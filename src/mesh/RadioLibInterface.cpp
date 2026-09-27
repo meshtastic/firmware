@@ -630,6 +630,15 @@ void RadioLibInterface::completeSending()
     }
 }
 
+/// Drop the terminal flags of a frame this thread is giving up on without reading. readData() clears them for a frame it
+/// does read, so once it has run a latched RX_DONE belongs to the NEXT frame and must survive - see
+/// SX126xInterface::resumeRunningReceive(). Only the paths that return before readData() may call this.
+void RadioLibInterface::clearUnreadRxIrqFlags()
+{
+    iface->clearIrq((1UL << RADIOLIB_IRQ_RX_DONE) | (1UL << RADIOLIB_IRQ_CRC_ERR) | (1UL << RADIOLIB_IRQ_HEADER_ERR) |
+                    (1UL << RADIOLIB_IRQ_TIMEOUT));
+}
+
 void RadioLibInterface::handleReceiveInterrupt(const CapturedRxInfo *captured)
 {
     size_t length;
@@ -640,6 +649,7 @@ void RadioLibInterface::handleReceiveInterrupt(const CapturedRxInfo *captured)
         // Race Condition?
         if (!isReceiving) {
             LOG_ERROR("handleReceiveInterrupt called while not in rx mode");
+            clearUnreadRxIrqFlags();
             return;
         }
 
@@ -653,6 +663,8 @@ void RadioLibInterface::handleReceiveInterrupt(const CapturedRxInfo *captured)
     if (length > sizeof(radioBuffer)) {
         LOG_ERROR("Ignore rx packet, bad length %u", (unsigned int)length);
         rxBad++;
+        if (!captured)
+            clearUnreadRxIrqFlags();
         return;
     }
 
@@ -662,6 +674,8 @@ void RadioLibInterface::handleReceiveInterrupt(const CapturedRxInfo *captured)
     if (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
         LOG_WARN("lora rx disabled: Region unset");
         airTime->logAirtime(RX_ALL_LOG, rxMsec);
+        if (!captured)
+            clearUnreadRxIrqFlags();
         return;
     }
 #endif
@@ -682,6 +696,12 @@ void RadioLibInterface::handleReceiveInterrupt(const CapturedRxInfo *captured)
         rxBad++;
 
         airTime->logAirtime(RX_ALL_LOG, rxMsec);
+        // readData() clears the flags on its way out, but several of its error returns come before that (an Rx
+        // timeout, a failed SPI stream check, a failed buffer read), so the flags of the frame it just gave up on
+        // can still be latched. This frame is lost either way; leaving RX_DONE set would hold DIO1 high past the
+        // re-arm and stop the next one being noticed.
+        if (!captured)
+            clearUnreadRxIrqFlags();
 
     } else {
         // Skip the 4 headers that are at the beginning of the rxBuf

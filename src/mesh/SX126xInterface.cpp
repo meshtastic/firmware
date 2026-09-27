@@ -520,12 +520,10 @@ template <typename T> bool SX126xInterface<T>::resumeRunningReceive()
     // the whole RX setup again, deaf throughout, so pick the RX back up instead.
     if (!rxArmedContinuous)
         return false;
-    // readData() clears these, but handleReceiveInterrupt()'s early outs do not, and a latched one would hold DIO1 high
-    // past the re-arm. PREAMBLE_DETECTED and HEADER_VALID stay: they may belong to the next frame, already arriving.
-    // The readout task clears what it reads, and a clear here could take the RX_DONE of a frame it has not read yet.
-    if (!rxReadoutActive())
-        lora.clearIrqFlags(RADIOLIB_SX126X_IRQ_RX_DONE | RADIOLIB_SX126X_IRQ_CRC_ERR | RADIOLIB_SX126X_IRQ_HEADER_ERR |
-                           RADIOLIB_SX126X_IRQ_TIMEOUT);
+    // No flag clearing here. Whoever gave up on a frame without reading it has already dropped its terminal flags
+    // (clearUnreadRxIrqFlags()), and readData() drops them for a frame it did read - so a latched RX_DONE at this
+    // point is a NEXT frame that completed while we were handling the last one. Clearing it here would discard that
+    // frame unread, and the checkRxDoneIrqFlag() below could no longer find it.
     activeReceiveStart = 0; // the frame it timed is done; a preamble now is the next one
     RadioLibInterface::startReceive();
     enableInterrupt(isrRxLevel0);
