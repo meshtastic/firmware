@@ -15,6 +15,7 @@
 #include "UptimeClock.h"
 #include "configuration.h"
 #include "graphics/Screen.h"
+#include "input/ButtonHelper.h"
 #include "main.h"
 #include "modules/StatusLEDModule.h"
 #include "sleep.h"
@@ -172,10 +173,15 @@ static void lsIdle()
 
             case ESP_SLEEP_WAKEUP_GPIO: {
                 bool pressed = false;
-#if defined(BUTTON_PIN)
-                pressed = !digitalRead(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN);
+#if HAS_BUTTON || defined(BUTTON_PIN)
+                uint32_t espBtnPin = getResolvedButtonPin();
+                if (espBtnPin != 0xFF)
+                    pressed = !digitalRead(espBtnPin);
+#ifdef KB_INT
+                else
+                    pressed = true; // keyboard press (probably) triggered GPIO interrupt
+#endif
 #elif defined(KB_INT)
-                // keyboard press (probably) triggered GPIO interrupt
                 pressed = true;
 #endif
                 if (pressed) {

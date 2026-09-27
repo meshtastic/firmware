@@ -2,8 +2,8 @@
 #include "PowerMon.h"
 #include "configuration.h"
 #include "esp_task_wdt.h"
+#include "input/ButtonHelper.h"
 #include "main.h"
-
 #if !defined(CONFIG_IDF_TARGET_ESP32S2) && !MESHTASTIC_EXCLUDE_BLUETOOTH
 #include "nimble/NimbleBluetooth.h"
 #endif
@@ -394,8 +394,9 @@ void cpuDeepSleep(uint32_t msecToWake)
     // arms nothing if any pin in it lacks RTC function, so one bad pin would veto the good one.
 #if defined(DEEP_SLEEP_WAKE_PIN)
     const int wakeButton = DEEP_SLEEP_WAKE_PIN;
-#elif defined(BUTTON_PIN)
-    const int wakeButton = config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN;
+#elif defined(BUTTON_PIN) || HAS_BUTTON
+    const int espBtnPin = getResolvedButtonPin();
+    const int wakeButton = (espBtnPin != 0xFF) ? espBtnPin : -1;
 #else
     const int wakeButton = -1;
 #endif
@@ -432,7 +433,7 @@ void cpuDeepSleep(uint32_t msecToWake)
 
     // FIXME, disable internal rtc pullups/pulldowns on the non isolated pins. for inputs that we aren't using
     // to detect wake and in normal operation the external part drives them hard.
-#if defined(BUTTON_PIN) || defined(DEEP_SLEEP_WAKE_PIN)
+#if defined(BUTTON_PIN) || defined(DEEP_SLEEP_WAKE_PIN) || HAS_BUTTON
 #ifdef BUTTON_NEED_PULLUP
     for (int pin : wakePins) {
         if (pin < 0)
