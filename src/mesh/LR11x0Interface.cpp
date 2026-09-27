@@ -600,12 +600,59 @@ template <typename T> bool LR11x0Interface<T>::isChannelActive()
             if (lora.writeBuffer8((uint8_t *)&radioBuffer, numbytes) == RADIOLIB_ERR_NONE) {
                 prestagedLen = numbytes;
                 prestagedId = scanForTx->id;
+#ifdef LR11X0_CAD_EXIT_PROBE
+                // Probe: arm the whole TX, so a chip that honours TX-when-clear sends this payload at the verdict. The
+                // TX length also bounds a detection's RX, so the probe line logs it. Under LBT the CAD timeout is
+                // also the TX timeout, so give it a quarter more than one max-length frame.
+                if (lora.setPacketParamsLoRa(preambleLength, RADIOLIB_LRXXXX_LORA_HEADER_EXPLICIT, (uint8_t)numbytes,
+                                             RADIOLIB_LRXXXX_LORA_CRC_ENABLED,
+                                             RADIOLIB_LR11X0_LORA_IQ_STANDARD) == RADIOLIB_ERR_NONE) {
+                    cfg.cad.exitMode = RADIOLIB_LR11X0_CAD_EXIT_MODE_RX | RADIOLIB_LR11X0_CAD_EXIT_MODE_LBT;
+                    cfg.cad.timeout = cadRxTimeoutUsec * 5 / 4;
+                    cfg.cad.irqFlags |= 1UL << RADIOLIB_IRQ_TX_DONE;
+                }
+#endif
             }
         }
 #endif
         result = lora.scanChannel(cfg);
 #ifdef LR11X0_TX_LAUNCH_OVERRIDE
         cadVerdictClock = benchClock();
+#endif
+#ifdef LR11X0_CAD_EXIT_PROBE
+        chipKeyedUp = false;
+        if (cfg.cad.exitMode != RADIOLIB_LR11X0_CAD_EXIT_MODE_RX) {
+            const uint8_t mode = readChipMode();
+            const char *modeName = mode == RADIOLIB_LR11X0_STAT_2_MODE_TX        ? "TX"
+                                   : mode == RADIOLIB_LR11X0_STAT_2_MODE_RX      ? "RX"
+                                   : mode == RADIOLIB_LR11X0_STAT_2_MODE_STBY_RC ? "STBY_RC"
+                                   : mode == RADIOLIB_LR11X0_STAT_2_MODE_FS      ? "FS"
+                                                                                 : "other";
+            LOG_DEBUG("CAD exit probe: %s, chip in %s (stat2 mode 0x%02x), staged len %u",
+                      result == RADIOLIB_CHANNEL_FREE    ? "clear"
+                      : result == RADIOLIB_LORA_DETECTED ? "busy"
+                                                         : "error",
+                      modeName, mode, (unsigned)prestagedLen);
+            if (result == RADIOLIB_CHANNEL_FREE && mode == RADIOLIB_LR11X0_STAT_2_MODE_TX) {
+                chipKeyedUp = true;
+            } else if (result == RADIOLIB_CHANNEL_FREE && mode != RADIOLIB_LR11X0_STAT_2_MODE_STBY_RC) {
+                lora.standby(); // TX-when-clear not honoured and the chip is somewhere else: launch from standby
+            } else if (result == RADIOLIB_LORA_DETECTED && mode != RADIOLIB_LR11X0_STAT_2_MODE_RX) {
+                // RX-on-detection not honoured: no handoff to adopt, so the caller's rearmReceive() restarts RX
+                lora.clearIrqFlags(RADIOLIB_LR11X0_IRQ_CAD_DONE | RADIOLIB_LR11X0_IRQ_CAD_DETECTED);
+                prestagedLen = 0;
+                return true;
+            } else if (result != RADIOLIB_CHANNEL_FREE && result != RADIOLIB_LORA_DETECTED &&
+                       result != RADIOLIB_ERR_WRONG_MODEM) {
+                // The chip refused 0x11 or the scan failed: report busy rather than TX without a CAD. A lost modem
+                // type still takes the recovery below.
+                LOG_WARN("CAD exit probe: scan with exit mode 0x11 returned %d", result);
+                prestagedLen = 0;
+                return true;
+            }
+        }
+#endif
+#ifdef LR11X0_TX_LAUNCH_OVERRIDE
         if (result != RADIOLIB_CHANNEL_FREE)
             prestagedLen = 0; // no TX follows, and a detection's RX may have overwritten the buffer
 #endif
@@ -625,6 +672,24 @@ template <typename T> bool LR11x0Interface<T>::isChannelActive()
     return false; // report the channel free: a recovered chip can TX, a dead one fails startSend safely
 }
 
+#ifdef LR11X0_CAD_EXIT_PROBE
+template <typename T> uint8_t LR11x0Interface<T>::readChipMode()
+{
+    // RadioLib keeps LRxxxx::getStatus() protected even under GODMODE, so make the same transfer it does through its
+    // Module: the chip answers any NOP transfer with stat1, stat2 and the IRQ word. FS is the chip on its way to TX
+    // or RX, so look again for up to 1 ms.
+    uint8_t buff[6] = {0};
+    for (int tries = 0; tries < 10; tries++) {
+        if (lora.getMod()->SPItransferStream(NULL, 0, false, NULL, buff, sizeof(buff), true) != RADIOLIB_ERR_NONE)
+            return 0xFF;
+        if ((buff[1] & 0x0E) != RADIOLIB_LR11X0_STAT_2_MODE_FS)
+            break;
+        delayMicroseconds(100);
+    }
+    return buff[1] & 0x0E;
+}
+#endif
+
 #ifdef LR11X0_TX_LAUNCH_OVERRIDE
 template <typename T> int16_t LR11x0Interface<T>::launchTransmit(size_t numbytes)
 {
@@ -634,6 +699,22 @@ template <typename T> int16_t LR11x0Interface<T>::launchTransmit(size_t numbytes
     const bool prestaged = prestagedLen != 0 && prestagedLen == numbytes && sendingPacket && sendingPacket->id == prestagedId;
     prestagedLen = 0;
     int16_t res;
+#ifdef LR11X0_CAD_EXIT_PROBE
+    if (chipKeyedUp) {
+        chipKeyedUp = false;
+        if (prestaged) {
+            // The chip went from the clear CAD straight to TX with this payload. Only release the latched CAD flags,
+            // so the pin drops and TX_DONE is a fresh edge for the TX interrupt startSend() attaches next.
+            lora.clearIrqFlags(RADIOLIB_LR11X0_IRQ_CAD_DONE | RADIOLIB_LR11X0_IRQ_CAD_DETECTED);
+            LOG_TRACE("Tx launch steps: chip, len %u, verdict to launch %u us", (unsigned)numbytes,
+                      (unsigned)benchClockToUs(benchClock() - cadVerdictClock));
+            return RADIOLIB_ERR_NONE;
+        }
+        // Should not happen: the chip is sending a different packet from the one being launched. Stop it and send ours.
+        LOG_WARN("CAD exit probe: chip keyed up with a stale payload, restarting TX");
+        lora.standby();
+    }
+#endif
 #ifdef LR11X0_TX_PRESTAGE
     if (prestaged) {
         // What stageMode(TX) sends, less the buffer (already written) and the packet-type read. The packet params
