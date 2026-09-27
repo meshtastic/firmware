@@ -16,6 +16,13 @@
 
 #define RADIOLIB_PIN_TYPE uint32_t
 
+// Each received frame is read out of the radio by a FreeRTOS task woken by RX_DONE, rather than whenever the main loop next
+// runs the radio thread: the radio holds one frame, and the next one overwrites it. It needs FreeRTOS and a DIO1 interrupt;
+// -DMESHTASTIC_EXCLUDE_READOUT_TASK=1 keeps the readout on the radio thread.
+#if defined(HAS_FREE_RTOS) && !defined(ARCH_PORTDUINO) && !defined(LORA_DIO1_SOFTWARE_POLL) && !MESHTASTIC_EXCLUDE_READOUT_TASK
+#define MESHTASTIC_RX_READOUT_TASK
+#endif
+
 // In addition to the default Rx flags, we need the PREAMBLE_DETECTED flag to detect whether we are actively receiving
 #define MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS (RADIOLIB_IRQ_RX_DEFAULT_FLAGS | (1 << RADIOLIB_IRQ_PREAMBLE_DETECTED))
 
@@ -307,7 +314,17 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     void startTransmitTimerRebroadcast(meshtastic_MeshPacket *p);
 
     void handleTransmitInterrupt();
-    void handleReceiveInterrupt();
+
+    /** A frame the readout task took out of the radio, and what addReceiveMetadata() would have read with it */
+    struct CapturedRxInfo {
+        int32_t rssi;
+        float snr;
+        int16_t state; // readData()'s result
+        uint16_t len;
+    };
+
+    /** Read out and deliver the frame behind RX_DONE; with captured, deliver one the readout task already took */
+    void handleReceiveInterrupt(const CapturedRxInfo *captured = nullptr);
 
     static void timerCallback(void *p1, uint32_t p2);
 
@@ -435,4 +452,43 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     void scheduleIrqPollTick();
     static bool isIsrTxCallback(void (*callback)());
     virtual void handleSoftwareLoraIrqPoll() {}
+
+#ifdef MESHTASTIC_RX_READOUT_TASK
+    /** From the RX_DONE interrupt, wake the readout task; false if there is none. The interrupt stays enabled, and the
+     *  task notifies ISR_RX once the frame is out of the radio. */
+    bool rxDoneFromIsr();
+    bool rxReadoutActive() const { return rxReadoutTask != nullptr; }
+    /** Wake the readout task for an RX_DONE found by a poll, and wait for its readout; false if there is no task */
+    bool wakeRxReadout();
+    /** Deliver every frame the readout task captured; returns how many */
+    unsigned deliverCapturedFrames();
+
+  private:
+    /** Start the readout task above the calling task (the main loop), once */
+    void startRxReadoutTask();
+    static void rxReadoutTaskMain(void *arg);
+    /** One readout, from the task, with the RadioLib calls handleReceiveInterrupt() makes */
+    void readOutFromTask();
+    /** Move the oldest captured frame into radioBuffer; false if there is none */
+    bool takeCapturedFrame(CapturedRxInfo &info);
+
+    TaskHandle_t rxReadoutTask = nullptr;
+    bool rxReadoutTaskTried = false;
+    /** Readouts the task has finished, for wakeRxReadout() to wait on */
+    volatile uint32_t rxReadoutPasses = 0;
+    /** Captured frames: the task produces, the radio thread consumes */
+    struct CapturedFrame {
+        CapturedRxInfo info;
+        uint8_t data[sizeof(RadioBuffer)];
+    };
+    static constexpr uint8_t rxRingSize = 9; // holds 8, for frames that end back to back behind a long main-loop hold
+    CapturedFrame rxRing[rxRingSize];
+    volatile uint8_t rxRingHead = 0, rxRingTail = 0;
+    volatile uint32_t rxReadoutFrames = 0, rxReadoutDropped = 0, rxReadoutBadLength = 0;
+#else
+    bool rxDoneFromIsr() { return false; }
+    bool rxReadoutActive() const { return false; }
+    bool wakeRxReadout() { return false; }
+    unsigned deliverCapturedFrames() { return 0; }
+#endif
 };
