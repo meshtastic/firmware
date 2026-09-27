@@ -573,12 +573,55 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     static bool isIsrTxCallback(void (*callback)());
     virtual void handleSoftwareLoraIrqPoll() {}
 
+    /** Take the radio-sequence lock, returning whether it was actually taken - see RadioSequence. The lock is
+     *  created with the readout task, so a sequence that started before it has nothing to take, and must not
+     *  then release it. Without a readout task at all, both are no-ops. */
+#ifdef MESHTASTIC_RX_READOUT_TASK
+    bool lockRadioSequence();
+    void unlockRadioSequence();
+#else
+    bool lockRadioSequence() { return false; }
+    void unlockRadioSequence() {}
+#endif
+
+    /** Held across a whole RadioLib call sequence, so the readout task cannot run between its calls.
+     *
+     *  The SPI lock is per transaction, so it does not span a sequence, and every driver's readData() ends by
+     *  clearing the chip's IRQ flags - SX128x also drops to standby first. A readout landing inside a channel
+     *  scan, an RX arm, a transmit setup or a reconfigure would therefore clear flags that sequence is about to
+     *  rely on, or move the chip out from under it.
+     *
+     *  The lock is recursive, because these sequences nest, and it inherits priority, so a readout waiting on
+     *  the radio thread lifts it rather than sitting behind it. Holding it does NOT bound a readout by the whole
+     *  main loop - only by the radio call sequence in flight, which is why packet delivery stays outside it.
+     *
+     *  Lock order: this lock is always taken BEFORE the SPI lock, never while holding it. RadioLib takes the SPI
+     *  lock per transaction inside the calls a sequence makes, so every holder acquires them in that order; a
+     *  caller that took the SPI lock first and then entered a sequence would invert it. */
+    class RadioSequence
+    {
+      public:
+        explicit RadioSequence(RadioLibInterface *iface) : iface(iface), held(iface->lockRadioSequence()) {}
+        ~RadioSequence()
+        {
+            if (held)
+                iface->unlockRadioSequence();
+        }
+        RadioSequence(const RadioSequence &) = delete;
+        RadioSequence &operator=(const RadioSequence &) = delete;
+
+      private:
+        RadioLibInterface *iface; // declared before held: held's initializer calls through it
+        bool held;
+    };
+
 #ifdef MESHTASTIC_RX_READOUT_TASK
     /** From the RX_DONE interrupt, wake the readout task; false if there is none. The interrupt stays enabled, and the
      *  task notifies ISR_RX once the frame is out of the radio. */
     bool rxDoneFromIsr();
     bool rxReadoutActive() const { return rxReadoutTask != nullptr; }
-    /** Wake the readout task for an RX_DONE found by a poll, and wait for its readout; false if there is no task */
+    /** Hand an RX_DONE found by a poll to the readout task; false if there is no task. Does not wait: the
+     *  radio-sequence lock, not a wait here, is what keeps the task out of the caller's RadioLib calls. */
     bool wakeRxReadout();
     /** Deliver every frame the readout task captured; returns how many */
     unsigned deliverCapturedFrames();
@@ -594,8 +637,8 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
     TaskHandle_t rxReadoutTask = nullptr;
     bool rxReadoutTaskTried = false;
-    /** Readouts the task has finished, for wakeRxReadout() to wait on */
-    volatile uint32_t rxReadoutPasses = 0;
+    /** Recursive, priority-inheriting; guards a whole RadioLib call sequence - see RadioSequence */
+    SemaphoreHandle_t radioSeqMutex = nullptr;
     /** Captured frames: the task produces, the radio thread consumes */
     struct CapturedFrame {
         CapturedRxInfo info;
