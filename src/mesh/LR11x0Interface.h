@@ -2,6 +2,15 @@
 #if RADIOLIB_EXCLUDE_LR11X0 != 1
 #include "RadioLibInterface.h"
 
+// Bench: -DLR11X0_TX_LAUNCH_TRACE times each step from the CAD verdict to TX, and -DLR11X0_TX_PRESTAGE also writes the
+// payload before the scan. Prestage calls RadioLib's LR11x0 commands directly, so it needs -DRADIOLIB_GODMODE=1.
+#if defined(LR11X0_TX_LAUNCH_TRACE) || defined(LR11X0_TX_PRESTAGE)
+#define LR11X0_TX_LAUNCH_OVERRIDE 1
+#endif
+#if defined(LR11X0_TX_PRESTAGE) && !RADIOLIB_GODMODE
+#error "LR11X0_TX_PRESTAGE calls RadioLib's LR11x0 commands directly: build with -DRADIOLIB_GODMODE=1"
+#endif
+
 /**
  * \brief Adapter for LR11x0 radio family. Implements common logic for child classes.
  * \tparam T RadioLib module type for LR11x0: SX1262, SX1268.
@@ -96,6 +105,16 @@ template <class T> class LR11x0Interface : public RadioLibInterface
 
     /** Recover a chip that lost its runtime state: hardware-reset via begin() and reprogram */
     bool recoverChipStateLoss() override { return reinitChip() && programModemParams() == RADIOLIB_ERR_NONE; }
+
+#ifdef LR11X0_TX_LAUNCH_OVERRIDE
+    /** Time the launch from the CAD verdict; with a payload staged before the scan, send only what follows it */
+    int16_t launchTransmit(size_t numbytes) override;
+    /** The payload isChannelActive() wrote into the chip's buffer before the CAD, or 0 bytes if none */
+    size_t prestagedLen = 0;
+    uint32_t prestagedId = 0;
+    /** When the last CAD verdict was read, for the launch step trace */
+    uint32_t cadVerdictMs = 0;
+#endif
 
     /// The TCXO Vref that init() settled on, so reinitChip() can begin() with the same oscillator setup
     float resolvedTcxoVoltage = 0;
