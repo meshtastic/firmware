@@ -3,6 +3,11 @@
 #include "InputBroker.h"
 #include "mesh/NodeDB.h"
 
+#ifdef ARCH_ESP32
+#include "Observer.h"
+#include "sleep.h"
+#endif
+
 #ifndef UPDOWN_LONG_PRESS_DURATION
 #define UPDOWN_LONG_PRESS_DURATION 300
 #endif
@@ -62,6 +67,22 @@ class UpDownInterruptBase : public Observable<const InputEvent *>, public concur
     input_broker_event _eventUpLong = INPUT_BROKER_NONE;
     input_broker_event _eventDownLong = INPUT_BROKER_NONE;
     const char *_originName;
+
+    void (*_onIntDown)() = nullptr;
+    void (*_onIntUp)() = nullptr;
+    void (*_onIntPress)() = nullptr;
+
+    void attachUpDownInterrupts();
+    void detachUpDownInterrupts();
+
+#ifdef ARCH_ESP32
+    int beforeLightSleep(void *);
+    int afterLightSleep(esp_sleep_wakeup_cause_t);
+    CallbackObserver<UpDownInterruptBase, void *> lsObserver =
+        CallbackObserver<UpDownInterruptBase, void *>(this, &UpDownInterruptBase::beforeLightSleep);
+    CallbackObserver<UpDownInterruptBase, esp_sleep_wakeup_cause_t> lsEndObserver =
+        CallbackObserver<UpDownInterruptBase, esp_sleep_wakeup_cause_t>(this, &UpDownInterruptBase::afterLightSleep);
+#endif
 
     unsigned long lastUpKeyTime = 0;
     unsigned long lastDownKeyTime = 0;

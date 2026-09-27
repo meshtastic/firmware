@@ -21,6 +21,9 @@ void UpDownInterruptBase::init(uint8_t pinDown, uint8_t pinUp, uint8_t pinPress,
     this->_eventPressedLong = eventPressedLong;
     this->_eventUpLong = eventUpLong;
     this->_eventDownLong = eventDownLong;
+    this->_onIntDown = onIntDown;
+    this->_onIntUp = onIntUp;
+    this->_onIntPress = onIntPress;
 
     // Store debounce configuration passed by caller
     this->updownDebounceMs = updownDebounceMs;
@@ -31,16 +34,20 @@ void UpDownInterruptBase::init(uint8_t pinDown, uint8_t pinUp, uint8_t pinPress,
 
     if (!isRAK || pinPress != 0) {
         pinMode(pinPress, INPUT_PULLUP);
-        attachInterrupt(pinPress, onIntPress, FALLING);
     }
     if (!isRAK || this->_pinDown != 0) {
         pinMode(this->_pinDown, INPUT_PULLUP);
-        attachInterrupt(this->_pinDown, onIntDown, FALLING);
     }
     if (!isRAK || this->_pinUp != 0) {
         pinMode(this->_pinUp, INPUT_PULLUP);
-        attachInterrupt(this->_pinUp, onIntUp, FALLING);
     }
+
+    attachUpDownInterrupts();
+
+#ifdef ARCH_ESP32
+    lsObserver.observe(&notifyLightSleep);
+    lsEndObserver.observe(&notifyLightSleepEnd);
+#endif
 
     LOG_DEBUG("Up/down/press GPIO initialized (%d, %d, %d)", this->_pinUp, this->_pinDown, pinPress);
 
@@ -164,3 +171,53 @@ void UpDownInterruptBase::intUpHandler()
 {
     this->action = UPDOWN_ACTION_UP;
 }
+
+void UpDownInterruptBase::attachUpDownInterrupts()
+{
+    bool isRAK = false;
+#ifdef RAK_4631
+    isRAK = true;
+#endif
+
+    if ((!isRAK || _pinPress != 0) && _onIntPress != nullptr) {
+        attachInterrupt(_pinPress, _onIntPress, FALLING);
+    }
+    if ((!isRAK || _pinDown != 0) && _onIntDown != nullptr) {
+        attachInterrupt(_pinDown, _onIntDown, FALLING);
+    }
+    if ((!isRAK || _pinUp != 0) && _onIntUp != nullptr) {
+        attachInterrupt(_pinUp, _onIntUp, FALLING);
+    }
+}
+
+void UpDownInterruptBase::detachUpDownInterrupts()
+{
+    bool isRAK = false;
+#ifdef RAK_4631
+    isRAK = true;
+#endif
+
+    if (!isRAK || _pinPress != 0) {
+        detachInterrupt(_pinPress);
+    }
+    if (!isRAK || _pinDown != 0) {
+        detachInterrupt(_pinDown);
+    }
+    if (!isRAK || _pinUp != 0) {
+        detachInterrupt(_pinUp);
+    }
+}
+
+#ifdef ARCH_ESP32
+int UpDownInterruptBase::beforeLightSleep(void *unused)
+{
+    detachUpDownInterrupts();
+    return 0;
+}
+
+int UpDownInterruptBase::afterLightSleep(esp_sleep_wakeup_cause_t cause)
+{
+    attachUpDownInterrupts();
+    return 0;
+}
+#endif
