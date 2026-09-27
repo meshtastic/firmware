@@ -112,8 +112,9 @@ bool RadioLibInterface::canSendImmediately()
     bool busyTx = sendingPacket != NULL;
     bool busyRx = isReceiving && isActivelyReceiving();
 #ifdef MESHTASTIC_TX_HOLD_FOR_CAD_RX
-    // Bench: a busy CAD left the chip receiving the frame it heard, and on LR11x0/LR20x0 the CAD's IRQ set has no
-    // preamble or header flag for isActivelyReceiving() to see. The next scan's standby would abort that frame.
+    // Bench: a busy CAD left the chip receiving the frame it heard, which may not have raised a preamble flag for
+    // isActivelyReceiving() to see (the CAD can take the preamble, or detect the payload). The next scan's standby
+    // would abort that RX, and a mid-payload CAD can read clear.
     if (!busyRx && isReceiving && cadHandoffRxStart) {
         LOG_DEBUG("TX held for the CAD>RX frame, %u ms since the CAD", (unsigned)(Time::getMillis() - cadHandoffRxStart));
         busyRx = true;
