@@ -654,8 +654,10 @@ template <typename T> bool SX126xInterface<T>::rearmReceiveFromIsr()
                                     RADIOLIB_SX126X_MAX_PACKET_LENGTH,     RADIOLIB_SX126X_LORA_CRC_ON,
                                     RADIOLIB_SX126X_LORA_IQ_STANDARD};
     const uint8_t setRx[] = {RADIOLIB_SX126X_CMD_SET_RX, 0xFF, 0xFF, 0xFF}; // continuous
+    const uint8_t getChipStatus[] = {RADIOLIB_SX126X_CMD_GET_STATUS, RADIOLIB_SX126X_CMD_NOP};
     static_assert(sizeof(getIrq) <= rawCommandMax && sizeof(setDioIrq) <= rawCommandMax && sizeof(clearIrq) <= rawCommandMax &&
-                      sizeof(packetParams) <= rawCommandMax && sizeof(setRx) <= rawCommandMax,
+                      sizeof(packetParams) <= rawCommandMax && sizeof(setRx) <= rawCommandMax &&
+                      sizeof(getChipStatus) <= rawCommandMax,
                   "a re-arm command is longer than rawCommandFromIsr() allows");
     // Only on a real TX_DONE: an edge from anything else must not cut a transmission short.
     RearmOutcome outcome = rawCommandFromIsr(getIrq, sizeof(getIrq), irqIn);
@@ -672,6 +674,14 @@ template <typename T> bool SX126xInterface<T>::rearmReceiveFromIsr()
         module.setRfSwitchState(Module::MODE_RX);
         outcome = rawCommandFromIsr(setRx, sizeof(setRx), nullptr);
     }
+    if (outcome == REARM_ARMED) {
+        // A transfer that completed is not evidence the chip listened, and adopting clears the recovery ladder that
+        // RadioLibInterface::startReceive() owns. So only a chip that reports RX skips the thread's checked start.
+        uint8_t statusIn[sizeof(getChipStatus)] = {0};
+        outcome = rawCommandFromIsr(getChipStatus, sizeof(getChipStatus), statusIn);
+        if (outcome == REARM_ARMED && (statusIn[statusByte] & statusModeMask) != RADIOLIB_SX126X_STATUS_MODE_RX)
+            outcome = REARM_NOT_IN_RX;
+    }
     spiLock->unlockFromISR();
     rearmOutcome = outcome;
     if (outcome != REARM_ARMED)
@@ -684,10 +694,11 @@ template <typename T> bool SX126xInterface<T>::adoptReceiveArmedFromIsr()
 {
     const uint8_t outcome = rearmOutcome;
     rearmOutcome = REARM_NONE;
-    if (outcome == REARM_SPI_BUSY || outcome == REARM_CHIP_BUSY || outcome == REARM_NOT_TX_DONE) {
-        LOG_TRACE("RX re-arm at TX_DONE skipped, %s", outcome == REARM_SPI_BUSY    ? "SPI busy"
-                                                      : outcome == REARM_CHIP_BUSY ? "chip busy"
-                                                                                   : "no TX_DONE flag");
+    if (outcome == REARM_SPI_BUSY || outcome == REARM_CHIP_BUSY || outcome == REARM_NOT_TX_DONE || outcome == REARM_NOT_IN_RX) {
+        LOG_TRACE("RX re-arm at TX_DONE skipped, %s", outcome == REARM_SPI_BUSY      ? "SPI busy"
+                                                      : outcome == REARM_CHIP_BUSY   ? "chip busy"
+                                                      : outcome == REARM_NOT_TX_DONE ? "no TX_DONE flag"
+                                                                                     : "chip not in RX");
         return false;
     }
     if (outcome != REARM_ARMED)
