@@ -1000,6 +1000,34 @@ uint32_t ticksToMs(uint32_t ticks)
 {
     return (uint32_t)(((uint64_t)ticks * 1000) / configTICK_RATE_HZ);
 }
+
+// The readout's SPI time. Adafruit's nRF52 micros() counts FreeRTOS ticks (976.6 us steps), too coarse for a
+// transfer of about a millisecond, so time it on the cycle counter there.
+#ifdef ARDUINO_NRF52_ADAFRUIT
+void readoutClockStart()
+{
+    CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+    DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+}
+uint32_t readoutClock()
+{
+    return DWT->CYCCNT;
+}
+uint32_t readoutClockToUs(uint32_t elapsed)
+{
+    return elapsed / (SystemCoreClock / 1000000);
+}
+#else
+void readoutClockStart() {}
+uint32_t readoutClock()
+{
+    return micros();
+}
+uint32_t readoutClockToUs(uint32_t elapsed)
+{
+    return elapsed;
+}
+#endif
 } // namespace
 
 /// RX_DONE: wake the readout task and return. The SPI work runs there, with interrupts enabled, not here.
@@ -1036,6 +1064,7 @@ template <typename T> bool SX126xInterface<T>::wakeRxReadout()
 template <typename T> void SX126xInterface<T>::rxReadoutTaskMain(void *arg)
 {
     auto *self = static_cast<SX126xInterface<T> *>(arg);
+    readoutClockStart();
     for (;;) {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
         self->readOutFromTask();
@@ -1070,7 +1099,7 @@ template <typename T> void SX126xInterface<T>::readOutFromTask()
         notify(ISR_RX, true); // RX_DONE stays set; the thread's handler hands it back or reads it itself
         return;
     }
-    const uint32_t t0 = micros();
+    const uint32_t t0 = readoutClock();
     uint8_t irqOut[4] = {RADIOLIB_SX126X_CMD_GET_IRQ_STATUS, RADIOLIB_SX126X_CMD_NOP, RADIOLIB_SX126X_CMD_NOP,
                          RADIOLIB_SX126X_CMD_NOP};
     uint8_t irqIn[4] = {0, 0, 0, 0};
@@ -1117,7 +1146,7 @@ template <typename T> void SX126xInterface<T>::readOutFromTask()
         ok = rawTransferFromTask(pktOut, pktIn, sizeof(pktOut));
     if (ok)
         ok = rawTransferFromTask(clearOut, clearIn, sizeof(clearOut));
-    const uint32_t spiUs = micros() - t0;
+    const uint32_t spiUs = readoutClockToUs(readoutClock() - t0);
     spiLock->unlock();
     if (!ok) {
         // RX_DONE may still be set; the thread's handler hands it back or reads it itself
