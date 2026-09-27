@@ -17,6 +17,12 @@
 
 #define RADIOLIB_PIN_TYPE uint32_t
 
+// Bench: -DMESHTASTIC_RX_READOUT_TASK reads each received frame out of the radio from a FreeRTOS task woken by the
+// RX_DONE interrupt, through RadioLib, for every radio. SX126X_RX_READOUT_TASK was its name while it was SX126x-only.
+#if defined(SX126X_RX_READOUT_TASK) && !defined(MESHTASTIC_RX_READOUT_TASK)
+#define MESHTASTIC_RX_READOUT_TASK
+#endif
+
 // In addition to the default Rx flags, we need the PREAMBLE_DETECTED flag to detect whether we are actively receiving
 #define MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS (RADIOLIB_IRQ_RX_DEFAULT_FLAGS | (1 << RADIOLIB_IRQ_PREAMBLE_DETECTED))
 
@@ -330,35 +336,42 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     /** Bench: after TX, take over the RX rearmReceiveFromIsr() started instead of restarting it; false if there is none. */
     virtual bool adoptReceiveArmedFromIsr() { return false; }
 
-    /** Bench: a frame a readout task took from the chip, and what it saw; the frame itself goes into radioBuffer */
+    /** Bench: a frame the readout task took from the chip, and what it saw; the frame itself goes into radioBuffer */
     struct CapturedRxInfo {
         uint32_t wakeMs;    // millis() of the RX_DONE interrupt, or of the poll that found RX_DONE
         uint32_t readMs;    // millis() when the readout ended
-        uint32_t spiUs;     // SPI time of the readout, lock wait excluded
-        int32_t rssi;       // as getRSSI() would report
-        float snr;          // as getSNR() would report
-        int16_t state;      // as readData() would report: RADIOLIB_ERR_NONE or RADIOLIB_ERR_CRC_MISMATCH
+        uint32_t spiUs;     // time of the readout's RadioLib calls
+        int32_t rssi;       // getRSSI()
+        float snr;          // getSNR()
+        int16_t state;      // readData()'s result
         uint8_t len;        // bytes in the frame
-        bool chipListening; // the chip was still in RX after the frame, so nothing needs re-arming
+        bool chipListening; // the driver's RX was still running after the frame, so nothing needs re-arming
     };
 
-    /** Bench: from the RX_DONE interrupt, hand the readout to a task; true if one took it. The interrupt then stays
-     *  enabled, and the task notifies ISR_RX once the frame is out of the chip. */
-    virtual bool rxDoneFromIsr() { return false; }
+    /** Bench: whether the driver's RX keeps running after RX_DONE (a continuous RX), so a frame read out by the
+     *  readout task needs no re-arm. False (re-arm, as without the task) unless the driver knows. */
+    virtual bool receiveStillRunning() const { return false; }
 
-    /** Bench: whether a readout task takes RX_DONE instead of this thread */
-    virtual bool rxReadoutActive() const { return false; }
+#ifdef MESHTASTIC_RX_READOUT_TASK
+    /** Bench: from the RX_DONE interrupt, wake the readout task; true if there is one. The interrupt then stays
+     *  enabled, and the task notifies ISR_RX once the frame is out of the chip. */
+    bool rxDoneFromIsr();
+
+    /** Bench: whether the readout task takes RX_DONE instead of this thread */
+    bool rxReadoutActive() const { return rxReadoutTask != nullptr; }
 
     /** Bench: wake the readout task from this thread, for an RX_DONE found by a poll, and wait for its readout (on
      *  one core it runs above this thread, so there is no wait). False if there is no task. */
-    virtual bool wakeRxReadout() { return false; }
+    bool wakeRxReadout();
 
     /** Bench: move the oldest frame the readout task captured into radioBuffer; false if there is none */
-    virtual bool takeCapturedFrame(CapturedRxInfo &info)
-    {
-        (void)info;
-        return false;
-    }
+    bool takeCapturedFrame(CapturedRxInfo &info);
+#else
+    bool rxDoneFromIsr() { return false; }
+    bool rxReadoutActive() const { return false; }
+    bool wakeRxReadout() { return false; }
+    bool takeCapturedFrame(CapturedRxInfo &) { return false; }
+#endif
 
     /** can we detect a LoRa preamble on the current channel?
      *  A true return means the chip may have been handed to RX in place, so the caller MUST follow it
@@ -587,4 +600,28 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     void scheduleIrqPollTick();
     static bool isIsrTxCallback(void (*callback)());
     virtual void handleSoftwareLoraIrqPoll() {}
+
+#ifdef MESHTASTIC_RX_READOUT_TASK
+  private:
+    /** Start the readout task, above the task calling (the loop), once */
+    void startRxReadoutTask();
+    static void rxReadoutTaskMain(void *arg);
+    /** One readout through RadioLib, from the task: IRQ flags, length, readData(), SNR and RSSI */
+    void readOutFromTask();
+    TaskHandle_t rxReadoutTask = nullptr;
+    bool rxReadoutTaskTried = false;
+    /** FreeRTOS tick count of the last wake, from the interrupt or from a poll */
+    volatile uint32_t rxWakeTicks = 0;
+    /** Readouts the task has finished, for wakeRxReadout() to wait on */
+    volatile uint32_t rxReadoutPasses = 0;
+    /** Frames read out, single producer (the task), single consumer (this thread) */
+    struct CapturedFrame {
+        CapturedRxInfo info;
+        uint8_t data[sizeof(RadioBuffer)];
+    };
+    static constexpr uint8_t rxRingSize = 9; // holds 8: frames that end back to back behind a long main-loop hold
+    CapturedFrame rxRing[rxRingSize];
+    volatile uint8_t rxRingHead = 0, rxRingTail = 0;
+    volatile uint32_t rxReadoutFrames = 0, rxReadoutDropped = 0, rxReadoutBadLength = 0;
+#endif
 };
