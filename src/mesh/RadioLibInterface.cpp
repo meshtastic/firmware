@@ -130,6 +130,24 @@ uint32_t RadioLibInterface::maxRxFrameMsec()
     return isRadioLibTimeError(usec) ? getPacketTime(MAX_LORA_PAYLOAD_LEN) : (usec + 999) / 1000;
 }
 
+uint32_t RadioLibInterface::barePreambleGraceMsec()
+{
+    // PREAMBLE_DETECTED can latch early in the preamble; sync word, SFD and explicit header follow in ~12.25 symbols.
+    return (uint32_t)ceilf(preambleTimeMsec * (preambleLength + 14.25f) / preambleLength);
+}
+
+void RadioLibInterface::recordRxFlagsBeforeStandby()
+{
+    // Standby clears the chip's RX flags; a sighting they hold must be recorded first or its hold is lost.
+    if (isReceiving)
+        (void)isActivelyReceiving();
+}
+
+void RadioLibInterface::rxFlagsClearedByStandby()
+{
+    rxSighting.flagsCleared(Time::getMillis(), maxRxFrameMsec());
+}
+
 bool RadioLibInterface::receiveDetected(uint16_t irq, unsigned long syncWordHeaderValidFlag, unsigned long preambleDetectedFlag)
 {
     const uint32_t nowMsec = Time::getMillis();
@@ -435,7 +453,11 @@ void RadioLibInterface::onNotify(uint32_t notification)
         // If we are not currently in receive mode, then restart the random delay (this can happen if the main thread
         // has placed the unit into standby)  FIXME, how will this work if the chipset is in sleep mode?
         if (!txQueue.empty()) {
-            if (!canSendImmediately()) {
+            const bool clear = canSendImmediately();
+            // A bare preamble held past the time its header needed: let the CAD below decide instead of waiting it out.
+            const bool peek = !clear && sendingPacket == NULL &&
+                              rxSighting.barePreamblePeekable(Time::getMillis(), barePreambleGraceMsec());
+            if (!clear && !peek) {
                 setTransmitDelay(); // currently Rx/Tx-ing: reset random delay
             } else {
                 meshtastic_MeshPacket *txp = txQueue.getFront();
@@ -464,6 +486,9 @@ void RadioLibInterface::onNotify(uint32_t notification)
                         }
                         setTransmitDelay();
                     } else {
+                        if (peek)
+                            LOG_DEBUG("Preamble hold released, CAD clear %ums after the sighting",
+                                      Time::getMillis() - rxSighting.preambleSeen());
                         // Send any outgoing packets we have ready as fast as possible to keep the time between channel scan and
                         // actual transmission as short as possible
                         txp = txQueue.dequeue();
@@ -622,6 +647,7 @@ void RadioLibInterface::handleReceiveInterrupt()
     }
 
     isReceiving = false;
+    rxSighting.reset(); // the frame a sighting announced is over, whether or not it decodes
 
     // read the number of actually received bytes
     size_t length = iface->getPacketLength();
@@ -822,6 +848,7 @@ bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
 {
     /* NOTE: Minimize the actions before startTransmit() to keep the time between
              channel scan and actual transmit as low as possible to avoid collisions. */
+    rxSighting.reset(); // we only transmit on a channel judged clear
     if (disabled || !config.lora.tx_enabled) {
         LOG_WARN("Drop Tx packet: LoRa Tx disabled");
         // Never reaches completeSending(), so any per-packet radio state has to be released here.

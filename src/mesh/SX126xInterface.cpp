@@ -401,6 +401,7 @@ template <typename T> void SX126xInterface<T>::handleSoftwareLoraIrqPoll()
 template <typename T> int16_t SX126xInterface<T>::trySetStandby()
 {
     checkNotification(); // handle any pending interrupts before we force standby
+    recordRxFlagsBeforeStandby();
 
     int16_t err = lora.standby();
 
@@ -411,7 +412,7 @@ template <typename T> int16_t SX126xInterface<T>::trySetStandby()
         portduino_status.LoRa_in_error = true;
 #endif
     isReceiving = false; // If we were receiving, not any more
-    rxSighting.reset();
+    rxFlagsClearedByStandby();
     disableInterrupt();
     completeSending(); // If we were sending, not anymore
     RadioLibInterface::setStandby();

@@ -43,8 +43,22 @@ class RxSighting
         return headerHolds || preambleSeenMsec;
     }
 
-    /// Standby and RX start clear the chip's flags, so they clear this too.
+    /// RX_DONE, CRC_ERR and HEADER_ERR (the frame is over) and our own TX end every hold.
     void reset() { lastPeekMsec = preambleSeenMsec = headerSeenMsec = 0; }
+
+    /// Standby cleared the chip's flags. Live holds stay: restarting RX does not end a frame still on air. An expired
+    /// header record, kept only so a stuck latch cannot re-arm, is dropped with the latch it guarded.
+    void flagsCleared(uint32_t nowMsec, uint32_t maxPacketMsec)
+    {
+        if (headerSeenMsec && nowMsec - headerSeenMsec >= maxPacketMsec)
+            headerSeenMsec = 0;
+    }
+
+    /// Only a bare preamble holds TX, and for longer than a real frame needs to latch its header: a CAD may settle it.
+    bool barePreamblePeekable(uint32_t nowMsec, uint32_t graceMsec) const
+    {
+        return preambleSeenMsec && !headerSeenMsec && nowMsec - preambleSeenMsec >= graceMsec;
+    }
 
     uint32_t lastPeek() const { return lastPeekMsec; }
     uint32_t preambleSeen() const { return preambleSeenMsec; }
@@ -364,6 +378,13 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
     /** Record a look at the RX flags and clear a PREAMBLE_DETECTED it found; true while a frame may be on air. */
     bool receiveDetected(uint16_t irq, unsigned long syncWordHeaderValidFlag, unsigned long preambleDetectedFlag);
+
+    /** How long after a preamble sighting a frame we can decode would have latched HEADER_VALID. */
+    uint32_t barePreambleGraceMsec();
+
+    /** Called by trySetStandby() around lora.standby(): record what the flags hold first, then note they are gone. */
+    void recordRxFlagsBeforeStandby();
+    void rxFlagsClearedByStandby();
 
     /** Do any hardware setup needed on entry into send configuration for the radio.
      * Subclasses can customize, but must also call this base method */

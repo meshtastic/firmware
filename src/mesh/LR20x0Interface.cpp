@@ -549,6 +549,7 @@ template <typename T> void LR20x0Interface<T>::clearRadioIsr()
 template <typename T> int16_t LR20x0Interface<T>::trySetStandby()
 {
     checkNotification(); // handle any pending interrupts before we force standby
+    recordRxFlagsBeforeStandby();
 
     int16_t err = lora.standby();
 
@@ -557,7 +558,7 @@ template <typename T> int16_t LR20x0Interface<T>::trySetStandby()
     }
 
     isReceiving = false; // If we were receiving, not any more
-    rxSighting.reset();
+    rxFlagsClearedByStandby();
     disableInterrupt();
     completeSending(); // If we were sending, not anymore
     RadioLibInterface::setStandby();

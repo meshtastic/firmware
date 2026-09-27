@@ -658,8 +658,11 @@ void tearDown(void)
 // always means a detection since the previous look. Once cleared, the chip stays locked on that frame
 // and never raises the bit for it again, so the stamp is the only record that a frame started. Neither
 // flag says when the frame ends - a foreign sync word never produces HEADER_VALID at all - so each
-// sighting holds TX for one max-length packet from the look that found it. Only RX_DONE, CRC_ERR or
-// HEADER_ERR end a hold early, through the standby that reset() mirrors.
+// sighting holds TX for one max-length packet from the look that found it. Only RX_DONE, CRC_ERR,
+// HEADER_ERR or our own TX end a hold early (reset()). A standby clears the chip's flags but not the
+// frame on air, so trySetStandby() records the flags first and flagsCleared() keeps every live hold.
+// A bare-preamble hold older than the time a header needs is "peekable": the TX path may then run its
+// CAD and send if the channel is clear, instead of waiting out the whole hold.
 //
 // Regressions guarded (#11933):
 //  - The old code released a bare preamble 2 * preambleTimeMsec after the first look that saw it
@@ -744,7 +747,7 @@ static void test_rxSighting_freshPreambleDuringStuckHeader_holds()
 
 static void test_rxSighting_resetEndsEveryHold()
 {
-    // RX_DONE, CRC_ERR and HEADER_ERR restart RX through standby: the frame is over, TX may go.
+    // RX_DONE, CRC_ERR, HEADER_ERR and our own TX: the frame is over, TX may go.
     RxSighting s;
     s.observe(1000, true, true, kRxMaxPacketMs);
     s.reset();
@@ -763,6 +766,54 @@ static void test_rxSighting_millisWrap_andZeroAreHandled()
     TEST_ASSERT_TRUE(s.observe(UINT32_MAX - 2, true, false, kRxMaxPacketMs));
     TEST_ASSERT_TRUE(s.observe(50, false, false, kRxMaxPacketMs));
     TEST_ASSERT_FALSE(s.observe(kRxMaxPacketMs - 3, false, false, kRxMaxPacketMs));
+}
+
+static void test_rxSighting_standbyKeepsALivePreambleHold()
+{
+    // A CAD scan, AGC reset or reconfigure goes through standby while a foreign frame is still on air.
+    // The old reset() here dropped the hold and TX went out over the frame.
+    RxSighting s;
+    TEST_ASSERT_TRUE(s.observe(1000, true, false, kRxMaxPacketMs));
+    s.flagsCleared(1010, kRxMaxPacketMs);
+    TEST_ASSERT_TRUE(s.observe(1050, false, false, kRxMaxPacketMs));
+    TEST_ASSERT_FALSE(s.observe(1000 + kRxMaxPacketMs, false, false, kRxMaxPacketMs));
+}
+
+static void test_rxSighting_standbyKeepsALiveHeaderHold()
+{
+    RxSighting s;
+    TEST_ASSERT_TRUE(s.observe(1000, false, true, kRxMaxPacketMs));
+    s.flagsCleared(1020, kRxMaxPacketMs);
+    TEST_ASSERT_TRUE(s.observe(1050, false, false, kRxMaxPacketMs));
+}
+
+static void test_rxSighting_standbyDropsAnExpiredHeader_soANewHeaderHolds()
+{
+    // The expired record only guarded a stuck latch; standby clears that latch, so a header seen after it
+    // is a new frame and must hold again.
+    RxSighting s;
+    s.observe(1000, false, true, kRxMaxPacketMs);
+    TEST_ASSERT_FALSE(s.observe(1000 + kRxMaxPacketMs, false, true, kRxMaxPacketMs));
+    s.flagsCleared(1000 + kRxMaxPacketMs + 5, kRxMaxPacketMs);
+    TEST_ASSERT_TRUE(s.observe(1000 + kRxMaxPacketMs + 10, false, true, kRxMaxPacketMs));
+}
+
+static void test_rxSighting_barePreamble_peekableOnlyAfterItsHeaderWasDue()
+{
+    // grace = the time a frame we can decode needs to latch HEADER_VALID after its preamble.
+    constexpr uint32_t grace = 20;
+    RxSighting s;
+    TEST_ASSERT_FALSE(s.barePreamblePeekable(1000, grace)); // nothing seen
+    s.observe(1000, true, false, kRxMaxPacketMs);
+    TEST_ASSERT_FALSE(s.barePreamblePeekable(1000 + grace - 1, grace)); // our own header may still come
+    TEST_ASSERT_TRUE(s.barePreamblePeekable(1000 + grace, grace));
+    s.observe(1030, false, true, kRxMaxPacketMs);
+    TEST_ASSERT_FALSE(s.barePreamblePeekable(1040, grace)); // a header means a real frame: wait, no peek
+
+    RxSighting e;
+    e.observe(1000, true, false, kRxMaxPacketMs);
+    e.observe(1000 + kRxMaxPacketMs, false, false, kRxMaxPacketMs); // the hold expired
+    TEST_ASSERT_FALSE(e.barePreamblePeekable(1000 + kRxMaxPacketMs, grace));
 }
 
 void setup()
@@ -806,6 +857,10 @@ void setup()
     RUN_TEST(test_rxSighting_freshPreambleDuringStuckHeader_holds);
     RUN_TEST(test_rxSighting_resetEndsEveryHold);
     RUN_TEST(test_rxSighting_millisWrap_andZeroAreHandled);
+    RUN_TEST(test_rxSighting_standbyKeepsALivePreambleHold);
+    RUN_TEST(test_rxSighting_standbyKeepsALiveHeaderHold);
+    RUN_TEST(test_rxSighting_standbyDropsAnExpiredHeader_soANewHeaderHolds);
+    RUN_TEST(test_rxSighting_barePreamble_peekableOnlyAfterItsHeaderWasDue);
     RUN_TEST(test_computePacketTime_txUsesTheRadiosOwnAnswer);
     RUN_TEST(test_computePacketTime_txFallsBackWhenTheRadioReportsAnError);
     RUN_TEST(test_computePacketTime_reportsNoAirtimeWhenNothingCanBeComputed);
