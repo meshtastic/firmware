@@ -15,6 +15,15 @@
 #if defined(LR11X0_CAD_EXIT_PROBE) && !defined(LR11X0_TX_PRESTAGE)
 #error "LR11X0_CAD_EXIT_PROBE sends the prestaged payload: build with -DLR11X0_TX_PRESTAGE -DRADIOLIB_GODMODE=1"
 #endif
+// Bench: -DLR11X0_RESUME_CONTINUOUS_RX keeps a continuous RX running after a frame instead of restarting it, checking the
+// chip is still in RX first. -DLR11X0_RX_REARM_AT_TX_DONE re-arms RX at TX_DONE from the readout task, before the radio
+// thread runs; the interrupt cannot call RadioLib, so it needs -DMESHTASTIC_RX_READOUT_TASK.
+#if defined(LR11X0_RX_REARM_AT_TX_DONE) && !defined(MESHTASTIC_RX_READOUT_TASK)
+#error "LR11X0_RX_REARM_AT_TX_DONE re-arms from the readout task: build with -DMESHTASTIC_RX_READOUT_TASK"
+#endif
+#if defined(LR11X0_CAD_EXIT_PROBE) || defined(LR11X0_RESUME_CONTINUOUS_RX)
+#define LR11X0_READ_CHIP_MODE 1
+#endif
 
 /**
  * \brief Adapter for LR11x0 radio family. Implements common logic for child classes.
@@ -123,11 +132,32 @@ template <class T> class LR11x0Interface : public RadioLibInterface
     /** When the last CAD verdict was read, on the bench clock, for the launch step trace */
     uint32_t cadVerdictClock = 0;
 #endif
-#ifdef LR11X0_CAD_EXIT_PROBE
+#ifdef LR11X0_READ_CHIP_MODE
     /** The chip's mode (stat2 bits 3..1, as RADIOLIB_LR11X0_STAT_2_MODE_*), waiting out a passing FS; 0xFF on SPI failure */
-    uint8_t readChipMode();
+    uint8_t readChipMode() const;
+    /** lora's Module, writable from const methods: RadioLib keeps LRxxxx::getStatus() protected, so read status here */
+    Module *const statusModule = &module;
+#endif
+#ifdef LR11X0_CAD_EXIT_PROBE
     /** A clear CAD under exit mode 0x11 put the chip in TX with the prestaged payload: launchTransmit() sends nothing */
     bool chipKeyedUp = false;
+#endif
+#ifdef LR11X0_RESUME_CONTINUOUS_RX
+    /** RX was armed continuous and nothing has put the chip into standby since */
+    bool rxArmedContinuous = false;
+    bool resumeRunningReceive() override;
+    bool receiveStillRunning() const override { return rxArmedContinuous && readChipMode() == RADIOLIB_LR11X0_STAT_2_MODE_RX; }
+#endif
+#ifdef LR11X0_RX_REARM_AT_TX_DONE
+    bool rearmReceiveFromIsr() override;
+    void rearmReceiveFromTask() override;
+    bool adoptReceiveArmedFromIsr() override;
+    enum RearmState : uint8_t { REARM_NONE, REARM_PENDING, REARM_ARMED, REARM_FAILED };
+    volatile uint8_t rearmState = REARM_NONE;
+    volatile int16_t rearmErr = 0;
+    volatile uint32_t rearmUs = 0;
+    /** FreeRTOS tick count when the task finished the re-arm */
+    volatile uint32_t rearmTicks = 0;
 #endif
 
     /// The TCXO Vref that init() settled on, so reinitChip() can begin() with the same oscillator setup

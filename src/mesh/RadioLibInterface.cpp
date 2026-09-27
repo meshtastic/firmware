@@ -1147,6 +1147,17 @@ bool INTERRUPT_ATTR RadioLibInterface::rxDoneFromIsr()
     return true;
 }
 
+bool INTERRUPT_ATTR RadioLibInterface::requestRearmFromIsr()
+{
+    if (!rxReadoutTask)
+        return false;
+    rxRearmFromTaskPending = true;
+    BaseType_t woken = pdFALSE;
+    vTaskNotifyGiveFromISR(rxReadoutTask, &woken);
+    YIELD_FROM_ISR(woken);
+    return true;
+}
+
 bool RadioLibInterface::wakeRxReadout()
 {
     if (!rxReadoutTask)
@@ -1167,6 +1178,10 @@ void RadioLibInterface::rxReadoutTaskMain(void *arg)
     benchClockStart();
     for (;;) {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        if (self->rxRearmFromTaskPending) {
+            self->rxRearmFromTaskPending = false;
+            self->rearmReceiveFromTask();
+        }
         self->readOutFromTask();
         self->rxReadoutPasses = self->rxReadoutPasses + 1;
     }
