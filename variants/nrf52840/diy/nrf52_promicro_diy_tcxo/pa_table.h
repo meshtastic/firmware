@@ -3,7 +3,7 @@
 
 // LR2021 LF PA from LR20xx DS rev 2.2 Table 7-19 (915 MHz reference design) at 10..22 dBm; that table stops at 10,
 // so -9..9 keep RadioLib's entries. RadioLib's own table never programs tx_power above 20.5 dBm and flattens from 14.
-// Index = power_dBm + 9. paVal in 0.5 dB. HF (2.4 GHz) uses RadioLib's default PA table.
+// Index = power_dBm + 9. paVal in 0.5 dB. Used at 500-1000 MHz only (isLr20x0CustomLfPaBand); RadioLib default elsewhere.
 
 static LR2021PaTableEntry_t lr2021_pa_table_lf[RADIOLIB_LR2021_PA_TABLE_LEN] = {
     // clang-format off
