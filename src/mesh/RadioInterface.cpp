@@ -834,7 +834,18 @@ uint32_t RadioInterface::getTxDelayMsec()
     float channelUtil = airTime->channelUtilizationPercent();
     uint8_t CWsize = map(channelUtil, 0, 100, CWmin, CWmax);
     // LOG_DEBUG("Current channel utilization is %f so setting CWsize to %d", channelUtil, CWsize);
-    return random(0, pow_of_2(CWsize)) * slotTimeMsec;
+    return random(0, pow_of_2(CWsize)) * slotTimeMsec + getSubSlotJitterMsec();
+}
+
+uint32_t RadioInterface::getSubSlotJitterMsec()
+{
+#ifdef MESHTASTIC_TX_SUBSLOT_JITTER
+    // Every node redraws from the end of the same frame, offset by its own handling time, so two nodes' slot grids sit
+    // at a fixed offset that can land inside the scan-to-air window. A random offset within the slot breaks that.
+    return random(0, slotTimeMsec);
+#else
+    return 0;
+#endif
 }
 
 /** The CW size to use when calculating SNR_based delays */
@@ -854,7 +865,11 @@ uint32_t RadioInterface::getTxDelayMsecWeightedWorst(float snr)
 {
     uint8_t CWsize = getCWsize(snr);
     // offset the maximum delay for routers: (2 * CWmax * slotTimeMsec)
-    return (2 * CWmax * slotTimeMsec) + pow_of_2(CWsize) * slotTimeMsec;
+    uint32_t worst = (2 * CWmax * slotTimeMsec) + pow_of_2(CWsize) * slotTimeMsec;
+#ifdef MESHTASTIC_TX_SUBSLOT_JITTER
+    worst += slotTimeMsec; // the jitter's maximum
+#endif
+    return worst;
 }
 
 /** Returns true if we should rebroadcast early like a ROUTER */
@@ -878,11 +893,11 @@ uint32_t RadioInterface::getTxDelayMsecWeighted(meshtastic_MeshPacket *p)
     uint8_t CWsize = getCWsize(snr);
     // LOG_DEBUG("rx_snr of %f so setting CWsize to:%d", snr, CWsize);
     if (shouldRebroadcastEarlyLikeRouter(p)) {
-        delay = random(0, 2 * CWsize) * slotTimeMsec;
+        delay = random(0, 2 * CWsize) * slotTimeMsec + getSubSlotJitterMsec();
         LOG_DEBUG("rx_snr in packet. Router: tx delay:%d", delay);
     } else {
         // offset the maximum delay for routers: (2 * CWmax * slotTimeMsec)
-        delay = (2 * CWmax * slotTimeMsec) + random(0, pow_of_2(CWsize)) * slotTimeMsec;
+        delay = (2 * CWmax * slotTimeMsec) + random(0, pow_of_2(CWsize)) * slotTimeMsec + getSubSlotJitterMsec();
         LOG_DEBUG("rx_snr in packet. Tx delay:%d", delay);
     }
 
