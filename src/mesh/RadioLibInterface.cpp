@@ -821,6 +821,9 @@ unsigned RadioLibInterface::deliverCapturedFrames(bool *rxEnded)
         delivered++;
         if (!info.chipListening && rxEnded)
             *rxEnded = true;
+#ifdef MESHTASTIC_TX_SLOT_ANCHOR
+        noteFrameEnd(info.wakeMs, "rx"); // the RX_DONE interrupt's time, which the task recorded
+#endif
         LOG_TRACE("RX read out by task: wake to readout %u ms (SPI %u us), readout to handler %u ms",
                   (unsigned)(info.readMs - info.wakeMs), (unsigned)info.spiUs, (unsigned)(millis() - info.readMs));
         handleReceiveInterrupt(&info);
@@ -850,7 +853,8 @@ void RadioLibInterface::handleReceiveInterrupt(const CapturedRxInfo *captured)
 
     uint32_t rxMsec = getPacketTime(length, true);
 #ifdef MESHTASTIC_TX_SLOT_ANCHOR
-    noteFrameEnd(frameEndFromIsr(false), "rx");
+    if (!captured) // the readout task's RX_DONE never reaches isrLevel0Common(), so its tick stamp is not this frame's
+        noteFrameEnd(frameEndFromIsr(false), "rx");
 #endif
 
 #ifndef DISABLE_WELCOME_UNSET
