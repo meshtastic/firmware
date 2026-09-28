@@ -12,8 +12,18 @@
 #endif
 // Bench probe: -DLR11X0_CAD_EXIT_PROBE scans with CAD exit mode 0x11 (RX on detection | TX when clear), which Semtech does
 // not document, and logs the mode the chip lands in after each verdict. It keys up from the prestaged payload.
-#if defined(LR11X0_CAD_EXIT_PROBE) && !defined(LR11X0_TX_PRESTAGE)
-#error "LR11X0_CAD_EXIT_PROBE sends the prestaged payload: build with -DLR11X0_TX_PRESTAGE -DRADIOLIB_GODMODE=1"
+// Bench: -DLR11X0_CAD_EXIT_LBT scans with exit mode 0x10 (LBT): a clear CAD keys up from the prestaged payload, and a busy
+// one leaves the chip in standby for rearmReceive() to restart RX, with no CAD>RX handoff. Same path as the probe.
+#if defined(LR11X0_CAD_EXIT_PROBE) && defined(LR11X0_CAD_EXIT_LBT)
+#error "LR11X0_CAD_EXIT_PROBE and LR11X0_CAD_EXIT_LBT pick different exit modes: build with one"
+#endif
+#if defined(LR11X0_CAD_EXIT_PROBE)
+#define LR11X0_CAD_EXIT_KEYUP (RADIOLIB_LR11X0_CAD_EXIT_MODE_RX | RADIOLIB_LR11X0_CAD_EXIT_MODE_LBT)
+#elif defined(LR11X0_CAD_EXIT_LBT)
+#define LR11X0_CAD_EXIT_KEYUP RADIOLIB_LR11X0_CAD_EXIT_MODE_LBT
+#endif
+#if defined(LR11X0_CAD_EXIT_KEYUP) && !defined(LR11X0_TX_PRESTAGE)
+#error "LR11X0_CAD_EXIT_PROBE and _LBT send the prestaged payload: build with -DLR11X0_TX_PRESTAGE -DRADIOLIB_GODMODE=1"
 #endif
 // Bench: -DLR11X0_RESUME_CONTINUOUS_RX keeps a continuous RX running after a frame instead of restarting it, checking the
 // chip is still in RX first. -DLR11X0_RX_REARM_AT_TX_DONE re-arms RX at TX_DONE from the readout task, before the radio
@@ -21,7 +31,7 @@
 #if defined(LR11X0_RX_REARM_AT_TX_DONE) && !defined(MESHTASTIC_RX_READOUT_TASK)
 #error "LR11X0_RX_REARM_AT_TX_DONE re-arms from the readout task: build with -DMESHTASTIC_RX_READOUT_TASK"
 #endif
-#if defined(LR11X0_CAD_EXIT_PROBE) || defined(LR11X0_RESUME_CONTINUOUS_RX)
+#if defined(LR11X0_CAD_EXIT_KEYUP) || defined(LR11X0_RESUME_CONTINUOUS_RX)
 #define LR11X0_READ_CHIP_MODE 1
 #endif
 
@@ -138,8 +148,8 @@ template <class T> class LR11x0Interface : public RadioLibInterface
     /** lora's Module, writable from const methods: RadioLib keeps LRxxxx::getStatus() protected, so read status here */
     Module *const statusModule = &module;
 #endif
-#ifdef LR11X0_CAD_EXIT_PROBE
-    /** A clear CAD under exit mode 0x11 put the chip in TX with the prestaged payload: launchTransmit() sends nothing */
+#ifdef LR11X0_CAD_EXIT_KEYUP
+    /** A clear CAD under an LBT exit mode put the chip in TX with the prestaged payload: launchTransmit() sends nothing */
     bool chipKeyedUp = false;
 #endif
 #ifdef LR11X0_RESUME_CONTINUOUS_RX
