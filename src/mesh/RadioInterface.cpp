@@ -834,8 +834,51 @@ uint32_t RadioInterface::getTxDelayMsec()
     float channelUtil = airTime->channelUtilizationPercent();
     uint8_t CWsize = map(channelUtil, 0, 100, CWmin, CWmax);
     // LOG_DEBUG("Current channel utilization is %f so setting CWsize to %d", channelUtil, CWsize);
+#ifdef MESHTASTIC_TX_SLOT_ANCHOR
+    return getAnchoredSlotDelayMsec(pow_of_2(CWsize));
+#else
     return random(0, pow_of_2(CWsize)) * slotTimeMsec + getSubSlotJitterMsec();
+#endif
 }
+
+#ifdef MESHTASTIC_TX_SLOT_ANCHOR
+#if defined(MESHTASTIC_TX_SUBSLOT_JITTER)
+#error "MESHTASTIC_TX_SLOT_ANCHOR (or _PARITY) and MESHTASTIC_TX_SUBSLOT_JITTER place the draw differently: build with one"
+#endif
+#if defined(MESHTASTIC_TX_SLOT_PARITY) && (MESHTASTIC_TX_SLOT_PARITY + 0) != 0 && (MESHTASTIC_TX_SLOT_PARITY + 0) != 1
+#error "MESHTASTIC_TX_SLOT_PARITY is this node's slot parity: build with =0 or =1"
+#endif
+
+void RadioInterface::noteFrameEnd(uint32_t endMs, const char *what)
+{
+    if (lastFrameEndMs && (int32_t)(endMs - lastFrameEndMs) < 0)
+        return; // a frame delivered late, after one that ended later
+    lastFrameEndMs = Time::skipZero(endMs);
+    lastFrameEndWhat = what;
+}
+
+uint32_t RadioInterface::getAnchoredSlotDelayMsec(uint32_t slots)
+{
+    // Bench: nodes that redraw after the same frame count their slots from its air end rather than from their own
+    // handling of it, so their grids line up. With a parity, each node also takes only slots of its own parity.
+    const uint32_t now = Time::getMillis();
+    const uint32_t sinceEnd = lastFrameEndMs ? now - lastFrameEndMs : 0;
+    uint32_t first = (sinceEnd + slotTimeMsec - 1) / slotTimeMsec; // the first slot that has not started yet
+#ifdef MESHTASTIC_TX_SLOT_PARITY
+    const uint32_t parity = MESHTASTIC_TX_SLOT_PARITY;
+    if ((first & 1) != parity)
+        first++;
+    const uint32_t slot = first + 2 * random(0, max(slots / 2, (uint32_t)1));
+#else
+    const uint32_t parity = 2; // any
+    const uint32_t slot = first + random(0, slots);
+#endif
+    LOG_TRACE("TX slot anchor: slot %u of %u, parity %u, %u ms after %s end", (unsigned)slot, (unsigned)slots, (unsigned)parity,
+              (unsigned)sinceEnd, lastFrameEndMs ? lastFrameEndWhat : "no");
+    (void)parity; // for builds without trace logging
+    return slot * slotTimeMsec - sinceEnd;
+}
+#endif
 
 uint32_t RadioInterface::getSubSlotJitterMsec()
 {

@@ -69,6 +69,9 @@ void INTERRUPT_ATTR RadioLibInterface::isrLevel0Common(PendingISR cause)
 #ifdef ARCH_PORTDUINO
     lastIsrMillis = millis();
 #endif
+#if defined(MESHTASTIC_TX_SLOT_ANCHOR) && defined(HAS_FREE_RTOS) && !defined(ARCH_PORTDUINO)
+    (cause == ISR_TX ? txDoneIsrTicks : rxDoneIsrTicks) = xTaskGetTickCountFromISR();
+#endif
     instance->disableInterrupt();
 
     BaseType_t xHigherPriorityTaskWoken;
@@ -101,6 +104,28 @@ RadioLibInterface *RadioLibInterface::instance;
 
 #ifdef ARCH_PORTDUINO
 volatile uint32_t RadioLibInterface::lastIsrMillis;
+#endif
+
+#ifdef MESHTASTIC_TX_SLOT_ANCHOR
+volatile uint32_t RadioLibInterface::txDoneIsrTicks, RadioLibInterface::rxDoneIsrTicks;
+
+uint32_t RadioLibInterface::frameEndFromIsr(bool tx)
+{
+    const uint32_t now = Time::getMillis();
+    uint32_t endMs = now;
+#if defined(ARCH_PORTDUINO)
+    // A CH341 host sees TX_DONE only by polling, but its launch waits until the chip is on air, so the start plus the
+    // airtime is closer. Its RX_DONE is the poll that found it.
+    endMs = tx ? txPredictedEndMs : lastIsrMillis;
+#elif defined(HAS_FREE_RTOS)
+    const uint32_t ticks = xTaskGetTickCount() - (tx ? txDoneIsrTicks : rxDoneIsrTicks);
+    endMs = now - (uint32_t)(((uint64_t)ticks * 1000) / configTICK_RATE_HZ);
+#endif
+    // A stamp older than this TX's launch, or one still ahead, is not this frame's: a missed interrupt found by a poll
+    if ((int32_t)(endMs - now) > 0 || (tx && (int32_t)(endMs - lastTxStart) < 0))
+        endMs = now;
+    return endMs;
+}
 #endif
 
 /** Could we send right now (i.e. either not actively receiving or transmitting)? */
@@ -428,6 +453,9 @@ void RadioLibInterface::scheduleIrqPollTick()
 void RadioLibInterface::deliverPendingIrqFromPoll(PendingISR cause)
 {
     disableInterrupt(); // stop polling; this is the poll-path equivalent of isrLevel0Common()
+#if defined(MESHTASTIC_TX_SLOT_ANCHOR) && defined(ARCH_PORTDUINO)
+    lastIsrMillis = millis(); // the slot anchor reads it, as it does after isrLevel0Common()
+#endif
     notify(cause, true);
 }
 
@@ -451,6 +479,10 @@ void RadioLibInterface::onNotify(uint32_t notification)
         if (irqPolledOverUsb() && sendingPacket && !txDoneByCheck)
             LOG_TRACE("TX done seen by poll after %u ms", (unsigned)(Time::getMillis() - lastTxStart));
         noteDeafFrom("tx");
+#ifdef MESHTASTIC_TX_SLOT_ANCHOR
+        if (sendingPacket)
+            noteFrameEnd(frameEndFromIsr(true), "tx");
+#endif
         {
             const uint32_t t0 = millis();
             handleTransmitInterrupt(); // completeSending() already restored the radio to the home config
@@ -817,6 +849,9 @@ void RadioLibInterface::handleReceiveInterrupt(const CapturedRxInfo *captured)
     }
 
     uint32_t rxMsec = getPacketTime(length, true);
+#ifdef MESHTASTIC_TX_SLOT_ANCHOR
+    noteFrameEnd(frameEndFromIsr(false), "rx");
+#endif
 
 #ifndef DISABLE_WELCOME_UNSET
     if (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
@@ -1347,6 +1382,9 @@ bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
             enableInterrupt(isrTxLevel0);
             // unset-sentinel-ok: busyTx/sendingPacket is the armed flag, so 0 is a legal stamp
             lastTxStart = Time::getMillis();
+#ifdef MESHTASTIC_TX_SLOT_ANCHOR
+            txPredictedEndMs = lastTxStart + getPacketTime(txp);
+#endif
             txDoneByCheck = false;
             if (irqPolledOverUsb()) {
                 txDoneChecksLeft = TX_DONE_CHECK_TRIES;

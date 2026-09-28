@@ -126,6 +126,15 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     static volatile uint32_t lastIsrMillis;
 #endif
 
+#ifdef MESHTASTIC_TX_SLOT_ANCHOR
+    // Bench: FreeRTOS tick of the last TX_DONE and RX_DONE interrupts, for the slot anchor
+    static volatile uint32_t txDoneIsrTicks, rxDoneIsrTicks;
+    /** Bench: millis() when the frame being sent should leave the air, from its launch and its airtime */
+    uint32_t txPredictedEndMs = 0;
+    /** Bench: the best estimate of when the frame this TX_DONE or RX_DONE ended left the air */
+    uint32_t frameEndFromIsr(bool tx);
+#endif
+
     ModemType_t modemType = RADIOLIB_MODEM_LORA;
     DataRate_t getDataRate() const { return {.lora = {.spreadingFactor = sf, .bandwidth = bw, .codingRate = cr}}; }
     PacketConfig_t getPacketConfig() const
