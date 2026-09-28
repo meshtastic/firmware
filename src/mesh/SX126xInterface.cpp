@@ -675,18 +675,21 @@ template <typename T> void SX126xInterface<T>::handleSoftwareLoraIrqPoll()
 }
 #endif
 
-template <typename T> int16_t SX126xInterface<T>::trySetStandby()
+template <typename T> int16_t SX126xInterface<T>::trySetStandby(bool skipChipCommand)
 {
     const uint32_t t0 = millis();
     checkNotification(); // handle any pending interrupts before we force standby
     const uint32_t tNotify = millis();
 
-    int16_t err = lora.standby();
-    if (err == RADIOLIB_ERR_SPI_CMD_TIMEOUT) {
-        // After a bounded RX times out, the status byte returned with SET_STANDBY still carries that timeout, and
-        // RadioLib reports it as a failed command although the chip took it. The next command sees a fresh status.
+    int16_t err = RADIOLIB_ERR_NONE;
+    if (!skipChipCommand) {
         err = lora.standby();
-        LOG_DEBUG("SX126x standby reported a stale command timeout, retry %s%d", radioLibErr, err);
+        if (err == RADIOLIB_ERR_SPI_CMD_TIMEOUT) {
+            // After a bounded RX times out, the status byte returned with SET_STANDBY still carries that timeout, and
+            // RadioLib reports it as a failed command although the chip took it. The next command sees a fresh status.
+            err = lora.standby();
+            LOG_DEBUG("SX126x standby reported a stale command timeout, retry %s%d", radioLibErr, err);
+        }
     }
     const uint32_t tCmd = millis();
 
@@ -775,8 +778,17 @@ template <typename T> void SX126xInterface<T>::startReceive()
 #endif
     };
 
+#ifdef CH341_SKIP_POST_TX_STANDBY
+    // Bench flag. setStandbyXOSC(true) sets the RX/TX fallback mode, so a CH341 host's chip is already in
+    // STDBY_XOSC the moment TX_DONE rises. The SET_STANDBY this opens with is then a command's worth of USB
+    // - four transfers, CS and BUSY included - for a transition the chip has already made. Round 41 logged
+    // that step at 0-1 ms of a 4-5 ms post-TX deaf span.
+    const bool skipStandbyCmd = postTxRearm && irqPolledOverUsb();
+#else
+    const bool skipStandbyCmd = false;
+#endif
     const uint32_t tStandby = millis();
-    int16_t err = trySetStandby();
+    int16_t err = trySetStandby(skipStandbyCmd);
     const uint32_t tStartRx = millis();
     if (err == RADIOLIB_ERR_NONE)
         err = tryStartRx();

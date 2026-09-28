@@ -137,8 +137,9 @@ template <class T> class SX126xInterface : public RadioLibInterface
     /** begin() and chip-side setup, shared by init() and by reconfigure()'s recovery of a chip that lost its state */
     bool reinitChip();
 
-    /** setStandby()'s body, returning the standby error instead of asserting - for callers that can recover */
-    int16_t trySetStandby();
+    /** setStandby()'s body, returning the standby error instead of asserting - for callers that can recover.
+     *  skipChipCommand leaves SET_STANDBY out where the chip is already there, and keeps the bookkeeping. */
+    int16_t trySetStandby(bool skipChipCommand = false);
 
 #if defined(SX126X_STATE_SAMPLER_MS) || defined(SX126X_RX_REARM_AT_TX_DONE)
     /** The chip select, kept for raw commands outside RadioLib, which does not expose it */
