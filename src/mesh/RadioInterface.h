@@ -223,6 +223,9 @@ class RadioInterface
     /** The delay to use when we want to send something */
     [[nodiscard]] uint32_t getTxDelayMsec();
 
+    /** Bench: -DMESHTASTIC_TX_SUBSLOT_JITTER adds a random 0..slot-1 ms to each backoff draw, 0 otherwise */
+    [[nodiscard]] uint32_t getSubSlotJitterMsec();
+
     /** The CW to use when calculating SNR_based delays */
     [[nodiscard]] uint8_t getCWsize(float snr);
 
