@@ -588,6 +588,8 @@ void RadioLibInterface::setTransmitDelay()
         // back to the 0 being avoided.
         p->tx_after = Time::skipZero(
             (uint32_t)min(max(p->tx_after + add_delay, now + add_delay), now + 2 * getTxDelayMsecWeightedWorst(p->rx_snr)));
+        LOG_TRACE("TX backoff %u ms (tx_after), drew %u ms, slot %u ms, util %u%%", (unsigned)(p->tx_after - now),
+                  (unsigned)add_delay, (unsigned)slotTimeMsec, (unsigned)airTime->channelUtilizationPercent());
         notifyLater(p->tx_after - now, TRANSMIT_DELAY_COMPLETED, txTimerOverwrite);
     } else if (p->rx_snr == 0 && p->rx_rssi == 0) {
         /* We assume if rx_snr = 0 and rx_rssi = 0, the packet was generated locally.
@@ -607,6 +609,9 @@ void RadioLibInterface::startTransmitTimer(bool withDelay)
     // If we have work to do and the timer wasn't already scheduled, schedule it now
     if (!txQueue.empty()) {
         uint32_t delay = !withDelay ? 1 : getTxDelayMsec();
+        // Bench: each redraw restarts the slot grid here, so the trace's timestamp is the grid's origin
+        LOG_TRACE("TX backoff %u ms, %u slots of %u ms, util %u%%", (unsigned)delay, (unsigned)(delay / slotTimeMsec),
+                  (unsigned)slotTimeMsec, (unsigned)airTime->channelUtilizationPercent());
         notifyLater(delay, TRANSMIT_DELAY_COMPLETED, txTimerOverwrite); // This will implicitly enable
     }
 }
@@ -616,6 +621,8 @@ void RadioLibInterface::startTransmitTimerRebroadcast(meshtastic_MeshPacket *p)
     // If we have work to do and the timer wasn't already scheduled, schedule it now
     if (!txQueue.empty()) {
         uint32_t delay = getTxDelayMsecWeighted(p);
+        LOG_TRACE("TX backoff %u ms (weighted), %u slots of %u ms, util %u%%", (unsigned)delay, (unsigned)(delay / slotTimeMsec),
+                  (unsigned)slotTimeMsec, (unsigned)airTime->channelUtilizationPercent());
         notifyLater(delay, TRANSMIT_DELAY_COMPLETED, txTimerOverwrite); // This will implicitly enable
     }
 }
