@@ -9,7 +9,7 @@
 // ask for the packet type first; 0x02 is LoRa, which as a status byte would decode as CMD_PERR,
 // so it goes in the data byte only.
 #define LR11X0_RADIO(hal)                                                                                                        \
-    RecordingHal hal;                                                                                                            \
+    RecordingHal &hal = freshHal();                                                                                              \
     hal.reply(op16(RADIOLIB_LR11X0_CMD_GET_PACKET_TYPE), 0x04, {0x04, RADIOLIB_LR11X0_PACKET_TYPE_LORA}, true);                  \
     Module mod(&hal, 1, RADIOLIB_NC, RADIOLIB_NC, 2);                                                                            \
     LR1121 radio(&mod)

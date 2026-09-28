@@ -8,7 +8,7 @@
 
 // The setters check REG_OP_MODE bit 7 for LoRa mode; begin() would have set it.
 #define SX127X_RADIO(hal)                                                                                                        \
-    RecordingHal hal;                                                                                                            \
+    RecordingHal &hal = freshHal();                                                                                              \
     hal.registerEcho = true;                                                                                                     \
     hal.registers[RADIOLIB_SX127X_REG_OP_MODE] = RADIOLIB_SX127X_LORA | RADIOLIB_SX127X_STANDBY;                                 \
     Module mod(&hal, 1, RADIOLIB_NC, RADIOLIB_NC, RADIOLIB_NC);                                                                  \

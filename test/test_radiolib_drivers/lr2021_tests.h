@@ -17,7 +17,7 @@ static void lr2021Tune(RecordingHal &hal, LR2021 &radio)
 
 // As LR11x0: the packet type comes back in the data byte of the next transaction. 0x00 is LoRa.
 #define LR2021_RADIO(hal)                                                                                                        \
-    RecordingHal hal;                                                                                                            \
+    RecordingHal &hal = freshHal();                                                                                              \
     hal.reply(op16(RADIOLIB_LR2021_CMD_GET_PACKET_TYPE), 0x04, {0x04, RADIOLIB_LR2021_PACKET_TYPE_LORA}, true);                  \
     Module mod(&hal, 1, RADIOLIB_NC, RADIOLIB_NC, 2);                                                                            \
     LR2021 radio(&mod);                                                                                                          \

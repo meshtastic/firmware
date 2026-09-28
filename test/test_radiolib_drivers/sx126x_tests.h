@@ -35,7 +35,7 @@ static void sx126xFraming(Module &mod)
 }
 
 #define SX126X_RADIO(hal)                                                                                                        \
-    RecordingHal hal;                                                                                                            \
+    RecordingHal &hal = freshHal();                                                                                              \
     sx126xAnswerLora(hal);                                                                                                       \
     Module mod(&hal, 1, RADIOLIB_NC, RADIOLIB_NC, 2);                                                                            \
     TestSX1262 radio(&mod);                                                                                                      \

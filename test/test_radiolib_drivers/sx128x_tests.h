@@ -24,7 +24,7 @@ static void sx128xFraming(Module &mod)
 
 // The LoRa setters ask for the packet type first. 0x01 is LoRa and matches no SX128x error code.
 #define SX128X_RADIO(hal)                                                                                                        \
-    RecordingHal hal;                                                                                                            \
+    RecordingHal &hal = freshHal();                                                                                              \
     hal.reply({RADIOLIB_SX128X_CMD_GET_PACKET_TYPE}, RADIOLIB_SX128X_PACKET_TYPE_LORA);                                          \
     Module mod(&hal, 1, RADIOLIB_NC, RADIOLIB_NC, 2);                                                                            \
     SX1280 radio(&mod);                                                                                                          \
