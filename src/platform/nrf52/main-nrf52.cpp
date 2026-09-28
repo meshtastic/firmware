@@ -29,7 +29,9 @@
 #include <power/PowerHAL.h>
 
 #include "Nrf52SaadcLock.h"
+#include "SPILock.h"
 #include "concurrency/LockGuard.h"
+#include "flash/flash_nrf5x.h"
 #include <hal/nrf_lpcomp.h>
 
 #ifdef BQ25703A_ADDR
@@ -483,6 +485,15 @@ void nrf52Setup()
     assert(r == NRFX_SUCCESS);
 }
 
+// Waits out any flash write another task has in flight, drains the shared page cache, and keeps
+// both locks: the caller resets next, and a reset mid-program tears the page.
+void nrf52FlashQuiesce()
+{
+    spiLock->lock();
+    InternalFS._lockFS();
+    flash_nrf5x_flush();
+}
+
 void cpuDeepSleep(uint32_t msecToWake)
 {
     // FIXME, configure RTC or button press to wake us
@@ -497,8 +508,8 @@ void cpuDeepSleep(uint32_t msecToWake)
     if (Serial)       // Another check in case of disabled default serial, does nothing bad
         Serial.end(); // This may cause crashes as debug messages continue to flow.
 
-        // This causes troubles with waking up on nrf52 (on pro-micro in particular):
-        // we have no Serial1 in use on nrf52, check Serial and GPS modules.
+    // This causes troubles with waking up on nrf52 (on pro-micro in particular):
+    // we have no Serial1 in use on nrf52, check Serial and GPS modules.
 #ifdef PIN_SERIAL1_RX
     if (Serial1) // A straightforward solution to the wake from deepsleep problem
         Serial1.end();
@@ -517,6 +528,8 @@ void cpuDeepSleep(uint32_t msecToWake)
 #endif
     // Run shutdown code if specified in variant.cpp
     variant_shutdown();
+
+    nrf52FlashQuiesce();
 
     // Sleepy trackers or sensors can low power "sleep"
     // Don't enter this if we're sleeping portMAX_DELAY, since that's a shutdown event
@@ -583,6 +596,7 @@ void clearBonds()
 
 void enterDfuMode()
 {
+    nrf52FlashQuiesce();
 // SDK kit does not have native USB like almost all other NRF52 boards
 #ifdef NRF_USE_SERIAL_DFU
     enterSerialDfu();

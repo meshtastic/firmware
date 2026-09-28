@@ -32,6 +32,9 @@ jobs:
     if: ${{ github.event_name != 'pull_request_target' && github.event_name != 'pull_request' }}
     runs-on: ubuntu-24.04
     needs: build-debian-src
+    env:
+      up_ppa_repo: ${{ inputs.ppa_repo }}
+      up_series: ${{ inputs.series }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -98,10 +101,21 @@ jobs:
         id: ssh
 
       - name: Publish with dput (sftp)
+        continue-on-error: true
         timeout-minutes: 30 # dput is terrible, sometimes runs 'forever'
+        id: publish_ppa
         env:
-          up_ppa_repo: ${{ inputs.ppa_repo }}
-          up_series: ${{ inputs.series }}
+          up_version: ${{ steps.version.outputs.deb }}
+        run: >
+          dput -c /etc/meshtastic-dput.cf
+          ssh-${up_ppa_repo}
+          meshtasticd_${up_version}~${up_series}_source.changes
+
+      # Only retry once if the initial publish fails
+      - name: "Retry: Publish with dput (sftp)"
+        if: steps.publish_ppa.outcome == 'failure'
+        timeout-minutes: 30
+        env:
           up_version: ${{ steps.version.outputs.deb }}
         run: >
           dput -c /etc/meshtastic-dput.cf

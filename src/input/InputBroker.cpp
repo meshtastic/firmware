@@ -17,6 +17,7 @@
 
 #if !MESHTASTIC_EXCLUDE_INPUTBROKER
 #include "input/ExpressLRSFiveWay.h"
+#include "input/QuadratureEncoder.h"
 #include "input/RotaryEncoderImpl.h"
 #include "input/RotaryEncoderInterruptImpl1.h"
 #include "input/SerialKeyboardImpl.h"
@@ -454,6 +455,13 @@ void InputBroker::Init()
         if (!upDownInterruptImpl1->init()) {
             delete upDownInterruptImpl1;
             upDownInterruptImpl1 = nullptr;
+        }
+#elif defined(INPUTDRIVER_ENCODER_TYPE) && (INPUTDRIVER_ENCODER_TYPE == 4)
+        // Pins come from variant.h, so there is no moduleConfig to consult and nothing to enable.
+        quadratureEncoder = new QuadratureEncoder("quadEnc");
+        if (!quadratureEncoder->init()) {
+            delete quadratureEncoder;
+            quadratureEncoder = nullptr;
         }
 #else
         rotaryEncoderInterruptImpl1 = new RotaryEncoderInterruptImpl1();

@@ -18,8 +18,10 @@
 #include "Nrf52SaadcLock.h"
 #include "Power.h"
 #include "PowerMon.h"
+#include "SPILock.h"
 #include "concurrency/LockGuard.h"
 #include "error.h"
+#include "flash/flash_nrf5x.h"
 #include "main.h"
 #include "meshUtils.h"
 #include <power/PowerHAL.h>
@@ -370,6 +372,15 @@ void nrf52Setup()
     assert(r == 0);
 }
 
+// Waits out any flash write another task has in flight, drains the shared page cache, and keeps
+// both locks: the caller resets next, and a reset mid-program tears the page.
+void nrf52FlashQuiesce()
+{
+    spiLock->lock();
+    InternalFS._lockFS();
+    flash_nrf5x_flush();
+}
+
 void cpuDeepSleep(uint32_t msecToWake)
 {
 #if HAS_WIRE
@@ -390,6 +401,8 @@ void cpuDeepSleep(uint32_t msecToWake)
 
     // Run shutdown code if specified in variant.cpp
     variant_shutdown();
+
+    nrf52FlashQuiesce();
 
     // Sleepy trackers or sensors can low power "sleep"
     // Don't enter this if we're sleeping portMAX_DELAY, since that's a shutdown event
@@ -428,5 +441,6 @@ void clearBonds()
 
 void enterDfuMode()
 {
+    nrf52FlashQuiesce();
     enterSerialDfu(); // no USB, so no UF2 bootloader
 }

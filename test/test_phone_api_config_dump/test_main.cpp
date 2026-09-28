@@ -528,6 +528,39 @@ void test_dump_reaches_idle_after_complete()
     TEST_ASSERT_EQUAL_UINT(0, api->getFromRadio(buf));
 }
 
+// A packet queued while the client is still consuming config is not announced by onNotify().
+// Once config completes, re-arm the transport so the queued packet cannot sleep until later traffic.
+void test_packet_queued_mid_sync_is_announced_after_complete()
+{
+    startHandshake(FULL_DUMP_NONCE);
+    api->dataNotifications = 0;
+
+    meshtastic_MeshPacket packet = meshtastic_MeshPacket_init_zero;
+    packet.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    packet.decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
+    packet.from = SEEDED_NODE_A;
+    packet.to = NODENUM_BROADCAST;
+    packet.id = 0xA11CE001;
+    meshtastic_MeshPacket *queued = packetPool.allocCopy(packet);
+    TEST_ASSERT_NOT_NULL(queued);
+    service->sendToPhone(queued);
+
+    service->loop();
+    TEST_ASSERT_EQUAL_UINT_MESSAGE(0, api->dataNotifications, "mid-sync packet should not interrupt the config dump");
+
+    DumpTranscript t;
+    TEST_ASSERT_TRUE(drainUntilComplete(t));
+    const unsigned notificationsAtComplete = api->dataNotifications;
+    service->loop();
+    TEST_ASSERT_GREATER_THAN_UINT_MESSAGE(notificationsAtComplete, api->dataNotifications,
+                                          "config completion must re-announce packets queued during sync");
+
+    meshtastic_FromRadio msg;
+    TEST_ASSERT_TRUE(readOneFromRadio(msg));
+    TEST_ASSERT_EQUAL_UINT(meshtastic_FromRadio_packet_tag, msg.which_payload_variant);
+    TEST_ASSERT_EQUAL_UINT32(packet.id, msg.packet.id);
+}
+
 // The first region set moves my_node_num live (NodeDB::createNewIdentity()) with no reboot to force a
 // re-handshake, so the stream must re-announce my_info - exactly once - on its own.
 void test_node_num_change_resends_my_info()
@@ -679,6 +712,7 @@ void setup()
     RUN_TEST(test_close_mid_dump_then_reconnect_restarts_clean);
     RUN_TEST(test_rehandshake_mid_dump_restarts_from_my_info);
     RUN_TEST(test_dump_reaches_idle_after_complete);
+    RUN_TEST(test_packet_queued_mid_sync_is_announced_after_complete);
     RUN_TEST(test_node_num_change_resends_my_info);
     RUN_TEST(test_node_num_change_mid_dump_restarts_sync);
     RUN_TEST(test_node_num_change_mid_nodes_only_restarts_sync);

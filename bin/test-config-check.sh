@@ -377,6 +377,18 @@ assert "pin value that resolves to -1" 1 pin-unreadable.yaml check \
 	"Result: 1 error, 0 warnings"
 
 echo
+echo "joystick buttons:"
+# Keyed by action rather than by button so that one action can list several codes.
+# The clean case is the regression guard on the list form staying accepted.
+assert "several buttons bound to one action" 0 joystick-buttons.yaml check \
+	"Result: 0 errors, 0 warnings"
+assert "joystick mappings that do nothing" 0 joystick-buttons-bad.yaml check \
+	"'fire' is not a recognised action" \
+	"'BTN_SOUTH' is not an evdev button code" \
+	"button 0x121 is mapped to both 'select' and 'cancel'" \
+	"Result: 0 errors, 3 warnings"
+
+echo
 echo "CH341 USB-SPI adapters:"
 # The Lora pins of a ch341 device are indexes on the adapter, driven by the usermode
 # driver: portduinoSetup() skips initGPIOPin() for all of them. Reporting them as

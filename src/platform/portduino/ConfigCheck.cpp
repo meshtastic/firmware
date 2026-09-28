@@ -37,6 +37,9 @@ constexpr int MAX_NODES_SANITY_CEILING = 16000;
 
 const std::set<std::string> kLoraPinKeys = {"CS", "IRQ", "Busy", "Reset", "TXen", "RXen", "SX126X_ANT_SW", "GPIO_DETECT_PA"};
 
+// Action names LinuxJoystick understands; anything else leaves the button unmapped.
+const std::set<std::string> kJoystickActions = {"select", "cancel", "back", "up", "down", "left", "right", "user", "userpress"};
+
 const std::map<std::string, std::set<std::string>> &schema()
 {
     static const std::map<std::string, std::set<std::string>> s = {
@@ -363,6 +366,61 @@ void checkPinNode(const std::string &file, const std::string &path, const YAML::
         if (!kPinSubKeys.count(key))
             findings.push_back({kError, file, lineOf(entry.first),
                                 "unknown key '" + path + "." + key + "'. A pin mapping accepts only pin, gpiochip and line"});
+    }
+}
+
+// Keyed by action, not by button, so one action can list several codes and have every one of
+// those buttons drive it. The value is a single evdev code or a list of them.
+void checkJoystickButtons(const std::string &file, const YAML::Node &node, std::vector<Finding> &findings)
+{
+    if (!node.IsMap()) {
+        findings.push_back(
+            {kError, file, lineOf(node), "Input.JoystickButtons must be a mapping of action name to evdev button code"});
+        return;
+    }
+
+    std::map<int, std::string> owner; // code -> the action that claimed it first
+    for (const auto &entry : node) {
+        std::string action = entry.first.as<std::string>("");
+        for (auto &c : action)
+            c = tolower(c);
+        if (!kJoystickActions.count(action)) {
+            findings.push_back({kWarn, file, lineOf(entry.first),
+                                "Input.JoystickButtons: '" + action +
+                                    "' is not a recognised action, so those buttons do nothing. Valid actions are select, "
+                                    "cancel, back, up, down, left, right and user"});
+            continue;
+        }
+
+        std::vector<YAML::Node> codeNodes;
+        if (entry.second.IsSequence())
+            for (const auto &codeNode : entry.second)
+                codeNodes.push_back(codeNode);
+        else
+            codeNodes.push_back(entry.second);
+
+        for (const auto &codeNode : codeNodes) {
+            const std::string raw = codeNode.as<std::string>("");
+            int code = 0;
+            try {
+                code = std::stoi(raw, nullptr, 0);
+            } catch (const std::exception &) {
+                code = 0;
+            }
+            if (code == 0) {
+                findings.push_back({kWarn, file, lineOf(codeNode),
+                                    "Input.JoystickButtons." + action + ": '" + raw +
+                                        "' is not an evdev button code (hex like 0x121, or decimal), so it is unmapped"});
+                continue;
+            }
+            // One button cannot do two things: the later action silently replaces the earlier one.
+            const auto claimed = owner.find(code);
+            if (claimed != owner.end() && claimed->second != action)
+                findings.push_back({kWarn, file, lineOf(codeNode),
+                                    "Input.JoystickButtons: button " + raw + " is mapped to both '" + claimed->second +
+                                        "' and '" + action + "'. Only '" + action + "' takes effect"});
+            owner[code] = action;
+        }
     }
 }
 
@@ -837,7 +895,7 @@ void checkSection(const std::string &file, const std::string &section, const YAM
                 for (const auto &pin : value)
                     checkPinNode(file, section + "." + key, pin, findings);
         } else if (key == "JoystickButtons") {
-            // Free-form: any action name mapped to an evdev code.
+            checkJoystickButtons(file, value, findings);
         } else if ((section == "Lora" && kLoraPinKeys.count(key)) ||
                    (section == "Display" &&
                     (key == "DC" || key == "CS" || key == "Backlight" || key == "BacklightPWMChannel" || key == "Reset")) ||
