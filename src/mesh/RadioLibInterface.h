@@ -260,6 +260,16 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     // Set when the timed check completed a TX, so the poll's late copy of the same edge is dropped.
     bool txDoneByCheck = false;
     void checkTxDone();
+    // Time::getMillis() the frame should have left the air, plus the check's margin: the deadline the TX_DONE
+    // handler was aiming for. What it runs late by is the part of the post-TX deaf window that sits BEFORE the
+    // handler - the main-loop hold plus, on the poll path, the pin poll's phase - which `deaf tx` cannot see.
+    uint32_t txDoneCheckDueAt = 0;
+    // getPacketTime() for the frame in flight, so the late figure can be read without the packet.
+    uint32_t txAirTimeMs = 0;
+    /** How late the TX_DONE handler is against txDoneCheckDueAt, 0 if it beat the deadline */
+    uint32_t txDoneHandlerLateMs() const;
+    // Set around the post-TX startReceive() so it knows the chip is already in its standby fallback.
+    bool postTxRearm = false;
 
     /** Re-arm if a CAD->RX handoff has produced no packet well past one max-length airtime. */
     void checkCadHandoffTimeout();

@@ -449,7 +449,8 @@ void RadioLibInterface::onNotify(uint32_t notification)
             break;
         }
         if (irqPolledOverUsb() && sendingPacket && !txDoneByCheck)
-            LOG_TRACE("TX done seen by poll after %u ms", (unsigned)(Time::getMillis() - lastTxStart));
+            LOG_TRACE("TX done seen by poll after %u ms, %u ms late (air %u ms)", (unsigned)(Time::getMillis() - lastTxStart),
+                      (unsigned)txDoneHandlerLateMs(), (unsigned)txAirTimeMs);
         noteDeafFrom("tx");
         {
             const uint32_t t0 = millis();
@@ -461,8 +462,11 @@ void RadioLibInterface::onNotify(uint32_t notification)
             (void)RadioTxHooks::beforeTransmit(this, txQueue.getFront());
             const uint32_t tHooks = millis();
             lastRxArmSteps = {0, 0, 0, 0};
+            postTxRearm = true;
             if (!adoptReceiveArmedFromIsr())
                 startReceive();
+            postTxRearm = false;
+            txDoneCheckDueAt = 0;
             if (irqPolledOverUsb())
                 LOG_TRACE("Post-TX re-arm: complete %u, hooks %u, standby %u (cmd %u), rx start %u, arm %u ms",
                           (unsigned)(tComplete - t0), (unsigned)(tHooks - tComplete), (unsigned)lastRxArmSteps.standbyMs,
@@ -666,6 +670,18 @@ bool RadioLibInterface::irqPolledOverUsb() const
 #endif
 }
 
+/// The post-TX deaf window has a part `deaf tx` cannot measure: everything between the frame leaving the air and
+/// this thread reaching the TX_DONE handler. On a polled host that is the main-loop hold, plus the pin poll's phase
+/// where the poll saw the edge first. Round 41 put the miss cliff at about 10 ms against a 4-5 ms logged deaf span,
+/// so this is the rest of it.
+uint32_t RadioLibInterface::txDoneHandlerLateMs() const
+{
+    if (!txDoneCheckDueAt)
+        return 0;
+    const uint32_t now = Time::getMillis();
+    return Throttle::deadlinePassedAt(now, txDoneCheckDueAt) ? now - txDoneCheckDueAt : 0;
+}
+
 void RadioLibInterface::checkTxDone()
 {
     if (!sendingPacket)
@@ -683,7 +699,8 @@ void RadioLibInterface::checkTxDone()
     }
     disableInterrupt(); // the poll must not deliver this edge a second time
     txDoneByCheck = true;
-    LOG_TRACE("TX done seen by timed check after %u ms (tries %u)", (unsigned)(Time::getMillis() - lastTxStart),
+    LOG_TRACE("TX done seen by timed check after %u ms, %u ms late (air %u ms, tries %u)",
+              (unsigned)(Time::getMillis() - lastTxStart), (unsigned)txDoneHandlerLateMs(), (unsigned)txAirTimeMs,
               (unsigned)(TX_DONE_CHECK_TRIES - txDoneChecksLeft + 1));
     onNotify(ISR_TX);
 }
@@ -1341,7 +1358,9 @@ bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
             txDoneByCheck = false;
             if (irqPolledOverUsb()) {
                 txDoneChecksLeft = TX_DONE_CHECK_TRIES;
-                notifyLater(getPacketTime(txp) + TX_DONE_CHECK_MARGIN_MS, TX_DONE_CHECK, false);
+                txAirTimeMs = getPacketTime(txp);
+                txDoneCheckDueAt = Time::skipZero(lastTxStart + txAirTimeMs + TX_DONE_CHECK_MARGIN_MS);
+                notifyLater(txAirTimeMs + TX_DONE_CHECK_MARGIN_MS, TX_DONE_CHECK, false);
             }
             printPacket("Started Tx", txp);
 #ifdef LED_LORA
