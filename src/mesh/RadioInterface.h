@@ -12,6 +12,10 @@
 #include "LoRaFEMInterface.h"
 #endif
 
+#if defined(MESHTASTIC_TX_SLOT_PARITY) && !defined(MESHTASTIC_TX_SLOT_ANCHOR)
+#define MESHTASTIC_TX_SLOT_ANCHOR
+#endif
+
 // Forward decl to avoid a direct include of generated config headers / full LoRaConfig definition in this widely-included file.
 typedef struct _meshtastic_Config_LoRaConfig meshtastic_Config_LoRaConfig;
 
@@ -225,6 +229,20 @@ class RadioInterface
 
     /** Bench: -DMESHTASTIC_TX_SUBSLOT_JITTER adds a random 0..slot-1 ms to each backoff draw, 0 otherwise */
     [[nodiscard]] uint32_t getSubSlotJitterMsec();
+
+#ifdef MESHTASTIC_TX_SLOT_ANCHOR
+    // Bench: -DMESHTASTIC_TX_SLOT_ANCHOR counts each backoff draw's slots from the last frame's air end, not from now.
+    // -DMESHTASTIC_TX_SLOT_PARITY=<0|1> implies it, and takes only slots of that parity.
+    /** Bench: millis() when the last frame this node sent or heard left the air, 0 before the first */
+    uint32_t lastFrameEndMs = 0;
+    const char *lastFrameEndWhat = "none";
+
+    /** Bench: note a frame's air end for the slot anchor. One older than the last is ignored. */
+    void noteFrameEnd(uint32_t endMs, const char *what);
+
+    /** Bench: a backoff of up to `slots` slots, counted from the last frame end, from now */
+    [[nodiscard]] uint32_t getAnchoredSlotDelayMsec(uint32_t slots);
+#endif
 
     /** The CW to use when calculating SNR_based delays */
     [[nodiscard]] uint8_t getCWsize(float snr);
