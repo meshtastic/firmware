@@ -526,6 +526,12 @@ template <typename T> void LR11x0Interface<T>::startReceive()
 #ifdef LR11X0_RESUME_CONTINUOUS_RX
     rxArmedContinuous = true; // RADIOLIB_LR11X0_RX_TIMEOUT_INF: continuous
 #endif
+#ifdef LR11X0_READ_CHIP_MODE
+    // Positive control for the mode read: the chip was just put in RX, so this should say 0x08.
+    static uint8_t rxStarts = 0;
+    if ((rxStarts++ & 0x3F) == 0)
+        LOG_DEBUG("LR11x0 chip mode after RX start: stat2 mode 0x%02x (RX is 0x08)", readChipMode());
+#endif
 
     // Must be done AFTER, starting transmit, because startTransmit clears (possibly stale) interrupt pending register bits
     enableInterrupt(isrRxLevel0);
@@ -774,17 +780,22 @@ template <typename T> bool LR11x0Interface<T>::isChannelActive()
 #ifdef LR11X0_READ_CHIP_MODE
 template <typename T> uint8_t LR11x0Interface<T>::readChipMode() const
 {
-    // The transfer RadioLib's LRxxxx::getStatus() makes: the chip answers any NOP transfer with stat1, stat2 and the
-    // IRQ word. FS is the chip on its way to TX or RX, so look again for up to 1 ms.
+    // The chip answers any NOP transfer with stat1, stat2 and the IRQ word, but SPItransferStream() drops the configured
+    // status width (8 bits on LR11x0) from the front of what it hands back, so stat2 lands in buff[0], not buff[1].
+    // Read the width rather than change it: the readout task and the thread share this Module. FS is the chip on its
+    // way to TX or RX, so look again for up to 1 ms.
     uint8_t buff[6] = {0};
+    uint8_t mode = 0xFF;
     for (int tries = 0; tries < 10; tries++) {
-        if (statusModule->SPItransferStream(NULL, 0, false, NULL, buff, sizeof(buff), true) != RADIOLIB_ERR_NONE)
+        const uint8_t skipped = statusModule->spiConfig.widths[RADIOLIB_MODULE_SPI_WIDTH_STATUS] / 8;
+        if (skipped > 1 || statusModule->SPItransferStream(NULL, 0, false, NULL, buff, sizeof(buff), true) != RADIOLIB_ERR_NONE)
             return 0xFF;
-        if ((buff[1] & 0x0E) != RADIOLIB_LR11X0_STAT_2_MODE_FS)
+        mode = buff[1 - skipped] & 0x0E;
+        if (mode != RADIOLIB_LR11X0_STAT_2_MODE_FS)
             break;
         delayMicroseconds(100);
     }
-    return buff[1] & 0x0E;
+    return mode;
 }
 #endif
 
