@@ -7,6 +7,17 @@
 #include "TestUtil.h"
 #include <modules/LR2021/LR2021_registers.h>
 
+#include <type_traits>
+#include <utility>
+
+// jgromes/RadioLib#1864 added the DC-DC workaround together with a public setRegulatorDCDC(), so that
+// method marks a RadioLib the DC-DC tests apply to. Earlier pins (7.7.1 and before) have neither.
+template <typename T, typename = void> struct HasDcdcWorkaround : std::false_type {
+};
+template <typename T>
+struct HasDcdcWorkaround<T, std::void_t<decltype(std::declval<T &>().setRegulatorDCDC())>> : std::true_type {
+};
+
 // begin() sets a frequency before anything else; without one the DC-DC workaround's closing
 // setFrequency(freqMHz) fails with INVALID_FREQUENCY. The log starts after it.
 static void lr2021Tune(RecordingHal &hal, LR2021 &radio)
@@ -119,9 +130,11 @@ static void test_lr2021_other_setters_and_modes_succeed()
 
 static void runLr2021Tests()
 {
-    RUN_TEST(test_lr2021_setRxPath_runs_the_dcdc_workaround);
-    RUN_TEST(test_lr2021_dcdc_adc_ctrl_read_asks_for_one_word);
-    RUN_TEST(test_lr2021_dcdc_freq_lf_write_sends_one_word);
+    if constexpr (HasDcdcWorkaround<LR2021>::value) {
+        RUN_TEST(test_lr2021_setRxPath_runs_the_dcdc_workaround);
+        RUN_TEST(test_lr2021_dcdc_adc_ctrl_read_asks_for_one_word);
+        RUN_TEST(test_lr2021_dcdc_freq_lf_write_sends_one_word);
+    }
     RUN_TEST(test_lr2021_setFrequency_sends_hertz);
     RUN_TEST(test_lr2021_lora_modulation_setters_send_modulation_params);
     RUN_TEST(test_lr2021_packet_setters_send_packet_params);
