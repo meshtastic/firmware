@@ -663,7 +663,7 @@ class Screen : public concurrency::OSThread
             case 0x8F:
                 return (uint8_t)0xAA; // Ώ: 0xBF is kept for the ¿ fallback
             }
-            if (ch >= 0x90 && ch != 0xA2)
+            if (ch >= 0x90 && ch <= 0xBF && ch != 0xA2)
                 return (uint8_t)(ch + 48); // ΐ Α-Ω Ϊ Ϋ ά έ ή ί ΰ α-ο
             break;
         }
