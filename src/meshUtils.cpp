@@ -223,6 +223,32 @@ bool sanitizeUtf8(char *buf, size_t bufSize)
     return replaced;
 }
 
+float parseDecimalFloat(const char *s)
+{
+    while (*s == ' ' || (*s >= '\t' && *s <= '\r'))
+        s++;
+    const bool negative = *s == '-';
+    if (*s == '-' || *s == '+')
+        s++;
+    double value = 0, scale = 1;
+    bool fraction = false, anyDigit = false;
+    for (;; s++) {
+        if (*s >= '0' && *s <= '9') {
+            value = value * 10 + (*s - '0');
+            if (fraction)
+                scale *= 10;
+            anyDigit = true;
+        } else if (*s == '.' && !fraction) {
+            fraction = true;
+        } else {
+            break;
+        }
+    }
+    if (!anyDigit)
+        return 0.0f;
+    return static_cast<float>((negative ? -value : value) / scale);
+}
+
 void clampLongName(char *longName)
 {
     longName[MAX_LONG_NAME_BYTES] = '\0';

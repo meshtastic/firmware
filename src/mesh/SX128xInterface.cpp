@@ -3,6 +3,7 @@
 #include "Throttle.h"
 #include "configuration.h"
 #include "error.h"
+#include "main.h"
 #include "mesh/NodeDB.h"
 
 #if ARCH_PORTDUINO
@@ -100,6 +101,7 @@ template <typename T> bool SX128xInterface<T>::reinitChip(bool fromInit)
 #if defined(ARCH_ESP32)
         ESP.restart();
 #elif defined(ARCH_NRF52)
+        nrf52FlashQuiesce(); // reset with the flash layer quiesced, like every other nRF52 reset path
         NVIC_SystemReset();
 #else
         LOG_ERROR("FIXME implement reboot for this platform. Skip for now");

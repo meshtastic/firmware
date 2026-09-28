@@ -8,6 +8,7 @@
 #include "platform/portduino/PortduinoGlue.h"
 #endif
 #include "Throttle.h"
+#include "UptimeClock.h"
 
 #define RECENT_WARN_AGE (10 * 60 * 1000L) // Warn if the packet that gets removed was more recent than 10 min
 
@@ -17,14 +18,16 @@
 PacketHistory::PacketHistory(uint32_t size) : recentPacketsCapacity(0) // Initialize members
 {
     if (size < 4 || size > PACKETHISTORY_MAX) { // Copilot suggested - makes sense
-        LOG_WARN("Packet History - Invalid size %d, using default %d", size, PACKETHISTORY_MAX);
+        LOG_WARN("Packet History - Invalid size %u, using default %u", static_cast<unsigned>(size),
+                 static_cast<unsigned>(PACKETHISTORY_MAX));
         size = PACKETHISTORY_MAX; // Use default size if invalid
     }
 
 #if !MESHTASTIC_EXCLUDE_PKT_HISTORY_HASH
     // Ensure capacity fits in uint16_t hash index (HASH_EMPTY = 0xFFFF is the sentinel)
     if (size >= HASH_EMPTY) {
-        LOG_WARN("Packet History - Clamping size %d to %d (hash index limit)", size, HASH_EMPTY - 1);
+        LOG_WARN("Packet History - Clamping size %u to %u (hash index limit)", static_cast<unsigned>(size),
+                 static_cast<unsigned>(HASH_EMPTY - 1));
         size = HASH_EMPTY - 1;
     }
 #endif
@@ -33,7 +36,7 @@ PacketHistory::PacketHistory(uint32_t size) : recentPacketsCapacity(0) // Initia
     recentPacketsCapacity = size;
     recentPackets.reset(new PacketRecord[recentPacketsCapacity]);
     if (!recentPackets) { // No logging here, console/log probably uninitialized yet.
-        LOG_ERROR("Packet History - Memory allocation failed for size=%d entries / %d Bytes", size,
+        LOG_ERROR("Packet History - Memory allocation failed for size=%u entries / %zu Bytes", static_cast<unsigned>(size),
                   sizeof(PacketRecord) * recentPacketsCapacity);
         recentPacketsCapacity = 0; // mark allocation fail
         return;                    // return early
@@ -49,7 +52,7 @@ PacketHistory::PacketHistory(uint32_t size) : recentPacketsCapacity(0) // Initia
     hashMask = hashCapacity - 1;
     hashIndex.reset(new uint16_t[hashCapacity]);
     if (!hashIndex) {
-        LOG_ERROR("Packet History - Hash index allocation failed for %d entries", hashCapacity);
+        LOG_ERROR("Packet History - Hash index allocation failed for %u entries", static_cast<unsigned>(hashCapacity));
         hashCapacity = 0;
         hashMask = 0;
         return;
@@ -91,9 +94,9 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
         r.relayed_by[0] = p->relay_node;
     }
 
-    r.rxTimeMsec = millis(); //
-    if (r.rxTimeMsec == 0)   // =0 every 49.7 days? 0 is special
-        r.rxTimeMsec = 1;
+    // TODO(elapsed-stamp): 0 means "empty slot" here and insert() drops a record stamped 0, so the
+    // dodge is important; a same-instant `now - rxTimeMsec` read still underflows to a huge age.
+    r.rxTimeMsec = Time::skipZero(Time::getMillis());
 
 #if VERBOSE_PACKET_HISTORY
     LOG_DEBUG(

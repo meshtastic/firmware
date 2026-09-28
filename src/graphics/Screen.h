@@ -67,6 +67,8 @@ class Screen
     };
 
     explicit Screen(ScanI2C::DeviceAddress, meshtastic_Config_DisplayConfig_OledType, OLEDDISPLAY_GEOMETRY);
+    // These are empty stubs, but they mirror the real Screen's instance API, so they can't become static.
+    // cppcheck-suppress-begin functionStatic
     void onPress() {}
     void setup() {}
     void setOn(bool) {}
@@ -87,6 +89,7 @@ class Screen
     bool getIsI2cScreen() const { return false; }
     uint32_t getI2cFrequency() const { return 0; }
     ScanI2C::I2CPort getI2CPort() const { return ScanI2C::I2CPort::NO_I2C; }
+    // cppcheck-suppress-end functionStatic
 };
 } // namespace graphics
 #else
@@ -257,7 +260,7 @@ class Screen : public concurrency::OSThread
 
     std::vector<const uint8_t *> indicatorIcons; // Per-frame custom icon pointers
 #if defined(OLED_COMPACT_UI)
-    std::vector<const char *> frameTitles;       // Per-frame short labels, parallel to indicatorIcons
+    std::vector<const char *> frameTitles; // Per-frame short labels, parallel to indicatorIcons
 #endif
     Screen(const Screen &) = delete;
     Screen &operator=(const Screen &) = delete;
@@ -290,6 +293,17 @@ class Screen : public concurrency::OSThread
     // True if the always-present games frame is the one currently on screen. Lets the games module
     // ignore D-pad input when the player has navigated to a different frame.
     bool isGamesFrameShown();
+
+    // Jump straight to the home (device-focused) frame. Used to bounce back to a clearly "this is a
+    // Meshtastic node" screen after a game is left idle. Home is optional, so when it is hidden this
+    // falls back to the messages frame rather than staying put.
+    void showHomeFrame();
+
+    // True when the user is in the middle of something that must not be interrupted: a module (or
+    // game) is holding the D-pad, or an interactive overlay (picker / text entry) is open. Callers
+    // that would pop a transient banner should check this first -- a banner both covers the screen
+    // and REPLACES any interactive overlay, discarding a half-finished entry.
+    bool isInteractionBusy();
 
     bool isScreenOn() { return screenOn; }
 
@@ -847,6 +861,10 @@ class Screen : public concurrency::OSThread
 #endif
 
     /// UI helper for rendering to frames and switching between them
+    // True if any module frame -- or the games frame, which is not a moduleFrame -- is currently
+    // holding the D-pad. Shared by the input router and isInteractionBusy().
+    bool anyModuleInterceptingInput();
+
     OLEDDisplayUi *ui;
 };
 

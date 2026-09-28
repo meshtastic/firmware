@@ -17,6 +17,11 @@ class Throttle
         return !isWithinTimespanMs(lastExecutionMs, intervalMs);
     }
 
+    /// What is left of intervalMs since lastExecutionMs, 0 once it has passed. One clock read, so a
+    /// caller waiting out the remainder cannot be preempted between the test and the subtraction.
+    /// Same sentinel rule as isWithinTimespanMs(): 0 is not treated as "never run".
+    static uint32_t remainingMs(uint32_t lastExecutionMs, uint32_t intervalMs);
+
     /// True once an absolute deadline has arrived. Use this rather than comparing against millis()
     /// directly: that inverts while the deadline sits on the far side of the 32-bit wrap, so the
     /// action either fires immediately or blocks for about the interval it should have waited.
@@ -32,15 +37,17 @@ class Throttle
     /// Deadline::in(ms) / .armed() / .passed() / .disarm(). A hand-built `now + interval` could then
     /// no longer land on the sentinel by accident, and "armed" would stay a question separate from
     /// "passed" - the split that has to survive, because which way "inactive" falls is the caller's
-    /// to decide. Same size and cost as the bare uint32_t. The conversion sites, grouped by the four
+    /// to decide. Same size and cost as the bare uint32_t. The conversion sites, grouped by the three
     /// meanings they give the sentinel today:
     ///   0 = unarmed - Power.cpp rebootAtMsec/shutdownAtMsec, GPS.cpp fixHoldEnds, AdminModule.cpp
-    ///                 enterDfuAtMsec - the last two remap a 0 result to 1 at the arm site by hand.
+    ///                 enterDfuAtMsec and the other timerEndsAtMillis()/skipZero() arm sites dodge
+    ///                 it; RadioLibInterface::setTransmitDelay()'s tx_after recompute still cannot.
     ///   0 = forever - NotificationRenderer.cpp alertBannerUntil. Every read spells its own `> 0`
     ///                 guard, so this third state wants naming rather than repeating.
-    ///   0 = due now - ethClient.cpp ntp_renew, forced at link-up.
-    ///   UINT32_MAX  - ExternalNotificationModule.cpp nagCycleCutoff, whose armed() also lives in a
-    ///                 second variable (isNagging) and whose arm site can land on the sentinel.
+    ///   0 = due now - ethClient.cpp ntp_renew, forced at link-up. A computed renewal now dodges 0,
+    ///                 so only a deliberate write still means "due now".
+    /// ExternalNotificationModule.cpp nagCycleCutoff reserves nothing: isNagging is the only armed
+    /// flag and the deadline is read only while it is set.
     static bool deadlinePassed(uint32_t deadlineMs);
 
     /// deadlinePassed() against a caller-supplied "now", for a loop that snapshots the time once and

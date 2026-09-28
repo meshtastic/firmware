@@ -1,3 +1,4 @@
+#include "UptimeClock.h"
 #include "configuration.h"
 
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
@@ -105,7 +106,7 @@ int32_t PowerTelemetryModule::runOnce()
             // Just send to phone when it's not our time to send to mesh yet
             // Only send while queue is empty (phone assumed connected)
             sendTelemetry(NODENUM_BROADCAST, true);
-            lastSentToPhone = millis();
+            lastSentToPhone = Time::skipZero(Time::getMillis());
         }
     }
     if (sleepOnNextExecution) {
@@ -165,7 +166,7 @@ void PowerTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *s
 
     // Display current and voltage based on ...power_metrics.has_[channel/voltage/current]... flags
     const auto &m = lastMeasurement.variant.power_metrics;
-    int lineY = textSecondLine;
+    int lineY = graphics::getTextPositions(display)[line];
 
     auto drawLine = [&](const char *label, float voltage, float current) {
         char lineStr[64];

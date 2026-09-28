@@ -40,7 +40,11 @@ size_t fsUsedBytes()
         return 0;
     size_t blocks = 0;
     FSCom._lockFS();
+#if LFS_VERSION_MAJOR >= 2
+    int err = lfs_fs_traverse(fs, fsCountBlockCb, &blocks);
+#else
     int err = lfs_traverse(fs, fsCountBlockCb, &blocks);
+#endif
     FSCom._unlockFS();
     if (err < 0)
         return fsTotalBytes(); // report "full" so capacity checks fail safe

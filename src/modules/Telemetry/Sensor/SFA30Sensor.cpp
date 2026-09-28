@@ -5,7 +5,7 @@
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "SFA30Sensor.h"
 
-SFA30Sensor::SFA30Sensor() : TelemetrySensor(meshtastic_TelemetrySensorType_SFA30, "SFA30"){};
+SFA30Sensor::SFA30Sensor() : TelemetrySensor(meshtastic_TelemetrySensorType_SFA30, "SFA30") {};
 
 bool SFA30Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 {

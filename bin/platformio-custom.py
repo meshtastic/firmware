@@ -41,8 +41,11 @@ def infer_architecture(board_cfg):
         return "rp2350"
     if "nrf52" in mcu_l or "nrf52840" in mcu_l:
         return "nrf52840"
+    if "nrf54l15" in mcu_l:
+        return "nrf54l15"
     if "stm32" in mcu_l:
         return "stm32"
+    print(f"mtjson: could not infer architecture from MCU '{mcu_l}'")
     return None
 
 def run_size_tool(env, flag, purpose):

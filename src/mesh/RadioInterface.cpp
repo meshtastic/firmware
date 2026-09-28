@@ -14,6 +14,7 @@
 #include "SX1262Interface.h"
 #include "SX1268Interface.h"
 #include "SX1280Interface.h"
+#include "UptimeClock.h"
 #include "configuration.h"
 #include "detect/LoRaRadioType.h"
 #include "main.h"
@@ -99,10 +100,17 @@ Observable<uint32_t> RadioInterface::loraRxPacketObservable;
 
 #define RDEF(name, freq_start, freq_end, duty_cycle, power_limit, frequency_switching, wide_lora, profile_ptr, default_preset,   \
              override_slot)                                                                                                      \
-    {                                                                                                                            \
-        meshtastic_Config_LoRaConfig_RegionCode_##name, freq_start, freq_end, duty_cycle, power_limit, frequency_switching,      \
-            wide_lora, &profile_ptr, default_preset, override_slot, #name                                                        \
-    }
+    {meshtastic_Config_LoRaConfig_RegionCode_##name,                                                                             \
+     freq_start,                                                                                                                 \
+     freq_end,                                                                                                                   \
+     duty_cycle,                                                                                                                 \
+     power_limit,                                                                                                                \
+     frequency_switching,                                                                                                        \
+     wide_lora,                                                                                                                  \
+     &profile_ptr,                                                                                                               \
+     default_preset,                                                                                                             \
+     override_slot,                                                                                                              \
+     #name}
 
 const RegionInfo regions[] = {
     /*
@@ -643,7 +651,7 @@ std::unique_ptr<RadioInterface> initLoRa()
             if (screen) {
                 screen->showSimpleBanner("Rebooting...");
             }
-            rebootAtMsec = millis() + 5000;
+            rebootAtMsec = Time::timerEndsAtMillis(5000);
         }
     }
     return rIf;
@@ -1432,11 +1440,13 @@ uint32_t RadioInterface::computeSlotTimeMsec()
 
 /**
  * Some regulatory regions limit xmit power.
- * This function should be called by subclasses after setting their desired power.  It might lower it
+ * This function should be called by subclasses after setting their desired power.  It might lower it.
+ * Re-derives `power` from config each call so a re-init that runs it twice cannot subtract PA gain twice.
  */
 void RadioInterface::limitPower(int8_t loraMaxPower)
 {
-    uint8_t maxPower = 255; // No limit
+    power = config.lora.tx_power; // applyModemConfig() writes the resolved value back here
+    uint8_t maxPower = 255;       // No limit
 
     if (myRegion->powerLimit)
         maxPower = myRegion->powerLimit;

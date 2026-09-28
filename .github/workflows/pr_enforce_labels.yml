@@ -4,6 +4,10 @@ on:
   pull_request:
     types: [opened, edited, labeled, unlabeled, synchronize, reopened]
 
+concurrency:
+  group: pr-labels-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
 permissions:
   pull-requests: read
   contents: read

@@ -20,10 +20,6 @@ extern NimbleBluetooth *nimbleBluetooth;
 #include "NRF52Bluetooth.h"
 extern NRF52Bluetooth *nrf52Bluetooth;
 #endif
-#ifdef ARCH_NRF54L15
-#include "NRF54L15Bluetooth.h"
-extern NRF54L15Bluetooth *nrf54l15Bluetooth;
-#endif
 #if !MESHTASTIC_EXCLUDE_I2C
 #include "detect/ScanI2CTwoWire.h"
 #endif
@@ -118,7 +114,7 @@ extern bool runASAP;
 extern bool pauseBluetoothLogging;
 
 void nrf52Setup(), esp32Setup(), nrf52Loop(), esp32Loop(), rp2040Setup(), rp2040Loop(), clearBonds(), enterDfuMode(),
-    stm32wlSetup();
+    nrf52FlashQuiesce(), stm32wlSetup();
 #ifdef ARCH_ESP32
 void esp32ReleaseBluetoothMemoryIfUnused();
 #endif

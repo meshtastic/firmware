@@ -1,4 +1,0 @@
-# Primary config for the sticky-switch-table case. The two files in config.d/ each
-# define a Lora.rfswitch_table.
-General:
-  ConfigDirectory: config.d/

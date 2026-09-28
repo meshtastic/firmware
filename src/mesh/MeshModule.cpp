@@ -1,4 +1,5 @@
 #include "MeshModule.h"
+#include "AckProof.h"
 #include "Channels.h"
 #include "MeshService.h"
 #include "NodeDB.h"
@@ -85,6 +86,13 @@ meshtastic_MeshPacket *MeshModule::allocAckNak(meshtastic_Routing_Error err, Nod
         p->rx_rssi = relaySource->rx_rssi;
         p->rx_snr = relaySource->rx_snr;
     }
+#if !(MESHTASTIC_EXCLUDE_PKI)
+    // Prove to the original sender that this ack came from the node holding their pairwise key.
+    // No-op unless we hold an authoritative key for `to`. Must follow the request_id and payload
+    // assignments above: the proof covers request_id and is appended to the payload.
+    ackProofAttach(p);
+#endif
+
     if (err != meshtastic_Routing_Error_NONE)
         LOG_WARN("Alloc an err=%d,to=0x%08x,idFrom=0x%08x,id=0x%08x", err, to, idFrom, p->id);
 

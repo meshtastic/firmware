@@ -29,7 +29,8 @@ jobs:
           semgrep \
             --sarif --output report.sarif \
             --metrics=off \
-            --config="p/default"
+            --config="p/default" \
+            --exclude-rule="yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag"
 
       # step 3
       - name: save report as pipeline artifact

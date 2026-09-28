@@ -88,12 +88,11 @@ int32_t ExternalNotificationModule::runOnce()
 #if defined(HAS_I2S_SPEAKER_NRF52)
         isRtttlPlaying = isRtttlPlaying || nrf52RtttlPlayer.isPlaying();
 #endif
-        // isNagging is the armed flag; nagCycleCutoff holds a real deadline only while it is set
-        // (UINT32_MAX once stopped, 1 at boot), so short-circuit before the comparison.
+        // isNagging is the armed flag; nagCycleCutoff is only a deadline while it is set, so
+        // short-circuit before the comparison. `millis() + durationMs` can land on any value.
         const bool nagWindowExpired = !isNagging || Throttle::deadlinePassed(nagCycleCutoff);
         if (nagWindowExpired && !isRtttlPlaying) {
             // Turn off external notification immediately when timeout is reached, regardless of song state
-            nagCycleCutoff = UINT32_MAX;
             ExternalNotificationModule::stopNow();
             isNagging = false;
             return INT32_MAX; // save cycles till we're needed again
@@ -309,9 +308,9 @@ void ExternalNotificationModule::stopNow()
 #endif
 
     // Prevent the state machine from immediately re-triggering outputs after a manual stop.
+    // Clearing isNagging disarms the cycle; nagCycleCutoff is never read without it.
     isNagging = false;
     buzzerShouldAlert = false;
-    nagCycleCutoff = UINT32_MAX;
 
 #ifdef HAS_I2S
     // GPIO0 is used as mclk for I2S audio and set to OUTPUT by the sound library
@@ -624,7 +623,9 @@ void ExternalNotificationModule::handleSetRingtone(const char *from_msg)
 #if !MESHTASTIC_EXCLUDE_INPUTBROKER
 int ExternalNotificationModule::handleInputEvent(const InputEvent *event)
 {
-    if (nagCycleCutoff != UINT32_MAX) {
+    // Testing the deadline instead of isNagging was true at boot, and the non-zero return
+    // swallowed the first input event from every later observer.
+    if (isNagging) {
         stopNow();
         return 1;
     }

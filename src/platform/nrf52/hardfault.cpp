@@ -1,5 +1,5 @@
 #include "configuration.h"
-#include <core_cm4.h>
+#include <nrf.h>
 
 #ifdef MESHTASTIC_ENCRYPTED_STORAGE
 #include "security/EncryptedStorage.h"
