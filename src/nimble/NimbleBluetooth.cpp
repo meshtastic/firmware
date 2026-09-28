@@ -960,6 +960,10 @@ void NimbleBluetooth::startAdvertising()
 {
     ble_gap_ext_adv_stop(PHONE_ADV_INSTANCE);
 
+    BLEServer *server = BLEDevice::getServer();
+    if (server && !server->isStarted())
+        server->start();
+
     struct ble_gap_ext_adv_params params = {};
     params.connectable = 1;
     params.scannable = 1;
