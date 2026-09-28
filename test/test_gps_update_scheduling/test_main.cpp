@@ -1,4 +1,5 @@
 #include "Arduino.h"
+#include "NodeDB.h"
 #include "TestUtil.h"
 #include "UptimeClock.h"
 #include "gps/GPSUpdateScheduling.h"
@@ -167,6 +168,47 @@ static void test_reset_clears_the_search_state(void)
     TEST_ASSERT_EQUAL_UINT32(0, s.elapsedSearchMs());
 }
 
+// Lock-time prediction vs. the post-lock hold. GPS::down(), which calls informGotLock(), runs when
+// the up-to-20s ephemeris hold ends, not at the first fix. predictedSearchDurationMs() feeds the
+// soft/hard sleep choice in down() and must be the time to first fix; counting the hold in it asks
+// for a gps_update_interval several minutes longer before hardsleep is chosen. msUntilNextSearch()
+// must still include the hold, since the fix is only published when it ends.
+
+// One search as GPS::runOnce() drives it: informValidFix() on every pass that reads a fix.
+static void runSearch(GPSUpdateScheduling &s, uint32_t lockMs, uint32_t holdMs)
+{
+    s.informSearching();
+    Time::advanceTestMillis(lockMs);
+    s.informValidFix();
+    Time::advanceTestMillis(holdMs / 2);
+    s.informValidFix();
+    Time::advanceTestMillis(holdMs - holdMs / 2);
+    s.informValidFix();
+    s.informGotLock();
+}
+
+static void test_lock_prediction_excludes_the_post_lock_hold(void)
+{
+    GPSUpdateScheduling s;
+    Time::setTestMillis(10 * 1000);
+    runSearch(s, 40 * 1000, 20 * 1000); // first search is ignored by the predictor
+    Time::advanceTestMillis(60 * 1000);
+    runSearch(s, 10 * 1000, 20 * 1000);
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(10 * 1000, s.predictedSearchDurationMs(), "time to first fix, not to hold end");
+}
+
+static void test_next_search_still_accounts_for_the_hold(void)
+{
+    config.position.gps_update_interval = 120;
+    GPSUpdateScheduling s;
+    Time::setTestMillis(10 * 1000);
+    runSearch(s, 40 * 1000, 20 * 1000);
+    Time::advanceTestMillis(60 * 1000);
+    runSearch(s, 10 * 1000, 20 * 1000);
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(120 * 1000 - 30 * 1000, s.msUntilNextSearch(), "wake early by lock plus hold");
+    config.position.gps_update_interval = 0;
+}
+
 void setup()
 {
     delay(10);
@@ -185,6 +227,8 @@ void setup()
     RUN_TEST(test_search_ending_after_the_wrap_reads_as_idle);
     RUN_TEST(test_search_starting_after_the_wrap_reads_as_searching);
     RUN_TEST(test_reset_clears_the_search_state);
+    RUN_TEST(test_lock_prediction_excludes_the_post_lock_hold);
+    RUN_TEST(test_next_search_still_accounts_for_the_hold);
     exit(UNITY_END());
 }
 

@@ -1,14 +1,22 @@
-// Unit tests for shouldArmFixHold() / fixHoldInForce() in src/gps/GPS.cpp - the post-lock
-// ephemeris hold.
+// Unit tests for shouldArmFixHold() / fixHoldInForce() / holdJustExpired() in src/gps/GPS.cpp - the
+// post-lock ephemeris hold.
 //
 // In power-saving mode (gps_update_interval above GPS_UPDATE_ALWAYS_ON_THRESHOLD_MS) the GPS holds
-// for up to 20s after a lock to download ephemeris, then publishes and sleeps. The predicate below
-// decides, once per GPS thread cycle that has a location, whether a hold should be armed.
+// for up to 20s after a lock to download ephemeris, then publishes and sleeps. The predicates below
+// decide, once per GPS thread cycle, whether a hold should be armed and whether one just expired.
 //
-// The case that matters is a hold that was consumed by a publish which did not sleep: GPS::runOnce()
-// clears fixHoldEnds whenever it publishes, but only calls down() when the search timed out or a
-// hold expired. If the predicate treats "not holding" as a reason to skip, nothing re-arms, nothing
-// publishes, and the receiver stays powered until searchedTooLong() fires.
+// Two regressions are guarded, one in each direction:
+//
+// - A hold consumed by a publish which did not sleep: GPS::runOnce() clears fixHoldEnds whenever it
+//   publishes, but only calls down() when the search timed out or a hold expired. If the predicate
+//   treats "no hold armed" as a reason to skip, nothing re-arms, nothing publishes, and the receiver
+//   stays powered until searchedTooLong() fires.
+// - A hold past its deadline but not yet consumed: runOnce() asks shouldArmFixHold() before
+//   holdJustExpired(). When it re-armed an expired hold after a GPS_THREAD_INTERVAL grace, a thread
+//   that ran later than its nominal interval (the ThinkNode M9 runs its 50ms interval every ~64ms)
+//   read a fresh fix just past that grace and started a second 20s hold in place of publishing.
+//   GPS::down() and GPS::disable() clear fixHoldEnds, so an armed hold always belongs to the
+//   current search cycle and holdJustExpired() is what ends it.
 #include "Arduino.h"
 #include "TestUtil.h"
 #include "Throttle.h"
@@ -21,7 +29,7 @@
 // signature change breaks the link rather than silently diverging from the definition.
 bool fixHoldInForce(uint32_t fixHoldEnds, uint32_t threadIntervalMs);
 bool holdJustExpired(uint32_t fixHoldEnds);
-bool shouldArmFixHold(bool hasValidLocation, uint8_t prevFixQual, uint32_t fixHoldEnds, uint32_t threadIntervalMs);
+bool shouldArmFixHold(bool hasValidLocation, uint8_t prevFixQual, uint32_t fixHoldEnds);
 
 // GPS_THREAD_INTERVAL, spelled out so the suite does not pull in GPS.h and its hardware deps.
 static constexpr uint32_t kThreadInterval = 200;
@@ -50,33 +58,23 @@ static uint32_t armHoldNow(uint32_t holdMs = kHoldMs)
 void test_arms_on_the_first_lock_of_a_cycle(void)
 {
     Time::setTestMillis(50 * 1000);
-    TEST_ASSERT_TRUE(shouldArmFixHold(false, 3, 0, kThreadInterval));
+    TEST_ASSERT_TRUE(shouldArmFixHold(false, 3, 0));
 }
 
 // Lock after the receiver was off: down() zeroes fixQual, so prev_fixQual is 0 on the way back up.
 void test_arms_on_the_first_lock_after_the_gps_was_off(void)
 {
     Time::setTestMillis(50 * 1000);
-    TEST_ASSERT_TRUE(shouldArmFixHold(true, 0, 0, kThreadInterval));
+    TEST_ASSERT_TRUE(shouldArmFixHold(true, 0, 0));
 }
 
-// The regression. A publish that did not sleep leaves hasValidLocation set, prev_fixQual non-zero
-// and fixHoldEnds cleared to 0. Nothing else in runOnce() re-arms, so if this returns false the
-// GPS never holds, never publishes again and never calls down() until the search times out.
+// A publish that did not sleep leaves hasValidLocation set, prev_fixQual non-zero and fixHoldEnds
+// cleared to 0. Nothing else in runOnce() re-arms, so if this returns false the GPS never holds,
+// never publishes again and never calls down() until the search times out.
 void test_arms_after_a_publish_cleared_the_hold_without_sleeping(void)
 {
     Time::setTestMillis(50 * 1000);
-    TEST_ASSERT_TRUE_MESSAGE(shouldArmFixHold(true, 3, 0, kThreadInterval),
-                             "fixHoldEnds == 0 means 'not holding', which is a reason to arm");
-}
-
-void test_arms_once_the_hold_has_expired(void)
-{
-    Time::setTestMillis(50 * 1000);
-    const uint32_t fixHoldEnds = armHoldNow();
-
-    Time::advanceTestMillis(kHoldMs + kThreadInterval);
-    TEST_ASSERT_TRUE(shouldArmFixHold(true, 3, fixHoldEnds, kThreadInterval));
+    TEST_ASSERT_TRUE_MESSAGE(shouldArmFixHold(true, 3, 0), "fixHoldEnds == 0 means 'no hold armed', which is a reason to arm");
 }
 
 // --- the reason not to arm ---
@@ -87,43 +85,41 @@ void test_does_not_arm_while_a_hold_is_in_force(void)
     const uint32_t fixHoldEnds = armHoldNow();
 
     Time::advanceTestMillis(kHoldMs / 2);
-    TEST_ASSERT_FALSE(shouldArmFixHold(true, 3, fixHoldEnds, kThreadInterval));
+    TEST_ASSERT_FALSE(shouldArmFixHold(true, 3, fixHoldEnds));
 }
 
-// The GPS_THREAD_INTERVAL grace period: at the exact deadline the hold has not yet expired, because
-// the next cycle is one interval away.
-void test_does_not_arm_in_the_thread_interval_grace_after_the_deadline(void)
+// The double-hold regression: a late thread pass reads a fresh fix after the deadline. It must fall
+// through to holdJustExpired() and publish, however late it runs, not start a second hold.
+void test_does_not_rearm_an_expired_hold_that_was_not_yet_consumed(void)
 {
     Time::setTestMillis(50 * 1000);
     const uint32_t fixHoldEnds = armHoldNow();
 
-    Time::advanceTestMillis(kHoldMs); // exactly at the deadline
-    TEST_ASSERT_FALSE(shouldArmFixHold(true, 3, fixHoldEnds, kThreadInterval));
-
-    Time::advanceTestMillis(kThreadInterval - 1);
-    TEST_ASSERT_FALSE(shouldArmFixHold(true, 3, fixHoldEnds, kThreadInterval));
-
-    Time::advanceTestMillis(1); // deadline + GPS_THREAD_INTERVAL, inclusive boundary
-    TEST_ASSERT_TRUE(shouldArmFixHold(true, 3, fixHoldEnds, kThreadInterval));
+    const uint32_t lateBy[] = {0, 1, kThreadInterval - 1, kThreadInterval, kThreadInterval + 14, 10 * kThreadInterval};
+    for (uint32_t late : lateBy) {
+        Time::setTestMillis(50 * 1000 + kHoldMs + late);
+        TEST_ASSERT_FALSE_MESSAGE(shouldArmFixHold(true, 3, fixHoldEnds), "an armed hold is ended, not re-armed");
+        TEST_ASSERT_TRUE_MESSAGE(holdJustExpired(fixHoldEnds), "...by holdJustExpired() in the same pass");
+    }
 }
 
 // --- across the 32-bit wrap ---
 
-// A hold armed just before the wrap must still be held through it. The naive form this replaced
-// (`(fixHoldEnds + GPS_THREAD_INTERVAL) < millis()`) read as expired for the whole pre-wrap window,
-// re-arming the hold on every single cycle.
-void test_does_not_arm_while_a_hold_straddling_the_wrap_is_in_force(void)
+// A hold armed just before the wrap must still be held through it and expire at its deadline. The
+// naive form this replaced (`(fixHoldEnds + GPS_THREAD_INTERVAL) < millis()`) read as expired for the
+// whole pre-wrap window.
+void test_a_hold_straddling_the_wrap_expires_at_its_deadline(void)
 {
     Time::setTestMillis(0xFFFFFF00u); // 256ms short of the wrap
     const uint32_t fixHoldEnds = armHoldNow();
 
-    TEST_ASSERT_FALSE(shouldArmFixHold(true, 3, fixHoldEnds, kThreadInterval));
+    TEST_ASSERT_FALSE(holdJustExpired(fixHoldEnds));
 
     Time::advanceTestMillis(0x200u); // now past the wrap, still inside the hold
-    TEST_ASSERT_FALSE(shouldArmFixHold(true, 3, fixHoldEnds, kThreadInterval));
+    TEST_ASSERT_FALSE(holdJustExpired(fixHoldEnds));
 
     Time::advanceTestMillis(kHoldMs); // well past the deadline, still past the wrap
-    TEST_ASSERT_TRUE(shouldArmFixHold(true, 3, fixHoldEnds, kThreadInterval));
+    TEST_ASSERT_TRUE(holdJustExpired(fixHoldEnds));
 }
 
 // The deadline itself wrapping (fixHoldEnds numerically below millis()) must not read as expired.
@@ -133,7 +129,8 @@ void test_holds_when_the_deadline_wraps_but_now_has_not(void)
     const uint32_t fixHoldEnds = armHoldNow(); // wraps to ~0x4CFF
 
     TEST_ASSERT_TRUE_MESSAGE(fixHoldEnds < Time::getMillis(), "test setup: the deadline must have wrapped");
-    TEST_ASSERT_FALSE(shouldArmFixHold(true, 3, fixHoldEnds, kThreadInterval));
+    TEST_ASSERT_TRUE(fixHoldInForce(fixHoldEnds, 0));
+    TEST_ASSERT_FALSE(holdJustExpired(fixHoldEnds));
 }
 
 // --- the two readings of the same sentinel ---
@@ -146,7 +143,7 @@ void test_no_hold_means_arm_but_does_not_mean_expired(void)
     Time::setTestMillis(50 * 1000);
 
     TEST_ASSERT_FALSE_MESSAGE(fixHoldInForce(0, kThreadInterval), "a hold that was never armed is not in force");
-    TEST_ASSERT_TRUE_MESSAGE(shouldArmFixHold(true, 3, 0, kThreadInterval), "...so it is a reason to arm one");
+    TEST_ASSERT_TRUE_MESSAGE(shouldArmFixHold(true, 3, 0), "...so it is a reason to arm one");
     TEST_ASSERT_FALSE_MESSAGE(holdJustExpired(0), "...but not a reason to publish and sleep");
 }
 
@@ -182,7 +179,7 @@ void test_the_sentinel_guard_is_load_bearing_past_the_half_range(void)
 
     // ...so the explicit sentinel test is the only thing keeping the answer right.
     TEST_ASSERT_FALSE_MESSAGE(fixHoldInForce(0, kThreadInterval), "an unarmed hold is never in force");
-    TEST_ASSERT_TRUE_MESSAGE(shouldArmFixHold(true, 3, 0, kThreadInterval), "...so a hold must still be armed");
+    TEST_ASSERT_TRUE_MESSAGE(shouldArmFixHold(true, 3, 0), "...so a hold must still be armed");
 }
 
 void test_hold_in_force_tracks_the_deadline(void)
@@ -207,10 +204,9 @@ void setup()
     RUN_TEST(test_arms_on_the_first_lock_of_a_cycle);
     RUN_TEST(test_arms_on_the_first_lock_after_the_gps_was_off);
     RUN_TEST(test_arms_after_a_publish_cleared_the_hold_without_sleeping);
-    RUN_TEST(test_arms_once_the_hold_has_expired);
     RUN_TEST(test_does_not_arm_while_a_hold_is_in_force);
-    RUN_TEST(test_does_not_arm_in_the_thread_interval_grace_after_the_deadline);
-    RUN_TEST(test_does_not_arm_while_a_hold_straddling_the_wrap_is_in_force);
+    RUN_TEST(test_does_not_rearm_an_expired_hold_that_was_not_yet_consumed);
+    RUN_TEST(test_a_hold_straddling_the_wrap_expires_at_its_deadline);
     RUN_TEST(test_holds_when_the_deadline_wraps_but_now_has_not);
     exit(UNITY_END());
 }
