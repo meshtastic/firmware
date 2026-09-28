@@ -11,7 +11,8 @@
 // Regressions guarded: the 16pt and 24pt tables shipping as one-glyph stubs (every
 // medium/large string rendered blank); accented letters (ά έ ή ί ό ύ ώ ΐ ΰ Ϊ Ϋ ϊ ϋ and
 // the capital tonos forms) left as empty slots; Ώ put back at 0xBF, which would make
-// every unconvertible character render as Ώ; ASCII glyphs drifting from upstream.
+// every unconvertible character render as Ώ; ASCII glyphs drifting from upstream; a
+// truncated table (like the old stubs) must fail an assertion, not be read past.
 //
 // The decoder itself is not exercised here: Screen.cpp is linked into native tests
 // without OLED_GR, so including Screen.h with it would give two different definitions
@@ -43,6 +44,7 @@ static const uint8_t HEADER = 4;
 static const uint8_t FIRST = 0x20;
 static const uint16_t COUNT = 0xE0;
 static const uint16_t EMPTY = 0xFFFF;
+static const size_t JUMP_TABLE_END = HEADER + 4 * COUNT;
 
 static const uint8_t *entry(const uint8_t *font, uint8_t code)
 {
@@ -95,12 +97,12 @@ void test_header_matches_upstream_metrics()
 void test_every_glyph_lies_inside_the_table()
 {
     for (const Table &t : TABLES) {
-        const size_t dataStart = HEADER + 4 * COUNT;
+        TEST_ASSERT_TRUE_MESSAGE(t.len >= JUMP_TABLE_END, "jump table truncated");
         for (uint16_t code = FIRST; code < FIRST + COUNT; code++) {
             uint16_t off = offsetOf(t.data, (uint8_t)code);
             if (off == EMPTY)
                 continue;
-            TEST_ASSERT_TRUE_MESSAGE(dataStart + off + entry(t.data, (uint8_t)code)[2] <= t.len, "glyph past end of table");
+            TEST_ASSERT_TRUE_MESSAGE(JUMP_TABLE_END + off + entry(t.data, (uint8_t)code)[2] <= t.len, "glyph past end of table");
         }
     }
 }
@@ -108,6 +110,7 @@ void test_every_glyph_lies_inside_the_table()
 void test_greek_slots_have_glyphs_in_every_size()
 {
     for (const Table &t : TABLES) {
+        TEST_ASSERT_TRUE_MESSAGE(t.len >= JUMP_TABLE_END, "jump table truncated");
         for (uint16_t code = FIRST; code < FIRST + COUNT; code++) {
             if (!isGreekSlot((uint8_t)code))
                 continue;
@@ -122,6 +125,7 @@ void test_greek_slots_have_glyphs_in_every_size()
 void test_ascii_and_fallback_glyph_match_upstream()
 {
     for (const Table &t : TABLES) {
+        TEST_ASSERT_TRUE_MESSAGE(t.len >= JUMP_TABLE_END, "jump table truncated");
         for (uint16_t code = FIRST; code <= 0xBF; code++) {
             if (code > 0x7E && code != 0xBF)
                 continue;
@@ -129,8 +133,11 @@ void test_ascii_and_fallback_glyph_match_upstream()
             const uint8_t *theirs = entry(t.upstream, (uint8_t)code);
             TEST_ASSERT_EQUAL_UINT8(theirs[2], ours[2]);
             TEST_ASSERT_EQUAL_UINT8(theirs[3], ours[3]);
-            if (ours[2] > 0)
-                TEST_ASSERT_EQUAL_UINT8_ARRAY(bitmapOf(t.upstream, (uint8_t)code), bitmapOf(t.data, (uint8_t)code), ours[2]);
+            if (ours[2] == 0)
+                continue;
+            TEST_ASSERT_TRUE_MESSAGE(JUMP_TABLE_END + offsetOf(t.data, (uint8_t)code) + ours[2] <= t.len,
+                                     "glyph past end of table");
+            TEST_ASSERT_EQUAL_UINT8_ARRAY(bitmapOf(t.upstream, (uint8_t)code), bitmapOf(t.data, (uint8_t)code), ours[2]);
         }
     }
 }
