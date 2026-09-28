@@ -111,9 +111,8 @@ template <typename T> bool SX126xInterface<T>::init()
     module.SPIreadStream(RADIOLIB_SX126X_CMD_GET_DEVICE_ERRORS, errors, 2);
     module.spiConfig.parseStatusCb = parse;
     static const char *const modes[] = {"?", "?", "STDBY_RC", "STDBY_XOSC", "FS", "RX", "TX", "?"};
-    LOG_INFO("SX126x state: osc=%s %.1fV, mode=%s, cmd status %u, device errors 0x%02x%02x",
-             tcxoVoltage > 0 ? "TCXO" : "XTAL", tcxoVoltage, modes[(status >> 4) & 0x07], (status >> 1) & 0x07,
-             errors[0], errors[1]);
+    LOG_INFO("SX126x state: osc=%s %.1fV, mode=%s, cmd status %u, device errors 0x%02x%02x", tcxoVoltage > 0 ? "TCXO" : "XTAL",
+             tcxoVoltage, modes[(status >> 4) & 0x07], (status >> 1) & 0x07, errors[0], errors[1]);
 
     return true;
 }
