@@ -25,6 +25,9 @@ extern uint32_t rebootAtMsec;
 #define CH341_PIN_CS (101)
 #define CH341_PIN_IRQ (0)
 
+// The adapter's chip select is D0, which is the pin pinedio_transceive_cs() drives.
+#define CH341_PIN_CS_INDEX (0)
+
 // the HAL must inherit from the base RadioLibHal class
 // and implement all of its virtual methods
 class Ch341Hal : public RadioLibHal
@@ -55,6 +58,11 @@ class Ch341Hal : public RadioLibHal
         pinedio_set_option(&pinedio, PINEDIO_OPTION_AUTO_CS, 0);
         pinedio_set_pin_mode(&pinedio, 3, true);
         pinedio_set_pin_mode(&pinedio, 5, true);
+#if defined(CH341_PACKED_CS) && defined(PINEDIO_HAS_TRANSCEIVE_CS)
+        // pinedio_transceive_cs() drives D0 itself, so it is only equivalent where D0 is the CS line.
+        packedCs = portduino_config.lora_cs_pin.pin == CH341_PIN_CS_INDEX;
+        LOG_INFO("CH341 packed CS %s (Lora.CS %d)", packedCs ? "on" : "off, CS is not D0", portduino_config.lora_cs_pin.pin);
+#endif
     }
 
     ~Ch341Hal() { pinedio_deinit(&pinedio); }
@@ -99,6 +107,11 @@ class Ch341Hal : public RadioLibHal
             return;
         }
         if (pin == RADIOLIB_NC) {
+            return;
+        }
+        // With the packed-CS path the transfer carries the select, so RadioLib's low costs nothing. Its high
+        // still goes out: the transfer cannot carry it, and the chip needs the edge before the next command.
+        if (packedCs && pin == CH341_PIN_CS_INDEX && value == PI_LOW) {
             return;
         }
         auto res = pinedio_digital_write(&pinedio, pin, value);
@@ -190,7 +203,15 @@ class Ch341Hal : public RadioLibHal
         if (checkError()) {
             return;
         }
+#ifdef PINEDIO_HAS_TRANSCEIVE_CS
+        // One bulk transfer for the select and the command, instead of two. RadioLib does exactly one
+        // spiTransfer per CS window (Module::SPItransferStream), so this is the same bus traffic minus a
+        // round trip - on every command, so the RX re-arm, the channel scan and the frame readout alike.
+        int32_t ret =
+            packedCs ? pinedio_transceive_cs(&this->pinedio, out, in, len) : pinedio_transceive(&this->pinedio, out, in, len);
+#else
         int32_t ret = pinedio_transceive(&this->pinedio, out, in, len);
+#endif
         if (ret < 0) {
             std::cerr << "Could not perform SPI transfer: " << ret << std::endl;
         }
@@ -214,6 +235,8 @@ class Ch341Hal : public RadioLibHal
   private:
     pinedio_inst pinedio = {0};
     bool has_warned = false;
+    // -DCH341_PACKED_CS, and only where D0 really is the configured CS pin.
+    bool packedCs = false;
 };
 
 #endif
