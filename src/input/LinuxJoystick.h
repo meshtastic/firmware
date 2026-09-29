@@ -37,11 +37,15 @@ class LinuxJoystick : public Observable<const InputEvent *>, public concurrency:
     int heldXZone() const { return heldX; }
     int heldYZone() const { return heldY; }
 
+    // The name this driver stamps into InputEvent::source. Lets a consumer tell an event that came
+    // from this gamepad from one that came from a keyboard or touchscreen carrying the same action.
+    const char *originName() const { return _originName; }
+
   protected:
     virtual int32_t runOnce() override;
 
   private:
-    void emitEvent(input_broker_event event);
+    void emitEvent(input_broker_event event, unsigned char kbchar = 0);
 
     const char *_originName;
     bool firstTime = true;

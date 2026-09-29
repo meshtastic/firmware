@@ -47,6 +47,12 @@ int16_t Channels::generateHash(ChannelIndex channelNum)
 
         h ^= xorHash(k.bytes, k.length);
 
+        // Differentiate AEAD channels in routing so AEAD and non-AEAD
+        // channels with the same PSK have different hashes
+        auto &ch = getByIndex(channelNum);
+        if (ch.has_settings && ch.settings.use_aead)
+            h ^= 0xAE;
+
         return h;
     }
 }
@@ -71,6 +77,13 @@ meshtastic_Channel &Channels::fixupChannel(ChannelIndex chIndex)
         // Convert the old string "Default" to our new short representation
         if (strcmp(meshtastic_channelSettings.name, "Default") == 0)
             *meshtastic_channelSettings.name = '\0';
+
+        // AEAD needs key material. Left set on a channel that resolves to no PSK it would make every
+        // send fail with BAD_REQUEST and every receive drop, with nothing in the config to show why.
+        if (meshtastic_channelSettings.use_aead && getKey(chIndex).length <= 0) {
+            LOG_WARN("Channel %d has AEAD enabled but no PSK; clearing use_aead", chIndex);
+            meshtastic_channelSettings.use_aead = false;
+        }
     }
 
     hashes[chIndex] = generateHash(chIndex);
@@ -166,67 +179,70 @@ void Channels::initDefaultChannel(ChannelIndex chIndex)
     ch.has_settings = true;
     ch.role = chIndex == 0 ? meshtastic_Channel_Role_PRIMARY : meshtastic_Channel_Role_SECONDARY;
 
+    static_assert(MAX_NUM_CHANNELS == 8, "the userPrefs switch below covers indices 0-7");
+
+// bin/platformio-custom.py completes every field of an index the vendor configured, so no field is
+// individually optional here and a new index costs one case rather than eighteen lines.
+#define USERPREFS_APPLY_CHANNEL(n)                                                                                               \
+    do {                                                                                                                         \
+        static const uint8_t userprefsPsk[] = USERPREFS_CHANNEL_##n##_PSK;                                                       \
+        static_assert(sizeof(userprefsPsk) <= sizeof(channelSettings.psk.bytes),                                                 \
+                      "USERPREFS_CHANNEL_" #n "_PSK is wider than psk.bytes");                                                   \
+        memcpy(channelSettings.psk.bytes, userprefsPsk, sizeof(userprefsPsk));                                                   \
+        channelSettings.psk.size = sizeof(userprefsPsk);                                                                         \
+        strncpy(channelSettings.name, (const char *)USERPREFS_CHANNEL_##n##_NAME, sizeof(channelSettings.name) - 1);             \
+        channelSettings.module_settings.position_precision = USERPREFS_CHANNEL_##n##_PRECISION;                                  \
+        channelSettings.module_settings.is_muted = USERPREFS_CHANNEL_##n##_IS_MUTED;                                             \
+        channelSettings.uplink_enabled = USERPREFS_CHANNEL_##n##_UPLINK_ENABLED;                                                 \
+        channelSettings.downlink_enabled = USERPREFS_CHANNEL_##n##_DOWNLINK_ENABLED;                                             \
+    } while (0)
+
     switch (chIndex) {
-    case 0:
 #ifdef USERPREFS_CHANNEL_0_PSK
-        static const uint8_t defaultpsk0[] = USERPREFS_CHANNEL_0_PSK;
-        memcpy(channelSettings.psk.bytes, defaultpsk0, sizeof(defaultpsk0));
-        channelSettings.psk.size = sizeof(defaultpsk0);
-#endif
-#ifdef USERPREFS_CHANNEL_0_NAME
-        strcpy(channelSettings.name, (const char *)USERPREFS_CHANNEL_0_NAME);
-#endif
-#ifdef USERPREFS_CHANNEL_0_PRECISION
-        channelSettings.module_settings.position_precision = USERPREFS_CHANNEL_0_PRECISION;
-#endif
-#ifdef USERPREFS_CHANNEL_0_UPLINK_ENABLED
-        channelSettings.uplink_enabled = USERPREFS_CHANNEL_0_UPLINK_ENABLED;
-#endif
-#ifdef USERPREFS_CHANNEL_0_DOWNLINK_ENABLED
-        channelSettings.downlink_enabled = USERPREFS_CHANNEL_0_DOWNLINK_ENABLED;
-#endif
+    case 0:
+        USERPREFS_APPLY_CHANNEL(0);
         break;
-    case 1:
+#endif
 #ifdef USERPREFS_CHANNEL_1_PSK
-        static const uint8_t defaultpsk1[] = USERPREFS_CHANNEL_1_PSK;
-        memcpy(channelSettings.psk.bytes, defaultpsk1, sizeof(defaultpsk1));
-        channelSettings.psk.size = sizeof(defaultpsk1);
-#endif
-#ifdef USERPREFS_CHANNEL_1_NAME
-        strcpy(channelSettings.name, (const char *)USERPREFS_CHANNEL_1_NAME);
-#endif
-#ifdef USERPREFS_CHANNEL_1_PRECISION
-        channelSettings.module_settings.position_precision = USERPREFS_CHANNEL_1_PRECISION;
-#endif
-#ifdef USERPREFS_CHANNEL_1_UPLINK_ENABLED
-        channelSettings.uplink_enabled = USERPREFS_CHANNEL_1_UPLINK_ENABLED;
-#endif
-#ifdef USERPREFS_CHANNEL_1_DOWNLINK_ENABLED
-        channelSettings.downlink_enabled = USERPREFS_CHANNEL_1_DOWNLINK_ENABLED;
-#endif
+    case 1:
+        USERPREFS_APPLY_CHANNEL(1);
         break;
-    case 2:
+#endif
 #ifdef USERPREFS_CHANNEL_2_PSK
-        static const uint8_t defaultpsk2[] = USERPREFS_CHANNEL_2_PSK;
-        memcpy(channelSettings.psk.bytes, defaultpsk2, sizeof(defaultpsk2));
-        channelSettings.psk.size = sizeof(defaultpsk2);
-#endif
-#ifdef USERPREFS_CHANNEL_2_NAME
-        strcpy(channelSettings.name, (const char *)USERPREFS_CHANNEL_2_NAME);
-#endif
-#ifdef USERPREFS_CHANNEL_2_PRECISION
-        channelSettings.module_settings.position_precision = USERPREFS_CHANNEL_2_PRECISION;
-#endif
-#ifdef USERPREFS_CHANNEL_2_UPLINK_ENABLED
-        channelSettings.uplink_enabled = USERPREFS_CHANNEL_2_UPLINK_ENABLED;
-#endif
-#ifdef USERPREFS_CHANNEL_2_DOWNLINK_ENABLED
-        channelSettings.downlink_enabled = USERPREFS_CHANNEL_2_DOWNLINK_ENABLED;
-#endif
+    case 2:
+        USERPREFS_APPLY_CHANNEL(2);
         break;
+#endif
+#ifdef USERPREFS_CHANNEL_3_PSK
+    case 3:
+        USERPREFS_APPLY_CHANNEL(3);
+        break;
+#endif
+#ifdef USERPREFS_CHANNEL_4_PSK
+    case 4:
+        USERPREFS_APPLY_CHANNEL(4);
+        break;
+#endif
+#ifdef USERPREFS_CHANNEL_5_PSK
+    case 5:
+        USERPREFS_APPLY_CHANNEL(5);
+        break;
+#endif
+#ifdef USERPREFS_CHANNEL_6_PSK
+    case 6:
+        USERPREFS_APPLY_CHANNEL(6);
+        break;
+#endif
+#ifdef USERPREFS_CHANNEL_7_PSK
+    case 7:
+        USERPREFS_APPLY_CHANNEL(7);
+        break;
+#endif
     default:
         break;
     }
+
+#undef USERPREFS_APPLY_CHANNEL
 }
 
 CryptoKey Channels::getKey(ChannelIndex chIndex)
@@ -314,16 +330,21 @@ void Channels::initDefaults()
 
 void Channels::onConfigChanged()
 {
-    // Make sure the phone hasn't mucked anything up
+    // Make sure the phone hasn't mucked anything up. Settle the primary first: fixupChannel()
+    // hashes through getKey(), which follows a keyless secondary to primaryIndex.
     bool hasPrimary = false;
     for (int i = 0; i < channelFile.channels_count; i++) {
-        const meshtastic_Channel &ch = fixupChannel(i);
+        const meshtastic_Channel &ch = getByIndex(i);
 
-        if (ch.role == meshtastic_Channel_Role_PRIMARY) {
+        if (ch.has_settings && ch.role == meshtastic_Channel_Role_PRIMARY) {
             primaryIndex = i;
             hasPrimary = true;
         }
     }
+
+    for (int i = 0; i < channelFile.channels_count; i++)
+        fixupChannel(i);
+
     // Enforce the invariant that primaryIndex references a PRIMARY channel: a malformed config can
     // demote every slot, which would leave all getPrimaryIndex() readers on a stale non-primary slot
     if (!hasPrimary) {
@@ -336,7 +357,9 @@ void Channels::onConfigChanged()
             initDefaultChannel(0);
         }
         LOG_WARN("Config has no PRIMARY channel, restored one at slot %u", primaryIndex);
-        fixupChannel(primaryIndex);
+        // The key every keyless secondary resolves through just changed, so re-run the lot
+        for (int i = 0; i < channelFile.channels_count; i++)
+            fixupChannel(i);
     }
 #if !MESHTASTIC_EXCLUDE_MQTT
     if (channels.anyMqttEnabled() && mqtt && !mqtt->isEnabled()) {
@@ -571,6 +594,12 @@ bool Channels::setDefaultPresetCryptoForHash(ChannelHash channelHash)
     return false;
 }
 
+bool Channels::isAEADEnabled(ChannelIndex chIndex)
+{
+    auto &ch = getByIndex(chIndex);
+    return ch.has_settings && ch.settings.use_aead;
+}
+
 /** Given a channel index setup crypto for encoding that channel (or the primary channel if that channel is unsecured)
  *
  * This method is called before encoding outbound packets
@@ -580,4 +609,13 @@ bool Channels::setDefaultPresetCryptoForHash(ChannelHash channelHash)
 int16_t Channels::setActiveByIndex(ChannelIndex channelIndex)
 {
     return setCrypto(channelIndex);
+}
+
+bool isMutedForPacket(const meshtastic_MeshPacket &mp)
+{
+    if (!isBroadcast(mp.to) && isToUs(&mp))
+        return nodeInfoLiteIsMuted(nodeDB->getMeshNode(mp.from));
+
+    const meshtastic_Channel &ch = channels.getByIndex(mp.channel ? mp.channel : channels.getPrimaryIndex());
+    return ch.settings.has_module_settings && ch.settings.module_settings.is_muted;
 }

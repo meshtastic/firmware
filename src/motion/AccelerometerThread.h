@@ -21,6 +21,7 @@
 #include "LSM6DS3Sensor.h"
 #include "MPU6050Sensor.h"
 #include "MotionSensor.h"
+#include "QMI8658Sensor.h"
 
 #include <memory>
 #ifdef HAS_QMA6100P
@@ -28,6 +29,9 @@
 #endif
 #ifdef HAS_STK8XXX
 #include "STK8XXXSensor.h"
+#endif
+#ifdef HAS_BHI260AP
+#include "BHI260APSensor.h"
 #endif
 
 extern ScanI2C::DeviceAddress accelerometer_found;
@@ -145,6 +149,16 @@ class AccelerometerThread : public concurrency::OSThread
 #ifdef HAS_QMA6100P
         case ScanI2C::DeviceType::QMA6100P:
             sensor.reset(new QMA6100PSensor(device));
+            break;
+#endif
+#if __has_include(<SensorQMI8658.hpp>)
+        case ScanI2C::DeviceType::QMI8658:
+            sensor.reset(new QMI8658Sensor(device));
+            break;
+#endif
+#ifdef HAS_BHI260AP
+        case ScanI2C::DeviceType::BHI260AP:
+            sensor.reset(new BHI260APSensor(device));
             break;
 #endif
         default:

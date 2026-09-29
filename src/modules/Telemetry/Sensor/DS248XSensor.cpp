@@ -63,13 +63,11 @@ bool DS248XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 
 #ifdef DS248X_I2C_CLOCK_SPEED
     reClockI2C.setup(_bus, _port);
-    reClockI2C.setClock(DS248X_I2C_CLOCK_SPEED);
+    LOG_INFO("%s: reclock speed %uHz", sensorName, DS248X_I2C_CLOCK_SPEED);
+    ReClockI2CGuard clockGuard(reClockI2C, DS248X_I2C_CLOCK_SPEED);
 #endif /* DS248X_I2C_CLOCK_SPEED */
 
     if (!ds248x.begin(bus, _address)) {
-#ifdef DS248X_I2C_CLOCK_SPEED
-        reClockI2C.restoreClock();
-#endif /* DS248X_I2C_CLOCK_SPEED */
         return false;
     }
 
@@ -151,9 +149,6 @@ bool DS248XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
         }
 
         if (initError && retry == numRetries) {
-#ifdef DS248X_I2C_CLOCK_SPEED
-            reClockI2C.restoreClock();
-#endif /* DS248X_I2C_CLOCK_SPEED */
             LOG_ERROR("%s: Max retries for one-wire init (%u/%u). Aborting", sensorName, retry, numRetries);
             return false;
         }
@@ -173,10 +168,6 @@ bool DS248XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
         delay(500);
     }
 
-#ifdef DS248X_I2C_CLOCK_SPEED
-    reClockI2C.restoreClock();
-#endif /* DS248X_I2C_CLOCK_SPEED */
-
     initI2CSensor();
     return status;
 }
@@ -190,7 +181,8 @@ bool DS248XSensor::isValidROM(const uint8_t *rom)
 float DS248XSensor::readTemperatureROM(const uint8_t *rom)
 {
 #ifdef DS248X_I2C_CLOCK_SPEED
-    reClockI2C.setClock(DS248X_I2C_CLOCK_SPEED);
+    LOG_DEBUG("%s: reclock speed %uHz", sensorName, DS248X_I2C_CLOCK_SPEED);
+    ReClockI2CGuard clockGuard(reClockI2C, DS248X_I2C_CLOCK_SPEED);
 #endif /* DS248X_I2C_CLOCK_SPEED */
 
     uint8_t data[9]{};
@@ -218,10 +210,6 @@ float DS248XSensor::readTemperatureROM(const uint8_t *rom)
             ok = ds248x.OneWireReadByte(&data[i]);
         }
     }
-
-#ifdef DS248X_I2C_CLOCK_SPEED
-    reClockI2C.restoreClock();
-#endif /* DS248X_I2C_CLOCK_SPEED */
 
     if (!ok) {
         LOG_WARN("%s: One-wire transaction failed", sensorName);

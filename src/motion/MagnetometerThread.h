@@ -9,6 +9,7 @@
 #include "../concurrency/OSThread.h"
 #include "MMC5983MASensor.h"
 #include "MotionSensor.h"
+#include "QMC6309Sensor.h"
 
 #include <memory>
 
@@ -72,6 +73,11 @@ class MagnetometerThread : public concurrency::OSThread
 #if __has_include(<SparkFun_MMC5983MA_Arduino_Library.h>)
         case ScanI2C::DeviceType::MMC5983MA:
             sensor.reset(new MMC5983MASensor(device));
+            break;
+#endif
+#if __has_include(<SensorQMC6309.hpp>)
+        case ScanI2C::DeviceType::QMC6309:
+            sensor.reset(new QMC6309Sensor(device));
             break;
 #endif
         default:

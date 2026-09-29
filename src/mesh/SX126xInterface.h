@@ -90,5 +90,17 @@ template <class T> class SX126xInterface : public RadioLibInterface
 #endif
     /** Some boards require GPIO control of tx vs rx paths */
     void setTransmitEnable(bool txon);
+
+    /** Program all modem parameters into the chip; returns the first RadioLib error, or RADIOLIB_ERR_NONE */
+    int16_t programModemParams();
+
+    /** begin() and chip-side setup, shared by init() and by reconfigure()'s recovery of a chip that lost its state */
+    bool reinitChip();
+
+    /** setStandby()'s body, returning the standby error instead of asserting - for callers that can recover */
+    int16_t trySetStandby();
+
+    /** Recover a chip that lost its runtime state: hardware-reset via begin() and reprogram */
+    bool recoverChipStateLoss() override { return reinitChip() && programModemParams() == RADIOLIB_ERR_NONE; }
 };
 #endif

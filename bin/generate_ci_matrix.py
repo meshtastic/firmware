@@ -23,9 +23,28 @@ parser.add_argument(
   default=[],
   help="Board level to build for (omit for the 'pr' + 'release' matrix)",
 )
+parser.add_argument(
+  "--added-config",
+  action="append",
+  default=[],
+  metavar="PATH",
+  help="platformio.ini added by this PR; its first env is built regardless of board_level",
+)
 args = parser.parse_args()
 
 outlist = []
+
+# A brand-new board is normally 'release', so it would get no CI until after merge.
+# Build the first env of each newly added config so it is compiled at least once.
+forced_envs = set()
+for added_path in args.added_config:
+  try:
+    with open(added_path, encoding="utf-8") as added_file:
+      first_env = re.search(r"^[ \t]*\[env:([^\]]+)\]", added_file.read(), re.MULTILINE)
+  except OSError:
+    continue
+  if first_env:
+    forced_envs.add(first_env.group(1).strip())
 
 cfg = ProjectConfig.get_instance()
 pio_envs = cfg.envs()
@@ -68,6 +87,9 @@ for env in all_envs:
   if args.platform == env["ci"]["platform"] or args.platform == "all":
     # Always include board_level = 'pr'
     if env["board_level"] == "pr":
+      outlist.append(env["ci"])
+    # Include the first env of a platformio.ini added by this PR
+    elif env["ci"]["board"] in forced_envs:
       outlist.append(env["ci"])
     # Include board_level = 'extra' when requested
     elif "extra" in args.level and env["board_level"] == "extra":

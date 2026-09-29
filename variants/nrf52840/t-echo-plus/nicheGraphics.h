@@ -13,6 +13,7 @@
 #include "graphics/niche/InkHUD/Applets/User/Positions/PositionsApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/RecentsList/RecentsListApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/ThreadedMessage/ThreadedMessageApplet.h"
+#include "graphics/niche/InkHUD/Applets/User/Waypoints/WaypointListApplet.h"
 #include "graphics/niche/InkHUD/InkHUD.h"
 #include "graphics/niche/Inputs/TwoButton.h"
 
@@ -44,6 +45,7 @@ void setupNicheGraphics()
     inkhud->addApplet("Channel 0", new InkHUD::ThreadedMessageApplet(0));
     inkhud->addApplet("Channel 1", new InkHUD::ThreadedMessageApplet(1));
     inkhud->addApplet("Positions", new InkHUD::PositionsApplet, true);
+    inkhud->addApplet("Waypoints", new InkHUD::WaypointListApplet);
     inkhud->addApplet("Favorites Map", new InkHUD::FavoritesMapApplet);
     inkhud->addApplet("Recents List", new InkHUD::RecentsListApplet);
     inkhud->addApplet("Heard", new InkHUD::HeardApplet, true, false, 0);

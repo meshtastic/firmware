@@ -81,10 +81,11 @@ class MockRoutingModule : public RoutingModule
 {
   public:
     void sendAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex, uint8_t hopLimit = 0,
-                    bool ackWantsAck = false) override
+                    bool ackWantsAck = false, const meshtastic_MeshPacket *relaySource = nullptr) override
     {
         (void)hopLimit;
         (void)ackWantsAck;
+        (void)relaySource;
         ackNaks.push_back({err, to, idFrom, chIndex});
     }
 
@@ -703,6 +704,51 @@ static void test_localAckNak_reachesPhoneViaRealRoutingModule()
     mockService->releaseToPool(toPhone);
 }
 
+// #10767: the implicit ACK for an overheard rebroadcast of our own packet carries that copy's
+// relaying node and the link metrics we heard it at, so the phone can attribute them to the relayer.
+// rx_rssi has explicit presence, so has_rx_rssi has to travel with it or the reading never encodes.
+static void test_localAck_carriesRelaySourceToPhone()
+{
+    installRealRoutingModule();
+
+    meshtastic_MeshPacket overheard = meshtastic_MeshPacket_init_zero;
+    overheard.from = LOCAL_NODE;
+    overheard.to = REMOTE_NODE;
+    overheard.id = 0xFEEDBEEF;
+    overheard.relay_node = 0xAB;
+    overheard.has_rx_rssi = true;
+    overheard.rx_rssi = -93;
+    overheard.rx_snr = 4.75f;
+
+    realRoutingModule->sendAckNak(meshtastic_Routing_Error_NONE, LOCAL_NODE, overheard.id, 0, /*hopLimit=*/0,
+                                  /*ackWantsAck=*/false, &overheard);
+
+    meshtastic_MeshPacket *toPhone = mockService->getForPhone();
+    TEST_ASSERT_NOT_NULL(toPhone);
+    TEST_ASSERT_EQUAL_UINT32(0xFEEDBEEF, toPhone->decoded.request_id);
+    TEST_ASSERT_EQUAL_HEX8(0xAB, toPhone->relay_node);
+    TEST_ASSERT_TRUE(toPhone->has_rx_rssi);
+    TEST_ASSERT_EQUAL_INT32(-93, toPhone->rx_rssi);
+    TEST_ASSERT_EQUAL_FLOAT(4.75f, toPhone->rx_snr);
+    mockService->releaseToPool(toPhone);
+}
+
+// Every other ACK/NAK passes no relay source and must reach the phone with the relay fields clear,
+// so the client is never told a relayer we did not hear.
+static void test_localAck_withoutRelaySource_leavesRelayFieldsUnset()
+{
+    installRealRoutingModule();
+
+    realRoutingModule->sendAckNak(meshtastic_Routing_Error_NONE, LOCAL_NODE, 0x0BADF00D, 0);
+
+    meshtastic_MeshPacket *toPhone = mockService->getForPhone();
+    TEST_ASSERT_NOT_NULL(toPhone);
+    TEST_ASSERT_EQUAL_UINT32(0x0BADF00D, toPhone->decoded.request_id);
+    TEST_ASSERT_EQUAL_HEX8(NO_RELAY_NODE, toPhone->relay_node);
+    TEST_ASSERT_FALSE(toPhone->has_rx_rssi);
+    mockService->releaseToPool(toPhone);
+}
+
 // The mirror of the above: a broadcast we originated, heard back off the mesh, must not reach the
 // phone even though it travels the same RoutingModule path.
 static void test_ownBroadcastEcho_isDroppedByRealRoutingModule()
@@ -855,6 +901,8 @@ void setup()
     RUN_TEST(test_handleFromRadio_ownPacketIsNotEchoedToPhone);
     RUN_TEST(test_handleFromRadio_ownPacketAddressedToUsReachesPhone);
     RUN_TEST(test_localAckNak_reachesPhoneViaRealRoutingModule);
+    RUN_TEST(test_localAck_carriesRelaySourceToPhone);
+    RUN_TEST(test_localAck_withoutRelaySource_leavesRelayFieldsUnset);
     RUN_TEST(test_ownBroadcastEcho_isDroppedByRealRoutingModule);
     RUN_TEST(test_phoneRequest_replyReachesPhone);
     RUN_TEST(test_nestedLocalSend_isDeferred_notReentrant);

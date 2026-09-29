@@ -51,6 +51,9 @@ PB_BIND(meshtastic_SHTXX_config, meshtastic_SHTXX_config, AUTO)
 PB_BIND(meshtastic_DS248X_config, meshtastic_DS248X_config, AUTO)
 
 
+PB_BIND(meshtastic_AS3935_config, meshtastic_AS3935_config, AUTO)
+
+
 
 
 

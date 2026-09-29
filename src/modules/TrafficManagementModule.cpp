@@ -1,4 +1,5 @@
 #include "TrafficManagementModule.h"
+#include "UptimeClock.h"
 
 #if HAS_TRAFFIC_MANAGEMENT
 
@@ -1362,7 +1363,7 @@ bool TrafficManagementModule::shouldDropPosition(const meshtastic_MeshPacket *p,
     const int32_t lat_truncated = truncateCoordinate(pos->latitude_i, precision);
     const int32_t lon_truncated = truncateCoordinate(pos->longitude_i, precision);
     const uint8_t fingerprint = computePositionFingerprint(lat_truncated, lon_truncated, precision);
-    // Drop gate uses the RAW configured interval: 0 means "dedup disabled". The 12 h default
+    // Drop gate uses the RAW configured interval: 0 means "dedup disabled". The 5 h default
     // is only for TTL sizing - feeding it here would silently defeat that contract.
     uint32_t minIntervalMs = secsToMs(moduleConfig.traffic_management.position_min_interval_secs);
 
@@ -1406,12 +1407,17 @@ bool TrafficManagementModule::shouldDropPosition(const meshtastic_MeshPacket *p,
     TM_LOG_TRACE("Position dedup 0x%08x: fp=0x%02x prev=0x%02x same=%d within=%d new=%d", p->from, fingerprint,
                  entry->pos_fingerprint, samePosition, withinInterval, isNew);
 
-    // Update cache entry (raw tick; 0 is a valid tick value)
-    entry->pos_fingerprint = fingerprint;
-    entry->pos_time = nowPosTick;
-
     // Drop only if same position AND within the minimum interval
-    return samePosition && withinInterval;
+    const bool drop = samePosition && withinInterval;
+
+    // Stamp only what we let through: re-stamping a dropped duplicate slides the window forward on
+    // every repeat, muting a node that broadcasts faster than the window instead of refreshing it.
+    if (!drop) {
+        entry->pos_fingerprint = fingerprint;
+        entry->pos_time = nowPosTick;
+    }
+
+    return drop;
 #endif
 }
 
@@ -1518,7 +1524,7 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
     // request declined above never spends the budget). false forwards the request instead of consuming
     // it. Rationale in https://meshtastic.org/docs/development/reference/traffic-management-internals "Throttling direct
     // responses".
-    if (!directResponseAllowed(getFrom(p), p->to, clockMs())) {
+    if (!directResponseAllowed(getFrom(p), p->to, Time::skipZero(clockMs()))) {
         TM_LOG_DEBUG("NodeInfo direct response throttled for 0x%08x; forwarding request", getFrom(p));
         return false;
     }
@@ -1622,7 +1628,7 @@ bool TrafficManagementModule::directResponseAllowed(NodeNum requester, NodeNum t
     reqSlot->lastReplyMs = nowMs;
     tgtSlot->key = target;
     tgtSlot->lastReplyMs = nowMs;
-    lastDirectResponseMs = nowMs;
+    lastDirectResponseMs = Time::skipZero(nowMs); // a parameter, so guard at the store as well
     return true;
 }
 

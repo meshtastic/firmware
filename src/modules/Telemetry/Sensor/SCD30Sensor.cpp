@@ -18,26 +18,21 @@ bool SCD30Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 #ifdef SCD30_I2C_CLOCK_SPEED
     _port = dev->address.port;
     reClockI2C.setup(_bus, _port);
-    reClockI2C.setClock(SCD30_I2C_CLOCK_SPEED);
+
+    LOG_INFO("%s: reclock speed %uHz", sensorName, SCD30_I2C_CLOCK_SPEED);
+    ReClockI2CGuard clockGuard(reClockI2C, SCD30_I2C_CLOCK_SPEED);
 #endif /* SCD30_I2C_CLOCK_SPEED */
 
     scd30.begin(*_bus, _address);
 
     if (!startMeasurement()) {
-        LOG_ERROR("%s: Periodic measurement start failed", sensorName);
-#ifdef SCD30_I2C_CLOCK_SPEED
-        reClockI2C.restoreClock();
-#endif /* SCD30_I2C_CLOCK_SPEED */
+        LOG_ERROR("%s: Failed to start periodic measurement", sensorName);
         return false;
     }
 
     if (!getASC(ascActive)) {
         LOG_WARN("%s: Can't determine ASC state", sensorName);
     }
-
-#ifdef SCD30_I2C_CLOCK_SPEED
-    reClockI2C.restoreClock();
-#endif /* SCD30_I2C_CLOCK_SPEED */
 
     if (state == SCD30_MEASUREMENT) {
         status = 1;
@@ -55,20 +50,14 @@ bool SCD30Sensor::getMetrics(meshtastic_Telemetry *measurement)
     float co2, temperature, humidity;
 
 #ifdef SCD30_I2C_CLOCK_SPEED
-    reClockI2C.setClock(SCD30_I2C_CLOCK_SPEED);
+    LOG_DEBUG("%s: reclock speed %uHz", sensorName, SCD30_I2C_CLOCK_SPEED);
+    ReClockI2CGuard clockGuard(reClockI2C, SCD30_I2C_CLOCK_SPEED);
 #endif /* SCD30_I2C_CLOCK_SPEED */
 
     if (scd30.readMeasurementData(co2, temperature, humidity) != SCD30_NO_ERROR) {
-        LOG_ERROR("%s: Measurement read failed", sensorName);
-#ifdef SCD30_I2C_CLOCK_SPEED
-        reClockI2C.restoreClock();
-#endif /* SCD30_I2C_CLOCK_SPEED */
+        LOG_ERROR("%s: Failed to read measurement data", sensorName);
         return false;
     }
-
-#ifdef SCD30_I2C_CLOCK_SPEED
-    reClockI2C.restoreClock();
-#endif /* SCD30_I2C_CLOCK_SPEED */
 
     if (co2 == 0) {
         LOG_ERROR("%s: Invalid CO₂ reading", sensorName);
@@ -359,14 +348,11 @@ bool SCD30Sensor::isActive()
 uint32_t SCD30Sensor::wakeUp()
 {
 #ifdef SCD30_I2C_CLOCK_SPEED
-    reClockI2C.setClock(SCD30_I2C_CLOCK_SPEED);
+    LOG_INFO("%s: reclock speed %uHz", sensorName, SCD30_I2C_CLOCK_SPEED);
+    ReClockI2CGuard clockGuard(reClockI2C, SCD30_I2C_CLOCK_SPEED);
 #endif /* SCD30_I2C_CLOCK_SPEED */
 
     startMeasurement();
-
-#ifdef SCD30_I2C_CLOCK_SPEED
-    reClockI2C.restoreClock();
-#endif /* SCD30_I2C_CLOCK_SPEED */
 
     return 0;
 }
@@ -378,14 +364,11 @@ uint32_t SCD30Sensor::wakeUp()
 void SCD30Sensor::sleep()
 {
 #ifdef SCD30_I2C_CLOCK_SPEED
-    reClockI2C.setClock(SCD30_I2C_CLOCK_SPEED);
+    LOG_INFO("%s: reclock speed %uHz", sensorName, SCD30_I2C_CLOCK_SPEED);
+    ReClockI2CGuard clockGuard(reClockI2C, SCD30_I2C_CLOCK_SPEED);
 #endif /* SCD30_I2C_CLOCK_SPEED */
 
     stopMeasurement();
-
-#ifdef SCD30_I2C_CLOCK_SPEED
-    reClockI2C.restoreClock();
-#endif /* SCD30_I2C_CLOCK_SPEED */
 }
 
 bool SCD30Sensor::canSleep()
@@ -409,7 +392,8 @@ AdminMessageHandleResult SCD30Sensor::handleAdminMessage(const meshtastic_MeshPa
     AdminMessageHandleResult result;
 
 #ifdef SCD30_I2C_CLOCK_SPEED
-    reClockI2C.setClock(SCD30_I2C_CLOCK_SPEED);
+    LOG_INFO("%s: reclock speed %uHz", sensorName, SCD30_I2C_CLOCK_SPEED);
+    ReClockI2CGuard clockGuard(reClockI2C, SCD30_I2C_CLOCK_SPEED);
 #endif /* SCD30_I2C_CLOCK_SPEED */
 
     switch (request->which_payload_variant) {
@@ -461,10 +445,6 @@ AdminMessageHandleResult SCD30Sensor::handleAdminMessage(const meshtastic_MeshPa
     default:
         result = AdminMessageHandleResult::NOT_HANDLED;
     }
-
-#ifdef SCD30_I2C_CLOCK_SPEED
-    reClockI2C.restoreClock();
-#endif /* SCD30_I2C_CLOCK_SPEED */
 
     return result;
 }

@@ -1,5 +1,4 @@
 #include "CryptoEngine.h"
-#include "aes-256/tiny-aes.h"
 #include "configuration.h"
 #include <Adafruit_nRFCrypto.h>
 class NRF52CryptoEngine : public CryptoEngine
@@ -12,9 +11,8 @@ class NRF52CryptoEngine : public CryptoEngine
     virtual void encryptAESCtr(CryptoKey _key, uint8_t *_nonce, size_t numBytes, uint8_t *bytes) override
     {
         if (_key.length > 16) {
-            AES_ctx ctx;
-            AES_init_ctx_iv(&ctx, _key.bytes, _nonce);
-            AES_CTR_xcrypt_buffer(&ctx, bytes, numBytes);
+            // CryptoCell only accelerates AES-128; AES-256 uses the shared software CTR.
+            CryptoEngine::encryptAESCtr(_key, _nonce, numBytes, bytes);
         } else if (_key.length > 0) {
             nRFCrypto.begin();
             nRFCrypto_AES ctx;

@@ -268,6 +268,8 @@ class ReliableRouterTestShim : public ReliableRouter
         ReliableRouter::sniffReceived(p, routing);
     }
 
+    void implicitAckForTest(const meshtastic_MeshPacket *p) { perhapsGenerateImplicitAckForOwnOverheard(p); }
+
     void clearPendingForTest()
     {
         while (!pending.empty())
@@ -279,8 +281,9 @@ class MockRoutingModule : public RoutingModule
 {
   public:
     void sendAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex, uint8_t hopLimit = 0,
-                    bool ackWantsAck = false) override
+                    bool ackWantsAck = false, const meshtastic_MeshPacket *relaySource = nullptr) override
     {
+        (void)relaySource;
         ackNaks.emplace_back(err, to, idFrom, chIndex, hopLimit, ackWantsAck);
     }
 
@@ -682,6 +685,25 @@ void test_health_lru_eviction_bounds_table(void)
     TEST_ASSERT_NOT_NULL(shim->findRouteHealth(0x2000));                      // newest present
 }
 
+// A stamp of 0 is the empty-slot marker, so an arm landing on the wrap tick must be normalized:
+// getOrAllocRouteHealth() would otherwise read the slot as ever-older and evict it first.
+void test_health_learn_never_stores_zero_sentinel(void)
+{
+    shim->noteRouteLearned(DEST, 0xAB, 0); // learned exactly on the wrap tick
+    RouteHealth *h = shim->findRouteHealth(DEST);
+    TEST_ASSERT_NOT_NULL(h);
+    TEST_ASSERT_NOT_EQUAL_UINT32(0u, h->learnedAtMsec);
+}
+
+void test_health_success_never_stores_zero_sentinel(void)
+{
+    shim->noteRouteLearned(DEST, 0xAB, 1000);
+    shim->noteRouteSuccess(DEST, 0); // refreshed exactly on the wrap tick
+    RouteHealth *h = shim->findRouteHealth(DEST);
+    TEST_ASSERT_NOT_NULL(h);
+    TEST_ASSERT_NOT_EQUAL_UINT32(0u, h->learnedAtMsec);
+}
+
 // ===========================================================================
 // Group 4 - shouldDecrementHopLimit favorite-router resolution (M2, site 4)
 // ===========================================================================
@@ -820,6 +842,57 @@ void test_reliableAckStopsNormalPendingTransmission(void)
     TEST_ASSERT_EQUAL_UINT32(0, reliableShim->pendingCount());
 }
 
+// A PKI DM we originated is encrypted to the recipient, so when we overhear it being rebroadcast we
+// cannot decode it. The routing auth gate classifies it opaque and returns before
+// shouldFilterReceived() runs, so the implicit ACK has to be reachable from the header alone -
+// otherwise the client never sees "Delivered to mesh" for a DM.
+void test_implicit_ack_for_opaque_own_packet(void)
+{
+    auto original = makeBehaviorPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kLocalNode, kRemoteNode, 0, /*wantAck=*/true);
+    reliableShim->seedRetry(original, NextHopRouter::NUM_RELIABLE_UNICAST_ATTEMPTS);
+    TEST_ASSERT_EQUAL_UINT32(1, reliableShim->pendingCount());
+    mockRoutingModule->ackNaks.clear();
+
+    // The overheard copy as it actually arrives: still encrypted, nothing decoded.
+    meshtastic_MeshPacket overheard = meshtastic_MeshPacket_init_zero;
+    overheard.from = kLocalNode;
+    overheard.to = kRemoteNode;
+    overheard.id = original.id;
+    overheard.channel = 0;
+    overheard.which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
+    overheard.encrypted.size = 32;
+
+    reliableShim->implicitAckForTest(&overheard);
+
+    TEST_ASSERT_EQUAL_UINT32(1, mockRoutingModule->ackNaks.size());
+    const auto &ack = mockRoutingModule->ackNaks.front();
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_NONE, std::get<0>(ack));
+    TEST_ASSERT_EQUAL_UINT32(kLocalNode, std::get<1>(ack)); // addressed to us -> reaches the phone
+    TEST_ASSERT_EQUAL_UINT32(original.id, std::get<2>(ack));
+
+    reliableShim->clearPendingForTest();
+}
+
+// Someone else's traffic must never mint an ACK, even with a colliding id.
+void test_implicit_ack_ignores_foreign_pkt(void)
+{
+    auto original = makeBehaviorPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kLocalNode, kRemoteNode, 0, /*wantAck=*/true);
+    reliableShim->seedRetry(original, NextHopRouter::NUM_RELIABLE_UNICAST_ATTEMPTS);
+    mockRoutingModule->ackNaks.clear();
+
+    meshtastic_MeshPacket foreign = meshtastic_MeshPacket_init_zero;
+    foreign.from = kRemoteNode;
+    foreign.to = kLocalNode;
+    foreign.id = original.id;
+    foreign.which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
+    foreign.encrypted.size = 32;
+
+    reliableShim->implicitAckForTest(&foreign);
+
+    TEST_ASSERT_EQUAL_UINT32(0, mockRoutingModule->ackNaks.size());
+    reliableShim->clearPendingForTest();
+}
+
 void test_pending_does_not_cancel_radio_queue_before_first_retry(void)
 {
     MockRadioInterface *mockIface = installMockIface();
@@ -934,6 +1007,25 @@ void test_rebroadcast_declined_send_releases_packet(void)
     TEST_ASSERT_EQUAL_MESSAGE(1, mockIface->sendCount, "the copy must have reached the mock radio");
 }
 
+// An already-encrypted packet never reaches perhapsEncode's TOO_LARGE check, so Router::send() is the
+// last gate before the radio queue: MeshPacket.encrypted holds 256 bytes, the radio buffer 240.
+void test_send_rejects_payload_larger_than_radio_buffer(void)
+{
+    MockRadioInterface *mockIface = installMockIface();
+    meshtastic_MeshPacket p = makeRebroadcastCandidate(NODENUM_BROADCAST);
+    p.id = 0x51000010;
+    p.encrypted.size = MAX_RADIO_PAYLOAD_LEN + 1;
+
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Routing_Error_TOO_LARGE, shim->send(packetPool.allocCopy(p)),
+                              "a payload larger than the radio buffer must be refused");
+    TEST_ASSERT_EQUAL_MESSAGE(0, mockIface->sendCount, "the oversized packet must never reach the radio");
+
+    p.id = 0x51000011;
+    p.encrypted.size = MAX_RADIO_PAYLOAD_LEN;
+    TEST_ASSERT_EQUAL_MESSAGE(ERRNO_OK, shim->send(packetPool.allocCopy(p)), "a payload at the radio ceiling must still be sent");
+    TEST_ASSERT_EQUAL_MESSAGE(1, mockIface->sendCount, "the fitting packet must reach the radio");
+}
+
 #if USERPREFS_EVENT_MODE
 void test_event_mode_hop_behavior(void)
 {
@@ -1033,6 +1125,8 @@ void setup()
     RUN_TEST(test_health_failure_without_record_is_noop);
     RUN_TEST(test_health_clear);
     RUN_TEST(test_health_lru_eviction_bounds_table);
+    RUN_TEST(test_health_learn_never_stores_zero_sentinel);
+    RUN_TEST(test_health_success_never_stores_zero_sentinel);
 
     printf("\n=== shouldDecrementHopLimit (M2 site 4) ===\n");
     RUN_TEST(test_hoplimit_preserve_unique_favorite_router);
@@ -1049,6 +1143,8 @@ void setup()
     RUN_TEST(test_reliableAckStopsNormalPendingTransmission);
 
     printf("\n=== pending retransmission bookkeeping ===\n");
+    RUN_TEST(test_implicit_ack_for_opaque_own_packet);
+    RUN_TEST(test_implicit_ack_ignores_foreign_pkt);
     RUN_TEST(test_pending_does_not_cancel_radio_queue_before_first_retry);
     RUN_TEST(test_pending_cancels_radio_queue_after_first_retry_for_any_budget);
     RUN_TEST(test_directed_hop_tracks_three_total_attempts);
@@ -1059,6 +1155,7 @@ void setup()
     RUN_TEST(test_rebroadcast_normal_broadcast_is_relayed);
     RUN_TEST(test_rebroadcast_no_lora_broadcast_is_not_relayed);
     RUN_TEST(test_rebroadcast_declined_send_releases_packet);
+    RUN_TEST(test_send_rejects_payload_larger_than_radio_buffer);
 #if USERPREFS_EVENT_MODE
     RUN_TEST(test_event_mode_hop_behavior);
 #endif

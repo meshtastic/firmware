@@ -2,7 +2,8 @@
 # trunk-ignore-all(ruff/F821)
 # trunk-ignore-all(flake8/F821): For SConstruct imports
 import sys
-from os.path import join
+from os.path import basename, isabs, isfile, join, realpath
+import shutil
 import subprocess
 import json
 import re
@@ -41,8 +42,11 @@ def infer_architecture(board_cfg):
         return "rp2350"
     if "nrf52" in mcu_l or "nrf52840" in mcu_l:
         return "nrf52840"
+    if "nrf54l15" in mcu_l:
+        return "nrf54l15"
     if "stm32" in mcu_l:
         return "stm32"
+    print(f"mtjson: could not infer architecture from MCU '{mcu_l}'")
     return None
 
 def run_size_tool(env, flag, purpose):
@@ -116,6 +120,65 @@ def compute_flash_bytes(env):
         if len(parts) >= 3 and parts[0].isdigit() and parts[1].isdigit():
             return int(parts[0]) + int(parts[1])
     return None
+
+def export_link_files(source, target, env):
+    """Copy the linker scripts that define MEMORY regions, and the linker map, next to the ELF.
+
+    CI uploads them with the ELF so MemBrowse can report usage per memory region and
+    attribute symbols to archives. Scripts come from LDSCRIPT_PATH and -T link flags,
+    resolved like the linker does: relative to the project dir, then each LIBPATH entry.
+    --defsym values a script uses (e.g. STM32's LD_MAX_SIZE) are prepended to its copy so
+    its MEMORY block resolves standalone. The map is the last -Map in LINKFLAGS, the one
+    the linker writes: STM32's framework adds its own after the global output.map, and ESP-IDF
+    builds use --Map instead.
+    """
+    names = []
+    if env.get("LDSCRIPT_PATH"):
+        names.append(env.subst("$LDSCRIPT_PATH"))
+    flags = [env.subst(str(f)) for f in env.Flatten(env.get("LINKFLAGS", []))]
+    for i, flag in enumerate(flags):
+        if flag == "-T" and i + 1 < len(flags):
+            names.append(flags[i + 1])
+        elif flag.startswith("-Wl,-T"):
+            names.append(flag[len("-Wl,-T"):].lstrip(","))
+        elif flag.startswith("-T"):
+            names.append(flag[2:])
+    defsyms = [m.groups() for m in (re.match(r"-Wl,--defsym[,=]([A-Za-z_]\w*)=(\S+)", f) for f in flags) if m]
+    search_dirs = [env.subst("$PROJECT_DIR")] + [
+        env.Dir(env.subst(str(p))).get_abspath() for p in env.Flatten(env.get("LIBPATH", []))
+    ]
+    exported = set()
+    for name in names:
+        name = name.strip('"')
+        candidates = [name] if isabs(name) else [join(d, name) for d in search_dirs]
+        path = next((c for c in candidates if isfile(c)), None)
+        if path is None or realpath(path) in exported:
+            continue
+        with open(path, errors="replace") as f:
+            script = f.read()
+        if not re.search(r"\bMEMORY\s*\{", script):
+            continue
+        exported.add(realpath(path))
+        dest = env.subst(f"$BUILD_DIR/${{PROGNAME}}.{basename(path)}")
+        with open(dest, "w") as f:
+            used = [(n, v) for n, v in defsyms if re.search(rf"\b{n}\b", script)]
+            if used:
+                f.write("/* --defsym values from the link command */\n")
+                f.writelines(f"{n} = {v};\n" for n, v in used)
+            f.write(script)
+        print(f"Exported linker script {path} -> {dest}")
+
+    map_path = None
+    for flag in flags:
+        m = re.match(r"-Wl,--?Map[,=](.+)", flag)
+        if m:
+            map_path = m.group(1).replace('"', "")
+    if map_path:
+        map_path = join(env.subst("$PROJECT_DIR"), map_path)
+        dest = env.subst("$BUILD_DIR/${PROGNAME}.map")
+        if isfile(map_path) and realpath(map_path) != realpath(dest):
+            shutil.copyfile(map_path, dest)
+            print(f"Exported linker map {map_path} -> {dest}")
 
 def manifest_gather(source, target, env):
     global manifest_ran
@@ -255,8 +318,12 @@ def manifest_write(files, env, ram_bytes=None, flash_bytes=None):
         if parsed is not None and parsed != "":
             device_meta[manifest_key] = parsed
 
-    # Determine architecture once; if we can't infer it, skip manifest generation
-    board_arch = device_meta.get("architecture") or infer_architecture(env.BoardConfig())
+    # Board MCU wins over a hand-typed custom_meshtastic_architecture: only the
+    # spellings infer_architecture emits are recognized downstream.
+    declared = device_meta.get("architecture")
+    board_arch = infer_architecture(env.BoardConfig()) or declared
+    if declared and declared != board_arch:
+        print(f"{pioenv}: architecture '{declared}' overridden with '{board_arch}'")
     if not board_arch:
         print(f"Skipping mtjson write for unknown architecture (env={env.get('PIOENV')})")
         return
@@ -299,12 +366,38 @@ with open(jsonLoc) as f:
     jsonStr = re.sub("//.*","", f.read(), flags=re.MULTILINE)
     userPrefs = json.loads(jsonStr)
 
+# Channels::initDefaultChannel() applies a configured index as a whole, so resolve per-field
+# optionality here: any field the vendor left out gets the value that function would have kept.
+MAX_NUM_CHANNELS = 8
+CHANNEL_FIELD_DEFAULTS = {
+    "PSK": "{ 0x01 }",  # short-form index into the well-known default PSK
+    "NAME": "",
+    "PRECISION": "0",
+    "IS_MUTED": "false",
+    "UPLINK_ENABLED": "false",
+    "DOWNLINK_ENABLED": "false",
+}
+channelsToWriteRaw = userPrefs.get("USERPREFS_CHANNELS_TO_WRITE", "1")
+channelsToWrite = int(channelsToWriteRaw, 16 if channelsToWriteRaw.lower().startswith("0x") else 10)
+if channelsToWrite > MAX_NUM_CHANNELS:
+    sys.exit(
+        f"userPrefs.jsonc: USERPREFS_CHANNELS_TO_WRITE is {channelsToWrite}, "
+        f"the channel table holds {MAX_NUM_CHANNELS}"
+    )
+for i in range(MAX_NUM_CHANNELS):
+    prefix = f"USERPREFS_CHANNEL_{i}_"
+    if any(k.startswith(prefix) for k in list(userPrefs)):
+        for field, default in CHANNEL_FIELD_DEFAULTS.items():
+            userPrefs.setdefault(prefix + field, default)
+
 pref_flags = []
 # Pre-process the userPrefs
 for pref in userPrefs:
     if userPrefs[pref].startswith("{"):
         pref_flags.append("-D" + pref + "=" + userPrefs[pref])
     elif userPrefs[pref].lstrip("-").replace(".", "").isdigit():
+        pref_flags.append("-D" + pref + "=" + userPrefs[pref])
+    elif re.fullmatch(r"0[xX][0-9a-fA-F]+", userPrefs[pref]):
         pref_flags.append("-D" + pref + "=" + userPrefs[pref])
     elif userPrefs[pref] == "true" or userPrefs[pref] == "false":
         pref_flags.append("-D" + pref + "=" + userPrefs[pref])
@@ -423,3 +516,5 @@ else:
 
     # Run manifest generation as part of the default build pipeline for non-native builds.
     env.Default("mtjson")
+
+    env.AddPostAction("$BUILD_DIR/${PROGNAME}.elf", export_link_files)

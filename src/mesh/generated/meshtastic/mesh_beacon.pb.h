@@ -15,7 +15,7 @@
 /* Payload for MESH_BEACON_APP packets.
  Periodically broadcast by nodes in beacon mode.
  Listeners deliver the text message to the local inbox and cache any offered
- channel/preset for the client app to act on — the firmware never auto-applies them. */
+ channel/preset for the client app to act on - the firmware never auto-applies them. */
 typedef struct _meshtastic_MeshBeacon {
     /* Human-readable beacon message. Max 100 bytes enforced by firmware on send. */
     char message[101];
@@ -63,7 +63,7 @@ extern const pb_msgdesc_t meshtastic_MeshBeacon_msg;
 
 /* Maximum encoded size of messages (where known) */
 #define MESHTASTIC_MESHTASTIC_MESH_BEACON_PB_H_MAX_SIZE meshtastic_MeshBeacon_size
-#define meshtastic_MeshBeacon_size               180
+#define meshtastic_MeshBeacon_size               182
 
 #ifdef __cplusplus
 } /* extern "C" */

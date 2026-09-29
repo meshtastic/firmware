@@ -59,17 +59,18 @@ void drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, i
 
     // === Header ===
     graphics::drawCommonHeader(display, x, y, titleStr);
+    y += BASEUI_BELOW_HEADER_MARGIN;
 
     const char *wifiName = config.network.wifi_ssid;
 
     if (WiFi.status() != WL_CONNECTED) {
-        display->drawString(x, getTextPositions(display)[line++], "WiFi: Not Connected");
+        display->drawString(x + BASEUI_BODY_LR_MARGIN, getTextPositions(display)[line++] + y, "WiFi: Not Connected");
     } else {
-        display->drawString(x, getTextPositions(display)[line++], "WiFi: Connected");
+        display->drawString(x + BASEUI_BODY_LR_MARGIN, getTextPositions(display)[line++] + y, "WiFi: Connected");
 
         char rssiStr[32];
         snprintf(rssiStr, sizeof(rssiStr), "RSSI: %d", WiFi.RSSI());
-        display->drawString(x, getTextPositions(display)[line++], rssiStr);
+        display->drawString(x + BASEUI_BODY_LR_MARGIN, getTextPositions(display)[line++] + y, rssiStr);
     }
 
     /*
@@ -87,36 +88,36 @@ void drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, i
     if (WiFi.status() == WL_CONNECTED) {
         char ipStr[64];
         snprintf(ipStr, sizeof(ipStr), "IP: %s", WiFi.localIP().toString().c_str());
-        display->drawString(x, getTextPositions(display)[line++], ipStr);
+        display->drawString(x + BASEUI_BODY_LR_MARGIN, getTextPositions(display)[line++] + y, ipStr);
     } else if (WiFi.status() == WL_NO_SSID_AVAIL) {
-        display->drawString(x, getTextPositions(display)[line++], "SSID Not Found");
+        display->drawString(x + BASEUI_BODY_LR_MARGIN, getTextPositions(display)[line++] + y, "SSID Not Found");
     } else if (WiFi.status() == WL_CONNECTION_LOST) {
-        display->drawString(x, getTextPositions(display)[line++], "Connection Lost");
+        display->drawString(x + BASEUI_BODY_LR_MARGIN, getTextPositions(display)[line++] + y, "Connection Lost");
     } else if (WiFi.status() == WL_IDLE_STATUS) {
-        display->drawString(x, getTextPositions(display)[line++], "Idle ... Reconnecting");
+        display->drawString(x + BASEUI_BODY_LR_MARGIN, getTextPositions(display)[line++] + y, "Idle ... Reconnecting");
     } else if (WiFi.status() == WL_CONNECT_FAILED) {
-        display->drawString(x, getTextPositions(display)[line++], "Connection Failed");
+        display->drawString(x + BASEUI_BODY_LR_MARGIN, getTextPositions(display)[line++] + y, "Connection Failed");
     }
 #ifdef ARCH_ESP32
     else {
         // Codes:
         // https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-guides/wifi.html#wi-fi-reason-code
-        display->drawString(x, getTextPositions(display)[line++],
+        display->drawString(x + BASEUI_BODY_LR_MARGIN, getTextPositions(display)[line++] + y,
                             WiFi.disconnectReasonName(static_cast<wifi_err_reason_t>(getWifiDisconnectReason())));
     }
 #else
     else {
         char statusStr[32];
         snprintf(statusStr, sizeof(statusStr), "Unknown status: %d", WiFi.status());
-        display->drawString(x, getTextPositions(display)[line++], statusStr);
+        display->drawString(x + BASEUI_BODY_LR_MARGIN, getTextPositions(display)[line++] + y, statusStr);
     }
 #endif
 
     char ssidStr[64];
     snprintf(ssidStr, sizeof(ssidStr), "SSID: %s", wifiName);
-    display->drawString(x, getTextPositions(display)[line++], ssidStr);
+    display->drawString(x + BASEUI_BODY_LR_MARGIN, getTextPositions(display)[line++] + y, ssidStr);
 
-    display->drawString(x, getTextPositions(display)[line++], "URL: http://meshtastic.local");
+    display->drawString(x + BASEUI_BODY_LR_MARGIN, getTextPositions(display)[line++] + y, "URL: http://meshtastic.local");
 
     graphics::drawCommonFooter(display, x, y);
 
@@ -144,9 +145,11 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
 
     // === Header ===
     graphics::drawCommonHeader(display, x, y, titleStr);
+    y += BASEUI_BELOW_HEADER_MARGIN;
 
     // === First Row: Region / BLE Name ===
-    graphics::UIRenderer::drawNodes(display, x, getTextPositions(display)[line] + 2, nodeStatus, 0, true, "");
+    graphics::UIRenderer::drawNodes(display, x + BASEUI_BODY_LR_MARGIN, getTextPositions(display)[line] + 2 + y, nodeStatus, 0,
+                                    true, "");
 
     uint8_t dmac[6];
     char shortnameble[35];
@@ -158,8 +161,8 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
         snprintf(shortnameble, sizeof(shortnameble), "BLE: %s", screen->ourId);
     }
     int textWidth = display->getStringWidth(shortnameble);
-    int nameX = (SCREEN_WIDTH - textWidth);
-    display->drawString(nameX, getTextPositions(display)[line++], shortnameble);
+    int nameX = (SCREEN_WIDTH - textWidth - BASEUI_BODY_LR_MARGIN);
+    display->drawString(nameX, getTextPositions(display)[line++] + y, shortnameble);
 
     if (!graphics::isCompactPanel(display)) {
         // === Second Row: Role ===
@@ -168,7 +171,7 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
         snprintf(device_role, sizeof(device_role), "Role: %s", role);
         textWidth = display->getStringWidth(device_role);
         nameX = (SCREEN_WIDTH - textWidth) / 2;
-        display->drawString(nameX, getTextPositions(display)[line++], device_role);
+        display->drawString(nameX, getTextPositions(display)[line++] + y, device_role);
     }
 
     // === Third Row: Radio Preset ===
@@ -194,7 +197,7 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
     }
     textWidth = display->getStringWidth(regionradiopreset);
     nameX = (SCREEN_WIDTH - textWidth) / 2;
-    display->drawString(nameX, getTextPositions(display)[line++], regionradiopreset);
+    display->drawString(nameX, getTextPositions(display)[line++] + y, regionradiopreset);
 
     // === Fourth Row: Frequency / ChanNum ===
     char frequencyslot[35];
@@ -220,14 +223,14 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
     }
     textWidth = display->getStringWidth(frequencyslot);
     nameX = (SCREEN_WIDTH - textWidth) / 2;
-    display->drawString(nameX, getTextPositions(display)[line++], frequencyslot);
+    display->drawString(nameX, getTextPositions(display)[line++] + y, frequencyslot);
 
 #if !defined(OLED_TINY)
     // === Fifth Row: Channel Utilization ===
     if (!config.lora.tx_enabled) {
         const char *txdisabled = "Transmit Disabled";
         textWidth = display->getStringWidth(txdisabled);
-        display->drawString((SCREEN_WIDTH - textWidth) / 2, getTextPositions(display)[line], txdisabled);
+        display->drawString((SCREEN_WIDTH - textWidth) / 2, getTextPositions(display)[line] + y, txdisabled);
     } else {
 
         const char *chUtil = "ChUtil:";
@@ -236,7 +239,7 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
 
         int chUtil_x = (currentResolution == ScreenResolution::High) ? display->getStringWidth(chUtil) + 10
                                                                      : display->getStringWidth(chUtil) + 5;
-        int chUtil_y = getTextPositions(display)[line] + 3;
+        int chUtil_y = getTextPositions(display)[line] + 3 + y;
 
         int chutil_bar_width = (currentResolution == ScreenResolution::High) ? 100 : 50;
         int chutil_bar_max_fill = chutil_bar_width - 2; // Account for border
@@ -250,7 +253,7 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
             (chUtil_x + chutil_bar_width + display->getStringWidth(chUtilPercentage) + extraoffset) / 2;
         int starting_position = centerofscreen - total_line_content_width;
 
-        display->drawString(starting_position, getTextPositions(display)[line], chUtil);
+        display->drawString(starting_position, getTextPositions(display)[line] + y, chUtil);
 
         // Force 61% or higher to show a full 100% bar, text would still show related percent.
         if (chutil_percent >= 61) {
@@ -297,7 +300,7 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
             display->fillRect(starting_position + chUtil_x + 1, chUtil_y + 1, fillRight, chutil_bar_height - 2);
         }
 
-        display->drawString(starting_position + chUtil_x + chutil_bar_width + extraoffset, getTextPositions(display)[line++],
+        display->drawString(starting_position + chUtil_x + chutil_bar_width + extraoffset, getTextPositions(display)[line++] + y,
                             chUtilPercentage);
     }
 #endif
@@ -318,11 +321,12 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
 
     // === Header ===
     graphics::drawCommonHeader(display, x, y, titleStr);
+    y += BASEUI_BELOW_HEADER_MARGIN;
 
     // === Layout ===
     int line = 1;
     const int barHeight = 6;
-    const int labelX = x;
+    const int labelX = x + BASEUI_BODY_LR_MARGIN;
     int barsOffset = (currentResolution == ScreenResolution::High) ? 24 : 0;
 #ifdef USE_EINK
 #ifndef T_DECK_PRO
@@ -353,7 +357,11 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
         }
 
         int textWidth = display->getStringWidth(combinedStr);
-        int adjustedBarWidth = SCREEN_WIDTH - barX - textWidth - 6;
+        int labelWidth = display->getStringWidth(label);
+        if (barX < BASEUI_BODY_LR_MARGIN + labelWidth) {
+            barX = BASEUI_BODY_LR_MARGIN + labelWidth;
+        }
+        int adjustedBarWidth = SCREEN_WIDTH - barX - textWidth - 6 - BASEUI_BODY_LR_MARGIN;
         if (adjustedBarWidth < 10)
             adjustedBarWidth = 10;
 
@@ -361,10 +369,10 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
 
         // Label
         display->setTextAlignment(TEXT_ALIGN_LEFT);
-        display->drawString(labelX, getTextPositions(display)[line], label);
+        display->drawString(labelX, getTextPositions(display)[line] + y, label);
 #if !defined(OLED_TINY)
         // Bar
-        int barY = getTextPositions(display)[line] + (FONT_HEIGHT_SMALL - barHeight) / 2;
+        int barY = getTextPositions(display)[line] + y + (FONT_HEIGHT_SMALL - barHeight) / 2;
         display->setColor(WHITE);
         display->drawRect(barX, barY, adjustedBarWidth, barHeight);
 
@@ -384,7 +392,7 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
 #endif
         // Value string
         display->setTextAlignment(TEXT_ALIGN_RIGHT);
-        display->drawString(SCREEN_WIDTH, getTextPositions(display)[line], combinedStr);
+        display->drawString(SCREEN_WIDTH - BASEUI_BODY_LR_MARGIN, getTextPositions(display)[line] + y, combinedStr);
     };
 
     // === Memory values ===
@@ -473,7 +481,7 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
     int textWidth = display->getStringWidth(appversionstr);
     int nameX = (SCREEN_WIDTH - textWidth) / 2;
 
-    display->drawString(nameX, getTextPositions(display)[line++], appversionstr);
+    display->drawString(nameX, getTextPositions(display)[line++] + y, appversionstr);
 
     if (!graphics::isCompactPanel(display) &&
         (SCREEN_HEIGHT > 64 || (SCREEN_HEIGHT <= 64 && line <= 5))) { // Only show uptime if the screen can show it
@@ -481,7 +489,7 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
         getUptimeStr(millis(), "Up: ", uptimeStr, sizeof(uptimeStr));
         textWidth = display->getStringWidth(uptimeStr);
         nameX = (SCREEN_WIDTH - textWidth) / 2;
-        display->drawString(nameX, getTextPositions(display)[line++], uptimeStr);
+        display->drawString(nameX, getTextPositions(display)[line++] + y, uptimeStr);
     }
 
     if (SCREEN_HEIGHT > 64 || (SCREEN_HEIGHT <= 64 && line <= 5)) { // Only show API state if the screen can show it
@@ -528,7 +536,7 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
         }
 #endif
         if (api_state[0] != '\0') {
-            display->drawString((SCREEN_WIDTH - display->getStringWidth(api_state)) / 2, getTextPositions(display)[line++],
+            display->drawString((SCREEN_WIDTH - display->getStringWidth(api_state)) / 2, getTextPositions(display)[line++] + y,
                                 api_state);
         }
     }

@@ -95,15 +95,17 @@ void NodeInfoModule::alterReceivedProtobuf(meshtastic_MeshPacket &mp, meshtastic
         pb_encode_to_bytes(mp.decoded.payload.bytes, sizeof(mp.decoded.payload.bytes), &meshtastic_User_msg, p);
 }
 
-void NodeInfoModule::sendOurNodeInfo(NodeNum dest, bool wantReplies, uint8_t channel, bool _shorterTimeout)
+bool NodeInfoModule::sendOurNodeInfo(NodeNum dest, bool wantReplies, uint8_t channel, bool _shorterTimeout)
 {
     // cancel any not yet sent (now stale) position packets
     if (prevPacketId) // if we wrap around to zero, we'll simply fail to cancel in that rare case (no big deal)
         service->cancelSending(prevPacketId);
     shorterTimeout = _shorterTimeout;
+    deferHistoryStamp = true;
     DEBUG_HEAP_BEFORE;
     meshtastic_MeshPacket *p = allocReply();
     DEBUG_HEAP_AFTER("NodeInfoModule::sendOurNodeInfo", p);
+    deferHistoryStamp = false;
 
     if (p) { // Check whether we didn't ignore it
         p->to = dest;
@@ -123,9 +125,23 @@ void NodeInfoModule::sendOurNodeInfo(NodeNum dest, bool wantReplies, uint8_t cha
 
         prevPacketId = p->id;
 
-        service->sendToMesh(p);
+        const ErrorCode res = service->sendToMesh(p);
         shorterTimeout = false;
+        // A rejected send never reached the air, so it neither defers the routine broadcast nor
+        // consumes a pending channel change. sendToMesh() has already released the packet.
+        if (res != ERRNO_OK && res != ERRNO_SHOULD_RELEASE) {
+            LOG_WARN("NodeInfo send rejected (err=%d)", res);
+            return false;
+        }
+        if (transmitHistory)
+            transmitHistory->setLastSentToMesh(meshtastic_PortNum_NODEINFO_APP);
+        // Our NodeInfo just went on the air, so the routine broadcast is due a full interval from now
+        // rather than from the last tick - an ad-hoc send otherwise leaves the periodic copy right behind it.
+        setIntervalFromNow(
+            Default::getConfiguredOrDefaultMs(config.device.node_info_broadcast_secs, default_node_info_broadcast_secs));
+        return true;
     }
+    return false;
 }
 
 void NodeInfoModule::triggerImmediateNodeInfoCheck()
@@ -155,8 +171,17 @@ meshtastic_MeshPacket *NodeInfoModule::allocReply()
         return NULL;
     }
 
-    // Use graduated scaling based on active mesh size (10 minute base, scales with congestion coefficient)
-    uint32_t timeoutMs = Default::getConfiguredOrDefaultMsScaled(0, 10 * 60, nodeStatus->getNumOnline());
+    // Use graduated scaling based on active mesh size (30 minute base, scales with congestion coefficient)
+    uint32_t timeoutMs = Default::getConfiguredOrDefaultMsScaled(0, 30 * 60, nodeStatus->getNumOnline());
+    // A licensed station's call-sign announcement is a regulatory interval, not a preference: ham mode
+    // sets node_info_broadcast_secs to 600 s, which a set-config would otherwise clamp to an hour.
+    // Never hold such a station past its own interval, whatever the floor and the scaling say.
+    if (owner.is_licensed) {
+        const uint32_t hamMs =
+            Default::getConfiguredOrDefaultMs(config.device.node_info_broadcast_secs, default_node_info_broadcast_secs);
+        if (hamMs < timeoutMs)
+            timeoutMs = hamMs;
+    }
     uint32_t lastNodeInfo = transmitHistory ? transmitHistory->getLastSentToMeshMillis(meshtastic_PortNum_NODEINFO_APP) : 0;
     if (!shorterTimeout && lastNodeInfo && Throttle::isWithinTimespanMs(lastNodeInfo, timeoutMs)) {
         LOG_DEBUG("Skip send NodeInfo since we sent it <%us ago", timeoutMs / 1000);
@@ -178,7 +203,10 @@ meshtastic_MeshPacket *NodeInfoModule::allocReply()
         strcpy(u.id, nodeDB->getNodeId().c_str());
 
         LOG_INFO("Send owner %s/%s/%s", u.id, u.long_name, u.short_name);
-        if (transmitHistory)
+        // The framework sends its own reply, so stamp here for that path. sendOurNodeInfo() stamps
+        // after the router accepts the packet instead - a send that never went out must not throttle
+        // the next one, and the floor it would sit out is 30 minutes.
+        if (transmitHistory && !deferHistoryStamp)
             transmitHistory->setLastSentToMesh(meshtastic_PortNum_NODEINFO_APP);
         return allocDataProtobuf(u);
     }
@@ -225,13 +253,12 @@ NodeInfoModule::NodeInfoModule()
 
 int32_t NodeInfoModule::runOnce()
 {
-    // If we changed channels, ask everyone else for their latest info
-    bool requestReplies = currentGeneration != radioGeneration;
-    currentGeneration = radioGeneration;
-
     if (airTime->isTxAllowedAirUtil() && config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_HIDDEN) {
+        // If we changed channels, ask everyone else for their latest info
+        bool requestReplies = currentGeneration != radioGeneration;
         LOG_INFO("Send our nodeinfo to mesh (wantReplies=%d)", requestReplies);
-        sendOurNodeInfo(NODENUM_BROADCAST, requestReplies); // Send our info (don't request replies)
+        if (sendOurNodeInfo(NODENUM_BROADCAST, requestReplies))
+            currentGeneration = radioGeneration; // only a send that went out consumes the channel change
     }
     return Default::getConfiguredOrDefaultMs(config.device.node_info_broadcast_secs, default_node_info_broadcast_secs);
 }

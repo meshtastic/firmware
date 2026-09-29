@@ -6,6 +6,12 @@
 
 #if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && __has_include(<SparkFun_MMC5983MA_Arduino_Library.h>)
 
+// SensorLib defines isBitSet as a macro, which collides with the class method of the same name
+// below. Drop it here, where the two actually meet, rather than relying on include order.
+#ifdef isBitSet
+#undef isBitSet
+#endif
+
 #include <SparkFun_MMC5983MA_Arduino_Library.h>
 
 class MMC5983MASensor : public MotionSensor

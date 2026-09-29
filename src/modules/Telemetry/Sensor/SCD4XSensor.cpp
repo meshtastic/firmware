@@ -19,7 +19,8 @@ bool SCD4XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 #ifdef SCD4X_I2C_CLOCK_SPEED
     _port = dev->address.port;
     reClockI2C.setup(_bus, _port);
-    reClockI2C.setClock(SCD4X_I2C_CLOCK_SPEED);
+    LOG_INFO("%s: reclock speed %uHz", sensorName, SCD4X_I2C_CLOCK_SPEED);
+    ReClockI2CGuard clockGuard(reClockI2C, SCD4X_I2C_CLOCK_SPEED);
 #endif /* SCD4X_I2C_CLOCK_SPEED */
 
     scd4x.begin(*_bus, _address);
@@ -29,9 +30,6 @@ bool SCD4XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 
     // Stop periodic measurement
     if (!stopMeasurement()) {
-#ifdef SCD4X_I2C_CLOCK_SPEED
-        reClockI2C.restoreClock();
-#endif /* SCD4X_I2C_CLOCK_SPEED */
         return false;
     }
 
@@ -41,34 +39,21 @@ bool SCD4XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
     if (sensorVariant == SCD4X_SENSOR_VARIANT_SCD41) {
         LOG_INFO("%s: Found SCD41", sensorName);
         if (!powerUp()) {
-            LOG_ERROR("%s: powerUp() failed", sensorName);
-#ifdef SCD4X_I2C_CLOCK_SPEED
-            reClockI2C.restoreClock();
-#endif /* SCD4X_I2C_CLOCK_SPEED */
+            LOG_ERROR("%s: Error trying to execute powerUp()", sensorName);
             return false;
         }
     }
 
     if (!getASC(ascActive)) {
-        LOG_ERROR("%s: Can't check if ASC enabled", sensorName);
-#ifdef SCD4X_I2C_CLOCK_SPEED
-        reClockI2C.restoreClock();
-#endif /* SCD4X_I2C_CLOCK_SPEED */
+        LOG_ERROR("%s: Unable to check if ASC is enabled", sensorName);
         return false;
     }
 
     // Start measurement in selected power mode (low power by default)
     if (!startMeasurement()) {
-        LOG_ERROR("%s: Can't start measurement", sensorName);
-#ifdef SCD4X_I2C_CLOCK_SPEED
-        reClockI2C.restoreClock();
-#endif /* SCD4X_I2C_CLOCK_SPEED */
+        LOG_ERROR("%s: Couldn't start measurement", sensorName);
         return false;
     }
-
-#ifdef SCD4X_I2C_CLOCK_SPEED
-    reClockI2C.restoreClock();
-#endif /* SCD4X_I2C_CLOCK_SPEED */
 
     if (state == SCD4X_MEASUREMENT) {
         status = 1;
@@ -93,7 +78,8 @@ bool SCD4XSensor::getMetrics(meshtastic_Telemetry *measurement)
     float temperature, humidity;
 
 #ifdef SCD4X_I2C_CLOCK_SPEED
-    reClockI2C.setClock(SCD4X_I2C_CLOCK_SPEED);
+    LOG_DEBUG("%s: reclock speed %uHz", sensorName, SCD4X_I2C_CLOCK_SPEED);
+    ReClockI2CGuard clockGuard(reClockI2C, SCD4X_I2C_CLOCK_SPEED);
 #endif /* SCD4X_I2C_CLOCK_SPEED */
 
     bool dataReady = false;
@@ -109,18 +95,11 @@ bool SCD4XSensor::getMetrics(meshtastic_Telemetry *measurement)
     }
 
     if (error != SCD4X_NO_ERROR || !dataReady) {
-#ifdef SCD4X_I2C_CLOCK_SPEED
-        reClockI2C.restoreClock();
-#endif /* SCD4X_I2C_CLOCK_SPEED */
         LOG_ERROR("SCD4X: Data is not ready");
         return false;
     }
 
     error = scd4x.readMeasurement(co2, temperature, humidity);
-
-#ifdef SCD4X_I2C_CLOCK_SPEED
-    reClockI2C.restoreClock();
-#endif /* SCD4X_I2C_CLOCK_SPEED */
 
     LOG_DEBUG("Got %s readings: co2=%u, co2_temp=%.2f, co2_hum%.2f", sensorName, co2, temperature, humidity);
     if (error != SCD4X_NO_ERROR) {
@@ -634,27 +613,18 @@ bool SCD4XSensor::powerDown()
     }
 
 #ifdef SCD4X_I2C_CLOCK_SPEED
-    reClockI2C.setClock(SCD4X_I2C_CLOCK_SPEED);
+    LOG_INFO("%s: reclock speed %uHz", sensorName, SCD4X_I2C_CLOCK_SPEED);
+    ReClockI2CGuard clockGuard(reClockI2C, SCD4X_I2C_CLOCK_SPEED);
 #endif /* SCD4X_I2C_CLOCK_SPEED */
 
     if (!stopMeasurement()) {
-#ifdef SCD4X_I2C_CLOCK_SPEED
-        reClockI2C.restoreClock();
-#endif /* SCD4X_I2C_CLOCK_SPEED */
         return false;
     }
 
     if (scd4x.powerDown() != SCD4X_NO_ERROR) {
-        LOG_ERROR("%s: sleep() failed", sensorName);
-#ifdef SCD4X_I2C_CLOCK_SPEED
-        reClockI2C.restoreClock();
-#endif /* SCD4X_I2C_CLOCK_SPEED */
+        LOG_ERROR("%s: Error trying to execute sleep()", sensorName);
         return false;
     }
-
-#ifdef SCD4X_I2C_CLOCK_SPEED
-    reClockI2C.restoreClock();
-#endif /* SCD4X_I2C_CLOCK_SPEED */
 
     state = SCD4X_OFF;
     return true;
@@ -701,20 +671,14 @@ uint32_t SCD4XSensor::wakeUp()
 {
 
 #ifdef SCD4X_I2C_CLOCK_SPEED
-    reClockI2C.setClock(SCD4X_I2C_CLOCK_SPEED);
+    LOG_INFO("%s: reclock speed %uHz", sensorName, SCD4X_I2C_CLOCK_SPEED);
+    ReClockI2CGuard clockGuard(reClockI2C, SCD4X_I2C_CLOCK_SPEED);
 #endif /* SCD4X_I2C_CLOCK_SPEED */
 
     if (startMeasurement()) {
         co2MeasureStarted = millis();
-#ifdef SCD4X_I2C_CLOCK_SPEED
-        reClockI2C.restoreClock();
-#endif /* SCD4X_I2C_CLOCK_SPEED */
         return SCD4X_WARMUP_MS;
     }
-
-#ifdef SCD4X_I2C_CLOCK_SPEED
-    reClockI2C.restoreClock();
-#endif /* SCD4X_I2C_CLOCK_SPEED */
 
     return 0;
 }
@@ -726,14 +690,11 @@ uint32_t SCD4XSensor::wakeUp()
 void SCD4XSensor::sleep()
 {
 #ifdef SCD4X_I2C_CLOCK_SPEED
-    reClockI2C.setClock(SCD4X_I2C_CLOCK_SPEED);
+    LOG_INFO("%s: reclock speed %uHz", sensorName, SCD4X_I2C_CLOCK_SPEED);
+    ReClockI2CGuard clockGuard(reClockI2C, SCD4X_I2C_CLOCK_SPEED);
 #endif /* SCD4X_I2C_CLOCK_SPEED */
 
     stopMeasurement();
-
-#ifdef SCD4X_I2C_CLOCK_SPEED
-    reClockI2C.restoreClock();
-#endif /* SCD4X_I2C_CLOCK_SPEED */
 }
 
 /**
@@ -771,7 +732,8 @@ AdminMessageHandleResult SCD4XSensor::handleAdminMessage(const meshtastic_MeshPa
     AdminMessageHandleResult result;
 
 #ifdef SCD4X_I2C_CLOCK_SPEED
-    reClockI2C.setClock(SCD4X_I2C_CLOCK_SPEED);
+    LOG_INFO("%s: reclock speed %uHz", sensorName, SCD4X_I2C_CLOCK_SPEED);
+    ReClockI2CGuard clockGuard(reClockI2C, SCD4X_I2C_CLOCK_SPEED);
 #endif /* SCD4X_I2C_CLOCK_SPEED */
 
     // TODO: potentially add selftest command?
@@ -836,10 +798,6 @@ AdminMessageHandleResult SCD4XSensor::handleAdminMessage(const meshtastic_MeshPa
 
     // Start measurement mode
     this->startMeasurement();
-
-#ifdef SCD4X_I2C_CLOCK_SPEED
-    reClockI2C.restoreClock();
-#endif /* SCD4X_I2C_CLOCK_SPEED */
 
     return result;
 }
