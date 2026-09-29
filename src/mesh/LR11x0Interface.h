@@ -11,6 +11,31 @@
 #error "LR11X0_TX_PRESTAGE sets RadioLib's staged mode directly: build with -DRADIOLIB_GODMODE=1"
 #endif
 
+// Options that shorten the scan's deaf window, each off unless the build sets it. They call RadioLib internals, so each
+// needs RADIOLIB_GODMODE.
+// LR11X0_TX_STAGE_EARLY: write the payload during the backoff while RX runs, not in the scan's standby. WriteBuffer8
+// fills the TX buffer and received frames land in the separate RX buffer (Semtech's lr11xx_regmem.h), so the write
+// aborts no frame and nothing received overwrites it.
+#ifndef LR11X0_TX_STAGE_EARLY
+#define LR11X0_TX_STAGE_EARLY 0
+#endif
+// LR11X0_CAD_SLIM: start the scan without RadioLib's packet-type reads and second standby, and send the CAD
+// parameters only when they change.
+#ifndef LR11X0_CAD_SLIM
+#define LR11X0_CAD_SLIM 0
+#endif
+// LR11X0_STANDBY_XOSC: standby and the TX/RX fallback keep the TCXO running, so a CAD or RX started from them skips
+// the TCXO start-up. It reaches the scan only with LR11X0_CAD_SLIM: RadioLib's scan re-enters STBY_RC.
+#ifndef LR11X0_STANDBY_XOSC
+#define LR11X0_STANDBY_XOSC 0
+#endif
+#if (LR11X0_TX_STAGE_EARLY || LR11X0_CAD_SLIM || LR11X0_STANDBY_XOSC) && !RADIOLIB_GODMODE
+#error "LR11X0_TX_STAGE_EARLY, LR11X0_CAD_SLIM and LR11X0_STANDBY_XOSC call RadioLib internals: build with -DRADIOLIB_GODMODE=1"
+#endif
+#if LR11X0_TX_STAGE_EARLY && !LR11X0_TX_PRESTAGE
+#error "LR11X0_TX_STAGE_EARLY launches through LR11X0_TX_PRESTAGE"
+#endif
+
 /**
  * \brief Adapter for LR11x0 radio family. Implements common logic for child classes.
  * \tparam T RadioLib module type for LR11x0: SX1262, SX1268.
@@ -103,6 +128,9 @@ template <class T> class LR11x0Interface : public RadioLibInterface
     /** setStandby()'s body, returning the standby error instead of asserting - for callers that can recover */
     int16_t trySetStandby();
 
+    /** Forget what the chip was left holding (staged payload, CAD parameters): it is being reset, reprogrammed or slept */
+    void forgetChipState();
+
     /** Recover a chip that lost its runtime state: hardware-reset via begin() and reprogram */
     bool recoverChipStateLoss() override { return reinitChip() && programModemParams() == RADIOLIB_ERR_NONE; }
 
@@ -112,6 +140,31 @@ template <class T> class LR11x0Interface : public RadioLibInterface
     /** The payload isChannelActive() wrote into the chip's buffer before the scan, or 0 bytes if none */
     size_t prestagedLen = 0;
     uint32_t prestagedId = 0;
+#endif
+
+#if LR11X0_TX_STAGE_EARLY
+    bool wantsEarlyTxStage() const override { return true; }
+    /** Write the next packet's payload into the TX buffer while RX runs */
+    void stageTxEarly(meshtastic_MeshPacket *p) override;
+    /** At the scan: true, with the prestage set, if the TX buffer already holds scanForTx's payload */
+    bool takeEarlyTxStage();
+    /** The payload in the chip's TX buffer, or 0 bytes if it is not known */
+    size_t earlyStagedLen = 0;
+    uint8_t earlyStagedBytes[256];
+    /** Remember the payload just written from radioBuffer */
+    void noteTxBuffer(size_t numbytes);
+#endif
+
+#if LR11X0_CAD_SLIM
+    /** lora.scanChannel(cfg), less what trySetStandby() has just done and the CAD parameters the chip already has */
+    int16_t scanChannelForTx(const ChannelScanConfig_t &cfg);
+    bool cadParamsValid = false;
+    uint8_t cadParamsSent[8];
+#endif
+
+#if LR11X0_STANDBY_XOSC
+    /** Put the TX/RX fallback on STBY_XOSC, after begin() */
+    void keepTcxoOnInStandby();
 #endif
 
     /// The TCXO Vref that init() settled on, so reinitChip() can begin() with the same oscillator setup
