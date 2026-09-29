@@ -433,6 +433,8 @@ for lb in env.GetLibBuilders():
         lb.env.Append(CPPDEFINES=[("APP_VERSION", verObj["long"])])
     elif not lb.lib_archive:
         lb.env.Append(CCFLAGS=flags)
+        # Plugins include firmware headers that pull in libraries the LDF only finds for src/ (e.g. WiFi.h)
+        lb.env.AppendUnique(CPPPATH=projenv.get("CPPPATH", []))
 
 # DEBUG_MUTE already compiles every LOG_* call out entirely; nanopb's own error-message
 # strings are a separate mechanism it doesn't touch, so mirror the same intent into nanopb.
