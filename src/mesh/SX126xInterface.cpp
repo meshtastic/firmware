@@ -1073,7 +1073,7 @@ template <typename T> void SX126xInterface<T>::noteStagedOverFrame(uint8_t base,
     rxClobberCheck = true;
     rxClobberBase = base;
     rxClobberLen = numbytes;
-    rxClobberFrameAt = rxWritePtr;
+    memcpy(rxClobberBytes, &radioBuffer, numbytes); // still the payload just written
 }
 
 template <typename T> bool SX126xInterface<T>::rxFrameOverlapsTxStage(size_t length)
@@ -1095,10 +1095,15 @@ template <typename T> bool SX126xInterface<T>::rxFrameOverlapsTxStage(size_t len
 #endif
     if (!clobberCheck || !bufferRangesOverlap(offset, length, rxClobberBase, rxClobberLen))
         return false;
-    // A frame that began where the write point said writes forward, away from ours, and reached it only by going round
-    // the buffer: long after our write, so its bytes went over ours and it is whole. Anywhere else, ours may be over it.
-    const bool wrappedOntoOurs = offset == rxClobberFrameAt && (uint8_t)(rxClobberBase - offset) >= TX_STAGE_WRAP_MIN_BYTES;
-    return !wrappedOntoOurs;
+    // The chip writes a frame forward at ~0.37 ms a byte; our write sweeps forward ~30x faster. So where our bytes lie
+    // over the frame's, they do so from the first byte the two share: if that byte is ours the frame is damaged, and if
+    // it is the frame's, so is every later shared byte. An intact frame matches ours there by chance 1 time in 256.
+    const uint8_t shared = (uint8_t)(offset - rxClobberBase) < rxClobberLen ? offset : rxClobberBase;
+    const uint8_t frameByte = ((const uint8_t *)&radioBuffer)[(uint8_t)(shared - offset)];
+    const bool ours = frameByte == rxClobberBytes[(uint8_t)(shared - rxClobberBase)];
+    LOG_DEBUG("RX frame at 0x%02x shares 0x%02x with a stage at 0x%02x: %s", (unsigned)offset, (unsigned)shared,
+              (unsigned)rxClobberBase, ours ? "ours landed last, drop" : "the frame landed last, keep");
+    return ours;
 }
 #endif
 

@@ -150,10 +150,7 @@ template <class T> class SX126xInterface : public RadioLibInterface
     bool rxClobberCheck = false;
     uint8_t rxClobberBase = 0;
     size_t rxClobberLen = 0;
-    /** Where the write point said that frame would begin */
-    uint8_t rxClobberFrameAt = 0;
-    /** A frame that met our bytes only after going this far round the buffer did so after our write had ended */
-    static constexpr uint8_t TX_STAGE_WRAP_MIN_BYTES = 16;
+    uint8_t rxClobberBytes[256];
     /** That frame had finished: the next resumeRunningReceive() must not clear its IRQ flags before it is read */
     bool keepRxIrqsAtResume = false;
     /** Where a payload of this length goes while RX runs: just behind RX's write point */
