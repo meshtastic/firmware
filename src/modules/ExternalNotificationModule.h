@@ -33,7 +33,7 @@ class rtttl
     explicit rtttl() {}
     static bool isPlaying() { return false; }
     static void play() {}
-    static void begin(byte a, const char *b){};
+    static void begin(byte a, const char *b) {};
     static void stop() {}
     static bool done() { return true; }
 };
