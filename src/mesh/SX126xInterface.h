@@ -108,6 +108,11 @@ template <class T> class SX126xInterface : public RadioLibInterface
     /** On a CH341 host: write scanForTx's payload in the scan's standby, so a clear verdict leaves four commands */
     void prestageTx();
 #endif
+    /** The SET_CAD_PARAMS bytes last sent, resent only when they change; invalid once the chip can have lost them */
+    uint8_t cadParamsSent[7] = {};
+    bool cadParamsValid = false;
+    /** lora.scanChannel(cfg), in fewer commands on a CH341 host */
+    int16_t scanChannelForTx(const ChannelScanConfig_t &cfg);
 
     /** Program all modem parameters into the chip; returns the first RadioLib error, or RADIOLIB_ERR_NONE */
     int16_t programModemParams();

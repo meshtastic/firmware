@@ -149,6 +149,7 @@ template <typename T> bool SX126xInterface<T>::reinitChip()
         lora.setPaRampTime(SX126X_PA_RAMP_US);
     }
 #endif
+    cadParamsValid = false; // begin() reset the chip
 #ifdef ARCH_PORTDUINO
     txStagedByRadioLib = false; // begin() reset the chip, and the register fixes with it
     // Lora.DIO3_TCXO_DELAY_US: a TCXO that settles sooner than RadioLib's 5000 us. A clear CAD drops the chip to
@@ -587,7 +588,7 @@ template <typename T> bool SX126xInterface<T>::isChannelActive()
 #ifdef ARCH_PORTDUINO
         prestageTx();
 #endif
-        result = lora.scanChannel(cfg);
+        result = scanChannelForTx(cfg);
 #ifdef ARCH_PORTDUINO
         if (result != RADIOLIB_CHANNEL_FREE)
             prestagedLen = 0; // no TX follows, and a detection's RX may overwrite the buffer
@@ -610,6 +611,51 @@ template <typename T> bool SX126xInterface<T>::isChannelActive()
     // standby failed or the LoRa modem type is gone - the chip lost its runtime state
     maybeRecoverChipStateLoss();
     return false; // report the channel free: a recovered chip can TX, a dead one fails startSend safely
+}
+
+template <typename T> int16_t SX126xInterface<T>::scanChannelForTx(const ChannelScanConfig_t &cfg)
+{
+    if (!irqPolledOverUsb())
+        return lora.scanChannel(cfg);
+    // lora.scanChannel(cfg) less its two packet-type reads and its standby, which trySetStandby() has just done, and
+    // with the CAD parameters sent only when they change: three commands instead of six before the CAD starts.
+    module.setRfSwitchState(Module::MODE_RX);
+    const uint32_t irqs = lora.getIrqMapped(cfg.cad.irqFlags);
+    const uint32_t dio1 = lora.getIrqMapped(cfg.cad.irqMask);
+    const uint8_t dioIrqParams[] = {
+        (uint8_t)(irqs >> 8), (uint8_t)(irqs & 0xFF), (uint8_t)(dio1 >> 8), (uint8_t)(dio1 & 0xFF), 0, 0, 0, 0};
+    int16_t res = module.SPIwriteStream(RADIOLIB_SX126X_CMD_SET_DIO_IRQ_PARAMS, dioIrqParams, sizeof(dioIrqParams));
+    if (res == RADIOLIB_ERR_NONE)
+        res = lora.clearIrqFlags(RADIOLIB_SX126X_IRQ_ALL);
+    // As RadioLib's setCad(): a default detection peak is SF + 13, and the timeout counts 15.625 us steps
+    const uint32_t timeoutRaw = (uint32_t)((float)cfg.cad.timeout / 15.625f);
+    const uint8_t cadParams[7] = {
+        cfg.cad.symNum,
+        cfg.cad.detPeak != RADIOLIB_SX126X_CAD_PARAM_DEFAULT ? cfg.cad.detPeak : (uint8_t)(sf + 13),
+        cfg.cad.detMin != RADIOLIB_SX126X_CAD_PARAM_DEFAULT ? cfg.cad.detMin : (uint8_t)RADIOLIB_SX126X_CAD_PARAM_DET_MIN,
+        cfg.cad.exitMode,
+        (uint8_t)((timeoutRaw >> 16) & 0xFF),
+        (uint8_t)((timeoutRaw >> 8) & 0xFF),
+        (uint8_t)(timeoutRaw & 0xFF)};
+    if (res == RADIOLIB_ERR_NONE && (!cadParamsValid || memcmp(cadParams, cadParamsSent, sizeof(cadParams)) != 0)) {
+        res = module.SPIwriteStream(RADIOLIB_SX126X_CMD_SET_CAD_PARAMS, cadParams, sizeof(cadParams));
+        cadParamsValid = res == RADIOLIB_ERR_NONE;
+        if (cadParamsValid)
+            memcpy(cadParamsSent, cadParams, sizeof(cadParams));
+    }
+    if (res == RADIOLIB_ERR_NONE)
+        res = module.SPIwriteStream(RADIOLIB_SX126X_CMD_SET_CAD, nullptr, 0);
+    if (res != RADIOLIB_ERR_NONE)
+        return res;
+    // As scanChannel(): wait for DIO1 to report the CAD finished, then read the verdict from the IRQ flags alone
+    while (!module.hal->digitalRead(module.getIrq()))
+        module.hal->yield();
+    const uint32_t irq = lora.getIrqFlags();
+    if (irq & RADIOLIB_SX126X_IRQ_CAD_DETECTED)
+        return RADIOLIB_LORA_DETECTED;
+    if (irq & RADIOLIB_SX126X_IRQ_CAD_DONE)
+        return RADIOLIB_CHANNEL_FREE;
+    return RADIOLIB_ERR_UNKNOWN;
 }
 
 #ifdef ARCH_PORTDUINO
@@ -691,7 +737,8 @@ template <typename T> bool SX126xInterface<T>::sleep()
 #ifdef ARCH_PORTDUINO
     txStagedByRadioLib = false; // sleep does not keep every register; let RadioLib stage the next TX in full
 #endif
-    (void)trySetStandby(); // Stop any pending operations - the chip is being put to sleep, a failure must not crash
+    cadParamsValid = false; // likewise the CAD parameters
+    (void)trySetStandby();  // Stop any pending operations - the chip is being put to sleep, a failure must not crash
 
     // turn off TCXO if it was powered
     // FIXME - this isn't correct
@@ -722,6 +769,7 @@ template <typename T> void SX126xInterface<T>::resetAGC()
 #ifdef ARCH_PORTDUINO
     txStagedByRadioLib = false; // as in sleep(): the next TX gets RadioLib's full staging
 #endif
+    cadParamsValid = false; // and the CAD parameters are sent again
 
     // 1. Warm sleep - powers down the entire analog frontend, resetting AGC state.
     //    A plain standby→startReceive cycle does NOT reset the AGC.
