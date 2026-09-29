@@ -935,6 +935,15 @@ void RadioLibInterface::handleReceiveInterrupt(const CapturedRxInfo *captured)
         printBytes("Raw incoming packet: ", (uint8_t *)&radioBuffer, length);
     }
 #endif
+#ifdef SX126X_TX_STAGE_IN_RX
+    if (rxFrameOverlapsTxStage(length) && state == RADIOLIB_ERR_NONE) { // consumes the flag on a failed frame too
+        // Bench: the chip's CRC covered what came over the air, not the buffer our payload was written into
+        LOG_WARN("Drop rx packet, %u bytes: a TX payload was staged over its buffer while it arrived", (unsigned)length);
+        rxBad++;
+        airTime->logAirtime(RX_ALL_LOG, rxMsec);
+        return;
+    }
+#endif
     if (state != RADIOLIB_ERR_NONE) {
         // Log PacketHeader similar to RadioInterface::printPacket so we can try to match RX errors to other packets in the logs.
         LOG_ERROR("Ignore rx packet, error=%d (maybe id=0x%08x fr=0x%08x to=0x%08x flags=0x%02x rxSNR=%g rxRSSI=%i "

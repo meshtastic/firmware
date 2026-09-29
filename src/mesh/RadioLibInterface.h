@@ -296,6 +296,11 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      *  interrupt arrives 0-35 ms after the chip raised it. */
     bool irqPolledOverUsb() const;
 
+#ifdef SX126X_TX_STAGE_IN_RX
+    /** Bench: whether a TX payload staged while this frame arrived can have overwritten part of it */
+    virtual bool rxFrameOverlapsTxStage(size_t length) { return false; }
+#endif
+
     // Timed TX_DONE check for irqPolledOverUsb() hosts: the chip drops to standby when a frame ends and is
     // deaf until we notice, so look when the frame should have ended instead of waiting for the poll.
     static constexpr uint32_t TX_DONE_CHECK_MARGIN_MS = 1;

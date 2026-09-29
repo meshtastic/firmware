@@ -10,6 +10,13 @@
 #define SX126X_TX_LAUNCH_OVERRIDE 1
 #endif
 
+// Bench: -DSX126X_CAD_SLIM starts each scan with three commands instead of RadioLib's six, and reads the verdict
+// without a packet-type read. -DSX126X_TX_STAGE_IN_RX writes the prestaged payload at the top of the buffer while RX
+// still runs, instead of in the scan's standby.
+#if defined(SX126X_TX_STAGE_IN_RX) && !defined(SX126X_TX_LAUNCH_OVERRIDE)
+#error "SX126X_TX_STAGE_IN_RX stages what the timed launch sends: build for a CH341 host or with -DSX126X_TX_PRESTAGE"
+#endif
+
 /**
  * \brief Adapter for SX126x radio family. Implements common logic for child classes.
  * \tparam T RadioLib module type for SX126x: SX1262, SX1268.
@@ -130,6 +137,27 @@ template <class T> class SX126xInterface : public RadioLibInterface
     /** When the last CAD verdict was read, for the launch step trace */
     uint32_t cadVerdictMs = 0;
 #endif
+#ifdef SX126X_TX_STAGE_IN_RX
+    /** Buffer offset of the payload staged while RX ran (256 minus its length), or 0 for one staged at offset 0 */
+    uint8_t prestagedBase = 0;
+    /** A frame was arriving or unread while a payload was written at this offset, 0 if none: its readout checks it */
+    uint8_t rxClobberBase = 0;
+    /** That frame had finished: the next resumeRunningReceive() must not clear its IRQ flags before it is read */
+    bool keepRxIrqsAtResume = false;
+    /** Write the payload at the top of the buffer while RX runs. True if a frame was arriving or unread: then the scan
+     *  must not go ahead, since its standby would abort that frame. */
+    bool stageTxInRx();
+    bool rxFrameOverlapsTxStage(size_t length) override;
+#endif
+#ifdef SX126X_CAD_SLIM
+    /** The SET_CAD_PARAMS bytes last sent, resent only when they change; invalid after the chip can have lost them */
+    uint8_t cadParamsSent[7] = {};
+    bool cadParamsValid = false;
+#endif
+    /** lora.startChannelScan(cfg), or its slim form under -DSX126X_CAD_SLIM */
+    int16_t startChannelScanForTx(const ChannelScanConfig_t &cfg);
+    /** lora.getChannelScanResult(), or its slim form under -DSX126X_CAD_SLIM */
+    int16_t readChannelScanResult();
 
     /** Program all modem parameters into the chip; returns the first RadioLib error, or RADIOLIB_ERR_NONE */
     int16_t programModemParams();
