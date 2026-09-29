@@ -422,6 +422,7 @@ template <typename T> int16_t SX126xInterface<T>::trySetStandby()
 #endif
     isReceiving = false; // If we were receiving, not any more
     activeReceiveStart = 0;
+    rxArmedContinuous = false;
     disableInterrupt();
     completeSending(); // If we were sending, not anymore
     RadioLibInterface::setStandby();
@@ -469,10 +470,13 @@ template <typename T> void SX126xInterface<T>::startReceive()
 
     setTransmitEnable(false);
 
+    // Continuous RX on a CH341 host: only a known-continuous RX can be resumed after RX_DONE (resumeRunningReceive())
+    // instead of restarted over the slow bus.
+    const bool continuousRx = irqPolledOverUsb();
 #ifdef ARCH_PORTDUINO_WASM
     const char *rxMethod = "startReceive";
 #else
-    const char *rxMethod = "startReceiveDutyCycleAuto";
+    const char *rxMethod = continuousRx ? "startReceive" : "startReceiveDutyCycleAuto";
 #endif
     auto tryStartRx = [&]() -> int16_t {
 #ifdef ARCH_PORTDUINO_WASM
@@ -480,6 +484,8 @@ template <typename T> void SX126xInterface<T>::startReceive()
         // windows and stalls the slow WebUSB SPI link. No battery to save here.
         return lora.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_INF, MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS);
 #else
+        if (continuousRx)
+            return lora.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_INF, MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS);
         // We use a 16 bit preamble so this should save some power by letting radio sit in standby mostly.
         return lora.startReceiveDutyCycleAuto(preambleLength, 8, MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS);
 #endif
@@ -507,11 +513,29 @@ template <typename T> void SX126xInterface<T>::startReceive()
     }
 
     RadioLibInterface::startReceive();
+    rxArmedContinuous = continuousRx;
 
     // Must be done AFTER, starting transmit, because startTransmit clears (possibly stale) interrupt pending register bits
     enableInterrupt(isrRxLevel0);
     checkRxDoneIrqFlag();
 #endif
+}
+
+template <typename T> bool SX126xInterface<T>::resumeRunningReceive()
+{
+    // Continuous RX survives RX_DONE and CRC or header errors: the chip is still listening. A restart is a standby
+    // and ~10 bus transactions, deaf throughout on a CH341 host, so pick the RX back up instead.
+    if (!rxArmedContinuous)
+        return false;
+    // readData() clears these, but handleReceiveInterrupt()'s early outs do not, and a latched one would hold DIO1
+    // high past the re-arm. PREAMBLE/HEADER_VALID stay: they may belong to the next frame, already arriving.
+    lora.clearIrqFlags(RADIOLIB_SX126X_IRQ_RX_DONE | RADIOLIB_SX126X_IRQ_CRC_ERR | RADIOLIB_SX126X_IRQ_HEADER_ERR |
+                       RADIOLIB_SX126X_IRQ_TIMEOUT);
+    activeReceiveStart = 0; // as the standby this replaces would
+    RadioLibInterface::startReceive();
+    enableInterrupt(isrRxLevel0);
+    checkRxDoneIrqFlag(); // an RX_DONE that beat the arm
+    return true;
 }
 
 /** Is the channel currently active? */

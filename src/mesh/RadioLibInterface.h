@@ -197,6 +197,10 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     /** Record that CAD left the chip in RX: arms both the flag and the no-show window below. */
     void noteCadHandoffToRx();
 
+    /** True where DIO1 is only seen through libch341's pin poll (a CH341 USB host), so an interrupt arrives up to
+     *  one poll interval after the chip raised it, and every command is a USB round trip. */
+    bool irqPolledOverUsb() const;
+
     /** Re-arm if a CAD->RX handoff has produced no packet well past one max-length airtime. */
     void checkCadHandoffTimeout();
 
@@ -265,6 +269,9 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      * re-attaches the MCU ISR only - a startReceive() there would standby over the packet CAD found.
      */
     void rearmReceive();
+
+    /** Resume an RX the chip is still running instead of restarting it; false if it is not known to be running. */
+    virtual bool resumeRunningReceive() { return false; }
 
     /** can we detect a LoRa preamble on the current channel?
      *  A true return means the chip may have been handed to RX in place, so the caller MUST follow it
