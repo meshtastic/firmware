@@ -61,6 +61,8 @@ class PositionModule : public ProtobufModule<meshtastic_Position>, private concu
     // Copy the altitude fields position_flags selects, keeping the source's presence so an altitude
     // nobody supplied is not broadcast as 0 m.
     static void copyAltitudeFields(meshtastic_Position &to, const meshtastic_Position &from, uint32_t flags);
+    // Position.ground_speed is km/h; TAKPacketV2.speed is cm/s. Rounds to nearest, saturates at UINT32_MAX.
+    static uint32_t groundSpeedKmhToCmPerSec(uint32_t kmh);
 
   protected:
     /** Called to handle a particular incoming message
