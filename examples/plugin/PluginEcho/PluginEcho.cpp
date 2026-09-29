@@ -1,10 +1,18 @@
 #include "PluginEcho.h"
 #include "DebugConfiguration.h"
+#include "MeshService.h"
 #include "NodeDB.h"
+#include "mesh/MeshTypes.h"
 #include "mesh/ModuleRegistry.h"
 #include <cstring>
 
-PluginEcho::PluginEcho() : SinglePortModule("PluginEcho", meshtastic_PortNum_PRIVATE_APP) {}
+static const char kPing[] = "/ping";
+static const char kPong[] = "pong";
+
+PluginEcho::PluginEcho() : SinglePortModule("PluginEcho", meshtastic_PortNum_TEXT_MESSAGE_APP)
+{
+    isPromiscuous = true; // channel broadcasts aren't addressed to us
+}
 
 void PluginEcho::setup()
 {
@@ -13,12 +21,19 @@ void PluginEcho::setup()
 
 ProcessMessage PluginEcho::handleReceived(const meshtastic_MeshPacket &mp)
 {
-    if (mp.which_payload_variant != meshtastic_MeshPacket_decoded_tag) {
+    if (mp.which_payload_variant != meshtastic_MeshPacket_decoded_tag || isFromUs(&mp)) {
         return ProcessMessage::CONTINUE;
     }
 
-    const NodeNum us = nodeDB->getNodeNum();
-    if (mp.to != us || mp.decoded.payload.size == 0) {
+    const bool dm = isToUs(&mp);
+    if (!dm && !isBroadcast(mp.to)) {
+        return ProcessMessage::CONTINUE;
+    }
+
+    const char *text = reinterpret_cast<const char *>(mp.decoded.payload.bytes);
+    const size_t len = mp.decoded.payload.size;
+    const size_t cmdLen = sizeof(kPing) - 1;
+    if (len < cmdLen || memcmp(text, kPing, cmdLen) != 0 || (len > cmdLen && text[cmdLen] != ' ')) {
         return ProcessMessage::CONTINUE;
     }
 
@@ -27,18 +42,24 @@ ProcessMessage PluginEcho::handleReceived(const meshtastic_MeshPacket &mp)
         return ProcessMessage::CONTINUE;
     }
 
-    size_t len = mp.decoded.payload.size;
-    if (len > sizeof(reply->decoded.payload.bytes)) {
-        len = sizeof(reply->decoded.payload.bytes);
+    // "pong" + everything after "/ping", so "/ping abc" -> "pong abc"
+    const size_t cap = sizeof(reply->decoded.payload.bytes);
+    const size_t pongLen = sizeof(kPong) - 1;
+    size_t rest = len - cmdLen;
+    if (rest > cap - pongLen) {
+        rest = cap - pongLen;
     }
-    memcpy(reply->decoded.payload.bytes, mp.decoded.payload.bytes, len);
-    reply->decoded.payload.size = len;
-    reply->to = mp.from;
+    memcpy(reply->decoded.payload.bytes, kPong, pongLen);
+    memcpy(reply->decoded.payload.bytes + pongLen, text + cmdLen, rest);
+    reply->decoded.payload.size = pongLen + rest;
+    reply->decoded.reply_id = mp.id;
+    reply->to = dm ? mp.from : NODENUM_BROADCAST;
     reply->channel = mp.channel;
 
-    LOG_INFO("PluginEcho: echo %u bytes to 0x%x (from 0x%x id=0x%x)", (unsigned)len, reply->to, mp.from, mp.id);
+    LOG_INFO("PluginEcho: pong %u bytes to 0x%x (from 0x%x id=0x%x)", (unsigned)reply->decoded.payload.size, reply->to, mp.from,
+             mp.id);
 
-    myReply = reply;
+    service->sendToMesh(reply);
     return ProcessMessage::CONTINUE;
 }
 

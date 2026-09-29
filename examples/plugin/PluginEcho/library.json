@@ -1,7 +1,7 @@
 {
   "name": "PluginEcho",
   "version": "0.1.0",
-  "description": "Meshtastic module plugin example: echoes PRIVATE_APP direct messages",
+  "description": "Meshtastic module plugin example: answers /ping text messages with pong",
   "license": "MIT",
   "frameworks": "arduino",
   "platforms": "*",

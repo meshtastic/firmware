@@ -3,7 +3,7 @@
 #include "SinglePortModule.h"
 #include "mesh/generated/meshtastic/portnums.pb.h"
 
-// Plugin example: echoes PRIVATE_APP direct messages back to the sender.
+// Plugin example: answers "/ping <payload>" text messages with "pong <payload>".
 class PluginEcho : public SinglePortModule
 {
   public:
