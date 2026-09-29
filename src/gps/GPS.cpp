@@ -1498,8 +1498,17 @@ bool holdJustExpired(uint32_t fixHoldEnds)
 /// hold past its deadline is not re-armed: holdJustExpired() consumes it later in the same cycle.
 bool shouldArmFixHold(bool hasValidLocation, uint8_t prevFixQual, uint32_t fixHoldEnds)
 {
-    // First lock of a cycle, first lock after the receiver was off, or no hold armed right now.
-    return !hasValidLocation || prevFixQual == 0 || fixHoldEnds == 0;
+    // A hold already recorded - still in force, or expired but not yet consumed by holdJustExpired() -
+    // must never be restarted by a transient fixQual dip: lookForLocation() sets fixQual (and so
+    // prevFixQual next cycle) before checking hasLock(), so it can read 0 mid-hold without down() ever
+    // having run and cleared fixHoldEnds.
+    if (fixHoldEnds != 0)
+        return false;
+    // No hold recorded: first lock of a cycle, first lock after the receiver was off, or a publish
+    // that cleared the hold without sleeping - all of these already imply fixHoldEnds == 0.
+    (void)hasValidLocation;
+    (void)prevFixQual;
+    return true;
 }
 
 int32_t GPS::runOnce()

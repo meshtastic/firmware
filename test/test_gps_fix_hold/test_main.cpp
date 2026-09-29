@@ -5,7 +5,7 @@
 // for up to 20s after a lock to download ephemeris, then publishes and sleeps. The predicates below
 // decide, once per GPS thread cycle, whether a hold should be armed and whether one just expired.
 //
-// Two regressions are guarded, one in each direction:
+// Three regressions are guarded:
 //
 // - A hold consumed by a publish which did not sleep: GPS::runOnce() clears fixHoldEnds whenever it
 //   publishes, but only calls down() when the search timed out or a hold expired. If the predicate
@@ -15,6 +15,10 @@
 //   holdJustExpired(). When it re-armed an expired hold after a GPS_THREAD_INTERVAL grace, a thread
 //   that ran later than its nominal interval (the ThinkNode M9 runs its 50ms interval every ~64ms)
 //   read a fresh fix just past that grace and started a second 20s hold in place of publishing.
+// - A hold restarted by a transient fixQual dip: lookForLocation() sets fixQual (and so prevFixQual
+//   next cycle) before checking hasLock(), so it can read 0 mid-hold with fixHoldEnds still set and
+//   no down() ever run. Treating prevFixQual == 0 as an unconditional arm reason let a reacquired fix
+//   restart the hold before holdJustExpired() had a chance to end and publish the original one.
 //   GPS::down() and GPS::disable() clear fixHoldEnds, so an armed hold always belongs to the
 //   current search cycle and holdJustExpired() is what ends it.
 #include "Arduino.h"
@@ -86,6 +90,33 @@ void test_does_not_arm_while_a_hold_is_in_force(void)
 
     Time::advanceTestMillis(kHoldMs / 2);
     TEST_ASSERT_FALSE(shouldArmFixHold(true, 3, fixHoldEnds));
+}
+
+// The transient-fixQual-dip regression: lookForLocation() sets fixQual (so prevFixQual next cycle)
+// before checking hasLock(), so a momentary signal dip mid-hold can read prevFixQual == 0 without
+// down() ever running and clearing fixHoldEnds. A fix reacquired on that cycle must not restart the
+// hold just because prevFixQual happened to be 0 - the original hold is still in force and must run
+// to its own deadline.
+void test_does_not_rearm_on_a_transient_fixqual_dip_during_an_active_hold(void)
+{
+    Time::setTestMillis(50 * 1000);
+    const uint32_t fixHoldEnds = armHoldNow();
+
+    Time::advanceTestMillis(kHoldMs / 2);
+    TEST_ASSERT_FALSE_MESSAGE(shouldArmFixHold(true, 0, fixHoldEnds),
+                              "prevFixQual==0 from a transient dip must not override an active hold");
+}
+
+// Same regression, but the dip is read on the cycle the hold's deadline has already passed: the
+// unconsumed hold must still be ended by holdJustExpired() and published, not silently restarted.
+void test_does_not_rearm_on_a_transient_fixqual_dip_at_an_unconsumed_deadline(void)
+{
+    Time::setTestMillis(50 * 1000);
+    const uint32_t fixHoldEnds = armHoldNow();
+
+    Time::advanceTestMillis(kHoldMs);
+    TEST_ASSERT_FALSE_MESSAGE(shouldArmFixHold(true, 0, fixHoldEnds), "an unconsumed hold is ended, not re-armed");
+    TEST_ASSERT_TRUE_MESSAGE(holdJustExpired(fixHoldEnds), "...by holdJustExpired() in the same pass");
 }
 
 // The double-hold regression: a late thread pass reads a fresh fix after the deadline. It must fall
@@ -205,6 +236,8 @@ void setup()
     RUN_TEST(test_arms_on_the_first_lock_after_the_gps_was_off);
     RUN_TEST(test_arms_after_a_publish_cleared_the_hold_without_sleeping);
     RUN_TEST(test_does_not_arm_while_a_hold_is_in_force);
+    RUN_TEST(test_does_not_rearm_on_a_transient_fixqual_dip_during_an_active_hold);
+    RUN_TEST(test_does_not_rearm_on_a_transient_fixqual_dip_at_an_unconsumed_deadline);
     RUN_TEST(test_does_not_rearm_an_expired_hold_that_was_not_yet_consumed);
     RUN_TEST(test_a_hold_straddling_the_wrap_expires_at_its_deadline);
     RUN_TEST(test_holds_when_the_deadline_wraps_but_now_has_not);
