@@ -23,6 +23,12 @@
 #define MESHTASTIC_RX_READOUT_TASK
 #endif
 
+// Bench: -DLR11X0_TX_STAGE_EARLY writes the TX payload during its backoff (see LR11x0Interface.h). The timer plumbing
+// lives here, as #12016's does.
+#if defined(LR11X0_TX_STAGE_EARLY) && !defined(MESHTASTIC_TX_STAGE_EARLY)
+#define MESHTASTIC_TX_STAGE_EARLY
+#endif
+
 // Bench: -DMESHTASTIC_TX_HOLD_FOR_CAD_RX holds TX while the RX a busy CAD handed off to is still open, so the next
 // scan's standby does not abort the frame the CAD heard.
 
@@ -513,6 +519,19 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
     /** The packet the running channel scan is clearing the way for, so the scan can stage it; null otherwise */
     meshtastic_MeshPacket *scanForTx = nullptr;
+
+#ifdef MESHTASTIC_TX_STAGE_EARLY
+    /** A backoff shorter than this is waited out as before, and its payload staged at the scan */
+    static constexpr uint32_t TX_STAGE_EARLY_MIN_MS = 5;
+    /** When the TX timer really falls due, 0 if it was not brought forward to stage the payload */
+    uint32_t txStageDueMs = 0;
+    /** Whether a payload can be written during its backoff (checked from the thread that queues it) */
+    virtual bool wantsEarlyTxStage() const { return false; }
+    /** Write the next packet's payload while RX runs, ahead of its scan */
+    virtual void stageTxEarly(meshtastic_MeshPacket *) {}
+#endif
+    /** notifyLater(delay, TRANSMIT_DELAY_COMPLETED), brought forward where the payload can be staged early */
+    void scheduleTransmitDelayCompleted(uint32_t delay);
 
     /** Could we send right now (i.e. either not actively receiving or transmitting)? */
     virtual bool canSendImmediately();
