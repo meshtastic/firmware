@@ -425,6 +425,9 @@ template <typename T> bool SX126xInterface<T>::reinitChip()
 #ifdef SX126X_TX_LAUNCH_OVERRIDE
     txStagedByRadioLib = false; // begin() reset the chip, and the sensitivity fix with it
 #endif
+#ifdef SX126X_CAD_SLIM
+    cadParamsValid = false; // the chip can have lost them
+#endif
     // \todo Display actual typename of the adapter, not just `SX126x`
     LOG_INFO("SX126x init result %d", res);
     if (res == RADIOLIB_ERR_CHIP_NOT_FOUND || res == RADIOLIB_ERR_SPI_CMD_FAILED)
@@ -814,13 +817,19 @@ template <typename T> bool SX126xInterface<T>::resumeRunningReceive()
 {
     // Continuous RX survives RX_DONE and CRC or header errors: the chip is still listening. A restart is a
     // standby and ~10 bus transactions, deaf throughout on a CH341 host, so pick the RX back up instead.
+#ifdef SX126X_TX_STAGE_IN_RX
+    const bool keepRxIrqs = keepRxIrqsAtResume;
+    keepRxIrqsAtResume = false;
+#else
+    const bool keepRxIrqs = false;
+#endif
     if (!rxArmedContinuous)
         return false;
     // readData() clears these, but handleReceiveInterrupt()'s early outs do not, and a latched one would hold
     // DIO1 high past the re-arm. PREAMBLE/HEADER_VALID stay: they may belong to the next frame, already arriving.
     // With the readout task, it clears what it reads, and a clear here could take the RX_DONE of a frame it has not
-    // read yet.
-    if (!rxReadoutActive())
+    // read yet. A scan skipped for an unread frame keeps them too.
+    if (!rxReadoutActive() && !keepRxIrqs)
         lora.clearIrqFlags(RADIOLIB_SX126X_IRQ_RX_DONE | RADIOLIB_SX126X_IRQ_CRC_ERR | RADIOLIB_SX126X_IRQ_HEADER_ERR |
                            RADIOLIB_SX126X_IRQ_TIMEOUT);
     if (deafSinceMs) {
@@ -946,6 +955,101 @@ template <typename T> bool SX126xInterface<T>::adoptReceiveArmedFromIsr()
 }
 #endif
 
+template <typename T> int16_t SX126xInterface<T>::startChannelScanForTx(const ChannelScanConfig_t &cfg)
+{
+#ifdef SX126X_CAD_SLIM
+    // lora.startChannelScan(cfg) less its packet-type read and its standby, which trySetStandby() has just done, and
+    // with the CAD parameters sent only when they change: three USB commands instead of six. RadioLib's SX126x calls
+    // for these steps are protected, so the commands go out as the launch path sends its own.
+    module.setRfSwitchState(Module::MODE_RX);
+    const uint32_t irqs = lora.getIrqMapped(cfg.cad.irqFlags);
+    const uint32_t dio1 = lora.getIrqMapped(cfg.cad.irqMask);
+    const uint8_t dioIrqParams[] = {
+        (uint8_t)(irqs >> 8), (uint8_t)(irqs & 0xFF), (uint8_t)(dio1 >> 8), (uint8_t)(dio1 & 0xFF), 0, 0, 0, 0};
+    int16_t res = module.SPIwriteStream(RADIOLIB_SX126X_CMD_SET_DIO_IRQ_PARAMS, dioIrqParams, sizeof(dioIrqParams));
+    if (res == RADIOLIB_ERR_NONE)
+        res = lora.clearIrqFlags(RADIOLIB_SX126X_IRQ_ALL);
+    // As RadioLib's setCad(): a default detection peak is SF + 13, and the timeout counts 15.625 us steps
+    const uint32_t timeoutRaw = (uint32_t)((float)cfg.cad.timeout / 15.625f);
+    const uint8_t cadParams[7] = {
+        cfg.cad.symNum,
+        cfg.cad.detPeak != RADIOLIB_SX126X_CAD_PARAM_DEFAULT ? cfg.cad.detPeak : (uint8_t)(sf + 13),
+        cfg.cad.detMin != RADIOLIB_SX126X_CAD_PARAM_DEFAULT ? cfg.cad.detMin : (uint8_t)RADIOLIB_SX126X_CAD_PARAM_DET_MIN,
+        cfg.cad.exitMode,
+        (uint8_t)((timeoutRaw >> 16) & 0xFF),
+        (uint8_t)((timeoutRaw >> 8) & 0xFF),
+        (uint8_t)(timeoutRaw & 0xFF)};
+    if (res == RADIOLIB_ERR_NONE && (!cadParamsValid || memcmp(cadParams, cadParamsSent, sizeof(cadParams)) != 0)) {
+        res = module.SPIwriteStream(RADIOLIB_SX126X_CMD_SET_CAD_PARAMS, cadParams, sizeof(cadParams));
+        cadParamsValid = res == RADIOLIB_ERR_NONE;
+        if (cadParamsValid)
+            memcpy(cadParamsSent, cadParams, sizeof(cadParams));
+    }
+    if (res == RADIOLIB_ERR_NONE)
+        res = module.SPIwriteStream(RADIOLIB_SX126X_CMD_SET_CAD, nullptr, 0);
+    return res;
+#else
+    return lora.startChannelScan(cfg);
+#endif
+}
+
+template <typename T> int16_t SX126xInterface<T>::readChannelScanResult()
+{
+#ifdef SX126X_CAD_SLIM
+    // lora.getChannelScanResult() less its packet-type read
+    const uint32_t irq = lora.getIrqFlags();
+    if (irq & RADIOLIB_SX126X_IRQ_CAD_DETECTED)
+        return RADIOLIB_LORA_DETECTED;
+    if (irq & RADIOLIB_SX126X_IRQ_CAD_DONE)
+        return RADIOLIB_CHANNEL_FREE;
+    return RADIOLIB_ERR_UNKNOWN;
+#else
+    return lora.getChannelScanResult();
+#endif
+}
+
+#ifdef SX126X_TX_STAGE_IN_RX
+template <typename T> bool SX126xInterface<T>::stageTxInRx()
+{
+    const uint32_t t0 = millis();
+    const size_t numbytes = encodeRadioBuffer(scanForTx);
+    if (numbytes == 0 || numbytes > RADIOLIB_SX126X_MAX_PACKET_LENGTH)
+        return false;
+    // RX writes each frame from offset 0 (RadioLib's RX base), so a payload that ends at the buffer's last byte only
+    // meets a received frame when the two together are longer than the buffer.
+    const uint8_t base = (uint8_t)(256 - numbytes);
+    const uint8_t writeBuffer[] = {RADIOLIB_SX126X_CMD_WRITE_BUFFER, base};
+    if (module.SPIwriteStream(writeBuffer, sizeof(writeBuffer), (uint8_t *)&radioBuffer, numbytes) != RADIOLIB_ERR_NONE)
+        return false;
+    // A frame with a header before or during the write can hold bytes of ours, and ours bytes of it
+    const uint32_t irq = lora.getIrqFlags();
+    const uint32_t doneIrqs = RADIOLIB_SX126X_IRQ_RX_DONE | RADIOLIB_SX126X_IRQ_CRC_ERR;
+    if (irq & (RADIOLIB_SX126X_IRQ_HEADER_VALID | doneIrqs)) {
+        rxClobberBase = base;
+        // The busy verdict's rearmReceive() resumes the RX: it must leave a finished frame's flags for its readout
+        keepRxIrqsAtResume = (irq & doneIrqs) != 0;
+        LOG_DEBUG("TX stage in RX: frame arriving or unread (irq 0x%04x), scan skipped", (unsigned)irq);
+        return true;
+    }
+    prestagedLen = numbytes;
+    prestagedId = scanForTx->id;
+    prestagedBase = base;
+    LOG_TRACE("TX staged in RX: %u bytes at 0x%02x in %u ms", (unsigned)numbytes, (unsigned)base, (unsigned)(millis() - t0));
+    return false;
+}
+
+template <typename T> bool SX126xInterface<T>::rxFrameOverlapsTxStage(size_t length)
+{
+    if (!rxClobberBase)
+        return false;
+    const uint32_t base = rxClobberBase;
+    rxClobberBase = 0; // the frame flagged at the stage is the next one read out
+    uint8_t offset = 0;
+    (void)lora.getPacketLength(false, &offset);
+    return offset + length > base;
+}
+#endif
+
 /** Is the channel currently active? */
 template <typename T> bool SX126xInterface<T>::isChannelActive()
 {
@@ -976,6 +1080,11 @@ template <typename T> bool SX126xInterface<T>::isChannelActive()
 #ifdef SX126X_TX_LAUNCH_OVERRIDE
     prestagedLen = 0; // only a clear verdict from this scan may launch what it stages
 #endif
+#ifdef SX126X_TX_STAGE_IN_RX
+    prestagedBase = 0;
+    if (txPrestageEnabled && scanForTx && txStagedByRadioLib && irqPolledOverUsb() && stageTxInRx())
+        return true; // report busy without the standby, which would abort the frame; rearmReceive() keeps the RX
+#endif
     const uint32_t t0 = millis();
     setTransmitEnable(false);
     const uint32_t tTxEn = millis();
@@ -986,7 +1095,7 @@ template <typename T> bool SX126xInterface<T>::isChannelActive()
 #ifdef SX126X_TX_LAUNCH_OVERRIDE
         // Write the payload now, while nothing is listening anyway, rather than after the verdict. The CAD leaves
         // the buffer alone; a detection's RX may overwrite it, but then there is no TX and the next scan rewrites it.
-        if (txPrestageEnabled && scanForTx && txStagedByRadioLib) {
+        if (txPrestageEnabled && scanForTx && txStagedByRadioLib && prestagedLen == 0) { // 0 unless staged in RX
             const size_t numbytes = encodeRadioBuffer(scanForTx);
             const uint8_t writeBuffer[] = {RADIOLIB_SX126X_CMD_WRITE_BUFFER, 0x00}; // offset 0, RadioLib's TX base
             if (module.SPIwriteStream(writeBuffer, sizeof(writeBuffer), (uint8_t *)&radioBuffer, numbytes) == RADIOLIB_ERR_NONE) {
@@ -996,7 +1105,7 @@ template <typename T> bool SX126xInterface<T>::isChannelActive()
         }
         tPrestage = millis();
 #endif
-        result = lora.startChannelScan(cfg);
+        result = startChannelScanForTx(cfg);
         const uint32_t tSetup = millis();
         uint32_t tWait = tSetup;
         unsigned polls = 0;
@@ -1007,7 +1116,7 @@ template <typename T> bool SX126xInterface<T>::isChannelActive()
                 module.hal->yield();
             }
             tWait = millis();
-            result = lora.getChannelScanResult();
+            result = readChannelScanResult();
         }
 #ifdef SX126X_TX_LAUNCH_OVERRIDE
         cadVerdictMs = millis();
@@ -1077,7 +1186,18 @@ template <typename T> int16_t SX126xInterface<T>::launchTransmit(size_t numbytes
         const uint8_t dioIrqParams[] = {
             (uint8_t)(irqMask >> 8), (uint8_t)(irqMask & 0xFF), (uint8_t)(dio1Mask >> 8), (uint8_t)(dio1Mask & 0xFF), 0, 0, 0, 0};
         const uint8_t clearAll[] = {(uint8_t)(RADIOLIB_SX126X_IRQ_ALL >> 8), (uint8_t)(RADIOLIB_SX126X_IRQ_ALL & 0xFF)};
-        res = module.SPIwriteStream(RADIOLIB_SX126X_CMD_SET_PACKET_PARAMS, packetParams, sizeof(packetParams));
+        res = RADIOLIB_ERR_NONE;
+#ifdef SX126X_TX_STAGE_IN_RX
+        if (prestagedBase) {
+            // Staged in RX at the top of the buffer: TX from there, leaving RX's base at 0 (RadioLib resets both on
+            // the next RX anyway)
+            const uint8_t bases[] = {prestagedBase, 0x00};
+            res = module.SPIwriteStream(RADIOLIB_SX126X_CMD_SET_BUFFER_BASE_ADDRESS, bases, sizeof(bases));
+            prestagedBase = 0;
+        }
+#endif
+        if (res == RADIOLIB_ERR_NONE)
+            res = module.SPIwriteStream(RADIOLIB_SX126X_CMD_SET_PACKET_PARAMS, packetParams, sizeof(packetParams));
         if (res == RADIOLIB_ERR_NONE)
             res = module.SPIwriteStream(RADIOLIB_SX126X_CMD_SET_DIO_IRQ_PARAMS, dioIrqParams, sizeof(dioIrqParams));
         if (res == RADIOLIB_ERR_NONE)
@@ -1134,6 +1254,9 @@ template <typename T> bool SX126xInterface<T>::sleep()
 #ifdef SX126X_TX_LAUNCH_OVERRIDE
     txStagedByRadioLib = false; // sleep does not keep every register; let RadioLib stage the next TX in full
 #endif
+#ifdef SX126X_CAD_SLIM
+    cadParamsValid = false; // the chip can have lost them
+#endif
     (void)trySetStandby(); // Stop any pending operations - the chip is being put to sleep, a failure must not crash
 
     // turn off TCXO if it was powered
@@ -1164,6 +1287,9 @@ template <typename T> void SX126xInterface<T>::resetAGC()
     LOG_DEBUG("SX126x AGC reset: warm sleep + Calibrate(0x7F)");
 #ifdef SX126X_TX_LAUNCH_OVERRIDE
     txStagedByRadioLib = false; // as in sleep(): the next TX gets RadioLib's full staging
+#endif
+#ifdef SX126X_CAD_SLIM
+    cadParamsValid = false; // the chip can have lost them
 #endif
 
     // 1. Warm sleep - powers down the entire analog frontend, resetting AGC state.
