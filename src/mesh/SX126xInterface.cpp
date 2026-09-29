@@ -148,6 +148,19 @@ template <typename T> bool SX126xInterface<T>::reinitChip()
         lora.setPaRampTime(SX126X_PA_RAMP_US);
     }
 #endif
+#ifdef ARCH_PORTDUINO
+    // Lora.DIO3_TCXO_DELAY_US: a TCXO that settles sooner than RadioLib's 5000 us. A clear CAD drops the chip to
+    // STDBY_RC, so the TX after it waits out this delay before the PA ramps.
+    const int tcxoDelayUs = portduino_config.dio3_tcxo_delay_us;
+    if (res == RADIOLIB_ERR_NONE && tcxoVoltage > 0 && tcxoDelayUs != 0) {
+        if (tcxoDelayUs < 0 || tcxoDelayUs > 10000) {
+            LOG_WARN("Ignoring Lora.DIO3_TCXO_DELAY_US %d, keeping 5000 us", tcxoDelayUs);
+        } else {
+            const int16_t tcxoErr = lora.setTCXO(tcxoVoltage, (uint32_t)tcxoDelayUs);
+            LOG_INFO("TCXO start-up delay %d us %s%d", tcxoDelayUs, radioLibErr, tcxoErr);
+        }
+    }
+#endif
     // \todo Display actual typename of the adapter, not just `SX126x`
     LOG_INFO("SX126x init result %d", res);
     if (res == RADIOLIB_ERR_CHIP_NOT_FOUND || res == RADIOLIB_ERR_SPI_CMD_FAILED)
