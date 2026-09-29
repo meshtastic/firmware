@@ -10,5 +10,6 @@
   },
   "[powershell]": {
     "editor.defaultFormatter": "ms-vscode.powershell"
-  }
+  },
+  "cmake.sourceDirectory": "/home/estlinh/Insync/estlinhowland@gmail.com/Google_Drive/Documents/Personal_Projects/Programming/Meshtastic/firmware/.dummy"
 }

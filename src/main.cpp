@@ -1054,6 +1054,19 @@ void setup()
     }
 #endif
 
+    // TEMPORARY: force-report a GPS lock for testing, regardless of whether real GPS hardware was
+    // detected/created. Remove once done testing GPS-lock-dependent behavior without hardware.
+    {
+        meshtastic_Position spoofedPos = meshtastic_Position_init_default;
+        spoofedPos.latitude_i = 377749000; // San Francisco, arbitrary spoofed coordinates
+        spoofedPos.longitude_i = -1224194000;
+        spoofedPos.altitude = 30;
+        spoofedPos.location_source = meshtastic_Position_LocSource_LOC_INTERNAL;
+        spoofedPos.timestamp = getValidTime(RTCQuality::RTCQualityDevice);
+        meshtastic::GPSStatus spoofedStatus(true, true, false, spoofedPos, true);
+        gpsStatus->updateStatus(&spoofedStatus);
+    }
+
 #endif
 
     nodeStatus->observe(&nodeDB->newStatus);

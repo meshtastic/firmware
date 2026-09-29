@@ -873,7 +873,17 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
 
                 break;
 
-                SCAN_SIMPLE_CASE(LSM6DS3_ADDR, LSM6DS3, "LSM6DS3", (uint8_t)addr.address);
+            case LSM6DS3_ADDR:
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x0F), 1); // WHO_AM_I
+                if (registerValue == 0x6B) {
+                    type = ISM330DHCX;
+                    logFoundDevice("ISM330DHCX", (uint8_t)addr.address);
+                } else {
+                    type = LSM6DS3;
+                    logFoundDevice("LSM6DS3", (uint8_t)addr.address);
+                }
+                break;
+
                 SCAN_SIMPLE_CASE(VEML7700_ADDR, VEML7700, "VEML7700", (uint8_t)addr.address);
             case TCA9555_ADDR:
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x01), 1);
