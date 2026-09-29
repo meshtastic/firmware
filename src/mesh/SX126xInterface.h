@@ -13,6 +13,9 @@
 // Bench: -DSX126X_CAD_SLIM starts each scan with three commands instead of RadioLib's six, and reads the verdict
 // without a packet-type read. -DSX126X_TX_STAGE_IN_RX writes the prestaged payload at the top of the buffer while RX
 // still runs, instead of in the scan's standby.
+#if defined(SX126X_TX_STAGE_EARLY) && !defined(SX126X_TX_STAGE_IN_RX)
+#error "SX126X_TX_STAGE_EARLY builds on SX126X_TX_STAGE_IN_RX"
+#endif
 #if defined(SX126X_TX_STAGE_IN_RX) && !defined(SX126X_TX_LAUNCH_OVERRIDE)
 #error "SX126X_TX_STAGE_IN_RX stages what the timed launch sends: build for a CH341 host or with -DSX126X_TX_PRESTAGE"
 #endif
@@ -148,6 +151,17 @@ template <class T> class SX126xInterface : public RadioLibInterface
      *  must not go ahead, since its standby would abort that frame. */
     bool stageTxInRx();
     bool rxFrameOverlapsTxStage(size_t length) override;
+#endif
+#ifdef SX126X_TX_STAGE_EARLY
+    /** A payload written during its backoff, at 256 - len: its length (0 if none), packet id, offset and bytes */
+    size_t earlyStagedLen = 0;
+    uint32_t earlyStagedId = 0;
+    uint8_t earlyStagedBase = 0;
+    uint8_t earlyStagedBytes[256];
+    bool wantsEarlyTxStage() const override;
+    void stageTxEarly(meshtastic_MeshPacket *p) override;
+    /** At the scan: whether the early stage still holds exactly this packet; if so it becomes the scan's prestage */
+    bool takeEarlyTxStage();
 #endif
 #ifdef SX126X_CAD_SLIM
     /** The SET_CAD_PARAMS bytes last sent, resent only when they change; invalid after the chip can have lost them */
