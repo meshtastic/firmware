@@ -1,0 +1,12 @@
+{
+  "name": "PluginEcho",
+  "version": "0.1.0",
+  "description": "Meshtastic module plugin example: echoes PRIVATE_APP direct messages",
+  "license": "MIT",
+  "frameworks": "arduino",
+  "platforms": "*",
+  "build": {
+    "libArchive": false,
+    "libLDFMode": "deep+"
+  }
+}

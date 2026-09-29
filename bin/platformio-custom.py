@@ -431,7 +431,8 @@ projenv.Append(
 for lb in env.GetLibBuilders():
     if lb.name == "meshtastic-device-ui":
         lb.env.Append(CPPDEFINES=[("APP_VERSION", verObj["long"])])
-        break
+    elif not lb.lib_archive:
+        lb.env.Append(CCFLAGS=flags)
 
 # DEBUG_MUTE already compiles every LOG_* call out entirely; nanopb's own error-message
 # strings are a separate mechanism it doesn't touch, so mirror the same intent into nanopb.
