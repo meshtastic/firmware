@@ -1012,6 +1012,13 @@ template <typename T> int16_t SX126xInterface<T>::readChannelScanResult()
 }
 
 #ifdef SX126X_TX_STAGE_IN_RX
+template <typename T> bool SX126xInterface<T>::rxFrameCanReach(uint32_t sinceMs, uint8_t base)
+{
+    // A frame with no header at sinceMs has written at most what it received since, from offset 0
+    const uint32_t elapsedMs = millis() - sinceMs + 2; // the IRQ reads' own time, and whole-ms rounding
+    return elapsedMs >= getPacketTime((uint32_t)base + 1, true) - getPacketTime((uint32_t)1, true);
+}
+
 template <typename T> bool SX126xInterface<T>::stageTxInRx()
 {
     const uint32_t t0 = millis();
@@ -1034,8 +1041,9 @@ template <typename T> bool SX126xInterface<T>::stageTxInRx()
     const uint32_t arrivingIrqs = RADIOLIB_SX126X_IRQ_HEADER_VALID;
 #endif
     if (irq & (arrivingIrqs | doneIrqs)) {
-        // A frame still in its preamble has written nothing yet, and will write over ours, not we over it
-        if (irq & (RADIOLIB_SX126X_IRQ_HEADER_VALID | doneIrqs))
+        // A frame still in its preamble has written nothing yet, and will write over ours, not we over it. The scan
+        // was let through with no header showing, so a frame with one now began its payload during the write.
+        if ((irq & (RADIOLIB_SX126X_IRQ_HEADER_VALID | doneIrqs)) && rxFrameCanReach(t0, base))
             rxClobberBase = base;
         // The busy verdict's rearmReceive() resumes the RX: it must leave a finished frame's flags for its readout
         keepRxIrqsAtResume = (irq & doneIrqs) != 0;
@@ -1091,13 +1099,24 @@ template <typename T> void SX126xInterface<T>::stageTxEarly(meshtastic_MeshPacke
     if (earlyStagedLen == numbytes && memcmp(earlyStagedBytes, &radioBuffer, numbytes) == 0)
         return; // a redraw of the same packet: still in the buffer
     earlyStagedLen = 0;
+    const uint32_t frameIrqs = RADIOLIB_SX126X_IRQ_HEADER_VALID | RADIOLIB_SX126X_IRQ_RX_DONE | RADIOLIB_SX126X_IRQ_CRC_ERR;
+    // A frame already in the buffer may have written past where ours would go: wait for its readout, which redraws the
+    // backoff and brings us back here
+    const uint32_t tBefore = millis();
+    const uint32_t irqBefore = lora.getIrqFlags();
+    if (irqBefore & frameIrqs) {
+        LOG_DEBUG("TX staged early: deferred, a frame is in the buffer (irq 0x%04x)", (unsigned)irqBefore);
+        return;
+    }
     const uint8_t base = (uint8_t)(256 - numbytes);
     const uint8_t writeBuffer[] = {RADIOLIB_SX126X_CMD_WRITE_BUFFER, base};
     if (module.SPIwriteStream(writeBuffer, sizeof(writeBuffer), (uint8_t *)&radioBuffer, numbytes) != RADIOLIB_ERR_NONE)
         return;
-    // No standby follows, so a frame arriving now is received as usual; its readout checks the two against each other
+    // No standby follows, so a frame arriving now is received as usual. It began its payload during the write, so it
+    // only met ours if it was fast enough to reach it; otherwise its bytes land on ours later, and its readout drops
+    // the stage.
     const uint32_t irq = lora.getIrqFlags();
-    if (irq & (RADIOLIB_SX126X_IRQ_HEADER_VALID | RADIOLIB_SX126X_IRQ_RX_DONE | RADIOLIB_SX126X_IRQ_CRC_ERR))
+    if ((irq & frameIrqs) && rxFrameCanReach(tBefore, base))
         rxClobberBase = base;
     earlyStagedLen = numbytes;
     earlyStagedId = p->id;
