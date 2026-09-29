@@ -467,6 +467,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #ifndef HAS_ETHERNET
 #define HAS_ETHERNET 0
 #endif
+#if (defined(USE_WS5500) || defined(USE_CH390D)) && !HAS_ETHERNET
+#error "USE_WS5500 and USE_CH390D require HAS_ETHERNET"
+#endif
 #ifndef HAS_SCREEN
 #define HAS_SCREEN 0
 #endif
