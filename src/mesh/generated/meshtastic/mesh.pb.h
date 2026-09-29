@@ -665,7 +665,11 @@ typedef enum _meshtastic_MeshPacket_TransportMechanism {
     /* Arrived via API connection */
     meshtastic_MeshPacket_TransportMechanism_TRANSPORT_API = 7,
     /* Arrived via Unicast UDP */
-    meshtastic_MeshPacket_TransportMechanism_TRANSPORT_UNICAST_UDP = 8
+    meshtastic_MeshPacket_TransportMechanism_TRANSPORT_UNICAST_UDP = 8,
+    /* Arrived via a connectionless BLE 5 extended advertisement */
+    meshtastic_MeshPacket_TransportMechanism_TRANSPORT_BLE_ADV = 9,
+    /* Arrived via a BLE GATT mesh-peer connection (a phone connected to this node as a mesh peer) */
+    meshtastic_MeshPacket_TransportMechanism_TRANSPORT_BLE_GATT = 10
 } meshtastic_MeshPacket_TransportMechanism;
 
 /* Outcome of checking Routing.ack_proof on a received ack or nak.
@@ -1793,8 +1797,8 @@ extern "C" {
 #define _meshtastic_MeshPacket_Delayed_ARRAYSIZE ((meshtastic_MeshPacket_Delayed)(meshtastic_MeshPacket_Delayed_DELAYED_DIRECT+1))
 
 #define _meshtastic_MeshPacket_TransportMechanism_MIN meshtastic_MeshPacket_TransportMechanism_TRANSPORT_INTERNAL
-#define _meshtastic_MeshPacket_TransportMechanism_MAX meshtastic_MeshPacket_TransportMechanism_TRANSPORT_UNICAST_UDP
-#define _meshtastic_MeshPacket_TransportMechanism_ARRAYSIZE ((meshtastic_MeshPacket_TransportMechanism)(meshtastic_MeshPacket_TransportMechanism_TRANSPORT_UNICAST_UDP+1))
+#define _meshtastic_MeshPacket_TransportMechanism_MAX meshtastic_MeshPacket_TransportMechanism_TRANSPORT_BLE_GATT
+#define _meshtastic_MeshPacket_TransportMechanism_ARRAYSIZE ((meshtastic_MeshPacket_TransportMechanism)(meshtastic_MeshPacket_TransportMechanism_TRANSPORT_BLE_GATT+1))
 
 #define _meshtastic_MeshPacket_AckProofStatus_MIN meshtastic_MeshPacket_AckProofStatus_ACK_PROOF_ABSENT
 #define _meshtastic_MeshPacket_AckProofStatus_MAX meshtastic_MeshPacket_AckProofStatus_ACK_PROOF_NO_KEY

@@ -172,7 +172,19 @@ typedef enum _meshtastic_Config_NetworkConfig_ProtocolFlags {
     /* Do not broadcast packets over any network protocol */
     meshtastic_Config_NetworkConfig_ProtocolFlags_NO_BROADCAST = 0,
     /* Enable broadcasting packets via UDP over the local network */
-    meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST = 1
+    meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST = 1,
+    /* Enable broadcasting packets via connectionless BLE extended advertisements */
+    meshtastic_Config_NetworkConfig_ProtocolFlags_BLE_BROADCAST = 2,
+    /* Carry mesh packets over the BLE GATT mesh-peer service, in either GATT role: a node
+ serves the service to peers that connect to it, and a node that can act as a central
+ connects outward to peers serving it.
+
+ A separate flag from bluetooth.enabled, which gates the phone-API BLE interface: two
+ services on the same controller with different UUIDs and different jobs - the phone API
+ is a client configuring one node, this is mesh traffic between nodes. On firmware this
+ flag still depends on that one: the service runs only while the node's Bluetooth is up,
+ so it is inert when bluetooth.enabled is false, and on an ESP32 while Wi-Fi is in use. */
+    meshtastic_Config_NetworkConfig_ProtocolFlags_BLE_GATT_PEER = 4
 } meshtastic_Config_NetworkConfig_ProtocolFlags;
 
 /* Unused. Kept so the deprecated gps_format field still has a type; when
@@ -778,8 +790,8 @@ extern "C" {
 #define _meshtastic_Config_NetworkConfig_AddressMode_ARRAYSIZE ((meshtastic_Config_NetworkConfig_AddressMode)(meshtastic_Config_NetworkConfig_AddressMode_STATIC+1))
 
 #define _meshtastic_Config_NetworkConfig_ProtocolFlags_MIN meshtastic_Config_NetworkConfig_ProtocolFlags_NO_BROADCAST
-#define _meshtastic_Config_NetworkConfig_ProtocolFlags_MAX meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST
-#define _meshtastic_Config_NetworkConfig_ProtocolFlags_ARRAYSIZE ((meshtastic_Config_NetworkConfig_ProtocolFlags)(meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST+1))
+#define _meshtastic_Config_NetworkConfig_ProtocolFlags_MAX meshtastic_Config_NetworkConfig_ProtocolFlags_BLE_GATT_PEER
+#define _meshtastic_Config_NetworkConfig_ProtocolFlags_ARRAYSIZE ((meshtastic_Config_NetworkConfig_ProtocolFlags)(meshtastic_Config_NetworkConfig_ProtocolFlags_BLE_GATT_PEER+1))
 
 #define _meshtastic_Config_DisplayConfig_DeprecatedGpsCoordinateFormat_MIN meshtastic_Config_DisplayConfig_DeprecatedGpsCoordinateFormat_UNUSED
 #define _meshtastic_Config_DisplayConfig_DeprecatedGpsCoordinateFormat_MAX meshtastic_Config_DisplayConfig_DeprecatedGpsCoordinateFormat_UNUSED
