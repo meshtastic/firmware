@@ -22,6 +22,13 @@
 #ifdef ARCH_ESP32
 #include "mesh/wifi/WiFiAPClient.h"
 #endif
+#if HAS_ETHERNET && defined(ETH_SHARED_SPI)
+#include "platform/esp32/SharedBusEthernet.h"
+#endif
+#if HAS_ETHERNET && defined(USE_CH390D)
+#include "ESP32_CH390.h"
+#define ETH CH390
+#endif
 #endif
 
 #include <DisplayFormatters.h>
@@ -43,24 +50,9 @@ namespace graphics
 namespace DebugRenderer
 {
 
-// ****************************
-// * WiFi Screen              *
-// ****************************
-void drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
-{
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
-    display->clear();
-    display->setTextAlignment(TEXT_ALIGN_LEFT);
-    display->setFont(FONT_SMALL);
-    int line = 1;
-
-    // === Set Title
-    const char *titleStr = "WiFi";
-
-    // === Header ===
-    graphics::drawCommonHeader(display, x, y, titleStr);
-    y += BASEUI_BELOW_HEADER_MARGIN;
-
+static void drawWiFiStatus(OLEDDisplay *display, int16_t x, int16_t y, int &line)
+{
     const char *wifiName = config.network.wifi_ssid;
 
     if (WiFi.status() != WL_CONNECTED) {
@@ -116,6 +108,65 @@ void drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, i
     char ssidStr[64];
     snprintf(ssidStr, sizeof(ssidStr), "SSID: %s", wifiName);
     display->drawString(x + BASEUI_BODY_LR_MARGIN, getTextPositions(display)[line++] + y, ssidStr);
+}
+#endif
+
+// ****************************
+// * WiFi Screen              *
+// ****************************
+void drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+#if HAS_WIFI && !defined(ARCH_PORTDUINO)
+    display->clear();
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    display->setFont(FONT_SMALL);
+    int line = 1;
+
+    bool showEth = false;
+#if defined(USE_WS5500) || defined(USE_CH390D)
+    // Same condition initWifi() uses to bring WiFi up
+    const bool wifiConfigured = config.network.wifi_enabled && config.network.wifi_ssid[0];
+    // Prefer Ethernet when it has link or WiFi is not in use
+    showEth = config.network.eth_enabled && (ETH.linkUp() || !wifiConfigured);
+#endif
+
+    // === Set Title
+    const char *titleStr = showEth ? "Ethernet" : "WiFi";
+
+    // === Header ===
+    graphics::drawCommonHeader(display, x, y, titleStr);
+    y += BASEUI_BELOW_HEADER_MARGIN;
+
+    if (showEth) {
+#if defined(USE_WS5500) || defined(USE_CH390D)
+        const uint32_t ip = (uint32_t)ETH.localIP();
+        if (!ETH.linkUp()) {
+            display->drawString(x + BASEUI_BODY_LR_MARGIN, getTextPositions(display)[line++] + y, "Ethernet: No Link");
+        } else {
+            display->drawString(x + BASEUI_BODY_LR_MARGIN, getTextPositions(display)[line++] + y,
+                                ip ? "Ethernet: Connected" : "Ethernet: Waiting for IP");
+
+            char linkStr[32];
+            snprintf(linkStr, sizeof(linkStr), "Link: %d Mbps %s", (int)ETH.linkSpeed(), ETH.fullDuplex() ? "Full" : "Half");
+            display->drawString(x + BASEUI_BODY_LR_MARGIN, getTextPositions(display)[line++] + y, linkStr);
+        }
+        if (ip) {
+            char ipStr[64];
+            snprintf(ipStr, sizeof(ipStr), "IP: %s", ETH.localIP().toString().c_str());
+            display->drawString(x + BASEUI_BODY_LR_MARGIN, getTextPositions(display)[line++] + y, ipStr);
+        }
+        if (wifiConfigured) {
+            char wifiStr[64];
+            if (WiFi.status() == WL_CONNECTED)
+                snprintf(wifiStr, sizeof(wifiStr), "WiFi: %s", WiFi.localIP().toString().c_str());
+            else
+                snprintf(wifiStr, sizeof(wifiStr), "WiFi: Not Connected");
+            display->drawString(x + BASEUI_BODY_LR_MARGIN, getTextPositions(display)[line++] + y, wifiStr);
+        }
+#endif
+    } else {
+        drawWiFiStatus(display, x, y, line);
+    }
 
     display->drawString(x + BASEUI_BODY_LR_MARGIN, getTextPositions(display)[line++] + y, "URL: http://meshtastic.local");
 
