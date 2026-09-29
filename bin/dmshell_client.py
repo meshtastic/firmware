@@ -23,6 +23,17 @@ from typing import Optional, TextIO
 
 START1 = 0x94
 START2 = 0xC3
+# StreamAPI's own cap on a frame. A torn header can claim any 16-bit length, and reading that many
+# bytes would stall the session waiting for bytes the node never sends, so anything larger is treated
+# as a bad header and skipped rather than believed.
+MAX_STREAM_FRAME = 512
+
+# Every point at which the framing had to resynchronise. These matter to a measurement, not just to
+# robustness: a frame destroyed on the USB stream is one the node did send and the radio did receive,
+# and it reaches the ledger as a replay request - indistinguishable from a frame the radio never
+# heard, which is what the bench is trying to measure. A run reporting non-zero here has lost frames
+# to the transport and its receive miss reads high by that much.
+STREAM_RESYNC = {"stray_bytes": 0, "bad_header": 0, "bad_start2": 0}
 HEADER_LEN = 4
 DEFAULT_API_PORT = 4403
 # Zero, and this is about airtime rather than reachability. A non-zero hop limit arms two
@@ -408,15 +419,33 @@ def resolve_initial_terminal_size(cols_override: Optional[int], rows_override: O
 
 
 def recv_stream_frame(transport) -> bytes:
+    # Bytes read but not consumed: a failed START2 or a bad header can hold the real frame's START1
+    pending = []
+
+    def next_byte() -> int:
+        return pending.pop(0) if pending else recv_exact(transport, 1)[0]
+
     while True:
-        start = recv_exact(transport, 1)[0]
-        if start != START1:
+        if next_byte() != START1:
+            # A byte where a frame should begin: the stream is mid-resynchronisation.
+            STREAM_RESYNC["stray_bytes"] += 1
             continue
-        if recv_exact(transport, 1)[0] != START2:
+        second = next_byte()
+        if second != START2:
+            # That byte can itself be the START1 of the real frame (0x94 0x94 0xc3), as StreamAPI allows
+            STREAM_RESYNC["bad_start2"] += 1
+            pending.insert(0, second)
             continue
-        header = recv_exact(transport, 2)
+        header = bytes(next_byte() for _ in range(2))
         length = (header[0] << 8) | header[1]
-        return recv_exact(transport, length)
+        if length > MAX_STREAM_FRAME:
+            # Out of bounds: this was not a real header. Resynchronise on the next START1, which can be in it.
+            STREAM_RESYNC["bad_header"] += 1
+            pending[:0] = header
+            continue
+        body = bytes(pending[:length])
+        del pending[:length]
+        return body + recv_exact(transport, length - len(body))
 
 
 def send_stream_frame(transport, payload: bytes) -> None:
@@ -482,6 +511,8 @@ class SessionState:
     peer_log_file: Optional[TextIO] = None
     peer_log_path: Optional[Path] = None
     peer_log_records: int = 0
+    # Frames dropped mid-flight on the wire, skipped and resynchronised past rather than fatal.
+    torn_frames: int = 0
     # Cumulative counters behind their own lock, for the end-of-session summary. Every one is
     # monotonic for the life of the session, unlike input_retransmits and missing_request_attempts,
     # which reset per sequence number and so describe the current gap rather than the run.
@@ -934,6 +965,11 @@ class SessionState:
                 "payload_bytes": c.get("tx_payload_bytes", 0),
                 "by_op": {},
             },
+            # Frames the host could not parse and resynchronised past. Not a radio loss: the node
+            # sent them, the USB stream tore them. A run with a non-zero count here has lost frames
+            # to the transport, so its miss of OUTPUTs reads high by that much.
+            "torn_frames": self.torn_frames,
+            "stream_resync": dict(STREAM_RESYNC),
             "recovery": {
                 "replay_requests_sent": c.get("replay_requests_sent", 0),
                 "replays_received": c.get("replay_replay_received", 0),
@@ -1385,13 +1421,25 @@ def reader_loop(transport, state: SessionState) -> None:
 
     while not state.stopped:
         try:
-            fromradio = state.pb2.mesh.FromRadio()
-            fromradio.ParseFromString(recv_stream_frame(transport))
+            frame = recv_stream_frame(transport)
         except Exception as exc:
             if not state.stopped:
                 state.event_queue.put(f"connection error: {exc}")
                 state.closed_event.set()
             return
+        try:
+            fromradio = state.pb2.mesh.FromRadio()
+            fromradio.ParseFromString(frame)
+        except Exception as exc:
+            # A torn frame is not a dead link. Log records and packets share one stream, so under
+            # load a dropped chunk truncates one mid-frame; recv_stream_frame resynchronises on the
+            # next START1 by itself. Ending the session here threw away a 300 s diagnostic run after
+            # a single bad frame with the node healthy throughout. Only the transport raising
+            # (ConnectionError from recv_exact) means the link is really gone.
+            state.torn_frames += 1
+            if state.torn_frames in (1, 10) or state.torn_frames % 100 == 0:
+                state.event_queue.put(f"skipped a torn frame ({state.torn_frames} so far): {exc}")
+            continue
 
         variant = fromradio.WhichOneof("payload_variant")
         if variant == "log_record":
