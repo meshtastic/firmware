@@ -86,6 +86,11 @@ template <class T> class SX126xInterface : public RadioLibInterface
     // Sub-GHz only. isChannelActive() passes CAD_ON_4_SYMB; keep the two in step.
     uint8_t getCadSymbolCountSubGhz() const override { return 4; }
 
+#ifdef ARCH_PORTDUINO
+    /** On a CH341 host: launch a payload the scan staged, sending only what the scan overwrote */
+    int16_t launchTransmit(size_t numbytes) override;
+#endif
+
   private:
 #ifdef LORA_DIO1_SOFTWARE_POLL
     bool irqPollingActive = false;
@@ -93,6 +98,16 @@ template <class T> class SX126xInterface : public RadioLibInterface
 #endif
     /** Some boards require GPIO control of tx vs rx paths */
     void setTransmitEnable(bool txon);
+
+#ifdef ARCH_PORTDUINO
+    /** A full RadioLib TX staging (which applies the register fixes) has run since the chip last lost its registers */
+    bool txStagedByRadioLib = false;
+    /** The payload the scan wrote into the chip's buffer, or 0 bytes if none, and its packet id */
+    size_t prestagedLen = 0;
+    uint32_t prestagedId = 0;
+    /** On a CH341 host: write scanForTx's payload in the scan's standby, so a clear verdict leaves four commands */
+    void prestageTx();
+#endif
 
     /** Program all modem parameters into the chip; returns the first RadioLib error, or RADIOLIB_ERR_NONE */
     int16_t programModemParams();
