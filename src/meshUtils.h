@@ -110,10 +110,7 @@ template <typename T> constexpr bool is_pow_of_2(T n)
     return n >= T(1) && (n & (n - T(1))) == T(0);
 }
 
-template <typename... Args> constexpr int countArgs(Args...)
-{
-    return sizeof...(Args);
-}
+// Declaration only: used inside sizeof so the arguments are counted without being evaluated.
+template <typename... Args> char (&isOneOfArgCount(Args &&...))[sizeof...(Args)];
 
-// Counted via a template pack: the GNU compound-literal `(int[]){...}` form is rejected by some g++ toolchains (nRF52).
-#define IS_ONE_OF(item, ...) isOneOf(item, countArgs(__VA_ARGS__), __VA_ARGS__)
+#define IS_ONE_OF(item, ...) isOneOf(item, (int)sizeof(isOneOfArgCount(__VA_ARGS__)), __VA_ARGS__)
