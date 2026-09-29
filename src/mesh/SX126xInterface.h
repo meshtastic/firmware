@@ -151,6 +151,8 @@ template <class T> class SX126xInterface : public RadioLibInterface
      *  must not go ahead, since its standby would abort that frame. */
     bool stageTxInRx();
     bool rxFrameOverlapsTxStage(size_t length) override;
+    /** Whether a frame that had no header at sinceMs can have received enough by now to reach offset base */
+    bool rxFrameCanReach(uint32_t sinceMs, uint8_t base);
 #endif
 #ifdef SX126X_TX_STAGE_EARLY
     /** A payload written during its backoff, at 256 - len: its length (0 if none), packet id, offset and bytes */
