@@ -103,10 +103,12 @@ template <typename T> bool SX126xInterface<T>::init()
     // on a GetDeviceErrors read. osc is the Vref reinitChip() settled on, 0 when RadioLib fell back to the XTAL.
     static uint8_t status;
     uint8_t errors[2] = {0, 0};
-    const Module::SPIparseStatusCb_t parse = module.spiConfig.parseStatusCb;
+    // Chain to RadioLib's parser so a failed command or a 0x00/0xFF (no chip) byte still fails the read.
+    static Module::SPIparseStatusCb_t parse;
+    parse = module.spiConfig.parseStatusCb;
     module.spiConfig.parseStatusCb = [](uint8_t in) -> int16_t {
         status = in;
-        return RADIOLIB_ERR_NONE;
+        return parse ? parse(in) : RADIOLIB_ERR_NONE;
     };
     const int16_t readRes = module.SPIreadStream(RADIOLIB_SX126X_CMD_GET_DEVICE_ERRORS, errors, 2);
     module.spiConfig.parseStatusCb = parse;
