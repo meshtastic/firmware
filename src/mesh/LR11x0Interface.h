@@ -31,6 +31,21 @@
 #if defined(LR11X0_RX_REARM_AT_TX_DONE) && !defined(MESHTASTIC_RX_READOUT_TASK)
 #error "LR11X0_RX_REARM_AT_TX_DONE re-arms from the readout task: build with -DMESHTASTIC_RX_READOUT_TASK"
 #endif
+// Bench, shortening the scan's deaf window:
+// -DLR11X0_TX_STAGE_EARLY writes the payload during the backoff while RX runs, not in the scan's standby. WriteBuffer8
+//   fills the TX buffer and received frames land in the separate RX buffer (Semtech's lr11xx_regmem.h), so the write
+//   aborts no frame and nothing received overwrites it. Needs -DLR11X0_TX_PRESTAGE.
+// -DLR11X0_CAD_SLIM starts the CAD without RadioLib's packet-type reads and second standby, and sends the CAD parameters
+//   only when they change.
+// -DLR11X0_STANDBY_XOSC keeps the TCXO running in standby and the TX/RX fallback, so a CAD or RX started from them skips
+//   the TCXO start-up. It reaches the CAD only with -DLR11X0_CAD_SLIM: RadioLib's scan re-enters STBY_RC.
+// All three call RadioLib internals, so they need -DRADIOLIB_GODMODE=1.
+#if (defined(LR11X0_TX_STAGE_EARLY) || defined(LR11X0_CAD_SLIM) || defined(LR11X0_STANDBY_XOSC)) && !RADIOLIB_GODMODE
+#error "LR11X0_TX_STAGE_EARLY, LR11X0_CAD_SLIM and LR11X0_STANDBY_XOSC call RadioLib internals: build with -DRADIOLIB_GODMODE=1"
+#endif
+#if defined(LR11X0_TX_STAGE_EARLY) && !defined(LR11X0_TX_PRESTAGE)
+#error "LR11X0_TX_STAGE_EARLY launches through LR11X0_TX_PRESTAGE: build with -DLR11X0_TX_PRESTAGE"
+#endif
 #if defined(LR11X0_CAD_EXIT_KEYUP) || defined(LR11X0_RESUME_CONTINUOUS_RX)
 #define LR11X0_READ_CHIP_MODE 1
 #endif
@@ -127,6 +142,9 @@ template <class T> class LR11x0Interface : public RadioLibInterface
     /** setStandby()'s body, returning the standby error instead of asserting - for callers that can recover */
     int16_t trySetStandby();
 
+    /** Forget what the chip was left holding (staged payload, CAD parameters): it is being reset, reprogrammed or slept */
+    void forgetChipState();
+
     /** Bench: -DLR11X0_TCXO_DELAY_US=<us> replaces RadioLib's 5000 us TCXO start-up wait after a successful begin() */
     void applyBenchTcxoDelay(int res);
 
@@ -141,6 +159,28 @@ template <class T> class LR11x0Interface : public RadioLibInterface
     uint32_t prestagedId = 0;
     /** When the last CAD verdict was read, on the bench clock, for the launch step trace */
     uint32_t cadVerdictClock = 0;
+#endif
+#ifdef LR11X0_TX_STAGE_EARLY
+    bool wantsEarlyTxStage() const override { return true; }
+    /** Write the next packet's payload into the TX buffer while RX runs */
+    void stageTxEarly(meshtastic_MeshPacket *p) override;
+    /** At the scan: true, with the prestage set, if the TX buffer already holds scanForTx's payload */
+    bool takeEarlyTxStage();
+    /** The payload in the chip's TX buffer, or 0 bytes if it is not known */
+    size_t earlyStagedLen = 0;
+    uint8_t earlyStagedBytes[256];
+    /** Remember the payload just written from radioBuffer */
+    void noteTxBuffer(size_t numbytes);
+#endif
+#ifdef LR11X0_CAD_SLIM
+    /** lora.scanChannel(cfg), less what trySetStandby() has just done and the CAD parameters the chip already has */
+    int16_t scanChannelForTx(const ChannelScanConfig_t &cfg);
+    bool cadParamsValid = false;
+    uint8_t cadParamsSent[8];
+#endif
+#ifdef LR11X0_STANDBY_XOSC
+    /** Put the TX/RX fallback on STBY_XOSC, after begin() */
+    void keepTcxoOnInStandby();
 #endif
 #ifdef LR11X0_READ_CHIP_MODE
     /** The chip's mode (stat2 bits 3..1, as RADIOLIB_LR11X0_STAT_2_MODE_*), waiting out a passing FS; 0xFF on SPI failure */
