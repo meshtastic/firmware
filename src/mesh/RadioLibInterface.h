@@ -206,6 +206,8 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
     // Time::getMillis() when plain RX was first seen holding PREAMBLE/HEADER flags, or 0 if none.
     uint32_t rxFlagsSeenMs = 0;
+    // rxFlagsSeenMs was stamped by a header, not by a bare preamble before it
+    bool rxFlagsSeenHeader = false;
 
     /** Plain-RX twin of checkCadHandoffTimeout(): retire flags no RX_DONE consumed within a max packet. */
     virtual void checkStaleRxFlags();

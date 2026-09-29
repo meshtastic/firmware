@@ -804,6 +804,7 @@ void RadioLibInterface::startReceive()
     rxOffline = false;
     chipRecoveryFailures = 0;
     rxFlagsSeenMs = 0;
+    rxFlagsSeenHeader = false;
     powerMon->setState(meshtastic_PowerMon_State_Lora_RXOn);
 }
 
@@ -887,10 +888,13 @@ void RadioLibInterface::checkStaleRxFlags()
     const bool preambleSeen = irq & iface->getIrqMapped(1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED);
     if (!headerSeen && !preambleSeen) {
         rxFlagsSeenMs = 0;
+        rxFlagsSeenHeader = false;
         return;
     }
-    if (!rxFlagsSeenMs) {
+    // A header's window starts when the header shows, not when an earlier bare preamble did
+    if (!rxFlagsSeenMs || (headerSeen && !rxFlagsSeenHeader)) {
         rxFlagsSeenMs = Time::skipZero(Time::getMillis());
+        rxFlagsSeenHeader = headerSeen;
         return;
     }
 
@@ -907,6 +911,7 @@ void RadioLibInterface::checkStaleRxFlags()
         LOG_DEBUG("RX preamble stale, cleared");
         iface->clearIrq(1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED);
         rxFlagsSeenMs = 0;
+        rxFlagsSeenHeader = false;
         break;
     }
 }
