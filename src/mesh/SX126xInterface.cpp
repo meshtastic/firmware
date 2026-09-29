@@ -808,6 +808,9 @@ template <typename T> void SX126xInterface<T>::startReceive()
     const uint32_t tArm = millis();
     RadioLibInterface::startReceive();
     rxArmedContinuous = continuousRx;
+#ifdef SX126X_TX_STAGE_IN_RX
+    noteRxRestart();
+#endif
 
     // Must be done AFTER, starting transmit, because startTransmit clears (possibly stale) interrupt pending register bits
     enableInterrupt(isrRxLevel0);
@@ -1012,11 +1015,22 @@ template <typename T> int16_t SX126xInterface<T>::readChannelScanResult()
 }
 
 #ifdef SX126X_TX_STAGE_IN_RX
-template <typename T> bool SX126xInterface<T>::rxFrameCanReach(uint32_t sinceMs, uint8_t base)
+template <typename T> uint8_t SX126xInterface<T>::txStageBase(size_t numbytes) const
 {
-    // A frame with no header at sinceMs has written at most what it received since, from offset 0
-    const uint32_t elapsedMs = millis() - sinceMs + 2; // the IRQ reads' own time, and whole-ms rounding
-    return elapsedMs >= getPacketTime((uint32_t)base + 1, true) - getPacketTime((uint32_t)1, true);
+    // Continuous RX writes each frame right after the last one and wraps at the buffer's end, so the bytes just behind
+    // its write point are the last it reaches again. Kept clear of the wrap, which the chip's TX would have to follow.
+    return rxWritePtr >= numbytes ? (uint8_t)(rxWritePtr - numbytes) : (uint8_t)(256 - numbytes);
+}
+
+/** Whether two ranges of the chip's 256-byte buffer, which wraps, share a byte */
+static bool bufferRangesOverlap(uint8_t a, size_t lenA, uint8_t b, size_t lenB)
+{
+    return lenA && lenB && ((uint8_t)(b - a) < lenA || (uint8_t)(a - b) < lenB);
+}
+
+template <typename T> void SX126xInterface<T>::noteRxRestart()
+{
+    rxWritePtr = 0; // RX's base, which RadioLib's RX start always sets to 0
 }
 
 template <typename T> bool SX126xInterface<T>::stageTxInRx()
@@ -1025,13 +1039,10 @@ template <typename T> bool SX126xInterface<T>::stageTxInRx()
     const size_t numbytes = encodeRadioBuffer(scanForTx);
     if (numbytes == 0 || numbytes > RADIOLIB_SX126X_MAX_PACKET_LENGTH)
         return false;
-    // RX writes each frame from offset 0 (RadioLib's RX base), so a payload that ends at the buffer's last byte only
-    // meets a received frame when the two together are longer than the buffer.
-    const uint8_t base = (uint8_t)(256 - numbytes);
+    const uint8_t base = txStageBase(numbytes);
     const uint8_t writeBuffer[] = {RADIOLIB_SX126X_CMD_WRITE_BUFFER, base};
     if (module.SPIwriteStream(writeBuffer, sizeof(writeBuffer), (uint8_t *)&radioBuffer, numbytes) != RADIOLIB_ERR_NONE)
         return false;
-    // A frame with a header before or during the write can hold bytes of ours, and ours bytes of it
     const uint32_t irq = lora.getIrqFlags();
     const uint32_t doneIrqs = RADIOLIB_SX126X_IRQ_RX_DONE | RADIOLIB_SX126X_IRQ_CRC_ERR;
 #ifdef SX126X_TX_STAGE_EARLY
@@ -1041,10 +1052,9 @@ template <typename T> bool SX126xInterface<T>::stageTxInRx()
     const uint32_t arrivingIrqs = RADIOLIB_SX126X_IRQ_HEADER_VALID;
 #endif
     if (irq & (arrivingIrqs | doneIrqs)) {
-        // A frame still in its preamble has written nothing yet, and will write over ours, not we over it. The scan
-        // was let through with no header showing, so a frame with one now began its payload during the write.
-        if ((irq & (RADIOLIB_SX126X_IRQ_HEADER_VALID | doneIrqs)) && rxFrameCanReach(t0, base))
-            rxClobberBase = base;
+        // Its readout checks whether our bytes can lie across it
+        if (irq & (RADIOLIB_SX126X_IRQ_HEADER_VALID | doneIrqs))
+            noteStagedOverFrame(base, numbytes);
         // The busy verdict's rearmReceive() resumes the RX: it must leave a finished frame's flags for its readout
         keepRxIrqsAtResume = (irq & doneIrqs) != 0;
         LOG_DEBUG("TX stage in RX: frame arriving or unread (irq 0x%04x), scan skipped", (unsigned)irq);
@@ -1053,31 +1063,42 @@ template <typename T> bool SX126xInterface<T>::stageTxInRx()
     prestagedLen = numbytes;
     prestagedId = scanForTx->id;
     prestagedBase = base;
+    prestagedInRx = true;
     LOG_TRACE("TX staged in RX: %u bytes at 0x%02x in %u ms", (unsigned)numbytes, (unsigned)base, (unsigned)(millis() - t0));
     return false;
 }
 
+template <typename T> void SX126xInterface<T>::noteStagedOverFrame(uint8_t base, size_t numbytes)
+{
+    rxClobberCheck = true;
+    rxClobberBase = base;
+    rxClobberLen = numbytes;
+    rxClobberFrameAt = rxWritePtr;
+}
+
 template <typename T> bool SX126xInterface<T>::rxFrameOverlapsTxStage(size_t length)
 {
-    const uint32_t base = rxClobberBase;
-    rxClobberBase = 0; // the frame flagged at the stage is the next one read out
-#ifdef SX126X_TX_STAGE_EARLY
-    const uint32_t heldBase = earlyStagedLen ? earlyStagedBase : 0;
-#else
-    const uint32_t heldBase = 0;
-#endif
-    if (!base && !heldBase)
+    const bool clobberCheck = rxClobberCheck;
+    rxClobberCheck = false; // the frame flagged at the stage is the next one read out
+    if (!txPrestageEnabled || !irqPolledOverUsb())
         return false;
     uint8_t offset = 0;
-    (void)lora.getPacketLength(false, &offset);
+    if (lora.getPacketLength(false, &offset) == 0 && length != 0)
+        LOG_DEBUG("RX buffer status unreadable, frame placement unknown");
+    rxWritePtr = (uint8_t)(offset + length);
+    LOG_TRACE("RX frame at 0x%02x, %u bytes", (unsigned)offset, (unsigned)length);
 #ifdef SX126X_TX_STAGE_EARLY
-    if (heldBase && offset + length > heldBase) {
-        earlyStagedLen = 0; // this frame's bytes went over the staged payload: the scan stages it again
-        LOG_DEBUG("TX staged early: overwritten by a %u-byte rx frame at 0x%02x, restage at the scan", (unsigned)length,
-                  (unsigned)offset);
+    if (earlyStagedLen && bufferRangesOverlap(offset, length, earlyStagedBase, earlyStagedLen)) {
+        earlyStagedLen = 0; // this frame's bytes went over the staged payload: stage it again
+        LOG_DEBUG("TX staged early: overwritten by a %u-byte rx frame at 0x%02x, restage", (unsigned)length, (unsigned)offset);
     }
 #endif
-    return base && offset + length > base;
+    if (!clobberCheck || !bufferRangesOverlap(offset, length, rxClobberBase, rxClobberLen))
+        return false;
+    // A frame that began where the write point said writes forward, away from ours, and reached it only by going round
+    // the buffer: long after our write, so its bytes went over ours and it is whole. Anywhere else, ours may be over it.
+    const bool wrappedOntoOurs = offset == rxClobberFrameAt && (uint8_t)(rxClobberBase - offset) >= TX_STAGE_WRAP_MIN_BYTES;
+    return !wrappedOntoOurs;
 }
 #endif
 
@@ -1099,25 +1120,22 @@ template <typename T> void SX126xInterface<T>::stageTxEarly(meshtastic_MeshPacke
     if (earlyStagedLen == numbytes && memcmp(earlyStagedBytes, &radioBuffer, numbytes) == 0)
         return; // a redraw of the same packet: still in the buffer
     earlyStagedLen = 0;
-    const uint32_t frameIrqs = RADIOLIB_SX126X_IRQ_HEADER_VALID | RADIOLIB_SX126X_IRQ_RX_DONE | RADIOLIB_SX126X_IRQ_CRC_ERR;
-    // A frame already in the buffer may have written past where ours would go: wait for its readout, which redraws the
-    // backoff and brings us back here
-    const uint32_t tBefore = millis();
+    const uint32_t doneIrqs = RADIOLIB_SX126X_IRQ_RX_DONE | RADIOLIB_SX126X_IRQ_CRC_ERR;
+    // With a frame in the buffer the write point is not known yet: wait for its readout, which redraws the backoff and
+    // brings us back here
     const uint32_t irqBefore = lora.getIrqFlags();
-    if (irqBefore & frameIrqs) {
+    if (irqBefore & (RADIOLIB_SX126X_IRQ_HEADER_VALID | doneIrqs)) {
         LOG_DEBUG("TX staged early: deferred, a frame is in the buffer (irq 0x%04x)", (unsigned)irqBefore);
         return;
     }
-    const uint8_t base = (uint8_t)(256 - numbytes);
+    const uint8_t base = txStageBase(numbytes);
     const uint8_t writeBuffer[] = {RADIOLIB_SX126X_CMD_WRITE_BUFFER, base};
     if (module.SPIwriteStream(writeBuffer, sizeof(writeBuffer), (uint8_t *)&radioBuffer, numbytes) != RADIOLIB_ERR_NONE)
         return;
-    // No standby follows, so a frame arriving now is received as usual. It began its payload during the write, so it
-    // only met ours if it was fast enough to reach it; otherwise its bytes land on ours later, and its readout drops
-    // the stage.
+    // No standby follows, so a frame that began during the write is received as usual; its readout checks it
     const uint32_t irq = lora.getIrqFlags();
-    if ((irq & frameIrqs) && rxFrameCanReach(tBefore, base))
-        rxClobberBase = base;
+    if (irq & (RADIOLIB_SX126X_IRQ_HEADER_VALID | doneIrqs))
+        noteStagedOverFrame(base, numbytes);
     earlyStagedLen = numbytes;
     earlyStagedId = p->id;
     earlyStagedBase = base;
@@ -1142,6 +1160,7 @@ template <typename T> bool SX126xInterface<T>::takeEarlyTxStage()
     prestagedLen = earlyStagedLen;
     prestagedId = earlyStagedId;
     prestagedBase = earlyStagedBase;
+    prestagedInRx = true;
     LOG_TRACE("TX staged early: in the buffer for this scan, %u bytes at 0x%02x", (unsigned)earlyStagedLen,
               (unsigned)earlyStagedBase);
     return true;
@@ -1179,7 +1198,7 @@ template <typename T> bool SX126xInterface<T>::isChannelActive()
     prestagedLen = 0; // only a clear verdict from this scan may launch what it stages
 #endif
 #ifdef SX126X_TX_STAGE_IN_RX
-    prestagedBase = 0;
+    prestagedInRx = false;
     bool stagedAhead = false;
 #ifdef SX126X_TX_STAGE_EARLY
     stagedAhead = takeEarlyTxStage();
@@ -1236,6 +1255,9 @@ template <typename T> bool SX126xInterface<T>::isChannelActive()
             // The chip auto-entered RX (GOTO_RX). Drop the latched CAD verdict so the pin releases and the
             // coming RX_DONE is a clean edge.
             lora.clearIrqFlags(RADIOLIB_SX126X_IRQ_CAD_DONE | RADIOLIB_SX126X_IRQ_CAD_DETECTED);
+#ifdef SX126X_TX_STAGE_IN_RX
+            noteRxRestart(); // inference: entering RX from the CAD restarts the write point too; the readout corrects it
+#endif
             noteCadHandoffToRx(); // nothing below arms the radio; the caller's rearmReceive() adopts it
             return true;
         }
@@ -1293,12 +1315,12 @@ template <typename T> int16_t SX126xInterface<T>::launchTransmit(size_t numbytes
         const uint8_t clearAll[] = {(uint8_t)(RADIOLIB_SX126X_IRQ_ALL >> 8), (uint8_t)(RADIOLIB_SX126X_IRQ_ALL & 0xFF)};
         res = RADIOLIB_ERR_NONE;
 #ifdef SX126X_TX_STAGE_IN_RX
-        if (prestagedBase) {
-            // Staged in RX at the top of the buffer: TX from there, leaving RX's base at 0 (RadioLib resets both on
-            // the next RX anyway)
+        if (prestagedInRx) {
+            // Staged while RX ran, behind its write point: TX from there, leaving RX's base at 0 (RadioLib resets both
+            // on the next RX anyway)
             const uint8_t bases[] = {prestagedBase, 0x00};
             res = module.SPIwriteStream(RADIOLIB_SX126X_CMD_SET_BUFFER_BASE_ADDRESS, bases, sizeof(bases));
-            prestagedBase = 0;
+            prestagedInRx = false;
         }
 #endif
         if (res == RADIOLIB_ERR_NONE)
