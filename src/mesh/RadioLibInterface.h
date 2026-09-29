@@ -273,6 +273,20 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     /** Resume an RX the chip is still running instead of restarting it; false if it is not known to be running. */
     virtual bool resumeRunningReceive() { return false; }
 
+    /** Whether a TX payload written into the chip's buffer while this frame arrived can have overwritten part of it */
+    virtual bool rxFrameOverlapsTxStage(size_t length) { return false; }
+
+    /** A backoff shorter than this is waited out as before, and its payload staged at the scan */
+    static constexpr uint32_t TX_STAGE_EARLY_MIN_MS = 5;
+    /** When the TX timer really falls due, 0 if it was not brought forward to stage the payload */
+    uint32_t txStageDueMs = 0;
+    /** Whether a payload can be written during its backoff (checked from the thread that queues it) */
+    virtual bool wantsEarlyTxStage() const { return false; }
+    /** Write the next packet's payload while RX runs, ahead of its scan */
+    virtual void stageTxEarly(meshtastic_MeshPacket *p) {}
+    /** notifyLater(delay, TRANSMIT_DELAY_COMPLETED), brought forward where the payload can be staged early */
+    void scheduleTransmitDelayCompleted(uint32_t delay);
+
     /** can we detect a LoRa preamble on the current channel?
      *  A true return means the chip may have been handed to RX in place, so the caller MUST follow it
      *  with rearmReceive() before anything else touches the radio. */

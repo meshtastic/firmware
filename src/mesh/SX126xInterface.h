@@ -107,6 +107,38 @@ template <class T> class SX126xInterface : public RadioLibInterface
     uint32_t prestagedId = 0;
     /** On a CH341 host: write scanForTx's payload in the scan's standby, so a clear verdict leaves four commands */
     void prestageTx();
+
+    // Staging while RX runs, on a CH341 host. Continuous RX writes each frame right after the last one and wraps at
+    // the buffer's end, so a payload staged in RX goes just behind the write point and each readout checks the two.
+    /** The payload was staged while RX ran, at prestagedBase: the launch points the TX base there */
+    bool prestagedInRx = false;
+    uint8_t prestagedBase = 0;
+    /** Where continuous RX writes its next frame */
+    uint8_t rxWritePtr = 0;
+    /** A frame arrived or finished around a stage write: its readout checks it against the staged bytes */
+    bool rxClobberCheck = false;
+    uint8_t rxClobberBase = 0;
+    size_t rxClobberLen = 0;
+    uint8_t rxClobberBytes[256];
+    /** That frame had finished: the next resumeRunningReceive() must not clear its IRQ flags before it is read */
+    bool keepRxIrqsAtResume = false;
+    /** A payload written during its backoff: its length (0 if none), packet id, offset and bytes */
+    size_t earlyStagedLen = 0;
+    uint32_t earlyStagedId = 0;
+    uint8_t earlyStagedBase = 0;
+    uint8_t earlyStagedBytes[256];
+
+    /** Where a payload of this length goes while RX runs: just behind RX's write point */
+    uint8_t txStageBase(size_t numbytes) const;
+    void noteStagedOverFrame(uint8_t base, size_t numbytes);
+    /** Write scanForTx's payload while RX runs. True if a frame was arriving or unread: then the scan must not go
+     *  ahead, since its standby would abort that frame. */
+    bool stageTxInRx();
+    /** At the scan: whether the early stage still holds exactly this packet; if so it becomes the scan's prestage */
+    bool takeEarlyTxStage();
+    bool rxFrameOverlapsTxStage(size_t length) override;
+    bool wantsEarlyTxStage() const override;
+    void stageTxEarly(meshtastic_MeshPacket *p) override;
 #endif
     /** The SET_CAD_PARAMS bytes last sent, resent only when they change; invalid once the chip can have lost them */
     uint8_t cadParamsSent[7] = {};
