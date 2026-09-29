@@ -80,6 +80,7 @@ Lora:
 #  DIO3_TCXO_VOLTAGE: true
 
 #  DIO3_TCXO_VOLTAGE: true  # the Waveshare Core1262 and others are known to need this setting
+#  DIO3_TCXO_DELAY_US: 1000  # TCXO start-up wait, SX126x/LR11xx; default 1000 (RadioLib's own is 5000)
 
 #  TCXO_OPTIONAL: true  # Probe both oscillators (default Vref 1.6V); SX126x/LR20x0/LR11xx only.
 #                       # SX126x and LR20x0 try TCXO first; LR11x0 tries the crystal first.
