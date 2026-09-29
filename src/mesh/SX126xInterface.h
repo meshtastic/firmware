@@ -141,21 +141,32 @@ template <class T> class SX126xInterface : public RadioLibInterface
     uint32_t cadVerdictMs = 0;
 #endif
 #ifdef SX126X_TX_STAGE_IN_RX
-    /** Buffer offset of the payload staged while RX ran (256 minus its length), or 0 for one staged at offset 0 */
+    /** The prestaged payload was written while RX ran, at prestagedBase: the launch points the TX base there */
+    bool prestagedInRx = false;
     uint8_t prestagedBase = 0;
-    /** A frame was arriving or unread while a payload was written at this offset, 0 if none: its readout checks it */
+    /** Where continuous RX writes its next frame: frames follow each other through the buffer, wrapping at its end */
+    uint8_t rxWritePtr = 0;
+    /** A frame arrived or finished around a stage write: its readout checks it against the staged bytes */
+    bool rxClobberCheck = false;
     uint8_t rxClobberBase = 0;
+    size_t rxClobberLen = 0;
+    /** Where the write point said that frame would begin */
+    uint8_t rxClobberFrameAt = 0;
+    /** A frame that met our bytes only after going this far round the buffer did so after our write had ended */
+    static constexpr uint8_t TX_STAGE_WRAP_MIN_BYTES = 16;
     /** That frame had finished: the next resumeRunningReceive() must not clear its IRQ flags before it is read */
     bool keepRxIrqsAtResume = false;
-    /** Write the payload at the top of the buffer while RX runs. True if a frame was arriving or unread: then the scan
-     *  must not go ahead, since its standby would abort that frame. */
+    /** Where a payload of this length goes while RX runs: just behind RX's write point */
+    uint8_t txStageBase(size_t numbytes) const;
+    void noteRxRestart();
+    void noteStagedOverFrame(uint8_t base, size_t numbytes);
+    /** Write the payload while RX runs. True if a frame was arriving or unread: then the scan must not go ahead, since
+     *  its standby would abort that frame. */
     bool stageTxInRx();
     bool rxFrameOverlapsTxStage(size_t length) override;
-    /** Whether a frame that had no header at sinceMs can have received enough by now to reach offset base */
-    bool rxFrameCanReach(uint32_t sinceMs, uint8_t base);
 #endif
 #ifdef SX126X_TX_STAGE_EARLY
-    /** A payload written during its backoff, at 256 - len: its length (0 if none), packet id, offset and bytes */
+    /** A payload written during its backoff, behind RX's write point: its length (0 if none), packet id, offset and bytes */
     size_t earlyStagedLen = 0;
     uint32_t earlyStagedId = 0;
     uint8_t earlyStagedBase = 0;
