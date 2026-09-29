@@ -407,6 +407,12 @@ template <typename T> int16_t SX126xInterface<T>::trySetStandby()
     checkNotification(); // handle any pending interrupts before we force standby
 
     int16_t err = lora.standby();
+    if (err == RADIOLIB_ERR_SPI_CMD_TIMEOUT) {
+        // After a bounded RX times out, the status byte returned with SET_STANDBY still carries that timeout, and
+        // RadioLib reports it as a failed command although the chip took it. The next command sees a fresh status.
+        err = lora.standby();
+        LOG_DEBUG("SX126x standby reported a stale command timeout, retry %s%d", radioLibErr, err);
+    }
 
     if (err != RADIOLIB_ERR_NONE)
         LOG_DEBUG("SX126x standby %s%d", radioLibErr, err);
