@@ -75,6 +75,7 @@ bool JapanTxHook::performCarrierSense(RadioInterface *iface)
         int16_t rssi = iface->getCurrentRSSI();
         if (isValidRssi(rssi)) {
             hasValidSample = true;
+            rssi -= RSSI_FEM_LNA_OFFSET;
             if (rssi >= CARRIER_SENSE_THRESHOLD_DBM) {
                 LOG_DEBUG("JP LBT: carrier sensed during 5ms window (RSSI %d dBm >= %d dBm)", rssi, CARRIER_SENSE_THRESHOLD_DBM);
                 return false;

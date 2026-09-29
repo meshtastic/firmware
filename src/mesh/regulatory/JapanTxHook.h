@@ -22,6 +22,16 @@ class JapanTxHook : public RadioTxHook
     static constexpr int16_t RSSI_VALID_MIN = -192;
     static constexpr int16_t RSSI_INVALID_DRIVER_ERROR = -706;
 
+// Accomodates with external LNA(FEM LNA) gain to offset carrier sensing measurement
+// Not accounting LoRa radio's Rx Boosted Gain as its gain is relatively low(less than 5dB at SX127x, at best).
+// FIXME: per-variant values should be handled on their variant.h
+#if defined(M5STACK_UNITC6L) // This variant has SGM13005L4 LNA in front of SX1262
+    // SGM13005L4's minimum gain:17.8dB at 960MHz from datasheet, define here with 10% margin
+    static constexpr int16_t RSSI_FEM_LNA_OFFSET = 16;
+#else
+    static constexpr int16_t RSSI_FEM_LNA_OFFSET = 0;
+#endif
+
     JapanTxHook();
     virtual ~JapanTxHook();
 
