@@ -110,4 +110,10 @@ template <typename T> constexpr bool is_pow_of_2(T n)
     return n >= T(1) && (n & (n - T(1))) == T(0);
 }
 
-#define IS_ONE_OF(item, ...) isOneOf(item, sizeof((int[]){__VA_ARGS__}) / sizeof(int), __VA_ARGS__)
+template <typename... Args> constexpr int countArgs(Args...)
+{
+    return sizeof...(Args);
+}
+
+// Counted via a template pack: the GNU compound-literal `(int[]){...}` form is rejected by some g++ toolchains (nRF52).
+#define IS_ONE_OF(item, ...) isOneOf(item, countArgs(__VA_ARGS__), __VA_ARGS__)
