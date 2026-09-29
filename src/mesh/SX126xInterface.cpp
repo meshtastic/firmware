@@ -532,7 +532,8 @@ template <typename T> void SX126xInterface<T>::startReceive()
     RadioLibInterface::startReceive();
     rxArmedContinuous = continuousRx;
 #ifdef ARCH_PORTDUINO
-    rxWritePtr = 0; // RX's base, which RadioLib's RX start always sets to 0
+    rxWritePtr = 0;         // RX's base, which RadioLib's RX start always sets to 0
+    rxClobberCheck = false; // the standby before it dropped the frame a stage was noted against
 #endif
 
     // Must be done AFTER, starting transmit, because startTransmit clears (possibly stale) interrupt pending register bits
@@ -613,7 +614,8 @@ template <typename T> bool SX126xInterface<T>::isChannelActive()
             // coming RX_DONE is a clean edge.
             lora.clearIrqFlags(RADIOLIB_SX126X_IRQ_CAD_DONE | RADIOLIB_SX126X_IRQ_CAD_DETECTED);
 #ifdef ARCH_PORTDUINO
-            rxWritePtr = 0; // assumed: entering RX from the CAD restarts the write point too; the readout corrects it
+            rxWritePtr = 0;         // assumed: entering RX from the CAD restarts the write point too; the readout corrects it
+            rxClobberCheck = false; // the scan's standby dropped any frame a stage was noted against
 #endif
             noteCadHandoffToRx(); // nothing below arms the radio; the caller's rearmReceive() adopts it
             return true;
