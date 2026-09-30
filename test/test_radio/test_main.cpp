@@ -67,7 +67,7 @@ class TestableRadioInterface : public RadioInterface
     size_t beginSendingPublic(meshtastic_MeshPacket *p) { return beginSending(p); }
     meshtastic_MeshPacket *getSendingPacket() const { return sendingPacket; }
     void clearSendingPacketForTest() { sendingPacket = nullptr; }
-    uint32_t getLastFrameEndMs() const { return lastFrameEndMs; }
+    uint32_t getLastFrameEndMs() const { return lastFrameEndMs.load(std::memory_order_relaxed); }
 
     // Override reconfigure to call the base which invokes applyModemConfig()
     bool reconfigure() override { return RadioInterface::reconfigure(); }

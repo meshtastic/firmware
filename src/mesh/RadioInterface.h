@@ -6,6 +6,7 @@
 #include "PointerQueue.h"
 #include "airtime.h"
 #include "error.h"
+#include <atomic>
 #include <memory>
 
 #if HAS_LORA_FEM
@@ -106,8 +107,12 @@ class RadioInterface
 
     /** millis() when the last frame this node sent or heard left the air, 0 before the first.
      *  Only read by a draw that was asked for a slot parity; the driver keeps it up to date so any
-     *  module can ask at any time. */
-    uint32_t lastFrameEndMs = 0;
+     *  module can ask at any time.
+     *
+     *  Atomic because the radio worker writes it from onNotify() while a draw for a packet being
+     *  queued reads it on whatever thread called send(). Relaxed is enough: it publishes nothing
+     *  but itself, and losing the race just anchors that one draw to the frame before last. */
+    std::atomic<uint32_t> lastFrameEndMs{0};
     /** "tx" or "rx" for the frame lastFrameEndMs came from, for the trace line */
     const char *lastFrameEndWhat = "none";
     uint16_t preambleLength = 16; // 8 is default, but we use longer to increase the amount of sleep time when receiving
