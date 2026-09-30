@@ -749,7 +749,7 @@ template <typename T> bool LR20x0Interface<T>::isChannelActive()
                                        // ignored: SetLoraCadParams has no det_min - that byte carries
                                        // pnr_delta, which scanChannel() takes from lora.fastCad below
                                        .detMin = RADIOLIB_LR2021_CAD_PARAM_DEFAULT,
-                                       .exitMode = RADIOLIB_LR2021_CAD_EXIT_MODE_RX,
+                                       .exitMode = LR20X0_CAD_EXIT_MODE_RX,
                                        .timeout = cadRxTimeoutUsec,
                                        // DS rev 2.2 6.8.3: only routes IRQs to a pin, so keep
                                        // preamble/header off it - they would fire the ISR mid-frame
@@ -793,7 +793,7 @@ template <typename T> bool LR20x0Interface<T>::isChannelActive()
             if (lora.setLoRaPacketParams(preambleLength, RADIOLIB_LRXXXX_LORA_HEADER_EXPLICIT, (uint8_t)prestagedLen,
                                          RADIOLIB_LRXXXX_LORA_CRC_ENABLED,
                                          RADIOLIB_LR2021_LORA_IQ_STANDARD) == RADIOLIB_ERR_NONE) {
-                cfg.cad.exitMode = RADIOLIB_LR2021_CAD_EXIT_MODE_TX;
+                cfg.cad.exitMode = LR20X0_CAD_EXIT_MODE_LBT;
                 cfg.cad.timeout = cadRxTimeoutUsec * 5 / 4;
                 cfg.cad.irqFlags |= 1UL << RADIOLIB_IRQ_TX_DONE;
             }
@@ -814,7 +814,7 @@ template <typename T> bool LR20x0Interface<T>::isChannelActive()
             LOG_WARN("LR20x0 channel scan returned %d, reported clear", result);
 #ifdef LR2021_CAD_EXIT_LBT
         chipKeyedUp = false;
-        if (cfg.cad.exitMode == RADIOLIB_LR2021_CAD_EXIT_MODE_TX) {
+        if (cfg.cad.exitMode == LR20X0_CAD_EXIT_MODE_LBT) {
             const uint8_t mode = readChipMode();
             const bool inStandby = mode == LR20X0_CHIP_MODE_STBY_RC || mode == LR20X0_CHIP_MODE_STBY_XOSC;
             LOG_DEBUG("CAD exit TX: %s, chip in stat2 mode %u, staged len %u",
@@ -827,7 +827,7 @@ template <typename T> bool LR20x0Interface<T>::isChannelActive()
             } else if (result == RADIOLIB_CHANNEL_FREE && !inStandby) {
                 lora.standby(STANDBY_MODE); // TX-when-clear not honoured and the chip is somewhere else: launch from standby
             } else if (result == RADIOLIB_LORA_DETECTED && mode != LR20X0_CHIP_MODE_RX) {
-                // The busy verdict left the chip in its fallback standby: no handoff to adopt, so the caller's
+                // The busy verdict left the chip in standby: no handoff to adopt, so the caller's
                 // rearmReceive() restarts RX
                 lora.clearIrqFlags(RADIOLIB_LR2021_IRQ_CAD_DONE | RADIOLIB_LR2021_IRQ_CAD_DETECTED);
                 prestagedLen = 0;
@@ -866,7 +866,7 @@ template <typename T> bool LR20x0Interface<T>::isChannelActive()
 template <typename T> void LR20x0Interface<T>::keepTcxoOnInStandby()
 {
     // RadioLib's config() sets STBY_RC. From STBY_RC every CAD, RX and TX first restarts the TCXO; STBY_XOSC keeps it
-    // running. A CAD that hands off to neither RX nor TX exits to this fallback too.
+    // running after TX and RX.
     const int16_t res = lora.setRxTxFallbackMode(RADIOLIB_LR2021_FALLBACK_MODE_STBY_XOSC);
     LOG_DEBUG("LR20x0 keep TCXO on in standby, result: %d", res);
 }

@@ -2,6 +2,12 @@
 #if RADIOLIB_EXCLUDE_LR2021 != 1
 #include "RadioLibInterface.h"
 
+// SetLoraCadParams exit modes as the LR2021 takes them: 0x00 CAD only, 0x01 RX on detection, 0x10 TX when clear (LBT), the
+// same values as LR11x0. RadioLib (to 510e00cf) defines RADIOLIB_LR2021_CAD_EXIT_MODE_RX as 0x02 and _TX as 0x01; the chip
+// refuses 0x02 with a processing error (-706), so a scan using it never runs.
+#define LR20X0_CAD_EXIT_MODE_RX 0x01
+#define LR20X0_CAD_EXIT_MODE_LBT 0x10
+
 // Bench: -DLR2021_TX_LAUNCH_TRACE times each step from the CAD verdict to TX in microseconds, and -DLR2021_TX_PRESTAGE also
 // writes the payload into the TX FIFO before the scan. Prestage calls RadioLib's LR2021 commands directly, so it needs
 // -DRADIOLIB_GODMODE=1.
@@ -11,16 +17,16 @@
 #if defined(LR2021_TX_PRESTAGE) && !RADIOLIB_GODMODE
 #error "LR2021_TX_PRESTAGE calls RadioLib's LR2021 commands directly: build with -DRADIOLIB_GODMODE=1"
 #endif
-// Bench: -DLR2021_CAD_EXIT_LBT scans with CAD exit mode TX: a clear CAD keys up from the prestaged payload, and a busy one
-// leaves the chip in its fallback standby for rearmReceive() to restart RX, with no CAD>RX handoff.
+// Bench: -DLR2021_CAD_EXIT_LBT scans with CAD exit mode LBT: a clear CAD keys up from the prestaged payload, and a busy one
+// leaves the chip in standby for rearmReceive() to restart RX, with no CAD>RX handoff.
 #if defined(LR2021_CAD_EXIT_LBT) && !defined(LR2021_TX_PRESTAGE)
 #error "LR2021_CAD_EXIT_LBT sends the prestaged payload: build with -DLR2021_TX_PRESTAGE -DRADIOLIB_GODMODE=1"
 #endif
 // Bench: -DLR2021_RESUME_CONTINUOUS_RX keeps a continuous RX running after a frame instead of restarting it, checking the
 // chip is still in RX first.
-// Bench: -DLR2021_STANDBY_XOSC keeps the TCXO running: standby is STBY_XOSC, the RX/TX fallback (where a CAD exits when it
-// hands off to neither RX nor TX) is STBY_XOSC, and the scan starts from there without RadioLib's STBY_RC. It calls RadioLib
-// internals, so it needs -DRADIOLIB_GODMODE=1.
+// Bench: -DLR2021_STANDBY_XOSC keeps the TCXO running: standby and the RX/TX fallback are STBY_XOSC, and the scan starts from
+// there without RadioLib's STBY_RC. Which standby a CAD itself exits to is the chip's; the LBT mode line shows it. It calls
+// RadioLib internals, so it needs -DRADIOLIB_GODMODE=1.
 #if defined(LR2021_STANDBY_XOSC) && !RADIOLIB_GODMODE
 #error "LR2021_STANDBY_XOSC calls RadioLib internals: build with -DRADIOLIB_GODMODE=1"
 #endif
@@ -165,7 +171,7 @@ template <class T> class LR20x0Interface : public RadioLibInterface
     static constexpr uint8_t LR20X0_CHIP_MODE_TX = 5;
 #endif
 #ifdef LR2021_CAD_EXIT_LBT
-    /** A clear CAD under exit mode TX put the chip in TX with the prestaged payload: launchTransmit() sends nothing */
+    /** A clear CAD under exit mode LBT put the chip in TX with the prestaged payload: launchTransmit() sends nothing */
     bool chipKeyedUp = false;
 #endif
 #ifdef LR2021_RESUME_CONTINUOUS_RX
