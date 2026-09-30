@@ -3,10 +3,21 @@
 #include "RadioLibInterface.h"
 
 // SetLoraCadParams exit modes as the LR2021 takes them: 0x00 CAD only, 0x01 RX on detection, 0x10 TX when clear (LBT), the
-// same values as LR11x0. RadioLib (to 510e00cf) defines RADIOLIB_LR2021_CAD_EXIT_MODE_RX as 0x02 and _TX as 0x01; the chip
-// refuses 0x02 with a processing error (-706), so a scan using it never runs.
+// same values as LR11x0. RadioLib (to 7.8.1) defines only RADIOLIB_LR2021_CAD_EXIT_MODE_*, which are SetCadParams' (RSSI CAD)
+// values: its RX is 0x02, which SetLoraCadParams refuses with a processing error (-706), so a scan using it never runs.
+// RadioLib #1882 adds the LoRa set; use it where the library has it.
+#ifdef RADIOLIB_LR2021_LORA_CAD_EXIT_MODE_RX
+#define LR20X0_CAD_EXIT_MODE_RX RADIOLIB_LR2021_LORA_CAD_EXIT_MODE_RX
+#define LR20X0_CAD_EXIT_MODE_LBT RADIOLIB_LR2021_LORA_CAD_EXIT_MODE_LBT
+#else
 #define LR20X0_CAD_EXIT_MODE_RX 0x01
 #define LR20X0_CAD_EXIT_MODE_LBT 0x10
+#endif
+// RadioLib 7.8 replaced the LR2021's setRegMode(simo, rampTimes) with setRegMode(simo) and the public setRegulatorDCDC(), and
+// applies Semtech's DCDC sensitivity workaround itself on every modulation change.
+#if (RADIOLIB_VERSION_MAJOR > 7) || (RADIOLIB_VERSION_MAJOR == 7 && RADIOLIB_VERSION_MINOR >= 8)
+#define LR2021_RADIOLIB_HAS_DCDC 1
+#endif
 
 // Bench: -DLR2021_TX_LAUNCH_TRACE times each step from the CAD verdict to TX in microseconds, and -DLR2021_TX_PRESTAGE also
 // writes the payload into the TX FIFO before the scan. Prestage calls RadioLib's LR2021 commands directly, so it needs
@@ -14,12 +25,28 @@
 #if defined(LR2021_TX_LAUNCH_TRACE) || defined(LR2021_TX_PRESTAGE)
 #define LR2021_TX_LAUNCH_OVERRIDE 1
 #endif
-#if defined(LR2021_TX_PRESTAGE) && !RADIOLIB_GODMODE
+#if defined(LR2021_TX_PRESTAGE) && !RADIOLIB_GODMODE && !defined(LR2021_PRESTAGE_UPSTREAM)
 #error "LR2021_TX_PRESTAGE calls RadioLib's LR2021 commands directly: build with -DRADIOLIB_GODMODE=1"
+#endif
+// Bench: -DLR2021_PRESTAGE_UPSTREAM makes LR2021_TX_PRESTAGE use RadioLib's own prestageTransmit() (RadioLib #1883): the FIFO
+// write goes through the library, and the launch is RadioLib's stageMode(TX), which skips the write when the payload
+// matches. Without LBT it needs no GODMODE.
+#if defined(LR2021_PRESTAGE_UPSTREAM) && !defined(LR2021_TX_PRESTAGE)
+#error "LR2021_PRESTAGE_UPSTREAM changes how LR2021_TX_PRESTAGE stages: build with -DLR2021_TX_PRESTAGE"
+#endif
+// Bench: -DLR2021_LOAD_PRAM loads Semtech's LR2021 patch RAM after every chip reset. Semtech's driver says the PRAM fixes,
+// among others, the DC-DC (SIMO) regulator's cost to sub-GHz LoRa sensitivity. It writes chip memory directly, so it needs
+// -DRADIOLIB_GODMODE=1.
+#if defined(LR2021_LOAD_PRAM) && !RADIOLIB_GODMODE
+#error "LR2021_LOAD_PRAM writes chip memory directly: build with -DRADIOLIB_GODMODE=1"
+#endif
+// Bench: -DLR2021_REGULATOR_LDO keeps the chip's default LDO regulator instead of the DC-DC (SIMO) one. RadioLib 7.8 only.
+#if defined(LR2021_REGULATOR_LDO) && !defined(LR2021_RADIOLIB_HAS_DCDC)
+#error "LR2021_REGULATOR_LDO needs RadioLib 7.8 or later"
 #endif
 // Bench: -DLR2021_CAD_EXIT_LBT scans with CAD exit mode LBT: a clear CAD keys up from the prestaged payload, and a busy one
 // leaves the chip in standby for rearmReceive() to restart RX, with no CAD>RX handoff.
-#if defined(LR2021_CAD_EXIT_LBT) && !defined(LR2021_TX_PRESTAGE)
+#if defined(LR2021_CAD_EXIT_LBT) && (!defined(LR2021_TX_PRESTAGE) || !RADIOLIB_GODMODE)
 #error "LR2021_CAD_EXIT_LBT sends the prestaged payload: build with -DLR2021_TX_PRESTAGE -DRADIOLIB_GODMODE=1"
 #endif
 // Bench: -DLR2021_RESUME_CONTINUOUS_RX keeps a continuous RX running after a frame instead of restarting it, checking the
@@ -61,6 +88,10 @@ template <class T> class LR20x0Interface : public RadioLibInterface
 
 #ifdef LR20X0_AGC_RESET
     void resetAGC() override;
+#endif
+#ifdef LR2021_LOAD_PRAM
+    /** Load and activate Semtech's patch RAM, then re-apply the modem settings begin() made; RadioLib status */
+    int16_t loadPram();
 #endif
 
   protected:
@@ -156,8 +187,10 @@ template <class T> class LR20x0Interface : public RadioLibInterface
 #ifdef LR2021_TX_PRESTAGE
     /** The TX FIFO may hold bytes no TX has sent. It appends, so they would go out ahead of the next payload */
     bool txFifoStale = true;
+#ifndef LR2021_PRESTAGE_UPSTREAM
     /** Empty the TX FIFO if it may hold unsent bytes */
     int16_t clearStaleTxFifo();
+#endif
 #endif
 #ifdef LR2021_READ_CHIP_MODE
     /** The chip's mode (stat2 bits 2..0, as the LR20X0_CHIP_MODE_* below), waiting out a passing FS; 0xFF on SPI failure */

@@ -7,6 +7,11 @@
 #include "error.h"
 #include "mesh/NodeDB.h"
 
+#ifdef LR2021_LOAD_PRAM
+#include "LR2021Pram.h"
+#include <modules/LR2021/LR2021_registers.h> // RADIOLIB_LR2021_PRAM_BASE
+#endif
+
 #if defined(LR2021_DCDC_WORKAROUND) && RADIOLIB_GODMODE
 // The DCDC sensitivity workaround pokes RadioLib-internal DCDC registers that are NOT exposed via the
 // public LR2021.h, so pull in the internal register map explicitly. Opt-in only (see LR2021_DCDC_WORKAROUND).
@@ -43,6 +48,26 @@
 #else
 #define LR2021_BENCH_XOSC ""
 #endif
+#ifdef LR2021_PRESTAGE_UPSTREAM
+#define LR2021_BENCH_UPSTREAM " upstream"
+#else
+#define LR2021_BENCH_UPSTREAM ""
+#endif
+#ifdef LR2021_LOAD_PRAM
+#define LR2021_BENCH_PRAM " pram"
+#else
+#define LR2021_BENCH_PRAM ""
+#endif
+#ifdef LR2021_REGULATOR_LDO
+#define LR2021_BENCH_REGULATOR " ldo"
+#else
+#define LR2021_BENCH_REGULATOR ""
+#endif
+#define LR2021_BENCH_STR_(x) #x
+#define LR2021_BENCH_STR(x) LR2021_BENCH_STR_(x)
+#define LR2021_BENCH_RADIOLIB                                                                                                    \
+    " radiolib " LR2021_BENCH_STR(RADIOLIB_VERSION_MAJOR) "." LR2021_BENCH_STR(RADIOLIB_VERSION_MINOR) "." LR2021_BENCH_STR(     \
+        RADIOLIB_VERSION_PATCH)
 
 #ifdef LR2021_DIO_AS_RF_SWITCH
 #include "rfswitch.h"
@@ -216,6 +241,10 @@ template <typename T> bool LR20x0Interface<T>::init()
     LOG_INFO("LR20x0 init result %d", res);
     if (res == RADIOLIB_ERR_CHIP_NOT_FOUND || res == RADIOLIB_ERR_SPI_CMD_FAILED)
         return false;
+#ifdef LR2021_LOAD_PRAM
+    if (res == RADIOLIB_ERR_NONE)
+        res = loadPram();
+#endif
 
     // Some basic info about the module's explicit firmware version - no other info available
     // Currently requires radiolib godmode
@@ -243,7 +272,7 @@ template <typename T> bool LR20x0Interface<T>::init()
 #endif
     // One literal per flag set, so both the image and the boot log say which bench flags this build carries
     LOG_INFO("LR20x0 bench flags:" LR2021_BENCH_TRACE LR2021_BENCH_PRESTAGE LR2021_BENCH_LBT LR2021_BENCH_RESUME LR2021_BENCH_XOSC
-             " end");
+                 LR2021_BENCH_UPSTREAM LR2021_BENCH_PRAM LR2021_BENCH_REGULATOR LR2021_BENCH_RADIOLIB " end");
 
     applyCustomLfPaTable(getFreq());
 
@@ -254,9 +283,18 @@ template <typename T> bool LR20x0Interface<T>::init()
     if (res == RADIOLIB_ERR_NONE)
         res = lora.setCRC(2);
 
+#ifdef LR2021_RADIOLIB_HAS_DCDC
+    // RadioLib 7.8 exposes the regulator and applies Semtech's DCDC workaround (register 0x00F20024) itself
+#ifndef LR2021_REGULATOR_LDO
+    if (res == RADIOLIB_ERR_NONE) {
+        const int16_t rmRes = lora.setRegulatorDCDC();
+        if (rmRes != RADIOLIB_ERR_NONE)
+            LOG_WARN("LR2021 setRegulatorDCDC failed: %d", rmRes);
+    }
+#endif
+#elif RADIOLIB_GODMODE
     // Standard DCDC ramp timing from RadioLib workarounds (register 0x00F20024)
     // Currently requires radiolib godmode
-#if RADIOLIB_GODMODE
     if (res == RADIOLIB_ERR_NONE) {
         uint8_t rampTimes[4] = {15, 15, 15, 15}; // Standard case for all conditions
         // godmode-only DCDC ramp tuning: log failures but don't fail init (radio is already up)
@@ -467,6 +505,12 @@ template <typename T> bool LR20x0Interface<T>::fullBegin(float freq)
             RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
             return false;
         }
+#ifdef LR2021_LOAD_PRAM
+        if (loadPram() != RADIOLIB_ERR_NONE) {
+            RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+            return false;
+        }
+#endif
 
 #ifdef LR2021_STANDBY_XOSC
         keepTcxoOnInStandby();
@@ -502,6 +546,51 @@ template <typename T> bool LR20x0Interface<T>::fullBegin(float freq)
         return true;
     }
 }
+
+#ifdef LR2021_LOAD_PRAM
+template <typename T> int16_t LR20x0Interface<T>::loadPram()
+{
+    // LR20xx DS rev 2.2 22.3: write the PRAM from 0x801000 with WriteRegMem32, then activate it (0x012D 0x00). It is lost on
+    // reset and cold sleep, kept in sleep with retention. Semtech loads it straight after the reset; begin() has already
+    // configured the modem by now, so re-apply begin()'s settings after it.
+    const uint32_t blockWords = RADIOLIB_LRXXXX_SPI_MAX_READ_WRITE_LEN / sizeof(uint32_t);
+    int16_t res = RADIOLIB_ERR_NONE;
+    for (uint32_t word = 0; word < LR2021_PRAM_WORDS && res == RADIOLIB_ERR_NONE; word += blockWords) {
+        const uint32_t n = (LR2021_PRAM_WORDS - word < blockWords) ? LR2021_PRAM_WORDS - word : blockWords;
+        res = lora.writeRegMem32(RADIOLIB_LR2021_PRAM_BASE + word * sizeof(uint32_t), &LR2021_PRAM[word], n);
+    }
+    if (res == RADIOLIB_ERR_NONE)
+        res = lora.activatePram();
+    bool loaded = false;
+    uint16_t version = 0;
+    if (res == RADIOLIB_ERR_NONE)
+        res = lora.checkPramLoaded(&loaded);
+    if (res == RADIOLIB_ERR_NONE)
+        res = lora.getPramVersion(&version);
+    if (res == RADIOLIB_ERR_NONE && !loaded)
+        res = RADIOLIB_ERR_UNKNOWN;
+    // begin()'s own settings, in its order
+    if (res == RADIOLIB_ERR_NONE)
+        res = lora.setFrequency(getFreq());
+    if (res == RADIOLIB_ERR_NONE)
+        res = lora.setBandwidth(bw);
+    if (res == RADIOLIB_ERR_NONE)
+        res = lora.setSpreadingFactor(sf);
+    if (res == RADIOLIB_ERR_NONE)
+        res = lora.setCodingRate(cr);
+    if (res == RADIOLIB_ERR_NONE)
+        res = lora.setSyncWord(syncWord);
+    if (res == RADIOLIB_ERR_NONE)
+        res = lora.setOutputPower(power);
+    if (res == RADIOLIB_ERR_NONE)
+        res = lora.setPreambleLength(preambleLength);
+    if (res == RADIOLIB_ERR_NONE)
+        LOG_INFO("LR20x0 PRAM loaded, version 0x%04x", (unsigned)version);
+    else
+        LOG_ERROR("LR20x0 PRAM load %s%d (loaded %d, version 0x%04x)", radioLibErr, res, (int)loaded, (unsigned)version);
+    return res;
+}
+#endif
 
 // Board LF PA table after begin(); pointer is retained. HF keeps the RadioLib default.
 // Warn-only: a calibration miss must not fail init/fullBegin, keep the begin() PA config.
@@ -771,6 +860,20 @@ template <typename T> bool LR20x0Interface<T>::isChannelActive()
         // packet params keep RX's maximum length, so a detection's RX still takes a full-length frame. A detection's RX
         // fills the RX FIFO, not this one.
         // Every way out without a staged payload logs, so a prestage that never engages is not taken for the baseline
+#ifdef LR2021_PRESTAGE_UPSTREAM
+        // RadioLib's prestageTransmit() empties the FIFO first and remembers the payload, so its stageMode(TX) skips the
+        // write for this payload and writes anything else
+        if (scanForTx) {
+            const size_t numbytes = encodeRadioBuffer(scanForTx);
+            const int16_t written = lora.prestageTransmit((uint8_t *)&radioBuffer, numbytes);
+            if (written == RADIOLIB_ERR_NONE) {
+                prestagedLen = numbytes;
+                prestagedId = scanForTx->id;
+            } else {
+                LOG_WARN("LR20x0 prestage: prestageTransmit(%u) refused, err %d", (unsigned)numbytes, written);
+            }
+        }
+#else
         const int16_t cleared = scanForTx ? clearStaleTxFifo() : RADIOLIB_ERR_NONE;
         if (cleared != RADIOLIB_ERR_NONE) {
             LOG_WARN("LR20x0 prestage: clearTxFifo refused, err %d", cleared);
@@ -785,6 +888,7 @@ template <typename T> bool LR20x0Interface<T>::isChannelActive()
                 LOG_WARN("LR20x0 prestage: writeRadioTxFifo(%u) refused, err %d", (unsigned)numbytes, written);
             }
         }
+#endif
 #ifdef LR2021_CAD_EXIT_LBT
         if (scanForTx && prestagedLen) {
             // Arm the whole TX, so a clear verdict sends this payload. The CAD timeout is also the TX timeout, so give it
@@ -920,7 +1024,7 @@ template <typename T> uint8_t LR20x0Interface<T>::readChipMode() const
 }
 #endif
 
-#ifdef LR2021_TX_PRESTAGE
+#if defined(LR2021_TX_PRESTAGE) && !defined(LR2021_PRESTAGE_UPSTREAM)
 template <typename T> int16_t LR20x0Interface<T>::clearStaleTxFifo()
 {
     if (!txFifoStale)
@@ -953,6 +1057,11 @@ template <typename T> int16_t LR20x0Interface<T>::launchTransmit(size_t numbytes
             // The chip went from the clear CAD straight to TX with this payload. Only release the latched CAD flags,
             // so the pin drops and TX_DONE is a fresh edge for the TX interrupt startSend() attaches next.
             txFifoStale = false;
+#ifdef LR2021_PRESTAGE_UPSTREAM
+            // The chip is sending the FIFO, so RadioLib's record of it is stale: without this, a later transmit of the same
+            // bytes would skip the write and send an empty FIFO. Nothing in RadioLib #1883 clears it on this path.
+            lora.prestagedLen = 0;
+#endif
             lora.clearIrqFlags(RADIOLIB_LR2021_IRQ_CAD_DONE | RADIOLIB_LR2021_IRQ_CAD_DETECTED);
             LOG_TRACE("Tx launch steps: chip, len %u, verdict to launch %u us", (unsigned)numbytes,
                       (unsigned)benchClockToUs(benchClock() - cadVerdictClock));
@@ -963,7 +1072,7 @@ template <typename T> int16_t LR20x0Interface<T>::launchTransmit(size_t numbytes
         lora.standby(STANDBY_MODE);
     }
 #endif
-#ifdef LR2021_TX_PRESTAGE
+#if defined(LR2021_TX_PRESTAGE) && !defined(LR2021_PRESTAGE_UPSTREAM)
     if (prestaged) {
         // What stageMode(TX) sends, less the FIFO write (already done) and the packet-type read. The packet params are
         // the ones init() gives RadioLib (explicit header, CRC on, standard IQ), with our length.
@@ -983,6 +1092,7 @@ template <typename T> int16_t LR20x0Interface<T>::launchTransmit(size_t numbytes
     if (!prestaged && res == RADIOLIB_ERR_NONE)
 #endif
     {
+        // With LR2021_PRESTAGE_UPSTREAM this is the only path: RadioLib skips the FIFO write for the prestaged payload
         RadioModeConfig_t cfg = {.transmit = {.data = (uint8_t *)&radioBuffer, .len = numbytes, .addr = 0}};
         res = lora.stageMode(RADIOLIB_RADIO_MODE_TX, &cfg);
     }
