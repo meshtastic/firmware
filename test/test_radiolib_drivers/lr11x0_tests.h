@@ -30,8 +30,23 @@ static void test_lr11x0_lora_modulation_setters_send_modulation_params()
     LR11X0_RADIO(hal);
     TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_NONE, radio.setSpreadingFactor(9));
     TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_NONE, radio.setBandwidth(250.0));
-    TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_NONE, radio.setCodingRate(5));
+    TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_NONE, radio.setCodingRate(5, true));
     TEST_ASSERT_EQUAL_UINT32(3, hal.count(op16(RADIOLIB_LR11X0_CMD_SET_MODULATION_PARAMS)));
+}
+
+// LR11x0Interface passes cr != 7 as the long-interleave flag: 4/7 has no long-interleaver code.
+static void test_lr11x0_coding_rate_long_interleaves_except_4_7()
+{
+    LR11X0_RADIO(hal);
+    TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_NONE, radio.setCodingRate(5, true));
+    const auto *t = hal.last(op16(RADIOLIB_LR11X0_CMD_SET_MODULATION_PARAMS));
+    TEST_ASSERT_NOT_NULL(t);
+    TEST_ASSERT_EQUAL_UINT32(6, t->size()); // opcode(2) + sf, bw, cr, ldro
+    TEST_ASSERT_EQUAL_UINT8(5, (*t)[4]);    // 4/5, long interleaver
+    TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_NONE, radio.setCodingRate(7, false));
+    t = hal.last(op16(RADIOLIB_LR11X0_CMD_SET_MODULATION_PARAMS));
+    TEST_ASSERT_NOT_NULL(t);
+    TEST_ASSERT_EQUAL_UINT8(3, (*t)[4]); // 4/7, short interleaver
 }
 
 static void test_lr11x0_packet_setters_send_packet_params()
@@ -68,6 +83,7 @@ static void runLr11x0Tests()
 {
     RUN_TEST(test_lr11x0_setFrequency_sends_hertz);
     RUN_TEST(test_lr11x0_lora_modulation_setters_send_modulation_params);
+    RUN_TEST(test_lr11x0_coding_rate_long_interleaves_except_4_7);
     RUN_TEST(test_lr11x0_packet_setters_send_packet_params);
     RUN_TEST(test_lr11x0_other_setters_and_modes_succeed);
 }

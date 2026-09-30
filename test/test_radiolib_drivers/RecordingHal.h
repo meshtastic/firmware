@@ -66,6 +66,14 @@ class RecordingHal : public RadioLibHal
         return nullptr;
     }
 
+    const std::vector<uint8_t> *last(const std::vector<uint8_t> &prefix) const
+    {
+        for (auto it = transactions.rbegin(); it != transactions.rend(); ++it)
+            if (startsWith(it->data(), it->size(), prefix))
+                return &*it;
+        return nullptr;
+    }
+
     void pinMode(uint32_t, uint32_t) override {}
     void digitalWrite(uint32_t, uint32_t) override {}
     uint32_t digitalRead(uint32_t) override { return 0; } // BUSY low

@@ -44,8 +44,23 @@ static void test_sx128x_lora_modulation_setters_send_modulation_params()
     SX128X_RADIO(hal);
     TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_NONE, radio.setSpreadingFactor(9));
     TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_NONE, radio.setBandwidth(812.5));
-    TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_NONE, radio.setCodingRate(5));
+    TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_NONE, radio.setCodingRate(5, true));
     TEST_ASSERT_EQUAL_UINT32(3, hal.count({RADIOLIB_SX128X_CMD_SET_MODULATION_PARAMS}));
+}
+
+// SX128xInterface passes cr != 7 as the long-interleave flag: 4/7 has no long-interleaver code.
+static void test_sx128x_coding_rate_long_interleaves_except_4_7()
+{
+    SX128X_RADIO(hal);
+    TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_NONE, radio.setCodingRate(5, true));
+    const auto *t = hal.last({RADIOLIB_SX128X_CMD_SET_MODULATION_PARAMS});
+    TEST_ASSERT_NOT_NULL(t);
+    TEST_ASSERT_EQUAL_UINT32(4, t->size()); // opcode + sf, bw, cr
+    TEST_ASSERT_EQUAL_UINT8(5, (*t)[3]);    // 4/5, long interleaver
+    TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_NONE, radio.setCodingRate(7, false));
+    t = hal.last({RADIOLIB_SX128X_CMD_SET_MODULATION_PARAMS});
+    TEST_ASSERT_NOT_NULL(t);
+    TEST_ASSERT_EQUAL_UINT8(3, (*t)[3]); // 4/7, short interleaver
 }
 
 static void test_sx128x_packet_setters_send_packet_params()
@@ -78,6 +93,7 @@ static void runSx128xTests()
 {
     RUN_TEST(test_sx128x_setFrequency_sends_rf_frequency);
     RUN_TEST(test_sx128x_lora_modulation_setters_send_modulation_params);
+    RUN_TEST(test_sx128x_coding_rate_long_interleaves_except_4_7);
     RUN_TEST(test_sx128x_packet_setters_send_packet_params);
     RUN_TEST(test_sx128x_other_setters_and_modes_succeed);
 }

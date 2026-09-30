@@ -12,8 +12,9 @@
 // buffer, on paths no hardware-free test reached before. Under [env:coverage] (-fsanitize=address)
 // an out-of-bounds access aborts the program at the call. The first such bug is jgromes/RadioLib#1864:
 // the LR2021 DC-DC workaround passes sizeof(uint32_t) as a word count, overrunning the stack on
-// every setRxPath() and LoRa modulation change. RadioLib 7.8.0 carries it, so the LR2021 set fails
-// until the pin moves to a fix; the set runs last so the other families report first.
+// every setRxPath() and LoRa modulation change. The pin here, 7.7.1, predates that workaround, so
+// the LR2021 DC-DC tests register only on a RadioLib that has it (see lr2021_tests.h). On one that
+// also carries the overrun (7.8.0) they abort, so the LR2021 set runs last and the rest report first.
 //
 // Anything that decodes a chip reply (begin(), readData(), getRSSI(), updateFirmware()) needs replies
 // scripted per opcode; each family's header lists those under "Grows here".
@@ -38,7 +39,7 @@ void setup()
     runSx127xTests();
     runSx128xTests();
     runLr11x0Tests();
-    runLr2021Tests(); // last: carries the known RadioLib 7.8.0 overrun
+    runLr2021Tests(); // last: its DC-DC tests abort under ASan on a RadioLib with the #1864 overrun
     exit(UNITY_END());
 }
 
