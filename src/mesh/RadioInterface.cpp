@@ -10,6 +10,7 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "RF95Interface.h"
+#include "RadioTxHook.h"
 #include "Router.h"
 #include "SX1262Interface.h"
 #include "SX1268Interface.h"
@@ -100,17 +101,10 @@ Observable<uint32_t> RadioInterface::loraRxPacketObservable;
 
 #define RDEF(name, freq_start, freq_end, duty_cycle, power_limit, frequency_switching, wide_lora, profile_ptr, default_preset,   \
              override_slot)                                                                                                      \
-    {meshtastic_Config_LoRaConfig_RegionCode_##name,                                                                             \
-     freq_start,                                                                                                                 \
-     freq_end,                                                                                                                   \
-     duty_cycle,                                                                                                                 \
-     power_limit,                                                                                                                \
-     frequency_switching,                                                                                                        \
-     wide_lora,                                                                                                                  \
-     &profile_ptr,                                                                                                               \
-     default_preset,                                                                                                             \
-     override_slot,                                                                                                              \
-     #name}
+    {                                                                                                                            \
+        meshtastic_Config_LoRaConfig_RegionCode_##name, freq_start, freq_end, duty_cycle, power_limit, frequency_switching,      \
+            wide_lora, &profile_ptr, default_preset, override_slot, #name                                                        \
+    }
 
 const RegionInfo regions[] = {
     /*
@@ -820,8 +814,12 @@ uint32_t RadioInterface::getRetransmissionMsec(const meshtastic_MeshPacket *p)
            PROCESSING_TIME_MSEC;
 }
 
+#if defined(MESHTASTIC_TX_SLOT_PARITY) && (MESHTASTIC_TX_SLOT_PARITY + 0) != 0 && (MESHTASTIC_TX_SLOT_PARITY + 0) != 1
+#error "MESHTASTIC_TX_SLOT_PARITY is this node's default slot parity: build with =0 (even) or =1 (odd)"
+#endif
+
 /** The delay to use when we want to send something */
-uint32_t RadioInterface::getTxDelayMsec()
+uint32_t RadioInterface::getTxDelayMsec(const meshtastic_MeshPacket *p)
 {
     /** We wait a random multiple of 'slotTimes' (see definition in header file) in order to avoid collisions.
     The pool to take a random multiple from is the contention window (CW), which size depends on the
@@ -829,7 +827,56 @@ uint32_t RadioInterface::getTxDelayMsec()
     float channelUtil = airTime->channelUtilizationPercent();
     uint8_t CWsize = map(channelUtil, 0, 100, CWmin, CWmax);
     // LOG_DEBUG("Current channel utilization is %f so setting CWsize to %d", channelUtil, CWsize);
+    meshtastic_SlotParity parity = RadioTxHooks::slotParity(p);
+#ifdef MESHTASTIC_TX_SLOT_PARITY
+    // A node-wide default for a node whose traffic no module speaks for - the far end of a stream
+    // whose near end is a module asking for the other parity. Bench builds only; unset by default.
+    if (parity == meshtastic_SlotParity_SLOT_PARITY_UNSET)
+        parity = (MESHTASTIC_TX_SLOT_PARITY + 0) ? meshtastic_SlotParity_SLOT_PARITY_ODD : meshtastic_SlotParity_SLOT_PARITY_EVEN;
+#endif
+    if (parity != meshtastic_SlotParity_SLOT_PARITY_UNSET)
+        return getAnchoredSlotDelayMsec(pow_of_2(CWsize), parity);
     return random(0, pow_of_2(CWsize)) * slotTimeMsec;
+}
+
+void RadioInterface::noteFrameEnd(uint32_t endMs, const char *what)
+{
+    if (lastFrameEndMs && (int32_t)(endMs - lastFrameEndMs) < 0)
+        return; // a frame handed to us late, after one that ended later
+    lastFrameEndMs = Time::skipZero(endMs);
+    lastFrameEndWhat = what;
+}
+
+uint32_t RadioInterface::anchoredSlotDelayMsec(uint32_t sinceEndMs, uint32_t slotMsec, uint32_t pairsDrawn,
+                                               meshtastic_SlotParity parity)
+{
+    // The first slot that has not started yet, and how long until its edge. The slot index is kept
+    // out of the millisecond arithmetic: a frame end hours ago makes it large enough to overflow a
+    // multiply, while the delay this returns is always within a contention window of now.
+    const uint32_t firstSlot = (sinceEndMs + slotMsec - 1) / slotMsec;
+    const uint32_t toSlotEdge = (slotMsec - (sinceEndMs % slotMsec)) % slotMsec;
+
+    const uint32_t wanted = parity == meshtastic_SlotParity_SLOT_PARITY_ODD ? 1 : 0;
+    // Slots past that edge: one to reach our parity when the first slot is the other one, then an
+    // even number of them, so every candidate keeps the parity.
+    const uint32_t extra = ((firstSlot & 1) != wanted ? 1 : 0) + 2 * pairsDrawn;
+    return toSlotEdge + extra * slotMsec;
+}
+
+uint32_t RadioInterface::getAnchoredSlotDelayMsec(uint32_t slots, meshtastic_SlotParity parity)
+{
+    // Two nodes that redraw after the same frame count their slots from its air end rather than from
+    // their own handling of it, so their grids line up however differently they got there. Taking
+    // only one parity's slots then leaves an unused slot between the two nodes' candidates.
+    const uint32_t sinceEnd = lastFrameEndMs ? Time::getMillis() - lastFrameEndMs : 0;
+    const uint32_t ownParitySlots = slots / 2 ? slots / 2 : 1;
+    const uint32_t delay = anchoredSlotDelayMsec(sinceEnd, slotTimeMsec, random(0, ownParitySlots), parity);
+
+    LOG_TRACE("TX slot anchor: %u ms into slot %u of %u, parity %u, %u ms after %s end", (unsigned)delay,
+              (unsigned)((sinceEnd + delay) / slotTimeMsec), (unsigned)slots,
+              (unsigned)(parity == meshtastic_SlotParity_SLOT_PARITY_ODD ? 1 : 0), (unsigned)sinceEnd,
+              lastFrameEndMs ? lastFrameEndWhat : "no");
+    return delay;
 }
 
 /** The CW size to use when calculating SNR_based delays */

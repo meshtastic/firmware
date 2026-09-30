@@ -27,6 +27,7 @@
 #include <vector>
 
 DMShellModule *dmShellModule;
+DMShellTxHook *dmShellTxHook;
 
 namespace
 {
@@ -121,7 +122,63 @@ uint32_t txWindowFromEnv()
     }
     return (uint32_t)parsed;
 }
+
+/// DMSHELL_SLOT_PARITY=even|odd (0|1 also taken) puts this node's shell frames on that parity of
+/// the CSMA slot grid. Unset, the frames take the ordinary backoff draw. The two ends of a session
+/// want opposite values; a node on the same parity as its peer is no better off than neither.
+meshtastic_SlotParity slotParityFromEnv()
+{
+    const char *value = getenv("DMSHELL_SLOT_PARITY");
+    if (!value || !*value) {
+        return meshtastic_SlotParity_SLOT_PARITY_UNSET;
+    }
+    if (strcasecmp(value, "even") == 0 || strcmp(value, "0") == 0) {
+        return meshtastic_SlotParity_SLOT_PARITY_EVEN;
+    }
+    if (strcasecmp(value, "odd") == 0 || strcmp(value, "1") == 0) {
+        return meshtastic_SlotParity_SLOT_PARITY_ODD;
+    }
+    LOG_WARN("DMShell: ignoring DMSHELL_SLOT_PARITY=%s, expected even or odd", value);
+    return meshtastic_SlotParity_SLOT_PARITY_UNSET;
+}
 } // namespace
+
+// ---------------------------------------------------------------------------
+// DMShellTxHook
+// ---------------------------------------------------------------------------
+
+void DMShellTxHook::claim(const meshtastic_MeshPacket *p)
+{
+    if (parity == meshtastic_SlotParity_SLOT_PARITY_UNSET || !p)
+        return;
+    // Round-robin rather than first-free: a driver that never reports a packet released (SimRadio)
+    // would otherwise fill the ring once and leave every later frame without its parity.
+    claimed[nextClaim] = p->id;
+    nextClaim = (nextClaim + 1) % CLAIMS;
+}
+
+meshtastic_SlotParity DMShellTxHook::slotParity(const meshtastic_MeshPacket *p)
+{
+    if (!p)
+        return meshtastic_SlotParity_SLOT_PARITY_UNSET;
+    for (const PacketId id : claimed) {
+        if (id && id == p->id)
+            return parity;
+    }
+    return meshtastic_SlotParity_SLOT_PARITY_UNSET;
+}
+
+void DMShellTxHook::packetReleased(RadioInterface *iface, const meshtastic_MeshPacket *p)
+{
+    if (!p)
+        return;
+    for (PacketId &id : claimed) {
+        if (id && id == p->id) {
+            id = 0;
+            return;
+        }
+    }
+}
 
 DMShellModule::DMShellModule()
     : SinglePortModule("DMShellModule", meshtastic_PortNum_REMOTE_SHELL_APP), concurrency::OSThread("DMShell", 100)
@@ -139,6 +196,14 @@ DMShellModule::DMShellModule()
         LOG_WARN("DMShell: outstanding-data window disabled, the sender may run away from a gap");
     } else {
         LOG_INFO("DMShell: bounding unacknowledged output to %u frames", (unsigned)txWindowFrames);
+    }
+
+    // Off unless asked for: with no parity the radio driver's backoff draw is exactly as it was.
+    const meshtastic_SlotParity parity = slotParityFromEnv();
+    if (parity != meshtastic_SlotParity_SLOT_PARITY_UNSET) {
+        dmShellTxHook = new DMShellTxHook();
+        dmShellTxHook->parity = parity;
+        LOG_INFO("DMShell: drawing backoff slots on %s parity", parity == meshtastic_SlotParity_SLOT_PARITY_ODD ? "odd" : "even");
     }
 }
 
@@ -1130,6 +1195,9 @@ void DMShellModule::sendFrameToPeer(NodeNum peer, meshtastic_RemoteShell frame, 
     packet->want_ack = false;
     packet->pki_encrypted = true;
     packet->priority = meshtastic_MeshPacket_Priority_RELIABLE;
+    if (dmShellTxHook) {
+        dmShellTxHook->claim(packet); // before the send: the driver can transmit it from under us
+    }
     service->sendToMesh(packet);
 }
 
