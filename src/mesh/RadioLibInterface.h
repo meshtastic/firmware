@@ -93,6 +93,9 @@ class STM32WLx_ModuleWrapper : public STM32WLx_Module
 
 class RadioLibInterface : public RadioInterface, protected concurrency::NotifiedWorkerThread
 {
+#ifdef PIO_UNIT_TESTING
+    friend class TestableRadioLibInterface; // test/test_radio - arms the TX timer on a queued packet
+#endif
     MeshPacketQueue txQueue = MeshPacketQueue(MAX_TX_QUEUE);
 
   protected:
@@ -363,6 +366,8 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
     uint8_t packetsInTxQueue() { return txQueue.getMaxLen() - txQueue.getFree(); }
 
+    [[nodiscard]] uint32_t getTxDueMs() const override { return txDueMs.load(std::memory_order_relaxed); }
+
     /**
      * Update the noise floor measurement by sampling RSSI from a slow path.
      * This should not be called from radio interrupt or TX/RX critical paths.
@@ -413,6 +418,9 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
     /** Detach the sent packet and undo its pre-TX switch; the caller re-arms RX, then finishSentPacket(). */
     meshtastic_MeshPacket *handleTransmitInterrupt();
+
+    /** See getTxDueMs(). Written by the radio thread, read by the router's */
+    std::atomic<uint32_t> txDueMs{0};
 
     /** A frame the readout task took out of the radio, and what addReceiveMetadata() would have read with it */
     struct CapturedRxInfo {
