@@ -576,6 +576,7 @@ void RadioLibInterface::onNotify(uint32_t notification)
                 break;
             }
         }
+        txDueMs.store(0, std::memory_order_relaxed); // the backoff is over; every path below that waits again re-stamps it
 
         // If we are not currently in receive mode, then restart the random delay (this can happen if the main thread
         // has placed the unit into standby)  FIXME, how will this work if the chipset is in sleep mode?
@@ -590,7 +591,7 @@ void RadioLibInterface::onNotify(uint32_t notification)
                 // ~4.29e9 where long is 64-bit (portduino), rescheduling a due packet ~49.7 days out.
                 if (txp->tx_after && !Throttle::deadlinePassedAt(now, txp->tx_after)) {
                     // There's still some delay pending on this packet, so resume waiting for it to elapse
-                    notifyLater(txp->tx_after - now, TRANSMIT_DELAY_COMPLETED, txTimerOverwrite);
+                    scheduleTransmitDelayCompleted(txp->tx_after - now);
                 } else if (const RadioTxHook::PreTxAction action = RadioTxHooks::beforeTransmit(this, txp);
                            action == RadioTxHook::PRETX_DROP) {
                     // A module refuses this packet on the radio config we are holding: drop it rather
@@ -695,6 +696,9 @@ void RadioLibInterface::startTransmitTimerRebroadcast(meshtastic_MeshPacket *p)
 
 void RadioLibInterface::scheduleTransmitDelayCompleted(uint32_t delay)
 {
+    const meshtastic_MeshPacket *p = txQueue.getFront();
+    const bool slotted = p && p->slot_parity != meshtastic_MeshPacket_SlotParity_SLOT_PARITY_UNSET;
+    txDueMs.store(slotted ? Time::timerEndsAtMillis(delay) : 0, std::memory_order_relaxed);
     // Where the driver wants it, fire at once so the radio thread writes the payload while RX runs, then wait out the
     // rest of the backoff
     txStageDueMs = 0;
