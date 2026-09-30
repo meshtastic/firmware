@@ -820,10 +820,6 @@ uint32_t RadioInterface::getRetransmissionMsec(const meshtastic_MeshPacket *p)
            PROCESSING_TIME_MSEC;
 }
 
-#if defined(MESHTASTIC_TX_SLOT_PARITY) && (MESHTASTIC_TX_SLOT_PARITY + 0) != 0 && (MESHTASTIC_TX_SLOT_PARITY + 0) != 1
-#error "MESHTASTIC_TX_SLOT_PARITY is this node's default slot parity: build with =0 (even) or =1 (odd)"
-#endif
-
 /** The delay to use when we want to send something */
 uint32_t RadioInterface::getTxDelayMsec(const meshtastic_MeshPacket *p)
 {
@@ -833,13 +829,7 @@ uint32_t RadioInterface::getTxDelayMsec(const meshtastic_MeshPacket *p)
     float channelUtil = airTime->channelUtilizationPercent();
     uint8_t CWsize = map(channelUtil, 0, 100, CWmin, CWmax);
     // LOG_DEBUG("Current channel utilization is %f so setting CWsize to %d", channelUtil, CWsize);
-    meshtastic_SlotParity parity = RadioTxHooks::slotParity(p);
-#ifdef MESHTASTIC_TX_SLOT_PARITY
-    // A node-wide default for a node whose traffic no module speaks for - the far end of a stream
-    // whose near end is a module asking for the other parity. Bench builds only; unset by default.
-    if (parity == meshtastic_SlotParity_SLOT_PARITY_UNSET)
-        parity = (MESHTASTIC_TX_SLOT_PARITY + 0) ? meshtastic_SlotParity_SLOT_PARITY_ODD : meshtastic_SlotParity_SLOT_PARITY_EVEN;
-#endif
+    const meshtastic_SlotParity parity = RadioTxHooks::slotParity(p);
     if (parity != meshtastic_SlotParity_SLOT_PARITY_UNSET)
         return getAnchoredSlotDelayMsec(pow_of_2(CWsize), parity);
     return random(0, pow_of_2(CWsize)) * slotTimeMsec;
