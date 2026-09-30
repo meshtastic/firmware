@@ -80,6 +80,7 @@ class TestableRadioInterface : public RadioInterface
     size_t beginSendingPublic(meshtastic_MeshPacket *p) { return beginSending(p); }
     meshtastic_MeshPacket *getSendingPacket() const { return sendingPacket; }
     void clearSendingPacketForTest() { sendingPacket = nullptr; }
+    uint32_t getLastFrameEndMs() const { return lastFrameEndMs; }
 
     // Override reconfigure to call the base which invokes applyModemConfig()
     bool reconfigure() override { return RadioInterface::reconfigure(); }
@@ -664,6 +665,89 @@ static void test_isRadioLibTimeError_separatesCodesFromDurations()
     TEST_ASSERT_FALSE(TestableRadioLibInterface::isRadioLibTimeErrorPublic(229ul * 1000ul * 1000ul));
 }
 
+// ---------------------------------------------------------------------------
+// Anchored backoff slots (RadioInterface::anchoredSlotDelayMsec)
+// ---------------------------------------------------------------------------
+//
+// What is pinned: a draw asking for a parity lands on a slot of that parity of the grid whose
+// origin is the last frame's air end, and never before the first slot that has not started yet.
+// That is the whole point of the mechanism - two nodes on opposite parities that redraw after the
+// same frame cannot pick the same or an adjacent slot however differently they handled it, so a
+// change that lets a draw land mid-slot, or on the wrong parity, silently gives that back.
+
+// The absolute slot index a delay lands on, counted from the anchor.
+static uint32_t slotIndexOf(uint32_t sinceEndMs, uint32_t slotMsec, uint32_t delayMsec)
+{
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, (sinceEndMs + delayMsec) % slotMsec, "the draw did not land on a slot edge");
+    return (sinceEndMs + delayMsec) / slotMsec;
+}
+
+static void test_anchoredSlotDelay_keepsTheRequestedParity()
+{
+    const uint32_t slotMsec = 43; // LongFast-ish, and deliberately not a round number
+    // Every position within a slot, either side of the boundary, on both parities of first slot.
+    for (uint32_t sinceEnd = 0; sinceEnd < 4 * slotMsec; sinceEnd++) {
+        for (uint32_t pairs = 0; pairs < 4; pairs++) {
+            const uint32_t evenDelay =
+                RadioInterface::anchoredSlotDelayMsec(sinceEnd, slotMsec, pairs, meshtastic_SlotParity_SLOT_PARITY_EVEN);
+            const uint32_t oddDelay =
+                RadioInterface::anchoredSlotDelayMsec(sinceEnd, slotMsec, pairs, meshtastic_SlotParity_SLOT_PARITY_ODD);
+
+            TEST_ASSERT_EQUAL_UINT32(0, slotIndexOf(sinceEnd, slotMsec, evenDelay) % 2);
+            TEST_ASSERT_EQUAL_UINT32(1, slotIndexOf(sinceEnd, slotMsec, oddDelay) % 2);
+            // Within the window it drew from: a slot index that wrapped would still divide cleanly,
+            // so the bound is what catches it.
+            TEST_ASSERT_TRUE(evenDelay <= (2 * pairs + 2) * slotMsec);
+            TEST_ASSERT_TRUE(oddDelay <= (2 * pairs + 2) * slotMsec);
+        }
+    }
+}
+
+static void test_anchoredSlotDelay_takesTheNextWholeSlot()
+{
+    const uint32_t slotMsec = 40;
+
+    // Exactly on a boundary: slot 2 has not started, so an even draw of 0 pairs is due now.
+    TEST_ASSERT_EQUAL_UINT32(
+        0, RadioInterface::anchoredSlotDelayMsec(2 * slotMsec, slotMsec, 0, meshtastic_SlotParity_SLOT_PARITY_EVEN));
+    // and the odd one waits out the rest of slot 2.
+    TEST_ASSERT_EQUAL_UINT32(
+        slotMsec, RadioInterface::anchoredSlotDelayMsec(2 * slotMsec, slotMsec, 0, meshtastic_SlotParity_SLOT_PARITY_ODD));
+    // A millisecond into slot 2, the first slot not yet started is 3: the odd draw takes it.
+    TEST_ASSERT_EQUAL_UINT32(slotMsec - 1, RadioInterface::anchoredSlotDelayMsec(2 * slotMsec + 1, slotMsec, 0,
+                                                                                 meshtastic_SlotParity_SLOT_PARITY_ODD));
+    TEST_ASSERT_EQUAL_UINT32(2 * slotMsec - 1, RadioInterface::anchoredSlotDelayMsec(2 * slotMsec + 1, slotMsec, 0,
+                                                                                     meshtastic_SlotParity_SLOT_PARITY_EVEN));
+    // Each drawn pair is two slots further out, so the parity survives the whole window.
+    TEST_ASSERT_EQUAL_UINT32(
+        4 * slotMsec, RadioInterface::anchoredSlotDelayMsec(2 * slotMsec, slotMsec, 2, meshtastic_SlotParity_SLOT_PARITY_EVEN));
+}
+
+static void test_anchoredSlotDelay_survivesAnAnchorHoursOld()
+{
+    // A node that has heard nothing for hours still has a live anchor. The slot index then runs to
+    // tens of millions, so multiplying it by the slot time would wrap - the delay must not.
+    const uint32_t slotMsec = 40;
+    const uint32_t sinceEnd = 6UL * 3600UL * 1000UL; // 6 hours, an exact multiple of the slot
+    const uint32_t delay = RadioInterface::anchoredSlotDelayMsec(sinceEnd, slotMsec, 3, meshtastic_SlotParity_SLOT_PARITY_ODD);
+    TEST_ASSERT_EQUAL_UINT32(7 * slotMsec, delay); // one slot to reach odd, then three pairs
+    TEST_ASSERT_EQUAL_UINT32(1, slotIndexOf(sinceEnd, slotMsec, delay) % 2);
+}
+
+static void test_noteFrameEnd_ignoresAFrameDeliveredLate()
+{
+    const uint32_t now = Time::getMillis();
+    testRadio->noteFrameEnd(now - 10, "rx");
+    TEST_ASSERT_EQUAL_UINT32(Time::skipZero(now - 10), testRadio->getLastFrameEndMs());
+
+    // A frame the driver got round to after one that ended later must not drag the anchor back.
+    testRadio->noteFrameEnd(now - 50, "rx");
+    TEST_ASSERT_EQUAL_UINT32(Time::skipZero(now - 10), testRadio->getLastFrameEndMs());
+
+    testRadio->noteFrameEnd(now, "tx");
+    TEST_ASSERT_EQUAL_UINT32(Time::skipZero(now), testRadio->getLastFrameEndMs());
+}
+
 void setUp(void)
 {
     mockMeshService = new MockMeshService();
@@ -794,6 +878,10 @@ void setup()
     RUN_TEST(test_staleRxFlagAction_barePreambleIsOnlyCleared);
     RUN_TEST(test_staleRxFlagAction_staleHeaderIsRearmed);
     RUN_TEST(test_checkStaleRxFlags_headerAfterPreambleRestartsTheWindow);
+    RUN_TEST(test_anchoredSlotDelay_keepsTheRequestedParity);
+    RUN_TEST(test_anchoredSlotDelay_takesTheNextWholeSlot);
+    RUN_TEST(test_anchoredSlotDelay_survivesAnAnchorHoursOld);
+    RUN_TEST(test_noteFrameEnd_ignoresAFrameDeliveredLate);
     exit(UNITY_END());
 }
 

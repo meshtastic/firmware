@@ -36,6 +36,16 @@ bool RadioTxHooks::holdsRadio(const meshtastic_MeshPacket *p)
     return false;
 }
 
+meshtastic_SlotParity RadioTxHooks::slotParity(const meshtastic_MeshPacket *p)
+{
+    for (RadioTxHook *h = RadioTxHook::hookList; h; h = h->nextHook) {
+        const meshtastic_SlotParity parity = h->slotParity(p);
+        if (parity != meshtastic_SlotParity_SLOT_PARITY_UNSET)
+            return parity;
+    }
+    return meshtastic_SlotParity_SLOT_PARITY_UNSET;
+}
+
 void RadioTxHooks::packetReleased(RadioInterface *iface, const meshtastic_MeshPacket *p)
 {
     for (RadioTxHook *h = RadioTxHook::hookList; h; h = h->nextHook)
