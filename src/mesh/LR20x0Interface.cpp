@@ -18,6 +18,32 @@
 #define LR20x0 LR2021
 #endif
 
+#ifdef LR2021_TX_LAUNCH_TRACE
+#define LR2021_BENCH_TRACE " trace"
+#else
+#define LR2021_BENCH_TRACE ""
+#endif
+#ifdef LR2021_TX_PRESTAGE
+#define LR2021_BENCH_PRESTAGE " prestage"
+#else
+#define LR2021_BENCH_PRESTAGE ""
+#endif
+#ifdef LR2021_CAD_EXIT_LBT
+#define LR2021_BENCH_LBT " lbt"
+#else
+#define LR2021_BENCH_LBT ""
+#endif
+#ifdef LR2021_RESUME_CONTINUOUS_RX
+#define LR2021_BENCH_RESUME " resume"
+#else
+#define LR2021_BENCH_RESUME ""
+#endif
+#ifdef LR2021_STANDBY_XOSC
+#define LR2021_BENCH_XOSC " xosc"
+#else
+#define LR2021_BENCH_XOSC ""
+#endif
+
 #ifdef LR2021_DIO_AS_RF_SWITCH
 #include "rfswitch.h"
 #elif ARCH_PORTDUINO
@@ -215,6 +241,9 @@ template <typename T> bool LR20x0Interface<T>::init()
 #ifdef LR2021_TX_LAUNCH_OVERRIDE
     benchClockStart();
 #endif
+    // One literal per flag set, so both the image and the boot log say which bench flags this build carries
+    LOG_INFO("LR20x0 bench flags:" LR2021_BENCH_TRACE LR2021_BENCH_PRESTAGE LR2021_BENCH_LBT LR2021_BENCH_RESUME LR2021_BENCH_XOSC
+             " end");
 
     applyCustomLfPaTable(getFreq());
 
