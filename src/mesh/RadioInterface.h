@@ -214,8 +214,8 @@ class RadioInterface
     [[nodiscard]] uint32_t getRetransmissionMsec(const meshtastic_MeshPacket *p);
 
     /** The delay to use when we want to send something.
-     *  p is the packet about to go out (NULL when there is none yet): a module may claim it through
-     *  RadioTxHook::slotParity(), which puts the draw on that parity's slots of the anchored grid. */
+     *  p is the packet about to go out (NULL when there is none yet): its slot_parity, when set,
+     *  puts the draw on that parity's slots of the grid anchored to the last frame's air end. */
     [[nodiscard]] uint32_t getTxDelayMsec(const meshtastic_MeshPacket *p = nullptr);
 
     /** Note when a frame this node sent or heard left the air, for the anchored backoff grid.
@@ -237,13 +237,13 @@ class RadioInterface
     /** A backoff of up to `slots` slots on one parity of the grid anchored to the last frame's air
      *  end, returned as a delay from now. Two nodes on opposite parities that redraw after the same
      *  frame are then always at least one whole slot apart, whatever their handling delay was. */
-    [[nodiscard]] uint32_t getAnchoredSlotDelayMsec(uint32_t slots, meshtastic_SlotParity parity);
+    [[nodiscard]] uint32_t getAnchoredSlotDelayMsec(uint32_t slots, meshtastic_MeshPacket_SlotParity parity);
 
     /** The grid arithmetic behind it, with the anchor and the draw passed in: the delay that lands
      *  on the `pairsDrawn`-th slot of `parity`, counting from the first slot of that parity not yet
      *  started `sinceEndMs` after the anchor. */
     [[nodiscard]] static uint32_t anchoredSlotDelayMsec(uint32_t sinceEndMs, uint32_t slotMsec, uint32_t pairsDrawn,
-                                                        meshtastic_SlotParity parity);
+                                                        meshtastic_MeshPacket_SlotParity parity);
 
     /** If the packet is not already in the late rebroadcast window, move it there */
     virtual void clampToLateRebroadcastWindow(NodeNum from, PacketId id) { return; }

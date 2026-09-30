@@ -654,10 +654,10 @@ static void test_anchoredSlotDelay_keepsTheRequestedParity()
     // Every position within a slot, either side of the boundary, on both parities of first slot.
     for (uint32_t sinceEnd = 0; sinceEnd < 4 * slotMsec; sinceEnd++) {
         for (uint32_t pairs = 0; pairs < 4; pairs++) {
-            const uint32_t evenDelay =
-                RadioInterface::anchoredSlotDelayMsec(sinceEnd, slotMsec, pairs, meshtastic_SlotParity_SLOT_PARITY_EVEN);
-            const uint32_t oddDelay =
-                RadioInterface::anchoredSlotDelayMsec(sinceEnd, slotMsec, pairs, meshtastic_SlotParity_SLOT_PARITY_ODD);
+            const uint32_t evenDelay = RadioInterface::anchoredSlotDelayMsec(sinceEnd, slotMsec, pairs,
+                                                                             meshtastic_MeshPacket_SlotParity_SLOT_PARITY_EVEN);
+            const uint32_t oddDelay = RadioInterface::anchoredSlotDelayMsec(sinceEnd, slotMsec, pairs,
+                                                                            meshtastic_MeshPacket_SlotParity_SLOT_PARITY_ODD);
 
             TEST_ASSERT_EQUAL_UINT32(0, slotIndexOf(sinceEnd, slotMsec, evenDelay) % 2);
             TEST_ASSERT_EQUAL_UINT32(1, slotIndexOf(sinceEnd, slotMsec, oddDelay) % 2);
@@ -675,18 +675,19 @@ static void test_anchoredSlotDelay_takesTheNextWholeSlot()
 
     // Exactly on a boundary: slot 2 has not started, so an even draw of 0 pairs is due now.
     TEST_ASSERT_EQUAL_UINT32(
-        0, RadioInterface::anchoredSlotDelayMsec(2 * slotMsec, slotMsec, 0, meshtastic_SlotParity_SLOT_PARITY_EVEN));
+        0, RadioInterface::anchoredSlotDelayMsec(2 * slotMsec, slotMsec, 0, meshtastic_MeshPacket_SlotParity_SLOT_PARITY_EVEN));
     // and the odd one waits out the rest of slot 2.
-    TEST_ASSERT_EQUAL_UINT32(
-        slotMsec, RadioInterface::anchoredSlotDelayMsec(2 * slotMsec, slotMsec, 0, meshtastic_SlotParity_SLOT_PARITY_ODD));
+    TEST_ASSERT_EQUAL_UINT32(slotMsec, RadioInterface::anchoredSlotDelayMsec(2 * slotMsec, slotMsec, 0,
+                                                                             meshtastic_MeshPacket_SlotParity_SLOT_PARITY_ODD));
     // A millisecond into slot 2, the first slot not yet started is 3: the odd draw takes it.
-    TEST_ASSERT_EQUAL_UINT32(slotMsec - 1, RadioInterface::anchoredSlotDelayMsec(2 * slotMsec + 1, slotMsec, 0,
-                                                                                 meshtastic_SlotParity_SLOT_PARITY_ODD));
-    TEST_ASSERT_EQUAL_UINT32(2 * slotMsec - 1, RadioInterface::anchoredSlotDelayMsec(2 * slotMsec + 1, slotMsec, 0,
-                                                                                     meshtastic_SlotParity_SLOT_PARITY_EVEN));
-    // Each drawn pair is two slots further out, so the parity survives the whole window.
+    TEST_ASSERT_EQUAL_UINT32(slotMsec - 1, RadioInterface::anchoredSlotDelayMsec(
+                                               2 * slotMsec + 1, slotMsec, 0, meshtastic_MeshPacket_SlotParity_SLOT_PARITY_ODD));
     TEST_ASSERT_EQUAL_UINT32(
-        4 * slotMsec, RadioInterface::anchoredSlotDelayMsec(2 * slotMsec, slotMsec, 2, meshtastic_SlotParity_SLOT_PARITY_EVEN));
+        2 * slotMsec - 1,
+        RadioInterface::anchoredSlotDelayMsec(2 * slotMsec + 1, slotMsec, 0, meshtastic_MeshPacket_SlotParity_SLOT_PARITY_EVEN));
+    // Each drawn pair is two slots further out, so the parity survives the whole window.
+    TEST_ASSERT_EQUAL_UINT32(4 * slotMsec, RadioInterface::anchoredSlotDelayMsec(
+                                               2 * slotMsec, slotMsec, 2, meshtastic_MeshPacket_SlotParity_SLOT_PARITY_EVEN));
 }
 
 static void test_anchoredSlotDelay_survivesAnAnchorHoursOld()
@@ -695,7 +696,8 @@ static void test_anchoredSlotDelay_survivesAnAnchorHoursOld()
     // tens of millions, so multiplying it by the slot time would wrap - the delay must not.
     const uint32_t slotMsec = 40;
     const uint32_t sinceEnd = 6UL * 3600UL * 1000UL; // 6 hours, an exact multiple of the slot
-    const uint32_t delay = RadioInterface::anchoredSlotDelayMsec(sinceEnd, slotMsec, 3, meshtastic_SlotParity_SLOT_PARITY_ODD);
+    const uint32_t delay =
+        RadioInterface::anchoredSlotDelayMsec(sinceEnd, slotMsec, 3, meshtastic_MeshPacket_SlotParity_SLOT_PARITY_ODD);
     TEST_ASSERT_EQUAL_UINT32(7 * slotMsec, delay); // one slot to reach odd, then three pairs
     TEST_ASSERT_EQUAL_UINT32(1, slotIndexOf(sinceEnd, slotMsec, delay) % 2);
 }

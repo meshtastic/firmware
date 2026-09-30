@@ -10,7 +10,6 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "RF95Interface.h"
-#include "RadioTxHook.h"
 #include "Router.h"
 #include "SX1262Interface.h"
 #include "SX1268Interface.h"
@@ -829,8 +828,8 @@ uint32_t RadioInterface::getTxDelayMsec(const meshtastic_MeshPacket *p)
     float channelUtil = airTime->channelUtilizationPercent();
     uint8_t CWsize = map(channelUtil, 0, 100, CWmin, CWmax);
     // LOG_DEBUG("Current channel utilization is %f so setting CWsize to %d", channelUtil, CWsize);
-    const meshtastic_SlotParity parity = RadioTxHooks::slotParity(p);
-    if (parity != meshtastic_SlotParity_SLOT_PARITY_UNSET)
+    const meshtastic_MeshPacket_SlotParity parity = p ? p->slot_parity : meshtastic_MeshPacket_SlotParity_SLOT_PARITY_UNSET;
+    if (parity != meshtastic_MeshPacket_SlotParity_SLOT_PARITY_UNSET)
         return getAnchoredSlotDelayMsec(pow_of_2(CWsize), parity);
     return random(0, pow_of_2(CWsize)) * slotTimeMsec;
 }
@@ -844,7 +843,7 @@ void RadioInterface::noteFrameEnd(uint32_t endMs, const char *what)
 }
 
 uint32_t RadioInterface::anchoredSlotDelayMsec(uint32_t sinceEndMs, uint32_t slotMsec, uint32_t pairsDrawn,
-                                               meshtastic_SlotParity parity)
+                                               meshtastic_MeshPacket_SlotParity parity)
 {
     // The first slot that has not started yet, and how long until its edge. The slot index is kept
     // out of the millisecond arithmetic: a frame end hours ago makes it large enough to overflow a
@@ -852,14 +851,14 @@ uint32_t RadioInterface::anchoredSlotDelayMsec(uint32_t sinceEndMs, uint32_t slo
     const uint32_t firstSlot = (sinceEndMs + slotMsec - 1) / slotMsec;
     const uint32_t toSlotEdge = (slotMsec - (sinceEndMs % slotMsec)) % slotMsec;
 
-    const uint32_t wanted = parity == meshtastic_SlotParity_SLOT_PARITY_ODD ? 1 : 0;
+    const uint32_t wanted = parity == meshtastic_MeshPacket_SlotParity_SLOT_PARITY_ODD ? 1 : 0;
     // Slots past that edge: one to reach our parity when the first slot is the other one, then an
     // even number of them, so every candidate keeps the parity.
     const uint32_t extra = ((firstSlot & 1) != wanted ? 1 : 0) + 2 * pairsDrawn;
     return toSlotEdge + extra * slotMsec;
 }
 
-uint32_t RadioInterface::getAnchoredSlotDelayMsec(uint32_t slots, meshtastic_SlotParity parity)
+uint32_t RadioInterface::getAnchoredSlotDelayMsec(uint32_t slots, meshtastic_MeshPacket_SlotParity parity)
 {
     // Two nodes that redraw after the same frame count their slots from its air end rather than from
     // their own handling of it, so their grids line up however differently they got there. Taking
@@ -870,7 +869,7 @@ uint32_t RadioInterface::getAnchoredSlotDelayMsec(uint32_t slots, meshtastic_Slo
 
     LOG_TRACE("TX slot anchor: %u ms into slot %u of %u, parity %u, %u ms after %s end", (unsigned)delay,
               (unsigned)((sinceEnd + delay) / slotTimeMsec), (unsigned)slots,
-              (unsigned)(parity == meshtastic_SlotParity_SLOT_PARITY_ODD ? 1 : 0), (unsigned)sinceEnd,
+              (unsigned)(parity == meshtastic_MeshPacket_SlotParity_SLOT_PARITY_ODD ? 1 : 0), (unsigned)sinceEnd,
               lastFrameEndMs ? lastFrameEndWhat : "no");
     return delay;
 }
