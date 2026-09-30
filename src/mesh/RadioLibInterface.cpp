@@ -1153,9 +1153,25 @@ void RadioLibInterface::clearReadIrqs()
     iface->clearIrq((1UL << RADIOLIB_IRQ_RX_DONE) | (1UL << RADIOLIB_IRQ_CRC_ERR));
 }
 
+void RadioLibInterface::stampFrameEndNow(bool tx)
+{
+    // The poll found an edge the interrupt never delivered, so that interrupt's own time is gone and
+    // now is the closest honest answer. Stamping it is what keeps the stale value from an earlier
+    // frame - which frameEndFromIsr() has no way to recognise - out of the anchored slot grid.
+#if defined(ARCH_PORTDUINO)
+    (void)tx;
+    lastIsrMillis = millis();
+#elif defined(HAS_FREE_RTOS)
+    (tx ? txDoneIsrTicks : rxDoneIsrTicks) = xTaskGetTickCount();
+#else
+    (void)tx;
+#endif
+}
+
 bool RadioLibInterface::checkRxDoneIrqFlag()
 {
     if (iface->checkIrq(RADIOLIB_IRQ_RX_DONE)) {
+        stampFrameEndNow(false);
         if (wakeRxReadout()) { // the readout task takes it, and notifies ISR_RX itself
             LOG_WARN("caught missed RX_DONE, woke the readout task");
             return true;
@@ -1367,6 +1383,7 @@ unsigned RadioLibInterface::deliverCapturedFrames()
 void RadioLibInterface::checkTxDoneIrqFlag()
 {
     if (iface->checkIrq(RADIOLIB_IRQ_TX_DONE)) {
+        stampFrameEndNow(true);
         LOG_WARN("caught missed TX_DONE");
         notify(ISR_TX, true);
     }
