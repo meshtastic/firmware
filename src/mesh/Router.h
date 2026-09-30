@@ -46,6 +46,16 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     /// forwarded to the phone.
     PointerQueue<meshtastic_MeshPacket> fromRadioQueue;
 
+#ifdef MESHTASTIC_RX_DEFER_FOR_TX_MS
+    /// The horizon in ms; a bare -DMESHTASTIC_RX_DEFER_FOR_TX_MS (which the compiler makes 1) means 30
+    static constexpr int32_t RX_DEFER_FOR_TX_MS = MESHTASTIC_RX_DEFER_FOR_TX_MS > 1 ? MESHTASTIC_RX_DEFER_FOR_TX_MS : 30;
+    /// Dequeued and held back so a TX falling due first is not stuck behind its handling; handled at rxDeferUntilMs
+    meshtastic_MeshPacket *rxDeferredForTx = nullptr;
+    uint32_t rxDeferUntilMs = 0;
+    /// How long to hold the next reception for a TX due within RX_DEFER_FOR_TX_MS; 0 to handle it now
+    int32_t rxWaitForTxMs();
+#endif
+
   protected:
     std::unique_ptr<RadioInterface> iface = nullptr;
 

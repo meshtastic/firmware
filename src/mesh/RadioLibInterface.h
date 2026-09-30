@@ -533,6 +533,16 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     /** notifyLater(delay, TRANSMIT_DELAY_COMPLETED), brought forward where the payload can be staged early */
     void scheduleTransmitDelayCompleted(uint32_t delay);
 
+#ifdef MESHTASTIC_RX_DEFER_FOR_TX_MS
+    /** When the armed TX timer really falls due (not the early-stage fire), 0 once it has run */
+    uint32_t txDueMs = 0;
+
+  public:
+    uint32_t getTxDueMs() const override { return txDueMs; }
+
+  protected:
+#endif
+
     /** Could we send right now (i.e. either not actively receiving or transmitting)? */
     virtual bool canSendImmediately();
 

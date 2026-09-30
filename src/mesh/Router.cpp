@@ -296,14 +296,50 @@ bool Router::shouldDecrementHopLimit(const meshtastic_MeshPacket *p)
     return true;
 }
 
+#ifdef MESHTASTIC_RX_DEFER_FOR_TX_MS
+int32_t Router::rxWaitForTxMs()
+{
+    const uint32_t dueMs = iface ? iface->getTxDueMs() : 0;
+    if (!dueMs)
+        return 0;
+    // Past due still counts: the radio thread has not run its timer yet. Long past is a timer that was dropped.
+    const int32_t untilDue = (int32_t)(dueMs - Time::getMillis());
+    if (untilDue > RX_DEFER_FOR_TX_MS || untilDue < -RX_DEFER_FOR_TX_MS)
+        return 0;
+    // A little past the due time, so the radio thread's timer runs first and its scan and launch finish
+    return (untilDue > 0 ? untilDue : 0) + 2;
+}
+#endif
+
 /**
  * do idle processing
  * Mostly looking in our incoming rxPacket queue and calling handleReceived.
  */
 int32_t Router::runOnce()
 {
+#ifdef MESHTASTIC_RX_DEFER_FOR_TX_MS
+    if (rxDeferredForTx) {
+        // Woken early by another arrival: keep holding while that TX is still waiting for its slot
+        const uint32_t now = Time::getMillis();
+        if (!Throttle::deadlinePassedAt(now, rxDeferUntilMs) && iface && iface->getTxDueMs())
+            return (int32_t)(rxDeferUntilMs - now);
+        meshtastic_MeshPacket *held = rxDeferredForTx;
+        rxDeferredForTx = nullptr;
+        perhapsHandleReceived(held); // held once only, whatever is due now
+    }
+#endif
     meshtastic_MeshPacket *mp;
     while ((mp = fromRadioQueue.dequeuePtr(0)) != NULL) {
+#ifdef MESHTASTIC_RX_DEFER_FOR_TX_MS
+        // Handling a reception (decrypt, modules, the phone) holds the loop ~20 ms on nRF52, and a TX due in that
+        // time goes out late by as much, out of the slot it drew. Let the TX go first.
+        if (const int32_t waitMs = rxWaitForTxMs(); waitMs > 0) {
+            rxDeferredForTx = mp;
+            rxDeferUntilMs = Time::timerEndsAtMillis(waitMs);
+            LOG_TRACE("RX handling held %d ms for a TX due, id 0x%08x", (int)waitMs, mp->id);
+            return waitMs;
+        }
+#endif
         // printPacket("handle fromRadioQ", mp);
         perhapsHandleReceived(mp);
     }

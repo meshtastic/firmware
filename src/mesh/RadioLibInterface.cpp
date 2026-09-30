@@ -547,6 +547,9 @@ void RadioLibInterface::onNotify(uint32_t notification)
             }
         }
 #endif
+#ifdef MESHTASTIC_RX_DEFER_FOR_TX_MS
+        txDueMs = 0; // the backoff is over; whatever re-arms the timer below stamps it again
+#endif
 
         // If we are not currently in receive mode, then restart the random delay (this can happen if the main thread
         // has placed the unit into standby)  FIXME, how will this work if the chipset is in sleep mode?
@@ -562,6 +565,9 @@ void RadioLibInterface::onNotify(uint32_t notification)
                 if (txp->tx_after && !Throttle::deadlinePassedAt(now, txp->tx_after)) {
                     // There's still some delay pending on this packet, so resume waiting for it to elapse
                     LOG_TRACE("TX backoff resumed, %u ms left of tx_after, id 0x%08x", (unsigned)(txp->tx_after - now), txp->id);
+#ifdef MESHTASTIC_RX_DEFER_FOR_TX_MS
+                    txDueMs = txp->tx_after;
+#endif
                     notifyLater(txp->tx_after - now, TRANSMIT_DELAY_COMPLETED, txTimerOverwrite);
                 } else if (const RadioTxHook::PreTxAction action = RadioTxHooks::beforeTransmit(this, txp);
                            action == RadioTxHook::PRETX_DROP) {
@@ -676,6 +682,9 @@ void RadioLibInterface::startTransmitTimerRebroadcast(meshtastic_MeshPacket *p)
 
 void RadioLibInterface::scheduleTransmitDelayCompleted(uint32_t delay)
 {
+#ifdef MESHTASTIC_RX_DEFER_FOR_TX_MS
+    txDueMs = Time::timerEndsAtMillis(delay); // the real due time, before an early stage brings the timer forward
+#endif
 #ifdef MESHTASTIC_TX_STAGE_EARLY
     // Where the driver wants it, fire at once so the radio thread writes the payload while RX runs, then wait out the
     // rest of the backoff
