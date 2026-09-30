@@ -359,22 +359,6 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_PRIVATE_HW = 255
 } meshtastic_HardwareModel;
 
-/* Which slots of the CSMA backoff grid a transmission is allowed to draw from.
- A node normally draws any slot of the contention window, counted from the moment it draws.
- A sender that asks for a parity instead counts slots from the end of the last frame it sent or
- heard, and takes only slots of that parity, so two senders on opposite parities that redraw
- after the same frame never land on the same slot, and so are always at least a slot apart.
- Useful for a pair of nodes exchanging a stream, where the two ends otherwise collide with each
- other far more often than with the rest of the mesh. */
-typedef enum _meshtastic_SlotParity {
-    /* No parity asked for: the ordinary backoff draw over the whole contention window. */
-    meshtastic_SlotParity_SLOT_PARITY_UNSET = 0,
-    /* Only even-numbered slots, counted from the end of the last frame on air. */
-    meshtastic_SlotParity_SLOT_PARITY_EVEN = 1,
-    /* Only odd-numbered slots, counted from the end of the last frame on air. */
-    meshtastic_SlotParity_SLOT_PARITY_ODD = 2
-} meshtastic_SlotParity;
-
 /* Shared constants between device and phone */
 typedef enum _meshtastic_Constants {
     /* First enum must be zero, and we are just using this enum to
@@ -1763,10 +1747,6 @@ extern "C" {
 #define _meshtastic_HardwareModel_MIN meshtastic_HardwareModel_UNSET
 #define _meshtastic_HardwareModel_MAX meshtastic_HardwareModel_PRIVATE_HW
 #define _meshtastic_HardwareModel_ARRAYSIZE ((meshtastic_HardwareModel)(meshtastic_HardwareModel_PRIVATE_HW+1))
-
-#define _meshtastic_SlotParity_MIN meshtastic_SlotParity_SLOT_PARITY_UNSET
-#define _meshtastic_SlotParity_MAX meshtastic_SlotParity_SLOT_PARITY_ODD
-#define _meshtastic_SlotParity_ARRAYSIZE ((meshtastic_SlotParity)(meshtastic_SlotParity_SLOT_PARITY_ODD+1))
 
 #define _meshtastic_Constants_MIN meshtastic_Constants_ZERO
 #define _meshtastic_Constants_MAX meshtastic_Constants_DATA_PAYLOAD_LEN
