@@ -35,9 +35,6 @@ class RadioTxHook
     /// True while p needs the radio left on its own config, so the driver must not listen instead.
     virtual bool holdsRadio(const meshtastic_MeshPacket *p) { return false; }
 
-    /// The backoff slots p may be drawn into, SLOT_PARITY_UNSET (the default) for the ordinary draw.
-    virtual meshtastic_SlotParity slotParity(const meshtastic_MeshPacket *p) { return meshtastic_SlotParity_SLOT_PARITY_UNSET; }
-
     /// The driver is done with p - sent, cancelled or dropped. Release anything held for it.
     virtual void packetReleased(RadioInterface *iface, const meshtastic_MeshPacket *p) {}
 };
@@ -49,7 +46,5 @@ class RadioTxHooks
     /// The first hook not returning PRETX_SEND decides, and the rest are not consulted.
     static RadioTxHook::PreTxAction beforeTransmit(RadioInterface *iface, meshtastic_MeshPacket *p);
     static bool holdsRadio(const meshtastic_MeshPacket *p);
-    /// The first hook asking for a parity decides; SLOT_PARITY_UNSET when none does.
-    static meshtastic_SlotParity slotParity(const meshtastic_MeshPacket *p);
     static void packetReleased(RadioInterface *iface, const meshtastic_MeshPacket *p);
 };
