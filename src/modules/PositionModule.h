@@ -24,6 +24,11 @@ class PositionModule : public ProtobufModule<meshtastic_Position>, private concu
     /// We force a rebroadcast if the radio settings change
     uint32_t currentGeneration = 0;
 
+    /// Monotonic counter for the position packets we send, so receivers can detect lost updates.
+    /// This must not live in localPosition: every new GPS fix overwrites that struct wholesale and
+    /// would reset the counter back to 1 on each fix.
+    uint32_t positionSequenceNumber = 0;
+
   public:
     /** Constructor
      * name is for debugging output

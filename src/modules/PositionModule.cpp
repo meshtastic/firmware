@@ -204,7 +204,6 @@ meshtastic_MeshPacket *PositionModule::allocPositionPacket(uint32_t atPrecision)
         if (nodeDB->copyNodePosition(node->num, cachedSelf))
             nodeDB->setLocalPosition(TypeConversions::ConvertToPosition(cachedSelf));
     }
-    localPosition.seq_number++;
 
     if (localPosition.latitude_i == 0 && localPosition.longitude_i == 0) {
         LOG_WARN("Skip position send: lat/lon zero");
@@ -264,8 +263,12 @@ meshtastic_MeshPacket *PositionModule::allocPositionPacket(uint32_t atPrecision)
     if (pos_flags & meshtastic_Config_PositionConfig_PositionFlags_TIMESTAMP)
         p.timestamp = localPosition.timestamp;
 
-    if (pos_flags & meshtastic_Config_PositionConfig_PositionFlags_SEQ_NO)
-        p.seq_number = localPosition.seq_number;
+    if (pos_flags & meshtastic_Config_PositionConfig_PositionFlags_SEQ_NO) {
+        // Only count position packets that we actually put together, and only when the caller
+        // asked for the field at all.
+        positionSequenceNumber++;
+        p.seq_number = positionSequenceNumber;
+    }
 
     if (pos_flags & meshtastic_Config_PositionConfig_PositionFlags_HEADING) {
         p.ground_track = localPosition.ground_track;
