@@ -873,7 +873,7 @@ uint32_t RadioInterface::getAnchoredSlotDelayMsec(uint32_t slots, meshtastic_Slo
 {
     // Two nodes that redraw after the same frame count their slots from its air end rather than from
     // their own handling of it, so their grids line up however differently they got there. Taking
-    // only one parity's slots then leaves an unused slot between the two nodes' candidates.
+    // only one parity's slots then rules out the same slot, so the two are always a slot time apart.
     const uint32_t sinceEnd = lastFrameEndMs ? Time::getMillis() - lastFrameEndMs : 0;
     const uint32_t ownParitySlots = slots / 2 ? slots / 2 : 1;
     const uint32_t delay = anchoredSlotDelayMsec(sinceEnd, slotTimeMsec, random(0, ownParitySlots), parity);
