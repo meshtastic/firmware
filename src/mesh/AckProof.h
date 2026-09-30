@@ -41,8 +41,18 @@
  *    property on offer here is the receipt.
  *  - Only the original sender can verify. A relay cannot, so a forged ack still propagates and
  *    still cancels intermediates' retransmissions; the endpoint just stops believing it.
- *  - Channel (non-PKI) traffic gets NOTHING from this: the forger holds the PSK, so any secret
- *    carried under channel encryption is a secret the forger also has.
+ *  - "From the actual recipient" is only true because the caller checks it. The MAC proves the
+ *    sender holds a pairwise key with us, and every keyed peer holds one - so the verifier must
+ *    look up the key of the node it ADDRESSED, not the node the ack claims to be from, or a proof
+ *    minted by any other keyed peer reads as VALID. ReliableRouter::ackProofPermitsAction does
+ *    that check.
+ *  - What gates a proof is whether both endpoints hold PKI keys, NOT how the acked packet was
+ *    encrypted. isProvableAck() tests only the ack's shape, so a DM that travelled under channel
+ *    encryption still gets a proven ack when we hold the peer's key - the secret comes from X25519,
+ *    not from the channel. That is more coverage than the receipt strictly needs, and it costs one
+ *    X25519 on every such ack we generate.
+ *  - A secret that rode under channel encryption would be worthless, since the forger holds the PSK
+ *    too. This derives the secret instead, which is why channel-encrypted DMs can be covered at all.
  *  - PKI_UNKNOWN_PUBKEY and NO_CHANNEL naks are emitted precisely when we could not decrypt, so no
  *    shared secret exists and they can never carry a proof. They stay forgeable.
  *  - Verification costs one X25519 (there is no shared-secret cache), and an attacker chooses when

@@ -19,7 +19,7 @@
 class STC8HKeyboard
 {
   public:
-    STC8HKeyboard(){};
+    STC8HKeyboard() {};
 
     void begin(uint8_t addr, TwoWire *wire);
 
