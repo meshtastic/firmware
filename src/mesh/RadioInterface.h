@@ -288,6 +288,11 @@ class RadioInterface
     /// Some boards (1st gen Pinetab Lora module) have broken IRQ wires, so we need to poll via i2c registers
     virtual bool isIRQPending() { return false; }
 
+#ifdef MESHTASTIC_RX_DEFER_FOR_TX_MS
+    /// When the queued transmit's backoff ends, in Time::getMillis() terms; 0 while no TX timer is armed
+    virtual uint32_t getTxDueMs() const { return 0; }
+#endif
+
     // Whether we use the default frequency slot given our LoRa config (region and modem preset)
     static bool uses_default_frequency_slot;
 
