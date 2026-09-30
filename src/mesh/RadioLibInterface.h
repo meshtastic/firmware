@@ -147,6 +147,9 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     /** When the frame this TX_DONE or RX_DONE ended left the air, as well as this platform knows */
     [[nodiscard]] uint32_t frameEndFromIsr(bool tx);
 
+    /** Stamp the air end as now, for a completion a poll found rather than an interrupt */
+    void stampFrameEndNow(bool tx);
+
   public:
     /** Our ISR code currently needs this to find our active instance
      */
