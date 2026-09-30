@@ -3,6 +3,7 @@
 #include "MeshPacketQueue.h"
 #include "RadioInterface.h"
 #include "concurrency/NotifiedWorkerThread.h"
+#include "freertosinc.h" // HAS_FREE_RTOS, for the frame-end tick stamps below
 
 #include <RadioLib.h>
 #include <sys/types.h>
@@ -27,7 +28,7 @@
 class LockingArduinoHal : public ArduinoHal
 {
   public:
-    LockingArduinoHal(SPIClass &spi, SPISettings spiSettings) : ArduinoHal(spi, spiSettings) {};
+    LockingArduinoHal(SPIClass &spi, SPISettings spiSettings) : ArduinoHal(spi, spiSettings){};
 
     void spiBeginTransaction() override;
     void spiEndTransaction() override;
@@ -59,7 +60,7 @@ class STM32WLx_ModuleWrapper : public STM32WLx_Module
   public:
     STM32WLx_ModuleWrapper(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst,
                            RADIOLIB_PIN_TYPE busy)
-        : STM32WLx_Module() {};
+        : STM32WLx_Module(){};
 };
 #endif
 
@@ -134,6 +135,17 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      * can reject.
      */
     virtual int16_t getCurrentRSSI() = 0;
+
+    // The air end of the last frame, for RadioInterface's anchored backoff grid. The interrupt's own
+    // time is what a peer's grid is aligned to, so it is stamped there rather than when the radio
+    // thread gets round to the notification.
+#if defined(ARCH_PORTDUINO)
+    static volatile uint32_t lastIsrMillis;
+#elif defined(HAS_FREE_RTOS)
+    static volatile uint32_t txDoneIsrTicks, rxDoneIsrTicks;
+#endif
+    /** When the frame this TX_DONE or RX_DONE ended left the air, as well as this platform knows */
+    [[nodiscard]] uint32_t frameEndFromIsr(bool tx);
 
   public:
     /** Our ISR code currently needs this to find our active instance

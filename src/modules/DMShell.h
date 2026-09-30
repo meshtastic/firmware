@@ -2,6 +2,7 @@
 
 #include "DMShellRecovery.h"
 #include "MeshModule.h"
+#include "RadioTxHook.h"
 #include "Router.h"
 #include "SinglePortModule.h"
 #include "concurrency/OSThread.h"
@@ -73,6 +74,40 @@ struct DMShellSession {
     size_t txHistoryNext = 0;
     DMShellTxHistoryWindow txHistoryWindow{TX_HISTORY_LEN};
 };
+
+/**
+ * Puts the session's frames on one parity of the CSMA slot grid.
+ *
+ * The two ends of a shell session talk to each other far more than to the rest of the mesh, so
+ * they are each other's main collision partner: both redraw their backoff after the same frame,
+ * and land on the same slot far more often than chance. Asking for opposite parities at the two
+ * ends keeps them a whole slot apart whatever their handling delay was.
+ *
+ * Only frames this module originated are claimed - the packet is encrypted by the time the driver
+ * asks, so the port number is no longer readable and the module's own ids are what is left.
+ */
+class DMShellTxHook : public RadioTxHook
+{
+  public:
+    /// Claim p for the configured parity, so the driver's next draw for it takes those slots.
+    void claim(const meshtastic_MeshPacket *p);
+
+    meshtastic_SlotParity slotParity(const meshtastic_MeshPacket *p) override;
+    void packetReleased(RadioInterface *iface, const meshtastic_MeshPacket *p) override;
+
+    /// SLOT_PARITY_UNSET (the default) leaves the ordinary backoff draw alone; see DMSHELL_SLOT_PARITY.
+    meshtastic_SlotParity parity = meshtastic_SlotParity_SLOT_PARITY_UNSET;
+
+  private:
+    // The driver holds one packet at a time and releases it before the next, but a queue backed up
+    // behind a long frame can hold a few. Wide enough for the output window; the oldest claim is
+    // overwritten beyond that, which costs that frame its parity and nothing else.
+    static constexpr size_t CLAIMS = 8;
+    PacketId claimed[CLAIMS] = {};
+    size_t nextClaim = 0;
+};
+
+extern DMShellTxHook *dmShellTxHook;
 
 class DMShellModule : private concurrency::OSThread, public SinglePortModule
 {

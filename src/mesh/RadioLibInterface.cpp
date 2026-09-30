@@ -65,6 +65,13 @@ RadioLibInterface::RadioLibInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE c
 
 void INTERRUPT_ATTR RadioLibInterface::isrLevel0Common(PendingISR cause)
 {
+    // Stamp the frame's air end before anything else: the anchored backoff grid is only as good as
+    // this stamp, and everything from here on is handling delay a peer does not share.
+#if defined(ARCH_PORTDUINO)
+    lastIsrMillis = millis();
+#elif defined(HAS_FREE_RTOS)
+    (cause == ISR_TX ? txDoneIsrTicks : rxDoneIsrTicks) = xTaskGetTickCountFromISR();
+#endif
     instance->disableInterrupt();
 
     BaseType_t xHigherPriorityTaskWoken;
@@ -89,6 +96,29 @@ void INTERRUPT_ATTR RadioLibInterface::isrTxLevel0()
 /** Our ISR code currently needs this to find our active instance
  */
 RadioLibInterface *RadioLibInterface::instance;
+
+#if defined(ARCH_PORTDUINO)
+volatile uint32_t RadioLibInterface::lastIsrMillis;
+#elif defined(HAS_FREE_RTOS)
+volatile uint32_t RadioLibInterface::txDoneIsrTicks, RadioLibInterface::rxDoneIsrTicks;
+#endif
+
+uint32_t RadioLibInterface::frameEndFromIsr(bool tx)
+{
+    const uint32_t now = Time::getMillis();
+    uint32_t endMs = now;
+#if defined(ARCH_PORTDUINO)
+    endMs = lastIsrMillis;
+#elif defined(HAS_FREE_RTOS)
+    const uint32_t ticks = xTaskGetTickCount() - (tx ? txDoneIsrTicks : rxDoneIsrTicks);
+    endMs = now - (uint32_t)(((uint64_t)ticks * 1000) / configTICK_RATE_HZ);
+#endif
+    // A stamp still ahead of now, or older than this TX's launch, belongs to some earlier frame:
+    // an interrupt we never took, or none yet. Now is the safe answer - late, never early.
+    if ((int32_t)(endMs - now) > 0 || (tx && (int32_t)(endMs - lastTxStart) < 0))
+        endMs = now;
+    return endMs;
+}
 
 /** Could we send right now (i.e. either not actively receiving or transmitting)? */
 bool RadioLibInterface::canSendImmediately()
@@ -406,6 +436,8 @@ void RadioLibInterface::onNotify(uint32_t notification)
 
     switch (notification) {
     case ISR_TX:
+        if (sendingPacket)
+            noteFrameEnd(frameEndFromIsr(true), "tx");
         handleTransmitInterrupt(); // completeSending() already restored the radio to the home config
         // Let the hooks pre-stage the radio for the NEXT queued packet. Not required for correctness -
         // TRANSMIT_DELAY_COMPLETED asks again before the scan, which is where the answer is acted on -
@@ -415,6 +447,7 @@ void RadioLibInterface::onNotify(uint32_t notification)
         setTransmitDelay();
         break;
     case ISR_RX:
+        noteFrameEnd(frameEndFromIsr(false), "rx");
         handleReceiveInterrupt();
         startReceive();
         setTransmitDelay();
@@ -486,7 +519,7 @@ void RadioLibInterface::setTransmitDelay()
     // So we want to make sure the other side has had a chance to reconfigure its radio.
 
     if (p->tx_after) {
-        unsigned long add_delay = p->rx_rssi ? getTxDelayMsecWeighted(p) : getTxDelayMsec();
+        unsigned long add_delay = p->rx_rssi ? getTxDelayMsecWeighted(p) : getTxDelayMsec(p);
         unsigned long now = Time::getMillis();
         // skipZero, not timerEndsAtMillis: this is a clamp of three candidates rather than a plain
         // now + delay, and `if (p->tx_after)` above is the read that takes 0 as "no delay wanted" -
@@ -516,7 +549,7 @@ void RadioLibInterface::startTransmitTimer(bool withDelay)
 {
     // If we have work to do and the timer wasn't already scheduled, schedule it now
     if (!txQueue.empty()) {
-        uint32_t delay = !withDelay ? 1 : getTxDelayMsec();
+        uint32_t delay = !withDelay ? 1 : getTxDelayMsec(txQueue.getFront());
         notifyLater(delay, TRANSMIT_DELAY_COMPLETED, txTimerOverwrite); // This will implicitly enable
     }
 }
