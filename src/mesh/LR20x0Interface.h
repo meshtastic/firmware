@@ -2,6 +2,32 @@
 #if RADIOLIB_EXCLUDE_LR2021 != 1
 #include "RadioLibInterface.h"
 
+// Bench: -DLR2021_TX_LAUNCH_TRACE times each step from the CAD verdict to TX in microseconds, and -DLR2021_TX_PRESTAGE also
+// writes the payload into the TX FIFO before the scan. Prestage calls RadioLib's LR2021 commands directly, so it needs
+// -DRADIOLIB_GODMODE=1.
+#if defined(LR2021_TX_LAUNCH_TRACE) || defined(LR2021_TX_PRESTAGE)
+#define LR2021_TX_LAUNCH_OVERRIDE 1
+#endif
+#if defined(LR2021_TX_PRESTAGE) && !RADIOLIB_GODMODE
+#error "LR2021_TX_PRESTAGE calls RadioLib's LR2021 commands directly: build with -DRADIOLIB_GODMODE=1"
+#endif
+// Bench: -DLR2021_CAD_EXIT_LBT scans with CAD exit mode TX: a clear CAD keys up from the prestaged payload, and a busy one
+// leaves the chip in its fallback standby for rearmReceive() to restart RX, with no CAD>RX handoff.
+#if defined(LR2021_CAD_EXIT_LBT) && !defined(LR2021_TX_PRESTAGE)
+#error "LR2021_CAD_EXIT_LBT sends the prestaged payload: build with -DLR2021_TX_PRESTAGE -DRADIOLIB_GODMODE=1"
+#endif
+// Bench: -DLR2021_RESUME_CONTINUOUS_RX keeps a continuous RX running after a frame instead of restarting it, checking the
+// chip is still in RX first.
+// Bench: -DLR2021_STANDBY_XOSC keeps the TCXO running: standby is STBY_XOSC, the RX/TX fallback (where a CAD exits when it
+// hands off to neither RX nor TX) is STBY_XOSC, and the scan starts from there without RadioLib's STBY_RC. It calls RadioLib
+// internals, so it needs -DRADIOLIB_GODMODE=1.
+#if defined(LR2021_STANDBY_XOSC) && !RADIOLIB_GODMODE
+#error "LR2021_STANDBY_XOSC calls RadioLib internals: build with -DRADIOLIB_GODMODE=1"
+#endif
+#if defined(LR2021_CAD_EXIT_LBT) || defined(LR2021_RESUME_CONTINUOUS_RX)
+#define LR2021_READ_CHIP_MODE 1
+#endif
+
 /**
  * \brief Adapter for LR20x0 radio family. Implements common logic for child classes.
  * \tparam T RadioLib module type for LR20x0, e.g. LR2021.
@@ -100,5 +126,53 @@ template <class T> class LR20x0Interface : public RadioLibInterface
 
     /** Recover a chip that lost its runtime state via the same full begin() the band-hop path uses */
     bool recoverChipStateLoss() override { return fullBegin(getFreq()); }
+
+    /** SetStandby's oscillator: STBY_XOSC with -DLR2021_STANDBY_XOSC, else STBY_RC as RadioLib's standby() */
+#ifdef LR2021_STANDBY_XOSC
+    static constexpr uint8_t STANDBY_MODE = RADIOLIB_LR2021_STANDBY_XOSC;
+    /** Put the TX/RX fallback on STBY_XOSC, after begin() */
+    void keepTcxoOnInStandby();
+    /** lora.scanChannel(cfg) without its STBY_RC: trySetStandby() has just put the chip in STBY_XOSC */
+    int16_t scanChannelFromStandby(const ChannelScanConfig_t &cfg);
+#else
+    static constexpr uint8_t STANDBY_MODE = RADIOLIB_LR2021_STANDBY_RC;
+#endif
+
+#ifdef LR2021_TX_LAUNCH_OVERRIDE
+    /** Time the launch from the CAD verdict; with a payload staged before the scan, send only what follows it */
+    int16_t launchTransmit(size_t numbytes) override;
+    /** The payload isChannelActive() wrote into the chip's TX FIFO before the CAD, or 0 bytes if none */
+    size_t prestagedLen = 0;
+    uint32_t prestagedId = 0;
+    /** When the last CAD verdict was read, on the bench clock, for the launch step trace */
+    uint32_t cadVerdictClock = 0;
+#endif
+#ifdef LR2021_TX_PRESTAGE
+    /** The TX FIFO may hold bytes no TX has sent. It appends, so they would go out ahead of the next payload */
+    bool txFifoStale = true;
+    /** Empty the TX FIFO if it may hold unsent bytes */
+    int16_t clearStaleTxFifo();
+#endif
+#ifdef LR2021_READ_CHIP_MODE
+    /** The chip's mode (stat2 bits 2..0, as the LR20X0_CHIP_MODE_* below), waiting out a passing FS; 0xFF on SPI failure */
+    uint8_t readChipMode() const;
+    /** lora's Module, writable from const methods: RadioLib's LRxxxx::getStatus() is protected, so read status here */
+    Module *const statusModule = &module;
+    static constexpr uint8_t LR20X0_CHIP_MODE_STBY_RC = 1;
+    static constexpr uint8_t LR20X0_CHIP_MODE_STBY_XOSC = 2;
+    static constexpr uint8_t LR20X0_CHIP_MODE_FS = 3;
+    static constexpr uint8_t LR20X0_CHIP_MODE_RX = 4;
+    static constexpr uint8_t LR20X0_CHIP_MODE_TX = 5;
+#endif
+#ifdef LR2021_CAD_EXIT_LBT
+    /** A clear CAD under exit mode TX put the chip in TX with the prestaged payload: launchTransmit() sends nothing */
+    bool chipKeyedUp = false;
+#endif
+#ifdef LR2021_RESUME_CONTINUOUS_RX
+    /** RX was armed continuous and nothing has put the chip into standby since */
+    bool rxArmedContinuous = false;
+    bool resumeRunningReceive() override;
+    bool receiveStillRunning() const override { return rxArmedContinuous && readChipMode() == LR20X0_CHIP_MODE_RX; }
+#endif
 };
 #endif
