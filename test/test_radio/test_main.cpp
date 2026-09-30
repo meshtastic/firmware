@@ -696,8 +696,9 @@ static void test_clearReadIrqs_alsoDiscardsTheUnreadFrame()
 // What is pinned: a draw asking for a parity lands on a slot of that parity of the grid whose
 // origin is the last frame's air end, and never before the first slot that has not started yet.
 // That is the whole point of the mechanism - two nodes on opposite parities that redraw after the
-// same frame cannot pick the same or an adjacent slot however differently they handled it, so a
-// change that lets a draw land mid-slot, or on the wrong parity, silently gives that back.
+// same frame cannot pick the same slot however differently they handled it, and so are always at
+// least a slot apart - adjacent slots are still allowed. A change that lets a draw land mid-slot,
+// or on the wrong parity, silently gives that back.
 
 // The absolute slot index a delay lands on, counted from the anchor.
 static uint32_t slotIndexOf(uint32_t sinceEndMs, uint32_t slotMsec, uint32_t delayMsec)
