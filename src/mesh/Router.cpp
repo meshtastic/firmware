@@ -28,8 +28,8 @@
 #include "mqtt/MQTT.h"
 #endif
 #include "Default.h"
-#if ARCH_PORTDUINO
 #include "Throttle.h"
+#if ARCH_PORTDUINO
 #include "platform/portduino/PortduinoGlue.h"
 #include "serialization/MeshPacketSerializer.h"
 #endif
@@ -297,14 +297,42 @@ bool Router::shouldDecrementHopLimit(const meshtastic_MeshPacket *p)
     return true;
 }
 
+int32_t Router::rxHoldForTxMs(uint32_t txDueMs, uint32_t nowMs, int32_t horizonMs)
+{
+    if (!txDueMs)
+        return 0;
+    // Past due still counts: the radio thread has not run its timer yet. Long past is a timer that was dropped.
+    const int32_t untilDue = (int32_t)(txDueMs - nowMs);
+    if (untilDue > horizonMs || untilDue < -horizonMs)
+        return 0;
+    // A little past the due time, so the radio thread's timer runs first and its scan and launch finish
+    return (untilDue > 0 ? untilDue : 0) + 2;
+}
+
 /**
  * do idle processing
  * Mostly looking in our incoming rxPacket queue and calling handleReceived.
  */
 int32_t Router::runOnce()
 {
+    if (rxHeldForTx) {
+        // Woken early by another arrival: keep holding while that TX is still waiting for its slot
+        const uint32_t now = Time::getMillis();
+        if (!Throttle::deadlinePassedAt(now, rxHeldUntilMs) && iface && iface->getTxDueMs())
+            return (int32_t)(rxHeldUntilMs - now);
+        meshtastic_MeshPacket *held = rxHeldForTx;
+        rxHeldForTx = nullptr;
+        perhapsHandleReceived(held); // held once only, whatever is due now
+    }
+
     meshtastic_MeshPacket *mp;
     while ((mp = fromRadioQueue.dequeuePtr(0)) != NULL) {
+        if (const int32_t holdMs = rxHoldForTxMs(iface ? iface->getTxDueMs() : 0, Time::getMillis()); holdMs > 0) {
+            rxHeldForTx = mp;
+            rxHeldUntilMs = Time::timerEndsAtMillis(holdMs);
+            LOG_TRACE("RX handling held %d ms for a TX due, id 0x%08x", (int)holdMs, mp->id);
+            return holdMs;
+        }
         // printPacket("handle fromRadioQ", mp);
         perhapsHandleReceived(mp);
     }

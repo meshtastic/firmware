@@ -229,6 +229,10 @@ class RadioInterface
      *  A stamp older than the one already held is a frame delivered late, and is ignored. */
     void noteFrameEnd(uint32_t endMs, const char *what);
 
+    /** When the TX timer for a packet with a slot parity falls due, or 0 when none is waiting on one.
+     *  The router holds received-packet handling around it so the TX leaves in the slot it drew. */
+    [[nodiscard]] virtual uint32_t getTxDueMs() const { return 0; }
+
     /** The CW to use when calculating SNR_based delays */
     [[nodiscard]] uint8_t getCWsize(float snr);
 

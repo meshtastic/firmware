@@ -3,6 +3,7 @@
 #include "MeshService.h"
 #include "RadioInterface.h"
 #include "RadioLibInterface.h"
+#include "Router.h"
 #include "TestUtil.h"
 #include "UptimeClock.h"
 #include "memory/MemAudit.h"
@@ -535,6 +536,18 @@ class TestableRadioLibInterface : public RadioLibInterface
 
     static bool isRadioLibTimeErrorPublic(RadioLibTime_t usec) { return isRadioLibTimeError(usec); }
 
+    // Queue p and arm the TX timer for it the way every backoff path does, then empty the queue again
+    // (p is the caller's) and report the due time the router would have read.
+    uint32_t dueAfterArmingFor(meshtastic_MeshPacket *p, uint32_t delay)
+    {
+        txQueue.enqueue(p);
+        scheduleTransmitDelayCompleted(delay);
+        const uint32_t due = getTxDueMs();
+        while (txQueue.dequeue()) {
+        }
+        return due;
+    }
+
     // Chip-specific hooks this test never reaches
     uint32_t getPacketTime(uint32_t, bool) override { return 0; }
     int16_t getCurrentRSSI() override { return 0; }
@@ -716,6 +729,59 @@ static void test_noteFrameEnd_ignoresAFrameDeliveredLate()
     TEST_ASSERT_EQUAL_UINT32(Time::skipZero(now), testRadio->getLastFrameEndMs());
 }
 
+// ---------------------------------------------------------------------------
+// Holding received-packet handling for a slotted TX (Router::rxHoldForTxMs)
+// ---------------------------------------------------------------------------
+// The DMShell bench (round 57): handling a reception holds the main loop long enough that a TX due in
+// that time leaves out of the slot it drew. The router holds the reception until just past the TX's
+// due time instead. These pin the arithmetic of that decision.
+
+static void test_rxHoldForTx_handlesAtOnceWhenNoTxIsDue()
+{
+    TEST_ASSERT_EQUAL_INT32(0, Router::rxHoldForTxMs(0, 1000));
+}
+
+// Within the horizon, the hold runs to 2 ms past the due time so the radio thread's timer runs first.
+static void test_rxHoldForTx_holdsUntilJustPastADueTx()
+{
+    TEST_ASSERT_EQUAL_INT32(22, Router::rxHoldForTxMs(1020, 1000));
+    TEST_ASSERT_EQUAL_INT32(Router::RX_HOLD_FOR_TX_MS + 2, Router::rxHoldForTxMs(1000 + Router::RX_HOLD_FOR_TX_MS, 1000));
+    // Further out, there is time to handle the reception before the TX falls due.
+    TEST_ASSERT_EQUAL_INT32(0, Router::rxHoldForTxMs(1000 + Router::RX_HOLD_FOR_TX_MS + 1, 1000));
+}
+
+// Past due means the radio thread has not run its timer yet: wait briefly for it. Long past due is a
+// timer that was dropped, and must not hold anything.
+static void test_rxHoldForTx_waitsBrieflyForAnOverdueTimer()
+{
+    TEST_ASSERT_EQUAL_INT32(2, Router::rxHoldForTxMs(995, 1000));
+    TEST_ASSERT_EQUAL_INT32(2, Router::rxHoldForTxMs(1000 - Router::RX_HOLD_FOR_TX_MS, 1000));
+    TEST_ASSERT_EQUAL_INT32(0, Router::rxHoldForTxMs(1000 - Router::RX_HOLD_FOR_TX_MS - 1, 1000));
+}
+
+static void test_rxHoldForTx_survivesTheClockWrap()
+{
+    TEST_ASSERT_EQUAL_INT32(22, Router::rxHoldForTxMs(10, UINT32_MAX - 9));
+    TEST_ASSERT_EQUAL_INT32(2, Router::rxHoldForTxMs(UINT32_MAX - 4, 5));
+}
+
+// Only a packet with a slot parity reports a due time, so ordinary mesh traffic never holds the router.
+static void test_txDueMs_isReportedOnlyForASlottedPacket()
+{
+    auto *radioIf = makeTestableRadioLibInterface();
+    Time::setTestMillis(5000);
+
+    meshtastic_MeshPacket slotted = meshtastic_MeshPacket_init_zero;
+    slotted.slot_parity = meshtastic_MeshPacket_SlotParity_SLOT_PARITY_EVEN;
+    TEST_ASSERT_EQUAL_UINT32(5020, radioIf->dueAfterArmingFor(&slotted, 20));
+
+    meshtastic_MeshPacket plain = meshtastic_MeshPacket_init_zero;
+    TEST_ASSERT_EQUAL_UINT32(0, radioIf->dueAfterArmingFor(&plain, 20));
+
+    Time::useRealClock();
+    delete radioIf;
+}
+
 void setUp(void)
 {
     mockMeshService = new MockMeshService();
@@ -777,6 +843,11 @@ void setup()
     RUN_TEST(test_anchoredSlotDelay_takesTheNextWholeSlot);
     RUN_TEST(test_anchoredSlotDelay_survivesAnAnchorHoursOld);
     RUN_TEST(test_noteFrameEnd_ignoresAFrameDeliveredLate);
+    RUN_TEST(test_rxHoldForTx_handlesAtOnceWhenNoTxIsDue);
+    RUN_TEST(test_rxHoldForTx_holdsUntilJustPastADueTx);
+    RUN_TEST(test_rxHoldForTx_waitsBrieflyForAnOverdueTimer);
+    RUN_TEST(test_rxHoldForTx_survivesTheClockWrap);
+    RUN_TEST(test_txDueMs_isReportedOnlyForASlottedPacket);
     exit(UNITY_END());
 }
 

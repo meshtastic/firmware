@@ -46,6 +46,10 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     /// forwarded to the phone.
     PointerQueue<meshtastic_MeshPacket> fromRadioQueue;
 
+    /// Dequeued and held back so a slotted TX falling due first is not stuck behind its handling; handled at rxHeldUntilMs
+    meshtastic_MeshPacket *rxHeldForTx = nullptr;
+    uint32_t rxHeldUntilMs = 0;
+
   protected:
     std::unique_ptr<RadioInterface> iface = nullptr;
 
@@ -252,8 +256,16 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     /** Frees the provided packet, and generates a NAK indicating the specifed error while sending */
     void abortSendAndNak(meshtastic_Routing_Error err, meshtastic_MeshPacket *p);
 
-#ifdef PIO_UNIT_TESTING
   public:
+    /// How far ahead of a slotted TX's due time the router starts holding received-packet handling for it
+    static constexpr int32_t RX_HOLD_FOR_TX_MS = 30;
+
+    /** How long to hold the next reception for a TX due at txDueMs (0 when none is), or 0 to handle it now.
+     *  Handling one (decrypt, modules, the phone) holds the loop ~20 ms on nRF52, so a TX due in that time
+     *  would leave late by as much, out of the slot it drew. */
+    [[nodiscard]] static int32_t rxHoldForTxMs(uint32_t txDueMs, uint32_t nowMs, int32_t horizonMs = RX_HOLD_FOR_TX_MS);
+
+#ifdef PIO_UNIT_TESTING
     /// High-water mark of handleDepth across this Router's life. The deferral must keep it at 1:
     /// a nested local send may never re-enter handleReceived() synchronously.
     uint8_t maxHandleDepthObserved = 0;
