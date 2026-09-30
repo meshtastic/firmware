@@ -5,9 +5,6 @@
 #include "modules/SystemCommandsModule.h"
 #endif
 #include "modules/StatusLEDModule.h"
-#if !MESHTASTIC_EXCLUDE_REPLYBOT
-#include "ReplyBotModule.h"
-#endif
 #if !MESHTASTIC_EXCLUDE_PKI
 #include "KeyVerificationModule.h"
 #endif
@@ -136,9 +133,6 @@ void setupModules()
     }
 #endif
     statusLEDModule = new StatusLEDModule();
-#if !MESHTASTIC_EXCLUDE_REPLYBOT
-    new ReplyBotModule();
-#endif
 
 #if HAS_TRAFFIC_MANAGEMENT && !MESHTASTIC_EXCLUDE_TRAFFIC_MANAGEMENT
     if (moduleConfig.has_traffic_management) {

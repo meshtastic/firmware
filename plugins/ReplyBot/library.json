@@ -1,7 +1,7 @@
 {
-  "name": "PluginEcho",
+  "name": "ReplyBot",
   "version": "0.1.0",
-  "description": "Meshtastic module plugin example: answers /ping text messages with pong",
+  "description": "Meshtastic module plugin: /ping /hello /test mic-check replies with hops, RSSI, SNR",
   "license": "MIT",
   "frameworks": "arduino",
   "platforms": "*",
