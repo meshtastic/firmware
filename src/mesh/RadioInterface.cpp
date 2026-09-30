@@ -842,7 +842,7 @@ void RadioInterface::noteFrameEnd(uint32_t endMs, const char *what)
     if (held && (int32_t)(endMs - held) < 0)
         return; // a frame handed to us late, after one that ended later
     lastFrameEndMs.store(Time::skipZero(endMs), std::memory_order_relaxed);
-    lastFrameEndWhat = what;
+    lastFrameEndWhat.store(what, std::memory_order_relaxed);
 }
 
 uint32_t RadioInterface::anchoredSlotDelayMsec(uint32_t sinceEndMs, uint32_t slotMsec, uint32_t pairsDrawn,
@@ -874,7 +874,7 @@ uint32_t RadioInterface::getAnchoredSlotDelayMsec(uint32_t slots, meshtastic_Mes
     LOG_TRACE("TX slot anchor: %u ms into slot %u of %u, parity %u, %u ms after %s end", (unsigned)delay,
               (unsigned)((sinceEnd + delay) / slotTimeMsec), (unsigned)slots,
               (unsigned)(parity == meshtastic_MeshPacket_SlotParity_SLOT_PARITY_ODD ? 1 : 0), (unsigned)sinceEnd,
-              frameEnd ? lastFrameEndWhat : "no");
+              frameEnd ? lastFrameEndWhat.load(std::memory_order_relaxed) : "no");
     return delay;
 }
 
