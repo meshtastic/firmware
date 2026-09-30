@@ -837,9 +837,11 @@ uint32_t RadioInterface::getTxDelayMsec(const meshtastic_MeshPacket *p)
 
 void RadioInterface::noteFrameEnd(uint32_t endMs, const char *what)
 {
-    if (lastFrameEndMs && (int32_t)(endMs - lastFrameEndMs) < 0)
+    // Both writers are the radio worker, so this read-modify-write races with no other write.
+    const uint32_t held = lastFrameEndMs.load(std::memory_order_relaxed);
+    if (held && (int32_t)(endMs - held) < 0)
         return; // a frame handed to us late, after one that ended later
-    lastFrameEndMs = Time::skipZero(endMs);
+    lastFrameEndMs.store(Time::skipZero(endMs), std::memory_order_relaxed);
     lastFrameEndWhat = what;
 }
 
@@ -864,14 +866,15 @@ uint32_t RadioInterface::getAnchoredSlotDelayMsec(uint32_t slots, meshtastic_Mes
     // Two nodes that redraw after the same frame count their slots from its air end rather than from
     // their own handling of it, so their grids line up however differently they got there. Taking
     // only one parity's slots then rules out the same slot, so the two are always a slot time apart.
-    const uint32_t sinceEnd = lastFrameEndMs ? Time::getMillis() - lastFrameEndMs : 0;
+    const uint32_t frameEnd = lastFrameEndMs.load(std::memory_order_relaxed);
+    const uint32_t sinceEnd = frameEnd ? Time::getMillis() - frameEnd : 0;
     const uint32_t ownParitySlots = slots / 2 ? slots / 2 : 1;
     const uint32_t delay = anchoredSlotDelayMsec(sinceEnd, slotTimeMsec, random(0, ownParitySlots), parity);
 
     LOG_TRACE("TX slot anchor: %u ms into slot %u of %u, parity %u, %u ms after %s end", (unsigned)delay,
               (unsigned)((sinceEnd + delay) / slotTimeMsec), (unsigned)slots,
               (unsigned)(parity == meshtastic_MeshPacket_SlotParity_SLOT_PARITY_ODD ? 1 : 0), (unsigned)sinceEnd,
-              lastFrameEndMs ? lastFrameEndWhat : "no");
+              frameEnd ? lastFrameEndWhat : "no");
     return delay;
 }
 
