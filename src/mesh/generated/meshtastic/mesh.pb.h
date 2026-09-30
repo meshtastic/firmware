@@ -363,7 +363,7 @@ typedef enum _meshtastic_HardwareModel {
  A node normally draws any slot of the contention window, counted from the moment it draws.
  A sender that asks for a parity instead counts slots from the end of the last frame it sent or
  heard, and takes only slots of that parity, so two senders on opposite parities that redraw
- after the same frame can never land on the same or an adjacent slot.
+ after the same frame never land on the same slot, and so are always at least a slot apart.
  Useful for a pair of nodes exchanging a stream, where the two ends otherwise collide with each
  other far more often than with the rest of the mesh. */
 typedef enum _meshtastic_SlotParity {
