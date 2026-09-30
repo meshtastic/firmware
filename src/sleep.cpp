@@ -270,7 +270,6 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false, bool skipSaveN
 #endif
 
 #if defined(TRACKER_T1000_E) || defined(MESH_TRACKER_X1)
-#ifdef GNSS_AIROHA
     digitalWrite(GPS_VRTC_EN, LOW);
     digitalWrite(PIN_GPS_RESET, LOW);
     digitalWrite(GPS_SLEEP_INT, LOW);
@@ -278,7 +277,6 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false, bool skipSaveN
 #ifdef GPS_RESETB_OUT
     pinMode(GPS_RESETB_OUT, OUTPUT);
     digitalWrite(GPS_RESETB_OUT, LOW);
-#endif
 #endif
 
 #ifdef BUZZER_EN_PIN

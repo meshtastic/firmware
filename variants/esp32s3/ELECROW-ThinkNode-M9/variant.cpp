@@ -18,8 +18,8 @@ void earlyInitVariant()
     digitalWrite(TFT_CS, HIGH);
     pinMode(PIN_GPS_EN, OUTPUT);
     digitalWrite(PIN_GPS_EN, !GPS_EN_ACTIVE);
-    pinMode(GPS_RTC_INT, OUTPUT);
-    digitalWrite(GPS_RTC_INT, LOW);
+    pinMode(GPS_SLEEP_INT, OUTPUT);
+    digitalWrite(GPS_SLEEP_INT, HIGH);
     delay(100);
 }
 

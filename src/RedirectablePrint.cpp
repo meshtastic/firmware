@@ -265,6 +265,9 @@ meshtastic_LogRecord_Level RedirectablePrint::getLogLevel(const char *logLevel)
 {
     meshtastic_LogRecord_Level ll = meshtastic_LogRecord_Level_UNSET; // default to unset
     switch (logLevel[0]) {
+    case 'T':
+        ll = meshtastic_LogRecord_Level_TRACE;
+        break;
     case 'D':
         ll = meshtastic_LogRecord_Level_DEBUG;
         break;
