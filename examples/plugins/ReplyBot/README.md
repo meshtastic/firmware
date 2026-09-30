@@ -1,6 +1,6 @@
-# ReplyBot plugin
+# ReplyBot (example plugin)
 
-ReplyBot is a Meshtastic **module plugin**. It listens for slash commands on text messages (DM or primary-channel broadcast) and replies with a direct message that includes hop count, RSSI, and SNR.
+Example Meshtastic **module plugin** under `examples/plugins/`. It listens for slash commands on text messages (DM or primary-channel broadcast) and replies with a direct message that includes hop count, RSSI, and SNR.
 
 ## Commands
 
@@ -23,7 +23,7 @@ Add the PlatformIO dependency to your desired target, or create a derived env th
 extends = env:t-deck
 lib_deps =
   ${env:t-deck.lib_deps}
-  symlink://plugins/ReplyBot
+  symlink://examples/plugins/ReplyBot
 ```
 
 Build and flash:
