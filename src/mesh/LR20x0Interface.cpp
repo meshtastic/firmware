@@ -770,12 +770,19 @@ template <typename T> bool LR20x0Interface<T>::isChannelActive()
         // Write the payload now, while nothing is listening anyway, rather than after the verdict. Only the FIFO: the
         // packet params keep RX's maximum length, so a detection's RX still takes a full-length frame. A detection's RX
         // fills the RX FIFO, not this one.
-        if (scanForTx && clearStaleTxFifo() == RADIOLIB_ERR_NONE) {
+        // Every way out without a staged payload logs, so a prestage that never engages is not taken for the baseline
+        const int16_t cleared = scanForTx ? clearStaleTxFifo() : RADIOLIB_ERR_NONE;
+        if (cleared != RADIOLIB_ERR_NONE) {
+            LOG_WARN("LR20x0 prestage: clearTxFifo refused, err %d", cleared);
+        } else if (scanForTx) {
             const size_t numbytes = encodeRadioBuffer(scanForTx);
             txFifoStale = true; // until a TX sends it
-            if (lora.writeRadioTxFifo((uint8_t *)&radioBuffer, numbytes) == RADIOLIB_ERR_NONE) {
+            const int16_t written = lora.writeRadioTxFifo((uint8_t *)&radioBuffer, numbytes);
+            if (written == RADIOLIB_ERR_NONE) {
                 prestagedLen = numbytes;
                 prestagedId = scanForTx->id;
+            } else {
+                LOG_WARN("LR20x0 prestage: writeRadioTxFifo(%u) refused, err %d", (unsigned)numbytes, written);
             }
         }
 #ifdef LR2021_CAD_EXIT_LBT
@@ -801,6 +808,10 @@ template <typename T> bool LR20x0Interface<T>::isChannelActive()
 #ifdef LR2021_TX_LAUNCH_OVERRIDE
         cadVerdictClock = benchClock();
 #endif
+        // Bench: anything but FREE or DETECTED is reported to the caller as a clear channel below, and also drops the
+        // prestage, so say what it was
+        if (result != RADIOLIB_CHANNEL_FREE && result != RADIOLIB_LORA_DETECTED)
+            LOG_WARN("LR20x0 channel scan returned %d, reported clear", result);
 #ifdef LR2021_CAD_EXIT_LBT
         chipKeyedUp = false;
         if (cfg.cad.exitMode == RADIOLIB_LR2021_CAD_EXIT_MODE_TX) {
@@ -928,6 +939,11 @@ template <typename T> int16_t LR20x0Interface<T>::launchTransmit(size_t numbytes
     // payload, send only the rest of RadioLib's TX staging.
     const uint32_t t0 = benchClock();
     const bool prestaged = prestagedLen != 0 && prestagedLen == numbytes && sendingPacket && sendingPacket->id == prestagedId;
+#ifdef LR2021_TX_PRESTAGE
+    if (!prestaged)
+        LOG_WARN("LR20x0 prestage miss: staged %u id 0x%08x, launching %u id 0x%08x", (unsigned)prestagedLen,
+                 (unsigned)prestagedId, (unsigned)numbytes, sendingPacket ? (unsigned)sendingPacket->id : 0U);
+#endif
     prestagedLen = 0;
     int16_t res = RADIOLIB_ERR_NONE;
 #ifdef LR2021_CAD_EXIT_LBT
