@@ -113,8 +113,10 @@ class RadioInterface
      *  queued reads it on whatever thread called send(). Relaxed is enough: it publishes nothing
      *  but itself, and losing the race just anchors that one draw to the frame before last. */
     std::atomic<uint32_t> lastFrameEndMs{0};
-    /** "tx" or "rx" for the frame lastFrameEndMs came from, for the trace line */
-    const char *lastFrameEndWhat = "none";
+    /** "tx" or "rx" for the frame lastFrameEndMs came from, for the trace line. Atomic for the
+     *  same reason, and always a string literal, so a reader that loses the race against the
+     *  writer prints the previous frame's word. */
+    std::atomic<const char *> lastFrameEndWhat{"none"};
     uint16_t preambleLength = 16; // 8 is default, but we use longer to increase the amount of sleep time when receiving
     static constexpr uint16_t preambleLengthDefault =
         16; // 8 is default, but we use longer to increase the amount of sleep time when receiving
