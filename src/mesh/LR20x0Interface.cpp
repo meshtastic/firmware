@@ -722,6 +722,10 @@ template <typename T> void LR20x0Interface<T>::addReceiveMetadata(meshtastic_Mes
  */
 template <typename T> void LR20x0Interface<T>::configHardwareForSend()
 {
+#ifdef LR2021_RX_REARM_AT_TX_DONE
+    rearmState = REARM_NONE; // only this TX's TX_DONE may re-arm, never a stale one from a TX the poll completed
+    rxArmedBeforeTxDone = false;
+#endif
     RadioLibInterface::configHardwareForSend();
 }
 
@@ -823,6 +827,9 @@ template <typename T> bool LR20x0Interface<T>::rearmReceiveFromIsr()
 
 template <typename T> void LR20x0Interface<T>::rearmReceiveFromTask()
 {
+    // Only a TX_DONE the thread has not yet handled: where adopt gave up waiting, the thread's own startReceive() has RX
+    if (rearmState != REARM_PENDING)
+        return;
     // What startReceive() sends, less the standby: after TX_DONE the chip has already fallen back to standby.
     const uint32_t t0 = benchClock();
     int16_t err = lora.setPreambleLength(preambleLength);
@@ -832,7 +839,18 @@ template <typename T> void LR20x0Interface<T>::rearmReceiveFromTask()
     rearmUs = benchClockToUs(benchClock() - t0);
     rearmErr = err;
     rearmTicks = xTaskGetTickCount();
-    rearmState = err == RADIOLIB_ERR_NONE ? REARM_ARMED : REARM_FAILED;
+    if (err != RADIOLIB_ERR_NONE) {
+        rearmState = REARM_FAILED;
+        return;
+    }
+    rearmState = REARM_ARMED;
+    // The TX_DONE interrupt detached the radio's interrupt. Attach the RX one now, so a frame that ends before the radio
+    // thread runs wakes this task to read it, rather than waiting in the chip for the next frame to overwrite it.
+    rxArmedBeforeTxDone = true;
+#ifdef LR2021_RESUME_CONTINUOUS_RX
+    rxArmedContinuous = true; // so a frame the task reads before the thread adopts finds the chip still listening
+#endif
+    enableInterrupt(isrRxLevel0);
 }
 
 template <typename T> bool LR20x0Interface<T>::adoptReceiveArmedFromIsr()
@@ -842,6 +860,7 @@ template <typename T> bool LR20x0Interface<T>::adoptReceiveArmedFromIsr()
         vTaskDelay(pdMS_TO_TICKS(1) ? pdMS_TO_TICKS(1) : 1);
     const uint8_t state = rearmState;
     rearmState = REARM_NONE;
+    rxArmedBeforeTxDone = false; // this is the TX_DONE; frames the task read meanwhile were delivered ahead of it
     if (state == REARM_PENDING) {
         // Leave the task nothing to do: the thread's startReceive() takes it from here
         LOG_WARN("RX re-arm at TX_DONE: readout task did not run");
