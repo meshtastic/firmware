@@ -553,9 +553,8 @@ void BLEGattMeshHandler::deliverToRouter(BLEGattPeerId peer, const uint8_t *data
     }
 
     mp.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_BLE_GATT;
-    // Wire-carried flags that only the local stack may set: a sender must not suppress our MQTT uplink
-    // or schedule our transmit.
-    mp.via_mqtt = false;
+    // A sender must not schedule our transmit. via_mqtt stays as sent: the LoRa header carries it too,
+    // and ignore_mqtt and the MQTT uplink's loop guard read it.
     mp.tx_after = 0;
     // priority is not carried in the LoRa header, so here a sender can choose it, and priority MAX
     // outranks the ACK ceiling fixPriority assigns locally.
