@@ -451,6 +451,9 @@ void setup()
     std::string timeCommandResult = exec("timedatectl status | grep synchronized | grep yes -c");
     if (timeCommandResult[0] == '1') {
         ourQuality = RTCQualityNTP;
+    } else if (access("/var/state/dnsmasqsec", F_OK) == 0) {
+        // OpenWrt marks the system time as valid after successful NTP synchronization.
+        ourQuality = RTCQualityNTP;
     }
 #endif
 
@@ -1086,6 +1089,13 @@ void setup()
 #ifndef HAS_PHYSICAL_KEYBOARD
     osk_found = true;
 #endif
+#endif
+#if ARCH_PORTDUINO && defined(__linux__)
+    // Same idea for a gamepad: it can drive the on-screen keyboard but cannot type, so without a
+    // configured keyboard device it is the only way to compose freetext on this host.
+    if (portduino_config.joystickDevice != "" && portduino_config.keyboardDevice == "") {
+        osk_found = true;
+    }
 #endif
 
     // Now that the mesh service is created, create any modules

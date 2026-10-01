@@ -463,7 +463,7 @@ extern const pb_msgdesc_t meshtastic_BackupPreferences_msg;
 #define MESHTASTIC_MESHTASTIC_DEVICEONLY_PB_H_MAX_SIZE meshtastic_BackupPreferences_size
 #define meshtastic_BackupPreferences_size        2674
 #define meshtastic_ChannelFile_size              734
-#define meshtastic_DeviceState_size              1944
+#define meshtastic_DeviceState_size              1953
 #define meshtastic_NodeEnvironmentEntry_size     231
 #define meshtastic_NodeInfoLite_size             112
 #define meshtastic_NodePositionEntry_size        42

@@ -1459,6 +1459,15 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.external_notification.alert_message_buzzer = true;
 #endif // HAS_I2S
 
+#if HAS_LIBNOTIFY
+    // meshtasticd has no buzzer or LED to drive, but the module is what raises desktop
+    // notifications (ExternalNotificationModule::portduinoNotify), so default it on. Gated on
+    // HAS_LIBNOTIFY rather than ARCH_PORTDUINO: without libnotify that code is not compiled in, so
+    // enabling the module by default would only add a config surface that can do nothing.
+    moduleConfig.external_notification.enabled = true;
+    moduleConfig.external_notification.alert_message = true;
+#endif // HAS_LIBNOTIFY
+
 #ifdef NANO_G2_ULTRA
     moduleConfig.external_notification.enabled = true;
     moduleConfig.external_notification.alert_message = true;
@@ -4235,6 +4244,14 @@ bool NodeDB::resolveUniqueLastByte(uint8_t lastByte, bool requireDirectNeighbor,
 bool NodeDB::isFull()
 {
     return (numMeshNodes >= MAX_NUM_NODES) || (memGet.getFreeHeap() < MINIMUM_SAFE_FREE_HEAP);
+}
+
+bool NodeDB::isHalfEmpty() const
+{
+    // MAX_NUM_NODES is a runtime call on portduino, so read it once. Strictly more than half the
+    // slots must be free, and low heap disqualifies the store just as it does in isFull().
+    const size_t cap = (size_t)MAX_NUM_NODES;
+    return ((size_t)numMeshNodes * 2 < cap) && (memGet.getFreeHeap() >= MINIMUM_SAFE_FREE_HEAP);
 }
 
 uint32_t NodeDB::hotNodeLastHeard(NodeNum n) const
