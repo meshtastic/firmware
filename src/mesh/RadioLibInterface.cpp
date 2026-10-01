@@ -191,11 +191,11 @@ bool RadioLibInterface::receiveDetected(uint16_t irq, unsigned long syncWordHead
     const uint32_t maxPacketMsec = maxRxFrameMsec();
     const bool busy = rxSighting.observe(nowMsec, preamble, header, maxPacketMsec);
     if (preamble && prevPeek)
-        LOG_TRACE("Preamble seen, detected in the last %ums, hold TX %ums", nowMsec - prevPeek, maxPacketMsec);
+        LOG_RADIO_EDGE("Preamble seen, detected in the last %ums, hold TX %ums", nowMsec - prevPeek, maxPacketMsec);
     else if (preamble)
-        LOG_TRACE("Preamble seen, first look since RX start, hold TX %ums", maxPacketMsec);
+        LOG_RADIO_EDGE("Preamble seen, first look since RX start, hold TX %ums", maxPacketMsec);
     else if (preambleWas && !rxSighting.preambleSeen())
-        LOG_TRACE("Preamble hold ended after %ums without a completed RX", nowMsec - preambleWas);
+        LOG_RADIO_EDGE("Preamble hold ended after %ums without a completed RX", nowMsec - preambleWas);
     else if (header && !busy)
         LOG_TRACE("Ignore false header detection, latched %ums", nowMsec - rxSighting.headerSeen());
     return busy;
@@ -1011,7 +1011,7 @@ void RadioLibInterface::startReceive()
     // transactions on either side of a scan, a transmission or a reception take long enough to swallow
     // a whole preamble, and nothing else in the log says so.
     if (deafSinceMs) {
-        LOG_TRACE("Radio back in RX after %s, deaf %u ms", deafFor, (unsigned)(Time::getMillis() - deafSinceMs));
+        LOG_RADIO_EDGE("Radio back in RX after %s, deaf %u ms", deafFor, (unsigned)(Time::getMillis() - deafSinceMs));
         deafSinceMs = 0;
     }
     isReceiving = true;
@@ -1046,7 +1046,7 @@ void RadioLibInterface::noteCadHandoffToRx()
     LOG_DEBUG("CAD>RX started");
     // The chip entered RX on its own at detection, so the deaf window ends here, not at rearmReceive().
     if (deafSinceMs) {
-        LOG_TRACE("Radio back in RX after scan (CAD>RX), deaf %u ms", (unsigned)(Time::getMillis() - deafSinceMs));
+        LOG_RADIO_EDGE("Radio back in RX after scan (CAD>RX), deaf %u ms", (unsigned)(Time::getMillis() - deafSinceMs));
         deafSinceMs = 0;
     }
     cadHandedToRx = true;

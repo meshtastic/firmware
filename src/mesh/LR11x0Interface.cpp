@@ -651,7 +651,8 @@ template <typename T> bool LR11x0Interface<T>::adoptReceiveArmedFromIsr()
     if (state != REARM_ARMED)
         return false;
     const uint32_t heldMs = (uint32_t)(((uint64_t)(xTaskGetTickCount() - rearmTicks) * 1000) / configTICK_RATE_HZ);
-    LOG_TRACE("Radio back in RX at TX_DONE, re-arm %u us, %u ms before the handler ran", (unsigned)rearmUs, (unsigned)heldMs);
+    LOG_RADIO_EDGE("Radio back in RX at TX_DONE, re-arm %u us, %u ms before the handler ran", (unsigned)rearmUs,
+                   (unsigned)heldMs);
     deafSinceMs = 0; // listening since the task re-armed: no deaf window to report
     RadioLibInterface::startReceive();
 #ifdef LR11X0_RESUME_CONTINUOUS_RX
