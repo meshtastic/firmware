@@ -856,8 +856,8 @@ unsigned RadioLibInterface::deliverCapturedFrames(bool *rxEnded)
             LOG_DEBUG("CAD>RX pkt");
         delivered++;
         if (info.retried)
-            LOG_WARN("RX readout read again after %d: len %u -> %u, now %d", info.firstState, (unsigned)info.firstLen,
-                     (unsigned)info.len, info.state);
+            LOG_WARN("RX readout read again after %d (len %u): at once %d (len %u), final %d (len %u)", info.firstState,
+                     (unsigned)info.firstLen, info.immediateState, (unsigned)info.immediateLen, info.state, (unsigned)info.len);
         if (!info.chipListening && rxEnded)
             *rxEnded = true;
 #ifdef MESHTASTIC_TX_SLOT_ANCHOR
@@ -1326,18 +1326,30 @@ void RadioLibInterface::readOutFromTask()
     if (f.info.state == RADIOLIB_ERR_WRONG_MODEM) {
         // On the LR11x0 both the packet type and the length have come back as 0x07, the status byte (CMD_DAT and
         // IRQ active) where the reply's data belonged. readData() returned before reading the buffer or clearing the
-        // flags, so the frame is still in the chip: read its length and the frame again.
+        // flags, so the frame is still in the chip: read its length and the frame again, at once and then, if that
+        // fails too, after a tick. A thread this task preempted mid-command gets that tick to finish it, so the
+        // two results tell a shared-state race (only the later read succeeds) from a fault in the chip.
         f.info.retried = true;
         f.info.firstState = f.info.state;
         f.info.firstLen = (uint8_t)len;
+        f.info.immediateState = RADIOLIB_ERR_UNKNOWN;
+        f.info.immediateLen = 0;
         rxReadoutRetried = rxReadoutRetried + 1;
-        const size_t again = iface->getPacketLength();
-        if (again <= sizeof(f.data)) {
+        for (unsigned attempt = 0; attempt < 2 && f.info.state == RADIOLIB_ERR_WRONG_MODEM; attempt++) {
+            if (attempt)
+                vTaskDelay(1);
+            const size_t again = iface->getPacketLength();
+            if (again > sizeof(f.data))
+                break;
             len = again;
             f.info.state = iface->readData(f.data, len);
-            if (f.info.state == RADIOLIB_ERR_NONE)
-                rxReadoutRecovered = rxReadoutRecovered + 1;
+            if (!attempt) {
+                f.info.immediateState = f.info.state;
+                f.info.immediateLen = (uint8_t)len;
+            }
         }
+        if (f.info.state == RADIOLIB_ERR_NONE)
+            rxReadoutRecovered = rxReadoutRecovered + 1;
     }
 #endif
     f.info.snr = iface->getSNR();
