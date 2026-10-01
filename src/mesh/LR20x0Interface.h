@@ -50,7 +50,12 @@
 #error "LR2021_CAD_EXIT_LBT sends the prestaged payload: build with -DLR2021_TX_PRESTAGE -DRADIOLIB_GODMODE=1"
 #endif
 // Bench: -DLR2021_RESUME_CONTINUOUS_RX keeps a continuous RX running after a frame instead of restarting it, checking the
-// chip is still in RX first.
+// chip is still in RX first. -DLR2021_RX_REARM_AT_TX_DONE re-arms RX at TX_DONE from the readout task, before the radio
+// thread runs, as LR11X0_RX_REARM_AT_TX_DONE does; the interrupt cannot call RadioLib, so it needs
+// -DMESHTASTIC_RX_READOUT_TASK.
+#if defined(LR2021_RX_REARM_AT_TX_DONE) && !defined(MESHTASTIC_RX_READOUT_TASK)
+#error "LR2021_RX_REARM_AT_TX_DONE re-arms from the readout task: build with -DMESHTASTIC_RX_READOUT_TASK"
+#endif
 // Bench: -DLR2021_STANDBY_XOSC keeps the TCXO running: standby and the RX/TX fallback are STBY_XOSC, and the scan starts from
 // there without RadioLib's STBY_RC. Which standby a CAD itself exits to is the chip's; the LBT mode line shows it. It calls
 // RadioLib internals, so it needs -DRADIOLIB_GODMODE=1.
@@ -212,6 +217,17 @@ template <class T> class LR20x0Interface : public RadioLibInterface
     bool rxArmedContinuous = false;
     bool resumeRunningReceive() override;
     bool receiveStillRunning() const override { return rxArmedContinuous && readChipMode() == LR20X0_CHIP_MODE_RX; }
+#endif
+#ifdef LR2021_RX_REARM_AT_TX_DONE
+    bool rearmReceiveFromIsr() override;
+    void rearmReceiveFromTask() override;
+    bool adoptReceiveArmedFromIsr() override;
+    enum RearmState : uint8_t { REARM_NONE, REARM_PENDING, REARM_ARMED, REARM_FAILED };
+    volatile uint8_t rearmState = REARM_NONE;
+    volatile int16_t rearmErr = 0;
+    volatile uint32_t rearmUs = 0;
+    /** FreeRTOS tick count when the task finished the re-arm */
+    volatile uint32_t rearmTicks = 0;
 #endif
 };
 #endif
