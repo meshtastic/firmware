@@ -223,6 +223,12 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     uint32_t rxBad = 0, rxGood = 0, txGood = 0, txRelay = 0;
     uint16_t txDrop = 0;
 
+    /// Consecutive non-Free scans for the packet at the head of the queue. Logged, never acted on:
+    /// what to do with a packet that never gets a free channel is still open.
+    static constexpr uint16_t DEFERRAL_WARN_THRESHOLD = 32;
+    uint32_t deferredPacketId = 0;
+    uint16_t consecutiveDeferrals = 0;
+
   public:
     RadioLibInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst,
                       RADIOLIB_PIN_TYPE busy, PhysicalLayer *iface = NULL);
@@ -350,6 +356,9 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
     /// Release a packet whose transmit never started: no airtime, no txGood/txRelay, counted in txDrop.
     void abandonSending();
+
+    /// Count a Busy or Failed scan against packet `p`; warns every DEFERRAL_WARN_THRESHOLD in a row.
+    void noteDeferral(const meshtastic_MeshPacket *p, ChannelScan scan);
 
     /**
      * Add SNR data to received messages

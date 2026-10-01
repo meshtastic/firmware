@@ -452,6 +452,7 @@ void RadioLibInterface::onNotify(uint32_t notification)
                 } else {
                     const ChannelScan scan = checkChannel();
                     if (scan != ChannelScan::Free) {
+                        noteDeferral(txp, scan);
                         // Failed: the channel state is unknown, so never send on it; recover and scan again later
                         if (scan == ChannelScan::Failed)
                             maybeRecoverChipStateLoss();
@@ -462,6 +463,7 @@ void RadioLibInterface::onNotify(uint32_t notification)
                     } else {
                         // Send any outgoing packets we have ready as fast as possible to keep the time between channel scan and
                         // actual transmission as short as possible
+                        consecutiveDeferrals = 0;
                         txp = txQueue.dequeue();
                         assert(txp);
                         startSend(txp);
@@ -578,6 +580,23 @@ void RadioLibInterface::handleTransmitInterrupt()
     if (sendingPacket)
         completeSending();
     powerMon->clearState(meshtastic_PowerMon_State_Lora_TXOn); // But our transmitter is definitely off now
+}
+
+void RadioLibInterface::noteDeferral(const meshtastic_MeshPacket *p, ChannelScan scan)
+{
+    if (p->id != deferredPacketId) {
+        deferredPacketId = p->id;
+        consecutiveDeferrals = 0;
+    }
+    if (consecutiveDeferrals < UINT16_MAX)
+        consecutiveDeferrals++;
+    if (consecutiveDeferrals % DEFERRAL_WARN_THRESHOLD == 0) {
+        // A stuck CAD, constant false positives or a scan that always fails silence the node with no other trace
+        LOG_WARN("Tx packet 0x%08x deferred %u times in a row, last scan %s", p->id, consecutiveDeferrals,
+                 scan == ChannelScan::Failed ? "failed" : "busy");
+        if (consecutiveDeferrals == DEFERRAL_WARN_THRESHOLD)
+            RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_TRANSMIT_FAILED);
+    }
 }
 
 void RadioLibInterface::abandonSending()
