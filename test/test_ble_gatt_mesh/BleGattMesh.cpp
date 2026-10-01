@@ -383,6 +383,22 @@ void test_ingress_clears_local_only_metadata(void)
     TEST_ASSERT_EQUAL(0, h.received[0].rx_snr);
 }
 
+void test_ingress_keeps_via_mqtt_and_clears_scheduling(void)
+{
+    FakeGattMesh h;
+    h.start();
+    auto p = encryptedPacket();
+    p.via_mqtt = true;
+    p.tx_after = 4242;
+    p.priority = meshtastic_MeshPacket_Priority_MAX;
+    h.feed(1, split(encode(p), 1, 512)[0]);
+    TEST_ASSERT_EQUAL(1, h.received.size());
+    // The LoRa header carries via_mqtt, so ignore_mqtt and the MQTT uplink depend on it arriving intact.
+    TEST_ASSERT_TRUE(h.received[0].via_mqtt);
+    TEST_ASSERT_EQUAL_UINT32(0, h.received[0].tx_after);
+    TEST_ASSERT_EQUAL(meshtastic_MeshPacket_Priority_UNSET, h.received[0].priority);
+}
+
 void test_ingress_rejects_bytes_that_do_not_decode(void)
 {
     FakeGattMesh h;
@@ -783,6 +799,7 @@ void setup()
     RUN_TEST(test_ingress_drops_a_packet_claiming_to_be_us);
     RUN_TEST(test_ingress_drops_an_impossible_hop_count);
     RUN_TEST(test_ingress_clears_local_only_metadata);
+    RUN_TEST(test_ingress_keeps_via_mqtt_and_clears_scheduling);
     RUN_TEST(test_ingress_rejects_bytes_that_do_not_decode);
     RUN_TEST(test_send_queues_rather_than_notifying);
     RUN_TEST(test_send_fragments_per_peer_chunk_size);
