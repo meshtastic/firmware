@@ -14,7 +14,8 @@
 // the LR2021 DC-DC workaround passes sizeof(uint32_t) as a word count, overrunning the stack on
 // every setRxPath() and LoRa modulation change. The pin here, 7.7.1, predates that workaround, so
 // the LR2021 DC-DC tests register only on a RadioLib that has it (see lr2021_tests.h). On one that
-// also carries the overrun (7.8.0) they abort, so the LR2021 set runs last and the rest report first.
+// also carries the overrun (7.8.0) they abort, so the LR2021 set and the LR20x0Interface set, whose
+// setup runs the same workaround, run last and the rest report first.
 //
 // CAD (channel activity detection, the listen-before-talk check) is pinned per family: the command
 // bytes, and that a command the chip refuses comes back as an error, never CHANNEL_FREE. The LR2021

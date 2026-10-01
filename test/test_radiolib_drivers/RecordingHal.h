@@ -92,7 +92,7 @@ class RecordingHal : public RadioLibHal
 
     void pinMode(uint32_t, uint32_t) override {}
     void digitalWrite(uint32_t, uint32_t) override {}
-    uint32_t digitalRead(uint32_t pin) override { return irqPin != RADIOLIB_NC && pin == irqPin; } // BUSY low
+    uint32_t digitalRead(uint32_t pin) override { return irqPin != RADIOLIB_NC && pin == irqPin; } // BUSY low, irqPin high
     void attachInterrupt(uint32_t, void (*)(void), uint32_t) override {}
     void detachInterrupt(uint32_t) override {}
     void delay(RadioLibTime_t ms) override { nowUs += ms * 1000; }
@@ -113,7 +113,8 @@ class RecordingHal : public RadioLibHal
             echoRegisters(out, len, in);
             return;
         }
-        // A due deferred reply wins over a direct match; copies, so a later reply() cannot invalidate one.
+        // A due deferred reply wins over a direct match, and the first due one wins over any other: each
+        // targets one transaction, so two due together is a test bug. Copies, so reply() cannot invalidate one.
         Reply due{};
         const Reply *r = nullptr;
         for (auto it = pending.begin(); it != pending.end();) {
