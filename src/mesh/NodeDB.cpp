@@ -953,6 +953,18 @@ bool NodeDB::factoryReset(bool eraseBleBonds)
         Bluefruit.Periph.clearBonds();
         Bluefruit.Central.clearBonds();
 #endif
+#ifdef MESHTASTIC_LINUX_BLE
+        // isEnabled(), not just the pointer: a setup() that threw leaves the object
+        // allocated with its bus torn down, and clearBonds() needs a live connection.
+        if (linuxBluetooth && linuxBluetooth->isEnabled()) {
+            LOG_INFO("Clear bluetooth bonds");
+            linuxBluetooth->clearBonds();
+        } else {
+            // BlueZ bonds live in the host adapter's store, not ours, so there is no
+            // removing them from here without that connection.
+            LOG_WARN("BLE off, host bluetooth bonds left in place");
+        }
+#endif
     }
     return true;
 }
