@@ -38,10 +38,20 @@
                                  the same, behind a ~21 min EMA folded per bucket
     utilizationTXPercent()       % of the last hour we transmitted
     isTxAllowedChannelUtil()     gate on the former, 40% or 25% "polite"
-    isTxAllowedAirUtil()         gate on the latter, at HALF the duty cycle
-    getSilentMinutes()           minutes until the TX figure clears a limit.
-                                 Feeds a log line and a client notification; it
-                                 gates nothing.
+    isRoutineBroadcastAllowed()  may a periodic broadcast (NodeInfo, telemetry,
+                                 NeighborInfo...) go out. Routine traffic may
+                                 spend only the FIRST HALF of the hour's duty
+                                 cycle; the second half is kept for the user's
+                                 own packets and for relaying. Gated on the
+                                 preset's widest frame, since the caller has no
+                                 packet yet.
+    wouldExceedDutyCycle()       admission: would the hour's TX plus a proposed
+                                 packet's airtime cross a limit. Router::send()
+                                 gates every packet on it, so the packet that
+                                 would cross the line is the one refused.
+    getSilentMinutes()           minutes until the TX figure, plus an optional
+                                 proposed packet, clears a limit. Feeds a log
+                                 line and a client notification; it gates nothing.
     airtimeReport()              8 x 1h of raw ms per type, for the HTTP report
     getSecondsSinceBoot()        the clock the buckets are keyed to
 
@@ -72,10 +82,11 @@
   scheduler-driven window stops advancing during light sleep. Enforced by
   test_channel_utilization_is_independent_of_scheduler_rate.
 
-  TODO: airtime accuracy. Four known defects remain - the quantised denominator,
-  its sawtooth, whole-packet attribution to the completing bucket, and
-  getSilentMinutes() reading a modular ring as if the index were an age. Each is
-  pinned by a test tagged CHARACTERISATION in test/test_airtime.
+  Accuracy: the four defects this block used to list - the ring-phase walk in
+  getSilentMinutes(), whole-packet attribution to the completing bucket, the
+  quantised denominator and its sawtooth - are fixed, and test_airtime_accuracy
+  measures what is left against an exact oracle. What remains is burst aliasing
+  at 6 x 10 s, which narrower channel buckets would halve.
 */
 
 #define CHANNEL_UTILIZATION_PERIODS 6
@@ -86,8 +97,17 @@
 #define PERIODS_TO_LOG 8
 #define MINUTES_IN_HOUR 60
 #define SECONDS_IN_MINUTE 60
-#define MS_IN_MINUTE (SECONDS_IN_MINUTE * 1000)
 #define MS_IN_HOUR (MINUTES_IN_HOUR * SECONDS_IN_MINUTE * 1000)
+// Bucket widths of the two modular rings, in ms. Named because the split write needs them and
+// because narrowing the channel window later is a change to one of these and nothing else.
+#define CHANUTIL_PERIOD_MS 10000
+#define TXUTIL_PERIOD_MS 60000
+// One slot more than the window is wide. The extra slot holds the bucket that is only PARTLY
+// expired, so the window can cover exactly the N periods its denominator claims instead of
+// (N-1) + however far we are into the current one. The denominator keeps the WINDOW count, never
+// the slot count - that asymmetry is the whole mechanism.
+#define CHANNEL_UTILIZATION_SLOTS (CHANNEL_UTILIZATION_PERIODS + 1)
+#define TXUTIL_SLOTS (MINUTES_IN_HOUR + 1)
 
 enum reportTypes { TX_LOG, RX_LOG, RX_ALL_LOG };
 
@@ -121,9 +141,9 @@ enum reportTypes { TX_LOG, RX_LOG, RX_ALL_LOG };
 //     core method's `const Held &`, so the lock cannot be forgotten.
 //
 // Every public method takes the lock exactly once and delegates, with two exceptions: the two
-// constexpr accessors below touch no state and take none, and isTxAllowedAirUtil() takes it zero or
-// one times, depending on whether the duty-cycle branch is entered at all. Nothing inside locks -
-// that includes isTxAllowed*(), which call the core rather than the public accessors.
+// constexpr accessors below touch no state and take none, and isRoutineBroadcastAllowed() takes it
+// zero or one times, depending on whether the duty-cycle branch is entered at all. Nothing inside
+// locks - the gates call the core rather than the public accessors.
 //
 // A new write-path helper belongs to Windows or is a free function, never a method on AirTime: an
 // AirTime method locks, and logAirtime() would call it while already holding the lock.
@@ -151,9 +171,16 @@ class AirTime : private concurrency::OSThread
     /// caller cannot hold a handle to buckets that every other entry point rotates underneath it.
     /// False if `out` is null, `count` exceeds the log depth, or the report type is unknown.
     bool airtimeReport(reportTypes reportType, uint32_t *out, size_t count);
-    uint8_t getSilentMinutes(float txPercent, float dutyCycle);
+    /// True if the hour's TX airtime plus `proposedMs` more would exceed `dutyCycle`. The complement
+    /// of getSilentMinutes() == 0 for the same arguments.
+    bool wouldExceedDutyCycle(uint32_t proposedMs, float dutyCycle);
+    /// Minutes of silence until the hour's TX airtime, plus a packet of `proposedMs` sent at the end
+    /// of it, would sit at `dutyCycle` or below.
+    uint8_t getSilentMinutes(float dutyCycle, uint32_t proposedMs = 0);
     bool isTxAllowedChannelUtil(bool polite = false);
-    bool isTxAllowedAirUtil();
+    /// Whether a periodic broadcast may go out: the preset's widest frame must fit inside the
+    /// routine share of the hour's duty cycle. User packets and relays are gated in Router::send().
+    bool isRoutineBroadcastAllowed();
 
   private:
     concurrency::Lock lock;
@@ -189,18 +216,22 @@ class AirTime : private concurrency::OSThread
         uint32_t secSinceBoot = 0;
 
         // Modular rings: index is absolute phase, (uptime secs / period) % N, never age.
-        uint32_t channelUtilization[CHANNEL_UTILIZATION_PERIODS] = {0}; // 6 x 10s
+        uint32_t channelUtilization[CHANNEL_UTILIZATION_SLOTS] = {0}; // 6 x 10s window, 7 slots
 
         // EMA over channelUtilization, folded in syncNow() once per crossed 10 s bucket so its
         // time constant follows elapsed time rather than how often a caller happens to ask.
         float channelUtilAvg = 0.0f;
         bool hasChannelUtilSample = false;
-        uint32_t utilizationTX[MINUTES_IN_HOUR] = {0}; // 60 x 60s, our TX only
+        uint32_t utilizationTX[TXUTIL_SLOTS] = {0}; // 60 x 60s window, 61 slots, our TX only
 
         // Hour crossings rotated but not yet traced. The core cannot log its own rotations: it
         // only ever runs under the lock, and DEBUG_PORT.log() blocks on a UART write. runOnce()
         // drains this and logs after releasing, so the trace costs the lock nothing.
         uint32_t rotationsPendingLog = 0;
+
+        // Sub-second remainder of the last sync, 0..999. Kept beside the seconds snapshot so
+        // nothing downstream needs 64-bit arithmetic on a path that runs per send attempt.
+        uint16_t msInSec = 0;
 
         // Shift-ordered, unlike the rings above: slot 0 is the newest hour and the index is age.
         struct airtimeStruct {
@@ -218,18 +249,27 @@ class AirTime : private concurrency::OSThread
         /// Fold `steps` readings of `sample` into channelUtilAvg. Power by squaring, so a
         /// multi-day sleep decays by the time elapsed in at most 32 multiplications.
         void foldChannelUtil(float sample, uint32_t steps, const Held &);
+        /// The ring sum in whole ms. Exact where the percentage is not, and the basis for
+        /// getSilentMinutes()'s budget arithmetic.
+        uint32_t utilizationTXMsec(const Held &);
         float utilizationTXPercent(const Held &);
         bool airtimeReport(reportTypes reportType, uint32_t *out, size_t count, const Held &);
-        uint8_t getSilentMinutes(float txPercent, float dutyCycle, const Held &);
+        bool wouldExceedDutyCycle(uint32_t proposedMs, float dutyCycle, const Held &);
+        uint8_t getSilentMinutes(float dutyCycle, uint32_t proposedMs, const Held &);
         uint8_t getPeriodUtilMinute(const Held &);
         uint8_t getPeriodUtilHour(const Held &);
+        /// Milliseconds into the current `periodSecs` bucket. Sub-second resolution matters: at
+        /// second granularity with 10 s buckets the interpolation weight moves in 0.1 steps, which
+        /// leaves a 0.67 pp step per second at a 40% reading.
+        uint32_t phaseMs(uint32_t periodSecs) const;
         // Advance rolling airtime windows from monotonic uptime, not from runOnce() calls.
         void syncNow(const Held &);
     } w;
 
     uint8_t max_channel_util_percent = 40;
     uint8_t polite_channel_util_percent = 25;
-    uint8_t polite_duty_cycle_percent = 50; // half of Duty Cycle allowance is ok for metadata
+    // Routine broadcasts may spend this much of the hour's duty cycle; the rest is the user's.
+    uint8_t routine_broadcast_share_percent = 50;
 
   protected:
     virtual int32_t runOnce() override;

@@ -29,7 +29,7 @@ int32_t DeviceTelemetryModule::runOnce()
                                                                          moduleConfig.telemetry.device_update_interval,
                                                                          default_telemetry_broadcast_interval_secs,
                                                                          numOnlineNodes, TrafficType::TELEMETRY))) &&
-        airTime->isTxAllowedChannelUtil(!isImpoliteRole) && airTime->isTxAllowedAirUtil() &&
+        airTime->isTxAllowedChannelUtil(!isImpoliteRole) && airTime->isRoutineBroadcastAllowed() &&
         config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_HIDDEN &&
         moduleConfig.telemetry.device_telemetry_enabled) {
         sendTelemetry();

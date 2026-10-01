@@ -2,6 +2,7 @@
 
 #include "MeshTypes.h"
 
+#include <atomic>
 #include <queue>
 
 /**
@@ -11,6 +12,11 @@ class MeshPacketQueue
 {
     size_t maxLen;
     std::vector<meshtastic_MeshPacket *> queue;
+    std::atomic<uint32_t> queuedMs{0};
+
+    /// Walk the queue and total its time-on-air. Only ever called from a mutator or from
+    /// refreshAirtime(), never from a reader.
+    uint32_t sumAirtimeMsec() const;
 
     /** Replace a lower priority package in the queue with 'mp' (provided there are lower pri packages). Return true if replaced.
      */
@@ -46,4 +52,16 @@ class MeshPacketQueue
 
     /* Attempt to find a packet from this queue. Return true if it was found. */
     bool find(const NodeNum from, const PacketId id);
+
+    /** Time-on-air of everything waiting, in ms.
+     *
+     * Summed when the queue last changed rather than walked by the caller: on nRF52 a phone's send
+     * runs on the Bluefruit task, which preempts the loop task two priorities down, so a reader
+     * there can be torn by an enqueue. Mutators own the sum instead, and the reader is a load.
+     */
+    uint32_t queuedAirtimeMsec() const { return queuedMs.load(std::memory_order_relaxed); }
+
+    /** Re-derive the sum. dequeue() leaves it high rather than spend a walk between the channel
+     * scan and the transmission; the caller settles it once the packet is away. */
+    void refreshAirtime() { queuedMs.store(sumAirtimeMsec(), std::memory_order_relaxed); }
 };

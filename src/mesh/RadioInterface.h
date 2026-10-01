@@ -191,6 +191,10 @@ class RadioInterface
     /** Attempt to find a packet in the TxQueue. Returns true if the packet was found. */
     virtual bool findInTxQueue(NodeNum from, PacketId id) { return false; }
 
+    /** Airtime of every packet admitted but not yet on the air, plus the one in flight: what the
+     * duty-cycle ring does not hold yet. A radio with no queue answers 0. */
+    virtual uint32_t queuedAirtimeMsec() { return 0; }
+
     // methods from radiohead
 
     /// Initialise the Driver transport hardware and software.

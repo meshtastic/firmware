@@ -470,15 +470,33 @@ int32_t NextHopRouter::doRetransmissions()
         // Judged against the snapshot above, so one pass sees one instant and the 49.7 day wrap
         // can't stall retransmission.
         if (Throttle::deadlinePassedAt(now, p.nextTxMsec)) {
+            // A NAK to ourselves is sniffed synchronously and erases this entry from under `it`:
+            // take the key first, and touch nothing of `p` after the NAK.
+            const GlobalPacketId key = it->first;
             if (p.numRetransmissions == 0) {
                 if (isFromUs(p.packet)) {
                     LOG_DEBUG("Reliable send failed, return nak fr=0x%08x,to=0x%08x,id=0x%08x", p.packet->from, p.packet->to,
                               p.packet->id);
                     sendAckNak(meshtastic_Routing_Error_MAX_RETRANSMIT, getFrom(p.packet), p.packet->id, p.packet->channel);
                 }
-                // Note: we don't stop retransmission here, instead the Nak packet gets processed in sniffReceived
-                stopRetransmission(it->first);
+                stopRetransmission(key);
                 stillValid = false; // just deleted it
+            } else if (const uint8_t waitMinutes = dutyCycleWaitMinutes(p.packet)) {
+                // No airtime for this rung, asked before the route failure below would charge a route never
+                // tried. The ladder ends: our client is told and NAKed with the reason, a relay owes nothing.
+                LOG_WARN("No airtime to retry id=0x%08x for %u mins, stop retrying", p.packet->id, waitMinutes);
+                // The counter is decremented at enqueue, so a copy may still be waiting at the radio:
+                // withdraw it before the terminal NAK, and do not count it as sent.
+                const bool mayWithdraw = isFromUs(p.packet) || roleAllowsCancelingFromTxQueue(p.packet);
+                const bool withdrawn = mayWithdraw && cancelSending(getFrom(p.packet), p.packet->id);
+                if (isFromUs(p.packet)) {
+                    const uint8_t attempts = p.initialNumRetransmissions + 1;
+                    const uint8_t sent = attempts - p.numRetransmissions - (withdrawn ? 1 : 0);
+                    notifyDutyCycleRefusal(p.packet, waitMinutes, sent, attempts);
+                    sendAckNak(meshtastic_Routing_Error_DUTY_CYCLE_LIMIT, getFrom(p.packet), p.packet->id, p.packet->channel);
+                }
+                stopRetransmission(key);
+                stillValid = false;
             } else {
                 LOG_DEBUG("Send retransmission fr=0x%08x,to=0x%08x,id=0x%08x, tries left=%d", p.packet->from, p.packet->to,
                           p.packet->id, p.numRetransmissions);
