@@ -998,7 +998,7 @@ void RadioLibInterface::readOutFromTask()
             rxReadoutBadLength = rxReadoutBadLength + 1;
         else
             rxReadoutDropped = rxReadoutDropped + 1;
-        notify(ISR_RX, true); // for the counter line, and the re-arm
+        notify(ISR_RX, !rxArmedBeforeTxDone); // for the counter line, and the re-arm
         return;
     }
     CapturedFrame &f = rxRing[head];
@@ -1016,7 +1016,7 @@ void RadioLibInterface::readOutFromTask()
     rxReadoutFrames = rxReadoutFrames + 1;
     __asm__ __volatile__("" ::: "memory"); // the entry is written before the head that publishes it
     rxRingHead = next;
-    notify(ISR_RX, true);
+    notify(ISR_RX, !rxArmedBeforeTxDone);
 }
 
 bool RadioLibInterface::takeCapturedFrame(CapturedRxInfo &info)

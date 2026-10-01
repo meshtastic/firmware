@@ -591,6 +591,7 @@ template <typename T> void LR20x0Interface<T>::configHardwareForSend()
 {
 #if defined(MESHTASTIC_RX_READOUT_TASK) && LR2021_RX_REARM_AT_TX_DONE
     rearmState = REARM_NONE; // only this TX's TX_DONE may re-arm, never a stale one from a TX the poll completed
+    rxArmedBeforeTxDone = false;
 #endif
     RadioLibInterface::configHardwareForSend();
 }
@@ -661,7 +662,15 @@ template <typename T> void LR20x0Interface<T>::rearmReceiveFromTask()
         err =
             lora.startReceive(RADIOLIB_LR2021_RX_TIMEOUT_INF, MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS, RADIOLIB_IRQ_RX_DEFAULT_MASK, 0);
     rearmErr = err;
-    rearmState = err == RADIOLIB_ERR_NONE ? REARM_ARMED : REARM_FAILED;
+    if (err != RADIOLIB_ERR_NONE) {
+        rearmState = REARM_FAILED;
+        return;
+    }
+    rearmState = REARM_ARMED;
+    // The TX_DONE interrupt detached the radio's interrupt. Attach the RX one now, so a frame that ends before the radio
+    // thread runs wakes this task to read it, rather than waiting in the chip for the next frame to overwrite it.
+    rxArmedBeforeTxDone = true;
+    enableInterrupt(isrRxLevel0);
 }
 
 template <typename T> bool LR20x0Interface<T>::adoptReceiveArmedFromIsr()
@@ -670,6 +679,7 @@ template <typename T> bool LR20x0Interface<T>::adoptReceiveArmedFromIsr()
     // clearing the state here stops it starting.
     const uint8_t state = rearmState;
     rearmState = REARM_NONE;
+    rxArmedBeforeTxDone = false; // this is the TX_DONE; frames the task read meanwhile were delivered ahead of it
     if (state == REARM_FAILED)
         LOG_WARN("LR20x0 RX re-arm at TX_DONE failed %s%d, restarting RX", radioLibErr, rearmErr);
     if (state != REARM_ARMED)
