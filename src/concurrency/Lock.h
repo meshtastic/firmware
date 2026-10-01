@@ -32,6 +32,14 @@ class Lock
     // Must not be called from an ISR.
     void unlock();
 
+#ifdef HAS_FREE_RTOS
+    /// From an ISR: take the lock only if it is free now. Never blocks.
+    bool tryLockFromISR();
+
+    /// From an ISR: release a lock taken with tryLockFromISR().
+    void unlockFromISR();
+#endif
+
   private:
 #ifdef HAS_FREE_RTOS
     SemaphoreHandle_t handle;

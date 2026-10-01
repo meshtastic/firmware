@@ -427,6 +427,12 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     void checkRxDoneIrqFlag();
     void checkTxDoneIrqFlag();
 
+    /** From the TX_DONE interrupt, put the chip straight back into RX; false if it did not */
+    virtual bool rearmReceiveFromIsr() { return false; }
+
+    /** After TX, take over the RX that rearmReceiveFromIsr() started instead of restarting it; false if there is none */
+    virtual bool adoptReceiveArmedFromIsr() { return false; }
+
     /** Software-poll substitute for a hardware DIO interrupt, for radios whose IRQ line sits behind
      * an I2C IO expander with no INT routed to the MCU (e.g. Meshnology W10, LORA_DIO1_SOFTWARE_POLL).
      * The chip-specific subclass polls the radio's IRQ status register from the radio thread and
