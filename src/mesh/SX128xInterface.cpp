@@ -174,8 +174,10 @@ template <typename T> int16_t SX128xInterface<T>::programModemParams()
 
     err = lora.setOutputPower(power);
     if (err != RADIOLIB_ERR_NONE) {
-        LOG_ERROR("SX128X setOutputPower(%d) %s%d", power, radioLibErr, err);
-        return err;
+        // A rejected power is operator config, not lost chip state: keep the previous power, as SX126x does,
+        // rather than return an error that drives reconfigure() into a re-init failing the same way
+        LOG_ERROR("SX128X setOutputPower %d dBm rejected (%s%d); keep previous Tx power", power, radioLibErr, err);
+        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
     }
 
     return RADIOLIB_ERR_NONE;

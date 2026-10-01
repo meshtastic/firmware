@@ -335,8 +335,10 @@ template <typename T> int16_t LR11x0Interface<T>::programModemParams()
 
     err = lora.setOutputPower(power);
     if (err != RADIOLIB_ERR_NONE) {
-        LOG_ERROR("LR11x0 setOutputPower(%d) %s%d", power, radioLibErr, err);
-        return err;
+        // A rejected power is operator config, not lost chip state: keep the previous power, as SX126x does,
+        // rather than return an error that drives reconfigure() into a re-init failing the same way
+        LOG_ERROR("LR11x0 setOutputPower %d dBm rejected (%s%d); keep previous Tx power", power, radioLibErr, err);
+        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
     }
 
     // Apply RX gain mode - valid in STDBY, matches resetAGC() pattern
