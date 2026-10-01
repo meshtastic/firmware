@@ -39,7 +39,8 @@ struct BannerOverlayOptions {
     const char **optionsArrayPtr = nullptr;
     const int *optionsEnumPtr = nullptr;
     uint8_t optionsCount = 0;
-    std::function<void(int)> bannerCallback = nullptr;
+    // Plain function pointer (captureless lambdas convert); only one banner is live, so keep any state in statics.
+    void (*bannerCallback)(int) = nullptr;
     int8_t InitialSelected = 0;
     notificationTypeEnum notificationType = notificationTypeEnum::text_banner;
 };
@@ -83,7 +84,7 @@ class Screen
     bool hasModalModule() const { return false; }
     bool isShowingModuleFrame(const MeshModule *) const { return false; }
     void showSimpleBanner(const char *message, uint32_t durationMs = 0) {}
-    void showOverlayBanner(BannerOverlayOptions) {}
+    void showOverlayBanner(const BannerOverlayOptions &) {}
     void setFrames(FrameFocus focus) {}
     void endAlert() {}
     bool getIsI2cScreen() const { return false; }
@@ -377,7 +378,7 @@ class Screen : public concurrency::OSThread
     bool isShowingModuleFrame(const MeshModule *m) const;
 
     void showSimpleBanner(const char *message, uint32_t durationMs = 0);
-    void showOverlayBanner(BannerOverlayOptions);
+    void showOverlayBanner(const BannerOverlayOptions &banner_overlay_options);
 
     void showNodePicker(const char *message, uint32_t durationMs, std::function<void(uint32_t)> bannerCallback);
     void showNumberPicker(const char *message, uint32_t durationMs, uint8_t digits, bool useBase16,
