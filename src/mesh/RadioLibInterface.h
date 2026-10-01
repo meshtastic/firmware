@@ -41,6 +41,17 @@
 #define MESHTASTIC_REARM_HOLD_FIX 1
 #endif
 
+// Bench: the readout task reads a frame again when readData() fails with WRONG_MODEM (-20), which on the LR11x0 returns
+// before touching the frame. -DMESHTASTIC_RX_RETRY_WRONG_MODEM=0 turns it off for an A/B. Default 1.
+#ifndef MESHTASTIC_RX_RETRY_WRONG_MODEM
+#define MESHTASTIC_RX_RETRY_WRONG_MODEM 1
+#endif
+#if MESHTASTIC_RX_RETRY_WRONG_MODEM
+#define MESHTASTIC_RX_RETRY_MARK "on"
+#else
+#define MESHTASTIC_RX_RETRY_MARK "off"
+#endif
+
 #define AGC_RESET_INTERVAL_MS (60 * 1000) // 60 seconds
 
 // Bench: -DMESHTASTIC_LOG_RADIO_EDGES logs where the radio stops and starts hearing, and its preamble sightings, at DEBUG
@@ -340,13 +351,14 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     struct RxCounters {
         uint32_t good, bad;            // packets handleReceiveInterrupt() passed on, and rejected
         uint32_t readOut, readOutLost; // frames the readout task took from the chip, and lost (ring full, bad length)
+        uint32_t retried, recovered;   // readouts read again after WRONG_MODEM, and those the second read recovered
     };
     RxCounters rxCounters() const
     {
 #ifdef MESHTASTIC_RX_READOUT_TASK
-        return {rxGood, rxBad, rxReadoutFrames, rxReadoutDropped + rxReadoutBadLength};
+        return {rxGood, rxBad, rxReadoutFrames, rxReadoutDropped + rxReadoutBadLength, rxReadoutRetried, rxReadoutRecovered};
 #else
-        return {rxGood, rxBad, 0, 0};
+        return {rxGood, rxBad, 0, 0, 0, 0};
 #endif
     }
 
@@ -399,6 +411,9 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
         int16_t state;      // readData()'s result
         uint8_t len;        // bytes in the frame
         bool chipListening; // the driver's RX was still running after the frame, so nothing needs re-arming
+        bool retried;       // the first readData() failed with WRONG_MODEM and this is the second
+        int16_t firstState; // that first readData()'s result
+        uint8_t firstLen;   // and the length read before it
     };
 
     /** Bench: whether the driver's RX keeps running after RX_DONE (a continuous RX), so a frame read out by the
@@ -715,5 +730,6 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     CapturedFrame rxRing[rxRingSize];
     volatile uint8_t rxRingHead = 0, rxRingTail = 0;
     volatile uint32_t rxReadoutFrames = 0, rxReadoutDropped = 0, rxReadoutBadLength = 0;
+    volatile uint32_t rxReadoutRetried = 0, rxReadoutRecovered = 0;
 #endif
 };

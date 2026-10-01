@@ -704,6 +704,8 @@ DMShellTestModule::RadioSnapshot DMShellTestModule::readRadio()
     r.bad = c.bad;
     r.readOut = c.readOut;
     r.readOutLost = c.readOutLost;
+    r.retried = c.retried;
+    r.recovered = c.recovered;
     r.chipValid = radio->readChipRxStats(r.chipReceived, r.chipCrcError, r.chipHeaderError, r.chipFalseSync);
     return r;
 }
@@ -718,6 +720,8 @@ void DMShellTestModule::logRadioStats()
     LOG_INFO("DMShellTest stats session=0x%08x radio rx_good=%u rx_bad=%u readout=%u readout_lost=%u", id,
              (unsigned)(end.good - start.good), (unsigned)(end.bad - start.bad), (unsigned)(end.readOut - start.readOut),
              (unsigned)(end.readOutLost - start.readOutLost));
+    LOG_INFO("DMShellTest stats session=0x%08x radio retry_-20=" MESHTASTIC_RX_RETRY_MARK " retried=%u recovered=%u", id,
+             (unsigned)(end.retried - start.retried), (unsigned)(end.recovered - start.recovered));
     if (!start.chipValid || !end.chipValid) {
         LOG_INFO("DMShellTest stats session=0x%08x chip none", id);
         return;
