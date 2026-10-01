@@ -593,8 +593,8 @@ template <typename T> bool LR11x0Interface<T>::resumeRunningReceive()
         lora.clearIrqFlags(RADIOLIB_LR11X0_IRQ_RX_DONE | RADIOLIB_LR11X0_IRQ_CRC_ERR | RADIOLIB_LR11X0_IRQ_HEADER_ERR |
                            RADIOLIB_LR11X0_IRQ_TIMEOUT);
     if (deafSinceMs) {
-        LOG_TRACE("RX still running, re-arm skipped after %s, readout %u ms", deafFor,
-                  (unsigned)(Time::getMillis() - deafSinceMs));
+        LOG_RADIO_EDGE("RX still running, re-arm skipped after %s, readout %u ms", deafFor,
+                       (unsigned)(Time::getMillis() - deafSinceMs));
         deafSinceMs = 0; // the chip never stopped listening, so there is no deaf window to report
     }
     rxSighting.reset(); // RX_DONE ends the frame's hold, as the standby it replaces would
