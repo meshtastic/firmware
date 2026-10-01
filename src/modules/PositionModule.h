@@ -1,4 +1,6 @@
 #pragma once
+#include <stdint.h>
+
 #include "Default.h"
 #include "ProtobufModule.h"
 #include "concurrency/OSThread.h"
@@ -27,7 +29,12 @@ class PositionModule : public ProtobufModule<meshtastic_Position>, private concu
     /// Monotonic counter for the position packets we send, so receivers can detect lost updates.
     /// This must not live in localPosition: every new GPS fix overwrites that struct wholesale and
     /// would reset the counter back to 1 on each fix.
-    uint32_t positionSequenceNumber = 0;
+    ///
+    /// Starts at UINT32_MAX on purpose: the increment in allocPositionPacket() wraps to 0, and a
+    /// zero-valued field is not serialized in proto3. So the first packet after a boot omits
+    /// seq_number entirely, which tells a receiver "this device just restarted" and lets it tell a
+    /// reboot apart from a lost packet. Every following packet counts up 1, 2, 3, ...
+    uint32_t positionSequenceNumber = UINT32_MAX;
 
   public:
     /** Constructor

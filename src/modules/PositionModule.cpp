@@ -266,6 +266,10 @@ meshtastic_MeshPacket *PositionModule::allocPositionPacket(uint32_t atPrecision)
     if (pos_flags & meshtastic_Config_PositionConfig_PositionFlags_SEQ_NO) {
         // Only count position packets that we actually put together, and only when the caller
         // asked for the field at all.
+        //
+        // Wraps from UINT32_MAX to 0 on the first packet after a boot, and a zero-valued field is
+        // not serialized in proto3, so that packet omits seq_number and is recognisable as a
+        // reboot. Every later packet counts up 1, 2, 3, ...
         positionSequenceNumber++;
         p.seq_number = positionSequenceNumber;
     }
