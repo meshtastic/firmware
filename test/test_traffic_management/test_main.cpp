@@ -175,14 +175,6 @@ class MockRadioInterface : public RadioInterface
 class MockRouter : public Router
 {
   public:
-    ~MockRouter()
-    {
-        // Router allocates a global crypt lock in its constructor.
-        // Clean it up here so each test can build a fresh mock router.
-        delete cryptLock;
-        cryptLock = nullptr;
-    }
-
     ErrorCode send(meshtastic_MeshPacket *p) override
     {
         sentPackets.push_back(*p);

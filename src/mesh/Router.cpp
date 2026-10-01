@@ -243,8 +243,8 @@ Router::Router() : concurrency::OSThread("Router"), fromRadioQueue(MAX_RX_FROMRA
     fromRadioQueue.setReader(this);
 
     // init Lockguard for crypt operations
-    assert(!cryptLock);
-    cryptLock = new concurrency::Lock();
+    if (!cryptLock)
+        cryptLock = new concurrency::Lock();
     if (!routingAuthCacheLock)
         routingAuthCacheLock = new concurrency::Lock();
     // Runtime default for the auth-cache snapshot policy. Keep it here, saves flash.
