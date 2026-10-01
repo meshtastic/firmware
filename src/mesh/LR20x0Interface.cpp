@@ -796,14 +796,73 @@ template <typename T> bool LR20x0Interface<T>::resumeRunningReceive()
         lora.clearIrqFlags(RADIOLIB_LR2021_IRQ_RX_DONE | RADIOLIB_LR2021_IRQ_CRC_ERROR | RADIOLIB_LR2021_IRQ_LORA_HDR_CRC_ERROR |
                            RADIOLIB_LR2021_IRQ_LEN_ERROR | RADIOLIB_LR2021_IRQ_TIMEOUT);
     if (deafSinceMs) {
-        LOG_TRACE("RX still running, re-arm skipped after %s, readout %u ms", deafFor,
-                  (unsigned)(Time::getMillis() - deafSinceMs));
+        LOG_RADIO_EDGE("RX still running, re-arm skipped after %s, readout %u ms", deafFor,
+                       (unsigned)(Time::getMillis() - deafSinceMs));
         deafSinceMs = 0; // the chip never stopped listening, so there is no deaf window to report
     }
     rxSighting.reset(); // RX_DONE ends the frame's hold, as the standby it replaces would
     RadioLibInterface::startReceive();
     enableInterrupt(isrRxLevel0);
     checkRxDoneIrqFlag(); // an RX_DONE that beat the arm
+    return true;
+}
+#endif
+
+#ifdef LR2021_RX_REARM_AT_TX_DONE
+template <typename T> bool LR20x0Interface<T>::rearmReceiveFromIsr()
+{
+    // After TX_DONE the chip sits in standby until the radio thread re-arms it, and a main-loop hold can make that
+    // hundreds of ms. The interrupt cannot call RadioLib, so the readout task, above the loop, re-arms as soon as the
+    // interrupt returns.
+    rearmState = REARM_PENDING;
+    if (requestRearmFromIsr())
+        return true;
+    rearmState = REARM_NONE;
+    return false;
+}
+
+template <typename T> void LR20x0Interface<T>::rearmReceiveFromTask()
+{
+    // What startReceive() sends, less the standby: after TX_DONE the chip has already fallen back to standby.
+    const uint32_t t0 = benchClock();
+    int16_t err = lora.setPreambleLength(preambleLength);
+    if (err == RADIOLIB_ERR_NONE)
+        err =
+            lora.startReceive(RADIOLIB_LR2021_RX_TIMEOUT_INF, MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS, RADIOLIB_IRQ_RX_DEFAULT_MASK, 0);
+    rearmUs = benchClockToUs(benchClock() - t0);
+    rearmErr = err;
+    rearmTicks = xTaskGetTickCount();
+    rearmState = err == RADIOLIB_ERR_NONE ? REARM_ARMED : REARM_FAILED;
+}
+
+template <typename T> bool LR20x0Interface<T>::adoptReceiveArmedFromIsr()
+{
+    // On one core the task, above this thread, has already run. Where it has not (blocked on a lock), give it a moment.
+    for (unsigned waited = 0; rearmState == REARM_PENDING && waited < 20; waited++)
+        vTaskDelay(pdMS_TO_TICKS(1) ? pdMS_TO_TICKS(1) : 1);
+    const uint8_t state = rearmState;
+    rearmState = REARM_NONE;
+    if (state == REARM_PENDING) {
+        // Leave the task nothing to do: the thread's startReceive() takes it from here
+        LOG_WARN("RX re-arm at TX_DONE: readout task did not run");
+        return false;
+    }
+    if (state == REARM_FAILED) {
+        LOG_WARN("RX re-arm at TX_DONE failed %s%d, restarting RX", radioLibErr, rearmErr);
+        return false;
+    }
+    if (state != REARM_ARMED)
+        return false;
+    const uint32_t heldMs = (uint32_t)(((uint64_t)(xTaskGetTickCount() - rearmTicks) * 1000) / configTICK_RATE_HZ);
+    LOG_RADIO_EDGE("Radio back in RX at TX_DONE, re-arm %u us, %u ms before the handler ran", (unsigned)rearmUs,
+                   (unsigned)heldMs);
+    deafSinceMs = 0; // listening since the task re-armed: no deaf window to report
+    RadioLibInterface::startReceive();
+#ifdef LR2021_RESUME_CONTINUOUS_RX
+    rxArmedContinuous = true; // the task armed a continuous RX
+#endif
+    enableInterrupt(isrRxLevel0);
+    checkRxDoneIrqFlag(); // an RX_DONE that completed while the handler waited
     return true;
 }
 #endif
