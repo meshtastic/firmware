@@ -502,7 +502,7 @@ template <typename T> void SX126xInterface<T>::startReceive()
 }
 
 /** Is the channel currently active? */
-template <typename T> bool SX126xInterface<T>::isChannelActive()
+template <typename T> RadioLibInterface::ChannelScan SX126xInterface<T>::checkChannel()
 {
     // check if we can detect a LoRa preamble on the current channel
     ChannelScanConfig_t cfg = {.cad = {.symNum = NUM_SYM_CAD,
@@ -514,21 +514,18 @@ template <typename T> bool SX126xInterface<T>::isChannelActive()
                                        .irqMask = RADIOLIB_IRQ_CAD_DEFAULT_MASK}};
     setTransmitEnable(false);
     int16_t result = trySetStandby();
-    if (result == RADIOLIB_ERR_NONE) {
+    if (result == RADIOLIB_ERR_NONE)
         result = lora.scanChannel(cfg);
-        if (result == RADIOLIB_LORA_DETECTED)
-            return true;
-        if (result != RADIOLIB_CHANNEL_FREE)
-            LOG_ERROR("SX126X scanChannel %s%d", radioLibErr, result);
-        if (result != RADIOLIB_ERR_WRONG_MODEM)
-            return false;
-    }
+    // Any error, including a failed standby, is Failed: the caller recovers the chip and never sends on it
+    const ChannelScan verdict = classifyScan(result);
+    if (verdict == ChannelScan::Failed) {
+        LOG_ERROR("SX126X channel scan failed %s%d", radioLibErr, result);
 #ifdef ARCH_PORTDUINO
-    portduino_status.LoRa_in_error = true;
+        if (result == RADIOLIB_ERR_WRONG_MODEM)
+            portduino_status.LoRa_in_error = true;
 #endif
-    // standby failed or the LoRa modem type is gone - the chip lost its runtime state
-    maybeRecoverChipStateLoss();
-    return false; // report the channel free: a recovered chip can TX, a dead one fails startSend safely
+    }
+    return verdict;
 }
 
 /** Could we send right now (i.e. either not actively receiving or transmitting)? */

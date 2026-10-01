@@ -376,27 +376,19 @@ void RF95Interface::startReceive()
     checkRxDoneIrqFlag();
 }
 
-bool RF95Interface::isChannelActive()
+RadioLibInterface::ChannelScan RF95Interface::checkChannel()
 {
     // check if we can detect a LoRa preamble on the current channel
     setTransmitEnable(false);
-    int16_t result = trySetStandby(); // needed for smooth transition
-    if (result == RADIOLIB_ERR_NONE) {
+    int16_t result = trySetStandby();
+    if (result == RADIOLIB_ERR_NONE)
         result = lora->scanChannel();
-
-        if (result == RADIOLIB_PREAMBLE_DETECTED) {
-            // LOG_DEBUG("Channel is busy");
-            return true;
-        }
-        if (result != RADIOLIB_CHANNEL_FREE)
-            LOG_ERROR("RF95 isChannelActive %s%d", radioLibErr, result);
-        if (result != RADIOLIB_ERR_WRONG_MODEM)
-            return false;
+    // Any error, including a failed standby, is Failed: the caller recovers the chip and never sends on it
+    const ChannelScan verdict = classifyScan(result);
+    if (verdict == ChannelScan::Failed) {
+        LOG_ERROR("RF95 channel scan failed %s%d", radioLibErr, result);
     }
-
-    // standby failed or the LoRa modem type is gone - the chip lost its runtime state
-    maybeRecoverChipStateLoss();
-    return false; // report the channel free: a recovered chip can TX, a dead one fails startSend safely
+    return verdict;
 }
 
 /** Could we send right now (i.e. either not actively receiving or transmitting)? */

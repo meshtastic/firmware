@@ -51,7 +51,7 @@ template <class T> class SX128xInterface : public RadioLibInterface
     virtual void setRadioIsr(void (*callback)()) override { lora.setDio1Action(callback); }
 
     /** can we detect a LoRa preamble on the current channel? */
-    virtual bool isChannelActive() override;
+    virtual ChannelScan checkChannel() override;
 
     /** are we actively receiving a packet (only called during receiving state) */
     virtual bool isActivelyReceiving() override;

@@ -136,6 +136,12 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     virtual int16_t getCurrentRSSI() = 0;
 
   public:
+    /// Listen-before-talk verdict. Failed means the scan itself errored, so the channel state is unknown.
+    enum class ChannelScan : uint8_t { Free, Busy, Failed };
+
+    /// Maps a RadioLib scan result to a verdict: only the two scan outcomes are Free or Busy, any error is Failed.
+    static ChannelScan classifyScan(int16_t result);
+
     /** Our ISR code currently needs this to find our active instance
      */
     static RadioLibInterface *instance;
@@ -239,8 +245,8 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      */
     virtual void startReceive();
 
-    /** can we detect a LoRa preamble on the current channel? */
-    virtual bool isChannelActive() = 0;
+    /** Run CAD on the current channel. A Failed scan must never be treated as a free channel. */
+    virtual ChannelScan checkChannel() = 0;
 
     /** are we actively receiving a packet (only called during receiving state)
      *  This method is only public to facilitate debugging.  Do not call.

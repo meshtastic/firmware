@@ -536,7 +536,7 @@ class TestableRadioLibInterface : public RadioLibInterface
     // Chip-specific hooks this test never reaches
     uint32_t getPacketTime(uint32_t, bool) override { return 0; }
     int16_t getCurrentRSSI() override { return 0; }
-    bool isChannelActive() override { return false; }
+    ChannelScan checkChannel() override { return ChannelScan::Free; }
     bool isActivelyReceiving() override { return false; }
     void addReceiveMetadata(meshtastic_MeshPacket *) override {}
     void setRadioIsr(void (*)()) override {}
@@ -614,6 +614,27 @@ static void test_computePacketTime_rxUsesHeaderInfoAndIsGuarded()
     delete radioIf;
 }
 
+// Only the two CAD outcomes are verdicts; every error is Failed, never Free. All five drivers used to
+// report any scan error except WRONG_MODEM as a free channel, so an LR2021 whose CAD params the chip
+// refused (-706) transmitted over live frames. If this table changes, onNotify() sends on errors again.
+static void test_classifyScan_onlyCadOutcomesAreVerdicts()
+{
+    using Scan = RadioLibInterface::ChannelScan;
+    TEST_ASSERT_TRUE(RadioLibInterface::classifyScan(RADIOLIB_CHANNEL_FREE) == Scan::Free);
+    TEST_ASSERT_TRUE(RadioLibInterface::classifyScan(RADIOLIB_LORA_DETECTED) == Scan::Busy);
+    TEST_ASSERT_TRUE(RadioLibInterface::classifyScan(RADIOLIB_PREAMBLE_DETECTED) == Scan::Busy); // SX127x
+    const int16_t errors[] = {RADIOLIB_ERR_NONE,
+                              RADIOLIB_ERR_UNKNOWN,
+                              RADIOLIB_ERR_WRONG_MODEM,
+                              RADIOLIB_ERR_SPI_CMD_TIMEOUT,
+                              RADIOLIB_ERR_SPI_CMD_INVALID,
+                              RADIOLIB_ERR_SPI_CMD_FAILED,
+                              RADIOLIB_ERR_CHIP_NOT_FOUND,
+                              RADIOLIB_ERR_RX_TIMEOUT};
+    for (int16_t err : errors)
+        TEST_ASSERT_TRUE_MESSAGE(RadioLibInterface::classifyScan(err) == Scan::Failed, "a scan error must not read as a verdict");
+}
+
 // Every RADIOLIB_ERR_* is rejected, every duration a LoRa packet can actually take is kept.
 static void test_isRadioLibTimeError_separatesCodesFromDurations()
 {
@@ -685,6 +706,7 @@ void setup()
     RUN_TEST(test_computePacketTime_reportsNoAirtimeWhenNothingCanBeComputed);
     RUN_TEST(test_computePacketTime_rxUsesHeaderInfoAndIsGuarded);
     RUN_TEST(test_isRadioLibTimeError_separatesCodesFromDurations);
+    RUN_TEST(test_classifyScan_onlyCadOutcomesAreVerdicts);
     exit(UNITY_END());
 }
 

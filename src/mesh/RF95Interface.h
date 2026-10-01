@@ -51,7 +51,7 @@ class RF95Interface : public RadioLibInterface
     virtual void setRadioIsr(void (*callback)()) override { lora->setDio0Action(callback, RISING); }
 
     /** can we detect a LoRa preamble on the current channel? */
-    virtual bool isChannelActive() override;
+    virtual ChannelScan checkChannel() override;
 
     /** are we actively receiving a packet (only called during receiving state) */
     virtual bool isActivelyReceiving() override;

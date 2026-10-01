@@ -450,7 +450,11 @@ void RadioLibInterface::onNotify(uint32_t notification)
                 } else if (action == RadioTxHook::PRETX_DEFER) {
                     setTransmitDelay(); // the radio config moved, so re-run the delay and scan on it
                 } else {
-                    if (isChannelActive()) { // check if there is currently a LoRa packet on the channel
+                    const ChannelScan scan = checkChannel();
+                    if (scan != ChannelScan::Free) {
+                        // Failed: the channel state is unknown, so never send on it; recover and scan again later
+                        if (scan == ChannelScan::Failed)
+                            maybeRecoverChipStateLoss();
                         if (!RadioTxHooks::holdsRadio(txp)) {
                             startReceive(); // try receiving this packet, afterwards we'll be trying to transmit again
                         }
@@ -751,6 +755,15 @@ void RadioLibInterface::periodicRadioMaintenance()
     }
 
     resetAGC();
+}
+
+RadioLibInterface::ChannelScan RadioLibInterface::classifyScan(int16_t result)
+{
+    if (result == RADIOLIB_LORA_DETECTED || result == RADIOLIB_PREAMBLE_DETECTED)
+        return ChannelScan::Busy;
+    if (result == RADIOLIB_CHANNEL_FREE)
+        return ChannelScan::Free;
+    return ChannelScan::Failed;
 }
 
 bool RadioLibInterface::maybeRecoverChipStateLoss()
