@@ -2,6 +2,12 @@
 #if RADIOLIB_EXCLUDE_LR2021 != 1
 #include "RadioLibInterface.h"
 
+// After TX_DONE the LR2021 waits in standby for the radio thread to restart RX, which a main-loop hold can stretch. With the
+// readout task, the TX_DONE interrupt has the task restart it instead; -DLR2021_RX_REARM_AT_TX_DONE=0 opts out.
+#if defined(MESHTASTIC_RX_READOUT_TASK) && !defined(LR2021_RX_REARM_AT_TX_DONE)
+#define LR2021_RX_REARM_AT_TX_DONE 1
+#endif
+
 /**
  * \brief Adapter for LR20x0 radio family. Implements common logic for child classes.
  * \tparam T RadioLib module type for LR20x0, e.g. LR2021.
@@ -100,6 +106,15 @@ template <class T> class LR20x0Interface : public RadioLibInterface
 
     /** setStandby()'s body, returning the standby error instead of asserting - for callers that can recover */
     int16_t trySetStandby();
+
+#if defined(MESHTASTIC_RX_READOUT_TASK) && LR2021_RX_REARM_AT_TX_DONE
+    bool rearmReceiveFromIsr() override;
+    void rearmReceiveFromTask() override;
+    bool adoptReceiveArmedFromIsr() override;
+    enum RearmState : uint8_t { REARM_NONE, REARM_PENDING, REARM_ARMED, REARM_FAILED };
+    volatile uint8_t rearmState = REARM_NONE;
+    volatile int16_t rearmErr = 0;
+#endif
 
     /** Recover a chip that lost its runtime state via the same full begin() the band-hop path uses */
     bool recoverChipStateLoss() override { return fullBegin(getFreq()); }
