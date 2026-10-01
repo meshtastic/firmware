@@ -158,7 +158,12 @@ void RedirectablePrint::log_to_serial(const char *logLevel, const char *format, 
         if (color) {
             printf("\u001b[0m");
         }
+#ifdef MESHTASTIC_LOG_RECORD_MILLIS
+        const uint32_t nowMs = millis();
+        printf("| %02d:%02d:%02d %u.%03u ", hour, min, sec, (unsigned)(nowMs / 1000), (unsigned)(nowMs % 1000));
+#else
         printf("| %02d:%02d:%02d %u ", hour, min, sec, millis() / 1000);
+#endif
 #endif
     } else {
 #ifdef ARCH_PORTDUINO
@@ -172,7 +177,12 @@ void RedirectablePrint::log_to_serial(const char *logLevel, const char *format, 
         if (color) {
             printf("\u001b[0m");
         }
+#ifdef MESHTASTIC_LOG_RECORD_MILLIS
+        const uint32_t nowMs = millis();
+        printf("| ??:??:?? %u.%03u ", (unsigned)(nowMs / 1000), (unsigned)(nowMs % 1000));
+#else
         printf("| ??:??:?? %u ", millis() / 1000);
+#endif
 #endif
     }
     auto thread = concurrency::OSThread::currentThread;
