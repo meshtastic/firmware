@@ -934,7 +934,7 @@ template <typename T> bool SX126xInterface<T>::adoptReceiveArmedFromIsr()
     if (outcome != REARM_ARMED)
         return false;
     const uint32_t heldMs = (uint32_t)(((uint64_t)(xTaskGetTickCount() - rearmTicks) * 1000) / configTICK_RATE_HZ);
-    LOG_TRACE("Radio back in RX at TX_DONE, %u ms before the handler ran", (unsigned)heldMs);
+    LOG_RADIO_EDGE("Radio back in RX at TX_DONE, %u ms before the handler ran", (unsigned)heldMs);
     deafSinceMs = 0; // listening since the interrupt: no deaf window to report
     RadioLibInterface::startReceive();
 #ifdef SX126X_RESUME_CONTINUOUS_RX

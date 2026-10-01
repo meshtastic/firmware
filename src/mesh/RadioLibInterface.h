@@ -37,6 +37,14 @@
 
 #define AGC_RESET_INTERVAL_MS (60 * 1000) // 60 seconds
 
+// Bench: -DMESHTASTIC_LOG_RADIO_EDGES logs where the radio stops and starts hearing, and its preamble sightings, at DEBUG
+// instead of TRACE: a few lines a second, against the full trace build's volume
+#ifdef MESHTASTIC_LOG_RADIO_EDGES
+#define LOG_RADIO_EDGE LOG_DEBUG
+#else
+#define LOG_RADIO_EDGE LOG_TRACE
+#endif
+
 /// What the radio's latched RX flags have shown since the last standby, stamped at each look at them.
 /// The owner must clear PREAMBLE_DETECTED whenever a look finds it, so every sighting is a new detection.
 class RxSighting
