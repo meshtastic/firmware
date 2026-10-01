@@ -487,13 +487,13 @@ template <typename T> void SX126xInterface<T>::startReceive()
 
     if (err != RADIOLIB_ERR_NONE) {
 #ifdef ARCH_PORTDUINO
-        portduino_status.LoRa_in_error = true;
-#else
-        // No assert: leave RX off rather than reboot; periodicRadioMaintenance() re-arms it, throttled
+        portduino_status.LoRa_in_error = true; // the Portduino main loop re-inits the interface
+#endif
+        // No assert: leave RX off rather than reboot; periodicRadioMaintenance() re-arms it, throttled.
+        // Return on every platform: the base startReceive() would mark RX armed and reset the failure count.
         LOG_ERROR("SX126X RX offline %s%d", radioLibErr, err);
         rxOffline = true;
         return;
-#endif
     }
 
     RadioLibInterface::startReceive();
