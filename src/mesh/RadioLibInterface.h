@@ -451,6 +451,12 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     void checkRxDoneIrqFlag();
     void checkTxDoneIrqFlag();
 
+    /** From the TX_DONE interrupt, put the chip straight back into RX; false if it did not */
+    virtual bool rearmReceiveFromIsr() { return false; }
+
+    /** After TX, take over the RX that rearmReceiveFromIsr() started instead of restarting it; false if there is none */
+    virtual bool adoptReceiveArmedFromIsr() { return false; }
+
     /** Software-poll substitute for a hardware DIO interrupt, for radios whose IRQ line sits behind
      * an I2C IO expander with no INT routed to the MCU (e.g. Meshnology W10, LORA_DIO1_SOFTWARE_POLL).
      * The chip-specific subclass polls the radio's IRQ status register from the radio thread and
@@ -512,6 +518,11 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     bool wakeRxReadout();
     /** Deliver every frame the readout task captured; returns how many */
     unsigned deliverCapturedFrames();
+    /** From the TX_DONE interrupt, have the readout task call rearmReceiveFromTask() before anything else; false if there
+     *  is no task. For drivers that re-arm RX through RadioLib, which an interrupt cannot call. */
+    bool requestRearmFromIsr();
+    /** The readout task's half of requestRearmFromIsr() */
+    virtual void rearmReceiveFromTask() {}
 
   private:
     /** Start the readout task above the calling task (the main loop), once */
@@ -535,8 +546,11 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     CapturedFrame rxRing[rxRingSize] = {};
     volatile uint8_t rxRingHead = 0, rxRingTail = 0;
     volatile uint32_t rxReadoutFrames = 0, rxReadoutDropped = 0, rxReadoutBadLength = 0;
+    /** Set by requestRearmFromIsr(), taken by the task */
+    volatile bool rxRearmFromTaskPending = false;
 #else
     bool rxDoneFromIsr() { return false; }
+    bool requestRearmFromIsr() { return false; }
     bool rxReadoutActive() const { return false; }
     bool wakeRxReadout() { return false; }
     unsigned deliverCapturedFrames() { return 0; }

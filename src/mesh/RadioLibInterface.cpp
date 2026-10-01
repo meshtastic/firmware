@@ -86,6 +86,8 @@ void INTERRUPT_ATTR RadioLibInterface::isrRxLevel0()
 
 void INTERRUPT_ATTR RadioLibInterface::isrTxLevel0()
 {
+    // Before the notify: the handler that would otherwise re-arm RX can wait behind a main-loop hold.
+    instance->rearmReceiveFromIsr();
     isrLevel0Common(ISR_TX);
 }
 
@@ -419,7 +421,8 @@ void RadioLibInterface::onNotify(uint32_t notification)
         // TRANSMIT_DELAY_COMPLETED asks again before the scan, which is where the answer is acted on -
         // but it keeps the post-TX listen window on the channel we are about to transmit on.
         (void)RadioTxHooks::beforeTransmit(this, txQueue.getFront());
-        startReceive();
+        if (!adoptReceiveArmedFromIsr())
+            startReceive();
         setTransmitDelay();
         break;
     }
@@ -951,11 +954,26 @@ bool RadioLibInterface::wakeRxReadout()
     return true;
 }
 
+bool INTERRUPT_ATTR RadioLibInterface::requestRearmFromIsr()
+{
+    if (!rxReadoutTask)
+        return false;
+    rxRearmFromTaskPending = true;
+    BaseType_t woken = pdFALSE;
+    vTaskNotifyGiveFromISR(rxReadoutTask, &woken);
+    YIELD_FROM_ISR(woken);
+    return true;
+}
+
 void RadioLibInterface::rxReadoutTaskMain(void *arg)
 {
     auto *self = static_cast<RadioLibInterface *>(arg);
     for (;;) {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        if (self->rxRearmFromTaskPending) {
+            self->rxRearmFromTaskPending = false;
+            self->rearmReceiveFromTask();
+        }
         self->readOutFromTask();
     }
 }
