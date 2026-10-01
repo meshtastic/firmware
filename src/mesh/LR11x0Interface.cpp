@@ -244,16 +244,15 @@ template <typename T> bool LR11x0Interface<T>::init()
     }
 #endif
 
-    // Every begin() above reset the delay to RadioLib's default
-    if (res == RADIOLIB_ERR_NONE)
-        applyTcxoStartupDelay(lora, resolvedTcxoVoltage);
-
     LOG_INFO("Frequency set to %f", getFreq());
     LOG_INFO("Bandwidth set to %f", bw);
     LOG_INFO("Power output set to %d", power);
 
-    if (res == RADIOLIB_ERR_NONE)
+    if (res == RADIOLIB_ERR_NONE) {
+        // Every begin() above reset the delay to RadioLib's default
+        applyTcxoStartupDelay(lora, resolvedTcxoVoltage);
         res = lora.setCRC(2);
+    }
 
     // FIXME: May want to set depending on a definition, currently all LR1110 variant files use the DC-DC regulator option
     if (res == RADIOLIB_ERR_NONE)
@@ -362,10 +361,11 @@ template <typename T> bool LR11x0Interface<T>::reinitChip()
     }
 
     int res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, resolvedTcxoVoltage);
-    if (res == RADIOLIB_ERR_NONE)
+    if (res == RADIOLIB_ERR_NONE) {
+        // begin() reset the delay to RadioLib's default
         applyTcxoStartupDelay(lora, resolvedTcxoVoltage);
-    if (res == RADIOLIB_ERR_NONE)
         res = lora.setCRC(2);
+    }
     if (res == RADIOLIB_ERR_NONE)
         res = lora.setRegulatorDCDC();
 
