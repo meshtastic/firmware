@@ -35,6 +35,12 @@
 // In addition to the default Rx flags, we need the PREAMBLE_DETECTED flag to detect whether we are actively receiving
 #define MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS (RADIOLIB_IRQ_RX_DEFAULT_FLAGS | (1 << RADIOLIB_IRQ_PREAMBLE_DETECTED))
 
+// Bench: -DMESHTASTIC_REARM_HOLD_FIX=0 runs the TX_DONE re-arm as round 64 did: the RX interrupt stays detached until the
+// radio thread adopts the task's re-arm, and the task re-arms whatever the state. Default 1 (ca5062ca1's behaviour).
+#ifndef MESHTASTIC_REARM_HOLD_FIX
+#define MESHTASTIC_REARM_HOLD_FIX 1
+#endif
+
 #define AGC_RESET_INTERVAL_MS (60 * 1000) // 60 seconds
 
 // Bench: -DMESHTASTIC_LOG_RADIO_EDGES logs where the radio stops and starts hearing, and its preamble sightings, at DEBUG

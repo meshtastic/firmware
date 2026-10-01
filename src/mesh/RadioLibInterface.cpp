@@ -1229,6 +1229,7 @@ void RadioLibInterface::startRxReadoutTask()
     rxReadoutTask = task;
     LOG_INFO("RX readout task %s, priority %u (loop %u), core %d", task ? "started" : "not started", (unsigned)priority,
              (unsigned)uxTaskPriorityGet(nullptr), core);
+    LOG_INFO("RX re-arm hold fix %s", MESHTASTIC_REARM_HOLD_FIX ? "on" : "off");
 }
 
 /// RX_DONE: wake the readout task and return. The radio is read there, with interrupts enabled, not here.
