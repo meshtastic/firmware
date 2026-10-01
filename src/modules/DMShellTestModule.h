@@ -91,6 +91,16 @@ class DMShellTestModule : public SinglePortModule, private concurrency::OSThread
 
     Stats stats = {};
 
+    // The radio's receive counts at session start, so the session's own appear as differences
+    struct RadioSnapshot {
+        uint32_t good, bad, readOut, readOutLost;
+        uint16_t chipReceived, chipCrcError, chipHeaderError, chipFalseSync;
+        bool chipValid;
+    };
+    RadioSnapshot radioAtStart = {};
+    static RadioSnapshot readRadio();
+    void logRadioStats();
+
     void startSession(uint32_t now);
     void endSession(uint32_t now, const char *reason);
     void serviceActive(uint32_t now);

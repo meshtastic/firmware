@@ -330,6 +330,27 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
     virtual ErrorCode send(meshtastic_MeshPacket *p) override;
 
+    /** Bench: this firmware's receive counts, for the test client's session stats */
+    struct RxCounters {
+        uint32_t good, bad;            // packets handleReceiveInterrupt() passed on, and rejected
+        uint32_t readOut, readOutLost; // frames the readout task took from the chip, and lost (ring full, bad length)
+    };
+    RxCounters rxCounters() const
+    {
+#ifdef MESHTASTIC_RX_READOUT_TASK
+        return {rxGood, rxBad, rxReadoutFrames, rxReadoutDropped + rxReadoutBadLength};
+#else
+        return {rxGood, rxBad, 0, 0};
+#endif
+    }
+
+    /** Bench: the chip's own receive counters since its last reset. False where the chip or RadioLib keeps none. */
+    virtual bool readChipRxStats(uint16_t & /*received*/, uint16_t & /*crcError*/, uint16_t & /*headerError*/,
+                                 uint16_t & /*falseSync*/)
+    {
+        return false;
+    }
+
     /**
      * Return true if we think the board can go to sleep (i.e. our tx queue is empty, we are not sending or receiving)
      *
@@ -672,6 +693,13 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     volatile uint32_t rxReadoutPasses = 0;
     /** Set by requestRearmFromIsr(), taken by the task */
     volatile bool rxRearmFromTaskPending = false;
+
+  protected:
+    /** The task re-armed RX at TX_DONE and the radio thread has not yet handled that TX_DONE: until it does, a frame the
+     *  task reads must not overwrite the pending ISR_TX, or the TX is never completed. onNotify() delivers it instead. */
+    volatile bool rxArmedBeforeTxDone = false;
+
+  private:
     /** Frames read out, single producer (the task), single consumer (this thread) */
     struct CapturedFrame {
         CapturedRxInfo info;
