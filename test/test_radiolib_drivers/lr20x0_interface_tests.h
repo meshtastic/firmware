@@ -57,8 +57,13 @@ class TestLr2021Interface : public LR2021Interface
 
     using LR20x0Interface<LR2021>::isChannelActive;
 
-    // init() would set the SF via begin(); RadioLib's default det_peak lookup needs one (see lr2021SetSf).
-    void setSpreadingFactor(uint8_t sf) { TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_NONE, lora.setSpreadingFactor(sf)); }
+    // init() would set these via begin(): the default det_peak lookup needs an SF (see lr2021SetSf), and
+    // from 7.8.0 the SF change runs the DC-DC workaround, which retunes to the set frequency.
+    void setSpreadingFactor(uint8_t sf)
+    {
+        TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_NONE, lora.setFrequency(915.0));
+        TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_NONE, lora.setSpreadingFactor(sf));
+    }
 };
 
 // One interface for the whole suite, never destroyed: the constructor registers a worker thread and

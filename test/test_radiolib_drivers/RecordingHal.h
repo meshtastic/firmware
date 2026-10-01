@@ -11,6 +11,9 @@
 #include <utility>
 #include <vector>
 
+// Gates a test on the RadioLib it runs against, for behaviour a later release changed.
+#define RADIOLIB_AT_LEAST(major, minor, patch) (RADIOLIB_VERSION >= (((major) << 24) | ((minor) << 16) | ((patch) << 8)))
+
 class RecordingHal : public RadioLibHal
 {
   public:

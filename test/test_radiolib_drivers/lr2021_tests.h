@@ -79,6 +79,31 @@ static void test_lr2021_dcdc_freq_lf_write_sends_one_word()
     TEST_ASSERT_EQUAL_UINT32(2 + 3 + 4, wr->size());
 }
 
+// The workaround ends by retuning to the frequency already set; a different one would move the node
+// off its channel on every SF, bandwidth or RX-path change.
+static void test_lr2021_dcdc_workaround_retunes_to_the_set_frequency()
+{
+    LR2021_RADIO(hal);
+    TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_NONE, radio.setSpreadingFactor(9));
+    const auto *t = hal.last(op16(RADIOLIB_LR2021_CMD_SET_RF_FREQUENCY));
+    TEST_ASSERT_NOT_NULL(t);
+    const uint8_t hz[] = {0x36, 0x89, 0xCA, 0xC0}; // 915000000
+    TEST_ASSERT_EQUAL_UINT8_ARRAY(hz, t->data() + 2, 4);
+}
+
+// A DC-DC register write the chip refuses fails the setter that triggered it. LR20x0Interface's
+// reconfigure() gets the error from setSpreadingFactor(), a call that could not fail this way before.
+static void test_lr2021_dcdc_refused_register_write_fails_the_setter()
+{
+    LR2021_RADIO(hal);
+    const uint32_t addr = RADIOLIB_LR2021_REG_DCDC_FREQ_LF;
+    hal.reply({static_cast<uint8_t>(RADIOLIB_LR2021_CMD_WRITE_REG_MEM_32 >> 8),
+               static_cast<uint8_t>(RADIOLIB_LR2021_CMD_WRITE_REG_MEM_32 & 0xFF), static_cast<uint8_t>((addr >> 16) & 0xFF),
+               static_cast<uint8_t>((addr >> 8) & 0xFF), static_cast<uint8_t>(addr & 0xFF)},
+              0x04, {0x02}, 1);
+    TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_SPI_CMD_INVALID, radio.setSpreadingFactor(9));
+}
+
 static void test_lr2021_setFrequency_sends_hertz()
 {
     LR2021_RADIO(hal);
@@ -421,6 +446,42 @@ static void test_lr2021_cad_params_failed_returns_spi_cmd_failed()
     TEST_ASSERT_EQUAL_UINT32(0, hal.count(op16(RADIOLIB_LR2021_CMD_SET_LORA_CAD)));
 }
 
+// jgromes/RadioLib#1882 adds SetLoraCadParams' own exit defines; earlier pins have only the
+// SetCadParams ones. These are the values the bench LR2021 accepted (DS 2.2 Table 6-18).
+#ifdef RADIOLIB_LR2021_LORA_CAD_EXIT_MODE_RX
+static void test_lr2021_lora_cad_exit_defines_match_datasheet()
+{
+    TEST_ASSERT_EQUAL_UINT8(0x00, RADIOLIB_LR2021_LORA_CAD_EXIT_MODE_FALLBACK);
+    TEST_ASSERT_EQUAL_UINT8(0x01, RADIOLIB_LR2021_LORA_CAD_EXIT_MODE_RX);
+    TEST_ASSERT_EQUAL_UINT8(0x10, RADIOLIB_LR2021_LORA_CAD_EXIT_MODE_LBT);
+}
+
+// Each LoRa define reaches SetLoraCadParams unchanged, and the modelled chip starts the CAD.
+static void test_lr2021_lora_cad_exit_defines_start_a_cad()
+{
+    const uint8_t modes[] = {RADIOLIB_LR2021_LORA_CAD_EXIT_MODE_FALLBACK, RADIOLIB_LR2021_LORA_CAD_EXIT_MODE_RX,
+                             RADIOLIB_LR2021_LORA_CAD_EXIT_MODE_LBT};
+    for (uint8_t mode : modes) {
+        LR2021_RADIO(hal);
+        lr2021SetSf(hal, radio, 9);
+        lr2021ModelCadExitCheck(hal);
+        TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_NONE, radio.startChannelScan(lr2021CadConfig(mode)));
+        TEST_ASSERT_EQUAL_UINT8(mode, lr2021CadParams(hal)[4]);
+        TEST_ASSERT_EQUAL_UINT32(1, hal.count(op16(RADIOLIB_LR2021_CMD_SET_LORA_CAD)));
+    }
+}
+#endif
+
+// From 7.8.0 (jgromes/RadioLib@f1af229) RadioLib parses the status of a command with no payload as
+// well, so a refusal in the first byte of SetLoraCad fails the scan; before, the scan started.
+static void test_lr2021_cad_refused_start_returns_spi_cmd_invalid()
+{
+    LR2021_RADIO(hal);
+    lr2021SetSf(hal, radio, 9);
+    hal.reply(op16(RADIOLIB_LR2021_CMD_SET_LORA_CAD), 0x04, {0x02});
+    TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_SPI_CMD_INVALID, radio.startChannelScan(lr2021CadConfig()));
+}
+
 // Grows here - each needs replies scripted per opcode:
 //   begin(): getVersion() check and the calibration sequence
 //   resetDCDCworkaround() via setPacketType(): only begin() reaches it; same one-word write as above
@@ -435,6 +496,8 @@ static void runLr2021Tests()
         RUN_TEST(test_lr2021_setRxPath_runs_the_dcdc_workaround);
         RUN_TEST(test_lr2021_dcdc_adc_ctrl_read_asks_for_one_word);
         RUN_TEST(test_lr2021_dcdc_freq_lf_write_sends_one_word);
+        RUN_TEST(test_lr2021_dcdc_workaround_retunes_to_the_set_frequency);
+        RUN_TEST(test_lr2021_dcdc_refused_register_write_fails_the_setter);
     }
     RUN_TEST(test_lr2021_setFrequency_sends_hertz);
     RUN_TEST(test_lr2021_lora_modulation_setters_send_modulation_params);
@@ -457,4 +520,10 @@ static void runLr2021Tests()
     RUN_TEST(test_lr2021_cad_not_started_after_rejected_params);
     RUN_TEST(test_lr2021_cad_accepted_exit_bytes_start_a_cad);
     RUN_TEST(test_lr2021_cad_params_failed_returns_spi_cmd_failed);
+#ifdef RADIOLIB_LR2021_LORA_CAD_EXIT_MODE_RX
+    RUN_TEST(test_lr2021_lora_cad_exit_defines_match_datasheet);
+    RUN_TEST(test_lr2021_lora_cad_exit_defines_start_a_cad);
+#endif
+    if constexpr (RADIOLIB_AT_LEAST(7, 8, 0))
+        RUN_TEST(test_lr2021_cad_refused_start_returns_spi_cmd_invalid);
 }

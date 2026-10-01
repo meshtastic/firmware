@@ -25,6 +25,11 @@
 // models that refusal; lr20x0_interface_tests.h runs LR20x0Interface::isChannelActive() against it,
 // so a firmware change that sends a refused exit byte fails here.
 //
+// Behaviour a later RadioLib changes is pinned by tests that register only on a RadioLib that has it
+// (a feature check, or RADIOLIB_AT_LEAST), so the pin can move without the suite being rewritten:
+// the LR2021 LoRa CAD exit defines (#1882), the status of payload-less commands and the SX128x
+// first-byte status (7.8.0, #1872), and the DC-DC workaround's retune and error path (#1864, #1880).
+//
 // Anything that decodes a chip reply (begin(), readData(), getRSSI(), updateFirmware()) needs replies
 // scripted per opcode; each family's header lists those under "Grows here".
 #include "TestUtil.h"
