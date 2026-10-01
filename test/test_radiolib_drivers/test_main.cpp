@@ -16,6 +16,14 @@
 // the LR2021 DC-DC tests register only on a RadioLib that has it (see lr2021_tests.h). On one that
 // also carries the overrun (7.8.0) they abort, so the LR2021 set runs last and the rest report first.
 //
+// CAD (channel activity detection, the listen-before-talk check) is pinned per family: the command
+// bytes, and that a command the chip refuses comes back as an error, never CHANNEL_FREE. The LR2021
+// refuses SetLoraCadParams exit mode 0x02, the value of RadioLib's RADIOLIB_LR2021_CAD_EXIT_MODE_RX
+// (a SetCadParams value; jgromes/RadioLib#1882 adds the LoRa ones), and LR20x0Interface reads the
+// error as a free channel, so a node passing that define transmits over live frames. lr2021_tests.h
+// models that refusal; lr20x0_interface_tests.h runs LR20x0Interface::isChannelActive() against it,
+// so a firmware change that sends a refused exit byte fails here.
+//
 // Anything that decodes a chip reply (begin(), readData(), getRSSI(), updateFirmware()) needs replies
 // scripted per opcode; each family's header lists those under "Grows here".
 #include "TestUtil.h"
@@ -24,6 +32,7 @@
 
 #include "lr11x0_tests.h"
 #include "lr2021_tests.h"
+#include "lr20x0_interface_tests.h"
 #include "sx126x_tests.h"
 #include "sx127x_tests.h"
 #include "sx128x_tests.h"
@@ -39,7 +48,8 @@ void setup()
     runSx127xTests();
     runSx128xTests();
     runLr11x0Tests();
-    runLr2021Tests(); // last: its DC-DC tests abort under ASan on a RadioLib with the #1864 overrun
+    runLr2021Tests();          // after the rest: its DC-DC tests abort under ASan on a RadioLib with the #1864 overrun
+    runLr20x0InterfaceTests(); // its setSpreadingFactor() runs that same DC-DC workaround
     exit(UNITY_END());
 }
 
