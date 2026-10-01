@@ -108,6 +108,7 @@ NRF52Bluetooth *nrf52Bluetooth = nullptr;
 #ifndef ARCH_PORTDUINO_WASM // raspi HTTP server (ulfius/zlib/openssl) excluded in the browser/wasm build
 #include "mesh/raspihttp/PiWebServer.h"
 #endif
+#include "platform/portduino/NativeDiscovery.h"
 #include "platform/portduino/PortduinoGlue.h"
 #ifdef _WIN32
 #include "platform/portduino/windows/WindowsService.h"
@@ -1222,6 +1223,7 @@ void setup()
     }
 #endif
     initApiServer(TCPPort);
+    startNativeDiscovery(TCPPort);
 #endif
 
     // Start airtime logger thread.
