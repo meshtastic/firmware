@@ -722,7 +722,7 @@ template <typename T> void LR20x0Interface<T>::addReceiveMetadata(meshtastic_Mes
  */
 template <typename T> void LR20x0Interface<T>::configHardwareForSend()
 {
-#ifdef LR2021_RX_REARM_AT_TX_DONE
+#if defined(LR2021_RX_REARM_AT_TX_DONE) && MESHTASTIC_REARM_HOLD_FIX
     rearmState = REARM_NONE; // only this TX's TX_DONE may re-arm, never a stale one from a TX the poll completed
     rxArmedBeforeTxDone = false;
 #endif
@@ -828,8 +828,10 @@ template <typename T> bool LR20x0Interface<T>::rearmReceiveFromIsr()
 template <typename T> void LR20x0Interface<T>::rearmReceiveFromTask()
 {
     // Only a TX_DONE the thread has not yet handled: where adopt gave up waiting, the thread's own startReceive() has RX
+#if MESHTASTIC_REARM_HOLD_FIX
     if (rearmState != REARM_PENDING)
         return;
+#endif
     // What startReceive() sends, less the standby: after TX_DONE the chip has already fallen back to standby.
     const uint32_t t0 = benchClock();
     int16_t err = lora.setPreambleLength(preambleLength);
@@ -844,6 +846,7 @@ template <typename T> void LR20x0Interface<T>::rearmReceiveFromTask()
         return;
     }
     rearmState = REARM_ARMED;
+#if MESHTASTIC_REARM_HOLD_FIX
     // The TX_DONE interrupt detached the radio's interrupt. Attach the RX one now, so a frame that ends before the radio
     // thread runs wakes this task to read it, rather than waiting in the chip for the next frame to overwrite it.
     rxArmedBeforeTxDone = true;
@@ -851,6 +854,7 @@ template <typename T> void LR20x0Interface<T>::rearmReceiveFromTask()
     rxArmedContinuous = true; // so a frame the task reads before the thread adopts finds the chip still listening
 #endif
     enableInterrupt(isrRxLevel0);
+#endif
 }
 
 template <typename T> bool LR20x0Interface<T>::adoptReceiveArmedFromIsr()
