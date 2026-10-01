@@ -91,6 +91,24 @@ template <class T> class LR20x0Interface : public RadioLibInterface
 
     bool isIRQPending() override { return lora.getIrqFlags() != 0; }
 
+#if RADIOLIB_GODMODE && defined(MESHTASTIC_RX_FAIL_PROBE)
+    /// Bench: the chip's state right after a failed readout. pktType starts at 0xEE, which neither chip uses, so a
+    /// GetPacketType that returns success without writing a reply is visible as 0xEE -- distinct from the chip
+    /// genuinely reporting NONE (0xFF here), and from it reporting a real modem.
+    bool readRxFailState(uint8_t &pktType, uint8_t &mode, uint32_t &irq, int16_t &typeErr) override
+    {
+        pktType = 0xEE;
+        typeErr = lora.getPacketType(&pktType);
+#ifdef LR2021_READ_CHIP_MODE
+        mode = this->readChipMode();
+#else
+        mode = 0xEE; // not compiled in on this board
+#endif
+        irq = lora.getIrqFlags();
+        return true; // always report: a failed GetPacketType is the case of interest, not a reason to stay silent
+    }
+#endif
+
 #ifdef LR20X0_AGC_RESET
     void resetAGC() override;
 #endif

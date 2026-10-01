@@ -4,6 +4,7 @@
 
 #include "MeshService.h"
 #include "RadioLibInterface.h"
+#include "SPILock.h"
 #include "Throttle.h"
 #include "configuration.h"
 #include "mesh/mesh-pb-constants.h"
@@ -45,6 +46,11 @@
 // CR or tab, 0.5 s after the last byte, 2 s after the first, or at 64 bytes), 1 = a pipe (64-byte frames only)
 #ifndef DMSHELL_TEST_BATCH_PIPE
 #define DMSHELL_TEST_BATCH_PIPE 0
+#endif
+// Bench: log the radio and chip receive counters every N ms during a session, so the gap between what the chip
+// decoded and what the firmware handled can be located in time rather than only totalled at the end. 0 = off.
+#ifndef DMSHELL_TEST_STATS_EVERY_MS
+#define DMSHELL_TEST_STATS_EVERY_MS 0
 #endif
 // The client's DMSHELL_INPUT_WINDOW and DMSHELL_ACK_EVERY
 #ifndef DMSHELL_TEST_INPUT_WINDOW
@@ -186,6 +192,7 @@ void DMShellTestModule::startSession(uint32_t now)
     endReason = nullptr;
 
     radioAtStart = readRadio();
+    nextStatsMs = now + DMSHELL_TEST_STATS_EVERY_MS;
     sessionStartMs = now;
     phase = Phase::Opening;
     LOG_INFO("DMShellTest t=%u session %u of %u: OPEN session=0x%08x to 0x%08x", (unsigned)now, (unsigned)sessionsDone + 1,
@@ -209,8 +216,46 @@ void DMShellTestModule::endSession(uint32_t now, const char *reason)
     }
 }
 
+// 0 when the command lock is not built in: nothing to count.
+static inline uint32_t spiCmdContendedNow()
+{
+#ifdef MESHTASTIC_SPI_CMD_ATOMIC
+    return spiCmdContended;
+#else
+    return 0;
+#endif
+}
+
+// Which arm this image is, on every stats line: contended=0 alone cannot tell "lock off" from "lock on,
+// no collisions", and the boot log is not in the capture window.
+static inline const char *spiCmdLockMode()
+{
+#ifdef MESHTASTIC_SPI_CMD_ATOMIC
+    return "on";
+#else
+    return "off";
+#endif
+}
+
 void DMShellTestModule::serviceActive(uint32_t now)
 {
+#if DMSHELL_TEST_STATS_EVERY_MS
+    if (Throttle::deadlinePassedAt(now, nextStatsMs)) {
+        nextStatsMs = now + DMSHELL_TEST_STATS_EVERY_MS;
+        const RadioSnapshot s = readRadio();
+        const RadioSnapshot &b = radioAtStart;
+        if (s.chipValid && b.chipValid)
+            LOG_INFO("DMShellTest t=%u counters rx_good=%u readout=%u lost=%u chip_rx=%u gap=%d cmdlock=%s contended=%u",
+                     (unsigned)now, (unsigned)(s.good - b.good), (unsigned)(s.readOut - b.readOut),
+                     (unsigned)(s.readOutLost - b.readOutLost), (unsigned)(uint16_t)(s.chipReceived - b.chipReceived),
+                     (int)((uint16_t)(s.chipReceived - b.chipReceived) - (s.good - b.good)), spiCmdLockMode(),
+                     (unsigned)spiCmdContendedNow());
+        else
+            LOG_INFO("DMShellTest t=%u counters rx_good=%u readout=%u lost=%u chip none cmdlock=%s contended=%u", (unsigned)now,
+                     (unsigned)(s.good - b.good), (unsigned)(s.readOut - b.readOut), (unsigned)(s.readOutLost - b.readOutLost),
+                     spiCmdLockMode(), (unsigned)spiCmdContendedNow());
+    }
+#endif
     const bool typing = !Throttle::deadlinePassedAt(now, openedAtMs + DMSHELL_TEST_SESSION_MS);
     if (typing)
         typeWorkload(now);

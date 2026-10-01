@@ -33,6 +33,21 @@ void LockingArduinoHal::spiEndTransaction()
     spiLock->unlock();
 }
 
+#ifdef MESHTASTIC_SPI_CMD_ATOMIC
+void LockingArduinoHal::spiLockCommand()
+{
+    if (!spiCmdLock->lock(0)) { // free now, or the other thread is inside a command: count that and wait
+        spiCmdContended = spiCmdContended + 1;
+        spiCmdLock->lock();
+    }
+}
+
+void LockingArduinoHal::spiUnlockCommand()
+{
+    spiCmdLock->unlock();
+}
+#endif
+
 #if ARCH_PORTDUINO
 void LockingArduinoHal::spiTransfer(uint8_t *out, size_t len, uint8_t *in)
 {
@@ -905,6 +920,16 @@ void RadioLibInterface::handleReceiveInterrupt(const CapturedRxInfo *captured)
 #endif
 
     int state = captured ? captured->state : iface->readData((uint8_t *)&radioBuffer, length);
+#ifdef MESHTASTIC_RX_FAIL_PROBE
+    // The readout task fills the probe for the frames it captured. A frame the thread reads itself has no capture, so
+    // read the chip back here instead, while it is still the state the read failed in.
+    uint8_t threadPkt = 0xEE, threadMode = 0xEE;
+    uint32_t threadIrq = 0;
+    int16_t threadTypeErr = 0;
+    bool threadProbe = false;
+    if (!captured && state != RADIOLIB_ERR_NONE)
+        threadProbe = readRxFailState(threadPkt, threadMode, threadIrq, threadTypeErr);
+#endif
 #if ARCH_PORTDUINO
     if (portduino_config.logoutputlevel == level_trace) {
         printBytes("Raw incoming packet: ", (uint8_t *)&radioBuffer, length);
@@ -917,6 +942,17 @@ void RadioLibInterface::handleReceiveInterrupt(const CapturedRxInfo *captured)
                   state, radioBuffer.header.id, radioBuffer.header.from, radioBuffer.header.to, radioBuffer.header.flags,
                   captured ? captured->snr : iface->getSNR(), captured ? (long)captured->rssi : lround(iface->getRSSI()),
                   radioBuffer.header.next_hop, radioBuffer.header.relay_node);
+#ifdef MESHTASTIC_RX_FAIL_PROBE
+        if (captured && captured->failValid)
+            LOG_ERROR("  rx fail probe readout: chip pktType=0x%02x (getPacketType=%d) mode=0x%02x irq=0x%08x len=%u",
+                      (unsigned)captured->failPktType, (int)captured->failTypeErr, (unsigned)captured->failMode,
+                      (unsigned)captured->failIrq, (unsigned)length);
+        else if (threadProbe)
+            LOG_ERROR("  rx fail probe thread: chip pktType=0x%02x (getPacketType=%d) mode=0x%02x irq=0x%08x len=%u",
+                      (unsigned)threadPkt, (int)threadTypeErr, (unsigned)threadMode, (unsigned)threadIrq, (unsigned)length);
+        else
+            LOG_ERROR("  rx fail probe: none (captured=%d)", captured ? 1 : 0);
+#endif
         rxBad++;
 
         airTime->logAirtime(RX_ALL_LOG, rxMsec);
@@ -1321,6 +1357,11 @@ void RadioLibInterface::readOutFromTask()
     }
     CapturedFrame &f = rxRing[head];
     f.info.state = iface->readData(f.data, len);
+#ifdef MESHTASTIC_RX_FAIL_PROBE
+    f.info.failValid = false;
+    if (f.info.state != RADIOLIB_ERR_NONE) // read the chip's state while it is still the state that failed
+        f.info.failValid = readRxFailState(f.info.failPktType, f.info.failMode, f.info.failIrq, f.info.failTypeErr);
+#endif
     f.info.retried = false;
 #if MESHTASTIC_RX_RETRY_WRONG_MODEM
     if (f.info.state == RADIOLIB_ERR_WRONG_MODEM) {
@@ -1351,7 +1392,6 @@ void RadioLibInterface::readOutFromTask()
         if (f.info.state == RADIOLIB_ERR_NONE)
             rxReadoutRecovered = rxReadoutRecovered + 1;
     }
-#endif
     f.info.snr = iface->getSNR();
     f.info.rssi = lround(iface->getRSSI());
     f.info.spiUs = benchClockToUs(benchClock() - t0);

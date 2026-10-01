@@ -106,6 +106,11 @@ class LockingArduinoHal : public ArduinoHal
 
     void spiBeginTransaction() override;
     void spiEndTransaction() override;
+#ifdef MESHTASTIC_SPI_CMD_ATOMIC
+    // Bench: serialise whole chip commands, not just single transfers. See spiCmdLock in SPILock.h.
+    void spiLockCommand() override;
+    void spiUnlockCommand() override;
+#endif
 #if ARCH_PORTDUINO
     void spiTransfer(uint8_t *out, size_t len, uint8_t *in) override;
 
@@ -362,6 +367,14 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 #endif
     }
 
+#ifdef MESHTASTIC_RX_FAIL_PROBE
+    /** Bench: the chip's packet type, mode and IRQ flags, for a readout that just failed. False if unavailable. */
+    virtual bool readRxFailState(uint8_t & /*pktType*/, uint8_t & /*mode*/, uint32_t & /*irq*/, int16_t & /*typeErr*/)
+    {
+        return false;
+    }
+#endif
+
     /** Bench: the chip's own receive counters since its last reset. False where the chip or RadioLib keeps none. */
     virtual bool readChipRxStats(uint16_t & /*received*/, uint16_t & /*crcError*/, uint16_t & /*headerError*/,
                                  uint16_t & /*falseSync*/)
@@ -416,6 +429,17 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
         uint8_t firstLen;       // and the length read before it
         int16_t immediateState; // the read straight after the failure; state is the final one, after a tick if needed
         uint8_t immediateLen;
+#ifdef MESHTASTIC_RX_FAIL_PROBE
+        // Bench: the chip's own state at a FAILED readout, read in the task right after readData(). Only
+        // meaningful when state != RADIOLIB_ERR_NONE. For -20 WRONG_MODEM the question is whether the chip
+        // really reports another modem, or whether GetPacketType returned success without writing a reply,
+        // leaving readData()'s initialiser: NONE is 0x00 on LR11x0 and 0xFF on LR2021.
+        uint8_t failPktType;
+        uint8_t failMode;
+        uint32_t failIrq;
+        int16_t failTypeErr;
+        bool failValid;
+#endif
     };
 
     /** Bench: whether the driver's RX keeps running after RX_DONE (a continuous RX), so a frame read out by the

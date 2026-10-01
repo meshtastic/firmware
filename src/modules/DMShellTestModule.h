@@ -98,6 +98,7 @@ class DMShellTestModule : public SinglePortModule, private concurrency::OSThread
         bool chipValid;
     };
     RadioSnapshot radioAtStart = {};
+    uint32_t nextStatsMs = 0;
     static RadioSnapshot readRadio();
     void logRadioStats();
 
