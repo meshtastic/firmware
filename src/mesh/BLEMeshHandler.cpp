@@ -27,7 +27,6 @@ meshtastic_MeshPacket strippedForAir(const meshtastic_MeshPacket &mp)
 {
     meshtastic_MeshPacket out = mp;
     out.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_INTERNAL;
-    out.via_mqtt = false;
     out.tx_after = 0;
     out.priority = meshtastic_MeshPacket_Priority_UNSET;
     out.pki_encrypted = false;
@@ -268,9 +267,8 @@ void BLEMeshHandler::deliverToRouter(const uint8_t *data, size_t len, int8_t rss
     }
 
     mp.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_BLE_ADV;
-    // Wire-carried flags that only the local stack may set: a sender must not suppress our MQTT uplink
-    // or schedule our transmit.
-    mp.via_mqtt = false;
+    // A sender must not schedule our transmit. via_mqtt stays as sent: the LoRa header carries it too,
+    // and ignore_mqtt and the MQTT uplink's loop guard read it.
     mp.tx_after = 0;
     // priority is local-only and, unlike want_ack/next_hop/relay_node, is NOT carried in the LoRa
     // header, so here a sender can choose it. Left as sent, MAX outranks the ceiling fixPriority

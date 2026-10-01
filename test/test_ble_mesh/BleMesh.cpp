@@ -234,7 +234,6 @@ void test_the_air_copy_drops_everything_the_receiver_overwrites(void)
     // Exactly the set deliverToRouter rewrites, plus rx_time which Router::handleReceived stamps.
     // Sending them costs budget for bytes the far side discards.
     TEST_ASSERT_EQUAL(meshtastic_MeshPacket_TransportMechanism_TRANSPORT_INTERNAL, air.transport_mechanism);
-    TEST_ASSERT_FALSE(air.via_mqtt);
     TEST_ASSERT_EQUAL_UINT32(0, air.tx_after);
     TEST_ASSERT_EQUAL(meshtastic_MeshPacket_Priority_UNSET, air.priority);
     TEST_ASSERT_FALSE(air.pki_encrypted);
@@ -244,6 +243,7 @@ void test_the_air_copy_drops_everything_the_receiver_overwrites(void)
     TEST_ASSERT_EQUAL_FLOAT(0.0f, air.rx_snr);
 
     // And nothing routing needs went with them.
+    TEST_ASSERT_TRUE_MESSAGE(air.via_mqtt, "the receiver keeps via_mqtt, as from a LoRa header");
     TEST_ASSERT_EQUAL_UINT32(p.from, air.from);
     TEST_ASSERT_EQUAL_UINT32(p.to, air.to);
     TEST_ASSERT_EQUAL_UINT32(p.id, air.id);
@@ -548,6 +548,26 @@ void test_ingress_clears_pki_metadata(void)
     TEST_ASSERT_EQUAL(0, h.received[0].public_key.size);
 }
 
+void test_ingress_keeps_via_mqtt_and_clears_scheduling(void)
+{
+    FakeBLEMesh h;
+    h.start();
+    auto p = encryptedPacket();
+    p.via_mqtt = true;
+    p.tx_after = 4242;
+    p.priority = meshtastic_MeshPacket_Priority_MAX;
+
+    uint8_t body[meshtastic_MeshPacket_size];
+    size_t n = encodeForAir(p, body, sizeof(body));
+
+    h.feed(body, n, -50);
+    TEST_ASSERT_EQUAL(1, h.received.size());
+    // The LoRa header carries via_mqtt, so ignore_mqtt and the MQTT uplink depend on it arriving intact.
+    TEST_ASSERT_TRUE(h.received[0].via_mqtt);
+    TEST_ASSERT_EQUAL_UINT32(0, h.received[0].tx_after);
+    TEST_ASSERT_EQUAL(meshtastic_MeshPacket_Priority_UNSET, h.received[0].priority);
+}
+
 void test_ingress_ignores_our_own_advertisement(void)
 {
     FakeBLEMesh h;
@@ -613,6 +633,7 @@ void setup()
     RUN_TEST(test_ingress_drops_a_frame_with_no_sender);
     RUN_TEST(test_ingress_drops_an_impossible_hop_count);
     RUN_TEST(test_ingress_clears_pki_metadata);
+    RUN_TEST(test_ingress_keeps_via_mqtt_and_clears_scheduling);
     RUN_TEST(test_ingress_ignores_our_own_advertisement);
     RUN_TEST(test_pump_waits_for_the_platform);
     exit(UNITY_END());
