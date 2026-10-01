@@ -283,8 +283,10 @@ template <typename T> bool LR20x0Interface<T>::reconfigure()
         // fullBegin() hardware-resets the chip, so a standby failure is survivable here
         (void)trySetStandby();
 
-        if (!fullBegin(freq))
+        if (!fullBegin(freq)) {
+            rxOffline = true; // periodicRadioMaintenance() retries recovery and RX; repeated failures reach the reboot ladder
             return false;
+        }
 
         startReceive();
         return reconfigureSuccess;
@@ -360,7 +362,8 @@ template <typename T> bool LR20x0Interface<T>::reconfigure()
         // would reboot before MeshService persists the config change that triggered us.
         LOG_ERROR("LR20x0 rejected modem params, chip state lost? Full re-init");
         if (!fullBegin(freq)) {
-            LOG_ERROR("LR20x0 unrecoverable, radio down until reboot");
+            LOG_ERROR("LR20x0 unrecoverable, radio offline, maintenance will retry");
+            rxOffline = true; // periodicRadioMaintenance() retries recovery and RX; repeated failures reach the reboot ladder
             return false;
         }
         LOG_INFO("LR20x0 recovered after re-init");

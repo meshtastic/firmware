@@ -299,7 +299,8 @@ bool RF95Interface::reconfigure()
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
         LOG_ERROR("RF95 rejected modem params, chip state lost? Full re-init");
         if (!reinitChip() || (err = programModemParams()) != RADIOLIB_ERR_NONE) {
-            LOG_ERROR("RF95 unrecoverable %s%d, radio down until reboot", radioLibErr, err);
+            LOG_ERROR("RF95 unrecoverable %s%d, radio offline, maintenance will retry", radioLibErr, err);
+            rxOffline = true; // periodicRadioMaintenance() retries recovery and RX; repeated failures reach the reboot ladder
             return false;
         }
         LOG_INFO("RF95 recovered after re-init");

@@ -199,7 +199,8 @@ template <typename T> bool SX128xInterface<T>::reconfigure()
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
         LOG_ERROR("SX128x rejected modem params, chip state lost? Full re-init");
         if (!reinitChip() || (err = programModemParams()) != RADIOLIB_ERR_NONE) {
-            LOG_ERROR("SX128x unrecoverable %s%d, radio down until reboot", radioLibErr, err);
+            LOG_ERROR("SX128x unrecoverable %s%d, radio offline, maintenance will retry", radioLibErr, err);
+            rxOffline = true; // periodicRadioMaintenance() retries recovery and RX; repeated failures reach the reboot ladder
             return false;
         }
         LOG_INFO("SX128x recovered after re-init");
