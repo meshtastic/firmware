@@ -318,7 +318,7 @@ void Screen::showSimpleBanner(const char *message, uint32_t durationMs)
 }
 
 // Called to trigger a banner with custom message and duration
-void Screen::showOverlayBanner(BannerOverlayOptions banner_overlay_options)
+void Screen::showOverlayBanner(const BannerOverlayOptions &banner_overlay_options)
 {
 #ifdef USE_EINK
     EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // Skip full refresh for all overlay menus
