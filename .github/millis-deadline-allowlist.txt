@@ -20,3 +20,8 @@ src/input/ButtonThread.cpp	if (millis() > 30000 && buttonPressStartTime > 30000 
 # Boot-window check, not a deadline: draws the custom OEM logo only during the first 10s of uptime,
 # so the ordinary Meshtastic logo is used at shutdown.
 src/graphics/niche/InkHUD/Applets/System/Logo/LogoApplet.cpp	if (millis() < 10 * 1000UL) {
+
+# Not a comparison at all: a right shift the guard's regex reads as one. Coarsens uptime to ~1.165 h
+# units for the shared-secret cache's least-recently-used stamp, whose own arithmetic handles the
+# 8-bit wrap.
+src/mesh/CryptoEngine.cpp	const uint8_t now = (millis() >> 22) & 0xff;
