@@ -204,8 +204,8 @@ template <typename T> bool LR11x0Interface<T>::init()
     }
 
     LR11x0VersionInfo_t version;
-    res = lora.getVersionInfo(&version);
-    if (res == RADIOLIB_ERR_NONE) {
+    // Own variable, as LR20x0 does: assigning to res would erase a begin() error and let init() succeed
+    if (lora.getVersionInfo(&version) == RADIOLIB_ERR_NONE) {
         LOG_DEBUG("LR11x0 Device %d, HW %d, FW %d.%d, WiFi %d.%d, GNSS %d.%d", version.device, version.hardware, version.fwMajor,
                   version.fwMinor, version.fwMajorWiFi, version.fwMinorWiFi, version.fwGNSS, version.almanacGNSS);
         transceiverFw = ((uint16_t)version.fwMajor << 8) | version.fwMinor;

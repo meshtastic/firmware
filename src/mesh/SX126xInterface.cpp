@@ -165,7 +165,9 @@ template <typename T> bool SX126xInterface<T>::reinitChip()
     // are: SX1262, SX1268: 0x38 (140 mA), SX1261: 0x18 (60 mA)
     // FIXME: Not ideal to increase SX1261 current limit above 60mA as it can only transmit max 15dBm, should probably only do it
     // if using SX1262 or SX1268
-    res = lora.setCurrentLimit(currentLimit);
+    // Gated, so a begin() error is not overwritten by this call's result and still fails init()
+    if (res == RADIOLIB_ERR_NONE)
+        res = lora.setCurrentLimit(currentLimit);
     LOG_DEBUG("Current limit set to %f", currentLimit);
     LOG_DEBUG("Current limit set result %d", res);
 
