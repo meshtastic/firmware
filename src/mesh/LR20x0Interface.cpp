@@ -658,12 +658,15 @@ template <typename T> bool LR20x0Interface<T>::isChannelActive()
     // datasheet's "32 MHz periods" disagrees); RadioLib scales it as 30.52, so we land ~2% long.
     const RadioLibTime_t cadRxTimeoutUsec =
         (RadioLibTime_t)getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN + sizeof(PacketHeader), false) * 1000;
+    // SetLoraCadParams exit mode: 0x00 CAD only, 0x01 RX on detection, 0x10 TX when clear, as on LR11x0. RadioLib's
+    // RADIOLIB_LR2021_CAD_EXIT_MODE_RX is 0x02, which the chip refuses with a processing error (-706), so no scan runs.
+    static constexpr uint8_t CAD_EXIT_MODE_RX = 0x01;
     ChannelScanConfig_t cfg = {.cad = {.symNum = symNum,
                                        .detPeak = detPeak,
                                        // ignored: SetLoraCadParams has no det_min - that byte carries
                                        // pnr_delta, which scanChannel() takes from lora.fastCad below
                                        .detMin = RADIOLIB_LR2021_CAD_PARAM_DEFAULT,
-                                       .exitMode = RADIOLIB_LR2021_CAD_EXIT_MODE_RX,
+                                       .exitMode = CAD_EXIT_MODE_RX,
                                        .timeout = cadRxTimeoutUsec,
                                        // DS rev 2.2 6.8.3: only routes IRQs to a pin, so keep
                                        // preamble/header off it - they would fire the ISR mid-frame
@@ -685,6 +688,8 @@ template <typename T> bool LR20x0Interface<T>::isChannelActive()
             noteCadHandoffToRx(); // nothing below arms the radio; the caller's rearmReceive() adopts it
             return true;
         }
+        if (result != RADIOLIB_CHANNEL_FREE && result != RADIOLIB_ERR_WRONG_MODEM)
+            LOG_WARN("LR20x0 channel scan failed %s%d, reported clear", radioLibErr, result);
         if (result != RADIOLIB_ERR_WRONG_MODEM)
             return false;
     }
