@@ -403,17 +403,19 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
     /** Bench: a frame the readout task took from the chip, and what it saw; the frame itself goes into radioBuffer */
     struct CapturedRxInfo {
-        uint32_t wakeMs;    // millis() of the RX_DONE interrupt, or of the poll that found RX_DONE
-        uint32_t readMs;    // millis() when the readout ended
-        uint32_t spiUs;     // time of the readout's RadioLib calls
-        int32_t rssi;       // getRSSI()
-        float snr;          // getSNR()
-        int16_t state;      // readData()'s result
-        uint8_t len;        // bytes in the frame
-        bool chipListening; // the driver's RX was still running after the frame, so nothing needs re-arming
-        bool retried;       // the first readData() failed with WRONG_MODEM and this is the second
-        int16_t firstState; // that first readData()'s result
-        uint8_t firstLen;   // and the length read before it
+        uint32_t wakeMs;        // millis() of the RX_DONE interrupt, or of the poll that found RX_DONE
+        uint32_t readMs;        // millis() when the readout ended
+        uint32_t spiUs;         // time of the readout's RadioLib calls
+        int32_t rssi;           // getRSSI()
+        float snr;              // getSNR()
+        int16_t state;          // readData()'s result
+        uint8_t len;            // bytes in the frame
+        bool chipListening;     // the driver's RX was still running after the frame, so nothing needs re-arming
+        bool retried;           // the first readData() failed with WRONG_MODEM, so the frame was read again
+        int16_t firstState;     // that first readData()'s result
+        uint8_t firstLen;       // and the length read before it
+        int16_t immediateState; // the read straight after the failure; state is the final one, after a tick if needed
+        uint8_t immediateLen;
     };
 
     /** Bench: whether the driver's RX keeps running after RX_DONE (a continuous RX), so a frame read out by the
