@@ -23,9 +23,9 @@
 #define MESHTASTIC_RX_READOUT_TASK
 #endif
 
-// Bench: -DLR11X0_TX_STAGE_EARLY writes the TX payload during its backoff (see LR11x0Interface.h). The timer plumbing
-// lives here, as #12016's does.
-#if defined(LR11X0_TX_STAGE_EARLY) && !defined(MESHTASTIC_TX_STAGE_EARLY)
+// Bench: -DLR11X0_TX_STAGE_EARLY and -DSX126X_TX_STAGE_EARLY write the TX payload during its backoff (see the
+// driver headers). The timer plumbing lives here, as #12016's does.
+#if (defined(LR11X0_TX_STAGE_EARLY) || defined(SX126X_TX_STAGE_EARLY)) && !defined(MESHTASTIC_TX_STAGE_EARLY)
 #define MESHTASTIC_TX_STAGE_EARLY
 #endif
 
@@ -300,18 +300,6 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     /** Bench: whether a TX payload staged while this frame arrived can have overwritten part of it */
     virtual bool rxFrameOverlapsTxStage(size_t length) { return false; }
 #endif
-#ifdef SX126X_TX_STAGE_EARLY
-    /** Bench: a backoff shorter than this is waited out as before, and its payload staged at the scan */
-    static constexpr uint32_t TX_STAGE_EARLY_MIN_MS = 5;
-    /** Bench: when the TX timer really falls due, 0 if it was not brought forward to stage the payload */
-    uint32_t txStageDueMs = 0;
-    /** Bench: whether a payload can be written during its backoff (checked from the thread that queues it) */
-    virtual bool wantsEarlyTxStage() const { return false; }
-    /** Bench: write the next packet's payload while RX runs, ahead of its scan */
-    virtual void stageTxEarly(meshtastic_MeshPacket *p) {}
-#endif
-    /** notifyLater(delay, TRANSMIT_DELAY_COMPLETED), brought forward under -DSX126X_TX_STAGE_EARLY */
-    void scheduleTransmitDelayCompleted(uint32_t delay);
 
     // Timed TX_DONE check for irqPolledOverUsb() hosts: the chip drops to standby when a frame ends and is
     // deaf until we notice, so look when the frame should have ended instead of waiting for the poll.
