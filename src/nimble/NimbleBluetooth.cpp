@@ -29,6 +29,11 @@
 #include <nvs_flash.h>
 #endif
 
+#if HAS_BLE_GATT_MESH && defined(ARCH_ESP32)
+#define NIMBLE_GATT_MESH 1
+#include "platform/esp32/ESP32BLEGattMesh.h"
+#endif
+
 namespace
 {
 constexpr uint16_t kPreferredBleMtu = 517;
@@ -125,6 +130,18 @@ static void clearPairingDisplay()
     }
 #endif
 }
+
+#if NIMBLE_GATT_MESH
+// The phone is whichever link uses the phone API, not whichever connected or paired: with a mesh peer
+// on the radio at the same time, neither says anything. Called from every phone-API access.
+static void notePhoneLink(uint16_t connHandle)
+{
+    if (nimbleBluetoothConnHandle.exchange(connHandle) == connHandle)
+        return;
+    meshtastic::BluetoothStatus newStatus(meshtastic::BluetoothStatus::ConnectionState::CONNECTED);
+    bluetoothStatus->updateStatus(&newStatus);
+}
+#endif
 
 class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
 {
@@ -223,7 +240,13 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
         // Service a deferred advertising restart from onDisconnect, gated on ble_hs_synced() so we
         // never re-enter the GAP API while the host is still mid-reset.
         if (pendingStartAdvertising) {
-            if (checkIsConnected()) {
+#if NIMBLE_GATT_MESH
+            // With mesh peers the advertisement runs while any connection slot is free, phone or not.
+            const bool slotsFull = ESP32BLEGattMesh::enabled() ? !ESP32BLEGattMesh::hasFreeLink() : checkIsConnected();
+#else
+            const bool slotsFull = checkIsConnected();
+#endif
+            if (slotsFull) {
                 pendingStartAdvertising = false; // a new physical connection beat us to it; nothing to do
             } else if (ble_hs_synced()) {
                 pendingStartAdvertising = false;
@@ -476,6 +499,14 @@ static uint8_t lastToRadio[MAX_TO_FROM_RADIO_SIZE];
 
 class NimbleBluetoothToRadioCallback : public BLECharacteristicCallbacks
 {
+#if NIMBLE_GATT_MESH
+    void onWrite(BLECharacteristic *pCharacteristic, ble_gap_conn_desc *desc) override
+    {
+        notePhoneLink(desc->conn_handle);
+        onWrite(pCharacteristic);
+    }
+#endif
+
     void onWrite(BLECharacteristic *pCharacteristic) override
     {
         // CAUTION: This callback runs in the NimBLE task!!! Don't do anything except communicate with the main task's runOnce.
@@ -526,6 +557,14 @@ class NimbleBluetoothToRadioCallback : public BLECharacteristicCallbacks
 
 class NimbleBluetoothFromRadioCallback : public BLECharacteristicCallbacks
 {
+#if NIMBLE_GATT_MESH
+    void onRead(BLECharacteristic *pCharacteristic, ble_gap_conn_desc *desc) override
+    {
+        notePhoneLink(desc->conn_handle);
+        onRead(pCharacteristic);
+    }
+#endif
+
     void onRead(BLECharacteristic *pCharacteristic) override
     {
         // CAUTION: This callback runs in the NimBLE task!!! Don't do anything except communicate with the main task's runOnce.
@@ -648,7 +687,25 @@ class NimbleBluetoothLogRadioCallback : public BLECharacteristicCallbacks
         if (s == Status::ERROR_GATT)
             lastLogNotifyFailureMs.store(millis());
     }
+#if NIMBLE_GATT_MESH
+    void onSubscribe(BLECharacteristic *, ble_gap_conn_desc *desc, uint16_t subValue) override
+    {
+        if (subValue)
+            notePhoneLink(desc->conn_handle);
+    }
+#endif
 };
+
+#if NIMBLE_GATT_MESH
+class NimbleBluetoothFromNumCallback : public BLECharacteristicCallbacks
+{
+    void onSubscribe(BLECharacteristic *, ble_gap_conn_desc *desc, uint16_t subValue) override
+    {
+        if (subValue)
+            notePhoneLink(desc->conn_handle);
+    }
+};
+#endif
 
 class NimbleBluetoothSecurityCallback : public BLESecurityCallbacks
 {
@@ -705,6 +762,12 @@ class NimbleBluetoothSecurityCallback : public BLESecurityCallbacks
         bluetoothStatus->updateStatus(&newStatus);
         clearPairingDisplay();
 
+#if NIMBLE_GATT_MESH
+        // With mesh peers sharing the radio, pairing does not say which link is the phone;
+        // notePhoneLink() decides that on the phone's first protected access, which follows this.
+        if (ESP32BLEGattMesh::enabled())
+            return;
+#endif
         nimbleBluetoothConnHandle = desc->conn_handle;
     }
 };
@@ -768,6 +831,18 @@ class NimbleBluetoothServerCallback : public BLEServerCallbacks
 
         LOG_INFO("BLE conn %u peer MTU %u (target %u)", connHandle, pServer->getPeerMTU(connHandle), kPreferredBleMtu);
         pServer->updateConnParams(connHandle, 6, 12, 0, 200);
+
+#if NIMBLE_GATT_MESH
+        if (ESP32BLEGattMesh::enabled()) {
+            // Every inbound link is a candidate mesh peer until it subscribes, whatever it turns out to
+            // be. The advertisement stopped for this connection; bring it back if a slot is still free.
+            ESP32BLEGattMesh::onConnect(connHandle);
+            pendingStartAdvertising = true;
+            if (bluetoothPhoneAPI)
+                bluetoothPhoneAPI->setIntervalFromNow(0);
+            concurrency::mainDelay.interrupt();
+        }
+#endif
     }
 
     void onDisconnect(BLEServer *pServer, struct ble_gap_conn_desc *desc)
@@ -775,6 +850,24 @@ class NimbleBluetoothServerCallback : public BLEServerCallbacks
         LOG_INFO("BLE disconnected");
         if (ble->isDeInit)
             return;
+
+#if NIMBLE_GATT_MESH
+        if (ESP32BLEGattMesh::enabled()) {
+            ESP32BLEGattMesh::onDisconnect(desc->conn_handle);
+            // Only the phone's link ends the phone's session; a mesh peer, or a link that never used
+            // the phone API, dropping must not close it.
+            if (desc->conn_handle != nimbleBluetoothConnHandle.load()) {
+                LOG_INFO("BLE link %u dropped (not the phone's)", desc->conn_handle);
+                if (nimbleBluetoothConnHandle.load() == BLE_HS_CONN_HANDLE_NONE)
+                    clearPairingDisplay();
+                pendingStartAdvertising = true;
+                if (bluetoothPhoneAPI)
+                    bluetoothPhoneAPI->setIntervalFromNow(0);
+                concurrency::mainDelay.interrupt();
+                return;
+            }
+        }
+#endif
 
         meshtastic::BluetoothStatus newStatus(meshtastic::BluetoothStatus::ConnectionState::DISCONNECTED);
         bluetoothStatus->updateStatus(&newStatus);
@@ -804,7 +897,12 @@ void NimbleBluetooth::startAdvertising()
     // }
 
     BLEAdvertisementData scan = BLEAdvertisementData();
-    scan.setName(getDeviceName());
+#if NIMBLE_GATT_MESH
+    if (ESP32BLEGattMesh::enabled())
+        ESP32BLEGattMesh::fillScanResponse(scan, getDeviceName());
+    else
+#endif
+        scan.setName(getDeviceName());
     pAdvertising->setScanResponseData(scan);
     pAdvertising->setMinPreferred(0x06); // functions that help with iPhone connections issue
     pAdvertising->setMaxPreferred(0x12);
@@ -842,6 +940,17 @@ void NimbleBluetooth::deinit()
 
     // isDeInit must stay false here, else onDisconnect early-returns without clearing the handle.
     uint16_t connHandle = nimbleBluetoothConnHandle.load();
+#if NIMBLE_GATT_MESH
+    // Every link, not only the phone's: a live mesh peer hits the same freed-server dispatch.
+    if (bleServer && ESP32BLEGattMesh::enabled()) {
+        uint16_t handles[BLE_GATT_MESH_ESP32_LINKS];
+        const size_t n = ESP32BLEGattMesh::linkHandles(handles, BLE_GATT_MESH_ESP32_LINKS);
+        for (size_t i = 0; i < n; i++) {
+            if (handles[i] != connHandle)
+                bleServer->disconnect(handles[i]);
+        }
+    }
+#endif
     if (connHandle != BLE_HS_CONN_HANDLE_NONE && bleServer) {
         bleServer->disconnect(connHandle);
         uint32_t start = millis();
@@ -849,9 +958,21 @@ void NimbleBluetooth::deinit()
             delay(10);
         delay(50);
     }
+#if NIMBLE_GATT_MESH
+    if (bleServer && ESP32BLEGattMesh::enabled()) {
+        uint16_t handles[BLE_GATT_MESH_ESP32_LINKS];
+        uint32_t start = millis();
+        while (ESP32BLEGattMesh::linkHandles(handles, BLE_GATT_MESH_ESP32_LINKS) != 0 &&
+               Throttle::isWithinTimespanMs(start, 2000))
+            delay(10);
+    }
+#endif
 
     isDeInit = true;
     pendingStartAdvertising = false; // stack is going away; don't let runOnce retry the adv restart
+#if NIMBLE_GATT_MESH
+    ESP32BLEGattMesh::teardown(); // its characteristic is freed by BLEDevice::deinit() below
+#endif
 
 #ifdef BLE_LED
     digitalWrite(BLE_LED, LED_STATE_OFF);
@@ -959,6 +1080,11 @@ void NimbleBluetooth::setup()
         // encrypted link, so don't offer to bond at all.
         security.setAuthenticationMode(false, false, false);
     }
+#if NIMBLE_GATT_MESH
+    // Security starts when a protected attribute is touched instead of on every connect, so a mesh
+    // peer, which touches none, is never pushed into pairing. The phone API keeps its protection.
+    BLESecurity::setForceAuthentication(!ESP32BLEGattMesh::enabled());
+#endif
     // Statics: setup() re-runs on BLE re-enable, and the library never frees these
     // caller-owned callback objects, so register the same instances every cycle.
     static NimbleBluetoothSecurityCallback securityCallbacks;
@@ -1024,6 +1150,11 @@ void NimbleBluetooth::setupService()
     static NimbleBluetoothLogRadioCallback logRadioCallbacks;
     logRadioCharacteristic->setCallbacks(&logRadioCallbacks);
 
+#if NIMBLE_GATT_MESH
+    static NimbleBluetoothFromNumCallback fromNumCallbacks;
+    fromNumCharacteristic->setCallbacks(&fromNumCallbacks);
+#endif
+
     bleService->start();
 
     // Setup the battery service
@@ -1045,6 +1176,10 @@ void NimbleBluetooth::setupService()
     BatteryCharacteristic->setValue(&initialLevel, 1);
     lastBatteryLevel = initialLevel;
     batteryService->start();
+
+#if NIMBLE_GATT_MESH
+    ESP32BLEGattMesh::setupService(bleServer);
+#endif
 }
 
 /// Given a level between 0-100, update the BLE attribute
