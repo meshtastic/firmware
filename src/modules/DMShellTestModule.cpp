@@ -19,6 +19,10 @@
 #ifndef DMSHELL_TEST_COMMAND
 #define DMSHELL_TEST_COMMAND "head -c 120000 /etc/services\n"
 #endif
+// Type the command a second time at this time from OPEN_OK, so a load burst lands mid-run as well as at the start; 0 = once
+#ifndef DMSHELL_TEST_COMMAND_AGAIN_MS
+#define DMSHELL_TEST_COMMAND_AGAIN_MS 0
+#endif
 #ifndef DMSHELL_TEST_KEY_INTERVAL_MS
 #define DMSHELL_TEST_KEY_INTERVAL_MS 200
 #endif
@@ -101,10 +105,11 @@ DMShellTestModule::DMShellTestModule()
     : SinglePortModule("DMShellTest", meshtastic_PortNum_REMOTE_SHELL_APP), concurrency::OSThread("DMShellTest")
 {
     nextSessionAtMs = DMSHELL_TEST_START_DELAY_MS;
-    LOG_INFO("DMShellTest: peer 0x%08x, %u session(s) of %u ms from %u ms after boot, %s batching, window %u",
+    LOG_INFO("DMShellTest: peer 0x%08x, %u session(s) of %u ms from %u ms after boot, %s batching, window %u, "
+             "command again at %u ms",
              (unsigned)DMSHELL_TEST_PEER, (unsigned)DMSHELL_TEST_SESSIONS, (unsigned)DMSHELL_TEST_SESSION_MS,
              (unsigned)DMSHELL_TEST_START_DELAY_MS, DMSHELL_TEST_BATCH_PIPE ? "pipe" : "terminal",
-             (unsigned)DMSHELL_TEST_INPUT_WINDOW);
+             (unsigned)DMSHELL_TEST_INPUT_WINDOW, (unsigned)DMSHELL_TEST_COMMAND_AGAIN_MS);
 }
 
 int32_t DMShellTestModule::runOnce()
@@ -171,6 +176,7 @@ void DMShellTestModule::startSession(uint32_t now)
     nextRetransmitMs = 0;
     pendingInputLen = 0;
     commandTyped = false;
+    commandRepeated = false;
     keystrokesTyped = 0;
     batchLen = 0;
     batchFirstByteMs = batchLastByteMs = 0;
@@ -266,21 +272,32 @@ void DMShellTestModule::closeBatch()
     batchFirstByteMs = 0;
 }
 
+void DMShellTestModule::typeCommand(uint32_t now)
+{
+    static const char command[] = DMSHELL_TEST_COMMAND;
+    for (size_t i = 0; i + 1 < sizeof(command); i++) {
+        addByte((uint8_t)command[i], now);
+        if (batchDue(now))
+            closeBatch();
+    }
+    LOG_INFO("DMShellTest t=%u typed the command (%u bytes)", (unsigned)now, (unsigned)(sizeof(command) - 1));
+}
+
 // The bench workload: after the settle time the command once, then one keystroke per interval
 void DMShellTestModule::typeWorkload(uint32_t now)
 {
     if (!commandTyped) {
         if (!Throttle::deadlinePassedAt(now, openedAtMs + DMSHELL_TEST_SETTLE_MS))
             return;
-        static const char command[] = DMSHELL_TEST_COMMAND;
-        for (size_t i = 0; i + 1 < sizeof(command); i++) {
-            addByte((uint8_t)command[i], now);
-            if (batchDue(now))
-                closeBatch();
-        }
+        typeCommand(now);
         commandTyped = true;
         nextKeystrokeMs = now + DMSHELL_TEST_KEY_INTERVAL_MS;
-        LOG_INFO("DMShellTest t=%u typed the command (%u bytes)", (unsigned)now, (unsigned)(sizeof(command) - 1));
+    }
+    if (DMSHELL_TEST_COMMAND_AGAIN_MS && !commandRepeated &&
+        Throttle::deadlinePassedAt(now, openedAtMs + DMSHELL_TEST_COMMAND_AGAIN_MS)) {
+        closeBatch(); // the command starts its own frame, as it would after a pause at a terminal
+        typeCommand(now);
+        commandRepeated = true;
     }
 
     if (batchDue(now))

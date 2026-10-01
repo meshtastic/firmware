@@ -79,6 +79,7 @@ class DMShellTestModule : public SinglePortModule, private concurrency::OSThread
     uint8_t pendingInput[PENDING_INPUT_MAX] = {};
     uint32_t pendingInputLen = 0;
     bool commandTyped = false;
+    bool commandRepeated = false;
     uint32_t keystrokesTyped = 0;
     uint32_t nextKeystrokeMs = 0;
     // The batch the client's stdin read would return, before it becomes one INPUT
@@ -94,6 +95,7 @@ class DMShellTestModule : public SinglePortModule, private concurrency::OSThread
     void endSession(uint32_t now, const char *reason);
     void serviceActive(uint32_t now);
     void typeWorkload(uint32_t now);
+    void typeCommand(uint32_t now);
     void addByte(uint8_t b, uint32_t now);
     bool batchDue(uint32_t now) const;
     void closeBatch();
