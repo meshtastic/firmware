@@ -119,31 +119,39 @@ bool RadioLibInterface::canSendImmediately()
         return true;
 }
 
+uint32_t RadioLibInterface::maxRxFrameMsec()
+{
+    // A sender's header can carry any CR up to 4/8, and the hold starts before that header can be read.
+    DataRate_t dr = getDataRate();
+    dr.lora.codingRate = 8;
+    PacketConfig_t pc = getPacketConfig();
+    pc.lora.crcEnabled = true;
+    const RadioLibTime_t usec = iface->calculateTimeOnAir(modemType, dr, pc, MAX_LORA_PAYLOAD_LEN);
+    return isRadioLibTimeError(usec) ? getPacketTime(MAX_LORA_PAYLOAD_LEN) : (usec + 999) / 1000;
+}
+
 bool RadioLibInterface::receiveDetected(uint16_t irq, unsigned long syncWordHeaderValidFlag, unsigned long preambleDetectedFlag)
 {
-    bool detected = (irq & (syncWordHeaderValidFlag | preambleDetectedFlag));
-    // Handle false detections
-    if (detected) {
-        if (!activeReceiveStart) {
-            activeReceiveStart = Time::skipZero(Time::getMillis());
-        } else if (!Throttle::isWithinTimespanMs(activeReceiveStart, 2 * preambleTimeMsec)) {
-            if (!(irq & syncWordHeaderValidFlag)) {
-                // The HEADER_VALID flag should be set by now if it was really a packet, so ignore PREAMBLE_DETECTED flag
-                activeReceiveStart = 0;
-                LOG_TRACE("Ignore false preamble detection");
-                return false;
-            } else {
-                uint32_t maxPacketTimeMsec = getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN + sizeof(PacketHeader));
-                if (!Throttle::isWithinTimespanMs(activeReceiveStart, maxPacketTimeMsec)) {
-                    // We should have gotten an RX_DONE IRQ by now if it was really a packet, so ignore HEADER_VALID flag
-                    activeReceiveStart = 0;
-                    LOG_TRACE("Ignore false header detection");
-                    return false;
-                }
-            }
-        }
-    }
-    return detected;
+    const uint32_t nowMsec = Time::getMillis();
+    const uint32_t prevPeek = rxSighting.lastPeek();
+    const uint32_t preambleWas = rxSighting.preambleSeen();
+    const bool preamble = irq & preambleDetectedFlag;
+    const bool header = irq & syncWordHeaderValidFlag;
+    // Cleared so that the next look finding it means a new detection. This only touches the IRQ register, never the RX.
+    if (preamble)
+        iface->clearIrqFlags(preambleDetectedFlag);
+
+    const uint32_t maxPacketMsec = maxRxFrameMsec();
+    const bool busy = rxSighting.observe(nowMsec, preamble, header, maxPacketMsec);
+    if (preamble && prevPeek)
+        LOG_TRACE("Preamble seen, detected in the last %ums, hold TX %ums", nowMsec - prevPeek, maxPacketMsec);
+    else if (preamble)
+        LOG_TRACE("Preamble seen, first look since RX start, hold TX %ums", maxPacketMsec);
+    else if (preambleWas && !rxSighting.preambleSeen())
+        LOG_TRACE("Preamble hold ended after %ums without a completed RX", nowMsec - preambleWas);
+    else if (header && !busy)
+        LOG_TRACE("Ignore false header detection, latched %ums", nowMsec - rxSighting.headerSeen());
+    return busy;
 }
 
 /// Send a packet (possibly by enquing in a private fifo).  This routine will

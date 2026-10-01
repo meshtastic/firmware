@@ -279,7 +279,7 @@ template <typename T> int16_t SX128xInterface<T>::trySetStandby()
 #endif
 #endif
     isReceiving = false; // If we were receiving, not any more
-    activeReceiveStart = 0;
+    rxSighting.reset();
     disableInterrupt();
     completeSending(); // If we were sending, not anymore
     RadioLibInterface::setStandby();
