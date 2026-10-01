@@ -663,27 +663,31 @@ DMShellTestModule::SentFrame *DMShellTestModule::findSent(uint32_t seq)
 
 void DMShellTestModule::logStats(uint32_t now)
 {
+    // Short lines: the board's log buffer is 160 bytes and truncates a longer one
+    const unsigned id = (unsigned)sessionId;
     const uint32_t elapsedMs = now - (openedAtMs ? openedAtMs : sessionStartMs);
     const uint32_t neverDelivered = peerHighestSeq > stats.rxNewInOrder ? peerHighestSeq - stats.rxNewInOrder : 0;
-    LOG_INFO("DMShellTest stats session=0x%08x elapsed_ms=%u peer_highest_seq=%u inbound frames_arrived=%u "
-             "delivered_in_order=%u duplicates=%u ahead_of_cursor=%u held_for_gap=%u dropped_reorder_full=%u "
-             "never_delivered=%u output_bytes=%u other_session=%u",
-             (unsigned)sessionId, (unsigned)elapsedMs, (unsigned)peerHighestSeq, (unsigned)stats.rxFramesTotal,
-             (unsigned)stats.rxNewInOrder, (unsigned)stats.rxDuplicate, (unsigned)stats.rxAheadOfCursor,
-             (unsigned)stats.rxHeldForGap, (unsigned)stats.rxDroppedReorderFull, (unsigned)neverDelivered,
-             (unsigned)stats.rxOutputBytes, (unsigned)stats.rxOtherSession);
-    LOG_INFO("DMShellTest stats session=0x%08x outbound frames_transmitted=%u frames_originated=%u resends=%u "
-             "input_retransmits=%u payload_bytes=%u INPUT=%u ACK=%u PING=%u OPEN=%u CLOSE=%u",
-             (unsigned)sessionId, (unsigned)stats.txFramesTotal, (unsigned)(nextTxSeq - 1), (unsigned)stats.framesResent,
-             (unsigned)stats.inputRetransmits, (unsigned)stats.txPayloadBytes, (unsigned)stats.txInput, (unsigned)stats.txAck,
-             (unsigned)stats.txPing, (unsigned)stats.txOpen, (unsigned)stats.txClose);
-    LOG_INFO("DMShellTest stats session=0x%08x recovery replay_requests_sent=%u replays_sent_to_peer=%u "
-             "replay_unavailable=%u replay_evicted=%u open_retries=%u input_window_closed=%u input_dropped=%u "
-             "keystrokes=%u ack_latency_ms=%u",
-             (unsigned)sessionId, (unsigned)stats.replayRequestsSent, (unsigned)stats.replaysSentToPeer,
-             (unsigned)stats.replayUnavailable, (unsigned)stats.replayEvicted, (unsigned)stats.openRetries,
-             (unsigned)stats.inputWindowClosed, (unsigned)stats.pendingInputDropped, (unsigned)keystrokesTyped,
-             (unsigned)ackLatency.estimateMs());
+    LOG_INFO("DMShellTest stats session=0x%08x elapsed_ms=%u peer_highest_seq=%u keystrokes=%u ack_latency_ms=%u", id,
+             (unsigned)elapsedMs, (unsigned)peerHighestSeq, (unsigned)keystrokesTyped, (unsigned)ackLatency.estimateMs());
+    LOG_INFO("DMShellTest stats session=0x%08x inbound frames_arrived=%u delivered_in_order=%u duplicates=%u ahead_of_cursor=%u",
+             id, (unsigned)stats.rxFramesTotal, (unsigned)stats.rxNewInOrder, (unsigned)stats.rxDuplicate,
+             (unsigned)stats.rxAheadOfCursor);
+    LOG_INFO("DMShellTest stats session=0x%08x inbound held_for_gap=%u dropped_reorder_full=%u never_delivered=%u", id,
+             (unsigned)stats.rxHeldForGap, (unsigned)stats.rxDroppedReorderFull, (unsigned)neverDelivered);
+    LOG_INFO("DMShellTest stats session=0x%08x inbound output_bytes=%u other_session=%u", id, (unsigned)stats.rxOutputBytes,
+             (unsigned)stats.rxOtherSession);
+    LOG_INFO("DMShellTest stats session=0x%08x outbound frames_transmitted=%u frames_originated=%u resends=%u", id,
+             (unsigned)stats.txFramesTotal, (unsigned)(nextTxSeq - 1), (unsigned)stats.framesResent);
+    LOG_INFO("DMShellTest stats session=0x%08x outbound input_retransmits=%u payload_bytes=%u", id,
+             (unsigned)stats.inputRetransmits, (unsigned)stats.txPayloadBytes);
+    LOG_INFO("DMShellTest stats session=0x%08x outbound INPUT=%u ACK=%u PING=%u OPEN=%u CLOSE=%u", id, (unsigned)stats.txInput,
+             (unsigned)stats.txAck, (unsigned)stats.txPing, (unsigned)stats.txOpen, (unsigned)stats.txClose);
+    LOG_INFO("DMShellTest stats session=0x%08x recovery replay_requests_sent=%u replays_sent_to_peer=%u", id,
+             (unsigned)stats.replayRequestsSent, (unsigned)stats.replaysSentToPeer);
+    LOG_INFO("DMShellTest stats session=0x%08x recovery replay_unavailable=%u replay_evicted=%u open_retries=%u", id,
+             (unsigned)stats.replayUnavailable, (unsigned)stats.replayEvicted, (unsigned)stats.openRetries);
+    LOG_INFO("DMShellTest stats session=0x%08x recovery input_window_closed=%u input_dropped=%u", id,
+             (unsigned)stats.inputWindowClosed, (unsigned)stats.pendingInputDropped);
 }
 
 #endif
