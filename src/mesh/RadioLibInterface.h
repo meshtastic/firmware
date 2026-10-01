@@ -348,6 +348,9 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      * If a send was in progress finish it and return the buffer to the pool */
     void completeSending();
 
+    /// Release a packet whose transmit never started: no airtime, no txGood/txRelay, counted in txDrop.
+    void abandonSending();
+
     /**
      * Add SNR data to received messages
      */

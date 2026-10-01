@@ -580,6 +580,22 @@ void RadioLibInterface::handleTransmitInterrupt()
     powerMon->clearState(meshtastic_PowerMon_State_Lora_TXOn); // But our transmitter is definitely off now
 }
 
+void RadioLibInterface::abandonSending()
+{
+    auto p = sendingPacket;
+    sendingPacket = NULL;
+#ifdef LED_LORA
+    digitalWrite(LED_LORA, LED_STATE_OFF);
+#endif
+
+    if (p) {
+        txDrop++;
+        printPacket("Abandoned sending", p);
+        RadioTxHooks::packetReleased(this, p);
+        packetPool.release(p);
+    }
+}
+
 void RadioLibInterface::completeSending()
 {
     // We are careful to clear sending packet before calling printPacket because
@@ -843,9 +859,10 @@ bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
             LOG_ERROR("startTransmit failed, error=%d", res);
             RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_RADIO_SPI_BUG);
 
-            // This send failed, but make sure to 'complete' it properly
-            completeSending();
+            // Nothing went on air: release it without completeSending()'s airtime and txGood accounting
+            abandonSending();
             powerMon->clearState(meshtastic_PowerMon_State_Lora_TXOn); // Transmitter off now
+            maybeRecoverChipStateLoss();
             startReceive(); // Restart receive mode (because startTransmit failed to put us in xmit mode)
         } else {
             // Must be done AFTER, starting transmit, because startTransmit clears (possibly stale) interrupt pending register
