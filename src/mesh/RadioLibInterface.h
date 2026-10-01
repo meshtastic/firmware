@@ -661,6 +661,11 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     volatile uint32_t rxReadoutFrames = 0, rxReadoutDropped = 0, rxReadoutBadLength = 0;
     /** Set by requestRearmFromIsr(), taken by the task */
     volatile bool rxRearmFromTaskPending = false;
+
+  protected:
+    /** The task re-armed RX at TX_DONE and the radio thread has not yet handled that TX_DONE: until it does, a frame the
+     *  task reads must not overwrite the pending ISR_TX, or the TX is never completed. onNotify() delivers it instead. */
+    volatile bool rxArmedBeforeTxDone = false;
 #else
     bool rxDoneFromIsr() { return false; }
     bool requestRearmFromIsr() { return false; }
