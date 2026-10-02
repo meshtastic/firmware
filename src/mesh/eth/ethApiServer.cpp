@@ -5,6 +5,7 @@
 #include "concurrency/OSThread.h"
 #include "ethApiHandlers.h"
 #include "ethApiServer.h"
+#include "ethFlush.h"
 #include <Arduino.h>
 #include <memory>
 
@@ -39,7 +40,7 @@ class EthernetClientStream : public IStreamReadWrite
     int read(uint8_t *buf, size_t len) override { return c_.read(buf, len); }
 
     bool connected() override { return c_.connected(); }
-    void flush() override { c_.flush(); }
+    void flush() override { ethFlush(c_); }
     IPAddress remoteIP() override { return c_.remoteIP(); }
 
   private:

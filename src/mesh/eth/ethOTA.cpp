@@ -3,6 +3,7 @@
 
 #if HAS_ETHERNET && defined(HAS_ETHERNET_OTA)
 
+#include "ethFlush.h"
 #include "ethOTA.h"
 #include <ErriezCRC32.h>
 #include <SHA256.h>
@@ -263,7 +264,7 @@ static void handleOTAClient(EthernetClient &client)
 
     LOG_INFO("ETH OTA: Update staged (%u bytes). Rebooting", hdr.firmwareSize);
     client.write(OTA_OK);
-    client.flush();
+    ethFlush(client);
     delay(500);
 
     // Reboot - the built-in bootloader will apply the update from LittleFS

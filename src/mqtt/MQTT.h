@@ -13,6 +13,7 @@
 #endif
 #endif
 #if HAS_ETHERNET && !defined(USE_WS5500) && !defined(USE_CH390D)
+#include "mesh/eth/ethFlush.h"
 #include <EthernetClient.h>
 #endif
 
@@ -86,6 +87,8 @@ class MQTT : private concurrency::OSThread
     using MQTTClientTLS = WiFiClientSecure;
 #define MQTT_SUPPORTS_TLS 1
 #endif
+#elif HAS_ETHERNET && !defined(USE_WS5500) && !defined(USE_CH390D)
+    using MQTTClient = BoundedFlushEthernetClient;
 #elif HAS_ETHERNET
     using MQTTClient = EthernetClient;
 #else

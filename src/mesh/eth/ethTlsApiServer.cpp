@@ -5,6 +5,7 @@
 #include "concurrency/OSThread.h"
 #include "ethApiHandlers.h"
 #include "ethCert.h"
+#include "ethFlush.h"
 #include "ethTlsApiServer.h"
 #include <Arduino.h>
 
@@ -179,7 +180,7 @@ class MbedTlsStream : public IStreamReadWrite
     }
 
     bool connected() override { return client_->connected(); }
-    void flush() override { client_->flush(); }
+    void flush() override { ethFlush(*client_); }
     IPAddress remoteIP() override { return client_->remoteIP(); }
 
   private:
