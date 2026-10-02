@@ -57,6 +57,25 @@ template <class T> class SX126xInterface : public RadioLibInterface
 
     void setTCXOVoltage(float voltage) { tcxoVoltage = voltage; }
 
+#if RADIOLIB_GODMODE
+    /// Bench: GetStats (0x10). RadioLib wraps this for the LR11x0 but not the SX126x, so the command goes out raw,
+    /// as the CAD and launch paths already send theirs. NbPktReceived counts what the modem decoded, so comparing it
+    /// with the firmware's rx_good separates "the chip never heard the frame" from "the chip heard it and the
+    /// firmware never got it" -- the two halves of the NONE bucket. The SX126x keeps no false-sync counter, so the
+    /// LR11x0's fourth field has no equivalent and reads 0.
+    bool readChipRxStats(uint16_t &received, uint16_t &crcError, uint16_t &headerError, uint16_t &falseSync) override
+    {
+        uint8_t buf[6] = {0};
+        if (module.SPIreadStream(RADIOLIB_SX126X_CMD_GET_STATS, buf, sizeof(buf)) != RADIOLIB_ERR_NONE)
+            return false;
+        received = (uint16_t)(((uint16_t)buf[0] << 8) | buf[1]);
+        crcError = (uint16_t)(((uint16_t)buf[2] << 8) | buf[3]);
+        headerError = (uint16_t)(((uint16_t)buf[4] << 8) | buf[5]);
+        falseSync = 0;
+        return true;
+    }
+#endif
+
 #ifdef SX126X_STATE_SAMPLER_MS
     /// Bench: read the chip's mode and IRQ flags, changing neither, and log them when they differ from the last look
     void sampleChipState();
