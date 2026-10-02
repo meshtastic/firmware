@@ -29,6 +29,9 @@
 #ifndef SX126X_MAX_POWER
 #define SX126X_MAX_POWER 22
 #endif
+#ifndef CH341_TX_PRESTAGE_DEFAULT
+#define CH341_TX_PRESTAGE_DEFAULT 0
+#endif
 
 template <typename T>
 SX126xInterface<T>::SX126xInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst,
@@ -385,7 +388,12 @@ template <typename T> bool SX126xInterface<T>::reinitChip()
                 LOG_INFO("TCXO start-up delay %ld us %s%d", delayUs, radioLibErr, tcxoErr);
             }
         } else {
+#ifdef SX126X_TCXO_DELAY_US
+            const int16_t tcxoErr = lora.setTCXO(tcxoVoltage, (uint32_t)(SX126X_TCXO_DELAY_US));
+            LOG_INFO("TCXO start-up delay %u us (build default) %s%d", (unsigned)(SX126X_TCXO_DELAY_US), radioLibErr, tcxoErr);
+#else
             LOG_INFO("TCXO start-up delay 5000 us (default)");
+#endif
         }
     }
 #elif defined(SX126X_TCXO_DELAY_US)
@@ -409,11 +417,13 @@ template <typename T> bool SX126xInterface<T>::reinitChip()
     }
 #ifdef ARCH_PORTDUINO
     if (irqPolledOverUsb()) {
-        const char *pollUs = getenv("PINEDIO_POLL_INTERVAL_US");
-        LOG_INFO("CH341 pin poll interval %s us", pollUs && *pollUs ? pollUs : "33000 (default)");
+        // libch341 polls the interrupt pins every 1 ms since 027cde5; it never reads PINEDIO_POLL_INTERVAL_US
+        LOG_INFO("CH341 pin poll interval 1000 us (libch341)");
+        // MESHTASTIC_TX_PRESTAGE=1|0 overrides the build's CH341_TX_PRESTAGE_DEFAULT
         const char *prestage = getenv("MESHTASTIC_TX_PRESTAGE");
-        txPrestageEnabled = prestage && prestage[0] == '1' && prestage[1] == '\0';
-        LOG_INFO("CH341 TX prestage %s", txPrestageEnabled ? "on" : "off");
+        const bool prestageFromEnv = prestage && *prestage;
+        txPrestageEnabled = prestageFromEnv ? (prestage[0] == '1' && prestage[1] == '\0') : CH341_TX_PRESTAGE_DEFAULT;
+        LOG_INFO("CH341 TX prestage %s%s", txPrestageEnabled ? "on" : "off", prestageFromEnv ? "" : " (build default)");
     }
 #endif
 #ifdef SX126X_TX_PRESTAGE
