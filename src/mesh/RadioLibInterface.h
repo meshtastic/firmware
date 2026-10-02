@@ -64,6 +64,16 @@
 #define LOG_RADIO_EDGE LOG_TRACE
 #endif
 
+// Bench: -DMESHTASTIC_TX_TIMELINE stamps each TX from its channel scan to RX being back, on benchClock(), and logs the
+// parts once the radio thread has handled the TX_DONE. The caller includes BenchClock.h.
+#ifdef MESHTASTIC_TX_TIMELINE
+#define TX_TIMELINE_MARK(field) ((field) = benchClock())
+#define TX_TIMELINE_SET(field, value) ((field) = (value))
+#else
+#define TX_TIMELINE_MARK(field) ((void)0)
+#define TX_TIMELINE_SET(field, value) ((void)0)
+#endif
+
 /// What the radio's latched RX flags have shown since the last standby, stamped at each look at them.
 /// The owner must clear PREAMBLE_DETECTED whenever a look finds it, so every sighting is a new detection.
 class RxSighting
@@ -584,6 +594,14 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     struct RxArmSteps {
         uint32_t standbyMs, standbyCmdMs, startRxMs, armMs;
     } lastRxArmSteps = {0, 0, 0, 0};
+
+#ifdef MESHTASTIC_TX_TIMELINE
+    /** Bench: benchClock() stamps across one TX; the re-arm pair is written by whoever re-armed RX at TX_DONE */
+    uint32_t tlScan = 0, tlSend = 0, tlLaunched = 0;
+    volatile uint32_t tlTxDone = 0, tlRearmStart = 0, tlRearmEnd = 0;
+    /** Log the last TX's timeline; adopted says RX was re-armed at TX_DONE rather than by this thread */
+    void logTxTimeline(bool adopted);
+#endif
 
     RxSighting rxSighting;
 

@@ -905,6 +905,7 @@ template <typename T> bool SX126xInterface<T>::rearmReceiveFromIsr()
         rearmOutcome = REARM_SPI_BUSY;
         return false;
     }
+    TX_TIMELINE_MARK(tlRearmStart);
     const uint16_t irqMask = RADIOLIB_SX126X_IRQ_RX_DONE | RADIOLIB_SX126X_IRQ_TIMEOUT | RADIOLIB_SX126X_IRQ_CRC_ERR |
                              RADIOLIB_SX126X_IRQ_HEADER_VALID | RADIOLIB_SX126X_IRQ_HEADER_ERR |
                              RADIOLIB_SX126X_IRQ_PREAMBLE_DETECTED;
@@ -942,6 +943,7 @@ template <typename T> bool SX126xInterface<T>::rearmReceiveFromIsr()
         return false;
     }
     rearmTicks = xTaskGetTickCountFromISR();
+    TX_TIMELINE_MARK(tlRearmEnd);
     rearmOutcome = REARM_ARMED;
     return true;
 }
@@ -998,6 +1000,8 @@ template <typename T> void SX126xInterface<T>::rearmReceiveFromTask()
     setTransmitEnable(false);
     const int16_t err = lora.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_INF, MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS);
     rearmUs = benchClockToUs(benchClock() - t0);
+    TX_TIMELINE_SET(tlRearmStart, t0);
+    TX_TIMELINE_MARK(tlRearmEnd);
     rearmErr = err;
     rearmTicks = xTaskGetTickCount();
     if (err != RADIOLIB_ERR_NONE) {

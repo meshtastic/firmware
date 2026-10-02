@@ -839,6 +839,8 @@ template <typename T> void LR20x0Interface<T>::rearmReceiveFromTask()
         err =
             lora.startReceive(RADIOLIB_LR2021_RX_TIMEOUT_INF, MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS, RADIOLIB_IRQ_RX_DEFAULT_MASK, 0);
     rearmUs = benchClockToUs(benchClock() - t0);
+    TX_TIMELINE_SET(tlRearmStart, t0);
+    TX_TIMELINE_MARK(tlRearmEnd);
     rearmErr = err;
     rearmTicks = xTaskGetTickCount();
     if (err != RADIOLIB_ERR_NONE) {

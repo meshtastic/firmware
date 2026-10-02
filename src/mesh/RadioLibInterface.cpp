@@ -108,6 +108,7 @@ void INTERRUPT_ATTR RadioLibInterface::isrRxLevel0()
 
 void INTERRUPT_ATTR RadioLibInterface::isrTxLevel0()
 {
+    TX_TIMELINE_MARK(instance->tlTxDone);
     // Before the notify: the handler that would otherwise re-arm RX can wait behind a main-loop hold.
     instance->rearmReceiveFromIsr();
     isrLevel0Common(ISR_TX);
@@ -508,8 +509,12 @@ void RadioLibInterface::onNotify(uint32_t notification)
             (void)RadioTxHooks::beforeTransmit(this, txQueue.getFront());
             const uint32_t tHooks = millis();
             lastRxArmSteps = {0, 0, 0, 0};
-            if (!adoptReceiveArmedFromIsr())
+            const bool adopted = adoptReceiveArmedFromIsr();
+            if (!adopted)
                 startReceive();
+#ifdef MESHTASTIC_TX_TIMELINE
+            logTxTimeline(adopted);
+#endif
             if (irqPolledOverUsb())
                 LOG_TRACE("Post-TX re-arm: complete %u, hooks %u, standby %u (cmd %u), rx start %u, arm %u ms",
                           (unsigned)(tComplete - t0), (unsigned)(tHooks - tComplete), (unsigned)lastRxArmSteps.standbyMs,
@@ -601,6 +606,7 @@ void RadioLibInterface::onNotify(uint32_t notification)
                     const uint32_t scanStartMs = Time::getMillis();
                     noteDeafFrom("scan");
                     scanForTx = txp;
+                    TX_TIMELINE_MARK(tlScan);
                     const bool channelActive = isChannelActive();
                     scanForTx = nullptr;
                     LOG_TRACE("Channel scan %s in %u ms", channelActive ? "busy" : "clear",
@@ -1447,6 +1453,27 @@ void RadioLibInterface::checkTxDoneIrqFlag()
     }
 }
 
+#ifdef MESHTASTIC_TX_TIMELINE
+void RadioLibInterface::logTxTimeline(bool adopted)
+{
+    // All in us. scan: scan start to the send; launch: the send to startTransmit() returning; air: that to the TX_DONE
+    // interrupt; done>rx: TX_DONE to RX back, split into wake (to the re-arm starting) and rearm; rx>thr: RX back to
+    // this log; out: scan start (or the send) to RX back. The log line's own time less rx>thr is when RX came back.
+    const uint32_t now = benchClock();
+    const uint32_t txDone = tlTxDone, rearmStart = tlRearmStart, rearmEnd = tlRearmEnd;
+    const bool early = adopted && rearmEnd != 0;
+    const uint32_t rxAt = early ? rearmEnd : now;
+    const uint32_t outFrom = tlScan ? tlScan : tlSend;
+    auto us = [](uint32_t from, uint32_t to) { return (unsigned)benchClockToUs(to - from); };
+    LOG_RADIO_EDGE("TX timeline us: scan %u launch %u air %u done>rx %u wake %u rearm %u rx>thr %u out %u %s",
+                   tlScan ? us(tlScan, tlSend) : 0, tlLaunched ? us(tlSend, tlLaunched) : 0,
+                   txDone && tlLaunched ? us(tlLaunched, txDone) : 0, txDone ? us(txDone, rxAt) : 0,
+                   early && txDone ? us(txDone, rearmStart) : 0, early ? us(rearmStart, rearmEnd) : 0, us(rxAt, now),
+                   tlSend ? us(outFrom, rxAt) : 0, early ? "early" : (txDone ? "thread" : "no-irq"));
+    tlScan = tlSend = 0;
+}
+#endif
+
 void RadioLibInterface::configHardwareForSend()
 {
     powerMon->setState(meshtastic_PowerMon_State_Lora_TXOn);
@@ -1488,6 +1515,10 @@ bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
         startReceive();
         return false;
     } else {
+#ifdef MESHTASTIC_TX_TIMELINE
+        tlSend = benchClock();
+        tlLaunched = tlTxDone = tlRearmStart = tlRearmEnd = 0;
+#endif
         configHardwareForSend(); // must be after setStandby
 
         size_t numbytes = beginSending(txp);
@@ -1504,6 +1535,7 @@ bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
         } else {
             // Must be done AFTER, starting transmit, because startTransmit clears (possibly stale) interrupt pending register
             // bits
+            TX_TIMELINE_MARK(tlLaunched);
             enableInterrupt(isrTxLevel0);
             // unset-sentinel-ok: busyTx/sendingPacket is the armed flag, so 0 is a legal stamp
             lastTxStart = Time::getMillis();
