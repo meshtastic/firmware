@@ -5,7 +5,7 @@
 #include "concurrency/OSThread.h"
 #include "ethApiHandlers.h"
 #include "ethApiServer.h"
-#include "ethFlush.h"
+#include "ethBoundedClient.h"
 #include <Arduino.h>
 #include <memory>
 

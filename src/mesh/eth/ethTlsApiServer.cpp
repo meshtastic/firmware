@@ -4,8 +4,8 @@
 
 #include "concurrency/OSThread.h"
 #include "ethApiHandlers.h"
+#include "ethBoundedClient.h"
 #include "ethCert.h"
-#include "ethFlush.h"
 #include "ethTlsApiServer.h"
 #include <Arduino.h>
 

@@ -3,7 +3,7 @@
 
 #if HAS_ETHERNET && defined(HAS_ETHERNET_OTA)
 
-#include "ethFlush.h"
+#include "ethBoundedClient.h"
 #include "ethOTA.h"
 #include <ErriezCRC32.h>
 #include <SHA256.h>
