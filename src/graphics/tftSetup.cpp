@@ -347,7 +347,6 @@ bool muiInjectInputEvent(uint32_t eventCode, uint32_t kbChar, uint32_t touchX, u
     if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR)
         return false;
 
-    constexpr uint16_t longPressHoldMs = 600;
     // trackball semantics: vertical is encoder rotation (moves group focus), horizontal the slider keys
     switch (eventCode) {
     case INPUT_BROKER_UP:
@@ -363,10 +362,14 @@ bool muiInjectInputEvent(uint32_t eventCode, uint32_t kbChar, uint32_t touchX, u
         DisplayMirror::injectKey(LV_KEY_UP);
         break;
     case INPUT_BROKER_SELECT:
+        // with coordinates this is a touch long-press, as the physical touch driver emits it
         if (touchX || touchY)
-            DisplayMirror::injectTouch(touchX, touchY, longPressHoldMs);
+            DisplayMirror::injectLongPress(touchX, touchY);
         else
             DisplayMirror::injectKey(LV_KEY_ENTER);
+        break;
+    case INPUT_BROKER_SELECT_LONG:
+        DisplayMirror::injectLongPressKey(LV_KEY_ENTER);
         break;
     case INPUT_BROKER_USER_PRESS:
         DisplayMirror::injectTouch(touchX, touchY);
