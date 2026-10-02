@@ -213,6 +213,8 @@ https://github.com/brad112358/easy_E22
 #define LR2021_DIO3_TCXO_VOLTAGE 1.8
 #define LR2021_DIO_AS_RF_SWITCH
 #define LR2021_IRQ_DIO_NUM 9 // DIO9 → P0.10
+// LF PA table from the LR20xx datasheet: see pa_table.h
+#define LR2021_CUSTOM_PA_TABLE
 #endif
 
 #else // Easy E22 Promicro arrangement
