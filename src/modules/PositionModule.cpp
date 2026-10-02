@@ -94,6 +94,7 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
         } else {
             LOG_TRACE("Incoming update from MYSELF");
             nodeDB->setLocalPosition(p);
+            lastLocalPositionUpdateMs = millis();
         }
     }
 
@@ -479,6 +480,7 @@ bool PositionModule::sendOurPosition(NodeNum dest, bool wantReplies, uint8_t cha
         LOG_WARN("Position send rejected by router: 0x%x", res);
         return false;
     }
+    lastPositionTxMs = millis();
 
     if (IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_TRACKER,
                   meshtastic_Config_DeviceConfig_Role_TAK_TRACKER) &&

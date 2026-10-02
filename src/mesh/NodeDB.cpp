@@ -466,6 +466,8 @@ static_assert(sizeof(meshtastic_User::long_name) > MAX_LONG_NAME_BYTES,
               "wire User.long_name must be wider than the local cap so clampLongName stays in bounds");
 
 meshtastic_Position localPosition = meshtastic_Position_init_default;
+uint32_t lastLocalPositionUpdateMs = 0;
+uint32_t lastPositionTxMs = 0;
 meshtastic_CriticalErrorCode error_code =
     meshtastic_CriticalErrorCode_NONE; // For the error code, only show values from this boot (discard value from flash)
 uint32_t error_address = 0;
