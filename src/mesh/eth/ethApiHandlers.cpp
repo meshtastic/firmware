@@ -77,6 +77,7 @@ static bool readLine(IStreamReadWrite &client, String &out, uint32_t deadlineMs)
             // available() can count raw bytes that do not yet decode (a partial TLS record).
             if (deadlinePassed(deadlineMs))
                 return false;
+            delay(1);
             continue;
         }
         if (c == '\n')
@@ -279,10 +280,13 @@ static bool handleToRadio(IStreamReadWrite &client, const Request &req, uint32_t
             continue;
         }
         int n = client.read(buf + got, (size_t)req.contentLength - got);
-        if (n > 0)
+        if (n > 0) {
             got += n;
-        else if (deadlinePassed(deadline))
-            break;
+        } else {
+            if (deadlinePassed(deadline))
+                break;
+            delay(1);
+        }
     }
     if (got != (size_t)req.contentLength) {
         LOG_WARN("ETH API: toradio short read (%u/%ld)", (unsigned)got, req.contentLength);
