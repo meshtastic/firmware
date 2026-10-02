@@ -518,17 +518,12 @@ bool DMShellModule::openSession(const meshtastic_MeshPacket &mp, const meshtasti
     if (!shell || !*shell) {
         shell = "/bin/sh";
     }
-    // Variables of the daemon's own environment that an interactive shell has no business inheriting.
-    // TERM and the locale are replaced below; the LC_* overrides go with LANG, since LC_ALL or a stale
-    // LC_CTYPE would win over it and leave the locale half-set. The rest is systemd's service plumbing,
-    // NOTIFY_SOCKET above all: with it, a command run in the shell can answer sd_notify() for meshtasticd.
+    // TERM and LANG are replaced below, LC_* would override LANG, and the rest is systemd's service plumbing.
     static const char *const strippedPrefixes[] = {"TERM=",          "LANG=",          "LC_",
                                                    "NOTIFY_SOCKET=", "INVOCATION_ID=", "JOURNAL_STREAM=",
                                                    "LISTEN_PID=",    "LISTEN_FDS=",    "LISTEN_FDNAMES="};
     static char term[] = "TERM=xterm-256color";
-    // Without a locale the shell lands in C, where ncurses draws its boxes in ASCII and a UTF-8 name from
-    // ls comes back escaped. C.UTF-8 is built into glibc and musl is UTF-8 throughout, so nothing has to be
-    // installed for it; where it is missing anyway, setlocale() falls back to C, which is where we are today.
+    // C.UTF-8 is built into glibc and musl is UTF-8 throughout; where it is missing, setlocale() falls back to C.
     static char lang[] = "LANG=C.UTF-8";
     std::vector<char *> childEnvp;
     for (char **e = environ; e && *e; ++e) {
