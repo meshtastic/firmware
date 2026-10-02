@@ -534,8 +534,8 @@ static bool getDisplayPosition(const meshtastic::GPSStatus *gps, meshtastic_Posi
         return true;
     }
 
-    const bool onboardGpsUnavailable =
-        !gps || !gps->getIsConnected() || config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED;
+    const bool onboardGpsUnavailable = !gps || !gps->getIsConnected() || !gps->getHasLock() ||
+                                       config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED;
     if (onboardGpsUnavailable && nodeDB && nodeDB->hasLocalPositionSinceBoot() &&
         (localPosition.latitude_i != 0 || localPosition.longitude_i != 0)) {
         position = localPosition;
