@@ -858,8 +858,16 @@ template <typename T> uint8_t LR11x0Interface<T>::readChipMode() const
     uint8_t buff[6] = {0};
     uint8_t mode = 0xFF;
     for (int tries = 0; tries < 10; tries++) {
+#ifdef MESHTASTIC_SPI_CMD_ATOMIC
+        statusModule->hal->spiLockCommand(); // so no other thread's command clears the width between reading and using it
+#endif
         const uint8_t skipped = statusModule->spiConfig.widths[RADIOLIB_MODULE_SPI_WIDTH_STATUS] / 8;
-        if (skipped > 1 || statusModule->SPItransferStream(NULL, 0, false, NULL, buff, sizeof(buff), true) != RADIOLIB_ERR_NONE)
+        const int16_t res =
+            skipped > 1 ? RADIOLIB_ERR_UNKNOWN : statusModule->SPItransferStream(NULL, 0, false, NULL, buff, sizeof(buff), true);
+#ifdef MESHTASTIC_SPI_CMD_ATOMIC
+        statusModule->hal->spiUnlockCommand();
+#endif
+        if (res != RADIOLIB_ERR_NONE)
             return 0xFF;
         mode = buff[1 - skipped] & 0x0E;
         if (mode != RADIOLIB_LR11X0_STAT_2_MODE_FS)

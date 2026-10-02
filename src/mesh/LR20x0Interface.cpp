@@ -1091,10 +1091,16 @@ template <typename T> uint8_t LR20x0Interface<T>::readChipMode() const
     uint8_t buff[2] = {0};
     uint8_t mode = 0xFF;
     for (int tries = 0; tries < 10; tries++) {
+#ifdef MESHTASTIC_SPI_CMD_ATOMIC
+        statusModule->hal->spiLockCommand(); // the cleared width is shared with the other thread's commands
+#endif
         const Module::BitWidth_t width = statusModule->spiConfig.widths[RADIOLIB_MODULE_SPI_WIDTH_STATUS];
         statusModule->spiConfig.widths[RADIOLIB_MODULE_SPI_WIDTH_STATUS] = Module::BITS_0;
         const int16_t res = statusModule->SPItransferStream(NULL, 0, false, NULL, buff, sizeof(buff), true);
         statusModule->spiConfig.widths[RADIOLIB_MODULE_SPI_WIDTH_STATUS] = width;
+#ifdef MESHTASTIC_SPI_CMD_ATOMIC
+        statusModule->hal->spiUnlockCommand();
+#endif
         if (res != RADIOLIB_ERR_NONE)
             return 0xFF;
         mode = buff[1] & 0x07;
