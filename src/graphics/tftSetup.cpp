@@ -3,16 +3,16 @@
 #include "SPILock.h"
 #include "sleep.h"
 
-#include "NodeDB.h" // config
 #include "api/PacketAPI.h"
 #include "comms/PacketClient.h"
 #include "comms/PacketServer.h"
 #include "graphics/DeviceScreen.h"
-#include "graphics/ScreenMirror.h"
 #include "graphics/driver/DisplayDriverConfig.h"
-#include "input/InputBroker.h"
 #if HAS_MUI_MIRROR
+#include "NodeDB.h"
 #include "graphics/DisplayMirror.h"
+#include "graphics/ScreenMirror.h"
+#include "input/InputBroker.h"
 #endif
 #include "util/ISpiLock.h"
 
@@ -323,9 +323,7 @@ static ReentrantSpiLock reentrantSpiLock;
 #if HAS_MUI_MIRROR
 namespace graphics
 {
-// Reports MUI's logical panel geometry for DeviceMetadata.display. The BaseUI
-// `screen` object does not exist on MUI builds, so the dimensions come from
-// LVGL itself (already rotated to the logical orientation).
+// MUI builds have no BaseUI `screen`, so the logical (rotated) geometry comes from LVGL.
 bool muiDisplayInfo(uint16_t &width, uint16_t &height, bool &hasTouch)
 {
     if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR)
@@ -343,18 +341,14 @@ bool muiDisplayInfo(uint16_t &width, uint16_t &height, bool &hasTouch)
     return width > 0 && height > 0;
 }
 
-// Maps a remote input event onto device-ui's virtual LVGL devices. Note the
-// LEFT/RIGHT cross-map: the broker's codes were modeled on LVGL keys but
-// those two are swapped.
+// The broker's LEFT/RIGHT codes are swapped relative to LVGL's, hence the cross-map below.
 bool muiInjectInputEvent(uint32_t eventCode, uint32_t kbChar, uint32_t touchX, uint32_t touchY)
 {
     if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR)
         return false;
 
     constexpr uint16_t longPressHoldMs = 600;
-    // Mirrors the trackball driver's semantics (EncoderInputDriver, type 3):
-    // vertical is encoder rotation, which is what actually moves focus in a
-    // group; horizontal becomes the slider keys, deliberately inverted there.
+    // trackball semantics: vertical is encoder rotation (moves group focus), horizontal the slider keys
     switch (eventCode) {
     case INPUT_BROKER_UP:
         DisplayMirror::injectEncoder(-1);
@@ -415,10 +409,7 @@ void tftSetup(void)
     PacketAPI::create(PacketServer::init());
     deviceScreen->init(new PacketClient);
 #if HAS_MUI_MIRROR
-    // Stream MUI's dirty rects to local clients (see graphics::ScreenMirror).
-    // Gated on MESHTASTIC_MUI_MIRROR until DisplayMirror merges (jamesarich/device-ui
-    // screen-mirror-poc); the vendored pin lacks it. Armed here because LVGL is up by
-    // now, and the view has not built its widgets yet - see DisplayMirror::start.
+    // LVGL is up and the view has not built its widgets yet, which DisplayMirror::start needs
     DisplayMirror::start(deviceScreen->getDisplayDriver());
     {
         lv_display_t *disp = lv_display_get_default();

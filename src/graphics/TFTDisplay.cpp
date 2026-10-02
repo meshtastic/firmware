@@ -1671,8 +1671,8 @@ void TFTDisplay::display(bool fromBlank)
         lastDefaultOnColor = defaultOnColor;
         lastDefaultOffColor = defaultOffColor;
 #if HAS_SCREEN_MIRROR
-        // Regions are cleared below; hand the mirror the palette this frame was painted with.
-        graphics::screenMirror.capturePalette(colorFrameSignature, defaultOnColor, defaultOffColor, graphics::colorRegions,
+        // regions are cleared below; hand the mirror the palette this frame was painted with
+        graphics::screenMirror.capturePalette(colorFrameSignature, colorTftWhite, colorTftBlack, graphics::colorRegions,
                                               graphics::getTFTColorRegionCount());
 #endif
         graphics::clearTFTColorRegions();
@@ -1854,7 +1854,7 @@ void TFTDisplay::display(bool fromBlank)
     lastDefaultOnColor = defaultOnColor;
     lastDefaultOffColor = defaultOffColor;
 #if HAS_SCREEN_MIRROR && GRAPHICS_TFT_COLORING_ENABLED
-    graphics::screenMirror.capturePalette(colorFrameSignature, defaultOnColor, defaultOffColor, graphics::colorRegions,
+    graphics::screenMirror.capturePalette(colorFrameSignature, colorTftWhite, colorTftBlack, graphics::colorRegions,
                                           graphics::getTFTColorRegionCount());
 #endif
     graphics::clearTFTColorRegions();
