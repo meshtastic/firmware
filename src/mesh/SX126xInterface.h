@@ -13,6 +13,14 @@
 // Bench: -DSX126X_CAD_SLIM starts each scan with three commands instead of RadioLib's six, and reads the verdict
 // without a packet-type read. -DSX126X_TX_STAGE_IN_RX writes the prestaged payload at the top of the buffer while RX
 // still runs, instead of in the scan's standby.
+// Bench: -DSX126X_RX_REARM_AT_TX_DONE re-arms RX at TX_DONE, before the radio thread runs. On nRF52 the interrupt does it
+// with raw SPI; elsewhere the SPI driver cannot be used from an interrupt, so the readout task does it with RadioLib.
+#if defined(SX126X_RX_REARM_AT_TX_DONE) && !defined(ARCH_NRF52)
+#define SX126X_REARM_FROM_TASK 1
+#ifndef MESHTASTIC_RX_READOUT_TASK
+#error "SX126X_RX_REARM_AT_TX_DONE re-arms from the readout task off nRF52: build with -DMESHTASTIC_RX_READOUT_TASK"
+#endif
+#endif
 #if defined(SX126X_TX_STAGE_EARLY) && !defined(SX126X_TX_STAGE_IN_RX)
 #error "SX126X_TX_STAGE_EARLY builds on SX126X_TX_STAGE_IN_RX"
 #endif
@@ -226,7 +234,17 @@ template <class T> class SX126xInterface : public RadioLibInterface
     bool resumeRunningReceive() override;
     bool receiveStillRunning() const override { return rxArmedContinuous; }
 
-#ifdef SX126X_RX_REARM_AT_TX_DONE
+#ifdef SX126X_REARM_FROM_TASK
+    bool rearmReceiveFromIsr() override;
+    void rearmReceiveFromTask() override;
+    bool adoptReceiveArmedFromIsr() override;
+    enum RearmState : uint8_t { REARM_NONE, REARM_PENDING, REARM_ARMED, REARM_FAILED };
+    volatile uint8_t rearmState = REARM_NONE;
+    volatile int16_t rearmErr = 0;
+    volatile uint32_t rearmUs = 0;
+    /** FreeRTOS tick count when the task finished the re-arm */
+    volatile uint32_t rearmTicks = 0;
+#elif defined(SX126X_RX_REARM_AT_TX_DONE)
     bool rearmReceiveFromIsr() override;
     bool adoptReceiveArmedFromIsr() override;
     enum RearmOutcome : uint8_t { REARM_NONE, REARM_ARMED, REARM_SPI_BUSY, REARM_CHIP_BUSY, REARM_BAD_COMMAND };

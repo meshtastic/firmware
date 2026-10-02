@@ -11,9 +11,10 @@
 #include <esp_sleep.h>
 #endif
 
+#include "BenchClock.h"
 #include "Throttle.h"
 #include "UptimeClock.h"
-#ifdef SX126X_RX_REARM_AT_TX_DONE
+#if defined(SX126X_RX_REARM_AT_TX_DONE) && !defined(SX126X_REARM_FROM_TASK)
 #include "SPILock.h"
 #endif
 #ifdef SX126X_STATE_SAMPLER_MS
@@ -42,7 +43,7 @@ SX126xInterface<T>::SX126xInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs
 #if defined(SX126X_STATE_SAMPLER_MS) || defined(SX126X_RX_REARM_AT_TX_DONE)
     rawCs = cs;
 #endif
-#ifdef SX126X_RX_REARM_AT_TX_DONE
+#if defined(SX126X_RX_REARM_AT_TX_DONE) && !defined(SX126X_REARM_FROM_TASK)
     isrHal = hal;
 #endif
 #ifdef SX126X_STATE_SAMPLER_TASK
@@ -749,6 +750,10 @@ template <typename T> void SX126xInterface<T>::addReceiveMetadata(meshtastic_Mes
  */
 template <typename T> void SX126xInterface<T>::configHardwareForSend()
 {
+#if defined(SX126X_REARM_FROM_TASK) && MESHTASTIC_REARM_HOLD_FIX
+    rearmState = REARM_NONE; // only this TX's TX_DONE may re-arm, never a stale one from a TX the poll completed
+    rxArmedBeforeTxDone = false;
+#endif
     setTransmitEnable(true);
     RadioLibInterface::configHardwareForSend();
 }
@@ -860,10 +865,7 @@ template <typename T> bool SX126xInterface<T>::resumeRunningReceive()
     return true;
 }
 
-#ifdef SX126X_RX_REARM_AT_TX_DONE
-#if !defined(ARCH_NRF52)
-#error "SX126X_RX_REARM_AT_TX_DONE is a bench flag for nRF52 only: it drives SPI from the DIO1 interrupt"
-#endif
+#if defined(SX126X_RX_REARM_AT_TX_DONE) && !defined(SX126X_REARM_FROM_TASK)
 // Test values, not definedness: init() above defines both pins as RADIOLIB_NC when a variant leaves them out.
 #if (defined(SX126X_TXEN) && (SX126X_TXEN) != RADIOLIB_NC) || (defined(SX126X_RXEN) && (SX126X_RXEN) != RADIOLIB_NC) ||          \
     HAS_LORA_FEM
@@ -964,6 +966,82 @@ template <typename T> bool SX126xInterface<T>::adoptReceiveArmedFromIsr()
     RadioLibInterface::startReceive();
 #ifdef SX126X_RESUME_CONTINUOUS_RX
     rxArmedContinuous = true; // the interrupt armed SET_RX with no timeout
+#endif
+    enableInterrupt(isrRxLevel0);
+    checkRxDoneIrqFlag(); // an RX_DONE that completed while the handler waited
+    return true;
+}
+#endif
+
+#ifdef SX126X_REARM_FROM_TASK
+template <typename T> bool INTERRUPT_ATTR SX126xInterface<T>::rearmReceiveFromIsr()
+{
+    // After TX_DONE the chip sits in standby until the radio thread re-arms it, and a main-loop hold can make that
+    // hundreds of ms. This interrupt cannot use the SPI driver, so the readout task, above the loop, re-arms as soon as
+    // the interrupt returns.
+    rearmState = REARM_PENDING;
+    if (requestRearmFromIsr())
+        return true;
+    rearmState = REARM_NONE;
+    return false;
+}
+
+template <typename T> void SX126xInterface<T>::rearmReceiveFromTask()
+{
+    // Only a TX_DONE the thread has not yet handled: where adopt gave up waiting, the thread's own startReceive() has RX
+#if MESHTASTIC_REARM_HOLD_FIX
+    if (rearmState != REARM_PENDING)
+        return;
+#endif
+    // What startReceive() sends, less the standby: after TX_DONE the chip has already fallen back to standby.
+    const uint32_t t0 = benchClock();
+    setTransmitEnable(false);
+    const int16_t err = lora.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_INF, MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS);
+    rearmUs = benchClockToUs(benchClock() - t0);
+    rearmErr = err;
+    rearmTicks = xTaskGetTickCount();
+    if (err != RADIOLIB_ERR_NONE) {
+        rearmState = REARM_FAILED;
+        return;
+    }
+    rearmState = REARM_ARMED;
+#if MESHTASTIC_REARM_HOLD_FIX
+    // The TX_DONE interrupt detached the radio's interrupt. Attach the RX one now, so a frame that ends before the radio
+    // thread runs wakes this task to read it, rather than waiting in the chip for the next frame to overwrite it.
+    rxArmedBeforeTxDone = true;
+#ifdef SX126X_RESUME_CONTINUOUS_RX
+    rxArmedContinuous = true; // so a frame the task reads before the thread adopts finds the chip still listening
+#endif
+    enableInterrupt(isrRxLevel0);
+#endif
+}
+
+template <typename T> bool SX126xInterface<T>::adoptReceiveArmedFromIsr()
+{
+    // On one core the task, above this thread, has already run. Where it has not (blocked on a lock), give it a moment.
+    for (unsigned waited = 0; rearmState == REARM_PENDING && waited < 20; waited++)
+        vTaskDelay(pdMS_TO_TICKS(1) ? pdMS_TO_TICKS(1) : 1);
+    const uint8_t state = rearmState;
+    rearmState = REARM_NONE;
+    rxArmedBeforeTxDone = false; // this is the TX_DONE; frames the task read meanwhile were delivered ahead of it
+    if (state == REARM_PENDING) {
+        // Leave the task nothing to do: the thread's startReceive() takes it from here
+        LOG_WARN("RX re-arm at TX_DONE: readout task did not run");
+        return false;
+    }
+    if (state == REARM_FAILED) {
+        LOG_WARN("RX re-arm at TX_DONE failed %s%d, restarting RX", radioLibErr, rearmErr);
+        return false;
+    }
+    if (state != REARM_ARMED)
+        return false;
+    const uint32_t heldMs = (uint32_t)(((uint64_t)(xTaskGetTickCount() - rearmTicks) * 1000) / configTICK_RATE_HZ);
+    LOG_RADIO_EDGE("Radio back in RX at TX_DONE, re-arm %u us, %u ms before the handler ran", (unsigned)rearmUs,
+                   (unsigned)heldMs);
+    deafSinceMs = 0; // listening since the task re-armed: no deaf window to report
+    RadioLibInterface::startReceive();
+#ifdef SX126X_RESUME_CONTINUOUS_RX
+    rxArmedContinuous = true; // the task armed a continuous RX
 #endif
     enableInterrupt(isrRxLevel0);
     checkRxDoneIrqFlag(); // an RX_DONE that completed while the handler waited
