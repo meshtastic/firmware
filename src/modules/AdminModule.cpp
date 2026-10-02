@@ -690,25 +690,11 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         handleSendInputEvent(r->send_input_event);
         break;
     }
-#if HAS_SCREEN_MIRROR
-    // Both verbs are documented local-connection-only: frames ride FromRadio,
-    // which never crosses the mesh, so honoring a remote arm request would
-    // stream the screen to whatever local client happens to be attached.
-    case meshtastic_AdminMessage_get_display_frame_request_tag: {
-        if (mp.from != 0)
-            break;
-        LOG_INFO("Client requests display frame");
-        graphics::screenMirror.requestFrame();
+    // Local connections handle these in PhoneAPI; frames never cross the mesh, so a remote request is refused.
+    case meshtastic_AdminMessage_get_display_frame_request_tag:
+    case meshtastic_AdminMessage_set_display_mirror_tag:
+        myReply = allocErrorResponse(meshtastic_Routing_Error_NOT_AUTHORIZED, &mp);
         break;
-    }
-    case meshtastic_AdminMessage_set_display_mirror_tag: {
-        if (mp.from != 0)
-            break;
-        LOG_INFO("Client sets display mirror: %d", r->set_display_mirror);
-        graphics::screenMirror.setMirror(r->set_display_mirror);
-        break;
-    }
-#endif
 #ifdef ARCH_PORTDUINO
     case meshtastic_AdminMessage_exit_simulator_tag:
         LOG_INFO("Exiting simulator");
@@ -2202,8 +2188,7 @@ bool AdminModule::messageIsRequest(const meshtastic_AdminMessage *r)
         r->which_payload_variant == meshtastic_AdminMessage_get_ringtone_request_tag ||
         r->which_payload_variant == meshtastic_AdminMessage_get_device_connection_status_request_tag ||
         r->which_payload_variant == meshtastic_AdminMessage_get_node_remote_hardware_pins_request_tag ||
-        r->which_payload_variant == meshtastic_AdminMessage_get_ui_config_request_tag ||
-        r->which_payload_variant == meshtastic_AdminMessage_get_display_frame_request_tag)
+        r->which_payload_variant == meshtastic_AdminMessage_get_ui_config_request_tag)
         return true;
     else
         return false;
