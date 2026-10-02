@@ -51,6 +51,8 @@
 #else
 #define MESHTASTIC_RX_RETRY_MARK "off"
 #endif
+// RadioLibInterface::rxCounters() and readChipRxStats() exist; the DMShell test client reads them when this is set
+#define MESHTASTIC_BENCH_RX_COUNTERS 1
 
 #define AGC_RESET_INTERVAL_MS (60 * 1000) // 60 seconds
 

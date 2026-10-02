@@ -10,6 +10,12 @@
 #include "mesh/mesh-pb-constants.h"
 #include <string.h>
 
+// The comparison arms build this client against a RadioLibInterface without the bench's receive counters: their
+// radio and chip stats then read zero and "chip none", and the retry mark reads "none"
+#ifndef MESHTASTIC_RX_RETRY_MARK
+#define MESHTASTIC_RX_RETRY_MARK "none"
+#endif
+
 // When the first session opens, after boot, so the node has its config and the peer's key
 #ifndef DMSHELL_TEST_START_DELAY_MS
 #define DMSHELL_TEST_START_DELAY_MS 60000
@@ -746,6 +752,7 @@ void DMShellTestModule::logStats(uint32_t now)
 DMShellTestModule::RadioSnapshot DMShellTestModule::readRadio()
 {
     RadioSnapshot r = {};
+#ifdef MESHTASTIC_BENCH_RX_COUNTERS
     RadioLibInterface *radio = RadioLibInterface::instance;
     if (!radio)
         return r;
@@ -757,6 +764,7 @@ DMShellTestModule::RadioSnapshot DMShellTestModule::readRadio()
     r.retried = c.retried;
     r.recovered = c.recovered;
     r.chipValid = radio->readChipRxStats(r.chipReceived, r.chipCrcError, r.chipHeaderError, r.chipFalseSync);
+#endif
     return r;
 }
 
