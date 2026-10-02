@@ -37,6 +37,7 @@ case "$1" in
         getent group video >/dev/null 2>/dev/null && adduser meshtasticd video >/dev/null 2>/dev/null
         getent group audio >/dev/null 2>/dev/null && adduser meshtasticd audio >/dev/null 2>/dev/null
         getent group input >/dev/null 2>/dev/null && adduser meshtasticd input >/dev/null 2>/dev/null
+        getent group bluetooth >/dev/null 2>/dev/null && adduser meshtasticd bluetooth >/dev/null 2>/dev/null
 
 
     # migrate /root/.portduino to /var/lib/meshtasticd/.portduino
