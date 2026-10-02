@@ -23,6 +23,7 @@
 #include <sys/wait.h>
 #include <termios.h>
 #include <unistd.h>
+#include <vector>
 
 DMShellModule *dmShellModule;
 
@@ -512,6 +513,21 @@ bool DMShellModule::openSession(const meshtastic_MeshPacket &mp, const meshtasti
     } else {
         ws.ws_col = PTY_COLS_DEFAULT;
     }
+    // Built before fork: the child may only make async-signal-safe calls until exec, and setenv() allocates.
+    const char *shell = getenv("SHELL");
+    if (!shell || !*shell) {
+        shell = "/bin/sh";
+    }
+    static char term[] = "TERM=xterm-256color";
+    std::vector<char *> childEnvp;
+    for (char **e = environ; e && *e; ++e) {
+        if (strncmp(*e, "TERM=", 5) != 0) {
+            childEnvp.push_back(*e);
+        }
+    }
+    childEnvp.push_back(term);
+    childEnvp.push_back(nullptr);
+
     const pid_t childPid = forkpty(&masterFd, nullptr, nullptr, &ws);
     if (childPid < 0) {
         LOG_ERROR("DMShell: forkpty failed errno=%d", errno);
@@ -519,11 +535,7 @@ bool DMShellModule::openSession(const meshtastic_MeshPacket &mp, const meshtasti
     }
 
     if (childPid == 0) {
-        const char *shell = getenv("SHELL");
-        if (!shell || !*shell) {
-            shell = "/bin/sh";
-        }
-        execl(shell, shell, "-i", static_cast<char *>(nullptr));
+        execle(shell, shell, "-i", static_cast<char *>(nullptr), childEnvp.data());
         _exit(127);
     }
 
