@@ -268,11 +268,21 @@ void StreamAPI::emitLogRecord(meshtastic_LogRecord_Level level, const char *src,
     fromRadioScratchLog.log_record.time = rtc_sec;
     strncpy(fromRadioScratchLog.log_record.source, src, sizeof(fromRadioScratchLog.log_record.source) - 1);
 
-    auto num_printed =
-        vsnprintf(fromRadioScratchLog.log_record.message, sizeof(fromRadioScratchLog.log_record.message) - 1, format, arg);
-    if (num_printed > 0 && fromRadioScratchLog.log_record.message[num_printed - 1] ==
-                               '\n') // Strip any ending newline, because we have records for framing instead.
-        fromRadioScratchLog.log_record.message[num_printed - 1] = '\0';
+    char *message = fromRadioScratchLog.log_record.message;
+    size_t room = sizeof(fromRadioScratchLog.log_record.message) - 1;
+#ifdef MESHTASTIC_LOG_RECORD_MILLIS
+    // Bench: LogRecord.time is whole seconds, and the host's arrival stamp carries the link's queueing delay.
+    // Uptime taken here, as the line is logged, lets a node's events be lined up with other nodes' to the ms.
+    const int stamped = snprintf(message, room, "millis=%lu ", (unsigned long)millis());
+    if (stamped > 0 && (size_t)stamped < room) {
+        message += stamped;
+        room -= stamped;
+    }
+#endif
+    auto num_printed = vsnprintf(message, room, format, arg);
+    if (num_printed > 0 && (size_t)num_printed <= room &&
+        message[num_printed - 1] == '\n') // Strip any ending newline, because we have records for framing instead.
+        message[num_printed - 1] = '\0';
 
     size_t len =
         pb_encode_to_bytes(txBufLog + HEADER_LEN, meshtastic_FromRadio_size, &meshtastic_FromRadio_msg, &fromRadioScratchLog);
