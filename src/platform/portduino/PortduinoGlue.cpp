@@ -15,6 +15,8 @@
 #include "meshUtils.h"
 #include <ErriezCRC32.h>
 #include <Utility.h>
+#include <algorithm>
+#include <array>
 #include <assert.h>
 #include <cctype>
 #include <cstdint>
@@ -1441,6 +1443,38 @@ bool loadConfig(const char *configPath)
             portduino_config.hostMetrics_user_command = (yamlConfig["HostMetrics"]["UserStringCommand"]).as<std::string>("");
         }
 
+        if (yamlConfig["Security"] && yamlConfig["Security"]["AdminKeys"]) {
+            const YAML::Node keys = yamlConfig["Security"]["AdminKeys"];
+            if (!keys.IsSequence()) {
+                std::cout << "Security.AdminKeys must be a list of base64 public keys!" << std::endl;
+                if (!configCheck)
+                    exit(EXIT_FAILURE);
+            } else {
+                // Appended, not assigned: loadConfig() runs once per file in config.d, so an
+                // operator can drop in a file per admin. Duplicates are dropped, since each key
+                // costs a trial decryption in Router's admin-key fallback.
+                for (const auto &entry : keys) {
+                    const std::string text = entry.as<std::string>("");
+                    std::array<uint8_t, 32> key;
+                    if (!adminKeyFromBase64(text, key)) {
+                        std::cout << "Security.AdminKeys: '" << text << "' is not a 32-byte base64 public key!" << std::endl;
+                        if (!configCheck)
+                            exit(EXIT_FAILURE);
+                        continue;
+                    }
+                    if (std::find(portduino_config.admin_keys.begin(), portduino_config.admin_keys.end(), key) !=
+                        portduino_config.admin_keys.end())
+                        continue;
+                    if (portduino_config.admin_keys.size() >= PORTDUINO_MAX_ADMIN_KEYS) {
+                        std::cout << "Security.AdminKeys: at most " << PORTDUINO_MAX_ADMIN_KEYS
+                                  << " admin keys are supported, ignoring the rest!" << std::endl;
+                        break;
+                    }
+                    portduino_config.admin_keys.push_back(key);
+                }
+            }
+        }
+
         if (yamlConfig["Config"]) {
             portduino_config.has_config_overrides = true;
             if (yamlConfig["Config"]["DisplayMode"]) {
@@ -1514,6 +1548,67 @@ bool loadConfig(const char *configPath)
 static bool ends_with(std::string_view str, std::string_view suffix)
 {
     return str.size() >= suffix.size() && str.compare(str.size() - suffix.size(), suffix.size(), suffix) == 0;
+}
+
+static int base64Value(char c)
+{
+    if (c >= 'A' && c <= 'Z')
+        return c - 'A';
+    if (c >= 'a' && c <= 'z')
+        return c - 'a' + 26;
+    if (c >= '0' && c <= '9')
+        return c - '0' + 52;
+    if (c == '+' || c == '-') // '-' and '_' so a base64url-encoded key is accepted too
+        return 62;
+    if (c == '/' || c == '_')
+        return 63;
+    return -1;
+}
+
+// Decodes a 32-byte public key as the apps and the CLI print it. Anything that is not exactly 32
+// bytes of canonical base64 is refused rather than zero-padded: a truncated admin key would
+// silently authorize the wrong peer.
+bool adminKeyFromBase64(const std::string &text, std::array<uint8_t, 32> &out)
+{
+    uint32_t accum = 0;
+    int bits = 0;
+    size_t written = 0;
+    for (char c : text) {
+        if (isspace(static_cast<unsigned char>(c)) || c == '=')
+            continue;
+        const int value = base64Value(c);
+        if (value < 0)
+            return false;
+        accum = (accum << 6) | static_cast<uint32_t>(value);
+        bits += 6;
+        if (bits >= 8) {
+            bits -= 8;
+            if (written >= out.size())
+                return false;
+            out[written++] = static_cast<uint8_t>((accum >> bits) & 0xFF);
+        }
+    }
+    return written == out.size() && (accum & ((1u << bits) - 1)) == 0;
+}
+
+std::string adminKeyToBase64(const std::array<uint8_t, 32> &key)
+{
+    static const char alphabet[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string out;
+    out.reserve(44);
+    for (size_t i = 0; i < key.size(); i += 3) {
+        const size_t remaining = key.size() - i;
+        uint32_t chunk = static_cast<uint32_t>(key[i]) << 16;
+        if (remaining > 1)
+            chunk |= static_cast<uint32_t>(key[i + 1]) << 8;
+        if (remaining > 2)
+            chunk |= key[i + 2];
+        out += alphabet[(chunk >> 18) & 0x3F];
+        out += alphabet[(chunk >> 12) & 0x3F];
+        out += remaining > 1 ? alphabet[(chunk >> 6) & 0x3F] : '=';
+        out += remaining > 2 ? alphabet[chunk & 0x3F] : '=';
+    }
+    return out;
 }
 
 bool MAC_from_string(std::string mac_str, uint8_t *dmac)
