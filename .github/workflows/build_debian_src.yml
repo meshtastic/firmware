@@ -20,7 +20,7 @@ permissions:
 
 jobs:
   build-debian-src:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     # Only pushes to the default branch (develop) populate the cache; PR / merge_group runs
     # restore it but never save, so they stop filling up the repo's Actions cache storage.
     env:
