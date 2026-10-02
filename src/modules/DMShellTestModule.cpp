@@ -254,6 +254,8 @@ void DMShellTestModule::serviceActive(uint32_t now)
             LOG_INFO("DMShellTest t=%u counters rx_good=%u readout=%u lost=%u chip none cmdlock=%s contended=%u", (unsigned)now,
                      (unsigned)(s.good - b.good), (unsigned)(s.readOut - b.readOut), (unsigned)(s.readOutLost - b.readOutLost),
                      spiCmdLockMode(), (unsigned)spiCmdContendedNow());
+        LOG_INFO("DMShellTest t=%u counters retry_-20=" MESHTASTIC_RX_RETRY_MARK " retried=%u recovered=%u", (unsigned)now,
+                 (unsigned)(s.retried - b.retried), (unsigned)(s.recovered - b.recovered));
     }
 #endif
     const bool typing = !Throttle::deadlinePassedAt(now, openedAtMs + DMSHELL_TEST_SESSION_MS);
@@ -713,7 +715,10 @@ void DMShellTestModule::logStats(uint32_t now)
     // Short lines: the board's log buffer is 160 bytes and truncates a longer one
     const unsigned id = (unsigned)sessionId;
     const uint32_t elapsedMs = now - (openedAtMs ? openedAtMs : sessionStartMs);
-    const uint32_t neverDelivered = peerHighestSeq > stats.rxNewInOrder ? peerHighestSeq - stats.rxNewInOrder : 0;
+    // Everything below the window's cursor was delivered, whether it arrived in order or was drained from the reorder
+    // buffer; rxNewInOrder counts only the former
+    const uint32_t delivered = rxWindow.lastInOrder();
+    const uint32_t neverDelivered = peerHighestSeq > delivered ? peerHighestSeq - delivered : 0;
     LOG_INFO("DMShellTest stats session=0x%08x elapsed_ms=%u peer_highest_seq=%u keystrokes=%u ack_latency_ms=%u", id,
              (unsigned)elapsedMs, (unsigned)peerHighestSeq, (unsigned)keystrokesTyped, (unsigned)ackLatency.estimateMs());
     LOG_INFO("DMShellTest stats session=0x%08x inbound frames_arrived=%u delivered_in_order=%u duplicates=%u ahead_of_cursor=%u",
