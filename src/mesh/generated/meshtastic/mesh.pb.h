@@ -749,7 +749,7 @@ typedef enum _meshtastic_LockdownStatus_State {
 /* Physical panel technology, as a hint for client rendering and refresh
  expectations. */
 typedef enum _meshtastic_DisplayInfo_PanelClass {
-    /* Default; should not be sent. */
+    /* Unknown, or selected at runtime (e.g. a native build's configured panel). */
     meshtastic_DisplayInfo_PanelClass_PANEL_CLASS_UNSPECIFIED = 0,
     /* Monochrome OLED (SSD1306/SH1106 family). */
     meshtastic_DisplayInfo_PanelClass_OLED = 1,
@@ -1478,9 +1478,9 @@ typedef struct _meshtastic_DisplayPalette {
     /* Identity of this palette; DisplayFrame.palette_signature references it.
  Changes whenever the region table or theme changes. */
     uint32_t signature;
-    /* RGB565 for set pixels outside all regions. */
+    /* RGB565 for set pixels outside all regions. The region_offset 0 chunk is authoritative. */
     uint32_t default_on_color;
-    /* RGB565 for clear pixels outside all regions. */
+    /* RGB565 for clear pixels outside all regions. The region_offset 0 chunk is authoritative. */
     uint32_t default_off_color;
     /* Table index of the first region in this chunk. */
     uint8_t region_offset;
