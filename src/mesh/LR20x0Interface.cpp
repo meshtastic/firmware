@@ -6,12 +6,6 @@
 #include "error.h"
 #include "mesh/NodeDB.h"
 
-#if defined(LR2021_DCDC_WORKAROUND) && RADIOLIB_GODMODE
-// The DCDC sensitivity workaround pokes RadioLib-internal DCDC registers that are NOT exposed via the
-// public LR2021.h, so pull in the internal register map explicitly. Opt-in only (see LR2021_DCDC_WORKAROUND).
-#include <modules/LR2021/LR2021_registers.h>
-#endif
-
 // Keep LR20x0 naming while RadioLib exposes LR2021 symbols.
 #ifndef LR20x0
 #define LR20x0 LR2021
@@ -203,10 +197,8 @@ template <typename T> bool LR20x0Interface<T>::init()
     }
 #endif
 
-    // Semtech DCDC sensitivity workaround for sub-GHz operation - applied here after lora.begin() has set the
-    // packet type and modulation params. reconfigure() reapplies it after its own modulation changes.
     if (res == RADIOLIB_ERR_NONE)
-        applyDcdcWorkaround();
+        applyRegulator();
 
     applyCustomLfPaTable(getFreq());
 
@@ -216,18 +208,6 @@ template <typename T> bool LR20x0Interface<T>::init()
 
     if (res == RADIOLIB_ERR_NONE)
         res = lora.setCRC(2);
-
-    // Standard DCDC ramp timing from RadioLib workarounds (register 0x00F20024)
-    // Currently requires radiolib godmode
-#if RADIOLIB_GODMODE
-    if (res == RADIOLIB_ERR_NONE) {
-        uint8_t rampTimes[4] = {15, 15, 15, 15}; // Standard case for all conditions
-        // godmode-only DCDC ramp tuning: log failures but don't fail init (radio is already up)
-        int16_t rmRes = lora.setRegMode(RADIOLIB_LR2021_REG_MODE_SIMO_NORMAL, rampTimes);
-        if (rmRes != RADIOLIB_ERR_NONE)
-            LOG_WARN("LR2021 setRegMode failed: %d", rmRes);
-    }
-#endif
 
 #ifdef LR2021_DIO_AS_RF_SWITCH
     bool dioAsRfSwitch = true;
@@ -366,11 +346,6 @@ template <typename T> bool LR20x0Interface<T>::reconfigure()
         LOG_INFO("LR20x0 recovered after re-init");
     }
 
-    // setSpreadingFactor/setBandwidth/setCodingRate each re-run setLoRaModulationParams(), which resets
-    // the DCDC configure state, so reapply the workaround before we resume receiving.
-    if (standbySuccess)
-        applyDcdcWorkaround();
-
     startReceive();
     lr20x0LastFreqMHz = freq;
     return reconfigureSuccess;
@@ -428,6 +403,7 @@ template <typename T> bool LR20x0Interface<T>::fullBegin(float freq)
             return false;
         }
 
+        applyRegulator();
         applyCustomLfPaTable(freq);
 
         lr20x0LastFreqMHz = freq;
@@ -453,9 +429,6 @@ template <typename T> bool LR20x0Interface<T>::fullBegin(float freq)
             return false;
         }
 
-        // begin() above reprogrammed the modulation params, so the DCDC configure state is reset here too.
-        applyDcdcWorkaround();
-
         return true;
     }
 }
@@ -478,67 +451,20 @@ template <typename T> void LR20x0Interface<T>::applyCustomLfPaTable(float freq)
 #endif
 }
 
-// Semtech DCDC sensitivity workaround for sub-GHz operation on engineering sample date code 2513.
-// Worthy of note is that we tested this on non-engineering samples and it didn't make any difference, but
-// we went to the trouble of writing this, so it can stay in, albeit gated behind a compile-time option.
-// lr20xx_workarounds_dcdc_reset must follow setPacketType; lr20xx_workarounds_dcdc_configure must follow
-// setModulationParams. In init() both hold once lora.begin() returns; in reconfigure() the caller invokes this
-// after setSpreadingFactor/setBandwidth/setCodingRate, whose RadioLib implementations re-run
-// setLoRaModulationParams() and reset the DCDC configure state. Only applies to sub-GHz; 2.4 GHz (LORA_24) is
-// excluded. Opt-in only: requires -DLR2021_DCDC_WORKAROUND (and RADIOLIB_GODMODE for the internal register access).
-template <typename T> void LR20x0Interface<T>::applyDcdcWorkaround()
+template <typename T> void LR20x0Interface<T>::applyRegulator()
 {
-#if defined(LR2021_DCDC_WORKAROUND) && RADIOLIB_GODMODE
-    if (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_LORA_24)
-        return;
-
-    // Helper: set DCDC LF frequency register and re-apply the current RF frequency.
-    auto dcdcSetFreq = [&](uint32_t freqHz) -> int16_t {
-        const uint32_t freqLf = (uint32_t)((float)freqHz * 1.048576f);
-        int16_t s = lora.writeRegMem32(RADIOLIB_LR2021_REG_DCDC_FREQ_LF, &freqLf, 1);
-        if (s != RADIOLIB_ERR_NONE)
-            return s;
-        uint32_t rawRfFreq = 0;
-        s = lora.readRegMem32(RADIOLIB_LR2021_REG_RTTOF_RF_FREQ, &rawRfFreq, 1);
-        if (s != RADIOLIB_ERR_NONE)
-            return s;
-        // Convert PLL steps to Hz: (steps * 15625 + 16383) / 16384
-        uint32_t rfHz = (uint32_t)(((uint64_t)rawRfFreq * 15625ULL + 16383ULL) / 16384ULL);
-        return lora.setRfFrequency(rfHz);
-    };
-
-    // dcdc_reset: reset RISE/FALL ramp fields to conservative 15/15 at 2.8 MHz
-    int16_t dcdcRes = lora.writeRegMemMask32(RADIOLIB_LR2021_REG_DCDC_SWITCHER, 0xFu << 20, 15u << 20);
-    if (dcdcRes == RADIOLIB_ERR_NONE)
-        dcdcRes = lora.writeRegMemMask32(RADIOLIB_LR2021_REG_DCDC_SWITCHER, 0xFu << 16, 15u << 16);
-    if (dcdcRes == RADIOLIB_ERR_NONE)
-        dcdcRes = dcdcSetFreq(2800000);
-
-    // dcdc_configure: tune RISE/FALL and DC freq based on ADC decimation and RX path.
-    // Matches lr20xx_workarounds_dcdc_configure() exactly.
-    if (dcdcRes == RADIOLIB_ERR_NONE) {
-        uint32_t adcCtrl = 0, rxPath = 0;
-        dcdcRes = lora.readRegMem32(RADIOLIB_LR2021_REG_DCDC_ADC_CTRL, &adcCtrl, 1);
-        if (dcdcRes == RADIOLIB_ERR_NONE)
-            dcdcRes = lora.readRegMem32(RADIOLIB_LR2021_REG_DCDC_RX_PATH, &rxPath, 1);
-        if (dcdcRes == RADIOLIB_ERR_NONE) {
-            const uint32_t anaDec = (adcCtrl >> 8) & 0x7;
-            const bool isRxHf = (rxPath & 0x3) == 1;
-            // Narrowband sub-GHz path (ana_dec 1 or 2): use tighter RISE=11/FALL=13 timing
-            const uint32_t rise = (!isRxHf && (anaDec == 1 || anaDec == 2)) ? 11u : 15u;
-            const uint32_t fall = (!isRxHf && (anaDec == 1 || anaDec == 2)) ? 13u : 15u;
-            dcdcRes = lora.writeRegMemMask32(RADIOLIB_LR2021_REG_DCDC_SWITCHER, 0xFu << 20, rise << 20);
-            if (dcdcRes == RADIOLIB_ERR_NONE)
-                dcdcRes = lora.writeRegMemMask32(RADIOLIB_LR2021_REG_DCDC_SWITCHER, 0xFu << 16, fall << 16);
-            if (dcdcRes == RADIOLIB_ERR_NONE)
-                dcdcRes = dcdcSetFreq(anaDec == 1 ? 4300000 : 2800000);
-        }
-    }
-    if (dcdcRes != RADIOLIB_ERR_NONE)
-        LOG_WARN("LR20x0 DCDC workaround failed: %d", dcdcRes);
-    else
-        LOG_DEBUG("LR20x0 DCDC workaround applied");
+#ifdef LR2021_REGULATOR_LDO
+    // For modules built without the SIMO inductor on LXA/LXB
+    int16_t regRes = lora.setRegulatorLDO();
+    const char *regName = "LDO";
+#else
+    int16_t regRes = lora.setRegulatorDCDC();
+    const char *regName = "DC-DC";
 #endif
+    if (regRes != RADIOLIB_ERR_NONE)
+        LOG_WARN("LR20x0 set %s regulator %s%d", regName, radioLibErr, regRes);
+    else
+        LOG_INFO("LR20x0 regulator: %s", regName);
 }
 
 template <typename T> void LR20x0Interface<T>::clearRadioIsr()
