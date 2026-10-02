@@ -82,14 +82,6 @@ class MockRouter : public Router
   public:
     MockRouter() { addInterface(std::unique_ptr<RadioInterface>(new StubRadioInterface())); }
 
-    // Router's constructor asserts cryptLock is null before allocating it, so a per-test router can
-    // only be rebuilt if the previous one hands the global back.
-    ~MockRouter()
-    {
-        delete cryptLock;
-        cryptLock = nullptr;
-    }
-
     ErrorCode send(meshtastic_MeshPacket *p) override
     {
         sentPackets.push_back(*p);
