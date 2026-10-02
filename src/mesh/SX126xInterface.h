@@ -4,6 +4,13 @@
 #include "RadioLibInterface.h"
 #include "configuration.h"
 
+// After TX_DONE the SX126x waits in standby for the radio thread to restart RX, which a main-loop hold can stretch. With the
+// readout task, the TX_DONE interrupt has the task restart it instead; -DSX126X_RX_REARM_AT_TX_DONE=0 opts out. Not on nRF52,
+// whose TX_DONE interrupt can re-arm RX itself.
+#if defined(MESHTASTIC_RX_READOUT_TASK) && !defined(ARCH_NRF52) && !defined(SX126X_RX_REARM_AT_TX_DONE)
+#define SX126X_RX_REARM_AT_TX_DONE 1
+#endif
+
 /**
  * \brief Adapter for SX126x radio family. Implements common logic for child classes.
  * \tparam T RadioLib module type for SX126x: SX1262, SX1268.
@@ -104,6 +111,21 @@ template <class T> class SX126xInterface : public RadioLibInterface
     bool rxArmedContinuous = false;
 
     bool resumeRunningReceive() override;
+
+    /** Whether startReceive() arms continuous RX rather than RadioLib's duty-cycled RX */
+    bool continuousRxWanted() const;
+
+    /** The RX command startReceive() sends once the chip is in standby */
+    int16_t startRxCommand(bool continuousRx);
+
+#if defined(MESHTASTIC_RX_READOUT_TASK) && SX126X_RX_REARM_AT_TX_DONE
+    bool rearmReceiveFromIsr() override;
+    void rearmReceiveFromTask() override;
+    bool adoptReceiveArmedFromIsr() override;
+    enum RearmState : uint8_t { REARM_NONE, REARM_PENDING, REARM_ARMED, REARM_FAILED };
+    volatile uint8_t rearmState = REARM_NONE;
+    volatile int16_t rearmErr = 0;
+#endif
 
     /** Recover a chip that lost its runtime state: hardware-reset via begin() and reprogram */
     bool recoverChipStateLoss() override
