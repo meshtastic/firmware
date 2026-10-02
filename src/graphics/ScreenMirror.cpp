@@ -3,6 +3,7 @@
 #if HAS_SCREEN_MIRROR
 
 #include "DebugConfiguration.h"
+#include "Screen.h"
 #include "concurrency/LockGuard.h"
 #include "memory/MemAudit.h"
 #include <OLEDDisplay.h>
@@ -17,8 +18,9 @@ ScreenMirror screenMirror;
 
 namespace
 {
-// Region colors arrive panel-byte-order (big-endian RGB565); the wire
-// carries logical bit layout.
+constexpr const char *kMemTag = "mirror";
+
+// panel byte order (big-endian RGB565) to the wire's logical layout
 inline uint16_t swap16(uint16_t v)
 {
     return (uint16_t)((v >> 8) | (v << 8));
@@ -28,13 +30,13 @@ inline uint16_t swap16(uint16_t v)
 void ScreenMirror::freeSnapshotLocked()
 {
     if (snapshot) {
-        memaudit::add("display", -(int32_t)frameSize);
+        memaudit::add(kMemTag, -(int32_t)frameSize);
         free(snapshot);
         snapshot = nullptr;
     }
     frameSize = 0;
     if (paletteRegions) {
-        memaudit::add("display", -(int32_t)(sizeof(PaletteRegion) * MAX_TFT_COLOR_REGIONS));
+        memaudit::add(kMemTag, -(int32_t)(sizeof(PaletteRegion) * MAX_TFT_COLOR_REGIONS));
         free(paletteRegions);
         paletteRegions = nullptr;
     }
@@ -42,7 +44,8 @@ void ScreenMirror::freeSnapshotLocked()
     paletteCount = 0;
 #if HAS_MUI_MIRROR
     if (muiPool) {
-        memaudit::add("display", -(int32_t)MUI_POOL_BYTES);
+        if (!muiPoolInPsram)
+            memaudit::add(kMemTag, -(int32_t)MUI_POOL_BYTES);
         free(muiPool);
         muiPool = nullptr;
     }
@@ -53,37 +56,81 @@ void ScreenMirror::freeSnapshotLocked()
 #endif
 }
 
-void ScreenMirror::setMirror(bool enabled)
+void ScreenMirror::releaseLocked(const void *client)
 {
-    concurrency::LockGuard g(&lock);
-    // Cleanup must stay unconditional: a one-shot request leaves mirroring
-    // false, so an early return would strand the pool and the snapshot.
-    const bool changed = mirroring != enabled || oneShot;
-    mirroring = enabled;
-    if (enabled) {
-        // Force an immediate frame so the client doesn't wait for the next
-        // on-screen change.
-        oneShot = true;
 #if HAS_MUI_MIRROR
-        if (muiRefresh)
-            muiRefresh(); // MUI delivers "a frame" as a full-repaint rect burst
-#endif
-    } else {
-        oneShot = false;
-        freeSnapshotLocked(); // also releases the MUI pool and rect ownership
+    if (muiOwner == client) {
+        muiOwner = nullptr;
+        muiRectSendOffset = 0; // the next owner starts the head rect from its first byte
     }
-    if (changed)
-        LOG_INFO("Screen mirror %s", enabled ? "enabled" : "disabled");
+#endif
+    freeIfIdleLocked();
 }
 
-void ScreenMirror::requestFrame()
+void ScreenMirror::freeIfIdleLocked()
 {
-    concurrency::LockGuard g(&lock);
-    oneShot = true;
+    if (armedLocked())
+        return;
+    captureRequested = false;
+    freeSnapshotLocked();
+}
+
+// Called outside the lock: the screen thread captures on its next pass, even while the panel is off.
+void ScreenMirror::kickCapture()
+{
 #if HAS_MUI_MIRROR
     if (muiRefresh)
         muiRefresh();
 #endif
+    if (screen)
+        screen->kick();
+}
+
+void ScreenMirror::subscribe()
+{
+    {
+        concurrency::LockGuard g(&lock);
+        if (subscribers == UINT8_MAX)
+            return;
+        subscribers++;
+        captureRequested = true;
+    }
+    kickCapture();
+}
+
+void ScreenMirror::unsubscribe(const void *client)
+{
+    concurrency::LockGuard g(&lock);
+    if (subscribers)
+        subscribers--;
+    releaseLocked(client);
+}
+
+void ScreenMirror::requestFrame()
+{
+    {
+        concurrency::LockGuard g(&lock);
+        if (pendingRequests == UINT8_MAX)
+            return;
+        pendingRequests++;
+        captureRequested = true;
+    }
+    kickCapture();
+}
+
+void ScreenMirror::frameRequestDone(const void *client)
+{
+    concurrency::LockGuard g(&lock);
+    if (pendingRequests)
+        pendingRequests--;
+    releaseLocked(client);
+}
+
+void ScreenMirror::cursorAtHead(uint32_t &clientFrameId, uint16_t &clientOffset)
+{
+    concurrency::LockGuard g(&lock);
+    clientFrameId = frameId;
+    clientOffset = frameSize;
 }
 
 void ScreenMirror::onRendered(OLEDDisplay *display)
@@ -91,7 +138,7 @@ void ScreenMirror::onRendered(OLEDDisplay *display)
     uint32_t readyId = 0;
     {
         concurrency::LockGuard g(&lock);
-        if (!mirroring && !oneShot)
+        if (!armedLocked())
             return;
         if (!display || !display->buffer)
             return;
@@ -103,51 +150,54 @@ void ScreenMirror::onRendered(OLEDDisplay *display)
             return;
         if (fullSize > UINT16_MAX) {
             LOG_WARN("Screen mirror: %ux%u framebuffer too large to stream", w, h);
-            mirroring = oneShot = false;
+            subscribers = pendingRequests = 0;
+            freeIfIdleLocked();
             return;
         }
         uint16_t size = (uint16_t)fullSize;
 
-        if (snapshot && size != frameSize)
-            freeSnapshotLocked(); // display geometry changed; start over
+        if (snapshot && size != frameSize) {
+            memaudit::add(kMemTag, -(int32_t)frameSize);
+            free(snapshot);
+            snapshot = nullptr;
+        }
 
         bool firstFrame = !snapshot;
         if (firstFrame) {
             snapshot = (uint8_t *)malloc(size);
             if (!snapshot) {
                 LOG_ERROR("Screen mirror: no memory for %u byte snapshot", size);
-                mirroring = oneShot = false;
+                subscribers = pendingRequests = 0;
+                freeIfIdleLocked();
                 return;
             }
-            memaudit::add("display", size);
+            memaudit::add(kMemTag, size);
             frameSize = size;
             width = w;
             height = h;
         }
 
-        // A palette-only change (theme recolor) is frame-worthy even when the
-        // mono bits are identical: the client keys colors off the frame's signature.
+        // a recolor alone is frame-worthy: clients key colors off the frame's signature
         bool paletteChanged = snapshotPaletteSig != paletteSig;
-        if (!firstFrame && !oneShot && !paletteChanged && memcmp(display->buffer, snapshot, frameSize) == 0)
+        if (!firstFrame && !captureRequested && !paletteChanged && memcmp(display->buffer, snapshot, frameSize) == 0)
             return;
 
         memcpy(snapshot, display->buffer, frameSize);
         snapshotPaletteSig = paletteSig;
         frameId++;
-        oneShot = false;
+        captureRequested = false;
         readyId = frameId;
     }
-    // Notify outside the lock: observers (PhoneAPI) may re-enter hasChunkFor.
     frameReady.notifyObservers(readyId);
 }
 
 void ScreenMirror::capturePalette(uint32_t signature, uint16_t defaultOnBe, uint16_t defaultOffBe, const TFTColorRegion *regions,
                                   uint8_t count)
 {
+    // regions alone do not change on a recolor, so the theme defaults are part of the signature
+    signature ^= (((uint32_t)defaultOnBe << 16) | defaultOffBe) * 2654435761u;
     concurrency::LockGuard g(&lock);
-    // Cheap when nothing changed and when the mirror is idle: paint-time
-    // callers hit this every frame, but clients only exist while mirroring.
-    if (!mirroring && !oneShot && !snapshot)
+    if (!armedLocked())
         return;
     if (signature == paletteSig && paletteRegions)
         return;
@@ -155,7 +205,7 @@ void ScreenMirror::capturePalette(uint32_t signature, uint16_t defaultOnBe, uint
         paletteRegions = (PaletteRegion *)malloc(sizeof(PaletteRegion) * MAX_TFT_COLOR_REGIONS);
         if (!paletteRegions)
             return; // frames still stream; clients render monochrome
-        memaudit::add("display", sizeof(PaletteRegion) * MAX_TFT_COLOR_REGIONS);
+        memaudit::add(kMemTag, sizeof(PaletteRegion) * MAX_TFT_COLOR_REGIONS);
     }
     if (count > MAX_TFT_COLOR_REGIONS)
         count = MAX_TFT_COLOR_REGIONS;
@@ -217,36 +267,32 @@ void ScreenMirror::onMuiRect(int16_t x, int16_t y, uint16_t w, uint16_t h, const
     uint32_t readyId = 0;
     {
         concurrency::LockGuard g(&lock);
-        if (!mirroring && !oneShot)
+        if (!armedLocked())
             return;
-        // Panel size comes from LVGL at registration, so frames always carry the
-        // full display dimensions the wire contract promises.
         if (x < 0 || y < 0 || w == 0 || h == 0 || muiPanelW == 0 || stride < w)
             return;
 
         uint32_t bytes = (uint32_t)w * h * 2;
         if (!muiPool) {
-            bool psram = false;
 #ifdef ESP32
-            muiPool = (uint8_t *)ps_malloc(MUI_POOL_BYTES); // PSRAM first; this is a big buffer
-            psram = muiPool != nullptr;
+            muiPool = (uint8_t *)ps_malloc(MUI_POOL_BYTES);
 #endif
+            muiPoolInPsram = muiPool != nullptr;
             if (!muiPool)
                 muiPool = (uint8_t *)malloc(MUI_POOL_BYTES);
             if (!muiPool) {
                 LOG_ERROR("Screen mirror: no memory for the %u byte rect pool", (unsigned)MUI_POOL_BYTES);
-                mirroring = oneShot = false;
+                subscribers = pendingRequests = 0;
+                freeIfIdleLocked();
                 return;
             }
-            if (!psram)
-                memaudit::add("display", MUI_POOL_BYTES); // PSRAM is not the constrained budget
+            if (!muiPoolInPsram)
+                memaudit::add(kMemTag, MUI_POOL_BYTES); // PSRAM is not the constrained budget
         }
         if (bytes > MUI_POOL_BYTES)
             return; // a rect larger than the whole pool can never be sent
         if (muiCount >= MUI_MAX_RECTS || muiPoolUsed + bytes > MUI_POOL_BYTES) {
-            // The consumer is behind. Drop the backlog rather than the newest
-            // pixels and repaint once: stale history has no value, and dropping
-            // only the incoming rect wedges the pool until the queue empties.
+            // consumer is behind: drop the backlog, not the newest pixels, and repaint once
             muiHead = muiCount = 0;
             muiPoolUsed = 0;
             muiRectSendOffset = 0;
@@ -271,8 +317,7 @@ void ScreenMirror::onMuiRect(int16_t x, int16_t y, uint16_t w, uint16_t h, const
         r = {(uint16_t)x, (uint16_t)y, w, h, bytes, muiPoolUsed, ++frameId};
         muiPoolUsed += bytes;
         muiCount++;
-        // Only the empty->non-empty transition needs a wakeup; available()
-        // keeps the client draining, and a notify per flush is a storm.
+        // only empty -> non-empty needs a wakeup; available() keeps the client draining
         if (muiCount == 1)
             readyId = frameId;
     }
@@ -281,9 +326,10 @@ void ScreenMirror::onMuiRect(int16_t x, int16_t y, uint16_t w, uint16_t h, const
 }
 
 // Fills one chunk of the oldest queued rect; pops it when fully drained.
-bool ScreenMirror::copyMuiChunkLocked(meshtastic_DisplayFrame &out)
+bool ScreenMirror::copyMuiChunkLocked(uint32_t &clientFrameId, meshtastic_DisplayFrame &out)
 {
     MuiRect &r = muiRects[muiHead];
+    clientFrameId = r.id;
     uint32_t len = r.bytes - muiRectSendOffset;
     if (len > sizeof(out.data.bytes))
         len = sizeof(out.data.bytes);
@@ -307,11 +353,8 @@ bool ScreenMirror::copyMuiChunkLocked(meshtastic_DisplayFrame &out)
         muiHead = (muiHead + 1) % MUI_MAX_RECTS;
         muiCount--;
         muiRectSendOffset = 0;
-        if (muiCount == 0) {
+        if (muiCount == 0)
             muiPoolUsed = 0;
-            if (!mirroring)
-                oneShot = false; // one-shot fully delivered
-        }
     }
     return true;
 }
@@ -321,8 +364,7 @@ bool ScreenMirror::hasChunkFor(const void *client, uint32_t clientFrameId, uint1
 {
     concurrency::LockGuard g(&lock);
 #if HAS_MUI_MIRROR
-    // One shared rect cursor means one consumer; another connection simply
-    // sees no rects rather than stealing half of each frame.
+    // one shared rect cursor: another connection sees no rects rather than half of each
     if (muiCount && (muiOwner == nullptr || muiOwner == client))
         return true;
 #endif
@@ -333,14 +375,12 @@ bool ScreenMirror::copyChunk(const void *client, uint32_t &clientFrameId, uint16
 {
     concurrency::LockGuard g(&lock);
 #if HAS_MUI_MIRROR
-    // MUI rects drain ahead of (and on MUI builds, instead of) mono snapshots.
-    // Spike scope: the rect queue has a single consumer, not per-client cursors.
     if (muiCount) {
         if (muiOwner == nullptr)
             muiOwner = client; // first drainer claims the stream
         if (muiOwner != client)
             return false;
-        return copyMuiChunkLocked(out);
+        return copyMuiChunkLocked(clientFrameId, out);
     }
 #endif
     if (!snapshot)
@@ -359,8 +399,6 @@ bool ScreenMirror::copyChunk(const void *client, uint32_t &clientFrameId, uint16
     out.width = width;
     out.height = height;
     out.format = meshtastic_DisplayFrame_Format_MONO_VLSB;
-    // The signature captured WITH this snapshot, not the live one: a drain can
-    // span a display() that already advanced paletteSig for the next frame.
     out.palette_signature = snapshotPaletteSig;
     out.frame_id = frameId;
     out.offset = clientOffset;
