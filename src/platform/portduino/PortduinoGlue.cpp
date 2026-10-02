@@ -9,7 +9,9 @@
 #include "ConfigCheck.h"
 #include "PortduinoGlue.h"
 #include "SHA256.h"
+#include "UptimeClock.h"
 #include "api/ServerAPI.h"
+#include "mesh/Throttle.h"
 #include "meshUtils.h"
 #include <ErriezCRC32.h>
 #include <Utility.h>
@@ -155,6 +157,13 @@ const char *argp_program_version = optstr(APP_VERSION);
 
 char stdoutBuffer[512];
 
+#ifdef MESHTASTIC_LINUX_BLE
+// Long enough that a host which can never bring BLE up is not re-probing BlueZ on every PowerFSM
+// transition, short enough that a bluetoothd still starting at boot is picked up without the user
+// noticing the wait.
+static constexpr uint32_t BLE_SETUP_RETRY_INTERVAL_MS = 30 * 1000;
+#endif
+
 // FIXME - move setBluetoothEnable into a HALPlatform class
 void setBluetoothEnable(bool enable)
 {
@@ -174,15 +183,25 @@ void setBluetoothEnable(bool enable)
     // Bluetooth on.
     if (!portduino_config.bluetooth_enabled || !config.bluetooth.enabled)
         return;
+    static uint32_t lastSetupMs = 0; // 0 = not attempted yet; stored through stampMillis()
     if (!linuxBluetooth) {
         LOG_INFO("Init LinuxBluetooth (adapter %s)", portduino_config.bluetooth_adapter.c_str());
         linuxBluetooth = new LinuxBluetooth();
+        lastSetupMs = Time::stampMillis();
         linuxBluetooth->setup();
     } else if (!linuxBluetooth->isEnabled()) {
         // The backend exists but never came up -- bluetoothd was not ready, the adapter was
         // missing, or policy refused us. resumeAdvertising() returns immediately while disabled, so
         // without this a transient failure at boot would keep BLE off until the process restarted.
+        //
+        // Throttled because five PowerFSM state-entry handlers reach here, and each setup() opens a
+        // system bus connection, spawns an event-loop thread and enumerates every BlueZ object
+        // before giving up. On a host where BLE can never come up that cost, and the log line, would
+        // otherwise repeat on every transition for as long as the daemon runs.
+        if (lastSetupMs && !Throttle::hasElapsed(lastSetupMs, BLE_SETUP_RETRY_INTERVAL_MS))
+            return;
         LOG_INFO("Retry LinuxBluetooth setup (adapter %s)", portduino_config.bluetooth_adapter.c_str());
+        lastSetupMs = Time::stampMillis();
         linuxBluetooth->setup();
     } else {
         linuxBluetooth->resumeAdvertising();
