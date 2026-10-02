@@ -42,12 +42,6 @@ namespace
 class MockRouter : public Router
 {
   public:
-    ~MockRouter()
-    {
-        // cryptLock is created in the constructor for Router.
-        delete cryptLock;
-        cryptLock = NULL;
-    }
     void enqueueReceivedMessage(meshtastic_MeshPacket *p) override
     {
         packets_.emplace_back(*p);

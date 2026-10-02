@@ -37,7 +37,37 @@ void Lock::unlock()
         abort();
     }
 }
+#elif defined(ARCH_PORTDUINO)
+Lock::Lock()
+{
+    pthread_mutex_init(&mutex, NULL);
+}
+
+void Lock::lock()
+{
+    pthread_mutex_lock(&mutex);
+}
+
+bool Lock::lock(uint32_t)
+{
+    // No portable timed pthread lock across Linux and macOS, so block instead: returning true
+    // without acquiring would leave callers such as SPILock unlocking a mutex they never took.
+    lock();
+    return true;
+}
+
+void Lock::unlock()
+{
+    pthread_mutex_unlock(&mutex);
+}
+
+Lock::~Lock()
+{
+    pthread_mutex_destroy(&mutex);
+}
 #else
+// Neither FreeRTOS nor pthreads: single-threaded targets such as STM32WL, whose newlib has no
+// pthread at all. Unchanged from upstream - the real implementation above is Portduino's.
 Lock::Lock() {}
 
 Lock::~Lock() {}
