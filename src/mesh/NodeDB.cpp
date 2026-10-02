@@ -953,6 +953,18 @@ bool NodeDB::factoryReset(bool eraseBleBonds)
         Bluefruit.Periph.clearBonds();
         Bluefruit.Central.clearBonds();
 #endif
+#ifdef MESHTASTIC_LINUX_BLE
+        // isEnabled(), not just the pointer: a setup() that threw leaves the object
+        // allocated with its bus torn down, and clearBonds() needs a live connection.
+        if (linuxBluetooth && linuxBluetooth->isEnabled()) {
+            LOG_INFO("Clear bluetooth bonds");
+            linuxBluetooth->clearBonds();
+        } else {
+            // BlueZ bonds live in the host adapter's store, not ours, so there is no
+            // removing them from here without that connection.
+            LOG_WARN("BLE off, host bluetooth bonds left in place");
+        }
+#endif
     }
     return true;
 }
@@ -1446,6 +1458,15 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.external_notification.use_i2s_as_buzzer = true;
     moduleConfig.external_notification.alert_message_buzzer = true;
 #endif // HAS_I2S
+
+#if HAS_LIBNOTIFY
+    // meshtasticd has no buzzer or LED to drive, but the module is what raises desktop
+    // notifications (ExternalNotificationModule::portduinoNotify), so default it on. Gated on
+    // HAS_LIBNOTIFY rather than ARCH_PORTDUINO: without libnotify that code is not compiled in, so
+    // enabling the module by default would only add a config surface that can do nothing.
+    moduleConfig.external_notification.enabled = true;
+    moduleConfig.external_notification.alert_message = true;
+#endif // HAS_LIBNOTIFY
 
 #ifdef NANO_G2_ULTRA
     moduleConfig.external_notification.enabled = true;
