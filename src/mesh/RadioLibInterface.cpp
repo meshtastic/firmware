@@ -1401,6 +1401,7 @@ void RadioLibInterface::readOutFromTask()
         if (f.info.state == RADIOLIB_ERR_NONE)
             rxReadoutRecovered = rxReadoutRecovered + 1;
     }
+#endif
     f.info.snr = iface->getSNR();
     f.info.rssi = lround(iface->getRSSI());
     f.info.spiUs = benchClockToUs(benchClock() - t0);
