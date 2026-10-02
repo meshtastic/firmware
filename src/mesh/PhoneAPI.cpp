@@ -384,14 +384,7 @@ void PhoneAPI::close()
 #endif
 #if HAS_SCREEN_MIRROR
         unobserve(&graphics::screenMirror.frameReady);
-        // This client is gone; PoC keeps one arming flag, so disarm and free
-        // the snapshot rather than stream to nobody. A surviving client
-        // re-arms with another set_display_mirror.
-        graphics::screenMirror.setMirror(false);
-        mirrorFrameId = 0;
-        mirrorOffset = 0;
-        mirrorPaletteSig = 0;
-        mirrorPaletteOffset = 0;
+        releaseMirror();
 #endif
         releasePhonePacket(); // Don't leak phone packets on shutdown
         releaseQueueStatusPhonePacket();
@@ -1109,14 +1102,19 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
                 fromRadioScratch.packet = replayPkt;
             }
 #if HAS_SCREEN_MIRROR
-        } else if (screenMirrorAuthorized() && graphics::screenMirror.copyPaletteChunk(mirrorPaletteSig, mirrorPaletteOffset,
-                                                                                       fromRadioScratch.display_palette)) {
-            // Palette before frames so the client can colorize the first frame it renders.
+        } else if (wantsMirror() && graphics::screenMirror.copyPaletteChunk(mirrorPaletteSig, mirrorPaletteOffset,
+                                                                            fromRadioScratch.display_palette)) {
+            // palette first, so the client can colorize the first frame it renders
             fromRadioScratch.which_payload_variant = meshtastic_FromRadio_display_palette_tag;
-        } else if (screenMirrorAuthorized() &&
+        } else if (wantsMirror() &&
                    graphics::screenMirror.copyChunk(this, mirrorFrameId, mirrorOffset, fromRadioScratch.display_frame)) {
-            // Lowest priority: mesh traffic and notifications outrank pixels.
+            // lowest priority: mesh traffic and notifications outrank pixels
             fromRadioScratch.which_payload_variant = meshtastic_FromRadio_display_frame_tag;
+            if (mirrorFramePending && mirrorFrameId != mirrorRequestedAt &&
+                !graphics::screenMirror.hasChunkFor(this, mirrorFrameId, mirrorOffset)) {
+                mirrorFramePending = false;
+                graphics::screenMirror.frameRequestDone(this);
+            }
 #endif
         }
         break;
@@ -1766,8 +1764,8 @@ bool PhoneAPI::available()
             return true;
 
 #if HAS_SCREEN_MIRROR
-        return screenMirrorAuthorized() && (graphics::screenMirror.hasPaletteChunkFor(mirrorPaletteSig, mirrorPaletteOffset) ||
-                                            graphics::screenMirror.hasChunkFor(this, mirrorFrameId, mirrorOffset));
+        return wantsMirror() && (graphics::screenMirror.hasPaletteChunkFor(mirrorPaletteSig, mirrorPaletteOffset) ||
+                                 graphics::screenMirror.hasChunkFor(this, mirrorFrameId, mirrorOffset));
 #else
         return false;
 #endif
@@ -1822,6 +1820,63 @@ PhoneAPI::LocalAdminGate PhoneAPI::classifyLocalAdminPacket(const meshtastic_Mes
     return adminAuthorized ? LocalAdminGate::AuthorizedPassThrough : LocalAdminGate::DropUnauthorized;
 }
 
+#if HAS_SCREEN_MIRROR
+// Handled here rather than in AdminModule: the subscription belongs to this connection, which the router task cannot see.
+bool PhoneAPI::handleScreenMirrorAdmin(const meshtastic_MeshPacket &p)
+{
+    if (p.which_payload_variant != meshtastic_MeshPacket_decoded_tag || p.decoded.portnum != meshtastic_PortNum_ADMIN_APP ||
+        p.to != nodeDB->getNodeNum())
+        return false;
+    meshtastic_AdminMessage admin = meshtastic_AdminMessage_init_zero;
+    if (!pb_decode_from_bytes(p.decoded.payload.bytes, p.decoded.payload.size, &meshtastic_AdminMessage_msg, &admin))
+        return false;
+    switch (admin.which_payload_variant) {
+    case meshtastic_AdminMessage_set_display_mirror_tag:
+        LOG_INFO("Client sets display mirror: %d", admin.set_display_mirror);
+        setMirrorSubscribed(admin.set_display_mirror);
+        return true;
+    case meshtastic_AdminMessage_get_display_frame_request_tag:
+        LOG_INFO("Client requests display frame");
+        if (!mirrorFramePending) {
+            if (!mirrorSubscribed)
+                graphics::screenMirror.cursorAtHead(mirrorFrameId, mirrorOffset);
+            mirrorRequestedAt = mirrorFrameId;
+            mirrorFramePending = true;
+            graphics::screenMirror.requestFrame();
+        }
+        return true;
+    default:
+        return false;
+    }
+}
+
+void PhoneAPI::setMirrorSubscribed(bool subscribed)
+{
+    if (subscribed == mirrorSubscribed)
+        return;
+    mirrorSubscribed = subscribed;
+    if (subscribed) {
+        graphics::screenMirror.cursorAtHead(mirrorFrameId, mirrorOffset);
+        graphics::screenMirror.subscribe();
+    } else {
+        graphics::screenMirror.unsubscribe(this);
+    }
+}
+
+void PhoneAPI::releaseMirror()
+{
+    setMirrorSubscribed(false);
+    if (mirrorFramePending) {
+        mirrorFramePending = false;
+        graphics::screenMirror.frameRequestDone(this);
+    }
+    mirrorFrameId = 0;
+    mirrorOffset = 0;
+    mirrorPaletteSig = 0;
+    mirrorPaletteOffset = 0;
+}
+#endif
+
 /**
  * Handle a packet that the phone wants us to send.  It is our responsibility to free the packet to the pool
  */
@@ -1874,6 +1929,11 @@ bool PhoneAPI::handleToRadioPacket(meshtastic_MeshPacket &p)
             break; // normal handling
         }
     }
+#endif
+
+#if HAS_SCREEN_MIRROR
+    if (handleScreenMirrorAdmin(p))
+        return true;
 #endif
 
     // Coordinates aimed at the event channel go out on the position channel instead (the phone picks the
@@ -1957,9 +2017,7 @@ int PhoneAPI::onNotify(uint32_t newValue)
         // Consumed by every connected client in this one notify pass, so no per-connection bookkeeping.
         if (service->identityMovePending())
             state = STATE_RESEND_MY_INFO;
-        // TRACE, not INFO: with display mirroring active this fires once per
-        // captured frame per client, at screen-change rate.
-        LOG_TRACE("Tell client new packets %u", newValue);
+        LOG_INFO("Tell client new packets %u", newValue);
         onNowHasData(newValue);
     } else if (service->identityMovePending() && state != STATE_SEND_NOTHING && state != STATE_SEND_MY_INFO) {
         // Mid-sync, so this dump is already carrying the old number in its my_info, its self record or
