@@ -1396,7 +1396,7 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
         deviceMetadata.display.has_touch = muiTouch;
     } else
 #endif
-#if HAS_SCREEN
+#if HAS_SCREEN_MIRROR
         if (screen) {
         OLEDDisplay *dispdev = screen->getDisplayDevice();
         if (dispdev && dispdev->getWidth() > 0) {
@@ -1411,9 +1411,7 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
             deviceMetadata.display.panel_class = meshtastic_DisplayInfo_PanelClass_EINK;
 #elif defined(USE_HUB75) || defined(HAS_HUB75_NATIVE)
             deviceMetadata.display.panel_class = meshtastic_DisplayInfo_PanelClass_HUB75;
-// USE_TFTDISPLAY is value-tested, not defined()-tested: configuration.h
-// defaults it to 0, so it is always defined and every screen build would
-// otherwise report itself as a TFT.
+// value-tested: configuration.h always defines USE_TFTDISPLAY, defaulting it to 0
 #elif USE_TFTDISPLAY || defined(HAS_SPI_TFT) || defined(USE_ST7789) || defined(USE_ST7796) || defined(ILI9341_DRIVER) ||         \
     defined(ILI9342_DRIVER)
             deviceMetadata.display.panel_class = meshtastic_DisplayInfo_PanelClass_TFT;

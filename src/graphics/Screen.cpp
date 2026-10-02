@@ -183,10 +183,7 @@ static void drawLockdownLockScreen(OLEDDisplay *display)
 }
 #endif
 
-// Give ScreenMirror a look at the committed framebuffer (no-op unless armed).
-// Deliberately scoped to updateUiFrame commits: the few direct display()
-// paths it bypasses (EInk re-commits, boot logo) immediately follow or
-// precede a mirrored frame.
+// Hands ScreenMirror the committed framebuffer; a no-op unless a client is armed.
 static inline void screenMirrorCapture()
 {
 #if HAS_SCREEN_MIRROR
@@ -222,8 +219,7 @@ static inline void updateUiFrame(OLEDDisplayUi *ui)
             NotificationRenderer::drawBannercallback(display, ui->getUiState());
         }
         display->display();
-        // The mirror sees the LOCKED frame, matching the panel's redaction.
-        screenMirrorCapture();
+        screenMirrorCapture(); // the locked frame, matching the panel's redaction
         return;
     }
 #endif
@@ -1246,6 +1242,11 @@ int32_t Screen::runOnce()
 
     if (!screenOn) { // If we didn't just wake and the screen is still off, then
                      // stop updating until it is on again
+#ifdef MESHTASTIC_LOCKDOWN
+        // the last committed frame may predate the lock
+        if (!meshtastic_security::shouldRedactDisplay())
+#endif
+            screenMirrorCapture(); // a request while off still gets the last committed frame
         textMessageFrameShown = false;
         enabled = false;
         return 0;
