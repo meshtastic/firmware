@@ -1028,7 +1028,19 @@ void NimbleBluetooth::startAdvertising()
 
     struct os_mbuf *rspData = os_msys_get_pkthdr(BLE_HS_ADV_MAX_SZ, 0);
     if (rspData) {
-        if (ble_hs_adv_set_fields_mbuf(&rspFields, rspData) == 0) {
+        int rspRc;
+#if NIMBLE_GATT_MESH
+        // Mesh peers find the node by the mesh-peer UUID, so it takes the legacy path's scan response
+        // byte for byte: the UUID, then the name shortened to what is left.
+        if (ESP32BLEGattMesh::enabled()) {
+            BLEAdvertisementData scan;
+            ESP32BLEGattMesh::fillScanResponse(scan, name);
+            const String payload = scan.getPayload();
+            rspRc = os_mbuf_append(rspData, payload.c_str(), payload.length());
+        } else
+#endif
+            rspRc = ble_hs_adv_set_fields_mbuf(&rspFields, rspData);
+        if (rspRc == 0) {
             if (ble_gap_ext_adv_rsp_set_data(PHONE_ADV_INSTANCE, rspData) != 0)
                 LOG_WARN("BLE ext adv scan response rejected; node will advertise without a name");
         } else {
