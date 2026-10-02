@@ -116,10 +116,12 @@ static void formatRingNum(char *buf, size_t len, float metres, float scale)
 // Node marker shapes
 // ---------------------------------------------------------------------------
 
-/** Half-extent of a marker glyph: bigger stroke on high-res panels. */
+/** Half-extent of a marker glyph: bigger stroke on high-res panels, 3x3 on tiny ones. */
 static int markerRadius()
 {
-    return (currentResolution == ScreenResolution::High) ? 4 : 2;
+    if (currentResolution == ScreenResolution::High)
+        return 4;
+    return (currentResolution == ScreenResolution::UltraLow) ? 1 : 2;
 }
 
 /** Draw a marker stroke, doubled into a 2 px line on high-res panels. */
@@ -203,6 +205,74 @@ static void drawMarker(OLEDDisplay *display, int px, int py, uint8_t sym)
     }
 }
 
+/** Short name, or the last 4 hex digits of the node number when there is none. */
+static void nodeLabel(char *buf, size_t len, const meshtastic_NodeInfoLite *node)
+{
+    if (nodeInfoLiteHasUser(node) && node->short_name[0])
+        snprintf(buf, len, "%s", node->short_name);
+    else
+        snprintf(buf, len, "%04X", (uint16_t)(node->num & 0xFFFF));
+}
+
+// Compact panels: list column width (marker + name + distance) and the cap height of FONT_TINY.
+static constexpr int kCompactListW = 37;
+
+/** Distance in at most ~4 tiny glyphs: "350m", "1.2k", "12k", or "500'", "1.2mi". */
+static void formatDistCompact(char *buf, size_t len, float metres)
+{
+    if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) {
+        const float miles = metres / 1609.34f;
+        if (miles < 0.1f)
+            snprintf(buf, len, "%d'", (int)(metres * 3.28084f));
+        else if (miles < 10.0f)
+            snprintf(buf, len, "%.1fmi", miles);
+        else
+            snprintf(buf, len, "%dmi", (int)(miles + 0.5f));
+    } else if (metres < 1000.0f) {
+        snprintf(buf, len, "%dm", (int)metres);
+    } else if (metres < 10000.0f) {
+        snprintf(buf, len, "%.1fk", metres / 1000.0f);
+    } else {
+        snprintf(buf, len, "%dk", (int)(metres / 1000.0f + 0.5f));
+    }
+}
+static constexpr int kTinyCapH = 5;
+
+/** Compact panels: marker + short name + compact distance per row, no scale. */
+template <typename Entries>
+static void drawCompactList(OLEDDisplay *display, int16_t x, int16_t y, const Entries &entries, int plottedCount, int maxRows)
+{
+    // Rows spread over the panel height; the block stays put as the count changes.
+    const int rowPitch = std::min(9, (SCREEN_HEIGHT - kTinyCapH) / std::max(1, maxRows - 1));
+    const int topY = (SCREEN_HEIGHT - ((maxRows - 1) * rowPitch + kTinyCapH)) / 2;
+    display->setFont(FONT_TINY);
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+
+    if (plottedCount == 0) {
+        const int blockTop = y + (SCREEN_HEIGHT - (rowPitch + kTinyCapH)) / 2;
+        display->setTextAlignment(TEXT_ALIGN_CENTER);
+        display->drawString(x + kCompactListW / 2, blockTop, "No");
+        display->drawString(x + kCompactListW / 2, blockTop + rowPitch, "nodes");
+        display->setTextAlignment(TEXT_ALIGN_LEFT);
+        return;
+    }
+
+    const int symOffsetY = kTinyCapH / 2;
+    for (int i = 0; i < plottedCount; i++) {
+        const int rowY = y + topY + rowPitch * i;
+        drawMarker(display, x + markerRadius(), rowY + symOffsetY, (uint8_t)i);
+        char name[10];
+        nodeLabel(name, sizeof(name), entries[i].node);
+        display->drawString(x + 2 * markerRadius() + 2, rowY, name);
+
+        char dist[10];
+        formatDistCompact(dist, sizeof(dist), entries[i].distM);
+        display->setTextAlignment(TEXT_ALIGN_RIGHT);
+        display->drawString(x + kCompactListW - 2, rowY, dist);
+        display->setTextAlignment(TEXT_ALIGN_LEFT);
+    }
+}
+
 /** Plot a node on the radar at the correct bearing/distance position. */
 static void plotNode(OLEDDisplay *display, int cx, int cy, int radius, float bearingRad, float headingRad, float norm,
                      uint8_t markerIdx)
@@ -232,7 +302,8 @@ static void plotNode(OLEDDisplay *display, int cx, int cy, int radius, float bea
  */
 void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
 {
-    const int headerH = FONT_HEIGHT_SMALL - 1;
+    const bool compact = graphics::isCompactPanel(display);
+    const int headerH = compact ? 0 : FONT_HEIGHT_SMALL - 1;
     const int sw = SCREEN_WIDTH;
     const int sh = SCREEN_HEIGHT;
 
@@ -256,9 +327,10 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
     // Radar circle - right side, padded, centred in the area below the header.
     // -----------------------------------------------------------------------
     // Capped at half the width so the node list keeps a usable column.
-    const int radarDiam = std::min(contentH - 2 * pad, sw / 2);
+    // Compact: everything right of the tiny-font list column.
+    const int radarDiam = compact ? std::min(sh - 2, sw - kCompactListW) : std::min(contentH - 2 * pad, sw / 2);
     const int radarRadius = radarDiam / 2;
-    const int radarCX = x + sw - pad - radarRadius;
+    const int radarCX = compact ? x + sw - 1 - radarRadius : x + sw - pad - radarRadius;
     const int radarCY = y + headerH + contentH / 2;
 
     // Node list panel fills the space to the left of the radar circle.
@@ -366,7 +438,10 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
     // Keeps the scale legible in the title bar instead of overlapping the
     // inner ring.
     // -----------------------------------------------------------------------
-    {
+    // Compact panels have no header and skip the scale entirely.
+    if (compact) {
+        drawCompactList(display, x, y, entries, plottedCount, kMaxPlotted);
+    } else {
         char scaleBuf[12] = "";
         formatDistM(scaleBuf, sizeof(scaleBuf), scale);
         char titleBuf[24];
@@ -375,10 +450,11 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
     }
 
     // -----------------------------------------------------------------------
-    // Draw radar chrome: three concentric range rings.
+    // Draw radar chrome: concentric range rings (two on compact panels).
     // -----------------------------------------------------------------------
-    for (int ring = 1; ring <= 3; ring++)
-        display->drawCircle(radarCX, radarCY, (radarRadius * ring) / 3);
+    const int ringCount = compact ? 2 : 3;
+    for (int ring = 1; ring <= ringCount; ring++)
+        display->drawCircle(radarCX, radarCY, (radarRadius * ring) / ringCount);
 
     // -----------------------------------------------------------------------
     // Ring distance labels - high-res only; numbers only, no unit suffix,
@@ -403,16 +479,17 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
 
     // -----------------------------------------------------------------------
     // North indicator - rotates in heading-up mode.
-    // Top edge of the N glyph just touches ring 3 from inside.
+    // Top edge of the N glyph just touches ring 3 from inside; on compact
+    // panels a tiny N sits midway between the two rings.
     // -----------------------------------------------------------------------
     {
         const float northBrg = -headingRad;
-        const int nRadius = radarRadius - FONT_HEIGHT_SMALL / 2;
+        const int nRadius = compact ? (radarRadius * 3) / 4 : radarRadius - FONT_HEIGHT_SMALL / 2;
         const int nx = radarCX + (int)(nRadius * sinf(northBrg));
         const int ny = radarCY - (int)(nRadius * cosf(northBrg));
-        display->setFont(FONT_SMALL);
+        display->setFont(compact ? FONT_TINY : FONT_SMALL);
         display->setTextAlignment(TEXT_ALIGN_CENTER);
-        display->drawString(nx, ny - FONT_HEIGHT_SMALL / 2, "N");
+        display->drawString(nx, ny - (compact ? kTinyCapH / 2 : FONT_HEIGHT_SMALL / 2), "N");
     }
 
     // Own-node marker: single pixel at centre.
@@ -430,6 +507,10 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
         const Entry &e = entries[i];
         plotNode(display, radarCX, radarCY, radarRadius, e.bearingRad, headingRad, std::min(e.distM / scale, 1.0f), (uint8_t)i);
     }
+
+    // Compact list was drawn with the header step above.
+    if (compact)
+        return;
 
     // -----------------------------------------------------------------------
     // Node list (left panel) - up to 10 closest nodes.
@@ -457,11 +538,8 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
 
         drawMarker(display, symCX, symCY, (uint8_t)i);
 
-        char name[10] = "";
-        if (nodeInfoLiteHasUser(e.node) && e.node->short_name[0])
-            strncpy(name, e.node->short_name, sizeof(name) - 1);
-        else
-            snprintf(name, sizeof(name), "%04X", (uint16_t)(e.node->num & 0xFFFF));
+        char name[10];
+        nodeLabel(name, sizeof(name), e.node);
 
         char dist[10] = "";
         formatDistM(dist, sizeof(dist), e.distM);

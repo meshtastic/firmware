@@ -20,6 +20,10 @@
 #include "graphics/fonts/OLEDDisplayFontsGR.h"
 #endif
 
+#ifdef OLED_COMPACT_UI
+#include "graphics/fonts/OLEDDisplayFontsTiny.h"
+#endif
+
 #if (defined(CROWPANEL_ESP32S3_5_EPAPER) || defined(T5_S3_EPAPER_PRO)) && defined(USE_EINK)
 #include "graphics/fonts/EinkDisplayFonts.h"
 #endif
@@ -120,6 +124,13 @@
 #define FONT_SMALL Monospaced_plain_30
 #define FONT_MEDIUM Monospaced_plain_30
 #define FONT_LARGE Monospaced_plain_30
+#endif
+
+// 3x5 font for compact panels; elsewhere it is just FONT_SMALL.
+#ifdef OLED_COMPACT_UI
+#define FONT_TINY TomThumb_6 // Height: 7
+#else
+#define FONT_TINY FONT_SMALL
 #endif
 
 #define _fontHeight(font) ((font)[1] + 1) // height is position 1
