@@ -59,19 +59,22 @@ class ScreenMirror
     bool copyPaletteChunk(uint32_t &clientPaletteSig, uint8_t &clientRegionOffset, meshtastic_DisplayPalette &out);
 
 #if HAS_MUI_MIRROR
-    /// MUI path: queues one LVGL dirty rect (native little-endian RGB565).
-    /// Called on the LVGL thread via the device-ui flush observer; copies and returns.
-    void onMuiRect(int16_t x, int16_t y, uint16_t w, uint16_t h, const uint16_t *pixels);
+    /// MUI path: queues one LVGL dirty rect, rows stride pixels apart, as tightly
+    /// packed little-endian RGB565. Called on the LVGL thread via the device-ui
+    /// flush observer; copies and returns.
+    void onMuiRect(int16_t x, int16_t y, uint16_t w, uint16_t h, const uint16_t *pixels, uint16_t stride);
 
     /// Registers device-ui's thread-safe full-repaint request plus the panel
     /// size, so streamed frames carry the full display dimensions from the
-    /// first rect rather than growing into them.
+    /// first rect rather than growing into them. byteSwapped is the display's
+    /// pixel byte order, which the wire's little-endian RGB565 undoes.
     using FullRefreshFn = void (*)();
-    void setMuiSource(FullRefreshFn fn, uint16_t panelWidth, uint16_t panelHeight)
+    void setMuiSource(FullRefreshFn fn, uint16_t panelWidth, uint16_t panelHeight, bool byteSwapped)
     {
         muiRefresh = fn;
         muiPanelW = panelWidth;
         muiPanelH = panelHeight;
+        muiByteSwapped = byteSwapped;
     }
 #endif
 
@@ -122,6 +125,7 @@ class ScreenMirror
     uint32_t muiRectSendOffset = 0;
     uint16_t muiPanelW = 0;
     uint16_t muiPanelH = 0;
+    bool muiByteSwapped = false;
     FullRefreshFn muiRefresh = nullptr;
     const void *muiOwner = nullptr; // connection currently draining rects
 

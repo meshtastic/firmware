@@ -212,7 +212,7 @@ bool ScreenMirror::copyPaletteChunk(uint32_t &clientPaletteSig, uint8_t &clientR
 }
 
 #if HAS_MUI_MIRROR
-void ScreenMirror::onMuiRect(int16_t x, int16_t y, uint16_t w, uint16_t h, const uint16_t *pixels)
+void ScreenMirror::onMuiRect(int16_t x, int16_t y, uint16_t w, uint16_t h, const uint16_t *pixels, uint16_t stride)
 {
     uint32_t readyId = 0;
     {
@@ -221,7 +221,7 @@ void ScreenMirror::onMuiRect(int16_t x, int16_t y, uint16_t w, uint16_t h, const
             return;
         // Panel size comes from LVGL at registration, so frames always carry the
         // full display dimensions the wire contract promises.
-        if (x < 0 || y < 0 || w == 0 || h == 0 || muiPanelW == 0)
+        if (x < 0 || y < 0 || w == 0 || h == 0 || muiPanelW == 0 || stride < w)
             return;
 
         uint32_t bytes = (uint32_t)w * h * 2;
@@ -254,7 +254,19 @@ void ScreenMirror::onMuiRect(int16_t x, int16_t y, uint16_t w, uint16_t h, const
                 muiRefresh();
             return;
         }
-        memcpy(muiPool + muiPoolUsed, pixels, bytes);
+        uint8_t *dst = muiPool + muiPoolUsed;
+        if (!muiByteSwapped && stride == w) {
+            memcpy(dst, pixels, bytes);
+        } else {
+            for (uint16_t row = 0; row < h; row++) {
+                const uint16_t *src = pixels + (uint32_t)row * stride;
+                for (uint16_t col = 0; col < w; col++) {
+                    uint16_t v = muiByteSwapped ? swap16(src[col]) : src[col];
+                    *dst++ = (uint8_t)(v & 0xFF);
+                    *dst++ = (uint8_t)(v >> 8);
+                }
+            }
+        }
         MuiRect &r = muiRects[(muiHead + muiCount) % MUI_MAX_RECTS];
         r = {(uint16_t)x, (uint16_t)y, w, h, bytes, muiPoolUsed, ++frameId};
         muiPoolUsed += bytes;

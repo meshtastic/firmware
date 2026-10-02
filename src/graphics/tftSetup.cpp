@@ -422,12 +422,12 @@ void tftSetup(void)
     DisplayMirror::start(deviceScreen->getDisplayDriver());
     {
         lv_display_t *disp = lv_display_get_default();
-        graphics::screenMirror.setMuiSource([]() { DisplayMirror::requestFullRefresh(); },
-                                            disp ? (uint16_t)lv_display_get_horizontal_resolution(disp) : 0,
-                                            disp ? (uint16_t)lv_display_get_vertical_resolution(disp) : 0);
+        graphics::screenMirror.setMuiSource(
+            []() { DisplayMirror::requestFullRefresh(); }, disp ? (uint16_t)lv_display_get_horizontal_resolution(disp) : 0,
+            disp ? (uint16_t)lv_display_get_vertical_resolution(disp) : 0, DisplayMirror::pixelsByteSwapped());
     }
-    DisplayMirror::setFrameObserver([](int16_t x, int16_t y, uint16_t w, uint16_t h, const uint16_t *px) {
-        graphics::screenMirror.onMuiRect(x, y, w, h, px);
+    DisplayMirror::setFrameObserver([](int16_t x, int16_t y, uint16_t w, uint16_t h, const uint16_t *px, uint16_t stride) {
+        graphics::screenMirror.onMuiRect(x, y, w, h, px, stride);
     });
 #endif
 #else
