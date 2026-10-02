@@ -533,6 +533,13 @@ class TestableRadioLibInterface : public RadioLibInterface
 
     static bool isRadioLibTimeErrorPublic(RadioLibTime_t usec) { return isRadioLibTimeError(usec); }
 
+    size_t beginSendingPublic(meshtastic_MeshPacket *p) { return beginSending(p); }
+    void abandonSendingPublic() { abandonSending(); }
+    meshtastic_MeshPacket *getSendingPacket() const { return sendingPacket; }
+    uint32_t getTxGood() const { return txGood; }
+    uint32_t getTxRelay() const { return txRelay; }
+    uint16_t getTxDrop() const { return txDrop; }
+
     // Chip-specific hooks this test never reaches
     uint32_t getPacketTime(uint32_t, bool) override { return 0; }
     int16_t getCurrentRSSI() override { return 0; }
@@ -623,16 +630,42 @@ static void test_classifyScan_onlyCadOutcomesAreVerdicts()
     TEST_ASSERT_TRUE(RadioLibInterface::classifyScan(RADIOLIB_CHANNEL_FREE) == Scan::Free);
     TEST_ASSERT_TRUE(RadioLibInterface::classifyScan(RADIOLIB_LORA_DETECTED) == Scan::Busy);
     TEST_ASSERT_TRUE(RadioLibInterface::classifyScan(RADIOLIB_PREAMBLE_DETECTED) == Scan::Busy); // SX127x
-    const int16_t errors[] = {RADIOLIB_ERR_NONE,
-                              RADIOLIB_ERR_UNKNOWN,
-                              RADIOLIB_ERR_WRONG_MODEM,
-                              RADIOLIB_ERR_SPI_CMD_TIMEOUT,
-                              RADIOLIB_ERR_SPI_CMD_INVALID,
-                              RADIOLIB_ERR_SPI_CMD_FAILED,
-                              RADIOLIB_ERR_CHIP_NOT_FOUND,
+    TEST_ASSERT_TRUE_MESSAGE(RadioLibInterface::classifyScan(RADIOLIB_ERR_NONE) == Scan::Failed,
+                             "a scan that reports no CAD outcome must not read as a verdict");
+    const int16_t errors[] = {RADIOLIB_ERR_UNKNOWN,         RADIOLIB_ERR_WRONG_MODEM,    RADIOLIB_ERR_SPI_CMD_TIMEOUT,
+                              RADIOLIB_ERR_SPI_CMD_INVALID, RADIOLIB_ERR_SPI_CMD_FAILED, RADIOLIB_ERR_CHIP_NOT_FOUND,
                               RADIOLIB_ERR_RX_TIMEOUT};
     for (int16_t err : errors)
         TEST_ASSERT_TRUE_MESSAGE(RadioLibInterface::classifyScan(err) == Scan::Failed, "a scan error must not read as a verdict");
+}
+
+// startSend() takes this path when startTransmit() fails: nothing went on air, so the packet is
+// released and counted as dropped, never as sent.
+static void test_abandonSending_releasesAndCountsDropNotSend()
+{
+    auto *radioIf = makeTestableRadioLibInterface();
+    const int32_t liveBefore = packetPoolLiveBytes();
+
+    meshtastic_MeshPacket *p = packetPool.allocZeroed();
+    TEST_ASSERT_NOT_NULL(p);
+    TEST_ASSERT_GREATER_THAN_INT32(liveBefore, packetPoolLiveBytes());
+    p->from = 0x12345678;
+    p->to = 0x87654321;
+    p->id = 0x10203042;
+    p->which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
+    p->encrypted.size = 16;
+    TEST_ASSERT_EQUAL_UINT(16 + sizeof(PacketHeader), radioIf->beginSendingPublic(p));
+    TEST_ASSERT_EQUAL_PTR(p, radioIf->getSendingPacket());
+
+    radioIf->abandonSendingPublic();
+
+    TEST_ASSERT_NULL_MESSAGE(radioIf->getSendingPacket(), "the abandoned packet must not stay in flight");
+    TEST_ASSERT_EQUAL_INT32_MESSAGE(liveBefore, packetPoolLiveBytes(), "the abandoned packet must go back to the pool");
+    TEST_ASSERT_EQUAL_UINT16(1, radioIf->getTxDrop());
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, radioIf->getTxGood(), "a failed transmit start must not count as sent");
+    TEST_ASSERT_EQUAL_UINT32(0, radioIf->getTxRelay());
+
+    delete radioIf;
 }
 
 // Every RADIOLIB_ERR_* is rejected, every duration a LoRa packet can actually take is kept.
@@ -707,6 +740,7 @@ void setup()
     RUN_TEST(test_computePacketTime_rxUsesHeaderInfoAndIsGuarded);
     RUN_TEST(test_isRadioLibTimeError_separatesCodesFromDurations);
     RUN_TEST(test_classifyScan_onlyCadOutcomesAreVerdicts);
+    RUN_TEST(test_abandonSending_releasesAndCountsDropNotSend);
     exit(UNITY_END());
 }
 
