@@ -35,8 +35,6 @@ void NRF52BLEMesh::start()
     }
 
     instance = this;
-    memset(peers, 0, sizeof(peers));
-    peerCount = 0;
     isRunning = true;
     LOG_INFO("BLE mesh started (waiting for Bluetooth ready)");
 }
@@ -248,53 +246,12 @@ void NRF52BLEMesh::handleScanResult(ble_gap_evt_adv_report_t *report)
                 const uint8_t *payload = &data[offset + 5];
                 size_t payloadLen = adLen - 4;
 
-                updatePeer(report->peer_addr, report->rssi);
                 deliverToRouter(payload, payloadLen, report->rssi);
                 return;
             }
         }
         offset += adLen + 1;
     }
-}
-
-void NRF52BLEMesh::updatePeer(const ble_gap_addr_t &addr, int8_t rssi)
-{
-    uint32_t now = millis();
-
-    for (uint8_t i = 0; i < peerCount; i++) {
-        if (memcmp(&peers[i].addr, &addr, sizeof(ble_gap_addr_t)) == 0) {
-            peers[i].rssi = rssi;
-            peers[i].lastSeenMs = now;
-            return;
-        }
-    }
-
-    if (peerCount >= BLE_MESH_MAX_PEERS)
-        pruneStale();
-
-    if (peerCount < BLE_MESH_MAX_PEERS) {
-        peers[peerCount].addr = addr;
-        peers[peerCount].rssi = rssi;
-        peers[peerCount].lastSeenMs = now;
-        peers[peerCount].nodeNum = 0; // unknown until a packet from them decodes
-        peerCount++;
-        LOG_DEBUG("BLE mesh new peer (%u total)", peerCount);
-    }
-}
-
-void NRF52BLEMesh::pruneStale()
-{
-    uint32_t now = millis();
-    uint8_t writeIdx = 0;
-
-    for (uint8_t i = 0; i < peerCount; i++) {
-        if (now - peers[i].lastSeenMs < BLE_MESH_PEER_TIMEOUT_MS) {
-            if (writeIdx != i)
-                peers[writeIdx] = peers[i];
-            writeIdx++;
-        }
-    }
-    peerCount = writeIdx;
 }
 
 #endif // HAS_BLE_MESH && ARCH_NRF52

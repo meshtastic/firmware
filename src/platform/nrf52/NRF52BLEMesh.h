@@ -5,10 +5,6 @@
 #include "mesh/BLEMeshHandler.h"
 #include <bluefruit.h>
 
-#ifndef BLE_MESH_MAX_PEERS
-#define BLE_MESH_MAX_PEERS 8
-#endif
-
 // Units of 0.625ms. Window equals interval: continuous, as on ESP32.
 #ifndef BLE_MESH_SCAN_INTERVAL
 #define BLE_MESH_SCAN_INTERVAL 160 // 100ms
@@ -19,10 +15,6 @@
 
 #ifndef BLE_MESH_ADV_INTERVAL
 #define BLE_MESH_ADV_INTERVAL 48 // 30ms in units of 0.625ms
-#endif
-
-#ifndef BLE_MESH_PEER_TIMEOUT_MS
-#define BLE_MESH_PEER_TIMEOUT_MS 300000 // 5 minutes
 #endif
 
 class NRF52BLEMesh : public BLEMeshHandler
@@ -45,15 +37,6 @@ class NRF52BLEMesh : public BLEMeshHandler
     void stopScanning();
     void handleScanResult(ble_gap_evt_adv_report_t *report);
 
-    struct BLEMeshPeer {
-        NodeNum nodeNum;
-        ble_gap_addr_t addr;
-        int8_t rssi;
-        uint32_t lastSeenMs;
-    };
-    BLEMeshPeer peers[BLE_MESH_MAX_PEERS];
-    uint8_t peerCount = 0;
-
     // A SoftDevice advertising set of its own, allocated by passing BLE_GAP_ADV_SET_HANDLE_NOT_SET.
     // Handle 0 is Bluefruit's phone advertisement; sharing it means tearing that down and restoring
     // it around every frame, which is the fallback when the SoftDevice has no spare set.
@@ -65,9 +48,6 @@ class NRF52BLEMesh : public BLEMeshHandler
     // sd_ble_gap_adv_set_configure keeps the pointer rather than copying.
     uint8_t advBuf[BLE_MESH_ADV_TOTAL_MAX];
     uint8_t advBufLen = 0;
-
-    void updatePeer(const ble_gap_addr_t &addr, int8_t rssi);
-    void pruneStale();
 
     static NRF52BLEMesh *instance;
 };
