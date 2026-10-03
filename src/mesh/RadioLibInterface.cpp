@@ -608,7 +608,27 @@ void RadioLibInterface::onNotify(uint32_t notification)
                     LOG_DEBUG("CAD arm");
 #ifdef MESHTASTIC_TX_SLOT_GATE_MS
                     // Bench: after the log line, which on some boards costs most of a slot
-                    const uint32_t gateWaitedMs = waitForOwnSlot();
+                    const uint32_t scanAt = ownSlotScanAt();
+                    const int32_t ahead = (int32_t)(scanAt - Time::getMillis());
+                    const int32_t earlyMs = MESHTASTIC_TX_SLOT_GATE_EARLY_SLOTS * slotTimeMsec;
+#if MESHTASTIC_TX_SLOT_GATE_REARM
+                    const int32_t saneMs = SLOT_GATE_SANE_MS;
+                    if (ahead > earlyMs && ahead < saneMs) {
+                        // A redraw cannot replace a pending TX timer (txTimerOverwrite), so this can be an older draw's
+                        // timer. Come back the early window ahead of the slot instead of holding the loop. If a
+                        // notification is pending, its handler redraws.
+                        slotGateRearmed++;
+                        notifyLater(ahead - earlyMs, TRANSMIT_DELAY_COMPLETED, false);
+                        break;
+                    }
+#else
+                    const int32_t saneMs = earlyMs + 2 * (int32_t)slotTimeMsec + 1; // round 86: scan at once beyond this
+#endif
+                    if (ahead >= saneMs)
+                        slotGateCapped++;
+                    const uint32_t gateWaitedMs = ahead > 0 && ahead < saneMs ? waitUntilMs(scanAt) : 0;
+                    if (gateWaitedMs)
+                        slotGateWaits++;
                     TX_TIMELINE_SET(tlGateWaitMs, gateWaitedMs);
                     if (gateWaitedMs && (!canSendImmediately() || capturedFramePending())) {
                         // A frame arrived during the wait: take it first. Its handling redraws from its end, as the
@@ -616,6 +636,8 @@ void RadioLibInterface::onNotify(uint32_t notification)
                         setTransmitDelay();
                         break;
                     }
+                    TX_TIMELINE_SET(tlGateScanMs, Time::getMillis() - slotGateAnchorMs);
+                    TX_TIMELINE_SET(tlGateNewerUnread, capturedFramePending());
 #endif
                     const uint32_t scanStartMs = Time::getMillis();
                     noteDeafFrom("scan");
@@ -1513,10 +1535,14 @@ void RadioLibInterface::logTxTimeline(bool adopted)
                        (unsigned)slotTimeMsec, (int)tlLateMs, (unsigned)(lastTxStart - slotDrawAnchorMs));
 #ifdef MESHTASTIC_TX_SLOT_GATE_MS
     if (tlSend)
-        LOG_RADIO_EDGE("TX slot gate: waited %u ms, SET_TX at +%u ms from its frame end; %u waits, %u capped",
-                       (unsigned)tlGateWaitMs, (unsigned)(lastTxStart - slotGateAnchorMs), (unsigned)slotGateWaits,
+        LOG_RADIO_EDGE("TX slot gate: waited %u ms, scan at +%u, SET_TX at +%u ms from its frame end (%s, noted +%u ms after "
+                       "it ended%s); %u waits, %u re-armed, %u capped",
+                       (unsigned)tlGateWaitMs, (unsigned)tlGateScanMs, (unsigned)(lastTxStart - slotGateAnchorMs),
+                       slotGateAnchorWhat, (unsigned)(slotGateAnchorNotedMs - slotGateAnchorMs),
+                       tlGateNewerUnread ? ", a newer frame unread" : "", (unsigned)slotGateWaits, (unsigned)slotGateRearmed,
                        (unsigned)slotGateCapped);
-    tlGateWaitMs = 0;
+    tlGateWaitMs = tlGateScanMs = 0;
+    tlGateNewerUnread = false;
 #endif
 #endif
     tlScan = tlSend = 0;

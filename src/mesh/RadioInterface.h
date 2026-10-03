@@ -17,13 +17,21 @@
 #endif
 // Bench: -DMESHTASTIC_TX_SLOT_GATE_MS=<ms> scans only in the first <ms> of a slot of this node's parity, waiting on the radio
 // thread for the next one if a main-loop hold made it late. The backoff timer fires
-// MESHTASTIC_TX_SLOT_GATE_EARLY_SLOTS (default 2) slots early so the wait, not the hold, sets the start.
+// MESHTASTIC_TX_SLOT_GATE_EARLY_SLOTS (default 2) slots early so the wait, not the hold, sets the start; a timer that
+// fires further ahead than that is set again rather than waited out.
 #ifdef MESHTASTIC_TX_SLOT_GATE_MS
 #ifndef MESHTASTIC_TX_SLOT_PARITY
 #error "MESHTASTIC_TX_SLOT_GATE_MS gates on this node's slot parity: build with MESHTASTIC_TX_SLOT_PARITY"
 #endif
 #ifndef MESHTASTIC_TX_SLOT_GATE_EARLY_SLOTS
 #define MESHTASTIC_TX_SLOT_GATE_EARLY_SLOTS 2
+#endif
+// A scan target further out than this is not a slot the backoff drew: scan at once and count it
+#define SLOT_GATE_SANE_MS 10000
+// -DMESHTASTIC_TX_SLOT_GATE_REARM=0 scans at once when the target is more than the early window plus two slots away,
+// as round 86 did, instead of setting the timer again
+#ifndef MESHTASTIC_TX_SLOT_GATE_REARM
+#define MESHTASTIC_TX_SLOT_GATE_REARM 1
 #endif
 #endif
 
@@ -247,6 +255,8 @@ class RadioInterface
     /** Bench: millis() when the last frame this node sent or heard left the air, 0 before the first */
     uint32_t lastFrameEndMs = 0;
     const char *lastFrameEndWhat = "none";
+    /** Bench: millis() when this node learned of that frame end */
+    uint32_t lastFrameEndNotedMs = 0;
 
     /** Bench: note a frame's air end for the slot anchor. One older than the last is ignored. */
     void noteFrameEnd(uint32_t endMs, const char *what);
@@ -258,13 +268,17 @@ class RadioInterface
     uint32_t slotDrawn = 0, slotDrawAnchorMs = 0;
 
 #ifdef MESHTASTIC_TX_SLOT_GATE_MS
-    /** Bench: wait until a slot of this node's parity, no earlier than the drawn one, began at most
-     *  MESHTASTIC_TX_SLOT_GATE_MS ago. Returns the ms waited. */
-    uint32_t waitForOwnSlot();
-    /** Bench: gated scans that waited, and those whose wait hit the cap and went at once */
-    uint32_t slotGateWaits = 0, slotGateCapped = 0;
-    /** Bench: the frame end the last gate counted its slots from */
-    uint32_t slotGateAnchorMs = 0;
+    /** Bench: the millis() to scan at: the earliest start of a slot of this node's parity, no earlier than the drawn one,
+     *  that began at most MESHTASTIC_TX_SLOT_GATE_MS ago. Now if there is no grid yet. */
+    uint32_t ownSlotScanAt();
+    /** Bench: hold this thread until untilMs; returns the ms waited */
+    uint32_t waitUntilMs(uint32_t untilMs);
+    /** Bench: gated scans that waited; timers that fired before the early window and were set again; targets too far to
+     *  be real, scanned at once */
+    uint32_t slotGateWaits = 0, slotGateRearmed = 0, slotGateCapped = 0;
+    /** Bench: the frame end the last gate counted its slots from, when it was noted, and what it was */
+    uint32_t slotGateAnchorMs = 0, slotGateAnchorNotedMs = 0;
+    const char *slotGateAnchorWhat = "none";
 #endif
 #endif
 

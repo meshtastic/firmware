@@ -855,6 +855,7 @@ void RadioInterface::noteFrameEnd(uint32_t endMs, const char *what)
         return; // a frame delivered late, after one that ended later
     lastFrameEndMs = Time::skipZero(endMs);
     lastFrameEndWhat = what;
+    lastFrameEndNotedMs = Time::getMillis();
 }
 
 uint32_t RadioInterface::getAnchoredSlotDelayMsec(uint32_t slots)
@@ -885,34 +886,32 @@ uint32_t RadioInterface::getAnchoredSlotDelayMsec(uint32_t slots)
 #if defined(MESHTASTIC_TX_STAGE_EARLY)
 #error "MESHTASTIC_TX_SLOT_GATE_MS and the early TX stage both bring the backoff timer forward: build with one"
 #endif
-uint32_t RadioInterface::waitForOwnSlot()
+uint32_t RadioInterface::ownSlotScanAt()
 {
+    const uint32_t now = Time::getMillis();
     const uint32_t slot = slotTimeMsec;
     if (!slot || !lastFrameEndMs)
-        return 0; // no grid yet
-    const uint32_t start = Time::getMillis();
+        return now; // no grid yet
     slotGateAnchorMs = lastFrameEndMs;
+    slotGateAnchorNotedMs = lastFrameEndNotedMs;
+    slotGateAnchorWhat = lastFrameEndWhat;
     // Not before the drawn slot: the timer fired early on purpose. The grid is the latest frame end's, which is the one
     // the other nodes count from too.
     const uint32_t drawnMs = slotDrawAnchorMs + slotDrawn * slot;
-    const uint32_t from = (int32_t)(drawnMs - start) > 0 ? drawnMs : start;
+    const uint32_t from = (int32_t)(drawnMs - now) > 0 ? drawnMs : now;
     const uint32_t since = from - lastFrameEndMs;
     uint32_t k = since / slot;
-    uint32_t scanAt = from;
-    if ((k & 1) != MESHTASTIC_TX_SLOT_PARITY || since - k * slot > MESHTASTIC_TX_SLOT_GATE_MS) {
-        k += ((k & 1) != MESHTASTIC_TX_SLOT_PARITY) ? 1 : 2; // the next slot start of this parity
-        scanAt = lastFrameEndMs + k * slot;
-    }
-    // At most the early fire plus two slots; anything longer means the grid moved under us, so go now
-    if ((int32_t)(scanAt - start) > (int32_t)((MESHTASTIC_TX_SLOT_GATE_EARLY_SLOTS + 2) * slot)) {
-        slotGateCapped++;
-        return 0;
-    }
-    if ((int32_t)(scanAt - start) <= 0)
-        return 0;
-    slotGateWaits++;
+    if ((k & 1) == MESHTASTIC_TX_SLOT_PARITY && since - k * slot <= MESHTASTIC_TX_SLOT_GATE_MS)
+        return from;
+    k += ((k & 1) != MESHTASTIC_TX_SLOT_PARITY) ? 1 : 2; // the next slot start of this parity
+    return lastFrameEndMs + k * slot;
+}
+
+uint32_t RadioInterface::waitUntilMs(uint32_t untilMs)
+{
+    const uint32_t start = Time::getMillis();
     // Sleep while more than 2 ms remain, so other tasks run, then spin onto the slot start
-    for (int32_t left = (int32_t)(scanAt - Time::getMillis()); left > 0; left = (int32_t)(scanAt - Time::getMillis())) {
+    for (int32_t left = (int32_t)(untilMs - start); left > 0; left = (int32_t)(untilMs - Time::getMillis())) {
         if (left > 2)
             delay(1);
     }
