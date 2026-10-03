@@ -24,8 +24,6 @@ void ESP32BLEMesh::start()
         return;
     }
 
-    memset(peers, 0, sizeof(peers));
-    peerCount = 0;
     isRunning = true;
     LOG_INFO("BLE mesh started (waiting for Bluetooth ready)");
 }
@@ -250,7 +248,7 @@ void ESP32BLEMesh::handleAdvertisement(const struct ble_gap_disc_desc *desc)
     if (!isRunning || !desc)
         return;
 
-    handleAdvertisementData(desc->addr, desc->rssi, desc->data, desc->length_data);
+    handleAdvertisementData(desc->rssi, desc->data, desc->length_data);
 }
 
 #if BLE_MESH_USE_EXT_ADV
@@ -263,11 +261,11 @@ void ESP32BLEMesh::handleExtendedAdvertisement(const struct ble_gap_ext_disc_des
     if (desc->data_status != BLE_GAP_EXT_ADV_DATA_STATUS_COMPLETE || !desc->data)
         return;
 
-    handleAdvertisementData(desc->addr, desc->rssi, desc->data, desc->length_data);
+    handleAdvertisementData(desc->rssi, desc->data, desc->length_data);
 }
 #endif
 
-void ESP32BLEMesh::handleAdvertisementData(const ble_addr_t &addr, int8_t rssi, const uint8_t *data, uint8_t len)
+void ESP32BLEMesh::handleAdvertisementData(int8_t rssi, const uint8_t *data, uint8_t len)
 {
     if (!isRunning || !data)
         return;
@@ -288,53 +286,12 @@ void ESP32BLEMesh::handleAdvertisementData(const ble_addr_t &addr, int8_t rssi, 
                 const uint8_t *payload = &data[offset + 5];
                 size_t payloadLen = adLen - 4;
 
-                updatePeer(addr, rssi);
                 deliverToRouter(payload, payloadLen, rssi);
                 return;
             }
         }
         offset += adLen + 1;
     }
-}
-
-void ESP32BLEMesh::updatePeer(const ble_addr_t &addr, int8_t rssi)
-{
-    uint32_t now = millis();
-
-    for (uint8_t i = 0; i < peerCount; i++) {
-        if (memcmp(&peers[i].addr, &addr, sizeof(ble_addr_t)) == 0) {
-            peers[i].rssi = rssi;
-            peers[i].lastSeenMs = now;
-            return;
-        }
-    }
-
-    if (peerCount >= BLE_MESH_MAX_PEERS)
-        pruneStale();
-
-    if (peerCount < BLE_MESH_MAX_PEERS) {
-        peers[peerCount].addr = addr;
-        peers[peerCount].rssi = rssi;
-        peers[peerCount].lastSeenMs = now;
-        peers[peerCount].nodeNum = 0;
-        peerCount++;
-        LOG_DEBUG("BLE mesh new peer (%u total)", peerCount);
-    }
-}
-
-void ESP32BLEMesh::pruneStale()
-{
-    uint32_t now = millis();
-    uint8_t writeIdx = 0;
-
-    for (uint8_t i = 0; i < peerCount; i++) {
-        if (now - peers[i].lastSeenMs < BLE_MESH_PEER_TIMEOUT_MS) {
-            if (writeIdx != i)
-                peers[writeIdx] = peers[i];
-            writeIdx++;
-        }
-    }
-    peerCount = writeIdx;
 }
 
 #endif // HAS_BLE_MESH && ARCH_ESP32
