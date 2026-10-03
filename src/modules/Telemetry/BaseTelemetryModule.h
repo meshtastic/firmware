@@ -2,11 +2,29 @@
 
 #include "DebugConfiguration.h"
 #include "NodeDB.h"
+#include "PortPolicy.h"
 #include "configuration.h"
 #include "sleep.h"
 
 class BaseTelemetryModule
 {
+  public:
+    /// May we answer a telemetry request from `from`? One policy for every sub-type.
+    static bool wouldReplyToPoll(NodeNum from, uint32_t dest)
+    {
+        return replyPolicyAllows(moduleConfig.telemetry.policy_flags, from, dest);
+    }
+
+    /// Routine (timer-driven) send destination: 0 = broadcast, else that node.
+    static NodeNum routineDest(uint32_t configured) { return configured ? (NodeNum)configured : NODENUM_BROADCAST; }
+
+    /// Admin gate for a telemetry config: PKC_ALWAYS needs a key for every routine destination.
+    static bool pkcOnlyDestsHaveKeys(const meshtastic_ModuleConfig_TelemetryConfig &t, char *why = nullptr, size_t whyLen = 0)
+    {
+        const uint32_t dests[] = {t.device_dest, t.environment_dest, t.air_quality_dest, t.power_dest, t.health_dest};
+        return pkcAlwaysDestsHaveKeys(t.policy_flags, dests, sizeof(dests) / sizeof(dests[0]), why, whyLen);
+    }
+
   protected:
     bool isSensorOrRouterRole() const
     {

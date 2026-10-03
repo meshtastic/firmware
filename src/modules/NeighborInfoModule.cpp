@@ -2,6 +2,7 @@
 #include "Default.h"
 #include "MeshService.h"
 #include "NodeDB.h"
+#include "PortPolicy.h"
 #include "UptimeClock.h"
 #include "gps/RTC.h"
 #include <Throttle.h>
@@ -140,6 +141,10 @@ int32_t NeighborInfoModule::runOnce()
 meshtastic_MeshPacket *NeighborInfoModule::allocReply()
 {
     LOG_INFO("NeighborInfoRequested");
+    if (currentRequest && !replyPolicyAllows(moduleConfig.neighbor_info.policy_flags, getFrom(currentRequest), 0)) {
+        ignoreRequest = true;
+        return nullptr;
+    }
     if (lastSentReply && Throttle::isWithinTimespanMs(lastSentReply, 3 * 60 * 1000)) {
         LOG_DEBUG("Skip Neighbors reply since we sent a reply <3min ago");
         ignoreRequest = true; // Mark it as ignored for MeshModule

@@ -48,6 +48,7 @@
 # suite	flags	reason
 test_admin_radio	writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto,warm.dat,Messages_default.msgs errors=400	per-test NodeDB fixture, and the admin handlers under test persist config, channels and node metadata
 test_admin_session_repro	writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto	constructs a NodeDB, whose constructor persists a default set when the prefs directory is empty
+test_directed_routine	writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto	constructs a NodeDB (the reply-policy and hop-budget helpers read it), whose constructor persists a default set when the prefs directory is empty
 test_event_channel_phone_api	writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto	constructs a NodeDB, whose constructor persists a default set when the prefs directory is empty
 test_event_channel_router	writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto errors=200	subclasses NodeDB for the event-channel fixtures; the base constructor persists a default set when the prefs directory is empty
 test_firmware_edition	writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto	persists an event firmware_edition in devicestate, then reboots a NodeDB to prove a vanilla build resets it
