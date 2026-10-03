@@ -1,9 +1,9 @@
 // Unit tests for the ingress and egress rules every non-LoRa bearer shares:
 // MeshTransportBase::sanitizeIngress() and MeshTransportBase::stripForTransmit() in
 // src/mesh/MeshTransportBase.cpp, driven through each bearer's own ingress where it can be reached
-// without a radio (UdpMulticastHandler::decodeIngress, BLEGattMeshHandler::deliverToRouter) and
-// directly for MQTT, whose onReceiveProto
-// path is covered end to end by test_mqtt.
+// without a radio (UdpMulticastHandler::decodeIngress, BLEGattMeshHandler::deliverToRouter,
+// BLEMeshHandler::deliverToRouter) and directly for MQTT, whose onReceiveProto path is covered end
+// to end by test_mqtt. The advertisement bearer measures its own hop, so it alone reports rx_rssi.
 //
 // Why: a LoRa arrival carries only what the LoRa header carries, so every field outside it (tx_after,
 // priority, pki_encrypted, public_key, rx_*) arrives at its default over radio. A bearer that hands
@@ -31,19 +31,27 @@
 #include "main.h"
 #if HAS_BLE_GATT_MESH
 #include "mesh/BLEGattMeshHandler.h"
-#include <vector>
 #endif
+#if HAS_BLE_MESH
+#include "mesh/BLEMeshHandler.h"
+#endif
+#include <vector>
 
 namespace
 {
 
 constexpr NodeNum kSender = 0x3061b02e;
 
+// The RSSI a bearer that measures its own hop reports for every fixture arrival.
+constexpr int8_t kHopRssi = -42;
+
 struct Bearer {
     const char *name;
     meshtastic_MeshPacket_TransportMechanism medium;
     // Delivers `sent` the way this bearer's ingress would. True, with `got` filled, when admitted.
     bool (*deliver)(const meshtastic_MeshPacket &sent, meshtastic_MeshPacket &got);
+    // True when the bearer measures the hop it arrived on, so rx_rssi is kHopRssi rather than cleared.
+    bool measuresHop;
 };
 
 #if HAS_UDP_MULTICAST
@@ -101,13 +109,54 @@ bool deliverGatt(const meshtastic_MeshPacket &sent, meshtastic_MeshPacket &got)
 }
 #endif
 
+#if HAS_BLE_MESH
+// The advertisement handler with its radio stubbed out, reached at the point a scanned payload arrives.
+class AdvIngress : public BLEMeshHandler
+{
+  public:
+    std::vector<meshtastic_MeshPacket> received;
+
+    void start() override { isRunning = true; }
+    void stop() override { isRunning = false; }
+    void deliver(const uint8_t *data, size_t len) { deliverToRouter(data, len, kHopRssi); }
+    void enqueueReceived(meshtastic_MeshPacket *p) override
+    {
+        received.push_back(*p);
+        packetPool.release(p);
+    }
+
+  protected:
+    bool platformBeginAdvertising(const uint8_t *, size_t) override { return false; }
+    bool platformAdvertisingActive() override { return false; }
+    void platformEndAdvertising() override {}
+    bool platformReady() override { return true; }
+};
+
+bool deliverAdv(const meshtastic_MeshPacket &sent, meshtastic_MeshPacket &got)
+{
+    uint8_t body[meshtastic_MeshPacket_size];
+    const size_t n = pb_encode_to_bytes(body, sizeof(body), &meshtastic_MeshPacket_msg, &sent);
+    TEST_ASSERT_TRUE_MESSAGE(n > 0, "fixture packet encodes");
+    AdvIngress h;
+    h.start();
+    h.deliver(body, n);
+    if (h.received.empty())
+        return false;
+    got = h.received[0];
+    return true;
+}
+#endif
+
 const Bearer bearers[] = {
 #if HAS_UDP_MULTICAST
-    {"UDP", meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MULTICAST_UDP, deliverUdp},
+    {"UDP", meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MULTICAST_UDP, deliverUdp, false},
 #endif
-    {"MQTT", meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MQTT, deliverMqtt},
+    {"MQTT", meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MQTT, deliverMqtt, false},
 #if HAS_BLE_GATT_MESH
-    {"BLE GATT", meshtastic_MeshPacket_TransportMechanism_TRANSPORT_BLE_GATT, deliverGatt},
+    {"BLE GATT", meshtastic_MeshPacket_TransportMechanism_TRANSPORT_BLE_GATT, deliverGatt, false},
+#endif
+#if HAS_BLE_MESH
+    {"BLE advertisement", meshtastic_MeshPacket_TransportMechanism_TRANSPORT_BLE_ADV, deliverAdv, true},
 #endif
 };
 
@@ -155,7 +204,7 @@ meshtastic_MeshPacket withHeaderFieldsSet(meshtastic_MeshPacket p)
     return p;
 }
 
-void assertLocalOnlyCleared(const meshtastic_MeshPacket &got, const char *name)
+void assertLocalOnlyCleared(const meshtastic_MeshPacket &got, const char *name, bool measuresHop = false)
 {
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, got.tx_after, name);
     TEST_ASSERT_EQUAL_MESSAGE(meshtastic_MeshPacket_Priority_UNSET, got.priority, name);
@@ -165,8 +214,9 @@ void assertLocalOnlyCleared(const meshtastic_MeshPacket &got, const char *name)
     uint8_t zeros[sizeof(got.public_key.bytes)] = {0};
     TEST_ASSERT_EQUAL_MEMORY_MESSAGE(zeros, got.public_key.bytes, sizeof(zeros), name);
     TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0, got.rx_snr, name);
-    TEST_ASSERT_EQUAL_INT_MESSAGE(0, got.rx_rssi, name);
-    TEST_ASSERT_FALSE_MESSAGE(got.has_rx_rssi, name);
+    // A sent value never survives: either this node's own measurement of the hop, or none at all.
+    TEST_ASSERT_EQUAL_INT_MESSAGE(measuresHop ? kHopRssi : 0, got.rx_rssi, name);
+    TEST_ASSERT_EQUAL_MESSAGE(measuresHop, got.has_rx_rssi, name);
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, got.rx_time, name);
     TEST_ASSERT_FALSE_MESSAGE(got.has_rx_time, name);
 }
@@ -196,6 +246,7 @@ void test_ingress_admits_and_stamps_the_bearer(void)
         TEST_ASSERT_EQUAL_UINT32_MESSAGE(0x0badf00d, got.id, b.name);
         TEST_ASSERT_EQUAL_MESSAGE(b.medium, got.transport_mechanism, b.name);
         TEST_ASSERT_EQUAL_MESSAGE(16, got.encrypted.size, b.name);
+        TEST_ASSERT_EQUAL_MESSAGE(b.measuresHop, got.has_rx_rssi, b.name);
     }
 }
 
@@ -239,7 +290,7 @@ void test_ingress_clears_every_local_only_field(void)
     for (const auto &b : bearers) {
         meshtastic_MeshPacket got;
         TEST_ASSERT_TRUE_MESSAGE(b.deliver(withLocalOnlyFieldsSet(encryptedPacket()), got), b.name);
-        assertLocalOnlyCleared(got, b.name);
+        assertLocalOnlyCleared(got, b.name, b.measuresHop);
         TEST_ASSERT_EQUAL_MESSAGE(b.medium, got.transport_mechanism, b.name);
     }
 }

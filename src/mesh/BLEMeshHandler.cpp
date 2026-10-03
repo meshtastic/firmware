@@ -13,33 +13,6 @@ BLEMeshHandler *bleMeshHandler = nullptr;
 #define BLE_MESH_AD_TYPE_MFG_DATA 0xFF
 #define BLE_MESH_AD_FLAGS_LE_GENERAL_DISC_BREDR_UNSUP 0x06
 
-namespace
-{
-/**
- * The packet as it goes on the air: every field the receiver overwrites, removed.
- *
- * deliverToRouter() rewrites all of these on arrival and Router::handleReceived stamps rx_time.
- * rx_rssi would additionally publish this node's own link quality.
- *
- * Keep in step with the ingress guards: a field added to one belongs in the other.
- */
-meshtastic_MeshPacket strippedForAir(const meshtastic_MeshPacket &mp)
-{
-    meshtastic_MeshPacket out = mp;
-    out.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_INTERNAL;
-    out.tx_after = 0;
-    out.priority = meshtastic_MeshPacket_Priority_UNSET;
-    out.pki_encrypted = false;
-    out.public_key.size = 0;
-    out.rx_snr = 0;
-    out.rx_rssi = 0;
-    out.has_rx_rssi = false;
-    out.rx_time = 0;
-    out.has_rx_time = false;
-    return out;
-}
-} // namespace
-
 uint8_t BLEMeshHandler::buildAdvPayload(const meshtastic_MeshPacket *mp, uint8_t *out, size_t outCap)
 {
     // Router::send() encrypts before it reaches any transport, so an unencrypted packet here is a
@@ -53,7 +26,8 @@ uint8_t BLEMeshHandler::buildAdvPayload(const meshtastic_MeshPacket *mp, uint8_t
         return 0;
     }
 
-    const meshtastic_MeshPacket air = strippedForAir(*mp);
+    // Every field the receiver overwrites costs budget for bytes the far side discards.
+    const meshtastic_MeshPacket air = stripForTransmit(*mp);
 
     // Sized before encoding: pb_encode_to_bytes returns 0 for an encode failure and for an
     // over-budget packet alike, and only one of those is a bug.
@@ -251,39 +225,12 @@ void BLEMeshHandler::deliverToRouter(const uint8_t *data, size_t len, int8_t rss
     if (mp.which_payload_variant != meshtastic_MeshPacket_encrypted_tag)
         return;
 
-    // Guard 1 (mirrors UdpMulticastHandler): nothing legitimate advertises from=0, and our own
-    // advertisement echoing back into our own scanner would loop.
-    if (mp.from == 0) {
-        LOG_WARN("BLE mesh: advertisement with no sender, dropping");
-        return;
-    }
+    // Our own advertisement, heard by our own scanner: dropped below too, but quietly here.
     if (mp.from == nodeDB->getNodeNum())
-        return; // our own advertisement, heard by our own scanner
-
-    // Guard 2 (mirrors UdpMulticastHandler): an out-of-range hop count is not relayable.
-    if (mp.hop_limit > HOP_MAX || mp.hop_start > HOP_MAX) {
-        LOG_WARN("BLE mesh: invalid hop_limit(%u)/hop_start(%u), dropping", mp.hop_limit, mp.hop_start);
         return;
-    }
-
-    mp.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_BLE_ADV;
-    // A sender must not schedule our transmit. via_mqtt stays as sent: the LoRa header carries it too,
-    // and ignore_mqtt and the MQTT uplink's loop guard read it.
-    mp.tx_after = 0;
-    // priority is local-only and, unlike want_ack/next_hop/relay_node, is NOT carried in the LoRa
-    // header, so here a sender can choose it. Left as sent, MAX outranks the ceiling fixPriority
-    // assigns, and replaceLowerPriorityPacket evicts one of ours once perhapsRebroadcast queues it.
-    mp.priority = meshtastic_MeshPacket_Priority_UNSET;
-
-    // Guard 3 (mirrors UdpMulticastHandler): authentication metadata is local-only, or a sender
-    // could assert its own packet was PKI-authenticated. The Router re-establishes it after decrypt.
-    mp.pki_encrypted = false;
-    mp.public_key.size = 0;
-    memset(mp.public_key.bytes, 0, sizeof(mp.public_key.bytes));
-
-    // Guard 4: no LoRa measurement exists for a BLE arrival, but the BLE hop itself is measured, so
-    // rx_rssi is populated rather than cleared as in the UDP case.
-    mp.rx_snr = 0;
+    if (!sanitizeIngress(mp, meshtastic_MeshPacket_TransportMechanism_TRANSPORT_BLE_ADV))
+        return;
+    // No LoRa measurement exists for a BLE arrival, but the BLE hop itself is measured.
     mp.rx_rssi = rssi;
     mp.has_rx_rssi = true;
 
