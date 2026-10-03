@@ -6,11 +6,6 @@
 
 #include <bluefruit.h>
 
-// Received writes waiting for the main task; each holds one ATT value, so up to 512 bytes.
-#ifndef BLE_GATT_MESH_RX_QUEUE_SIZE
-#define BLE_GATT_MESH_RX_QUEUE_SIZE 6
-#endif
-
 /**
  * The mesh-peer GATT service on the SoftDevice. S140 has one advertising set, so the service UUID
  * rides in the phone advertisement's scan response and a mesh peer connects to the same set the

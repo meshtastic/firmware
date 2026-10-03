@@ -4,6 +4,7 @@
 
 #include "ESP32BLEGattMesh.h"
 #include "main.h"
+#include "mesh/BLEGattMeshLinks.h"
 #include "nimble/NimbleBluetooth.h"
 
 #include <BLEAdvertising.h>
@@ -21,26 +22,10 @@
 
 namespace
 {
-// Shared between the NimBLE host task (the callbacks) and the main task (the pump).
+// Shared between the NimBLE host task (the callbacks) and the main task (the pump). Callers hold
+// `lock` around every use of `state`, and never log while they do.
 std::mutex lock;
-
-struct Link {
-    bool used;
-    uint16_t conn;
-    bool subscribed;     // wrote the CCCD: a notify target, and the mark of a mesh peer
-    bool everSubscribed; // subscribed at any point, which outlives an unsubscribe
-};
-std::array<Link, BLE_GATT_MESH_ESP32_LINKS> links{};
-
-struct RxChunk {
-    uint16_t conn;
-    uint16_t len; // 0 marks a disconnect
-    uint8_t data[BLE_GATT_MESH_MAX_CHUNK];
-};
-std::array<RxChunk, BLE_GATT_MESH_RX_QUEUE_SIZE> rxQueue{};
-size_t rxHead = 0;
-size_t rxTail = 0;
-size_t rxCount = 0;
+BLEGattMeshLinks<BLE_GATT_MESH_ESP32_LINKS> state;
 
 BLECharacteristic *meshCharacteristic = nullptr;
 
@@ -48,75 +33,6 @@ uint16_t chunkFor(uint16_t conn)
 {
     const uint16_t mtu = ble_att_mtu(conn);
     return mtu > 3 ? mtu - 3 : BLE_GATT_MESH_MIN_CHUNK;
-}
-
-// Callers hold `lock` for everything below this line, and never log while they do.
-Link *findLink(uint16_t conn)
-{
-    for (auto &l : links) {
-        if (l.used && l.conn == conn)
-            return &l;
-    }
-    return nullptr;
-}
-
-Link *addLink(uint16_t conn)
-{
-    if (Link *l = findLink(conn))
-        return l;
-    for (auto &l : links) {
-        if (l.used)
-            continue;
-        l.used = true;
-        l.conn = conn;
-        l.subscribed = false;
-        l.everSubscribed = false;
-        return &l;
-    }
-    return nullptr;
-}
-
-size_t linkCount()
-{
-    size_t n = 0;
-    for (const auto &l : links)
-        n += l.used ? 1 : 0;
-    return n;
-}
-
-uint32_t rxAccepted = 0;
-uint32_t rxDropped = 0;
-
-// Returns false when a write was turned away, for the caller to log outside the lock.
-bool pushRx(uint16_t conn, const uint8_t *data, uint16_t len)
-{
-    if (rxCount >= rxQueue.size()) {
-        if (len) {
-            rxDropped++;
-            return false;
-        }
-        // A disconnect marker must land or the pump keeps that handle's half-built packets for the
-        // next peer the stack gives it: overwrite the newest chunk, which belongs to a dead link anyway.
-        rxTail = (rxTail + rxQueue.size() - 1) % rxQueue.size();
-        rxCount--;
-    }
-    RxChunk &r = rxQueue[rxTail];
-    r.conn = conn;
-    r.len = len;
-    if (len)
-        memcpy(r.data, data, len);
-    rxTail = (rxTail + 1) % rxQueue.size();
-    rxCount++;
-    if (len)
-        rxAccepted++;
-    return true;
-}
-
-void resetState()
-{
-    for (auto &l : links)
-        l.used = false;
-    rxHead = rxTail = rxCount = 0;
 }
 
 class MeshPeerCallbacks : public BLECharacteristicCallbacks
@@ -133,10 +49,10 @@ class MeshPeerCallbacks : public BLECharacteristicCallbacks
         uint32_t accCount, dropCount;
         {
             std::lock_guard<std::mutex> guard(lock);
-            addLink(desc->conn_handle);
-            accepted = pushRx(desc->conn_handle, characteristic->getData(), (uint16_t)len);
-            accCount = rxAccepted;
-            dropCount = rxDropped;
+            state.add(desc->conn_handle);
+            accepted = state.pushRx(desc->conn_handle, characteristic->getData(), (uint16_t)len);
+            accCount = state.rxAccepted;
+            dropCount = state.rxDropped;
         }
         if (!accepted)
             LOG_WARN("BLE GATT mesh: RX queue full, dropping a %u-byte write from conn %u (accepted %u, dropped %u)",
@@ -152,10 +68,7 @@ class MeshPeerCallbacks : public BLECharacteristicCallbacks
         const bool subscribed = (subValue & 0x0001) != 0; // NIMBLE_SUB_NOTIFY
         {
             std::lock_guard<std::mutex> guard(lock);
-            if (Link *l = addLink(desc->conn_handle)) {
-                l->subscribed = subscribed;
-                l->everSubscribed |= subscribed;
-            }
+            state.setSubscribed(desc->conn_handle, subscribed);
         }
         LOG_INFO("BLE GATT mesh: conn %u %s (chunk %u)", desc->conn_handle, subscribed ? "subscribed" : "unsubscribed",
                  chunkFor(desc->conn_handle));
@@ -167,7 +80,7 @@ class MeshPeerCallbacks : public BLECharacteristicCallbacks
 
 bool ESP32BLEGattMesh::enabled()
 {
-    return config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_BLE_GATT_PEER;
+    return protocolEnabled();
 }
 
 void ESP32BLEGattMesh::setupService(BLEServer *server)
@@ -192,7 +105,7 @@ void ESP32BLEGattMesh::setupService(BLEServer *server)
     {
         std::lock_guard<std::mutex> guard(lock);
         meshCharacteristic = characteristic;
-        resetState();
+        state.reset();
     }
     LOG_INFO("BLE GATT mesh: mesh-peer service registered");
 }
@@ -212,19 +125,15 @@ void ESP32BLEGattMesh::fillScanResponse(BLEAdvertisementData &scan, const char *
 void ESP32BLEGattMesh::onConnect(uint16_t conn)
 {
     std::lock_guard<std::mutex> guard(lock);
-    addLink(conn);
+    state.add(conn);
 }
 
 bool ESP32BLEGattMesh::onDisconnect(uint16_t conn)
 {
-    bool subscribed = false;
+    bool subscribed;
     {
         std::lock_guard<std::mutex> guard(lock);
-        if (Link *l = findLink(conn)) {
-            subscribed = l->everSubscribed;
-            l->used = false;
-            pushRx(conn, nullptr, 0); // the pump drops its half-built packets
-        }
+        subscribed = state.remove(conn);
     }
     LOG_INFO("BLE GATT mesh: conn %u disconnected (%s)", conn, subscribed ? "was a mesh peer" : "never subscribed");
     if (bleGattMeshHandler)
@@ -235,14 +144,14 @@ bool ESP32BLEGattMesh::onDisconnect(uint16_t conn)
 bool ESP32BLEGattMesh::hasFreeLink()
 {
     std::lock_guard<std::mutex> guard(lock);
-    return linkCount() < links.size();
+    return state.count() < state.links.size();
 }
 
 size_t ESP32BLEGattMesh::linkHandles(uint16_t *out, size_t cap)
 {
     std::lock_guard<std::mutex> guard(lock);
     size_t n = 0;
-    for (const auto &l : links) {
+    for (const auto &l : state.links) {
         if (l.used && n < cap)
             out[n++] = l.conn;
     }
@@ -253,7 +162,7 @@ void ESP32BLEGattMesh::teardown()
 {
     std::lock_guard<std::mutex> guard(lock);
     meshCharacteristic = nullptr;
-    resetState();
+    state.reset();
 }
 
 void ESP32BLEGattMesh::start()
@@ -280,18 +189,10 @@ bool ESP32BLEGattMesh::platformReady()
 
 size_t ESP32BLEGattMesh::platformPeers(BLEGattMeshPeer *out, size_t cap)
 {
-    size_t n = 0;
+    size_t n;
     {
         std::lock_guard<std::mutex> guard(lock);
-        for (const auto &l : links) {
-            if (!l.used || !l.subscribed)
-                continue;
-            if (n >= cap)
-                break;
-            out[n].id = l.conn;
-            out[n].outbound = false; // every link here was dialled by the peer
-            n++;
-        }
+        n = state.subscribed(out, cap);
     }
     // Outside the lock: the MTU read takes the host's own lock, which the host task holds when it
     // calls into ours.
@@ -327,16 +228,7 @@ bool ESP32BLEGattMesh::platformNotify(BLEGattPeerId peer, const uint8_t *data, s
 bool ESP32BLEGattMesh::platformPollInbound(BLEGattPeerId &peer, uint8_t *buf, size_t cap, size_t &len)
 {
     std::lock_guard<std::mutex> guard(lock);
-    if (rxCount == 0)
-        return false;
-    const RxChunk &r = rxQueue[rxHead];
-    peer = r.conn;
-    len = std::min<size_t>(r.len, cap);
-    if (len)
-        memcpy(buf, r.data, len);
-    rxHead = (rxHead + 1) % rxQueue.size();
-    rxCount--;
-    return true;
+    return state.popRx(peer, buf, cap, len);
 }
 
 #endif // HAS_BLE_GATT_MESH && ARCH_ESP32 && !MESHTASTIC_EXCLUDE_BLUETOOTH
