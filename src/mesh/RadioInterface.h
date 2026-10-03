@@ -242,6 +242,9 @@ class RadioInterface
 
     /** Bench: a backoff of up to `slots` slots, counted from the last frame end, from now */
     [[nodiscard]] uint32_t getAnchoredSlotDelayMsec(uint32_t slots);
+
+    /** Bench: the last anchored draw's slot and the millis() its slots count from, for the TX timeline */
+    uint32_t slotDrawn = 0, slotDrawAnchorMs = 0;
 #endif
 
     /** The CW to use when calculating SNR_based delays */

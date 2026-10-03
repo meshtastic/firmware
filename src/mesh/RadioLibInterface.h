@@ -601,6 +601,9 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     /** Bench: benchClock() stamps across one TX; the re-arm pair is written by whoever re-armed RX at TX_DONE */
     uint32_t tlScan = 0, tlSend = 0, tlLaunched = 0;
     volatile uint32_t tlTxDone = 0, tlRearmStart = 0, tlRearmEnd = 0;
+    /** millis() the backoff fell due, and how late the scan started after it */
+    uint32_t tlDueMs = 0;
+    int32_t tlLateMs = 0;
     /** Log the last TX's timeline; adopted says RX was re-armed at TX_DONE rather than by this thread */
     void logTxTimeline(bool adopted);
 #endif

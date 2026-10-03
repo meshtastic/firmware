@@ -876,6 +876,8 @@ uint32_t RadioInterface::getAnchoredSlotDelayMsec(uint32_t slots)
     LOG_TRACE("TX slot anchor: slot %u of %u, parity %u, %u ms after %s end", (unsigned)slot, (unsigned)slots, (unsigned)parity,
               (unsigned)sinceEnd, lastFrameEndMs ? lastFrameEndWhat : "no");
     (void)parity; // for builds without trace logging
+    slotDrawn = slot;
+    slotDrawAnchorMs = now - sinceEnd;
     return slot * slotTimeMsec - sinceEnd;
 }
 #endif

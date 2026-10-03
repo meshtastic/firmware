@@ -588,6 +588,9 @@ void RadioLibInterface::onNotify(uint32_t notification)
 #ifdef MESHTASTIC_RX_DEFER_FOR_TX_MS
                     txDueMs = txp->tx_after;
 #endif
+#ifdef MESHTASTIC_TX_TIMELINE
+                    tlDueMs = txp->tx_after;
+#endif
                     notifyLater(txp->tx_after - now, TRANSMIT_DELAY_COMPLETED, txTimerOverwrite);
                 } else if (const RadioTxHook::PreTxAction action = RadioTxHooks::beforeTransmit(this, txp);
                            action == RadioTxHook::PRETX_DROP) {
@@ -607,6 +610,7 @@ void RadioLibInterface::onNotify(uint32_t notification)
                     noteDeafFrom("scan");
                     scanForTx = txp;
                     TX_TIMELINE_MARK(tlScan);
+                    TX_TIMELINE_SET(tlLateMs, tlDueMs ? (int32_t)(scanStartMs - tlDueMs) : 0);
                     const bool channelActive = isChannelActive();
                     scanForTx = nullptr;
                     LOG_TRACE("Channel scan %s in %u ms", channelActive ? "busy" : "clear",
@@ -712,6 +716,7 @@ void RadioLibInterface::scheduleTransmitDelayCompleted(uint32_t delay)
 #ifdef MESHTASTIC_RX_DEFER_FOR_TX_MS
     txDueMs = Time::timerEndsAtMillis(delay); // the real due time, before an early stage brings the timer forward
 #endif
+    TX_TIMELINE_SET(tlDueMs, Time::timerEndsAtMillis(delay));
 #ifdef MESHTASTIC_TX_STAGE_EARLY
     // Where the driver wants it, fire at once so the radio thread writes the payload while RX runs, then wait out the
     // rest of the backoff
@@ -1483,7 +1488,16 @@ void RadioLibInterface::logTxTimeline(bool adopted)
                    txDone && tlLaunched ? us(tlLaunched, txDone) : 0, txDone ? us(txDone, rxAt) : 0,
                    early && txDone ? us(txDone, rearmStart) : 0, early ? us(rearmStart, rearmEnd) : 0, us(rxAt, now),
                    tlSend ? us(outFrom, rxAt) : 0, early ? "early" : (txDone ? "thread" : "no-irq"));
+#ifdef MESHTASTIC_TX_SLOT_ANCHOR
+    // Where this TX went out on the slot grid it drew from: late is the backoff's due time to the scan, and SET_TX's
+    // offset over the slot time gives the slot it landed in, whose parity can then be checked against this node's.
+    if (tlSend)
+        LOG_RADIO_EDGE("TX slot: drawn %u of %u ms, scan late %d ms, SET_TX at +%u ms", (unsigned)slotDrawn,
+                       (unsigned)slotTimeMsec, (int)tlLateMs, (unsigned)(lastTxStart - slotDrawAnchorMs));
+#endif
     tlScan = tlSend = 0;
+    tlDueMs = 0;
+    tlLateMs = 0;
 }
 #endif
 
