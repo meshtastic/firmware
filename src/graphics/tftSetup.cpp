@@ -8,6 +8,12 @@
 #include "comms/PacketServer.h"
 #include "graphics/DeviceScreen.h"
 #include "graphics/driver/DisplayDriverConfig.h"
+#if HAS_MUI_MIRROR
+#include "NodeDB.h"
+#include "graphics/DisplayMirror.h"
+#include "graphics/ScreenMirror.h"
+#include "input/InputBroker.h"
+#endif
 #include "util/ISpiLock.h"
 
 #ifdef ARCH_PORTDUINO
@@ -314,6 +320,76 @@ class ReentrantSpiLock : public ISpiLock
 
 static ReentrantSpiLock reentrantSpiLock;
 
+#if HAS_MUI_MIRROR
+namespace graphics
+{
+// MUI builds have no BaseUI `screen`, so the logical (rotated) geometry comes from LVGL.
+bool muiDisplayInfo(uint16_t &width, uint16_t &height, bool &hasTouch)
+{
+    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR)
+        return false;
+    lv_display_t *disp = lv_display_get_default();
+    if (!disp)
+        return false;
+    width = (uint16_t)lv_display_get_horizontal_resolution(disp);
+    height = (uint16_t)lv_display_get_vertical_resolution(disp);
+#if HAS_TOUCHSCREEN
+    hasTouch = true;
+#else
+    hasTouch = false;
+#endif
+    return width > 0 && height > 0;
+}
+
+// The broker's LEFT/RIGHT codes are swapped relative to LVGL's, hence the cross-map below.
+bool muiInjectInputEvent(uint32_t eventCode, uint32_t kbChar, uint32_t touchX, uint32_t touchY)
+{
+    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR)
+        return false;
+
+    // trackball semantics: vertical is encoder rotation (moves group focus), horizontal the slider keys
+    switch (eventCode) {
+    case INPUT_BROKER_UP:
+        DisplayMirror::injectEncoder(-1);
+        break;
+    case INPUT_BROKER_DOWN:
+        DisplayMirror::injectEncoder(1);
+        break;
+    case INPUT_BROKER_LEFT:
+        DisplayMirror::injectKey(LV_KEY_DOWN);
+        break;
+    case INPUT_BROKER_RIGHT:
+        DisplayMirror::injectKey(LV_KEY_UP);
+        break;
+    case INPUT_BROKER_SELECT:
+        // with coordinates this is a touch long-press, as the physical touch driver emits it
+        if (touchX || touchY)
+            DisplayMirror::injectLongPress(touchX, touchY);
+        else
+            DisplayMirror::injectKey(LV_KEY_ENTER);
+        break;
+    case INPUT_BROKER_SELECT_LONG:
+        DisplayMirror::injectLongPressKey(LV_KEY_ENTER);
+        break;
+    case INPUT_BROKER_USER_PRESS:
+        DisplayMirror::injectTouch(touchX, touchY);
+        break;
+    case INPUT_BROKER_BACK:
+    case INPUT_BROKER_CANCEL:
+        DisplayMirror::injectKey(LV_KEY_ESC);
+        break;
+    default:
+        if (kbChar)
+            DisplayMirror::injectKey(kbChar);
+        else
+            return false;
+        break;
+    }
+    return true;
+}
+} // namespace graphics
+#endif
+
 void tft_task_handler(void *param = nullptr)
 {
     while (true) {
@@ -335,6 +411,19 @@ void tftSetup(void)
     deviceScreen = &DeviceScreen::create(reentrantSpiLock);
     PacketAPI::create(PacketServer::init());
     deviceScreen->init(new PacketClient);
+#if HAS_MUI_MIRROR
+    // LVGL is up and the view has not built its widgets yet, which DisplayMirror::start needs
+    DisplayMirror::start(deviceScreen->getDisplayDriver());
+    {
+        lv_display_t *disp = lv_display_get_default();
+        graphics::screenMirror.setMuiSource(
+            []() { DisplayMirror::requestFullRefresh(); }, disp ? (uint16_t)lv_display_get_horizontal_resolution(disp) : 0,
+            disp ? (uint16_t)lv_display_get_vertical_resolution(disp) : 0, DisplayMirror::pixelsByteSwapped());
+    }
+    DisplayMirror::setFrameObserver([](int16_t x, int16_t y, uint16_t w, uint16_t h, const uint16_t *px, uint16_t stride) {
+        graphics::screenMirror.onMuiRect(x, y, w, h, px, stride);
+    });
+#endif
 #else
     if (portduino_config.displayPanel != no_screen) {
         DisplayDriverConfig displayConfig;
