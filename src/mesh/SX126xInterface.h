@@ -65,9 +65,18 @@ template <class T> class SX126xInterface : public RadioLibInterface
     /// LR11x0's fourth field has no equivalent and reads 0.
     bool readChipRxStats(uint16_t &received, uint16_t &crcError, uint16_t &headerError, uint16_t &falseSync) override
     {
-        uint8_t buf[6] = {0};
+        uint8_t buf[8] = {0};
         if (module.SPIreadStream(RADIOLIB_SX126X_CMD_GET_STATS, buf, sizeof(buf)) != RADIOLIB_ERR_NONE)
             return false;
+        // Round 82: this read returned only the LOW byte of a 16-bit counter -- rx_done came back as
+        // rx_good mod 256 in 6 of 6 sessions across both boards, and crc_err likewise tracked rx_bad.
+        // The values were recoverable there, because the frames-on-air bound left one candidate, but
+        // that needs the excess to be small against a 256 quantum and will not hold in general. Log the
+        // raw bytes and both candidate parses so one run names the layout from data instead of
+        // inference; 8 bytes rather than 6 so a shifted buffer still shows its tail. Called twice per
+        // session, so this is two lines, not a stream.
+        LOG_DEBUG("chip stats raw %02x %02x %02x %02x %02x %02x %02x %02x | be@0 %u le@1 %u", buf[0], buf[1], buf[2], buf[3],
+                  buf[4], buf[5], buf[6], buf[7], (unsigned)((buf[0] << 8) | buf[1]), (unsigned)(buf[1] | (buf[2] << 8)));
         received = (uint16_t)(((uint16_t)buf[0] << 8) | buf[1]);
         crcError = (uint16_t)(((uint16_t)buf[2] << 8) | buf[3]);
         headerError = (uint16_t)(((uint16_t)buf[4] << 8) | buf[5]);
