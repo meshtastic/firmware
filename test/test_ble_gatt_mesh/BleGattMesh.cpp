@@ -5,6 +5,7 @@
 #if defined(ARCH_PORTDUINO) && HAS_BLE_GATT_MESH
 
 #include "mesh/BLEGattMeshHandler.h"
+#include "mesh/BLEGattMeshLinks.h"
 #include "mesh/NodeDB.h"
 #include "mesh/Router.h"
 
@@ -741,6 +742,58 @@ void test_inbound_chunks_are_drained_by_the_pump(void)
     TEST_ASSERT_TRUE(h.inbound.empty());
 }
 
+// --- the platform glue's link table and RX ring (BLEGattMeshLinks) -------------------------------
+
+void test_a_full_rx_ring_still_takes_a_disconnect_marker(void)
+{
+    BLEGattMeshLinks<2, 2> s;
+    const uint8_t chunk[4] = {1, 2, 3, 4};
+    TEST_ASSERT_TRUE(s.pushRx(7, chunk, sizeof(chunk)));
+    TEST_ASSERT_TRUE(s.pushRx(8, chunk, sizeof(chunk)));
+    TEST_ASSERT_FALSE_MESSAGE(s.pushRx(7, chunk, sizeof(chunk)), "a write past a full ring is turned away");
+    TEST_ASSERT_EQUAL_UINT32(1, s.rxDropped);
+
+    // Without the marker the pump keeps conn 8's half-built packets for whoever the stack hands
+    // that handle next, so the marker replaces the newest chunk rather than being dropped.
+    TEST_ASSERT_TRUE(s.pushRx(8, nullptr, 0));
+    BLEGattPeerId peer;
+    uint8_t buf[8];
+    size_t len;
+    TEST_ASSERT_TRUE(s.popRx(peer, buf, sizeof(buf), len));
+    TEST_ASSERT_EQUAL(7, peer);
+    TEST_ASSERT_EQUAL(4, len);
+    TEST_ASSERT_TRUE(s.popRx(peer, buf, sizeof(buf), len));
+    TEST_ASSERT_EQUAL(8, peer);
+    TEST_ASSERT_EQUAL_MESSAGE(0, len, "the marker landed");
+    TEST_ASSERT_FALSE(s.popRx(peer, buf, sizeof(buf), len));
+}
+
+void test_a_link_that_ever_subscribed_is_reported_as_a_mesh_peer(void)
+{
+    BLEGattMeshLinks<2, 4> s;
+    s.add(3);
+    s.setSubscribed(3, true);
+    s.setSubscribed(3, false);
+    s.add(4);
+
+    BLEGattMeshPeer peers[2];
+    TEST_ASSERT_EQUAL_MESSAGE(0, s.subscribed(peers, 2), "an unsubscribed link is no notify target");
+    // The phone API's session handling must not run for a link that was a mesh peer at any point.
+    TEST_ASSERT_TRUE(s.remove(3));
+    TEST_ASSERT_FALSE(s.remove(4));
+    TEST_ASSERT_FALSE_MESSAGE(s.remove(9), "an unknown handle queues nothing");
+    TEST_ASSERT_EQUAL(0, s.count());
+
+    BLEGattPeerId peer;
+    uint8_t buf[1];
+    size_t len;
+    TEST_ASSERT_TRUE(s.popRx(peer, buf, sizeof(buf), len));
+    TEST_ASSERT_EQUAL(3, peer);
+    TEST_ASSERT_TRUE(s.popRx(peer, buf, sizeof(buf), len));
+    TEST_ASSERT_EQUAL(4, peer);
+    TEST_ASSERT_FALSE(s.popRx(peer, buf, sizeof(buf), len));
+}
+
 void setUp(void) {}
 void tearDown(void) {}
 
@@ -775,6 +828,8 @@ void setup()
     RUN_TEST(test_a_busy_stack_is_retried_then_skipped);
     RUN_TEST(test_pump_waits_for_the_platform);
     RUN_TEST(test_inbound_chunks_are_drained_by_the_pump);
+    RUN_TEST(test_a_full_rx_ring_still_takes_a_disconnect_marker);
+    RUN_TEST(test_a_link_that_ever_subscribed_is_reported_as_a_mesh_peer);
     RUN_TEST(test_greets_each_peer_once);
     RUN_TEST(test_a_refused_greeting_is_offered_again);
     RUN_TEST(test_a_hello_in_is_never_a_fragment);
