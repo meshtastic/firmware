@@ -1076,7 +1076,7 @@ void setup()
 #ifdef ARCH_PORTDUINO
     // FIXME: portduino does not ever call onNetworkConnected so call it here because I don't know what happen if I call
     // onNetworkConnected there
-    if (config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST) {
+    if (udpHandler->isEnabled()) {
         udpHandler->start();
     }
 #endif
