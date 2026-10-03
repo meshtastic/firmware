@@ -76,7 +76,8 @@ bool BLEGattMeshHandler::onSend(const meshtastic_MeshPacket *mp)
     }
 
     TxSlot &slot = txQueue[txTail];
-    const size_t n = pb_encode_to_bytes(slot.data.data(), slot.data.size(), &meshtastic_MeshPacket_msg, mp);
+    const meshtastic_MeshPacket air = stripForTransmit(*mp);
+    const size_t n = pb_encode_to_bytes(slot.data.data(), slot.data.size(), &meshtastic_MeshPacket_msg, &air);
     if (n == 0) {
         LOG_WARN("BLE GATT mesh: failed to encode 0x%08x", mp->id);
         return false;
@@ -537,38 +538,9 @@ void BLEGattMeshHandler::deliverToRouter(BLEGattPeerId peer, const uint8_t *data
     if (mp.which_payload_variant != meshtastic_MeshPacket_encrypted_tag)
         return;
 
-    // The same guards the UDP and advertisement transports apply: a spoofed local origin reaches
-    // paths that trust isFromUs, and an out-of-range hop count is not relayable.
-    if (mp.from == 0) {
-        LOG_WARN("BLE GATT mesh: packet with no sender from peer %u, dropping", peer);
+    // No radio measurement exists for a GATT arrival, so rx_rssi stays cleared.
+    if (!sanitizeIngress(mp, meshtastic_MeshPacket_TransportMechanism_TRANSPORT_BLE_GATT))
         return;
-    }
-    if (mp.from == nodeDB->getNodeNum()) {
-        LOG_WARN("BLE GATT mesh: peer %u claims our own node number, dropping", peer);
-        return;
-    }
-    if (mp.hop_limit > HOP_MAX || mp.hop_start > HOP_MAX) {
-        LOG_WARN("BLE GATT mesh: invalid hop_limit(%u)/hop_start(%u), dropping", mp.hop_limit, mp.hop_start);
-        return;
-    }
-
-    mp.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_BLE_GATT;
-    // A sender must not schedule our transmit. via_mqtt stays as sent: the LoRa header carries it too,
-    // and ignore_mqtt and the MQTT uplink's loop guard read it.
-    mp.tx_after = 0;
-    // priority is not carried in the LoRa header, so here a sender can choose it, and priority MAX
-    // outranks the ACK ceiling fixPriority assigns locally.
-    mp.priority = meshtastic_MeshPacket_Priority_UNSET;
-
-    // Authentication metadata is local-only; the Router re-establishes it after a PKI decrypt.
-    mp.pki_encrypted = false;
-    mp.public_key.size = 0;
-    memset(mp.public_key.bytes, 0, sizeof(mp.public_key.bytes));
-
-    // No radio measurement exists for a GATT arrival.
-    mp.rx_snr = 0;
-    mp.rx_rssi = 0;
-    mp.has_rx_rssi = false;
 
     UniquePacketPoolPacket p = packetPool.allocUniqueCopy(mp);
     if (!p)
