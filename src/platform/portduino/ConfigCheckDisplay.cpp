@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <fstream>
 #include <set>
 
 #if defined(__linux__)
@@ -87,6 +88,29 @@ void checkSpiNode(const std::string &key, const std::string &path, std::vector<F
 #endif
 }
 
+// Mirrors the startup guard in PortduinoGlue.cpp, which exits when bufsiz is below the minimum.
+void checkSpidevBufsiz(std::vector<Finding> &findings)
+{
+#if defined(__linux__)
+    std::ifstream file("/sys/module/spidev/parameters/bufsiz");
+    long bufsiz = 0;
+    if (!file.is_open() || !(file >> bufsiz)) {
+        findings.push_back({kInfo, kMerged, 0,
+                            "/sys/module/spidev/parameters/bufsiz is not readable here, so the SPI buffer size was not "
+                            "checked. spidev may be built into the kernel, or not loaded" +
+                                std::string(kOtherHost)});
+        return;
+    }
+    if (bufsiz < kSpidevMinBufsiz)
+        findings.push_back({kError, kMerged, 0,
+                            "The spidev buffer is " + std::to_string(bufsiz) + " bytes, below the " +
+                                std::to_string(kSpidevMinBufsiz) + " an SPI panel needs, so meshtasticd exits at startup. " +
+                                spidevBufsizAdvice(kSpidevMinBufsiz)});
+#else
+    (void)findings;
+#endif
+}
+
 } // namespace
 
 void checkDisplayPanelName(const std::string &file, int line, const std::string &name, std::vector<Finding> &findings)
@@ -139,8 +163,10 @@ void checkDisplay(std::vector<Finding> &findings)
             findings.push_back({kWarn, kMerged, 0,
                                 "Display.OffsetRotate is " + std::to_string(portduino_config.displayOffsetRotate) +
                                     "; it selects 0, 90, 180 or 270 degrees as 0 to 3"});
-        if (!portduino_config.display_spi_dev.empty())
+        if (!portduino_config.display_spi_dev.empty()) {
             checkSpiNode("Display.spidev", portduino_config.display_spi_dev, findings);
+            checkSpidevBufsiz(findings);
+        }
 
         const std::string &loraNode = portduino_config.lora_spi_dev;
         if (!portduino_config.display_spi_dev.empty() && loraNode != "ch341" && loraNode == portduino_config.display_spi_dev)
