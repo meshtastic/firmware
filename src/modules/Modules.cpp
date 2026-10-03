@@ -1,12 +1,10 @@
 #include "configuration.h"
+#include "mesh/ModuleRegistry.h"
 #if !MESHTASTIC_EXCLUDE_INPUTBROKER
 #include "buzz/BuzzerFeedbackThread.h"
 #include "modules/SystemCommandsModule.h"
 #endif
 #include "modules/StatusLEDModule.h"
-#if !MESHTASTIC_EXCLUDE_REPLYBOT
-#include "ReplyBotModule.h"
-#endif
 #if !MESHTASTIC_EXCLUDE_PKI
 #include "KeyVerificationModule.h"
 #endif
@@ -136,9 +134,6 @@ void setupModules()
     }
 #endif
     statusLEDModule = new StatusLEDModule();
-#if !MESHTASTIC_EXCLUDE_REPLYBOT
-    new ReplyBotModule();
-#endif
 
 #if HAS_TRAFFIC_MANAGEMENT && !MESHTASTIC_EXCLUDE_TRAFFIC_MANAGEMENT
     if (moduleConfig.has_traffic_management) {
@@ -298,6 +293,7 @@ void setupModules()
 #ifdef OPTIONAL_MODULES_SETUP
     OPTIONAL_MODULES_SETUP();
 #endif
+    createRegisteredModules();
     // NOTE! This module must be added LAST because it likes to check for replies from other modules and avoid sending extra
     // acks
     routingModule = new RoutingModule();

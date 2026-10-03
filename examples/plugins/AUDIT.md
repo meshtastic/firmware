@@ -1,0 +1,40 @@
+| Rank | Module                     | Gate                            | Guards | Callers | Coupling | Compile (stock)                     | Boot (typical ESP32+screen+GPS) | Depends on                 |
+| ---- | -------------------------- | ------------------------------- | ------ | ------- | -------- | ----------------------------------- | ------------------------------- | -------------------------- |
+| 1    | ReplyModule                | none                            | 0      | 0       | Low      | Never (not in setup)                | Never                           | -                          |
+| 2    | GenericThreadModule        | `EXCLUDE_GENERIC_THREAD_MODULE` | 0      | 0       | Low      | **Off global**                      | Never                           | -                          |
+| 3    | StatusMessageModule        | `EXCLUDE_STATUS`                | 1      | 0       | Low      | All families                        | Always                          | -                          |
+| 4    | AtakPluginModule           | `EXCLUDE_ATAK`                  | 0      | 0       | Low      | All except STM32WL family           | Role TAK only                   | -                          |
+| 5    | DropzoneModule             | `EXCLUDE_DROPZONE`              | 1      | 0       | Low      | **Off global**                      | Never                           | -                          |
+| 6    | PowerStressModule          | `EXCLUDE_POWERSTRESS`           | 0      | 0       | Low      | **Off global**                      | Never                           | -                          |
+| 7    | RemoteHardwareModule       | `EXCLUDE_REMOTEHARDWARE`        | 0      | 0       | Low      | **Off global**                      | Never                           | -                          |
+| 8    | DetectionSensorModule      | `EXCLUDE_DETECTIONSENSOR`       | 0      | 0       | Low      | All                                 | Config only                     | -                          |
+| 9    | PaxcounterModule           | `EXCLUDE_PAXCOUNTER` + ESP32    | 3      | 0       | Low      | ESP32 only; **off nRF54/nRF52 ini** | Config only                     | -                          |
+| 10   | AudioModule                | `EXCLUDE_AUDIO` + `USE_SX1280`  | 4      | 0       | Low      | ESP32 + SX1280 boards               | Always on those boards          | -                          |
+| 11   | RangeTestModule            | `EXCLUDE_RANGETEST` + GPS       | 6      | 0       | Low      | **Off global**                      | Never (needs flag + config)     | GPS                        |
+| 12   | KeyVerificationModule      | `EXCLUDE_PKI`                   | 2      | 1       | Low      | If PKI on                           | Always                          | PKI, NodeInfo              |
+| 13   | NeighborInfoModule         | `EXCLUDE_NEIGHBORINFO`          | 0      | 1       | Medium   | All                                 | Config only                     | NodeDB                     |
+| 14   | HostMetricsModule          | `ARCH_PORTDUINO`                | 1      | 0       | Low      | Portduino only                      | Always on Portduino             | -                          |
+| 15   | DeviceTelemetryModule      | `HAS_TELEMETRY`                 | 1      | 0       | Medium   | ESP32, nRF, STM32WL, Portduino      | Always                          | -                          |
+| 16   | HealthTelemetryModule      | `EXCLUDE_HEALTH_TELEMETRY`      | 4      | 0       | Medium   | **Off global**                      | Never                           | Env compile block, sensors |
+| 17   | PowerTelemetryModule       | power + env exclude gates       | 3      | 0       | Medium   | If env sensors compiled             | Config only                     | Env gate, telemetry config |
+| 18   | AirQualityTelemetryModule  | `EXCLUDE_AIR_QUALITY_SENSOR`    | 6      | 0       | Medium   | If HAS_SENSOR                       | Config only                     | I2C sensors                |
+| 19   | SerialModule               | `EXCLUDE_SERIAL` + arch         | 5      | 0       | Medium   | ESP32/nRF/RP2040/STM32; not S2/C3   | Config + not COLOR UI           | -                          |
+| 20   | StoreForwardModule         | `EXCLUDE_STOREFORWARD`          | 2      | 2       | Medium   | ESP32, Portduino                    | Config only                     | PhoneAPI, MeshService      |
+| 21   | GamesModule                | screen + `BASEUI_HAS_GAMES`     | 2      | 2       | Medium   | Variants with games flag            | If BaseUI + not COLOR           | Screen                     |
+| 22   | SystemCommandsModule       | InputBroker gate                | 3      | 0       | Medium   | If buttons/Portduino; off STM32WL   | If not COLOR display            | InputBroker                |
+| 23   | GeofenceModule             | `EXCLUDE_WAYPOINT`              | 2      | 2       | Medium   | Same as Waypoint                    | Always with Waypoint            | Waypoint gate, Position    |
+| 24   | WaypointModule             | `EXCLUDE_WAYPOINT`              | 2      | 5       | Medium   | Most screened boards; off STM32WL   | Always                          | GPS/RTC, Screen            |
+| 25   | TraceRouteModule           | `EXCLUDE_TRACEROUTE`            | 2      | 2       | Medium   | Most; off some STM32 variants       | Always                          | TrafficMgmt (soft)         |
+| 26   | TextMessageModule          | `EXCLUDE_TEXTMESSAGE`           | 0      | 5       | High     | All                                 | Always                          | FloodingRouter             |
+| 27   | ExternalNotificationModule | `EXCLUDE_EXTERNALNOTIFICATION`  | 6      | 9       | High     | All unless variant off              | Always                          | Many UI/telemetry modules  |
+| 28   | CannedMessageModule        | screen + canned exclude         | 7      | 6       | High     | HAS_SCREEN boards                   | If not COLOR                    | InputBroker, OSK           |
+| 29   | EnvironmentTelemetryModule | `EXCLUDE_ENVIRONMENTAL_SENSOR`  | 6      | 2       | High     | HAS_SENSOR families                 | Config only                     | Sensor table               |
+| 30   | MeshBeaconModule           | `EXCLUDE_BEACON`                | 0      | 1       | High     | All                                 | Always (3 objects + TX hook)    | Admin                      |
+| 31   | PositionModule             | `EXCLUDE_GPS`                   | 3      | 4       | High     | If GPS on board                     | Always                          | GPS core                   |
+| 32   | HopScalingModule           | `HAS_VARIABLE_HOPS`             | 1      | 2       | High     | Most; **off STM32WL**               | Always when compiled            | Router, NodeDB             |
+| 33   | TrafficManagementModule    | traffic flags                   | 7      | 3       | High     | **Off tiny/STM32WL**                | Config block only               | NodeDB, routers            |
+| 34   | StatusLEDModule            | none                            | 2      | 2       | High     | All                                 | Always                          | PowerFSM, sleep            |
+| 35   | NodeInfoModule             | `EXCLUDE_NODEINFO`              | 0      | 6       | Core     | All                                 | Always                          | Mesh stack                 |
+| 36   | OnScreenKeyboardModule     | `HAS_SCREEN`                    | 1      | 4       | Core     | Screen boards                       | On demand (singleton)           | CannedMessage, Screen      |
+| 37   | AdminModule                | `EXCLUDE_ADMIN`                 | 25     | 5       | Core     | All                                 | Always                          | Most config subsystems     |
+| 38   | RoutingModule              | always last                     | 0      | 5       | Core     | All                                 | Always                          | Entire module list order   |
