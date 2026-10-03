@@ -379,11 +379,11 @@ template <typename T> void SX126xInterface<T>::handleSoftwareLoraIrqPoll()
         RADIOLIB_SX126X_IRQ_RX_DONE | RADIOLIB_SX126X_IRQ_TIMEOUT | RADIOLIB_SX126X_IRQ_CRC_ERR | RADIOLIB_SX126X_IRQ_HEADER_ERR;
     const uint16_t noisyRxMask = RADIOLIB_SX126X_IRQ_PREAMBLE_DETECTED | RADIOLIB_SX126X_IRQ_HEADER_VALID;
 
-    // A bare PREAMBLE is mid-reception, not an RX event: readData() here would run on nothing. With a TX
-    // queued it goes through the same hold as the TX-path look; HEADER_VALID stays latched for readData().
+    // A bare PREAMBLE is mid-reception, not an RX event. With a TX queued clear only it, so a noise preamble
+    // can't block TX; keep HEADER_VALID latched, as it marks a real frame.
     const bool preambleOnly = (irq & RADIOLIB_SX126X_IRQ_PREAMBLE_DETECTED) && !(irq & RADIOLIB_SX126X_IRQ_HEADER_VALID);
-    if (!pollTxMode && hasQueuedTx() && preambleOnly && ((irq & ~noisyRxMask) == 0U)) {
-        holdOnPreamble();
+    if (!pollTxMode && !txQueue.empty() && preambleOnly && ((irq & ~noisyRxMask) == 0U)) {
+        lora.clearIrqFlags(RADIOLIB_SX126X_IRQ_PREAMBLE_DETECTED);
         scheduleIrqPollTick();
         return;
     }
