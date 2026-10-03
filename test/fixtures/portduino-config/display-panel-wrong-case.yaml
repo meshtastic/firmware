@@ -1,0 +1,9 @@
+# FAULT: Panel names are case-sensitive, so this runs with no display. --check names the
+# correct spelling.
+Lora:
+  Module: sim
+Display:
+  Panel: st7789
+  Width: 320
+  Height: 240
+  DC: 25
