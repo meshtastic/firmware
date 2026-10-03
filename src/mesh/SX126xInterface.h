@@ -182,6 +182,10 @@ template <class T> class SX126xInterface : public RadioLibInterface
     uint8_t prestagedBase = 0;
     /** Where continuous RX writes its next frame: frames follow each other through the buffer, wrapping at its end */
     uint8_t rxWritePtr = 0;
+    /** RX has (re)started at its base and no frame has landed since, so the chip's RX buffer status is a stale frame's */
+    volatile bool rxStartedSinceFrame = true;
+    /** MCU stage-in-RX outcomes, for the periodic DEBUG line */
+    uint32_t stageInRxStaged = 0, stageInRxSkipped = 0, stageInRxBusy = 0;
     /** A frame arrived or finished around a stage write: its readout checks it against the staged bytes */
     bool rxClobberCheck = false;
     uint8_t rxClobberBase = 0;
@@ -197,6 +201,9 @@ template <class T> class SX126xInterface : public RadioLibInterface
      *  its standby would abort that frame. */
     bool stageTxInRx();
     bool rxFrameOverlapsTxStage(size_t length) override;
+    void noteRxFrameTaken() override { rxStartedSinceFrame = false; }
+    /** A CH341 host always; on an MCU board the build flag is the choice */
+    bool stageInRxAllowed() const;
 #endif
 #ifdef SX126X_TX_STAGE_EARLY
     /** A payload written during its backoff, behind RX's write point: its length (0 if none), packet id, offset and bytes */

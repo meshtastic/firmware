@@ -618,12 +618,18 @@ void RadioLibInterface::onNotify(uint32_t notification)
                         }
                         setTransmitDelay();
                     } else {
+#ifndef MESHTASTIC_LOG_CAD_FREE_AFTER_TX
                         LOG_DEBUG("CAD free");
+#endif
                         // Send any outgoing packets we have ready as fast as possible to keep the time between channel scan and
                         // actual transmission as short as possible
                         txp = txQueue.dequeue();
                         assert(txp);
                         startSend(txp);
+#ifdef MESHTASTIC_LOG_CAD_FREE_AFTER_TX
+                        // Bench: after the launch, not between the verdict and SET_TX, where the chip sits deaf in STBY_RC
+                        LOG_DEBUG("CAD free");
+#endif
                         LOG_TRACE("%d packets in TX queue", txQueue.getMaxLen() - txQueue.getFree());
                     }
                 }
@@ -903,6 +909,10 @@ void RadioLibInterface::handleReceiveInterrupt(const CapturedRxInfo *captured)
         length = captured->len; // the readout task already took the frame into radioBuffer
     else if (!beginReceiveFromChip(length))
         return;
+#ifdef SX126X_TX_STAGE_IN_RX
+    if (!captured)
+        noteRxFrameTaken();
+#endif
 
     // Some drivers report this as a 16 bit value, so a bad readback can overrun radioBuffer in readData()
     if (length > sizeof(radioBuffer)) {
@@ -1355,6 +1365,9 @@ void RadioLibInterface::readOutFromTask()
         return;
     }
     const bool listening = receiveStillRunning();
+#ifdef SX126X_TX_STAGE_IN_RX
+    noteRxFrameTaken();
+#endif
     size_t len = iface->getPacketLength();
     const uint8_t head = rxRingHead;
     const uint8_t next = (uint8_t)((head + 1) % rxRingSize);

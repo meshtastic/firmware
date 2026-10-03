@@ -958,6 +958,9 @@ template <typename T> bool SX126xInterface<T>::rearmReceiveFromIsr()
     }
     rearmTicks = xTaskGetTickCountFromISR();
     TX_TIMELINE_MARK(tlRearmEnd);
+#ifdef SX126X_TX_STAGE_IN_RX
+    noteRxRestart();
+#endif
     rearmOutcome = REARM_ARMED;
     return true;
 }
@@ -1023,6 +1026,9 @@ template <typename T> void SX126xInterface<T>::rearmReceiveFromTask()
         return;
     }
     rearmState = REARM_ARMED;
+#ifdef SX126X_TX_STAGE_IN_RX
+    noteRxRestart();
+#endif
 #if MESHTASTIC_REARM_HOLD_FIX
     // The TX_DONE interrupt detached the radio's interrupt. Attach the RX one now, so a frame that ends before the radio
     // thread runs wakes this task to read it, rather than waiting in the chip for the next frame to overwrite it.
@@ -1137,11 +1143,41 @@ static bool bufferRangesOverlap(uint8_t a, size_t lenA, uint8_t b, size_t lenB)
 template <typename T> void SX126xInterface<T>::noteRxRestart()
 {
     rxWritePtr = 0; // RX's base, which RadioLib's RX start always sets to 0
+    rxStartedSinceFrame = true;
+}
+
+template <typename T> bool SX126xInterface<T>::stageInRxAllowed() const
+{
+#ifdef ARCH_PORTDUINO
+    return irqPolledOverUsb();
+#else
+    return true; // the build flag asked for it
+#endif
 }
 
 template <typename T> bool SX126xInterface<T>::stageTxInRx()
 {
     const uint32_t t0 = millis();
+#ifndef ARCH_PORTDUINO
+    // On an MCU board the readout task takes each frame, so the thread never learns where it lay: read the write point
+    // now instead. A frame past its header or unread lies just behind that point, where the stage would go, so leave
+    // those to the standby prestage. A frame that starts after this look is written forward from the point, away from it.
+    if ((stageInRxStaged + stageInRxSkipped + stageInRxBusy) % 50 == 0)
+        LOG_DEBUG("TX stage in RX: %u staged, %u left to the standby prestage, %u scans skipped for a frame",
+                  (unsigned)stageInRxStaged, (unsigned)stageInRxSkipped, (unsigned)stageInRxBusy);
+    const uint32_t irqBefore = lora.getIrqFlags();
+    if (irqBefore & (RADIOLIB_SX126X_IRQ_HEADER_VALID | RADIOLIB_SX126X_IRQ_RX_DONE | RADIOLIB_SX126X_IRQ_CRC_ERR)) {
+        stageInRxSkipped++;
+        return false;
+    }
+    if (rxStartedSinceFrame) {
+        rxWritePtr = 0;
+    } else {
+        uint8_t offset = 0;
+        const size_t lastLen = lora.getPacketLength(false, &offset);
+        rxWritePtr = (uint8_t)(offset + lastLen);
+    }
+#endif
     const size_t numbytes = encodeRadioBuffer(scanForTx);
     if (numbytes == 0 || numbytes > RADIOLIB_SX126X_MAX_PACKET_LENGTH)
         return false;
@@ -1163,9 +1199,13 @@ template <typename T> bool SX126xInterface<T>::stageTxInRx()
             noteStagedOverFrame(base, numbytes);
         // The busy verdict's rearmReceive() resumes the RX: it must leave a finished frame's flags for its readout
         keepRxIrqsAtResume = (irq & doneIrqs) != 0;
+        stageInRxBusy++;
+#ifdef ARCH_PORTDUINO
         LOG_DEBUG("TX stage in RX: frame arriving or unread (irq 0x%04x), scan skipped", (unsigned)irq);
+#endif
         return true;
     }
+    stageInRxStaged++;
     prestagedLen = numbytes;
     prestagedId = scanForTx->id;
     prestagedBase = base;
@@ -1314,7 +1354,7 @@ template <typename T> bool SX126xInterface<T>::isChannelActive()
 #ifdef SX126X_TX_STAGE_EARLY
     stagedAhead = takeEarlyTxStage();
 #endif
-    if (!stagedAhead && txPrestageEnabled && scanForTx && txStagedByRadioLib && irqPolledOverUsb() && stageTxInRx())
+    if (!stagedAhead && txPrestageEnabled && scanForTx && txStagedByRadioLib && stageInRxAllowed() && stageTxInRx())
         return true; // report busy without the standby, which would abort the frame; rearmReceive() keeps the RX
 #endif
     const uint32_t t0 = millis();

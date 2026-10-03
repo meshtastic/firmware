@@ -311,6 +311,8 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 #ifdef SX126X_TX_STAGE_IN_RX
     /** Bench: whether a TX payload staged while this frame arrived can have overwritten part of it */
     virtual bool rxFrameOverlapsTxStage(size_t length) { return false; }
+    /** Bench: a frame has landed in the chip's buffer since RX last started (the readout task or the thread is reading it) */
+    virtual void noteRxFrameTaken() {}
 #endif
 
     // Timed TX_DONE check for irqPolledOverUsb() hosts: the chip drops to standby when a frame ends and is
