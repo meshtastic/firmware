@@ -82,7 +82,7 @@ class BLEMeshHandler : private concurrency::OSThread, public MeshTransportBase
 
   protected:
     /// One queued outbound frame, built into a complete AD payload. `from`/`id` let a cancel match
-    /// without decoding the queue; `priority` is here because strippedForAir() keeps it off the air.
+    /// without decoding the queue; `priority` is here because stripForTransmit() keeps it off the air.
     struct AdvSlot {
         std::array<uint8_t, BLE_MESH_ADV_TOTAL_MAX> data;
         uint8_t len;
