@@ -616,6 +616,14 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     int32_t tlLateMs = 0;
     uint32_t tlGateWaitMs = 0, tlGateScanMs = 0;
     bool tlGateNewerUnread = false;
+#ifdef MESHTASTIC_RADIO_TASK
+    uint32_t tlLockWaitUs = 0;
+    const char *tlLockHolder = "none";
+#endif
+#ifdef MESHTASTIC_TX_SLOT_LEAD
+    int32_t tlWakeUs = -1;
+    uint32_t tlPathUs = 0;
+#endif
     /** Log the last TX's timeline; adopted says RX was re-armed at TX_DONE rather than by this thread */
     void logTxTimeline(bool adopted);
 #endif

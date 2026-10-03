@@ -35,6 +35,21 @@
 #define MESHTASTIC_TX_SLOT_GATE_REARM 1
 #endif
 #endif
+// Bench: -DMESHTASTIC_TX_SLOT_LEAD replaces the gate's fixed early window with measured ones. SET_TX is aimed
+// MESHTASTIC_TX_SLOT_SET_TX_AT_MS (default 1) into the slot; the gate starts the scan the measured scan-to-SET_TX time
+// before that, and the timer fires the measured wake latency, plus MESHTASTIC_TX_SLOT_LEAD_GUARD_MS (default 1), before
+// the scan.
+#ifdef MESHTASTIC_TX_SLOT_LEAD
+#ifndef MESHTASTIC_TX_SLOT_GATE_MS
+#error "MESHTASTIC_TX_SLOT_LEAD sets the slot gate's lead: build with MESHTASTIC_TX_SLOT_GATE_MS"
+#endif
+#ifndef MESHTASTIC_TX_SLOT_SET_TX_AT_MS
+#define MESHTASTIC_TX_SLOT_SET_TX_AT_MS 1
+#endif
+#ifndef MESHTASTIC_TX_SLOT_LEAD_GUARD_MS
+#define MESHTASTIC_TX_SLOT_LEAD_GUARD_MS 1
+#endif
+#endif
 
 // Forward decl to avoid a direct include of generated config headers / full LoRaConfig definition in this widely-included file.
 typedef struct _meshtastic_Config_LoRaConfig meshtastic_Config_LoRaConfig;
@@ -270,7 +285,8 @@ class RadioInterface
 
 #ifdef MESHTASTIC_TX_SLOT_GATE_MS
     /** Bench: the millis() to scan at: the earliest start of a slot of this node's parity, no earlier than the drawn one,
-     *  that began at most MESHTASTIC_TX_SLOT_GATE_MS ago. Now if there is no grid yet. */
+     *  that began at most MESHTASTIC_TX_SLOT_GATE_MS ago. Now if there is no grid yet. With MESHTASTIC_TX_SLOT_LEAD, the
+     *  scan time that puts SET_TX MESHTASTIC_TX_SLOT_SET_TX_AT_MS into such a slot. */
     uint32_t ownSlotScanAt();
     /** Bench: hold this thread until untilMs; returns the ms waited */
     uint32_t waitUntilMs(uint32_t untilMs);
@@ -280,6 +296,18 @@ class RadioInterface
     /** Bench: the frame end the last gate counted its slots from, when it was noted, and what it was */
     uint32_t slotGateAnchorMs = 0, slotGateAnchorNotedMs = 0;
     const char *slotGateAnchorWhat = "none";
+#ifdef MESHTASTIC_TX_SLOT_LEAD
+    /** Bench: how late the TX timer's handling starts after the timer falls due (a fast-rising, slowly falling envelope,
+     *  so a late tail sets it), and the scan start to SET_TX (an average), in us */
+    uint32_t leadWakeUs = 1000, leadPathUs = 6000;
+    /** Bench: micros() the TX timer was set to fall due, 0 when no sample is pending; micros() of the last SET_TX */
+    uint32_t txTimerDueUs = 0, lastTxStartUs = 0;
+    void noteLeadWake(int32_t lateUs);
+    void noteLeadPath(uint32_t pathUs);
+    /** Bench: the estimates in whole ms, rounded up */
+    uint32_t leadWakeMs() const { return (leadWakeUs + 999) / 1000; }
+    uint32_t leadPathMs() const { return (leadPathUs + 999) / 1000; }
+#endif
 #endif
 #endif
 

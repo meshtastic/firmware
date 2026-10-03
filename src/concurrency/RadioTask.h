@@ -25,6 +25,9 @@ void startRadioTask();
 bool inRadioTask();
 /// The task's stack high-water mark in bytes, 0 before it starts
 uint32_t radioTaskStackFree();
+/// How long the radio task waited for the lock at the start of its current run, in us, and the thread that held it
+uint32_t radioTaskLockWaitUs();
+const char *radioTaskLockHolder();
 
 class RadioTaskLockGuard
 {

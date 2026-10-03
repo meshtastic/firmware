@@ -2,6 +2,7 @@
 
 #ifdef MESHTASTIC_RADIO_TASK
 
+#include "concurrency/OSThread.h"
 #include "configuration.h"
 #include <assert.h>
 
@@ -29,6 +30,11 @@ SemaphoreHandle_t radioMutex;
 TaskHandle_t volatile radioMutexOwner;
 uint32_t radioMutexDepth;
 TaskHandle_t radioTask;
+// The thread that last took the lock from another task, and what the radio task last waited on it. Bench diagnostics:
+// written and read without a lock, and only read after the TX they describe.
+const char *volatile radioMutexHolderName = "none";
+volatile uint32_t radioLockWaitUs;
+const char *volatile radioLockHolder = "none";
 
 void radioTaskMain(void *)
 {
@@ -52,7 +58,22 @@ void radioTaskLock()
     // so a lower task holding it is raised to the radio task's priority while the radio waits.
     if (!radioMutex)
         radioMutex = xSemaphoreCreateMutex();
-    xSemaphoreTake(radioMutex, portMAX_DELAY);
+    if (radioTask && self == radioTask) {
+        uint32_t waitedUs = 0;
+        const char *holder = "none";
+        if (xSemaphoreTake(radioMutex, 0) != pdTRUE) {
+            holder = radioMutexHolderName;
+            const uint32_t t0 = micros();
+            xSemaphoreTake(radioMutex, portMAX_DELAY);
+            waitedUs = micros() - t0;
+        }
+        radioLockWaitUs = waitedUs;
+        radioLockHolder = holder;
+    } else {
+        xSemaphoreTake(radioMutex, portMAX_DELAY);
+        const OSThread *thread = OSThread::current();
+        radioMutexHolderName = thread ? thread->ThreadName.c_str() : "loop";
+    }
     radioMutexOwner = self;
     radioMutexDepth = 1;
 }
@@ -99,6 +120,16 @@ void startRadioTask()
              (unsigned)uxTaskPriorityGet(nullptr), core);
     // Nothing else runs the radio thread: without the task the radio is dead, and the bench must not mistake that for loss
     assert(task);
+}
+
+uint32_t radioTaskLockWaitUs()
+{
+    return radioLockWaitUs;
+}
+
+const char *radioTaskLockHolder()
+{
+    return radioLockHolder;
 }
 
 uint32_t radioTaskStackFree()

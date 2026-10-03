@@ -899,6 +899,21 @@ uint32_t RadioInterface::ownSlotScanAt()
     // Not before the drawn slot: the timer fired early on purpose. The grid is the latest frame end's, which is the one
     // the other nodes count from too.
     const uint32_t drawnMs = slotDrawAnchorMs + slotDrawn * slot;
+#ifdef MESHTASTIC_TX_SLOT_LEAD
+    // Scan this long before the slot starts, so SET_TX lands SET_TX_AT_MS into it. A slot qualifies if its scan time began
+    // at most GATE_MS ago, and the drawn one is the earliest.
+    const int32_t back = (int32_t)leadPathMs() - MESHTASTIC_TX_SLOT_SET_TX_AT_MS;
+    int32_t lower = (int32_t)(now - lastFrameEndMs) + back - MESHTASTIC_TX_SLOT_GATE_MS;
+    const int32_t drawnSince = (int32_t)(drawnMs - lastFrameEndMs);
+    if (drawnSince > lower)
+        lower = drawnSince;
+    if (lower < 0)
+        lower = 0;
+    uint32_t first = ((uint32_t)lower + slot - 1) / slot;
+    if ((first & 1) != MESHTASTIC_TX_SLOT_PARITY)
+        first++;
+    return lastFrameEndMs + first * slot - back;
+#endif
     const uint32_t from = (int32_t)(drawnMs - now) > 0 ? drawnMs : now;
     const uint32_t since = from - lastFrameEndMs;
     uint32_t k = since / slot;
@@ -907,6 +922,30 @@ uint32_t RadioInterface::ownSlotScanAt()
     k += ((k & 1) != MESHTASTIC_TX_SLOT_PARITY) ? 1 : 2; // the next slot start of this parity
     return lastFrameEndMs + k * slot;
 }
+
+#ifdef MESHTASTIC_TX_SLOT_LEAD
+void RadioInterface::noteLeadWake(int32_t lateUs)
+{
+    // Rises to a late sample at once and falls back an eighth of the way per sample, so the timer covers the recent tail
+    // rather than the average. Capped at two slots: past that the gate's re-arm comes back for the slot anyway.
+    uint32_t sample = lateUs > 0 ? (uint32_t)lateUs : 0;
+    const uint32_t cap = 2 * slotTimeMsec * 1000;
+    if (sample > cap)
+        sample = cap;
+    if (sample >= leadWakeUs)
+        leadWakeUs = sample;
+    else
+        leadWakeUs -= (leadWakeUs - sample) / 8;
+}
+
+void RadioInterface::noteLeadPath(uint32_t pathUs)
+{
+    // The scan and the launch take about the same time every TX, so an average; a sample over a slot is something else
+    if (pathUs > slotTimeMsec * 1000)
+        return;
+    leadPathUs = (uint32_t)((int32_t)leadPathUs + ((int32_t)pathUs - (int32_t)leadPathUs) / 8);
+}
+#endif
 
 uint32_t RadioInterface::waitUntilMs(uint32_t untilMs)
 {
