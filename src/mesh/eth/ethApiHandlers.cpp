@@ -21,6 +21,10 @@ static constexpr uint32_t BODY_TIMEOUT_MS = 5000;
 // A request body still missing when the session window closes gets at least this long, so a PUT
 // that lands right at the end of a session is not dropped over a few milliseconds of lag.
 static constexpr uint32_t BODY_MIN_WAIT_MS = 500;
+// Input that keeps arriving is read for at most this long past a deadline. Reading what is already
+// buffered takes milliseconds (the W5x00 holds 2 KB per socket), but without a cap a client feeding
+// one byte per poll could stretch a request by MAX_HEADER_LINES * MAX_LINE_LEN polls, about 8 s.
+static constexpr uint32_t CONSUME_GRACE_MS = 500;
 static constexpr size_t MAX_LINE_LEN = 256;
 static constexpr size_t MAX_HEADER_LINES = 32;
 static constexpr const char *PROTOBUF_SCHEMA =
@@ -58,8 +62,9 @@ static bool deadlinePassed(uint32_t deadlineMs)
 }
 
 // Read up to one CRLF-terminated line; returns false on timeout or oversize.
-// The deadline bounds how long we wait for more bytes, not how much already-received input we
-// read, so a request that is fully buffered is never dropped just because its window closed.
+// The deadline bounds how long we wait for more bytes; input that has already arrived is still read
+// for up to CONSUME_GRACE_MS after it, so a request that is fully buffered is never dropped just
+// because its window closed, and one that keeps trickling in cannot hold the session open.
 static bool readLine(IStreamReadWrite &client, String &out, uint32_t deadlineMs)
 {
     out = "";
@@ -72,6 +77,8 @@ static bool readLine(IStreamReadWrite &client, String &out, uint32_t deadlineMs)
             delay(1);
             continue;
         }
+        if (deadlinePassed(deadlineMs + CONSUME_GRACE_MS))
+            return false;
         int c = client.read();
         if (c < 0) {
             // available() can count raw bytes that do not yet decode (a partial TLS record).
@@ -279,6 +286,8 @@ static bool handleToRadio(IStreamReadWrite &client, const Request &req, uint32_t
             delay(1);
             continue;
         }
+        if (deadlinePassed(deadline + CONSUME_GRACE_MS))
+            break;
         int n = client.read(buf + got, (size_t)req.contentLength - got);
         if (n > 0) {
             got += n;
