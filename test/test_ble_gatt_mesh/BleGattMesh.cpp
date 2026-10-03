@@ -337,67 +337,8 @@ void test_a_lost_peer_forgets_its_assemblies(void)
     TEST_ASSERT_EQUAL_MESSAGE(1, h.pending(), "only the departed peer's slot is freed");
 }
 
-// --- ingress guards -----------------------------------------------------------------------------
-
-void test_ingress_drops_a_packet_with_no_sender(void)
-{
-    FakeGattMesh h;
-    h.start();
-    h.feed(1, split(encode(encryptedPacket(0 /* from */)), 1, 512)[0]);
-    TEST_ASSERT_EQUAL_MESSAGE(0, h.received.size(), "spoofed origin rejected");
-}
-
-void test_ingress_drops_a_packet_claiming_to_be_us(void)
-{
-    FakeGattMesh h;
-    h.start();
-    h.feed(1, split(encode(encryptedPacket(nodeDB->getNodeNum())), 1, 512)[0]);
-    TEST_ASSERT_EQUAL_MESSAGE(0, h.received.size(), "a peer cannot speak as this node");
-}
-
-void test_ingress_drops_an_impossible_hop_count(void)
-{
-    FakeGattMesh h;
-    h.start();
-    auto p = encryptedPacket();
-    p.hop_limit = HOP_MAX + 1;
-    h.feed(1, split(encode(p), 1, 512)[0]);
-    TEST_ASSERT_EQUAL(0, h.received.size());
-}
-
-void test_ingress_clears_local_only_metadata(void)
-{
-    FakeGattMesh h;
-    h.start();
-    auto p = encryptedPacket();
-    p.pki_encrypted = true;
-    p.public_key.size = 32;
-    p.rx_rssi = -40;
-    p.has_rx_rssi = true;
-    p.rx_snr = 9;
-    h.feed(1, split(encode(p), 1, 512)[0]);
-    TEST_ASSERT_EQUAL(1, h.received.size());
-    TEST_ASSERT_FALSE_MESSAGE(h.received[0].pki_encrypted, "claimed authentication stripped");
-    TEST_ASSERT_EQUAL(0, h.received[0].public_key.size);
-    TEST_ASSERT_FALSE_MESSAGE(h.received[0].has_rx_rssi, "no radio measurement exists for a GATT arrival");
-    TEST_ASSERT_EQUAL(0, h.received[0].rx_snr);
-}
-
-void test_ingress_keeps_via_mqtt_and_clears_scheduling(void)
-{
-    FakeGattMesh h;
-    h.start();
-    auto p = encryptedPacket();
-    p.via_mqtt = true;
-    p.tx_after = 4242;
-    p.priority = meshtastic_MeshPacket_Priority_MAX;
-    h.feed(1, split(encode(p), 1, 512)[0]);
-    TEST_ASSERT_EQUAL(1, h.received.size());
-    // The LoRa header carries via_mqtt, so ignore_mqtt and the MQTT uplink depend on it arriving intact.
-    TEST_ASSERT_TRUE(h.received[0].via_mqtt);
-    TEST_ASSERT_EQUAL_UINT32(0, h.received[0].tx_after);
-    TEST_ASSERT_EQUAL(meshtastic_MeshPacket_Priority_UNSET, h.received[0].priority);
-}
+// --- ingress ------------------------------------------------------------------------------------
+// The guards and field clearing every bearer shares run per bearer in test_transport_ingress.
 
 void test_ingress_rejects_bytes_that_do_not_decode(void)
 {
@@ -409,6 +350,33 @@ void test_ingress_rejects_bytes_that_do_not_decode(void)
 }
 
 // --- egress -------------------------------------------------------------------------------------
+
+void test_send_strips_local_only_fields(void)
+{
+    FakeGattMesh h;
+    h.start();
+    h.peers = {{1, 512}};
+    auto p = encryptedPacket();
+    p.priority = meshtastic_MeshPacket_Priority_MAX;
+    p.tx_after = 4242;
+    p.rx_rssi = -40;
+    p.has_rx_rssi = true;
+    p.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA;
+    TEST_ASSERT_TRUE(h.onSend(&p));
+    h.pump();
+    TEST_ASSERT_EQUAL(1, h.notified[1].size());
+
+    // What a peer decodes carries none of this node's local state; an older peer that clears less at
+    // ingress than this one would otherwise act on it.
+    const auto body = reassembleAll(h.notified[1]);
+    meshtastic_MeshPacket got = meshtastic_MeshPacket_init_zero;
+    TEST_ASSERT_TRUE(pb_decode_from_bytes(body.data(), body.size(), &meshtastic_MeshPacket_msg, &got));
+    TEST_ASSERT_EQUAL(meshtastic_MeshPacket_Priority_UNSET, got.priority);
+    TEST_ASSERT_EQUAL_UINT32(0, got.tx_after);
+    TEST_ASSERT_FALSE(got.has_rx_rssi);
+    TEST_ASSERT_EQUAL(meshtastic_MeshPacket_TransportMechanism_TRANSPORT_INTERNAL, got.transport_mechanism);
+    TEST_ASSERT_EQUAL_UINT32(p.id, got.id);
+}
 
 void test_send_queues_rather_than_notifying(void)
 {
@@ -795,12 +763,8 @@ void setup()
     RUN_TEST(test_peers_holding_slots_are_bounded);
     RUN_TEST(test_half_built_packets_expire);
     RUN_TEST(test_a_lost_peer_forgets_its_assemblies);
-    RUN_TEST(test_ingress_drops_a_packet_with_no_sender);
-    RUN_TEST(test_ingress_drops_a_packet_claiming_to_be_us);
-    RUN_TEST(test_ingress_drops_an_impossible_hop_count);
-    RUN_TEST(test_ingress_clears_local_only_metadata);
-    RUN_TEST(test_ingress_keeps_via_mqtt_and_clears_scheduling);
     RUN_TEST(test_ingress_rejects_bytes_that_do_not_decode);
+    RUN_TEST(test_send_strips_local_only_fields);
     RUN_TEST(test_send_queues_rather_than_notifying);
     RUN_TEST(test_send_fragments_per_peer_chunk_size);
     RUN_TEST(test_a_relay_is_not_written_back_to_the_peer_it_came_from);
