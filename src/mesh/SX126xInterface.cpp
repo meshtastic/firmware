@@ -141,13 +141,13 @@ template <typename T> bool SX126xInterface<T>::reinitChip()
             LOG_INFO("SX126x init success without TCXO (XTAL mode)");
     }
 #endif
-
-#ifdef SX126X_PA_RAMP_US
-    // Set custom PA ramp time for boards requiring longer stabilization (e.g., T-Beam 1W needs >800us)
     if (res == RADIOLIB_ERR_NONE) {
+        applyTcxoStartupDelay(lora, tcxoVoltage);
+#ifdef SX126X_PA_RAMP_US
+        // Set custom PA ramp time for boards requiring longer stabilization (e.g., T-Beam 1W needs >800us)
         lora.setPaRampTime(SX126X_PA_RAMP_US);
-    }
 #endif
+    }
     // \todo Display actual typename of the adapter, not just `SX126x`
     LOG_INFO("SX126x init result %d", res);
     if (res == RADIOLIB_ERR_CHIP_NOT_FOUND || res == RADIOLIB_ERR_SPI_CMD_FAILED)

@@ -56,6 +56,19 @@ RadioLibInterface::RadioLibInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE c
 #endif
 }
 
+uint32_t RadioLibInterface::tcxoStartupDelayUs()
+{
+#if ARCH_PORTDUINO
+    // 0 is an absent key; the build default applies
+    if (portduino_config.dio3_tcxo_delay_us > 0)
+        return (uint32_t)portduino_config.dio3_tcxo_delay_us;
+    if (portduino_config.dio3_tcxo_delay_us < 0)
+        LOG_WARN("Ignore Lora.DIO3_TCXO_DELAY_US %d, use %u us", portduino_config.dio3_tcxo_delay_us,
+                 (unsigned)TCXO_STARTUP_DELAY_US);
+#endif
+    return TCXO_STARTUP_DELAY_US;
+}
+
 #ifdef ARCH_ESP32
 // ESP32 doesn't use that flag
 #define YIELD_FROM_ISR(x) portYIELD_FROM_ISR()
