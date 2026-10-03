@@ -7,6 +7,7 @@
 #include "NodeStatus.h"
 #include "Router.h"
 #include "TransmitHistory.h"
+#include "UptimeClock.h"
 #include "airtime.h"
 #include "configuration.h"
 #include "gps/RTC.h"
@@ -115,6 +116,27 @@ static Print *serialPrint = &SERIAL_PRINT_OBJECT;
 char serialBytes[512];
 size_t serialPayloadSize;
 
+/// The UART the module drives when rxd/txd are set.
+static HardwareSerial *serialModulePort()
+{
+#if defined(CONFIG_IDF_TARGET_ESP32C6) || defined(RAK3172)
+    return &Serial1;
+#else
+    return &Serial2;
+#endif
+}
+
+#if !MESHTASTIC_EXCLUDE_MODBUS
+#define MODBUS_POLL_MS 10000
+#define MODBUS_SCAN_RETRY_MS 60000
+#define MODBUS_MAX_FAILS 10
+#define MODBUS_RAIN_HOUR_MS 3600000
+#define MODBUS_RX_MAX sizeof(serialBytes)
+#if defined(MODBUS_PWR_EN_PIN) && !defined(MODBUS_PWR_WARMUP_MS)
+#define MODBUS_PWR_WARMUP_MS 2000
+#endif
+#endif
+
 SerialModuleRadio::SerialModuleRadio() : SinglePortModule("SerialModuleRadio", meshtastic_PortNum_SERIAL_APP)
 {
     switch (moduleConfig.serial.mode) {
@@ -190,11 +212,7 @@ int32_t SerialModule::runOnce()
                 Serial.setTimeout(moduleConfig.serial.timeout > 0 ? moduleConfig.serial.timeout : TIMEOUT);
             }
 #elif defined(ARCH_STM32WL)
-#ifndef RAK3172
-            HardwareSerial *serialInstance = &Serial2;
-#else
-            HardwareSerial *serialInstance = &Serial1;
-#endif
+            HardwareSerial *serialInstance = serialModulePort();
             if (moduleConfig.serial.rxd && moduleConfig.serial.txd) {
                 serialInstance->setTx(moduleConfig.serial.txd);
                 serialInstance->setRx(moduleConfig.serial.rxd);
@@ -238,11 +256,31 @@ int32_t SerialModule::runOnce()
 
             firstTime = 0;
 
-            if (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_WS85) {
+            if (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_WS85 ||
+                moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MODBUS) {
                 // First send after the shared periodic-broadcast start delay, like the telemetry modules
                 telemetryStartAt = millis();
                 telemetryStartDelay = serialModuleRadio->setStartDelay();
             }
+
+#if !MESHTASTIC_EXCLUDE_MODBUS
+            if (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MODBUS) {
+#ifdef MODBUS_DE_PIN
+                pinMode(MODBUS_DE_PIN, OUTPUT);
+                digitalWrite(MODBUS_DE_PIN, LOW);
+#endif
+#ifdef MODBUS_PWR_EN_PIN
+                pinMode(MODBUS_PWR_EN_PIN, OUTPUT);
+                digitalWrite(MODBUS_PWR_EN_PIN, HIGH);
+                mbCycleAt = millis();
+                mbCycleMs = MODBUS_PWR_WARMUP_MS;
+#endif
+#ifdef MODBUS_SLAVE_ADDR
+                mbSensor.addr = MODBUS_SLAVE_ADDR;
+                mbSensor.caps = modbus::capsForAddress(MODBUS_SLAVE_ADDR);
+#endif
+            }
+#endif
 
             // in API mode send rebooted sequence
             if (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_PROTO) {
@@ -275,6 +313,11 @@ int32_t SerialModule::runOnce()
                     }
                 }
             }
+#if !MESHTASTIC_EXCLUDE_MODBUS
+            else if (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MODBUS) {
+                return runModbus();
+            }
+#endif
 
 #if SERIAL_PRINT_PORT != 0
             else if ((moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_WS85)) {
@@ -291,18 +334,9 @@ int32_t SerialModule::runOnce()
             }
 #endif
             else {
-#if defined(CONFIG_IDF_TARGET_ESP32C6)
-                while (Serial1.available()) {
-                    serialPayloadSize = Serial1.readBytes(serialBytes, meshtastic_Constants_DATA_PAYLOAD_LEN);
-#else
-#ifndef RAK3172
-                HardwareSerial *serialInstance = &Serial2;
-#else
-                HardwareSerial *serialInstance = &Serial1;
-#endif
+                HardwareSerial *serialInstance = serialModulePort();
                 while (serialInstance->available()) {
                     serialPayloadSize = serialInstance->readBytes(serialBytes, meshtastic_Constants_DATA_PAYLOAD_LEN);
-#endif
                     serialModuleRadio->sendPayload();
                 }
             }
@@ -396,8 +430,9 @@ void SerialModuleRadio::sendPayload(NodeNum dest, bool wantReplies)
 ProcessMessage SerialModuleRadio::handleReceived(const meshtastic_MeshPacket &mp)
 {
     if (moduleConfig.serial.enabled) {
-        if (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_PROTO) {
-            // in API mode we don't care about stuff from radio.
+        if (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_PROTO ||
+            moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MODBUS) {
+            // in API mode we don't care about stuff from radio, and nothing from the mesh may reach a Modbus bus.
             return ProcessMessage::CONTINUE;
         }
 
@@ -494,6 +529,10 @@ uint32_t SerialModule::getBaudRate()
     } else if (moduleConfig.serial.baud == meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_921600) {
         return 921600;
     }
+#if !MESHTASTIC_EXCLUDE_MODBUS
+    if (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MODBUS)
+        return 9600; // SenseCAP ONE default
+#endif
     return BAUD;
 }
 
@@ -740,4 +779,149 @@ void SerialModule::processWXSerial()
 #endif
     return;
 }
+
+#if !MESHTASTIC_EXCLUDE_MODBUS
+/// MODBUS mode: master for one RS485 sensor. Never blocks waiting for the bus.
+int32_t SerialModule::runModbus()
+{
+    HardwareSerial *port = serialModulePort();
+    uint8_t *rx = (uint8_t *)serialBytes;
+    while (port->available()) {
+        int c = port->read();
+        if (c < 0)
+            break;
+        // A response cannot start with another address; drop line turn-around noise before it.
+        if (mbWaiting && !mbRxLen && c != mbAddr)
+            continue;
+        if (mbRxLen < MODBUS_RX_MAX)
+            rx[mbRxLen++] = c;
+    }
+
+    if (mbWaiting) {
+        modbus::Result r = modbus::checkResponse(rx, mbRxLen, mbAddr, modbus::READ_INPUT, mbCount);
+        uint32_t timeout = moduleConfig.serial.timeout > 0 ? moduleConfig.serial.timeout : TIMEOUT;
+        if (r == modbus::RESP_INCOMPLETE && Throttle::isWithinTimespanMs(mbSentAt, timeout))
+            return 10;
+        mbWaiting = false;
+        mbRxLen = 0;
+        modbusPollDone(r);
+        return 10;
+    }
+
+    mbRxLen = 0; // only the awaited response is of interest
+
+    if (!mbBusy) {
+        if (!Throttle::hasElapsed(mbCycleAt, mbCycleMs))
+            return 10;
+        mbBusy = true;
+        mbStep = 0;
+        mbCycleAt = millis();
+        mbCycleMs = MODBUS_POLL_MS;
+    }
+    if (!modbusNextRequest()) {
+        modbusCycleDone();
+        return 10;
+    }
+    // The bus has been idle since at least the previous call, 10 ms ago: more than the 3.5 character gap.
+    uint8_t req[8];
+    modbusSend(req, modbus::buildRead(req, mbAddr, modbus::READ_INPUT, mbReg, mbCount));
+    mbSentAt = millis();
+    mbWaiting = true;
+    return 10;
+}
+
+/// Fill in the request for the current step of the poll or scan cycle; false once the cycle is complete.
+bool SerialModule::modbusNextRequest()
+{
+    if (mbSensor.addr) {
+        mbAddr = mbSensor.addr;
+        return modbus::nextRead(mbSensor.caps, mbSensor.split, mbStep, mbReg, mbCount);
+    }
+    if (mbStep >= modbus::profileCount)
+        return false;
+    mbAddr = modbus::profiles[mbStep].addr;
+    mbReg = 0;
+    mbCount = 2;
+    return true;
+}
+
+void SerialModule::modbusPollDone(modbus::Result r)
+{
+    if (r == modbus::RESP_OK) {
+        if (!mbSensor.addr) {
+            LOG_INFO("Modbus sensor found at address %u", mbAddr);
+            mbSensor = {mbAddr, modbus::capsForAddress(mbAddr)};
+            mbBusy = false;
+            mbCycleMs = 0;
+            return;
+        }
+        modbus::storeRegisters(mbRaw, mbReg, (const uint8_t *)serialBytes + 3, serialBytes[2]);
+        if (!mbSensor.split && mbStep == 0)
+            mbSensor.fullOk = true;
+        mbStep++;
+        return;
+    }
+    if (!mbSensor.addr) {
+        mbStep++; // next scan candidate
+        return;
+    }
+    LOG_WARN("Modbus poll of address %u register 0x%x failed (%u)", mbAddr, mbReg, r);
+    // A sensor that never answered the full base block gets the short reads, which skip light and rain.
+    if (!mbSensor.split && mbStep == 0 && !mbSensor.fullOk) {
+        mbSensor.split = true;
+        mbSensor.caps &= ~(modbus::CAP_LIGHT | modbus::CAP_RAIN);
+    }
+    mbBusy = false;
+#ifndef MODBUS_SLAVE_ADDR
+    if (++mbSensor.fails >= MODBUS_MAX_FAILS)
+        mbSensor = {};
+#endif
+}
+
+void SerialModule::modbusCycleDone()
+{
+    mbBusy = false;
+    if (!mbSensor.addr) {
+        mbCycleMs = MODBUS_SCAN_RETRY_MS;
+        return;
+    }
+    mbSensor.fails = 0;
+    if (mbRaw[0x1E / 2])
+        LOG_WARN("Modbus sensor tipped over");
+    if (Throttle::hasElapsed(mbRainHourAt, MODBUS_RAIN_HOUR_MS)) {
+        mbAgg.nextHour();
+        mbRainHourAt = millis();
+    }
+    mbAgg.add(mbRaw);
+
+    if (!telemetryDue())
+        return;
+
+    meshtastic_Telemetry m = meshtastic_Telemetry_init_zero;
+    m.which_variant = meshtastic_Telemetry_environment_metrics_tag;
+    mbAgg.environment(m.variant.environment_metrics, mbSensor.caps);
+    sendTelemetry(m);
+    if (mbSensor.caps & (modbus::CAP_PM | modbus::CAP_CO2)) {
+        m.which_variant = meshtastic_Telemetry_air_quality_metrics_tag;
+        m.variant.air_quality_metrics = meshtastic_AirQualityMetrics_init_zero;
+        mbAgg.airQuality(m.variant.air_quality_metrics, mbSensor.caps);
+        sendTelemetry(m);
+    }
+    mbAgg.reset();
+}
+
+void SerialModule::modbusSend(const uint8_t *buf, size_t len)
+{
+    HardwareSerial *port = serialModulePort();
+#ifdef MODBUS_DE_PIN
+    digitalWrite(MODBUS_DE_PIN, HIGH);
+#endif
+    port->write(buf, len);
+#ifdef MODBUS_DE_PIN
+    port->flush();
+    digitalWrite(MODBUS_DE_PIN, LOW);
+#endif
+}
+
+#endif
 #endif
