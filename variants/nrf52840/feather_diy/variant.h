@@ -44,7 +44,7 @@ extern "C" {
 #define WIRE_INTERFACES_COUNT 1
 
 #define PIN_WIRE_SDA 22 // P0.12 22
-#define PIN_WIRE_SCL 23 // P0.12 23
+#define PIN_WIRE_SCL 23 // P0.11 23
 
 #define PIN_LED1 3 // P1.15 3
 #define PIN_LED2 4 // P1.10 4
