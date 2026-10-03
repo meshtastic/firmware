@@ -51,7 +51,7 @@ jobs:
             echo "We build this one:" >> $GITHUB_STEP_SUMMARY
             echo "| Platform | Board |" >> $GITHUB_STEP_SUMMARY
             echo "| -------- | ----- |" >> $GITHUB_STEP_SUMMARY
-            if echo "$TARGETS" | grep -qx -- "$BUILDTARGET"; then
+            if echo "$TARGETS" | grep -Fqx -- "$BUILDTARGET"; then
               echo "| native | $BUILDTARGET |" >> $GITHUB_STEP_SUMMARY
               echo "" >> $GITHUB_STEP_SUMMARY
               echo "## ✅ Target $BUILDTARGET found, proceeding to build." >> $GITHUB_STEP_SUMMARY
@@ -62,6 +62,7 @@ jobs:
               echo "" >> $GITHUB_STEP_SUMMARY
               echo "## ❌ Error: Target $BUILDTARGET not found!" >> $GITHUB_STEP_SUMMARY
               echo "found=false" >> $GITHUB_OUTPUT
+              exit 1
             fi
           fi
     outputs:
@@ -100,13 +101,14 @@ jobs:
       - name: Build
         env:
           PIO_ENV: ${{ inputs.target }}
+          DEBIAN: ${{ inputs.debian }}
         run: |
           bash ./bin/build-native.sh "$PIO_ENV"
           {
             echo "## meshtasticd build"
             echo "| Env | Debian | Arch |"
             echo "| --- | ------ | ---- |"
-            echo "| ${PIO_ENV} | ${{ inputs.debian }} | $(uname -m) |"
+            echo "| ${PIO_ENV} | ${DEBIAN} | $(uname -m) |"
             echo
             echo '```'
             ldd release/meshtasticd_linux_* | head -40
