@@ -1497,6 +1497,15 @@ void NodeDB::installDefaultModuleConfig()
 
     moduleConfig.has_canned_message = true;
 
+#ifdef SEEED_M2100
+    // Single-purpose data logger: poll the RS485 sensor without any client setup.
+    moduleConfig.serial.enabled = true;
+    moduleConfig.serial.mode = meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MODBUS;
+    moduleConfig.serial.baud = meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_9600;
+    moduleConfig.serial.rxd = PIN_SERIAL2_RX;
+    moduleConfig.serial.txd = PIN_SERIAL2_TX;
+#endif
+
 #if USERPREFS_MQTT_ENABLED && !MESHTASTIC_EXCLUDE_MQTT
     moduleConfig.mqtt.enabled = true;
 #endif
