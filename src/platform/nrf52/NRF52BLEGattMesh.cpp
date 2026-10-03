@@ -6,31 +6,15 @@
 #include "concurrency/Lock.h"
 #include "concurrency/LockGuard.h"
 #include "main.h"
-#include <array>
+#include "mesh/BLEGattMeshLinks.h"
 #include <bluefruit.h>
 
 namespace
 {
-// Shared between Bluefruit's callback task and the main task (the pump).
+// Shared between Bluefruit's callback task and the main task (the pump). Callers hold `lock` around
+// every use of `state`, and never log while they do.
 concurrency::Lock lock;
-
-struct Link {
-    bool used;
-    uint16_t conn;
-    bool subscribed;     // wrote the CCCD: a notify target, and the mark of a mesh peer
-    bool everSubscribed; // subscribed at any point, which outlives an unsubscribe
-};
-std::array<Link, 4> links{};
-
-struct RxChunk {
-    uint16_t conn;
-    uint16_t len; // 0 marks a disconnect
-    uint8_t data[BLE_GATT_MESH_MAX_CHUNK];
-};
-std::array<RxChunk, BLE_GATT_MESH_RX_QUEUE_SIZE> rxQueue{};
-size_t rxHead = 0;
-size_t rxTail = 0;
-size_t rxCount = 0;
+BLEGattMeshLinks<4> state;
 bool serviceReady = false;
 
 // BLE_GATT_MESH_SERVICE_UUID / _CHARACTERISTIC_UUID as the SoftDevice wants them: little-endian.
@@ -48,62 +32,9 @@ uint16_t chunkFor(uint16_t conn)
     return mtu > 3 ? mtu - 3 : BLE_GATT_MESH_MIN_CHUNK;
 }
 
-// Callers hold `lock` for everything below this line.
-Link *findLink(uint16_t conn)
-{
-    for (auto &l : links) {
-        if (l.used && l.conn == conn)
-            return &l;
-    }
-    return nullptr;
-}
-
-Link *addLink(uint16_t conn)
-{
-    if (Link *l = findLink(conn))
-        return l;
-    for (auto &l : links) {
-        if (l.used)
-            continue;
-        l.used = true;
-        l.conn = conn;
-        l.subscribed = false;
-        l.everSubscribed = false;
-        return &l;
-    }
-    return nullptr;
-}
-
 // Counted since boot so a dropped write carries its own denominator: the log reaches a host as a
 // sparse LogRecord stream, and one surviving line has to be enough to compute a rate from.
 uint32_t rxArrived = 0;
-uint32_t rxAccepted = 0;
-uint32_t rxDropped = 0;
-
-void pushRx(uint16_t conn, const uint8_t *data, uint16_t len)
-{
-    if (rxCount >= rxQueue.size()) {
-        if (len) {
-            rxDropped++;
-            LOG_WARN("BLE GATT mesh: RX queue full, dropping a %u-byte write from conn %u (accepted %u, dropped %u)", len, conn,
-                     (unsigned)rxAccepted, (unsigned)rxDropped);
-            return;
-        }
-        // A disconnect marker must land or the pump keeps that handle's half-built packets for the
-        // next peer the stack gives it: overwrite the newest chunk, which belongs to a dead link anyway.
-        rxTail = (rxTail + rxQueue.size() - 1) % rxQueue.size();
-        rxCount--;
-    }
-    RxChunk &r = rxQueue[rxTail];
-    r.conn = conn;
-    r.len = len;
-    if (len)
-        memcpy(r.data, data, len);
-    rxTail = (rxTail + 1) % rxQueue.size();
-    rxCount++;
-    if (len)
-        rxAccepted++;
-}
 
 void onWrite(uint16_t conn, BLECharacteristic *, uint8_t *data, uint16_t len)
 {
@@ -112,17 +43,23 @@ void onWrite(uint16_t conn, BLECharacteristic *, uint8_t *data, uint16_t len)
         LOG_WARN("BLE GATT mesh: write from conn %u refused at the door, %u bytes", conn, len);
         return;
     }
+    bool accepted;
+    uint32_t accCount, dropCount;
     {
         concurrency::LockGuard guard(&lock);
-        addLink(conn);
-        pushRx(conn, data, len);
+        state.add(conn);
+        accepted = state.pushRx(conn, data, len);
+        accCount = state.rxAccepted;
+        dropCount = state.rxDropped;
     }
-    // After the lock, never inside it: a LOG_ that takes one deadlocks against this same mutex.
-    // Every arrival is logged because the question this answers is whether writes reach the door at
-    // all - pushRx speaks only when it turns one away.
+    // After the lock, never inside it. Every arrival is logged because the question this answers is
+    // whether writes reach the door at all.
     rxArrived++;
+    if (!accepted)
+        LOG_WARN("BLE GATT mesh: RX queue full, dropping a %u-byte write from conn %u (accepted %u, dropped %u)", len, conn,
+                 (unsigned)accCount, (unsigned)dropCount);
     LOG_DEBUG("BLE GATT mesh: write %u bytes from conn %u (arrived %u, accepted %u, dropped %u)", len, conn, (unsigned)rxArrived,
-              (unsigned)rxAccepted, (unsigned)rxDropped);
+              (unsigned)accCount, (unsigned)dropCount);
     if (bleGattMeshHandler)
         bleGattMeshHandler->wake();
 }
@@ -134,10 +71,7 @@ void onCccd(uint16_t conn, BLECharacteristic *, uint16_t value)
     const bool subscribed = (value & 0x0001) != 0;
     {
         concurrency::LockGuard guard(&lock);
-        if (Link *l = addLink(conn)) {
-            l->subscribed = subscribed;
-            l->everSubscribed |= subscribed;
-        }
+        state.setSubscribed(conn, subscribed);
     }
     LOG_INFO("BLE GATT mesh: conn %u %s (chunk %u)", conn, subscribed ? "subscribed" : "unsubscribed", chunkFor(conn));
     if (bleGattMeshHandler)
@@ -160,9 +94,7 @@ void NRF52BLEGattMesh::setupService()
     meshPeerCharacteristic.begin();
     {
         concurrency::LockGuard guard(&lock);
-        for (auto &l : links)
-            l.used = false;
-        rxHead = rxTail = rxCount = 0;
+        state.reset();
         serviceReady = true;
     }
     LOG_INFO("BLE GATT mesh: mesh-peer service registered");
@@ -170,7 +102,7 @@ void NRF52BLEGattMesh::setupService()
 
 bool NRF52BLEGattMesh::addToScanResponse()
 {
-    if (!(config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_BLE_GATT_PEER))
+    if (!protocolEnabled())
         return false;
     // 18 of the scan response's 31 bytes; the name that follows is shortened to what is left.
     Bluefruit.ScanResponse.addService(meshPeerService);
@@ -184,8 +116,7 @@ void NRF52BLEGattMesh::rearmAdvertising()
     // link is left, so with the phone and a peer sharing the radio the free slot would otherwise go
     // unadvertised. Bluefruit's own connect/disconnect handling ran synchronously before the deferred
     // callbacks this is reached from.
-    if ((config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_BLE_GATT_PEER) &&
-        Bluefruit.Periph.connected() < 2 && !Bluefruit.Advertising.isRunning())
+    if (protocolEnabled() && Bluefruit.Periph.connected() < 2 && !Bluefruit.Advertising.isRunning())
         Bluefruit.Advertising.start(0);
 }
 
@@ -193,21 +124,17 @@ void NRF52BLEGattMesh::onConnect(uint16_t conn)
 {
     {
         concurrency::LockGuard guard(&lock);
-        addLink(conn);
+        state.add(conn);
     }
     rearmAdvertising();
 }
 
 bool NRF52BLEGattMesh::onDisconnect(uint16_t conn)
 {
-    bool subscribed = false;
+    bool subscribed;
     {
         concurrency::LockGuard guard(&lock);
-        if (Link *l = findLink(conn)) {
-            subscribed = l->everSubscribed;
-            l->used = false;
-            pushRx(conn, nullptr, 0); // the pump drops its half-built packets
-        }
+        subscribed = state.remove(conn);
     }
     LOG_INFO("BLE GATT mesh: conn %u disconnected (%s)", conn, subscribed ? "was a mesh peer" : "never subscribed");
     if (bleGattMeshHandler)
@@ -245,17 +172,9 @@ bool NRF52BLEGattMesh::platformReady()
 size_t NRF52BLEGattMesh::platformPeers(BLEGattMeshPeer *out, size_t cap)
 {
     concurrency::LockGuard guard(&lock);
-    size_t n = 0;
-    for (const auto &l : links) {
-        if (!l.used || !l.subscribed)
-            continue;
-        if (n >= cap)
-            break;
-        out[n].id = l.conn;
-        out[n].chunk = chunkFor(l.conn);
-        out[n].outbound = false; // every link here was dialled by the peer
-        n++;
-    }
+    const size_t n = state.subscribed(out, cap);
+    for (size_t i = 0; i < n; i++)
+        out[i].chunk = chunkFor(out[i].id);
     return n;
 }
 
@@ -271,16 +190,7 @@ bool NRF52BLEGattMesh::platformNotify(BLEGattPeerId peer, const uint8_t *data, s
 bool NRF52BLEGattMesh::platformPollInbound(BLEGattPeerId &peer, uint8_t *buf, size_t cap, size_t &len)
 {
     concurrency::LockGuard guard(&lock);
-    if (rxCount == 0)
-        return false;
-    const RxChunk &r = rxQueue[rxHead];
-    peer = r.conn;
-    len = std::min<size_t>(r.len, cap);
-    if (len)
-        memcpy(buf, r.data, len);
-    rxHead = (rxHead + 1) % rxQueue.size();
-    rxCount--;
-    return true;
+    return state.popRx(peer, buf, cap, len);
 }
 
 #endif // HAS_BLE_GATT_MESH && ARCH_NRF52

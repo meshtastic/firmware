@@ -14,11 +14,6 @@ class BLEAdvertisementData;
 #define BLE_GATT_MESH_ESP32_LINKS 2
 #endif
 
-// Received writes waiting for the main task; each holds one ATT value, so up to 512 bytes.
-#ifndef BLE_GATT_MESH_RX_QUEUE_SIZE
-#define BLE_GATT_MESH_RX_QUEUE_SIZE 6
-#endif
-
 /**
  * The mesh-peer GATT service on NimBLE. One legacy connectable advertisement serves the phone and the
  * mesh peers alike, with the service UUID in its scan response; a link becomes a mesh peer when it
