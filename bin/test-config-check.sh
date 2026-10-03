@@ -407,13 +407,47 @@ echo
 echo "joystick buttons:"
 # Keyed by action rather than by button so that one action can list several codes.
 # The clean case is the regression guard on the list form staying accepted.
+# Both fixtures name a gamepad that is not attached to the test host, which the device probe
+# reports as one machine-dependent warning on top of whatever the fixture plants.
 assert "several buttons bound to one action" 0 joystick-buttons.yaml check \
-	"Result: 0 errors, 0 warnings"
+	"Result: 0 errors, 1 warning" \
+	"does not exist on this machine"
 assert "joystick mappings that do nothing" 0 joystick-buttons-bad.yaml check \
 	"'fire' is not a recognised action" \
 	"'BTN_SOUTH' is not an evdev button code" \
 	"button 0x121 is mapped to both 'select' and 'cancel'" \
-	"Result: 0 errors, 3 warnings"
+	"Result: 0 errors, 4 warnings"
+
+echo
+echo "displays, touchscreens and input devices:"
+assert "a complete SPI panel is clean" 0 display-spi-ok.yaml check \
+	"Result: 0 errors, 0 warnings"
+assert "Display.Rotate given a number" 0 display-rotate-integer.yaml check \
+	"Display.Rotate is not a true/false value" \
+	"The turn itself is Display.OffsetRotate"
+assert "Touchscreen.Rotate given a boolean" 0 touchscreen-rotate-boolean.yaml check \
+	"Touchscreen.Rotate is not a whole number" \
+	"not true/false"
+assert "unknown panel name" 1 display-panel-unknown.yaml check \
+	"Display.Panel 'ST7798' is not a known panel" \
+	"Known panels:"
+assert "wrong-case panel name names the spelling" 1 display-panel-wrong-case.yaml check \
+	"did you mean 'ST7789'?"
+assert "SPI panel with no size and no DC pin" 1 display-spi-incomplete.yaml check \
+	"Display.Width and Display.Height must both be set" \
+	"Display.DC is not set"
+assert "malformed spidev name" 0 display-spidev-malformed.yaml check \
+	"is not of the form spidevB.C"
+assert "I2C touch controller without an address" 0 touchscreen-i2c-no-address.yaml check \
+	"configured as an SPI device"
+assert "wrong-case touch module names the spelling" 0 touchscreen-module-wrong-case.yaml check \
+	"did you mean 'GT911'?"
+assert "keyboard path that does not exist" 0 input-device-missing.yaml check \
+	"does not exist on this machine"
+assert "keyboard path that is not an evdev node" 0 input-device-not-evdev.yaml check \
+	"is not an evdev node"
+assert "pointer path with an X11 panel" 0 input-pointer-x11.yaml check \
+	"Input.PointerDevice is not passed to the X11 display driver"
 
 echo
 echo "CH341 USB-SPI adapters:"

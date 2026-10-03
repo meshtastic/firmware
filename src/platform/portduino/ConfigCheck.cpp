@@ -4,6 +4,9 @@
 
 #include "configuration.h"
 
+#include "ConfigCheckDisplay.h"
+#include "ConfigCheckFinding.h"
+#include "ConfigCheckInput.h"
 #include "PortduinoGlue.h"
 
 #include "yaml-cpp/eventhandler.h"
@@ -218,14 +221,11 @@ const std::map<std::string, std::set<std::string>> &keyOwners()
 // Findings
 // ---------------------------------------------------------------------------
 
-enum Level { kInfo, kWarn, kError };
-
-struct Finding {
-    Level level;
-    std::string file;
-    int line; // 1-based; 0 when the finding is not tied to a line
-    std::string message;
-};
+using configcheck::Finding;
+using configcheck::kError;
+using configcheck::kInfo;
+using configcheck::kWarn;
+using configcheck::Level;
 
 const char *levelName(Level l)
 {
@@ -524,7 +524,8 @@ enum ValueType { kBool, kInt, kFloat, kString, kIntList, kBoolOrFloat, kIntOrStr
 
 struct ValueSpec {
     ValueType type;
-    bool fatal; // read without a default: a bad value stops meshtasticd outright
+    bool fatal;            // read without a default: a bad value stops meshtasticd outright
+    const char *hint = ""; // appended to the finding, for keys easily mistaken for a neighbour
 };
 
 const std::map<std::string, ValueSpec> &valueSpecs()
@@ -565,17 +566,25 @@ const std::map<std::string, ValueSpec> &valueSpecs()
         {"Display.Width", {kInt, false}},
         {"Display.Height", {kInt, false}},
         {"Display.Invert", {kBool, false}},
-        {"Display.Rotate", {kInt, false}},
+        {"Display.Rotate",
+         {kBool, false,
+          "Display.Rotate is true or false: it swaps Width and Height for a panel mounted the other way round. The turn "
+          "itself is Display.OffsetRotate"}},
         {"Display.OffsetX", {kInt, false}},
         {"Display.OffsetY", {kInt, false}},
-        {"Display.OffsetRotate", {kInt, false}},
+        {"Display.OffsetRotate",
+         {kInt, false,
+          "Display.OffsetRotate is a number of quarter turns, 0 to 3 (1 is 90 degrees). The true/false key is Display.Rotate"}},
         {"Display.RGBOrder", {kBool, false}},
         {"Display.BacklightInvert", {kBool, false}},
         {"Touchscreen.Module", {kString, false}},
         {"Touchscreen.spidev", {kString, false}},
         {"Touchscreen.BusFrequency", {kInt, false}},
         {"Touchscreen.I2CAddr", {kInt, false}},
-        {"Touchscreen.Rotate", {kBool, false}},
+        {"Touchscreen.Rotate",
+         {kInt, false,
+          "Touchscreen.Rotate is a number from 0 to 7 (4 to 7 are upside down), not true/false. It is separate from "
+          "Display.Rotate, which is the true/false key"}},
         {"Input.KeyboardDevice", {kString, false}},
         {"Input.PointerDevice", {kString, false}},
         {"Input.JoystickDevice", {kString, false}},
@@ -702,7 +711,8 @@ void checkValueType(const std::string &file, const std::string &path, const YAML
     else
         findings.push_back({kWarn, file, lineOf(value),
                             path + " is not " + typeName(spec->second.type) +
-                                ", so it is silently replaced by the default and the setting does nothing"});
+                                ", so it is silently replaced by the default and the setting does nothing" +
+                                (*spec->second.hint ? std::string(". ") + spec->second.hint : std::string())});
 }
 
 // The spelling the earlier LR2021 branches used, read only when IRQ_DIO_NUM is absent. Held as a
@@ -910,6 +920,10 @@ void checkSection(const std::string &file, const std::string &section, const YAM
                 findings.push_back({kWarn, file, lineOf(entry.first),
                                     "Lora.LR2021_IRQ_DIO_NUM is the older spelling of Lora.IRQ_DIO_NUM and is only read "
                                     "when that key is absent, so this line does nothing"});
+        } else if (section == "Display" && key == "Panel") {
+            configcheck::checkDisplayPanelName(file, lineOf(value), value.as<std::string>(""), findings);
+        } else if (section == "Touchscreen" && key == "Module") {
+            configcheck::checkTouchscreenModuleName(file, lineOf(value), value.as<std::string>(""), findings);
         } else if (section == "Display" && key == "HUB75") {
             if (value.IsMap())
                 for (const auto &hub : value) {
@@ -1119,6 +1133,8 @@ void checkMergedConfig(const PathIndex &paths, std::vector<Finding> &findings)
     const std::string merged = "(merged configuration)";
 
     checkPinValues(findings);
+    configcheck::checkInputDevices(findings);
+    configcheck::checkDisplay(findings);
 
     // portduinoSetup() skips initGPIOPin() for every Lora pin when spidev is ch341, so a
     // gpiochip or line mapping written next to one is read, stored, and never used.
