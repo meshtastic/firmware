@@ -112,7 +112,10 @@ class BLEGattMeshHandler : private concurrency::OSThread, public MeshTransportBa
     virtual void start() = 0;
     virtual void stop() = 0;
 
-    bool isEnabled() const override
+    bool isEnabled() const override { return protocolEnabled(); }
+
+    /// The BLE_GATT_PEER bit, for the platform's static hooks that run without an instance.
+    static bool protocolEnabled()
     {
         return config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_BLE_GATT_PEER;
     }
