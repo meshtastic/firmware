@@ -1,6 +1,12 @@
 name: Build One Meshtasticd
 
 on:
+  # A workflow is only dispatchable from the default branch, so this test branch also builds on push.
+  push:
+    branches: [device-ui-linux-input-fix]
+    paths:
+      - .github/workflows/build_one_meshtasticd.yml
+      - platformio.ini
   workflow_dispatch:
     inputs:
       pio_env:
@@ -30,9 +36,9 @@ permissions: read-all
 
 jobs:
   build:
-    runs-on: ${{ inputs.runner }}
+    runs-on: ${{ inputs.runner || 'ubuntu-24.04-arm' }}
     container:
-      image: debian:${{ inputs.debian }}
+      image: debian:${{ inputs.debian || 'trixie' }}
     env:
       DEBIAN_FRONTEND: noninteractive
       PIP_ROOT_USER_ACTION: ignore
@@ -59,14 +65,14 @@ jobs:
 
       - name: Build
         env:
-          PIO_ENV: ${{ inputs.pio_env }}
+          PIO_ENV: ${{ inputs.pio_env || 'native-tft' }}
         run: |
           bash ./bin/build-native.sh "$PIO_ENV"
           {
             echo "## meshtasticd build"
             echo "| Env | Debian | Runner | Arch |"
             echo "| --- | ------ | ------ | ---- |"
-            echo "| ${PIO_ENV} | ${{ inputs.debian }} | ${{ inputs.runner }} | $(uname -m) |"
+            echo "| ${PIO_ENV} | ${{ inputs.debian || 'trixie' }} | ${{ inputs.runner || 'ubuntu-24.04-arm' }} | $(uname -m) |"
             echo
             echo '```'
             ldd release/meshtasticd_linux_* | head -40
@@ -75,6 +81,6 @@ jobs:
 
       - uses: actions/upload-artifact@v7
         with:
-          name: meshtasticd-${{ inputs.pio_env }}-${{ inputs.debian }}-${{ runner.arch }}
+          name: meshtasticd-${{ inputs.pio_env || 'native-tft' }}-${{ inputs.debian || 'trixie' }}-${{ runner.arch }}
           overwrite: true
           path: release/meshtasticd_linux_*
