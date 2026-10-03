@@ -58,6 +58,8 @@ class PositionModule : public ProtobufModule<meshtastic_Position>, private concu
     // still honors the cadence.
     static bool shouldSendPositionToPhone(bool hasValidPosition, bool phoneQueueEmpty, bool everSentToPhone, uint32_t nowMs,
                                           uint32_t lastSentMs, uint32_t intervalMs);
+    // Position.ground_speed is km/h; TAKPacketV2.speed is cm/s. Rounds to nearest, saturates at UINT32_MAX.
+    static uint32_t groundSpeedKmhToCmPerSec(uint32_t kmh);
 
   protected:
     /** Called to handle a particular incoming message

@@ -106,6 +106,35 @@ static void test_sendToPhone_sentAtTimeZeroStillHoldsCadence()
     TEST_ASSERT_TRUE(PositionModule::shouldSendPositionToPhone(true, true, true, 60000U, 0U, 60000U));
 }
 
+// groundSpeedKmhToCmPerSec() in src/modules/PositionModule.cpp feeds TAKPacketV2.speed in allocAtakPli().
+// Position.ground_speed is km/h (GPS.cpp stores reader.speed.kmph()) and TAKPacketV2.speed is cm/s
+// (atak.proto; TAKPacket-SDK divides by 100 to write CoT <track speed> in m/s). Guards against the raw
+// km/h value landing in the cm/s field again, which a cm/s decoder reads as ~28x too slow.
+
+static void test_groundSpeedKmhToCmPerSec_zeroStaysZero()
+{
+    TEST_ASSERT_EQUAL_UINT32(0U, PositionModule::groundSpeedKmhToCmPerSec(0U));
+}
+
+static void test_groundSpeedKmhToCmPerSec_exactMultiples()
+{
+    TEST_ASSERT_EQUAL_UINT32(250U, PositionModule::groundSpeedKmhToCmPerSec(9U));
+    TEST_ASSERT_EQUAL_UINT32(1000U, PositionModule::groundSpeedKmhToCmPerSec(36U));
+}
+
+// 1 km/h is 27.78 cm/s and 100 km/h is 2777.78 cm/s: round to nearest, not truncate.
+static void test_groundSpeedKmhToCmPerSec_roundsToNearest()
+{
+    TEST_ASSERT_EQUAL_UINT32(28U, PositionModule::groundSpeedKmhToCmPerSec(1U));
+    TEST_ASSERT_EQUAL_UINT32(2778U, PositionModule::groundSpeedKmhToCmPerSec(100U));
+}
+
+// kmh * 250 overflows 32 bits above ~17M km/h; the result saturates instead of wrapping.
+static void test_groundSpeedKmhToCmPerSec_saturatesAtMax()
+{
+    TEST_ASSERT_EQUAL_UINT32(UINT32_MAX, PositionModule::groundSpeedKmhToCmPerSec(UINT32_MAX));
+}
+
 void setUp(void) {}
 
 void tearDown(void) {}
@@ -131,6 +160,10 @@ void setup()
     RUN_TEST(test_sendToPhone_requiresIdlePhoneQueue);
     RUN_TEST(test_sendToPhone_survivesMillisRollover);
     RUN_TEST(test_sendToPhone_sentAtTimeZeroStillHoldsCadence);
+    RUN_TEST(test_groundSpeedKmhToCmPerSec_zeroStaysZero);
+    RUN_TEST(test_groundSpeedKmhToCmPerSec_exactMultiples);
+    RUN_TEST(test_groundSpeedKmhToCmPerSec_roundsToNearest);
+    RUN_TEST(test_groundSpeedKmhToCmPerSec_saturatesAtMax);
     exit(UNITY_END());
 }
 
