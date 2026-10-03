@@ -18,6 +18,13 @@
 // goes quiet.
 static constexpr uint32_t HEADER_TIMEOUT_MS = 3000;
 static constexpr uint32_t BODY_TIMEOUT_MS = 5000;
+// A request body still missing when the session window closes gets at least this long, so a PUT
+// that lands right at the end of a session is not dropped over a few milliseconds of lag.
+static constexpr uint32_t BODY_MIN_WAIT_MS = 500;
+// Input that keeps arriving is read for at most this long past a deadline. Reading what is already
+// buffered takes milliseconds (the W5x00 holds 2 KB per socket), but without a cap a client feeding
+// one byte per poll could stretch a request by MAX_HEADER_LINES * MAX_LINE_LEN polls, about 8 s.
+static constexpr uint32_t CONSUME_GRACE_MS = 500;
 static constexpr size_t MAX_LINE_LEN = 256;
 static constexpr size_t MAX_HEADER_LINES = 32;
 static constexpr const char *PROTOBUF_SCHEMA =
@@ -43,20 +50,43 @@ struct Request {
     long contentLength = 0;
 };
 
+// Whichever of two millis() deadlines comes first, safe across the 32-bit wrap.
+static uint32_t earlierDeadline(uint32_t a, uint32_t b)
+{
+    return (int32_t)(a - b) < 0 ? a : b;
+}
+
+static bool deadlinePassed(uint32_t deadlineMs)
+{
+    return (int32_t)(millis() - deadlineMs) >= 0;
+}
+
 // Read up to one CRLF-terminated line; returns false on timeout or oversize.
+// The deadline bounds how long we wait for more bytes; input that has already arrived is still read
+// for up to CONSUME_GRACE_MS after it, so a request that is fully buffered is never dropped just
+// because its window closed, and one that keeps trickling in cannot hold the session open.
 static bool readLine(IStreamReadWrite &client, String &out, uint32_t deadlineMs)
 {
     out = "";
-    while ((int32_t)(millis() - deadlineMs) < 0) {
+    while (true) {
         if (!client.connected())
             return false;
         if (!client.available()) {
+            if (deadlinePassed(deadlineMs))
+                return false;
             delay(1);
             continue;
         }
+        if (deadlinePassed(deadlineMs + CONSUME_GRACE_MS))
+            return false;
         int c = client.read();
-        if (c < 0)
+        if (c < 0) {
+            // available() can count raw bytes that do not yet decode (a partial TLS record).
+            if (deadlinePassed(deadlineMs))
+                return false;
+            delay(1);
             continue;
+        }
         if (c == '\n')
             return true;
         if (c == '\r')
@@ -65,7 +95,6 @@ static bool readLine(IStreamReadWrite &client, String &out, uint32_t deadlineMs)
             return false;
         out += (char)c;
     }
-    return false;
 }
 
 static bool parseRequest(IStreamReadWrite &client, Request &req, uint32_t deadlineMs)
@@ -224,7 +253,7 @@ static bool handleFromRadio(IStreamReadWrite &client, const Request &req)
 
 // Returns true if the connection may stay open (keep-alive), false if the
 // handler emitted an error response with Connection: close framing.
-static bool handleToRadio(IStreamReadWrite &client, const Request &req)
+static bool handleToRadio(IStreamReadWrite &client, const Request &req, uint32_t sessionDeadlineMs)
 {
     if (req.method == "OPTIONS") {
         sendPreflight(client, "PUT, OPTIONS");
@@ -242,19 +271,31 @@ static bool handleToRadio(IStreamReadWrite &client, const Request &req)
 
     uint8_t buf[MAX_TO_FROM_RADIO_SIZE];
     size_t got = 0;
-    const uint32_t deadline = millis() + BODY_TIMEOUT_MS;
+    const uint32_t now = millis();
+    // Stay inside the session window (see handleApiClient), but never wait less than BODY_MIN_WAIT_MS.
+    uint32_t deadline = sessionDeadlineMs;
+    if ((int32_t)(deadline - (now + BODY_MIN_WAIT_MS)) < 0)
+        deadline = now + BODY_MIN_WAIT_MS;
+    deadline = earlierDeadline(deadline, now + BODY_TIMEOUT_MS);
     while (got < (size_t)req.contentLength) {
         if (!client.connected())
             break;
-        if ((int32_t)(millis() - deadline) >= 0)
-            break;
         if (!client.available()) {
+            if (deadlinePassed(deadline))
+                break;
             delay(1);
             continue;
         }
+        if (deadlinePassed(deadline + CONSUME_GRACE_MS))
+            break;
         int n = client.read(buf + got, (size_t)req.contentLength - got);
-        if (n > 0)
+        if (n > 0) {
             got += n;
+        } else {
+            if (deadlinePassed(deadline))
+                break;
+            delay(1);
+        }
     }
     if (got != (size_t)req.contentLength) {
         LOG_WARN("ETH API: toradio short read (%u/%ld)", (unsigned)got, req.contentLength);
@@ -286,23 +327,23 @@ void handleApiClient(IStreamReadWrite &client)
     // framing + Connection: keep-alive so the loop can read the next request
     // on the same TLS session.
     //
-    // MAX_REQUESTS_PER_SESSION caps the loop because while we're inside it
-    // the parent OSThread is not returning to mainController, and the
-    // RP2350 hardware watchdog (8 s default in arduino-pico) only gets
-    // pet by the main loop. A client.meshtastic.org sync produces ~80
-    // back-to-back requests over a single TLS session - well past the
-    // watchdog deadline. yield() between requests lets the rest of core0
-    // (Periodic ticks, NTP, MQTT, LoRa packet pump) run + pets the
-    // watchdog; the cap puts a hard ceiling so a chatty client can never
-    // monopolize the server indefinitely. After the cap the client just
-    // re-handshakes once and continues, which is cheap (one ECDSA cost
-    // every 64 requests is amortized well below the per-request
-    // handshake we had before keep-alive).
+    // MAX_REQUESTS_PER_SESSION and MAX_SESSION_MS bound the loop because, while we are inside it,
+    // the parent OSThread does not return to mainController. The watchdog is fed below after every
+    // request, so the board stays up, but nothing else on core0 runs: MQTT, the radio, the router.
+    // (yield() does not help: on RP2350 it is a bare taskYIELD() and does not run the OSThreads.)
+    // A client.meshtastic.org sync produces ~80 back-to-back requests on one session, and a client
+    // that keeps polling /api/v1/fromradio can hold a session for minutes. On a pico2_w5500_e22 that
+    // was long enough for the 15 s MQTT keep-alive to lapse and for the broker to drop the node.
+    // MAX_SESSION_MS bounds the time rather than the request count, and every wait below (next
+    // request, request body) ends at the session deadline, so control is back in loop() within a
+    // few seconds. After either cap the client just re-handshakes once and carries on.
     static constexpr int MAX_REQUESTS_PER_SESSION = 64;
+    static constexpr uint32_t MAX_SESSION_MS = 3000;
 
+    const uint32_t sessionDeadline = millis() + MAX_SESSION_MS;
     int requestsServed = 0;
-    while (client.connected() && requestsServed < MAX_REQUESTS_PER_SESSION) {
-        const uint32_t deadline = millis() + HEADER_TIMEOUT_MS;
+    while (client.connected() && requestsServed < MAX_REQUESTS_PER_SESSION && !deadlinePassed(sessionDeadline)) {
+        const uint32_t deadline = earlierDeadline(millis() + HEADER_TIMEOUT_MS, sessionDeadline);
         Request req;
         if (!parseRequest(client, req, deadline)) {
             if (requestsServed == 0)
@@ -317,7 +358,7 @@ void handleApiClient(IStreamReadWrite &client)
         if (req.path == "/api/v1/fromradio") {
             keepAlive = handleFromRadio(client, req);
         } else if (req.path == "/api/v1/toradio") {
-            keepAlive = handleToRadio(client, req);
+            keepAlive = handleToRadio(client, req, sessionDeadline);
         } else {
             sendError(client, 404, "Not Found", "unknown endpoint");
             return; // errors are terminal - Connection: close framing
