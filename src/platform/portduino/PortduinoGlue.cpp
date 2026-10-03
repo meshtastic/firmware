@@ -271,8 +271,7 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state)
 }
 
 // A kernel SPI transfer is capped by the spidev module's `bufsiz` parameter (4096 by default).
-// LovyanGFX pushes the framebuffer in large chunks, so a display bigger than that budget fails
-// deep inside the driver with a bare -EMSGSIZE. Check up front so the user gets told what to fix.
+// A write larger than that fails deep inside the driver with a bare -EMSGSIZE, so check up front.
 static void checkSpidevBufsiz()
 {
     if (portduino_config.display_spi_dev == "" || portduino_config.displayWidth == 0 || portduino_config.displayHeight == 0) {
@@ -288,8 +287,6 @@ static void checkSpidevBufsiz()
         break;
     }
 
-    const long required = (long)portduino_config.displayWidth * portduino_config.displayHeight / 2 * 3;
-
     std::ifstream bufsizFile("/sys/module/spidev/parameters/bufsiz");
     long bufsiz = 0;
     if (!bufsizFile.is_open() || !(bufsizFile >> bufsiz)) {
@@ -297,13 +294,11 @@ static void checkSpidevBufsiz()
         return;
     }
 
-    if (bufsiz < required) {
+    if (bufsiz < kSpidevMinBufsiz) {
         std::cerr << "SPI display " << portduino_config.displayWidth << "x" << portduino_config.displayHeight
-                  << " needs a spidev buffer of at least " << required << " bytes, but "
+                  << " needs a spidev buffer of at least " << kSpidevMinBufsiz << " bytes, but "
                   << "/sys/module/spidev/parameters/bufsiz is " << bufsiz << "." << std::endl;
-        std::cerr << "Add 'spidev.bufsiz=" << required << "' to your kernel command line "
-                  << "(/boot/firmware/cmdline.txt on Raspberry Pi OS) and reboot." << std::endl;
-        std::cerr << "Or echo that value into /etc/modprobe.d/spidev.conf and reload the spidev module" << std::endl;
+        std::cerr << spidevBufsizAdvice(kSpidevMinBufsiz) << std::endl;
         exit(EXIT_FAILURE);
     }
 }

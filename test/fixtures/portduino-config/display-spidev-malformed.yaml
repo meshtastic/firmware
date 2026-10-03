@@ -1,0 +1,9 @@
+# FAULT: spidev is not spidevB.C, so the SPI bus number silently stays 0.
+Lora:
+  Module: sim
+Display:
+  Panel: ST7789
+  Width: 320
+  Height: 240
+  DC: 25
+  spidev: spi0
