@@ -1,22 +1,20 @@
 name: Build One Meshtasticd
 
 on:
-  # A workflow is only dispatchable from the default branch, so this test branch also builds on push.
-  push:
-    branches: [device-ui-linux-input-fix]
-    paths:
-      - .github/workflows/build_one_meshtasticd.yml
-      - platformio.ini
   workflow_dispatch:
     inputs:
-      pio_env:
+      # trunk-ignore(checkov/CKV_GHA_7)
+      target:
+        type: string
+        required: false
+        description: Choose the native target, e.g. native-tft. If blank, will list available targets.
+      arch:
         type: choice
         options:
-          - native-tft
-          - native-fb
-          - native
-        default: native-tft
-        description: PlatformIO environment to build.
+          - aarch64
+          - x86_64
+        default: aarch64
+        description: Architecture to build for. aarch64 suits Pi 3/4/5 on a 64-bit OS.
       debian:
         type: choice
         options:
@@ -24,21 +22,56 @@ on:
           - bookworm
         default: trixie
         description: Debian release to build on. Match the target's /etc/os-release, since the binary links the build host's glibc.
-      runner:
-        type: choice
-        options:
-          - ubuntu-24.04-arm
-          - ubuntu-24.04
-        default: ubuntu-24.04-arm
-        description: ubuntu-24.04-arm builds aarch64 (Pi 3/4/5, 64-bit OS); ubuntu-24.04 builds x86_64.
 
 permissions: read-all
 
 jobs:
+  find-targets:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: List targets
+        id: jsonStep
+        env:
+          BUILDTARGET: ${{ inputs.target }}
+          MATRIXARCH: ${{ inputs.arch }}
+        run: |
+          TARGETS=$(grep -rhoE '^\[env:native(-tft|-fb|-tft-debug)?\]' platformio.ini variants | sed -E 's/\[env:(.*)\]/\1/' | sort -u)
+          if [ "$BUILDTARGET" = "" ]; then
+            echo "Name: $GITHUB_REF_NAME" >> $GITHUB_STEP_SUMMARY
+            echo "Arch: $MATRIXARCH" >> $GITHUB_STEP_SUMMARY
+            echo "Ref: $GITHUB_REF" >> $GITHUB_STEP_SUMMARY
+            echo "## 🎯 The following native targets are available to build:" >> $GITHUB_STEP_SUMMARY
+            echo "| Platform | Board |" >> $GITHUB_STEP_SUMMARY
+            echo "| -------- | ----- |" >> $GITHUB_STEP_SUMMARY
+            for t in $TARGETS; do echo "| native | $t |" >> $GITHUB_STEP_SUMMARY; done
+            echo "found=false" >> $GITHUB_OUTPUT
+          else
+            echo "We build this one:" >> $GITHUB_STEP_SUMMARY
+            echo "| Platform | Board |" >> $GITHUB_STEP_SUMMARY
+            echo "| -------- | ----- |" >> $GITHUB_STEP_SUMMARY
+            if echo "$TARGETS" | grep -qx -- "$BUILDTARGET"; then
+              echo "| native | $BUILDTARGET |" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "## ✅ Target $BUILDTARGET found, proceeding to build." >> $GITHUB_STEP_SUMMARY
+              echo "You may need to refresh this page to make the built binary appear below." >> $GITHUB_STEP_SUMMARY
+              echo "found=true" >> $GITHUB_OUTPUT
+            else
+              echo "| native | $BUILDTARGET |" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "## ❌ Error: Target $BUILDTARGET not found!" >> $GITHUB_STEP_SUMMARY
+              echo "found=false" >> $GITHUB_OUTPUT
+            fi
+          fi
+    outputs:
+      found: ${{ steps.jsonStep.outputs.found }}
+
   build:
-    runs-on: ${{ inputs.runner || 'ubuntu-24.04-arm' }}
+    if: ${{ inputs.target != '' && needs.find-targets.outputs.found == 'true' }}
+    needs: find-targets
+    runs-on: ${{ inputs.arch == 'x86_64' && 'ubuntu-24.04' || 'ubuntu-24.04-arm' }}
     container:
-      image: debian:${{ inputs.debian || 'trixie' }}
+      image: debian:${{ inputs.debian }}
     env:
       DEBIAN_FRONTEND: noninteractive
       PIP_ROOT_USER_ACTION: ignore
@@ -65,14 +98,14 @@ jobs:
 
       - name: Build
         env:
-          PIO_ENV: ${{ inputs.pio_env || 'native-tft' }}
+          PIO_ENV: ${{ inputs.target }}
         run: |
           bash ./bin/build-native.sh "$PIO_ENV"
           {
             echo "## meshtasticd build"
-            echo "| Env | Debian | Runner | Arch |"
-            echo "| --- | ------ | ------ | ---- |"
-            echo "| ${PIO_ENV} | ${{ inputs.debian || 'trixie' }} | ${{ inputs.runner || 'ubuntu-24.04-arm' }} | $(uname -m) |"
+            echo "| Env | Debian | Arch |"
+            echo "| --- | ------ | ---- |"
+            echo "| ${PIO_ENV} | ${{ inputs.debian }} | $(uname -m) |"
             echo
             echo '```'
             ldd release/meshtasticd_linux_* | head -40
@@ -81,6 +114,6 @@ jobs:
 
       - uses: actions/upload-artifact@v7
         with:
-          name: meshtasticd-${{ inputs.pio_env || 'native-tft' }}-${{ inputs.debian || 'trixie' }}-${{ runner.arch }}
+          name: meshtasticd-${{ inputs.target }}-${{ inputs.debian }}-${{ runner.arch }}
           overwrite: true
           path: release/meshtasticd_linux_*
