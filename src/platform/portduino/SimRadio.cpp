@@ -1,6 +1,9 @@
 #include "SimRadio.h"
 #include "MeshService.h"
 #include "Router.h"
+#include "Throttle.h"
+#include "UptimeClock.h"
+#include "mesh/RadioTxHook.h"
 
 SimRadio::SimRadio() : NotifiedWorkerThread("SimRadio")
 {
@@ -96,6 +99,8 @@ void SimRadio::completeSending()
         if (!isFromUs(p))
             txRelay++;
         printPacket("Completed sending", p);
+        RadioTxHooks::postTransmit(this, p);
+        RadioTxHooks::packetReleased(this, p);
 
         // We are done sending that packet, release it
         packetPool.release(p);
@@ -136,8 +141,10 @@ bool SimRadio::isChannelActive()
 bool SimRadio::cancelSending(NodeNum from, PacketId id)
 {
     auto p = txQueue.remove(from, id);
-    if (p)
+    if (p) {
+        RadioTxHooks::packetReleased(this, p);
         packetPool.release(p); // free the packet we just removed
+    }
 
     bool result = (p != NULL);
     LOG_DEBUG("cancelSending id=0x%08x, removed=%d", id, result);
@@ -178,12 +185,31 @@ void SimRadio::onNotify(uint32_t notification)
                 // LOG_DEBUG("Currently Rx/Tx-ing: set random delay");
                 setTransmitDelay(); // currently Rx/Tx-ing: reset random delay
             } else {
-                if (isChannelActive()) { // check if there is currently a LoRa packet on the channel
+                meshtastic_MeshPacket *txp = txQueue.getFront();
+                assert(txp);
+                const uint32_t now = Time::getMillis();
+                if (txp->tx_after && !Throttle::deadlinePassedAt(now, txp->tx_after)) {
+                    notifyLater(txp->tx_after - now, TRANSMIT_DELAY_COMPLETED, true);
+                } else if (const RadioTxHook::PreTxAction action = RadioTxHooks::beforeTransmit(this, txp);
+                           action == RadioTxHook::PRETX_DROP) {
+                    meshtastic_MeshPacket *bad = txQueue.dequeue();
+                    RadioTxHooks::packetReleased(this, bad);
+                    packetPool.release(bad);
+                    setTransmitDelay();
+                } else if (action == RadioTxHook::PRETX_DEFER) {
+                    const uint32_t nowAfter = Time::getMillis();
+                    if (txp->tx_after && !Throttle::deadlinePassedAt(nowAfter, txp->tx_after)) {
+                        uint32_t remaining = txp->tx_after - nowAfter;
+                        notifyLater(remaining, TRANSMIT_DELAY_COMPLETED, true);
+                    } else {
+                        setTransmitDelay();
+                    }
+                } else if (isChannelActive()) { // check if there is currently a LoRa packet on the channel
                     // LOG_DEBUG("Channel is active: set random delay");
                     setTransmitDelay(); // reset random delay
                 } else {
                     // Send any outgoing packets we have ready
-                    meshtastic_MeshPacket *txp = txQueue.dequeue();
+                    txp = txQueue.dequeue();
                     assert(txp);
                     startSend(txp);
                     // Packet has been sent, count it toward our TX airtime utilization.
