@@ -198,7 +198,7 @@ void test_the_advertisement_ceiling_is_below_the_lora_ceiling(void)
     // nRF52 SoftDevice caps the advertising data and the scan buffer at 255 in either direction.
     // Everything above this rides LoRa only, counted by txDroppedTooLarge.
     // relay_node costs 3 of the budget (field 19, so a two-byte tag); priority costs nothing,
-    // because strippedForAir drops it.
+    // because stripForTransmit drops it.
     TEST_ASSERT_EQUAL_size_t(216, fits);
     TEST_ASSERT_LESS_THAN_size_t_MESSAGE(MAX_RADIO_PAYLOAD_LEN, fits, "BLE carries less than LoRa");
 }
@@ -477,97 +477,8 @@ void test_a_relayed_packet_is_re_advertised(void)
     TEST_ASSERT_TRUE_MESSAGE(h.onSend(&p), "relay must not be refused");
 }
 
-void test_ingress_accepts_a_well_formed_frame(void)
-{
-    FakeBLEMesh h;
-    h.start();
-    auto p = encryptedPacket();
-
-    uint8_t body[meshtastic_MeshPacket_size];
-    size_t n = encodeForAir(p, body, sizeof(body));
-    TEST_ASSERT_TRUE(n > 0);
-
-    h.feed(body, n, -42);
-
-    TEST_ASSERT_EQUAL_MESSAGE(1, h.received.size(), "delivered to the router");
-    const auto &got = h.received[0];
-    TEST_ASSERT_EQUAL_UINT32(0x3061b02e, got.from);
-    TEST_ASSERT_EQUAL(meshtastic_MeshPacket_TransportMechanism_TRANSPORT_BLE_ADV, got.transport_mechanism);
-    // Unlike UDP there is a real measurement of this hop, so it is reported rather than cleared.
-    TEST_ASSERT_TRUE(got.has_rx_rssi);
-    TEST_ASSERT_EQUAL_INT(-42, got.rx_rssi);
-    TEST_ASSERT_EQUAL_MESSAGE(0, got.rx_snr, "no SNR exists for a BLE arrival");
-}
-
-void test_ingress_drops_a_frame_with_no_sender(void)
-{
-    FakeBLEMesh h;
-    h.start();
-    auto p = encryptedPacket(0 /* from */);
-
-    uint8_t body[meshtastic_MeshPacket_size];
-    size_t n = encodeForAir(p, body, sizeof(body));
-
-    // A packet with no sender can reach remote admin without authorisation; the LoRa path refuses
-    // it for the same reason.
-    h.feed(body, n, -50);
-    TEST_ASSERT_EQUAL_MESSAGE(0, h.received.size(), "spoofed origin rejected");
-}
-
-void test_ingress_drops_an_impossible_hop_count(void)
-{
-    FakeBLEMesh h;
-    h.start();
-    auto p = encryptedPacket();
-    p.hop_limit = HOP_MAX + 1;
-
-    uint8_t body[meshtastic_MeshPacket_size];
-    size_t n = encodeForAir(p, body, sizeof(body));
-
-    // An out-of-range hop count is not relayable; UdpMulticastHandler drops it identically.
-    h.feed(body, n, -50);
-    TEST_ASSERT_EQUAL_MESSAGE(0, h.received.size(), "invalid hop count rejected");
-}
-
-void test_ingress_clears_pki_metadata(void)
-{
-    FakeBLEMesh h;
-    h.start();
-    auto p = encryptedPacket();
-    // pki_encrypted is local state the Router sets after a successful decrypt, never something off
-    // the wire: a sender must not be able to assert its own packet was PKI-authenticated.
-    p.pki_encrypted = true;
-    p.public_key.size = 32;
-
-    uint8_t body[meshtastic_MeshPacket_size];
-    size_t n = encodeForAir(p, body, sizeof(body));
-
-    h.feed(body, n, -50);
-    TEST_ASSERT_EQUAL(1, h.received.size());
-    TEST_ASSERT_FALSE_MESSAGE(h.received[0].pki_encrypted, "claimed authentication stripped");
-    TEST_ASSERT_EQUAL(0, h.received[0].public_key.size);
-}
-
-void test_ingress_keeps_via_mqtt_and_clears_scheduling(void)
-{
-    FakeBLEMesh h;
-    h.start();
-    auto p = encryptedPacket();
-    p.via_mqtt = true;
-    p.tx_after = 4242;
-    p.priority = meshtastic_MeshPacket_Priority_MAX;
-
-    uint8_t body[meshtastic_MeshPacket_size];
-    size_t n = encodeForAir(p, body, sizeof(body));
-
-    h.feed(body, n, -50);
-    TEST_ASSERT_EQUAL(1, h.received.size());
-    // The LoRa header carries via_mqtt, so ignore_mqtt and the MQTT uplink depend on it arriving intact.
-    TEST_ASSERT_TRUE(h.received[0].via_mqtt);
-    TEST_ASSERT_EQUAL_UINT32(0, h.received[0].tx_after);
-    TEST_ASSERT_EQUAL(meshtastic_MeshPacket_Priority_UNSET, h.received[0].priority);
-}
-
+// The guards and field clearing every bearer shares, the hop RSSI included, run per bearer in
+// test_transport_ingress. The self-echo is this bearer's own: its scanner can hear its own burst.
 void test_ingress_ignores_our_own_advertisement(void)
 {
     FakeBLEMesh h;
@@ -629,11 +540,6 @@ void setup()
     RUN_TEST(test_a_full_queue_makes_room_only_for_something_more_important);
     RUN_TEST(test_the_frame_displaced_is_the_newest_of_the_least_important);
     RUN_TEST(test_a_relayed_packet_is_re_advertised);
-    RUN_TEST(test_ingress_accepts_a_well_formed_frame);
-    RUN_TEST(test_ingress_drops_a_frame_with_no_sender);
-    RUN_TEST(test_ingress_drops_an_impossible_hop_count);
-    RUN_TEST(test_ingress_clears_pki_metadata);
-    RUN_TEST(test_ingress_keeps_via_mqtt_and_clears_scheduling);
     RUN_TEST(test_ingress_ignores_our_own_advertisement);
     RUN_TEST(test_pump_waits_for_the_platform);
     exit(UNITY_END());
