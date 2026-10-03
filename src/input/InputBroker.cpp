@@ -249,7 +249,9 @@ void InputBroker::Init()
     touchConfig.singlePress = INPUT_BROKER_NONE;
     touchConfig.longPress = INPUT_BROKER_BACK;
 #if HAS_BACKLIGHT
-    // Touch pad drives the backlight on devices that have one
+    // Touch pad drives the backlight on devices that have one, so a hold is already spoken for.
+    // Move the back action onto a tap, which would otherwise do nothing at all.
+    touchConfig.singlePress = INPUT_BROKER_BACK;
     touchConfig.longPress = INPUT_BROKER_NONE;
 #endif
 #if HAS_BACKLIGHT || defined(HAPTIC_FEEDBACK_PIN)
