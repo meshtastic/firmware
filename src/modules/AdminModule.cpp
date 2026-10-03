@@ -35,6 +35,7 @@
 #include "MessageStore.h"
 #include "RadioInterface.h"
 #include "TypeConversions.h"
+#include "mesh/AdminKeys.h"
 #include "mesh/RadioLibInterface.h"
 #ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
 #include "mesh/PhoneAPI.h"
@@ -187,12 +188,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
             return handled;
         }
     } else if (mp.pki_encrypted) {
-        if ((config.security.admin_key[0].size == 32 &&
-             memcmp(mp.public_key.bytes, config.security.admin_key[0].bytes, 32) == 0) ||
-            (config.security.admin_key[1].size == 32 &&
-             memcmp(mp.public_key.bytes, config.security.admin_key[1].bytes, 32) == 0) ||
-            (config.security.admin_key[2].size == 32 &&
-             memcmp(mp.public_key.bytes, config.security.admin_key[2].bytes, 32) == 0)) {
+        if (AdminKeys::isAuthorized(mp.public_key.bytes)) {
             LOG_INFO("PKC admin payload with authorized sender key");
 
             // Note: PKC admin does NOT automatically authorize the
@@ -1204,6 +1200,8 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
         }
 #endif
         config.security = incoming;
+        // A remote admin does not get to drop the host's own admin keys.
+        AdminKeys::applyHostKeys();
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN) && !(MESHTASTIC_EXCLUDE_PKI)
         // First provisioning (no key) generates one; a private key supplied without its public key derives it.
         // A supplied public key that is itself blacklisted is re-derived too, so a restore carrying a whole
@@ -1222,8 +1220,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
             }
         }
 #endif
-        if (config.security.is_managed && !(config.security.admin_key[0].size == 32 || config.security.admin_key[1].size == 32 ||
-                                            config.security.admin_key[2].size == 32)) {
+        if (config.security.is_managed && !AdminKeys::any()) {
             config.security.is_managed = false;
             const char *warning = "You must provide at least one admin public key to enable managed mode";
             LOG_WARN(warning);
