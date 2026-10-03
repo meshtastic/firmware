@@ -7,10 +7,6 @@
 // NimBLE comes from the ESP-IDF component, so the host headers are on the include path directly.
 #include "host/ble_gap.h"
 
-#ifndef BLE_MESH_MAX_PEERS
-#define BLE_MESH_MAX_PEERS 8
-#endif
-
 // Units of 0.625ms. Window equals interval: a sender emits only BLE_MESH_ADV_EVENTS repeats and
 // nothing retransmits until heard, so a gap in the duty cycle can only lose frames.
 #ifndef BLE_MESH_SCAN_INTERVAL
@@ -28,10 +24,6 @@
 // Instance 0 stays with the PhoneAPI's connectable advertisement.
 #ifndef BLE_MESH_ADV_INSTANCE
 #define BLE_MESH_ADV_INSTANCE 1
-#endif
-
-#ifndef BLE_MESH_PEER_TIMEOUT_MS
-#define BLE_MESH_PEER_TIMEOUT_MS 300000 // 5 minutes
 #endif
 
 class ESP32BLEMesh : public BLEMeshHandler
@@ -58,19 +50,7 @@ class ESP32BLEMesh : public BLEMeshHandler
     bool configureAdvInstance();
     bool advInstanceConfigured = false;
 #endif
-    void handleAdvertisementData(const ble_addr_t &addr, int8_t rssi, const uint8_t *data, uint8_t len);
-
-    // Peer tracking
-    struct BLEMeshPeer {
-        NodeNum nodeNum;
-        ble_addr_t addr;
-        int8_t rssi;
-        uint32_t lastSeenMs;
-    };
-    BLEMeshPeer peers[BLE_MESH_MAX_PEERS];
-    uint8_t peerCount = 0;
-    void updatePeer(const ble_addr_t &addr, int8_t rssi);
-    void pruneStale();
+    void handleAdvertisementData(int8_t rssi, const uint8_t *data, uint8_t len);
 };
 
 #endif // HAS_BLE_MESH && ARCH_ESP32
