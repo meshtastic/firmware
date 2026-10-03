@@ -75,7 +75,7 @@ class MagnetometerThread : public concurrency::OSThread
             sensor.reset(new MMC5983MASensor(device));
             break;
 #endif
-#if __has_include(<SensorQMC6309.hpp>)
+#if __has_include(<MagnetometerDrv.hpp>)
         case ScanI2C::DeviceType::QMC6309:
             sensor.reset(new QMC6309Sensor(device));
             break;

@@ -1,6 +1,6 @@
 #include "QMC6309Sensor.h"
 
-#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && __has_include(<SensorQMC6309.hpp>)
+#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && __has_include(<MagnetometerDrv.hpp>)
 
 #include "Fusion/Fusion.h"
 #include "detect/ScanI2CTwoWire.h"
