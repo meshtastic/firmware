@@ -1,7 +1,9 @@
 #pragma once
+#include <array>
 #include <fstream>
 #include <map>
 #include <memory>
+#include <string>
 #include <unistd.h>
 #include <unordered_map>
 #include <vector>
@@ -106,6 +108,13 @@ extern std::ofstream JSONFile;
 extern std::unique_ptr<Ch341Hal> ch341Hal;
 int initGPIOPin(int pinNum, const std::string &gpioChipname, int line);
 bool loadConfig(const char *configPath);
+
+// Admin keys past the three that fit config.security are also tried by Router's admin-key decrypt
+// fallback, so the list is capped to keep that per-packet cost bounded.
+constexpr size_t PORTDUINO_MAX_ADMIN_KEYS = 16;
+bool adminKeyFromBase64(const std::string &text, std::array<uint8_t, 32> &out);
+std::string adminKeyToBase64(const std::array<uint8_t, 32> &key);
+
 static bool ends_with(std::string_view str, std::string_view suffix);
 void getMacAddr(uint8_t *dmac);
 bool MAC_from_string(std::string mac_str, uint8_t *dmac);
@@ -274,6 +283,9 @@ extern struct portduino_config_struct {
     std::string hostMetrics_user_command = "";
     int hostMetrics_interval = 0;
     int hostMetrics_channel = 0;
+
+    // Security
+    std::vector<std::array<uint8_t, 32>> admin_keys;
 
     // config
     bool has_config_overrides = false;
@@ -662,6 +674,16 @@ extern struct portduino_config_struct {
             out << YAML::Key << "Channel" << YAML::Value << hostMetrics_channel;
 
             out << YAML::EndMap; // HostMetrics
+        }
+
+        // Security
+        if (!admin_keys.empty()) {
+            out << YAML::Key << "Security" << YAML::Value << YAML::BeginMap;
+            out << YAML::Key << "AdminKeys" << YAML::Value << YAML::BeginSeq;
+            for (const auto &key : admin_keys)
+                out << adminKeyToBase64(key);
+            out << YAML::EndSeq;
+            out << YAML::EndMap; // Security
         }
 
         // config

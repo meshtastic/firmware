@@ -7,6 +7,7 @@
 #include "NodeDB.h"
 #include "Throttle.h"
 #include "configuration.h"
+#include "mesh/AdminKeys.h"
 #include "mesh/generated/meshtastic/mesh.pb.h"
 #include "mesh/mesh-pb-constants.h"
 #include "meshUtils.h"
@@ -484,12 +485,7 @@ bool DMShellModule::isAuthorizedPacket(const meshtastic_MeshPacket &mp) const
     }
 
     if (mp.pki_encrypted) {
-        for (uint8_t i = 0; i < 3; ++i) {
-            if (config.security.admin_key[i].size == 32 &&
-                memcmp(mp.public_key.bytes, config.security.admin_key[i].bytes, 32) == 0) {
-                return true;
-            }
-        }
+        return AdminKeys::isAuthorized(mp.public_key.bytes);
     }
 
     return false;
