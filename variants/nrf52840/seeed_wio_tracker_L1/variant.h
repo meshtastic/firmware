@@ -114,6 +114,9 @@ static const uint8_t SCL = PIN_WIRE_SCL;
 #define AREF_VOLTAGE 3.6
 // We rely on the nrf52840 USB controller to tell us if we are hooked to a power supply
 #define NRF_APM
+// Shares same OCV_ARRAY as E-Ink variant, 1W variant uses its own OCV_ARRAY
+#define OCV_ARRAY 4200, 3876, 3826, 3763, 3713, 3660, 3573, 3485, 3422, 3359, 3300
+
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  GPS L76KB
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
