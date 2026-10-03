@@ -1,199 +1,334 @@
 #include "RotaryEncoderInterruptBase.h"
+
 #include "UptimeClock.h"
 #include "configuration.h"
 
-RotaryEncoderInterruptBase::RotaryEncoderInterruptBase(const char *name) : concurrency::OSThread(name)
+const uint8_t RotaryEncoderInterruptBase::encoderTable[7][4] = {
+    { R_START,    R_CW_BEGIN,  R_CCW_BEGIN, R_START },
+    { R_CW_NEXT,  R_START,     R_CW_FINAL,  R_START | DIR_CW },
+    { R_CW_NEXT,  R_CW_BEGIN,  R_START,     R_START },
+    { R_CW_NEXT,  R_CW_BEGIN,  R_CW_FINAL,  R_START },
+    { R_CCW_NEXT, R_START,     R_CCW_BEGIN, R_START },
+    { R_CCW_NEXT, R_CCW_FINAL, R_START,     R_START | DIR_CCW },
+    { R_CCW_NEXT, R_CCW_FINAL, R_CCW_BEGIN, R_START }
+};
+
+RotaryEncoderInterruptBase::RotaryEncoderInterruptBase(const char *name)
+    : concurrency::OSThread(name)
 {
-    this->_originName = name;
+    _originName = name;
 }
 
 void RotaryEncoderInterruptBase::init(
-    uint8_t pinA, uint8_t pinB, uint8_t pinPress, input_broker_event eventCw, input_broker_event eventCcw,
-    input_broker_event eventPressed, input_broker_event eventPressedLong,
-    //    std::function<void(void)> onIntA, std::function<void(void)> onIntB, std::function<void(void)> onIntPress) :
-    void (*onIntA)(), void (*onIntB)(), void (*onIntPress)())
+    uint8_t pinA,
+    uint8_t pinB,
+    uint8_t pinPress,
+    input_broker_event eventCw,
+    input_broker_event eventCcw,
+    input_broker_event eventPressed,
+    input_broker_event eventPressedLong,
+    void (*onIntA)(),
+    void (*onIntB)(),
+    void (*onIntPress)()
+)
 {
-    this->_pinA = pinA;
-    this->_pinB = pinB;
-    this->_pinPress = pinPress;
-    this->_eventCw = eventCw;
-    this->_eventCcw = eventCcw;
-    this->_eventPressed = eventPressed;
-    this->_eventPressedLong = eventPressedLong;
+    _pinA = pinA;
+    _pinB = pinB;
+    _pinPress = pinPress;
 
-    bool isRAK = false;
-#ifdef RAK_4631
-    isRAK = true;
-#endif
+    _eventCw = eventCw;
+    _eventCcw = eventCcw;
+    _eventPressed = eventPressed;
+    _eventPressedLong = eventPressedLong;
 
-    if (!isRAK || pinPress != 0) {
-        pinMode(pinPress, INPUT_PULLUP);
-        attachInterrupt(pinPress, onIntPress, CHANGE);
-    }
-    if (!isRAK || this->_pinA != 0) {
-        pinMode(this->_pinA, INPUT_PULLUP);
-        attachInterrupt(this->_pinA, onIntA, CHANGE);
-    }
-    if (!isRAK || this->_pinA != 0) {
-        pinMode(this->_pinB, INPUT_PULLUP);
-        attachInterrupt(this->_pinB, onIntB, CHANGE);
+    (void)onIntA;
+    (void)onIntB;
+    (void)onIntPress;
+
+    if (_pinA != 0) {
+        pinMode(_pinA, INPUT_PULLUP);
+        pinMode(_pinB, INPUT_PULLUP);
     }
 
-    this->rotaryLevelA = digitalRead(this->_pinA);
-    this->rotaryLevelB = digitalRead(this->_pinB);
-    LOG_INFO("Rotary initialized (%d, %d, %d)", this->_pinA, this->_pinB, pinPress);
+    if (_pinPress != 0) {
+        pinMode(_pinPress, INPUT_PULLUP);
+        buttonRaw = digitalRead(_pinPress);
+        buttonStable = buttonRaw;
+    }
+
+    encoderState = R_START;
+    lastPinState = readPhysicalState();
+
+    uint32_t now = Time::stampMillis();
+    buttonLastChange = now;
+    pressStartTime = 0;
+    selectReleaseTime = 0;
+    lastRotationTime = 0;
+
+    pressDetected = false;
+    longPressFired = false;
+    pressAndTurnFired = false;
+    pressCandidateValid = false;
+    selectPending = false;
+
+    LOG_INFO("Rotary initialized (%d, %d, %d)", _pinA, _pinB, _pinPress);
+}
+
+uint8_t RotaryEncoderInterruptBase::readPhysicalState() const
+{
+    uint8_t a = digitalRead(_pinA);
+    uint8_t b = digitalRead(_pinB);
+    return (a << 1) | b;
+}
+
+uint8_t RotaryEncoderInterruptBase::processFSM(uint8_t pinState)
+{
+    encoderState = encoderTable[encoderState & 0x0F][pinState];
+    return encoderState & 0x30;
+}
+
+void RotaryEncoderInterruptBase::sendInputEvent(input_broker_event event)
+{
+    if (event == INPUT_BROKER_NONE) {
+        return;
+    }
+
+    InputEvent e = {};
+    e.source = _originName;
+    e.inputEvent = event;
+    e.kbchar = 0;
+    e.touchX = 0;
+    e.touchY = 0;
+
+    LOG_DEBUG("Rotary event %d", static_cast<int>(event));
+    notifyObservers(&e);
+}
+
+void RotaryEncoderInterruptBase::sendKeyboardEvent(unsigned char key)
+{
+    if (key == 0) {
+        return;
+    }
+
+    InputEvent e = {};
+    e.source = _originName;
+    e.inputEvent = INPUT_BROKER_NONE;
+    e.kbchar = key;
+    e.touchX = 0;
+    e.touchY = 0;
+
+    notifyObservers(&e);
+}
+
+void RotaryEncoderInterruptBase::cancelPressBecauseOfRotation(uint32_t now)
+{
+    lastRotationTime = now;
+
+    if (pressDetected || pressCandidateValid || selectPending) {
+        LOG_DEBUG("Rotary press canceled by rotation");
+    }
+
+    pressCandidateValid = false;
+    selectPending = false;
+    pressAndTurnFired = false;
+}
+
+void RotaryEncoderInterruptBase::processButton(uint32_t now)
+{
+    if (_pinPress == 0) {
+        return;
+    }
+
+    bool reading = digitalRead(_pinPress);
+
+    if (reading != buttonRaw) {
+        buttonRaw = reading;
+        buttonLastChange = now;
+    }
+
+    if (now - buttonLastChange < BUTTON_DEBOUNCE_MS) {
+        return;
+    }
+
+    // Button remains stably LOW.
+    if (reading == LOW && buttonStable == LOW) {
+
+        if (
+            pressDetected &&
+            !pressCandidateValid &&
+            now - pressStartTime >= PRESS_MIN_STABLE_MS
+        ) {
+            if (
+                lastRotationTime == 0 ||
+                now - lastRotationTime > ROTATION_BLOCK_MS
+            ) {
+                pressCandidateValid = true;
+                LOG_DEBUG("Rotary press validated");
+            }
+        }
+
+        if (
+            pressDetected &&
+            pressCandidateValid &&
+            !longPressFired &&
+            !pressAndTurnEnabled() &&
+            _eventPressedLong != INPUT_BROKER_NONE &&
+            now - pressStartTime >= LONG_PRESS_DURATION &&
+            (
+                lastRotationTime == 0 ||
+                now - lastRotationTime > ROTATION_BLOCK_MS
+            )
+        ) {
+            longPressFired = true;
+            selectPending = false;
+
+            LOG_DEBUG("Rotary event Press long");
+            sendInputEvent(_eventPressedLong);
+        }
+
+        return;
+    }
+
+    if (reading == buttonStable) {
+        return;
+    }
+
+    buttonStable = reading;
+
+    // Debounced press down.
+    if (buttonStable == LOW) {
+        pressDetected = true;
+        pressStartTime = now;
+        longPressFired = false;
+        pressAndTurnFired = false;
+        pressCandidateValid = false;
+        selectPending = false;
+
+        LOG_DEBUG("Rotary press down");
+        return;
+    }
+
+    // Debounced release.
+    if (!pressDetected) {
+        return;
+    }
+
+    if (
+        pressCandidateValid &&
+        !pressAndTurnFired &&
+        !longPressFired
+    ) {
+        if (
+            lastRotationTime == 0 ||
+            now - lastRotationTime > ROTATION_BLOCK_MS
+        ) {
+            selectPending = true;
+            selectReleaseTime = now;
+            LOG_DEBUG("Rotary select pending");
+        }
+    }
+
+    pressDetected = false;
+    pressStartTime = 0;
+    pressCandidateValid = false;
+    pressAndTurnFired = false;
+}
+
+void RotaryEncoderInterruptBase::processPendingSelect(uint32_t now)
+{
+    if (!selectPending) {
+        return;
+    }
+
+    if (lastRotationTime > selectReleaseTime) {
+        LOG_DEBUG("Rotary select canceled during guard");
+        selectPending = false;
+        return;
+    }
+
+    if (now - selectReleaseTime < SELECT_GUARD_MS) {
+        return;
+    }
+
+    selectPending = false;
+
+    LOG_DEBUG("Rotary event Press short");
+    sendInputEvent(_eventPressed);
+}
+
+void RotaryEncoderInterruptBase::handleRotation(bool cw, uint32_t now)
+{
+    // Preserve a legitimate press+turn before invalidating a normal SELECT.
+    if (
+        pressDetected &&
+        buttonStable == LOW &&
+        pressAndTurnEnabled()
+    ) {
+        lastRotationTime = now;
+        pressCandidateValid = false;
+        selectPending = false;
+
+        unsigned char key = cw ? _pressAndTurnCw : _pressAndTurnCcw;
+
+        LOG_DEBUG("Rotary event Press %s", cw ? "CW" : "CCW");
+        sendKeyboardEvent(key);
+        pressAndTurnFired = true;
+        return;
+    }
+
+    cancelPressBecauseOfRotation(now);
+
+    if (cw) {
+        LOG_DEBUG("Rotary event CW");
+        sendInputEvent(_eventCw);
+    } else {
+        LOG_DEBUG("Rotary event CCW");
+        sendInputEvent(_eventCcw);
+    }
 }
 
 int32_t RotaryEncoderInterruptBase::runOnce()
 {
-    InputEvent e = {};
-    e.inputEvent = INPUT_BROKER_NONE;
-    e.source = this->_originName;
-    unsigned long now = Time::stampMillis();
+    uint32_t now = Time::stampMillis();
 
-    // Handle press long/short detection
-    if (this->action == ROTARY_ACTION_PRESSED) {
-        bool buttonPressed = !digitalRead(_pinPress);
-        if (!pressDetected && buttonPressed) {
-            pressDetected = true;
-            // unset-sentinel-ok: pressDetected is the armed flag; no read tests the stamp against 0
-            pressStartTime = now;
-            pressAndTurnFired = false;
+    processButton(now);
+
+    uint8_t pinState = readPhysicalState();
+
+    if (pinState != lastPinState) {
+        lastPinState = pinState;
+
+        uint8_t result = processFSM(pinState);
+
+        if (result == DIR_CW) {
+            handleRotation(true, now);
+        } else if (result == DIR_CCW) {
+            handleRotation(false, now);
         }
-
-        if (pressDetected) {
-            // Press-and-turn takes precedence over the press itself.
-            if (pressAndTurnEnabled() && pressAndTurnDelta.load(std::memory_order_relaxed) != 0) {
-                // Drain in one pass: releasing the button would discard anything left over.
-                // Exchange, so a detent arriving from the ISR mid-drain is not lost.
-                int32_t pending = pressAndTurnDelta.exchange(0, std::memory_order_relaxed);
-                LOG_DEBUG("Rotary event Press %s (%d detents)", pending > 0 ? "CW" : "CCW", pending);
-                while (pending != 0) {
-                    bool cw = pending > 0;
-                    InputEvent turn = {};
-                    turn.source = this->_originName;
-                    turn.inputEvent = INPUT_BROKER_NONE;
-                    turn.kbchar = cw ? _pressAndTurnCw : _pressAndTurnCcw;
-                    pending -= cw ? 1 : -1;
-                    this->notifyObservers(&turn);
-                }
-                pressAndTurnFired = true;
-            }
-
-            uint32_t duration = now - pressStartTime;
-            if (!buttonPressed) {
-                // released -> if short press, send short, else already sent long
-                if (!pressAndTurnFired && duration < LONG_PRESS_DURATION && now - lastPressKeyTime >= pressDebounceMs) {
-                    lastPressKeyTime = now;
-                    LOG_DEBUG("Rotary event Press short");
-                    e.inputEvent = this->_eventPressed;
-                } else if (pressAndTurnEnabled() && !pressAndTurnFired && duration >= LONG_PRESS_DURATION &&
-                           this->_eventPressedLong != INPUT_BROKER_NONE) {
-                    // Held long enough and no turn came, so the long press stands
-                    LOG_DEBUG("Rotary event Press long");
-                    e.inputEvent = this->_eventPressedLong;
-                }
-                pressDetected = false;
-                pressStartTime = 0;
-                lastPressLongEventTime = 0;
-                pressAndTurnDelta.store(0, std::memory_order_relaxed);
-                pressAndTurnFired = false;
-                this->action = ROTARY_ACTION_NONE;
-            } else if (!pressAndTurnEnabled() && duration >= LONG_PRESS_DURATION &&
-                       this->_eventPressedLong != INPUT_BROKER_NONE && lastPressLongEventTime == 0) {
-                // fire single-shot long press; press-and-turn encoders defer this to release
-                lastPressLongEventTime = now;
-                LOG_DEBUG("Rotary event Press long");
-                e.inputEvent = this->_eventPressedLong;
-            }
-        }
-    } else if (this->action == ROTARY_ACTION_CW) {
-        LOG_DEBUG("Rotary event CW");
-        e.inputEvent = this->_eventCw;
-    } else if (this->action == ROTARY_ACTION_CCW) {
-        LOG_DEBUG("Rotary event CCW");
-        e.inputEvent = this->_eventCcw;
     }
 
-    if (e.inputEvent != INPUT_BROKER_NONE || e.kbchar != 0) {
-        this->notifyObservers(&e);
-    }
+    processPendingSelect(now);
 
-    if (!pressDetected) {
-        this->action = ROTARY_ACTION_NONE;
-    } else if (now - pressStartTime < LONG_PRESS_DURATION) {
-        return (20); // keep checking for long/short until time expires
-    } else if (pressAndTurnEnabled()) {
-        // Keep polling while held, rather than relying on intHandler()'s reschedule from ISR.
-        return (20);
-    }
-
-    return INT32_MAX;
-}
-
-void RotaryEncoderInterruptBase::setPressAndTurnChars(unsigned char cw, unsigned char ccw)
-{
-    this->_pressAndTurnCw = cw;
-    this->_pressAndTurnCcw = ccw;
-}
-
-void RotaryEncoderInterruptBase::intPressHandler()
-{
-    this->action = ROTARY_ACTION_PRESSED;
-    setIntervalFromNow(20); // start checking for long/short
+    return 1;
 }
 
 void RotaryEncoderInterruptBase::intAHandler()
 {
-    // CW rotation (at least on most common rotary encoders)
-    int currentLevelA = digitalRead(this->_pinA);
-    if (this->rotaryLevelA == currentLevelA) {
-        return;
-    }
-    this->rotaryLevelA = currentLevelA;
-    this->rotaryStateCCW = intHandler(currentLevelA == HIGH, this->rotaryLevelB, ROTARY_ACTION_CCW, this->rotaryStateCCW);
 }
 
 void RotaryEncoderInterruptBase::intBHandler()
 {
-    // CW rotation (at least on most common rotary encoders)
-    int currentLevelB = digitalRead(this->_pinB);
-    if (this->rotaryLevelB == currentLevelB) {
-        return;
-    }
-    this->rotaryLevelB = currentLevelB;
-    this->rotaryStateCW = intHandler(currentLevelB == HIGH, this->rotaryLevelA, ROTARY_ACTION_CW, this->rotaryStateCW);
 }
 
-/**
- * @brief Rotary action implementation.
- *   We assume, the following pin setup:
- *    A   --||
- *    GND --||]========
- *    B   --||
- *
- * @return The new state for rotary pin.
- */
-RotaryEncoderInterruptBaseStateType RotaryEncoderInterruptBase::intHandler(bool actualPinRaising, int otherPinLevel,
-                                                                           RotaryEncoderInterruptBaseActionType action,
-                                                                           RotaryEncoderInterruptBaseStateType state)
+void RotaryEncoderInterruptBase::intPressHandler()
 {
-    RotaryEncoderInterruptBaseStateType newState = state;
-    if (actualPinRaising && (otherPinLevel == LOW)) {
-        if (state == ROTARY_EVENT_CLEARED) {
-            newState = ROTARY_EVENT_OCCURRED;
-            if (this->action == ROTARY_ACTION_PRESSED) {
-                // Turning while held; runOnce() ignores this unless press-and-turn is enabled.
-                pressAndTurnDelta.fetch_add((action == ROTARY_ACTION_CW) ? 1 : -1, std::memory_order_relaxed);
-            } else {
-                this->action = action;
-            }
-        }
-    } else if (!actualPinRaising && (otherPinLevel == HIGH)) {
-        // Logic to prevent bouncing.
-        newState = ROTARY_EVENT_CLEARED;
-    }
-    setIntervalFromNow(ROTARY_DELAY); // TODO: this modifies a non-volatile variable!
+}
 
-    return newState;
+void RotaryEncoderInterruptBase::setPressAndTurnChars(
+    unsigned char cw,
+    unsigned char ccw
+)
+{
+    _pressAndTurnCw = cw;
+    _pressAndTurnCcw = ccw;
 }
