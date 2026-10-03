@@ -486,9 +486,13 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
     /** Bench: the readout task's half of requestRearmFromIsr(), run at the task's priority with the SPI lock free */
     virtual void rearmReceiveFromTask() {}
+
+    /** Bench: frames the readout task captured that this thread has not yet delivered */
+    bool capturedFramePending() const { return rxRingHead != rxRingTail; }
 #else
     bool rxDoneFromIsr() { return false; }
     bool rxReadoutActive() const { return false; }
+    bool capturedFramePending() const { return false; }
     bool wakeRxReadout() { return false; }
     bool takeCapturedFrame(CapturedRxInfo &) { return false; }
 #endif
@@ -604,6 +608,7 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     /** millis() the backoff fell due, and how late the scan started after it */
     uint32_t tlDueMs = 0;
     int32_t tlLateMs = 0;
+    uint32_t tlGateWaitMs = 0;
     /** Log the last TX's timeline; adopted says RX was re-armed at TX_DONE rather than by this thread */
     void logTxTimeline(bool adopted);
 #endif

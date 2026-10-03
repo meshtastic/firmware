@@ -606,6 +606,17 @@ void RadioLibInterface::onNotify(uint32_t notification)
                 } else {
                     // Listen-before-talk: a CAD preamble scan immediately before we key up.
                     LOG_DEBUG("CAD arm");
+#ifdef MESHTASTIC_TX_SLOT_GATE_MS
+                    // Bench: after the log line, which on some boards costs most of a slot
+                    const uint32_t gateWaitedMs = waitForOwnSlot();
+                    TX_TIMELINE_SET(tlGateWaitMs, gateWaitedMs);
+                    if (gateWaitedMs && (!canSendImmediately() || capturedFramePending())) {
+                        // A frame arrived during the wait: take it first. Its handling redraws from its end, as the
+                        // other nodes will.
+                        setTransmitDelay();
+                        break;
+                    }
+#endif
                     const uint32_t scanStartMs = Time::getMillis();
                     noteDeafFrom("scan");
                     scanForTx = txp;
@@ -717,6 +728,12 @@ void RadioLibInterface::scheduleTransmitDelayCompleted(uint32_t delay)
     txDueMs = Time::timerEndsAtMillis(delay); // the real due time, before an early stage brings the timer forward
 #endif
     TX_TIMELINE_SET(tlDueMs, Time::timerEndsAtMillis(delay));
+#ifdef MESHTASTIC_TX_SLOT_GATE_MS
+    // Fire early: the gate waits out the rest on the radio thread, so a main-loop hold shortens the wait instead of
+    // pushing the scan into the next slot
+    const uint32_t early = MESHTASTIC_TX_SLOT_GATE_EARLY_SLOTS * slotTimeMsec;
+    delay = delay > early ? delay - early : 1;
+#endif
 #ifdef MESHTASTIC_TX_STAGE_EARLY
     // Where the driver wants it, fire at once so the radio thread writes the payload while RX runs, then wait out the
     // rest of the backoff
@@ -1494,6 +1511,13 @@ void RadioLibInterface::logTxTimeline(bool adopted)
     if (tlSend)
         LOG_RADIO_EDGE("TX slot: drawn %u of %u ms, scan late %d ms, SET_TX at +%u ms", (unsigned)slotDrawn,
                        (unsigned)slotTimeMsec, (int)tlLateMs, (unsigned)(lastTxStart - slotDrawAnchorMs));
+#ifdef MESHTASTIC_TX_SLOT_GATE_MS
+    if (tlSend)
+        LOG_RADIO_EDGE("TX slot gate: waited %u ms, SET_TX at +%u ms from its frame end; %u waits, %u capped",
+                       (unsigned)tlGateWaitMs, (unsigned)(lastTxStart - slotGateAnchorMs), (unsigned)slotGateWaits,
+                       (unsigned)slotGateCapped);
+    tlGateWaitMs = 0;
+#endif
 #endif
     tlScan = tlSend = 0;
     tlDueMs = 0;

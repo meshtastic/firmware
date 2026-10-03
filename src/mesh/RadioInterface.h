@@ -15,6 +15,17 @@
 #if defined(MESHTASTIC_TX_SLOT_PARITY) && !defined(MESHTASTIC_TX_SLOT_ANCHOR)
 #define MESHTASTIC_TX_SLOT_ANCHOR
 #endif
+// Bench: -DMESHTASTIC_TX_SLOT_GATE_MS=<ms> scans only in the first <ms> of a slot of this node's parity, waiting on the radio
+// thread for the next one if a main-loop hold made it late. The backoff timer fires
+// MESHTASTIC_TX_SLOT_GATE_EARLY_SLOTS (default 2) slots early so the wait, not the hold, sets the start.
+#ifdef MESHTASTIC_TX_SLOT_GATE_MS
+#ifndef MESHTASTIC_TX_SLOT_PARITY
+#error "MESHTASTIC_TX_SLOT_GATE_MS gates on this node's slot parity: build with MESHTASTIC_TX_SLOT_PARITY"
+#endif
+#ifndef MESHTASTIC_TX_SLOT_GATE_EARLY_SLOTS
+#define MESHTASTIC_TX_SLOT_GATE_EARLY_SLOTS 2
+#endif
+#endif
 
 // Forward decl to avoid a direct include of generated config headers / full LoRaConfig definition in this widely-included file.
 typedef struct _meshtastic_Config_LoRaConfig meshtastic_Config_LoRaConfig;
@@ -245,6 +256,16 @@ class RadioInterface
 
     /** Bench: the last anchored draw's slot and the millis() its slots count from, for the TX timeline */
     uint32_t slotDrawn = 0, slotDrawAnchorMs = 0;
+
+#ifdef MESHTASTIC_TX_SLOT_GATE_MS
+    /** Bench: wait until a slot of this node's parity, no earlier than the drawn one, began at most
+     *  MESHTASTIC_TX_SLOT_GATE_MS ago. Returns the ms waited. */
+    uint32_t waitForOwnSlot();
+    /** Bench: gated scans that waited, and those whose wait hit the cap and went at once */
+    uint32_t slotGateWaits = 0, slotGateCapped = 0;
+    /** Bench: the frame end the last gate counted its slots from */
+    uint32_t slotGateAnchorMs = 0;
+#endif
 #endif
 
     /** The CW to use when calculating SNR_based delays */
