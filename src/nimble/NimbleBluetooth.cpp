@@ -893,6 +893,24 @@ class NimbleBluetoothServerCallback : public BLEServerCallbacks
     }
 };
 
+namespace
+{
+// The phone advertisement's scan response, which both advertisers below send byte for byte: the
+// name, or with the GATT mesh-peer bearer on, its UUID and the name shortened to what is left.
+BLEAdvertisementData phoneScanResponse(const char *name)
+{
+    BLEAdvertisementData scan;
+#if NIMBLE_GATT_MESH
+    if (ESP32BLEGattMesh::enabled()) {
+        ESP32BLEGattMesh::fillScanResponse(scan, name);
+        return scan;
+    }
+#endif
+    scan.setName(name);
+    return scan;
+}
+} // namespace
+
 #if BLE_MESH_USE_EXT_ADV
 
 namespace
@@ -1018,29 +1036,12 @@ void NimbleBluetooth::startAdvertising()
         return;
     }
 
-    // Scan response carries the name, exactly as the wrapper did - it does not fit alongside a
-    // 128-bit UUID in 31 bytes.
-    const char *name = getDeviceName();
-    struct ble_hs_adv_fields rspFields = {};
-    rspFields.name = (const uint8_t *)name;
-    rspFields.name_len = (uint8_t)strlen(name);
-    rspFields.name_is_complete = 1;
-
+    // Scan response carries the name - it does not fit alongside a 128-bit UUID in 31 bytes.
     struct os_mbuf *rspData = os_msys_get_pkthdr(BLE_HS_ADV_MAX_SZ, 0);
     if (rspData) {
-        int rspRc;
-#if NIMBLE_GATT_MESH
-        // Mesh peers find the node by the mesh-peer UUID, so it takes the legacy path's scan response
-        // byte for byte: the UUID, then the name shortened to what is left.
-        if (ESP32BLEGattMesh::enabled()) {
-            BLEAdvertisementData scan;
-            ESP32BLEGattMesh::fillScanResponse(scan, name);
-            const String payload = scan.getPayload();
-            rspRc = os_mbuf_append(rspData, payload.c_str(), payload.length());
-        } else
-#endif
-            rspRc = ble_hs_adv_set_fields_mbuf(&rspFields, rspData);
-        if (rspRc == 0) {
+        BLEAdvertisementData scan = phoneScanResponse(getDeviceName());
+        const String payload = scan.getPayload();
+        if (os_mbuf_append(rspData, payload.c_str(), payload.length()) == 0) {
             if (ble_gap_ext_adv_rsp_set_data(PHONE_ADV_INSTANCE, rspData) != 0)
                 LOG_WARN("BLE ext adv scan response rejected; node will advertise without a name");
         } else {
@@ -1070,13 +1071,7 @@ void NimbleBluetooth::startAdvertising()
     //     pAdvertising->addServiceUUID(BLEUUID((uint16_t)0x180f));
     // }
 
-    BLEAdvertisementData scan = BLEAdvertisementData();
-#if NIMBLE_GATT_MESH
-    if (ESP32BLEGattMesh::enabled())
-        ESP32BLEGattMesh::fillScanResponse(scan, getDeviceName());
-    else
-#endif
-        scan.setName(getDeviceName());
+    BLEAdvertisementData scan = phoneScanResponse(getDeviceName());
     pAdvertising->setScanResponseData(scan);
     pAdvertising->setMinPreferred(0x06); // functions that help with iPhone connections issue
     pAdvertising->setMaxPreferred(0x12);
