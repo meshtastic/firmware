@@ -1,0 +1,80 @@
+name: Build One Meshtasticd
+
+on:
+  workflow_dispatch:
+    inputs:
+      pio_env:
+        type: choice
+        options:
+          - native-tft
+          - native-fb
+          - native
+        default: native-tft
+        description: PlatformIO environment to build.
+      debian:
+        type: choice
+        options:
+          - trixie
+          - bookworm
+        default: trixie
+        description: Debian release to build on. Match the target's /etc/os-release, since the binary links the build host's glibc.
+      runner:
+        type: choice
+        options:
+          - ubuntu-24.04-arm
+          - ubuntu-24.04
+        default: ubuntu-24.04-arm
+        description: ubuntu-24.04-arm builds aarch64 (Pi 3/4/5, 64-bit OS); ubuntu-24.04 builds x86_64.
+
+permissions: read-all
+
+jobs:
+  build:
+    runs-on: ${{ inputs.runner }}
+    container:
+      image: debian:${{ inputs.debian }}
+    env:
+      DEBIAN_FRONTEND: noninteractive
+      PIP_ROOT_USER_ACTION: ignore
+      PIP_BREAK_SYSTEM_PACKAGES: 1
+    steps:
+      # Same package set as the Dockerfile builder stage.
+      - name: Install dependencies
+        run: |
+          apt-get update
+          apt-get install --no-install-recommends -y \
+            curl wget g++ zip git ca-certificates pkg-config \
+            python3-pip python3-grpc-tools \
+            libgpiod-dev libyaml-cpp-dev libjsoncpp-dev libbluetooth-dev libsdbus-c++-dev libi2c-dev libuv1-dev \
+            libcurl4-gnutls-dev libusb-1.0-0-dev libulfius-dev liborcania-dev libssl-dev \
+            libx11-dev libinput-dev libxkbcommon-x11-dev libsqlite3-dev libsdl2-dev libnotify-dev
+          pip install --no-cache-dir -U platformio
+
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: Allow git in the container workspace
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Build
+        env:
+          PIO_ENV: ${{ inputs.pio_env }}
+        run: |
+          bash ./bin/build-native.sh "$PIO_ENV"
+          {
+            echo "## meshtasticd build"
+            echo "| Env | Debian | Runner | Arch |"
+            echo "| --- | ------ | ------ | ---- |"
+            echo "| ${PIO_ENV} | ${{ inputs.debian }} | ${{ inputs.runner }} | $(uname -m) |"
+            echo
+            echo '```'
+            ldd release/meshtasticd_linux_* | head -40
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: meshtasticd-${{ inputs.pio_env }}-${{ inputs.debian }}-${{ runner.arch }}
+          overwrite: true
+          path: release/meshtasticd_linux_*
