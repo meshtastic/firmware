@@ -49,3 +49,10 @@
 #if defined(PORTDUINO_LINUX_HARDWARE) && __has_include(<sdbus-c++/sdbus-c++.h>)
 #define HAS_BLUETOOTH 1
 #endif
+
+// Powering off the host (systemd-logind over D-Bus) needs the same sdbus-c++ headers. Kept as its
+// own macro rather than leaning on HAS_BLUETOOTH: the two features share a transport, not a
+// purpose, and a build with Bluetooth deliberately disabled should still be able to halt the box.
+#if defined(PORTDUINO_LINUX_HARDWARE) && __has_include(<sdbus-c++/sdbus-c++.h>)
+#define HAS_HOST_POWEROFF 1
+#endif
