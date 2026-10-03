@@ -163,7 +163,7 @@ void GDEW0102T4::writeOldImage()
 
     // FAST refresh uses differential data (previous frame as old image).
     if (previousBuffer) {
-        writeImage(0x10, previousBuffer);
+        writeImage(0x10, previousBuffer.get());
     } else {
         writeImage(0x10, buffer);
     }

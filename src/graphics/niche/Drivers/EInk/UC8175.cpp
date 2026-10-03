@@ -33,9 +33,9 @@ void UC8175::begin(SPIClass *spi, uint8_t pin_dc, uint8_t pin_cs, uint8_t pin_bu
     }
 
     if (!previousBuffer) {
-        previousBuffer = new uint8_t[bufferSize];
+        previousBuffer.reset(new uint8_t[bufferSize]);
         if (previousBuffer)
-            memset(previousBuffer, 0xFF, bufferSize);
+            memset(previousBuffer.get(), 0xFF, bufferSize);
     }
 }
 
@@ -44,7 +44,7 @@ void UC8175::update(uint8_t *imageData, UpdateTypes type)
     buffer = imageData;
     updateType = (type == UpdateTypes::UNSPECIFIED) ? UpdateTypes::FULL : type;
 
-    if (updateType == FAST && hasPreviousBuffer && previousBuffer && memcmp(previousBuffer, buffer, bufferSize) == 0)
+    if (updateType == FAST && hasPreviousBuffer && previousBuffer && memcmp(previousBuffer.get(), buffer, bufferSize) == 0)
         return;
 
     reset();
@@ -60,7 +60,7 @@ void UC8175::update(uint8_t *imageData, UpdateTypes type)
     sendCommand(0x12); // Display refresh.
 
     if (previousBuffer) {
-        memcpy(previousBuffer, buffer, bufferSize);
+        memcpy(previousBuffer.get(), buffer, bufferSize);
         hasPreviousBuffer = true;
     }
 
@@ -164,7 +164,7 @@ void UC8175::writeImage(uint8_t command, const uint8_t *image)
 void UC8175::writeOldImage()
 {
     if (updateType == FAST && previousBuffer)
-        writeImage(0x10, previousBuffer);
+        writeImage(0x10, previousBuffer.get());
     else
         writeImage(0x10, buffer);
 }
