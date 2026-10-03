@@ -157,6 +157,107 @@ void assertValidUtf8(const char *s, size_t width)
     TEST_ASSERT_FALSE_MESSAGE(sanitizeUtf8(copy, width), "migrated name still contains invalid UTF-8");
 }
 
+void writeFileBytes(const char *dir, const char *path, const uint8_t *bytes, size_t len)
+{
+    FSCom.mkdir(dir);
+    FSCom.remove(path);
+    auto f = FSCom.open(path, FILE_O_WRITE);
+    TEST_ASSERT_TRUE((bool)f);
+    const size_t wrote = f.write(bytes, len);
+    f.close();
+    TEST_ASSERT_EQUAL_MESSAGE(len, wrote, "short write laying down a fixture");
+}
+
+void writeModuleBytes(const uint8_t *bytes, size_t len)
+{
+    writeFileBytes("/prefs", moduleConfigFileName, bytes, len);
+}
+
+void writeBackupBytes(const std::vector<uint8_t> &bytes)
+{
+    writeFileBytes("/backups", backupFileName, bytes.data(), bytes.size());
+}
+
+/// A 2.8.0 module.proto from before the broadcast_message cut: base's fields, with a mesh_beacon whose
+/// message is longer than the current struct holds. padTo > 0 appends an unknown field to that total.
+std::vector<uint8_t> encodePreCutModuleConfig(const meshtastic_LocalModuleConfig &base, const std::string &message,
+                                              size_t padTo = 0)
+{
+    meshtastic_LocalModuleConfig outer = base;
+    outer.has_mesh_beacon = false;
+    std::vector<uint8_t> buf(2048);
+    pb_ostream_t os = pb_ostream_from_buffer(buf.data(), buf.size());
+    TEST_ASSERT_TRUE(pb_encode(&os, meshtastic_LocalModuleConfig_fields, &outer));
+
+    meshtastic_ModuleConfig_MeshBeaconConfig beacon = base.mesh_beacon;
+    beacon.broadcast_message[0] = '\0'; // the long message is written by hand below
+    uint8_t body[512];
+    pb_ostream_t bs = pb_ostream_from_buffer(body, sizeof(body));
+    TEST_ASSERT_TRUE(pb_encode(&bs, meshtastic_ModuleConfig_MeshBeaconConfig_fields, &beacon));
+    TEST_ASSERT_TRUE(pb_encode_tag(&bs, PB_WT_STRING, meshtastic_ModuleConfig_MeshBeaconConfig_broadcast_message_tag));
+    TEST_ASSERT_TRUE(pb_encode_string(&bs, reinterpret_cast<const pb_byte_t *>(message.data()), message.size()));
+    TEST_ASSERT_TRUE(pb_encode_tag(&os, PB_WT_STRING, meshtastic_LocalModuleConfig_mesh_beacon_tag));
+    TEST_ASSERT_TRUE(pb_encode_string(&os, body, bs.bytes_written));
+
+    if (padTo) {
+        const size_t overhead = 4; // 2-byte key for tag 1000, 2-byte length
+        TEST_ASSERT_TRUE_MESSAGE(padTo >= os.bytes_written + overhead + 128, "padding must need a 2-byte length");
+        const std::vector<uint8_t> pad(padTo - os.bytes_written - overhead, 0x55);
+        TEST_ASSERT_TRUE(pb_encode_tag(&os, PB_WT_STRING, 1000));
+        TEST_ASSERT_TRUE(pb_encode_string(&os, pad.data(), pad.size()));
+    }
+    buf.resize(os.bytes_written);
+    return buf;
+}
+
+/// A backup from a pre-cut build: this node's config and an owner named "Backup Owner", with module_config encoded
+/// by hand as moduleBody.
+std::vector<uint8_t> encodeBackup(const std::vector<uint8_t> &moduleBody)
+{
+    meshtastic_BackupPreferences b = meshtastic_BackupPreferences_init_zero;
+    b.version = DEVICESTATE_CUR_VER;
+    b.has_config = true;
+    b.config = config;
+    b.has_owner = true;
+    b.owner = owner;
+    strncpy(b.owner.long_name, "Backup Owner", sizeof(b.owner.long_name) - 1);
+    std::vector<uint8_t> buf(4096);
+    pb_ostream_t os = pb_ostream_from_buffer(buf.data(), buf.size());
+    TEST_ASSERT_TRUE(pb_encode(&os, meshtastic_BackupPreferences_fields, &b));
+    TEST_ASSERT_TRUE(pb_encode_tag(&os, PB_WT_STRING, meshtastic_BackupPreferences_module_config_tag));
+    TEST_ASSERT_TRUE(pb_encode_string(&os, moduleBody.data(), moduleBody.size()));
+    buf.resize(os.bytes_written);
+    return buf;
+}
+
+/// The settings every module.proto case writes, so a wiped config is told apart from a migrated one.
+meshtastic_LocalModuleConfig distinctiveModuleConfig()
+{
+    meshtastic_LocalModuleConfig c = moduleConfig; // the first boot's defaults, with a current version
+    c.has_mqtt = true;
+    c.mqtt.enabled = true;
+    strncpy(c.mqtt.address, "mqtt.example", sizeof(c.mqtt.address) - 1);
+    c.has_telemetry = true;
+    c.telemetry.device_update_interval = 7200; // above the floor boot coerces default-channel telemetry to
+    c.has_mesh_beacon = true;
+    c.mesh_beacon.broadcast_interval_secs = 7200;
+    c.mesh_beacon.has_broadcast_offer_channel = true;
+    strncpy(c.mesh_beacon.broadcast_offer_channel.name, "Open", sizeof(c.mesh_beacon.broadcast_offer_channel.name) - 1);
+    c.mesh_beacon.broadcast_offer_channel.psk.size = 1;
+    c.mesh_beacon.broadcast_offer_channel.psk.bytes[0] = 1;
+    return c;
+}
+
+void assertDistinctiveModulesSurvived(const meshtastic_LocalModuleConfig &c)
+{
+    TEST_ASSERT_TRUE_MESSAGE(c.mqtt.enabled, "MQTT must survive the migration, not reset to defaults");
+    TEST_ASSERT_EQUAL_STRING("mqtt.example", c.mqtt.address);
+    TEST_ASSERT_EQUAL_UINT32(7200, c.telemetry.device_update_interval);
+    TEST_ASSERT_TRUE(c.has_mesh_beacon);
+    TEST_ASSERT_EQUAL_UINT32(7200, c.mesh_beacon.broadcast_interval_secs);
+    TEST_ASSERT_EQUAL_STRING("Open", c.mesh_beacon.broadcast_offer_channel.name);
+}
+
 } // namespace
 
 void setUp(void) {}
@@ -543,6 +644,124 @@ static void test_fullBootLadder_persistsMigratedV25(void)
 #endif
 }
 
+// --- module.proto: the broadcast_message cut from 100 to 60 bytes ---
+
+// A pre-cut save with a 100-byte beacon message fails the current decode. Regression guarded: that
+// installed default module config, silently resetting MQTT, telemetry and every other module.
+static void test_preCutModuleConfig_longBeaconMessage_migratesAndKeepsOtherModules(void)
+{
+    const meshtastic_LocalModuleConfig base = distinctiveModuleConfig();
+    const std::vector<uint8_t> file = encodePreCutModuleConfig(base, std::string(100, 'x'));
+    writeModuleBytes(file.data(), file.size());
+    coldBoot();
+
+    assertDistinctiveModulesSurvived(moduleConfig);
+    TEST_ASSERT_EQUAL_STRING_MESSAGE(std::string(60, 'x').c_str(), moduleConfig.mesh_beacon.broadcast_message,
+                                     "the message keeps its first 60 bytes");
+
+    meshtastic_LocalModuleConfig reloaded = meshtastic_LocalModuleConfig_init_zero;
+    TEST_ASSERT_EQUAL_MESSAGE(LoadFileResult::LOAD_SUCCESS,
+                              db->loadProto(moduleConfigFileName, meshtastic_LocalModuleConfig_size,
+                                            sizeof(meshtastic_LocalModuleConfig), &meshtastic_LocalModuleConfig_msg, &reloaded),
+                              "the migrated config is saved in the current shape, so the next boot decodes it");
+    assertDistinctiveModulesSurvived(reloaded);
+    TEST_ASSERT_EQUAL_UINT(60, strlen(reloaded.mesh_beacon.broadcast_message));
+}
+
+// A pre-cut save can be larger than the current encoded maximum, which the first read stops at.
+static void test_preCutModuleConfig_largerThanTheCurrentMaximum_stillMigrates(void)
+{
+    const meshtastic_LocalModuleConfig base = distinctiveModuleConfig();
+    const std::vector<uint8_t> file = encodePreCutModuleConfig(base, std::string(100, 'x'), 1040);
+    TEST_ASSERT_GREATER_THAN_UINT(meshtastic_LocalModuleConfig_size, file.size());
+    writeModuleBytes(file.data(), file.size());
+    coldBoot();
+
+    assertDistinctiveModulesSurvived(moduleConfig);
+    TEST_ASSERT_EQUAL_UINT(60, strlen(moduleConfig.mesh_beacon.broadcast_message));
+}
+
+// The cut never splits a character: a 2-byte character straddling byte 60 is dropped whole.
+static void test_truncateLegacyBeaconMessage_straddlingCharacter_isDroppedWhole(void)
+{
+    const std::string message = std::string(59, 'a') + "\xC3\xA9" + std::string(39, 'b');
+    const std::vector<uint8_t> in = encodePreCutModuleConfig(distinctiveModuleConfig(), message);
+    std::vector<uint8_t> out(in.size());
+    size_t outLen = 0;
+    TEST_ASSERT_TRUE(truncateLegacyBeaconMessage(in.data(), in.size(), out.data(), out.size(), outLen));
+
+    meshtastic_LocalModuleConfig decoded = meshtastic_LocalModuleConfig_init_zero;
+    TEST_ASSERT_TRUE(pb_decode_from_bytes(out.data(), outLen, &meshtastic_LocalModuleConfig_msg, &decoded));
+    TEST_ASSERT_EQUAL_STRING(std::string(59, 'a').c_str(), decoded.mesh_beacon.broadcast_message);
+}
+
+// A message that already fits needs no cut, so the rewrite declines and a normal decode reads the file.
+static void test_truncateLegacyBeaconMessage_messageThatFits_needsNoMigration(void)
+{
+    const std::vector<uint8_t> in = encodePreCutModuleConfig(distinctiveModuleConfig(), std::string(60, 'x'));
+    std::vector<uint8_t> out(in.size());
+    size_t outLen = 0;
+    TEST_ASSERT_FALSE(truncateLegacyBeaconMessage(in.data(), in.size(), out.data(), out.size(), outLen));
+
+    meshtastic_LocalModuleConfig decoded = meshtastic_LocalModuleConfig_init_zero;
+    TEST_ASSERT_TRUE(pb_decode_from_bytes(in.data(), in.size(), &meshtastic_LocalModuleConfig_msg, &decoded));
+    TEST_ASSERT_EQUAL_UINT(60, strlen(decoded.mesh_beacon.broadcast_message));
+}
+
+// A long message in a file that is broken elsewhere is not a pre-cut save: it still gets defaults.
+static void test_preCutModuleConfig_corruptElsewhere_installsDefaults(void)
+{
+    std::vector<uint8_t> file = encodePreCutModuleConfig(distinctiveModuleConfig(), std::string(100, 'x'));
+    file.insert(file.end(), {0xFF, 0xFF, 0xFF}); // a key with no end
+    std::vector<uint8_t> out(file.size());
+    size_t outLen = 0;
+    TEST_ASSERT_FALSE(truncateLegacyBeaconMessage(file.data(), file.size(), out.data(), out.size(), outLen));
+
+    writeModuleBytes(file.data(), file.size());
+    coldBoot();
+    TEST_ASSERT_TRUE_MESSAGE(strcmp("mqtt.example", moduleConfig.mqtt.address) != 0, "a broken file is not migrated");
+}
+
+// --- backup.proto: the same cut, inside BackupPreferences.module_config ---
+
+// A backup taken by a pre-cut build with a 100-byte beacon message fails the current decode.
+// Regression guarded: restorePreferences() had no migration, so the restore failed or restored a half-read backup.
+static void test_preCutBackup_longBeaconMessage_restoresEveryModule(void)
+{
+    writeBackupBytes(encodeBackup(encodePreCutModuleConfig(distinctiveModuleConfig(), std::string(100, 'x'))));
+    moduleConfig = meshtastic_LocalModuleConfig_init_zero;
+
+    TEST_ASSERT_TRUE_MESSAGE(
+        nodeDB->restorePreferences(meshtastic_AdminMessage_BackupLocation_FLASH, SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE),
+        "a pre-cut backup is migrated, not refused");
+    assertDistinctiveModulesSurvived(moduleConfig);
+    TEST_ASSERT_EQUAL_STRING(std::string(60, 'x').c_str(), moduleConfig.mesh_beacon.broadcast_message);
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("Backup Owner", devicestate.owner.long_name, "the fields around it restore too");
+    FSCom.remove(backupFileName);
+}
+
+// A backup that does not decode is refused and restores nothing.
+// Regression guarded: loadProto()'s DECODE_FAILED converted to true, so the half-read backup was restored and saved.
+static void test_undecodableBackup_isRefusedAndRestoresNothing(void)
+{
+    const meshtastic_LocalModuleConfig current = distinctiveModuleConfig();
+    std::vector<uint8_t> moduleBody(meshtastic_LocalModuleConfig_size);
+    const size_t moduleLen =
+        pb_encode_to_bytes(moduleBody.data(), moduleBody.size(), &meshtastic_LocalModuleConfig_msg, &current);
+    TEST_ASSERT_GREATER_THAN_UINT(0, moduleLen);
+    moduleBody.resize(moduleLen);
+    std::vector<uint8_t> file = encodeBackup(moduleBody);
+    file.insert(file.end(), {0xFF, 0xFF, 0xFF}); // a key with no end
+    writeBackupBytes(file);
+
+    moduleConfig = meshtastic_LocalModuleConfig_init_zero;
+    strncpy(moduleConfig.mqtt.address, "before.restore", sizeof(moduleConfig.mqtt.address) - 1);
+    TEST_ASSERT_FALSE_MESSAGE(nodeDB->restorePreferences(meshtastic_AdminMessage_BackupLocation_FLASH, SEGMENT_MODULECONFIG),
+                              "an undecodable backup is refused");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("before.restore", moduleConfig.mqtt.address, "nothing from it is restored");
+    FSCom.remove(backupFileName);
+}
+
 NDBM_TEST_ENTRY void setup()
 {
     initializeTestEnvironment();
@@ -569,6 +788,17 @@ NDBM_TEST_ENTRY void setup()
     printf("\n=== Capacity and persistence ===\n");
     RUN_TEST(test_overCapLegacyFile_truncatesToMaxNumNodes);
     RUN_TEST(test_fullBootLadder_persistsMigratedV25);
+
+    printf("\n=== module.proto beacon message cut ===\n");
+    RUN_TEST(test_preCutModuleConfig_longBeaconMessage_migratesAndKeepsOtherModules);
+    RUN_TEST(test_preCutModuleConfig_largerThanTheCurrentMaximum_stillMigrates);
+    RUN_TEST(test_truncateLegacyBeaconMessage_straddlingCharacter_isDroppedWhole);
+    RUN_TEST(test_truncateLegacyBeaconMessage_messageThatFits_needsNoMigration);
+    RUN_TEST(test_preCutModuleConfig_corruptElsewhere_installsDefaults);
+
+    printf("\n=== backup.proto beacon message cut ===\n");
+    RUN_TEST(test_preCutBackup_longBeaconMessage_restoresEveryModule);
+    RUN_TEST(test_undecodableBackup_isRefusedAndRestoresNothing);
 
     exit(UNITY_END());
 }

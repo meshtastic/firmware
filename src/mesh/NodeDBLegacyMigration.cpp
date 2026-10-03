@@ -9,12 +9,19 @@
 // This file (and the deviceonly_legacy proto) can be removed once
 // DEVICESTATE_MIN_VER advances past 24.
 
+#include "FSCommon.h"
 #include "NodeDB.h"
+#include "SPILock.h"
 #include "concurrency/LockGuard.h"
 #include "configuration.h"
 #include "mesh-pb-constants.h"
 #include "mesh/generated/meshtastic/deviceonly_legacy.pb.h"
 #include "meshUtils.h"
+#include "security/SecureZero.h"
+
+#ifdef MESHTASTIC_ENCRYPTED_STORAGE
+#include "security/EncryptedStorage.h"
+#endif
 
 #include <algorithm>
 #include <cstring>
@@ -130,5 +137,169 @@ bool NodeDB::migrateLegacyNodeDatabase()
     numMeshNodes = nodeDatabase.nodes.size();
     LOG_INFO("Migrated %u nodes from legacy -> v%u (positions: %u, telemetry: %u)", (unsigned)numMeshNodes, DEVICESTATE_CUR_VER,
              (unsigned)posCount, (unsigned)telCount);
+    return true;
+}
+
+// Encoded maxima before the broadcast_message cut (max_size 101), from develop's generated headers. Remove this
+// block, and its callers in loadFromDisk() and restorePreferences(), once pre-cut 2.8.0 builds are out of support.
+static constexpr size_t kLegacyLocalModuleConfigSize = 1044;
+static constexpr size_t kLegacyMeshBeaconConfigSize = 242;
+static constexpr size_t kLegacyBackupPreferencesSize = 2674;
+
+// Copies a message field by field; the body of each length-delimited field `target` goes to `rewrite` instead.
+template <typename Rewrite>
+static bool rewriteField(const uint8_t *in, size_t inLen, pb_ostream_t *out, uint32_t target, Rewrite rewrite)
+{
+    pb_istream_t is = pb_istream_from_buffer(in, inLen);
+    while (is.bytes_left) {
+        const size_t start = inLen - is.bytes_left;
+        pb_wire_type_t wireType;
+        uint32_t tag;
+        bool eof;
+        if (!pb_decode_tag(&is, &wireType, &tag, &eof))
+            return false;
+        if (tag == target && wireType == PB_WT_STRING) {
+            uint32_t len;
+            if (!pb_decode_varint32(&is, &len) || len > is.bytes_left)
+                return false;
+            if (!rewrite(in + (inLen - is.bytes_left), (size_t)len) || !pb_read(&is, NULL, len))
+                return false;
+        } else {
+            if (!pb_skip_field(&is, wireType) || !pb_write(out, in + start, (inLen - is.bytes_left) - start))
+                return false;
+        }
+    }
+    return true;
+}
+
+// Copies a MeshBeaconConfig body, cutting broadcast_message to what the current struct holds.
+static bool truncateBeaconBody(const uint8_t *in, size_t inLen, pb_ostream_t *out, bool &cut)
+{
+    constexpr size_t maxMessage = sizeof(meshtastic_ModuleConfig_MeshBeaconConfig::broadcast_message) - 1;
+    constexpr uint32_t tag = meshtastic_ModuleConfig_MeshBeaconConfig_broadcast_message_tag;
+    return rewriteField(in, inLen, out, tag, [&](const uint8_t *body, size_t len) {
+        const char *msg = reinterpret_cast<const char *>(body);
+        const size_t keep = utf8TruncateLen(msg, len, maxMessage);
+        if (keep < len) {
+            LOG_WARN("moduleConfig: beacon message %u bytes, over the %u limit, cut to %u", (unsigned)len, (unsigned)maxMessage,
+                     (unsigned)keep);
+            cut = true;
+        }
+        return pb_encode_tag(out, PB_WT_STRING, tag) && pb_encode_string(out, body, keep);
+    });
+}
+
+// Copies a LocalModuleConfig body, passing its mesh_beacon through truncateBeaconBody().
+static bool truncateModuleConfigBody(const uint8_t *in, size_t inLen, pb_ostream_t *out, bool &cut)
+{
+    constexpr uint32_t tag = meshtastic_LocalModuleConfig_mesh_beacon_tag;
+    return rewriteField(in, inLen, out, tag, [&](const uint8_t *body, size_t len) {
+        uint8_t beacon[kLegacyMeshBeaconConfigSize];
+        pb_ostream_t beaconOut = pb_ostream_from_buffer(beacon, sizeof(beacon));
+        return truncateBeaconBody(body, len, &beaconOut, cut) && pb_encode_tag(out, PB_WT_STRING, tag) &&
+               pb_encode_string(out, beacon, beaconOut.bytes_written);
+    });
+}
+
+bool truncateLegacyBeaconMessage(const uint8_t *in, size_t inLen, uint8_t *out, size_t outCap, size_t &outLen)
+{
+    pb_ostream_t os = pb_ostream_from_buffer(out, outCap);
+    bool cut = false;
+    if (!truncateModuleConfigBody(in, inLen, &os, cut))
+        return false;
+    outLen = os.bytes_written;
+    return cut;
+}
+
+bool truncateLegacyBackupBeaconMessage(const uint8_t *in, size_t inLen, uint8_t *out, size_t outCap, size_t &outLen)
+{
+    auto module = meshtastic_security::make_zeroizing_array(kLegacyLocalModuleConfigSize);
+    if (!module)
+        return false;
+    pb_ostream_t os = pb_ostream_from_buffer(out, outCap);
+    bool cut = false;
+    constexpr uint32_t tag = meshtastic_BackupPreferences_module_config_tag;
+    const bool parsed = rewriteField(in, inLen, &os, tag, [&](const uint8_t *body, size_t len) {
+        pb_ostream_t moduleOut = pb_ostream_from_buffer(module.get(), kLegacyLocalModuleConfigSize);
+        return truncateModuleConfigBody(body, len, &moduleOut, cut) && pb_encode_tag(&os, PB_WT_STRING, tag) &&
+               pb_encode_string(&os, module.get(), moduleOut.bytes_written);
+    });
+    if (!parsed)
+        return false;
+    outLen = os.bytes_written;
+    return cut;
+}
+
+// Reads a whole prefs file, decrypting it if it is stored encrypted; false if it is missing, empty or unreadable.
+static bool readRawPrefsFile(const char *filename, uint8_t *buf, size_t cap, size_t &len)
+{
+#ifdef MESHTASTIC_ENCRYPTED_STORAGE
+    if (EncryptedStorage::isEncrypted(filename))
+        return EncryptedStorage::readAndDecrypt(filename, buf, cap, len);
+#endif
+#ifdef FSCom
+    concurrency::LockGuard g(spiLock);
+    auto f = FSCom.open(filename, FILE_O_READ);
+    if (!f)
+        return false;
+    const int got = f.read(buf, cap);
+    f.close();
+    if (got <= 0)
+        return false;
+    len = (size_t)got;
+    return true;
+#else
+    return false;
+#endif
+}
+
+bool NodeDB::migrateLegacyModuleConfig()
+{
+    // Re-read at the legacy maximum: loadProto() stops at the current one, which a pre-cut file can exceed.
+    auto raw = meshtastic_security::make_zeroizing_array(kLegacyLocalModuleConfigSize);
+    auto fixed = meshtastic_security::make_zeroizing_array(kLegacyLocalModuleConfigSize);
+    if (!raw || !fixed)
+        return false;
+
+    size_t rawLen = 0;
+    if (!readRawPrefsFile(moduleConfigFileName, raw.get(), kLegacyLocalModuleConfigSize, rawLen))
+        return false;
+
+    size_t fixedLen = 0;
+    if (!truncateLegacyBeaconMessage(raw.get(), rawLen, fixed.get(), kLegacyLocalModuleConfigSize, fixedLen))
+        return false;
+
+    pb_istream_t stream = pb_istream_from_buffer(fixed.get(), fixedLen);
+    memset(&moduleConfig, 0, sizeof(moduleConfig));
+    if (!pb_decode(&stream, &meshtastic_LocalModuleConfig_msg, &moduleConfig)) {
+        LOG_ERROR("moduleConfig: still undecodable after the beacon message cut: %s", PB_GET_ERROR(&stream));
+        return false;
+    }
+    LOG_WARN("moduleConfig: migrated a save with an over-long beacon message");
+    return true;
+}
+
+bool NodeDB::migrateLegacyBackup(meshtastic_BackupPreferences &backup)
+{
+    auto raw = meshtastic_security::make_zeroizing_array(kLegacyBackupPreferencesSize);
+    auto fixed = meshtastic_security::make_zeroizing_array(kLegacyBackupPreferencesSize);
+    if (!raw || !fixed)
+        return false;
+
+    size_t rawLen = 0;
+    if (!readRawPrefsFile(backupFileName, raw.get(), kLegacyBackupPreferencesSize, rawLen))
+        return false;
+
+    size_t fixedLen = 0;
+    if (!truncateLegacyBackupBeaconMessage(raw.get(), rawLen, fixed.get(), kLegacyBackupPreferencesSize, fixedLen))
+        return false;
+
+    pb_istream_t stream = pb_istream_from_buffer(fixed.get(), fixedLen);
+    memset(&backup, 0, sizeof(backup));
+    if (!pb_decode(&stream, &meshtastic_BackupPreferences_msg, &backup)) {
+        LOG_ERROR("backup: still undecodable after the beacon message cut: %s", PB_GET_ERROR(&stream));
+        return false;
+    }
+    LOG_WARN("backup: migrated a backup with an over-long beacon message");
     return true;
 }

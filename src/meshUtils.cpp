@@ -254,3 +254,13 @@ void clampLongName(char *longName)
     longName[MAX_LONG_NAME_BYTES] = '\0';
     sanitizeUtf8(longName, MAX_LONG_NAME_BYTES + 1);
 }
+
+size_t utf8TruncateLen(const char *s, size_t len, size_t maxBytes)
+{
+    if (len <= maxBytes)
+        return len;
+    size_t n = maxBytes;
+    while (n > 0 && ((uint8_t)s[n] & 0xC0) == 0x80) // s[n] is the first byte dropped; back up to its lead byte
+        n--;
+    return n;
+}

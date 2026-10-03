@@ -439,6 +439,134 @@ const char *Channels::getName(size_t chIndex)
     return channelName;
 }
 
+// Blank means the running preset's display name, matching what getName() resolves a slot to, so an
+// offer naming "LongFast" finds a table entry that stores the name blank.
+static void resolveIdentityName(const char *name, char *out, size_t outLen)
+{
+    const char *src =
+        *name ? name : DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, false, config.lora.use_preset);
+    strncpy(out, src, outLen - 1);
+    out[outLen - 1] = '\0';
+}
+
+// A stored PSK expanded as getKey() expands it, so the spellings that resolve to one key - the
+// 1-byte shorthands, and a short key the firmware pads - compare equal instead of duplicating a
+// slot. Pure: no secondary inheritance and no role check, since a disabled slot must stay matchable.
+static uint8_t canonicalPsk(const uint8_t *psk, uint8_t pskLen, uint8_t *out)
+{
+    memset(out, 0, sizeof(meshtastic_ChannelSettings::psk.bytes));
+    if (pskLen == 0)
+        return 0;
+    if (pskLen == 1) {
+        if (psk[0] == 0)
+            return 0; // encryption off, same as an absent key
+        memcpy(out, defaultpsk, sizeof(defaultpsk));
+        out[sizeof(defaultpsk) - 1] += psk[0] - 1; // index 1 is defaultpsk itself
+        return sizeof(defaultpsk);
+    }
+    memcpy(out, psk, pskLen);
+    if (pskLen < 16)
+        return 16;
+    if (pskLen < 32 && pskLen != 16)
+        return 32;
+    return pskLen;
+}
+
+// Identity is the name and the PSK only; role is the caller's business. The name compares
+// case-sensitively because generateHash() xors the raw bytes, so two spellings differing only in
+// case are different channels on the air and must not be collapsed onto one slot.
+// inheritKey, when given, is the primary's canonical key: getKey() lends it to a live SECONDARY with an empty PSK,
+// so that slot is not cleartext. A DISABLED slot is matched raw, so it is passed without one.
+static bool slotMatchesIdentity(const meshtastic_Channel &ch, const char *wantName, const uint8_t *wantKey, uint8_t wantKeyLen,
+                                bool wantAead, const uint8_t *inheritKey = nullptr, uint8_t inheritKeyLen = 0)
+{
+    // AEAD and CTR on one key are two channels: each rejects the other's packets.
+    if (!ch.has_settings || ch.settings.use_aead != wantAead)
+        return false;
+    uint8_t haveKey[sizeof(meshtastic_ChannelSettings::psk.bytes)];
+    uint8_t haveKeyLen = canonicalPsk(ch.settings.psk.bytes, (uint8_t)ch.settings.psk.size, haveKey);
+    if (inheritKey && ch.role == meshtastic_Channel_Role_SECONDARY && ch.settings.psk.size == 0) {
+        memcpy(haveKey, inheritKey, inheritKeyLen);
+        haveKeyLen = inheritKeyLen;
+    }
+    if (haveKeyLen != wantKeyLen || memcmp(haveKey, wantKey, haveKeyLen) != 0)
+        return false;
+    char have[sizeof(ch.settings.name)];
+    resolveIdentityName(ch.settings.name, have, sizeof(have));
+    return strcmp(have, wantName) == 0;
+}
+
+int16_t Channels::findByIdentity(const char *name, const uint8_t *psk, uint8_t pskLen, bool useAead)
+{
+    char want[sizeof(meshtastic_ChannelSettings::name)];
+    resolveIdentityName(name, want, sizeof(want));
+    uint8_t wantKey[sizeof(meshtastic_ChannelSettings::psk.bytes)];
+    const uint8_t wantKeyLen = canonicalPsk(psk, pskLen, wantKey);
+    const meshtastic_ChannelSettings &primary = channelFile.channels[getPrimaryIndex()].settings;
+    uint8_t primaryKey[sizeof(meshtastic_ChannelSettings::psk.bytes)];
+    const uint8_t primaryKeyLen = canonicalPsk(primary.psk.bytes, (uint8_t)primary.psk.size, primaryKey);
+
+    for (ChannelIndex i = 0; i < getNumChannels(); i++) {
+        const meshtastic_Channel &ch = channelFile.channels[i];
+        if (ch.role == meshtastic_Channel_Role_DISABLED)
+            continue;
+        if (slotMatchesIdentity(ch, want, wantKey, wantKeyLen, useAead, primaryKey, primaryKeyLen))
+            return i;
+    }
+    return -1;
+}
+
+int16_t Channels::upsertIdentity(const char *name, const uint8_t *psk, uint8_t pskLen, bool useAead)
+{
+    if (pskLen > sizeof(meshtastic_ChannelSettings::psk.bytes))
+        return -1;
+
+    const int16_t live = findByIdentity(name, psk, pskLen, useAead);
+    if (live >= 0)
+        return live; // already in the table, write nothing
+
+    char want[sizeof(meshtastic_ChannelSettings::name)];
+    resolveIdentityName(name, want, sizeof(want));
+
+    uint8_t wantKey[sizeof(meshtastic_ChannelSettings::psk.bytes)];
+    const uint8_t wantKeyLen = canonicalPsk(psk, pskLen, wantKey);
+
+    // A DISABLED slot holds the settings of a deleted channel, so claiming one destroys nothing
+    // live. Prefer one that already held this identity, so re-adding a channel keeps its old index.
+    int16_t slot = -1;
+    for (ChannelIndex i = 0; i < getNumChannels(); i++) {
+        const meshtastic_Channel &ch = channelFile.channels[i];
+        if (i == getPrimaryIndex() || ch.role != meshtastic_Channel_Role_DISABLED)
+            continue;
+        if (slot < 0)
+            slot = i;
+        if (slotMatchesIdentity(ch, want, wantKey, wantKeyLen, useAead)) {
+            slot = i;
+            break;
+        }
+    }
+    if (slot < 0)
+        return -1; // every slot is live; the caller withholds rather than evicting one
+
+    meshtastic_Channel c = meshtastic_Channel_init_zero;
+    c.index = slot;
+    c.role = meshtastic_Channel_Role_SECONDARY;
+    c.has_settings = true;
+    strncpy(c.settings.name, name, sizeof(c.settings.name) - 1);
+    if (wantKeyLen == 0) {
+        // Cleartext is spelled {0}: an empty PSK on a SECONDARY would borrow the primary's key instead.
+        c.settings.psk.size = 1;
+        c.settings.psk.bytes[0] = 0;
+    } else {
+        c.settings.psk.size = pskLen;
+        memcpy(c.settings.psk.bytes, psk, pskLen);
+    }
+    c.settings.use_aead = useAead;
+    setChannel(c);
+    onConfigChanged();
+    return slot;
+}
+
 bool Channels::isDefaultChannel(ChannelIndex chIndex)
 {
     const auto &ch = getByIndex(chIndex);
