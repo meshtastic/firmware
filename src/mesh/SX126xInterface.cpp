@@ -14,8 +14,7 @@
 #include "BenchClock.h"
 #include "Throttle.h"
 #include "UptimeClock.h"
-#if (defined(SX126X_RX_REARM_AT_TX_DONE) && !defined(SX126X_REARM_FROM_TASK)) || defined(SX126X_STATE_SAMPLER_TASK) ||           \
-    defined(SX126X_REARM_RAW_FROM_TASK)
+#if (defined(SX126X_RX_REARM_AT_TX_DONE) && !defined(SX126X_REARM_FROM_TASK)) || defined(SX126X_STATE_SAMPLER_TASK)
 #include "SPILock.h"
 #endif
 #ifdef SX126X_STATE_SAMPLER_MS
@@ -44,7 +43,7 @@ SX126xInterface<T>::SX126xInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs
 #if defined(SX126X_STATE_SAMPLER_MS) || defined(SX126X_RX_REARM_AT_TX_DONE)
     rawCs = cs;
 #endif
-#if (defined(SX126X_RX_REARM_AT_TX_DONE) && !defined(SX126X_REARM_FROM_TASK)) || defined(SX126X_REARM_RAW_FROM_TASK)
+#if defined(SX126X_RX_REARM_AT_TX_DONE) && !defined(SX126X_REARM_FROM_TASK)
     isrHal = hal;
 #endif
 #ifdef SX126X_STATE_SAMPLER_TASK
@@ -1009,60 +1008,29 @@ template <typename T> bool INTERRUPT_ATTR SX126xInterface<T>::rearmReceiveFromIs
 #ifdef SX126X_REARM_RAW_FROM_TASK
 template <typename T> bool SX126xInterface<T>::rearmRawFromTask()
 {
-    if (rawCs == RADIOLIB_NC || !isrHal)
-        return false;
-    // Exactly what the nRF52 interrupt sends, and in the same order: the RX IRQ set with RX_DONE on DIO1, the flags
-    // cleared, the RX packet length, then a continuous RX. No standby: after TX_DONE the chip is already in its
-    // RX/TX fallback standby, which is why the interrupt path omits it too.
-    const uint16_t irqMask = RADIOLIB_SX126X_IRQ_RX_DONE | RADIOLIB_SX126X_IRQ_TIMEOUT | RADIOLIB_SX126X_IRQ_CRC_ERR |
-                             RADIOLIB_SX126X_IRQ_HEADER_VALID | RADIOLIB_SX126X_IRQ_HEADER_ERR |
-                             RADIOLIB_SX126X_IRQ_PREAMBLE_DETECTED;
-    const uint16_t dio1Mask = RADIOLIB_SX126X_IRQ_RX_DONE;
-    const uint8_t setDioIrq[] = {RADIOLIB_SX126X_CMD_SET_DIO_IRQ_PARAMS,
-                                 (uint8_t)(irqMask >> 8),
-                                 (uint8_t)(irqMask & 0xFF),
-                                 (uint8_t)(dio1Mask >> 8),
-                                 (uint8_t)(dio1Mask & 0xFF),
-                                 0,
-                                 0,
-                                 0,
-                                 0};
-    const uint8_t clearIrq[] = {RADIOLIB_SX126X_CMD_CLEAR_IRQ_STATUS, (uint8_t)(RADIOLIB_SX126X_IRQ_ALL >> 8),
-                                (uint8_t)(RADIOLIB_SX126X_IRQ_ALL & 0xFF)};
-    const uint8_t packetParams[] = {RADIOLIB_SX126X_CMD_SET_PACKET_PARAMS, (uint8_t)(preambleLength >> 8),
-                                    (uint8_t)(preambleLength & 0xFF),      RADIOLIB_SX126X_LORA_HEADER_EXPLICIT,
-                                    RADIOLIB_SX126X_MAX_PACKET_LENGTH,     RADIOLIB_SX126X_LORA_CRC_ON,
-                                    RADIOLIB_SX126X_LORA_IQ_STANDARD};
-    const uint8_t setRx[] = {RADIOLIB_SX126X_CMD_SET_RX, 0xFF, 0xFF, 0xFF}; // continuous
-    const uint8_t *cmds[] = {setDioIrq, clearIrq, packetParams, setRx};
-    const size_t lens[] = {sizeof(setDioIrq), sizeof(clearIrq), sizeof(packetParams), sizeof(setRx)};
-    static_assert(sizeof(setDioIrq) <= rawCommandMax, "a re-arm command is longer than rawCommandMax");
-
-    // One acquisition for the whole sequence, which is the point: RadioLib takes and releases it per transaction.
-    if (!spiLock->lock(20))
-        return false;
-    bool ok = true;
-    for (unsigned c = 0; ok && c < 4; c++) {
-        uint8_t out[rawCommandMax], in[rawCommandMax];
-        // The chip holds BUSY for microseconds after each command. Bounded, as the interrupt path bounds it.
-        for (unsigned i = 0; module.hal->digitalRead(module.getGpio()); i++) {
-            if (i >= 200) {
-                ok = false;
-                break;
-            }
-            delayMicroseconds(1);
-        }
-        if (!ok)
-            break;
-        memcpy(out, cmds[c], lens[c]);
-        isrHal->ArduinoHal::spiBeginTransaction(); // the base class's: the lock is already held
-        isrHal->digitalWrite(rawCs, isrHal->GpioLevelLow);
-        isrHal->spiTransfer(out, lens[c], in);
-        isrHal->digitalWrite(rawCs, isrHal->GpioLevelHigh);
-        isrHal->ArduinoHal::spiEndTransaction();
-    }
-    spiLock->unlock();
-    return ok;
+    // The nRF52 interrupt's four commands, in its order, as RadioLib module calls: the RX IRQ set with RX_DONE on DIO1,
+    // the flags cleared, the RX packet length, then a continuous RX. No standby (after TX_DONE the chip has fallen back
+    // to standby already) and no buffer base write (RX's base never moves). Each call takes the SPI lock for itself.
+    module.setRfSwitchState(Module::MODE_RX);
+    const uint32_t irqs = lora.getIrqMapped(MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS);
+    const uint32_t dio1 = lora.getIrqMapped(RADIOLIB_IRQ_RX_DEFAULT_MASK);
+    const uint8_t dioIrqParams[] = {
+        (uint8_t)(irqs >> 8), (uint8_t)(irqs & 0xFF), (uint8_t)(dio1 >> 8), (uint8_t)(dio1 & 0xFF), 0, 0, 0, 0};
+    const uint8_t clearAll[] = {(uint8_t)(RADIOLIB_SX126X_IRQ_ALL >> 8), (uint8_t)(RADIOLIB_SX126X_IRQ_ALL & 0xFF)};
+    // As startReceive() programs them: explicit header, the RX length RadioLib uses, CRC on, standard IQ
+    const uint8_t packetParams[] = {(uint8_t)(preambleLength >> 8),       (uint8_t)(preambleLength & 0xFF),
+                                    RADIOLIB_SX126X_LORA_HEADER_EXPLICIT, RADIOLIB_SX126X_MAX_PACKET_LENGTH,
+                                    RADIOLIB_SX126X_LORA_CRC_ON,          RADIOLIB_SX126X_LORA_IQ_STANDARD};
+    const uint8_t continuous[] = {0xFF, 0xFF, 0xFF};
+    int16_t res = module.SPIwriteStream(RADIOLIB_SX126X_CMD_SET_DIO_IRQ_PARAMS, dioIrqParams, sizeof(dioIrqParams));
+    if (res == RADIOLIB_ERR_NONE)
+        res = module.SPIwriteStream(RADIOLIB_SX126X_CMD_CLEAR_IRQ_STATUS, clearAll, sizeof(clearAll));
+    if (res == RADIOLIB_ERR_NONE)
+        res = module.SPIwriteStream(RADIOLIB_SX126X_CMD_SET_PACKET_PARAMS, packetParams, sizeof(packetParams));
+    // No wait for BUSY to fall after it, as neither the interrupt path nor the launch's SET_TX waits
+    if (res == RADIOLIB_ERR_NONE)
+        res = module.SPIwriteStream(RADIOLIB_SX126X_CMD_SET_RX, continuous, sizeof(continuous), false);
+    return res == RADIOLIB_ERR_NONE;
 }
 #endif
 
@@ -1078,16 +1046,14 @@ template <typename T> void SX126xInterface<T>::rearmReceiveFromTask()
     setTransmitEnable(false);
     int16_t err = RADIOLIB_ERR_NONE;
 #ifdef SX126X_REARM_RAW_FROM_TASK
-    // The four raw commands under one lock. Falls back to startReceive() if the chip or the lock is busy, so a failure
-    // costs a slow re-arm rather than a lost RX.
+    // The four commands alone. A failed one falls back to startReceive(), so it costs a slow re-arm rather than a lost
+    // RX. The thread logs the counts: this task does not log.
     if (rearmRawFromTask()) {
-        rearmRawOk++;
+        rearmRawOk = rearmRawOk + 1;
     } else {
-        rearmRawFell++;
+        rearmRawFell = rearmRawFell + 1;
         err = lora.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_INF, MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS);
     }
-    if ((rearmRawOk + rearmRawFell) % 50 == 0)
-        LOG_DEBUG("raw task re-arm: %u raw, %u fell back to startReceive", (unsigned)rearmRawOk, (unsigned)rearmRawFell);
 #else
     err = lora.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_INF, MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS);
 #endif
@@ -1132,6 +1098,13 @@ template <typename T> bool SX126xInterface<T>::adoptReceiveArmedFromIsr()
         LOG_WARN("RX re-arm at TX_DONE failed %s%d, restarting RX", radioLibErr, rearmErr);
         return false;
     }
+#ifdef SX126X_REARM_RAW_FROM_TASK
+    const uint32_t rawOk = rearmRawOk, rawFell = rearmRawFell;
+    if (rawOk + rawFell - rearmRawLogged >= 50 || (rawFell && !rearmRawLogged)) {
+        rearmRawLogged = rawOk + rawFell;
+        LOG_DEBUG("Short task re-arm: %u by its four commands, %u fell back to startReceive", (unsigned)rawOk, (unsigned)rawFell);
+    }
+#endif
     if (state != REARM_ARMED)
         return false;
     const uint32_t heldMs = (uint32_t)(((uint64_t)(xTaskGetTickCount() - rearmTicks) * 1000) / configTICK_RATE_HZ);
