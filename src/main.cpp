@@ -1091,14 +1091,24 @@ void setup()
 #if HAS_BLE_GATT_MESH && defined(ARCH_NRF52)
     // The service is registered by NRF52Bluetooth's setupMeshService(); this is the pump.
     bleGattMeshHandler = new NRF52BLEGattMesh();
-    if (config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_BLE_GATT_PEER)
-        bleGattMeshHandler->start();
+    if (bleGattMeshHandler->isEnabled()) {
+        // startDisabled() registers the service but never advertises it, so no peer can find it.
+        if (!config.bluetooth.enabled)
+            LOG_WARN("BLE GATT mesh: enabled_protocols asks for it, but bluetooth.enabled is false");
+        else
+            bleGattMeshHandler->start();
+    }
 #endif
 #if HAS_BLE_GATT_MESH && defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_BLUETOOTH
-    // The service is registered by NimbleBluetooth's setupService(); this is the pump.
+    // The service is registered by NimbleBluetooth's setupService(), which runs only when
+    // setBluetoothEnable() starts Bluetooth; this is the pump.
     bleGattMeshHandler = new ESP32BLEGattMesh();
-    if (ESP32BLEGattMesh::enabled())
-        bleGattMeshHandler->start();
+    if (bleGattMeshHandler->isEnabled()) {
+        if (const char *why = bluetoothBlockedReason())
+            LOG_WARN("BLE GATT mesh: enabled_protocols asks for it, but Bluetooth will not start: %s", why);
+        else
+            bleGattMeshHandler->start();
+    }
 #endif
 
     service = new MeshService();
