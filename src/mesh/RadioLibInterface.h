@@ -186,6 +186,32 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      */
     void pollMissedIrqs();
 
+    // Time::getMillis() at which a CAD->RX handoff left the chip listening without us arming it, or 0
+    // if none is outstanding. 0 is a sentinel, so it must be tested before any elapsed comparison.
+    uint32_t cadHandoffRxStart = 0;
+
+    // True between the handoff and the rearmReceive() that consumes it: the chip is already in RX, so
+    // that one re-arm must not standby. Both fields are cleared by setStandby().
+    bool cadHandedToRx = false;
+
+    /** Record that CAD left the chip in RX: arms both the flag and the no-show window below. */
+    void noteCadHandoffToRx();
+
+    /** True where DIO1 is only seen through libch341's pin poll (a CH341 USB host), so an interrupt arrives up to
+     *  one poll interval after the chip raised it, and every command is a USB round trip. */
+    bool irqPolledOverUsb() const;
+
+    /** Re-arm if a CAD->RX handoff has produced no packet well past one max-length airtime. */
+    void checkCadHandoffTimeout();
+
+    // Time::getMillis() when plain RX was first seen holding PREAMBLE/HEADER flags, or 0 if none.
+    uint32_t rxFlagsSeenMs = 0;
+    // rxFlagsSeenMs was stamped by a header, not by a bare preamble before it
+    bool rxFlagsSeenHeader = false;
+
+    /** Plain-RX twin of checkCadHandoffTimeout(): retire flags no RX_DONE consumed within a max packet. */
+    virtual void checkStaleRxFlags();
+
     /**
      * Reset AGC by power-cycling the analog frontend.
      * Subclasses override with chip-specific calibration sequences.
@@ -239,7 +265,33 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      */
     virtual void startReceive();
 
-    /** can we detect a LoRa preamble on the current channel? */
+    /**
+     * Re-arm RX after a busy-channel CAD detect or after servicing an RX_DONE. Normally a full
+     * startReceive(); after a CAD->RX handoff the chip is already listening, so that one re-arm
+     * re-attaches the MCU ISR only - a startReceive() there would standby over the packet CAD found.
+     */
+    void rearmReceive();
+
+    /** Resume an RX the chip is still running instead of restarting it; false if it is not known to be running. */
+    virtual bool resumeRunningReceive() { return false; }
+
+    /** Whether a TX payload written into the chip's buffer while this frame arrived can have overwritten part of it */
+    virtual bool rxFrameOverlapsTxStage(size_t length) { return false; }
+
+    /** A backoff shorter than this is waited out as before, and its payload staged at the scan */
+    static constexpr uint32_t TX_STAGE_EARLY_MIN_MS = 5;
+    /** When the TX timer really falls due, 0 if it was not brought forward to stage the payload */
+    uint32_t txStageDueMs = 0;
+    /** Whether a payload can be written during its backoff (checked from the thread that queues it) */
+    virtual bool wantsEarlyTxStage() const { return false; }
+    /** Write the next packet's payload while RX runs, ahead of its scan */
+    virtual void stageTxEarly(meshtastic_MeshPacket *p) {}
+    /** notifyLater(delay, TRANSMIT_DELAY_COMPLETED), brought forward where the payload can be staged early */
+    void scheduleTransmitDelayCompleted(uint32_t delay);
+
+    /** can we detect a LoRa preamble on the current channel?
+     *  A true return means the chip may have been handed to RX in place, so the caller MUST follow it
+     *  with rearmReceive() before anything else touches the radio. */
     virtual bool isChannelActive() = 0;
 
     /** are we actively receiving a packet (only called during receiving state)
@@ -308,7 +360,8 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      */
     void startTransmitTimerRebroadcast(meshtastic_MeshPacket *p);
 
-    void handleTransmitInterrupt();
+    /** Detach the sent packet and undo its pre-TX switch; the caller re-arms RX, then finishSentPacket(). */
+    meshtastic_MeshPacket *handleTransmitInterrupt();
     void handleReceiveInterrupt();
 
     static void timerCallback(void *p1, uint32_t p2);
@@ -325,12 +378,29 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
   protected:
     uint32_t activeReceiveStart = 0;
+    // Time::getMillis() when a look cleared PREAMBLE_DETECTED and began holding TX, or 0 if no hold.
+    uint32_t preambleHoldStart = 0;
+
+    /** True while a cleared preamble still holds TX; ends the hold once one max packet has passed. */
+    bool preambleHoldActive();
+
+    /** Clear a bare PREAMBLE_DETECTED and hold TX one max packet, unless a hold is already running. */
+    void holdOnPreamble();
+
+    /** Whether a packet is waiting to transmit; txQueue itself stays private. */
+    bool hasQueuedTx() { return !txQueue.empty(); }
 
     bool receiveDetected(uint16_t irq, unsigned long syncWordHeaderValidFlag, unsigned long preambleDetectedFlag);
 
     /** Do any hardware setup needed on entry into send configuration for the radio.
      * Subclasses can customize, but must also call this base method */
     virtual void configHardwareForSend();
+
+    /** Put radioBuffer's first numbytes on air; a subclass may launch a payload it staged during the scan */
+    virtual int16_t launchTransmit(size_t numbytes);
+
+    /** The packet the running channel scan is clearing the way for, so the scan can stage it; null otherwise */
+    meshtastic_MeshPacket *scanForTx = nullptr;
 
     /** Could we send right now (i.e. either not actively receiving or transmitting)? */
     virtual bool canSendImmediately();
@@ -343,6 +413,12 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     /**
      * If a send was in progress finish it and return the buffer to the pool */
     void completeSending();
+
+    /** Clear sendingPacket and release its per-packet radio state; returns the packet, or null. */
+    meshtastic_MeshPacket *detachSentPacket();
+
+    /** Airtime, counters, log and pool release for a packet detachSentPacket() returned. */
+    void finishSentPacket(meshtastic_MeshPacket *p);
 
     /**
      * Add SNR data to received messages
