@@ -21,6 +21,7 @@ class SerialModule : public StreamAPI, private concurrency::OSThread
     bool firstTime = 1;
     unsigned long lastNmeaTime = millis();
     char outbuf[90] = "";
+    uint32_t telemetryStartAt = 0, telemetryStartDelay = 0;
 
   public:
     SerialModule();
@@ -34,6 +35,7 @@ class SerialModule : public StreamAPI, private concurrency::OSThread
   private:
     uint32_t getBaudRate();
     void sendTelemetry(meshtastic_Telemetry m);
+    bool telemetryDue();
     void processWXSerial();
 };
 
@@ -50,6 +52,8 @@ class SerialModuleRadio : public SinglePortModule
 
   public:
     SerialModuleRadio();
+
+    using SinglePortModule::setStartDelay;
 
     /**
      * Send our payload into the mesh

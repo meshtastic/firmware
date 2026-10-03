@@ -1,9 +1,13 @@
 #include "SerialModule.h"
+#include "Default.h"
 #include "GeoCoord.h"
 #include "MeshService.h"
 #include "NMEAWPL.h"
 #include "NodeDB.h"
+#include "NodeStatus.h"
 #include "Router.h"
+#include "TransmitHistory.h"
+#include "airtime.h"
 #include "configuration.h"
 #include "gps/RTC.h"
 #include "meshUtils.h"
@@ -234,6 +238,12 @@ int32_t SerialModule::runOnce()
 
             firstTime = 0;
 
+            if (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_WS85) {
+                // First send after the shared periodic-broadcast start delay, like the telemetry modules
+                telemetryStartAt = millis();
+                telemetryStartDelay = serialModuleRadio->setStartDelay();
+            }
+
             // in API mode send rebooted sequence
             if (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_PROTO) {
                 emitRebooted();
@@ -304,6 +314,9 @@ int32_t SerialModule::runOnce()
     }
 }
 
+// Own TransmitHistory slot, so a board with I2C environment sensors as well keeps both streams.
+static constexpr uint16_t TX_HISTORY_KEY_SERIAL_TELEMETRY = 0x8006;
+
 /**
  * Sends telemetry packet over the mesh network.
  *
@@ -318,18 +331,34 @@ void SerialModule::sendTelemetry(meshtastic_Telemetry m)
     meshtastic_MeshPacket *p = router->allocForSending();
     if (!p)
         return;
+    m.time = getTime();
     p->decoded.portnum = meshtastic_PortNum_TELEMETRY_APP;
     p->decoded.payload.size =
         pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), &meshtastic_Telemetry_msg, &m);
     p->to = NODENUM_BROADCAST;
     p->decoded.want_response = false;
-    if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR) {
-        p->want_ack = true;
-        p->priority = meshtastic_MeshPacket_Priority_HIGH;
-    } else {
+    // Same as EnvironmentTelemetryModule: periodic telemetry must not outrank interactive traffic.
+    if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR)
         p->priority = meshtastic_MeshPacket_Priority_RELIABLE;
-    }
+    else
+        p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
     service->sendToMesh(p, RX_SRC_LOCAL, true);
+    TransmitHistory::getInstance()->setLastSentToMesh(TX_HISTORY_KEY_SERIAL_TELEMETRY);
+}
+
+/// Whether telemetry may go out now: the cadence of EnvironmentTelemetryModule, carried across reboots.
+bool SerialModule::telemetryDue()
+{
+    if (Throttle::isWithinTimespanMs(telemetryStartAt, telemetryStartDelay))
+        return false;
+    telemetryStartDelay = 0; // passed for good, also once millis() wraps
+    uint32_t lastSend = TransmitHistory::getInstance()->getLastSentToMeshMillis(TX_HISTORY_KEY_SERIAL_TELEMETRY);
+    uint32_t interval = Default::getConfiguredOrDefaultMsScaled(moduleConfig.telemetry.environment_update_interval,
+                                                                default_telemetry_broadcast_interval_secs,
+                                                                nodeStatus->getNumOnline(), TrafficType::TELEMETRY);
+    return !(lastSend && Throttle::isWithinTimespanMs(lastSend, interval)) &&
+           airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR) &&
+           airTime->isTxAllowedAirUtil();
 }
 
 /**
@@ -535,8 +564,6 @@ void SerialModule::processWXSerial()
 {
 #if SERIAL_PRINT_PORT != 0 && !defined(ARCH_STM32WL) && !defined(CONFIG_IDF_TARGET_ESP32C6)
 
-    static unsigned int lastAveraged = 0;
-    static unsigned int averageIntervalMillis = 300000; // 5 minutes hard coded.
     static double dir_sum_sin = 0;
     static double dir_sum_cos = 0;
     static float velSum = 0;
@@ -651,7 +678,7 @@ void SerialModule::processWXSerial()
         LOG_INFO("WS8X : %i %.1fg%.1f %.1fv %.1fv %.1fC rain: %.1f, %i sum", atoi(windDir), parseDecimalFloat(windVel),
                  parseDecimalFloat(windGust), batVoltageF, capVoltageF, temperatureF, rain, rainSum);
     }
-    if (gotwind && !Throttle::isWithinTimespanMs(lastAveraged, averageIntervalMillis) && velCount > 0 && dirCount > 0) {
+    if (gotwind && velCount > 0 && dirCount > 0 && telemetryDue()) {
         // calculate averages and send to the mesh
         float velAvg = 1.0 * velSum / velCount;
 
@@ -664,8 +691,6 @@ void SerialModule::processWXSerial()
         if (dirAvg < 0) {
             dirAvg += 360.0;
         }
-        // unset-sentinel-ok: gotwind carries the armed state; no read tests this for 0
-        lastAveraged = millis();
 
         // make a telemetry packet with the data
         meshtastic_Telemetry m = meshtastic_Telemetry_init_zero;
