@@ -21,6 +21,11 @@ bool initWifi();
 
 void deinitWifi();
 
+/// Stop WiFi without changing the user's config, and bring it back.
+void suspendWifi();
+void resumeWifi();
+bool isWifiSuspended();
+
 bool isWifiAvailable();
 
 uint8_t getWifiDisconnectReason();

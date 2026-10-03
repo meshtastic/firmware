@@ -100,6 +100,9 @@ class Power : public concurrency::OSThread
     void powerCommandsCheck();
     void readPowerStatus();
     void logHeapUsage();
+#if HAS_WIFI && !defined(ARCH_PORTDUINO)
+    void handleWifiPowerManagement();
+#endif
     virtual bool setup();
     virtual int32_t runOnce() override;
     void setStatusHandler(meshtastic::PowerStatus *handler) { statusHandler = handler; }
@@ -147,6 +150,11 @@ class Power : public concurrency::OSThread
     // Periodic free-heap logging: time of the last line emitted, and the reading it carried
     uint32_t lastHeapLogTime = 0;
     uint32_t lastHeapLogFree = 0;
+
+#if HAS_WIFI && !defined(ARCH_PORTDUINO)
+    // When external power went away, 0 while it is present.
+    uint32_t wifiPowerLostAt = 0;
+#endif
 
 #ifdef ARCH_ESP32
     // Get notified when lightsleep begins and ends
