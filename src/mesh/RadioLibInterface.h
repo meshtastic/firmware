@@ -23,6 +23,12 @@
 #define MESHTASTIC_RX_READOUT_TASK
 #endif
 
+// Bench: in the radio task no log line may sit between the TX timer and SET_TX, since the radio's lines wait on the
+// loop's. CAD free goes after the launch, as CAD arm does.
+#if defined(MESHTASTIC_RADIO_TASK) && !defined(MESHTASTIC_LOG_CAD_FREE_AFTER_TX)
+#define MESHTASTIC_LOG_CAD_FREE_AFTER_TX
+#endif
+
 // Bench: -DLR11X0_TX_STAGE_EARLY and -DSX126X_TX_STAGE_EARLY write the TX payload during its backoff (see the
 // driver headers). The timer plumbing lives here, as #12016's does.
 #if (defined(LR11X0_TX_STAGE_EARLY) || defined(SX126X_TX_STAGE_EARLY)) && !defined(MESHTASTIC_TX_STAGE_EARLY)

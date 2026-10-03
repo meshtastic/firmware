@@ -756,6 +756,7 @@ DMShellTestModule::RadioSnapshot DMShellTestModule::readRadio()
     RadioLibInterface *radio = RadioLibInterface::instance;
     if (!radio)
         return r;
+    RADIO_TASK_LOCK(); // the chip read below
     const RadioLibInterface::RxCounters c = radio->rxCounters();
     r.good = c.good;
     r.bad = c.bad;

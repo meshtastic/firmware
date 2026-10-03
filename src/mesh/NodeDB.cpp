@@ -3016,6 +3016,8 @@ static concurrency::Lock g_reloadFromDiskMutex;
 bool NodeDB::reloadFromDisk()
 {
     concurrency::LockGuard guard(&g_reloadFromDiskMutex);
+    // With the radio in its own task, keep it parked for the whole swap, as the loop's cooperative threading did
+    RADIO_TASK_LOCK();
     LOG_INFO("NodeDB: Reloading config from encrypted storage after unlock");
 
     RadioInterface *rIface = router ? router->getRadioIface() : nullptr;

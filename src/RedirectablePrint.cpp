@@ -185,7 +185,7 @@ void RedirectablePrint::log_to_serial(const char *logLevel, const char *format, 
 #endif
 #endif
     }
-    auto thread = concurrency::OSThread::currentThread;
+    auto thread = concurrency::OSThread::current();
     // the tag is printed by vprintf, which knows whether the formatted
     // message already carries one of its own
 
@@ -226,7 +226,7 @@ void RedirectablePrint::log_to_syslog(const char *logLevel, const char *format, 
         default:
             ll = 0;
         }
-        auto thread = concurrency::OSThread::currentThread;
+        auto thread = concurrency::OSThread::current();
         if (thread) {
             syslog.vlogf(ll, thread->ThreadName.c_str(), format, arg);
         } else {
@@ -249,7 +249,7 @@ void RedirectablePrint::log_to_ble(const char *logLevel, const char *format, va_
         isBleConnected = linuxBluetooth != nullptr && linuxBluetooth->isEnabled() && linuxBluetooth->isConnected();
 #endif
         if (isBleConnected) {
-            auto thread = concurrency::OSThread::currentThread;
+            auto thread = concurrency::OSThread::current();
             meshtastic_LogRecord logRecord = meshtastic_LogRecord_init_zero;
             logRecord.level = getLogLevel(logLevel);
             vsnprintf(logRecord.message, sizeof(logRecord.message), format, arg);

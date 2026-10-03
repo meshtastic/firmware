@@ -57,7 +57,12 @@ void LockingArduinoHal::spiTransfer(uint8_t *out, size_t len, uint8_t *in)
 
 RadioLibInterface::RadioLibInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst,
                                      RADIOLIB_PIN_TYPE busy, PhysicalLayer *_iface)
+#ifdef MESHTASTIC_RADIO_TASK
+    : NotifiedWorkerThread("RadioIf", &concurrency::radioController, &concurrency::radioDelay), module(hal, cs, irq, rst, busy),
+      iface(_iface)
+#else
     : NotifiedWorkerThread("RadioIf"), module(hal, cs, irq, rst, busy), iface(_iface)
+#endif
 {
     instance = this;
 
@@ -605,7 +610,9 @@ void RadioLibInterface::onNotify(uint32_t notification)
                     setTransmitDelay(); // the radio config moved, so re-run the delay and scan on it
                 } else {
                     // Listen-before-talk: a CAD preamble scan immediately before we key up.
+#ifndef MESHTASTIC_RADIO_TASK
                     LOG_DEBUG("CAD arm");
+#endif
 #ifdef MESHTASTIC_TX_SLOT_GATE_MS
                     // Bench: after the log line, which on some boards costs most of a slot
                     const uint32_t scanAt = ownSlotScanAt();
@@ -649,6 +656,10 @@ void RadioLibInterface::onNotify(uint32_t notification)
                     LOG_TRACE("Channel scan %s in %u ms", channelActive ? "busy" : "clear",
                               (unsigned)(Time::getMillis() - scanStartMs));
                     if (channelActive) { // currently traffic on the channel?
+#ifdef MESHTASTIC_RADIO_TASK
+                        // Bench: the radio's lines wait on the loop's, so none sits between the timer and the launch
+                        LOG_DEBUG("CAD arm");
+#endif
                         LOG_DEBUG("CAD busy");
                         if (!RadioTxHooks::holdsRadio(txp)) {
                             rearmReceive(); // try receiving this packet, afterwards we'll be trying to transmit again
@@ -663,6 +674,9 @@ void RadioLibInterface::onNotify(uint32_t notification)
                         txp = txQueue.dequeue();
                         assert(txp);
                         startSend(txp);
+#ifdef MESHTASTIC_RADIO_TASK
+                        LOG_DEBUG("CAD arm");
+#endif
 #ifdef MESHTASTIC_LOG_CAD_FREE_AFTER_TX
                         // Bench: after the launch, not between the verdict and SET_TX, where the chip sits deaf in STBY_RC
                         LOG_DEBUG("CAD free");
@@ -1114,6 +1128,9 @@ void RadioLibInterface::startReceive()
 #ifdef MESHTASTIC_RX_READOUT_TASK
     if (!rxReadoutTaskTried)
         startRxReadoutTask();
+#endif
+#ifdef MESHTASTIC_RADIO_TASK
+    concurrency::startRadioTask(); // once, from the loop during init, after the readout task: both take the loop's priority
 #endif
     // How long the radio could not hear, reported at the moment it can again. On a slow bus the
     // transactions on either side of a scan, a transmission or a reception take long enough to swallow

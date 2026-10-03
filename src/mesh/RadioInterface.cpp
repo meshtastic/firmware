@@ -646,6 +646,7 @@ std::unique_ptr<RadioInterface> initLoRa()
         config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
         nodeDB->saveToDisk(SEGMENT_CONFIG);
 
+        RADIO_TASK_LOCK();
         if (rIf && !rIf->reconfigure()) {
             LOG_WARN("Reconfigure failed, rebooting");
             if (screen) {
@@ -1076,6 +1077,7 @@ bool RadioInterface::init()
 
 int RadioInterface::notifyDeepSleepCb(void *unused)
 {
+    RADIO_TASK_LOCK();
     sleep();
     return 0;
 }

@@ -5,6 +5,7 @@
 #include "Observer.h"
 #include "PointerQueue.h"
 #include "airtime.h"
+#include "concurrency/RadioTask.h"
 #include "error.h"
 #include <memory>
 
@@ -409,12 +410,17 @@ class RadioInterface
 
     /// Return 0 if sleep is okay. A non-NULL argument means the radio is about to be powered
     /// down (deep sleep / shutdown), see doPreflightSleep()
-    int preflightSleepCb(void *deepSleep = NULL) { return canSleep(deepSleep != NULL) ? 0 : 1; }
+    int preflightSleepCb(void *deepSleep = NULL)
+    {
+        RADIO_TASK_LOCK();
+        return canSleep(deepSleep != NULL) ? 0 : 1;
+    }
 
     int notifyDeepSleepCb(void *unused = NULL);
 
     int reloadConfig(void *unused)
     {
+        RADIO_TASK_LOCK();
         reconfigure();
         return 0;
     }

@@ -445,14 +445,28 @@ void Router::setReceivedMessage()
     runASAP = true;
 }
 
+#ifdef MESHTASTIC_RADIO_TASK
+void Router::wakeIfReceived()
+{
+#ifdef MESHTASTIC_RX_DEFER_FOR_TX_MS
+    if (rxDeferredForTx)
+        return; // its own deadline wakes it
+#endif
+    if (!fromRadioQueue.isEmpty())
+        setInterval(0);
+}
+#endif
+
 meshtastic_QueueStatus Router::getQueueStatus()
 {
     if (!iface) {
         meshtastic_QueueStatus qs;
         qs.res = qs.mesh_packet_id = qs.free = qs.maxlen = 0;
         return qs;
-    } else
+    } else {
+        RADIO_TASK_LOCK();
         return iface->getQueueStatus();
+    }
 }
 
 ErrorCode Router::sendLocal(meshtastic_MeshPacket *p, RxSource src)
@@ -653,12 +667,14 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
     }
 
     assert(iface); // This should have been detected already in sendLocal (or we just received a packet from outside)
+    RADIO_TASK_LOCK();
     return iface->send(p);
 }
 
 /** Attempt to cancel a previously sent packet.  Returns true if a packet was found we could cancel */
 bool Router::cancelSending(NodeNum from, PacketId id)
 {
+    RADIO_TASK_LOCK();
     if (iface && iface->cancelSending(from, id)) {
         // We are not a relayer of this packet anymore
         removeRelayer(nodeDB->getLastByteOfNodeNum(nodeDB->getNodeNum()), id, from);
@@ -670,6 +686,7 @@ bool Router::cancelSending(NodeNum from, PacketId id)
 /** Attempt to find a packet in the TxQueue. Returns true if the packet was found. */
 bool Router::findInTxQueue(NodeNum from, PacketId id)
 {
+    RADIO_TASK_LOCK();
     return iface->findInTxQueue(from, id);
 }
 
