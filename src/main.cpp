@@ -1102,8 +1102,15 @@ void setup()
 #elif defined(ARCH_NRF52)
     bleMeshHandler = new NRF52BLEMesh();
 #endif
-    if (bleMeshHandler && (config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_BLE_BROADCAST))
-        bleMeshHandler->start();
+    if (bleMeshHandler && bleMeshHandler->isEnabled()) {
+#if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_BLUETOOTH
+        // The scanner and the burst wait on NimbleBluetooth, which setBluetoothEnable() may never start.
+        if (const char *why = bluetoothBlockedReason())
+            LOG_WARN("BLE mesh: enabled_protocols asks for it, but Bluetooth will not start: %s", why);
+        else
+#endif
+            bleMeshHandler->start();
+    }
 #endif
 #if HAS_BLE_GATT_MESH && defined(ARCH_NRF52)
     // The service is registered by NRF52Bluetooth's setupMeshService(); this is the pump.
