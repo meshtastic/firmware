@@ -279,6 +279,19 @@ template <class T> class SX126xInterface : public RadioLibInterface
     volatile uint32_t rearmUs = 0;
     /** FreeRTOS tick count when the task finished the re-arm */
     volatile uint32_t rearmTicks = 0;
+#ifdef SX126X_REARM_RAW_FROM_TASK
+    /** Bench: re-arm with the four raw commands the nRF52 interrupt sends, under ONE lock, instead of
+     *  RadioLib's startReceive(). Round 84 measured the task's startReceive() at 1829 us against the
+     *  interrupt's 215 us for the same chip: ~7 transactions each separately locked, against 4 raw ones
+     *  locked once. Two of the seven come from a standby() this path's own comment calls unnecessary.
+     *  A task may use the SPI driver, so nothing about the context requires the slow route. */
+    bool rearmRawFromTask();
+    /** Longest raw command: SET_DIO_IRQ_PARAMS, opcode plus 8 bytes */
+    static constexpr size_t rawCommandMax = 9;
+    /** The HAL without its lock: the caller holds the SPI lock across the whole sequence */
+    ArduinoHal *isrHal = nullptr;
+    uint32_t rearmRawOk = 0, rearmRawFell = 0;
+#endif
 #elif defined(SX126X_RX_REARM_AT_TX_DONE)
     bool rearmReceiveFromIsr() override;
     bool adoptReceiveArmedFromIsr() override;
