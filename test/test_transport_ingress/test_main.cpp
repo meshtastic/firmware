@@ -1,7 +1,8 @@
 // Unit tests for the ingress and egress rules every non-LoRa bearer shares:
 // MeshTransportBase::sanitizeIngress() and MeshTransportBase::stripForTransmit() in
 // src/mesh/MeshTransportBase.cpp, driven through each bearer's own ingress where it can be reached
-// without a socket (UdpMulticastHandler::decodeIngress) and directly for MQTT, whose onReceiveProto
+// without a radio (UdpMulticastHandler::decodeIngress, BLEGattMeshHandler::deliverToRouter) and
+// directly for MQTT, whose onReceiveProto
 // path is covered end to end by test_mqtt.
 //
 // Why: a LoRa arrival carries only what the LoRa header carries, so every field outside it (tx_after,
@@ -28,6 +29,10 @@
 
 // main.h, not UdpMulticastHandler.h: the handler includes main.h, which names the handler type.
 #include "main.h"
+#if HAS_BLE_GATT_MESH
+#include "mesh/BLEGattMeshHandler.h"
+#include <vector>
+#endif
 
 namespace
 {
@@ -58,11 +63,52 @@ bool deliverMqtt(const meshtastic_MeshPacket &sent, meshtastic_MeshPacket &got)
     return MeshTransportBase::sanitizeIngress(got, meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MQTT);
 }
 
+#if HAS_BLE_GATT_MESH
+// The GATT handler with its BLE stack stubbed out, reached at the point a reassembled packet arrives.
+class GattIngress : public BLEGattMeshHandler
+{
+  public:
+    std::vector<meshtastic_MeshPacket> received;
+
+    void start() override { isRunning = true; }
+    void stop() override { isRunning = false; }
+    void deliver(const uint8_t *data, size_t len) { deliverToRouter(1, data, len); }
+    void enqueueReceived(meshtastic_MeshPacket *p) override
+    {
+        received.push_back(*p);
+        packetPool.release(p);
+    }
+
+  protected:
+    bool platformReady() override { return true; }
+    size_t platformPeers(BLEGattMeshPeer *, size_t) override { return 0; }
+    bool platformNotify(BLEGattPeerId, const uint8_t *, size_t) override { return false; }
+    bool platformPollInbound(BLEGattPeerId &, uint8_t *, size_t, size_t &) override { return false; }
+};
+
+bool deliverGatt(const meshtastic_MeshPacket &sent, meshtastic_MeshPacket &got)
+{
+    uint8_t body[meshtastic_MeshPacket_size];
+    const size_t n = pb_encode_to_bytes(body, sizeof(body), &meshtastic_MeshPacket_msg, &sent);
+    TEST_ASSERT_TRUE_MESSAGE(n > 0, "fixture packet encodes");
+    GattIngress h;
+    h.start();
+    h.deliver(body, n);
+    if (h.received.empty())
+        return false;
+    got = h.received[0];
+    return true;
+}
+#endif
+
 const Bearer bearers[] = {
 #if HAS_UDP_MULTICAST
     {"UDP", meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MULTICAST_UDP, deliverUdp},
 #endif
     {"MQTT", meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MQTT, deliverMqtt},
+#if HAS_BLE_GATT_MESH
+    {"BLE GATT", meshtastic_MeshPacket_TransportMechanism_TRANSPORT_BLE_GATT, deliverGatt},
+#endif
 };
 
 meshtastic_MeshPacket encryptedPacket(NodeNum from = kSender)

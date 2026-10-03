@@ -88,6 +88,20 @@ static const char *getBluetoothReleaseReason()
     }
     return "Bluetooth is disabled";
 }
+
+const char *bluetoothBlockedReason()
+{
+#if defined(USE_WS5500) || defined(USE_CH390D)
+    if (config.network.wifi_enabled)
+        return "network.wifi_enabled is set";
+#elif HAS_WIFI
+    if (isWifiAvailable())
+        return "Wi-Fi is configured";
+#endif
+    if (!config.bluetooth.enabled)
+        return "bluetooth.enabled is false";
+    return nullptr;
+}
 #endif
 
 #if !defined(CONFIG_IDF_TARGET_ESP32S2) && !MESHTASTIC_EXCLUDE_BLUETOOTH
@@ -101,14 +115,7 @@ void setBluetoothEnable(bool enable)
         return;
     }
 
-#if defined(USE_WS5500) || defined(USE_CH390D)
-    if ((config.bluetooth.enabled == true) && (config.network.wifi_enabled == false))
-#elif HAS_WIFI
-    if (!isWifiAvailable() && config.bluetooth.enabled == true)
-#else
-    if (config.bluetooth.enabled == true)
-#endif
-    {
+    if (!bluetoothBlockedReason()) {
         if (!nimbleBluetooth) {
             nimbleBluetooth = new NimbleBluetooth();
         }
