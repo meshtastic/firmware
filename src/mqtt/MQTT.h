@@ -30,22 +30,17 @@
  * forwards to mqtt->onSend(), which keeps every MQTT-side gate (via_mqtt loop-prevention, per-channel
  * uplink, DontMqttMeBro, range-test suppression, PKI-vs-channel encryption choice) exactly where it was.
  *
- * It is a PreEncode transport, so it is invisible to callTransports() (the post-encode fan-out) - it
- * must never receive relayed/already-encrypted broadcast traffic, only our own originations that the
- * call site gates with moduleConfig.mqtt.enabled && isFromUs. isEnabled()/onSend() below are the unused
- * PostEncode contract; they are never called for a PreEncode transport.
+ * It is a PreEncode transport, so it is invisible to callTransports() (the post-encode fan-out) and
+ * never receives relayed traffic; onSendPreEncode() forwards only our own originations.
  */
 class MQTTTransport : public MeshTransportBase
 {
   public:
     MQTTTransport() : MeshTransportBase(MeshTransportBase::PreEncode) {}
 
-  protected:
-    // Unused: a PreEncode transport is never in the post-encode fan-out. Do not repurpose these to
-    // enable MQTT on the post-encode path or it would publish relayed traffic.
-    bool isEnabled() const override { return false; }
-    bool onSend(const meshtastic_MeshPacket *) override { return false; }
+    bool isEnabled() const override; // moduleConfig.mqtt.enabled
 
+  protected:
     // Defined out-of-line at the bottom of this header, where MQTT and the mqtt global are complete.
     void onSendPreEncode(const meshtastic_MeshPacket &mp_encrypted, const meshtastic_MeshPacket &mp_decoded,
                          ChannelIndex chIndex) override;
@@ -183,6 +178,7 @@ extern MQTT *mqtt;
 inline void MQTTTransport::onSendPreEncode(const meshtastic_MeshPacket &mp_encrypted, const meshtastic_MeshPacket &mp_decoded,
                                            ChannelIndex chIndex)
 {
-    if (mqtt)
+    // Only the original transmitter publishes.
+    if (mqtt && isFromUs(&mp_encrypted))
         mqtt->onSend(mp_encrypted, mp_decoded, chIndex);
 }

@@ -44,22 +44,25 @@ class MockTransport : public MeshTransportBase
 };
 
 // A transport shaped like the MQTTTransport adapter: registers at the PreEncode point, so it must be
-// reached only by callTransportsPreEncode and never by the post-encode callTransports. isEnabled()
-// returns true on purpose - it would matter only on the post path, which must never reach a PreEncode
-// transport regardless.
+// reached only by callTransportsPreEncode and never by the post-encode callTransports. Enabled by
+// default, so the disjoint test shows an enabled PreEncode transport still never reaches the post path.
 class PreMockTransport : public MeshTransportBase
 {
   public:
-    explicit PreMockTransport(int id) : MeshTransportBase(MeshTransportBase::PreEncode), id(id) {}
+    explicit PreMockTransport(int id, bool enabled = true)
+        : MeshTransportBase(MeshTransportBase::PreEncode), id(id), enabled(enabled)
+    {
+    }
 
     int id;
+    bool enabled;
     int preSends = 0;
     int postSends = 0; // must stay 0: a PreEncode transport is never in the post fan-out
     const meshtastic_MeshPacket *lastEncrypted = nullptr;
     const meshtastic_MeshPacket *lastDecoded = nullptr;
     ChannelIndex lastChIndex = 0xFF;
 
-    bool isEnabled() const override { return true; }
+    bool isEnabled() const override { return enabled; }
     bool onSend(const meshtastic_MeshPacket *) override
     {
         postSends++;
@@ -178,10 +181,27 @@ void test_pre_encode_transports_receive_decoded_and_encrypted(void)
     TEST_ASSERT_EQUAL_INT(11, preCallLog[1]);
 }
 
+// A disabled PreEncode transport is skipped like a disabled PostEncode one, so a new PreEncode transport
+// needs no gate added to Router::send(). MQTT's adapter reports moduleConfig.mqtt.enabled here.
+void test_disabled_pre_encode_transport_is_skipped(void)
+{
+    PreMockTransport a(10, /*enabled=*/false);
+    PreMockTransport b(11, /*enabled=*/true);
+    auto enc = samplePacket();
+    auto dec = sampleDecodedPacket();
+
+    MeshTransportBase::callTransportsPreEncode(enc, dec, /*chIndex=*/0);
+
+    TEST_ASSERT_EQUAL_INT(0, a.preSends);
+    TEST_ASSERT_EQUAL_INT(1, b.preSends);
+    TEST_ASSERT_EQUAL_INT(1, (int)preCallLog.size());
+    TEST_ASSERT_EQUAL_INT(11, preCallLog[0]);
+}
+
 // The two fan-out points are disjoint. This is the MQTT invariant expressed at the registry level: MQTT
-// registers at the pre point (reached only for our own originations, which the Router call site gates
-// with moduleConfig.mqtt.enabled && isFromUs) and is never in the post fan-out, so it can never publish
-// the relayed / already-encrypted broadcast traffic that flows through callTransports().
+// registers at the pre point (its adapter forwards only our own originations) and is never in the post
+// fan-out, even while enabled, so it can never publish the relayed / already-encrypted broadcast
+// traffic that flows through callTransports().
 void test_pre_and_post_hooks_are_disjoint(void)
 {
     PreMockTransport pre(10); // shaped like the MQTTTransport adapter
@@ -221,6 +241,7 @@ void setup()
     RUN_TEST(test_disabled_transport_is_skipped);
     RUN_TEST(test_empty_registry_is_a_noop);
     RUN_TEST(test_pre_encode_transports_receive_decoded_and_encrypted);
+    RUN_TEST(test_disabled_pre_encode_transport_is_skipped);
     RUN_TEST(test_pre_and_post_hooks_are_disjoint);
     RUN_TEST(test_empty_pre_encode_registry_is_a_noop);
     exit(UNITY_END());

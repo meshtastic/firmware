@@ -593,17 +593,10 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
             abortSendAndNak(encodeResult, p);
             return encodeResult; // FIXME - this isn't a valid ErrorCode
         }
-#if !MESHTASTIC_EXCLUDE_MQTT
-        // Only publish to MQTT if we're the original transmitter of the packet. MQTT is a PreEncode
-        // transport in the registry now, so this fans out through callTransportsPreEncode instead of a
-        // hardcoded mqtt->onSend() - same gating (moduleConfig.mqtt.enabled && isFromUs), same point
-        // (inside the decoded-tag block, before p_decoded is released), same arguments (the now-encrypted
-        // packet, the decoded copy, the channel index). The old `&& mqtt` null check now lives inside the
-        // MQTTTransport adapter's hook.
-        if (moduleConfig.mqtt.enabled && isFromUs(p) && p_decoded) {
+        // MQTT lives here: it needs the decoded copy and the channel index before p_decoded is released.
+        // Each PreEncode transport applies its own gates (MQTT: enabled, and only our own originations).
+        if (p_decoded)
             MeshTransportBase::callTransportsPreEncode(*p, *p_decoded, chIndex);
-        }
-#endif
         packetPool.release(p_decoded);
     }
 
