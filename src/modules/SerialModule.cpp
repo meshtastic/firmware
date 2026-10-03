@@ -130,8 +130,11 @@ static HardwareSerial *serialModulePort()
 #define MODBUS_POLL_MS 10000
 #define MODBUS_SCAN_RETRY_MS 60000
 #define MODBUS_MAX_FAILS 10
+#define MODBUS_SESSION_MS 30000
+#define MODBUS_SILENCE_MS 50
 #define MODBUS_RAIN_HOUR_MS 3600000
-#define MODBUS_RX_MAX sizeof(serialBytes)
+// RX in the first half of serialBytes; the tunnel keeps its last response in the second half.
+#define MODBUS_RX_MAX (sizeof(serialBytes) / 2)
 #if defined(MODBUS_PWR_EN_PIN) && !defined(MODBUS_PWR_WARMUP_MS)
 #define MODBUS_PWR_WARMUP_MS 2000
 #endif
@@ -781,7 +784,7 @@ void SerialModule::processWXSerial()
 }
 
 #if !MESHTASTIC_EXCLUDE_MODBUS
-/// MODBUS mode: master for one RS485 sensor. Never blocks waiting for the bus.
+/// MODBUS mode: master for one RS485 sensor, slave for the API tunnel. Never blocks waiting for the bus.
 int32_t SerialModule::runModbus()
 {
     HardwareSerial *port = serialModulePort();
@@ -795,6 +798,9 @@ int32_t SerialModule::runModbus()
             continue;
         if (mbRxLen < MODBUS_RX_MAX)
             rx[mbRxLen++] = c;
+#ifdef MODBUS_API_ADDR
+        mbRxAt = millis();
+#endif
     }
 
     if (mbWaiting) {
@@ -808,7 +814,21 @@ int32_t SerialModule::runModbus()
         return 10;
     }
 
-    mbRxLen = 0; // only the awaited response is of interest
+#ifdef MODBUS_API_ADDR
+    if (mbRxLen) {
+        size_t need = mbTunnel.frameLength(rx, mbRxLen);
+        bool complete = need && mbRxLen >= need;
+        if (!complete && !Throttle::hasElapsed(mbRxAt, MODBUS_SILENCE_MS))
+            return 10; // a frame is still arriving, keep off the bus
+        modbusTunnel(complete ? need : mbRxLen);
+        mbRxLen = 0;
+    }
+    runOncePart(nullptr, 0); // pull the next API frame into the tunnel's retained slot
+    if (mbTunnelAt && Throttle::isWithinTimespanMs(mbTunnelAt, MODBUS_SESSION_MS))
+        return 10; // provisioning session, sensor polling paused
+#else
+    mbRxLen = 0;
+#endif
 
     if (!mbBusy) {
         if (!Throttle::hasElapsed(mbCycleAt, mbCycleMs))
@@ -923,5 +943,41 @@ void SerialModule::modbusSend(const uint8_t *buf, size_t len)
 #endif
 }
 
+#ifdef MODBUS_API_ADDR
+/// Answer one host frame from the first len bytes of serialBytes.
+void SerialModule::modbusTunnel(size_t len)
+{
+    if (!config.security.serial_enabled)
+        return;
+    const uint8_t *in;
+    size_t inLen;
+    uint8_t *resp = (uint8_t *)serialBytes + MODBUS_RX_MAX;
+    size_t n = mbTunnel.handle((const uint8_t *)serialBytes, len, resp, in, inLen);
+    if (!n)
+        return;
+    mbTunnelAt = lastContactMsec = Time::stampMillis();
+    // Acknowledge first: handling the input can take longer than the host waits for an answer.
+    modbusSend(resp, n);
+    if (inLen)
+        runOncePart((char *)in, inLen);
+}
+
+bool SerialModule::writeFrame(uint8_t *buf, size_t len, bool bestEffort)
+{
+    if (moduleConfig.serial.mode != meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MODBUS)
+        return StreamAPI::writeFrame(buf, len, bestEffort);
+    // Log records stay off the bus; required frames wait in buf until the host has read them.
+    if (bestEffort || !len || mbTunnel.frame)
+        return false;
+    mbTunnel.frameLen = buildFrameHeader(buf, len);
+    mbTunnel.frame = buf;
+    return false; // retained, so writeStream() stops dequeuing
+}
+
+bool SerialModule::finishPendingFrame()
+{
+    return moduleConfig.serial.mode != meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MODBUS || !mbTunnel.frame;
+}
+#endif
 #endif
 #endif

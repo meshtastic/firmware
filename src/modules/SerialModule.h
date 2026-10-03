@@ -36,6 +36,10 @@ class SerialModule : public StreamAPI, private concurrency::OSThread
     uint16_t mbReg = 0, mbCount = 0; // request in flight
     uint8_t mbAddr = 0, mbStep = 0;
     bool mbWaiting = false, mbBusy = false;
+#ifdef MODBUS_API_ADDR
+    modbus::Tunnel mbTunnel{MODBUS_API_ADDR};
+    uint32_t mbRxAt = 0, mbTunnelAt = 0;
+#endif
 #endif
 
   public:
@@ -46,6 +50,12 @@ class SerialModule : public StreamAPI, private concurrency::OSThread
 
     /// Check the current underlying physical link to see if the client is currently connected
     virtual bool checkIsConnected() override;
+
+#if !MESHTASTIC_EXCLUDE_MODBUS && defined(MODBUS_API_ADDR)
+    // In MODBUS mode API output is retained for the host's tunnel reads instead of being written to the UART.
+    virtual bool writeFrame(uint8_t *buf, size_t len, bool bestEffort) override;
+    virtual bool finishPendingFrame() override;
+#endif
 
   private:
     uint32_t getBaudRate();
@@ -58,6 +68,9 @@ class SerialModule : public StreamAPI, private concurrency::OSThread
     void modbusPollDone(modbus::Result r);
     void modbusCycleDone();
     void modbusSend(const uint8_t *buf, size_t len);
+#ifdef MODBUS_API_ADDR
+    void modbusTunnel(size_t len);
+#endif
 #endif
 };
 

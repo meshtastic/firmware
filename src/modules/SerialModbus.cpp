@@ -3,6 +3,7 @@
 #if !MESHTASTIC_EXCLUDE_MODBUS
 
 #include <math.h>
+#include <string.h>
 
 namespace modbus
 {
@@ -241,6 +242,63 @@ void Aggregate::airQuality(meshtastic_AirQualityMetrics &a, uint8_t caps) const
         a.has_co2 = true;
         a.co2 = s.co2 * k + 0.5f;
     }
+}
+
+size_t Tunnel::frameLength(const uint8_t *buf, size_t len) const
+{
+    if (len < 2 || buf[0] != addr)
+        return 0;
+    if (buf[1] == TUNNEL_READ)
+        return 5;
+    if (buf[1] == TUNNEL_WRITE && len >= 4)
+        return 6 + buf[3];
+    return 0;
+}
+
+size_t Tunnel::handle(const uint8_t *buf, size_t len, uint8_t *resp, const uint8_t *&in, size_t &inLen)
+{
+    in = nullptr;
+    inLen = 0;
+    if (buf[0] != addr || !crcOk(buf, len))
+        return 0;
+
+    uint8_t fc = buf[1];
+    if (fc != TUNNEL_WRITE && fc != TUNNEL_READ) {
+        resp[0] = addr;
+        resp[1] = fc | 0x80;
+        resp[2] = 0x01; // illegal function
+        lastFc = 0;     // resp no longer holds the previous answer, so nothing can be retried
+        return appendCrc(resp, 3);
+    }
+    if (len != (fc == TUNNEL_WRITE ? 6 + buf[3] : 5) || (fc == TUNNEL_WRITE && buf[3] > TUNNEL_MAX_DATA))
+        return 0;
+
+    uint8_t seq = buf[2];
+    if (fc == lastFc && seq == lastSeq)
+        return lastLen;
+    lastFc = fc;
+    lastSeq = seq;
+
+    uint8_t n = 0;
+    if (fc == TUNNEL_WRITE) {
+        in = buf + 4;
+        inLen = n = buf[3];
+    } else if (frame) {
+        // Advance as soon as the slice is copied: a retry resends resp, not the frame.
+        n = frameLen - frameOff > TUNNEL_MAX_DATA ? TUNNEL_MAX_DATA : frameLen - frameOff;
+        memcpy(resp + 4, frame + frameOff, n);
+        frameOff += n;
+        if (frameOff >= frameLen) {
+            frame = nullptr;
+            frameOff = 0;
+        }
+    }
+    resp[0] = addr;
+    resp[1] = fc;
+    resp[2] = seq;
+    resp[3] = n;
+    lastLen = appendCrc(resp, fc == TUNNEL_WRITE ? 4 : 4 + n);
+    return lastLen;
 }
 
 } // namespace modbus

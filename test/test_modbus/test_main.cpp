@@ -1,5 +1,5 @@
 // Unit tests for the Modbus-RTU protocol code in src/modules/SerialModbus.{h,cpp}, used by SerialModule's
-// MODBUS mode to poll a SenseCAP ONE weather sensor on RS485.
+// MODBUS mode to poll a SenseCAP ONE weather sensor on RS485 and to tunnel the client API over the same bus.
 //
 // What is pinned, and why:
 //   - crc16() / buildRead() / checkResponse() against frames whose CRCs were recomputed with a reference
@@ -16,6 +16,11 @@
 //     mean of wind direction. An arithmetic mean of 350 and 10 degrees gives 180, the opposite direction.
 //     The mean uses polynomial sin/atan2 (libm's cost 4 KB of STM32 flash); a whole degree in must come
 //     back as the same degree, or the approximation has drifted.
+//   - Tunnel implements the provisioning tunnel (function codes 0x41 write / 0x42 read, address 240):
+//     a retained API frame larger than one read must arrive complete over several reads, a host retry
+//     (same seq and function code) must get the identical answer without advancing the output or applying
+//     input twice, and frames for other addresses must be ignored. Losing or duplicating bytes here
+//     corrupts the 0x94C3 StreamAPI framing the stock client relies on.
 #include "TestUtil.h"
 #include <unity.h>
 
@@ -75,7 +80,13 @@ void test_crc_reference_vectors()
                             "2B 04 00 40 00 02 77 D5",
                             "2B 04 04 00 0C EC 98 FD 2F",
                             "01 84 01 82 C0",
-                            "01 84 04 42 C3"};
+                            "01 84 04 42 C3",
+                            "F0 42 00 41 53",
+                            "F0 42 00 00 93 30",
+                            "F0 42 01 80 93",
+                            "F0 41 05 06 94 C3 00 02 18 01 DD 6D",
+                            "F0 41 05 06 E0 62",
+                            "F0 C1 01 E1 A3"};
     for (const char *f : frames)
         assertCrc(f);
 }
@@ -284,6 +295,149 @@ void test_rain_24h_survives_counter_reset()
     TEST_ASSERT_FLOAT_WITHIN(0.001f, 3.5f, e.rainfall_24h);
 }
 
+// --- API tunnel ---
+
+static const char *const writeFrame = "F0 41 05 06 94 C3 00 02 18 01 DD 6D";
+
+void test_tunnel_reference_frames()
+{
+    Tunnel t(240);
+    uint8_t resp[256];
+    const uint8_t *in;
+    size_t inLen;
+
+    std::vector<uint8_t> read0 = hex("F0 42 00 41 53");
+    std::vector<uint8_t> empty = hex("F0 42 00 00 93 30");
+    TEST_ASSERT_EQUAL(empty.size(), t.handle(read0.data(), read0.size(), resp, in, inLen));
+    TEST_ASSERT_EQUAL_HEX8_ARRAY(empty.data(), resp, empty.size());
+
+    std::vector<uint8_t> w = hex(writeFrame);
+    std::vector<uint8_t> ack = hex("F0 41 05 06 E0 62");
+    TEST_ASSERT_EQUAL(ack.size(), t.handle(w.data(), w.size(), resp, in, inLen));
+    TEST_ASSERT_EQUAL_HEX8_ARRAY(ack.data(), resp, ack.size());
+    TEST_ASSERT_EQUAL(6, inLen);
+    TEST_ASSERT_EQUAL_HEX8_ARRAY(w.data() + 4, in, 6);
+}
+
+void test_tunnel_frame_length()
+{
+    Tunnel t(240);
+    std::vector<uint8_t> w = hex(writeFrame);
+    TEST_ASSERT_EQUAL(0, t.frameLength(w.data(), 1));
+    TEST_ASSERT_EQUAL(0, t.frameLength(w.data(), 3)); // length byte not yet seen
+    TEST_ASSERT_EQUAL(w.size(), t.frameLength(w.data(), 4));
+    std::vector<uint8_t> r = hex("F0 42 01 80 93");
+    TEST_ASSERT_EQUAL(5, t.frameLength(r.data(), 2));
+    std::vector<uint8_t> other = hex("14 04 00 00 00 20 F3 17");
+    TEST_ASSERT_EQUAL(0, t.frameLength(other.data(), other.size()));
+}
+
+static size_t readSeq(Tunnel &t, uint8_t seq, uint8_t *resp)
+{
+    uint8_t req[5] = {240, TUNNEL_READ, seq};
+    uint16_t crc = crc16(req, 3);
+    req[3] = crc & 0xFF;
+    req[4] = crc >> 8;
+    const uint8_t *in;
+    size_t inLen;
+    return t.handle(req, sizeof(req), resp, in, inLen);
+}
+
+void test_tunnel_large_frame_over_three_reads()
+{
+    Tunnel t(240);
+    uint8_t frame[516];
+    for (size_t i = 0; i < sizeof(frame); i++)
+        frame[i] = (uint8_t)(i * 7 + 3);
+    t.frame = frame;
+    t.frameLen = sizeof(frame);
+
+    std::vector<uint8_t> got;
+    uint8_t resp[256];
+    const size_t expect[] = {240, 240, 36};
+    for (uint8_t seq = 1; seq <= 3; seq++) {
+        size_t n = readSeq(t, seq, resp);
+        TEST_ASSERT_EQUAL(6 + expect[seq - 1], n);
+        TEST_ASSERT_EQUAL(expect[seq - 1], resp[3]);
+        TEST_ASSERT_EQUAL_HEX16(crc16(resp, n - 2), resp[n - 2] | resp[n - 1] << 8);
+        got.insert(got.end(), resp + 4, resp + 4 + resp[3]);
+    }
+    TEST_ASSERT_NULL(t.frame); // released: the next API frame may be dequeued
+    TEST_ASSERT_EQUAL(sizeof(frame), got.size());
+    TEST_ASSERT_EQUAL_HEX8_ARRAY(frame, got.data(), sizeof(frame));
+    TEST_ASSERT_EQUAL(6, readSeq(t, 4, resp)); // nothing pending
+}
+
+void test_tunnel_read_retry_resends_without_advancing()
+{
+    Tunnel t(240);
+    uint8_t frame[300];
+    for (size_t i = 0; i < sizeof(frame); i++)
+        frame[i] = (uint8_t)i;
+    t.frame = frame;
+    t.frameLen = sizeof(frame);
+
+    uint8_t first[256], again[256];
+    size_t n1 = readSeq(t, 9, first);
+    memcpy(again, first, n1); // the caller hands the same buffer back, as SerialModule does
+    size_t n2 = readSeq(t, 9, again);
+    TEST_ASSERT_EQUAL(n1, n2);
+    TEST_ASSERT_EQUAL_HEX8_ARRAY(first, again, n1);
+
+    uint8_t next[256];
+    memcpy(next, again, n2);
+    size_t n3 = readSeq(t, 10, next);
+    TEST_ASSERT_EQUAL(6 + 60, n3);
+    TEST_ASSERT_EQUAL_HEX8(240, next[4]); // continues at byte 240, not 480
+    TEST_ASSERT_NULL(t.frame);
+}
+
+void test_tunnel_repeated_write_applied_once()
+{
+    Tunnel t(240);
+    std::vector<uint8_t> w = hex(writeFrame);
+    uint8_t resp[256];
+    const uint8_t *in;
+    size_t inLen;
+    size_t n1 = t.handle(w.data(), w.size(), resp, in, inLen);
+    TEST_ASSERT_EQUAL(6, inLen);
+    size_t n2 = t.handle(w.data(), w.size(), resp, in, inLen);
+    TEST_ASSERT_EQUAL(n1, n2);
+    TEST_ASSERT_EQUAL(0, inLen);
+    TEST_ASSERT_NULL(in);
+}
+
+void test_tunnel_ignores_other_address_and_bad_crc()
+{
+    Tunnel t(240);
+    uint8_t resp[256];
+    const uint8_t *in;
+    size_t inLen;
+    std::vector<uint8_t> other = hex("01 04 00 00 00 02 71 CB");
+    TEST_ASSERT_EQUAL(0, t.handle(other.data(), other.size(), resp, in, inLen));
+    std::vector<uint8_t> bad = hex(writeFrame);
+    bad[6] ^= 0xFF;
+    TEST_ASSERT_EQUAL(0, t.handle(bad.data(), bad.size(), resp, in, inLen));
+    TEST_ASSERT_EQUAL(0, inLen);
+}
+
+void test_tunnel_unknown_function_gets_exception()
+{
+    Tunnel t(240);
+    uint8_t req[4] = {240, 0x03};
+    uint16_t crc = crc16(req, 2);
+    req[2] = crc & 0xFF;
+    req[3] = crc >> 8;
+    uint8_t resp[256];
+    const uint8_t *in;
+    size_t inLen;
+    TEST_ASSERT_EQUAL(5, t.handle(req, sizeof(req), resp, in, inLen));
+    TEST_ASSERT_EQUAL_HEX8(240, resp[0]);
+    TEST_ASSERT_EQUAL_HEX8(0x83, resp[1]);
+    TEST_ASSERT_EQUAL_HEX8(0x01, resp[2]);
+    TEST_ASSERT_EQUAL_HEX16(crc16(resp, 3), resp[3] | resp[4] << 8);
+}
+
 void setup()
 {
     initializeTestEnvironment();
@@ -305,6 +459,13 @@ void setup()
     RUN_TEST(test_wind_direction_single_sample_round_trips);
     RUN_TEST(test_wind_gust_and_lull_are_extremes);
     RUN_TEST(test_rain_24h_survives_counter_reset);
+    RUN_TEST(test_tunnel_reference_frames);
+    RUN_TEST(test_tunnel_frame_length);
+    RUN_TEST(test_tunnel_large_frame_over_three_reads);
+    RUN_TEST(test_tunnel_read_retry_resends_without_advancing);
+    RUN_TEST(test_tunnel_repeated_write_applied_once);
+    RUN_TEST(test_tunnel_ignores_other_address_and_bad_crc);
+    RUN_TEST(test_tunnel_unknown_function_gets_exception);
     exit(UNITY_END());
 }
 

@@ -82,6 +82,35 @@ class Aggregate
     uint8_t rainIdx = 0;
 };
 
+constexpr uint8_t TUNNEL_WRITE = 0x41;
+constexpr uint8_t TUNNEL_READ = 0x42;
+constexpr uint8_t TUNNEL_MAX_DATA = 240;
+
+/// Slave side of the client API tunnel: carries the StreamAPI byte stream in user-defined function codes.
+class Tunnel
+{
+  public:
+    explicit Tunnel(uint8_t slaveAddr) : addr(slaveAddr) {}
+
+    // Retained API output frame; its producer must not reuse the buffer until frame is null again.
+    const uint8_t *frame = nullptr;
+    size_t frameLen = 0;
+
+    /// Length of the host frame starting at buf, or 0 while unknown (unknown function codes end on silence).
+    size_t frameLength(const uint8_t *buf, size_t len) const;
+
+    /// Handles one host frame. Returns the response length written to resp, 0 to stay silent. A new write
+    /// points in/inLen at the API bytes to consume. resp must be the same buffer every call: a retry resends it.
+    size_t handle(const uint8_t *buf, size_t len, uint8_t *resp, const uint8_t *&in, size_t &inLen);
+
+  private:
+    const uint8_t addr;
+    size_t frameOff = 0;
+    size_t lastLen = 0;
+    uint8_t lastSeq = 0;
+    uint8_t lastFc = 0;
+};
+
 } // namespace modbus
 
 #endif
