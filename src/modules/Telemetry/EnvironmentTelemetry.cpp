@@ -572,6 +572,7 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
         entries.push_back("Hum: " + String(m.relative_humidity, 0) + "%");
     if (m.barometric_pressure != 0)
         entries.push_back("Prss: " + String(m.barometric_pressure, 0) + " hPa");
+  
     if (m.has_iaq) {
         String aqi = "IAQ: " + String(m.iaq);
         const char *bannerMsg = nullptr; // Default: no banner
@@ -598,22 +599,21 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
         entries.push_back(aqi);
 
         // === IAQ alert logic ===
-        static uint32_t lastAlertTime = 0;
-        uint32_t now = millis();
+        if (isLocalTelemetry && bannerMsg) {
+            static uint32_t lastAlertTime = 0;
+            uint32_t now = millis();
 
-        bool isOwnTelemetry = isLocalTelemetry;
-        bool isCooldownOver = (now - lastAlertTime > 60000);
+            if (now - lastAlertTime > 60000) {
+                LOG_INFO("drawFrame: IAQ %d (own) - showing banner: %s", m.iaq, bannerMsg);
+                screen->showSimpleBanner(bannerMsg, 3000);
 
-        if (isOwnTelemetry && bannerMsg && isCooldownOver) {
-            LOG_INFO("drawFrame: IAQ %d (own) - showing banner: %s", m.iaq, bannerMsg);
-            screen->showSimpleBanner(bannerMsg, 3000);
+                // Only buzz if IAQ is over 200
+                if (m.iaq > 200 && moduleConfig.external_notification.enabled && !externalNotificationModule->getMute()) {
+                    playLongBeep();
+                }
 
-            // Only buzz if IAQ is over 200
-            if (m.iaq > 200 && moduleConfig.external_notification.enabled && !externalNotificationModule->getMute()) {
-                playLongBeep();
+                lastAlertTime = now;
             }
-
-            lastAlertTime = now;
         }
     }
     if (m.voltage != 0 || m.current != 0)
