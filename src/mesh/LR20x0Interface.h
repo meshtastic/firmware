@@ -50,7 +50,7 @@ template <class T> class LR20x0Interface : public RadioLibInterface
     virtual void setRadioIsr(void (*callback)()) override { lora.setIrqAction(callback); }
 
     /** can we detect a LoRa preamble on the current channel? */
-    virtual bool isChannelActive() override;
+    virtual ChannelScan checkChannel() override;
 
     /** are we actively receiving a packet (only called during receiving state) */
     virtual bool isActivelyReceiving() override;

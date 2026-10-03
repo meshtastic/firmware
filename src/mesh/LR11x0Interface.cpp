@@ -204,8 +204,8 @@ template <typename T> bool LR11x0Interface<T>::init()
     }
 
     LR11x0VersionInfo_t version;
-    res = lora.getVersionInfo(&version);
-    if (res == RADIOLIB_ERR_NONE) {
+    // Own variable, as LR20x0 does: assigning to res would erase a begin() error and let init() succeed
+    if (lora.getVersionInfo(&version) == RADIOLIB_ERR_NONE) {
         LOG_DEBUG("LR11x0 Device %d, HW %d, FW %d.%d, WiFi %d.%d, GNSS %d.%d", version.device, version.hardware, version.fwMajor,
                   version.fwMinor, version.fwMajorWiFi, version.fwMinorWiFi, version.fwGNSS, version.almanacGNSS);
         transceiverFw = ((uint16_t)version.fwMajor << 8) | version.fwMinor;
@@ -335,8 +335,10 @@ template <typename T> int16_t LR11x0Interface<T>::programModemParams()
 
     err = lora.setOutputPower(power);
     if (err != RADIOLIB_ERR_NONE) {
-        LOG_ERROR("LR11x0 setOutputPower(%d) %s%d", power, radioLibErr, err);
-        return err;
+        // A rejected power is operator config, not lost chip state: keep the previous power, as SX126x does,
+        // rather than return an error that drives reconfigure() into a re-init failing the same way
+        LOG_ERROR("LR11x0 setOutputPower %d dBm rejected (%s%d); keep previous Tx power", power, radioLibErr, err);
+        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
     }
 
     // Apply RX gain mode - valid in STDBY, matches resetAGC() pattern
@@ -399,7 +401,8 @@ template <typename T> bool LR11x0Interface<T>::reconfigure()
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
         LOG_ERROR("LR11x0 rejected modem params, chip state lost? Full re-init");
         if (!reinitChip() || (err = programModemParams()) != RADIOLIB_ERR_NONE) {
-            LOG_ERROR("LR11x0 unrecoverable %s%d, radio down until reboot", radioLibErr, err);
+            LOG_ERROR("LR11x0 unrecoverable %s%d, radio offline, maintenance will retry", radioLibErr, err);
+            rxOffline = true; // periodicRadioMaintenance() retries recovery and RX; repeated failures reach the reboot ladder
             return false;
         }
         LOG_INFO("LR11x0 recovered after re-init");
@@ -502,7 +505,7 @@ template <typename T> void LR11x0Interface<T>::startReceive()
 }
 
 /** Is the channel currently active? */
-template <typename T> bool LR11x0Interface<T>::isChannelActive()
+template <typename T> RadioLibInterface::ChannelScan LR11x0Interface<T>::checkChannel()
 {
     // check if we can detect a LoRa preamble on the current channel
     ChannelScanConfig_t cfg = {.cad = {.symNum = NUM_SYM_CAD,
@@ -513,17 +516,14 @@ template <typename T> bool LR11x0Interface<T>::isChannelActive()
                                        .irqFlags = RADIOLIB_IRQ_CAD_DEFAULT_FLAGS,
                                        .irqMask = RADIOLIB_IRQ_CAD_DEFAULT_MASK}};
     int16_t result = trySetStandby();
-    if (result == RADIOLIB_ERR_NONE) {
+    if (result == RADIOLIB_ERR_NONE)
         result = lora.scanChannel(cfg);
-        if (result == RADIOLIB_LORA_DETECTED)
-            return true;
-        if (result != RADIOLIB_ERR_WRONG_MODEM)
-            return false;
+    // Any error, including a failed standby, is Failed: the caller recovers the chip and never sends on it
+    const ChannelScan verdict = classifyScan(result);
+    if (verdict == ChannelScan::Failed) {
+        LOG_ERROR("LR11x0 channel scan failed %s%d", radioLibErr, result);
     }
-
-    // standby failed or the LoRa modem type is gone - the chip lost its runtime state
-    maybeRecoverChipStateLoss();
-    return false; // report the channel free: a recovered chip can TX, a dead one fails startSend safely
+    return verdict;
 }
 
 /** Could we send right now (i.e. either not actively receiving or transmitting)? */

@@ -59,7 +59,7 @@ template <class T> class SX126xInterface : public RadioLibInterface
 #endif
 
     /** can we detect a LoRa preamble on the current channel? */
-    virtual bool isChannelActive() override;
+    virtual ChannelScan checkChannel() override;
 
     /** are we actively receiving a packet (only called during receiving state) */
     virtual bool isActivelyReceiving() override;

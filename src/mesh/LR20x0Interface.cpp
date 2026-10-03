@@ -283,8 +283,10 @@ template <typename T> bool LR20x0Interface<T>::reconfigure()
         // fullBegin() hardware-resets the chip, so a standby failure is survivable here
         (void)trySetStandby();
 
-        if (!fullBegin(freq))
+        if (!fullBegin(freq)) {
+            rxOffline = true; // periodicRadioMaintenance() retries recovery and RX; repeated failures reach the reboot ladder
             return false;
+        }
 
         startReceive();
         return reconfigureSuccess;
@@ -341,9 +343,10 @@ template <typename T> bool LR20x0Interface<T>::reconfigure()
 
         err = lora.setOutputPower(power);
         if (err != RADIOLIB_ERR_NONE) {
-            LOG_ERROR("LR20x0 setOutputPower %d dBm @ %.3f MHz %s%d", power, freq, radioLibErr, err);
+            // Not a lost-state signature: keep the previous power instead of forcing a full re-init
+            LOG_ERROR("LR20x0 setOutputPower %d dBm @ %.3f MHz rejected (%s%d); keep previous Tx power", power, freq, radioLibErr,
+                      err);
             RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
-            standbySuccess = false;
         }
 
         // Warn-only, as in LR11x0: a rejected gain mode is cosmetic and not a lost-state signature, so
@@ -360,7 +363,8 @@ template <typename T> bool LR20x0Interface<T>::reconfigure()
         // would reboot before MeshService persists the config change that triggered us.
         LOG_ERROR("LR20x0 rejected modem params, chip state lost? Full re-init");
         if (!fullBegin(freq)) {
-            LOG_ERROR("LR20x0 unrecoverable, radio down until reboot");
+            LOG_ERROR("LR20x0 unrecoverable, radio offline, maintenance will retry");
+            rxOffline = true; // periodicRadioMaintenance() retries recovery and RX; repeated failures reach the reboot ladder
             return false;
         }
         LOG_INFO("LR20x0 recovered after re-init");
@@ -634,7 +638,7 @@ template <typename T> void LR20x0Interface<T>::startReceive()
 }
 
 /** Is the channel currently active? */
-template <typename T> bool LR20x0Interface<T>::isChannelActive()
+template <typename T> RadioLibInterface::ChannelScan LR20x0Interface<T>::checkChannel()
 {
     // check if we can detect a LoRa preamble on the current channel
     ChannelScanConfig_t cfg = {.cad = {.symNum = NUM_SYM_CAD,
@@ -645,17 +649,14 @@ template <typename T> bool LR20x0Interface<T>::isChannelActive()
                                        .irqFlags = RADIOLIB_IRQ_CAD_DEFAULT_FLAGS,
                                        .irqMask = RADIOLIB_IRQ_CAD_DEFAULT_MASK}};
     int16_t result = trySetStandby();
-    if (result == RADIOLIB_ERR_NONE) {
+    if (result == RADIOLIB_ERR_NONE)
         result = lora.scanChannel(cfg);
-        if (result == RADIOLIB_LORA_DETECTED)
-            return true;
-        if (result != RADIOLIB_ERR_WRONG_MODEM)
-            return false;
+    // Any error, including a failed standby, is Failed: the caller recovers the chip and never sends on it
+    const ChannelScan verdict = classifyScan(result);
+    if (verdict == ChannelScan::Failed) {
+        LOG_ERROR("LR20x0 channel scan failed %s%d", radioLibErr, result);
     }
-
-    // standby failed or the LoRa modem type is gone - the chip lost its runtime state
-    maybeRecoverChipStateLoss();
-    return false; // report the channel free: a recovered chip can TX, a dead one fails startSend safely
+    return verdict;
 }
 
 /** Could we send right now (i.e. either not actively receiving or transmitting)? */

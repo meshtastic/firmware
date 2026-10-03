@@ -165,7 +165,9 @@ template <typename T> bool SX126xInterface<T>::reinitChip()
     // are: SX1262, SX1268: 0x38 (140 mA), SX1261: 0x18 (60 mA)
     // FIXME: Not ideal to increase SX1261 current limit above 60mA as it can only transmit max 15dBm, should probably only do it
     // if using SX1262 or SX1268
-    res = lora.setCurrentLimit(currentLimit);
+    // Gated, so a begin() error is not overwritten by this call's result and still fails init()
+    if (res == RADIOLIB_ERR_NONE)
+        res = lora.setCurrentLimit(currentLimit);
     LOG_DEBUG("Current limit set to %f", currentLimit);
     LOG_DEBUG("Current limit set result %d", res);
 
@@ -322,7 +324,8 @@ template <typename T> bool SX126xInterface<T>::reconfigure()
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
         LOG_ERROR("SX126x rejected modem params, chip state lost? Full re-init");
         if (!reinitChip() || (err = programModemParams()) != RADIOLIB_ERR_NONE) {
-            LOG_ERROR("SX126x unrecoverable %s%d, radio down until reboot", radioLibErr, err);
+            LOG_ERROR("SX126x unrecoverable %s%d, radio offline, maintenance will retry", radioLibErr, err);
+            rxOffline = true; // periodicRadioMaintenance() retries recovery and RX; repeated failures reach the reboot ladder
             return false;
         }
         LOG_INFO("SX126x recovered after re-init");
@@ -484,13 +487,13 @@ template <typename T> void SX126xInterface<T>::startReceive()
 
     if (err != RADIOLIB_ERR_NONE) {
 #ifdef ARCH_PORTDUINO
-        portduino_status.LoRa_in_error = true;
-#else
-        // No assert: leave RX off rather than reboot; periodicRadioMaintenance() re-arms it, throttled
+        portduino_status.LoRa_in_error = true; // the Portduino main loop re-inits the interface
+#endif
+        // No assert: leave RX off rather than reboot; periodicRadioMaintenance() re-arms it, throttled.
+        // Return on every platform: the base startReceive() would mark RX armed and reset the failure count.
         LOG_ERROR("SX126X RX offline %s%d", radioLibErr, err);
         rxOffline = true;
         return;
-#endif
     }
 
     RadioLibInterface::startReceive();
@@ -502,7 +505,7 @@ template <typename T> void SX126xInterface<T>::startReceive()
 }
 
 /** Is the channel currently active? */
-template <typename T> bool SX126xInterface<T>::isChannelActive()
+template <typename T> RadioLibInterface::ChannelScan SX126xInterface<T>::checkChannel()
 {
     // check if we can detect a LoRa preamble on the current channel
     ChannelScanConfig_t cfg = {.cad = {.symNum = NUM_SYM_CAD,
@@ -514,21 +517,18 @@ template <typename T> bool SX126xInterface<T>::isChannelActive()
                                        .irqMask = RADIOLIB_IRQ_CAD_DEFAULT_MASK}};
     setTransmitEnable(false);
     int16_t result = trySetStandby();
-    if (result == RADIOLIB_ERR_NONE) {
+    if (result == RADIOLIB_ERR_NONE)
         result = lora.scanChannel(cfg);
-        if (result == RADIOLIB_LORA_DETECTED)
-            return true;
-        if (result != RADIOLIB_CHANNEL_FREE)
-            LOG_ERROR("SX126X scanChannel %s%d", radioLibErr, result);
-        if (result != RADIOLIB_ERR_WRONG_MODEM)
-            return false;
-    }
+    // Any error, including a failed standby, is Failed: the caller recovers the chip and never sends on it
+    const ChannelScan verdict = classifyScan(result);
+    if (verdict == ChannelScan::Failed) {
+        LOG_ERROR("SX126X channel scan failed %s%d", radioLibErr, result);
 #ifdef ARCH_PORTDUINO
-    portduino_status.LoRa_in_error = true;
+        if (result == RADIOLIB_ERR_WRONG_MODEM)
+            portduino_status.LoRa_in_error = true;
 #endif
-    // standby failed or the LoRa modem type is gone - the chip lost its runtime state
-    maybeRecoverChipStateLoss();
-    return false; // report the channel free: a recovered chip can TX, a dead one fails startSend safely
+    }
+    return verdict;
 }
 
 /** Could we send right now (i.e. either not actively receiving or transmitting)? */
