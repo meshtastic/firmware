@@ -50,6 +50,11 @@
 
 MQTT *mqtt;
 
+bool MQTTTransport::isEnabled() const
+{
+    return moduleConfig.mqtt.enabled;
+}
+
 namespace
 {
 constexpr int reconnectMax = 5;
@@ -141,10 +146,6 @@ inline void onReceiveProto(char *topic, byte *payload, size_t length)
     }
 
     LOG_INFO("Received MQTT topic %s, len=%u", topic, length);
-    if (e.packet->hop_limit > HOP_MAX || e.packet->hop_start > HOP_MAX) {
-        LOG_INFO("Invalid hop_limit(%u) or hop_start(%u)", e.packet->hop_limit, e.packet->hop_start);
-        return;
-    }
 
     UniquePacketPoolPacket p = packetPool.allocUniqueZeroed();
     if (!p)
@@ -156,9 +157,9 @@ inline void onReceiveProto(char *topic, byte *payload, size_t length)
     p->hop_limit = e.packet->hop_limit;
     p->hop_start = e.packet->hop_start;
     p->want_ack = e.packet->want_ack;
-    p->via_mqtt = true;       // Mark that the packet was received via MQTT
-    p->pki_encrypted = false; // Only local AES-CCM decryption may establish PKI authentication.
-    p->transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MQTT;
+    if (!MeshTransportBase::sanitizeIngress(*p, meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MQTT))
+        return;
+    p->via_mqtt = true; // Mark that the packet was received via MQTT
     p->which_payload_variant = e.packet->which_payload_variant;
     memcpy(&p->decoded, &e.packet->decoded, std::max(sizeof(p->decoded), sizeof(p->encrypted)));
 
