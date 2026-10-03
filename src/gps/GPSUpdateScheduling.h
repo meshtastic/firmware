@@ -30,10 +30,12 @@ class GPSUpdateScheduling
     bool searching = false;          // Set by the inform*() calls; never inferred from stamp ordering
     bool validFixReceived = false;
     uint32_t searchStartedMs = 0;
+    uint32_t firstFixMs = 0; // First valid fix of the current search; the post-lock hold comes after it
     uint32_t searchEndedMs = 0;
     uint32_t searchCount = 0;
-    uint32_t predictedMsToGetLock = 0;
-    uint32_t consecutiveFailures = 0; // Count of search cycles that ended without a fix; reset on lock
+    uint32_t predictedMsToGetLock = 0; // Search start to first fix
+    uint32_t predictedMsActive = 0;    // Search start to down(), including the post-lock hold
+    uint32_t consecutiveFailures = 0;  // Count of search cycles that ended without a fix; reset on lock
 
     const float weighting = 0.2; // Controls exponential smoothing of lock-times prediction. 20% weighting of "latest lock-time".
 };
