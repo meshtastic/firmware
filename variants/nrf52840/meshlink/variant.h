@@ -25,17 +25,20 @@ extern "C" {
 #define NUM_ANALOG_INPUTS (2)
 #define NUM_ANALOG_OUTPUTS (0)
 
-#define BUTTON_PIN (-1) // If defined, this will be used for user button presses,
+#define BUTTON_PIN (10) // If defined, this will be used for user button presses,
 #define BUTTON_NEED_PULLUP
 
 // LEDs
-#define PIN_LED1 (24) // Built in white led for status
-#define LED_BLUE PIN_LED1
+#define LED_HEARTBEAT (24)     // Force strictly heartbeat on Pin 24
+#define LED_STATE_ON 0         // Active LOW
 
-#define LED_STATE_ON 0 // State when LED is lit
+#define HAS_HARDWARE_WATCHDOG
+#define HARDWARE_WATCHDOG_DONE (24)
+#define HARDWARE_WATCHDOG_TIMEOUT_MS (50 * 1000) // our hardware one expires in 60s so we feed it each 50s for safety
+#define HARDWARE_WATCHDOG_WAKE -1
 
 // Testing USB detection
-// #define NRF_APM
+//#define NRF_APM
 
 /*
  * Analog pins
@@ -50,8 +53,8 @@ extern "C" {
 /*
  * Serial interfaces
  */
-#define PIN_SERIAL1_RX (32 + 8)
-#define PIN_SERIAL1_TX (7)
+#define PIN_SERIAL1_TX (32 + 8)
+#define PIN_SERIAL1_RX (7)
 #define SERIAL_PRINT_PORT 0
 
 /*
@@ -126,10 +129,11 @@ static const uint8_t SCK = PIN_SPI_SCK;
 // #define GPS_THREAD_INTERVAL 50
 
 // Define pin to enable GPS toggle (set GPIO to LOW) via user button triple press
-#define PIN_GPS_EN (0)
+#define PIN_GPS_EN (4)
 #define GPS_EN_ACTIVE LOW
 
 #define PIN_BUZZER (31) // P0.31/AIN7
+
 
 // Battery
 // The battery sense is hooked to pin A0 (2)
