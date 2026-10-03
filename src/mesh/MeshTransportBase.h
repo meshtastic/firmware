@@ -43,8 +43,7 @@ class MeshTransportBase
     static void callTransports(const meshtastic_MeshPacket *mp);
 
     /** Hands the encrypted packet, the decoded copy and the channel index to every registered
-     * PreEncode transport, before the decoded copy is released. Unlike callTransports() this does NOT
-     * gate on isEnabled(): the call site applies the transport-specific gate. */
+     * PreEncode transport whose isEnabled() is true, before the decoded copy is released. */
     static void callTransportsPreEncode(const meshtastic_MeshPacket &mp_encrypted, const meshtastic_MeshPacket &mp_decoded,
                                         ChannelIndex chIndex);
 
@@ -53,14 +52,21 @@ class MeshTransportBase
      * for a medium that is not its own. True if any transport dropped something. */
     static bool cancelTransportsOn(meshtastic_MeshPacket_TransportMechanism medium, NodeNum from, PacketId id);
 
-  protected:
-    /** True when this transport should receive outgoing packets right now. Only the PostEncode path
-     * consults this. */
+    /** The ingress rules every non-LoRa bearer shares. False means drop: a local origin or an out-of-range
+     * hop count. On true `mp` is stamped with `medium` and its local-only fields are cleared, rx_rssi included. */
+    static bool sanitizeIngress(meshtastic_MeshPacket &mp, meshtastic_MeshPacket_TransportMechanism medium);
+
+    /** The packet as it goes onto a non-LoRa bearer, without the local-only fields a receiver overwrites. */
+    static meshtastic_MeshPacket stripForTransmit(const meshtastic_MeshPacket &mp);
+
+    /** True when this transport should receive outgoing packets right now. Both fan-out points consult it. */
     virtual bool isEnabled() const = 0;
 
+  protected:
     /** Queue or emit an outgoing (encrypted) packet. Must not block Router::send(). The return value
-     * is ignored: one transport accepting a packet never suppresses another. */
-    virtual bool onSend(const meshtastic_MeshPacket *mp) = 0;
+     * is ignored: one transport accepting a packet never suppresses another. Default no-op, for a
+     * PreEncode transport, which is never reached here. */
+    virtual bool onSend(const meshtastic_MeshPacket *mp) { return false; }
 
     /** Act on the decoded packet, with its encrypted copy and channel index, before the decoded copy
      * is freed. Default no-op. Must not block Router::send(). */
