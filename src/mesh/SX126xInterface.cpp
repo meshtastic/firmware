@@ -14,7 +14,7 @@
 #include "BenchClock.h"
 #include "Throttle.h"
 #include "UptimeClock.h"
-#if defined(SX126X_RX_REARM_AT_TX_DONE) && !defined(SX126X_REARM_FROM_TASK)
+#if (defined(SX126X_RX_REARM_AT_TX_DONE) && !defined(SX126X_REARM_FROM_TASK)) || defined(SX126X_STATE_SAMPLER_TASK)
 #include "SPILock.h"
 #endif
 #ifdef SX126X_STATE_SAMPLER_MS
@@ -52,8 +52,14 @@ SX126xInterface<T>::SX126xInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs
 }
 
 #ifdef SX126X_STATE_SAMPLER_TASK
-#if !defined(SX126X_STATE_SAMPLER_MS) || !defined(ARCH_NRF52)
-#error "SX126X_STATE_SAMPLER_TASK is a bench flag for nRF52, and needs SX126X_STATE_SAMPLER_MS for its period"
+#if !defined(SX126X_STATE_SAMPLER_MS) || !(defined(ARCH_NRF52) || defined(ARCH_ESP32))
+#error "SX126X_STATE_SAMPLER_TASK is a bench flag for nRF52 and ESP32, and needs SX126X_STATE_SAMPLER_MS for its period"
+#endif
+// xTaskCreate takes the stack in words on nRF52 and in bytes on ESP32; the task only does SPI and millis(), no logging.
+#ifdef ARCH_ESP32
+#define SX126X_STATE_SAMPLER_STACK 2048
+#else
+#define SX126X_STATE_SAMPLER_STACK 256
 #endif
 // The task looks every SX126X_STATE_SAMPLER_MS; the main loop only logs what it queued, so it need not run as often.
 #define SX126X_STATE_SAMPLER_LOOP_MS 10
@@ -321,10 +327,18 @@ template <typename T> bool SX126xInterface<T>::init()
         chipStateSampler = new ChipStateSampler([this]() { sampleChipState(); });
 #endif
 #ifdef SX126X_STATE_SAMPLER_TASK
-    // Above the Arduino loop task, so a main-loop hold cannot delay a look.
+    // Above the Arduino loop task, so a main-loop hold cannot delay a look, and below the RX readout task (loop + 2).
     static bool chipStateTaskStarted = false;
     if (!chipStateTaskStarted) {
-        chipStateTaskStarted = xTaskCreate(chipStateTaskMain, "ChipState", 256, this, tskIDLE_PRIORITY + 2, nullptr) == pdPASS;
+#ifdef ARCH_ESP32
+        // On the loop's core, as the readout task is: the ring between this task and the loop then needs only the
+        // compiler barriers it has, not a cross-core fence.
+        chipStateTaskStarted = xTaskCreatePinnedToCore(chipStateTaskMain, "ChipState", SX126X_STATE_SAMPLER_STACK, this,
+                                                       tskIDLE_PRIORITY + 2, nullptr, xPortGetCoreID()) == pdPASS;
+#else
+        chipStateTaskStarted = xTaskCreate(chipStateTaskMain, "ChipState", SX126X_STATE_SAMPLER_STACK, this, tskIDLE_PRIORITY + 2,
+                                           nullptr) == pdPASS;
+#endif
         LOG_INFO("Chip state sampler task %s, every %u ms", chipStateTaskStarted ? "started" : "not started",
                  (unsigned)SX126X_STATE_SAMPLER_MS);
     }
