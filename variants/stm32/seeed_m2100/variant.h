@@ -10,9 +10,8 @@ Polls an RS485 Modbus sensor and sends its readings as telemetry.
 
 #define SEEED_M2100
 
-// TODO(S2100 schematic): placeholders taken from the Wio-E5 dev board, not verified for the S2100.
-// The RS485 UART (Serial2, PIN_SERIAL2_TX PA2 -> transceiver DI, PIN_SERIAL2_RX PA3 <- RO) is set in
-// platformio.ini: the STM32 core instantiates Serial2 from build flags and never sees this file.
+// TODO(S2100 schematic): Wio-E5 dev board placeholders, unverified for the S2100.
+// Serial2 (PA2 TX -> DI, PA3 RX <- RO) is set in platformio.ini, as the STM32 core never sees this file.
 // #define MODBUS_DE_PIN        <pin> // driver enable, if the transceiver is not auto-direction
 // #define MODBUS_PWR_EN_PIN    <pin> // switch for the 12 V sensor supply
 // #define MODBUS_PWR_WARMUP_MS 2000

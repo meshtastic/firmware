@@ -906,7 +906,7 @@ void SerialModule::modbusCycleDone()
         return;
     }
     mbSensor.fails = 0;
-    if (mbRaw[0x1E / 2])
+    if (!mbSensor.split && mbRaw[0x1E / 2]) // the short reads do not cover the tilt register
         LOG_WARN("Modbus sensor tipped over");
     if (Throttle::hasElapsed(mbRainHourAt, MODBUS_RAIN_HOUR_MS)) {
         mbAgg.nextHour();
