@@ -123,6 +123,9 @@ extern meshtastic_DeviceUIConfig uiconfig;
 extern meshtastic_LocalModuleConfig moduleConfig;
 extern meshtastic_User &owner;
 extern meshtastic_Position localPosition;
+// These timestamps describe local activity during the current boot only.
+extern uint32_t lastLocalPositionUpdateMs;
+extern uint32_t lastPositionTxMs;
 
 static constexpr const char *deviceStateFileName = "/prefs/device.proto";
 static constexpr const char *legacyPrefFileName = "/prefs/db.proto";
