@@ -149,6 +149,9 @@ uint32_t RadioLibInterface::frameEndFromIsr(bool tx)
 }
 #endif
 
+/** At most one busyRx deferral line per this interval; the line carries the count it stands for. */
+#define BUSY_RX_LOG_INTERVAL_MS 30000
+
 /** Could we send right now (i.e. either not actively receiving or transmitting)? */
 bool RadioLibInterface::canSendImmediately()
 {
@@ -180,7 +183,19 @@ bool RadioLibInterface::canSendImmediately()
             rebootAtMsec = Time::skipZero(lastTxStart + 65000);
         }
         if (busyRx) {
-            LOG_WARN("Can not send yet, busyRx");
+            // Deferring a send while a frame is inbound is normal and self-correcting, but this test
+            // runs on every attempt, so an unthrottled line ran to hundreds a minute on a busy
+            // channel - at WARN, which no log level filters out. Report the rate instead: at most one
+            // line per BUSY_RX_LOG_INTERVAL_MS, carrying the attempts deferred since the last one.
+            busyRxDeferred++;
+            const uint32_t nowMs = Time::getMillis();
+            // 0 is this counter's "never reported" sentinel, so keep it away from the arithmetic.
+            if (lastBusyRxLogMs == 0 || Throttle::hasElapsed(lastBusyRxLogMs, BUSY_RX_LOG_INTERVAL_MS)) {
+                LOG_WARN("Can not send yet, busyRx (%u deferred in %u ms)", (unsigned)busyRxDeferred,
+                         (unsigned)(lastBusyRxLogMs ? nowMs - lastBusyRxLogMs : nowMs));
+                busyRxDeferred = 0;
+                lastBusyRxLogMs = Time::skipZero(nowMs);
+            }
         }
         return false;
     } else

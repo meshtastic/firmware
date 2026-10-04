@@ -672,6 +672,14 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     /** Could we send right now (i.e. either not actively receiving or transmitting)? */
     virtual bool canSendImmediately();
 
+    /** canSendImmediately()'s busyRx report is rate-limited: a send attempt while a frame is on the
+     *  air is normal and self-correcting, but it fires on every attempt, so on a busy channel the
+     *  unthrottled LOG_WARN was hundreds of lines a minute at every log level. These carry how many
+     *  attempts were deferred since the last line, so the rate survives. 0 = never reported.
+     *  Declared here, outside every #ifdef: canSendImmediately() uses them on every arch. */
+    uint32_t lastBusyRxLogMs = 0;
+    uint32_t busyRxDeferred = 0;
+
     /**
      * Raw ISR handler that just calls our polymorphic method
      */
