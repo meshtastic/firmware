@@ -63,6 +63,13 @@ class Channels
      * -1 when every slot is live. Never overwrites a live channel - callers withhold instead. */
     int16_t upsertIdentity(const char *name, const uint8_t *psk, uint8_t pskLen, bool useAead = false);
 
+    // The length a PSK of len bytes is used at: 2-15 zero-pad to 16, 17-31 to 32, anything else as given.
+    static uint8_t pskPaddedLength(uint8_t len);
+
+    // The key a stored PSK spells, as every channel uses it: 1-byte shorthands expanded, short keys zero-padded.
+    // Returns its length (0 = cleartext); out must hold 32 bytes. No secondary inheritance - that is getKey()'s.
+    static uint8_t expandPsk(const uint8_t *psk, uint8_t len, uint8_t *out);
+
     /**
      * Return a globally unique channel ID usable with MQTT.
      */

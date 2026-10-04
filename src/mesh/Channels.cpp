@@ -245,53 +245,53 @@ void Channels::initDefaultChannel(ChannelIndex chIndex)
 #undef USERPREFS_APPLY_CHANNEL
 }
 
+uint8_t Channels::pskPaddedLength(uint8_t len)
+{
+    if (len >= 2 && len < 16)
+        return 16;
+    if (len > 16 && len < 32)
+        return 32;
+    return len;
+}
+
+uint8_t Channels::expandPsk(const uint8_t *psk, uint8_t len, uint8_t *out)
+{
+    memset(out, 0, sizeof(meshtastic_ChannelSettings::psk.bytes));
+    if (len == 0)
+        return 0;
+    if (len == 1) {
+        if (psk[0] == 0)
+            return 0; // encryption off, same as an absent key
+        memcpy(out, defaultpsk, sizeof(defaultpsk));
+        out[sizeof(defaultpsk) - 1] += psk[0] - 1; // index 1 is defaultpsk itself
+        return sizeof(defaultpsk);
+    }
+    memcpy(out, psk, len);
+    return pskPaddedLength(len);
+}
+
 CryptoKey Channels::getKey(ChannelIndex chIndex)
 {
     meshtastic_Channel &ch = getByIndex(chIndex);
     const meshtastic_ChannelSettings &channelSettings = ch.settings;
 
     CryptoKey k;
-    memset(k.bytes, 0, sizeof(k.bytes)); // In case the user provided a short key, we want to pad the rest with zeros
+    memset(k.bytes, 0, sizeof(k.bytes));
 
     if (!ch.has_settings || ch.role == meshtastic_Channel_Role_DISABLED) {
         k.length = -1; // invalid
+    } else if (channelSettings.psk.size == 0 && ch.role == meshtastic_Channel_Role_SECONDARY && chIndex != primaryIndex) {
+        // A secondary with no PSK borrows the primary's key; the chIndex != primaryIndex check
+        // prevents infinite recursion if the primary slot itself is marked SECONDARY
+        LOG_DEBUG("Unset PSK for secondary channel %s. use primary key", ch.settings.name);
+        k = getKey(primaryIndex);
     } else {
-        memcpy(k.bytes, channelSettings.psk.bytes, channelSettings.psk.size);
-        k.length = channelSettings.psk.size;
-        if (k.length == 0) {
-            // A secondary with no PSK borrows the primary's key; the chIndex != primaryIndex check
-            // prevents infinite recursion if the primary slot itself is marked SECONDARY
-            if (ch.role == meshtastic_Channel_Role_SECONDARY && chIndex != primaryIndex) {
-                LOG_DEBUG("Unset PSK for secondary channel %s. use primary key", ch.settings.name);
-                k = getKey(primaryIndex);
-            } else {
-                LOG_WARN("User disabled encryption");
-            }
-        } else if (k.length == 1) {
-            // Convert the short single byte variants of psk into variant that can be used more generally
-
-            uint8_t pskIndex = k.bytes[0];
-            LOG_DEBUG("Expand short PSK #%d", pskIndex);
-            if (pskIndex == 0)
-                k.length = 0; // Turn off encryption
-            else {
-                memcpy(k.bytes, defaultpsk, sizeof(defaultpsk));
-                k.length = sizeof(defaultpsk);
-                // Bump up the last byte of PSK as needed
-                uint8_t *last = k.bytes + sizeof(defaultpsk) - 1;
-                *last = *last + pskIndex - 1; // index of 1 means no change vs defaultPSK
-            }
-        } else if (k.length < 16) {
-            // Error! The user specified only the first few bits of an AES128 key.  So by convention we just pad the rest of the
-            // key with zeros
-            LOG_WARN("User provided a too short AES128 key - padding");
-            k.length = 16;
-        } else if (k.length < 32 && k.length != 16) {
-            // Error! The user specified only the first few bits of an AES256 key.  So by convention we just pad the rest of the
-            // key with zeros
-            LOG_WARN("User provided a too short AES256 key - padding");
-            k.length = 32;
-        }
+        const uint8_t given = (uint8_t)channelSettings.psk.size;
+        k.length = expandPsk(channelSettings.psk.bytes, given, k.bytes);
+        if (given == 0)
+            LOG_WARN("User disabled encryption");
+        else if (given > 1 && k.length != given)
+            LOG_WARN("User provided a %u-byte key - padding to %d", given, k.length);
     }
 
     return k;
@@ -449,29 +449,6 @@ static void resolveIdentityName(const char *name, char *out, size_t outLen)
     out[outLen - 1] = '\0';
 }
 
-// A stored PSK expanded as getKey() expands it, so the spellings that resolve to one key - the
-// 1-byte shorthands, and a short key the firmware pads - compare equal instead of duplicating a
-// slot. Pure: no secondary inheritance and no role check, since a disabled slot must stay matchable.
-static uint8_t canonicalPsk(const uint8_t *psk, uint8_t pskLen, uint8_t *out)
-{
-    memset(out, 0, sizeof(meshtastic_ChannelSettings::psk.bytes));
-    if (pskLen == 0)
-        return 0;
-    if (pskLen == 1) {
-        if (psk[0] == 0)
-            return 0; // encryption off, same as an absent key
-        memcpy(out, defaultpsk, sizeof(defaultpsk));
-        out[sizeof(defaultpsk) - 1] += psk[0] - 1; // index 1 is defaultpsk itself
-        return sizeof(defaultpsk);
-    }
-    memcpy(out, psk, pskLen);
-    if (pskLen < 16)
-        return 16;
-    if (pskLen < 32 && pskLen != 16)
-        return 32;
-    return pskLen;
-}
-
 // Identity is the name and the PSK only; role is the caller's business. The name compares
 // case-sensitively because generateHash() xors the raw bytes, so two spellings differing only in
 // case are different channels on the air and must not be collapsed onto one slot.
@@ -484,7 +461,7 @@ static bool slotMatchesIdentity(const meshtastic_Channel &ch, const char *wantNa
     if (!ch.has_settings || ch.settings.use_aead != wantAead)
         return false;
     uint8_t haveKey[sizeof(meshtastic_ChannelSettings::psk.bytes)];
-    uint8_t haveKeyLen = canonicalPsk(ch.settings.psk.bytes, (uint8_t)ch.settings.psk.size, haveKey);
+    uint8_t haveKeyLen = Channels::expandPsk(ch.settings.psk.bytes, (uint8_t)ch.settings.psk.size, haveKey);
     if (inheritKey && ch.role == meshtastic_Channel_Role_SECONDARY && ch.settings.psk.size == 0) {
         memcpy(haveKey, inheritKey, inheritKeyLen);
         haveKeyLen = inheritKeyLen;
@@ -501,10 +478,10 @@ int16_t Channels::findByIdentity(const char *name, const uint8_t *psk, uint8_t p
     char want[sizeof(meshtastic_ChannelSettings::name)];
     resolveIdentityName(name, want, sizeof(want));
     uint8_t wantKey[sizeof(meshtastic_ChannelSettings::psk.bytes)];
-    const uint8_t wantKeyLen = canonicalPsk(psk, pskLen, wantKey);
+    const uint8_t wantKeyLen = expandPsk(psk, pskLen, wantKey);
     const meshtastic_ChannelSettings &primary = channelFile.channels[getPrimaryIndex()].settings;
     uint8_t primaryKey[sizeof(meshtastic_ChannelSettings::psk.bytes)];
-    const uint8_t primaryKeyLen = canonicalPsk(primary.psk.bytes, (uint8_t)primary.psk.size, primaryKey);
+    const uint8_t primaryKeyLen = expandPsk(primary.psk.bytes, (uint8_t)primary.psk.size, primaryKey);
 
     for (ChannelIndex i = 0; i < getNumChannels(); i++) {
         const meshtastic_Channel &ch = channelFile.channels[i];
@@ -529,7 +506,7 @@ int16_t Channels::upsertIdentity(const char *name, const uint8_t *psk, uint8_t p
     resolveIdentityName(name, want, sizeof(want));
 
     uint8_t wantKey[sizeof(meshtastic_ChannelSettings::psk.bytes)];
-    const uint8_t wantKeyLen = canonicalPsk(psk, pskLen, wantKey);
+    const uint8_t wantKeyLen = expandPsk(psk, pskLen, wantKey);
 
     // A DISABLED slot holds the settings of a deleted channel, so claiming one destroys nothing
     // live. Prefer one that already held this identity, so re-adding a channel keeps its old index.

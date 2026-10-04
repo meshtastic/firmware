@@ -2535,6 +2535,42 @@ static void offerChannelByValue(meshtastic_ModuleConfig_MeshBeaconConfig &bcfg, 
     memcpy(bcfg.broadcast_offer_channel.psk.bytes, psk, pskLen);
 }
 
+/**
+ * Under test: MeshBeaconModule::sanitiseConfig() padding an offer PSK with Channels::pskPaddedLength()
+ * (src/modules/MeshBeaconModule.cpp).
+ *
+ * Why: every node uses a 2-15 or 17-31 byte key zero-padded to 16 or 32, so the offer advertises that
+ * key at the length it is used at; a client that rejects an odd length still gets a usable offer. A
+ * shorthand stays one byte - every receiver expands it, and expanding it here would put 16 key bytes on
+ * the air instead of one.
+ *
+ * Regression guarded: an odd-length key advertised as written, or a {1} shorthand inflated on the air.
+ */
+static void test_sanitise_offerPsk_paddedToTheLengthItIsUsedAt(void)
+{
+    resetConfig();
+    meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
+    static const uint8_t five[5] = {0x11, 0x22, 0x33, 0x44, 0x55};
+    offerChannelByValue(bcfg, "Odd", five, sizeof(five));
+    MeshBeaconModule::sanitiseConfig(bcfg);
+    TEST_ASSERT_EQUAL_UINT_MESSAGE(16, bcfg.broadcast_offer_channel.psk.size, "a 5-byte key is used as 16 bytes");
+    TEST_ASSERT_EQUAL_UINT8_ARRAY(five, bcfg.broadcast_offer_channel.psk.bytes, sizeof(five));
+    for (size_t b = sizeof(five); b < 16; b++)
+        TEST_ASSERT_EQUAL_UINT8_MESSAGE(0, bcfg.broadcast_offer_channel.psk.bytes[b], "padded with zeros");
+
+    static const uint8_t twenty[20] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a,
+                                       0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14};
+    offerChannelByValue(bcfg, "Odd", twenty, sizeof(twenty));
+    MeshBeaconModule::sanitiseConfig(bcfg);
+    TEST_ASSERT_EQUAL_UINT_MESSAGE(32, bcfg.broadcast_offer_channel.psk.size, "a 20-byte key is used as 32 bytes");
+
+    static const uint8_t shorthand[1] = {0x01};
+    offerChannelByValue(bcfg, "LongFast", shorthand, sizeof(shorthand));
+    MeshBeaconModule::sanitiseConfig(bcfg);
+    TEST_ASSERT_EQUAL_UINT_MESSAGE(1, bcfg.broadcast_offer_channel.psk.size, "a shorthand stays one byte on the air");
+    TEST_ASSERT_EQUAL_UINT8(0x01, bcfg.broadcast_offer_channel.psk.bytes[0]);
+}
+
 // One beacon cycle from a clean slate: the sidecar and the captured sends are per-test state, so
 // a sweep has to reset them itself between iterations.
 static void sendOneCycle()
@@ -5741,6 +5777,7 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_byValue_emptyPskOfferMatchingHeldCleartext_claimsAndPushesNothing);
     RUN_TEST(test_byValue_upsertNeverClaimsThePrimarySlot);
     RUN_TEST(test_byValue_defaultKeyRemoteWrite_isAccepted);
+    RUN_TEST(test_sanitise_offerPsk_paddedToTheLengthItIsUsedAt);
     RUN_TEST(test_byValue_configWithHeadroom_fromLocalClient_isSilent);
     RUN_TEST(test_byValue_widestIndexedList_hasRemoteAdminHeadroom);
     RUN_TEST(test_remoteAdminCeiling_agreesWithThePerhapsEncodeBound);

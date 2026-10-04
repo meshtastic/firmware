@@ -606,6 +606,90 @@ void test_upsert_pskSpellingsOfOneKeyShareASlot()
                                     "a short key and its zero-padded form are one key to getKey(), so one identity here");
 }
 
+/*
+ * Under test: Channels::expandPsk() and Channels::pskPaddedLength() (src/mesh/Channels.cpp), the one
+ * statement of how a stored PSK becomes the key a channel uses, shared by getKey() and the identity
+ * matcher behind findByIdentity()/upsertIdentity().
+ *
+ * Why: the two used to carry separate copies of these rules. A rule added to one and not the other
+ * makes the matcher disagree with the radio: an offer that "matches" a slot it cannot decrypt, or a
+ * channel duplicated into a second slot because its key was spelled differently.
+ *
+ * Regression guarded: getKey() and the matcher drifting apart on any PSK length or shorthand.
+ */
+void test_expandPsk_shorthands()
+{
+    uint8_t out[32];
+    static const uint8_t off[1] = {0x00};
+    TEST_ASSERT_EQUAL_UINT8_MESSAGE(0, Channels::expandPsk(off, 1, out), "{0} is encryption off");
+
+    static const uint8_t one[1] = {0x01};
+    TEST_ASSERT_EQUAL_UINT8(sizeof(defaultpsk), Channels::expandPsk(one, 1, out));
+    TEST_ASSERT_EQUAL_UINT8_ARRAY_MESSAGE(defaultpsk, out, sizeof(defaultpsk), "{1} is defaultpsk itself");
+
+    static const uint8_t two[1] = {0x02};
+    Channels::expandPsk(two, 1, out);
+    TEST_ASSERT_EQUAL_UINT8_ARRAY(defaultpsk, out, sizeof(defaultpsk) - 1);
+    TEST_ASSERT_EQUAL_UINT8_MESSAGE((uint8_t)(defaultpsk[sizeof(defaultpsk) - 1] + 1), out[sizeof(defaultpsk) - 1],
+                                    "{2} bumps the last byte by one");
+
+    static const uint8_t top[1] = {0xFF};
+    Channels::expandPsk(top, 1, out);
+    TEST_ASSERT_EQUAL_UINT8_MESSAGE((uint8_t)(defaultpsk[sizeof(defaultpsk) - 1] + 0xFE), out[sizeof(defaultpsk) - 1],
+                                    "{255} wraps the last byte, as getKey() always has");
+
+    TEST_ASSERT_EQUAL_UINT8_MESSAGE(0, Channels::expandPsk(nullptr, 0, out), "an absent key is encryption off");
+}
+
+void test_expandPsk_paddingLengths()
+{
+    static const uint8_t lengths[] = {2, 15, 16, 17, 31, 32};
+    static const uint8_t expect[] = {16, 16, 16, 32, 32, 32};
+    uint8_t key[32];
+    for (size_t i = 0; i < sizeof(key); i++)
+        key[i] = (uint8_t)(0xA0 + i);
+    for (size_t i = 0; i < sizeof(lengths); i++) {
+        uint8_t out[32];
+        memset(out, 0xEE, sizeof(out));
+        TEST_ASSERT_EQUAL_UINT8(expect[i], Channels::pskPaddedLength(lengths[i]));
+        TEST_ASSERT_EQUAL_UINT8(expect[i], Channels::expandPsk(key, lengths[i], out));
+        TEST_ASSERT_EQUAL_UINT8_ARRAY_MESSAGE(key, out, lengths[i], "the given bytes are kept");
+        for (uint8_t b = lengths[i]; b < expect[i]; b++)
+            TEST_ASSERT_EQUAL_UINT8_MESSAGE(0, out[b], "and the pad is zeros");
+    }
+    TEST_ASSERT_EQUAL_UINT8_MESSAGE(1, Channels::pskPaddedLength(1), "a shorthand is not padded");
+    TEST_ASSERT_EQUAL_UINT8_MESSAGE(0, Channels::pskPaddedLength(0), "nor is an absent key");
+}
+
+void test_getKey_agreesWithExpandPsk_forEveryLength()
+{
+    uint8_t key[32];
+    for (size_t i = 0; i < sizeof(key); i++)
+        key[i] = (uint8_t)(0x30 + i);
+    for (uint8_t len = 0; len <= sizeof(key); len++) {
+        seedTableWithPrimary("Agree", key, len);
+        uint8_t expanded[32];
+        const uint8_t expandedLen = Channels::expandPsk(key, len, expanded);
+        const CryptoKey k = channels.getKey(0);
+        TEST_ASSERT_EQUAL_INT_MESSAGE(expandedLen, k.length, "getKey() and expandPsk() agree on the length");
+        TEST_ASSERT_EQUAL_UINT8_ARRAY_MESSAGE(expanded, k.bytes, sizeof(k.bytes), "and on every byte");
+    }
+}
+
+void test_identity_expandedKeyFindsItsShorthand_andAllZeroKeyIsNotCleartext()
+{
+    seedTableWithPrimary("Home", defaultpsk, sizeof(defaultpsk));
+    static const uint8_t shorthand[1] = {0x01};
+    TEST_ASSERT_EQUAL_INT16_MESSAGE(0, channels.findByIdentity("Home", shorthand, sizeof(shorthand)),
+                                    "a table holding the full key is found by its shorthand too");
+
+    static const uint8_t off[1] = {0x00};
+    seedTableWithPrimary("Open", off, sizeof(off));
+    static const uint8_t zeros[16] = {0};
+    TEST_ASSERT_EQUAL_INT16_MESSAGE(-1, channels.findByIdentity("Open", zeros, sizeof(zeros)),
+                                    "an all-zero AES-128 key encrypts; it is not the cleartext channel");
+}
+
 // generateHash() xors the raw name bytes, so two spellings differing only in case hash differently
 // and are different channels on the air. Collapsing them would beacon on a hash nobody computes.
 void test_identity_nameCaseIsSignificant()
@@ -846,6 +930,10 @@ CK_TEST_ENTRY void setup()
     RUN_TEST(test_identity_emptyPskSecondaryCarriesThePrimaryKey);
     RUN_TEST(test_upsert_cleartextIsStoredAsExplicitOff);
     RUN_TEST(test_identity_nameCaseIsSignificant);
+    RUN_TEST(test_expandPsk_shorthands);
+    RUN_TEST(test_expandPsk_paddingLengths);
+    RUN_TEST(test_getKey_agreesWithExpandPsk_forEveryLength);
+    RUN_TEST(test_identity_expandedKeyFindsItsShorthand_andAllZeroKeyIsNotCleartext);
     RUN_TEST(test_identity_aead_is_a_different_channel);
 
     printf("\n=== decryptForHash bounds (#11046) ===\n");

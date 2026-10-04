@@ -316,7 +316,7 @@ static bool placeChannelIdentity(const meshtastic_ChannelSettings &id, int16_t &
     if (channels.findByIdentity(id.name, id.psk.bytes, pskLen, id.use_aead) >= 0)
         return true;
     // Licensed operation forbids encryption, so this node may not hold the key it would advertise. A 1-byte {0}
-    // is the explicit "encryption off" spelling, as Channels' canonicalPsk() reads it.
+    // is the explicit "encryption off" spelling, as Channels::expandPsk() reads it.
     const bool encrypted = pskLen > 1 || (pskLen == 1 && id.psk.bytes[0] != 0);
     if (owner.is_licensed && encrypted)
         return false;
@@ -377,6 +377,15 @@ void MeshBeaconModule::sanitiseConfig(meshtastic_ModuleConfig_MeshBeaconConfig &
     if (bcfg.has_broadcast_offer_channel && bcfg.broadcast_offer_channel.psk.size == 0) {
         bcfg.broadcast_offer_channel.psk.size = 1;
         bcfg.broadcast_offer_channel.psk.bytes[0] = 0;
+    }
+    // A short key is used zero-padded everywhere, so advertise it at that length; shorthands stay as written.
+    if (bcfg.has_broadcast_offer_channel) {
+        auto &psk = bcfg.broadcast_offer_channel.psk;
+        const uint8_t padded = Channels::pskPaddedLength((uint8_t)psk.size);
+        if (padded > psk.size) {
+            memset(psk.bytes + psk.size, 0, padded - psk.size);
+            psk.size = padded;
+        }
     }
     // Enforce interval minimum (0 means unset/use default).
     if (bcfg.broadcast_interval_secs != 0 && bcfg.broadcast_interval_secs < default_mesh_beacon_min_broadcast_interval_secs)
