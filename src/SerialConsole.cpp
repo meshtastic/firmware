@@ -58,6 +58,7 @@ struct UsbStats {
     uint32_t dropRoom, dropTail, dropBig;        // log records dropped: ring short of room, a frame tail retained, too big
     uint32_t dropRetained;                       // log records not encoded: a retained frame still owns the log buffer
     uint32_t slowLocks, maxLockUs;               // streamLock waits of 1 ms or more, the longest
+    uint32_t dropBusy;                           // log records dropped rather than wait for streamLock
 };
 UsbStats usbStats;
 uint32_t usbStatsAt;
@@ -124,6 +125,38 @@ void noteWritten(bool frame)
     }
     stallNow.fromMs = 0;
 }
+} // namespace
+#endif
+
+#if defined(IS_USB_SERIAL) && defined(MESHTASTIC_LOG_NEVER_WAIT)
+namespace
+{
+// Bench: streamLock, taken outright for a packet frame, but for a log record only if it is free now. A log record is
+// dropped rather than wait behind a packet frame's write, which can block for USB drain.
+class StreamGuard
+{
+  public:
+    StreamGuard(concurrency::Lock *lock, bool logRecord) : lock(lock)
+    {
+        if (logRecord) {
+            held = lock->lock(0);
+        } else {
+            lock->lock();
+            held = true;
+        }
+    }
+    ~StreamGuard()
+    {
+        if (held)
+            lock->unlock();
+    }
+    StreamGuard(const StreamGuard &) = delete;
+    StreamGuard &operator=(const StreamGuard &) = delete;
+    bool held = false;
+
+  private:
+    concurrency::Lock *lock;
+};
 } // namespace
 #endif
 
@@ -237,9 +270,10 @@ int32_t SerialConsole::runOnce()
         uint32_t debugSlow, debugMaxUs;
         RedirectablePrint::takeDebugLockStats(&debugSlow, &debugMaxUs);
         LOG_INFO("USB stats 10 s: frames %u (>=1 ms %u, max %u us); logs %u (>=1 ms %u, max %u us), dropped room %u tail %u "
-                 "big %u retained %u; stream lock >=1 ms %u, max %u us; log lock >=1 ms %u, max %u us",
+                 "big %u retained %u; stream lock >=1 ms %u, max %u us; log lock >=1 ms %u, max %u us; dropped busy %u",
                  seen.frames, seen.slowWrites, seen.maxWriteUs, seen.logs, seen.logSlowWrites, seen.logMaxWriteUs, seen.dropRoom,
-                 seen.dropTail, seen.dropBig, seen.dropRetained, seen.slowLocks, seen.maxLockUs, debugSlow, debugMaxUs);
+                 seen.dropTail, seen.dropBig, seen.dropRetained, seen.slowLocks, seen.maxLockUs, debugSlow, debugMaxUs,
+                 seen.dropBusy);
     }
 #endif
     int32_t delay = runOncePart();
@@ -352,7 +386,17 @@ bool SerialConsole::hasRetainedFrame()
 bool SerialConsole::canEncodeLogRecord()
 {
 #ifdef IS_USB_SERIAL
+#ifdef MESHTASTIC_LOG_NEVER_WAIT
+    StreamGuard guard(&streamLock, true);
+    if (!guard.held) {
+#ifdef MESHTASTIC_LOG_USB_STATS
+        usbStats.dropBusy++; // not under the lock: approximate
+#endif
+        return false;
+    }
+#else
     concurrency::LockGuard guard(&streamLock);
+#endif
 #ifdef MESHTASTIC_LOG_USB_STATS
     if (!frameWriter.isIdle()) {
         usbStats.dropRetained++;
@@ -379,7 +423,17 @@ bool SerialConsole::writeFrame(uint8_t *buf, size_t len, bool bestEffort)
 #ifdef MESHTASTIC_LOG_USB_STATS
     const uint32_t lockFromUs = micros();
 #endif
+#ifdef MESHTASTIC_LOG_NEVER_WAIT
+    StreamGuard guard(&streamLock, bestEffort);
+    if (!guard.held) {
+#ifdef MESHTASTIC_LOG_USB_STATS
+        usbStats.dropBusy++; // not under the lock: approximate
+#endif
+        return false;
+    }
+#else
     concurrency::LockGuard guard(&streamLock);
+#endif
 #ifdef MESHTASTIC_LOG_USB_STATS
     const uint32_t writeFromUs = micros();
     noteUsbUs(writeFromUs - lockFromUs, usbStats.slowLocks, usbStats.maxLockUs);
