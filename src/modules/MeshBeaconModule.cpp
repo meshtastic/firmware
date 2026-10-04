@@ -7,7 +7,6 @@
 #include "TransmitHistory.h"
 #include "UptimeClock.h"
 #include "configuration.h"
-#include "gps/RTC.h"
 #include "main.h"
 #include "meshUtils.h"
 #include <Throttle.h>
@@ -1133,12 +1132,10 @@ int32_t MeshBeaconBroadcastModule::runOnce()
 // ---------------------------------------------------------------------------
 
 MeshBeaconListenerModule *meshBeaconListenerModule;
-MeshBeaconListenerModule::BeaconOffer MeshBeaconListenerModule::lastReceivedOffer;
 
 MeshBeaconListenerModule::MeshBeaconListenerModule()
     : ProtobufModule("beacon_listen", meshtastic_PortNum_MESH_BEACON_APP, &meshtastic_MeshBeacon_msg)
 {
-    lastReceivedOffer = {};
 }
 
 bool MeshBeaconListenerModule::wantPacket(const meshtastic_MeshPacket *p)
@@ -1165,22 +1162,9 @@ bool MeshBeaconListenerModule::handleReceivedProtobuf(const meshtastic_MeshPacke
     if (hasText)
         LOG_INFO("Beacon: received from 0x%08x: '%.40s'", mp.from, b->message);
 
-    // Cache any offer for the client app - never auto-applied.
-    if (hasOfferContent) {
-        lastReceivedOffer.valid = true;
-        lastReceivedOffer.sender = mp.from;
-        lastReceivedOffer.has_channel = b->has_offer_channel;
-        if (b->has_offer_channel)
-            lastReceivedOffer.channel = b->offer_channel;
-        lastReceivedOffer.region = b->offer_region;
-        lastReceivedOffer.preset = b->offer_preset;
-        // Cached, not derived: a sender only sends this when the offer's own fields do not give it.
-        lastReceivedOffer.has_frequency_slot = b->has_offer_frequency_slot;
-        lastReceivedOffer.frequency_slot = b->offer_frequency_slot;
-        lastReceivedOffer.received_at =
-            getValidTime(RTCQualityFromNet); // 0 if no RTC fix yet - consumers must not treat 0 as valid
-        LOG_INFO("Beacon: stored offer from 0x%08x (preset=%d)", mp.from, b->offer_preset);
-    }
+    // The offer travels to the client in the packet itself - never cached here, never auto-applied.
+    if (hasOfferContent)
+        LOG_INFO("Beacon: offer from 0x%08x (preset=%d)", mp.from, b->offer_preset);
 
     notifyObservers(&mp);
     return false;

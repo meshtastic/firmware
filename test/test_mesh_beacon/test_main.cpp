@@ -1265,7 +1265,7 @@ static void test_broadcaster_runOnce_silentWhenDisabled(void)
 }
 
 // ===========================================================================
-// Group 4: Listener - offer caching and guards
+// Group 4: Listener - pass-through and guards
 // ===========================================================================
 
 // Helper: build a decoded MESH_BEACON_APP packet carrying the given MeshBeacon.
@@ -1282,164 +1282,90 @@ static meshtastic_MeshPacket makeBeaconPacket(const meshtastic_MeshBeacon &b, No
     return p;
 }
 
-/**
- * Verify a beacon carrying preset and region offer fields is stored in lastReceivedOffer.
- * Important to confirm the client app's offer cache is populated correctly for join-offer UI flows.
- */
-static void test_listener_receiveWithOffer_cachesOffer(void)
+static void enableListener()
 {
     resetConfig();
     moduleConfig.has_mesh_beacon = true;
     moduleConfig.mesh_beacon.flags |= MESH_BEACON_FLAG_LISTEN_ENABLED;
+}
 
+// The listener's whole contract for a received beacon: CONTINUE, so the client gets the packet, with the
+// beacon exactly as it arrived (re-encoded byte for byte), nothing sent onto the mesh, nothing synthesized.
+static void assertListenerPassesThrough(const meshtastic_MeshBeacon &sent, const char *what)
+{
     MeshBeaconListenerModuleTestShim listener;
-    MeshBeaconListenerModule::lastReceivedOffer = {};
+    meshtastic_MeshBeacon b = sent;
+    const meshtastic_MeshPacket mp = makeBeaconPacket(sent);
+    const size_t sentBefore = mockRouter->sentPackets.size();
 
-    meshtastic_MeshBeacon b = meshtastic_MeshBeacon_init_zero;
-    strncpy(b.message, "Join us on US/MEDIUM_FAST", sizeof(b.message) - 1);
-    b.has_offer_preset = true;
-    b.offer_preset = meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST;
-    b.offer_region = meshtastic_Config_LoRaConfig_RegionCode_US;
-
-    meshtastic_MeshPacket mp = makeBeaconPacket(b);
-    listener.handleReceivedProtobuf(mp, &b);
-
-    TEST_ASSERT_TRUE_MESSAGE(MeshBeaconListenerModule::lastReceivedOffer.valid, "Offer with preset must be cached");
-    TEST_ASSERT_EQUAL(kRemoteNode, MeshBeaconListenerModule::lastReceivedOffer.sender);
-    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST, MeshBeaconListenerModule::lastReceivedOffer.preset);
-    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_US, MeshBeaconListenerModule::lastReceivedOffer.region);
+    TEST_ASSERT_FALSE_MESSAGE(listener.handleReceivedProtobuf(mp, &b), what);
+    const meshtastic_MeshPacket after = makeBeaconPacket(b);
+    TEST_ASSERT_EQUAL_UINT_MESSAGE(mp.decoded.payload.size, after.decoded.payload.size, what);
+    TEST_ASSERT_EQUAL_MEMORY_MESSAGE(mp.decoded.payload.bytes, after.decoded.payload.bytes, mp.decoded.payload.size, what);
+    TEST_ASSERT_EQUAL_UINT_MESSAGE(sentBefore, mockRouter->sentPackets.size(), "nothing is sent onto the mesh");
+    TEST_ASSERT_NULL_MESSAGE(service->getForPhone(), "nothing is synthesized for the phone");
 }
 
 /**
- * Verify a beacon with a full ChannelSettings offer sets has_channel and copies the channel struct.
- * Important because the client app checks has_channel before rendering a channel join offer.
+ * Under test: MeshBeaconListenerModule::handleReceivedProtobuf(), for every shape of offer a sender can
+ * put in a beacon (preset and region, a full channel, a pinned slot, a slot alone, LONG_FAST = 0 alone).
+ * Why: the offer reaches the client inside the original packet, which the handler passes on; the node
+ * holds no copy of its own, so a client always reads the offer it was actually sent.
+ * Regression guarded: the handler consuming, rewriting or re-injecting a beacon that carries an offer.
  */
-static void test_listener_receiveWithChannelOffer_setsHasChannel(void)
+static void test_listener_offerShapes_passThroughUntouched(void)
 {
-    resetConfig();
-    moduleConfig.has_mesh_beacon = true;
-    moduleConfig.mesh_beacon.flags |= MESH_BEACON_FLAG_LISTEN_ENABLED;
+    enableListener();
 
-    MeshBeaconListenerModuleTestShim listener;
-    MeshBeaconListenerModule::lastReceivedOffer = {};
+    meshtastic_MeshBeacon presetAndRegion = meshtastic_MeshBeacon_init_zero;
+    strncpy(presetAndRegion.message, "Join us on US/MEDIUM_FAST", sizeof(presetAndRegion.message) - 1);
+    presetAndRegion.has_offer_preset = true;
+    presetAndRegion.offer_preset = meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST;
+    presetAndRegion.offer_region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    assertListenerPassesThrough(presetAndRegion, "preset and region offer");
 
-    meshtastic_MeshBeacon b = meshtastic_MeshBeacon_init_zero;
-    strncpy(b.message, "Channel offer test", sizeof(b.message) - 1);
-    b.has_offer_channel = true;
-    strncpy(b.offer_channel.name, "TestNet", sizeof(b.offer_channel.name) - 1);
-    b.offer_channel.psk.size = 1;
-    b.offer_channel.psk.bytes[0] = 0x01;
+    meshtastic_MeshBeacon channel = meshtastic_MeshBeacon_init_zero;
+    strncpy(channel.message, "Channel offer test", sizeof(channel.message) - 1);
+    channel.has_offer_channel = true;
+    strncpy(channel.offer_channel.name, "TestNet", sizeof(channel.offer_channel.name) - 1);
+    channel.offer_channel.psk.size = 1;
+    channel.offer_channel.psk.bytes[0] = 0x01;
+    assertListenerPassesThrough(channel, "channel offer");
 
-    meshtastic_MeshPacket mp = makeBeaconPacket(b);
-    listener.handleReceivedProtobuf(mp, &b);
+    meshtastic_MeshBeacon pinned = meshtastic_MeshBeacon_init_zero;
+    pinned.has_offer_preset = true;
+    pinned.offer_preset = meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW;
+    pinned.offer_region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    pinned.has_offer_frequency_slot = true;
+    pinned.offer_frequency_slot = 48;
+    assertListenerPassesThrough(pinned, "offer with a pinned slot");
 
-    TEST_ASSERT_TRUE(MeshBeaconListenerModule::lastReceivedOffer.valid);
-    TEST_ASSERT_TRUE_MESSAGE(MeshBeaconListenerModule::lastReceivedOffer.has_channel,
-                             "has_channel must be set when offer_channel is present");
-    TEST_ASSERT_EQUAL_STRING("TestNet", MeshBeaconListenerModule::lastReceivedOffer.channel.name);
-    TEST_ASSERT_EQUAL_UINT16(1, MeshBeaconListenerModule::lastReceivedOffer.channel.psk.size);
+    meshtastic_MeshBeacon slotOnly = meshtastic_MeshBeacon_init_zero;
+    slotOnly.has_offer_frequency_slot = true;
+    slotOnly.offer_frequency_slot = 12;
+    assertListenerPassesThrough(slotOnly, "a slot alone");
+
+    meshtastic_MeshBeacon longFast = meshtastic_MeshBeacon_init_zero;
+    longFast.has_offer_preset = true;
+    longFast.offer_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    assertListenerPassesThrough(longFast, "LONG_FAST (enum 0) alone");
 }
 
 /**
- * Verify a pinned offer_frequency_slot survives into the offer cache.
- * Important because a sender only spends the airtime when the slot cannot be derived, so dropping
- * it here leaves a client deriving the wrong frequency for the mesh it was invited to.
+ * Under test: MeshBeaconListenerModule::handleReceivedProtobuf() on beacons with no offer: text only,
+ * and neither text nor offer. Why: both still belong to the client, which decides what an empty or
+ * text-only beacon means. Regression guarded: an empty beacon being consumed instead of passed on.
  */
-static void test_listener_offerWithFrequencySlot_cachesSlot(void)
+static void test_listener_noOffer_passesThroughUntouched(void)
 {
-    resetConfig();
-    moduleConfig.has_mesh_beacon = true;
-    moduleConfig.mesh_beacon.flags |= MESH_BEACON_FLAG_LISTEN_ENABLED;
+    enableListener();
 
-    MeshBeaconListenerModuleTestShim listener;
-    MeshBeaconListenerModule::lastReceivedOffer = {};
+    meshtastic_MeshBeacon textOnly = meshtastic_MeshBeacon_init_zero;
+    strncpy(textOnly.message, "No offer here", sizeof(textOnly.message) - 1);
+    assertListenerPassesThrough(textOnly, "text only");
 
-    meshtastic_MeshBeacon b = meshtastic_MeshBeacon_init_zero;
-    b.has_offer_preset = true;
-    b.offer_preset = meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW;
-    b.offer_region = meshtastic_Config_LoRaConfig_RegionCode_US;
-    b.has_offer_frequency_slot = true;
-    b.offer_frequency_slot = 48;
-
-    meshtastic_MeshPacket mp = makeBeaconPacket(b);
-    listener.handleReceivedProtobuf(mp, &b);
-
-    TEST_ASSERT_TRUE(MeshBeaconListenerModule::lastReceivedOffer.valid);
-    TEST_ASSERT_TRUE_MESSAGE(MeshBeaconListenerModule::lastReceivedOffer.has_frequency_slot,
-                             "a pinned slot must be recorded as pinned");
-    TEST_ASSERT_EQUAL_UINT32_MESSAGE(48, MeshBeaconListenerModule::lastReceivedOffer.frequency_slot,
-                                     "and kept verbatim, not re-derived");
-}
-
-/**
- * Verify a beacon whose only offer field is the frequency slot is still treated as an offer.
- * Important because this node never sends one, so only a foreign sender produces it - and dropping
- * it would discard the one field it chose to spend airtime on.
- */
-static void test_listener_offerWithOnlyFrequencySlot_isCached(void)
-{
-    resetConfig();
-    moduleConfig.has_mesh_beacon = true;
-    moduleConfig.mesh_beacon.flags |= MESH_BEACON_FLAG_LISTEN_ENABLED;
-
-    MeshBeaconListenerModuleTestShim listener;
-    MeshBeaconListenerModule::lastReceivedOffer = {};
-
-    meshtastic_MeshBeacon b = meshtastic_MeshBeacon_init_zero;
-    b.has_offer_frequency_slot = true;
-    b.offer_frequency_slot = 12;
-
-    meshtastic_MeshPacket mp = makeBeaconPacket(b);
-    listener.handleReceivedProtobuf(mp, &b);
-
-    TEST_ASSERT_TRUE_MESSAGE(MeshBeaconListenerModule::lastReceivedOffer.valid, "a slot alone is offer content");
-    TEST_ASSERT_EQUAL_UINT32(12, MeshBeaconListenerModule::lastReceivedOffer.frequency_slot);
-}
-
-/**
- * Verify a beacon with neither message text nor offer fields is silently discarded.
- * Important to avoid spurious cache updates and wasted inbox copies from empty-payload packets.
- */
-static void test_listener_emptyMessageWithoutOffer_isDropped(void)
-{
-    resetConfig();
-    moduleConfig.has_mesh_beacon = true;
-    moduleConfig.mesh_beacon.flags |= MESH_BEACON_FLAG_LISTEN_ENABLED;
-
-    MeshBeaconListenerModuleTestShim listener;
-    MeshBeaconListenerModule::lastReceivedOffer = {};
-
-    meshtastic_MeshBeacon b = meshtastic_MeshBeacon_init_zero;
-    // message field intentionally left blank
-
-    meshtastic_MeshPacket mp = makeBeaconPacket(b);
-    listener.handleReceivedProtobuf(mp, &b);
-
-    TEST_ASSERT_FALSE_MESSAGE(MeshBeaconListenerModule::lastReceivedOffer.valid, "Empty message must not update offer cache");
-}
-
-/**
- * Verify a LONG_FAST offer (preset enum value 0) with no message still populates the offer cache.
- * Important to guard the has_offer_preset fix - LONG_FAST must not be treated as 'no offer present'.
- */
-static void test_listener_offerOnly_isCached(void)
-{
-    resetConfig();
-    moduleConfig.has_mesh_beacon = true;
-    moduleConfig.mesh_beacon.flags |= MESH_BEACON_FLAG_LISTEN_ENABLED;
-
-    MeshBeaconListenerModuleTestShim listener;
-    MeshBeaconListenerModule::lastReceivedOffer = {};
-
-    meshtastic_MeshBeacon b = meshtastic_MeshBeacon_init_zero;
-    b.has_offer_preset = true;
-    b.offer_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
-
-    meshtastic_MeshPacket mp = makeBeaconPacket(b);
-    listener.handleReceivedProtobuf(mp, &b);
-
-    TEST_ASSERT_TRUE(MeshBeaconListenerModule::lastReceivedOffer.valid);
-    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, MeshBeaconListenerModule::lastReceivedOffer.preset);
+    const meshtastic_MeshBeacon empty = meshtastic_MeshBeacon_init_zero;
+    assertListenerPassesThrough(empty, "neither text nor offer");
 }
 
 /**
@@ -1448,41 +1374,13 @@ static void test_listener_offerOnly_isCached(void)
  */
 static void test_listener_nullBeacon_isDropped(void)
 {
-    resetConfig();
-    moduleConfig.has_mesh_beacon = true;
-    moduleConfig.mesh_beacon.flags |= MESH_BEACON_FLAG_LISTEN_ENABLED;
-
+    enableListener();
     MeshBeaconListenerModuleTestShim listener;
-    MeshBeaconListenerModule::lastReceivedOffer = {};
 
     meshtastic_MeshPacket mp = meshtastic_MeshPacket_init_zero;
     bool result = listener.handleReceivedProtobuf(mp, nullptr);
 
     TEST_ASSERT_FALSE_MESSAGE(result, "Null beacon must return false");
-    TEST_ASSERT_FALSE(MeshBeaconListenerModule::lastReceivedOffer.valid);
-}
-
-/**
- * Verify a text-only beacon (no offer fields set) does not mark the offer cache valid.
- * Important to prevent the client from showing a join dialog in response to plain-text beacons.
- */
-static void test_listener_receiveWithNoOffer_cacheStaysInvalid(void)
-{
-    resetConfig();
-    moduleConfig.has_mesh_beacon = true;
-    moduleConfig.mesh_beacon.flags |= MESH_BEACON_FLAG_LISTEN_ENABLED;
-
-    MeshBeaconListenerModuleTestShim listener;
-    MeshBeaconListenerModule::lastReceivedOffer = {};
-
-    meshtastic_MeshBeacon b = meshtastic_MeshBeacon_init_zero;
-    strncpy(b.message, "No offer here", sizeof(b.message) - 1);
-    // has_offer_preset == false, has_offer_channel == false
-
-    meshtastic_MeshPacket mp = makeBeaconPacket(b);
-    listener.handleReceivedProtobuf(mp, &b);
-
-    TEST_ASSERT_FALSE_MESSAGE(MeshBeaconListenerModule::lastReceivedOffer.valid, "No offer fields → cache must stay invalid");
 }
 
 /**
@@ -1494,28 +1392,11 @@ static void test_listener_receiveWithNoOffer_cacheStaysInvalid(void)
  */
 static void test_listener_textMessage_notUnwrapped(void)
 {
-    resetConfig();
-    moduleConfig.has_mesh_beacon = true;
-    moduleConfig.mesh_beacon.flags |= MESH_BEACON_FLAG_LISTEN_ENABLED;
-
-    MeshBeaconListenerModuleTestShim listener;
-    MeshBeaconListenerModule::lastReceivedOffer = {};
+    enableListener();
 
     meshtastic_MeshBeacon b = meshtastic_MeshBeacon_init_zero;
     strncpy(b.message, "hello mesh", sizeof(b.message) - 1);
-
-    meshtastic_MeshPacket mp = makeBeaconPacket(b);
-    bool consumed = listener.handleReceivedProtobuf(mp, &b);
-
-    // CONTINUE (not STOP): the original MESH_BEACON_APP keeps flowing to the client, which reads
-    // `message` from it - the simple path for a beacon-aware client.
-    TEST_ASSERT_FALSE_MESSAGE(consumed, "Listener must not consume the beacon; the original must reach the client");
-    // Nothing re-injected onto the mesh.
-    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, mockRouter->sentPackets.size(),
-                                     "Received beacon text must not be re-injected into the mesh");
-    // No synthesized TEXT_MESSAGE_APP delivered to the phone (no duplicate of the beacon's text).
-    meshtastic_MeshPacket *toPhone = service->getForPhone();
-    TEST_ASSERT_NULL_MESSAGE(toPhone, "Listener must not inject a duplicate text packet to the phone");
+    assertListenerPassesThrough(b, "a text beacon is not consumed; the original must reach the client");
 }
 
 /**
@@ -5772,14 +5653,9 @@ BEACON_TEST_ENTRY void setup()
 
     printf("\n=== Listener offer caching ===\n");
 
-    RUN_TEST(test_listener_receiveWithOffer_cachesOffer);
-    RUN_TEST(test_listener_receiveWithChannelOffer_setsHasChannel);
-    RUN_TEST(test_listener_offerWithFrequencySlot_cachesSlot);
-    RUN_TEST(test_listener_offerWithOnlyFrequencySlot_isCached);
-    RUN_TEST(test_listener_emptyMessageWithoutOffer_isDropped);
-    RUN_TEST(test_listener_offerOnly_isCached);
+    RUN_TEST(test_listener_offerShapes_passThroughUntouched);
+    RUN_TEST(test_listener_noOffer_passesThroughUntouched);
     RUN_TEST(test_listener_nullBeacon_isDropped);
-    RUN_TEST(test_listener_receiveWithNoOffer_cacheStaysInvalid);
     RUN_TEST(test_listener_textMessage_notUnwrapped);
     RUN_TEST(test_listener_wantPacket_falseWhenDisabled);
     RUN_TEST(test_listener_wantPacket_trueWhenEnabled);

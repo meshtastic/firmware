@@ -577,16 +577,15 @@ void test_E6_beacon_listener_fuzz(void)
         mp.decoded.portnum = meshtastic_PortNum_MESH_BEACON_APP;
 
         meshtastic_MeshBeacon b = fuzzBeacon();
-        bool hasOffer =
-            b.has_offer_channel || b.offer_region != meshtastic_Config_LoRaConfig_RegionCode_UNSET || b.has_offer_preset;
+        uint8_t before[meshtastic_MeshBeacon_size];
+        const size_t beforeLen = pb_encode_to_bytes(before, sizeof(before), &meshtastic_MeshBeacon_msg, &b);
 
         // The listener must never consume the packet (it flows on to the phone)...
         TEST_ASSERT_FALSE(beacon.handleReceivedProtobuf(mp, &b));
-        // ...and any offer content must land in the client-visible cache, keyed to the sender.
-        if (hasOffer) {
-            TEST_ASSERT_TRUE(MeshBeaconListenerModule::lastReceivedOffer.valid);
-            TEST_ASSERT_EQUAL_UINT32(mp.from, MeshBeaconListenerModule::lastReceivedOffer.sender);
-        }
+        // ...and passes the beacon, offer and all, on exactly as it arrived: the client reads the offer from it.
+        uint8_t after[meshtastic_MeshBeacon_size];
+        TEST_ASSERT_EQUAL_size_t(beforeLen, pb_encode_to_bytes(after, sizeof(after), &meshtastic_MeshBeacon_msg, &b));
+        TEST_ASSERT_EQUAL_MEMORY(before, after, beforeLen);
     }
 }
 #endif // !MESHTASTIC_EXCLUDE_BEACON
