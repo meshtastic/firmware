@@ -27,6 +27,12 @@ static MeshBeaconModule_TargetRadioSettings targetRadioSettings[4];
 static PacketId expiredIds[MAX_TX_QUEUE];
 static uint8_t expiredNext;
 
+// Every beacon a cycle queued, two per target under legacy split, so a config change can withdraw the ones
+// still waiting: each was resolved and encrypted against the config being replaced.
+static PacketId queuedBeaconIds[2 * sizeof(meshtastic_ModuleConfig_MeshBeaconConfig::broadcast_targets) /
+                                sizeof(meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget)];
+static uint8_t queuedBeaconNext;
+
 // A free slot first, else round-robin: a queued id is overwritten only once every slot holds an unreleased id.
 static void rememberExpired(const MeshBeaconModule_TargetRadioSettings &entry)
 {
@@ -241,6 +247,23 @@ void MeshBeaconModule::clearAllTargetRadioSettings()
         entry.idCount = 0;
     for (PacketId &e : expiredIds)
         e = 0;
+    for (PacketId &q : queuedBeaconIds)
+        q = 0;
+    queuedBeaconNext = 0;
+}
+
+void MeshBeaconModule::flushQueuedBeacons()
+{
+    unsigned withdrawn = 0;
+    for (PacketId &id : queuedBeaconIds) {
+        // cancelSending() releases through the TX hooks, which frees the target entry and restores the radio.
+        if (id && router && nodeDB && router->cancelSending(nodeDB->getNodeNum(), id))
+            withdrawn++;
+        id = 0;
+    }
+    queuedBeaconNext = 0;
+    if (withdrawn)
+        LOG_INFO("Beacon: config changed, withdrew %u queued beacon(s)", withdrawn);
 }
 
 bool MeshBeaconModule::beaconTxConfigInvalid(const meshtastic_MeshPacket *p)
@@ -738,7 +761,12 @@ void MeshBeaconBroadcastModule::sendBeaconPacket(meshtastic_MeshPacket *p)
     // p->channel already names the target's channel-table slot, so perhapsEncode() picks that
     // channel's key and stamps its hash. Beacons uplink to MQTT on that channel's uplink_enabled.
     const PacketId id = p->id; // every send() failure path frees p before returning
-    releaseIfNotQueued(router->send(p), p, id);
+    const ErrorCode sent = router->send(p);
+    if (sent == ERRNO_OK) {
+        queuedBeaconIds[queuedBeaconNext] = id;
+        queuedBeaconNext = (uint8_t)((queuedBeaconNext + 1) % (sizeof(queuedBeaconIds) / sizeof(queuedBeaconIds[0])));
+    }
+    releaseIfNotQueued(sent, p, id);
 }
 
 void MeshBeaconBroadcastModule::sendBeacon()

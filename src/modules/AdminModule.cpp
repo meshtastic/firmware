@@ -1003,6 +1003,10 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
 
     case meshtastic_Config_lora_tag: {
         // Wrap the entire case in a block to scope variables and avoid crossing initialization
+#if !MESHTASTIC_EXCLUDE_BEACON
+        // Before the snapshot: withdrawing a beacon that holds the radio restores the home RF fields into config.lora.
+        MeshBeaconModule::flushQueuedBeacons();
+#endif
         auto oldLoraConfig = config.lora;
         auto validatedLora = c.payload_variant.lora;
 
@@ -1423,6 +1427,7 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c, bool f
         moduleConfig.has_mesh_beacon = true;
         moduleConfig.mesh_beacon = beaconCfg;
         shouldReboot = false;
+        MeshBeaconModule::flushQueuedBeacons(); // anything still queued describes the config just replaced
         // Payload content changed - invalidate the broadcaster's cache.
         if (meshBeaconBroadcastModule)
             meshBeaconBroadcastModule->invalidateCache();

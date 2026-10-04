@@ -25,8 +25,8 @@ typedef struct {
     // When true, reconfigureForBeaconTX sets hop_start=1 so pre-2.7.20 firmware
     // (which drops hop_start==0 packets) accepts the zero-hop beacon.
     bool legacyHopOverride;
-    // The radio this packet needs, whole, so a future per-target bandwidth or SF needs no field
-    // added. Always a complete config: lora.region holds what the target resolved to at send time.
+    // The radio this packet needs, resolved at send. A beacon or LoRa config write withdraws anything still queued
+    // (flushQueuedBeacons()) and the stale gate drops the rest, so it is deliberately not re-resolved at key-up.
     meshtastic_Config_LoRaConfig lora;
     // The target named no region, so it follows the node's. Re-read at key-up rather than trusting
     // the send-time value: a region changed in between must not put this beacon on the old one.
@@ -80,6 +80,9 @@ class MeshBeaconModule
 
     /** Drop every entry. For tests, which reuse the table across cases. */
     static void clearAllTargetRadioSettings();
+
+    // Withdraw every beacon still in the TX queue, so a config change cannot transmit one resolved against the old config.
+    static void flushQueuedBeacons();
 
     /**
      * True if p is tagged for a beacon radio switch whose target config must NOT be transmitted:

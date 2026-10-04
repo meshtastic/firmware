@@ -4295,6 +4295,133 @@ static void test_txHook_dropOfOneSplitHalf_leavesTheOtherArmed(void)
     MeshBeaconModule::clearAllTargetRadioSettings();
 }
 
+// A TX queue the beacon's packets sit in until cancelled, cancelled the way RadioLibInterface does it:
+// off the queue, then released through the TX hooks.
+class CancellingRadioInterface : public ReentrantRadioInterface
+{
+  public:
+    std::vector<meshtastic_MeshPacket> queued;
+    std::vector<PacketId> cancelled;
+    std::vector<NodeNum> cancelledFrom;
+
+    bool cancelSending(NodeNum from, PacketId id) override
+    {
+        for (size_t i = 0; i < queued.size(); i++) {
+            if (queued[i].id != id)
+                continue;
+            cancelled.push_back(id);
+            cancelledFrom.push_back(from);
+            RadioTxHooks::packetReleased(this, &queued[i]);
+            queued.erase(queued.begin() + i);
+            return true;
+        }
+        return false;
+    }
+};
+
+// Queue one beacon on a target that needs a switch, and let the driver reach it, so the radio is
+// switched and the packet is still waiting - the state a config write can land in.
+static CancellingRadioInterface *queueSwitchedBeacon(MeshBeaconBroadcastModuleTestShim &bcast)
+{
+    moduleConfig.has_mesh_beacon = true;
+    moduleConfig.mesh_beacon.has_broadcast_offer_preset = true;
+    moduleConfig.mesh_beacon.broadcast_offer_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
+    moduleConfig.mesh_beacon.broadcast_targets_count = 1;
+    moduleConfig.mesh_beacon.broadcast_targets[0].has_preset = true;
+    moduleConfig.mesh_beacon.broadcast_targets[0].preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
+
+    auto *radio = new CancellingRadioInterface();
+    mockRouter->addInterface(std::unique_ptr<RadioInterface>(radio)); // the router owns it from here
+
+    bcast.sendBeacon();
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, mockRouter->sentPackets.size(), "one target, one offer-only beacon");
+    radio->queued.push_back(mockRouter->sentPackets[0]);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(RadioTxHook::PRETX_DEFER, RadioTxHooks::beforeTransmit(radio, &radio->queued[0]),
+                                  "the driver reaching the beacon must switch the radio");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW, config.lora.modem_preset,
+                                  "precondition: the radio holds the beacon's preset");
+    return radio;
+}
+
+/**
+ * Under test: MeshBeaconModule::flushQueuedBeacons(), called from AdminModule::handleSetModuleConfig()
+ * when a mesh_beacon config is written (src/modules/AdminModule.cpp, src/modules/MeshBeaconModule.cpp).
+ *
+ * Why: a queued beacon was resolved and encrypted against the config the write replaces - its
+ * targets, offer and message. Withdrawing it means nothing on the air predates the operator's latest
+ * write, and it ends any argument about how long a beacon can wait in the queue.
+ *
+ * Regression guarded: without the flush the old beacon stays queued, keeps its sidecar entry and
+ * keeps the radio on its preset, and transmits the replaced config after the write returned.
+ */
+static void test_beaconConfigWrite_withdrawsQueuedBeacons(void)
+{
+    resetConfig();
+    static const uint8_t homePsk[16] = {0xC3, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                        0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    installTestPrimaryChannel("Home", homePsk, sizeof(homePsk));
+
+    MeshBeaconTxHook hook; // registers itself, so RadioTxHooks routes through the beacon
+    MeshBeaconBroadcastModuleTestShim bcast;
+    CancellingRadioInterface *radio = queueSwitchedBeacon(bcast);
+    const meshtastic_MeshPacket beacon = radio->queued[0];
+
+    meshtastic_ModuleConfig_MeshBeaconConfig bcfg = moduleConfig.mesh_beacon;
+    strncpy(bcfg.broadcast_message, "new text", sizeof(bcfg.broadcast_message) - 1);
+    testAdmin->deferSaves();
+    TEST_ASSERT_TRUE(testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg)));
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, radio->cancelled.size(), "the queued beacon must be withdrawn");
+    TEST_ASSERT_EQUAL_UINT32(beacon.id, radio->cancelled[0]);
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(kLocalNode, radio->cancelledFrom[0], "cancelled as our own packet");
+    TEST_ASSERT_TRUE_MESSAGE(radio->queued.empty(), "nothing of the old config may be left to transmit");
+    TEST_ASSERT_FALSE_MESSAGE(MeshBeaconModule::hasTargetRadioSettings(&beacon), "its target entry must go with it");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, config.lora.modem_preset,
+                                  "withdrawing the switched beacon must put the home preset back");
+}
+
+/**
+ * Under test: the flush at the top of the LoRa case in AdminModule::handleSetConfig(), before
+ * oldLoraConfig is taken (src/modules/AdminModule.cpp).
+ *
+ * Why: withdrawing a beacon that holds the radio restores the home RF fields into config.lora. Done
+ * before the edit is applied, that restore is what the edit builds on; the queued beacon was also
+ * resolved against the region and preset being replaced.
+ *
+ * Regression guarded: with no flush, or a flush after `config.lora = validatedLora`, the beacon's
+ * eventual release writes the old home preset back over the operator's edit - the edit appears to
+ * take and is silently reverted when the beacon finishes.
+ */
+static void test_loraConfigWrite_withdrawsQueuedBeaconsBeforeTheEditLands(void)
+{
+    resetConfig();
+    static const uint8_t homePsk[16] = {0xC4, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                        0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    installTestPrimaryChannel("Home", homePsk, sizeof(homePsk));
+    const meshtastic_Config_LoRaConfig home = config.lora;
+
+    MeshBeaconTxHook hook; // registers itself, so RadioTxHooks routes through the beacon
+    MeshBeaconBroadcastModuleTestShim bcast;
+    CancellingRadioInterface *radio = queueSwitchedBeacon(bcast);
+
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_lora_tag;
+    c.payload_variant.lora = home;
+    c.payload_variant.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW;
+    testAdmin->deferSaves();
+    testAdmin->handleSetConfig(c, false);
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, radio->cancelled.size(), "the queued beacon must be withdrawn");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW, config.lora.modem_preset,
+                                  "the edit must land");
+
+    // Whatever is still queued reaches the driver's release eventually; it must not undo the edit.
+    for (auto &q : radio->queued)
+        RadioTxHooks::packetReleased(radio, &q);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW, config.lora.modem_preset,
+                                  "no beacon release may put the pre-edit preset back");
+}
+
 /**
  * The hook list is what keeps the driver free of module includes: with nothing registered every call
  * is a no-op, so a build without the beacon module behaves exactly as one with beacons idle.
@@ -5362,6 +5489,8 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_txHook_invalidTarget_isDrop);
     RUN_TEST(test_txHook_dropTakesOnlyItsOwnTarget);
     RUN_TEST(test_txHook_dropOfOneSplitHalf_leavesTheOtherArmed);
+    RUN_TEST(test_beaconConfigWrite_withdrawsQueuedBeacons);
+    RUN_TEST(test_loraConfigWrite_withdrawsQueuedBeaconsBeforeTheEditLands);
     RUN_TEST(test_txHook_unregistered_isNoOp);
     RUN_TEST(test_txHook_untaggedPacketAheadOfQueuedBeacon_restoresHome);
 
