@@ -383,9 +383,10 @@ void RedirectablePrint::log(const char *logLevel, const char *format, ...)
     if (moduleConfig.serial.override_console_serial_port && strcmp(logLevel, MESHTASTIC_LOG_LEVEL_DEBUG) == 0) {
         return;
     }
-#ifdef MESHTASTIC_RADIO_TASK
-    // Bench: the radio task never writes the console itself. A second task writing USB CDC wedged the RAK's log, and the
-    // write cost landed in the radio's timing. The loop prints the line, with the radio thread's name and this time.
+#if defined(MESHTASTIC_RADIO_TASK) && !defined(MESHTASTIC_RADIO_TASK_LOG_DIRECT)
+    // Bench: the radio task never writes the console itself (-DMESHTASTIC_RADIO_TASK_LOG_DIRECT: it does, as before). A second
+    // task writing USB CDC wedged the RAK's log, and the write cost landed in the radio's timing. The loop prints the line, with
+    // the radio thread's name and this time.
     if (concurrency::inRadioTask()) {
         const uint8_t next = (uint8_t)((radioTaskLogHead + 1) % radioTaskLogCount);
         if (next == radioTaskLogTail) {
