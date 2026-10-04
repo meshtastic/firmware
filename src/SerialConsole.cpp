@@ -49,53 +49,87 @@ static bool s_serialLinkUp = false;
 #endif
 
 #ifdef MESHTASTIC_LOG_USB_STATS
-// Bench: where console output spends its time and why log records drop. Updated under streamLock, reported every 10 s.
+// Bench: how much console output the port refuses, and what the USB link looks like while it does
+#if defined(IS_USB_HWCDC) && defined(CONFIG_IDF_TARGET_ESP32S3)
+#include "soc/usb_serial_jtag_struct.h"
+#define USB_STALL_HW
+#endif
+#include <atomic>
 namespace
 {
 struct UsbStats {
-    uint32_t frames, slowWrites, maxWriteUs;     // required frames (packets): count, writes of 1 ms or more, the slowest
-    uint32_t logs, logSlowWrites, logMaxWriteUs; // best-effort log records offered to the port
-    uint32_t dropRoom, dropTail, dropBig;        // log records dropped: ring short of room, a frame tail retained, too big
-    uint32_t dropRetained;                       // log records not encoded: a retained frame still owns the log buffer
-    uint32_t slowLocks, maxLockUs;               // streamLock waits of 1 ms or more, the longest
-    uint32_t dropBusy;                           // log records dropped rather than wait for streamLock
+    uint32_t frames;                      // required frames (packets) written
+    uint32_t logs;                        // best-effort log records offered to the port
+    uint32_t dropRoom, dropTail, dropBig; // log records dropped: ring short of room, a frame tail retained, too big
+    uint32_t dropRetained;                // log records not encoded: a retained frame still owns the log buffer
+    uint32_t dropBusy;                    // log records dropped rather than wait for streamLock
 };
-UsbStats usbStats;
+UsbStats usbStats; // framed output, under streamLock
 uint32_t usbStatsAt;
+// Plain-text output (no API client): bytes the port took and refused. Totals, written only under the log lock.
+volatile uint32_t textBytes, textRefused;
+uint32_t textBytesSeen, textRefusedSeen;
 #ifdef MESHTASTIC_HWCDC_TX_BUFFER
 constexpr size_t usbTxRing = MESHTASTIC_HWCDC_TX_BUFFER;
 #else
 constexpr size_t usbTxRing = 256; // HWCDC::begin()'s default
 #endif
 
-void noteUsbUs(uint32_t us, uint32_t &slow, uint32_t &maxUs)
-{
-    if (us >= 1000)
-        slow++;
-    if (us > maxUs)
-        maxUs = us;
-}
+// The USB serial peripheral's state, sampled during a stall
+struct UsbHw {
+    uint32_t atMs; // ms into the stall
+    uint16_t ringFree, sof;
+    uint8_t epState, epWr, epRd;
+    bool fifoFree, emptyEna, emptyRaw, plugged, taken;
+};
 
-// A stall: the ring refusing log records for room, from the first refusal to the next write it takes. One of 1 s or more
-// is reported when it ends, since lines logged during it never reach the host.
+#ifdef USB_STALL_HW
+void sampleHw(UsbHw &hw, uint32_t atMs)
+{
+    hw.atMs = atMs;
+    hw.ringFree = Port.availableForWrite();
+    hw.fifoFree = USB_SERIAL_JTAG.ep1_conf.serial_in_ep_data_free;
+    hw.emptyEna = USB_SERIAL_JTAG.int_ena.serial_in_empty_int_ena;
+    hw.emptyRaw = USB_SERIAL_JTAG.int_raw.serial_in_empty_int_raw;
+    hw.epState = USB_SERIAL_JTAG.in_ep1_st.in_ep1_state;
+    hw.epWr = USB_SERIAL_JTAG.in_ep1_st.in_ep1_wr_addr;
+    hw.epRd = USB_SERIAL_JTAG.in_ep1_st.in_ep1_rd_addr;
+    hw.sof = USB_SERIAL_JTAG.fram_num.sof_frame_index;
+    hw.plugged = HWCDC::isPlugged();
+    hw.taken = true;
+}
+#endif
+
+// A stall: the port refusing output, from the first refusal to the next write it takes. One of 1 s or more is reported
+// when it ends, since what was logged during it never reached the host.
+enum UsbHwAt { HW_ONSET, HW_100MS, HW_1S, HW_LAST, HW_END, HW_COUNT };
 struct UsbStall {
     uint32_t fromMs, ms;
-    uint32_t drops, unplugged; // log records refused, and how many of those found the USB link without SOFs
-    uint32_t frames;           // packet frames written during it
+    uint32_t bytes;     // plain-text bytes refused
+    uint32_t drops;     // framed log records refused for room
+    uint32_t unplugged; // refusals that found the USB link without SOFs
+    uint32_t frames;    // packet frames written during it
     bool endedByFrame;
+    UsbHw hw[HW_COUNT];
 };
 UsbStall stallNow, stallDone;
-bool stallDoneReady;
-uint32_t stallsUnreported;
+std::atomic<bool> stallDoneReady;
+std::atomic<uint32_t> stallsUnreported;
 
-void noteRoomDrop()
+void noteRefused(bool text)
 {
+    const uint32_t now = millis();
     if (!stallNow.fromMs) {
         stallNow = {};
-        const uint32_t now = millis();
         stallNow.fromMs = now ? now : 1;
+#ifdef USB_STALL_HW
+        sampleHw(stallNow.hw[HW_ONSET], 0);
+#endif
     }
-    stallNow.drops++;
+    if (text)
+        stallNow.bytes++;
+    else
+        stallNow.drops++;
 #ifdef IS_USB_HWCDC
     if (!HWCDC::isPlugged())
         stallNow.unplugged++;
@@ -104,6 +138,15 @@ void noteRoomDrop()
     // record never reaches write()
     (void)HWCDC::isConnected();
 #endif
+#endif
+#ifdef USB_STALL_HW
+    const uint32_t at = now - stallNow.fromMs;
+    if (at >= 100 && !stallNow.hw[HW_100MS].taken)
+        sampleHw(stallNow.hw[HW_100MS], at);
+    if (at >= 1000 && !stallNow.hw[HW_1S].taken)
+        sampleHw(stallNow.hw[HW_1S], at);
+    if (at >= stallNow.hw[HW_LAST].atMs + 20)
+        sampleHw(stallNow.hw[HW_LAST], at);
 #endif
 }
 
@@ -116,16 +159,43 @@ void noteWritten(bool frame)
     stallNow.ms = millis() - stallNow.fromMs;
     stallNow.endedByFrame = frame;
     if (stallNow.ms >= 1000) {
-        if (stallDoneReady) {
+        if (stallDoneReady.load(std::memory_order_acquire)) {
             stallsUnreported++;
         } else {
+#ifdef USB_STALL_HW
+            sampleHw(stallNow.hw[HW_END], stallNow.ms);
+#endif
             stallDone = stallNow;
-            stallDoneReady = true;
+            stallDoneReady.store(true, std::memory_order_release);
         }
     }
     stallNow.fromMs = 0;
 }
+
+void noteText(size_t written)
+{
+    if (written) {
+        textBytes = textBytes + 1;
+        noteWritten(false);
+    } else {
+        textRefused = textRefused + 1;
+        noteRefused(true);
+    }
+}
+
+// The loop's last few radio upkeeps (main.cpp), to place a stall's onset against them
+struct RadioUpkeep {
+    uint32_t fromMs, lockWaitMs, tookMs;
+};
+RadioUpkeep upkeeps[4];
+uint8_t upkeepNext;
 } // namespace
+
+void noteRadioUpkeep(uint32_t fromMs, uint32_t lockWaitMs, uint32_t tookMs)
+{
+    upkeeps[upkeepNext] = {fromMs ? fromMs : 1, lockWaitMs, tookMs};
+    upkeepNext = (upkeepNext + 1) % (sizeof(upkeeps) / sizeof(upkeeps[0]));
+}
 #endif
 
 #if defined(IS_USB_SERIAL) && defined(MESHTASTIC_LOG_NEVER_WAIT)
@@ -244,20 +314,34 @@ int32_t SerialConsole::runOnce()
 #endif
 
 #ifdef MESHTASTIC_LOG_USB_STATS
-    if (stallDoneReady) {
-        UsbStall stall;
-        uint32_t unreported;
-        {
-            concurrency::LockGuard guard(&streamLock);
-            stall = stallDone;
-            unreported = stallsUnreported;
-            stallDoneReady = false;
-            stallsUnreported = 0;
+    if (stallDoneReady.load(std::memory_order_acquire)) {
+        const UsbStall stall = stallDone;
+        stallDoneReady.store(false, std::memory_order_release);
+        LOG_INFO("USB stall %u ms from uptime %u ms: refused %u B text, %u records; %u with no SOF; %u frames; ended by %s",
+                 stall.ms, stall.fromMs, stall.bytes, stall.drops, stall.unplugged, stall.frames,
+                 stall.endedByFrame ? "a packet" : "text or a log record");
+        // The latest radio upkeep that started at or before the onset (upkeeps run on this thread)
+        const RadioUpkeep *before = nullptr;
+        for (const RadioUpkeep &u : upkeeps)
+            if (u.fromMs && (int32_t)(stall.fromMs - u.fromMs) >= 0 && (!before || (int32_t)(u.fromMs - before->fromMs) > 0))
+                before = &u;
+        if (before)
+            LOG_INFO("USB stall upkeep: started %u ms before onset, took %u ms (lock wait %u ms); %u more stalls unreported",
+                     stall.fromMs - before->fromMs, before->tookMs, before->lockWaitMs, stallsUnreported.exchange(0));
+        else
+            LOG_INFO("USB stall upkeep: none recorded before onset; %u more stalls unreported", stallsUnreported.exchange(0));
+#ifdef USB_STALL_HW
+        static const char *const hwAt[HW_COUNT] = {"onset", "100 ms", "1 s", "last", "end"};
+        for (int i = 0; i < HW_COUNT; i++) {
+            const UsbHw &hw = stall.hw[i];
+            if (hw.taken)
+                LOG_INFO(
+                    "USB stall hw %s +%u ms: ring free %u, FIFO free %u, IN_EMPTY ena %u raw %u, EP1 st %u wr %u rd %u, SOF %u, "
+                    "plugged %u",
+                    hwAt[i], hw.atMs, hw.ringFree, hw.fifoFree, hw.emptyEna, hw.emptyRaw, hw.epState, hw.epWr, hw.epRd, hw.sof,
+                    hw.plugged);
         }
-        LOG_INFO("USB stall: %u ms from uptime %u ms, %u log records refused (%u with no SOFs), %u packet frames written, "
-                 "ended by a %s write; %u more stalls unreported",
-                 stall.ms, stall.fromMs, stall.drops, stall.unplugged, stall.frames, stall.endedByFrame ? "packet" : "log",
-                 unreported);
+#endif
     }
     if (Throttle::hasElapsed(usbStatsAt, 10000)) {
         usbStatsAt = millis();
@@ -267,13 +351,12 @@ int32_t SerialConsole::runOnce()
             seen = usbStats;
             usbStats = {};
         }
-        uint32_t debugSlow, debugMaxUs;
-        RedirectablePrint::takeDebugLockStats(&debugSlow, &debugMaxUs);
-        LOG_INFO("USB stats 10 s: frames %u (>=1 ms %u, max %u us); logs %u (>=1 ms %u, max %u us), dropped room %u tail %u "
-                 "big %u retained %u; stream lock >=1 ms %u, max %u us; log lock >=1 ms %u, max %u us; dropped busy %u",
-                 seen.frames, seen.slowWrites, seen.maxWriteUs, seen.logs, seen.logSlowWrites, seen.logMaxWriteUs, seen.dropRoom,
-                 seen.dropTail, seen.dropBig, seen.dropRetained, seen.slowLocks, seen.maxLockUs, debugSlow, debugMaxUs,
-                 seen.dropBusy);
+        const uint32_t bytes = textBytes, refused = textRefused;
+        LOG_INFO("USB 10 s: text %u B, refused %u B; frames %u; logs %u, dropped room %u tail %u big %u retained %u busy %u",
+                 bytes - textBytesSeen, refused - textRefusedSeen, seen.frames, seen.logs, seen.dropRoom, seen.dropTail,
+                 seen.dropBig, seen.dropRetained, seen.dropBusy);
+        textBytesSeen = bytes;
+        textRefusedSeen = refused;
     }
 #endif
     int32_t delay = runOncePart();
@@ -310,9 +393,19 @@ size_t SerialConsole::write(uint8_t c)
     if (usingProtobufs)
         return 1;
 
+#ifdef MESHTASTIC_LOG_USB_STATS
+    if (c == '\n') {
+        RedirectablePrint::write('\r');
+        noteText(destWritten);
+    }
+    RedirectablePrint::write(c);
+    noteText(destWritten);
+    return 1;
+#else
     if (c == '\n')
         RedirectablePrint::write('\r');
     return RedirectablePrint::write(c);
+#endif
 }
 
 /// Wake the serial worker when PhoneAPI queues output.
@@ -420,9 +513,6 @@ bool SerialConsole::writeFrame(uint8_t *buf, size_t len, bool bestEffort)
 
     const size_t totalLen = buildFrameHeader(buf, len);
 
-#ifdef MESHTASTIC_LOG_USB_STATS
-    const uint32_t lockFromUs = micros();
-#endif
 #ifdef MESHTASTIC_LOG_NEVER_WAIT
     StreamGuard guard(&streamLock, bestEffort);
     if (!guard.held) {
@@ -435,13 +525,9 @@ bool SerialConsole::writeFrame(uint8_t *buf, size_t len, bool bestEffort)
     concurrency::LockGuard guard(&streamLock);
 #endif
 #ifdef MESHTASTIC_LOG_USB_STATS
-    const uint32_t writeFromUs = micros();
-    noteUsbUs(writeFromUs - lockFromUs, usbStats.slowLocks, usbStats.maxLockUs);
     const bool written = frameWriter.writeFrame(Port, buf, totalLen, bestEffort);
-    const uint32_t writeUs = micros() - writeFromUs;
     if (bestEffort) {
         usbStats.logs++;
-        noteUsbUs(writeUs, usbStats.logSlowWrites, usbStats.logMaxWriteUs);
         if (written) {
             noteWritten(false);
         } else if (!frameWriter.isIdle()) {
@@ -450,11 +536,10 @@ bool SerialConsole::writeFrame(uint8_t *buf, size_t len, bool bestEffort)
             usbStats.dropBig++;
         } else {
             usbStats.dropRoom++;
-            noteRoomDrop();
+            noteRefused(false);
         }
     } else {
         usbStats.frames++;
-        noteUsbUs(writeUs, usbStats.slowWrites, usbStats.maxWriteUs);
         if (written)
             noteWritten(true);
     }

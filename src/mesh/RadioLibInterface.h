@@ -60,7 +60,9 @@
 // RadioLibInterface::rxCounters() and readChipRxStats() exist; the DMShell test client reads them when this is set
 #define MESHTASTIC_BENCH_RX_COUNTERS 1
 
+#ifndef AGC_RESET_INTERVAL_MS
 #define AGC_RESET_INTERVAL_MS (60 * 1000) // 60 seconds
+#endif
 
 // Bench: -DMESHTASTIC_LOG_RADIO_EDGES logs where the radio stops and starts hearing, and its preamble sightings, at DEBUG
 // instead of TRACE: a few lines a second, against the full trace build's volume

@@ -71,31 +71,6 @@ void RedirectablePrint::drainRadioTaskLogs()
 }
 #endif
 
-#ifdef MESHTASTIC_LOG_USB_STATS
-namespace
-{
-// Bench: waits for inDebugPrint, the lock every log line takes before the console. Written by every logging task without
-// a lock, so the counts are approximate.
-volatile uint32_t debugLockSlow, debugLockMaxUs;
-
-void noteDebugLockWait(uint32_t us)
-{
-    if (us >= 1000)
-        debugLockSlow = debugLockSlow + 1;
-    if (us > debugLockMaxUs)
-        debugLockMaxUs = us;
-}
-} // namespace
-
-void RedirectablePrint::takeDebugLockStats(uint32_t *slow, uint32_t *maxUs)
-{
-    *slow = debugLockSlow;
-    *maxUs = debugLockMaxUs;
-    debugLockSlow = 0;
-    debugLockMaxUs = 0;
-}
-#endif
-
 void RedirectablePrint::rpInit()
 {
 #ifdef HAS_FREE_RTOS
@@ -117,8 +92,12 @@ size_t RedirectablePrint::write(uint8_t c)
 #endif
     // Account for legacy config transition
     bool serialEnabled = config.has_security ? config.security.serial_enabled : config.device.serial_enabled;
+#ifdef MESHTASTIC_LOG_USB_STATS
+    destWritten = !config.has_lora || serialEnabled ? dest->write(c) : 1;
+#else
     if (!config.has_lora || serialEnabled)
         dest->write(c);
+#endif
 
     return 1; // We always claim one was written, rather than trusting what the
               // serial port said (which could be zero)
@@ -448,12 +427,7 @@ void RedirectablePrint::log(const char *logLevel, const char *format, ...)
     newFormat[len] = '\n';
     newFormat[len + 1] = '\0';
 
-#if defined(HAS_FREE_RTOS) && defined(MESHTASTIC_LOG_USB_STATS)
-    const uint32_t debugLockFromUs = micros();
-    const bool debugLocked = inDebugPrint != nullptr && xSemaphoreTake(inDebugPrint, portMAX_DELAY) == pdTRUE;
-    if (debugLocked) {
-        noteDebugLockWait(micros() - debugLockFromUs);
-#elif defined(HAS_FREE_RTOS)
+#ifdef HAS_FREE_RTOS
     if (inDebugPrint != nullptr && xSemaphoreTake(inDebugPrint, portMAX_DELAY) == pdTRUE) {
 #else
     if (!inDebugPrint) {

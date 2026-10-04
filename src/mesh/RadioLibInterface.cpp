@@ -1329,7 +1329,9 @@ void RadioLibInterface::periodicRadioMaintenance()
         return; // a chip just re-inited (or still dead) has no use for an AGC reset this tick
     }
 
+#ifndef MESHTASTIC_SKIP_AGC_RESET // bench: the upkeep tick without the reset's ~105 ms of sleep, calibration and delays
     resetAGC();
+#endif
 }
 
 bool RadioLibInterface::maybeRecoverChipStateLoss()
