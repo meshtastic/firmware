@@ -380,13 +380,6 @@ meshtastic_LogRecord_Level RedirectablePrint::getLogLevel(const char *logLevel)
 void RedirectablePrint::log(const char *logLevel, const char *format, ...)
 {
 
-    // append \n to format
-    size_t len = strlen(format);
-    auto newFormat = std::unique_ptr<char[]>(new char[len + 2]);
-    strcpy(newFormat.get(), format);
-    newFormat[len] = '\n';
-    newFormat[len + 1] = '\0';
-
 #if ARCH_PORTDUINO
     // level trace is special, two possible ways to handle it.
     if (strcmp(logLevel, MESHTASTIC_LOG_LEVEL_TRACE) == 0) {
@@ -443,6 +436,17 @@ void RedirectablePrint::log(const char *logLevel, const char *format, ...)
         return;
     }
 #endif
+
+    // Append \n to the format string here rather than carrying one in all ~3400 call sites, which
+    // would cost a byte of flash each. This is the first point past every early return above: the
+    // Portduino level filters, the console-override check and the radio task's queue all discard or
+    // re-format the line themselves, so allocating at the top of the function bought nothing on
+    // those paths and they are the common ones when a log level is filtered out.
+    size_t len = strlen(format);
+    auto newFormat = std::unique_ptr<char[]>(new char[len + 2]);
+    strcpy(newFormat.get(), format);
+    newFormat[len] = '\n';
+    newFormat[len + 1] = '\0';
 
 #if defined(HAS_FREE_RTOS) && defined(MESHTASTIC_LOG_USB_STATS)
     const uint32_t debugLockFromUs = micros();
