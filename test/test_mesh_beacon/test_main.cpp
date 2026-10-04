@@ -52,6 +52,9 @@
 namespace
 {
 
+// Several cases fill the target table or the target list with four literal entries.
+static_assert(MESH_BEACON_MAX_TARGETS == 4, "the proto's broadcast_targets capacity moved: update the four-entry cases");
+
 constexpr NodeNum kLocalNode = 0xAAAA0001;
 constexpr NodeNum kRemoteNode = 0xBBBB0002;
 

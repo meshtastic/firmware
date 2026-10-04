@@ -13,6 +13,10 @@
 #define MESH_BEACON_FLAG_BROADCAST_ENABLED meshtastic_ModuleConfig_MeshBeaconConfig_Flags_FLAG_BROADCAST_ENABLED
 #define MESH_BEACON_FLAG_LEGACY_SPLIT meshtastic_ModuleConfig_MeshBeaconConfig_Flags_FLAG_LEGACY_SPLIT
 
+// The proto's broadcast_targets capacity: every per-target array is sized from it, so a wider list cannot overflow one.
+constexpr size_t MESH_BEACON_MAX_TARGETS = sizeof(meshtastic_ModuleConfig_MeshBeaconConfig::broadcast_targets) /
+                                           sizeof(meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget);
+
 // Sidecar entry pairing packet IDs with the target radio settings they share for beacon TX.
 typedef struct {
     // Legacy split sends the offer and the text as two packets on identical settings, so one entry

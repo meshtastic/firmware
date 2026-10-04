@@ -20,7 +20,7 @@ meshtastic_Config_LoRaConfig_RegionCode MeshBeaconModule::originalRegion;
 bool MeshBeaconModule::originalUsePreset;
 
 // One entry per broadcast target - the proto holds 4 - each covering the legacy split pair.
-static MeshBeaconModule_TargetRadioSettings targetRadioSettings[4];
+static MeshBeaconModule_TargetRadioSettings targetRadioSettings[MESH_BEACON_MAX_TARGETS];
 
 // Ids of entries reaped or evicted while their packets may still be queued: without them such a packet would
 // reach the radio as ordinary traffic and key up on the home config with the target channel's key.
@@ -30,8 +30,7 @@ static uint8_t expiredNext;
 
 // Every beacon a cycle queued, two per target under legacy split, so a config change can withdraw the ones
 // still waiting: each was resolved and encrypted against the config being replaced.
-static PacketId queuedBeaconIds[2 * sizeof(meshtastic_ModuleConfig_MeshBeaconConfig::broadcast_targets) /
-                                sizeof(meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget)];
+static PacketId queuedBeaconIds[2 * MESH_BEACON_MAX_TARGETS];
 static uint8_t queuedBeaconNext;
 
 // A free slot first, else round-robin: a queued id is overwritten only once every slot holds an unreleased id.
@@ -902,8 +901,8 @@ void MeshBeaconBroadcastModule::sendBeacon()
 
     // The payload is identical across targets, so a repeat of one already sent is pure wasted
     // airtime. Keyed on resolved values, so an explicit "current region" dedups against an UNSET one.
-    EffTarget sent[4];
-    meshtastic_Config_LoRaConfig_RegionCode sentRegion[4];
+    EffTarget sent[MESH_BEACON_MAX_TARGETS];
+    meshtastic_Config_LoRaConfig_RegionCode sentRegion[MESH_BEACON_MAX_TARGETS];
     int sentCount = 0;
     // Everything that reaches the air: the RF the packet goes out on, plus the channel slot that
     // keys its encryption. All equal means a byte-identical transmission.
