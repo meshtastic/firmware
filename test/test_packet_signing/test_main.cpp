@@ -32,6 +32,7 @@
 #include "mesh/ReliableRouter.h"
 #include "mesh/Router.h"
 #include "mesh/SinglePortModule.h"
+#include "modules/MeshBeaconModule.h"
 #include "modules/NodeInfoModule.h"
 #include "modules/RoutingModule.h"
 #include "mqtt/MQTT.h"
@@ -1192,6 +1193,101 @@ void test_B17_ack_on_a_usable_channel_stays_on_the_channel(void)
     TEST_ASSERT_EQUAL(meshtastic_Routing_Error_NONE, perhapsEncode(&ack));
     TEST_ASSERT_FALSE_MESSAGE(ack.pki_encrypted, "a sendable ack must stay readable to relays");
 }
+
+#if !MESHTASTIC_EXCLUDE_BEACON
+// Give LOCAL_NODE and REMOTE_NODE key pairs, so a unicast from us to REMOTE_NODE is PKC-encrypted.
+static void installPkcPair()
+{
+    uint8_t localPub[32], localPriv[32], remotePub[32], remotePriv[32];
+    crypto->generateKeyPair(localPub, localPriv);
+    crypto->generateKeyPair(remotePub, remotePriv);
+    mockNodeDB->addNode(LOCAL_NODE);
+    mockNodeDB->setPublicKey(LOCAL_NODE, localPub);
+    mockNodeDB->addNode(REMOTE_NODE);
+    mockNodeDB->setPublicKey(REMOTE_NODE, remotePub);
+    memcpy(config.security.private_key.bytes, localPriv, sizeof(localPriv));
+    config.security.private_key.size = sizeof(localPriv);
+    crypto->setDHPrivateKey(localPriv);
+}
+
+// An admin response from us to REMOTE_NODE, framed as setReplyTo() and perhapsEncode() frame it.
+static meshtastic_MeshPacket adminResponse(const uint8_t *payload, size_t len)
+{
+    meshtastic_MeshPacket p = makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_ADMIN_APP, 0);
+    memcpy(p.decoded.payload.bytes, payload, len);
+    p.decoded.payload.size = (pb_size_t)len;
+    p.decoded.request_id = 0xFFFFFFFF; // fixed32: always 4 bytes
+    p.decoded.has_bitfield = true;
+    p.decoded.bitfield = 0xFF; // the two-byte varint ADMIN_DATA_FRAMING charges for
+    return p;
+}
+
+// B18: the beacon's remote-admin gate against the router it protects.
+// Under test: MeshBeaconModule::remoteAdminCeiling() and fitsRemoteAdmin() (src/modules/MeshBeaconModule.h/.cpp)
+// against perhapsEncode()'s PKC bound (src/mesh/Router.cpp).
+// Why: a beacon config is refused over remote admin when its read-back would not survive one PKC frame,
+// so the gate's number must be the router's. The widest real config passes the gate and must encode; and
+// at the edge, a response carrying remoteAdminCeiling() bytes encodes while one byte more is TOO_LARGE.
+// Regression guarded: the ceiling (or ADMIN_DATA_FRAMING) drifting from perhapsEncode(), so the gate either
+// accepts a config whose response the router refuses - a remote admin NAKed with no reason - or refuses
+// configs that would have fitted.
+void test_B18_beacon_remote_admin_bound_agrees_with_pkc_encode(void)
+{
+    installPkcPair();
+
+    // The widest config a client can write: full message, a 32-byte offer key, every target fully populated.
+    meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
+    bcfg.flags = MESH_BEACON_FLAG_BROADCAST_ENABLED | MESH_BEACON_FLAG_LISTEN_ENABLED | MESH_BEACON_FLAG_LEGACY_SPLIT;
+    bcfg.broadcast_interval_secs = 0xFFFFFFFF;
+    memset(bcfg.broadcast_message, 'x', sizeof(bcfg.broadcast_message) - 1);
+    bcfg.has_broadcast_offer_channel = true;
+    memset(bcfg.broadcast_offer_channel.name, 'n', sizeof(bcfg.broadcast_offer_channel.name) - 1);
+    bcfg.broadcast_offer_channel.psk.size = 32;
+    memset(bcfg.broadcast_offer_channel.psk.bytes, 0x5A, 32);
+    bcfg.broadcast_offer_region = meshtastic_Config_LoRaConfig_RegionCode_ITU2_125CM;
+    bcfg.has_broadcast_offer_preset = true;
+    bcfg.broadcast_offer_preset = meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_TURBO;
+    bcfg.has_broadcast_offer_frequency_slot = true;
+    bcfg.broadcast_offer_frequency_slot = 0xFFFF;
+    bcfg.broadcast_targets_count = (pb_size_t)MESH_BEACON_MAX_TARGETS;
+    for (size_t i = 0; i < MESH_BEACON_MAX_TARGETS; i++) {
+        auto &t = bcfg.broadcast_targets[i];
+        t.region = meshtastic_Config_LoRaConfig_RegionCode_ITU2_125CM;
+        t.has_preset = true;
+        t.preset = meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_TURBO;
+        t.has_channel_index = true;
+        t.channel_index = 7;
+        t.has_frequency_slot = true;
+        t.frequency_slot = 0xFFFF;
+    }
+    TEST_ASSERT_TRUE_MESSAGE(MeshBeaconModule::fitsRemoteAdmin(bcfg), "precondition: the gate passes it");
+
+    meshtastic_AdminMessage r = meshtastic_AdminMessage_init_zero;
+    r.which_payload_variant = meshtastic_AdminMessage_get_module_config_response_tag;
+    r.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_mesh_beacon_tag;
+    r.get_module_config_response.payload_variant.mesh_beacon = bcfg;
+    r.session_passkey.size = 8;
+    memset(r.session_passkey.bytes, 0xA5, 8);
+    uint8_t encoded[meshtastic_Constants_DATA_PAYLOAD_LEN];
+    const size_t encodedLen = pb_encode_to_bytes(encoded, sizeof(encoded), &meshtastic_AdminMessage_msg, &r);
+    TEST_ASSERT_NOT_EQUAL(0, encodedLen);
+
+    meshtastic_MeshPacket widest = adminResponse(encoded, encodedLen);
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Routing_Error_NONE, perhapsEncode(&widest), "the widest config's response must encode");
+    TEST_ASSERT_TRUE_MESSAGE(widest.pki_encrypted, "and it went the PKC way, the path the ceiling is sized for");
+
+    // No real config reaches the ceiling, so drive the edge with an opaque payload of the response's framing.
+    uint8_t filler[meshtastic_Constants_DATA_PAYLOAD_LEN];
+    memset(filler, 0xC3, sizeof(filler));
+    const size_t ceiling = MeshBeaconModule::remoteAdminCeiling();
+    meshtastic_MeshPacket atCeiling = adminResponse(filler, ceiling);
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Routing_Error_NONE, perhapsEncode(&atCeiling), "a response at the ceiling fits");
+    TEST_ASSERT_TRUE(atCeiling.pki_encrypted);
+    meshtastic_MeshPacket overCeiling = adminResponse(filler, ceiling + 1);
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Routing_Error_TOO_LARGE, perhapsEncode(&overCeiling),
+                              "one byte past the ceiling is what the router refuses");
+}
+#endif
 
 // ===========================================================================
 // Group C - routing pipeline and NodeInfo authentication ordering
@@ -2490,6 +2586,9 @@ void setup()
     RUN_TEST(test_B15_ack_with_no_channel_and_no_key_still_fails);
     RUN_TEST(test_B16_non_ack_on_unusable_channel_still_fails);
     RUN_TEST(test_B17_ack_on_a_usable_channel_stays_on_the_channel);
+#if !MESHTASTIC_EXCLUDE_BEACON
+    RUN_TEST(test_B18_beacon_remote_admin_bound_agrees_with_pkc_encode);
+#endif
 
     printf("\n=== Group C: routing pipeline authentication ordering ===\n");
     RUN_TEST(test_C1_invalid_first_copy_does_not_poison_valid_same_id);
