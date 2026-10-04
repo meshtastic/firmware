@@ -34,7 +34,16 @@ struct RadioTaskLog {
     uint32_t ms;
     char text[240]; // the longest bench line, the gate's, is about 190
 };
-constexpr uint8_t radioTaskLogCount = 16;
+// Bench: 16 lines dropped ~8% of the T-Beam's (bursts of up to ~47, printed by the loop at 4-6 ms each on HWCDC)
+#ifndef MESHTASTIC_RADIO_TASK_LOG_LINES
+#ifdef ARCH_ESP32
+#define MESHTASTIC_RADIO_TASK_LOG_LINES 64
+#else
+#define MESHTASTIC_RADIO_TASK_LOG_LINES 16
+#endif
+#endif
+static_assert(MESHTASTIC_RADIO_TASK_LOG_LINES <= 255, "the queue's indexes are uint8_t");
+constexpr uint8_t radioTaskLogCount = MESHTASTIC_RADIO_TASK_LOG_LINES;
 RadioTaskLog radioTaskLogs[radioTaskLogCount];
 volatile uint8_t radioTaskLogHead, radioTaskLogTail;
 volatile uint32_t radioTaskLogsDropped;
