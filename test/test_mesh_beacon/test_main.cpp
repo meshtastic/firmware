@@ -1301,7 +1301,8 @@ static void assertListenerPassesThrough(const meshtastic_MeshBeacon &sent, const
     TEST_ASSERT_FALSE_MESSAGE(listener.handleReceivedProtobuf(mp, &b), what);
     const meshtastic_MeshPacket after = makeBeaconPacket(b);
     TEST_ASSERT_EQUAL_UINT_MESSAGE(mp.decoded.payload.size, after.decoded.payload.size, what);
-    TEST_ASSERT_EQUAL_MEMORY_MESSAGE(mp.decoded.payload.bytes, after.decoded.payload.bytes, mp.decoded.payload.size, what);
+    if (mp.decoded.payload.size) // Unity fails a zero-length compare; an empty beacon encodes to nothing
+        TEST_ASSERT_EQUAL_MEMORY_MESSAGE(mp.decoded.payload.bytes, after.decoded.payload.bytes, mp.decoded.payload.size, what);
     TEST_ASSERT_EQUAL_UINT_MESSAGE(sentBefore, mockRouter->sentPackets.size(), "nothing is sent onto the mesh");
     TEST_ASSERT_NULL_MESSAGE(service->getForPhone(), "nothing is synthesized for the phone");
 }

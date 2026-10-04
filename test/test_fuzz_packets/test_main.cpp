@@ -585,7 +585,8 @@ void test_E6_beacon_listener_fuzz(void)
         // ...and passes the beacon, offer and all, on exactly as it arrived: the client reads the offer from it.
         uint8_t after[meshtastic_MeshBeacon_size];
         TEST_ASSERT_EQUAL_size_t(beforeLen, pb_encode_to_bytes(after, sizeof(after), &meshtastic_MeshBeacon_msg, &b));
-        TEST_ASSERT_EQUAL_MEMORY(before, after, beforeLen);
+        if (beforeLen) // Unity fails a zero-length compare; an empty beacon encodes to nothing
+            TEST_ASSERT_EQUAL_MEMORY(before, after, beforeLen);
     }
 }
 #endif // !MESHTASTIC_EXCLUDE_BEACON
