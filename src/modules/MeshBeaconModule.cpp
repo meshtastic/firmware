@@ -514,8 +514,7 @@ void MeshBeaconModule::fillOffer(meshtastic_MeshBeacon &beacon, const meshtastic
         // Deliberately only what a joiner needs: name, PSK and use_aead, plus preset, region and an underivable slot
         // below. id, uplink/downlink and module_settings are this node's options on the channel, not the channel.
         // The PSK is a convenience token in a public join-invitation, not a security boundary.
-        const meshtastic_ChannelSettings zeroed = meshtastic_ChannelSettings_init_zero;
-        beacon.offer_channel = zeroed;
+        memset(&beacon.offer_channel, 0, sizeof(beacon.offer_channel));
         memcpy(beacon.offer_channel.name, bcfg.broadcast_offer_channel.name, sizeof(beacon.offer_channel.name));
         beacon.offer_channel.psk = bcfg.broadcast_offer_channel.psk;
         beacon.offer_channel.use_aead = bcfg.broadcast_offer_channel.use_aead;
@@ -569,10 +568,7 @@ bool MeshBeaconModule::offerChannelSettings(const meshtastic_ModuleConfig_MeshBe
     // advertised is exactly what the operator wrote.
     if (!bcfg.has_broadcast_offer_channel)
         return false;
-    // Zeroed through a declaration, not `out = {...}`: arm-none-eabi rejects the init macro as an
-    // assignment operand where the host compiler accepts it.
-    const meshtastic_ChannelSettings zeroed = meshtastic_ChannelSettings_init_zero;
-    out = zeroed;
+    memset(&out, 0, sizeof(out)); // _init_zero is all zeros; a const copy of it would sit in .rodata
     strncpy(out.name, bcfg.broadcast_offer_channel.name, sizeof(out.name) - 1);
     out.psk.size = bcfg.broadcast_offer_channel.psk.size;
     memcpy(out.psk.bytes, bcfg.broadcast_offer_channel.psk.bytes, out.psk.size);
