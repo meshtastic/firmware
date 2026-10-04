@@ -4151,6 +4151,86 @@ static void test_beaconRestore_deferredUntilPacketCompletes(void)
                                      "restore must put the home channel back");
 }
 
+/**
+ * Under test: effectiveLora()'s home-region argument in MeshBeaconModule::reconfigureForBeaconTX() and
+ * beaconTxConfigInvalid() (src/modules/MeshBeaconModule.cpp).
+ *
+ * Why: a target that names no region follows the node's. While another beacon's switch is still
+ * installed, config.lora.region is that beacon's region, not the node's - the node's is the snapshot.
+ * A switching beacon can leave the queue without packetReleased() (MeshPacketQueue evicts with a bare
+ * release), so a second switch on top of the first is reachable.
+ *
+ * Regression guarded: the inheriting target keyed up on the first target's region instead of home.
+ */
+static void test_beaconSwitch_inheritedRegionFollowsHomeNotTheInstalledSwitch(void)
+{
+    resetConfig(); // home is EU_868 / LONG_FAST
+    static const uint8_t homePsk[16] = {0xC5, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                        0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    installTestPrimaryChannel("Home", homePsk, sizeof(homePsk));
+
+    ReentrantRadioInterface radio;
+    meshtastic_MeshPacket elsewhere = meshtastic_MeshPacket_init_zero;
+    elsewhere.id = 0x5EED0010;
+    MeshBeaconModule::setTargetRadioSettings(&elsewhere, targetSettings(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, true,
+                                                                        0, false, meshtastic_Config_LoRaConfig_RegionCode_US));
+    meshtastic_MeshPacket inheriting = meshtastic_MeshPacket_init_zero;
+    inheriting.id = 0x5EED0011;
+    MeshBeaconModule_TargetRadioSettings s = targetSettings(meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW, true, 0, false,
+                                                            meshtastic_Config_LoRaConfig_RegionCode_UNSET);
+    s.regionInherited = true;
+    MeshBeaconModule::setTargetRadioSettings(&inheriting, s);
+
+    TEST_ASSERT_TRUE_MESSAGE(MeshBeaconModule::reconfigureForBeaconTX(&radio, &elsewhere), "the US switch should apply");
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Config_LoRaConfig_RegionCode_US, config.lora.region, "precondition: switched to US");
+
+    // Evicted from the queue: its entry goes, but nothing calls the restore.
+    MeshBeaconModule::clearTargetRadioSettings(&elsewhere);
+
+    TEST_ASSERT_TRUE_MESSAGE(MeshBeaconModule::reconfigureForBeaconTX(&radio, &inheriting), "the second switch should apply");
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Config_LoRaConfig_RegionCode_EU_868, config.lora.region,
+                              "an inherited region is the node's home region, not the switch still installed");
+
+    MeshBeaconModule::clearTargetRadioSettings(&inheriting);
+    TEST_ASSERT_TRUE(MeshBeaconModule::reconfigureForBeaconTX(&radio, nullptr));
+    TEST_ASSERT_EQUAL_INT_MESSAGE(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, config.lora.modem_preset,
+                                  "and the restore still returns home");
+}
+
+/**
+ * Under test: the restore branch of MeshBeaconModule::reconfigureForBeaconTX() comparing config.lora with
+ * the switchedTo record (src/modules/MeshBeaconModule.cpp).
+ *
+ * Why: a LoRa write that lands while the beacon is on the air cannot be helped by the flush - the packet
+ * has left the queue - so it is applied over the switched fields and saved. The restore then runs when
+ * the beacon finishes. Putting the home snapshot back at that point overwrites the operator's edit.
+ *
+ * Regression guarded: RAM silently reverting to the pre-edit preset/region/slot after the beacon, while
+ * the saved config holds the edit - two different radios until the next reboot.
+ */
+static void test_beaconRestore_keepsALoraEditMadeDuringTheSwitch(void)
+{
+    resetConfig();
+    static const uint8_t homePsk[16] = {0xC6, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                        0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    installTestPrimaryChannel("Home", homePsk, sizeof(homePsk));
+
+    ReentrantRadioInterface radio;
+    meshtastic_MeshPacket pkt = meshtastic_MeshPacket_init_zero;
+    pkt.id = 0x5EED0012;
+    MeshBeaconModule::setTargetRadioSettings(&pkt, targetSettings(meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW, true, 0,
+                                                                  false, meshtastic_Config_LoRaConfig_RegionCode_UNSET));
+    TEST_ASSERT_TRUE(MeshBeaconModule::reconfigureForBeaconTX(&radio, &pkt));
+
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW; // what handleSetConfig() assigns
+
+    MeshBeaconModule::clearTargetRadioSettings(&pkt);
+    TEST_ASSERT_TRUE_MESSAGE(MeshBeaconModule::reconfigureForBeaconTX(&radio, nullptr), "the switch must still be released");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW, config.lora.modem_preset,
+                                  "the restore must keep an edit made during the switch");
+    TEST_ASSERT_FALSE_MESSAGE(MeshBeaconModule::reconfigureForBeaconTX(&radio, nullptr), "and leave nothing switched");
+}
+
 // ---------------------------------------------------------------------------
 // MeshBeaconTxHook (the radio driver's view of the beacon)
 // ---------------------------------------------------------------------------
@@ -5518,6 +5598,8 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_beaconSwitch_isNotUndoneByCompleteSending);
     RUN_TEST(test_beaconRestore_withoutSwitch_isNoOp);
     RUN_TEST(test_beaconRestore_deferredUntilPacketCompletes);
+    RUN_TEST(test_beaconSwitch_inheritedRegionFollowsHomeNotTheInstalledSwitch);
+    RUN_TEST(test_beaconRestore_keepsALoraEditMadeDuringTheSwitch);
 
     printf("\n=== MeshBeaconTxHook ===\n");
 
