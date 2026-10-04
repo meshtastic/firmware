@@ -53,7 +53,9 @@ void RedirectablePrint::drainRadioTaskLogs()
 {
     static uint32_t droppedReported;
     const uint32_t dropped = radioTaskLogsDropped;
-    if (dropped != droppedReported) {
+    // Reporting every change prints from the loop on each drain, which costs the console most when the
+    // queue is already the thing under pressure. Batch it: one line per 1000 dropped.
+    if (dropped - droppedReported >= 1000) {
         log(MESHTASTIC_LOG_LEVEL_WARN, "Radio task log full, %u lines dropped", (unsigned)(dropped - droppedReported));
         droppedReported = dropped;
     }
