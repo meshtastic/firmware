@@ -1,4 +1,5 @@
 // trunk-ignore-all(trufflehog/Lob): matches test_* function names, not credentials
+#include "Channels.h"
 #include "LR20x0Band.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
@@ -312,6 +313,78 @@ static void test_clampSlot_inRangePinIsKept()
 // -----------------------------------------------------------------------
 
 static TestableRadioInterface *testRadio;
+
+// ---------------------------------------------------------------------------
+// One slot rule. checkOrClampConfigLora() and applyModemConfig() both take the count from
+// frequencySlotCount() and the slot from resolveFrequencySlot(), so the radio lands where every
+// other caller (the beacon, the slot flags) works out it will.
+// ---------------------------------------------------------------------------
+
+/**
+ * Every real region x every preset it offers: the slot applyModemConfig() tunes to is the one
+ * resolveFrequencySlot() names, both unpinned and pinned to that same slot, and either way the
+ * radio reports itself on the default slot. Regression guarded: applyModemConfig() and the clamp
+ * each carried their own copy of the count and the hash, free to drift from resolveFrequencySlot().
+ */
+static void test_frequencySlot_appliedSlotMatchesResolverForEveryRegionAndPreset()
+{
+    unsigned checked = 0;
+    for (const RegionInfo *r = regions; r->code != meshtastic_Config_LoRaConfig_RegionCode_UNSET; r++) {
+        for (const meshtastic_Config_LoRaConfig_ModemPreset *p = r->getAvailablePresets(); *p != MODEM_PRESET_END; p++) {
+            char where[64];
+            snprintf(where, sizeof(where), "%s preset %d", r->name, (int)*p);
+
+            config.lora = meshtastic_Config_LoRaConfig_init_zero;
+            config.lora.region = r->code;
+            config.lora.use_preset = true;
+            config.lora.modem_preset = *p;
+            testRadio->reconfigure();
+            const char *name = channels.getName(channels.getPrimaryIndex());
+            const uint32_t expected = RadioInterface::resolveFrequencySlot(config.lora, name);
+            TEST_ASSERT_EQUAL_UINT32_MESSAGE(expected, testRadio->getChannelNum() + 1, where);
+            TEST_ASSERT_TRUE_MESSAGE(RadioInterface::uses_default_frequency_slot, where);
+
+            config.lora.channel_num = expected; // a pin on the derived slot is still the default slot
+            testRadio->reconfigure();
+            TEST_ASSERT_EQUAL_UINT32_MESSAGE(expected, testRadio->getChannelNum() + 1, where);
+            TEST_ASSERT_TRUE_MESSAGE(RadioInterface::uses_default_frequency_slot, where);
+            checked++;
+        }
+    }
+    TEST_ASSERT_GREATER_THAN_UINT32_MESSAGE(0, checked, "the region table was walked");
+}
+
+/**
+ * resolveFrequencySlot() guards its modulo: a region narrower than the bandwidth has zero slots,
+ * and the answer is slot 1 rather than a SIGFPE. EU_868 is 250 kHz wide; a 1625 kHz custom
+ * bandwidth tiles it into round(0.15) = 0 slots. Regression guarded: hash % 0 on a crafted config.
+ */
+static void test_resolveFrequencySlot_zeroSlotRegion_isSlotOne()
+{
+    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
+    cfg.region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
+    cfg.use_preset = false;
+    cfg.bandwidth = 1600; // 1625 kHz
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, RadioInterface::frequencySlotCount(cfg), "precondition: no whole slot fits");
+    TEST_ASSERT_EQUAL_UINT32(1, RadioInterface::resolveFrequencySlot(cfg, "NYMesh"));
+}
+
+/**
+ * A pin past the region's last slot is not a pin: resolveFrequencySlot() falls through to the
+ * region's derivation, exactly as if channel_num were 0. Regression guarded: an out-of-range
+ * channel_num returned as the slot, tuning the radio above the band edge.
+ */
+static void test_resolveFrequencySlot_pinAboveCount_derivesInstead()
+{
+    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
+    cfg.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    cfg.use_preset = true;
+    cfg.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    const uint32_t derived = RadioInterface::resolveFrequencySlot(cfg, "NYMesh");
+
+    cfg.channel_num = RadioInterface::frequencySlotCount(cfg) + 1;
+    TEST_ASSERT_EQUAL_UINT32(derived, RadioInterface::resolveFrequencySlot(cfg, "NYMesh"));
+}
 
 // ---------------------------------------------------------------------------
 // Frequency slot boundaries. Width is spacing + 2*padding + bandwidth; getFreq() returns the slot
@@ -932,6 +1005,9 @@ void setup()
     RUN_TEST(test_frequencySlot_nz865NarrowBandwidthTopSlot);
     RUN_TEST(test_frequencySlot_eu868IsExactlyOneSlot);
     RUN_TEST(test_frequencySlot_itu1_2mPaddingBracketsTopSlot);
+    RUN_TEST(test_frequencySlot_appliedSlotMatchesResolverForEveryRegionAndPreset);
+    RUN_TEST(test_resolveFrequencySlot_zeroSlotRegion_isSlotOne);
+    RUN_TEST(test_resolveFrequencySlot_pinAboveCount_derivesInstead);
     RUN_TEST(test_bwCodeToKHz_specialMappings);
     RUN_TEST(test_bwCodeToKHz_passthrough);
     RUN_TEST(test_bwCodeToKHz_roundTrip);

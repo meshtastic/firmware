@@ -1202,8 +1202,7 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
     // Calculate width of slots (aka channels) based on bandwidth and any spacing or padding required by the region:
     // spacing = gap between slots (0 for continuous spectrum) and at the beginning of the band
     // padding = gap at the beginning and end of the slots (0 for no padding)
-    float freqSlotWidth = newRegion->profile->spacing + (newRegion->profile->padding * 2) + (check_bw / 1000); // in MHz
-    uint32_t numFreqSlots = round((newRegion->freqEnd - newRegion->freqStart + newRegion->profile->spacing) / freqSlotWidth);
+    const float freqSlotWidth = newRegion->profile->spacing + (newRegion->profile->padding * 2) + (check_bw / 1000); // in MHz
 
     // Check if the region supports the requested bandwidth
     if ((newRegion->freqEnd - newRegion->freqStart) < freqSlotWidth) {
@@ -1212,11 +1211,6 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
         announceError(); // a no-op unless the caller asked to be told
         if (clamp) {
             loraConfig.bandwidth = bwKHzToCode(modemPresetToBwKHz(newRegion->getDefaultPreset(), newRegion->wideLora));
-            check_bw = bwCodeToKHz(loraConfig.bandwidth);
-
-            // Recompute slot width and number of slots based on the new bandwidth
-            freqSlotWidth = newRegion->profile->spacing + (newRegion->profile->padding * 2) + (check_bw / 1000); // in MHz
-            numFreqSlots = round((newRegion->freqEnd - newRegion->freqStart + newRegion->profile->spacing) / freqSlotWidth);
         } else {
             return false;
         }
@@ -1228,22 +1222,16 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
         channelName = channels.getName(channels.getPrimaryIndex());
     const char *presetNameDisplay =
         DisplayFormatters::getModemPresetDisplayName(loraConfig.modem_preset, false, loraConfig.use_preset);
-    // numFreqSlots can still be 0 for an UNSET/degenerate region, and % 0 is a SIGFPE
-    uint32_t channelNameHashSlot = numFreqSlots ? (hash(channelName) % numFreqSlots) : 0;
-    uint32_t presetNameHashSlot = numFreqSlots ? (hash(presetNameDisplay) % numFreqSlots) : 0;
+    // After the clamp has written its preset or bandwidth back, so the count is the one applyModemConfig() uses.
+    const uint32_t numFreqSlots = frequencySlotCount(loraConfig);
 
     if (loraConfig.override_frequency == 0) {
 
-        // Check if we use the default frequency slot
-        // overrideSlot: 0 = channel hash, -1 = preset hash, >0 = explicit slot
+        // Unpinned, or pinned to the slot the region's rule derives anyway.
+        meshtastic_Config_LoRaConfig derive = loraConfig;
+        derive.channel_num = 0;
         const bool usesDefaultSlot =
-            (loraConfig.channel_num == 0) || // user choice unset, no frequency override, so use default
-            (newRegion->overrideSlot > 0 &&
-             loraConfig.channel_num == newRegion->overrideSlot) || // user setting matches explicit override slot
-            ((newRegion->overrideSlot == OVERRIDE_SLOT_DEFAULT_CHANNEL_HASH) &&
-             ((uint32_t)(loraConfig.channel_num - 1) == channelNameHashSlot)) || // user setting matches channel name hash
-            ((newRegion->overrideSlot == OVERRIDE_SLOT_PRESET_HASH) &&
-             ((uint32_t)(loraConfig.channel_num - 1) == presetNameHashSlot)); // user setting matches preset name hash
+            (loraConfig.channel_num == 0) || (loraConfig.channel_num == resolveFrequencySlot(derive, channelName));
 
         // A custom name may hash to the default slot or not, so this is independent of the above.
         const bool usesCustomChannelName = (strcmp(channelName, presetNameDisplay) != 0);
@@ -1281,8 +1269,7 @@ uint32_t RadioInterface::frequencySlotCount(const meshtastic_Config_LoRaConfig &
     const RegionInfo *region = getRegion(loraConfig.region);
     const float bw = loraConfig.use_preset ? modemPresetToBwKHz(loraConfig.modem_preset, region->wideLora)
                                            : clampBandwidthKHz(bwCodeToKHz(loraConfig.bandwidth));
-    // Same arithmetic as applyModemConfig(); a caller mid-clamp must not use this, because the
-    // bandwidth it is clamping to is not yet the one this derives from the config.
+    // The one slot count; a caller mid-clamp calls it only once the clamped preset or bandwidth is written back.
     const float freqSlotWidth = region->profile->spacing + (region->profile->padding * 2) + (bw / 1000); // in MHz
     return round((region->freqEnd - region->freqStart + region->profile->spacing) / freqSlotWidth);
 }
@@ -1403,19 +1390,8 @@ void RadioInterface::applyModemConfig()
     // spacing = gap between channels (0 for continuous spectrum) and at the beginning of the band
     // padding = gap at the beginning and end of the channel (0 for no padding)
     float freqSlotWidth = newRegion->profile->spacing + (newRegion->profile->padding * 2) + (bw / 1000); // in MHz
-    uint32_t numFreqSlots = round((newRegion->freqEnd - newRegion->freqStart + newRegion->profile->spacing) / freqSlotWidth);
-
-    // Calculate hash of channel name and preset name to pick a default frequency slot if user has not specified one.
-    // Note that channel_num is actually (channel_num - 1), i.e. zero-based, since modulus (%) returns values from 0 to
-    // (numFreqSlots - 1).
+    const uint32_t numFreqSlots = frequencySlotCount(loraConfig);
     const char *channelName = channels.getName(channels.getPrimaryIndex());
-    // Guard the modulo: numFreqSlots can be 0 for an UNSET/degenerate region, and % 0 is a SIGFPE
-    uint32_t channelNameHashSlot = numFreqSlots ? (hash(channelName) % numFreqSlots) : 0;
-    uint32_t presetNameHashSlot =
-        numFreqSlots
-            ? (hash(DisplayFormatters::getModemPresetDisplayName(loraConfig.modem_preset, false, loraConfig.use_preset)) %
-               numFreqSlots)
-            : 0;
 
     // override if we have a verbatim frequency
     if (loraConfig.override_frequency) {
@@ -1424,23 +1400,9 @@ void RadioInterface::applyModemConfig()
         uses_default_frequency_slot = false;
     } else {
 
-        // If user has not manually specified a frequency slot, or has not specified one that is different than the default or the
-        // override for the new region, then use the default or override. If the user has not specified one, but has specified a
-        // custom channel name, then use the hash of that channel name to pick a frequency slot. Note that channel_num is actually
-        // (channel_num - 1), i.e. zero-based, since modulus (%) returns values from 0 to (numFreqSlots - 1).
-        // NB: channel_num is also know as frequency slot but it's too late to fix now.
-        if (uses_default_frequency_slot) {
-            // Handle three override slot cases: explicit slot (>0), preset hash (-1), or channel hash (0)
-            if (newRegion->overrideSlot > 0) {
-                channel_num = newRegion->overrideSlot - 1; // explicit override slot (1-based to 0-based)
-            } else if (newRegion->overrideSlot == OVERRIDE_SLOT_PRESET_HASH) {
-                channel_num = presetNameHashSlot; // use preset name hash
-            } else {
-                channel_num = channelNameHashSlot; // use channel name hash (default case)
-            }
-        } else { // use the manually defined one
-            channel_num = loraConfig.channel_num - 1;
-        }
+        // The clamp above has dropped an out-of-range pin, so this is the pin or the region's derived slot.
+        // channel_num here is zero-based (NB: also known as the frequency slot, too late to rename).
+        channel_num = resolveFrequencySlot(loraConfig, channelName) - 1;
 
         // Calculate frequency: freqStart is band edge, add half bandwidth (plus optional padding) to get middle of first channel
         // subsequent channels are spaced by freqSlotWidth
