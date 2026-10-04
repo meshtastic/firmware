@@ -69,6 +69,9 @@ uint32_t usbStatsAt;
 // Plain-text output (no API client): bytes the port took and refused. Totals, written only under the log lock.
 volatile uint32_t textBytes, textRefused;
 uint32_t textBytesSeen, textRefusedSeen;
+// Times the TX latch held for LATCH_MS of refusals, and times it was kicked (MESHTASTIC_HWCDC_KICK). Under the log lock.
+volatile uint32_t latches, kicks;
+uint32_t latchesSeen, kicksSeen;
 #ifdef MESHTASTIC_HWCDC_TX_BUFFER
 constexpr size_t usbTxRing = MESHTASTIC_HWCDC_TX_BUFFER;
 #else
@@ -109,6 +112,9 @@ struct UsbStall {
     uint32_t drops;     // framed log records refused for room
     uint32_t unplugged; // refusals that found the USB link without SOFs
     uint32_t frames;    // packet frames written during it
+    uint32_t latches;   // times the TX latch held for LATCH_MS during it
+    uint32_t kicks;     // times it was kicked
+    uint32_t latchFromMs;
     bool endedByFrame;
     UsbHw hw[HW_COUNT];
 };
@@ -116,7 +122,46 @@ UsbStall stallNow, stallDone;
 std::atomic<bool> stallDoneReady;
 std::atomic<uint32_t> stallsUnreported;
 
-void noteRefused(bool text)
+#ifdef USB_STALL_HW
+// Round 96's stalls: data waiting in the ring, an empty IN FIFO, and the TX interrupt enabled but not raised. HWCDC's ISR
+// clears the interrupt without moving data when it finds the FIFO not writable, and nothing raises it again.
+constexpr uint32_t LATCH_MS = 20;
+bool txLatched()
+{
+    return Port.availableForWrite() == 0 && USB_SERIAL_JTAG.ep1_conf.serial_in_ep_data_free &&
+           USB_SERIAL_JTAG.int_ena.serial_in_empty_int_ena && !USB_SERIAL_JTAG.int_raw.serial_in_empty_int_raw;
+}
+
+// A latch that holds for LATCH_MS of refusals is counted. MESHTASTIC_HWCDC_KICK also writes the refused byte straight into
+// the FIFO: when the host reads it the interrupt is raised, and the ISR drains the ring again. That byte reaches the host
+// ahead of the ring's older bytes, and would otherwise have been dropped.
+void checkLatch(uint32_t now, uint8_t c)
+{
+    if (!txLatched()) {
+        stallNow.latchFromMs = 0;
+        return;
+    }
+    if (!stallNow.latchFromMs) {
+        stallNow.latchFromMs = now ? now : 1;
+        return;
+    }
+    if (now - stallNow.latchFromMs < LATCH_MS)
+        return;
+    stallNow.latchFromMs = 0;
+    stallNow.latches++;
+    latches = latches + 1;
+#ifdef MESHTASTIC_HWCDC_KICK
+    USB_SERIAL_JTAG.ep1.rdwr_byte = c;
+    USB_SERIAL_JTAG.ep1_conf.wr_done = 1;
+    stallNow.kicks++;
+    kicks = kicks + 1;
+#else
+    (void)c;
+#endif
+}
+#endif
+
+void noteRefused(bool text, uint8_t c = 0)
 {
     const uint32_t now = millis();
     if (!stallNow.fromMs) {
@@ -147,6 +192,10 @@ void noteRefused(bool text)
         sampleHw(stallNow.hw[HW_1S], at);
     if (at >= stallNow.hw[HW_LAST].atMs + 20)
         sampleHw(stallNow.hw[HW_LAST], at);
+    if (text)
+        checkLatch(now, c);
+#else
+    (void)c;
 #endif
 }
 
@@ -172,14 +221,14 @@ void noteWritten(bool frame)
     stallNow.fromMs = 0;
 }
 
-void noteText(size_t written)
+void noteText(size_t written, uint8_t c)
 {
     if (written) {
         textBytes = textBytes + 1;
         noteWritten(false);
     } else {
         textRefused = textRefused + 1;
-        noteRefused(true);
+        noteRefused(true, c);
     }
 }
 
@@ -320,6 +369,7 @@ int32_t SerialConsole::runOnce()
         LOG_INFO("USB stall %u ms from uptime %u ms: refused %u B text, %u records; %u with no SOF; %u frames; ended by %s",
                  stall.ms, stall.fromMs, stall.bytes, stall.drops, stall.unplugged, stall.frames,
                  stall.endedByFrame ? "a packet" : "text or a log record");
+        LOG_INFO("USB stall latch: held %u times, kicked %u times", stall.latches, stall.kicks);
         // The latest radio upkeep that started at or before the onset (upkeeps run on this thread)
         const RadioUpkeep *before = nullptr;
         for (const RadioUpkeep &u : upkeeps)
@@ -357,6 +407,11 @@ int32_t SerialConsole::runOnce()
                  seen.dropBig, seen.dropRetained, seen.dropBusy);
         textBytesSeen = bytes;
         textRefusedSeen = refused;
+        const uint32_t held = latches, kicked = kicks;
+        if (held != latchesSeen || kicked != kicksSeen)
+            LOG_INFO("USB 10 s latch: held %u times, kicked %u times", held - latchesSeen, kicked - kicksSeen);
+        latchesSeen = held;
+        kicksSeen = kicked;
     }
 #endif
     int32_t delay = runOncePart();
@@ -396,10 +451,10 @@ size_t SerialConsole::write(uint8_t c)
 #ifdef MESHTASTIC_LOG_USB_STATS
     if (c == '\n') {
         RedirectablePrint::write('\r');
-        noteText(destWritten);
+        noteText(destWritten, '\r');
     }
     RedirectablePrint::write(c);
-    noteText(destWritten);
+    noteText(destWritten, c);
     return 1;
 #else
     if (c == '\n')
