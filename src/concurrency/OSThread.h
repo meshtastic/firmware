@@ -79,9 +79,8 @@ class OSThread : public Thread
     virtual void run();
 
   private:
-    // Due time set by setIntervalFromNow() during runOnce(); run() keeps it rather than re-basing on runned()
+    // setIntervalFromNow() ran during runOnce(); run() keeps its due time rather than re-basing it in runned()
     volatile bool fromNowDuringRun = false;
-    unsigned long fromNowDue = 0;
 };
 
 /**
