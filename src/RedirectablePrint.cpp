@@ -69,6 +69,31 @@ void RedirectablePrint::drainRadioTaskLogs()
 }
 #endif
 
+#ifdef MESHTASTIC_LOG_USB_STATS
+namespace
+{
+// Bench: waits for inDebugPrint, the lock every log line takes before the console. Written by every logging task without
+// a lock, so the counts are approximate.
+volatile uint32_t debugLockSlow, debugLockMaxUs;
+
+void noteDebugLockWait(uint32_t us)
+{
+    if (us >= 1000)
+        debugLockSlow = debugLockSlow + 1;
+    if (us > debugLockMaxUs)
+        debugLockMaxUs = us;
+}
+} // namespace
+
+void RedirectablePrint::takeDebugLockStats(uint32_t *slow, uint32_t *maxUs)
+{
+    *slow = debugLockSlow;
+    *maxUs = debugLockMaxUs;
+    debugLockSlow = 0;
+    debugLockMaxUs = 0;
+}
+#endif
+
 void RedirectablePrint::rpInit()
 {
 #ifdef HAS_FREE_RTOS
@@ -417,7 +442,12 @@ void RedirectablePrint::log(const char *logLevel, const char *format, ...)
     }
 #endif
 
-#ifdef HAS_FREE_RTOS
+#if defined(HAS_FREE_RTOS) && defined(MESHTASTIC_LOG_USB_STATS)
+    const uint32_t debugLockFromUs = micros();
+    const bool debugLocked = inDebugPrint != nullptr && xSemaphoreTake(inDebugPrint, portMAX_DELAY) == pdTRUE;
+    if (debugLocked) {
+        noteDebugLockWait(micros() - debugLockFromUs);
+#elif defined(HAS_FREE_RTOS)
     if (inDebugPrint != nullptr && xSemaphoreTake(inDebugPrint, portMAX_DELAY) == pdTRUE) {
 #else
     if (!inDebugPrint) {

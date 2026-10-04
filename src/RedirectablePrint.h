@@ -47,6 +47,11 @@ class RedirectablePrint : public Print
 
     void hexDump(const char *logLevel, const unsigned char *buf, uint16_t len);
 
+#ifdef MESHTASTIC_LOG_USB_STATS
+    /// Bench: waits for the log lock of 1 ms or more, and the longest, since the last call
+    static void takeDebugLockStats(uint32_t *slow, uint32_t *maxUs);
+#endif
+
 #ifdef MESHTASTIC_RADIO_TASK
     /// From the loop: print the lines the radio task logged since the last call
     void drainRadioTaskLogs();

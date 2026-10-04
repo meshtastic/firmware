@@ -48,6 +48,35 @@ SerialConsole *console;
 static bool s_serialLinkUp = false;
 #endif
 
+#ifdef MESHTASTIC_LOG_USB_STATS
+// Bench: where console output spends its time and why log records drop. Updated under streamLock, reported every 10 s.
+namespace
+{
+struct UsbStats {
+    uint32_t frames, slowWrites, maxWriteUs;     // required frames (packets): count, writes of 1 ms or more, the slowest
+    uint32_t logs, logSlowWrites, logMaxWriteUs; // best-effort log records offered to the port
+    uint32_t dropRoom, dropTail, dropBig;        // log records dropped: ring short of room, a frame tail retained, too big
+    uint32_t dropRetained;                       // log records not encoded: a retained frame still owns the log buffer
+    uint32_t slowLocks, maxLockUs;               // streamLock waits of 1 ms or more, the longest
+};
+UsbStats usbStats;
+uint32_t usbStatsAt;
+#ifdef MESHTASTIC_HWCDC_TX_BUFFER
+constexpr size_t usbTxRing = MESHTASTIC_HWCDC_TX_BUFFER;
+#else
+constexpr size_t usbTxRing = 256; // HWCDC::begin()'s default
+#endif
+
+void noteUsbUs(uint32_t us, uint32_t &slow, uint32_t &maxUs)
+{
+    if (us >= 1000)
+        slow++;
+    if (us > maxUs)
+        maxUs = us;
+}
+} // namespace
+#endif
+
 /// Create the shared serial console once and register receive wakeups.
 void consoleInit()
 {
@@ -76,6 +105,9 @@ SerialConsole::SerialConsole() : StreamAPI(&Port), RedirectablePrint(&Port), con
 #ifdef RP2040_SLOW_CLOCK
     Port.setTX(SERIAL2_TX);
     Port.setRX(SERIAL2_RX);
+#endif
+#if defined(IS_USB_HWCDC) && defined(MESHTASTIC_HWCDC_TX_BUFFER)
+    Port.setTxBufferSize(MESHTASTIC_HWCDC_TX_BUFFER); // before begin(), which creates a 256 B ring only if none exists
 #endif
     Port.begin(SERIAL_BAUD);
     // Boot with console TX in non-blocking mode: no host is provably listening yet.
@@ -128,6 +160,23 @@ int32_t SerialConsole::runOnce()
     }
 #endif
 
+#ifdef MESHTASTIC_LOG_USB_STATS
+    if (Throttle::hasElapsed(usbStatsAt, 10000)) {
+        usbStatsAt = millis();
+        UsbStats seen;
+        {
+            concurrency::LockGuard guard(&streamLock);
+            seen = usbStats;
+            usbStats = {};
+        }
+        uint32_t debugSlow, debugMaxUs;
+        RedirectablePrint::takeDebugLockStats(&debugSlow, &debugMaxUs);
+        LOG_INFO("USB stats 10 s: frames %u (>=1 ms %u, max %u us); logs %u (>=1 ms %u, max %u us), dropped room %u tail %u "
+                 "big %u retained %u; stream lock >=1 ms %u, max %u us; log lock >=1 ms %u, max %u us",
+                 seen.frames, seen.slowWrites, seen.maxWriteUs, seen.logs, seen.logSlowWrites, seen.logMaxWriteUs, seen.dropRoom,
+                 seen.dropTail, seen.dropBig, seen.dropRetained, seen.slowLocks, seen.maxLockUs, debugSlow, debugMaxUs);
+    }
+#endif
     int32_t delay = runOncePart();
 #if defined(SERIAL_HAS_ON_RECEIVE) || defined(CONFIG_IDF_TARGET_ESP32S2)
     // Nothing wakes the idle sleep for "TX space freed" or a bounded-drain remainder
@@ -239,7 +288,15 @@ bool SerialConsole::canEncodeLogRecord()
 {
 #ifdef IS_USB_SERIAL
     concurrency::LockGuard guard(&streamLock);
+#ifdef MESHTASTIC_LOG_USB_STATS
+    if (!frameWriter.isIdle()) {
+        usbStats.dropRetained++;
+        return false;
+    }
+    return true;
+#else
     return frameWriter.isIdle();
+#endif
 #else
     return true;
 #endif
@@ -254,8 +311,34 @@ bool SerialConsole::writeFrame(uint8_t *buf, size_t len, bool bestEffort)
 
     const size_t totalLen = buildFrameHeader(buf, len);
 
+#ifdef MESHTASTIC_LOG_USB_STATS
+    const uint32_t lockFromUs = micros();
+#endif
     concurrency::LockGuard guard(&streamLock);
+#ifdef MESHTASTIC_LOG_USB_STATS
+    const uint32_t writeFromUs = micros();
+    noteUsbUs(writeFromUs - lockFromUs, usbStats.slowLocks, usbStats.maxLockUs);
+    const bool written = frameWriter.writeFrame(Port, buf, totalLen, bestEffort);
+    const uint32_t writeUs = micros() - writeFromUs;
+    if (bestEffort) {
+        usbStats.logs++;
+        noteUsbUs(writeUs, usbStats.logSlowWrites, usbStats.logMaxWriteUs);
+        if (!written) {
+            if (!frameWriter.isIdle())
+                usbStats.dropTail++;
+            else if (totalLen > usbTxRing)
+                usbStats.dropBig++;
+            else
+                usbStats.dropRoom++;
+        }
+    } else {
+        usbStats.frames++;
+        noteUsbUs(writeUs, usbStats.slowWrites, usbStats.maxWriteUs);
+    }
+    return written;
+#else
     return frameWriter.writeFrame(Port, buf, totalLen, bestEffort);
+#endif
 #else
     return StreamAPI::writeFrame(buf, len, bestEffort);
 #endif
