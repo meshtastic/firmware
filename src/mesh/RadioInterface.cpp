@@ -423,6 +423,7 @@ std::unique_ptr<RadioInterface> initLoRa()
               portduino_config.lora_spi_dev.c_str());
     if (portduino_config.lora_spi_dev == "ch341") {
         RadioLibHAL = ch341Hal.get(); // non-owning: the ch341 HAL stays owned by the global unique_ptr
+        ch341Hal->setRadioPins(portduino_config.lora_cs_pin.pin, portduino_config.lora_busy_pin.pin);
     } else {
         if (RadioLibHAL != nullptr) {
             delete RadioLibHAL;

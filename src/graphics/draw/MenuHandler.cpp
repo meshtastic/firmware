@@ -5,6 +5,9 @@
 #include "DisplayFormatters.h"
 #include "GPS.h"
 #include "MenuHandler.h"
+#if HAS_HOST_POWEROFF
+#include "platform/portduino/LinuxPower.h"
+#endif
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "MessageStore.h"
@@ -58,23 +61,37 @@ namespace
 uint32_t selectedGeofenceWaypointId = 0;
 #endif
 
+template <typename X> struct Identity {
+    using type = X;
+};
+
+// One banner is live at a time, so the options table and handler for it live in per-T statics.
+template <typename T> struct StaticBannerState {
+    static const MenuOption<T> *options;
+    static void (*onSelection)(const MenuOption<T> &, int);
+    static void dispatch(int selected) { onSelection(options[selected], selected); }
+};
+template <typename T> const MenuOption<T> *StaticBannerState<T>::options = nullptr;
+template <typename T> void (*StaticBannerState<T>::onSelection)(const MenuOption<T> &, int) = nullptr;
+
 // Caller must ensure the provided options array outlives the banner callback.
-template <typename T, size_t N, typename Callback>
+template <typename T, size_t N>
 BannerOverlayOptions createStaticBannerOptions(const char *message, const MenuOption<T> (&options)[N],
-                                               std::array<const char *, N> &labels, Callback &&onSelection)
+                                               std::array<const char *, N> &labels,
+                                               typename Identity<void (*)(const MenuOption<T> &, int)>::type onSelection)
 {
     for (size_t i = 0; i < N; ++i) {
         labels[i] = options[i].label;
     }
 
-    const MenuOption<T> *optionsPtr = options;
-    auto callback = std::function<void(const MenuOption<T> &, int)>(std::forward<Callback>(onSelection));
+    StaticBannerState<T>::options = options;
+    StaticBannerState<T>::onSelection = onSelection;
 
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = message;
     bannerOptions.optionsArrayPtr = labels.data();
     bannerOptions.optionsCount = static_cast<uint8_t>(N);
-    bannerOptions.bannerCallback = [optionsPtr, callback](int selected) -> void { callback(optionsPtr[selected], selected); };
+    bannerOptions.bannerCallback = &StaticBannerState<T>::dispatch;
     return bannerOptions;
 }
 
@@ -678,13 +695,18 @@ void menuHandler::twelveHourPicker()
 void menuHandler::showConfirmationBanner(const char *message, std::function<void()> onConfirm)
 {
     static const char *confirmOptions[] = {"No", "Yes"};
+    static std::function<void()> pendingConfirm;
+    pendingConfirm = std::move(onConfirm);
     BannerOverlayOptions confirmBanner;
     confirmBanner.message = message;
     confirmBanner.optionsArrayPtr = confirmOptions;
     confirmBanner.optionsCount = 2;
-    confirmBanner.bannerCallback = [onConfirm](int confirmSelected) -> void {
-        if (confirmSelected == 1) {
-            onConfirm();
+    confirmBanner.bannerCallback = [](int confirmSelected) -> void {
+        // Take it out first: the handler may open another confirmation and reassign pendingConfirm.
+        std::function<void()> fn = std::move(pendingConfirm);
+        pendingConfirm = nullptr;
+        if (confirmSelected == 1 && fn) {
+            fn();
         }
     };
     screen->showOverlayBanner(confirmBanner);
@@ -1022,7 +1044,8 @@ void menuHandler::deleteMessagesMenu()
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsEnumPtr = optionsEnumArray;
     bannerOptions.optionsCount = options;
-    bannerOptions.bannerCallback = [mode](int selected) -> void {
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        auto mode = graphics::MessageRenderer::getThreadMode();
         int ch = graphics::MessageRenderer::getThreadChannel();
         uint32_t peer = graphics::MessageRenderer::getThreadPeer();
 
@@ -1072,7 +1095,6 @@ void menuHandler::deleteMessagesMenu()
 void menuHandler::messageViewModeMenu()
 {
     auto encodeChannelId = [](int ch) -> int { return 100 + ch; };
-    auto isChannelSel = [](int id) -> bool { return id >= 100 && id < 200; };
 
     static std::vector<std::string> labels;
     static std::vector<int> ids;
@@ -1188,14 +1210,14 @@ void menuHandler::messageViewModeMenu()
     bannerOptions.optionsCount = options.size();
     bannerOptions.InitialSelected = initialIndex;
 
-    bannerOptions.bannerCallback = [=](int selected) -> void {
+    bannerOptions.bannerCallback = [](int selected) -> void {
         LOG_DEBUG("messageViewModeMenu: selected=%d", selected);
         if (selected == -1) {
             menuHandler::menuQueue = menuHandler::MessageResponseMenu;
             screen->runNow();
         } else if (selected == -2) {
             graphics::MessageRenderer::setThreadMode(graphics::MessageRenderer::ThreadMode::ALL);
-        } else if (isChannelSel(selected)) {
+        } else if (selected >= 100 && selected < 200) {
             int ch = selected - 100;
             graphics::MessageRenderer::setThreadMode(graphics::MessageRenderer::ThreadMode::CHANNEL, ch);
         } else if (selected >= 1000) {
@@ -2625,9 +2647,9 @@ void menuHandler::traceRouteMenu()
 void menuHandler::testMenu()
 {
 
-    enum optionsNumbers { Back, NumberPicker, ShowChirpy, TestAnnounce };
-    static const char *optionsArray[5] = {"Back"};
-    static int optionsEnumArray[5] = {Back};
+    enum optionsNumbers { Back, NumberPicker, ShowChirpy, TestAnnounce, HostPowerOff };
+    static const char *optionsArray[6] = {"Back"};
+    static int optionsEnumArray[6] = {Back};
     int options = 1;
 
     optionsArray[options] = "Number Picker";
@@ -2638,6 +2660,11 @@ void menuHandler::testMenu()
 #ifdef HAS_I2S
     optionsArray[options] = "Test Announce";
     optionsEnumArray[options++] = TestAnnounce;
+#endif
+#if HAS_HOST_POWEROFF
+    // Halts the computer meshtasticd runs on, not just the node. See hostPowerOffMenu().
+    optionsArray[options] = "Power Off Host";
+    optionsEnumArray[options++] = HostPowerOff;
 #endif
 
     BannerOverlayOptions bannerOptions;
@@ -2657,12 +2684,47 @@ void menuHandler::testMenu()
 #ifdef HAS_I2S
             audioThread->readAloud("This is a test of the emergency broadcast system. This is only a test.");
 #endif
+        } else if (selected == HostPowerOff) {
+#if HAS_HOST_POWEROFF
+            menuQueue = HostPowerOffMenu;
+            screen->runNow();
+#endif
         } else {
             menuQueue = SystemBaseMenu;
             screen->runNow();
         }
     };
     screen->showOverlayBanner(bannerOptions);
+}
+
+// Separate from shutdownMenu(): that one ends the node, this one ends the machine. Worth its own
+// confirmation because on a headless node nothing else will bring the host back.
+void menuHandler::hostPowerOffMenu()
+{
+#if HAS_HOST_POWEROFF
+    static const char *optionsArray[] = {"Back", "Confirm"};
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Power Off Host?";
+    if (currentResolution == ScreenResolution::UltraLow) {
+        bannerOptions.message = "Power Off?";
+    }
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 2;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == 1) {
+            // Raise the flag first, then run the ordinary shutdown so the NodeDB and message store
+            // are saved exactly as they would be for a normal one; Power.cpp halts the host at the
+            // end instead of just exiting.
+            hostPowerOffRequested = true;
+            InputEvent event = {.inputEvent = (input_broker_event)INPUT_BROKER_SHUTDOWN, .kbchar = 0, .touchX = 0, .touchY = 0};
+            inputBroker->injectInputEvent(&event);
+        } else {
+            menuQueue = TestMenu;
+            screen->runNow();
+        }
+    };
+    screen->showOverlayBanner(bannerOptions);
+#endif
 }
 
 void menuHandler::numberTest()
@@ -2852,7 +2914,7 @@ void menuHandler::keyVerificationFinalPrompt()
         options.optionsArrayPtr = optionsArray;
         options.optionsCount = 2;
         options.notificationType = graphics::notificationTypeEnum::selection_picker;
-        options.bannerCallback = [=](int selected) {
+        options.bannerCallback = [](int selected) {
             if (selected == 1) {
                 keyVerificationModule->commitVerifiedRemoteNode();
             }
@@ -2886,6 +2948,7 @@ void menuHandler::frameTogglesMenu()
 
     // Track last selected index (not enum value!)
     static int lastSelectedIndex = 0;
+    static int optionCount = 0;
 
 #ifndef USE_EINK
     optionsArray[options] = screen->isFrameHidden("nodelist_nodes") ? "Show Node Lists" : "Hide Node Lists";
@@ -2937,10 +3000,11 @@ void menuHandler::frameTogglesMenu()
     bannerOptions.optionsEnumPtr = optionsEnumArray;
     bannerOptions.InitialSelected = lastSelectedIndex; // Use index, not enum value
 
-    bannerOptions.bannerCallback = [options](int selected) mutable -> void {
+    optionCount = options;
+    bannerOptions.bannerCallback = [](int selected) -> void {
         // Find the index of selected in optionsEnumArray
         int idx = 0;
-        for (; idx < options; ++idx) {
+        for (; idx < optionCount; ++idx) {
             if (optionsEnumArray[idx] == selected)
                 break;
         }
@@ -3263,6 +3327,9 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         break;
     case TraceRouteMenu:
         traceRouteMenu();
+        break;
+    case HostPowerOffMenu:
+        hostPowerOffMenu();
         break;
     case TestMenu:
         testMenu();
