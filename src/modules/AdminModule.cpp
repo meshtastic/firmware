@@ -1421,9 +1421,10 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c, bool f
         if (claimedChannel >= 0)
             extraSegments |= SEGMENT_CHANNELS;
         if (!MeshBeaconModule::offerChannelHeld(beaconCfg))
-            sendWarningAndLog("Beacon offer saved but withheld: %s", owner.is_licensed
-                                                                         ? "a licensed node cannot hold its encrypted channel"
-                                                                         : "no free channel slot for its channel");
+            sendWarningAndLog("Beacon offer saved but withheld: %s",
+                              owner.is_licensed && MeshBeaconModule::offerKeyIsEncrypted(beaconCfg)
+                                  ? "a licensed node cannot hold its encrypted channel"
+                                  : "no free channel slot for its channel");
         moduleConfig.has_mesh_beacon = true;
         moduleConfig.mesh_beacon = beaconCfg;
         shouldReboot = false;

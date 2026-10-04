@@ -147,6 +147,8 @@ class MeshBeaconModule
     static bool offerIsPlaceable(const meshtastic_ModuleConfig_MeshBeaconConfig &bcfg);
     /** Whether the offer's by-value channel is live in the table; true when the offer names none. */
     static bool offerChannelHeld(const meshtastic_ModuleConfig_MeshBeaconConfig &bcfg);
+    // Whether the offered channel carries a key: the reason a licensed node may not hold it. {0} spells cleartext.
+    static bool offerKeyIsEncrypted(const meshtastic_ModuleConfig_MeshBeaconConfig &bcfg);
 
     // Default a blank name to the TARGET preset's display name - not Channels::getName(), which
     // resolves it against the RUNNING preset. A node joining on the target preset derives the same.

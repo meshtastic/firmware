@@ -308,6 +308,17 @@ bool MeshBeaconModule::beaconTxConfigInvalid(const meshtastic_MeshPacket *p)
     return !RadioInterface::validateConfigLora(lora, s->channelName);
 }
 
+// A 1-byte {0} is the explicit "encryption off" spelling, as Channels::expandPsk() reads it.
+static bool pskIsEncrypted(const meshtastic_ChannelSettings &id)
+{
+    return id.psk.size > 1 || (id.psk.size == 1 && id.psk.bytes[0] != 0);
+}
+
+bool MeshBeaconModule::offerKeyIsEncrypted(const meshtastic_ModuleConfig_MeshBeaconConfig &bcfg)
+{
+    return bcfg.has_broadcast_offer_channel && pskIsEncrypted(bcfg.broadcast_offer_channel);
+}
+
 // Already present means nothing to write; absent means claim a disabled slot. written is the index
 // claimed, or -1 when the table did not change, so the caller knows to save SEGMENT_CHANNELS.
 static bool placeChannelIdentity(const meshtastic_ChannelSettings &id, int16_t &written)
@@ -315,10 +326,8 @@ static bool placeChannelIdentity(const meshtastic_ChannelSettings &id, int16_t &
     const uint8_t pskLen = (uint8_t)id.psk.size;
     if (channels.findByIdentity(id.name, id.psk.bytes, pskLen, id.use_aead) >= 0)
         return true;
-    // Licensed operation forbids encryption, so this node may not hold the key it would advertise. A 1-byte {0}
-    // is the explicit "encryption off" spelling, as Channels::expandPsk() reads it.
-    const bool encrypted = pskLen > 1 || (pskLen == 1 && id.psk.bytes[0] != 0);
-    if (owner.is_licensed && encrypted)
+    // Licensed operation forbids encryption, so this node may not hold the key it would advertise.
+    if (owner.is_licensed && pskIsEncrypted(id))
         return false;
     const int16_t idx = channels.upsertIdentity(id.name, id.psk.bytes, pskLen, id.use_aead);
     if (idx < 0)

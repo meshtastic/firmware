@@ -4949,6 +4949,42 @@ static void test_byValue_licensedNode_acceptsExplicitCleartextOffer(void)
 }
 
 /**
+ * The "saved but withheld" warning names the reason the offer was actually withheld, judged by
+ * MeshBeaconModule::offerKeyIsEncrypted() - the rule placeChannelIdentity() applies. A licensed node
+ * may hold a cleartext {0} offer, so when the table is full the cause is the table, not the licence.
+ * Regression guarded: the wording keyed on owner.is_licensed alone and blamed encryption for a
+ * cleartext offer that only lacked a free slot.
+ */
+static void test_byValue_licensedNode_withheldReasonFollowsTheKey(void)
+{
+    resetConfig();
+    fillChannelTable();
+    owner.is_licensed = true;
+
+    meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
+    bcfg.has_broadcast_offer_channel = true;
+    strncpy(bcfg.broadcast_offer_channel.name, "Open", sizeof(bcfg.broadcast_offer_channel.name) - 1);
+    bcfg.broadcast_offer_channel.psk.size = 1;
+    bcfg.broadcast_offer_channel.psk.bytes[0] = 0;
+
+    testAdmin->deferSaves();
+    mockSvc->lastNotification[0] = '\0';
+    testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(mockSvc->lastNotification, "no free channel slot"), mockSvc->lastNotification);
+    TEST_ASSERT_NULL_MESSAGE(strstr(mockSvc->lastNotification, "licensed"), "a cleartext offer is not refused for the licence");
+
+    // The same full table with a real key: now the licence is the reason.
+    bcfg.broadcast_offer_channel.psk.size = sizeof(kByValuePsk);
+    memcpy(bcfg.broadcast_offer_channel.psk.bytes, kByValuePsk, sizeof(kByValuePsk));
+    testAdmin->deferSaves();
+    mockSvc->lastNotification[0] = '\0';
+    testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(mockSvc->lastNotification, "a licensed node cannot hold its encrypted channel"),
+                                 mockSvc->lastNotification);
+    owner.is_licensed = false;
+}
+
+/**
  * A new identity never lands in the primary slot, even when the table is malformed enough to mark
  * that slot DISABLED. An identity matching the primary resolves to it rather than being re-placed.
  */
@@ -5764,6 +5800,7 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_byValue_fullTable_offerIsKeptButWithheld);
     RUN_TEST(test_byValue_licensedNode_refusesEncryptedOffer);
     RUN_TEST(test_byValue_licensedNode_acceptsExplicitCleartextOffer);
+    RUN_TEST(test_byValue_licensedNode_withheldReasonFollowsTheKey);
     RUN_TEST(test_sanitise_emptyOfferPsk_isSavedAndAdvertisedAsExplicitCleartext);
     RUN_TEST(test_sanitise_messageCap_dropsAStraddlingCharacterWhole);
     RUN_TEST(test_sidecar_reapedEntryStillQueued_isDroppedNotSentOnHome);
