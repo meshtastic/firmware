@@ -264,3 +264,12 @@ size_t utf8TruncateLen(const char *s, size_t len, size_t maxBytes)
         n--;
     return n;
 }
+
+void strcpyUtf8Truncated(char *dst, size_t dstSize, const char *src)
+{
+    if (!dst || dstSize == 0)
+        return;
+    const size_t keep = utf8TruncateLen(src, strlen(src), dstSize - 1);
+    memcpy(dst, src, keep);
+    dst[keep] = '\0';
+}

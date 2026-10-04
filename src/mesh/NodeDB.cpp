@@ -1601,9 +1601,8 @@ void NodeDB::installDefaultModuleConfig()
                       meshtastic_ModuleConfig_MeshBeaconConfig_Flags_FLAG_BROADCAST_ENABLED);
 #endif
 #ifdef USERPREFS_MESH_BEACON_MESSAGE
-    strncpy(moduleConfig.mesh_beacon.broadcast_message, USERPREFS_MESH_BEACON_MESSAGE,
-            sizeof(moduleConfig.mesh_beacon.broadcast_message) - 1);
-    moduleConfig.mesh_beacon.broadcast_message[sizeof(moduleConfig.mesh_beacon.broadcast_message) - 1] = '\0';
+    strcpyUtf8Truncated(moduleConfig.mesh_beacon.broadcast_message, sizeof(moduleConfig.mesh_beacon.broadcast_message),
+                        USERPREFS_MESH_BEACON_MESSAGE);
 #endif
 #ifdef USERPREFS_MESH_BEACON_INTERVAL_SECS
     moduleConfig.mesh_beacon.broadcast_interval_secs =
@@ -1621,10 +1620,8 @@ void NodeDB::installDefaultModuleConfig()
 #endif
 #ifdef USERPREFS_MESH_BEACON_OFFER_CHANNEL_NAME
     moduleConfig.mesh_beacon.has_broadcast_offer_channel = true;
-    strncpy(moduleConfig.mesh_beacon.broadcast_offer_channel.name, USERPREFS_MESH_BEACON_OFFER_CHANNEL_NAME,
-            sizeof(moduleConfig.mesh_beacon.broadcast_offer_channel.name) - 1);
-    moduleConfig.mesh_beacon.broadcast_offer_channel.name[sizeof(moduleConfig.mesh_beacon.broadcast_offer_channel.name) - 1] =
-        '\0';
+    strcpyUtf8Truncated(moduleConfig.mesh_beacon.broadcast_offer_channel.name,
+                        sizeof(moduleConfig.mesh_beacon.broadcast_offer_channel.name), USERPREFS_MESH_BEACON_OFFER_CHANNEL_NAME);
 #endif
 #ifdef USERPREFS_MESH_BEACON_OFFER_CHANNEL_PSK
     moduleConfig.mesh_beacon.has_broadcast_offer_channel = true;

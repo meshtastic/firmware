@@ -30,16 +30,17 @@ void tearDown(void) {}
 #ifdef USERPREFS_MESH_BEACON_OFFER_CHANNEL_NAME
 
 static const uint8_t kOfferPsk[] = USERPREFS_MESH_BEACON_OFFER_CHANNEL_PSK;
+// What the fixture strings must become: each cut before the 3-byte character across its limit, never inside it.
+static const char kExpectedOfferName[] = "OfferedCou";
+static const char kExpectedMessage[] = "Join the county mesh - 012345678901234567890123456789012345";
 
-// ChannelSettings.name is a char[12] and the fixture name is longer; the old ON_* block this
-// replaces is where a strcpy would have run off the end.
-static void test_over_long_offer_channel_name_is_truncated_and_terminated()
+// ChannelSettings.name is a char[12] and the fixture name is longer, with a multi-byte character across
+// the 11-byte limit. A byte cut there leaves invalid UTF-8, which fails nanopb's encode on every save.
+static void test_over_long_offer_channel_name_is_cut_on_a_character_boundary()
 {
     const auto &name = moduleConfig.mesh_beacon.broadcast_offer_channel.name;
     TEST_ASSERT_TRUE(strlen(USERPREFS_MESH_BEACON_OFFER_CHANNEL_NAME) >= sizeof(name));
-    TEST_ASSERT_EQUAL_UINT(sizeof(name) - 1, strlen(name));
-    TEST_ASSERT_EQUAL_CHAR('\0', name[sizeof(name) - 1]);
-    TEST_ASSERT_EQUAL_MEMORY(USERPREFS_MESH_BEACON_OFFER_CHANNEL_NAME, name, sizeof(name) - 1);
+    TEST_ASSERT_EQUAL_STRING_MESSAGE(kExpectedOfferName, name, "cut before the character that straddles the limit");
 }
 
 // Region carries no has_ flag - UNSET is the absence - so an in-process writer that sets only the
@@ -61,8 +62,7 @@ static void test_offer_channel_is_applied()
 {
     const auto &b = moduleConfig.mesh_beacon;
     TEST_ASSERT_TRUE(b.has_broadcast_offer_channel);
-    TEST_ASSERT_EQUAL_MEMORY(USERPREFS_MESH_BEACON_OFFER_CHANNEL_NAME, b.broadcast_offer_channel.name,
-                             sizeof(b.broadcast_offer_channel.name) - 1);
+    TEST_ASSERT_EQUAL_STRING(kExpectedOfferName, b.broadcast_offer_channel.name);
     TEST_ASSERT_EQUAL_UINT(sizeof(kOfferPsk), b.broadcast_offer_channel.psk.size);
     TEST_ASSERT_EQUAL_UINT8_ARRAY(kOfferPsk, b.broadcast_offer_channel.psk.bytes, sizeof(kOfferPsk));
     TEST_ASSERT_EQUAL(USERPREFS_MESH_BEACON_OFFER_REGION, b.broadcast_offer_region);
@@ -75,7 +75,8 @@ static void test_flags_and_message_are_applied()
     const auto &b = moduleConfig.mesh_beacon;
     TEST_ASSERT_TRUE(b.flags & meshtastic_ModuleConfig_MeshBeaconConfig_Flags_FLAG_LISTEN_ENABLED);
     TEST_ASSERT_TRUE(b.flags & MESH_BEACON_FLAG_BROADCAST_ENABLED);
-    TEST_ASSERT_EQUAL_STRING(USERPREFS_MESH_BEACON_MESSAGE, b.broadcast_message);
+    // Cut before the multi-byte character across the 60-byte limit, so the config still encodes.
+    TEST_ASSERT_EQUAL_STRING(kExpectedMessage, b.broadcast_message);
 }
 
 // A vendor build never passes through AdminModule, so this is the only place the floor is applied.
@@ -160,7 +161,7 @@ UPB_TEST_ENTRY void setup()
 
 #ifdef USERPREFS_MESH_BEACON_OFFER_CHANNEL_NAME
     printf("\n=== by-value beacon userPrefs ===\n");
-    RUN_TEST(test_over_long_offer_channel_name_is_truncated_and_terminated);
+    RUN_TEST(test_over_long_offer_channel_name_is_cut_on_a_character_boundary);
     RUN_TEST(test_target_region_preset_and_slot_are_applied);
     RUN_TEST(test_offer_channel_is_applied);
     RUN_TEST(test_flags_and_message_are_applied);

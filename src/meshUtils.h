@@ -92,6 +92,9 @@ void clampLongName(char *longName);
 // Length of the longest prefix of s[0..len) that fits in maxBytes without splitting a UTF-8 character.
 size_t utf8TruncateLen(const char *s, size_t len, size_t maxBytes);
 
+// Copy src into dst[dstSize], cut on a character boundary and always NUL-terminated. For strings nanopb never decoded.
+void strcpyUtf8Truncated(char *dst, size_t dstSize, const char *src);
+
 // Is a received Waypoint still live? The clients send expire == 0 for "never expires" and expire == 1
 // to delete; now == 0 means we have no trustworthy clock, which must not expire anything.
 static inline bool waypointIsActive(uint32_t expire, uint32_t now)

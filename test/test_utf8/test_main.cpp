@@ -254,6 +254,45 @@ void test_truncate_len_drops_straddling_4byte()
     TEST_ASSERT_EQUAL_UINT(1, utf8TruncateLen("a\xF0\x9F\x8C\x99", 5, 4));
 }
 
+// strcpyUtf8Truncated() is the copy for strings nanopb never decoded (userPrefs): a byte cut there
+// leaves invalid UTF-8 that fails every later encode under PB_VALIDATE_UTF8.
+void test_copy_truncated_fits_unchanged()
+{
+    char dst[8];
+    strcpyUtf8Truncated(dst, sizeof(dst), "abc");
+    TEST_ASSERT_EQUAL_STRING("abc", dst);
+}
+
+void test_copy_truncated_ascii_is_cut_and_terminated()
+{
+    char dst[4];
+    strcpyUtf8Truncated(dst, sizeof(dst), "abcdef");
+    TEST_ASSERT_EQUAL_STRING("abc", dst);
+}
+
+void test_copy_truncated_drops_a_straddling_character()
+{
+    char dst[4];
+    strcpyUtf8Truncated(dst, sizeof(dst), "ab\xE2\x82\xAC"); // the euro would need bytes 2..4 of 3 available
+    TEST_ASSERT_EQUAL_STRING("ab", dst);
+}
+
+void test_copy_truncated_keeps_a_character_ending_at_the_limit()
+{
+    char dst[5];
+    strcpyUtf8Truncated(dst, sizeof(dst),
+                        "a\xE2\x82\xAC"
+                        "b");
+    TEST_ASSERT_EQUAL_STRING("a\xE2\x82\xAC", dst);
+}
+
+void test_copy_truncated_one_byte_buffer_is_empty()
+{
+    char dst[1] = {'x'};
+    strcpyUtf8Truncated(dst, sizeof(dst), "abc");
+    TEST_ASSERT_EQUAL_STRING("", dst);
+}
+
 void test_truncate_len_keeps_character_ending_at_max()
 {
     // é ends exactly at max 3; the next byte is a fresh ASCII character
@@ -309,6 +348,11 @@ void setup()
     RUN_TEST(test_truncate_len_drops_straddling_4byte);
     RUN_TEST(test_truncate_len_keeps_character_ending_at_max);
     RUN_TEST(test_truncate_len_zero_max);
+    RUN_TEST(test_copy_truncated_fits_unchanged);
+    RUN_TEST(test_copy_truncated_ascii_is_cut_and_terminated);
+    RUN_TEST(test_copy_truncated_drops_a_straddling_character);
+    RUN_TEST(test_copy_truncated_keeps_a_character_ending_at_the_limit);
+    RUN_TEST(test_copy_truncated_one_byte_buffer_is_empty);
 
     exit(UNITY_END());
 }
