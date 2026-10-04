@@ -29,6 +29,13 @@ uint32_t radioTaskStackFree();
 uint32_t radioTaskLockWaitUs();
 const char *radioTaskLockHolder();
 
+class OSThread;
+/// While the loop prints a line the radio task logged, the line's thread and the time it was logged, for its source
+/// and millis stamp. Set and read on the printing task only; false on any other.
+void setLoggingFor(const OSThread *thread, uint32_t ms);
+void clearLoggingFor();
+bool loggingFor(const OSThread **thread, uint32_t *ms);
+
 class RadioTaskLockGuard
 {
   public:

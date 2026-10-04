@@ -6,6 +6,9 @@
 #include "StreamAPI.h"
 #include "Throttle.h"
 #include "concurrency/LockGuard.h"
+#ifdef MESHTASTIC_RADIO_TASK
+#include "concurrency/RadioTask.h"
+#endif
 #include "gps/RTC.h"
 
 #define START1 0x94
@@ -273,7 +276,13 @@ void StreamAPI::emitLogRecord(meshtastic_LogRecord_Level level, const char *src,
 #ifdef MESHTASTIC_LOG_RECORD_MILLIS
     // Bench: LogRecord.time is whole seconds, and the host's arrival stamp carries the link's queueing delay.
     // Uptime taken here, as the line is logged, lets a node's events be lined up with other nodes' to the ms.
-    const int stamped = snprintf(message, room, "millis=%lu ", (unsigned long)millis());
+    unsigned long stampMs = millis();
+#ifdef MESHTASTIC_RADIO_TASK
+    uint32_t loggedMs;
+    if (concurrency::loggingFor(nullptr, &loggedMs))
+        stampMs = loggedMs; // a radio task line the loop is printing now
+#endif
+    const int stamped = snprintf(message, room, "millis=%lu ", stampMs);
     if (stamped > 0 && (size_t)stamped < room) {
         message += stamped;
         room -= stamped;

@@ -35,6 +35,10 @@ TaskHandle_t radioTask;
 const char *volatile radioMutexHolderName = "none";
 volatile uint32_t radioLockWaitUs;
 const char *volatile radioLockHolder = "none";
+// The line the loop is printing for the radio task (see RedirectablePrint::drainRadioTaskLogs)
+const OSThread *loggingForThread;
+uint32_t loggingForMs;
+TaskHandle_t volatile loggingForTask;
 
 void radioTaskMain(void *)
 {
@@ -120,6 +124,29 @@ void startRadioTask()
              (unsigned)uxTaskPriorityGet(nullptr), core);
     // Nothing else runs the radio thread: without the task the radio is dead, and the bench must not mistake that for loss
     assert(task);
+}
+
+void setLoggingFor(const OSThread *thread, uint32_t ms)
+{
+    loggingForThread = thread;
+    loggingForMs = ms;
+    loggingForTask = xTaskGetCurrentTaskHandle();
+}
+
+void clearLoggingFor()
+{
+    loggingForTask = nullptr;
+}
+
+bool loggingFor(const OSThread **thread, uint32_t *ms)
+{
+    if (!loggingForTask || loggingForTask != xTaskGetCurrentTaskHandle())
+        return false;
+    if (thread)
+        *thread = loggingForThread;
+    if (ms)
+        *ms = loggingForMs;
+    return true;
 }
 
 uint32_t radioTaskLockWaitUs()

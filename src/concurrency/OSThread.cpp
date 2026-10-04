@@ -26,6 +26,9 @@ const OSThread *OSThread::current()
 #ifdef MESHTASTIC_RADIO_TASK
     if (inRadioTask())
         return radioTaskThread;
+    const OSThread *loggedOn;
+    if (loggingFor(&loggedOn, nullptr))
+        return loggedOn;
 #endif
     return currentThread;
 }

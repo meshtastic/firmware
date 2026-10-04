@@ -1583,6 +1583,7 @@ void loop()
 #ifdef MESHTASTIC_RADIO_TASK
     if (router)
         router->wakeIfReceived();
+    DEBUG_PORT.drainRadioTaskLogs();
 #endif
     long delayMsec = mainController.runOrDelay();
 

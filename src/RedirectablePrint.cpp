@@ -16,10 +16,50 @@
 #ifdef ARCH_PORTDUINO
 #include "platform/portduino/PortduinoGlue.h"
 #endif
+#ifdef MESHTASTIC_RADIO_TASK
+#include "concurrency/RadioTask.h"
+#endif
 
 #if HAS_NETWORKING
 extern meshtastic::Syslog syslog;
 #endif
+#ifdef MESHTASTIC_RADIO_TASK
+namespace
+{
+// Bench: the radio task's lines, formatted where they were logged and printed by the loop. One writer (the radio task)
+// and one reader (the loop), so the indexes need no lock.
+struct RadioTaskLog {
+    const char *level;
+    const concurrency::OSThread *thread;
+    uint32_t ms;
+    char text[240]; // the longest bench line, the gate's, is about 190
+};
+constexpr uint8_t radioTaskLogCount = 16;
+RadioTaskLog radioTaskLogs[radioTaskLogCount];
+volatile uint8_t radioTaskLogHead, radioTaskLogTail;
+volatile uint32_t radioTaskLogsDropped;
+} // namespace
+
+void RedirectablePrint::drainRadioTaskLogs()
+{
+    static uint32_t droppedReported;
+    const uint32_t dropped = radioTaskLogsDropped;
+    if (dropped != droppedReported) {
+        log(MESHTASTIC_LOG_LEVEL_WARN, "Radio task log full, %u lines dropped", (unsigned)(dropped - droppedReported));
+        droppedReported = dropped;
+    }
+    while (radioTaskLogTail != radioTaskLogHead) {
+        __asm__ __volatile__("" ::: "memory"); // read the entry only after seeing the head that published it
+        const RadioTaskLog &line = radioTaskLogs[radioTaskLogTail];
+        concurrency::setLoggingFor(line.thread, line.ms);
+        log(line.level, "%s", line.text);
+        concurrency::clearLoggingFor();
+        __asm__ __volatile__("" ::: "memory"); // and free its slot only after printing it
+        radioTaskLogTail = (uint8_t)((radioTaskLogTail + 1) % radioTaskLogCount);
+    }
+}
+#endif
+
 void RedirectablePrint::rpInit()
 {
 #ifdef HAS_FREE_RTOS
@@ -343,6 +383,29 @@ void RedirectablePrint::log(const char *logLevel, const char *format, ...)
     if (moduleConfig.serial.override_console_serial_port && strcmp(logLevel, MESHTASTIC_LOG_LEVEL_DEBUG) == 0) {
         return;
     }
+#ifdef MESHTASTIC_RADIO_TASK
+    // Bench: the radio task never writes the console itself. A second task writing USB CDC wedged the RAK's log, and the
+    // write cost landed in the radio's timing. The loop prints the line, with the radio thread's name and this time.
+    if (concurrency::inRadioTask()) {
+        const uint8_t next = (uint8_t)((radioTaskLogHead + 1) % radioTaskLogCount);
+        if (next == radioTaskLogTail) {
+            radioTaskLogsDropped = radioTaskLogsDropped + 1;
+            return;
+        }
+        RadioTaskLog &line = radioTaskLogs[radioTaskLogHead];
+        line.level = logLevel;
+        line.thread = concurrency::OSThread::current();
+        line.ms = millis();
+        va_list arg;
+        va_start(arg, format);
+        vsnprintf(line.text, sizeof(line.text), format, arg);
+        va_end(arg);
+        __asm__ __volatile__("" ::: "memory"); // publish the entry before the head that points past it
+        radioTaskLogHead = next;
+        concurrency::mainDelay.interrupt(); // the loop prints it on its next pass
+        return;
+    }
+#endif
 
 #ifdef HAS_FREE_RTOS
     if (inDebugPrint != nullptr && xSemaphoreTake(inDebugPrint, portMAX_DELAY) == pdTRUE) {
