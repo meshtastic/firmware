@@ -23,7 +23,7 @@ class PacketHistory
         uint8_t hop_limit;                // bit 0-2: Highest hop limit observed for this packet,
                                           // bit 3-5: our hop limit when we first transmitted it
         uint8_t relayed_by[NUM_RELAYERS]; // Array of nodes that relayed this packet
-    };                                    // 4B + 4B + 4B + 1B + 1B + 6B = 20B
+    }; // 4B + 4B + 4B + 1B + 1B + 6B = 20B
     static_assert(sizeof(PacketRecord) == 20,
                   "PacketRecord size feeds the boot-cache budget math in mesh-pb-constants.h - update both together");
 

@@ -250,10 +250,22 @@ Webserver:
 #  SSLKey: /etc/meshtasticd/ssl/private_key.pem # Path to SSL Key, generated if not present
 #  SSLCert: /etc/meshtasticd/ssl/certificate.pem # Path to SSL Certificate, generated if not present
 
+Bluetooth:
+#  Enabled: true # Advertise a BLE peripheral via BlueZ, like other Meshtastic devices (Linux only)
+#  AdapterId: hci0 # BlueZ adapter to use
+
 HostMetrics:
 #  ReportInterval: 30 # Interval in minutes between HostMetrics report packets, or 0 for disabled
 #  Channel: 0 # channel to send Host Metrics over. Defaults to the primary channel.
 #  UserStringCommand: cat /sys/firmware/devicetree/base/serial-number # Command to execute, to send the results as the userString
+
+Security:
+# Public keys authorized to send admin messages to this node, as base64, the same text the apps and
+# the CLI show for a node's public key. Up to 16, and up to 3 of them are reflected into the node's
+# own security config so clients and managed mode see them. Files in config.d add to this list, and
+# this file is the authority: a key removed from here loses access, and remote admin cannot drop it.
+#  AdminKeys:
+#    - rvzaPCZmlh1nWnqNKUFHj0dLBJJIRJhRrkZmaFLHCVY=
 
 Config:
 #  DisplayMode: TWOCOLOR # uncomment to force BaseUI

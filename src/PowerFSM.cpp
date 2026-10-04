@@ -29,7 +29,7 @@
 #endif
 #if MESHTASTIC_EXCLUDE_POWER_FSM
 FakeFsm powerFSM;
-void PowerFSM_setup(){};
+void PowerFSM_setup() {};
 #else
 /// Should we behave as if we have AC power now?
 static bool isPowered()
