@@ -1002,6 +1002,10 @@ static meshtastic_DeviceState savedDeviceState;
 static meshtastic_User savedOwner;
 static meshtastic_LocalConfig savedConfig;
 static meshtastic_ChannelFile savedChannelFile;
+static meshtastic_LocalModuleConfig savedModuleConfig;
+// Set by a case that saves moduleConfig through the real reloadConfig(). Every setUp() builds a NodeDB that reloads
+// module.proto, so tearDown must write the restored config back or the next case inherits it from disk.
+static bool moduleConfigPersisted;
 // Only the ham dispatcher test installs a router (allocErrorResponse() allocates through it).
 // Saved/torn down for every test so a failed assertion's longjmp cannot leave one dangling.
 static Router *savedRouter;
@@ -1019,6 +1023,8 @@ static void replaceAdminRadioGlobals()
     savedOwner = owner;
     savedConfig = config;
     savedChannelFile = channelFile;
+    savedModuleConfig = moduleConfig;
+    moduleConfigPersisted = false;
     replacementNodeDB = new NodeDB();
     nodeDB = replacementNodeDB;
 }
@@ -1035,6 +1041,9 @@ static void restoreAdminRadioGlobals()
     router = savedRouter;
     delete hamMockRouter;
     hamMockRouter = nullptr;
+    moduleConfig = savedModuleConfig;
+    if (moduleConfigPersisted)
+        replacementNodeDB->saveToDisk(SEGMENT_MODULECONFIG);
     delete replacementNodeDB;
     replacementNodeDB = nullptr;
     devicestate = savedDeviceState;
@@ -1233,7 +1242,6 @@ class HamModeMockRouter : public Router
 // the in-transaction case; it has no NodeDB, so a non-deferred channel save cannot run there.
 static void test_handleSetModuleConfig_localBeaconClaimOutsideATransaction_pushesTheSlot()
 {
-    const meshtastic_LocalModuleConfig savedModuleConfig = moduleConfig;
     hamMockRouter = new HamModeMockRouter();
     router = hamMockRouter;
     memset(&channelFile, 0, sizeof(channelFile));
@@ -1259,6 +1267,7 @@ static void test_handleSetModuleConfig_localBeaconClaimOutsideATransaction_pushe
     memcpy(c.payload_variant.mesh_beacon.broadcast_offer_channel.psk.bytes, psk, sizeof(psk));
 
     TEST_ASSERT_FALSE(testAdmin->editTransactionOpen());
+    moduleConfigPersisted = true;
     testAdmin->handleSetModuleConfig(c, false); // a local client, saved at once
 
     const int16_t placed = channels.findByIdentity("Offered", psk, sizeof(psk));
@@ -1276,7 +1285,6 @@ static void test_handleSetModuleConfig_localBeaconClaimOutsideATransaction_pushe
         mockMeshService->releaseToPool(p);
     }
     TEST_ASSERT_EQUAL_UINT_MESSAGE(1, pushes, "the claimed slot is pushed once, transaction or not");
-    moduleConfig = savedModuleConfig;
 }
 #endif
 
