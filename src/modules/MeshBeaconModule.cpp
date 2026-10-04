@@ -1005,6 +1005,11 @@ void MeshBeaconBroadcastModule::sendBeacon()
                 s.legacyHopOverride = legacySplit;
                 strncpy(s.channelName, tgt.channelName, sizeof(s.channelName) - 1);
                 sharedEntry = setTargetRadioSettings(p, s, sharedEntry);
+                // No entry means no switch and no TX gate, so it would key up on the home radio with this target's key.
+                if (sharedEntry < 0 && radioDiffers) {
+                    packetPool.release(p);
+                    return;
+                }
             }
             sendBeaconPacket(p);
         };
