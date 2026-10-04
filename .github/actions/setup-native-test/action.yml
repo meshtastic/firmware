@@ -25,7 +25,8 @@ runs:
         sudo apt-get -y update --fix-missing
         sudo apt-get install -y ccache lcov \
           libbluetooth-dev libgpiod-dev libyaml-cpp-dev libjsoncpp-dev openssl libssl-dev \
-          libulfius-dev liborcania-dev libusb-1.0-0-dev libi2c-dev libuv1-dev libcurl4-gnutls-dev
+          libulfius-dev liborcania-dev libusb-1.0-0-dev libi2c-dev libuv1-dev \
+          libcurl4-gnutls-dev libavahi-client-dev
 
     - name: Install PlatformIO
       shell: bash

@@ -17,7 +17,7 @@ ENV PIP_BREAK_SYSTEM_PACKAGES=1
 RUN apk --no-cache add \
         bash g++ libstdc++-dev linux-headers zip git ca-certificates libbsd-dev \
         py3-pip py3-grpcio-tools \
-        libgpiod-dev yaml-cpp-dev jsoncpp-dev bluez-dev curl-dev \
+        libgpiod-dev yaml-cpp-dev jsoncpp-dev bluez-dev curl-dev avahi-dev \
         libusb-dev i2c-tools-dev libuv-dev openssl-dev pkgconf argp-standalone \
         libx11-dev libinput-dev libxkbcommon-dev sqlite-dev sdl2-dev \
     && rm -rf /var/cache/apk/* \
@@ -49,7 +49,7 @@ LABEL org.opencontainers.image.title="Meshtastic" \
 USER root
 
 RUN apk --no-cache add \
-        shadow libstdc++ libbsd libgpiod yaml-cpp jsoncpp libusb \
+        shadow libstdc++ libbsd libgpiod yaml-cpp jsoncpp libusb avahi-libs \
         libcurl i2c-tools libuv libx11 libinput libxkbcommon sdl2 \
     && rm -rf /var/cache/apk/* \
     && mkdir -p /var/lib/meshtasticd \
