@@ -23,6 +23,7 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "RadioInterface.h"
+#include "UptimeClock.h"
 #include "airtime.h"
 #include "modules/AdminModule.h"
 #include "modules/MeshBeaconModule.h"
@@ -2141,7 +2142,7 @@ static void backdateArmedAt(const meshtastic_MeshPacket &p, uint32_t byMs)
 {
     const MeshBeaconModule_TargetRadioSettings *got = MeshBeaconModule::getTargetRadioSettings(&p);
     TEST_ASSERT_NOT_NULL_MESSAGE(got, "backdating requires an armed entry");
-    const_cast<MeshBeaconModule_TargetRadioSettings *>(got)->armedAtMs = millis() - byMs;
+    const_cast<MeshBeaconModule_TargetRadioSettings *>(got)->armedAtMs = Time::getMillis() - byMs;
 }
 
 static const uint32_t kBeaconIntervalMs = (uint32_t)default_mesh_beacon_min_broadcast_interval_secs * 1000UL;
@@ -2190,6 +2191,35 @@ static void test_sidecar_staleness_followsTheConfiguredInterval(void)
     TEST_ASSERT_TRUE_MESSAGE(MeshBeaconModule::beaconTxConfigInvalid(&pkt), "past the configured interval, it is stale");
 
     MeshBeaconModule::clearTargetRadioSettings(&pkt);
+}
+
+/**
+ * Under test: setTargetRadioSettings() arming on Time::getMillis(), the clock Throttle::hasElapsed() reads
+ * in targetRadioSettingsStale() (src/modules/MeshBeaconModule.cpp).
+ *
+ * Why: staleness is a subtraction, which only survives the 32-bit wrap if both sides come from one
+ * clock. Arming on raw millis() also left the test clock unable to drive it at all.
+ *
+ * Regression guarded: an entry armed just before the wrap reading as stale (or never stale) on the far
+ * side of it - a beacon dropped at once, or one an hour old transmitted.
+ */
+static void test_sidecar_staleness_holdsAcrossTheMillisWrap(void)
+{
+    resetConfig();
+    Time::setTestMillis(0xFFFFFFFFu - 1000); // armed one second before the wrap
+    meshtastic_MeshPacket pkt = meshtastic_MeshPacket_init_zero;
+    pkt.id = 0x5EED0402;
+    MeshBeaconModule::setTargetRadioSettings(&pkt, targetSettings(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, true, 1,
+                                                                  false, meshtastic_Config_LoRaConfig_RegionCode_EU_868, "Wrap"));
+
+    Time::advanceTestMillis(kBeaconIntervalMs - 1000); // across the wrap, still inside the interval
+    TEST_ASSERT_FALSE_MESSAGE(MeshBeaconModule::beaconTxConfigInvalid(&pkt),
+                              "inside its interval across the wrap, it is current");
+    Time::advanceTestMillis(2000);
+    TEST_ASSERT_TRUE_MESSAGE(MeshBeaconModule::beaconTxConfigInvalid(&pkt), "past its interval across the wrap, it is stale");
+
+    MeshBeaconModule::clearTargetRadioSettings(&pkt);
+    Time::useRealClock();
 }
 
 /**
@@ -5404,6 +5434,7 @@ void setUp(void)
 
 void tearDown(void)
 {
+    Time::useRealClock(); // a case that failed mid-way must not leave the next one on fake time
     meshBeaconBroadcastModule = nullptr;
 
     delete testAdmin;
@@ -5533,6 +5564,7 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_sidecar_entryQueuedPastItsInterval_dropsThePacket);
     RUN_TEST(test_sidecar_staleEntry_freesItsSlotForTheNextCycle);
     RUN_TEST(test_sidecar_staleness_followsTheConfiguredInterval);
+    RUN_TEST(test_sidecar_staleness_holdsAcrossTheMillisWrap);
     RUN_TEST(test_offer_unplaceablePin_advertisesNothing);
     RUN_TEST(test_offer_pinPlaceableAfterRegionMove_isAdvertised);
     RUN_TEST(test_broadcaster_unplaceableOffer_sendsTextOnly);

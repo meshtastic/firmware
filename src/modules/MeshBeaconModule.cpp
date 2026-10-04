@@ -5,6 +5,7 @@
 #include "RadioInterface.h"
 #include "Router.h"
 #include "TransmitHistory.h"
+#include "UptimeClock.h"
 #include "configuration.h"
 #include "gps/RTC.h"
 #include "main.h"
@@ -208,7 +209,7 @@ int MeshBeaconModule::setTargetRadioSettings(const meshtastic_MeshPacket *p, con
     target->idCount = 1;
     target->ids[0] = p->id;
     // Armed on allocation, not on attach: the split pair expires together, timed from the first.
-    target->armedAtMs = millis();
+    target->armedAtMs = Time::getMillis();                       // the clock Throttle::hasElapsed() reads it against
     target->channelName[sizeof(target->channelName) - 1] = '\0'; // s may carry an unterminated name
     return (int)(target - targetRadioSettings);
 }
