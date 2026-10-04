@@ -136,6 +136,12 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     virtual int16_t getCurrentRSSI() = 0;
 
   public:
+    /// Listen-before-talk verdict. Failed means the scan itself errored, so the channel state is unknown.
+    enum class ChannelScan : uint8_t { Free, Busy, Failed };
+
+    /// Maps a RadioLib scan result to a verdict: only the two scan outcomes are Free or Busy, any error is Failed.
+    static ChannelScan classifyScan(int16_t result);
+
     /** Our ISR code currently needs this to find our active instance
      */
     static RadioLibInterface *instance;
@@ -217,6 +223,12 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     uint32_t rxBad = 0, rxGood = 0, txGood = 0, txRelay = 0;
     uint16_t txDrop = 0;
 
+    /// Consecutive non-Free scans for the packet at the head of the queue. Logged, never acted on:
+    /// what to do with a packet that never gets a free channel is still open.
+    static constexpr uint16_t DEFERRAL_WARN_THRESHOLD = 32;
+    uint32_t deferredPacketId = 0;
+    uint16_t consecutiveDeferrals = 0;
+
   public:
     RadioLibInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst,
                       RADIOLIB_PIN_TYPE busy, PhysicalLayer *iface = NULL);
@@ -239,8 +251,8 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      */
     virtual void startReceive();
 
-    /** can we detect a LoRa preamble on the current channel? */
-    virtual bool isChannelActive() = 0;
+    /** Run CAD on the current channel. A Failed scan must never be treated as a free channel. */
+    virtual ChannelScan checkChannel() = 0;
 
     /** are we actively receiving a packet (only called during receiving state)
      *  This method is only public to facilitate debugging.  Do not call.
@@ -343,6 +355,12 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     /**
      * If a send was in progress finish it and return the buffer to the pool */
     void completeSending();
+
+    /// Release a packet whose transmit never started: no airtime, no txGood/txRelay, counted in txDrop.
+    void abandonSending();
+
+    /// Count a Busy or Failed scan against packet `p`; warns every DEFERRAL_WARN_THRESHOLD in a row.
+    void noteDeferral(const meshtastic_MeshPacket *p, ChannelScan scan);
 
     /**
      * Add SNR data to received messages
