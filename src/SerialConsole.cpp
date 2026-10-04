@@ -74,6 +74,56 @@ void noteUsbUs(uint32_t us, uint32_t &slow, uint32_t &maxUs)
     if (us > maxUs)
         maxUs = us;
 }
+
+// A stall: the ring refusing log records for room, from the first refusal to the next write it takes. One of 1 s or more
+// is reported when it ends, since lines logged during it never reach the host.
+struct UsbStall {
+    uint32_t fromMs, ms;
+    uint32_t drops, unplugged; // log records refused, and how many of those found the USB link without SOFs
+    uint32_t frames;           // packet frames written during it
+    bool endedByFrame;
+};
+UsbStall stallNow, stallDone;
+bool stallDoneReady;
+uint32_t stallsUnreported;
+
+void noteRoomDrop()
+{
+    if (!stallNow.fromMs) {
+        stallNow = {};
+        const uint32_t now = millis();
+        stallNow.fromMs = now ? now : 1;
+    }
+    stallNow.drops++;
+#ifdef IS_USB_HWCDC
+    if (!HWCDC::isPlugged())
+        stallNow.unplugged++;
+#ifdef MESHTASTIC_HWCDC_NUDGE
+    // HWCDC::write() re-arms the TX interrupt through this check if the driver has marked the host gone, but a refused
+    // record never reaches write()
+    (void)HWCDC::isConnected();
+#endif
+#endif
+}
+
+void noteWritten(bool frame)
+{
+    if (!stallNow.fromMs)
+        return;
+    if (frame)
+        stallNow.frames++;
+    stallNow.ms = millis() - stallNow.fromMs;
+    stallNow.endedByFrame = frame;
+    if (stallNow.ms >= 1000) {
+        if (stallDoneReady) {
+            stallsUnreported++;
+        } else {
+            stallDone = stallNow;
+            stallDoneReady = true;
+        }
+    }
+    stallNow.fromMs = 0;
+}
 } // namespace
 #endif
 
@@ -161,6 +211,21 @@ int32_t SerialConsole::runOnce()
 #endif
 
 #ifdef MESHTASTIC_LOG_USB_STATS
+    if (stallDoneReady) {
+        UsbStall stall;
+        uint32_t unreported;
+        {
+            concurrency::LockGuard guard(&streamLock);
+            stall = stallDone;
+            unreported = stallsUnreported;
+            stallDoneReady = false;
+            stallsUnreported = 0;
+        }
+        LOG_INFO("USB stall: %u ms from uptime %u ms, %u log records refused (%u with no SOFs), %u packet frames written, "
+                 "ended by a %s write; %u more stalls unreported",
+                 stall.ms, stall.fromMs, stall.drops, stall.unplugged, stall.frames, stall.endedByFrame ? "packet" : "log",
+                 unreported);
+    }
     if (Throttle::hasElapsed(usbStatsAt, 10000)) {
         usbStatsAt = millis();
         UsbStats seen;
@@ -323,17 +388,21 @@ bool SerialConsole::writeFrame(uint8_t *buf, size_t len, bool bestEffort)
     if (bestEffort) {
         usbStats.logs++;
         noteUsbUs(writeUs, usbStats.logSlowWrites, usbStats.logMaxWriteUs);
-        if (!written) {
-            if (!frameWriter.isIdle())
-                usbStats.dropTail++;
-            else if (totalLen > usbTxRing)
-                usbStats.dropBig++;
-            else
-                usbStats.dropRoom++;
+        if (written) {
+            noteWritten(false);
+        } else if (!frameWriter.isIdle()) {
+            usbStats.dropTail++;
+        } else if (totalLen > usbTxRing) {
+            usbStats.dropBig++;
+        } else {
+            usbStats.dropRoom++;
+            noteRoomDrop();
         }
     } else {
         usbStats.frames++;
         noteUsbUs(writeUs, usbStats.slowWrites, usbStats.maxWriteUs);
+        if (written)
+            noteWritten(true);
     }
     return written;
 #else
