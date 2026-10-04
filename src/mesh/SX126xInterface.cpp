@@ -565,11 +565,11 @@ template <typename T> bool SX126xInterface<T>::sleep()
     return true;
 }
 
-template <typename T> void SX126xInterface<T>::resetAGC()
+template <typename T> bool SX126xInterface<T>::resetAGC()
 {
     // Safety: don't reset mid-packet
     if (sendingPacket != NULL || (isReceiving && isActivelyReceiving()))
-        return;
+        return false;
 
     LOG_DEBUG("SX126x AGC reset: warm sleep + Calibrate(0x7F)");
 
@@ -596,7 +596,7 @@ template <typename T> void SX126xInterface<T>::resetAGC()
     if (module.hal->digitalRead(module.getGpio())) {
         LOG_WARN("SX126x AGC reset: calibration not done in 50ms");
         startReceive();
-        return;
+        return true;
     }
 
     // 5. Re-calibrate image rejection for actual operating frequency
@@ -631,6 +631,7 @@ template <typename T> void SX126xInterface<T>::resetAGC()
 
     // 7. Resume receiving
     startReceive();
+    return true;
 }
 
 /** Control PA mode for GC1109 FEM - CPS pin selects full PA (txon=true) or bypass mode (txon=false) */
