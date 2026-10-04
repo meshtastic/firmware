@@ -113,6 +113,30 @@ static void test_shipped_config_fits_a_remote_admin_read_back()
     TEST_ASSERT_TRUE(MeshBeaconModule::fitsRemoteAdmin(moduleConfig.mesh_beacon));
 }
 
+/*
+ * Under test: NodeDB::factoryReset() calling NodeDB::placeDefaultBeaconChannels() after
+ * installDefaultChannels() (src/mesh/NodeDB.cpp).
+ *
+ * Why: a factory reset installs the module config (which sets beaconChannelsFromDefaults) only after
+ * resetRadioConfig() has run, then installs a fresh channel table and saves. The next boot loads that
+ * module config cleanly, so the flag is never set again: the reset itself is the only chance to place
+ * the offer channel.
+ *
+ * Regression guarded: the offer channel missing from the table after a factory reset, so the beacon
+ * withholds its offer from then on - a vendor build that stops inviting anyone after a reset.
+ * Runs last: it replaces the NodeDB the other cases read.
+ */
+static void test_offer_channel_survives_a_factory_reset()
+{
+    nodeDB->factoryReset(false);
+    delete nodeDB; // the reset reboots; a fresh NodeDB loads exactly what it saved
+    nodeDB = new NodeDB();
+
+    const auto &ch = moduleConfig.mesh_beacon.broadcast_offer_channel;
+    const int16_t idx = channels.findByIdentity(ch.name, ch.psk.bytes, (uint8_t)ch.psk.size, ch.use_aead);
+    TEST_ASSERT_GREATER_THAN_INT16_MESSAGE(0, idx, "the offer channel must be in the table after a factory reset");
+}
+
 #else // no beacon userPrefs: the baseline the block must not have moved
 
 static void test_stock_build_ships_no_beacon_target()
@@ -146,6 +170,9 @@ UPB_TEST_ENTRY void setup()
     RUN_TEST(test_by_value_target_is_not_cleared_by_the_boot_gate);
     RUN_TEST(test_offer_channel_is_placed_in_the_table_at_boot);
     RUN_TEST(test_shipped_config_fits_a_remote_admin_read_back);
+
+    printf("\n=== factory reset ===\n");
+    RUN_TEST(test_offer_channel_survives_a_factory_reset);
 #else
     printf("\n=== stock defaults (no beacon userPrefs) ===\n");
     RUN_TEST(test_stock_build_ships_no_beacon_target);

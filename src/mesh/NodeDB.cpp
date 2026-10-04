@@ -845,13 +845,19 @@ void NodeDB::resetRadioConfig(bool is_fresh_install)
 #if !MESHTASTIC_EXCLUDE_BEACON
     // A userPrefs build writes broadcast targets and the offer straight into moduleConfig, so this
     // is the only point that catches a combination no radio can key up on. Channels are live above.
-    if (moduleConfig.has_mesh_beacon) {
+    if (moduleConfig.has_mesh_beacon)
         MeshBeaconModule::sanitiseConfig(moduleConfig.mesh_beacon);
-        if (beaconChannelsFromDefaults)
-            MeshBeaconModule::upsertByValueChannels(moduleConfig.mesh_beacon);
-    }
-    beaconChannelsFromDefaults = false;
 #endif
+    placeDefaultBeaconChannels();
+}
+
+void NodeDB::placeDefaultBeaconChannels()
+{
+#if !MESHTASTIC_EXCLUDE_BEACON
+    if (beaconChannelsFromDefaults && moduleConfig.has_mesh_beacon)
+        MeshBeaconModule::upsertByValueChannels(moduleConfig.mesh_beacon);
+#endif
+    beaconChannelsFromDefaults = false;
 }
 
 LoraSlotSnapshot loraSlotSnapshotFrom(const meshtastic_Config_LoRaConfig &lora, const char *primaryChannelName)
@@ -957,6 +963,7 @@ bool NodeDB::factoryReset(bool eraseBleBonds)
     installDefaultConfig(!eraseBleBonds); // Also preserve the private key if we're not erasing BLE bonds
     installDefaultModuleConfig();
     installDefaultChannels();
+    placeDefaultBeaconChannels(); // after the channel table is reset, which would wipe it, and before the save
     // third, write everything to disk
     saveToDisk();
     if (eraseBleBonds) {
