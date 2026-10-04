@@ -115,13 +115,13 @@ static void test_shipped_config_fits_a_remote_admin_read_back()
 }
 
 /*
- * Under test: NodeDB::factoryReset() calling NodeDB::placeDefaultBeaconChannels() after
- * installDefaultChannels() (src/mesh/NodeDB.cpp).
+ * Under test: NodeDB::resetRadioConfig() setting beaconChannelsFromDefaults whenever it rebuilds the
+ * channel table from defaults, and placeDefaultBeaconChannels() consuming it (src/mesh/NodeDB.cpp).
  *
- * Why: a factory reset installs the module config (which sets beaconChannelsFromDefaults) only after
- * resetRadioConfig() has run, then installs a fresh channel table and saves. The next boot loads that
- * module config cleanly, so the flag is never set again: the reset itself is the only chance to place
- * the offer channel.
+ * Why: a factory reset saves an empty channel file and the module config with the offer. The boot after
+ * it loads that module config cleanly, so only the channel-table rebuild can say "this table is fresh,
+ * the vendor's offer channel belongs in it". An operator-deleted channel is only disabled, so a table
+ * that is not rebuilt never brings one back.
  *
  * Regression guarded: the offer channel missing from the table after a factory reset, so the beacon
  * withholds its offer from then on - a vendor build that stops inviting anyone after a reset.

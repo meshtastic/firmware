@@ -835,6 +835,9 @@ void NodeDB::resetRadioConfig(bool is_fresh_install)
         // loadFromDisk's sanitation is a no-op when the channel file was absent or corrupt.
         if (owner.is_licensed)
             channels.ensureLicensedOperation();
+        // A table rebuilt from defaults includes a userPrefs offer channel: a fresh install, the boot after a
+        // factory reset, or a lost channels.proto. A channel the operator deleted is only disabled, so stays.
+        beaconChannelsFromDefaults = true;
     }
 
     channels.onConfigChanged();
@@ -963,7 +966,6 @@ bool NodeDB::factoryReset(bool eraseBleBonds)
     installDefaultConfig(!eraseBleBonds); // Also preserve the private key if we're not erasing BLE bonds
     installDefaultModuleConfig();
     installDefaultChannels();
-    placeDefaultBeaconChannels(); // after the channel table is reset, which would wipe it, and before the save
     // third, write everything to disk
     saveToDisk();
     if (eraseBleBonds) {

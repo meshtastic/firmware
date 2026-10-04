@@ -267,7 +267,7 @@ void MeshBeaconModule::flushQueuedBeacons()
     unsigned withdrawn = 0;
     for (PacketId &id : queuedBeaconIds) {
         // cancelSending() releases through the TX hooks, which frees the target entry and restores the radio.
-        if (id && router && nodeDB && router->cancelSending(nodeDB->getNodeNum(), id))
+        if (id && router && router->cancelSending(myNodeInfo.my_node_num, id))
             withdrawn++;
         id = 0;
     }
