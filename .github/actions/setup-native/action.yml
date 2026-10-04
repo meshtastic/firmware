@@ -12,6 +12,6 @@ runs:
       shell: bash
       run: >
         sudo apt-get install -y
-        libbluetooth-dev libgpiod-dev libyaml-cpp-dev libjsoncpp-dev openssl libssl-dev
+        libbluetooth-dev libsdbus-c++-dev libgpiod-dev libyaml-cpp-dev libjsoncpp-dev openssl libssl-dev
         libulfius-dev liborcania-dev libusb-1.0-0-dev libi2c-dev libuv1-dev
-        libcurl4-gnutls-dev libavahi-client-dev
+        libcurl4-gnutls-dev libnotify-dev libavahi-client-dev
