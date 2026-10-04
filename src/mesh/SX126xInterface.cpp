@@ -596,7 +596,7 @@ template <typename T> bool SX126xInterface<T>::resetAGC()
     if (module.hal->digitalRead(module.getGpio())) {
         LOG_WARN("SX126x AGC reset: calibration not done in 50ms");
         startReceive();
-        return true;
+        return false; // incomplete: retried on the next maintenance tick
     }
 
     // 5. Re-calibrate image rejection for actual operating frequency
