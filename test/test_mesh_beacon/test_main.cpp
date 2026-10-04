@@ -2001,6 +2001,42 @@ static void test_applyModemConfig_publishesTheSlotVerdict(void)
 }
 
 /**
+ * Under test: RadioInterface::refreshSlotFlags() (src/mesh/RadioInterface.cpp), which NodeDB's constructor
+ * calls before Channels::hasDefaultChannel() (src/mesh/NodeDB.cpp).
+ *
+ * Why: the constructor decides whether to coerce telemetry intervals to the default-channel minimum by
+ * asking hasDefaultChannel(), which reads uses_default_frequency_slot. No radio exists yet, so
+ * applyModemConfig() has never published it; refreshSlotFlags() must.
+ *
+ * Regression guarded: the flag starts true, so a default-named, default-keyed channel pinned to a
+ * non-default slot read as "on the public default channel" at boot and had its telemetry clamped.
+ */
+static void test_refreshSlotFlags_pinnedDefaultChannelIsNotDefault(void)
+{
+    resetConfig(); // the stock table: primary on the default key with a blank name, i.e. the preset name
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    initRegion();
+
+    const uint32_t derived = RadioInterface::resolveFrequencySlot(config.lora, nullptr);
+    const uint32_t slots = RadioInterface::frequencySlotCount(config.lora);
+    config.lora.channel_num = (derived % slots) + 1; // a valid slot that is not the default one
+
+    RadioInterface::uses_default_frequency_slot = true; // the boot value
+    TEST_ASSERT_TRUE_MESSAGE(channels.hasDefaultChannel(), "precondition: the stale flag reads as a default channel");
+
+    RadioInterface::refreshSlotFlags(config.lora);
+
+    TEST_ASSERT_FALSE_MESSAGE(RadioInterface::uses_default_frequency_slot, "a pinned non-default slot is not the default");
+    TEST_ASSERT_FALSE_MESSAGE(channels.hasDefaultChannel(), "so the default channel is not in use");
+
+    config.lora.channel_num = 0;
+    RadioInterface::refreshSlotFlags(config.lora);
+    TEST_ASSERT_TRUE_MESSAGE(channels.hasDefaultChannel(), "the same channel on the derived slot is the default");
+}
+
+/**
  * The sidecar carries a whole LoRaConfig so a target can vary more than a preset. Nothing in the
  * beacon config can ask for that yet, so pin it at the sidecar: custom modem params must survive
  * the round trip rather than being flattened onto a preset.
@@ -5410,6 +5446,7 @@ BEACON_TEST_ENTRY void setup()
 
     RUN_TEST(test_adminValidation_targetClamp_leavesRunningSlotState);
     RUN_TEST(test_applyModemConfig_publishesTheSlotVerdict);
+    RUN_TEST(test_refreshSlotFlags_pinnedDefaultChannelIsNotDefault);
     RUN_TEST(test_sidecar_carriesCustomModemParams);
     RUN_TEST(test_sidecar_legacySplitPair_sharesOneEntryUntilBothRelease);
     RUN_TEST(test_sidecar_fourLegacySplitTargets_allFit);

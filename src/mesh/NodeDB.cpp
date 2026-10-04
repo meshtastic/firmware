@@ -586,6 +586,7 @@ NodeDB::NodeDB()
 
     // If we are setup to broadcast on any default channel slot (with default frequency slot semantics),
     // ensure that the telemetry intervals are coerced to the role-aware minimum value.
+    RadioInterface::refreshSlotFlags(config.lora); // no radio yet, so nothing else has published them
     if (channels.hasDefaultChannel()) {
         LOG_DEBUG("Coerce telemetry to role-aware min on defaults");
         moduleConfig.telemetry.device_update_interval = Default::getConfiguredOrMinimumValue(

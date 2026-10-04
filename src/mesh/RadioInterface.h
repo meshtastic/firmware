@@ -299,6 +299,9 @@ class RadioInterface
     static LoraSlotVerdict clampConfigLora(meshtastic_Config_LoRaConfig &loraConfig, const char *channelName = nullptr,
                                            bool announce = true);
 
+    // Publish what applyModemConfig() would, for readers that run before the radio exists (NodeDB's constructor).
+    static void refreshSlotFlags(const meshtastic_Config_LoRaConfig &loraConfig);
+
     // If preset is locked to a sibling of currentRegion among the swappable EU regions
     // (EU_868/EU_866/EU_N_868), return the sibling region owning the preset, else nullptr.
     static const RegionInfo *regionSwapForPreset(meshtastic_Config_LoRaConfig_RegionCode currentRegion,

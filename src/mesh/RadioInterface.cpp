@@ -1328,6 +1328,14 @@ RadioInterface::LoraSlotVerdict RadioInterface::clampConfigLora(meshtastic_Confi
     return verdict;
 }
 
+void RadioInterface::refreshSlotFlags(const meshtastic_Config_LoRaConfig &loraConfig)
+{
+    auto copy = loraConfig;
+    const LoraSlotVerdict verdict = clampConfigLora(copy, nullptr, false);
+    uses_default_frequency_slot = verdict.usesDefaultFrequencySlot;
+    uses_custom_channel_name = verdict.usesCustomChannelName;
+}
+
 /**
  * Pull our channel settings etc... from protobufs to the dumb interface settings.
  * Clamps config.lora in place first, so it is also where uses_default_frequency_slot is published.
