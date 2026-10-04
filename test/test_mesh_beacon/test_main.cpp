@@ -2261,6 +2261,62 @@ static void test_sidecar_staleEntry_freesItsSlotForTheNextCycle(void)
     MeshBeaconModule::clearAllTargetRadioSettings();
 }
 
+// Arm a bare id. Once the table is full, each call evicts entry 0 into the expired-id ring.
+static void armForRing(PacketId id)
+{
+    meshtastic_MeshPacket p = meshtastic_MeshPacket_init_zero;
+    p.id = id;
+    MeshBeaconModule::setTargetRadioSettings(&p, targetSettings(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, true, 1,
+                                                                false, meshtastic_Config_LoRaConfig_RegionCode_EU_868, "Ring"));
+}
+
+static bool ringDrops(PacketId id)
+{
+    meshtastic_MeshPacket p = meshtastic_MeshPacket_init_zero;
+    p.id = id;
+    return MeshBeaconModule::beaconTxConfigInvalid(&p);
+}
+
+/**
+ * Under test: the expired-id ring behind beaconTxConfigInvalid() (rememberExpired() / forgetExpired()
+ * in src/modules/MeshBeaconModule.cpp). An evicted entry's packet may still sit in the TX queue, and
+ * the ring is what stops it keying up on the home config; it holds MAX_TX_QUEUE ids, a free slot first,
+ * else the oldest is overwritten. clearTargetRadioSettingsById() (a packet leaving the queue) frees its
+ * slot, and the next expiry must take that slot rather than displace a still-queued id.
+ * Regression guarded: overflow overwriting a newer id than the oldest, or a freed slot being skipped so
+ * the round-robin drops a packet that is still queued.
+ */
+static void test_sidecar_expiredRing_overflowsOldestFirstAndReusesFreedSlots(void)
+{
+    resetConfig();
+    const PacketId base = 0x5EED0700;
+    const unsigned evictions = MAX_TX_QUEUE + 2;
+    // MESH_BEACON_MAX_TARGETS arms fill the table; every arm after that evicts one id.
+    for (unsigned i = 0; i < MESH_BEACON_MAX_TARGETS + evictions; i++)
+        armForRing(base + i);
+
+    // Evicted in order: base, then base + MAX_TARGETS onwards. The ring kept only the newest MAX_TX_QUEUE.
+    PacketId evicted[evictions];
+    evicted[0] = base;
+    for (unsigned e = 1; e < evictions; e++)
+        evicted[e] = base + MESH_BEACON_MAX_TARGETS + e - 1;
+    TEST_ASSERT_FALSE_MESSAGE(ringDrops(evicted[0]), "the oldest expiry is the first overwritten");
+    TEST_ASSERT_FALSE_MESSAGE(ringDrops(evicted[1]), "then the next oldest");
+    for (unsigned e = 2; e < evictions; e++)
+        TEST_ASSERT_TRUE_MESSAGE(ringDrops(evicted[e]), "the newest MAX_TX_QUEUE expiries are all still remembered");
+
+    // A remembered packet leaves the queue: its slot is free, and the next expiry lands there.
+    const PacketId released = evicted[evictions / 2];
+    MeshBeaconModule::clearTargetRadioSettingsById(released);
+    TEST_ASSERT_FALSE(ringDrops(released));
+    const PacketId nextEvicted = base + MESH_BEACON_MAX_TARGETS + evictions - 1; // entry 0 at this point
+    armForRing(base + MESH_BEACON_MAX_TARGETS + evictions);
+    TEST_ASSERT_TRUE_MESSAGE(ringDrops(nextEvicted), "the new expiry is remembered");
+    TEST_ASSERT_TRUE_MESSAGE(ringDrops(evicted[2]), "and took the freed slot, not the oldest remaining id's");
+
+    MeshBeaconModule::clearAllTargetRadioSettings();
+}
+
 /**
  * A pinned offer slot the offered region does not hold makes the whole invitation impossible: no
  * channel, no preset, no slot. Advertising the derived slot instead would invite receivers onto a
@@ -5111,6 +5167,53 @@ static void test_byValue_widestIndexedList_hasRemoteAdminHeadroom(void)
 }
 
 /**
+ * remoteAdminSize() and ADMIN_DATA_FRAMING against real encodes of the widest indexed config. The
+ * write (set_module_config, tag 35, plus an 8-byte session passkey) encodes to exactly
+ * remoteAdminSize(). The response that must survive the frame (get_module_config_response, tag 8,
+ * wrapped in Data with request_id and a two-byte bitfield) costs one byte less than the bound,
+ * because its tag key is one byte where the write's is two. Regression guarded: the formula or the
+ * framing constant drifting from what nanopb actually emits, so the gate passes a config whose
+ * response perhapsEncode() refuses.
+ */
+static void test_byValue_remoteAdminBound_matchesRealEncodes(void)
+{
+    uint8_t bigPsk[32];
+    memset(bigPsk, 0x5A, sizeof(bigPsk));
+    meshtastic_ModuleConfig_MeshBeaconConfig bcfg;
+    offerPlusFullIndexedList(bcfg, bigPsk, sizeof(bigPsk), sizeof(bcfg.broadcast_message) - 1);
+    const size_t bound = MeshBeaconModule::remoteAdminSize(bcfg);
+    TEST_ASSERT_NOT_EQUAL(0, bound);
+
+    meshtastic_AdminMessage write = meshtastic_AdminMessage_init_zero;
+    write.which_payload_variant = meshtastic_AdminMessage_set_module_config_tag;
+    write.set_module_config.which_payload_variant = meshtastic_ModuleConfig_mesh_beacon_tag;
+    write.set_module_config.payload_variant.mesh_beacon = bcfg;
+    write.session_passkey.size = 8;
+    memset(write.session_passkey.bytes, 0xA5, 8);
+    size_t writeSize = 0;
+    TEST_ASSERT_TRUE(pb_get_encoded_size(&writeSize, &meshtastic_AdminMessage_msg, &write));
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(bound, writeSize, "remoteAdminSize() is the encoded write, byte for byte");
+
+    meshtastic_AdminMessage r = meshtastic_AdminMessage_init_zero;
+    r.which_payload_variant = meshtastic_AdminMessage_get_module_config_response_tag;
+    r.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_mesh_beacon_tag;
+    r.get_module_config_response.payload_variant.mesh_beacon = bcfg;
+    r.session_passkey = write.session_passkey;
+
+    meshtastic_Data d = meshtastic_Data_init_zero;
+    d.portnum = meshtastic_PortNum_ADMIN_APP;
+    d.request_id = 0xFFFFFFFF;
+    d.has_bitfield = true;
+    d.bitfield = 0xFF;
+    d.payload.size = (pb_size_t)pb_encode_to_bytes(d.payload.bytes, sizeof(d.payload.bytes), &meshtastic_AdminMessage_msg, &r);
+    TEST_ASSERT_NOT_EQUAL(0, d.payload.size);
+    size_t dataSize = 0;
+    TEST_ASSERT_TRUE(pb_get_encoded_size(&dataSize, &meshtastic_Data_msg, &d));
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(bound + MeshBeaconModule::ADMIN_DATA_FRAMING - 1, dataSize,
+                                     "the response is the bound less the one-byte-shorter tag key");
+}
+
+/**
  * The gate has to agree with the router or it is not a gate. perhapsEncode() bounds the encoded
  * Data submessage against MAX_LORA_PAYLOAD_LEN, so a config the gate passes must still leave room
  * for the header, the PKC overhead and the framing once it is wrapped for transmission.
@@ -5708,6 +5811,7 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_sidecar_fourLegacySplitTargets_allFit);
     RUN_TEST(test_sidecar_entryQueuedPastItsInterval_dropsThePacket);
     RUN_TEST(test_sidecar_staleEntry_freesItsSlotForTheNextCycle);
+    RUN_TEST(test_sidecar_expiredRing_overflowsOldestFirstAndReusesFreedSlots);
     RUN_TEST(test_sidecar_staleness_followsTheConfiguredInterval);
     RUN_TEST(test_sidecar_staleness_holdsAcrossTheMillisWrap);
     RUN_TEST(test_offer_unplaceablePin_advertisesNothing);
@@ -5817,6 +5921,7 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_sanitise_offerPsk_paddedToTheLengthItIsUsedAt);
     RUN_TEST(test_byValue_configWithHeadroom_fromLocalClient_isSilent);
     RUN_TEST(test_byValue_widestIndexedList_hasRemoteAdminHeadroom);
+    RUN_TEST(test_byValue_remoteAdminBound_matchesRealEncodes);
     RUN_TEST(test_remoteAdminCeiling_agreesWithThePerhapsEncodeBound);
     RUN_TEST(test_broadcaster_targetWithoutChannel_retunesThePrimary);
     RUN_TEST(test_sidecar_rearmSameId_movesTheIdRatherThanDuplicatingIt);

@@ -740,6 +740,22 @@ static void test_preCutBackup_longBeaconMessage_restoresEveryModule(void)
     FSCom.remove(backupFileName);
 }
 
+// truncateLegacyBackupBeaconMessage() makes the same character-boundary cut one level deeper, inside
+// BackupPreferences.module_config: a 3-byte character straddling byte 60 is dropped whole, leaving 59 bytes.
+// Regression guarded: the backup path cutting mid-character and restoring a message that is invalid UTF-8.
+static void test_truncateLegacyBackupBeaconMessage_straddlingCharacter_isDroppedWhole(void)
+{
+    const std::string message = std::string(59, 'a') + "\xE2\x82\xAC" + std::string(38, 'b');
+    const std::vector<uint8_t> in = encodeBackup(encodePreCutModuleConfig(distinctiveModuleConfig(), message));
+    std::vector<uint8_t> out(in.size());
+    size_t outLen = 0;
+    TEST_ASSERT_TRUE(truncateLegacyBackupBeaconMessage(in.data(), in.size(), out.data(), out.size(), outLen));
+
+    std::vector<meshtastic_BackupPreferences> decoded(1); // too large for the stack
+    TEST_ASSERT_TRUE(pb_decode_from_bytes(out.data(), outLen, &meshtastic_BackupPreferences_msg, decoded.data()));
+    TEST_ASSERT_EQUAL_STRING(std::string(59, 'a').c_str(), decoded[0].module_config.mesh_beacon.broadcast_message);
+}
+
 // A backup that does not decode is refused and restores nothing.
 // Regression guarded: loadProto()'s DECODE_FAILED converted to true, so the half-read backup was restored and saved.
 static void test_undecodableBackup_isRefusedAndRestoresNothing(void)
@@ -798,6 +814,7 @@ NDBM_TEST_ENTRY void setup()
 
     printf("\n=== backup.proto beacon message cut ===\n");
     RUN_TEST(test_preCutBackup_longBeaconMessage_restoresEveryModule);
+    RUN_TEST(test_truncateLegacyBackupBeaconMessage_straddlingCharacter_isDroppedWhole);
     RUN_TEST(test_undecodableBackup_isRefusedAndRestoresNothing);
 
     exit(UNITY_END());
