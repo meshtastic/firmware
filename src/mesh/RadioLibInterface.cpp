@@ -567,9 +567,15 @@ void RadioLibInterface::onNotify(uint32_t notification)
             stageTxEarly(txQueue.getFront());
             const uint32_t now = Time::getMillis();
             if (!Throttle::deadlinePassedAt(now, dueMs)) {
+#ifdef MESHTASTIC_TX_SLOT_LEAD
+                txTimerDueUs = micros() + (dueMs - now) * 1000; // the lead's wake sample is this timer's
+#endif
                 notifyLater(dueMs - now, TRANSMIT_DELAY_COMPLETED, txTimerOverwrite);
                 break;
             }
+#ifdef MESHTASTIC_TX_SLOT_LEAD
+            txTimerDueUs = 0; // the stage ran past the due time: not a wake sample
+#endif
         }
 #endif
 #ifdef MESHTASTIC_RX_DEFER_FOR_TX_MS

@@ -884,8 +884,8 @@ uint32_t RadioInterface::getAnchoredSlotDelayMsec(uint32_t slots)
 }
 
 #ifdef MESHTASTIC_TX_SLOT_GATE_MS
-#if defined(MESHTASTIC_TX_STAGE_EARLY)
-#error "MESHTASTIC_TX_SLOT_GATE_MS and the early TX stage both bring the backoff timer forward: build with one"
+#if defined(MESHTASTIC_TX_STAGE_EARLY) && !defined(MESHTASTIC_TX_SLOT_LEAD)
+#error "MESHTASTIC_TX_SLOT_GATE_MS and the early TX stage both bring the backoff timer forward: build with one, or add the lead"
 #endif
 uint32_t RadioInterface::ownSlotScanAt()
 {
