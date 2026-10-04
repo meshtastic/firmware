@@ -142,9 +142,9 @@ bool NodeDB::migrateLegacyNodeDatabase()
 
 // Encoded maxima before the broadcast_message cut (max_size 101), from develop's generated headers. Remove this
 // block, and its callers in loadFromDisk() and restorePreferences(), once pre-cut 2.8.0 builds are out of support.
-static constexpr size_t kLegacyLocalModuleConfigSize = 1044;
-static constexpr size_t kLegacyMeshBeaconConfigSize = 242;
-static constexpr size_t kLegacyBackupPreferencesSize = 2674;
+static constexpr size_t LEGACY_LOCAL_MODULE_CONFIG_SIZE = 1044;
+static constexpr size_t LEGACY_MESH_BEACON_CONFIG_SIZE = 242;
+static constexpr size_t LEGACY_BACKUP_PREFERENCES_SIZE = 2674;
 
 // Copies a message field by field; the body of each length-delimited field `target` goes to `rewrite` instead.
 template <typename Rewrite>
@@ -194,7 +194,7 @@ static bool truncateModuleConfigBody(const uint8_t *in, size_t inLen, pb_ostream
 {
     constexpr uint32_t tag = meshtastic_LocalModuleConfig_mesh_beacon_tag;
     return rewriteField(in, inLen, out, tag, [&](const uint8_t *body, size_t len) {
-        uint8_t beacon[kLegacyMeshBeaconConfigSize];
+        uint8_t beacon[LEGACY_MESH_BEACON_CONFIG_SIZE];
         pb_ostream_t beaconOut = pb_ostream_from_buffer(beacon, sizeof(beacon));
         return truncateBeaconBody(body, len, &beaconOut, cut) && pb_encode_tag(out, PB_WT_STRING, tag) &&
                pb_encode_string(out, beacon, beaconOut.bytes_written);
@@ -213,14 +213,14 @@ bool truncateLegacyBeaconMessage(const uint8_t *in, size_t inLen, uint8_t *out, 
 
 bool truncateLegacyBackupBeaconMessage(const uint8_t *in, size_t inLen, uint8_t *out, size_t outCap, size_t &outLen)
 {
-    auto module = meshtastic_security::make_zeroizing_array(kLegacyLocalModuleConfigSize);
+    auto module = meshtastic_security::make_zeroizing_array(LEGACY_LOCAL_MODULE_CONFIG_SIZE);
     if (!module)
         return false;
     pb_ostream_t os = pb_ostream_from_buffer(out, outCap);
     bool cut = false;
     constexpr uint32_t tag = meshtastic_BackupPreferences_module_config_tag;
     const bool parsed = rewriteField(in, inLen, &os, tag, [&](const uint8_t *body, size_t len) {
-        pb_ostream_t moduleOut = pb_ostream_from_buffer(module.get(), kLegacyLocalModuleConfigSize);
+        pb_ostream_t moduleOut = pb_ostream_from_buffer(module.get(), LEGACY_LOCAL_MODULE_CONFIG_SIZE);
         return truncateModuleConfigBody(body, len, &moduleOut, cut) && pb_encode_tag(&os, PB_WT_STRING, tag) &&
                pb_encode_string(&os, module.get(), moduleOut.bytes_written);
     });
@@ -256,17 +256,17 @@ static bool readRawPrefsFile(const char *filename, uint8_t *buf, size_t cap, siz
 bool NodeDB::migrateLegacyModuleConfig()
 {
     // Re-read at the legacy maximum: loadProto() stops at the current one, which a pre-cut file can exceed.
-    auto raw = meshtastic_security::make_zeroizing_array(kLegacyLocalModuleConfigSize);
-    auto fixed = meshtastic_security::make_zeroizing_array(kLegacyLocalModuleConfigSize);
+    auto raw = meshtastic_security::make_zeroizing_array(LEGACY_LOCAL_MODULE_CONFIG_SIZE);
+    auto fixed = meshtastic_security::make_zeroizing_array(LEGACY_LOCAL_MODULE_CONFIG_SIZE);
     if (!raw || !fixed)
         return false;
 
     size_t rawLen = 0;
-    if (!readRawPrefsFile(moduleConfigFileName, raw.get(), kLegacyLocalModuleConfigSize, rawLen))
+    if (!readRawPrefsFile(moduleConfigFileName, raw.get(), LEGACY_LOCAL_MODULE_CONFIG_SIZE, rawLen))
         return false;
 
     size_t fixedLen = 0;
-    if (!truncateLegacyBeaconMessage(raw.get(), rawLen, fixed.get(), kLegacyLocalModuleConfigSize, fixedLen))
+    if (!truncateLegacyBeaconMessage(raw.get(), rawLen, fixed.get(), LEGACY_LOCAL_MODULE_CONFIG_SIZE, fixedLen))
         return false;
 
     pb_istream_t stream = pb_istream_from_buffer(fixed.get(), fixedLen);
@@ -281,17 +281,17 @@ bool NodeDB::migrateLegacyModuleConfig()
 
 bool NodeDB::migrateLegacyBackup(meshtastic_BackupPreferences &backup)
 {
-    auto raw = meshtastic_security::make_zeroizing_array(kLegacyBackupPreferencesSize);
-    auto fixed = meshtastic_security::make_zeroizing_array(kLegacyBackupPreferencesSize);
+    auto raw = meshtastic_security::make_zeroizing_array(LEGACY_BACKUP_PREFERENCES_SIZE);
+    auto fixed = meshtastic_security::make_zeroizing_array(LEGACY_BACKUP_PREFERENCES_SIZE);
     if (!raw || !fixed)
         return false;
 
     size_t rawLen = 0;
-    if (!readRawPrefsFile(backupFileName, raw.get(), kLegacyBackupPreferencesSize, rawLen))
+    if (!readRawPrefsFile(backupFileName, raw.get(), LEGACY_BACKUP_PREFERENCES_SIZE, rawLen))
         return false;
 
     size_t fixedLen = 0;
-    if (!truncateLegacyBackupBeaconMessage(raw.get(), rawLen, fixed.get(), kLegacyBackupPreferencesSize, fixedLen))
+    if (!truncateLegacyBackupBeaconMessage(raw.get(), rawLen, fixed.get(), LEGACY_BACKUP_PREFERENCES_SIZE, fixedLen))
         return false;
 
     pb_istream_t stream = pb_istream_from_buffer(fixed.get(), fixedLen);
