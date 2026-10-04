@@ -112,14 +112,14 @@ class MeshBeaconModule
     // perhapsEncode() always sets 3 (uint8_t, two varint bytes once bit 7 is used), and the
     // fixed32 request_id setReplyTo() stamps 5. A write costs less - it carries want_response (2)
     // instead of request_id - so the response is the binding case.
-    static constexpr size_t kAdminDataFraming = 13;
+    static constexpr size_t ADMIN_DATA_FRAMING = 13;
 
     // What survives one PKC-encrypted frame. perhapsEncode() bounds the encoded Data submessage,
     // not the payload, so charge the framing too; DATA_PAYLOAD_LEN is the decoded cap a BLE client
     // gets and is seven bytes too generous here.
     static constexpr size_t remoteAdminCeiling()
     {
-        return (size_t)MAX_LORA_PAYLOAD_LEN - MESHTASTIC_HEADER_LENGTH - MESHTASTIC_PKC_OVERHEAD - kAdminDataFraming;
+        return (size_t)MAX_LORA_PAYLOAD_LEN - MESHTASTIC_HEADER_LENGTH - MESHTASTIC_PKC_OVERHEAD - ADMIN_DATA_FRAMING;
     }
 
     // False when a remote admin write of this config would not survive one PKC-encrypted LoRa

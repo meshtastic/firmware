@@ -36,10 +36,10 @@ static uint8_t queuedBeaconNext;
 // A free slot first, else round-robin: a queued id is overwritten only once every slot holds an unreleased id.
 static void rememberExpired(const MeshBeaconModule_TargetRadioSettings &entry)
 {
-    constexpr uint8_t kSlots = sizeof(expiredIds) / sizeof(expiredIds[0]);
+    constexpr uint8_t EXPIRED_SLOTS = sizeof(expiredIds) / sizeof(expiredIds[0]);
     for (uint8_t i = 0; i < entry.idCount; i++) {
         uint8_t slot = expiredNext;
-        for (uint8_t j = 0; j < kSlots; j++) {
+        for (uint8_t j = 0; j < EXPIRED_SLOTS; j++) {
             if (!expiredIds[j]) {
                 slot = j;
                 break;
@@ -47,7 +47,7 @@ static void rememberExpired(const MeshBeaconModule_TargetRadioSettings &entry)
         }
         expiredIds[slot] = entry.ids[i];
         if (slot == expiredNext)
-            expiredNext = (uint8_t)((expiredNext + 1) % kSlots);
+            expiredNext = (uint8_t)((expiredNext + 1) % EXPIRED_SLOTS);
     }
 }
 
@@ -155,7 +155,7 @@ MeshBeaconModule::MeshBeaconModule()
 int MeshBeaconModule::setTargetRadioSettings(const meshtastic_MeshPacket *p, const MeshBeaconModule_TargetRadioSettings &s,
                                              int shareWith)
 {
-    constexpr int kEntries = (int)(sizeof(targetRadioSettings) / sizeof(targetRadioSettings[0]));
+    constexpr int TARGET_ENTRIES = (int)(sizeof(targetRadioSettings) / sizeof(targetRadioSettings[0]));
     if (!p)
         return -1;
     clearTargetRadioSettingsById(p->id); // a re-arm must not leave this id on its old entry
@@ -172,7 +172,7 @@ int MeshBeaconModule::setTargetRadioSettings(const meshtastic_MeshPacket *p, con
 
     // The caller names the split pair rather than us inferring it: guessing loose would share an
     // entry between packets that need different radios.
-    if (shareWith >= 0 && shareWith < kEntries) {
+    if (shareWith >= 0 && shareWith < TARGET_ENTRIES) {
         auto &entry = targetRadioSettings[shareWith];
         if (entry.idCount && entry.idCount < (uint8_t)(sizeof(entry.ids) / sizeof(entry.ids[0]))) {
             entry.ids[entry.idCount++] = p->id;
@@ -200,8 +200,8 @@ int MeshBeaconModule::setTargetRadioSettings(const meshtastic_MeshPacket *p, con
             LOG_WARN("Beacon: target table full and every slot is in flight, drop target for 0x%08x", p->id);
             return -1;
         }
-        LOG_WARN("Beacon: target table full (%u slots), evicting packet 0x%08x for 0x%08x", (unsigned)kEntries, target->ids[0],
-                 p->id);
+        LOG_WARN("Beacon: target table full (%u slots), evicting packet 0x%08x for 0x%08x", (unsigned)TARGET_ENTRIES,
+                 target->ids[0], p->id);
         rememberExpired(*target);
     }
     *target = s;

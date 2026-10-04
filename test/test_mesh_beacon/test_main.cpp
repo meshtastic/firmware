@@ -5117,7 +5117,7 @@ static void test_byValue_widestIndexedList_hasRemoteAdminHeadroom(void)
  */
 static void test_remoteAdminCeiling_agreesWithThePerhapsEncodeBound(void)
 {
-    const size_t onTheWire = MeshBeaconModule::remoteAdminCeiling() + MeshBeaconModule::kAdminDataFraming +
+    const size_t onTheWire = MeshBeaconModule::remoteAdminCeiling() + MeshBeaconModule::ADMIN_DATA_FRAMING +
                              MESHTASTIC_HEADER_LENGTH + MESHTASTIC_PKC_OVERHEAD;
     TEST_ASSERT_LESS_OR_EQUAL_MESSAGE((size_t)MAX_LORA_PAYLOAD_LEN, onTheWire,
                                       "a config at the ceiling must still fit the frame perhapsEncode() builds");
