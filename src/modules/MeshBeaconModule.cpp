@@ -494,9 +494,9 @@ void MeshBeaconModule::fillOffer(meshtastic_MeshBeacon &beacon, const meshtastic
     }
     if (bcfg.has_broadcast_offer_channel) {
         beacon.has_offer_channel = true;
-        // What a joiner needs and nothing else: id, uplink/downlink and module_settings describe
-        // this node's posture, not the mesh. PSK is included intentionally: this beacon is a public
-        // join-invitation, and the PSK here is a convenience token, not a security boundary.
+        // Deliberately only what a joiner needs: name, PSK and use_aead, plus preset, region and an underivable slot
+        // below. id, uplink/downlink and module_settings are this node's options on the channel, not the channel.
+        // The PSK is a convenience token in a public join-invitation, not a security boundary.
         const meshtastic_ChannelSettings zeroed = meshtastic_ChannelSettings_init_zero;
         beacon.offer_channel = zeroed;
         memcpy(beacon.offer_channel.name, bcfg.broadcast_offer_channel.name, sizeof(beacon.offer_channel.name));

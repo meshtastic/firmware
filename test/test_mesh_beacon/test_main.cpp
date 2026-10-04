@@ -4182,6 +4182,76 @@ static void test_beaconRestore_deferredUntilPacketCompletes(void)
 }
 
 /**
+ * Under test: the announce parameter of RadioInterface::validateConfigLora() and clampConfigLora()
+ * (src/mesh/RadioInterface.cpp), and their defaults: validate quiet, clamp loud.
+ *
+ * Why: validate is the asking call - the beacon TX gate runs it on every queued beacon against configs
+ * the node is not running - so its default must not touch the node's error state or the phone. Clamp is
+ * the applying call, so its default must still tell the operator what it changed.
+ *
+ * Regression guarded: a loud validate puts "Critical fault" on screen and an ERROR on the phone for every
+ * bad beacon target; a quiet clamp silently rewrites a client's config with no reason given.
+ */
+static void test_announce_validateIsQuietAndClampIsLoudByDefault(void)
+{
+    resetConfig();
+    meshtastic_Config_LoRaConfig bad = config.lora;
+    bad.channel_num = RadioInterface::frequencySlotCount(bad) + 1; // past the region's slots
+
+    error_code = meshtastic_CriticalErrorCode_NONE;
+    mockSvc->notificationCount = 0;
+    TEST_ASSERT_FALSE(RadioInterface::validateConfigLora(bad));
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_CriticalErrorCode_NONE, error_code, "a default validate records no fault");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, mockSvc->notificationCount, "and tells the phone nothing");
+
+    TEST_ASSERT_FALSE(RadioInterface::validateConfigLora(bad, nullptr, true));
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING, error_code, "an announced validate does");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, mockSvc->notificationCount, "and tells the phone why");
+
+    error_code = meshtastic_CriticalErrorCode_NONE;
+    mockSvc->notificationCount = 0;
+    meshtastic_Config_LoRaConfig quiet = bad;
+    RadioInterface::clampConfigLora(quiet, nullptr, false);
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_CriticalErrorCode_NONE, error_code, "a quiet clamp records no fault");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, mockSvc->notificationCount, "and tells the phone nothing");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, quiet.channel_num, "but still repairs the pin");
+
+    meshtastic_Config_LoRaConfig loud = bad;
+    RadioInterface::clampConfigLora(loud);
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING, error_code, "a default clamp records it");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, mockSvc->notificationCount, "and tells the phone why");
+    TEST_ASSERT_EQUAL_UINT32(0, loud.channel_num);
+
+    error_code = meshtastic_CriticalErrorCode_NONE;
+}
+
+/**
+ * Under test: the beacon TX gate, MeshBeaconModule::beaconTxConfigInvalid(), validating quietly.
+ *
+ * Why: it runs per queued beacon packet against a target the node is not running; refusing one is the
+ * gate doing its job, not a fault in the node's radio settings.
+ *
+ * Regression guarded: every refused beacon raising INVALID_RADIO_SETTING and an ERROR notification.
+ */
+static void test_announce_beaconTxGateRefusesQuietly(void)
+{
+    resetConfig();
+    meshtastic_MeshPacket pkt = meshtastic_MeshPacket_init_zero;
+    pkt.id = 0x5EED0700;
+    // SHORT_TURBO is not legal on EU_868, so the gate refuses it.
+    MeshBeaconModule::setTargetRadioSettings(&pkt, targetSettings(meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO, true, 0,
+                                                                  false, meshtastic_Config_LoRaConfig_RegionCode_EU_868));
+    error_code = meshtastic_CriticalErrorCode_NONE;
+    mockSvc->notificationCount = 0;
+
+    TEST_ASSERT_TRUE_MESSAGE(MeshBeaconModule::beaconTxConfigInvalid(&pkt), "precondition: the gate refuses it");
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_CriticalErrorCode_NONE, error_code, "a refused beacon is not a node fault");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, mockSvc->notificationCount, "and is not reported to the phone");
+
+    MeshBeaconModule::clearTargetRadioSettings(&pkt);
+}
+
+/**
  * Under test: effectiveLora()'s home-region argument in MeshBeaconModule::reconfigureForBeaconTX() and
  * beaconTxConfigInvalid() (src/modules/MeshBeaconModule.cpp).
  *
@@ -5630,6 +5700,8 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_beaconSwitch_isNotUndoneByCompleteSending);
     RUN_TEST(test_beaconRestore_withoutSwitch_isNoOp);
     RUN_TEST(test_beaconRestore_deferredUntilPacketCompletes);
+    RUN_TEST(test_announce_validateIsQuietAndClampIsLoudByDefault);
+    RUN_TEST(test_announce_beaconTxGateRefusesQuietly);
     RUN_TEST(test_beaconSwitch_inheritedRegionFollowsHomeNotTheInstalledSwitch);
     RUN_TEST(test_beaconRestore_keepsALoraEditMadeDuringTheSwitch);
 

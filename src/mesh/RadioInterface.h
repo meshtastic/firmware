@@ -289,6 +289,8 @@ class RadioInterface
     // records a critical error, and sends a client notification.
     static bool validateConfigRegion(const meshtastic_Config_LoRaConfig &loraConfig);
 
+    // Validate asks (quiet by default: the beacon TX gate checks every queued beacon); clamp applies (loud: the result
+    // is about to be the radio). Pass announce explicitly to cross over.
     // Check if a candidate radio configuration is valid. Side-effect free unless announce, which tells the
     // client why it failed; pass channelName to evaluate against a channel other than the running primary.
     static bool validateConfigLora(const meshtastic_Config_LoRaConfig &loraConfig, const char *channelName = nullptr,
