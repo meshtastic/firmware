@@ -20,4 +20,12 @@
 #ifndef MESHTASTIC_LOG_USB_STATS
 #define MESHTASTIC_LOG_USB_STATS
 #endif
+// Log each window in which the radio cannot hear, as it ends, and its radio edge lines at DEBUG rather than TRACE
+#ifndef MESHTASTIC_LOG_RADIO_EDGES
+#define MESHTASTIC_LOG_RADIO_EDGES
+#endif
+// Time each TX from its channel scan to RX being back, and log where it landed on the slot grid
+#ifndef MESHTASTIC_TX_TIMELINE
+#define MESHTASTIC_TX_TIMELINE
+#endif
 #endif

@@ -41,6 +41,11 @@ bool loggedAtMs(uint32_t *ms);
 /// Bench: the task's stack high-water mark in bytes, 0 before it starts
 uint32_t radioTaskStackFree();
 #endif
+#ifdef MESHTASTIC_TX_TIMELINE
+/// Bench: how long the radio task waited for the lock at the start of its current run, in us, and the thread that held it
+uint32_t radioTaskLockWaitUs();
+const char *radioTaskLockHolder();
+#endif
 
 class RadioTaskLockGuard
 {
