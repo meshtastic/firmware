@@ -10,6 +10,11 @@
 #if LR11X0_TX_PRESTAGE && !RADIOLIB_GODMODE
 #error "LR11X0_TX_PRESTAGE sets RadioLib's staged mode directly: build with -DRADIOLIB_GODMODE=1"
 #endif
+// -DLR11X0_STANDBY_XOSC keeps the TCXO running in standby and in the TX/RX fallback, so a CAD, RX or TX started from them
+// skips its start-up. RadioLib's own scan still drops to STBY_RC before the CAD.
+#if defined(LR11X0_STANDBY_XOSC) && !RADIOLIB_GODMODE
+#error "LR11X0_STANDBY_XOSC sets the TX/RX fallback mode directly: build with -DRADIOLIB_GODMODE=1"
+#endif
 
 /**
  * \brief Adapter for LR11x0 radio family. Implements common logic for child classes.
@@ -105,6 +110,11 @@ template <class T> class LR11x0Interface : public RadioLibInterface
 
     /** Recover a chip that lost its runtime state: hardware-reset via begin() and reprogram */
     bool recoverChipStateLoss() override { return reinitChip() && programModemParams() == RADIOLIB_ERR_NONE; }
+
+#ifdef LR11X0_STANDBY_XOSC
+    /** Put the TX/RX fallback on STBY_XOSC; begin() resets it */
+    void keepTcxoOnInStandby();
+#endif
 
 #if LR11X0_TX_PRESTAGE
     /** With a payload staged before the scan, send only what follows it */
