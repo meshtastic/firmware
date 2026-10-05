@@ -150,6 +150,10 @@ template <class T> class LR11x0Interface : public RadioLibInterface
     enum RearmState : uint8_t { REARM_NONE, REARM_PENDING, REARM_ARMED, REARM_FAILED };
     volatile uint8_t rearmState = REARM_NONE;
     volatile int16_t rearmErr = 0;
+#ifdef MESHTASTIC_LOG_RADIO_EDGES
+    /** Bench: how long the task's re-arm took, and the FreeRTOS tick count when it finished */
+    volatile uint32_t rearmUs = 0, rearmTicks = 0;
+#endif
 #endif
 
     /** The chip's mode (stat2 bits 3..1, as RADIOLIB_LR11X0_STAT_2_MODE_*), waiting out a passing FS; 0xFF on failure */
