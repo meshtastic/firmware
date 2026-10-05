@@ -13,7 +13,14 @@
 
 #include "BenchClock.h"
 #include "Throttle.h"
+#ifdef SX126X_STATE_SAMPLER_TASK
+#include "SPILock.h"
+#endif
 #include "UptimeClock.h"
+#ifdef SX126X_STATE_SAMPLER_MS
+#include "concurrency/OSThread.h"
+#include <functional>
+#endif
 
 // Particular boards might define a different max power based on what their hardware can do, default to max power output if not
 // specified (may be dangerous if using external PA and SX126x power config forgotten)
@@ -30,7 +37,209 @@ SX126xInterface<T>::SX126xInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs
     : RadioLibInterface(hal, cs, irq, rst, busy, &lora), lora(&module)
 {
     LOG_DEBUG_RADIO("SX126xInterface(cs=%d, irq=%d, rst=%d, busy=%d)", cs, irq, rst, busy);
+#ifdef SX126X_STATE_SAMPLER_MS
+    rawCs = cs;
+#endif
+#ifdef SX126X_STATE_SAMPLER_TASK
+    samplerHal = hal;
+#endif
 }
+
+#ifdef SX126X_STATE_SAMPLER_TASK
+#if !defined(SX126X_STATE_SAMPLER_MS) || !(defined(ARCH_NRF52) || defined(ARCH_ESP32))
+#error "SX126X_STATE_SAMPLER_TASK is a bench flag for nRF52 and ESP32, and needs SX126X_STATE_SAMPLER_MS for its period"
+#endif
+// xTaskCreate takes the stack in words on nRF52 and in bytes on ESP32; the task only does SPI and reads the clock, no logging.
+#ifdef ARCH_ESP32
+#define SX126X_STATE_SAMPLER_STACK 2048
+#else
+#define SX126X_STATE_SAMPLER_STACK 256
+#endif
+// The task looks every SX126X_STATE_SAMPLER_MS; the main loop only logs what it queued, so it need not run as often.
+#define SX126X_STATE_SAMPLER_LOOP_MS 10
+#elif defined(SX126X_STATE_SAMPLER_MS)
+#define SX126X_STATE_SAMPLER_LOOP_MS SX126X_STATE_SAMPLER_MS
+#endif
+
+#ifdef SX126X_STATE_SAMPLER_MS
+namespace
+{
+/** Bench: runs the chip state sample (or, with the task, its logging) on the main loop, between the other threads */
+class ChipStateSampler : public concurrency::OSThread
+{
+  public:
+    explicit ChipStateSampler(std::function<void()> sample)
+        : concurrency::OSThread("ChipState", SX126X_STATE_SAMPLER_LOOP_MS), sample(std::move(sample))
+    {
+    }
+
+  protected:
+    int32_t runOnce() override
+    {
+        sample();
+        return SX126X_STATE_SAMPLER_LOOP_MS;
+    }
+
+  private:
+    std::function<void()> sample;
+};
+
+const char *chipModeName(uint8_t mode)
+{
+    switch (mode) {
+    case 0x2:
+        return "STBY_RC";
+    case 0x3:
+        return "STBY_XOSC";
+    case 0x4:
+        return "FS";
+    case 0x5:
+        return "RX";
+    case 0x6:
+        return "TX";
+    case 0xB:
+        return "BUSY";
+    default:
+        return "?";
+    }
+}
+} // namespace
+
+template <typename T> bool SX126xInterface<T>::readChipState(bool fromTask, uint8_t &mode, uint16_t &irq, uint8_t &status)
+{
+    // GetIrqStatus returns the status byte (the chip mode) and then the IRQ word; unlike ClearIrqStatus it changes nothing.
+    // BUSY high means mid-command, waking or starting the TCXO: the chip would not answer, so report the mode as BUSY and
+    // leave irq as the caller passed it.
+    uint8_t out[4] = {RADIOLIB_SX126X_CMD_GET_IRQ_STATUS, RADIOLIB_SX126X_CMD_NOP, RADIOLIB_SX126X_CMD_NOP,
+                      RADIOLIB_SX126X_CMD_NOP};
+    uint8_t in[4] = {0, 0, 0, 0};
+    bool busy;
+#ifdef SX126X_STATE_SAMPLER_TASK
+    if (fromTask) {
+        // Never wait for the lock: a look that holds up the radio would change what it measures.
+        if (!spiLock->lock(0)) {
+            chipStateLockBusy = chipStateLockBusy + 1;
+            return false;
+        }
+        busy = samplerHal->digitalRead(module.getGpio());
+        if (!busy) {
+            samplerHal->ArduinoHal::spiBeginTransaction();
+            samplerHal->digitalWrite(rawCs, samplerHal->GpioLevelLow);
+            samplerHal->spiTransfer(out, sizeof(out), in);
+            samplerHal->digitalWrite(rawCs, samplerHal->GpioLevelHigh);
+            samplerHal->ArduinoHal::spiEndTransaction();
+        }
+        spiLock->unlock();
+    } else
+#endif
+    {
+        (void)fromTask;
+        busy = module.hal->digitalRead(module.getGpio());
+        if (!busy) {
+            module.hal->spiBeginTransaction();
+            module.hal->digitalWrite(rawCs, module.hal->GpioLevelLow);
+            module.hal->spiTransfer(out, sizeof(out), in);
+            module.hal->digitalWrite(rawCs, module.hal->GpioLevelHigh);
+            module.hal->spiEndTransaction();
+        }
+    }
+    if (busy) {
+        mode = 0xB;
+        status = 0;
+        return true;
+    }
+    status = in[1];
+    mode = (status >> 4) & 0x7;
+    irq = ((uint16_t)in[2] << 8) | in[3];
+    return true;
+}
+
+#ifdef SX126X_STATE_SAMPLER_TASK
+template <typename T> void SX126xInterface<T>::chipStateTaskMain(void *arg)
+{
+    auto *self = static_cast<SX126xInterface<T> *>(arg);
+    const TickType_t period = pdMS_TO_TICKS(SX126X_STATE_SAMPLER_MS) ? pdMS_TO_TICKS(SX126X_STATE_SAMPLER_MS) : 1;
+    TickType_t wake = xTaskGetTickCount();
+    for (;;) {
+        vTaskDelayUntil(&wake, period);
+        if (xTaskGetTickCount() - wake >= period) // woke a whole period late: something above us ran
+            self->chipStateTaskLate = self->chipStateTaskLate + 1;
+        self->sampleChipStateFromTask();
+    }
+}
+
+template <typename T> void SX126xInterface<T>::sampleChipStateFromTask()
+{
+    static uint8_t lastMode = 0xFF;
+    static uint16_t lastIrq = 0xFFFF;
+    uint8_t mode = 0xB, status = 0;
+    uint16_t irq = lastIrq;
+    if (rawCs == RADIOLIB_NC || !readChipState(true, mode, irq, status))
+        return; // the SPI lock was held: no look this tick
+    if (mode == lastMode && irq == lastIrq)
+        return;
+    lastMode = mode;
+    lastIrq = irq;
+    const uint8_t head = chipStateHead;
+    const uint8_t next = (uint8_t)((head + 1) % chipStateRingSize);
+    if (next == chipStateTail) {
+        chipStateDropped = chipStateDropped + 1;
+        return;
+    }
+    chipStateRing[head] = {Time::getMillis(), irq, mode, status};
+    __asm__ __volatile__("" ::: "memory"); // the entry is written before the head that publishes it
+    chipStateHead = next;
+}
+#endif
+
+template <typename T> void SX126xInterface<T>::sampleChipState()
+{
+    const uint32_t now = Time::getMillis();
+    // This runs on the main loop, so a late run is a span in which nothing ran there, the RX handler included.
+    if (lastSampleMs && now - lastSampleMs > 2 * SX126X_STATE_SAMPLER_LOOP_MS)
+        LOG_DEBUG("chip state: sampler late, %u ms since the last look", (unsigned)(now - lastSampleMs));
+    lastSampleMs = now;
+    if (rawCs == RADIOLIB_NC)
+        return;
+
+#ifdef SX126X_STATE_SAMPLER_TASK
+    // The task did the looking; this only logs what it queued, each change with the time the task saw it. At most 16
+    // lines a run, so draining a backlog after a hold does not become a hold of its own.
+    for (unsigned n = 0; n < 16 && chipStateTail != chipStateHead; n++) {
+        __asm__ __volatile__("" ::: "memory"); // read the entry only after seeing the head that published it
+        const ChipStateEvent e = chipStateRing[chipStateTail];
+        __asm__ __volatile__("" ::: "memory"); // and free its slot only after reading it
+        chipStateTail = (uint8_t)((chipStateTail + 1) % chipStateRingSize);
+        LOG_DEBUG("chip state @%u: %s irq 0x%03x, was %s irq 0x%03x, status 0x%02x", (unsigned)e.ms, chipModeName(e.mode), e.irq,
+                  chipModeName(sampledMode), sampledIrq, e.status);
+        sampledMode = e.mode;
+        sampledIrq = e.irq;
+    }
+    // Drops and late ticks log at once; lock skips are routine, so they only refresh the line every 10 s.
+    static uint32_t loggedDropped = 0, loggedLate = 0, loggedLockBusy = 0, loggedCountersMs = 0;
+    if (chipStateDropped != loggedDropped || chipStateTaskLate != loggedLate ||
+        (chipStateLockBusy != loggedLockBusy && now - loggedCountersMs >= 10000)) {
+        loggedDropped = chipStateDropped;
+        loggedLate = chipStateTaskLate;
+        loggedLockBusy = chipStateLockBusy;
+        loggedCountersMs = now;
+        LOG_DEBUG("chip state task: %u changes dropped, %u late ticks, %u looks skipped for the SPI lock",
+                  (unsigned)loggedDropped, (unsigned)loggedLate, (unsigned)loggedLockBusy);
+    }
+#else
+    uint8_t mode = 0xB;
+    uint8_t status = 0;
+    uint16_t irq = sampledIrq;
+    readChipState(false, mode, irq, status);
+    if (mode == sampledMode && irq == sampledIrq)
+        return;
+    LOG_DEBUG("chip state: %s irq 0x%03x, was %s irq 0x%03x, status 0x%02x", chipModeName(mode), irq, chipModeName(sampledMode),
+              sampledIrq, status);
+    sampledMode = mode;
+    sampledIrq = irq;
+#endif
+}
+#endif
 
 /// Initialise the Driver transport hardware and software.
 /// Make sure the Driver is properly configured before calling init().
@@ -106,6 +315,29 @@ template <typename T> bool SX126xInterface<T>::init()
     boundBusyWait();
 
     startReceive(); // start receiving
+
+#ifdef SX126X_STATE_SAMPLER_MS
+    static ChipStateSampler *chipStateSampler = nullptr; // init() runs once per radio; never start a second sampler
+    if (!chipStateSampler)
+        chipStateSampler = new ChipStateSampler([this]() { sampleChipState(); });
+#endif
+#ifdef SX126X_STATE_SAMPLER_TASK
+    // Above the Arduino loop task, so a main-loop hold cannot delay a look, and below the RX readout task (loop + 2).
+    static bool chipStateTaskStarted = false;
+    if (!chipStateTaskStarted) {
+#ifdef ARCH_ESP32
+        // On the loop's core, as the readout task is: the ring between this task and the loop then needs only the
+        // compiler barriers it has, not a cross-core fence.
+        chipStateTaskStarted = xTaskCreatePinnedToCore(chipStateTaskMain, "ChipState", SX126X_STATE_SAMPLER_STACK, this,
+                                                       tskIDLE_PRIORITY + 2, nullptr, xPortGetCoreID()) == pdPASS;
+#else
+        chipStateTaskStarted = xTaskCreate(chipStateTaskMain, "ChipState", SX126X_STATE_SAMPLER_STACK, this, tskIDLE_PRIORITY + 2,
+                                           nullptr) == pdPASS;
+#endif
+        LOG_INFO("Chip state sampler task %s, every %u ms", chipStateTaskStarted ? "started" : "not started",
+                 (unsigned)SX126X_STATE_SAMPLER_MS);
+    }
+#endif
 
     return true;
 }
