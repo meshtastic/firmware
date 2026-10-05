@@ -537,11 +537,11 @@ template <typename T> bool LR11x0Interface<T>::isActivelyReceiving()
 }
 
 #ifdef LR11X0_AGC_RESET
-template <typename T> void LR11x0Interface<T>::resetAGC()
+template <typename T> bool LR11x0Interface<T>::resetAGC()
 {
     // Safety: don't reset mid-packet
     if (sendingPacket != NULL || (isReceiving && isActivelyReceiving()))
-        return;
+        return false;
 
     LOG_DEBUG_RADIO("LR11x0 AGC reset: warm sleep + Calibrate(0x3F)");
 
@@ -565,6 +565,7 @@ template <typename T> void LR11x0Interface<T>::resetAGC()
 
     // 6. Resume receiving
     startReceive();
+    return true;
 }
 #endif
 

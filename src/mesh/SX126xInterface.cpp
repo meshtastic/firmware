@@ -565,11 +565,11 @@ template <typename T> bool SX126xInterface<T>::sleep()
     return true;
 }
 
-template <typename T> void SX126xInterface<T>::resetAGC()
+template <typename T> bool SX126xInterface<T>::resetAGC()
 {
     // Safety: don't reset mid-packet
     if (sendingPacket != NULL || (isReceiving && isActivelyReceiving()))
-        return;
+        return false;
 
     LOG_DEBUG_RADIO("SX126x AGC reset: warm sleep + Calibrate(0x7F)");
 
@@ -596,7 +596,7 @@ template <typename T> void SX126xInterface<T>::resetAGC()
     if (module.hal->digitalRead(module.getGpio())) {
         LOG_WARN("SX126x AGC reset: calibration not done in 50ms");
         startReceive();
-        return;
+        return false; // incomplete: retried on the next maintenance tick
     }
 
     // 5. Re-calibrate image rejection for actual operating frequency
@@ -625,12 +625,14 @@ template <typename T> void SX126xInterface<T>::resetAGC()
     // silently removes the RX sensitivity improvement introduced in #9571 / #9777.
     // Without this re-apply, every SX1262 node loses its RX boost ~60s after boot
     // and never recovers until reboot. See empirical evidence in the PR description.
-    if (module.SPIsetRegValue(0x8B5, 0x01, 0, 0) != RADIOLIB_ERR_NONE) {
+    const bool patched = module.SPIsetRegValue(0x8B5, 0x01, 0, 0) == RADIOLIB_ERR_NONE;
+    if (!patched) {
         LOG_WARN("SX126x resetAGC: 0x8B5 RX patch re-apply failed");
     }
 
     // 7. Resume receiving
     startReceive();
+    return patched; // without the patch the reset is incomplete: retried on the next maintenance tick
 }
 
 /** Control PA mode for GC1109 FEM - CPS pin selects full PA (txon=true) or bypass mode (txon=false) */
