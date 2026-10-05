@@ -77,6 +77,16 @@ template <class T> class SX126xInterface : public RadioLibInterface
     }
 #endif
 
+#ifdef SX126X_STATE_SAMPLER_MS
+    /// Bench: read the chip's mode and IRQ flags, changing neither, and log them when they differ from the last look
+    void sampleChipState();
+#ifdef SX126X_STATE_SAMPLER_TASK
+    /// Bench: the same look from a FreeRTOS task above the main loop, queueing changes for sampleChipState() to log
+    void sampleChipStateFromTask();
+    static void chipStateTaskMain(void *arg);
+#endif
+#endif
+
   protected:
     float currentLimit = 140; // Higher OCP limit for SX126x PA
     float tcxoVoltage = 0.0;
@@ -246,6 +256,33 @@ template <class T> class SX126xInterface : public RadioLibInterface
     volatile uint8_t rearmOutcome = REARM_NONE;
     /** FreeRTOS tick count when the ISR re-armed RX */
     volatile uint32_t rearmTicks = 0;
+#endif
+#ifdef SX126X_STATE_SAMPLER_MS
+#if !SX126X_REARM_IN_ISR
+    /** The chip select, kept for the sampler's raw command */
+    RADIOLIB_PIN_TYPE rawCs = RADIOLIB_NC;
+#endif
+    /** Bench: what the last sample saw, so only changes are logged; 0xFF/0xFFFF until the first look */
+    uint8_t sampledMode = 0xFF;
+    uint16_t sampledIrq = 0xFFFF;
+    uint32_t lastSampleMs = 0;
+    /** One GetIrqStatus; mode 0xB if the chip was BUSY. False only from the task, when the SPI lock was held */
+    bool readChipState(bool fromTask, uint8_t &mode, uint16_t &irq, uint8_t &status);
+#endif
+#ifdef SX126X_STATE_SAMPLER_TASK
+    /** The HAL without its lock, for the task: it takes the SPI lock itself, and never waits for it */
+    ArduinoHal *samplerHal = nullptr;
+    /** Changes seen by the task, stamped when seen; single producer (the task), single consumer (the main loop) */
+    struct ChipStateEvent {
+        uint32_t ms;
+        uint16_t irq;
+        uint8_t mode;
+        uint8_t status;
+    };
+    static constexpr uint8_t chipStateRingSize = 255; // holds 254: a 175 ms loop hold at a few changes a frame
+    ChipStateEvent chipStateRing[chipStateRingSize];
+    volatile uint8_t chipStateHead = 0, chipStateTail = 0;
+    volatile uint32_t chipStateDropped = 0, chipStateLockBusy = 0, chipStateTaskLate = 0;
 #endif
 };
 #endif
