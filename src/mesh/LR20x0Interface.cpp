@@ -870,6 +870,9 @@ template <typename T> bool LR20x0Interface<T>::isChannelActive()
     // SetLoraCadParams exit mode: 0x00 CAD only, 0x01 RX on detection, 0x10 TX when clear, as on LR11x0. RadioLib's
     // RADIOLIB_LR2021_CAD_EXIT_MODE_RX is 0x02, which the chip refuses with a processing error (-706), so no scan runs.
     static constexpr uint8_t CAD_EXIT_MODE_RX = 0x01;
+#ifdef LR2021_CAD_EXIT_LBT
+    static constexpr uint8_t CAD_EXIT_MODE_LBT = 0x10;
+#endif
     ChannelScanConfig_t cfg = {.cad = {.symNum = symNum,
                                        .detPeak = detPeak,
                                        // ignored: SetLoraCadParams has no det_min - that byte carries
@@ -913,10 +916,45 @@ template <typename T> bool LR20x0Interface<T>::isChannelActive()
             }
         }
 #endif
+#ifdef LR2021_CAD_EXIT_LBT
+        // Arm the whole TX, so a clear verdict sends the staged payload. The CAD timeout is also the TX timeout, so give it
+        // a quarter more than one max-length frame.
+        if (prestagedLen &&
+            lora.setLoRaPacketParams(preambleLength, RADIOLIB_LRXXXX_LORA_HEADER_EXPLICIT, (uint8_t)prestagedLen,
+                                     RADIOLIB_LRXXXX_LORA_CRC_ENABLED, RADIOLIB_LR2021_LORA_IQ_STANDARD) == RADIOLIB_ERR_NONE) {
+            cfg.cad.exitMode = CAD_EXIT_MODE_LBT;
+            cfg.cad.timeout = cadRxTimeoutUsec * 5 / 4;
+            cfg.cad.irqFlags |= 1UL << RADIOLIB_IRQ_TX_DONE;
+        }
+#endif
 #ifdef LR2021_STANDBY_XOSC
         result = scanChannelFromStandby(cfg);
 #else
         result = lora.scanChannel(cfg);
+#endif
+#ifdef LR2021_CAD_EXIT_LBT
+        chipKeyedUp = false;
+        if (cfg.cad.exitMode == CAD_EXIT_MODE_LBT) {
+            const uint8_t mode = readChipMode();
+            const bool inStandby = mode == LR20X0_CHIP_MODE_STBY_RC || mode == LR20X0_CHIP_MODE_STBY_XOSC;
+            if (result == RADIOLIB_CHANNEL_FREE && mode == LR20X0_CHIP_MODE_TX) {
+                chipKeyedUp = true;
+            } else if (result == RADIOLIB_CHANNEL_FREE && !inStandby) {
+                lora.standby(STANDBY_MODE); // the chip did not key up and is not in standby: launch from standby
+            } else if (result == RADIOLIB_LORA_DETECTED && mode != LR20X0_CHIP_MODE_RX) {
+                // The busy verdict left the chip in standby: no handoff to adopt, so the caller's rearmReceive() restarts RX
+                lora.clearIrqFlags(RADIOLIB_LR2021_IRQ_CAD_DONE | RADIOLIB_LR2021_IRQ_CAD_DETECTED);
+                prestagedLen = 0;
+                return true;
+            } else if (result != RADIOLIB_CHANNEL_FREE && result != RADIOLIB_LORA_DETECTED &&
+                       result != RADIOLIB_ERR_WRONG_MODEM) {
+                // The chip refused the exit mode or the scan failed: report busy rather than TX without a CAD. A lost
+                // modem type still takes the recovery below.
+                LOG_WARN("LR20x0 CAD exit TX: channel scan failed %s%d", radioLibErr, result);
+                prestagedLen = 0;
+                return true;
+            }
+        }
 #endif
 #ifdef LR2021_TX_PRESTAGE
         if (result != RADIOLIB_CHANNEL_FREE)
@@ -991,6 +1029,27 @@ template <typename T> int16_t LR20x0Interface<T>::launchTransmit(size_t numbytes
 {
     const bool prestaged = prestagedLen != 0 && prestagedLen == numbytes && sendingPacket && sendingPacket->id == prestagedId;
     prestagedLen = 0;
+#ifdef LR2021_CAD_EXIT_LBT
+    if (chipKeyedUp) {
+        chipKeyedUp = false;
+        if (prestaged) {
+            // The chip went from the clear CAD straight to TX with this payload. Only release the latched CAD flags, so the
+            // pin drops and TX_DONE is a fresh edge for the TX interrupt startSend() attaches next.
+#ifdef LR2021_PRESTAGE_UPSTREAM
+            // The chip is sending the FIFO, so RadioLib's record of it is stale: a later transmit of the same bytes must
+            // write them again
+            lora.prestagedLen = 0;
+#else
+            txFifoStale = false;
+#endif
+            lora.clearIrqFlags(RADIOLIB_LR2021_IRQ_CAD_DONE | RADIOLIB_LR2021_IRQ_CAD_DETECTED);
+            return RADIOLIB_ERR_NONE;
+        }
+        // Should not happen: the chip is sending a different packet from the one being launched. Stop it and send ours.
+        LOG_WARN("LR20x0 CAD exit TX: chip keyed up with a stale payload, restarting TX");
+        lora.standby(STANDBY_MODE);
+    }
+#endif
 #ifdef LR2021_PRESTAGE_UPSTREAM
     // RadioLib's stageMode(TX) skips the FIFO write for the payload prestageTransmit() staged, and writes anything else
     (void)prestaged;
