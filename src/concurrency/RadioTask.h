@@ -3,6 +3,8 @@
 // -DMESHTASTIC_RADIO_TASK (ESP32 and nRF52) runs the RadioLib radio thread from its own FreeRTOS task, one priority above
 // the main loop, so a main-loop hold can no longer delay a scan, a launch or the TX_DONE handling. The task holds the radio
 // lock while the radio thread runs, and the loop takes it with RADIO_TASK_LOCK() wherever it reaches into the radio.
+#include "BenchInstrumentation.h"
+
 #ifdef MESHTASTIC_RADIO_TASK
 
 #include "ThreadController.h"
@@ -30,6 +32,15 @@ class OSThread;
 void setLoggingFor(const OSThread *thread);
 void clearLoggingFor();
 bool loggingFor(const OSThread **thread);
+#ifdef MESHTASTIC_LOG_RECORD_MILLIS
+/// Bench: with setLoggingFor(), the millis() the line was logged at, for its log record's stamp; false off the printing task
+void setLoggedAtMs(uint32_t ms);
+bool loggedAtMs(uint32_t *ms);
+#endif
+#if MESHTASTIC_BENCH_INSTRUMENTATION
+/// Bench: the task's stack high-water mark in bytes, 0 before it starts
+uint32_t radioTaskStackFree();
+#endif
 
 class RadioTaskLockGuard
 {
