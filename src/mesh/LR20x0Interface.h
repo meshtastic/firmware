@@ -75,6 +75,14 @@ template <class T> class LR20x0Interface : public RadioLibInterface
 
     bool isIRQPending() override { return lora.getIrqFlags() != 0; }
 
+#if MESHTASTIC_RADIO_CHIP_STATS
+    /// GetLoraRxStats: packets received, CRC errors, header errors and false syncs
+    bool readChipRxStats(uint16_t &received, uint16_t &crcError, uint16_t &headerError, uint16_t &falseSync) override
+    {
+        return lora.getLoRaRxStats(&received, &crcError, &headerError, &falseSync) == RADIOLIB_ERR_NONE;
+    }
+#endif
+
 #ifdef LR20X0_AGC_RESET
     bool resetAGC() override;
 #endif
