@@ -365,6 +365,9 @@ template <typename T> bool LR11x0Interface<T>::reinitChip()
     }
 
     forgetChipState(); // begin() resets it
+#ifdef LR11X0_RESUME_CONTINUOUS_RX
+    rxArmedContinuous = false;
+#endif
     int res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, resolvedTcxoVoltage);
     if (res == RADIOLIB_ERR_NONE) {
         // begin() reset the delay to RadioLib's default
@@ -448,6 +451,9 @@ template <typename T> int16_t LR11x0Interface<T>::trySetStandby()
     }
 
     isReceiving = false; // If we were receiving, not any more
+#ifdef LR11X0_RESUME_CONTINUOUS_RX
+    rxArmedContinuous = false;
+#endif
     activeReceiveStart = 0;
     disableInterrupt();
     completeSending(); // If we were sending, not anymore
@@ -496,6 +502,9 @@ template <typename T> void LR11x0Interface<T>::addReceiveMetadata(meshtastic_Mes
  */
 template <typename T> void LR11x0Interface<T>::configHardwareForSend()
 {
+#ifdef LR11X0_RESUME_CONTINUOUS_RX
+    rxArmedContinuous = false; // the transmission takes the chip out of RX
+#endif
 #ifdef LR11X0_RX_REARM_AT_TX_DONE
     rearmState = REARM_NONE; // only this TX's TX_DONE may re-arm, never a stale one from a TX the poll completed
     rxArmedBeforeTxDone = false;
@@ -539,12 +548,40 @@ template <typename T> void LR11x0Interface<T>::startReceive()
     }
 
     RadioLibInterface::startReceive();
+#ifdef LR11X0_RESUME_CONTINUOUS_RX
+    rxArmedContinuous = true; // RADIOLIB_LR11X0_RX_TIMEOUT_INF: continuous
+#endif
 
     // Must be done AFTER, starting transmit, because startTransmit clears (possibly stale) interrupt pending register bits
     enableInterrupt(isrRxLevel0);
     checkRxDoneIrqFlag();
 #endif
 }
+
+#ifdef LR11X0_RESUME_CONTINUOUS_RX
+template <typename T> bool LR11x0Interface<T>::resumeRunningReceive()
+{
+    // Continuous RX survives RX_DONE and CRC or header errors: the chip is still listening. A restart is a standby and
+    // the whole RX setup again, deaf throughout, so pick the RX back up instead.
+    if (!rxArmedContinuous)
+        return false;
+    // Only a chip that reports RX is resumed: one that left it unseen (a chip reset, or RX not surviving the frame) would
+    // otherwise stay deaf with nothing left to re-arm it. The restart also runs the chip-state recovery.
+    const uint8_t mode = readChipMode();
+    if (mode != RADIOLIB_LR11X0_STAT_2_MODE_RX) {
+        LOG_WARN("LR11x0 RX not running after a frame (stat2 mode 0x%02x), restarting it", mode);
+        rxArmedContinuous = false;
+        return false;
+    }
+    // No flag clearing here: whoever gave up on a frame unread dropped its flags (clearUnreadRxIrqFlags()), and readData()
+    // drops them for a frame it read, so a latched RX_DONE now is the next frame's.
+    activeReceiveStart = 0; // the frame it timed is done; a preamble now is the next one
+    RadioLibInterface::startReceive();
+    enableInterrupt(isrRxLevel0);
+    checkRxDoneIrqFlag(); // an RX_DONE that beat the re-arm
+    return true;
+}
+#endif
 
 #ifdef LR11X0_RX_REARM_AT_TX_DONE
 template <typename T> bool INTERRUPT_ATTR LR11x0Interface<T>::rearmReceiveFromIsr()
@@ -592,6 +629,9 @@ template <typename T> bool LR11x0Interface<T>::adoptReceiveArmedFromIsr()
     if (state != REARM_ARMED)
         return false;
     RadioLibInterface::startReceive();
+#ifdef LR11X0_RESUME_CONTINUOUS_RX
+    rxArmedContinuous = true; // the task armed a continuous RX
+#endif
     enableInterrupt(isrRxLevel0);
     checkRxDoneIrqFlag(); // an RX_DONE that completed before the interrupt was attached
     return true;
@@ -865,7 +905,7 @@ template <typename T> int16_t LR11x0Interface<T>::scanChannelForTx(const Channel
 }
 #endif
 
-#ifdef LR11X0_CAD_EXIT_LBT
+#ifdef LR11X0_READ_CHIP_MODE
 template <typename T> uint8_t LR11x0Interface<T>::readChipMode()
 {
     // GetStatus is protected in RadioLib, so read it the way LRxxxx::getStatus() does: any NOP transfer returns stat1,
@@ -906,6 +946,9 @@ template <typename T> bool LR11x0Interface<T>::resetAGC()
 
     LOG_DEBUG_RADIO("LR11x0 AGC reset: warm sleep + Calibrate(0x3F)");
     forgetChipState(); // the calibration below may not keep it
+#ifdef LR11X0_RESUME_CONTINUOUS_RX
+    rxArmedContinuous = false; // the warm sleep below stops RX
+#endif
 
     // 1. Warm sleep - powers down the analog frontend, resetting AGC state
     lora.sleep(true, 0);
@@ -935,7 +978,10 @@ template <typename T> bool LR11x0Interface<T>::sleep()
 {
     // \todo Display actual typename of the adapter, not just `LR11x0`
     LOG_DEBUG_RADIO("LR11x0 entering sleep mode");
-    forgetChipState();     // sleep without retention loses it
+    forgetChipState(); // sleep without retention loses it
+#ifdef LR11X0_RESUME_CONTINUOUS_RX
+    rxArmedContinuous = false;
+#endif
     (void)trySetStandby(); // Stop any pending operations - the chip is being put to sleep, a failure must not crash
 
     // turn off TCXO if it was powered
