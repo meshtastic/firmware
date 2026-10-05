@@ -62,6 +62,7 @@ namespace
 constexpr uint32_t TX_LATCH_KICK_MS = 20;
 uint32_t txLatchedSinceMs = 0;
 
+/// The TX ring is full, yet the IN FIFO is free and its interrupt enabled but not raised: nothing will drain the ring
 bool txLatched()
 {
     return Port.availableForWrite() == 0 && USB_SERIAL_JTAG.ep1_conf.serial_in_ep_data_free &&
@@ -210,11 +211,14 @@ size_t SerialConsole::write(uint8_t c)
     return writeText(c);
 }
 
+/// Write one byte of console text, restarting a latched HWCDC TX path where it can
 size_t SerialConsole::writeText(uint8_t c)
 {
 #ifdef HWCDC_TX_KICK
-    // Only on the text path: a byte sent ahead of the ring could land inside a protobuf frame
-    if (kickLatchedTx(c))
+    // Only on the text path, where a byte sent ahead of the ring cannot land inside a protobuf frame, and only where
+    // RedirectablePrint::write() would send it at all
+    const bool serialEnabled = config.has_security ? config.security.serial_enabled : config.device.serial_enabled;
+    if ((!config.has_lora || serialEnabled) && kickLatchedTx(c))
         return 1;
 #endif
     return RedirectablePrint::write(c);
