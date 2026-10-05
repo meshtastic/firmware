@@ -885,6 +885,9 @@ template <typename T> void LR11x0Interface<T>::stageTxEarly(meshtastic_MeshPacke
     if (earlyStagedLen == numbytes && memcmp(earlyStagedBytes, &radioBuffer, numbytes) == 0)
         return; // a redraw of the same packet: still in the buffer
     earlyStagedLen = 0;
+    // onNotify() calls this outside the scan's sequence. Unlocked, the readout task can land between WriteBuffer8 and
+    // its response read and wedge BUSY for RadioLib's whole BUSY timeout.
+    RadioSequence seq(this);
     if (lora.writeBuffer8((uint8_t *)&radioBuffer, numbytes) == RADIOLIB_ERR_NONE)
         noteTxBuffer(numbytes);
 }
