@@ -257,7 +257,17 @@ bool RadioLibInterface::canSendImmediately()
     // To do otherwise would be doubly bad because not only would we drop the packet that was on the way in,
     // we almost certainly guarantee no one outside will like the packet we are sending.
     bool busyTx = sendingPacket != NULL;
-    bool busyRx = isReceiving && isActivelyReceiving();
+    // isActivelyReceiving() reads the chip's IRQ status over SPI - every driver does, through
+    // getIrqFlags() or getIrqStatus() or isReceiving(). Unlocked, that command lands in the middle of
+    // another task's sequence, typically the RX readout's, and leaves the chip mid-command with BUSY
+    // asserted; both tasks then spin in RadioLib's BUSY wait until its 1000 ms timeout fires. The radio
+    // holds one frame, so whatever arrives during that stall overwrites it. The sequence mutex is
+    // recursive, so a caller already holding it simply re-enters.
+    bool busyRx = false;
+    if (isReceiving) {
+        RadioSequence seq(this);
+        busyRx = isActivelyReceiving();
+    }
 
     if (busyTx || busyRx) {
         if (busyTx) {
