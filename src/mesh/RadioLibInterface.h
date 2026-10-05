@@ -58,6 +58,12 @@ class LockingArduinoHal : public ArduinoHal
 // RadioLib's own default Vref, for a probe with no explicit voltage configured.
 #define TCXO_OPTIONAL_DEFAULT_VOLTAGE 1.6f
 
+// TCXO start-up delay programmed after every begin(), in place of RadioLib's 5000 us. A clear CAD leaves the chip on
+// its RC oscillator, so the TX after it waits this long before the PA ramps. Set it in variant.h for a slower TCXO.
+#ifndef TCXO_STARTUP_DELAY_US
+#define TCXO_STARTUP_DELAY_US 1000
+#endif
+
 #if defined(USE_STM32WLx)
 /**
  * A wrapper for the RadioLib STM32WLx_Module class, that doesn't connect any pins as they are virtual
@@ -423,6 +429,22 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     }
 
     const char *radioLibErr = "RadioLib err=";
+
+    /// TCXO_STARTUP_DELAY_US, or Lora.DIO3_TCXO_DELAY_US on Portduino
+    static uint32_t tcxoStartupDelayUs();
+
+    /// Reprogram the TCXO start-up delay, which begin() resets to RadioLib's 5000 us. No-op without a TCXO Vref.
+    template <typename R> void applyTcxoStartupDelay(R &radio, float tcxoVoltage)
+    {
+        if (tcxoVoltage <= 0)
+            return;
+        const uint32_t delayUs = tcxoStartupDelayUs();
+        const int16_t err = radio.setTCXO(tcxoVoltage, delayUs);
+        if (err == RADIOLIB_ERR_NONE)
+            LOG_DEBUG("TCXO start-up delay %u us", (unsigned)delayUs);
+        else
+            LOG_WARN("TCXO start-up delay %u us not set %s%d", (unsigned)delayUs, radioLibErr, err);
+    }
 
     /**
      * If the packet is not already in the late rebroadcast window, move it there
