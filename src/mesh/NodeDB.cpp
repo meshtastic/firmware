@@ -3185,12 +3185,21 @@ bool NodeDB::saveChannelsToDisk()
     spiLock->unlock();
 #endif
 
-    // As for config.lora: a borrowed primary is persisted as the committed one, and handed back after.
-    meshtastic_Channel &primary = channels.getByIndex(channels.getPrimaryIndex());
-    const meshtastic_ChannelSettings livePrimary = primary.settings;
-    primary.settings = channels.getChannelToReport(channels.getPrimaryIndex()).settings;
-    const bool saved = saveProto(channelFileName, meshtastic_ChannelFile_size, &meshtastic_ChannelFile_msg, &channelFile);
-    primary.settings = livePrimary;
+    if (!RadioInterface::radioIsBorrowed())
+        return saveProto(channelFileName, meshtastic_ChannelFile_size, &meshtastic_ChannelFile_msg, &channelFile);
+    // A borrowed primary is persisted as the committed one, from a copy: the live table is never written. malloc(),
+    // not new: it is the allocation that returns nullptr on every build (see FSCommon.cpp).
+    auto *committed = static_cast<meshtastic_ChannelFile *>(malloc(sizeof(meshtastic_ChannelFile)));
+    if (!committed) {
+        LOG_ERROR("saveChannelsToDisk() can't copy the channel table mid-borrow");
+        return false;
+    }
+    *committed = channelFile;
+    const ChannelIndex primary = channels.getPrimaryIndex();
+    if (primary < committed->channels_count)
+        committed->channels[primary] = channels.getChannelToReport(primary);
+    const bool saved = saveProto(channelFileName, meshtastic_ChannelFile_size, &meshtastic_ChannelFile_msg, committed);
+    free(committed);
     return saved;
 }
 
@@ -3387,11 +3396,22 @@ bool NodeDB::saveToDiskNoRetry(int saveWhat)
         config.has_bluetooth = true;
         config.has_security = true;
 
-        // A borrowed radio is not this node's config: persist the committed RF identity, then hand the borrow back.
-        const meshtastic_Config_LoRaConfig liveLora = config.lora;
-        config.lora = RadioInterface::loraConfigToReport();
-        success &= saveProto(configFileName, meshtastic_LocalConfig_size, &meshtastic_LocalConfig_msg, &config);
-        config.lora = liveLora;
+        if (!RadioInterface::radioIsBorrowed()) {
+            success &= saveProto(configFileName, meshtastic_LocalConfig_size, &meshtastic_LocalConfig_msg, &config);
+        } else {
+            // A borrowed radio is not this node's config: persist the committed one, from a copy (malloc: see
+            // saveChannelsToDisk()).
+            auto *committed = static_cast<meshtastic_LocalConfig *>(malloc(sizeof(meshtastic_LocalConfig)));
+            if (committed) {
+                *committed = config;
+                committed->lora = RadioInterface::loraConfigToReport();
+                success &= saveProto(configFileName, meshtastic_LocalConfig_size, &meshtastic_LocalConfig_msg, committed);
+                free(committed);
+            } else {
+                LOG_ERROR("saveToDisk() can't copy the config mid-borrow");
+                success = false;
+            }
+        }
     }
 
     if (saveWhat & SEGMENT_MODULECONFIG) {

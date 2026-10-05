@@ -459,6 +459,69 @@ static void test_borrow_operatorEditMidBorrowIsCommitted(void)
                               RadioInterface::configuredLoraConfig().modem_preset, "and the commit takes it as the node's own");
 }
 
+/*
+ * Under test: the committed config during a borrow (RadioInterface::loraConfigToReport(), captureConfiguredRadio())
+ * against applyModemConfig()'s clamps (src/mesh/RadioInterface.cpp).
+ * Why: the borrow's own reprogram clamps fields outside the RF identity in place - tx_power to the visited region's
+ * limit. That clamp is the borrow's doing, not an operator's edit, so it must not be reported or committed.
+ * Regression guarded: a save mid-beacon committing the visited region's lower power as this node's TX power.
+ */
+static void test_borrow_clampedTxPowerIsNotCommitted(void)
+{
+    BorrowingRadio radio;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    config.lora.channel_num = 0;
+    config.lora.tx_power = getRegion(meshtastic_Config_LoRaConfig_RegionCode_US)->powerLimit;
+    radio.commitConfig(); // home, committed
+    const int8_t homePower = config.lora.tx_power;
+
+    db->setLoraSlotTransient(true);
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
+    radio.reconfigure(); // the borrow; applyModemConfig() clamps tx_power to EU_868's limit
+    TEST_ASSERT_LESS_THAN_INT_MESSAGE(homePower, config.lora.tx_power, "precondition: the borrow clamped tx_power");
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(homePower, RadioInterface::loraConfigToReport().tx_power,
+                                  "a client is told this node's power, not the visited region's");
+    RadioInterface::captureConfiguredRadio(); // a save mid-borrow
+    TEST_ASSERT_EQUAL_INT_MESSAGE(homePower, RadioInterface::configuredLoraConfig().tx_power,
+                                  "and the commit keeps it - the clamp was the borrow's, not an edit");
+}
+
+/*
+ * Under test: Channels::generateHash() during a borrow (src/mesh/Channels.cpp).
+ * Why: any config or channel save runs resetRadioConfig() -> channels.onConfigChanged(), which rebuilds every hash.
+ * A blank name is the preset's display name, so a rebuild mid-beacon hashed the visited preset's name - and the
+ * restore never rebuilds, leaving every later packet on the home mesh with a hash no receiver matches.
+ * Regression guarded: a mid-beacon save stranding the stock blank-named primary on the wrong channel hash.
+ */
+static void test_borrow_channelRebuildKeepsTheHomeHash(void)
+{
+    const ChannelIndex idx = channels.getPrimaryIndex();
+    meshtastic_ChannelSettings &primary = channels.getByIndex(idx).settings;
+    primary.name[0] = '\0'; // the stock primary: blank name, default key
+    primary.psk.size = 1;
+    primary.psk.bytes[0] = 1;
+    BorrowingRadio radio;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    radio.commitConfig();
+    channels.onConfigChanged();
+    const int16_t home = channels.getHash(idx);
+
+    db->setLoraSlotTransient(true);
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST;
+    radio.reconfigure();        // the borrow
+    channels.onConfigChanged(); // what a save mid-borrow runs
+
+    TEST_ASSERT_EQUAL_INT16_MESSAGE(home, channels.getHash(idx), "the rebuilt hash is still this node's own");
+
+    db->setLoraSlotTransient(false);
+    channels.onConfigChanged(); // leave the table's hashes as setUp() restores the settings
+}
+
 NDB_TEST_ENTRY void setup()
 {
     initializeTestEnvironment();
@@ -492,6 +555,8 @@ NDB_TEST_ENTRY void setup()
     RUN_TEST(test_borrow_saveWritesTheCommittedRadio);
     RUN_TEST(test_noBorrow_reportsTheLiveRadio);
     RUN_TEST(test_borrow_operatorEditMidBorrowIsCommitted);
+    RUN_TEST(test_borrow_clampedTxPowerIsNotCommitted);
+    RUN_TEST(test_borrow_channelRebuildKeepsTheHomeHash);
     exit(UNITY_END());
 }
 NDB_TEST_ENTRY void loop() {}
