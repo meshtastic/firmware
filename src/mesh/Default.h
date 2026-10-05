@@ -49,7 +49,6 @@ enum class TrafficType { POSITION, TELEMETRY };
 #define default_traffic_mgmt_tracker_position_min_interval_secs (60 * 60) // 1 hour
 // Role cap: lost-and-found origins may refresh a duplicate position this often, so a lost
 // device updates frequently without flooding. (Quantised to the dedup tick: ~2 ticks.)
-// Unlike before, lost-and-found is NOT exempt from the relayed precision clamp.
 #define default_traffic_mgmt_lost_and_found_position_min_interval_secs (15 * 60) // 15 minutes
 
 // Hop scaling defaults

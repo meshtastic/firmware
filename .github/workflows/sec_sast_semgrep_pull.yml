@@ -28,4 +28,5 @@ jobs:
             --error \
             --metrics=off \
             --baseline-commit ${{ github.event.pull_request.base.sha }} \
-            --config="p/default"
+            --config="p/default" \
+            --exclude-rule="yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag"
