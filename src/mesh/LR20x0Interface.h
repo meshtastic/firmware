@@ -23,6 +23,11 @@
 #if defined(LR2021_LOAD_PRAM) && (!RADIOLIB_GODMODE || !defined(LR2021_RADIOLIB_HAS_DCDC))
 #error "LR2021_LOAD_PRAM writes chip memory directly: build with -DRADIOLIB_GODMODE=1 and RadioLib 7.8 or later"
 #endif
+// -DLR2021_STANDBY_XOSC keeps the TCXO running: standby and the RX/TX fallback are STBY_XOSC, and the scan starts from there
+// without RadioLib's STBY_RC. It calls RadioLib internals, so it needs -DRADIOLIB_GODMODE=1.
+#if defined(LR2021_STANDBY_XOSC) && !RADIOLIB_GODMODE
+#error "LR2021_STANDBY_XOSC calls RadioLib internals: build with -DRADIOLIB_GODMODE=1"
+#endif
 
 /**
  * \brief Adapter for LR20x0 radio family. Implements common logic for child classes.
@@ -131,6 +136,17 @@ template <class T> class LR20x0Interface : public RadioLibInterface
 
     /** Recover a chip that lost its runtime state via the same full begin() the band-hop path uses */
     bool recoverChipStateLoss() override { return fullBegin(getFreq()); }
+
+    /** SetStandby's oscillator: STBY_XOSC with -DLR2021_STANDBY_XOSC, else STBY_RC as RadioLib's standby() */
+#ifdef LR2021_STANDBY_XOSC
+    static constexpr uint8_t STANDBY_MODE = RADIOLIB_LR2021_STANDBY_XOSC;
+    /** Put the TX/RX fallback on STBY_XOSC, after begin() */
+    void keepTcxoOnInStandby();
+    /** lora.scanChannel(cfg) without its STBY_RC: trySetStandby() has just put the chip in STBY_XOSC */
+    int16_t scanChannelFromStandby(const ChannelScanConfig_t &cfg);
+#else
+    static constexpr uint8_t STANDBY_MODE = RADIOLIB_LR2021_STANDBY_RC;
+#endif
 
 #ifdef LR2021_LOAD_PRAM
     /** Load and activate Semtech's patch RAM, then re-apply the modem settings begin() made; RadioLib status */
