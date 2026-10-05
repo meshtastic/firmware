@@ -1,5 +1,6 @@
 #pragma once
 
+#include "BenchInstrumentation.h"
 #include "MemoryPool.h"
 #include "MeshTypes.h"
 #include "Observer.h"
@@ -153,6 +154,12 @@ class RadioInterface
      *  same reason, and always a string literal, so a reader that loses the race against the
      *  writer prints the previous frame's word. */
     std::atomic<const char *> lastFrameEndWhat{"none"};
+#ifdef MESHTASTIC_TX_TIMELINE
+    /** Bench: millis() when this node learned of that frame end */
+    uint32_t lastFrameEndNotedMs = 0;
+    /** Bench: the last anchored draw's slot and the millis() its slots count from, for the TX timeline */
+    uint32_t slotDrawn = 0, slotDrawAnchorMs = 0;
+#endif
     uint16_t preambleLength = 16; // 8 is default, but we use longer to increase the amount of sleep time when receiving
     static constexpr uint16_t preambleLengthDefault =
         16; // 8 is default, but we use longer to increase the amount of sleep time when receiving
