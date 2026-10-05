@@ -5,12 +5,43 @@
 #include "Observer.h"
 #include "PointerQueue.h"
 #include "airtime.h"
+#include "concurrency/RadioTask.h"
 #include "error.h"
 #include <atomic>
 #include <memory>
 
 #if HAS_LORA_FEM
 #include "LoRaFEMInterface.h"
+#endif
+
+// -DMESHTASTIC_TX_SLOT_GATE_MS=<ms> scans a TX that has a slot parity only in the first <ms> of a slot of that parity,
+// waiting on the radio thread for the next one if its handling came late. The backoff timer fires
+// MESHTASTIC_TX_SLOT_GATE_EARLY_SLOTS (default 2) slots early so the wait, not the late handling, sets the start. A timer
+// that fires further ahead than that is set again, or with -DMESHTASTIC_TX_SLOT_GATE_REARM=0 scans at once.
+#ifdef MESHTASTIC_TX_SLOT_GATE_MS
+#ifndef MESHTASTIC_TX_SLOT_GATE_EARLY_SLOTS
+#define MESHTASTIC_TX_SLOT_GATE_EARLY_SLOTS 2
+#endif
+#ifndef MESHTASTIC_TX_SLOT_GATE_REARM
+#define MESHTASTIC_TX_SLOT_GATE_REARM 1
+#endif
+// A scan target further out than this is not a slot the backoff drew: scan at once
+#define SLOT_GATE_SANE_MS 10000
+#endif
+// -DMESHTASTIC_TX_SLOT_LEAD replaces the gate's fixed early window with measured ones. SET_TX is aimed
+// MESHTASTIC_TX_SLOT_SET_TX_AT_MS (default 1) into the slot; the gate starts the scan the measured scan-to-SET_TX time
+// before that, and the timer fires the measured wake latency, plus MESHTASTIC_TX_SLOT_LEAD_GUARD_MS (default 1), before
+// the scan.
+#ifdef MESHTASTIC_TX_SLOT_LEAD
+#ifndef MESHTASTIC_TX_SLOT_GATE_MS
+#error "MESHTASTIC_TX_SLOT_LEAD sets the slot gate's lead: build with MESHTASTIC_TX_SLOT_GATE_MS"
+#endif
+#ifndef MESHTASTIC_TX_SLOT_SET_TX_AT_MS
+#define MESHTASTIC_TX_SLOT_SET_TX_AT_MS 1
+#endif
+#ifndef MESHTASTIC_TX_SLOT_LEAD_GUARD_MS
+#define MESHTASTIC_TX_SLOT_LEAD_GUARD_MS 1
+#endif
 #endif
 
 // Forward decl to avoid a direct include of generated config headers / full LoRaConfig definition in this widely-included file.
@@ -270,6 +301,13 @@ class RadioInterface
     [[nodiscard]] static uint32_t anchoredSlotDelayMsec(uint32_t sinceEndMs, uint32_t slotMsec, uint32_t pairsDrawn,
                                                         meshtastic_MeshPacket_SlotParity parity);
 
+#ifdef MESHTASTIC_TX_SLOT_GATE_MS
+    /** When to start the scan for a TX on `parity` whose backoff fell due at drawnMs: the earliest start of a slot of that
+     *  parity, no earlier than drawnMs, that began at most MESHTASTIC_TX_SLOT_GATE_MS ago. Now if there is no grid yet.
+     *  With MESHTASTIC_TX_SLOT_LEAD, backMs (scan-to-SET_TX less the aim) before such a slot, so SET_TX lands the aim in. */
+    [[nodiscard]] uint32_t ownSlotScanAt(meshtastic_MeshPacket_SlotParity parity, uint32_t drawnMs, int32_t backMs);
+#endif
+
     /** If the packet is not already in the late rebroadcast window, move it there */
     virtual void clampToLateRebroadcastWindow(NodeNum from, PacketId id) { return; }
 
@@ -380,12 +418,17 @@ class RadioInterface
 
     /// Return 0 if sleep is okay. A non-NULL argument means the radio is about to be powered
     /// down (deep sleep / shutdown), see doPreflightSleep()
-    int preflightSleepCb(void *deepSleep = NULL) { return canSleep(deepSleep != NULL) ? 0 : 1; }
+    int preflightSleepCb(void *deepSleep = NULL)
+    {
+        RADIO_TASK_LOCK();
+        return canSleep(deepSleep != NULL) ? 0 : 1;
+    }
 
     int notifyDeepSleepCb(void *unused = NULL);
 
     int reloadConfig(void *unused)
     {
+        RADIO_TASK_LOCK();
         reconfigure();
         return 0;
     }

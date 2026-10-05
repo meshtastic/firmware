@@ -15,7 +15,7 @@ bool NotifiedWorkerThread::notify(uint32_t v, bool overwrite)
     bool r = notifyCommon(v, overwrite);
 
     if (r)
-        mainDelay.interrupt();
+        wakeDelay->interrupt();
 
     return r;
 }
@@ -27,8 +27,9 @@ IRAM_ATTR bool NotifiedWorkerThread::notifyCommon(uint32_t v, bool overwrite)
 {
     if (overwrite || notification == 0) {
         enabled = true;
-        setInterval(0); // Run ASAP
-        runASAP = true;
+        setInterval(0);              // Run ASAP
+        if (wakeDelay == &mainDelay) // another task's controller is no reason for the loop to skip its sleep
+            runASAP = true;
 
         notification = v;
         if (debugNotification) {
@@ -52,7 +53,7 @@ IRAM_ATTR bool NotifiedWorkerThread::notifyFromISR(BaseType_t *highPriWoken, uin
 {
     bool r = notifyCommon(v, overwrite);
     if (r)
-        mainDelay.interruptFromISR(highPriWoken);
+        wakeDelay->interruptFromISR(highPriWoken);
 
     return r;
 }

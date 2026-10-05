@@ -47,6 +47,11 @@ class RedirectablePrint : public Print
 
     void hexDump(const char *logLevel, const unsigned char *buf, uint16_t len);
 
+#ifdef MESHTASTIC_RADIO_TASK
+    /// From the loop: print the lines the radio task logged since the last call
+    void drainRadioTaskLogs();
+#endif
+
     std::string mt_sprintf(const std::string fmt_str, ...);
 
   protected:
