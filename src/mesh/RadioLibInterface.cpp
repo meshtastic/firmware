@@ -1256,6 +1256,7 @@ bool INTERRUPT_ATTR RadioLibInterface::rxDoneFromIsr()
 {
     if (!rxReadoutTask)
         return false;
+    rxDoneIsrTicks = xTaskGetTickCountFromISR(); // this path never reaches isrLevel0Common(), which stamps it otherwise
     BaseType_t woken = pdFALSE;
     vTaskNotifyGiveFromISR(rxReadoutTask, &woken);
     YIELD_FROM_ISR(woken);
@@ -1349,6 +1350,7 @@ void RadioLibInterface::readOutFromTask()
     // Here, not where the radio thread accounts for the frame: by then the chip has been put back in RX - after a
     // resume it never left it - and its packet status describes the frame it is receiving now, not this one.
     f.info.headerInfoValid = readRxHeaderInfo(f.info.rxCR, f.info.hasCRC);
+    f.info.endMs = frameEndFromIsr(false); // now, before a later frame's interrupt moves the stamp on
     rxReadoutFrames = rxReadoutFrames + 1;
     __asm__ __volatile__("" ::: "memory"); // the entry is written before the head that publishes it
     rxRingHead = next;
@@ -1382,6 +1384,7 @@ unsigned RadioLibInterface::deliverCapturedFrames()
     CapturedRxInfo info;
     while (takeCapturedFrame(info)) {
         delivered++;
+        noteFrameEnd(info.endMs, "rx");
         handleReceiveInterrupt(&info);
     }
     return delivered;
