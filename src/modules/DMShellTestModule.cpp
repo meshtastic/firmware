@@ -52,17 +52,9 @@
 #ifndef DMSHELL_TEST_ACK_EVERY
 #define DMSHELL_TEST_ACK_EVERY 2
 #endif
-// The slot parity stamped on every packet the client sends: unset = none (the ordinary backoff), 0 = even, 1 = odd
+// 2.8.1 has no MeshPacket.slot_parity, so the client sends none, as develop's does unflagged
 #ifdef DMSHELL_TEST_SLOT_PARITY
-#if DMSHELL_TEST_SLOT_PARITY == 0
-static constexpr meshtastic_MeshPacket_SlotParity SLOT_PARITY = meshtastic_MeshPacket_SlotParity_SLOT_PARITY_EVEN;
-#elif DMSHELL_TEST_SLOT_PARITY == 1
-static constexpr meshtastic_MeshPacket_SlotParity SLOT_PARITY = meshtastic_MeshPacket_SlotParity_SLOT_PARITY_ODD;
-#else
-#error "DMSHELL_TEST_SLOT_PARITY is 0 (even) or 1 (odd)"
-#endif
-#else
-static constexpr meshtastic_MeshPacket_SlotParity SLOT_PARITY = meshtastic_MeshPacket_SlotParity_SLOT_PARITY_UNSET;
+#error "DMSHELL_TEST_SLOT_PARITY needs MeshPacket.slot_parity, which 2.8.1 does not have"
 #endif
 
 // The client's timing constants (bin/dmshell_client.py)
@@ -638,7 +630,6 @@ void DMShellTestModule::transmit(const meshtastic_RemoteShell &frame, uint32_t n
     p->want_ack = false;
     p->pki_encrypted = true;
     p->priority = meshtastic_MeshPacket_Priority_RELIABLE;
-    p->slot_parity = SLOT_PARITY;
     // Anything we send carries our receive cursor in ack_seq
     if (frame.ack_seq == rxWindow.lastInOrder())
         framesSinceOutbound = 0;
