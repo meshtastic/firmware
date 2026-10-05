@@ -53,6 +53,9 @@ static bool s_serialLinkUp = false;
 #if defined(IS_USB_HWCDC) && defined(CONFIG_IDF_TARGET_ESP32S3)
 #include "soc/usb_serial_jtag_struct.h"
 #define USB_STALL_HW
+#if defined(MESHTASTIC_HWCDC_INDUCE) && defined(MESHTASTIC_RADIO_TASK)
+#include "concurrency/RadioTask.h"
+#endif
 #endif
 #include <atomic>
 namespace
@@ -158,6 +161,86 @@ void checkLatch(uint32_t now, uint8_t c)
 #else
     (void)c;
 #endif
+}
+#endif
+
+#if defined(USB_STALL_HW) && defined(MESHTASTIC_HWCDC_INDUCE)
+// Bench: make the latch on demand. With IN_EMPTY masked, wait for the host to read the FIFO (the interrupt then stays
+// raised), clear it and unmask it: the same state as round 96's stalls, with nothing left to raise it again.
+constexpr uint32_t INDUCE_EVERY_MS = 60 * 1000;
+struct Induction {
+    uint32_t atMs;     // 0: none in progress
+    uint32_t healMs;   // ms from induction until the ISR drained the ring again
+    uint32_t refused;  // plain-text bytes refused meanwhile
+    uint32_t kicks;    // kicks meanwhile
+    uint32_t waitedUs; // spent waiting for the host to read
+    uint16_t minFree;  // lowest ring free since induction
+    uint8_t epWr, epRd;
+    bool raised; // false: IN_EMPTY never came, so nothing was induced
+};
+Induction induced, inducedDone;
+uint32_t inducedLastMs;
+std::atomic<bool> inducedDoneReady;
+
+void induceLatch()
+{
+    const uint32_t from = micros();
+    USB_SERIAL_JTAG.int_ena.serial_in_empty_int_ena = 0;
+    bool raised = false;
+    while (micros() - from < 20000) {
+        if (USB_SERIAL_JTAG.int_raw.serial_in_empty_int_raw && USB_SERIAL_JTAG.ep1_conf.serial_in_ep_data_free) {
+            raised = true;
+            break;
+        }
+    }
+    if (raised) {
+        decltype(USB_SERIAL_JTAG.int_clr) clr = {};
+        clr.serial_in_empty_int_clr = 1;
+        USB_SERIAL_JTAG.int_clr.val = clr.val;
+    }
+    USB_SERIAL_JTAG.int_ena.serial_in_empty_int_ena = 1;
+    const uint32_t now = millis();
+    induced = {};
+    induced.atMs = now ? now : 1;
+    induced.waitedUs = micros() - from;
+    induced.minFree = Port.availableForWrite();
+    induced.epWr = USB_SERIAL_JTAG.in_ep1_st.in_ep1_wr_addr;
+    induced.epRd = USB_SERIAL_JTAG.in_ep1_st.in_ep1_rd_addr;
+    induced.raised = raised;
+    induced.refused = textRefused;
+    induced.kicks = kicks;
+    inducedLastMs = now;
+}
+
+// Before each plain-text byte, under the log lock: induce once a minute (never on the radio task, which the wait would
+// delay), and watch an induction until the ISR takes from the ring again
+void induceOrWatch()
+{
+    if (!induced.atMs) {
+        if (inducedDoneReady.load(std::memory_order_acquire) || !Throttle::hasElapsed(inducedLastMs, INDUCE_EVERY_MS))
+            return;
+#ifdef MESHTASTIC_RADIO_TASK
+        if (concurrency::inRadioTask())
+            return;
+#endif
+        induceLatch();
+        if (induced.raised)
+            return;
+    } else {
+        const uint16_t ringFree = Port.availableForWrite();
+        if (ringFree < induced.minFree) {
+            induced.minFree = ringFree;
+            return;
+        }
+        if (ringFree == induced.minFree)
+            return;
+    }
+    induced.healMs = millis() - induced.atMs;
+    induced.refused = textRefused - induced.refused;
+    induced.kicks = kicks - induced.kicks;
+    inducedDone = induced;
+    inducedDoneReady.store(true, std::memory_order_release);
+    induced.atMs = 0;
 }
 #endif
 
@@ -393,6 +476,18 @@ int32_t SerialConsole::runOnce()
         }
 #endif
     }
+#if defined(USB_STALL_HW) && defined(MESHTASTIC_HWCDC_INDUCE)
+    if (inducedDoneReady.load(std::memory_order_acquire)) {
+        const Induction done = inducedDone;
+        inducedDoneReady.store(false, std::memory_order_release);
+        if (done.raised)
+            LOG_INFO("USB induce at uptime %u ms: waited %u us, EP1 wr %u rd %u; drained again after %u ms, %u B refused, "
+                     "%u kicks",
+                     done.atMs, done.waitedUs, done.epWr, done.epRd, done.healMs, done.refused, done.kicks);
+        else
+            LOG_INFO("USB induce at uptime %u ms: no IN_EMPTY in %u us, nothing induced", done.atMs, done.waitedUs);
+    }
+#endif
     if (Throttle::hasElapsed(usbStatsAt, 10000)) {
         usbStatsAt = millis();
         UsbStats seen;
@@ -449,6 +544,9 @@ size_t SerialConsole::write(uint8_t c)
         return 1;
 
 #ifdef MESHTASTIC_LOG_USB_STATS
+#if defined(USB_STALL_HW) && defined(MESHTASTIC_HWCDC_INDUCE)
+    induceOrWatch();
+#endif
     if (c == '\n') {
         RedirectablePrint::write('\r');
         noteText(destWritten, '\r');
