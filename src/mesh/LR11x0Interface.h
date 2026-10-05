@@ -63,6 +63,14 @@ template <class T> class LR11x0Interface : public RadioLibInterface
 
     bool isIRQPending() override { return lora.getIrqFlags() != 0; }
 
+#if MESHTASTIC_RADIO_CHIP_STATS && RADIOLIB_GODMODE
+    /// GetStats, protected in RadioLib. In LoRa the last two are header errors and false syncs (LR1110 user manual).
+    bool readChipRxStats(uint16_t &received, uint16_t &crcError, uint16_t &headerError, uint16_t &falseSync) override
+    {
+        return lora.getStats(&received, &crcError, &headerError, &falseSync) == RADIOLIB_ERR_NONE;
+    }
+#endif
+
 #ifdef LR11X0_AGC_RESET
     bool resetAGC() override;
 #endif
