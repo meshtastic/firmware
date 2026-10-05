@@ -3,6 +3,7 @@
 #include "GPS.h"
 #endif
 #include "../detect/ScanI2C.h"
+#include "AdminKeys.h"
 #include "Channels.h"
 #include "CryptoEngine.h"
 #include "Default.h"
@@ -2972,6 +2973,10 @@ void NodeDB::loadFromDisk()
         saveToDisk(SEGMENT_CHANNELS);
     }
 #if ARCH_PORTDUINO
+    // The host's config.yaml is authoritative for admin keys: it is root-owned and cannot be
+    // rewritten by an authorized remote, so it decides who may administer this node.
+    AdminKeys::applyHostKeys();
+
     // set any config overrides
     if (portduino_config.has_configDisplayMode) {
         config.display.displaymode = (_meshtastic_Config_DisplayConfig_DisplayMode)portduino_config.configDisplayMode;
