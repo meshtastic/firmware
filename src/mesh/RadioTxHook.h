@@ -35,7 +35,8 @@ class RadioTxHook
     /// True while p needs the radio left on its own config, so the driver must not listen instead.
     virtual bool holdsRadio(const meshtastic_MeshPacket *p) { return false; }
 
-    /// The driver is done with p - sent, cancelled or dropped. Release anything held for it.
+    /// The driver is done with p - sent, cancelled, refused, dropped or evicted. Release anything held for it.
+    /// Drivers call it through RadioTxHooks::releasePacket(), immediately before p goes back to the pool.
     virtual void packetReleased(RadioInterface *iface, const meshtastic_MeshPacket *p) {}
 };
 
@@ -47,4 +48,7 @@ class RadioTxHooks
     static RadioTxHook::PreTxAction beforeTransmit(RadioInterface *iface, meshtastic_MeshPacket *p);
     static bool holdsRadio(const meshtastic_MeshPacket *p);
     static void packetReleased(RadioInterface *iface, const meshtastic_MeshPacket *p);
+    /// The one way a driver lets go of a TX packet: every hook's packetReleased(), then back to the pool.
+    /// A bare packetPool.release() of a TX packet would leave hook state (a beacon's radio switch) armed.
+    static void releasePacket(RadioInterface *iface, meshtastic_MeshPacket *p);
 };

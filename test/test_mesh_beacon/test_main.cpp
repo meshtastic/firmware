@@ -4229,10 +4229,11 @@ static void test_announce_beaconTxGateRefusesQuietly(void)
  *
  * Why: a target that names no region follows the node's. While another beacon's switch is still
  * installed, config.lora.region is that beacon's region, not the node's - the node's is the snapshot.
- * A switching beacon can leave the queue without packetReleased() (MeshPacketQueue evicts with a bare
- * release), so a second switch on top of the first is reachable.
+ * Every driver release now runs packetReleased(), queue eviction included, so a second switch on top of an
+ * unreleased first one is a defence-in-depth case: a release missed anywhere must not move the home region.
  *
- * Regression guarded: the inheriting target keyed up on the first target's region instead of home.
+ * Regression guarded: the inheriting target keyed up on the first target's region instead of home - reached
+ * through #4, when queue eviction freed a switching beacon without telling the hooks.
  */
 static void test_beaconSwitch_inheritedRegionFollowsHomeNotTheInstalledSwitch(void)
 {
@@ -4733,43 +4734,57 @@ static void test_flush_secondQueuedCycle_withdrawsOnlyTheNewestEight(void)
 }
 
 /**
- * CHARACTERISATION OF A KNOWN DEFECT (#4), not an endorsement. Under test: MeshPacketQueue::enqueue() evicting
- * a lower-priority packet to make room (replaceLowerPriorityPacket(), src/mesh/MeshPacketQueue.cpp).
- * Why pinned: the eviction frees the packet with a bare packetPool.release(), so no TX hook runs and an evicted
- * beacon leaves its sidecar entry armed until the stale reaper frees it, up to a broadcast interval later.
- * When eviction is routed through RadioTxHooks::packetReleased() this assertion is EXPECTED to flip.
+ * Under test: the eviction chain behind #4. MeshPacketQueue::enqueue() hands the evicted packet back
+ * (src/mesh/MeshPacketQueue.cpp), and the driver lets go of it through RadioTxHooks::releasePacket()
+ * (src/mesh/RadioTxHook.cpp), as RadioLibInterface::send() and SimRadio::send() do.
+ * Why: a beacon the radio is switched for can be the evictee. Released through the hooks, its entry goes
+ * and the home radio comes straight back; no second switch can stack on a switch nobody will undo.
+ * Regression guarded: eviction freed the packet itself, so no hook ran - the entry stayed armed and the
+ * radio stayed on the beacon's preset until some other packet happened to transmit.
  */
-static void test_txQueueEviction_leavesTheEvictedBeaconsEntryArmed(void)
+static void test_txQueueEviction_releasesTheEvictedBeaconThroughTheHooks(void)
 {
     resetConfig();
+    static const uint8_t homePsk[16] = {0xC9, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                        0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    installTestPrimaryChannel("Home", homePsk, sizeof(homePsk));
+    MeshBeaconTxHook hook;
+    ReentrantRadioInterface radio;
     MeshPacketQueue queue(2);
 
     meshtastic_MeshPacket *beacon = packetPool.allocZeroed();
     beacon->id = 0x7A000030;
     beacon->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
-    MeshBeaconModule::setTargetRadioSettings(beacon, targetSettings(meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW, true, 1,
-                                                                    false, meshtastic_Config_LoRaConfig_RegionCode_EU_868));
+    MeshBeaconModule::setTargetRadioSettings(beacon, targetSettings(meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW, true, 0,
+                                                                    false, meshtastic_Config_LoRaConfig_RegionCode_UNSET));
+    meshtastic_MeshPacket *evicted = nullptr;
+    TEST_ASSERT_TRUE(queue.enqueue(beacon, &evicted));
+    // The driver pre-stages the radio for the packet at the head of the queue, as onNotify(ISR_TX) does.
+    TEST_ASSERT_EQUAL_INT(RadioTxHook::PRETX_DEFER, RadioTxHooks::beforeTransmit(&radio, queue.getFront()));
+    TEST_ASSERT_EQUAL_INT_MESSAGE(meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW, config.lora.modem_preset,
+                                  "precondition: the radio is switched for the queued beacon");
+
     meshtastic_MeshPacket *other = packetPool.allocZeroed();
     other->id = 0x7A000031;
     other->priority = meshtastic_MeshPacket_Priority_DEFAULT;
-    TEST_ASSERT_TRUE(queue.enqueue(beacon));
-    TEST_ASSERT_TRUE(queue.enqueue(other));
+    TEST_ASSERT_TRUE(queue.enqueue(other, &evicted));
+    TEST_ASSERT_NULL(evicted);
 
     meshtastic_MeshPacket *urgent = packetPool.allocZeroed();
     urgent->id = 0x7A000032;
     urgent->priority = meshtastic_MeshPacket_Priority_RELIABLE;
-    bool dropped = false;
-    TEST_ASSERT_TRUE_MESSAGE(queue.enqueue(urgent, &dropped), "the full queue takes the higher-priority packet");
-    TEST_ASSERT_TRUE_MESSAGE(dropped, "by evicting the lowest-priority one, the beacon");
+    TEST_ASSERT_TRUE_MESSAGE(queue.enqueue(urgent, &evicted), "the full queue takes the higher-priority packet");
+    TEST_ASSERT_EQUAL_PTR_MESSAGE(beacon, evicted, "and hands back the lowest-priority one, the beacon, unfreed");
 
+    RadioTxHooks::releasePacket(&radio, evicted); // what the driver does with an evictee
     meshtastic_MeshPacket probe = meshtastic_MeshPacket_init_zero;
     probe.id = 0x7A000030;
-    TEST_ASSERT_TRUE_MESSAGE(MeshBeaconModule::hasTargetRadioSettings(&probe),
-                             "KNOWN DEFECT #4: the evicted beacon's entry is still armed - no hook ran");
+    TEST_ASSERT_FALSE_MESSAGE(MeshBeaconModule::hasTargetRadioSettings(&probe), "the evicted beacon's entry is released");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, config.lora.modem_preset,
+                                  "and the home radio is back at once, not when some other packet transmits");
 
     while (meshtastic_MeshPacket *p = queue.dequeue())
         packetPool.release(p);
-    MeshBeaconModule::clearAllTargetRadioSettings();
 }
 
 // ===========================================================================
@@ -5863,7 +5878,7 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_txHook_unregistered_isNoOp);
     RUN_TEST(test_txHook_untaggedPacketAheadOfQueuedBeacon_restoresHome);
     RUN_TEST(test_flush_secondQueuedCycle_withdrawsOnlyTheNewestEight);
-    RUN_TEST(test_txQueueEviction_leavesTheEvictedBeaconsEntryArmed);
+    RUN_TEST(test_txQueueEviction_releasesTheEvictedBeaconThroughTheHooks);
 
     printf("\n=== By-value target (remote administration) ===\n");
 
