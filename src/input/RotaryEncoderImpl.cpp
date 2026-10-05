@@ -3,6 +3,7 @@
 #include "RotaryEncoderImpl.h"
 #include "InputBroker.h"
 #include "RotaryEncoder.h"
+#include "mesh/RadioLibInterface.h"
 #include "mesh/Throttle.h"
 #ifdef ARCH_ESP32
 #include "sleep.h"
@@ -95,10 +96,7 @@ void RotaryEncoderImpl::detachRotaryEncoderInterrupts()
 {
     LOG_DEBUG("RotaryEncoderImpl detach button interrupts");
     if (interruptInstance == this) {
-        detachInterrupt(moduleConfig.canned_message.inputbroker_pin_a);
-        detachInterrupt(moduleConfig.canned_message.inputbroker_pin_b);
-        detachInterrupt(moduleConfig.canned_message.inputbroker_pin_press);
-        interruptInstance = nullptr;
+        interruptInstance = nullptr; // polling task idles
     } else {
         LOG_WARN("RotaryEncoderImpl: interrupts already detached");
     }
@@ -111,10 +109,23 @@ void RotaryEncoderImpl::attachRotaryEncoderInterrupts()
         rotary->resetButton();
 
         interruptInstance = this;
-        auto interruptHandler = []() { inputBroker->requestPollSoon(interruptInstance); };
-        attachInterrupt(moduleConfig.canned_message.inputbroker_pin_a, interruptHandler, CHANGE);
-        attachInterrupt(moduleConfig.canned_message.inputbroker_pin_b, interruptHandler, CHANGE);
-        attachInterrupt(moduleConfig.canned_message.inputbroker_pin_press, interruptHandler, CHANGE);
+        // Poll instead of using pin-change interrupts. On battery (no USB ground) LoRa TX couples noise into the
+        // encoder lines; the resulting GPIO interrupt storm (>2k IRQs/s measured) starves the tick interrupt and
+        // trips the interrupt watchdog ("Interrupt wdt timeout on CPU1" during SX126x startTransmit).
+        static TaskHandle_t pollTask = nullptr;
+        if (!pollTask) {
+            xTaskCreate(
+                [](void *) {
+                    while (true) {
+                        // TX also makes the lines noisy enough to fake steps: don't sample while transmitting
+                        bool txActive = RadioLibInterface::instance && RadioLibInterface::instance->isSending();
+                        if (interruptInstance && !txActive)
+                            interruptInstance->pollOnce();
+                        vTaskDelay(pdMS_TO_TICKS(2)); // 500 Hz is plenty for a hand-turned encoder
+                    }
+                },
+                "rotary-poll", 2 * 1024, nullptr, 10, &pollTask);
+        }
     } else {
         LOG_WARN("RotaryEncoderImpl: interrupts already attached");
     }
