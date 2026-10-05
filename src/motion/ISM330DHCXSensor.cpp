@@ -331,3 +331,5 @@ void ISM330DHCXSensor::calibrate(uint16_t forSeconds)
     startCalibrationWindow(forSeconds);
 #endif
 }
+
+#endif
