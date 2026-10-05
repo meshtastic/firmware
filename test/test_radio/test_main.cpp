@@ -3,6 +3,7 @@
 #include "MeshService.h"
 #include "RadioInterface.h"
 #include "RadioLibInterface.h"
+#include "Router.h"
 #include "TestUtil.h"
 #include "UptimeClock.h"
 #include "memory/MemAudit.h"
@@ -67,6 +68,7 @@ class TestableRadioInterface : public RadioInterface
     size_t beginSendingPublic(meshtastic_MeshPacket *p) { return beginSending(p); }
     meshtastic_MeshPacket *getSendingPacket() const { return sendingPacket; }
     void clearSendingPacketForTest() { sendingPacket = nullptr; }
+    uint32_t getLastFrameEndMs() const { return lastFrameEndMs.load(std::memory_order_relaxed); }
 
     // Override reconfigure to call the base which invokes applyModemConfig()
     bool reconfigure() override { return RadioInterface::reconfigure(); }
@@ -556,6 +558,18 @@ class TestableRadioLibInterface : public RadioLibInterface
 
     static bool isRadioLibTimeErrorPublic(RadioLibTime_t usec) { return isRadioLibTimeError(usec); }
 
+    // Queue p and arm the TX timer for it the way every backoff path does, then empty the queue again
+    // (p is the caller's) and report the due time the router would have read.
+    uint32_t dueAfterArmingFor(meshtastic_MeshPacket *p, uint32_t delay)
+    {
+        txQueue.enqueue(p);
+        scheduleTransmitDelayCompleted(delay);
+        const uint32_t due = getTxDueMs();
+        while (txQueue.dequeue()) {
+        }
+        return due;
+    }
+
     // Chip-specific hooks this test never reaches
     uint32_t getPacketTime(uint32_t, bool) override { return packetTimeMs; }
     int16_t getCurrentRSSI() override { return 0; }
@@ -649,6 +663,145 @@ static void test_isRadioLibTimeError_separatesCodesFromDurations()
     TEST_ASSERT_FALSE(TestableRadioLibInterface::isRadioLibTimeErrorPublic(123456));
     // ~229s: SF12 at 7.8kHz with a full 255-byte frame, the slowest packet that can be configured.
     TEST_ASSERT_FALSE(TestableRadioLibInterface::isRadioLibTimeErrorPublic(229ul * 1000ul * 1000ul));
+}
+
+// ---------------------------------------------------------------------------
+// Anchored backoff slots (RadioInterface::anchoredSlotDelayMsec)
+// ---------------------------------------------------------------------------
+//
+// What is pinned: a draw asking for a parity lands on a slot of that parity of the grid whose
+// origin is the last frame's air end, and never before the first slot that has not started yet.
+// That is the whole point of the mechanism - two nodes on opposite parities that redraw after the
+// same frame cannot pick the same slot however differently they handled it, and so are always at
+// least a slot apart - adjacent slots are still allowed. A change that lets a draw land mid-slot,
+// or on the wrong parity, silently gives that back.
+
+// The absolute slot index a delay lands on, counted from the anchor.
+static uint32_t slotIndexOf(uint32_t sinceEndMs, uint32_t slotMsec, uint32_t delayMsec)
+{
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, (sinceEndMs + delayMsec) % slotMsec, "the draw did not land on a slot edge");
+    return (sinceEndMs + delayMsec) / slotMsec;
+}
+
+static void test_anchoredSlotDelay_keepsTheRequestedParity()
+{
+    const uint32_t slotMsec = 43; // LongFast-ish, and deliberately not a round number
+    // Every position within a slot, either side of the boundary, on both parities of first slot.
+    for (uint32_t sinceEnd = 0; sinceEnd < 4 * slotMsec; sinceEnd++) {
+        for (uint32_t pairs = 0; pairs < 4; pairs++) {
+            const uint32_t evenDelay = RadioInterface::anchoredSlotDelayMsec(sinceEnd, slotMsec, pairs,
+                                                                             meshtastic_MeshPacket_SlotParity_SLOT_PARITY_EVEN);
+            const uint32_t oddDelay = RadioInterface::anchoredSlotDelayMsec(sinceEnd, slotMsec, pairs,
+                                                                            meshtastic_MeshPacket_SlotParity_SLOT_PARITY_ODD);
+
+            TEST_ASSERT_EQUAL_UINT32(0, slotIndexOf(sinceEnd, slotMsec, evenDelay) % 2);
+            TEST_ASSERT_EQUAL_UINT32(1, slotIndexOf(sinceEnd, slotMsec, oddDelay) % 2);
+            // Within the window it drew from: a slot index that wrapped would still divide cleanly,
+            // so the bound is what catches it.
+            TEST_ASSERT_TRUE(evenDelay <= (2 * pairs + 2) * slotMsec);
+            TEST_ASSERT_TRUE(oddDelay <= (2 * pairs + 2) * slotMsec);
+        }
+    }
+}
+
+static void test_anchoredSlotDelay_takesTheNextWholeSlot()
+{
+    const uint32_t slotMsec = 40;
+
+    // Exactly on a boundary: slot 2 has not started, so an even draw of 0 pairs is due now.
+    TEST_ASSERT_EQUAL_UINT32(
+        0, RadioInterface::anchoredSlotDelayMsec(2 * slotMsec, slotMsec, 0, meshtastic_MeshPacket_SlotParity_SLOT_PARITY_EVEN));
+    // and the odd one waits out the rest of slot 2.
+    TEST_ASSERT_EQUAL_UINT32(slotMsec, RadioInterface::anchoredSlotDelayMsec(2 * slotMsec, slotMsec, 0,
+                                                                             meshtastic_MeshPacket_SlotParity_SLOT_PARITY_ODD));
+    // A millisecond into slot 2, the first slot not yet started is 3: the odd draw takes it.
+    TEST_ASSERT_EQUAL_UINT32(slotMsec - 1, RadioInterface::anchoredSlotDelayMsec(
+                                               2 * slotMsec + 1, slotMsec, 0, meshtastic_MeshPacket_SlotParity_SLOT_PARITY_ODD));
+    TEST_ASSERT_EQUAL_UINT32(
+        2 * slotMsec - 1,
+        RadioInterface::anchoredSlotDelayMsec(2 * slotMsec + 1, slotMsec, 0, meshtastic_MeshPacket_SlotParity_SLOT_PARITY_EVEN));
+    // Each drawn pair is two slots further out, so the parity survives the whole window.
+    TEST_ASSERT_EQUAL_UINT32(4 * slotMsec, RadioInterface::anchoredSlotDelayMsec(
+                                               2 * slotMsec, slotMsec, 2, meshtastic_MeshPacket_SlotParity_SLOT_PARITY_EVEN));
+}
+
+static void test_anchoredSlotDelay_survivesAnAnchorHoursOld()
+{
+    // A node that has heard nothing for hours still has a live anchor. The slot index then runs to
+    // tens of millions, so multiplying it by the slot time would wrap - the delay must not.
+    const uint32_t slotMsec = 40;
+    const uint32_t sinceEnd = 6UL * 3600UL * 1000UL; // 6 hours, an exact multiple of the slot
+    const uint32_t delay =
+        RadioInterface::anchoredSlotDelayMsec(sinceEnd, slotMsec, 3, meshtastic_MeshPacket_SlotParity_SLOT_PARITY_ODD);
+    TEST_ASSERT_EQUAL_UINT32(7 * slotMsec, delay); // one slot to reach odd, then three pairs
+    TEST_ASSERT_EQUAL_UINT32(1, slotIndexOf(sinceEnd, slotMsec, delay) % 2);
+}
+
+static void test_noteFrameEnd_ignoresAFrameDeliveredLate()
+{
+    const uint32_t now = Time::getMillis();
+    testRadio->noteFrameEnd(now - 10, "rx");
+    TEST_ASSERT_EQUAL_UINT32(Time::skipZero(now - 10), testRadio->getLastFrameEndMs());
+
+    // A frame the driver got round to after one that ended later must not drag the anchor back.
+    testRadio->noteFrameEnd(now - 50, "rx");
+    TEST_ASSERT_EQUAL_UINT32(Time::skipZero(now - 10), testRadio->getLastFrameEndMs());
+
+    testRadio->noteFrameEnd(now, "tx");
+    TEST_ASSERT_EQUAL_UINT32(Time::skipZero(now), testRadio->getLastFrameEndMs());
+}
+
+// ---------------------------------------------------------------------------
+// Holding received-packet handling for a slotted TX (Router::rxHoldForTxMs)
+// ---------------------------------------------------------------------------
+// The DMShell bench (round 57): handling a reception holds the main loop long enough that a TX due in
+// that time leaves out of the slot it drew. The router holds the reception until just past the TX's
+// due time instead. These pin the arithmetic of that decision.
+
+static void test_rxHoldForTx_handlesAtOnceWhenNoTxIsDue()
+{
+    TEST_ASSERT_EQUAL_INT32(0, Router::rxHoldForTxMs(0, 1000));
+}
+
+// Within the horizon, the hold runs to 2 ms past the due time so the radio thread's timer runs first.
+static void test_rxHoldForTx_holdsUntilJustPastADueTx()
+{
+    TEST_ASSERT_EQUAL_INT32(22, Router::rxHoldForTxMs(1020, 1000));
+    TEST_ASSERT_EQUAL_INT32(Router::RX_HOLD_FOR_TX_MS + 2, Router::rxHoldForTxMs(1000 + Router::RX_HOLD_FOR_TX_MS, 1000));
+    // Further out, there is time to handle the reception before the TX falls due.
+    TEST_ASSERT_EQUAL_INT32(0, Router::rxHoldForTxMs(1000 + Router::RX_HOLD_FOR_TX_MS + 1, 1000));
+}
+
+// Past due means the radio thread has not run its timer yet: wait briefly for it. Long past due is a
+// timer that was dropped, and must not hold anything.
+static void test_rxHoldForTx_waitsBrieflyForAnOverdueTimer()
+{
+    TEST_ASSERT_EQUAL_INT32(2, Router::rxHoldForTxMs(995, 1000));
+    TEST_ASSERT_EQUAL_INT32(2, Router::rxHoldForTxMs(1000 - Router::RX_HOLD_FOR_TX_MS, 1000));
+    TEST_ASSERT_EQUAL_INT32(0, Router::rxHoldForTxMs(1000 - Router::RX_HOLD_FOR_TX_MS - 1, 1000));
+}
+
+static void test_rxHoldForTx_survivesTheClockWrap()
+{
+    TEST_ASSERT_EQUAL_INT32(22, Router::rxHoldForTxMs(10, UINT32_MAX - 9));
+    TEST_ASSERT_EQUAL_INT32(2, Router::rxHoldForTxMs(UINT32_MAX - 4, 5));
+}
+
+// Only a packet with a slot parity reports a due time, so ordinary mesh traffic never holds the router.
+static void test_txDueMs_isReportedOnlyForASlottedPacket()
+{
+    auto *radioIf = makeTestableRadioLibInterface();
+    Time::setTestMillis(5000);
+
+    meshtastic_MeshPacket slotted = meshtastic_MeshPacket_init_zero;
+    slotted.slot_parity = meshtastic_MeshPacket_SlotParity_SLOT_PARITY_EVEN;
+    TEST_ASSERT_EQUAL_UINT32(5020, radioIf->dueAfterArmingFor(&slotted, 20));
+
+    meshtastic_MeshPacket plain = meshtastic_MeshPacket_init_zero;
+    TEST_ASSERT_EQUAL_UINT32(0, radioIf->dueAfterArmingFor(&plain, 20));
+
+    Time::useRealClock();
+    delete radioIf;
 }
 
 void setUp(void)
@@ -780,6 +933,15 @@ void setup()
     RUN_TEST(test_staleRxFlagAction_barePreambleIsOnlyCleared);
     RUN_TEST(test_staleRxFlagAction_staleHeaderIsRearmed);
     RUN_TEST(test_checkStaleRxFlags_headerAfterPreambleRestartsTheWindow);
+    RUN_TEST(test_anchoredSlotDelay_keepsTheRequestedParity);
+    RUN_TEST(test_anchoredSlotDelay_takesTheNextWholeSlot);
+    RUN_TEST(test_anchoredSlotDelay_survivesAnAnchorHoursOld);
+    RUN_TEST(test_noteFrameEnd_ignoresAFrameDeliveredLate);
+    RUN_TEST(test_rxHoldForTx_handlesAtOnceWhenNoTxIsDue);
+    RUN_TEST(test_rxHoldForTx_holdsUntilJustPastADueTx);
+    RUN_TEST(test_rxHoldForTx_waitsBrieflyForAnOverdueTimer);
+    RUN_TEST(test_rxHoldForTx_survivesTheClockWrap);
+    RUN_TEST(test_txDueMs_isReportedOnlyForASlottedPacket);
     exit(UNITY_END());
 }
 
