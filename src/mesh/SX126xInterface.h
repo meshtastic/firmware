@@ -4,11 +4,23 @@
 #include "RadioLibInterface.h"
 #include "configuration.h"
 
-// After TX_DONE the SX126x waits in standby for the radio thread to restart RX, which a main-loop hold can stretch. With the
-// readout task, the TX_DONE interrupt has the task restart it instead; -DSX126X_RX_REARM_AT_TX_DONE=0 opts out. Not on nRF52,
-// whose TX_DONE interrupt can re-arm RX itself.
-#if defined(MESHTASTIC_RX_READOUT_TASK) && !defined(ARCH_NRF52) && !defined(SX126X_RX_REARM_AT_TX_DONE)
+// After TX_DONE the SX126x waits in standby for the radio thread to restart RX, which a main-loop hold can stretch by hundreds
+// of ms. On nRF52, whose SPI can be driven from an interrupt, where DIO1 is a real interrupt and no LoRa FEM needs setting for
+// RX, the TX_DONE interrupt re-arms RX itself. Elsewhere, with the readout task, the interrupt has the task re-arm it.
+// -DSX126X_RX_REARM_AT_TX_DONE=0 turns both off.
+#ifndef SX126X_RX_REARM_AT_TX_DONE
+#if defined(ARCH_NRF52) && !defined(LORA_DIO1_SOFTWARE_POLL) && !HAS_LORA_FEM
 #define SX126X_RX_REARM_AT_TX_DONE 1
+#elif defined(MESHTASTIC_RX_READOUT_TASK) && !defined(ARCH_NRF52)
+#define SX126X_RX_REARM_AT_TX_DONE 1
+#else
+#define SX126X_RX_REARM_AT_TX_DONE 0
+#endif
+#endif
+#if SX126X_RX_REARM_AT_TX_DONE && defined(ARCH_NRF52)
+#define SX126X_REARM_IN_ISR 1
+#elif SX126X_RX_REARM_AT_TX_DONE && defined(MESHTASTIC_RX_READOUT_TASK)
+#define SX126X_REARM_FROM_TASK 1
 #endif
 
 /**
@@ -118,7 +130,7 @@ template <class T> class SX126xInterface : public RadioLibInterface
     /** The RX command startReceive() sends once the chip is in standby */
     int16_t startRxCommand(bool continuousRx);
 
-#if defined(MESHTASTIC_RX_READOUT_TASK) && SX126X_RX_REARM_AT_TX_DONE
+#if SX126X_REARM_FROM_TASK
     bool rearmReceiveFromIsr() override;
     void rearmReceiveFromTask() override;
     bool adoptReceiveArmedFromIsr() override;
@@ -133,5 +145,25 @@ template <class T> class SX126xInterface : public RadioLibInterface
         rxArmedContinuous = false;
         return reinitChip() && programModemParams() == RADIOLIB_ERR_NONE;
     }
+
+#if SX126X_REARM_IN_ISR
+    bool rearmReceiveFromIsr() override;
+    bool adoptReceiveArmedFromIsr() override;
+    enum RearmOutcome : uint8_t { REARM_NONE, REARM_ARMED, REARM_SPI_BUSY, REARM_CHIP_BUSY, REARM_NOT_TX_DONE, REARM_NOT_IN_RX };
+    /** Where a raw command's reply carries the chip status, and the chip-mode bits in it (6:4) */
+    static constexpr size_t statusByte = 1;
+    static constexpr uint8_t statusModeMask = 0b01110000;
+    /** Longest raw command the ISR sends: SET_DIO_IRQ_PARAMS, opcode plus 8 bytes */
+    static constexpr size_t rawCommandMax = 9;
+    /** One raw command from the ISR, with the SPI lock already held: wait briefly for BUSY, then write it */
+    RearmOutcome rawCommandFromIsr(const uint8_t *cmd, size_t len, uint8_t *in);
+    /** The chip select, kept for raw commands: RadioLib does not expose it */
+    RADIOLIB_PIN_TYPE rawCs = RADIOLIB_NC;
+    /** The HAL without its lock, for the ISR, which takes the SPI lock itself without blocking */
+    ArduinoHal *isrHal = nullptr;
+    volatile uint8_t rearmOutcome = REARM_NONE;
+    /** FreeRTOS tick count when the ISR re-armed RX */
+    volatile uint32_t rearmTicks = 0;
+#endif
 };
 #endif
