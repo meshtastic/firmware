@@ -6,6 +6,11 @@
 #include "error.h"
 #include "mesh/NodeDB.h"
 
+#ifdef LR2021_LOAD_PRAM
+#include "LR2021Pram.h"
+#include <modules/LR2021/LR2021_registers.h> // RADIOLIB_LR2021_PRAM_BASE
+#endif
+
 #if defined(LR2021_DCDC_WORKAROUND) && RADIOLIB_GODMODE
 // The DCDC sensitivity workaround pokes RadioLib-internal DCDC registers that are NOT exposed via the
 // public LR2021.h, so pull in the internal register map explicitly. Opt-in only (see LR2021_DCDC_WORKAROUND).
@@ -189,6 +194,10 @@ template <typename T> bool LR20x0Interface<T>::init()
     LOG_INFO("LR20x0 init result %d", res);
     if (res == RADIOLIB_ERR_CHIP_NOT_FOUND || res == RADIOLIB_ERR_SPI_CMD_FAILED)
         return false;
+#ifdef LR2021_LOAD_PRAM
+    if (res == RADIOLIB_ERR_NONE)
+        res = loadPram();
+#endif
 
     // Some basic info about the module's explicit firmware version - no other info available
     // Currently requires radiolib godmode
@@ -450,6 +459,12 @@ template <typename T> bool LR20x0Interface<T>::fullBegin(float freq)
             RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
             return false;
         }
+#ifdef LR2021_LOAD_PRAM
+        if (loadPram() != RADIOLIB_ERR_NONE) {
+            RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+            return false;
+        }
+#endif
 
         applyCustomLfPaTable(freq);
 
@@ -482,6 +497,51 @@ template <typename T> bool LR20x0Interface<T>::fullBegin(float freq)
         return true;
     }
 }
+
+#ifdef LR2021_LOAD_PRAM
+template <typename T> int16_t LR20x0Interface<T>::loadPram()
+{
+    // LR20xx DS rev 2.2 22.3: write the PRAM from 0x801000 with WriteRegMem32, then activate it (0x012D 0x00). It is lost on
+    // reset and cold sleep, kept in sleep with retention. Semtech loads it straight after the reset; begin() has already
+    // configured the modem by now, so re-apply begin()'s settings after it.
+    const uint32_t blockWords = RADIOLIB_LRXXXX_SPI_MAX_READ_WRITE_LEN / sizeof(uint32_t);
+    int16_t res = RADIOLIB_ERR_NONE;
+    for (uint32_t word = 0; word < LR2021_PRAM_WORDS && res == RADIOLIB_ERR_NONE; word += blockWords) {
+        const uint32_t n = (LR2021_PRAM_WORDS - word < blockWords) ? LR2021_PRAM_WORDS - word : blockWords;
+        res = lora.writeRegMem32(RADIOLIB_LR2021_PRAM_BASE + word * sizeof(uint32_t), &LR2021_PRAM[word], n);
+    }
+    if (res == RADIOLIB_ERR_NONE)
+        res = lora.activatePram();
+    bool loaded = false;
+    uint16_t version = 0;
+    if (res == RADIOLIB_ERR_NONE)
+        res = lora.checkPramLoaded(&loaded);
+    if (res == RADIOLIB_ERR_NONE)
+        res = lora.getPramVersion(&version);
+    if (res == RADIOLIB_ERR_NONE && !loaded)
+        res = RADIOLIB_ERR_UNKNOWN;
+    // begin()'s own settings, in its order
+    if (res == RADIOLIB_ERR_NONE)
+        res = lora.setFrequency(getFreq());
+    if (res == RADIOLIB_ERR_NONE)
+        res = lora.setBandwidth(bw);
+    if (res == RADIOLIB_ERR_NONE)
+        res = lora.setSpreadingFactor(sf);
+    if (res == RADIOLIB_ERR_NONE)
+        res = lora.setCodingRate(cr);
+    if (res == RADIOLIB_ERR_NONE)
+        res = lora.setSyncWord(syncWord);
+    if (res == RADIOLIB_ERR_NONE)
+        res = lora.setOutputPower(power);
+    if (res == RADIOLIB_ERR_NONE)
+        res = lora.setPreambleLength(preambleLength);
+    if (res == RADIOLIB_ERR_NONE)
+        LOG_INFO("LR20x0 PRAM loaded, version 0x%04x", (unsigned)version);
+    else
+        LOG_ERROR("LR20x0 PRAM load %s%d (loaded %d, version 0x%04x)", radioLibErr, res, (int)loaded, (unsigned)version);
+    return res;
+}
+#endif
 
 // Board LF PA table after begin(); pointer is retained. HF keeps the RadioLib default.
 // Warn-only: a calibration miss must not fail init/fullBegin, keep the begin() PA config.
