@@ -11,6 +11,7 @@
 #include <esp_sleep.h>
 #endif
 
+#include "BenchClock.h"
 #include "Throttle.h"
 #if SX126X_REARM_IN_ISR
 #include "SPILock.h"
@@ -557,6 +558,13 @@ template <typename T> bool SX126xInterface<T>::resumeRunningReceive()
     // point is a NEXT frame that completed while we were handling the last one. Clearing it here would discard that
     // frame unread, and the checkRxDoneIrqFlag() below could no longer find it.
     activeReceiveStart = 0; // the frame it timed is done; a preamble now is the next one
+#ifdef MESHTASTIC_LOG_RADIO_EDGES
+    if (deafSinceMs) {
+        LOG_TRACE("RX still running, re-arm skipped after %s, readout %u ms", deafFor,
+                  (unsigned)(Time::getMillis() - deafSinceMs));
+        deafSinceMs = 0; // the chip never stopped listening, so there is no deaf window to report
+    }
+#endif
     RadioLibInterface::startReceive();
     enableInterrupt(isrRxLevel0);
     checkRxDoneIrqFlag(); // an RX_DONE that beat the re-arm
@@ -610,8 +618,17 @@ template <typename T> void SX126xInterface<T>::rearmReceiveFromTask()
         return;
 #endif
     // What startReceive() sends, less the standby: after TX_DONE the chip has already fallen back to standby.
+    TX_TIMELINE_MARK(tlRearmStart);
+#ifdef MESHTASTIC_LOG_RADIO_EDGES
+    const uint32_t t0 = benchClock();
+#endif
     setTransmitEnable(false);
     const int16_t err = startRxCommand(continuousRxWanted());
+#ifdef MESHTASTIC_LOG_RADIO_EDGES
+    rearmUs = benchClockToUs(benchClock() - t0);
+    rearmTicks = xTaskGetTickCount();
+#endif
+    TX_TIMELINE_MARK(tlRearmEnd);
     rearmErr = err;
     if (err != RADIOLIB_ERR_NONE) {
         rearmState = REARM_FAILED;
@@ -637,6 +654,12 @@ template <typename T> bool SX126xInterface<T>::adoptReceiveArmedFromIsr()
         LOG_WARN("SX126X RX re-arm at TX_DONE failed %s%d, restarting RX", radioLibErr, rearmErr);
     if (state != REARM_ARMED)
         return false;
+#ifdef MESHTASTIC_LOG_RADIO_EDGES
+    const uint32_t heldMs = (uint32_t)(((uint64_t)(xTaskGetTickCount() - rearmTicks) * 1000) / configTICK_RATE_HZ);
+    LOG_RADIO_EDGE("Radio back in RX at TX_DONE, re-arm %u us, %u ms before the handler ran", (unsigned)rearmUs,
+                   (unsigned)heldMs);
+    deafSinceMs = 0; // listening since the task re-armed: no deaf window to report
+#endif
     RadioLibInterface::startReceive();
     rxArmedContinuous = continuousRxWanted();
     enableInterrupt(isrRxLevel0);
@@ -682,6 +705,7 @@ template <typename T> bool SX126xInterface<T>::rearmReceiveFromIsr()
         rearmOutcome = REARM_SPI_BUSY;
         return false;
     }
+    TX_TIMELINE_MARK(tlRearmStart);
     const uint8_t getIrq[] = {RADIOLIB_SX126X_CMD_GET_IRQ_STATUS, RADIOLIB_SX126X_CMD_NOP, RADIOLIB_SX126X_CMD_NOP,
                               RADIOLIB_SX126X_CMD_NOP};
     uint8_t irqIn[sizeof(getIrq)] = {0};
@@ -739,6 +763,7 @@ template <typename T> bool SX126xInterface<T>::rearmReceiveFromIsr()
     if (outcome != REARM_ARMED)
         return false; // the thread's startReceive() redoes all of it
     rearmTicks = xTaskGetTickCountFromISR();
+    TX_TIMELINE_MARK(tlRearmEnd);
     return true;
 }
 
@@ -756,7 +781,10 @@ template <typename T> bool SX126xInterface<T>::adoptReceiveArmedFromIsr()
     if (outcome != REARM_ARMED)
         return false;
     const uint32_t heldMs = (uint32_t)(((uint64_t)(xTaskGetTickCount() - rearmTicks) * 1000) / configTICK_RATE_HZ);
-    LOG_TRACE("Radio back in RX at TX_DONE, %u ms before the handler ran", (unsigned)heldMs);
+    LOG_RADIO_EDGE("Radio back in RX at TX_DONE, %u ms before the handler ran", (unsigned)heldMs);
+#ifdef MESHTASTIC_LOG_RADIO_EDGES
+    deafSinceMs = 0; // listening since the interrupt: no deaf window to report
+#endif
     // The tail of startReceive(): the chip is already listening, so only the bookkeeping and the RX interrupt remain.
     RadioLibInterface::startReceive();
     enableInterrupt(isrRxLevel0);

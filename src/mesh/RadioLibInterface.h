@@ -1,5 +1,6 @@
 #pragma once
 
+#include "BenchInstrumentation.h"
 #include "MeshPacketQueue.h"
 #include "RadioInterface.h"
 #include "concurrency/NotifiedWorkerThread.h"
@@ -48,6 +49,24 @@
 #endif
 #ifndef AGC_FORCED_RESET_MS
 #define AGC_FORCED_RESET_MS (24 * 60 * 60 * 1000UL)
+#endif
+
+// Bench: -DMESHTASTIC_LOG_RADIO_EDGES logs where the radio stops and starts hearing at DEBUG instead of TRACE: a few lines
+// a second, against the full trace build's volume
+#ifdef MESHTASTIC_LOG_RADIO_EDGES
+#define LOG_RADIO_EDGE LOG_DEBUG
+#else
+#define LOG_RADIO_EDGE LOG_TRACE
+#endif
+
+// Bench: -DMESHTASTIC_TX_TIMELINE stamps each TX from its channel scan to RX being back, on benchClock(), and logs the
+// parts once the radio thread has handled the TX_DONE. The caller includes BenchClock.h.
+#ifdef MESHTASTIC_TX_TIMELINE
+#define TX_TIMELINE_MARK(field) ((field) = benchClock())
+#define TX_TIMELINE_SET(field, value) ((field) = (value))
+#else
+#define TX_TIMELINE_MARK(field) ((void)0)
+#define TX_TIMELINE_SET(field, value) ((void)0)
 #endif
 
 /**
@@ -434,6 +453,11 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
         uint32_t endMs; // when the frame left the air, from its RX_DONE interrupt
     };
 
+#ifdef MESHTASTIC_TX_TIMELINE
+    /** Bench: before the scan, stamp it and what led up to it for the TX timeline */
+    void markTimelineScan();
+#endif
+
     /** Read out and deliver the frame behind RX_DONE; with captured, deliver one the readout task already took */
     void handleReceiveInterrupt(const CapturedRxInfo *captured = nullptr);
 
@@ -481,6 +505,45 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
   protected:
     uint32_t activeReceiveStart = 0;
+
+#ifdef MESHTASTIC_LOG_RADIO_EDGES
+    /// Bench: when the radio last began work that leaves it unable to receive, and what that work was, so the next
+    /// startReceive() can report how long it was deaf. 0 when nothing is pending.
+    uint32_t deafSinceMs = 0;
+    const char *deafFor = nullptr;
+    void noteDeafFrom(const char *what);
+#endif
+
+#ifdef MESHTASTIC_TX_TIMELINE
+    /** Bench: benchClock() stamps across one TX; the re-arm pair is written by whoever re-armed RX at TX_DONE */
+    uint32_t tlScan = 0, tlSend = 0, tlLaunched = 0;
+    volatile uint32_t tlTxDone = 0, tlRearmStart = 0, tlRearmEnd = 0;
+    /** millis() the backoff fell due, and how late the scan started after it */
+    uint32_t tlDueMs = 0;
+    int32_t tlLateMs = 0;
+    /** The packet sent had a slot parity, so it went out on the slot grid */
+    bool tlSlotted = false;
+#ifdef MESHTASTIC_TX_SLOT_GATE_MS
+    uint32_t tlGateWaitMs = 0, tlGateScanMs = 0;
+    bool tlGateNewerUnread = false;
+    /** Gated scans that waited; timers that fired before the early window and were set again; targets too far to be
+     *  real, scanned at once */
+    uint32_t slotGateWaits = 0, slotGateRearmed = 0, slotGateCapped = 0;
+    /** The frame end the last gate counted its slots from, when it was noted, and what it was */
+    uint32_t slotGateAnchorMs = 0, slotGateAnchorNotedMs = 0;
+    const char *slotGateAnchorWhat = "none";
+#endif
+#ifdef MESHTASTIC_RADIO_TASK
+    uint32_t tlLockWaitUs = 0;
+    const char *tlLockHolder = "none";
+#endif
+#ifdef MESHTASTIC_TX_SLOT_LEAD
+    int32_t tlWakeUs = -1;
+    uint32_t tlPathUs = 0;
+#endif
+    /** Log the last TX's timeline; adopted says RX was re-armed at TX_DONE rather than by this thread */
+    void logTxTimeline(bool adopted);
+#endif
 
     /** Whether a packet is waiting to transmit; txQueue itself stays private. */
     bool hasQueuedTx() { return !txQueue.empty(); }
