@@ -252,6 +252,9 @@ template <typename T> bool LR11x0Interface<T>::init()
     if (res == RADIOLIB_ERR_NONE) {
         // Every begin() above reset the delay to RadioLib's default
         applyTcxoStartupDelay(lora, resolvedTcxoVoltage);
+#ifdef LR11X0_STANDBY_XOSC
+        keepTcxoOnInStandby();
+#endif
         res = lora.setCRC(2);
     }
 
@@ -368,6 +371,9 @@ template <typename T> bool LR11x0Interface<T>::reinitChip()
     if (res == RADIOLIB_ERR_NONE) {
         // begin() reset the delay to RadioLib's default
         applyTcxoStartupDelay(lora, resolvedTcxoVoltage);
+#ifdef LR11X0_STANDBY_XOSC
+        keepTcxoOnInStandby();
+#endif
         res = lora.setCRC(2);
     }
     if (res == RADIOLIB_ERR_NONE)
@@ -441,7 +447,12 @@ template <typename T> int16_t LR11x0Interface<T>::trySetStandby()
     // here, before its delay is up, and the standby below would cut it off with its payload still in the radio
     checkNotificationExcept(TRANSMIT_DELAY_COMPLETED);
 
+#ifdef LR11X0_STANDBY_XOSC
+    // SetStandby 0x01 is STBY_XOSC. RadioLib defines RADIOLIB_LR11X0_STANDBY_XOSC as 0x00, which is STBY_RC.
+    int16_t err = lora.standby(0x01);
+#else
     int16_t err = lora.standby();
+#endif
 
     if (err != RADIOLIB_ERR_NONE) {
         LOG_DEBUG_RADIO("LR11x0 standby failed, err %d", err);
@@ -461,6 +472,15 @@ template <typename T> void LR11x0Interface<T>::setStandby()
     int16_t err = trySetStandby();
     assert(err == RADIOLIB_ERR_NONE);
 }
+
+#ifdef LR11X0_STANDBY_XOSC
+template <typename T> void LR11x0Interface<T>::keepTcxoOnInStandby()
+{
+    // From STBY_RC, every SetCad, SetRx and SetTx first waits out the TCXO start-up
+    const int16_t res = lora.setRxTxFallbackMode(RADIOLIB_LR11X0_FALLBACK_MODE_STBY_XOSC);
+    LOG_DEBUG_RADIO("LR11x0 keep TCXO on in standby, result: %d", res);
+}
+#endif
 
 /**
  * Add SNR data to received messages
