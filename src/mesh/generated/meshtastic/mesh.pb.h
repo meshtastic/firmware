@@ -349,6 +349,10 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_T_CONNECT_PRO = 147,
     /* Axiometa Axiometa Genesis Mini */
     meshtastic_HardwareModel_AXIOMETA_GENESIS_MINI = 148,
+    /* MakerFabs Nomad Terminal */
+    meshtastic_HardwareModel_MAKERFABS_NOMAD_TERMINAL = 149,
+    /* Elecrow ThinkNode MX */
+    meshtastic_HardwareModel_THINKNODE_MX = 150,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */
@@ -670,8 +674,14 @@ typedef enum _meshtastic_MeshPacket_TransportMechanism {
  proofs existed. The value exists so a client can tell a proven delivery receipt from an
  unproven one, and can tell "nobody proved this" from "somebody tried and failed". */
 typedef enum _meshtastic_MeshPacket_AckProofStatus {
-    /* No proof was carried. The default, and what every ack from firmware predating
- Routing.ack_proof looks like, so an absent field and an absent proof read the same. */
+    /* No verdict. The default, and what every ack from firmware predating Routing.ack_proof looks
+ like, so an absent field and an absent proof read the same.
+
+ Also reported when a proof was carried but not checked: the ack came from a node other than
+ the one the packet was addressed to (a nak from an intermediate, for example), the packet was
+ no longer awaiting an ack, or the proof was malformed. A build without PKI never checks one.
+ A proof is only checked while the packet it acknowledges is still pending, so on a multi-hop
+ path an overheard relay can settle the packet first and leave a genuine receipt reading ABSENT. */
     meshtastic_MeshPacket_AckProofStatus_ACK_PROOF_ABSENT = 0,
     /* A proof was carried and verified against the public key of the node the acknowledged packet
  was addressed to. The only value that means "the recipient received it".
