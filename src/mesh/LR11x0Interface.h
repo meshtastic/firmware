@@ -30,6 +30,12 @@
 #if defined(LR11X0_RX_REARM_AT_TX_DONE) && !defined(MESHTASTIC_RX_READOUT_TASK)
 #error "LR11X0_RX_REARM_AT_TX_DONE re-arms from the readout task: build with MESHTASTIC_RX_READOUT_TASK"
 #endif
+// -DLR11X0_TX_STAGE_EARLY writes the payload during the backoff while RX runs, not in the scan's standby. WriteBuffer8
+// fills the TX buffer and received frames land in the separate RX buffer (Semtech's lr11xx_regmem.h), so the write aborts
+// no frame and nothing received overwrites it.
+#if defined(LR11X0_TX_STAGE_EARLY) && !LR11X0_TX_PRESTAGE
+#error "LR11X0_TX_STAGE_EARLY launches through LR11X0_TX_PRESTAGE: build with it and -DRADIOLIB_GODMODE=1"
+#endif
 
 /**
  * \brief Adapter for LR11x0 radio family. Implements common logic for child classes.
@@ -139,8 +145,21 @@ template <class T> class LR11x0Interface : public RadioLibInterface
     uint32_t prestagedId = 0;
 #endif
 
-    /** Forget what the chip was left holding (CAD parameters): it is being reset, reprogrammed or slept */
+    /** Forget what the chip was left holding (staged payload, CAD parameters): it is being reset, reprogrammed or slept */
     void forgetChipState();
+
+#ifdef LR11X0_TX_STAGE_EARLY
+    bool wantsEarlyTxStage() const override { return true; }
+    /** Write the next packet's payload into the TX buffer while RX runs */
+    void stageTxEarly(meshtastic_MeshPacket *p) override;
+    /** At the scan: true, with the prestage set, if the TX buffer already holds scanForTx's payload */
+    bool takeEarlyTxStage();
+    /** Remember the payload just written from radioBuffer */
+    void noteTxBuffer(size_t numbytes);
+    /** The payload in the chip's TX buffer, or 0 bytes if it is not known */
+    size_t earlyStagedLen = 0;
+    uint8_t earlyStagedBytes[sizeof(RadioBuffer)];
+#endif
 
 #ifdef LR11X0_CAD_SLIM
     /** lora.scanChannel(cfg), less the standby trySetStandby() has just done and CAD parameters the chip already has */
