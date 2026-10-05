@@ -693,7 +693,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         } else
 #endif
         {
-            fromRadioScratch.channel = channels.getByIndex(config_state);
+            fromRadioScratch.channel = channels.getChannelToReport(config_state); // never a borrowed primary
         }
         config_state++;
         // Advance when we have sent all of our Channels
@@ -764,7 +764,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             } else
 #endif
             {
-                fromRadioScratch.config.payload_variant.lora = config.lora;
+                fromRadioScratch.config.payload_variant.lora = RadioInterface::loraConfigToReport(); // never borrowed RF
             }
             break;
         case meshtastic_Config_bluetooth_tag:

@@ -201,7 +201,12 @@ class RadioInterface
     /// Apply any radio provisioning changes
     /// Make sure the Driver is properly configured before calling init().
     /// \return true if initialisation succeeded.
+    /// This is the BORROWED path: it programs the radio without moving the configured snapshot.
     virtual bool reconfigure();
+
+    /// Apply a permanent config change: program the radio, then snapshot what it accepted.
+    /// applyModemConfig() clamps config.lora in place, so the capture must come last.
+    bool commitConfig();
 
     /** The delay to use for retransmitting dropped packets */
     [[nodiscard]] uint32_t getRetransmissionMsec(const meshtastic_MeshPacket *p);
@@ -278,6 +283,32 @@ class RadioInterface
     // How many slots this config's region holds, deriving the bandwidth from it so every caller
     // gets the count the radio will actually run on.
     static uint32_t frequencySlotCount(const meshtastic_Config_LoRaConfig &loraConfig);
+
+    // The radio as configured, which is not always the radio as it is running. Status gates - may
+    // a module run, transmit, how often - ask these; only radio programming reads the live values.
+    // TRAP: only fields where committed and accepted coincide are meaningful. tx_power, bandwidth,
+    // spread_factor and coding_rate are clamped into members by applyModemConfig(), not into this.
+    static const meshtastic_Config_LoRaConfig &configuredLoraConfig();
+
+    // Settings-time twin of uses_default_frequency_slot.
+    static bool configuredUsesDefaultSlot();
+
+    // The region this node is configured for, not the one the radio may be borrowing.
+    static const RegionInfo *configuredRegion();
+
+    // Freeze config.lora and its slot verdict. Settings path and init() only.
+    // During a borrow it keeps the committed RF identity and primary, and adopts only the rest.
+    static void captureConfiguredRadio();
+
+    // True while a feature has the radio on borrowed settings (NodeDB's transient LoRa slot).
+    static bool radioIsBorrowed();
+
+    // Copy the committed RF identity (region, use_preset, modem_preset, channel_num) over lora.
+    static void overlayConfiguredRf(meshtastic_Config_LoRaConfig &lora);
+
+    // config.lora for anything outside the radio - a client, a save: the committed RF identity while a borrow
+    // holds it. Live otherwise, including an operator's edit made mid-borrow or inside an open edit transaction.
+    static meshtastic_Config_LoRaConfig loraConfigToReport();
 
     // Check if a candidate region is compatible and valid, with no side effects (safe for
     // speculative UI checks). prospectiveLicensedOwner is for a UI flow that requires
@@ -361,7 +392,7 @@ class RadioInterface
 
     int reloadConfig(void *unused)
     {
-        reconfigure();
+        commitConfig(); // only a committed config reaches here, so this is what the node IS
         return 0;
     }
 };

@@ -70,6 +70,18 @@ class Channels
     // Returns its length (0 = cleartext); out must hold 32 bytes. No secondary inheritance - that is getKey()'s.
     static uint8_t expandPsk(const uint8_t *psk, uint8_t len, uint8_t *out);
 
+    // getName() against an explicit preset: a blank name resolves to the preset's display name, so
+    // the answer depends on which preset is asked about. Status checks must ask the configured one.
+    const char *getNameForPreset(size_t chIndex, meshtastic_Config_LoRaConfig_ModemPreset preset, bool usePreset);
+
+    // Freeze the primary channel's settings. Called by RadioInterface::captureConfiguredRadio(),
+    // so the channel and the LoRa config are snapshotted at the same commit.
+    void captureCommittedPrimary();
+
+    // The channel for anything outside the radio - a client, a save: the committed primary while a borrow
+    // holds the live one, as stored otherwise.
+    meshtastic_Channel getChannelToReport(ChannelIndex chIndex);
+
     /**
      * Return a globally unique channel ID usable with MQTT.
      */
@@ -169,6 +181,18 @@ class Channels
      * Write default channels defined in UserPrefs
      */
     void initDefaultChannel(ChannelIndex chIndex);
+
+    // getNameForPreset() against settings the caller already holds.
+    static const char *nameForSettings(const meshtastic_ChannelSettings &settings,
+                                       meshtastic_Config_LoRaConfig_ModemPreset preset, bool usePreset);
+
+    // The committed settings for a channel: the snapshot for the primary, live for the rest.
+    const meshtastic_ChannelSettings &committedSettings(ChannelIndex chIndex);
+
+    // The primary as committed. A borrow replaces the live settings in place, so a status check
+    // that read those would answer for the mesh we are visiting.
+    meshtastic_ChannelSettings committedPrimary = meshtastic_ChannelSettings_init_zero;
+    bool committedPrimaryCaptured = false;
 };
 
 /// Singleton channel table
