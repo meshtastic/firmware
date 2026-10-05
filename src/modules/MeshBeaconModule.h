@@ -177,6 +177,7 @@ class MeshBeaconModule
     static meshtastic_Config_LoRaConfig_RegionCode originalRegion;
     static bool originalUsePreset;
     static float originalOverrideFrequency;
+    static int8_t originalTxPower;
 };
 
 /**

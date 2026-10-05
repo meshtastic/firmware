@@ -5807,6 +5807,157 @@ static void test_txHook_blankChannelOnAnotherPreset_carriesTheTargetMeshHash(voi
     TEST_ASSERT_EQUAL_HEX8_MESSAGE(receiverHash, onAir, "the beacon carries the hash the target mesh computes");
 }
 
+/**
+ * Under test: the home-slot seed in MeshBeaconBroadcastModule::sendBeacon() (src/modules/MeshBeaconModule.cpp).
+ * Why: a target naming a secondary channel, with no preset, region or pin of its own, is a beacon for the home
+ * mesh on that channel. The home mesh listens on the home slot, not on the slot the secondary's name hashes to.
+ * Regression guarded: the beacon keying up on hash("Alt"), a slot nobody on the home mesh is listening on.
+ */
+static void test_broadcaster_secondaryTargetWithNoPin_staysOnTheHomeSlot(void)
+{
+    resetConfig();
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    initRegion();
+    installTestPrimaryChannel("Home", kHomePsk, sizeof(kHomePsk));
+    static const uint8_t altPsk[16] = {0xB2, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                       0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    installTestSecondaryChannel(1, "Alt", altPsk, sizeof(altPsk));
+    channels.onConfigChanged();
+    TEST_ASSERT_NOT_EQUAL_MESSAGE(RadioInterface::resolveFrequencySlot(config.lora, "Home"),
+                                  RadioInterface::resolveFrequencySlot(config.lora, "Alt"),
+                                  "precondition: the two names hash to different slots");
+
+    moduleConfig.has_mesh_beacon = true;
+    strncpy(moduleConfig.mesh_beacon.broadcast_message, "hi", sizeof(moduleConfig.mesh_beacon.broadcast_message) - 1);
+    moduleConfig.mesh_beacon.broadcast_targets_count = 1;
+    moduleConfig.mesh_beacon.broadcast_targets[0].has_channel_index = true;
+    moduleConfig.mesh_beacon.broadcast_targets[0].channel_index = 1;
+
+    MeshBeaconBroadcastModuleTestShim bcast;
+    bcast.sendBeacon();
+
+    TEST_ASSERT_EQUAL_UINT32(1, mockRouter->sentPackets.size());
+    TEST_ASSERT_EQUAL_MESSAGE(1, mockRouter->sentPackets[0].channel, "addressed at the secondary");
+    TEST_ASSERT_FALSE_MESSAGE(MeshBeaconModule::hasTargetRadioSettings(&mockRouter->sentPackets[0]),
+                              "on the home region, preset and slot, so no radio switch");
+}
+
+/**
+ * Under test: the unset-preset default in MeshBeaconBroadcastModule::sendBeacon() (src/modules/MeshBeaconModule.cpp).
+ * Why: a target naming another region and no preset means that region's default mesh, the same rule an
+ * offer's unset preset follows. The node's own preset says nothing about a region it is not in.
+ * Regression guarded: the target keying up on the home preset (LONG_SLOW here) instead of US's LONG_FAST.
+ */
+static void test_broadcaster_otherRegionTargetWithNoPreset_usesThatRegionsDefault(void)
+{
+    resetConfig();
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
+    installTestPrimaryChannel("Home", kHomePsk, sizeof(kHomePsk));
+    const auto usDefault = getRegion(meshtastic_Config_LoRaConfig_RegionCode_US)->getDefaultPreset();
+    TEST_ASSERT_NOT_EQUAL_MESSAGE(config.lora.modem_preset, usDefault, "precondition: home preset is not US's default");
+
+    moduleConfig.has_mesh_beacon = true;
+    strncpy(moduleConfig.mesh_beacon.broadcast_message, "hi", sizeof(moduleConfig.mesh_beacon.broadcast_message) - 1);
+    moduleConfig.mesh_beacon.broadcast_targets_count = 1;
+    moduleConfig.mesh_beacon.broadcast_targets[0].region = meshtastic_Config_LoRaConfig_RegionCode_US;
+
+    MeshBeaconBroadcastModuleTestShim bcast;
+    bcast.sendBeacon();
+
+    TEST_ASSERT_EQUAL_UINT32(1, mockRouter->sentPackets.size());
+    const auto *s = MeshBeaconModule::getTargetRadioSettings(&mockRouter->sentPackets[0]);
+    TEST_ASSERT_NOT_NULL(s);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(usDefault, s->lora.modem_preset, "US's default preset, not the home one");
+    TEST_ASSERT_TRUE(s->lora.use_preset);
+}
+
+/**
+ * Under test: the restore gate in MeshBeaconModule::reconfigureForBeaconTX() (src/modules/MeshBeaconModule.cpp).
+ * Why: two queued beacons on the same target radio, back to back, should key up on one switch. Going home
+ * between them costs two reconfigures and a fresh channel scan for nothing. An untagged packet still restores.
+ * Regression guarded: a restore and a re-switch between consecutive beacons on identical settings.
+ */
+static void test_beaconRestore_waitsForTheNextBeaconOnTheSameRadio(void)
+{
+    resetConfig();
+    installTestPrimaryChannel("Home", kHomePsk, sizeof(kHomePsk));
+
+    MeshBeaconTxHook hook;
+    ReentrantRadioInterface radio;
+    meshtastic_MeshPacket first = meshtastic_MeshPacket_init_zero;
+    meshtastic_MeshPacket second = meshtastic_MeshPacket_init_zero;
+    meshtastic_MeshPacket normal = meshtastic_MeshPacket_init_zero;
+    first.id = 0x5EED0020;
+    second.id = 0x5EED0021;
+    normal.id = 0x5EED0022;
+    const auto target = targetSettings(meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW, true, 1, false,
+                                       meshtastic_Config_LoRaConfig_RegionCode_UNSET);
+    MeshBeaconModule::setTargetRadioSettings(&first, target);
+    MeshBeaconModule::setTargetRadioSettings(&second, target);
+
+    TEST_ASSERT_EQUAL_INT(RadioTxHook::PRETX_DEFER, RadioTxHooks::beforeTransmit(&radio, &first));
+    const int switches = radio.reconfigureCalls;
+    RadioTxHooks::packetReleased(&radio, &first);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW, config.lora.modem_preset,
+                                  "the next beacon wants the same radio, so it stays");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(RadioTxHook::PRETX_SEND, RadioTxHooks::beforeTransmit(&radio, &second),
+                                  "and the second beacon keys up with no switch");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(switches, radio.reconfigureCalls, "no reconfigure between the two");
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(RadioTxHook::PRETX_DEFER, RadioTxHooks::beforeTransmit(&radio, &normal),
+                                  "an untagged packet at the front still restores first");
+    TEST_ASSERT_EQUAL_INT(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, config.lora.modem_preset);
+
+    MeshBeaconModule::clearAllTargetRadioSettings();
+}
+
+// Lowers tx_power on US, as applyModemConfig() clamps it to a region's limit.
+class ClampingRadioInterface : public ReentrantRadioInterface
+{
+  public:
+    bool reconfigure() override
+    {
+        if (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_US && config.lora.tx_power > 10)
+            config.lora.tx_power = 10;
+        return ReentrantRadioInterface::reconfigure();
+    }
+};
+
+/**
+ * Under test: the field-wise restore in MeshBeaconModule::reconfigureForBeaconTX() (src/modules/MeshBeaconModule.cpp).
+ * Why: applyModemConfig() clamps tx_power for the target region in place, so the restore has to put the home
+ * value back. A field the operator changed during the switch is theirs and stays, without keeping the rest.
+ * Regression guarded: the node left on the target region's clamped power, or kept on the beacon's preset because
+ * an unrelated field was edited mid-switch.
+ */
+static void test_beaconRestore_putsBackAClampedTxPowerAndKeepsOnlyEditedFields(void)
+{
+    resetConfig();
+    installTestPrimaryChannel("Home", kHomePsk, sizeof(kHomePsk));
+    config.lora.tx_power = 20;
+
+    ClampingRadioInterface radio;
+    meshtastic_MeshPacket pkt = meshtastic_MeshPacket_init_zero;
+    pkt.id = 0x5EED0023;
+    const auto target = targetSettings(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, true, 1, false,
+                                       meshtastic_Config_LoRaConfig_RegionCode_US);
+    MeshBeaconModule::setTargetRadioSettings(&pkt, target);
+    TEST_ASSERT_TRUE(MeshBeaconModule::reconfigureForBeaconTX(&radio, &pkt));
+    TEST_ASSERT_EQUAL_INT8_MESSAGE(10, config.lora.tx_power, "precondition: clamped for the target region");
+    MeshBeaconModule::clearTargetRadioSettings(&pkt);
+    TEST_ASSERT_TRUE(MeshBeaconModule::reconfigureForBeaconTX(&radio, nullptr));
+    TEST_ASSERT_EQUAL_INT8_MESSAGE(20, config.lora.tx_power, "the restore puts the home power back");
+
+    // Again, with only tx_power edited during the switch.
+    MeshBeaconModule::setTargetRadioSettings(&pkt, target);
+    TEST_ASSERT_TRUE(MeshBeaconModule::reconfigureForBeaconTX(&radio, &pkt));
+    config.lora.tx_power = 5; // an on-device menu edit
+    MeshBeaconModule::clearTargetRadioSettings(&pkt);
+    TEST_ASSERT_TRUE(MeshBeaconModule::reconfigureForBeaconTX(&radio, nullptr));
+    TEST_ASSERT_EQUAL_INT8_MESSAGE(5, config.lora.tx_power, "the edited field stays");
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Config_LoRaConfig_RegionCode_EU_868, config.lora.region, "the rest goes home");
+}
+
 // ===========================================================================
 // Unity lifecycle
 // ===========================================================================
@@ -6080,6 +6231,10 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_sidecar_inheritedRegionMoved_dropsEvenATargetTheNewRegionCouldRun);
     RUN_TEST(test_beaconSwitch_clearsAHomeFrequencyOverrideAndRestoresIt);
     RUN_TEST(test_txHook_blankChannelOnAnotherPreset_carriesTheTargetMeshHash);
+    RUN_TEST(test_broadcaster_secondaryTargetWithNoPin_staysOnTheHomeSlot);
+    RUN_TEST(test_broadcaster_otherRegionTargetWithNoPreset_usesThatRegionsDefault);
+    RUN_TEST(test_beaconRestore_waitsForTheNextBeaconOnTheSameRadio);
+    RUN_TEST(test_beaconRestore_putsBackAClampedTxPowerAndKeepsOnlyEditedFields);
 
     exit(UNITY_END());
 }

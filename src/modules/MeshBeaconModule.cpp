@@ -18,6 +18,7 @@ uint16_t MeshBeaconModule::originalLoraChannel;
 meshtastic_Config_LoRaConfig_RegionCode MeshBeaconModule::originalRegion;
 bool MeshBeaconModule::originalUsePreset;
 float MeshBeaconModule::originalOverrideFrequency;
+int8_t MeshBeaconModule::originalTxPower;
 
 // One entry per broadcast target - the proto holds 4 - each covering the legacy split pair.
 static MeshBeaconModule_TargetRadioSettings targetRadioSettings[MESH_BEACON_MAX_TARGETS];
@@ -85,7 +86,16 @@ static struct {
     uint32_t slot;
     meshtastic_Config_LoRaConfig_RegionCode region;
     float overrideFrequency;
+    int8_t txPower;
 } switchedTo;
+
+// A LoRa write landed while the beacon held the radio: config.lora no longer holds what the switch installed.
+static bool radioEditedMidSwitch()
+{
+    return config.lora.modem_preset != switchedTo.preset || config.lora.use_preset != switchedTo.usePreset ||
+           config.lora.channel_num != switchedTo.slot || config.lora.region != switchedTo.region ||
+           config.lora.override_frequency != switchedTo.overrideFrequency || config.lora.tx_power != switchedTo.txPower;
+}
 
 // The interval runOnce() schedules on: configured, else the default, never below the minimum.
 static uint32_t beaconIntervalMs()
@@ -129,6 +139,17 @@ static bool targetRadioSettingsLive(uint32_t id)
     return false;
 }
 
+// A queued beacon whose target is the RF the switch installed, so keying it up needs no reconfigure.
+static bool queuedBeaconWantsInstalledRadio()
+{
+    for (const auto &entry : targetRadioSettings)
+        if (entry.idCount && !targetRadioSettingsStale(entry) && entry.lora.modem_preset == switchedTo.preset &&
+            entry.lora.use_preset == switchedTo.usePreset && entry.lora.channel_num == switchedTo.slot &&
+            entry.lora.region == switchedTo.region)
+            return true;
+    return false;
+}
+
 // ---------------------------------------------------------------------------
 // MeshBeaconModule base
 // ---------------------------------------------------------------------------
@@ -140,6 +161,7 @@ MeshBeaconModule::MeshBeaconModule()
     originalLoraChannel = config.lora.channel_num;
     originalRegion = config.lora.region;
     originalOverrideFrequency = config.lora.override_frequency;
+    originalTxPower = config.lora.tx_power;
 }
 
 int MeshBeaconModule::setTargetRadioSettings(const meshtastic_MeshPacket *p, const MeshBeaconModule_TargetRadioSettings &s,
@@ -662,6 +684,7 @@ bool MeshBeaconModule::reconfigureForBeaconTX(RadioInterface *iface, meshtastic_
             originalLoraChannel = config.lora.channel_num;
             originalRegion = config.lora.region;
             originalOverrideFrequency = config.lora.override_frequency;
+            originalTxPower = config.lora.tx_power; // applyModemConfig() clamps it for the target region in place
             switchDepth = 0;
         }
         switchDepth++;
@@ -691,8 +714,8 @@ bool MeshBeaconModule::reconfigureForBeaconTX(RadioInterface *iface, meshtastic_
         switchedForId = p->id;
         iface->reconfigure();
         // After reconfigure(): applyModemConfig() may clamp in place, and that must not read as an edit.
-        switchedTo = {config.lora.modem_preset, config.lora.use_preset, config.lora.channel_num, config.lora.region,
-                      config.lora.override_frequency};
+        switchedTo = {config.lora.modem_preset, config.lora.use_preset,         config.lora.channel_num,
+                      config.lora.region,       config.lora.override_frequency, config.lora.tx_power};
         return true;
 
     } else if (radioSwitched) { // s is null here: either no packet, or one carrying no target
@@ -703,24 +726,29 @@ bool MeshBeaconModule::reconfigureForBeaconTX(RadioInterface *iface, meshtastic_
             LOG_DEBUG("Beacon: skip restore, packet 0x%08x has not finished sending", switchedForId);
             return false;
         }
-
-        // A LoRa write landed while the beacon held the radio (it was on the air, out of the flush's reach):
-        // config.lora is now the operator's, so putting the snapshot back would silently revert it.
-        const bool editedMidSwitch = config.lora.modem_preset != switchedTo.preset ||
-                                     config.lora.use_preset != switchedTo.usePreset ||
-                                     config.lora.channel_num != switchedTo.slot || config.lora.region != switchedTo.region ||
-                                     config.lora.override_frequency != switchedTo.overrideFrequency;
-        if (editedMidSwitch) {
-            LOG_INFO("Beacon: LoRa config edited during switch #%u, keeping the edit", switchDepth);
-        } else {
-            LOG_INFO("Beacon: restore radio config after TX, undoing %u switch(es) -> preset=%d slot=%u region=%d", switchDepth,
-                     originalModemPreset, originalLoraChannel, originalRegion);
-            config.lora.modem_preset = originalModemPreset;
-            config.lora.use_preset = originalUsePreset;
-            config.lora.channel_num = originalLoraChannel;
-            config.lora.region = originalRegion;
-            config.lora.override_frequency = originalOverrideFrequency;
+        // Another queued beacon wants the radio as installed: stay, rather than go home and straight back.
+        // An untagged packet reaching the driver still restores, through the non-null p above.
+        if (!p && !radioEditedMidSwitch() && queuedBeaconWantsInstalledRadio()) {
+            LOG_DEBUG("Beacon: skip restore, the next beacon keys up on the same radio");
+            return false;
         }
+
+        // Field by field: a field a LoRa write changed while the beacon held the radio is the operator's, and stays.
+        unsigned kept = 0;
+        const auto restore = [&kept](auto &live, auto installed, auto home) {
+            if (live == installed)
+                live = home;
+            else
+                kept++;
+        };
+        restore(config.lora.modem_preset, switchedTo.preset, originalModemPreset);
+        restore(config.lora.use_preset, switchedTo.usePreset, originalUsePreset);
+        restore(config.lora.channel_num, switchedTo.slot, originalLoraChannel);
+        restore(config.lora.region, switchedTo.region, originalRegion);
+        restore(config.lora.override_frequency, switchedTo.overrideFrequency, originalOverrideFrequency);
+        restore(config.lora.tx_power, switchedTo.txPower, originalTxPower);
+        LOG_INFO("Beacon: restore radio config after TX, undoing %u switch(es) -> preset=%d slot=%u region=%d, %u edit(s) kept",
+                 switchDepth, config.lora.modem_preset, config.lora.channel_num, config.lora.region, kept);
         if (nodeDB) { // config.lora describes the committed config again
             nodeDB->setLoraSlotTransient(false);
             nodeDB->refreshCommittedLoraSlot();
@@ -944,6 +972,10 @@ void MeshBeaconBroadcastModule::sendBeacon()
             if (bt->has_preset) {
                 tgt.preset = bt->preset;
                 tgt.usePreset = true;
+            } else if (bt->region != meshtastic_Config_LoRaConfig_RegionCode_UNSET && bt->region != config.lora.region) {
+                // Another region with no preset means that region's default, the rule an offer follows.
+                tgt.preset = getRegion(bt->region)->getDefaultPreset();
+                tgt.usePreset = true;
             }
             tgt.region = bt->region;
         }
@@ -980,19 +1012,18 @@ void MeshBeaconBroadcastModule::sendBeacon()
             }
         }
 
-        // A pin wins. Otherwise channel_num derives from the region, the bandwidth and the hashed
-        // name, so overriding any of those means the node's own slot no longer names the same
-        // frequency and must not be carried across. Seeding 0 asks for the target region's answer.
+        // A pin wins. On the home region and preset an unpinned target stays on the home slot, whichever channel
+        // it names; otherwise seeding 0 asks the target region for its slot, hashed from the channel name.
         const bool pinned = bt && bt->has_frequency_slot && bt->frequency_slot > 0;
         const bool inheritsRadio = resolvedRegion == config.lora.region && tgt.usePreset == config.lora.use_preset &&
-                                   tgt.preset == config.lora.modem_preset && bc.index == channels.getPrimaryIndex();
+                                   tgt.preset == config.lora.modem_preset;
         if (pinned && bt->frequency_slot > RadioInterface::frequencySlotCount(targetProbe(tgt, resolvedRegion, 0))) {
             // Skipped rather than derived, as for a channel or a preset: the operator named a
             // frequency, and beaconing on a different one is worse than not beaconing at all.
             LOG_DEBUG("Beacon: target %d frequency_slot %u not in the resolved region, skip", ti, bt->frequency_slot);
             continue;
         }
-        const uint32_t seedSlot = pinned ? bt->frequency_slot : inheritsRadio ? config.lora.channel_num : 0;
+        const uint32_t seedSlot = pinned ? bt->frequency_slot : inheritsRadio ? homeSlot : 0;
         tgt.slot = targetSlot(tgt, resolvedRegion, seedSlot);
 
         // Skip a target whose effective radio config duplicates one already sent this cycle.
