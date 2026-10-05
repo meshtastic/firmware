@@ -54,6 +54,7 @@ void CryptoEngine::generateKeyPair(uint8_t *pubKey, uint8_t *privKey)
     Curve25519::dh1(public_key, private_key);
     memcpy(pubKey, public_key, sizeof(public_key));
     memcpy(privKey, private_key, sizeof(private_key));
+    clearSharedSecretCache();
 #if !(MESHTASTIC_EXCLUDE_XEDDSA)
     XEdDSA::priv_curve_to_ed_keys(private_key, xeddsa_private_key, xeddsa_public_key);
 #endif
@@ -76,6 +77,7 @@ bool CryptoEngine::regeneratePublicKey(uint8_t *pubKey, uint8_t *privKey)
         }
         memcpy(private_key, privKey, sizeof(private_key));
         memcpy(public_key, pubKey, sizeof(public_key));
+        clearSharedSecretCache();
 #if !(MESHTASTIC_EXCLUDE_XEDDSA)
         XEdDSA::priv_curve_to_ed_keys(private_key, xeddsa_private_key, xeddsa_public_key);
 #endif
@@ -299,10 +301,9 @@ bool CryptoEngine::encryptCurve25519(uint32_t toNode, uint32_t fromNode, meshtas
         LOG_DEBUG("Node %d or their public_key not found", toNode);
         return false;
     }
-    if (!setDHPublicKey(remotePublic.bytes)) {
+    if (!setCryptoSharedSecret(remotePublic.bytes)) {
         return false;
     }
-    hash(shared_key, 32);
     initNonce(fromNode, packetNum, extraNonceTmp);
 
     // Calculate the shared secret with the destination node and encrypt
@@ -340,10 +341,9 @@ bool CryptoEngine::decryptCurve25519(uint32_t fromNode, meshtastic_NodeInfoLite_
     }
 
     // Calculate the shared secret with the sending node and decrypt
-    if (!setDHPublicKey(remotePublic.bytes)) {
+    if (!setCryptoSharedSecret(remotePublic.bytes)) {
         return false;
     }
-    hash(shared_key, 32);
 
     initNonce(fromNode, packetNum, extraNonce);
     printBytes("Attempt decrypt with nonce: ", nonce, 13);
@@ -363,12 +363,9 @@ bool CryptoEngine::ackProofCompute(const uint8_t *peerPubKey, uint32_t ackFrom, 
     if (memfll(private_key, 0, sizeof(private_key)))
         return false; // no identity yet - nothing to prove with
 
-    // setDHPublicKey takes a mutable buffer (Curve25519::dh2 works in place), so copy the peer key.
-    uint8_t peer[32];
-    memcpy(peer, peerPubKey, 32);
-    if (!setDHPublicKey(peer))
-        return false;     // includes the library's weak-point check
-    hash(shared_key, 32); // same derivation encryptCurve25519/decryptCurve25519 use
+    // Same derivation, and the same cache, encryptCurve25519/decryptCurve25519 use.
+    if (!setCryptoSharedSecret(peerPubKey))
+        return false; // includes the library's weak-point check on a cache miss
 
     uint8_t header[ACK_PROOF_LABEL_LEN + 3 * sizeof(uint32_t)];
     memcpy(header, ACK_PROOF_LABEL, ACK_PROOF_LABEL_LEN);
@@ -386,13 +383,89 @@ bool CryptoEngine::ackProofCompute(const uint8_t *peerPubKey, uint32_t ackFrom, 
     memcpy(proofOut, digest, ACK_PROOF_SIZE);
 
     memset(digest, 0, sizeof(digest));
-    memset(shared_key, 0, sizeof(shared_key)); // do not leave the pairwise secret sitting in the engine
+    memset(shared_key, 0, sizeof(shared_key)); // clear the working copy; the cache keeps its own
     return true;
 }
 
 void CryptoEngine::setDHPrivateKey(uint8_t *_private_key)
 {
     memcpy(private_key, _private_key, 32);
+    clearSharedSecretCache();
+}
+
+void CryptoEngine::clearSharedSecretCache()
+{
+    memset(sharedSecretCache, 0, sizeof(sharedSecretCache));
+}
+
+/**
+ * Derive shared_key = SHA256(X25519(our private, peer public)), reusing the cached result when we
+ * have derived it for this peer before. Entries are matched on the whole peer key: a shorter tag
+ * can be ground out by an impostor, who would then receive traffic meant for the peer it shadows.
+ */
+bool CryptoEngine::setCryptoSharedSecret(const uint8_t *peerPubKey)
+{
+    // setDHPublicKey takes a mutable buffer (Curve25519::dh2 works in place), so copy the peer key.
+    uint8_t peer[32];
+    memcpy(peer, peerPubKey, 32);
+
+    // The last used timestamp is in units of ~1.165 hours, which gives us
+    // ~12.3 days before the timestamps roll over. This is ok since a periodic
+    // misfire on evicting the oldest secret has very little impact.
+    const uint8_t now = (millis() >> 22) & 0xff;
+
+    uint16_t oldestDelta = 0;
+    size_t oldestIndex = 0;
+    bool haveEmptySlot = false;
+    for (size_t i = 0; i < MAX_CACHED_SHARED_SECRETS; i++) {
+        CachedSharedSecret &entry = sharedSecretCache[i];
+        if (entry.valid && memcmp(entry.peer_public_key, peerPubKey, 32) == 0) {
+            // Cache hit! Copy it into shared_key.
+            memcpy(shared_key, entry.shared_secret, 32);
+            // Update the last used timestamp
+            entry.last_used = now;
+            return true;
+        }
+
+        if (haveEmptySlot) {
+            // We already have a slot to insert into. Keep looking for a cache hit.
+            continue;
+        }
+
+        if (!entry.valid) {
+            // This entry is empty. We can insert into it later, if needed.
+            oldestIndex = i;
+            haveEmptySlot = true;
+            continue;
+        }
+
+        // Track the oldest entry in case the cache is full.
+        uint16_t delta = 0;
+        if (now >= entry.last_used) {
+            delta = now - entry.last_used;
+        } else {
+            // Assume a larger last used timestamp is further in the past
+            delta = uint16_t(0x100) + now - entry.last_used;
+        }
+        if (delta > oldestDelta) {
+            oldestIndex = i;
+            oldestDelta = delta;
+        }
+    }
+
+    // Cache miss. Generate the shared secret.
+    if (!setDHPublicKey(peer)) {
+        return false;
+    }
+    hash(shared_key, 32);
+
+    // Insert the calculated shared secret into the cache, overwriting an old entry if needed.
+    CachedSharedSecret &oldestEntry = sharedSecretCache[oldestIndex];
+    memcpy(oldestEntry.peer_public_key, peerPubKey, 32);
+    oldestEntry.last_used = now;
+    oldestEntry.valid = true;
+    memcpy(oldestEntry.shared_secret, shared_key, 32);
+    return true;
 }
 
 #endif // !(MESHTASTIC_EXCLUDE_PKI)

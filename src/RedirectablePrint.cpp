@@ -235,6 +235,8 @@ void RedirectablePrint::log_to_ble(const char *logLevel, const char *format, va_
         isBleConnected = nimbleBluetooth && nimbleBluetooth->isActive() && nimbleBluetooth->isConnected();
 #elif defined(ARCH_NRF52)
         isBleConnected = nrf52Bluetooth != nullptr && nrf52Bluetooth->isConnected();
+#elif defined(MESHTASTIC_LINUX_BLE)
+        isBleConnected = linuxBluetooth != nullptr && linuxBluetooth->isEnabled() && linuxBluetooth->isConnected();
 #endif
         if (isBleConnected) {
             auto thread = concurrency::OSThread::currentThread;
@@ -251,6 +253,8 @@ void RedirectablePrint::log_to_ble(const char *logLevel, const char *format, va_
             nimbleBluetooth->sendLog(buffer.get(), size);
 #elif defined(ARCH_NRF52)
             nrf52Bluetooth->sendLog(buffer.get(), size);
+#elif defined(MESHTASTIC_LINUX_BLE)
+            linuxBluetooth->sendLog(buffer.get(), size);
 #endif
         }
     }
@@ -265,6 +269,9 @@ meshtastic_LogRecord_Level RedirectablePrint::getLogLevel(const char *logLevel)
 {
     meshtastic_LogRecord_Level ll = meshtastic_LogRecord_Level_UNSET; // default to unset
     switch (logLevel[0]) {
+    case 'T':
+        ll = meshtastic_LogRecord_Level_TRACE;
+        break;
     case 'D':
         ll = meshtastic_LogRecord_Level_DEBUG;
         break;
