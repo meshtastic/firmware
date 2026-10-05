@@ -475,6 +475,9 @@ template <typename T> void LR11x0Interface<T>::setStandby()
 
 template <typename T> void LR11x0Interface<T>::forgetChipState()
 {
+#ifdef LR11X0_TX_STAGE_EARLY
+    earlyStagedLen = 0;
+#endif
 #ifdef LR11X0_CAD_SLIM
     cadParamsValid = false;
 #endif
@@ -719,17 +722,23 @@ template <typename T> bool LR11x0Interface<T>::isChannelActive()
 #if LR11X0_TX_PRESTAGE
     prestagedLen = 0; // only a clear verdict from this scan may launch what it stages
 #endif
+#ifdef LR11X0_TX_STAGE_EARLY
+    (void)takeEarlyTxStage(); // written during the backoff: nothing to write in the standby below
+#endif
     int16_t result = trySetStandby();
     if (result == RADIOLIB_ERR_NONE) {
 #if LR11X0_TX_PRESTAGE
         // Write the payload now, in the standby the scan needs anyway, not after the verdict. Only the buffer: the
         // packet params keep RX's maximum length, so a detection's RX still takes a full-length frame. The CAD leaves
         // the buffer alone; a detection's RX may overwrite it, but then no TX follows.
-        if (scanForTx) {
+        if (scanForTx && !prestagedLen) {
             const size_t numbytes = encodeRadioBuffer(scanForTx);
             if (numbytes && lora.writeBuffer8((uint8_t *)&radioBuffer, numbytes) == RADIOLIB_ERR_NONE) {
                 prestagedLen = numbytes;
                 prestagedId = scanForTx->id;
+#ifdef LR11X0_TX_STAGE_EARLY
+                noteTxBuffer(numbytes); // so a busy verdict's rescan need not write it again
+#endif
             }
         }
 #endif
@@ -798,6 +807,9 @@ template <typename T> int16_t LR11x0Interface<T>::launchTransmit(size_t numbytes
 {
     const bool prestaged = prestagedLen != 0 && prestagedLen == numbytes && sendingPacket && sendingPacket->id == prestagedId;
     prestagedLen = 0;
+#ifdef LR11X0_TX_STAGE_EARLY
+    earlyStagedLen = 0; // this packet is on its way; RadioLib's staging would also write over the buffer
+#endif
 #ifdef LR11X0_CAD_EXIT_LBT
     if (chipKeyedUp) {
         chipKeyedUp = false;
@@ -826,6 +838,44 @@ template <typename T> int16_t LR11x0Interface<T>::launchTransmit(size_t numbytes
         return res;
     lora.stagedMode = RADIOLIB_RADIO_MODE_TX; // what stageMode() leaves for launchMode()
     return lora.launchMode();                 // RF switch, SET_TX, then the BUSY wait for the PA ramp
+}
+#endif
+
+#ifdef LR11X0_TX_STAGE_EARLY
+template <typename T> void LR11x0Interface<T>::noteTxBuffer(size_t numbytes)
+{
+    earlyStagedLen = numbytes;
+    memcpy(earlyStagedBytes, &radioBuffer, numbytes); // still the payload just written
+}
+
+template <typename T> void LR11x0Interface<T>::stageTxEarly(meshtastic_MeshPacket *p)
+{
+    // Only while RX runs: a TX in flight is using the buffer, and SPI would wake a sleeping chip
+    if (!p || sendingPacket || !isReceiving)
+        return;
+    const size_t numbytes = encodeRadioBuffer(p);
+    if (numbytes == 0)
+        return;
+    if (earlyStagedLen == numbytes && memcmp(earlyStagedBytes, &radioBuffer, numbytes) == 0)
+        return; // a redraw of the same packet: still in the buffer
+    earlyStagedLen = 0;
+    if (lora.writeBuffer8((uint8_t *)&radioBuffer, numbytes) == RADIOLIB_ERR_NONE)
+        noteTxBuffer(numbytes);
+}
+
+template <typename T> bool LR11x0Interface<T>::takeEarlyTxStage()
+{
+    if (!earlyStagedLen || !scanForTx)
+        return false;
+    const size_t numbytes = encodeRadioBuffer(scanForTx); // CPU only, no bus traffic
+    if (numbytes != earlyStagedLen || memcmp(earlyStagedBytes, &radioBuffer, numbytes) != 0) {
+        LOG_DEBUG("TX staged early: not the packet being scanned for, restage at the scan");
+        earlyStagedLen = 0; // whatever the scan stages goes over it
+        return false;
+    }
+    prestagedLen = numbytes;
+    prestagedId = scanForTx->id;
+    return true;
 }
 #endif
 
