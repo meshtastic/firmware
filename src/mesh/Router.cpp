@@ -299,7 +299,7 @@ bool Router::shouldDecrementHopLimit(const meshtastic_MeshPacket *p)
 
 int32_t Router::rxHoldForTxMs(uint32_t txDueMs, uint32_t nowMs, int32_t horizonMs)
 {
-    if (!txDueMs)
+    if (!txDueMs || horizonMs <= 0)
         return 0;
     // Past due still counts: the radio thread has not run its timer yet. Long past is a timer that was dropped.
     const int32_t untilDue = (int32_t)(txDueMs - nowMs);
