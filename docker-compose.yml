@@ -15,8 +15,9 @@ services:
     volumes:
       - "${CONFIG_PATH}:/etc/meshtasticd/config.yaml:ro"
       - meshtastic_data:/var/lib/meshtasticd
+      # Let the host Avahi daemon advertise the mapped API port.
+      - /run/dbus:/run/dbus:ro
 
-    # Forward the container’s port 4403 to the host
     ports:
       - 4403:4403
 

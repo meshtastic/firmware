@@ -151,10 +151,13 @@ class NativeDiscovery
             }
 
             int error = 0;
-            AvahiClient *client = avahi_client_new(avahi_simple_poll_get(poll), AVAHI_CLIENT_NO_FAIL,
+            AvahiClient *client = avahi_client_new(avahi_simple_poll_get(poll), AvahiClientFlags(0),
                                                    &NativeDiscovery::clientCallback, this, &error);
-            if (!client)
-                LOG_WARN("Avahi client setup failed: %s", avahi_strerror(error));
+            if (!client) {
+                LOG_INFO("Avahi unavailable (%s); mDNS discovery disabled", avahi_strerror(error));
+                avahi_simple_poll_free(poll);
+                return;
+            }
             while (client && !stopping && !reconnect && avahi_simple_poll_iterate(poll, 250) >= 0) {
             }
 
