@@ -69,6 +69,7 @@ template <typename T> bool SX128xInterface<T>::init()
 
     if (!reinitChip(/*fromInit=*/true))
         return false;
+    boundBusyWait();
 
     applyCadDetPeak(); // init() does not route through reconfigure(), so set it here too
     startReceive();    // start receiving
