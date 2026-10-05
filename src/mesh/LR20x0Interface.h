@@ -38,6 +38,12 @@
 #if defined(LR2021_PRESTAGE_UPSTREAM) && !defined(LR2021_TX_PRESTAGE)
 #error "LR2021_PRESTAGE_UPSTREAM changes how LR2021_TX_PRESTAGE stages: build with -DLR2021_TX_PRESTAGE"
 #endif
+// -DLR2021_CAD_EXIT_LBT scans with CAD exit mode LBT: a clear CAD keys up from the prestaged payload, and a busy one leaves the
+// chip in standby for rearmReceive() to restart RX, with no CAD>RX handoff. The chip keys up without the MCU, so the RF
+// switch must be the chip's DIOs or none.
+#if defined(LR2021_CAD_EXIT_LBT) && (!defined(LR2021_TX_PRESTAGE) || !RADIOLIB_GODMODE)
+#error "LR2021_CAD_EXIT_LBT sends the prestaged payload: build with -DLR2021_TX_PRESTAGE -DRADIOLIB_GODMODE=1"
+#endif
 
 /**
  * \brief Adapter for LR20x0 radio family. Implements common logic for child classes.
@@ -199,6 +205,11 @@ template <class T> class LR20x0Interface : public RadioLibInterface
     /** Empty the TX FIFO if it may hold unsent bytes */
     int16_t clearStaleTxFifo();
 #endif
+#endif
+
+#ifdef LR2021_CAD_EXIT_LBT
+    /** A clear CAD under exit mode LBT put the chip in TX with the prestaged payload: launchTransmit() sends nothing */
+    bool chipKeyedUp = false;
 #endif
 
 #ifdef LR2021_LOAD_PRAM
