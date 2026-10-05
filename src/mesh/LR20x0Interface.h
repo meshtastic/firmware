@@ -17,6 +17,12 @@
 #if defined(LR2021_REGULATOR_LDO) && !defined(LR2021_RADIOLIB_HAS_DCDC)
 #error "LR2021_REGULATOR_LDO needs RadioLib 7.8 or later"
 #endif
+// -DLR2021_LOAD_PRAM loads Semtech's LR2021 patch RAM after every chip reset. Semtech's driver says the PRAM fixes, among
+// others, the DC-DC (SIMO) regulator's cost to sub-GHz LoRa sensitivity. It writes chip memory directly, so it needs
+// -DRADIOLIB_GODMODE=1, and RadioLib 7.8, whose WriteRegMem32 no longer sends a stray byte after the data.
+#if defined(LR2021_LOAD_PRAM) && (!RADIOLIB_GODMODE || !defined(LR2021_RADIOLIB_HAS_DCDC))
+#error "LR2021_LOAD_PRAM writes chip memory directly: build with -DRADIOLIB_GODMODE=1 and RadioLib 7.8 or later"
+#endif
 
 /**
  * \brief Adapter for LR20x0 radio family. Implements common logic for child classes.
@@ -151,5 +157,10 @@ template <class T> class LR20x0Interface : public RadioLibInterface
 
     /** Recover a chip that lost its runtime state via the same full begin() the band-hop path uses */
     bool recoverChipStateLoss() override { return fullBegin(getFreq()); }
+
+#ifdef LR2021_LOAD_PRAM
+    /** Load and activate Semtech's patch RAM, then re-apply the modem settings begin() made; RadioLib status */
+    int16_t loadPram();
+#endif
 };
 #endif
