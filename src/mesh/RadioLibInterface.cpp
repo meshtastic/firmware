@@ -90,6 +90,9 @@ void INTERRUPT_ATTR RadioLibInterface::isrTxLevel0()
  */
 RadioLibInterface *RadioLibInterface::instance;
 
+/** At most one busyRx deferral line per this interval; the line carries the count it stands for. */
+#define BUSY_RX_LOG_INTERVAL_MS 30000
+
 /** Could we send right now (i.e. either not actively receiving or transmitting)? */
 bool RadioLibInterface::canSendImmediately()
 {
@@ -112,7 +115,15 @@ bool RadioLibInterface::canSendImmediately()
             rebootAtMsec = Time::skipZero(lastTxStart + 65000);
         }
         if (busyRx) {
-            LOG_WARN("Can not send yet, busyRx");
+            // Normal on a busy channel, and checked on every attempt: log the count at most once per interval
+            busyRxDeferred++;
+            const uint32_t nowMs = Time::getMillis();
+            if (lastBusyRxLogMs == 0 || Throttle::hasElapsed(lastBusyRxLogMs, BUSY_RX_LOG_INTERVAL_MS)) {
+                LOG_WARN("Can not send yet, busyRx (%u deferred in %u ms)", (unsigned)busyRxDeferred,
+                         (unsigned)(lastBusyRxLogMs ? nowMs - lastBusyRxLogMs : nowMs));
+                busyRxDeferred = 0;
+                lastBusyRxLogMs = Time::skipZero(nowMs);
+            }
         }
         return false;
     } else

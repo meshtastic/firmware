@@ -345,6 +345,10 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     /** Could we send right now (i.e. either not actively receiving or transmitting)? */
     virtual bool canSendImmediately();
 
+    /** busyRx deferrals since the last line, and when that line went out (0 = never) */
+    uint32_t lastBusyRxLogMs = 0;
+    uint32_t busyRxDeferred = 0;
+
     /**
      * Raw ISR handler that just calls our polymorphic method
      */
