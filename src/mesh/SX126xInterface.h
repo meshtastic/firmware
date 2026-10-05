@@ -57,6 +57,26 @@ template <class T> class SX126xInterface : public RadioLibInterface
 
     void setTCXOVoltage(float voltage) { tcxoVoltage = voltage; }
 
+#if MESHTASTIC_RADIO_CHIP_STATS
+    /// GetStats (0x10). RadioLib wraps this for the LR11x0 but not the SX126x, so the command goes out raw.
+    /// NbPktReceived counts what the modem decoded, so comparing it with the firmware's rx_good tells "the chip never
+    /// heard the frame" from "the chip heard it and the firmware never got it". The SX126x keeps no false-sync counter,
+    /// so the LR11x0's fourth field reads 0. The raw bytes are logged with both candidate parses of the first counter.
+    bool readChipRxStats(uint16_t &received, uint16_t &crcError, uint16_t &headerError, uint16_t &falseSync) override
+    {
+        uint8_t buf[8] = {0};
+        if (module.SPIreadStream(RADIOLIB_SX126X_CMD_GET_STATS, buf, sizeof(buf)) != RADIOLIB_ERR_NONE)
+            return false;
+        LOG_DEBUG("chip stats raw %02x %02x %02x %02x %02x %02x %02x %02x | be@0 %u le@1 %u", buf[0], buf[1], buf[2], buf[3],
+                  buf[4], buf[5], buf[6], buf[7], (unsigned)((buf[0] << 8) | buf[1]), (unsigned)(buf[1] | (buf[2] << 8)));
+        received = (uint16_t)(((uint16_t)buf[0] << 8) | buf[1]);
+        crcError = (uint16_t)(((uint16_t)buf[2] << 8) | buf[3]);
+        headerError = (uint16_t)(((uint16_t)buf[4] << 8) | buf[5]);
+        falseSync = 0;
+        return true;
+    }
+#endif
+
   protected:
     float currentLimit = 140; // Higher OCP limit for SX126x PA
     float tcxoVoltage = 0.0;
