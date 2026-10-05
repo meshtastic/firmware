@@ -1432,7 +1432,7 @@ void RadioLibInterface::readOutFromTask()
             notify(ISR_RX, !rxArmedBeforeTxDone);
         return; // otherwise an edge for a frame already taken
     }
-    const size_t len = iface->getPacketLength();
+    size_t len = iface->getPacketLength();
     const uint8_t head = rxRingHead;
     const uint8_t next = (uint8_t)((head + 1) % rxRingSize);
     if (len > sizeof(rxRing[0].data) || next == rxRingTail) {
@@ -1448,6 +1448,20 @@ void RadioLibInterface::readOutFromTask()
     }
     CapturedFrame &f = rxRing[head];
     f.info.state = iface->readData(f.data, len);
+#if MESHTASTIC_RX_RETRY_WRONG_MODEM
+    // On the LR11x0 the packet type and the length can both come back as its status byte, and readData() then returns
+    // WRONG_MODEM before it reads the buffer or clears the flags: the frame is still in the chip. Read its length and the
+    // frame again, at once and then, if that fails too, after a tick.
+    for (unsigned attempt = 0; attempt < 2 && f.info.state == RADIOLIB_ERR_WRONG_MODEM; attempt++) {
+        if (attempt)
+            vTaskDelay(1);
+        const size_t again = iface->getPacketLength();
+        if (again > sizeof(f.data))
+            break;
+        len = again;
+        f.info.state = iface->readData(f.data, len);
+    }
+#endif
     if (readDataLeftIrqFlags(f.info.state)) {
         // This read came back before RadioLib's own clear, so RX_DONE is still latched for a frame nobody will ever
         // read. Drop it here, while we know that: leaving it would have checkRxDoneIrqFlag() wake this task again for

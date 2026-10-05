@@ -24,6 +24,19 @@
 #define MESHTASTIC_RX_READOUT_TASK
 #endif
 
+// -DMESHTASTIC_REARM_HOLD_FIX=0 runs the readout task's TX_DONE re-arm without its hold fix: the RX interrupt stays detached
+// until the radio thread adopts the re-arm, the task re-arms whatever the state, and a send does not clear a stale state.
+// Default 1, the readout task's own behaviour.
+#ifndef MESHTASTIC_REARM_HOLD_FIX
+#define MESHTASTIC_REARM_HOLD_FIX 1
+#endif
+
+// -DMESHTASTIC_RX_RETRY_WRONG_MODEM=1 has the readout task read a frame again when readData() fails with WRONG_MODEM, which
+// on the LR11x0 returns before touching the frame. Default 0.
+#ifndef MESHTASTIC_RX_RETRY_WRONG_MODEM
+#define MESHTASTIC_RX_RETRY_WRONG_MODEM 0
+#endif
+
 // In addition to the default Rx flags, we need the PREAMBLE_DETECTED flag to detect whether we are actively receiving
 #define MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS (RADIOLIB_IRQ_RX_DEFAULT_FLAGS | (1 << RADIOLIB_IRQ_PREAMBLE_DETECTED))
 
