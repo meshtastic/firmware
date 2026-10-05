@@ -1475,10 +1475,22 @@ static BeaconChannelEditReport beaconAfterChannelEdit(ChannelIndex index, bool o
     return r;
 }
 
+// A queued beacon was encrypted with this slot's key and hashed from its name, and was let through on its role.
+static bool channelIdentityChanged(const meshtastic_Channel &was, const meshtastic_Channel &now)
+{
+    return was.role != now.role || was.has_settings != now.has_settings ||
+           strncmp(was.settings.name, now.settings.name, sizeof(was.settings.name)) != 0 ||
+           was.settings.psk.size != now.settings.psk.size ||
+           memcmp(was.settings.psk.bytes, now.settings.psk.bytes, now.settings.psk.size) != 0 ||
+           was.settings.use_aead != now.settings.use_aead;
+}
+
 void AdminModule::handleSetChannel(const meshtastic_Channel &cc)
 {
 #if !MESHTASTIC_EXCLUDE_BEACON
     const bool offerHeldBefore = moduleConfig.has_mesh_beacon && MeshBeaconModule::offerChannelHeld(moduleConfig.mesh_beacon);
+    if (channelIdentityChanged(channels.getByIndex(cc.index), cc))
+        MeshBeaconModule::flushQueuedBeacons();
 #else
     const bool offerHeldBefore = false;
 #endif

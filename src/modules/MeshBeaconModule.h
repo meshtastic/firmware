@@ -32,12 +32,14 @@ typedef struct {
     // The radio this packet needs, resolved at send. A beacon or LoRa config write withdraws anything still queued
     // (flushQueuedBeacons()) and the stale gate drops the rest, so it is deliberately not re-resolved at key-up.
     meshtastic_Config_LoRaConfig lora;
-    // The target named no region, so it follows the node's. Re-read at key-up rather than trusting
-    // the send-time value: a region changed in between must not put this beacon on the old one.
+    // The target named no region, so it follows the node's. If the node's region moves before key-up
+    // by a path that skips the flush (a menu, wasm), the slot was derived for the old band: dropped.
     bool regionInherited;
     // The channel name the slot was hashed from, resolved once at send time so the TX path and
     // the pre-key-up validation cannot derive it two different ways.
     char channelName[sizeof(meshtastic_ChannelSettings::name)];
+    // The wire hash a receiver on the target mesh expects. Encoding stamps the home preset's for a blank name.
+    uint8_t channelHash;
 } MeshBeaconModule_TargetRadioSettings;
 
 /**
@@ -174,6 +176,7 @@ class MeshBeaconModule
     static uint16_t originalLoraChannel;
     static meshtastic_Config_LoRaConfig_RegionCode originalRegion;
     static bool originalUsePreset;
+    static float originalOverrideFrequency;
 };
 
 /**

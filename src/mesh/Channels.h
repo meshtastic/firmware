@@ -74,6 +74,9 @@ class Channels
     // the answer depends on which preset is asked about. Status checks must ask the configured one.
     const char *getNameForPreset(size_t chIndex, meshtastic_Config_LoRaConfig_ModemPreset preset, bool usePreset);
 
+    // The wire hash for chIndex's key under an explicit name, for a packet keyed up on another preset. -1 if no key.
+    int16_t hashFor(ChannelIndex chIndex, const char *name);
+
     // Freeze the primary channel's settings. Called by RadioInterface::captureConfiguredRadio(),
     // so the channel and the LoRa config are snapshotted at the same commit.
     void captureCommittedPrimary();

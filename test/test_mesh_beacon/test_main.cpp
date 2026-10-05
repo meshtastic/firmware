@@ -407,8 +407,10 @@ static void test_adminValidation_targetUnknownRegion_isCleared(void)
 }
 
 /**
- * Verify a preset that is illegal for a broadcast target's region clamps that entry's preset to the
- * region default and leaves its channel alone - the channel is a separate setting.
+ * Under test: MeshBeaconModule::sanitiseConfig() via AdminModule::handleSetModuleConfig().
+ * Why: a preset illegal for the target's region is kept as written, and so is its channel; sendBeacon()
+ * withholds the target at send time, so a later region change can make it good again.
+ * Regression guarded: the write clamping the preset to the region default, or clearing the channel with it.
  */
 static void test_adminValidation_targetInvalidPresetForRegion_keepsPresetAndChannel(void)
 {
@@ -5643,6 +5645,168 @@ static void test_byValue_emptyPskOfferMatchingHeldCleartext_claimsAndPushesNothi
     TEST_ASSERT_FALSE_MESSAGE(testAdmin->savedSegments() & SEGMENT_CHANNELS, "nothing was written");
 }
 
+/**
+ * Under test: the hasRadioContent test in MeshBeaconBroadcastModule::sendBeacon() against fillOffer()
+ * (src/modules/MeshBeaconModule.cpp).
+ * Why: fillOffer() leaves out a pinned slot that derivation already produces, so such a pin puts nothing
+ * on the air. Counted as offer content, it turned a text beacon into a MESH_BEACON_APP carrying only the
+ * message, which clients that read only text messages never show.
+ * Regression guarded: the text going out as MESH_BEACON_APP, or a bare MESH_BEACON_APP with no text.
+ */
+static void test_broadcaster_offerSlotEqualToTheDerivedOne_isNotOfferContent(void)
+{
+    resetConfig();
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    initRegion();
+    installTestPrimaryChannel("Home", kHomePsk, sizeof(kHomePsk));
+
+    uint32_t derived = 0;
+    MeshBeaconModule::offerFrequencySlot(moduleConfig.mesh_beacon, &derived);
+    TEST_ASSERT_GREATER_THAN_UINT32_MESSAGE(0, derived, "precondition: US derives a concrete slot");
+
+    moduleConfig.has_mesh_beacon = true;
+    auto &bcfg = moduleConfig.mesh_beacon;
+    bcfg.flags |= MESH_BEACON_FLAG_BROADCAST_ENABLED;
+    bcfg.has_broadcast_offer_frequency_slot = true;
+    bcfg.broadcast_offer_frequency_slot = derived;
+
+    MeshBeaconBroadcastModuleTestShim bcast;
+    bcast.sendBeacon();
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, mockRouter->sentPackets.size(), "a derivable pin alone is nothing to send");
+
+    strncpy(bcfg.broadcast_message, "hello", sizeof(bcfg.broadcast_message) - 1);
+    bcast.invalidateCache();
+    bcast.sendBeacon();
+    TEST_ASSERT_EQUAL_UINT32(1, mockRouter->sentPackets.size());
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_PortNum_TEXT_MESSAGE_APP, mockRouter->sentPackets[0].decoded.portnum,
+                              "with nothing of the offer on the air, the text goes out as a plain text message");
+}
+
+/**
+ * Under test: the flush in AdminModule::handleSetChannel() (src/modules/AdminModule.cpp).
+ * Why: a queued beacon was encrypted with the slot's key and hashed from its name when it was queued.
+ * After the operator rekeys, renames or disables that slot it would still transmit under the old ones.
+ * Rewriting a slot unchanged, as a client saving its whole channel list does, must not withdraw anything.
+ * Regression guarded: a beacon on a channel the operator has just rekeyed reaching the air afterwards.
+ */
+static void test_channelEdit_withdrawsQueuedBeaconsOnlyWhenTheSlotChanges(void)
+{
+    resetConfig();
+    static const uint8_t homePsk[16] = {0xC7, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                        0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    installTestPrimaryChannel("Home", homePsk, sizeof(homePsk));
+
+    MeshBeaconTxHook hook;
+    MeshBeaconBroadcastModuleTestShim bcast;
+    CancellingRadioInterface *radio = queueSwitchedBeacon(bcast);
+    testAdmin->deferSaves();
+
+    meshtastic_Channel slot = channels.getByIndex(0);
+    testAdmin->handleSetChannel(slot);
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, radio->cancelled.size(), "an unchanged slot leaves the beacon queued");
+
+    slot.settings.psk.bytes[0] ^= 0xFF;
+    testAdmin->handleSetChannel(slot);
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, radio->cancelled.size(), "a rekeyed slot withdraws the beacon encrypted on it");
+    TEST_ASSERT_TRUE(radio->queued.empty());
+}
+
+/**
+ * Under test: the inherited-region check in MeshBeaconModule::beaconTxConfigInvalid()
+ * (src/modules/MeshBeaconModule.cpp).
+ * Why: an inheriting target's slot was derived for the region at send time. A menu or wasm region change
+ * skips the admin flush, and keeping the old slot number in the new band is neither the operator's pin
+ * nor what the new band derives. LONG_FAST and slot 1 are legal in both, so only that check can drop it.
+ * Regression guarded: the beacon keying up in the new region on the old region's slot number.
+ */
+static void test_sidecar_inheritedRegionMoved_dropsEvenATargetTheNewRegionCouldRun(void)
+{
+    resetConfig();
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+
+    meshtastic_MeshPacket pkt = meshtastic_MeshPacket_init_zero;
+    pkt.id = 0x5EED0702;
+    MeshBeaconModule_TargetRadioSettings s = targetSettings(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, true, 1, false,
+                                                            meshtastic_Config_LoRaConfig_RegionCode_UNSET, "Home");
+    s.regionInherited = true;
+    MeshBeaconModule::setTargetRadioSettings(&pkt, s);
+    TEST_ASSERT_FALSE_MESSAGE(MeshBeaconModule::beaconTxConfigInvalid(&pkt), "precondition: valid where it was resolved");
+
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
+    meshtastic_Config_LoRaConfig moved = s.lora;
+    moved.region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
+    TEST_ASSERT_TRUE_MESSAGE(RadioInterface::validateConfigLora(moved, "Home"), "precondition: EU_868 could run it");
+    TEST_ASSERT_TRUE_MESSAGE(MeshBeaconModule::beaconTxConfigInvalid(&pkt),
+                             "a beacon resolved for a region the node left is dropped");
+
+    MeshBeaconModule::clearAllTargetRadioSettings();
+}
+
+/**
+ * Under test: the override_frequency handling in MeshBeaconModule::reconfigureForBeaconTX()
+ * (src/modules/MeshBeaconModule.cpp).
+ * Why: applyModemConfig() tunes to override_frequency ahead of the slot, so a home override left in place
+ * keys every switched beacon up on the home frequency. The restore must put the override back.
+ * Regression guarded: switched beacons transmitting on the home override, or the override lost after one.
+ */
+static void test_beaconSwitch_clearsAHomeFrequencyOverrideAndRestoresIt(void)
+{
+    resetConfig();
+    installTestPrimaryChannel("Home", kHomePsk, sizeof(kHomePsk));
+    config.lora.override_frequency = 869.525f;
+
+    ReentrantRadioInterface radio;
+    meshtastic_MeshPacket pkt = meshtastic_MeshPacket_init_zero;
+    pkt.id = 0x5EED0013;
+    MeshBeaconModule::setTargetRadioSettings(&pkt, targetSettings(meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW, true, 0,
+                                                                  false, meshtastic_Config_LoRaConfig_RegionCode_UNSET));
+    TEST_ASSERT_TRUE(MeshBeaconModule::reconfigureForBeaconTX(&radio, &pkt));
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(0.0f, config.lora.override_frequency, "the switch tunes by the target's slot");
+
+    MeshBeaconModule::clearTargetRadioSettings(&pkt);
+    TEST_ASSERT_TRUE(MeshBeaconModule::reconfigureForBeaconTX(&radio, nullptr));
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(869.525f, config.lora.override_frequency, "the restore puts the home override back");
+}
+
+/**
+ * Under test: the channel-hash stamp in MeshBeaconTxHook::beforeTransmit(), from the hash
+ * MeshBeaconBroadcastModule::sendBeacon() stores in the sidecar (src/modules/MeshBeaconModule.cpp).
+ * Why: a blank channel name is the preset's name, so its hash depends on the preset. perhapsEncode() hashes
+ * it with the home preset; a receiver on the target preset hashes it with its own and finds no key.
+ * Regression guarded: a beacon to another preset on a stock blank channel that no receiver there can decrypt.
+ */
+static void test_txHook_blankChannelOnAnotherPreset_carriesTheTargetMeshHash(void)
+{
+    resetConfig(); // EU_868 LONG_FAST, blank primary on the default key
+
+    moduleConfig.has_mesh_beacon = true;
+    moduleConfig.mesh_beacon.has_broadcast_offer_preset = true;
+    moduleConfig.mesh_beacon.broadcast_offer_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
+    moduleConfig.mesh_beacon.broadcast_targets_count = 1;
+    moduleConfig.mesh_beacon.broadcast_targets[0].has_preset = true;
+    moduleConfig.mesh_beacon.broadcast_targets[0].preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
+
+    MeshBeaconTxHook hook;
+    ReentrantRadioInterface radio;
+    MeshBeaconBroadcastModuleTestShim bcast;
+    bcast.sendBeacon();
+    TEST_ASSERT_EQUAL_UINT32(1, mockRouter->sentPackets.size());
+
+    meshtastic_MeshPacket pkt = mockRouter->sentPackets[0];
+    pkt.channel = channels.getHash(pkt.channel); // what perhapsEncode() stamps: the home preset's hash
+    const uint8_t homeHash = pkt.channel;
+    TEST_ASSERT_EQUAL_INT(RadioTxHook::PRETX_DEFER, RadioTxHooks::beforeTransmit(&radio, &pkt));
+    const uint8_t onAir = pkt.channel;
+    RadioTxHooks::packetReleased(&radio, &pkt);
+
+    // A LONG_SLOW node's own hash for the same blank, default-key channel.
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
+    channels.onConfigChanged();
+    const uint8_t receiverHash = (uint8_t)channels.getHash(0);
+    TEST_ASSERT_NOT_EQUAL_MESSAGE(homeHash, receiverHash, "precondition: the two presets hash a blank name differently");
+    TEST_ASSERT_EQUAL_HEX8_MESSAGE(receiverHash, onAir, "the beacon carries the hash the target mesh computes");
+}
+
 // ===========================================================================
 // Unity lifecycle
 // ===========================================================================
@@ -5911,6 +6075,11 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_sidecar_rearmSameId_movesTheIdRatherThanDuplicatingIt);
     RUN_TEST(test_broadcaster_presetOnlyTargetSwappingRegion_isNotDropped);
     RUN_TEST(test_broadcaster_offerWithOnlyFrequencySlot_isSent);
+    RUN_TEST(test_broadcaster_offerSlotEqualToTheDerivedOne_isNotOfferContent);
+    RUN_TEST(test_channelEdit_withdrawsQueuedBeaconsOnlyWhenTheSlotChanges);
+    RUN_TEST(test_sidecar_inheritedRegionMoved_dropsEvenATargetTheNewRegionCouldRun);
+    RUN_TEST(test_beaconSwitch_clearsAHomeFrequencyOverrideAndRestoresIt);
+    RUN_TEST(test_txHook_blankChannelOnAnotherPreset_carriesTheTargetMeshHash);
 
     exit(UNITY_END());
 }
