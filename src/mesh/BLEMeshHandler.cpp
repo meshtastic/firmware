@@ -3,7 +3,11 @@
 #if HAS_BLE_MESH
 
 #include "BLEMeshHandler.h"
+#include "Throttle.h"
+#include "UptimeClock.h"
 #include "main.h"
+
+#include <cstring>
 
 BLEMeshHandler *bleMeshHandler = nullptr;
 
@@ -240,6 +244,106 @@ void BLEMeshHandler::deliverToRouter(const uint8_t *data, size_t len, int8_t rss
 
     LOG_DEBUG("BLE mesh RX from=0x%08x to=0x%08x id=0x%08x rssi=%d len=%u", mp.from, mp.to, mp.id, rssi, (unsigned)len);
     enqueueReceived(p.release());
+}
+
+BLEMeshHandler::PartialAdv *BLEMeshHandler::partialFor(uint8_t addrType, const uint8_t addr[6], uint8_t sid)
+{
+    for (auto &slot : partials) {
+        if (slot.inUse && slot.addrType == addrType && slot.sid == sid && memcmp(slot.addr, addr, sizeof(slot.addr)) == 0)
+            return &slot;
+    }
+    return nullptr;
+}
+
+BLEMeshHandler::PartialAdv &BLEMeshHandler::claimPartial(uint8_t addrType, const uint8_t addr[6], uint8_t sid)
+{
+    const uint32_t now = Time::getMillis();
+    PartialAdv *pick = &partials[0];
+    for (auto &slot : partials) {
+        if (!slot.inUse) {
+            pick = &slot;
+            break;
+        }
+        if ((uint32_t)(now - slot.lastMs) > (uint32_t)(now - pick->lastMs))
+            pick = &slot;
+    }
+    pick->inUse = true;
+    pick->overflowed = false;
+    pick->addrType = addrType;
+    memcpy(pick->addr, addr, sizeof(pick->addr));
+    pick->sid = sid;
+    pick->len = 0;
+    pick->lastMs = now;
+    return *pick;
+}
+
+void BLEMeshHandler::onScanReport(uint8_t addrType, const uint8_t addr[6], uint8_t sid, ScanReportStatus status,
+                                  const uint8_t *data, size_t len, int8_t rssi)
+{
+    if (!isRunning || !addr || (len > 0 && !data))
+        return;
+
+    PartialAdv *slot = partialFor(addrType, addr, sid);
+    if (slot && Throttle::hasElapsed(slot->lastMs, BLE_MESH_REASSEMBLY_TIMEOUT_MS)) {
+        slot->inUse = false;
+        slot = nullptr;
+    }
+
+    if (status == ScanReportStatus::Truncated) {
+        if (slot)
+            slot->inUse = false;
+        return;
+    }
+
+    if (status == ScanReportStatus::Complete && !slot) {
+        handleAdvertisementData(data, len, rssi);
+        return;
+    }
+
+    if (!slot)
+        slot = &claimPartial(addrType, addr, sid);
+
+    if (!slot->overflowed) {
+        if (slot->len + len > slot->data.size()) {
+            slot->overflowed = true;
+        } else if (len > 0) {
+            memcpy(slot->data.data() + slot->len, data, len);
+            slot->len += len;
+        }
+    }
+    slot->lastMs = Time::getMillis();
+
+    if (status == ScanReportStatus::Complete) {
+        slot->inUse = false;
+        if (!slot->overflowed)
+            handleAdvertisementData(slot->data.data(), slot->len, rssi);
+    }
+}
+
+void BLEMeshHandler::handleAdvertisementData(const uint8_t *data, size_t len, int8_t rssi)
+{
+    if (!isRunning || !data)
+        return;
+
+    // An advertisement carries several AD structures, and the mesh one is not necessarily first.
+    size_t offset = 0;
+    while (offset + 1 < len) {
+        uint8_t adLen = data[offset];
+        // An AD structure spans data[offset] .. data[offset + adLen]; anything else is truncated.
+        if (adLen == 0 || offset + adLen >= len)
+            break;
+
+        uint8_t adType = data[offset + 1];
+        if (adType == BLE_MESH_AD_TYPE_MFG_DATA && adLen >= 4) {
+            uint16_t companyId = data[offset + 2] | (data[offset + 3] << 8);
+            if (companyId == BLE_MESH_COMPANY_ID && data[offset + 4] == BLE_MESH_PROTOCOL_VERSION) {
+                // Skip the type byte, the 2-byte company ID and the 1-byte version.
+                deliverToRouter(&data[offset + 5], adLen - 4, rssi);
+                return;
+            }
+        }
+        offset += adLen + 1;
+    }
 }
 
 void BLEMeshHandler::enqueueReceived(meshtastic_MeshPacket *p)

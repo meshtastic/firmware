@@ -14,7 +14,7 @@
 
 #if BLE_MESH_USE_EXT_ADV
 static_assert(BLE_MESH_ADV_TOTAL_MAX <= BLE_HCI_MAX_EXT_ADV_DATA_LEN,
-              "advertisement budget must fit NimBLE's unfragmented ext-adv data limit");
+              "advertisement budget must fit one NimBLE LE Set Extended Advertising Data command");
 #endif
 
 void ESP32BLEMesh::start()
@@ -249,7 +249,7 @@ void ESP32BLEMesh::handleAdvertisement(const struct ble_gap_disc_desc *desc)
     if (!isRunning || !desc)
         return;
 
-    handleAdvertisementData(desc->rssi, desc->data, desc->length_data);
+    handleAdvertisementData(desc->data, desc->length_data, desc->rssi);
 }
 
 #if BLE_MESH_USE_EXT_ADV
@@ -258,41 +258,14 @@ void ESP32BLEMesh::handleExtendedAdvertisement(const struct ble_gap_ext_disc_des
     if (!isRunning || !desc)
         return;
 
-    // Nothing chains on send, so anything flagged INCOMPLETE is another advertiser's.
-    if (desc->data_status != BLE_GAP_EXT_ADV_DATA_STATUS_COMPLETE || !desc->data)
-        return;
+    ScanReportStatus status = ScanReportStatus::Truncated;
+    if (desc->data_status == BLE_GAP_EXT_ADV_DATA_STATUS_COMPLETE)
+        status = ScanReportStatus::Complete;
+    else if (desc->data_status == BLE_GAP_EXT_ADV_DATA_STATUS_INCOMPLETE)
+        status = ScanReportStatus::Incomplete;
 
-    handleAdvertisementData(desc->rssi, desc->data, desc->length_data);
+    onScanReport(desc->addr.type, desc->addr.val, desc->sid, status, desc->data, desc->length_data, desc->rssi);
 }
 #endif
-
-void ESP32BLEMesh::handleAdvertisementData(int8_t rssi, const uint8_t *data, uint8_t len)
-{
-    if (!isRunning || !data)
-        return;
-
-    // An advertisement carries several AD structures, and the mesh one is not necessarily first.
-    uint16_t offset = 0;
-    while (offset + 1 < len) {
-        uint8_t adLen = data[offset];
-        // An AD structure spans data[offset] .. data[offset + adLen]; anything else is truncated.
-        if (adLen == 0 || offset + adLen >= len)
-            break;
-
-        uint8_t adType = data[offset + 1];
-        if (adType == BLE_HS_ADV_TYPE_MFG_DATA && adLen >= 4) {
-            uint16_t companyId = data[offset + 2] | (data[offset + 3] << 8);
-            if (companyId == BLE_MESH_COMPANY_ID && data[offset + 4] == BLE_MESH_PROTOCOL_VERSION) {
-                // Skip the type byte, the 2-byte company ID and the 1-byte version.
-                const uint8_t *payload = &data[offset + 5];
-                size_t payloadLen = adLen - 4;
-
-                deliverToRouter(payload, payloadLen, rssi);
-                return;
-            }
-        }
-        offset += adLen + 1;
-    }
-}
 
 #endif // HAS_BLE_MESH && ARCH_ESP32
