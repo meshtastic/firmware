@@ -406,11 +406,14 @@ template <typename T> void SX126xInterface<T>::handleSoftwareLoraIrqPoll()
         RADIOLIB_SX126X_IRQ_RX_DONE | RADIOLIB_SX126X_IRQ_TIMEOUT | RADIOLIB_SX126X_IRQ_CRC_ERR | RADIOLIB_SX126X_IRQ_HEADER_ERR;
     const uint16_t noisyRxMask = RADIOLIB_SX126X_IRQ_PREAMBLE_DETECTED | RADIOLIB_SX126X_IRQ_HEADER_VALID;
 
-    // A bare PREAMBLE is mid-reception, not an RX event. With a TX queued clear only it, so a noise preamble
-    // can't block TX; keep HEADER_VALID latched, as it marks a real frame.
-    const bool preambleOnly = (irq & RADIOLIB_SX126X_IRQ_PREAMBLE_DETECTED) && !(irq & RADIOLIB_SX126X_IRQ_HEADER_VALID);
-    if (!pollTxMode && hasQueuedTx() && preambleOnly && ((irq & ~noisyRxMask) == 0U)) {
-        lora.clearIrqFlags(RADIOLIB_SX126X_IRQ_PREAMBLE_DETECTED);
+    // Do NOT treat a preamble/header-only IRQ as a full RX event: noisy preamble detections would
+    // repeatedly trigger readData() and starve TX scheduling. Clear these non-terminal bits, or the
+    // poll loop spins at high rate while they stay latched.
+    if (!pollTxMode && (irq & noisyRxMask) && ((irq & ~noisyRxMask) == 0U)) {
+        // Record the look first: it clears PREAMBLE, and the TX path must still see a header this clear hides.
+        receiveDetected(irq, RADIOLIB_SX126X_IRQ_HEADER_VALID, RADIOLIB_SX126X_IRQ_PREAMBLE_DETECTED);
+        if (irq & RADIOLIB_SX126X_IRQ_HEADER_VALID)
+            lora.clearIrqFlags(RADIOLIB_SX126X_IRQ_HEADER_VALID);
         scheduleIrqPollTick();
         return;
     }
@@ -432,6 +435,7 @@ template <typename T> void SX126xInterface<T>::handleSoftwareLoraIrqPoll()
 template <typename T> int16_t SX126xInterface<T>::trySetStandby()
 {
     checkNotification(); // handle any pending interrupts before we force standby
+    recordRxFlagsBeforeStandby();
 
     int16_t err = lora.standby();
     if (err == RADIOLIB_ERR_SPI_CMD_TIMEOUT) {
@@ -449,7 +453,7 @@ template <typename T> int16_t SX126xInterface<T>::trySetStandby()
 #endif
     isReceiving = false; // If we were receiving, not any more
     rxArmedContinuous = false;
-    activeReceiveStart = 0;
+    rxFlagsClearedByStandby();
     disableInterrupt();
 #if SX126X_REARM_IN_ISR
     rearmOutcome = REARM_NONE; // an RX the TX_DONE interrupt started is gone
@@ -556,7 +560,6 @@ template <typename T> bool SX126xInterface<T>::resumeRunningReceive()
     // (clearUnreadRxIrqFlags()), and readData() drops them for a frame it did read - so a latched RX_DONE at this
     // point is a NEXT frame that completed while we were handling the last one. Clearing it here would discard that
     // frame unread, and the checkRxDoneIrqFlag() below could no longer find it.
-    activeReceiveStart = 0; // the frame it timed is done; a preamble now is the next one
     RadioLibInterface::startReceive();
     enableInterrupt(isrRxLevel0);
     checkRxDoneIrqFlag(); // an RX_DONE that beat the re-arm

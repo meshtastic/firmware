@@ -438,6 +438,7 @@ template <typename T> void LR11x0Interface<T>::clearRadioIsr()
 template <typename T> int16_t LR11x0Interface<T>::trySetStandby()
 {
     checkNotification(); // handle any pending interrupts before we force standby
+    recordRxFlagsBeforeStandby();
 
 #ifdef LR11X0_STANDBY_XOSC
     // SetStandby 0x01 is STBY_XOSC. RadioLib defines RADIOLIB_LR11X0_STANDBY_XOSC as 0x00, which is STBY_RC.
@@ -454,7 +455,7 @@ template <typename T> int16_t LR11x0Interface<T>::trySetStandby()
 #ifdef LR11X0_RESUME_CONTINUOUS_RX
     rxArmedContinuous = false;
 #endif
-    activeReceiveStart = 0;
+    rxFlagsClearedByStandby();
     disableInterrupt();
     completeSending(); // If we were sending, not anymore
     RadioLibInterface::setStandby();
@@ -575,7 +576,6 @@ template <typename T> bool LR11x0Interface<T>::resumeRunningReceive()
     }
     // No flag clearing here: whoever gave up on a frame unread dropped its flags (clearUnreadRxIrqFlags()), and readData()
     // drops them for a frame it read, so a latched RX_DONE now is the next frame's.
-    activeReceiveStart = 0; // the frame it timed is done; a preamble now is the next one
     RadioLibInterface::startReceive();
     enableInterrupt(isrRxLevel0);
     checkRxDoneIrqFlag(); // an RX_DONE that beat the re-arm
