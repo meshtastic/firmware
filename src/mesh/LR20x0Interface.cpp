@@ -217,9 +217,18 @@ template <typename T> bool LR20x0Interface<T>::init()
     if (res == RADIOLIB_ERR_NONE)
         res = lora.setCRC(2);
 
+#ifdef LR2021_RADIOLIB_HAS_DCDC
+    // RadioLib 7.8 exposes the regulator and applies Semtech's DCDC workaround (register 0x00F20024) itself
+#ifndef LR2021_REGULATOR_LDO
+    if (res == RADIOLIB_ERR_NONE) {
+        const int16_t rmRes = lora.setRegulatorDCDC();
+        if (rmRes != RADIOLIB_ERR_NONE)
+            LOG_WARN("LR2021 setRegulatorDCDC failed: %d", rmRes);
+    }
+#endif
+#elif RADIOLIB_GODMODE
     // Standard DCDC ramp timing from RadioLib workarounds (register 0x00F20024)
     // Currently requires radiolib godmode
-#if RADIOLIB_GODMODE
     if (res == RADIOLIB_ERR_NONE) {
         uint8_t rampTimes[4] = {15, 15, 15, 15}; // Standard case for all conditions
         // godmode-only DCDC ramp tuning: log failures but don't fail init (radio is already up)

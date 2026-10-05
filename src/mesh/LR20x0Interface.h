@@ -8,6 +8,16 @@
 #define LR2021_RX_REARM_AT_TX_DONE 1
 #endif
 
+// RadioLib 7.8 replaced the LR2021's setRegMode(simo, rampTimes) with setRegMode(simo) and the public setRegulatorDCDC(), and
+// applies Semtech's DCDC sensitivity workaround itself on every modulation change.
+#if (RADIOLIB_VERSION_MAJOR > 7) || (RADIOLIB_VERSION_MAJOR == 7 && RADIOLIB_VERSION_MINOR >= 8)
+#define LR2021_RADIOLIB_HAS_DCDC 1
+#endif
+// -DLR2021_REGULATOR_LDO keeps the chip's default LDO regulator instead of the DC-DC (SIMO) one
+#if defined(LR2021_REGULATOR_LDO) && !defined(LR2021_RADIOLIB_HAS_DCDC)
+#error "LR2021_REGULATOR_LDO needs RadioLib 7.8 or later"
+#endif
+
 /**
  * \brief Adapter for LR20x0 radio family. Implements common logic for child classes.
  * \tparam T RadioLib module type for LR20x0, e.g. LR2021.
