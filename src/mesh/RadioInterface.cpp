@@ -647,6 +647,7 @@ std::unique_ptr<RadioInterface> initLoRa()
         config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
         nodeDB->saveToDisk(SEGMENT_CONFIG);
 
+        RADIO_TASK_LOCK();
         if (rIf && !rIf->reconfigure()) {
             LOG_WARN("Reconfigure failed, rebooting");
             if (screen) {
@@ -878,6 +879,43 @@ uint32_t RadioInterface::getAnchoredSlotDelayMsec(uint32_t slots, meshtastic_Mes
     return delay;
 }
 
+#ifdef MESHTASTIC_TX_SLOT_GATE_MS
+uint32_t RadioInterface::ownSlotScanAt(meshtastic_MeshPacket_SlotParity parity, uint32_t drawnMs, int32_t backMs)
+{
+    const uint32_t now = Time::getMillis();
+    const uint32_t slot = slotTimeMsec;
+    // The latest frame end's grid, which is the one the other nodes count from too
+    const uint32_t frameEnd = lastFrameEndMs.load(std::memory_order_relaxed);
+    if (!slot || !frameEnd)
+        return now; // no grid yet
+    const uint32_t wanted = parity == meshtastic_MeshPacket_SlotParity_SLOT_PARITY_ODD ? 1 : 0;
+#ifdef MESHTASTIC_TX_SLOT_LEAD
+    // A slot qualifies if its scan time began at most GATE_MS ago, and the drawn one is the earliest: the timer fired
+    // early on purpose.
+    int32_t lower = (int32_t)(now - frameEnd) + backMs - MESHTASTIC_TX_SLOT_GATE_MS;
+    const int32_t drawnSince = (int32_t)(drawnMs - frameEnd);
+    if (drawnSince > lower)
+        lower = drawnSince;
+    if (lower < 0)
+        lower = 0;
+    uint32_t first = ((uint32_t)lower + slot - 1) / slot;
+    if ((first & 1) != wanted)
+        first++;
+    return frameEnd + first * slot - backMs;
+#else
+    (void)backMs;
+    // Not before the drawn slot: the timer fired early on purpose
+    const uint32_t from = (int32_t)(drawnMs - now) > 0 ? drawnMs : now;
+    const uint32_t since = from - frameEnd;
+    uint32_t k = since / slot;
+    if ((k & 1) == wanted && since - k * slot <= MESHTASTIC_TX_SLOT_GATE_MS)
+        return from;
+    k += (k & 1) != wanted ? 1 : 2; // the next slot start of this parity
+    return frameEnd + k * slot;
+#endif
+}
+#endif
+
 /** The CW size to use when calculating SNR_based delays */
 uint8_t RadioInterface::getCWsize(float snr)
 {
@@ -1019,6 +1057,7 @@ bool RadioInterface::init()
 
 int RadioInterface::notifyDeepSleepCb(void *unused)
 {
+    RADIO_TASK_LOCK();
     sleep();
     return 0;
 }

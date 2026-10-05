@@ -289,7 +289,7 @@ void SerialConsole::log_to_serial(const char *logLevel, const char *format, va_l
     if (usingProtobufs) {
         if (config.security.debug_log_api_enabled && !pauseBluetoothLogging) {
             meshtastic_LogRecord_Level ll = RedirectablePrint::getLogLevel(logLevel);
-            auto thread = concurrency::OSThread::currentThread;
+            auto thread = concurrency::OSThread::current();
             emitLogRecord(ll, thread ? thread->ThreadName.c_str() : "", format, arg);
         }
         return;

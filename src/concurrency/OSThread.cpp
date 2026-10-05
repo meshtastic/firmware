@@ -1,4 +1,5 @@
 #include "OSThread.h"
+#include "concurrency/RadioTask.h"
 #include "configuration.h"
 #include "memGet.h"
 #include <assert.h>
@@ -16,6 +17,21 @@ bool OSThread::showRun = false;
 bool OSThread::showWaiting = false;
 
 const OSThread *OSThread::currentThread;
+#ifdef MESHTASTIC_RADIO_TASK
+const OSThread *OSThread::radioTaskThread;
+#endif
+
+const OSThread *OSThread::current()
+{
+#ifdef MESHTASTIC_RADIO_TASK
+    if (inRadioTask())
+        return radioTaskThread;
+    const OSThread *loggedOn;
+    if (loggingFor(&loggedOn))
+        return loggedOn;
+#endif
+    return currentThread;
+}
 
 ThreadController mainController, timerController;
 InterruptableDelay mainDelay;
@@ -83,7 +99,12 @@ void OSThread::run()
 #ifdef DEBUG_HEAP
     auto heap = memGet.getFreeHeap();
 #endif
-    currentThread = this;
+#ifdef MESHTASTIC_RADIO_TASK
+    const OSThread *&running = controller == &radioController ? radioTaskThread : currentThread;
+#else
+    const OSThread *&running = currentThread;
+#endif
+    running = this;
     fromNowDuringRun = false;
     auto newDelay = runOnce();
 #ifdef DEBUG_HEAP
@@ -104,7 +125,7 @@ void OSThread::run()
     if (newDelay >= 0)
         setInterval(newDelay);
 
-    currentThread = NULL;
+    running = NULL;
 }
 
 int32_t OSThread::disable()

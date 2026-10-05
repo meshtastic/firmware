@@ -425,6 +425,26 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     /** See getTxDueMs(). Written by the radio thread, read by the router's */
     std::atomic<uint32_t> txDueMs{0};
 
+#ifdef MESHTASTIC_TX_SLOT_GATE_MS
+    /** When the backoff of the TX at the front of the queue falls due, before the gate brings its timer forward */
+    uint32_t slotGateDueMs = 0;
+    /** Hold a TX with a slot parity until its slot on the grid (see ownSlotScanAt()); false if it is not to be scanned now:
+     *  its timer was set again, or a frame arrived during the wait */
+    bool waitForTxSlot(meshtastic_MeshPacket *txp);
+#ifdef MESHTASTIC_TX_SLOT_LEAD
+    /** How late the TX timer's handling starts after the timer falls due (a fast-rising, slowly falling envelope, so a late
+     *  tail sets it), and the scan start to SET_TX (an average), in us */
+    uint32_t leadWakeUs = 1000, leadPathUs = 6000;
+    /** micros() the TX timer was set to fall due, 0 when no sample is pending; micros() of the last SET_TX */
+    uint32_t txTimerDueUs = 0, lastTxStartUs = 0;
+    void noteLeadWake(int32_t lateUs);
+    void noteLeadPath(uint32_t pathUs);
+    /** The estimates in whole ms, rounded up */
+    uint32_t leadWakeMs() const { return (leadWakeUs + 999) / 1000; }
+    uint32_t leadPathMs() const { return (leadPathUs + 999) / 1000; }
+#endif
+#endif
+
     static void timerCallback(void *p1, uint32_t p2);
 
     virtual void onNotify(uint32_t notification) override;
@@ -636,6 +656,8 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      *  task notifies ISR_RX once the frame is out of the radio. */
     bool rxDoneFromIsr();
     bool rxReadoutActive() const { return rxReadoutTask != nullptr; }
+    /** Whether a frame the readout task captured is still waiting for this thread */
+    bool capturedFramePending() const { return rxRingTail != rxRingHead; }
     /** Hand an RX_DONE found by a poll to the readout task; false if there is no task. Does not wait: the
      *  radio-sequence lock, not a wait here, is what keeps the task out of the caller's RadioLib calls. */
     bool wakeRxReadout();
@@ -680,6 +702,7 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     bool rxDoneFromIsr() { return false; }
     bool requestRearmFromIsr() { return false; }
     bool rxReadoutActive() const { return false; }
+    bool capturedFramePending() const { return false; }
     bool wakeRxReadout() { return false; }
     unsigned deliverCapturedFrames() { return 0; }
 #endif
