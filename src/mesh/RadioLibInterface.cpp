@@ -662,6 +662,7 @@ void RadioLibInterface::handleReceiveInterrupt()
             airTime->logAirtime(RX_ALL_LOG, rxMsec);
         } else {
             rxGood++;
+            lastRxGoodMs = millis();
             // altered packet with "from == 0" can do Remote Node Administration without permission
             if (radioBuffer.header.from == 0) {
                 LOG_WARN("Ignore received packet without sender");
@@ -733,9 +734,10 @@ void RadioLibInterface::pollMissedIrqs()
     }
 }
 
-void RadioLibInterface::resetAGC()
+bool RadioLibInterface::resetAGC()
 {
     // Base implementation: no-op. Override in chip-specific subclasses.
+    return false;
 }
 
 void RadioLibInterface::periodicRadioMaintenance()
@@ -750,7 +752,14 @@ void RadioLibInterface::periodicRadioMaintenance()
         return; // a chip just re-inited (or still dead) has no use for an AGC reset this tick
     }
 
-    resetAGC();
+    // A radio that is still decoding packets has gain that isn't stuck
+    const bool hearing = lastRxGoodMs && Throttle::isWithinTimespanMs(lastRxGoodMs, AGC_IDLE_RESET_MS);
+    if (hearing && lastAgcResetMs && Throttle::isWithinTimespanMs(lastAgcResetMs, AGC_FORCED_RESET_MS))
+        return;
+    if (resetAGC()) {
+        const uint32_t now = millis();
+        lastAgcResetMs = now ? now : 1;
+    }
 }
 
 bool RadioLibInterface::maybeRecoverChipStateLoss()
