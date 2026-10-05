@@ -8,6 +8,48 @@
 #define LR2021_RX_REARM_AT_TX_DONE 1
 #endif
 
+// RadioLib 7.8 replaced the LR2021's setRegMode(simo, rampTimes) with setRegMode(simo) and the public setRegulatorDCDC(), and
+// applies Semtech's DCDC sensitivity workaround itself on every modulation change.
+#if (RADIOLIB_VERSION_MAJOR > 7) || (RADIOLIB_VERSION_MAJOR == 7 && RADIOLIB_VERSION_MINOR >= 8)
+#define LR2021_RADIOLIB_HAS_DCDC 1
+#endif
+// -DLR2021_REGULATOR_LDO keeps the chip's default LDO regulator instead of the DC-DC (SIMO) one
+#if defined(LR2021_REGULATOR_LDO) && !defined(LR2021_RADIOLIB_HAS_DCDC)
+#error "LR2021_REGULATOR_LDO needs RadioLib 7.8 or later"
+#endif
+// -DLR2021_LOAD_PRAM loads Semtech's LR2021 patch RAM after every chip reset. Semtech's driver says the PRAM fixes, among
+// others, the DC-DC (SIMO) regulator's cost to sub-GHz LoRa sensitivity. It writes chip memory directly, so it needs
+// -DRADIOLIB_GODMODE=1, and RadioLib 7.8, whose WriteRegMem32 no longer sends a stray byte after the data.
+#if defined(LR2021_LOAD_PRAM) && (!RADIOLIB_GODMODE || !defined(LR2021_RADIOLIB_HAS_DCDC))
+#error "LR2021_LOAD_PRAM writes chip memory directly: build with -DRADIOLIB_GODMODE=1 and RadioLib 7.8 or later"
+#endif
+// -DLR2021_STANDBY_XOSC keeps the TCXO running: standby and the RX/TX fallback are STBY_XOSC, and the scan starts from there
+// without RadioLib's STBY_RC. It calls RadioLib internals, so it needs -DRADIOLIB_GODMODE=1.
+#if defined(LR2021_STANDBY_XOSC) && !RADIOLIB_GODMODE
+#error "LR2021_STANDBY_XOSC calls RadioLib internals: build with -DRADIOLIB_GODMODE=1"
+#endif
+// -DLR2021_TX_PRESTAGE writes the TX payload into the chip's TX FIFO before the channel scan, so a clear verdict sends only
+// packet params, IRQ setup and SET_TX. It calls RadioLib's LR2021 commands directly, so it needs -DRADIOLIB_GODMODE=1.
+// -DLR2021_PRESTAGE_UPSTREAM stages through RadioLib's own prestageTransmit() (RadioLib #1883) instead, whose stageMode(TX)
+// skips the FIFO write for the payload it staged; that needs no GODMODE.
+#if defined(LR2021_TX_PRESTAGE) && !RADIOLIB_GODMODE && !defined(LR2021_PRESTAGE_UPSTREAM)
+#error "LR2021_TX_PRESTAGE calls RadioLib's LR2021 commands directly: build with -DRADIOLIB_GODMODE=1"
+#endif
+#if defined(LR2021_PRESTAGE_UPSTREAM) && !defined(LR2021_TX_PRESTAGE)
+#error "LR2021_PRESTAGE_UPSTREAM changes how LR2021_TX_PRESTAGE stages: build with -DLR2021_TX_PRESTAGE"
+#endif
+// -DLR2021_CAD_EXIT_LBT scans with CAD exit mode LBT: a clear CAD keys up from the prestaged payload, and a busy one leaves the
+// chip in standby for rearmReceive() to restart RX, with no CAD>RX handoff. The chip keys up without the MCU, so the RF
+// switch must be the chip's DIOs or none.
+#if defined(LR2021_CAD_EXIT_LBT) && (!defined(LR2021_TX_PRESTAGE) || !RADIOLIB_GODMODE)
+#error "LR2021_CAD_EXIT_LBT sends the prestaged payload: build with -DLR2021_TX_PRESTAGE -DRADIOLIB_GODMODE=1"
+#endif
+// -DLR2021_RESUME_CONTINUOUS_RX keeps a continuous RX running after a frame instead of restarting it, checking the chip is
+// still in RX first. It and LR2021_CAD_EXIT_LBT read the chip's mode.
+#if defined(LR2021_CAD_EXIT_LBT) || defined(LR2021_RESUME_CONTINUOUS_RX)
+#define LR2021_READ_CHIP_MODE 1
+#endif
+
 /**
  * \brief Adapter for LR20x0 radio family. Implements common logic for child classes.
  * \tparam T RadioLib module type for LR20x0, e.g. LR2021.
@@ -115,5 +157,54 @@ template <class T> class LR20x0Interface : public RadioLibInterface
 
     /** Recover a chip that lost its runtime state via the same full begin() the band-hop path uses */
     bool recoverChipStateLoss() override { return fullBegin(getFreq()); }
+
+    /** SetStandby's oscillator: STBY_XOSC with -DLR2021_STANDBY_XOSC, else STBY_RC as RadioLib's standby() */
+#ifdef LR2021_STANDBY_XOSC
+    static constexpr uint8_t STANDBY_MODE = RADIOLIB_LR2021_STANDBY_XOSC;
+    /** Put the TX/RX fallback on STBY_XOSC, after begin() */
+    void keepTcxoOnInStandby();
+    /** lora.scanChannel(cfg) without its STBY_RC: trySetStandby() has just put the chip in STBY_XOSC */
+    int16_t scanChannelFromStandby(const ChannelScanConfig_t &cfg);
+#else
+    static constexpr uint8_t STANDBY_MODE = RADIOLIB_LR2021_STANDBY_RC;
+#endif
+
+#ifdef LR2021_TX_PRESTAGE
+    /** With a payload staged before the scan, send only what follows it */
+    int16_t launchTransmit(size_t numbytes) override;
+    /** The payload isChannelActive() wrote into the chip's TX FIFO before the scan, or 0 bytes if none */
+    size_t prestagedLen = 0;
+    uint32_t prestagedId = 0;
+#ifndef LR2021_PRESTAGE_UPSTREAM
+    /** The TX FIFO may hold bytes no TX has sent. It appends, so they would go out ahead of the next payload */
+    bool txFifoStale = true;
+    /** Empty the TX FIFO if it may hold unsent bytes */
+    int16_t clearStaleTxFifo();
+#endif
+#endif
+
+#ifdef LR2021_READ_CHIP_MODE
+    /** The chip's mode (stat2 bits 2..0, as the LR20X0_CHIP_MODE_* below), waiting out a passing FS; 0xFF on SPI failure */
+    uint8_t readChipMode();
+    static constexpr uint8_t LR20X0_CHIP_MODE_STBY_RC = 1;
+    static constexpr uint8_t LR20X0_CHIP_MODE_STBY_XOSC = 2;
+    static constexpr uint8_t LR20X0_CHIP_MODE_FS = 3;
+    static constexpr uint8_t LR20X0_CHIP_MODE_RX = 4;
+    static constexpr uint8_t LR20X0_CHIP_MODE_TX = 5;
+#endif
+#ifdef LR2021_CAD_EXIT_LBT
+    /** A clear CAD under exit mode LBT put the chip in TX with the prestaged payload: launchTransmit() sends nothing */
+    bool chipKeyedUp = false;
+#endif
+#ifdef LR2021_RESUME_CONTINUOUS_RX
+    /** RX was armed continuous and nothing has put the chip into standby since */
+    bool rxArmedContinuous = false;
+    bool resumeRunningReceive() override;
+#endif
+
+#ifdef LR2021_LOAD_PRAM
+    /** Load and activate Semtech's patch RAM, then re-apply the modem settings begin() made; RadioLib status */
+    int16_t loadPram();
+#endif
 };
 #endif
