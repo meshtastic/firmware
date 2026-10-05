@@ -5,6 +5,7 @@
 // Under coverage-beacon-userprefs / native-windows-beacon-userprefs userprefs_fixture.h is
 // -include'd and the configured cases run; under any other env the suite asserts the stock default.
 
+#include "FSCommon.h"
 #include "MeshTypes.h" // Include BEFORE TestUtil.h (provides NodeNum, isBroadcast, etc.)
 #include "NodeDB.h"
 #include "TestUtil.h"
@@ -114,6 +115,56 @@ static void test_shipped_config_fits_a_remote_admin_read_back()
     TEST_ASSERT_TRUE(MeshBeaconModule::fitsRemoteAdmin(moduleConfig.mesh_beacon));
 }
 
+// The offer channel's slot, by the identity the offer names; -1 when no live slot holds it.
+static int16_t offerChannelSlot()
+{
+    const auto &ch = moduleConfig.mesh_beacon.broadcast_offer_channel;
+    return channels.findByIdentity(ch.name, ch.psk.bytes, (uint8_t)ch.psk.size, ch.use_aead);
+}
+
+/*
+ * Under test: NodeDB::resetRadioConfig() placing the offer channel only when it rebuilds the channel table
+ * (src/mesh/NodeDB.cpp, beaconChannelsFromDefaults).
+ * Why: an operator who deletes the offer channel has given the newer instruction. A table loaded intact from
+ * channels.proto is not a fresh one, so an ordinary reboot must leave the deleted channel deleted.
+ * Regression guarded: the placement firing on every boot, so a deleted offer channel came back each restart.
+ */
+static void test_deleted_offer_channel_stays_deleted_across_a_reboot()
+{
+    const int16_t idx = offerChannelSlot();
+    TEST_ASSERT_GREATER_THAN_INT16_MESSAGE(0, idx, "precondition: placed at boot");
+    meshtastic_Channel gone = channels.getByIndex(idx);
+    gone.role = meshtastic_Channel_Role_DISABLED;
+    channels.setChannel(gone);
+    channels.onConfigChanged();
+    TEST_ASSERT_TRUE(nodeDB->saveToDisk(SEGMENT_CHANNELS | SEGMENT_MODULECONFIG));
+
+    delete nodeDB; // an ordinary reboot: both files load intact
+    nodeDB = new NodeDB();
+
+    TEST_ASSERT_TRUE_MESSAGE(moduleConfig.mesh_beacon.has_broadcast_offer_channel, "the offer itself is kept");
+    TEST_ASSERT_LESS_THAN_INT16_MESSAGE(0, offerChannelSlot(), "the deleted channel is not placed again");
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Channel_Role_DISABLED, channels.getByIndex(idx).role, "its slot stays disabled");
+}
+
+/*
+ * Under test: the same placement when channels.proto is lost but module.proto, with the offer, loads.
+ * Why: the table is rebuilt from defaults, so the offer's channel belongs in it again - the config still asks for
+ * it, and nothing the operator did removed it from this table.
+ * Regression guarded: a lost channel file leaving the offer withheld for good. Until now only an admin_radio case
+ * leaking its offer onto disk exercised this path, and by accident.
+ */
+static void test_lost_channel_file_places_the_offer_channel_again()
+{
+    TEST_ASSERT_TRUE(moduleConfig.mesh_beacon.has_broadcast_offer_channel);
+    FSCom.remove(channelFileName);
+
+    delete nodeDB; // the boot after the channel file went missing
+    nodeDB = new NodeDB();
+
+    TEST_ASSERT_GREATER_THAN_INT16_MESSAGE(0, offerChannelSlot(), "a rebuilt table places the offer's channel");
+}
+
 /*
  * Under test: NodeDB::resetRadioConfig() setting beaconChannelsFromDefaults whenever it rebuilds the
  * channel table from defaults, and placeDefaultBeaconChannels() consuming it (src/mesh/NodeDB.cpp).
@@ -171,6 +222,10 @@ UPB_TEST_ENTRY void setup()
     RUN_TEST(test_by_value_target_is_not_cleared_by_the_boot_gate);
     RUN_TEST(test_offer_channel_is_placed_in_the_table_at_boot);
     RUN_TEST(test_shipped_config_fits_a_remote_admin_read_back);
+
+    printf("\n=== reboots ===\n");
+    RUN_TEST(test_deleted_offer_channel_stays_deleted_across_a_reboot);
+    RUN_TEST(test_lost_channel_file_places_the_offer_channel_again);
 
     printf("\n=== factory reset ===\n");
     RUN_TEST(test_offer_channel_survives_a_factory_reset);

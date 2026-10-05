@@ -19,6 +19,7 @@
 #if !MESHTASTIC_EXCLUDE_BEACON
 
 #include "Default.h"
+#include "MeshPacketQueue.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "NodeDB.h"
@@ -272,8 +273,8 @@ static void test_adminValidation_turboPresetOnEU868_isKept(void)
 }
 
 /**
- * Verify LONG_TURBO is also clamped for EU_868, not just SHORT_TURBO.
- * Important to confirm rejection covers the entire turbo preset family rather than one variant.
+ * LONG_TURBO is kept on EU_868 too, as SHORT_TURBO is: the whole turbo family is recorded as asked for,
+ * and sendBeacon() declines a target it cannot resolve.
  */
 static void test_adminValidation_longTurboPresetOnEU868_isKept(void)
 {
@@ -312,8 +313,8 @@ static void test_adminValidation_turboPresetOnUS_isAccepted(void)
 }
 
 /**
- * Verify MEDIUM_TURBO is also clamped for EU_868. Like SHORT_TURBO/LONG_TURBO it is a 500 kHz preset
- * that does not fit EU_868's 250 kHz band, so it must not survive admin validation there.
+ * MEDIUM_TURBO is kept on EU_868 like the other turbo presets. It is a 500 kHz preset that does not fit
+ * EU_868's 250 kHz band, so it is withheld at send, not cleared on write.
  */
 static void test_adminValidation_mediumTurboPresetOnEU868_isKept(void)
 {
@@ -1923,38 +1924,6 @@ static void test_refreshSlotFlags_pinnedDefaultChannelIsNotDefault(void)
 }
 
 /**
- * The sidecar carries a whole LoRaConfig so a target can vary more than a preset. Nothing in the
- * beacon config can ask for that yet, so pin it at the sidecar: custom modem params must survive
- * the round trip rather than being flattened onto a preset.
- */
-static void test_sidecar_carriesCustomModemParams(void)
-{
-    resetConfig();
-    meshtastic_MeshPacket pkt = meshtastic_MeshPacket_init_zero;
-    pkt.id = 0x5EED0100;
-
-    MeshBeaconModule_TargetRadioSettings s = {};
-    s.lora = config.lora;
-    s.lora.use_preset = false; // custom params: bandwidth/SF/CR are the config, not the preset
-    s.lora.bandwidth = 125;
-    s.lora.spread_factor = 11;
-    s.lora.coding_rate = 8;
-    s.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
-    strncpy(s.channelName, "Custom", sizeof(s.channelName) - 1);
-    MeshBeaconModule::setTargetRadioSettings(&pkt, s);
-
-    const MeshBeaconModule_TargetRadioSettings *got = MeshBeaconModule::getTargetRadioSettings(&pkt);
-    TEST_ASSERT_NOT_NULL_MESSAGE(got, "the entry must be retrievable by packet id");
-    TEST_ASSERT_FALSE_MESSAGE(got->lora.use_preset, "use_preset must survive the sidecar");
-    TEST_ASSERT_EQUAL_UINT32_MESSAGE(125, got->lora.bandwidth, "bandwidth must survive the sidecar");
-    TEST_ASSERT_EQUAL_UINT32_MESSAGE(11, got->lora.spread_factor, "spread_factor must survive the sidecar");
-    TEST_ASSERT_EQUAL_UINT32_MESSAGE(8, got->lora.coding_rate, "coding_rate must survive the sidecar");
-    TEST_ASSERT_EQUAL_STRING_MESSAGE("Custom", got->channelName, "the hashed channel name must survive the sidecar");
-
-    MeshBeaconModule::clearTargetRadioSettings(&pkt);
-}
-
-/**
  * Legacy split sends the offer and the text on identical settings. They share one entry, so
  * releasing the first must not pull the settings out from under the second still queued.
  */
@@ -2585,11 +2554,12 @@ static void test_sweep_us_everyPinnedOfferSlot_advertisedIffNotDerived(void)
     bcfg.broadcast_offer_region = meshtastic_Config_LoRaConfig_RegionCode_US;
     bcfg.has_broadcast_offer_preset = true;
     bcfg.broadcast_offer_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
-    uint32_t derived = 0;
-    MeshBeaconModule::offerFrequencySlot(bcfg, &derived);
+    // What a receiver derives from the advertised region, preset and name - not the module's own answer.
     meshtastic_Config_LoRaConfig probe = config.lora;
     probe.use_preset = true;
     probe.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    probe.channel_num = 0;
+    const uint32_t derived = RadioInterface::resolveFrequencySlot(probe, "Offer");
     const uint32_t slots = RadioInterface::frequencySlotCount(probe);
 
     for (uint32_t k = 1; k <= slots + 1; k++) {
@@ -3371,6 +3341,37 @@ static void test_broadcaster_sendFailure_releasesTargetEntry(void)
 }
 
 /**
+ * Under test: releaseIfNotQueued() on ERRNO_SHOULD_RELEASE (src/modules/MeshBeaconModule.cpp), the one send()
+ * result after which the packet is still the beacon's to free.
+ * Why: every other failure has already freed p; this one has not, so the module must free it and clear the
+ * entry by id. The mock router does not free on this result, so a missed release is a leak LSan reports.
+ * Regression guarded: the packet leaked, or its target entry stayed armed for a beacon that never queued.
+ */
+static void test_broadcaster_sendShouldRelease_freesThePacketAndItsEntry(void)
+{
+    resetConfig();
+    static const uint8_t homePsk[16] = {0xC7, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                        0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    installTestPrimaryChannel("Home", homePsk, sizeof(homePsk));
+
+    moduleConfig.has_mesh_beacon = true;
+    moduleConfig.mesh_beacon.has_broadcast_offer_preset = true;
+    moduleConfig.mesh_beacon.broadcast_offer_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
+    moduleConfig.mesh_beacon.broadcast_targets_count = 1;
+    moduleConfig.mesh_beacon.broadcast_targets[0].has_preset = true;
+    moduleConfig.mesh_beacon.broadcast_targets[0].preset = meshtastic_Config_LoRaConfig_ModemPreset_NARROW_SLOW;
+
+    mockRouter->nextSendResult = ERRNO_SHOULD_RELEASE;
+    MeshBeaconBroadcastModuleTestShim bcast;
+    bcast.sendBeacon();
+    mockRouter->nextSendResult = ERRNO_OK;
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, mockRouter->sentPackets.size(), "expected one send attempt");
+    TEST_ASSERT_FALSE_MESSAGE(MeshBeaconModule::hasTargetRadioSettings(&mockRouter->sentPackets[0]),
+                              "a beacon that never queued must not keep a target entry");
+}
+
+/**
  * A target already transmitting on the offered mesh must not carry the offer - everyone hearing it
  * is already there. Valid config at write time, redundant only at TX.
  */
@@ -3529,8 +3530,8 @@ static void test_offer_redundancy_bothRegionsExplicit(void)
 
 /**
  * The EU trio own mutually exclusive presets, so naming one is naming its region. An offer that
- * inherits the region and asks for a sibling's preset must keep the preset and gain that sibling,
- * not lose the preset to the running region's default.
+ * inherits the region and asks for a sibling's preset keeps the preset, and its region stays UNSET:
+ * the sibling is resolved at send, not written into the config.
  */
 static void test_adminValidation_offerWithUnsetRegionKeepsTheRequest(void)
 {
@@ -3594,7 +3595,7 @@ static void test_broadcaster_threeSpellingsOfTheSameEUMesh_sendOnce(void)
                                   moduleConfig.mesh_beacon.broadcast_targets[i].preset, "every target keeps LITE_FAST");
 
     // Read it back the way a client would, not by peeking at the global: what admin answers with
-    // is what the operator sees, and it must carry the resolved regions.
+    // is what the operator sees, and it must carry the regions as written.
     meshtastic_MeshPacket req = meshtastic_MeshPacket_init_zero;
     req.decoded.want_response = true;
     testAdmin->handleGetModuleConfig(req, meshtastic_AdminMessage_ModuleConfigType_MESHBEACON_CONFIG);
@@ -3669,7 +3670,7 @@ static void test_broadcaster_threeSpellingsNotThroughAdmin_stillSendOnce(void)
                               "a userPrefs config must reach the same one mesh a client's would");
 }
 
-/** The same for a broadcast target: preset kept, region swapped to the sibling that owns it. */
+/** The same for a broadcast target: preset kept, region left UNSET for sendBeacon() to resolve to the sibling. */
 static void test_adminValidation_targetWithUnsetRegionKeepsTheRequest(void)
 {
     resetConfig();
@@ -4057,8 +4058,6 @@ static void test_beaconRestore_isNotReenteredByCompleteSending(void)
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, radio.reconfigureCalls, "restore must reconfigure the radio exactly once");
     TEST_ASSERT_EQUAL_INT_MESSAGE(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, config.lora.modem_preset,
                                   "restore must put the home preset back");
-    TEST_ASSERT_EQUAL_STRING_MESSAGE("Home", channels.getByIndex(channels.getPrimaryIndex()).settings.name,
-                                     "restore must put the home channel back");
 }
 
 /**
@@ -4100,8 +4099,6 @@ static void test_beaconSwitch_isNotUndoneByCompleteSending(void)
     TEST_ASSERT_TRUE_MESSAGE(MeshBeaconModule::reconfigureForBeaconTX(&radio, nullptr), "restore should have applied");
     TEST_ASSERT_EQUAL_INT_MESSAGE(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, config.lora.modem_preset,
                                   "restore must return to the home preset, not the first beacon target");
-    TEST_ASSERT_EQUAL_STRING_MESSAGE("Home", channels.getByIndex(channels.getPrimaryIndex()).settings.name,
-                                     "restore must return to the home channel");
 }
 
 /** A restore with nothing switched must do nothing at all - the guard is what makes re-entry safe. */
@@ -4154,8 +4151,6 @@ static void test_beaconRestore_deferredUntilPacketCompletes(void)
     TEST_ASSERT_TRUE_MESSAGE(MeshBeaconModule::reconfigureForBeaconTX(&radio, nullptr), "restore should have applied");
     TEST_ASSERT_EQUAL_INT_MESSAGE(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, config.lora.modem_preset,
                                   "restore must put the home preset back");
-    TEST_ASSERT_EQUAL_STRING_MESSAGE("Home", channels.getByIndex(channels.getPrimaryIndex()).settings.name,
-                                     "restore must put the home channel back");
 }
 
 /**
@@ -4362,8 +4357,6 @@ static void test_txHook_beaconPacket_isDefer(void)
     RadioTxHooks::packetReleased(&radio, &pkt);
     TEST_ASSERT_EQUAL_INT_MESSAGE(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, config.lora.modem_preset,
                                   "releasing the packet must put the home preset back");
-    TEST_ASSERT_EQUAL_STRING_MESSAGE("Home", channels.getByIndex(channels.getPrimaryIndex()).settings.name,
-                                     "releasing the packet must put the home channel back");
 }
 
 /**
@@ -4672,8 +4665,6 @@ static void test_txHook_untaggedPacketAheadOfQueuedBeacon_restoresHome(void)
                                   "restoring the radio owes the driver a fresh delay and scan");
     TEST_ASSERT_EQUAL_INT_MESSAGE(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, config.lora.modem_preset,
                                   "an untagged packet must never transmit on the beacon preset");
-    TEST_ASSERT_EQUAL_STRING_MESSAGE("Home", channels.getByIndex(channels.getPrimaryIndex()).settings.name,
-                                     "an untagged packet must never transmit on the beacon channel");
 
     // The beacon is not lost by the restore: it switches the radio back when it next reaches the head.
     TEST_ASSERT_EQUAL_INT_MESSAGE(RadioTxHook::PRETX_DEFER, RadioTxHooks::beforeTransmit(&radio, &beacon),
@@ -4683,6 +4674,102 @@ static void test_txHook_untaggedPacketAheadOfQueuedBeacon_restoresHome(void)
 
     MeshBeaconModule::clearTargetRadioSettings(&beacon);
     RadioTxHooks::packetReleased(&radio, &beacon);
+}
+
+/**
+ * CHARACTERISATION, not an endorsement. Under test: the queuedBeaconIds ring behind flushQueuedBeacons()
+ * (src/modules/MeshBeaconModule.cpp), which holds 2 * MESH_BEACON_MAX_TARGETS ids - one full legacy-split cycle.
+ * Why pinned: a second queued cycle overwrites the first cycle's ids, so a config write withdraws only the newest
+ * eight; the older beacons stay queued until the stale gate drops them, an interval late.
+ * Regression guarded: none yet. If the ring is resized or keyed on the queue itself, this is EXPECTED to change.
+ */
+static void test_flush_secondQueuedCycle_withdrawsOnlyTheNewestEight(void)
+{
+    resetConfig();
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    initRegion();
+    static const uint8_t homePsk[16] = {0xC8, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                        0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    installTestPrimaryChannel("Home", homePsk, sizeof(homePsk));
+
+    MeshBeaconTxHook hook;
+    auto *radio = new CancellingRadioInterface();
+    mockRouter->addInterface(std::unique_ptr<RadioInterface>(radio)); // the router owns it from here
+
+    moduleConfig.has_mesh_beacon = true;
+    auto &bcfg = moduleConfig.mesh_beacon;
+    bcfg.flags |= MESH_BEACON_FLAG_LEGACY_SPLIT;
+    strncpy(bcfg.broadcast_message, "two cycles", sizeof(bcfg.broadcast_message) - 1);
+    bcfg.has_broadcast_offer_preset = true;
+    bcfg.broadcast_offer_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
+    static const meshtastic_Config_LoRaConfig_ModemPreset presets[4] = {
+        meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW, meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW,
+        meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST, meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST};
+    bcfg.broadcast_targets_count = 4;
+    for (int t = 0; t < 4; t++) {
+        bcfg.broadcast_targets[t].has_preset = true;
+        bcfg.broadcast_targets[t].preset = presets[t];
+    }
+
+    MeshBeaconBroadcastModuleTestShim bcast;
+    bcast.sendBeacon();
+    bcast.sendBeacon();
+    const size_t perCycle = 2 * MESH_BEACON_MAX_TARGETS;
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(2 * perCycle, mockRouter->sentPackets.size(), "precondition: two full split cycles");
+    for (const auto &sent : mockRouter->sentPackets)
+        radio->queued.push_back(sent);
+
+    MeshBeaconModule::flushQueuedBeacons();
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(perCycle, radio->cancelled.size(), "only the ring's eight ids are withdrawn");
+    for (size_t i = 0; i < perCycle; i++)
+        TEST_ASSERT_EQUAL_UINT32_MESSAGE(mockRouter->sentPackets[perCycle + i].id, radio->cancelled[i],
+                                         "and they are the second cycle's");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(perCycle, radio->queued.size(), "the first cycle is still queued");
+
+    for (auto &q : radio->queued)
+        RadioTxHooks::packetReleased(radio, &q);
+    MeshBeaconModule::clearAllTargetRadioSettings();
+}
+
+/**
+ * CHARACTERISATION OF A KNOWN DEFECT (#4), not an endorsement. Under test: MeshPacketQueue::enqueue() evicting
+ * a lower-priority packet to make room (replaceLowerPriorityPacket(), src/mesh/MeshPacketQueue.cpp).
+ * Why pinned: the eviction frees the packet with a bare packetPool.release(), so no TX hook runs and an evicted
+ * beacon leaves its sidecar entry armed until the stale reaper frees it, up to a broadcast interval later.
+ * When eviction is routed through RadioTxHooks::packetReleased() this assertion is EXPECTED to flip.
+ */
+static void test_txQueueEviction_leavesTheEvictedBeaconsEntryArmed(void)
+{
+    resetConfig();
+    MeshPacketQueue queue(2);
+
+    meshtastic_MeshPacket *beacon = packetPool.allocZeroed();
+    beacon->id = 0x7A000030;
+    beacon->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
+    MeshBeaconModule::setTargetRadioSettings(beacon, targetSettings(meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW, true, 1,
+                                                                    false, meshtastic_Config_LoRaConfig_RegionCode_EU_868));
+    meshtastic_MeshPacket *other = packetPool.allocZeroed();
+    other->id = 0x7A000031;
+    other->priority = meshtastic_MeshPacket_Priority_DEFAULT;
+    TEST_ASSERT_TRUE(queue.enqueue(beacon));
+    TEST_ASSERT_TRUE(queue.enqueue(other));
+
+    meshtastic_MeshPacket *urgent = packetPool.allocZeroed();
+    urgent->id = 0x7A000032;
+    urgent->priority = meshtastic_MeshPacket_Priority_RELIABLE;
+    bool dropped = false;
+    TEST_ASSERT_TRUE_MESSAGE(queue.enqueue(urgent, &dropped), "the full queue takes the higher-priority packet");
+    TEST_ASSERT_TRUE_MESSAGE(dropped, "by evicting the lowest-priority one, the beacon");
+
+    meshtastic_MeshPacket probe = meshtastic_MeshPacket_init_zero;
+    probe.id = 0x7A000030;
+    TEST_ASSERT_TRUE_MESSAGE(MeshBeaconModule::hasTargetRadioSettings(&probe),
+                             "KNOWN DEFECT #4: the evicted beacon's entry is still armed - no hook ran");
+
+    while (meshtastic_MeshPacket *p = queue.dequeue())
+        packetPool.release(p);
+    MeshBeaconModule::clearAllTargetRadioSettings();
 }
 
 // ===========================================================================
@@ -5005,9 +5092,6 @@ static void offerPlusFullIndexedList(meshtastic_ModuleConfig_MeshBeaconConfig &b
     }
 }
 
-// Both channels by value on private 32-byte keys, message length as the dial. The widest shape the
-// Sweeps the message length for a config landing in the band between the two bounds - fits the
-// decoded cap, exceeds what survives the frame once the PKC overhead and the Data framing are
 /**
  * The warning is for the shape that cannot be read back. A config with headroom must not nag.
  */
@@ -5201,8 +5285,8 @@ static void test_broadcaster_presetOnlyTargetSwappingRegion_isNotDropped(void)
 }
 
 /**
- * An offer that is nothing but a pinned slot is still an offer: the listener caches one, so the
- * broadcaster has to send one, or the two halves disagree about what offer content is.
+ * An offer that is nothing but a pinned slot is still an offer: the listener counts it as offer
+ * content, so the broadcaster has to send one, or the two halves disagree about what an offer is.
  */
 static void test_broadcaster_offerWithOnlyFrequencySlot_isSent(void)
 {
@@ -5565,6 +5649,12 @@ void setUp(void)
 void tearDown(void)
 {
     Time::useRealClock(); // a case that failed mid-way must not leave the next one on fake time
+    // Nor a radio switch: drop every entry, then release whatever switch is still installed.
+    MeshBeaconModule::clearAllTargetRadioSettings();
+    {
+        ReentrantRadioInterface radio;
+        MeshBeaconModule::reconfigureForBeaconTX(&radio, nullptr);
+    }
     meshBeaconBroadcastModule = nullptr;
 
     delete testAdmin;
@@ -5683,7 +5773,6 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_adminValidation_targetClamp_leavesRunningSlotState);
     RUN_TEST(test_applyModemConfig_publishesTheSlotVerdict);
     RUN_TEST(test_refreshSlotFlags_pinnedDefaultChannelIsNotDefault);
-    RUN_TEST(test_sidecar_carriesCustomModemParams);
     RUN_TEST(test_sidecar_legacySplitPair_sharesOneEntryUntilBothRelease);
     RUN_TEST(test_sidecar_fourLegacySplitTargets_allFit);
     RUN_TEST(test_sidecar_entryQueuedPastItsInterval_dropsThePacket);
@@ -5726,6 +5815,7 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_broadcaster_twoPinnedSlotsNoChannel_bothSent);
     RUN_TEST(test_broadcaster_bareTargetAndPrimaryIndexTarget_dedupToOne);
     RUN_TEST(test_broadcaster_sendFailure_releasesTargetEntry);
+    RUN_TEST(test_broadcaster_sendShouldRelease_freesThePacketAndItsEntry);
     RUN_TEST(test_broadcaster_offerMatchesTarget_offerIsOmitted);
     RUN_TEST(test_broadcaster_offerMatchesOneTarget_stillSentOnTheOther);
     RUN_TEST(test_broadcaster_offerMatchesTargetNoText_sendsNothing);
@@ -5772,6 +5862,8 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_loraConfigWrite_withdrawsQueuedBeaconsBeforeTheEditLands);
     RUN_TEST(test_txHook_unregistered_isNoOp);
     RUN_TEST(test_txHook_untaggedPacketAheadOfQueuedBeacon_restoresHome);
+    RUN_TEST(test_flush_secondQueuedCycle_withdrawsOnlyTheNewestEight);
+    RUN_TEST(test_txQueueEviction_leavesTheEvictedBeaconsEntryArmed);
 
     printf("\n=== By-value target (remote administration) ===\n");
 

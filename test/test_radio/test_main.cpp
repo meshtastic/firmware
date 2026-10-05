@@ -1,5 +1,6 @@
 // trunk-ignore-all(trufflehog/Lob): matches test_* function names, not credentials
 #include "Channels.h"
+#include "DisplayFormatters.h"
 #include "LR20x0Band.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
@@ -320,13 +321,31 @@ static TestableRadioInterface *testRadio;
 // other caller (the beacon, the slot flags) works out it will.
 // ---------------------------------------------------------------------------
 
+// The slot rule as documented, written out here so the test does not ask resolveFrequencySlot() to
+// check itself: an override slot wins, else djb2 of the name (or the preset name, rule -1) mod the count.
+static uint32_t documentedSlot(const RegionInfo *r, const meshtastic_Config_LoRaConfig &lora, const char *channelName)
+{
+    if (r->overrideSlot > 0)
+        return (uint32_t)r->overrideSlot;
+    const char *hashed = (r->overrideSlot == OVERRIDE_SLOT_PRESET_HASH)
+                             ? DisplayFormatters::getModemPresetDisplayName(lora.modem_preset, false, lora.use_preset)
+                             : channelName;
+    uint32_t h = 5381;
+    for (const unsigned char *c = (const unsigned char *)hashed; *c; c++)
+        h = ((h << 5) + h) + *c;
+    return h % RadioInterface::frequencySlotCount(lora) + 1;
+}
+
 /**
- * Every real region x every preset it offers: the slot applyModemConfig() tunes to is the one
- * resolveFrequencySlot() names, both unpinned and pinned to that same slot, and either way the
- * radio reports itself on the default slot. Regression guarded: applyModemConfig() and the clamp
- * each carried their own copy of the count and the hash, free to drift from resolveFrequencySlot().
+ * Under test: the slot and frequency applyModemConfig() tunes to (src/mesh/RadioInterface.cpp), for every
+ * real region and every preset it offers, unpinned and pinned to the derived slot.
+ * Why: the clamp, applyModemConfig() and every beacon caller must agree where a config lands. The oracle is
+ * the documented rule, re-derived here, and the frequency is checked against the slot it claims - comparing
+ * with resolveFrequencySlot() would be circular, since applyModemConfig() now calls it.
+ * Regression guarded: the applied slot drifting from the rule (the clamp and applyModemConfig() once carried
+ * their own copies of it), or channel_num and the tuned frequency disagreeing.
  */
-static void test_frequencySlot_appliedSlotMatchesResolverForEveryRegionAndPreset()
+static void test_frequencySlot_appliedSlotFollowsTheRuleForEveryRegionAndPreset()
 {
     unsigned checked = 0;
     for (const RegionInfo *r = regions; r->code != meshtastic_Config_LoRaConfig_RegionCode_UNSET; r++) {
@@ -339,10 +358,12 @@ static void test_frequencySlot_appliedSlotMatchesResolverForEveryRegionAndPreset
             config.lora.use_preset = true;
             config.lora.modem_preset = *p;
             testRadio->reconfigure();
-            const char *name = channels.getName(channels.getPrimaryIndex());
-            const uint32_t expected = RadioInterface::resolveFrequencySlot(config.lora, name);
+            const uint32_t expected = documentedSlot(r, config.lora, channels.getName(channels.getPrimaryIndex()));
             TEST_ASSERT_EQUAL_UINT32_MESSAGE(expected, testRadio->getChannelNum() + 1, where);
             TEST_ASSERT_TRUE_MESSAGE(RadioInterface::uses_default_frequency_slot, where);
+            const float width = r->profile->spacing + 2 * r->profile->padding + testRadio->getBw() / 1000;
+            const float centre = r->freqStart + testRadio->getBw() / 2000 + r->profile->padding + (expected - 1) * width;
+            TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.0005f, centre, testRadio->getFreq(), where);
 
             config.lora.channel_num = expected; // a pin on the derived slot is still the default slot
             testRadio->reconfigure();
@@ -1005,7 +1026,7 @@ void setup()
     RUN_TEST(test_frequencySlot_nz865NarrowBandwidthTopSlot);
     RUN_TEST(test_frequencySlot_eu868IsExactlyOneSlot);
     RUN_TEST(test_frequencySlot_itu1_2mPaddingBracketsTopSlot);
-    RUN_TEST(test_frequencySlot_appliedSlotMatchesResolverForEveryRegionAndPreset);
+    RUN_TEST(test_frequencySlot_appliedSlotFollowsTheRuleForEveryRegionAndPreset);
     RUN_TEST(test_resolveFrequencySlot_zeroSlotRegion_isSlotOne);
     RUN_TEST(test_resolveFrequencySlot_pinAboveCount_derivesInstead);
     RUN_TEST(test_bwCodeToKHz_specialMappings);

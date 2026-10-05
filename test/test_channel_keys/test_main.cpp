@@ -661,19 +661,27 @@ void test_expandPsk_paddingLengths()
     TEST_ASSERT_EQUAL_UINT8_MESSAGE(0, Channels::pskPaddedLength(0), "nor is an absent key");
 }
 
-void test_getKey_agreesWithExpandPsk_forEveryLength()
+// getKey() through fixed vectors rather than against expandPsk(), which it now calls: a 5-byte key is used
+// zero-padded to 16 bytes, {1} is defaultpsk itself, and {0} is encryption off.
+void test_getKey_usesFixedVectorsForPaddedAndShorthandKeys()
 {
-    uint8_t key[32];
-    for (size_t i = 0; i < sizeof(key); i++)
-        key[i] = (uint8_t)(0x30 + i);
-    for (uint8_t len = 0; len <= sizeof(key); len++) {
-        seedTableWithPrimary("Agree", key, len);
-        uint8_t expanded[32];
-        const uint8_t expandedLen = Channels::expandPsk(key, len, expanded);
-        const CryptoKey k = channels.getKey(0);
-        TEST_ASSERT_EQUAL_INT_MESSAGE(expandedLen, k.length, "getKey() and expandPsk() agree on the length");
-        TEST_ASSERT_EQUAL_UINT8_ARRAY_MESSAGE(expanded, k.bytes, sizeof(k.bytes), "and on every byte");
-    }
+    static const uint8_t five[5] = {0x11, 0x22, 0x33, 0x44, 0x55};
+    seedTableWithPrimary("Five", five, sizeof(five));
+    CryptoKey k = channels.getKey(0);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(16, k.length, "a 5-byte key is used as 16 bytes");
+    TEST_ASSERT_EQUAL_UINT8_ARRAY(five, k.bytes, sizeof(five));
+    for (size_t b = sizeof(five); b < 16; b++)
+        TEST_ASSERT_EQUAL_UINT8_MESSAGE(0, k.bytes[b], "padded with zeros");
+
+    static const uint8_t one[1] = {0x01};
+    seedTableWithPrimary("One", one, sizeof(one));
+    k = channels.getKey(0);
+    TEST_ASSERT_EQUAL_INT(sizeof(defaultpsk), k.length);
+    TEST_ASSERT_EQUAL_UINT8_ARRAY_MESSAGE(defaultpsk, k.bytes, sizeof(defaultpsk), "{1} is defaultpsk");
+
+    static const uint8_t off[1] = {0x00};
+    seedTableWithPrimary("Off", off, sizeof(off));
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, channels.getKey(0).length, "{0} is encryption off");
 }
 
 void test_identity_expandedKeyFindsItsShorthand_andAllZeroKeyIsNotCleartext()
@@ -932,7 +940,7 @@ CK_TEST_ENTRY void setup()
     RUN_TEST(test_identity_nameCaseIsSignificant);
     RUN_TEST(test_expandPsk_shorthands);
     RUN_TEST(test_expandPsk_paddingLengths);
-    RUN_TEST(test_getKey_agreesWithExpandPsk_forEveryLength);
+    RUN_TEST(test_getKey_usesFixedVectorsForPaddedAndShorthandKeys);
     RUN_TEST(test_identity_expandedKeyFindsItsShorthand_andAllZeroKeyIsNotCleartext);
     RUN_TEST(test_identity_aead_is_a_different_channel);
 
