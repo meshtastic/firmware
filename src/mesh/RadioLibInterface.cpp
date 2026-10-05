@@ -1,4 +1,5 @@
 #include "RadioLibInterface.h"
+#include "BenchClock.h"
 #include "MeshTypes.h"
 #include "NodeDB.h"
 #include "PowerMon.h"
@@ -49,6 +50,9 @@ RadioLibInterface::RadioLibInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE c
 #endif
 {
     instance = this;
+#if MESHTASTIC_BENCH_INSTRUMENTATION || defined(MESHTASTIC_TX_TIMELINE) || defined(MESHTASTIC_LOG_RADIO_EDGES)
+    benchClockStart();
+#endif
 
     // Initialize unused sample slots to a sane default; sample count controls averaging.
     for (uint8_t i = 0; i < NOISE_FLOOR_SAMPLES; i++) {
@@ -111,6 +115,7 @@ void INTERRUPT_ATTR RadioLibInterface::isrRxLevel0()
 
 void INTERRUPT_ATTR RadioLibInterface::isrTxLevel0()
 {
+    TX_TIMELINE_MARK(instance->tlTxDone);
     // Before the notify: the handler that would otherwise re-arm RX can wait behind a main-loop hold.
     instance->rearmReceiveFromIsr();
     isrLevel0Common(ISR_TX);
@@ -512,6 +517,9 @@ void RadioLibInterface::onNotify(uint32_t notification)
 
     switch (notification) {
     case ISR_TX: {
+#ifdef MESHTASTIC_LOG_RADIO_EDGES
+        noteDeafFrom("tx");
+#endif
         if (sendingPacket)
             noteFrameEnd(frameEndFromIsr(true), "tx");
         // The chip is deaf in standby until startReceive(), so the airtime log and printPacket() wait until after it.
@@ -526,8 +534,12 @@ void RadioLibInterface::onNotify(uint32_t notification)
             // TRANSMIT_DELAY_COMPLETED asks again before the scan, which is where the answer is acted on -
             // but it keeps the post-TX listen window on the channel we are about to transmit on.
             (void)RadioTxHooks::beforeTransmit(this, txQueue.getFront());
-            if (!adoptReceiveArmedFromIsr())
+            const bool adopted = adoptReceiveArmedFromIsr();
+            if (!adopted)
                 startReceive();
+#ifdef MESHTASTIC_TX_TIMELINE
+            logTxTimeline(adopted);
+#endif
         }
         setTransmitDelay();
         finishSentPacket(sent); // outside the lock: it only logs airtime and prints
@@ -552,12 +564,20 @@ void RadioLibInterface::onNotify(uint32_t notification)
                 RadioSequence seq(this);
                 if (iface->checkIrq(RADIOLIB_IRQ_TIMEOUT) != 1)
                     rearmWanted = false; // the handoff's own RX is still running: nothing to re-arm
-                else
+                else {
+#ifdef MESHTASTIC_LOG_RADIO_EDGES
+                    noteDeafFrom("rx");
+#endif
                     handleReceiveInterrupt(); // logs it and drops the TIMEOUT; the re-arm below puts the chip back in RX
+                }
             }
         } else {
             noteFrameEnd(frameEndFromIsr(false), "rx");
             RadioSequence seq(this);
+#ifdef MESHTASTIC_LOG_RADIO_EDGES
+            // The chip is still listening while the frame is read out, but a restart puts it into standby first
+            noteDeafFrom("rx");
+#endif
             handleReceiveInterrupt();
         }
         if (rearmWanted) {
@@ -565,7 +585,16 @@ void RadioLibInterface::onNotify(uint32_t notification)
             // rearmReceive() picks that RX back up instead of standing by first, so a second packet that is already
             // arriving is not aborted; the others restart RX.
             RadioSequence seq(this);
+#ifdef MESHTASTIC_LOG_RADIO_EDGES
+            // Bench: tell a resume from a restart, so the restart's deaf window is timed from here
+            if (!resumeRunningReceive()) {
+                if (!deafSinceMs) // the readout task read the frame: deaf from this restart
+                    noteDeafFrom("rx");
+                rearmReceive();
+            }
+#else
             rearmReceive();
+#endif
         }
         setTransmitDelay();
         break;
@@ -635,6 +664,12 @@ void RadioLibInterface::onNotify(uint32_t notification)
                     // The scan and the transmit it decides are one sequence: a readout landing between them would clear
                     // the flags startTransmit() is about to set up, or on SX128x leave the chip in standby.
                     RadioSequence seq(this);
+#ifdef MESHTASTIC_TX_TIMELINE
+                    markTimelineScan();
+#endif
+#ifdef MESHTASTIC_LOG_RADIO_EDGES
+                    noteDeafFrom("scan");
+#endif
                     scanForTx = txp;
                     const bool channelActive = isChannelActive();
                     scanForTx = nullptr;
@@ -661,8 +696,10 @@ void RadioLibInterface::onNotify(uint32_t notification)
 #endif
                         startSend(txp);
 #ifdef MESHTASTIC_TX_SLOT_LEAD
-                        if (lastTxStartUs)
+                        if (lastTxStartUs) {
                             noteLeadPath(lastTxStartUs - scanStartUs);
+                            TX_TIMELINE_SET(tlPathUs, lastTxStartUs - scanStartUs);
+                        }
 #endif
 #ifdef MESHTASTIC_RADIO_TASK
                         LOG_DEBUG("CAD arm");
@@ -742,6 +779,7 @@ void RadioLibInterface::scheduleTransmitDelayCompleted(uint32_t delay)
     const meshtastic_MeshPacket *p = txQueue.getFront();
     const bool slotted = p && p->slot_parity != meshtastic_MeshPacket_SlotParity_SLOT_PARITY_UNSET;
     txDueMs.store(slotted ? Time::timerEndsAtMillis(delay) : 0, std::memory_order_relaxed);
+    TX_TIMELINE_SET(tlDueMs, Time::timerEndsAtMillis(delay));
 #ifdef MESHTASTIC_TX_SLOT_GATE_MS
     slotGateDueMs = Time::timerEndsAtMillis(delay);
     if (slotted) {
@@ -792,7 +830,9 @@ bool RadioLibInterface::waitForTxSlot(meshtastic_MeshPacket *txp)
     if (txTimerDueUs) {
         // How late this handling starts after the timer fell due: the wake-up, the radio lock, and anything this thread
         // ran first
-        noteLeadWake((int32_t)(micros() - txTimerDueUs));
+        const int32_t wakeUs = (int32_t)(micros() - txTimerDueUs);
+        noteLeadWake(wakeUs);
+        TX_TIMELINE_SET(tlWakeUs, wakeUs);
         txTimerDueUs = 0;
     }
     const int32_t backMs = (int32_t)leadPathMs() - MESHTASTIC_TX_SLOT_SET_TX_AT_MS;
@@ -803,12 +843,24 @@ bool RadioLibInterface::waitForTxSlot(meshtastic_MeshPacket *txp)
 #endif
     const uint32_t scanAt = ownSlotScanAt(txp->slot_parity, slotGateDueMs, backMs);
     const int32_t ahead = (int32_t)(scanAt - Time::getMillis());
+#ifdef MESHTASTIC_TX_TIMELINE
+    // The grid ownSlotScanAt() counted from, if it had one
+    if (const uint32_t frameEnd = lastFrameEndMs.load(std::memory_order_relaxed)) {
+        slotGateAnchorMs = frameEnd;
+        slotGateAnchorNotedMs = lastFrameEndNotedMs;
+        slotGateAnchorWhat = lastFrameEndWhat.load(std::memory_order_relaxed);
+    }
+    tlGateWaitMs = 0;
+#endif
 #if MESHTASTIC_TX_SLOT_GATE_REARM
     const int32_t saneMs = SLOT_GATE_SANE_MS;
     if (ahead > earlyMs && ahead < saneMs) {
         // A redraw cannot replace a pending TX timer (txTimerOverwrite), so this can be an older draw's timer. Come back
         // the early window ahead of the slot instead of holding this thread; a notification already pending redraws.
         txDueMs.store(slotGateDueMs, std::memory_order_relaxed);
+#ifdef MESHTASTIC_TX_TIMELINE
+        slotGateRearmed++;
+#endif
 #ifdef MESHTASTIC_TX_SLOT_LEAD
         txTimerDueUs = micros() + (uint32_t)(ahead - earlyMs) * 1000;
 #endif
@@ -818,10 +870,22 @@ bool RadioLibInterface::waitForTxSlot(meshtastic_MeshPacket *txp)
 #else
     const int32_t saneMs = earlyMs + 2 * (int32_t)slotTimeMsec + 1; // further out than this, scan at once
 #endif
+#ifdef MESHTASTIC_TX_TIMELINE
+    if (ahead >= saneMs)
+        slotGateCapped++;
+#endif
     if (ahead <= 0 || ahead >= saneMs)
         return true;
     txDueMs.store(scanAt, std::memory_order_relaxed); // the router holds RX handling while this thread waits
+#ifdef MESHTASTIC_TX_TIMELINE
+    const uint32_t waitFromMs = Time::getMillis();
+#endif
     waitUntilMs(scanAt);
+#ifdef MESHTASTIC_TX_TIMELINE
+    tlGateWaitMs = Time::getMillis() - waitFromMs;
+    if (tlGateWaitMs)
+        slotGateWaits++;
+#endif
     txDueMs.store(0, std::memory_order_relaxed);
     if (!canSendImmediately() || capturedFramePending()) {
         // A frame arrived during the wait: take it first. Its handling redraws from its end, as the other nodes will.
@@ -1114,6 +1178,14 @@ void RadioLibInterface::startReceive()
 #ifdef MESHTASTIC_RADIO_TASK
     concurrency::startRadioTask(); // once, from the loop during init, after the readout task: both take the loop's priority
 #endif
+#ifdef MESHTASTIC_LOG_RADIO_EDGES
+    // How long the radio could not hear, reported at the moment it can again: the transactions on either side of a
+    // scan, a transmission or a reception can take long enough to swallow a preamble, and nothing else in the log says so.
+    if (deafSinceMs) {
+        LOG_RADIO_EDGE("Radio back in RX after %s, deaf %u ms", deafFor, (unsigned)(Time::getMillis() - deafSinceMs));
+        deafSinceMs = 0;
+    }
+#endif
     isReceiving = true;
     // Drivers only reach here once the chip actually accepted the RX start, so the radio is alive again.
     // This is the sole place the recovery ladder is cleared - nothing short of an armed RX counts as fixed.
@@ -1149,6 +1221,13 @@ bool RadioLibInterface::resetAGC()
 void RadioLibInterface::noteCadHandoffToRx()
 {
     LOG_DEBUG("CAD>RX started");
+#ifdef MESHTASTIC_LOG_RADIO_EDGES
+    // The chip entered RX on its own at detection, so the deaf window ends here, not at rearmReceive().
+    if (deafSinceMs) {
+        LOG_RADIO_EDGE("Radio back in RX after scan (CAD>RX), deaf %u ms", (unsigned)(Time::getMillis() - deafSinceMs));
+        deafSinceMs = 0;
+    }
+#endif
     cadHandedToRx = true;
     // Same clock Throttle compares against, so a native test can drive both across the wrap. 0 is the
     // "none outstanding" sentinel and getMillis() does land on it once per wrap, so step past it.
@@ -1574,6 +1653,87 @@ void RadioLibInterface::setStandby()
     powerMon->clearState(meshtastic_PowerMon_State_Lora_TXOn);
 }
 
+#ifdef MESHTASTIC_LOG_RADIO_EDGES
+void RadioLibInterface::noteDeafFrom(const char *what)
+{
+    deafSinceMs = Time::skipZero(Time::getMillis());
+    deafFor = what;
+}
+#endif
+
+#ifdef MESHTASTIC_TX_TIMELINE
+void RadioLibInterface::markTimelineScan()
+{
+#ifdef MESHTASTIC_RADIO_TASK
+    tlLockWaitUs = concurrency::radioTaskLockWaitUs();
+    tlLockHolder = concurrency::radioTaskLockHolder();
+#endif
+#ifdef MESHTASTIC_TX_SLOT_GATE_MS
+    tlGateScanMs = Time::getMillis() - slotGateAnchorMs;
+    tlGateNewerUnread = capturedFramePending();
+#endif
+    const uint32_t scanStartMs = Time::getMillis();
+    tlScan = benchClock();
+    tlLateMs = tlDueMs ? (int32_t)(scanStartMs - tlDueMs) : 0;
+}
+
+void RadioLibInterface::logTxTimeline(bool adopted)
+{
+    // All in us. scan: scan start to the send; launch: the send to startTransmit() returning; air: that to the TX_DONE
+    // interrupt; done>rx: TX_DONE to RX back, split into wake (to the re-arm starting) and rearm; rx>thr: RX back to
+    // this log; out: scan start (or the send) to RX back. The log line's own time less rx>thr is when RX came back.
+    const uint32_t now = benchClock();
+    const uint32_t txDone = tlTxDone, rearmStart = tlRearmStart, rearmEnd = tlRearmEnd;
+    const bool early = adopted && rearmEnd != 0;
+    const uint32_t rxAt = early ? rearmEnd : now;
+    const uint32_t outFrom = tlScan ? tlScan : tlSend;
+    auto us = [](uint32_t from, uint32_t to) { return (unsigned)benchClockToUs(to - from); };
+    LOG_RADIO_EDGE("TX timeline us: scan %u launch %u air %u done>rx %u wake %u rearm %u rx>thr %u out %u %s",
+                   tlScan ? us(tlScan, tlSend) : 0, tlLaunched ? us(tlSend, tlLaunched) : 0,
+                   txDone && tlLaunched ? us(tlLaunched, txDone) : 0, txDone ? us(txDone, rxAt) : 0,
+                   early && txDone ? us(txDone, rearmStart) : 0, early ? us(rearmStart, rearmEnd) : 0, us(rxAt, now),
+                   tlSend ? us(outFrom, rxAt) : 0, early ? "early" : (txDone ? "thread" : "no-irq"));
+    // Where a TX with a slot parity went out on the slot grid it drew from: late is the backoff's due time to the scan,
+    // and SET_TX's offset over the slot time gives the slot it landed in, whose parity can then be checked.
+    const bool slotted = tlSend && tlSlotted;
+#ifdef MESHTASTIC_RADIO_TASK
+    // The radio lock is the radio task's wait before the run that scanned, and the thread that held it. Logged here,
+    // after the TX, so measuring it costs the TX nothing.
+    if (slotted)
+        LOG_RADIO_EDGE("TX slot: drawn %u of %u ms, scan late %d ms, SET_TX at +%u ms, radio lock %u us (%s)",
+                       (unsigned)slotDrawn, (unsigned)slotTimeMsec, (int)tlLateMs, (unsigned)(lastTxStart - slotDrawAnchorMs),
+                       (unsigned)tlLockWaitUs, tlLockHolder);
+    tlLockWaitUs = 0;
+    tlLockHolder = "none";
+#else
+    if (slotted)
+        LOG_RADIO_EDGE("TX slot: drawn %u of %u ms, scan late %d ms, SET_TX at +%u ms", (unsigned)slotDrawn,
+                       (unsigned)slotTimeMsec, (int)tlLateMs, (unsigned)(lastTxStart - slotDrawAnchorMs));
+#endif
+#ifdef MESHTASTIC_TX_SLOT_GATE_MS
+    if (slotted)
+        LOG_RADIO_EDGE("TX slot gate: waited %u ms, scan at +%u, SET_TX at +%u ms from its frame end (%s, noted +%u ms after "
+                       "it ended%s); %u waits, %u re-armed, %u capped",
+                       (unsigned)tlGateWaitMs, (unsigned)tlGateScanMs, (unsigned)(lastTxStart - slotGateAnchorMs),
+                       slotGateAnchorWhat, (unsigned)(slotGateAnchorNotedMs - slotGateAnchorMs),
+                       tlGateNewerUnread ? ", a newer frame unread" : "", (unsigned)slotGateWaits, (unsigned)slotGateRearmed,
+                       (unsigned)slotGateCapped);
+#ifdef MESHTASTIC_TX_SLOT_LEAD
+    if (slotted)
+        LOG_RADIO_EDGE("TX lead: woke %d us after the timer, scan to SET_TX %u us; lead now wake %u + path %u us", (int)tlWakeUs,
+                       (unsigned)tlPathUs, (unsigned)leadWakeUs, (unsigned)leadPathUs);
+    tlWakeUs = -1;
+    tlPathUs = 0;
+#endif
+    tlGateWaitMs = tlGateScanMs = 0;
+    tlGateNewerUnread = false;
+#endif
+    tlScan = tlSend = 0;
+    tlDueMs = 0;
+    tlLateMs = 0;
+}
+#endif
+
 /** start an immediate transmit */
 bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
 {
@@ -1591,6 +1751,11 @@ bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
         startReceive();
         return false;
     } else {
+#ifdef MESHTASTIC_TX_TIMELINE
+        tlSend = benchClock();
+        tlLaunched = tlTxDone = tlRearmStart = tlRearmEnd = 0;
+        tlSlotted = txp->slot_parity != meshtastic_MeshPacket_SlotParity_SLOT_PARITY_UNSET;
+#endif
         configHardwareForSend(); // must be after setStandby
 
         size_t numbytes = beginSending(txp);
@@ -1607,6 +1772,7 @@ bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
         } else {
             // Must be done AFTER, starting transmit, because startTransmit clears (possibly stale) interrupt pending register
             // bits
+            TX_TIMELINE_MARK(tlLaunched);
 #ifdef MESHTASTIC_TX_SLOT_LEAD
             lastTxStartUs = micros();
 #endif
