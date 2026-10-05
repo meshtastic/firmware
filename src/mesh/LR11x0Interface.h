@@ -30,6 +30,11 @@
 #if defined(LR11X0_RX_REARM_AT_TX_DONE) && !defined(MESHTASTIC_RX_READOUT_TASK)
 #error "LR11X0_RX_REARM_AT_TX_DONE re-arms from the readout task: build with MESHTASTIC_RX_READOUT_TASK"
 #endif
+// -DLR11X0_RESUME_CONTINUOUS_RX picks a continuous RX back up after a frame instead of restarting it, once the chip
+// reports it is still in RX.
+#if defined(LR11X0_CAD_EXIT_LBT) || defined(LR11X0_RESUME_CONTINUOUS_RX)
+#define LR11X0_READ_CHIP_MODE 1
+#endif
 // -DLR11X0_TX_STAGE_EARLY writes the payload during the backoff while RX runs, not in the scan's standby. WriteBuffer8
 // fills the TX buffer and received frames land in the separate RX buffer (Semtech's lr11xx_regmem.h), so the write aborts
 // no frame and nothing received overwrites it.
@@ -168,9 +173,18 @@ template <class T> class LR11x0Interface : public RadioLibInterface
     uint8_t cadParamsSent[8] = {};
 #endif
 
-#ifdef LR11X0_CAD_EXIT_LBT
+#ifdef LR11X0_READ_CHIP_MODE
     /** The chip's mode (stat2 bits 3..1, as RADIOLIB_LR11X0_STAT_2_MODE_*), waiting out a passing FS; 0xFF on failure */
     uint8_t readChipMode();
+#endif
+
+#ifdef LR11X0_RESUME_CONTINUOUS_RX
+    /** RX was armed continuous and nothing has taken the chip out of it since, so it is still listening */
+    bool rxArmedContinuous = false;
+    bool resumeRunningReceive() override;
+#endif
+
+#ifdef LR11X0_CAD_EXIT_LBT
     /** A clear CAD under LBT put the chip in TX with the prestaged payload: launchTransmit() sends nothing */
     bool chipKeyedUp = false;
 #endif
