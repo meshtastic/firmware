@@ -144,8 +144,9 @@ bool ESP32BLEMesh::platformBeginAdvertising(const uint8_t *adv, size_t len)
 
     if (ble_gap_adv_set_data(adv, len) != 0)
         return false;
-    // Duration in 10ms units; approximate the same burst length the extended path gets.
-    return ble_gap_adv_start(BLE_OWN_ADDR_PUBLIC, NULL, BLE_MESH_ADV_EVENTS * 10, &legacyParams, onGapEvent, this) == 0;
+    // The legacy API bounds a burst by milliseconds, not events, so convert the extended path's count.
+    return ble_gap_adv_start(BLE_OWN_ADDR_PUBLIC, NULL, bleMeshBurstMs(BLE_MESH_ADV_EVENTS, BLE_MESH_ADV_INTERVAL), &legacyParams,
+                             onGapEvent, this) == 0;
 #endif
 }
 

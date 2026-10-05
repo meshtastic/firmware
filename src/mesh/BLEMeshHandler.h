@@ -38,6 +38,14 @@
 #define BLE_MESH_ADV_EVENTS 3
 #endif
 
+
+/// A burst of `events` advertising events at `intervalUnits` x 0.625 ms, as a duration in ms. The
+/// extra interval covers the up-to-10 ms advDelay the Link Layer adds before each event.
+constexpr int32_t bleMeshBurstMs(uint32_t events, uint32_t intervalUnits)
+{
+    return (int32_t)((events + 1) * intervalUnits * 625 / 1000);
+}
+
 /**
  * Carries mesh frames between nodes over connectionless BLE extended advertisements.
  *
