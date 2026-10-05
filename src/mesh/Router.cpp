@@ -1,4 +1,5 @@
 #include "Router.h"
+#include "AdminKeys.h"
 #include "Channels.h"
 #include "CryptoEngine.h"
 #include "MeshRadio.h"
@@ -887,14 +888,7 @@ void resetAdminKeyFallbackBudget()
 
 static bool adminKeyFallbackAllowed()
 {
-    bool haveAdminKey = false;
-    for (int i = 0; i < 3; i++) {
-        if (config.security.admin_key[i].size == 32) {
-            haveAdminKey = true;
-            break;
-        }
-    }
-    if (!haveAdminKey)
+    if (!AdminKeys::any())
         return false; // nothing to try, so do not spend a token
 
     // Injectable clock so the budget can be tested without sleeping, and without racing a slow host.
@@ -985,11 +979,12 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
             viaPendingKey = havePendingKey;
         }
         if (!decrypted && adminKeyFallbackAllowed()) {
-            for (int i = 0; i < 3 && !decrypted; i++) {
-                if (config.security.admin_key[i].size != 32)
-                    continue;
+            for (size_t i = 0, n = AdminKeys::count(); i < n && !decrypted; i++) {
+                const uint8_t *adminKey = AdminKeys::keyAt(i);
+                if (!adminKey)
+                    break;
                 remotePublic.size = 32;
-                memcpy(remotePublic.bytes, config.security.admin_key[i].bytes, 32);
+                memcpy(remotePublic.bytes, adminKey, 32);
 
                 if (crypto->decryptCurve25519(p->from, remotePublic, p->id, rawSize, p->encrypted.bytes, bytes)) {
                     decrypted = true;
