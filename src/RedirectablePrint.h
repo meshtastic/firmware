@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../freertosinc.h"
+#include "BenchInstrumentation.h"
 #include "Print.h"
 #include "mesh/generated/meshtastic/mesh.pb.h"
 #include <stdarg.h>
@@ -55,6 +56,11 @@ class RedirectablePrint : public Print
     std::string mt_sprintf(const std::string fmt_str, ...);
 
   protected:
+#ifdef MESHTASTIC_LOG_USB_STATS
+    /// Bench: what the destination took of the last byte write() passed it (write() itself always claims 1)
+    size_t destWritten = 1;
+#endif
+
     /// Subclasses can override if they need to change how we format over the serial port
     virtual void log_to_serial(const char *logLevel, const char *format, va_list arg);
     meshtastic_LogRecord_Level getLogLevel(const char *logLevel);

@@ -32,6 +32,9 @@ uint32_t radioMutexDepth;
 TaskHandle_t radioTask;
 // The line the loop is printing for the radio task (see RedirectablePrint::drainRadioTaskLogs)
 const OSThread *loggingForThread;
+#ifdef MESHTASTIC_LOG_RECORD_MILLIS
+uint32_t loggedAtMsec;
+#endif
 TaskHandle_t volatile loggingForTask;
 
 void radioTaskMain(void *)
@@ -124,6 +127,38 @@ bool loggingFor(const OSThread **thread)
         *thread = loggingForThread;
     return true;
 }
+
+#ifdef MESHTASTIC_LOG_RECORD_MILLIS
+void setLoggedAtMs(uint32_t ms)
+{
+    loggedAtMsec = ms;
+}
+
+bool loggedAtMs(uint32_t *ms)
+{
+    if (!loggingFor(nullptr))
+        return false;
+    *ms = loggedAtMsec;
+    return true;
+}
+#endif
+
+#if MESHTASTIC_BENCH_INSTRUMENTATION
+uint32_t radioTaskStackFree()
+{
+#if INCLUDE_uxTaskGetStackHighWaterMark
+    if (!radioTask)
+        return 0;
+#ifdef ARCH_ESP32
+    return uxTaskGetStackHighWaterMark(radioTask);
+#else
+    return uxTaskGetStackHighWaterMark(radioTask) * sizeof(StackType_t);
+#endif
+#else
+    return 0;
+#endif
+}
+#endif
 
 } // namespace concurrency
 
