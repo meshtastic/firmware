@@ -116,6 +116,7 @@ static Print *serialPrint = &SERIAL_PRINT_OBJECT;
 char serialBytes[512];
 size_t serialPayloadSize;
 
+#if defined(ARCH_STM32WL) || SERIAL_PRINT_PORT != 0 || !MESHTASTIC_EXCLUDE_MODBUS
 /// The UART the module drives when rxd/txd are set.
 static HardwareSerial *serialModulePort()
 {
@@ -125,6 +126,7 @@ static HardwareSerial *serialModulePort()
     return &Serial2;
 #endif
 }
+#endif
 
 #if !MESHTASTIC_EXCLUDE_MODBUS
 #define MODBUS_POLL_MS 10000
@@ -844,7 +846,8 @@ int32_t SerialModule::runModbus()
     }
     // The bus has been idle since at least the previous call, 10 ms ago: more than the 3.5 character gap.
     uint8_t req[8];
-    modbusSend(req, modbus::buildRead(req, mbAddr, modbus::READ_INPUT, mbReg, mbCount));
+    size_t reqLen = modbus::buildRead(req, mbAddr, modbus::READ_INPUT, mbReg, mbCount);
+    modbusSend(req, reqLen);
     mbSentAt = millis();
     mbWaiting = true;
     return 10;
