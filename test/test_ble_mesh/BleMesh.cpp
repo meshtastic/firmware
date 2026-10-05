@@ -511,6 +511,15 @@ void test_pump_waits_for_the_platform(void)
     TEST_ASSERT_EQUAL_MESSAGE(1, h.sent.size(), "transmits once ready");
 }
 
+// NimBLE's legacy ble_gap_adv_start takes its duration in milliseconds, where the extended API
+// counts events. 3 events at 48 x 0.625 ms last 90 ms, plus one interval for the advDelay each
+// event may add.
+void test_legacy_burst_duration_is_in_milliseconds(void)
+{
+    TEST_ASSERT_EQUAL_INT32(120, bleMeshBurstMs(3, 48));
+    TEST_ASSERT_GREATER_OR_EQUAL_INT32(3 * 30, bleMeshBurstMs(3, 48));
+}
+
 void setUp(void) {}
 void tearDown(void) {}
 
@@ -542,6 +551,7 @@ void setup()
     RUN_TEST(test_a_relayed_packet_is_re_advertised);
     RUN_TEST(test_ingress_ignores_our_own_advertisement);
     RUN_TEST(test_pump_waits_for_the_platform);
+    RUN_TEST(test_legacy_burst_duration_is_in_milliseconds);
     exit(UNITY_END());
 }
 
