@@ -73,6 +73,7 @@ bool mixWithLoRaEntropy(uint8_t *buffer, size_t length)
     size_t offset = 0;
     bool mixed = false;
 
+    RADIO_TASK_LOCK();
     while (offset < length) {
         size_t toCopy = std::min(length - offset, chunkSize);
 
