@@ -67,14 +67,16 @@ void RotaryEncoderImpl::pollOnce()
     InputEvent e{ORIGIN_NAME, INPUT_BROKER_NONE, 0, 0, 0};
 
     static uint32_t lastPressed = millis();
-    if (rotary->readButton() == RotaryEncoder::ButtonState::BUTTON_PRESSED) {
-        if (Throttle::hasElapsed(lastPressed, 200)) {
-            LOG_DEBUG("Rotary event Press");
-            lastPressed = millis();
-            e.inputEvent = this->eventPressed;
-            inputBroker->queueInputEvent(&e);
-        }
+    static bool wasPressed = false;
+    // Polled continuously, and readButton() reports the level: emit only on the released->pressed edge
+    bool pressed = rotary->readButton() == RotaryEncoder::ButtonState::BUTTON_PRESSED;
+    if (pressed && !wasPressed && Throttle::hasElapsed(lastPressed, 200)) {
+        LOG_DEBUG("Rotary event Press");
+        lastPressed = millis();
+        e.inputEvent = this->eventPressed;
+        inputBroker->queueInputEvent(&e);
     }
+    wasPressed = pressed;
 
     switch (rotary->process()) {
     case RotaryEncoder::DIRECTION_CW:
@@ -119,8 +121,9 @@ void RotaryEncoderImpl::attachRotaryEncoderInterrupts()
                     while (true) {
                         // TX also makes the lines noisy enough to fake steps: don't sample while transmitting
                         bool txActive = RadioLibInterface::instance && RadioLibInterface::instance->isSending();
-                        if (interruptInstance && !txActive)
-                            interruptInstance->pollOnce();
+                        RotaryEncoderImpl *inst = interruptInstance; // detach may clear it concurrently
+                        if (inst && !txActive)
+                            inst->pollOnce();
                         vTaskDelay(pdMS_TO_TICKS(2)); // 500 Hz is plenty for a hand-turned encoder
                     }
                 },
