@@ -77,7 +77,12 @@ bool FloodingRouter::perhapsHandleUpgradedPacket(const meshtastic_MeshPacket *p)
         // If we overhear a duplicate copy of the packet with more hops left than the one we are waiting to
         // rebroadcast, then remove the packet currently sitting in the TX queue and use this one instead.
         uint8_t dropThreshold = p->hop_limit; // remove queued packets that have fewer hops remaining
-        if (iface->removePendingTXPacket(getFrom(p), p->id, dropThreshold)) {
+        bool removed;
+        {
+            RADIO_TASK_LOCK();
+            removed = iface->removePendingTXPacket(getFrom(p), p->id, dropThreshold);
+        }
+        if (removed) {
             LOG_DEBUG("Processing upgraded packet 0x%08x for rebroadcast with hop limit %d (dropping queued < %d)", p->id,
                       p->hop_limit, dropThreshold);
 
@@ -143,10 +148,12 @@ void FloodingRouter::perhapsCancelDupe(const meshtastic_MeshPacket *p)
             txRelayCanceled++;
     }
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_LATE && iface) {
+        RADIO_TASK_LOCK();
         iface->clampToLateRebroadcastWindow(getFrom(p), p->id);
     }
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_CLIENT_BASE && iface && nodeDB &&
         nodeDB->isFromOrToFavoritedNode(*p)) {
+        RADIO_TASK_LOCK();
         iface->clampToLateRebroadcastWindow(getFrom(p), p->id);
     }
 }
