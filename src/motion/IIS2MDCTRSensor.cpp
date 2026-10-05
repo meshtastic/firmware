@@ -22,7 +22,12 @@ constexpr uint8_t IIS2MDCTR_STATUS_REG = 0x67;
 constexpr uint8_t IIS2MDCTR_OUTX_L_REG = 0x68;
 
 // offset for heading correction
+#if defined(MAGNETOMETER_OFFSET)
+static constexpr float IIS2MDCTR_HEADING_OFFSET_DEG = MAGNETOMETER_OFFSET;
+#else
 static constexpr float IIS2MDCTR_HEADING_OFFSET_DEG = 270.0f;
+#endif
+
 // COMP_TEMP_EN=1, ODR=100Hz ('11'), MD=continuous ('00')
 constexpr uint8_t IIS2MDCTR_CFG_A_CONTINUOUS_100HZ = 0x8C;
 // BDU=1 (block data update, avoids torn reads across the ODR boundary)
@@ -106,7 +111,6 @@ bool IIS2MDCTRSensor::readMagnetometer(float &xGauss, float &yGauss, float &zGau
     yGauss = rawY * IIS2MDCTR_GAUSS_PER_LSB;
     zGauss = rawZ * IIS2MDCTR_GAUSS_PER_LSB;
 
-    static uint32_t lastAuxMagLogMs = 0;
     return true;
 }
 

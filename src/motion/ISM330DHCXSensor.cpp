@@ -43,10 +43,18 @@ constexpr uint8_t ISM330DHCX_STATUS_MASTER_SLAVE0_NACK = 0x08;
 constexpr uint8_t ISM330DHCX_MASTER_ON = 0x04;
 constexpr uint8_t ISM330DHCX_SHUB_PU_EN = 0x08;
 constexpr uint8_t ISM330DHCX_WRITE_ONCE = 0x40;
+constexpr uint8_t ISM330DHCX_RST_MASTER_REGS = 0x80;
+constexpr uint8_t ISM330DHCX_STATUS_MASTER_ENDOP = 0x01;
 
 // stuff
 constexpr uint32_t ISM330DHCX_SHUB_WRITE_TIMEOUT_MS = 200;
+
+// accelerometer to compass rotation offset
+#if defined(ACCELEROMETER_OFFSET)
+static constexpr float ISM330DHCX_ACCEL_TO_COMPASS_ROTATION_DEG_VALUE = ACCELEROMETER_OFFSET;
+#else
 static constexpr float ISM330DHCX_ACCEL_TO_COMPASS_ROTATION_DEG_VALUE = 0.0f;
+#endif
 
 // The IIS2MDCTR register map/constants this mirrors those in IIS2MDCTRSensor.cpp; duplicated
 // here because the aux path talks to the magnetometer only through the IMU's Sensor Hub bank,
@@ -60,6 +68,10 @@ constexpr uint8_t IIS2MDCTR_OUTX_L_REG = 0x68;
 constexpr uint8_t IIS2MDCTR_CFG_A_CONTINUOUS_100HZ = 0x8C;
 constexpr uint8_t IIS2MDCTR_CFG_C_BDU = 0x10;
 constexpr float IIS2MDCTR_GAUSS_PER_LSB = 0.0015f;
+
+#if defined(MAGNETOMETER_OFFSET)
+static constexpr float IIS2MDCTR_HEADING_OFFSET_DEG = MAGNETOMETER_OFFSET;
+#else
 static constexpr float IIS2MDCTR_HEADING_OFFSET_DEG = 270.0f;
 #endif
 } // namespace
@@ -163,12 +175,22 @@ bool ISM330DHCXSensor::configureAuxMagnetometer()
     // The hub only reloads SLV0_ADD/SLV0_SUBADD/SLV0_CONFIG on a MASTER_ON 0->1 transition, so it
     // must be stopped here first - otherwise it keeps relaying the stale 1-byte WHO_AM_I probe
     // read from earlier in this function forever, never picking up the new 6-byte OUTX_L config.
+    // Pulse RST_MASTER_REGS to clear the leftover write-once state before the continuous read.
+    writeRegister(ISM330DHCX_MASTER_CONFIG, ISM330DHCX_RST_MASTER_REGS);
     writeRegister(ISM330DHCX_MASTER_CONFIG, 0);
     writeRegister(ISM330DHCX_SLV0_ADD, static_cast<uint8_t>((IIS2MDCTR_I2C_ADDR << 1) | 0x01));
     writeRegister(ISM330DHCX_SLV0_SUBADD, IIS2MDCTR_OUTX_L_REG);
     writeRegister(ISM330DHCX_SLV0_CONFIG, 6); // numop=6
     writeRegister(ISM330DHCX_MASTER_CONFIG, ISM330DHCX_MASTER_ON | ISM330DHCX_SHUB_PU_EN);
     setMemBank(ISM330DHCX_BANK_USER);
+
+    delay(50);
+    status = 0;
+    readRegisters(ISM330DHCX_STATUS_MASTER_MAINPAGE, &status, 1);
+    LOG_DEBUG("ISM330DHCX hub status after continuous config: 0x%02x", status);
+    if (!(status & ISM330DHCX_STATUS_MASTER_ENDOP)) {
+        return false;
+    }
     return true;
 }
 
@@ -244,26 +266,12 @@ int32_t ISM330DHCXSensor::runOnce()
             ax = rotatedX;
             ay = rotatedY;
         }
-        // Sign convention copied from the other FusionCompass accel sources; must be verified
-        // against real ISM330DHCX + IIS2MDCTR hardware before relying on it for a heading.
-        // x,y,z
         publishCompassAccelSample(ax, ay, az);
     }
-    // temporary logging for testing
+
     if (auxMagAvailable) {
         float magX, magY, magZ;
         if (readAuxMagnetometer(magX, magY, magZ)) {
-            if (Throttle::hasElapsed(lastAuxMagLogMs, 1000)) {
-                uint8_t mainpageStatus = 0;
-                readRegisters(ISM330DHCX_STATUS_MASTER_MAINPAGE, &mainpageStatus, 1);
-                uint8_t hubStatus = 0;
-                setMemBank(ISM330DHCX_BANK_SENSOR_HUB);
-                readRegisters(ISM330DHCX_STATUS_MASTER, &hubStatus, 1);
-                setMemBank(ISM330DHCX_BANK_USER);
-                LOG_DEBUG("ISM330DHCX aux mag raw: x=%.3f y=%.3f z=%.3f mainpage=0x%02x hub=0x%02x nack=%d", magX, magY, magZ,
-                          mainpageStatus, hubStatus, (hubStatus & ISM330DHCX_STATUS_MASTER_SLAVE0_NACK) != 0);
-                lastAuxMagLogMs = millis();
-            }
             publishCompassMagSample(magX, magY, magZ);
 
 #if !defined(MESHTASTIC_EXCLUDE_SCREEN)
@@ -284,7 +292,7 @@ int32_t ISM330DHCXSensor::runOnce()
             if (haveAccel) {
                 FusionVector ga = {.axis = {ax, ay, az}};
                 FusionVector ma = {.axis = {magX, magY, magZ}};
-                float heading = FusionCompass(ga, ma, FusionConventionNed);
+                float heading = FusionCompass(ga, ma, FusionConventionNed) + IIS2MDCTR_HEADING_OFFSET_DEG;
                 if (ga.axis.z > 0.0f)
                     heading = 360.0f - heading;
 
