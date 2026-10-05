@@ -88,6 +88,16 @@ jobs:
       push: true
     secrets: inherit
 
+  docker-windows-amd64:
+    uses: ./.github/workflows/docker_build.yml
+    with:
+      distro: windows
+      platform: windows/amd64
+      runs-on: windows-2025
+      push: true
+      pio_env: native-windows
+    secrets: inherit
+
   docker-manifest:
     needs:
       # Debian
@@ -100,6 +110,8 @@ jobs:
       - docker-alpine-arm64
       - docker-alpine-armv7
       - docker-alpine-riscv64
+      # Windows
+      - docker-windows-amd64
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout code
@@ -129,6 +141,9 @@ jobs:
               ],
               "alpine": [
                 f"{short}-alpine", f"{long}-alpine", f"{short}-beta-alpine", f"{long}-beta-alpine", "beta-alpine"
+              ],
+              "windows": [
+                f"{short}-windows", f"{long}-windows", f"{short}-beta-windows", f"{long}-beta-windows", "beta-windows"
               ]
             },
             "alpha": {
@@ -138,11 +153,15 @@ jobs:
               ],
               "alpine": [
                 f"{short}-alpha-alpine", f"{long}-alpha-alpine", "alpha-alpine"
+              ],
+              "windows": [
+                f"{short}-alpha-windows", f"{long}-alpha-windows", "alpha-windows"
               ]
             },
             "daily": {
               "debian": ["daily", "daily-debian"],
-              "alpine": ["daily-alpine"]
+              "alpine": ["daily-alpine"],
+              "windows": ["daily-windows"]
             }
           }
 
@@ -153,6 +172,10 @@ jobs:
 
             fh.write("alpine<<EOF\n")
             fh.write("\n".join(tags[release_channel]["alpine"]))
+            fh.write("\nEOF\n")
+
+            fh.write("windows<<EOF\n")
+            fh.write("\n".join(tags[release_channel]["windows"]))
             fh.write("\nEOF\n")
         id: tags
 
@@ -204,3 +227,22 @@ jobs:
             meshtastic/meshtasticd@${{ needs.docker-alpine-arm64.outputs.digest }}
             meshtastic/meshtasticd@${{ needs.docker-alpine-armv7.outputs.digest }}
             meshtastic/meshtasticd@${{ needs.docker-alpine-riscv64.outputs.digest }}
+
+      - name: Docker meta (Windows)
+        id: meta_windows
+        uses: docker/metadata-action@v6
+        with:
+          images: meshtastic/meshtasticd
+          tags: |
+            ${{ steps.tags.outputs.windows }}
+          flavor: latest=false
+
+      - name: Create Docker manifest (Windows)
+        id: manifest_windows
+        uses: int128/docker-manifest-create-action@v2
+        with:
+          tags: |
+            ${{ steps.meta_windows.outputs.tags }}
+          push: true
+          sources: |
+            meshtastic/meshtasticd@${{ needs.docker-windows-amd64.outputs.digest }}
