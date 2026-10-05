@@ -10,6 +10,7 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PhoneAPI.h"
+#include "RadioInterface.h"
 #include "Router.h"
 #include "mesh-pb-constants.h"
 #include "meshtastic/admin.pb.h"
@@ -642,6 +643,73 @@ void test_node_num_change_mid_nodes_only_restarts_sync()
 
 } // namespace
 
+// What MeshBeaconModule does for a beacon TX: mark the slot transient, then rewrite the RF identity and the
+// primary channel in place, each to a value unlike home.
+// A stand-in driver: its reconfigure() is the base one, so applyModemConfig() runs exactly as on a device.
+class BorrowingRadio : public RadioInterface
+{
+  public:
+    ErrorCode send(meshtastic_MeshPacket *p) override
+    {
+        packetPool.release(p);
+        return ERRNO_OK;
+    }
+    uint32_t getPacketTime(uint32_t, bool = false) override { return 0; }
+};
+
+void borrowRadioForBeacon(RadioInterface &radio)
+{
+    nodeDB->setLoraSlotTransient(true);
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST;
+    config.lora.channel_num = 3;
+    meshtastic_ChannelSettings &primary = channels.getByIndex(channels.getPrimaryIndex()).settings;
+    strncpy(primary.name, "Visited", sizeof(primary.name) - 1);
+    primary.psk.size = 16;
+    memset(primary.psk.bytes, 0x77, 16);
+    radio.reconfigure(); // the beacon programs the borrow through here, never through commitConfig()
+}
+
+/*
+ * Under test: PhoneAPI's connect-time config dump (STATE_SEND_CHANNELS, STATE_SEND_CONFIG LoRa) while a
+ * beacon has the radio (src/mesh/PhoneAPI.cpp).
+ * Why: a client caches the dump and writes it back with its next edit, so a dump taken mid-switch handed it
+ * the visited mesh as this node's region, preset, slot and primary channel, and the next edit committed them.
+ * Regression guarded: the dump reading config.lora and the channel table live.
+ */
+void test_dump_duringABorrow_reportsTheCommittedRadio()
+{
+    RadioInterface::captureConfiguredRadio(); // home, committed
+    const meshtastic_Config_LoRaConfig home = config.lora;
+    const meshtastic_ChannelSettings homePrimary = channels.getByIndex(channels.getPrimaryIndex()).settings;
+    BorrowingRadio radio;
+    borrowRadioForBeacon(radio);
+    startHandshake(FULL_DUMP_NONCE);
+
+    bool sawLora = false, sawPrimary = false;
+    for (unsigned i = 0; i < 600; i++) {
+        meshtastic_FromRadio msg;
+        TEST_ASSERT_TRUE_MESSAGE(readOneFromRadio(msg), "the dump stalled");
+        if (msg.which_payload_variant == meshtastic_FromRadio_config_tag &&
+            msg.config.which_payload_variant == meshtastic_Config_lora_tag) {
+            sawLora = true;
+            TEST_ASSERT_EQUAL_MESSAGE(home.region, msg.config.payload_variant.lora.region, "the dump reports this node's region");
+            TEST_ASSERT_EQUAL_MESSAGE(home.modem_preset, msg.config.payload_variant.lora.modem_preset, "and its preset");
+            TEST_ASSERT_EQUAL_UINT32_MESSAGE(home.channel_num, msg.config.payload_variant.lora.channel_num, "and its slot");
+        } else if (msg.which_payload_variant == meshtastic_FromRadio_channel_tag &&
+                   msg.channel.index == channels.getPrimaryIndex()) {
+            sawPrimary = true;
+            TEST_ASSERT_EQUAL_STRING_MESSAGE(homePrimary.name, msg.channel.settings.name,
+                                             "the primary reported is this node's, not the visited channel");
+            TEST_ASSERT_EQUAL_UINT_MESSAGE(homePrimary.psk.size, msg.channel.settings.psk.size, "with its own key");
+        } else if (msg.which_payload_variant == meshtastic_FromRadio_config_complete_id_tag) {
+            break;
+        }
+    }
+    TEST_ASSERT_TRUE_MESSAGE(sawLora, "the dump must carry the LoRa config");
+    TEST_ASSERT_TRUE_MESSAGE(sawPrimary, "and the primary channel");
+}
+
 void setUp(void)
 {
     savedState =
@@ -708,6 +776,7 @@ void setup()
     RUN_TEST(test_node_num_change_resends_my_info);
     RUN_TEST(test_node_num_change_mid_dump_restarts_sync);
     RUN_TEST(test_node_num_change_mid_nodes_only_restarts_sync);
+    RUN_TEST(test_dump_duringABorrow_reportsTheCommittedRadio);
 
     exit(UNITY_END());
 }

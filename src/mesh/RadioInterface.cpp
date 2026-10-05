@@ -369,12 +369,76 @@ static meshtastic_Config_LoRaConfig configuredLora;
 static bool configuredSlotIsDefault = true;
 static bool configuredCaptured = false;
 
+// The RF identity a borrow installed, recorded when it programmed the radio. Live RF that no longer matches it
+// during a borrow is an operator's edit (admin, an on-device menu), not the borrow.
+static meshtastic_Config_LoRaConfig borrowedRf;
+static bool hasBorrowedRf = false;
+static bool committingConfig = false;
+
+// The fields a borrow moves: the radio's identity on the air, as opposed to how this node runs it.
+static void copyRfIdentity(meshtastic_Config_LoRaConfig &to, const meshtastic_Config_LoRaConfig &from)
+{
+    to.region = from.region;
+    to.use_preset = from.use_preset;
+    to.modem_preset = from.modem_preset;
+    to.channel_num = from.channel_num;
+}
+
+static bool sameRfIdentity(const meshtastic_Config_LoRaConfig &a, const meshtastic_Config_LoRaConfig &b)
+{
+    return a.region == b.region && a.use_preset == b.use_preset && a.modem_preset == b.modem_preset &&
+           a.channel_num == b.channel_num;
+}
+
+// True while config.lora still holds the RF a borrow installed; false once an operator has moved it.
+static bool liveRfIsBorrowed()
+{
+    return RadioInterface::radioIsBorrowed() && (!hasBorrowedRf || sameRfIdentity(config.lora, borrowedRf));
+}
+
+bool RadioInterface::commitConfig()
+{
+    committingConfig = true; // this reprogram is the commit's, not a borrow's
+    const bool ok = reconfigure();
+    committingConfig = false;
+    captureConfiguredRadio();
+    return ok;
+}
+
 void RadioInterface::captureConfiguredRadio()
 {
+    if (radioIsBorrowed()) {
+        // A save during a borrow commits the rest of config.lora; the RF identity only if an operator moved it.
+        meshtastic_Config_LoRaConfig adopted = config.lora;
+        if (liveRfIsBorrowed())
+            overlayConfiguredRf(adopted);
+        else
+            configuredSlotIsDefault = uses_default_frequency_slot; // the commit just applied the edit
+        configuredLora = adopted;
+        return;
+    }
     configuredLora = config.lora;
     configuredSlotIsDefault = uses_default_frequency_slot;
     configuredCaptured = true;
     channels.captureCommittedPrimary();
+}
+
+bool RadioInterface::radioIsBorrowed()
+{
+    return configuredCaptured && nodeDB && nodeDB->loraSlotIsTransient();
+}
+
+void RadioInterface::overlayConfiguredRf(meshtastic_Config_LoRaConfig &lora)
+{
+    copyRfIdentity(lora, configuredLora);
+}
+
+meshtastic_Config_LoRaConfig RadioInterface::loraConfigToReport()
+{
+    meshtastic_Config_LoRaConfig lora = config.lora;
+    if (liveRfIsBorrowed())
+        overlayConfiguredRf(lora);
+    return lora;
 }
 
 const meshtastic_Config_LoRaConfig &RadioInterface::configuredLoraConfig()
@@ -985,6 +1049,13 @@ RadioInterface::RadioInterface()
 bool RadioInterface::reconfigure()
 {
     applyModemConfig();
+    // A borrow reprograms through here, never through commitConfig(): remember the RF it installed, as clamped.
+    if (radioIsBorrowed() && !committingConfig) {
+        borrowedRf = config.lora;
+        hasBorrowedRf = true;
+    } else if (!radioIsBorrowed()) {
+        hasBorrowedRf = false;
+    }
     return true;
 }
 

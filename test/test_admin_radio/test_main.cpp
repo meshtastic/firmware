@@ -2505,6 +2505,81 @@ static void test_presetForRegionSelection_ignoresNodesOnRawModemSettings()
 // Test runner
 // -----------------------------------------------------------------------
 
+// What MeshBeaconModule does for a beacon TX: mark the slot transient, then rewrite the RF identity and the
+// primary channel in place, each to a value unlike home.
+// A stand-in driver: its reconfigure() is the base one, so applyModemConfig() runs exactly as on a device.
+class BorrowingRadio : public RadioInterface
+{
+  public:
+    ErrorCode send(meshtastic_MeshPacket *p) override
+    {
+        packetPool.release(p);
+        return ERRNO_OK;
+    }
+    uint32_t getPacketTime(uint32_t, bool = false) override { return 0; }
+};
+
+static void borrowRadioForBeacon(RadioInterface &radio)
+{
+    nodeDB->setLoraSlotTransient(true);
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST;
+    config.lora.channel_num = 3;
+    meshtastic_ChannelSettings &primary = channels.getByIndex(channels.getPrimaryIndex()).settings;
+    strncpy(primary.name, "Visited", sizeof(primary.name) - 1);
+    primary.psk.size = 16;
+    memset(primary.psk.bytes, 0x77, 16);
+    radio.reconfigure(); // the beacon programs the borrow through here, never through commitConfig()
+}
+
+static bool decodeAdminReply(meshtastic_MeshPacket *reply, meshtastic_AdminMessage &out)
+{
+    out = meshtastic_AdminMessage_init_zero;
+    return reply && reply->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
+           pb_decode_from_bytes(reply->decoded.payload.bytes, reply->decoded.payload.size, &meshtastic_AdminMessage_msg, &out);
+}
+
+/*
+ * Under test: AdminModule::handleGetConfig(LORA_CONFIG) and handleGetChannel() while a beacon has the radio
+ * (src/modules/AdminModule.cpp, RadioInterface::loraConfigToReport(), Channels::getChannelToReport()).
+ * Why: a client caches what it reads and writes it back with its next edit. Read mid-switch, it was handed
+ * the visited mesh as this node's region, preset, slot and primary channel - and the next set_config or
+ * set_channel committed them for good.
+ * Regression guarded: get_config / get_channel reading config.lora and the channel table live.
+ */
+static void test_getConfigAndChannel_duringABorrow_reportTheCommittedRadio()
+{
+    RadioInterface::captureConfiguredRadio(); // home, committed
+    const meshtastic_Config_LoRaConfig home = config.lora;
+    const meshtastic_ChannelSettings homePrimary = channels.getByIndex(channels.getPrimaryIndex()).settings;
+    BorrowingRadio radio;
+    borrowRadioForBeacon(radio);
+
+    hamMockRouter = new HamModeMockRouter(); // allocDataProtobuf() allocates the reply through the router
+    router = hamMockRouter;
+    meshtastic_MeshPacket req = meshtastic_MeshPacket_init_zero;
+    req.from = 0; // a local client
+    req.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    req.decoded.want_response = true;
+
+    testAdmin->handleGetConfig(req, meshtastic_AdminMessage_ConfigType_LORA_CONFIG);
+    meshtastic_AdminMessage res;
+    TEST_ASSERT_TRUE_MESSAGE(decodeAdminReply(testAdmin->reply(), res), "get_config must answer");
+    TEST_ASSERT_EQUAL(meshtastic_Config_lora_tag, res.get_config_response.which_payload_variant);
+    const auto &lora = res.get_config_response.payload_variant.lora;
+    TEST_ASSERT_EQUAL_MESSAGE(home.region, lora.region, "the client is told this node's region, not the visited one");
+    TEST_ASSERT_EQUAL_MESSAGE(home.modem_preset, lora.modem_preset, "and its preset");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(home.channel_num, lora.channel_num, "and its slot");
+    testAdmin->drainReply();
+
+    testAdmin->handleGetChannel(req, channels.getPrimaryIndex());
+    TEST_ASSERT_TRUE_MESSAGE(decodeAdminReply(testAdmin->reply(), res), "get_channel must answer");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE(homePrimary.name, res.get_channel_response.settings.name,
+                                     "the primary reported is this node's, not the visited channel");
+    TEST_ASSERT_EQUAL_UINT_MESSAGE(homePrimary.psk.size, res.get_channel_response.settings.psk.size, "with its own key");
+    testAdmin->drainReply();
+}
+
 void setUp(void)
 {
     mockMeshService = new MockMeshService();
@@ -2683,6 +2758,8 @@ void setup()
     RUN_TEST(test_presetForRegionSelection_respectsAPresetAlreadyChosen);
     RUN_TEST(test_presetForRegionSelection_ignoresNodesOnRawModemSettings);
 #endif
+    // Last: it captures the configured-radio snapshot, which nothing in this suite resets.
+    RUN_TEST(test_getConfigAndChannel_duringABorrow_reportTheCommittedRadio);
 
     exit(UNITY_END());
 }

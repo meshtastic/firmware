@@ -63,6 +63,10 @@ class Channels
     // so the channel and the LoRa config are snapshotted at the same commit.
     void captureCommittedPrimary();
 
+    // The channel for anything outside the radio - a client, a save: the committed primary while a borrow
+    // holds the live one, as stored otherwise.
+    meshtastic_Channel getChannelToReport(ChannelIndex chIndex);
+
     /**
      * Return a globally unique channel ID usable with MQTT.
      */

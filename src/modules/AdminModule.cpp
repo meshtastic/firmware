@@ -1543,7 +1543,7 @@ void AdminModule::handleGetConfig(const meshtastic_MeshPacket &req, const uint32
         case meshtastic_AdminMessage_ConfigType_LORA_CONFIG:
             LOG_INFO("Get config: LoRa");
             res.get_config_response.which_payload_variant = meshtastic_Config_lora_tag;
-            res.get_config_response.payload_variant.lora = config.lora;
+            res.get_config_response.payload_variant.lora = RadioInterface::loraConfigToReport(); // never borrowed RF
             break;
         case meshtastic_AdminMessage_ConfigType_BLUETOOTH_CONFIG:
             LOG_INFO("Get config: Bluetooth");
@@ -1848,7 +1848,7 @@ void AdminModule::handleGetChannel(const meshtastic_MeshPacket &req, uint32_t ch
     if (req.decoded.want_response) {
         // We create the reply here
         meshtastic_AdminMessage r = meshtastic_AdminMessage_init_default;
-        r.get_channel_response = channels.getByIndex(channelIndex);
+        r.get_channel_response = channels.getChannelToReport(channelIndex); // never a borrowed primary
         r.which_payload_variant = meshtastic_AdminMessage_get_channel_response_tag;
         setPassKey(&r);
         myReply = allocDataProtobuf(r);

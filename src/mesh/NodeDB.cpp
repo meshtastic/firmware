@@ -3185,7 +3185,13 @@ bool NodeDB::saveChannelsToDisk()
     spiLock->unlock();
 #endif
 
-    return saveProto(channelFileName, meshtastic_ChannelFile_size, &meshtastic_ChannelFile_msg, &channelFile);
+    // As for config.lora: a borrowed primary is persisted as the committed one, and handed back after.
+    meshtastic_Channel &primary = channels.getByIndex(channels.getPrimaryIndex());
+    const meshtastic_ChannelSettings livePrimary = primary.settings;
+    primary.settings = channels.getChannelToReport(channels.getPrimaryIndex()).settings;
+    const bool saved = saveProto(channelFileName, meshtastic_ChannelFile_size, &meshtastic_ChannelFile_msg, &channelFile);
+    primary.settings = livePrimary;
+    return saved;
 }
 
 bool NodeDB::saveDeviceStateToDisk()
@@ -3381,7 +3387,11 @@ bool NodeDB::saveToDiskNoRetry(int saveWhat)
         config.has_bluetooth = true;
         config.has_security = true;
 
+        // A borrowed radio is not this node's config: persist the committed RF identity, then hand the borrow back.
+        const meshtastic_Config_LoRaConfig liveLora = config.lora;
+        config.lora = RadioInterface::loraConfigToReport();
         success &= saveProto(configFileName, meshtastic_LocalConfig_size, &meshtastic_LocalConfig_msg, &config);
+        config.lora = liveLora;
     }
 
     if (saveWhat & SEGMENT_MODULECONFIG) {

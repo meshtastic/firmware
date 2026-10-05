@@ -427,6 +427,14 @@ void Channels::captureCommittedPrimary()
     committedPrimaryCaptured = true;
 }
 
+meshtastic_Channel Channels::getChannelToReport(ChannelIndex chIndex)
+{
+    meshtastic_Channel ch = getByIndex(chIndex);
+    if (RadioInterface::radioIsBorrowed())
+        ch.settings = committedSettings(chIndex);
+    return ch;
+}
+
 const meshtastic_ChannelSettings &Channels::committedSettings(ChannelIndex chIndex)
 {
     if (committedPrimaryCaptured && chIndex == getPrimaryIndex())
