@@ -74,4 +74,9 @@ class SerialConsole : public StreamAPI, public RedirectablePrint, private concur
 // A simple wrapper to allow non class aware code write to the console
 void consoleInit();
 
+#ifdef MESHTASTIC_LOG_USB_STATS
+/// Bench: the loop's periodic radio upkeep (noise floor, AGC reset), so a console stall's onset can be placed against it
+void noteRadioUpkeep(uint32_t fromMs, uint32_t lockWaitMs, uint32_t tookMs);
+#endif
+
 extern SerialConsole *console;

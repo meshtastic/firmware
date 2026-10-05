@@ -32,6 +32,9 @@ namespace
 struct RadioTaskLog {
     const char *level;
     const concurrency::OSThread *thread;
+#ifdef MESHTASTIC_LOG_RECORD_MILLIS
+    uint32_t ms; // when it was logged, for the log record's stamp
+#endif
     char text[240];
 };
 #ifndef MESHTASTIC_RADIO_TASK_LOG_LINES
@@ -60,6 +63,9 @@ void RedirectablePrint::drainRadioTaskLogs()
         __asm__ __volatile__("" ::: "memory"); // read the entry only after seeing the head that published it
         const RadioTaskLog &line = radioTaskLogs[radioTaskLogTail];
         concurrency::setLoggingFor(line.thread);
+#ifdef MESHTASTIC_LOG_RECORD_MILLIS
+        concurrency::setLoggedAtMs(line.ms);
+#endif
         log(line.level, "%s", line.text);
         concurrency::clearLoggingFor();
         __asm__ __volatile__("" ::: "memory"); // and free its slot only after printing it
@@ -91,8 +97,12 @@ size_t RedirectablePrint::write(uint8_t c)
 #endif
     // Account for legacy config transition
     bool serialEnabled = config.has_security ? config.security.serial_enabled : config.device.serial_enabled;
+#ifdef MESHTASTIC_LOG_USB_STATS
+    destWritten = !config.has_lora || serialEnabled ? dest->write(c) : 1;
+#else
     if (!config.has_lora || serialEnabled)
         dest->write(c);
+#endif
 
     return 1; // We always claim one was written, rather than trusting what the
               // serial port said (which could be zero)
@@ -208,7 +218,12 @@ void RedirectablePrint::log_to_serial(const char *logLevel, const char *format, 
         if (color) {
             printf("\u001b[0m");
         }
+#ifdef MESHTASTIC_LOG_RECORD_MILLIS
+        const uint32_t nowMs = millis();
+        printf("| %02d:%02d:%02d %u.%03u ", hour, min, sec, (unsigned)(nowMs / 1000), (unsigned)(nowMs % 1000));
+#else
         printf("| %02d:%02d:%02d %u ", hour, min, sec, millis() / 1000);
+#endif
 #endif
     } else {
 #ifdef ARCH_PORTDUINO
@@ -222,7 +237,12 @@ void RedirectablePrint::log_to_serial(const char *logLevel, const char *format, 
         if (color) {
             printf("\u001b[0m");
         }
+#ifdef MESHTASTIC_LOG_RECORD_MILLIS
+        const uint32_t nowMs = millis();
+        printf("| ??:??:?? %u.%03u ", (unsigned)(nowMs / 1000), (unsigned)(nowMs % 1000));
+#else
         printf("| ??:??:?? %u ", millis() / 1000);
+#endif
 #endif
     }
     auto thread = concurrency::OSThread::current();
@@ -388,6 +408,9 @@ void RedirectablePrint::log(const char *logLevel, const char *format, ...)
         RadioTaskLog &line = radioTaskLogs[radioTaskLogHead];
         line.level = logLevel;
         line.thread = concurrency::OSThread::current();
+#ifdef MESHTASTIC_LOG_RECORD_MILLIS
+        line.ms = millis();
+#endif
         va_list arg;
         va_start(arg, format);
         vsnprintf(line.text, sizeof(line.text), format, arg);

@@ -1508,8 +1508,19 @@ void loop()
             lastAgcReset = millis();
             // Sample before resetAGC(): recalibrating the frontend biases an RSSI read taken right after it.
             RADIO_TASK_LOCK();
+#ifdef MESHTASTIC_LOG_USB_STATS
+            const uint32_t lockedMs = millis();
+#endif
             RadioLibInterface::instance->updateNoiseFloor();
             RadioLibInterface::instance->periodicRadioMaintenance();
+#ifdef MESHTASTIC_LOG_USB_STATS
+            const uint32_t doneMs = millis();
+            noteRadioUpkeep(lastAgcReset, lockedMs - lastAgcReset, doneMs - lastAgcReset);
+            LOG_DEBUG("Radio upkeep: lock wait %u ms, took %u ms", lockedMs - lastAgcReset, doneMs - lastAgcReset);
+#endif
+#if MESHTASTIC_BENCH_INSTRUMENTATION && defined(MESHTASTIC_RADIO_TASK)
+            LOG_DEBUG("Radio task stack: %u bytes never used", (unsigned)concurrency::radioTaskStackFree());
+#endif
         }
     }
 
