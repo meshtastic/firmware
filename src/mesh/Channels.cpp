@@ -42,7 +42,9 @@ int16_t Channels::generateHash(ChannelIndex channelNum)
     if (k.length < 0)
         return -1; // invalid
     else {
-        const char *name = getName(channelNum);
+        // A blank name is the preset's: resolve it against the reported config, so a rebuild mid-borrow keeps our own hash.
+        const meshtastic_Config_LoRaConfig lora = RadioInterface::loraConfigToReport();
+        const char *name = getNameForPreset(channelNum, lora.modem_preset, lora.use_preset);
         uint8_t h = xorHash((const uint8_t *)name, strlen(name));
 
         h ^= xorHash(k.bytes, k.length);

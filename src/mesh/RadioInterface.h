@@ -297,17 +297,15 @@ class RadioInterface
     static const RegionInfo *configuredRegion();
 
     // Freeze config.lora and its slot verdict. Settings path and init() only.
-    // During a borrow it keeps the committed RF identity and primary, and adopts only the rest.
+    // During a borrow it keeps the committed config and primary, adopting only fields an operator changed.
     static void captureConfiguredRadio();
 
     // True while a feature has the radio on borrowed settings (NodeDB's transient LoRa slot).
     static bool radioIsBorrowed();
 
-    // Copy the committed RF identity (region, use_preset, modem_preset, channel_num) over lora.
-    static void overlayConfiguredRf(meshtastic_Config_LoRaConfig &lora);
-
-    // config.lora for anything outside the radio - a client, a save: the committed RF identity while a borrow
-    // holds it. Live otherwise, including an operator's edit made mid-borrow or inside an open edit transaction.
+    // config.lora for anything outside the radio - a client, a save, a channel hash. While a borrow holds it: the
+    // committed config plus any field an operator changed since. Live otherwise, so an open edit transaction reads
+    // back its own edits.
     static meshtastic_Config_LoRaConfig loraConfigToReport();
 
     // Check if a candidate region is compatible and valid, with no side effects (safe for

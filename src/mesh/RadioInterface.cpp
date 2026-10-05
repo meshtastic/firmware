@@ -21,6 +21,7 @@
 #include "meshUtils.h" // for pow_of_2
 #include "sleep.h"
 #include <assert.h>
+#include <pb_common.h>
 #include <pb_decode.h>
 #include <pb_encode.h>
 #include <string.h>
@@ -369,13 +370,13 @@ static meshtastic_Config_LoRaConfig configuredLora;
 static bool configuredSlotIsDefault = true;
 static bool configuredCaptured = false;
 
-// The RF identity a borrow installed, recorded when it programmed the radio. Live RF that no longer matches it
-// during a borrow is an operator's edit (admin, an on-device menu), not the borrow.
-static meshtastic_Config_LoRaConfig borrowedRf;
-static bool hasBorrowedRf = false;
+// config.lora as a borrow left it, recorded when it programmed the radio (clamps included, e.g. tx_power). During
+// the borrow a field still equal to this is the borrow's; one that differs is an operator's edit.
+static meshtastic_Config_LoRaConfig borrowedLora;
+static bool hasBorrowedLora = false;
 static bool committingConfig = false;
 
-// The fields a borrow moves: the radio's identity on the air, as opposed to how this node runs it.
+// The fields a borrow sets directly: the radio's identity on the air.
 static void copyRfIdentity(meshtastic_Config_LoRaConfig &to, const meshtastic_Config_LoRaConfig &from)
 {
     to.region = from.region;
@@ -390,10 +391,43 @@ static bool sameRfIdentity(const meshtastic_Config_LoRaConfig &a, const meshtast
            a.channel_num == b.channel_num;
 }
 
-// True while config.lora still holds the RF a borrow installed; false once an operator has moved it.
-static bool liveRfIsBorrowed()
+// Copy into out every field the operator changed since the borrow - live differs from borrowedLora. Walks the
+// proto's field table, so a field added to LoRaConfig is covered without touching this.
+static void adoptEditsSinceBorrow(meshtastic_Config_LoRaConfig &out)
 {
-    return RadioInterface::radioIsBorrowed() && (!hasBorrowedRf || sameRfIdentity(config.lora, borrowedRf));
+    const auto &live = config.lora;
+    pb_field_iter_t it;
+    if (!pb_field_iter_begin_const(&it, &meshtastic_Config_LoRaConfig_msg, &live))
+        return;
+    const char *base = reinterpret_cast<const char *>(&live);
+    const auto adoptIfEdited = [&](const void *at, size_t len) {
+        const size_t off = static_cast<const char *>(at) - base;
+        if (memcmp(base + off, reinterpret_cast<const char *>(&borrowedLora) + off, len) != 0)
+            memcpy(reinterpret_cast<char *>(&out) + off, base + off, len);
+    };
+    do {
+        if (PB_ATYPE(it.type) != PB_ATYPE_STATIC)
+            continue;
+        adoptIfEdited(it.pData, (size_t)it.data_size * it.array_size);
+        // A has_ flag or repeated count lives in the struct; a fixed array's points into the iterator instead.
+        if (it.pSize && it.pSize != &it.array_size)
+            adoptIfEdited(it.pSize, PB_HTYPE(it.type) == PB_HTYPE_OPTIONAL ? sizeof(bool) : sizeof(pb_size_t));
+    } while (pb_field_iter_next(&it));
+}
+
+// What config.lora says this node is while a borrow holds it: the committed config, plus the operator's edits.
+static meshtastic_Config_LoRaConfig committedDuringBorrow()
+{
+    meshtastic_Config_LoRaConfig lora;
+    if (!hasBorrowedLora) {
+        // The borrow has not programmed the radio yet, so only the RF identity it is setting can be its own.
+        lora = config.lora;
+        copyRfIdentity(lora, configuredLora);
+        return lora;
+    }
+    lora = configuredLora;
+    adoptEditsSinceBorrow(lora);
+    return lora;
 }
 
 bool RadioInterface::commitConfig()
@@ -408,13 +442,11 @@ bool RadioInterface::commitConfig()
 void RadioInterface::captureConfiguredRadio()
 {
     if (radioIsBorrowed()) {
-        // A save during a borrow commits the rest of config.lora; the RF identity only if an operator moved it.
-        meshtastic_Config_LoRaConfig adopted = config.lora;
-        if (liveRfIsBorrowed())
-            overlayConfiguredRf(adopted);
-        else
-            configuredSlotIsDefault = uses_default_frequency_slot; // the commit just applied the edit
-        configuredLora = adopted;
+        // A save during a borrow commits the operator's edits, never what the borrow (or its clamps) wrote.
+        const meshtastic_Config_LoRaConfig committed = committedDuringBorrow();
+        if (!sameRfIdentity(committed, configuredLora))
+            configuredSlotIsDefault = uses_default_frequency_slot; // the commit just applied an RF edit
+        configuredLora = committed;
         return;
     }
     configuredLora = config.lora;
@@ -428,17 +460,9 @@ bool RadioInterface::radioIsBorrowed()
     return configuredCaptured && nodeDB && nodeDB->loraSlotIsTransient();
 }
 
-void RadioInterface::overlayConfiguredRf(meshtastic_Config_LoRaConfig &lora)
-{
-    copyRfIdentity(lora, configuredLora);
-}
-
 meshtastic_Config_LoRaConfig RadioInterface::loraConfigToReport()
 {
-    meshtastic_Config_LoRaConfig lora = config.lora;
-    if (liveRfIsBorrowed())
-        overlayConfiguredRf(lora);
-    return lora;
+    return radioIsBorrowed() ? committedDuringBorrow() : config.lora;
 }
 
 const meshtastic_Config_LoRaConfig &RadioInterface::configuredLoraConfig()
@@ -1049,12 +1073,12 @@ RadioInterface::RadioInterface()
 bool RadioInterface::reconfigure()
 {
     applyModemConfig();
-    // A borrow reprograms through here, never through commitConfig(): remember the RF it installed, as clamped.
+    // A borrow reprograms through here, never through commitConfig(): remember config.lora as it left it, clamps included.
     if (radioIsBorrowed() && !committingConfig) {
-        borrowedRf = config.lora;
-        hasBorrowedRf = true;
+        borrowedLora = config.lora;
+        hasBorrowedLora = true;
     } else if (!radioIsBorrowed()) {
-        hasBorrowedRf = false;
+        hasBorrowedLora = false;
     }
     return true;
 }
