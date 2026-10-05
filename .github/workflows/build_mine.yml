@@ -1,0 +1,10 @@
+name: Build my variant
+on: workflow_dispatch
+permissions: read-all
+jobs:
+  build:
+    uses: ./.github/workflows/build_firmware.yml
+    with:
+      version: custom
+      platform: esp32c3
+      pio_env: supermini_wio_sx1262_v1
