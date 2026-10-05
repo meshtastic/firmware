@@ -315,6 +315,9 @@ template <typename T> bool SX126xInterface<T>::init()
 
     if (!reinitChip())
         return false;
+#ifdef MESHTASTIC_RADIOLIB_SPI_TIMEOUT_MS
+    boundBusyWait();
+#endif
 
     startReceive(); // start receiving
 

@@ -291,6 +291,10 @@ template <typename T> bool LR11x0Interface<T>::init()
         }
     }
 
+#ifdef MESHTASTIC_RADIOLIB_SPI_TIMEOUT_MS
+    if (res == RADIOLIB_ERR_NONE)
+        boundBusyWait();
+#endif
     if (res == RADIOLIB_ERR_NONE)
         startReceive(); // start receiving
 

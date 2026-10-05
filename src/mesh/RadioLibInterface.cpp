@@ -13,6 +13,9 @@
 #include "mesh-pb-constants.h"
 #include <pb_decode.h>
 #include <pb_encode.h>
+#ifdef MESHTASTIC_BUSY_PROBE_MS
+#include <string.h>
+#endif
 
 #if ARCH_PORTDUINO
 #include "PortduinoGlue.h"
@@ -22,6 +25,9 @@
 void LockingArduinoHal::spiBeginTransaction()
 {
     spiLock->lock();
+#ifdef MESHTASTIC_BUSY_PROBE_MS
+    closeBusyWait();
+#endif
 
     ArduinoHal::spiBeginTransaction();
 }
@@ -29,14 +35,110 @@ void LockingArduinoHal::spiBeginTransaction()
 void LockingArduinoHal::spiEndTransaction()
 {
     ArduinoHal::spiEndTransaction();
+#ifdef MESHTASTIC_BUSY_PROBE_MS
+    lastEndUs = micros();
+    if (pendingValid) {
+        ready = pending; // a second one before the first is logged replaces it; busyWaitsLong counts both
+        readyValid = true;
+        pendingValid = false;
+    }
+#endif
 
     spiLock->unlock();
+#ifdef MESHTASTIC_BUSY_PROBE_MS
+    reportBusyWait();
+#endif
 }
 
-#if ARCH_PORTDUINO
+#if ARCH_PORTDUINO || defined(MESHTASTIC_BUSY_PROBE_MS)
 void LockingArduinoHal::spiTransfer(uint8_t *out, size_t len, uint8_t *in)
 {
+#ifdef MESHTASTIC_BUSY_PROBE_MS
+    // The first two bytes: the LR11x0/LR20x0 opcode, or the SX126x opcode and its first parameter. All-NOP is the
+    // response read or status check after an LR command, which keeps that command's opcode.
+    const uint16_t op = len >= 2 ? (uint16_t)((out[0] << 8) | out[1]) : (len ? out[0] : 0);
+    lastWasResp = op == 0;
+    if (!lastWasResp)
+        lastOp = op;
+    if (pendingValid && !pendingNextSet) {
+        pending.nextOp = lastOp;
+        pending.nextResp = lastWasResp;
+        pendingNextSet = true;
+    }
+#endif
+#if ARCH_PORTDUINO
     spi->transfer(out, in, len);
+#else
+    ArduinoHal::spiTransfer(out, len, in);
+#endif
+}
+#endif
+
+#ifdef MESHTASTIC_BUSY_PROBE_MS
+uint32_t LockingArduinoHal::busyWaitsLong = 0;
+uint32_t LockingArduinoHal::busyWaitMaxMs = 0;
+
+void LockingArduinoHal::yield()
+{
+    const uint32_t now = micros();
+#ifdef HAS_FREE_RTOS
+    const void *task = xTaskGetCurrentTaskHandle();
+#else
+    const void *task = nullptr;
+#endif
+    if (!waitFirstUs) {
+        waitFirstUs = now ? now : 1;
+        waitTask = task;
+        waitOtherTask = false;
+    } else if (task != waitTask) {
+        waitOtherTask = true;
+    }
+    waitLastUs = now;
+    ArduinoHal::yield();
+}
+
+void LockingArduinoHal::closeBusyWait()
+{
+    if (!waitFirstUs)
+        return;
+    const uint32_t ms = (waitLastUs - waitFirstUs) / 1000;
+    if (ms > busyWaitMaxMs)
+        busyWaitMaxMs = ms;
+    if (ms >= MESHTASTIC_BUSY_PROBE_MS) {
+        busyWaitsLong++;
+        pending = {};
+        pending.ms = ms;
+        pending.gapUs = waitFirstUs - lastEndUs;
+        pending.prevOp = lastOp;
+        pending.prevResp = lastWasResp;
+        pending.other = waitOtherTask;
+        pending.task = "";
+#ifdef HAS_FREE_RTOS
+        pending.task = waitTask ? pcTaskGetName((TaskHandle_t)waitTask) : "";
+#endif
+        pendingValid = true;
+        pendingNextSet = false;
+    }
+    waitFirstUs = 0;
+}
+
+void LockingArduinoHal::reportBusyWait()
+{
+    if (!readyValid)
+        return;
+#ifdef HAS_FREE_RTOS
+    // Never from the SPI-only tasks, whose stacks are not sized for a log line: a later transfer on another task logs it
+    const char *self = pcTaskGetName(nullptr);
+    if (strcmp(self, "RxReadout") == 0 || strcmp(self, "ChipState") == 0)
+        return;
+#endif
+    const BusyWaitReport r = ready;
+    readyValid = false;
+    // A gap of a few us means the wait followed the earlier transfer; a longer one, that it preceded the later one. "r"
+    // marks the response read or status check after an LR command, shown with that command's opcode.
+    LOG_WARN("BUSY wait %u ms, from %u us after %04x%s ended, before %04x%s, task %s%s", (unsigned)r.ms, (unsigned)r.gapUs,
+             r.prevOp, r.prevResp ? "r" : "", r.nextOp, r.nextResp ? "r" : "", r.task,
+             r.other ? ", another task also waited" : "");
 }
 #endif
 

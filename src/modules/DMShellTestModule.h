@@ -121,6 +121,9 @@ class DMShellTestModule : public SinglePortModule, private concurrency::OSThread
     /** Bench: the firmware's receive counts, read at the start and end of a session */
     struct RadioSnapshot {
         uint32_t good, bad, readOut, readOutLost, retried, recovered;
+#ifdef MESHTASTIC_BUSY_PROBE_MS
+        uint32_t busyLong;
+#endif
     };
     RadioSnapshot radioAtStart = {};
     RadioSnapshot readRadio();

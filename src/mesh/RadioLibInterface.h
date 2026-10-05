@@ -79,9 +79,37 @@ class LockingArduinoHal : public ArduinoHal
 
     void spiBeginTransaction() override;
     void spiEndTransaction() override;
-#if ARCH_PORTDUINO
+#if ARCH_PORTDUINO || defined(MESHTASTIC_BUSY_PROBE_MS)
     void spiTransfer(uint8_t *out, size_t len, uint8_t *in) override;
 
+#endif
+#ifdef MESHTASTIC_BUSY_PROBE_MS
+    // RadioLib calls yield() while it spins on the chip's BUSY line, before and after each transfer
+    void yield() override;
+
+    /** BUSY waits of MESHTASTIC_BUSY_PROBE_MS or more, and the longest wait seen */
+    static uint32_t busyWaitsLong, busyWaitMaxMs;
+
+  private:
+    struct BusyWaitReport {
+        uint32_t ms, gapUs;
+        uint16_t prevOp, nextOp;
+        bool prevResp, nextResp, other;
+        const char *task;
+    };
+
+    /** Close the run of yields since the last transfer. A long one is completed by the next transfer's opcode. */
+    void closeBusyWait();
+    /** Log the last long wait, outside the SPI lock */
+    void reportBusyWait();
+
+    uint32_t waitFirstUs = 0, waitLastUs = 0, lastEndUs = 0; // waitFirstUs 0 = no run open
+    uint16_t lastOp = 0;
+    bool lastWasResp = false;
+    const void *waitTask = nullptr;
+    bool waitOtherTask = false;
+    BusyWaitReport pending = {}, ready = {};
+    bool pendingValid = false, pendingNextSet = false, readyValid = false;
 #endif
 };
 
@@ -159,6 +187,10 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     Module module; // The HW interface to the radio
 #else
     STM32WLx_ModuleWrapper module;
+#endif
+#ifdef MESHTASTIC_RADIOLIB_SPI_TIMEOUT_MS
+    /// RadioLib waits up to spiConfig.timeout (1000 ms by default) on BUSY. Set after begin(), whose calibration keeps it.
+    void boundBusyWait() { module.spiConfig.timeout = MESHTASTIC_RADIOLIB_SPI_TIMEOUT_MS; }
 #endif
 
     /**

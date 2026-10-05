@@ -212,6 +212,9 @@ void DMShellTestModule::startSession(uint32_t now)
 
 #ifdef MESHTASTIC_BENCH_RX_COUNTERS
     radioAtStart = readRadio();
+#ifdef MESHTASTIC_BUSY_PROBE_MS
+    LockingArduinoHal::busyWaitMaxMs = 0; // this session's longest, not boot's calibration
+#endif
 #endif
 #if MESHTASTIC_RADIO_CHIP_STATS
     chipAtStart = readChip();
@@ -746,6 +749,9 @@ DMShellTestModule::RadioSnapshot DMShellTestModule::readRadio()
     r.readOutLost = c.readOutLost;
     r.retried = c.retried;
     r.recovered = c.recovered;
+#ifdef MESHTASTIC_BUSY_PROBE_MS
+    r.busyLong = LockingArduinoHal::busyWaitsLong;
+#endif
     return r;
 }
 
@@ -759,6 +765,11 @@ void DMShellTestModule::logRadioStats()
              (unsigned)(end.readOutLost - start.readOutLost));
     LOG_INFO("DMShellTest stats session=0x%08x radio retry_-20=" MESHTASTIC_RX_RETRY_MARK " retried=%u recovered=%u", id,
              (unsigned)(end.retried - start.retried), (unsigned)(end.recovered - start.recovered));
+#ifdef MESHTASTIC_BUSY_PROBE_MS
+    LOG_INFO("DMShellTest stats session=0x%08x radio busy_waits_over_%ums=%u busy_wait_max_ms=%u", id,
+             (unsigned)MESHTASTIC_BUSY_PROBE_MS, (unsigned)(end.busyLong - start.busyLong),
+             (unsigned)LockingArduinoHal::busyWaitMaxMs);
+#endif
 }
 #endif
 
