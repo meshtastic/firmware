@@ -16,6 +16,13 @@
 
 #define RADIOLIB_PIN_TYPE uint32_t
 
+// Each received frame is read out of the radio by a FreeRTOS task woken by RX_DONE, rather than whenever the main loop next
+// runs the radio thread: the radio holds one frame, and the next one overwrites it. It needs FreeRTOS and a DIO1 interrupt;
+// -DMESHTASTIC_EXCLUDE_READOUT_TASK=1 keeps the readout on the radio thread.
+#if defined(HAS_FREE_RTOS) && !defined(ARCH_PORTDUINO) && !defined(LORA_DIO1_SOFTWARE_POLL) && !MESHTASTIC_EXCLUDE_READOUT_TASK
+#define MESHTASTIC_RX_READOUT_TASK
+#endif
+
 // In addition to the default Rx flags, we need the PREAMBLE_DETECTED flag to detect whether we are actively receiving
 #define MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS (RADIOLIB_IRQ_RX_DEFAULT_FLAGS | (1 << RADIOLIB_IRQ_PREAMBLE_DETECTED))
 
@@ -325,7 +332,24 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     void startTransmitTimerRebroadcast(meshtastic_MeshPacket *p);
 
     void handleTransmitInterrupt();
-    void handleReceiveInterrupt();
+
+    /** A frame the readout task took out of the radio, and what addReceiveMetadata() would have read with it */
+    struct CapturedRxInfo {
+        int32_t rssi;
+        float snr;
+        int16_t state; // readData()'s result
+        uint16_t len;
+    };
+
+    /** Read out and deliver the frame behind RX_DONE; with captured, deliver one the readout task already took */
+    void handleReceiveInterrupt(const CapturedRxInfo *captured = nullptr);
+
+    /** Drop the terminal flags of a frame being given up on unread - only from a path that never reached readData() */
+    void clearUnreadRxIrqFlags();
+
+    /** Pick up an RX the chip is still running after a frame instead of restarting it; false if it is not known to be
+     *  running, and the caller restarts it with startReceive() */
+    virtual bool resumeRunningReceive() { return false; }
 
     static void timerCallback(void *p1, uint32_t p2);
 
@@ -461,6 +485,12 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     void checkRxDoneIrqFlag();
     void checkTxDoneIrqFlag();
 
+    /** From the TX_DONE interrupt, put the chip straight back into RX; false if it did not */
+    virtual bool rearmReceiveFromIsr() { return false; }
+
+    /** After TX, take over the RX that rearmReceiveFromIsr() started instead of restarting it; false if there is none */
+    virtual bool adoptReceiveArmedFromIsr() { return false; }
+
     /** Software-poll substitute for a hardware DIO interrupt, for radios whose IRQ line sits behind
      * an I2C IO expander with no INT routed to the MCU (e.g. Meshnology W10, LORA_DIO1_SOFTWARE_POLL).
      * The chip-specific subclass polls the radio's IRQ status register from the radio thread and
@@ -469,4 +499,99 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     void scheduleIrqPollTick();
     static bool isIsrTxCallback(void (*callback)());
     virtual void handleSoftwareLoraIrqPoll() {}
+
+    /** Take the radio-sequence lock, returning whether it was actually taken - see RadioSequence. The lock is
+     *  created with the readout task, so a sequence that started before it has nothing to take, and must not
+     *  then release it. Without a readout task at all, both are no-ops. */
+#ifdef MESHTASTIC_RX_READOUT_TASK
+    bool lockRadioSequence();
+    void unlockRadioSequence();
+#else
+    bool lockRadioSequence() { return false; }
+    void unlockRadioSequence() {}
+#endif
+
+    /** Held across a whole RadioLib call sequence, so the readout task cannot run between its calls.
+     *
+     *  The SPI lock is per transaction, so it does not span a sequence, and every driver's readData() ends by
+     *  clearing the chip's IRQ flags - SX128x also drops to standby first. A readout landing inside a channel
+     *  scan, an RX arm, a transmit setup or a reconfigure would therefore clear flags that sequence is about to
+     *  rely on, or move the chip out from under it.
+     *
+     *  The lock is recursive, because these sequences nest, and it inherits priority, so a readout waiting on
+     *  the radio thread lifts it rather than sitting behind it. Holding it does NOT bound a readout by the whole
+     *  main loop - only by the radio call sequence in flight, which is why packet delivery stays outside it.
+     *
+     *  Lock order: this lock is always taken BEFORE the SPI lock, never while holding it. RadioLib takes the SPI
+     *  lock per transaction inside the calls a sequence makes, so every holder acquires them in that order; a
+     *  caller that took the SPI lock first and then entered a sequence would invert it. */
+    class RadioSequence
+    {
+      public:
+        explicit RadioSequence(RadioLibInterface *iface) : iface(iface), held(iface->lockRadioSequence()) {}
+        ~RadioSequence()
+        {
+            if (held)
+                iface->unlockRadioSequence();
+        }
+        RadioSequence(const RadioSequence &) = delete;
+        RadioSequence &operator=(const RadioSequence &) = delete;
+
+      private:
+        RadioLibInterface *iface; // declared before held: held's initializer calls through it
+        bool held;
+    };
+
+#ifdef MESHTASTIC_RX_READOUT_TASK
+    /** From the RX_DONE interrupt, wake the readout task; false if there is none. The interrupt stays enabled, and the
+     *  task notifies ISR_RX once the frame is out of the radio. */
+    bool rxDoneFromIsr();
+    bool rxReadoutActive() const { return rxReadoutTask != nullptr; }
+    /** Hand an RX_DONE found by a poll to the readout task; false if there is no task. Does not wait: the
+     *  radio-sequence lock, not a wait here, is what keeps the task out of the caller's RadioLib calls. */
+    bool wakeRxReadout();
+    /** Deliver every frame the readout task captured; returns how many */
+    unsigned deliverCapturedFrames();
+    /** From the TX_DONE interrupt, have the readout task call rearmReceiveFromTask() before anything else; false if there
+     *  is no task. For drivers that re-arm RX through RadioLib, which an interrupt cannot call. */
+    bool requestRearmFromIsr();
+    /** The readout task's half of requestRearmFromIsr() */
+    virtual void rearmReceiveFromTask() {}
+
+  private:
+    /** Start the readout task above the calling task (the main loop), once */
+    void startRxReadoutTask();
+    static void rxReadoutTaskMain(void *arg);
+    /** One readout, from the task, with the RadioLib calls handleReceiveInterrupt() makes */
+    void readOutFromTask();
+    /** Move the oldest captured frame into radioBuffer; false if there is none */
+    bool takeCapturedFrame(CapturedRxInfo &info);
+
+    TaskHandle_t rxReadoutTask = nullptr;
+    bool rxReadoutTaskTried = false;
+    /** Recursive, priority-inheriting; guards a whole RadioLib call sequence - see RadioSequence */
+    SemaphoreHandle_t radioSeqMutex = nullptr;
+    /** Captured frames: the task produces, the radio thread consumes */
+    struct CapturedFrame {
+        CapturedRxInfo info;
+        uint8_t data[sizeof(RadioBuffer)];
+    };
+    static constexpr uint8_t rxRingSize = 9; // holds 8, for frames that end back to back behind a long main-loop hold
+    CapturedFrame rxRing[rxRingSize] = {};
+    volatile uint8_t rxRingHead = 0, rxRingTail = 0;
+    volatile uint32_t rxReadoutFrames = 0, rxReadoutDropped = 0, rxReadoutBadLength = 0;
+    /** Set by requestRearmFromIsr(), taken by the task */
+    volatile bool rxRearmFromTaskPending = false;
+
+  protected:
+    /** The task re-armed RX at TX_DONE and the radio thread has not yet handled that TX_DONE: until it does, a frame the
+     *  task reads must not overwrite the pending ISR_TX, or the TX is never completed. onNotify() delivers it instead. */
+    volatile bool rxArmedBeforeTxDone = false;
+#else
+    bool rxDoneFromIsr() { return false; }
+    bool requestRearmFromIsr() { return false; }
+    bool rxReadoutActive() const { return false; }
+    bool wakeRxReadout() { return false; }
+    unsigned deliverCapturedFrames() { return 0; }
+#endif
 };
