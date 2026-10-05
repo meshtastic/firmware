@@ -8,6 +8,10 @@
 #define SX126X_MAX_POWER 19
 #endif
 
+// Primary Slot LNA Mode: LOW/open is LNA on, HIGH/short is LNA off.
+// Requires Jumper LNA P to be removed.
+#define LORA_STATION_G3_LNA_EN 10
+
 /*
 #define BATTERY_PIN 4 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
 #define ADC_CHANNEL ADC1_GPIO4_CHANNEL
