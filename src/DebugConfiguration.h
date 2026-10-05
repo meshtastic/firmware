@@ -95,6 +95,15 @@ extern MemGet memGet;
 #else
 #define LOG_DEBUG_RADIO(...) ((void)0)
 #endif
+// The radio chip's own receive counters (RadioLibInterface::readChipRxStats()) and the lines that report them. On with
+// RADIO_DEBUG, and with MESHTASTIC_BENCH_INSTRUMENTATION without the rest of RADIO_DEBUG's lines.
+#ifndef MESHTASTIC_RADIO_CHIP_STATS
+#if RADIO_DEBUG || MESHTASTIC_BENCH_INSTRUMENTATION
+#define MESHTASTIC_RADIO_CHIP_STATS 1
+#else
+#define MESHTASTIC_RADIO_CHIP_STATS 0
+#endif
+#endif
 
 #if defined(DEBUG_HEAP)
 #define LOG_HEAP(...) DEBUG_PORT.log(MESHTASTIC_LOG_LEVEL_HEAP, __VA_ARGS__)

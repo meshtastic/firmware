@@ -303,6 +303,15 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
     virtual ErrorCode send(meshtastic_MeshPacket *p) override;
 
+#if MESHTASTIC_RADIO_CHIP_STATS
+    /** The chip's own receive counters since its last reset. False where the chip or RadioLib keeps none. */
+    virtual bool readChipRxStats(uint16_t & /*received*/, uint16_t & /*crcError*/, uint16_t & /*headerError*/,
+                                 uint16_t & /*falseSync*/)
+    {
+        return false;
+    }
+#endif
+
     /**
      * Return true if we think the board can go to sleep (i.e. our tx queue is empty, we are not sending or receiving)
      *
