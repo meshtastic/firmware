@@ -663,10 +663,6 @@ void borrowRadioForBeacon(RadioInterface &radio)
     config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
     config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST;
     config.lora.channel_num = 3;
-    meshtastic_ChannelSettings &primary = channels.getByIndex(channels.getPrimaryIndex()).settings;
-    strncpy(primary.name, "Visited", sizeof(primary.name) - 1);
-    primary.psk.size = 16;
-    memset(primary.psk.bytes, 0x77, 16);
     radio.reconfigure(); // the beacon programs the borrow through here, never through commitConfig()
 }
 
@@ -674,16 +670,18 @@ void borrowRadioForBeacon(RadioInterface &radio)
  * Under test: PhoneAPI's connect-time config dump (STATE_SEND_CHANNELS, STATE_SEND_CONFIG LoRa) while a
  * beacon has the radio (src/mesh/PhoneAPI.cpp).
  * Why: a client caches the dump and writes it back with its next edit, so a dump taken mid-switch handed it
- * the visited mesh as this node's region, preset, slot and primary channel, and the next edit committed them.
- * Regression guarded: the dump reading config.lora and the channel table live.
+ * the visited mesh as this node's region, preset and slot, and the next edit committed them. The beacon never
+ * borrows the channel table, so a primary edited mid-switch is dumped as edited.
+ * Regression guarded: the dump reading config.lora live; the dump reporting a pre-borrow primary snapshot.
  */
 void test_dump_duringABorrow_reportsTheCommittedRadio()
 {
     RadioInterface::captureConfiguredRadio(); // home, committed
     const meshtastic_Config_LoRaConfig home = config.lora;
-    const meshtastic_ChannelSettings homePrimary = channels.getByIndex(channels.getPrimaryIndex()).settings;
     BorrowingRadio radio;
     borrowRadioForBeacon(radio);
+    meshtastic_ChannelSettings &primary = channels.getByIndex(channels.getPrimaryIndex()).settings;
+    strncpy(primary.name, "Edited", sizeof(primary.name) - 1); // what set_channel does mid-beacon
     startHandshake(FULL_DUMP_NONCE);
 
     bool sawLora = false, sawPrimary = false;
@@ -699,9 +697,8 @@ void test_dump_duringABorrow_reportsTheCommittedRadio()
         } else if (msg.which_payload_variant == meshtastic_FromRadio_channel_tag &&
                    msg.channel.index == channels.getPrimaryIndex()) {
             sawPrimary = true;
-            TEST_ASSERT_EQUAL_STRING_MESSAGE(homePrimary.name, msg.channel.settings.name,
-                                             "the primary reported is this node's, not the visited channel");
-            TEST_ASSERT_EQUAL_UINT_MESSAGE(homePrimary.psk.size, msg.channel.settings.psk.size, "with its own key");
+            TEST_ASSERT_EQUAL_STRING_MESSAGE("Edited", msg.channel.settings.name,
+                                             "the primary dumped is the live one, edit included");
         } else if (msg.which_payload_variant == meshtastic_FromRadio_config_complete_id_tag) {
             break;
         }

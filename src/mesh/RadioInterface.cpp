@@ -452,7 +452,6 @@ void RadioInterface::captureConfiguredRadio()
     configuredLora = config.lora;
     configuredSlotIsDefault = uses_default_frequency_slot;
     configuredCaptured = true;
-    channels.captureCommittedPrimary();
 }
 
 bool RadioInterface::radioIsBorrowed()

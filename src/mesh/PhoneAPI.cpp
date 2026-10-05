@@ -693,7 +693,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         } else
 #endif
         {
-            fromRadioScratch.channel = channels.getChannelToReport(config_state); // never a borrowed primary
+            fromRadioScratch.channel = channels.getByIndex(config_state);
         }
         config_state++;
         // Advance when we have sent all of our Channels

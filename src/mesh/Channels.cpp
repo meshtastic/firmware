@@ -427,27 +427,6 @@ bool Channels::anyMqttEnabled()
     return false;
 }
 
-void Channels::captureCommittedPrimary()
-{
-    committedPrimary = getByIndex(getPrimaryIndex()).settings;
-    committedPrimaryCaptured = true;
-}
-
-meshtastic_Channel Channels::getChannelToReport(ChannelIndex chIndex)
-{
-    meshtastic_Channel ch = getByIndex(chIndex);
-    if (RadioInterface::radioIsBorrowed())
-        ch.settings = committedSettings(chIndex);
-    return ch;
-}
-
-const meshtastic_ChannelSettings &Channels::committedSettings(ChannelIndex chIndex)
-{
-    if (committedPrimaryCaptured && chIndex == getPrimaryIndex())
-        return committedPrimary;
-    return getByIndex(chIndex).settings;
-}
-
 const char *Channels::nameForSettings(const meshtastic_ChannelSettings &settings, meshtastic_Config_LoRaConfig_ModemPreset preset,
                                       bool usePreset)
 {
@@ -584,9 +563,9 @@ const char *Channels::getName(size_t chIndex)
 
 bool Channels::isDefaultChannel(ChannelIndex chIndex)
 {
-    // Uses committed channel and committed preset only: modules gate transmissions on this, so a
-    // borrowed channel or preset is not used. See RadioInterface::configuredLoraConfig().
-    const meshtastic_ChannelSettings &settings = committedSettings(chIndex);
+    // Uses the committed preset: modules gate transmissions on this, so a borrowed preset is not used.
+    // A beacon never borrows the channel table. See RadioInterface::configuredLoraConfig().
+    const meshtastic_ChannelSettings &settings = getByIndex(chIndex).settings;
     if (settings.psk.size == 1 && settings.psk.bytes[0] == 1) {
         const meshtastic_Config_LoRaConfig &cfg = RadioInterface::configuredLoraConfig();
         const char *name = nameForSettings(settings, cfg.modem_preset, cfg.use_preset);

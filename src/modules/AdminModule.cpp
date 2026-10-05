@@ -1916,7 +1916,7 @@ void AdminModule::handleGetChannel(const meshtastic_MeshPacket &req, uint32_t ch
     if (req.decoded.want_response) {
         // We create the reply here
         meshtastic_AdminMessage r = meshtastic_AdminMessage_init_default;
-        r.get_channel_response = channels.getChannelToReport(channelIndex); // never a borrowed primary
+        r.get_channel_response = channels.getByIndex(channelIndex);
         r.which_payload_variant = meshtastic_AdminMessage_get_channel_response_tag;
         setPassKey(&r);
         myReply = allocDataProtobuf(r);

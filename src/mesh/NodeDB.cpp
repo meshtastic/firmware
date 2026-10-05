@@ -3268,22 +3268,7 @@ bool NodeDB::saveChannelsToDisk()
     spiLock->unlock();
 #endif
 
-    if (!RadioInterface::radioIsBorrowed())
-        return saveProto(channelFileName, meshtastic_ChannelFile_size, &meshtastic_ChannelFile_msg, &channelFile);
-    // A borrowed primary is persisted as the committed one, from a copy: the live table is never written. malloc(),
-    // not new: it is the allocation that returns nullptr on every build (see FSCommon.cpp).
-    auto *committed = static_cast<meshtastic_ChannelFile *>(malloc(sizeof(meshtastic_ChannelFile)));
-    if (!committed) {
-        LOG_ERROR("saveChannelsToDisk() can't copy the channel table mid-borrow");
-        return false;
-    }
-    *committed = channelFile;
-    const ChannelIndex primary = channels.getPrimaryIndex();
-    if (primary < committed->channels_count)
-        committed->channels[primary] = channels.getChannelToReport(primary);
-    const bool saved = saveProto(channelFileName, meshtastic_ChannelFile_size, &meshtastic_ChannelFile_msg, committed);
-    free(committed);
-    return saved;
+    return saveProto(channelFileName, meshtastic_ChannelFile_size, &meshtastic_ChannelFile_msg, &channelFile);
 }
 
 bool NodeDB::saveDeviceStateToDisk()
@@ -3482,8 +3467,8 @@ bool NodeDB::saveToDiskNoRetry(int saveWhat)
         if (!RadioInterface::radioIsBorrowed()) {
             success &= saveProto(configFileName, meshtastic_LocalConfig_size, &meshtastic_LocalConfig_msg, &config);
         } else {
-            // A borrowed radio is not this node's config: persist the committed one, from a copy (malloc: see
-            // saveChannelsToDisk()).
+            // A borrowed radio is not this node's config: persist the committed one, from a copy. malloc(), not new:
+            // it is the allocation that returns nullptr on every build (see FSCommon.cpp).
             auto *committed = static_cast<meshtastic_LocalConfig *>(malloc(sizeof(meshtastic_LocalConfig)));
             if (committed) {
                 *committed = config;

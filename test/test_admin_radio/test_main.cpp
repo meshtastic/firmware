@@ -2711,10 +2711,6 @@ static void borrowRadioForBeacon(RadioInterface &radio)
     config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
     config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST;
     config.lora.channel_num = 3;
-    meshtastic_ChannelSettings &primary = channels.getByIndex(channels.getPrimaryIndex()).settings;
-    strncpy(primary.name, "Visited", sizeof(primary.name) - 1);
-    primary.psk.size = 16;
-    memset(primary.psk.bytes, 0x77, 16);
     radio.reconfigure(); // the beacon programs the borrow through here, never through commitConfig()
 }
 
@@ -2727,19 +2723,20 @@ static bool decodeAdminReply(meshtastic_MeshPacket *reply, meshtastic_AdminMessa
 
 /*
  * Under test: AdminModule::handleGetConfig(LORA_CONFIG) and handleGetChannel() while a beacon has the radio
- * (src/modules/AdminModule.cpp, RadioInterface::loraConfigToReport(), Channels::getChannelToReport()).
+ * (src/modules/AdminModule.cpp, RadioInterface::loraConfigToReport()).
  * Why: a client caches what it reads and writes it back with its next edit. Read mid-switch, it was handed
- * the visited mesh as this node's region, preset, slot and primary channel - and the next set_config or
- * set_channel committed them for good.
- * Regression guarded: get_config / get_channel reading config.lora and the channel table live.
+ * the visited mesh as this node's region, preset and slot - and the next set_config committed them for good.
+ * The beacon never borrows the channel table, so a primary edited mid-switch is reported as edited.
+ * Regression guarded: get_config reading config.lora live; get_channel reporting a pre-borrow primary snapshot.
  */
 static void test_getConfigAndChannel_duringABorrow_reportTheCommittedRadio()
 {
     RadioInterface::captureConfiguredRadio(); // home, committed
     const meshtastic_Config_LoRaConfig home = config.lora;
-    const meshtastic_ChannelSettings homePrimary = channels.getByIndex(channels.getPrimaryIndex()).settings;
     BorrowingRadio radio;
     borrowRadioForBeacon(radio);
+    meshtastic_ChannelSettings &primary = channels.getByIndex(channels.getPrimaryIndex()).settings;
+    strncpy(primary.name, "Edited", sizeof(primary.name) - 1); // what set_channel does mid-beacon
 
     hamMockRouter = new HamModeMockRouter(); // allocDataProtobuf() allocates the reply through the router
     router = hamMockRouter;
@@ -2760,9 +2757,8 @@ static void test_getConfigAndChannel_duringABorrow_reportTheCommittedRadio()
 
     testAdmin->handleGetChannel(req, channels.getPrimaryIndex());
     TEST_ASSERT_TRUE_MESSAGE(decodeAdminReply(testAdmin->reply(), res), "get_channel must answer");
-    TEST_ASSERT_EQUAL_STRING_MESSAGE(homePrimary.name, res.get_channel_response.settings.name,
-                                     "the primary reported is this node's, not the visited channel");
-    TEST_ASSERT_EQUAL_UINT_MESSAGE(homePrimary.psk.size, res.get_channel_response.settings.psk.size, "with its own key");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("Edited", res.get_channel_response.settings.name,
+                                     "the primary reported is the live one, edit included");
     testAdmin->drainReply();
 }
 
