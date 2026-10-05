@@ -1379,8 +1379,8 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
         // Sanitize a local copy rather than const_cast-ing the const input (UB if a truly-const
         // object is ever passed); the validated copy is assigned into moduleConfig below.
         auto beaconCfg = c.payload_variant.mesh_beacon;
-        // Hard cap at 100 chars.
-        beaconCfg.broadcast_message[100] = '\0';
+        // Cap at the generated field size, so the limit follows the proto's max_size.
+        beaconCfg.broadcast_message[sizeof(beaconCfg.broadcast_message) - 1] = '\0';
         // Enforce interval minimum (0 means unset/use default).
         if (beaconCfg.broadcast_interval_secs != 0 &&
             beaconCfg.broadcast_interval_secs < default_mesh_beacon_min_broadcast_interval_secs)
