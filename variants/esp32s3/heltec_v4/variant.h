@@ -96,5 +96,3 @@
 #define GPS_TX_PIN (38) // This is for bits going TOWARDS the GPS
 #define GPS_RX_PIN (39) // This is for bits going TOWARDS the CPU
 #define GPS_THREAD_INTERVAL 50
-
-#define MAGNETOMETER_OFFSET 270.0f
