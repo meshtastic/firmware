@@ -415,6 +415,7 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
         float snr;
         int16_t state; // readData()'s result
         uint16_t len;
+        uint32_t endMs; // when the frame left the air, from its RX_DONE interrupt
     };
 
     /** Read out and deliver the frame behind RX_DONE; with captured, deliver one the readout task already took */

@@ -1224,6 +1224,7 @@ bool INTERRUPT_ATTR RadioLibInterface::rxDoneFromIsr()
 {
     if (!rxReadoutTask)
         return false;
+    rxDoneIsrTicks = xTaskGetTickCountFromISR(); // this path never reaches isrLevel0Common(), which stamps it otherwise
     BaseType_t woken = pdFALSE;
     vTaskNotifyGiveFromISR(rxReadoutTask, &woken);
     YIELD_FROM_ISR(woken);
@@ -1305,6 +1306,7 @@ void RadioLibInterface::readOutFromTask()
     f.info.snr = iface->getSNR();
     f.info.rssi = lround(iface->getRSSI());
     f.info.len = (uint16_t)len;
+    f.info.endMs = frameEndFromIsr(false); // now, before a later frame's interrupt moves the stamp on
     rxReadoutFrames = rxReadoutFrames + 1;
     __asm__ __volatile__("" ::: "memory"); // the entry is written before the head that publishes it
     rxRingHead = next;
@@ -1338,6 +1340,7 @@ unsigned RadioLibInterface::deliverCapturedFrames()
     CapturedRxInfo info;
     while (takeCapturedFrame(info)) {
         delivered++;
+        noteFrameEnd(info.endMs, "rx");
         handleReceiveInterrupt(&info);
     }
     return delivered;
