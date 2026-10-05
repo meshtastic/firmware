@@ -446,9 +446,18 @@ void RadioLibInterface::onNotify(uint32_t notification)
             // The readout task has already taken the frames out of the radio, so this makes no RadioLib calls and
             // deliberately runs outside the radio-sequence lock: it enqueues packets, and holding the lock across
             // that would delay the next readout for no reason.
+            // A CAD handoff's frame among these ends its wait (handleReceiveInterrupt() clears cadHandoffRxStart).
             deliverCapturedFrames();
             if (!isReceiving) // this thread has since moved the radio on (a scan or a TX): leave it there
                 break;
+            if (cadHandoffRxStart) {
+                // No frame for the handoff. Its RX is still running, unless it expired empty: TIMEOUT alone, which the
+                // task does not read, and the chip now in standby.
+                RadioSequence seq(this);
+                if (iface->checkIrq(RADIOLIB_IRQ_TIMEOUT) != 1)
+                    break;
+                handleReceiveInterrupt(); // logs it and drops the TIMEOUT; the re-arm below puts the chip back in RX
+            }
         } else {
             RadioSequence seq(this);
             handleReceiveInterrupt();
@@ -1119,8 +1128,13 @@ void RadioLibInterface::readOutFromTask()
     // Never between the RadioLib calls of a sequence on the radio thread: readData() below clears the chip's IRQ
     // flags, and on SX128x drops it to standby, either of which would break a scan, arm or transmit in flight.
     RadioSequence seq(this);
-    if (iface->checkIrq(RADIOLIB_IRQ_RX_DONE) != 1)
-        return; // an edge for a frame already taken
+    if (iface->checkIrq(RADIOLIB_IRQ_RX_DONE) != 1) {
+        // A CAD handoff's RX that expired empty raises TIMEOUT alone. The radio thread logs it and re-arms; left here, the
+        // chip would stay in standby until checkCadHandoffTimeout().
+        if (cadHandoffRxStart && iface->checkIrq(RADIOLIB_IRQ_TIMEOUT) == 1)
+            notify(ISR_RX, !rxArmedBeforeTxDone);
+        return; // otherwise an edge for a frame already taken
+    }
     const size_t len = iface->getPacketLength();
     const uint8_t head = rxRingHead;
     const uint8_t next = (uint8_t)((head + 1) % rxRingSize);
