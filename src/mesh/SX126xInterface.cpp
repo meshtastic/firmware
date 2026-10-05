@@ -486,7 +486,7 @@ template <typename T> void SX126xInterface<T>::addReceiveMetadata(meshtastic_Mes
 template <typename T> void SX126xInterface<T>::configHardwareForSend()
 {
     rxArmedContinuous = false; // the transmission takes the chip out of RX
-#if SX126X_REARM_FROM_TASK
+#if SX126X_REARM_FROM_TASK && MESHTASTIC_REARM_HOLD_FIX
     rearmState = REARM_NONE; // only this TX's TX_DONE may re-arm, never a stale one from a TX the poll completed
     rxArmedBeforeTxDone = false;
 #endif
@@ -605,8 +605,10 @@ template <typename T> void SX126xInterface<T>::rearmReceiveFromTask()
 {
     // Outside any radio-thread sequence. If the thread got there first, it took the re-arm over and left nothing to do.
     RadioSequence seq(this);
+#if MESHTASTIC_REARM_HOLD_FIX
     if (rearmState != REARM_PENDING)
         return;
+#endif
     // What startReceive() sends, less the standby: after TX_DONE the chip has already fallen back to standby.
     setTransmitEnable(false);
     const int16_t err = startRxCommand(continuousRxWanted());
@@ -616,10 +618,12 @@ template <typename T> void SX126xInterface<T>::rearmReceiveFromTask()
         return;
     }
     rearmState = REARM_ARMED;
+#if MESHTASTIC_REARM_HOLD_FIX
     // The TX_DONE interrupt detached the radio's interrupt. Attach the RX one now, so a frame that ends before the radio
     // thread runs wakes this task to read it, rather than waiting in the chip for the next frame to overwrite it.
     rxArmedBeforeTxDone = true;
     enableInterrupt(isrRxLevel0);
+#endif
 }
 
 template <typename T> bool SX126xInterface<T>::adoptReceiveArmedFromIsr()

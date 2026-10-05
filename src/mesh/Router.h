@@ -120,6 +120,12 @@ class Router : protected concurrency::OSThread, protected PacketHistory
      */
     void setReceivedMessage();
 
+#ifdef MESHTASTIC_RADIO_TASK
+    /// From loop(): run soon if a reception is queued. The radio task's enqueue can land while this thread runs, and the
+    /// run's own return then overwrites the wake-up the enqueue set.
+    void wakeIfReceived();
+#endif
+
     /**
      * RadioInterface calls this to queue up packets that have been received from the radio.  The router is now responsible for
      * freeing the packet

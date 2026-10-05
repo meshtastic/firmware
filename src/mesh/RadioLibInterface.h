@@ -24,6 +24,19 @@
 #define MESHTASTIC_RX_READOUT_TASK
 #endif
 
+// -DMESHTASTIC_REARM_HOLD_FIX=0 runs the readout task's TX_DONE re-arm without its hold fix: the RX interrupt stays detached
+// until the radio thread adopts the re-arm, the task re-arms whatever the state, and a send does not clear a stale state.
+// Default 1, the readout task's own behaviour.
+#ifndef MESHTASTIC_REARM_HOLD_FIX
+#define MESHTASTIC_REARM_HOLD_FIX 1
+#endif
+
+// -DMESHTASTIC_RX_RETRY_WRONG_MODEM=1 has the readout task read a frame again when readData() fails with WRONG_MODEM, which
+// on the LR11x0 returns before touching the frame. Default 0.
+#ifndef MESHTASTIC_RX_RETRY_WRONG_MODEM
+#define MESHTASTIC_RX_RETRY_WRONG_MODEM 0
+#endif
+
 // In addition to the default Rx flags, we need the PREAMBLE_DETECTED flag to detect whether we are actively receiving
 #define MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS (RADIOLIB_IRQ_RX_DEFAULT_FLAGS | (1 << RADIOLIB_IRQ_PREAMBLE_DETECTED))
 
@@ -425,6 +438,26 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     /** See getTxDueMs(). Written by the radio thread, read by the router's */
     std::atomic<uint32_t> txDueMs{0};
 
+#ifdef MESHTASTIC_TX_SLOT_GATE_MS
+    /** When the backoff of the TX at the front of the queue falls due, before the gate brings its timer forward */
+    uint32_t slotGateDueMs = 0;
+    /** Hold a TX with a slot parity until its slot on the grid (see ownSlotScanAt()); false if it is not to be scanned now:
+     *  its timer was set again, or a frame arrived during the wait */
+    bool waitForTxSlot(meshtastic_MeshPacket *txp);
+#ifdef MESHTASTIC_TX_SLOT_LEAD
+    /** How late the TX timer's handling starts after the timer falls due (a fast-rising, slowly falling envelope, so a late
+     *  tail sets it), and the scan start to SET_TX (an average), in us */
+    uint32_t leadWakeUs = 1000, leadPathUs = 6000;
+    /** micros() the TX timer was set to fall due, 0 when no sample is pending; micros() of the last SET_TX */
+    uint32_t txTimerDueUs = 0, lastTxStartUs = 0;
+    void noteLeadWake(int32_t lateUs);
+    void noteLeadPath(uint32_t pathUs);
+    /** The estimates in whole ms, rounded up */
+    uint32_t leadWakeMs() const { return (leadWakeUs + 999) / 1000; }
+    uint32_t leadPathMs() const { return (leadPathUs + 999) / 1000; }
+#endif
+#endif
+
     static void timerCallback(void *p1, uint32_t p2);
 
     virtual void onNotify(uint32_t notification) override;
@@ -636,6 +669,8 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      *  task notifies ISR_RX once the frame is out of the radio. */
     bool rxDoneFromIsr();
     bool rxReadoutActive() const { return rxReadoutTask != nullptr; }
+    /** Whether a frame the readout task captured is still waiting for this thread */
+    bool capturedFramePending() const { return rxRingTail != rxRingHead; }
     /** Hand an RX_DONE found by a poll to the readout task; false if there is no task. Does not wait: the
      *  radio-sequence lock, not a wait here, is what keeps the task out of the caller's RadioLib calls. */
     bool wakeRxReadout();
@@ -680,6 +715,7 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     bool rxDoneFromIsr() { return false; }
     bool requestRearmFromIsr() { return false; }
     bool rxReadoutActive() const { return false; }
+    bool capturedFramePending() const { return false; }
     bool wakeRxReadout() { return false; }
     unsigned deliverCapturedFrames() { return 0; }
 #endif
