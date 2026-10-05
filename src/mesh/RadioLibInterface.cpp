@@ -155,7 +155,13 @@ bool RadioLibInterface::canSendImmediately()
     // To do otherwise would be doubly bad because not only would we drop the packet that was on the way in,
     // we almost certainly guarantee no one outside will like the packet we are sending.
     bool busyTx = sendingPacket != NULL;
-    bool busyRx = isReceiving && isActivelyReceiving();
+    // isActivelyReceiving() reads the chip over SPI. Unlocked, it can split the readout task's command and wedge BUSY for
+    // RadioLib's whole BUSY timeout. The lock is recursive, so a caller already holding it re-enters.
+    bool busyRx = false;
+    if (isReceiving) {
+        RadioSequence seq(this);
+        busyRx = isActivelyReceiving();
+    }
 
     if (busyTx || busyRx) {
         if (busyTx) {
