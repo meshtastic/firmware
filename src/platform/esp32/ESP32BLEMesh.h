@@ -50,7 +50,6 @@ class ESP32BLEMesh : public BLEMeshHandler
     bool configureAdvInstance();
     bool advInstanceConfigured = false;
 #endif
-    void handleAdvertisementData(int8_t rssi, const uint8_t *data, uint8_t len);
 };
 
 #endif // HAS_BLE_MESH && ARCH_ESP32

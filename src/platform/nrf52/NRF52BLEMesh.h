@@ -35,7 +35,6 @@ class NRF52BLEMesh : public BLEMeshHandler
   private:
     void startScanning();
     void stopScanning();
-    void handleScanResult(ble_gap_evt_adv_report_t *report);
 
     // A SoftDevice advertising set of its own, allocated by passing BLE_GAP_ADV_SET_HANDLE_NOT_SET.
     // Handle 0 is Bluefruit's phone advertisement; sharing it means tearing that down and restoring

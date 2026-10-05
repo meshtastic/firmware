@@ -195,9 +195,10 @@ void NRF52BLEMesh::onBleEvent(ble_evt_t *event)
     case BLE_GAP_EVT_ADV_REPORT: {
         ble_gap_evt_adv_report_t *report = &event->evt.gap_evt.params.adv_report;
 
-        if (report->type.status == BLE_GAP_ADV_DATA_STATUS_COMPLETE) {
-            instance->handleScanResult(report);
-        }
+        // The SoftDevice joins a chained advertisement in the scan buffer itself and reports it once
+        // (report_incomplete_evts is unsupported), so a whole advertisement is always COMPLETE.
+        if (report->type.status == BLE_GAP_ADV_DATA_STATUS_COMPLETE)
+            instance->handleAdvertisementData(report->data.p_data, report->data.len, report->rssi);
 
         // The SoftDevice pauses scanning after each report; hand the buffer back to resume.
         bleMeshScanReportData.len = sizeof(bleMeshScanBuffer);
@@ -222,35 +223,6 @@ void NRF52BLEMesh::onBleEvent(ble_evt_t *event)
         break;
     default:
         break;
-    }
-}
-
-void NRF52BLEMesh::handleScanResult(ble_gap_evt_adv_report_t *report)
-{
-    if (!isRunning || !report->data.p_data)
-        return;
-
-    const uint8_t *data = report->data.p_data;
-    uint16_t len = report->data.len;
-    uint16_t offset = 0;
-
-    while (offset + 1 < len) {
-        uint8_t adLen = data[offset];
-        if (adLen == 0 || offset + adLen >= len)
-            break;
-
-        uint8_t adType = data[offset + 1];
-        if (adType == BLE_GAP_AD_TYPE_MANUFACTURER_SPECIFIC_DATA && adLen >= 4) {
-            uint16_t companyId = data[offset + 2] | (data[offset + 3] << 8);
-            if (companyId == BLE_MESH_COMPANY_ID && data[offset + 4] == BLE_MESH_PROTOCOL_VERSION) {
-                const uint8_t *payload = &data[offset + 5];
-                size_t payloadLen = adLen - 4;
-
-                deliverToRouter(payload, payloadLen, report->rssi);
-                return;
-            }
-        }
-        offset += adLen + 1;
     }
 }
 
