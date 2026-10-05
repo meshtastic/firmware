@@ -117,6 +117,16 @@ class DMShellTestModule : public SinglePortModule, private concurrency::OSThread
     SentFrame *findSent(uint32_t seq);
     void logStats(uint32_t now);
 
+#ifdef MESHTASTIC_BENCH_RX_COUNTERS
+    /** Bench: the firmware's receive counts, read at the start and end of a session */
+    struct RadioSnapshot {
+        uint32_t good, bad, readOut, readOutLost, retried, recovered;
+    };
+    RadioSnapshot radioAtStart = {};
+    RadioSnapshot readRadio();
+    /** This session's firmware receive counts */
+    void logRadioStats();
+#endif
 #if MESHTASTIC_RADIO_CHIP_STATS
     /** The radio chip's receive counters, read at the start and end of a session */
     struct ChipSnapshot {

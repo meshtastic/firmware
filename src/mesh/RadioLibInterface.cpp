@@ -1071,6 +1071,16 @@ void RadioLibInterface::handleReceiveInterrupt(const CapturedRxInfo *captured)
 #endif
 
     int state = captured ? captured->state : iface->readData((uint8_t *)&radioBuffer, length);
+#ifdef MESHTASTIC_RX_FAIL_PROBE
+    // The readout task fills the probe for the frames it captured. A frame the thread reads itself has no capture, so
+    // read the chip back here instead, while it is still the state the read failed in.
+    uint8_t threadPkt = 0xEE, threadMode = 0xEE;
+    uint32_t threadIrq = 0;
+    int16_t threadTypeErr = 0;
+    bool threadProbe = false;
+    if (!captured && state != RADIOLIB_ERR_NONE)
+        threadProbe = readRxFailState(threadPkt, threadMode, threadIrq, threadTypeErr);
+#endif
 #if ARCH_PORTDUINO
     if (portduino_config.logoutputlevel == level_trace) {
         printBytes("Raw incoming packet: ", (uint8_t *)&radioBuffer, length);
@@ -1090,6 +1100,17 @@ void RadioLibInterface::handleReceiveInterrupt(const CapturedRxInfo *captured)
                   state, radioBuffer.header.id, radioBuffer.header.from, radioBuffer.header.to, radioBuffer.header.flags,
                   captured ? captured->snr : iface->getSNR(), captured ? (long)captured->rssi : lround(iface->getRSSI()),
                   radioBuffer.header.next_hop, radioBuffer.header.relay_node);
+#ifdef MESHTASTIC_RX_FAIL_PROBE
+        if (captured && captured->failValid)
+            LOG_ERROR("  rx fail probe readout: chip pktType=0x%02x (getPacketType=%d) mode=0x%02x irq=0x%08x len=%u",
+                      (unsigned)captured->failPktType, (int)captured->failTypeErr, (unsigned)captured->failMode,
+                      (unsigned)captured->failIrq, (unsigned)length);
+        else if (threadProbe)
+            LOG_ERROR("  rx fail probe thread: chip pktType=0x%02x (getPacketType=%d) mode=0x%02x irq=0x%08x len=%u",
+                      (unsigned)threadPkt, (int)threadTypeErr, (unsigned)threadMode, (unsigned)threadIrq, (unsigned)length);
+        else
+            LOG_ERROR("  rx fail probe: none (captured=%d)", captured ? 1 : 0);
+#endif
         rxBad++;
 
         airTime->logAirtime(RX_ALL_LOG, rxMsec);
@@ -1534,6 +1555,9 @@ void RadioLibInterface::readOutFromTask()
     // Never between the RadioLib calls of a sequence on the radio thread: readData() below clears the chip's IRQ
     // flags, and on SX128x drops it to standby, either of which would break a scan, arm or transmit in flight.
     RadioSequence seq(this);
+#if MESHTASTIC_BENCH_INSTRUMENTATION
+    const uint32_t t0 = benchClock();
+#endif
     if (iface->checkIrq(RADIOLIB_IRQ_RX_DONE) != 1) {
         // A CAD handoff's RX that expired empty raises TIMEOUT alone. The radio thread logs it and re-arms; left here, the
         // chip would stay in standby until checkCadHandoffTimeout().
@@ -1566,6 +1590,14 @@ void RadioLibInterface::readOutFromTask()
     }
     CapturedFrame &f = rxRing[head];
     f.info.state = iface->readData(f.data, len);
+#ifdef MESHTASTIC_RX_FAIL_PROBE
+    f.info.failValid = false;
+    if (f.info.state != RADIOLIB_ERR_NONE) // read the chip's state while it is still the state that failed
+        f.info.failValid = readRxFailState(f.info.failPktType, f.info.failMode, f.info.failIrq, f.info.failTypeErr);
+#endif
+#if MESHTASTIC_BENCH_INSTRUMENTATION
+    f.info.retried = false;
+#endif
     if (readDataLeftIrqFlags(f.info.state)) {
         // This read came back before RadioLib's own clear, so RX_DONE is still latched for a frame nobody will ever
         // read. Drop it here, while we know that: leaving it would have checkRxDoneIrqFlag() wake this task again for
@@ -1575,11 +1607,17 @@ void RadioLibInterface::readOutFromTask()
     }
     f.info.snr = iface->getSNR();
     f.info.rssi = lround(iface->getRSSI());
+#if MESHTASTIC_BENCH_INSTRUMENTATION
+    f.info.spiUs = benchClockToUs(benchClock() - t0);
+#endif
     f.info.len = (uint16_t)len;
     // Here, not where the radio thread accounts for the frame: by then the chip has been put back in RX - after a
     // resume it never left it - and its packet status describes the frame it is receiving now, not this one.
     f.info.headerInfoValid = readRxHeaderInfo(f.info.rxCR, f.info.hasCRC);
     f.info.endMs = frameEndFromIsr(false); // now, before a later frame's interrupt moves the stamp on
+#if MESHTASTIC_BENCH_INSTRUMENTATION
+    f.info.readMs = Time::getMillis();
+#endif
     rxReadoutFrames = rxReadoutFrames + 1;
     __asm__ __volatile__("" ::: "memory"); // the entry is written before the head that publishes it
     rxRingHead = next;
@@ -1613,7 +1651,16 @@ unsigned RadioLibInterface::deliverCapturedFrames()
     CapturedRxInfo info;
     while (takeCapturedFrame(info)) {
         delivered++;
+#if MESHTASTIC_BENCH_INSTRUMENTATION
+        if (info.retried)
+            LOG_WARN("RX readout read again after %d (len %u): at once %d (len %u), final %d (len %u)", info.firstState,
+                     (unsigned)info.firstLen, info.immediateState, (unsigned)info.immediateLen, info.state, (unsigned)info.len);
+#endif
         noteFrameEnd(info.endMs, "rx");
+#if MESHTASTIC_BENCH_INSTRUMENTATION
+        LOG_TRACE("RX read out by task: wake to readout %u ms (SPI %u us), readout to handler %u ms",
+                  (unsigned)(info.readMs - info.endMs), (unsigned)info.spiUs, (unsigned)(Time::getMillis() - info.readMs));
+#endif
         handleReceiveInterrupt(&info);
     }
     return delivered;

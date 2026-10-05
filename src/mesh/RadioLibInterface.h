@@ -322,6 +322,31 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
     virtual ErrorCode send(meshtastic_MeshPacket *p) override;
 
+#ifdef MESHTASTIC_BENCH_RX_COUNTERS
+    /** Bench: this firmware's receive counts, for the test client's session stats */
+    struct RxCounters {
+        uint32_t good, bad;            // packets handleReceiveInterrupt() passed on, and rejected
+        uint32_t readOut, readOutLost; // frames the readout task took from the chip, and lost (ring full, bad length)
+        uint32_t retried, recovered;   // readouts read again after WRONG_MODEM, and those the second read recovered
+    };
+    RxCounters rxCounters() const
+    {
+#ifdef MESHTASTIC_RX_READOUT_TASK
+        return {rxGood, rxBad, rxReadoutFrames, rxReadoutDropped + rxReadoutBadLength, rxReadoutRetried, rxReadoutRecovered};
+#else
+        return {rxGood, rxBad, 0, 0, 0, 0};
+#endif
+    }
+#endif
+
+#ifdef MESHTASTIC_RX_FAIL_PROBE
+    /** Bench: the chip's packet type, mode and IRQ flags, for a readout that just failed. False if unavailable. */
+    virtual bool readRxFailState(uint8_t & /*pktType*/, uint8_t & /*mode*/, uint32_t & /*irq*/, int16_t & /*typeErr*/)
+    {
+        return false;
+    }
+#endif
+
 #if MESHTASTIC_RADIO_CHIP_STATS
     /** The chip's own receive counters since its last reset. False where the chip or RadioLib keeps none. */
     virtual bool readChipRxStats(uint16_t & /*received*/, uint16_t & /*crcError*/, uint16_t & /*headerError*/,
@@ -460,6 +485,24 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
         uint8_t rxCR;         // the LoRa header's raw coding rate, read with the frame
         bool hasCRC;          // the LoRa header's CRC flag, likewise
         bool headerInfoValid; // false where the chip would not report them
+#if MESHTASTIC_BENCH_INSTRUMENTATION
+        uint32_t readMs;        // Bench: Time::getMillis() when the readout ended
+        uint32_t spiUs;         // and the time of its RadioLib calls
+        bool retried;           // the first readData() failed with WRONG_MODEM, so the frame was read again
+        int16_t firstState;     // that first readData()'s result
+        uint16_t firstLen;      // and the length read before it
+        int16_t immediateState; // the read straight after the failure; state is the final one, after a tick if needed
+        uint16_t immediateLen;
+#endif
+#ifdef MESHTASTIC_RX_FAIL_PROBE
+        // Bench: the chip's own state at a failed readout, read in the task right after readData(). For -20 WRONG_MODEM
+        // it tells a chip that reports another modem from a GetPacketType that returned success without writing a reply.
+        uint8_t failPktType;
+        uint8_t failMode;
+        uint32_t failIrq;
+        int16_t failTypeErr;
+        bool failValid;
+#endif
     };
 
 #ifdef MESHTASTIC_TX_TIMELINE
@@ -820,6 +863,9 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     CapturedFrame rxRing[rxRingSize] = {};
     volatile uint8_t rxRingHead = 0, rxRingTail = 0;
     volatile uint32_t rxReadoutFrames = 0, rxReadoutDropped = 0, rxReadoutBadLength = 0;
+#ifdef MESHTASTIC_BENCH_RX_COUNTERS
+    volatile uint32_t rxReadoutRetried = 0, rxReadoutRecovered = 0;
+#endif
     /** Set by requestRearmFromIsr(), taken by the task */
     volatile bool rxRearmFromTaskPending = false;
 
