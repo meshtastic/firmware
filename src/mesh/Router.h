@@ -279,8 +279,11 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     void abortSendAndNak(meshtastic_Routing_Error err, meshtastic_MeshPacket *p);
 
   public:
-    /// How far ahead of a slotted TX's due time the router starts holding received-packet handling for it
-    static constexpr int32_t RX_HOLD_FOR_TX_MS = 30;
+    /// How far ahead of a slotted TX's due time the router starts holding received-packet handling for it; 0 never holds
+#ifndef MESHTASTIC_RX_DEFER_FOR_TX_MS
+#define MESHTASTIC_RX_DEFER_FOR_TX_MS 30
+#endif
+    static constexpr int32_t RX_HOLD_FOR_TX_MS = MESHTASTIC_RX_DEFER_FOR_TX_MS;
 
     /** How long to hold the next reception for a TX due at txDueMs (0 when none is), or 0 to handle it now.
      *  Handling one (decrypt, modules, the phone) holds the loop ~20 ms on nRF52, so a TX due in that time
