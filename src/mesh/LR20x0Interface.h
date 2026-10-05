@@ -38,9 +38,15 @@
 #if defined(LR2021_PRESTAGE_UPSTREAM) && !defined(LR2021_TX_PRESTAGE)
 #error "LR2021_PRESTAGE_UPSTREAM changes how LR2021_TX_PRESTAGE stages: build with -DLR2021_TX_PRESTAGE"
 #endif
+// -DLR2021_CAD_EXIT_LBT scans with CAD exit mode LBT: a clear CAD keys up from the prestaged payload, and a busy one leaves the
+// chip in standby for rearmReceive() to restart RX, with no CAD>RX handoff. The chip keys up without the MCU, so the RF
+// switch must be the chip's DIOs or none.
+#if defined(LR2021_CAD_EXIT_LBT) && (!defined(LR2021_TX_PRESTAGE) || !RADIOLIB_GODMODE)
+#error "LR2021_CAD_EXIT_LBT sends the prestaged payload: build with -DLR2021_TX_PRESTAGE -DRADIOLIB_GODMODE=1"
+#endif
 // -DLR2021_RESUME_CONTINUOUS_RX keeps a continuous RX running after a frame instead of restarting it, checking the chip is
-// still in RX first
-#if defined(LR2021_RESUME_CONTINUOUS_RX)
+// still in RX first. It and LR2021_CAD_EXIT_LBT read the chip's mode.
+#if defined(LR2021_CAD_EXIT_LBT) || defined(LR2021_RESUME_CONTINUOUS_RX)
 #define LR2021_READ_CHIP_MODE 1
 #endif
 
@@ -185,6 +191,10 @@ template <class T> class LR20x0Interface : public RadioLibInterface
     static constexpr uint8_t LR20X0_CHIP_MODE_FS = 3;
     static constexpr uint8_t LR20X0_CHIP_MODE_RX = 4;
     static constexpr uint8_t LR20X0_CHIP_MODE_TX = 5;
+#endif
+#ifdef LR2021_CAD_EXIT_LBT
+    /** A clear CAD under exit mode LBT put the chip in TX with the prestaged payload: launchTransmit() sends nothing */
+    bool chipKeyedUp = false;
 #endif
 #ifdef LR2021_RESUME_CONTINUOUS_RX
     /** RX was armed continuous and nothing has put the chip into standby since */
