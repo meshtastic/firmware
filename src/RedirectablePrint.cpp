@@ -17,9 +17,59 @@
 #include "platform/portduino/PortduinoGlue.h"
 #endif
 
+#ifdef MESHTASTIC_RADIO_TASK
+#include "concurrency/RadioTask.h"
+#endif
+
 #if HAS_NETWORKING
 extern meshtastic::Syslog syslog;
 #endif
+#if defined(MESHTASTIC_RADIO_TASK) && !defined(MESHTASTIC_RADIO_TASK_LOG_DIRECT)
+namespace
+{
+// The radio task's lines, formatted where they were logged and printed by the loop. One writer (the radio task) and one
+// reader (the loop), so the indexes need no lock.
+struct RadioTaskLog {
+    const char *level;
+    const concurrency::OSThread *thread;
+    char text[240];
+};
+#ifndef MESHTASTIC_RADIO_TASK_LOG_LINES
+#ifdef ARCH_ESP32
+#define MESHTASTIC_RADIO_TASK_LOG_LINES 64 // HWCDC prints a line in 4-6 ms, so bursts back up further
+#else
+#define MESHTASTIC_RADIO_TASK_LOG_LINES 16
+#endif
+#endif
+static_assert(MESHTASTIC_RADIO_TASK_LOG_LINES <= 255, "the queue's indexes are uint8_t");
+constexpr uint8_t radioTaskLogCount = MESHTASTIC_RADIO_TASK_LOG_LINES;
+RadioTaskLog radioTaskLogs[radioTaskLogCount];
+volatile uint8_t radioTaskLogHead, radioTaskLogTail;
+volatile uint32_t radioTaskLogsDropped;
+} // namespace
+
+void RedirectablePrint::drainRadioTaskLogs()
+{
+    static uint32_t droppedReported;
+    const uint32_t dropped = radioTaskLogsDropped;
+    if (dropped != droppedReported) {
+        log(MESHTASTIC_LOG_LEVEL_WARN, "Radio task log full, %u lines dropped", (unsigned)(dropped - droppedReported));
+        droppedReported = dropped;
+    }
+    while (radioTaskLogTail != radioTaskLogHead) {
+        __asm__ __volatile__("" ::: "memory"); // read the entry only after seeing the head that published it
+        const RadioTaskLog &line = radioTaskLogs[radioTaskLogTail];
+        concurrency::setLoggingFor(line.thread);
+        log(line.level, "%s", line.text);
+        concurrency::clearLoggingFor();
+        __asm__ __volatile__("" ::: "memory"); // and free its slot only after printing it
+        radioTaskLogTail = (uint8_t)((radioTaskLogTail + 1) % radioTaskLogCount);
+    }
+}
+#elif defined(MESHTASTIC_RADIO_TASK)
+void RedirectablePrint::drainRadioTaskLogs() {}
+#endif
+
 void RedirectablePrint::rpInit()
 {
 #ifdef HAS_FREE_RTOS
@@ -175,7 +225,7 @@ void RedirectablePrint::log_to_serial(const char *logLevel, const char *format, 
         printf("| ??:??:?? %u ", millis() / 1000);
 #endif
     }
-    auto thread = concurrency::OSThread::currentThread;
+    auto thread = concurrency::OSThread::current();
     // the tag is printed by vprintf, which knows whether the formatted
     // message already carries one of its own
 
@@ -216,7 +266,7 @@ void RedirectablePrint::log_to_syslog(const char *logLevel, const char *format, 
         default:
             ll = 0;
         }
-        auto thread = concurrency::OSThread::currentThread;
+        auto thread = concurrency::OSThread::current();
         if (thread) {
             syslog.vlogf(ll, thread->ThreadName.c_str(), format, arg);
         } else {
@@ -239,7 +289,7 @@ void RedirectablePrint::log_to_ble(const char *logLevel, const char *format, va_
         isBleConnected = linuxBluetooth != nullptr && linuxBluetooth->isEnabled() && linuxBluetooth->isConnected();
 #endif
         if (isBleConnected) {
-            auto thread = concurrency::OSThread::currentThread;
+            auto thread = concurrency::OSThread::current();
             meshtastic_LogRecord logRecord = meshtastic_LogRecord_init_zero;
             logRecord.level = getLogLevel(logLevel);
             vsnprintf(logRecord.message, sizeof(logRecord.message), format, arg);
@@ -326,6 +376,35 @@ void RedirectablePrint::log(const char *logLevel, const char *format, ...)
     if (moduleConfig.serial.override_console_serial_port && strcmp(logLevel, MESHTASTIC_LOG_LEVEL_DEBUG) == 0) {
         return;
     }
+#if defined(MESHTASTIC_RADIO_TASK) && !defined(MESHTASTIC_RADIO_TASK_LOG_DIRECT)
+    // The radio task never writes the console itself (-DMESHTASTIC_RADIO_TASK_LOG_DIRECT: it does). A second task writing
+    // USB CDC can wedge the console, and the write would cost the radio its timing. The loop prints the line.
+    if (concurrency::inRadioTask()) {
+        const uint8_t next = (uint8_t)((radioTaskLogHead + 1) % radioTaskLogCount);
+        if (next == radioTaskLogTail) {
+            radioTaskLogsDropped = radioTaskLogsDropped + 1;
+            return;
+        }
+        RadioTaskLog &line = radioTaskLogs[radioTaskLogHead];
+        line.level = logLevel;
+        line.thread = concurrency::OSThread::current();
+        va_list arg;
+        va_start(arg, format);
+        vsnprintf(line.text, sizeof(line.text), format, arg);
+        va_end(arg);
+        __asm__ __volatile__("" ::: "memory"); // publish the entry before the head that points past it
+        radioTaskLogHead = next;
+        concurrency::mainDelay.interrupt(); // the loop prints it on its next pass
+        return;
+    }
+#endif
+
+    // append \n to format
+    size_t len = strlen(format);
+    auto newFormat = std::unique_ptr<char[]>(new char[len + 2]);
+    strcpy(newFormat.get(), format);
+    newFormat[len] = '\n';
+    newFormat[len + 1] = '\0';
 
     // Append \n here rather than in every call site; past the early returns, so a filtered line allocates nothing
     size_t len = strlen(format);

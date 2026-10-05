@@ -16,8 +16,17 @@ class NotifiedWorkerThread : public OSThread
      */
     std::atomic<uint32_t> notification{0};
 
+    /// What a notification interrupts so the thread's controller runs it: mainDelay, unless a task runs the controller
+    InterruptableDelay *wakeDelay = &mainDelay;
+
   public:
     NotifiedWorkerThread(const char *name) : OSThread(name) {}
+
+    /// For a thread run by a controller other than mainController, from a task waiting on wake
+    NotifiedWorkerThread(const char *name, ThreadController *controller, InterruptableDelay *wake)
+        : OSThread(name, 0, controller), wakeDelay(wake)
+    {
+    }
 
     /**
      * Notify this thread so it can run
