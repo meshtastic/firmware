@@ -14,15 +14,14 @@ on:
       - master
       - develop
 
+  # Docs-only pushes (see the `setup` job) skip every build and upload identical MemBrowse
+  # reports instead, so the MemBrowse commit chain has no hole where CI used to not run.
   push:
     branches:
       - master
       - develop
       - event/*
       - feature/*
-    paths-ignore:
-      - "**.md"
-      - version.properties
 
   # No paths-ignore here: ci-gate is the required status check, and a PR that
   # never runs this workflow never reports it, so a docs-only PR cannot merge.
@@ -58,6 +57,21 @@ jobs:
         with:
           # Needed to diff against the base branch for newly added variants.
           fetch-depth: 0
+      # The one definition of "docs-only": a push whose files are all Markdown or
+      # version.properties. Only pushes qualify; PRs and merge groups always build.
+      - name: Detect docs-only push
+        id: docs
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          docs_only=false
+          if [[ "$GITHUB_EVENT_NAME" == "push" && "$BEFORE" =~ [^0] ]]; then
+            files=$(git diff --name-only "$BEFORE" "$GITHUB_SHA")
+            if [[ -n "$files" ]] && ! grep -qvE '\.md$|^version\.properties$' <<<"$files"; then
+              docs_only=true
+            fi
+          fi
+          echo "docs_only=$docs_only" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-python@v7
         with:
           python-version: 3.x
@@ -103,8 +117,11 @@ jobs:
           echo "$TARGETS" >> $GITHUB_STEP_SUMMARY
     outputs:
       all: ${{ steps.jsonStep.outputs.all }}
+      docs_only: ${{ steps.docs.outputs.docs_only }}
 
   version:
+    needs: setup
+    if: ${{ needs.setup.outputs.docs_only != 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -143,6 +160,7 @@ jobs:
 
   build:
     needs: [setup, version]
+    if: ${{ needs.setup.outputs.docs_only != 'true' }}
     strategy:
       fail-fast: false
       matrix:
@@ -156,7 +174,8 @@ jobs:
       MEMBROWSE_API_KEY: ${{ secrets.MEMBROWSE_API_KEY }}
 
   build-debian-src:
-    if: github.repository_owner == 'meshtastic' && github.event_name != 'schedule' && github.event.inputs.nightly != 'true'
+    needs: setup
+    if: github.repository_owner == 'meshtastic' && github.event_name != 'schedule' && github.event.inputs.nightly != 'true' && needs.setup.outputs.docs_only != 'true'
     uses: ./.github/workflows/build_debian_src.yml
     with:
       series: UNRELEASED
@@ -164,7 +183,8 @@ jobs:
     secrets: inherit
 
   MacOS:
-    if: github.event_name != 'schedule' && github.event.inputs.nightly != 'true' && !contains(github.ref_name, 'event/')
+    needs: setup
+    if: github.event_name != 'schedule' && github.event.inputs.nightly != 'true' && !contains(github.ref_name, 'event/') && needs.setup.outputs.docs_only != 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -178,7 +198,8 @@ jobs:
     # secrets: inherit
 
   Windows:
-    if: github.event_name != 'schedule' && github.event.inputs.nightly != 'true' && !contains(github.ref_name, 'event/')
+    needs: setup
+    if: github.event_name != 'schedule' && github.event.inputs.nightly != 'true' && !contains(github.ref_name, 'event/') && needs.setup.outputs.docs_only != 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -197,7 +218,8 @@ jobs:
     secrets: inherit
 
   test-native:
-    if: github.repository_owner == 'meshtastic' && github.event_name != 'schedule' && github.event.inputs.nightly != 'true' && !contains(github.ref_name, 'event/')
+    needs: setup
+    if: github.repository_owner == 'meshtastic' && github.event_name != 'schedule' && github.event.inputs.nightly != 'true' && !contains(github.ref_name, 'event/') && needs.setup.outputs.docs_only != 'true'
     permissions: # Needed for dorny/test-reporter.
       contents: read
       actions: read
@@ -205,7 +227,8 @@ jobs:
     uses: ./.github/workflows/test_native.yml
 
   build-wasm:
-    if: github.event_name != 'schedule' && github.event.inputs.nightly != 'true' && !contains(github.ref_name, 'event/')
+    needs: setup
+    if: github.event_name != 'schedule' && github.event.inputs.nightly != 'true' && !contains(github.ref_name, 'event/') && needs.setup.outputs.docs_only != 'true'
     # Build the WebAssembly portduino node ([env:native-wasm]) as part of normal CI,
     # like the other platforms. It's a dedicated job (not a row in the `build`
     # matrix) because its artifact is meshnode.{mjs,wasm} - not a flashable
@@ -214,7 +237,8 @@ jobs:
     uses: ./.github/workflows/build_portduino_wasm.yml
 
   docker:
-    if: github.event_name != 'schedule' && github.event.inputs.nightly != 'true' && !contains(github.ref_name, 'event/')
+    needs: setup
+    if: github.event_name != 'schedule' && github.event.inputs.nightly != 'true' && !contains(github.ref_name, 'event/') && needs.setup.outputs.docs_only != 'true'
     permissions: # Needed for pushing to GHCR.
       contents: read
       packages: write
@@ -231,6 +255,21 @@ jobs:
       runs-on: ${{ contains(matrix.platform, 'arm') && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
       pio_env: ${{ matrix.pio_env }}
       push: false
+
+  # Docs-only push: no build ran, so tell MemBrowse these commits left every target unchanged.
+  membrowse-identical:
+    needs: setup
+    if: github.repository == 'meshtastic/firmware' && needs.setup.outputs.docs_only == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        build: ${{ fromJson(needs.setup.outputs.all) }}
+    uses: ./.github/workflows/membrowse_report.yml
+    with:
+      pio_env: ${{ matrix.build.board }}
+      identical: true
+    secrets:
+      MEMBROWSE_API_KEY: ${{ secrets.MEMBROWSE_API_KEY }}
 
   # Single, stable status check for branch protection.
   # Always runs and passes only if every build and check that ran succeeded.

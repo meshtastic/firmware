@@ -4,14 +4,21 @@ on:
   workflow_call:
     inputs:
       version:
-        required: true
+        required: false
         type: string
+        default: ""
       platform:
-        required: true
+        required: false
         type: string
+        default: ""
       pio_env:
         required: true
         type: string
+      # Metadata-only upload for commits CI skips (docs-only pushes): no artifact, no ELF.
+      identical:
+        required: false
+        type: boolean
+        default: false
     secrets:
       # Absent on fork PRs; membrowse-action then uploads tokenless.
       MEMBROWSE_API_KEY:
@@ -36,6 +43,7 @@ jobs:
 
       # Analyze the ELF, linker scripts and map from build_firmware.yml instead of rebuilding.
       - name: Download firmware artifact
+        if: ${{ !inputs.identical }}
         uses: actions/download-artifact@v8
         with:
           name: firmware-${{ inputs.platform }}-${{ inputs.pio_env }}-${{ inputs.version }}
@@ -43,6 +51,7 @@ jobs:
 
       - name: Locate ELF, linker scripts and map
         id: files
+        if: ${{ !inputs.identical }}
         run: |
           shopt -s nullglob
           elf=(membrowse/firmware-*.elf)
@@ -68,6 +77,7 @@ jobs:
         uses: membrowse/membrowse-action@v1
         with:
           target_name: ${{ inputs.pio_env }}
+          identical: ${{ inputs.identical }}
           elf: ${{ steps.files.outputs.elf }}
           ld: ${{ steps.files.outputs.ld }}
           map_file: ${{ steps.files.outputs.map }}
