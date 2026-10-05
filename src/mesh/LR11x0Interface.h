@@ -67,6 +67,32 @@ template <class T> class LR11x0Interface : public RadioLibInterface
 
     bool isIRQPending() override { return lora.getIrqFlags() != 0; }
 
+#if RADIOLIB_GODMODE && defined(MESHTASTIC_RX_FAIL_PROBE)
+    /// Bench: the chip's state right after a failed readout. pktType starts at 0xEE, which neither chip uses, so a
+    /// GetPacketType that returns success without writing a reply is visible as 0xEE -- distinct from the chip
+    /// genuinely reporting NONE (0x00 here), and from it reporting a real modem.
+    bool readRxFailState(uint8_t &pktType, uint8_t &mode, uint32_t &irq, int16_t &typeErr) override
+    {
+        pktType = 0xEE;
+        typeErr = lora.getPacketType(&pktType);
+#ifdef LR11X0_READ_CHIP_MODE
+        mode = this->readChipMode();
+#else
+        mode = 0xEE; // not compiled in on this board
+#endif
+        irq = lora.getIrqFlags();
+        return true; // always report: a failed GetPacketType is the case of interest, not a reason to stay silent
+    }
+#endif
+
+#if MESHTASTIC_RADIO_CHIP_STATS && RADIOLIB_GODMODE
+    /// GetStats, protected in RadioLib. In LoRa the last two are header errors and false syncs (LR1110 user manual).
+    bool readChipRxStats(uint16_t &received, uint16_t &crcError, uint16_t &headerError, uint16_t &falseSync) override
+    {
+        return lora.getStats(&received, &crcError, &headerError, &falseSync) == RADIOLIB_ERR_NONE;
+    }
+#endif
+
 #ifdef LR11X0_AGC_RESET
     bool resetAGC() override;
 #endif
@@ -196,6 +222,10 @@ template <class T> class LR11x0Interface : public RadioLibInterface
     enum RearmState : uint8_t { REARM_NONE, REARM_PENDING, REARM_ARMED, REARM_FAILED };
     volatile uint8_t rearmState = REARM_NONE;
     volatile int16_t rearmErr = 0;
+#ifdef MESHTASTIC_LOG_RADIO_EDGES
+    /** Bench: how long the task's re-arm took, and the FreeRTOS tick count when it finished */
+    volatile uint32_t rearmUs = 0, rearmTicks = 0;
+#endif
 #endif
 
     /// The TCXO Vref that init() settled on, so reinitChip() can begin() with the same oscillator setup

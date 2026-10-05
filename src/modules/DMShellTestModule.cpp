@@ -3,6 +3,20 @@
 #ifdef DMSHELL_TEST_PEER
 
 #include "MeshService.h"
+#if MESHTASTIC_RADIO_CHIP_STATS || defined(MESHTASTIC_BENCH_RX_COUNTERS)
+#include "RadioLibInterface.h"
+#endif
+#if MESHTASTIC_RADIO_CHIP_STATS
+#include "concurrency/RadioTask.h"
+#endif
+#ifdef MESHTASTIC_BENCH_RX_COUNTERS
+// Whether the readout task reads a WRONG_MODEM frame again, on the retry line
+#if MESHTASTIC_RX_RETRY_WRONG_MODEM
+#define MESHTASTIC_RX_RETRY_MARK "on"
+#else
+#define MESHTASTIC_RX_RETRY_MARK "off"
+#endif
+#endif
 #include "Throttle.h"
 #include "configuration.h"
 #include "mesh/mesh-pb-constants.h"
@@ -196,6 +210,12 @@ void DMShellTestModule::startSession(uint32_t now)
     closeSent = false;
     endReason = nullptr;
 
+#ifdef MESHTASTIC_BENCH_RX_COUNTERS
+    radioAtStart = readRadio();
+#endif
+#if MESHTASTIC_RADIO_CHIP_STATS
+    chipAtStart = readChip();
+#endif
     sessionStartMs = now;
     phase = Phase::Opening;
     LOG_INFO("DMShellTest t=%u session %u of %u: OPEN session=0x%08x to 0x%08x", (unsigned)now, (unsigned)sessionsDone + 1,
@@ -704,6 +724,73 @@ void DMShellTestModule::logStats(uint32_t now)
              (unsigned)stats.replayUnavailable, (unsigned)stats.replayEvicted, (unsigned)stats.openRetries);
     LOG_INFO("DMShellTest stats session=0x%08x recovery input_window_closed=%u input_dropped=%u", id,
              (unsigned)stats.inputWindowClosed, (unsigned)stats.pendingInputDropped);
+#ifdef MESHTASTIC_BENCH_RX_COUNTERS
+    logRadioStats();
+#endif
+#if MESHTASTIC_RADIO_CHIP_STATS
+    logChipStats();
+#endif
 }
+
+#ifdef MESHTASTIC_BENCH_RX_COUNTERS
+DMShellTestModule::RadioSnapshot DMShellTestModule::readRadio()
+{
+    RadioSnapshot r = {};
+    RadioLibInterface *radio = RadioLibInterface::instance;
+    if (!radio)
+        return r;
+    const RadioLibInterface::RxCounters c = radio->rxCounters();
+    r.good = c.good;
+    r.bad = c.bad;
+    r.readOut = c.readOut;
+    r.readOutLost = c.readOutLost;
+    r.retried = c.retried;
+    r.recovered = c.recovered;
+    return r;
+}
+
+void DMShellTestModule::logRadioStats()
+{
+    const RadioSnapshot end = readRadio();
+    const RadioSnapshot &start = radioAtStart;
+    const unsigned id = (unsigned)sessionId;
+    LOG_INFO("DMShellTest stats session=0x%08x radio rx_good=%u rx_bad=%u readout=%u readout_lost=%u", id,
+             (unsigned)(end.good - start.good), (unsigned)(end.bad - start.bad), (unsigned)(end.readOut - start.readOut),
+             (unsigned)(end.readOutLost - start.readOutLost));
+    LOG_INFO("DMShellTest stats session=0x%08x radio retry_-20=" MESHTASTIC_RX_RETRY_MARK " retried=%u recovered=%u", id,
+             (unsigned)(end.retried - start.retried), (unsigned)(end.recovered - start.recovered));
+}
+#endif
+
+#if MESHTASTIC_RADIO_CHIP_STATS
+DMShellTestModule::ChipSnapshot DMShellTestModule::readChip()
+{
+    ChipSnapshot r = {};
+    RadioLibInterface *radio = RadioLibInterface::instance;
+    if (!radio)
+        return r;
+    RADIO_TASK_LOCK(); // the chip read below
+    r.chipValid = radio->readChipRxStats(r.chipReceived, r.chipCrcError, r.chipHeaderError, r.chipFalseSync);
+    return r;
+}
+
+void DMShellTestModule::logChipStats()
+{
+    // A chip count above the firmware's is a frame the chip decoded that the firmware never handled; the chip's 16-bit
+    // counters only wrap or reset with a chip re-init.
+    const ChipSnapshot end = readChip();
+    const ChipSnapshot &start = chipAtStart;
+    const unsigned id = (unsigned)sessionId;
+    if (!start.chipValid || !end.chipValid) {
+        LOG_INFO("DMShellTest stats session=0x%08x chip none", id);
+        return;
+    }
+    LOG_INFO("DMShellTest stats session=0x%08x chip rx_done=%u crc_err=%u header_err=%u false_sync=%u", id,
+             (unsigned)(uint16_t)(end.chipReceived - start.chipReceived),
+             (unsigned)(uint16_t)(end.chipCrcError - start.chipCrcError),
+             (unsigned)(uint16_t)(end.chipHeaderError - start.chipHeaderError),
+             (unsigned)(uint16_t)(end.chipFalseSync - start.chipFalseSync));
+}
+#endif
 
 #endif

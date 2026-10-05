@@ -766,5 +766,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #endif // MESHTASTIC_LOCKDOWN
 
+#include "BenchInstrumentation.h"
 #include "DebugConfiguration.h"
 #include "RF95Configuration.h"

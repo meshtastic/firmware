@@ -1,8 +1,10 @@
 #include "configuration.h"
 
 #if (defined(USE_LR2021) || defined(ARCH_PORTDUINO)) && RADIOLIB_EXCLUDE_LR2021 != 1
+#include "BenchClock.h"
 #include "LR20x0Band.h"
 #include "LR20x0Interface.h"
+#include "UptimeClock.h"
 #include "error.h"
 #include "mesh/NodeDB.h"
 
@@ -739,6 +741,13 @@ template <typename T> bool LR20x0Interface<T>::resumeRunningReceive()
         return false;
     }
     // No flag clearing, as in SX126xInterface::resumeRunningReceive(): a latched RX_DONE here is a next frame
+#ifdef MESHTASTIC_LOG_RADIO_EDGES
+    if (deafSinceMs) {
+        LOG_RADIO_EDGE("RX still running, re-arm skipped after %s, readout %u ms", deafFor,
+                       (unsigned)(Time::getMillis() - deafSinceMs));
+        deafSinceMs = 0; // the chip never stopped listening, so there is no deaf window to report
+    }
+#endif
     RadioLibInterface::startReceive();
     enableInterrupt(isrRxLevel0);
     checkRxDoneIrqFlag(); // an RX_DONE that beat the re-arm
@@ -766,10 +775,19 @@ template <typename T> void LR20x0Interface<T>::rearmReceiveFromTask()
         return;
 #endif
     // What startReceive() sends, less the standby: after TX_DONE the chip has already fallen back to standby.
+    TX_TIMELINE_MARK(tlRearmStart);
+#ifdef MESHTASTIC_LOG_RADIO_EDGES
+    const uint32_t t0 = benchClock();
+#endif
     int16_t err = lora.setPreambleLength(preambleLength);
     if (err == RADIOLIB_ERR_NONE)
         err =
             lora.startReceive(RADIOLIB_LR2021_RX_TIMEOUT_INF, MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS, RADIOLIB_IRQ_RX_DEFAULT_MASK, 0);
+#ifdef MESHTASTIC_LOG_RADIO_EDGES
+    rearmUs = benchClockToUs(benchClock() - t0);
+    rearmTicks = xTaskGetTickCount();
+#endif
+    TX_TIMELINE_MARK(tlRearmEnd);
     rearmErr = err;
     if (err != RADIOLIB_ERR_NONE) {
         rearmState = REARM_FAILED;
@@ -798,6 +816,12 @@ template <typename T> bool LR20x0Interface<T>::adoptReceiveArmedFromIsr()
         LOG_WARN("LR20x0 RX re-arm at TX_DONE failed %s%d, restarting RX", radioLibErr, rearmErr);
     if (state != REARM_ARMED)
         return false;
+#ifdef MESHTASTIC_LOG_RADIO_EDGES
+    const uint32_t heldMs = (uint32_t)(((uint64_t)(xTaskGetTickCount() - rearmTicks) * 1000) / configTICK_RATE_HZ);
+    LOG_RADIO_EDGE("Radio back in RX at TX_DONE, re-arm %u us, %u ms before the handler ran", (unsigned)rearmUs,
+                   (unsigned)heldMs);
+    deafSinceMs = 0; // listening since the task re-armed: no deaf window to report
+#endif
     RadioLibInterface::startReceive();
 #ifdef LR2021_RESUME_CONTINUOUS_RX
     rxArmedContinuous = true; // the task armed a continuous RX

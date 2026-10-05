@@ -57,6 +57,36 @@ template <class T> class SX126xInterface : public RadioLibInterface
 
     void setTCXOVoltage(float voltage) { tcxoVoltage = voltage; }
 
+#if MESHTASTIC_RADIO_CHIP_STATS
+    /// GetStats (0x10). RadioLib wraps this for the LR11x0 but not the SX126x, so the command goes out raw.
+    /// NbPktReceived counts what the modem decoded, so comparing it with the firmware's rx_good tells "the chip never
+    /// heard the frame" from "the chip heard it and the firmware never got it". The SX126x keeps no false-sync counter,
+    /// so the LR11x0's fourth field reads 0. The raw bytes are logged with both candidate parses of the first counter.
+    bool readChipRxStats(uint16_t &received, uint16_t &crcError, uint16_t &headerError, uint16_t &falseSync) override
+    {
+        uint8_t buf[8] = {0};
+        if (module.SPIreadStream(RADIOLIB_SX126X_CMD_GET_STATS, buf, sizeof(buf)) != RADIOLIB_ERR_NONE)
+            return false;
+        LOG_DEBUG("chip stats raw %02x %02x %02x %02x %02x %02x %02x %02x | be@0 %u le@1 %u", buf[0], buf[1], buf[2], buf[3],
+                  buf[4], buf[5], buf[6], buf[7], (unsigned)((buf[0] << 8) | buf[1]), (unsigned)(buf[1] | (buf[2] << 8)));
+        received = (uint16_t)(((uint16_t)buf[0] << 8) | buf[1]);
+        crcError = (uint16_t)(((uint16_t)buf[2] << 8) | buf[3]);
+        headerError = (uint16_t)(((uint16_t)buf[4] << 8) | buf[5]);
+        falseSync = 0;
+        return true;
+    }
+#endif
+
+#ifdef SX126X_STATE_SAMPLER_MS
+    /// Bench: read the chip's mode and IRQ flags, changing neither, and log them when they differ from the last look
+    void sampleChipState();
+#ifdef SX126X_STATE_SAMPLER_TASK
+    /// Bench: the same look from a FreeRTOS task above the main loop, queueing changes for sampleChipState() to log
+    void sampleChipStateFromTask();
+    static void chipStateTaskMain(void *arg);
+#endif
+#endif
+
   protected:
     float currentLimit = 140; // Higher OCP limit for SX126x PA
     float tcxoVoltage = 0.0;
@@ -197,6 +227,10 @@ template <class T> class SX126xInterface : public RadioLibInterface
     enum RearmState : uint8_t { REARM_NONE, REARM_PENDING, REARM_ARMED, REARM_FAILED };
     volatile uint8_t rearmState = REARM_NONE;
     volatile int16_t rearmErr = 0;
+#ifdef MESHTASTIC_LOG_RADIO_EDGES
+    /** Bench: how long the task's re-arm took, and the FreeRTOS tick count when it finished */
+    volatile uint32_t rearmUs = 0, rearmTicks = 0;
+#endif
 #endif
 
     /** Recover a chip that lost its runtime state: hardware-reset via begin() and reprogram */
@@ -224,6 +258,33 @@ template <class T> class SX126xInterface : public RadioLibInterface
     volatile uint8_t rearmOutcome = REARM_NONE;
     /** FreeRTOS tick count when the ISR re-armed RX */
     volatile uint32_t rearmTicks = 0;
+#endif
+#ifdef SX126X_STATE_SAMPLER_MS
+#if !SX126X_REARM_IN_ISR
+    /** The chip select, kept for the sampler's raw command */
+    RADIOLIB_PIN_TYPE rawCs = RADIOLIB_NC;
+#endif
+    /** Bench: what the last sample saw, so only changes are logged; 0xFF/0xFFFF until the first look */
+    uint8_t sampledMode = 0xFF;
+    uint16_t sampledIrq = 0xFFFF;
+    uint32_t lastSampleMs = 0;
+    /** One GetIrqStatus; mode 0xB if the chip was BUSY. False only from the task, when the SPI lock was held */
+    bool readChipState(bool fromTask, uint8_t &mode, uint16_t &irq, uint8_t &status);
+#endif
+#ifdef SX126X_STATE_SAMPLER_TASK
+    /** The HAL without its lock, for the task: it takes the SPI lock itself, and never waits for it */
+    ArduinoHal *samplerHal = nullptr;
+    /** Changes seen by the task, stamped when seen; single producer (the task), single consumer (the main loop) */
+    struct ChipStateEvent {
+        uint32_t ms;
+        uint16_t irq;
+        uint8_t mode;
+        uint8_t status;
+    };
+    static constexpr uint8_t chipStateRingSize = 255; // holds 254: a 175 ms loop hold at a few changes a frame
+    ChipStateEvent chipStateRing[chipStateRingSize];
+    volatile uint8_t chipStateHead = 0, chipStateTail = 0;
+    volatile uint32_t chipStateDropped = 0, chipStateLockBusy = 0, chipStateTaskLate = 0;
 #endif
 };
 #endif

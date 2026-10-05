@@ -1,5 +1,6 @@
 #pragma once
 
+#include "BenchInstrumentation.h"
 #include "MeshPacketQueue.h"
 #include "RadioInterface.h"
 #include "UptimeClock.h"
@@ -98,6 +99,24 @@ class RxSighting
     uint32_t preambleSeenMsec = 0; // last look that found a fresh PREAMBLE_DETECTED, 0 once its hold ends
     uint32_t headerSeenMsec = 0;   // first look that found HEADER_VALID, 0 if none since reset
 };
+
+// Bench: -DMESHTASTIC_LOG_RADIO_EDGES logs where the radio stops and starts hearing at DEBUG instead of TRACE: a few lines
+// a second, against the full trace build's volume
+#ifdef MESHTASTIC_LOG_RADIO_EDGES
+#define LOG_RADIO_EDGE LOG_DEBUG
+#else
+#define LOG_RADIO_EDGE LOG_TRACE
+#endif
+
+// Bench: -DMESHTASTIC_TX_TIMELINE stamps each TX from its channel scan to RX being back, on benchClock(), and logs the
+// parts once the radio thread has handled the TX_DONE. The caller includes BenchClock.h.
+#ifdef MESHTASTIC_TX_TIMELINE
+#define TX_TIMELINE_MARK(field) ((field) = benchClock())
+#define TX_TIMELINE_SET(field, value) ((field) = (value))
+#else
+#define TX_TIMELINE_MARK(field) ((void)0)
+#define TX_TIMELINE_SET(field, value) ((void)0)
+#endif
 
 /**
  * We need to override the RadioLib ArduinoHal class to add mutex protection for SPI bus access
@@ -352,6 +371,40 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
     virtual ErrorCode send(meshtastic_MeshPacket *p) override;
 
+#ifdef MESHTASTIC_BENCH_RX_COUNTERS
+    /** Bench: this firmware's receive counts, for the test client's session stats */
+    struct RxCounters {
+        uint32_t good, bad;            // packets handleReceiveInterrupt() passed on, and rejected
+        uint32_t readOut, readOutLost; // frames the readout task took from the chip, and lost (ring full, bad length)
+        uint32_t retried, recovered;   // readouts read again after WRONG_MODEM, and those the second read recovered
+    };
+    RxCounters rxCounters() const
+    {
+#ifdef MESHTASTIC_RX_READOUT_TASK
+        return {rxGood, rxBad, rxReadoutFrames, rxReadoutDropped + rxReadoutBadLength, rxReadoutRetried, rxReadoutRecovered};
+#else
+        return {rxGood, rxBad, 0, 0, 0, 0};
+#endif
+    }
+#endif
+
+#ifdef MESHTASTIC_RX_FAIL_PROBE
+    /** Bench: the chip's packet type, mode and IRQ flags, for a readout that just failed. False if unavailable. */
+    virtual bool readRxFailState(uint8_t & /*pktType*/, uint8_t & /*mode*/, uint32_t & /*irq*/, int16_t & /*typeErr*/)
+    {
+        return false;
+    }
+#endif
+
+#if MESHTASTIC_RADIO_CHIP_STATS
+    /** The chip's own receive counters since its last reset. False where the chip or RadioLib keeps none. */
+    virtual bool readChipRxStats(uint16_t & /*received*/, uint16_t & /*crcError*/, uint16_t & /*headerError*/,
+                                 uint16_t & /*falseSync*/)
+    {
+        return false;
+    }
+#endif
+
     /**
      * Return true if we think the board can go to sleep (i.e. our tx queue is empty, we are not sending or receiving)
      *
@@ -472,7 +525,30 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
         int16_t state; // readData()'s result
         uint16_t len;
         uint32_t endMs; // when the frame left the air, from its RX_DONE interrupt
+#if MESHTASTIC_BENCH_INSTRUMENTATION
+        uint32_t readMs;        // Bench: Time::getMillis() when the readout ended
+        uint32_t spiUs;         // and the time of its RadioLib calls
+        bool retried;           // the first readData() failed with WRONG_MODEM, so the frame was read again
+        int16_t firstState;     // that first readData()'s result
+        uint16_t firstLen;      // and the length read before it
+        int16_t immediateState; // the read straight after the failure; state is the final one, after a tick if needed
+        uint16_t immediateLen;
+#endif
+#ifdef MESHTASTIC_RX_FAIL_PROBE
+        // Bench: the chip's own state at a failed readout, read in the task right after readData(). For -20 WRONG_MODEM
+        // it tells a chip that reports another modem from a GetPacketType that returned success without writing a reply.
+        uint8_t failPktType;
+        uint8_t failMode;
+        uint32_t failIrq;
+        int16_t failTypeErr;
+        bool failValid;
+#endif
     };
+
+#ifdef MESHTASTIC_TX_TIMELINE
+    /** Bench: before the scan, stamp it and what led up to it for the TX timeline */
+    void markTimelineScan();
+#endif
 
     /** Read out and deliver the frame behind RX_DONE; with captured, deliver one the readout task already took */
     void handleReceiveInterrupt(const CapturedRxInfo *captured = nullptr);
@@ -521,6 +597,45 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
   protected:
     RxSighting rxSighting;
+
+#ifdef MESHTASTIC_LOG_RADIO_EDGES
+    /// Bench: when the radio last began work that leaves it unable to receive, and what that work was, so the next
+    /// startReceive() can report how long it was deaf. 0 when nothing is pending.
+    uint32_t deafSinceMs = 0;
+    const char *deafFor = nullptr;
+    void noteDeafFrom(const char *what);
+#endif
+
+#ifdef MESHTASTIC_TX_TIMELINE
+    /** Bench: benchClock() stamps across one TX; the re-arm pair is written by whoever re-armed RX at TX_DONE */
+    uint32_t tlScan = 0, tlSend = 0, tlLaunched = 0;
+    volatile uint32_t tlTxDone = 0, tlRearmStart = 0, tlRearmEnd = 0;
+    /** millis() the backoff fell due, and how late the scan started after it */
+    uint32_t tlDueMs = 0;
+    int32_t tlLateMs = 0;
+    /** The packet sent had a slot parity, so it went out on the slot grid */
+    bool tlSlotted = false;
+#ifdef MESHTASTIC_TX_SLOT_GATE_MS
+    uint32_t tlGateWaitMs = 0, tlGateScanMs = 0;
+    bool tlGateNewerUnread = false;
+    /** Gated scans that waited; timers that fired before the early window and were set again; targets too far to be
+     *  real, scanned at once */
+    uint32_t slotGateWaits = 0, slotGateRearmed = 0, slotGateCapped = 0;
+    /** The frame end the last gate counted its slots from, when it was noted, and what it was */
+    uint32_t slotGateAnchorMs = 0, slotGateAnchorNotedMs = 0;
+    const char *slotGateAnchorWhat = "none";
+#endif
+#ifdef MESHTASTIC_RADIO_TASK
+    uint32_t tlLockWaitUs = 0;
+    const char *tlLockHolder = "none";
+#endif
+#ifdef MESHTASTIC_TX_SLOT_LEAD
+    int32_t tlWakeUs = -1;
+    uint32_t tlPathUs = 0;
+#endif
+    /** Log the last TX's timeline; adopted says RX was re-armed at TX_DONE rather than by this thread */
+    void logTxTimeline(bool adopted);
+#endif
 
     /** Whether a packet is waiting to transmit; txQueue itself stays private. */
     bool hasQueuedTx() { return !txQueue.empty(); }
@@ -764,6 +879,9 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     CapturedFrame rxRing[rxRingSize] = {};
     volatile uint8_t rxRingHead = 0, rxRingTail = 0;
     volatile uint32_t rxReadoutFrames = 0, rxReadoutDropped = 0, rxReadoutBadLength = 0;
+#ifdef MESHTASTIC_BENCH_RX_COUNTERS
+    volatile uint32_t rxReadoutRetried = 0, rxReadoutRecovered = 0;
+#endif
     /** Set by requestRearmFromIsr(), taken by the task */
     volatile bool rxRearmFromTaskPending = false;
 

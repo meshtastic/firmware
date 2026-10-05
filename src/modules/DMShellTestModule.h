@@ -8,6 +8,7 @@
 #include "DMShellRecovery.h"
 #include "SinglePortModule.h"
 #include "concurrency/OSThread.h"
+#include "configuration.h"
 #include "mesh/generated/meshtastic/mesh.pb.h"
 
 class DMShellTestModule : public SinglePortModule, private concurrency::OSThread
@@ -115,6 +116,28 @@ class DMShellTestModule : public SinglePortModule, private concurrency::OSThread
     void transmit(const meshtastic_RemoteShell &frame, uint32_t now);
     SentFrame *findSent(uint32_t seq);
     void logStats(uint32_t now);
+
+#ifdef MESHTASTIC_BENCH_RX_COUNTERS
+    /** Bench: the firmware's receive counts, read at the start and end of a session */
+    struct RadioSnapshot {
+        uint32_t good, bad, readOut, readOutLost, retried, recovered;
+    };
+    RadioSnapshot radioAtStart = {};
+    RadioSnapshot readRadio();
+    /** This session's firmware receive counts */
+    void logRadioStats();
+#endif
+#if MESHTASTIC_RADIO_CHIP_STATS
+    /** The radio chip's receive counters, read at the start and end of a session */
+    struct ChipSnapshot {
+        bool chipValid;
+        uint16_t chipReceived, chipCrcError, chipHeaderError, chipFalseSync;
+    };
+    ChipSnapshot chipAtStart = {};
+    ChipSnapshot readChip();
+    /** This session's chip counts */
+    void logChipStats();
+#endif
 };
 
 extern DMShellTestModule *dmShellTestModule;
