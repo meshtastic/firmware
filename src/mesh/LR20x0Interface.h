@@ -28,6 +28,16 @@
 #if defined(LR2021_STANDBY_XOSC) && !RADIOLIB_GODMODE
 #error "LR2021_STANDBY_XOSC calls RadioLib internals: build with -DRADIOLIB_GODMODE=1"
 #endif
+// -DLR2021_TX_PRESTAGE writes the TX payload into the chip's TX FIFO before the channel scan, so a clear verdict sends only
+// packet params, IRQ setup and SET_TX. It calls RadioLib's LR2021 commands directly, so it needs -DRADIOLIB_GODMODE=1.
+// -DLR2021_PRESTAGE_UPSTREAM stages through RadioLib's own prestageTransmit() (RadioLib #1883) instead, whose stageMode(TX)
+// skips the FIFO write for the payload it staged; that needs no GODMODE.
+#if defined(LR2021_TX_PRESTAGE) && !RADIOLIB_GODMODE && !defined(LR2021_PRESTAGE_UPSTREAM)
+#error "LR2021_TX_PRESTAGE calls RadioLib's LR2021 commands directly: build with -DRADIOLIB_GODMODE=1"
+#endif
+#if defined(LR2021_PRESTAGE_UPSTREAM) && !defined(LR2021_TX_PRESTAGE)
+#error "LR2021_PRESTAGE_UPSTREAM changes how LR2021_TX_PRESTAGE stages: build with -DLR2021_TX_PRESTAGE"
+#endif
 
 /**
  * \brief Adapter for LR20x0 radio family. Implements common logic for child classes.
@@ -172,6 +182,20 @@ template <class T> class LR20x0Interface : public RadioLibInterface
     int16_t scanChannelFromStandby(const ChannelScanConfig_t &cfg);
 #else
     static constexpr uint8_t STANDBY_MODE = RADIOLIB_LR2021_STANDBY_RC;
+#endif
+
+#ifdef LR2021_TX_PRESTAGE
+    /** With a payload staged before the scan, send only what follows it */
+    int16_t launchTransmit(size_t numbytes) override;
+    /** The payload isChannelActive() wrote into the chip's TX FIFO before the scan, or 0 bytes if none */
+    size_t prestagedLen = 0;
+    uint32_t prestagedId = 0;
+#ifndef LR2021_PRESTAGE_UPSTREAM
+    /** The TX FIFO may hold bytes no TX has sent. It appends, so they would go out ahead of the next payload */
+    bool txFifoStale = true;
+    /** Empty the TX FIFO if it may hold unsent bytes */
+    int16_t clearStaleTxFifo();
+#endif
 #endif
 
 #ifdef LR2021_LOAD_PRAM
