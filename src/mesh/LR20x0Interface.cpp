@@ -824,12 +824,40 @@ template <typename T> bool LR20x0Interface<T>::isChannelActive()
     // false is pnr_delta 0: the scan runs the full nb_symbols, which is what the slot time assumes.
     lora.fastCad = false;
 
+#ifdef LR2021_TX_PRESTAGE
+    prestagedLen = 0; // only a clear verdict from this scan may launch what it stages
+#endif
     int16_t result = trySetStandby();
     if (result == RADIOLIB_ERR_NONE) {
+#ifdef LR2021_TX_PRESTAGE
+        // Write the payload now, in the standby the scan needs anyway, not after the verdict. Only the FIFO: the packet
+        // params keep RX's maximum length, so a detection's RX still takes a full-length frame, into the RX FIFO.
+        if (scanForTx) {
+            const size_t numbytes = encodeRadioBuffer(scanForTx);
+#ifdef LR2021_PRESTAGE_UPSTREAM
+            // RadioLib empties the FIFO first and remembers the payload, so its stageMode(TX) skips writing it again
+            const bool staged = numbytes && lora.prestageTransmit((uint8_t *)&radioBuffer, numbytes) == RADIOLIB_ERR_NONE;
+#else
+            bool staged = false;
+            if (numbytes && clearStaleTxFifo() == RADIOLIB_ERR_NONE) {
+                txFifoStale = true; // until a TX sends it
+                staged = lora.writeRadioTxFifo((uint8_t *)&radioBuffer, numbytes) == RADIOLIB_ERR_NONE;
+            }
+#endif
+            if (staged) {
+                prestagedLen = numbytes;
+                prestagedId = scanForTx->id;
+            }
+        }
+#endif
 #ifdef LR2021_STANDBY_XOSC
         result = scanChannelFromStandby(cfg);
 #else
         result = lora.scanChannel(cfg);
+#endif
+#ifdef LR2021_TX_PRESTAGE
+        if (result != RADIOLIB_CHANNEL_FREE)
+            prestagedLen = 0; // no TX follows this scan
 #endif
         if (result == RADIOLIB_LORA_DETECTED) {
             // The chip auto-entered RX. Drop the latched CAD verdict so the pin releases and the coming
@@ -880,6 +908,56 @@ template <typename T> int16_t LR20x0Interface<T>::scanChannelFromStandby(const C
     if (irq & RADIOLIB_LR2021_IRQ_CAD_DONE)
         return RADIOLIB_CHANNEL_FREE;
     return RADIOLIB_ERR_UNKNOWN;
+}
+#endif
+
+#ifdef LR2021_TX_PRESTAGE
+#ifndef LR2021_PRESTAGE_UPSTREAM
+template <typename T> int16_t LR20x0Interface<T>::clearStaleTxFifo()
+{
+    if (!txFifoStale)
+        return RADIOLIB_ERR_NONE;
+    const int16_t res = lora.clearTxFifo();
+    if (res == RADIOLIB_ERR_NONE)
+        txFifoStale = false;
+    return res;
+}
+#endif
+
+template <typename T> int16_t LR20x0Interface<T>::launchTransmit(size_t numbytes)
+{
+    const bool prestaged = prestagedLen != 0 && prestagedLen == numbytes && sendingPacket && sendingPacket->id == prestagedId;
+    prestagedLen = 0;
+#ifdef LR2021_PRESTAGE_UPSTREAM
+    // RadioLib's stageMode(TX) skips the FIFO write for the payload prestageTransmit() staged, and writes anything else
+    (void)prestaged;
+    return RadioLibInterface::launchTransmit(numbytes);
+#else
+    int16_t res;
+    if (prestaged) {
+        // What stageMode(TX) sends, less the FIFO write (already done) and the packet-type read. The packet params are the
+        // ones init() gives RadioLib (explicit header, CRC on, standard IQ), with our length.
+        res = lora.setLoRaPacketParams(preambleLength, RADIOLIB_LRXXXX_LORA_HEADER_EXPLICIT, (uint8_t)numbytes,
+                                       RADIOLIB_LRXXXX_LORA_CRC_ENABLED, RADIOLIB_LR2021_LORA_IQ_STANDARD);
+        if (res == RADIOLIB_ERR_NONE)
+            res = lora.setDioIrqConfig(lora.irqDioNum, RADIOLIB_LR2021_IRQ_TX_DONE | RADIOLIB_LR2021_IRQ_TIMEOUT);
+        if (res == RADIOLIB_ERR_NONE)
+            res = lora.clearIrqState(RADIOLIB_LR2021_IRQ_ALL);
+        if (res == RADIOLIB_ERR_NONE) {
+            lora.stagedMode = RADIOLIB_RADIO_MODE_TX; // what stageMode() leaves for launchMode()
+            res = lora.launchMode();                  // RF switch, SET_TX, then the BUSY wait for the PA ramp
+        }
+    } else {
+        // RadioLib's staging appends to the TX FIFO, so empty what a busy verdict left unsent first
+        res = clearStaleTxFifo();
+        txFifoStale = true; // until this TX sends it
+        if (res == RADIOLIB_ERR_NONE)
+            res = RadioLibInterface::launchTransmit(numbytes);
+    }
+    if (res == RADIOLIB_ERR_NONE)
+        txFifoStale = false; // the TX takes what the FIFO holds
+    return res;
+#endif
 }
 #endif
 
