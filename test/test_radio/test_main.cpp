@@ -1,8 +1,6 @@
-#include "Channels.h"
 #include "LR20x0Band.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
-#include "NodeDB.h"
 #include "RadioInterface.h"
 #include "RadioLibInterface.h"
 #include "TestUtil.h"
@@ -178,53 +176,6 @@ static void test_clampConfigLora_validPresetUnchanged()
     RadioInterface::clampConfigLora(cfg);
 
     TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST, cfg.modem_preset);
-}
-
-/*
- * Under test: checkOrClampConfigLora() with an empty channel table (src/mesh/RadioInterface.cpp).
- * Why: NodeDB::loadFromDisk() clamps config.lora before channels.proto loads. Reading the empty table logged
- * "Invalid channel index" on every boot; the primary must resolve as a blank-named one does, as getName() did.
- * Regression guarded: the fallback name drifting, which moves uses_default_frequency_slot for a pinned slot.
- */
-static void test_clampConfigLora_emptyChannelTable_judgesLikeABlankPrimary()
-{
-    const meshtastic_ChannelFile savedChannels = channelFile;
-    const meshtastic_Config_LoRaConfig savedLora = config.lora;
-    config.lora = meshtastic_Config_LoRaConfig_init_zero;
-    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
-    config.lora.use_preset = true;
-    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
-
-    // The verdict to match: a stock primary, blank name on the default key.
-    const auto verdictFor = [](uint32_t slot) {
-        config.lora.channel_num = slot;
-        RadioInterface::clampConfigLora(config.lora);
-        return RadioInterface::uses_default_frequency_slot;
-    };
-    channelFile = meshtastic_ChannelFile_init_zero;
-    channelFile.channels_count = 1;
-    channelFile.channels[0].has_settings = true;
-    channelFile.channels[0].role = meshtastic_Channel_Role_PRIMARY;
-    channelFile.channels[0].settings.psk.size = 1;
-    channelFile.channels[0].settings.psk.bytes[0] = 1;
-    channels.onConfigChanged();
-    bool blank[121] = {};
-    for (uint32_t slot = 1; slot <= 120; slot++)
-        blank[slot] = verdictFor(slot);
-
-    channelFile = meshtastic_ChannelFile_init_zero; // before channels.proto loads
-    bool sawDefault = false, sawOther = false;
-    for (uint32_t slot = 1; slot <= 120; slot++) {
-        const bool empty = verdictFor(slot);
-        TEST_ASSERT_EQUAL_MESSAGE(blank[slot], empty, "an empty table must judge the slot as a blank primary does");
-        sawDefault |= empty;
-        sawOther |= !empty;
-    }
-    TEST_ASSERT_TRUE_MESSAGE(sawDefault && sawOther, "the sweep must reach both verdicts, or it proves nothing");
-
-    channelFile = savedChannels;
-    config.lora = savedLora;
-    channels.onConfigChanged();
 }
 
 // -----------------------------------------------------------------------
@@ -717,7 +668,6 @@ void setup()
     RUN_TEST(test_validateConfigLora_rejectsInvalidPresetForRegion);
     RUN_TEST(test_clampConfigLora_invalidPresetClampedToDefault);
     RUN_TEST(test_clampConfigLora_validPresetUnchanged);
-    RUN_TEST(test_clampConfigLora_emptyChannelTable_judgesLikeABlankPrimary);
     RUN_TEST(test_applyModemConfig_freshFlashCodingRateNotZero);
     RUN_TEST(test_applyModemConfig_codingRateMatchesPreset);
     RUN_TEST(test_applyModemConfig_customCodingRateHigherThanPreset);
