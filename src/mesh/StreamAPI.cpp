@@ -6,6 +6,9 @@
 #include "StreamAPI.h"
 #include "Throttle.h"
 #include "concurrency/LockGuard.h"
+#if defined(MESHTASTIC_LOG_RECORD_MILLIS) && defined(MESHTASTIC_RADIO_TASK)
+#include "concurrency/RadioTask.h"
+#endif
 #include "gps/RTC.h"
 
 #define START1 0x94
@@ -268,11 +271,33 @@ void StreamAPI::emitLogRecord(meshtastic_LogRecord_Level level, const char *src,
     fromRadioScratchLog.log_record.time = rtc_sec;
     strncpy(fromRadioScratchLog.log_record.source, src, sizeof(fromRadioScratchLog.log_record.source) - 1);
 
+#ifdef MESHTASTIC_LOG_RECORD_MILLIS
+    char *message = fromRadioScratchLog.log_record.message;
+    size_t room = sizeof(fromRadioScratchLog.log_record.message) - 1;
+    // Bench: LogRecord.time is whole seconds, and the host's arrival stamp carries the link's queueing delay.
+    // Uptime taken here, as the line is logged, lets a node's events be lined up with other nodes' to the ms.
+    unsigned long stampMs = millis();
+#ifdef MESHTASTIC_RADIO_TASK
+    uint32_t loggedMs;
+    if (concurrency::loggedAtMs(&loggedMs))
+        stampMs = loggedMs; // a radio task line the loop is printing now
+#endif
+    const int stamped = snprintf(message, room, "millis=%lu ", stampMs);
+    if (stamped > 0 && (size_t)stamped < room) {
+        message += stamped;
+        room -= stamped;
+    }
+    auto num_printed = vsnprintf(message, room, format, arg);
+    if (num_printed > 0 && (size_t)num_printed <= room &&
+        message[num_printed - 1] == '\n') // Strip any ending newline, because we have records for framing instead.
+        message[num_printed - 1] = '\0';
+#else
     auto num_printed =
         vsnprintf(fromRadioScratchLog.log_record.message, sizeof(fromRadioScratchLog.log_record.message) - 1, format, arg);
     if (num_printed > 0 && fromRadioScratchLog.log_record.message[num_printed - 1] ==
                                '\n') // Strip any ending newline, because we have records for framing instead.
         fromRadioScratchLog.log_record.message[num_printed - 1] = '\0';
+#endif
 
     size_t len =
         pb_encode_to_bytes(txBufLog + HEADER_LEN, meshtastic_FromRadio_size, &meshtastic_FromRadio_msg, &fromRadioScratchLog);
