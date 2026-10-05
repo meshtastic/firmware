@@ -216,6 +216,10 @@ template <typename T> bool LR20x0Interface<T>::init()
     // packet type and modulation params. reconfigure() reapplies it after its own modulation changes.
     if (res == RADIOLIB_ERR_NONE)
         applyDcdcWorkaround();
+#ifdef LR2021_STANDBY_XOSC
+    if (res == RADIOLIB_ERR_NONE)
+        keepTcxoOnInStandby();
+#endif
 
     applyCustomLfPaTable(getFreq());
 
@@ -465,6 +469,9 @@ template <typename T> bool LR20x0Interface<T>::fullBegin(float freq)
             return false;
         }
 #endif
+#ifdef LR2021_STANDBY_XOSC
+        keepTcxoOnInStandby();
+#endif
 
         applyCustomLfPaTable(freq);
 
@@ -646,7 +653,7 @@ template <typename T> int16_t LR20x0Interface<T>::trySetStandby()
     // here, before its delay is up, and the standby below would cut it off with its payload still in the radio
     checkNotificationExcept(TRANSMIT_DELAY_COMPLETED);
 
-    int16_t err = lora.standby();
+    int16_t err = lora.standby(STANDBY_MODE);
 
     if (err != RADIOLIB_ERR_NONE) {
         LOG_DEBUG_RADIO("LR20x0 standby failed, err %d", err);
@@ -914,7 +921,11 @@ template <typename T> bool LR20x0Interface<T>::isChannelActive()
 
     int16_t result = trySetStandby();
     if (result == RADIOLIB_ERR_NONE) {
+#ifdef LR2021_STANDBY_XOSC
+        result = scanChannelFromStandby(cfg);
+#else
         result = lora.scanChannel(cfg);
+#endif
         if (result == RADIOLIB_LORA_DETECTED) {
             // The chip auto-entered RX. Drop the latched CAD verdict so the pin releases and the coming
             // RX_DONE is a clean edge.
@@ -932,6 +943,40 @@ template <typename T> bool LR20x0Interface<T>::isChannelActive()
     maybeRecoverChipStateLoss();
     return false; // report the channel free: a recovered chip can TX, a dead one fails startSend safely
 }
+
+#ifdef LR2021_STANDBY_XOSC
+template <typename T> void LR20x0Interface<T>::keepTcxoOnInStandby()
+{
+    // RadioLib's config() sets STBY_RC. From STBY_RC every CAD, RX and TX first restarts the TCXO; STBY_XOSC keeps it
+    // running after TX and RX.
+    const int16_t res = lora.setRxTxFallbackMode(RADIOLIB_LR2021_FALLBACK_MODE_STBY_XOSC);
+    if (res != RADIOLIB_ERR_NONE)
+        LOG_WARN("LR20x0 RX/TX fallback to STBY_XOSC %s%d", radioLibErr, res);
+}
+
+template <typename T> int16_t LR20x0Interface<T>::scanChannelFromStandby(const ChannelScanConfig_t &cfg)
+{
+    // lora.scanChannel(cfg) less its packet-type read and its standby(), which is STBY_RC: trySetStandby() has just put
+    // the chip in STBY_XOSC. startCad() still checks the packet type, so a lost modem still reports WRONG_MODEM.
+    module.setRfSwitchState(Module::MODE_RX);
+    int16_t res = lora.setDioIrqConfig(lora.irqDioNum, lora.getIrqMapped(cfg.cad.irqFlags));
+    if (res == RADIOLIB_ERR_NONE)
+        res = lora.clearIrqState(RADIOLIB_LR2021_IRQ_ALL);
+    if (res == RADIOLIB_ERR_NONE)
+        res = lora.startCad(cfg.cad.symNum, cfg.cad.detPeak, lora.fastCad, cfg.cad.exitMode, cfg.cad.timeout);
+    if (res != RADIOLIB_ERR_NONE)
+        return res;
+    // As scanChannel(): wait for the IRQ pin to report the CAD finished, then read the verdict from the IRQ status alone
+    while (!module.hal->digitalRead(module.getIrq()))
+        module.hal->yield();
+    const uint32_t irq = lora.getIrqStatus();
+    if (irq & RADIOLIB_LR2021_IRQ_CAD_DETECTED)
+        return RADIOLIB_LORA_DETECTED;
+    if (irq & RADIOLIB_LR2021_IRQ_CAD_DONE)
+        return RADIOLIB_CHANNEL_FREE;
+    return RADIOLIB_ERR_UNKNOWN;
+}
+#endif
 
 /** Could we send right now (i.e. either not actively receiving or transmitting)? */
 template <typename T> bool LR20x0Interface<T>::isActivelyReceiving()
