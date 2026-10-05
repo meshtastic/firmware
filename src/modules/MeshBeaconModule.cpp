@@ -558,6 +558,8 @@ void MeshBeaconBroadcastModule::sendBeacon()
         const meshtastic_ChannelSettings *chPtr = tgt.has_channel ? &tgt.channel : nullptr;
 
         const auto applyTarget = [&](meshtastic_MeshPacket *p) {
+            // The radio thread reads the target table, and sendBeaconPacket() swaps the primary channel around send()
+            RADIO_TASK_LOCK();
             if (presetDiffers || legacySplit)
                 setTargetRadioSettings(p, tgt.preset, tgt.slot, legacySplit, tgt.region, tgt.has_channel, chPtr);
             sendBeaconPacket(p, tgt.preset, tgt.has_channel, chPtr);

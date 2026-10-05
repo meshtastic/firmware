@@ -1498,6 +1498,7 @@ void loop()
         static uint32_t lastRadioMissedIrqPoll;
         if (!Throttle::isWithinTimespanMs(lastRadioMissedIrqPoll, 1000)) {
             lastRadioMissedIrqPoll = millis();
+            RADIO_TASK_LOCK();
             RadioLibInterface::instance->pollMissedIrqs();
         }
 
@@ -1506,6 +1507,7 @@ void loop()
         if (!Throttle::isWithinTimespanMs(lastAgcReset, AGC_RESET_INTERVAL_MS)) {
             lastAgcReset = millis();
             // Sample before resetAGC(): recalibrating the frontend biases an RSSI read taken right after it.
+            RADIO_TASK_LOCK();
             RadioLibInterface::instance->updateNoiseFloor();
             RadioLibInterface::instance->periodicRadioMaintenance();
         }
@@ -1574,6 +1576,11 @@ void loop()
 #endif
 #if !MESHTASTIC_EXCLUDE_WAYPOINT && ENABLE_WAYPOINT_PERSISTENCE
     waypointStoreAutosaveTick();
+#endif
+#ifdef MESHTASTIC_RADIO_TASK
+    if (router)
+        router->wakeIfReceived();
+    DEBUG_PORT.drainRadioTaskLogs();
 #endif
     long delayMsec = mainController.runOrDelay();
 
