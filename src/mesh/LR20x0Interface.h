@@ -38,6 +38,11 @@
 #if defined(LR2021_PRESTAGE_UPSTREAM) && !defined(LR2021_TX_PRESTAGE)
 #error "LR2021_PRESTAGE_UPSTREAM changes how LR2021_TX_PRESTAGE stages: build with -DLR2021_TX_PRESTAGE"
 #endif
+// -DLR2021_RESUME_CONTINUOUS_RX keeps a continuous RX running after a frame instead of restarting it, checking the chip is
+// still in RX first
+#if defined(LR2021_RESUME_CONTINUOUS_RX)
+#define LR2021_READ_CHIP_MODE 1
+#endif
 
 /**
  * \brief Adapter for LR20x0 radio family. Implements common logic for child classes.
@@ -173,6 +178,21 @@ template <class T> class LR20x0Interface : public RadioLibInterface
     /** Empty the TX FIFO if it may hold unsent bytes */
     int16_t clearStaleTxFifo();
 #endif
+#endif
+
+#ifdef LR2021_READ_CHIP_MODE
+    /** The chip's mode (stat2 bits 2..0, as the LR20X0_CHIP_MODE_* below), waiting out a passing FS; 0xFF on SPI failure */
+    uint8_t readChipMode();
+    static constexpr uint8_t LR20X0_CHIP_MODE_STBY_RC = 1;
+    static constexpr uint8_t LR20X0_CHIP_MODE_STBY_XOSC = 2;
+    static constexpr uint8_t LR20X0_CHIP_MODE_FS = 3;
+    static constexpr uint8_t LR20X0_CHIP_MODE_RX = 4;
+    static constexpr uint8_t LR20X0_CHIP_MODE_TX = 5;
+#endif
+#ifdef LR2021_RESUME_CONTINUOUS_RX
+    /** RX was armed continuous and nothing has put the chip into standby since */
+    bool rxArmedContinuous = false;
+    bool resumeRunningReceive() override;
 #endif
 
 #ifdef LR2021_LOAD_PRAM
