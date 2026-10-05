@@ -178,7 +178,7 @@ ErrorCode RadioLibInterface::send(meshtastic_MeshPacket *p)
 #endif
 
     if (p->to == NODENUM_BROADCAST_NO_LORA) {
-        LOG_DEBUG("Drop no-LoRa pkt");
+        LOG_DEBUG_RADIO("Drop no-LoRa pkt");
         return ERRNO_SHOULD_RELEASE;
     }
 
@@ -229,7 +229,7 @@ bool RadioLibInterface::canSleep(bool deepSleep)
     // packet on air.
     bool res = txQueue.empty() && !(deepSleep && isSending());
     if (!res) { // only print debug messages if we are vetoing sleep
-        LOG_DEBUG("Radio wait to sleep, txEmpty=%d, txInFlight=%d", txQueue.empty(), isSending());
+        LOG_DEBUG_RADIO("Radio wait to sleep, txEmpty=%d, txInFlight=%d", txQueue.empty(), isSending());
     }
     return res;
 }
@@ -252,7 +252,7 @@ bool RadioLibInterface::cancelSending(NodeNum from, PacketId id)
     }
 
     bool result = (p != NULL);
-    LOG_DEBUG("cancelSending id=0x%08x, removed=%d", id, result);
+    LOG_DEBUG_RADIO("cancelSending id=0x%08x, removed=%d", id, result);
     return result;
 }
 
@@ -276,7 +276,7 @@ void RadioLibInterface::updateNoiseFloor()
 
     int16_t rssi = getCurrentRSSI();
     if (rssi == NOISE_FLOOR_INVALID || rssi >= 0 || rssi < NOISE_FLOOR_VALID_MIN) {
-        LOG_DEBUG("Skipping invalid RSSI reading: %d", rssi);
+        LOG_DEBUG_RADIO("Skipping invalid RSSI reading: %d", rssi);
         return;
     }
 
@@ -339,7 +339,7 @@ void RadioLibInterface::resetNoiseFloor()
     currentSampleIndex = 0;
     isNoiseFloorBufferFull = false;
     currentNoiseFloor = NOISE_FLOOR_DEFAULT;
-    LOG_INFO("Noise floor reset - rolling window will restart");
+    LOG_DEBUG_RADIO("Noise floor reset - rolling window will restart");
 }
 
 bool RadioLibInterface::randomBytes(uint8_t *buffer, size_t length)
@@ -559,7 +559,7 @@ bool RadioLibInterface::removePendingTXPacket(NodeNum from, PacketId id, uint32_
 {
     meshtastic_MeshPacket *p = txQueue.remove(from, id, true, true, hop_limit_lt);
     if (p) {
-        LOG_DEBUG("Drop pending-TX packet 0x%08x, hop limit %d", p->id, p->hop_limit);
+        LOG_DEBUG_RADIO("Drop pending-TX packet 0x%08x, hop limit %d", p->id, p->hop_limit);
         RadioTxHooks::packetReleased(this, p);
         packetPool.release(p);
         return true;
