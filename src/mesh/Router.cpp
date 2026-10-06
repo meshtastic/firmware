@@ -1,4 +1,5 @@
 #include "Router.h"
+#include "AdminKeys.h"
 #include "Channels.h"
 #include "CryptoEngine.h"
 #include "MeshRadio.h"
@@ -243,8 +244,8 @@ Router::Router() : concurrency::OSThread("Router"), fromRadioQueue(MAX_RX_FROMRA
     fromRadioQueue.setReader(this);
 
     // init Lockguard for crypt operations
-    assert(!cryptLock);
-    cryptLock = new concurrency::Lock();
+    if (!cryptLock)
+        cryptLock = new concurrency::Lock();
     if (!routingAuthCacheLock)
         routingAuthCacheLock = new concurrency::Lock();
     // Runtime default for the auth-cache snapshot policy. Keep it here, saves flash.
@@ -536,7 +537,6 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
 
             // Never exceed user-configured hop_limit
             if (variableHopLimit < p->hop_limit) {
-                LOG_DEBUG("[HOPSCALE] hop_limit %u -> %u for portnum %u", p->hop_limit, variableHopLimit, p->decoded.portnum);
                 p->hop_limit = variableHopLimit;
             }
             break;
@@ -713,8 +713,7 @@ static NodeInfoBootstrapResult verifyFirstContactNodeInfo(meshtastic_MeshPacket 
     meshtastic_User user = meshtastic_User_init_zero;
     if (!pb_decode_from_bytes(p->decoded.payload.bytes, p->decoded.payload.size, &meshtastic_User_msg, &user) ||
         user.public_key.size != 32 || crc32Buffer(user.public_key.bytes, user.public_key.size) != p->from ||
-        !crypto->xeddsa_verify(user.public_key.bytes, p->from, p->id, p->decoded.portnum, p->decoded.payload.bytes,
-                               p->decoded.payload.size, p->decoded.xeddsa_signature.bytes)) {
+        !crypto->xeddsa_verify(user.public_key.bytes, p->from, p->id, p->to, &p->decoded, p->decoded.xeddsa_signature.bytes)) {
         return NodeInfoBootstrapResult::INVALID;
     }
 
@@ -744,8 +743,7 @@ bool checkXeddsaReceivePolicy(meshtastic_MeshPacket *p)
         // key mark its own node a signer, the trust loop #11116 closed on the decrypt path.
         if (nodeDB->copyPublicKeyAuthoritative(p->from, senderKey)) {
             p->xeddsa_signed =
-                crypto->xeddsa_verify(senderKey.bytes, p->from, p->id, p->decoded.portnum, p->decoded.payload.bytes,
-                                      p->decoded.payload.size, p->decoded.xeddsa_signature.bytes);
+                crypto->xeddsa_verify(senderKey.bytes, p->from, p->id, p->to, &p->decoded, p->decoded.xeddsa_signature.bytes);
             if (p->xeddsa_signed) {
                 // Learn this node as a signer, so a later unsigned signable broadcast from it is dropped
                 // A warm-tier key must be re-admitted before setting the signer bit; otherwise Balanced
@@ -807,6 +805,13 @@ bool checkXeddsaReceivePolicy(meshtastic_MeshPacket *p)
 
 RoutingAuthVerdict passesRoutingAuthGate(meshtastic_MeshPacket *p)
 {
+    // Only our own ack verification sets this. Cleared before the cache compare and both copies below,
+    // so neither the auth cache nor the MQTT/UDP uplink snapshot can carry an inbound value onward.
+    // It must stay ahead of routingAuthCacheMatches(): that compare is a memcmp over the whole packet,
+    // so a sender varying this field would otherwise miss the cache and force a fresh authentication
+    // on every packet.
+    p->ack_proof_status = meshtastic_MeshPacket_AckProofStatus_ACK_PROOF_ABSENT;
+
     // Routing still needs the original encrypted representation for byte-for-byte relay and for
     // MQTT uplink. Authenticate a copy here; handleReceived() performs the normal in-place decode
     // only after stateful routing filters have completed.
@@ -883,14 +888,7 @@ void resetAdminKeyFallbackBudget()
 
 static bool adminKeyFallbackAllowed()
 {
-    bool haveAdminKey = false;
-    for (int i = 0; i < 3; i++) {
-        if (config.security.admin_key[i].size == 32) {
-            haveAdminKey = true;
-            break;
-        }
-    }
-    if (!haveAdminKey)
+    if (!AdminKeys::any())
         return false; // nothing to try, so do not spend a token
 
     // Injectable clock so the budget can be tested without sleeping, and without racing a slow host.
@@ -981,11 +979,12 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
             viaPendingKey = havePendingKey;
         }
         if (!decrypted && adminKeyFallbackAllowed()) {
-            for (int i = 0; i < 3 && !decrypted; i++) {
-                if (config.security.admin_key[i].size != 32)
-                    continue;
+            for (size_t i = 0, n = AdminKeys::count(); i < n && !decrypted; i++) {
+                const uint8_t *adminKey = AdminKeys::keyAt(i);
+                if (!adminKey)
+                    break;
                 remotePublic.size = 32;
-                memcpy(remotePublic.bytes, config.security.admin_key[i].bytes, 32);
+                memcpy(remotePublic.bytes, adminKey, 32);
 
                 if (crypto->decryptCurve25519(p->from, remotePublic, p->id, rawSize, p->encrypted.bytes, bytes)) {
                     decrypted = true;
@@ -997,7 +996,6 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
                 adminKeyFallbackRefund();
         }
         if (decrypted) {
-            LOG_INFO("PKI Decryption worked");
             meshtastic_Data decodedtmp;
             memset(&decodedtmp, 0, sizeof(decodedtmp));
             size_t payloadSize = rawSize - MESHTASTIC_PKC_OVERHEAD;
@@ -1207,6 +1205,36 @@ bool wouldEncryptWithPKC(const meshtastic_MeshPacket *p, ChannelIndex chIndex, b
            // to handle the case where the remote node has our key, but we don't have theirs.
            !(p->decoded.portnum == meshtastic_PortNum_KEY_VERIFICATION_APP && !haveDestKey);
 }
+
+/**
+ * PKC fallback for an ack that has no channel in common with the sender.
+ *
+ * PKI needs only the two keys, so a DM can reach us over a channel we do not carry. Its ack is a
+ * ROUTING packet, which wouldEncryptWithPKC() excludes, so it would be channel-encoded, fail at
+ * setActiveByIndex() with NO_CHANNEL, and never be sent - leaving the sender to retransmit to
+ * exhaustion for a message that was in fact delivered.
+ *
+ * This is the one place an ack is deliberately made opaque to relays. Normally that costs next-hop
+ * learning and intermediate retransmission cancel, which is why ROUTING is PKC-excluded in general;
+ * here there is no readable alternative to lose, because without this the ack does not exist.
+ *
+ * Scoped as tightly as that argument reaches: a unicast ROUTING packet we originate, carrying a
+ * request_id, to a destination whose key we hold, under the same ham/sim/private-key preconditions
+ * PKC always has - and only when the channel index does not resolve. It tests channels.getHash()
+ * rather than setActiveByIndex() so the predicate has no side effect; generateHash already returns
+ * -1 for an invalid key, so the two agree on which indexes are unusable. The range check has to come
+ * first and stay first: getHash() is a bare hashes[i] with no bounds test of its own.
+ */
+static bool ackNeedsPkcFallback(const meshtastic_MeshPacket *p, ChannelIndex chIndex, bool haveDestKey)
+{
+    return isFromUs(p) &&
+#if ARCH_PORTDUINO
+           !portduino_config.force_simradio &&
+#endif
+           !owner.is_licensed && config.security.private_key.size == 32 && haveDestKey && !isBroadcast(p->to) &&
+           p->decoded.portnum == meshtastic_PortNum_ROUTING_APP && p->decoded.request_id != 0 &&
+           (chIndex >= MAX_NUM_CHANNELS || channels.getHash(chIndex) < 0);
+}
 #endif
 
 /** Return 0 for success or a Routing_Error code for failure
@@ -1235,8 +1263,7 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
             // were deliverable unsigned, and perhapsDecode() applies the mirror-image rule when
             // deciding whether an unsigned broadcast from a known signer is a downgrade.
             if (!p->pki_encrypted && (owner.is_licensed || isBroadcast(p->to)) && signedDataFits(&p->decoded)) {
-                if (crypto->xeddsa_sign(p->from, p->id, p->decoded.portnum, p->decoded.payload.bytes, p->decoded.payload.size,
-                                        p->decoded.xeddsa_signature.bytes)) {
+                if (crypto->xeddsa_sign(p->from, p->id, p->to, &p->decoded, p->decoded.xeddsa_signature.bytes)) {
                     p->decoded.xeddsa_signature.size = XEDDSA_SIGNATURE_SIZE;
                     LOG_TRACE("XEdDSA signed packet 0x%08x", p->id);
                 }
@@ -1300,9 +1327,18 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
             crypto->getPendingPublicKey(p->to, destKey)) {
             haveDestKey = true;
         }
+        const bool ackFallback = ackNeedsPkcFallback(p, chIndex, haveDestKey);
+        if (ackFallback)
+            LOG_INFO("No usable channel %d for ack of 0x%08x, send it over PKC", chIndex, p->decoded.request_id);
+
         // We may want to retool things so we can send a PKC packet when the client specifies a key and nodenum, even if the node
         // is not in the local nodedb
-        if (wouldEncryptWithPKC(p, chIndex, haveDestKey)) {
+        //
+        // ackFallback is tested first so an out-of-range chIndex short-circuits: wouldEncryptWithPKC
+        // reaches channels.getName(chIndex) before its portnum exclusion, and getByIndex() logs
+        // "Invalid channel index" on the way past. Without the short-circuit this path would print
+        // an error and then go on to encode the packet successfully.
+        if (ackFallback || wouldEncryptWithPKC(p, chIndex, haveDestKey)) {
             LOG_DEBUG("Use PKI");
             if (numbytes + MESHTASTIC_HEADER_LENGTH + MESHTASTIC_PKC_OVERHEAD > MAX_LORA_PAYLOAD_LEN)
                 return meshtastic_Routing_Error_TOO_LARGE;

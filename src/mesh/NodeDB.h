@@ -604,6 +604,9 @@ class NodeDB
     // returns true if the maximum number of nodes is reached or we are running low on memory
     bool isFull();
 
+    // returns true only if more than half the node slots are still empty (and memory is not tight)
+    bool isHalfEmpty() const;
+
     void clearLocalPosition();
 
     void setLocalPosition(meshtastic_Position position, bool timeOnly = false)

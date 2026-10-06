@@ -39,7 +39,7 @@ PB_BIND(meshtastic_Telemetry, meshtastic_Telemetry, 2)
 PB_BIND(meshtastic_Nau7802Config, meshtastic_Nau7802Config, AUTO)
 
 
-PB_BIND(meshtastic_AS3935Config, meshtastic_AS3935Config, AUTO)
+PB_BIND(meshtastic_AS3935State, meshtastic_AS3935State, AUTO)
 
 
 PB_BIND(meshtastic_SEN5XState, meshtastic_SEN5XState, AUTO)

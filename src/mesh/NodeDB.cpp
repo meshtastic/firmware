@@ -3,6 +3,7 @@
 #include "GPS.h"
 #endif
 #include "../detect/ScanI2C.h"
+#include "AdminKeys.h"
 #include "Channels.h"
 #include "CryptoEngine.h"
 #include "Default.h"
@@ -739,6 +740,29 @@ NodeNum getFrom(const meshtastic_MeshPacket *p)
     return (p->from == 0) ? nodeDB->getNodeNum() : p->from;
 }
 
+// The re-encode below cannot overflow the payload buffer, so it never yields an empty payload.
+static_assert(meshtastic_User_size <= sizeof(meshtastic_Data_payload_t::bytes), "User no longer fits Data.payload");
+
+bool coerceNodeInfoUserId(meshtastic_MeshPacket &p)
+{
+    if (p.which_payload_variant != meshtastic_MeshPacket_decoded_tag || p.decoded.portnum != meshtastic_PortNum_NODEINFO_APP)
+        return false;
+
+    meshtastic_User user = meshtastic_User_init_zero;
+    if (!pb_decode_from_bytes(p.decoded.payload.bytes, p.decoded.payload.size, &meshtastic_User_msg, &user))
+        return false;
+
+    char expected[sizeof(user.id)];
+    snprintf(expected, sizeof(expected), "!%08x", getFrom(&p));
+    if (strcmp(user.id, expected) == 0)
+        return false;
+
+    memcpy(user.id, expected, sizeof(user.id));
+    p.decoded.payload.size =
+        pb_encode_to_bytes(p.decoded.payload.bytes, sizeof(p.decoded.payload.bytes), &meshtastic_User_msg, &user);
+    return true;
+}
+
 // Returns true if the packet originated from the local node
 bool isFromUs(const meshtastic_MeshPacket *p)
 {
@@ -952,6 +976,18 @@ bool NodeDB::factoryReset(bool eraseBleBonds)
         bond_print_list(BLE_GAP_ROLE_CENTRAL);
         Bluefruit.Periph.clearBonds();
         Bluefruit.Central.clearBonds();
+#endif
+#ifdef MESHTASTIC_LINUX_BLE
+        // isEnabled(), not just the pointer: a setup() that threw leaves the object
+        // allocated with its bus torn down, and clearBonds() needs a live connection.
+        if (linuxBluetooth && linuxBluetooth->isEnabled()) {
+            LOG_INFO("Clear bluetooth bonds");
+            linuxBluetooth->clearBonds();
+        } else {
+            // BlueZ bonds live in the host adapter's store, not ours, so there is no
+            // removing them from here without that connection.
+            LOG_WARN("BLE off, host bluetooth bonds left in place");
+        }
 #endif
     }
     return true;
@@ -1446,6 +1482,15 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.external_notification.use_i2s_as_buzzer = true;
     moduleConfig.external_notification.alert_message_buzzer = true;
 #endif // HAS_I2S
+
+#if HAS_LIBNOTIFY
+    // meshtasticd has no buzzer or LED to drive, but the module is what raises desktop
+    // notifications (ExternalNotificationModule::portduinoNotify), so default it on. Gated on
+    // HAS_LIBNOTIFY rather than ARCH_PORTDUINO: without libnotify that code is not compiled in, so
+    // enabling the module by default would only add a config surface that can do nothing.
+    moduleConfig.external_notification.enabled = true;
+    moduleConfig.external_notification.alert_message = true;
+#endif // HAS_LIBNOTIFY
 
 #ifdef NANO_G2_ULTRA
     moduleConfig.external_notification.enabled = true;
@@ -2951,6 +2996,10 @@ void NodeDB::loadFromDisk()
         saveToDisk(SEGMENT_CHANNELS);
     }
 #if ARCH_PORTDUINO
+    // The host's config.yaml is authoritative for admin keys: it is root-owned and cannot be
+    // rewritten by an authorized remote, so it decides who may administer this node.
+    AdminKeys::applyHostKeys();
+
     // set any config overrides
     if (portduino_config.has_configDisplayMode) {
         config.display.displaymode = (_meshtastic_Config_DisplayConfig_DisplayMode)portduino_config.configDisplayMode;
@@ -3135,6 +3184,7 @@ bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_
     if (!okay || !writeSucceeded) {
         LOG_ERROR("Can't write prefs");
     }
+    okay &= writeSucceeded;
 #else
     LOG_ERROR("Filesystem not implemented");
 #endif
@@ -3395,6 +3445,31 @@ bool NodeDB::saveToDiskNoRetry(int saveWhat)
     return success;
 }
 
+/// Reads never touch the write path a busy or lock-protected flash fails on, so metadata that still
+/// resolves means the write failure was transient, not a filesystem that needs formatting.
+static bool filesystemStillReadable()
+{
+    concurrency::LockGuard g(spiLock);
+
+    auto dir = FSCom.open("/prefs", FILE_O_READ);
+    if (!dir)
+        return false;
+    dir.close();
+
+    // An existing pref proves the metadata chain resolves; a fresh device has none to check.
+    for (const char *name : {deviceStateFileName, configFileName, channelFileName}) {
+        if (!FSCom.exists(name))
+            continue;
+        auto f = FSCom.open(name, FILE_O_READ);
+        if (!f)
+            return false;
+        const bool readable = f.read() >= 0;
+        f.close();
+        return readable;
+    }
+    return true;
+}
+
 bool NodeDB::saveToDisk(int saveWhat)
 {
     LOG_DEBUG("Save to disk %d", saveWhat);
@@ -3408,13 +3483,58 @@ bool NodeDB::saveToDisk(int saveWhat)
 
     bool success = saveToDiskNoRetry(saveWhat);
 
-    if (!success) {
-        LOG_ERROR("Save to disk failed, retry");
-        spiLock->lock();
-        fsFormat();
-        spiLock->unlock();
-
+    // A failed write is far more often a busy SoftDevice or a sagging rail than a corrupt filesystem,
+    // and the format below takes every file with it, so retry first and never format on a low rail.
+    for (int attempt = 1; !success && attempt <= 2; attempt++) {
+        delay(150);
+#ifdef ARCH_RP2040
+        watchdog_update();
+#endif
+        if (!powerHAL_isPowerLevelSafe()) {
+            LOG_ERROR("saveToDisk() on unsafe device power level");
+            return false;
+        }
+        LOG_WARN("Save to disk failed, retry %d", attempt);
         success = saveToDiskNoRetry(saveWhat);
+    }
+
+    if (!success) {
+        if (!powerHAL_isPowerLevelSafe()) {
+            LOG_ERROR("saveToDisk() on unsafe device power level");
+            return false;
+        }
+#ifdef ARCH_RP2040
+        // Probe, format and resave run back-to-back from here with no retry loop left to feed it.
+        watchdog_update();
+#endif
+        // The format below takes every file with it, so spend one read proving it is warranted.
+        if (filesystemStillReadable()) {
+            LOG_ERROR("Save to disk failed but the filesystem still reads, not formatting (full or busy?)");
+            return false;
+        }
+        LOG_ERROR("Save to disk failed and the filesystem is unreadable, formatting");
+#ifdef MESHTASTIC_ENCRYPTED_STORAGE
+        // The format takes the DEK with it, and without it the resave below would land the keys in plaintext.
+        const bool lockdownWasActive = EncryptedStorage::isLockdownActive();
+#else
+        const bool lockdownWasActive = false;
+#endif
+        spiLock->lock();
+        const bool formatted = fsFormat();
+        spiLock->unlock();
+#ifdef ARCH_RP2040
+        // The five-segment resave below needs a budget of its own.
+        watchdog_update();
+#endif
+
+        // The format took every segment, not just the ones asked for, so all of them must land again.
+        if (!formatted)
+            LOG_ERROR("Filesystem format failed");
+        else if (lockdownWasActive)
+            LOG_ERROR("Lockdown DEK formatted away, not resaving in plaintext");
+        else
+            success = saveToDiskNoRetry(SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS |
+                                        SEGMENT_NODEDATABASE);
 
         RECORD_CRITICALERROR(success ? meshtastic_CriticalErrorCode_FLASH_CORRUPTION_RECOVERABLE
                                      : meshtastic_CriticalErrorCode_FLASH_CORRUPTION_UNRECOVERABLE);
@@ -4152,6 +4272,14 @@ bool NodeDB::resolveUniqueLastByte(uint8_t lastByte, bool requireDirectNeighbor,
 bool NodeDB::isFull()
 {
     return (numMeshNodes >= MAX_NUM_NODES) || (memGet.getFreeHeap() < MINIMUM_SAFE_FREE_HEAP);
+}
+
+bool NodeDB::isHalfEmpty() const
+{
+    // MAX_NUM_NODES is a runtime call on portduino, so read it once. Strictly more than half the
+    // slots must be free, and low heap disqualifies the store just as it does in isFull().
+    const size_t cap = (size_t)MAX_NUM_NODES;
+    return ((size_t)numMeshNodes * 2 < cap) && (memGet.getFreeHeap() >= MINIMUM_SAFE_FREE_HEAP);
 }
 
 uint32_t NodeDB::hotNodeLastHeard(NodeNum n) const

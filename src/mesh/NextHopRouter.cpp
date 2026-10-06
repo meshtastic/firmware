@@ -33,8 +33,20 @@ bool NextHopRouter::relayOpaquePacket(const meshtastic_MeshPacket *p)
     const auto mode = config.device.rebroadcast_mode;
     if (!iface || isToUs(p) || isFromUs(p) || p->id == 0 || p->hop_limit == 0 || !isRebroadcaster() || owner.is_licensed ||
         !IS_ONE_OF(mode, meshtastic_Config_DeviceConfig_RebroadcastMode_ALL,
-                   meshtastic_Config_DeviceConfig_RebroadcastMode_ALL_SKIP_DECODING) ||
+                   meshtastic_Config_DeviceConfig_RebroadcastMode_ALL_SKIP_DECODING,
+                   meshtastic_Config_DeviceConfig_RebroadcastMode_CORE_PORTNUMS_ONLY,
+                   meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY,
+                   meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY) ||
         (p->next_hop != NO_NEXT_HOP_PREFERENCE && p->next_hop != nodeDB->getLastByteOfNodeNum(getNodeNum())))
+        return false;
+
+    // LOCAL_ONLY and KNOWN_ONLY gate on identity, and the only opaque frame carrying its parties in
+    // the header is a PKI-shaped unicast: relay one just when a party is known, which is the rule
+    // RoutingModule applied before opaque frames stopped reaching modules.
+    if (IS_ONE_OF(mode, meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY,
+                  meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY) &&
+        !(p->channel == 0 && !isBroadcast(p->to) &&
+          (nodeInfoLiteHasUser(nodeDB->getMeshNode(p->from)) || nodeInfoLiteHasUser(nodeDB->getMeshNode(p->to)))))
         return false;
 
     // Dedup opaque relays. Opaque frames deliberately never enter PacketHistory (so unauthenticated

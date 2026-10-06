@@ -270,7 +270,6 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false, bool skipSaveN
 #endif
 
 #if defined(TRACKER_T1000_E) || defined(MESH_TRACKER_X1)
-#ifdef GNSS_AIROHA
     digitalWrite(GPS_VRTC_EN, LOW);
     digitalWrite(PIN_GPS_RESET, LOW);
     digitalWrite(GPS_SLEEP_INT, LOW);
@@ -278,7 +277,6 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false, bool skipSaveN
 #ifdef GPS_RESETB_OUT
     pinMode(GPS_RESETB_OUT, OUTPUT);
     digitalWrite(GPS_RESETB_OUT, LOW);
-#endif
 #endif
 
 #ifdef BUZZER_EN_PIN
@@ -475,7 +473,14 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
 #else
 #define INPUTDRIVER_WAKE_BTN_PIN INPUTDRIVER_ENCODER_BTN
 #endif
+// Most of these switches idle high and pull to ground, but not all. Arming the wrong level on a
+// button that idles low means the wake condition is already true, and light sleep ends the
+// instant it begins. Defaults to low, so only a board that says otherwise changes behaviour.
+#if defined(INPUTDRIVER_ENCODER_BTN_ACTIVE_LOW) && !INPUTDRIVER_ENCODER_BTN_ACTIVE_LOW
+    gpio_wakeup_enable((gpio_num_t)INPUTDRIVER_WAKE_BTN_PIN, GPIO_INTR_HIGH_LEVEL);
+#else
     gpio_wakeup_enable((gpio_num_t)INPUTDRIVER_WAKE_BTN_PIN, GPIO_INTR_LOW_LEVEL);
+#endif
 #endif
 #if defined(WAKE_ON_TOUCH)
     gpio_wakeup_enable((gpio_num_t)SCREEN_TOUCH_INT, GPIO_INTR_LOW_LEVEL);

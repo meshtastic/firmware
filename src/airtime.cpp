@@ -191,7 +191,14 @@ void AirTime::Windows::foldChannelUtil(float sample, uint32_t steps, const Held 
     }
 
     if (steps > 0) {
-        const float retained = powf(1.0f - 1.0f / float(CHANNEL_UTILIZATION_EMA_DIVISOR), float(steps));
+        // Integer power by squaring; powf would link ~1.9 KB of float libm for this one call.
+        float base = 1.0f - 1.0f / float(CHANNEL_UTILIZATION_EMA_DIVISOR);
+        float retained = 1.0f;
+        for (uint32_t e = steps; e != 0; e >>= 1) {
+            if (e & 1)
+                retained *= base;
+            base *= base;
+        }
         channelUtilAvg = sample + (channelUtilAvg - sample) * retained;
     }
 }

@@ -174,15 +174,22 @@ tag_sdkconfig_cache_key(env)
 # the IDF libs, so an aborted pass leaves it describing libs that were never built.
 def drop_stale_sdkconfig_defaults(env):
     defaults = join(env.subst("$PROJECT_DIR"), "sdkconfig.defaults")
-    mcu = env.BoardConfig().get("build.mcu", "esp32")
+    board = env.BoardConfig()
+    mcu = board.get("build.mcu", "esp32")
+    # arduino.py's idf_lib_copy() writes the post-compile sdkconfig under
+    # libs/<chip_variant>/, which only equals libs/<mcu>/ when the board has no
+    # chip_variant override (e.g. esp32p4 boards use chip_variant "esp32p4_es").
+    # Checking libs/<mcu>/ there would always see the untouched package template
+    # and re-delete sdkconfig.defaults on every single build.
+    chip_variant = board.get("build.chip_variant", "").lower() or mcu
     try:
         libs = env.PioPlatform().get_package_dir("framework-arduinoespressif32-libs")
         # Rewritten last by a completed compile, so it marks "libs built".
-        if getmtime(join(libs, mcu, "sdkconfig")) >= getmtime(defaults):
+        if getmtime(join(libs, chip_variant, "sdkconfig")) >= getmtime(defaults):
             return
     except (OSError, TypeError):
         return
-    print("*** Stale %s IDF libs; forcing a HybridCompile rebuild ***" % mcu)
+    print("*** Stale %s IDF libs; forcing a HybridCompile rebuild ***" % chip_variant)
     remove(defaults)
 
 
