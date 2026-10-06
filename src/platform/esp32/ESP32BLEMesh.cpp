@@ -258,13 +258,11 @@ void ESP32BLEMesh::handleExtendedAdvertisement(const struct ble_gap_ext_disc_des
     if (!isRunning || !desc)
         return;
 
-    ScanReportStatus status = ScanReportStatus::Truncated;
-    if (desc->data_status == BLE_GAP_EXT_ADV_DATA_STATUS_COMPLETE)
-        status = ScanReportStatus::Complete;
-    else if (desc->data_status == BLE_GAP_EXT_ADV_DATA_STATUS_INCOMPLETE)
-        status = ScanReportStatus::Incomplete;
+    // A mesh advertisement fits one HCI report, so one split across several is another advertiser's.
+    if (desc->data_status != BLE_GAP_EXT_ADV_DATA_STATUS_COMPLETE || !desc->data)
+        return;
 
-    onScanReport(desc->addr.type, desc->addr.val, desc->sid, status, desc->data, desc->length_data, desc->rssi);
+    handleAdvertisementData(desc->data, desc->length_data, desc->rssi);
 }
 #endif
 

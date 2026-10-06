@@ -3,8 +3,6 @@
 #if HAS_BLE_MESH
 
 #include "BLEMeshHandler.h"
-#include "Throttle.h"
-#include "UptimeClock.h"
 #include "main.h"
 
 #include <cstring>
@@ -40,11 +38,12 @@ uint8_t BLEMeshHandler::buildAdvPayload(const meshtastic_MeshPacket *mp, uint8_t
         LOG_ERROR("BLE mesh: cannot size packet 0x%08x", mp->id);
         return 0;
     }
-    if (needed > BLE_MESH_MAX_PROTO_LEN) {
+    const size_t limit = isFromUs(mp) ? BLE_MESH_MAX_ORIGIN_PROTO_LEN : BLE_MESH_MAX_PROTO_LEN;
+    if (needed > limit) {
         // It still goes out over LoRa; Router::send handed it to the radio before reaching us.
         txDroppedTooLarge++;
-        LOG_WARN("BLE mesh: drop 0x%08x, %u bytes over the %u-byte advertisement budget", mp->id,
-                 (unsigned)(needed - BLE_MESH_MAX_PROTO_LEN), (unsigned)BLE_MESH_MAX_PROTO_LEN);
+        LOG_WARN("BLE mesh: drop 0x%08x, %u bytes over the %u-byte advertisement budget", mp->id, (unsigned)(needed - limit),
+                 (unsigned)limit);
         return 0;
     }
 
@@ -244,80 +243,6 @@ void BLEMeshHandler::deliverToRouter(const uint8_t *data, size_t len, int8_t rss
 
     LOG_DEBUG("BLE mesh RX from=0x%08x to=0x%08x id=0x%08x rssi=%d len=%u", mp.from, mp.to, mp.id, rssi, (unsigned)len);
     enqueueReceived(p.release());
-}
-
-BLEMeshHandler::PartialAdv *BLEMeshHandler::partialFor(uint8_t addrType, const uint8_t addr[6], uint8_t sid)
-{
-    for (auto &slot : partials) {
-        if (slot.inUse && slot.addrType == addrType && slot.sid == sid && memcmp(slot.addr, addr, sizeof(slot.addr)) == 0)
-            return &slot;
-    }
-    return nullptr;
-}
-
-BLEMeshHandler::PartialAdv &BLEMeshHandler::claimPartial(uint8_t addrType, const uint8_t addr[6], uint8_t sid)
-{
-    const uint32_t now = Time::getMillis();
-    PartialAdv *pick = &partials[0];
-    for (auto &slot : partials) {
-        if (!slot.inUse) {
-            pick = &slot;
-            break;
-        }
-        if ((uint32_t)(now - slot.lastMs) > (uint32_t)(now - pick->lastMs))
-            pick = &slot;
-    }
-    pick->inUse = true;
-    pick->overflowed = false;
-    pick->addrType = addrType;
-    memcpy(pick->addr, addr, sizeof(pick->addr));
-    pick->sid = sid;
-    pick->len = 0;
-    pick->lastMs = now;
-    return *pick;
-}
-
-void BLEMeshHandler::onScanReport(uint8_t addrType, const uint8_t addr[6], uint8_t sid, ScanReportStatus status,
-                                  const uint8_t *data, size_t len, int8_t rssi)
-{
-    if (!isRunning || !addr || (len > 0 && !data))
-        return;
-
-    PartialAdv *slot = partialFor(addrType, addr, sid);
-    if (slot && Throttle::hasElapsed(slot->lastMs, BLE_MESH_REASSEMBLY_TIMEOUT_MS)) {
-        slot->inUse = false;
-        slot = nullptr;
-    }
-
-    if (status == ScanReportStatus::Truncated) {
-        if (slot)
-            slot->inUse = false;
-        return;
-    }
-
-    if (status == ScanReportStatus::Complete && !slot) {
-        handleAdvertisementData(data, len, rssi);
-        return;
-    }
-
-    if (!slot)
-        slot = &claimPartial(addrType, addr, sid);
-
-    if (!slot->overflowed) {
-        if (slot->len + len > slot->data.size()) {
-            slot->overflowed = true;
-        } else if (len > 0) {
-            memcpy(slot->data.data() + slot->len, data, len);
-            slot->len += len;
-        }
-    }
-    slot->lastMs = Time::getMillis();
-
-    if (status == ScanReportStatus::Complete) {
-        slot->inUse = false;
-        if (!slot->overflowed)
-            handleAdvertisementData(slot->data.data(), slot->len, rssi);
-    }
 }
 
 void BLEMeshHandler::handleAdvertisementData(const uint8_t *data, size_t len, int8_t rssi)

@@ -17,15 +17,17 @@
 #define BLE_MESH_COMPANY_ID 0xFFFF
 #define BLE_MESH_PROTOCOL_VERSION 1
 
-// The advertising data one HCI LE Set Extended Advertising Data command carries. One AUX_ADV_IND
-// holds 245 bytes of it, so the Link Layer chains more into an AUX_CHAIN_IND, and a receiving
-// controller reports anything over 229 bytes as several HCI reports, which onScanReport()
-// reassembles. Each platform static_asserts this against its own stack's constant.
-#define BLE_MESH_ADV_TOTAL_MAX 251
+// One HCI LE Extended Advertising Report carries at most 229 bytes (Core 5.4 Vol 4 Part E
+// 7.7.65.13), and Linux delivers nothing above that intact. The budget node-kmp shares.
+#define BLE_MESH_ADV_TOTAL_MAX 229
 
 // Flags AD structure (3) + manufacturer-data AD header (2) + company ID (2) + version (1).
 #define BLE_MESH_ADV_OVERHEAD 8
 #define BLE_MESH_MAX_PROTO_LEN (BLE_MESH_ADV_TOTAL_MAX - BLE_MESH_ADV_OVERHEAD)
+
+// A relay can grow a packet by up to 5 bytes (next_hop on a DM), so one this node originates leaves
+// that room for the next hop to re-advertise it.
+#define BLE_MESH_MAX_ORIGIN_PROTO_LEN (BLE_MESH_MAX_PROTO_LEN - 5)
 
 // Outbound frames waiting for the advertiser. Extended advertising is set-and-repeat, not a packet
 // queue, so a burst has to be clocked through one frame at a time.
@@ -36,17 +38,6 @@
 // Repeats per queued frame, standing in for the redundancy LoRa gets from its own retries.
 #ifndef BLE_MESH_ADV_EVENTS
 #define BLE_MESH_ADV_EVENTS 3
-#endif
-
-// Advertisers whose split reports can be reassembled at once; a further one evicts the stalest.
-#ifndef BLE_MESH_REASSEMBLY_SLOTS
-#define BLE_MESH_REASSEMBLY_SLOTS 2
-#endif
-
-// HCI marks no first report, so a partial advertisement this old is abandoned rather than joined
-// to whatever its advertiser sends next.
-#ifndef BLE_MESH_REASSEMBLY_TIMEOUT_MS
-#define BLE_MESH_REASSEMBLY_TIMEOUT_MS 100
 #endif
 
 /// A burst of `events` advertising events at `intervalUnits` x 0.625 ms, as a duration in ms. The
@@ -83,8 +74,8 @@ class BLEMeshHandler : private concurrency::OSThread, public MeshTransportBase
         return config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_BLE_BROADCAST;
     }
 
-    /// Packets refused for not fitting one advertisement. The ceiling is
-    /// BLE_MESH_MAX_PROTO_LEN for the whole encoded MeshPacket, below LoRa's MAX_RADIO_PAYLOAD_LEN.
+    /// Packets refused for not fitting one advertisement. The ceiling is the whole encoded
+    /// MeshPacket: BLE_MESH_MAX_PROTO_LEN for a relay, BLE_MESH_MAX_ORIGIN_PROTO_LEN for our own.
     uint32_t txDroppedTooLarge = 0;
 
     /// Frames lost to a full TX queue, refused or displaced. txDroppedTooLarge means the bearer
@@ -129,16 +120,6 @@ class BLEMeshHandler : private concurrency::OSThread, public MeshTransportBase
     /// Decode a received advertisement payload and enqueue it into the router.
     void deliverToRouter(const uint8_t *data, size_t len, int8_t rssi);
 
-    /// How much of an advertisement one scan report carries, as HCI LE Extended Advertising Report
-    /// grades it.
-    enum class ScanReportStatus : uint8_t { Complete, Incomplete, Truncated };
-
-    /// One extended scan report. A controller splits an advertisement over 229 bytes into several
-    /// reports from the same (address, SID), each but the last Incomplete; this joins them and hands
-    /// the whole advertisement to handleAdvertisementData(). A Truncated advertisement is dropped.
-    void onScanReport(uint8_t addrType, const uint8_t addr[6], uint8_t sid, ScanReportStatus status, const uint8_t *data,
-                      size_t len, int8_t rssi);
-
     /// Find the mesh manufacturer-data structure in a whole advertisement and deliver its packet.
     void handleAdvertisementData(const uint8_t *data, size_t len, int8_t rssi);
 
@@ -172,24 +153,6 @@ class BLEMeshHandler : private concurrency::OSThread, public MeshTransportBase
     // one-shot readiness callback would race. runOnce() polls platformReady() and calls
     // onBluetoothReady() itself, exactly once.
     bool readyHandled = false;
-
-    /// An advertisement whose reports have not all arrived. Touched only from the scan callback,
-    /// which runs on the BLE host task alone.
-    struct PartialAdv {
-        bool inUse;
-        // Longer than any mesh advertisement, so the rest is skipped until its last report.
-        bool overflowed;
-        uint8_t addrType;
-        uint8_t addr[6];
-        uint8_t sid;
-        uint16_t len;
-        uint32_t lastMs;
-        std::array<uint8_t, BLE_MESH_ADV_TOTAL_MAX> data;
-    };
-    std::array<PartialAdv, BLE_MESH_REASSEMBLY_SLOTS> partials{};
-
-    PartialAdv *partialFor(uint8_t addrType, const uint8_t addr[6], uint8_t sid);
-    PartialAdv &claimPartial(uint8_t addrType, const uint8_t addr[6], uint8_t sid);
 };
 
 extern BLEMeshHandler *bleMeshHandler;
