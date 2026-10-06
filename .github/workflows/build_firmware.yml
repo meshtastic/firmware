@@ -12,6 +12,9 @@ on:
       pio_env:
         required: true
         type: string
+    secrets:
+      MEMBROWSE_API_KEY:
+        required: false
 
 permissions: read-all
 
@@ -118,6 +121,8 @@ jobs:
             release/*.mt.json
             release/*.bin
             release/*.elf
+            release/*.ld
+            release/*.map
             release/*.uf2
             release/*.hex
             release/*.zip
@@ -132,3 +137,16 @@ jobs:
           overwrite: true
           path: |
             release/*.mt.json
+
+  # Memory report on MemBrowse from this build's artifact. PRs and pushes only: merge-queue,
+  # nightly and release runs rebuild commits MemBrowse already has.
+  membrowse:
+    needs: pio-build
+    if: github.repository == 'meshtastic/firmware' && contains(fromJSON('["push", "pull_request"]'), github.event_name)
+    uses: ./.github/workflows/membrowse_report.yml
+    with:
+      version: ${{ inputs.version }}
+      platform: ${{ inputs.platform }}
+      pio_env: ${{ inputs.pio_env }}
+    secrets:
+      MEMBROWSE_API_KEY: ${{ secrets.MEMBROWSE_API_KEY }}
