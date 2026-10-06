@@ -27,6 +27,7 @@
 
 // Sensors
 #include "Sensor/CGRadSensSensor.h"
+#include "Sensor/HDC1080Sensor.h"
 #include "Sensor/RCWL9620Sensor.h"
 #include "Sensor/nullSensor.h"
 
@@ -371,6 +372,7 @@ void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
 #if __has_include(<Adafruit_DS248x.h>)
     addSensor<DS248XSensor>(i2cScanner, ScanI2C::DeviceType::DS248X);
 #endif
+    addSensor<HDC1080Sensor>(i2cScanner, ScanI2C::DeviceType::HDC1080);
 
 #endif
 }
