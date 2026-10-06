@@ -56,6 +56,19 @@ RadioLibInterface::RadioLibInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE c
 #endif
 }
 
+uint32_t RadioLibInterface::tcxoStartupDelayUs()
+{
+#if ARCH_PORTDUINO
+    // 0 is an absent key; the build default applies
+    if (portduino_config.dio3_tcxo_delay_us > 0)
+        return (uint32_t)portduino_config.dio3_tcxo_delay_us;
+    if (portduino_config.dio3_tcxo_delay_us < 0)
+        LOG_WARN("Ignore Lora.DIO3_TCXO_DELAY_US %d, use %u us", portduino_config.dio3_tcxo_delay_us,
+                 (unsigned)TCXO_STARTUP_DELAY_US);
+#endif
+    return TCXO_STARTUP_DELAY_US;
+}
+
 #ifdef ARCH_ESP32
 // ESP32 doesn't use that flag
 #define YIELD_FROM_ISR(x) portYIELD_FROM_ISR()
@@ -90,6 +103,9 @@ void INTERRUPT_ATTR RadioLibInterface::isrTxLevel0()
  */
 RadioLibInterface *RadioLibInterface::instance;
 
+/** At most one busyRx deferral line per this interval; the line carries the count it stands for. */
+#define BUSY_RX_LOG_INTERVAL_MS 30000
+
 /** Could we send right now (i.e. either not actively receiving or transmitting)? */
 bool RadioLibInterface::canSendImmediately()
 {
@@ -112,7 +128,15 @@ bool RadioLibInterface::canSendImmediately()
             rebootAtMsec = Time::skipZero(lastTxStart + 65000);
         }
         if (busyRx) {
-            LOG_WARN("Can not send yet, busyRx");
+            // Normal on a busy channel, and checked on every attempt: log the count at most once per interval
+            busyRxDeferred++;
+            const uint32_t nowMs = Time::getMillis();
+            if (lastBusyRxLogMs == 0 || Throttle::hasElapsed(lastBusyRxLogMs, BUSY_RX_LOG_INTERVAL_MS)) {
+                LOG_WARN("Can not send yet, busyRx (%u deferred in %u ms)", (unsigned)busyRxDeferred,
+                         (unsigned)(lastBusyRxLogMs ? nowMs - lastBusyRxLogMs : nowMs));
+                busyRxDeferred = 0;
+                lastBusyRxLogMs = Time::skipZero(nowMs);
+            }
         }
         return false;
     } else
@@ -197,7 +221,7 @@ ErrorCode RadioLibInterface::send(meshtastic_MeshPacket *p)
 #endif
 
     if (p->to == NODENUM_BROADCAST_NO_LORA) {
-        LOG_DEBUG("Drop no-LoRa pkt");
+        LOG_DEBUG_RADIO("Drop no-LoRa pkt");
         return ERRNO_SHOULD_RELEASE;
     }
 
@@ -248,7 +272,7 @@ bool RadioLibInterface::canSleep(bool deepSleep)
     // packet on air.
     bool res = txQueue.empty() && !(deepSleep && isSending());
     if (!res) { // only print debug messages if we are vetoing sleep
-        LOG_DEBUG("Radio wait to sleep, txEmpty=%d, txInFlight=%d", txQueue.empty(), isSending());
+        LOG_DEBUG_RADIO("Radio wait to sleep, txEmpty=%d, txInFlight=%d", txQueue.empty(), isSending());
     }
     return res;
 }
@@ -271,7 +295,7 @@ bool RadioLibInterface::cancelSending(NodeNum from, PacketId id)
     }
 
     bool result = (p != NULL);
-    LOG_DEBUG("cancelSending id=0x%08x, removed=%d", id, result);
+    LOG_DEBUG_RADIO("cancelSending id=0x%08x, removed=%d", id, result);
     return result;
 }
 
@@ -295,7 +319,7 @@ void RadioLibInterface::updateNoiseFloor()
 
     int16_t rssi = getCurrentRSSI();
     if (rssi == NOISE_FLOOR_INVALID || rssi >= 0 || rssi < NOISE_FLOOR_VALID_MIN) {
-        LOG_DEBUG("Skipping invalid RSSI reading: %d", rssi);
+        LOG_DEBUG_RADIO("Skipping invalid RSSI reading: %d", rssi);
         return;
     }
 
@@ -358,7 +382,7 @@ void RadioLibInterface::resetNoiseFloor()
     currentSampleIndex = 0;
     isNoiseFloorBufferFull = false;
     currentNoiseFloor = NOISE_FLOOR_DEFAULT;
-    LOG_INFO("Noise floor reset - rolling window will restart");
+    LOG_DEBUG_RADIO("Noise floor reset - rolling window will restart");
 }
 
 bool RadioLibInterface::randomBytes(uint8_t *buffer, size_t length)
@@ -613,7 +637,7 @@ bool RadioLibInterface::removePendingTXPacket(NodeNum from, PacketId id, uint32_
 {
     meshtastic_MeshPacket *p = txQueue.remove(from, id, true, true, hop_limit_lt);
     if (p) {
-        LOG_DEBUG("Drop pending-TX packet 0x%08x, hop limit %d", p->id, p->hop_limit);
+        LOG_DEBUG_RADIO("Drop pending-TX packet 0x%08x, hop limit %d", p->id, p->hop_limit);
         RadioTxHooks::packetReleased(this, p);
         packetPool.release(p);
         return true;
@@ -746,6 +770,7 @@ void RadioLibInterface::handleReceiveInterrupt()
             airTime->logAirtime(RX_ALL_LOG, rxMsec);
         } else {
             rxGood++;
+            lastRxGoodMs = millis();
             // altered packet with "from == 0" can do Remote Node Administration without permission
             if (radioBuffer.header.from == 0) {
                 LOG_WARN("Ignore received packet without sender");
@@ -821,9 +846,10 @@ void RadioLibInterface::pollMissedIrqs()
     }
 }
 
-void RadioLibInterface::resetAGC()
+bool RadioLibInterface::resetAGC()
 {
     // Base implementation: no-op. Override in chip-specific subclasses.
+    return false;
 }
 
 void RadioLibInterface::noteCadHandoffToRx()
@@ -931,7 +957,14 @@ void RadioLibInterface::periodicRadioMaintenance()
     if (hasQueuedTx())
         return;
 
-    resetAGC();
+    // A radio that is still decoding packets has gain that isn't stuck
+    const bool hearing = lastRxGoodMs && Throttle::isWithinTimespanMs(lastRxGoodMs, AGC_IDLE_RESET_MS);
+    if (hearing && lastAgcResetMs && Throttle::isWithinTimespanMs(lastAgcResetMs, AGC_FORCED_RESET_MS))
+        return;
+    if (resetAGC()) {
+        const uint32_t now = millis();
+        lastAgcResetMs = now ? now : 1;
+    }
 }
 
 bool RadioLibInterface::maybeRecoverChipStateLoss()
