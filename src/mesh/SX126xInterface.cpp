@@ -543,12 +543,15 @@ template <typename T> bool SX126xInterface<T>::resumeRunningReceive()
 #endif
     if (!rxArmedContinuous)
         return false;
-    // readData() clears these, but handleReceiveInterrupt()'s early outs do not, and a latched one would hold DIO1
-    // high past the re-arm. PREAMBLE/HEADER_VALID stay: they may belong to the next frame, already arriving. A scan
-    // skipped for an unread frame keeps them all, for its readout.
+    // readData() clears these, but handleReceiveInterrupt()'s early outs do not. PREAMBLE/HEADER_VALID stay: they
+    // may belong to the next frame, already arriving. A scan skipped for a frame in flight or unread keeps that
+    // frame's RX_DONE (the only flag on DIO1) and CRC_ERR for its readout, which checkRxDoneIrqFlag() below drives -
+    // including an RX_DONE that landed in the USB round trip since the scan read the flags. A stale HEADER_ERR or
+    // TIMEOUT has no readout waiting and would cost checkStaleRxFlags() a re-arm, so it goes either way.
+    uint32_t clearMask = RADIOLIB_SX126X_IRQ_HEADER_ERR | RADIOLIB_SX126X_IRQ_TIMEOUT;
     if (!keepRxIrqs)
-        lora.clearIrqFlags(RADIOLIB_SX126X_IRQ_RX_DONE | RADIOLIB_SX126X_IRQ_CRC_ERR | RADIOLIB_SX126X_IRQ_HEADER_ERR |
-                           RADIOLIB_SX126X_IRQ_TIMEOUT);
+        clearMask |= RADIOLIB_SX126X_IRQ_RX_DONE | RADIOLIB_SX126X_IRQ_CRC_ERR;
+    lora.clearIrqFlags(clearMask);
     activeReceiveStart = 0; // as the standby this replaces would
     RadioLibInterface::startReceive();
     enableInterrupt(isrRxLevel0);
@@ -779,8 +782,9 @@ template <typename T> bool SX126xInterface<T>::stageTxInRx()
         // Its readout checks whether our bytes can lie across it
         if (irq & (RADIOLIB_SX126X_IRQ_HEADER_VALID | doneIrqs))
             noteStagedOverFrame(base, numbytes);
-        // The busy verdict's rearmReceive() resumes the RX: it must leave a finished frame's flags for its readout
-        keepRxIrqsAtResume = (irq & doneIrqs) != 0;
+        // The busy verdict's rearmReceive() resumes the RX: it must leave the frame's terminal flags for its
+        // readout, whether it had already finished or finishes while we get there
+        keepRxIrqsAtResume = true;
         LOG_DEBUG("TX stage in RX: frame arriving or unread (irq 0x%04x), scan skipped", (unsigned)irq);
         return true;
     }

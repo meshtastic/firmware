@@ -120,7 +120,7 @@ template <class T> class SX126xInterface : public RadioLibInterface
     uint8_t rxClobberBase = 0;
     size_t rxClobberLen = 0;
     uint8_t rxClobberBytes[256];
-    /** That frame had finished: the next resumeRunningReceive() must not clear its IRQ flags before it is read */
+    /** A frame was in flight or unread: the next resumeRunningReceive() keeps RX_DONE/CRC_ERR for its readout */
     bool keepRxIrqsAtResume = false;
     /** A payload written during its backoff: its length (0 if none), packet id, offset and bytes */
     size_t earlyStagedLen = 0;
