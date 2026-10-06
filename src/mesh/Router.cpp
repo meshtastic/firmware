@@ -996,7 +996,6 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
                 adminKeyFallbackRefund();
         }
         if (decrypted) {
-            LOG_INFO("PKI Decryption worked");
             meshtastic_Data decodedtmp;
             memset(&decodedtmp, 0, sizeof(decodedtmp));
             size_t payloadSize = rawSize - MESHTASTIC_PKC_OVERHEAD;

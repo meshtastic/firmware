@@ -874,11 +874,11 @@ uint32_t RadioInterface::getTxDelayMsecWeighted(meshtastic_MeshPacket *p)
     // LOG_DEBUG("rx_snr of %f so setting CWsize to:%d", snr, CWsize);
     if (shouldRebroadcastEarlyLikeRouter(p)) {
         delay = random(0, 2 * CWsize) * slotTimeMsec;
-        LOG_DEBUG("rx_snr in packet. Router: tx delay:%d", delay);
+        LOG_DEBUG_RADIO("rx_snr in packet. Router: tx delay:%d", delay);
     } else {
         // offset the maximum delay for routers: (2 * CWmax * slotTimeMsec)
         delay = (2 * CWmax * slotTimeMsec) + random(0, pow_of_2(CWsize)) * slotTimeMsec;
-        LOG_DEBUG("rx_snr in packet. Tx delay:%d", delay);
+        LOG_DEBUG_RADIO("rx_snr in packet. Tx delay:%d", delay);
     }
 
     return delay;

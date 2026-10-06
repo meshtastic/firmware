@@ -19,7 +19,15 @@
 // In addition to the default Rx flags, we need the PREAMBLE_DETECTED flag to detect whether we are actively receiving
 #define MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS (RADIOLIB_IRQ_RX_DEFAULT_FLAGS | (1 << RADIOLIB_IRQ_PREAMBLE_DETECTED))
 
-#define AGC_RESET_INTERVAL_MS (60 * 1000) // 60 seconds
+#define AGC_RESET_INTERVAL_MS (60 * 1000) // 60 seconds: how often the loop runs periodicRadioMaintenance()
+// An AGC reset takes the radio off the air for over 100 ms, so it runs only on a radio that has decoded nothing for
+// AGC_IDLE_RESET_MS (gain stuck low would look like that), or at least once per AGC_FORCED_RESET_MS on a busy one
+#ifndef AGC_IDLE_RESET_MS
+#define AGC_IDLE_RESET_MS (60 * 1000UL)
+#endif
+#ifndef AGC_FORCED_RESET_MS
+#define AGC_FORCED_RESET_MS (24 * 60 * 60 * 1000UL)
+#endif
 
 /**
  * We need to override the RadioLib ArduinoHal class to add mutex protection for SPI bus access
@@ -190,10 +198,11 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      * Reset AGC by power-cycling the analog frontend.
      * Subclasses override with chip-specific calibration sequences.
      * Safe to call periodically - skips if currently sending or receiving.
+     * @return false if it skipped the reset or could not complete it, so the next maintenance tick retries
      */
-    virtual void resetAGC();
+    virtual bool resetAGC();
 
-    /** Periodic radio upkeep: re-arms RX if a failed startReceive() left it off, otherwise resets AGC. */
+    /** Periodic radio upkeep: re-arms RX if a failed startReceive() left it off, otherwise resets AGC when it is due. */
     void periodicRadioMaintenance();
 
     /** Chip-specific recovery of a chip that lost its state to a reset/brownout. Returns true if reprogrammed. */
@@ -215,6 +224,7 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      * Debugging counts
      */
     uint32_t rxBad = 0, rxGood = 0, txGood = 0, txRelay = 0;
+    uint32_t lastRxGoodMs = 0, lastAgcResetMs = 0; // 0: none yet
     uint16_t txDrop = 0;
 
   public:
@@ -334,6 +344,10 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
     /** Could we send right now (i.e. either not actively receiving or transmitting)? */
     virtual bool canSendImmediately();
+
+    /** busyRx deferrals since the last line, and when that line went out (0 = never) */
+    uint32_t lastBusyRxLogMs = 0;
+    uint32_t busyRxDeferred = 0;
 
     /**
      * Raw ISR handler that just calls our polymorphic method
