@@ -1,4 +1,5 @@
 #include "Router.h"
+#include "AdminKeys.h"
 #include "Channels.h"
 #include "CryptoEngine.h"
 #include "MeshRadio.h"
@@ -243,8 +244,8 @@ Router::Router() : concurrency::OSThread("Router"), fromRadioQueue(MAX_RX_FROMRA
     fromRadioQueue.setReader(this);
 
     // init Lockguard for crypt operations
-    assert(!cryptLock);
-    cryptLock = new concurrency::Lock();
+    if (!cryptLock)
+        cryptLock = new concurrency::Lock();
     if (!routingAuthCacheLock)
         routingAuthCacheLock = new concurrency::Lock();
     // Runtime default for the auth-cache snapshot policy. Keep it here, saves flash.
@@ -804,6 +805,13 @@ bool checkXeddsaReceivePolicy(meshtastic_MeshPacket *p)
 
 RoutingAuthVerdict passesRoutingAuthGate(meshtastic_MeshPacket *p)
 {
+    // Only our own ack verification sets this. Cleared before the cache compare and both copies below,
+    // so neither the auth cache nor the MQTT/UDP uplink snapshot can carry an inbound value onward.
+    // It must stay ahead of routingAuthCacheMatches(): that compare is a memcmp over the whole packet,
+    // so a sender varying this field would otherwise miss the cache and force a fresh authentication
+    // on every packet.
+    p->ack_proof_status = meshtastic_MeshPacket_AckProofStatus_ACK_PROOF_ABSENT;
+
     // Routing still needs the original encrypted representation for byte-for-byte relay and for
     // MQTT uplink. Authenticate a copy here; handleReceived() performs the normal in-place decode
     // only after stateful routing filters have completed.
@@ -880,14 +888,7 @@ void resetAdminKeyFallbackBudget()
 
 static bool adminKeyFallbackAllowed()
 {
-    bool haveAdminKey = false;
-    for (int i = 0; i < 3; i++) {
-        if (config.security.admin_key[i].size == 32) {
-            haveAdminKey = true;
-            break;
-        }
-    }
-    if (!haveAdminKey)
+    if (!AdminKeys::any())
         return false; // nothing to try, so do not spend a token
 
     // Injectable clock so the budget can be tested without sleeping, and without racing a slow host.
@@ -978,11 +979,12 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
             viaPendingKey = havePendingKey;
         }
         if (!decrypted && adminKeyFallbackAllowed()) {
-            for (int i = 0; i < 3 && !decrypted; i++) {
-                if (config.security.admin_key[i].size != 32)
-                    continue;
+            for (size_t i = 0, n = AdminKeys::count(); i < n && !decrypted; i++) {
+                const uint8_t *adminKey = AdminKeys::keyAt(i);
+                if (!adminKey)
+                    break;
                 remotePublic.size = 32;
-                memcpy(remotePublic.bytes, config.security.admin_key[i].bytes, 32);
+                memcpy(remotePublic.bytes, adminKey, 32);
 
                 if (crypto->decryptCurve25519(p->from, remotePublic, p->id, rawSize, p->encrypted.bytes, bytes)) {
                     decrypted = true;
@@ -994,7 +996,6 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
                 adminKeyFallbackRefund();
         }
         if (decrypted) {
-            LOG_INFO("PKI Decryption worked");
             meshtastic_Data decodedtmp;
             memset(&decodedtmp, 0, sizeof(decodedtmp));
             size_t payloadSize = rawSize - MESHTASTIC_PKC_OVERHEAD;

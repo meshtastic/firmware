@@ -1,0 +1,12 @@
+# FAULT: AdapterId is not a BlueZ adapter name. The MAC fallback reads only the leading
+# hci1 and is happy, but LinuxBluetooth uses the whole string as the object path and finds
+# no /org/bluez/hci1junk, so BLE silently never comes up. Expect a WARNING and exit 0.
+Lora:
+  Module: sx1262
+  CS: 21
+  IRQ: 16
+  Busy: 20
+  Reset: 18
+Bluetooth:
+  Enabled: true
+  AdapterId: hci1junk
