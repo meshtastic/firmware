@@ -584,7 +584,11 @@ template <typename T> void LR20x0Interface<T>::setStandby()
 
 /**
  * Add SNR data to received messages
-    LOG_DEBUG_RADIO("LR2021 %s LF PA table at %.3f MHz", isLr20x0CustomLfPaBand(freq) ? "custom" : "default", freq);
+ */
+template <typename T> void LR20x0Interface<T>::addReceiveMetadata(meshtastic_MeshPacket *mp)
+{
+    // LOG_DEBUG("PacketStatus %x", lora.getPacketStatus());
+    mp->rx_snr = lora.getSNR();
     mp->rx_rssi = lround(lora.getRSSI());
     mp->has_rx_rssi = true; // rx_rssi has explicit presence - a genuine reading must be marked present to survive encoding
     // LOG_DEBUG("Corrected frequency offset: %f", lora.getFrequencyError()); // not implemented for LR20x0, but noop for LR11x0
