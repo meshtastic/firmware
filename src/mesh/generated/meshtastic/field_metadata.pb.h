@@ -58,6 +58,14 @@
  catalog. Do not put machine-readable values (regexes, identifiers, format
  codes) in a string attribute; they would be handed to translators.
 
+ The exception is a short, named set of MACHINE-READABLE string attributes -
+ currently `since_firmware` and `deprecated_since` - which the generators emit
+ as plain literals. A firmware version is compared rather than read, and a
+ translated one would compare wrongly at runtime. The set is deliberately
+ closed and lives in the generators (`machineReadableAttributes`); adding to it
+ is a generator change and should stay rare, because every entry is a string a
+ translator will never see and therefore a place display text can hide.
+
  To tag a field, set the option on it, e.g.
    uint32 rx_gpio = 8 [(meshtastic.field_metadata) = { diy_only: true }];
 
@@ -113,6 +121,48 @@ typedef struct _meshtastic_FieldMetadata {
  ignored. "|" is used rather than "," because a keyword may itself contain a
  comma. Source string for localization. */
     pb_callback_t keywords;
+    /* The first firmware version that has this field, e.g. "2.7.12".
+
+ A client showing a control for a field the connected node does not have
+ offers a setting that will be ignored; one hiding a field the node does
+ have loses a setting that works. Today each client answers that from a
+ version constant written into its own UI, so the same boundary is stated
+ independently in each of them - and when firmware adds a field, every
+ client has to learn the number separately.
+
+ MACHINE-READABLE (see the note on string attributes above): a version is
+ compared, not read, and is emitted as a plain literal rather than as
+ localizable text.
+
+ Presentation metadata, like `min_value`: firmware still has to defend
+ itself, since an older client can always write a field a newer firmware
+ ignores, and a newer client a field an older one does not know.
+
+ Unset means "as long as anyone needs to care", which is the common case -
+ annotate a field only where a client genuinely has to make this decision. */
+    pb_callback_t since_firmware;
+    /* The first firmware version that no longer honours this field, e.g. "2.7.1"
+ on `compass_north_top`: `compass_orientation` replaced it in 2.3.13, but
+ firmware went on reading the old field until 2.7.1. The replacement's
+ arrival and the old field's removal are different releases, which is the
+ whole reason this is worth writing down.
+
+ Distinct from `deprecated`, which says only THAT a field is superseded.
+ That is enough to stop offering it on new firmware but not enough to keep
+ offering it where it still works: a node below this version needs the field,
+ and a client that hides it on the strength of the boolean alone takes a
+ working setting away. Both clients do exactly that today.
+
+ So the intended rule is: show the field below this version; at or above it,
+ treat it as `deprecated` does - hidden unless the node holds a non-default
+ value, which keeps a stale setting visible rather than silently saved.
+
+ Deprecated is not removed. A field firmware has stopped reading entirely is
+ a different statement and wants its own annotation rather than this one.
+
+ MACHINE-READABLE, and presentation metadata, on the same terms as
+ `since_firmware`. */
+    pb_callback_t deprecated_since;
 } meshtastic_FieldMetadata;
 
 
@@ -125,8 +175,8 @@ extern "C" {
 #endif
 
 /* Initializer values for message structs */
-#define meshtastic_FieldMetadata_init_default    {false, 0, false, 0, false, 0, false, 0, {{NULL}, NULL}, false, 0, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}}
-#define meshtastic_FieldMetadata_init_zero       {false, 0, false, 0, false, 0, false, 0, {{NULL}, NULL}, false, 0, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}}
+#define meshtastic_FieldMetadata_init_default    {false, 0, false, 0, false, 0, false, 0, {{NULL}, NULL}, false, 0, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}}
+#define meshtastic_FieldMetadata_init_zero       {false, 0, false, 0, false, 0, false, 0, {{NULL}, NULL}, false, 0, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define meshtastic_FieldMetadata_diy_only_tag    1
@@ -138,6 +188,8 @@ extern "C" {
 #define meshtastic_FieldMetadata_label_tag       7
 #define meshtastic_FieldMetadata_description_tag 8
 #define meshtastic_FieldMetadata_keywords_tag    9
+#define meshtastic_FieldMetadata_since_firmware_tag 10
+#define meshtastic_FieldMetadata_deprecated_since_tag 11
 #define meshtastic_field_metadata_tag            51001
 #define meshtastic_enum_value_metadata_tag       51001
 
@@ -151,7 +203,9 @@ X(a, CALLBACK, OPTIONAL, STRING,   unit,              5) \
 X(a, STATIC,   OPTIONAL, BOOL,     deprecated,        6) \
 X(a, CALLBACK, OPTIONAL, STRING,   label,             7) \
 X(a, CALLBACK, OPTIONAL, STRING,   description,       8) \
-X(a, CALLBACK, OPTIONAL, STRING,   keywords,          9)
+X(a, CALLBACK, OPTIONAL, STRING,   keywords,          9) \
+X(a, CALLBACK, OPTIONAL, STRING,   since_firmware,   10) \
+X(a, CALLBACK, OPTIONAL, STRING,   deprecated_since,  11)
 #define meshtastic_FieldMetadata_CALLBACK pb_default_field_callback
 #define meshtastic_FieldMetadata_DEFAULT NULL
 

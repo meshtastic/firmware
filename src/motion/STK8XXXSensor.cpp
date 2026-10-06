@@ -14,8 +14,7 @@ bool STK8XXXSensor::init()
         STK_IRQ = false;
         sensor.STK8xxx_Anymotion_init();
         pinMode(STK8XXX_INT, INPUT_PULLUP);
-        attachInterrupt(
-            digitalPinToInterrupt(STK8XXX_INT), [] { STK_IRQ = true; }, RISING);
+        attachInterrupt(digitalPinToInterrupt(STK8XXX_INT), [] { STK_IRQ = true; }, RISING);
 
         LOG_DEBUG("STK8XXX init ok");
         return true;

@@ -83,17 +83,10 @@ class MockNodeDB : public NodeDB
 
 // ---------------------------------------------------------------------------
 // Test shim - expose getNextHop and the route-health helpers; reset health between tests.
-// Nulls cryptLock so the Router base can be (re)constructed (same pattern as test_mqtt MockRouter).
 // ---------------------------------------------------------------------------
 class NextHopRouterTestShim : public NextHopRouter
 {
   public:
-    NextHopRouterTestShim() : NextHopRouter()
-    {
-        delete cryptLock;
-        cryptLock = nullptr;
-    }
-
     using NextHopRouter::clearRouteHealth;
     using NextHopRouter::findRouteHealth;
     using NextHopRouter::getNextHop;

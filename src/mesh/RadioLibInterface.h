@@ -19,7 +19,15 @@
 // In addition to the default Rx flags, we need the PREAMBLE_DETECTED flag to detect whether we are actively receiving
 #define MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS (RADIOLIB_IRQ_RX_DEFAULT_FLAGS | (1 << RADIOLIB_IRQ_PREAMBLE_DETECTED))
 
-#define AGC_RESET_INTERVAL_MS (60 * 1000) // 60 seconds
+#define AGC_RESET_INTERVAL_MS (60 * 1000) // 60 seconds: how often the loop runs periodicRadioMaintenance()
+// An AGC reset takes the radio off the air for over 100 ms, so it runs only on a radio that has decoded nothing for
+// AGC_IDLE_RESET_MS (gain stuck low would look like that), or at least once per AGC_FORCED_RESET_MS on a busy one
+#ifndef AGC_IDLE_RESET_MS
+#define AGC_IDLE_RESET_MS (60 * 1000UL)
+#endif
+#ifndef AGC_FORCED_RESET_MS
+#define AGC_FORCED_RESET_MS (24 * 60 * 60 * 1000UL)
+#endif
 
 /**
  * We need to override the RadioLib ArduinoHal class to add mutex protection for SPI bus access
@@ -27,7 +35,7 @@
 class LockingArduinoHal : public ArduinoHal
 {
   public:
-    LockingArduinoHal(SPIClass &spi, SPISettings spiSettings) : ArduinoHal(spi, spiSettings){};
+    LockingArduinoHal(SPIClass &spi, SPISettings spiSettings) : ArduinoHal(spi, spiSettings) {};
 
     void spiBeginTransaction() override;
     void spiEndTransaction() override;
@@ -59,7 +67,7 @@ class STM32WLx_ModuleWrapper : public STM32WLx_Module
   public:
     STM32WLx_ModuleWrapper(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst,
                            RADIOLIB_PIN_TYPE busy)
-        : STM32WLx_Module(){};
+        : STM32WLx_Module() {};
 };
 #endif
 
@@ -190,10 +198,11 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      * Reset AGC by power-cycling the analog frontend.
      * Subclasses override with chip-specific calibration sequences.
      * Safe to call periodically - skips if currently sending or receiving.
+     * @return false if it skipped the reset or could not complete it, so the next maintenance tick retries
      */
-    virtual void resetAGC();
+    virtual bool resetAGC();
 
-    /** Periodic radio upkeep: re-arms RX if a failed startReceive() left it off, otherwise resets AGC. */
+    /** Periodic radio upkeep: re-arms RX if a failed startReceive() left it off, otherwise resets AGC when it is due. */
     void periodicRadioMaintenance();
 
     /** Chip-specific recovery of a chip that lost its state to a reset/brownout. Returns true if reprogrammed. */
@@ -215,6 +224,7 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      * Debugging counts
      */
     uint32_t rxBad = 0, rxGood = 0, txGood = 0, txRelay = 0;
+    uint32_t lastRxGoodMs = 0, lastAgcResetMs = 0; // 0: none yet
     uint16_t txDrop = 0;
 
   public:
@@ -257,6 +267,8 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
     /** Attempt to find a packet in the TxQueue. Returns true if the packet was found. */
     virtual bool findInTxQueue(NodeNum from, PacketId id) override;
+
+    uint8_t packetsInTxQueue() { return txQueue.getMaxLen() - txQueue.getFree(); }
 
     /**
      * Update the noise floor measurement by sampling RSSI from a slow path.
@@ -333,6 +345,10 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     /** Could we send right now (i.e. either not actively receiving or transmitting)? */
     virtual bool canSendImmediately();
 
+    /** busyRx deferrals since the last line, and when that line went out (0 = never) */
+    uint32_t lastBusyRxLogMs = 0;
+    uint32_t busyRxDeferred = 0;
+
     /**
      * Raw ISR handler that just calls our polymorphic method
      */
@@ -356,16 +372,22 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      */
     virtual void setStandby();
 
+    /// RadioLib returns its negative RADIOLIB_ERR_* codes through the same unsigned microsecond count it
+    /// returns durations in, so an error reads as 4294967ms of airtime for one packet and takes the node
+    /// off the air until it reboots (#11935). The codes are int16_t, so they wrap to the top of the
+    /// range; the slowest packet we can configure is ~229s, well clear of it.
+    static bool isRadioLibTimeError(RadioLibTime_t usec) { return usec == 0 || usec >= (RadioLibTime_t)0 - 32768; }
+
     /**
      * Derive packet time either for a received (using header info) or a transmitted packet
      */
     template <typename T> uint32_t computePacketTime(T &lora, uint32_t pl, bool received)
     {
+        DataRate_t dr = getDataRate();
+        PacketConfig_t pc = getPacketConfig();
+
         if (received) {
             // Received packet configuration must be the same as configured, except for coding rate and CRC
-            DataRate_t dr = getDataRate();
-            PacketConfig_t pc = getPacketConfig();
-
             uint8_t rxCR = 0;
             bool hasCRC = true;
             if (lora.getLoRaRxHeaderInfo(&rxCR, &hasCRC) == RADIOLIB_ERR_NONE) {
@@ -385,11 +407,23 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
                     pc.lora.crcEnabled = hasCRC;
                 }
             }
-
-            return lora.calculateTimeOnAir(modemType, dr, pc, pl) / 1000;
+        } else {
+            // Reads the packet type back over SPI, so a chip that lost its config answers WRONG_MODEM.
+            RadioLibTime_t reported = lora.getTimeOnAir(pl);
+            if (!isRadioLibTimeError(reported))
+                return reported / 1000;
+            LOG_WARN("%s%d from getTimeOnAir, use configured modem", radioLibErr, (int)(int16_t)reported);
         }
 
-        return lora.getTimeOnAir(pl) / 1000;
+        // Arithmetic on the config we asked for, with no readback to fail. Guarded too: once a code is
+        // in milliseconds nothing downstream can tell it from a duration.
+        RadioLibTime_t computed = lora.calculateTimeOnAir(modemType, dr, pc, pl);
+        if (isRadioLibTimeError(computed)) {
+            LOG_ERROR("%s%d from calculateTimeOnAir", radioLibErr, (int)(int16_t)computed);
+            return 0;
+        }
+
+        return computed / 1000;
     }
 
     const char *radioLibErr = "RadioLib err=";

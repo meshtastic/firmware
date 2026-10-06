@@ -21,6 +21,30 @@ struct CryptoKey {
  *
  */
 
+#if !(MESHTASTIC_EXCLUDE_PKI)
+struct CachedSharedSecret {
+    // The whole peer key, not a short digest of it: a peer identified by a prefix can be
+    // impersonated by anyone who grinds a key sharing it, who would then be handed the secret we
+    // use to talk to the real peer. `valid` marks a slot in use, since any key bytes can be zero.
+    uint8_t peer_public_key[32];
+    uint8_t shared_secret[32];
+    uint8_t last_used;
+    bool valid;
+};
+
+/**
+ * Max number of cached secrets to track. This should be roughly dependent on MAX_NUM_NODES but
+ * cannot be directly because it is not a constant expression.
+ */
+#if defined(ARCH_STM32WL)
+#define MAX_CACHED_SHARED_SECRETS 2
+#elif defined(ARCH_NRF52)
+#define MAX_CACHED_SHARED_SECRETS 8
+#else
+#define MAX_CACHED_SHARED_SECRETS 10
+#endif
+#endif
+
 #define MAX_BLOCKSIZE 256
 #define TEST_CURVE25519_FIELD_OPS // Exposes Curve25519::isWeakPoint() for testing keys
 #define XEDDSA_SIGNATURE_SIZE 64
@@ -29,6 +53,20 @@ struct CryptoKey {
 #define XEDDSA_SIGNATURE_FIELD_BYTES (XEDDSA_SIGNATURE_SIZE + 2)
 // Length of Routing.ack_proof, taken from the generated field so the protocol owns the number.
 static constexpr size_t ACK_PROOF_SIZE = sizeof(meshtastic_Routing_ack_proof_t::bytes);
+
+// Signing-buffer format. Bump this if the covered fields or their order ever change: it makes a
+// buffer built by one version impossible to reinterpret as one built by another.
+#define XEDDSA_SIGNING_VERSION 0x01
+// version(1) | from | id | to | portnum | request_id | reply_id | emoji | bitfield | flags(1)
+static constexpr size_t XEDDSA_SIGNED_HEADER_LEN = 1 + 8 * sizeof(uint32_t) + 1;
+// The signing buffer is local scratch and is never transmitted, so no wire limit applies to it.
+// Sized against the largest payload the Data schema can hold rather than against what the sender's
+// fits-on-air gate currently admits, so buildSigningBuffer cannot run out of room on a well-formed
+// packet however that gate is later tuned - an overflow there would silently stop signing.
+static constexpr size_t XEDDSA_SIGN_BUF_LEN = XEDDSA_SIGNED_HEADER_LEN + meshtastic_Constants_DATA_PAYLOAD_LEN;
+// Bit positions in the signing buffer's flags byte.
+#define XEDDSA_SIGNED_FLAG_WANT_RESPONSE 0x01
+#define XEDDSA_SIGNED_FLAG_HAS_BITFIELD 0x02
 
 class CryptoEngine
 {
@@ -45,10 +83,12 @@ class CryptoEngine
     virtual bool ensurePkiKeys(meshtastic_Config_SecurityConfig &security, meshtastic_User &user);
 #endif
 #if !(MESHTASTIC_EXCLUDE_XEDDSA)
-    bool xeddsa_sign(uint32_t fromNode, uint32_t packetId, uint32_t portnum, const uint8_t *payload, size_t payloadLen,
-                     uint8_t *signature);
-    bool xeddsa_verify(const uint8_t *pubKey, uint32_t fromNode, uint32_t packetId, uint32_t portnum, const uint8_t *payload,
-                       size_t payloadLen, const uint8_t *signature);
+    // The whole Data envelope is covered, not just its payload - see buildSigningBuffer. Takes the
+    // Data rather than a field list so adding a field to the covered set cannot silently miss a
+    // call site. toNode and fromNode come from the MeshPacket header; everything else is in `d`.
+    bool xeddsa_sign(uint32_t fromNode, uint32_t packetId, uint32_t toNode, const meshtastic_Data *d, uint8_t *signature);
+    bool xeddsa_verify(const uint8_t *pubKey, uint32_t fromNode, uint32_t packetId, uint32_t toNode, const meshtastic_Data *d,
+                       const uint8_t *signature);
 #endif
     /**
      * Derive the pairwise ACK proof carried in Routing.ack_proof.
@@ -72,8 +112,8 @@ class CryptoEngine
      *  - Integers are little-endian explicitly, so the value is a property of the protocol and not of
      *    the compiler that built the node.
      *
-     * Cost: setDHPublicKey runs Curve25519::dh2 on every call and nothing caches the result, so this
-     * is one X25519 per verify, which an attacker chooses when we pay by sending a forged ack.
+     * Cost: one X25519 per peer whose derived key is not in the shared-secret cache, which an
+     * attacker chooses when we pay by sending a forged ack from an unseen key.
      * Callers MUST gate on cheap checks first - see ReliableRouter::ackProofPermitsAction.
      *
      * Clobbers shared_key, so the caller must hold cryptLock (which is NOT recursive - do not call
@@ -163,6 +203,20 @@ class CryptoEngine
     uint8_t cached_curve_pubkey[32] = {0};
     uint8_t cached_ed_pubkey[32] = {0};
 #endif
+
+    /**
+     * Cache mapping peers' public keys -> {shared_secret, last_used}
+     */
+    CachedSharedSecret sharedSecretCache[MAX_CACHED_SHARED_SECRETS] = {};
+
+    /**
+     * Set cryptographic (hashed) shared_key calculated from the given peer public key, deriving it
+     * only on a cache miss. Caller must hold cryptLock, as with setDHPublicKey.
+     */
+    bool setCryptoSharedSecret(const uint8_t *peerPubKey);
+
+    /** Drop every cached secret. Called whenever our own private key changes: they are all stale. */
+    void clearSharedSecretCache();
 #endif
     /**
      * Init our 128 bit nonce for a new packet
