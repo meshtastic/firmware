@@ -414,8 +414,10 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
 
         if (MeshtasticOTA::trySwitchToOTA()) {
             suppressRebootBanner = true;
-            if (screen)
+            if (screen) {
+                powerFSM.trigger(EVENT_PRESS);
                 screen->startFirmwareUpdateScreen();
+            }
             MeshtasticOTA::saveConfig(&config.network, mode, r->ota_request.ota_hash.bytes);
             sendWarningAndLog("Rebooting to %s OTA", mode_name);
         } else {
