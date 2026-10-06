@@ -4,7 +4,6 @@
 
 #if defined(ARCH_PORTDUINO) && HAS_BLE_MESH
 
-#include "UptimeClock.h"
 #include "mesh/BLEMeshHandler.h"
 #include "mesh/NodeDB.h"
 #include "mesh/Router.h"
@@ -26,8 +25,6 @@ class FakeBLEMesh : public BLEMeshHandler
     bool ready = true;
     bool advertising = false;
 
-    using BLEMeshHandler::ScanReportStatus;
-
     void start() override { isRunning = true; }
     void stop() override { isRunning = false; }
 
@@ -37,11 +34,7 @@ class FakeBLEMesh : public BLEMeshHandler
         return onCancelSending(medium, from, id);
     }
     uint8_t build(const meshtastic_MeshPacket *mp, uint8_t *out, size_t cap) { return buildAdvPayload(mp, out, cap); }
-    void report(uint8_t sid, ScanReportStatus status, const uint8_t *data, size_t len, const uint8_t *addr = defaultAddr)
-    {
-        onScanReport(0 /* public */, addr, sid, status, data, len, -60);
-    }
-    static constexpr uint8_t defaultAddr[6] = {0x11, 0x22, 0x33, 0x44, 0x55, 0x66};
+    void hear(const uint8_t *adv, size_t len) { handleAdvertisementData(adv, len, -60); }
     int32_t pump() { return runOnce(); }
 
     void enqueueReceived(meshtastic_MeshPacket *p) override
@@ -117,21 +110,21 @@ size_t encodeForAir(const meshtastic_MeshPacket &mp, uint8_t *out, size_t cap)
     return pb_encode_to_bytes(out, cap, &meshtastic_MeshPacket_msg, &mp);
 }
 
-/// Build a whole advertisement of exactly `total` bytes, the size an HCI split is measured against.
-size_t advertisementOf(FakeBLEMesh &h, size_t total, uint32_t id, uint8_t *out, meshtastic_MeshPacket *sent = nullptr)
+/// A packet from `from` that encodes to exactly `bytes`, the unit the advertisement budget counts.
+meshtastic_MeshPacket packetEncodingTo(size_t bytes, NodeNum from)
 {
     for (size_t payload = 1; payload <= MAX_ENCRYPTED_FOR_TEST; payload++) {
-        auto p = encryptedPacket(0x3061b02e, id, payload);
-        if (h.build(&p, out, BLE_MESH_ADV_TOTAL_MAX) == total) {
-            if (sent)
-                *sent = p;
-            return total;
-        }
+        auto p = encryptedPacket(from, 0x04050b6e, payload);
+        size_t n = 0;
+        if (pb_get_encoded_size(&n, &meshtastic_MeshPacket_msg, &p) && n == bytes)
+            return p;
     }
-    return 0;
+    TEST_FAIL_MESSAGE("no ciphertext length encodes to the requested size");
+    return encryptedPacket(from);
 }
 
-using Status = FakeBLEMesh::ScanReportStatus;
+/// Room for any advertisement, so a refusal pins the budget rather than the caller's buffer.
+constexpr size_t ROOMY_ADV = 255;
 
 } // namespace
 
@@ -183,7 +176,7 @@ void test_drops_a_packet_too_large_for_one_advertisement(void)
 {
     FakeBLEMesh h;
     h.start();
-    // One advertisement holds 251 bytes, one HCI Set Extended Advertising Data command, so the
+    // One advertisement holds 229 bytes, what one HCI LE Extended Advertising Report carries, so the
     // largest packets cannot ride BLE. They still go out over LoRa: Router::send has already handed
     // them to the radio by the time the transport refuses.
     auto p = encryptedPacket(0x3061b02e, 0x04050b6e, MAX_ENCRYPTED_FOR_TEST);
@@ -217,13 +210,17 @@ size_t largestCiphertextThatFits(meshtastic_MeshPacket shape)
 void test_the_advertisement_ceiling_is_below_the_lora_ceiling(void)
 {
     const size_t fits = largestCiphertextThatFits(productionPacket());
+    auto ours = productionPacket();
+    ours.from = nodeDB->getNodeNum();
+    const size_t oursFits = largestCiphertextThatFits(ours);
 
-    // One extended advertisement cannot hold what one LoRa frame holds, and nothing fragments: the
-    // nRF52 SoftDevice caps the advertising data and the scan buffer at 255 in either direction.
-    // Everything above this rides LoRa only, counted by txDroppedTooLarge.
+    // One extended advertisement cannot hold what one LoRa frame holds, and nothing fragments: a
+    // BlueZ host receives no more than the 229 bytes one HCI report carries. Everything above this
+    // rides LoRa only, counted by txDroppedTooLarge.
     // relay_node costs 3 of the budget (field 19, so a two-byte tag); priority costs nothing,
-    // because stripForTransmit drops it.
-    TEST_ASSERT_EQUAL_size_t(216, fits);
+    // because stripForTransmit drops it. Our own packets give up 5 more, for the relay's next_hop.
+    TEST_ASSERT_EQUAL_size_t(194, fits);
+    TEST_ASSERT_EQUAL_size_t(189, oursFits);
     TEST_ASSERT_LESS_THAN_size_t_MESSAGE(MAX_RADIO_PAYLOAD_LEN, fits, "BLE carries less than LoRa");
 }
 
@@ -286,6 +283,70 @@ void test_an_oversized_packet_is_counted_not_just_logged(void)
 
     TEST_ASSERT_FALSE(h.onSend(&p));
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, h.txDroppedTooLarge, "the loss is countable");
+}
+
+// One HCI LE Extended Advertising Report carries at most 229 bytes and Linux delivers nothing above
+// that intact, so a packet over 221 bytes (229 less the 8-byte AD envelope) would never reach a
+// BlueZ node. It is refused and counted here, and still rides LoRa.
+void test_a_packet_over_221_bytes_is_refused(void)
+{
+    FakeBLEMesh h;
+    h.start();
+    auto p = packetEncodingTo(222, 0x3061b02e);
+    TEST_ASSERT_FALSE_MESSAGE(isFromUs(&p), "a relayed packet, held to the full budget");
+
+    uint8_t adv[ROOMY_ADV];
+    TEST_ASSERT_EQUAL_UINT8(0, h.build(&p, adv, sizeof(adv)));
+    TEST_ASSERT_EQUAL_UINT32(1, h.txDroppedTooLarge);
+}
+
+// The other side of the same edge: a relayed 221-byte packet fills one report exactly.
+void test_a_relayed_221_byte_packet_fills_the_advertisement(void)
+{
+    FakeBLEMesh h;
+    h.start();
+    auto p = packetEncodingTo(221, 0x3061b02e);
+    TEST_ASSERT_FALSE(isFromUs(&p));
+
+    uint8_t adv[ROOMY_ADV];
+    TEST_ASSERT_EQUAL_UINT8(229, h.build(&p, adv, sizeof(adv)));
+    TEST_ASSERT_EQUAL_UINT32(0, h.txDroppedTooLarge);
+}
+
+// A relay can grow a packet: NextHopRouter stamps next_hop on a DM it forwards, up to 5 bytes more
+// with relay_node. A packet this node originates is held to 216 bytes so that copy still fits; at
+// the full budget the relay's copy would be refused and the BLE flood would stop one hop out.
+void test_our_own_packet_leaves_room_for_a_relay(void)
+{
+    FakeBLEMesh h;
+    h.start();
+    auto over = packetEncodingTo(217, nodeDB->getNodeNum());
+    auto fits = packetEncodingTo(216, nodeDB->getNodeNum());
+    TEST_ASSERT_TRUE(isFromUs(&over));
+
+    uint8_t adv[ROOMY_ADV];
+    TEST_ASSERT_EQUAL_UINT8_MESSAGE(0, h.build(&over, adv, sizeof(adv)), "217 bytes of our own is refused");
+    TEST_ASSERT_EQUAL_UINT32(1, h.txDroppedTooLarge);
+    TEST_ASSERT_EQUAL_UINT8_MESSAGE(216 + BLE_MESH_ADV_OVERHEAD, h.build(&fits, adv, sizeof(adv)), "216 fits");
+}
+
+// The receive side of the same budget: the largest advertisement this node sends is one whole
+// report, and the shared AD parser hands its packet on intact.
+void test_a_full_advertisement_is_received_whole(void)
+{
+    FakeBLEMesh h;
+    h.start();
+    auto p = packetEncodingTo(BLE_MESH_MAX_PROTO_LEN, 0x3061b02e);
+
+    uint8_t adv[ROOMY_ADV];
+    const uint8_t len = h.build(&p, adv, sizeof(adv));
+    TEST_ASSERT_EQUAL_UINT8(BLE_MESH_ADV_TOTAL_MAX, len);
+
+    h.hear(adv, len);
+    TEST_ASSERT_EQUAL_MESSAGE(1, h.received.size(), "delivered once");
+    TEST_ASSERT_EQUAL_UINT32(p.id, h.received[0].id);
+    TEST_ASSERT_EQUAL_UINT32(p.encrypted.size, h.received[0].encrypted.size);
+    TEST_ASSERT_EQUAL_MEMORY(p.encrypted.bytes, h.received[0].encrypted.bytes, p.encrypted.size);
 }
 
 void test_an_urgent_frame_overtakes_one_already_queued(void)
@@ -544,99 +605,6 @@ void test_legacy_burst_duration_is_in_milliseconds(void)
     TEST_ASSERT_GREATER_OR_EQUAL_INT32(3 * 30, bleMeshBurstMs(3, 48));
 }
 
-// HCI LE Extended Advertising Report carries at most 229 bytes, so a controller hands a 245-byte
-// advertisement (one full AUX_ADV_IND) up as a 229-byte INCOMPLETE head and a 16-byte COMPLETE tail.
-// Dropping the head and parsing the tail alone loses every packet over 221 bytes.
-void test_a_split_advertisement_is_joined(void)
-{
-    FakeBLEMesh h;
-    h.start();
-    uint8_t adv[BLE_MESH_ADV_TOTAL_MAX];
-    meshtastic_MeshPacket p;
-    TEST_ASSERT_EQUAL_MESSAGE(245, advertisementOf(h, 245, 0x0a0b0c0d, adv, &p), "a 245-byte advertisement exists");
-
-    h.report(0, Status::Incomplete, adv, 229);
-    TEST_ASSERT_EQUAL_MESSAGE(0, h.received.size(), "nothing delivered from the head alone");
-    h.report(0, Status::Complete, adv + 229, 16);
-
-    TEST_ASSERT_EQUAL_MESSAGE(1, h.received.size(), "the joined advertisement delivered once");
-    TEST_ASSERT_EQUAL_UINT32(p.id, h.received[0].id);
-    TEST_ASSERT_EQUAL_UINT32(p.encrypted.size, h.received[0].encrypted.size);
-    TEST_ASSERT_EQUAL_MEMORY(p.encrypted.bytes, h.received[0].encrypted.bytes, p.encrypted.size);
-}
-
-void test_an_unsplit_advertisement_is_delivered(void)
-{
-    FakeBLEMesh h;
-    h.start();
-    uint8_t adv[BLE_MESH_ADV_TOTAL_MAX];
-    TEST_ASSERT_EQUAL(120, advertisementOf(h, 120, 0x0a0b0c0d, adv));
-
-    h.report(0, Status::Complete, adv, 120);
-    TEST_ASSERT_EQUAL(1, h.received.size());
-}
-
-// TRUNCATED means the controller lost the rest of the chain; what arrived is not a packet.
-void test_a_truncated_advertisement_is_dropped(void)
-{
-    FakeBLEMesh h;
-    h.start();
-    uint8_t adv[BLE_MESH_ADV_TOTAL_MAX];
-    TEST_ASSERT_EQUAL(245, advertisementOf(h, 245, 0x0a0b0c0d, adv));
-
-    h.report(0, Status::Incomplete, adv, 229);
-    h.report(0, Status::Truncated, adv + 229, 8);
-    TEST_ASSERT_EQUAL_MESSAGE(0, h.received.size(), "a truncated advertisement is not delivered");
-
-    // The abandoned head must not be joined to the advertiser's next burst.
-    h.report(0, Status::Incomplete, adv, 229);
-    h.report(0, Status::Complete, adv + 229, 16);
-    TEST_ASSERT_EQUAL_MESSAGE(1, h.received.size(), "the next burst arrives whole");
-}
-
-// The key is (address, SID): two advertisers, or two sets of one, interleave on air.
-void test_interleaved_advertisers_stay_apart(void)
-{
-    FakeBLEMesh h;
-    h.start();
-    uint8_t a[BLE_MESH_ADV_TOTAL_MAX];
-    uint8_t b[BLE_MESH_ADV_TOTAL_MAX];
-    TEST_ASSERT_EQUAL(245, advertisementOf(h, 245, 0x0000000a, a));
-    TEST_ASSERT_EQUAL(240, advertisementOf(h, 240, 0x0000000b, b));
-    const uint8_t otherAddr[6] = {0x66, 0x55, 0x44, 0x33, 0x22, 0x11};
-
-    h.report(0, Status::Incomplete, a, 229);
-    h.report(0, Status::Incomplete, b, 229, otherAddr);
-    h.report(0, Status::Complete, a + 229, 16);
-    h.report(0, Status::Complete, b + 229, 11, otherAddr);
-
-    TEST_ASSERT_EQUAL(2, h.received.size());
-    TEST_ASSERT_EQUAL_UINT32(0x0000000a, h.received[0].id);
-    TEST_ASSERT_EQUAL_UINT32(0x0000000b, h.received[1].id);
-}
-
-// HCI marks no first report, so a head whose tail never came must expire rather than prefix the
-// advertiser's next advertisement.
-void test_a_stale_partial_is_abandoned(void)
-{
-    FakeBLEMesh h;
-    h.start();
-    uint8_t stale[BLE_MESH_ADV_TOTAL_MAX];
-    uint8_t fresh[BLE_MESH_ADV_TOTAL_MAX];
-    TEST_ASSERT_EQUAL(245, advertisementOf(h, 245, 0x0000000a, stale));
-    TEST_ASSERT_EQUAL(245, advertisementOf(h, 245, 0x0000000b, fresh));
-
-    Time::setTestMillis(10000);
-    h.report(0, Status::Incomplete, stale, 229);
-    Time::advanceTestMillis(BLE_MESH_REASSEMBLY_TIMEOUT_MS + 1);
-    h.report(0, Status::Incomplete, fresh, 229);
-    h.report(0, Status::Complete, fresh + 229, 16);
-    Time::useRealClock();
-
-    TEST_ASSERT_EQUAL(1, h.received.size());
-    TEST_ASSERT_EQUAL_UINT32(0x0000000b, h.received[0].id);
-}
-
 void setUp(void) {}
 void tearDown(void) {}
 
@@ -655,6 +623,10 @@ void setup()
     RUN_TEST(test_relaying_no_longer_costs_budget);
     RUN_TEST(test_the_air_copy_drops_everything_the_receiver_overwrites);
     RUN_TEST(test_an_oversized_packet_is_counted_not_just_logged);
+    RUN_TEST(test_a_packet_over_221_bytes_is_refused);
+    RUN_TEST(test_a_relayed_221_byte_packet_fills_the_advertisement);
+    RUN_TEST(test_our_own_packet_leaves_room_for_a_relay);
+    RUN_TEST(test_a_full_advertisement_is_received_whole);
     RUN_TEST(test_a_dupe_heard_on_ble_cancels_our_queued_copy);
     RUN_TEST(test_a_dupe_heard_on_lora_leaves_the_ble_queue_alone);
     RUN_TEST(test_canceling_keeps_the_other_queued_frames_in_order);
@@ -669,11 +641,6 @@ void setup()
     RUN_TEST(test_ingress_ignores_our_own_advertisement);
     RUN_TEST(test_pump_waits_for_the_platform);
     RUN_TEST(test_legacy_burst_duration_is_in_milliseconds);
-    RUN_TEST(test_a_split_advertisement_is_joined);
-    RUN_TEST(test_an_unsplit_advertisement_is_delivered);
-    RUN_TEST(test_a_truncated_advertisement_is_dropped);
-    RUN_TEST(test_interleaved_advertisers_stay_apart);
-    RUN_TEST(test_a_stale_partial_is_abandoned);
     exit(UNITY_END());
 }
 
