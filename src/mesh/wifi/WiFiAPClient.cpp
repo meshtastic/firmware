@@ -78,11 +78,14 @@ bool isReconnecting = false; // If we are currently reconnecting
 // The claim is load/store only - ARMv6-M has no LDREX, so an exchange() would call libatomic.
 static std::atomic<bool> wifiJoinRunning{false};
 static uint32_t wifiJoinStartMillis = 0; // 0 = nothing in flight
+// The task's own copy of the credentials, taken on the main loop where AdminModule writes config.network.
+// Only written while no join holds the claim.
+static char wifiJoinSsid[sizeof(config.network.wifi_ssid)];
+static char wifiJoinPsk[sizeof(config.network.wifi_psk)];
 
 static void wifiJoinTaskFn(void *)
 {
-    const char *psk = config.network.wifi_psk[0] ? config.network.wifi_psk : NULL;
-    WiFi.beginNoBlock(config.network.wifi_ssid, psk);
+    WiFi.beginNoBlock(wifiJoinSsid, wifiJoinPsk[0] ? wifiJoinPsk : NULL);
     wifiJoinRunning.store(false, std::memory_order_release);
     vTaskDelete(NULL);
 }
@@ -91,6 +94,8 @@ static bool startWifiJoin()
 {
     if (wifiJoinRunning.load(std::memory_order_acquire))
         return true; // previous join still in progress
+    strncpy(wifiJoinSsid, config.network.wifi_ssid, sizeof(wifiJoinSsid) - 1);
+    strncpy(wifiJoinPsk, config.network.wifi_psk, sizeof(wifiJoinPsk) - 1);
     wifiJoinRunning.store(true, std::memory_order_relaxed);
     uint32_t startedAt = millis();
     wifiJoinStartMillis = startedAt == 0 ? 1 : startedAt;
