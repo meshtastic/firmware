@@ -10,7 +10,7 @@ permissions: {}
 
 jobs:
   welcome:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     permissions:
       issues: write # Required to post comments and labels on issues
       pull-requests: write # Required to post comments and labels on PRs
