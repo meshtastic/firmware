@@ -58,6 +58,12 @@ class LockingArduinoHal : public ArduinoHal
 // RadioLib's own default Vref, for a probe with no explicit voltage configured.
 #define TCXO_OPTIONAL_DEFAULT_VOLTAGE 1.6f
 
+// TCXO start-up delay programmed after every begin(), in place of RadioLib's 5000 us. A clear CAD leaves the chip on
+// its RC oscillator, so the TX after it waits this long before the PA ramps. Set it in variant.h for a slower TCXO.
+#ifndef TCXO_STARTUP_DELAY_US
+#define TCXO_STARTUP_DELAY_US 1000
+#endif
+
 #if defined(USE_STM32WLx)
 /**
  * A wrapper for the RadioLib STM32WLx_Module class, that doesn't connect any pins as they are virtual
@@ -194,6 +200,26 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      */
     void pollMissedIrqs();
 
+    // Time::getMillis() at which a CAD->RX handoff left the chip listening without us arming it, or 0
+    // if none is outstanding. 0 is a sentinel, so it must be tested before any elapsed comparison.
+    uint32_t cadHandoffRxStart = 0;
+
+    // True between the handoff and the rearmReceive() that consumes it: the chip is already in RX, so
+    // that one re-arm must not standby. Both fields are cleared by setStandby().
+    bool cadHandedToRx = false;
+
+    /** Record that CAD left the chip in RX: arms both the flag and the no-show window below. */
+    void noteCadHandoffToRx();
+
+    /** Re-arm if a CAD->RX handoff has produced no packet well past one max-length airtime. */
+    void checkCadHandoffTimeout();
+
+    // Time::getMillis() when plain RX was first seen holding PREAMBLE/HEADER flags, or 0 if none.
+    uint32_t rxFlagsSeenMs = 0;
+
+    /** Plain-RX twin of checkCadHandoffTimeout(): retire flags no RX_DONE consumed within a max packet. */
+    virtual void checkStaleRxFlags();
+
     /**
      * Reset AGC by power-cycling the analog frontend.
      * Subclasses override with chip-specific calibration sequences.
@@ -249,7 +275,16 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      */
     virtual void startReceive();
 
-    /** can we detect a LoRa preamble on the current channel? */
+    /**
+     * Re-arm RX after a busy-channel CAD detect or after servicing an RX_DONE. Normally a full
+     * startReceive(); after a CAD->RX handoff the chip is already listening, so that one re-arm
+     * re-attaches the MCU ISR only - a startReceive() there would standby over the packet CAD found.
+     */
+    void rearmReceive();
+
+    /** can we detect a LoRa preamble on the current channel?
+     *  A true return means the chip may have been handed to RX in place, so the caller MUST follow it
+     *  with rearmReceive() before anything else touches the radio. */
     virtual bool isChannelActive() = 0;
 
     /** are we actively receiving a packet (only called during receiving state)
@@ -318,7 +353,8 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      */
     void startTransmitTimerRebroadcast(meshtastic_MeshPacket *p);
 
-    void handleTransmitInterrupt();
+    /** Detach the sent packet and undo its pre-TX switch; the caller re-arms RX, then finishSentPacket(). */
+    meshtastic_MeshPacket *handleTransmitInterrupt();
     void handleReceiveInterrupt();
 
     static void timerCallback(void *p1, uint32_t p2);
@@ -335,6 +371,9 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
   protected:
     uint32_t activeReceiveStart = 0;
+
+    /** Whether a packet is waiting to transmit; txQueue itself stays private. */
+    bool hasQueuedTx() { return !txQueue.empty(); }
 
     bool receiveDetected(uint16_t irq, unsigned long syncWordHeaderValidFlag, unsigned long preambleDetectedFlag);
 
@@ -357,6 +396,12 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     /**
      * If a send was in progress finish it and return the buffer to the pool */
     void completeSending();
+
+    /** Clear sendingPacket and release its per-packet radio state; returns the packet, or null. */
+    meshtastic_MeshPacket *detachSentPacket();
+
+    /** Airtime, counters, log and pool release for a packet detachSentPacket() returned. */
+    void finishSentPacket(meshtastic_MeshPacket *p);
 
     /**
      * Add SNR data to received messages
@@ -427,6 +472,22 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     }
 
     const char *radioLibErr = "RadioLib err=";
+
+    /// TCXO_STARTUP_DELAY_US, or Lora.DIO3_TCXO_DELAY_US on Portduino
+    static uint32_t tcxoStartupDelayUs();
+
+    /// Reprogram the TCXO start-up delay, which begin() resets to RadioLib's 5000 us. No-op without a TCXO Vref.
+    template <typename R> void applyTcxoStartupDelay(R &radio, float tcxoVoltage)
+    {
+        if (tcxoVoltage <= 0)
+            return;
+        const uint32_t delayUs = tcxoStartupDelayUs();
+        const int16_t err = radio.setTCXO(tcxoVoltage, delayUs);
+        if (err == RADIOLIB_ERR_NONE)
+            LOG_DEBUG("TCXO start-up delay %u us", (unsigned)delayUs);
+        else
+            LOG_WARN("TCXO start-up delay %u us not set %s%d", (unsigned)delayUs, radioLibErr, err);
+    }
 
     /**
      * If the packet is not already in the late rebroadcast window, move it there
