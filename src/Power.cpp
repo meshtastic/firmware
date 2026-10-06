@@ -328,6 +328,8 @@ static HasBatteryLevel *batteryLevel; // Default to NULL for no battery level se
 
 #ifdef BATTERY_PIN
 
+static_assert(BATTERY_PIN >= 0, "BATTERY_PIN must be a real ADC pin; leave it undefined when the board has no battery sense");
+
 void battery_adcEnable()
 {
 #ifdef ADC_CTRL // enable adc voltage divider when we need to read
