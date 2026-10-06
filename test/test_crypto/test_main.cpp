@@ -420,6 +420,98 @@ void test_XEdDSA_repeated_sign_is_randomized(void)
     TEST_ASSERT_TRUE(crypto->xeddsa_verify(pub, fromNode, packetId, toNode, &d, sig2));
 }
 
+// Finds the cache slot holding this peer's key, so the tests can assert on the cache itself and not
+// only on what setCryptoSharedSecret leaves in shared_key. Protected members are public under
+// PIO_UNIT_TESTING.
+static bool findCachedSecret(const uint8_t *peerPubKey, CachedSharedSecret &entry)
+{
+    for (size_t i = 0; i < MAX_CACHED_SHARED_SECRETS; i++) {
+        if (crypto->sharedSecretCache[i].valid && memcmp(crypto->sharedSecretCache[i].peer_public_key, peerPubKey, 32) == 0) {
+            entry = crypto->sharedSecretCache[i];
+            return true;
+        }
+    }
+    return false;
+}
+
+void test_shared_secret_cache(void)
+{
+    uint8_t private_key[32];
+    uint8_t other_private_key[32];
+    uint8_t public_key[32];
+    uint8_t derived[32];
+    uint8_t stale[32];
+
+    // Same wycheproof vector test_DH25519 uses, hashed: the cache holds the hashed key packet
+    // crypto and the ack proof both consume.
+    HexToBytes(public_key, "504a36999f489cd2fdbc08baff3d88fa00569ba986cba22548ffde80f9806829");
+    HexToBytes(private_key, "c8a9d5a91091ad851c668b0736c1c9a02936c0d3ad62670858088047ba057475");
+    HexToBytes(other_private_key, "d85d8c061a50804ac488ad774ac716c3f5ba714b2712e048491379a500211958");
+    HexToBytes(derived, "436a2c040cf45fea9b29a0cb81b1f41458f863d0d61b453d0a982720d6d61320");
+    crypto->hash(derived, 32);
+
+    crypto->setDHPrivateKey(private_key);
+    TEST_ASSERT(crypto->setCryptoSharedSecret(public_key));
+    TEST_ASSERT_EQUAL_MEMORY(derived, crypto->shared_key, 32);
+
+    // The derivation was cached under the peer's key
+    CachedSharedSecret entry;
+    TEST_ASSERT(findCachedSecret(public_key, entry));
+    TEST_ASSERT_EQUAL_MEMORY(derived, entry.shared_secret, 32);
+
+    // A second call refills shared_key from the cache. Clearing it first means an equal result can
+    // only have come from the cache or from a fresh derivation, and either way it must match.
+    memset(crypto->shared_key, 0, 32);
+    TEST_ASSERT(crypto->setCryptoSharedSecret(public_key));
+    TEST_ASSERT_EQUAL_MEMORY(derived, crypto->shared_key, 32);
+
+    // Our own key changing invalidates every entry: the old secrets no longer belong to this identity
+    memcpy(stale, derived, 32);
+    crypto->setDHPrivateKey(other_private_key);
+    TEST_ASSERT_FALSE(findCachedSecret(public_key, entry));
+    TEST_ASSERT(crypto->setCryptoSharedSecret(public_key));
+    TEST_ASSERT(memcmp(stale, crypto->shared_key, 32) != 0);
+    TEST_ASSERT(findCachedSecret(public_key, entry));
+    TEST_ASSERT_EQUAL_MEMORY(crypto->shared_key, entry.shared_secret, 32);
+}
+
+// Two distinct peers whose keys share a leading prefix must not share a cache entry: an impostor
+// can grind a key that shares any short prefix with a peer it wants to shadow, and would then be
+// handed the secret we use with that peer. An all-zero key is a weak point and stays rejected.
+void test_shared_secret_cache_distinguishes_prefix_sharing_keys(void)
+{
+    uint8_t private_key[32];
+    uint8_t zeroPub[32] = {0};
+    uint8_t peerA[32], peerB[32];
+    uint8_t expectedA[32], expectedB[32];
+    CachedSharedSecret entry;
+
+    HexToBytes(private_key, "c8a9d5a91091ad851c668b0736c1c9a02936c0d3ad62670858088047ba057475");
+    crypto->setDHPrivateKey(private_key);
+
+    // Both peer keys open with the same four zero bytes. SHA256 of X25519(private_key, peer).
+    HexToBytes(peerA, "000000009f489cd2fdbc08baff3d88fa00569ba986cba22548ffde80f9806829");
+    HexToBytes(peerB, "0000000063aa40c6e38346c5caf23a6df0a5e6c80889a08647e551b3563449be");
+    HexToBytes(expectedA, "8df84c5a00ed192f7dadac05873a1dae6a07478153db8395c4604fc905a274ae");
+    HexToBytes(expectedB, "2b011221f1626664332ff61c28715044758ff62a72e91a2b215fba9dbb426097");
+
+    TEST_ASSERT(crypto->setCryptoSharedSecret(peerA));
+    TEST_ASSERT_EQUAL_MEMORY(expectedA, crypto->shared_key, 32);
+
+    // peerB must be derived on its own, not served peerA's entry
+    TEST_ASSERT(crypto->setCryptoSharedSecret(peerB));
+    TEST_ASSERT_EQUAL_MEMORY(expectedB, crypto->shared_key, 32);
+    TEST_ASSERT(findCachedSecret(peerA, entry));
+    TEST_ASSERT_EQUAL_MEMORY(expectedA, entry.shared_secret, 32);
+
+    // And each is still served its own secret once both are resident
+    TEST_ASSERT(crypto->setCryptoSharedSecret(peerA));
+    TEST_ASSERT_EQUAL_MEMORY(expectedA, crypto->shared_key, 32);
+
+    // The all-zero key shares that prefix too, and must be refused rather than matched
+    TEST_ASSERT_FALSE(crypto->setCryptoSharedSecret(zeroPub));
+}
+
 void test_AES_CTR(void)
 {
     uint8_t expected[32];
@@ -919,6 +1011,8 @@ void setup()
     RUN_TEST(test_ECB_AES128);
     RUN_TEST(test_ECB_AES256);
     RUN_TEST(test_DH25519);
+    RUN_TEST(test_shared_secret_cache);
+    RUN_TEST(test_shared_secret_cache_distinguishes_prefix_sharing_keys);
     RUN_TEST(test_AES_CTR);
     RUN_TEST(test_AES_CCM_partial_block_bounds);
     RUN_TEST(test_AES_CCM_rfc3610);

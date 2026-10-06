@@ -147,7 +147,7 @@ bool SimRadio::cancelSending(NodeNum from, PacketId id)
     }
 
     bool result = (p != NULL);
-    LOG_DEBUG("cancelSending id=0x%08x, removed=%d", id, result);
+    LOG_DEBUG_RADIO("cancelSending id=0x%08x, removed=%d", id, result);
     return result;
 }
 
