@@ -21,6 +21,7 @@
 #include "meshUtils.h" // for pow_of_2
 #include "sleep.h"
 #include <assert.h>
+#include <pb_common.h>
 #include <pb_decode.h>
 #include <pb_encode.h>
 #include <string.h>
@@ -364,6 +365,127 @@ const RegionInfo *myRegion;
 bool RadioInterface::uses_default_frequency_slot = true;
 bool RadioInterface::uses_custom_channel_name = false;
 
+// A snapshot of the configured identity at settings time. Separate from the live values above.
+static meshtastic_Config_LoRaConfig configuredLora;
+static bool configuredSlotIsDefault = true;
+static bool configuredCaptured = false;
+
+// config.lora as a borrow left it, recorded when it programmed the radio (clamps included, e.g. tx_power). During
+// the borrow a field still equal to this is the borrow's; one that differs is an operator's edit.
+static meshtastic_Config_LoRaConfig borrowedLora;
+static bool hasBorrowedLora = false;
+static bool committingConfig = false;
+
+// The fields a borrow sets directly: the radio's identity on the air.
+static void copyRfIdentity(meshtastic_Config_LoRaConfig &to, const meshtastic_Config_LoRaConfig &from)
+{
+    to.region = from.region;
+    to.use_preset = from.use_preset;
+    to.modem_preset = from.modem_preset;
+    to.channel_num = from.channel_num;
+}
+
+static bool sameRfIdentity(const meshtastic_Config_LoRaConfig &a, const meshtastic_Config_LoRaConfig &b)
+{
+    return a.region == b.region && a.use_preset == b.use_preset && a.modem_preset == b.modem_preset &&
+           a.channel_num == b.channel_num;
+}
+
+// Copy into out every field the operator changed since the borrow - live differs from borrowedLora. Walks the
+// proto's field table, so a field added to LoRaConfig is covered without touching this.
+static void adoptEditsSinceBorrow(meshtastic_Config_LoRaConfig &out)
+{
+    const auto &live = config.lora;
+    pb_field_iter_t it;
+    if (!pb_field_iter_begin_const(&it, &meshtastic_Config_LoRaConfig_msg, &live))
+        return;
+    const char *base = reinterpret_cast<const char *>(&live);
+    const auto adoptIfEdited = [&](const void *at, size_t len) {
+        const size_t off = static_cast<const char *>(at) - base;
+        if (memcmp(base + off, reinterpret_cast<const char *>(&borrowedLora) + off, len) != 0)
+            memcpy(reinterpret_cast<char *>(&out) + off, base + off, len);
+    };
+    do {
+        if (PB_ATYPE(it.type) != PB_ATYPE_STATIC)
+            continue;
+        adoptIfEdited(it.pData, (size_t)it.data_size * it.array_size);
+        // A has_ flag or repeated count lives in the struct; a fixed array's points into the iterator instead.
+        if (it.pSize && it.pSize != &it.array_size)
+            adoptIfEdited(it.pSize, PB_HTYPE(it.type) == PB_HTYPE_OPTIONAL ? sizeof(bool) : sizeof(pb_size_t));
+    } while (pb_field_iter_next(&it));
+}
+
+// What config.lora says this node is while a borrow holds it: the committed config, plus the operator's edits.
+static meshtastic_Config_LoRaConfig committedDuringBorrow()
+{
+    meshtastic_Config_LoRaConfig lora;
+    if (!hasBorrowedLora) {
+        // The borrow has not programmed the radio yet, so only the RF identity it is setting can be its own.
+        lora = config.lora;
+        copyRfIdentity(lora, configuredLora);
+        return lora;
+    }
+    lora = configuredLora;
+    adoptEditsSinceBorrow(lora);
+    return lora;
+}
+
+bool RadioInterface::commitConfig()
+{
+    committingConfig = true; // this reprogram is the commit's, not a borrow's
+    const bool ok = reconfigure();
+    committingConfig = false;
+    captureConfiguredRadio();
+    return ok;
+}
+
+void RadioInterface::captureConfiguredRadio()
+{
+    if (radioIsBorrowed()) {
+        // A save during a borrow commits the operator's edits, never what the borrow (or its clamps) wrote.
+        const meshtastic_Config_LoRaConfig committed = committedDuringBorrow();
+        if (!sameRfIdentity(committed, configuredLora))
+            configuredSlotIsDefault = uses_default_frequency_slot; // the commit just applied an RF edit
+        configuredLora = committed;
+        return;
+    }
+    configuredLora = config.lora;
+    configuredSlotIsDefault = uses_default_frequency_slot;
+    configuredCaptured = true;
+    channels.captureCommittedPrimary();
+}
+
+bool RadioInterface::radioIsBorrowed()
+{
+    return configuredCaptured && nodeDB && nodeDB->loraSlotIsTransient();
+}
+
+meshtastic_Config_LoRaConfig RadioInterface::loraConfigToReport()
+{
+    return radioIsBorrowed() ? committedDuringBorrow() : config.lora;
+}
+
+const meshtastic_Config_LoRaConfig &RadioInterface::configuredLoraConfig()
+{
+    // Before the first capture the live config is the only one there has been, so it is configured.
+    return configuredCaptured ? configuredLora : config.lora;
+}
+
+bool RadioInterface::configuredUsesDefaultSlot()
+{
+    return configuredCaptured ? configuredSlotIsDefault : uses_default_frequency_slot;
+}
+
+const RegionInfo *RadioInterface::configuredRegion()
+{
+#ifdef REGULATORY_LORA_REGIONCODE
+    // The same override initRegion() applies: a regulatory build pins the region whatever is configured.
+    return getRegion(REGULATORY_LORA_REGIONCODE);
+#else
+    return getRegion(configuredLoraConfig().region);
+#endif
+}
+
 static uint8_t bytes[MAX_LORA_PAYLOAD_LEN + 1];
 
 // Global LoRa radio type
@@ -647,7 +769,7 @@ std::unique_ptr<RadioInterface> initLoRa()
         config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
         nodeDB->saveToDisk(SEGMENT_CONFIG);
 
-        if (rIf && !rIf->reconfigure()) {
+        if (rIf && !rIf->commitConfig()) {
             LOG_WARN("Reconfigure failed, rebooting");
             if (screen) {
                 screen->showSimpleBanner("Rebooting...");
@@ -951,6 +1073,13 @@ RadioInterface::RadioInterface()
 bool RadioInterface::reconfigure()
 {
     applyModemConfig();
+    // A borrow reprograms through here, never through commitConfig(): remember config.lora as it left it, clamps included.
+    if (radioIsBorrowed() && !committingConfig) {
+        borrowedLora = config.lora;
+        hasBorrowedLora = true;
+    } else if (!radioIsBorrowed()) {
+        hasBorrowedLora = false;
+    }
     return true;
 }
 
@@ -967,6 +1096,7 @@ bool RadioInterface::init()
     // constructor time.
 
     applyModemConfig();
+    captureConfiguredRadio(); // boot is a settings event
 
     return true;
 }

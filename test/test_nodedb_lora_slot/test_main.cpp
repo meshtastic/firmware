@@ -12,7 +12,9 @@
 #define NDB_TEST_ENTRY
 #endif
 
+#include "mesh/Channels.h"
 #include "mesh/NodeDB.h"
+#include "mesh/RadioInterface.h"
 #include "mesh/TypeConversions.h"
 #include <cstring>
 
@@ -43,6 +45,7 @@ namespace
 
 NodeDBTestShim *db = nullptr;
 meshtastic_Config_LoRaConfig savedLora;
+meshtastic_ChannelSettings savedPrimary; // a borrow rewrites the primary in place
 
 // Every field the snapshot reads is non-default, so changing one is a real change, not a zero swap.
 meshtastic_Config_LoRaConfig baselineLora()
@@ -101,6 +104,7 @@ void setUp(void)
 {
     db->clearHot();
     config.lora = savedLora;
+    channels.getByIndex(channels.getPrimaryIndex()).settings = savedPrimary;
     db->setLoraSlotTransient(false);
     db->refreshCommittedLoraSlot();
 }
@@ -305,12 +309,226 @@ static void test_transient_hearIsStampedWithTheLiveSlot(void)
     TEST_ASSERT_FALSE(heard(0x8888));
 }
 
+// ---------- a borrow is never reported or persisted as this node's own config -----------------
+
+// What MeshBeaconModule does for a beacon TX: mark the slot transient, then rewrite the RF identity and
+// the primary channel in place. Each value differs from home, so reading the wrong one is visible.
+static const char kVisitedName[] = "Visited";
+
+// A stand-in driver: its reconfigure() is the base one, so applyModemConfig() runs exactly as on a device.
+class BorrowingRadio : public RadioInterface
+{
+  public:
+    ErrorCode send(meshtastic_MeshPacket *p) override
+    {
+        packetPool.release(p);
+        return ERRNO_OK;
+    }
+    uint32_t getPacketTime(uint32_t, bool = false) override { return 0; }
+};
+
+static void borrowRadio(RadioInterface &radio)
+{
+    db->setLoraSlotTransient(true);
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST;
+    config.lora.use_preset = true;
+    config.lora.channel_num = 3;
+    meshtastic_ChannelSettings &primary = channels.getByIndex(channels.getPrimaryIndex()).settings;
+    strncpy(primary.name, kVisitedName, sizeof(primary.name) - 1);
+    primary.psk.size = 16;
+    memset(primary.psk.bytes, 0x77, 16);
+    radio.reconfigure(); // the beacon programs the borrow through here, never through commitConfig()
+}
+
+/*
+ * Under test: RadioInterface::captureConfiguredRadio() while NodeDB's LoRa slot is transient
+ * (src/mesh/RadioInterface.cpp).
+ * Why: any config or channel save runs MeshService::reloadConfig() -> commitConfig() -> this capture. During a
+ * beacon switch config.lora and the primary hold the visited mesh, so the snapshot every status gate reads
+ * would answer for that mesh until the next commit.
+ * Regression guarded: a save landing mid-switch committing the beacon's region, preset, slot and channel as
+ * the node's own - while still adopting a non-RF field the operator really did change.
+ */
+static void test_borrow_commitKeepsTheCommittedRadio(void)
+{
+    RadioInterface::uses_default_frequency_slot = true;
+    RadioInterface::captureConfiguredRadio(); // home, committed
+    const meshtastic_Config_LoRaConfig home = config.lora;
+    const meshtastic_ChannelSettings homePrimary = channels.getByIndex(channels.getPrimaryIndex()).settings;
+
+    BorrowingRadio radio;
+    borrowRadio(radio);
+    RadioInterface::uses_default_frequency_slot = false; // the switch republishes the live verdict
+    config.lora.tx_power = home.tx_power + 3;            // a non-RF field a commit must still adopt
+    RadioInterface::captureConfiguredRadio();            // a save mid-switch
+
+    const meshtastic_Config_LoRaConfig &committed = RadioInterface::configuredLoraConfig();
+    TEST_ASSERT_EQUAL_MESSAGE(home.region, committed.region, "the borrowed region is not committed");
+    TEST_ASSERT_EQUAL_MESSAGE(home.modem_preset, committed.modem_preset, "nor the borrowed preset");
+    TEST_ASSERT_EQUAL_MESSAGE(home.use_preset, committed.use_preset, "nor use_preset");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(home.channel_num, committed.channel_num, "nor the borrowed slot");
+    TEST_ASSERT_TRUE_MESSAGE(RadioInterface::configuredUsesDefaultSlot(), "nor the borrowed slot verdict");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(home.tx_power + 3, committed.tx_power, "but the rest of the commit is adopted");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE(homePrimary.name, channels.getChannelToReport(channels.getPrimaryIndex()).settings.name,
+                                     "and the committed primary is the home channel, not the visited one");
+
+    db->setLoraSlotTransient(false);
+    RadioInterface::captureConfiguredRadio(); // the next commit outside a borrow adopts the live radio again
+    TEST_ASSERT_EQUAL_MESSAGE(config.lora.modem_preset, RadioInterface::configuredLoraConfig().modem_preset,
+                              "a commit outside a borrow is a real commit");
+}
+
+/*
+ * Under test: NodeDB::saveToDiskNoRetry() (SEGMENT_CONFIG) and saveChannelsToDisk() while borrowed
+ * (src/mesh/NodeDB.cpp).
+ * Why: flash is what the node boots onto. A save mid-switch wrote config.lora and the channel table verbatim,
+ * so the node came back up on the beacon's mesh with the beacon's channel as its primary.
+ * Regression guarded: the borrow persisted; and, the other way, the save leaving the live (borrowed) radio
+ * rewritten - the beacon is still on the air and its restore expects its own values back.
+ */
+static void test_borrow_saveWritesTheCommittedRadio(void)
+{
+    RadioInterface::captureConfiguredRadio();
+    const meshtastic_Config_LoRaConfig home = config.lora;
+    const meshtastic_ChannelSettings homePrimary = channels.getByIndex(channels.getPrimaryIndex()).settings;
+
+    BorrowingRadio radio;
+    borrowRadio(radio);
+    TEST_ASSERT_TRUE(db->saveToDisk(SEGMENT_CONFIG | SEGMENT_CHANNELS));
+
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST, config.lora.modem_preset,
+                              "the save hands the borrowed radio back untouched");
+    TEST_ASSERT_EQUAL_STRING(kVisitedName, channels.getByIndex(channels.getPrimaryIndex()).settings.name);
+
+    meshtastic_LocalConfig onDisk = meshtastic_LocalConfig_init_zero;
+    TEST_ASSERT_EQUAL(LoadFileResult::LOAD_SUCCESS, db->loadProto(configFileName, meshtastic_LocalConfig_size, sizeof(onDisk),
+                                                                  &meshtastic_LocalConfig_msg, &onDisk));
+    TEST_ASSERT_EQUAL_MESSAGE(home.region, onDisk.lora.region, "flash holds the committed region");
+    TEST_ASSERT_EQUAL_MESSAGE(home.modem_preset, onDisk.lora.modem_preset, "and preset");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(home.channel_num, onDisk.lora.channel_num, "and slot");
+
+    meshtastic_ChannelFile channelsOnDisk = meshtastic_ChannelFile_init_zero;
+    TEST_ASSERT_EQUAL(LoadFileResult::LOAD_SUCCESS,
+                      db->loadProto(channelFileName, meshtastic_ChannelFile_size, sizeof(channelsOnDisk),
+                                    &meshtastic_ChannelFile_msg, &channelsOnDisk));
+    TEST_ASSERT_EQUAL_STRING_MESSAGE(homePrimary.name, channelsOnDisk.channels[channels.getPrimaryIndex()].settings.name,
+                                     "and the committed primary, not the visited channel");
+    TEST_ASSERT_EQUAL_UINT_MESSAGE(homePrimary.psk.size, channelsOnDisk.channels[channels.getPrimaryIndex()].settings.psk.size,
+                                   "with its own key");
+}
+
+/*
+ * Under test: RadioInterface::loraConfigToReport() and Channels::getChannelToReport() with no borrow.
+ * Why: inside an open edit transaction set_config/set_channel change RAM and defer the commit, and a client
+ * reading back mid-transaction must see its own edits. Only a borrow substitutes the committed values.
+ * Regression guarded: the report reading the snapshot unconditionally, hiding every uncommitted edit.
+ */
+static void test_noBorrow_reportsTheLiveRadio(void)
+{
+    RadioInterface::captureConfiguredRadio();
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW; // edited, not yet committed
+    meshtastic_ChannelSettings &primary = channels.getByIndex(channels.getPrimaryIndex()).settings;
+    strncpy(primary.name, "Edited", sizeof(primary.name) - 1);
+
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW, RadioInterface::loraConfigToReport().modem_preset);
+    TEST_ASSERT_EQUAL_STRING("Edited", channels.getChannelToReport(channels.getPrimaryIndex()).settings.name);
+}
+
+/*
+ * Under test: captureConfiguredRadio() and loraConfigToReport() when the RF identity moves mid-borrow by
+ * something other than the borrow (src/mesh/RadioInterface.cpp, the borrowedRf record).
+ * Why: an operator's edit - set_config(lora), or the on-device preset and region menus, which write config.lora
+ * directly - can land while a beacon holds the radio. It is the newer instruction, so a client must read it
+ * back and the commit must take it, rather than the snapshot from before the borrow.
+ * Regression guarded: the borrow guard keeping the old snapshot over the operator's edit, so the commit and
+ * the save dropped it.
+ */
+static void test_borrow_operatorEditMidBorrowIsCommitted(void)
+{
+    RadioInterface::captureConfiguredRadio(); // home, committed
+    BorrowingRadio radio;
+    borrowRadio(radio);
+
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW; // what a menu or admin write does
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW,
+                              RadioInterface::loraConfigToReport().modem_preset, "a client reads back the edit");
+
+    radio.commitConfig(); // reloadConfig(), still mid-borrow
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW,
+                              RadioInterface::configuredLoraConfig().modem_preset, "and the commit takes it as the node's own");
+}
+
+/*
+ * Under test: the committed config during a borrow (RadioInterface::loraConfigToReport(), captureConfiguredRadio())
+ * against applyModemConfig()'s clamps (src/mesh/RadioInterface.cpp).
+ * Why: the borrow's own reprogram clamps fields outside the RF identity in place - tx_power to the visited region's
+ * limit. That clamp is the borrow's doing, not an operator's edit, so it must not be reported or committed.
+ * Regression guarded: a save mid-beacon committing the visited region's lower power as this node's TX power.
+ */
+static void test_borrow_clampedTxPowerIsNotCommitted(void)
+{
+    BorrowingRadio radio;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    config.lora.channel_num = 0;
+    config.lora.tx_power = getRegion(meshtastic_Config_LoRaConfig_RegionCode_US)->powerLimit;
+    radio.commitConfig(); // home, committed
+    const int8_t homePower = config.lora.tx_power;
+
+    db->setLoraSlotTransient(true);
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
+    radio.reconfigure(); // the borrow; applyModemConfig() clamps tx_power to EU_868's limit
+    TEST_ASSERT_LESS_THAN_INT_MESSAGE(homePower, config.lora.tx_power, "precondition: the borrow clamped tx_power");
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(homePower, RadioInterface::loraConfigToReport().tx_power,
+                                  "a client is told this node's power, not the visited region's");
+    RadioInterface::captureConfiguredRadio(); // a save mid-borrow
+    TEST_ASSERT_EQUAL_INT_MESSAGE(homePower, RadioInterface::configuredLoraConfig().tx_power,
+                                  "and the commit keeps it - the clamp was the borrow's, not an edit");
+}
+
+/*
+ * Under test: Channels::generateHash() during a borrow (src/mesh/Channels.cpp).
+ * Why: any config or channel save runs resetRadioConfig() -> channels.onConfigChanged(), which rebuilds every hash.
+ * A blank name is the preset's display name, so a rebuild mid-beacon hashed the visited preset's name - and the
+ * restore never rebuilds, leaving every later packet on the home mesh with a hash no receiver matches.
+ * Regression guarded: a mid-beacon save stranding the stock blank-named primary on the wrong channel hash.
+ */
+static void test_borrow_channelRebuildKeepsTheHomeHash(void)
+{
+    const ChannelIndex idx = channels.getPrimaryIndex();
+    meshtastic_ChannelSettings &primary = channels.getByIndex(idx).settings;
+    primary.name[0] = '\0'; // the stock primary: blank name, default key
+    primary.psk.size = 1;
+    primary.psk.bytes[0] = 1;
+    BorrowingRadio radio;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    radio.commitConfig();
+    channels.onConfigChanged();
+    const int16_t home = channels.getHash(idx);
+
+    db->setLoraSlotTransient(true);
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST;
+    radio.reconfigure();        // the borrow
+    channels.onConfigChanged(); // what a save mid-borrow runs
+
+    TEST_ASSERT_EQUAL_INT16_MESSAGE(home, channels.getHash(idx), "the rebuilt hash is still this node's own");
+
+    db->setLoraSlotTransient(false);
+    channels.onConfigChanged(); // leave the table's hashes as setUp() restores the settings
+}
+
 NDB_TEST_ENTRY void setup()
 {
     initializeTestEnvironment();
     db = new NodeDBTestShim();
     nodeDB = db;
     savedLora = config.lora;
+    savedPrimary = channels.getByIndex(channels.getPrimaryIndex()).settings;
 
     UNITY_BEGIN();
     RUN_TEST(test_fingerprint_identicalConfigMatches);
@@ -333,6 +551,12 @@ NDB_TEST_ENTRY void setup()
     RUN_TEST(test_scan_refreshWritesNoNode);
     RUN_TEST(test_transient_committedSlotIsPinned);
     RUN_TEST(test_transient_hearIsStampedWithTheLiveSlot);
+    RUN_TEST(test_borrow_commitKeepsTheCommittedRadio);
+    RUN_TEST(test_borrow_saveWritesTheCommittedRadio);
+    RUN_TEST(test_noBorrow_reportsTheLiveRadio);
+    RUN_TEST(test_borrow_operatorEditMidBorrowIsCommitted);
+    RUN_TEST(test_borrow_clampedTxPowerIsNotCommitted);
+    RUN_TEST(test_borrow_channelRebuildKeepsTheHomeHash);
     exit(UNITY_END());
 }
 NDB_TEST_ENTRY void loop() {}

@@ -366,6 +366,7 @@ class NodeDB
     /// Declare that config.lora holds a temporary radio switch - a beacon keying up on another preset.
     /// While set the committed slot is pinned, so neither the switch nor its restore reads as a move.
     void setLoraSlotTransient(bool transient) { loraSlotTransient = transient; }
+    bool loraSlotIsTransient() const { return loraSlotTransient; }
 
     void addFromContact(const meshtastic_SharedContact);
 
