@@ -788,8 +788,9 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp_encrypted, const meshtastic_Me
         LOG_DEBUG("encrypted message");
     } else if (mp_decoded.which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
         p = &mp_decoded;
-        if (mp_decoded.decoded.portnum == meshtastic_PortNum_NODEINFO_APP && (coerced = packetPool.allocCopy(mp_decoded, 0)) &&
-            coerceNodeInfoUserId(*coerced))
+        // A signed payload is published as sent: a coerced copy would no longer verify at downlink gateways.
+        if (mp_decoded.decoded.portnum == meshtastic_PortNum_NODEINFO_APP && mp_decoded.decoded.xeddsa_signature.size == 0 &&
+            (coerced = packetPool.allocCopy(mp_decoded, 0)) && coerceNodeInfoUserId(*coerced))
             p = coerced;
         LOG_DEBUG("portnum %i message", mp_decoded.decoded.portnum);
     } else {

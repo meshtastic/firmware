@@ -740,6 +740,9 @@ NodeNum getFrom(const meshtastic_MeshPacket *p)
     return (p->from == 0) ? nodeDB->getNodeNum() : p->from;
 }
 
+// The re-encode below cannot overflow the payload buffer, so it never yields an empty payload.
+static_assert(meshtastic_User_size <= sizeof(meshtastic_Data_payload_t::bytes), "User no longer fits Data.payload");
+
 bool coerceNodeInfoUserId(meshtastic_MeshPacket &p)
 {
     if (p.which_payload_variant != meshtastic_MeshPacket_decoded_tag || p.decoded.portnum != meshtastic_PortNum_NODEINFO_APP)
