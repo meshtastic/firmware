@@ -12,17 +12,18 @@ class MeshPacketQueue
     size_t maxLen;
     std::vector<meshtastic_MeshPacket *> queue;
 
-    /** Replace a lower priority package in the queue with 'mp' (provided there are lower pri packages). Return true if replaced.
-     */
-    bool replaceLowerPriorityPacket(meshtastic_MeshPacket *mp);
+    /// Remove and return the packet mp may displace from a full queue, or nullptr if none may go. Frees nothing.
+    meshtastic_MeshPacket *evictLowerPriorityPacket(const meshtastic_MeshPacket *mp);
+
+    /// Insert p in CompareMeshPacketFunc order, after every packet that ranks equal, so equals keep arrival order.
+    void insertSorted(meshtastic_MeshPacket *p);
 
   public:
     explicit MeshPacketQueue(size_t _maxLen);
 
-    /** enqueue a packet, return false if full
-     * @param dropped Optional pointer to a bool that will be set to true if a packet was dropped
-     */
-    bool enqueue(meshtastic_MeshPacket *p, bool *dropped = nullptr);
+    /** Enqueue p, displacing a lower-priority packet if the queue is full. Returns false if p was refused.
+     * @param evicted Set to the displaced packet, or nullptr. The queue never frees: the caller releases both. */
+    bool enqueue(meshtastic_MeshPacket *p, meshtastic_MeshPacket **evicted);
 
     /** return true if the queue is empty */
     bool empty();

@@ -31,6 +31,9 @@
 #include "mesh-pb-constants.h"
 #include "mesh/generated/meshtastic/deviceonly_legacy.pb.h"
 #include "meshUtils.h"
+#if !MESHTASTIC_EXCLUDE_BEACON
+#include "modules/MeshBeaconModule.h"
+#endif
 #include "modules/NeighborInfoModule.h"
 #include "target_specific.h"
 #if HAS_VARIABLE_HOPS
@@ -549,6 +552,10 @@ NodeDB::NodeDB()
         saveNodeDatabaseToDisk();
         migrationSavePending = false;
     }
+    if (moduleConfigMigrationSavePending) {
+        saveToDisk(SEGMENT_MODULECONFIG);
+        moduleConfigMigrationSavePending = false;
+    }
 
     // If node database has not been saved for the first time, save it now
 #ifdef FSCom
@@ -579,6 +586,7 @@ NodeDB::NodeDB()
 
     // If we are setup to broadcast on any default channel slot (with default frequency slot semantics),
     // ensure that the telemetry intervals are coerced to the role-aware minimum value.
+    RadioInterface::refreshSlotFlags(config.lora); // no radio yet, so nothing else has published them
     if (channels.hasDefaultChannel()) {
         LOG_DEBUG("Coerce telemetry to role-aware min on defaults");
         moduleConfig.telemetry.device_update_interval = Default::getConfiguredOrMinimumValue(
@@ -827,12 +835,32 @@ void NodeDB::resetRadioConfig(bool is_fresh_install)
         // loadFromDisk's sanitation is a no-op when the channel file was absent or corrupt.
         if (owner.is_licensed)
             channels.ensureLicensedOperation();
+        // A table rebuilt from defaults includes a userPrefs offer channel: a fresh install, the boot after a
+        // factory reset, or a lost channels.proto. A channel the operator deleted is only disabled, so stays.
+        beaconChannelsFromDefaults = true;
     }
 
     channels.onConfigChanged();
 
     // Update the global myRegion
     initRegion();
+
+#if !MESHTASTIC_EXCLUDE_BEACON
+    // A userPrefs build writes broadcast targets and the offer straight into moduleConfig, so this
+    // is the only point that catches a combination no radio can key up on. Channels are live above.
+    if (moduleConfig.has_mesh_beacon)
+        MeshBeaconModule::sanitiseConfig(moduleConfig.mesh_beacon);
+#endif
+    placeDefaultBeaconChannels();
+}
+
+void NodeDB::placeDefaultBeaconChannels()
+{
+#if !MESHTASTIC_EXCLUDE_BEACON
+    if (beaconChannelsFromDefaults && moduleConfig.has_mesh_beacon)
+        MeshBeaconModule::upsertByValueChannels(moduleConfig.mesh_beacon);
+#endif
+    beaconChannelsFromDefaults = false;
 }
 
 LoraSlotSnapshot loraSlotSnapshotFrom(const meshtastic_Config_LoRaConfig &lora, const char *primaryChannelName)
@@ -1575,9 +1603,8 @@ void NodeDB::installDefaultModuleConfig()
                       meshtastic_ModuleConfig_MeshBeaconConfig_Flags_FLAG_BROADCAST_ENABLED);
 #endif
 #ifdef USERPREFS_MESH_BEACON_MESSAGE
-    strncpy(moduleConfig.mesh_beacon.broadcast_message, USERPREFS_MESH_BEACON_MESSAGE,
-            sizeof(moduleConfig.mesh_beacon.broadcast_message) - 1);
-    moduleConfig.mesh_beacon.broadcast_message[sizeof(moduleConfig.mesh_beacon.broadcast_message) - 1] = '\0';
+    strcpyUtf8Truncated(moduleConfig.mesh_beacon.broadcast_message, sizeof(moduleConfig.mesh_beacon.broadcast_message),
+                        USERPREFS_MESH_BEACON_MESSAGE);
 #endif
 #ifdef USERPREFS_MESH_BEACON_INTERVAL_SECS
     moduleConfig.mesh_beacon.broadcast_interval_secs =
@@ -1595,27 +1622,45 @@ void NodeDB::installDefaultModuleConfig()
 #endif
 #ifdef USERPREFS_MESH_BEACON_OFFER_CHANNEL_NAME
     moduleConfig.mesh_beacon.has_broadcast_offer_channel = true;
-    strncpy(moduleConfig.mesh_beacon.broadcast_offer_channel.name, USERPREFS_MESH_BEACON_OFFER_CHANNEL_NAME,
-            sizeof(moduleConfig.mesh_beacon.broadcast_offer_channel.name) - 1);
-    moduleConfig.mesh_beacon.broadcast_offer_channel.name[sizeof(moduleConfig.mesh_beacon.broadcast_offer_channel.name) - 1] =
-        '\0';
+    strcpyUtf8Truncated(moduleConfig.mesh_beacon.broadcast_offer_channel.name,
+                        sizeof(moduleConfig.mesh_beacon.broadcast_offer_channel.name), USERPREFS_MESH_BEACON_OFFER_CHANNEL_NAME);
 #endif
 #ifdef USERPREFS_MESH_BEACON_OFFER_CHANNEL_PSK
     moduleConfig.mesh_beacon.has_broadcast_offer_channel = true;
-    static const uint8_t beaconOfferPsk[] = USERPREFS_MESH_BEACON_OFFER_CHANNEL_PSK;
-    static_assert(sizeof(beaconOfferPsk) <= sizeof(moduleConfig.mesh_beacon.broadcast_offer_channel.psk.bytes),
-                  "USERPREFS_MESH_BEACON_OFFER_CHANNEL_PSK exceeds the 32-byte channel PSK buffer");
-    memcpy(moduleConfig.mesh_beacon.broadcast_offer_channel.psk.bytes, beaconOfferPsk, sizeof(beaconOfferPsk));
-    moduleConfig.mesh_beacon.broadcast_offer_channel.psk.size = sizeof(beaconOfferPsk);
+    {
+        static const uint8_t beaconOfferPsk[] = USERPREFS_MESH_BEACON_OFFER_CHANNEL_PSK;
+        static_assert(sizeof(beaconOfferPsk) <= sizeof(moduleConfig.mesh_beacon.broadcast_offer_channel.psk.bytes),
+                      "USERPREFS_MESH_BEACON_OFFER_CHANNEL_PSK exceeds the 32-byte channel PSK buffer");
+        memcpy(moduleConfig.mesh_beacon.broadcast_offer_channel.psk.bytes, beaconOfferPsk, sizeof(beaconOfferPsk));
+        moduleConfig.mesh_beacon.broadcast_offer_channel.psk.size = sizeof(beaconOfferPsk);
+    }
 #endif
-// The USERPREFS_MESH_BEACON_ON_* keys were removed with the broadcast_on_* config fields. Fail the
-// build rather than silently dropping a preconfigured beacon channel: define the equivalent
-// USERPREFS_MESH_BEACON_TARGET_0_{PRESET,REGION,CHANNEL_INDEX} keys instead. CHANNEL_INDEX names a
-// slot in the device's channel table, so the channel must also be provisioned on the node.
-#if defined(USERPREFS_MESH_BEACON_ON_PRESET) || defined(USERPREFS_MESH_BEACON_ON_REGION) ||                                      \
-    defined(USERPREFS_MESH_BEACON_ON_CHANNEL_NAME) || defined(USERPREFS_MESH_BEACON_ON_CHANNEL_PSK) ||                           \
-    defined(USERPREFS_MESH_BEACON_ON_CHANNEL_NUM)
-#error "USERPREFS_MESH_BEACON_ON_* removed; use USERPREFS_MESH_BEACON_TARGET_0_* (channel must be in the channel table)"
+#ifdef USERPREFS_MESH_BEACON_OFFER_FREQUENCY_SLOT
+    moduleConfig.mesh_beacon.has_broadcast_offer_frequency_slot = true;
+    moduleConfig.mesh_beacon.broadcast_offer_frequency_slot = USERPREFS_MESH_BEACON_OFFER_FREQUENCY_SLOT;
+#endif
+// The by-value default target channel (broadcast_on_channel) is not in the released proto, so a
+// preconfigured target names its channel by table index.
+#if defined(USERPREFS_MESH_BEACON_ON_CHANNEL_NAME) || defined(USERPREFS_MESH_BEACON_ON_CHANNEL_PSK)
+#error                                                                                                                           \
+    "USERPREFS_MESH_BEACON_ON_CHANNEL_{NAME,PSK} removed; provision the channel and use USERPREFS_MESH_BEACON_TARGET_0_CHANNEL_INDEX"
+#endif
+// A destination's region, preset and slot now live on the target that uses them.
+#ifdef USERPREFS_MESH_BEACON_ON_REGION
+#error "USERPREFS_MESH_BEACON_ON_REGION removed; use USERPREFS_MESH_BEACON_TARGET_0_REGION"
+#endif
+#ifdef USERPREFS_MESH_BEACON_ON_PRESET
+#error "USERPREFS_MESH_BEACON_ON_PRESET removed; use USERPREFS_MESH_BEACON_TARGET_0_PRESET"
+#endif
+#ifdef USERPREFS_MESH_BEACON_ON_FREQUENCY_SLOT
+#error "USERPREFS_MESH_BEACON_ON_FREQUENCY_SLOT removed; use USERPREFS_MESH_BEACON_TARGET_0_FREQUENCY_SLOT"
+#endif
+// Tag 12 used to be the offer's channel-table index; the offer now carries its own name and PSK.
+#ifdef USERPREFS_MESH_BEACON_OFFER_CHANNEL_INDEX
+#error "USERPREFS_MESH_BEACON_OFFER_CHANNEL_INDEX removed; use USERPREFS_MESH_BEACON_OFFER_CHANNEL_{NAME,PSK}"
+#endif
+#ifdef USERPREFS_MESH_BEACON_ON_CHANNEL_NUM
+#error "USERPREFS_MESH_BEACON_ON_CHANNEL_NUM removed; use USERPREFS_MESH_BEACON_TARGET_0_FREQUENCY_SLOT"
 #endif
 #ifdef USERPREFS_MESH_BEACON_LEGACY_SPLIT
     BEACON_APPLY_FLAG(USERPREFS_MESH_BEACON_LEGACY_SPLIT, meshtastic_ModuleConfig_MeshBeaconConfig_Flags_FLAG_LEGACY_SPLIT);
@@ -1643,6 +1688,14 @@ void NodeDB::installDefaultModuleConfig()
         moduleConfig.mesh_beacon.broadcast_targets[(N)].has_channel_index = true;                                                \
         moduleConfig.mesh_beacon.broadcast_targets[(N)].channel_index = (VAL);                                                   \
     } while (0)
+// A pinned frequency slot is 1-based, matching Config.LoRaConfig.channel_num.
+#define BEACON_TARGET_FREQ_SLOT(N, VAL)                                                                                          \
+    do {                                                                                                                         \
+        if (moduleConfig.mesh_beacon.broadcast_targets_count < (N) + 1)                                                          \
+            moduleConfig.mesh_beacon.broadcast_targets_count = (N) + 1;                                                          \
+        moduleConfig.mesh_beacon.broadcast_targets[(N)].has_frequency_slot = true;                                               \
+        moduleConfig.mesh_beacon.broadcast_targets[(N)].frequency_slot = (VAL);                                                  \
+    } while (0)
 #ifdef USERPREFS_MESH_BEACON_TARGET_0_PRESET
     BEACON_TARGET_PRESET(0, USERPREFS_MESH_BEACON_TARGET_0_PRESET);
 #endif
@@ -1651,6 +1704,9 @@ void NodeDB::installDefaultModuleConfig()
 #endif
 #ifdef USERPREFS_MESH_BEACON_TARGET_0_CHANNEL_INDEX
     BEACON_TARGET_CH_INDEX(0, USERPREFS_MESH_BEACON_TARGET_0_CHANNEL_INDEX);
+#endif
+#ifdef USERPREFS_MESH_BEACON_TARGET_0_FREQUENCY_SLOT
+    BEACON_TARGET_FREQ_SLOT(0, USERPREFS_MESH_BEACON_TARGET_0_FREQUENCY_SLOT);
 #endif
 #ifdef USERPREFS_MESH_BEACON_TARGET_1_PRESET
     BEACON_TARGET_PRESET(1, USERPREFS_MESH_BEACON_TARGET_1_PRESET);
@@ -1661,6 +1717,9 @@ void NodeDB::installDefaultModuleConfig()
 #ifdef USERPREFS_MESH_BEACON_TARGET_1_CHANNEL_INDEX
     BEACON_TARGET_CH_INDEX(1, USERPREFS_MESH_BEACON_TARGET_1_CHANNEL_INDEX);
 #endif
+#ifdef USERPREFS_MESH_BEACON_TARGET_1_FREQUENCY_SLOT
+    BEACON_TARGET_FREQ_SLOT(1, USERPREFS_MESH_BEACON_TARGET_1_FREQUENCY_SLOT);
+#endif
 #ifdef USERPREFS_MESH_BEACON_TARGET_2_PRESET
     BEACON_TARGET_PRESET(2, USERPREFS_MESH_BEACON_TARGET_2_PRESET);
 #endif
@@ -1669,6 +1728,9 @@ void NodeDB::installDefaultModuleConfig()
 #endif
 #ifdef USERPREFS_MESH_BEACON_TARGET_2_CHANNEL_INDEX
     BEACON_TARGET_CH_INDEX(2, USERPREFS_MESH_BEACON_TARGET_2_CHANNEL_INDEX);
+#endif
+#ifdef USERPREFS_MESH_BEACON_TARGET_2_FREQUENCY_SLOT
+    BEACON_TARGET_FREQ_SLOT(2, USERPREFS_MESH_BEACON_TARGET_2_FREQUENCY_SLOT);
 #endif
 #ifdef USERPREFS_MESH_BEACON_TARGET_3_PRESET
     BEACON_TARGET_PRESET(3, USERPREFS_MESH_BEACON_TARGET_3_PRESET);
@@ -1679,9 +1741,14 @@ void NodeDB::installDefaultModuleConfig()
 #ifdef USERPREFS_MESH_BEACON_TARGET_3_CHANNEL_INDEX
     BEACON_TARGET_CH_INDEX(3, USERPREFS_MESH_BEACON_TARGET_3_CHANNEL_INDEX);
 #endif
+#ifdef USERPREFS_MESH_BEACON_TARGET_3_FREQUENCY_SLOT
+    BEACON_TARGET_FREQ_SLOT(3, USERPREFS_MESH_BEACON_TARGET_3_FREQUENCY_SLOT);
+#endif
 #undef BEACON_TARGET_PRESET
 #undef BEACON_TARGET_REGION
 #undef BEACON_TARGET_CH_INDEX
+#undef BEACON_TARGET_FREQ_SLOT
+    beaconChannelsFromDefaults = true;
 #endif // !MESHTASTIC_EXCLUDE_BEACON
 
     initModuleConfigIntervals();
@@ -2438,6 +2505,7 @@ void NodeDB::loadFromDisk()
 #endif
 
     migrationSavePending = false;
+    moduleConfigMigrationSavePending = false;
     configDecodeFailed = false;
     configLoadComplete = false;
 
@@ -2817,8 +2885,19 @@ void NodeDB::loadFromDisk()
         saveToDisk(SEGMENT_CONFIG);
     }
 
+#ifdef MESHTASTIC_ENCRYPTED_STORAGE
+    const bool corruptBeforeModuleConfig = storageCorruptThisLoad;
+#endif
     state = loadProto(moduleConfigFileName, meshtastic_LocalModuleConfig_size, sizeof(meshtastic_LocalModuleConfig),
                       &meshtastic_LocalModuleConfig_msg, &moduleConfig);
+    // A pre-cut 2.8.0 save with a long beacon message fails the decode; migrate it rather than wipe every module.
+    if (state == LoadFileResult::DECODE_FAILED && migrateLegacyModuleConfig()) {
+        state = LoadFileResult::LOAD_SUCCESS;
+        moduleConfigMigrationSavePending = true;
+#ifdef MESHTASTIC_ENCRYPTED_STORAGE
+        storageCorruptThisLoad = corruptBeforeModuleConfig; // the failed first decode was this file, now migrated
+#endif
+    }
     if (state != LoadFileResult::LOAD_SUCCESS) {
         installDefaultModuleConfig(); // Our in RAM copy might now be corrupt
     } else {
@@ -3048,11 +3127,16 @@ bool NodeDB::reloadFromDisk()
         saveNodeDatabaseToDisk();
         migrationSavePending = false;
     }
+    if (moduleConfigMigrationSavePending) {
+        saveToDisk(SEGMENT_MODULECONFIG);
+        moduleConfigMigrationSavePending = false;
+    }
 
-    // Push the now-real config to the radio.
+    // Push the now-real config to the radio. Committed, not borrowed: the unlock swapped both
+    // config.lora and channelFile from disk, so the snapshot must follow.
     if (rIface) {
         channels.onConfigChanged();
-        rIface->reconfigure();
+        rIface->commitConfig();
     }
     // The unlock replaced the locked-default config with the operator's, so the boot snapshot
     // describes a slot we were never on.
@@ -3380,7 +3464,22 @@ bool NodeDB::saveToDiskNoRetry(int saveWhat)
         config.has_bluetooth = true;
         config.has_security = true;
 
-        success &= saveProto(configFileName, meshtastic_LocalConfig_size, &meshtastic_LocalConfig_msg, &config);
+        if (!RadioInterface::radioIsBorrowed()) {
+            success &= saveProto(configFileName, meshtastic_LocalConfig_size, &meshtastic_LocalConfig_msg, &config);
+        } else {
+            // A borrowed radio is not this node's config: persist the committed one, from a copy. malloc(), not new:
+            // it is the allocation that returns nullptr on every build (see FSCommon.cpp).
+            auto *committed = static_cast<meshtastic_LocalConfig *>(malloc(sizeof(meshtastic_LocalConfig)));
+            if (committed) {
+                *committed = config;
+                committed->lora = RadioInterface::loraConfigToReport();
+                success &= saveProto(configFileName, meshtastic_LocalConfig_size, &meshtastic_LocalConfig_msg, committed);
+                free(committed);
+            } else {
+                LOG_ERROR("saveToDisk() can't copy the config mid-borrow");
+                success = false;
+            }
+        }
     }
 
     if (saveWhat & SEGMENT_MODULECONFIG) {
@@ -4844,8 +4943,13 @@ bool NodeDB::restorePreferences(meshtastic_AdminMessage_BackupLocation location,
             spiLock->unlock();
         }
         meshtastic_BackupPreferences backup = meshtastic_BackupPreferences_init_zero;
-        success = loadProto(backupFileName, meshtastic_BackupPreferences_size, sizeof(meshtastic_BackupPreferences),
-                            &meshtastic_BackupPreferences_msg, &backup);
+        LoadFileResult state = loadProto(backupFileName, meshtastic_BackupPreferences_size, sizeof(meshtastic_BackupPreferences),
+                                         &meshtastic_BackupPreferences_msg, &backup);
+        // A pre-cut 2.8.0 backup with a long beacon message fails the decode; migrate it as loadFromDisk() does.
+        if (state == LoadFileResult::DECODE_FAILED && migrateLegacyBackup(backup))
+            state = LoadFileResult::LOAD_SUCCESS;
+        // Compared, not converted: every LoadFileResult is nonzero, so a failed decode used to restore a half-read backup.
+        success = state == LoadFileResult::LOAD_SUCCESS;
         if (success) {
             if (restoreWhat & SEGMENT_CONFIG) {
                 config = backup.config;

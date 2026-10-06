@@ -55,6 +55,28 @@ class Channels
      */
     const char *getName(size_t chIndex);
 
+    /** Index of a live (non-DISABLED) channel with this name and PSK, or -1. A blank name resolves
+     * to the running preset's display name, the same way getName() resolves a slot's. */
+    int16_t findByIdentity(const char *name, const uint8_t *psk, uint8_t pskLen, bool useAead = false);
+
+    /** Find that channel, or place it in a DISABLED slot as SECONDARY. Returns the index used, or
+     * -1 when every slot is live. Never overwrites a live channel - callers withhold instead. */
+    int16_t upsertIdentity(const char *name, const uint8_t *psk, uint8_t pskLen, bool useAead = false);
+
+    // The length a PSK of len bytes is used at: 2-15 zero-pad to 16, 17-31 to 32, anything else as given.
+    static uint8_t pskPaddedLength(uint8_t len);
+
+    // The key a stored PSK spells, as every channel uses it: 1-byte shorthands expanded, short keys zero-padded.
+    // Returns its length (0 = cleartext); out must hold 32 bytes. No secondary inheritance - that is getKey()'s.
+    static uint8_t expandPsk(const uint8_t *psk, uint8_t len, uint8_t *out);
+
+    // getName() against an explicit preset: a blank name resolves to the preset's display name, so
+    // the answer depends on which preset is asked about. Status checks must ask the configured one.
+    const char *getNameForPreset(size_t chIndex, meshtastic_Config_LoRaConfig_ModemPreset preset, bool usePreset);
+
+    // The wire hash for chIndex's key under an explicit name, for a packet keyed up on another preset. -1 if no key.
+    int16_t hashFor(ChannelIndex chIndex, const char *name);
+
     /**
      * Return a globally unique channel ID usable with MQTT.
      */
@@ -154,6 +176,10 @@ class Channels
      * Write default channels defined in UserPrefs
      */
     void initDefaultChannel(ChannelIndex chIndex);
+
+    // getNameForPreset() against settings the caller already holds.
+    static const char *nameForSettings(const meshtastic_ChannelSettings &settings,
+                                       meshtastic_Config_LoRaConfig_ModemPreset preset, bool usePreset);
 };
 
 /// Singleton channel table

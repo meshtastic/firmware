@@ -429,7 +429,9 @@ static NodeNum fuzzNodeNum()
 // Randomize a ChannelSettings name + PSK (shared by the set_channel case and fuzzBeacon). Name is
 // random-length but NUL-terminated (nanopb terminates decoded strings, so un-terminated isn't
 // wire-reachable); PSK is 0..32 bytes including empty.
-static void fuzzChannelSettings(meshtastic_ChannelSettings &s)
+// The offer and the table both carry ChannelSettings, with the same name and psk capacities,
+// so one template fuzzes either.
+template <typename T> static void fuzzChannelSettings(T &s)
 {
     size_t nameLen = rngRange(sizeof(s.name));
     for (size_t i = 0; i < sizeof(s.name); i++)
@@ -575,16 +577,16 @@ void test_E6_beacon_listener_fuzz(void)
         mp.decoded.portnum = meshtastic_PortNum_MESH_BEACON_APP;
 
         meshtastic_MeshBeacon b = fuzzBeacon();
-        bool hasOffer =
-            b.has_offer_channel || b.offer_region != meshtastic_Config_LoRaConfig_RegionCode_UNSET || b.has_offer_preset;
+        uint8_t before[meshtastic_MeshBeacon_size];
+        const size_t beforeLen = pb_encode_to_bytes(before, sizeof(before), &meshtastic_MeshBeacon_msg, &b);
 
         // The listener must never consume the packet (it flows on to the phone)...
         TEST_ASSERT_FALSE(beacon.handleReceivedProtobuf(mp, &b));
-        // ...and any offer content must land in the client-visible cache, keyed to the sender.
-        if (hasOffer) {
-            TEST_ASSERT_TRUE(MeshBeaconListenerModule::lastReceivedOffer.valid);
-            TEST_ASSERT_EQUAL_UINT32(mp.from, MeshBeaconListenerModule::lastReceivedOffer.sender);
-        }
+        // ...and passes the beacon, offer and all, on exactly as it arrived: the client reads the offer from it.
+        uint8_t after[meshtastic_MeshBeacon_size];
+        TEST_ASSERT_EQUAL_size_t(beforeLen, pb_encode_to_bytes(after, sizeof(after), &meshtastic_MeshBeacon_msg, &b));
+        if (beforeLen) // Unity fails a zero-length compare; an empty beacon encodes to nothing
+            TEST_ASSERT_EQUAL_MEMORY(before, after, beforeLen);
     }
 }
 #endif // !MESHTASTIC_EXCLUDE_BEACON

@@ -168,13 +168,13 @@ ErrorCode RadioLibInterface::send(meshtastic_MeshPacket *p)
     if (config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
         if (disabled || !config.lora.tx_enabled) {
             LOG_WARN("send - !config.lora.tx_enabled");
-            packetPool.release(p);
+            RadioTxHooks::releasePacket(this, p);
             return ERRNO_DISABLED;
         }
 
     } else {
         LOG_WARN("send - lora tx disabled: Region unset");
-        packetPool.release(p);
+        RadioTxHooks::releasePacket(this, p);
         return ERRNO_DISABLED;
     }
 
@@ -182,7 +182,7 @@ ErrorCode RadioLibInterface::send(meshtastic_MeshPacket *p)
 
     if (disabled || !config.lora.tx_enabled) {
         LOG_WARN("send - !config.lora.tx_enabled");
-        packetPool.release(p);
+        RadioTxHooks::releasePacket(this, p);
         return ERRNO_DISABLED;
     }
 
@@ -198,15 +198,15 @@ ErrorCode RadioLibInterface::send(meshtastic_MeshPacket *p)
     printPacket("enqueue for send", p);
 
     LOG_TRACE("txGood=%d,txRelay=%d,rxGood=%d,rxBad=%d", txGood, txRelay, rxGood, rxBad);
-    bool dropped = false;
-    ErrorCode res = txQueue.enqueue(p, &dropped) ? ERRNO_OK : ERRNO_UNKNOWN;
+    meshtastic_MeshPacket *evicted = nullptr;
+    ErrorCode res = txQueue.enqueue(p, &evicted) ? ERRNO_OK : ERRNO_UNKNOWN;
 
-    if (dropped) {
+    if (evicted || res != ERRNO_OK) // a full queue drops one packet either way: the evictee, or p
         txDrop++;
-    }
+    RadioTxHooks::releasePacket(this, evicted); // after p is queued: a hook's release can retune the radio
 
     if (res != ERRNO_OK) { // we weren't able to queue it, so we must drop it to prevent leaks
-        packetPool.release(p);
+        RadioTxHooks::releasePacket(this, p);
         return res;
     }
 
@@ -216,7 +216,7 @@ ErrorCode RadioLibInterface::send(meshtastic_MeshPacket *p)
 
     return res;
 #else
-    packetPool.release(p);
+    RadioTxHooks::releasePacket(this, p);
     return ERRNO_DISABLED;
 #endif
 }
@@ -257,12 +257,9 @@ bool RadioLibInterface::isSending()
 bool RadioLibInterface::cancelSending(NodeNum from, PacketId id)
 {
     auto p = txQueue.remove(from, id);
-    if (p) {
-        RadioTxHooks::packetReleased(this, p);
-        packetPool.release(p); // free the packet we just removed
-    }
+    const bool result = (p != NULL); // before the release: a freed pointer's value is indeterminate
+    RadioTxHooks::releasePacket(this, p);
 
-    bool result = (p != NULL);
     LOG_DEBUG_RADIO("cancelSending id=0x%08x, removed=%d", id, result);
     return result;
 }
@@ -455,8 +452,7 @@ void RadioLibInterface::onNotify(uint32_t notification)
                     // than transmit it, and move on to the next queued packet.
                     meshtastic_MeshPacket *bad = txQueue.dequeue();
                     LOG_DEBUG("Drop Tx packet 0x%08x, refused before transmit", bad->id);
-                    RadioTxHooks::packetReleased(this, bad);
-                    packetPool.release(bad);
+                    RadioTxHooks::releasePacket(this, bad);
                     setTransmitDelay();
                 } else if (action == RadioTxHook::PRETX_DEFER) {
                     setTransmitDelay(); // the radio config moved, so re-run the delay and scan on it
@@ -550,15 +546,15 @@ void RadioLibInterface::clampToLateRebroadcastWindow(NodeNum from, PacketId id)
     meshtastic_MeshPacket *p = txQueue.remove(from, id, true, false);
     if (p) {
         p->tx_after = Time::timerEndsAtMillis(getTxDelayMsecWeightedWorst(p->rx_snr));
-        bool dropped = false;
-        if (txQueue.enqueue(p, &dropped)) {
+        meshtastic_MeshPacket *evicted = nullptr;
+        const bool queued = txQueue.enqueue(p, &evicted);
+        if (queued)
             LOG_TRACE("Move queued packet to late rebroadcast window %ums from now", (uint32_t)(p->tx_after - millis()));
-        } else {
-            packetPool.release(p);
-        }
-        if (dropped) {
+        if (evicted || !queued)
             txDrop++;
-        }
+        RadioTxHooks::releasePacket(this, evicted);
+        if (!queued)
+            RadioTxHooks::releasePacket(this, p);
     }
 }
 
@@ -571,8 +567,7 @@ bool RadioLibInterface::removePendingTXPacket(NodeNum from, PacketId id, uint32_
     meshtastic_MeshPacket *p = txQueue.remove(from, id, true, true, hop_limit_lt);
     if (p) {
         LOG_DEBUG_RADIO("Drop pending-TX packet 0x%08x, hop limit %d", p->id, p->hop_limit);
-        RadioTxHooks::packetReleased(this, p);
-        packetPool.release(p);
+        RadioTxHooks::releasePacket(this, p);
         return true;
     }
     return false;
@@ -608,10 +603,7 @@ void RadioLibInterface::completeSending()
         printPacket("Completed sending", p);
         // Keep this inside `if (p)`: completeSending() also runs on every setStandby(), where a hook
         // undoing its own pre-TX switch would recurse back through reconfigure().
-        RadioTxHooks::packetReleased(this, p);
-
-        // We are done sending that packet, release it
-        packetPool.release(p);
+        RadioTxHooks::releasePacket(this, p);
     }
 }
 
@@ -837,8 +829,7 @@ bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
     if (disabled || !config.lora.tx_enabled) {
         LOG_WARN("Drop Tx packet: LoRa Tx disabled");
         // Never reaches completeSending(), so any per-packet radio state has to be released here.
-        RadioTxHooks::packetReleased(this, txp);
-        packetPool.release(txp);
+        RadioTxHooks::releasePacket(this, txp);
         return false;
     } else {
         configHardwareForSend(); // must be after setStandby

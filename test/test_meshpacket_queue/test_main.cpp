@@ -1,5 +1,6 @@
-// Unit tests for MeshPacketQueue::replaceLowerPriorityPacket()'s late-packet branch - the one that
-// evicts an overdue packet from a full queue to make room for a new arrival.
+// Unit tests for MeshPacketQueue::evictLowerPriorityPacket()'s late-packet branch - the one that
+// evicts an overdue packet from a full queue to make room for a new arrival. enqueue() hands the
+// evictee back rather than freeing it, so every case checks which packet came back and frees it.
 //
 // tx_after is an absolute millis() deadline, so every decision here has to subtract before comparing
 // or it inverts across the 32-bit wrap. The subtlety the cases below pin is that an *elapsed* time
@@ -33,6 +34,15 @@ meshtastic_MeshPacket *makePacket(uint32_t id, uint32_t txAfter)
     return p;
 }
 
+// Enqueue into a queue with room: nothing may be evicted.
+bool enqueueNoEviction(MeshPacketQueue &q, meshtastic_MeshPacket *p)
+{
+    meshtastic_MeshPacket *evicted = nullptr;
+    const bool queued = q.enqueue(p, &evicted);
+    TEST_ASSERT_NULL(evicted);
+    return queued;
+}
+
 // Drains whatever is still queued back to the pool, so a failing case cannot starve a later one.
 void drain(MeshPacketQueue &q)
 {
@@ -61,9 +71,9 @@ static void test_future_incoming_deadline_does_not_evict_an_overdue_packet(void)
 
     meshtastic_MeshPacket *back = makePacket(0x1001, 900);   // 100ms overdue
     meshtastic_MeshPacket *fresh = makePacket(0x1002, 1100); // 100ms in the future
-    TEST_ASSERT_TRUE(q.enqueue(back));
+    TEST_ASSERT_TRUE(enqueueNoEviction(q, back));
 
-    TEST_ASSERT_FALSE(q.enqueue(fresh));
+    TEST_ASSERT_FALSE(enqueueNoEviction(q, fresh));
     TEST_ASSERT_EQUAL_HEX32(0x1001, q.getFront()->id);
 
     packetPool.release(fresh);
@@ -79,10 +89,13 @@ static void test_more_overdue_incoming_packet_evicts_the_late_back_packet(void)
 
     meshtastic_MeshPacket *back = makePacket(0x2001, 900);  // 100ms overdue
     meshtastic_MeshPacket *fresh = makePacket(0x2002, 800); // 200ms overdue
-    TEST_ASSERT_TRUE(q.enqueue(back));
+    TEST_ASSERT_TRUE(enqueueNoEviction(q, back));
 
-    TEST_ASSERT_TRUE(q.enqueue(fresh)); // back is released by the queue
+    meshtastic_MeshPacket *evicted = nullptr;
+    TEST_ASSERT_TRUE(q.enqueue(fresh, &evicted));
+    TEST_ASSERT_EQUAL_PTR_MESSAGE(back, evicted, "the late back packet is handed back, not freed");
     TEST_ASSERT_EQUAL_HEX32(0x2002, q.getFront()->id);
+    packetPool.release(evicted);
 
     drain(q);
 }
@@ -95,9 +108,9 @@ static void test_less_overdue_incoming_packet_is_rejected(void)
 
     meshtastic_MeshPacket *back = makePacket(0x3001, 800);  // 200ms overdue
     meshtastic_MeshPacket *fresh = makePacket(0x3002, 900); // 100ms overdue
-    TEST_ASSERT_TRUE(q.enqueue(back));
+    TEST_ASSERT_TRUE(enqueueNoEviction(q, back));
 
-    TEST_ASSERT_FALSE(q.enqueue(fresh));
+    TEST_ASSERT_FALSE(enqueueNoEviction(q, fresh));
     TEST_ASSERT_EQUAL_HEX32(0x3001, q.getFront()->id);
 
     packetPool.release(fresh);
@@ -112,10 +125,13 @@ static void test_undelayed_incoming_packet_evicts_the_late_back_packet(void)
 
     meshtastic_MeshPacket *back = makePacket(0x4001, 900);
     meshtastic_MeshPacket *fresh = makePacket(0x4002, 0); // no tx_after
-    TEST_ASSERT_TRUE(q.enqueue(back));
+    TEST_ASSERT_TRUE(enqueueNoEviction(q, back));
 
-    TEST_ASSERT_TRUE(q.enqueue(fresh));
+    meshtastic_MeshPacket *evicted = nullptr;
+    TEST_ASSERT_TRUE(q.enqueue(fresh, &evicted));
+    TEST_ASSERT_EQUAL_PTR(back, evicted);
     TEST_ASSERT_EQUAL_HEX32(0x4002, q.getFront()->id);
+    packetPool.release(evicted);
 
     drain(q);
 }
@@ -130,8 +146,11 @@ static void test_decisions_survive_the_millis_wrap(void)
 
     meshtastic_MeshPacket *back = makePacket(0x5001, 0xFFFFFF00);  // 512ms overdue
     meshtastic_MeshPacket *older = makePacket(0x5002, 0xFFFFFE00); // 768ms overdue
-    TEST_ASSERT_TRUE(q.enqueue(back));
-    TEST_ASSERT_TRUE(q.enqueue(older));
+    TEST_ASSERT_TRUE(enqueueNoEviction(q, back));
+    meshtastic_MeshPacket *evicted = nullptr;
+    TEST_ASSERT_TRUE(q.enqueue(older, &evicted));
+    TEST_ASSERT_EQUAL_PTR(back, evicted);
+    packetPool.release(evicted);
     TEST_ASSERT_EQUAL_HEX32(0x5002, q.getFront()->id);
     drain(q);
 
@@ -139,9 +158,9 @@ static void test_decisions_survive_the_millis_wrap(void)
     MeshPacketQueue q2(1);
     meshtastic_MeshPacket *back2 = makePacket(0x5003, 0xFFFFFF00); // 512ms overdue
     meshtastic_MeshPacket *fresh = makePacket(0x5004, 0x00000300); // 512ms in the future
-    TEST_ASSERT_TRUE(q2.enqueue(back2));
+    TEST_ASSERT_TRUE(enqueueNoEviction(q2, back2));
 
-    TEST_ASSERT_FALSE(q2.enqueue(fresh));
+    TEST_ASSERT_FALSE(enqueueNoEviction(q2, fresh));
     TEST_ASSERT_EQUAL_HEX32(0x5003, q2.getFront()->id);
 
     packetPool.release(fresh);

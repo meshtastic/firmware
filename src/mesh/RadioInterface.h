@@ -201,7 +201,12 @@ class RadioInterface
     /// Apply any radio provisioning changes
     /// Make sure the Driver is properly configured before calling init().
     /// \return true if initialisation succeeded.
+    /// This is the BORROWED path: it programs the radio without moving the configured snapshot.
     virtual bool reconfigure();
+
+    /// Apply a permanent config change: program the radio, then snapshot what it accepted.
+    /// applyModemConfig() clamps config.lora in place, so the capture must come last.
+    bool commitConfig();
 
     /** The delay to use for retransmitting dropped packets */
     [[nodiscard]] uint32_t getRetransmissionMsec(const meshtastic_MeshPacket *p);
@@ -259,7 +264,49 @@ class RadioInterface
     // Whether we have a custom channel name
     static bool uses_custom_channel_name;
 
-    static bool checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraConfig, bool clamp);
+    // What a config settles the two published flags to. Reported by the clamp, applied by
+    // applyModemConfig() - so asking about a config the node will not run cannot move them.
+    struct LoraSlotVerdict {
+        bool usesDefaultFrequencySlot;
+        bool usesCustomChannelName;
+    };
+
+    // channelName is the name whose hash picks the default frequency slot. Null means "the current
+    // primary" - pass one explicitly to ask about a config that is not the running one.
+    static bool checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraConfig, bool clamp, const char *channelName = nullptr,
+                                       bool announce = true, LoraSlotVerdict *verdict = nullptr);
+
+    // 1-based slot this config lands on for a channel name, resolving the region override or name
+    // hash as applyModemConfig() does. Asks about a channel without making it primary first.
+    static uint32_t resolveFrequencySlot(const meshtastic_Config_LoRaConfig &loraConfig, const char *channelName);
+
+    // How many slots this config's region holds, deriving the bandwidth from it so every caller
+    // gets the count the radio will actually run on.
+    static uint32_t frequencySlotCount(const meshtastic_Config_LoRaConfig &loraConfig);
+
+    // The radio as configured, which is not always the radio as it is running. Status gates - may
+    // a module run, transmit, how often - ask these; only radio programming reads the live values.
+    // TRAP: only fields where committed and accepted coincide are meaningful. tx_power, bandwidth,
+    // spread_factor and coding_rate are clamped into members by applyModemConfig(), not into this.
+    static const meshtastic_Config_LoRaConfig &configuredLoraConfig();
+
+    // Settings-time twin of uses_default_frequency_slot.
+    static bool configuredUsesDefaultSlot();
+
+    // The region this node is configured for, not the one the radio may be borrowing.
+    static const RegionInfo *configuredRegion();
+
+    // Freeze config.lora and its slot verdict. Settings path and init() only.
+    // During a borrow it keeps the committed config and primary, adopting only fields an operator changed.
+    static void captureConfiguredRadio();
+
+    // True while a feature has the radio on borrowed settings (NodeDB's transient LoRa slot).
+    static bool radioIsBorrowed();
+
+    // config.lora for anything outside the radio - a client, a save, a channel hash. While a borrow holds it: the
+    // committed config plus any field an operator changed since. Live otherwise, so an open edit transaction reads
+    // back its own edits.
+    static meshtastic_Config_LoRaConfig loraConfigToReport();
 
     // Check if a candidate region is compatible and valid, with no side effects (safe for
     // speculative UI checks). prospectiveLicensedOwner is for a UI flow that requires
@@ -271,11 +318,20 @@ class RadioInterface
     // records a critical error, and sends a client notification.
     static bool validateConfigRegion(const meshtastic_Config_LoRaConfig &loraConfig);
 
-    // Check if a candidate radio configuration is valid.
-    static bool validateConfigLora(const meshtastic_Config_LoRaConfig &loraConfig);
+    // Validate asks (quiet by default: the beacon TX gate checks every queued beacon); clamp applies (loud: the result
+    // is about to be the radio). Pass announce explicitly to cross over.
+    // Check if a candidate radio configuration is valid. Side-effect free unless announce, which tells the
+    // client why it failed; pass channelName to evaluate against a channel other than the running primary.
+    static bool validateConfigLora(const meshtastic_Config_LoRaConfig &loraConfig, const char *channelName = nullptr,
+                                   bool announce = false);
 
-    // Make a candidate radio configuration valid, even if it isn't.
-    static void clampConfigLora(meshtastic_Config_LoRaConfig &loraConfig);
+    // Make a candidate radio configuration valid, even if it isn't; only applyModemConfig() applies
+    // the verdict. announce=false asks about a config the node will not run, and stays silent.
+    static LoraSlotVerdict clampConfigLora(meshtastic_Config_LoRaConfig &loraConfig, const char *channelName = nullptr,
+                                           bool announce = true);
+
+    // Publish what applyModemConfig() would, for readers that run before the radio exists (NodeDB's constructor).
+    static void refreshSlotFlags(const meshtastic_Config_LoRaConfig &loraConfig);
 
     // If preset is locked to a sibling of currentRegion among the swappable EU regions
     // (EU_868/EU_866/EU_N_868), return the sibling region owning the preset, else nullptr.
@@ -334,7 +390,7 @@ class RadioInterface
 
     int reloadConfig(void *unused)
     {
-        reconfigure();
+        commitConfig(); // only a committed config reaches here, so this is what the node IS
         return 0;
     }
 };

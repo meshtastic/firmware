@@ -1,5 +1,6 @@
 #include "SimRadio.h"
 #include "MeshService.h"
+#include "RadioTxHook.h"
 #include "Router.h"
 
 SimRadio::SimRadio() : NotifiedWorkerThread("SimRadio")
@@ -13,15 +14,15 @@ ErrorCode SimRadio::send(meshtastic_MeshPacket *p)
 {
     printPacket("enqueuing for send", p);
 
-    bool dropped = false;
-    ErrorCode res = txQueue.enqueue(p, &dropped) ? ERRNO_OK : ERRNO_UNKNOWN;
+    meshtastic_MeshPacket *evicted = nullptr;
+    ErrorCode res = txQueue.enqueue(p, &evicted) ? ERRNO_OK : ERRNO_UNKNOWN;
 
-    if (dropped) {
+    if (evicted || res != ERRNO_OK) // a full queue drops one packet either way: the evictee, or p
         txDrop++;
-    }
+    RadioTxHooks::releasePacket(this, evicted); // after p is queued: a hook's release can retune the radio
 
     if (res != ERRNO_OK) { // we weren't able to queue it, so we must drop it to prevent leaks
-        packetPool.release(p);
+        RadioTxHooks::releasePacket(this, p);
         return res;
     }
 
@@ -96,9 +97,7 @@ void SimRadio::completeSending()
         if (!isFromUs(p))
             txRelay++;
         printPacket("Completed sending", p);
-
-        // We are done sending that packet, release it
-        packetPool.release(p);
+        RadioTxHooks::releasePacket(this, p);
         // LOG_DEBUG("Done with send");
     }
 }
@@ -136,10 +135,9 @@ bool SimRadio::isChannelActive()
 bool SimRadio::cancelSending(NodeNum from, PacketId id)
 {
     auto p = txQueue.remove(from, id);
-    if (p)
-        packetPool.release(p); // free the packet we just removed
+    const bool result = (p != NULL); // before the release: a freed pointer's value is indeterminate
+    RadioTxHooks::releasePacket(this, p);
 
-    bool result = (p != NULL);
     LOG_DEBUG_RADIO("cancelSending id=0x%08x, removed=%d", id, result);
     return result;
 }
@@ -178,9 +176,14 @@ void SimRadio::onNotify(uint32_t notification)
                 // LOG_DEBUG("Currently Rx/Tx-ing: set random delay");
                 setTransmitDelay(); // currently Rx/Tx-ing: reset random delay
             } else {
-                if (isChannelActive()) { // check if there is currently a LoRa packet on the channel
-                    // LOG_DEBUG("Channel is active: set random delay");
-                    setTransmitDelay(); // reset random delay
+                const RadioTxHook::PreTxAction action = RadioTxHooks::beforeTransmit(this, txQueue.getFront());
+                if (action == RadioTxHook::PRETX_DROP) {
+                    // Refused on the radio config we hold, as RadioLibInterface does: drop it and try the next one.
+                    RadioTxHooks::releasePacket(this, txQueue.dequeue());
+                    startTransmitTimer(); // not setTransmitDelay(): it reads the front, and the queue may be empty now
+                } else if (action == RadioTxHook::PRETX_DEFER || isChannelActive()) {
+                    // The radio config moved, or there is a LoRa packet on the channel: re-run the random delay
+                    setTransmitDelay();
                 } else {
                     // Send any outgoing packets we have ready
                     meshtastic_MeshPacket *txp = txQueue.dequeue();

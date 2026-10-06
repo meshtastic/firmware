@@ -38,11 +38,17 @@ uint8_t xorHash(const uint8_t *p, size_t len)
  */
 int16_t Channels::generateHash(ChannelIndex channelNum)
 {
+    // A blank name is the preset's: resolve it against the reported config, so a rebuild mid-borrow keeps our own hash.
+    const meshtastic_Config_LoRaConfig lora = RadioInterface::loraConfigToReport();
+    return hashFor(channelNum, getNameForPreset(channelNum, lora.modem_preset, lora.use_preset));
+}
+
+int16_t Channels::hashFor(ChannelIndex channelNum, const char *name)
+{
     auto k = getKey(channelNum);
     if (k.length < 0)
         return -1; // invalid
     else {
-        const char *name = getName(channelNum);
         uint8_t h = xorHash((const uint8_t *)name, strlen(name));
 
         h ^= xorHash(k.bytes, k.length);
@@ -245,53 +251,53 @@ void Channels::initDefaultChannel(ChannelIndex chIndex)
 #undef USERPREFS_APPLY_CHANNEL
 }
 
+uint8_t Channels::pskPaddedLength(uint8_t len)
+{
+    if (len >= 2 && len < 16)
+        return 16;
+    if (len > 16 && len < 32)
+        return 32;
+    return len;
+}
+
+uint8_t Channels::expandPsk(const uint8_t *psk, uint8_t len, uint8_t *out)
+{
+    memset(out, 0, sizeof(meshtastic_ChannelSettings::psk.bytes));
+    if (len == 0)
+        return 0;
+    if (len == 1) {
+        if (psk[0] == 0)
+            return 0; // encryption off, same as an absent key
+        memcpy(out, defaultpsk, sizeof(defaultpsk));
+        out[sizeof(defaultpsk) - 1] += psk[0] - 1; // index 1 is defaultpsk itself
+        return sizeof(defaultpsk);
+    }
+    memcpy(out, psk, len);
+    return pskPaddedLength(len);
+}
+
 CryptoKey Channels::getKey(ChannelIndex chIndex)
 {
     meshtastic_Channel &ch = getByIndex(chIndex);
     const meshtastic_ChannelSettings &channelSettings = ch.settings;
 
     CryptoKey k;
-    memset(k.bytes, 0, sizeof(k.bytes)); // In case the user provided a short key, we want to pad the rest with zeros
+    memset(k.bytes, 0, sizeof(k.bytes));
 
     if (!ch.has_settings || ch.role == meshtastic_Channel_Role_DISABLED) {
         k.length = -1; // invalid
+    } else if (channelSettings.psk.size == 0 && ch.role == meshtastic_Channel_Role_SECONDARY && chIndex != primaryIndex) {
+        // A secondary with no PSK borrows the primary's key; the chIndex != primaryIndex check
+        // prevents infinite recursion if the primary slot itself is marked SECONDARY
+        LOG_DEBUG("Unset PSK for secondary channel %s. use primary key", ch.settings.name);
+        k = getKey(primaryIndex);
     } else {
-        memcpy(k.bytes, channelSettings.psk.bytes, channelSettings.psk.size);
-        k.length = channelSettings.psk.size;
-        if (k.length == 0) {
-            // A secondary with no PSK borrows the primary's key; the chIndex != primaryIndex check
-            // prevents infinite recursion if the primary slot itself is marked SECONDARY
-            if (ch.role == meshtastic_Channel_Role_SECONDARY && chIndex != primaryIndex) {
-                LOG_DEBUG("Unset PSK for secondary channel %s. use primary key", ch.settings.name);
-                k = getKey(primaryIndex);
-            } else {
-                LOG_WARN("User disabled encryption");
-            }
-        } else if (k.length == 1) {
-            // Convert the short single byte variants of psk into variant that can be used more generally
-
-            uint8_t pskIndex = k.bytes[0];
-            LOG_DEBUG("Expand short PSK #%d", pskIndex);
-            if (pskIndex == 0)
-                k.length = 0; // Turn off encryption
-            else {
-                memcpy(k.bytes, defaultpsk, sizeof(defaultpsk));
-                k.length = sizeof(defaultpsk);
-                // Bump up the last byte of PSK as needed
-                uint8_t *last = k.bytes + sizeof(defaultpsk) - 1;
-                *last = *last + pskIndex - 1; // index of 1 means no change vs defaultPSK
-            }
-        } else if (k.length < 16) {
-            // Error! The user specified only the first few bits of an AES128 key.  So by convention we just pad the rest of the
-            // key with zeros
-            LOG_WARN("User provided a too short AES128 key - padding");
-            k.length = 16;
-        } else if (k.length < 32 && k.length != 16) {
-            // Error! The user specified only the first few bits of an AES256 key.  So by convention we just pad the rest of the
-            // key with zeros
-            LOG_WARN("User provided a too short AES256 key - padding");
-            k.length = 32;
-        }
+        const uint8_t given = (uint8_t)channelSettings.psk.size;
+        k.length = expandPsk(channelSettings.psk.bytes, given, k.bytes);
+        if (given == 0)
+            LOG_WARN("User disabled encryption");
+        else if (given > 1 && k.length != given)
+            LOG_WARN("User provided a %u-byte key - padding to %d", given, k.length);
     }
 
     return k;
@@ -421,16 +427,16 @@ bool Channels::anyMqttEnabled()
     return false;
 }
 
-const char *Channels::getName(size_t chIndex)
+const char *Channels::nameForSettings(const meshtastic_ChannelSettings &settings, meshtastic_Config_LoRaConfig_ModemPreset preset,
+                                      bool usePreset)
 {
     // Convert the short "" representation for Default into a usable string
-    const meshtastic_ChannelSettings &channelSettings = getByIndex(chIndex).settings;
-    const char *channelName = channelSettings.name;
+    const char *channelName = settings.name;
     if (!*channelName) { // emptystring
         // Per mesh.proto spec, if bandwidth is specified we must ignore modemPreset enum, we assume that in that case
         // the app effed up and forgot to set channelSettings.name
-        if (config.lora.use_preset) {
-            channelName = DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, false, config.lora.use_preset);
+        if (usePreset) {
+            channelName = DisplayFormatters::getModemPresetDisplayName(preset, false, usePreset);
         } else {
             channelName = "Custom";
         }
@@ -439,13 +445,131 @@ const char *Channels::getName(size_t chIndex)
     return channelName;
 }
 
+// Blank means the running preset's display name, matching what getName() resolves a slot to, so an
+// offer naming "LongFast" finds a table entry that stores the name blank.
+static void resolveIdentityName(const char *name, char *out, size_t outLen)
+{
+    const char *src =
+        *name ? name : DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, false, config.lora.use_preset);
+    strncpy(out, src, outLen - 1);
+    out[outLen - 1] = '\0';
+}
+
+// Identity is the name and the PSK only; role is the caller's business. The name compares
+// case-sensitively because generateHash() xors the raw bytes, so two spellings differing only in
+// case are different channels on the air and must not be collapsed onto one slot.
+// inheritKey, when given, is the primary's canonical key: getKey() lends it to a live SECONDARY with an empty PSK,
+// so that slot is not cleartext. A DISABLED slot is matched raw, so it is passed without one.
+static bool slotMatchesIdentity(const meshtastic_Channel &ch, const char *wantName, const uint8_t *wantKey, uint8_t wantKeyLen,
+                                bool wantAead, const uint8_t *inheritKey = nullptr, uint8_t inheritKeyLen = 0)
+{
+    // AEAD and CTR on one key are two channels: each rejects the other's packets.
+    if (!ch.has_settings || ch.settings.use_aead != wantAead)
+        return false;
+    uint8_t haveKey[sizeof(meshtastic_ChannelSettings::psk.bytes)];
+    uint8_t haveKeyLen = Channels::expandPsk(ch.settings.psk.bytes, (uint8_t)ch.settings.psk.size, haveKey);
+    if (inheritKey && ch.role == meshtastic_Channel_Role_SECONDARY && ch.settings.psk.size == 0) {
+        memcpy(haveKey, inheritKey, inheritKeyLen);
+        haveKeyLen = inheritKeyLen;
+    }
+    if (haveKeyLen != wantKeyLen || memcmp(haveKey, wantKey, haveKeyLen) != 0)
+        return false;
+    char have[sizeof(ch.settings.name)];
+    resolveIdentityName(ch.settings.name, have, sizeof(have));
+    return strcmp(have, wantName) == 0;
+}
+
+int16_t Channels::findByIdentity(const char *name, const uint8_t *psk, uint8_t pskLen, bool useAead)
+{
+    char want[sizeof(meshtastic_ChannelSettings::name)];
+    resolveIdentityName(name, want, sizeof(want));
+    uint8_t wantKey[sizeof(meshtastic_ChannelSettings::psk.bytes)];
+    const uint8_t wantKeyLen = expandPsk(psk, pskLen, wantKey);
+    const meshtastic_ChannelSettings &primary = channelFile.channels[getPrimaryIndex()].settings;
+    uint8_t primaryKey[sizeof(meshtastic_ChannelSettings::psk.bytes)];
+    const uint8_t primaryKeyLen = expandPsk(primary.psk.bytes, (uint8_t)primary.psk.size, primaryKey);
+
+    for (ChannelIndex i = 0; i < getNumChannels(); i++) {
+        const meshtastic_Channel &ch = channelFile.channels[i];
+        if (ch.role == meshtastic_Channel_Role_DISABLED)
+            continue;
+        if (slotMatchesIdentity(ch, want, wantKey, wantKeyLen, useAead, primaryKey, primaryKeyLen))
+            return i;
+    }
+    return -1;
+}
+
+int16_t Channels::upsertIdentity(const char *name, const uint8_t *psk, uint8_t pskLen, bool useAead)
+{
+    if (pskLen > sizeof(meshtastic_ChannelSettings::psk.bytes))
+        return -1;
+
+    const int16_t live = findByIdentity(name, psk, pskLen, useAead);
+    if (live >= 0)
+        return live; // already in the table, write nothing
+
+    char want[sizeof(meshtastic_ChannelSettings::name)];
+    resolveIdentityName(name, want, sizeof(want));
+
+    uint8_t wantKey[sizeof(meshtastic_ChannelSettings::psk.bytes)];
+    const uint8_t wantKeyLen = expandPsk(psk, pskLen, wantKey);
+
+    // A DISABLED slot holds the settings of a deleted channel, so claiming one destroys nothing
+    // live. Prefer one that already held this identity, so re-adding a channel keeps its old index.
+    int16_t slot = -1;
+    for (ChannelIndex i = 0; i < getNumChannels(); i++) {
+        const meshtastic_Channel &ch = channelFile.channels[i];
+        if (i == getPrimaryIndex() || ch.role != meshtastic_Channel_Role_DISABLED)
+            continue;
+        if (slot < 0)
+            slot = i;
+        if (slotMatchesIdentity(ch, want, wantKey, wantKeyLen, useAead)) {
+            slot = i;
+            break;
+        }
+    }
+    if (slot < 0)
+        return -1; // every slot is live; the caller withholds rather than evicting one
+
+    meshtastic_Channel c = meshtastic_Channel_init_zero;
+    c.index = slot;
+    c.role = meshtastic_Channel_Role_SECONDARY;
+    c.has_settings = true;
+    strncpy(c.settings.name, name, sizeof(c.settings.name) - 1);
+    if (wantKeyLen == 0) {
+        // Cleartext is spelled {0}: an empty PSK on a SECONDARY would borrow the primary's key instead.
+        c.settings.psk.size = 1;
+        c.settings.psk.bytes[0] = 0;
+    } else {
+        c.settings.psk.size = pskLen;
+        memcpy(c.settings.psk.bytes, psk, pskLen);
+    }
+    c.settings.use_aead = useAead;
+    setChannel(c);
+    onConfigChanged();
+    return slot;
+}
+
+const char *Channels::getNameForPreset(size_t chIndex, meshtastic_Config_LoRaConfig_ModemPreset preset, bool usePreset)
+{
+    return nameForSettings(getByIndex(chIndex).settings, preset, usePreset);
+}
+
+const char *Channels::getName(size_t chIndex)
+{
+    // The display name, which follows the live radio - what a user reading a screen expects.
+    return getNameForPreset(chIndex, config.lora.modem_preset, config.lora.use_preset);
+}
+
 bool Channels::isDefaultChannel(ChannelIndex chIndex)
 {
-    const auto &ch = getByIndex(chIndex);
-    if (ch.settings.psk.size == 1 && ch.settings.psk.bytes[0] == 1) {
-        const char *name = getName(chIndex);
-        const char *presetName =
-            DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, false, config.lora.use_preset);
+    // Uses the committed preset: modules gate transmissions on this, so a borrowed preset is not used.
+    // A beacon never borrows the channel table. See RadioInterface::configuredLoraConfig().
+    const meshtastic_ChannelSettings &settings = getByIndex(chIndex).settings;
+    if (settings.psk.size == 1 && settings.psk.bytes[0] == 1) {
+        const meshtastic_Config_LoRaConfig &cfg = RadioInterface::configuredLoraConfig();
+        const char *name = nameForSettings(settings, cfg.modem_preset, cfg.use_preset);
+        const char *presetName = DisplayFormatters::getModemPresetDisplayName(cfg.modem_preset, false, cfg.use_preset);
         // Check if the name is the default derived from the modem preset
         if (strcmp(name, presetName) == 0)
             return true;
@@ -538,7 +662,8 @@ bool Channels::isEventChannel(ChannelIndex chIndex)
 bool Channels::hasDefaultChannel()
 {
     // If we don't use a preset or the default frequency slot, or we override the frequency, we don't have a default channel
-    if (!config.lora.use_preset || !RadioInterface::uses_default_frequency_slot || config.lora.override_frequency)
+    const meshtastic_Config_LoRaConfig &cfg = RadioInterface::configuredLoraConfig();
+    if (!cfg.use_preset || !RadioInterface::configuredUsesDefaultSlot() || cfg.override_frequency)
         return false;
     // Check if any of the channels are using the default name and PSK
     for (size_t i = 0; i < getNumChannels(); i++) {
