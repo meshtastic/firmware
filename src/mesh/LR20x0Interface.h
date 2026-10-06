@@ -28,7 +28,7 @@ template <class T> class LR20x0Interface : public RadioLibInterface
     bool isIRQPending() override { return lora.getIrqFlags() != 0; }
 
 #ifdef LR20X0_AGC_RESET
-    void resetAGC() override;
+    bool resetAGC() override;
 #endif
 
   protected:

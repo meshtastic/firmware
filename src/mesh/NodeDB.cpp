@@ -3,6 +3,7 @@
 #include "GPS.h"
 #endif
 #include "../detect/ScanI2C.h"
+#include "AdminKeys.h"
 #include "Channels.h"
 #include "CryptoEngine.h"
 #include "Default.h"
@@ -737,6 +738,29 @@ NodeDB::NodeDB()
 NodeNum getFrom(const meshtastic_MeshPacket *p)
 {
     return (p->from == 0) ? nodeDB->getNodeNum() : p->from;
+}
+
+// The re-encode below cannot overflow the payload buffer, so it never yields an empty payload.
+static_assert(meshtastic_User_size <= sizeof(meshtastic_Data_payload_t::bytes), "User no longer fits Data.payload");
+
+bool coerceNodeInfoUserId(meshtastic_MeshPacket &p)
+{
+    if (p.which_payload_variant != meshtastic_MeshPacket_decoded_tag || p.decoded.portnum != meshtastic_PortNum_NODEINFO_APP)
+        return false;
+
+    meshtastic_User user = meshtastic_User_init_zero;
+    if (!pb_decode_from_bytes(p.decoded.payload.bytes, p.decoded.payload.size, &meshtastic_User_msg, &user))
+        return false;
+
+    char expected[sizeof(user.id)];
+    snprintf(expected, sizeof(expected), "!%08x", getFrom(&p));
+    if (strcmp(user.id, expected) == 0)
+        return false;
+
+    memcpy(user.id, expected, sizeof(user.id));
+    p.decoded.payload.size =
+        pb_encode_to_bytes(p.decoded.payload.bytes, sizeof(p.decoded.payload.bytes), &meshtastic_User_msg, &user);
+    return true;
 }
 
 // Returns true if the packet originated from the local node
@@ -2972,6 +2996,10 @@ void NodeDB::loadFromDisk()
         saveToDisk(SEGMENT_CHANNELS);
     }
 #if ARCH_PORTDUINO
+    // The host's config.yaml is authoritative for admin keys: it is root-owned and cannot be
+    // rewritten by an authorized remote, so it decides who may administer this node.
+    AdminKeys::applyHostKeys();
+
     // set any config overrides
     if (portduino_config.has_configDisplayMode) {
         config.display.displaymode = (_meshtastic_Config_DisplayConfig_DisplayMode)portduino_config.configDisplayMode;
