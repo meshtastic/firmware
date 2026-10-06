@@ -183,7 +183,9 @@ https://github.com/brad112358/easy_E22
 
 // P1.06 is the only free pin left for a TXEN line, but it is also the e-ink panel's BUSY line.
 // EasyProMicro, where it is SCL, takes the #else branch below and has its own TXEN on P1.00.
-#if !defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS) && !defined(USE_EINK)
+#if !defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS) && !defined(USE_EINK) &&                                                         \
+    !(defined(MESHTASTIC_USE_EINK_UI) && MESHTASTIC_USE_EINK_UI)
+
 #define PROMICRO_P106_FREE_FOR_TXEN
 #endif
 
