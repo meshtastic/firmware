@@ -33,7 +33,7 @@ class NRF52CryptoEngine : public CryptoEngine
 #if !(MESHTASTIC_EXCLUDE_PKI)
   protected:
     // CC310 X25519 (~5x faster, no ~3 KB eval stack frame). The CC310 clamps and eval doesn't, so only
-    // clamped scalars (all Curve25519::dh1 keys) go to the hardware; others keep the software result.
+    // clamped scalars (every key dh1 or regeneratePublicKey leaves) go to the hardware; others keep the software result.
     bool x25519(uint8_t *out, const uint8_t *scalar, const uint8_t *point) override
     {
         if (!isClamped(scalar))
