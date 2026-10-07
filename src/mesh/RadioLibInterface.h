@@ -392,9 +392,6 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      */
     void rearmReceive();
 
-    /** Resume an RX the chip is still running instead of restarting it; false if it is not known to be running. */
-    virtual bool resumeRunningReceive() { return false; }
-
     /** Whether a TX payload written into the chip's buffer while this frame arrived can have overwritten part of it */
     virtual bool rxFrameOverlapsTxStage(size_t length) { return false; }
 
