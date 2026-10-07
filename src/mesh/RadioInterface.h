@@ -7,6 +7,7 @@
 #include "airtime.h"
 #include "error.h"
 #include <memory>
+#include <meshUtils.h> // for pow_of_2
 
 #if HAS_LORA_FEM
 #include "LoRaFEMInterface.h"
@@ -365,6 +366,18 @@ constexpr StaleRxFlagAction staleRxFlagAction(bool headerSeen, uint32_t sinceFir
     return sinceFirstSeenMsec < maxPacketTimeMsec ? StaleRxFlagAction::Keep
            : headerSeen                           ? StaleRxFlagAction::Rearm
                                                   : StaleRxFlagAction::ClearPreamble;
+}
+
+// How long after a preamble sighting a frame we can decode would have latched HEADER_VALID: the rest of the preamble plus
+// the ~12.25 symbols of sync word, SFD and explicit header, and 2 more because PREAMBLE_DETECTED dates from a look, not
+// from the first symbol. Taken from sf and bw, never from preambleTimeMsec: that is whole milliseconds, and a wide-LoRa
+// symbol is tens of microseconds, so the stored value truncates to 0 and would make every sighting peekable at once.
+inline uint32_t preambleHeaderGraceMsec(uint8_t sf, float bwKhz, uint16_t preambleLength)
+{
+    const float symbolMsec = (float)pow_of_2(sf) / bwKhz; // bw is in kHz, so a symbol time comes out in milliseconds
+    const float grace = symbolMsec * (preambleLength + 14.25f);
+    const uint32_t whole = (uint32_t)grace;
+    return grace > (float)whole ? whole + 1 : whole; // round up, so a sub-millisecond grace is never zero
 }
 
 /// Debug printing for packets

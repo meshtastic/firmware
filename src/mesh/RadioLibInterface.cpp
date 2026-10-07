@@ -156,8 +156,7 @@ uint32_t RadioLibInterface::maxRxFrameMsec()
 
 uint32_t RadioLibInterface::barePreambleGraceMsec()
 {
-    // PREAMBLE_DETECTED can latch early in the preamble; sync word, SFD and explicit header follow in ~12.25 symbols.
-    return (uint32_t)ceilf(preambleTimeMsec * (preambleLength + 14.25f) / preambleLength);
+    return preambleHeaderGraceMsec(sf, bw, preambleLength);
 }
 
 void RadioLibInterface::recordRxFlagsBeforeStandby()

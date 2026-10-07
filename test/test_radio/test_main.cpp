@@ -851,6 +851,36 @@ static void test_staleRxFlagAction_staleHeaderIsRearmed()
     TEST_ASSERT_EQUAL(static_cast<int>(StaleRxFlagAction::Rearm), static_cast<int>(staleRxFlagAction(true, 60000, 2115)));
 }
 
+// preambleHeaderGraceMsec() in src/mesh/RadioInterface.h: how long a bare-preamble hold waits before the TX path may peek
+// past it and run its CAD. It is the rest of the preamble plus the ~12.25 symbols of sync word, SFD and explicit header.
+//
+// Pinned: the grace is computed from sf and bw and rounded up, so it is never zero. Regression guarded: deriving it from
+// RadioInterface::preambleTimeMsec, which is whole milliseconds. Above 2 GHz a whole 12-symbol preamble is under 1 ms, so
+// that value is 0 and scaling it gave a grace of 0 - every sighting peekable the moment it was seen, which is the one case
+// the hold exists for.
+
+static void test_preambleHeaderGrace_wideLoraIsNeverZero()
+{
+    // SHORT_TURBO at 2.4 GHz: SF7, 1625 kHz, 12-symbol preamble. A symbol is 79 us and the whole preamble 0.95 ms.
+    TEST_ASSERT_EQUAL_UINT32(3, preambleHeaderGraceMsec(7, 1625.0f, 12));
+    // The shortest preamble we can be configured for stays above zero too.
+    TEST_ASSERT_EQUAL_UINT32(1, preambleHeaderGraceMsec(5, 1625.0f, 12));
+}
+
+static void test_preambleHeaderGrace_roundsUp()
+{
+    // SHORT_FAST at 2.4 GHz: 4.14 ms of symbols. Truncating the preamble to 1 ms first gave 3.
+    TEST_ASSERT_EQUAL_UINT32(5, preambleHeaderGraceMsec(7, 812.5f, 12));
+}
+
+static void test_preambleHeaderGrace_subGhzPresets()
+{
+    // Sub-GHz grace is unchanged, or a millisecond longer where the old form rounded the symbol time down first.
+    TEST_ASSERT_EQUAL_UINT32(8, preambleHeaderGraceMsec(7, 500.0f, 16));    // SHORT_TURBO
+    TEST_ASSERT_EQUAL_UINT32(248, preambleHeaderGraceMsec(11, 250.0f, 16)); // LONG_FAST
+    TEST_ASSERT_EQUAL_UINT32(992, preambleHeaderGraceMsec(12, 125.0f, 16)); // LONG_SLOW
+}
+
 void setup()
 {
     delay(10);
@@ -905,6 +935,9 @@ void setup()
     RUN_TEST(test_staleRxFlagAction_windowEndsAtExactlyOneMaxPacket);
     RUN_TEST(test_staleRxFlagAction_barePreambleIsOnlyCleared);
     RUN_TEST(test_staleRxFlagAction_staleHeaderIsRearmed);
+    RUN_TEST(test_preambleHeaderGrace_wideLoraIsNeverZero);
+    RUN_TEST(test_preambleHeaderGrace_roundsUp);
+    RUN_TEST(test_preambleHeaderGrace_subGhzPresets);
     exit(UNITY_END());
 }
 
