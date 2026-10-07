@@ -995,12 +995,14 @@ bool RadioLibInterface::maybeRecoverChipStateLoss()
     return recovered;
 }
 
-void RadioLibInterface::checkRxDoneIrqFlag()
+bool RadioLibInterface::checkRxDoneIrqFlag()
 {
     if (iface->checkIrq(RADIOLIB_IRQ_RX_DONE)) {
         LOG_WARN("caught missed RX_DONE");
         notify(ISR_RX, true);
+        return true;
     }
+    return false;
 }
 
 void RadioLibInterface::checkTxDoneIrqFlag()

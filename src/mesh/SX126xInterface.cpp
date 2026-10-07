@@ -555,7 +555,14 @@ template <typename T> bool SX126xInterface<T>::resumeRunningReceive()
     activeReceiveStart = 0; // as the standby this replaces would
     RadioLibInterface::startReceive();
     enableInterrupt(isrRxLevel0);
+#ifdef ARCH_PORTDUINO
+    // Name the one catch the keep is responsible for: "caught missed RX_DONE" alone cannot say which look
+    // found it, as pollMissedIrqs(), rearmReceive() and startReceive() all log it too.
+    if (checkRxDoneIrqFlag() && keepRxIrqs) // an RX_DONE that beat the arm
+        LOG_DEBUG("RX resume kept RX_DONE for readout");
+#else
     checkRxDoneIrqFlag(); // an RX_DONE that beat the arm
+#endif
     return true;
 }
 
@@ -779,9 +786,9 @@ template <typename T> bool SX126xInterface<T>::stageTxInRx()
     // A preamble shows ~2 ms into a frame, its header ~5 ms in: the scan's standby would abort either
     const uint32_t arrivingIrqs = RADIOLIB_SX126X_IRQ_HEADER_VALID | RADIOLIB_SX126X_IRQ_PREAMBLE_DETECTED;
     if (irq & (arrivingIrqs | doneIrqs)) {
-        // Its readout checks whether our bytes can lie across it
-        if (irq & (RADIOLIB_SX126X_IRQ_HEADER_VALID | doneIrqs))
-            noteStagedOverFrame(base, numbytes);
+        // Its readout checks whether our bytes can lie across it. A bare preamble counts: that frame can still
+        // grow into the staged bytes, no later look records the check, and the record is spent on the next readout.
+        noteStagedOverFrame(base, numbytes);
         // The busy verdict's rearmReceive() resumes the RX: it must leave the frame's terminal flags for its
         // readout, whether it had already finished or finishes while we get there
         keepRxIrqsAtResume = true;

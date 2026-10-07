@@ -538,7 +538,8 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
     bool removePendingTXPacket(NodeNum from, PacketId id, uint32_t hop_limit_lt) override;
 
-    void checkRxDoneIrqFlag();
+    /** @return whether a latched RX_DONE was found and notified, so a caller can say which look caught it */
+    bool checkRxDoneIrqFlag();
     void checkTxDoneIrqFlag();
 
     /** Software-poll substitute for a hardware DIO interrupt, for radios whose IRQ line sits behind
