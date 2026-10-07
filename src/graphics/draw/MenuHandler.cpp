@@ -5,6 +5,9 @@
 #include "DisplayFormatters.h"
 #include "GPS.h"
 #include "MenuHandler.h"
+#if HAS_HOST_POWEROFF
+#include "platform/portduino/LinuxPower.h"
+#endif
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "MessageStore.h"
@@ -28,6 +31,9 @@
 #include "mesh/RadioLibInterface.h"
 #include "modules/AdminModule.h"
 #include "modules/CannedMessageModule.h"
+#if !MESHTASTIC_EXCLUDE_MQTT
+#include "mqtt/MQTT.h"
+#endif
 #include "modules/ExternalNotificationModule.h"
 #include "modules/GeofenceModule.h"
 #include "modules/KeyVerificationModule.h"
@@ -55,23 +61,37 @@ namespace
 uint32_t selectedGeofenceWaypointId = 0;
 #endif
 
+template <typename X> struct Identity {
+    using type = X;
+};
+
+// One banner is live at a time, so the options table and handler for it live in per-T statics.
+template <typename T> struct StaticBannerState {
+    static const MenuOption<T> *options;
+    static void (*onSelection)(const MenuOption<T> &, int);
+    static void dispatch(int selected) { onSelection(options[selected], selected); }
+};
+template <typename T> const MenuOption<T> *StaticBannerState<T>::options = nullptr;
+template <typename T> void (*StaticBannerState<T>::onSelection)(const MenuOption<T> &, int) = nullptr;
+
 // Caller must ensure the provided options array outlives the banner callback.
-template <typename T, size_t N, typename Callback>
+template <typename T, size_t N>
 BannerOverlayOptions createStaticBannerOptions(const char *message, const MenuOption<T> (&options)[N],
-                                               std::array<const char *, N> &labels, Callback &&onSelection)
+                                               std::array<const char *, N> &labels,
+                                               typename Identity<void (*)(const MenuOption<T> &, int)>::type onSelection)
 {
     for (size_t i = 0; i < N; ++i) {
         labels[i] = options[i].label;
     }
 
-    const MenuOption<T> *optionsPtr = options;
-    auto callback = std::function<void(const MenuOption<T> &, int)>(std::forward<Callback>(onSelection));
+    StaticBannerState<T>::options = options;
+    StaticBannerState<T>::onSelection = onSelection;
 
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = message;
     bannerOptions.optionsArrayPtr = labels.data();
     bannerOptions.optionsCount = static_cast<uint8_t>(N);
-    bannerOptions.bannerCallback = [optionsPtr, callback](int selected) -> void { callback(optionsPtr[selected], selected); };
+    bannerOptions.bannerCallback = &StaticBannerState<T>::dispatch;
     return bannerOptions;
 }
 
@@ -118,6 +138,18 @@ const StoredMessage *getNewestMessageForActiveThread()
     return nullptr;
 }
 
+// Freetext compose is offered whenever the device can enter text at all: a physical
+// keyboard, an on-screen keyboard driven by rotary/trackball/joystick, or a touchscreen
+// virtual keyboard.
+bool freetextAvailable()
+{
+#if defined(USE_VIRTUAL_KEYBOARD)
+    return true;
+#else
+    return kb_found || osk_found;
+#endif
+}
+
 void launchReplyForMessage(const StoredMessage &message, bool freetext)
 {
     if (message.type == MessageType::BROADCAST || message.dest == NODENUM_BROADCAST) {
@@ -153,12 +185,7 @@ uint8_t test_count = 0;
 void menuHandler::loraMenu()
 {
     static const char *optionsArray[] = {
-        "Back",
-        "Device Role",
-        "Radio Preset",
-        "Frequency Slot",
-        "LoRa Region",
-        "Transmit Enabled",
+        "Back",    "Device Role", "Radio Preset", "Frequency Slot", "LoRa Region", "Transmit Enabled",
 #if HAS_LORA_FEM
         "FEM LNA",
 #endif
@@ -289,10 +316,10 @@ static void applyLoraRegion(meshtastic_Config_LoRaConfig_RegionCode region, bool
     if (getEffectiveDutyCycle() < 100) {
         config.lora.ignore_mqtt = true;
     }
-    if (strncmp(moduleConfig.mqtt.root, default_mqtt_root, strlen(default_mqtt_root)) == 0) {
-        snprintf(moduleConfig.mqtt.root, sizeof(moduleConfig.mqtt.root), "%s/%s", default_mqtt_root, myRegion->name);
+#if !MESHTASTIC_EXCLUDE_MQTT
+    if (MQTT::applyRegionRootTopic(myRegion->name))
         changes |= SEGMENT_MODULECONFIG;
-    }
+#endif
 #if !MESHTASTIC_EXCLUDE_GPS
     // Enable gps if it was previously disabled due to region not being set
     if (gps != nullptr && !gps->isEnabled() && config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED)
@@ -668,13 +695,18 @@ void menuHandler::twelveHourPicker()
 void menuHandler::showConfirmationBanner(const char *message, std::function<void()> onConfirm)
 {
     static const char *confirmOptions[] = {"No", "Yes"};
+    static std::function<void()> pendingConfirm;
+    pendingConfirm = std::move(onConfirm);
     BannerOverlayOptions confirmBanner;
     confirmBanner.message = message;
     confirmBanner.optionsArrayPtr = confirmOptions;
     confirmBanner.optionsCount = 2;
-    confirmBanner.bannerCallback = [onConfirm](int confirmSelected) -> void {
-        if (confirmSelected == 1) {
-            onConfirm();
+    confirmBanner.bannerCallback = [](int confirmSelected) -> void {
+        // Take it out first: the handler may open another confirmation and reassign pendingConfirm.
+        std::function<void()> fn = std::move(pendingConfirm);
+        pendingConfirm = nullptr;
+        if (confirmSelected == 1 && fn) {
+            fn();
         }
     };
     screen->showOverlayBanner(confirmBanner);
@@ -915,8 +947,8 @@ void menuHandler::replyMenu()
     optionsArray[options] = "With Preset";
     optionsEnumArray[options++] = ReplyPreset;
 
-    // Freetext reply (only when keyboard exists)
-    if (kb_found) {
+    // Freetext reply (only when the device can enter text)
+    if (freetextAvailable()) {
         optionsArray[options] = "With Freetext";
         optionsEnumArray[options++] = ReplyFreetext;
     }
@@ -1012,7 +1044,8 @@ void menuHandler::deleteMessagesMenu()
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsEnumPtr = optionsEnumArray;
     bannerOptions.optionsCount = options;
-    bannerOptions.bannerCallback = [mode](int selected) -> void {
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        auto mode = graphics::MessageRenderer::getThreadMode();
         int ch = graphics::MessageRenderer::getThreadChannel();
         uint32_t peer = graphics::MessageRenderer::getThreadPeer();
 
@@ -1062,7 +1095,6 @@ void menuHandler::deleteMessagesMenu()
 void menuHandler::messageViewModeMenu()
 {
     auto encodeChannelId = [](int ch) -> int { return 100 + ch; };
-    auto isChannelSel = [](int id) -> bool { return id >= 100 && id < 200; };
 
     static std::vector<std::string> labels;
     static std::vector<int> ids;
@@ -1178,14 +1210,14 @@ void menuHandler::messageViewModeMenu()
     bannerOptions.optionsCount = options.size();
     bannerOptions.InitialSelected = initialIndex;
 
-    bannerOptions.bannerCallback = [=](int selected) -> void {
+    bannerOptions.bannerCallback = [](int selected) -> void {
         LOG_DEBUG("messageViewModeMenu: selected=%d", selected);
         if (selected == -1) {
             menuHandler::menuQueue = menuHandler::MessageResponseMenu;
             screen->runNow();
         } else if (selected == -2) {
             graphics::MessageRenderer::setThreadMode(graphics::MessageRenderer::ThreadMode::ALL);
-        } else if (isChannelSel(selected)) {
+        } else if (selected >= 100 && selected < 200) {
             int ch = selected - 100;
             graphics::MessageRenderer::setThreadMode(graphics::MessageRenderer::ThreadMode::CHANNEL, ch);
         } else if (selected >= 1000) {
@@ -1245,7 +1277,6 @@ void menuHandler::homeBaseMenu()
                 IF_SCREEN(if (!externalNotificationModule->getMute()) externalNotificationModule->stopNow();)
             }
         } else if (selected == Backlight) {
-            screen->setOn(false);
 #if HAS_BACKLIGHT
             graphics::backlightToggle();
             saveUIConfig();
@@ -1282,7 +1313,7 @@ void menuHandler::textMessageBaseMenu()
     int options = 1;
     optionsArray[options] = "New Preset Msg";
     optionsEnumArray[options++] = Preset;
-    if (kb_found) {
+    if (freetextAvailable()) {
         optionsArray[options] = "New Freetext Msg";
         optionsEnumArray[options++] = Freetext;
     }
@@ -1405,7 +1436,7 @@ void menuHandler::favoriteBaseMenu()
     }
     optionsEnumArray[options++] = Preset;
 
-    if (kb_found) {
+    if (freetextAvailable()) {
         optionsArray[options] = "New Freetext Msg";
         optionsEnumArray[options++] = Freetext;
     }
@@ -2304,15 +2335,26 @@ void menuHandler::BuzzerModeMenu()
     screen->showOverlayBanner(bannerOptions);
 }
 
+// Variants may override these in variant.h.
+#ifndef SCREEN_BRIGHTNESS_LEVEL_MEDIUM
+#define SCREEN_BRIGHTNESS_LEVEL_MEDIUM 64
+#endif
+#ifndef SCREEN_BRIGHTNESS_LEVEL_HIGH
+#define SCREEN_BRIGHTNESS_LEVEL_HIGH 128
+#endif
+#ifndef SCREEN_BRIGHTNESS_LEVEL_VERY_HIGH
+#define SCREEN_BRIGHTNESS_LEVEL_VERY_HIGH 255
+#endif
+
 void menuHandler::BrightnessPickerMenu()
 {
     static const char *optionsArray[] = {"Back", "Low", "Medium", "High"};
 
     // Get current brightness level to set initial selection
     int currentSelection = 1; // Default to Medium
-    if (uiconfig.screen_brightness >= 255) {
+    if (uiconfig.screen_brightness >= SCREEN_BRIGHTNESS_LEVEL_VERY_HIGH) {
         currentSelection = 3; // Very High
-    } else if (uiconfig.screen_brightness >= 128) {
+    } else if (uiconfig.screen_brightness >= SCREEN_BRIGHTNESS_LEVEL_HIGH) {
         currentSelection = 2; // High
     } else {
         currentSelection = 1; // Medium
@@ -2324,11 +2366,11 @@ void menuHandler::BrightnessPickerMenu()
     bannerOptions.optionsCount = 4;
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == 1) { // Medium
-            uiconfig.screen_brightness = 64;
+            uiconfig.screen_brightness = SCREEN_BRIGHTNESS_LEVEL_MEDIUM;
         } else if (selected == 2) { // High
-            uiconfig.screen_brightness = 128;
+            uiconfig.screen_brightness = SCREEN_BRIGHTNESS_LEVEL_HIGH;
         } else if (selected == 3) { // Very High
-            uiconfig.screen_brightness = 255;
+            uiconfig.screen_brightness = SCREEN_BRIGHTNESS_LEVEL_VERY_HIGH;
         }
 
         if (selected != 0) { // Not "Back"
@@ -2604,9 +2646,9 @@ void menuHandler::traceRouteMenu()
 void menuHandler::testMenu()
 {
 
-    enum optionsNumbers { Back, NumberPicker, ShowChirpy, TestAnnounce };
-    static const char *optionsArray[5] = {"Back"};
-    static int optionsEnumArray[5] = {Back};
+    enum optionsNumbers { Back, NumberPicker, ShowChirpy, TestAnnounce, HostPowerOff };
+    static const char *optionsArray[6] = {"Back"};
+    static int optionsEnumArray[6] = {Back};
     int options = 1;
 
     optionsArray[options] = "Number Picker";
@@ -2617,6 +2659,11 @@ void menuHandler::testMenu()
 #ifdef HAS_I2S
     optionsArray[options] = "Test Announce";
     optionsEnumArray[options++] = TestAnnounce;
+#endif
+#if HAS_HOST_POWEROFF
+    // Halts the computer meshtasticd runs on, not just the node. See hostPowerOffMenu().
+    optionsArray[options] = "Power Off Host";
+    optionsEnumArray[options++] = HostPowerOff;
 #endif
 
     BannerOverlayOptions bannerOptions;
@@ -2636,12 +2683,47 @@ void menuHandler::testMenu()
 #ifdef HAS_I2S
             audioThread->readAloud("This is a test of the emergency broadcast system. This is only a test.");
 #endif
+        } else if (selected == HostPowerOff) {
+#if HAS_HOST_POWEROFF
+            menuQueue = HostPowerOffMenu;
+            screen->runNow();
+#endif
         } else {
             menuQueue = SystemBaseMenu;
             screen->runNow();
         }
     };
     screen->showOverlayBanner(bannerOptions);
+}
+
+// Separate from shutdownMenu(): that one ends the node, this one ends the machine. Worth its own
+// confirmation because on a headless node nothing else will bring the host back.
+void menuHandler::hostPowerOffMenu()
+{
+#if HAS_HOST_POWEROFF
+    static const char *optionsArray[] = {"Back", "Confirm"};
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Power Off Host?";
+    if (currentResolution == ScreenResolution::UltraLow) {
+        bannerOptions.message = "Power Off?";
+    }
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 2;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == 1) {
+            // Raise the flag first, then run the ordinary shutdown so the NodeDB and message store
+            // are saved exactly as they would be for a normal one; Power.cpp halts the host at the
+            // end instead of just exiting.
+            hostPowerOffRequested = true;
+            InputEvent event = {.inputEvent = (input_broker_event)INPUT_BROKER_SHUTDOWN, .kbchar = 0, .touchX = 0, .touchY = 0};
+            inputBroker->injectInputEvent(&event);
+        } else {
+            menuQueue = TestMenu;
+            screen->runNow();
+        }
+    };
+    screen->showOverlayBanner(bannerOptions);
+#endif
 }
 
 void menuHandler::numberTest()
@@ -2831,7 +2913,7 @@ void menuHandler::keyVerificationFinalPrompt()
         options.optionsArrayPtr = optionsArray;
         options.optionsCount = 2;
         options.notificationType = graphics::notificationTypeEnum::selection_picker;
-        options.bannerCallback = [=](int selected) {
+        options.bannerCallback = [](int selected) {
             if (selected == 1) {
                 keyVerificationModule->commitVerifiedRemoteNode();
             }
@@ -2865,6 +2947,7 @@ void menuHandler::frameTogglesMenu()
 
     // Track last selected index (not enum value!)
     static int lastSelectedIndex = 0;
+    static int optionCount = 0;
 
 #ifndef USE_EINK
     optionsArray[options] = screen->isFrameHidden("nodelist_nodes") ? "Show Node Lists" : "Hide Node Lists";
@@ -2916,10 +2999,11 @@ void menuHandler::frameTogglesMenu()
     bannerOptions.optionsEnumPtr = optionsEnumArray;
     bannerOptions.InitialSelected = lastSelectedIndex; // Use index, not enum value
 
-    bannerOptions.bannerCallback = [options](int selected) mutable -> void {
+    optionCount = options;
+    bannerOptions.bannerCallback = [](int selected) -> void {
         // Find the index of selected in optionsEnumArray
         int idx = 0;
-        for (; idx < options; ++idx) {
+        for (; idx < optionCount; ++idx) {
             if (optionsEnumArray[idx] == selected)
                 break;
         }
@@ -3243,6 +3327,9 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
     case TraceRouteMenu:
         traceRouteMenu();
         break;
+    case HostPowerOffMenu:
+        hostPowerOffMenu();
+        break;
     case TestMenu:
         testMenu();
         break;
@@ -3297,9 +3384,11 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
     case MessageBubblesMenu:
         messageBubblesMenu();
         break;
+#if GRAPHICS_TFT_COLORING_ENABLED // the Theme option only exists with TFT coloring
     case ThemeMenu:
         themeMenu();
         break;
+#endif
     case HamModeConfirm:
         hamModeConfirmMenu();
         break;

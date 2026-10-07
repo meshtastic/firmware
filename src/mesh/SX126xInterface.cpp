@@ -27,7 +27,7 @@ SX126xInterface<T>::SX126xInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs
                                     RADIOLIB_PIN_TYPE busy)
     : RadioLibInterface(hal, cs, irq, rst, busy, &lora), lora(&module)
 {
-    LOG_DEBUG("SX126xInterface(cs=%d, irq=%d, rst=%d, busy=%d)", cs, irq, rst, busy);
+    LOG_DEBUG_RADIO("SX126xInterface(cs=%d, irq=%d, rst=%d, busy=%d)", cs, irq, rst, busy);
 }
 
 /// Initialise the Driver transport hardware and software.
@@ -70,16 +70,31 @@ template <typename T> bool SX126xInterface<T>::init()
 #endif
 
 #if ARCH_PORTDUINO
-    tcxoVoltage = (float)portduino_config.dio3_tcxo_voltage / 1000;
+    // An explicit Vref wins; probing with none given tries the radio default first.
+    bool tcxoVoltageExplicit = portduino_config.dio3_tcxo_voltage > 0;
+    if (tcxoVoltageExplicit)
+        tcxoVoltage = (float)portduino_config.dio3_tcxo_voltage / 1000;
+    else if (TCXO_OPTIONAL_ENABLED)
+        tcxoVoltage = TCXO_OPTIONAL_DEFAULT_VOLTAGE;
+    else
+        tcxoVoltage = 0;
     if (portduino_config.lora_sx126x_ant_sw_pin.pin != RADIOLIB_NC) {
         digitalWrite(portduino_config.lora_sx126x_ant_sw_pin.pin, HIGH);
         pinMode(portduino_config.lora_sx126x_ant_sw_pin.pin, OUTPUT);
     }
-#endif
+    // The knob here is the YAML key, not the variant define the other branch reports.
     if (tcxoVoltage == 0.0)
-        LOG_DEBUG("SX126X_DIO3_TCXO_VOLTAGE not defined, DIO3 not used as TCXO Vref");
+        LOG_DEBUG_RADIO("Lora.DIO3_TCXO_VOLTAGE not set, DIO3 not used as TCXO Vref");
+    else if (!tcxoVoltageExplicit)
+        LOG_DEBUG_RADIO("TCXO_OPTIONAL: no Vref configured, probing default TCXO Vref %f V on DIO3", tcxoVoltage);
     else
-        LOG_DEBUG("SX126X_DIO3_TCXO_VOLTAGE defined, DIO3 as TCXO Vref %f V", tcxoVoltage);
+        LOG_DEBUG_RADIO("Lora.DIO3_TCXO_VOLTAGE set, DIO3 as TCXO Vref %f V", tcxoVoltage);
+#else
+    if (tcxoVoltage == 0.0)
+        LOG_DEBUG_RADIO("SX126X_DIO3_TCXO_VOLTAGE not defined, DIO3 not used as TCXO Vref");
+    else
+        LOG_DEBUG_RADIO("SX126X_DIO3_TCXO_VOLTAGE defined, DIO3 as TCXO Vref %f V", tcxoVoltage);
+#endif
     setTransmitEnable(false);
 
     RadioLibInterface::init();
@@ -109,12 +124,30 @@ template <typename T> bool SX126xInterface<T>::reinitChip()
 
     int res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage, useRegulatorLDO);
 
-#ifdef SX126X_PA_RAMP_US
-    // Set custom PA ramp time for boards requiring longer stabilization (e.g., T-Beam 1W needs >800us)
-    if (res == RADIOLIB_ERR_NONE) {
-        lora.setPaRampTime(SX126X_PA_RAMP_US);
+    // Chip answered but would not start on the TCXO: retry on the XTAL. CHIP_NOT_FOUND is a
+    // wiring or SPI fault, where a second attempt only hides it. Portduino only - an embedded
+    // board gets this from the second interface instance in initLoRa()'s ladder.
+    // TODO: consider deferring to RadioLib, which has autocorrected this itself since 7.5.0:
+    // SX126x::modSetup() retries config() on the XTAL when begin() fails with SPI_CMD_FAILED and
+    // XOSC_START_ERR, so the ordinary "TCXO configured, XTAL fitted" case never reaches here and
+    // what does is mostly invalid settings. Narrowing this to SPI_CMD_TIMEOUT - the oscillator
+    // symptom RadioLib's condition misses - would keep the cover and drop the misdiagnosis.
+#if ARCH_PORTDUINO
+    if (TCXO_OPTIONAL_ENABLED && res != RADIOLIB_ERR_NONE && res != RADIOLIB_ERR_CHIP_NOT_FOUND && tcxoVoltage > 0) {
+        LOG_WARN("SX126x init failed with TCXO Vref %f V (err %d), retrying without TCXO", tcxoVoltage, res);
+        tcxoVoltage = 0;
+        res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage, useRegulatorLDO);
+        if (res == RADIOLIB_ERR_NONE)
+            LOG_INFO("SX126x init success without TCXO (XTAL mode)");
     }
 #endif
+    if (res == RADIOLIB_ERR_NONE) {
+        applyTcxoStartupDelay(lora, tcxoVoltage);
+#ifdef SX126X_PA_RAMP_US
+        // Set custom PA ramp time for boards requiring longer stabilization (e.g., T-Beam 1W needs >800us)
+        lora.setPaRampTime(SX126X_PA_RAMP_US);
+#endif
+    }
     // \todo Display actual typename of the adapter, not just `SX126x`
     LOG_INFO("SX126x init result %d", res);
     if (res == RADIOLIB_ERR_CHIP_NOT_FOUND || res == RADIOLIB_ERR_SPI_CMD_FAILED)
@@ -133,8 +166,8 @@ template <typename T> bool SX126xInterface<T>::reinitChip()
     // FIXME: Not ideal to increase SX1261 current limit above 60mA as it can only transmit max 15dBm, should probably only do it
     // if using SX1262 or SX1268
     res = lora.setCurrentLimit(currentLimit);
-    LOG_DEBUG("Current limit set to %f", currentLimit);
-    LOG_DEBUG("Current limit set result %d", res);
+    LOG_DEBUG_RADIO("Current limit set to %f", currentLimit);
+    LOG_DEBUG_RADIO("Current limit set result %d", res);
 
     if (res == RADIOLIB_ERR_NONE) {
 #ifdef SX126X_DIO2_AS_RF_SWITCH
@@ -148,28 +181,35 @@ template <typename T> bool SX126xInterface<T>::reinitChip()
         bool dio2AsRfSwitch = false;
 #endif
         res = lora.setDio2AsRfSwitch(dio2AsRfSwitch);
-        LOG_DEBUG("Set DIO2 as %sRF switch, result: %d", dio2AsRfSwitch ? "" : "not ", res);
+        LOG_DEBUG_RADIO("Set DIO2 as %sRF switch, result: %d", dio2AsRfSwitch ? "" : "not ", res);
+    }
+
+    if (res == RADIOLIB_ERR_NONE && tcxoVoltage > 0) {
+        // Standby and TX/RX fallback on STDBY_XOSC keep the TCXO powered: from STDBY_RC every SetRx and SetTx
+        // first waits out the TCXO start-up delay (5 ms by RadioLib's default).
+        const int16_t xoscRes = lora.setStandbyXOSC(true);
+        LOG_DEBUG("Keep TCXO on in standby, result: %d", xoscRes);
     }
 
 // If a pin isn't defined, we set it to RADIOLIB_NC, it is safe to always do external RF switching with RADIOLIB_NC as it has
 // no effect
 #if ARCH_PORTDUINO
     if (res == RADIOLIB_ERR_NONE) {
-        LOG_DEBUG("Use MCU pin %i as RXEN, pin %i as TXEN for RF switching", portduino_config.lora_rxen_pin.pin,
-                  portduino_config.lora_txen_pin.pin);
+        LOG_DEBUG_RADIO("Use MCU pin %i as RXEN, pin %i as TXEN for RF switching", portduino_config.lora_rxen_pin.pin,
+                        portduino_config.lora_txen_pin.pin);
         lora.setRfSwitchPins(portduino_config.lora_rxen_pin.pin, portduino_config.lora_txen_pin.pin);
     }
 #else
 #ifndef SX126X_RXEN
 #define SX126X_RXEN RADIOLIB_NC
-    LOG_DEBUG("SX126X_RXEN not defined, default RADIOLIB_NC");
+    LOG_DEBUG_RADIO("SX126X_RXEN not defined, default RADIOLIB_NC");
 #endif
 #ifndef SX126X_TXEN
 #define SX126X_TXEN RADIOLIB_NC
-    LOG_DEBUG("SX126X_TXEN not defined, default RADIOLIB_NC");
+    LOG_DEBUG_RADIO("SX126X_TXEN not defined, default RADIOLIB_NC");
 #endif
     if (res == RADIOLIB_ERR_NONE) {
-        LOG_DEBUG("Use MCU pin %i as RXEN, pin %i as TXEN for RF switching", SX126X_RXEN, SX126X_TXEN);
+        LOG_DEBUG_RADIO("Use MCU pin %i as RXEN, pin %i as TXEN for RF switching", SX126X_RXEN, SX126X_TXEN);
         lora.setRfSwitchPins(SX126X_RXEN, SX126X_TXEN);
     }
 #endif
@@ -339,11 +379,11 @@ template <typename T> void SX126xInterface<T>::handleSoftwareLoraIrqPoll()
         RADIOLIB_SX126X_IRQ_RX_DONE | RADIOLIB_SX126X_IRQ_TIMEOUT | RADIOLIB_SX126X_IRQ_CRC_ERR | RADIOLIB_SX126X_IRQ_HEADER_ERR;
     const uint16_t noisyRxMask = RADIOLIB_SX126X_IRQ_PREAMBLE_DETECTED | RADIOLIB_SX126X_IRQ_HEADER_VALID;
 
-    // Do NOT treat a preamble/header-only IRQ as a full RX event: noisy preamble detections would
-    // repeatedly trigger readData() and starve TX scheduling. Clear these non-terminal bits, or the
-    // poll loop spins at high rate while they stay latched.
-    if (!pollTxMode && (irq & noisyRxMask) && ((irq & ~noisyRxMask) == 0U)) {
-        lora.clearIrqFlags(noisyRxMask);
+    // A bare PREAMBLE is mid-reception, not an RX event. With a TX queued clear only it, so a noise preamble
+    // can't block TX; keep HEADER_VALID latched, as it marks a real frame.
+    const bool preambleOnly = (irq & RADIOLIB_SX126X_IRQ_PREAMBLE_DETECTED) && !(irq & RADIOLIB_SX126X_IRQ_HEADER_VALID);
+    if (!pollTxMode && hasQueuedTx() && preambleOnly && ((irq & ~noisyRxMask) == 0U)) {
+        lora.clearIrqFlags(RADIOLIB_SX126X_IRQ_PREAMBLE_DETECTED);
         scheduleIrqPollTick();
         return;
     }
@@ -367,9 +407,15 @@ template <typename T> int16_t SX126xInterface<T>::trySetStandby()
     checkNotification(); // handle any pending interrupts before we force standby
 
     int16_t err = lora.standby();
+    if (err == RADIOLIB_ERR_SPI_CMD_TIMEOUT) {
+        // After a bounded RX times out, the status byte returned with SET_STANDBY still carries that timeout, and
+        // RadioLib reports it as a failed command although the chip took it. The next command sees a fresh status.
+        err = lora.standby();
+        LOG_DEBUG("SX126x standby reported a stale command timeout, retry %s%d", radioLibErr, err);
+    }
 
     if (err != RADIOLIB_ERR_NONE)
-        LOG_DEBUG("SX126x standby %s%d", radioLibErr, err);
+        LOG_DEBUG_RADIO("SX126x standby %s%d", radioLibErr, err);
 #ifdef ARCH_PORTDUINO
     if (err != RADIOLIB_ERR_NONE)
         portduino_status.LoRa_in_error = true;
@@ -471,20 +517,39 @@ template <typename T> void SX126xInterface<T>::startReceive()
 /** Is the channel currently active? */
 template <typename T> bool SX126xInterface<T>::isChannelActive()
 {
-    // check if we can detect a LoRa preamble on the current channel
-    ChannelScanConfig_t cfg = {.cad = {.symNum = NUM_SYM_CAD,
+    // check if we can detect a LoRa preamble on the current channel.
+    // NOTE: symNum is the *encoded* SET_CAD_PARAMS value, not a raw count - RADIOLIB_SX126X_CAD_ON_4_SYMB
+    // (== raw 2) runs the 4-symbol scan getCadSymbolCountSubGhz() reports; keep the two in step.
+    // Exit CAD straight into RX on detection (GOTO_RX) with the RX IRQs already mapped, so the chip's
+    // own CAD->RX transition delivers RX_DONE with no library call in between. irqFlags is
+    // the status-enable set (CAD verdict + full RX set incl. PREAMBLE/HEADER_VALID for isActivelyReceiving);
+    // irqMask is the DIO-trigger set - CAD verdict + terminal RX events only, NOT PREAMBLE/HEADER_VALID,
+    // which would fire the ISR mid-frame and run readData() on an incomplete packet.
+    const uint32_t cadIrqFlags = RADIOLIB_IRQ_CAD_DEFAULT_FLAGS | MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS;
+    const uint32_t cadIrqMask = RADIOLIB_IRQ_CAD_DEFAULT_MASK | (1UL << RADIOLIB_IRQ_RX_DONE) | (1UL << RADIOLIB_IRQ_TIMEOUT) |
+                                (1UL << RADIOLIB_IRQ_CRC_ERR) | (1UL << RADIOLIB_IRQ_HEADER_ERR);
+    // cadTimeout bounds the RX the chip enters on detection: one max-length airtime, in microseconds. A
+    // detection that delivers nothing then expires to standby and raises TIMEOUT, which re-arms us.
+    const RadioLibTime_t cadRxTimeoutUsec =
+        (RadioLibTime_t)getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN + sizeof(PacketHeader), false) * 1000;
+    ChannelScanConfig_t cfg = {.cad = {.symNum = RADIOLIB_SX126X_CAD_ON_4_SYMB,
                                        .detPeak = RADIOLIB_SX126X_CAD_PARAM_DEFAULT,
                                        .detMin = RADIOLIB_SX126X_CAD_PARAM_DEFAULT,
-                                       .exitMode = RADIOLIB_SX126X_CAD_PARAM_DEFAULT,
-                                       .timeout = 0,
-                                       .irqFlags = RADIOLIB_IRQ_CAD_DEFAULT_FLAGS,
-                                       .irqMask = RADIOLIB_IRQ_CAD_DEFAULT_MASK}};
+                                       .exitMode = RADIOLIB_SX126X_CAD_GOTO_RX,
+                                       .timeout = cadRxTimeoutUsec,
+                                       .irqFlags = cadIrqFlags,
+                                       .irqMask = cadIrqMask}};
     setTransmitEnable(false);
     int16_t result = trySetStandby();
     if (result == RADIOLIB_ERR_NONE) {
         result = lora.scanChannel(cfg);
-        if (result == RADIOLIB_LORA_DETECTED)
+        if (result == RADIOLIB_LORA_DETECTED) {
+            // The chip auto-entered RX (GOTO_RX). Drop the latched CAD verdict so the pin releases and the
+            // coming RX_DONE is a clean edge.
+            lora.clearIrqFlags(RADIOLIB_SX126X_IRQ_CAD_DONE | RADIOLIB_SX126X_IRQ_CAD_DETECTED);
+            noteCadHandoffToRx(); // nothing below arms the radio; the caller's rearmReceive() adopts it
             return true;
+        }
         if (result != RADIOLIB_CHANNEL_FREE)
             LOG_ERROR("SX126X scanChannel %s%d", radioLibErr, result);
         if (result != RADIOLIB_ERR_WRONG_MODEM)
@@ -510,7 +575,7 @@ template <typename T> bool SX126xInterface<T>::sleep()
 {
     // Not keeping config is busted - next time nrf52 board boots lora sending fails  tcxo related? - see datasheet
     // \todo Display actual typename of the adapter, not just `SX126x`
-    LOG_DEBUG("SX126x entering sleep mode"); // (FIXME, don't keep config)
+    LOG_DEBUG_RADIO("SX126x entering sleep mode"); // (FIXME, don't keep config)
     (void)trySetStandby(); // Stop any pending operations - the chip is being put to sleep, a failure must not crash
 
     // turn off TCXO if it was powered
@@ -532,13 +597,13 @@ template <typename T> bool SX126xInterface<T>::sleep()
     return true;
 }
 
-template <typename T> void SX126xInterface<T>::resetAGC()
+template <typename T> bool SX126xInterface<T>::resetAGC()
 {
     // Safety: don't reset mid-packet
     if (sendingPacket != NULL || (isReceiving && isActivelyReceiving()))
-        return;
+        return false;
 
-    LOG_DEBUG("SX126x AGC reset: warm sleep + Calibrate(0x7F)");
+    LOG_DEBUG_RADIO("SX126x AGC reset: warm sleep + Calibrate(0x7F)");
 
     // 1. Warm sleep - powers down the entire analog frontend, resetting AGC state.
     //    A plain standby→startReceive cycle does NOT reset the AGC.
@@ -563,7 +628,7 @@ template <typename T> void SX126xInterface<T>::resetAGC()
     if (module.hal->digitalRead(module.getGpio())) {
         LOG_WARN("SX126x AGC reset: calibration not done in 50ms");
         startReceive();
-        return;
+        return false; // incomplete: retried on the next maintenance tick
     }
 
     // 5. Re-calibrate image rejection for actual operating frequency
@@ -592,12 +657,14 @@ template <typename T> void SX126xInterface<T>::resetAGC()
     // silently removes the RX sensitivity improvement introduced in #9571 / #9777.
     // Without this re-apply, every SX1262 node loses its RX boost ~60s after boot
     // and never recovers until reboot. See empirical evidence in the PR description.
-    if (module.SPIsetRegValue(0x8B5, 0x01, 0, 0) != RADIOLIB_ERR_NONE) {
+    const bool patched = module.SPIsetRegValue(0x8B5, 0x01, 0, 0) == RADIOLIB_ERR_NONE;
+    if (!patched) {
         LOG_WARN("SX126x resetAGC: 0x8B5 RX patch re-apply failed");
     }
 
     // 7. Resume receiving
     startReceive();
+    return patched; // without the patch the reset is incomplete: retried on the next maintenance tick
 }
 
 /** Control PA mode for GC1109 FEM - CPS pin selects full PA (txon=true) or bypass mode (txon=false) */

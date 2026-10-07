@@ -6,6 +6,7 @@
 #include "Router.h"
 #include "configuration.h"
 #include "gps/RTC.h"
+#include "meshUtils.h"
 #include <Arduino.h>
 #include <Throttle.h>
 
@@ -593,14 +594,14 @@ void SerialModule::processWXSerial()
                         if (strlen(parsed.name) > 0) {
                             if (strcmp(parsed.name, "WindDir") == 0) {
                                 strlcpy(windDir, parsed.value, sizeof(windDir));
-                                double radians = GeoCoord::toRadians(strtof(windDir, nullptr));
+                                double radians = GeoCoord::toRadians(parseDecimalFloat(windDir));
                                 dir_sum_sin += sin(radians);
                                 dir_sum_cos += cos(radians);
                                 dirCount++;
                                 gotwind = true;
                             } else if (strcmp(parsed.name, "WindSpeed") == 0) {
                                 strlcpy(windVel, parsed.value, sizeof(windVel));
-                                float newv = strtof(windVel, nullptr);
+                                float newv = parseDecimalFloat(windVel);
                                 velSum += newv;
                                 velCount++;
                                 if (newv < lull || lull == -1) {
@@ -609,27 +610,27 @@ void SerialModule::processWXSerial()
                                 gotwind = true;
                             } else if (strcmp(parsed.name, "WindGust") == 0) {
                                 strlcpy(windGust, parsed.value, sizeof(windGust));
-                                float newg = strtof(windGust, nullptr);
+                                float newg = parseDecimalFloat(windGust);
                                 if (newg > gust) {
                                     gust = newg;
                                 }
                                 gotwind = true;
                             } else if (strcmp(parsed.name, "BatVoltage") == 0) {
                                 strlcpy(batVoltage, parsed.value, sizeof(batVoltage));
-                                batVoltageF = strtof(batVoltage, nullptr);
+                                batVoltageF = parseDecimalFloat(batVoltage);
                                 break; // last possible data we want so break
                             } else if (strcmp(parsed.name, "CapVoltage") == 0) {
                                 strlcpy(capVoltage, parsed.value, sizeof(capVoltage));
-                                capVoltageF = strtof(capVoltage, nullptr);
+                                capVoltageF = parseDecimalFloat(capVoltage);
                             } else if (strcmp(parsed.name, "GXTS04Temp") == 0 || strcmp(parsed.name, "Temperature") == 0) {
                                 strlcpy(temperature, parsed.value, sizeof(temperature));
-                                temperatureF = strtof(temperature, nullptr);
+                                temperatureF = parseDecimalFloat(temperature);
                             } else if (strcmp(parsed.name, "RainIntSum") == 0) {
                                 strlcpy(rainStr, parsed.value, sizeof(rainStr));
-                                rainSum = int(strtof(rainStr, nullptr));
+                                rainSum = int(parseDecimalFloat(rainStr));
                             } else if (strcmp(parsed.name, "Rain") == 0) {
                                 strlcpy(rainStr, parsed.value, sizeof(rainStr));
-                                rain = strtof(rainStr, nullptr);
+                                rain = parseDecimalFloat(rainStr);
                             }
                         }
 
@@ -647,8 +648,8 @@ void SerialModule::processWXSerial()
     }
     if (gotwind) {
 
-        LOG_INFO("WS8X : %i %.1fg%.1f %.1fv %.1fv %.1fC rain: %.1f, %i sum", atoi(windDir), strtof(windVel, nullptr),
-                 strtof(windGust, nullptr), batVoltageF, capVoltageF, temperatureF, rain, rainSum);
+        LOG_INFO("WS8X : %i %.1fg%.1f %.1fv %.1fv %.1fC rain: %.1f, %i sum", atoi(windDir), parseDecimalFloat(windVel),
+                 parseDecimalFloat(windGust), batVoltageF, capVoltageF, temperatureF, rain, rainSum);
     }
     if (gotwind && !Throttle::isWithinTimespanMs(lastAveraged, averageIntervalMillis) && velCount > 0 && dirCount > 0) {
         // calculate averages and send to the mesh

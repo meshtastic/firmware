@@ -51,7 +51,7 @@
 #ifndef HAS_CPU_SHUTDOWN
 #define HAS_CPU_SHUTDOWN 1
 #endif
-#if !defined(HAS_CUSTOM_CRYPTO_ENGINE) && !defined(ARCH_NRF54L)
+#ifndef HAS_CUSTOM_CRYPTO_ENGINE
 #define HAS_CUSTOM_CRYPTO_ENGINE 1
 #endif
 
@@ -198,7 +198,7 @@
 
 // If we are not on a NRF52840 (which has built in USB-ACM serial support) and we don't have serial pins hooked up, then we MUST
 // use SEGGER for debug output
-#if !defined(PIN_SERIAL_RX) && !defined(NRF52840_XXAA) && !defined(ARCH_NRF54L)
+#if !defined(PIN_SERIAL_RX) && !defined(NRF52840_XXAA)
 // No serial ports on this board - ONLY use segger in memory console
 #define USE_SEGGER
 #endif

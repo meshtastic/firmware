@@ -21,8 +21,24 @@
 #include "rfswitch.h"
 #elif ARCH_PORTDUINO
 #include "PortduinoGlue.h"
-#define lr20x0_rfswitch_dio_pins portduino_config.rfswitch_dio_pins
-#define lr20x0_rfswitch_table portduino_config.rfswitch_table
+
+// Switch-capable DIOs in slot order with this part's constants.
+static const int8_t lr20x0_switch_dio_nums[] = {5, 6, 7, 8, 9, 10, 11};
+static const uint32_t lr20x0_switch_dio_consts[] = {RADIOLIB_LR2021_DIO5, RADIOLIB_LR2021_DIO6, RADIOLIB_LR2021_DIO7,
+                                                    RADIOLIB_LR2021_DIO8, RADIOLIB_LR2021_DIO9, RADIOLIB_LR2021_DIO10,
+                                                    RADIOLIB_LR2021_DIO11};
+static_assert(sizeof(lr20x0_switch_dio_nums) / sizeof(lr20x0_switch_dio_nums[0]) ==
+                  sizeof(lr20x0_switch_dio_consts) / sizeof(lr20x0_switch_dio_consts[0]),
+              "LR20x0 switch DIO numbers and constants must describe the same slots");
+
+// This part has MODE_RX_HF and no MODE_TX_HP/MODE_GNSS/MODE_WIFI.
+static const int32_t lr20x0_rfswitch_mode_map[RFSW_MODE_COUNT] = {
+    LR20x0::MODE_STBY,  LR20x0::MODE_RX,    LR20x0::MODE_TX,       RFSW_MODE_UNSUPPORTED,
+    LR20x0::MODE_TX_HF, LR20x0::MODE_RX_HF, RFSW_MODE_UNSUPPORTED, RFSW_MODE_UNSUPPORTED,
+};
+
+static uint32_t lr20x0_rfswitch_dio_pins[Module::RFSWITCH_MAX_PINS];
+static Module::RfSwitchMode_t lr20x0_rfswitch_table[RFSW_MODE_COUNT + 1];
 #else
 static const uint32_t lr20x0_rfswitch_dio_pins[] = {RADIOLIB_NC, RADIOLIB_NC, RADIOLIB_NC, RADIOLIB_NC, RADIOLIB_NC};
 static const Module::RfSwitchMode_t lr20x0_rfswitch_table[] = {
@@ -67,7 +83,7 @@ LR20x0Interface<T>::LR20x0Interface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs
                                     RADIOLIB_PIN_TYPE busy)
     : RadioLibInterface(hal, cs, irq, rst, busy, &lora), lora(&module)
 {
-    LOG_WARN("LR20x0Interface(cs=%d, irq=%d, rst=%d, busy=%d)", cs, irq, rst, busy);
+    LOG_DEBUG_RADIO("LR20x0Interface(cs=%d, irq=%d, rst=%d, busy=%d)", cs, irq, rst, busy);
 }
 
 /// Initialise the Driver transport hardware and software.
@@ -81,33 +97,53 @@ template <typename T> bool LR20x0Interface<T>::init()
 #endif
 
 #if ARCH_PORTDUINO
-    float tcxoVoltage = (float)portduino_config.dio3_tcxo_voltage / 1000;
-// FIXME: correct logic to default to not using TCXO if no voltage is specified for LR20x0_DIO3_TCXO_VOLTAGE
+    // An explicit Vref wins; probing with none given tries the radio default first.
+    float tcxoVoltage;
+    if (portduino_config.dio3_tcxo_voltage > 0)
+        tcxoVoltage = (float)portduino_config.dio3_tcxo_voltage / 1000;
+    else if (TCXO_OPTIONAL_ENABLED)
+        tcxoVoltage = TCXO_OPTIONAL_DEFAULT_VOLTAGE;
+    else
+        tcxoVoltage = 0;
+    if (portduino_config.dio3_tcxo_voltage <= 0 && TCXO_OPTIONAL_ENABLED)
+        LOG_DEBUG_RADIO("TCXO_OPTIONAL: no Lora.DIO3_TCXO_VOLTAGE set, trying default TCXO Vref %f V first", tcxoVoltage);
 #elif defined(LR2021_DIO3_TCXO_VOLTAGE)
     float tcxoVoltage = LR2021_DIO3_TCXO_VOLTAGE;
-    LOG_DEBUG("LR2021_DIO3_TCXO_VOLTAGE defined, DIO3 as TCXO Vref %f V", LR2021_DIO3_TCXO_VOLTAGE);
+    LOG_DEBUG_RADIO("LR2021_DIO3_TCXO_VOLTAGE defined, DIO3 as TCXO Vref %f V", LR2021_DIO3_TCXO_VOLTAGE);
     // (DIO3 is not free to be used as an IRQ)
 #elif defined(TCXO_OPTIONAL)
     float tcxoVoltage = 1.6f; // TCXO_OPTIONAL: try default 1.6 V first, fall back to XTAL on failure
-    LOG_DEBUG("TCXO_OPTIONAL: no LR2021_DIO3_TCXO_VOLTAGE, try default TCXO Vref 1.6 V first");
+    LOG_DEBUG_RADIO("TCXO_OPTIONAL: no LR2021_DIO3_TCXO_VOLTAGE, try default TCXO Vref 1.6 V first");
 #else
     float tcxoVoltage =
         0; // "TCXO reference voltage to be set on DIO3. Defaults to 1.6 V, set to 0 to skip." per
            // https://github.com/jgromes/RadioLib/blob/690a050ebb46e6097c5d00c371e961c1caa3b52e/src/modules/LR11x0/LR11x0.h#L471C26-L471C104
     // (DIO3 is free to be used as an IRQ)
-    LOG_DEBUG("LR2021_DIO3_TCXO_VOLTAGE not defined, DIO3 not used as TCXO Vref");
+    LOG_DEBUG_RADIO("LR2021_DIO3_TCXO_VOLTAGE not defined, DIO3 not used as TCXO Vref");
 #endif
 
     RadioLibInterface::init();
 
 #ifdef LR2021_IRQ_DIO_NUM
     lora.irqDioNum = LR2021_IRQ_DIO_NUM;
-    LOG_DEBUG("Set irqDioNum %d", lora.irqDioNum);
+    LOG_DEBUG_RADIO("Set irqDioNum %d", lora.irqDioNum);
 #elif defined(IRQ_DIO_NUM)
     lora.irqDioNum = IRQ_DIO_NUM;
-    LOG_DEBUG("Set irqDioNum %d", lora.irqDioNum);
+    LOG_DEBUG_RADIO("Set irqDioNum %d", lora.irqDioNum);
+#elif defined(ARCH_PORTDUINO)
+    // Unset keeps RadioLib's default of DIO5, which many carriers also drive as a switch line. The
+    // range is checked again here because a DIO the radio cannot drive is a silently dead receiver.
+    if (portduino_config.irq_dio_num < 0) {
+        LOG_DEBUG_RADIO("Use default irqDioNum %d", lora.irqDioNum);
+    } else if (portduino_config.irq_dio_num >= kLr20x0IrqDioMin && portduino_config.irq_dio_num <= kLr20x0IrqDioMax) {
+        lora.irqDioNum = portduino_config.irq_dio_num;
+        LOG_DEBUG_RADIO("Set irqDioNum %d from config", lora.irqDioNum);
+    } else {
+        LOG_WARN("Config irqDioNum %d outside DIO%d-DIO%d, using default irqDioNum %d", portduino_config.irq_dio_num,
+                 kLr20x0IrqDioMin, kLr20x0IrqDioMax, lora.irqDioNum);
+    }
 #else
-    LOG_DEBUG("Use default irqDioNum %d", lora.irqDioNum);
+    LOG_DEBUG_RADIO("Use default irqDioNum %d", lora.irqDioNum);
 #endif
 
     if (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_LORA_24) { // clamp if wide freq range
@@ -119,13 +155,13 @@ template <typename T> bool LR20x0Interface<T>::init()
 #ifdef LR2021_RF_SWITCH_SUBGHZ
     pinMode(LR2021_RF_SWITCH_SUBGHZ, OUTPUT);
     digitalWrite(LR2021_RF_SWITCH_SUBGHZ, isLr20x0HighBand(getFreq()) ? LOW : HIGH);
-    LOG_DEBUG("Set RF0 switch to %s", isLr20x0HighBand(getFreq()) ? "2.4GHz" : "SubGHz");
+    LOG_DEBUG_RADIO("Set RF0 switch to %s", isLr20x0HighBand(getFreq()) ? "2.4GHz" : "SubGHz");
 #endif
 
 #ifdef LR2021_RF_SWITCH_2_4GHZ
     pinMode(LR2021_RF_SWITCH_2_4GHZ, OUTPUT);
     digitalWrite(LR2021_RF_SWITCH_2_4GHZ, isLr20x0HighBand(getFreq()) ? HIGH : LOW);
-    LOG_DEBUG("Set RF1 switch to %s", isLr20x0HighBand(getFreq()) ? "2.4GHz" : "SubGHz");
+    LOG_DEBUG_RADIO("Set RF1 switch to %s", isLr20x0HighBand(getFreq()) ? "2.4GHz" : "SubGHz");
 #endif
 
     // Allow extra time for TCXO to stabilize after power-on
@@ -140,24 +176,22 @@ template <typename T> bool LR20x0Interface<T>::init()
         res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage);
     }
 
-#if defined(TCXO_OPTIONAL)
     // If init failed for any reason other than chip not found, retry without TCXO (XTAL mode)
-    if (res != RADIOLIB_ERR_NONE && res != RADIOLIB_ERR_CHIP_NOT_FOUND && tcxoVoltage > 0) {
+    if (TCXO_OPTIONAL_ENABLED && res != RADIOLIB_ERR_NONE && res != RADIOLIB_ERR_CHIP_NOT_FOUND && tcxoVoltage > 0) {
         LOG_WARN("LR20x0 init failed with TCXO Vref %f V (err %d), retry without TCXO", tcxoVoltage, res);
         tcxoVoltage = 0;
         res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage);
         if (res == RADIOLIB_ERR_NONE)
             LOG_INFO("LR20x0 init success without TCXO (XTAL mode)");
     }
-#endif
 
     // \todo Display actual typename of the adapter, not just `LR20x0`
     LOG_INFO("LR20x0 init result %d", res);
     if (res == RADIOLIB_ERR_CHIP_NOT_FOUND || res == RADIOLIB_ERR_SPI_CMD_FAILED)
         return false;
 
-        // Some basic info about the module's explicit firmware version - no other info available
-        // Currently requires radiolib godmode
+    // Some basic info about the module's explicit firmware version - no other info available
+    // Currently requires radiolib godmode
 
 #if RADIOLIB_GODMODE
     if (res == RADIOLIB_ERR_NONE) {
@@ -165,7 +199,7 @@ template <typename T> bool LR20x0Interface<T>::init()
         uint8_t fwMinor = 0;
         int versionRes = lora.getVersion(&fwMajor, &fwMinor);
         if (versionRes == RADIOLIB_ERR_NONE)
-            LOG_DEBUG("LR20x0 FW %d.%d", fwMajor, fwMinor);
+            LOG_DEBUG_RADIO("LR20x0 FW %d.%d", fwMajor, fwMinor);
     }
 #endif
 
@@ -183,8 +217,8 @@ template <typename T> bool LR20x0Interface<T>::init()
     if (res == RADIOLIB_ERR_NONE)
         res = lora.setCRC(2);
 
-        // Standard DCDC ramp timing from RadioLib workarounds (register 0x00F20024)
-        // Currently requires radiolib godmode
+    // Standard DCDC ramp timing from RadioLib workarounds (register 0x00F20024)
+    // Currently requires radiolib godmode
 #if RADIOLIB_GODMODE
     if (res == RADIOLIB_ERR_NONE) {
         uint8_t rampTimes[4] = {15, 15, 15, 15}; // Standard case for all conditions
@@ -199,13 +233,17 @@ template <typename T> bool LR20x0Interface<T>::init()
     bool dioAsRfSwitch = true;
 #elif defined(ARCH_PORTDUINO)
     bool dioAsRfSwitch = portduino_config.has_rfswitch_table;
+    if (dioAsRfSwitch)
+        buildRfSwitchTable(lr20x0_rfswitch_dio_pins, lr20x0_rfswitch_table, RFSW_MODE_COUNT + 1, lr20x0_switch_dio_nums,
+                           lr20x0_switch_dio_consts, sizeof(lr20x0_switch_dio_nums) / sizeof(lr20x0_switch_dio_nums[0]),
+                           lr20x0_rfswitch_mode_map);
 #else
     bool dioAsRfSwitch = false;
 #endif
 
     if (dioAsRfSwitch) {
         lora.setRfSwitchTable(lr20x0_rfswitch_dio_pins, lr20x0_rfswitch_table);
-        LOG_DEBUG("Set DIO RF switch");
+        LOG_DEBUG_RADIO("Set DIO RF switch");
     }
 
     if (res == RADIOLIB_ERR_NONE) {
@@ -301,6 +339,7 @@ template <typename T> bool LR20x0Interface<T>::reconfigure()
             standbySuccess = false;
         }
 
+        selectLfPaTable(freq);
         err = lora.setOutputPower(power);
         if (err != RADIOLIB_ERR_NONE) {
             LOG_ERROR("LR20x0 setOutputPower %d dBm @ %.3f MHz %s%d", power, freq, radioLibErr, err);
@@ -347,20 +386,26 @@ template <typename T> bool LR20x0Interface<T>::fullBegin(float freq)
 #ifdef LR2021_RF_SWITCH_SUBGHZ
         pinMode(LR2021_RF_SWITCH_SUBGHZ, OUTPUT);
         digitalWrite(LR2021_RF_SWITCH_SUBGHZ, isLr20x0HighBand(freq) ? LOW : HIGH);
-        LOG_DEBUG("Set RF0 switch to %s", isLr20x0HighBand(freq) ? "2.4GHz" : "SubGHz");
+        LOG_DEBUG_RADIO("Set RF0 switch to %s", isLr20x0HighBand(freq) ? "2.4GHz" : "SubGHz");
 #endif
 #ifdef LR2021_RF_SWITCH_2_4GHZ
         pinMode(LR2021_RF_SWITCH_2_4GHZ, OUTPUT);
         digitalWrite(LR2021_RF_SWITCH_2_4GHZ, isLr20x0HighBand(freq) ? HIGH : LOW);
-        LOG_DEBUG("Set RF1 switch to %s", isLr20x0HighBand(freq) ? "2.4GHz" : "SubGHz");
+        LOG_DEBUG_RADIO("Set RF1 switch to %s", isLr20x0HighBand(freq) ? "2.4GHz" : "SubGHz");
 #endif
 
 #if ARCH_PORTDUINO
-        float tcxoVoltage = (float)portduino_config.dio3_tcxo_voltage / 1000;
+        float tcxoVoltage;
+        if (portduino_config.dio3_tcxo_voltage > 0)
+            tcxoVoltage = (float)portduino_config.dio3_tcxo_voltage / 1000;
+        else if (TCXO_OPTIONAL_ENABLED)
+            tcxoVoltage = TCXO_OPTIONAL_DEFAULT_VOLTAGE;
+        else
+            tcxoVoltage = 0;
 #elif defined(LR2021_DIO3_TCXO_VOLTAGE)
         float tcxoVoltage = LR2021_DIO3_TCXO_VOLTAGE;
 #elif defined(TCXO_OPTIONAL)
-        float tcxoVoltage = 1.6f;
+        float tcxoVoltage = TCXO_OPTIONAL_DEFAULT_VOLTAGE;
 #else
         float tcxoVoltage = 0;
 #endif
@@ -373,13 +418,11 @@ template <typename T> bool LR20x0Interface<T>::fullBegin(float freq)
             delay(100);
             res = lora.begin(freq, bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage);
         }
-#if defined(TCXO_OPTIONAL)
-        if (res != RADIOLIB_ERR_NONE && res != RADIOLIB_ERR_CHIP_NOT_FOUND && tcxoVoltage > 0) {
+        if (TCXO_OPTIONAL_ENABLED && res != RADIOLIB_ERR_NONE && res != RADIOLIB_ERR_CHIP_NOT_FOUND && tcxoVoltage > 0) {
             LOG_WARN("LR20x0 band-hop begin TCXO failed (%s%d), retry without TCXO", radioLibErr, res);
             tcxoVoltage = 0;
             res = lora.begin(freq, bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage);
         }
-#endif
         if (res != RADIOLIB_ERR_NONE) {
             LOG_ERROR("LR20x0 band-hop begin %s%d", radioLibErr, res);
             RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
@@ -425,12 +468,23 @@ template <typename T> void LR20x0Interface<T>::applyCustomLfPaTable(float freq)
 #ifdef LR2021_CUSTOM_PA_TABLE
     if (isLr20x0HighBand(freq))
         return;
-    lora.setPaTable(lr2021_pa_table_lf, false);
+    selectLfPaTable(freq);
     int16_t paRes = lora.setOutputPower(power);
     if (paRes != RADIOLIB_ERR_NONE)
-        LOG_WARN("LR2021 custom LF PA table setOutputPower failed (%s%d)", radioLibErr, paRes);
+        LOG_WARN("LR2021 LF PA table setOutputPower failed (%s%d)", radioLibErr, paRes);
     else
-        LOG_DEBUG("LR2021 custom LF PA table installed");
+        LOG_DEBUG_RADIO("LR2021 %s LF PA table at %.3f MHz", isLr20x0CustomLfPaBand(freq) ? "custom" : "default", freq);
+#else
+    (void)freq;
+#endif
+}
+
+// RadioLib retains the pointer, so a same-band retune out of the calibrated range must clear it.
+template <typename T> void LR20x0Interface<T>::selectLfPaTable(float freq)
+{
+#ifdef LR2021_CUSTOM_PA_TABLE
+    if (!isLr20x0HighBand(freq))
+        lora.setPaTable(isLr20x0CustomLfPaBand(freq) ? lr2021_pa_table_lf : nullptr, false);
 #else
     (void)freq;
 #endif
@@ -495,7 +549,7 @@ template <typename T> void LR20x0Interface<T>::applyDcdcWorkaround()
     if (dcdcRes != RADIOLIB_ERR_NONE)
         LOG_WARN("LR20x0 DCDC workaround failed: %d", dcdcRes);
     else
-        LOG_DEBUG("LR20x0 DCDC workaround applied");
+        LOG_DEBUG_RADIO("LR20x0 DCDC workaround applied");
 #endif
 }
 
@@ -511,7 +565,7 @@ template <typename T> int16_t LR20x0Interface<T>::trySetStandby()
     int16_t err = lora.standby();
 
     if (err != RADIOLIB_ERR_NONE) {
-        LOG_DEBUG("LR20x0 standby failed, err %d", err);
+        LOG_DEBUG_RADIO("LR20x0 standby failed, err %d", err);
     }
 
     isReceiving = false; // If we were receiving, not any more
@@ -594,19 +648,60 @@ template <typename T> void LR20x0Interface<T>::startReceive()
 /** Is the channel currently active? */
 template <typename T> bool LR20x0Interface<T>::isChannelActive()
 {
-    // check if we can detect a LoRa preamble on the current channel
-    ChannelScanConfig_t cfg = {.cad = {.symNum = NUM_SYM_CAD,
-                                       .detPeak = RADIOLIB_LR2021_CAD_PARAM_DEFAULT,
+    // check if we can detect a LoRa preamble on the current channel.
+    // symNum is SetLoraCadParams nb_symbols - a plain count - so take it straight from
+    // getCadSymbolCount(), which follows the band (8 on 2.4 GHz, as SX1280 scans) and sizes the CW slot.
+    // det_peak is the peak-to-average ratio threshold: a higher value demands a stronger correlation
+    // peak and so detects less readily, which is why the recommended value falls as the scan lengthens.
+    // Indexed by that same count, so the threshold tracks the scan instead of drifting out of step.
+    // Table 6-19 stops at 4 symbols, so a longer scan reuses that row - the last measured point, and
+    // erring high, i.e. slightly less sensitive than a true 8-symbol value would be.
+    static constexpr uint8_t CAD_DET_PEAK[4][8] = {
+        // LR20xx datasheet rev 2.2, Table 6-19 - recommended det_peak, SF5..SF12
+        {60, 60, 60, 64, 64, 66, 70, 74}, // 1 symbol
+        {56, 56, 56, 58, 58, 60, 64, 68}, // 2 symbols (RadioLib's default row)
+        {51, 51, 52, 54, 56, 60, 60, 65}, // 3 symbols
+        {51, 51, 51, 54, 56, 60, 60, 64}, // 4 symbols
+    };
+    const uint8_t symNum = getCadSymbolCount();
+    const uint8_t detPeak = CAD_DET_PEAK[(symNum >= 1 && symNum <= 4) ? symNum - 1 : 3]
+                                        [(sf >= 5 && sf <= 12) ? sf - 5 : 6]; // out of range: 4 symbols, SF11
+    // Times the RX that follows a detection. lr20xx_driver calls this field PLL steps of 31.25 us (the
+    // datasheet's "32 MHz periods" disagrees); RadioLib scales it as 30.52, so we land ~2% long.
+    const RadioLibTime_t cadRxTimeoutUsec =
+        (RadioLibTime_t)getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN + sizeof(PacketHeader), false) * 1000;
+    // SetLoraCadParams exit mode: 0x00 CAD only, 0x01 RX on detection, 0x10 TX when clear, as on LR11x0. RadioLib's
+    // RADIOLIB_LR2021_CAD_EXIT_MODE_RX is 0x02, which the chip refuses with a processing error (-706), so no scan runs.
+    static constexpr uint8_t CAD_EXIT_MODE_RX = 0x01;
+    ChannelScanConfig_t cfg = {.cad = {.symNum = symNum,
+                                       .detPeak = detPeak,
+                                       // ignored: SetLoraCadParams has no det_min - that byte carries
+                                       // pnr_delta, which scanChannel() takes from lora.fastCad below
                                        .detMin = RADIOLIB_LR2021_CAD_PARAM_DEFAULT,
-                                       .exitMode = RADIOLIB_LR2021_CAD_PARAM_DEFAULT,
-                                       .timeout = 0,
-                                       .irqFlags = RADIOLIB_IRQ_CAD_DEFAULT_FLAGS,
-                                       .irqMask = RADIOLIB_IRQ_CAD_DEFAULT_MASK}};
+                                       .exitMode = CAD_EXIT_MODE_RX,
+                                       .timeout = cadRxTimeoutUsec,
+                                       // DS rev 2.2 6.8.3: only routes IRQs to a pin, so keep
+                                       // preamble/header off it - they would fire the ISR mid-frame
+                                       .irqFlags = RADIOLIB_IRQ_CAD_DEFAULT_FLAGS | (1UL << RADIOLIB_IRQ_RX_DONE) |
+                                                   (1UL << RADIOLIB_IRQ_TIMEOUT) | (1UL << RADIOLIB_IRQ_CRC_ERR) |
+                                                   (1UL << RADIOLIB_IRQ_HEADER_ERR),
+                                       .irqMask = RADIOLIB_IRQ_CAD_DEFAULT_MASK}}; // ignored: startChannelScan() drops it
+    // fastCad is not in ChannelScanConfig_t - scanChannel() reads it off the radio object - so pin it.
+    // false is pnr_delta 0: the scan runs the full nb_symbols, which is what the slot time assumes.
+    lora.fastCad = false;
+
     int16_t result = trySetStandby();
     if (result == RADIOLIB_ERR_NONE) {
         result = lora.scanChannel(cfg);
-        if (result == RADIOLIB_LORA_DETECTED)
+        if (result == RADIOLIB_LORA_DETECTED) {
+            // The chip auto-entered RX. Drop the latched CAD verdict so the pin releases and the coming
+            // RX_DONE is a clean edge.
+            lora.clearIrqFlags(RADIOLIB_LR2021_IRQ_CAD_DONE | RADIOLIB_LR2021_IRQ_CAD_DETECTED);
+            noteCadHandoffToRx(); // nothing below arms the radio; the caller's rearmReceive() adopts it
             return true;
+        }
+        if (result != RADIOLIB_CHANNEL_FREE && result != RADIOLIB_ERR_WRONG_MODEM)
+            LOG_WARN("LR20x0 channel scan failed %s%d, reported clear", radioLibErr, result);
         if (result != RADIOLIB_ERR_WRONG_MODEM)
             return false;
     }
@@ -625,13 +720,13 @@ template <typename T> bool LR20x0Interface<T>::isActivelyReceiving()
 }
 
 #ifdef LR20X0_AGC_RESET
-template <typename T> void LR20x0Interface<T>::resetAGC()
+template <typename T> bool LR20x0Interface<T>::resetAGC()
 {
     // Safety: don't reset mid-packet
     if (sendingPacket != NULL || (isReceiving && isActivelyReceiving()))
-        return;
+        return false;
 
-    LOG_DEBUG("LR20x0 AGC reset: warm sleep + Calibrate(0x3F)");
+    LOG_DEBUG_RADIO("LR20x0 AGC reset: warm sleep + Calibrate(0x3F)");
 
     // 1. Warm sleep - powers down the analog frontend, resetting AGC state
     lora.sleep(true, 0);
@@ -653,13 +748,14 @@ template <typename T> void LR20x0Interface<T>::resetAGC()
 
     // 6. Resume receiving
     startReceive();
+    return true;
 }
 #endif
 
 template <typename T> bool LR20x0Interface<T>::sleep()
 {
     // \todo Display actual typename of the adapter, not just `LR20x0`
-    LOG_DEBUG("LR20x0 entering sleep mode");
+    LOG_DEBUG_RADIO("LR20x0 entering sleep mode");
     (void)trySetStandby(); // Stop any pending operations - the chip is being put to sleep, a failure must not crash
 
     // turn off TCXO if it was powered
@@ -682,8 +778,6 @@ template <typename T> int16_t LR20x0Interface<T>::getCurrentRSSI()
     return (int16_t)round(rssi);
 }
 
-// Don't leak the aliases into the files InterfacesTemplates.cpp includes after this one.
-#undef lr20x0_rfswitch_dio_pins
-#undef lr20x0_rfswitch_table
+// Don't leak the alias into the files InterfacesTemplates.cpp includes after this one.
 #undef LR20x0
 #endif

@@ -1,12 +1,23 @@
 #include "HardwareRNG.h"
 #include "configuration.h"
 #include "hardware/xosc.h"
+#include <assert.h>
 #include <cstring>
 #include <hardware/clocks.h>
 #include <hardware/pll.h>
 #include <hardware/watchdog.h>
 #include <pico/stdlib.h>
 #include <pico/unique_id.h>
+
+// newlib's assert() prints to stdio and parks in _exit's breakpoint loop, which the watchdog
+// cannot catch before rp2040Loop() arms it. Log and reset instead, as the nRF52 port does.
+extern "C" void __assert_func(const char *file, int line, const char *func, const char *failedexpr)
+{
+    LOG_ERROR("assert failed %s: %d, %s, test=%s", file, line, func, failedexpr);
+    watchdog_reboot(0, 0, 10);
+    while (true) {
+    }
+}
 
 #ifdef __PLAT_RP2040__
 #include <pico/sleep.h>
