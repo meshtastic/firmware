@@ -390,6 +390,8 @@ template <typename T> bool LR11x0Interface<T>::reinitChip()
 
 template <typename T> bool LR11x0Interface<T>::reconfigure()
 {
+    // A readout between these calls would clear the flags they set up, or move the chip out from under them
+    RadioSequence seq(this);
     RadioLibInterface::reconfigure();
 
     // set mode to standby - a chip that lost its state to a reset/brownout can time out here (-707),
