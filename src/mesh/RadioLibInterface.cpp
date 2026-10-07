@@ -974,6 +974,9 @@ void RadioLibInterface::checkCadHandoffTimeout()
     if (cadHandoffRxStart && Throttle::hasElapsed(cadHandoffRxStart, 2 * maxPacketTimeMsec)) {
         LOG_WARN("CAD>RX timeout");
         cadHandoffRxStart = 0;
+        // Reached from the main loop, which holds no sequence of its own: a readout landing inside this
+        // re-arm would clear the flags it sets up, exactly as it would on the radio thread's paths.
+        RadioSequence seq(this);
         startReceive();
     }
 }
@@ -983,6 +986,9 @@ void RadioLibInterface::checkStaleRxFlags()
     // A handoff RX has its own timeout, and a pending RX_DONE is about to clear every flag itself.
     if (cadHandoffRxStart)
         return;
+    // The flag read, the verdict drawn from it and the re-arm or clear that follows are one sequence: a readout
+    // in between retires the very flags being judged, so the verdict would be drawn on flags that are gone.
+    RadioSequence seq(this);
     const uint32_t irq = iface->getIrqFlags();
     if (irq & iface->getIrqMapped(1UL << RADIOLIB_IRQ_RX_DONE))
         return;
@@ -1039,7 +1045,15 @@ void RadioLibInterface::periodicRadioMaintenance()
     const bool hearing = lastRxGoodMs && Throttle::isWithinTimespanMs(lastRxGoodMs, AGC_IDLE_RESET_MS);
     if (hearing && lastAgcResetMs && Throttle::isWithinTimespanMs(lastAgcResetMs, AGC_FORCED_RESET_MS))
         return;
-    if (resetAGC()) {
+    // resetAGC() is a sequence end to end - warm sleep, RC standby, CALIBRATE_ALL, the re-applied settings and
+    // the startReceive() that resumes - and the chip is not readable for any of it. Its own mid-packet bail is a
+    // point check, so it cannot exclude a readout that starts just after it: the lock is what does.
+    bool agcReset = false;
+    {
+        RadioSequence seq(this);
+        agcReset = resetAGC();
+    }
+    if (agcReset) {
         const uint32_t now = millis();
         lastAgcResetMs = now ? now : 1;
     }
