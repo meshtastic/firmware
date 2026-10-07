@@ -633,11 +633,14 @@ template <typename T> void SX126xInterface<T>::handleSoftwareLoraIrqPoll()
         RADIOLIB_SX126X_IRQ_RX_DONE | RADIOLIB_SX126X_IRQ_TIMEOUT | RADIOLIB_SX126X_IRQ_CRC_ERR | RADIOLIB_SX126X_IRQ_HEADER_ERR;
     const uint16_t noisyRxMask = RADIOLIB_SX126X_IRQ_PREAMBLE_DETECTED | RADIOLIB_SX126X_IRQ_HEADER_VALID;
 
-    // A bare PREAMBLE is mid-reception, not an RX event: readData() here would run on nothing. With a TX
-    // queued it goes through the same hold as the TX-path look; HEADER_VALID stays latched for readData().
-    const bool preambleOnly = (irq & RADIOLIB_SX126X_IRQ_PREAMBLE_DETECTED) && !(irq & RADIOLIB_SX126X_IRQ_HEADER_VALID);
-    if (!pollTxMode && hasQueuedTx() && preambleOnly && ((irq & ~noisyRxMask) == 0U)) {
-        holdOnPreamble();
+    // Do NOT treat a preamble/header-only IRQ as a full RX event: noisy preamble detections would
+    // repeatedly trigger readData() and starve TX scheduling. Clear these non-terminal bits, or the
+    // poll loop spins at high rate while they stay latched.
+    if (!pollTxMode && (irq & noisyRxMask) && ((irq & ~noisyRxMask) == 0U)) {
+        // Record the look first: it clears PREAMBLE, and the TX path must still see a header this clear hides.
+        receiveDetected(irq, RADIOLIB_SX126X_IRQ_HEADER_VALID, RADIOLIB_SX126X_IRQ_PREAMBLE_DETECTED);
+        if (irq & RADIOLIB_SX126X_IRQ_HEADER_VALID)
+            lora.clearIrqFlags(RADIOLIB_SX126X_IRQ_HEADER_VALID);
         scheduleIrqPollTick();
         return;
     }
@@ -659,6 +662,7 @@ template <typename T> void SX126xInterface<T>::handleSoftwareLoraIrqPoll()
 template <typename T> int16_t SX126xInterface<T>::trySetStandby()
 {
     checkNotification(); // handle any pending interrupts before we force standby
+    recordRxFlagsBeforeStandby();
 
     int16_t err = lora.standby();
     if (err == RADIOLIB_ERR_SPI_CMD_TIMEOUT) {
@@ -675,8 +679,8 @@ template <typename T> int16_t SX126xInterface<T>::trySetStandby()
         portduino_status.LoRa_in_error = true;
 #endif
     isReceiving = false; // If we were receiving, not any more
-    activeReceiveStart = 0;
     rxArmedContinuous = false;
+    rxFlagsClearedByStandby();
     disableInterrupt();
 #if SX126X_REARM_IN_ISR
     rearmOutcome = REARM_NONE; // an RX the TX_DONE interrupt started is gone
@@ -783,7 +787,6 @@ template <typename T> bool SX126xInterface<T>::resumeRunningReceive()
     // stay: they may belong to the next frame, already arriving. A stale HEADER_ERR or TIMEOUT has no readout
     // waiting and would cost checkStaleRxFlags() a re-arm, so those two go unconditionally.
     lora.clearIrqFlags(RADIOLIB_SX126X_IRQ_HEADER_ERR | RADIOLIB_SX126X_IRQ_TIMEOUT);
-    activeReceiveStart = 0; // as the standby this replaces would
 #ifdef MESHTASTIC_LOG_RADIO_EDGES
     if (deafSinceMs) {
         LOG_TRACE("RX still running, re-arm skipped after %s, readout %u ms", deafFor,

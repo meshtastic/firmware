@@ -646,6 +646,7 @@ template <typename T> void LR20x0Interface<T>::clearRadioIsr()
 template <typename T> int16_t LR20x0Interface<T>::trySetStandby()
 {
     checkNotification(); // handle any pending interrupts before we force standby
+    recordRxFlagsBeforeStandby();
 
     int16_t err = lora.standby(STANDBY_MODE);
 
@@ -654,7 +655,7 @@ template <typename T> int16_t LR20x0Interface<T>::trySetStandby()
     }
 
     isReceiving = false; // If we were receiving, not any more
-    activeReceiveStart = 0;
+    rxFlagsClearedByStandby();
 #ifdef LR2021_RESUME_CONTINUOUS_RX
     rxArmedContinuous = false;
 #endif
@@ -754,7 +755,6 @@ template <typename T> bool LR20x0Interface<T>::resumeRunningReceive()
         return false;
     }
     // No flag clearing, as in SX126xInterface::resumeRunningReceive(): a latched RX_DONE here is a next frame
-    activeReceiveStart = 0; // the frame it timed is done; a preamble now is the next one
 #ifdef MESHTASTIC_LOG_RADIO_EDGES
     if (deafSinceMs) {
         LOG_RADIO_EDGE("RX still running, re-arm skipped after %s, readout %u ms", deafFor,

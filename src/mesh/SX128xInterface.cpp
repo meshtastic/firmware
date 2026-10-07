@@ -261,6 +261,7 @@ template <typename T> bool SX128xInterface<T>::wideLora()
 template <typename T> int16_t SX128xInterface<T>::trySetStandby()
 {
     checkNotification(); // handle any pending interrupts before we force standby
+    recordRxFlagsBeforeStandby();
 
     int16_t err = lora.standby();
 
@@ -282,7 +283,7 @@ template <typename T> int16_t SX128xInterface<T>::trySetStandby()
 #endif
 #endif
     isReceiving = false; // If we were receiving, not any more
-    activeReceiveStart = 0;
+    rxFlagsClearedByStandby();
     disableInterrupt();
     completeSending(); // If we were sending, not anymore
     RadioLibInterface::setStandby();
