@@ -339,6 +339,7 @@ template <typename T> bool LR20x0Interface<T>::reconfigure()
             standbySuccess = false;
         }
 
+        selectLfPaTable(freq);
         err = lora.setOutputPower(power);
         if (err != RADIOLIB_ERR_NONE) {
             LOG_ERROR("LR20x0 setOutputPower %d dBm @ %.3f MHz %s%d", power, freq, radioLibErr, err);
@@ -467,12 +468,23 @@ template <typename T> void LR20x0Interface<T>::applyCustomLfPaTable(float freq)
 #ifdef LR2021_CUSTOM_PA_TABLE
     if (isLr20x0HighBand(freq))
         return;
-    lora.setPaTable(lr2021_pa_table_lf, false);
+    selectLfPaTable(freq);
     int16_t paRes = lora.setOutputPower(power);
     if (paRes != RADIOLIB_ERR_NONE)
-        LOG_WARN("LR2021 custom LF PA table setOutputPower failed (%s%d)", radioLibErr, paRes);
+        LOG_WARN("LR2021 LF PA table setOutputPower failed (%s%d)", radioLibErr, paRes);
     else
-        LOG_DEBUG_RADIO("LR2021 custom LF PA table installed");
+        LOG_DEBUG_RADIO("LR2021 %s LF PA table at %.3f MHz", isLr20x0CustomLfPaBand(freq) ? "custom" : "default", freq);
+#else
+    (void)freq;
+#endif
+}
+
+// RadioLib retains the pointer, so a same-band retune out of the calibrated range must clear it.
+template <typename T> void LR20x0Interface<T>::selectLfPaTable(float freq)
+{
+#ifdef LR2021_CUSTOM_PA_TABLE
+    if (!isLr20x0HighBand(freq))
+        lora.setPaTable(isLr20x0CustomLfPaBand(freq) ? lr2021_pa_table_lf : nullptr, false);
 #else
     (void)freq;
 #endif

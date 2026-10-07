@@ -21,6 +21,19 @@ static void test_lr20x0BandClassification()
     TEST_ASSERT_TRUE(isLr20x0HighBand(2420.71875f));
 }
 
+static void test_lr20x0CustomLfPaBandCoversOnly500To1000MHz()
+{
+    // The board LF PA table is the datasheet's 915 MHz design; 433 MHz and anything above 1 GHz keep RadioLib's.
+    TEST_ASSERT_FALSE(isLr20x0CustomLfPaBand(433.175f));
+    TEST_ASSERT_FALSE(isLr20x0CustomLfPaBand(499.9f));
+    TEST_ASSERT_TRUE(isLr20x0CustomLfPaBand(500.0f));
+    TEST_ASSERT_TRUE(isLr20x0CustomLfPaBand(869.525f));
+    TEST_ASSERT_TRUE(isLr20x0CustomLfPaBand(906.875f));
+    TEST_ASSERT_TRUE(isLr20x0CustomLfPaBand(1000.0f));
+    TEST_ASSERT_FALSE(isLr20x0CustomLfPaBand(1000.1f));
+    TEST_ASSERT_FALSE(isLr20x0CustomLfPaBand(2420.71875f));
+}
+
 static void test_lr20x0BandHopDetection()
 {
     TEST_ASSERT_FALSE(isLr20x0BandHop(0.0f, 2420.71875f));
@@ -692,6 +705,7 @@ void setup()
 
     UNITY_BEGIN();
     RUN_TEST(test_lr20x0BandClassification);
+    RUN_TEST(test_lr20x0CustomLfPaBandCoversOnly500To1000MHz);
     RUN_TEST(test_lr20x0BandHopDetection);
     RUN_TEST(test_lr20x0ReconfigurePathSelection);
     RUN_TEST(test_bwCodeToKHz_specialMappings);

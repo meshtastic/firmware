@@ -95,6 +95,9 @@ template <class T> class LR20x0Interface : public RadioLibInterface
     /** Board LF PA table after begin(); HF keeps RadioLib default. Warn-only on setOutputPower miss. */
     void applyCustomLfPaTable(float freq);
 
+    /** Point RadioLib at the board LF PA table inside 500-1000 MHz, back at its default outside it. */
+    void selectLfPaTable(float freq);
+
     /** setStandby()'s body, returning the standby error instead of asserting - for callers that can recover */
     int16_t trySetStandby();
 
