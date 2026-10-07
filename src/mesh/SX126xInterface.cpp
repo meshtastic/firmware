@@ -13,6 +13,9 @@
 
 #include "Throttle.h"
 #include "UptimeClock.h"
+#if SX126X_REARM_IN_ISR
+#include "SPILock.h"
+#endif
 
 // Particular boards might define a different max power based on what their hardware can do, default to max power output if not
 // specified (may be dangerous if using external PA and SX126x power config forgotten)
@@ -29,6 +32,10 @@ SX126xInterface<T>::SX126xInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs
     : RadioLibInterface(hal, cs, irq, rst, busy, &lora), lora(&module)
 {
     LOG_DEBUG_RADIO("SX126xInterface(cs=%d, irq=%d, rst=%d, busy=%d)", cs, irq, rst, busy);
+#if SX126X_REARM_IN_ISR
+    rawCs = cs;
+    isrHal = hal;
+#endif
 }
 
 /// Initialise the Driver transport hardware and software.
@@ -238,6 +245,16 @@ template <typename T> bool SX126xInterface<T>::reinitChip()
     if (res == RADIOLIB_ERR_NONE)
         res = lora.setCRC(RADIOLIB_SX126X_LORA_CRC_ON);
 
+#if SX126X_REARM_IN_ISR
+    // After TX_DONE the chip falls back to STDBY_RC, where a DIO3 TCXO is off, so the SET_RX the interrupt writes would
+    // still wait out the TCXO start-up (5 ms) before listening. Keep the oscillator running in standby instead; this
+    // also sets the RX/TX fallback mode to STDBY_XOSC.
+    if (res == RADIOLIB_ERR_NONE) {
+        const int16_t xoscErr = lora.setStandbyXOSC(true);
+        LOG_INFO("SX126x standby set to XOSC %s%d", radioLibErr, xoscErr);
+    }
+#endif
+
 #ifdef SX126X_NO_POWER_OPTIMIZATION_TABLE
     // begin() applied the optimization table; re-apply the fixed PA config.
     if (res == RADIOLIB_ERR_NONE)
@@ -432,6 +449,9 @@ template <typename T> int16_t SX126xInterface<T>::trySetStandby()
     activeReceiveStart = 0;
     rxArmedContinuous = false;
     disableInterrupt();
+#if SX126X_REARM_IN_ISR
+    rearmOutcome = REARM_NONE; // an RX the TX_DONE interrupt started is gone
+#endif
     completeSending(); // If we were sending, not anymore
     RadioLibInterface::setStandby();
     return err;
@@ -463,7 +483,7 @@ template <typename T> void SX126xInterface<T>::addReceiveMetadata(meshtastic_Mes
  */
 template <typename T> void SX126xInterface<T>::configHardwareForSend()
 {
-#if defined(MESHTASTIC_RX_READOUT_TASK) && SX126X_RX_REARM_AT_TX_DONE
+#if SX126X_REARM_FROM_TASK
     rearmState = REARM_NONE; // only this TX's TX_DONE may re-arm, never a stale one from a TX the poll completed
     rxArmedBeforeTxDone = false;
 #endif
@@ -572,7 +592,7 @@ template <typename T> int16_t SX126xInterface<T>::startRxCommand(bool continuous
     return lora.startReceiveDutyCycleAuto(preambleLength, rxDutyCycleMinSymbols, MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS);
 }
 
-#if defined(MESHTASTIC_RX_READOUT_TASK) && SX126X_RX_REARM_AT_TX_DONE
+#if SX126X_REARM_FROM_TASK
 template <typename T> bool INTERRUPT_ATTR SX126xInterface<T>::rearmReceiveFromIsr()
 {
     // The interrupt cannot call RadioLib, so the readout task, above the main loop, re-arms as soon as it returns.
@@ -619,6 +639,126 @@ template <typename T> bool SX126xInterface<T>::adoptReceiveArmedFromIsr()
     rxArmedContinuous = continuousRxWanted();
     enableInterrupt(isrRxLevel0);
     checkRxDoneIrqFlag(); // an RX_DONE that completed before the interrupt was attached
+    return true;
+}
+#elif SX126X_REARM_IN_ISR
+#if HAS_LORA_FEM
+#error "SX126X_RX_REARM_AT_TX_DONE needs a board without a LoRa FEM on nRF52: the ISR does not set the FEM to RX"
+#endif
+
+template <typename T>
+typename SX126xInterface<T>::RearmOutcome SX126xInterface<T>::rawCommandFromIsr(const uint8_t *cmd, size_t len, uint8_t *in)
+{
+    uint8_t out[rawCommandMax];
+    uint8_t discard[rawCommandMax];
+    // The chip holds BUSY for microseconds after each command. Bounded: millis() does not advance in an ISR.
+    for (unsigned i = 0; module.hal->digitalRead(module.getGpio()); i++) {
+        if (i >= 200)
+            return REARM_CHIP_BUSY;
+        delayMicroseconds(1);
+    }
+    memcpy(out, cmd, len);
+    isrHal->ArduinoHal::spiBeginTransaction(); // the base class's: the lock is already held
+    isrHal->digitalWrite(rawCs, isrHal->GpioLevelLow);
+    isrHal->spiTransfer(out, len, in ? in : discard);
+    isrHal->digitalWrite(rawCs, isrHal->GpioLevelHigh);
+    isrHal->ArduinoHal::spiEndTransaction();
+    return REARM_ARMED;
+}
+
+/// After TX_DONE the chip sits in standby until the RadioIf thread re-arms it, and a main-loop hold can make that
+/// hundreds of ms. So re-arm here, with what startReceive() programs: the RX IRQ set with RX_DONE on DIO1, the flags
+/// cleared, the RX packet length, and a continuous RX. Skipped if the SPI lock or the chip is busy; the thread then
+/// re-arms as before.
+template <typename T> bool SX126xInterface<T>::rearmReceiveFromIsr()
+{
+    // startReceiveDutyCycleAuto(preambleLength, 8) only falls back to continuous RX when the preamble is at most 16
+    // symbols; a longer one gets a duty-cycled RX, which this does not reproduce.
+    if (rawCs == RADIOLIB_NC || !isrHal || preambleLength > 2 * 8)
+        return false;
+    if (!spiLock->tryLockFromISR()) {
+        rearmOutcome = REARM_SPI_BUSY;
+        return false;
+    }
+    const uint8_t getIrq[] = {RADIOLIB_SX126X_CMD_GET_IRQ_STATUS, RADIOLIB_SX126X_CMD_NOP, RADIOLIB_SX126X_CMD_NOP,
+                              RADIOLIB_SX126X_CMD_NOP};
+    uint8_t irqIn[sizeof(getIrq)] = {0};
+    const uint16_t irqMask = RADIOLIB_SX126X_IRQ_RX_DONE | RADIOLIB_SX126X_IRQ_TIMEOUT | RADIOLIB_SX126X_IRQ_CRC_ERR |
+                             RADIOLIB_SX126X_IRQ_HEADER_VALID | RADIOLIB_SX126X_IRQ_HEADER_ERR |
+                             RADIOLIB_SX126X_IRQ_PREAMBLE_DETECTED; // MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS
+    const uint16_t dio1Mask = RADIOLIB_SX126X_IRQ_RX_DONE;
+    const uint8_t setDioIrq[] = {RADIOLIB_SX126X_CMD_SET_DIO_IRQ_PARAMS,
+                                 (uint8_t)(irqMask >> 8),
+                                 (uint8_t)(irqMask & 0xFF),
+                                 (uint8_t)(dio1Mask >> 8),
+                                 (uint8_t)(dio1Mask & 0xFF),
+                                 0,
+                                 0,
+                                 0,
+                                 0};
+    const uint8_t clearIrq[] = {RADIOLIB_SX126X_CMD_CLEAR_IRQ_STATUS, (uint8_t)(RADIOLIB_SX126X_IRQ_ALL >> 8),
+                                (uint8_t)(RADIOLIB_SX126X_IRQ_ALL & 0xFF)};
+    // As RadioLib stages RX: explicit header, CRC on, standard IQ, and its maximum length as the RX length.
+    const uint8_t packetParams[] = {RADIOLIB_SX126X_CMD_SET_PACKET_PARAMS, (uint8_t)(preambleLength >> 8),
+                                    (uint8_t)(preambleLength & 0xFF),      RADIOLIB_SX126X_LORA_HEADER_EXPLICIT,
+                                    RADIOLIB_SX126X_MAX_PACKET_LENGTH,     RADIOLIB_SX126X_LORA_CRC_ON,
+                                    RADIOLIB_SX126X_LORA_IQ_STANDARD};
+    const uint8_t setRx[] = {RADIOLIB_SX126X_CMD_SET_RX, 0xFF, 0xFF, 0xFF}; // continuous
+    const uint8_t getChipStatus[] = {RADIOLIB_SX126X_CMD_GET_STATUS, RADIOLIB_SX126X_CMD_NOP};
+    static_assert(sizeof(getIrq) <= rawCommandMax && sizeof(setDioIrq) <= rawCommandMax && sizeof(clearIrq) <= rawCommandMax &&
+                      sizeof(packetParams) <= rawCommandMax && sizeof(setRx) <= rawCommandMax &&
+                      sizeof(getChipStatus) <= rawCommandMax,
+                  "a re-arm command is longer than rawCommandFromIsr() allows");
+    // Only on a real TX_DONE: an edge from anything else must not cut a transmission short.
+    RearmOutcome outcome = rawCommandFromIsr(getIrq, sizeof(getIrq), irqIn);
+    if (outcome == REARM_ARMED && !((((uint16_t)irqIn[2] << 8) | irqIn[3]) & RADIOLIB_SX126X_IRQ_TX_DONE))
+        outcome = REARM_NOT_TX_DONE;
+    if (outcome == REARM_ARMED)
+        outcome = rawCommandFromIsr(setDioIrq, sizeof(setDioIrq), nullptr);
+    if (outcome == REARM_ARMED)
+        outcome = rawCommandFromIsr(clearIrq, sizeof(clearIrq), nullptr);
+    if (outcome == REARM_ARMED)
+        outcome = rawCommandFromIsr(packetParams, sizeof(packetParams), nullptr);
+    if (outcome == REARM_ARMED) {
+        // SX126X_TXEN/RXEN, if the board has them: only GPIO writes, which are safe here
+        module.setRfSwitchState(Module::MODE_RX);
+        outcome = rawCommandFromIsr(setRx, sizeof(setRx), nullptr);
+    }
+    if (outcome == REARM_ARMED) {
+        // A transfer that completed is not evidence the chip listened, and adopting clears the recovery ladder that
+        // RadioLibInterface::startReceive() owns. So only a chip that reports RX skips the thread's checked start.
+        uint8_t statusIn[sizeof(getChipStatus)] = {0};
+        outcome = rawCommandFromIsr(getChipStatus, sizeof(getChipStatus), statusIn);
+        if (outcome == REARM_ARMED && (statusIn[statusByte] & statusModeMask) != RADIOLIB_SX126X_STATUS_MODE_RX)
+            outcome = REARM_NOT_IN_RX;
+    }
+    spiLock->unlockFromISR();
+    rearmOutcome = outcome;
+    if (outcome != REARM_ARMED)
+        return false; // the thread's startReceive() redoes all of it
+    rearmTicks = xTaskGetTickCountFromISR();
+    return true;
+}
+
+template <typename T> bool SX126xInterface<T>::adoptReceiveArmedFromIsr()
+{
+    const uint8_t outcome = rearmOutcome;
+    rearmOutcome = REARM_NONE;
+    if (outcome == REARM_SPI_BUSY || outcome == REARM_CHIP_BUSY || outcome == REARM_NOT_TX_DONE || outcome == REARM_NOT_IN_RX) {
+        LOG_TRACE("RX re-arm at TX_DONE skipped, %s", outcome == REARM_SPI_BUSY      ? "SPI busy"
+                                                      : outcome == REARM_CHIP_BUSY   ? "chip busy"
+                                                      : outcome == REARM_NOT_TX_DONE ? "no TX_DONE flag"
+                                                                                     : "chip not in RX");
+        return false;
+    }
+    if (outcome != REARM_ARMED)
+        return false;
+    const uint32_t heldMs = (uint32_t)(((uint64_t)(xTaskGetTickCount() - rearmTicks) * 1000) / configTICK_RATE_HZ);
+    LOG_TRACE("Radio back in RX at TX_DONE, %u ms before the handler ran", (unsigned)heldMs);
+    // The tail of startReceive(): the chip is already listening, so only the bookkeeping and the RX interrupt remain.
+    RadioLibInterface::startReceive();
+    enableInterrupt(isrRxLevel0);
+    checkRxDoneIrqFlag(); // an RX_DONE that completed while the handler waited
     return true;
 }
 #endif
