@@ -28,7 +28,7 @@ template <class T> class LR11x0Interface : public RadioLibInterface
     bool isIRQPending() override { return lora.getIrqFlags() != 0; }
 
 #ifdef LR11X0_AGC_RESET
-    void resetAGC() override;
+    bool resetAGC() override;
 #endif
 
   protected:
@@ -78,6 +78,11 @@ template <class T> class LR11x0Interface : public RadioLibInterface
     virtual void setStandby() override;
 
     uint32_t getPacketTime(uint32_t pl, bool received) override { return computePacketTime(lora, pl, received); }
+
+    // LR1120/LR1121 work in both bands. 4 sub-GHz is the SWSD003 table's row we use; 8 on 2.4 GHz
+    // matches SX1280, the other part sharing that band, so one mesh keeps one CW slot.
+    uint8_t getCadSymbolCountSubGhz() const override { return 4; }
+    uint8_t getCadSymbolCountWideLora() const override { return 8; }
 
   private:
     /** Program all modem parameters into the chip; returns the first RadioLib error, or RADIOLIB_ERR_NONE */

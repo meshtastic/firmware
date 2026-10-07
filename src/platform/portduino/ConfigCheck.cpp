@@ -9,6 +9,7 @@
 #include "yaml-cpp/eventhandler.h"
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <filesystem>
 #include <fstream>
@@ -77,6 +78,7 @@ const std::map<std::string, std::set<std::string>> &schema()
         {"General",
          {"MACAddress", "MACAddressSource", "MaxNodes", "MaxMessageQueue", "APIPort", "ConfigDirectory", "AvailableDirectory"}},
         {"Config", {"DisplayMode", "EnableUDP", "StatusMessage"}},
+        {"Security", {"AdminKeys"}},
         {"Display",
          {"Panel", "spidev", "BusFrequency", "Width", "Height", "Invert", "Rotate", "OffsetX", "OffsetY", "OffsetRotate",
           "RGBOrder", "HUB75", "DC", "CS", "Backlight", "BacklightInvert", "BacklightPWMChannel", "Reset"}},
@@ -769,6 +771,31 @@ void checkTxGain(const std::string &file, const YAML::Node &node, std::vector<Fi
                             "Lora.TX_GAIN_LORA is not a whole number, so it is silently read as 0 and no PA gain is applied"});
 }
 
+// Each entry is read without a fallback: loadConfig() exits on anything that is not a 32-byte
+// base64 public key, so a typo here stops meshtasticd rather than dropping one admin.
+void checkAdminKeys(const std::string &file, const YAML::Node &node, std::vector<Finding> &findings)
+{
+    if (!node.IsSequence()) {
+        findings.push_back({kError, file, lineOf(node),
+                            "Security.AdminKeys must be a list of base64 public keys, so meshtasticd refuses to start on "
+                            "this file"});
+        return;
+    }
+
+    if (node.size() > PORTDUINO_MAX_ADMIN_KEYS)
+        findings.push_back({kWarn, file, lineOf(node),
+                            "Security.AdminKeys lists " + std::to_string(node.size()) + " keys but only the first " +
+                                std::to_string(PORTDUINO_MAX_ADMIN_KEYS) + " are read; the rest are dropped"});
+
+    for (const auto &entry : node) {
+        std::array<uint8_t, 32> key;
+        if (!adminKeyFromBase64(entry.as<std::string>(""), key))
+            findings.push_back({kError, file, lineOf(entry),
+                                "Security.AdminKeys entry '" + entry.as<std::string>("") +
+                                    "' is not a 32-byte base64 public key, so meshtasticd refuses to start on this file"});
+    }
+}
+
 // Module names match exactly and are inconsistently cased (RF95 upper, sx1262 lower),
 // and loadConfig() exits on an unknown name without printing the valid set, so name it here.
 void checkLoraModule(const std::string &file, const YAML::Node &module, std::vector<Finding> &findings)
@@ -897,6 +924,8 @@ void checkSection(const std::string &file, const std::string &section, const YAM
             if (value.IsSequence())
                 for (const auto &pin : value)
                     checkPinNode(file, section + "." + key, pin, findings);
+        } else if (section == "Security" && key == "AdminKeys") {
+            checkAdminKeys(file, value, findings);
         } else if (section == "Bluetooth" && key == "AdapterId") {
             // LinuxBluetooth uses this verbatim as the BlueZ object path (/org/bluez/<id>), while the
             // MAC fallback only reads the leading hciN. A value like "hci1junk" therefore looks

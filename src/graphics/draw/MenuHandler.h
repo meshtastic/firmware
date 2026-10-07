@@ -43,6 +43,7 @@ class menuHandler
         GeofenceOptionsMenu,
         RemoveWaypointMenu,
         TestMenu,
+        HostPowerOffMenu,
         NumberTest,
         EnvironmentTelemetryMenu,
         EnvironmentTelemetrySourceMenu,
@@ -125,6 +126,7 @@ class menuHandler
     static void removeWaypointMenu();
     static void traceRouteMenu();
     static void testMenu();
+    static void hostPowerOffMenu();
     static void numberTest();
     static void environmentTelemetryMenu();
     static void environmentTelemetrySourceMenu();

@@ -159,6 +159,23 @@ assert "bluetooth AdapterId must name a real adapter" 0 bluetooth-bad-adapter.ya
 	"Result: 0 errors, 1 warning"
 
 echo
+echo "admin keys in the host config:"
+assert "a list of admin keys is clean" 0 adminkeys.yaml check \
+	"Result: 0 errors, 0 warnings"
+assert "a malformed admin key is refused" 1 adminkeys-bad.yaml check \
+	"is not a 32-byte base64 public key" \
+	"Result: 1 error, 0 warnings"
+assert "admin keys written as a scalar are refused" 1 adminkeys-not-a-list.yaml check \
+	"Security.AdminKeys must be a list of base64 public keys" \
+	"Result: 1 error, 0 warnings"
+# Admin keys append rather than the last file winning, so one file per admin works. config.yaml is
+# always loaded first, so the effective list is deterministic; --output-yaml is what reports it.
+assert "admin keys append across config.d" 0 adminkeys-append/config.yaml yaml \
+	"rvzaPCZmlh1nWnqNKUFHj0dLBJJIRJhRrkZmaFLHCVY=" \
+	"NGC+MSAeaf7aoO7ouZl/XHwpmf2v5ZMlPNZUr0361xQ=" \
+	"P2jeuoXA1sOGSPH9Vm3eHFlITu1EVnohWGKlGF3t8GU="
+
+echo
 echo "module names are matched exactly:"
 assert "unknown module names the valid set" 1 module-unknown.yaml check \
 	"Lora.Module 'sx1263' is not a module meshtasticd knows" \
@@ -497,6 +514,10 @@ assert "non-mapping section is refused" 1 nonmap-section.yaml normal \
 	"as config file"
 assert "unknown module is refused" 1 module-unknown.yaml normal \
 	"Unknown Lora.Module: sx1263"
+assert "a malformed admin key is refused on a normal boot" 1 adminkeys-bad.yaml normal \
+	"is not a 32-byte base64 public key"
+assert "admin keys as a scalar are refused on a normal boot" 1 adminkeys-not-a-list.yaml normal \
+	"Security.AdminKeys must be a list of base64 public keys"
 assert "MACAddress conflict is refused" 1 mac-conflict.yaml normal \
 	"Cannot set both MACAddress and MACAddressSource!"
 # Only meaningful on a build without rgbmatrix. A build that supports HUB75 accepts

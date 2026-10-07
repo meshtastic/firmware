@@ -294,13 +294,6 @@ meshtastic_LogRecord_Level RedirectablePrint::getLogLevel(const char *logLevel)
 void RedirectablePrint::log(const char *logLevel, const char *format, ...)
 {
 
-    // append \n to format
-    size_t len = strlen(format);
-    auto newFormat = std::unique_ptr<char[]>(new char[len + 2]);
-    strcpy(newFormat.get(), format);
-    newFormat[len] = '\n';
-    newFormat[len + 1] = '\0';
-
 #if ARCH_PORTDUINO
     // level trace is special, two possible ways to handle it.
     if (strcmp(logLevel, MESHTASTIC_LOG_LEVEL_TRACE) == 0) {
@@ -333,6 +326,13 @@ void RedirectablePrint::log(const char *logLevel, const char *format, ...)
     if (moduleConfig.serial.override_console_serial_port && strcmp(logLevel, MESHTASTIC_LOG_LEVEL_DEBUG) == 0) {
         return;
     }
+
+    // Append \n here rather than in every call site; past the early returns, so a filtered line allocates nothing
+    size_t len = strlen(format);
+    auto newFormat = std::unique_ptr<char[]>(new char[len + 2]);
+    strcpy(newFormat.get(), format);
+    newFormat[len] = '\n';
+    newFormat[len + 1] = '\0';
 
 #ifdef HAS_FREE_RTOS
     if (inDebugPrint != nullptr && xSemaphoreTake(inDebugPrint, portMAX_DELAY) == pdTRUE) {
