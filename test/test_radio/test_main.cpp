@@ -21,6 +21,19 @@ static void test_lr20x0BandClassification()
     TEST_ASSERT_TRUE(isLr20x0HighBand(2420.71875f));
 }
 
+static void test_lr20x0CustomLfPaBandCoversOnly500To1000MHz()
+{
+    // The board LF PA table is the datasheet's 915 MHz design; 433 MHz and anything above 1 GHz keep RadioLib's.
+    TEST_ASSERT_FALSE(isLr20x0CustomLfPaBand(433.175f));
+    TEST_ASSERT_FALSE(isLr20x0CustomLfPaBand(499.9f));
+    TEST_ASSERT_TRUE(isLr20x0CustomLfPaBand(500.0f));
+    TEST_ASSERT_TRUE(isLr20x0CustomLfPaBand(869.525f));
+    TEST_ASSERT_TRUE(isLr20x0CustomLfPaBand(906.875f));
+    TEST_ASSERT_TRUE(isLr20x0CustomLfPaBand(1000.0f));
+    TEST_ASSERT_FALSE(isLr20x0CustomLfPaBand(1000.1f));
+    TEST_ASSERT_FALSE(isLr20x0CustomLfPaBand(2420.71875f));
+}
+
 static void test_lr20x0BandHopDetection()
 {
     TEST_ASSERT_FALSE(isLr20x0BandHop(0.0f, 2420.71875f));
@@ -648,6 +661,41 @@ void tearDown(void)
     mockMeshService = nullptr;
 }
 
+// staleRxFlagAction() in src/mesh/RadioInterface.h: the decision behind RadioLibInterface::checkStaleRxFlags(),
+// the plain-RX twin of checkCadHandoffTimeout(). Plain RX runs with no chip timeout, and the DIO mask carries
+// RX_DONE only, so a PREAMBLE_DETECTED, HEADER_VALID or HEADER_ERR that never completes stays latched until
+// something re-arms RX - on an idle node, never. RX_DONE clears every flag in readData(), so a flag still
+// latched one max packet after it was first seen has no frame behind it.
+//
+// Pinned: nothing happens inside that window (a frame may still be arriving); after it, a bare preamble is
+// only cleared, because a clear never aborts a reception; a header re-arms, because SX1280 DS rev 3.3 16.2
+// leaves RX wedged after a header error with no RX_DONE or timeout to follow, and a clear does not unwedge it.
+// Regressions guarded: re-arming on a preamble (startReceive() goes through standby, which aborts a frame
+// that is in fact arriving), acting before the window closes, or never acting at all.
+
+static void test_staleRxFlagAction_keepsFlagsInsideTheWindow()
+{
+    TEST_ASSERT_EQUAL(static_cast<int>(StaleRxFlagAction::Keep), static_cast<int>(staleRxFlagAction(false, 0, 99)));
+    TEST_ASSERT_EQUAL(static_cast<int>(StaleRxFlagAction::Keep), static_cast<int>(staleRxFlagAction(true, 98, 99)));
+}
+
+static void test_staleRxFlagAction_windowEndsAtExactlyOneMaxPacket()
+{
+    // Inclusive at the boundary, matching Throttle::hasElapsed().
+    TEST_ASSERT_EQUAL(static_cast<int>(StaleRxFlagAction::ClearPreamble), static_cast<int>(staleRxFlagAction(false, 99, 99)));
+    TEST_ASSERT_EQUAL(static_cast<int>(StaleRxFlagAction::Rearm), static_cast<int>(staleRxFlagAction(true, 99, 99)));
+}
+
+static void test_staleRxFlagAction_barePreambleIsOnlyCleared()
+{
+    TEST_ASSERT_EQUAL(static_cast<int>(StaleRxFlagAction::ClearPreamble), static_cast<int>(staleRxFlagAction(false, 2200, 2115)));
+}
+
+static void test_staleRxFlagAction_staleHeaderIsRearmed()
+{
+    TEST_ASSERT_EQUAL(static_cast<int>(StaleRxFlagAction::Rearm), static_cast<int>(staleRxFlagAction(true, 60000, 2115)));
+}
+
 void setup()
 {
     delay(10);
@@ -657,6 +705,7 @@ void setup()
 
     UNITY_BEGIN();
     RUN_TEST(test_lr20x0BandClassification);
+    RUN_TEST(test_lr20x0CustomLfPaBandCoversOnly500To1000MHz);
     RUN_TEST(test_lr20x0BandHopDetection);
     RUN_TEST(test_lr20x0ReconfigurePathSelection);
     RUN_TEST(test_bwCodeToKHz_specialMappings);
@@ -685,6 +734,10 @@ void setup()
     RUN_TEST(test_computePacketTime_reportsNoAirtimeWhenNothingCanBeComputed);
     RUN_TEST(test_computePacketTime_rxUsesHeaderInfoAndIsGuarded);
     RUN_TEST(test_isRadioLibTimeError_separatesCodesFromDurations);
+    RUN_TEST(test_staleRxFlagAction_keepsFlagsInsideTheWindow);
+    RUN_TEST(test_staleRxFlagAction_windowEndsAtExactlyOneMaxPacket);
+    RUN_TEST(test_staleRxFlagAction_barePreambleIsOnlyCleared);
+    RUN_TEST(test_staleRxFlagAction_staleHeaderIsRearmed);
     exit(UNITY_END());
 }
 

@@ -26,6 +26,10 @@ pio run --environment $1 -t dfu -t mtjson # -v
 
 cp $BUILDDIR/$basename.elf $OUTDIR/$basename.elf
 
+echo "Copying linker scripts and map file"
+cp $BUILDDIR/$basename.*.ld $OUTDIR/ 2>/dev/null || true
+cp $BUILDDIR/$basename.map $OUTDIR/ 2>/dev/null || true
+
 echo "Copying merged hex (bootloader + SoftDevice + application)"
 cp $BUILDDIR/$basename.hex $OUTDIR/$basename.hex
 

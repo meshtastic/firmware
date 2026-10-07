@@ -3,6 +3,7 @@
 #include "GPS.h"
 #endif
 #include "../detect/ScanI2C.h"
+#include "AdminKeys.h"
 #include "Channels.h"
 #include "CryptoEngine.h"
 #include "Default.h"
@@ -739,6 +740,29 @@ NodeNum getFrom(const meshtastic_MeshPacket *p)
     return (p->from == 0) ? nodeDB->getNodeNum() : p->from;
 }
 
+// The re-encode below cannot overflow the payload buffer, so it never yields an empty payload.
+static_assert(meshtastic_User_size <= sizeof(meshtastic_Data_payload_t::bytes), "User no longer fits Data.payload");
+
+bool coerceNodeInfoUserId(meshtastic_MeshPacket &p)
+{
+    if (p.which_payload_variant != meshtastic_MeshPacket_decoded_tag || p.decoded.portnum != meshtastic_PortNum_NODEINFO_APP)
+        return false;
+
+    meshtastic_User user = meshtastic_User_init_zero;
+    if (!pb_decode_from_bytes(p.decoded.payload.bytes, p.decoded.payload.size, &meshtastic_User_msg, &user))
+        return false;
+
+    char expected[sizeof(user.id)];
+    snprintf(expected, sizeof(expected), "!%08x", getFrom(&p));
+    if (strcmp(user.id, expected) == 0)
+        return false;
+
+    memcpy(user.id, expected, sizeof(user.id));
+    p.decoded.payload.size =
+        pb_encode_to_bytes(p.decoded.payload.bytes, sizeof(p.decoded.payload.bytes), &meshtastic_User_msg, &user);
+    return true;
+}
+
 // Returns true if the packet originated from the local node
 bool isFromUs(const meshtastic_MeshPacket *p)
 {
@@ -952,6 +976,18 @@ bool NodeDB::factoryReset(bool eraseBleBonds)
         bond_print_list(BLE_GAP_ROLE_CENTRAL);
         Bluefruit.Periph.clearBonds();
         Bluefruit.Central.clearBonds();
+#endif
+#ifdef MESHTASTIC_LINUX_BLE
+        // isEnabled(), not just the pointer: a setup() that threw leaves the object
+        // allocated with its bus torn down, and clearBonds() needs a live connection.
+        if (linuxBluetooth && linuxBluetooth->isEnabled()) {
+            LOG_INFO("Clear bluetooth bonds");
+            linuxBluetooth->clearBonds();
+        } else {
+            // BlueZ bonds live in the host adapter's store, not ours, so there is no
+            // removing them from here without that connection.
+            LOG_WARN("BLE off, host bluetooth bonds left in place");
+        }
 #endif
     }
     return true;
@@ -1446,6 +1482,15 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.external_notification.use_i2s_as_buzzer = true;
     moduleConfig.external_notification.alert_message_buzzer = true;
 #endif // HAS_I2S
+
+#if HAS_LIBNOTIFY
+    // meshtasticd has no buzzer or LED to drive, but the module is what raises desktop
+    // notifications (ExternalNotificationModule::portduinoNotify), so default it on. Gated on
+    // HAS_LIBNOTIFY rather than ARCH_PORTDUINO: without libnotify that code is not compiled in, so
+    // enabling the module by default would only add a config surface that can do nothing.
+    moduleConfig.external_notification.enabled = true;
+    moduleConfig.external_notification.alert_message = true;
+#endif // HAS_LIBNOTIFY
 
 #ifdef NANO_G2_ULTRA
     moduleConfig.external_notification.enabled = true;
@@ -2951,6 +2996,10 @@ void NodeDB::loadFromDisk()
         saveToDisk(SEGMENT_CHANNELS);
     }
 #if ARCH_PORTDUINO
+    // The host's config.yaml is authoritative for admin keys: it is root-owned and cannot be
+    // rewritten by an authorized remote, so it decides who may administer this node.
+    AdminKeys::applyHostKeys();
+
     // set any config overrides
     if (portduino_config.has_configDisplayMode) {
         config.display.displaymode = (_meshtastic_Config_DisplayConfig_DisplayMode)portduino_config.configDisplayMode;
