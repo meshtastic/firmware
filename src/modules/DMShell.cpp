@@ -121,6 +121,25 @@ uint32_t txWindowFromEnv()
     }
     return (uint32_t)parsed;
 }
+
+/// DMSHELL_SLOT_PARITY=even|odd (0|1 also taken) puts this node's shell frames on that parity of
+/// the CSMA slot grid. Unset, the frames take the ordinary backoff draw. The two ends of a session
+/// want opposite values; a node on the same parity as its peer is no better off than neither.
+meshtastic_MeshPacket_SlotParity slotParityFromEnv()
+{
+    const char *value = getenv("DMSHELL_SLOT_PARITY");
+    if (!value || !*value) {
+        return meshtastic_MeshPacket_SlotParity_SLOT_PARITY_UNSET;
+    }
+    if (strcasecmp(value, "even") == 0 || strcmp(value, "0") == 0) {
+        return meshtastic_MeshPacket_SlotParity_SLOT_PARITY_EVEN;
+    }
+    if (strcasecmp(value, "odd") == 0 || strcmp(value, "1") == 0) {
+        return meshtastic_MeshPacket_SlotParity_SLOT_PARITY_ODD;
+    }
+    LOG_WARN("DMShell: ignoring DMSHELL_SLOT_PARITY=%s, expected even or odd", value);
+    return meshtastic_MeshPacket_SlotParity_SLOT_PARITY_UNSET;
+}
 } // namespace
 
 DMShellModule::DMShellModule()
@@ -139,6 +158,14 @@ DMShellModule::DMShellModule()
         LOG_WARN("DMShell: outstanding-data window disabled, the sender may run away from a gap");
     } else {
         LOG_INFO("DMShell: bounding unacknowledged output to %u frames", (unsigned)txWindowFrames);
+    }
+
+    // Off unless asked for: left unset, the frames carry no parity and the radio driver's backoff
+    // draw is exactly as it was.
+    slotParity = slotParityFromEnv();
+    if (slotParity != meshtastic_MeshPacket_SlotParity_SLOT_PARITY_UNSET) {
+        LOG_INFO("DMShell: drawing backoff slots on %s parity",
+                 slotParity == meshtastic_MeshPacket_SlotParity_SLOT_PARITY_ODD ? "odd" : "even");
     }
 }
 
@@ -1130,6 +1157,7 @@ void DMShellModule::sendFrameToPeer(NodeNum peer, meshtastic_RemoteShell frame, 
     packet->want_ack = false;
     packet->pki_encrypted = true;
     packet->priority = meshtastic_MeshPacket_Priority_RELIABLE;
+    packet->slot_parity = slotParity;
     service->sendToMesh(packet);
 }
 
