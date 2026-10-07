@@ -1,4 +1,5 @@
 #include "Throttle.h"
+#include "UptimeClock.h"
 #include <Arduino.h>
 
 /// @brief Execute a function throttled to a minimum interval
@@ -9,12 +10,14 @@
 /// @return true if the function was executed, false if it was deferred
 bool Throttle::execute(uint32_t *lastExecutionMs, uint32_t minumumIntervalMs, void (*throttleFunc)(void), void (*onDefer)(void))
 {
+    // TODO(elapsed-stamp): 0 doubles as "never run" here, so neither store is safe on the wrap tick:
+    // skipZero()'s 1 underflows a same-instant `now - *lastExecutionMs`, and 0 re-takes this branch.
     if (*lastExecutionMs == 0) {
-        *lastExecutionMs = millis();
+        *lastExecutionMs = Time::getMillis();
         throttleFunc();
         return true;
     }
-    uint32_t now = millis();
+    uint32_t now = Time::getMillis();
 
     if ((now - *lastExecutionMs) >= minumumIntervalMs) {
         throttleFunc();
@@ -31,6 +34,23 @@ bool Throttle::execute(uint32_t *lastExecutionMs, uint32_t minumumIntervalMs, vo
 /// @param timeSpanMs The interval in milliseconds of the timespan
 bool Throttle::isWithinTimespanMs(uint32_t lastExecutionMs, uint32_t timeSpanMs)
 {
-    uint32_t now = millis();
+    uint32_t now = Time::getMillis();
     return (now - lastExecutionMs) < timeSpanMs;
+}
+
+/// @brief How much of an interval is left since a stored event, 0 once the interval has passed
+/// @param lastExecutionMs The last execution time in milliseconds
+/// @param intervalMs The interval in milliseconds
+uint32_t Throttle::remainingMs(uint32_t lastExecutionMs, uint32_t intervalMs)
+{
+    uint32_t elapsed = Time::getMillis() - lastExecutionMs;
+    return elapsed < intervalMs ? intervalMs - elapsed : 0;
+}
+
+/// @brief Check whether an absolute deadline has arrived, correctly across the millis() wrap
+/// @param deadlineMs The deadline, as a millis() value
+/// See the header for the range limit and the sentinel requirement.
+bool Throttle::deadlinePassed(uint32_t deadlineMs)
+{
+    return deadlinePassedAt(Time::getMillis(), deadlineMs);
 }

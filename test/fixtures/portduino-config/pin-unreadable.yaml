@@ -1,0 +1,7 @@
+# FAULT: a pin value that is not a number. It is still marked enabled but resolves to
+# -1 (RADIOLIB_NC), and initGPIOPin() then trips an assertion inside LinuxGPIOPin at
+# startup. Expect an ERROR -- catching it here is the difference between a report and
+# a stack trace from a library file.
+Lora:
+  Module: sx1262
+  CS: not-a-number

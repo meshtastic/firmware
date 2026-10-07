@@ -1,5 +1,8 @@
 #include "NextHopRouter.h"
+#include "Default.h"
 #include "MeshTypes.h"
+#include "Throttle.h"
+#include "UptimeClock.h"
 #include "meshUtils.h"
 #if !MESHTASTIC_EXCLUDE_TRACEROUTE
 #include "modules/TraceRouteModule.h"
@@ -9,12 +12,94 @@
 #endif
 #include "NodeDB.h"
 
+#if USERPREFS_EVENT_MODE
+static void capEventRelayHops(meshtastic_MeshPacket *packet)
+{
+    if (packet->hop_limit <= Default::eventModeRelayHopLimit)
+        return;
+
+    const uint8_t reduction = packet->hop_limit - Default::eventModeRelayHopLimit;
+    packet->hop_start = reduction <= packet->hop_start ? packet->hop_start - reduction : 0;
+    packet->hop_limit = Default::eventModeRelayHopLimit;
+}
+#endif
+
 NextHopRouter::NextHopRouter() {}
+
+bool NextHopRouter::relayOpaquePacket(const meshtastic_MeshPacket *p)
+{
+    // Opaque traffic is never admitted to PacketHistory, NodeDB, modules, phone, MQTT, or ACK
+    // handling. Relay only from the immutable outer routing header and let hop exhaustion bound it.
+    const auto mode = config.device.rebroadcast_mode;
+    if (!iface || isToUs(p) || isFromUs(p) || p->id == 0 || p->hop_limit == 0 || !isRebroadcaster() || owner.is_licensed ||
+        !IS_ONE_OF(mode, meshtastic_Config_DeviceConfig_RebroadcastMode_ALL,
+                   meshtastic_Config_DeviceConfig_RebroadcastMode_ALL_SKIP_DECODING,
+                   meshtastic_Config_DeviceConfig_RebroadcastMode_CORE_PORTNUMS_ONLY,
+                   meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY,
+                   meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY) ||
+        (p->next_hop != NO_NEXT_HOP_PREFERENCE && p->next_hop != nodeDB->getLastByteOfNodeNum(getNodeNum())))
+        return false;
+
+    // LOCAL_ONLY and KNOWN_ONLY gate on identity, and the only opaque frame carrying its parties in
+    // the header is a PKI-shaped unicast: relay one just when a party is known, which is the rule
+    // RoutingModule applied before opaque frames stopped reaching modules.
+    if (IS_ONE_OF(mode, meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY,
+                  meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY) &&
+        !(p->channel == 0 && !isBroadcast(p->to) &&
+          (nodeInfoLiteHasUser(nodeDB->getMeshNode(p->from)) || nodeInfoLiteHasUser(nodeDB->getMeshNode(p->to)))))
+        return false;
+
+    // Dedup opaque relays. Opaque frames deliberately never enter PacketHistory (so unauthenticated
+    // traffic can't influence routing/ACK/next-hop) - but with NO dedup at all, a dense mesh re-relays
+    // every copy of every frame, multiplying at each hop into an unbounded broadcast storm ("let hop
+    // exhaustion bound it" caps depth, not count). Suppress duplicate opaque rebroadcasts with a small,
+    // routing-isolated seen-set. Genuine originator (re)transmissions (hop_start == hop_limit) are
+    // always relayed so reliable opaque unicast still propagates (mirrors FloodingRouter's isRepeated).
+    const bool isOriginatorTx = p->hop_start > 0 && p->hop_start == p->hop_limit;
+    if (opaqueWasSeenRecently(getFrom(p), p->id) && !isOriginatorTx) {
+        LOG_TRACE("Drop duplicate opaque relay from 0x%08x id 0x%08x", getFrom(p), p->id);
+        return false;
+    }
+
+    meshtastic_MeshPacket *relay = packetPool.allocCopy(*p);
+    if (!relay)
+        return false;
+    relay->hop_limit--;
+#if USERPREFS_EVENT_MODE
+    capEventRelayHops(relay);
+#endif
+    relay->relay_node = nodeDB->getLastByteOfNodeNum(getNodeNum());
+    // The interface declines some packets (NODENUM_BROADCAST_NO_LORA) with ERRNO_SHOULD_RELEASE,
+    // which leaves the copy ours to free. Dropping it here would leak a pool slot per opaque frame.
+    ErrorCode res = Router::send(relay);
+    if (res == ERRNO_SHOULD_RELEASE)
+        packetPool.release(relay);
+    return res == ERRNO_OK;
+}
+
+// Isolated dedup for opaque relays (see relayOpaquePacket). Returns true if (from,id) is already in the
+// ring; otherwise records it (round-robin eviction) and returns false. A separate table from
+// PacketHistory on purpose: opaque frames must never influence routing/ACK/next-hop. No timestamps -
+// a stale (from,id) can't false-match a later packet because ids are effectively random.
+bool NextHopRouter::opaqueWasSeenRecently(NodeNum from, PacketId id)
+{
+    for (uint8_t i = 0; i < OPAQUE_SEEN_MAX; i++) {
+        if (opaqueSeen[i].sender == from && opaqueSeen[i].id == id)
+            return true;
+    }
+    // Not seen: record it, overwriting the oldest-written slot (FIFO). Empty slots hold id 0, which a
+    // real entry never has (relayOpaquePacket drops id 0), so they simply never match above.
+    opaqueSeen[opaqueSeenNext].sender = from;
+    opaqueSeen[opaqueSeenNext].id = id;
+    opaqueSeenNext = (uint8_t)((opaqueSeenNext + 1) % OPAQUE_SEEN_MAX);
+    return false;
+}
 
 PendingPacket::PendingPacket(meshtastic_MeshPacket *p, uint8_t numRetransmissions)
 {
     packet = p;
     this->numRetransmissions = numRetransmissions - 1; // We subtract one, because we assume the user just did the first send
+    this->initialNumRetransmissions = this->numRetransmissions;
 }
 
 /**
@@ -22,16 +107,22 @@ PendingPacket::PendingPacket(meshtastic_MeshPacket *p, uint8_t numRetransmission
  */
 ErrorCode NextHopRouter::send(meshtastic_MeshPacket *p)
 {
+    return sendWithNextHop(p, true);
+}
+
+ErrorCode NextHopRouter::sendWithNextHop(meshtastic_MeshPacket *p, bool trackRetransmission)
+{
     // Add any messages _we_ send to the seen message list (so we will ignore all retransmissions we see)
     p->relay_node = nodeDB->getLastByteOfNodeNum(getNodeNum()); // First set the relayer to us
     wasSeenRecently(p);                                         // FIXME, move this to a sniffSent method
 
     p->next_hop = getNextHop(p->to, p->relay_node).value_or(NO_NEXT_HOP_PREFERENCE); // set the next hop
-    LOG_DEBUG("Setting next hop for packet with dest %x to %x", p->to, p->next_hop);
+    LOG_TRACE("Set next hop for dest 0x%08x to 0x%x", p->to, p->next_hop);
 
     // If it's from us, ReliableRouter already handles retransmissions if want_ack is set. If a next hop is set and hop limit is
     // not 0 or want_ack is set, start retransmissions
-    if ((!isFromUs(p) || !p->want_ack) && p->next_hop != NO_NEXT_HOP_PREFERENCE && (p->hop_limit > 0 || p->want_ack)) {
+    if (trackRetransmission && (!isFromUs(p) || !p->want_ack) && p->next_hop != NO_NEXT_HOP_PREFERENCE &&
+        (p->hop_limit > 0 || p->want_ack)) {
         if (auto *copy = packetPool.allocCopy(*p))
             startRetransmission(copy); // start retransmission for relayed packet
     }
@@ -65,16 +156,16 @@ bool NextHopRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
             LOG_INFO("Fallback to flooding from relay_node=0x%x", p->relay_node);
             // Check if it's still in the Tx queue, if not, we have to relay it again
             if (!findInTxQueue(p->from, p->id)) {
-                reprocessPacket(p);
-                perhapsRebroadcast(p);
+                if (reprocessPacket(p))
+                    perhapsRebroadcast(p);
             }
         } else {
             bool isRepeated = getHopsAway(*p) == 0;
             // If repeated and not in Tx queue anymore, try relaying again, or if we are the destination, send the ACK again
             if (isRepeated) {
                 if (!findInTxQueue(p->from, p->id)) {
-                    reprocessPacket(p);
-                    if (!perhapsRebroadcast(p) && isToUs(p) && p->want_ack) {
+                    if (reprocessPacket(p) && !isBlockedEventCoordinatePacket(p) && !perhapsRebroadcast(p) && isToUs(p) &&
+                        p->want_ack) {
                         sendAckNak(meshtastic_Routing_Error_NONE, getFrom(p), p->id, p->channel, 0);
                     }
                 }
@@ -118,11 +209,11 @@ void NextHopRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtast
                 // -> store nothing and keep flooding (safe).
                 if (nodeDB->resolveUniqueLastByte(p->relay_node, /*requireDirectNeighbor=*/false)) {
                     if (origTx && origTx->next_hop != p->relay_node) { // Not already set
-                        LOG_INFO("Update next hop of 0x%08x to 0x%x based on ACK/reply (was relayer %d we were sole %d)", p->from,
+                        LOG_INFO("Update next hop of 0x%08x to 0x%x from ACK/reply (was relayer %d we were sole %d)", p->from,
                                  p->relay_node, wasAlreadyRelayer, weWereSoleRelayer);
                         origTx->next_hop = p->relay_node;
                     }
-                    noteRouteLearned(p->from, p->relay_node, millis()); // M3: anchor freshness (hot or overflow route)
+                    noteRouteLearned(p->from, p->relay_node, Time::stampMillis()); // M3: anchor freshness (hot or overflow route)
 #if HAS_TRAFFIC_MANAGEMENT
                     // Mirror the confirmed (and now unique-resolved) hop into the TMM overflow cache so it
                     // survives even when the source isn't (or is no longer) in the hot NodeDB.
@@ -151,6 +242,14 @@ void NextHopRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtast
 /* Check if we should be rebroadcasting this packet if so, do so. */
 bool NextHopRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
 {
+#if USERPREFS_BLOCK_POSITION_ON_EVENT_CHANNEL
+    // Never relay coordinate-bearing packets on the event ("everyone") channel.
+    // Closes the reliable-retransmit-dupe path that runs before handleReceived().
+    if (isBlockedEventCoordinatePacket(p)) {
+        return false;
+    }
+#endif
+
     // Check if traffic management wants to exhaust this packet's hops
     bool exhaustHops = false;
 #if HAS_TRAFFIC_MANAGEMENT
@@ -158,6 +257,9 @@ bool NextHopRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
         exhaustHops = true;
     }
 #endif
+
+    if (p->to == NODENUM_BROADCAST_NO_LORA)
+        return false;
 
     // Allow rebroadcast if hop_limit > 0 OR if we're exhausting hops (which sets hop_limit = 0 but still needs one relay)
     if (!isToUs(p) && !isFromUs(p) && (p->hop_limit > 0 || exhaustHops)) {
@@ -172,31 +274,26 @@ bool NextHopRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
                     meshtastic_MeshPacket *tosend = packetPool.allocCopy(*p); // keep a copy because we will be sending it
                     if (!tosend)
                         return true;
-                    LOG_INFO("Rebroadcast received message coming from %x", p->relay_node);
+                    LOG_INFO("Rebroadcast msg from %x", p->relay_node);
 
                     // If exhausting hops, force hop_limit = 0 regardless of other logic
                     if (exhaustHops) {
                         tosend->hop_limit = 0;
-                        LOG_INFO("Traffic management: exhausting hops for 0x%08x, setting hop_limit=0", getFrom(p));
+                        LOG_INFO("Traffic management: exhaust hops for 0x%08x, hop_limit=0", getFrom(p));
                     } else if (shouldDecrementHopLimit(p)) {
                         // Use shared logic to determine if hop_limit should be decremented
                         tosend->hop_limit--; // bump down the hop count
                     } else {
-                        LOG_INFO("favorite-ROUTER/CLIENT_BASE-to-ROUTER/CLIENT_BASE rebroadcast: preserving hop_limit");
+                        LOG_INFO("favorite-ROUTER/CLIENT_BASE-to-ROUTER/CLIENT_BASE rebroadcast: keep hop_limit");
                     }
 #if USERPREFS_EVENT_MODE
-                    if (tosend->hop_limit > 2) {
-                        // if we are "correcting" the hop_limit, "correct" the hop_start by the same amount to preserve hops away.
-                        tosend->hop_start -= (tosend->hop_limit - 2);
-                        tosend->hop_limit = 2;
-                    }
+                    capEventRelayHops(tosend);
 #endif
 
-                    if (p->next_hop == NO_NEXT_HOP_PREFERENCE) {
-                        FloodingRouter::send(tosend);
-                    } else {
-                        NextHopRouter::send(tosend);
-                    }
+                    ErrorCode res =
+                        (p->next_hop == NO_NEXT_HOP_PREFERENCE) ? FloodingRouter::send(tosend) : NextHopRouter::send(tosend);
+                    if (res == ERRNO_SHOULD_RELEASE)
+                        packetPool.release(tosend);
 
                     return true;
                 }
@@ -228,8 +325,8 @@ std::optional<uint8_t> NextHopRouter::getNextHop(NodeNum to, uint8_t relay_node)
         // a health record that still matches the stored byte; a next_hop set by another path (e.g.
         // TraceRouteModule) with no matching record is left authoritative.
         const RouteHealth *h = findRouteHealth(to);
-        if (h && h->lastNextHop == node->next_hop && isRouteStale(*h, millis())) {
-            LOG_INFO("Next hop 0x%x for 0x%08x is stale (age/fails); flood and clear", node->next_hop, to);
+        if (h && h->lastNextHop == node->next_hop && isRouteStale(*h, Time::stampMillis())) {
+            LOG_INFO("Next hop 0x%x for 0x%08x stale (age/fails); flood and clear", node->next_hop, to);
             node->next_hop = NO_NEXT_HOP_PREFERENCE; // clear persisted route
             clearRouteHealth(to);                    // clear RAM health
             return std::nullopt;
@@ -260,15 +357,15 @@ std::optional<uint8_t> NextHopRouter::getNextHop(NodeNum to, uint8_t relay_node)
         uint8_t hint = trafficManagementModule->getNextHopHint(to);
         if (hint && hint != relay_node) {
             const RouteHealth *h = findRouteHealth(to);
-            if (h && h->lastNextHop == hint && isRouteStale(*h, millis())) {
-                LOG_INFO("TMM next hop 0x%x for 0x%08x is stale (age/fails); flood and clear", hint, to);
+            if (h && h->lastNextHop == hint && isRouteStale(*h, Time::stampMillis())) {
+                LOG_INFO("TMM next hop 0x%x for 0x%08x stale (age/fails); flood and clear", hint, to);
                 trafficManagementModule->clearNextHop(to); // clear overflow route (setNextHop won't store 0)
                 clearRouteHealth(to);                      // clear RAM health
                 return std::nullopt;
             }
             ResolvedNode r = nodeDB->resolveLastByte(hint, /*requireDirectNeighbor=*/true);
             if (r.status == LastByteResolution::Unique) {
-                LOG_DEBUG("Next hop for 0x%08x is 0x%x (TMM cache)", to, hint);
+                LOG_TRACE("Next hop for 0x%08x is 0x%x (TMM cache)", to, hint);
                 return hint;
             }
             LOG_WARN("TMM next hop 0x%x for 0x%08x %s; set no pref", hint, to,
@@ -314,7 +411,7 @@ bool NextHopRouter::stopRetransmission(GlobalPacketId key)
         auto p = old->packet;
         /* Only when we already transmitted a packet via LoRa, we will cancel the packet in the Tx queue
           to avoid canceling a transmission if it was ACKed super fast via MQTT */
-        if (old->numRetransmissions < NUM_RELIABLE_RETX - 1) {
+        if (old->numRetransmissions < old->initialNumRetransmissions) {
             // We only cancel it if we are the original sender or if we're not a router(_late)
             if (isFromUs(p) || roleAllowsCancelingFromTxQueue(p)) {
                 // remove the 'original' (identified by originator and packet->id) from the txqueue and free it
@@ -357,7 +454,9 @@ PendingPacket *NextHopRouter::startRetransmission(meshtastic_MeshPacket *p, uint
  */
 int32_t NextHopRouter::doRetransmissions()
 {
-    uint32_t now = millis();
+    // Same clock Throttle reads, so setNextTx() deadlines and this test can't diverge under an
+    // injected test clock.
+    uint32_t now = Time::stampMillis();
     int32_t d = INT32_MAX;
 
     // FIXME, we should use a better datastructure rather than walking through this map.
@@ -368,19 +467,20 @@ int32_t NextHopRouter::doRetransmissions()
 
         bool stillValid = true; // assume we'll keep this record around
 
-        // FIXME, handle 51 day rolloever here!!!
-        if (p.nextTxMsec <= now) {
+        // Judged against the snapshot above, so one pass sees one instant and the 49.7 day wrap
+        // can't stall retransmission.
+        if (Throttle::deadlinePassedAt(now, p.nextTxMsec)) {
             if (p.numRetransmissions == 0) {
                 if (isFromUs(p.packet)) {
-                    LOG_DEBUG("Reliable send failed, returning a nak for fr=0x%08x,to=0x%08x,id=0x%08x", p.packet->from,
-                              p.packet->to, p.packet->id);
+                    LOG_DEBUG("Reliable send failed, return nak fr=0x%08x,to=0x%08x,id=0x%08x", p.packet->from, p.packet->to,
+                              p.packet->id);
                     sendAckNak(meshtastic_Routing_Error_MAX_RETRANSMIT, getFrom(p.packet), p.packet->id, p.packet->channel);
                 }
                 // Note: we don't stop retransmission here, instead the Nak packet gets processed in sniffReceived
                 stopRetransmission(it->first);
                 stillValid = false; // just deleted it
             } else {
-                LOG_DEBUG("Sending retransmission fr=0x%08x,to=0x%08x,id=0x%08x, tries left=%d", p.packet->from, p.packet->to,
+                LOG_DEBUG("Send retransmission fr=0x%08x,to=0x%08x,id=0x%08x, tries left=%d", p.packet->from, p.packet->to,
                           p.packet->id, p.numRetransmissions);
 
                 if (!isBroadcast(p.packet->to)) {
@@ -393,7 +493,7 @@ int32_t NextHopRouter::doRetransmissions()
                         // Also reset it in the nodeDB
                         meshtastic_NodeInfoLite *sentTo = nodeDB->getMeshNode(p.packet->to);
                         if (sentTo) {
-                            LOG_INFO("Resetting next hop for packet with dest 0x%08x", p.packet->to);
+                            LOG_INFO("Reset next hop for dest 0x%08x", p.packet->to);
                             sentTo->next_hop = NO_NEXT_HOP_PREFERENCE;
                         }
 #if HAS_TRAFFIC_MANAGEMENT
@@ -401,8 +501,10 @@ int32_t NextHopRouter::doRetransmissions()
                             trafficManagementModule->clearNextHop(p.packet->to);
                         }
 #endif
-                        if (auto *copy = packetPool.allocCopy(*p.packet))
-                            FloodingRouter::send(copy);
+                        if (auto *copy = packetPool.allocCopy(*p.packet)) {
+                            if (FloodingRouter::send(copy) == ERRNO_SHOULD_RELEASE)
+                                packetPool.release(copy);
+                        }
                     } else {
 #if NEXTHOP_EARLY_FLOOD_ON_UNVERIFIED
                         // M4 (gated): if the route isn't proven healthy, don't spend a second directed
@@ -416,22 +518,30 @@ int32_t NextHopRouter::doRetransmissions()
                             meshtastic_NodeInfoLite *sentTo = nodeDB->getMeshNode(p.packet->to);
                             if (sentTo)
                                 sentTo->next_hop = NO_NEXT_HOP_PREFERENCE;
-                            if (auto *copy = packetPool.allocCopy(*p.packet))
-                                FloodingRouter::send(copy);
+                            if (auto *copy = packetPool.allocCopy(*p.packet)) {
+                                if (FloodingRouter::send(copy) == ERRNO_SHOULD_RELEASE)
+                                    packetPool.release(copy);
+                            }
                         } else {
-                            if (auto *copy = packetPool.allocCopy(*p.packet))
-                                NextHopRouter::send(copy);
+                            if (auto *copy = packetPool.allocCopy(*p.packet)) {
+                                if (sendWithNextHop(copy, false) == ERRNO_SHOULD_RELEASE)
+                                    packetPool.release(copy);
+                            }
                         }
 #else
-                        if (auto *copy = packetPool.allocCopy(*p.packet))
-                            NextHopRouter::send(copy);
+                        if (auto *copy = packetPool.allocCopy(*p.packet)) {
+                            if (sendWithNextHop(copy, false) == ERRNO_SHOULD_RELEASE)
+                                packetPool.release(copy);
+                        }
 #endif
                     }
                 } else {
                     // Note: we call the superclass version because we don't want to have our version of send() add a new
                     // retransmission record
-                    if (auto *copy = packetPool.allocCopy(*p.packet))
-                        FloodingRouter::send(copy);
+                    if (auto *copy = packetPool.allocCopy(*p.packet)) {
+                        if (FloodingRouter::send(copy) == ERRNO_SHOULD_RELEASE)
+                            packetPool.release(copy);
+                    }
                 }
 
                 // Queue again
@@ -455,8 +565,8 @@ void NextHopRouter::setNextTx(PendingPacket *pending)
 {
     assert(iface);
     auto d = iface->getRetransmissionMsec(pending->packet);
-    pending->nextTxMsec = millis() + d;
-    LOG_DEBUG("Setting next retransmission in %u msecs: ", d);
+    pending->nextTxMsec = Time::getMillis() + d;
+    LOG_TRACE("Next retransmission in %u msecs", d);
     printPacket("", pending->packet);
     setReceivedMessage(); // Run ASAP, so we can figure out our correct sleep time
 }
@@ -519,7 +629,8 @@ void NextHopRouter::noteRouteLearned(NodeNum dest, uint8_t nextHop, uint32_t now
         h->lastNextHop = nextHop;
         h->consecutiveFailures = 0;
     }
-    h->learnedAtMsec = now ? now : 1;
+    // `now` is a parameter, so guard at the store too: 0 is the empty-slot marker.
+    h->learnedAtMsec = Time::skipZero(now);
 }
 
 void NextHopRouter::noteRouteSuccess(NodeNum dest, uint32_t now)
@@ -528,7 +639,7 @@ void NextHopRouter::noteRouteSuccess(NodeNum dest, uint32_t now)
     if (!h)
         return; // only routes we actually learned have health to refresh
     h->consecutiveFailures = 0;
-    h->learnedAtMsec = now ? now : 1;
+    h->learnedAtMsec = Time::skipZero(now); // a parameter, so guard at the store too
 }
 
 void NextHopRouter::noteRouteFailure(NodeNum dest)

@@ -1,7 +1,13 @@
+// First, in its own block so the include sorter keeps it there: configuration.h supplies the
+// variant defines mesh-pb-constants.h needs (portduino resolves MAX_NUM_NODES at runtime).
+#include "configuration.h"
+
 #include "ServerAPI.h"
 #include "Throttle.h"
-#include "configuration.h"
+#include "concurrency/LockGuard.h"
 #include <Arduino.h>
+#include <cstdlib>
+#include <new>
 
 static constexpr uint32_t TCP_IDLE_TIMEOUT_MS = 15 * 60 * 1000UL;
 
@@ -29,12 +35,18 @@ template <typename T> bool ServerAPI<T>::checkIsConnected()
     return client.connected();
 }
 
-template <typename T> bool ServerAPI<T>::canWriteFrame(size_t)
+/// Frame TCP output, retaining any tail the socket could not take yet.
+template <typename T> bool ServerAPI<T>::writeFrame(uint8_t *buf, size_t len, bool bestEffort)
 {
-    // Only a dropped link is a reason to refuse a write up front. A full transmit
-    // buffer (availableForWrite() == 0) is normal backpressure, not a dead socket,
-    // so we must not close the connection on it. A genuinely failed write is
-    // detected after the fact in onFrameWriteFailed().
+    if (len == 0 || !canWrite)
+        return false;
+
+    const size_t totalLen = buildFrameHeader(buf, len);
+
+    concurrency::LockGuard guard(&streamLock);
+    // Only a dropped link is a reason to refuse a write. A short write means the transmit buffer
+    // is momentarily full, so retain the tail and finish it on a later pass instead of tearing
+    // down the session mid-NodeDB-dump.
     if (!client.connected()) {
         canWrite = false;
         enabled = false;
@@ -43,15 +55,27 @@ template <typename T> bool ServerAPI<T>::canWriteFrame(size_t)
         return false;
     }
 
-    return true;
+    return frameWriter.writeFrame(client, buf, totalLen, bestEffort);
 }
 
-template <typename T> void ServerAPI<T>::onFrameWriteFailed(size_t frameLen, size_t writtenLen)
+/// Continue retained TCP output under the shared stream lock.
+template <typename T> bool ServerAPI<T>::finishPendingFrame()
 {
-    canWrite = false;
-    enabled = false;
-    LOG_WARN("TCP client write short (%lu/%lu bytes), closing API service", (unsigned long)writtenLen, (unsigned long)frameLen);
-    close();
+    concurrency::LockGuard guard(&streamLock);
+    return frameWriter.finishPendingFrame(client);
+}
+
+/// Report a retained TCP frame awaiting transmit space.
+template <typename T> bool ServerAPI<T>::hasRetainedFrame()
+{
+    concurrency::LockGuard guard(&streamLock);
+    return !frameWriter.isIdle();
+}
+
+/// Protect the retained log buffer from being re-encoded under it.
+template <typename T> bool ServerAPI<T>::canEncodeLogRecord()
+{
+    return !hasRetainedFrame();
 }
 
 template <class T> int32_t ServerAPI<T>::runOnce()
@@ -63,7 +87,9 @@ template <class T> int32_t ServerAPI<T>::runOnce()
             enabled = false;
             return 0;
         }
-        return StreamAPI::runOncePart();
+        int32_t delay = StreamAPI::runOncePart();
+        // Nothing wakes us when the socket frees transmit space.
+        return hasPendingOutput() && delay > 25 ? 25 : delay;
     } else {
         LOG_INFO("Client dropped connection, suspend API service");
         close();
@@ -114,7 +140,22 @@ template <class T, class U> int32_t APIServerPort<T, U>::runOnce()
             openAPI.reset();
         }
 
-        openAPI.reset(new T(client));
+        // A ServerAPI carries the stream rx/tx buffers plus the FromRadio/ToRadio scratch, several
+        // KB in one block. On ESP32 a new that cannot get that block is a reboot (see the note on
+        // openAPI in the header), and std::nothrow does not help there because libstdc++ builds it
+        // on the throwing form. malloc() does return nullptr, so take the block from malloc() and
+        // construct in place; if there is no room drop this connection instead of the node - the
+        // client retries and the next accept gets a fresh look at the heap. The T constructors do
+        // not allocate (default-constructed containers, fixed-size thread table), so nothing inside
+        // the placement new can throw either.
+        void *block = malloc(sizeof(T));
+        if (!block) {
+            LOG_ERROR("No heap for API connection (%u bytes), dropping client", (unsigned)sizeof(T));
+            client.stop();
+        } else {
+            openAPI.reset(new (block) T(client));
+        }
+        // cppcheck-suppress memleak ; block is owned by openAPI via placement new, freed by MallocDeleter
     }
 
 #if RAK_4631

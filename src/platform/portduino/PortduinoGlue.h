@@ -1,6 +1,9 @@
 #pragma once
+#include <array>
 #include <fstream>
 #include <map>
+#include <memory>
+#include <string>
 #include <unistd.h>
 #include <unordered_map>
 #include <vector>
@@ -34,7 +37,7 @@ inline const std::unordered_map<std::string, std::string> configProducts = {
     {"RAK6421-13300-S1", "lora-RAK6421-13300-slot1.yaml"},
     {"RAK6421-13300-S2", "lora-RAK6421-13300-slot2.yaml"}};
 
-enum screen_modules { no_screen, x11, fb, st7789, st7735, st7735s, st7796, ili9341, ili9342, ili9486, ili9488, hx8357d };
+enum screen_modules { no_screen, x11, fb, st7789, st7735, st7735s, st7796, ili9341, ili9342, ili9486, ili9488, hx8357d, hub75 };
 enum touchscreen_modules { no_touchscreen, xpt2046, stmpe610, gt911, ft5x06 };
 enum portduino_log_level { level_error, level_warn, level_info, level_debug, level_trace };
 enum lora_module_enum {
@@ -47,8 +50,47 @@ enum lora_module_enum {
     use_lr1110,
     use_lr1120,
     use_lr1121,
-    use_llcc68
+    use_llcc68,
+    use_lr2021
 };
+
+// RF switch modes as the YAML names them; each family supports a different subset. The neutral
+// id lets one parser serve both, each interface translating to its own OpMode_t.
+enum RfSwitchModeId { RFSW_STBY, RFSW_RX, RFSW_TX, RFSW_TX_HP, RFSW_TX_HF, RFSW_RX_HF, RFSW_GNSS, RFSW_WIFI, RFSW_MODE_COUNT };
+
+// A mode the part does not have, for buildRfSwitchTable()'s modeMap.
+#define RFSW_MODE_UNSUPPORTED (-1)
+
+struct RfSwitchModeName {
+    const char *name;
+    RfSwitchModeId id;
+};
+
+// YAML spelling of every mode, in RfSwitchModeId order.
+extern const RfSwitchModeName kRfSwitchModeNames[RFSW_MODE_COUNT];
+
+// The switch-capable DIO numbers of each family, parallel to that interface's pin-constant
+// array: a configured DIO<n> is looked up by value here, and the index found selects the
+// constant. Not a slot mapping - Lora.rfswitch_table has 5 pin slots, the LR20x0 has 7 DIOs.
+extern const int8_t kLr11x0SwitchDios[5];
+extern const int8_t kLr20x0SwitchDios[7];
+
+// DIOs an LR20x0 can raise its interrupt on. Anything outside this is refused when the config is
+// read and again before it reaches RadioLib, which would otherwise route the IRQ into the void.
+constexpr int kLr20x0IrqDioMin = 5;
+constexpr int kLr20x0IrqDioMax = 11;
+
+// A module's switch-capable DIO numbers, nullptr if it applies no table; count gets the length.
+const int8_t *rfSwitchDiosFor(lora_module_enum module, size_t *count);
+
+// True if this module is handed the parsed table via setRfSwitchTable().
+bool moduleUsesRfSwitchTable(lora_module_enum module);
+
+// Build RadioLib's pin array and mode table from the parsed YAML, resolving each configured DIO
+// through the parallel dioNumbers/pinConsts and taking modeMap[i]'s OpMode_t for RfSwitchModeId
+// i. Returns rows written.
+size_t buildRfSwitchTable(uint32_t (&pins)[Module::RFSWITCH_MAX_PINS], Module::RfSwitchMode_t *table, size_t tableCapacity,
+                          const int8_t *dioNumbers, const uint32_t *pinConsts, size_t dioCount, const int32_t *modeMap);
 
 struct pinMapping {
     std::string config_section;
@@ -63,9 +105,16 @@ struct pinMapping {
 extern std::ofstream traceFile;
 extern std::ofstream JSONFile;
 
-extern Ch341Hal *ch341Hal;
+extern std::unique_ptr<Ch341Hal> ch341Hal;
 int initGPIOPin(int pinNum, const std::string &gpioChipname, int line);
 bool loadConfig(const char *configPath);
+
+// Admin keys past the three that fit config.security are also tried by Router's admin-key decrypt
+// fallback, so the list is capped to keep that per-packet cost bounded.
+constexpr size_t PORTDUINO_MAX_ADMIN_KEYS = 16;
+bool adminKeyFromBase64(const std::string &text, std::array<uint8_t, 32> &out);
+std::string adminKeyToBase64(const std::array<uint8_t, 32> &key);
+
 static bool ends_with(std::string_view str, std::string_view suffix);
 void getMacAddr(uint8_t *dmac);
 bool MAC_from_string(std::string mac_str, uint8_t *dmac);
@@ -76,19 +125,25 @@ std::string exec(const char *cmd);
 
 extern struct portduino_config_struct {
     // Lora
-    std::map<lora_module_enum, std::string> loraModules = {
-        {use_simradio, "sim"},  {use_autoconf, "auto"}, {use_rf95, "RF95"},     {use_sx1262, "sx1262"}, {use_sx1268, "sx1268"},
-        {use_sx1280, "sx1280"}, {use_lr1110, "lr1110"}, {use_lr1120, "lr1120"}, {use_lr1121, "lr1121"}, {use_llcc68, "LLCC68"}};
+    std::map<lora_module_enum, std::string> loraModules = {{use_simradio, "sim"},  {use_autoconf, "auto"}, {use_rf95, "RF95"},
+                                                           {use_sx1262, "sx1262"}, {use_sx1268, "sx1268"}, {use_sx1280, "sx1280"},
+                                                           {use_lr1110, "lr1110"}, {use_lr1120, "lr1120"}, {use_lr1121, "lr1121"},
+                                                           {use_llcc68, "LLCC68"}, {use_lr2021, "lr2021"}};
 
     std::map<screen_modules, std::string> screen_names = {{x11, "X11"},         {fb, "FB"},           {st7789, "ST7789"},
                                                           {st7735, "ST7735"},   {st7735s, "ST7735S"}, {st7796, "ST7796"},
                                                           {ili9341, "ILI9341"}, {ili9342, "ILI9342"}, {ili9486, "ILI9486"},
-                                                          {ili9488, "ILI9488"}, {hx8357d, "HX8357D"}};
+                                                          {ili9488, "ILI9488"}, {hx8357d, "HX8357D"}, {hub75, "HUB75"}};
 
     lora_module_enum lora_module;
     bool has_rfswitch_table = false;
-    uint32_t rfswitch_dio_pins[5] = {RADIOLIB_NC, RADIOLIB_NC, RADIOLIB_NC, RADIOLIB_NC, RADIOLIB_NC};
-    Module::RfSwitchMode_t rfswitch_table[8];
+    // The table as written: rfswitch_dio_num[i] is the DIO number for pin slot i (-1 = none),
+    // rfswitch_mode_high[m] has bit i set when slot i is HIGH in mode m.
+    int8_t rfswitch_dio_num[5] = {-1, -1, -1, -1, -1};
+    uint8_t rfswitch_mode_high[RFSW_MODE_COUNT] = {0};
+    bool rfswitch_mode_present[RFSW_MODE_COUNT] = {false};
+    // DIO carrying the radio's interrupt; -1 keeps RadioLib's default (DIO5 on an LR2021).
+    int irq_dio_num = -1;
     bool force_simradio = false;
     bool has_device_id = false;
     uint8_t device_id[16] = {0};
@@ -100,9 +155,18 @@ extern struct portduino_config_struct {
     int sx128x_max_power = 13;
     int lr1110_max_power = 22;
     int lr1120_max_power = 13;
+    int lr2021_max_power = 22;
+    int lr2021_max_power_hf = 12;
     int rf95_max_power = 20;
     bool dio2_as_rf_switch = false;
     int dio3_tcxo_voltage = 0;
+    // DIO3_TCXO_VOLTAGE was written out as false or 0 rather than left absent. Diagnostic only,
+    // and so not serialized - the key it came from round-trips as absent either way.
+    bool dio3_tcxo_voltage_disabled = false;
+    // TCXO start-up delay in us; 0 keeps the build's TCXO_STARTUP_DELAY_US
+    int dio3_tcxo_delay_us = 0;
+    // Probe for a TCXO and fall back to the XTAL; runtime twin of the TCXO_OPTIONAL define.
+    bool tcxo_optional = false;
     int lora_usb_pid = 0x5512;
     int lora_usb_vid = 0x1A86;
     int spiSpeed = 2000000;
@@ -147,6 +211,29 @@ extern struct portduino_config_struct {
     pinMapping displayBacklightPWMChannel = {"Display", "BacklightPWMChannel"};
     pinMapping displayReset = {"Display", "Reset"};
 
+    // Display -> HUB75 (Raspberry Pi RGB matrix via hzeller/rpi-rgb-led-matrix).
+    // These mirror rgb_matrix::RGBMatrix::Options + RuntimeOptions; the library owns the GPIO
+    // pins (chosen by hub75_hardware_mapping), so there are no per-pin mappings here.
+    std::string hub75_hardware_mapping = "regular";
+    int hub75_rows = 64;
+    int hub75_cols = 64;
+    int hub75_chain_length = 1;
+    int hub75_parallel = 1;
+    int hub75_pwm_bits = 11;
+    int hub75_pwm_lsb_nanoseconds = 130;
+    int hub75_brightness = 100; // percent, 1..100
+    int hub75_scan_mode = 0;
+    int hub75_row_address_type = 0;
+    int hub75_multiplexing = 0;
+    bool hub75_disable_hardware_pulsing = false;
+    bool hub75_show_refresh_rate = false;
+    bool hub75_inverse_colors = false;
+    std::string hub75_led_rgb_sequence = "RGB";
+    std::string hub75_pixel_mapper_config = "";
+    std::string hub75_panel_type = "";
+    int hub75_limit_refresh_rate_hz = 0;
+    int hub75_gpio_slowdown = 1; // RuntimeOptions; higher for faster Pis / long cables
+
     // Touchscreen
     std::string touchscreen_spi_dev = "";
     int touchscreen_spi_dev_int = 0;
@@ -189,10 +276,18 @@ extern struct portduino_config_struct {
     std::string webserver_ssl_cert_path = "/etc/meshtasticd/ssl/certificate.pem";
     int webserverport = -1;
 
+    // Bluetooth (BLE peripheral via BlueZ; Linux only, and only when built with
+    // sdbus-c++)
+    bool bluetooth_enabled = false;
+    std::string bluetooth_adapter = "hci0";
+
     // HostMetrics
     std::string hostMetrics_user_command = "";
     int hostMetrics_interval = 0;
     int hostMetrics_channel = 0;
+
+    // Security
+    std::vector<std::array<uint8_t, 32>> admin_keys;
 
     // config
     bool has_config_overrides = false;
@@ -264,6 +359,10 @@ extern struct portduino_config_struct {
             out << YAML::Key << "LR1110_MAX_POWER" << YAML::Value << lr1110_max_power;
         if (lr1120_max_power != 13)
             out << YAML::Key << "LR1120_MAX_POWER" << YAML::Value << lr1120_max_power;
+        if (lr2021_max_power != 22)
+            out << YAML::Key << "LR2021_MAX_POWER" << YAML::Value << lr2021_max_power;
+        if (lr2021_max_power_hf != 12)
+            out << YAML::Key << "LR2021_MAX_POWER_HF" << YAML::Value << lr2021_max_power_hf;
         if (rf95_max_power != 20)
             out << YAML::Key << "RF95_MAX_POWER" << YAML::Value << rf95_max_power;
 
@@ -281,6 +380,10 @@ extern struct portduino_config_struct {
             out << YAML::Key << "DIO2_AS_RF_SWITCH" << YAML::Value << dio2_as_rf_switch;
         if (dio3_tcxo_voltage != 0)
             out << YAML::Key << "DIO3_TCXO_VOLTAGE" << YAML::Value << YAML::Precision(3) << (float)dio3_tcxo_voltage / 1000;
+        if (dio3_tcxo_delay_us != 0)
+            out << YAML::Key << "DIO3_TCXO_DELAY_US" << YAML::Value << dio3_tcxo_delay_us;
+        if (tcxo_optional)
+            out << YAML::Key << "TCXO_OPTIONAL" << YAML::Value << tcxo_optional;
         if (lora_usb_pid != 0x5512)
             out << YAML::Key << "USB_PID" << YAML::Value << YAML::Hex << lora_usb_pid;
         if (lora_usb_vid != 0x1A86)
@@ -294,60 +397,33 @@ extern struct portduino_config_struct {
             out << YAML::Key << "USB_Serialnum" << YAML::Value << lora_usb_serial_num;
         if (spiSpeed != 2000000)
             out << YAML::Key << "spiSpeed" << YAML::Value << spiSpeed;
-        if (rfswitch_dio_pins[0] != RADIOLIB_NC) {
+        if (irq_dio_num >= 0)
+            out << YAML::Key << "IRQ_DIO_NUM" << YAML::Value << irq_dio_num;
+        if (has_rfswitch_table) {
             out << YAML::Key << "rfswitch_table" << YAML::Value << YAML::BeginMap;
 
+            // DIO numbers as written; a slot can be absent (sparse config), so remember its
+            // original index - row values below key off that, not position in this sequence.
             out << YAML::Key << "pins";
             out << YAML::Value << YAML::Flow << YAML::BeginSeq;
-
+            int emittedSlots[5];
+            size_t pinCount = 0;
             for (int i = 0; i < 5; i++) {
-                // set up the pin array first
-                if (rfswitch_dio_pins[i] == RADIOLIB_LR11X0_DIO5)
-                    out << "DIO5";
-                if (rfswitch_dio_pins[i] == RADIOLIB_LR11X0_DIO6)
-                    out << "DIO6";
-                if (rfswitch_dio_pins[i] == RADIOLIB_LR11X0_DIO7)
-                    out << "DIO7";
-                if (rfswitch_dio_pins[i] == RADIOLIB_LR11X0_DIO8)
-                    out << "DIO8";
-                if (rfswitch_dio_pins[i] == RADIOLIB_LR11X0_DIO10)
-                    out << "DIO10";
+                if (rfswitch_dio_num[i] < 0)
+                    continue;
+                out << ("DIO" + std::to_string(rfswitch_dio_num[i]));
+                emittedSlots[pinCount++] = i;
             }
             out << YAML::EndSeq;
 
-            for (int i = 0; i < 7; i++) {
-                switch (i) {
-                case 0:
-                    out << YAML::Key << "MODE_STBY";
-                    break;
-                case 1:
-                    out << YAML::Key << "MODE_RX";
-                    break;
-                case 2:
-                    out << YAML::Key << "MODE_TX";
-                    break;
-                case 3:
-                    out << YAML::Key << "MODE_TX_HP";
-                    break;
-                case 4:
-                    out << YAML::Key << "MODE_TX_HF";
-                    break;
-                case 5:
-                    out << YAML::Key << "MODE_GNSS";
-                    break;
-                case 6:
-                    out << YAML::Key << "MODE_WIFI";
-                    break;
-                }
-
+            // Only the modes the config carried, so a round trip invents no rows.
+            for (int m = 0; m < RFSW_MODE_COUNT; m++) {
+                if (!rfswitch_mode_present[m])
+                    continue;
+                out << YAML::Key << kRfSwitchModeNames[m].name;
                 out << YAML::Value << YAML::Flow << YAML::BeginSeq;
-                for (int j = 0; j < 5; j++) {
-                    if (rfswitch_table[i].values[j] == HIGH) {
-                        out << "HIGH";
-                    } else {
-                        out << "LOW";
-                    }
-                }
+                for (size_t j = 0; j < pinCount; j++)
+                    out << ((rfswitch_mode_high[m] & (1u << emittedSlots[j])) ? "HIGH" : "LOW");
                 out << YAML::EndSeq;
             }
             out << YAML::EndMap; // rfswitch_table
@@ -423,6 +499,30 @@ extern struct portduino_config_struct {
 
             out << YAML::Key << "OffsetRotate" << YAML::Value << displayOffsetRotate;
 
+            if (displayPanel == hub75) {
+                out << YAML::Key << "HUB75" << YAML::Value << YAML::BeginMap;
+                out << YAML::Key << "HardwareMapping" << YAML::Value << hub75_hardware_mapping;
+                out << YAML::Key << "Rows" << YAML::Value << hub75_rows;
+                out << YAML::Key << "Cols" << YAML::Value << hub75_cols;
+                out << YAML::Key << "ChainLength" << YAML::Value << hub75_chain_length;
+                out << YAML::Key << "Parallel" << YAML::Value << hub75_parallel;
+                out << YAML::Key << "PWMBits" << YAML::Value << hub75_pwm_bits;
+                out << YAML::Key << "PWMLSBNanoseconds" << YAML::Value << hub75_pwm_lsb_nanoseconds;
+                out << YAML::Key << "Brightness" << YAML::Value << hub75_brightness;
+                out << YAML::Key << "ScanMode" << YAML::Value << hub75_scan_mode;
+                out << YAML::Key << "RowAddressType" << YAML::Value << hub75_row_address_type;
+                out << YAML::Key << "Multiplexing" << YAML::Value << hub75_multiplexing;
+                out << YAML::Key << "DisableHardwarePulsing" << YAML::Value << hub75_disable_hardware_pulsing;
+                out << YAML::Key << "ShowRefreshRate" << YAML::Value << hub75_show_refresh_rate;
+                out << YAML::Key << "InverseColors" << YAML::Value << hub75_inverse_colors;
+                out << YAML::Key << "RGBSequence" << YAML::Value << hub75_led_rgb_sequence;
+                out << YAML::Key << "PixelMapper" << YAML::Value << hub75_pixel_mapper_config;
+                out << YAML::Key << "PanelType" << YAML::Value << hub75_panel_type;
+                out << YAML::Key << "LimitRefreshRateHz" << YAML::Value << hub75_limit_refresh_rate_hz;
+                out << YAML::Key << "GPIOSlowdown" << YAML::Value << hub75_gpio_slowdown;
+                out << YAML::EndMap; // HUB75
+            }
+
             out << YAML::EndMap; // Display
         }
 
@@ -466,9 +566,23 @@ extern struct portduino_config_struct {
         if (joystickDevice != "")
             out << YAML::Key << "JoystickDevice" << YAML::Value << joystickDevice;
         if (!joystickButtons.empty()) {
-            out << YAML::Key << "JoystickButtons" << YAML::Value << YAML::BeginMap;
+            // Stored as code -> action; invert so each action lists every code bound to it.
+            // Several buttons may share one action, so a multi-code action emits a list.
+            std::map<std::string, std::vector<int>> codesByAction;
             for (const auto &button : joystickButtons)
-                out << YAML::Key << button.second << YAML::Value << button.first;
+                codesByAction[button.second].push_back(button.first);
+            out << YAML::Key << "JoystickButtons" << YAML::Value << YAML::BeginMap;
+            for (const auto &action : codesByAction) {
+                out << YAML::Key << action.first << YAML::Value;
+                if (action.second.size() == 1) {
+                    out << action.second.front();
+                } else {
+                    out << YAML::Flow << YAML::BeginSeq;
+                    for (const int code : action.second)
+                        out << code;
+                    out << YAML::EndSeq;
+                }
+            }
             out << YAML::EndMap;
         }
 
@@ -548,6 +662,14 @@ extern struct portduino_config_struct {
             out << YAML::EndMap; // Webserver
         }
 
+        // Bluetooth
+        if (bluetooth_enabled) {
+            out << YAML::Key << "Bluetooth" << YAML::Value << YAML::BeginMap;
+            out << YAML::Key << "Enabled" << YAML::Value << bluetooth_enabled;
+            out << YAML::Key << "AdapterId" << YAML::Value << bluetooth_adapter;
+            out << YAML::EndMap; // Bluetooth
+        }
+
         // HostMetrics
         if (hostMetrics_user_command != "") {
             out << YAML::Key << "HostMetrics" << YAML::Value << YAML::BeginMap;
@@ -556,6 +678,16 @@ extern struct portduino_config_struct {
             out << YAML::Key << "Channel" << YAML::Value << hostMetrics_channel;
 
             out << YAML::EndMap; // HostMetrics
+        }
+
+        // Security
+        if (!admin_keys.empty()) {
+            out << YAML::Key << "Security" << YAML::Value << YAML::BeginMap;
+            out << YAML::Key << "AdminKeys" << YAML::Value << YAML::BeginSeq;
+            for (const auto &key : admin_keys)
+                out << adminKeyToBase64(key);
+            out << YAML::EndSeq;
+            out << YAML::EndMap; // Security
         }
 
         // config

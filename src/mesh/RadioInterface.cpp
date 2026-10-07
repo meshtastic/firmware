@@ -14,6 +14,7 @@
 #include "SX1262Interface.h"
 #include "SX1268Interface.h"
 #include "SX1280Interface.h"
+#include "UptimeClock.h"
 #include "configuration.h"
 #include "detect/LoRaRadioType.h"
 #include "main.h"
@@ -39,8 +40,8 @@
 #endif
 
 static const meshtastic_Config_LoRaConfig_ModemPreset PRESETS_STD[] = {
-    PRESET(LONG_FAST),  PRESET(LONG_SLOW),     PRESET(MEDIUM_SLOW), PRESET(MEDIUM_FAST), PRESET(SHORT_SLOW),
-    PRESET(SHORT_FAST), PRESET(LONG_MODERATE), PRESET(SHORT_TURBO), PRESET(LONG_TURBO),  MODEM_PRESET_END};
+    PRESET(LONG_FAST),     PRESET(LONG_SLOW),   PRESET(MEDIUM_SLOW), PRESET(MEDIUM_FAST),  PRESET(SHORT_SLOW), PRESET(SHORT_FAST),
+    PRESET(LONG_MODERATE), PRESET(SHORT_TURBO), PRESET(LONG_TURBO),  PRESET(MEDIUM_TURBO), MODEM_PRESET_END};
 
 static const meshtastic_Config_LoRaConfig_ModemPreset PRESETS_EU_868[] = {
     PRESET(LONG_FAST),  PRESET(LONG_SLOW),  PRESET(MEDIUM_SLOW),   PRESET(MEDIUM_FAST),
@@ -54,6 +55,34 @@ static const meshtastic_Config_LoRaConfig_ModemPreset PRESETS_NARROW[] = {PRESET
                                                                           MODEM_PRESET_END};
 
 static const meshtastic_Config_LoRaConfig_ModemPreset PRESETS_TINY[] = {PRESET(TINY_FAST), PRESET(TINY_SLOW), MODEM_PRESET_END};
+
+// The EU_868/EU_866/EU_N_868 trio share the 868 band but own mutually exclusive preset
+// profiles. Selecting a preset locked to a sibling swaps the region to that sibling (see
+// regionSwapForPreset), so from any region in the trio every one of these presets is
+// selectable. This union is what we advertise to clients as the trio's legal list. It is a
+// display-only superset: on-device enforcement still uses each region's own disjoint
+// profile->presets, so this must never be assigned to a RegionProfile (that would make
+// supportsPreset() accept the preset in place and defeat the swap). Keep in sync with the
+// EU_868/EU_866/EU_N_868 profile lists below. Sized to the 11-preset wire cap.
+static const meshtastic_Config_LoRaConfig_ModemPreset PRESETS_EU_SUPERSET[] = {
+    PRESET(LONG_FAST),     PRESET(LONG_SLOW), PRESET(MEDIUM_SLOW), PRESET(MEDIUM_FAST), PRESET(SHORT_SLOW),  PRESET(SHORT_FAST),
+    PRESET(LONG_MODERATE), PRESET(LITE_FAST), PRESET(LITE_SLOW),   PRESET(NARROW_FAST), PRESET(NARROW_SLOW), MODEM_PRESET_END};
+
+// The EU_868/EU_866/EU_N_868 trio own mutually exclusive preset lists. Selecting a preset
+// locked to a sibling means the user wants that sibling region, not the default preset.
+static const meshtastic_Config_LoRaConfig_RegionCode SWAPPABLE_EU_REGIONS[] = {
+    meshtastic_Config_LoRaConfig_RegionCode_EU_868,
+    meshtastic_Config_LoRaConfig_RegionCode_EU_866,
+    meshtastic_Config_LoRaConfig_RegionCode_EU_N_868,
+};
+
+static bool isSwappableEuRegion(meshtastic_Config_LoRaConfig_RegionCode code)
+{
+    for (auto c : SWAPPABLE_EU_REGIONS)
+        if (c == code)
+            return true;
+    return false;
+}
 
 // Region profiles: bundle preset list + regulatory parameters shared across regions
 // presets, spacing, padding, audio, licensed, text throttle, position throttle, telemetry throttle
@@ -71,10 +100,17 @@ Observable<uint32_t> RadioInterface::loraRxPacketObservable;
 
 #define RDEF(name, freq_start, freq_end, duty_cycle, power_limit, frequency_switching, wide_lora, profile_ptr, default_preset,   \
              override_slot)                                                                                                      \
-    {                                                                                                                            \
-        meshtastic_Config_LoRaConfig_RegionCode_##name, freq_start, freq_end, duty_cycle, power_limit, frequency_switching,      \
-            wide_lora, &profile_ptr, default_preset, override_slot, #name                                                        \
-    }
+    {meshtastic_Config_LoRaConfig_RegionCode_##name,                                                                             \
+     freq_start,                                                                                                                 \
+     freq_end,                                                                                                                   \
+     duty_cycle,                                                                                                                 \
+     power_limit,                                                                                                                \
+     frequency_switching,                                                                                                        \
+     wide_lora,                                                                                                                  \
+     &profile_ptr,                                                                                                               \
+     default_preset,                                                                                                             \
+     override_slot,                                                                                                              \
+     #name}
 
 const RegionInfo regions[] = {
     /*
@@ -184,11 +220,9 @@ const RegionInfo regions[] = {
 
     /*
         433,05-434,7 Mhz 10 mW
-        868,0-868,6 Mhz 25 mW
-        https://nkrzi.gov.ua/images/upload/256/5810/PDF_UUZ_19_01_2016.pdf
+        https://zakon.rada.gov.ua/laws/show/262-2026-п
     */
     RDEF(UA_433, 433.0f, 434.7f, 10, 10, false, false, PROFILE_STD, PRESET(LONG_FAST), 0),
-    RDEF(UA_868, 868.0f, 868.6f, 1, 14, false, false, PROFILE_STD, PRESET(LONG_FAST), 0),
 
     /*
         Malaysia
@@ -375,6 +409,8 @@ std::unique_ptr<RadioInterface> initLoRa()
             return std::unique_ptr<RadioInterface>(new LR1121Interface(hal, cs, irq, rst, busy));
         case use_llcc68:
             return std::unique_ptr<RadioInterface>(new LLCC68Interface(hal, cs, irq, rst, busy));
+        case use_lr2021:
+            return std::unique_ptr<RadioInterface>(new LR2021Interface(hal, cs, irq, rst, busy));
         case use_simradio:
             return std::unique_ptr<RadioInterface>(new SimRadio);
         default:
@@ -386,7 +422,8 @@ std::unique_ptr<RadioInterface> initLoRa()
     LOG_DEBUG("Activate %s radio on SPI port %s", portduino_config.loraModules[portduino_config.lora_module].c_str(),
               portduino_config.lora_spi_dev.c_str());
     if (portduino_config.lora_spi_dev == "ch341") {
-        RadioLibHAL = ch341Hal;
+        RadioLibHAL = ch341Hal.get(); // non-owning: the ch341 HAL stays owned by the global unique_ptr
+        ch341Hal->setRadioPins(portduino_config.lora_cs_pin.pin, portduino_config.lora_busy_pin.pin);
     } else {
         if (RadioLibHAL != nullptr) {
             delete RadioLibHAL;
@@ -615,7 +652,7 @@ std::unique_ptr<RadioInterface> initLoRa()
             if (screen) {
                 screen->showSimpleBanner("Rebooting...");
             }
-            rebootAtMsec = millis() + 5000;
+            rebootAtMsec = Time::timerEndsAtMillis(5000);
         }
     }
     return rIf;
@@ -644,6 +681,19 @@ const RegionInfo *getRegion(meshtastic_Config_LoRaConfig_RegionCode code)
     return r;
 }
 
+bool isKnownModemPreset(meshtastic_Config_LoRaConfig_ModemPreset preset)
+{
+    // Walks profile->presets directly rather than RegionInfo::supportsPreset(), which calls
+    // back here for the UNSET entry. UNSET terminates the table, so it is checked last.
+    for (const RegionInfo *r = regions;; r++) {
+        for (size_t i = 0; r->profile->presets[i] != MODEM_PRESET_END; i++)
+            if (r->profile->presets[i] == preset)
+                return true;
+        if (r->code == meshtastic_Config_LoRaConfig_RegionCode_UNSET)
+            return false;
+    }
+}
+
 void getRegionPresetMap(meshtastic_LoRaRegionPresetMap &map)
 {
     map = meshtastic_LoRaRegionPresetMap_init_zero;
@@ -664,7 +714,7 @@ void getRegionPresetMap(meshtastic_LoRaRegionPresetMap &map)
         // log once and stop. An incomplete map means clients won't constrain the
         // omitted regions, so this must be discoverable rather than silent.
         if (map.region_groups_count >= maxRegions) {
-            LOG_ERROR("Region preset map full at %u regions; remaining regions omitted", (unsigned)maxRegions);
+            LOG_ERROR("Region preset map full at %u regions; rest omitted", (unsigned)maxRegions);
             break;
         }
 
@@ -689,8 +739,13 @@ void getRegionPresetMap(meshtastic_LoRaRegionPresetMap &map)
             grp.default_preset = r->getDefaultPreset();
             grp.licensed_only = r->profile->licensedOnly;
             grp.presets_count = 0;
-            for (size_t i = 0; r->profile->presets[i] != MODEM_PRESET_END && grp.presets_count < maxPresets; i++)
-                grp.presets[grp.presets_count++] = r->profile->presets[i];
+            // EU 86x siblings advertise the trio's superset - any of those presets is
+            // reachable from here via an automatic region swap. Every other region
+            // advertises exactly its own enforced profile list.
+            const meshtastic_Config_LoRaConfig_ModemPreset *advertised =
+                isSwappableEuRegion(r->code) ? PRESETS_EU_SUPERSET : r->profile->presets;
+            for (size_t i = 0; advertised[i] != MODEM_PRESET_END && grp.presets_count < maxPresets; i++)
+                grp.presets[grp.presets_count++] = advertised[i];
         }
 
         // Map this region to its group (capacity checked at the top of the loop).
@@ -698,6 +753,26 @@ void getRegionPresetMap(meshtastic_LoRaRegionPresetMap &map)
         rg.region = r->code;
         rg.group_index = (uint8_t)gi;
     }
+
+#ifdef USERPREFS_LORACONFIG_MODEM_PRESET
+    // A pinned preset is a statement of intent, not enforcement: supportsPreset() still accepts any
+    // known preset while unset. Stock builds emit no UNSET entry, which clients read as unconstrained.
+    if (map.groups_count < maxGroups && map.region_groups_count < maxRegions) {
+        const RegionInfo *unset = getRegion(meshtastic_Config_LoRaConfig_RegionCode_UNSET);
+        meshtastic_LoRaPresetGroup &grp = map.groups[map.groups_count];
+        grp.presets_count = 1;
+        grp.presets[0] = USERPREFS_LORACONFIG_MODEM_PRESET;
+        grp.default_preset = USERPREFS_LORACONFIG_MODEM_PRESET;
+        grp.licensed_only = unset->profile->licensedOnly;
+
+        meshtastic_LoRaRegionPresets &rg = map.region_groups[map.region_groups_count++];
+        rg.region = unset->code;
+        rg.group_index = (uint8_t)map.groups_count++;
+    } else {
+        // Costs only the intent signal - clients fall back to unconstrained - but must not be silent.
+        LOG_ERROR("Region preset map full; UNSET intent omitted");
+    }
+#endif
 }
 
 /**
@@ -799,11 +874,11 @@ uint32_t RadioInterface::getTxDelayMsecWeighted(meshtastic_MeshPacket *p)
     // LOG_DEBUG("rx_snr of %f so setting CWsize to:%d", snr, CWsize);
     if (shouldRebroadcastEarlyLikeRouter(p)) {
         delay = random(0, 2 * CWsize) * slotTimeMsec;
-        LOG_DEBUG("rx_snr found in packet. Router: setting tx delay:%d", delay);
+        LOG_DEBUG_RADIO("rx_snr in packet. Router: tx delay:%d", delay);
     } else {
         // offset the maximum delay for routers: (2 * CWmax * slotTimeMsec)
         delay = (2 * CWmax * slotTimeMsec) + random(0, pow_of_2(CWsize)) * slotTimeMsec;
-        LOG_DEBUG("rx_snr found in packet. Setting tx delay:%d", delay);
+        LOG_DEBUG_RADIO("rx_snr in packet. Tx delay:%d", delay);
     }
 
     return delay;
@@ -846,11 +921,11 @@ void printPacket(const char *prefix, const meshtastic_MeshPacket *p)
         out += DEBUG_PORT.mt_sprintf(" len=%d", p->encrypted.size + sizeof(PacketHeader));
     }
 
-    if (p->rx_time != 0)
+    if (p->has_rx_time) // rx_time has explicit presence; a millis() placeholder isn't a real reading to print
         out += DEBUG_PORT.mt_sprintf(" rxtime=%u", p->rx_time);
     if (p->rx_snr != 0.0)
         out += DEBUG_PORT.mt_sprintf(" rxSNR=%g", p->rx_snr);
-    if (p->rx_rssi != 0)
+    if (p->has_rx_rssi) // rx_rssi has explicit presence; a != 0 check would hide a genuine 0 dBm reading
         out += DEBUG_PORT.mt_sprintf(" rxRSSI=%i", p->rx_rssi);
     if (p->via_mqtt != 0)
         out += DEBUG_PORT.mt_sprintf(" via MQTT");
@@ -965,14 +1040,6 @@ static void sendErrorNotification(const char *msg, meshtastic_LogRecord_Level le
     service->sendClientNotification(cn);
 }
 
-// The EU_868/EU_866/EU_N_868 trio own mutually exclusive preset lists. Selecting a preset
-// locked to a sibling means the user wants that sibling region, not the default preset.
-static const meshtastic_Config_LoRaConfig_RegionCode SWAPPABLE_EU_REGIONS[] = {
-    meshtastic_Config_LoRaConfig_RegionCode_EU_868,
-    meshtastic_Config_LoRaConfig_RegionCode_EU_866,
-    meshtastic_Config_LoRaConfig_RegionCode_EU_N_868,
-};
-
 /**
  * If currentRegion is one of the swappable EU regions and preset belongs to a sibling in
  * that trio, return the sibling region that owns the preset. Returns nullptr otherwise.
@@ -980,12 +1047,7 @@ static const meshtastic_Config_LoRaConfig_RegionCode SWAPPABLE_EU_REGIONS[] = {
 const RegionInfo *RadioInterface::regionSwapForPreset(meshtastic_Config_LoRaConfig_RegionCode currentRegion,
                                                       meshtastic_Config_LoRaConfig_ModemPreset preset)
 {
-    bool currentIsSwappable = false;
-    for (auto code : SWAPPABLE_EU_REGIONS) {
-        if (code == currentRegion)
-            currentIsSwappable = true;
-    }
-    if (!currentIsSwappable)
+    if (!isSwappableEuRegion(currentRegion))
         return nullptr;
 
     for (auto code : SWAPPABLE_EU_REGIONS) {
@@ -1004,7 +1066,8 @@ const RegionInfo *RadioInterface::regionSwapForPreset(meshtastic_Config_LoRaConf
  * receives the human-readable failure reason.
  * Returns false if not compatible.
  */
-bool RadioInterface::checkConfigRegion(const meshtastic_Config_LoRaConfig &loraConfig, char *errBuf, size_t errLen)
+bool RadioInterface::checkConfigRegion(const meshtastic_Config_LoRaConfig &loraConfig, char *errBuf, size_t errLen,
+                                       bool prospectiveLicensedOwner)
 {
     const RegionInfo *newRegion = getRegion(loraConfig.region);
 
@@ -1016,7 +1079,7 @@ bool RadioInterface::checkConfigRegion(const meshtastic_Config_LoRaConfig &loraC
     }
 
     // If you are not licensed, you can't use ham regions.
-    if (newRegion->profile->licensedOnly && !devicestate.owner.is_licensed) {
+    if (newRegion->profile->licensedOnly && !devicestate.owner.is_licensed && !prospectiveLicensedOwner) {
         if (errBuf)
             snprintf(errBuf, errLen, "Region %s requires licensed mode", newRegion->name);
         return false;
@@ -1087,7 +1150,7 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
                     // Validation must still fail so callers route into the clamp, but quietly:
                     // the clamp will accept this config by swapping regions, so don't record a
                     // critical error or alarm the user over a change that is about to succeed.
-                    LOG_INFO("Preset %s implies region swap %s to %s, deferring to clamp", presetName, newRegion->name,
+                    LOG_INFO("Preset %s implies region swap %s to %s, defer to clamp", presetName, newRegion->name,
                              swapRegion->name);
                     return false;
                 }
@@ -1242,7 +1305,7 @@ void RadioInterface::applyModemConfig()
         // If custom CR is being used already, check if the new preset is higher
         if (loraConfig.coding_rate >= 5 && loraConfig.coding_rate <= 8 && loraConfig.coding_rate < newcr) {
             cr = newcr;
-            LOG_INFO("Default Coding Rate is higher than custom setting, using %u", cr);
+            LOG_INFO("Default Coding Rate above custom setting, use %u", cr);
         }
         // If the custom CR is higher than the preset, use it
         else if (loraConfig.coding_rate >= 5 && loraConfig.coding_rate <= 8 && loraConfig.coding_rate > newcr) {
@@ -1255,8 +1318,7 @@ void RadioInterface::applyModemConfig()
     } else { // if not using preset, then just use the custom settings
         if (validateConfigLora(loraConfig)) {
         } else {
-            LOG_WARN("Invalid LoRa config settings, cannot apply requested modem config - falling back to %s defaults",
-                     newRegion->name);
+            LOG_WARN("Invalid LoRa config, can't apply modem config - fall back to %s defaults", newRegion->name);
             clampConfigLora(loraConfig);
         }
         // Clamp at the source so numFreqSlots below can never be 0 (a bandwidth-0 config may already be persisted)
@@ -1349,9 +1411,9 @@ void RadioInterface::applyModemConfig()
              newRegion->freqEnd - newRegion->freqStart);
     LOG_INFO("numFreqSlots: %u x %.3fkHz", numFreqSlots, bw);
     if (newRegion->overrideSlot > 0) {
-        LOG_INFO("Using region explicit override slot: %d", newRegion->overrideSlot);
+        LOG_INFO("Region explicit override slot: %d", newRegion->overrideSlot);
     } else if (newRegion->overrideSlot == OVERRIDE_SLOT_PRESET_HASH) {
-        LOG_INFO("Using region preset name hash for slot selection");
+        LOG_INFO("Use region preset name hash for slot");
     }
     LOG_INFO("channel_num: %d", channel_num + 1);
     LOG_INFO("frequency: %f", getFreq());
@@ -1363,33 +1425,43 @@ void RadioInterface::applyModemConfig()
   - roundtrip air propagation time (assuming max. 30km between nodes);
   - Tx/Rx turnaround time (maximum of SX126x and SX127x);
   - MAC processing time (measured on T-beam) */
+uint8_t RadioInterface::getCadSymbolCount() const
+{
+    return myRegion->wideLora ? getCadSymbolCountWideLora() : getCadSymbolCountSubGhz();
+}
+
 uint32_t RadioInterface::computeSlotTimeMsec()
 {
     float sumPropagationTurnaroundMACTime = 0.2 + 0.4 + 7; // in milliseconds
     float symbolTime = pow_of_2(sf) / bw;                  // in milliseconds
 
     if (myRegion->wideLora) {
-        // CAD duration derived from AN1200.22 of SX1280
-        return (NUM_SYM_CAD_24GHZ + (2 * sf + 3) / 32) * symbolTime + sumPropagationTurnaroundMACTime;
+        // SX1280 datasheet rev 3.3: CAD duration = (cadSymbolNum + (2*SF + 3) / 32) * Ts, the trailing
+        // term being the post-scan processing window. Float division: as ints it truncates to 0 for
+        // every legal SF. SX1280, LR1120 and LR2021 all run here, so take the count from the driver.
+        return (getCadSymbolCount() + (2.0f * sf + 3) / 32) * symbolTime + sumPropagationTurnaroundMACTime;
     } else {
-        // CAD duration for SX127x is max. 2.25 symbols, for SX126x it is number of symbols + 0.5 symbol
-        return max(2.25, NUM_SYM_CAD + 0.5) * symbolTime + sumPropagationTurnaroundMACTime;
+        // CAD duration for SX127x is max. 2.25 symbols, for SX126x it is number of symbols + 0.5 symbol.
+        // getCadSymbolCount() reports the symbols the scan really runs.
+        return max(2.25, getCadSymbolCount() + 0.5) * symbolTime + sumPropagationTurnaroundMACTime;
     }
 }
 
 /**
  * Some regulatory regions limit xmit power.
- * This function should be called by subclasses after setting their desired power.  It might lower it
+ * This function should be called by subclasses after setting their desired power.  It might lower it.
+ * Re-derives `power` from config each call so a re-init that runs it twice cannot subtract PA gain twice.
  */
 void RadioInterface::limitPower(int8_t loraMaxPower)
 {
-    uint8_t maxPower = 255; // No limit
+    power = config.lora.tx_power; // applyModemConfig() writes the resolved value back here
+    uint8_t maxPower = 255;       // No limit
 
     if (myRegion->powerLimit)
         maxPower = myRegion->powerLimit;
 
     if ((power > maxPower) && !devicestate.owner.is_licensed) {
-        LOG_INFO("Lower transmit power because of regulatory limits");
+        LOG_INFO("Lower Tx power: regulatory limits");
         power = maxPower;
     }
 
@@ -1456,7 +1528,7 @@ size_t RadioInterface::beginSending(meshtastic_MeshPacket *p)
     radioBuffer.header.next_hop = p->next_hop;
     radioBuffer.header.relay_node = p->relay_node;
     if (p->hop_limit > HOP_MAX) {
-        LOG_WARN("hop limit %d is too high, setting to %d", p->hop_limit, HOP_RELIABLE);
+        LOG_WARN("hop limit %d too high, set to %d", p->hop_limit, HOP_RELIABLE);
         p->hop_limit = HOP_RELIABLE;
     }
     radioBuffer.header.flags =
@@ -1465,9 +1537,17 @@ size_t RadioInterface::beginSending(meshtastic_MeshPacket *p)
 
     // if the sender nodenum is zero, that means uninitialized
     assert(radioBuffer.header.from);
-    assert(p->encrypted.size <= sizeof(radioBuffer.payload));
-    memcpy(radioBuffer.payload, p->encrypted.bytes, p->encrypted.size);
+
+    // Oversize is rejected at the radio queue in Router::send(); clamp rather than fail here so this
+    // stays a call that always succeeds, with no failure return for startSend() to unwind.
+    size_t payloadLen = p->encrypted.size;
+    if (payloadLen > MAX_RADIO_PAYLOAD_LEN) {
+        LOG_ERROR("Payload %u exceeds radioBuffer capacity %u, truncate", (unsigned)payloadLen, (unsigned)MAX_RADIO_PAYLOAD_LEN);
+        payloadLen = MAX_RADIO_PAYLOAD_LEN;
+    }
+
+    memcpy(radioBuffer.payload, p->encrypted.bytes, payloadLen);
 
     sendingPacket = p;
-    return p->encrypted.size + sizeof(PacketHeader);
+    return payloadLen + sizeof(PacketHeader);
 }

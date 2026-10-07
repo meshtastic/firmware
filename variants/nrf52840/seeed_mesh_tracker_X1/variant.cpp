@@ -68,4 +68,6 @@ void initVariant()
 
     pinMode(GPS_RTC_INT, OUTPUT);
     digitalWrite(GPS_RTC_INT, LOW);
+
+    pinMode(PIN_BUZZER, INPUT_PULLDOWN);
 }

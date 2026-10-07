@@ -1,0 +1,4 @@
+# FAULT: module names are matched EXACTLY and are not consistently cased -- the
+# accepted spelling is LLCC68, not llcc68. Expect an ERROR with a "did you mean".
+Lora:
+  Module: llcc68

@@ -2,12 +2,12 @@
 
 > **TL;DR**
 >
-> |                |                                                                                                                        |
-> | -------------- | ---------------------------------------------------------------------------------------------------------------------- |
-> | Local tests    | `./bin/run-tests.sh` (exit 0 GREEN · 1 RED · 2 AMBER · 3 FILTERED)                                                     |
-> | Hardware tests | [meshtastic/meshtastic-mcp](https://github.com/meshtastic/meshtastic-mcp) (`MESHTASTIC_FIRMWARE_ROOT` → this checkout) |
-> | Format         | `trunk fmt`                                                                                                            |
-> | Mirror docs    | `.github/copilot-instructions.md` (canonical) · `CLAUDE.md` (Claude Code)                                              |
+> |                |                                                                                                                           |
+> | -------------- | ------------------------------------------------------------------------------------------------------------------------- |
+> | Local tests    | `./bin/run-tests.sh` (exit 0 GREEN · 1 RED · 2 AMBER · 3 FILTERED · 4 BUSY · 5 ABORTED · 6 UNSUPPORTED); `--status` first |
+> | Hardware tests | [meshtastic/meshtastic-mcp](https://github.com/meshtastic/meshtastic-mcp) (`MESHTASTIC_FIRMWARE_ROOT` → this checkout)    |
+> | Format         | `trunk fmt`                                                                                                               |
+> | Mirror docs    | `.github/copilot-instructions.md` (canonical) · `CLAUDE.md` (Claude Code)                                                 |
 >
 > **Need this? It's here.**
 >
@@ -50,6 +50,7 @@ The [meshtastic-mcp](https://github.com/meshtastic/meshtastic-mcp) server expose
 - **Serial sessions**: `serial_open`, `serial_read`, `serial_list`, `serial_close`
 - **Device reads**: `device_info`, `list_nodes`
 - **Device writes** (require `confirm=True`): `set_owner`, `get_config`, `set_config`, `get_channel_url`, `set_channel_url`, `send_text`, `reboot`, `shutdown`, `factory_reset`, `set_debug_log_api`
+- **Frame injection**: `inject_frame` - deliver a crafted frame into a board's real RX pipeline as if received off LoRa (reaches `from != 0` / decrypt / remote-admin paths the `toRadio` API can't). Needs firmware built with `-D MESHTASTIC_ENABLE_FRAME_INJECTION=1` (`MeshService::injectAsReceived`); sim nodes always. See the copilot-instructions **Frame injection** section.
 - **userPrefs admin**: `userprefs_get`, `userprefs_set`, `userprefs_reset`, `userprefs_manifest`, `userprefs_testing_profile`
 - **Vendor escape hatches**: `esptool_*`, `nrfutil_*`, `picotool_*`
 
@@ -66,7 +67,7 @@ The test-and-diagnose workflows (`/test`, `/diagnose`, `/repro`, `/leakhunt`) no
 Two layers, both in `src/mesh/CryptoEngine.cpp`:
 
 - **Channel (symmetric)** - **AES-CTR** with a channel-wide PSK (AES-128 or AES-256). Nonce = packet_id ‖ from_node ‖ block_counter. No AEAD; integrity is soft (channel-hash filter). The well-known default PSK lives in `src/mesh/Channels.h`; a 1-byte PSK is a short-form index into it.
-- **Per-peer PKI** - **X25519 ECDH** (Curve25519, 32-byte keys) → SHA-256 → **AES-256-CCM** with an 8-byte MAC. Fresh 32-bit `extraNonce` per packet, sent in the clear alongside the MAC. 12-byte wire overhead (`MESHTASTIC_PKC_OVERHEAD`). Used for DMs. Also used for remote admin (`src/modules/AdminModule.cpp`), where AdminMessage authorization is gated by `config.security.admin_key[0..2]`. Disabled entirely in Ham mode (`user.is_licensed=true`).
+- **Per-peer PKI** - **X25519 ECDH** (Curve25519, 32-byte keys) → SHA-256 → **AES-256-CCM** with an 8-byte MAC. Fresh 32-bit `extraNonce` per packet, sent in the clear alongside the MAC. 12-byte wire overhead (`MESHTASTIC_PKC_OVERHEAD`). Used for DMs. Also used for remote admin (`src/modules/AdminModule.cpp`), where AdminMessage authorization is gated by `AdminKeys::isAuthorized()` (`config.security.admin_key[0..2]`, plus meshtasticd's `Security.AdminKeys`). Disabled entirely in Ham mode (`user.is_licensed=true`).
 
 Key rotation to never trigger casually: only the **full** factory reset (`factory_reset_device`, `eraseBleBonds=true`) wipes `security.private_key` and regenerates the keypair - every peer holds the old public key, so DMs silently fail PKI decrypt until NodeInfo re-exchanges. The **partial** config reset (`factory_reset_config`) preserves the private key and doesn't invalidate peer relationships. Explicitly blanking `security.private_key` via admin also triggers regen. See the **Encryption & Key Management** section of `.github/copilot-instructions.md` for the full spec (nonce layout, send/receive selection logic including infrastructure-portnum exceptions, admin-key + session-passkey authorization, `is_managed` scope, key-rotation hazards).
 
@@ -79,8 +80,22 @@ Key rotation to never trigger casually: only the **full** factory reset (`factor
 - **Run `trunk fmt` before proposing a commit.** The `trunk_check` CI gate will reject unformatted code. Claude Code runs it automatically via the PostToolUse hook in `.claude/settings.json`; trunk's launcher needs `curl` or `wget` to bootstrap its pinned CLI - see **Formatting & the trunk toolchain** in `.github/copilot-instructions.md` for the no-curl bootstrap procedure.
 - **Never edit or commit files under `src/mesh/generated/`.** They are regenerated from the [`meshtastic/protobufs`](https://github.com/meshtastic/protobufs) repo by the `update_protobufs.yml` workflow (entry point: `bin/regen-protos.sh`). Local edits will be overwritten and create merge conflicts. If a `.proto` change is needed, open a PR against the protobufs repo first, then let the workflow re-sync this repo.
 - **`confirm=True` on destructive MCP tools is a real gate, not a formality.** Don't bypass it via auto-approve settings.
+- **The `src/` naming rule does not apply under `test/`.** Suite directories and `test_*` functions follow their own rule and must not be renamed to match `src/`. What that rule is, and why: [**Test naming** in `.github/copilot-instructions.md`](.github/copilot-instructions.md#test-naming) - authoritative there, not restated here.
 - **Keep code comments minimal - one or two lines, max.** Comment only when the _why_ isn't obvious from the code; never restate what the next line does. No multi-paragraph block comments explaining straightforward changes. The diff and commit message carry the rationale; the code carries the behavior.
-- **Use `Throttle` for time-based rate limiting, not raw `millis()` math.** `src/mesh/Throttle.h` provides `Throttle::isWithinTimespanMs(lastMs, intervalMs)` (returns true while inside the cooldown) and `Throttle::execute(&lastMs, intervalMs, func)` (function-pointer form that updates the timestamp on fire). Use these for any "did N ms pass since X" check - raw `millis() > lastMs + N` is rollover-unsafe (breaks after ~49.7 days) and inconsistent with the rest of the codebase. The helpers compute `now - lastMs` with unsigned subtraction, which wraps correctly.
+- **That limit does not bind a test's header comment.** A test header states what it pins and the regression it guards, at whatever length that takes, and must not be cut to two lines. What it must contain, and why: [**Test comments** in `.github/copilot-instructions.md`](.github/copilot-instructions.md#test-comments) - authoritative there, not restated here.
+- **Documentation does not live in this repo. Do not add it here.** This repository holds firmware code. There is no `docs/` directory - the design documents that used to sit there were published to [meshtastic/meshtastic](https://github.com/meshtastic/meshtastic) in #11488 and the directory was deleted - and it must not come back. Do not create a `.md` file to describe a feature, a configuration surface, an API, a wire format, or a design; write it in the docs repo and link that PR instead. Never leave a write-up behind in the tree: no investigation notes, no mitigation plans, no migration checklists, no "how we got here" narrative, no summaries of what a change did. That is what the PR description and the commit message are for, and they are the only place it belongs. When you do write documentation upstream, write a technical manual, not a novel - what the feature does, the settings it exposes in the user's terms, and the exact API or protocol a client speaks. No story of the debugging journey, no rationale essays, no changelog prose. Concise and factual, as short as the facts allow.
+- **Never compare against `millis()` directly. Use `Throttle`.** `src/mesh/Throttle.h` is the sanctioned way to ask about time, and CI enforces this (`millis-deadline-check` in `.github/workflows/test_native.yml` fails the PR on a new `millis() >` / `< millis()` comparison).
+  - `Throttle::isWithinTimespanMs(lastMs, intervalMs)` - true while still inside the cooldown.
+  - `Throttle::hasElapsed(lastMs, intervalMs)` - its complement, true once the interval has passed (inclusive `>=`). Prefer this to spelling `!isWithinTimespanMs(...)`.
+  - `Throttle::execute(&lastMs, intervalMs, func)` - function-pointer form that updates the timestamp on fire.
+  - `Throttle::deadlinePassed(deadlineMs)` - for a stored absolute deadline that cannot be re-expressed as "interval since an event".
+  - `Throttle::deadlinePassedAt(nowMs, deadlineMs)` - the same test against a caller-supplied `now`, for a loop that snapshots the clock once and tests many deadlines. Snapshot from `Time::getMillis()`.
+
+  Raw `millis() > deadline` or `deadline < millis()` is rollover-unsafe: the comparison inverts while the deadline sits on the far side of the 32-bit wrap, so the action fires immediately or blocks for roughly the interval it should have waited. All five helpers subtract first, so unsigned wraparound cancels out. `Throttle` reads the clock through `Time::getMillis()` (`src/UptimeClock.h`), so all ~94 of its call sites are time-injectable and a native test can drive the wrap with `Time::setTestMillis()`.
+
+  **Sentinel hazard.** If a deadline variable also encodes "inactive" (`0` for `rebootAtMsec`, `shutdownAtMsec`, `alertBannerUntil`, `fixHoldEnds`; `UINT32_MAX` for `nagCycleCutoff`), test that sentinel _before_ the elapsed comparison - every such value is arithmetically far in the past, so a correct comparison fires on it immediately. Match the test to the sentinel in use: `if (deadline && Throttle::deadlinePassed(deadline))` covers the `0` family, `nagCycleCutoff` needs `deadline != UINT32_MAX` or a separate armed flag (`isNagging`).
+
+  Then decide which way the sentinel should fall - "inactive" does not always mean "suppress". At the GPS fix-hold site `fixHoldEnds == 0` means _no hold is in force_, which is exactly when one must be armed; guarding it with `fixHoldEnds != 0 &&` looks like this rule and inverts the site. See `fixHoldInForce()` in `src/gps/GPS.cpp` and `test/test_gps_fix_hold/`.
 
 ## Typical agent workflows
 
@@ -106,7 +121,16 @@ Sequence these; don't parallelize on the same port.
 4. On failure, open the run's `tests/report.html` → `Meshtastic debug` section for the firmware log tail + device state dump
 5. Iterate
 
-### Debugging a flaky test
+### Debugging a native unit-test failure
+
+1. **Run the full suite before believing a filtered one.** `-f` is not a gate: it removes the suites that _create_ the shared state a later suite trips over.
+2. **A signal name is not a crash.** `exit(UNITY_END())` returns the failure count and PlatformIO renders it as a signal (4 -> `SIGILL`, 5 -> `SIGTRAP`), reporting `[ERRORED]`. Match it against the failure count first.
+3. **Check the CLEAN/DIRTY axis.** Each suite runs in its own scratch `$HOME`; deliberate writes are declared in `test/state-manifest.tsv`. A DIRTY verdict names the suite and the undeclared path, and the kept sandbox under `.pio/test-state/<suite>/` is a replayable reproduction.
+4. **Sanitizers are per env** - `coverage` has ASan/LSan, `native` has none. Don't reason from ASan on a `-e native` run.
+5. **Reproduce a shuffled order.** `--shuffle` prints its seed and puts it on the `RESULT:` line; `--seed <n>` replays that exact order. One green seed proves nothing about order independence.
+6. **Exit 2 with "Linux-only" is the host, not the tests.** The harness needs bash 4+ and GNU coreutils/find and rejects any other `uname` rather than degrade quietly. `native-macos` is a build target, not a test host; elsewhere use `./bin/test-native-docker.sh`.
+
+### Debugging a flaky hardware test
 
 1. `/repro <test-node-id> [count]` - re-runs the test N times, diffs firmware logs between passes and failures
 2. If the first attempt always fails and the rest pass, that's a state-leak pattern → suggest `--force-bake` or a clean device state, don't chase the first failure
@@ -121,7 +145,7 @@ Sequence these; don't parallelize on the same port.
 | `src/modules/`                                                 | Feature modules; `Telemetry/Sensor/` has 50+ I2C sensor drivers                                                                                                                                |
 | `variants/`                                                    | 200+ hardware variant definitions (`variant.h` + `platformio.ini` per board)                                                                                                                   |
 | `protobufs/`                                                   | `.proto` definitions; regenerate with `bin/regen-protos.sh`                                                                                                                                    |
-| `test/`                                                        | Firmware unit tests (19 suites; `./bin/run-tests.sh` preferred, falls back to `pio test -e native`)                                                                                            |
+| `test/`                                                        | Firmware unit tests (count = the `test_*` dirs, detected on the fly; `./bin/run-tests.sh` preferred, falls back to `pio test -e native`)                                                       |
 | [meshtastic-mcp](https://github.com/meshtastic/meshtastic-mcp) | Standalone MCP server + tiered pytest hardware harness (`unit/`, `mesh/`, `telemetry/`, `monitor/`, `recovery/`, `ui/`, `fleet/`, `admin/`, `provisioning/`) - registered here via `.mcp.json` |
 | `.github/prompts/`                                             | Copilot prompt bodies (firmware scaffolding: new module / sensor / variant)                                                                                                                    |
 | `.github/copilot-instructions.md`                              | **Primary agent instructions - read this**                                                                                                                                                     |

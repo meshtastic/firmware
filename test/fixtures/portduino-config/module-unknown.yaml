@@ -1,0 +1,4 @@
+# FAULT: sx1263 is not a module meshtasticd knows. loadConfig() exits on an unknown
+# name, so --check has to report it instead and list the valid set.
+Lora:
+  Module: sx1263

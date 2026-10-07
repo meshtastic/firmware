@@ -46,6 +46,16 @@ const static DetectionSensorTriggerHandler handlers[_meshtastic_ModuleConfig_Det
     [meshtastic_ModuleConfig_DetectionSensorConfig_TriggerType_EITHER_EDGE_ACTIVE_HIGH] = detection_trigger_either_edge,
 };
 
+// The configured trigger type arrives as an unvalidated protobuf enum, so a value outside the
+// generated range would index past the handler table. Fall back to the schema default instead.
+static meshtastic_ModuleConfig_DetectionSensorConfig_TriggerType configuredTriggerType()
+{
+    const uint32_t configured = (uint32_t)moduleConfig.detection_sensor.detection_trigger_type;
+    if (configured > (uint32_t)_meshtastic_ModuleConfig_DetectionSensorConfig_TriggerType_MAX)
+        return _meshtastic_ModuleConfig_DetectionSensorConfig_TriggerType_MIN;
+    return (meshtastic_ModuleConfig_DetectionSensorConfig_TriggerType)configured;
+}
+
 int32_t DetectionSensorModule::runOnce()
 {
     /*
@@ -89,8 +99,7 @@ int32_t DetectionSensorModule::runOnce()
     if (!Throttle::isWithinTimespanMs(lastSentToMesh,
                                       Default::getConfiguredOrDefaultMs(moduleConfig.detection_sensor.minimum_broadcast_secs))) {
         bool isDetected = hasDetectionEvent();
-        DetectionSensorTriggerVerdict verdict =
-            handlers[moduleConfig.detection_sensor.detection_trigger_type](wasDetected, isDetected);
+        DetectionSensorTriggerVerdict verdict = handlers[configuredTriggerType()](wasDetected, isDetected);
         wasDetected = isDetected;
         switch (verdict) {
         case DetectionSensorVerdictDetected:
@@ -119,13 +128,16 @@ int32_t DetectionSensorModule::runOnce()
 void DetectionSensorModule::sendDetectionMessage()
 {
     LOG_DEBUG("Detected event observed. Send message");
-    char *message = new char[40];
-    sprintf(message, "%s detected", moduleConfig.detection_sensor.name);
+    char message[40];
+    snprintf(message, sizeof(message), "%s detected", moduleConfig.detection_sensor.name);
     meshtastic_MeshPacket *p = allocDataPacket();
+    if (!p) {
+        return;
+    }
     p->want_ack = false;
     p->decoded.payload.size = strlen(message);
     memcpy(p->decoded.payload.bytes, message, p->decoded.payload.size);
-    if (moduleConfig.detection_sensor.send_bell && p->decoded.payload.size < meshtastic_Constants_DATA_PAYLOAD_LEN) {
+    if (moduleConfig.detection_sensor.send_bell && p->decoded.payload.size + 1 < meshtastic_Constants_DATA_PAYLOAD_LEN) {
         p->decoded.payload.bytes[p->decoded.payload.size] = 7;        // Bell character
         p->decoded.payload.bytes[p->decoded.payload.size + 1] = '\0'; // Bell character
         p->decoded.payload.size++;
@@ -134,16 +146,20 @@ void DetectionSensorModule::sendDetectionMessage()
     if (!channels.isDefaultChannel(0)) {
         LOG_INFO("Send message id=%d, dest=%x, msg=%.*s", p->id, p->to, p->decoded.payload.size, p->decoded.payload.bytes);
         service->sendToMesh(p);
-    } else
+    } else {
         LOG_ERROR("Message not allow on Public channel");
-    delete[] message;
+        packetPool.release(p);
+    }
 }
 
 void DetectionSensorModule::sendCurrentStateMessage(bool state)
 {
-    char *message = new char[40];
-    sprintf(message, "%s state: %i", moduleConfig.detection_sensor.name, state);
+    char message[40];
+    snprintf(message, sizeof(message), "%s state: %i", moduleConfig.detection_sensor.name, state);
     meshtastic_MeshPacket *p = allocDataPacket();
+    if (!p) {
+        return;
+    }
     p->want_ack = false;
     p->decoded.payload.size = strlen(message);
     memcpy(p->decoded.payload.bytes, message, p->decoded.payload.size);
@@ -151,14 +167,15 @@ void DetectionSensorModule::sendCurrentStateMessage(bool state)
     if (!channels.isDefaultChannel(0)) {
         LOG_INFO("Send message id=%d, dest=%x, msg=%.*s", p->id, p->to, p->decoded.payload.size, p->decoded.payload.bytes);
         service->sendToMesh(p);
-    } else
+    } else {
         LOG_ERROR("Message not allow on Public channel");
-    delete[] message;
+        packetPool.release(p);
+    }
 }
 
 bool DetectionSensorModule::hasDetectionEvent()
 {
     bool currentState = digitalRead(moduleConfig.detection_sensor.monitor_pin);
     // LOG_DEBUG("Detection Sensor Module: Current state: %i", currentState);
-    return (moduleConfig.detection_sensor.detection_trigger_type & 1) ? currentState : !currentState;
+    return (configuredTriggerType() & 1) ? currentState : !currentState;
 }

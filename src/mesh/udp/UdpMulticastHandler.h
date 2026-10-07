@@ -14,6 +14,12 @@
 
 #if HAS_ETHERNET && defined(ARCH_ESP32)
 #include <ETH.h>
+#if HAS_ETHERNET && defined(ETH_SHARED_SPI)
+#include "platform/esp32/SharedBusEthernet.h"
+#endif
+#if HAS_ETHERNET && defined(USE_CH390D)
+#include "ESP32_CH390.h"
+#endif
 #endif // HAS_ETHERNET
 
 #define UDP_MULTICAST_DEFAUL_PORT 4403 // Default port for UDP multicast is same as TCP api server
@@ -21,7 +27,7 @@
 class UdpMulticastHandler final
 {
   public:
-    UdpMulticastHandler() : isRunning(false) { udpIpAddress = IPAddress(224, 0, 0, 69); }
+    UdpMulticastHandler() : isRunning(false) { udpIpAddress = IPAddress(239, 0, 0, 69); }
 
     void start()
     {
@@ -33,8 +39,10 @@ class UdpMulticastHandler final
 #if defined(ARCH_NRF52) || defined(ARCH_PORTDUINO)
             LOG_DEBUG("UDP Listening on IP: %u.%u.%u.%u:%u", udpIpAddress[0], udpIpAddress[1], udpIpAddress[2], udpIpAddress[3],
                       UDP_MULTICAST_DEFAUL_PORT);
-#elif defined(USE_WS5500) || defined(USE_CH390D)
+#elif defined(USE_WS5500)
             LOG_DEBUG("UDP Listening on IP: %s", ETH.localIP().toString().c_str());
+#elif defined(USE_CH390D)
+            LOG_DEBUG("UDP Listening on IP: %s", CH390.localIP().toString().c_str());
 #else
             LOG_DEBUG("UDP Listening on IP: %s", WiFi.localIP().toString().c_str());
 #endif
@@ -79,14 +87,25 @@ class UdpMulticastHandler final
                 LOG_WARN("UDP packet with spoofed local from=0x%08x, dropping", mp.from);
                 return;
             }
+            // Same clamp the MQTT ingress applies: an out-of-range hop count is not relayable.
+            if (mp.hop_limit > HOP_MAX || mp.hop_start > HOP_MAX) {
+                LOG_WARN("UDP packet with invalid hop_limit(%u) or hop_start(%u), dropping", mp.hop_limit, mp.hop_start);
+                return;
+            }
             mp.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MULTICAST_UDP;
-            // Preserve the whole MeshPacket as received: while payload_variant is encrypted, `channel` is a hash (and is 0 for
-            // PKI DMs), so it must be copied verbatim for the router to attempt PKI/channel decryption. Keep
-            // pki_encrypted/public_key too so downstream auth/metadata can reflect PKI usage correctly.
+            // Authentication metadata is local-only; Router re-establishes it after successful PKI decryption.
+            mp.pki_encrypted = false;
+            mp.public_key.size = 0;
             UniquePacketPoolPacket p = packetPool.allocUniqueCopy(mp);
-            // Unset received SNR/RSSI
+            if (!p)
+                return;
+            // Unset received SNR/RSSI - no local RF measurement exists for a UDP arrival. rx_rssi
+            // has explicit presence, so also clear has_rx_rssi: `mp` may have arrived already
+            // carrying a real measurement from whichever node forwarded it onto UDP, and leaving
+            // the presence bit set would misrepresent that stale value as "0 dBm over UDP".
             p->rx_snr = 0;
             p->rx_rssi = 0;
+            p->has_rx_rssi = false;
             router->enqueueReceivedMessage(p.release());
         }
     }
@@ -100,8 +119,12 @@ class UdpMulticastHandler final
         if (!isEthernetAvailable()) {
             return false;
         }
-#elif defined(USE_WS5500) || defined(USE_CH390D)
+#elif defined(USE_WS5500)
         if (!ETH.connected()) {
+            return false;
+        }
+#elif defined(USE_CH390D)
+        if (!CH390.isConnected()) {
             return false;
         }
 #elif !defined(ARCH_PORTDUINO)

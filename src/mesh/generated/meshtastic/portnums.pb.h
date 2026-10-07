@@ -103,6 +103,12 @@ typedef enum _meshtastic_PortNum {
  Periodically broadcast by nodes in beacon mode; received by nodes with MeshBeaconConfig.FLAG_LISTEN_ENABLED.
  Carries a text message plus optional channel/preset offers for client apps. */
     meshtastic_PortNum_MESH_BEACON_APP = 37,
+    /* Acknowledged paging: alerts a person is expected to physically acknowledge, and the
+ acknowledgements themselves.
+ ENCODING: protobuf PagingPacket
+ Distinct from ALERT_APP, which is a text message the recipient never confirms, and from a
+ routing or delivery ACK, which says the packet arrived rather than that someone saw it. */
+    meshtastic_PortNum_PAGING_APP = 38,
     /* Provides a hardware serial interface to send and receive from the Meshtastic network.
  Connect to the RX/TX pins of a device with 38400 8N1. Packets received from the Meshtastic
  network is forwarded to the RX pin while sending a packet to TX will go out to the Mesh network.
@@ -148,7 +154,7 @@ typedef enum _meshtastic_PortNum {
     /* PowerStress based monitoring support (for automated power consumption testing) */
     meshtastic_PortNum_POWERSTRESS_APP = 74,
     /* LoraWAN Payload Transport
- ENCODING: compact binary LoRaWAN uplink (10-byte RF metadata + PHY payload) - see LoRaWANBridgeModule */
+ ENCODING: LoRaWANBridge protobuf, see lorawan_bridge.proto */
     meshtastic_PortNum_LORAWAN_BRIDGE = 75,
     /* Reticulum Network Stack Tunnel App
  ENCODING: Fragmented RNS Packet. Handled by Meshtastic RNS interface */

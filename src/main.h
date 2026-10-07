@@ -11,6 +11,7 @@
 #include "mesh/generated/meshtastic/telemetry.pb.h"
 #include <SPI.h>
 #include <map>
+#include <memory>
 #if defined(ARCH_ESP32) && !defined(CONFIG_IDF_TARGET_ESP32S2) && !MESHTASTIC_EXCLUDE_BLUETOOTH
 #include "nimble/NimbleBluetooth.h"
 extern NimbleBluetooth *nimbleBluetooth;
@@ -19,9 +20,11 @@ extern NimbleBluetooth *nimbleBluetooth;
 #include "NRF52Bluetooth.h"
 extern NRF52Bluetooth *nrf52Bluetooth;
 #endif
-#ifdef ARCH_NRF54L15
-#include "NRF54L15Bluetooth.h"
-extern NRF54L15Bluetooth *nrf54l15Bluetooth;
+#ifdef ARCH_PORTDUINO
+#include "platform/portduino/LinuxBluetooth.h" // self-guards; defines MESHTASTIC_LINUX_BLE when BLE is compiled in
+#ifdef MESHTASTIC_LINUX_BLE
+extern LinuxBluetooth *linuxBluetooth;
+#endif
 #endif
 #if !MESHTASTIC_EXCLUDE_I2C
 #include "detect/ScanI2CTwoWire.h"
@@ -68,7 +71,7 @@ extern UdpMulticastHandler *udpHandler;
 #endif
 
 // Global Screen singleton.
-extern graphics::Screen *screen;
+extern std::unique_ptr<graphics::Screen> screen;
 
 #if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && !MESHTASTIC_EXCLUDE_ACCELEROMETER
 #include "motion/AccelerometerThread.h"
@@ -91,6 +94,9 @@ extern uint32_t timeLastPowered;
 extern uint32_t rebootAtMsec;
 extern uint32_t shutdownAtMsec;
 extern bool suppressRebootBanner;
+#ifdef ARCH_STM32
+extern uint32_t enterDfuAtMsec; // 0 = unset; else millis() deadline for the deferred DFU jump
+#endif
 
 #if defined(MESHTASTIC_ENCRYPTED_STORAGE) && defined(MESHTASTIC_PHONEAPI_ACCESS_CONTROL)
 // Set by PhoneAPI::handleLockdownAuthInline after a successful unlock.
@@ -113,7 +119,8 @@ extern bool runASAP;
 
 extern bool pauseBluetoothLogging;
 
-void nrf52Setup(), esp32Setup(), nrf52Loop(), esp32Loop(), rp2040Setup(), rp2040Loop(), clearBonds(), enterDfuMode();
+void nrf52Setup(), esp32Setup(), nrf52Loop(), esp32Loop(), rp2040Setup(), rp2040Loop(), clearBonds(), enterDfuMode(),
+    nrf52FlashQuiesce(), stm32wlSetup();
 #ifdef ARCH_ESP32
 void esp32ReleaseBluetoothMemoryIfUnused();
 #endif

@@ -52,7 +52,7 @@ float RCWL9620Sensor::getDistance()
     _wire->requestFrom(_addr, (uint8_t)3);
 
     if (_wire->available() < 3) {
-        LOG_DEBUG("[RCWL9620] less than 3 octets !");
+        LOG_DEBUG("[RCWL9620] less than 3 octets ");
         return 0.0;
     }
 

@@ -8,14 +8,11 @@
  */
 class SinglePortModule : public MeshModule
 {
-  protected:
-    meshtastic_PortNum ourPortNum;
-
   public:
     /** Constructor
      * name is for debugging output
      */
-    SinglePortModule(const char *_name, meshtastic_PortNum _ourPortNum) : MeshModule(_name), ourPortNum(_ourPortNum) {}
+    SinglePortModule(const char *_name, meshtastic_PortNum _ourPortNum) : MeshModule(_name, _ourPortNum) {}
 
   protected:
     /**
@@ -32,6 +29,8 @@ class SinglePortModule : public MeshModule
     {
         // Update our local node info with our position (even if we don't decide to update anyone else)
         meshtastic_MeshPacket *p = router->allocForSending();
+        if (!p)
+            return nullptr;
         p->decoded.portnum = ourPortNum;
 
         return p;
