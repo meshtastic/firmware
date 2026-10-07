@@ -22,11 +22,6 @@
 #elif SX126X_RX_REARM_AT_TX_DONE && defined(MESHTASTIC_RX_READOUT_TASK)
 #define SX126X_REARM_FROM_TASK 1
 #endif
-// Standby and the TX/RX fallback on STDBY_XOSC keep the oscillator running, so SET_RX, SET_CAD and SET_TX skip a TCXO's
-// start-up. -DSX126X_STANDBY_XOSC=0 leaves the chip on STDBY_RC.
-#ifndef SX126X_STANDBY_XOSC
-#define SX126X_STANDBY_XOSC 1
-#endif
 
 /**
  * \brief Adapter for SX126x radio family. Implements common logic for child classes.

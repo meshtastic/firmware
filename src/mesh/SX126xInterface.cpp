@@ -427,14 +427,12 @@ template <typename T> bool SX126xInterface<T>::reinitChip()
         LOG_DEBUG_RADIO("Set DIO2 as %sRF switch, result: %d", dio2AsRfSwitch ? "" : "not ", res);
     }
 
-#if SX126X_STANDBY_XOSC
     if (res == RADIOLIB_ERR_NONE && tcxoVoltage > 0) {
         // Standby and TX/RX fallback on STDBY_XOSC keep the TCXO powered: from STDBY_RC every SetRx and SetTx
         // first waits out the TCXO start-up delay (5 ms by RadioLib's default).
         const int16_t xoscRes = lora.setStandbyXOSC(true);
         LOG_DEBUG("Keep TCXO on in standby, result: %d", xoscRes);
     }
-#endif
 
 // If a pin isn't defined, we set it to RADIOLIB_NC, it is safe to always do external RF switching with RADIOLIB_NC as it has
 // no effect
@@ -476,16 +474,6 @@ template <typename T> bool SX126xInterface<T>::reinitChip()
 
     if (res == RADIOLIB_ERR_NONE)
         res = lora.setCRC(RADIOLIB_SX126X_LORA_CRC_ON);
-
-#if SX126X_REARM_IN_ISR && SX126X_STANDBY_XOSC
-    // After TX_DONE the chip falls back to STDBY_RC, where a DIO3 TCXO is off, so the SET_RX the interrupt writes would
-    // still wait out the TCXO start-up (5 ms) before listening. Keep the oscillator running in standby instead; this
-    // also sets the RX/TX fallback mode to STDBY_XOSC.
-    if (res == RADIOLIB_ERR_NONE) {
-        const int16_t xoscErr = lora.setStandbyXOSC(true);
-        LOG_INFO("SX126x standby set to XOSC %s%d", radioLibErr, xoscErr);
-    }
-#endif
 
 #ifdef SX126X_NO_POWER_OPTIMIZATION_TABLE
     // begin() applied the optimization table; re-apply the fixed PA config.
