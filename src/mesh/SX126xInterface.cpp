@@ -707,6 +707,9 @@ template <typename T> bool SX126xInterface<T>::adoptReceiveArmedFromIsr()
     LOG_TRACE("Radio back in RX at TX_DONE, %u ms before the handler ran", (unsigned)heldMs);
     // The tail of startReceive(): the chip is already listening, so only the bookkeeping and the RX interrupt remain.
     RadioLibInterface::startReceive();
+    // The ISR's RX is continuous and the TX's standby cleared the flag, so record it: otherwise the next RX_DONE
+    // cannot resume and startReceive()'s standby aborts a second packet already arriving.
+    rxArmedContinuous = true;
     enableInterrupt(isrRxLevel0);
     checkRxDoneIrqFlag(); // an RX_DONE that completed while the handler waited
     return true;
