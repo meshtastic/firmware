@@ -203,6 +203,11 @@ void setupNicheGraphics();
 #include "nicheGraphics.h"
 #endif
 
+#ifdef MESHTASTIC_INCLUDE_INKHUD
+#include "graphics/niche/InkHUD/Applets/Bases/Map/MapTile.h"
+#include "graphics/niche/InkHUD/Applets/Bases/Map/MapTileSD.h"
+#endif
+
 #if defined(HW_SPI1_DEVICE) && defined(ARCH_ESP32)
 #if defined(HAS_SDCARD) && defined(SDCARD_USE_SPI1)
 // Reuse FSCommon's SPI_HSPI instance to avoid double-initializing SPI2_HOST in arduino-esp32 3.x.
@@ -1177,6 +1182,12 @@ void setup()
 #endif
 
     auto rIf = initLoRa();
+
+#ifdef MESHTASTIC_INCLUDE_INKHUD
+    // After the radio, not before: this holds spiLock, which radio SPI also uses.
+    if (map_tile_count == 0)
+        NicheGraphics::InkHUD::MapTileSD::tryLoad();
+#endif
 
     lateInitVariant(); // Do board specific init (see extra_variants/README.md for documentation)
 

@@ -2,6 +2,7 @@
 
 #include "./MapApplet.h"
 #include "./MapTile.h"
+#include "./MapTileSD.h"
 #include "WaypointStore.h"
 #include "WaypointUtils.h"
 
@@ -113,6 +114,38 @@ InkHUD::MapApplet::MapApplet()
         gpsStatusObserver.observe(&gpsStatus->onNewStatus);
     waypointStoreObserver.observe(&waypointStore);
 }
+
+// Redirect tile reads below to MapTileSD, which falls back to compiled MapTile.h data.
+#undef map_tile_layout
+#undef map_tile_grid_cols
+#undef map_tile_grid_rows
+#undef map_tile_block_count
+#undef map_tile_count
+#undef map_tile_zooms
+#undef map_tile_tx
+#undef map_tile_ty
+#undef map_tile_block_zooms
+#undef map_tile_block_tx
+#undef map_tile_block_ty
+#undef map_tile_kinds
+#undef map_tile_sizes
+#undef map_tile_offsets
+#undef map_tile_data
+#define map_tile_layout NicheGraphics::InkHUD::MapTileSD::layout()
+#define map_tile_grid_cols NicheGraphics::InkHUD::MapTileSD::gridCols()
+#define map_tile_grid_rows NicheGraphics::InkHUD::MapTileSD::gridRows()
+#define map_tile_block_count NicheGraphics::InkHUD::MapTileSD::blockCount()
+#define map_tile_count NicheGraphics::InkHUD::MapTileSD::count()
+#define map_tile_zooms NicheGraphics::InkHUD::MapTileSD::zooms()
+#define map_tile_tx NicheGraphics::InkHUD::MapTileSD::tx()
+#define map_tile_ty NicheGraphics::InkHUD::MapTileSD::ty()
+#define map_tile_block_zooms NicheGraphics::InkHUD::MapTileSD::blockZooms()
+#define map_tile_block_tx NicheGraphics::InkHUD::MapTileSD::blockTx()
+#define map_tile_block_ty NicheGraphics::InkHUD::MapTileSD::blockTy()
+#define map_tile_kinds NicheGraphics::InkHUD::MapTileSD::kinds()
+#define map_tile_sizes NicheGraphics::InkHUD::MapTileSD::sizes()
+#define map_tile_offsets NicheGraphics::InkHUD::MapTileSD::offsets()
+#define map_tile_data NicheGraphics::InkHUD::MapTileSD::data()
 
 int InkHUD::MapApplet::onGpsStatusUpdate(const meshtastic::Status *status)
 {
@@ -417,7 +450,8 @@ void InkHUD::MapApplet::drawMapTileBackground(int zoom)
     const float minWy = gpxY - height() * 0.5f * tileWorldPx;
     const float maxWy = gpxY + height() * 0.5f * tileWorldPx;
 
-    for (int i = 0; i < map_tile_count; i++) {
+    const int tileCount = (int)map_tile_count;
+    for (int i = 0; i < tileCount; i++) {
         if (tileZoomAt(i) != tileZoom)
             continue;
 
