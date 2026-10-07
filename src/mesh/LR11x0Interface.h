@@ -2,6 +2,15 @@
 #if RADIOLIB_EXCLUDE_LR11X0 != 1
 #include "RadioLibInterface.h"
 
+// Write the TX payload into the chip before the channel scan, so a clear verdict sends only packet params, IRQ setup
+// and SET_TX. It sets RadioLib's staged mode directly, so it is on where RADIOLIB_GODMODE is; 0 opts out.
+#ifndef LR11X0_TX_PRESTAGE
+#define LR11X0_TX_PRESTAGE RADIOLIB_GODMODE
+#endif
+#if LR11X0_TX_PRESTAGE && !RADIOLIB_GODMODE
+#error "LR11X0_TX_PRESTAGE sets RadioLib's staged mode directly: build with -DRADIOLIB_GODMODE=1"
+#endif
+
 /**
  * \brief Adapter for LR11x0 radio family. Implements common logic for child classes.
  * \tparam T RadioLib module type for LR11x0: SX1262, SX1268.
@@ -96,6 +105,14 @@ template <class T> class LR11x0Interface : public RadioLibInterface
 
     /** Recover a chip that lost its runtime state: hardware-reset via begin() and reprogram */
     bool recoverChipStateLoss() override { return reinitChip() && programModemParams() == RADIOLIB_ERR_NONE; }
+
+#if LR11X0_TX_PRESTAGE
+    /** With a payload staged before the scan, send only what follows it */
+    int16_t launchTransmit(size_t numbytes) override;
+    /** The payload isChannelActive() wrote into the chip's buffer before the scan, or 0 bytes if none */
+    size_t prestagedLen = 0;
+    uint32_t prestagedId = 0;
+#endif
 
     /// The TCXO Vref that init() settled on, so reinitChip() can begin() with the same oscillator setup
     float resolvedTcxoVoltage = 0;
