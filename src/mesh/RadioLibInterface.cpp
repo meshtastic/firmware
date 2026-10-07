@@ -91,11 +91,16 @@ void INTERRUPT_ATTR RadioLibInterface::isrLevel0Common(PendingISR cause)
 
 void INTERRUPT_ATTR RadioLibInterface::isrRxLevel0()
 {
+    // With a readout task, it takes the frame out of the radio, and the interrupt stays enabled for the next one
+    if (instance->rxDoneFromIsr())
+        return;
     isrLevel0Common(ISR_RX);
 }
 
 void INTERRUPT_ATTR RadioLibInterface::isrTxLevel0()
 {
+    // Before the notify: the handler that would otherwise re-arm RX can wait behind a main-loop hold.
+    instance->rearmReceiveFromIsr();
     isrLevel0Common(ISR_TX);
 }
 
@@ -113,7 +118,13 @@ bool RadioLibInterface::canSendImmediately()
     // To do otherwise would be doubly bad because not only would we drop the packet that was on the way in,
     // we almost certainly guarantee no one outside will like the packet we are sending.
     bool busyTx = sendingPacket != NULL;
-    bool busyRx = isReceiving && isActivelyReceiving();
+    // isActivelyReceiving() reads the chip over SPI. Unlocked, it can split the readout task's command and wedge BUSY for
+    // RadioLib's whole BUSY timeout. The lock is recursive, so a caller already holding it re-enters.
+    bool busyRx = false;
+    if (isReceiving) {
+        RadioSequence seq(this);
+        busyRx = isActivelyReceiving();
+    }
 
     if (busyTx || busyRx) {
         if (busyTx) {
@@ -446,25 +457,50 @@ void RadioLibInterface::deliverPendingIrqFromPoll(PendingISR cause)
 
 void RadioLibInterface::onNotify(uint32_t notification)
 {
+    // Frames the readout task captured whose ISR_RX a later notification overwrote. Deliver them, and re-arm as ISR_RX
+    // would unless this thread has moved the radio on.
+    if (notification != ISR_RX && deliverCapturedFrames() && isReceiving)
+        notify(ISR_RX, false);
 
     switch (notification) {
     case ISR_TX: {
         // The chip is deaf in standby until startReceive(), so the airtime log and printPacket() wait until after it.
-        meshtastic_MeshPacket *sent = handleTransmitInterrupt(); // radio already back on the home config
-        // Let the hooks pre-stage the radio for the NEXT queued packet. Not required for correctness -
-        // TRANSMIT_DELAY_COMPLETED asks again before the scan, which is where the answer is acted on -
-        // but it keeps the post-TX listen window on the channel we are about to transmit on.
-        (void)RadioTxHooks::beforeTransmit(this, txQueue.getFront());
-        startReceive();
+        meshtastic_MeshPacket *sent;
+        {
+            // The detach and the re-arm are one sequence: a readout between them would clear the flags the arm
+            // sets up, and the hook's pre-stage switch must not land mid-readout either. The adopt below needs it
+            // too: inside it the readout task cannot be partway through the re-arm it is taking over.
+            RadioSequence seq(this);
+            sent = handleTransmitInterrupt(); // radio already back on the home config
+            // Let the hooks pre-stage the radio for the NEXT queued packet. Not required for correctness -
+            // TRANSMIT_DELAY_COMPLETED asks again before the scan, which is where the answer is acted on -
+            // but it keeps the post-TX listen window on the channel we are about to transmit on.
+            (void)RadioTxHooks::beforeTransmit(this, txQueue.getFront());
+            if (!adoptReceiveArmedFromIsr())
+                startReceive();
+        }
         setTransmitDelay();
-        finishSentPacket(sent);
+        finishSentPacket(sent); // outside the lock: it only logs airtime and prints
         break;
     }
     case ISR_RX:
-        handleReceiveInterrupt();
-        // Re-arm for the next packet. rearmReceive() avoids a standby where the chip is already in RX,
-        // so a second packet that is already arriving is not aborted.
-        rearmReceive();
+        if (rxReadoutActive()) {
+            // The readout task has already taken the frames out of the radio, so this makes no RadioLib calls and
+            // deliberately runs outside the radio-sequence lock: it enqueues packets, and holding the lock across
+            // that would delay the next readout for no reason.
+            deliverCapturedFrames();
+            if (!isReceiving) // this thread has since moved the radio on (a scan or a TX): leave it there
+                break;
+        } else {
+            RadioSequence seq(this);
+            handleReceiveInterrupt();
+        }
+        {
+            // Re-arm for the next packet, as one sequence. rearmReceive() avoids a standby where the chip is
+            // already in RX, so a second packet that is already arriving is not aborted.
+            RadioSequence seq(this);
+            rearmReceive();
+        }
         setTransmitDelay();
         break;
     case ISR_POLL_TICK:
@@ -509,6 +545,9 @@ void RadioLibInterface::onNotify(uint32_t notification)
                 } else if (action == RadioTxHook::PRETX_DEFER) {
                     setTransmitDelay(); // the radio config moved, so re-run the delay and scan on it
                 } else {
+                    // The scan and the transmit it decides are one sequence: a readout landing between them would
+                    // clear the flags startTransmit() is about to set up, or on SX128x leave the chip in standby.
+                    RadioSequence seq(this);
                     // Listen-before-talk: a CAD preamble scan immediately before we key up.
                     LOG_DEBUG("CAD arm");
                     scanForTx = txp;
@@ -690,40 +729,57 @@ void RadioLibInterface::finishSentPacket(meshtastic_MeshPacket *p)
     packetPool.release(p);
 }
 
-void RadioLibInterface::handleReceiveInterrupt()
+/// Whether readData() came back with the chip's terminal flags still latched. Every driver decides a CRC or damaged-header
+/// verdict BEFORE its clear and returns it after (SX126x asserts crcState one line past clearIrqStatus(); SX127x has no
+/// early return at all), so those two codes mean the flags are already gone and clearing again could take the RX_DONE of a
+/// frame that arrived meanwhile. Every other error - an Rx timeout, a failed SPI stream check or buffer read, a wrong
+/// modem - returns before the clear, leaving the flags to be dropped by hand.
+static bool readDataLeftIrqFlags(int16_t state)
 {
-    // when this is called, we should be in receive mode - if we are not, just jump out instead of bombing. Possible Race
-    // Condition?
+    return state != RADIOLIB_ERR_NONE && state != RADIOLIB_ERR_CRC_MISMATCH && state != RADIOLIB_ERR_LORA_HEADER_DAMAGED;
+}
+
+void RadioLibInterface::handleReceiveInterrupt(const CapturedRxInfo *captured)
+{
     const bool wasCadHandoff = cadHandoffRxStart != 0;
     cadHandoffRxStart = 0; // this RX ends the wait either way; the outcome is logged below
     preambleHoldStart = 0; // likewise the reception a held preamble announced
 
-    if (!isReceiving) {
-        LOG_ERROR("handleReceiveInterrupt called while not in rx mode");
-        return;
-    }
+    size_t length;
+    if (captured) {
+        length = captured->len; // the readout task already took the frame into radioBuffer
+    } else {
+        // when this is called, we should be in receive mode - if we are not, just jump out instead of bombing. Possible
+        // Race Condition?
+        if (!isReceiving) {
+            LOG_ERROR("handleReceiveInterrupt called while not in rx mode");
+            clearReadIrqs(); // nothing will read this frame out, and a latched RX_DONE holds DIO1 high
+            return;
+        }
 
-    isReceiving = false;
+        isReceiving = false;
 
-    // A CAD handoff's RX window expired with nothing on air. There is no packet to read, so don't count
-    // it as a bad one - the caller's rearmReceive() puts the radio back to listening.
-    if (iface->checkIrq(RADIOLIB_IRQ_RX_DONE) != 1 && iface->checkIrq(RADIOLIB_IRQ_TIMEOUT) == 1) {
-        LOG_DEBUG("CAD>RX empty");
-        iface->clearIrq(1UL << RADIOLIB_IRQ_TIMEOUT);
-        return;
+        // A CAD handoff's RX window expired with nothing on air. There is no packet to read, so don't count
+        // it as a bad one - the caller's rearmReceive() puts the radio back to listening.
+        if (iface->checkIrq(RADIOLIB_IRQ_RX_DONE) != 1 && iface->checkIrq(RADIOLIB_IRQ_TIMEOUT) == 1) {
+            LOG_DEBUG("CAD>RX empty");
+            iface->clearIrq(1UL << RADIOLIB_IRQ_TIMEOUT);
+            return;
+        }
+
+        // read the number of actually received bytes
+        length = iface->getPacketLength();
     }
 
     if (wasCadHandoff)
         LOG_DEBUG("CAD>RX pkt");
 
-    // read the number of actually received bytes
-    size_t length = iface->getPacketLength();
-
     // Some drivers report this as a 16 bit value, so a bad readback can overrun radioBuffer in readData()
     if (length > sizeof(radioBuffer)) {
         LOG_ERROR("Ignore rx packet, bad length %u", (unsigned int)length);
         rxBad++;
-        clearReadIrqs(); // no readData() ran to clear them, and no readout is waiting on them
+        if (!captured) // for a captured frame the readout task's readData() already cleared them
+            clearReadIrqs();
         return;
     }
 
@@ -733,12 +789,13 @@ void RadioLibInterface::handleReceiveInterrupt()
     if (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
         LOG_WARN("lora rx disabled: Region unset");
         airTime->logAirtime(RX_ALL_LOG, rxMsec);
-        clearReadIrqs(); // no readData() ran to clear them, and no readout is waiting on them
+        if (!captured) // for a captured frame the readout task's readData() already cleared them
+            clearReadIrqs();
         return;
     }
 #endif
 
-    int state = iface->readData((uint8_t *)&radioBuffer, length);
+    int state = captured ? captured->state : iface->readData((uint8_t *)&radioBuffer, length);
 #if ARCH_PORTDUINO
     if (portduino_config.logoutputlevel == level_trace) {
         printBytes("Raw incoming packet: ", (uint8_t *)&radioBuffer, length);
@@ -756,10 +813,17 @@ void RadioLibInterface::handleReceiveInterrupt()
         LOG_ERROR("Ignore rx packet, error=%d (maybe id=0x%08x fr=0x%08x to=0x%08x flags=0x%02x rxSNR=%g rxRSSI=%i "
                   "nextHop=0x%x relay=0x%x)",
                   state, radioBuffer.header.id, radioBuffer.header.from, radioBuffer.header.to, radioBuffer.header.flags,
-                  iface->getSNR(), lround(iface->getRSSI()), radioBuffer.header.next_hop, radioBuffer.header.relay_node);
+                  captured ? captured->snr : iface->getSNR(), captured ? (long)captured->rssi : lround(iface->getRSSI()),
+                  radioBuffer.header.next_hop, radioBuffer.header.relay_node);
         rxBad++;
 
         airTime->logAirtime(RX_ALL_LOG, rxMsec);
+        // Only where readData() returned before its own clear. A CRC mismatch is the common error on a noisy
+        // channel and comes back with the flags already cleared, so clearing again would drop the RX_DONE of a
+        // frame that completed while this error was being logged. The task clears its own failed reads, so a
+        // captured frame is never ours to clear.
+        if (!captured && readDataLeftIrqFlags(state))
+            clearReadIrqs();
 
     } else {
         // Skip the 4 headers that are at the beginning of the rxBuf
@@ -802,7 +866,14 @@ void RadioLibInterface::handleReceiveInterrupt()
             mp->next_hop = mp->hop_start == 0 ? NO_NEXT_HOP_PREFERENCE : radioBuffer.header.next_hop;
             mp->relay_node = mp->hop_start == 0 ? NO_RELAY_NODE : radioBuffer.header.relay_node;
 
-            addReceiveMetadata(mp);
+            if (captured) {
+                // What addReceiveMetadata() reads, read by the task before the next frame could replace it
+                mp->rx_snr = captured->snr;
+                mp->rx_rssi = captured->rssi;
+                mp->has_rx_rssi = true;
+            } else {
+                addReceiveMetadata(mp);
+            }
 
             mp->which_payload_variant =
                 meshtastic_MeshPacket_encrypted_tag; // Mark that the payload is still encrypted at this point
@@ -825,6 +896,10 @@ void RadioLibInterface::handleReceiveInterrupt()
 
 void RadioLibInterface::startReceive()
 {
+#ifdef MESHTASTIC_RX_READOUT_TASK
+    if (!rxReadoutTaskTried)
+        startRxReadoutTask();
+#endif
     isReceiving = true;
     // Drivers only reach here once the chip actually accepted the RX start, so the radio is alive again.
     // This is the sole place the recovery ladder is cleared - nothing short of an armed RX counts as fixed.
@@ -951,6 +1026,7 @@ void RadioLibInterface::periodicRadioMaintenance()
     // nothing would ever re-arm it. This periodic tick is that retry; maybeRecoverChipStateLoss() throttles.
     if (rxOffline) {
         LOG_WARN("Radio RX offline, retrying");
+        RadioSequence seq(this); // a re-init and the arm that follows it are one sequence
         if (maybeRecoverChipStateLoss())
             startReceive();
         return; // a chip just re-inited (or still dead) has no use for an AGC reset this tick
@@ -992,6 +1068,7 @@ bool RadioLibInterface::maybeRecoverChipStateLoss()
     lastChipRecoveryMs = Time::skipZero(Time::getMillis());
     RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
     LOG_ERROR("Radio chip state lost mid-operation, re-init");
+    RadioSequence seq(this); // begin() and the chip setup behind it must not be split by a readout
     bool recovered = recoverChipStateLoss();
     LOG_INFO("Radio re-init %s", recovered ? "succeeded" : "failed");
     return recovered;
@@ -1005,12 +1082,196 @@ void RadioLibInterface::clearReadIrqs()
 bool RadioLibInterface::checkRxDoneIrqFlag()
 {
     if (iface->checkIrq(RADIOLIB_IRQ_RX_DONE)) {
+        if (wakeRxReadout()) { // the readout task takes it, and notifies ISR_RX itself
+            LOG_WARN("caught missed RX_DONE, woke the readout task");
+            return true;
+        }
         LOG_WARN("caught missed RX_DONE");
         notify(ISR_RX, true);
         return true;
     }
     return false;
 }
+
+#ifdef MESHTASTIC_RX_READOUT_TASK
+// ESP-IDF counts a task's stack in bytes, the other ports in words
+#ifdef ARCH_ESP32
+#define RX_READOUT_STACK 4096
+#else
+#define RX_READOUT_STACK 512
+#endif
+
+bool RadioLibInterface::lockRadioSequence()
+{
+    // Null before the task exists, and there is nothing to exclude until then
+    if (!radioSeqMutex)
+        return false;
+    return xSemaphoreTakeRecursive(radioSeqMutex, portMAX_DELAY) == pdTRUE;
+}
+
+void RadioLibInterface::unlockRadioSequence()
+{
+    if (radioSeqMutex)
+        xSemaphoreGiveRecursive(radioSeqMutex);
+}
+
+void RadioLibInterface::startRxReadoutTask()
+{
+    rxReadoutTaskTried = true;
+    // Before the task, so it can never run unguarded
+    radioSeqMutex = xSemaphoreCreateRecursiveMutex();
+    if (!radioSeqMutex) {
+        LOG_ERROR("RX readout task not started, no mutex");
+        return;
+    }
+    // Above the main loop, so a long hold there cannot delay a readout
+    UBaseType_t priority = uxTaskPriorityGet(nullptr) + 2;
+    if (priority < tskIDLE_PRIORITY + 3)
+        priority = tskIDLE_PRIORITY + 3;
+    if (priority > configMAX_PRIORITIES - 1)
+        priority = configMAX_PRIORITIES - 1;
+    // On the main loop's core, so the task preempts the loop as it would on one core: none of the loop's RadioLib calls
+    // can fall between the task's.
+    TaskHandle_t task = nullptr;
+    int core = -1;
+#ifdef ARCH_ESP32
+    core = xPortGetCoreID();
+    if (xTaskCreatePinnedToCore(rxReadoutTaskMain, "RxReadout", RX_READOUT_STACK, this, priority, &task, core) != pdPASS)
+        task = nullptr;
+#else
+    if (xTaskCreate(rxReadoutTaskMain, "RxReadout", RX_READOUT_STACK, this, priority, &task) != pdPASS)
+        task = nullptr;
+#if defined(ARCH_RP2040) && configUSE_CORE_AFFINITY == 1 && configNUMBER_OF_CORES > 1
+    if (task) {
+        core = rp2040.cpuid();
+        vTaskCoreAffinitySet(task, 1u << core);
+    }
+#endif
+#endif
+    rxReadoutTask = task;
+    LOG_INFO("RX readout task %s, priority %u (loop %u), core %d", task ? "started" : "not started", (unsigned)priority,
+             (unsigned)uxTaskPriorityGet(nullptr), core);
+}
+
+/// RX_DONE: wake the readout task and return. The radio is read there, with interrupts enabled, not here.
+bool INTERRUPT_ATTR RadioLibInterface::rxDoneFromIsr()
+{
+    if (!rxReadoutTask)
+        return false;
+    BaseType_t woken = pdFALSE;
+    vTaskNotifyGiveFromISR(rxReadoutTask, &woken);
+    YIELD_FROM_ISR(woken);
+    return true;
+}
+
+bool RadioLibInterface::wakeRxReadout()
+{
+    if (!rxReadoutTask)
+        return false;
+    // No wait here. This is called from inside driver RX arms, which hold the radio-sequence lock, so waiting for a
+    // task that needs that same lock would deadlock. The lock is also what makes waiting unnecessary: the task
+    // cannot touch the radio until the caller's sequence ends, and it notifies ISR_RX itself once it has.
+    xTaskNotifyGive(rxReadoutTask);
+    return true;
+}
+
+bool INTERRUPT_ATTR RadioLibInterface::requestRearmFromIsr()
+{
+    if (!rxReadoutTask)
+        return false;
+    rxRearmFromTaskPending = true;
+    BaseType_t woken = pdFALSE;
+    vTaskNotifyGiveFromISR(rxReadoutTask, &woken);
+    YIELD_FROM_ISR(woken);
+    return true;
+}
+
+void RadioLibInterface::rxReadoutTaskMain(void *arg)
+{
+    auto *self = static_cast<RadioLibInterface *>(arg);
+    for (;;) {
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        if (self->rxRearmFromTaskPending) {
+            self->rxRearmFromTaskPending = false;
+            self->rearmReceiveFromTask();
+        }
+        self->readOutFromTask();
+    }
+}
+
+/// The RadioLib calls handleReceiveInterrupt() and addReceiveMetadata() make, as soon as RX_DONE rises. Each takes the SPI
+/// lock for itself; the radio-sequence lock below is what keeps the whole readout out of the radio thread's sequences.
+void RadioLibInterface::readOutFromTask()
+{
+    // Never between the RadioLib calls of a sequence on the radio thread: readData() below clears the chip's IRQ
+    // flags, and on SX128x drops it to standby, either of which would break a scan, arm or transmit in flight.
+    RadioSequence seq(this);
+    if (iface->checkIrq(RADIOLIB_IRQ_RX_DONE) != 1)
+        return; // an edge for a frame already taken
+    const size_t len = iface->getPacketLength();
+    const uint8_t head = rxRingHead;
+    const uint8_t next = (uint8_t)((head + 1) % rxRingSize);
+    if (len > sizeof(rxRing[0].data) || next == rxRingTail) {
+        // A length that would overrun the buffer, or the thread has not taken the last 8: the frame is lost. Clear its
+        // flags so the next RX_DONE raises a fresh edge.
+        clearReadIrqs();
+        if (len > sizeof(rxRing[0].data))
+            rxReadoutBadLength = rxReadoutBadLength + 1;
+        else
+            rxReadoutDropped = rxReadoutDropped + 1;
+        notify(ISR_RX, !rxArmedBeforeTxDone); // for the counter line, and the re-arm
+        return;
+    }
+    CapturedFrame &f = rxRing[head];
+    f.info.state = iface->readData(f.data, len);
+    if (readDataLeftIrqFlags(f.info.state)) {
+        // This read came back before RadioLib's own clear, so RX_DONE is still latched for a frame nobody will ever
+        // read. Drop it here, while we know that: leaving it would have checkRxDoneIrqFlag() wake this task again for
+        // the same dead event, round after round. The radio thread cannot tell - a captured frame's flags are not its
+        // to judge - which is why this belongs to the reader.
+        clearReadIrqs();
+    }
+    f.info.snr = iface->getSNR();
+    f.info.rssi = lround(iface->getRSSI());
+    f.info.len = (uint16_t)len;
+    rxReadoutFrames = rxReadoutFrames + 1;
+    __asm__ __volatile__("" ::: "memory"); // the entry is written before the head that publishes it
+    rxRingHead = next;
+    notify(ISR_RX, !rxArmedBeforeTxDone);
+}
+
+bool RadioLibInterface::takeCapturedFrame(CapturedRxInfo &info)
+{
+    // The task's counters, logged from this thread whenever a frame was lost
+    static uint32_t loggedDropped = 0, loggedBadLength = 0;
+    if (rxReadoutDropped != loggedDropped || rxReadoutBadLength != loggedBadLength) {
+        loggedDropped = rxReadoutDropped;
+        loggedBadLength = rxReadoutBadLength;
+        LOG_WARN("RX readout task: %u frames read, %u dropped (ring full), %u bad length", (unsigned)rxReadoutFrames,
+                 (unsigned)loggedDropped, (unsigned)loggedBadLength);
+    }
+    if (rxRingTail == rxRingHead)
+        return false;
+    __asm__ __volatile__("" ::: "memory"); // read the entry only after seeing the head that published it
+    const CapturedFrame &f = rxRing[rxRingTail];
+    info = f.info;
+    memcpy(&radioBuffer, f.data, info.len);
+    __asm__ __volatile__("" ::: "memory"); // and free its slot only after reading it
+    rxRingTail = (uint8_t)((rxRingTail + 1) % rxRingSize);
+    return true;
+}
+
+unsigned RadioLibInterface::deliverCapturedFrames()
+{
+    unsigned delivered = 0;
+    CapturedRxInfo info;
+    while (takeCapturedFrame(info)) {
+        delivered++;
+        handleReceiveInterrupt(&info);
+    }
+    return delivered;
+}
+#endif
 
 void RadioLibInterface::checkTxDoneIrqFlag()
 {

@@ -283,6 +283,8 @@ int16_t RF95Interface::programModemParams()
 
 bool RF95Interface::reconfigure()
 {
+    // A readout between these calls would clear the flags they set up, or move the chip out from under them
+    RadioSequence seq(this);
     RadioLibInterface::reconfigure();
 
     // set mode to standby - a chip that lost its state to a reset/brownout can fail here,
