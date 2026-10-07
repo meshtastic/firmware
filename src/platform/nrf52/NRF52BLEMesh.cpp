@@ -1,0 +1,229 @@
+#include "configuration.h"
+
+#if HAS_BLE_MESH && defined(ARCH_NRF52)
+
+#include "NRF52BLEMesh.h"
+#include "NRF52Bluetooth.h"
+#include "main.h"
+#include "mesh/Router.h"
+#include <bluefruit.h>
+
+static_assert(BLE_MESH_ADV_TOTAL_MAX <= BLE_GAP_ADV_SET_DATA_SIZE_EXTENDED_MAX_SUPPORTED,
+              "advertisement budget must fit the SoftDevice's extended adv data limit");
+
+NRF52BLEMesh *NRF52BLEMesh::instance = nullptr;
+
+static uint8_t bleMeshScanBuffer[BLE_GAP_SCAN_BUFFER_EXTENDED_MAX_SUPPORTED];
+static ble_data_t bleMeshScanReportData = {.p_data = bleMeshScanBuffer, .len = sizeof(bleMeshScanBuffer)};
+static ble_gap_scan_params_t bleMeshScanParams = {
+    .extended = 1,
+    .report_incomplete_evts = 0,
+    .active = 0,
+    .filter_policy = BLE_GAP_SCAN_FP_ACCEPT_ALL,
+    .scan_phys = BLE_GAP_PHY_1MBPS,
+    .interval = BLE_MESH_SCAN_INTERVAL,
+    .window = BLE_MESH_SCAN_WINDOW,
+    .timeout = 0,
+    .channel_mask = {0, 0, 0, 0, 0},
+};
+
+void NRF52BLEMesh::start()
+{
+    if (isRunning) {
+        LOG_DEBUG("BLE mesh already running");
+        return;
+    }
+
+    instance = this;
+    isRunning = true;
+    LOG_INFO("BLE mesh started (waiting for Bluetooth ready)");
+}
+
+bool NRF52BLEMesh::platformReady()
+{
+    return nrf52BluetoothReady;
+}
+
+void NRF52BLEMesh::onBluetoothReady()
+{
+    if (!isRunning)
+        return;
+
+    Bluefruit.setEventCallback(onBleEvent);
+    startScanning();
+    LOG_INFO("BLE mesh Bluetooth ready, scanning");
+}
+
+void NRF52BLEMesh::stop()
+{
+    if (!isRunning)
+        return;
+
+    platformEndAdvertising();
+    stopScanning();
+    isRunning = false;
+    LOG_INFO("BLE mesh stopped");
+}
+
+bool NRF52BLEMesh::platformBeginAdvertising(const uint8_t *adv, size_t len)
+{
+    if (len > sizeof(advBuf))
+        return false;
+
+    // sd_ble_gap_adv_set_configure retains this pointer rather than copying, so the payload lives in
+    // this object for the whole burst, not in the caller's buffer.
+    memcpy(advBuf, adv, len);
+    advBufLen = (uint8_t)len;
+
+    ble_gap_adv_data_t gapAdvData = {};
+    gapAdvData.adv_data.p_data = advBuf;
+    gapAdvData.adv_data.len = advBufLen;
+    gapAdvData.scan_rsp_data.p_data = NULL;
+    gapAdvData.scan_rsp_data.len = 0;
+
+    ble_gap_adv_params_t advParams = {};
+    advParams.properties.type = BLE_GAP_ADV_TYPE_EXTENDED_NONCONNECTABLE_NONSCANNABLE_UNDIRECTED;
+    advParams.p_peer_addr = NULL;
+    advParams.filter_policy = BLE_GAP_ADV_FP_ANY;
+    advParams.interval = BLE_MESH_ADV_INTERVAL;
+    advParams.duration = 0; // bounded by max_adv_evts, not by time
+    advParams.primary_phy = BLE_GAP_PHY_1MBPS;
+    advParams.secondary_phy = BLE_GAP_PHY_1MBPS;
+    advParams.max_adv_evts = BLE_MESH_ADV_EVENTS;
+
+    if (!ownsDedicatedSet && advHandle == BLE_GAP_ADV_SET_HANDLE_NOT_SET) {
+        uint8_t handle = BLE_GAP_ADV_SET_HANDLE_NOT_SET;
+        uint32_t err = sd_ble_gap_adv_set_configure(&handle, &gapAdvData, &advParams);
+        if (err == NRF_SUCCESS) {
+            advHandle = handle;
+            ownsDedicatedSet = true;
+            LOG_INFO("BLE mesh using dedicated adv set %u", advHandle);
+        } else {
+            // Sharing handle 0 means suspending the phone advertisement for each burst and
+            // restoring it afterwards.
+            LOG_WARN("BLE mesh: no spare adv set (0x%x), sharing the phone's", err);
+            advHandle = 0;
+            ownsDedicatedSet = false;
+        }
+    }
+
+    if (!ownsDedicatedSet) {
+        Bluefruit.Advertising.stop();
+        uint32_t err = sd_ble_gap_adv_set_configure(&advHandle, &gapAdvData, &advParams);
+        if (err != NRF_SUCCESS) {
+            LOG_WARN("BLE mesh adv configure failed: 0x%x", err);
+            if (nrf52Bluetooth)
+                nrf52Bluetooth->resumeAdvertising();
+            return false;
+        }
+    } else {
+        uint32_t err = sd_ble_gap_adv_set_configure(&advHandle, &gapAdvData, &advParams);
+        if (err != NRF_SUCCESS) {
+            LOG_WARN("BLE mesh adv reconfigure failed: 0x%x", err);
+            return false;
+        }
+    }
+
+    uint32_t err = sd_ble_gap_adv_start(advHandle, BLE_CONN_CFG_TAG_DEFAULT);
+    if (err != NRF_SUCCESS) {
+        LOG_WARN("BLE mesh adv start failed: 0x%x", err);
+        if (!ownsDedicatedSet && nrf52Bluetooth)
+            nrf52Bluetooth->resumeAdvertising();
+        return false;
+    }
+
+    advActive = true;
+    LOG_DEBUG("BLE mesh adv burst: handle %u len %u %s", advHandle, advBufLen, ownsDedicatedSet ? "dedicated" : "shared");
+    return true;
+}
+
+bool NRF52BLEMesh::platformAdvertisingActive()
+{
+    // Cleared by BLE_GAP_EVT_ADV_SET_TERMINATED once max_adv_evts have gone out.
+    return advActive;
+}
+
+void NRF52BLEMesh::platformEndAdvertising()
+{
+    if (advHandle != BLE_GAP_ADV_SET_HANDLE_NOT_SET) {
+        uint32_t err = sd_ble_gap_adv_stop(advHandle);
+        if (err != NRF_SUCCESS && err != NRF_ERROR_INVALID_STATE)
+            LOG_WARN("BLE mesh adv stop failed: 0x%x", err);
+    }
+    advActive = false;
+
+    // Hand the shared set back to the phone.
+    if (!ownsDedicatedSet && nrf52Bluetooth)
+        nrf52Bluetooth->resumeAdvertising();
+}
+
+void NRF52BLEMesh::startScanning()
+{
+    if (!nrf52BluetoothReady)
+        return;
+
+    bleMeshScanReportData.len = sizeof(bleMeshScanBuffer);
+    bleMeshScanParams.interval = BLE_MESH_SCAN_INTERVAL;
+    bleMeshScanParams.window = BLE_MESH_SCAN_WINDOW;
+
+    uint32_t err = sd_ble_gap_scan_start(&bleMeshScanParams, &bleMeshScanReportData);
+    if (err == NRF_SUCCESS) {
+        LOG_DEBUG("BLE mesh scanning started");
+    } else if (err == NRF_ERROR_INVALID_STATE) {
+        LOG_DEBUG("BLE mesh scanning already active");
+    } else {
+        // Scanning needs a central link and Bluefruit.begin() defaults to zero, which surfaces here
+        // as NRF_ERROR_NOT_SUPPORTED.
+        LOG_WARN("BLE mesh scan start failed: 0x%x", err);
+    }
+}
+
+void NRF52BLEMesh::stopScanning()
+{
+    uint32_t err = sd_ble_gap_scan_stop();
+    if (err != NRF_SUCCESS && err != NRF_ERROR_INVALID_STATE) {
+        LOG_WARN("BLE mesh scan stop failed: 0x%x", err);
+    }
+}
+
+void NRF52BLEMesh::onBleEvent(ble_evt_t *event)
+{
+    if (!instance || !instance->isRunning || !event)
+        return;
+
+    switch (event->header.evt_id) {
+    case BLE_GAP_EVT_ADV_REPORT: {
+        ble_gap_evt_adv_report_t *report = &event->evt.gap_evt.params.adv_report;
+
+        // The SoftDevice joins a chained advertisement in the scan buffer itself and reports it once
+        // (report_incomplete_evts is unsupported), so a whole advertisement is always COMPLETE.
+        if (report->type.status == BLE_GAP_ADV_DATA_STATUS_COMPLETE)
+            instance->handleAdvertisementData(report->data.p_data, report->data.len, report->rssi);
+
+        // The SoftDevice pauses scanning after each report; hand the buffer back to resume.
+        bleMeshScanReportData.len = sizeof(bleMeshScanBuffer);
+        uint32_t err = sd_ble_gap_scan_start(NULL, &bleMeshScanReportData);
+        if (err != NRF_SUCCESS && err != NRF_ERROR_INVALID_STATE) {
+            LOG_WARN("BLE mesh scan resume failed: 0x%x", err);
+        }
+        break;
+    }
+    case BLE_GAP_EVT_ADV_SET_TERMINATED: {
+        const ble_gap_evt_adv_set_terminated_t &t = event->evt.gap_evt.params.adv_set_terminated;
+        LOG_DEBUG("BLE mesh adv set %u terminated: reason %u after %u events (ours=%d)", t.adv_handle, t.reason,
+                  t.num_completed_adv_events, t.adv_handle == instance->advHandle);
+        if (t.adv_handle == instance->advHandle)
+            instance->advActive = false;
+        break;
+    }
+    case BLE_GAP_EVT_TIMEOUT:
+        if (event->evt.gap_evt.params.timeout.src == BLE_GAP_TIMEOUT_SRC_SCAN) {
+            instance->startScanning();
+        }
+        break;
+    default:
+        break;
+    }
+}
+
+#endif // HAS_BLE_MESH && ARCH_NRF52
