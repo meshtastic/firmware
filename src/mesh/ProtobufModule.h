@@ -33,7 +33,7 @@ template <class T> class ProtobufModule : protected SinglePortModule
 
     /** Called to make changes to a particular incoming message
      */
-    virtual void alterReceivedProtobuf(meshtastic_MeshPacket &mp, T *decoded){};
+    virtual void alterReceivedProtobuf(meshtastic_MeshPacket &mp, T *decoded) {};
 
     /**
      * Return a mesh packet which has been preinited with a particular protobuf data payload and port number.

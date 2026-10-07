@@ -19,6 +19,7 @@
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include "Throttle.h"
+#include "UptimeClock.h"
 #include "WaypointStore.h"
 #include "buzz/buzz.h"
 #include "configuration.h"
@@ -36,10 +37,17 @@
 #include <esp_err.h>
 #endif
 
+#if defined(USB_HOST_PWR_DETECT) && defined(ARDUINO_USB_CDC_ON_BOOT) && ARDUINO_USB_CDC_ON_BOOT
+#include "HWCDC.h"
+#endif
+
 #if defined(ARCH_PORTDUINO)
 #include "api/WiFiServerAPI.h"
 #include "input/LinuxInputImpl.h"
 #include "input/LinuxJoystick.h"
+#if HAS_HOST_POWEROFF
+#include "platform/portduino/LinuxPower.h"
+#endif
 #endif
 
 #ifdef HAS_ADS1115
@@ -194,6 +202,12 @@ static bool initAdcCalibration()
 #endif
 #ifndef EXT_PWR_DETECT_VALUE
 #define EXT_PWR_DETECT_VALUE HIGH
+#endif
+#endif
+
+#ifdef USB_HOST_PWR_DETECT
+#if !defined(ARDUINO_USB_CDC_ON_BOOT) || !ARDUINO_USB_CDC_ON_BOOT
+#error "USB_HOST_PWR_DETECT needs the native USB port: build with ARDUINO_USB_CDC_ON_BOOT=1"
 #endif
 #endif
 
@@ -583,6 +597,12 @@ class AnalogBatteryLevel : public HasBatteryLevel
 // VBUS was not properly connected and detected by the CPU
 #elif defined(MUZI_BASE) || defined(PROMICRO_DIY_TCXO) || defined(ELECROW_ThinkNode_M8)
         return powerHAL_isVBUSConnected();
+#elif defined(USB_HOST_PWR_DETECT)
+        // No VBUS sense pin, so ask the native USB port instead. This watches for start-of-frame
+        // packets, which means it sees a USB *host*: a wall charger or power bank supplies VBUS but
+        // sends no SOF and reads as unplugged. Boards that must spot dumb chargers need a real
+        // EXT_PWR_DETECT pin.
+        return HWCDC::isPlugged();
 #endif
         return getBattVoltage() > chargingVolt;
     }
@@ -591,6 +611,11 @@ class AnalogBatteryLevel : public HasBatteryLevel
     /// we can't be smart enough to say 'full'?
     virtual bool isCharging() override
     {
+#ifdef BATTERY_NOT_RECHARGEABLE
+        // Primary cells with no charger on board: external power is never charging the pack, so
+        // report false and let the UI draw the plain USB icon instead of a charging bolt.
+        return false;
+#else
 #ifdef HAS_SGM41562
         if (sgm41562 && sgm41562->refresh())
             return sgm41562->isCharging();
@@ -629,6 +654,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
 #endif
         // by default, we check the battery voltage only
         return isVbusIn();
+#endif // BATTERY_NOT_RECHARGEABLE
     }
 
   private:
@@ -784,7 +810,7 @@ class ADS1115BatteryLevel : public AnalogBatteryLevel
                     sum += _ads.computeVolts(raw);
                 }
                 // Piggyback a toggle-engine watchdog on this same throttle interval.
-                // Only re-arm when VBUS is absent — calling this while attached
+                // Only re-arm when VBUS is absent - calling this while attached
                 // would restart CC toggling and could glitch an active sink attach.
                 if (_aw35615.isReady() && !_aw35615.isVbusPresent()) {
                     _aw35615.rearmToggle();
@@ -812,7 +838,7 @@ class ADS1115BatteryLevel : public AnalogBatteryLevel
 
             bool vbus = _aw35615.isVbusPresent();
             if (!vbus) {
-                // VBUS just went away (or has been away) — make sure the CC
+                // VBUS just went away (or has been away) - make sure the CC
                 // toggle engine is re-armed so the next attach gets detected.
                 _aw35615.rearmToggle();
             }
@@ -830,7 +856,7 @@ class ADS1115BatteryLevel : public AnalogBatteryLevel
         if (_aw35615.isReady()) {
             concurrency::LockGuard guard(spiLock);
             // Charging == VBUS present AND we're attached as a sink.
-            // (isSinkAttached() is a latched result — safe to trust here since
+            // (isSinkAttached() is a latched result - safe to trust here since
             // isVbusIn() above keeps re-arming toggle on every detach.)
             return _aw35615.isVbusPresent() && _aw35615.isSinkAttached();
         }
@@ -1012,6 +1038,7 @@ void Power::reboot()
 #if defined(ARCH_ESP32)
     ESP.restart();
 #elif defined(ARCH_NRF52)
+    nrf52FlashQuiesce();
     NVIC_SystemReset();
 #elif defined(ARCH_RP2040)
     rp2040.reboot();
@@ -1091,10 +1118,33 @@ void Power::shutdown()
 #endif
     doDeepSleep(DELAY_FOREVER, true, true);
 #elif defined(ARCH_PORTDUINO)
+#if HAS_HOST_POWEROFF
+    // A portduino node is a process on a computer that outlives it, so exiting here only ends the
+    // daemon - and under Restart=always systemd brings it straight back. When the user asked for
+    // the host itself, hand off to logind. Everything above has already run, so the NodeDB and
+    // message store are on disk either way. Fall through to exit() if logind refuses, rather than
+    // leaving the node sitting there having said it was shutting down.
+    if (hostPowerOffRequested)
+        linuxPowerOffHost();
+#endif
     exit(EXIT_SUCCESS);
 #else
     LOG_WARN("FIXME implement shutdown for this platform");
 #endif
+}
+
+// Consecutive readings only: a battery-less board's floating divider drifts in and out of the
+// "battery present" window, and a count that survived the gaps would deep-sleep a USB-powered node.
+bool updateLowVoltageCounter(uint8_t &counter, bool hasBattery, bool hasUsb, uint16_t battMv, uint16_t cutoffMv)
+{
+    if (!hasBattery || hasUsb || battMv >= cutoffMv) {
+        counter = 0;
+        return false;
+    }
+
+    if (counter < UINT8_MAX)
+        counter++;
+    return counter > LOW_VOLTAGE_READINGS_BEFORE_SHUTDOWN;
 }
 
 /// Reads power status to powerStatus singleton.
@@ -1229,16 +1279,16 @@ void Power::readPowerStatus()
     // is 2.0 to 2.5V, current OCV min is set to 3100 that is large enough.
     //
 
-    if (batteryLevel && powerStatus2.getHasBattery() && !powerStatus2.getHasUSB()) {
-        if (batteryLevel->getBattVoltage() < OCV[NUM_OCV_POINTS - 1]) {
-            low_voltage_counter++;
-            LOG_DEBUG("Low voltage counter: %d/10", low_voltage_counter);
-            if (low_voltage_counter > 10) {
-                LOG_INFO("Low voltage detected, trigger deep sleep");
-                powerFSM.trigger(EVENT_LOW_BATTERY);
-            }
-        } else {
-            low_voltage_counter = 0;
+    if (batteryLevel) {
+        // getBattVoltage() reports pack voltage; the OCV table is per cell.
+        const bool shutdownNow =
+            updateLowVoltageCounter(low_voltage_counter, powerStatus2.getHasBattery(), powerStatus2.getHasUSB(),
+                                    batteryLevel->getBattVoltage(), OCV[NUM_OCV_POINTS - 1] * NUM_CELLS);
+        if (low_voltage_counter)
+            LOG_DEBUG("Low voltage counter: %d/%d", low_voltage_counter, LOW_VOLTAGE_READINGS_BEFORE_SHUTDOWN);
+        if (shutdownNow) {
+            LOG_INFO("Low voltage detected, trigger deep sleep");
+            powerFSM.trigger(EVENT_LOW_BATTERY);
         }
     }
 }
@@ -1282,7 +1332,7 @@ void Power::logHeapUsage()
     memaudit::logBreakdown("periodic");
 
     lastHeapLogFree = heapFree;
-    lastHeapLogTime = millis();
+    lastHeapLogTime = Time::skipZero(Time::getMillis());
 #endif
 }
 

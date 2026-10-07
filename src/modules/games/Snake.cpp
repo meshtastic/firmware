@@ -45,6 +45,15 @@ bool SnakeGame::setDirection(Direction d)
     return true;
 }
 
+void SnakeGame::turn(bool clockwise)
+{
+    // Indexed by Direction (UP, DOWN, LEFT, RIGHT). Screen space has y growing downward, so the
+    // clockwise cycle the player sees is UP -> RIGHT -> DOWN -> LEFT.
+    static constexpr Direction CW[4] = {DIR_RIGHT, DIR_LEFT, DIR_UP, DIR_DOWN};
+    static constexpr Direction CCW[4] = {DIR_LEFT, DIR_RIGHT, DIR_DOWN, DIR_UP};
+    setDirection(clockwise ? CW[dir] : CCW[dir]);
+}
+
 uint32_t SnakeGame::nextRandom()
 {
     uint32_t x = rng;
@@ -172,8 +181,20 @@ int32_t Snake::tickIntervalMs() const
     return iv < 70 ? 70 : iv;
 }
 
-void Snake::handleInput(input_broker_event ev)
+void Snake::handleInput(const InputEvent *event)
 {
+    const input_broker_event ev = event->inputEvent;
+    const unsigned char kbchar = event->kbchar;
+
+    // Shoulder-button steering: a gamepad button mapped to left/right turns the snake relative to
+    // where it is already heading (L counter-clockwise, R clockwise) rather than setting an
+    // absolute heading. The D-pad and keyboard keep steering absolutely -- the D-pad is an axis,
+    // so it arrives with no button in kbchar, which is exactly what tells the two apart.
+    if (isJoyButton(kbchar) && (ev == INPUT_BROKER_LEFT || ev == INPUT_BROKER_RIGHT)) {
+        game.turn(ev == INPUT_BROKER_RIGHT);
+        return;
+    }
+
     switch (ev) {
     case INPUT_BROKER_UP:
         game.setDirection(SnakeGame::DIR_UP);

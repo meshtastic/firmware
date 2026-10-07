@@ -254,6 +254,21 @@ static std::string jsonNum(double v)
     return ss.str();
 }
 
+// One TLS record per write(); loop until the whole body is sent.
+static bool writeAll(HTTPResponse *res, const std::string &body)
+{
+    size_t sent = 0;
+    while (sent < body.size()) {
+        const size_t remaining = body.size() - sent;
+        const size_t written = res->write(reinterpret_cast<const uint8_t *>(body.data()) + sent, remaining);
+        // An error code arrives as a huge count, write() returning mbedtls' int through a size_t.
+        if (written == 0 || written > remaining)
+            return false;
+        sent += written;
+    }
+    return true;
+}
+
 // Build a serialized JSON array string listing files in `dirname`.
 // Subdirectories recurse as nested arrays (up to `levels` deep).
 std::string htmlListDir(const char *dirname, uint8_t levels)
@@ -337,11 +352,14 @@ void handleFsBrowseStatic(HTTPRequest *req, HTTPResponse *res)
     res->setHeader("Access-Control-Allow-Origin", "*");
     res->setHeader("Access-Control-Allow-Methods", "GET");
 
-    concurrency::LockGuard g(spiLock);
-    std::string fileList = htmlListDir("/static", 10);
-
-    uint64_t total = FSCom.totalBytes();
-    uint64_t used = FSCom.usedBytes();
+    std::string fileList;
+    uint64_t total, used;
+    {
+        concurrency::LockGuard g(spiLock);
+        fileList = htmlListDir("/static", 10);
+        total = FSCom.totalBytes();
+        used = FSCom.usedBytes();
+    }
 
     // Key order matches the previous std::map-based emission (alphabetical).
     std::string out;
@@ -356,7 +374,7 @@ void handleFsBrowseStatic(HTTPRequest *req, HTTPResponse *res)
     out += jsonNum((int)used);
     out += "}},\"status\":\"ok\"}";
 
-    res->print(out.c_str());
+    writeAll(res, out);
 }
 
 void handleFsDeleteStatic(HTTPRequest *req, HTTPResponse *res)
@@ -370,13 +388,16 @@ void handleFsDeleteStatic(HTTPRequest *req, HTTPResponse *res)
 
     if (params->getQueryParameter("delete", paramValDelete)) {
         std::string pathDelete = "/" + paramValDelete;
-        concurrency::LockGuard g(spiLock);
-        const char *status = FSCom.remove(pathDelete.c_str()) ? "ok" : "Error";
+        bool removed;
+        {
+            concurrency::LockGuard g(spiLock);
+            removed = FSCom.remove(pathDelete.c_str());
+        }
         LOG_INFO("%s", pathDelete.c_str());
         std::string out = "{\"status\":";
-        out += jsonEscape(status);
+        out += jsonEscape(removed ? "ok" : "Error");
         out += "}";
-        res->print(out.c_str());
+        writeAll(res, out);
         return;
     }
 }
@@ -406,38 +427,43 @@ void handleStatic(HTTPRequest *req, HTTPResponse *res)
             filenameGzip = "/static/index.html.gz";
         }
 
-        concurrency::LockGuard g(spiLock);
+        // spiLock covers filesystem calls only: a socket write or a syslog line can need the lock itself on a
+        // shared-bus Ethernet board, and the lock is not recursive.
+        bool exists;
+        bool gzipExists = false;
+        bool available;
+        size_t size;
+        {
+            concurrency::LockGuard g(spiLock);
+            exists = FSCom.exists(filename.c_str());
+            if (!exists) {
+                gzipExists = FSCom.exists(filenameGzip.c_str());
+                if (!gzipExists)
+                    filenameGzip = "/static/index.html.gz";
+            }
+            file = FSCom.open(exists ? filename.c_str() : filenameGzip.c_str());
+            available = file.available();
+            size = file.size();
+            if (!available && !exists && !gzipExists)
+                file.close();
+        }
 
-        if (FSCom.exists(filename.c_str())) {
-            file = FSCom.open(filename.c_str());
-            if (!file.available()) {
-                LOG_WARN("File not available - %s", filename.c_str());
-            }
-        } else if (FSCom.exists(filenameGzip.c_str())) {
-            file = FSCom.open(filenameGzip.c_str());
-            res->setHeader("Content-Encoding", "gzip");
-            if (!file.available()) {
-                LOG_WARN("File not available - %s", filenameGzip.c_str());
-            }
-        } else {
+        if (!available)
+            LOG_WARN("File not available - %s", exists ? filename.c_str() : filenameGzip.c_str());
+        if (!exists && !gzipExists) {
             has_set_content_type = true;
-            filenameGzip = "/static/index.html.gz";
-            file = FSCom.open(filenameGzip.c_str());
             res->setHeader("Content-Type", "text/html");
-            if (!file.available()) {
-
-                LOG_WARN("File not available - %s", filenameGzip.c_str());
+            if (!available) {
                 res->println("Web server is running.<br><br>The content you are looking for can't be found. Please see: <a "
                              "href=https://meshtastic.org/docs/software/web-client/>FAQ</a>.<br><br><a "
                              "href=/admin>admin</a>");
-
                 return;
-            } else {
-                res->setHeader("Content-Encoding", "gzip");
             }
         }
+        if (!exists)
+            res->setHeader("Content-Encoding", "gzip");
 
-        res->setHeader("Content-Length", httpsserver::intToString(file.size()));
+        res->setHeader("Content-Length", httpsserver::intToString(size));
 
         // Content-Type is guessed using the definition of the contentTypes-table defined above
         int cTypeIdx = 0;
@@ -458,13 +484,18 @@ void handleStatic(HTTPRequest *req, HTTPResponse *res)
         // Read the file and write it to the HTTP response body
         size_t length = 0;
         do {
-            char buffer[256];
-            length = file.read((uint8_t *)buffer, 256);
-            std::string bufferString(buffer, length);
-            res->write((uint8_t *)bufferString.c_str(), bufferString.size());
+            uint8_t buffer[256];
+            {
+                concurrency::LockGuard g(spiLock);
+                length = file.read(buffer, sizeof(buffer));
+            }
+            res->write(buffer, length);
         } while (length > 0);
 
-        file.close();
+        {
+            concurrency::LockGuard g(spiLock);
+            file.close();
+        }
 
         return;
     } else {
@@ -551,9 +582,16 @@ void handleFormUpload(HTTPRequest *req, HTTPResponse *res)
         // concepts of the body parser functionality easier to understand.
         std::string pathname = "/static/" + filename;
 
-        concurrency::LockGuard g(spiLock);
-        // Create a new file to stream the data into
-        File file = FSCom.open(pathname.c_str(), FILE_O_WRITE);
+        // spiLock covers filesystem calls only: the body is read from a socket, and on a shared-bus Ethernet board
+        // the receive path needs the lock. Free space is taken once, as nothing else writes while this runs.
+        File file;
+        size_t freeBytes;
+        {
+            concurrency::LockGuard g(spiLock);
+            // Create a new file to stream the data into
+            file = FSCom.open(pathname.c_str(), FILE_O_WRITE);
+            freeBytes = FSCom.totalBytes() - FSCom.usedBytes();
+        }
         size_t fileLength = 0;
         didwrite = true;
 
@@ -564,29 +602,32 @@ void handleFormUpload(HTTPRequest *req, HTTPResponse *res)
 
             byte buf[512];
             size_t readLength = parser->read(buf, 512);
-            // LOG_DEBUG("readLength - %i", readLength);
 
-            // Abort the transfer if there is less than 50k space left on the filesystem.
-            if (FSCom.totalBytes() - FSCom.usedBytes() < 51200) {
-                file.flush();
-                file.close();
-                res->println("<p>Write aborted! Reserving 50k on filesystem.</p>");
-
-                // enableLoopWDT();
-
+            // Abort the transfer if there is less than 50k space left on the filesystem, or a write comes up short.
+            const bool full = fileLength + readLength + 51200 > freeBytes;
+            size_t written = 0;
+            if (!full) {
+                concurrency::LockGuard g(spiLock);
+                written = file.write(buf, readLength);
+            }
+            if (full || written != readLength) {
+                {
+                    concurrency::LockGuard g(spiLock);
+                    file.flush();
+                    file.close();
+                }
+                res->println(full ? "<p>Write aborted! Reserving 50k on filesystem.</p>" : "<p>Write failed.</p>");
                 return;
             }
-
-            // if (readLength) {
-            file.write(buf, readLength);
             fileLength += readLength;
             LOG_DEBUG("File Length %i", fileLength);
-            //}
         }
-        // enableLoopWDT();
 
-        file.flush();
-        file.close();
+        {
+            concurrency::LockGuard g(spiLock);
+            file.flush();
+            file.close();
+        }
 
         res->printf("<p>Saved %d bytes to %s</p>", (int)fileLength, pathname.c_str());
     }
@@ -725,7 +766,7 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
 
     out += "},\"status\":\"ok\"}";
 
-    res->print(out.c_str());
+    writeAll(res, out);
 }
 
 void handleNodes(HTTPRequest *req, HTTPResponse *res)
@@ -746,8 +787,11 @@ void handleNodes(HTTPRequest *req, HTTPResponse *res)
         res->println("<pre>");
     }
 
+    // A couple of kB at a time: the whole body at once asked for a 64 kB block, one write per node
+    // asks mbedTLS for a record per node.
+    static const size_t NODES_FLUSH_BYTES = 2048;
     std::string out;
-    out.reserve(2048);
+    out.reserve(NODES_FLUSH_BYTES + 1024); // a node's worth of headroom past the mark, so no regrowth
     out += "{\"data\":{\"nodes\":[";
 
     bool firstNode = true;
@@ -800,12 +844,17 @@ void handleNodes(HTTPRequest *req, HTTPResponse *res)
             out += ",\"via_mqtt\":";
             out += jsonEscape(BoolToString(nodeInfoLiteViaMqtt(tempNodeInfo)));
             out += "}";
+            if (out.size() >= NODES_FLUSH_BYTES) {
+                if (!writeAll(res, out))
+                    return;
+                out.clear(); // keeps the capacity, so the buffer never grows past the mark
+            }
         }
         tempNodeInfo = nodeDB->readNextMeshNode(readIndex);
     }
 
     out += "]},\"status\":\"ok\"}";
-    res->print(out.c_str());
+    writeAll(res, out);
 }
 
 void handleAdmin(HTTPRequest *req, HTTPResponse *res)
@@ -872,6 +921,6 @@ void handleScanNetworks(HTTPRequest *req, HTTPResponse *res)
         }
     }
     out += "],\"status\":\"ok\"}";
-    res->print(out.c_str());
+    writeAll(res, out);
 }
 #endif

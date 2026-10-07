@@ -32,6 +32,15 @@
 #define GPS_RF_EN_ACTIVE HIGH
 #endif
 
+// Compile receiver-specific sleep support when the board exposes the required wake controls.
+#if defined(GPS_RTC_INT)
+#define HAS_AIROHA_SOFT_RTC 1
+#endif
+// Without RTC_INT only the GNSS engine is stopped; powering EN back up reboots the core on its own.
+#if defined(HAS_AIROHA_SOFT_RTC) || (defined(GPS_SLEEP_INT) && defined(PIN_GPS_EN))
+#define HAS_AIROHA_SLEEP 1
+#endif
+
 static constexpr uint32_t GPS_UPDATE_ALWAYS_ON_THRESHOLD_MS = 10 * 1000UL;
 static constexpr uint32_t GPS_FIX_HOLD_MAX_MS = 20000;
 
@@ -222,6 +231,9 @@ class GPS : private concurrency::OSThread
     bool GPSInitStarted = false;  // Init thread finished?
 
     GPSPowerState powerState = GPS_OFF; // GPS_ACTIVE if we want a location right now
+#ifdef HAS_AIROHA_SLEEP
+    uint8_t airohaSleepMisses = 0; // consecutive sleep commands that went unacked
+#endif
 
     uint8_t numSatellites = 0;
 
@@ -276,6 +288,10 @@ class GPS : private concurrency::OSThread
     /** Set UBLOX power, if relevant
      */
     void setPowerUBLOX(bool on, uint32_t sleepMs = 0);
+
+    /** Send an Airoha receiver its sleep command before the power cut, if relevant
+     */
+    void airohaEnterSleep();
 
     /**
      * Tell users we have new GPS readings

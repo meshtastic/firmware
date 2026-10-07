@@ -29,7 +29,7 @@ template <class T> class SX126xInterface : public RadioLibInterface
 
     bool isIRQPending() override { return lora.getIrqFlags() != 0; }
 
-    void resetAGC() override;
+    bool resetAGC() override;
 
     void setTCXOVoltage(float voltage) { tcxoVoltage = voltage; }
 
@@ -82,6 +82,9 @@ template <class T> class SX126xInterface : public RadioLibInterface
     virtual void setStandby() override;
 
     uint32_t getPacketTime(uint32_t pl, bool received) override { return computePacketTime(lora, pl, received); }
+
+    // Sub-GHz only. isChannelActive() passes CAD_ON_4_SYMB; keep the two in step.
+    uint8_t getCadSymbolCountSubGhz() const override { return 4; }
 
   private:
 #ifdef LORA_DIO1_SOFTWARE_POLL

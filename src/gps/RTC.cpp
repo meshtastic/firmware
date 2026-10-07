@@ -332,7 +332,7 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpd
         currentQuality = q;
         lastSetMsec = now;
         if (currentQuality >= RTCQualityNTP) {
-            lastSetFromPhoneNtpOrGps = now;
+            lastSetFromPhoneNtpOrGps = Time::skipZero(now);
         }
 
         // This delta value works on all platforms

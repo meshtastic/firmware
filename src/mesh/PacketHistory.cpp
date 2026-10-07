@@ -8,11 +8,12 @@
 #include "platform/portduino/PortduinoGlue.h"
 #endif
 #include "Throttle.h"
+#include "UptimeClock.h"
 
 #define RECENT_WARN_AGE (10 * 60 * 1000L) // Warn if the packet that gets removed was more recent than 10 min
 
 #define VERBOSE_PACKET_HISTORY 0     // Set to 1 for verbose logging, 2 for heavy debugging
-#define PACKET_HISTORY_TRACE_AGING 1 // Set to 1 to enable logging of the age of re/used history slots
+#define PACKET_HISTORY_TRACE_AGING 0 // Set to 1 to enable logging of the age of re/used history slots
 
 PacketHistory::PacketHistory(uint32_t size) : recentPacketsCapacity(0) // Initialize members
 {
@@ -93,9 +94,9 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
         r.relayed_by[0] = p->relay_node;
     }
 
-    r.rxTimeMsec = millis(); //
-    if (r.rxTimeMsec == 0)   // =0 every 49.7 days? 0 is special
-        r.rxTimeMsec = 1;
+    // TODO(elapsed-stamp): 0 means "empty slot" here and insert() drops a record stamped 0, so the
+    // dodge is important; a same-instant `now - rxTimeMsec` read still underflows to a huge age.
+    r.rxTimeMsec = Time::skipZero(Time::getMillis());
 
 #if VERBOSE_PACKET_HISTORY
     LOG_DEBUG(

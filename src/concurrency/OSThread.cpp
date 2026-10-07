@@ -54,7 +54,9 @@ void OSThread::setIntervalFromNow(unsigned long _interval)
     interval = _interval;
 
     // Cache the next run based on the last_run
+    // unset-sentinel-ok: enabled is the armed flag, and tillRun() reads this as a wrap-safe delta
     _cached_next_run = millis() + interval;
+    fromNowDuringRun = true;
 }
 
 bool OSThread::shouldRun(unsigned long time)
@@ -82,6 +84,7 @@ void OSThread::run()
     auto heap = memGet.getFreeHeap();
 #endif
     currentThread = this;
+    fromNowDuringRun = false;
     auto newDelay = runOnce();
 #ifdef DEBUG_HEAP
     auto newHeap = memGet.getFreeHeap();
@@ -93,7 +96,10 @@ void OSThread::run()
 #ifdef DEBUG_LOOP_TIMING
     LOG_DEBUG("====== Thread next run in: %d", newDelay);
 #endif
-    runned();
+    if (newDelay < 0 && fromNowDuringRun)
+        last_run = millis(); // runned() would re-base the due time; leaving it unwritten also keeps an ISR's setInterval(0)
+    else
+        runned();
 
     if (newDelay >= 0)
         setInterval(newDelay);

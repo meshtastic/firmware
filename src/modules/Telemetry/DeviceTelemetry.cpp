@@ -41,7 +41,7 @@ int32_t DeviceTelemetryModule::runOnce()
         sendTelemetry(NODENUM_BROADCAST, true);
         if (lastSentStatsToPhone == 0 || Throttle::hasElapsed(lastSentStatsToPhone, sendStatsToPhoneIntervalMs)) {
             sendLocalStatsToPhone();
-            lastSentStatsToPhone = Time::getMillis();
+            lastSentStatsToPhone = Time::skipZero(Time::getMillis());
         }
     }
     return sendToPhoneIntervalMs;

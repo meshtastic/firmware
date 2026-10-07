@@ -80,6 +80,17 @@ Lora:
 #  DIO3_TCXO_VOLTAGE: true
 
 #  DIO3_TCXO_VOLTAGE: true  # the Waveshare Core1262 and others are known to need this setting
+#  DIO3_TCXO_DELAY_US: 1000  # TCXO start-up wait, SX126x/LR11xx; default 1000 (RadioLib's own is 5000)
+
+#  TCXO_OPTIONAL: true  # Probe both oscillators (default Vref 1.6V); SX126x/LR20x0/LR11xx only.
+#                       # SX126x and LR20x0 try TCXO first; LR11x0 tries the crystal first.
+
+### DIO the LR2021 raises its interrupt on, DIO5 to DIO11. Defaults to DIO5, which many carriers
+### also drive as an RF switch line -- a pin cannot be both, and the radio will report init
+### success and then receive nothing. Point it at a DIO rfswitch_table does not list.
+### LR2021_IRQ_DIO_NUM is an older spelling of the same setting, read only if IRQ_DIO_NUM is absent.
+#  IRQ_DIO_NUM: 9
+#  LR2021_IRQ_DIO_NUM: 9
 
 #  TXen: x  # TX and RX enable pins
 #  RXen: x
@@ -201,10 +212,18 @@ Input:
 #  JoystickDevice: /dev/input/by-id/usb-0079_USB_Gamepad-event-joystick
 ### Map evdev button codes (hex or decimal) to actions. Omit to use built-in
 ### defaults (select=0x121, cancel=0x122). Actions: select, cancel, back, up,
-### down, left, right, user.
+### down, left, right, user. Give an action a list of codes to bind several
+### physical buttons to it -- e.g. the shoulder buttons alongside the D-pad.
+### Games can tell which physical button was pressed even when several share an
+### action: in Snake the shoulders turn relative to the snake's heading while
+### the D-pad steers absolutely, and Start pauses in play while selecting
+### everywhere else.
+### The codes below are an example only -- confirm yours with `evtest`.
 #  JoystickButtons:
-#    select: 0x122
-#    cancel: 0x121
+#    select: [0x121, 0x123, 0x129] # A, Y and Start
+#    cancel: [0x122, 0x120] # B and X
+#    left: [0x124]          # L shoulder, alongside the D-pad
+#    right: [0x125]         # R shoulder
 
 ### Standard User Button Config
 #  UserButton: 6
@@ -232,10 +251,22 @@ Webserver:
 #  SSLKey: /etc/meshtasticd/ssl/private_key.pem # Path to SSL Key, generated if not present
 #  SSLCert: /etc/meshtasticd/ssl/certificate.pem # Path to SSL Certificate, generated if not present
 
+Bluetooth:
+#  Enabled: true # Advertise a BLE peripheral via BlueZ, like other Meshtastic devices (Linux only)
+#  AdapterId: hci0 # BlueZ adapter to use
+
 HostMetrics:
 #  ReportInterval: 30 # Interval in minutes between HostMetrics report packets, or 0 for disabled
 #  Channel: 0 # channel to send Host Metrics over. Defaults to the primary channel.
 #  UserStringCommand: cat /sys/firmware/devicetree/base/serial-number # Command to execute, to send the results as the userString
+
+Security:
+# Public keys authorized to send admin messages to this node, as base64, the same text the apps and
+# the CLI show for a node's public key. Up to 16, and up to 3 of them are reflected into the node's
+# own security config so clients and managed mode see them. Files in config.d add to this list, and
+# this file is the authority: a key removed from here loses access, and remote admin cannot drop it.
+#  AdminKeys:
+#    - rvzaPCZmlh1nWnqNKUFHj0dLBJJIRJhRrkZmaFLHCVY=
 
 Config:
 #  DisplayMode: TWOCOLOR # uncomment to force BaseUI

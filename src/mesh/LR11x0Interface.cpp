@@ -27,8 +27,23 @@
 #include "rfswitch.h"
 #elif ARCH_PORTDUINO
 #include "PortduinoGlue.h"
-#define rfswitch_dio_pins portduino_config.rfswitch_dio_pins
-#define rfswitch_table portduino_config.rfswitch_table
+
+// Switch-capable DIOs in slot order with this part's constants; no DIO9, so slot 4 is DIO10.
+static const int8_t lr11x0_switch_dio_nums[] = {5, 6, 7, 8, 10};
+static const uint32_t lr11x0_switch_dio_consts[] = {RADIOLIB_LR11X0_DIO5, RADIOLIB_LR11X0_DIO6, RADIOLIB_LR11X0_DIO7,
+                                                    RADIOLIB_LR11X0_DIO8, RADIOLIB_LR11X0_DIO10};
+static_assert(sizeof(lr11x0_switch_dio_nums) / sizeof(lr11x0_switch_dio_nums[0]) ==
+                  sizeof(lr11x0_switch_dio_consts) / sizeof(lr11x0_switch_dio_consts[0]),
+              "LR11x0 switch DIO numbers and constants must describe the same slots");
+
+// This part has MODE_TX_HP/MODE_GNSS/MODE_WIFI and no MODE_RX_HF.
+static const int32_t lr11x0_rfswitch_mode_map[RFSW_MODE_COUNT] = {
+    LR11x0::MODE_STBY,  LR11x0::MODE_RX,       LR11x0::MODE_TX,   LR11x0::MODE_TX_HP,
+    LR11x0::MODE_TX_HF, RFSW_MODE_UNSUPPORTED, LR11x0::MODE_GNSS, LR11x0::MODE_WIFI,
+};
+
+static uint32_t rfswitch_dio_pins[Module::RFSWITCH_MAX_PINS];
+static Module::RfSwitchMode_t rfswitch_table[RFSW_MODE_COUNT + 1];
 #else
 static const uint32_t rfswitch_dio_pins[] = {RADIOLIB_NC, RADIOLIB_NC, RADIOLIB_NC, RADIOLIB_NC, RADIOLIB_NC};
 static const Module::RfSwitchMode_t rfswitch_table[] = {
@@ -57,11 +72,12 @@ static const Module::RfSwitchMode_t rfswitch_table[] = {
 // Vref to assume for a board that declares a TCXO may be fitted without saying at what voltage.
 // "TCXO reference voltage to be set on DIO3. Defaults to 1.6 V, set to 0 to skip." per
 // https://github.com/jgromes/RadioLib/blob/690a050ebb46e6097c5d00c371e961c1caa3b52e/src/modules/LR11x0/LR11x0.h#L471C26-L471C104
-#if defined(TCXO_OPTIONAL)
-#define LR11X0_TCXO_DEFAULT_VOLTAGE 1.6f
-#else
-#define LR11X0_TCXO_DEFAULT_VOLTAGE 0
-#endif
+static inline float lr11x0TcxoDefaultVoltage()
+{
+    if (TCXO_OPTIONAL_ENABLED)
+        return TCXO_OPTIONAL_DEFAULT_VOLTAGE;
+    return 0;
+}
 
 // A chip that never answers can surface either way depending on where RadioLib gave up: a bounded
 // per-command BUSY wait in Module::SPItransferStream() reports SPI_CMD_TIMEOUT rather than
@@ -76,7 +92,7 @@ LR11x0Interface<T>::LR11x0Interface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs
                                     RADIOLIB_PIN_TYPE busy)
     : RadioLibInterface(hal, cs, irq, rst, busy, &lora), lora(&module)
 {
-    LOG_WARN("LR11x0Interface(cs=%d, irq=%d, rst=%d, busy=%d)", cs, irq, rst, busy);
+    LOG_DEBUG_RADIO("LR11x0Interface(cs=%d, irq=%d, rst=%d, busy=%d)", cs, irq, rst, busy);
 }
 
 /// Initialise the Driver transport hardware and software.
@@ -95,21 +111,20 @@ template <typename T> bool LR11x0Interface<T>::init()
     // Portduino leaves dio3_tcxo_voltage at 0 whenever the YAML omits DIO3_TCXO_VOLTAGE, which is the
     // "no explicit Vref" case, so the TCXO_OPTIONAL default still has to apply there
     float tcxoVoltage =
-        portduino_config.dio3_tcxo_voltage > 0 ? (float)portduino_config.dio3_tcxo_voltage / 1000 : LR11X0_TCXO_DEFAULT_VOLTAGE;
+        portduino_config.dio3_tcxo_voltage > 0 ? (float)portduino_config.dio3_tcxo_voltage / 1000 : lr11x0TcxoDefaultVoltage();
 #elif defined(LR11X0_DIO3_TCXO_VOLTAGE)
     float tcxoVoltage = LR11X0_DIO3_TCXO_VOLTAGE;
 #else
-    float tcxoVoltage = LR11X0_TCXO_DEFAULT_VOLTAGE;
+    float tcxoVoltage = lr11x0TcxoDefaultVoltage();
 #endif
 
     // DIO3 is free to be used as an IRQ only while no TCXO Vref is driven on it
     if (tcxoVoltage > 0)
-        LOG_DEBUG("LR11x0 TCXO Vref %f V on DIO3 (DIO3 unavailable as IRQ)", tcxoVoltage);
+        LOG_DEBUG_RADIO("LR11x0 TCXO Vref %f V on DIO3 (DIO3 unavailable as IRQ)", tcxoVoltage);
     else
-        LOG_DEBUG("LR11x0 no TCXO Vref, XTAL only (DIO3 free as IRQ)");
-#if defined(TCXO_OPTIONAL)
-    LOG_DEBUG("TCXO_OPTIONAL: osc type unknown, probe XTAL first, TCXO Vref as fallback");
-#endif
+        LOG_DEBUG_RADIO("LR11x0 no TCXO Vref, XTAL only (DIO3 free as IRQ)");
+    if (TCXO_OPTIONAL_ENABLED)
+        LOG_DEBUG_RADIO("TCXO_OPTIONAL: osc type unknown, probe XTAL first, TCXO Vref as fallback");
 
     RadioLibInterface::init();
 
@@ -122,13 +137,13 @@ template <typename T> bool LR11x0Interface<T>::init()
 #ifdef LR11X0_RF_SWITCH_SUBGHZ
     pinMode(LR11X0_RF_SWITCH_SUBGHZ, OUTPUT);
     digitalWrite(LR11X0_RF_SWITCH_SUBGHZ, getFreq() < 1e9 ? HIGH : LOW);
-    LOG_DEBUG("Set RF0 switch to %s", getFreq() < 1e9 ? "SubGHz" : "2.4GHz");
+    LOG_DEBUG_RADIO("Set RF0 switch to %s", getFreq() < 1e9 ? "SubGHz" : "2.4GHz");
 #endif
 
 #ifdef LR11X0_RF_SWITCH_2_4GHZ
     pinMode(LR11X0_RF_SWITCH_2_4GHZ, OUTPUT);
     digitalWrite(LR11X0_RF_SWITCH_2_4GHZ, getFreq() < 1e9 ? LOW : HIGH);
-    LOG_DEBUG("Set RF1 switch to %s", getFreq() < 1e9 ? "SubGHz" : "2.4GHz");
+    LOG_DEBUG_RADIO("Set RF1 switch to %s", getFreq() < 1e9 ? "SubGHz" : "2.4GHz");
 #endif
 
     // Allow extra time for TCXO to stabilize after power-on
@@ -143,26 +158,21 @@ template <typename T> bool LR11x0Interface<T>::init()
         return res;
     };
 
-#if defined(TCXO_OPTIONAL)
-    // 1. XTAL, because a TCXO-first attempt hangs RadioLib's unbounded calibration wait on a module
-    //    with no TCXO fitted, whereas XTAL fails fast and cleanly on a module that does have one
-    float attemptVoltage = 0;
-#else
-    // 1. Whatever Vref the variant configured, which it declared unconditionally
+    // 1. XTAL first when probing (see TCXO_OPTIONAL_ENABLED), else the configured Vref. Not a
+    // ternary: cppcheck sees both branches as 0 when tcxoVoltage above already folded to it.
     float attemptVoltage = tcxoVoltage;
-#endif
+    if (TCXO_OPTIONAL_ENABLED)
+        attemptVoltage = 0;
     int res = tryBegin(1, attemptVoltage);
 
-#if defined(TCXO_OPTIONAL)
-    // 2. XTAL failed with the chip present, so fall back to the TCXO if the variant configured one
-    if (res != RADIOLIB_ERR_NONE && res != RADIOLIB_ERR_CHIP_NOT_FOUND && tcxoVoltage > 0) {
+    // 2. XTAL failed with the chip present, so fall back to the TCXO if one was configured
+    if (TCXO_OPTIONAL_ENABLED && res != RADIOLIB_ERR_NONE && res != RADIOLIB_ERR_CHIP_NOT_FOUND && tcxoVoltage > 0) {
         LOG_WARN("LR11x0 XTAL init failed (err %d), retry with TCXO Vref %f V", res, tcxoVoltage);
         attemptVoltage = tcxoVoltage;
         res = tryBegin(2, attemptVoltage);
         if (res == RADIOLIB_ERR_NONE)
             LOG_INFO("LR11x0 init success with TCXO Vref %f V", tcxoVoltage);
     }
-#endif
 
     // 3. Some units need extra settling time, so give whichever oscillator we settled on one retry.
     //    After a step 2 fallback that is a second TCXO attempt, which is where settling actually matters.
@@ -196,8 +206,9 @@ template <typename T> bool LR11x0Interface<T>::init()
     LR11x0VersionInfo_t version;
     res = lora.getVersionInfo(&version);
     if (res == RADIOLIB_ERR_NONE) {
-        LOG_DEBUG("LR11x0 Device %d, HW %d, FW %d.%d, WiFi %d.%d, GNSS %d.%d", version.device, version.hardware, version.fwMajor,
-                  version.fwMinor, version.fwMajorWiFi, version.fwMinorWiFi, version.fwGNSS, version.almanacGNSS);
+        LOG_DEBUG_RADIO("LR11x0 Device %d, HW %d, FW %d.%d, WiFi %d.%d, GNSS %d.%d", version.device, version.hardware,
+                        version.fwMajor, version.fwMinor, version.fwMajorWiFi, version.fwMinorWiFi, version.fwGNSS,
+                        version.almanacGNSS);
         transceiverFw = ((uint16_t)version.fwMajor << 8) | version.fwMinor;
         transceiverDevice = version.device;
     }
@@ -238,8 +249,11 @@ template <typename T> bool LR11x0Interface<T>::init()
     LOG_INFO("Bandwidth set to %f", bw);
     LOG_INFO("Power output set to %d", power);
 
-    if (res == RADIOLIB_ERR_NONE)
+    if (res == RADIOLIB_ERR_NONE) {
+        // Every begin() above reset the delay to RadioLib's default
+        applyTcxoStartupDelay(lora, resolvedTcxoVoltage);
         res = lora.setCRC(2);
+    }
 
     // FIXME: May want to set depending on a definition, currently all LR1110 variant files use the DC-DC regulator option
     if (res == RADIOLIB_ERR_NONE)
@@ -249,13 +263,17 @@ template <typename T> bool LR11x0Interface<T>::init()
     bool dioAsRfSwitch = true;
 #elif defined(ARCH_PORTDUINO)
     bool dioAsRfSwitch = portduino_config.has_rfswitch_table;
+    if (dioAsRfSwitch)
+        buildRfSwitchTable(rfswitch_dio_pins, rfswitch_table, RFSW_MODE_COUNT + 1, lr11x0_switch_dio_nums,
+                           lr11x0_switch_dio_consts, sizeof(lr11x0_switch_dio_nums) / sizeof(lr11x0_switch_dio_nums[0]),
+                           lr11x0_rfswitch_mode_map);
 #else
     bool dioAsRfSwitch = false;
 #endif
 
     if (dioAsRfSwitch) {
         lora.setRfSwitchTable(rfswitch_dio_pins, rfswitch_table);
-        LOG_DEBUG("Set DIO RF switch");
+        LOG_DEBUG_RADIO("Set DIO RF switch");
     }
 
     if (res == RADIOLIB_ERR_NONE) {
@@ -344,8 +362,11 @@ template <typename T> bool LR11x0Interface<T>::reinitChip()
     }
 
     int res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, resolvedTcxoVoltage);
-    if (res == RADIOLIB_ERR_NONE)
+    if (res == RADIOLIB_ERR_NONE) {
+        // begin() reset the delay to RadioLib's default
+        applyTcxoStartupDelay(lora, resolvedTcxoVoltage);
         res = lora.setCRC(2);
+    }
     if (res == RADIOLIB_ERR_NONE)
         res = lora.setRegulatorDCDC();
 
@@ -408,7 +429,7 @@ template <typename T> int16_t LR11x0Interface<T>::trySetStandby()
     int16_t err = lora.standby();
 
     if (err != RADIOLIB_ERR_NONE) {
-        LOG_DEBUG("LR11x0 standby failed, err %d", err);
+        LOG_DEBUG_RADIO("LR11x0 standby failed, err %d", err);
     }
 
     isReceiving = false; // If we were receiving, not any more
@@ -434,7 +455,7 @@ template <typename T> void LR11x0Interface<T>::addReceiveMetadata(meshtastic_Mes
     mp->rx_snr = lora.getSNR();
     mp->rx_rssi = lround(lora.getRSSI());
     mp->has_rx_rssi = true; // rx_rssi has explicit presence - a genuine reading must be marked present to survive encoding
-    LOG_DEBUG("Corrected frequency offset: %f", lora.getFrequencyError());
+    LOG_DEBUG_RADIO("Corrected frequency offset: %f", lora.getFrequencyError());
 }
 
 /** We override to turn on transmitter power as needed.
@@ -490,19 +511,75 @@ template <typename T> void LR11x0Interface<T>::startReceive()
 /** Is the channel currently active? */
 template <typename T> bool LR11x0Interface<T>::isChannelActive()
 {
-    // check if we can detect a LoRa preamble on the current channel
-    ChannelScanConfig_t cfg = {.cad = {.symNum = NUM_SYM_CAD,
-                                       .detPeak = RADIOLIB_LR11X0_CAD_PARAM_DEFAULT,
+    // check if we can detect a LoRa preamble on the current channel.
+    // symNum is SetCadParams SymbolNum - a plain count - so take it straight from getCadSymbolCount(),
+    // which follows the band (8 on 2.4 GHz, as SX1280 scans) and is what sizes the CW slot.
+    const uint8_t symNum = getCadSymbolCount();
+    // detPeak: Semtech SWSD003 lr11xx/apps/cad/main_cad.c optimized_parameters[symbols][BW][SF5..SF12],
+    // its measured best CAD detection rates. RadioLib's  default is this table's [2 symbols][BW250] row.
+    // 50 = SWSD003's CAD_DETECT_PEAK fallback, used where it has no measured value.
+    static constexpr uint8_t CAD_DET_PEAK[4][4][8] = {
+        // Each block is one symbol count. Within a block the 4 rows are BW 62.5 / 125 / 250 / 500 kHz,
+        // and the 8 columns are SF5..SF12.
+        // 2 symbols:
+        {{39, 45, 47, 53, 59, 61, 64, 63},
+         {44, 51, 49, 55, 56, 60, 62, 68},
+         {48, 48, 50, 55, 55, 59, 61, 65},
+         {76, 80, 71, 77, 69, 50, 50, 50}}, // SF10-12: SWSD003 has no measurement, 50 is its fallback
+        // 4 symbols:
+        {{43, 45, 45, 50, 53, 57, 59, 63},
+         {44, 46, 49, 53, 53, 55, 57, 62},
+         {45, 47, 47, 51, 51, 56, 59, 62},
+         {58, 66, 58, 65, 62, 55, 60, 57}},
+        // 8 symbols:
+        {{43, 44, 46, 48, 51, 53, 56, 59},
+         {45, 43, 44, 50, 52, 55, 56, 61},
+         {42, 44, 45, 48, 50, 53, 55, 60},
+         {49, 52, 50, 59, 56, 57, 57, 60}},
+        // 16 symbols:
+        {{41, 44, 43, 46, 49, 52, 54, 60},
+         {42, 42, 43, 48, 49, 53, 55, 59},
+         {41, 42, 43, 48, 48, 53, 54, 58},
+         {44, 47, 45, 53, 52, 53, 57, 62}}};
+    // SWSD003 characterises symbol counts 2/4/8/16 against the sub-GHz LoRa modem's four bandwidths.
+    // Use exact matches to avoid mixing widelora (406.25/812.5/1625 kHz)
+    // Anything unmatched uses RadioLib default.
+    // Whole sub-GHz set today; a narrower BW or a symbol count outside 2/4/8/16 needs a row adding.
+    static constexpr float TABLE_BW_KHZ[4] = {62.5f, 125.0f, 250.0f, 500.0f};
+    const int symIdx = symNum == 2 ? 0 : symNum == 4 ? 1 : symNum == 8 ? 2 : symNum == 16 ? 3 : -1;
+    int bwIdx = -1;
+    for (int i = 0; i < 4; i++) {
+        if (bw > TABLE_BW_KHZ[i] - 1.0f && bw < TABLE_BW_KHZ[i] + 1.0f)
+            bwIdx = i;
+    }
+    const uint8_t detPeak = (symIdx < 0 || bwIdx < 0) ? (uint8_t)RADIOLIB_LR11X0_CAD_PARAM_DEFAULT
+                                                      : CAD_DET_PEAK[symIdx][bwIdx][(sf >= 5 && sf <= 12) ? sf - 5 : 6];
+    // Keep preamble/header off the pin - they would fire the ISR mid-frame. Same set the normal RX path
+    // already programs (stageMode sends irqFlags & irqMask), so isActivelyReceiving() sees no change.
+    const uint32_t cadIrqFlags = RADIOLIB_IRQ_CAD_DEFAULT_FLAGS | (1UL << RADIOLIB_IRQ_RX_DONE) | (1UL << RADIOLIB_IRQ_TIMEOUT) |
+                                 (1UL << RADIOLIB_IRQ_CRC_ERR) | (1UL << RADIOLIB_IRQ_HEADER_ERR);
+    // UM Table 8-8: the timeout bounds the RX that follows a detection, so use one max-length airtime.
+    // RadioLib scales it by 30.52 us against a real 31.25, landing ~2% long - not worth pre-compensating.
+    const RadioLibTime_t cadRxTimeoutUsec =
+        (RadioLibTime_t)getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN + sizeof(PacketHeader), false) * 1000;
+    ChannelScanConfig_t cfg = {.cad = {.symNum = symNum,
+                                       .detPeak = detPeak,
+                                       // PARAM_DEFAULT lands on 10 in RadioLib, which is SWSD003's CAD_DETECT_MIN
                                        .detMin = RADIOLIB_LR11X0_CAD_PARAM_DEFAULT,
-                                       .exitMode = RADIOLIB_LR11X0_CAD_PARAM_DEFAULT,
-                                       .timeout = 0,
-                                       .irqFlags = RADIOLIB_IRQ_CAD_DEFAULT_FLAGS,
-                                       .irqMask = RADIOLIB_IRQ_CAD_DEFAULT_MASK}};
+                                       .exitMode = RADIOLIB_LR11X0_CAD_EXIT_MODE_RX,
+                                       .timeout = cadRxTimeoutUsec,
+                                       .irqFlags = cadIrqFlags,
+                                       .irqMask = cadIrqFlags}}; // ignored: startChannelScan() sends irqFlags twice
     int16_t result = trySetStandby();
     if (result == RADIOLIB_ERR_NONE) {
         result = lora.scanChannel(cfg);
-        if (result == RADIOLIB_LORA_DETECTED)
+        if (result == RADIOLIB_LORA_DETECTED) {
+            // The chip auto-entered RX. Drop the latched CAD verdict so the pin releases and the coming
+            // RX_DONE is a clean edge.
+            lora.clearIrqFlags(RADIOLIB_LR11X0_IRQ_CAD_DONE | RADIOLIB_LR11X0_IRQ_CAD_DETECTED);
+            noteCadHandoffToRx(); // nothing below arms the radio; the caller's rearmReceive() adopts it
             return true;
+        }
         if (result != RADIOLIB_ERR_WRONG_MODEM)
             return false;
     }
@@ -522,13 +599,13 @@ template <typename T> bool LR11x0Interface<T>::isActivelyReceiving()
 }
 
 #ifdef LR11X0_AGC_RESET
-template <typename T> void LR11x0Interface<T>::resetAGC()
+template <typename T> bool LR11x0Interface<T>::resetAGC()
 {
     // Safety: don't reset mid-packet
     if (sendingPacket != NULL || (isReceiving && isActivelyReceiving()))
-        return;
+        return false;
 
-    LOG_DEBUG("LR11x0 AGC reset: warm sleep + Calibrate(0x3F)");
+    LOG_DEBUG_RADIO("LR11x0 AGC reset: warm sleep + Calibrate(0x3F)");
 
     // 1. Warm sleep - powers down the analog frontend, resetting AGC state
     lora.sleep(true, 0);
@@ -550,13 +627,14 @@ template <typename T> void LR11x0Interface<T>::resetAGC()
 
     // 6. Resume receiving
     startReceive();
+    return true;
 }
 #endif
 
 template <typename T> bool LR11x0Interface<T>::sleep()
 {
     // \todo Display actual typename of the adapter, not just `LR11x0`
-    LOG_DEBUG("LR11x0 entering sleep mode");
+    LOG_DEBUG_RADIO("LR11x0 entering sleep mode");
     (void)trySetStandby(); // Stop any pending operations - the chip is being put to sleep, a failure must not crash
 
     // turn off TCXO if it was powered
@@ -583,7 +661,4 @@ template <typename T> int16_t LR11x0Interface<T>::getCurrentRSSI()
     return (int16_t)round(rssi);
 }
 
-// Don't leak the aliases into the files InterfacesTemplates.cpp includes after this one.
-#undef rfswitch_dio_pins
-#undef rfswitch_table
 #endif
