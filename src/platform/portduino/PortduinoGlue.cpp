@@ -9,10 +9,14 @@
 #include "ConfigCheck.h"
 #include "PortduinoGlue.h"
 #include "SHA256.h"
+#include "UptimeClock.h"
 #include "api/ServerAPI.h"
+#include "mesh/Throttle.h"
 #include "meshUtils.h"
 #include <ErriezCRC32.h>
 #include <Utility.h>
+#include <algorithm>
+#include <array>
 #include <assert.h>
 #include <cctype>
 #include <cstdint>
@@ -35,6 +39,12 @@
 #include "linux/gpio/LinuxGPIOPin.h"
 #include <bluetooth/bluetooth.h>
 #include <bluetooth/hci.h>
+#endif
+
+#include "LinuxBluetooth.h"
+#ifdef MESHTASTIC_LINUX_BLE
+#include "mesh/NodeDB.h"               // config.bluetooth.enabled
+extern LinuxBluetooth *linuxBluetooth; // defined in main.cpp
 #endif
 
 #ifdef PORTDUINO_LINUX_HARDWARE
@@ -149,10 +159,56 @@ const char *argp_program_version = optstr(APP_VERSION);
 
 char stdoutBuffer[512];
 
+#ifdef MESHTASTIC_LINUX_BLE
+// Long enough that a host which can never bring BLE up is not re-probing BlueZ on every PowerFSM
+// transition, short enough that a bluetoothd still starting at boot is picked up without the user
+// noticing the wait.
+static constexpr uint32_t BLE_SETUP_RETRY_INTERVAL_MS = 30 * 1000;
+#endif
+
 // FIXME - move setBluetoothEnable into a HALPlatform class
 void setBluetoothEnable(bool enable)
 {
-    // not needed
+#ifdef MESHTASTIC_LINUX_BLE
+    // Disable is not gated on the config flags: if BLE is running it must always be
+    // stoppable, even after the device config was switched off underneath it.
+    if (!enable) {
+        if (linuxBluetooth) {
+            // Stop advertising only; a live phone connection survives PowerFSM state
+            // dips.
+            linuxBluetooth->shutdown();
+        }
+        return;
+    }
+    // Opt-in twice: the config.yaml Bluetooth section must enable BLE on this
+    // host, and the regular device config (like every other platform) must have
+    // Bluetooth on.
+    if (!portduino_config.bluetooth_enabled || !config.bluetooth.enabled)
+        return;
+    static uint32_t lastSetupMs = 0; // 0 = not attempted yet; stored through stampMillis()
+    if (!linuxBluetooth) {
+        LOG_INFO("Init LinuxBluetooth (adapter %s)", portduino_config.bluetooth_adapter.c_str());
+        linuxBluetooth = new LinuxBluetooth();
+        lastSetupMs = Time::stampMillis();
+        linuxBluetooth->setup();
+    } else if (!linuxBluetooth->isEnabled()) {
+        // The backend exists but never came up -- bluetoothd was not ready, the adapter was
+        // missing, or policy refused us. resumeAdvertising() returns immediately while disabled, so
+        // without this a transient failure at boot would keep BLE off until the process restarted.
+        //
+        // Throttled because five PowerFSM state-entry handlers reach here, and each setup() opens a
+        // system bus connection, spawns an event-loop thread and enumerates every BlueZ object
+        // before giving up. On a host where BLE can never come up that cost, and the log line, would
+        // otherwise repeat on every transition for as long as the daemon runs.
+        if (lastSetupMs && !Throttle::hasElapsed(lastSetupMs, BLE_SETUP_RETRY_INTERVAL_MS))
+            return;
+        LOG_INFO("Retry LinuxBluetooth setup (adapter %s)", portduino_config.bluetooth_adapter.c_str());
+        lastSetupMs = Time::stampMillis();
+        linuxBluetooth->setup();
+    } else {
+        linuxBluetooth->resumeAdvertising();
+    }
+#endif
 }
 
 void cpuDeepSleep(uint32_t msecs)
@@ -295,9 +351,23 @@ void getMacAddr(uint8_t *dmac)
         return;
     } else {
 #ifdef PORTDUINO_LINUX_HARDWARE
+        // Cache after the first successful read. The adapter address can't change at
+        // runtime, this now gets called from BLE property getters on every bluetoothd
+        // read (not just at startup), and the socket used to leak one fd per call.
+        static uint8_t cachedMac[6];
+        static bool macCached = false;
+        if (macCached) {
+            memcpy(dmac, cachedMac, 6);
+            return;
+        }
         struct hci_dev_info di = {0};
-        di.dev_id = 0;
-        bdaddr_t bdaddr;
+        // Read the adapter configured for BLE (Bluetooth.AdapterId) so the node
+        // identity matches the advertised adapter; a name that doesn't parse as
+        // hci<N> falls back to hci0, preserving the pre-BLE behavior.
+        unsigned adapterIndex = 0;
+        if (sscanf(portduino_config.bluetooth_adapter.c_str(), "hci%u", &adapterIndex) != 1)
+            adapterIndex = 0;
+        di.dev_id = adapterIndex;
         int btsock;
         btsock = socket(AF_BLUETOOTH, SOCK_RAW, 1);
         if (btsock < 0) { // If anything fails, just return with the default value
@@ -305,8 +375,10 @@ void getMacAddr(uint8_t *dmac)
         }
 
         if (ioctl(btsock, HCIGETDEVINFO, (void *)&di)) {
+            close(btsock);
             return;
         }
+        close(btsock);
 
         dmac[0] = di.bdaddr.b[5];
         dmac[1] = di.bdaddr.b[4];
@@ -314,6 +386,8 @@ void getMacAddr(uint8_t *dmac)
         dmac[3] = di.bdaddr.b[2];
         dmac[4] = di.bdaddr.b[1];
         dmac[5] = di.bdaddr.b[0];
+        memcpy(cachedMac, dmac, 6);
+        macCached = true;
 #elif defined(__APPLE__)
         // No BlueZ on macOS, but we can fall back to the host's primary
         // network interface MAC. `en0` is Wi-Fi on every shipping Mac
@@ -1062,6 +1136,7 @@ bool loadConfig(const char *configPath)
                 // an absent key. Kept apart so --check can see it contradict TCXO_OPTIONAL.
                 portduino_config.dio3_tcxo_voltage_disabled =
                     yamlConfig["Lora"]["DIO3_TCXO_VOLTAGE"] && portduino_config.dio3_tcxo_voltage == 0;
+                portduino_config.dio3_tcxo_delay_us = yamlConfig["Lora"]["DIO3_TCXO_DELAY_US"].as<int>(0);
                 // Try both oscillators rather than requiring the user to know which is fitted.
                 portduino_config.tcxo_optional = yamlConfig["Lora"]["TCXO_OPTIONAL"].as<bool>(false);
 
@@ -1351,10 +1426,54 @@ bool loadConfig(const char *configPath)
                 (yamlConfig["Webserver"]["SSLCert"]).as<std::string>("/etc/meshtasticd/ssl/certificate.pem");
         }
 
+        if (yamlConfig["Bluetooth"]) {
+            // Assign per key, not per section. loadConfig() runs once for every file in config.d, so
+            // reading an absent key as its default would let a later file that names only one of
+            // these silently reset the other -- `AdapterId: hci1` alone would turn Bluetooth off,
+            // and `Enabled: true` alone would drag the adapter back to hci0. Only what a file
+            // actually says should override what an earlier one set.
+            if (yamlConfig["Bluetooth"]["Enabled"])
+                portduino_config.bluetooth_enabled = (yamlConfig["Bluetooth"]["Enabled"]).as<bool>(false);
+            if (yamlConfig["Bluetooth"]["AdapterId"])
+                portduino_config.bluetooth_adapter = (yamlConfig["Bluetooth"]["AdapterId"]).as<std::string>("hci0");
+        }
+
         if (yamlConfig["HostMetrics"]) {
             portduino_config.hostMetrics_channel = (yamlConfig["HostMetrics"]["Channel"]).as<int>(0);
             portduino_config.hostMetrics_interval = (yamlConfig["HostMetrics"]["ReportInterval"]).as<int>(0);
             portduino_config.hostMetrics_user_command = (yamlConfig["HostMetrics"]["UserStringCommand"]).as<std::string>("");
+        }
+
+        if (yamlConfig["Security"] && yamlConfig["Security"]["AdminKeys"]) {
+            const YAML::Node keys = yamlConfig["Security"]["AdminKeys"];
+            if (!keys.IsSequence()) {
+                std::cout << "Security.AdminKeys must be a list of base64 public keys!" << std::endl;
+                if (!configCheck)
+                    exit(EXIT_FAILURE);
+            } else {
+                // Appended, not assigned: loadConfig() runs once per file in config.d, so an
+                // operator can drop in a file per admin. Duplicates are dropped, since each key
+                // costs a trial decryption in Router's admin-key fallback.
+                for (const auto &entry : keys) {
+                    const std::string text = entry.as<std::string>("");
+                    std::array<uint8_t, 32> key;
+                    if (!adminKeyFromBase64(text, key)) {
+                        std::cout << "Security.AdminKeys: '" << text << "' is not a 32-byte base64 public key!" << std::endl;
+                        if (!configCheck)
+                            exit(EXIT_FAILURE);
+                        continue;
+                    }
+                    if (std::find(portduino_config.admin_keys.begin(), portduino_config.admin_keys.end(), key) !=
+                        portduino_config.admin_keys.end())
+                        continue;
+                    if (portduino_config.admin_keys.size() >= PORTDUINO_MAX_ADMIN_KEYS) {
+                        std::cout << "Security.AdminKeys: at most " << PORTDUINO_MAX_ADMIN_KEYS
+                                  << " admin keys are supported, ignoring the rest!" << std::endl;
+                        break;
+                    }
+                    portduino_config.admin_keys.push_back(key);
+                }
+            }
         }
 
         if (yamlConfig["Config"]) {
@@ -1430,6 +1549,67 @@ bool loadConfig(const char *configPath)
 static bool ends_with(std::string_view str, std::string_view suffix)
 {
     return str.size() >= suffix.size() && str.compare(str.size() - suffix.size(), suffix.size(), suffix) == 0;
+}
+
+static int base64Value(char c)
+{
+    if (c >= 'A' && c <= 'Z')
+        return c - 'A';
+    if (c >= 'a' && c <= 'z')
+        return c - 'a' + 26;
+    if (c >= '0' && c <= '9')
+        return c - '0' + 52;
+    if (c == '+' || c == '-') // '-' and '_' so a base64url-encoded key is accepted too
+        return 62;
+    if (c == '/' || c == '_')
+        return 63;
+    return -1;
+}
+
+// Decodes a 32-byte public key as the apps and the CLI print it. Anything that is not exactly 32
+// bytes of canonical base64 is refused rather than zero-padded: a truncated admin key would
+// silently authorize the wrong peer.
+bool adminKeyFromBase64(const std::string &text, std::array<uint8_t, 32> &out)
+{
+    uint32_t accum = 0;
+    int bits = 0;
+    size_t written = 0;
+    for (char c : text) {
+        if (isspace(static_cast<unsigned char>(c)) || c == '=')
+            continue;
+        const int value = base64Value(c);
+        if (value < 0)
+            return false;
+        accum = (accum << 6) | static_cast<uint32_t>(value);
+        bits += 6;
+        if (bits >= 8) {
+            bits -= 8;
+            if (written >= out.size())
+                return false;
+            out[written++] = static_cast<uint8_t>((accum >> bits) & 0xFF);
+        }
+    }
+    return written == out.size() && (accum & ((1u << bits) - 1)) == 0;
+}
+
+std::string adminKeyToBase64(const std::array<uint8_t, 32> &key)
+{
+    static const char alphabet[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string out;
+    out.reserve(44);
+    for (size_t i = 0; i < key.size(); i += 3) {
+        const size_t remaining = key.size() - i;
+        uint32_t chunk = static_cast<uint32_t>(key[i]) << 16;
+        if (remaining > 1)
+            chunk |= static_cast<uint32_t>(key[i + 1]) << 8;
+        if (remaining > 2)
+            chunk |= key[i + 2];
+        out += alphabet[(chunk >> 18) & 0x3F];
+        out += alphabet[(chunk >> 12) & 0x3F];
+        out += remaining > 1 ? alphabet[(chunk >> 6) & 0x3F] : '=';
+        out += remaining > 2 ? alphabet[chunk & 0x3F] : '=';
+    }
+    return out;
 }
 
 bool MAC_from_string(std::string mac_str, uint8_t *dmac)

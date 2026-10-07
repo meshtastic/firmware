@@ -55,12 +55,6 @@ class MockRouter : public Router
   public:
     MockRouter() { addInterface(std::make_unique<MockRadioInterface>()); }
 
-    ~MockRouter()
-    {
-        delete cryptLock;
-        cryptLock = nullptr;
-    }
-
     ErrorCode send(meshtastic_MeshPacket *packet) override
     {
         sentPackets.push_back(*packet);
@@ -109,8 +103,6 @@ struct GlobalState {
     MeshService *service;
     Router *router;
     NodeDB *nodeDB;
-    // Router's ctor asserts !cryptLock and allocates one; ~MockRouter() deletes it. Save the
-    // incoming lock so the restored router keeps the one it was built with.
     concurrency::Lock *cryptLock;
     meshtastic_MyNodeInfo myNodeInfo;
     Channels channels;
@@ -215,7 +207,6 @@ void setUp(void)
     nodeDB = mockNodeDB = new NodeDB();
     myNodeInfo.my_node_num = LOCAL_NODE;
     configureChannels();
-    cryptLock = nullptr; // Router's ctor asserts this is unset before allocating its own.
     router = mockRouter = new MockRouter();
     streamAPI = new TestStreamAPI();
     noopModule = new NoopModule();
@@ -238,7 +229,7 @@ void tearDown(void)
     service = savedState->service;
     router = savedState->router;
     nodeDB = savedState->nodeDB;
-    cryptLock = savedState->cryptLock; // ~MockRouter() nulled it; hand the saved router its own back.
+    cryptLock = savedState->cryptLock;
     myNodeInfo = savedState->myNodeInfo;
     channels = savedState->channels;
     channelFile = savedState->channelFile;
