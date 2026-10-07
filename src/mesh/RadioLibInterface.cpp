@@ -839,7 +839,14 @@ void RadioLibInterface::pollMissedIrqs()
 {
     // RadioLibInterface::enableInterrupt uses EDGE-TRIGGERED interrupts. Poll as a backup to catch missed edges.
     if (isReceiving) {
+#ifdef ARCH_PORTDUINO
+        // Name this look's own catch. This one fires on a timer rather than on anything the radio did, so it is the
+        // look that finds a flag nobody else went back for - which is what makes it worth telling apart.
+        if (checkRxDoneIrqFlag())
+            LOG_DEBUG("RX poll found a missed RX_DONE");
+#else
         checkRxDoneIrqFlag();
+#endif
         checkCadHandoffTimeout();
         checkStaleRxFlags();
     }
@@ -888,7 +895,12 @@ void RadioLibInterface::rearmReceive()
     RadioLibInterface::startReceive();
     enableInterrupt(isrRxLevel0);
     // The line is not known-low here, and the ISR is rising-edge: catch an RX_DONE that beat the arm.
+#ifdef ARCH_PORTDUINO
+    if (checkRxDoneIrqFlag()) // name this look's own catch
+        LOG_DEBUG("RX re-arm found a missed RX_DONE");
+#else
     checkRxDoneIrqFlag();
+#endif
 }
 
 void RadioLibInterface::checkCadHandoffTimeout()

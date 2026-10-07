@@ -527,7 +527,12 @@ template <typename T> void SX126xInterface<T>::startReceive()
 
     // Must be done AFTER, starting transmit, because startTransmit clears (possibly stale) interrupt pending register bits
     enableInterrupt(isrRxLevel0);
+#ifdef ARCH_PORTDUINO
+    if (checkRxDoneIrqFlag()) // name this look's own catch
+        LOG_DEBUG("RX start found a missed RX_DONE");
+#else
     checkRxDoneIrqFlag();
+#endif
 #endif
 }
 
@@ -549,8 +554,8 @@ template <typename T> bool SX126xInterface<T>::resumeRunningReceive()
     RadioLibInterface::startReceive();
     enableInterrupt(isrRxLevel0);
 #ifdef ARCH_PORTDUINO
-    // Name this look's own catch: "caught missed RX_DONE" alone cannot say which found it, as pollMissedIrqs(),
-    // rearmReceive() and startReceive() all log it too, and the first fires on a timer.
+    // Name this look's own catch: "caught missed RX_DONE" alone cannot say which found it. pollMissedIrqs(),
+    // rearmReceive() and startReceive() each name their own the same way, so the four are now told apart.
     if (checkRxDoneIrqFlag()) // an RX_DONE the resume carried across
         LOG_DEBUG("RX resume kept RX_DONE for readout");
 #else
