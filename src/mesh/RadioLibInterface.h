@@ -211,11 +211,17 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     /** Record that CAD left the chip in RX: arms both the flag and the no-show window below. */
     void noteCadHandoffToRx();
 
+    /** True where DIO1 is only seen through libch341's pin poll (a CH341 USB host), so an interrupt arrives up to
+     *  one poll interval after the chip raised it, and every command is a USB round trip. */
+    bool irqPolledOverUsb() const;
+
     /** Re-arm if a CAD->RX handoff has produced no packet well past one max-length airtime. */
     void checkCadHandoffTimeout();
 
     // Time::getMillis() when plain RX was first seen holding PREAMBLE/HEADER flags, or 0 if none.
     uint32_t rxFlagsSeenMs = 0;
+    // rxFlagsSeenMs was stamped by a header, not by a bare preamble before it
+    bool rxFlagsSeenHeader = false;
 
     /** Plain-RX twin of checkCadHandoffTimeout(): retire flags no RX_DONE consumed within a max packet. */
     virtual void checkStaleRxFlags();
@@ -281,6 +287,23 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      * re-attaches the MCU ISR only - a startReceive() there would standby over the packet CAD found.
      */
     void rearmReceive();
+
+    /** Resume an RX the chip is still running instead of restarting it; false if it is not known to be running. */
+    virtual bool resumeRunningReceive() { return false; }
+
+    /** Whether a TX payload written into the chip's buffer while this frame arrived can have overwritten part of it */
+    virtual bool rxFrameOverlapsTxStage(size_t length) { return false; }
+
+    /** A backoff shorter than this is waited out as before, and its payload staged at the scan */
+    static constexpr uint32_t TX_STAGE_EARLY_MIN_MS = 5;
+    /** When the TX timer really falls due, 0 if it was not brought forward to stage the payload */
+    uint32_t txStageDueMs = 0;
+    /** Whether a payload can be written during its backoff (checked from the thread that queues it) */
+    virtual bool wantsEarlyTxStage() const { return false; }
+    /** Write the next packet's payload while RX runs, ahead of its scan */
+    virtual void stageTxEarly(meshtastic_MeshPacket *p) {}
+    /** notifyLater(delay, TRANSMIT_DELAY_COMPLETED), brought forward where the payload can be staged early */
+    void scheduleTransmitDelayCompleted(uint32_t delay);
 
     /** can we detect a LoRa preamble on the current channel?
      *  A true return means the chip may have been handed to RX in place, so the caller MUST follow it
@@ -371,6 +394,14 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
   protected:
     uint32_t activeReceiveStart = 0;
+    // Time::getMillis() when a look cleared PREAMBLE_DETECTED and began holding TX, or 0 if no hold.
+    uint32_t preambleHoldStart = 0;
+
+    /** True while a cleared preamble still holds TX; ends the hold once one max packet has passed. */
+    bool preambleHoldActive();
+
+    /** Clear a bare PREAMBLE_DETECTED and hold TX one max packet, unless a hold is already running. */
+    void holdOnPreamble();
 
     /** Whether a packet is waiting to transmit; txQueue itself stays private. */
     bool hasQueuedTx() { return !txQueue.empty(); }
@@ -380,6 +411,12 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     /** Do any hardware setup needed on entry into send configuration for the radio.
      * Subclasses can customize, but must also call this base method */
     virtual void configHardwareForSend();
+
+    /** Put radioBuffer's first numbytes on air; a subclass may launch a payload it staged during the scan */
+    virtual int16_t launchTransmit(size_t numbytes);
+
+    /** The packet the running channel scan is clearing the way for, so the scan can stage it; null otherwise */
+    meshtastic_MeshPacket *scanForTx = nullptr;
 
     /** Could we send right now (i.e. either not actively receiving or transmitting)? */
     virtual bool canSendImmediately();
@@ -501,7 +538,13 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
     bool removePendingTXPacket(NodeNum from, PacketId id, uint32_t hop_limit_lt) override;
 
-    void checkRxDoneIrqFlag();
+    /** Retire RX_DONE and CRC_ERR for a frame nothing will read out. readData() clears its own, so this is for the
+     * early outs in handleReceiveInterrupt() that return before it: left latched, they would be taken for an unread
+     * frame and re-notified for as long as they sit there. */
+    void clearReadIrqs();
+
+    /** @return whether a latched RX_DONE was found and notified, so a caller can say which look caught it */
+    bool checkRxDoneIrqFlag();
     void checkTxDoneIrqFlag();
 
     /** Software-poll substitute for a hardware DIO interrupt, for radios whose IRQ line sits behind
