@@ -577,7 +577,7 @@ template <typename T> bool LR11x0Interface<T>::resumeRunningReceive()
         rxArmedContinuous = false;
         return false;
     }
-    // No flag clearing here: whoever gave up on a frame unread dropped its flags (clearUnreadRxIrqFlags()), and readData()
+    // No flag clearing here: whoever gave up on a frame unread dropped its flags (clearReadIrqs()), and readData()
     // drops them for a frame it read, so a latched RX_DONE now is the next frame's.
     activeReceiveStart = 0; // the frame it timed is done; a preamble now is the next one
 #ifdef MESHTASTIC_LOG_RADIO_EDGES
