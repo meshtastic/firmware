@@ -538,6 +538,11 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
     bool removePendingTXPacket(NodeNum from, PacketId id, uint32_t hop_limit_lt) override;
 
+    /** Retire RX_DONE and CRC_ERR for a frame nothing will read out. readData() clears its own, so this is for the
+     * early outs in handleReceiveInterrupt() that return before it: left latched, they would be taken for an unread
+     * frame and re-notified for as long as they sit there. */
+    void clearReadIrqs();
+
     /** @return whether a latched RX_DONE was found and notified, so a caller can say which look caught it */
     bool checkRxDoneIrqFlag();
     void checkTxDoneIrqFlag();

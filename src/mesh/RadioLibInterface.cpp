@@ -723,6 +723,7 @@ void RadioLibInterface::handleReceiveInterrupt()
     if (length > sizeof(radioBuffer)) {
         LOG_ERROR("Ignore rx packet, bad length %u", (unsigned int)length);
         rxBad++;
+        clearReadIrqs(); // no readData() ran to clear them, and no readout is waiting on them
         return;
     }
 
@@ -732,6 +733,7 @@ void RadioLibInterface::handleReceiveInterrupt()
     if (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
         LOG_WARN("lora rx disabled: Region unset");
         airTime->logAirtime(RX_ALL_LOG, rxMsec);
+        clearReadIrqs(); // no readData() ran to clear them, and no readout is waiting on them
         return;
     }
 #endif
@@ -993,6 +995,11 @@ bool RadioLibInterface::maybeRecoverChipStateLoss()
     bool recovered = recoverChipStateLoss();
     LOG_INFO("Radio re-init %s", recovered ? "succeeded" : "failed");
     return recovered;
+}
+
+void RadioLibInterface::clearReadIrqs()
+{
+    iface->clearIrq((1UL << RADIOLIB_IRQ_RX_DONE) | (1UL << RADIOLIB_IRQ_CRC_ERR));
 }
 
 bool RadioLibInterface::checkRxDoneIrqFlag()

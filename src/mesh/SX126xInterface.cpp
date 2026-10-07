@@ -535,33 +535,26 @@ template <typename T> bool SX126xInterface<T>::resumeRunningReceive()
 {
     // Continuous RX survives RX_DONE and CRC or header errors: the chip is still listening. A restart is a standby
     // and ~10 bus transactions, deaf throughout on a CH341 host, so pick the RX back up instead.
-#ifdef ARCH_PORTDUINO
-    const bool keepRxIrqs = keepRxIrqsAtResume;
-    keepRxIrqsAtResume = false;
-#else
-    const bool keepRxIrqs = false;
-#endif
     if (!rxArmedContinuous)
         return false;
-    // readData() clears these, but handleReceiveInterrupt()'s early outs do not. PREAMBLE/HEADER_VALID stay: they
-    // may belong to the next frame, already arriving. A scan skipped for a frame in flight or unread keeps that
-    // frame's RX_DONE (the only flag on DIO1) and CRC_ERR for its readout, which checkRxDoneIrqFlag() below drives -
-    // including an RX_DONE that landed in the USB round trip since the scan read the flags. A stale HEADER_ERR or
-    // TIMEOUT has no readout waiting and would cost checkStaleRxFlags() a re-arm, so it goes either way.
-    uint32_t clearMask = RADIOLIB_SX126X_IRQ_HEADER_ERR | RADIOLIB_SX126X_IRQ_TIMEOUT;
-    if (!keepRxIrqs)
-        clearMask |= RADIOLIB_SX126X_IRQ_RX_DONE | RADIOLIB_SX126X_IRQ_CRC_ERR;
-    lora.clearIrqFlags(clearMask);
+    // RX_DONE and CRC_ERR are never cleared here: whoever read a frame out cleared its own flags, so anything still
+    // latched belongs to a frame that has not been read, and checkRxDoneIrqFlag() below drives that readout. Clearing
+    // them would erase a frame that finished while we got here - on a CH341 host the readout's own bus traffic, the
+    // overlap check included, is several round trips wide. The two early outs in handleReceiveInterrupt() that return
+    // before readData() clear them where they return. PREAMBLE/HEADER_VALID stay: they may belong to the next frame,
+    // already arriving. A stale HEADER_ERR or TIMEOUT has no readout waiting and would cost checkStaleRxFlags() a
+    // re-arm, so those two go unconditionally.
+    lora.clearIrqFlags(RADIOLIB_SX126X_IRQ_HEADER_ERR | RADIOLIB_SX126X_IRQ_TIMEOUT);
     activeReceiveStart = 0; // as the standby this replaces would
     RadioLibInterface::startReceive();
     enableInterrupt(isrRxLevel0);
 #ifdef ARCH_PORTDUINO
-    // Name the one catch the keep is responsible for: "caught missed RX_DONE" alone cannot say which look
-    // found it, as pollMissedIrqs(), rearmReceive() and startReceive() all log it too.
-    if (checkRxDoneIrqFlag() && keepRxIrqs) // an RX_DONE that beat the arm
+    // Name this look's own catch: "caught missed RX_DONE" alone cannot say which found it, as pollMissedIrqs(),
+    // rearmReceive() and startReceive() all log it too, and the first fires on a timer.
+    if (checkRxDoneIrqFlag()) // an RX_DONE the resume carried across
         LOG_DEBUG("RX resume kept RX_DONE for readout");
 #else
-    checkRxDoneIrqFlag(); // an RX_DONE that beat the arm
+    checkRxDoneIrqFlag(); // an RX_DONE the resume carried across
 #endif
     return true;
 }
@@ -789,9 +782,6 @@ template <typename T> bool SX126xInterface<T>::stageTxInRx()
         // Its readout checks whether our bytes can lie across it. A bare preamble counts: that frame can still
         // grow into the staged bytes, no later look records the check, and the record is spent on the next readout.
         noteStagedOverFrame(base, numbytes);
-        // The busy verdict's rearmReceive() resumes the RX: it must leave the frame's terminal flags for its
-        // readout, whether it had already finished or finishes while we get there
-        keepRxIrqsAtResume = true;
         LOG_DEBUG("TX stage in RX: frame arriving or unread (irq 0x%04x), scan skipped", (unsigned)irq);
         return true;
     }
