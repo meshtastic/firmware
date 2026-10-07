@@ -9,6 +9,7 @@
 #include "yaml-cpp/eventhandler.h"
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <filesystem>
 #include <fstream>
@@ -36,6 +37,9 @@ constexpr int MAX_NODES_SANITY_CEILING = 16000;
 // CI runs --check over bin/config.d/**, so an omission fails the build rather than a user.
 
 const std::set<std::string> kLoraPinKeys = {"CS", "IRQ", "Busy", "Reset", "TXen", "RXen", "SX126X_ANT_SW", "GPIO_DETECT_PA"};
+
+// Action names LinuxJoystick understands; anything else leaves the button unmapped.
+const std::set<std::string> kJoystickActions = {"select", "cancel", "back", "up", "down", "left", "right", "user", "userpress"};
 
 const std::map<std::string, std::set<std::string>> &schema()
 {
@@ -74,6 +78,7 @@ const std::map<std::string, std::set<std::string>> &schema()
         {"General",
          {"MACAddress", "MACAddressSource", "MaxNodes", "MaxMessageQueue", "APIPort", "ConfigDirectory", "AvailableDirectory"}},
         {"Config", {"DisplayMode", "EnableUDP", "StatusMessage"}},
+        {"Security", {"AdminKeys"}},
         {"Display",
          {"Panel", "spidev", "BusFrequency", "Width", "Height", "Invert", "Rotate", "OffsetX", "OffsetY", "OffsetRotate",
           "RGBOrder", "HUB75", "DC", "CS", "Backlight", "BacklightInvert", "BacklightPWMChannel", "Reset"}},
@@ -86,6 +91,7 @@ const std::map<std::string, std::set<std::string>> &schema()
         {"I2C", {"I2CDevice"}},
         {"Logging", {"LogLevel", "TraceFile", "JSONFile", "JSONFileRotate", "JSONFilter", "AsciiLogs"}},
         {"Webserver", {"Port", "RootPath", "SSLCert", "SSLKey"}},
+        {"Bluetooth", {"Enabled", "AdapterId"}},
         {"HostMetrics", {"ReportInterval", "Channel", "UserStringCommand"}},
         // Read by packaging/menu tooling rather than by meshtasticd itself.
         {"Meta", {}},
@@ -366,6 +372,61 @@ void checkPinNode(const std::string &file, const std::string &path, const YAML::
     }
 }
 
+// Keyed by action, not by button, so one action can list several codes and have every one of
+// those buttons drive it. The value is a single evdev code or a list of them.
+void checkJoystickButtons(const std::string &file, const YAML::Node &node, std::vector<Finding> &findings)
+{
+    if (!node.IsMap()) {
+        findings.push_back(
+            {kError, file, lineOf(node), "Input.JoystickButtons must be a mapping of action name to evdev button code"});
+        return;
+    }
+
+    std::map<int, std::string> owner; // code -> the action that claimed it first
+    for (const auto &entry : node) {
+        std::string action = entry.first.as<std::string>("");
+        for (auto &c : action)
+            c = tolower(c);
+        if (!kJoystickActions.count(action)) {
+            findings.push_back({kWarn, file, lineOf(entry.first),
+                                "Input.JoystickButtons: '" + action +
+                                    "' is not a recognised action, so those buttons do nothing. Valid actions are select, "
+                                    "cancel, back, up, down, left, right and user"});
+            continue;
+        }
+
+        std::vector<YAML::Node> codeNodes;
+        if (entry.second.IsSequence())
+            for (const auto &codeNode : entry.second)
+                codeNodes.push_back(codeNode);
+        else
+            codeNodes.push_back(entry.second);
+
+        for (const auto &codeNode : codeNodes) {
+            const std::string raw = codeNode.as<std::string>("");
+            int code = 0;
+            try {
+                code = std::stoi(raw, nullptr, 0);
+            } catch (const std::exception &) {
+                code = 0;
+            }
+            if (code == 0) {
+                findings.push_back({kWarn, file, lineOf(codeNode),
+                                    "Input.JoystickButtons." + action + ": '" + raw +
+                                        "' is not an evdev button code (hex like 0x121, or decimal), so it is unmapped"});
+                continue;
+            }
+            // One button cannot do two things: the later action silently replaces the earlier one.
+            const auto claimed = owner.find(code);
+            if (claimed != owner.end() && claimed->second != action)
+                findings.push_back({kWarn, file, lineOf(codeNode),
+                                    "Input.JoystickButtons: button " + raw + " is mapped to both '" + claimed->second +
+                                        "' and '" + action + "'. Only '" + action + "' takes effect"});
+            owner[code] = action;
+        }
+    }
+}
+
 void checkRfSwitchTable(const std::string &file, const YAML::Node &table, std::vector<Finding> &findings)
 {
     if (!table.IsMap()) {
@@ -534,6 +595,8 @@ const std::map<std::string, ValueSpec> &valueSpecs()
         {"Webserver.RootPath", {kString, false}},
         {"Webserver.SSLCert", {kString, false}},
         {"Webserver.SSLKey", {kString, false}},
+        {"Bluetooth.Enabled", {kBool, false}},
+        {"Bluetooth.AdapterId", {kString, false}},
         {"HostMetrics.ReportInterval", {kInt, false}},
         {"HostMetrics.Channel", {kInt, false}},
         {"HostMetrics.UserStringCommand", {kString, false}},
@@ -708,6 +771,31 @@ void checkTxGain(const std::string &file, const YAML::Node &node, std::vector<Fi
                             "Lora.TX_GAIN_LORA is not a whole number, so it is silently read as 0 and no PA gain is applied"});
 }
 
+// Each entry is read without a fallback: loadConfig() exits on anything that is not a 32-byte
+// base64 public key, so a typo here stops meshtasticd rather than dropping one admin.
+void checkAdminKeys(const std::string &file, const YAML::Node &node, std::vector<Finding> &findings)
+{
+    if (!node.IsSequence()) {
+        findings.push_back({kError, file, lineOf(node),
+                            "Security.AdminKeys must be a list of base64 public keys, so meshtasticd refuses to start on "
+                            "this file"});
+        return;
+    }
+
+    if (node.size() > PORTDUINO_MAX_ADMIN_KEYS)
+        findings.push_back({kWarn, file, lineOf(node),
+                            "Security.AdminKeys lists " + std::to_string(node.size()) + " keys but only the first " +
+                                std::to_string(PORTDUINO_MAX_ADMIN_KEYS) + " are read; the rest are dropped"});
+
+    for (const auto &entry : node) {
+        std::array<uint8_t, 32> key;
+        if (!adminKeyFromBase64(entry.as<std::string>(""), key))
+            findings.push_back({kError, file, lineOf(entry),
+                                "Security.AdminKeys entry '" + entry.as<std::string>("") +
+                                    "' is not a 32-byte base64 public key, so meshtasticd refuses to start on this file"});
+    }
+}
+
 // Module names match exactly and are inconsistently cased (RF95 upper, sx1262 lower),
 // and loadConfig() exits on an unknown name without printing the valid set, so name it here.
 void checkLoraModule(const std::string &file, const YAML::Node &module, std::vector<Finding> &findings)
@@ -836,8 +924,23 @@ void checkSection(const std::string &file, const std::string &section, const YAM
             if (value.IsSequence())
                 for (const auto &pin : value)
                     checkPinNode(file, section + "." + key, pin, findings);
+        } else if (section == "Security" && key == "AdminKeys") {
+            checkAdminKeys(file, value, findings);
+        } else if (section == "Bluetooth" && key == "AdapterId") {
+            // LinuxBluetooth uses this verbatim as the BlueZ object path (/org/bluez/<id>), while the
+            // MAC fallback only reads the leading hciN. A value like "hci1junk" therefore looks
+            // plausible, yields a MAC, and then finds no adapter -- BLE just never comes up. Only
+            // hci<digits> is a real adapter name.
+            const std::string adapter = value.as<std::string>("");
+            const bool wellFormed = adapter.rfind("hci", 0) == 0 && adapter.size() > 3 &&
+                                    adapter.find_first_not_of("0123456789", 3) == std::string::npos;
+            if (!wellFormed)
+                findings.push_back({kWarn, file, lineOf(value),
+                                    "Bluetooth.AdapterId '" + adapter +
+                                        "' is not a BlueZ adapter name. It must be hci followed by digits (hci0, hci1); "
+                                        "anything else leaves no /org/bluez entry to attach to and Bluetooth stays off"});
         } else if (key == "JoystickButtons") {
-            // Free-form: any action name mapped to an evdev code.
+            checkJoystickButtons(file, value, findings);
         } else if ((section == "Lora" && kLoraPinKeys.count(key)) ||
                    (section == "Display" &&
                     (key == "DC" || key == "CS" || key == "Backlight" || key == "BacklightPWMChannel" || key == "Reset")) ||
@@ -1157,6 +1260,17 @@ void checkMergedConfig(const PathIndex &paths, std::vector<Finding> &findings)
         findings.push_back({kError, merged, 0,
                             "Display.Panel is HUB75 but this meshtasticd was built without HUB75 support, so it exits at "
                             "startup. Rebuild with hzeller/rpi-rgb-led-matrix installed (it provides rgbmatrix.pc)"});
+#endif
+
+#if !HAS_BLUETOOTH
+    // Same class of build-time gap as HUB75 above, but only a warning: BLE
+    // quietly stays off rather than aborting startup.
+    if (portduino_config.bluetooth_enabled)
+        findings.push_back({kWarn, merged, 0,
+                            "Bluetooth.Enabled is true but this meshtasticd "
+                            "was built without BLE support, so Bluetooth "
+                            "stays off. Rebuild with libsdbus-c++-dev "
+                            "installed (it provides sdbus-c++.pc)"});
 #endif
 
     if (portduino_config.lora_cs_pin.enabled && !portduino_config.lora_spi_dev.empty() &&

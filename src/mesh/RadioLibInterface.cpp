@@ -56,6 +56,19 @@ RadioLibInterface::RadioLibInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE c
 #endif
 }
 
+uint32_t RadioLibInterface::tcxoStartupDelayUs()
+{
+#if ARCH_PORTDUINO
+    // 0 is an absent key; the build default applies
+    if (portduino_config.dio3_tcxo_delay_us > 0)
+        return (uint32_t)portduino_config.dio3_tcxo_delay_us;
+    if (portduino_config.dio3_tcxo_delay_us < 0)
+        LOG_WARN("Ignore Lora.DIO3_TCXO_DELAY_US %d, use %u us", portduino_config.dio3_tcxo_delay_us,
+                 (unsigned)TCXO_STARTUP_DELAY_US);
+#endif
+    return TCXO_STARTUP_DELAY_US;
+}
+
 #ifdef ARCH_ESP32
 // ESP32 doesn't use that flag
 #define YIELD_FROM_ISR(x) portYIELD_FROM_ISR()
@@ -90,6 +103,9 @@ void INTERRUPT_ATTR RadioLibInterface::isrTxLevel0()
  */
 RadioLibInterface *RadioLibInterface::instance;
 
+/** At most one busyRx deferral line per this interval; the line carries the count it stands for. */
+#define BUSY_RX_LOG_INTERVAL_MS 30000
+
 /** Could we send right now (i.e. either not actively receiving or transmitting)? */
 bool RadioLibInterface::canSendImmediately()
 {
@@ -112,7 +128,15 @@ bool RadioLibInterface::canSendImmediately()
             rebootAtMsec = Time::skipZero(lastTxStart + 65000);
         }
         if (busyRx) {
-            LOG_WARN("Can not send yet, busyRx");
+            // Normal on a busy channel, and checked on every attempt: log the count at most once per interval
+            busyRxDeferred++;
+            const uint32_t nowMs = Time::getMillis();
+            if (lastBusyRxLogMs == 0 || Throttle::hasElapsed(lastBusyRxLogMs, BUSY_RX_LOG_INTERVAL_MS)) {
+                LOG_WARN("Can not send yet, busyRx (%u deferred in %u ms)", (unsigned)busyRxDeferred,
+                         (unsigned)(lastBusyRxLogMs ? nowMs - lastBusyRxLogMs : nowMs));
+                busyRxDeferred = 0;
+                lastBusyRxLogMs = Time::skipZero(nowMs);
+            }
         }
         return false;
     } else
@@ -178,7 +202,7 @@ ErrorCode RadioLibInterface::send(meshtastic_MeshPacket *p)
 #endif
 
     if (p->to == NODENUM_BROADCAST_NO_LORA) {
-        LOG_DEBUG("Drop no-LoRa pkt");
+        LOG_DEBUG_RADIO("Drop no-LoRa pkt");
         return ERRNO_SHOULD_RELEASE;
     }
 
@@ -229,7 +253,7 @@ bool RadioLibInterface::canSleep(bool deepSleep)
     // packet on air.
     bool res = txQueue.empty() && !(deepSleep && isSending());
     if (!res) { // only print debug messages if we are vetoing sleep
-        LOG_DEBUG("Radio wait to sleep, txEmpty=%d, txInFlight=%d", txQueue.empty(), isSending());
+        LOG_DEBUG_RADIO("Radio wait to sleep, txEmpty=%d, txInFlight=%d", txQueue.empty(), isSending());
     }
     return res;
 }
@@ -252,7 +276,7 @@ bool RadioLibInterface::cancelSending(NodeNum from, PacketId id)
     }
 
     bool result = (p != NULL);
-    LOG_DEBUG("cancelSending id=0x%08x, removed=%d", id, result);
+    LOG_DEBUG_RADIO("cancelSending id=0x%08x, removed=%d", id, result);
     return result;
 }
 
@@ -276,7 +300,7 @@ void RadioLibInterface::updateNoiseFloor()
 
     int16_t rssi = getCurrentRSSI();
     if (rssi == NOISE_FLOOR_INVALID || rssi >= 0 || rssi < NOISE_FLOOR_VALID_MIN) {
-        LOG_DEBUG("Skipping invalid RSSI reading: %d", rssi);
+        LOG_DEBUG_RADIO("Skipping invalid RSSI reading: %d", rssi);
         return;
     }
 
@@ -339,7 +363,7 @@ void RadioLibInterface::resetNoiseFloor()
     currentSampleIndex = 0;
     isNoiseFloorBufferFull = false;
     currentNoiseFloor = NOISE_FLOOR_DEFAULT;
-    LOG_INFO("Noise floor reset - rolling window will restart");
+    LOG_DEBUG_RADIO("Noise floor reset - rolling window will restart");
 }
 
 bool RadioLibInterface::randomBytes(uint8_t *buffer, size_t length)
@@ -405,18 +429,23 @@ void RadioLibInterface::onNotify(uint32_t notification)
 {
 
     switch (notification) {
-    case ISR_TX:
-        handleTransmitInterrupt(); // completeSending() already restored the radio to the home config
+    case ISR_TX: {
+        // The chip is deaf in standby until startReceive(), so the airtime log and printPacket() wait until after it.
+        meshtastic_MeshPacket *sent = handleTransmitInterrupt(); // radio already back on the home config
         // Let the hooks pre-stage the radio for the NEXT queued packet. Not required for correctness -
         // TRANSMIT_DELAY_COMPLETED asks again before the scan, which is where the answer is acted on -
         // but it keeps the post-TX listen window on the channel we are about to transmit on.
         (void)RadioTxHooks::beforeTransmit(this, txQueue.getFront());
         startReceive();
         setTransmitDelay();
+        finishSentPacket(sent);
         break;
+    }
     case ISR_RX:
         handleReceiveInterrupt();
-        startReceive();
+        // Re-arm for the next packet. rearmReceive() avoids a standby where the chip is already in RX,
+        // so a second packet that is already arriving is not aborted.
+        rearmReceive();
         setTransmitDelay();
         break;
     case ISR_POLL_TICK:
@@ -450,12 +479,16 @@ void RadioLibInterface::onNotify(uint32_t notification)
                 } else if (action == RadioTxHook::PRETX_DEFER) {
                     setTransmitDelay(); // the radio config moved, so re-run the delay and scan on it
                 } else {
-                    if (isChannelActive()) { // check if there is currently a LoRa packet on the channel
-                        if (!RadioTxHooks::holdsRadio(txp)) {
-                            startReceive(); // try receiving this packet, afterwards we'll be trying to transmit again
-                        }
+                    // Listen-before-talk: a CAD preamble scan immediately before we key up.
+                    LOG_DEBUG("CAD arm");
+                    if (isChannelActive()) { // currently traffic on the channel?
+                        LOG_DEBUG("CAD busy");
+                        // Beacon target or not: reconfigureForBeaconTX() already left RX running on that
+                        // config, so skipping this only ever left the node deaf in standby.
+                        rearmReceive();
                         setTransmitDelay();
                     } else {
+                        LOG_DEBUG("CAD free");
                         // Send any outgoing packets we have ready as fast as possible to keep the time between channel scan and
                         // actual transmission as short as possible
                         txp = txQueue.dequeue();
@@ -559,7 +592,7 @@ bool RadioLibInterface::removePendingTXPacket(NodeNum from, PacketId id, uint32_
 {
     meshtastic_MeshPacket *p = txQueue.remove(from, id, true, true, hop_limit_lt);
     if (p) {
-        LOG_DEBUG("Drop pending-TX packet 0x%08x, hop limit %d", p->id, p->hop_limit);
+        LOG_DEBUG_RADIO("Drop pending-TX packet 0x%08x, hop limit %d", p->id, p->hop_limit);
         RadioTxHooks::packetReleased(this, p);
         packetPool.release(p);
         return true;
@@ -567,53 +600,75 @@ bool RadioLibInterface::removePendingTXPacket(NodeNum from, PacketId id, uint32_
     return false;
 }
 
-void RadioLibInterface::handleTransmitInterrupt()
+meshtastic_MeshPacket *RadioLibInterface::handleTransmitInterrupt()
 {
-    // This can be null if we forced the device to enter standby mode.  In that case
-    // ignore the transmit interrupt
-    if (sendingPacket)
-        completeSending();
+    // Null if we forced the device into standby, which already completed the send.
+    meshtastic_MeshPacket *sent = detachSentPacket();
     powerMon->clearState(meshtastic_PowerMon_State_Lora_TXOn); // But our transmitter is definitely off now
+    return sent;
 }
 
 void RadioLibInterface::completeSending()
 {
-    // We are careful to clear sending packet before calling printPacket because
-    // that can take a long time
+    finishSentPacket(detachSentPacket());
+}
+
+meshtastic_MeshPacket *RadioLibInterface::detachSentPacket()
+{
+    // Cleared first: printPacket() in finishSentPacket() can take a long time.
     auto p = sendingPacket;
     sendingPacket = NULL;
 #ifdef LED_LORA
     digitalWrite(LED_LORA, LED_STATE_OFF);
 #endif
-
-    if (p) {
-        // Packet has been sent, count it toward our TX airtime utilization.
-        uint32_t xmitMsec = getPacketTime(p);
-        airTime->logAirtime(TX_LOG, xmitMsec);
-
-        txGood++;
-        if (!isFromUs(p))
-            txRelay++;
-        printPacket("Completed sending", p);
-        // Keep this inside `if (p)`: completeSending() also runs on every setStandby(), where a hook
-        // undoing its own pre-TX switch would recurse back through reconfigure().
+    // Keep this behind `if (p)`: completeSending() also runs on every setStandby(), where a hook
+    // undoing its own pre-TX switch would recurse back through reconfigure().
+    if (p)
         RadioTxHooks::packetReleased(this, p);
+    return p;
+}
 
-        // We are done sending that packet, release it
-        packetPool.release(p);
-    }
+void RadioLibInterface::finishSentPacket(meshtastic_MeshPacket *p)
+{
+    if (!p)
+        return;
+    // Packet has been sent, count it toward our TX airtime utilization.
+    uint32_t xmitMsec = getPacketTime(p);
+    airTime->logAirtime(TX_LOG, xmitMsec);
+
+    txGood++;
+    if (!isFromUs(p))
+        txRelay++;
+    printPacket("Completed sending", p);
+
+    // We are done sending that packet, release it
+    packetPool.release(p);
 }
 
 void RadioLibInterface::handleReceiveInterrupt()
 {
     // when this is called, we should be in receive mode - if we are not, just jump out instead of bombing. Possible Race
     // Condition?
+    const bool wasCadHandoff = cadHandoffRxStart != 0;
+    cadHandoffRxStart = 0; // this RX ends the wait either way; the outcome is logged below
+
     if (!isReceiving) {
         LOG_ERROR("handleReceiveInterrupt called while not in rx mode");
         return;
     }
 
     isReceiving = false;
+
+    // A CAD handoff's RX window expired with nothing on air. There is no packet to read, so don't count
+    // it as a bad one - the caller's rearmReceive() puts the radio back to listening.
+    if (iface->checkIrq(RADIOLIB_IRQ_RX_DONE) != 1 && iface->checkIrq(RADIOLIB_IRQ_TIMEOUT) == 1) {
+        LOG_DEBUG("CAD>RX empty");
+        iface->clearIrq(1UL << RADIOLIB_IRQ_TIMEOUT);
+        return;
+    }
+
+    if (wasCadHandoff)
+        LOG_DEBUG("CAD>RX pkt");
 
     // read the number of actually received bytes
     size_t length = iface->getPacketLength();
@@ -662,6 +717,7 @@ void RadioLibInterface::handleReceiveInterrupt()
             airTime->logAirtime(RX_ALL_LOG, rxMsec);
         } else {
             rxGood++;
+            lastRxGoodMs = millis();
             // altered packet with "from == 0" can do Remote Node Administration without permission
             if (radioBuffer.header.from == 0) {
                 LOG_WARN("Ignore received packet without sender");
@@ -719,6 +775,7 @@ void RadioLibInterface::startReceive()
     // This is the sole place the recovery ladder is cleared - nothing short of an armed RX counts as fixed.
     rxOffline = false;
     chipRecoveryFailures = 0;
+    rxFlagsSeenMs = 0;
     powerMon->setState(meshtastic_PowerMon_State_Lora_RXOn);
 }
 
@@ -727,15 +784,94 @@ void RadioLibInterface::pollMissedIrqs()
     // RadioLibInterface::enableInterrupt uses EDGE-TRIGGERED interrupts. Poll as a backup to catch missed edges.
     if (isReceiving) {
         checkRxDoneIrqFlag();
+        checkCadHandoffTimeout();
+        checkStaleRxFlags();
     }
     if (sendingPacket) {
         checkTxDoneIrqFlag();
     }
 }
 
-void RadioLibInterface::resetAGC()
+bool RadioLibInterface::resetAGC()
 {
     // Base implementation: no-op. Override in chip-specific subclasses.
+    return false;
+}
+
+void RadioLibInterface::noteCadHandoffToRx()
+{
+    LOG_DEBUG("CAD>RX started");
+    cadHandedToRx = true;
+    // Same clock Throttle compares against, so a native test can drive both across the wrap. 0 is the
+    // "none outstanding" sentinel and getMillis() does land on it once per wrap, so step past it.
+    const uint32_t now = Time::getMillis();
+    cadHandoffRxStart = now ? now : 1;
+}
+
+void RadioLibInterface::rearmReceive()
+{
+    // The flag is spent here, so every later call takes the full path - including RX_DONE after a
+    // handoff, whose bounded RX has already dropped the chip to standby.
+    if (!cadHandedToRx) {
+        startReceive();
+        return;
+    }
+    cadHandedToRx = false;
+    // Same order the drivers' own startReceive() uses: mark receiving BEFORE arming, or an ISR that
+    // fires in between reaches handleReceiveInterrupt() while isReceiving is still false and is dropped.
+    RadioLibInterface::startReceive();
+    enableInterrupt(isrRxLevel0);
+    // The line is not known-low here, and the ISR is rising-edge: catch an RX_DONE that beat the arm.
+    checkRxDoneIrqFlag();
+}
+
+void RadioLibInterface::checkCadHandoffTimeout()
+{
+    // Backstop to the chip's own cadTimeout, which is the primary bound. Doubled so the hardware always
+    // expires first; this only catches an RX whose timer stopped on a header that never completed.
+    const uint32_t maxPacketTimeMsec = getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN + sizeof(PacketHeader));
+    if (cadHandoffRxStart && Throttle::hasElapsed(cadHandoffRxStart, 2 * maxPacketTimeMsec)) {
+        LOG_WARN("CAD>RX timeout");
+        cadHandoffRxStart = 0;
+        startReceive();
+    }
+}
+
+void RadioLibInterface::checkStaleRxFlags()
+{
+    // A handoff RX has its own timeout, and a pending RX_DONE is about to clear every flag itself.
+    if (cadHandoffRxStart)
+        return;
+    const uint32_t irq = iface->getIrqFlags();
+    if (irq & iface->getIrqMapped(1UL << RADIOLIB_IRQ_RX_DONE))
+        return;
+    // HEADER_ERR counts: on SX1280 it leaves RX wedged with no RX_DONE or TIMEOUT to follow.
+    const bool headerSeen = irq & iface->getIrqMapped((1UL << RADIOLIB_IRQ_HEADER_VALID) | (1UL << RADIOLIB_IRQ_HEADER_ERR));
+    const bool preambleSeen = irq & iface->getIrqMapped(1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED);
+    if (!headerSeen && !preambleSeen) {
+        rxFlagsSeenMs = 0;
+        return;
+    }
+    if (!rxFlagsSeenMs) {
+        rxFlagsSeenMs = Time::skipZero(Time::getMillis());
+        return;
+    }
+
+    const uint32_t maxPacketTimeMsec = getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN + sizeof(PacketHeader));
+    switch (staleRxFlagAction(headerSeen, Time::getMillis() - rxFlagsSeenMs, maxPacketTimeMsec)) {
+    case StaleRxFlagAction::Keep:
+        break;
+    case StaleRxFlagAction::Rearm:
+        LOG_DEBUG("RX header stale, re-arm");
+        startReceive(); // clears rxFlagsSeenMs
+        break;
+    case StaleRxFlagAction::ClearPreamble:
+        // A clear never aborts a reception, unlike the standby inside startReceive().
+        LOG_DEBUG("RX preamble stale, cleared");
+        iface->clearIrq(1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED);
+        rxFlagsSeenMs = 0;
+        break;
+    }
 }
 
 void RadioLibInterface::periodicRadioMaintenance()
@@ -749,8 +885,18 @@ void RadioLibInterface::periodicRadioMaintenance()
             startReceive();
         return; // a chip just re-inited (or still dead) has no use for an AGC reset this tick
     }
+    // resetAGC() ends in startReceive(), whose standby would run a queued packet's TX delay, start it and cut it off.
+    if (hasQueuedTx())
+        return;
 
-    resetAGC();
+    // A radio that is still decoding packets has gain that isn't stuck
+    const bool hearing = lastRxGoodMs && Throttle::isWithinTimespanMs(lastRxGoodMs, AGC_IDLE_RESET_MS);
+    if (hearing && lastAgcResetMs && Throttle::isWithinTimespanMs(lastAgcResetMs, AGC_FORCED_RESET_MS))
+        return;
+    if (resetAGC()) {
+        const uint32_t now = millis();
+        lastAgcResetMs = now ? now : 1;
+    }
 }
 
 bool RadioLibInterface::maybeRecoverChipStateLoss()
@@ -804,6 +950,13 @@ void RadioLibInterface::configHardwareForSend()
 
 void RadioLibInterface::setStandby()
 {
+    // Any handoff is void once the chip leaves RX. Left set, the flag would make the next rearmReceive()
+    // a no-op on a standby chip - deaf with no recovery - and the window would re-arm over a live packet.
+    if (cadHandedToRx) // standby between the handoff and the re-arm that adopts it: should not happen
+        LOG_WARN("CAD>RX void");
+    cadHandedToRx = false;
+    cadHandoffRxStart = 0;
+
     // neither sending nor receiving
     powerMon->clearState(meshtastic_PowerMon_State_Lora_RXOn);
     powerMon->clearState(meshtastic_PowerMon_State_Lora_TXOn);
@@ -812,6 +965,8 @@ void RadioLibInterface::setStandby()
 /** start an immediate transmit */
 bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
 {
+    cadHandoffRxStart = 0; // TX ends any handoff wait; completeSending() re-arms RX itself
+
     /* NOTE: Minimize the actions before startTransmit() to keep the time between
              channel scan and actual transmit as low as possible to avoid collisions. */
     if (disabled || !config.lora.tx_enabled) {
@@ -819,6 +974,9 @@ bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
         // Never reaches completeSending(), so any per-packet radio state has to be released here.
         RadioTxHooks::packetReleased(this, txp);
         packetPool.release(txp);
+        // We got here through isChannelActive(), which left the chip in standby for a transmit that is
+        // no longer happening. Without this the node stays deaf until something else re-arms it.
+        startReceive();
         return false;
     } else {
         configHardwareForSend(); // must be after setStandby

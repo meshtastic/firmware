@@ -42,12 +42,6 @@ namespace
 class MockRouter : public Router
 {
   public:
-    ~MockRouter()
-    {
-        // cryptLock is created in the constructor for Router.
-        delete cryptLock;
-        cryptLock = NULL;
-    }
     void enqueueReceivedMessage(meshtastic_MeshPacket *p) override
     {
         packets_.emplace_back(*p);
@@ -888,8 +882,7 @@ void test_receiveVerifiesSignedDecodedDownlink(void)
     memcpy(mockNodeDB->emptyNode.public_key.bytes, pub, 32);
 
     meshtastic_MeshPacket p = makeDecodedBroadcast();
-    TEST_ASSERT_TRUE(crypto->xeddsa_sign(p.from, p.id, p.decoded.portnum, p.decoded.payload.bytes, p.decoded.payload.size,
-                                         p.decoded.xeddsa_signature.bytes));
+    TEST_ASSERT_TRUE(crypto->xeddsa_sign(p.from, p.id, p.to, &p.decoded, p.decoded.xeddsa_signature.bytes));
     p.decoded.xeddsa_signature.size = XEDDSA_SIGNATURE_SIZE;
 
     unitTest->publish(&p);
@@ -910,8 +903,7 @@ void test_receiveDropsBadSignatureOnDecodedDownlink(void)
     memcpy(mockNodeDB->emptyNode.public_key.bytes, pub, 32);
 
     meshtastic_MeshPacket p = makeDecodedBroadcast();
-    TEST_ASSERT_TRUE(crypto->xeddsa_sign(p.from, p.id, p.decoded.portnum, p.decoded.payload.bytes, p.decoded.payload.size,
-                                         p.decoded.xeddsa_signature.bytes));
+    TEST_ASSERT_TRUE(crypto->xeddsa_sign(p.from, p.id, p.to, &p.decoded, p.decoded.xeddsa_signature.bytes));
     p.decoded.xeddsa_signature.size = XEDDSA_SIGNATURE_SIZE;
     p.decoded.xeddsa_signature.bytes[0] ^= 0xFF;
 
