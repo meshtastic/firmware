@@ -6,6 +6,7 @@
 #include "PointerQueue.h"
 #include "airtime.h"
 #include "error.h"
+#include <atomic>
 #include <memory>
 
 #if HAS_LORA_FEM
@@ -108,6 +109,19 @@ class RadioInterface
     // Runs during RadioInterface's own construction, so it uses the fallbacks above, never a driver
     // override. applyModemConfig() recomputes it before anything reads it, and is authoritative.
     uint32_t slotTimeMsec = computeSlotTimeMsec();
+
+    /** millis() when the last frame this node sent or heard left the air, 0 before the first.
+     *  Only read by a draw that was asked for a slot parity; the driver keeps it up to date so any
+     *  module can ask at any time.
+     *
+     *  Atomic because the radio worker writes it from onNotify() while a draw for a packet being
+     *  queued reads it on whatever thread called send(). Relaxed is enough: it publishes nothing
+     *  but itself, and losing the race just anchors that one draw to the frame before last. */
+    std::atomic<uint32_t> lastFrameEndMs{0};
+    /** "tx" or "rx" for the frame lastFrameEndMs came from, for the trace line. Atomic for the
+     *  same reason, and always a string literal, so a reader that loses the race against the
+     *  writer prints the previous frame's word. */
+    std::atomic<const char *> lastFrameEndWhat{"none"};
     uint16_t preambleLength = 16; // 8 is default, but we use longer to increase the amount of sleep time when receiving
     static constexpr uint16_t preambleLengthDefault =
         16; // 8 is default, but we use longer to increase the amount of sleep time when receiving
@@ -220,8 +234,18 @@ class RadioInterface
     /** The delay to use for retransmitting dropped packets */
     [[nodiscard]] uint32_t getRetransmissionMsec(const meshtastic_MeshPacket *p);
 
-    /** The delay to use when we want to send something */
-    [[nodiscard]] uint32_t getTxDelayMsec();
+    /** The delay to use when we want to send something.
+     *  p is the packet about to go out (NULL when there is none yet): its slot_parity, when set,
+     *  puts the draw on that parity's slots of the grid anchored to the last frame's air end. */
+    [[nodiscard]] uint32_t getTxDelayMsec(const meshtastic_MeshPacket *p = nullptr);
+
+    /** Note when a frame this node sent or heard left the air, for the anchored backoff grid.
+     *  A stamp older than the one already held is a frame delivered late, and is ignored. */
+    void noteFrameEnd(uint32_t endMs, const char *what);
+
+    /** When the TX timer for a packet with a slot parity falls due, or 0 when none is waiting on one.
+     *  The router holds received-packet handling around it so the TX leaves in the slot it drew. */
+    [[nodiscard]] virtual uint32_t getTxDueMs() const { return 0; }
 
     /** The CW to use when calculating SNR_based delays */
     [[nodiscard]] uint8_t getCWsize(float snr);
@@ -234,6 +258,17 @@ class RadioInterface
 
     /** The delay to use when we want to flood a message. Use a weighted scale based on SNR */
     [[nodiscard]] uint32_t getTxDelayMsecWeighted(meshtastic_MeshPacket *p);
+
+    /** A backoff of up to `slots` slots on one parity of the grid anchored to the last frame's air
+     *  end, returned as a delay from now. Two nodes on opposite parities that redraw after the same
+     *  frame are then always at least one whole slot apart, whatever their handling delay was. */
+    [[nodiscard]] uint32_t getAnchoredSlotDelayMsec(uint32_t slots, meshtastic_MeshPacket_SlotParity parity);
+
+    /** The grid arithmetic behind it, with the anchor and the draw passed in: the delay that lands
+     *  on the `pairsDrawn`-th slot of `parity`, counting from the first slot of that parity not yet
+     *  started `sinceEndMs` after the anchor. */
+    [[nodiscard]] static uint32_t anchoredSlotDelayMsec(uint32_t sinceEndMs, uint32_t slotMsec, uint32_t pairsDrawn,
+                                                        meshtastic_MeshPacket_SlotParity parity);
 
     /** If the packet is not already in the late rebroadcast window, move it there */
     virtual void clampToLateRebroadcastWindow(NodeNum from, PacketId id) { return; }
