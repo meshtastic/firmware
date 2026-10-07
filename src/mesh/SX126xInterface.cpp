@@ -782,6 +782,10 @@ template <typename T> bool SX126xInterface<T>::stageTxInRx()
         // Its readout checks whether our bytes can lie across it. A bare preamble counts: that frame can still
         // grow into the staged bytes, no later look records the check, and the record is spent on the next readout.
         noteStagedOverFrame(base, numbytes);
+        // Name the bare-preamble record: with neither a header nor a terminal flag there is nothing else in the
+        // log to tell it from a record the readout would have had anyway
+        if (!(irq & (RADIOLIB_SX126X_IRQ_HEADER_VALID | doneIrqs)))
+            LOG_DEBUG("TX stage recorded over a bare preamble");
         LOG_DEBUG("TX stage in RX: frame arriving or unread (irq 0x%04x), scan skipped", (unsigned)irq);
         return true;
     }
