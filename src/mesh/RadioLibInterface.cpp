@@ -122,18 +122,22 @@ volatile uint32_t RadioLibInterface::txDoneIsrTicks, RadioLibInterface::rxDoneIs
 uint32_t RadioLibInterface::frameEndFromIsr(bool tx)
 {
     const uint32_t now = Time::getMillis();
-    uint32_t endMs = now;
+#if defined(ARCH_PORTDUINO) || defined(HAS_FREE_RTOS)
 #if defined(ARCH_PORTDUINO)
-    endMs = lastIsrMillis;
-#elif defined(HAS_FREE_RTOS)
+    const uint32_t endMs = lastIsrMillis;
+#else
     const uint32_t ticks = xTaskGetTickCount() - (tx ? txDoneIsrTicks : rxDoneIsrTicks);
-    endMs = now - (uint32_t)(((uint64_t)ticks * 1000) / configTICK_RATE_HZ);
+    const uint32_t endMs = now - (uint32_t)(((uint64_t)ticks * 1000) / configTICK_RATE_HZ);
 #endif
     // A stamp still ahead of now, or older than this TX's launch, belongs to some earlier frame:
     // an interrupt we never took, or none yet. Now is the safe answer - late, never early.
     if ((int32_t)(endMs - now) > 0 || (tx && (int32_t)(endMs - lastTxStart) < 0))
-        endMs = now;
+        return now;
     return endMs;
+#else
+    (void)tx;
+    return now; // no interrupt time stamp on this platform
+#endif
 }
 
 /** Could we send right now (i.e. either not actively receiving or transmitting)? */
