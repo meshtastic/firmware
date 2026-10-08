@@ -569,7 +569,13 @@ template <typename T> bool SX126xInterface<T>::continuousRxWanted() const
 #else
     // Continuous RX on a CH341 host: only a known-continuous RX can be resumed after RX_DONE (resumeRunningReceive())
     // instead of restarted over the slow bus.
-    return irqPolledOverUsb();
+    if (irqPolledOverUsb())
+        return true;
+    // RadioLib's duty cycle listens for 2 x minSymbols and sleeps through whatever preamble is left, so a preamble no
+    // longer than that window leaves nothing to sleep through: the chip stays in RX whichever command we send. Ask for
+    // continuous RX outright when that is the case, so rxArmedContinuous describes the RX the chip is really in and
+    // resumeRunningReceive() can pick it back up after RX_DONE instead of paying for a standby and a restart.
+    return preambleLength <= 2 * rxDutyCycleMinSymbols;
 #endif
 }
 

@@ -505,8 +505,9 @@ void RadioLibInterface::onNotify(uint32_t notification)
             handleReceiveInterrupt();
         }
         {
-            // Re-arm for the next packet, as one sequence. rearmReceive() avoids a standby where the chip is
-            // already in RX, so a second packet that is already arriving is not aborted.
+            // Re-arm for the next packet, as one sequence. Where the radio can tell that its RX is still running,
+            // rearmReceive() picks that RX back up instead of standing by first, so a second packet that is already
+            // arriving is not aborted; the others restart RX.
             RadioSequence seq(this);
             rearmReceive();
         }
