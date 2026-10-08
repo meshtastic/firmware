@@ -46,7 +46,7 @@ constexpr uint8_t ISM330DHCX_WRITE_ONCE = 0x40;
 constexpr uint8_t ISM330DHCX_RST_MASTER_REGS = 0x80;
 constexpr uint8_t ISM330DHCX_STATUS_MASTER_ENDOP = 0x01;
 
-// stuff
+// Sensor hub write timeout
 constexpr uint32_t ISM330DHCX_SHUB_WRITE_TIMEOUT_MS = 200;
 
 // accelerometer to compass rotation offset
@@ -152,9 +152,9 @@ bool ISM330DHCXSensor::configureAuxMagnetometer()
         writeRegister(ISM330DHCX_MASTER_CONFIG, ISM330DHCX_MASTER_ON | ISM330DHCX_SHUB_PU_EN | ISM330DHCX_WRITE_ONCE);
         setMemBank(ISM330DHCX_BANK_USER);
 
-        const uint32_t deadline = millis() + ISM330DHCX_SHUB_WRITE_TIMEOUT_MS;
+        const uint32_t startMs = millis();
         bool done = false;
-        while (millis() < deadline) {
+        while (millis() - startMs < ISM330DHCX_SHUB_WRITE_TIMEOUT_MS) {
             if (readRegisters(ISM330DHCX_STATUS_MASTER_MAINPAGE, &status, 1) &&
                 (status & ISM330DHCX_STATUS_MASTER_WR_ONCE_DONE)) {
                 done = true;

@@ -25,7 +25,7 @@ constexpr uint8_t IIS2MDCTR_OUTX_L_REG = 0x68;
 #if defined(MAGNETOMETER_OFFSET)
 static constexpr float IIS2MDCTR_HEADING_OFFSET_DEG = MAGNETOMETER_OFFSET;
 #else
-static constexpr float IIS2MDCTR_HEADING_OFFSET_DEG = 270.0f;
+static constexpr float IIS2MDCTR_HEADING_OFFSET_DEG = 0.0f;
 #endif
 
 // COMP_TEMP_EN=1, ODR=100Hz ('11'), MD=continuous ('00')
