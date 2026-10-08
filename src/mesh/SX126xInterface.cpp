@@ -666,6 +666,12 @@ template <typename T> bool SX126xInterface<T>::rearmReceiveFromIsr()
     // symbols; a longer one gets a duty-cycled RX, which this does not reproduce.
     if (rawCs == RADIOLIB_NC || !isrHal || preambleLength > 2 * 8)
         return false;
+    // The SPI lock is per transaction, so holding it proves only that no single transfer is in flight. A thread-side
+    // RadioLib sequence would be reprogrammed under itself by the commands below, so leave those to the thread.
+    if (radioSequenceOpen()) {
+        rearmOutcome = REARM_SEQ_OPEN;
+        return false;
+    }
     if (!spiLock->tryLockFromISR()) {
         rearmOutcome = REARM_SPI_BUSY;
         return false;
@@ -734,10 +740,12 @@ template <typename T> bool SX126xInterface<T>::adoptReceiveArmedFromIsr()
 {
     const uint8_t outcome = rearmOutcome;
     rearmOutcome = REARM_NONE;
-    if (outcome == REARM_SPI_BUSY || outcome == REARM_CHIP_BUSY || outcome == REARM_NOT_TX_DONE || outcome == REARM_NOT_IN_RX) {
+    if (outcome == REARM_SPI_BUSY || outcome == REARM_CHIP_BUSY || outcome == REARM_NOT_TX_DONE ||
+        outcome == REARM_NOT_IN_RX || outcome == REARM_SEQ_OPEN) {
         LOG_TRACE("RX re-arm at TX_DONE skipped, %s", outcome == REARM_SPI_BUSY      ? "SPI busy"
                                                       : outcome == REARM_CHIP_BUSY   ? "chip busy"
                                                       : outcome == REARM_NOT_TX_DONE ? "no TX_DONE flag"
+                                                      : outcome == REARM_SEQ_OPEN    ? "sequence open"
                                                                                      : "chip not in RX");
         return false;
     }

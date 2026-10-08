@@ -1129,13 +1129,20 @@ bool RadioLibInterface::lockRadioSequence()
     // Null before the task exists, and there is nothing to exclude until then
     if (!radioSeqMutex)
         return false;
-    return xSemaphoreTakeRecursive(radioSeqMutex, portMAX_DELAY) == pdTRUE;
+    if (xSemaphoreTakeRecursive(radioSeqMutex, portMAX_DELAY) != pdTRUE)
+        return false;
+    // Raised before the sequence's first RadioLib call, so an ISR that reads it clear cannot be inside one
+    radioSeqDepth++;
+    return true;
 }
 
 void RadioLibInterface::unlockRadioSequence()
 {
-    if (radioSeqMutex)
+    if (radioSeqMutex) {
+        if (radioSeqDepth)
+            radioSeqDepth--;
         xSemaphoreGiveRecursive(radioSeqMutex);
+    }
 }
 
 void RadioLibInterface::startRxReadoutTask()

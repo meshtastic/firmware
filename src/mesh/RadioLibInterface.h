@@ -585,9 +585,13 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 #ifdef MESHTASTIC_RX_READOUT_TASK
     bool lockRadioSequence();
     void unlockRadioSequence();
+    /** Whether a radio-sequence lock is held right now. Safe from an ISR, which cannot take a mutex: an ISR cannot be
+     *  preempted by the thread that holds it, so a clear reading means no sequence can open underneath the ISR. */
+    bool radioSequenceOpen() const { return radioSeqDepth != 0; }
 #else
     bool lockRadioSequence() { return false; }
     void unlockRadioSequence() {}
+    bool radioSequenceOpen() const { return false; }
 #endif
 
     /** Held across a whole RadioLib call sequence, so the readout task cannot run between its calls.
@@ -650,6 +654,8 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     bool rxReadoutTaskTried = false;
     /** Recursive, priority-inheriting; guards a whole RadioLib call sequence - see RadioSequence */
     SemaphoreHandle_t radioSeqMutex = nullptr;
+    /** How deep the sequence lock is held, for radioSequenceOpen(): the mutex itself cannot be read from an ISR */
+    volatile uint8_t radioSeqDepth = 0;
     /** Captured frames: the task produces, the radio thread consumes */
     struct CapturedFrame {
         CapturedRxInfo info;

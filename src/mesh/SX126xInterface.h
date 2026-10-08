@@ -198,7 +198,15 @@ template <class T> class SX126xInterface : public RadioLibInterface
 #if SX126X_REARM_IN_ISR
     bool rearmReceiveFromIsr() override;
     bool adoptReceiveArmedFromIsr() override;
-    enum RearmOutcome : uint8_t { REARM_NONE, REARM_ARMED, REARM_SPI_BUSY, REARM_CHIP_BUSY, REARM_NOT_TX_DONE, REARM_NOT_IN_RX };
+    enum RearmOutcome : uint8_t {
+        REARM_NONE,
+        REARM_ARMED,
+        REARM_SPI_BUSY,
+        REARM_CHIP_BUSY,
+        REARM_NOT_TX_DONE,
+        REARM_NOT_IN_RX,
+        REARM_SEQ_OPEN
+    };
     /** Where a raw command's reply carries the chip status, and the chip-mode bits in it (6:4) */
     static constexpr size_t statusByte = 1;
     static constexpr uint8_t statusModeMask = 0b01110000;
