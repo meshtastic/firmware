@@ -247,8 +247,8 @@ template <typename T> bool SX126xInterface<T>::reinitChip()
 
 #if SX126X_RX_REARM_AT_TX_DONE
     // After TX_DONE the chip falls back to STDBY_RC, where a DIO3 TCXO is off, so the SET_RX the interrupt writes would
-    // still wait out the TCXO start-up (5 ms) before listening. Keep the oscillator running in standby instead; this
-    // also sets the RX/TX fallback mode to STDBY_XOSC.
+    // still wait out the TCXO start-up (TCXO_STARTUP_DELAY_US, 1 ms by default) before listening. Keep the oscillator
+    // running in standby instead; this also sets the RX/TX fallback mode to STDBY_XOSC.
     if (res == RADIOLIB_ERR_NONE) {
         const int16_t xoscErr = lora.setStandbyXOSC(true);
         LOG_INFO("SX126x standby set to XOSC %s%d", radioLibErr, xoscErr);
