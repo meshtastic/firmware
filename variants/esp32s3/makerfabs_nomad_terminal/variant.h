@@ -20,7 +20,6 @@
 #define PCF8563_RTC 0x51
 
 #define HAS_GPS 1
-#define GPS_BAUDRATE 9600
 #define GPS_RX_PIN 47
 #define GPS_TX_PIN 48
 #define PIN_GPS_EN 40
@@ -52,3 +51,25 @@
 #define LR1121_SPI_MISO_PIN LORA_MISO
 #define LR11X0_DIO3_TCXO_VOLTAGE 1.8
 #define LR11X0_DIO_AS_RF_SWITCH
+
+#if !HAS_TFT // BaseUI; the -tft env configures the panel through LGFX_* flags
+#define USE_TFTDISPLAY 1
+#define HAS_SPI_TFT 1
+#define ILI9488_SPI_HOST SPI3_HOST
+#define ILI9488_CS 4
+#define ILI9488_RS 5
+#define ILI9488_SDA 10
+#define ILI9488_SCK 16
+#define ILI9488_MISO 12
+#define ILI9488_RESET 7
+#define ILI9488_BL 9
+#define SPI_FREQUENCY 40000000
+#define SPI_READ_FREQUENCY 16000000
+#define TFT_WIDTH 320
+#define TFT_HEIGHT 480
+#define TFT_OFFSET_X 0
+#define TFT_OFFSET_Y 0
+#define TFT_OFFSET_ROTATION 3 // portrait with connect()'s setRotation(3); 0 = landscape
+#define TFT_INVERT false
+#define SCREEN_TRANSITION_FRAMERATE 10
+#endif
