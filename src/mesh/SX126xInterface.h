@@ -185,6 +185,9 @@ template <class T> class SX126xInterface : public RadioLibInterface
     enum RearmState : uint8_t { REARM_NONE, REARM_PENDING, REARM_ARMED, REARM_FAILED };
     volatile uint8_t rearmState = REARM_NONE;
     volatile int16_t rearmErr = 0;
+    /** How many TX_DONEs the task re-armed, and how many it found the radio thread had already taken over. Reported
+     *  from the thread rather than the task, so the task does not wait on the log port between RX arms. */
+    volatile uint32_t rearmTaskCount = 0, rearmThreadFirstCount = 0;
 #endif
 
     /** Recover a chip that lost its runtime state: hardware-reset via begin() and reprogram */
