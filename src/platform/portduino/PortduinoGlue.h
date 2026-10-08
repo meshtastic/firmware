@@ -37,6 +37,25 @@ inline const std::unordered_map<std::string, std::string> configProducts = {
     {"RAK6421-13300-S1", "lora-RAK6421-13300-slot1.yaml"},
     {"RAK6421-13300-S2", "lora-RAK6421-13300-slot2.yaml"}};
 
+// Largest single SPI write LovyanGFX 1.2.28 issues (Bus_SPI chunks to a 512-byte scratch buffer);
+// 4096 is the mainline spidev default, so a stock kernel always meets it.
+constexpr long kSpidevMinBufsiz = 512;
+
+inline std::string spidevBufsizAdvice(long required)
+{
+    const std::string value = std::to_string(required);
+    return "To raise it, either:\n"
+           "  - append 'spidev.bufsiz=" +
+           value +
+           "' to the single line in /boot/firmware/cmdline.txt (/boot/cmdline.txt on older Raspberry Pi OS), keeping it on "
+           "one line, then reboot; or\n"
+           "  - put 'options spidev bufsiz=" +
+           value +
+           "' in /etc/modprobe.d/spidev.conf, then reboot (or 'sudo modprobe -r spidev && sudo modprobe spidev' if nothing "
+           "is using it).\n"
+           "Check the result with: cat /sys/module/spidev/parameters/bufsiz";
+}
+
 enum screen_modules { no_screen, x11, fb, st7789, st7735, st7735s, st7796, ili9341, ili9342, ili9486, ili9488, hx8357d, hub75 };
 enum touchscreen_modules { no_touchscreen, xpt2046, stmpe610, gt911, ft5x06 };
 enum portduino_log_level { level_error, level_warn, level_info, level_debug, level_trace };

@@ -201,10 +201,31 @@ if those yield nothing meshtasticd exits with "Blank MAC Address not allowed!".
 `Input.JoystickButtons` is keyed by action, not by button, so an action can name a
 single evdev code or a list of them and every one of those buttons drives it.
 
-| File                        | Expected                                                                                                       |
-| --------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `joystick-buttons.yaml`     | **Clean, and a regression guard** - four actions, two of them with several codes.                              |
-| `joystick-buttons-bad.yaml` | Three silent no-ops: an action name nothing reads, an evdev name where a code belongs, one code claimed twice. |
+| File                        | Expected                                                                                                              |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `joystick-buttons.yaml`     | **Clean, and a regression guard** - four actions, two of them with several codes. One warning: the gamepad is absent. |
+| `joystick-buttons-bad.yaml` | Three silent no-ops: an action name nothing reads, an evdev name where a code belongs, one code claimed twice.        |
+
+## Displays, touchscreens and input devices
+
+Settings that load without complaint and leave the screen blank or a device unread. The
+`input-*` fixtures lean on `/dev/null`, which exists on every Linux host, rather than on
+hardware.
+
+| File                                 | Expected                                                                                 |
+| ------------------------------------ | ---------------------------------------------------------------------------------------- |
+| `display-spi-ok.yaml`                | **Clean, and a regression guard** - a full SPI panel, with `Rotate` as a boolean.        |
+| `display-rotate-integer.yaml`        | Warning: `Display.Rotate` is true/false, and the hint names `OffsetRotate` for the turn. |
+| `touchscreen-rotate-boolean.yaml`    | Warning: `Touchscreen.Rotate` is a number, and the hint says it is not true/false.       |
+| `display-panel-unknown.yaml`         | Error: a `Panel` name nothing recognises, so there is no display.                        |
+| `display-panel-wrong-case.yaml`      | Error naming the correct spelling.                                                       |
+| `display-spi-incomplete.yaml`        | Error for the missing size, warning for the missing `DC` pin.                            |
+| `display-spidev-malformed.yaml`      | Warning: the bus number silently stays 0.                                                |
+| `touchscreen-i2c-no-address.yaml`    | Warning: an I2C controller with no `I2CAddr` is set up as SPI.                           |
+| `touchscreen-module-wrong-case.yaml` | Warning naming the correct spelling.                                                     |
+| `input-device-missing.yaml`          | Warning: the node does not exist, so the keyboard is silently off.                       |
+| `input-device-not-evdev.yaml`        | Warnings: `/dev/null` is not an evdev node, and cannot be grabbed.                       |
+| `input-pointer-x11.yaml`             | Warning: `PointerDevice` is not handed to the X11 display driver.                        |
 
 ## CH341 USB-SPI adapters
 
