@@ -4,6 +4,13 @@
 #include "RadioLibInterface.h"
 #include "configuration.h"
 
+// -DSX126X_RX_KNOWN_CONTINUOUS=1 records the RX RadioLib's duty cycle actually armed: with a 16-symbol preamble it falls
+// back to a continuous RX on every sub-GHz preset, so the chip is still listening after RX_DONE and the frame can be
+// resumed rather than the chip stood by and reprogrammed.
+#ifndef SX126X_RX_KNOWN_CONTINUOUS
+#define SX126X_RX_KNOWN_CONTINUOUS 0
+#endif
+
 // After TX_DONE the SX126x waits in standby for the radio thread to restart RX, which a main-loop hold can stretch by
 // hundreds of ms. With the readout task, the TX_DONE interrupt has the task restart it instead, on every platform the
 // task runs on; -DSX126X_RX_REARM_AT_TX_DONE=0 opts out.

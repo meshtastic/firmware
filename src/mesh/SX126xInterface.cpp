@@ -562,6 +562,15 @@ static constexpr uint16_t rxDutyCycleMinSymbols = 8;
 
 template <typename T> bool SX126xInterface<T>::continuousRxWanted() const
 {
+#if SX126X_RX_KNOWN_CONTINUOUS
+    // RadioLib's startReceiveDutyCycleAuto() computes a sleep window of preambleLength - 2 * minSymbols symbols and
+    // falls back to a plain continuous RX when that leaves nothing to sleep through. At our 16-symbol preamble and 8
+    // minimum symbols it is exactly zero, so every sub-GHz preset already arms a continuous RX - the chip keeps
+    // listening through RX_DONE whatever we asked for. Say so, and resumeRunningReceive() can pick that RX back up
+    // after a frame instead of standing the chip by and reprogramming it while a next frame is arriving.
+    if (preambleLength <= 2 * rxDutyCycleMinSymbols)
+        return true;
+#endif
 #ifdef ARCH_PORTDUINO_WASM
     // Continuous RX in the browser: duty-cycle sleep parks BUSY high between RX
     // windows and stalls the slow WebUSB SPI link. No battery to save here.
