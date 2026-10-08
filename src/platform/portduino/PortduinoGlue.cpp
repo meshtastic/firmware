@@ -1136,6 +1136,7 @@ bool loadConfig(const char *configPath)
                 // an absent key. Kept apart so --check can see it contradict TCXO_OPTIONAL.
                 portduino_config.dio3_tcxo_voltage_disabled =
                     yamlConfig["Lora"]["DIO3_TCXO_VOLTAGE"] && portduino_config.dio3_tcxo_voltage == 0;
+                portduino_config.dio3_tcxo_delay_us = yamlConfig["Lora"]["DIO3_TCXO_DELAY_US"].as<int>(0);
                 // Try both oscillators rather than requiring the user to know which is fitted.
                 portduino_config.tcxo_optional = yamlConfig["Lora"]["TCXO_OPTIONAL"].as<bool>(false);
 

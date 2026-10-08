@@ -83,6 +83,14 @@ template <class T> class SX126xInterface : public RadioLibInterface
 
     uint32_t getPacketTime(uint32_t pl, bool received) override { return computePacketTime(lora, pl, received); }
 
+    // Sub-GHz only. isChannelActive() passes CAD_ON_4_SYMB; keep the two in step.
+    uint8_t getCadSymbolCountSubGhz() const override { return 4; }
+
+#ifdef ARCH_PORTDUINO
+    /** On a CH341 host: launch a payload the scan staged, sending only what the scan overwrote */
+    int16_t launchTransmit(size_t numbytes) override;
+#endif
+
   private:
 #ifdef LORA_DIO1_SOFTWARE_POLL
     bool irqPollingActive = false;
@@ -90,6 +98,51 @@ template <class T> class SX126xInterface : public RadioLibInterface
 #endif
     /** Some boards require GPIO control of tx vs rx paths */
     void setTransmitEnable(bool txon);
+
+#ifdef ARCH_PORTDUINO
+    /** A full RadioLib TX staging (which applies the register fixes) has run since the chip last lost its registers */
+    bool txStagedByRadioLib = false;
+    /** The payload the scan wrote into the chip's buffer, or 0 bytes if none, and its packet id */
+    size_t prestagedLen = 0;
+    uint32_t prestagedId = 0;
+    /** On a CH341 host: write scanForTx's payload in the scan's standby, so a clear verdict leaves four commands */
+    void prestageTx();
+
+    // Staging while RX runs, on a CH341 host. Continuous RX writes each frame right after the last one and wraps at
+    // the buffer's end, so a payload staged in RX goes just behind the write point and each readout checks the two.
+    /** The payload was staged while RX ran, at prestagedBase: the launch points the TX base there */
+    bool prestagedInRx = false;
+    uint8_t prestagedBase = 0;
+    /** Where continuous RX writes its next frame */
+    uint8_t rxWritePtr = 0;
+    /** A frame arrived or finished around a stage write: its readout checks it against the staged bytes */
+    bool rxClobberCheck = false;
+    uint8_t rxClobberBase = 0;
+    size_t rxClobberLen = 0;
+    uint8_t rxClobberBytes[256];
+    /** A payload written during its backoff: its length (0 if none), packet id, offset and bytes */
+    size_t earlyStagedLen = 0;
+    uint32_t earlyStagedId = 0;
+    uint8_t earlyStagedBase = 0;
+    uint8_t earlyStagedBytes[256];
+
+    /** Where a payload of this length goes while RX runs: just behind RX's write point */
+    uint8_t txStageBase(size_t numbytes) const;
+    void noteStagedOverFrame(uint8_t base, size_t numbytes);
+    /** Write scanForTx's payload while RX runs. True if a frame was arriving or unread: then the scan must not go
+     *  ahead, since its standby would abort that frame. */
+    bool stageTxInRx();
+    /** At the scan: whether the early stage still holds exactly this packet; if so it becomes the scan's prestage */
+    bool takeEarlyTxStage();
+    bool rxFrameOverlapsTxStage(size_t length) override;
+    bool wantsEarlyTxStage() const override;
+    void stageTxEarly(meshtastic_MeshPacket *p) override;
+#endif
+    /** The SET_CAD_PARAMS bytes last sent, resent only when they change; invalid once the chip can have lost them */
+    uint8_t cadParamsSent[7] = {};
+    bool cadParamsValid = false;
+    /** lora.scanChannel(cfg), in fewer commands on a CH341 host */
+    int16_t scanChannelForTx(const ChannelScanConfig_t &cfg);
 
     /** Program all modem parameters into the chip; returns the first RadioLib error, or RADIOLIB_ERR_NONE */
     int16_t programModemParams();
@@ -99,6 +152,11 @@ template <class T> class SX126xInterface : public RadioLibInterface
 
     /** setStandby()'s body, returning the standby error instead of asserting - for callers that can recover */
     int16_t trySetStandby();
+
+    /** RX was armed continuous and nothing has put the chip into standby since, so it is still listening */
+    bool rxArmedContinuous = false;
+
+    bool resumeRunningReceive() override;
 
     /** Recover a chip that lost its runtime state: hardware-reset via begin() and reprogram */
     bool recoverChipStateLoss() override { return reinitChip() && programModemParams() == RADIOLIB_ERR_NONE; }
