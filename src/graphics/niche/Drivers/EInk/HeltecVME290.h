@@ -1,25 +1,11 @@
 /*
 
-E-Ink display driver for Heltec Vision Master E290
-    - Panel: DEPG0290BNS800F6_V2.1
-    - Size: 2.9 inch
-    - Resolution: 128px x 296px
+E-Ink display driver for Heltec Vision Master E290, FPC-7519revb
+    - OTP LUT + internal temp sensor (ZJY128296 approach)
+    - 1-byte X offset from DEPG0290BNS800
+    - Enable with -D EINK_HELTEC_VME290_OTP
 
-HYBRID DRIVER - combines two approaches to fix ghosting:
-
-From ZJY128296_029EAAMFGN (OTP-based):
-    - OTP LUT: waveform from controller memory (not custom in firmware)
-    - Internal temperature sensor (0x80) for automatic waveform selection
-    - Border waveform 0x05 (follow LUT1, drive white)
-    - Update sequence 0xFF (differential from OTP)
-
-From DEPG0290BNS800:
-    - Buffer offset: 1 byte (panel wiring quirk)
-
-NOT used from ZJY:
-    - configScanning override (not needed for this panel)
-
-Result: No ghosting, faster refresh (~300ms), auto temperature adaptation.
+Do not use on 15-22243-M0282 panels: FAST refresh will not paint.
 
 */
 

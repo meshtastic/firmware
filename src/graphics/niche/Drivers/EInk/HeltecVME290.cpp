@@ -4,10 +4,7 @@
 
 using namespace NicheGraphics::Drivers;
 
-// OTP LUT approach from ZJY128296_029EAAMFGN:
-// - Border follows LUT1 (white) instead of actively holding (0x60)
-// - Internal temp sensor auto-selects appropriate waveform
-// This eliminates ghosting that occurred with DEPG0290BNS800's custom LUT
+// OTP LUT (ZJY128296 approach). FAST 0xFF is a no-op on 15-22243-M0282 panels.
 void HeltecVME290::configWaveform()
 {
     sendCommand(0x3C); // Border waveform:
