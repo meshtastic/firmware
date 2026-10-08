@@ -341,6 +341,15 @@ template <typename T> bool SX126xInterface<T>::reconfigure()
         LOG_INFO("SX126x recovered after re-init");
     }
 
+#ifdef ARCH_PORTDUINO
+    // RadioLib's TX staging ends in fixSensitivity(), which programs the sensitivity register from the configured
+    // bandwidth (datasheet 15.1), and setBandwidth() does not redo it. The modem params just moved, so the next TX
+    // has to be a full staging and not the launch that skips the register fixes.
+    txStagedByRadioLib = false;
+    prestagedLen = 0;
+    earlyStagedLen = 0;
+#endif
+
     startReceive(); // restart receiving
 
     return true;
