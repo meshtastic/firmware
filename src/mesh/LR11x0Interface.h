@@ -9,6 +9,16 @@
 #define LR11X0_RX_REARM_AT_TX_DONE 1
 #endif
 
+// Restarting RX after a frame is a standby and the whole RX setup again, deaf throughout, where a continuous RX is still
+// listening. We pick that RX back up instead, once the chip reports it is still in RX;
+// -DLR11X0_RESUME_CONTINUOUS_RX=0 opts out and takes the restart every time.
+#ifndef LR11X0_RESUME_CONTINUOUS_RX
+#define LR11X0_RESUME_CONTINUOUS_RX 1
+#endif
+#if LR11X0_RESUME_CONTINUOUS_RX
+#define LR11X0_READ_CHIP_MODE 1
+#endif
+
 /**
  * \brief Adapter for LR11x0 radio family. Implements common logic for child classes.
  * \tparam T RadioLib module type for LR11x0: SX1262, SX1268.
@@ -108,6 +118,17 @@ template <class T> class LR11x0Interface : public RadioLibInterface
     enum RearmState : uint8_t { REARM_NONE, REARM_PENDING, REARM_ARMED, REARM_FAILED };
     volatile uint8_t rearmState = REARM_NONE;
     volatile int16_t rearmErr = 0;
+#endif
+
+#if LR11X0_READ_CHIP_MODE
+    /** The chip's mode (stat2 bits 3..1, as RADIOLIB_LR11X0_STAT_2_MODE_*), waiting out a passing FS; 0xFF on failure */
+    uint8_t readChipMode();
+#endif
+
+#if LR11X0_RESUME_CONTINUOUS_RX
+    /** RX was armed continuous and nothing has taken the chip out of it since, so it is still listening */
+    bool rxArmedContinuous = false;
+    bool resumeRunningReceive() override;
 #endif
 
     /** Recover a chip that lost its runtime state: hardware-reset via begin() and reprogram */
