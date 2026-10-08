@@ -8,6 +8,12 @@
 #define LR2021_RX_REARM_AT_TX_DONE 1
 #endif
 
+// Restarting RX after a frame is a standby and the whole RX setup again, deaf throughout, where a continuous RX is still
+// listening. -DLR2021_RESUME_CONTINUOUS_RX keeps that RX running instead, checking the chip is still in RX first.
+#ifdef LR2021_RESUME_CONTINUOUS_RX
+#define LR2021_READ_CHIP_MODE 1
+#endif
+
 /**
  * \brief Adapter for LR20x0 radio family. Implements common logic for child classes.
  * \tparam T RadioLib module type for LR20x0, e.g. LR2021.
@@ -114,6 +120,22 @@ template <class T> class LR20x0Interface : public RadioLibInterface
     enum RearmState : uint8_t { REARM_NONE, REARM_PENDING, REARM_ARMED, REARM_FAILED };
     volatile uint8_t rearmState = REARM_NONE;
     volatile int16_t rearmErr = 0;
+#endif
+
+#ifdef LR2021_READ_CHIP_MODE
+    /** The chip's mode (stat2 bits 2..0, as the LR20X0_CHIP_MODE_* below), waiting out a passing FS; 0xFF on SPI failure */
+    uint8_t readChipMode();
+    static constexpr uint8_t LR20X0_CHIP_MODE_STBY_RC = 1;
+    static constexpr uint8_t LR20X0_CHIP_MODE_STBY_XOSC = 2;
+    static constexpr uint8_t LR20X0_CHIP_MODE_FS = 3;
+    static constexpr uint8_t LR20X0_CHIP_MODE_RX = 4;
+    static constexpr uint8_t LR20X0_CHIP_MODE_TX = 5;
+#endif
+
+#ifdef LR2021_RESUME_CONTINUOUS_RX
+    /** RX was armed continuous and nothing has put the chip into standby since */
+    bool rxArmedContinuous = false;
+    bool resumeRunningReceive() override;
 #endif
 
     /** Recover a chip that lost its runtime state via the same full begin() the band-hop path uses */
