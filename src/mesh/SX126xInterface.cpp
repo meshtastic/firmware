@@ -605,8 +605,12 @@ template <typename T> void SX126xInterface<T>::rearmReceiveFromTask()
 {
     // Outside any radio-thread sequence. If the thread got there first, it took the re-arm over and left nothing to do.
     RadioSequence seq(this);
-    if (rearmState != REARM_PENDING)
+    if (rearmState != REARM_PENDING) {
+        // The thread's post-TX sequence held the lock and re-armed RX itself while this task waited for it, so this
+        // TX_DONE took the old path. Counted, not logged: the log port would hold the task up here.
+        rearmThreadFirstCount++;
         return;
+    }
     // What startReceive() sends, less the standby: after TX_DONE the chip has already fallen back to standby.
     setTransmitEnable(false);
     const int16_t err = startRxCommand(continuousRxWanted());
@@ -633,6 +637,9 @@ template <typename T> bool SX126xInterface<T>::adoptReceiveArmedFromIsr()
         LOG_WARN("SX126X RX re-arm at TX_DONE failed %s%d, restarting RX", radioLibErr, rearmErr);
     if (state != REARM_ARMED)
         return false;
+    rearmTaskCount++;
+    LOG_TRACE("Radio back in RX at TX_DONE from the readout task, %u by the task, %u the thread took first",
+              (unsigned)rearmTaskCount, (unsigned)rearmThreadFirstCount);
     RadioLibInterface::startReceive();
     rxArmedContinuous = continuousRxWanted();
     enableInterrupt(isrRxLevel0);
