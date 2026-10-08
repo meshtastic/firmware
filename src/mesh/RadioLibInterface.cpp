@@ -319,16 +319,25 @@ bool RadioLibInterface::findInTxQueue(NodeNum from, PacketId id)
 void RadioLibInterface::updateNoiseFloor()
 {
     // Only sample from idle receive mode. TX/RX-critical paths must return to radio work quickly.
-    if (!isReceiving || sendingPacket != NULL || isActivelyReceiving() || isIRQPending()) {
+    if (!isReceiving || sendingPacket != NULL) {
         return;
     }
-
+    // Ahead of the lock and the chip reads below, which then cost nothing on the iterations this skips
     if (Throttle::isWithinTimespanMs(lastNoiseFloorUpdate, NOISE_FLOOR_UPDATE_INTERVAL_MS)) {
         return;
     }
-    lastNoiseFloorUpdate = Time::getMillis();
 
-    int16_t rssi = getCurrentRSSI();
+    int16_t rssi;
+    {
+        // Three chip reads from the main loop, which holds no sequence of its own: unlocked, the readout task can land
+        // between them and wedge BUSY for RadioLib's whole timeout, same as canSendImmediately() above.
+        RadioSequence seq(this);
+        if (isActivelyReceiving() || isIRQPending()) {
+            return;
+        }
+        lastNoiseFloorUpdate = Time::getMillis();
+        rssi = getCurrentRSSI();
+    }
     if (rssi == NOISE_FLOOR_INVALID || rssi >= 0 || rssi < NOISE_FLOOR_VALID_MIN) {
         LOG_DEBUG_RADIO("Skipping invalid RSSI reading: %d", rssi);
         return;
@@ -1235,6 +1244,15 @@ void RadioLibInterface::readOutFromTask()
         // chip would stay in standby until checkCadHandoffTimeout().
         if (cadHandoffRxStart && iface->checkIrq(RADIOLIB_IRQ_TIMEOUT) == 1)
             notify(ISR_RX, !rxArmedBeforeTxDone);
+        // A handoff's RX also routes CRC_ERR and HEADER_ERR to DIO1, and a damaged header raises one of those with no
+        // RX_DONE behind it. Left latched, the line stays asserted and the next frame's RX_DONE raises no edge:
+        // checkStaleRxFlags() steps aside for a handoff, so nothing would notice until checkCadHandoffTimeout().
+        // Only inside the handoff window: plain RX leaves HEADER_ERR for checkStaleRxFlags() to judge a wedged SX1280 on.
+        if (cadHandoffRxStart) {
+            const uint32_t errIrqs = (1UL << RADIOLIB_IRQ_CRC_ERR) | (1UL << RADIOLIB_IRQ_HEADER_ERR);
+            if (iface->getIrqFlags() & iface->getIrqMapped(errIrqs))
+                iface->clearIrq(errIrqs);
+        }
         return; // otherwise an edge for a frame already taken
     }
     const size_t len = iface->getPacketLength();
