@@ -58,10 +58,10 @@ void setupNicheGraphics()
     // -----------------------------
 
 #ifdef EINK_HELTEC_VME290_OTP
-    Drivers::EInk *driver = new Drivers::HeltecVME290;
+    Drivers::EInk *driver = new Drivers::HeltecVME290; // FPC-7519revb
     driver->begin(hspi, PIN_EINK_DC, PIN_EINK_CS, PIN_EINK_BUSY, PIN_EINK_RES);
 #else
-    Drivers::EInk *driver = new Drivers::DEPG0290BNS800;
+    Drivers::EInk *driver = new Drivers::DEPG0290BNS800; // 15-22243-M0282
     driver->begin(hspi, PIN_EINK_DC, PIN_EINK_CS, PIN_EINK_BUSY);
 #endif
 

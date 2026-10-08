@@ -3,7 +3,7 @@
 E-Ink display driver for Heltec Vision Master E290, FPC-7519revb
     - OTP LUT + internal temp sensor (ZJY128296 approach)
     - 1-byte X offset from DEPG0290BNS800
-    - Enable with -D EINK_HELTEC_VME290_OTP
+    - Enable with -D EINK_HELTEC_VME290_OTP (see variant README)
 
 Do not use on 15-22243-M0282 panels: FAST refresh will not paint.
 
