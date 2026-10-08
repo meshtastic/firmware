@@ -1,4 +1,4 @@
-name: Build One Target
+name: Build_stm32c3_superMini_wio-sx1262
 
 on:
   workflow_dispatch:
