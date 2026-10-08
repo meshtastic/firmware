@@ -3,20 +3,10 @@
 #include "RadioLibInterface.h"
 
 // After TX_DONE the LR2021 waits in standby for the radio thread to restart RX, which a main-loop hold can stretch. With the
-// readout task, the TX_DONE interrupt has the task restart it instead; -DLR2021_RX_REARM_AT_TX_DONE=0 opts out.
-#if defined(MESHTASTIC_RX_READOUT_TASK) && !defined(LR2021_RX_REARM_AT_TX_DONE)
-#define LR2021_RX_REARM_AT_TX_DONE 1
-#endif
-
+// readout task, the TX_DONE interrupt has the task restart it instead.
+//
 // Restarting RX after a frame is a standby and the whole RX setup again, deaf throughout, where a continuous RX is still
-// listening. We keep that RX running instead, checking the chip is still in RX first;
-// -DLR2021_RESUME_CONTINUOUS_RX=0 opts out and takes the restart every time.
-#ifndef LR2021_RESUME_CONTINUOUS_RX
-#define LR2021_RESUME_CONTINUOUS_RX 1
-#endif
-#if LR2021_RESUME_CONTINUOUS_RX
-#define LR2021_READ_CHIP_MODE 1
-#endif
+// listening. We keep that RX running instead, checking the chip is still in RX first.
 
 /**
  * \brief Adapter for LR20x0 radio family. Implements common logic for child classes.
@@ -117,7 +107,7 @@ template <class T> class LR20x0Interface : public RadioLibInterface
     /** setStandby()'s body, returning the standby error instead of asserting - for callers that can recover */
     int16_t trySetStandby();
 
-#if defined(MESHTASTIC_RX_READOUT_TASK) && LR2021_RX_REARM_AT_TX_DONE
+#ifdef MESHTASTIC_RX_READOUT_TASK
     bool rearmReceiveFromIsr() override;
     void rearmReceiveFromTask() override;
     bool adoptReceiveArmedFromIsr() override;
@@ -126,7 +116,6 @@ template <class T> class LR20x0Interface : public RadioLibInterface
     volatile int16_t rearmErr = 0;
 #endif
 
-#if LR2021_READ_CHIP_MODE
     /** The chip's mode (stat2 bits 2..0, as the LR20X0_CHIP_MODE_* below), waiting out a passing FS; 0xFF on SPI failure */
     uint8_t readChipMode();
     static constexpr uint8_t LR20X0_CHIP_MODE_STBY_RC = 1;
@@ -134,13 +123,10 @@ template <class T> class LR20x0Interface : public RadioLibInterface
     static constexpr uint8_t LR20X0_CHIP_MODE_FS = 3;
     static constexpr uint8_t LR20X0_CHIP_MODE_RX = 4;
     static constexpr uint8_t LR20X0_CHIP_MODE_TX = 5;
-#endif
 
-#if LR2021_RESUME_CONTINUOUS_RX
     /** RX was armed continuous and nothing has put the chip into standby since */
     bool rxArmedContinuous = false;
     bool resumeRunningReceive() override;
-#endif
 
     /** Recover a chip that lost its runtime state via the same full begin() the band-hop path uses */
     bool recoverChipStateLoss() override { return fullBegin(getFreq()); }

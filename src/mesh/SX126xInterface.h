@@ -6,10 +6,7 @@
 
 // After TX_DONE the SX126x waits in standby for the radio thread to restart RX, which a main-loop hold can stretch by
 // hundreds of ms. With the readout task, the TX_DONE interrupt has the task restart it instead, on every platform the
-// task runs on; -DSX126X_RX_REARM_AT_TX_DONE=0 opts out.
-#if defined(MESHTASTIC_RX_READOUT_TASK) && !defined(SX126X_RX_REARM_AT_TX_DONE)
-#define SX126X_RX_REARM_AT_TX_DONE 1
-#endif
+// task runs on.
 
 /**
  * \brief Adapter for SX126x radio family. Implements common logic for child classes.
@@ -171,7 +168,7 @@ template <class T> class SX126xInterface : public RadioLibInterface
     /** The RX command startReceive() sends once the chip is in standby */
     int16_t startRxCommand(bool continuousRx);
 
-#if defined(MESHTASTIC_RX_READOUT_TASK) && SX126X_RX_REARM_AT_TX_DONE
+#ifdef MESHTASTIC_RX_READOUT_TASK
     bool rearmReceiveFromIsr() override;
     void rearmReceiveFromTask() override;
     bool adoptReceiveArmedFromIsr() override;

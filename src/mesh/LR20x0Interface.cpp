@@ -414,9 +414,7 @@ template <typename T> bool LR20x0Interface<T>::fullBegin(float freq)
 
         delay(10); // same TCXO settle window as init()
 
-#if LR2021_RESUME_CONTINUOUS_RX
         rxArmedContinuous = false; // begin() resets the chip
-#endif
         int res = lora.begin(freq, bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage);
         if (res == RADIOLIB_ERR_SPI_CMD_FAILED) {
             LOG_WARN("LR20x0 band-hop begin SPI_CMD_FAILED, retrying");
@@ -575,9 +573,7 @@ template <typename T> int16_t LR20x0Interface<T>::trySetStandby()
 
     isReceiving = false; // If we were receiving, not any more
     activeReceiveStart = 0;
-#if LR2021_RESUME_CONTINUOUS_RX
     rxArmedContinuous = false;
-#endif
     disableInterrupt();
     completeSending(); // If we were sending, not anymore
     RadioLibInterface::setStandby();
@@ -607,10 +603,8 @@ template <typename T> void LR20x0Interface<T>::addReceiveMetadata(meshtastic_Mes
  */
 template <typename T> void LR20x0Interface<T>::configHardwareForSend()
 {
-#if LR2021_RESUME_CONTINUOUS_RX
     rxArmedContinuous = false; // the transmission takes the chip out of RX
-#endif
-#if defined(MESHTASTIC_RX_READOUT_TASK) && LR2021_RX_REARM_AT_TX_DONE
+#ifdef MESHTASTIC_RX_READOUT_TASK
     rearmState = REARM_NONE; // only this TX's TX_DONE may re-arm, never a stale one from a TX the poll completed
     rxArmedBeforeTxDone = false;
 #endif
@@ -653,9 +647,7 @@ template <typename T> void LR20x0Interface<T>::startReceive()
     }
 
     RadioLibInterface::startReceive();
-#if LR2021_RESUME_CONTINUOUS_RX
     rxArmedContinuous = true; // RADIOLIB_LR2021_RX_TIMEOUT_INF: continuous
-#endif
 
     // Must be done AFTER starting receive, because startReceive clears (possibly stale) interrupt pending register bits
     enableInterrupt(isrRxLevel0);
@@ -663,7 +655,6 @@ template <typename T> void LR20x0Interface<T>::startReceive()
 #endif
 }
 
-#if LR2021_READ_CHIP_MODE
 template <typename T> uint8_t LR20x0Interface<T>::readChipMode()
 {
     // Any NOP transfer returns stat1 and stat2 first, but SPItransferStream() drops the configured 16-bit status from the
@@ -690,9 +681,7 @@ template <typename T> uint8_t LR20x0Interface<T>::readChipMode()
     }
     return mode;
 }
-#endif
 
-#if LR2021_RESUME_CONTINUOUS_RX
 template <typename T> bool LR20x0Interface<T>::resumeRunningReceive()
 {
     // A continuous RX keeps listening after RX_DONE and after CRC or header errors, so pick it back up instead of a standby
@@ -712,9 +701,8 @@ template <typename T> bool LR20x0Interface<T>::resumeRunningReceive()
     checkRxDoneIrqFlag(); // an RX_DONE that beat the resume
     return true;
 }
-#endif
 
-#if defined(MESHTASTIC_RX_READOUT_TASK) && LR2021_RX_REARM_AT_TX_DONE
+#ifdef MESHTASTIC_RX_READOUT_TASK
 template <typename T> bool LR20x0Interface<T>::rearmReceiveFromIsr()
 {
     // The interrupt cannot call RadioLib, so the readout task, above the main loop, re-arms as soon as it returns.
@@ -742,9 +730,7 @@ template <typename T> void LR20x0Interface<T>::rearmReceiveFromTask()
         return;
     }
     rearmState = REARM_ARMED;
-#if LR2021_RESUME_CONTINUOUS_RX
     rxArmedContinuous = true; // so a frame the task reads before the thread adopts finds the chip still listening
-#endif
     // The TX_DONE interrupt detached the radio's interrupt. Attach the RX one now, so a frame that ends before the radio
     // thread runs wakes this task to read it, rather than waiting in the chip for the next frame to overwrite it.
     rxArmedBeforeTxDone = true;
@@ -763,9 +749,7 @@ template <typename T> bool LR20x0Interface<T>::adoptReceiveArmedFromIsr()
     if (state != REARM_ARMED)
         return false;
     RadioLibInterface::startReceive();
-#if LR2021_RESUME_CONTINUOUS_RX
     rxArmedContinuous = true; // the task armed a continuous RX
-#endif
     enableInterrupt(isrRxLevel0);
     checkRxDoneIrqFlag(); // an RX_DONE that completed before the interrupt was attached
     return true;
@@ -856,9 +840,7 @@ template <typename T> bool LR20x0Interface<T>::resetAGC()
     LOG_DEBUG_RADIO("LR20x0 AGC reset: warm sleep + Calibrate(0x3F)");
 
     // 1. Warm sleep - powers down the analog frontend, resetting AGC state
-#if LR2021_RESUME_CONTINUOUS_RX
     rxArmedContinuous = false; // the warm sleep stops RX
-#endif
     lora.sleep(true, 0);
 
     // 2. Wake to RC standby for stable calibration

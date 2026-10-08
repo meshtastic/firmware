@@ -472,7 +472,7 @@ template <typename T> void SX126xInterface<T>::addReceiveMetadata(meshtastic_Mes
  */
 template <typename T> void SX126xInterface<T>::configHardwareForSend()
 {
-#if defined(MESHTASTIC_RX_READOUT_TASK) && SX126X_RX_REARM_AT_TX_DONE
+#ifdef MESHTASTIC_RX_READOUT_TASK
     rearmState = REARM_NONE; // only this TX's TX_DONE may re-arm, never a stale one from a TX the poll completed
     rxArmedBeforeTxDone = false;
 #endif
@@ -587,7 +587,7 @@ template <typename T> int16_t SX126xInterface<T>::startRxCommand(bool continuous
     return lora.startReceiveDutyCycleAuto(preambleLength, rxDutyCycleMinSymbols, MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS);
 }
 
-#if defined(MESHTASTIC_RX_READOUT_TASK) && SX126X_RX_REARM_AT_TX_DONE
+#ifdef MESHTASTIC_RX_READOUT_TASK
 template <typename T> bool INTERRUPT_ATTR SX126xInterface<T>::rearmReceiveFromIsr()
 {
     // The interrupt cannot call RadioLib, so the readout task, above the main loop, re-arms as soon as it returns.
