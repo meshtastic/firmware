@@ -4,10 +4,10 @@
 #include "RadioLibInterface.h"
 #include "configuration.h"
 
-// After TX_DONE the SX126x waits in standby for the radio thread to restart RX, which a main-loop hold can stretch. With the
-// readout task, the TX_DONE interrupt has the task restart it instead; -DSX126X_RX_REARM_AT_TX_DONE=0 opts out. Not on nRF52,
-// whose TX_DONE interrupt can re-arm RX itself.
-#if defined(MESHTASTIC_RX_READOUT_TASK) && !defined(ARCH_NRF52) && !defined(SX126X_RX_REARM_AT_TX_DONE)
+// After TX_DONE the SX126x waits in standby for the radio thread to restart RX, which a main-loop hold can stretch by
+// hundreds of ms. With the readout task, the TX_DONE interrupt has the task restart it instead, on every platform the
+// task runs on; -DSX126X_RX_REARM_AT_TX_DONE=0 opts out.
+#if defined(MESHTASTIC_RX_READOUT_TASK) && !defined(SX126X_RX_REARM_AT_TX_DONE)
 #define SX126X_RX_REARM_AT_TX_DONE 1
 #endif
 
