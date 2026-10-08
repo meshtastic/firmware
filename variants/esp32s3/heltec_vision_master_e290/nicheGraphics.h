@@ -33,7 +33,7 @@ Different NicheGraphics UIs and different hardware variants will each have their
 
 // Shared NicheGraphics components
 // --------------------------------
-#include "graphics/niche/Drivers/EInk/DEPG0290BNS800.h"
+#include "graphics/niche/Drivers/EInk/HeltecVME290.h"
 #include "graphics/niche/Inputs/TwoButton.h"
 
 // Button feedback
@@ -53,8 +53,8 @@ void setupNicheGraphics()
     // E-Ink Driver
     // -----------------------------
 
-    Drivers::EInk *driver = new Drivers::DEPG0290BNS800;
-    driver->begin(hspi, PIN_EINK_DC, PIN_EINK_CS, PIN_EINK_BUSY);
+    Drivers::EInk *driver = new Drivers::HeltecVME290;
+    driver->begin(hspi, PIN_EINK_DC, PIN_EINK_CS, PIN_EINK_BUSY, PIN_EINK_RES);
 
     // InkHUD
     // ----------------------------
