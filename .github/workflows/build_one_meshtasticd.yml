@@ -1,0 +1,167 @@
+name: Build One Meshtasticd
+
+on:
+  workflow_dispatch:
+    inputs:
+      # trunk-ignore(checkov/CKV_GHA_7)
+      target:
+        type: string
+        required: false
+        description: Choose the native target, e.g. native-tft. If blank, will list available targets.
+      arch:
+        type: choice
+        options:
+          - aarch64
+          - armv7
+          - x86_64
+        default: aarch64
+        description: Architecture to build for. aarch64 suits Pi 3/4/5 on a 64-bit OS; armv7 is 32-bit ARM (Pi Zero, Luckfox Lyra) and is built under QEMU, so it is slow.
+      debian:
+        type: choice
+        options:
+          - trixie
+          - bookworm
+        default: trixie
+        description: Debian release to build on. Match the target's /etc/os-release, since the binary links the build host's glibc.
+
+permissions: read-all
+
+jobs:
+  find-targets:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: List targets
+        id: jsonStep
+        env:
+          BUILDTARGET: ${{ inputs.target }}
+          MATRIXARCH: ${{ inputs.arch }}
+        run: |
+          TARGETS=$(grep -rhoE '^\[env:native(-tft|-fb|-tft-debug)?\]' platformio.ini variants | sed -E 's/\[env:(.*)\]/\1/' | sort -u)
+          if [ "$BUILDTARGET" = "" ]; then
+            echo "Name: $GITHUB_REF_NAME" >> $GITHUB_STEP_SUMMARY
+            echo "Arch: $MATRIXARCH" >> $GITHUB_STEP_SUMMARY
+            echo "Ref: $GITHUB_REF" >> $GITHUB_STEP_SUMMARY
+            echo "## 🎯 The following native targets are available to build:" >> $GITHUB_STEP_SUMMARY
+            echo "| Platform | Board |" >> $GITHUB_STEP_SUMMARY
+            echo "| -------- | ----- |" >> $GITHUB_STEP_SUMMARY
+            for t in $TARGETS; do echo "| native | $t |" >> $GITHUB_STEP_SUMMARY; done
+            echo "found=false" >> $GITHUB_OUTPUT
+          else
+            echo "We build this one:" >> $GITHUB_STEP_SUMMARY
+            echo "| Platform | Board |" >> $GITHUB_STEP_SUMMARY
+            echo "| -------- | ----- |" >> $GITHUB_STEP_SUMMARY
+            if echo "$TARGETS" | grep -Fqx -- "$BUILDTARGET"; then
+              echo "| native | $BUILDTARGET |" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "## ✅ Target $BUILDTARGET found, proceeding to build." >> $GITHUB_STEP_SUMMARY
+              echo "You may need to refresh this page to make the built binary appear below." >> $GITHUB_STEP_SUMMARY
+              echo "found=true" >> $GITHUB_OUTPUT
+            else
+              echo "| native | $BUILDTARGET |" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "## ❌ Error: Target $BUILDTARGET not found!" >> $GITHUB_STEP_SUMMARY
+              echo "found=false" >> $GITHUB_OUTPUT
+              exit 1
+            fi
+          fi
+    outputs:
+      found: ${{ steps.jsonStep.outputs.found }}
+
+  build:
+    if: ${{ inputs.target != '' && needs.find-targets.outputs.found == 'true' && inputs.arch != 'armv7' }}
+    needs: find-targets
+    runs-on: ${{ inputs.arch == 'x86_64' && 'ubuntu-24.04' || 'ubuntu-24.04-arm' }}
+    container:
+      image: debian:${{ inputs.debian }}
+    env:
+      DEBIAN_FRONTEND: noninteractive
+      PIP_ROOT_USER_ACTION: ignore
+      PIP_BREAK_SYSTEM_PACKAGES: 1
+    steps:
+      # Same package set as the Dockerfile builder stage.
+      - name: Install dependencies
+        run: |
+          apt-get update
+          apt-get install --no-install-recommends -y \
+            curl wget g++ zip git ca-certificates pkg-config \
+            python3-pip python3-grpc-tools \
+            libgpiod-dev libyaml-cpp-dev libjsoncpp-dev libbluetooth-dev libsdbus-c++-dev libi2c-dev libuv1-dev \
+            libcurl4-gnutls-dev libusb-1.0-0-dev libulfius-dev liborcania-dev libssl-dev \
+            libx11-dev libinput-dev libxkbcommon-x11-dev libsqlite3-dev libsdl2-dev libnotify-dev
+          pip install --no-cache-dir -U platformio
+
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: Allow git in the container workspace
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Build
+        env:
+          PIO_ENV: ${{ inputs.target }}
+          DEBIAN: ${{ inputs.debian }}
+        run: |
+          bash ./bin/build-native.sh "$PIO_ENV"
+          {
+            echo "## meshtasticd build"
+            echo "| Env | Debian | Arch |"
+            echo "| --- | ------ | ---- |"
+            echo "| ${PIO_ENV} | ${DEBIAN} | $(uname -m) |"
+            echo
+            echo '```'
+            ldd release/meshtasticd_linux_* | head -40
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: meshtasticd-${{ inputs.target }}-${{ inputs.debian }}-${{ runner.arch }}
+          overwrite: true
+          path: release/meshtasticd_linux_*
+
+  # No 32-bit ARM runner exists, so run the same native build in a linux/arm/v7 container under QEMU,
+  # as docker_manifest.yml does for the release image.
+  build-armv7:
+    if: ${{ inputs.target != '' && needs.find-targets.outputs.found == 'true' && inputs.arch == 'armv7' }}
+    needs: find-targets
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - uses: docker/setup-qemu-action@v4
+        with:
+          platforms: arm
+
+      - name: Build in an armv7 container
+        env:
+          PIO_ENV: ${{ inputs.target }}
+          DEBIAN: ${{ inputs.debian }}
+        run: |
+          docker run --rm --platform linux/arm/v7 -v "$PWD:/work" -w /work -e PIO_ENV -e DEBIAN_FRONTEND=noninteractive \
+            -e PIP_ROOT_USER_ACTION=ignore -e PIP_BREAK_SYSTEM_PACKAGES=1 "debian:${DEBIAN}" bash -ec '
+              apt-get update
+              apt-get install --no-install-recommends -y \
+                curl wget g++ zip git ca-certificates pkg-config \
+                python3-pip python3-grpc-tools \
+                libgpiod-dev libyaml-cpp-dev libjsoncpp-dev libbluetooth-dev libsdbus-c++-dev libi2c-dev libuv1-dev \
+                libcurl4-gnutls-dev libusb-1.0-0-dev libulfius-dev liborcania-dev libssl-dev \
+                libx11-dev libinput-dev libxkbcommon-x11-dev libsqlite3-dev libsdl2-dev libnotify-dev
+              pip install --no-cache-dir -U platformio
+              git config --global --add safe.directory /work
+              bash ./bin/build-native.sh "$PIO_ENV"
+              { echo "## meshtasticd build"; echo "| Env | Debian | Arch |"; echo "| --- | ------ | ---- |"
+                echo "| $PIO_ENV | '"$DEBIAN"' | $(uname -m) |"; echo; echo "\`\`\`"
+                ldd release/meshtasticd_linux_* | head -40; echo "\`\`\`"; } > /work/summary.md
+            '
+          cat summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: meshtasticd-${{ inputs.target }}-${{ inputs.debian }}-armv7
+          overwrite: true
+          path: release/meshtasticd_linux_*
