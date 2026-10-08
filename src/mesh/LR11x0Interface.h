@@ -2,6 +2,13 @@
 #if RADIOLIB_EXCLUDE_LR11X0 != 1
 #include "RadioLibInterface.h"
 
+// After TX_DONE the LR11x0 waits in standby for the radio thread to restart RX, which a main-loop hold can stretch by
+// hundreds of ms. With the readout task, the TX_DONE interrupt has the task restart it instead;
+// -DLR11X0_RX_REARM_AT_TX_DONE=0 opts out.
+#if defined(MESHTASTIC_RX_READOUT_TASK) && !defined(LR11X0_RX_REARM_AT_TX_DONE)
+#define LR11X0_RX_REARM_AT_TX_DONE 1
+#endif
+
 /**
  * \brief Adapter for LR11x0 radio family. Implements common logic for child classes.
  * \tparam T RadioLib module type for LR11x0: SX1262, SX1268.
@@ -93,6 +100,15 @@ template <class T> class LR11x0Interface : public RadioLibInterface
 
     /** setStandby()'s body, returning the standby error instead of asserting - for callers that can recover */
     int16_t trySetStandby();
+
+#if defined(MESHTASTIC_RX_READOUT_TASK) && LR11X0_RX_REARM_AT_TX_DONE
+    bool rearmReceiveFromIsr() override;
+    void rearmReceiveFromTask() override;
+    bool adoptReceiveArmedFromIsr() override;
+    enum RearmState : uint8_t { REARM_NONE, REARM_PENDING, REARM_ARMED, REARM_FAILED };
+    volatile uint8_t rearmState = REARM_NONE;
+    volatile int16_t rearmErr = 0;
+#endif
 
     /** Recover a chip that lost its runtime state: hardware-reset via begin() and reprogram */
     bool recoverChipStateLoss() override { return reinitChip() && programModemParams() == RADIOLIB_ERR_NONE; }
