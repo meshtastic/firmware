@@ -1,4 +1,4 @@
-name: Build my variant
+name: Build esp32c3 super mini with wio-sx1262
 on: workflow_dispatch
 permissions: read-all
 jobs:
