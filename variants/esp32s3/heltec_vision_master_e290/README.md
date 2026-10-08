@@ -1,6 +1,6 @@
 # Heltec Vision Master E290 - InkHUD panel split
 
-Same V3.2 PCB ships two 2.9" panels. The flex print is the only reliable ID; firmware cannot read it (e-ink SPI is MOSI-only).
+Same V0.3.2 PCB ships two 2.9" panels. The flex print is the only reliable ID; firmware cannot read it (e-ink SPI is MOSI-only).
 
 | Flex print                     | InkHUD env                                                           | FAST / partial                       |
 | ------------------------------ | -------------------------------------------------------------------- | ------------------------------------ |
