@@ -897,13 +897,6 @@ Power::Power() : OSThread("Power")
 
 bool Power::analogInit()
 {
-#ifdef EXT_PWR_DETECT
-    pinMode(EXT_PWR_DETECT, EXT_PWR_DETECT_MODE);
-#endif
-#ifdef EXT_CHRG_DETECT
-    pinMode(EXT_CHRG_DETECT, EXT_CHRG_DETECT_MODE);
-#endif
-
 #ifdef BATTERY_PIN
     LOG_DEBUG("Use analog input %d for battery level", BATTERY_PIN);
 
@@ -963,6 +956,13 @@ bool Power::analogInit()
  */
 bool Power::setup()
 {
+    // Before the gauge probes: a gauge that keeps AnalogBatteryLevel::isVbusIn() still reads these pins
+#ifdef EXT_PWR_DETECT
+    pinMode(EXT_PWR_DETECT, EXT_PWR_DETECT_MODE);
+#endif
+#ifdef EXT_CHRG_DETECT
+    pinMode(EXT_CHRG_DETECT, EXT_CHRG_DETECT_MODE);
+#endif
 #ifdef HAS_SGM41562
     // Initialize the charger early so AnalogBatteryLevel can read charging
     // state from it. The charger does not provide battery voltage / percent -
@@ -2370,13 +2370,6 @@ SerialBatteryLevel serialBatteryLevel;
  */
 bool Power::serialBatteryInit()
 {
-#ifdef EXT_PWR_DETECT
-    pinMode(EXT_PWR_DETECT, EXT_PWR_DETECT_MODE);
-#endif
-#ifdef EXT_CHRG_DETECT
-    pinMode(EXT_CHRG_DETECT, EXT_CHRG_DETECT_MODE);
-#endif
-
     bool result = serialBatteryLevel.runOnce();
     LOG_DEBUG("Power::serialBatteryInit sensor is %s", result ? "ready" : "not ready yet");
     if (!result)
