@@ -36,18 +36,20 @@ class TraceRouteModule : public ProtobufModule<meshtastic_RouteDiscovery>,
     virtual bool wantUIFrame() override { return shouldDraw(); }
     virtual Observable<const UIFrameEvent *> *getUIFrameObservable() override { return this; }
 
-    void processUpgradedPacket(const meshtastic_MeshPacket &mp);
+    /* Add this node's hop to a RouteDiscovery payload in place, before the packet is dispatched to modules or relayed.
+       Traceroute is the one module allowed to rewrite a relayed payload: the protocol needs each hop to add itself.
+       Called by the Router; a no-op for anything but a decoded TRACEROUTE_APP packet. */
+    void updateRoute(meshtastic_MeshPacket &p);
 
   protected:
     bool handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_RouteDiscovery *r) override;
 
     virtual meshtastic_MeshPacket *allocReply() override;
 
-    /* Called before rebroadcasting a RouteDiscovery payload in order to update
-       the route array containing the IDs of nodes this packet went through */
-    void alterReceivedProtobuf(meshtastic_MeshPacket &p, meshtastic_RouteDiscovery *r) override;
-
     virtual int32_t runOnce() override;
+
+    /* Update the route array of a decoded RouteDiscovery with this node's hop and re-encode it into p */
+    void updateRoute(meshtastic_MeshPacket &p, meshtastic_RouteDiscovery *r);
 
   private:
     void setResultText(const String &text);

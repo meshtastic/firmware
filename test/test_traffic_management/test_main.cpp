@@ -188,7 +188,6 @@ class MockRouter : public Router
 class TrafficManagementModuleTestShim : public TrafficManagementModule
 {
   public:
-    using TrafficManagementModule::alterReceived;
     using TrafficManagementModule::dropNodeInfoCacheForTest;
     using TrafficManagementModule::flushCache;
     using TrafficManagementModule::handleReceived;
@@ -2295,9 +2294,9 @@ static void test_tm_nodeinfo_directResponse_fallbackUnsignedNotServed(void)
 /**
  * Verify relayed telemetry broadcasts are NOT hop-exhausted.
  * exhaust_hop_telemetry / exhaust_hop_position have been removed from the config
- * as "not suitable right now" - alterReceived must leave hop_limit unchanged.
+ * as "not suitable right now" - handleReceived must leave hop_limit unchanged.
  */
-static void test_tm_alterReceived_telemetryBroadcast_hopLimitUnchanged(void)
+static void test_tm_handleReceived_telemetryBroadcast_hopLimitUnchanged(void)
 {
     // ScopedBusyAirTime busyChannel; // INERT: the module never reads airTime
     TrafficManagementModuleTestShim module;
@@ -2305,7 +2304,7 @@ static void test_tm_alterReceived_telemetryBroadcast_hopLimitUnchanged(void)
     packet.hop_start = 5;
     packet.hop_limit = 3;
 
-    module.alterReceived(packet);
+    (void)module.handleReceived(packet);
     meshtastic_TrafficManagementStats stats = module.getStats();
 
     TEST_ASSERT_EQUAL_UINT8(3, packet.hop_limit); // unchanged
@@ -2315,23 +2314,23 @@ static void test_tm_alterReceived_telemetryBroadcast_hopLimitUnchanged(void)
 }
 
 /**
- * Verify alterReceived does not modify unicast or local-origin packets.
+ * Verify handleReceived does not exhaust hops on unicast or local-origin packets.
  */
-static void test_tm_alterReceived_skipsLocalAndUnicast(void)
+static void test_tm_handleReceived_skipsLocalAndUnicast(void)
 {
     TrafficManagementModuleTestShim module;
 
     meshtastic_MeshPacket unicast = makeDecodedPacket(meshtastic_PortNum_TELEMETRY_APP, kRemoteNode, kTargetNode);
     unicast.hop_start = 5;
     unicast.hop_limit = 3;
-    module.alterReceived(unicast);
+    (void)module.handleReceived(unicast);
     TEST_ASSERT_EQUAL_UINT8(3, unicast.hop_limit);
     TEST_ASSERT_FALSE(module.shouldExhaustHops(unicast));
 
     meshtastic_MeshPacket fromUs = makeDecodedPacket(meshtastic_PortNum_TELEMETRY_APP, kLocalNode, NODENUM_BROADCAST);
     fromUs.hop_start = 5;
     fromUs.hop_limit = 3;
-    module.alterReceived(fromUs);
+    (void)module.handleReceived(fromUs);
     TEST_ASSERT_EQUAL_UINT8(3, fromUs.hop_limit);
     TEST_ASSERT_FALSE(module.shouldExhaustHops(fromUs));
 
@@ -2612,16 +2611,16 @@ static void test_tm_unknownPackets_thresholdAbove255_clamps(void)
 
 /**
  * Verify relayed position broadcasts are NOT hop-exhausted.
- * exhaust_hop_position has been removed - alterReceived must leave hop_limit unchanged.
+ * exhaust_hop_position has been removed - handleReceived must leave hop_limit unchanged.
  */
-static void test_tm_alterReceived_positionBroadcast_hopLimitUnchanged(void)
+static void test_tm_handleReceived_positionBroadcast_hopLimitUnchanged(void)
 {
     TrafficManagementModuleTestShim module;
     meshtastic_MeshPacket packet = makePositionPacket(kRemoteNode, 374221234, -1220845678, NODENUM_BROADCAST);
     packet.hop_start = 5;
     packet.hop_limit = 2;
 
-    module.alterReceived(packet);
+    (void)module.handleReceived(packet);
     meshtastic_TrafficManagementStats stats = module.getStats();
 
     TEST_ASSERT_EQUAL_UINT8(2, packet.hop_limit); // unchanged
@@ -2630,17 +2629,16 @@ static void test_tm_alterReceived_positionBroadcast_hopLimitUnchanged(void)
     TEST_ASSERT_EQUAL_UINT32(0, stats.hop_exhausted_packets);
 }
 /**
- * Verify alterReceived ignores undecoded/encrypted packets.
- * Important so we never mutate packets that were not decoded by this module.
+ * Verify handleReceived does not exhaust hops on undecoded/encrypted packets.
  */
-static void test_tm_alterReceived_skipsUndecodedPackets(void)
+static void test_tm_handleReceived_skipsUndecodedPackets(void)
 {
     TrafficManagementModuleTestShim module;
     meshtastic_MeshPacket packet = makeUnknownPacket(kRemoteNode, NODENUM_BROADCAST);
     packet.hop_start = 5;
     packet.hop_limit = 3;
 
-    module.alterReceived(packet);
+    (void)module.handleReceived(packet);
     meshtastic_TrafficManagementStats stats = module.getStats();
 
     TEST_ASSERT_EQUAL_UINT8(5, packet.hop_start);
@@ -2654,14 +2652,14 @@ static void test_tm_alterReceived_skipsUndecodedPackets(void)
  * removed, so the exhaustRequested flag is never set.
  * Guards against accidental re-enablement without updating the flag logic.
  */
-static void test_tm_alterReceived_exhaustFlagAlwaysFalse(void)
+static void test_tm_handleReceived_exhaustFlagAlwaysFalse(void)
 {
     TrafficManagementModuleTestShim module;
 
     meshtastic_MeshPacket telemetry = makeDecodedPacket(meshtastic_PortNum_TELEMETRY_APP, kRemoteNode, NODENUM_BROADCAST);
     telemetry.hop_start = 5;
     telemetry.hop_limit = 3;
-    module.alterReceived(telemetry);
+    (void)module.handleReceived(telemetry);
     TEST_ASSERT_FALSE(module.shouldExhaustHops(telemetry));
 
     meshtastic_MeshPacket text = makeDecodedPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kRemoteNode);
@@ -2678,7 +2676,7 @@ static void test_tm_alterReceived_exhaustFlagAlwaysFalse(void)
  * Since exhaust is removed, the from+id scope check is moot - this guards that
  * the always-false invariant holds across multiple distinct packets.
  */
-static void test_tm_alterReceived_exhaustFlag_isPacketScoped(void)
+static void test_tm_handleReceived_exhaustFlag_isPacketScoped(void)
 {
     TrafficManagementModuleTestShim module;
 
@@ -2686,7 +2684,7 @@ static void test_tm_alterReceived_exhaustFlag_isPacketScoped(void)
     p1.id = 0x1010;
     p1.hop_start = 5;
     p1.hop_limit = 3;
-    module.alterReceived(p1);
+    (void)module.handleReceived(p1);
 
     meshtastic_MeshPacket p2 = makeDecodedPacket(meshtastic_PortNum_TELEMETRY_APP, kTargetNode, NODENUM_BROADCAST);
     p2.id = 0x2020;
@@ -3154,34 +3152,10 @@ static void test_tm_unknownRole_noUserBit_appliesFullInterval(void)
     TEST_ASSERT_EQUAL_UINT32(1, stats.position_dedup_drops);
 }
 
-/**
- * Verify a relayed position broadcast more precise than the channel setting passes through
- * handleReceived/alterReceived unmodified. Relays must forward position payloads byte-for-byte
- * so the sender's XEdDSA signature still verifies downstream.
- */
-static void test_tm_relayedPosition_payloadUnmodified(void)
-{
-    installWellKnownPrimaryChannelWithPrecision(13);
-    mockNodeDB->setCachedNode(kRemoteNode);
-
-    TrafficManagementModuleTestShim module;
-
-    meshtastic_MeshPacket packet = makePositionPacketWithPrecision(kRemoteNode, 374221234, -1220845678, 32);
-    packet.hop_start = 3;
-    packet.hop_limit = 2;
-    const meshtastic_Data_payload_t original = packet.decoded.payload;
-
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(module.handleReceived(packet)));
-    module.alterReceived(packet);
-
-    TEST_ASSERT_EQUAL_UINT32(original.size, packet.decoded.payload.size);
-    TEST_ASSERT_EQUAL_MEMORY(original.bytes, packet.decoded.payload.bytes, original.size);
-}
-
 // ---------------------------------------------------------------------------
 // Fuzz - crafted-nodenum blitz of the unified cache
 // ---------------------------------------------------------------------------
-// Floods handleReceived/alterReceived with crafted packets over a tiny node pool so the fixed-size
+// Floods handleReceived with crafted packets over a tiny node pool so the fixed-size
 // cache churns hard while the virtual clock sweeps the rate/unknown/position windows; no crash, counters bounded.
 static constexpr uint64_t FUZZ_SEED = 0x00D07E5701ULL;
 
@@ -3250,8 +3224,6 @@ static void test_tm_fuzz_nodenum_blitz(void)
         }
 
         (void)module.handleReceived(p);
-        if (rngRange(3) == 0)
-            module.alterReceived(p);
 
         // Advance the virtual clock so rate / unknown / position windows open and close under churn.
         if (rngRange(16) == 0)
@@ -3357,8 +3329,8 @@ TM_TEST_ENTRY void setup()
     RUN_TEST(test_tm_nodeinfo_cache_dropsFrameCarryingOwnerKey);
 #endif
 #endif
-    RUN_TEST(test_tm_alterReceived_telemetryBroadcast_hopLimitUnchanged);
-    RUN_TEST(test_tm_alterReceived_skipsLocalAndUnicast);
+    RUN_TEST(test_tm_handleReceived_telemetryBroadcast_hopLimitUnchanged);
+    RUN_TEST(test_tm_handleReceived_skipsLocalAndUnicast);
     RUN_TEST(test_tm_positionDedup_allowsDuplicateAfterIntervalExpires);
     RUN_TEST(test_tm_positionDedup_continuousDuplicatesStillRefresh);
     RUN_TEST(test_tm_positionDedup_intervalZero_neverDrops);
@@ -3370,10 +3342,10 @@ TM_TEST_ENTRY void setup()
     RUN_TEST(test_tm_rateLimit_resetsAfterWindowExpires);
     RUN_TEST(test_tm_unknownPackets_resetAfterWindowExpires);
     RUN_TEST(test_tm_unknownPackets_thresholdAbove255_clamps);
-    RUN_TEST(test_tm_alterReceived_positionBroadcast_hopLimitUnchanged);
-    RUN_TEST(test_tm_alterReceived_skipsUndecodedPackets);
-    RUN_TEST(test_tm_alterReceived_exhaustFlagAlwaysFalse);
-    RUN_TEST(test_tm_alterReceived_exhaustFlag_isPacketScoped);
+    RUN_TEST(test_tm_handleReceived_positionBroadcast_hopLimitUnchanged);
+    RUN_TEST(test_tm_handleReceived_skipsUndecodedPackets);
+    RUN_TEST(test_tm_handleReceived_exhaustFlagAlwaysFalse);
+    RUN_TEST(test_tm_handleReceived_exhaustFlag_isPacketScoped);
     RUN_TEST(test_tm_runOnce_disabledReturnsMaxInterval);
     RUN_TEST(test_tm_runOnce_enabledReturnsMaintenanceInterval);
     RUN_TEST(test_tm_nextHop_setAndGetRoundTrip);
@@ -3388,7 +3360,6 @@ TM_TEST_ENTRY void setup()
     RUN_TEST(test_tm_specialRole_evictedLastUnderPressure);
     RUN_TEST(test_tm_trackerRole_doesNotLengthenShorterOperatorInterval);
     RUN_TEST(test_tm_lostAndFoundRole_capsDedupAtFifteenMinutes);
-    RUN_TEST(test_tm_relayedPosition_payloadUnmodified);
     RUN_TEST(test_tm_unknownRole_noDbEntry_appliesFullInterval);
     RUN_TEST(test_tm_unknownRole_noUserBit_appliesFullInterval);
     RUN_TEST(test_tm_fuzz_nodenum_blitz);

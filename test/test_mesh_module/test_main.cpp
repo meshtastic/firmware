@@ -872,7 +872,6 @@ static void test_deferredQueueOverflow_dropsGracefully()
 class NeighborInfoModuleTestShim : public NeighborInfoModule
 {
   public:
-    using MeshModule::alterReceived;
     using NeighborInfoModule::collectNeighborInfo;
     using NeighborInfoModule::updateNeighbors;
 };
@@ -920,19 +919,6 @@ static meshtastic_NeighborInfo collectedNeighbors(NeighborInfoModuleTestShim *mo
     meshtastic_NeighborInfo out = meshtastic_NeighborInfo_init_zero;
     module->collectNeighborInfo(&out);
     return out;
-}
-
-static void test_neighborInfo_relayedPayloadIsNotModified()
-{
-    auto *module = makeNeighborInfoModule();
-    meshtastic_NeighborInfo ni;
-    meshtastic_MeshPacket p = makeNeighborInfoPacket(REMOTE_NODE, 3, 2, 0x44, &ni);
-    const meshtastic_Data_payload_t original = p.decoded.payload;
-
-    module->alterReceived(p);
-
-    TEST_ASSERT_EQUAL_UINT32(original.size, p.decoded.payload.size);
-    TEST_ASSERT_EQUAL_MEMORY(original.bytes, p.decoded.payload.bytes, original.size);
 }
 
 static void test_neighborInfo_directCopyRecordsSenderAndOursOmitsLastSentBy()
@@ -1032,7 +1018,6 @@ void setup()
     RUN_TEST(test_nestedLocalSend_isDeferred_notReentrant);
     RUN_TEST(test_deferredChain_drainsBreadthFirst);
     RUN_TEST(test_deferredQueueOverflow_dropsGracefully);
-    RUN_TEST(test_neighborInfo_relayedPayloadIsNotModified);
     RUN_TEST(test_neighborInfo_directCopyRecordsSenderAndOursOmitsLastSentBy);
     RUN_TEST(test_neighborInfo_olderRelayRewriteMatchingHeaderIsTrusted);
     RUN_TEST(test_neighborInfo_relayResolvedFromHeaderByte);

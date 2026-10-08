@@ -280,7 +280,7 @@ void test_E3_traceroute_route_processing_fuzz(void)
         mp.decoded.request_id = (rngRange(2) == 0) ? 0 : rngNext();
 
         if (rngRange(5) == 0) {
-            // Pure-random payload: processUpgradedPacket must reject it at decode and not crash.
+            // Pure-random payload: updateRoute must reject it at decode and not crash.
             mp.decoded.payload.size = rngRange(sizeof(mp.decoded.payload.bytes) + 1);
             rngFill(mp.decoded.payload.bytes, mp.decoded.payload.size);
         } else {
@@ -290,7 +290,7 @@ void test_E3_traceroute_route_processing_fuzz(void)
                                                          &meshtastic_RouteDiscovery_msg, &r);
         }
 
-        tr.processUpgradedPacket(mp); // decode -> alterReceivedProtobuf (insert/append/printRoute)
+        tr.updateRoute(mp); // decode -> insert/append/printRoute, re-encoded in place
 
         // After processing, the re-encoded route arrays must still be within bounds.
         meshtastic_RouteDiscovery out = meshtastic_RouteDiscovery_init_zero;

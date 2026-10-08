@@ -14,6 +14,9 @@
 #include "mesh-pb-constants.h"
 #include "meshUtils.h"
 #include "modules/RoutingModule.h"
+#if !MESHTASTIC_EXCLUDE_TRACEROUTE
+#include "modules/TraceRouteModule.h"
+#endif
 #include <ErriezCRC32.h>
 #include <pb_decode.h>
 #include <pb_encode.h>
@@ -1646,6 +1649,12 @@ void Router::dispatchReceived(meshtastic_MeshPacket *p, RxSource src)
     // call modules here
     // If this could be a spoofed packet, don't let the modules see it.
     if (!skipHandle) {
+#if !MESHTASTIC_EXCLUDE_TRACEROUTE
+        // Modules get the packet read-only; traceroute is the one payload a relay rewrites, so the hop is added here
+        // first. Our own loopback is left alone, as callModules() never showed it to the module.
+        if (traceRouteModule && src != RX_SRC_LOCAL)
+            traceRouteModule->updateRoute(*p);
+#endif
         MeshModule::callModules(*p, src);
 
 #if !MESHTASTIC_EXCLUDE_MQTT
