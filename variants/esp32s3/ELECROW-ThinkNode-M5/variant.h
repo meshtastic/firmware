@@ -37,13 +37,22 @@
 // PCF8563 RTC Module
 #define PCF8563_RTC 0x51
 
-// GPS pins
-#define GPS_SWITH 10
+// GPS: either an L76K (old) or an AG3352 (new); variant.cpp selects the pin setup while probing.
 #define HAS_GPS 1
-#define GPS_L76K
-#define PIN_GPS_REINIT 13 // An output to reset L76K GPS. As per datasheet, low for > 100ms will reset the L76K
+// T_GPS: senses VGPS_0V8_EN via 2M. Slide switch K5 ties it to GPS_1V8 (on) or GND (off).
+#define PIN_GPS_T_SENSE 10
+extern int m5Ag3352;
+// L76K: reset, active low. AG3352: reset through an inverting transistor, active high.
+#define PIN_GPS_RESET 13
+#define GPS_RESET_MODE (m5Ag3352 ? HIGH : LOW)
 
-#define PIN_GPS_STANDBY 11 // An output to wake GPS, low means allow sleep, high means force wake
+// L76K: standby, low means allow sleep. AG3352: idle_int, rests high, pulled low to send sleep commands.
+#define PIN_GPS_STANDBY 11
+#define GPS_SLEEP_INT 11
+// v2.0 GPS rails follow peripheral power; IO7 is GPS_HIGHT, not a GPS supply enable.
+#define HAS_AIROHA_SLEEP 1
+#define PCA_PIN_GPS_HIGHT 7
+#define PCA_PIN_GPS_PPS 6   // AG3352: 1PPS on the GPIO expander (unused)
 
 #define GPS_TX_PIN 20 // This is for bits going TOWARDS the GPS
 #define GPS_RX_PIN 19 // This is for bits going TOWARDS the CPU

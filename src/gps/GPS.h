@@ -310,4 +310,8 @@ class GPS : private concurrency::OSThread
 };
 
 extern std::unique_ptr<GPS> gps;
+
+// Board hook for alternative GNSS fits: GNSS_MODEL_UNKNOWN selects the next candidate's pin setup and returns
+// false once none is left; a known model selects that model's. Weak in GPS.cpp; override in the variant.
+bool initGpsVariant(GnssModel_t model);
 #endif // Exclude GPS

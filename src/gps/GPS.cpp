@@ -77,6 +77,15 @@ std::unique_ptr<GPS> gps = nullptr;
 
 static GPSUpdateScheduling scheduling;
 
+__attribute__((weak, noinline)) bool initGpsVariant(GnssModel_t)
+{
+    return false;
+}
+
+#if defined(PIN_GPS_STANDBY) && defined(GPS_SLEEP_INT) && PIN_GPS_STANDBY == GPS_SLEEP_INT
+#define GPS_STANDBY_IS_IDLE_INT 1
+#endif
+
 /// Multiple GPS instances might use the same serial port (in sequence), but we can
 /// only init that port once.
 static bool didSerialInit;
@@ -862,6 +871,7 @@ bool GPS::setup()
         if (tx_gpio && gnssModel == GNSS_MODEL_UNKNOWN) {
             if (!hasProbeCache && !triedProbeCache) {
                 (void)loadProbeCache();
+                initGpsVariant(cachedProbeModel);
             }
 
             if (hasProbeCache && !triedProbeCache) {
@@ -891,6 +901,12 @@ bool GPS::setup()
                 if (gnssModel != GNSS_MODEL_UNKNOWN) {
                     detectedBaud = rareSerialSpeeds[speedSelect];
                 } else if (currentStep == 0 && ++speedSelect == array_count(rareSerialSpeeds)) {
+                    speedSelect = 0;
+                    // Another board fit to try: rerun the whole baud ladder with its pin setup.
+                    if (initGpsVariant(GNSS_MODEL_UNKNOWN)) {
+                        probeTries = 0;
+                        return false;
+                    }
                     LOG_WARN("Give up GPS probe, set to %d", GPS_BAUDRATE);
                     return true;
                 }
@@ -899,6 +915,7 @@ bool GPS::setup()
         }
 
         if (gnssModel != GNSS_MODEL_UNKNOWN) {
+            initGpsVariant(gnssModel);
             setConnected();
             (void)saveProbeCache();
         } else {
@@ -1296,6 +1313,11 @@ void GPS::writePinEN(bool on)
 void GPS::writePinStandby(bool standby)
 {
 #ifdef PIN_GPS_STANDBY // Specifically the standby pin for L76B, L76K and clones
+#ifdef GPS_STANDBY_IS_IDLE_INT
+    // On an Airoha fit the same pin is idle_int, which must rest high.
+    if (IS_ONE_OF(gnssModel, GNSS_MODEL_AG3335, GNSS_MODEL_AG3352))
+        return;
+#endif
     bool val;
     if (standby)
         val = GPS_STANDBY_ACTIVE;
@@ -1485,6 +1507,10 @@ void GPS::down()
         bool softsleepSupported = true;
 #else
         bool softsleepSupported = false;
+#endif
+#ifdef GPS_STANDBY_IS_IDLE_INT
+        if (IS_ONE_OF(gnssModel, GNSS_MODEL_AG3335, GNSS_MODEL_AG3352))
+            softsleepSupported = false;
 #endif
         // U-blox is supported via PMREQ
         if (IS_ONE_OF(gnssModel, GNSS_MODEL_UBLOX6, GNSS_MODEL_UBLOX7, GNSS_MODEL_UBLOX8, GNSS_MODEL_UBLOX9, GNSS_MODEL_UBLOX10))
@@ -1988,6 +2014,7 @@ GnssModel_t GPS::getProbeResponse(unsigned long timeout, const std::vector<ChipI
         bufferSize = 2048;
 
     auto response = std::unique_ptr<char[]>(new char[bufferSize]); // Dynamically allocate based on baud rate
+    response[0] = '\0';
     uint16_t responseLen = 0;
     unsigned long start = millis();
     while (millis() - start < timeout) {
