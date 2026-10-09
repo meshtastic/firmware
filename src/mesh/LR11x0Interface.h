@@ -85,6 +85,11 @@ template <class T> class LR11x0Interface : public RadioLibInterface
 
     uint32_t getPacketTime(uint32_t pl, bool received) override { return computePacketTime(lora, pl, received); }
 
+    bool readRxHeaderInfo(uint8_t &cr, bool &hasCRC) override
+    {
+        return lora.getLoRaRxHeaderInfo(&cr, &hasCRC) == RADIOLIB_ERR_NONE;
+    }
+
     // LR1120/LR1121 work in both bands. 4 sub-GHz is the SWSD003 table's row we use; 8 on 2.4 GHz
     // matches SX1280, the other part sharing that band, so one mesh keeps one CW slot.
     uint8_t getCadSymbolCountSubGhz() const override { return 4; }
