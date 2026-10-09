@@ -699,6 +699,38 @@ template <typename T> void LR20x0Interface<T>::configHardwareForSend()
     RadioLibInterface::configHardwareForSend();
 }
 
+#ifndef LR2021_TX_PRESTAGE
+template <typename T> int16_t LR20x0Interface<T>::launchTransmit(size_t numbytes)
+{
+    // RadioLib's TX staging appends to the TX FIFO and never empties it, so bytes a cut-short TX left there would go out
+    // ahead of this packet, at this packet's length, and push every later packet out of line by the same amount.
+    uint16_t level = 0;
+    const bool levelRead = readTxFifoLevel(level);
+    if (level)
+        LOG_WARN("LR20x0 TX FIFO held %u bytes from an earlier TX, cleared", (unsigned)level);
+    if (!levelRead || level)
+        module.SPIwriteStream((uint16_t)RADIOLIB_LR2021_CMD_CLEAR_TX_FIFO, NULL, 0, true, true); // private in RadioLib
+    return RadioLibInterface::launchTransmit(numbytes);
+}
+#endif
+
+template <typename T> bool LR20x0Interface<T>::readTxFifoLevel(uint16_t &level)
+{
+    // RadioLib's getTxFifoLevel() is private, so read it as RadioLib does: the command, then the reply in a second transfer
+    // with no command in front. The width swap is safe for the reason readChipMode() gives.
+    uint8_t buff[2] = {0};
+    if (module.SPIwriteStream((uint16_t)RADIOLIB_LR2021_CMD_GET_TX_FIFO_LEVEL, NULL, 0, true, false) != RADIOLIB_ERR_NONE)
+        return false;
+    const Module::BitWidth_t width = module.spiConfig.widths[RADIOLIB_MODULE_SPI_WIDTH_CMD];
+    module.spiConfig.widths[RADIOLIB_MODULE_SPI_WIDTH_CMD] = Module::BITS_0;
+    const int16_t res = module.SPIreadStream((uint16_t)RADIOLIB_LR2021_CMD_NOP, buff, sizeof(buff), true, false);
+    module.spiConfig.widths[RADIOLIB_MODULE_SPI_WIDTH_CMD] = width;
+    if (res != RADIOLIB_ERR_NONE)
+        return false;
+    level = ((uint16_t)buff[0] << 8) | buff[1];
+    return true;
+}
+
 // For power draw measurements, helpful to force radio to stay sleeping
 // #define SLEEP_ONLY
 
