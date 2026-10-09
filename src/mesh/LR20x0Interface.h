@@ -158,8 +158,10 @@ template <class T> class LR20x0Interface : public RadioLibInterface
     uint8_t getCadSymbolCountSubGhz() const override { return 4; }
     uint8_t getCadSymbolCountWideLora() const override { return 8; }
 
+#ifndef LR2021_TX_PRESTAGE // the prestage has its own, below, whose staging empties the FIFO
     /** Empty the TX FIFO of anything an earlier TX left behind, then hand the packet to RadioLib */
     int16_t launchTransmit(size_t numbytes) override;
+#endif
 
   private:
     /** The chip's TX FIFO fill level in bytes; false on SPI failure */
