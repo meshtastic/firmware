@@ -77,13 +77,9 @@ std::unique_ptr<GPS> gps = nullptr;
 
 static GPSUpdateScheduling scheduling;
 
-__attribute__((weak, noinline)) bool initGpsVariant(GnssModel_t)
-{
-    return false;
-}
-
-#if defined(PIN_GPS_STANDBY) && defined(GPS_SLEEP_INT) && PIN_GPS_STANDBY == GPS_SLEEP_INT
-#define GPS_STANDBY_IS_IDLE_INT 1
+// A board can share one pin between an L76K standby and an Airoha RTC_INT (ThinkNode M5 v1.0/v2.0).
+#if defined(PIN_GPS_STANDBY) && defined(GPS_RTC_INT) && PIN_GPS_STANDBY == GPS_RTC_INT
+#define GPS_STANDBY_IS_RTC_INT 1
 #endif
 
 /// Multiple GPS instances might use the same serial port (in sequence), but we can
@@ -871,7 +867,6 @@ bool GPS::setup()
         if (tx_gpio && gnssModel == GNSS_MODEL_UNKNOWN) {
             if (!hasProbeCache && !triedProbeCache) {
                 (void)loadProbeCache();
-                initGpsVariant(cachedProbeModel);
             }
 
             if (hasProbeCache && !triedProbeCache) {
@@ -901,12 +896,6 @@ bool GPS::setup()
                 if (gnssModel != GNSS_MODEL_UNKNOWN) {
                     detectedBaud = rareSerialSpeeds[speedSelect];
                 } else if (currentStep == 0 && ++speedSelect == array_count(rareSerialSpeeds)) {
-                    speedSelect = 0;
-                    // Another board fit to try: rerun the whole baud ladder with its pin setup.
-                    if (initGpsVariant(GNSS_MODEL_UNKNOWN)) {
-                        probeTries = 0;
-                        return false;
-                    }
                     LOG_WARN("Give up GPS probe, set to %d", GPS_BAUDRATE);
                     return true;
                 }
@@ -915,7 +904,6 @@ bool GPS::setup()
         }
 
         if (gnssModel != GNSS_MODEL_UNKNOWN) {
-            initGpsVariant(gnssModel);
             setConnected();
             (void)saveProbeCache();
         } else {
@@ -1313,8 +1301,8 @@ void GPS::writePinEN(bool on)
 void GPS::writePinStandby(bool standby)
 {
 #ifdef PIN_GPS_STANDBY // Specifically the standby pin for L76B, L76K and clones
-#ifdef GPS_STANDBY_IS_IDLE_INT
-    // On an Airoha fit the same pin is idle_int, which must rest high.
+#ifdef GPS_STANDBY_IS_RTC_INT
+    // RTC_INT must rest low on an Airoha fit; the Airoha sleep code pulses it.
     if (IS_ONE_OF(gnssModel, GNSS_MODEL_AG3335, GNSS_MODEL_AG3352))
         return;
 #endif
@@ -1508,7 +1496,7 @@ void GPS::down()
 #else
         bool softsleepSupported = false;
 #endif
-#ifdef GPS_STANDBY_IS_IDLE_INT
+#ifdef GPS_STANDBY_IS_RTC_INT
         if (IS_ONE_OF(gnssModel, GNSS_MODEL_AG3335, GNSS_MODEL_AG3352))
             softsleepSupported = false;
 #endif
@@ -1875,6 +1863,9 @@ GnssModel_t GPS::probe(int serialSpeed)
                                         {"AG3352", "$PAIR021,AG3352", GNSS_MODEL_AG3352},
                                         {"RYS3520", "$PAIR021,REYAX_RYS3520_V2", GNSS_MODEL_AG3352}};
         PROBE_FAMILY("Airoha Family", "$PAIR021*39", airoha, 1000);
+#ifdef GPS_STANDBY_IS_RTC_INT
+        writePinStandby(false); // the RTC_INT wake pulse left a shared standby pin low
+#endif
         currentDelay = 20;
         currentStep = 4;
         return GNSS_MODEL_UNKNOWN;
@@ -2014,7 +2005,6 @@ GnssModel_t GPS::getProbeResponse(unsigned long timeout, const std::vector<ChipI
         bufferSize = 2048;
 
     auto response = std::unique_ptr<char[]>(new char[bufferSize]); // Dynamically allocate based on baud rate
-    response[0] = '\0';
     uint16_t responseLen = 0;
     unsigned long start = millis();
     while (millis() - start < timeout) {

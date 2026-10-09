@@ -37,25 +37,21 @@
 // PCF8563 RTC Module
 #define PCF8563_RTC 0x51
 
-// GPS: either an L76K (old) or an AG3352 (new); variant.cpp selects the pin setup while probing.
+// GPS: v1.0 has an L76K, v2.0 an AG3352. variant.cpp reads the revision from expander IO7 at boot.
 #define HAS_GPS 1
-// T_GPS: senses VGPS_0V8_EN via 2M. Slide switch K5 ties it to GPS_1V8 (on) or GND (off).
-#define PIN_GPS_T_SENSE 10
-extern int m5Ag3352;
-// L76K: reset, active low. AG3352: reset through an inverting transistor, active high.
-#define PIN_GPS_RESET 13
-#define GPS_RESET_MODE (m5Ag3352 ? HIGH : LOW)
+#define PCA_PIN_GPS_VERSION 7 // strap: HIGH = v2.0 (AG3352), LOW = v1.0 (L76K)
+extern int m5HasAg3352;
 
-// L76K: standby, low means allow sleep. AG3352: idle_int, rests high, pulled low to send sleep commands.
+// v2.0: AG3352 0.8V core rail enable. v1.0: must stay an input.
+#define PIN_GPS_0V8_EN 10
+
+// v1.0: L76K standby, low means allow sleep. v2.0: AG3352 RTC_INT, rests low, rising edge wakes from RTC mode.
 #define PIN_GPS_STANDBY 11
-#define GPS_SLEEP_INT 11
-// v2.0 GPS rails follow peripheral power; IO7 is GPS_HIGHT, not a GPS supply enable.
-#define HAS_AIROHA_SLEEP 1
-#define PCA_PIN_GPS_HIGHT 7
-#define PCA_PIN_GPS_PPS 6   // AG3352: 1PPS on the GPIO expander (unused)
+#define GPS_RTC_INT 11
 
-#define GPS_TX_PIN 20 // This is for bits going TOWARDS the GPS
-#define GPS_RX_PIN 19 // This is for bits going TOWARDS the CPU
+// The GPS UART is crossed the other way on v1.0.
+#define GPS_TX_PIN (m5HasAg3352 ? 19 : 20) // This is for bits going TOWARDS the GPS
+#define GPS_RX_PIN (m5HasAg3352 ? 20 : 19) // This is for bits going TOWARDS the CPU
 
 #define GPS_THREAD_INTERVAL 50
 
