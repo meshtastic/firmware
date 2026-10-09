@@ -102,6 +102,7 @@ template <typename T> bool SX126xInterface<T>::init()
 
     if (!reinitChip())
         return false;
+    boundBusyWait();
 
     startReceive(); // start receiving
 

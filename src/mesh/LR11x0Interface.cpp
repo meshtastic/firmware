@@ -286,8 +286,10 @@ template <typename T> bool LR11x0Interface<T>::init()
         }
     }
 
-    if (res == RADIOLIB_ERR_NONE)
+    if (res == RADIOLIB_ERR_NONE) {
+        boundBusyWait();
         startReceive(); // start receiving
+    }
 
     return res == RADIOLIB_ERR_NONE;
 }

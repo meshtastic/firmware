@@ -256,8 +256,10 @@ template <typename T> bool LR20x0Interface<T>::init()
         }
     }
 
-    if (res == RADIOLIB_ERR_NONE)
+    if (res == RADIOLIB_ERR_NONE) {
+        boundBusyWait();
         startReceive(); // start receiving
+    }
 
     lr20x0LastFreqMHz = getFreq();
     return res == RADIOLIB_ERR_NONE;

@@ -64,6 +64,12 @@ class LockingArduinoHal : public ArduinoHal
 #define TCXO_STARTUP_DELAY_US 1000
 #endif
 
+// How long RadioLib waits on BUSY before failing a command; its own default is 1000 ms. A chip whose command was split
+// holds BUSY until the wait gives up, and the radio is deaf meanwhile. 0 keeps RadioLib's default.
+#ifndef MESHTASTIC_RADIOLIB_SPI_TIMEOUT_MS
+#define MESHTASTIC_RADIOLIB_SPI_TIMEOUT_MS 50
+#endif
+
 #if defined(USE_STM32WLx)
 /**
  * A wrapper for the RadioLib STM32WLx_Module class, that doesn't connect any pins as they are virtual
@@ -117,6 +123,13 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 #else
     STM32WLx_ModuleWrapper module;
 #endif
+
+    /// Apply MESHTASTIC_RADIOLIB_SPI_TIMEOUT_MS. Called after begin(), so its calibration keeps RadioLib's default.
+    void boundBusyWait()
+    {
+        if (MESHTASTIC_RADIOLIB_SPI_TIMEOUT_MS)
+            module.spiConfig.timeout = MESHTASTIC_RADIOLIB_SPI_TIMEOUT_MS;
+    }
 
     /**
      * provides lowest common denominator RadioLib API
