@@ -1,0 +1,18 @@
+# FAULT: three ways a bonnet mapping silently does nothing. 'fire' is not an action the
+# driver knows; '2A' is not a button on the bonnet (they run 1A-1F); and 1B appears under
+# two actions, where the later one wins and the earlier binding is lost.
+Lora:
+  Module: sx1262
+  CS: 21
+  IRQ: 16
+  Busy: 20
+  Reset: 18
+I2C:
+  I2CDevice: /dev/i2c-1
+Input:
+  ArcadeBonnet: 0x26
+  ArcadeBonnetButtons:
+    select: [1A, 2A]
+    fire: 1C
+    cancel: [1B]
+    back: 1B
