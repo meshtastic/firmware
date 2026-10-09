@@ -71,11 +71,7 @@ template <class T> class LR11x0Interface : public RadioLibInterface
     {
         pktType = 0xEE;
         typeErr = lora.getPacketType(&pktType);
-#ifdef LR11X0_READ_CHIP_MODE
         mode = this->readChipMode();
-#else
-        mode = 0xEE; // not compiled in on this board
-#endif
         irq = lora.getIrqFlags();
         return true; // always report: a failed GetPacketType is the case of interest, not a reason to stay silent
     }
