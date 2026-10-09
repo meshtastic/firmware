@@ -420,6 +420,29 @@ void test_XEdDSA_repeated_sign_is_randomized(void)
     TEST_ASSERT_TRUE(crypto->xeddsa_verify(pub, fromNode, packetId, toNode, &d, sig2));
 }
 
+// CryptoEngine::regeneratePublicKey must clamp the private key it is handed, in place. Curve25519::eval
+// uses the scalar as given while XEdDSA::priv_curve_to_ed_keys clamps it, so an unclamped key (set via
+// admin, an app's private-key field, or a backup restore) derives an X25519 public key that disagrees
+// with the signing key: every signature the node sends then fails xeddsa_verify at its peers. If the
+// clamp is dropped, the bit assertions and the final verify fail for this 0x11-filled key.
+void test_regeneratePublicKey_clamps_imported_key(void)
+{
+    uint8_t pub[32], priv[32], signature[64];
+    memset(priv, 0x11, sizeof(priv));
+    uint8_t message[] = "imported key";
+    uint32_t fromNode = 0x1111, packetId = 0x2222, toNode = 0x3333;
+    meshtastic_Data d = makeSignableData(message, sizeof(message), 5);
+    d.request_id = 0x44;
+
+    TEST_ASSERT_TRUE(crypto->regeneratePublicKey(pub, priv));
+    TEST_ASSERT_EQUAL_HEX8(0, priv[0] & 0x07);
+    TEST_ASSERT_EQUAL_HEX8(0x40, priv[31] & 0xC0);
+
+    TEST_ASSERT(crypto->xeddsa_sign(fromNode, packetId, toNode, &d, signature));
+    TEST_ASSERT_TRUE_MESSAGE(crypto->xeddsa_verify(pub, fromNode, packetId, toNode, &d, signature),
+                             "the derived public key must verify the node's own signature");
+}
+
 // Finds the cache slot holding this peer's key, so the tests can assert on the cache itself and not
 // only on what setCryptoSharedSecret leaves in shared_key. Protected members are public under
 // PIO_UNIT_TESTING.
@@ -1024,6 +1047,7 @@ void setup()
     RUN_TEST(test_XEdDSA_curve_to_ed_cache);
     RUN_TEST(test_XEdDSA_max_payload);
     RUN_TEST(test_XEdDSA_repeated_sign_is_randomized);
+    RUN_TEST(test_regeneratePublicKey_clamps_imported_key);
     RUN_TEST(test_AES_CCM_AEAD_smoke);
     RUN_TEST(test_AES_CCM_AEAD_roundtrip_aes256);
     RUN_TEST(test_AES_CCM_AEAD_rejects_tampering);

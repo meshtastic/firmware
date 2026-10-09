@@ -82,6 +82,11 @@ class RF95Interface : public RadioLibInterface
 
     uint32_t getPacketTime(uint32_t pl, bool received) override { return computePacketTime(*lora, pl, received); }
 
+    bool readRxHeaderInfo(uint8_t &cr, bool &hasCRC) override
+    {
+        return lora->getLoRaRxHeaderInfo(&cr, &hasCRC) == RADIOLIB_ERR_NONE;
+    }
+
   private:
     /** Some boards require GPIO control of tx vs rx paths */
     void setTransmitEnable(bool txon);

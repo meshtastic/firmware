@@ -310,6 +310,9 @@ class RadioInterface
      */
     [[nodiscard]] size_t beginSending(meshtastic_MeshPacket *p);
 
+    /** beginSending()'s encoding into radioBuffer, without claiming sendingPacket; returns the bytes to send */
+    [[nodiscard]] size_t encodeRadioBuffer(meshtastic_MeshPacket *p);
+
     /**
      * Some regulatory regions limit xmit power.
      * This function should be called by subclasses after setting their desired power.  It might lower it

@@ -85,6 +85,14 @@ void NotifiedWorkerThread::checkNotification()
     }
 }
 
+void NotifiedWorkerThread::checkNotificationExcept(uint32_t deferred)
+{
+    // Clear only the value that was read: one an interrupt writes in between is kept for the next look
+    uint32_t n = notification.load();
+    if (n && n != deferred && notification.compare_exchange_strong(n, 0))
+        onNotify(n);
+}
+
 int32_t NotifiedWorkerThread::runOnce()
 {
     enabled = false; // Only run once per notification
