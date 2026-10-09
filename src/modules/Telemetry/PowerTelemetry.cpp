@@ -76,6 +76,8 @@ int32_t PowerTelemetryModule::runOnce()
                 result = ina219Sensor.isInitialized() ? 0 : ina219Sensor.runOnce();
             if (ina226Sensor.hasSensor())
                 result = ina226Sensor.isInitialized() ? 0 : ina226Sensor.runOnce();
+            if (ina228Sensor.hasSensor())
+                result = ina228Sensor.isInitialized() ? 0 : ina228Sensor.runOnce();
             if (ina260Sensor.hasSensor())
                 result = ina260Sensor.isInitialized() ? 0 : ina260Sensor.runOnce();
             if (ina3221Sensor.hasSensor())
@@ -222,6 +224,8 @@ bool PowerTelemetryModule::getPowerTelemetry(meshtastic_Telemetry *m)
         valid = ina219Sensor.getMetrics(m);
     if (ina226Sensor.hasSensor())
         valid = ina226Sensor.getMetrics(m);
+    if (ina228Sensor.hasSensor())
+        valid = ina228Sensor.getMetrics(m);
     if (ina260Sensor.hasSensor())
         valid = ina260Sensor.getMetrics(m);
     if (ina3221Sensor.hasSensor())

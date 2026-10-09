@@ -572,6 +572,13 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                         type = INA226;
                         break;
                     }
+                    // TI INA228: DIEID 0x228 in the top 12 bits, silicon revision in the low 4. Must come
+                    // before the INA260 catch-all, whose driver reads registers the INA228 lays out differently.
+                    else if (mfg == 0x5449 && (die >> 4) == 0x228) {
+                        logFoundDevice("INA228", (uint8_t)addr.address);
+                        type = INA228;
+                        break;
+                    }
                     // TI INA260
                     else if (mfg == 0x5449) {
                         logFoundDevice("INA260", (uint8_t)addr.address);
