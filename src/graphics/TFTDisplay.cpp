@@ -432,9 +432,23 @@ class LGFX : public lgfx::LGFX_Device
     lgfx::Panel_ILI9488 _panel_instance;
     lgfx::Bus_SPI _bus_instance;
     lgfx::Light_PWM _light_instance;
+#if defined(MAKERFABS_NOMAD_TERMINAL)
+    lgfx::Touch_FT5x06 _touch_instance;
+#else
     lgfx::Touch_GT911 _touch_instance;
+#endif
 
   public:
+#if defined(MAKERFABS_NOMAD_TERMINAL)
+    // Touch init resets the I2C0 peripheral that Wire also drives; restart Wire or its next transfer times out
+    bool init_impl(bool use_reset, bool use_clear) override
+    {
+        bool result = LGFX_Device::init_impl(use_reset, use_clear);
+        Wire.end();
+        Wire.begin(I2C_SDA, I2C_SCL);
+        return result;
+    }
+#endif
     LGFX(void)
     {
         {
@@ -540,6 +554,13 @@ class LGFX : public lgfx::LGFX_Device
             cfg.pin_scl = I2C_SCL;
 #endif
             // cfg.freq = 400000;
+#if defined(MAKERFABS_NOMAD_TERMINAL)
+            // FT6236 reports in the panel's native portrait frame, so the panel rotation alone maps it
+            cfg.x_max = TFT_WIDTH - 1;
+            cfg.y_max = TFT_HEIGHT - 1;
+            cfg.offset_rotation = 0;
+            cfg.freq = 100000; // shares the 100 kHz sensor bus
+#endif
 
             _touch_instance.config(cfg);
             _panel_instance.setTouch(&_touch_instance);
