@@ -84,7 +84,7 @@ class RF95Interface : public RadioLibInterface
 
     bool readRxHeaderInfo(uint8_t &cr, bool &hasCRC) override
     {
-        return *lora.getLoRaRxHeaderInfo(&cr, &hasCRC) == RADIOLIB_ERR_NONE;
+        return lora->getLoRaRxHeaderInfo(&cr, &hasCRC) == RADIOLIB_ERR_NONE;
     }
 
   private:
