@@ -701,6 +701,7 @@ template <typename T> void LR20x0Interface<T>::configHardwareForSend()
     RadioLibInterface::configHardwareForSend();
 }
 
+#ifndef LR2021_TX_PRESTAGE
 template <typename T> int16_t LR20x0Interface<T>::launchTransmit(size_t numbytes)
 {
     // RadioLib's TX staging appends to the TX FIFO and never empties it, so bytes a cut-short TX left there would go out
@@ -713,6 +714,7 @@ template <typename T> int16_t LR20x0Interface<T>::launchTransmit(size_t numbytes
         module.SPIwriteStream((uint16_t)RADIOLIB_LR2021_CMD_CLEAR_TX_FIFO, NULL, 0, true, true); // private in RadioLib
     return RadioLibInterface::launchTransmit(numbytes);
 }
+#endif
 
 template <typename T> void LR20x0Interface<T>::discardUnreadRxFrame()
 {
