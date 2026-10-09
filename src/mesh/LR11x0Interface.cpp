@@ -369,7 +369,7 @@ template <typename T> bool LR11x0Interface<T>::reinitChip()
     }
 
     rxArmedContinuous = false; // begin() resets the chip
-    forgetChipState(); // begin() resets it
+    forgetChipState();         // begin() resets it
     int res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, resolvedTcxoVoltage);
     if (res == RADIOLIB_ERR_NONE) {
         // begin() reset the delay to RadioLib's default
@@ -971,7 +971,7 @@ template <typename T> bool LR11x0Interface<T>::resetAGC()
 
     LOG_DEBUG_RADIO("LR11x0 AGC reset: warm sleep + Calibrate(0x3F)");
     rxArmedContinuous = false; // the warm sleep below stops RX
-    forgetChipState(); // the calibration below may not keep it
+    forgetChipState();         // the calibration below may not keep it
 
     // 1. Warm sleep - powers down the analog frontend, resetting AGC state
     lora.sleep(true, 0);
