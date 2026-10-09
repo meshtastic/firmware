@@ -43,6 +43,7 @@ BuildRequires: libi2c-devel
 BuildRequires: pkgconfig(libuv)
 BuildRequires: pkgconfig(sqlite3)
 BuildRequires: pkgconfig(libcurl)
+BuildRequires: pkgconfig(avahi-client)
 # Web components:
 BuildRequires: pkgconfig(openssl)
 BuildRequires: pkgconfig(liborcania)
@@ -63,6 +64,8 @@ BuildRequires: pkgconfig(libbsd-overlay)
 %endif
 
 Requires:      systemd-udev
+# mDNS discovery (_meshtastic._tcp) publishes through avahi-daemon
+Recommends:    avahi
 # bluetoothd and the 'bluetooth' group, needed for BLE peripheral support
 Recommends:    bluez
 
