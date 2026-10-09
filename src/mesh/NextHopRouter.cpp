@@ -28,8 +28,8 @@ NextHopRouter::NextHopRouter() {}
 
 bool NextHopRouter::relayOpaquePacket(const meshtastic_MeshPacket *p)
 {
-    // Opaque traffic is never admitted to PacketHistory, NodeDB, modules, phone, MQTT, or ACK
-    // handling. Relay only from the immutable outer routing header and let hop exhaustion bound it.
+    // Opaque traffic never reaches PacketHistory, NodeDB, modules, phone, or ACK handling (a PKI DM still
+    // goes to MQTT). Relay only from the immutable outer routing header and let hop exhaustion bound it.
     const auto mode = config.device.rebroadcast_mode;
     if (!iface || isToUs(p) || isFromUs(p) || p->id == 0 || p->hop_limit == 0 || !isRebroadcaster() || owner.is_licensed ||
         !IS_ONE_OF(mode, meshtastic_Config_DeviceConfig_RebroadcastMode_ALL,

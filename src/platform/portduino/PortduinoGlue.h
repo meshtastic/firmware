@@ -163,6 +163,8 @@ extern struct portduino_config_struct {
     // DIO3_TCXO_VOLTAGE was written out as false or 0 rather than left absent. Diagnostic only,
     // and so not serialized - the key it came from round-trips as absent either way.
     bool dio3_tcxo_voltage_disabled = false;
+    // TCXO start-up delay in us; 0 keeps the build's TCXO_STARTUP_DELAY_US
+    int dio3_tcxo_delay_us = 0;
     // Probe for a TCXO and fall back to the XTAL; runtime twin of the TCXO_OPTIONAL define.
     bool tcxo_optional = false;
     int lora_usb_pid = 0x5512;
@@ -378,6 +380,8 @@ extern struct portduino_config_struct {
             out << YAML::Key << "DIO2_AS_RF_SWITCH" << YAML::Value << dio2_as_rf_switch;
         if (dio3_tcxo_voltage != 0)
             out << YAML::Key << "DIO3_TCXO_VOLTAGE" << YAML::Value << YAML::Precision(3) << (float)dio3_tcxo_voltage / 1000;
+        if (dio3_tcxo_delay_us != 0)
+            out << YAML::Key << "DIO3_TCXO_DELAY_US" << YAML::Value << dio3_tcxo_delay_us;
         if (tcxo_optional)
             out << YAML::Key << "TCXO_OPTIONAL" << YAML::Value << tcxo_optional;
         if (lora_usb_pid != 0x5512)

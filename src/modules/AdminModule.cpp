@@ -414,8 +414,10 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
 
         if (MeshtasticOTA::trySwitchToOTA()) {
             suppressRebootBanner = true;
-            if (screen)
+            if (screen) {
+                powerFSM.trigger(EVENT_PRESS);
                 screen->startFirmwareUpdateScreen();
+            }
             MeshtasticOTA::saveConfig(&config.network, mode, r->ota_request.ota_hash.bytes);
             sendWarningAndLog("Rebooting to %s OTA", mode_name);
         } else {
@@ -1146,9 +1148,11 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
 #endif
 
 #if !MESHTASTIC_EXCLUDE_GPS
-        // Enable gps if it was previously disabled due to region not being set
-        if (!requiresReboot && config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET && gps != nullptr &&
-            !gps->isEnabled() && config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
+        // Enable gps if it was previously disabled due to region not being set. Only then: a probe that
+        // gave up also leaves it disabled, and re-enabling on every LoRa save re-runs the blocking probe.
+        if (!requiresReboot && oldLoraConfig.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET &&
+            config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET && gps != nullptr && !gps->isEnabled() &&
+            config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
             gps->enable();
         }
 #endif
