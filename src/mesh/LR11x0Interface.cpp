@@ -447,7 +447,9 @@ template <typename T> void LR11x0Interface<T>::clearRadioIsr()
 
 template <typename T> int16_t LR11x0Interface<T>::trySetStandby()
 {
-    checkNotification(); // handle any pending interrupts before we force standby
+    // Handle any pending interrupts before we force standby, but not a TX whose backoff timer is pending: it would start
+    // here, before its delay is up, and the standby below would cut it off with its payload still in the radio
+    checkNotificationExcept(TRANSMIT_DELAY_COMPLETED);
 
 #ifdef LR11X0_STANDBY_XOSC
     // SetStandby 0x01 is STBY_XOSC. RadioLib defines RADIOLIB_LR11X0_STANDBY_XOSC as 0x00, which is STBY_RC.

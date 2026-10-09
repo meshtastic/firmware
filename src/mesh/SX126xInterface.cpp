@@ -663,7 +663,9 @@ template <typename T> void SX126xInterface<T>::handleSoftwareLoraIrqPoll()
 
 template <typename T> int16_t SX126xInterface<T>::trySetStandby()
 {
-    checkNotification(); // handle any pending interrupts before we force standby
+    // Handle any pending interrupts before we force standby, but not a TX whose backoff timer is pending: it would start
+    // here, before its delay is up, and the standby below would cut it off with its payload still in the radio
+    checkNotificationExcept(TRANSMIT_DELAY_COMPLETED);
 
     int16_t err = lora.standby();
     if (err == RADIOLIB_ERR_SPI_CMD_TIMEOUT) {
