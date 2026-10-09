@@ -687,9 +687,28 @@ template <typename T> bool LR11x0Interface<T>::isChannelActive()
                                        .timeout = cadRxTimeoutUsec,
                                        .irqFlags = cadIrqFlags,
                                        .irqMask = cadIrqFlags}}; // ignored: startChannelScan() sends irqFlags twice
+#if LR11X0_TX_PRESTAGE
+    prestagedLen = 0; // only a clear verdict from this scan may launch what it stages
+#endif
     int16_t result = trySetStandby();
     if (result == RADIOLIB_ERR_NONE) {
+#if LR11X0_TX_PRESTAGE
+        // Write the payload now, in the standby the scan needs anyway, not after the verdict. Only the buffer: the
+        // packet params keep RX's maximum length, so a detection's RX still takes a full-length frame. The CAD leaves
+        // the buffer alone; a detection's RX may overwrite it, but then no TX follows.
+        if (scanForTx) {
+            const size_t numbytes = encodeRadioBuffer(scanForTx);
+            if (numbytes && lora.writeBuffer8((uint8_t *)&radioBuffer, numbytes) == RADIOLIB_ERR_NONE) {
+                prestagedLen = numbytes;
+                prestagedId = scanForTx->id;
+            }
+        }
+#endif
         result = lora.scanChannel(cfg);
+#if LR11X0_TX_PRESTAGE
+        if (result != RADIOLIB_CHANNEL_FREE)
+            prestagedLen = 0; // no TX follows, and a detection's RX may overwrite the buffer
+#endif
         if (result == RADIOLIB_LORA_DETECTED) {
             // The chip auto-entered RX. Drop the latched CAD verdict so the pin releases and the coming
             // RX_DONE is a clean edge.
@@ -705,6 +724,28 @@ template <typename T> bool LR11x0Interface<T>::isChannelActive()
     maybeRecoverChipStateLoss();
     return false; // report the channel free: a recovered chip can TX, a dead one fails startSend safely
 }
+
+#if LR11X0_TX_PRESTAGE
+template <typename T> int16_t LR11x0Interface<T>::launchTransmit(size_t numbytes)
+{
+    const bool prestaged = prestagedLen != 0 && prestagedLen == numbytes && sendingPacket && sendingPacket->id == prestagedId;
+    prestagedLen = 0;
+    if (!prestaged)
+        return RadioLibInterface::launchTransmit(numbytes);
+    // What stageMode(TX) sends, less the buffer (already written) and the packet-type read. The packet params are the
+    // ones init() gives RadioLib (explicit header, CRC on, standard IQ), with our length.
+    int16_t res = lora.setPacketParamsLoRa(preambleLength, RADIOLIB_LRXXXX_LORA_HEADER_EXPLICIT, (uint8_t)numbytes,
+                                           RADIOLIB_LRXXXX_LORA_CRC_ENABLED, RADIOLIB_LR11X0_LORA_IQ_STANDARD);
+    if (res == RADIOLIB_ERR_NONE)
+        res = lora.setDioIrqParams(RADIOLIB_LR11X0_IRQ_TX_DONE | RADIOLIB_LR11X0_IRQ_TIMEOUT);
+    if (res == RADIOLIB_ERR_NONE)
+        res = lora.clearIrqState(RADIOLIB_LR11X0_IRQ_ALL);
+    if (res != RADIOLIB_ERR_NONE)
+        return res;
+    lora.stagedMode = RADIOLIB_RADIO_MODE_TX; // what stageMode() leaves for launchMode()
+    return lora.launchMode();                 // RF switch, SET_TX, then the BUSY wait for the PA ramp
+}
+#endif
 
 /** Could we send right now (i.e. either not actively receiving or transmitting)? */
 template <typename T> bool LR11x0Interface<T>::isActivelyReceiving()
