@@ -3794,10 +3794,20 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
     saveNodeDatabaseToDisk();
 }
 
+// Locked encrypted storage rejects every write; saveToDiskNoRetry() skips it the same way.
+static bool isStorageLocked()
+{
+#ifdef MESHTASTIC_ENCRYPTED_STORAGE
+    return EncryptedStorage::isLockdownActive() && !EncryptedStorage::isUnlocked();
+#else
+    return false;
+#endif
+}
+
 void NodeDB::saveNodeDatabaseIfDirty()
 {
     // Single attempt; shares updateUser()'s once-a-minute budget, so the write rate is unchanged.
-    if (!nodeDatabaseDirty || Throttle::isWithinTimespanMs(lastNodeDbSave, ONE_MINUTE_MS))
+    if (!nodeDatabaseDirty || isStorageLocked() || Throttle::isWithinTimespanMs(lastNodeDbSave, ONE_MINUTE_MS))
         return;
     lastNodeDbSave = Time::getMillis();
     saveNodeDatabaseToDisk();
@@ -3806,7 +3816,7 @@ void NodeDB::saveNodeDatabaseIfDirty()
 int NodeDB::onReboot(void *)
 {
     // A graceful reboot has no other save point.
-    if (nodeDatabaseDirty)
+    if (nodeDatabaseDirty && !isStorageLocked())
         saveNodeDatabaseToDisk();
     return 0;
 }
