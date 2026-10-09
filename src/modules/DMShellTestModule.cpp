@@ -393,8 +393,9 @@ void DMShellTestModule::serviceHeartbeat(uint32_t now)
 
 ProcessMessage DMShellTestModule::handleReceived(const meshtastic_MeshPacket &mp)
 {
+    // PKI only, as the server requires of us: a channel-encrypted packet can claim any `from`
     if (phase == Phase::Waiting || phase == Phase::Done || getFrom(&mp) != (NodeNum)DMSHELL_TEST_PEER ||
-        mp.which_payload_variant != meshtastic_MeshPacket_decoded_tag)
+        mp.which_payload_variant != meshtastic_MeshPacket_decoded_tag || !mp.pki_encrypted)
         return ProcessMessage::CONTINUE;
     meshtastic_RemoteShell frame = meshtastic_RemoteShell_init_zero;
     if (!pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, meshtastic_RemoteShell_fields, &frame)) {
