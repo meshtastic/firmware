@@ -211,10 +211,10 @@ single evdev code or a list of them and every one of those buttons drives it.
 `Input.ArcadeBonnetButtons` has the same shape as `JoystickButtons`, but names buttons as
 printed on the bonnet (`1A`-`1F`) instead of by evdev code.
 
-| File                     | Expected                                                                                     |
-| ------------------------ | -------------------------------------------------------------------------------------------- |
-| `arcade-bonnet.yaml`     | **Clean** - hex address, mixed-case names, single and list forms.                            |
-| `arcade-bonnet-bad.yaml` | Three silent no-ops: an unknown action, a button the bonnet doesn't have, one claimed twice. |
+| File                     | Expected                                                                                                                  |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
+| `arcade-bonnet.yaml`     | **Clean** - hex address, mixed-case names, single and list forms.                                                         |
+| `arcade-bonnet-bad.yaml` | Four silent no-ops: an address outside 0x20-0x27, an unknown action, a button the bonnet doesn't have, one claimed twice. |
 
 ## CH341 USB-SPI adapters
 

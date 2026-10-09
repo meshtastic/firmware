@@ -992,6 +992,15 @@ void checkSection(const std::string &file, const std::string &section, const YAM
             checkJoystickButtons(file, value, findings);
         } else if (key == "ArcadeBonnetButtons") {
             checkArcadeBonnetButtons(file, value, findings);
+        } else if (section == "Input" && key == "ArcadeBonnet") {
+            // 0 is "not fitted"; anything else must be an address the MCP23017 can actually take.
+            int address = 0;
+            if (converts(value, kInt))
+                address = value.as<int>();
+            if (address != 0 && (address < ARCADE_BONNET_ADDR_MIN || address > ARCADE_BONNET_ADDR_MAX))
+                findings.push_back({kWarn, file, lineOf(value),
+                                    "Input.ArcadeBonnet '" + value.as<std::string>("") +
+                                        "' is not an MCP23017 address (0x20-0x27), so the bonnet is not started"});
         } else if ((section == "Lora" && kLoraPinKeys.count(key)) ||
                    (section == "Display" &&
                     (key == "DC" || key == "CS" || key == "Backlight" || key == "BacklightPWMChannel" || key == "Reset")) ||

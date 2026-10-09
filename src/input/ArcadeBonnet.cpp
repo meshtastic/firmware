@@ -31,14 +31,15 @@ ArcadeBonnet *arcadeBonnet;
 #define BONNET_BUTTON_MASK 0x003F
 
 // The evdev gamepad code each button reports in kbchar, so games can tell buttons apart exactly
-// as they do on a USB pad. 1E/1F are the bonnet's Select/Start, so Start pauses games.
+// as they do on a USB pad. None is BTN_START: games pause on Start, and every bonnet button should
+// do its action in play.
 static const int buttonCodes[BONNET_BUTTON_COUNT] = {
     0x130, // 1A  BTN_SOUTH
     0x131, // 1B  BTN_EAST
     0x133, // 1C  BTN_NORTH
     0x134, // 1D  BTN_WEST
-    0x13a, // 1E  BTN_SELECT
-    0x13b, // 1F  BTN_START
+    0x132, // 1E  BTN_C
+    0x135, // 1F  BTN_Z
 };
 
 ArcadeBonnet::ArcadeBonnet(const char *name) : concurrency::OSThread(name)
@@ -72,7 +73,12 @@ bool ArcadeBonnet::readPins(uint16_t &pressed)
 
 bool ArcadeBonnet::init()
 {
-    address = portduino_config.arcadeBonnetAddress;
+    const int configured = portduino_config.arcadeBonnetAddress;
+    if (configured < ARCADE_BONNET_ADDR_MIN || configured > ARCADE_BONNET_ADDR_MAX) {
+        LOG_WARN("Arcade Bonnet: 0x%x is not an MCP23017 address (0x20-0x27)", configured);
+        return false;
+    }
+    address = (uint8_t)configured;
 
     // All 16 pins inputs with pull-ups and no inversion or interrupts. Unlike Adafruit's script we
     // don't mirror INTA/INTB or configure interrupt-on-change: nothing listens to that line.
@@ -85,13 +91,13 @@ bool ArcadeBonnet::init()
     }
 
     if (portduino_config.arcadeBonnetButtons.empty()) {
-        // Same split as the USB pad: the face buttons and Start select, the rest cancel.
+        // 1A, 1C and 1F select; 1B, 1D and 1E cancel.
         buttonMap[0] = INPUT_BROKER_SELECT; // 1A
         buttonMap[1] = INPUT_BROKER_CANCEL; // 1B
         buttonMap[2] = INPUT_BROKER_SELECT; // 1C
         buttonMap[3] = INPUT_BROKER_CANCEL; // 1D
-        buttonMap[4] = INPUT_BROKER_CANCEL; // 1E (Select)
-        buttonMap[5] = INPUT_BROKER_SELECT; // 1F (Start)
+        buttonMap[4] = INPUT_BROKER_CANCEL; // 1E
+        buttonMap[5] = INPUT_BROKER_SELECT; // 1F
     } else {
         for (const auto &button : portduino_config.arcadeBonnetButtons) {
             input_broker_event event = inputBrokerEventFromAction(button.second);
@@ -130,8 +136,13 @@ static int switchZone(uint16_t pressed, uint16_t lowBit, uint16_t highBit)
 int32_t ArcadeBonnet::runOnce()
 {
     uint16_t pressed;
-    if (!readPins(pressed))
-        return 500; // Bus hiccup or the bonnet went away; back off and try again
+    if (!readPins(pressed)) {
+        // Bus hiccup or the bonnet went away. Release the stick so nothing polling heldXZone() keeps
+        // moving, and back off; the next good read re-establishes any direction still held.
+        heldX = 0;
+        heldY = 0;
+        return 500;
+    }
 
     // Buttons fire once on press, carrying their gamepad code. Polling at 20 ms is slower than the
     // switches bounce, so a single changed sample is a real edge.

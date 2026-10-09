@@ -231,7 +231,7 @@ Input:
 ### bonnet's interrupt line (GPIO17, the HUB75 clock on adafruit-hat) is never used.
 #  ArcadeBonnet: 0x26
 ### Map bonnet buttons to actions, as with JoystickButtons. Omit to use the defaults:
-### 1A, 1C and 1F (Start) select; 1B, 1D and 1E (Select) cancel.
+### 1A, 1C and 1F select; 1B, 1D and 1E cancel.
 #  ArcadeBonnetButtons:
 #    select: [1A, 1C, 1F]
 #    cancel: [1B, 1D, 1E]

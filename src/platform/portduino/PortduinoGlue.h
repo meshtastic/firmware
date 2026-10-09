@@ -29,6 +29,10 @@ extern struct portduino_status_struct {
 // Product strings for auto-configuration
 // {"PRODUCT_STRING", "CONFIG.YAML"}
 // YAML paths are relative to `meshtastic/available.d`
+// The Arcade Bonnet's MCP23017 address straps put it somewhere in 0x20-0x27.
+#define ARCADE_BONNET_ADDR_MIN 0x20
+#define ARCADE_BONNET_ADDR_MAX 0x27
+
 // Arcade Bonnet button names as printed on the board ("1A".."1F") <-> MCP23017 bit 0-5.
 // Returns -1 for anything else; case-insensitive.
 inline int arcadeBonnetPinBit(const std::string &name)

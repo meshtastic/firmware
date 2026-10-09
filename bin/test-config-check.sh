@@ -421,10 +421,11 @@ echo "arcade bonnet buttons:"
 assert "bonnet buttons bound by name" 0 arcade-bonnet.yaml check \
 	"Result: 0 errors, 0 warnings"
 assert "bonnet mappings that do nothing" 0 arcade-bonnet-bad.yaml check \
+	"Input.ArcadeBonnet '0x120' is not an MCP23017 address (0x20-0x27)" \
 	"'fire' is not a recognised action" \
 	"'2A' is not a bonnet button (1A-1F)" \
 	"button 1B is mapped to both 'cancel' and 'back'" \
-	"Result: 0 errors, 3 warnings"
+	"Result: 0 errors, 4 warnings"
 
 echo
 echo "CH341 USB-SPI adapters:"
