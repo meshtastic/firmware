@@ -28,7 +28,7 @@ template <class T> class LR20x0Interface : public RadioLibInterface
     bool isIRQPending() override { return lora.getIrqFlags() != 0; }
 
 #ifdef LR20X0_AGC_RESET
-    void resetAGC() override;
+    bool resetAGC() override;
 #endif
 
   protected:
@@ -83,12 +83,20 @@ template <class T> class LR20x0Interface : public RadioLibInterface
 
     uint32_t getPacketTime(uint32_t pl, bool received) override { return computePacketTime(lora, pl, received); }
 
+    // LR2021 works in both bands. 4 sub-GHz is Table 6-19's row we use; 8 on 2.4 GHz matches SX1280,
+    // the other part sharing that band, so one mesh keeps one CW slot.
+    uint8_t getCadSymbolCountSubGhz() const override { return 4; }
+    uint8_t getCadSymbolCountWideLora() const override { return 8; }
+
   private:
     /** Chip-side re-init shared by the band-hop and recovery paths: front-end GPIOs, begin(), CRC, RF switch, RX gain */
     bool fullBegin(float freq);
 
     /** Board LF PA table after begin(); HF keeps RadioLib default. Warn-only on setOutputPower miss. */
     void applyCustomLfPaTable(float freq);
+
+    /** Point RadioLib at the board LF PA table inside 500-1000 MHz, back at its default outside it. */
+    void selectLfPaTable(float freq);
 
     /** setStandby()'s body, returning the standby error instead of asserting - for callers that can recover */
     int16_t trySetStandby();
