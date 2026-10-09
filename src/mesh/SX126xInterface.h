@@ -167,11 +167,8 @@ template <class T> class SX126xInterface : public RadioLibInterface
 
     bool resumeRunningReceive() override;
 
-    /** Whether startReceive() arms continuous RX rather than RadioLib's duty-cycled RX */
-    bool continuousRxWanted() const;
-
-    /** The RX command startReceive() sends once the chip is in standby */
-    int16_t startRxCommand(bool continuousRx);
+    /** The RX command startReceive() sends once the chip is in standby. Always a continuous RX */
+    int16_t startRxCommand();
 
 #ifdef MESHTASTIC_RX_READOUT_TASK
     bool rearmReceiveFromIsr() override;
