@@ -395,6 +395,14 @@ template <typename T> bool LR11x0Interface<T>::reconfigure()
     RadioSequence seq(this);
     RadioLibInterface::reconfigure();
 
+#ifdef MESHTASTIC_RX_READOUT_TASK
+    // A reconfigure standbys the chip and owns the re-arm that follows, so an RX the readout task armed at TX_DONE is
+    // void from here. Left set, adoptReceiveArmedFromIsr() would report armed for an RX that no longer exists and, via
+    // the base startReceive() it calls, clear rxOffline and chipRecoveryFailures for a chip that never took one -
+    // zeroing the ladder and the rxOffline that periodicRadioMaintenance() gates its retry on.
+    rearmState = REARM_NONE;
+#endif
+
     // set mode to standby - a chip that lost its state to a reset/brownout can time out here (-707),
     // so don't let setStandby()'s assert fire before the recovery below gets a chance
     int16_t err = trySetStandby();
@@ -563,7 +571,7 @@ template <typename T> bool LR11x0Interface<T>::resumeRunningReceive()
 }
 
 #ifdef MESHTASTIC_RX_READOUT_TASK
-template <typename T> bool LR11x0Interface<T>::rearmReceiveFromIsr()
+template <typename T> bool INTERRUPT_ATTR LR11x0Interface<T>::rearmReceiveFromIsr()
 {
     // The interrupt cannot call RadioLib, so the readout task, above the main loop, re-arms as soon as it returns.
     rearmState = REARM_PENDING;
@@ -744,12 +752,17 @@ template <typename T> bool LR11x0Interface<T>::sleep()
     // \todo Display actual typename of the adapter, not just `LR11x0`
     LOG_DEBUG_RADIO("LR11x0 entering sleep mode");
     rxArmedContinuous = false;
+    // trySetStandby() and the sleep command below are one sequence: a readout landing between them talks to a chip
+    // that is on its way down, and the standby would be undone by the arm a readout's caller can follow it with.
+    RadioSequence seq(this);
     (void)trySetStandby(); // Stop any pending operations - the chip is being put to sleep, a failure must not crash
 
     // turn off TCXO if it was powered
     lora.setTCXO(0);
 
-    // put chipset into sleep mode (we've already disabled interrupts by now)
+    // put chipset into sleep mode. Interrupts are not necessarily detached here - disable() and NodeDB's
+    // config-reload park both reach this with the ISR still attached - so the lock above is what keeps
+    // the readout task out of it rather than the absence of interrupts.
     bool keepConfig = false;
     lora.sleep(keepConfig, 0); // Note: we do not keep the config, full reinit will be needed
 

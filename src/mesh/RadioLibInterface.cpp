@@ -492,28 +492,33 @@ void RadioLibInterface::onNotify(uint32_t notification)
         finishSentPacket(sent); // outside the lock: it only logs airtime and prints
         break;
     }
-    case ISR_RX:
+    case ISR_RX: {
+        // Set false where the radio is to be left as it is. Never an early break: the task's notify(ISR_RX) may have
+        // overwritten a pending TRANSMIT_DELAY_COMPLETED - one notification slot - so skipping the setTransmitDelay()
+        // below would strand a queued packet until the next send() or radio interrupt happened to re-arm its timer.
+        bool rearmWanted = true;
         if (rxReadoutActive()) {
             // The readout task has already taken the frames out of the radio, so this makes no RadioLib calls and
             // deliberately runs outside the radio-sequence lock: it enqueues packets, and holding the lock across
             // that would delay the next readout for no reason.
             // A CAD handoff's frame among these ends its wait (handleReceiveInterrupt() clears cadHandoffRxStart).
             deliverCapturedFrames();
-            if (!isReceiving) // this thread has since moved the radio on (a scan or a TX): leave it there
-                break;
-            if (cadHandoffRxStart) {
+            if (!isReceiving) {
+                rearmWanted = false; // this thread has since moved the radio on (a scan or a TX): leave it there
+            } else if (cadHandoffRxStart) {
                 // No frame for the handoff. Its RX is still running, unless it expired empty: TIMEOUT alone, which the
                 // task does not read, and the chip now in standby.
                 RadioSequence seq(this);
                 if (iface->checkIrq(RADIOLIB_IRQ_TIMEOUT) != 1)
-                    break;
-                handleReceiveInterrupt(); // logs it and drops the TIMEOUT; the re-arm below puts the chip back in RX
+                    rearmWanted = false; // the handoff's own RX is still running: nothing to re-arm
+                else
+                    handleReceiveInterrupt(); // logs it and drops the TIMEOUT; the re-arm below puts the chip back in RX
             }
         } else {
             RadioSequence seq(this);
             handleReceiveInterrupt();
         }
-        {
+        if (rearmWanted) {
             // Re-arm for the next packet, as one sequence. Where the radio can tell that its RX is still running,
             // rearmReceive() picks that RX back up instead of standing by first, so a second packet that is already
             // arriving is not aborted; the others restart RX.
@@ -522,6 +527,7 @@ void RadioLibInterface::onNotify(uint32_t notification)
         }
         setTransmitDelay();
         break;
+    }
     case ISR_POLL_TICK:
         handleSoftwareLoraIrqPoll();
         break;
