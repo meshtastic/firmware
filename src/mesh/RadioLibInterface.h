@@ -392,10 +392,17 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
         float snr;
         int16_t state; // readData()'s result
         uint16_t len;
+        uint8_t rxCR;         // the LoRa header's raw coding rate, read with the frame
+        bool hasCRC;          // the LoRa header's CRC flag, likewise
+        bool headerInfoValid; // false where the chip would not report them
     };
 
     /** Read out and deliver the frame behind RX_DONE; with captured, deliver one the readout task already took */
     void handleReceiveInterrupt(const CapturedRxInfo *captured = nullptr);
+
+    /** Set across the getPacketTime() of a captured frame, so computePacketTime() takes that frame's header info
+     *  instead of reading the chip. Only ever set and cleared on the radio thread, inside handleReceiveInterrupt(). */
+    const CapturedRxInfo *rxCapturedHeader = nullptr;
 
     static void timerCallback(void *p1, uint32_t p2);
 
@@ -471,6 +478,10 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      */
     virtual void setStandby();
 
+    /** The LoRa header's raw coding rate and CRC flag for the frame the chip holds now; false where it cannot report
+     *  them. Read with the frame, not later: on a chip left listening the status describes whatever it is receiving. */
+    virtual bool readRxHeaderInfo(uint8_t &, bool &) { return false; }
+
     /// RadioLib returns its negative RADIOLIB_ERR_* codes through the same unsigned microsecond count it
     /// returns durations in, so an error reads as 4294967ms of airtime for one packet and takes the node
     /// off the air until it reboots (#11935). The codes are int16_t, so they wrap to the top of the
@@ -489,7 +500,17 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
             // Received packet configuration must be the same as configured, except for coding rate and CRC
             uint8_t rxCR = 0;
             bool hasCRC = true;
-            if (lora.getLoRaRxHeaderInfo(&rxCR, &hasCRC) == RADIOLIB_ERR_NONE) {
+            // A frame the readout task took carries its own header info, read off the chip with it. Asking the chip
+            // here would read the status of whatever it is receiving now, since the resume leaves it listening.
+            bool haveHeaderInfo;
+            if (rxCapturedHeader) {
+                haveHeaderInfo = rxCapturedHeader->headerInfoValid;
+                rxCR = rxCapturedHeader->rxCR;
+                hasCRC = rxCapturedHeader->hasCRC;
+            } else {
+                haveHeaderInfo = lora.getLoRaRxHeaderInfo(&rxCR, &hasCRC) == RADIOLIB_ERR_NONE;
+            }
+            if (haveHeaderInfo) {
                 // Raw 0 is reserved and >7 is either undefined or an LR2021-only convolutional rate no
                 // Meshtastic peer can send. calculateTimeOnAir() would multiply by it unchecked.
                 if (rxCR < 1 || rxCR > 7) {

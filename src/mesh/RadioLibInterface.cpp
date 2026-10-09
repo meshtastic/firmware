@@ -808,7 +808,9 @@ void RadioLibInterface::handleReceiveInterrupt(const CapturedRxInfo *captured)
         return;
     }
 
+    rxCapturedHeader = captured; // null on the thread path, where the chip still holds this frame's status
     uint32_t rxMsec = getPacketTime(length, true);
+    rxCapturedHeader = nullptr;
 
 #ifndef DISABLE_WELCOME_UNSET
     if (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
@@ -1287,6 +1289,9 @@ void RadioLibInterface::readOutFromTask()
     f.info.snr = iface->getSNR();
     f.info.rssi = lround(iface->getRSSI());
     f.info.len = (uint16_t)len;
+    // Here, not where the radio thread accounts for the frame: by then the chip has been put back in RX - after a
+    // resume it never left it - and its packet status describes the frame it is receiving now, not this one.
+    f.info.headerInfoValid = readRxHeaderInfo(f.info.rxCR, f.info.hasCRC);
     rxReadoutFrames = rxReadoutFrames + 1;
     __asm__ __volatile__("" ::: "memory"); // the entry is written before the head that publishes it
     rxRingHead = next;
