@@ -481,7 +481,7 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
         float snr;
         int16_t state; // readData()'s result
         uint16_t len;
-        uint32_t endMs; // when the frame left the air, from its RX_DONE interrupt
+        uint32_t endMs;       // when the frame left the air, from its RX_DONE interrupt
         uint8_t rxCR;         // the LoRa header's raw coding rate, read with the frame
         bool hasCRC;          // the LoRa header's CRC flag, likewise
         bool headerInfoValid; // false where the chip would not report them
