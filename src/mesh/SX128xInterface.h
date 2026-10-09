@@ -75,6 +75,11 @@ template <class T> class SX128xInterface : public RadioLibInterface
 
     uint32_t getPacketTime(uint32_t pl, bool received) override { return computePacketTime(lora, pl, received); }
 
+    bool readRxHeaderInfo(uint8_t &cr, bool &hasCRC) override
+    {
+        return lora.getLoRaRxHeaderInfo(&cr, &hasCRC) == RADIOLIB_ERR_NONE;
+    }
+
     // 2.4 GHz only. isChannelActive() passes CAD_ON_8_SYMB; keep the two in step.
     uint8_t getCadSymbolCountWideLora() const override { return 8; }
 
