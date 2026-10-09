@@ -3,6 +3,7 @@
 #include "MeshPacketQueue.h"
 #include "RadioInterface.h"
 #include "concurrency/NotifiedWorkerThread.h"
+#include "freertosinc.h" // HAS_FREE_RTOS, for the frame-end tick stamps below
 
 #include <RadioLib.h>
 #include <sys/types.h>
@@ -92,6 +93,9 @@ class STM32WLx_ModuleWrapper : public STM32WLx_Module
 
 class RadioLibInterface : public RadioInterface, protected concurrency::NotifiedWorkerThread
 {
+#ifdef PIO_UNIT_TESTING
+    friend class TestableRadioLibInterface; // test/test_radio - arms the TX timer on a queued packet
+#endif
     MeshPacketQueue txQueue = MeshPacketQueue(MAX_TX_QUEUE);
 
   protected:
@@ -168,6 +172,20 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      * can reject.
      */
     virtual int16_t getCurrentRSSI() = 0;
+
+    // The air end of the last frame, for RadioInterface's anchored backoff grid. The interrupt's own
+    // time is what a peer's grid is aligned to, so it is stamped there rather than when the radio
+    // thread gets round to the notification.
+#if defined(ARCH_PORTDUINO)
+    static volatile uint32_t lastIsrMillis;
+#elif defined(HAS_FREE_RTOS)
+    static volatile uint32_t txDoneIsrTicks, rxDoneIsrTicks;
+#endif
+    /** When the frame this TX_DONE or RX_DONE ended left the air, as well as this platform knows */
+    [[nodiscard]] uint32_t frameEndFromIsr(bool tx);
+
+    /** Stamp the air end as now, for a completion a poll found rather than an interrupt */
+    void stampFrameEndNow(bool tx);
 
   public:
     /** Our ISR code currently needs this to find our active instance
@@ -348,6 +366,8 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
     uint8_t packetsInTxQueue() { return txQueue.getMaxLen() - txQueue.getFree(); }
 
+    [[nodiscard]] uint32_t getTxDueMs() const override { return txDueMs.load(std::memory_order_relaxed); }
+
     /**
      * Update the noise floor measurement by sampling RSSI from a slow path.
      * This should not be called from radio interrupt or TX/RX critical paths.
@@ -398,6 +418,9 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
     /** Detach the sent packet and undo its pre-TX switch; the caller re-arms RX, then finishSentPacket(). */
     meshtastic_MeshPacket *handleTransmitInterrupt();
+
+    /** See getTxDueMs(). Written by the radio thread, read by the router's */
+    std::atomic<uint32_t> txDueMs{0};
 
     /** A frame the readout task took out of the radio, and what addReceiveMetadata() would have read with it */
     struct CapturedRxInfo {

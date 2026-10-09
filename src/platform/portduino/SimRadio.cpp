@@ -1,6 +1,7 @@
 #include "SimRadio.h"
 #include "MeshService.h"
 #include "Router.h"
+#include "UptimeClock.h"
 
 SimRadio::SimRadio() : NotifiedWorkerThread("SimRadio")
 {
@@ -56,7 +57,7 @@ void SimRadio::startTransmitTimer(bool withDelay)
 {
     // If we have work to do and the timer wasn't already scheduled, schedule it now
     if (!txQueue.empty()) {
-        uint32_t delayMsec = !withDelay ? 1 : getTxDelayMsec();
+        uint32_t delayMsec = !withDelay ? 1 : getTxDelayMsec(txQueue.getFront());
         // LOG_DEBUG("xmit timer %d", delay);
         notifyLater(delayMsec, TRANSMIT_DELAY_COMPLETED, false);
     }
@@ -76,8 +77,10 @@ void SimRadio::handleTransmitInterrupt()
 {
     // This can be null if we forced the device to enter standby mode.  In that case
     // ignore the transmit interrupt
-    if (sendingPacket)
+    if (sendingPacket) {
+        noteFrameEnd(Time::getMillis(), "tx"); // the anchor for a backoff draw asking for a slot parity
         completeSending();
+    }
 
     isReceiving = true;
     if (receivingPacket) // This happens when we don't consider something a collision if we weren't sending long enough
@@ -365,6 +368,7 @@ void SimRadio::handleReceiveInterrupt()
 
     LOG_TRACE("HANDLE RECEIVE INTERRUPT");
     rxGood++;
+    noteFrameEnd(Time::getMillis(), "rx"); // the anchor for a backoff draw asking for a slot parity
 
     meshtastic_MeshPacket *mp = packetPool.allocCopy(*receivingPacket); // keep a copy in packetPool
     packetPool.release(receivingPacket);                                // release the original
