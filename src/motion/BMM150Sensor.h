@@ -41,6 +41,10 @@ class BMM150Sensor : public MotionSensor
   private:
     BMM150Singleton *sensor = nullptr;
     bool showingScreen = false;
+    static constexpr const char *compassCalibrationFileName = "/prefs/compass_bmm150.dat";
+    float highestX = 0, lowestX = 0, highestY = 0, lowestY = 0, highestZ = 0, lowestZ = 0;
+
+    bool readMagnetometer(float &xMicroTesla, float &yMicroTesla, float &zMicroTesla);
 
   public:
     explicit BMM150Sensor(ScanI2C::FoundDevice foundDevice);
@@ -50,6 +54,7 @@ class BMM150Sensor : public MotionSensor
 
     // Called each time our sensor gets a chance to run
     virtual int32_t runOnce() override;
+    virtual void calibrate(uint16_t forSeconds) override;
     virtual bool providesHeading() const override { return true; }
 };
 
