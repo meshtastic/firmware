@@ -7,7 +7,7 @@
 #include "TelemetrySensor.h"
 #include <INA3221.h>
 
-INA3221Sensor::INA3221Sensor() : TelemetrySensor(meshtastic_TelemetrySensorType_INA3221, "INA3221"){};
+INA3221Sensor::INA3221Sensor() : TelemetrySensor(meshtastic_TelemetrySensorType_INA3221, "INA3221") {};
 
 int32_t INA3221Sensor::runOnce()
 {
