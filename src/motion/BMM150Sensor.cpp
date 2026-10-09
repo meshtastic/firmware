@@ -50,6 +50,10 @@ int32_t BMM150Sensor::runOnce()
 
     if (doCalibration) {
         beginCalibrationDisplay(showingScreen);
+        if (seedPending) {
+            seedCalibrationExtrema(magX, magY, magZ, highestX, lowestX, highestY, lowestY, highestZ, lowestZ);
+            seedPending = false;
+        }
         updateCalibrationExtrema(magX, magY, magZ, highestX, lowestX, highestY, lowestY, highestZ, lowestZ);
         finishCalibrationIfExpired(showingScreen, compassCalibrationFileName, highestX, lowestX, highestY, lowestY, highestZ,
                                    lowestZ);
@@ -90,12 +94,8 @@ int32_t BMM150Sensor::runOnce()
 void BMM150Sensor::calibrate(uint16_t forSeconds)
 {
 #if !defined(MESHTASTIC_EXCLUDE_SCREEN) && HAS_SCREEN
-    float xMicroTesla = 0.0f, yMicroTesla = 0.0f, zMicroTesla = 0.0f;
-
     LOG_DEBUG("BMM150 calibration started for %is", forSeconds);
-    if (!readMagnetometer(xMicroTesla, yMicroTesla, zMicroTesla))
-        xMicroTesla = yMicroTesla = zMicroTesla = 0.0f;
-    seedCalibrationExtrema(xMicroTesla, yMicroTesla, zMicroTesla, highestX, lowestX, highestY, lowestY, highestZ, lowestZ);
+    seedPending = true;
     startCalibrationWindow(forSeconds);
 #endif
 }

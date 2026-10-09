@@ -41,6 +41,7 @@ class BMM150Sensor : public MotionSensor
   private:
     BMM150Singleton *sensor = nullptr;
     bool showingScreen = false;
+    bool seedPending = false; // seed the calibration extrema from the first valid sample of the window
     static constexpr const char *compassCalibrationFileName = "/prefs/compass_bmm150.dat";
     float highestX = 0, lowestX = 0, highestY = 0, lowestY = 0, highestZ = 0, lowestZ = 0;
 
