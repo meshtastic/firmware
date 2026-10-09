@@ -367,6 +367,7 @@ template <typename T> bool LR11x0Interface<T>::reinitChip()
     }
 
     rxArmedContinuous = false; // begin() resets the chip
+    forgetChipState(); // begin() resets it
     int res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, resolvedTcxoVoltage);
     if (res == RADIOLIB_ERR_NONE) {
         // begin() reset the delay to RadioLib's default
@@ -402,6 +403,7 @@ template <typename T> bool LR11x0Interface<T>::reconfigure()
     // A readout between these calls would clear the flags they set up, or move the chip out from under them
     RadioSequence seq(this);
     RadioLibInterface::reconfigure();
+    forgetChipState(); // the modem parameters are about to be reprogrammed
 
 #ifdef MESHTASTIC_RX_READOUT_TASK
     // A reconfigure standbys the chip and owns the re-arm that follows, so an RX the readout task armed at TX_DONE is
@@ -471,6 +473,13 @@ template <typename T> void LR11x0Interface<T>::setStandby()
 {
     int16_t err = trySetStandby();
     assert(err == RADIOLIB_ERR_NONE);
+}
+
+template <typename T> void LR11x0Interface<T>::forgetChipState()
+{
+#ifdef LR11X0_CAD_SLIM
+    cadParamsValid = false;
+#endif
 }
 
 #ifdef LR11X0_STANDBY_XOSC
@@ -726,7 +735,46 @@ template <typename T> bool LR11x0Interface<T>::isChannelActive()
             }
         }
 #endif
+#ifdef LR11X0_CAD_EXIT_LBT
+        // Arm the whole TX, so a clear verdict sends the staged payload. Under LBT the CAD timeout is also the TX
+        // timeout, so give it a quarter more than one max-length frame.
+        if (prestagedLen &&
+            lora.setPacketParamsLoRa(preambleLength, RADIOLIB_LRXXXX_LORA_HEADER_EXPLICIT, (uint8_t)prestagedLen,
+                                     RADIOLIB_LRXXXX_LORA_CRC_ENABLED, RADIOLIB_LR11X0_LORA_IQ_STANDARD) == RADIOLIB_ERR_NONE) {
+            cfg.cad.exitMode = RADIOLIB_LR11X0_CAD_EXIT_MODE_LBT;
+            cfg.cad.timeout = cadRxTimeoutUsec * 5 / 4;
+            cfg.cad.irqFlags |= 1UL << RADIOLIB_IRQ_TX_DONE;
+        }
+#endif
+#ifdef LR11X0_CAD_SLIM
+        result = scanChannelForTx(cfg);
+#else
         result = lora.scanChannel(cfg);
+#endif
+#ifdef LR11X0_CAD_EXIT_LBT
+        chipKeyedUp = false;
+        if (cfg.cad.exitMode == RADIOLIB_LR11X0_CAD_EXIT_MODE_LBT) {
+            const uint8_t mode = readChipMode();
+            if (result == RADIOLIB_CHANNEL_FREE && mode == RADIOLIB_LR11X0_STAT_2_MODE_TX) {
+                chipKeyedUp = true;
+            } else if (result == RADIOLIB_CHANNEL_FREE && mode != RADIOLIB_LR11X0_STAT_2_MODE_STBY_RC &&
+                       mode != RADIOLIB_LR11X0_STAT_2_MODE_STBY_OSC) {
+                lora.standby(); // clear but not keyed up, and not in standby either: launch from standby
+            } else if (result == RADIOLIB_LORA_DETECTED && mode != RADIOLIB_LR11X0_STAT_2_MODE_RX) {
+                // LBT's busy exit is standby: no handoff to adopt, so the caller's rearmReceive() restarts RX
+                lora.clearIrqFlags(RADIOLIB_LR11X0_IRQ_CAD_DONE | RADIOLIB_LR11X0_IRQ_CAD_DETECTED);
+                prestagedLen = 0;
+                return true;
+            } else if (result != RADIOLIB_CHANNEL_FREE && result != RADIOLIB_LORA_DETECTED &&
+                       result != RADIOLIB_ERR_WRONG_MODEM) {
+                // The scan failed with a TX armed: report busy rather than send without a verdict. A lost modem type
+                // still takes the recovery below.
+                LOG_WARN("LR11x0 LBT CAD failed %s%d", radioLibErr, result);
+                prestagedLen = 0;
+                return true;
+            }
+        }
+#endif
 #if LR11X0_TX_PRESTAGE
         if (result != RADIOLIB_CHANNEL_FREE)
             prestagedLen = 0; // no TX follows, and a detection's RX may overwrite the buffer
@@ -752,6 +800,20 @@ template <typename T> int16_t LR11x0Interface<T>::launchTransmit(size_t numbytes
 {
     const bool prestaged = prestagedLen != 0 && prestagedLen == numbytes && sendingPacket && sendingPacket->id == prestagedId;
     prestagedLen = 0;
+#ifdef LR11X0_CAD_EXIT_LBT
+    if (chipKeyedUp) {
+        chipKeyedUp = false;
+        if (prestaged) {
+            // The clear CAD put the chip straight into TX with this payload. Release the latched CAD flags so the pin
+            // drops and TX_DONE is a fresh edge for the TX interrupt startSend() attaches next.
+            lora.clearIrqFlags(RADIOLIB_LR11X0_IRQ_CAD_DONE | RADIOLIB_LR11X0_IRQ_CAD_DETECTED);
+            return RADIOLIB_ERR_NONE;
+        }
+        // The chip is sending a different payload from the packet being launched: stop it and send ours
+        LOG_WARN("LR11x0 LBT keyed up with a stale payload, restarting TX");
+        lora.standby();
+    }
+#endif
     if (!prestaged)
         return RadioLibInterface::launchTransmit(numbytes);
     // What stageMode(TX) sends, less the buffer (already written) and the packet-type read. The packet params are the
@@ -766,6 +828,51 @@ template <typename T> int16_t LR11x0Interface<T>::launchTransmit(size_t numbytes
         return res;
     lora.stagedMode = RADIOLIB_RADIO_MODE_TX; // what stageMode() leaves for launchMode()
     return lora.launchMode();                 // RF switch, SET_TX, then the BUSY wait for the PA ramp
+}
+#endif
+
+#ifdef LR11X0_CAD_SLIM
+template <typename T> int16_t LR11x0Interface<T>::scanChannelForTx(const ChannelScanConfig_t &cfg)
+{
+    // lora.scanChannel(cfg) less its packet-type reads and its standby, which trySetStandby() has just done (a second
+    // one would also drop STBY_XOSC to STBY_RC), and with the CAD parameters sent only when they change
+    module.setRfSwitchState(Module::MODE_RX);
+    const uint32_t irqs = lora.getIrqMapped(cfg.cad.irqFlags);
+    int16_t res = lora.setDioIrqParams(irqs, irqs);
+    if (res == RADIOLIB_ERR_NONE)
+        res = lora.clearIrqState(RADIOLIB_LR11X0_IRQ_ALL);
+    // As RadioLib's startCad(): its defaults, and the timeout in 30.52 us steps
+    static constexpr uint8_t DEFAULT_DET_PEAK[8] = {48, 48, 50, 55, 55, 59, 61, 65};
+    const uint32_t timeoutRaw = (uint32_t)((float)cfg.cad.timeout / 30.52f);
+    const uint8_t cadParams[8] = {
+        cfg.cad.symNum != RADIOLIB_LR11X0_CAD_PARAM_DEFAULT ? cfg.cad.symNum : (uint8_t)2,
+        cfg.cad.detPeak != RADIOLIB_LR11X0_CAD_PARAM_DEFAULT ? cfg.cad.detPeak
+                                                             : DEFAULT_DET_PEAK[(sf >= 5 && sf <= 12) ? sf - 5 : 0],
+        cfg.cad.detMin != RADIOLIB_LR11X0_CAD_PARAM_DEFAULT ? cfg.cad.detMin : (uint8_t)10,
+        cfg.cad.exitMode != RADIOLIB_LR11X0_CAD_PARAM_DEFAULT ? cfg.cad.exitMode : (uint8_t)RADIOLIB_LR11X0_CAD_EXIT_MODE_STBY_RC,
+        (uint8_t)((timeoutRaw >> 24) & 0xFF),
+        (uint8_t)((timeoutRaw >> 16) & 0xFF),
+        (uint8_t)((timeoutRaw >> 8) & 0xFF),
+        (uint8_t)(timeoutRaw & 0xFF)};
+    if (res == RADIOLIB_ERR_NONE && (!cadParamsValid || memcmp(cadParams, cadParamsSent, sizeof(cadParams)) != 0)) {
+        res = lora.setCadParams(cadParams[0], cadParams[1], cadParams[2], cadParams[3], timeoutRaw);
+        cadParamsValid = res == RADIOLIB_ERR_NONE;
+        if (cadParamsValid)
+            memcpy(cadParamsSent, cadParams, sizeof(cadParams));
+    }
+    if (res == RADIOLIB_ERR_NONE)
+        res = lora.setCad();
+    if (res != RADIOLIB_ERR_NONE)
+        return res;
+    // As scanChannel(): wait for the IRQ pin to report the CAD finished, then read the verdict from the IRQ status alone
+    while (!module.hal->digitalRead(module.getIrq()))
+        module.hal->yield();
+    const uint32_t irq = lora.getIrqStatus();
+    if (irq & RADIOLIB_LR11X0_IRQ_CAD_DETECTED)
+        return RADIOLIB_LORA_DETECTED;
+    if (irq & RADIOLIB_LR11X0_IRQ_CAD_DONE)
+        return RADIOLIB_CHANNEL_FREE;
+    return RADIOLIB_ERR_UNKNOWN;
 }
 #endif
 
@@ -787,6 +894,7 @@ template <typename T> bool LR11x0Interface<T>::resetAGC()
 
     LOG_DEBUG_RADIO("LR11x0 AGC reset: warm sleep + Calibrate(0x3F)");
     rxArmedContinuous = false; // the warm sleep below stops RX
+    forgetChipState(); // the calibration below may not keep it
 
     // 1. Warm sleep - powers down the analog frontend, resetting AGC state
     lora.sleep(true, 0);
@@ -820,6 +928,7 @@ template <typename T> bool LR11x0Interface<T>::sleep()
     // trySetStandby() and the sleep command below are one sequence: a readout landing between them talks to a chip
     // that is on its way down, and the standby would be undone by the arm a readout's caller can follow it with.
     RadioSequence seq(this);
+    forgetChipState();     // sleep without retention loses it
     (void)trySetStandby(); // Stop any pending operations - the chip is being put to sleep, a failure must not crash
 
     // turn off TCXO if it was powered

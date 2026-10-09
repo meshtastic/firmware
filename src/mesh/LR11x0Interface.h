@@ -17,9 +17,19 @@
 #error "LR11X0_TX_PRESTAGE sets RadioLib's staged mode directly: build with -DRADIOLIB_GODMODE=1"
 #endif
 // -DLR11X0_STANDBY_XOSC keeps the TCXO running in standby and in the TX/RX fallback, so a CAD, RX or TX started from them
-// skips its start-up. RadioLib's own scan still drops to STBY_RC before the CAD.
+// skips its start-up. RadioLib's own scan still drops to STBY_RC before the CAD; -DLR11X0_CAD_SLIM does not.
 #if defined(LR11X0_STANDBY_XOSC) && !RADIOLIB_GODMODE
 #error "LR11X0_STANDBY_XOSC sets the TX/RX fallback mode directly: build with -DRADIOLIB_GODMODE=1"
+#endif
+// -DLR11X0_CAD_SLIM starts the CAD without RadioLib's packet-type reads and second standby, and sends the CAD parameters
+// only when they change.
+#if defined(LR11X0_CAD_SLIM) && !RADIOLIB_GODMODE
+#error "LR11X0_CAD_SLIM sends RadioLib's CAD commands directly: build with -DRADIOLIB_GODMODE=1"
+#endif
+// -DLR11X0_CAD_EXIT_LBT scans with CAD exit mode 0x10 (LBT): a clear CAD keys up from the prestaged payload, and a busy
+// one leaves the chip in standby for rearmReceive() to restart RX, with no CAD>RX handoff.
+#if defined(LR11X0_CAD_EXIT_LBT) && !LR11X0_TX_PRESTAGE
+#error "LR11X0_CAD_EXIT_LBT sends the prestaged payload: build with LR11X0_TX_PRESTAGE and -DRADIOLIB_GODMODE=1"
 #endif
 
 /**
@@ -149,6 +159,21 @@ template <class T> class LR11x0Interface : public RadioLibInterface
     /** The payload isChannelActive() wrote into the chip's buffer before the scan, or 0 bytes if none */
     size_t prestagedLen = 0;
     uint32_t prestagedId = 0;
+#endif
+
+    /** Forget what the chip was left holding (CAD parameters): it is being reset, reprogrammed or slept */
+    void forgetChipState();
+
+#ifdef LR11X0_CAD_SLIM
+    /** lora.scanChannel(cfg), less the standby trySetStandby() has just done and CAD parameters the chip already has */
+    int16_t scanChannelForTx(const ChannelScanConfig_t &cfg);
+    bool cadParamsValid = false;
+    uint8_t cadParamsSent[8] = {};
+#endif
+
+#ifdef LR11X0_CAD_EXIT_LBT
+    /** A clear CAD under LBT put the chip in TX with the prestaged payload: launchTransmit() sends nothing */
+    bool chipKeyedUp = false;
 #endif
 
     /// The TCXO Vref that init() settled on, so reinitChip() can begin() with the same oscillator setup
