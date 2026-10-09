@@ -633,7 +633,15 @@ template <typename T> int16_t LR20x0Interface<T>::launchTransmit(size_t numbytes
         LOG_WARN("LR20x0 TX FIFO held %u bytes from an earlier TX, cleared", (unsigned)level);
     if (!levelRead || level)
         module.SPIwriteStream((uint16_t)RADIOLIB_LR2021_CMD_CLEAR_TX_FIFO, NULL, 0, true, true); // private in RadioLib
+#ifdef MESHTASTIC_TX_PROBE
+    const int16_t res = RadioLibInterface::launchTransmit(numbytes);
+    const uint8_t mode = res == RADIOLIB_ERR_NONE ? readChipMode() : LR20X0_CHIP_MODE_TX;
+    if (mode != LR20X0_CHIP_MODE_TX)
+        LOG_WARN("TX probe: chip mode %u after SET_TX for %u bytes", (unsigned)mode, (unsigned)numbytes);
+    return res;
+#else
     return RadioLibInterface::launchTransmit(numbytes);
+#endif
 }
 
 template <typename T> bool LR20x0Interface<T>::readTxFifoLevel(uint16_t &level)

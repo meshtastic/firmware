@@ -711,6 +711,13 @@ bool RadioLibInterface::removePendingTXPacket(NodeNum from, PacketId id, uint32_
 
 meshtastic_MeshPacket *RadioLibInterface::handleTransmitInterrupt()
 {
+#ifdef MESHTASTIC_TX_PROBE
+    if (sendingPacket) {
+        const uint32_t took = Time::getMillis() - lastTxStart, airtime = getPacketTime(sendingPacket);
+        if (took + 2 < airtime)
+            LOG_WARN("TX probe: id=0x%08x TX ended after %u ms, airtime %u ms", sendingPacket->id, took, airtime);
+    }
+#endif
     // Null if we forced the device into standby, which already completed the send.
     meshtastic_MeshPacket *sent = detachSentPacket();
     powerMon->clearState(meshtastic_PowerMon_State_Lora_TXOn); // But our transmitter is definitely off now
@@ -719,6 +726,11 @@ meshtastic_MeshPacket *RadioLibInterface::handleTransmitInterrupt()
 
 void RadioLibInterface::completeSending()
 {
+#ifdef MESHTASTIC_TX_PROBE
+    if (sendingPacket) // reached from a standby, so the TX had not ended
+        LOG_WARN("TX probe: id=0x%08x cut short by standby after %u ms, airtime %u ms", sendingPacket->id,
+                 Time::getMillis() - lastTxStart, getPacketTime(sendingPacket));
+#endif
     finishSentPacket(detachSentPacket());
 }
 
