@@ -70,8 +70,14 @@ void lateInitVariant()
 {
     LOG_INFO("ThinkNode M5 %s, GPS %s", m5HasAg3352 ? "v2.0" : "v1.0", m5HasAg3352 ? "AG3352" : "L76K");
 #if !MESHTASTIC_EXCLUDE_GPS
-    if (gps && m5HasAg3352)
-        new GpioUnaryTransformer(gps->enablePin, new GpsCoreRail());
+    if (gps && m5HasAg3352) {
+        auto originalEnablePin = gps->enablePin;
+        auto enablePin = new GpioVirtPin();
+        new GpioUnaryTransformer(enablePin, new GpioSplitter(originalEnablePin, new GpsCoreRail()));
+        gps->enablePin = enablePin;
+        if (originalEnablePin->get() != GpioVirtPin::PinState::Unset)
+            enablePin->set(originalEnablePin->get() == GpioVirtPin::PinState::On);
+    }
 #endif
 }
 
