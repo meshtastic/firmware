@@ -378,6 +378,8 @@ void cpuDeepSleep(uint32_t msecToWake)
     const int wakeButton = DEEP_SLEEP_WAKE_PIN;
 #elif defined(BUTTON_PIN)
     const int wakeButton = config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN;
+#elif defined(BUTTON_PIN_RUNTIME_ONLY)
+    const int wakeButton = IS_RUNTIME_BUTTON_PIN(config.device.button_gpio) ? (int)config.device.button_gpio : -1;
 #else
     const int wakeButton = -1;
 #endif
@@ -390,7 +392,7 @@ void cpuDeepSleep(uint32_t msecToWake)
 
     // FIXME, disable internal rtc pullups/pulldowns on the non isolated pins. for inputs that we aren't using
     // to detect wake and in normal operation the external part drives them hard.
-#if defined(BUTTON_PIN) || defined(DEEP_SLEEP_WAKE_PIN)
+#if defined(BUTTON_PIN) || defined(DEEP_SLEEP_WAKE_PIN) || defined(BUTTON_PIN_RUNTIME_ONLY)
     // Only GPIOs with RTC functionality can go in this bit map, and which ones those are differs
     // per SoC (ESP32 0,2,4,12-15,25-27,32-39 / S2 and S3 0-21 / C6 0-7 / H2 7-14 / P4 0-15).
     // filterExt1WakeMask() below enforces that rather than each variant having to know it.
@@ -399,13 +401,18 @@ void cpuDeepSleep(uint32_t msecToWake)
     // exists only on ESP32/S2/S3 for IDF backwards compatibility, so keying off it silently
     // drops the whole ext1 path on C6, H2 and P4, which all have the hardware.
 #if SOC_PM_SUPPORT_EXT1_WAKEUP
-    uint64_t gpioMask = (1ULL << wakeButton);
+    // A board with no button configured has no wake pin, and shifting by -1 is undefined.
+    uint64_t gpioMask = wakeButton >= 0 ? (1ULL << wakeButton) : 0;
 #endif
 #ifdef ALT_BUTTON_WAKE
     gpioMask |= (1ULL << BUTTON_PIN_ALT);
 #endif
 #ifdef BUTTON_NEED_PULLUP
     gpio_pullup_en((gpio_num_t)BUTTON_PIN);
+#elif defined(BUTTON_PIN_RUNTIME_ONLY)
+    // Resolved here rather than from wakeButton, which only exists where RTC IO hold does.
+    if (IS_RUNTIME_BUTTON_PIN(config.device.button_gpio))
+        gpio_pullup_en((gpio_num_t)config.device.button_gpio); // a user-added switch pulls to ground, so it needs our pullup
 #endif
 
     // Not needed because both of the current boards have external pullups
