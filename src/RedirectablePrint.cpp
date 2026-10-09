@@ -422,13 +422,6 @@ void RedirectablePrint::log(const char *logLevel, const char *format, ...)
     }
 #endif
 
-    // append \n to format
-    size_t len = strlen(format);
-    auto newFormat = std::unique_ptr<char[]>(new char[len + 2]);
-    strcpy(newFormat.get(), format);
-    newFormat[len] = '\n';
-    newFormat[len + 1] = '\0';
-
     // Append \n here rather than in every call site; past the early returns, so a filtered line allocates nothing
     size_t len = strlen(format);
     auto newFormat = std::unique_ptr<char[]>(new char[len + 2]);
