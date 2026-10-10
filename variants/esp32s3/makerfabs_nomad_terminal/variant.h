@@ -30,10 +30,6 @@
 #define SPI_MISO 20
 #define SPI_MOSI 19
 
-#define HAS_SDCARD 1
-#define SDCARD_CS 3
-#define SD_SPI_FREQUENCY 25000000U
-
 #define LORA_SCK SPI_SCK
 #define LORA_MISO SPI_MISO
 #define LORA_MOSI SPI_MOSI
@@ -52,7 +48,7 @@
 #define LR11X0_DIO3_TCXO_VOLTAGE 1.8
 #define LR11X0_DIO_AS_RF_SWITCH
 
-#if !HAS_TFT // BaseUI; the -tft env configures the panel through LGFX_* flags
+// BaseUI panel; MUI takes it from the LGFX_* build flags
 #define USE_TFTDISPLAY 1
 #define HAS_SPI_TFT 1
 #define ILI9488_SPI_HOST SPI3_HOST
@@ -78,4 +74,3 @@
 #define TOUCH_I2C_PORT 0
 #define TOUCH_SLAVE_ADDRESS 0x38
 #define USE_VIRTUAL_KEYBOARD 1
-#endif
