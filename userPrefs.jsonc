@@ -95,6 +95,7 @@
   //   "USERPREFS_MESH_BEACON_OFFER_REGION": "meshtastic_Config_LoRaConfig_RegionCode_EU_N_868",     // Region advertised in the beacon payload
   // "USERPREFS_MESH_BEACON_OFFER_CHANNEL_NAME": "'MyChannel'",   // Channel name advertised in the beacon payload
   // "USERPREFS_MESH_BEACON_OFFER_CHANNEL_PSK": "{ 0x38, 0x4b, 0xbc, 0xc0, 0x1d, 0xc0, 0x22, 0xd1, 0x81, 0xbf, 0x36, 0xb8, 0x61, 0x21, 0xe1, 0xfb, 0x96, 0xb7, 0x2e, 0x55, 0xbf, 0x74, 0x22, 0x7e, 0x9d, 0x6a, 0xfb, 0x48, 0xd6, 0x4c, 0xb1, 0xa1 }", // PSK for the offered channel (32-byte AES-256)
+  // "USERPREFS_MESH_BEACON_OFFER_FREQUENCY_SLOT": "48",     // 1-based slot advertised; only set when the mesh pins a non-default slot
   //   "USERPREFS_MESH_BEACON_LEGACY_SPLIT": "true",               // When both text and offer are present, split into a separate MESH_BEACON_APP (offer) and TEXT_MESSAGE_APP (text) for legacy client compatibility
   // Broadcast targets: every beacon destination is a TARGET_<N>_* entry. With none set, the node
   // beacons once on its running preset and region over the primary channel. Up to 4 targets (0-3);
@@ -105,6 +106,7 @@
   // "USERPREFS_MESH_BEACON_TARGET_0_PRESET": "meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST",
   // "USERPREFS_MESH_BEACON_TARGET_0_REGION": "meshtastic_Config_LoRaConfig_RegionCode_EU_868",
   // "USERPREFS_MESH_BEACON_TARGET_0_CHANNEL_INDEX": "0",   // device channel-table slot to transmit on
+  // "USERPREFS_MESH_BEACON_TARGET_0_FREQUENCY_SLOT": "48", // 1-based slot to transmit on; unset derives it from the channel
   // "USERPREFS_MESH_BEACON_TARGET_1_PRESET": "meshtastic_Config_LoRaConfig_ModemPreset_NARROW_SLOW",
   // "USERPREFS_MESH_BEACON_TARGET_1_REGION": "meshtastic_Config_LoRaConfig_RegionCode_EU_N_868",
   // "USERPREFS_MESH_BEACON_TARGET_1_CHANNEL_INDEX": "1",

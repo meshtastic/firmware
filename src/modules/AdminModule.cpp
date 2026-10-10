@@ -1253,6 +1253,24 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
         flushChannelWarnings();
 } // end of handleSetConfig
 
+#if !MESHTASTIC_EXCLUDE_BEACON
+// A beacon frequency slot that can never be valid: 0, which the proto forbids, or past the slot count of an explicit
+// region and preset. A pin against the running region or preset is left for send time, which skips it while it does not fit.
+static bool beaconSlotValid(uint32_t slot, meshtastic_Config_LoRaConfig_RegionCode region, bool hasPreset,
+                            meshtastic_Config_LoRaConfig_ModemPreset preset)
+{
+    if (slot == 0)
+        return false;
+    if (region == meshtastic_Config_LoRaConfig_RegionCode_UNSET || !hasPreset)
+        return true;
+    meshtastic_Config_LoRaConfig probe = config.lora;
+    probe.use_preset = true;
+    probe.region = region;
+    probe.modem_preset = preset;
+    return slot <= RadioInterface::frequencySlotCount(probe);
+}
+#endif
+
 bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
 {
     bool shouldReboot = true;
@@ -1439,6 +1457,16 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
                 LOG_WARN("Beacon: broadcast_targets[%u] channel_index %u out of range, clearing", i, t.channel_index);
                 t.has_channel_index = false;
             }
+            if (t.has_frequency_slot && !beaconSlotValid(t.frequency_slot, t.region, t.has_preset, t.preset)) {
+                LOG_WARN("Beacon: broadcast_targets[%u] frequency_slot %u invalid, clearing", i, t.frequency_slot);
+                t.has_frequency_slot = false;
+            }
+        }
+        if (beaconCfg.has_broadcast_offer_frequency_slot &&
+            !beaconSlotValid(beaconCfg.broadcast_offer_frequency_slot, beaconCfg.broadcast_offer_region,
+                             beaconCfg.has_broadcast_offer_preset, beaconCfg.broadcast_offer_preset)) {
+            LOG_WARN("Beacon: broadcast_offer_frequency_slot %u invalid, clearing", beaconCfg.broadcast_offer_frequency_slot);
+            beaconCfg.has_broadcast_offer_frequency_slot = false;
         }
         moduleConfig.has_mesh_beacon = true;
         moduleConfig.mesh_beacon = beaconCfg;

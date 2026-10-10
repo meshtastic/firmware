@@ -1618,6 +1618,10 @@ void NodeDB::installDefaultModuleConfig()
 #ifdef USERPREFS_MESH_BEACON_OFFER_REGION
     moduleConfig.mesh_beacon.broadcast_offer_region = USERPREFS_MESH_BEACON_OFFER_REGION;
 #endif
+#ifdef USERPREFS_MESH_BEACON_OFFER_FREQUENCY_SLOT
+    moduleConfig.mesh_beacon.has_broadcast_offer_frequency_slot = true;
+    moduleConfig.mesh_beacon.broadcast_offer_frequency_slot = USERPREFS_MESH_BEACON_OFFER_FREQUENCY_SLOT;
+#endif
 #ifdef USERPREFS_MESH_BEACON_OFFER_CHANNEL_NAME
     moduleConfig.mesh_beacon.has_broadcast_offer_channel = true;
     strncpy(moduleConfig.mesh_beacon.broadcast_offer_channel.name, USERPREFS_MESH_BEACON_OFFER_CHANNEL_NAME,
@@ -1668,6 +1672,14 @@ void NodeDB::installDefaultModuleConfig()
         moduleConfig.mesh_beacon.broadcast_targets[(N)].has_channel_index = true;                                                \
         moduleConfig.mesh_beacon.broadcast_targets[(N)].channel_index = (VAL);                                                   \
     } while (0)
+// 1-based frequency slot, as Config.LoRaConfig.channel_num. Unset derives it from the target channel.
+#define BEACON_TARGET_SLOT(N, VAL)                                                                                               \
+    do {                                                                                                                         \
+        if (moduleConfig.mesh_beacon.broadcast_targets_count < (N) + 1)                                                          \
+            moduleConfig.mesh_beacon.broadcast_targets_count = (N) + 1;                                                          \
+        moduleConfig.mesh_beacon.broadcast_targets[(N)].has_frequency_slot = true;                                               \
+        moduleConfig.mesh_beacon.broadcast_targets[(N)].frequency_slot = (VAL);                                                  \
+    } while (0)
 #ifdef USERPREFS_MESH_BEACON_TARGET_0_PRESET
     BEACON_TARGET_PRESET(0, USERPREFS_MESH_BEACON_TARGET_0_PRESET);
 #endif
@@ -1676,6 +1688,9 @@ void NodeDB::installDefaultModuleConfig()
 #endif
 #ifdef USERPREFS_MESH_BEACON_TARGET_0_CHANNEL_INDEX
     BEACON_TARGET_CH_INDEX(0, USERPREFS_MESH_BEACON_TARGET_0_CHANNEL_INDEX);
+#endif
+#ifdef USERPREFS_MESH_BEACON_TARGET_0_FREQUENCY_SLOT
+    BEACON_TARGET_SLOT(0, USERPREFS_MESH_BEACON_TARGET_0_FREQUENCY_SLOT);
 #endif
 #ifdef USERPREFS_MESH_BEACON_TARGET_1_PRESET
     BEACON_TARGET_PRESET(1, USERPREFS_MESH_BEACON_TARGET_1_PRESET);
@@ -1686,6 +1701,9 @@ void NodeDB::installDefaultModuleConfig()
 #ifdef USERPREFS_MESH_BEACON_TARGET_1_CHANNEL_INDEX
     BEACON_TARGET_CH_INDEX(1, USERPREFS_MESH_BEACON_TARGET_1_CHANNEL_INDEX);
 #endif
+#ifdef USERPREFS_MESH_BEACON_TARGET_1_FREQUENCY_SLOT
+    BEACON_TARGET_SLOT(1, USERPREFS_MESH_BEACON_TARGET_1_FREQUENCY_SLOT);
+#endif
 #ifdef USERPREFS_MESH_BEACON_TARGET_2_PRESET
     BEACON_TARGET_PRESET(2, USERPREFS_MESH_BEACON_TARGET_2_PRESET);
 #endif
@@ -1694,6 +1712,9 @@ void NodeDB::installDefaultModuleConfig()
 #endif
 #ifdef USERPREFS_MESH_BEACON_TARGET_2_CHANNEL_INDEX
     BEACON_TARGET_CH_INDEX(2, USERPREFS_MESH_BEACON_TARGET_2_CHANNEL_INDEX);
+#endif
+#ifdef USERPREFS_MESH_BEACON_TARGET_2_FREQUENCY_SLOT
+    BEACON_TARGET_SLOT(2, USERPREFS_MESH_BEACON_TARGET_2_FREQUENCY_SLOT);
 #endif
 #ifdef USERPREFS_MESH_BEACON_TARGET_3_PRESET
     BEACON_TARGET_PRESET(3, USERPREFS_MESH_BEACON_TARGET_3_PRESET);
@@ -1704,9 +1725,13 @@ void NodeDB::installDefaultModuleConfig()
 #ifdef USERPREFS_MESH_BEACON_TARGET_3_CHANNEL_INDEX
     BEACON_TARGET_CH_INDEX(3, USERPREFS_MESH_BEACON_TARGET_3_CHANNEL_INDEX);
 #endif
+#ifdef USERPREFS_MESH_BEACON_TARGET_3_FREQUENCY_SLOT
+    BEACON_TARGET_SLOT(3, USERPREFS_MESH_BEACON_TARGET_3_FREQUENCY_SLOT);
+#endif
 #undef BEACON_TARGET_PRESET
 #undef BEACON_TARGET_REGION
 #undef BEACON_TARGET_CH_INDEX
+#undef BEACON_TARGET_SLOT
 #endif // !MESHTASTIC_EXCLUDE_BEACON
 
     initModuleConfigIntervals();

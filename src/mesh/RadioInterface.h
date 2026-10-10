@@ -291,6 +291,13 @@ class RadioInterface
     // Make a candidate radio configuration valid, even if it isn't.
     static void clampConfigLora(meshtastic_Config_LoRaConfig &loraConfig);
 
+    // How many frequency slots the config's region holds at the config's bandwidth. 0 for an UNSET region.
+    static uint32_t frequencySlotCount(const meshtastic_Config_LoRaConfig &loraConfig);
+
+    // The 1-based slot a config lands on for a channel name, without making that channel primary: an in-range
+    // channel_num wins, else the region's override slot, else the hash applyModemConfig() would use.
+    static uint32_t resolveFrequencySlot(const meshtastic_Config_LoRaConfig &loraConfig, const char *channelName);
+
     // If preset is locked to a sibling of currentRegion among the swappable EU regions
     // (EU_868/EU_866/EU_N_868), return the sibling region owning the preset, else nullptr.
     static const RegionInfo *regionSwapForPreset(meshtastic_Config_LoRaConfig_RegionCode currentRegion,
