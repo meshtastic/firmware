@@ -38,11 +38,15 @@ uint8_t xorHash(const uint8_t *p, size_t len)
  */
 int16_t Channels::generateHash(ChannelIndex channelNum)
 {
+    return hashFor(channelNum, getName(channelNum));
+}
+
+int16_t Channels::hashFor(ChannelIndex channelNum, const char *name)
+{
     auto k = getKey(channelNum);
     if (k.length < 0)
         return -1; // invalid
     else {
-        const char *name = getName(channelNum);
         uint8_t h = xorHash((const uint8_t *)name, strlen(name));
 
         h ^= xorHash(k.bytes, k.length);

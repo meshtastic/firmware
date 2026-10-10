@@ -1284,6 +1284,35 @@ void RadioInterface::clampConfigLora(meshtastic_Config_LoRaConfig &loraConfig)
     checkOrClampConfigLora(loraConfig, true);
 }
 
+uint32_t RadioInterface::frequencySlotCount(const meshtastic_Config_LoRaConfig &loraConfig)
+{
+    const RegionInfo *region = getRegion(loraConfig.region);
+    const float bwKHz = loraConfig.use_preset ? modemPresetToBwKHz(loraConfig.modem_preset, region->wideLora)
+                                              : clampBandwidthKHz(bwCodeToKHz(loraConfig.bandwidth));
+    // Same arithmetic as applyModemConfig(), so a slot checked here is a slot the radio can tune
+    const float freqSlotWidth = region->profile->spacing + (region->profile->padding * 2) + (bwKHz / 1000); // in MHz
+    return round((region->freqEnd - region->freqStart + region->profile->spacing) / freqSlotWidth);
+}
+
+uint32_t RadioInterface::resolveFrequencySlot(const meshtastic_Config_LoRaConfig &loraConfig, const char *channelName)
+{
+    const RegionInfo *region = getRegion(loraConfig.region);
+    const uint32_t numFreqSlots = frequencySlotCount(loraConfig);
+    if (loraConfig.channel_num > 0 && loraConfig.channel_num <= numFreqSlots)
+        return loraConfig.channel_num;
+    if (region->overrideSlot > 0)
+        return region->overrideSlot;
+    if (!numFreqSlots) // UNSET/degenerate region, and % 0 is a SIGFPE
+        return 1;
+
+    // A blank name is the default channel, which Channels::getName() spells as the preset name
+    const char *presetName = DisplayFormatters::getModemPresetDisplayName(loraConfig.modem_preset, false, loraConfig.use_preset);
+    if (!channelName || !*channelName)
+        channelName = presetName;
+    const char *hashOf = (region->overrideSlot == OVERRIDE_SLOT_PRESET_HASH) ? presetName : channelName;
+    return (hash(hashOf) % numFreqSlots) + 1; // hash slots are 0-based, channel_num is 1-based
+}
+
 /**
  * Pull our channel settings etc... from protobufs to the dumb interface settings
  * Note: this must be given only settings which have been validated or clamped!
