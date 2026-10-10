@@ -77,6 +77,11 @@ std::unique_ptr<GPS> gps = nullptr;
 
 static GPSUpdateScheduling scheduling;
 
+// A board can share one pin between an L76K standby and an Airoha RTC_INT (ThinkNode M5 v1.0/v2.0).
+#if defined(PIN_GPS_STANDBY) && defined(GPS_RTC_INT) && PIN_GPS_STANDBY == GPS_RTC_INT
+#define GPS_STANDBY_IS_RTC_INT 1
+#endif
+
 /// Multiple GPS instances might use the same serial port (in sequence), but we can
 /// only init that port once.
 static bool didSerialInit;
@@ -1296,6 +1301,11 @@ void GPS::writePinEN(bool on)
 void GPS::writePinStandby(bool standby)
 {
 #ifdef PIN_GPS_STANDBY // Specifically the standby pin for L76B, L76K and clones
+#ifdef GPS_STANDBY_IS_RTC_INT
+    // RTC_INT must rest low on an Airoha fit; the Airoha sleep code pulses it.
+    if (IS_ONE_OF(gnssModel, GNSS_MODEL_AG3335, GNSS_MODEL_AG3352))
+        return;
+#endif
     bool val;
     if (standby)
         val = GPS_STANDBY_ACTIVE;
@@ -1485,6 +1495,10 @@ void GPS::down()
         bool softsleepSupported = true;
 #else
         bool softsleepSupported = false;
+#endif
+#ifdef GPS_STANDBY_IS_RTC_INT
+        if (IS_ONE_OF(gnssModel, GNSS_MODEL_AG3335, GNSS_MODEL_AG3352))
+            softsleepSupported = false;
 #endif
         // U-blox is supported via PMREQ
         if (IS_ONE_OF(gnssModel, GNSS_MODEL_UBLOX6, GNSS_MODEL_UBLOX7, GNSS_MODEL_UBLOX8, GNSS_MODEL_UBLOX9, GNSS_MODEL_UBLOX10))
@@ -1849,6 +1863,9 @@ GnssModel_t GPS::probe(int serialSpeed)
                                         {"AG3352", "$PAIR021,AG3352", GNSS_MODEL_AG3352},
                                         {"RYS3520", "$PAIR021,REYAX_RYS3520_V2", GNSS_MODEL_AG3352}};
         PROBE_FAMILY("Airoha Family", "$PAIR021*39", airoha, 1000);
+#ifdef GPS_STANDBY_IS_RTC_INT
+        writePinStandby(false); // the RTC_INT wake pulse left a shared standby pin low
+#endif
         currentDelay = 20;
         currentStep = 4;
         return GNSS_MODEL_UNKNOWN;

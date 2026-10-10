@@ -37,16 +37,21 @@
 // PCF8563 RTC Module
 #define PCF8563_RTC 0x51
 
-// GPS pins
-#define GPS_SWITH 10
+// GPS: v1.0 has an L76K, v2.0 an AG3352. variant.cpp reads the revision from expander IO7 at boot.
 #define HAS_GPS 1
-#define GPS_L76K
-#define PIN_GPS_REINIT 13 // An output to reset L76K GPS. As per datasheet, low for > 100ms will reset the L76K
+#define PCA_PIN_GPS_VERSION 7 // strap: HIGH = v2.0 (AG3352), LOW = v1.0 (L76K)
+extern int m5HasAg3352;
 
-#define PIN_GPS_STANDBY 11 // An output to wake GPS, low means allow sleep, high means force wake
+// v2.0: AG3352 0.8V core rail enable. v1.0: must stay an input.
+#define PIN_GPS_0V8_EN 10
 
-#define GPS_TX_PIN 20 // This is for bits going TOWARDS the GPS
-#define GPS_RX_PIN 19 // This is for bits going TOWARDS the CPU
+// v1.0: L76K standby, low means allow sleep. v2.0: AG3352 RTC_INT, rests low, rising edge wakes from RTC mode.
+#define PIN_GPS_STANDBY 11
+#define GPS_RTC_INT 11
+
+// The GPS UART is crossed the other way on v1.0.
+#define GPS_TX_PIN (m5HasAg3352 ? 19 : 20) // This is for bits going TOWARDS the GPS
+#define GPS_RX_PIN (m5HasAg3352 ? 20 : 19) // This is for bits going TOWARDS the CPU
 
 #define GPS_THREAD_INTERVAL 50
 
