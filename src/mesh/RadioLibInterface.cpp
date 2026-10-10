@@ -568,7 +568,13 @@ void RadioLibInterface::onNotify(uint32_t notification)
                     packetPool.release(bad);
                     setTransmitDelay();
                 } else if (action == RadioTxHook::PRETX_DEFER) {
-                    setTransmitDelay(); // the radio config moved, so re-run the delay and scan on it
+                    const uint32_t nowAfter = Time::getMillis();
+                    if (txp->tx_after && !Throttle::deadlinePassedAt(nowAfter, txp->tx_after)) {
+                        uint32_t remaining = txp->tx_after - nowAfter;
+                        notifyLater(remaining, TRANSMIT_DELAY_COMPLETED, txTimerOverwrite);
+                    } else {
+                        setTransmitDelay(); // the radio config moved, so re-run the delay and scan on it
+                    }
                 } else {
                     // The scan and the transmit it decides are one sequence: a readout landing between them would
                     // clear the flags startTransmit() is about to set up, or on SX128x leave the chip in standby.
@@ -748,6 +754,7 @@ void RadioLibInterface::finishSentPacket(meshtastic_MeshPacket *p)
     txGood++;
     if (!isFromUs(p))
         txRelay++;
+    RadioTxHooks::postTransmit(this, p);
     printPacket("Completed sending", p);
 
     // We are done sending that packet, release it
@@ -1393,8 +1400,15 @@ bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
             LOG_ERROR("startTransmit failed, error=%d", res);
             RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_RADIO_SPI_BUG);
 
-            // This send failed, but make sure to 'complete' it properly
-            completeSending();
+            auto p = sendingPacket;
+            sendingPacket = NULL;
+#ifdef LED_LORA
+            digitalWrite(LED_LORA, LED_STATE_OFF);
+#endif
+            if (p) {
+                RadioTxHooks::packetReleased(this, p);
+                packetPool.release(p);
+            }
             powerMon->clearState(meshtastic_PowerMon_State_Lora_TXOn); // Transmitter off now
             startReceive(); // Restart receive mode (because startTransmit failed to put us in xmit mode)
         } else {
