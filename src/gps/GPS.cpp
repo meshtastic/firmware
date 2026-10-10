@@ -1464,6 +1464,7 @@ void GPS::up()
 // We've finished a GPS search cycle (lock or timeout). Enter a low power state, potentially.
 void GPS::down()
 {
+    fixHoldEnds = 0; // A hold never outlives its search cycle, or the next cycle would read it as expired.
     if (scheduling.hasValidFixSinceSearchStarted())
         scheduling.informGotLock();
     else
@@ -1546,12 +1547,22 @@ bool holdJustExpired(uint32_t fixHoldEnds)
     return fixHoldEnds != 0 && !fixHoldInForce(fixHoldEnds, 0);
 }
 
-/// Should a post-lock ephemeris hold be (re-)armed this cycle? "No hold in force" fires often, since
-/// every publish clears the hold, including ones that don't put the receiver back to sleep.
-bool shouldArmFixHold(bool hasValidLocation, uint8_t prevFixQual, uint32_t fixHoldEnds, uint32_t threadIntervalMs)
+/// Should a post-lock ephemeris hold be (re-)armed this cycle? "No hold armed" fires often, since
+/// every publish clears the hold, including ones that don't put the receiver back to sleep. An armed
+/// hold past its deadline is not re-armed: holdJustExpired() consumes it later in the same cycle.
+bool shouldArmFixHold(bool hasValidLocation, uint8_t prevFixQual, uint32_t fixHoldEnds)
 {
-    // First lock of a cycle, first lock after the receiver was off, or nothing holding right now.
-    return !hasValidLocation || prevFixQual == 0 || !fixHoldInForce(fixHoldEnds, threadIntervalMs);
+    // A hold already recorded - still in force, or expired but not yet consumed by holdJustExpired() -
+    // must never be restarted by a transient fixQual dip: lookForLocation() sets fixQual (and so
+    // prevFixQual next cycle) before checking hasLock(), so it can read 0 mid-hold without down() ever
+    // having run and cleared fixHoldEnds.
+    if (fixHoldEnds != 0)
+        return false;
+    // No hold recorded: first lock of a cycle, first lock after the receiver was off, or a publish
+    // that cleared the hold without sleeping - all of these already imply fixHoldEnds == 0.
+    (void)hasValidLocation;
+    (void)prevFixQual;
+    return true;
 }
 
 int32_t GPS::runOnce()
@@ -1638,9 +1649,12 @@ int32_t GPS::runOnce()
             gotTime = true;
             // Publish immediately (rather than via the block below, which would clear fixHoldEnds) so the
             // time-only state reaches the UI without waiting for a location. Safe without a valid location:
-            // PositionModule::handleNewPosition ignores invalid positions.
-            shouldPublish = true;
-            publishUpdate();
+            // PositionModule::handleNewPosition ignores invalid positions. A location held from the last
+            // cycle is skipped: publishing it here would stamp stale coordinates with the current time.
+            if (!hasValidLocation) {
+                shouldPublish = true;
+                publishUpdate();
+            }
         }
 
         // 2. Got a lock for the first time, or 3. Got a lock after turning back on
@@ -1655,7 +1669,7 @@ int32_t GPS::runOnce()
             if (updateInterval <= GPS_UPDATE_ALWAYS_ON_THRESHOLD_MS) {
                 hasValidLocation = true;
                 shouldPublish = true;
-            } else if (shouldArmFixHold(hasValidLocation, prev_fixQual, fixHoldEnds, GPS_THREAD_INTERVAL)) {
+            } else if (shouldArmFixHold(hasValidLocation, prev_fixQual, fixHoldEnds)) {
                 hasValidLocation = true;
                 // Hold for up to 20secs after getting a lock to download ephemeris etc
                 uint32_t holdTime = updateInterval - GPS_UPDATE_ALWAYS_ON_THRESHOLD_MS;
@@ -2173,7 +2187,8 @@ bool GPS::lookForTime()
 {
     auto ti = reader.time;
     auto d = reader.date;
-    if (ti.isValid() && d.isValid()) { // Note: we don't check for updated, because we'll only be called if needed
+    // The reader keeps the last sentence across a sleep; only a fresh one is receiver time.
+    if (ti.isValid() && d.isValid() && ti.age() < GPS_SOL_EXPIRY_MS && d.age() < GPS_SOL_EXPIRY_MS) {
         /* Convert to unix time
 The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of seconds that have elapsed since January 1,
 1970 (midnight UTC/GMT), not counting leap seconds (in ISO 8601: 1970-01-01T00:00:00Z).
@@ -2408,6 +2423,7 @@ void GPS::enable()
 int32_t GPS::disable()
 {
     enabled = false;
+    fixHoldEnds = 0;
     setInterval(INT32_MAX);
     setPowerState(GPS_OFF);
 
