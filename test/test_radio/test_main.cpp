@@ -789,9 +789,11 @@ static void test_preambleHold_isSizedForTheWorstCaseFrame()
 
     Time::setTestMillis(1000);
     TEST_ASSERT_TRUE(radioIf->receiveDetectedPublic(TestableRadioLibInterface::kFakePreambleDetected));
+    // The first sighting short-circuits on the unset stamp, so the bound has to be asked for before the chip has been
+    // asked anything at all.
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(159, radioIf->maxRxFrameMsecPublic(), "part milliseconds round up");
     TEST_ASSERT_EQUAL_UINT8_MESSAGE(8, phy.lastCodingRate, "the hold must be timed at the worst case CR, not ours");
     TEST_ASSERT_TRUE_MESSAGE(phy.lastCrcEnabled, "a received frame may carry a CRC, which lengthens it");
-    TEST_ASSERT_EQUAL_UINT32_MESSAGE(159, radioIf->maxRxFrameMsecPublic(), "part milliseconds round up");
 
     Time::setTestMillis(1100); // the old sizing released here, with the frame still arriving
     TEST_ASSERT_TRUE(radioIf->preambleHoldActivePublic());
