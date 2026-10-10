@@ -148,26 +148,31 @@ char TCA8418KeyboardBase::dequeueEvent()
 
 void TCA8418KeyboardBase::trigger()
 {
-    if (keyCount() == 0) {
+    if (state == Init) {
+        reset();
         return;
     }
-    if (state != Init) {
-        // Read the key register
-        uint8_t k = readRegister(TCA8418_REG_KEY_EVENT_A);
-        uint8_t key = k & 0x7F;
-        if (k & 0x80) {
-            if (state == Idle)
-                pressed(key);
-            return;
-        } else {
-            if (state == Held) {
-                released();
-            }
-            state = Idle;
-            return;
+
+    if (keyCount() == 0) {
+        if (state == Held) {
+            held();
         }
+        return;
+    }
+
+    // Read the key register
+    uint8_t k = readRegister(TCA8418_REG_KEY_EVENT_A);
+    uint8_t key = k & 0x7F;
+    if (k & 0x80) {
+        if (state == Idle)
+            pressed(key);
+        return;
     } else {
-        reset();
+        if (state == Held) {
+            released();
+        }
+        state = Idle;
+        return;
     }
 }
 
@@ -175,6 +180,11 @@ void TCA8418KeyboardBase::pressed(uint8_t key)
 {
     // must be defined in derived class
     LOG_ERROR("pressed() not implemented in derived class");
+}
+
+void TCA8418KeyboardBase::held()
+{
+    // optional in derived class
 }
 
 void TCA8418KeyboardBase::released()
