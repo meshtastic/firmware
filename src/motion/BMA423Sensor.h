@@ -4,9 +4,9 @@
 
 #include "MotionSensor.h"
 
-#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && defined(HAS_BMA423) && __has_include(<SensorBMA423.hpp>)
+#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && defined(HAS_BMA423) && __has_include(<AccelerometerDrv.hpp>)
 
-#include <SensorBMA423.hpp>
+#include <AccelerometerDrv.hpp>
 #include <Wire.h>
 
 class BMA423Sensor : public MotionSensor

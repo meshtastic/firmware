@@ -12,7 +12,7 @@
 #include "main.h"
 #include "mesh/Throttle.h"
 #include "sleep.h"
-#include "touch/TouchDrvGT911.hpp"
+#include <TouchDrvGoodix.hpp>
 #include <cstring>
 
 #ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
