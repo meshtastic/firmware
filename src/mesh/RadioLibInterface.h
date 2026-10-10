@@ -433,6 +433,8 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     uint32_t activeReceiveStart = 0;
     // Time::getMillis() when a look cleared PREAMBLE_DETECTED and began holding TX, or 0 if no hold.
     uint32_t preambleHoldStart = 0;
+    // Whether a look has found HEADER_VALID since this hold began, which makes it a frame rather than a bare preamble.
+    bool preambleHoldHeaderSeen = false;
 
     /** Airtime of the longest frame we could be receiving: 255 bytes at CR 4/8 with CRC, whatever our own CR. */
     uint32_t maxRxFrameMsec();
@@ -440,8 +442,12 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     /** True while a cleared preamble still holds TX; ends the hold once one max frame has passed. */
     bool preambleHoldActive();
 
-    /** Clear a bare PREAMBLE_DETECTED and hold TX one max packet, unless a hold is already running. */
+    /** Clear a bare PREAMBLE_DETECTED and hold TX one max frame, unless a hold is already running. */
     void holdOnPreamble();
+
+    /** True while a bare-preamble hold has outlived the time a frame we could decode needs to show its header, so the
+     *  pre-TX CAD may settle it rather than the TX path waiting out the whole hold. */
+    bool preambleHoldPeekable();
 
     /** Whether a packet is waiting to transmit; txQueue itself stays private. */
     bool hasQueuedTx() { return !txQueue.empty(); }

@@ -586,6 +586,8 @@ class TestableRadioLibInterface : public RadioLibInterface
 
     uint32_t maxRxFrameMsecPublic() { return maxRxFrameMsec(); }
     bool preambleHoldActivePublic() { return preambleHoldActive(); }
+    bool preambleHoldPeekablePublic() { return preambleHoldPeekable(); }
+    void setPreambleLength(uint16_t len) { preambleLength = len; }
     bool receiveDetectedPublic(uint16_t irq) { return receiveDetected(irq, kFakeHeaderValid, kFakePreambleDetected); }
 
     // Chip IRQ masks, as each driver passes its own to receiveDetected()
@@ -810,6 +812,115 @@ static void test_preambleHold_clearsTheFlagAndSurvivesIt()
     delete radioIf;
 }
 
+// preambleHeaderGraceMsec() in src/mesh/RadioInterface.h and preambleHoldPeekable(): when the TX path may stop waiting
+// out a bare-preamble hold and let its pre-TX CAD judge the channel instead. The grace is the rest of the preamble plus
+// the ~12.25 symbols of sync word, SFD and explicit header, so once it has passed with no HEADER_VALID the sighting was
+// noise or LoRa we cannot decode - and a hold is 159 ms at SHORT_TURBO but 14 s at LONG_SLOW, long enough to overflow
+// the Tx queue.
+//
+// Pinned: nothing peeks inside the grace (our own header may still be coming), a header ends the peek for the whole
+// hold, and the grace is never zero. Regressions guarded: deriving the grace from RadioInterface::preambleTimeMsec,
+// whole milliseconds that truncate to 0 above 2 GHz where a 12-symbol preamble is 0.95 ms - every sighting then
+// peekable the moment it was seen, which is the one case the hold exists for.
+
+static void test_preambleHeaderGrace_wideLoraIsNeverZero()
+{
+    // SHORT_TURBO at 2.4 GHz: SF7, 1625 kHz, 12-symbol preamble. A symbol is 79 us and the whole preamble 0.95 ms.
+    TEST_ASSERT_EQUAL_UINT32(3, preambleHeaderGraceMsec(7, 1625.0f, 12));
+    // The shortest preamble we can be configured for stays above zero too.
+    TEST_ASSERT_EQUAL_UINT32(1, preambleHeaderGraceMsec(5, 1625.0f, 12));
+}
+
+static void test_preambleHeaderGrace_roundsUp()
+{
+    // SHORT_FAST at 2.4 GHz: 4.14 ms of symbols. Truncating the preamble to 1 ms first gave 3.
+    TEST_ASSERT_EQUAL_UINT32(5, preambleHeaderGraceMsec(7, 812.5f, 12));
+}
+
+static void test_preambleHeaderGrace_subGhzPresets()
+{
+    TEST_ASSERT_EQUAL_UINT32(8, preambleHeaderGraceMsec(7, 500.0f, 16));    // SHORT_TURBO
+    TEST_ASSERT_EQUAL_UINT32(248, preambleHeaderGraceMsec(11, 250.0f, 16)); // LONG_FAST
+    TEST_ASSERT_EQUAL_UINT32(992, preambleHeaderGraceMsec(12, 125.0f, 16)); // LONG_SLOW
+}
+
+// SHORT_TURBO sub-GHz: a 16-symbol preamble, so a grace of 8 ms inside a hold of 159 ms.
+static TestableRadioLibInterface *makeHoldingRadio(FakeIrqRadio &phy)
+{
+    phy.timeOnAirUsec = 159000;
+    auto *radioIf = new TestableRadioLibInterface(&phy);
+    radioIf->setModem(7, 500.0f, 5);
+    radioIf->setPreambleLength(16);
+    radioIf->packetTimeMs = 159;
+    return radioIf;
+}
+
+static void test_preambleHoldPeekable_onlyOnceTheHeaderWasDue()
+{
+    FakeIrqRadio phy;
+    auto *radioIf = makeHoldingRadio(phy);
+
+    Time::setTestMillis(1000);
+    TEST_ASSERT_FALSE_MESSAGE(radioIf->preambleHoldPeekablePublic(), "nothing has been sighted yet");
+    TEST_ASSERT_TRUE(radioIf->receiveDetectedPublic(TestableRadioLibInterface::kFakePreambleDetected));
+
+    Time::setTestMillis(1007);
+    TEST_ASSERT_FALSE_MESSAGE(radioIf->preambleHoldPeekablePublic(), "a frame we can decode may still show its header");
+    Time::setTestMillis(1008);
+    TEST_ASSERT_TRUE_MESSAGE(radioIf->preambleHoldPeekablePublic(), "past the header time, the CAD should settle it");
+
+    Time::setTestMillis(1159);
+    TEST_ASSERT_FALSE_MESSAGE(radioIf->preambleHoldPeekablePublic(),
+                              "the hold itself has ended, so there is nothing to peek past");
+
+    Time::useRealClock();
+    delete radioIf;
+}
+
+static void test_preambleHoldPeekable_aHeaderEndsThePeekForTheWholeHold()
+{
+    // HEADER_VALID means a real frame on a modem we share: wait it out rather than keying up over it.
+    FakeIrqRadio phy;
+    auto *radioIf = makeHoldingRadio(phy);
+
+    Time::setTestMillis(1000);
+    TEST_ASSERT_TRUE(radioIf->receiveDetectedPublic(TestableRadioLibInterface::kFakePreambleDetected));
+    Time::setTestMillis(1020);
+    TEST_ASSERT_TRUE(radioIf->receiveDetectedPublic(TestableRadioLibInterface::kFakeHeaderValid));
+    TEST_ASSERT_FALSE(radioIf->preambleHoldPeekablePublic());
+
+    Time::setTestMillis(1100);
+    TEST_ASSERT_TRUE_MESSAGE(radioIf->preambleHoldActivePublic(), "the hold still runs");
+    TEST_ASSERT_FALSE_MESSAGE(radioIf->preambleHoldPeekablePublic(), "and stays unpeekable for the rest of it");
+
+    Time::useRealClock();
+    delete radioIf;
+}
+
+static void test_preambleHoldPeekable_aNewHoldForgetsTheOldHeader()
+{
+    // The next sighting is its own frame: a header from the hold before it must not keep the CAD out.
+    FakeIrqRadio phy;
+    auto *radioIf = makeHoldingRadio(phy);
+
+    Time::setTestMillis(1000);
+    TEST_ASSERT_TRUE(radioIf->receiveDetectedPublic(TestableRadioLibInterface::kFakePreambleDetected));
+    Time::setTestMillis(1020);
+    TEST_ASSERT_TRUE(radioIf->receiveDetectedPublic(TestableRadioLibInterface::kFakeHeaderValid));
+    TEST_ASSERT_FALSE(radioIf->preambleHoldPeekablePublic());
+
+    Time::setTestMillis(1159); // that hold, and the frame it stood for, are over
+    TEST_ASSERT_FALSE(radioIf->preambleHoldActivePublic());
+    Time::setTestMillis(1160);
+    TEST_ASSERT_TRUE(radioIf->receiveDetectedPublic(TestableRadioLibInterface::kFakePreambleDetected));
+
+    Time::setTestMillis(1168);
+    TEST_ASSERT_TRUE_MESSAGE(radioIf->preambleHoldPeekablePublic(), "the new sighting is judged on its own");
+
+    Time::useRealClock();
+    delete radioIf;
+}
+
 static void test_checkStaleRxFlags_headerAfterPreambleRestartsTheWindow()
 {
     FakeIrqRadio phy;
@@ -885,6 +996,12 @@ void setup()
     RUN_TEST(test_preambleHold_isSizedForTheWorstCaseFrame);
     RUN_TEST(test_preambleHold_fallsBackWhenTheRadioCannotTimeTheFrame);
     RUN_TEST(test_preambleHold_clearsTheFlagAndSurvivesIt);
+    RUN_TEST(test_preambleHeaderGrace_wideLoraIsNeverZero);
+    RUN_TEST(test_preambleHeaderGrace_roundsUp);
+    RUN_TEST(test_preambleHeaderGrace_subGhzPresets);
+    RUN_TEST(test_preambleHoldPeekable_onlyOnceTheHeaderWasDue);
+    RUN_TEST(test_preambleHoldPeekable_aHeaderEndsThePeekForTheWholeHold);
+    RUN_TEST(test_preambleHoldPeekable_aNewHoldForgetsTheOldHeader);
     exit(UNITY_END());
 }
 
