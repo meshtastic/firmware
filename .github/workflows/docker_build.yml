@@ -43,8 +43,12 @@ permissions:
 jobs:
   docker-build:
     outputs:
-      digest: ${{ steps.docker_variant.outputs.digest }}
+      digest: ${{ steps.docker_variant.outputs.digest || steps.docker_variant_windows.outputs.digest }}
     runs-on: ${{ inputs.runs-on }}
+    # Windows runners default to pwsh; every run step below is bash.
+    defaults:
+      run:
+        shell: bash
     env:
       # Only cache on default branch (develop).
       # 'docker/' actions don't support separate Restore/Save actions, so we have to disable caching entirely on PRs/merge_queue.
@@ -57,15 +61,17 @@ jobs:
 
       - name: Get release version string
         run: |
-          echo "long=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
+          echo "long=$(python ./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
         id: version
 
       - name: Set up QEMU
+        if: runner.os == 'Linux'
         uses: docker/setup-qemu-action@v4
         with:
           cache-image: ${{ env.USE_CACHE }}
 
       - name: Docker setup
+        if: runner.os == 'Linux'
         uses: docker/setup-buildx-action@v4
         with:
           cache-binary: ${{ env.USE_CACHE }}
@@ -106,6 +112,7 @@ jobs:
           flavor: latest=false
 
       - name: Docker setup caching
+        if: runner.os == 'Linux'
         id: docker-cache
         env:
           BASE_REF: ${{ github.event.merge_group.base_ref || github.event.pull_request.base.ref || github.ref_name }}
@@ -119,12 +126,13 @@ jobs:
           esac
 
       - name: Docker build and push
+        if: runner.os == 'Linux'
         uses: docker/build-push-action@v7
         id: docker_variant
         with:
           context: .
           file: |
-            ${{ contains(inputs.distro, 'debian') && './Dockerfile' || contains(inputs.distro, 'alpine') && './alpine.Dockerfile' }}
+            ${{ contains(inputs.distro, 'debian') && './Dockerfile' || format('{0}.Dockerfile', inputs.distro) }}
           push: ${{ inputs.push }}
           tags: ${{ steps.meta.outputs.tags }} # Tag is only meant to be consumed by the "manifest" job
           platforms: ${{ inputs.platform }}
@@ -133,3 +141,23 @@ jobs:
           # Cache image layers in GitHub Container Registry to speed up subsequent builds.
           cache-from: ${{ steps.docker-cache.outputs.cache_from }}
           cache-to: ${{ steps.docker-cache.outputs.cache_to || '' }}
+
+      - name: Windows docker build and push
+        if: runner.os == 'Windows'
+        id: docker_variant_windows
+        env:
+          PUSH: ${{ inputs.push }}
+          DOCKERFILE: ${{ format('{0}.Dockerfile', inputs.distro) }}
+          PIO_ENV: ${{ inputs.pio_env }}
+          WIN_TAG: |-
+            GHA-${{ steps.version.outputs.long }}-${{ inputs.distro }}-${{ steps.sanitize_platform.outputs.cleaned_platform }}
+        run: |
+          docker build -f "${DOCKERFILE}" \
+            -t "meshtastic/meshtasticd:${WIN_TAG}" \
+            --build-arg "PIO_ENV=${PIO_ENV}" .
+          if [ "${PUSH}" = "true" ]; then
+            docker push "meshtastic/meshtasticd:${WIN_TAG}"
+            # Same form as build-push-action's digest output (sha256:...).
+            ref=$(docker inspect --format '{{index .RepoDigests 0}}' "meshtastic/meshtasticd:${WIN_TAG}")
+            echo "digest=${ref#*@}" >> "$GITHUB_OUTPUT"
+          fi

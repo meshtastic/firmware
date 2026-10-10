@@ -222,13 +222,22 @@ jobs:
       fail-fast: false
       matrix:
         distro: [debian, alpine]
-        platform: [linux/arm64]
         pio_env: [native-tft]
+        arch:
+          - platform: linux/arm64
+            runs-on: ubuntu-24.04-arm
+        # Windows container
+        include:
+          - distro: windows
+            pio_env: native-windows
+            arch:
+              platform: windows/amd64
+              runs-on: windows-2025
     uses: ./.github/workflows/docker_build.yml
     with:
       distro: ${{ matrix.distro }}
-      platform: ${{ matrix.platform }}
-      runs-on: ${{ contains(matrix.platform, 'arm') && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+      platform: ${{ matrix.arch.platform }}
+      runs-on: ${{ matrix.arch.runs-on }}
       pio_env: ${{ matrix.pio_env }}
       push: false
 
