@@ -15,6 +15,7 @@
 
 #include "mesh/Channels.h"
 #include "mesh/NodeDB.h"
+#include "mesh/Router.h"
 #include "mesh/mesh-pb-constants.h"
 #include "modules/AdminModule.h"
 #include "support/AdminModuleTestShim.h"
@@ -544,6 +545,38 @@ void test_ham_mode_request_is_not_pinned(void)
                              "a request that could not have gone out over PKC must not be pinned");
 }
 
+// LocalStats requests and replies need normal shared-channel encryption so every node with the
+// channel key can decode the payload. They must not be auto-upgraded to PKC merely because both
+// endpoints have identity keys. Other telemetry retains its normal PKC behavior.
+void test_local_stats_uses_channel_encryption_not_pkc(void)
+{
+    meshtastic_MeshPacket telemetry = meshtastic_MeshPacket_init_zero;
+    telemetry.from = LOCAL_NODE;
+    telemetry.to = QUERIED_NODE;
+    telemetry.channel = channels.getPrimaryIndex();
+    telemetry.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    telemetry.decoded.portnum = meshtastic_PortNum_TELEMETRY_APP;
+    meshtastic_Telemetry localStats = meshtastic_Telemetry_init_zero;
+    localStats.which_variant = meshtastic_Telemetry_local_stats_tag;
+    telemetry.decoded.payload.size = pb_encode_to_bytes(telemetry.decoded.payload.bytes, sizeof(telemetry.decoded.payload.bytes),
+                                                        &meshtastic_Telemetry_msg, &localStats);
+
+    TEST_ASSERT_FALSE_MESSAGE(wouldEncryptWithPKC(&telemetry, telemetry.channel, true),
+                              "LocalStats telemetry must use normal channel encryption");
+
+    telemetry.pki_encrypted = true;
+    TEST_ASSERT_TRUE_MESSAGE(wouldEncryptWithPKC(&telemetry, telemetry.channel, true),
+                             "an explicitly PKI LocalStats request must retain PKC encryption");
+
+    telemetry.pki_encrypted = false;
+    meshtastic_Telemetry deviceMetrics = meshtastic_Telemetry_init_zero;
+    deviceMetrics.which_variant = meshtastic_Telemetry_device_metrics_tag;
+    telemetry.decoded.payload.size = pb_encode_to_bytes(telemetry.decoded.payload.bytes, sizeof(telemetry.decoded.payload.bytes),
+                                                        &meshtastic_Telemetry_msg, &deviceMetrics);
+    TEST_ASSERT_TRUE_MESSAGE(wouldEncryptWithPKC(&telemetry, telemetry.channel, true),
+                             "non-LocalStats telemetry must retain its existing PKC behavior");
+}
+
 // The response must echo our request's packet id, so an injector cannot answer a request it did
 // not see just by naming the right node and variant.
 void test_response_with_wrong_request_id_is_rejected(void)
@@ -678,6 +711,7 @@ void setup()
     RUN_TEST(test_pinned_request_keeps_its_key_after_an_unpinned_request);
     RUN_TEST(test_request_to_keyed_node_pins_the_stored_key);
     RUN_TEST(test_ham_mode_request_is_not_pinned);
+    RUN_TEST(test_local_stats_uses_channel_encryption_not_pkc);
     RUN_TEST(test_response_with_wrong_request_id_is_rejected);
     RUN_TEST(test_request_without_an_id_admits_nothing);
     RUN_TEST(test_module_config_subtype_must_match);
