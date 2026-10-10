@@ -1215,7 +1215,11 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
         }
     }
 
-    const char *channelName = channels.getName(channels.getPrimaryIndex());
+    // NodeDB::loadFromDisk() clamps before channels.proto loads: an empty table's primary resolves as a blank one does.
+    const char *channelName =
+        channels.getNumChannels()
+            ? channels.getName(channels.getPrimaryIndex())
+            : DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, false, config.lora.use_preset);
     const char *presetNameDisplay =
         DisplayFormatters::getModemPresetDisplayName(loraConfig.modem_preset, false, loraConfig.use_preset);
     // numFreqSlots can still be 0 for an UNSET/degenerate region, and % 0 is a SIGFPE
