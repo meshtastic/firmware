@@ -132,12 +132,11 @@ template <typename T> bool SX128xInterface<T>::reinitChip(bool fromInit)
     if (res == RADIOLIB_ERR_NONE) {
         // Standby and TX/RX fallback on STDBY_XOSC keep the TCXO powered
         // to avoid the TCXO startup time on each TX/RX transition.
-        res = lora.setStandbyXOSC(true);
-        LOG_DEBUG("Keep TCXO on in standby, result: %d", res);
-    }
+        const int16_t xoscRes = lora.setStandbyXOSC(true);
+        LOG_DEBUG("Keep TCXO on in standby, result: %d", xoscRes);
 
-    if (res == RADIOLIB_ERR_NONE)
         res = lora.setCRC(2);
+    }
 
     if (res != RADIOLIB_ERR_NONE)
         LOG_ERROR("SX128x re-init failed %s%d", radioLibErr, res);
