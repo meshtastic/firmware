@@ -238,6 +238,10 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     /** Re-arm if a CAD->RX handoff has produced no packet well past one max-length airtime. */
     void checkCadHandoffTimeout();
 
+    /** A CAD->RX handoff is outstanding and its RX has ended without a frame: TIMEOUT if it expired empty, CRC_ERR or
+     *  HEADER_ERR on a damaged header. Either way the chip may have stopped listening, so the handoff needs a re-arm. */
+    bool cadHandoffRxEnded();
+
     // Time::getMillis() when plain RX was first seen holding PREAMBLE/HEADER flags, or 0 if none.
     uint32_t rxFlagsSeenMs = 0;
     // rxFlagsSeenMs was stamped by a header, not by a bare preamble before it
