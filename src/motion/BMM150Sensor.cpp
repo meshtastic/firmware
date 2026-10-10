@@ -8,7 +8,8 @@
 extern std::unique_ptr<graphics::Screen> screen;
 #endif
 
-static constexpr float BMM150_MIN_AXIS_RADIUS = 1.0f; // uT; the driver reports whole microtesla
+static constexpr float BMM150_MIN_AXIS_RADIUS = 1.0f;   // uT; the driver reports whole microtesla
+static constexpr int32_t BMM150_POLL_INTERVAL_MS = 200; // each read blocks the main loop for the library's 3 ms delay
 
 BMM150Sensor::BMM150Sensor(ScanI2C::FoundDevice foundDevice) : MotionSensor::MotionSensor(foundDevice) {}
 
@@ -45,7 +46,7 @@ int32_t BMM150Sensor::runOnce()
 #if !defined(MESHTASTIC_EXCLUDE_SCREEN) && HAS_SCREEN
     float magX = 0, magY = 0, magZ = 0;
     if (!readMagnetometer(magX, magY, magZ)) {
-        return MOTION_SENSOR_CHECK_INTERVAL_MS;
+        return BMM150_POLL_INTERVAL_MS;
     }
 
     if (doCalibration) {
@@ -88,7 +89,7 @@ int32_t BMM150Sensor::runOnce()
     if (screen)
         screen->setHeading(heading);
 #endif
-    return MOTION_SENSOR_CHECK_INTERVAL_MS;
+    return BMM150_POLL_INTERVAL_MS;
 }
 
 void BMM150Sensor::calibrate(uint16_t forSeconds)
