@@ -716,6 +716,9 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     volatile TaskHandle_t seqProbeOwner = nullptr;
     volatile uint32_t seqProbeDepth = 0, spiProbeOutside = 0;
     TaskHandle_t spiProbeLastTask = nullptr;
+    static constexpr uint8_t spiProbeSlots = 8;
+    const void *spiProbeThread[spiProbeSlots] = {};
+    volatile uint32_t spiProbeThreadCount[spiProbeSlots] = {};
 
   public:
     /** Bench probe, from LockingArduinoHal: count radio SPI that no radio sequence covers */

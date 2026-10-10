@@ -102,6 +102,9 @@ template <class T> class LR20x0Interface : public RadioLibInterface
     /** Empty the TX FIFO of anything an earlier TX left behind, then hand the packet to RadioLib */
     int16_t launchTransmit(size_t numbytes) override;
 #ifdef MESHTASTIC_RX_FIFO_PROBE
+#ifndef MESHTASTIC_RX_FIFO_PROBE_MAXLEN
+#define MESHTASTIC_RX_FIFO_PROBE_MAXLEN 64
+#endif
     bool rxFifoProbe(size_t len, uint16_t &level) override;
 #endif
 
@@ -110,6 +113,7 @@ template <class T> class LR20x0Interface : public RadioLibInterface
     bool readTxFifoLevel(uint16_t &level);
 #ifdef MESHTASTIC_RX_FIFO_PROBE
     uint32_t rxFifoProbeFrames = 0;
+    bool rxFifoProbeArmed = false;
 #endif
 
     /** Chip-side re-init shared by the band-hop and recovery paths: front-end GPIOs, begin(), CRC, RF switch, RX gain */

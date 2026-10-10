@@ -1196,6 +1196,15 @@ void RadioLibInterface::probeSpiOutsideSequence()
         return;
     spiProbeOutside = spiProbeOutside + 1;
     spiProbeLastTask = self;
+    // Which OSThread ran last on this task: the caller's own, or for code in loop() itself whichever ran before it
+    const void *thread = concurrency::OSThread::currentThread;
+    for (uint8_t i = 0; i < spiProbeSlots; i++) {
+        if (spiProbeThreadCount[i] && spiProbeThread[i] != thread)
+            continue;
+        spiProbeThread[i] = thread;
+        spiProbeThreadCount[i] = spiProbeThreadCount[i] + 1;
+        break;
+    }
 }
 #endif
 
@@ -1387,6 +1396,10 @@ bool RadioLibInterface::takeCapturedFrame(CapturedRxInfo &info)
         loggedSpiOutside = spiProbeOutside;
         LOG_WARN("SPI probe: %u radio SPI transactions outside a radio sequence, last from task %s", (unsigned)loggedSpiOutside,
                  spiProbeLastTask ? pcTaskGetName(spiProbeLastTask) : "?");
+        for (uint8_t i = 0; i < spiProbeSlots && spiProbeThreadCount[i]; i++) {
+            const auto *t = (const concurrency::OSThread *)spiProbeThread[i];
+            LOG_WARN("SPI probe:   %u under thread %s", (unsigned)spiProbeThreadCount[i], t ? t->ThreadName.c_str() : "(none)");
+        }
     }
 #endif
     if (rxRingTail == rxRingHead)
@@ -1397,8 +1410,9 @@ bool RadioLibInterface::takeCapturedFrame(CapturedRxInfo &info)
     memcpy(&radioBuffer, f.data, info.len);
 #ifdef MESHTASTIC_RX_FIFO_PROBE
     if (info.probeAfterDrop || (info.probeFifoLevel != 0xFFFF && info.probeFifoLevel != info.len))
-        LOG_WARN("RX FIFO probe: %u-byte frame found %u bytes in the FIFO%s", (unsigned)info.len, (unsigned)info.probeFifoLevel,
-                 info.probeAfterDrop ? ", first readout after a forced drop" : "");
+        LOG_WARN("RX FIFO probe: %u-byte frame found %u bytes in the FIFO%s%u", (unsigned)info.len, (unsigned)info.probeFifoLevel,
+                 info.probeAfterDrop ? ", first readout after a forced drop of " : ", no drop before it, last drop ",
+                 (unsigned)rxProbeDropLen);
 #endif
     __asm__ __volatile__("" ::: "memory"); // and free its slot only after reading it
     rxRingTail = (uint8_t)((rxRingTail + 1) % rxRingSize);

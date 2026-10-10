@@ -654,7 +654,7 @@ template <typename T> bool LR20x0Interface<T>::readTxFifoLevel(uint16_t &level)
 }
 
 #ifdef MESHTASTIC_RX_FIFO_PROBE
-template <typename T> bool LR20x0Interface<T>::rxFifoProbe(size_t, uint16_t &level)
+template <typename T> bool LR20x0Interface<T>::rxFifoProbe(size_t len, uint16_t &level)
 {
     // As readTxFifoLevel(), for the RX FIFO
     uint8_t buff[2] = {0};
@@ -667,9 +667,15 @@ template <typename T> bool LR20x0Interface<T>::rxFifoProbe(size_t, uint16_t &lev
         if (res == RADIOLIB_ERR_NONE)
             level = ((uint16_t)buff[0] << 8) | buff[1];
     }
-    // Every Nth frame is left unread, as the readout's bad-length path leaves one
+    // Every Nth frame arms a drop, taken on the next frame under MESHTASTIC_RX_FIFO_PROBE_MAXLEN bytes and left unread as
+    // the bad-length path leaves one: small enough that it and its successor can both fit the 256-byte FIFO
     rxFifoProbeFrames++;
-    return MESHTASTIC_RX_FIFO_PROBE > 0 && rxFifoProbeFrames % MESHTASTIC_RX_FIFO_PROBE == 0;
+    if (MESHTASTIC_RX_FIFO_PROBE > 0 && rxFifoProbeFrames % MESHTASTIC_RX_FIFO_PROBE == 0)
+        rxFifoProbeArmed = true;
+    if (!rxFifoProbeArmed || len >= MESHTASTIC_RX_FIFO_PROBE_MAXLEN)
+        return false;
+    rxFifoProbeArmed = false;
+    return true;
 }
 #endif
 
