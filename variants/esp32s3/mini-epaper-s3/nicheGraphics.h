@@ -49,9 +49,9 @@ void setupNicheGraphics()
     inkhud->twoWayRocker = true;
 
     // Fonts
-    InkHUD::Applet::fontLarge = FREESANS_9PT_WIN1252;
-    InkHUD::Applet::fontMedium = FREESANS_6PT_WIN1252;
-    InkHUD::Applet::fontSmall = FREESANS_6PT_WIN1252;
+    InkHUD::Applet::fontLarge = FREESANS_9PT;
+    InkHUD::Applet::fontMedium = FREESANS_6PT;
+    InkHUD::Applet::fontSmall = FREESANS_6PT;
 
     // Small display defaults
     inkhud->persistence->settings.rotation = 0;
