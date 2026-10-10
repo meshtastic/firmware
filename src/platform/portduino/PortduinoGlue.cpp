@@ -1402,6 +1402,32 @@ bool loadConfig(const char *configPath)
                 }
             }
 
+            // Only when present, so a later config.d file with its own Input section keeps it.
+            if (yamlConfig["Input"]["ArcadeBonnet"])
+                portduino_config.arcadeBonnetAddress = yamlConfig["Input"]["ArcadeBonnet"].as<int>(0);
+            if (yamlConfig["Input"]["ArcadeBonnetButtons"]) {
+                // action name -> bonnet button name (1A..1F) or a list of them, stored inverted as
+                // expander bit -> lowercase action, like JoystickButtons.
+                for (const auto &button : yamlConfig["Input"]["ArcadeBonnetButtons"]) {
+                    std::string action = button.first.as<std::string>("");
+                    for (auto &c : action)
+                        c = tolower(c);
+                    if (action == "")
+                        continue;
+                    std::vector<YAML::Node> pinNodes;
+                    if (button.second.IsSequence())
+                        for (const auto &pinNode : button.second)
+                            pinNodes.push_back(pinNode);
+                    else
+                        pinNodes.push_back(button.second);
+                    for (const auto &pinNode : pinNodes) {
+                        const int bit = arcadeBonnetPinBit(pinNode.as<std::string>(""));
+                        if (bit >= 0)
+                            portduino_config.arcadeBonnetButtons[bit] = action;
+                    }
+                }
+            }
+
             readGPIOFromYaml(yamlConfig["Input"]["User"], portduino_config.userButtonPin);
             readGPIOFromYaml(yamlConfig["Input"]["TrackballUp"], portduino_config.tbUpPin);
             readGPIOFromYaml(yamlConfig["Input"]["TrackballDown"], portduino_config.tbDownPin);

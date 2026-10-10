@@ -9,6 +9,7 @@
 #endif
 
 #if ARCH_PORTDUINO
+#include "input/ArcadeBonnet.h"
 #include "input/LinuxInputImpl.h"
 #include "input/LinuxJoystick.h"
 #include "input/SeesawRotary.h"
@@ -499,6 +500,13 @@ void InputBroker::Init()
             if (!seesawRotary->init()) {
                 delete seesawRotary;
                 seesawRotary = nullptr;
+            }
+            if (portduino_config.arcadeBonnetAddress != 0) {
+                arcadeBonnet = new ArcadeBonnet("ArcadeBonnet");
+                if (!arcadeBonnet->init()) {
+                    delete arcadeBonnet;
+                    arcadeBonnet = nullptr;
+                }
             }
         }
 #ifdef __linux__
