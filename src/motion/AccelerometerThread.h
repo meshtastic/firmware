@@ -17,6 +17,7 @@
 #include "BMX160Sensor.h"
 #include "ICM20948Sensor.h"
 #include "ICM42607PSensor.h"
+#include "ISM330DHCXSensor.h"
 #include "LIS3DHSensor.h"
 #include "LSM6DS3Sensor.h"
 #include "MPU6050Sensor.h"
@@ -119,6 +120,11 @@ class AccelerometerThread : public concurrency::OSThread
 #if __has_include(<Adafruit_LSM6DS3TRC.h>)
         case ScanI2C::DeviceType::LSM6DS3:
             sensor.reset(new LSM6DS3Sensor(device));
+            break;
+#endif
+#if __has_include(<Adafruit_ISM330DHCX.h>)
+        case ScanI2C::DeviceType::ISM330DHCX:
+            sensor.reset(new ISM330DHCXSensor(device));
             break;
 #endif
 #ifdef HAS_STK8XXX
