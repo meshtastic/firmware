@@ -653,6 +653,26 @@ template <typename T> bool LR20x0Interface<T>::readTxFifoLevel(uint16_t &level)
     return true;
 }
 
+#ifdef MESHTASTIC_RX_FIFO_PROBE
+template <typename T> bool LR20x0Interface<T>::rxFifoProbe(size_t, uint16_t &level)
+{
+    // As readTxFifoLevel(), for the RX FIFO
+    uint8_t buff[2] = {0};
+    level = 0xFFFF;
+    if (module.SPIwriteStream((uint16_t)RADIOLIB_LR2021_CMD_GET_RX_FIFO_LEVEL, NULL, 0, true, false) == RADIOLIB_ERR_NONE) {
+        const Module::BitWidth_t width = module.spiConfig.widths[RADIOLIB_MODULE_SPI_WIDTH_CMD];
+        module.spiConfig.widths[RADIOLIB_MODULE_SPI_WIDTH_CMD] = Module::BITS_0;
+        const int16_t res = module.SPIreadStream((uint16_t)RADIOLIB_LR2021_CMD_NOP, buff, sizeof(buff), true, false);
+        module.spiConfig.widths[RADIOLIB_MODULE_SPI_WIDTH_CMD] = width;
+        if (res == RADIOLIB_ERR_NONE)
+            level = ((uint16_t)buff[0] << 8) | buff[1];
+    }
+    // Every Nth frame is left unread, as the readout's bad-length path leaves one
+    rxFifoProbeFrames++;
+    return MESHTASTIC_RX_FIFO_PROBE > 0 && rxFifoProbeFrames % MESHTASTIC_RX_FIFO_PROBE == 0;
+}
+#endif
+
 // For power draw measurements, helpful to force radio to stay sleeping
 // #define SLEEP_ONLY
 
