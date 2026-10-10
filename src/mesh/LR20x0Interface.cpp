@@ -636,6 +636,12 @@ template <typename T> int16_t LR20x0Interface<T>::launchTransmit(size_t numbytes
     return RadioLibInterface::launchTransmit(numbytes);
 }
 
+template <typename T> void LR20x0Interface<T>::discardUnreadRxFrame()
+{
+    // The FIFO appends, so a frame left in it is read out as the start of the next one, which then fails to decode
+    module.SPIwriteStream((uint16_t)RADIOLIB_LR2021_CMD_CLEAR_RX_FIFO, NULL, 0, true, true); // private in RadioLib
+}
+
 template <typename T> bool LR20x0Interface<T>::readTxFifoLevel(uint16_t &level)
 {
     // RadioLib's getTxFifoLevel() is private, so read it as RadioLib does: the command, then the reply in a second transfer

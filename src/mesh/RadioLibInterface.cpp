@@ -1121,6 +1121,7 @@ bool RadioLibInterface::maybeRecoverChipStateLoss()
 void RadioLibInterface::clearReadIrqs()
 {
     iface->clearIrq((1UL << RADIOLIB_IRQ_RX_DONE) | (1UL << RADIOLIB_IRQ_CRC_ERR));
+    discardUnreadRxFrame();
 }
 
 bool RadioLibInterface::checkRxDoneIrqFlag()
