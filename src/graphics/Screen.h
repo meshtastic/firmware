@@ -634,36 +634,50 @@ class Screen : public concurrency::OSThread
 
 #if defined(OLED_GR)
 
+        // Map UTF-8 Greek (U+0384-U+03CE) to the CP-1253 slots of ArialMT_Plain_*_GR
         switch (last) {
-        case 0xC3: {
+        case 0xCD: {
             SKIPREST = false;
-            return (uint8_t)(ch | 0xC0);
+            if (ch == 0xBE)
+                return (uint8_t)';'; // U+037E Greek question mark
+            break;
         }
-        // Map UTF-8 Greek chars to Windows-1253 (CP-1253) ASCII codes
         case 0xCE: {
             SKIPREST = false;
-            // Uppercase Greek: Α-Ρ (U+0391-U+03A1) -> CP-1253 193-209
-            if (ch >= 145 && ch <= 161)
-                return (uint8_t)(ch + 48);
-            // Uppercase Greek: Σ-Ω (U+03A3-U+03A9) -> CP-1253 211-217
-            else if (ch >= 163 && ch <= 169)
-                return (uint8_t)(ch + 48);
-            // Lowercase Greek: α-ρ (U+03B1-U+03C1) -> CP-1253 225-241
-            else if (ch >= 177 && ch <= 193)
-                return (uint8_t)(ch + 48);
+            switch (ch) {
+            case 0x84:
+                return (uint8_t)0xB4; // ΄
+            case 0x85:
+                return (uint8_t)0xA1; // ΅
+            case 0x86:
+                return (uint8_t)0xA2; // Ά
+            case 0x87:
+                return (uint8_t)0xB7; // ·
+            case 0x88:
+            case 0x89:
+            case 0x8A:
+                return (uint8_t)(ch + 0x30); // Έ Ή Ί
+            case 0x8C:
+                return (uint8_t)0xBC; // Ό
+            case 0x8E:
+                return (uint8_t)0xBE; // Ύ
+            case 0x8F:
+                return (uint8_t)0xAA; // Ώ: 0xBF is kept for the ¿ fallback
+            }
+            if (ch >= 0x90 && ch <= 0xBF && ch != 0xA2)
+                return (uint8_t)(ch + 48); // ΐ Α-Ω Ϊ Ϋ ά έ ή ί ΰ α-ο
             break;
         }
         case 0xCF: {
             SKIPREST = false;
-            // Lowercase Greek: ς-ω (U+03C2-U+03C9) -> CP-1253 242-249
-            if (ch >= 130 && ch <= 137)
-                return (uint8_t)(ch + 112);
+            if (ch <= 0x8E)
+                return (uint8_t)(ch + 112); // π-ω ϊ ϋ ό ύ ώ
             break;
         }
         }
 
         // We want to strip out prefix chars for two-byte Greek char formats
-        if (ch == 0xC2 || ch == 0xC3 || ch == 0xCE || ch == 0xCF)
+        if (ch == 0xC2 || ch == 0xC3 || ch == 0xCD || ch == 0xCE || ch == 0xCF)
             return (uint8_t)0;
 
 #endif
