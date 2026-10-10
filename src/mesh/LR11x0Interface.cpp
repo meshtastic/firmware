@@ -38,16 +38,6 @@ static_assert(sizeof(lr11x0_switch_dio_nums) / sizeof(lr11x0_switch_dio_nums[0])
                   sizeof(lr11x0_switch_dio_consts) / sizeof(lr11x0_switch_dio_consts[0]),
               "LR11x0 switch DIO numbers and constants must describe the same slots");
 
-// MESHTASTIC_PRESTAGE_VIA_PHY routes the prestage payload write through RadioLib's chip-neutral
-// PhysicalLayer::writeTxBuffer() (jgromes/RadioLib#1890) instead of the chip-specific call this branch
-// has been using. The staged bytes are the same; what differs is the command that carries them, and on
-// SX126x writeTxBuffer() also sends a buffer-base command of its own first.
-#ifdef MESHTASTIC_PRESTAGE_VIA_PHY
-#define MESHTASTIC_STAGE_TX_PAYLOAD(n) lora.writeTxBuffer((uint8_t *)&radioBuffer, (n))
-#else
-#define MESHTASTIC_STAGE_TX_PAYLOAD(n) lora.writeBuffer8((uint8_t *)&radioBuffer, (n))
-#endif
-
 // This part has MODE_TX_HP/MODE_GNSS/MODE_WIFI and no MODE_RX_HF.
 static const int32_t lr11x0_rfswitch_mode_map[RFSW_MODE_COUNT] = {
     LR11x0::MODE_STBY,  LR11x0::MODE_RX,       LR11x0::MODE_TX,   LR11x0::MODE_TX_HP,
@@ -62,6 +52,16 @@ static const Module::RfSwitchMode_t rfswitch_table[] = {
     {LR11x0::MODE_STBY, {}},  {LR11x0::MODE_RX, {}},   {LR11x0::MODE_TX, {}},   {LR11x0::MODE_TX_HP, {}},
     {LR11x0::MODE_TX_HF, {}}, {LR11x0::MODE_GNSS, {}}, {LR11x0::MODE_WIFI, {}}, END_OF_MODE_TABLE,
 };
+#endif
+
+// MESHTASTIC_PRESTAGE_VIA_PHY routes the prestage payload write through RadioLib's chip-neutral
+// PhysicalLayer::writeTxBuffer() (jgromes/RadioLib#1890) instead of the chip-specific call this branch
+// has been using. The staged bytes are the same; what differs is the command that carries them, and on
+// SX126x writeTxBuffer() also sends a buffer-base command of its own first.
+#ifdef MESHTASTIC_PRESTAGE_VIA_PHY
+#define MESHTASTIC_STAGE_TX_PAYLOAD(n) lora.writeTxBuffer((uint8_t *)&radioBuffer, (n))
+#else
+#define MESHTASTIC_STAGE_TX_PAYLOAD(n) lora.writeBuffer8((uint8_t *)&radioBuffer, (n))
 #endif
 
 // Particular boards might define a different max power based on what their hardware can do, default to max power output if not
