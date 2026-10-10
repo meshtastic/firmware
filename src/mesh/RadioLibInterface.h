@@ -538,6 +538,7 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
                 rxCR = rxCapturedHeader->rxCR;
                 hasCRC = rxCapturedHeader->hasCRC;
             } else {
+                RadioSequence seq(this); // a chip read, from callers that hold no sequence: see getTimeOnAir() below
                 haveHeaderInfo = lora.getLoRaRxHeaderInfo(&rxCR, &hasCRC) == RADIOLIB_ERR_NONE;
             }
             if (haveHeaderInfo) {
@@ -558,8 +559,13 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
                 }
             }
         } else {
-            // Reads the packet type back over SPI, so a chip that lost its config answers WRONG_MODEM.
-            RadioLibTime_t reported = lora.getTimeOnAir(pl);
+            // Reads the packet type back over SPI, so a chip that lost its config answers WRONG_MODEM. Called after every
+            // send by finishSentPacket() and the router, which hold no sequence: unlocked, a readout could land inside it.
+            RadioLibTime_t reported;
+            {
+                RadioSequence seq(this);
+                reported = lora.getTimeOnAir(pl);
+            }
             if (!isRadioLibTimeError(reported))
                 return reported / 1000;
             LOG_WARN("%s%d from getTimeOnAir, use configured modem", radioLibErr, (int)(int16_t)reported);
