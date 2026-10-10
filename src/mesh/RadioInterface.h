@@ -17,6 +17,15 @@ typedef struct _meshtastic_Config_LoRaConfig meshtastic_Config_LoRaConfig;
 
 #define MAX_TX_QUEUE 16 // max number of packets which can be waiting for transmission
 
+// Lowest level the radio can actually emit. Below this the chip rejects the
+// setting and transmits nothing at all, so limitPower() floors here rather than
+// handing the driver an impossible value. -9 dBm covers SX126x (RadioLib's
+// SX1268::checkOutputPower allows -9..22); boards with a different floor can
+// override it in variant.h.
+#ifndef RADIO_MIN_TX_POWER_DBM
+#define RADIO_MIN_TX_POWER_DBM -9
+#endif
+
 #define MAX_LORA_PAYLOAD_LEN 255 // max length of 255 per Semtech's datasheets on SX12xx
 #define MESHTASTIC_HEADER_LENGTH 16
 #define MESHTASTIC_PKC_OVERHEAD 12
