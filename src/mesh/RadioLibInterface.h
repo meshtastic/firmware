@@ -434,7 +434,10 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     // Time::getMillis() when a look cleared PREAMBLE_DETECTED and began holding TX, or 0 if no hold.
     uint32_t preambleHoldStart = 0;
 
-    /** True while a cleared preamble still holds TX; ends the hold once one max packet has passed. */
+    /** Airtime of the longest frame we could be receiving: 255 bytes at CR 4/8 with CRC, whatever our own CR. */
+    uint32_t maxRxFrameMsec();
+
+    /** True while a cleared preamble still holds TX; ends the hold once one max frame has passed. */
     bool preambleHoldActive();
 
     /** Clear a bare PREAMBLE_DETECTED and hold TX one max packet, unless a hold is already running. */

@@ -154,11 +154,21 @@ bool RadioLibInterface::canSendImmediately()
         return true;
 }
 
+uint32_t RadioLibInterface::maxRxFrameMsec()
+{
+    // A sender's header can carry any CR up to 4/8, and a hold starts before that header can be read.
+    DataRate_t dr = getDataRate();
+    dr.lora.codingRate = 8;
+    PacketConfig_t pc = getPacketConfig();
+    pc.lora.crcEnabled = true;
+    const RadioLibTime_t usec = iface->calculateTimeOnAir(modemType, dr, pc, MAX_LORA_PAYLOAD_LEN);
+    return isRadioLibTimeError(usec) ? getPacketTime(MAX_LORA_PAYLOAD_LEN) : (usec + 999) / 1000;
+}
+
 bool RadioLibInterface::preambleHoldActive()
 {
-    // Whatever sent the cleared preamble is off the air one max packet later.
-    if (preambleHoldStart && !Throttle::isWithinTimespanMs(
-                                 preambleHoldStart, getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN + sizeof(PacketHeader))))
+    // Whatever sent the cleared preamble is off the air one max frame later.
+    if (preambleHoldStart && !Throttle::isWithinTimespanMs(preambleHoldStart, maxRxFrameMsec()))
         preambleHoldStart = 0;
     return preambleHoldStart != 0;
 }
@@ -181,8 +191,7 @@ bool RadioLibInterface::receiveDetected(uint16_t irq, unsigned long syncWordHead
     if (irq & syncWordHeaderValidFlag) {
         if (!activeReceiveStart) {
             activeReceiveStart = Time::skipZero(Time::getMillis());
-        } else if (!Throttle::isWithinTimespanMs(activeReceiveStart,
-                                                 getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN + sizeof(PacketHeader)))) {
+        } else if (!Throttle::isWithinTimespanMs(activeReceiveStart, maxRxFrameMsec())) {
             // We should have gotten an RX_DONE IRQ by now if it was really a packet, so ignore HEADER_VALID flag
             activeReceiveStart = 0;
             LOG_TRACE("Ignore false header detection");
