@@ -22,6 +22,7 @@ static int gridTilesPerBlock();
 static int tileZoomAt(int tileIndex);
 static int tileTxAt(int tileIndex);
 static int tileTyAt(int tileIndex);
+static bool hasMapTileZoom(int zoom);
 static int tileMetadataZoomCount();
 static int tileMetadataZoomAt(int index);
 static bool hasMapTiles();
@@ -298,17 +299,27 @@ static int tileTyAt(int tileIndex)
     return map_tile_block_ty[blockIndex] + (rows > 0 ? (localIndex % rows) : 0);
 }
 
+static bool hasMapTileZoom(int zoom)
+{
+    const uint8_t *embeddedZooms = map_tile_zooms;
+    int embeddedCount = map_tile_count;
+    if (usesGridTileLayout()) {
+        embeddedZooms = map_tile_block_zooms;
+        embeddedCount = map_tile_block_count;
+    }
+
+    for (int i = 0; i < embeddedCount; i++)
+        if (embeddedZooms[i] == zoom)
+            return true;
+
+    return ::NicheGraphics::InkHUD::SDMapTiles::hasZoom(zoom);
+}
+
 static int tileMetadataZoomCount()
 {
     int count = 0;
     for (int zoom = 0; zoom <= 22; zoom++) {
-        bool available = false;
-        const int embeddedCount = usesGridTileLayout() ? map_tile_block_count : map_tile_count;
-        for (int i = 0; i < embeddedCount && !available; i++)
-            available = (usesGridTileLayout() ? map_tile_block_zooms[i] : map_tile_zooms[i]) == zoom;
-        if (!available)
-            available = ::NicheGraphics::InkHUD::SDMapTiles::hasZoom(zoom);
-        if (available)
+        if (hasMapTileZoom(zoom))
             count++;
     }
     return count;
@@ -317,13 +328,7 @@ static int tileMetadataZoomCount()
 static int tileMetadataZoomAt(int index)
 {
     for (int zoom = 0; zoom <= 22; zoom++) {
-        bool available = false;
-        const int embeddedCount = usesGridTileLayout() ? map_tile_block_count : map_tile_count;
-        for (int i = 0; i < embeddedCount && !available; i++)
-            available = (usesGridTileLayout() ? map_tile_block_zooms[i] : map_tile_zooms[i]) == zoom;
-        if (!available)
-            available = ::NicheGraphics::InkHUD::SDMapTiles::hasZoom(zoom);
-        if (available && index-- == 0)
+        if (hasMapTileZoom(zoom) && index-- == 0)
             return zoom;
     }
     return -1;
