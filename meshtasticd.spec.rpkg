@@ -32,7 +32,7 @@ BuildRequires: python3dist(protobuf)
 BuildRequires: python3dist(grpcio[protobuf])
 BuildRequires: python3dist(grpcio-tools)
 BuildRequires: git-core
-BuildRequires: gcc-c++
+BuildRequires: gcc-c++ >= 10
 BuildRequires: pkgconfig(yaml-cpp)
 BuildRequires: pkgconfig(jsoncpp)
 BuildRequires: pkgconfig(libgpiod)
