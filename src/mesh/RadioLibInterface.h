@@ -412,6 +412,10 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
         uint8_t rxCR;         // the LoRa header's raw coding rate, read with the frame
         bool hasCRC;          // the LoRa header's CRC flag, likewise
         bool headerInfoValid; // false where the chip would not report them
+#ifdef MESHTASTIC_RX_FIFO_PROBE
+        uint16_t probeFifoLevel; // RX FIFO level just before readData(), 0xFFFF if not read
+        bool probeAfterDrop;     // the first frame read out after a forced drop
+#endif
     };
 
     /** Read out and deliver the frame behind RX_DONE; with captured, deliver one the readout task already took */
@@ -498,6 +502,15 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     /** The LoRa header's raw coding rate and CRC flag for the frame the chip holds now; false where it cannot report
      *  them. Read with the frame, not later: on a chip left listening the status describes whatever it is receiving. */
     virtual bool readRxHeaderInfo(uint8_t &, bool &) { return false; }
+#ifdef MESHTASTIC_RX_FIFO_PROBE
+    /** Bench probe, from the readout task before readData(): the chip's RX FIFO level (0xFFFF if it has none), and
+     *  whether to drop this frame on purpose, as the bad-length path does, to see what the next readout finds */
+    virtual bool rxFifoProbe(size_t, uint16_t &level)
+    {
+        level = 0xFFFF;
+        return false;
+    }
+#endif
 
     /// RadioLib returns its negative RADIOLIB_ERR_* codes through the same unsigned microsecond count it
     /// returns durations in, so an error reads as 4294967ms of airtime for one packet and takes the node
@@ -697,6 +710,23 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     CapturedFrame rxRing[rxRingSize] = {};
     volatile uint8_t rxRingHead = 0, rxRingTail = 0;
     volatile uint32_t rxReadoutFrames = 0, rxReadoutDropped = 0, rxReadoutBadLength = 0;
+#ifdef MESHTASTIC_RX_FIFO_PROBE
+    // Bench probe: the task's forced drops, the length of the last one, and the last bad length read, logged by the thread
+    volatile uint32_t rxProbeForcedDrops = 0, rxProbeDropLen = 0, rxProbeBadLength = 0;
+    volatile bool rxProbeDropPending = false;
+#endif
+#ifdef MESHTASTIC_SPI_LOCK_PROBE
+    // Bench probe: the task holding the radio-sequence lock and its depth, and radio SPI seen outside any sequence
+    volatile TaskHandle_t seqProbeOwner = nullptr;
+    volatile uint32_t seqProbeDepth = 0, spiProbeOutside = 0;
+    TaskHandle_t spiProbeLastTask = nullptr;
+
+  public:
+    /** Bench probe, from LockingArduinoHal: count radio SPI that no radio sequence covers */
+    void probeSpiOutsideSequence();
+
+  private:
+#endif
     /** Set by requestRearmFromIsr(), taken by the task */
     volatile bool rxRearmFromTaskPending = false;
 

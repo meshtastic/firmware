@@ -134,6 +134,13 @@ template <class T> class SX126xInterface : public RadioLibInterface
     uint32_t earlyStagedId = 0;
     uint8_t earlyStagedBase = 0;
     uint8_t earlyStagedBytes[256];
+#ifdef MESHTASTIC_STAGE_PROBE
+    // Bench probe: the last payload written while RX ran, whatever the flags said around the write
+    size_t stageProbeLen = 0;
+    uint8_t stageProbeBase = 0;
+    uint8_t stageProbeBytes[256];
+    void stageProbeNote(uint8_t base, size_t numbytes);
+#endif
 
     /** Where a payload of this length goes while RX runs: just behind RX's write point */
     uint8_t txStageBase(size_t numbytes) const;

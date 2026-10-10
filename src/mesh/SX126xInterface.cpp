@@ -789,6 +789,21 @@ template <typename T> int16_t SX126xInterface<T>::launchTransmit(size_t numbytes
         (uint8_t)(irqMask >> 8), (uint8_t)(irqMask & 0xFF), (uint8_t)(dio1Mask >> 8), (uint8_t)(dio1Mask & 0xFF), 0, 0, 0, 0};
     const uint8_t clearAll[] = {(uint8_t)(RADIOLIB_SX126X_IRQ_ALL >> 8), (uint8_t)(RADIOLIB_SX126X_IRQ_ALL & 0xFF)};
     int16_t res = RADIOLIB_ERR_NONE;
+#ifdef MESHTASTIC_STAGE_PROBE
+    if (inRx) {
+        // Read the staged payload back: a frame RX wrote over it since the stage would go out inside this TX
+        uint8_t chip[256];
+        const uint8_t readBuffer[] = {RADIOLIB_SX126X_CMD_READ_BUFFER, prestagedBase};
+        if (module.SPIreadStream(readBuffer, sizeof(readBuffer), chip, numbytes) == RADIOLIB_ERR_NONE) {
+            unsigned changed = 0;
+            for (size_t i = 0; i < numbytes; i++)
+                changed += chip[i] != ((const uint8_t *)&radioBuffer)[i];
+            if (changed)
+                LOG_WARN("Stage probe: TX id=0x%08x staged at 0x%02x has %u of %u bytes changed at launch",
+                         (unsigned)(sendingPacket ? sendingPacket->id : 0), (unsigned)prestagedBase, changed, (unsigned)numbytes);
+        }
+    }
+#endif
     if (inRx) {
         // Staged behind RX's write point: TX from there. RadioLib sets both bases back to 0 at the next RX start.
         const uint8_t bases[] = {prestagedBase, 0x00};
@@ -840,6 +855,15 @@ template <typename T> void SX126xInterface<T>::noteStagedOverFrame(uint8_t base,
     memcpy(rxClobberBytes, &radioBuffer, numbytes); // still the payload just written
 }
 
+#ifdef MESHTASTIC_STAGE_PROBE
+template <typename T> void SX126xInterface<T>::stageProbeNote(uint8_t base, size_t numbytes)
+{
+    stageProbeLen = numbytes;
+    stageProbeBase = base;
+    memcpy(stageProbeBytes, &radioBuffer, numbytes); // still the payload just written
+}
+#endif
+
 template <typename T> bool SX126xInterface<T>::stageTxInRx()
 {
     if (!scanForTx || !txStagedByRadioLib || !irqPolledOverUsb())
@@ -851,6 +875,9 @@ template <typename T> bool SX126xInterface<T>::stageTxInRx()
     const uint8_t writeBuffer[] = {RADIOLIB_SX126X_CMD_WRITE_BUFFER, base};
     if (module.SPIwriteStream(writeBuffer, sizeof(writeBuffer), (uint8_t *)&radioBuffer, numbytes) != RADIOLIB_ERR_NONE)
         return false;
+#ifdef MESHTASTIC_STAGE_PROBE
+    stageProbeNote(base, numbytes);
+#endif
     const uint32_t irq = lora.getIrqFlags();
     const uint32_t doneIrqs = RADIOLIB_SX126X_IRQ_RX_DONE | RADIOLIB_SX126X_IRQ_CRC_ERR;
     // A preamble shows ~2 ms into a frame, its header ~5 ms in: the scan's standby would abort either
@@ -883,6 +910,26 @@ template <typename T> bool SX126xInterface<T>::rxFrameOverlapsTxStage(size_t len
     if (lora.getPacketLength(false, &offset) == 0 && length != 0)
         LOG_DEBUG("RX buffer status unreadable, frame placement unknown");
     rxWritePtr = (uint8_t)(offset + length);
+#ifdef MESHTASTIC_STAGE_PROBE
+    if (stageProbeLen && bufferRangesOverlap(offset, length, stageProbeBase, stageProbeLen)) {
+        // How many of the bytes this frame shares with the stage are the stage's: all of them with no detector record
+        // is a received frame delivered with our TX bytes in it
+        unsigned shared = 0, ours = 0;
+        for (size_t i = 0; i < length; i++) {
+            const uint8_t at = (uint8_t)(offset + i);
+            const uint8_t k = (uint8_t)(at - stageProbeBase);
+            if (k < stageProbeLen) {
+                shared++;
+                if (((const uint8_t *)&radioBuffer)[i] == stageProbeBytes[k])
+                    ours++;
+            }
+        }
+        LOG_WARN("Stage probe: %u-byte rx frame at 0x%02x shares %u bytes with the stage at 0x%02x, %u of them ours, %s",
+                 (unsigned)length, (unsigned)offset, shared, (unsigned)stageProbeBase, ours,
+                 clobberCheck ? "detector record" : "no record");
+        stageProbeLen = 0; // this frame's bytes are now over it
+    }
+#endif
     if (earlyStagedLen && bufferRangesOverlap(offset, length, earlyStagedBase, earlyStagedLen)) {
         earlyStagedLen = 0; // this frame's bytes went over the staged payload: stage it again
         LOG_DEBUG("TX staged early: overwritten by a %u-byte rx frame at 0x%02x, restage", (unsigned)length, (unsigned)offset);
@@ -928,6 +975,9 @@ template <typename T> void SX126xInterface<T>::stageTxEarly(meshtastic_MeshPacke
     const uint8_t writeBuffer[] = {RADIOLIB_SX126X_CMD_WRITE_BUFFER, base};
     if (module.SPIwriteStream(writeBuffer, sizeof(writeBuffer), (uint8_t *)&radioBuffer, numbytes) != RADIOLIB_ERR_NONE)
         return;
+#ifdef MESHTASTIC_STAGE_PROBE
+    stageProbeNote(base, numbytes);
+#endif
     // No standby follows, so a frame that began during the write is received as usual; its readout checks it
     if (lora.getIrqFlags() & (RADIOLIB_SX126X_IRQ_HEADER_VALID | doneIrqs))
         noteStagedOverFrame(base, numbytes);

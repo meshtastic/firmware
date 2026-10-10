@@ -20,6 +20,10 @@
 
 void LockingArduinoHal::spiBeginTransaction()
 {
+#if defined(MESHTASTIC_SPI_LOCK_PROBE) && defined(MESHTASTIC_RX_READOUT_TASK)
+    if (RadioLibInterface::instance)
+        RadioLibInterface::instance->probeSpiOutsideSequence();
+#endif
     spiLock->lock();
 
     ArduinoHal::spiBeginTransaction();
@@ -1156,14 +1160,50 @@ bool RadioLibInterface::lockRadioSequence()
     // Null before the task exists, and there is nothing to exclude until then
     if (!radioSeqMutex)
         return false;
+#ifdef MESHTASTIC_SPI_LOCK_PROBE
+    if (xSemaphoreTakeRecursive(radioSeqMutex, portMAX_DELAY) != pdTRUE)
+        return false;
+    seqProbeOwner = xTaskGetCurrentTaskHandle();
+    seqProbeDepth = seqProbeDepth + 1;
+    return true;
+#else
     return xSemaphoreTakeRecursive(radioSeqMutex, portMAX_DELAY) == pdTRUE;
+#endif
 }
 
 void RadioLibInterface::unlockRadioSequence()
 {
+#ifdef MESHTASTIC_SPI_LOCK_PROBE
+    if (radioSeqMutex && seqProbeDepth) {
+        seqProbeDepth = seqProbeDepth - 1;
+        if (!seqProbeDepth)
+            seqProbeOwner = nullptr;
+    }
+#endif
     if (radioSeqMutex)
         xSemaphoreGiveRecursive(radioSeqMutex);
 }
+
+#ifdef MESHTASTIC_SPI_LOCK_PROBE
+void RadioLibInterface::probeSpiOutsideSequence()
+{
+    // Only once the task exists: before that there is nothing to race. Never from an interrupt.
+#if defined(ARCH_NRF52)
+    if (__get_IPSR())
+        return;
+#elif defined(ARCH_ESP32)
+    if (xPortInIsrContext())
+        return;
+#endif
+    if (!radioSeqMutex)
+        return;
+    const TaskHandle_t self = xTaskGetCurrentTaskHandle();
+    if (seqProbeOwner == self && seqProbeDepth)
+        return;
+    spiProbeOutside = spiProbeOutside + 1;
+    spiProbeLastTask = self;
+}
+#endif
 
 void RadioLibInterface::startRxReadoutTask()
 {
@@ -1271,14 +1311,32 @@ void RadioLibInterface::readOutFromTask()
         // A length that would overrun the buffer, or the thread has not taken the last 8: the frame is lost. Clear its
         // flags so the next RX_DONE raises a fresh edge.
         clearReadIrqs();
-        if (len > sizeof(rxRing[0].data))
+        if (len > sizeof(rxRing[0].data)) {
             rxReadoutBadLength = rxReadoutBadLength + 1;
-        else
+#ifdef MESHTASTIC_RX_FIFO_PROBE
+            rxProbeBadLength = len;
+#endif
+        } else
             rxReadoutDropped = rxReadoutDropped + 1;
         notify(ISR_RX, !rxArmedBeforeTxDone); // for the counter line, and the re-arm
         return;
     }
     CapturedFrame &f = rxRing[head];
+#ifdef MESHTASTIC_RX_FIFO_PROBE
+    uint16_t probeLevel = 0xFFFF;
+    if (rxFifoProbe(len, probeLevel)) {
+        // Exactly what the bad-length path leaves behind: flags cleared, the frame's bytes not read
+        clearReadIrqs();
+        rxProbeDropLen = len;
+        rxProbeForcedDrops = rxProbeForcedDrops + 1;
+        rxProbeDropPending = true;
+        notify(ISR_RX, !rxArmedBeforeTxDone);
+        return;
+    }
+    f.info.probeFifoLevel = probeLevel;
+    f.info.probeAfterDrop = rxProbeDropPending;
+    rxProbeDropPending = false;
+#endif
     f.info.state = iface->readData(f.data, len);
     if (readDataLeftIrqFlags(f.info.state)) {
         // This read came back before RadioLib's own clear, so RX_DONE is still latched for a frame nobody will ever
@@ -1308,13 +1366,38 @@ bool RadioLibInterface::takeCapturedFrame(CapturedRxInfo &info)
         loggedBadLength = rxReadoutBadLength;
         LOG_WARN("RX readout task: %u frames read, %u dropped (ring full), %u bad length", (unsigned)rxReadoutFrames,
                  (unsigned)loggedDropped, (unsigned)loggedBadLength);
+#ifdef MESHTASTIC_RX_FIFO_PROBE
+        if (rxProbeBadLength)
+            LOG_WARN("RX FIFO probe: last bad length read 0x%04x", (unsigned)rxProbeBadLength);
+#endif
     }
+#ifdef MESHTASTIC_RX_FIFO_PROBE
+    static uint32_t loggedForcedDrops = 0;
+    if (rxProbeForcedDrops != loggedForcedDrops) {
+        loggedForcedDrops = rxProbeForcedDrops;
+        LOG_WARN("RX FIFO probe: forced drop %u, a %u-byte frame left unread", (unsigned)loggedForcedDrops,
+                 (unsigned)rxProbeDropLen);
+    }
+#endif
+#ifdef MESHTASTIC_SPI_LOCK_PROBE
+    static uint32_t loggedSpiOutside = 0;
+    if (spiProbeOutside != loggedSpiOutside) {
+        loggedSpiOutside = spiProbeOutside;
+        LOG_WARN("SPI probe: %u radio SPI transactions outside a radio sequence, last from task %s", (unsigned)loggedSpiOutside,
+                 spiProbeLastTask ? pcTaskGetName(spiProbeLastTask) : "?");
+    }
+#endif
     if (rxRingTail == rxRingHead)
         return false;
     __asm__ __volatile__("" ::: "memory"); // read the entry only after seeing the head that published it
     const CapturedFrame &f = rxRing[rxRingTail];
     info = f.info;
     memcpy(&radioBuffer, f.data, info.len);
+#ifdef MESHTASTIC_RX_FIFO_PROBE
+    if (info.probeAfterDrop || (info.probeFifoLevel != 0xFFFF && info.probeFifoLevel != info.len))
+        LOG_WARN("RX FIFO probe: %u-byte frame found %u bytes in the FIFO%s", (unsigned)info.len, (unsigned)info.probeFifoLevel,
+                 info.probeAfterDrop ? ", first readout after a forced drop" : "");
+#endif
     __asm__ __volatile__("" ::: "memory"); // and free its slot only after reading it
     rxRingTail = (uint8_t)((rxRingTail + 1) % rxRingSize);
     return true;
