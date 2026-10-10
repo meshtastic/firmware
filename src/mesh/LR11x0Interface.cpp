@@ -38,6 +38,16 @@ static_assert(sizeof(lr11x0_switch_dio_nums) / sizeof(lr11x0_switch_dio_nums[0])
                   sizeof(lr11x0_switch_dio_consts) / sizeof(lr11x0_switch_dio_consts[0]),
               "LR11x0 switch DIO numbers and constants must describe the same slots");
 
+// MESHTASTIC_PRESTAGE_VIA_PHY routes the prestage payload write through RadioLib's chip-neutral
+// PhysicalLayer::writeTxBuffer() (jgromes/RadioLib#1890) instead of the chip-specific call this branch
+// has been using. The staged bytes are the same; what differs is the command that carries them, and on
+// SX126x writeTxBuffer() also sends a buffer-base command of its own first.
+#ifdef MESHTASTIC_PRESTAGE_VIA_PHY
+#define MESHTASTIC_STAGE_TX_PAYLOAD(n) lora.writeTxBuffer((uint8_t *)&radioBuffer, (n))
+#else
+#define MESHTASTIC_STAGE_TX_PAYLOAD(n) lora.writeBuffer8((uint8_t *)&radioBuffer, (n))
+#endif
+
 // This part has MODE_TX_HP/MODE_GNSS/MODE_WIFI and no MODE_RX_HF.
 static const int32_t lr11x0_rfswitch_mode_map[RFSW_MODE_COUNT] = {
     LR11x0::MODE_STBY,  LR11x0::MODE_RX,       LR11x0::MODE_TX,   LR11x0::MODE_TX_HP,
@@ -452,7 +462,8 @@ template <typename T> int16_t LR11x0Interface<T>::trySetStandby()
     checkNotificationExcept(TRANSMIT_DELAY_COMPLETED);
 
 #ifdef LR11X0_STANDBY_XOSC
-    // SetStandby 0x01 is STBY_XOSC. RadioLib defines RADIOLIB_LR11X0_STANDBY_XOSC as 0x00, which is STBY_RC.
+    // SetStandby 0x01 is STBY_XOSC. Kept literal: RadioLib defined RADIOLIB_LR11X0_STANDBY_XOSC as 0x00 (STBY_RC)
+    // until d25fa56, so the constant means different things either side of this branch's RadioLib pin.
     int16_t err = lora.standby(0x01);
 #else
     int16_t err = lora.standby();
@@ -759,7 +770,7 @@ template <typename T> bool LR11x0Interface<T>::isChannelActive()
         // the buffer alone; a detection's RX may overwrite it, but then no TX follows.
         if (scanForTx && !prestagedLen) {
             const size_t numbytes = encodeRadioBuffer(scanForTx);
-            if (numbytes && lora.writeBuffer8((uint8_t *)&radioBuffer, numbytes) == RADIOLIB_ERR_NONE) {
+            if (numbytes && MESHTASTIC_STAGE_TX_PAYLOAD(numbytes) == RADIOLIB_ERR_NONE) {
                 prestagedLen = numbytes;
                 prestagedId = scanForTx->id;
 #ifdef LR11X0_TX_STAGE_EARLY
@@ -888,7 +899,7 @@ template <typename T> void LR11x0Interface<T>::stageTxEarly(meshtastic_MeshPacke
     // onNotify() calls this outside the scan's sequence. Unlocked, the readout task can land between WriteBuffer8 and
     // its response read and wedge BUSY for RadioLib's whole BUSY timeout.
     RadioSequence seq(this);
-    if (lora.writeBuffer8((uint8_t *)&radioBuffer, numbytes) == RADIOLIB_ERR_NONE)
+    if (MESHTASTIC_STAGE_TX_PAYLOAD(numbytes) == RADIOLIB_ERR_NONE)
         noteTxBuffer(numbytes);
 }
 

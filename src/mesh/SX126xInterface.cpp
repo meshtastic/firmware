@@ -1012,8 +1012,15 @@ template <typename T> void SX126xInterface<T>::prestageTx()
     const size_t numbytes = encodeRadioBuffer(scanForTx);
     if (numbytes == 0 || numbytes > RADIOLIB_SX126X_MAX_PACKET_LENGTH)
         return;
+#ifdef MESHTASTIC_PRESTAGE_VIA_PHY
+    // RadioLib's chip-neutral write (jgromes/RadioLib#1890). It sends a buffer-base command of its own
+    // before the payload, which the raw write below does not: one extra command per scan on this bus.
+    const int16_t res = lora.writeTxBuffer((uint8_t *)&radioBuffer, numbytes);
+#else
     const uint8_t writeBuffer[] = {RADIOLIB_SX126X_CMD_WRITE_BUFFER, 0x00}; // offset 0, RadioLib's TX base
-    if (module.SPIwriteStream(writeBuffer, sizeof(writeBuffer), (uint8_t *)&radioBuffer, numbytes) == RADIOLIB_ERR_NONE) {
+    const int16_t res = module.SPIwriteStream(writeBuffer, sizeof(writeBuffer), (uint8_t *)&radioBuffer, numbytes);
+#endif
+    if (res == RADIOLIB_ERR_NONE) {
         prestagedLen = numbytes;
         prestagedId = scanForTx->id;
     }

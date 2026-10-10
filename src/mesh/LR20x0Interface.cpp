@@ -958,7 +958,15 @@ template <typename T> bool LR20x0Interface<T>::isChannelActive()
         // params keep RX's maximum length, so a detection's RX still takes a full-length frame, into the RX FIFO.
         if (scanForTx) {
             const size_t numbytes = encodeRadioBuffer(scanForTx);
-#ifdef LR2021_PRESTAGE_UPSTREAM
+#if defined(MESHTASTIC_PRESTAGE_VIA_PHY)
+            // writeTxBuffer() clears the appending Tx FIFO itself (jgromes/RadioLib#1890), so this is the whole
+            // staging step. It clears unconditionally, so the FIFO is never stale afterwards - only pending.
+            bool staged = false;
+            if (numbytes && lora.writeTxBuffer((uint8_t *)&radioBuffer, numbytes) == RADIOLIB_ERR_NONE) {
+                txFifoStale = true; // until a TX sends it
+                staged = true;
+            }
+#elif defined(LR2021_PRESTAGE_UPSTREAM)
             // RadioLib empties the FIFO first and remembers the payload, so its stageMode(TX) skips writing it again
             const bool staged = numbytes && lora.prestageTransmit((uint8_t *)&radioBuffer, numbytes) == RADIOLIB_ERR_NONE;
 #else
