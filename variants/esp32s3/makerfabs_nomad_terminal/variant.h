@@ -71,6 +71,8 @@
 // FT6236 touch on the sensor I2C bus
 #define HAS_TOUCHSCREEN 1
 #define SCREEN_TOUCH_INT 41
+#define ENABLE_TOUCH_INT
+#define SCREEN_TOUCH_RST 42
 #define TOUCH_I2C_PORT 0
 #define TOUCH_SLAVE_ADDRESS 0x38
 #define USE_VIRTUAL_KEYBOARD 1
