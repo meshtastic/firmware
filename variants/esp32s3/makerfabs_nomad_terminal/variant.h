@@ -13,6 +13,7 @@
 #define EXT_PWR_DETECT 15
 
 #define HAS_CW2015 1
+#define CW2015_FULL_SOC 93 // gauge reading with the cell held full on USB
 
 #define I2C_SDA 39
 #define I2C_SCL 38

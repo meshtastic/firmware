@@ -1920,6 +1920,10 @@ bool Power::max17048Init()
 
 #if !MESHTASTIC_EXCLUDE_I2C && HAS_CW2015
 
+#ifndef CW2015_FULL_SOC
+#define CW2015_FULL_SOC 100 // gauge SOC that counts as full; boards whose charger tops out lower set their own
+#endif
+
 class CW2015BatteryLevel : public AnalogBatteryLevel
 {
   public:
@@ -1933,7 +1937,7 @@ class CW2015BatteryLevel : public AnalogBatteryLevel
         Wire.write(0x04);
         if (Wire.endTransmission() == 0) {
             if (Wire.requestFrom(CW2015_ADDR, (uint8_t)1)) {
-                data = Wire.read();
+                data = clamp(Wire.read() * 100 / CW2015_FULL_SOC, 0, 100);
             }
         }
         return data;
