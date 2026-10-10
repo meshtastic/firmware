@@ -78,8 +78,7 @@ CannedMessageModule::CannedMessageModule()
         LOG_INFO("CannedMessage: no InputBroker, disabled");
         this->updateState(CANNED_MESSAGE_RUN_STATE_DISABLED);
         disable();
-    }
-    else {
+    } else {
         LOG_INFO("CannedMessageModule is enabled");
         moduleConfig.canned_message.enabled = true;
         this->inputObserver.observe(inputBroker);
