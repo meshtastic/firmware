@@ -940,6 +940,9 @@ void RadioLibInterface::startReceive()
 void RadioLibInterface::pollMissedIrqs()
 {
     // RadioLibInterface::enableInterrupt uses EDGE-TRIGGERED interrupts. Poll as a backup to catch missed edges.
+    // The main loop's flag reads are a sequence too: an LR11x0/LR20x0 status read zeroes RadioLib's per-Module SPI widths
+    // for its transfer, so a readout landing inside one would take the chip's status bytes for the frame length.
+    RadioSequence seq(this);
     if (isReceiving) {
         checkRxDoneIrqFlag();
         checkCadHandoffTimeout();
