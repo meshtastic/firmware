@@ -175,6 +175,10 @@ static void lsIdle()
                     powerFSM.trigger(EVENT_INPUT);
                 }
 #endif
+                else {
+                    // Let loop() service LoRa or another GPIO source before light sleep is attempted again.
+                    powerFSM.trigger(EVENT_WAKE_TIMER);
+                }
                 break;
             }
             default:
