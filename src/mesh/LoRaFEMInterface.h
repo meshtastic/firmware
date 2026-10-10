@@ -3,7 +3,7 @@
 #include "configuration.h"
 #include <stdint.h>
 
-typedef enum { GC1109_PA, KCT8103L_PA, OTHER_FEM_TYPES } LoRaFEMType;
+typedef enum { GC1109_PA, KCT8103L_PA, STATION_G3_FEM, OTHER_FEM_TYPES } LoRaFEMType;
 
 class LoRaFEMInterface
 {
