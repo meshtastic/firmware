@@ -108,6 +108,9 @@ template <class T> class LR20x0Interface : public RadioLibInterface
     bool rxFifoProbe(size_t len, uint16_t &level) override;
 #endif
 
+    /** Empty the RX FIFO of a frame nothing read out: RadioLib empties it only at the end of readData() */
+    void discardUnreadRxFrame() override;
+
   private:
     /** The chip's TX FIFO fill level in bytes; false on SPI failure */
     bool readTxFifoLevel(uint16_t &level);

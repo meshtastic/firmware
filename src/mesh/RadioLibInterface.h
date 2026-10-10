@@ -508,6 +508,10 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     }
 #endif
 
+    /** Drop what the chip still holds of a frame nobody will read out. Only a chip that receives into a FIFO keeps it:
+     *  there the next readout would start with the dropped frame's bytes. */
+    virtual void discardUnreadRxFrame() {}
+
     /// RadioLib returns its negative RADIOLIB_ERR_* codes through the same unsigned microsecond count it
     /// returns durations in, so an error reads as 4294967ms of airtime for one packet and takes the node
     /// off the air until it reboots (#11935). The codes are int16_t, so they wrap to the top of the
@@ -602,9 +606,9 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
     bool removePendingTXPacket(NodeNum from, PacketId id, uint32_t hop_limit_lt) override;
 
-    /** Retire RX_DONE and CRC_ERR for a frame nothing will read out. readData() clears its own, so this is for the
-     * early outs in handleReceiveInterrupt() that return before it: left latched, they would be taken for an unread
-     * frame and re-notified for as long as they sit there. */
+    /** Retire RX_DONE and CRC_ERR, and the chip's copy of the frame, for a frame nothing will read out. readData() clears
+     * its own, so this is for the early outs in handleReceiveInterrupt() that return before it: left latched, they would
+     * be taken for an unread frame and re-notified for as long as they sit there. */
     void clearReadIrqs();
 
     /** @return whether a latched RX_DONE was found and notified, so a caller can say which look caught it */
