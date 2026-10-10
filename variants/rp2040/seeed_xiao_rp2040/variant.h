@@ -5,8 +5,6 @@
 // active low RGB led
 #define LED_POWER_ON 0
 
-// no ADC by default
-#define BATTERY_PIN -1
 // ratio of voltage divider = 3.0 (R1=200k, R2=100k)
 #define ADC_MULTIPLIER 3
 #define BATTERY_SENSE_RESOLUTION_BITS ADC_RESOLUTION
