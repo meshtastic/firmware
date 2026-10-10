@@ -154,11 +154,21 @@ bool RadioLibInterface::canSendImmediately()
         return true;
 }
 
+uint32_t RadioLibInterface::maxRxFrameMsec()
+{
+    // A sender's header can carry any CR up to 4/8, and a hold starts before that header can be read.
+    DataRate_t dr = getDataRate();
+    dr.lora.codingRate = 8;
+    PacketConfig_t pc = getPacketConfig();
+    pc.lora.crcEnabled = true;
+    const RadioLibTime_t usec = iface->calculateTimeOnAir(modemType, dr, pc, MAX_LORA_PAYLOAD_LEN);
+    return isRadioLibTimeError(usec) ? getPacketTime(MAX_LORA_PAYLOAD_LEN) : (usec + 999) / 1000;
+}
+
 bool RadioLibInterface::preambleHoldActive()
 {
-    // Whatever sent the cleared preamble is off the air one max packet later.
-    if (preambleHoldStart && !Throttle::isWithinTimespanMs(
-                                 preambleHoldStart, getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN + sizeof(PacketHeader))))
+    // Whatever sent the cleared preamble is off the air one max frame later.
+    if (preambleHoldStart && !Throttle::isWithinTimespanMs(preambleHoldStart, maxRxFrameMsec()))
         preambleHoldStart = 0;
     return preambleHoldStart != 0;
 }
@@ -170,19 +180,30 @@ void RadioLibInterface::holdOnPreamble()
         return;
     iface->clearIrq(1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED);
     preambleHoldStart = Time::skipZero(Time::getMillis());
+    preambleHoldHeaderSeen = false; // nothing says this preamble belongs to a frame we can decode yet
     LOG_TRACE("Preamble seen, cleared, holding TX");
+}
+
+bool RadioLibInterface::preambleHoldPeekable()
+{
+    // A frame we could decode has shown its header by now, so what is left is noise or LoRa we cannot read. Neither is
+    // worth the rest of a max-frame hold: let the pre-TX CAD listen and decide (#11933).
+    return preambleHoldActive() && !preambleHoldHeaderSeen &&
+           Throttle::hasElapsed(preambleHoldStart, preambleHeaderGraceMsec(sf, bw, preambleLength));
 }
 
 bool RadioLibInterface::receiveDetected(uint16_t irq, unsigned long syncWordHeaderValidFlag, unsigned long preambleDetectedFlag)
 {
+    if (irq & syncWordHeaderValidFlag)
+        preambleHoldHeaderSeen = true; // a real frame, so the hold is no longer a bare preamble the CAD may settle
+
     if (preambleHoldActive())
         return true;
 
     if (irq & syncWordHeaderValidFlag) {
         if (!activeReceiveStart) {
             activeReceiveStart = Time::skipZero(Time::getMillis());
-        } else if (!Throttle::isWithinTimespanMs(activeReceiveStart,
-                                                 getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN + sizeof(PacketHeader)))) {
+        } else if (!Throttle::isWithinTimespanMs(activeReceiveStart, maxRxFrameMsec())) {
             // We should have gotten an RX_DONE IRQ by now if it was really a packet, so ignore HEADER_VALID flag
             activeReceiveStart = 0;
             LOG_TRACE("Ignore false header detection");
@@ -547,7 +568,12 @@ void RadioLibInterface::onNotify(uint32_t notification)
         // If we are not currently in receive mode, then restart the random delay (this can happen if the main thread
         // has placed the unit into standby)  FIXME, how will this work if the chipset is in sleep mode?
         if (!txQueue.empty()) {
-            if (!canSendImmediately()) {
+            const bool clear = canSendImmediately();
+            // An old bare preamble is noise or LoRa we cannot decode; the CAD below judges the channel instead.
+            const bool peek = !clear && sendingPacket == NULL && preambleHoldPeekable();
+            // Snapshotted: the scan below can age the hold out, and the log would then read the cleared stamp.
+            const uint32_t peekHoldStart = peek ? preambleHoldStart : 0;
+            if (!clear && !peek) {
                 setTransmitDelay(); // currently Rx/Tx-ing: reset random delay
             } else {
                 meshtastic_MeshPacket *txp = txQueue.getFront();
@@ -586,6 +612,9 @@ void RadioLibInterface::onNotify(uint32_t notification)
                         setTransmitDelay();
                     } else {
                         LOG_DEBUG("CAD free");
+                        if (peek)
+                            LOG_DEBUG("Preamble hold released, CAD clear %ums after the sighting",
+                                      Time::getMillis() - peekHoldStart);
                         // Send any outgoing packets we have ready as fast as possible to keep the time between channel scan and
                         // actual transmission as short as possible
                         txp = txQueue.dequeue();
@@ -769,6 +798,7 @@ void RadioLibInterface::handleReceiveInterrupt(const CapturedRxInfo *captured)
     const bool wasCadHandoff = cadHandoffRxStart != 0;
     cadHandoffRxStart = 0; // this RX ends the wait either way; the outcome is logged below
     preambleHoldStart = 0; // likewise the reception a held preamble announced
+    preambleHoldHeaderSeen = false;
 
     size_t length;
     if (captured) {
@@ -1371,6 +1401,10 @@ void RadioLibInterface::setStandby()
 bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
 {
     cadHandoffRxStart = 0; // TX ends any handoff wait; completeSending() re-arms RX itself
+    // A peek reaches here with its hold still running; the CAD judged the channel clear and we are about to key up, so
+    // the next packet must not wait out the rest of it.
+    preambleHoldStart = 0;
+    preambleHoldHeaderSeen = false;
 
     /* NOTE: Minimize the actions before startTransmit() to keep the time between
              channel scan and actual transmit as low as possible to avoid collisions. */
