@@ -7,6 +7,17 @@ on:
         required: false
         default: "2025"
         type: string
+      # WiX and the MSI add several minutes to a job every CI run pays for, and only the
+      # release and nightly publishes consume one, so those runs opt in instead.
+      build_msi:
+        required: false
+        default: false
+        type: boolean
+    outputs:
+      # SignPath addresses the artifact to sign by id, not by name.
+      msi_artifact_id:
+        description: Artifact id of the MSI, empty unless build_msi is set
+        value: ${{ jobs.build-Windows.outputs.msi_artifact_id }}
 
 permissions:
   contents: read
@@ -14,6 +25,8 @@ permissions:
 jobs:
   build-Windows:
     runs-on: windows-${{ inputs.windows_ver }}
+    outputs:
+      msi_artifact_id: ${{ steps.msi-artifact.outputs.artifact-id }}
     # Only pushes to the default branch (develop) populate the cache; PR / merge_group runs
     # restore it but never save, so they stop filling up the repo's Actions cache storage.
     env:
@@ -143,6 +156,7 @@ jobs:
             .pio/build/native-windows/meshtasticd.exe
 
       - name: Install WiX
+        if: inputs.build_msi
         shell: pwsh
         run: |
           dotnet tool install --global wix --version 5.0.2
@@ -150,12 +164,15 @@ jobs:
           & "$env:USERPROFILE\.dotnet\tools\wix.exe" extension add -g WixToolset.Util.wixext/5.0.2
 
       - name: Build the MSI and winget manifests
+        if: inputs.build_msi
         shell: pwsh
         run: ./bin/build-winget-package.ps1 -ReleaseTag "v$env:LONG_VERSION" -Validate
         env:
           LONG_VERSION: ${{ steps.version.outputs.long }}
 
       - name: Store the MSI and winget manifests as an artifact
+        id: msi-artifact
+        if: inputs.build_msi
         uses: actions/upload-artifact@v7
         with:
           name: meshtasticd-msi-${{ inputs.windows_ver }}-${{ steps.version.outputs.long }}

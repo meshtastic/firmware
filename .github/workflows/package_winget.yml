@@ -1,7 +1,46 @@
 name: Validate winget manifest
 
+# winget has no channel concept, so each release channel is its own PackageIdentifier.
+# Every version bump ships as Alpha; the subset promoted for wider circulation is
+# republished, same version, under the unsuffixed id that winget treats as the default
+# package. Alpha is therefore always equal to or newer than the unsuffixed package.
+# Nightlies are not published here at all - they are plain downloads off firmware-nightly/.
+
 on:
+  workflow_call:
+    inputs:
+      release_tag:
+        required: true
+        type: string
+      package_identifier:
+        required: true
+        type: string
+      submit:
+        required: false
+        default: false
+        type: boolean
+    secrets:
+      # Named rather than inherited: this job runs a third-party binary, so it gets the
+      # one credential it needs instead of every secret the caller can see.
+      WINGET_TOKEN:
+        required: false
   workflow_dispatch:
+    inputs:
+      # trunk-ignore(checkov/CKV_GHA_7): intentional manual switch for repackaging a published release
+      release_tag:
+        description: "Release tag to package (blank: the newest release)"
+        required: false
+        type: string
+      package_identifier:
+        description: winget PackageIdentifier (Meshtastic.Meshtasticd is the beta/default channel)
+        required: false
+        default: Meshtastic.Meshtasticd.Alpha
+        type: string
+      submit:
+        description: Open a winget-pkgs pull request instead of only validating
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -15,11 +54,12 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Resolve the newest release and download its MSI
+      - name: Resolve the release and download its MSI
         id: release
         shell: pwsh
         run: |
-          $tag = gh release list --limit 1 --json tagName --jq '.[0].tagName'
+          $tag = $env:RELEASE_TAG
+          if (-not $tag) { $tag = gh release list --limit 1 --json tagName --jq '.[0].tagName' }
           if (-not $tag) { throw 'No releases found.' }
           New-Item -ItemType Directory -Force -Path release/download | Out-Null
           gh release download $tag --pattern '*.msi' --dir release/download
@@ -31,15 +71,23 @@ jobs:
           "tag=$tag", "version=$($parsed.Groups[1].Value)", "arch=$($parsed.Groups[2].Value)", "msi=$($msis[0].FullName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
 
       - name: Generate manifests for the published MSI
+        id: manifests
         shell: pwsh
-        run: ./bin/build-winget-package.ps1 -MsiPath $env:MSI_PATH -Version $env:PKG_VERSION -Architecture $env:PKG_ARCH -ReleaseTag $env:RELEASE_TAG -Validate
+        run: |
+          # `winget validate` writes to the success stream, so take the trailing
+          # result object rather than the whole pipeline.
+          $result = ./bin/build-winget-package.ps1 -MsiPath $env:MSI_PATH -Version $env:PKG_VERSION -Architecture $env:PKG_ARCH -ReleaseTag $env:RELEASE_TAG -PackageIdentifier $env:PKG_ID -Validate |
+            Select-Object -Last 1
+          "dir=$($result.ManifestDirectory)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
         env:
           MSI_PATH: ${{ steps.release.outputs.msi }}
           PKG_VERSION: ${{ steps.release.outputs.version }}
           PKG_ARCH: ${{ steps.release.outputs.arch }}
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          PKG_ID: ${{ inputs.package_identifier || 'Meshtastic.Meshtasticd.Alpha' }}
 
       - name: Verify the manifest URL resolves to the published asset
         shell: pwsh
@@ -54,9 +102,37 @@ jobs:
           }
           "URL and hash agree: $url"
 
+      # wingetcreate forks microsoft/winget-pkgs under the token's account and opens the
+      # PR from there, so WINGET_TOKEN needs a classic PAT with public_repo scope.
+      - name: Submit the manifests to winget-pkgs
+        if: inputs.submit
+        shell: pwsh
+        run: |
+          if (-not $env:WINGET_TOKEN) {
+            Write-Host "::warning::WINGET_TOKEN is not set; skipping the winget-pkgs submission for $env:PKG_ID $env:PKG_VERSION."
+            exit 0
+          }
+          # Pinned by version and hash rather than aka.ms/wingetcreate/latest: this binary
+          # is handed WINGET_TOKEN, so a moving redirect would be an unverified dependency
+          # with credentials. Bump both values together.
+          Invoke-WebRequest -OutFile wingetcreate.exe `
+            -Uri "https://github.com/microsoft/winget-create/releases/download/$env:WINGETCREATE_VERSION/wingetcreate.exe"
+          $actual = (Get-FileHash wingetcreate.exe -Algorithm SHA256).Hash
+          if ($actual -ne $env:WINGETCREATE_SHA256) {
+            throw "wingetcreate.exe hashes to $actual, expected $env:WINGETCREATE_SHA256"
+          }
+          ./wingetcreate.exe submit --token $env:WINGET_TOKEN $env:MANIFEST_DIR
+        env:
+          WINGETCREATE_VERSION: v1.12.13.0
+          WINGETCREATE_SHA256: 24042BD37915805615E6CF969AC57C6439124C3FE85823327F5F3FB24BD9FFEA
+          WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
+          MANIFEST_DIR: ${{ steps.manifests.outputs.dir }}
+          PKG_ID: ${{ inputs.package_identifier }}
+          PKG_VERSION: ${{ steps.release.outputs.version }}
+
       - name: Upload the manifests as an artifact
         uses: actions/upload-artifact@v7
         with:
-          name: winget-manifests-${{ steps.release.outputs.version }}
+          name: winget-manifests-${{ inputs.package_identifier || 'Meshtastic.Meshtasticd.Alpha' }}-${{ steps.release.outputs.version }}
           overwrite: true
           path: release/winget/manifests/
