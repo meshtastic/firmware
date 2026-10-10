@@ -92,6 +92,32 @@ constexpr bool isJoyStartButton(unsigned char kbchar)
     return kbchar == joyButtonToKbchar(0x129) || kbchar == joyButtonToKbchar(0x13b);
 }
 
+#ifdef ARCH_PORTDUINO
+#include <string>
+// Translate a config.yaml action name (lowercase) into a broker event, for the gamepad drivers'
+// button maps. Returns INPUT_BROKER_NONE for unknown names so a typo simply leaves a button unmapped.
+inline input_broker_event inputBrokerEventFromAction(const std::string &action)
+{
+    if (action == "select")
+        return INPUT_BROKER_SELECT;
+    if (action == "cancel")
+        return INPUT_BROKER_CANCEL;
+    if (action == "back")
+        return INPUT_BROKER_BACK;
+    if (action == "up")
+        return INPUT_BROKER_UP;
+    if (action == "down")
+        return INPUT_BROKER_DOWN;
+    if (action == "left")
+        return INPUT_BROKER_LEFT;
+    if (action == "right")
+        return INPUT_BROKER_RIGHT;
+    if (action == "user" || action == "userpress")
+        return INPUT_BROKER_USER_PRESS;
+    return INPUT_BROKER_NONE;
+}
+#endif
+
 typedef struct _InputEvent {
     const char *source;
     input_broker_event inputEvent;

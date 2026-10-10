@@ -149,6 +149,41 @@ is `uint16_t[22]`, so extra points are dropped and out-of-range values wrap.
 | `statusmessage-long.yaml` | Copied into a `char[80]`, so it is safe but silently shortened to 79 characters.                                                                        |
 | `configdir-missing.yaml`  | **Crash regression guard** - an unreadable `ConfigDirectory` used to abort meshtasticd (and `--check`) with SIGABRT via an uncaught `filesystem_error`. |
 
+## Bluetooth
+
+BLE support is compiled in only when sdbus-c++ is present, so a valid `Bluetooth:`
+section is clean on a BLE build and reports the build-time gap as a warning on a
+non-BLE build. The assertions only test what holds either way.
+
+| File                         | Expected                                                                                         |
+| ---------------------------- | ------------------------------------------------------------------------------------------------ |
+| `bluetooth.yaml`             | The section parses, both keys are known, and no error is invented.                               |
+| `bluetooth-bad-enabled.yaml` | `Enabled: maybe` is read with a fallback: silently replaced by `false`, so BLE never turns on.   |
+| `bluetooth-bad-adapter.yaml` | `hci1junk` passes the MAC fallback but is not a BlueZ object path, so BLE silently never starts. |
+
+## Admin keys (`Security.AdminKeys`)
+
+The host's config is the authority on who may administer the node: it is root-owned,
+so unlike the persisted protobuf an already-authorized remote cannot rewrite it. Only
+the first three keys fit `config.security.admin_key`; the rest are authorized from
+this list alone.
+
+| File                        | Expected                                                                                            |
+| --------------------------- | --------------------------------------------------------------------------------------------------- |
+| `adminkeys.yaml`            | Two keys, clean.                                                                                    |
+| `adminkeys-bad.yaml`        | A key three characters short of 32 bytes. Read without a fallback, so meshtasticd refuses the file. |
+| `adminkeys-not-a-list.yaml` | One key written as a scalar: nothing in it would be read, so the file is refused.                   |
+
+A short or mistyped key is an error rather than a dropped entry because it would
+authorize something other than what was written - and a file whose only admin key is
+unreadable would otherwise boot a node nobody can administer.
+
+`adminkeys-append/` is a whole tree: a `config.yaml` with one key pointing at a
+`config.d/` holding two more. Admin keys are the one list that appends across files
+rather than the last file winning, so an operator can drop in one file per admin.
+`config.yaml` is always loaded first, so the effective list is deterministic and
+`--output-yaml` can assert it by value.
+
 ## MAC address
 
 The MAC no longer determines NodeNum - that comes from the public key - but a MAC
@@ -170,6 +205,16 @@ single evdev code or a list of them and every one of those buttons drives it.
 | --------------------------- | -------------------------------------------------------------------------------------------------------------- |
 | `joystick-buttons.yaml`     | **Clean, and a regression guard** - four actions, two of them with several codes.                              |
 | `joystick-buttons-bad.yaml` | Three silent no-ops: an action name nothing reads, an evdev name where a code belongs, one code claimed twice. |
+
+## Arcade Bonnet buttons
+
+`Input.ArcadeBonnetButtons` has the same shape as `JoystickButtons`, but names buttons as
+printed on the bonnet (`1A`-`1F`) instead of by evdev code.
+
+| File                     | Expected                                                                                                                  |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
+| `arcade-bonnet.yaml`     | **Clean** - hex address, mixed-case names, single and list forms.                                                         |
+| `arcade-bonnet-bad.yaml` | Four silent no-ops: an address outside 0x20-0x27, an unknown action, a button the bonnet doesn't have, one claimed twice. |
 
 ## CH341 USB-SPI adapters
 
@@ -225,7 +270,8 @@ appears as a surviving pin, a surviving mode row, or a `HIGH` that should be `LO
 ## Running these as a normal boot
 
 `malformed-indent.yaml`, `nonmap-section.yaml`, `module-unknown.yaml`,
-`mac-conflict.yaml` and `hub75-unknown-key.yaml` are also run _without_ `--check`,
+`mac-conflict.yaml`, `hub75-unknown-key.yaml`, `adminkeys-bad.yaml` and
+`adminkeys-not-a-list.yaml` are also run _without_ `--check`,
 where each must be rejected with a non-zero exit. That is the guard on `--check`
 mode not having quietly made the normal path permissive. No other fixture is run
 that way: a config meshtasticd accepts makes it boot a node and block.

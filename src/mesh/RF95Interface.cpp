@@ -85,7 +85,7 @@ RF95Interface::RF95Interface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIO
                              RADIOLIB_PIN_TYPE busy)
     : RadioLibInterface(hal, cs, irq, rst, busy)
 {
-    LOG_DEBUG("RF95Interface(cs=%d, irq=%d, rst=%d, busy=%d)", cs, irq, rst, busy);
+    LOG_DEBUG_RADIO("RF95Interface(cs=%d, irq=%d, rst=%d, busy=%d)", cs, irq, rst, busy);
 }
 
 /** Some boards require GPIO control of tx vs rx paths */
@@ -283,6 +283,8 @@ int16_t RF95Interface::programModemParams()
 
 bool RF95Interface::reconfigure()
 {
+    // A readout between these calls would clear the flags they set up, or move the chip out from under them
+    RadioSequence seq(this);
     RadioLibInterface::reconfigure();
 
     // set mode to standby - a chip that lost its state to a reset/brownout can fail here,
@@ -318,7 +320,7 @@ void RF95Interface::addReceiveMetadata(meshtastic_MeshPacket *mp)
     mp->rx_snr = lora->getSNR();
     mp->rx_rssi = lround(lora->getRSSI());
     mp->has_rx_rssi = true; // rx_rssi has explicit presence - a genuine reading must be marked present to survive encoding
-    LOG_DEBUG("Corrected frequency offset: %f", lora->getFrequencyError());
+    LOG_DEBUG_RADIO("Corrected frequency offset: %f", lora->getFrequencyError());
 }
 
 int16_t RF95Interface::trySetStandby()
@@ -407,7 +409,10 @@ bool RF95Interface::isActivelyReceiving()
 
 bool RF95Interface::sleep()
 {
-    // put chipset into sleep mode
+    // put chipset into sleep mode. trySetStandby() and the sleep command below are one sequence: a readout landing
+    // between them talks to a chip on its way down, and the standby would be undone by the arm its caller can follow
+    // the readout with.
+    RadioSequence seq(this);
     (void)trySetStandby(); // First cancel any active receiving/sending - going to sleep, a failure must not crash
     lora->sleep();
 

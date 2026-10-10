@@ -1,7 +1,10 @@
 #pragma once
+#include <array>
+#include <cctype>
 #include <fstream>
 #include <map>
 #include <memory>
+#include <string>
 #include <unistd.h>
 #include <unordered_map>
 #include <vector>
@@ -26,6 +29,24 @@ extern struct portduino_status_struct {
 // Product strings for auto-configuration
 // {"PRODUCT_STRING", "CONFIG.YAML"}
 // YAML paths are relative to `meshtastic/available.d`
+// The Arcade Bonnet's MCP23017 address straps put it somewhere in 0x20-0x27.
+#define ARCADE_BONNET_ADDR_MIN 0x20
+#define ARCADE_BONNET_ADDR_MAX 0x27
+
+// Arcade Bonnet button names as printed on the board ("1A".."1F") <-> MCP23017 bit 0-5.
+// Returns -1 for anything else; case-insensitive.
+inline int arcadeBonnetPinBit(const std::string &name)
+{
+    if (name.size() != 2 || name[0] != '1')
+        return -1;
+    const char letter = (char)toupper((unsigned char)name[1]);
+    return (letter >= 'A' && letter <= 'F') ? letter - 'A' : -1;
+}
+inline std::string arcadeBonnetPinName(int bit)
+{
+    return std::string("1") + (char)('A' + bit);
+}
+
 inline const std::unordered_map<std::string, std::string> configProducts = {
     {"MESHTOAD", "lora-usb-meshtoad-e22.yaml"},
     {"MESHSTICK", "lora-meshstick-1262.yaml"},
@@ -106,6 +127,13 @@ extern std::ofstream JSONFile;
 extern std::unique_ptr<Ch341Hal> ch341Hal;
 int initGPIOPin(int pinNum, const std::string &gpioChipname, int line);
 bool loadConfig(const char *configPath);
+
+// Admin keys past the three that fit config.security are also tried by Router's admin-key decrypt
+// fallback, so the list is capped to keep that per-packet cost bounded.
+constexpr size_t PORTDUINO_MAX_ADMIN_KEYS = 16;
+bool adminKeyFromBase64(const std::string &text, std::array<uint8_t, 32> &out);
+std::string adminKeyToBase64(const std::array<uint8_t, 32> &key);
+
 static bool ends_with(std::string_view str, std::string_view suffix);
 void getMacAddr(uint8_t *dmac);
 bool MAC_from_string(std::string mac_str, uint8_t *dmac);
@@ -154,6 +182,8 @@ extern struct portduino_config_struct {
     // DIO3_TCXO_VOLTAGE was written out as false or 0 rather than left absent. Diagnostic only,
     // and so not serialized - the key it came from round-trips as absent either way.
     bool dio3_tcxo_voltage_disabled = false;
+    // TCXO start-up delay in us; 0 keeps the build's TCXO_STARTUP_DELAY_US
+    int dio3_tcxo_delay_us = 0;
     // Probe for a TCXO and fall back to the XTAL; runtime twin of the TCXO_OPTIONAL define.
     bool tcxo_optional = false;
     int lora_usb_pid = 0x5512;
@@ -241,6 +271,10 @@ extern struct portduino_config_struct {
     // ("select", "cancel", "back", "up", "down", "left", "right", "user").
     // Empty means the LinuxJoystick driver uses its built-in defaults.
     std::map<int, std::string> joystickButtons;
+    // Adafruit Arcade Bonnet: MCP23017 I2C address (0 = not fitted) and its button map, keyed by
+    // expander bit 0-5 (buttons 1A-1F) -> lowercase action name. Empty means the driver's defaults.
+    int arcadeBonnetAddress = 0;
+    std::map<int, std::string> arcadeBonnetButtons;
     int tbDirection;
     pinMapping userButtonPin = {"Input", "User"};
     pinMapping tbUpPin = {"Input", "TrackballUp"};
@@ -265,10 +299,18 @@ extern struct portduino_config_struct {
     std::string webserver_ssl_cert_path = "/etc/meshtasticd/ssl/certificate.pem";
     int webserverport = -1;
 
+    // Bluetooth (BLE peripheral via BlueZ; Linux only, and only when built with
+    // sdbus-c++)
+    bool bluetooth_enabled = false;
+    std::string bluetooth_adapter = "hci0";
+
     // HostMetrics
     std::string hostMetrics_user_command = "";
     int hostMetrics_interval = 0;
     int hostMetrics_channel = 0;
+
+    // Security
+    std::vector<std::array<uint8_t, 32>> admin_keys;
 
     // config
     bool has_config_overrides = false;
@@ -361,6 +403,8 @@ extern struct portduino_config_struct {
             out << YAML::Key << "DIO2_AS_RF_SWITCH" << YAML::Value << dio2_as_rf_switch;
         if (dio3_tcxo_voltage != 0)
             out << YAML::Key << "DIO3_TCXO_VOLTAGE" << YAML::Value << YAML::Precision(3) << (float)dio3_tcxo_voltage / 1000;
+        if (dio3_tcxo_delay_us != 0)
+            out << YAML::Key << "DIO3_TCXO_DELAY_US" << YAML::Value << dio3_tcxo_delay_us;
         if (tcxo_optional)
             out << YAML::Key << "TCXO_OPTIONAL" << YAML::Value << tcxo_optional;
         if (lora_usb_pid != 0x5512)
@@ -565,6 +609,28 @@ extern struct portduino_config_struct {
             out << YAML::EndMap;
         }
 
+        if (arcadeBonnetAddress != 0) {
+            out << YAML::Key << "ArcadeBonnet" << YAML::Value << YAML::Hex << arcadeBonnetAddress << YAML::Dec;
+            if (!arcadeBonnetButtons.empty()) {
+                std::map<std::string, std::vector<std::string>> pinsByAction;
+                for (const auto &button : arcadeBonnetButtons)
+                    pinsByAction[button.second].push_back(arcadeBonnetPinName(button.first));
+                out << YAML::Key << "ArcadeBonnetButtons" << YAML::Value << YAML::BeginMap;
+                for (const auto &action : pinsByAction) {
+                    out << YAML::Key << action.first << YAML::Value;
+                    if (action.second.size() == 1) {
+                        out << action.second.front();
+                    } else {
+                        out << YAML::Flow << YAML::BeginSeq;
+                        for (const auto &pin : action.second)
+                            out << pin;
+                        out << YAML::EndSeq;
+                    }
+                }
+                out << YAML::EndMap;
+            }
+        }
+
         for (const auto *input_pin : all_pins) {
             if (input_pin->config_section == "Input" && input_pin->enabled) {
                 out << YAML::Key << input_pin->config_name << YAML::Value << YAML::BeginMap;
@@ -641,6 +707,14 @@ extern struct portduino_config_struct {
             out << YAML::EndMap; // Webserver
         }
 
+        // Bluetooth
+        if (bluetooth_enabled) {
+            out << YAML::Key << "Bluetooth" << YAML::Value << YAML::BeginMap;
+            out << YAML::Key << "Enabled" << YAML::Value << bluetooth_enabled;
+            out << YAML::Key << "AdapterId" << YAML::Value << bluetooth_adapter;
+            out << YAML::EndMap; // Bluetooth
+        }
+
         // HostMetrics
         if (hostMetrics_user_command != "") {
             out << YAML::Key << "HostMetrics" << YAML::Value << YAML::BeginMap;
@@ -649,6 +723,16 @@ extern struct portduino_config_struct {
             out << YAML::Key << "Channel" << YAML::Value << hostMetrics_channel;
 
             out << YAML::EndMap; // HostMetrics
+        }
+
+        // Security
+        if (!admin_keys.empty()) {
+            out << YAML::Key << "Security" << YAML::Value << YAML::BeginMap;
+            out << YAML::Key << "AdminKeys" << YAML::Value << YAML::BeginSeq;
+            for (const auto &key : admin_keys)
+                out << adminKeyToBase64(key);
+            out << YAML::EndSeq;
+            out << YAML::EndMap; // Security
         }
 
         // config
