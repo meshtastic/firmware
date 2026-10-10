@@ -17,6 +17,7 @@ The save / load mechanism is a shared NicheGraphics feature.
 #include "./InkHUD.h"
 #include "MessageStore.h"
 #include "graphics/niche/Utils/FlashData.h"
+#include <cstring>
 
 namespace NicheGraphics::InkHUD
 {
@@ -126,6 +127,23 @@ class Persistence
         StoredMessage broadcast; // Most recent broadcast message received
         StoredMessage dm;        // Most recent DM received
         bool wasBroadcast;       // True if most recent broadcast is newer than most recent dm
+
+        // Own copies of the text: a pool offset kept here would go stale as the store churns
+        char broadcastText[MAX_MESSAGE_SIZE] = {};
+        char dmText[MAX_MESSAGE_SIZE] = {};
+
+        void set(bool isBroadcast, const StoredMessage &meta, const char *text, size_t len)
+        {
+            StoredMessage &slot = isBroadcast ? broadcast : dm;
+            char *buf = isBroadcast ? broadcastText : dmText;
+            len = strnlen(text, len < MAX_MESSAGE_SIZE ? len : MAX_MESSAGE_SIZE - 1);
+            memcpy(buf, text, len);
+            buf[len] = '\0';
+            slot = meta;
+            slot.textOffset = 0; // the text is in buf, never in the pool
+            slot.textLength = len;
+        }
+        const char *textOf(bool isBroadcast) const { return isBroadcast ? broadcastText : dmText; }
     };
 
     void loadSettings();
