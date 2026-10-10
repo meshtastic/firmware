@@ -751,6 +751,52 @@ static void test_checkStaleRxFlags_headerAfterPreambleRestartsTheWindow()
     delete radioIf;
 }
 
+// cadHandoffRxEnded() in src/mesh/RadioLibInterface.cpp: whether a CAD->RX handoff's RX has ended without a frame, so
+// the radio thread must end the handoff and re-arm. The readout task used to clear a damaged header's CRC_ERR or
+// HEADER_ERR and return, which left the handoff open and the chip possibly in standby until checkCadHandoffTimeout()
+// re-armed it up to a second later ("CAD>RX timeout" on an LR2021). Guards that every frameless end counts, and that
+// nothing counts outside a handoff, where plain RX leaves HEADER_ERR to checkStaleRxFlags().
+static void test_cadHandoffRxEnded_everyFramelessEndCounts()
+{
+    FakeIrqRadio phy;
+    auto *radioIf = new TestableRadioLibInterface(&phy);
+    radioIf->cadHandoffRxStart = 1000;
+
+    const uint32_t ends[] = {RADIOLIB_IRQ_TIMEOUT, RADIOLIB_IRQ_CRC_ERR, RADIOLIB_IRQ_HEADER_ERR};
+    for (uint32_t irq : ends) {
+        phy.irqFlags = phy.getIrqMapped(1UL << irq);
+        TEST_ASSERT_TRUE_MESSAGE(radioIf->cadHandoffRxEnded(), "a frameless end must close the handoff");
+    }
+
+    delete radioIf;
+}
+
+static void test_cadHandoffRxEnded_anRxStillRunningDoesNotCount()
+{
+    FakeIrqRadio phy;
+    auto *radioIf = new TestableRadioLibInterface(&phy);
+    radioIf->cadHandoffRxStart = 1000;
+
+    phy.irqFlags = 0;
+    TEST_ASSERT_FALSE(radioIf->cadHandoffRxEnded());
+    phy.irqFlags = phy.getIrqMapped((1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED) | (1UL << RADIOLIB_IRQ_HEADER_VALID));
+    TEST_ASSERT_FALSE_MESSAGE(radioIf->cadHandoffRxEnded(), "a frame still arriving must be left to finish");
+
+    delete radioIf;
+}
+
+static void test_cadHandoffRxEnded_falseWithoutAHandoff()
+{
+    FakeIrqRadio phy;
+    auto *radioIf = new TestableRadioLibInterface(&phy);
+    radioIf->cadHandoffRxStart = 0;
+
+    phy.irqFlags = phy.getIrqMapped((1UL << RADIOLIB_IRQ_HEADER_ERR) | (1UL << RADIOLIB_IRQ_TIMEOUT));
+    TEST_ASSERT_FALSE_MESSAGE(radioIf->cadHandoffRxEnded(), "plain RX's flags are not a handoff's end");
+
+    delete radioIf;
+}
+
 void setup()
 {
     delay(10);
@@ -794,6 +840,9 @@ void setup()
     RUN_TEST(test_staleRxFlagAction_barePreambleIsOnlyCleared);
     RUN_TEST(test_staleRxFlagAction_staleHeaderIsRearmed);
     RUN_TEST(test_checkStaleRxFlags_headerAfterPreambleRestartsTheWindow);
+    RUN_TEST(test_cadHandoffRxEnded_everyFramelessEndCounts);
+    RUN_TEST(test_cadHandoffRxEnded_anRxStillRunningDoesNotCount);
+    RUN_TEST(test_cadHandoffRxEnded_falseWithoutAHandoff);
     exit(UNITY_END());
 }
 
