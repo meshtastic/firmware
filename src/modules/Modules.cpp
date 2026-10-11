@@ -66,6 +66,9 @@
 #ifdef DMSHELL_TEST_PEER
 #include "modules/DMShellTestModule.h"
 #endif
+#ifdef BENCH_TRAFFIC_LOAD_PCT
+#include "modules/BenchTrafficModule.h"
+#endif
 #if ARCH_PORTDUINO
 #include "modules/DMShell.h"
 #include "modules/Telemetry/HostMetrics.h"
@@ -234,6 +237,9 @@ void setupModules()
 #endif
 #ifdef DMSHELL_TEST_PEER
     dmShellTestModule = new DMShellTestModule();
+#endif
+#ifdef BENCH_TRAFFIC_LOAD_PCT
+    benchTrafficModule = new BenchTrafficModule();
 #endif
 #if HAS_TELEMETRY
     new DeviceTelemetryModule();
