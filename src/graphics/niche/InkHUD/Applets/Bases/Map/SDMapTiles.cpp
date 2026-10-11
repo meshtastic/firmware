@@ -3,6 +3,8 @@
 #include "SDMapTiles.h"
 
 #include "MapTileUtils.h"
+#include "Throttle.h"
+#include "UptimeClock.h"
 #include "configuration.h"
 
 #if defined(INKHUD_USE_SDCARD_MAP_TILES)
@@ -17,6 +19,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifndef INKHUD_SD_MAP_INDEX_CACHE_PERCENT
+#define INKHUD_SD_MAP_INDEX_CACHE_PERCENT 10U
+#endif
+
 namespace NicheGraphics::InkHUD::SDMapTiles
 {
 namespace
@@ -26,7 +32,10 @@ constexpr char MAP_PATH[] = "/Map/MapTile.bin";
 constexpr uint32_t HEADER_SIZE = 16;
 constexpr uint32_t POSITION_SIZE = 5;
 constexpr uint32_t PAYLOAD_SIZE = 7;
+constexpr uint32_t HEADER_RETRY_MS = 2000;
+constexpr uint32_t STREAMED_INDEX_ENTRIES_PER_BLOCK = 64;
 constexpr size_t MAX_COMPRESSED_TILE_SIZE = MapTileUtils::TILE_BYTES + MapTileUtils::TILE_BYTES / 255 + 16;
+static_assert(INKHUD_SD_MAP_INDEX_CACHE_PERCENT <= 50, "SD map index cache percentage cannot exceed 50");
 
 class SpiLockGuard
 {
@@ -67,6 +76,7 @@ Header header;
 uint8_t *indexData = nullptr;
 uint32_t indexSize = 0;
 uint32_t mapFileSize = 0;
+uint32_t headerRetryAt = 0;
 uint8_t compressedTile[MAX_COMPRESSED_TILE_SIZE];
 
 uint16_t readLittleEndian16(const uint8_t *data)
@@ -107,85 +117,96 @@ bool parseHeader(const uint8_t *rawHeader, uint32_t fileSize, Header &parsed)
     return true;
 }
 
-bool readAt(File *file, uint32_t offset, uint8_t *buffer, size_t size)
+bool readCached(uint32_t offset, uint8_t *buffer, size_t size)
 {
     if (indexData && offset <= indexSize && size <= indexSize - offset) {
         memcpy(buffer, indexData + offset, size);
         return true;
     }
-    return file && file->seek(offset) && file->read(buffer, size) == size;
+    return false;
 }
 
-void loadHeader()
+bool readSdBlock(uint32_t offset, uint8_t *buffer, size_t size, uint32_t *fileSize = nullptr)
 {
-    if (header.checked)
-        return;
+    SpiLockGuard lock(250);
+    if (!lock)
+        return false;
 
-    header.checked = true;
-    SpiLockGuard lock(100, !indexData);
-    if (!lock) {
-        header.checked = false;
-        LOG_WARN("SD map: SPI bus busy, deferring header read");
-        return;
-    }
-
-    File file;
-    File *source = nullptr;
-    uint32_t fileSize = mapFileSize;
-    if (!indexData) {
-        file = SD.open(MAP_PATH, FILE_READ);
-        if (!file)
-            return;
-        source = &file;
-        fileSize = file.size();
-    }
-
-    uint8_t rawHeader[HEADER_SIZE];
-    if (fileSize < sizeof(rawHeader) || !readAt(source, 0, rawHeader, sizeof(rawHeader)) ||
-        !parseHeader(rawHeader, fileSize, header)) {
-        if (file)
-            file.close();
-        return;
-    }
-    const uint32_t positionCount = header.layout == MapTileUtils::LAYOUT_GRID ? header.blockCount : header.tileCount;
-    uint8_t position[POSITION_SIZE];
-    for (uint32_t i = 0; i < positionCount; ++i) {
-        if (!readAt(source, HEADER_SIZE + i * POSITION_SIZE, position, sizeof(position))) {
-            if (file)
-                file.close();
-            return;
-        }
-        if (position[0] <= 22)
-            header.zoomMask |= 1UL << position[0];
-    }
-    if (file)
+    File file = SD.open(MAP_PATH, FILE_READ);
+    if (!file)
+        return false;
+    const size_t currentFileSize = file.size();
+    if (currentFileSize > UINT32_MAX) {
         file.close();
-    header.valid = header.tileCount > 0 && header.zoomMask != 0;
+        return false;
+    }
+    if (fileSize)
+        *fileSize = currentFileSize;
+    const bool readOk =
+        offset <= currentFileSize && size <= currentFileSize - offset && file.seek(offset) && file.read(buffer, size) == size;
+    file.close();
+    return readOk;
 }
 
-int findTile(File *file, int zoom, int x, int y)
+void deferHeaderRetry(const char *reason)
 {
-    uint8_t position[POSITION_SIZE];
-    if (header.layout == MapTileUtils::LAYOUT_SPARSE) {
-        for (uint32_t i = 0; i < header.tileCount; ++i) {
-            if (!readAt(file, HEADER_SIZE + i * POSITION_SIZE, position, sizeof(position)))
-                return -1;
-            if (position[0] == zoom && readLittleEndian16(position + 1) == x && readLittleEndian16(position + 3) == y)
-                return i;
-        }
-        return -1;
-    }
+    headerRetryAt = Time::timerEndsAtMillis(HEADER_RETRY_MS);
+    LOG_WARN("SD map: %s; retrying header", reason);
+}
 
+bool readPositionBlock(uint32_t firstEntry, uint32_t entryCount, uint8_t *buffer)
+{
+    const uint32_t offset = HEADER_SIZE + firstEntry * POSITION_SIZE;
+    const size_t size = entryCount * POSITION_SIZE;
+    if (readCached(offset, buffer, size))
+        return true;
+    const bool readOk = readSdBlock(offset, buffer, size);
+    yield();
+    return readOk;
+}
+
+bool scanZoomMask(Header &parsed)
+{
+    const uint32_t positionCount = parsed.layout == MapTileUtils::LAYOUT_GRID ? parsed.blockCount : parsed.tileCount;
+    uint8_t positions[STREAMED_INDEX_ENTRIES_PER_BLOCK * POSITION_SIZE];
+    for (uint32_t first = 0; first < positionCount; first += STREAMED_INDEX_ENTRIES_PER_BLOCK) {
+        const uint32_t count = min(STREAMED_INDEX_ENTRIES_PER_BLOCK, positionCount - first);
+        if (!readPositionBlock(first, count, positions))
+            return false;
+        for (uint32_t i = 0; i < count; ++i) {
+            const uint8_t zoom = positions[i * POSITION_SIZE];
+            if (zoom <= 22)
+                parsed.zoomMask |= 1UL << zoom;
+        }
+    }
+    return true;
+}
+
+int findTile(int zoom, int x, int y)
+{
+    const uint32_t positionCount = header.layout == MapTileUtils::LAYOUT_GRID ? header.blockCount : header.tileCount;
     const uint32_t tilesPerBlock = (uint32_t)header.gridColumns * header.gridRows;
-    for (uint32_t block = 0; block < header.blockCount; ++block) {
-        if (!readAt(file, HEADER_SIZE + block * POSITION_SIZE, position, sizeof(position)))
+    uint8_t positions[STREAMED_INDEX_ENTRIES_PER_BLOCK * POSITION_SIZE];
+    for (uint32_t first = 0; first < positionCount; first += STREAMED_INDEX_ENTRIES_PER_BLOCK) {
+        const uint32_t count = min(STREAMED_INDEX_ENTRIES_PER_BLOCK, positionCount - first);
+        if (!readPositionBlock(first, count, positions)) {
+            LOG_WARN("SD map: index block read failed at entry %lu", (unsigned long)first);
             return -1;
-        const int originX = readLittleEndian16(position + 1);
-        const int originY = readLittleEndian16(position + 3);
-        if (position[0] != zoom || x < originX || x >= originX + header.gridColumns || y < originY ||
-            y >= originY + header.gridRows)
-            continue;
-        return block * tilesPerBlock + (x - originX) * header.gridRows + (y - originY);
+        }
+        for (uint32_t i = 0; i < count; ++i) {
+            const uint8_t *position = positions + i * POSITION_SIZE;
+            if (header.layout == MapTileUtils::LAYOUT_SPARSE) {
+                if (position[0] == zoom && readLittleEndian16(position + 1) == x && readLittleEndian16(position + 3) == y)
+                    return first + i;
+                continue;
+            }
+
+            const int originX = readLittleEndian16(position + 1);
+            const int originY = readLittleEndian16(position + 3);
+            if (position[0] == zoom && x >= originX && x < originX + header.gridColumns && y >= originY &&
+                y < originY + header.gridRows)
+                return (first + i) * tilesPerBlock + (x - originX) * header.gridRows + (y - originY);
+        }
     }
     return -1;
 }
@@ -196,71 +217,80 @@ void preload()
 {
     if (header.checked || indexData)
         return;
-
-    SpiLockGuard lock(1000);
-    if (!lock) {
-        LOG_WARN("SD map: SPI bus busy during preload");
+    if (headerRetryAt && !Throttle::deadlinePassed(headerRetryAt))
         return;
-    }
+    headerRetryAt = 0;
 
-    File file = SD.open(MAP_PATH, FILE_READ);
-    if (!file) {
-        LOG_DEBUG("SD map: %s not found during preload", MAP_PATH);
-        header.checked = true;
-        return;
-    }
-
-    const size_t fileSize = file.size();
     uint8_t rawHeader[HEADER_SIZE];
-    if (!fileSize || fileSize > UINT32_MAX || file.read(rawHeader, sizeof(rawHeader)) != sizeof(rawHeader)) {
-        LOG_WARN("SD map: invalid header or size %lu", (unsigned long)fileSize);
-        file.close();
-        header.checked = true;
+    uint32_t fileSize = 0;
+    if (!readSdBlock(0, rawHeader, sizeof(rawHeader), &fileSize)) {
+        deferHeaderRetry("header read failed");
         return;
     }
 
     Header parsed;
     if (!parseHeader(rawHeader, fileSize, parsed)) {
         LOG_WARN("SD map: invalid tile index");
-        file.close();
-        header.checked = true;
+        parsed.checked = true;
+        header = parsed;
         return;
     }
 
+    uint8_t *candidateIndex = nullptr;
+    uint32_t freePsram = 0;
+    uint32_t totalPsram = 0;
+    uint32_t cacheLimit = 0;
 #if defined(ARCH_ESP32)
-    indexData = static_cast<uint8_t *>(ps_malloc(parsed.dataOffset));
+    freePsram = ESP.getFreePsram();
+    totalPsram = ESP.getPsramSize();
+    cacheLimit = ((uint64_t)freePsram * INKHUD_SD_MAP_INDEX_CACHE_PERCENT) / 100U;
+    if (parsed.dataOffset <= cacheLimit)
+        candidateIndex = static_cast<uint8_t *>(ps_malloc(parsed.dataOffset));
 #endif
-    if (!indexData) {
-        LOG_WARN("SD map: insufficient PSRAM to cache %lu-byte index; using streamed index", (unsigned long)parsed.dataOffset);
-        file.close();
-        return;
+
+    if (candidateIndex) {
+        constexpr size_t CACHE_READ_BLOCK_SIZE = 4096;
+        bool cacheReadOk = true;
+        for (uint32_t offset = 0; offset < parsed.dataOffset; offset += CACHE_READ_BLOCK_SIZE) {
+            const size_t size = min((uint32_t)CACHE_READ_BLOCK_SIZE, parsed.dataOffset - offset);
+            if (!readSdBlock(offset, candidateIndex + offset, size)) {
+                cacheReadOk = false;
+                break;
+            }
+            yield();
+        }
+        if (!cacheReadOk) {
+            free(candidateIndex);
+            deferHeaderRetry("index preload failed");
+            return;
+        }
+        indexData = candidateIndex;
+        indexSize = parsed.dataOffset;
+        mapFileSize = fileSize;
+        LOG_INFO("SD map: cached %lu-byte index for %lu-byte map (limit=%lu, PSRAM=%lu/%lu free)", (unsigned long)indexSize,
+                 (unsigned long)mapFileSize, (unsigned long)cacheLimit, (unsigned long)(freePsram - indexSize),
+                 (unsigned long)totalPsram);
+    } else {
+        LOG_INFO("SD map: streaming %lu-byte index (limit=%lu, PSRAM=%lu/%lu free)", (unsigned long)parsed.dataOffset,
+                 (unsigned long)cacheLimit, (unsigned long)freePsram, (unsigned long)totalPsram);
     }
 
-    if (!file.seek(0) || file.read(indexData, parsed.dataOffset) != parsed.dataOffset) {
-        LOG_WARN("SD map: index preload failed");
-        free(indexData);
-        indexData = nullptr;
-        file.close();
-        return;
-    }
-    indexSize = parsed.dataOffset;
-    mapFileSize = fileSize;
-    file.close();
-    LOG_INFO("SD map: cached %lu-byte index for %lu-byte map", (unsigned long)parsed.dataOffset, (unsigned long)fileSize);
-
-    loadHeader();
-    if (!header.valid) {
-        LOG_WARN("SD map: preloaded file is invalid");
+    if (!scanZoomMask(parsed)) {
         free(indexData);
         indexData = nullptr;
         indexSize = 0;
         mapFileSize = 0;
+        deferHeaderRetry("position index read failed");
+        return;
     }
+    parsed.valid = parsed.tileCount > 0 && parsed.zoomMask != 0;
+    parsed.checked = true;
+    header = parsed;
 }
 
 bool hasZoom(int zoom)
 {
-    loadHeader();
+    preload();
     return header.valid && zoom >= 0 && zoom <= 22 && (header.zoomMask & (1UL << zoom));
 }
 
@@ -269,28 +299,14 @@ bool readTile(int zoom, int x, int y, uint8_t *destination, size_t destinationSi
     if (!destination || destinationSize < MapTileUtils::TILE_BYTES || !hasZoom(zoom))
         return false;
 
-    uint8_t payload[PAYLOAD_SIZE];
-    if (indexData) {
-        const int tileIndex = findTile(nullptr, zoom, x, y);
-        if (tileIndex < 0 || !readAt(nullptr, header.payloadOffset + tileIndex * PAYLOAD_SIZE, payload, sizeof(payload)))
-            return false;
-    } else {
-        SpiLockGuard lock(250);
-        if (!lock) {
-            LOG_WARN("SD map: SPI bus busy, skipping tile z%d/%d/%d", zoom, x, y);
-            return false;
-        }
+    const int tileIndex = findTile(zoom, x, y);
+    if (tileIndex < 0)
+        return false;
 
-        File file = SD.open(MAP_PATH, FILE_READ);
-        if (!file)
-            return false;
-        const int tileIndex = findTile(&file, zoom, x, y);
-        const bool readOk =
-            tileIndex >= 0 && readAt(&file, header.payloadOffset + tileIndex * PAYLOAD_SIZE, payload, sizeof(payload));
-        file.close();
-        if (!readOk)
-            return false;
-    }
+    uint8_t payload[PAYLOAD_SIZE];
+    const uint32_t payloadOffset = header.payloadOffset + tileIndex * PAYLOAD_SIZE;
+    if (!readCached(payloadOffset, payload, sizeof(payload)) && !readSdBlock(payloadOffset, payload, sizeof(payload)))
+        return false;
 
     const uint8_t kind = payload[0];
     if (kind == MapTileUtils::KIND_WHITE || kind == MapTileUtils::KIND_BLACK) {
@@ -304,20 +320,9 @@ bool readTile(int zoom, int x, int y, uint8_t *destination, size_t destinationSi
         dataOffset > header.dataSize || compressedSize > header.dataSize - dataOffset)
         return false;
 
-    {
-        SpiLockGuard lock(250);
-        if (!lock) {
-            LOG_WARN("SD map: SPI bus busy, skipping tile data z%d/%d/%d", zoom, x, y);
-            return false;
-        }
-
-        File file = SD.open(MAP_PATH, FILE_READ);
-        if (!file)
-            return false;
-        const bool readOk = readAt(&file, header.dataOffset + dataOffset, compressedTile, compressedSize);
-        file.close();
-        if (!readOk)
-            return false;
+    if (!readSdBlock(header.dataOffset + dataOffset, compressedTile, compressedSize)) {
+        LOG_WARN("SD map: tile data read failed z%d/%d/%d", zoom, x, y);
+        return false;
     }
 
     return MapTileUtils::decompress(compressedTile, compressedSize, destination, MapTileUtils::TILE_BYTES) ==
