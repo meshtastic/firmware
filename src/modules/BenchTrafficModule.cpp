@@ -89,24 +89,37 @@ int32_t BenchTrafficModule::runOnce()
 #if BENCH_TRAFFIC_LOAD_PCT == 0
     return IDLE_POLL_MS; // the load-0 arm: the same image and node on the air, sending nothing of its own
 #else
-    const uint32_t now = millis();
+    uint32_t now = millis();
     if (!firstSendMs) {
         firstSendMs = now ? now : 1;
         lastSummaryMs = firstSendMs;
+        nextDueMs = now;
     }
+    if (Throttle::deadlinePassedAt(now, nextDueMs))
+        lateMs += now - nextDueMs;
     const uint32_t airMs = sendOne();
+    const uint32_t after = millis();
+    sendBlockedMs += after - now;
+    now = after;
     if (!Throttle::isWithinTimespanMs(lastSummaryMs, BENCH_TRAFFIC_SUMMARY_MS)) {
         lastSummaryMs = now;
         const uint32_t elapsed = now - firstSendMs;
-        LOG_INFO("BenchTraffic: %u sent, %u skipped for duty cycle, %u ms offered in %u ms (%u.%u%%)", (unsigned)sent,
-                 (unsigned)skippedDutyCycle, (unsigned)offeredAirMs, (unsigned)elapsed,
+        LOG_INFO("BenchTraffic: %u sent, %u skipped for duty cycle, %u ms offered in %u ms (%u.%u%%), send blocked %u ms/frame, "
+                 "started late %u ms/frame, %u reanchors",
+                 (unsigned)sent, (unsigned)skippedDutyCycle, (unsigned)offeredAirMs, (unsigned)elapsed,
                  (unsigned)(elapsed ? offeredAirMs * 100ULL / elapsed : 0),
-                 (unsigned)(elapsed ? offeredAirMs * 1000ULL / elapsed % 10 : 0));
+                 (unsigned)(elapsed ? offeredAirMs * 1000ULL / elapsed % 10 : 0), (unsigned)(sent ? sendBlockedMs / sent : 0),
+                 (unsigned)(sent ? lateMs / sent : 0), (unsigned)reanchors);
     }
     // Mean gap = this frame's airtime / load, so the offered fraction averages BENCH_TRAFFIC_LOAD_PCT
     const uint32_t meanMs = (airMs ? airMs : 50) * 100 / BENCH_TRAFFIC_LOAD_PCT;
-    const uint32_t gapMs = exponentialMs(meanMs);
-    return gapMs ? gapMs : 1;
+    nextDueMs += exponentialMs(meanMs);
+    // Behind schedule: send at once, but past a few mean gaps restart from now rather than burst to catch up
+    if (Throttle::deadlinePassedAt(now, nextDueMs + 4 * meanMs)) {
+        reanchors++;
+        nextDueMs = now;
+    }
+    return Throttle::deadlinePassedAt(now, nextDueMs) ? 1 : (int32_t)(nextDueMs - now);
 #endif
 }
 
