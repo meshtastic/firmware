@@ -15,6 +15,7 @@
 #include "configuration.h"
 #include "gps/RTC.h"
 #include "mesh/Default.h"
+#include "mesh/MeshService.h"
 #include "mesh/NextHopRouter.h"
 #include "mesh/NodeDB.h"
 #include "mesh/RadioInterface.h"
@@ -855,15 +856,30 @@ void test_implicit_ack_for_opaque_own_packet(void)
     overheard.which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
     overheard.encrypted.size = 32;
 
+    // The ack is minted through the global router and looped back to the phone, so observe it there.
+    // Globals are restored before asserting: a failed assertion longjmps past anything after it.
+    Router *savedRouter = router;
+    MeshService *savedService = service;
+    MeshService *phone = new MeshService();
+    router = reliableShim;
+    service = phone;
     reliableShim->implicitAckForTest(&overheard);
-
-    TEST_ASSERT_EQUAL_UINT32(1, mockRoutingModule->ackNaks.size());
-    const auto &ack = mockRoutingModule->ackNaks.front();
-    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_NONE, std::get<0>(ack));
-    TEST_ASSERT_EQUAL_UINT32(kLocalNode, std::get<1>(ack)); // addressed to us -> reaches the phone
-    TEST_ASSERT_EQUAL_UINT32(original.id, std::get<2>(ack));
-
+    meshtastic_MeshPacket ack = meshtastic_MeshPacket_init_zero;
+    size_t toPhone = 0;
+    while (meshtastic_MeshPacket *queued = phone->getForPhone()) {
+        if (toPhone++ == 0)
+            ack = *queued;
+        phone->releaseToPool(queued);
+    }
+    router = savedRouter;
+    service = savedService;
+    delete phone;
     reliableShim->clearPendingForTest();
+
+    TEST_ASSERT_EQUAL_UINT32(1, toPhone);
+    TEST_ASSERT_EQUAL(meshtastic_PortNum_ROUTING_APP, ack.decoded.portnum);
+    TEST_ASSERT_EQUAL_UINT32(kLocalNode, ack.to); // addressed to us -> reaches the phone
+    TEST_ASSERT_EQUAL_UINT32(original.id, ack.decoded.request_id);
 }
 
 // Someone else's traffic must never mint an ACK, even with a colliding id.
