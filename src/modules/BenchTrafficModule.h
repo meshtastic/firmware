@@ -21,6 +21,10 @@ class BenchTrafficModule : public SinglePortModule, private concurrency::OSThrea
     uint32_t offeredAirMs = 0;
     uint32_t firstSendMs = 0;
     uint32_t lastSummaryMs = 0;
+    uint32_t nextDueMs = 0;     // arrivals are scheduled on this timeline, not after each send, so send time adds no gap
+    uint32_t sendBlockedMs = 0; // total time sendOne() held the loop
+    uint32_t lateMs = 0;        // total time runOnce() started after its due time, i.e. other work held the loop
+    uint32_t reanchors = 0;     // times the schedule fell too far behind and restarted from now
 
     /// Queue one frame and return its expected airtime in ms, or 0 if nothing was sent
     uint32_t sendOne();
