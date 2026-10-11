@@ -627,7 +627,7 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
 #if defined(LORA_DIO1) || defined(SX128X_DIO1)
     const int wokeDio1 = loraWakeDio1Pin(); // must match what enableLoraInterrupt() armed
 #if SOC_PM_SUPPORT_EXT_WAKEUP
-    if (wokeDio1 >= 0) {
+    if (wokeDio1 >= 0 && radioType != RF95_RADIO) {
 #else
     if (wokeDio1 >= 0 && radioType != RF95_RADIO) {
 #endif
@@ -706,7 +706,7 @@ void enableLoraInterrupt()
 #elif SOC_PM_SUPPORT_EXT_WAKEUP && (defined(LORA_DIO1) || defined(SX128X_DIO1))
     const int loraDio1 = loraWakeDio1Pin();
     esp_err_t res;
-    if (loraDio1 >= 0) {
+    if (loraDio1 >= 0 && radioType != RF95_RADIO) {
         res = gpio_pulldown_en((gpio_num_t)loraDio1);
         if (res != ESP_OK) {
             LOG_ERROR("gpio_pulldown_en(lora dio1) result %d", res);
@@ -726,7 +726,7 @@ void enableLoraInterrupt()
     loraFEMInterface.setRxModeEnableWhenMCUSleep();
 #endif
 
-    if (loraDio1 >= 0) {
+    if (loraDio1 >= 0 && radioType != RF95_RADIO) {
         LOG_INFO("Wake on LoRa DIO1 (GPIO%02d) gpio interrupt", loraDio1);
         armLoraWakePin((gpio_num_t)loraDio1);
     }
