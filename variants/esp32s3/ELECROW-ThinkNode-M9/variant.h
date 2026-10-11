@@ -36,7 +36,9 @@ extern int m9Version;
 #define PIN_GPS_PPS 4
 #define GPS_TX_PIN 3
 #define GPS_RX_PIN 2
-#define GPS_RTC_INT 10
+// AG3352 without RTC_INT: sleep is $PAIR003 then EN low; EN only gates the core, backup data survives.
+// IO10 is the AG3352 idle_int: rests HIGH, pulled LOW while sending the sleep command so it is heard.
+#define GPS_SLEEP_INT 10
 #define PIN_GPS_EN 11
 #define GPS_EN_ACTIVE (m9Version > 1 ? HIGH : LOW)
 #define GPS_THREAD_INTERVAL 50

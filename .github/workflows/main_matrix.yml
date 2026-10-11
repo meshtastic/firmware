@@ -152,6 +152,8 @@ jobs:
       version: ${{ needs.version.outputs.long }}
       pio_env: ${{ matrix.build.board }}
       platform: ${{ matrix.build.platform }}
+    secrets:
+      MEMBROWSE_API_KEY: ${{ secrets.MEMBROWSE_API_KEY }}
 
   build-debian-src:
     if: github.repository_owner == 'meshtastic' && github.event_name != 'schedule' && github.event.inputs.nightly != 'true'

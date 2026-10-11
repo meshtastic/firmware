@@ -83,6 +83,19 @@ extern MemGet memGet;
 #define LOG_TRACE(...)
 #endif
 
+// RADIO_DEBUG=1 enables verbose LoRa radio diagnostics: chip bring-up detail (TCXO/RF-switch probing,
+// pin and current-limit lines) and per-event driver chatter (standby, sleep, AGC reset, per-RX
+// frequency-offset reads, Tx delay). Costs no flash when off, which keeps console I/O off the radio
+// path on platforms where a log line is expensive. Packet lines and LOG_WARN/LOG_ERROR stay on.
+#ifndef RADIO_DEBUG
+#define RADIO_DEBUG 0
+#endif
+#if RADIO_DEBUG
+#define LOG_DEBUG_RADIO(...) LOG_DEBUG(__VA_ARGS__)
+#else
+#define LOG_DEBUG_RADIO(...) ((void)0)
+#endif
+
 #if defined(DEBUG_HEAP)
 #define LOG_HEAP(...) DEBUG_PORT.log(MESHTASTIC_LOG_LEVEL_HEAP, __VA_ARGS__)
 

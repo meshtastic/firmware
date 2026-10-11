@@ -239,6 +239,7 @@ static bool heartbeat = false;
 
 #include "graphics/ScreenFonts.h"
 #include <Throttle.h>
+#include <cmath>
 
 // Usage: int stringWidth = formatDateTime(datetimeStr, sizeof(datetimeStr), rtc_sec, display);
 // End Functions to write date/time to the screen
@@ -318,7 +319,7 @@ void Screen::showSimpleBanner(const char *message, uint32_t durationMs)
 }
 
 // Called to trigger a banner with custom message and duration
-void Screen::showOverlayBanner(BannerOverlayOptions banner_overlay_options)
+void Screen::showOverlayBanner(const BannerOverlayOptions &banner_overlay_options)
 {
 #ifdef USE_EINK
     EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // Skip full refresh for all overlay menus
@@ -491,7 +492,7 @@ static void drawGamesFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
 float Screen::estimatedHeading(double lat, double lon)
 {
     static double oldLat, oldLon;
-    static float b = -1.0f;
+    static float b = NAN;
     static uint32_t lastHeadingAtMs = 0;
     const uint32_t now = Time::stampMillis();
     const uint32_t gpsUpdateIntervalSecs =
@@ -520,7 +521,7 @@ float Screen::estimatedHeading(double lat, double lon)
     if (d < 10) { // haven't moved enough, keep previous heading (invalid until first real movement)
         if (lastHeadingAtMs != 0 && (now - lastHeadingAtMs) >= headingStaleMs) {
             // Heading is stale after prolonged no-movement; force reacquire.
-            b = -1.0f;
+            b = NAN;
             oldLat = lat;
             oldLon = lon;
         }

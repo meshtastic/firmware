@@ -84,6 +84,12 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
 #endif
 
             nodeDB->setLocalPosition(p, true);
+            // Keep `precision` current for this channel even on this early-return path -
+            // alterReceivedProtobuf() runs right after handleReceived() on this same packet
+            // (MeshModule::callModules()) and depends on it to truncate correctly, whether this
+            // packet is our own already-truncated broadcast (re-truncating is a no-op) or a
+            // phone-submitted one that still needs it applied.
+            precision = getPositionPrecisionForChannel(mp.channel);
             return false;
         } else {
             LOG_TRACE("Incoming update from MYSELF");

@@ -1,0 +1,35 @@
+name: Post MemBrowse Comment
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  post-membrowse-comment:
+    # Skipped CI runs upload nothing, so the summary lookup would 404.
+    if: >
+      github.repository == 'meshtastic/firmware' &&
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion != 'cancelled' &&
+      github.event.workflow_run.conclusion != 'skipped'
+    continue-on-error: true
+    runs-on: ubuntu-24.04
+    steps:
+      # Only for gh to resolve the repo from the git remote; gh authenticates with GH_TOKEN.
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Post combined PR comment
+        uses: membrowse/membrowse-action/comment-action@v1
+        # gh posts the comment; without a token it fails and the action only logs a warning.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        with:
+          api_key: ${{ secrets.MEMBROWSE_API_KEY }}
+          commit: ${{ github.event.workflow_run.head_sha }}
