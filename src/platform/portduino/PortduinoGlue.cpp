@@ -1136,6 +1136,7 @@ bool loadConfig(const char *configPath)
                 // an absent key. Kept apart so --check can see it contradict TCXO_OPTIONAL.
                 portduino_config.dio3_tcxo_voltage_disabled =
                     yamlConfig["Lora"]["DIO3_TCXO_VOLTAGE"] && portduino_config.dio3_tcxo_voltage == 0;
+                portduino_config.dio3_tcxo_delay_us = yamlConfig["Lora"]["DIO3_TCXO_DELAY_US"].as<int>(0);
                 // Try both oscillators rather than requiring the user to know which is fitted.
                 portduino_config.tcxo_optional = yamlConfig["Lora"]["TCXO_OPTIONAL"].as<bool>(false);
 
@@ -1397,6 +1398,32 @@ bool loadConfig(const char *configPath)
                         }
                         if (code != 0)
                             portduino_config.joystickButtons[code] = action;
+                    }
+                }
+            }
+
+            // Only when present, so a later config.d file with its own Input section keeps it.
+            if (yamlConfig["Input"]["ArcadeBonnet"])
+                portduino_config.arcadeBonnetAddress = yamlConfig["Input"]["ArcadeBonnet"].as<int>(0);
+            if (yamlConfig["Input"]["ArcadeBonnetButtons"]) {
+                // action name -> bonnet button name (1A..1F) or a list of them, stored inverted as
+                // expander bit -> lowercase action, like JoystickButtons.
+                for (const auto &button : yamlConfig["Input"]["ArcadeBonnetButtons"]) {
+                    std::string action = button.first.as<std::string>("");
+                    for (auto &c : action)
+                        c = tolower(c);
+                    if (action == "")
+                        continue;
+                    std::vector<YAML::Node> pinNodes;
+                    if (button.second.IsSequence())
+                        for (const auto &pinNode : button.second)
+                            pinNodes.push_back(pinNode);
+                    else
+                        pinNodes.push_back(button.second);
+                    for (const auto &pinNode : pinNodes) {
+                        const int bit = arcadeBonnetPinBit(pinNode.as<std::string>(""));
+                        if (bit >= 0)
+                            portduino_config.arcadeBonnetButtons[bit] = action;
                     }
                 }
             }

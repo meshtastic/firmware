@@ -64,12 +64,18 @@ void CryptoEngine::generateKeyPair(uint8_t *pubKey, uint8_t *privKey)
  * regenerate a public key with Curve25519.
  *
  * @param pubKey The destination for the public key.
- * @param privKey The source for the private key.
+ * @param privKey The source for the private key, clamped in place.
  */
 bool CryptoEngine::regeneratePublicKey(uint8_t *pubKey, uint8_t *privKey)
 {
     if (!memfll(privKey, 0, sizeof(private_key))) {
-        Curve25519::eval(pubKey, privKey, 0);
+        // x25519 uses the scalar as given but the XEdDSA signing key is clamped, so clamp here to keep them one key.
+        const uint8_t first = privKey[0], last = privKey[31];
+        privKey[0] &= 0xF8;
+        privKey[31] = (privKey[31] & 0x7F) | 0x40;
+        if (privKey[0] != first || privKey[31] != last)
+            LOG_WARN("Private key was not clamped; its public key and node number change");
+        x25519(pubKey, privKey, nullptr);
         if (Curve25519::isWeakPoint(pubKey)) {
             LOG_ERROR("PKI key generation failed. Specified private key results in a weak");
             memset(pubKey, 0, 32);
@@ -199,11 +205,11 @@ bool CryptoEngine::xeddsa_verify(const uint8_t *pubKey, uint32_t fromNode, uint3
         curve_to_ed_pub(pubKey, cached_ed_pubkey);
         memcpy(cached_curve_pubkey, pubKey, 32);
     }
-    uint8_t sigBuf[XEDDSA_SIGN_BUF_LEN];
+    alignas(4) uint8_t sigBuf[XEDDSA_SIGN_BUF_LEN]; // aligned: hardware verifiers DMA it in place
     size_t sigLen = buildSigningBuffer(sigBuf, sizeof(sigBuf), fromNode, packetId, toNode, d);
     if (sigLen == 0)
         return false;
-    return XEdDSA::verify(signature, cached_ed_pubkey, sigBuf, sigLen);
+    return ed25519Verify(signature, cached_ed_pubkey, sigBuf, sigLen);
 }
 
 void CryptoEngine::curve_to_ed_pub(const uint8_t *curve_pubkey, uint8_t *ed_pubkey)
@@ -398,7 +404,7 @@ void CryptoEngine::clearSharedSecretCache()
  */
 bool CryptoEngine::setCryptoSharedSecret(const uint8_t *peerPubKey)
 {
-    // setDHPublicKey takes a mutable buffer (Curve25519::dh2 works in place), so copy the peer key.
+    // setDHPublicKey takes a mutable buffer, so copy the peer key.
     uint8_t peer[32];
     memcpy(peer, peerPubKey, 32);
 
@@ -509,17 +515,29 @@ void CryptoEngine::aesEncrypt(uint8_t *in, uint8_t *out)
 
 bool CryptoEngine::setDHPublicKey(uint8_t *pubKey)
 {
-    uint8_t local_priv[32];
-    memcpy(shared_key, pubKey, 32);
-    memcpy(local_priv, private_key, 32);
-    // Calculate the shared secret with the specified node's public key and our private key
-    // This includes an internal weak key check, which among other things looks for an all 0 public key and shared key.
-    if (!Curve25519::dh2(shared_key, local_priv)) {
+    // Same checks as Curve25519::dh2 (rejects e.g. an all-0 public or shared key); all of them run
+    // so timing doesn't depend on which one fails.
+    uint8_t weak = Curve25519::isWeakPoint(pubKey);
+    weak |= x25519(shared_key, private_key, pubKey) ? 0 : 1;
+    weak |= Curve25519::isWeakPoint(shared_key);
+    if (weak) {
         LOG_WARN("Curve25519DH step 2 failed");
         return false;
     }
     return true;
 }
+
+bool CryptoEngine::x25519(uint8_t *out, const uint8_t *scalar, const uint8_t *point)
+{
+    return Curve25519::eval(out, scalar, point);
+}
+
+#if !(MESHTASTIC_EXCLUDE_XEDDSA)
+bool CryptoEngine::ed25519Verify(const uint8_t *signature, const uint8_t *edPubKey, const uint8_t *msg, size_t msgLen)
+{
+    return XEdDSA::verify(signature, edPubKey, msg, msgLen);
+}
+#endif
 
 void CryptoEngine::setPendingPublicKey(uint32_t node, const uint8_t *key)
 {
