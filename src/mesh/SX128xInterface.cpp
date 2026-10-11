@@ -69,6 +69,7 @@ template <typename T> bool SX128xInterface<T>::init()
 
     if (!reinitChip(/*fromInit=*/true))
         return false;
+    boundBusyWait();
 
     applyCadDetPeak(); // init() does not route through reconfigure(), so set it here too
     startReceive();    // start receiving
@@ -188,6 +189,8 @@ template <typename T> int16_t SX128xInterface<T>::programModemParams()
 
 template <typename T> bool SX128xInterface<T>::reconfigure()
 {
+    // A readout between these calls would clear the flags they set up, or move the chip out from under them
+    RadioSequence seq(this);
     RadioLibInterface::reconfigure();
 
     // set mode to standby - a chip that lost its state to a reset/brownout can time out here,
@@ -257,7 +260,9 @@ template <typename T> bool SX128xInterface<T>::wideLora()
 
 template <typename T> int16_t SX128xInterface<T>::trySetStandby()
 {
-    checkNotification(); // handle any pending interrupts before we force standby
+    // Handle any pending interrupts before we force standby, but not a TX whose backoff timer is pending: it would start
+    // here, before its delay is up, and the standby below would cut it off with its payload still in the radio
+    checkNotificationExcept(TRANSMIT_DELAY_COMPLETED);
 
     int16_t err = lora.standby();
 
@@ -425,13 +430,18 @@ template <typename T> bool SX128xInterface<T>::sleep()
     // Not keeping config is busted - next time nrf52 board boots lora sending fails  tcxo related? - see datasheet
     // \todo Display actual typename of the adapter, not just `SX128x`
     LOG_DEBUG_RADIO("SX128x entering sleep mode"); // (FIXME, don't keep config)
+    // trySetStandby() and the sleep command below are one sequence: a readout landing between them talks to a chip
+    // that is on its way down, and the standby would be undone by the arm a readout's caller can follow it with.
+    RadioSequence seq(this);
     (void)trySetStandby(); // Stop any pending operations - the chip is being put to sleep, a failure must not crash
 
     // turn off TCXO if it was powered
     // FIXME - this isn't correct
     // lora.setTCXO(0);
 
-    // put chipset into sleep mode (we've already disabled interrupts by now)
+    // put chipset into sleep mode. Interrupts are not necessarily detached here - disable() and NodeDB's
+    // config-reload park both reach this with the ISR still attached - so the lock above is what keeps
+    // the readout task out of it rather than the absence of interrupts.
     bool keepConfig = true;
     lora.sleep(keepConfig); // Note: we do not keep the config, full reinit will be needed
 

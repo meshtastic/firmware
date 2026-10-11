@@ -18,29 +18,6 @@ LinuxJoystick::LinuxJoystick(const char *name) : concurrency::OSThread(name)
     this->_originName = name;
 }
 
-// Translate a config.yaml action name into a broker event. Returns INPUT_BROKER_NONE
-// for unknown names so a typo simply leaves that button unmapped.
-static input_broker_event joystickActionToEvent(const std::string &action)
-{
-    if (action == "select")
-        return INPUT_BROKER_SELECT;
-    if (action == "cancel")
-        return INPUT_BROKER_CANCEL;
-    if (action == "back")
-        return INPUT_BROKER_BACK;
-    if (action == "up")
-        return INPUT_BROKER_UP;
-    if (action == "down")
-        return INPUT_BROKER_DOWN;
-    if (action == "left")
-        return INPUT_BROKER_LEFT;
-    if (action == "right")
-        return INPUT_BROKER_RIGHT;
-    if (action == "user" || action == "userpress")
-        return INPUT_BROKER_USER_PRESS;
-    return INPUT_BROKER_NONE;
-}
-
 void LinuxJoystick::init()
 {
     if (portduino_config.joystickButtons.empty()) {
@@ -49,7 +26,7 @@ void LinuxJoystick::init()
         buttonMap[JOY_BTN_B] = INPUT_BROKER_CANCEL;
     } else {
         for (const auto &button : portduino_config.joystickButtons) {
-            input_broker_event event = joystickActionToEvent(button.second);
+            input_broker_event event = inputBrokerEventFromAction(button.second);
             if (event != INPUT_BROKER_NONE)
                 buttonMap[button.first] = event;
         }

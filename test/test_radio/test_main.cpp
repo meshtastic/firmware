@@ -4,6 +4,7 @@
 #include "RadioInterface.h"
 #include "RadioLibInterface.h"
 #include "TestUtil.h"
+#include "UptimeClock.h"
 #include "memory/MemAudit.h"
 #include <string.h>
 #include <unity.h>
@@ -526,11 +527,33 @@ class FakeLoraRadio
     }
 };
 
+// A PhysicalLayer that answers only its IRQ flags, each generic RadioLib IRQ mapped to its own bit.
+class FakeIrqRadio : public PhysicalLayer
+{
+  public:
+    uint32_t irqFlags = 0;
+
+    FakeIrqRadio()
+    {
+        for (uint8_t i = 0; i < sizeof(irqMap) / sizeof(irqMap[0]); i++)
+            irqMap[i] = 1UL << i;
+    }
+
+    uint32_t getIrqFlags() override { return irqFlags; }
+    Module *getMod() override { return nullptr; }
+};
+
 // Test shim: no chip, just the modem parameters computePacketTime() reads.
 class TestableRadioLibInterface : public RadioLibInterface
 {
   public:
-    TestableRadioLibInterface() : RadioLibInterface(nullptr, RADIOLIB_NC, RADIOLIB_NC, RADIOLIB_NC, RADIOLIB_NC) {}
+    explicit TestableRadioLibInterface(PhysicalLayer *phy = nullptr)
+        : RadioLibInterface(nullptr, RADIOLIB_NC, RADIOLIB_NC, RADIOLIB_NC, RADIOLIB_NC, phy)
+    {
+    }
+
+    // What getPacketTime() answers, so checkStaleRxFlags() has a max-packet window to time against
+    uint32_t packetTimeMs = 0;
 
     void setModem(uint8_t spreadFactor, float bandwidth, uint8_t codingRate)
     {
@@ -546,8 +569,13 @@ class TestableRadioLibInterface : public RadioLibInterface
 
     static bool isRadioLibTimeErrorPublic(RadioLibTime_t usec) { return isRadioLibTimeError(usec); }
 
+    // What a chip with a receive FIFO is asked to drop when a frame is given up on unread
+    uint32_t discardedRxFrames = 0;
+    void discardUnreadRxFrame() override { discardedRxFrames++; }
+    void clearReadIrqsPublic() { clearReadIrqs(); }
+
     // Chip-specific hooks this test never reaches
-    uint32_t getPacketTime(uint32_t, bool) override { return 0; }
+    uint32_t getPacketTime(uint32_t, bool) override { return packetTimeMs; }
     int16_t getCurrentRSSI() override { return 0; }
     bool isChannelActive() override { return false; }
     bool isActivelyReceiving() override { return false; }
@@ -641,6 +669,25 @@ static void test_isRadioLibTimeError_separatesCodesFromDurations()
     TEST_ASSERT_FALSE(TestableRadioLibInterface::isRadioLibTimeErrorPublic(229ul * 1000ul * 1000ul));
 }
 
+// clearReadIrqs() is how every early out gives up on a received frame unread: the readout task's bad length and full
+// ring, and the radio thread's bad length, unset region and failed readData(). The LR2021 receives into a FIFO that only
+// RadioLib's readData() empties, so r113 found each such drop left the frame's bytes at the front of the FIFO, and the
+// next frame was read out on top of them and failed to decode - 37 of 37 drops on an X1.
+//
+// Pinned: dropping a frame's flags also asks the chip to drop the frame. Regression guarded: a drop path that clears
+// only the IRQs, which corrupts the following frame on an LR2021 and is invisible on every other chip.
+
+static void test_clearReadIrqs_alsoDiscardsTheUnreadFrame()
+{
+    FakeIrqRadio phy;
+    TestableRadioLibInterface radioIf(&phy);
+    phy.irqFlags = (1UL << RADIOLIB_IRQ_RX_DONE);
+
+    radioIf.clearReadIrqsPublic();
+
+    TEST_ASSERT_EQUAL_UINT32(1, radioIf.discardedRxFrames);
+}
+
 void setUp(void)
 {
     mockMeshService = new MockMeshService();
@@ -696,6 +743,38 @@ static void test_staleRxFlagAction_staleHeaderIsRearmed()
     TEST_ASSERT_EQUAL(static_cast<int>(StaleRxFlagAction::Rearm), static_cast<int>(staleRxFlagAction(true, 60000, 2115)));
 }
 
+// checkStaleRxFlags() itself, which the cases above cannot see: a header that shows after a bare preamble gets its own
+// max-packet window, timed from when the header showed. Regression guarded: timing the header from the earlier
+// preamble's stamp, which re-arms RX - a standby that aborts the frame whose header has only just arrived.
+static void test_checkStaleRxFlags_headerAfterPreambleRestartsTheWindow()
+{
+    FakeIrqRadio phy;
+    auto *radioIf = new TestableRadioLibInterface(&phy);
+    radioIf->packetTimeMs = 100;
+
+    Time::setTestMillis(1000);
+    phy.irqFlags = phy.getIrqMapped(1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED);
+    radioIf->checkStaleRxFlags();
+    TEST_ASSERT_EQUAL_UINT32(1000, radioIf->rxFlagsSeenMs);
+    TEST_ASSERT_FALSE(radioIf->rxFlagsSeenHeader);
+
+    // The header shows inside the preamble's window: its own window starts here
+    Time::setTestMillis(1090);
+    phy.irqFlags |= phy.getIrqMapped(1UL << RADIOLIB_IRQ_HEADER_VALID);
+    radioIf->checkStaleRxFlags();
+    TEST_ASSERT_EQUAL_UINT32(1090, radioIf->rxFlagsSeenMs);
+    TEST_ASSERT_TRUE(radioIf->rxFlagsSeenHeader);
+
+    // Past one max packet from the preamble, not from the header: nothing happens
+    Time::setTestMillis(1150);
+    radioIf->checkStaleRxFlags();
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1090, radioIf->rxFlagsSeenMs, "the header must be timed from when it showed");
+    TEST_ASSERT_TRUE(radioIf->rxFlagsSeenHeader);
+
+    Time::useRealClock();
+    delete radioIf;
+}
+
 void setup()
 {
     delay(10);
@@ -734,10 +813,12 @@ void setup()
     RUN_TEST(test_computePacketTime_reportsNoAirtimeWhenNothingCanBeComputed);
     RUN_TEST(test_computePacketTime_rxUsesHeaderInfoAndIsGuarded);
     RUN_TEST(test_isRadioLibTimeError_separatesCodesFromDurations);
+    RUN_TEST(test_clearReadIrqs_alsoDiscardsTheUnreadFrame);
     RUN_TEST(test_staleRxFlagAction_keepsFlagsInsideTheWindow);
     RUN_TEST(test_staleRxFlagAction_windowEndsAtExactlyOneMaxPacket);
     RUN_TEST(test_staleRxFlagAction_barePreambleIsOnlyCleared);
     RUN_TEST(test_staleRxFlagAction_staleHeaderIsRearmed);
+    RUN_TEST(test_checkStaleRxFlags_headerAfterPreambleRestartsTheWindow);
     exit(UNITY_END());
 }
 
