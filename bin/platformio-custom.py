@@ -44,6 +44,8 @@ def infer_architecture(board_cfg):
         return "nrf52840"
     if "nrf54l15" in mcu_l:
         return "nrf54l15"
+    if "nrf54lm20" in mcu_l:
+        return "nrf54lm20"
     if "stm32" in mcu_l:
         return "stm32"
     print(f"mtjson: could not infer architecture from MCU '{mcu_l}'")
