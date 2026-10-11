@@ -235,6 +235,8 @@ void RedirectablePrint::log_to_ble(const char *logLevel, const char *format, va_
         isBleConnected = nimbleBluetooth && nimbleBluetooth->isActive() && nimbleBluetooth->isConnected();
 #elif defined(ARCH_NRF52)
         isBleConnected = nrf52Bluetooth != nullptr && nrf52Bluetooth->isConnected();
+#elif defined(MESHTASTIC_LINUX_BLE)
+        isBleConnected = linuxBluetooth != nullptr && linuxBluetooth->isEnabled() && linuxBluetooth->isConnected();
 #endif
         if (isBleConnected) {
             auto thread = concurrency::OSThread::currentThread;
@@ -251,6 +253,8 @@ void RedirectablePrint::log_to_ble(const char *logLevel, const char *format, va_
             nimbleBluetooth->sendLog(buffer.get(), size);
 #elif defined(ARCH_NRF52)
             nrf52Bluetooth->sendLog(buffer.get(), size);
+#elif defined(MESHTASTIC_LINUX_BLE)
+            linuxBluetooth->sendLog(buffer.get(), size);
 #endif
         }
     }
@@ -265,6 +269,9 @@ meshtastic_LogRecord_Level RedirectablePrint::getLogLevel(const char *logLevel)
 {
     meshtastic_LogRecord_Level ll = meshtastic_LogRecord_Level_UNSET; // default to unset
     switch (logLevel[0]) {
+    case 'T':
+        ll = meshtastic_LogRecord_Level_TRACE;
+        break;
     case 'D':
         ll = meshtastic_LogRecord_Level_DEBUG;
         break;
@@ -286,13 +293,6 @@ meshtastic_LogRecord_Level RedirectablePrint::getLogLevel(const char *logLevel)
 
 void RedirectablePrint::log(const char *logLevel, const char *format, ...)
 {
-
-    // append \n to format
-    size_t len = strlen(format);
-    auto newFormat = std::unique_ptr<char[]>(new char[len + 2]);
-    strcpy(newFormat.get(), format);
-    newFormat[len] = '\n';
-    newFormat[len + 1] = '\0';
 
 #if ARCH_PORTDUINO
     // level trace is special, two possible ways to handle it.
@@ -326,6 +326,13 @@ void RedirectablePrint::log(const char *logLevel, const char *format, ...)
     if (moduleConfig.serial.override_console_serial_port && strcmp(logLevel, MESHTASTIC_LOG_LEVEL_DEBUG) == 0) {
         return;
     }
+
+    // Append \n here rather than in every call site; past the early returns, so a filtered line allocates nothing
+    size_t len = strlen(format);
+    auto newFormat = std::unique_ptr<char[]>(new char[len + 2]);
+    strcpy(newFormat.get(), format);
+    newFormat[len] = '\n';
+    newFormat[len + 1] = '\0';
 
 #ifdef HAS_FREE_RTOS
     if (inDebugPrint != nullptr && xSemaphoreTake(inDebugPrint, portMAX_DELAY) == pdTRUE) {

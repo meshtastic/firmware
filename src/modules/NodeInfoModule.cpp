@@ -85,16 +85,6 @@ bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
     return false; // Let others look at this message also if they want
 }
 
-void NodeInfoModule::alterReceivedProtobuf(meshtastic_MeshPacket &mp, meshtastic_User *p)
-{
-    // Coerce user.id to be derived from the node number
-    snprintf(p->id, sizeof(p->id), "!%08x", getFrom(&mp));
-
-    // Re-encode the altered protobuf back into the packet
-    mp.decoded.payload.size =
-        pb_encode_to_bytes(mp.decoded.payload.bytes, sizeof(mp.decoded.payload.bytes), &meshtastic_User_msg, p);
-}
-
 bool NodeInfoModule::sendOurNodeInfo(NodeNum dest, bool wantReplies, uint8_t channel, bool _shorterTimeout)
 {
     // cancel any not yet sent (now stale) position packets

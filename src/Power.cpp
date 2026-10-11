@@ -45,6 +45,9 @@
 #include "api/WiFiServerAPI.h"
 #include "input/LinuxInputImpl.h"
 #include "input/LinuxJoystick.h"
+#if HAS_HOST_POWEROFF
+#include "platform/portduino/LinuxPower.h"
+#endif
 #endif
 
 #ifdef HAS_ADS1115
@@ -1115,6 +1118,15 @@ void Power::shutdown()
 #endif
     doDeepSleep(DELAY_FOREVER, true, true);
 #elif defined(ARCH_PORTDUINO)
+#if HAS_HOST_POWEROFF
+    // A portduino node is a process on a computer that outlives it, so exiting here only ends the
+    // daemon - and under Restart=always systemd brings it straight back. When the user asked for
+    // the host itself, hand off to logind. Everything above has already run, so the NodeDB and
+    // message store are on disk either way. Fall through to exit() if logind refuses, rather than
+    // leaving the node sitting there having said it was shutting down.
+    if (hostPowerOffRequested)
+        linuxPowerOffHost();
+#endif
     exit(EXIT_SUCCESS);
 #else
     LOG_WARN("FIXME implement shutdown for this platform");

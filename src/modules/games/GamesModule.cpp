@@ -306,11 +306,11 @@ int GamesModule::handleInputEvent(const InputEvent *event)
             confirm.message = "Clear Scores?";
             confirm.optionsArrayPtr = opts;
             confirm.optionsCount = 2;
-            confirm.bannerCallback = [this](int sel) {
-                if (sel == 1 && active) {
-                    active->scores().clear();
-                    active->scores().save();
-                    requestRedraw();
+            confirm.bannerCallback = [](int sel) {
+                if (sel == 1 && gamesModule && gamesModule->active) {
+                    gamesModule->active->scores().clear();
+                    gamesModule->active->scores().save();
+                    gamesModule->requestRedraw();
                     LOG_INFO("Games: high scores cleared");
                 }
             };

@@ -1,0 +1,78 @@
+name: MemBrowse
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+      platform:
+        required: true
+        type: string
+      pio_env:
+        required: true
+        type: string
+    secrets:
+      # Absent on fork PRs; membrowse-action then uploads tokenless.
+      MEMBROWSE_API_KEY:
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  membrowse:
+    name: membrowse-${{ inputs.pio_env }}
+    runs-on: ubuntu-24.04
+    # Informational, like firmware-size-report: a MemBrowse outage or budget alert must not fail
+    # the build job that ci-gate checks, nor hold it up.
+    continue-on-error: true
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # MemBrowse reads the parent commit for its diff metadata.
+          fetch-depth: 2
+
+      # Analyze the ELF, linker scripts and map from build_firmware.yml instead of rebuilding.
+      - name: Download firmware artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: firmware-${{ inputs.platform }}-${{ inputs.pio_env }}-${{ inputs.version }}
+          path: ./membrowse
+
+      - name: Locate ELF, linker scripts and map
+        id: files
+        run: |
+          shopt -s nullglob
+          elf=(membrowse/firmware-*.elf)
+          ld=(membrowse/*.ld)
+          map=(membrowse/*.map)
+          if [[ ${#elf[@]} -ne 1 ]]; then
+            echo "::error::Expected one ELF in the artifact, found ${#elf[@]}"
+            exit 1
+          fi
+          if [[ ${#ld[@]} -eq 0 ]]; then
+            echo "::warning::No linker scripts in the artifact; MemBrowse falls back to default Code/Data regions"
+          fi
+          if [[ ${#map[@]} -eq 0 ]]; then
+            echo "::warning::No map file in the artifact; MemBrowse cannot attribute symbols to libraries"
+          fi
+          {
+            echo "elf=${elf[0]}"
+            echo "ld=${ld[*]}"
+            echo "map=${map[0]:-}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Run MemBrowse analysis
+        uses: membrowse/membrowse-action@v1
+        with:
+          target_name: ${{ inputs.pio_env }}
+          elf: ${{ steps.files.outputs.elf }}
+          ld: ${{ steps.files.outputs.ld }}
+          map_file: ${{ steps.files.outputs.map }}
+          # nRF52 and RP2xx0 size .heap to fill the RAM left after .bss, which pins RAM at ~100%
+          # and hides static RAM growth (what bin/ram_budgets.json gates).
+          skip_sections: .heap
+          api_key: ${{ secrets.MEMBROWSE_API_KEY }}
+          verbose: INFO

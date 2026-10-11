@@ -2,7 +2,8 @@
 # trunk-ignore-all(ruff/F821)
 # trunk-ignore-all(flake8/F821): For SConstruct imports
 import sys
-from os.path import join
+from os.path import basename, isabs, isfile, join, realpath
+import shutil
 import subprocess
 import json
 import re
@@ -119,6 +120,65 @@ def compute_flash_bytes(env):
         if len(parts) >= 3 and parts[0].isdigit() and parts[1].isdigit():
             return int(parts[0]) + int(parts[1])
     return None
+
+def export_link_files(source, target, env):
+    """Copy the linker scripts that define MEMORY regions, and the linker map, next to the ELF.
+
+    CI uploads them with the ELF so MemBrowse can report usage per memory region and
+    attribute symbols to archives. Scripts come from LDSCRIPT_PATH and -T link flags,
+    resolved like the linker does: relative to the project dir, then each LIBPATH entry.
+    --defsym values a script uses (e.g. STM32's LD_MAX_SIZE) are prepended to its copy so
+    its MEMORY block resolves standalone. The map is the last -Map in LINKFLAGS, the one
+    the linker writes: STM32's framework adds its own after the global output.map, and ESP-IDF
+    builds use --Map instead.
+    """
+    names = []
+    if env.get("LDSCRIPT_PATH"):
+        names.append(env.subst("$LDSCRIPT_PATH"))
+    flags = [env.subst(str(f)) for f in env.Flatten(env.get("LINKFLAGS", []))]
+    for i, flag in enumerate(flags):
+        if flag == "-T" and i + 1 < len(flags):
+            names.append(flags[i + 1])
+        elif flag.startswith("-Wl,-T"):
+            names.append(flag[len("-Wl,-T"):].lstrip(","))
+        elif flag.startswith("-T"):
+            names.append(flag[2:])
+    defsyms = [m.groups() for m in (re.match(r"-Wl,--defsym[,=]([A-Za-z_]\w*)=(\S+)", f) for f in flags) if m]
+    search_dirs = [env.subst("$PROJECT_DIR")] + [
+        env.Dir(env.subst(str(p))).get_abspath() for p in env.Flatten(env.get("LIBPATH", []))
+    ]
+    exported = set()
+    for name in names:
+        name = name.strip('"')
+        candidates = [name] if isabs(name) else [join(d, name) for d in search_dirs]
+        path = next((c for c in candidates if isfile(c)), None)
+        if path is None or realpath(path) in exported:
+            continue
+        with open(path, errors="replace") as f:
+            script = f.read()
+        if not re.search(r"\bMEMORY\s*\{", script):
+            continue
+        exported.add(realpath(path))
+        dest = env.subst(f"$BUILD_DIR/${{PROGNAME}}.{basename(path)}")
+        with open(dest, "w") as f:
+            used = [(n, v) for n, v in defsyms if re.search(rf"\b{n}\b", script)]
+            if used:
+                f.write("/* --defsym values from the link command */\n")
+                f.writelines(f"{n} = {v};\n" for n, v in used)
+            f.write(script)
+        print(f"Exported linker script {path} -> {dest}")
+
+    map_path = None
+    for flag in flags:
+        m = re.match(r"-Wl,--?Map[,=](.+)", flag)
+        if m:
+            map_path = m.group(1).replace('"', "")
+    if map_path:
+        map_path = join(env.subst("$PROJECT_DIR"), map_path)
+        dest = env.subst("$BUILD_DIR/${PROGNAME}.map")
+        if isfile(map_path) and realpath(map_path) != realpath(dest):
+            shutil.copyfile(map_path, dest)
+            print(f"Exported linker map {map_path} -> {dest}")
 
 def manifest_gather(source, target, env):
     global manifest_ran
@@ -456,3 +516,5 @@ else:
 
     # Run manifest generation as part of the default build pipeline for non-native builds.
     env.Default("mtjson")
+
+    env.AddPostAction("$BUILD_DIR/${PROGNAME}.elf", export_link_files)
