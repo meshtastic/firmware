@@ -106,4 +106,40 @@ void lateInitVariant()
     LOG_INFO("ES8311 Audio board initialized");
 }
 
+static void lp5814Write(uint8_t reg, uint8_t value)
+{
+    Wire.beginTransmission(LP5814_ADDR);
+    Wire.write(reg);
+    Wire.write(value);
+    Wire.endTransmission();
+}
+
+// The LP5814 backlight and the PCA9555 rails are externally powered and keep their state through deep sleep.
+void variant_shutdown()
+{
+    // doDeepSleep() has already released the I2C bus
+    Wire.begin(I2C_SDA, I2C_SCL);
+    Wire.setClock(100000);
+
+    for (uint8_t i = 0; i < 4; i++)
+        lp5814Write(0x18 + i, 0); // LED0..3 PWM
+    lp5814Write(0x02, 0x00);      // disable all channels
+    lp5814Write(0x0F, 0x55);      // latch
+    lp5814Write(0x00, 0x00);      // chip standby
+
+    if (initOK) {
+        // Drive every expander output low in one transaction: once the LCD rail drops, the unpowered
+        // touch controller on this bus clamps SDA/SCL and any further transfer NACKs.
+        Wire.beginTransmission(BOARD_PCA9535_ADDR);
+        Wire.write(0x02); // output port 0, auto-increments to port 1
+        Wire.write(0x00);
+        Wire.write(0x00);
+        Wire.endTransmission();
+    }
+
+    Wire.end();
+    pinMode(I2C_SDA, ANALOG);
+    pinMode(I2C_SCL, ANALOG);
+}
+
 #endif
