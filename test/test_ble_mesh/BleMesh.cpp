@@ -563,8 +563,11 @@ void test_a_relayed_packet_is_re_advertised(void)
 }
 
 // The guards and field clearing every bearer shares, the hop RSSI included, run per bearer in
-// test_transport_ingress. The self-echo is this bearer's own: its scanner can hear its own burst.
-void test_ingress_ignores_our_own_advertisement(void)
+// test_transport_ingress. A copy of our own packet goes on to the Router, stamped BLE_ADV, so a
+// neighbor's relay of it raises the implicit ack; the Router stops it there, and ignores one
+// carrying our own relay byte (our scanner hearing our own burst). test_reliable_ack_matrix
+// covers that half.
+void test_ingress_passes_our_own_advertisement_to_the_router(void)
 {
     FakeBLEMesh h;
     h.start();
@@ -573,9 +576,10 @@ void test_ingress_ignores_our_own_advertisement(void)
     uint8_t body[meshtastic_MeshPacket_size];
     size_t n = encodeForAir(p, body, sizeof(body));
 
-    // A self-echo back into the node's own scanner would loop.
     h.feed(body, n, -50);
-    TEST_ASSERT_EQUAL_MESSAGE(0, h.received.size(), "self-echo dropped");
+    TEST_ASSERT_EQUAL_MESSAGE(1, h.received.size(), "own copy reaches the router");
+    TEST_ASSERT_EQUAL(meshtastic_MeshPacket_TransportMechanism_TRANSPORT_BLE_ADV, h.received[0].transport_mechanism);
+    TEST_ASSERT_EQUAL_INT(-50, h.received[0].rx_rssi);
 }
 
 void test_pump_waits_for_the_platform(void)
@@ -638,7 +642,7 @@ void setup()
     RUN_TEST(test_a_full_queue_makes_room_only_for_something_more_important);
     RUN_TEST(test_the_frame_displaced_is_the_newest_of_the_least_important);
     RUN_TEST(test_a_relayed_packet_is_re_advertised);
-    RUN_TEST(test_ingress_ignores_our_own_advertisement);
+    RUN_TEST(test_ingress_passes_our_own_advertisement_to_the_router);
     RUN_TEST(test_pump_waits_for_the_platform);
     RUN_TEST(test_legacy_burst_duration_is_in_milliseconds);
     exit(UNITY_END());

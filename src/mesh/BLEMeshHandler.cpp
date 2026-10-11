@@ -86,7 +86,7 @@ bool BLEMeshHandler::onSend(const meshtastic_MeshPacket *mp)
     // Deliberately NOT the "arrived on this medium" guard UdpMulticastHandler carries: a rebroadcast
     // still carries TRANSPORT_BLE_ADV, because nothing on the TX path rewrites transport_mechanism,
     // so refusing it would cap the BLE mesh at one hop. Loop protection is LoRa's: PacketHistory,
-    // hop_limit, and deliverToRouter ignoring frames this node sent.
+    // hop_limit, and the Router taking a frame this node sent no further than its implicit ack.
     if (mp->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_BLE_ADV)
         LOG_DEBUG("BLE mesh: re-advertising relayed packet 0x%08x", mp->id);
 
@@ -228,9 +228,8 @@ void BLEMeshHandler::deliverToRouter(const uint8_t *data, size_t len, int8_t rss
     if (mp.which_payload_variant != meshtastic_MeshPacket_encrypted_tag)
         return;
 
-    // Our own advertisement, heard by our own scanner: dropped below too, but quietly here.
-    if (mp.from == nodeDB->getNodeNum())
-        return;
+    // A copy of our own packet goes on to the Router for its implicit ack, which ignores one carrying our
+    // own relay byte: that is our own burst heard by our own scanner.
     if (!sanitizeIngress(mp, meshtastic_MeshPacket_TransportMechanism_TRANSPORT_BLE_ADV))
         return;
     // No LoRa measurement exists for a BLE arrival, but the BLE hop itself is measured.

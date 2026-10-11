@@ -11,7 +11,9 @@
 // and evicts one of ours from the TX queue, a sent tx_after schedules our transmit, a sent
 // pki_encrypted claims PKI authentication the Router never established, and a sent rx_rssi reads as
 // our own measurement. A local origin (from 0 or our own node number) reaches paths that trust
-// isFromUs, remote admin among them, and an out-of-range hop count is not relayable.
+// isFromUs, remote admin among them, and an out-of-range hop count is not relayable. The one
+// exception is our own node number on a BLE bearer: Router::perhapsHandleReceived takes that copy
+// no further than the implicit ack, and dropping it here leaves a BLE-only send with no Delivered.
 //
 // Regression guarded: the guards were once hand-copied into each bearer and drifted; UDP cleared
 // neither tx_after nor priority while the BLE bearers did. Every test here runs once per bearer, so a
@@ -258,12 +260,21 @@ void test_ingress_drops_a_frame_with_no_sender(void)
     }
 }
 
-void test_ingress_drops_our_own_node_number(void)
+void test_ingress_admits_our_own_node_number_only_over_ble(void)
 {
+    // The BLE bearers carry a neighbor's relay of our own packet to the Router, which takes it no
+    // further than the implicit ack. Every other bearer drops it here.
     for (const auto &b : bearers) {
         meshtastic_MeshPacket got;
-        TEST_ASSERT_FALSE_MESSAGE(b.deliver(encryptedPacket(nodeDB->getNodeNum()), got), b.name);
+        const bool admitted = b.deliver(encryptedPacket(nodeDB->getNodeNum()), got);
+        TEST_ASSERT_EQUAL_MESSAGE(MeshTransportBase::carriesOwnEcho(b.medium), admitted, b.name);
+        if (admitted)
+            TEST_ASSERT_EQUAL_MESSAGE(b.medium, got.transport_mechanism, b.name);
     }
+    TEST_ASSERT_TRUE(MeshTransportBase::carriesOwnEcho(meshtastic_MeshPacket_TransportMechanism_TRANSPORT_BLE_ADV));
+    TEST_ASSERT_TRUE(MeshTransportBase::carriesOwnEcho(meshtastic_MeshPacket_TransportMechanism_TRANSPORT_BLE_GATT));
+    TEST_ASSERT_FALSE(MeshTransportBase::carriesOwnEcho(meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MULTICAST_UDP));
+    TEST_ASSERT_FALSE(MeshTransportBase::carriesOwnEcho(meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MQTT));
 }
 
 void test_ingress_drops_an_impossible_hop_count(void)
@@ -336,7 +347,7 @@ void setup()
     UNITY_BEGIN();
     RUN_TEST(test_ingress_admits_and_stamps_the_bearer);
     RUN_TEST(test_ingress_drops_a_frame_with_no_sender);
-    RUN_TEST(test_ingress_drops_our_own_node_number);
+    RUN_TEST(test_ingress_admits_our_own_node_number_only_over_ble);
     RUN_TEST(test_ingress_drops_an_impossible_hop_count);
     RUN_TEST(test_ingress_clears_every_local_only_field);
     RUN_TEST(test_ingress_keeps_the_lora_header_fields);

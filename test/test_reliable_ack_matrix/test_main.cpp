@@ -313,10 +313,13 @@ static void expectNoRelaySource()
 }
 
 // Empties the phone queue, counting the routing acks for requestId and copying the first into *out.
-static size_t drainPhoneAcksFor(PacketId requestId, meshtastic_MeshPacket *out = nullptr)
+// *total, when given, counts every packet the phone was handed.
+static size_t drainPhoneAcksFor(PacketId requestId, meshtastic_MeshPacket *out = nullptr, size_t *total = nullptr)
 {
     size_t count = 0;
     while (meshtastic_MeshPacket *queued = phoneService->getForPhone()) {
+        if (total)
+            (*total)++;
         if (queued->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
             queued->decoded.portnum == meshtastic_PortNum_ROUTING_APP && queued->decoded.request_id == requestId) {
             if (count == 0 && out)
@@ -1002,6 +1005,76 @@ void test_ingress_opaque_foreign_packet_mints_no_implicit_ack(void)
 }
 
 // ===========================================================================
+// Group 5c - a BLE copy of our own packet (Router::perhapsHandleReceived's carriesOwnEcho branch).
+// The BLE bearers admit our own node number so a neighbor's relay can raise Delivered; the Router
+// must take that copy no further than the implicit ack, which must not end the LoRa retries, and
+// must ignore a copy carrying our own relay byte, which is our own burst heard by our own scanner.
+// ===========================================================================
+
+static void expectBleOwnCopyRaisesDeliveredOnly(meshtastic_MeshPacket_TransportMechanism transport)
+{
+    auto original = makeDecodedPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kLocalNode, kRemoteNode, 1, /*wantAck=*/true);
+    reliableShim->seedRetry(original, NextHopRouter::NUM_RELIABLE_UNICAST_ATTEMPTS);
+    mockRoutingModule->loopback = true;
+
+    ingressOverheard(makeOpaqueOwnOverheard(original.id, transport));
+
+    TEST_ASSERT_EQUAL_UINT32(1, reliableShim->pendingCount());
+    // Never relayed or re-sent.
+    TEST_ASSERT_EQUAL_UINT32(0, radio->sentPackets.size());
+    meshtastic_MeshPacket ack = meshtastic_MeshPacket_init_zero;
+    size_t total = 0;
+    TEST_ASSERT_EQUAL_UINT32(1, drainPhoneAcksFor(original.id, &ack, &total));
+    // The ack is the only thing the phone sees: the copy itself is never delivered as a message.
+    TEST_ASSERT_EQUAL_UINT32(1, total);
+    TEST_ASSERT_EQUAL_INT(transport, ack.transport_mechanism);
+    TEST_ASSERT_EQUAL_HEX32(kLocalNode, ack.to);
+    expectPhoneAckRelay(ack, 0x4D, -112, -3.5f);
+}
+
+void test_ble_own_copy_raises_delivered_but_keeps_retries(void)
+{
+    expectBleOwnCopyRaisesDeliveredOnly(meshtastic_MeshPacket_TransportMechanism_TRANSPORT_BLE_ADV);
+}
+
+void test_ble_gatt_own_copy_raises_delivered_but_keeps_retries(void)
+{
+    expectBleOwnCopyRaisesDeliveredOnly(meshtastic_MeshPacket_TransportMechanism_TRANSPORT_BLE_GATT);
+}
+
+void test_ble_self_echo_raises_no_implicit_ack(void)
+{
+    auto original = makeDecodedPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kLocalNode, kRemoteNode, 1, /*wantAck=*/true);
+    reliableShim->seedRetry(original, NextHopRouter::NUM_RELIABLE_UNICAST_ATTEMPTS);
+    mockRoutingModule->loopback = true;
+
+    auto echo = makeOpaqueOwnOverheard(original.id, meshtastic_MeshPacket_TransportMechanism_TRANSPORT_BLE_ADV);
+    echo.relay_node = nodeDB->getLastByteOfNodeNum(kLocalNode);
+    ingressOverheard(echo);
+
+    size_t total = 0;
+    TEST_ASSERT_EQUAL_UINT32(0, drainPhoneAcksFor(original.id, nullptr, &total));
+    TEST_ASSERT_EQUAL_UINT32(0, total);
+    TEST_ASSERT_EQUAL_UINT32(0, radio->sentPackets.size());
+    TEST_ASSERT_EQUAL_UINT32(1, reliableShim->pendingCount());
+}
+
+void test_ble_own_copy_to_us_never_reaches_the_modules(void)
+{
+    // A forged from-us, to-us frame is what the isFromUs trust (remote admin, phone delivery) would
+    // act on. Past the auth gate it would reach the modules and the phone; it must reach neither.
+    auto forged = makeDecodedPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kLocalNode, kLocalNode, 0);
+    forged.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_BLE_ADV;
+    forged.relay_node = 0x4D;
+    ingressOverheard(forged);
+
+    size_t total = 0;
+    drainPhoneAcksFor(forged.id, nullptr, &total);
+    TEST_ASSERT_EQUAL_UINT32(0, total);
+    TEST_ASSERT_EQUAL_UINT32(0, radio->sentPackets.size());
+}
+
+// ===========================================================================
 // Group 6 - pending-timer airtime extension in send() and shouldFilterReceived()
 // ===========================================================================
 
@@ -1121,6 +1194,10 @@ void setup()
     RUN_TEST(test_ingress_opaque_own_dm_lora_mints_implicit_ack_and_stops_retries);
     RUN_TEST(test_ingress_opaque_own_dm_mqtt_acks_but_keeps_retries);
     RUN_TEST(test_ingress_opaque_foreign_packet_mints_no_implicit_ack);
+    RUN_TEST(test_ble_own_copy_raises_delivered_but_keeps_retries);
+    RUN_TEST(test_ble_gatt_own_copy_raises_delivered_but_keeps_retries);
+    RUN_TEST(test_ble_self_echo_raises_no_implicit_ack);
+    RUN_TEST(test_ble_own_copy_to_us_never_reaches_the_modules);
 
     printf("\n=== pending-timer airtime extension ===\n");
     RUN_TEST(test_send_extends_other_pending_deadlines_not_own);

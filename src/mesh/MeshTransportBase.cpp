@@ -82,10 +82,17 @@ void clearLocalOnly(meshtastic_MeshPacket &mp)
 }
 } // namespace
 
+bool MeshTransportBase::carriesOwnEcho(meshtastic_MeshPacket_TransportMechanism medium)
+{
+    return medium == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_BLE_ADV ||
+           medium == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_BLE_GATT;
+}
+
 bool MeshTransportBase::sanitizeIngress(meshtastic_MeshPacket &mp, meshtastic_MeshPacket_TransportMechanism medium)
 {
-    // A local origin reaches paths that trust isFromUs, remote admin among them.
-    if (isFromUs(&mp)) {
+    // A local origin reaches paths that trust isFromUs, remote admin among them. A BLE copy of our own
+    // packet passes because the Router stops it at the implicit ack, before any of those paths.
+    if (mp.from == 0 || (isFromUs(&mp) && !carriesOwnEcho(medium))) {
         LOG_WARN("Transport %d: packet with local from=0x%08x, dropping", medium, mp.from);
         return false;
     }
