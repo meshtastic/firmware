@@ -569,6 +569,11 @@ class TestableRadioLibInterface : public RadioLibInterface
 
     static bool isRadioLibTimeErrorPublic(RadioLibTime_t usec) { return isRadioLibTimeError(usec); }
 
+    // What a chip with a receive FIFO is asked to drop when a frame is given up on unread
+    uint32_t discardedRxFrames = 0;
+    void discardUnreadRxFrame() override { discardedRxFrames++; }
+    void clearReadIrqsPublic() { clearReadIrqs(); }
+
     // Chip-specific hooks this test never reaches
     uint32_t getPacketTime(uint32_t, bool) override { return packetTimeMs; }
     int16_t getCurrentRSSI() override { return 0; }
@@ -662,6 +667,25 @@ static void test_isRadioLibTimeError_separatesCodesFromDurations()
     TEST_ASSERT_FALSE(TestableRadioLibInterface::isRadioLibTimeErrorPublic(123456));
     // ~229s: SF12 at 7.8kHz with a full 255-byte frame, the slowest packet that can be configured.
     TEST_ASSERT_FALSE(TestableRadioLibInterface::isRadioLibTimeErrorPublic(229ul * 1000ul * 1000ul));
+}
+
+// clearReadIrqs() is how every early out gives up on a received frame unread: the readout task's bad length and full
+// ring, and the radio thread's bad length, unset region and failed readData(). The LR2021 receives into a FIFO that only
+// RadioLib's readData() empties, so r113 found each such drop left the frame's bytes at the front of the FIFO, and the
+// next frame was read out on top of them and failed to decode - 37 of 37 drops on an X1.
+//
+// Pinned: dropping a frame's flags also asks the chip to drop the frame. Regression guarded: a drop path that clears
+// only the IRQs, which corrupts the following frame on an LR2021 and is invisible on every other chip.
+
+static void test_clearReadIrqs_alsoDiscardsTheUnreadFrame()
+{
+    FakeIrqRadio phy;
+    TestableRadioLibInterface radioIf(&phy);
+    phy.irqFlags = (1UL << RADIOLIB_IRQ_RX_DONE);
+
+    radioIf.clearReadIrqsPublic();
+
+    TEST_ASSERT_EQUAL_UINT32(1, radioIf.discardedRxFrames);
 }
 
 void setUp(void)
@@ -789,6 +813,7 @@ void setup()
     RUN_TEST(test_computePacketTime_reportsNoAirtimeWhenNothingCanBeComputed);
     RUN_TEST(test_computePacketTime_rxUsesHeaderInfoAndIsGuarded);
     RUN_TEST(test_isRadioLibTimeError_separatesCodesFromDurations);
+    RUN_TEST(test_clearReadIrqs_alsoDiscardsTheUnreadFrame);
     RUN_TEST(test_staleRxFlagAction_keepsFlagsInsideTheWindow);
     RUN_TEST(test_staleRxFlagAction_windowEndsAtExactlyOneMaxPacket);
     RUN_TEST(test_staleRxFlagAction_barePreambleIsOnlyCleared);

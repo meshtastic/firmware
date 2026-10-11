@@ -495,6 +495,10 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      *  them. Read with the frame, not later: on a chip left listening the status describes whatever it is receiving. */
     virtual bool readRxHeaderInfo(uint8_t &, bool &) { return false; }
 
+    /** Drop what the chip still holds of a frame nobody will read out. Only a chip that receives into a FIFO keeps it:
+     *  there the next readout would start with the dropped frame's bytes. */
+    virtual void discardUnreadRxFrame() {}
+
     /// RadioLib returns its negative RADIOLIB_ERR_* codes through the same unsigned microsecond count it
     /// returns durations in, so an error reads as 4294967ms of airtime for one packet and takes the node
     /// off the air until it reboots (#11935). The codes are int16_t, so they wrap to the top of the
@@ -521,6 +525,7 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
                 rxCR = rxCapturedHeader->rxCR;
                 hasCRC = rxCapturedHeader->hasCRC;
             } else {
+                RadioSequence seq(this); // a chip read, from callers that hold no sequence: see getTimeOnAir() below
                 haveHeaderInfo = lora.getLoRaRxHeaderInfo(&rxCR, &hasCRC) == RADIOLIB_ERR_NONE;
             }
             if (haveHeaderInfo) {
@@ -541,8 +546,13 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
                 }
             }
         } else {
-            // Reads the packet type back over SPI, so a chip that lost its config answers WRONG_MODEM.
-            RadioLibTime_t reported = lora.getTimeOnAir(pl);
+            // Reads the packet type back over SPI, so a chip that lost its config answers WRONG_MODEM. Called after every
+            // send by finishSentPacket() and the router, which hold no sequence: unlocked, a readout could land inside it.
+            RadioLibTime_t reported;
+            {
+                RadioSequence seq(this);
+                reported = lora.getTimeOnAir(pl);
+            }
             if (!isRadioLibTimeError(reported))
                 return reported / 1000;
             LOG_WARN("%s%d from getTimeOnAir, use configured modem", radioLibErr, (int)(int16_t)reported);
@@ -589,9 +599,9 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
     bool removePendingTXPacket(NodeNum from, PacketId id, uint32_t hop_limit_lt) override;
 
-    /** Retire RX_DONE and CRC_ERR for a frame nothing will read out. readData() clears its own, so this is for the
-     * early outs in handleReceiveInterrupt() that return before it: left latched, they would be taken for an unread
-     * frame and re-notified for as long as they sit there. */
+    /** Retire RX_DONE and CRC_ERR, and the chip's copy of the frame, for a frame nothing will read out. readData() clears
+     * its own, so this is for the early outs in handleReceiveInterrupt() that return before it: left latched, they would
+     * be taken for an unread frame and re-notified for as long as they sit there. */
     void clearReadIrqs();
 
     /** @return whether a latched RX_DONE was found and notified, so a caller can say which look caught it */
