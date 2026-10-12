@@ -954,7 +954,14 @@ bool Power::analogInit()
     batteryLevel = &analogLevel;
     return true;
 #else
+#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+    // No ADC pin: AnalogBatteryLevel still reads a configured INA (power.device_battery_ina_address), and with
+    // none it reports no battery, so the board keeps its 101% external-power status.
+    batteryLevel = &analogLevel;
+    return true;
+#else
     return false;
+#endif
 #endif
 }
 
