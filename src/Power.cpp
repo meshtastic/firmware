@@ -1419,6 +1419,61 @@ int Power::afterLightSleep(esp_sleep_wakeup_cause_t cause)
  * Attach (or re-attach) hardware interrupts for power management
  * Public method. Used outside class when waking from MCU sleep
  */
+#if defined(ARCH_ESP32) && defined(PMU_IRQ) && defined(MESHTASTIC_PMU_IRQ_PROBE)
+#include <esp_system.h>
+#include <soc/gpio_reg.h>
+#include <soc/soc.h>
+
+// Bench probe. Everything here runs awake, before the first attachInterrupt() of the boot, and reads
+// only - nothing is cleared, so the state the storm theory needs is still intact when it is logged.
+namespace
+{
+// Eight reads of a pad, oldest in the high bit, so a line that is decaying or chattering shows as a
+// pattern rather than as one value.
+uint8_t pmuIrqSample(uint32_t gapUsec)
+{
+    uint8_t bits = 0;
+    for (int i = 0; i < 8; i++) {
+        bits = (uint8_t)((bits << 1) | (digitalRead(PMU_IRQ) ? 1 : 0));
+        if (gapUsec)
+            delayMicroseconds(gapUsec);
+    }
+    return bits;
+}
+
+void pmuIrqProbe()
+{
+    // The GPIO peripheral's own view, before anything touches it. A pending interrupt status bit for
+    // PMU_IRQ here is the stale-state half of the theory: a panic reset is CPU-only and leaves these
+    // registers alone, so a bit set at this point was set before the reset.
+    const uint32_t pinReg = REG_READ(GPIO_PIN0_REG + 4 * PMU_IRQ);
+    LOG_INFO("PMU IRQ probe: GPIO%02d, esp_reset_reason %u, pin_reg 0x%08x, status 0x%08x, status1 0x%08x", PMU_IRQ,
+             (unsigned)esp_reset_reason(), (unsigned)pinReg, (unsigned)REG_READ(GPIO_STATUS_REG),
+             (unsigned)REG_READ(GPIO_STATUS1_REG));
+
+    // Is the line asserted, and is anything holding it? pinMode(PMU_IRQ, INPUT) in axpChipInit() leaves
+    // no internal pull, so "no pull" reading low means nothing external holds this open-drain line
+    // high either - which would make a FALLING attach on it a storm source on its own.
+    const uint8_t asIs = pmuIrqSample(200);
+    pinMode(PMU_IRQ, INPUT_PULLUP);
+    const uint8_t pulled = pmuIrqSample(200);
+    pinMode(PMU_IRQ, INPUT);
+    const uint8_t floated = pmuIrqSample(200);
+    LOG_INFO("PMU IRQ probe: as found 0x%02x, pull-up 0x%02x, no pull 0x%02x", asIs, pulled, floated);
+
+    // What the AXP thinks. getIrqStatus() reads the status registers over I2C; clearIrqStatus() is the
+    // write that releases the line, and this probe deliberately does not call it. Its return type is not
+    // used anywhere in the tree, so this logs the chip's VBUS view rather than the raw word.
+    if (PMU) {
+        PMU->getIrqStatus();
+        LOG_INFO("PMU IRQ probe: axp model %d, vbus in %d, charging %d, pending vbus_ins %d vbus_rem %d pkey_short %d",
+                 (int)PMU->getChipModel(), PMU->isVbusIn() ? 1 : 0, PMU->isCharging() ? 1 : 0, PMU->isVbusInsertIrq() ? 1 : 0,
+                 PMU->isVbusRemoveIrq() ? 1 : 0, PMU->isPekeyShortPressIrq() ? 1 : 0);
+    }
+}
+} // namespace
+#endif
+
 void Power::attachPowerInterrupts()
 {
 #ifdef EXT_PWR_DETECT
@@ -1450,7 +1505,26 @@ void Power::attachPowerInterrupts()
         CHANGE);
 #endif
 #ifdef PMU_IRQ
+#if defined(ARCH_ESP32) && defined(MESHTASTIC_PMU_IRQ_PROBE)
+    // Read the pad, the GPIO peripheral and the AXP status before the first attachInterrupt() of the
+    // boot, which is the call that installs the shared GPIO ISR service.
+    pmuIrqProbe();
+#endif
+#if defined(MESHTASTIC_PMU_IRQ_ARM) && MESHTASTIC_PMU_IRQ_ARM == 2
+    // Bench arm C2: do not attach PMU_IRQ at all. The 20 s poll in runOnce() does all the real work
+    // (VBUS insert/remove, power key); the ISR only pokes runASAP, so this costs latency, not function.
+    LOG_WARN("PMU_IRQ arm C2: interrupt not attached");
+#else
     if (PMU) {
+#if defined(MESHTASTIC_PMU_IRQ_ARM) && MESHTASTIC_PMU_IRQ_ARM == 1
+        // Bench arm C1: release the line immediately before the attach, in case the AXP is holding it.
+        PMU->getIrqStatus();
+        PMU->clearIrqStatus();
+#elif defined(MESHTASTIC_PMU_IRQ_ARM) && MESHTASTIC_PMU_IRQ_ARM == 3
+        // Bench arm C3: the AXP's IRQ pin is open drain, and axpChipInit() leaves this pad with no
+        // internal pull. Give it one, in case nothing external holds it high.
+        pinMode(PMU_IRQ, INPUT_PULLUP);
+#endif
         attachInterrupt(
             PMU_IRQ,
             []() {
@@ -1460,6 +1534,7 @@ void Power::attachPowerInterrupts()
             },
             FALLING);
     }
+#endif
 #endif
 }
 
