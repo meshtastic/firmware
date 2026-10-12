@@ -1401,12 +1401,42 @@ void scannerToSensorsMap(const std::unique_ptr<ScanI2CTwoWire> &i2cScanner, Scan
 #endif
 
 #ifndef PIO_UNIT_TESTING
+#if defined(ARCH_ESP32) && defined(PMU_IRQ) && defined(MESHTASTIC_PMU_IRQ_FORCE_STALE_ARM)
+#include <driver/gpio.h>
+#include <esp_system.h>
+// Set once the forced stale arming has been done, so the reset it triggers does not do it again.
+RTC_DATA_ATTR uint32_t pmuIrqStaleArmDone;
+#endif
+
 void loop()
 {
     runASAP = false;
 
     // The single writer of the monotonic wrap carry; every other caller only reads it.
     Time::serviceMonotonic();
+
+#if defined(ARCH_ESP32) && defined(PMU_IRQ) && defined(MESHTASTIC_PMU_IRQ_FORCE_STALE_ARM)
+    // Bench flag (r125). Reproduce the storm's precondition deterministically, with no dependence on
+    // power saving: arm PMU_IRQ as a low-level wake exactly as doLightSleep() does, then take a
+    // CPU-only reset, which leaves the GPIO registers alone. The next boot's first attachInterrupt()
+    // then meets that arming. Once per power cycle - the flag is in RTC memory, which the reset keeps.
+    if (!pmuIrqStaleArmDone && Throttle::hasElapsed(0, MESHTASTIC_PMU_IRQ_FORCE_STALE_ARM * 1000UL)) {
+        pmuIrqStaleArmDone = 1;
+        LOG_WARN("MESHTASTIC_PMU_IRQ_FORCE_STALE_ARM: arming GPIO%d low-level wake, then esp_restart()", PMU_IRQ);
+        gpio_wakeup_enable((gpio_num_t)PMU_IRQ, GPIO_INTR_LOW_LEVEL);
+#ifdef MESHTASTIC_PMU_IRQ_DISARM_AFTER_LS
+        // Arm C4 under the forcer: run the same disarm doLightSleep() now does, so the candidate fix is
+        // tested against this precondition without needing a real light sleep - which needs power
+        // saving, which costs the capture.
+        gpio_wakeup_disable((gpio_num_t)PMU_IRQ);
+        gpio_set_intr_type((gpio_num_t)PMU_IRQ, GPIO_INTR_NEGEDGE);
+#endif
+        if (console)
+            console->flush();
+        delay(50);
+        esp_restart();
+    }
+#endif
 
 #if defined(ARCH_ESP32) && defined(MESHTASTIC_FORCE_DEEP_SLEEP_SECS)
 #ifndef MESHTASTIC_FORCE_DEEP_SLEEP_AWAKE_SECS

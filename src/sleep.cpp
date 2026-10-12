@@ -632,6 +632,17 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     // Disable wake-on-button interrupt. Re-attach normal button-interrupts
     gpio_wakeup_disable(pin);
 #endif
+#if defined(PMU_IRQ) && defined(MESHTASTIC_PMU_IRQ_DISARM_AFTER_LS)
+    // Bench arm C4, and the candidate fix for the storm: PMU_IRQ is the one light-sleep wake pin that is
+    // never disarmed, so its low-level arming is still in the GPIO registers at the next reset. A panic
+    // reset is CPU-only and leaves them intact, so the next boot's first attachInterrupt() - which on
+    // this board is attachPowerInterrupts() - enables a level condition nothing can clear.
+    // gpio_wakeup_disable() alone leaves int_type behind (the #12131 lesson), so set an edge type too.
+    if (pmu_found) {
+        gpio_wakeup_disable((gpio_num_t)PMU_IRQ);
+        gpio_set_intr_type((gpio_num_t)PMU_IRQ, GPIO_INTR_NEGEDGE);
+    }
+#endif
 #ifdef INPUTDRIVER_WAKE_BTN_PIN
     gpio_wakeup_disable((gpio_num_t)INPUTDRIVER_WAKE_BTN_PIN);
 #undef INPUTDRIVER_WAKE_BTN_PIN

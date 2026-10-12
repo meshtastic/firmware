@@ -1447,8 +1447,11 @@ void pmuIrqProbe()
     // PMU_IRQ here is the stale-state half of the theory: a panic reset is CPU-only and leaves these
     // registers alone, so a bit set at this point was set before the reset.
     const uint32_t pinReg = REG_READ(GPIO_PIN0_REG + 4 * PMU_IRQ);
-    LOG_INFO("PMU IRQ probe: GPIO%02d, esp_reset_reason %u, pin_reg 0x%08x, status 0x%08x, status1 0x%08x", PMU_IRQ,
-             (unsigned)esp_reset_reason(), (unsigned)pinReg, (unsigned)REG_READ(GPIO_STATUS_REG),
+    // bootCount is the other RTC_DATA_ATTR in this build (sleep.cpp): printed beside the registers it
+    // immediately invalidates a read taken after an unnoticed power cycle, which is how r124's false
+    // zero was caught.
+    LOG_INFO("PMU IRQ probe: GPIO%02d, esp_reset_reason %u, boot count %d, pin_reg 0x%08x, status 0x%08x, status1 0x%08x",
+             PMU_IRQ, (unsigned)esp_reset_reason(), bootCount, (unsigned)pinReg, (unsigned)REG_READ(GPIO_STATUS_REG),
              (unsigned)REG_READ(GPIO_STATUS1_REG));
 
     // Is the line asserted, and is anything holding it? pinMode(PMU_IRQ, INPUT) in axpChipInit() leaves
