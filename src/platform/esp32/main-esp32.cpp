@@ -465,6 +465,30 @@ void esp32LogWakePinLevel(const char *when)
 }
 #endif // MESHTASTIC_WAKE_PIN_PROBE
 
+// Pull a pad to the level ext1 treats as idle, in both the digital and the RTC registers: the digital
+// pull covers the window before the sleep, the RTC pull holds once the RTC domain owns the pad.
+static void holdPadAtIdleLevel(gpio_num_t pad, bool wakeOnHigh)
+{
+    if (wakeOnHigh) {
+        gpio_pullup_dis(pad);
+        gpio_pulldown_en(pad);
+    } else {
+        gpio_pulldown_dis(pad);
+        gpio_pullup_en(pad);
+    }
+#if SOC_RTCIO_HOLD_SUPPORTED
+    if (rtc_gpio_is_valid_gpio(pad)) {
+        if (wakeOnHigh) {
+            rtc_gpio_pullup_dis(pad);
+            rtc_gpio_pulldown_en(pad);
+        } else {
+            rtc_gpio_pulldown_dis(pad);
+            rtc_gpio_pullup_en(pad);
+        }
+    }
+#endif
+}
+
 void cpuDeepSleep(uint32_t msecToWake)
 {
     /*
@@ -536,37 +560,21 @@ void cpuDeepSleep(uint32_t msecToWake)
 #ifdef ALT_BUTTON_WAKE
     gpioMask |= (1ULL << BUTTON_PIN_ALT);
 #endif
-    // Hold the wake pad at its idle level for the whole sleep. Two reasons, and the second is the one
-    // that bites: ext1 samples the line, and on a strapping pin the ROM reads it again at the reset that
-    // ends the sleep - GPIO0 is the ESP32 download-mode strap, so a pad left floating can bring the chip
-    // up in ROM download mode instead of booting the firmware, which needs power physically removed to
-    // clear. ~40 variants use GPIO0 as BUTTON_PIN. This was previously gated on BUTTON_NEED_PULLUP and
-    // applied to BUTTON_PIN rather than to the pin actually armed; an internal pull is a few hundred nA,
-    // less than the leakage the gate was there to avoid.
+    // Give every pad in the ext1 mask a pull at its idle level for the whole sleep. ext1 samples those
+    // lines, so an unpulled one is a wake source that needs no button, and on a strapping pin the ROM
+    // reads the pad again at the reset that ends the sleep. This was previously gated on
+    // BUTTON_NEED_PULLUP and applied to BUTTON_PIN rather than to the pin actually armed - which on a
+    // DEEP_SLEEP_WAKE_PIN board, or where the user has set button_gpio, is a different pin. An internal
+    // pull is a few hundred nA, less than the leakage the gate was there to avoid.
     //
     // Both register sets are written on purpose: the digital pull covers the window before the sleep,
     // the RTC pull is the one that holds once the RTC domain owns the pad.
-    if (wakeButton >= 0) {
-        const gpio_num_t wakePad = (gpio_num_t)wakeButton;
-        if (wakeOnHigh) {
-            gpio_pullup_dis(wakePad);
-            gpio_pulldown_en(wakePad);
-        } else {
-            gpio_pulldown_dis(wakePad);
-            gpio_pullup_en(wakePad);
-        }
-#if SOC_RTCIO_HOLD_SUPPORTED
-        if (rtc_gpio_is_valid_gpio(wakePad)) {
-            if (wakeOnHigh) {
-                rtc_gpio_pullup_dis(wakePad);
-                rtc_gpio_pulldown_en(wakePad);
-            } else {
-                rtc_gpio_pulldown_dis(wakePad);
-                rtc_gpio_pullup_en(wakePad);
-            }
-        }
+    if (wakeButton >= 0)
+        holdPadAtIdleLevel((gpio_num_t)wakeButton, wakeOnHigh);
+#ifdef ALT_BUTTON_WAKE
+    // The mask's second pad needs the same treatment; ext1 arms both for the same level.
+    holdPadAtIdleLevel((gpio_num_t)BUTTON_PIN_ALT, wakeOnHigh);
 #endif
-    }
 
 #if SOC_PM_SUPPORT_EXT1_WAKEUP
     gpioMask = filterExt1WakeMask(gpioMask);
