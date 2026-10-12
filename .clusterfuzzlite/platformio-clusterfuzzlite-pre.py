@@ -40,7 +40,7 @@ env.Append(
     LINKFLAGS=cxxflags
     + sanitizer_flags
     + lib_fuzzing_engine
-    + ["-stdlib=libc++", "-std=c++17"],
+    + ["-stdlib=libc++", "-std=c++20"],
     _LIBFLAGS=[replaceStatic(s) for s in shlex.split(os.getenv("STATIC_LIBS"))]
     + [
         "/usr/lib/x86_64-linux-gnu/libunistring.a",  # Needs to be at the end.
