@@ -1497,6 +1497,7 @@ void loop()
     rp2040Loop();
 #endif
     power->powerCommandsCheck();
+    nodeDB->saveNodeDatabaseIfDirty();
 
     if (RadioLibInterface::instance != nullptr) {
         static uint32_t lastRadioMissedIrqPoll;
@@ -1505,7 +1506,7 @@ void loop()
             RadioLibInterface::instance->pollMissedIrqs();
         }
 
-        // Periodic radio upkeep - re-arms RX if it was left off, else AGC reset (stuck-gain prevention)
+        // Periodic radio upkeep - re-arms RX if it was left off, else an AGC reset when one is due (stuck-gain prevention)
         static uint32_t lastAgcReset;
         if (!Throttle::isWithinTimespanMs(lastAgcReset, AGC_RESET_INTERVAL_MS)) {
             lastAgcReset = millis();

@@ -1277,7 +1277,6 @@ void menuHandler::homeBaseMenu()
                 IF_SCREEN(if (!externalNotificationModule->getMute()) externalNotificationModule->stopNow();)
             }
         } else if (selected == Backlight) {
-            screen->setOn(false);
 #if HAS_BACKLIGHT
             graphics::backlightToggle();
             saveUIConfig();

@@ -80,6 +80,7 @@ Lora:
 #  DIO3_TCXO_VOLTAGE: true
 
 #  DIO3_TCXO_VOLTAGE: true  # the Waveshare Core1262 and others are known to need this setting
+#  DIO3_TCXO_DELAY_US: 1000  # TCXO start-up wait, SX126x/LR11xx; default 1000 (RadioLib's own is 5000)
 
 #  TCXO_OPTIONAL: true  # Probe both oscillators (default Vref 1.6V); SX126x/LR20x0/LR11xx only.
 #                       # SX126x and LR20x0 try TCXO first; LR11x0 tries the crystal first.
@@ -223,6 +224,17 @@ Input:
 #    cancel: [0x122, 0x120] # B and X
 #    left: [0x124]          # L shoulder, alongside the D-pad
 #    right: [0x125]         # R shoulder
+
+### Adafruit Arcade Bonnet: six buttons (1A-1F) and a 4-way joystick on an MCP23017
+### I2C expander. Needs I2C.I2CDevice. The value is the expander's I2C address (0x26 as
+### shipped). The joystick drives Up/Down/Left/Right; it is polled over I2C, so the
+### bonnet's interrupt line (GPIO17, the HUB75 clock on adafruit-hat) is never used.
+#  ArcadeBonnet: 0x26
+### Map bonnet buttons to actions, as with JoystickButtons. Omit to use the defaults:
+### 1A, 1C and 1F select; 1B, 1D and 1E cancel.
+#  ArcadeBonnetButtons:
+#    select: [1A, 1C, 1F]
+#    cancel: [1B, 1D, 1E]
 
 ### Standard User Button Config
 #  UserButton: 6
