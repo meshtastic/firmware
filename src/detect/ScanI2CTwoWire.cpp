@@ -1100,6 +1100,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
 #ifdef HAS_ADS1115
                 // Already configured by the battery driver in Power.cpp, so the default-config check above misses it.
                 if (addr.address == ADS1115_ADDR) {
+                    type = ADS1X15;
                     logFoundDevice("ADS1115 ADC", (uint8_t)addr.address);
                     break;
                 }
