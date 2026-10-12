@@ -123,6 +123,12 @@ void nrf52Setup(), esp32Setup(), nrf52Loop(), esp32Loop(), rp2040Setup(), rp2040
     nrf52FlashQuiesce(), stm32wlSetup();
 #ifdef ARCH_ESP32
 void esp32ReleaseBluetoothMemoryIfUnused();
+#ifdef MESHTASTIC_WAKE_PIN_PROBE
+// Bench probe for the deep-sleep wake pad; see main-esp32.cpp. Off in every shipped build.
+void esp32CaptureWakePinAtBoot();
+void esp32LogWakePinProbe();
+void esp32LogWakePinLevel(const char *when);
+#endif
 #endif
 
 meshtastic_DeviceMetadata getDeviceMetadata();

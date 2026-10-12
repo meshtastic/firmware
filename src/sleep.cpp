@@ -499,6 +499,9 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
 
     waitEnterSleep(false, false);
     notifyLightSleep.notifyObservers(NULL); // Button interrupts are detached here
+#ifdef MESHTASTIC_WAKE_PIN_PROBE
+    esp32LogWakePinLevel("before arming for light sleep");
+#endif
 
     uint64_t sleepUsec = sleepMsec * 1000LL;
 
@@ -660,6 +663,9 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     // handling below (and PowerFSM) takes the packet-service path instead of a stale timer path.
     esp_sleep_wakeup_cause_t cause = loraIrqPending ? ESP_SLEEP_WAKEUP_GPIO : esp_sleep_get_wakeup_cause();
     notifyLightSleepEnd.notifyObservers(cause); // Button interrupts are reattached here
+#ifdef MESHTASTIC_WAKE_PIN_PROBE
+    esp32LogWakePinLevel("after light sleep");
+#endif
 
     if (cause == ESP_SLEEP_WAKEUP_GPIO) {
         LOG_INFO("Exit light sleep gpio");

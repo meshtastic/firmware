@@ -368,6 +368,10 @@ void printInfo()
 #ifndef PIO_UNIT_TESTING
 void setup()
 {
+#if defined(ARCH_ESP32) && defined(MESHTASTIC_WAKE_PIN_PROBE)
+    // Before anything configures the pad, so the level read here is the one the ROM saw as a boot strap
+    esp32CaptureWakePinAtBoot();
+#endif
 
     // initialize power HAL layer as early as possible
     powerHAL_init();

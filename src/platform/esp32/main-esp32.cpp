@@ -26,6 +26,7 @@
 #include "soc/rtc.h"
 #include "target_specific.h"
 #include <Preferences.h>
+#include <driver/gpio.h>
 #include <driver/rtc_io.h>
 #include <esp_efuse.h>
 #include <esp_efuse_table.h>
@@ -220,6 +221,9 @@ void enableSlowCLK()
 
 void esp32Setup()
 {
+#ifdef MESHTASTIC_WAKE_PIN_PROBE
+    esp32LogWakePinProbe();
+#endif
     /* We explicitly don't want to do call randomSeed,
     // as that triggers the esp32 core to use a less secure pseudorandom function.
     uint32_t seed = esp_random();
@@ -342,6 +346,95 @@ static uint64_t filterExt1WakeMask(uint64_t gpioMask)
     return valid;
 }
 #endif
+
+#ifdef MESHTASTIC_WAKE_PIN_PROBE
+#include <esp_system.h> // esp_reset_reason()
+/*
+ * Bench probe (r123), off in every shipped build. Answers two questions about the pad deep sleep wakes
+ * on, without ever sleeping or resetting while it is unpulled:
+ *   - what level was it at when the ROM read it as a boot strap, and what reset were we coming out of
+ *   - is anything external holding it, or is our internal pull the only thing that does
+ */
+static uint32_t wakePinProbeResetReason = 0;
+static uint8_t wakePinProbeBootBits = 0;
+static bool wakePinProbeCaptured = false;
+
+static int wakePinProbePad()
+{
+#if defined(DEEP_SLEEP_WAKE_PIN)
+    return DEEP_SLEEP_WAKE_PIN;
+#elif defined(BUTTON_PIN)
+    return BUTTON_PIN; // the boot capture runs before NodeDB, so config.device.button_gpio is not readable yet
+#else
+    return -1;
+#endif
+}
+
+static bool wakePinProbeWakesOnHigh()
+{
+#if defined(ESP32S3_WAKE_TYPE)
+    return ESP32S3_WAKE_TYPE == ESP_EXT1_WAKEUP_ANY_HIGH;
+#else
+    return false;
+#endif
+}
+
+/// Eight reads, oldest in the high bit, so a decaying line shows as a pattern rather than one value.
+static uint8_t wakePinProbeSample(gpio_num_t pad, uint32_t gapUsec)
+{
+    uint8_t bits = 0;
+    for (int i = 0; i < 8; i++) {
+        bits = (uint8_t)((bits << 1) | (gpio_get_level(pad) & 1));
+        delayMicroseconds(gapUsec);
+    }
+    return bits;
+}
+
+void esp32CaptureWakePinAtBoot()
+{
+    const int pad = wakePinProbePad();
+    if (pad < 0)
+        return;
+    wakePinProbeResetReason = (uint32_t)esp_reset_reason();
+    // The input buffer can be off after a ROM boot. Enabling it does not touch the pull, which is what
+    // we are here to read.
+    gpio_set_direction((gpio_num_t)pad, GPIO_MODE_INPUT);
+    wakePinProbeBootBits = wakePinProbeSample((gpio_num_t)pad, 200);
+    wakePinProbeCaptured = true;
+}
+
+void esp32LogWakePinProbe()
+{
+    const int pad = wakePinProbePad();
+    if (pad < 0 || !wakePinProbeCaptured)
+        return;
+    LOG_INFO("Wake pin probe: GPIO%02d, esp_reset_reason %u, level at boot 0x%02x", pad, (unsigned)wakePinProbeResetReason,
+             wakePinProbeBootBits);
+    if (wakePinProbeWakesOnHigh()) {
+        LOG_INFO("Wake pin probe: pad wakes on high, external-pull test skipped");
+        return;
+    }
+    // Awake throughout: the chip never sleeps or resets with the pull removed, so this cannot strand the
+    // board in download mode the way a real unpulled sleep can.
+    const gpio_num_t wakePad = (gpio_num_t)pad;
+    gpio_pulldown_dis(wakePad);
+    gpio_pullup_en(wakePad);
+    const uint8_t pulled = wakePinProbeSample(wakePad, 1000);
+    gpio_pullup_dis(wakePad);
+    const uint8_t floated = wakePinProbeSample(wakePad, 1000);
+    gpio_pullup_en(wakePad);
+    const uint8_t restored = wakePinProbeSample(wakePad, 1000);
+    LOG_INFO("Wake pin probe: pull-up 0x%02x, no pull 0x%02x, pull-up again 0x%02x", pulled, floated, restored);
+}
+
+void esp32LogWakePinLevel(const char *when)
+{
+    const int pad = wakePinProbePad();
+    if (pad < 0)
+        return;
+    LOG_INFO("Wake pin probe: GPIO%02d %s, level 0x%02x", pad, when, wakePinProbeSample((gpio_num_t)pad, 200));
+}
+#endif // MESHTASTIC_WAKE_PIN_PROBE
 
 void cpuDeepSleep(uint32_t msecToWake)
 {
@@ -476,5 +569,8 @@ void cpuDeepSleep(uint32_t msecToWake)
     // User shutdown (DELAY_FOREVER / portMAX_DELAY): no RTC timer - align with nRF52 system_off semantics.
     if (msecToWake != portMAX_DELAY)
         esp_sleep_enable_timer_wakeup(msecToWake * 1000ULL); // call expects usecs
+#ifdef MESHTASTIC_WAKE_PIN_PROBE
+    esp32LogWakePinLevel("armed, entering deep sleep");
+#endif
     esp_deep_sleep_start();
 }
