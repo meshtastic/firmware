@@ -94,6 +94,9 @@ class NativeDiscovery
         std::lock_guard<std::mutex> lock(logMu);
         if (strcmp(buf, lastQueued) == 0)
             return;
+        // One slot. Leave an undrained warning in place; info must not erase it.
+        if (logPending && logWarn && !warn)
+            return;
         snprintf(logText, sizeof(logText), "%s", buf);
         snprintf(lastQueued, sizeof(lastQueued), "%s", buf);
         logWarn = warn;
