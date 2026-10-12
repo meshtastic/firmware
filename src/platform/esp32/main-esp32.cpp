@@ -465,30 +465,6 @@ void esp32LogWakePinLevel(const char *when)
 }
 #endif // MESHTASTIC_WAKE_PIN_PROBE
 
-// Pull a pad to the level ext1 treats as idle, in both the digital and the RTC registers: the digital
-// pull covers the window before the sleep, the RTC pull holds once the RTC domain owns the pad.
-static void holdPadAtIdleLevel(gpio_num_t pad, bool wakeOnHigh)
-{
-    if (wakeOnHigh) {
-        gpio_pullup_dis(pad);
-        gpio_pulldown_en(pad);
-    } else {
-        gpio_pulldown_dis(pad);
-        gpio_pullup_en(pad);
-    }
-#if SOC_RTCIO_HOLD_SUPPORTED
-    if (rtc_gpio_is_valid_gpio(pad)) {
-        if (wakeOnHigh) {
-            rtc_gpio_pullup_dis(pad);
-            rtc_gpio_pulldown_en(pad);
-        } else {
-            rtc_gpio_pulldown_dis(pad);
-            rtc_gpio_pullup_en(pad);
-        }
-    }
-#endif
-}
-
 void cpuDeepSleep(uint32_t msecToWake)
 {
     /*
@@ -505,26 +481,6 @@ void cpuDeepSleep(uint32_t msecToWake)
     Note: we don't isolate pins that are used for the LORA, LED, i2c, or ST7735 Display for the Chatter2, spi or the wake
     button(s), maybe we should not include any other GPIOs...
     */
-    // The pad deep sleep wakes on. A variant whose button is not an RTC IO can nominate a different one
-    // with DEEP_SLEEP_WAKE_PIN; that replaces the button rather than joining it, because
-    // esp_sleep_enable_ext1_wakeup() validates the whole mask and arms nothing if any pin in it lacks
-    // RTC function, so one bad pin would veto the good one.
-#if defined(DEEP_SLEEP_WAKE_PIN)
-    const int wakeButton = DEEP_SLEEP_WAKE_PIN;
-#elif defined(BUTTON_PIN)
-    const int wakeButton = config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN;
-#else
-    const int wakeButton = -1;
-#endif
-#if defined(BUTTON_PIN) || defined(DEEP_SLEEP_WAKE_PIN)
-    // Which level ext1 is armed for below, so the pull we hold the pad at is the idle one.
-#if defined(ESP32S3_WAKE_TYPE)
-    const bool wakeOnHigh = (ESP32S3_WAKE_TYPE == ESP_EXT1_WAKEUP_ANY_HIGH);
-#else
-    const bool wakeOnHigh = false;
-#endif
-#endif
-
 #if SOC_RTCIO_HOLD_SUPPORTED
     static const uint8_t rtcGpios[] = {
 #ifndef HELTEC_VISION_MASTER_E213
@@ -537,6 +493,16 @@ void cpuDeepSleep(uint32_t msecToWake)
 #endif
         34, 35, 37};
 
+    // A variant whose button is not an RTC IO can nominate a different pad here. This replaces the
+    // button rather than joining it: esp_sleep_enable_ext1_wakeup() validates the whole mask and
+    // arms nothing if any pin in it lacks RTC function, so one bad pin would veto the good one.
+#if defined(DEEP_SLEEP_WAKE_PIN)
+    const int wakeButton = DEEP_SLEEP_WAKE_PIN;
+#elif defined(BUTTON_PIN)
+    const int wakeButton = config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN;
+#else
+    const int wakeButton = -1;
+#endif
     // Isolating a pad holds it, and ext1 cannot re-arm a held pad - skip the pin we wake on.
     for (int i = 0; i < sizeof(rtcGpios); i++) {
         if (rtcGpios[i] != wakeButton)
@@ -560,21 +526,13 @@ void cpuDeepSleep(uint32_t msecToWake)
 #ifdef ALT_BUTTON_WAKE
     gpioMask |= (1ULL << BUTTON_PIN_ALT);
 #endif
-    // Give every pad in the ext1 mask a pull at its idle level for the whole sleep. ext1 samples those
-    // lines, so an unpulled one is a wake source that needs no button, and on a strapping pin the ROM
-    // reads the pad again at the reset that ends the sleep. This was previously gated on
-    // BUTTON_NEED_PULLUP and applied to BUTTON_PIN rather than to the pin actually armed - which on a
-    // DEEP_SLEEP_WAKE_PIN board, or where the user has set button_gpio, is a different pin. An internal
-    // pull is a few hundred nA, less than the leakage the gate was there to avoid.
-    //
-    // Both register sets are written on purpose: the digital pull covers the window before the sleep,
-    // the RTC pull is the one that holds once the RTC domain owns the pad.
-    if (wakeButton >= 0)
-        holdPadAtIdleLevel((gpio_num_t)wakeButton, wakeOnHigh);
-#ifdef ALT_BUTTON_WAKE
-    // The mask's second pad needs the same treatment; ext1 arms both for the same level.
-    holdPadAtIdleLevel((gpio_num_t)BUTTON_PIN_ALT, wakeOnHigh);
+#ifdef BUTTON_NEED_PULLUP
+    gpio_pullup_en((gpio_num_t)BUTTON_PIN);
 #endif
+
+    // Not needed because both of the current boards have external pullups
+    // FIXME change polarity in hw so we can wake on ANY_HIGH instead - that would allow us to use all three buttons (instead
+    // of just the first) gpio_pullup_en((gpio_num_t)BUTTON_PIN);
 
 #if SOC_PM_SUPPORT_EXT1_WAKEUP
     gpioMask = filterExt1WakeMask(gpioMask);
