@@ -33,6 +33,15 @@
 #define SX126X_BUSY LORA_BUSY
 #define SX126X_RESET LORA_RESET
 
+//battery support , dividier 100kOm&100kOm
+
+#define BATTERY_PIN 0
+#define ADC_CHANNEL ADC1_GPIO0_CHANNEL
+#define ADC_MULTIPLIER 2.0
+
+//end battery support
+
+
 // RF_SW = RXEN, TX-переключение идёт через DIO2
 #define SX126X_RXEN 10
 #define SX126X_TXEN RADIOLIB_NC
