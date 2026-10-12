@@ -101,28 +101,19 @@ template <typename T> bool SX126xInterface<T>::init()
 
     startReceive(); // start receiving
 
-    // RadioLib's getStatus() is protected and reads no data bytes, so catch the status byte through parseStatusCb
-    // on a GetDeviceErrors read. osc is the Vref reinitChip() settled on, 0 when RadioLib fell back to the XTAL.
-    static uint8_t status;
-    uint8_t errors[2] = {0, 0};
-    // Chain to RadioLib's parser so a failed command or a 0x00/0xFF (no chip) byte still fails the read.
-    static Module::SPIparseStatusCb_t parse;
-    parse = module.spiConfig.parseStatusCb;
-    module.spiConfig.parseStatusCb = [](uint8_t in) -> int16_t {
-        status = in;
-        return parse ? parse(in) : RADIOLIB_ERR_NONE;
-    };
-    const int16_t readRes = module.SPIreadStream(RADIOLIB_SX126X_CMD_GET_DEVICE_ERRORS, errors, 2);
-    module.spiConfig.parseStatusCb = parse;
-    // A failed read can return before parseStatusCb runs, leaving the static holding an earlier call's byte.
-    if (readRes != RADIOLIB_ERR_NONE) {
-        LOG_WARN("SX126x state: osc=%s %.1fV, GetDeviceErrors read failed (%s%d)", tcxoVoltage > 0 ? "TCXO" : "XTAL", tcxoVoltage,
-                 radioLibErr, readRes);
-        return true;
-    }
-    static const char *const modes[] = {"?", "?", "STDBY_RC", "STDBY_XOSC", "FS", "RX", "TX", "?"};
-    LOG_INFO("SX126x state: osc=%s %.1fV, mode=%s, cmd status %u, device errors 0x%02x%02x", tcxoVoltage > 0 ? "TCXO" : "XTAL",
-             tcxoVoltage, modes[(status >> 4) & 0x07], (status >> 1) & 0x07, errors[0], errors[1]);
+    // Init-failure debug aid, disabled: a raw SPI read and parseStatusCb swap racing the RX readout task (needs a RadioSequence).
+    // static uint8_t status;
+    // uint8_t errors[2] = {0, 0};
+    // static Module::SPIparseStatusCb_t parse;
+    // parse = module.spiConfig.parseStatusCb;
+    // module.spiConfig.parseStatusCb = [](uint8_t in) -> int16_t {
+    //     status = in;
+    //     return parse ? parse(in) : RADIOLIB_ERR_NONE;
+    // };
+    // const int16_t readRes = module.SPIreadStream(RADIOLIB_SX126X_CMD_GET_DEVICE_ERRORS, errors, 2);
+    // module.spiConfig.parseStatusCb = parse;
+    // if (readRes == RADIOLIB_ERR_NONE)
+    //     LOG_DEBUG("SX126x status 0x%02x, device errors 0x%02x%02x", status, errors[0], errors[1]);
 
     return true;
 }
