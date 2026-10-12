@@ -133,10 +133,11 @@ void variant_shutdown()
     lp5814Write(0x00, 0x00);      // chip standby
 
     if (initOK) {
-        // Drive every expander output low in one transaction: once the LCD rail drops, the unpowered
-        // touch controller on this bus clamps SDA/SCL and any further transfer NACKs.
+        // Turn off Port 1 peripherals (GNSS, SD, PA) first, then Port 0 (LCD/touch) last.
+        // Once the LCD rail drops, the unpowered touch controller clamps SDA/SCL.
+        // Starting at register 0x03 writes Port 1, then decrements to Port 0.
         Wire.beginTransmission(BOARD_PCA9535_ADDR);
-        Wire.write(0x02); // output port 0, auto-increments to port 1
+        Wire.write(0x03); // output port 1, then wraps to port 0
         Wire.write(0x00);
         Wire.write(0x00);
         Wire.endTransmission();
