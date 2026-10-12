@@ -3,6 +3,7 @@
 #include "GPS.h"
 #endif
 #include "../detect/ScanI2C.h"
+#include "AdminKeys.h"
 #include "Channels.h"
 #include "CryptoEngine.h"
 #include "Default.h"
@@ -31,6 +32,7 @@
 #include "mesh/generated/meshtastic/deviceonly_legacy.pb.h"
 #include "meshUtils.h"
 #include "modules/NeighborInfoModule.h"
+#include "sleep.h"
 #include "target_specific.h"
 #if HAS_VARIABLE_HOPS
 #include "modules/HopScalingModule.h"
@@ -475,6 +477,7 @@ static uint8_t ourMacAddr[6];
 NodeDB::NodeDB()
 {
     LOG_INFO("Init NodeDB");
+    rebootObserver.observe(&notifyReboot);
     loadFromDisk();
     cleanupMeshDB();
 
@@ -737,6 +740,29 @@ NodeDB::NodeDB()
 NodeNum getFrom(const meshtastic_MeshPacket *p)
 {
     return (p->from == 0) ? nodeDB->getNodeNum() : p->from;
+}
+
+// The re-encode below cannot overflow the payload buffer, so it never yields an empty payload.
+static_assert(meshtastic_User_size <= sizeof(meshtastic_Data_payload_t::bytes), "User no longer fits Data.payload");
+
+bool coerceNodeInfoUserId(meshtastic_MeshPacket &p)
+{
+    if (p.which_payload_variant != meshtastic_MeshPacket_decoded_tag || p.decoded.portnum != meshtastic_PortNum_NODEINFO_APP)
+        return false;
+
+    meshtastic_User user = meshtastic_User_init_zero;
+    if (!pb_decode_from_bytes(p.decoded.payload.bytes, p.decoded.payload.size, &meshtastic_User_msg, &user))
+        return false;
+
+    char expected[sizeof(user.id)];
+    snprintf(expected, sizeof(expected), "!%08x", getFrom(&p));
+    if (strcmp(user.id, expected) == 0)
+        return false;
+
+    memcpy(user.id, expected, sizeof(user.id));
+    p.decoded.payload.size =
+        pb_encode_to_bytes(p.decoded.payload.bytes, sizeof(p.decoded.payload.bytes), &meshtastic_User_msg, &user);
+    return true;
 }
 
 // Returns true if the packet originated from the local node
@@ -2972,6 +2998,10 @@ void NodeDB::loadFromDisk()
         saveToDisk(SEGMENT_CHANNELS);
     }
 #if ARCH_PORTDUINO
+    // The host's config.yaml is authoritative for admin keys: it is root-owned and cannot be
+    // rewritten by an authorized remote, so it decides who may administer this node.
+    AdminKeys::applyHostKeys();
+
     // set any config overrides
     if (portduino_config.has_configDisplayMode) {
         config.display.displaymode = (_meshtastic_Config_DisplayConfig_DisplayMode)portduino_config.configDisplayMode;
@@ -3297,6 +3327,8 @@ bool NodeDB::saveNodeDatabaseToDisk()
     size_t nodeDatabaseSize;
     pb_get_encoded_size(&nodeDatabaseSize, meshtastic_NodeDatabase_fields, &nodeDatabase);
     bool ok = saveProto(nodeDatabaseFileName, nodeDatabaseSize, &meshtastic_NodeDatabase_msg, &nodeDatabase, false);
+    if (ok)
+        nodeDatabaseDirty = false;
 
     nodeDatabase.positions.clear();
     nodeDatabase.positions.shrink_to_fit();
@@ -3811,6 +3843,33 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
     saveNodeDatabaseToDisk();
 }
 
+// Locked encrypted storage rejects every write; saveToDiskNoRetry() skips it the same way.
+static bool isStorageLocked()
+{
+#ifdef MESHTASTIC_ENCRYPTED_STORAGE
+    return EncryptedStorage::isLockdownActive() && !EncryptedStorage::isUnlocked();
+#else
+    return false;
+#endif
+}
+
+void NodeDB::saveNodeDatabaseIfDirty()
+{
+    // Single attempt; shares updateUser()'s once-a-minute budget, so the write rate is unchanged.
+    if (!nodeDatabaseDirty || isStorageLocked() || Throttle::isWithinTimespanMs(lastNodeDbSave, ONE_MINUTE_MS))
+        return;
+    lastNodeDbSave = Time::getMillis();
+    saveNodeDatabaseToDisk();
+}
+
+int NodeDB::onReboot(void *)
+{
+    // A graceful reboot has no other save point.
+    if (nodeDatabaseDirty && !isStorageLocked())
+        saveNodeDatabaseToDisk();
+    return 0;
+}
+
 /** Update user info and channel for this node based on received user data
  */
 bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelIndex, bool xeddsaSigned)
@@ -3892,9 +3951,9 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
         updateGUIforNode = info;
         notifyObservers(true); // Force an update whether or not our node counts have changed
 
-        // We just changed something about a User,
-        // store our DB unless we just did so less than a minute ago
-
+        // We just changed something about a User. Store our DB unless we just did so less than a minute
+        // ago; a deferred save stays pending and saveNodeDatabaseIfDirty() retries it.
+        nodeDatabaseDirty = true;
         if (!Throttle::isWithinTimespanMs(lastNodeDbSave, ONE_MINUTE_MS)) {
             saveToDisk(SEGMENT_NODEDATABASE);
             lastNodeDbSave = millis();
