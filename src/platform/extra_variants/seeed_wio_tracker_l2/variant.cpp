@@ -6,6 +6,7 @@
 #include "DebugConfiguration.h"
 #include "SPILock.h"
 #include "WakeKey.h"
+#include "driver/gpio.h"
 #include "input/InputBroker.h"
 
 #include PCA95X5_INC
@@ -18,6 +19,10 @@ static bool initOK = false;
 
 void earlyInitVariant()
 {
+    gpio_intr_disable((gpio_num_t)LORA_DIO1);
+    gpio_wakeup_disable((gpio_num_t)LORA_DIO1);
+    gpio_set_intr_type((gpio_num_t)LORA_DIO1, GPIO_INTR_DISABLE);
+
     Wire.begin(I2C_SDA, I2C_SCL);
     Wire.setClock(100000); // Pin main I2C0 bus to 100 kHz (TCA9535, ADS1115, AW35615, ES8311 share this Wire)
     if (io.begin(Wire, BOARD_PCA9535_ADDR, I2C_SDA, I2C_SCL)) {
