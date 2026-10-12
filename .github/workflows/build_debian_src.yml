@@ -20,7 +20,7 @@ permissions:
 
 jobs:
   build-debian-src:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     # Only pushes to the default branch (develop) populate the cache; PR / merge_group runs
     # restore it but never save, so they stop filling up the repo's Actions cache storage.
     env:
@@ -39,9 +39,9 @@ jobs:
           # Build-tools (notably platformio) come from the Meshtastic project
           # on the OpenSUSE Build Service:
           # https://build.opensuse.org/project/show/network:Meshtastic:build-tools
-          echo 'deb http://download.opensuse.org/repositories/network:/Meshtastic:/build-tools/xUbuntu_24.04/ /' \
+          echo 'deb http://download.opensuse.org/repositories/network:/Meshtastic:/build-tools/xUbuntu_26.04/ /' \
             | sudo tee /etc/apt/sources.list.d/network:Meshtastic:build-tools.list
-          curl -fsSL https://download.opensuse.org/repositories/network:Meshtastic:build-tools/xUbuntu_24.04/Release.key \
+          curl -fsSL https://download.opensuse.org/repositories/network:Meshtastic:build-tools/xUbuntu_26.04/Release.key \
             | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/network_Meshtastic_build-tools.gpg >/dev/null
           sudo apt-get update -y --fix-missing
           sudo apt-get install -y build-essential devscripts equivs
