@@ -487,6 +487,13 @@ static uint8_t loraIrqSkippedSleeps = 0;
  *
  * Returns (after restoring hw state) when the user presses a button or we get a LoRa interrupt
  */
+#ifdef MESHTASTIC_LIGHT_SLEEP_COUNT
+// Bench counters. RTC memory, so they survive a light sleep, a deep sleep and a software reset, and are
+// cleared only by a power cycle - a capture can therefore be read long after the sleeps happened.
+RTC_DATA_ATTR uint32_t lightSleepEntries;
+RTC_DATA_ATTR uint32_t lightSleepArmedMsec;
+#endif
+
 esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more reasonable default
 {
     // LOG_DEBUG("Enter light sleep");
@@ -610,7 +617,16 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
         // Either nothing pending, or the line has stayed high past LORA_IRQ_SKIP_SLEEP_MAX and the main
         // loop is clearly not going to clear it. Never sleeping costs more than one stranded packet.
         loraIrqSkippedSleeps = 0;
+#ifdef MESHTASTIC_LIGHT_SLEEP_COUNT
+        // Counted before the sleep and logged after it: the console is already flushed here and the
+        // USJ pad is about to go down, so a line written now would not reach a host.
+        lightSleepEntries++;
+        lightSleepArmedMsec += (uint32_t)sleepMsec;
+#endif
         res = esp_light_sleep_start();
+#ifdef MESHTASTIC_LIGHT_SLEEP_COUNT
+        LOG_INFO("Light sleep count: %u entries, %u ms armed", lightSleepEntries, lightSleepArmedMsec);
+#endif
     }
     if (res != ESP_OK) {
         LOG_ERROR("esp_light_sleep_start result %d", res);

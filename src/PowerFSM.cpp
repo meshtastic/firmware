@@ -195,7 +195,12 @@ static void lsIdle()
             static bool loggedUsbVeto = false;
             if (usbConsoleHostAttached()) {
                 if (!loggedUsbVeto) {
+#ifdef MESHTASTIC_LIGHT_SLEEP_COUNT
+                    LOG_INFO("Skip light sleep: USB console host attached (count so far: %u entries, %u ms)", lightSleepEntries,
+                             lightSleepArmedMsec);
+#else
                     LOG_INFO("Skip light sleep: USB console host attached");
+#endif
                     loggedUsbVeto = true;
                 }
             } else {
@@ -216,6 +221,10 @@ static void lsIdle()
 static void lsExit()
 {
     LOG_POWERFSM("State: lsExit");
+#if defined(ARCH_ESP32) && defined(MESHTASTIC_LIGHT_SLEEP_COUNT)
+    // Printed on the way out of LS, while the console is up, so the tally can be read after a replug.
+    LOG_INFO("Light sleep count: %u entries, %u ms armed", lightSleepEntries, lightSleepArmedMsec);
+#endif
     // Lift the light-sleep force-off gate when leaving LS.
     t5BacklightWakeFromSleep();
 }

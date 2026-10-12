@@ -16,6 +16,12 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t msecToWake);
 /// to TinyUSB instead.
 bool usbConsoleHostAttached();
 
+#ifdef MESHTASTIC_LIGHT_SLEEP_COUNT
+/// Bench counters: how many light sleeps this board has entered since its last power cycle, and how
+/// many milliseconds of sleep those asked for. Kept in RTC memory, so they outlive a reset.
+extern uint32_t lightSleepEntries, lightSleepArmedMsec;
+#endif
+
 extern esp_sleep_source_t wakeCause;
 #endif
 
