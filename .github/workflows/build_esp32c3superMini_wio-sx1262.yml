@@ -7,4 +7,4 @@ jobs:
     with:
       version: custom
       platform: esp32c3
-      pio_env: supermini_wio_sx1262_v1
+      pio_env: supermini_wio_sx1262
