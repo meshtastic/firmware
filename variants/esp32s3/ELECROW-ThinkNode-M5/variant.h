@@ -52,7 +52,7 @@ extern int m5HasAg3352;
 // The GPS UART is crossed the other way on v1.0.
 #define GPS_TX_PIN (m5HasAg3352 ? 19 : 20) // This is for bits going TOWARDS the GPS
 #define GPS_RX_PIN (m5HasAg3352 ? 20 : 19) // This is for bits going TOWARDS the CPU
-
+#define PIN_GPS_SWITCH 18
 #define GPS_THREAD_INTERVAL 50
 
 #define PIN_SERIAL1_RX GPS_TX_PIN
