@@ -443,7 +443,18 @@ void PowerFSM_setup()
                              config.device.role == meshtastic_Config_DeviceConfig_Role_TAK_TRACKER ||
                              config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR;
 
-    if ((isRouter || config.power.is_power_saving) && !isWifiAvailable() && !isTrackerOrSensor) {
+#ifdef MESHTASTIC_NO_LIGHT_SLEEP
+    // Bench flag (r123). Light sleep suspends the USB-serial/JTAG console and a CPU-only reset does not
+    // bring it back, so a capture goes dark for as long as the node sleeps. Keep the two transitions into
+    // stateLS out of the machine entirely rather than returning early from doLightSleep(): lsIdle() reads
+    // an immediate ESP_SLEEP_WAKEUP_TIMER as a completed sleep chunk, so it would churn through ls_secs at
+    // loop speed instead. Deep sleep is unaffected.
+    const bool addLightSleepTransitions = false;
+    LOG_WARN("MESHTASTIC_NO_LIGHT_SLEEP: light sleep is disabled in this build");
+#else
+    const bool addLightSleepTransitions = true;
+#endif
+    if (addLightSleepTransitions && (isRouter || config.power.is_power_saving) && !isWifiAvailable() && !isTrackerOrSensor) {
         powerFSM.add_timed_transition(&stateNB, &stateLS,
                                       Default::getConfiguredOrDefaultMs(config.power.min_wake_secs, default_min_wake_secs), NULL,
                                       "Min wake timeout");
