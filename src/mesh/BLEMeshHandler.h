@@ -35,17 +35,37 @@
 #define BLE_MESH_TX_QUEUE_SIZE 8
 #endif
 
-// Repeats per queued frame, standing in for the redundancy LoRa gets from its own retries.
-#ifndef BLE_MESH_ADV_EVENTS
-#define BLE_MESH_ADV_EVENTS 3
+// Advertising interval in units of 0.625 ms.
+#ifndef BLE_MESH_ADV_INTERVAL
+#define BLE_MESH_ADV_INTERVAL 48 // 30 ms
 #endif
 
-/// A burst of `events` advertising events at `intervalUnits` x 0.625 ms, as a duration in ms. The
-/// extra interval covers the up-to-10 ms advDelay the Link Layer adds before each event.
-constexpr int32_t bleMeshBurstMs(uint32_t events, uint32_t intervalUnits)
+/// `units` x 0.625 ms, in ms.
+constexpr int32_t bleMeshUnitsToMs(uint32_t units)
 {
-    return (int32_t)((events + 1) * intervalUnits * 625 / 1000);
+    return (int32_t)(units * 625 / 1000);
 }
+
+// Burst length is a per-node radio parameter, sized for the slowest scanner the mesh must reach, and
+// need not match other implementations. That scanner is a phone whose app is not visible: Android runs
+// its scan at LOW_POWER, a 140 ms window every 1.4 s. A burst spanning one interval plus one window
+// always contains a whole window, and that window holds at least three 30-40 ms events; the two extra
+// advertising intervals cover a burst starting or ending mid-event.
+#ifndef BLE_MESH_PEER_SCAN_INTERVAL_MS
+#define BLE_MESH_PEER_SCAN_INTERVAL_MS 1400
+#endif
+#ifndef BLE_MESH_PEER_SCAN_WINDOW_MS
+#define BLE_MESH_PEER_SCAN_WINDOW_MS 140
+#endif
+#define BLE_MESH_ADV_BURST_MS                                                                                                    \
+    (BLE_MESH_PEER_SCAN_INTERVAL_MS + BLE_MESH_PEER_SCAN_WINDOW_MS + 2 * bleMeshUnitsToMs(BLE_MESH_ADV_INTERVAL))
+
+// Both controllers bound a burst by time in 10 ms units; rounded up so the burst is never shorter.
+#define BLE_MESH_ADV_BURST_10MS ((BLE_MESH_ADV_BURST_MS + 9) / 10)
+static_assert(BLE_MESH_ADV_BURST_10MS <= 0xFFFF, "burst must fit the controllers' 16-bit duration");
+
+// Frames are advertised one at a time, so a 1.6 s burst caps a node near 0.6 frames/s. A backlog waits
+// in the TX queue, and past its depth a frame is refused and counted in txDroppedQueueFull.
 
 /**
  * Carries mesh frames between nodes over connectionless BLE extended advertisements.

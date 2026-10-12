@@ -13,10 +13,6 @@
 #define BLE_MESH_SCAN_WINDOW 160 // 100ms
 #endif
 
-#ifndef BLE_MESH_ADV_INTERVAL
-#define BLE_MESH_ADV_INTERVAL 48 // 30ms in units of 0.625ms
-#endif
-
 class NRF52BLEMesh : public BLEMeshHandler
 {
   public:
@@ -38,7 +34,8 @@ class NRF52BLEMesh : public BLEMeshHandler
 
     // A SoftDevice advertising set of its own, allocated by passing BLE_GAP_ADV_SET_HANDLE_NOT_SET.
     // Handle 0 is Bluefruit's phone advertisement; sharing it means tearing that down and restoring
-    // it around every frame, which is the fallback when the SoftDevice has no spare set.
+    // it around every frame, which is the fallback when the SoftDevice has no spare set. S140 6.x and
+    // 7.x have BLE_GAP_ADV_SET_COUNT_MAX 1, so the phone advertisement is down for every burst.
     uint8_t advHandle = BLE_GAP_ADV_SET_HANDLE_NOT_SET;
     bool ownsDedicatedSet = false;
     bool advActive = false;

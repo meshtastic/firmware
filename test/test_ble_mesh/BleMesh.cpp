@@ -510,7 +510,7 @@ void test_canceling_cuts_a_burst_already_on_air(void)
     TEST_ASSERT_TRUE_MESSAGE(h.advertising, "on air");
 
     // runOnce pops before it advertises, so the frame is no longer in the ring and only the
-    // live-burst identity can find the BLE_MESH_ADV_EVENTS repeats still to come.
+    // live-burst identity can find the rest of the burst still to come.
     TEST_ASSERT_TRUE(h.cancel(meshtastic_MeshPacket_TransportMechanism_TRANSPORT_BLE_ADV, p.from, p.id));
     TEST_ASSERT_FALSE_MESSAGE(h.advertising, "burst ended");
 
@@ -600,13 +600,36 @@ void test_pump_waits_for_the_platform(void)
     TEST_ASSERT_EQUAL_MESSAGE(1, h.sent.size(), "transmits once ready");
 }
 
-// NimBLE's legacy ble_gap_adv_start takes its duration in milliseconds, where the extended API
-// counts events. 3 events at 48 x 0.625 ms last 90 ms, plus one interval for the advDelay each
-// event may add.
-void test_legacy_burst_duration_is_in_milliseconds(void)
+// A phone whose app is not visible scans 140 ms in every 1.4 s. A burst at least one interval plus
+// one window long always contains a whole window, whatever the phase between the two.
+void test_a_burst_spans_a_backgrounded_phone_scan(void)
 {
-    TEST_ASSERT_EQUAL_INT32(120, bleMeshBurstMs(3, 48));
-    TEST_ASSERT_GREATER_OR_EQUAL_INT32(3 * 30, bleMeshBurstMs(3, 48));
+    TEST_ASSERT_EQUAL_INT32(1600, BLE_MESH_ADV_BURST_MS);
+    TEST_ASSERT_GREATER_OR_EQUAL_INT32(1400 + 140, BLE_MESH_ADV_BURST_MS);
+    // Both controllers count the duration in 10 ms units, rounded up, never down.
+    TEST_ASSERT_EQUAL_INT32(160, BLE_MESH_ADV_BURST_10MS);
+}
+
+void test_a_backlog_waits_out_the_whole_burst(void)
+{
+    FakeBLEMesh h;
+    h.start();
+    auto first = encryptedPacket(0x3061b02e, 0x1000);
+    auto second = encryptedPacket(0x3061b02e, 0x1001);
+    TEST_ASSERT_TRUE(h.onSend(&first));
+    h.pump();
+    TEST_ASSERT_TRUE(h.onSend(&second));
+
+    // A waiting frame is no reason to cut: the duty-cycled scanner the burst is sized for would
+    // miss the tail.
+    h.pump();
+    TEST_ASSERT_TRUE_MESSAGE(h.advertising, "first burst still on air");
+    TEST_ASSERT_EQUAL_MESSAGE(1, h.sent.size(), "second frame still waiting");
+
+    // The controller ends the burst on its own once the duration has run.
+    h.advertising = false;
+    h.pump();
+    TEST_ASSERT_EQUAL_MESSAGE(2, h.sent.size(), "second frame follows");
 }
 
 void setUp(void) {}
@@ -644,7 +667,8 @@ void setup()
     RUN_TEST(test_a_relayed_packet_is_re_advertised);
     RUN_TEST(test_ingress_passes_our_own_advertisement_to_the_router);
     RUN_TEST(test_pump_waits_for_the_platform);
-    RUN_TEST(test_legacy_burst_duration_is_in_milliseconds);
+    RUN_TEST(test_a_burst_spans_a_backgrounded_phone_scan);
+    RUN_TEST(test_a_backlog_waits_out_the_whole_burst);
     exit(UNITY_END());
 }
 

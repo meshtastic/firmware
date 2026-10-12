@@ -7,18 +7,13 @@
 // NimBLE comes from the ESP-IDF component, so the host headers are on the include path directly.
 #include "host/ble_gap.h"
 
-// Units of 0.625ms. Window equals interval: a sender emits only BLE_MESH_ADV_EVENTS repeats and
-// nothing retransmits until heard, so a gap in the duty cycle can only lose frames.
+// Units of 0.625ms. Window equals interval: a sender emits one bounded burst per frame and nothing
+// retransmits until heard, so a gap in the duty cycle can only lose frames.
 #ifndef BLE_MESH_SCAN_INTERVAL
 #define BLE_MESH_SCAN_INTERVAL 160 // 100ms
 #endif
 #ifndef BLE_MESH_SCAN_WINDOW
 #define BLE_MESH_SCAN_WINDOW 160 // 100ms
-#endif
-
-// Units of 0.625ms.
-#ifndef BLE_MESH_ADV_INTERVAL
-#define BLE_MESH_ADV_INTERVAL 48 // 30ms
 #endif
 
 // Instance 0 stays with the PhoneAPI's connectable advertisement.

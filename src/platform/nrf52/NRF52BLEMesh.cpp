@@ -86,10 +86,10 @@ bool NRF52BLEMesh::platformBeginAdvertising(const uint8_t *adv, size_t len)
     advParams.p_peer_addr = NULL;
     advParams.filter_policy = BLE_GAP_ADV_FP_ANY;
     advParams.interval = BLE_MESH_ADV_INTERVAL;
-    advParams.duration = 0; // bounded by max_adv_evts, not by time
+    advParams.duration = BLE_MESH_ADV_BURST_10MS; // a span of time, as on ESP32
     advParams.primary_phy = BLE_GAP_PHY_1MBPS;
     advParams.secondary_phy = BLE_GAP_PHY_1MBPS;
-    advParams.max_adv_evts = BLE_MESH_ADV_EVENTS;
+    advParams.max_adv_evts = 0;
 
     if (!ownsDedicatedSet && advHandle == BLE_GAP_ADV_SET_HANDLE_NOT_SET) {
         uint8_t handle = BLE_GAP_ADV_SET_HANDLE_NOT_SET;
@@ -139,7 +139,7 @@ bool NRF52BLEMesh::platformBeginAdvertising(const uint8_t *adv, size_t len)
 
 bool NRF52BLEMesh::platformAdvertisingActive()
 {
-    // Cleared by BLE_GAP_EVT_ADV_SET_TERMINATED once max_adv_evts have gone out.
+    // Cleared by BLE_GAP_EVT_ADV_SET_TERMINATED once the duration has run out.
     return advActive;
 }
 

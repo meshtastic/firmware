@@ -119,9 +119,9 @@ bool ESP32BLEMesh::platformBeginAdvertising(const uint8_t *adv, size_t len)
         return false;
     }
 
-    // Bounded by max_events, not by duration: duration is the middle argument and is in 10ms units,
-    // not a repeat count.
-    rc = ble_gap_ext_adv_start(BLE_MESH_ADV_INSTANCE, 0, BLE_MESH_ADV_EVENTS);
+    // Bounded by duration (the middle argument, in 10ms units), not max_events: what the burst must
+    // cover is a span of time, and an event count's span varies with the Link Layer's advDelay.
+    rc = ble_gap_ext_adv_start(BLE_MESH_ADV_INSTANCE, BLE_MESH_ADV_BURST_10MS, 0);
     if (rc != 0) {
         LOG_WARN("BLE mesh ext adv start failed: %d", rc);
         return false;
@@ -144,9 +144,8 @@ bool ESP32BLEMesh::platformBeginAdvertising(const uint8_t *adv, size_t len)
 
     if (ble_gap_adv_set_data(adv, len) != 0)
         return false;
-    // The legacy API bounds a burst by milliseconds, not events, so convert the extended path's count.
-    return ble_gap_adv_start(BLE_OWN_ADDR_PUBLIC, NULL, bleMeshBurstMs(BLE_MESH_ADV_EVENTS, BLE_MESH_ADV_INTERVAL), &legacyParams,
-                             onGapEvent, this) == 0;
+    // The legacy API takes the duration in milliseconds, where the extended one counts 10ms units.
+    return ble_gap_adv_start(BLE_OWN_ADDR_PUBLIC, NULL, BLE_MESH_ADV_BURST_MS, &legacyParams, onGapEvent, this) == 0;
 #endif
 }
 
