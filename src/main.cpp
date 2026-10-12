@@ -1408,6 +1408,21 @@ void loop()
     // The single writer of the monotonic wrap carry; every other caller only reads it.
     Time::serviceMonotonic();
 
+#if defined(ARCH_ESP32) && defined(MESHTASTIC_FORCE_DEEP_SLEEP_SECS)
+#ifndef MESHTASTIC_FORCE_DEEP_SLEEP_AWAKE_SECS
+#define MESHTASTIC_FORCE_DEEP_SLEEP_AWAKE_SECS 30
+#endif
+    // Bench flag (r123). Deep sleep on a fixed cadence that no config setting can change: stay awake
+    // MESHTASTIC_FORCE_DEEP_SLEEP_AWAKE_SECS from each boot - long enough for a host to enumerate and
+    // for the per-boot logs to be read - then sleep MESHTASTIC_FORCE_DEEP_SLEEP_SECS. skipPreflight,
+    // so a busy radio cannot stretch the cadence into something the capture has to account for.
+    if (Throttle::hasElapsed(0, MESHTASTIC_FORCE_DEEP_SLEEP_AWAKE_SECS * 1000UL)) {
+        LOG_WARN("MESHTASTIC_FORCE_DEEP_SLEEP: %u s awake, sleeping %u s", (unsigned)MESHTASTIC_FORCE_DEEP_SLEEP_AWAKE_SECS,
+                 (unsigned)MESHTASTIC_FORCE_DEEP_SLEEP_SECS);
+        doDeepSleep(MESHTASTIC_FORCE_DEEP_SLEEP_SECS * 1000UL, true, true);
+    }
+#endif
+
 #if defined(MESHTASTIC_ENCRYPTED_STORAGE) && defined(MESHTASTIC_PHONEAPI_ACCESS_CONTROL)
     if (lockdownDisablePending) {
         lockdownDisablePending = false;
