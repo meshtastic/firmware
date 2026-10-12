@@ -325,6 +325,10 @@ void RF95Interface::addReceiveMetadata(meshtastic_MeshPacket *mp)
 
 int16_t RF95Interface::trySetStandby()
 {
+    // Handle any pending interrupts before we force standby, but not a TX whose backoff timer is pending: it would start
+    // here, before its delay is up, and the standby below would cut it off with its payload still in the radio
+    checkNotificationExcept(TRANSMIT_DELAY_COMPLETED);
+
     int16_t err = lora->standby();
     if (err != RADIOLIB_ERR_NONE)
         LOG_ERROR("RF95 standby %s%d", radioLibErr, err);
