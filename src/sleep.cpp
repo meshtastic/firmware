@@ -311,13 +311,28 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false, bool skipSaveN
 #ifdef BUTTON_PIN
     // Avoid leakage through button pin
     if (GPIO_IS_VALID_OUTPUT_GPIO(BUTTON_PIN)) {
+#if defined(DEEP_SLEEP_WAKE_PIN)
+        const int deepSleepWakePin = DEEP_SLEEP_WAKE_PIN;
+#else
+        const int deepSleepWakePin = config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN;
+#endif
 #ifdef BUTTON_NEED_PULLUP
         pinMode(BUTTON_PIN, INPUT_PULLUP);
 #else
-        pinMode(BUTTON_PIN, INPUT);
+#if defined(ESP32S3_WAKE_TYPE)
+        const bool wakeOnHigh = (ESP32S3_WAKE_TYPE == ESP_EXT1_WAKEUP_ANY_HIGH);
+#else
+        const bool wakeOnHigh = false;
+#endif
+        // Leaving the pad with no pull is only safe for a pin we are not waking on, which gpio_hold_en()
+        // latches below. The pin ext1 does wake on has to hold its idle level instead: the ROM reads a
+        // strapping pin again at the reset that ends the sleep, and GPIO0 - BUTTON_PIN on ~40 variants -
+        // is the download-mode strap, so a floating pad can come back up in ROM download mode.
+        // cpuDeepSleep() asserts the same pull in the RTC registers, which are what hold through the sleep.
+        pinMode(BUTTON_PIN, BUTTON_PIN != deepSleepWakePin ? INPUT : (wakeOnHigh ? INPUT_PULLDOWN : INPUT_PULLUP));
 #endif
         // A held pad ignores ext1_wakeup_prepare()'s re-route to RTC, so never hold the pin we wake on.
-        if (config.device.button_gpio && config.device.button_gpio != BUTTON_PIN)
+        if (BUTTON_PIN != deepSleepWakePin)
             gpio_hold_en((gpio_num_t)BUTTON_PIN);
     }
 #endif
