@@ -242,6 +242,9 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      *  HEADER_ERR on a damaged header. Either way the chip may have stopped listening, so the handoff needs a re-arm. */
     bool cadHandoffRxEnded();
 
+    // What a damaged header raises inside a handoff's RX, with no RX_DONE behind it. A handoff routes both to DIO1.
+    static constexpr uint32_t cadHandoffRxErrorIrqs = (1UL << RADIOLIB_IRQ_CRC_ERR) | (1UL << RADIOLIB_IRQ_HEADER_ERR);
+
     // Time::getMillis() when plain RX was first seen holding PREAMBLE/HEADER flags, or 0 if none.
     uint32_t rxFlagsSeenMs = 0;
     // rxFlagsSeenMs was stamped by a header, not by a bare preamble before it

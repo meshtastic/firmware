@@ -784,11 +784,28 @@ void RadioLibInterface::handleReceiveInterrupt(const CapturedRxInfo *captured)
 
         isReceiving = false;
 
+        const bool haveFrame = iface->checkIrq(RADIOLIB_IRQ_RX_DONE) == 1;
+
         // A CAD handoff's RX window expired with nothing on air. There is no packet to read, so don't count
         // it as a bad one - the caller's rearmReceive() puts the radio back to listening.
-        if (iface->checkIrq(RADIOLIB_IRQ_RX_DONE) != 1 && iface->checkIrq(RADIOLIB_IRQ_TIMEOUT) == 1) {
+        if (!haveFrame && iface->checkIrq(RADIOLIB_IRQ_TIMEOUT) == 1) {
             LOG_DEBUG("CAD>RX empty");
-            iface->clearIrq(1UL << RADIOLIB_IRQ_TIMEOUT);
+            // Inside a handoff a damaged header's flags can be set alongside the timeout, both routed to DIO1:
+            // clear them together, or the line stays asserted and the next frame's RX_DONE raises no edge. Plain
+            // RX keeps leaving HEADER_ERR for checkStaleRxFlags() to judge.
+            uint32_t endedIrqs = 1UL << RADIOLIB_IRQ_TIMEOUT;
+            if (wasCadHandoff)
+                endedIrqs |= cadHandoffRxErrorIrqs;
+            iface->clearIrq(endedIrqs);
+            return;
+        }
+
+        // The other frameless end of a handoff: a damaged header, raising CRC_ERR or HEADER_ERR with no RX_DONE
+        // behind it. getPacketLength() would not be a frame's length here, so take the same exit as the empty
+        // window, clearing what ended the RX instead of reading a packet that never arrived.
+        if (wasCadHandoff && !haveFrame) {
+            LOG_DEBUG("CAD>RX damaged");
+            iface->clearIrq(cadHandoffRxErrorIrqs);
             return;
         }
 
@@ -995,7 +1012,7 @@ void RadioLibInterface::rearmReceive()
 
 bool RadioLibInterface::cadHandoffRxEnded()
 {
-    const uint32_t endIrqs = (1UL << RADIOLIB_IRQ_TIMEOUT) | (1UL << RADIOLIB_IRQ_CRC_ERR) | (1UL << RADIOLIB_IRQ_HEADER_ERR);
+    const uint32_t endIrqs = (1UL << RADIOLIB_IRQ_TIMEOUT) | cadHandoffRxErrorIrqs;
     return cadHandoffRxStart && (iface->getIrqFlags() & iface->getIrqMapped(endIrqs));
 }
 
@@ -1257,8 +1274,13 @@ void RadioLibInterface::readOutFromTask()
         // A CAD handoff's RX that ends without a frame (TIMEOUT, or CRC_ERR / HEADER_ERR on a damaged header) can leave the
         // chip in standby. The radio thread clears the flags and re-arms; cleared here instead, the handoff stays open,
         // the chip deaf, until checkCadHandoffTimeout(). Plain RX leaves HEADER_ERR for checkStaleRxFlags() to judge.
-        if (cadHandoffRxEnded())
-            notify(ISR_RX, !rxArmedBeforeTxDone);
+        if (cadHandoffRxEnded() && !notify(ISR_RX, !rxArmedBeforeTxDone)) {
+            // The one notification slot already held a TX: that path re-arms RX itself, but nothing there would
+            // clear a damaged header's flags, and a latched line raises no edge for the next frame's RX_DONE. So
+            // clear them here, as this site did before the handoff end was handed to the radio thread, and leave
+            // the open handoff to checkCadHandoffTimeout().
+            iface->clearIrq(cadHandoffRxErrorIrqs);
+        }
         return; // otherwise an edge for a frame already taken
     }
     const size_t len = iface->getPacketLength();
