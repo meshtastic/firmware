@@ -1036,6 +1036,13 @@ void RadioLibInterface::checkStaleRxFlags()
     // HEADER_ERR counts on its own: on SX1280 it leaves RX wedged with no RX_DONE or TIMEOUT to follow.
     const bool errSeen = irq & iface->getIrqMapped(1UL << RADIOLIB_IRQ_HEADER_ERR);
     const bool headerSeen = validSeen || errSeen;
+#ifdef MESHTASTIC_STALE_HEADER_ERR_PROBE
+    // The error's own first sight, kept beside rxFlagsSeenMs so the probe can report both ages
+    if (!errSeen)
+        rxFlagsErrSeenMs = 0;
+    else if (!rxFlagsErrSeenMs)
+        rxFlagsErrSeenMs = Time::skipZero(Time::getMillis());
+#endif
     const bool preambleSeen = irq & iface->getIrqMapped(1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED);
     if (!headerSeen && !preambleSeen) {
         rxFlagsSeenMs = 0;
@@ -1063,6 +1070,13 @@ void RadioLibInterface::checkStaleRxFlags()
     case StaleRxFlagAction::ClearHeaderErr:
         // A clear never aborts a reception, unlike the standby inside startReceive().
         LOG_DEBUG("RX header err stale, cleared");
+#ifdef MESHTASTIC_STALE_HEADER_ERR_PROBE
+        // One line per retired error. errAge >= maxpkt is one develop had already re-armed on; errAge < maxpkt
+        // with valid=1 is one develop re-arms on at errAge == maxpkt unless the frame's RX_DONE lands first.
+        LOG_WARN("STALE_HDR_ERR valid=%d errAge=%u validAge=%u maxpkt=%u", validSeen ? 1 : 0,
+                 (unsigned)(Time::getMillis() - rxFlagsErrSeenMs), (unsigned)(validSeen ? Time::getMillis() - rxFlagsSeenMs : 0),
+                 (unsigned)maxPacketTimeMsec);
+#endif
         if (validSeen) { // a valid header beside it keeps the window this error did not start
             iface->clearIrq(1UL << RADIOLIB_IRQ_HEADER_ERR);
             break;

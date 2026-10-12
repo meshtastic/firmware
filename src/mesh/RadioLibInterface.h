@@ -251,6 +251,10 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     bool rxFlagsSeenHeader = false;
     // ...and that header was a valid one, not a failed header before it
     bool rxFlagsSeenValidHeader = false;
+#ifdef MESHTASTIC_STALE_HEADER_ERR_PROBE
+    // Bench only: when HEADER_ERR was first seen, which a valid header's restart overwrites in rxFlagsSeenMs
+    uint32_t rxFlagsErrSeenMs = 0;
+#endif
 
     /** Plain-RX twin of checkCadHandoffTimeout(): retire flags no RX_DONE consumed within a max packet. */
     virtual void checkStaleRxFlags();
