@@ -72,12 +72,14 @@ ProcessMessage InkHUD::FavoritesMapApplet::handleReceived(const meshtastic_MeshP
 
     // Determine if the position packet would change anything on-screen.
     bool somethingChanged = false;
+    bool backgroundChanged = false;
 
     // If our own position.
     if (isFromUs(&mp)) {
         // Ignore tiny local movement to reduce update spam.
         if (GeoCoord::latLongToMeter(ourLastLat, ourLastLng, lat, lng) > 50) {
             somethingChanged = true;
+            backgroundChanged = true;
             ourLastLat = lat;
             ourLastLng = lng;
         }
@@ -90,6 +92,7 @@ ProcessMessage InkHUD::FavoritesMapApplet::handleReceived(const meshtastic_MeshP
         // Check if this position is from someone different than our previous position packet.
         if (mp.from != lastFrom) {
             somethingChanged = true;
+            backgroundChanged = true;
             lastFrom = mp.from;
             lastLat = lat;
             lastLng = lng;
@@ -99,6 +102,7 @@ ProcessMessage InkHUD::FavoritesMapApplet::handleReceived(const meshtastic_MeshP
         // Same sender: check if position changed.
         else if (GeoCoord::latLongToMeter(lastLat, lastLng, lat, lng) > 10) {
             somethingChanged = true;
+            backgroundChanged = true;
             lastLat = lat;
             lastLng = lng;
         }
@@ -112,7 +116,7 @@ ProcessMessage InkHUD::FavoritesMapApplet::handleReceived(const meshtastic_MeshP
 
     if (somethingChanged) {
         requestAutoshow();
-        requestUpdate();
+        requestMapUpdate(backgroundChanged);
     }
 
     return ProcessMessage::CONTINUE;

@@ -57,6 +57,7 @@ ProcessMessage InkHUD::PositionsApplet::handleReceived(const meshtastic_MeshPack
     // -----------------------------------------------------------------
 
     bool somethingChanged = false;
+    bool backgroundChanged = false;
 
     // If our own position
     if (isFromUs(&mp)) {
@@ -65,6 +66,7 @@ ProcessMessage InkHUD::PositionsApplet::handleReceived(const meshtastic_MeshPack
         // Todo: smarter detection of position changes
         if (GeoCoord::latLongToMeter(ourLastLat, ourLastLng, lat, lng) > 50) {
             somethingChanged = true;
+            backgroundChanged = true;
             ourLastLat = lat;
             ourLastLng = lng;
         }
@@ -75,6 +77,7 @@ ProcessMessage InkHUD::PositionsApplet::handleReceived(const meshtastic_MeshPack
         // Check if this position is from someone different than our previous position packet
         if (mp.from != lastFrom) {
             somethingChanged = true;
+            backgroundChanged = true;
             lastFrom = mp.from;
             lastLat = lat;
             lastLng = lng;
@@ -85,6 +88,7 @@ ProcessMessage InkHUD::PositionsApplet::handleReceived(const meshtastic_MeshPack
         // Todo: smarter detection of position changes
         else if (GeoCoord::latLongToMeter(lastLat, lastLng, lat, lng) > 10) {
             somethingChanged = true;
+            backgroundChanged = true;
             lastLat = lat;
             lastLng = lng;
         }
@@ -102,7 +106,7 @@ ProcessMessage InkHUD::PositionsApplet::handleReceived(const meshtastic_MeshPack
 
     if (somethingChanged) {
         requestAutoshow(); // Todo: only request this in some situations?
-        requestUpdate();
+        requestMapUpdate(backgroundChanged);
     }
 
     return ProcessMessage::CONTINUE;

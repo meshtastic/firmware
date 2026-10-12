@@ -52,6 +52,7 @@ class MapApplet : public Applet
     virtual bool shouldDrawNode(meshtastic_NodeInfoLite *node) { return true; } // Allow derived applets to filter the nodes
     virtual void getMapCenter(float *lat, float *lng);
     virtual void getMapSize(uint32_t *widthMeters, uint32_t *heightMeters);
+    void requestMapUpdate(bool backgroundChanged);
 
     virtual bool enoughMarkers();                          // Anything to draw?
     void drawLabeledMarker(meshtastic_NodeInfoLite *node); // Highlight a specific marker
@@ -109,6 +110,9 @@ class MapApplet : public Applet
     uint32_t widthMeters = 0;  // Map width: meters
     uint32_t heightMeters = 0; // Map height: meters
     uint32_t focusedWaypointId = 0;
+    bool hasRefreshGpsPosition = false;
+    float refreshGpsLat = 0.0f;
+    float refreshGpsLng = 0.0f;
 };
 
 } // namespace NicheGraphics::InkHUD

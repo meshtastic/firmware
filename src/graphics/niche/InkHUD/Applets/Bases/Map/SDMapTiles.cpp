@@ -182,33 +182,54 @@ bool scanZoomMask(Header &parsed)
     return true;
 }
 
-int findTile(int zoom, int x, int y)
+struct TileMatch {
+    int index = -1;
+    uint8_t zoom = 0;
+};
+
+TileMatch findTileOrParent(int zoom, int x, int y)
 {
     const uint32_t positionCount = header.layout == MapTileUtils::LAYOUT_GRID ? header.blockCount : header.tileCount;
     const uint32_t tilesPerBlock = (uint32_t)header.gridColumns * header.gridRows;
+    TileMatch match;
     uint8_t positions[STREAMED_INDEX_ENTRIES_PER_BLOCK * POSITION_SIZE];
     for (uint32_t first = 0; first < positionCount; first += STREAMED_INDEX_ENTRIES_PER_BLOCK) {
         const uint32_t count = min(STREAMED_INDEX_ENTRIES_PER_BLOCK, positionCount - first);
         if (!readPositionBlock(first, count, positions)) {
             LOG_WARN("SD map: index block read failed at entry %lu", (unsigned long)first);
-            return -1;
+            return {};
         }
         for (uint32_t i = 0; i < count; ++i) {
             const uint8_t *position = positions + i * POSITION_SIZE;
-            if (header.layout == MapTileUtils::LAYOUT_SPARSE) {
-                if (position[0] == zoom && readLittleEndian16(position + 1) == x && readLittleEndian16(position + 3) == y)
-                    return first + i;
+            const uint8_t candidateZoom = position[0];
+            if (candidateZoom > zoom || (match.index >= 0 && candidateZoom <= match.zoom))
                 continue;
+
+            const uint8_t zoomDifference = zoom - candidateZoom;
+            const int candidateX = x >> zoomDifference;
+            const int candidateY = y >> zoomDifference;
+            int candidateIndex = -1;
+            if (header.layout == MapTileUtils::LAYOUT_SPARSE) {
+                if (readLittleEndian16(position + 1) == candidateX && readLittleEndian16(position + 3) == candidateY)
+                    candidateIndex = first + i;
+            } else {
+                const int originX = readLittleEndian16(position + 1);
+                const int originY = readLittleEndian16(position + 3);
+                if (candidateX >= originX && candidateX < originX + header.gridColumns && candidateY >= originY &&
+                    candidateY < originY + header.gridRows)
+                    candidateIndex =
+                        (first + i) * tilesPerBlock + (candidateX - originX) * header.gridRows + (candidateY - originY);
             }
 
-            const int originX = readLittleEndian16(position + 1);
-            const int originY = readLittleEndian16(position + 3);
-            if (position[0] == zoom && x >= originX && x < originX + header.gridColumns && y >= originY &&
-                y < originY + header.gridRows)
-                return (first + i) * tilesPerBlock + (x - originX) * header.gridRows + (y - originY);
+            if (candidateIndex >= 0) {
+                match.index = candidateIndex;
+                match.zoom = candidateZoom;
+                if (candidateZoom == zoom)
+                    return match;
+            }
         }
     }
-    return -1;
+    return match;
 }
 
 } // namespace
@@ -294,23 +315,28 @@ bool hasZoom(int zoom)
     return header.valid && zoom >= 0 && zoom <= 22 && (header.zoomMask & (1UL << zoom));
 }
 
-bool readTile(int zoom, int x, int y, uint8_t *destination, size_t destinationSize)
+bool readTileOrParent(int zoom, int x, int y, uint8_t *destination, size_t destinationSize, uint8_t &sourceZoom)
 {
-    if (!destination || destinationSize < MapTileUtils::TILE_BYTES || !hasZoom(zoom))
+    if (!destination || destinationSize < MapTileUtils::TILE_BYTES || zoom < 0 || zoom > 22) {
+        return false;
+    }
+    preload();
+    if (!header.valid)
         return false;
 
-    const int tileIndex = findTile(zoom, x, y);
-    if (tileIndex < 0)
+    const TileMatch match = findTileOrParent(zoom, x, y);
+    if (match.index < 0)
         return false;
 
     uint8_t payload[PAYLOAD_SIZE];
-    const uint32_t payloadOffset = header.payloadOffset + tileIndex * PAYLOAD_SIZE;
+    const uint32_t payloadOffset = header.payloadOffset + match.index * PAYLOAD_SIZE;
     if (!readCached(payloadOffset, payload, sizeof(payload)) && !readSdBlock(payloadOffset, payload, sizeof(payload)))
         return false;
 
     const uint8_t kind = payload[0];
     if (kind == MapTileUtils::KIND_WHITE || kind == MapTileUtils::KIND_BLACK) {
-        memset(destination, kind == MapTileUtils::KIND_BLACK ? 0xFF : 0x00, MapTileUtils::TILE_BYTES);
+        memset(destination, kind == MapTileUtils::KIND_WHITE ? 0xFF : 0x00, MapTileUtils::TILE_BYTES);
+        sourceZoom = match.zoom;
         return true;
     }
 
@@ -321,12 +347,16 @@ bool readTile(int zoom, int x, int y, uint8_t *destination, size_t destinationSi
         return false;
 
     if (!readSdBlock(header.dataOffset + dataOffset, compressedTile, compressedSize)) {
-        LOG_WARN("SD map: tile data read failed z%d/%d/%d", zoom, x, y);
+        const uint8_t zoomDifference = zoom - match.zoom;
+        LOG_WARN("SD map: tile data read failed z%u/%d/%d", match.zoom, x >> zoomDifference, y >> zoomDifference);
         return false;
     }
 
-    return MapTileUtils::decompress(compressedTile, compressedSize, destination, MapTileUtils::TILE_BYTES) ==
-           MapTileUtils::TILE_BYTES;
+    if (MapTileUtils::decompress(compressedTile, compressedSize, destination, MapTileUtils::TILE_BYTES) !=
+        MapTileUtils::TILE_BYTES)
+        return false;
+    sourceZoom = match.zoom;
+    return true;
 }
 
 } // namespace NicheGraphics::InkHUD::SDMapTiles
@@ -342,13 +372,14 @@ bool hasZoom(int zoom)
     (void)zoom;
     return false;
 }
-bool readTile(int zoom, int x, int y, uint8_t *destination, size_t destinationSize)
+bool readTileOrParent(int zoom, int x, int y, uint8_t *destination, size_t destinationSize, uint8_t &sourceZoom)
 {
     (void)zoom;
     (void)x;
     (void)y;
     (void)destination;
     (void)destinationSize;
+    (void)sourceZoom;
     return false;
 }
 
