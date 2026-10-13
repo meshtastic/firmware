@@ -6,6 +6,11 @@
 
 #include <bluefruit.h>
 
+// Peripheral links Bluefruit.begin() asks the SoftDevice for: the phone and one mesh peer.
+#ifndef BLE_GATT_MESH_NRF52_LINKS
+#define BLE_GATT_MESH_NRF52_LINKS 2
+#endif
+
 /**
  * The mesh-peer GATT service on the SoftDevice. S140 has one advertising set, so the service UUID
  * rides in the phone advertisement's scan response and a mesh peer connects to the same set the
@@ -26,6 +31,8 @@ class NRF52BLEGattMesh : public BLEGattMeshHandler
     /// link had subscribed to the mesh characteristic: the phone API's session handling must not run.
     static void onConnect(uint16_t conn);
     static bool onDisconnect(uint16_t conn);
+    /// Mark the link the phone API runs on; a mesh subscribe there never counts against the peer cap.
+    static void onPhoneLink(uint16_t conn);
     /// Restart the connectable advertisement if a peripheral slot is free and it is not running.
     static void rearmAdvertising();
 

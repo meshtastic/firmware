@@ -69,9 +69,17 @@ void onCccd(uint16_t conn, BLECharacteristic *, uint16_t value)
     // The canonical "this link is a mesh peer" signal: a CCCD write enabling notifications. Only a
     // subscribed link is a notify target, so a plain phone-API client is never sent mesh frames.
     const bool subscribed = (value & 0x0001) != 0;
+    bool admitted;
     {
         concurrency::LockGuard guard(&lock);
-        state.setSubscribed(conn, subscribed);
+        admitted = !subscribed || state.admitsPeer(conn, BLE_GATT_MESH_NRF52_LINKS);
+        state.setSubscribed(conn, subscribed && admitted);
+    }
+    if (!admitted) {
+        // Mesh peers filling every link would stop the advertisement and lock out the phone.
+        LOG_WARN("BLE GATT mesh: conn %u dropped, its subscribe would take the link kept for a phone", conn);
+        Bluefruit.disconnect(conn);
+        return;
     }
     LOG_INFO("BLE GATT mesh: conn %u %s (chunk %u)", conn, subscribed ? "subscribed" : "unsubscribed", chunkFor(conn));
     if (bleGattMeshHandler)
@@ -116,7 +124,7 @@ void NRF52BLEGattMesh::rearmAdvertising()
     // link is left, so with the phone and a peer sharing the radio the free slot would otherwise go
     // unadvertised. Bluefruit's own connect/disconnect handling ran synchronously before the deferred
     // callbacks this is reached from.
-    if (protocolEnabled() && Bluefruit.Periph.connected() < 2 && !Bluefruit.Advertising.isRunning())
+    if (protocolEnabled() && Bluefruit.Periph.connected() < BLE_GATT_MESH_NRF52_LINKS && !Bluefruit.Advertising.isRunning())
         Bluefruit.Advertising.start(0);
 }
 
@@ -143,6 +151,12 @@ bool NRF52BLEGattMesh::onDisconnect(uint16_t conn)
     // whoever just dropped could never come back without this.
     rearmAdvertising();
     return subscribed;
+}
+
+void NRF52BLEGattMesh::onPhoneLink(uint16_t conn)
+{
+    concurrency::LockGuard guard(&lock);
+    state.setPhone(conn);
 }
 
 void NRF52BLEGattMesh::start()

@@ -26,6 +26,7 @@ template <size_t Links, size_t RxSlots = BLE_GATT_MESH_RX_QUEUE_SIZE> class BLEG
         uint16_t conn;
         bool subscribed;     // wrote the CCCD: a notify target, and the mark of a mesh peer
         bool everSubscribed; // subscribed at any point, which outlives an unsubscribe
+        bool phone;          // used the phone API, so it holds the link kept for a phone
     };
 
     std::array<Link, Links> links{};
@@ -52,6 +53,7 @@ template <size_t Links, size_t RxSlots = BLE_GATT_MESH_RX_QUEUE_SIZE> class BLEG
             l.conn = conn;
             l.subscribed = false;
             l.everSubscribed = false;
+            l.phone = false;
             return &l;
         }
         return nullptr;
@@ -71,6 +73,33 @@ template <size_t Links, size_t RxSlots = BLE_GATT_MESH_RX_QUEUE_SIZE> class BLEG
             l->subscribed = subscribed;
             l->everSubscribed |= subscribed;
         }
+    }
+
+    /// Mark the one link that uses the phone API.
+    void setPhone(uint16_t conn)
+    {
+        const Link *p = add(conn);
+        for (auto &l : links)
+            l.phone = (&l == p);
+    }
+
+    /// True when conn may subscribe as a mesh peer. Mesh peers other than the phone's own link may
+    /// hold at most slots - 1 of the stack's peripheral links, so one is always left for a phone and
+    /// the node keeps advertising while it is free.
+    bool admitsPeer(uint16_t conn, size_t slots) const
+    {
+        size_t others = 0;
+        for (const auto &l : links) {
+            if (!l.used)
+                continue;
+            if (l.conn == conn) {
+                if (l.phone)
+                    return true;
+                continue;
+            }
+            others += (l.subscribed && !l.phone) ? 1 : 0;
+        }
+        return others + 1 < slots;
     }
 
     /// Forget the link and queue its disconnect marker. True when it had ever subscribed.

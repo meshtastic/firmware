@@ -794,6 +794,54 @@ void test_a_link_that_ever_subscribed_is_reported_as_a_mesh_peer(void)
     TEST_ASSERT_FALSE(s.popRx(peer, buf, sizeof(buf), len));
 }
 
+// admitsPeer() in src/mesh/BLEGattMeshLinks.h is the slot rule both platforms apply at the mesh
+// subscribe. A connectable advertisement stops once every peripheral link is taken, so if mesh peers
+// could fill them all, a phone could no longer find the node at all (a RAK4631 with two links did
+// exactly that). Relax these and that lockout returns.
+void test_mesh_peers_leave_one_link_for_a_phone(void)
+{
+    BLEGattMeshLinks<4, 2> s;
+    s.add(1);
+    s.add(2);
+    TEST_ASSERT_TRUE_MESSAGE(s.admitsPeer(1, 2), "one peer of two links leaves the phone's free");
+    s.setSubscribed(1, true);
+    TEST_ASSERT_TRUE_MESSAGE(s.admitsPeer(1, 2), "a peer already in is not counted against itself");
+    TEST_ASSERT_FALSE_MESSAGE(s.admitsPeer(2, 2), "a second peer would take the last link");
+
+    // The first peer leaving frees its place for the next.
+    s.remove(1);
+    TEST_ASSERT_TRUE(s.admitsPeer(2, 2));
+
+    BLEGattMeshLinks<4, 2> three;
+    three.add(1);
+    three.add(2);
+    three.add(3);
+    three.setSubscribed(1, true);
+    TEST_ASSERT_TRUE_MESSAGE(three.admitsPeer(2, 3), "three links hold two peers");
+    three.setSubscribed(2, true);
+    TEST_ASSERT_FALSE(three.admitsPeer(3, 3));
+}
+
+void test_the_phone_link_is_never_a_peer_to_cap(void)
+{
+    // One phone runs the phone API and a mesh peer over a single link: that link already is the
+    // phone's, so its subscribe takes nothing from a phone and neither it nor its neighbour is refused.
+    BLEGattMeshLinks<4, 2> s;
+    s.add(1);
+    s.add(2);
+    s.setPhone(1);
+    TEST_ASSERT_TRUE(s.admitsPeer(1, 2));
+    s.setSubscribed(1, true);
+    TEST_ASSERT_TRUE_MESSAGE(s.admitsPeer(2, 2), "the phone's own subscribe does not count as a peer");
+    s.setSubscribed(2, true);
+    TEST_ASSERT_TRUE(s.admitsPeer(1, 2));
+
+    // Only one link is the phone: the mark moves with the phone API, and the old link counts again.
+    s.setPhone(2);
+    s.add(3);
+    TEST_ASSERT_FALSE_MESSAGE(s.admitsPeer(3, 2), "the old phone link is now the one peer two links allow");
+}
+
 void setUp(void) {}
 void tearDown(void) {}
 
@@ -830,6 +878,8 @@ void setup()
     RUN_TEST(test_inbound_chunks_are_drained_by_the_pump);
     RUN_TEST(test_a_full_rx_ring_still_takes_a_disconnect_marker);
     RUN_TEST(test_a_link_that_ever_subscribed_is_reported_as_a_mesh_peer);
+    RUN_TEST(test_mesh_peers_leave_one_link_for_a_phone);
+    RUN_TEST(test_the_phone_link_is_never_a_peer_to_cap);
     RUN_TEST(test_greets_each_peer_once);
     RUN_TEST(test_a_refused_greeting_is_offered_again);
     RUN_TEST(test_a_hello_in_is_never_a_fragment);

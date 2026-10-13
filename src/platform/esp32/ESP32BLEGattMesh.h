@@ -37,6 +37,8 @@ class ESP32BLEGattMesh : public BLEGattMeshHandler
     /// true when the link had subscribed to the mesh characteristic.
     static void onConnect(uint16_t conn);
     static bool onDisconnect(uint16_t conn);
+    /// Mark the link the phone API runs on; a mesh subscribe there never counts against the peer cap.
+    static void onPhoneLink(uint16_t conn);
     /// True while a connection slot is free for the advertisement to fill.
     static bool hasFreeLink();
     /// Copy the handles of every live link into out; returns the count. For teardown.

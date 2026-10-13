@@ -142,6 +142,7 @@ static void notePhoneLink(uint16_t connHandle)
 {
     if (nimbleBluetoothConnHandle.exchange(connHandle) == connHandle)
         return;
+    ESP32BLEGattMesh::onPhoneLink(connHandle);
     meshtastic::BluetoothStatus newStatus(meshtastic::BluetoothStatus::ConnectionState::CONNECTED);
     bluetoothStatus->updateStatus(&newStatus);
 }

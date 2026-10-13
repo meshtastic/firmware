@@ -112,6 +112,7 @@ static void notePhoneLink(uint16_t conn_handle)
     if (connectionHandle == conn_handle)
         return;
     connectionHandle = conn_handle;
+    NRF52BLEGattMesh::onPhoneLink(conn_handle);
     meshtastic::BluetoothStatus newStatus(meshtastic::BluetoothStatus::ConnectionState::CONNECTED);
     bluetoothStatus->updateStatus(&newStatus);
 }
@@ -380,7 +381,7 @@ void NRF52Bluetooth::setup()
     Bluefruit.configPrphBandwidth(BANDWIDTH_MAX);
 #if HAS_BLE_GATT_MESH
     // Two peripheral links, the phone and one mesh peer, and no central: this node never dials out.
-    if (!Bluefruit.begin(2, 0)) {
+    if (!Bluefruit.begin(BLE_GATT_MESH_NRF52_LINKS, 0)) {
 #else
     if (!Bluefruit.begin()) {
 #endif

@@ -66,9 +66,17 @@ class MeshPeerCallbacks : public BLECharacteristicCallbacks
         // The canonical "this link is a mesh peer" signal: a CCCD write enabling notifications. Only a
         // subscribed link is a notify target, so a plain phone-API client is never sent mesh frames.
         const bool subscribed = (subValue & 0x0001) != 0; // NIMBLE_SUB_NOTIFY
+        bool admitted;
         {
             std::lock_guard<std::mutex> guard(lock);
-            state.setSubscribed(desc->conn_handle, subscribed);
+            admitted = !subscribed || state.admitsPeer(desc->conn_handle, BLE_GATT_MESH_ESP32_LINKS);
+            state.setSubscribed(desc->conn_handle, subscribed && admitted);
+        }
+        if (!admitted) {
+            // Mesh peers filling every link would stop the advertisement and lock out the phone.
+            LOG_WARN("BLE GATT mesh: conn %u dropped, its subscribe would take the link kept for a phone", desc->conn_handle);
+            ble_gap_terminate(desc->conn_handle, BLE_ERR_REM_USER_CONN_TERM);
+            return;
         }
         LOG_INFO("BLE GATT mesh: conn %u %s (chunk %u)", desc->conn_handle, subscribed ? "subscribed" : "unsubscribed",
                  chunkFor(desc->conn_handle));
@@ -139,6 +147,14 @@ bool ESP32BLEGattMesh::onDisconnect(uint16_t conn)
     if (bleGattMeshHandler)
         bleGattMeshHandler->wake();
     return subscribed;
+}
+
+void ESP32BLEGattMesh::onPhoneLink(uint16_t conn)
+{
+    if (!enabled())
+        return;
+    std::lock_guard<std::mutex> guard(lock);
+    state.setPhone(conn);
 }
 
 bool ESP32BLEGattMesh::hasFreeLink()
