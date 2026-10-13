@@ -1486,7 +1486,7 @@ int CannedMessageModule::getPrevIndex()
 
 #if defined(USE_VIRTUAL_KEYBOARD)
 
-String CannedMessageModule::keyForCoordinates(uint x, uint y)
+String CannedMessageModule::keyForCoordinates(int x, int y)
 {
     int outerSize = *(&this->keyboard[this->charSet] + 1) - this->keyboard[this->charSet];
 
