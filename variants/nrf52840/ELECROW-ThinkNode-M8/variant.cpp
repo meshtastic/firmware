@@ -38,6 +38,8 @@ void initVariant()
     digitalWrite(I2C_EN, HIGH);
     pinMode(VCC_ELNK_EN, OUTPUT);
     digitalWrite(VCC_ELNK_EN, HIGH);
+    pinMode(GPS_SLEEP_INT, OUTPUT);
+    digitalWrite(GPS_SLEEP_INT, HIGH);
     pinMode(PIN_GPS_EN, OUTPUT);
     digitalWrite(PIN_GPS_EN, HIGH);
     pinMode(ADC_EN, OUTPUT);
