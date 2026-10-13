@@ -175,14 +175,6 @@ class MockRadioInterface : public RadioInterface
 class MockRouter : public Router
 {
   public:
-    ~MockRouter()
-    {
-        // Router allocates a global crypt lock in its constructor.
-        // Clean it up here so each test can build a fresh mock router.
-        delete cryptLock;
-        cryptLock = nullptr;
-    }
-
     ErrorCode send(meshtastic_MeshPacket *p) override
     {
         sentPackets.push_back(*p);
@@ -298,12 +290,6 @@ static meshtastic_MeshPacket makePositionPacketWithPrecision(NodeNum from, int32
     packet.decoded.payload.size =
         pb_encode_to_bytes(packet.decoded.payload.bytes, sizeof(packet.decoded.payload.bytes), &meshtastic_Position_msg, &pos);
     return packet;
-}
-
-static bool decodePositionPayload(const meshtastic_MeshPacket &packet, meshtastic_Position &out)
-{
-    out = meshtastic_Position_init_zero;
-    return pb_decode_from_bytes(packet.decoded.payload.bytes, packet.decoded.payload.size, &meshtastic_Position_msg, &out);
 }
 
 // Primary channel with a well-known single-byte PSK and the (empty -> preset)
@@ -2330,8 +2316,6 @@ static void test_tm_alterReceived_telemetryBroadcast_hopLimitUnchanged(void)
 
 /**
  * Verify alterReceived does not modify unicast or local-origin packets.
- * The precision clamp (the only active alterReceived path) only fires for
- * broadcast position packets from remote nodes - these should be untouched.
  */
 static void test_tm_alterReceived_skipsLocalAndUnicast(void)
 {
@@ -3171,36 +3155,27 @@ static void test_tm_unknownRole_noUserBit_appliesFullInterval(void)
 }
 
 /**
- * Verify a LOST_AND_FOUND origin now GETS the relayed precision clamp - the
- * anti-dox exemption was removed, so a relayed position more precise than the
- * channel setting is clamped down to the channel ceiling like any other node's.
+ * Verify a relayed position broadcast more precise than the channel setting passes through
+ * handleReceived/alterReceived unmodified. Relays must forward position payloads byte-for-byte
+ * so the sender's XEdDSA signature still verifies downstream.
  */
-static void test_tm_lostAndFoundRole_getsAlterReceivedPrecisionClamp(void)
+static void test_tm_relayedPosition_payloadUnmodified(void)
 {
-    // Set channel precision ceiling to 13 bits. Must be <= MAX_POSITION_PRECISION_PUBLIC_KEY
-    // (15) - well-known channels have a public PSK (size==1), so getPositionPrecisionForChannel
-    // clamps any value above 15 via usesPublicKey().
     installWellKnownPrimaryChannelWithPrecision(13);
-
     mockNodeDB->setCachedNode(kRemoteNode);
-    mockNodeDB->setCachedNodeRole(meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND);
 
     TrafficManagementModuleTestShim module;
 
-    // Full-precision packet - 32 bits - exceeds the channel cap.
-    const uint32_t fullPrecision = 32;
-    meshtastic_MeshPacket packet = makePositionPacketWithPrecision(kRemoteNode, 374221234, -1220845678, fullPrecision);
+    meshtastic_MeshPacket packet = makePositionPacketWithPrecision(kRemoteNode, 374221234, -1220845678, 32);
     packet.hop_start = 3;
-    packet.hop_limit = 2; // relayed (hop_limit < hop_start) so clamp logic applies
+    packet.hop_limit = 2;
+    const meshtastic_Data_payload_t original = packet.decoded.payload;
 
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(module.handleReceived(packet)));
     module.alterReceived(packet);
 
-    meshtastic_Position out;
-    TEST_ASSERT_TRUE(decodePositionPayload(packet, out));
-    // Clamped to channel ceiling (13 bits) - lost-and-found is no longer exempt.
-    // Note: precision must be <= MAX_POSITION_PRECISION_PUBLIC_KEY (15); well-known
-    // channels always have a public PSK so getPositionPrecisionForChannel caps at 15.
-    TEST_ASSERT_EQUAL_UINT32(13, out.precision_bits);
+    TEST_ASSERT_EQUAL_UINT32(original.size, packet.decoded.payload.size);
+    TEST_ASSERT_EQUAL_MEMORY(original.bytes, packet.decoded.payload.bytes, original.size);
 }
 
 // ---------------------------------------------------------------------------
@@ -3413,7 +3388,7 @@ TM_TEST_ENTRY void setup()
     RUN_TEST(test_tm_specialRole_evictedLastUnderPressure);
     RUN_TEST(test_tm_trackerRole_doesNotLengthenShorterOperatorInterval);
     RUN_TEST(test_tm_lostAndFoundRole_capsDedupAtFifteenMinutes);
-    RUN_TEST(test_tm_lostAndFoundRole_getsAlterReceivedPrecisionClamp);
+    RUN_TEST(test_tm_relayedPosition_payloadUnmodified);
     RUN_TEST(test_tm_unknownRole_noDbEntry_appliesFullInterval);
     RUN_TEST(test_tm_unknownRole_noUserBit_appliesFullInterval);
     RUN_TEST(test_tm_fuzz_nodenum_blitz);
