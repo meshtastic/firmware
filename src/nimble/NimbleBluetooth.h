@@ -20,3 +20,5 @@ class NimbleBluetooth : BluetoothApi
 };
 
 void setBluetoothEnable(bool enable);
+/// Why setBluetoothEnable() will not start Bluetooth this boot, or nullptr when it will.
+const char *bluetoothBlockedReason();
