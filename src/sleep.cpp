@@ -579,7 +579,8 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     assert(res == ESP_OK);
 
     console->flush();
-    const bool loraIrqPending = loraWakeIrqAsserted() && loraIrqSkippedSleeps < LORA_IRQ_SKIP_SLEEP_MAX;
+    const bool loraIrqAsserted = loraWakeIrqAsserted();
+    const bool loraIrqPending = loraIrqAsserted && loraIrqSkippedSleeps < LORA_IRQ_SKIP_SLEEP_MAX;
     if (loraIrqPending) {
         // A LoRa IRQ is already pending (see loraWakeIrqAsserted). Don't sleep on top of it - return so
         // the main loop services the packet now instead of stranding it until the next wake.
@@ -591,7 +592,13 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     } else {
         // Either nothing pending, or the line has stayed high past LORA_IRQ_SKIP_SLEEP_MAX and the main
         // loop is clearly not going to clear it. Never sleeping costs more than one stranded packet.
-        loraIrqSkippedSleeps = 0;
+        //
+        // Only reset the count once the line is seen low again. Resetting on every sleep we allow made a
+        // stuck-high line give LORA_IRQ_SKIP_SLEEP_MAX skips, one sleep, repeat, forever - and each
+        // skipped attempt still runs waitEnterSleep() and the whole notifyLightSleep/End pass, which
+        // detaches, arms and restores every wake pin. Once we have given up, stay given up.
+        if (!loraIrqAsserted)
+            loraIrqSkippedSleeps = 0;
         res = esp_light_sleep_start();
     }
     if (res != ESP_OK) {
