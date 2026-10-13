@@ -85,7 +85,6 @@ extern int m5HasAg3352;
 #define PIN_EINK_MOSI 45 // also called SDI
 
 // Controls power for all peripherals (eink + GPS + LoRa + Sensor)
-#define PIN_POWER_EN -1
 #define PCA_PIN_POWER_EN 4 // This is the pin number on the GPIO expander
 
 #define PIN_SPI_MISO 7
@@ -95,6 +94,7 @@ extern int m5HasAg3352;
 #define BUTTON_PIN PIN_BUTTON1
 #define BUTTON_PIN_ALT PIN_BUTTON2
 #define ALT_BUTTON_WAKE
+#define BUTTON_NEED_PULLUP
 
 #define SERIAL_PRINT_PORT 0
 #endif
