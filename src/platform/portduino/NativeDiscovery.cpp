@@ -9,8 +9,11 @@
 #include "meshUtils.h"
 
 #include <atomic>
-#include <cerrno>
 #include <chrono>
+#include <cstdarg>
+#include <cstdio>
+#include <cstring>
+#include <mutex>
 #include <string>
 #include <thread>
 
@@ -23,6 +26,7 @@
 #include <avahi-common/simple-watch.h>
 #elif defined(__APPLE__)
 #include <arpa/inet.h>
+#include <cerrno>
 #include <dns_sd.h>
 #include <poll.h>
 #endif
@@ -30,18 +34,42 @@
 namespace
 {
 
+constexpr int kRetryInitialMs = 1000;
+constexpr int kRetryMaxMs = 5 * 60 * 1000;
+constexpr int kRetrySliceMs = 200;
+constexpr size_t kLogTextLen = 160;
+
 class NativeDiscovery
 {
   public:
-    NativeDiscovery(int port) : port(port), shortName(owner.short_name), nodeId(nodeDB->getNodeId()), pioEnv(optstr(APP_ENV))
-    {
-        worker = std::thread(&NativeDiscovery::run, this);
-    }
+    NativeDiscovery(int port) : port(port), shortName(owner.short_name), nodeId(nodeDB->getNodeId()), pioEnv(optstr(APP_ENV)) {}
+
+    void start() { worker = std::thread(&NativeDiscovery::run, this); }
 
     ~NativeDiscovery()
     {
         stopping = true;
-        worker.join();
+        if (worker.joinable())
+            worker.join();
+    }
+
+    // The worker must not call LOG_*. Portduino leaves RedirectablePrint's buffer unlocked.
+    void drainLog()
+    {
+        bool warn = false;
+        char text[kLogTextLen];
+        {
+            std::lock_guard<std::mutex> lock(logMu);
+            if (!logPending)
+                return;
+            warn = logWarn;
+            memcpy(text, logText, kLogTextLen);
+            logPending = false;
+        }
+        if (warn)
+            LOG_WARN("%s", text);
+        else
+            LOG_INFO("%s", text);
     }
 
   private:
@@ -51,11 +79,64 @@ class NativeDiscovery
     const std::string pioEnv;
     std::atomic<bool> stopping{false};
     std::thread worker;
+    int retryMs = kRetryInitialMs;
 
-    void retryDelay()
+    std::mutex logMu;
+    bool logPending = false;
+    bool logWarn = false;
+    char logText[kLogTextLen]{};
+    char lastQueued[kLogTextLen]{};
+
+    void queueFormatted(bool warn, const char *fmt, va_list ap)
     {
-        for (int i = 0; i < 5 && !stopping; ++i)
-            std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        char buf[kLogTextLen];
+        vsnprintf(buf, sizeof(buf), fmt, ap);
+        std::lock_guard<std::mutex> lock(logMu);
+        if (strcmp(buf, lastQueued) == 0)
+            return;
+        // One slot. Leave an undrained warning in place; info must not erase it.
+        if (logPending && logWarn && !warn)
+            return;
+        snprintf(logText, sizeof(logText), "%s", buf);
+        snprintf(lastQueued, sizeof(lastQueued), "%s", buf);
+        logWarn = warn;
+        logPending = true;
+    }
+
+    void noteFailure(const char *fmt, ...)
+    {
+        va_list ap;
+        va_start(ap, fmt);
+        queueFormatted(true, fmt, ap);
+        va_end(ap);
+    }
+
+    void noteInfo(const char *fmt, ...)
+    {
+        va_list ap;
+        va_start(ap, fmt);
+        queueFormatted(false, fmt, ap);
+        va_end(ap);
+    }
+
+    // Backoff resets only once the service is registered. A connected client is not enough.
+    void noteRegistered(const char *fmt, ...)
+    {
+        retryMs = kRetryInitialMs;
+        va_list ap;
+        va_start(ap, fmt);
+        queueFormatted(false, fmt, ap);
+        va_end(ap);
+    }
+
+    void backoffSleep()
+    {
+        for (int waited = 0; waited < retryMs && !stopping; waited += kRetrySliceMs)
+            std::this_thread::sleep_for(std::chrono::milliseconds(kRetrySliceMs));
+        if (retryMs < kRetryMaxMs) {
+            const int next = retryMs * 2;
+            retryMs = next > kRetryMaxMs ? kRetryMaxMs : next;
+        }
     }
 
 #if defined(MESHTASTIC_USE_AVAHI)
@@ -68,7 +149,7 @@ class NativeDiscovery
         if (!group)
             group = avahi_entry_group_new(client, &NativeDiscovery::groupCallback, this);
         if (!group) {
-            LOG_WARN("Avahi entry group failed: %s", avahi_strerror(avahi_client_errno(client)));
+            noteFailure("Avahi entry group failed: %s", avahi_strerror(avahi_client_errno(client)));
             reconnect = true;
             return;
         }
@@ -92,7 +173,7 @@ class NativeDiscovery
         if (result >= 0)
             result = avahi_entry_group_commit(group);
         if (result < 0) {
-            LOG_WARN("Avahi service registration failed: %s", avahi_strerror(result));
+            noteFailure("Avahi service registration failed: %s", avahi_strerror(result));
             reconnect = true;
         }
     }
@@ -112,7 +193,7 @@ class NativeDiscovery
     {
         auto *self = static_cast<NativeDiscovery *>(userdata);
         if (state == AVAHI_ENTRY_GROUP_ESTABLISHED)
-            LOG_INFO("Avahi service %s registered on port %d", self->serviceName.c_str(), self->port);
+            self->noteRegistered("Avahi service %s registered on port %d", self->serviceName.c_str(), self->port);
         else if (state == AVAHI_ENTRY_GROUP_COLLISION) {
             self->renameService();
             if (!self->reconnect) {
@@ -120,7 +201,8 @@ class NativeDiscovery
                 self->publish(avahi_entry_group_get_client(entryGroup));
             }
         } else if (state == AVAHI_ENTRY_GROUP_FAILURE) {
-            LOG_WARN("Avahi service failed: %s", avahi_strerror(avahi_client_errno(avahi_entry_group_get_client(entryGroup))));
+            self->noteFailure("Avahi service failed: %s",
+                              avahi_strerror(avahi_client_errno(avahi_entry_group_get_client(entryGroup))));
             self->reconnect = true;
         }
     }
@@ -134,7 +216,7 @@ class NativeDiscovery
             if (self->group)
                 avahi_entry_group_reset(self->group);
         } else if (state == AVAHI_CLIENT_FAILURE) {
-            LOG_WARN("Avahi client failed: %s", avahi_strerror(avahi_client_errno(client)));
+            self->noteFailure("Avahi client failed: %s", avahi_strerror(avahi_client_errno(client)));
             self->reconnect = true;
         }
     }
@@ -145,8 +227,8 @@ class NativeDiscovery
             reconnect = false;
             AvahiSimplePoll *poll = avahi_simple_poll_new();
             if (!poll) {
-                LOG_WARN("Avahi poll setup failed");
-                retryDelay();
+                noteFailure("Avahi poll setup failed");
+                backoffSleep();
                 continue;
             }
 
@@ -154,9 +236,10 @@ class NativeDiscovery
             AvahiClient *client = avahi_client_new(avahi_simple_poll_get(poll), AvahiClientFlags(0),
                                                    &NativeDiscovery::clientCallback, this, &error);
             if (!client) {
-                LOG_INFO("Avahi unavailable (%s); mDNS discovery disabled", avahi_strerror(error));
+                noteInfo("Avahi unavailable (%s); will retry", avahi_strerror(error));
                 avahi_simple_poll_free(poll);
-                return;
+                backoffSleep();
+                continue;
             }
             while (client && !stopping && !reconnect && avahi_simple_poll_iterate(poll, 250) >= 0) {
             }
@@ -169,7 +252,7 @@ class NativeDiscovery
                 avahi_client_free(client);
             avahi_simple_poll_free(poll);
             if (!stopping)
-                retryDelay();
+                backoffSleep();
         }
     }
 #elif defined(__APPLE__)
@@ -180,9 +263,9 @@ class NativeDiscovery
     {
         auto *self = static_cast<NativeDiscovery *>(userdata);
         if (error == kDNSServiceErr_NoError && (flags & kDNSServiceFlagsAdd))
-            LOG_INFO("Bonjour service %s registered on port %d", name, self->port);
+            self->noteRegistered("Bonjour service %s registered on port %d", name, self->port);
         else if (error != kDNSServiceErr_NoError) {
-            LOG_WARN("Bonjour service registration failed: %d", error);
+            self->noteFailure("Bonjour service registration failed: %d", error);
             self->registrationFailed = true;
         }
     }
@@ -197,7 +280,7 @@ class NativeDiscovery
         if (error == kDNSServiceErr_NoError)
             error = TXTRecordSetValue(&txt, "pio_env", pioEnv.size(), pioEnv.data());
         if (error != kDNSServiceErr_NoError) {
-            LOG_WARN("Bonjour TXT record setup failed: %d", error);
+            noteFailure("Bonjour TXT record setup failed: %d", error);
             TXTRecordDeallocate(&txt);
             return;
         }
@@ -209,7 +292,7 @@ class NativeDiscovery
                                        TXTRecordGetLength(&txt), TXTRecordGetBytesPtr(&txt), &NativeDiscovery::registerCallback,
                                        this);
             if (error != kDNSServiceErr_NoError)
-                LOG_WARN("Bonjour service setup failed: %d", error);
+                noteFailure("Bonjour service setup failed: %d", error);
             if (service) {
                 int fd = DNSServiceRefSockFD(service);
                 while (!stopping && !registrationFailed && fd >= 0) {
@@ -227,22 +310,34 @@ class NativeDiscovery
                 DNSServiceRefDeallocate(service);
             }
             if (!stopping)
-                retryDelay();
+                backoffSleep();
         }
         TXTRecordDeallocate(&txt);
     }
 #endif
 };
 
+NativeDiscovery *instance = nullptr;
+
 } // namespace
 
 void startNativeDiscovery(int port)
 {
     static NativeDiscovery discovery(port);
+    instance = &discovery;
+    discovery.start();
+}
+
+void serviceNativeDiscovery()
+{
+    if (instance)
+        instance->drainLog();
 }
 
 #else
 
 void startNativeDiscovery(int) {}
+
+void serviceNativeDiscovery() {}
 
 #endif
