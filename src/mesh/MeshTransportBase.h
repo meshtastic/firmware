@@ -53,8 +53,13 @@ class MeshTransportBase
     static bool cancelTransportsOn(meshtastic_MeshPacket_TransportMechanism medium, NodeNum from, PacketId id);
 
     /** The ingress rules every non-LoRa bearer shares. False means drop: a local origin or an out-of-range
-     * hop count. On true `mp` is stamped with `medium` and its local-only fields are cleared, rx_rssi included. */
+     * hop count. On true `mp` is stamped with `medium` and its local-only fields are cleared, rx_rssi included.
+     * A copy of our own packet passes on a medium for which carriesOwnEcho() is true. */
     static bool sanitizeIngress(meshtastic_MeshPacket &mp, meshtastic_MeshPacket_TransportMechanism medium);
+
+    /** True for the BLE bearers, whose relayed copy of our own packet is admitted so the Router can raise
+     * its implicit ack. Router::perhapsHandleReceived takes such a copy no further than that ack. */
+    static bool carriesOwnEcho(meshtastic_MeshPacket_TransportMechanism medium);
 
     /** The packet as it goes onto a non-LoRa bearer, without the local-only fields a receiver overwrites. */
     static meshtastic_MeshPacket stripForTransmit(const meshtastic_MeshPacket &mp);

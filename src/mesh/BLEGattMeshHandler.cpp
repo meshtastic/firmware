@@ -515,8 +515,9 @@ BLEGattPeerId BLEGattMeshHandler::arrivalPeer(NodeNum from, PacketId id) const
  * not arrive. node-kmp's MeshNode.scheduleRelay holds the same rule as `header.hopsAway == 0`;
  * change one and change the other.
  *
- * Echoing to the originator cannot loop - it drops a packet bearing its own node number, and so do
- * we - and it costs one write per relayed broadcast per adjacent originator.
+ * Echoing to the originator cannot loop - this firmware takes a packet bearing its own node number
+ * no further than the implicit ack (Router::perhapsHandleReceived), so it is never relayed again -
+ * and it costs one write per relayed broadcast per adjacent originator.
  */
 BLEGattPeerId BLEGattMeshHandler::relayExclusion(NodeNum from, PacketId id) const
 {

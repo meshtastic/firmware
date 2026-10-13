@@ -12,6 +12,14 @@
 
 // ReliableRouter::ReliableRouter() {}
 
+static bool isLoRaTransport(meshtastic_MeshPacket_TransportMechanism t)
+{
+    return t == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA ||
+           t == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA_ALT1 ||
+           t == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA_ALT2 ||
+           t == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA_ALT3;
+}
+
 /**
  * If the message is want_ack, then add it to a list of packets to retransmit.
  * If we run out of retransmissions, send a nak packet towards the original client to indicate failure.
@@ -78,12 +86,13 @@ void ReliableRouter::perhapsGenerateImplicitAckForOwnOverheard(const meshtastic_
         // marked as wantAck
         // Pass the overheard rebroadcast as the relay source so the ack carries the relaying node's id
         // and the RSSI/SNR we heard it at.
-        sendAckNak(meshtastic_Routing_Error_NONE, getFrom(p), p->id, old->packet->channel, 0, false, p);
-
-        // Only stop retransmissions if the rebroadcast came via LoRa
-        if (p->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA) {
-            stopRetransmission(key);
-        }
+        auto pAck = routingModule->allocAckNak(meshtastic_Routing_Error_NONE, getFrom(p), p->id, old->packet->channel, 0, p);
+        if (!pAck)
+            return;
+        // sniffReceived() stops the retries on this ack only when the copy was heard on LoRa.
+        pAck->transport_mechanism = p->transport_mechanism;
+        if (sendLocal(pAck) == ERRNO_SHOULD_RELEASE)
+            packetPool.release(pAck);
     } else {
         LOG_DEBUG("Didn't find pending packet");
     }
@@ -175,8 +184,10 @@ void ReliableRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
 
         // We intentionally don't check wasSeenRecently, because it is harmless to delete non existent retransmission records
         if ((ackId || nakId) && ackProofPermitsAction(p, ackId ? ackId : nakId, ackId != 0) &&
-            // Implicit ACKs from MQTT should not stop retransmissions
-            !(isFromUs(p) && p->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MQTT)) {
+            // An implicit ack for our own packet heard back off LoRa stops the LoRa retries; one heard on
+            // any other bearer only reports delivery. Our own NAKs are minted INTERNAL and always stop.
+            !(isFromUs(p) && p->transport_mechanism != meshtastic_MeshPacket_TransportMechanism_TRANSPORT_INTERNAL &&
+              !isLoRaTransport(p->transport_mechanism))) {
             LOG_DEBUG("Received a %s for 0x%08x, stopping retransmissions", ackId ? "ACK" : "NAK", ackId);
             if (ackId) {
                 stopRetransmission(p->to, ackId);
