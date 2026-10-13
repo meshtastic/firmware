@@ -530,6 +530,8 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
 #endif // KB_INT
 #ifdef BOARD_PCA9535_INT
     // Side-key interrupt line from PCA9535 expander (active low).
+    // Mask the CPU interrupt: the level type would storm an ISR that cannot clear the expander's latched INT.
+    gpio_intr_disable((gpio_num_t)BOARD_PCA9535_INT);
     gpio_wakeup_enable((gpio_num_t)BOARD_PCA9535_INT, GPIO_INTR_LOW_LEVEL);
 #endif
 #ifdef BUTTON_PIN
