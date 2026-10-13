@@ -2005,6 +2005,7 @@ GnssModel_t GPS::getProbeResponse(unsigned long timeout, const std::vector<ChipI
         bufferSize = 2048;
 
     auto response = std::unique_ptr<char[]>(new char[bufferSize]); // Dynamically allocate based on baud rate
+    response[0] = '\0';
     uint16_t responseLen = 0;
     unsigned long start = millis();
     while (millis() - start < timeout) {
