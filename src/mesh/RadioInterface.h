@@ -359,15 +359,21 @@ class RadioInterface
 std::unique_ptr<RadioInterface> initLoRa();
 
 // What the plain-RX poll does with PREAMBLE/HEADER flags that no RX_DONE has consumed.
-enum class StaleRxFlagAction : uint8_t { Keep, ClearPreamble, Rearm };
+enum class StaleRxFlagAction : uint8_t { Keep, ClearPreamble, ClearHeaderErr, Rearm };
 
 // RX_DONE clears every flag, so one still latched a max packet after first sight has no frame behind it.
-// A header may mean a wedged demodulator (SX1280 DS 16.2), so re-arm; a bare preamble is only cleared.
-constexpr StaleRxFlagAction staleRxFlagAction(bool headerSeen, uint32_t sinceFirstSeenMsec, uint32_t maxPacketTimeMsec)
+// One header raises HEADER_VALID or HEADER_ERR and never both (SX1262 DS rev 2.1 table 13-29), so an error
+// beside a valid header is an earlier frame's and is retired without touching the valid header's window.
+// Only where a header error wedges RX (SX1280 DS rev 3.3 16.2) is a stale one worth the standby in a re-arm.
+constexpr StaleRxFlagAction staleRxFlagAction(bool validSeen, bool errSeen, bool errWedgesRx, uint32_t sinceFirstSeenMsec,
+                                              uint32_t maxPacketTimeMsec)
 {
-    return sinceFirstSeenMsec < maxPacketTimeMsec ? StaleRxFlagAction::Keep
-           : headerSeen                           ? StaleRxFlagAction::Rearm
-                                                  : StaleRxFlagAction::ClearPreamble;
+    return validSeen && errSeen                     ? StaleRxFlagAction::ClearHeaderErr
+           : sinceFirstSeenMsec < maxPacketTimeMsec ? StaleRxFlagAction::Keep
+           : validSeen                              ? StaleRxFlagAction::Rearm
+           : !errSeen                               ? StaleRxFlagAction::ClearPreamble
+           : errWedgesRx                            ? StaleRxFlagAction::Rearm
+                                                    : StaleRxFlagAction::ClearHeaderErr;
 }
 
 /// Debug printing for packets

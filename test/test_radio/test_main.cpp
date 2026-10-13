@@ -539,7 +539,17 @@ class FakeIrqRadio : public PhysicalLayer
             irqMap[i] = 1UL << i;
     }
 
+    // What clearIrq() retired, and the register it retired it from: PhysicalLayer::clearIrq() maps the
+    // generic flags and hands them to clearIrqFlags(), which is the chip-specific half the fake stands in for.
+    uint32_t clearedIrqFlags = 0;
+
     uint32_t getIrqFlags() override { return irqFlags; }
+    int16_t clearIrqFlags(uint32_t irq) override
+    {
+        clearedIrqFlags |= irq;
+        irqFlags &= ~irq;
+        return RADIOLIB_ERR_NONE;
+    }
     Module *getMod() override { return nullptr; }
 };
 
@@ -715,32 +725,66 @@ void tearDown(void)
 // latched one max packet after it was first seen has no frame behind it.
 //
 // Pinned: nothing happens inside that window (a frame may still be arriving); after it, a bare preamble is
-// only cleared, because a clear never aborts a reception; a header re-arms, because SX1280 DS rev 3.3 16.2
-// leaves RX wedged after a header error with no RX_DONE or timeout to follow, and a clear does not unwedge it.
+// only cleared, because a clear never aborts a reception; a valid header re-arms, because nothing short of a
+// restart retires HEADER_VALID. A header error re-arms only where it wedges RX - SX1280 DS rev 3.3 16.2 leaves
+// RX stuck after one with no RX_DONE or timeout to follow, and a clear does not unwedge it - and is otherwise
+// cleared, because on every other chip the demodulator is already back hunting for a preamble.
+//
+// One header raises HEADER_VALID or HEADER_ERR and never both (SX1262 DS rev 2.1 table 13-29), so the two
+// together are two frames: the error is the older one and must not decide anything about the valid header.
 // Regressions guarded: re-arming on a preamble (startReceive() goes through standby, which aborts a frame
-// that is in fact arriving), acting before the window closes, or never acting at all.
+// that is in fact arriving), re-arming on a stale error while a good frame is on air, acting before the
+// window closes, or never acting at all.
+
+// errWedgesRx false unless a case is about the SX1280 wedge: every other chip is the common path.
+static StaleRxFlagAction policy(bool validSeen, bool errSeen, uint32_t sinceMsec, uint32_t maxPacketMsec)
+{
+    return staleRxFlagAction(validSeen, errSeen, false, sinceMsec, maxPacketMsec);
+}
 
 static void test_staleRxFlagAction_keepsFlagsInsideTheWindow()
 {
-    TEST_ASSERT_EQUAL(static_cast<int>(StaleRxFlagAction::Keep), static_cast<int>(staleRxFlagAction(false, 0, 99)));
-    TEST_ASSERT_EQUAL(static_cast<int>(StaleRxFlagAction::Keep), static_cast<int>(staleRxFlagAction(true, 98, 99)));
+    TEST_ASSERT_EQUAL(static_cast<int>(StaleRxFlagAction::Keep), static_cast<int>(policy(false, false, 0, 99)));
+    TEST_ASSERT_EQUAL(static_cast<int>(StaleRxFlagAction::Keep), static_cast<int>(policy(true, false, 98, 99)));
+    TEST_ASSERT_EQUAL(static_cast<int>(StaleRxFlagAction::Keep), static_cast<int>(policy(false, true, 98, 99)));
 }
 
 static void test_staleRxFlagAction_windowEndsAtExactlyOneMaxPacket()
 {
     // Inclusive at the boundary, matching Throttle::hasElapsed().
-    TEST_ASSERT_EQUAL(static_cast<int>(StaleRxFlagAction::ClearPreamble), static_cast<int>(staleRxFlagAction(false, 99, 99)));
-    TEST_ASSERT_EQUAL(static_cast<int>(StaleRxFlagAction::Rearm), static_cast<int>(staleRxFlagAction(true, 99, 99)));
+    TEST_ASSERT_EQUAL(static_cast<int>(StaleRxFlagAction::ClearPreamble), static_cast<int>(policy(false, false, 99, 99)));
+    TEST_ASSERT_EQUAL(static_cast<int>(StaleRxFlagAction::Rearm), static_cast<int>(policy(true, false, 99, 99)));
 }
 
 static void test_staleRxFlagAction_barePreambleIsOnlyCleared()
 {
-    TEST_ASSERT_EQUAL(static_cast<int>(StaleRxFlagAction::ClearPreamble), static_cast<int>(staleRxFlagAction(false, 2200, 2115)));
+    TEST_ASSERT_EQUAL(static_cast<int>(StaleRxFlagAction::ClearPreamble), static_cast<int>(policy(false, false, 2200, 2115)));
 }
 
-static void test_staleRxFlagAction_staleHeaderIsRearmed()
+static void test_staleRxFlagAction_staleValidHeaderIsRearmed()
 {
-    TEST_ASSERT_EQUAL(static_cast<int>(StaleRxFlagAction::Rearm), static_cast<int>(staleRxFlagAction(true, 60000, 2115)));
+    TEST_ASSERT_EQUAL(static_cast<int>(StaleRxFlagAction::Rearm), static_cast<int>(policy(true, false, 60000, 2115)));
+}
+
+// The regression. A header error latches, no RX_DONE follows, and a good frame's HEADER_VALID lands beside it.
+// Deciding on "a header is up" re-arms one max packet after the ERROR was first seen - a standby in the middle
+// of the good frame. The error is the stale one, so it is retired and the valid header's own window decides.
+static void test_staleRxFlagAction_staleHeaderErrBesideValidHeaderIsRetired()
+{
+    // Inside the valid header's window and past it: either way the error goes first and nothing re-arms on it.
+    TEST_ASSERT_EQUAL(static_cast<int>(StaleRxFlagAction::ClearHeaderErr), static_cast<int>(policy(true, true, 10, 2115)));
+    TEST_ASSERT_EQUAL(static_cast<int>(StaleRxFlagAction::ClearHeaderErr), static_cast<int>(policy(true, true, 60000, 2115)));
+    // And on an SX1280, where a lone error does wedge RX, a valid header beside it still means two frames
+    TEST_ASSERT_EQUAL(static_cast<int>(StaleRxFlagAction::ClearHeaderErr),
+                      static_cast<int>(staleRxFlagAction(true, true, true, 60000, 2115)));
+}
+
+// A lone stale header error: only the chips it wedges pay a re-arm's standby for it.
+static void test_staleRxFlagAction_loneStaleHeaderErrRearmsOnlyWhereItWedgesRx()
+{
+    TEST_ASSERT_EQUAL(static_cast<int>(StaleRxFlagAction::ClearHeaderErr), static_cast<int>(policy(false, true, 60000, 2115)));
+    TEST_ASSERT_EQUAL(static_cast<int>(StaleRxFlagAction::Rearm),
+                      static_cast<int>(staleRxFlagAction(false, true, true, 60000, 2115)));
 }
 
 // checkStaleRxFlags() itself, which the cases above cannot see: a header that shows after a bare preamble gets its own
@@ -770,6 +814,42 @@ static void test_checkStaleRxFlags_headerAfterPreambleRestartsTheWindow()
     radioIf->checkStaleRxFlags();
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(1090, radioIf->rxFlagsSeenMs, "the header must be timed from when it showed");
     TEST_ASSERT_TRUE(radioIf->rxFlagsSeenHeader);
+
+    Time::useRealClock();
+    delete radioIf;
+}
+
+// The regression, end to end through the poll. A header fails on noise or a collision, HEADER_ERR latches and
+// nothing clears it. A good frame then arrives and raises HEADER_VALID beside it. Timing a header from the
+// error's stamp re-arms RX one max packet later, and startReceive()'s standby aborts the frame being received.
+// Guarded here: the valid header gets its own window, and the error is retired instead of deciding anything.
+static void test_checkStaleRxFlags_validHeaderAfterHeaderErrRestartsTheWindow()
+{
+    FakeIrqRadio phy;
+    auto *radioIf = new TestableRadioLibInterface(&phy);
+    radioIf->packetTimeMs = 100;
+
+    // A failed header, seen by the poll: this is where develop starts the clock that goes on to abort the frame
+    Time::setTestMillis(1000);
+    phy.irqFlags = phy.getIrqMapped(1UL << RADIOLIB_IRQ_HEADER_ERR);
+    radioIf->checkStaleRxFlags();
+    TEST_ASSERT_EQUAL_UINT32(1000, radioIf->rxFlagsSeenMs);
+    TEST_ASSERT_TRUE(radioIf->rxFlagsSeenHeader);
+    TEST_ASSERT_FALSE(radioIf->rxFlagsSeenValidHeader);
+
+    // A good frame's header lands beside the stale error: its own window starts here
+    Time::setTestMillis(1090);
+    phy.irqFlags |= phy.getIrqMapped(1UL << RADIOLIB_IRQ_HEADER_VALID);
+    radioIf->checkStaleRxFlags();
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1090, radioIf->rxFlagsSeenMs, "a valid header must restart a failed header's window");
+    TEST_ASSERT_TRUE(radioIf->rxFlagsSeenValidHeader);
+
+    // Past one max packet from the error, inside the valid header's window: the error goes, the window stays
+    Time::setTestMillis(1150);
+    radioIf->checkStaleRxFlags();
+    TEST_ASSERT_EQUAL_UINT32(phy.getIrqMapped(1UL << RADIOLIB_IRQ_HEADER_ERR), phy.clearedIrqFlags);
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1090, radioIf->rxFlagsSeenMs, "retiring the error must not restart the window");
+    TEST_ASSERT_TRUE(radioIf->rxFlagsSeenValidHeader);
 
     Time::useRealClock();
     delete radioIf;
@@ -817,8 +897,11 @@ void setup()
     RUN_TEST(test_staleRxFlagAction_keepsFlagsInsideTheWindow);
     RUN_TEST(test_staleRxFlagAction_windowEndsAtExactlyOneMaxPacket);
     RUN_TEST(test_staleRxFlagAction_barePreambleIsOnlyCleared);
-    RUN_TEST(test_staleRxFlagAction_staleHeaderIsRearmed);
+    RUN_TEST(test_staleRxFlagAction_staleValidHeaderIsRearmed);
+    RUN_TEST(test_staleRxFlagAction_staleHeaderErrBesideValidHeaderIsRetired);
+    RUN_TEST(test_staleRxFlagAction_loneStaleHeaderErrRearmsOnlyWhereItWedgesRx);
     RUN_TEST(test_checkStaleRxFlags_headerAfterPreambleRestartsTheWindow);
+    RUN_TEST(test_checkStaleRxFlags_validHeaderAfterHeaderErrRestartsTheWindow);
     exit(UNITY_END());
 }
 

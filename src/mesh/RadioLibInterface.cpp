@@ -943,6 +943,7 @@ void RadioLibInterface::startReceive()
     chipRecoveryFailures = 0;
     rxFlagsSeenMs = 0;
     rxFlagsSeenHeader = false;
+    rxFlagsSeenValidHeader = false;
     powerMon->setState(meshtastic_PowerMon_State_Lora_RXOn);
 }
 
@@ -1031,35 +1032,50 @@ void RadioLibInterface::checkStaleRxFlags()
     const uint32_t irq = iface->getIrqFlags();
     if (irq & iface->getIrqMapped(1UL << RADIOLIB_IRQ_RX_DONE))
         return;
-    // HEADER_ERR counts: on SX1280 it leaves RX wedged with no RX_DONE or TIMEOUT to follow.
-    const bool headerSeen = irq & iface->getIrqMapped((1UL << RADIOLIB_IRQ_HEADER_VALID) | (1UL << RADIOLIB_IRQ_HEADER_ERR));
+    const bool validSeen = irq & iface->getIrqMapped(1UL << RADIOLIB_IRQ_HEADER_VALID);
+    // HEADER_ERR counts on its own: on SX1280 it leaves RX wedged with no RX_DONE or TIMEOUT to follow.
+    const bool errSeen = irq & iface->getIrqMapped(1UL << RADIOLIB_IRQ_HEADER_ERR);
+    const bool headerSeen = validSeen || errSeen;
     const bool preambleSeen = irq & iface->getIrqMapped(1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED);
     if (!headerSeen && !preambleSeen) {
         rxFlagsSeenMs = 0;
         rxFlagsSeenHeader = false;
+        rxFlagsSeenValidHeader = false;
         return;
     }
-    // A header's window starts when the header shows, not when an earlier bare preamble did
-    if (!rxFlagsSeenMs || (headerSeen && !rxFlagsSeenHeader)) {
+    // A header's window starts when the header shows, not when an earlier bare preamble did - and a valid
+    // header's starts over a failed header's, whose flag stays latched beside it and is not this frame's.
+    if (!rxFlagsSeenMs || (headerSeen && !rxFlagsSeenHeader) || (validSeen && !rxFlagsSeenValidHeader)) {
         rxFlagsSeenMs = Time::skipZero(Time::getMillis());
         rxFlagsSeenHeader = headerSeen;
+        rxFlagsSeenValidHeader = validSeen;
         return;
     }
 
     const uint32_t maxPacketTimeMsec = getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN + sizeof(PacketHeader));
-    switch (staleRxFlagAction(headerSeen, Time::getMillis() - rxFlagsSeenMs, maxPacketTimeMsec)) {
+    switch (staleRxFlagAction(validSeen, errSeen, headerErrWedgesRx(), Time::getMillis() - rxFlagsSeenMs, maxPacketTimeMsec)) {
     case StaleRxFlagAction::Keep:
         break;
     case StaleRxFlagAction::Rearm:
         LOG_DEBUG("RX header stale, re-arm");
         startReceive(); // clears rxFlagsSeenMs
         break;
-    case StaleRxFlagAction::ClearPreamble:
+    case StaleRxFlagAction::ClearHeaderErr:
         // A clear never aborts a reception, unlike the standby inside startReceive().
+        LOG_DEBUG("RX header err stale, cleared");
+        iface->clearIrq(1UL << RADIOLIB_IRQ_HEADER_ERR);
+        if (!validSeen) { // a valid header beside it keeps the window this error did not start
+            rxFlagsSeenMs = 0;
+            rxFlagsSeenHeader = false;
+            rxFlagsSeenValidHeader = false;
+        }
+        break;
+    case StaleRxFlagAction::ClearPreamble:
         LOG_DEBUG("RX preamble stale, cleared");
         iface->clearIrq(1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED);
         rxFlagsSeenMs = 0;
         rxFlagsSeenHeader = false;
+        rxFlagsSeenValidHeader = false;
         break;
     }
 }
@@ -1267,7 +1283,7 @@ void RadioLibInterface::readOutFromTask()
         // A handoff's RX also routes CRC_ERR and HEADER_ERR to DIO1, and a damaged header raises one of those with no
         // RX_DONE behind it. Left latched, the line stays asserted and the next frame's RX_DONE raises no edge:
         // checkStaleRxFlags() steps aside for a handoff, so nothing would notice until checkCadHandoffTimeout().
-        // Only inside the handoff window: plain RX leaves HEADER_ERR for checkStaleRxFlags() to judge a wedged SX1280 on.
+        // Only inside the handoff window: plain RX leaves HEADER_ERR to checkStaleRxFlags(), which clears or re-arms on it.
         if (cadHandoffRxStart) {
             const uint32_t errIrqs = (1UL << RADIOLIB_IRQ_CRC_ERR) | (1UL << RADIOLIB_IRQ_HEADER_ERR);
             if (iface->getIrqFlags() & iface->getIrqMapped(errIrqs))
