@@ -9,6 +9,7 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerMon.h"
+#include "RadioLibInterface.h"
 #include "TransmitHistory.h"
 #include "detect/LoRaRadioType.h"
 #include "error.h"
@@ -442,6 +443,24 @@ static bool loraWakeIrqAsserted()
     return false;
 }
 
+// The radio ISR is rising-edge and stays attached with the RX readout task. As a level wake source it would fire
+// nonstop, starving the readout task that clears the IRQ, so mask it while armed and restore the edge type after.
+static void armLoraWakePin(gpio_num_t pin)
+{
+    gpio_intr_disable(pin);
+    gpio_wakeup_enable(pin, GPIO_INTR_HIGH_LEVEL);
+}
+
+static void restoreLoraIrqPin(gpio_num_t pin)
+{
+    gpio_wakeup_disable(pin); // leaves the level type in place
+    gpio_set_intr_type(pin, GPIO_INTR_POSEDGE);
+    gpio_intr_enable(pin);
+    // The edge that woke us was consumed by the sleep; deliver an IRQ that is already pending.
+    if (gpio_get_level(pin) == 1 && RadioLibInterface::instance)
+        RadioLibInterface::instance->pollMissedIrqs();
+}
+
 // Consecutive sleeps skipped because the LoRa IRQ was already asserted. A line stuck high would
 // otherwise stop the node sleeping for good, so give up on skipping once it stops looking transient.
 static uint8_t loraIrqSkippedSleeps = 0;
@@ -605,15 +624,19 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     // Unconditional: the config can have changed while we were asleep.
     gpio_wakeup_disable((gpio_num_t)MOTION_WAKE_INT_PIN);
 #endif
-#if !defined(SOC_PM_SUPPORT_EXT_WAKEUP) && (defined(LORA_DIO1) || defined(SX128X_DIO1))
+#if defined(LORA_DIO1) || defined(SX128X_DIO1)
     const int wokeDio1 = loraWakeDio1Pin(); // must match what enableLoraInterrupt() armed
+#if SOC_PM_SUPPORT_EXT_WAKEUP
     if (wokeDio1 >= 0 && radioType != RF95_RADIO) {
-        gpio_wakeup_disable((gpio_num_t)wokeDio1);
+#else
+    if (wokeDio1 >= 0 && radioType != RF95_RADIO) {
+#endif
+        restoreLoraIrqPin((gpio_num_t)wokeDio1);
     }
 #endif
 #if defined(RF95_IRQ) && (RF95_IRQ != RADIOLIB_NC)
     if (radioType == RF95_RADIO) {
-        gpio_wakeup_disable((gpio_num_t)RF95_IRQ);
+        restoreLoraIrqPin((gpio_num_t)RF95_IRQ);
     }
 #endif
 
@@ -683,7 +706,7 @@ void enableLoraInterrupt()
 #elif SOC_PM_SUPPORT_EXT_WAKEUP && (defined(LORA_DIO1) || defined(SX128X_DIO1))
     const int loraDio1 = loraWakeDio1Pin();
     esp_err_t res;
-    if (loraDio1 >= 0) {
+    if (loraDio1 >= 0 && radioType != RF95_RADIO) {
         res = gpio_pulldown_en((gpio_num_t)loraDio1);
         if (res != ESP_OK) {
             LOG_ERROR("gpio_pulldown_en(lora dio1) result %d", res);
@@ -703,22 +726,22 @@ void enableLoraInterrupt()
     loraFEMInterface.setRxModeEnableWhenMCUSleep();
 #endif
 
-    if (loraDio1 >= 0) {
+    if (loraDio1 >= 0 && radioType != RF95_RADIO) {
         LOG_INFO("Wake on LoRa DIO1 (GPIO%02d) gpio interrupt", loraDio1);
-        gpio_wakeup_enable((gpio_num_t)loraDio1, GPIO_INTR_HIGH_LEVEL);
+        armLoraWakePin((gpio_num_t)loraDio1);
     }
 
 #elif defined(LORA_DIO1) || defined(SX128X_DIO1)
     const int loraDio1 = loraWakeDio1Pin();
     if (loraDio1 >= 0 && radioType != RF95_RADIO) {
         LOG_INFO("Wake on LoRa DIO1 (GPIO%02d) gpio interrupt", loraDio1);
-        gpio_wakeup_enable((gpio_num_t)loraDio1, GPIO_INTR_HIGH_LEVEL); // SX126x/SX128x interrupt, active high
+        armLoraWakePin((gpio_num_t)loraDio1); // SX126x/SX128x interrupt, active high
     }
 #endif
 #if defined(RF95_IRQ) && (RF95_IRQ != RADIOLIB_NC)
     if (radioType == RF95_RADIO) {
         LOG_INFO("Wake on RF95_IRQ (GPIO%02d) gpio interrupt", RF95_IRQ);
-        gpio_wakeup_enable((gpio_num_t)RF95_IRQ, GPIO_INTR_HIGH_LEVEL); // RF95 interrupt, active high
+        armLoraWakePin((gpio_num_t)RF95_IRQ); // RF95 interrupt, active high
     }
 #endif
 }

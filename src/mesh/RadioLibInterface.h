@@ -179,6 +179,13 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     {
         if (instance == this)
             instance = nullptr;
+#ifdef MESHTASTIC_RX_READOUT_TASK
+        // initLoRa() destroys an interface whose init() failed, and the mutex is made in the constructor
+        if (radioSeqMutex) {
+            vSemaphoreDelete(radioSeqMutex);
+            radioSeqMutex = nullptr;
+        }
+#endif
     }
 
     /**
@@ -624,8 +631,8 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     virtual void handleSoftwareLoraIrqPoll() {}
 
     /** Take the radio-sequence lock, returning whether it was actually taken - see RadioSequence. The lock is
-     *  created with the readout task, so a sequence that started before it has nothing to take, and must not
-     *  then release it. Without a readout task at all, both are no-ops. */
+     *  created in the constructor, so every sequence in a readout-task build holds it; a sequence that could not
+     *  take one has nothing to release. Without a readout task at all, both are no-ops. */
 #ifdef MESHTASTIC_RX_READOUT_TASK
     bool lockRadioSequence();
     void unlockRadioSequence();
