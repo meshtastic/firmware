@@ -87,11 +87,13 @@ extern "C" {
 #define PIN_WIRE_SCL (0 + 27)
 
 /*GPS*/
-// AG3352Q without RTC_INT: sleep is $PAIR003 then EN low; EN gates only the 0.8 V core, as on the ThinkNode M9.
+// AG3352Q without RTC_INT: sleep is $PAIR650 then EN low, wake is EN high then a RESETB pulse.
+// EN gates only the 0.8 V core; the 1.8 V rail is always on.
 #define HAS_GPS 1
 #define GPS_BAUDRATE 115200
 #define PIN_GPS_RESET (0 + 17)
 #define GPS_SLEEP_INT (32 + 7) // idle_int: rests HIGH, pulled LOW while sending the sleep command
+#define GPS_AIROHA_RESET_WAKE  // sleep in backup mode ($PAIR650); RESETB (P0.17, inverted by Q16) wakes it
 #define PIN_GPS_PPS (0 + 14)   // 1PPS output, configured as an input by GPS.cpp
 #define PIN_SERIAL1_RX (32 + 2)
 #define PIN_SERIAL1_TX (32 + 4)
