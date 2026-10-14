@@ -530,6 +530,8 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
 #endif // KB_INT
 #ifdef BOARD_PCA9535_INT
     // Side-key interrupt line from PCA9535 expander (active low).
+    // Mask the CPU interrupt: the level type would storm an ISR that cannot clear the expander's latched INT.
+    gpio_intr_disable((gpio_num_t)BOARD_PCA9535_INT);
     gpio_wakeup_enable((gpio_num_t)BOARD_PCA9535_INT, GPIO_INTR_LOW_LEVEL);
 #endif
 #ifdef BUTTON_PIN
@@ -612,6 +614,18 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
 #ifdef BUTTON_PIN
     // Disable wake-on-button interrupt. Re-attach normal button-interrupts
     gpio_wakeup_disable(pin);
+#endif
+#ifdef PMU_IRQ
+    // Undo the arming above. PMU_IRQ was the only light-sleep wake pin left armed after the sleep, so
+    // its GPIO_INTR_LOW_LEVEL type and wake-enable bit stayed in the GPIO registers indefinitely. A
+    // panic or software reset is CPU-only and leaves those registers intact, so the next boot's first
+    // attachInterrupt() - attachPowerInterrupts() on the boards that define PMU_IRQ - installs the ISR
+    // service with a level condition already pending and nothing to clear it. gpio_wakeup_disable()
+    // alone leaves int_type behind, so set an edge type too, matching what the button path does.
+    if (pmu_found) {
+        gpio_wakeup_disable((gpio_num_t)PMU_IRQ);
+        gpio_set_intr_type((gpio_num_t)PMU_IRQ, GPIO_INTR_NEGEDGE);
+    }
 #endif
 #ifdef INPUTDRIVER_WAKE_BTN_PIN
     gpio_wakeup_disable((gpio_num_t)INPUTDRIVER_WAKE_BTN_PIN);
