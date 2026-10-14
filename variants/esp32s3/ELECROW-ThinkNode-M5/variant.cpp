@@ -19,5 +19,8 @@ void earlyInitVariant()
 
 void variant_shutdown()
 {
+    // Ensure backlight is shut off before entering sleep (for InkHUD, redundant in BaseUI)
+    io.digitalWrite(PCA_PIN_EINK_EN, LOW);
+
     io.digitalWrite(PCA_PIN_POWER_EN, LOW);
 }
