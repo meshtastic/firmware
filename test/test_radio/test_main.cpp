@@ -855,6 +855,37 @@ static void test_checkStaleRxFlags_validHeaderAfterHeaderErrRestartsTheWindow()
     delete radioIf;
 }
 
+// A failed header latches beside its own preamble, and both are the dead frame's. Retiring only the error
+// leaves the preamble for the next send's receiveDetected(), which holds TX a max packet over nothing - a wait
+// the re-arm this replaces never cost, since its standby cleared the whole flag register.
+static void test_checkStaleRxFlags_loneStaleHeaderErrRetiresItsPreambleToo()
+{
+    FakeIrqRadio phy;
+    auto *radioIf = new TestableRadioLibInterface(&phy);
+    radioIf->packetTimeMs = 100;
+
+    const uint32_t preamble = phy.getIrqMapped(1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED);
+    const uint32_t headerErr = phy.getIrqMapped(1UL << RADIOLIB_IRQ_HEADER_ERR);
+
+    Time::setTestMillis(1000);
+    phy.irqFlags = preamble | headerErr;
+    radioIf->checkStaleRxFlags();
+    TEST_ASSERT_EQUAL_UINT32(1000, radioIf->rxFlagsSeenMs);
+    TEST_ASSERT_TRUE(radioIf->rxFlagsSeenHeader);
+    TEST_ASSERT_FALSE(radioIf->rxFlagsSeenValidHeader);
+
+    // Past one max packet with no valid header: the whole failed frame is retired, without a standby
+    Time::setTestMillis(1150);
+    radioIf->checkStaleRxFlags();
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(preamble | headerErr, phy.clearedIrqFlags, "the dead frame's preamble must go too");
+    TEST_ASSERT_EQUAL_UINT32(0, phy.irqFlags);
+    TEST_ASSERT_EQUAL_UINT32(0, radioIf->rxFlagsSeenMs);
+    TEST_ASSERT_FALSE(radioIf->rxFlagsSeenHeader);
+
+    Time::useRealClock();
+    delete radioIf;
+}
+
 void setup()
 {
     delay(10);
@@ -902,6 +933,7 @@ void setup()
     RUN_TEST(test_staleRxFlagAction_loneStaleHeaderErrRearmsOnlyWhereItWedgesRx);
     RUN_TEST(test_checkStaleRxFlags_headerAfterPreambleRestartsTheWindow);
     RUN_TEST(test_checkStaleRxFlags_validHeaderAfterHeaderErrRestartsTheWindow);
+    RUN_TEST(test_checkStaleRxFlags_loneStaleHeaderErrRetiresItsPreambleToo);
     exit(UNITY_END());
 }
 

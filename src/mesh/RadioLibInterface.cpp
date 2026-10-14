@@ -1063,12 +1063,17 @@ void RadioLibInterface::checkStaleRxFlags()
     case StaleRxFlagAction::ClearHeaderErr:
         // A clear never aborts a reception, unlike the standby inside startReceive().
         LOG_DEBUG("RX header err stale, cleared");
-        iface->clearIrq(1UL << RADIOLIB_IRQ_HEADER_ERR);
-        if (!validSeen) { // a valid header beside it keeps the window this error did not start
-            rxFlagsSeenMs = 0;
-            rxFlagsSeenHeader = false;
-            rxFlagsSeenValidHeader = false;
+        if (validSeen) { // a valid header beside it keeps the window this error did not start
+            iface->clearIrq(1UL << RADIOLIB_IRQ_HEADER_ERR);
+            break;
         }
+        // The failed frame's own preamble is latched beside its error. Retiring one and not the other
+        // leaves the next send's receiveDetected() holding TX a max packet over a frame already dead -
+        // a wait the re-arm this replaces never cost, because its standby cleared both flags at once.
+        iface->clearIrq((1UL << RADIOLIB_IRQ_HEADER_ERR) | (1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED));
+        rxFlagsSeenMs = 0;
+        rxFlagsSeenHeader = false;
+        rxFlagsSeenValidHeader = false;
         break;
     case StaleRxFlagAction::ClearPreamble:
         LOG_DEBUG("RX preamble stale, cleared");
