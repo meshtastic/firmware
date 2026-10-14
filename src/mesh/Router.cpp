@@ -996,7 +996,6 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
                 adminKeyFallbackRefund();
         }
         if (decrypted) {
-            LOG_INFO("PKI Decryption worked");
             meshtastic_Data decodedtmp;
             memset(&decodedtmp, 0, sizeof(decodedtmp));
             size_t payloadSize = rawSize - MESHTASTIC_PKC_OVERHEAD;
@@ -1653,14 +1652,9 @@ void Router::dispatchReceived(meshtastic_MeshPacket *p, RxSource src)
         if (p_encrypted == nullptr) {
             LOG_WARN("p_encrypted null, skip MQTT publish");
         } else {
-            // Mark as pki_encrypted if it is not yet decoded and MQTT encryption is also enabled, hash matches and it's a DM not
-            // to us (because we would be able to decrypt it)
-            if (decodedState == DecodeState::DECODE_OPAQUE && moduleConfig.mqtt.encryption_enabled && p->channel == 0x00 &&
-                !isBroadcast(p->to) && !isToUs(p))
-                p_encrypted->pki_encrypted = true;
-            // After potentially altering it, publish received message to MQTT if we're not the original transmitter of the packet
-            if ((decodedState == DecodeState::DECODE_SUCCESS || p_encrypted->pki_encrypted) && moduleConfig.mqtt.enabled &&
-                !isFromUs(p) && mqtt) {
+            // Publish received message to MQTT if we're not the original transmitter of the packet. PKI DMs we can't
+            // decrypt never get here; perhapsUplinkOpaquePki() publishes those.
+            if (decodedState == DecodeState::DECODE_SUCCESS && moduleConfig.mqtt.enabled && !isFromUs(p) && mqtt) {
                 if (decodedState == DecodeState::DECODE_SUCCESS && p->decoded.portnum == meshtastic_PortNum_TRACEROUTE_APP &&
                     moduleConfig.mqtt.encryption_enabled) {
                     // For TRACEROUTE_APP packets release the original encrypted packet and encrypt a new from the changed packet
@@ -1691,6 +1685,30 @@ void Router::dispatchReceived(meshtastic_MeshPacket *p, RxSource src)
     }
 
     packetPool.release(p_encrypted); // Release the encrypted packet (release() handles nullptr)
+}
+
+void Router::perhapsUplinkOpaquePki(meshtastic_MeshPacket *p)
+{
+#if !MESHTASTIC_EXCLUDE_MQTT
+    // Only a PKI-shaped DM between two other nodes: a DM to us would have decrypted, and a still-encrypted
+    // packet is publishable only with MQTT encryption enabled.
+    if (!mqtt || !moduleConfig.mqtt.enabled || !moduleConfig.mqtt.encryption_enabled || p->via_mqtt || p->channel != 0 ||
+        p->id == 0 || isBroadcast(p->to) || isToUs(p) || isFromUs(p))
+        return;
+
+    for (const auto &seen : opaqueUplinkSeen) {
+        if (seen.from == p->from && seen.id == p->id)
+            return;
+    }
+    opaqueUplinkSeen[opaqueUplinkNext] = {p->from, p->id};
+    opaqueUplinkNext = (opaqueUplinkNext + 1) % opaqueUplinkCapacity;
+
+    p->pki_encrypted = true;
+    stampRxTime(p);
+    mqtt->onSend(*p, *p, 0);
+#else
+    (void)p;
+#endif
 }
 
 void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
@@ -1756,6 +1774,7 @@ void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
         if (isFromUs(p))
             perhapsGenerateImplicitAckForOwnOverheard(p);
         relayOpaquePacket(p);
+        perhapsUplinkOpaquePki(p);
         packetPool.release(p);
         return;
     }

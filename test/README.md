@@ -124,7 +124,7 @@ The native build requires several system libraries. Install them all at once:
 ```bash
 sudo apt-get install -y \
   libbluetooth-dev libgpiod-dev libyaml-cpp-dev libjsoncpp-dev openssl libssl-dev \
-  libulfius-dev liborcania-dev libusb-1.0-0-dev libi2c-dev libuv1-dev
+  libulfius-dev liborcania-dev libusb-1.0-0-dev libi2c-dev libuv1-dev libavahi-client-dev
 ```
 
 See `.github/actions/setup-native/action.yml` for the canonical list.
