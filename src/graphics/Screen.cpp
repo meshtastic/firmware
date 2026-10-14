@@ -2384,7 +2384,8 @@ int Screen::handleInputEvent(const InputEvent *event)
                            this->ui->getUiState()->currentFrame >= framesetInfo.positions.firstFavorite &&
                            this->ui->getUiState()->currentFrame <= framesetInfo.positions.lastFavorite) {
                     menuHandler::favoriteBaseMenu();
-                } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.nodelist_location &&
+                } else if ((this->ui->getUiState()->currentFrame == framesetInfo.positions.nodelist_location ||
+                            this->ui->getUiState()->currentFrame == framesetInfo.positions.nodelist_bearings) &&
                            config.display.bearings_view_radar) {
                     // Bearings/distance frame is being drawn as a radar - use the
                     // radar-specific options menu (zoom, heading, favorites filter,

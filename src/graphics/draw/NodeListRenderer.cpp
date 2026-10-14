@@ -928,6 +928,11 @@ void drawDistanceScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
 #endif
 void drawNodeListWithCompasses(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
+    // E-ink registers this as its own Bearings frame, bypassing the radar check in the Location frame.
+    if (config.display.bearings_view_radar) {
+        graphics::RadarRenderer::drawRadarOverlay(display, x, y);
+        return;
+    }
     float headingRadian = 0.0f;
     const auto *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
     meshtastic_PositionLite ourSelfPos;
