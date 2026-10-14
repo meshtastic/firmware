@@ -167,11 +167,18 @@ uint32_t RadioLibInterface::maxRxFrameMsec()
 {
     // A sender's header can carry any CR up to 4/8, and a hold starts before that header can be read.
     DataRate_t dr = getDataRate();
+    const uint8_t ourCR = dr.lora.codingRate;
     dr.lora.codingRate = 8;
     PacketConfig_t pc = getPacketConfig();
     pc.lora.crcEnabled = true;
     const RadioLibTime_t usec = iface->calculateTimeOnAir(modemType, dr, pc, MAX_LORA_PAYLOAD_LEN);
-    return isRadioLibTimeError(usec) ? getPacketTime(MAX_LORA_PAYLOAD_LEN) : (usec + 999) / 1000;
+    if (!isRadioLibTimeError(usec))
+        return (usec + 999) / 1000;
+    // The fallback times the frame at our own CR, which is short of the 4/8 bound the hold is for, so scale it up.
+    // The preamble does not scale with CR, so the result runs long - the safe direction for a hold.
+    const uint32_t ourMsec = getPacketTime(MAX_LORA_PAYLOAD_LEN);
+    const uint8_t scaleCR = (ourCR >= 5 && ourCR <= 8) ? ourCR : 8;
+    return (uint32_t)(((uint64_t)ourMsec * 8 + scaleCR - 1) / scaleCR);
 }
 
 bool RadioLibInterface::preambleHoldActive()

@@ -811,8 +811,23 @@ static void test_preambleHold_fallsBackWhenTheRadioCannotTimeTheFrame()
     FakeIrqRadio phy; // answers 0 usec, which isRadioLibTimeError() reads as an error, not as no airtime
     auto *radioIf = new TestableRadioLibInterface(&phy);
     radioIf->packetTimeMs = 120;
+    radioIf->setModem(11, 250.0f, 8); // already the worst case, so nothing to scale
 
     TEST_ASSERT_EQUAL_UINT32(120, radioIf->maxRxFrameMsecPublic());
+
+    delete radioIf;
+}
+
+static void test_preambleHold_fallbackIsScaledToTheWorstCaseCodingRate()
+{
+    // getPacketTime() times the frame at our own CR, so a configured rate below 4/8 would otherwise hold for less than
+    // the worst case a sender may be transmitting. Regression guarded: returning the configured-CR figure unscaled.
+    FakeIrqRadio phy; // 0 usec again, so the bound comes from the fallback
+    auto *radioIf = new TestableRadioLibInterface(&phy);
+    radioIf->packetTimeMs = 120;
+    radioIf->setModem(11, 250.0f, 5); // CR 4/5, the shortest we configure
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(192, radioIf->maxRxFrameMsecPublic(), "120 ms at CR 4/5 is 192 ms at CR 4/8");
 
     delete radioIf;
 }
@@ -1071,6 +1086,7 @@ void setup()
     RUN_TEST(test_cadHandoffRxEnded_falseWithoutAHandoff);
     RUN_TEST(test_preambleHold_isSizedForTheWorstCaseFrame);
     RUN_TEST(test_preambleHold_fallsBackWhenTheRadioCannotTimeTheFrame);
+    RUN_TEST(test_preambleHold_fallbackIsScaledToTheWorstCaseCodingRate);
     RUN_TEST(test_preambleHold_clearsTheFlagAndSurvivesIt);
     RUN_TEST(test_preambleHeaderGrace_wideLoraIsNeverZero);
     RUN_TEST(test_preambleHeaderGrace_roundsUp);
