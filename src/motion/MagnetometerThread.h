@@ -7,6 +7,7 @@
 #if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && !MESHTASTIC_EXCLUDE_MAGNETOMETER
 
 #include "../concurrency/OSThread.h"
+#include "IIS2MDCTRSensor.h"
 #include "MMC5983MASensor.h"
 #include "MotionSensor.h"
 #include "QMC6309Sensor.h"
@@ -80,6 +81,9 @@ class MagnetometerThread : public concurrency::OSThread
             sensor.reset(new QMC6309Sensor(device));
             break;
 #endif
+        case ScanI2C::DeviceType::IIS2MDCTR:
+            sensor.reset(new IIS2MDCTRSensor(device));
+            break;
         default:
             disable();
             return;
