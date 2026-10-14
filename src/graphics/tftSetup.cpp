@@ -429,7 +429,14 @@ void tftSetup(void)
         }
         tftSleepObserver->observe(&notifyLightSleep);
         endSleepObserver->observe(&notifyLightSleepEnd);
+#ifdef MESHTASTIC_BENCH_NO_TFT_TASK
+        // Bench only: the panel is initialized above, so the bus comes up exactly as it does in a
+        // normal boot, but no render loop runs afterwards. On a board whose panel shares the radio's
+        // SPI bus that isolates the display's bus traffic as a single variable.
+        LOG_WARN("BENCH: TFT render task suppressed, no display SPI traffic");
+#else
         xTaskCreatePinnedToCore(tft_task_handler, "tft", TFT_TASK_STACK_SIZE, NULL, 1, NULL, 0);
+#endif
 #elif defined(ARCH_PORTDUINO)
         std::thread *tft_task = new std::thread([] { tft_task_handler(); });
 #endif
