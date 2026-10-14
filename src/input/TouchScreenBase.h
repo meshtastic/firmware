@@ -17,6 +17,9 @@ class TouchScreenBase : public Observable<const InputEvent *>, public concurrenc
   public:
     explicit TouchScreenBase(const char *name, uint16_t width, uint16_t height);
     void init(bool hasTouch);
+#ifdef MESHTASTIC_INCLUDE_INKHUD_BOOKREADER
+    bool isTouchActive() const { return _touchedOld; }
+#endif
 
   protected:
     enum TouchScreenBaseStateType { TOUCH_EVENT_OCCURRED, TOUCH_EVENT_CLEARED };
@@ -37,6 +40,9 @@ class TouchScreenBase : public Observable<const InputEvent *>, public concurrenc
     virtual void onEvent(const TouchEvent &event) = 0;
     virtual bool fastTapModeEnabled() const;
     virtual bool longPressEnabled() const;
+#ifdef MESHTASTIC_INCLUDE_INKHUD_BOOKREADER
+    virtual bool swipeFriendlyModeEnabled() const;
+#endif
 
     volatile TouchScreenBaseStateType _state = TOUCH_EVENT_CLEARED;
     volatile TouchScreenBaseEventType _action = TOUCH_ACTION_NONE;
@@ -50,7 +56,10 @@ class TouchScreenBase : public Observable<const InputEvent *>, public concurrenc
     bool _touchedOld = false;  // previous touch state
     int16_t _first_x, _last_x; // horizontal swipe direction
     int16_t _first_y, _last_y; // vertical swipe direction
-    uint32_t _pressStartMs;    // when the current touch began; read via Throttle::hasElapsed()
+#ifdef MESHTASTIC_INCLUDE_INKHUD_BOOKREADER
+    int16_t _peak_x = 0, _peak_y = 0;
+#endif
+    uint32_t _pressStartMs; // when the current touch began; read via Throttle::hasElapsed()
 
     // LONG_PRESS repeat suppression while one touch is held: the bool is the armed flag, the
     // deadline is read only while it is set. No value of the deadline can mean "unarmed".

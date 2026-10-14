@@ -20,6 +20,7 @@ A haphazard collection of notes which _might_ be helpful for developers.
   - [NicheGraphics Framework](#nichegraphics-framework)
   - [NicheGraphics E-Ink Drivers](#nichegraphics-e-ink-drivers)
   - [InkHUD Applets](#inkhud-applets)
+  - [Book Reader Applet](#book-reader-applet)
 - [Adding a Variant](#adding-a-variant)
   - [platformio.ini](#platformioini)
   - [nicheGraphics.h](#nichegraphicsh)
@@ -249,6 +250,101 @@ In a variant's `nicheGraphics.h`:
 - `inkhud->addApplet("My Applet", new InkHUD::MyApplet);`
 
 You will need to add these lines to any variants which will use your applet.
+
+#### Book Reader Applet
+
+`BookReaderApplet` provides an SD-card library, EPUB reader, contents picker, image viewer, and reader menu. Its implementation is in `src/graphics/niche/InkHUD/Applets/User/BookReader`.
+
+##### Books and Layout
+
+Place normal EPUB files in `/books` on the SD card. Subfolders are browsable. The library accepts `.epub`, `.kepub`, and `.epu` filenames containing EPUB archives; it does not open generic ZIP files or treat extracted EPUB folders as books. Standalone text, HTML, RTF, PDF, and comic archive files are not library entries.
+
+The library lists folders before books and sorts names case-insensitively. Book rows wrap long titles and show the format and file size.
+
+The reader uses the EPUB package's spine for reading order and its NCX or navigation document for contents entries. Contents links can target anchors within a chapter. Text is reflowed for the current viewport rather than preserving the publisher's page boundaries.
+
+Supported content includes headings, paragraphs, bold and italic text, lists, basic tables, and JPEG/PNG images. A subset of inline and linked CSS controls alignment, indentation, spacing, and visibility. This is not a browser layout engine; arbitrary CSS, scripting, embedded fonts, and encrypted books are not supported.
+
+Mixed text/image pages keep images together when paginating. An image that cannot fit in the remaining space moves to the following page; large images are fitted to the available image area. Image-only EPUB parts use a fitted image view with page and zoom controls. Consecutive images in an image-only part can form a combined image sequence.
+
+##### Touch Controls
+
+Touch-friendly layout is selected when the variant registers a touch-enabled provider with InkHUD.
+
+| View | Control | Action |
+| ---- | ------- | ------ |
+| Library | Tap a book or folder | Open the entry |
+| Library | Back | Go to the parent folder |
+| Library / contents | Swipe up or down | Move through the list by a screenful |
+| Contents | Tap an entry | Open its chapter or anchor |
+| Contents | Back | Return to the reader |
+| Reader | Menu | Open the reader menu |
+| Reader | Contents | Open the book's contents picker, when available |
+| Reader at 100% | Tap the left / right third | Previous / next page; tapping an inline image opens that image instead |
+| Reader at 100% | Swipe left or up | Next page |
+| Reader at 100% | Swipe right or down | Previous page |
+| Mixed page | Tap an inline image | Expand it into the image viewer |
+| Expanded image | Back | Close the image viewer and return to the text page |
+| Image toolbar | `<` / `>` | Previous / next page |
+| Image toolbar | `-` / `+` | Step down / up through zoom levels |
+| Image toolbar | Percentage | Reset zoom to 100% and recenter |
+| Image above 100% | Swipe | Pan the image; use toolbar arrows to change pages |
+| Reader menu | Tap an item | Perform the selected action |
+| Reader menu | Swipe | Move the selected menu item |
+
+Image zoom levels are **100%, 120%, 150%, 175%, 260%, and 360%**. Here, 100% means fit-to-view, not one source pixel per display pixel. Panning is clamped to the image bounds. Pinch-to-zoom is not implemented.
+
+The reader consumes touch events, including border taps, so they do not fall through to physical-button applet switching. Hardware button mappings remain variant-specific. On the T5 S3 Pro, the side key's short press toggles touch input, and holding it toggles the backlight; these are board controls, not reader gestures.
+
+For non-touch layouts, navigation up/down moves the library or contents selection and turns reader pages. Right opens the selected entry; left returns to the parent folder or closes contents. In the reader, left/right turn pages. A short or long user-button press opens the selected library/contents entry or advances the reader page. In the reader menu, a short press cycles the selection; right or long press activates it, and left closes the menu.
+
+##### Menu and Persistence
+
+The reader menu provides Resume, Library, Contents, Bookmark this page, and Exit to applets. Go to bookmark and Remove bookmark appear when a bookmark exists. There is one explicit bookmark per book, separate from the saved reading position.
+
+Reading positions and bookmarks are saved through InkHUD persistence using a per-book key. Reopening a book restores its saved part and wrapped-line position. The page-count cache is separate and is validated against the book and layout. Total page count can display `?` while background pagination is incomplete. Saved locations use wrapped lines, so changing the layout can affect the restored passage.
+
+##### Variant Setup
+
+The variant must provide a working SD filesystem and include both `MESHTASTIC_INCLUDE_INKHUD` and `MESHTASTIC_INCLUDE_INKHUD_BOOKREADER`. The reader's source and header are guarded by these feature definitions; an additional reader-specific source-filter exclusion/reinclusion is unnecessary.
+
+Include and register the applet in the variant's `nicheGraphics.h`:
+
+```cpp
+#ifdef MESHTASTIC_INCLUDE_INKHUD_BOOKREADER
+#include "graphics/niche/InkHUD/Applets/User/BookReader/BookReaderApplet.h"
+#endif
+
+// Inside setupNicheGraphics(), after creating the InkHUD instance:
+#ifdef MESHTASTIC_INCLUDE_INKHUD_BOOKREADER
+inkhud->addApplet("Book Reader", new InkHUD::BookReaderApplet, true, false);
+#endif
+```
+
+| Build definition | Purpose |
+| ---------------- | ------- |
+| `INKHUD_BOOKREADER_ENABLE_INLINE_IMAGES=1` | Enable JPEG/PNG image rendering; provide the required decoder dependencies |
+| `INKHUD_BOOKREADER_USE_JPEGDEC=1` | Use JPEGDEC instead of the ESP32 ROM JPEG decoder |
+| `INKHUD_BOOKREADER_GRAYSCALE=1` | Enable the grayscale image path; requires compatible renderer and display-driver support |
+| `INKHUD_BOOKREADER_PERF_LOG=1` | Enable detailed reader loading, parsing, caching, and rendering logs |
+
+`variants/esp32s3/t5s3_epaper/platformio.ini` contains the current image-enabled configuration and JPEGDEC/PNGdec dependencies. Grayscale support is a driver capability, not a guarantee that every InkHUD display supports the same shades or refresh behavior.
+
+Resource limits have overridable defaults in `BookReaderApplet.cpp`. Set overrides in the relevant variant, not as universal device limits. The `INKHUD_BOOKREADER_MAX_*` definitions bound text, metadata, archive directories, and individual archive/image entries; `INKHUD_BOOKREADER_CSS_MAX_*` bounds stylesheet work; `INKHUD_BOOKREADER_PREFETCH_MAX_*` bounds speculative text loading. Image sizing, JPEG scaling, and initial partial chapter reads have their own overrides. Oversized or unsupported content may be truncated or unavailable.
+
+##### Loading and Implementation
+
+Opening a book or an uncached chapter/page uses a centered book icon and loading label. Chapter reads, wrapping, pagination, and image prefetch are deferred where possible so the reader can show content before preparing the entire book. A cached transition need not show a loading indicator. E-paper refresh time is separate from CPU rendering time and depends on the display driver.
+
+| Component | Responsibility |
+| --------- | -------------- |
+| `BookReaderApplet.cpp` / `.h` | Library, EPUB access, parsing, views, input, persistence, and background work |
+| `ReaderText.h` | Shared text markers, quote-aware tag scanning, and XML attribute decoding |
+| `ReaderPagination.h` | Page boundaries and page-count helpers |
+| `ReaderControls.h` | Shared image-toolbar dimensions and hit testing |
+| `SourceBitmap.h` | Image rasterization, scaling, and grayscale/monochrome bitmap helpers |
+
+Decoded-source and rendered-image caches reduce repeat decoding during page changes, zooming, and panning. Background prefetch protects sources referenced by the current page and yields to interactive/display work. Cache residency and resource limits affect timing; compare the same pages and distinguish first-load from cached operations when profiling.
 
 #### Applet Bases
 

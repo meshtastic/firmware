@@ -77,12 +77,21 @@ class ED047TC1 : public EInk
     // EInk interface - SPI params are not used for this parallel display
     void begin(SPIClass *spi, uint8_t pin_dc, uint8_t pin_cs, uint8_t pin_busy, uint8_t pin_rst = 0xFF) override;
     void update(uint8_t *imageData, UpdateTypes type) override;
+#if INKHUD_BOOKREADER_GRAYSCALE
+    bool supportsGrayscale() const override { return panelReady; }
+    void updateGrayscale(uint8_t *imageData) override;
+#endif
 
   protected:
     bool isUpdateDone() override { return true; } // FastEPD updates are blocking
 
   private:
     FASTEPD *epaper = nullptr;
+    bool panelReady = false;
+    bool monochromeBaselineValid = false;
+#if INKHUD_BOOKREADER_GRAYSCALE
+    bool grayscaleBaselineValid = false;
+#endif
 };
 
 } // namespace NicheGraphics::Drivers

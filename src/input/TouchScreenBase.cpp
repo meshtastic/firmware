@@ -1,6 +1,7 @@
 #include "TouchScreenBase.h"
 #include "main.h"
 #include "mesh/Throttle.h"
+#include <algorithm>
 
 #if defined(RAK14014) && !defined(MESHTASTIC_EXCLUDE_CANNEDMESSAGES)
 #include "modules/CannedMessageModule.h"
@@ -84,9 +85,21 @@ int32_t TouchScreenBase::runOnce()
     this->setInterval(TOUCH_POLL_INTERVAL_IDLE);
     const bool fastTapMode = fastTapModeEnabled();
     const bool allowLongPress = longPressEnabled();
+#ifdef MESHTASTIC_INCLUDE_INKHUD_BOOKREADER
+    const bool swipeFriendlyMode = swipeFriendlyModeEnabled();
+    const uint16_t thresholdX = swipeFriendlyMode ? std::min<uint16_t>(20, TOUCH_THRESHOLD_X) : TOUCH_THRESHOLD_X;
+    const uint16_t thresholdY = swipeFriendlyMode ? std::min<uint16_t>(20, TOUCH_THRESHOLD_Y) : TOUCH_THRESHOLD_Y;
+#else
+    constexpr bool swipeFriendlyMode = false;
+    constexpr uint16_t thresholdX = TOUCH_THRESHOLD_X, thresholdY = TOUCH_THRESHOLD_Y;
+#endif
 
     // process touch events
+#ifdef MESHTASTIC_INCLUDE_INKHUD_BOOKREADER
+    int16_t x = _last_x, y = _last_y;
+#else
     int16_t x, y;
+#endif
     bool touched = getTouch(x, y);
     if (x < 0 || y < 0) // T-deck can emit phantom touch events with a negative value when turning off the screen
         touched = false;
@@ -95,6 +108,16 @@ int32_t TouchScreenBase::runOnce()
         this->setInterval(fastTapMode ? TOUCH_POLL_INTERVAL_ACTIVE_FAST : TOUCH_POLL_INTERVAL_ACTIVE);
         _last_x = x;
         _last_y = y;
+#ifdef MESHTASTIC_INCLUDE_INKHUD_BOOKREADER
+        if (_touchedOld && swipeFriendlyMode) {
+            const int32_t dx = x - _first_x, dy = y - _first_y;
+            const int32_t peakDx = _peak_x - _first_x, peakDy = _peak_y - _first_y;
+            if (dx * dx + dy * dy > peakDx * peakDx + peakDy * peakDy) {
+                _peak_x = x;
+                _peak_y = y;
+            }
+        }
+#endif
     } else if (_touchedOld && ((uint32_t)millis() - _lastTouchSeenMs) < TOUCH_RELEASE_GRACE_MS) {
         // Treat brief no-touch samples as continuous touch to preserve long-press detection.
         touched = true;
@@ -107,6 +130,10 @@ int32_t TouchScreenBase::runOnce()
             _longPressSuppressed = false;
             _first_x = x;
             _first_y = y;
+#ifdef MESHTASTIC_INCLUDE_INKHUD_BOOKREADER
+            _peak_x = x;
+            _peak_y = y;
+#endif
         } else {
             _state = TOUCH_EVENT_CLEARED;
             uint32_t duration = nowMs - _pressStartMs;
@@ -117,11 +144,17 @@ int32_t TouchScreenBase::runOnce()
             // compute distance
             int16_t dx = x - _first_x;
             int16_t dy = y - _first_y;
+#ifdef MESHTASTIC_INCLUDE_INKHUD_BOOKREADER
+            if (swipeFriendlyMode) {
+                dx = _peak_x - _first_x;
+                dy = _peak_y - _first_y;
+            }
+#endif
             uint16_t adx = abs(dx);
             uint16_t ady = abs(dy);
 
             // swipe horizontal
-            if (adx > ady && adx > TOUCH_THRESHOLD_X) {
+            if (adx > ady && adx > thresholdX) {
                 if (0 > dx) { // swipe right to left
                     e.touchEvent = static_cast<char>(TOUCH_ACTION_LEFT);
                     LOG_DEBUG("action SWIPE: right to left");
@@ -131,7 +164,7 @@ int32_t TouchScreenBase::runOnce()
                 }
             }
             // swipe vertical
-            else if (ady > adx && ady > TOUCH_THRESHOLD_Y) {
+            else if ((ady > adx || (swipeFriendlyMode && ady == adx)) && ady > thresholdY) {
                 if (0 > dy) { // swipe bottom to top
                     e.touchEvent = static_cast<char>(TOUCH_ACTION_UP);
                     LOG_DEBUG("action SWIPE: bottom to top");
@@ -221,3 +254,10 @@ bool TouchScreenBase::longPressEnabled() const
 {
     return true;
 }
+
+#ifdef MESHTASTIC_INCLUDE_INKHUD_BOOKREADER
+bool TouchScreenBase::swipeFriendlyModeEnabled() const
+{
+    return false;
+}
+#endif

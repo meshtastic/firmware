@@ -13,9 +13,11 @@
 #include "mesh/Throttle.h"
 #include "sleep.h"
 #include "touch/TouchDrvGT911.hpp"
+#include <algorithm>
 #include <cstring>
 
 #ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
+#include "graphics/niche/InkHUD/Applet.h"
 #include "graphics/niche/InkHUD/InkHUD.h"
 #include "graphics/niche/InkHUD/Persistence.h"
 #include "graphics/niche/InkHUD/SystemApplet.h"
@@ -23,17 +25,20 @@
 // Bridges touch events from TouchScreenImpl1 directly into InkHUD,
 // bypassing the InputBroker (which is excluded in InkHUD builds).
 // Routing mirrors the mini-epaper-s3 two-way rocker pattern:
-//   - Nav left/right: prevApplet/nextApplet when idle, navUp/Down when a system applet has focus (e.g. menu)
+//   - Nav left/right: prevApplet/nextApplet when idle, navUp/Down when a system
+//   applet has focus (e.g. menu)
 //   - Nav up/down:    navUp/navDown always (menu scroll)
-//   - Tap/long-press: direct touch point dispatch (with fallback to short/long button semantics)
+//   - Tap/long-press: direct touch point dispatch (with fallback to short/long
+//   button semantics)
 class TouchInkHUDBridge : public Observer<const InputEvent *>
 {
     int onNotify(const InputEvent *e) override
     {
         auto *inkhud = NicheGraphics::InkHUD::InkHUD::getInstance();
 
-        // Keep alignment in sync with the current rotation so that visual-frame gestures
-        // always pass through nav functions without remapping: (rotation + alignment) % 4 == 0.
+        // Keep alignment in sync with the current rotation so that visual-frame
+        // gestures always pass through nav functions without remapping: (rotation +
+        // alignment) % 4 == 0.
         inkhud->persistence->settings.joystick.alignment = (4 - inkhud->persistence->settings.rotation) % 4;
 
         // Check whether a system applet (e.g. menu) is currently handling input
@@ -44,6 +49,17 @@ class TouchInkHUDBridge : public Observer<const InputEvent *>
                 break;
             }
         }
+
+#ifdef MESHTASTIC_INCLUDE_INKHUD_BOOKREADER
+        if (!systemHandlingInput) {
+            auto *applet = inkhud->getActiveApplet();
+            const int8_t dx = (e->inputEvent == INPUT_BROKER_RIGHT) - (e->inputEvent == INPUT_BROKER_LEFT);
+            const int8_t dy = (e->inputEvent == INPUT_BROKER_DOWN) - (e->inputEvent == INPUT_BROKER_UP);
+            if (applet && (dx || dy) && applet->onTouchSwipe(dx, dy)) {
+                return 0;
+            }
+        }
+#endif
 
         switch (e->inputEvent) {
         case INPUT_BROKER_USER_PRESS:
@@ -102,8 +118,9 @@ volatile bool touchControllerReady = false;
 volatile bool touchLightSleepActive = false;
 volatile bool touchNeedsWake = false;
 volatile bool touchIndicatorRefreshPending = false;
-// When the light-sleep resume happened, not when the block expires: an interval bounds a missed
-// 0-check by the settle time, where a stored deadline would block for up to half a wrap cycle.
+// When the light-sleep resume happened, not when the block expires: an interval
+// bounds a missed 0-check by the settle time, where a stored deadline would
+// block for up to half a wrap cycle.
 constexpr uint32_t TOUCH_RESUME_BLOCK_MS = 150;
 volatile uint32_t touchResumeAtMs = 0;
 volatile uint32_t touchStateEpoch = 1;
@@ -116,7 +133,8 @@ void showTouchIndicator(const char *text)
 {
 #if HAS_SCREEN
 #ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
-    // InkHUD builds render a dedicated bottom-edge "TOUCH OFF" overlay instead of popup banners.
+    // InkHUD builds render a dedicated bottom-edge "TOUCH OFF" overlay instead of
+    // popup banners.
     (void)text;
     return;
 #else
@@ -154,23 +172,11 @@ bool readPca9535Port1(uint8_t *value)
     return true;
 }
 
-bool isPca9535SideKeyPressed()
-{
-    uint8_t port1 = 0xFF;
-    if (!readPca9535Port1(&port1)) {
-        return false;
-    }
-
-    return (port1 & BOARD_PCA9535_BUTTON_MASK) == 0;
-}
-
 class SideKeyInterruptThread : public concurrency::OSThread
 {
   public:
-    SideKeyInterruptThread() : concurrency::OSThread("t5s3SideKeyInt", SAMPLE_MS)
+    SideKeyInterruptThread() : concurrency::OSThread("t5s3SideKeyInt", IDLE_POLL_MS)
     {
-        // Do not run unless an edge arrives.
-        OSThread::disable();
         instance = this;
 #ifdef ARCH_ESP32
         lsObserver.observe(&notifyLightSleep);
@@ -187,47 +193,57 @@ class SideKeyInterruptThread : public concurrency::OSThread
   protected:
     int32_t runOnce() override
     {
-        const uint32_t now = millis();
+        const uint32_t now = Time::getMillis();
 
-        // 0 means the device has never light-slept, so no block is armed - test it first.
+        // 0 means the device has never light-slept, so no block is armed - test it
+        // first.
         if (touchResumeAtMs != 0 && Throttle::isWithinTimespanMs(touchResumeAtMs, TOUCH_RESUME_BLOCK_MS)) {
-            resetStateAndStop();
-            return OSThread::disable();
+            resetState();
+            return IDLE_POLL_MS;
         }
 
         if (touchLightSleepActive) {
-            resetStateAndStop();
-            return OSThread::disable();
+            resetState();
+            return IDLE_POLL_MS;
         }
 
         // Ignore side-key handling while BOOT/user button is held.
         if (digitalRead(BUTTON_PIN) == LOW) {
-            resetStateAndStop();
-            return OSThread::disable();
+            resetState();
+            return IDLE_POLL_MS;
         }
+
+        if (state == State::REST) {
+            // Recover a latched expander interrupt even if its edge was missed.
+            if (digitalRead(BOARD_PCA9535_INT) != LOW)
+                return IDLE_POLL_MS;
+            irqAtMs = now;
+            state = State::IRQ_PENDING;
+        }
+        if (state == State::IRQ_PENDING && !Throttle::hasElapsed(irqAtMs, DEBOUNCE_MS))
+            return SAMPLE_MS;
+
+        uint8_t port1 = 0xFF;
+        if (!readPca9535Port1(&port1))
+            return SAMPLE_MS;
+        const bool pressed = (port1 & BOARD_PCA9535_BUTTON_MASK) == 0;
 
         switch (state) {
         case State::IRQ_PENDING:
-            // Initial debounce after expander interrupt edge.
-            if ((uint32_t)(now - irqAtMs) < DEBOUNCE_MS) {
-                return SAMPLE_MS;
+            if (!pressed) {
+                resetState();
+                return IDLE_POLL_MS;
             }
-
-            if (isPca9535SideKeyPressed()) {
-                state = State::PRESSED;
-                pressStartMs = now;
-                return SAMPLE_MS;
-            }
-
-            // Spurious/cleared edge.
-            resetStateAndStop();
-            return OSThread::disable();
+            state = State::PRESSED;
+            pressStartMs = irqAtMs;
+            [[fallthrough]];
 
         case State::PRESSED: {
-            if (isPca9535SideKeyPressed()) {
-                // Fire long-press action as soon as threshold is reached, without waiting for release.
-                if (!longPressFired && (uint32_t)(now - pressStartMs) >= LONG_PRESS_MIN_MS &&
-                    (uint32_t)(now - lastActionMs) >= ACTION_COOLDOWN_MS) {
+            if (pressed) {
+                // Fire long-press action as soon as threshold is reached, without
+                // waiting for release.
+                if (!longPressFired && Throttle::hasElapsed(pressStartMs, LONG_PRESS_MIN_MS) &&
+                    Throttle::hasElapsed(lastActionMs, ACTION_COOLDOWN_MS)) {
                     t5BacklightToggleUser();
                     longPressFired = true;
                     lastActionMs = now;
@@ -235,10 +251,12 @@ class SideKeyInterruptThread : public concurrency::OSThread
                 return SAMPLE_MS;
             }
 
-            // Released: if long-press already fired, do nothing. Otherwise classify short press.
+            // Released: if long-press already fired, do nothing. Otherwise classify
+            // short press.
             const uint32_t heldMs = now - pressStartMs;
-            if (!longPressFired && heldMs >= SHORT_PRESS_MIN_MS && (uint32_t)(now - lastActionMs) >= ACTION_COOLDOWN_MS) {
-                // If timeout forced touch/backlight off, short-press acts as a wake action first.
+            if (!longPressFired && heldMs >= SHORT_PRESS_MIN_MS && Throttle::hasElapsed(lastActionMs, ACTION_COOLDOWN_MS)) {
+                // If timeout forced touch/backlight off, short-press acts as a wake
+                // action first.
                 if (t5TouchIsForcedByTimeout()) {
                     t5TouchHandleUserInput();
                     t5BacklightHandleUserInput();
@@ -248,13 +266,13 @@ class SideKeyInterruptThread : public concurrency::OSThread
                 lastActionMs = now;
             }
 
-            resetStateAndStop();
-            return OSThread::disable();
+            resetState();
+            return IDLE_POLL_MS;
         }
 
         case State::REST:
         default:
-            return OSThread::disable();
+            return IDLE_POLL_MS;
         }
     }
 
@@ -266,6 +284,7 @@ class SideKeyInterruptThread : public concurrency::OSThread
     };
 
     static constexpr uint32_t SAMPLE_MS = 15;
+    static constexpr uint32_t IDLE_POLL_MS = 100;
     static constexpr uint32_t DEBOUNCE_MS = 25;
     static constexpr uint32_t SHORT_PRESS_MIN_MS = 30;
     static constexpr uint32_t LONG_PRESS_MIN_MS = 450;
@@ -295,25 +314,16 @@ class SideKeyInterruptThread : public concurrency::OSThread
 
         state = State::IRQ_PENDING;
         irqAtMs = millis();
-        startThread();
+        OSThread::setIntervalFromNow(0);
+        runASAP = true;
+        BaseType_t higherWake = 0;
+        concurrency::mainDelay.interruptFromISR(&higherWake);
     }
 
-    void startThread()
-    {
-        if (!OSThread::enabled) {
-            OSThread::setIntervalFromNow(0);
-            OSThread::enabled = true;
-            runASAP = true;
-        }
-    }
-
-    void resetStateAndStop()
+    void resetState()
     {
         state = State::REST;
         longPressFired = false;
-        if (OSThread::enabled) {
-            OSThread::disable();
-        }
     }
 
 #ifdef ARCH_ESP32
@@ -324,7 +334,7 @@ class SideKeyInterruptThread : public concurrency::OSThread
         // If INT is left asserted low, light sleep exits immediately.
         uint8_t ignored = 0xFF;
         (void)readPca9535Port1(&ignored);
-        resetStateAndStop();
+        resetState();
         return 0;
     }
 
@@ -375,7 +385,8 @@ void refreshTouchIndicatorInInkHUD(bool async = true)
             touchStatus->bringToForeground();
     }
 
-    // Re-render all applets so touch-status visibility changes are immediately reflected.
+    // Re-render all applets so touch-status visibility changes are immediately
+    // reflected.
     inkhud->forceUpdate(NicheGraphics::Drivers::EInk::UpdateTypes::FAST, true, async);
 }
 #endif
@@ -434,7 +445,8 @@ void t5TouchSetForcedByTimeout(bool forced)
 
     if (forced) {
         // Timeout only gates touch input in software. Avoid GT911 I2C here because
-        // PowerFSM same-state transitions can fire from phone contact and screen timeout.
+        // PowerFSM same-state transitions can fire from phone contact and screen
+        // timeout.
         touchNeedsWake = false;
     } else if (touchInputEnabled && touchControllerReady && !touchLightSleepActive) {
         touchNeedsWake = false;
@@ -512,7 +524,8 @@ void toggleTouchInputEnabled()
 }
 
 // Commands the GT911 into standby before the Wire bus is torn down.
-// notifyDeepSleep fires before Wire.end() in doDeepSleep(), so I2C is still available here.
+// notifyDeepSleep fires before Wire.end() in doDeepSleep(), so I2C is still
+// available here.
 struct TouchDeepSleepObserver {
     int onDeepSleep(void *)
     {
@@ -528,7 +541,8 @@ struct TouchLightSleepObserver {
     {
         touchLightSleepActive = true;
 #ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
-        // Render touch-off overlay before sleeping so user sees touch is unavailable.
+        // Render touch-off overlay before sleeping so user sees touch is
+        // unavailable.
         touchIndicatorRefreshPending = true;
         refreshTouchIndicatorInInkHUD(false);
         touchIndicatorRefreshPending = false;
@@ -585,7 +599,8 @@ bool readTouch(int16_t *x, int16_t *y)
         suppressFromMs = 0;
     }
 
-    // Let buses and peripherals settle briefly after light-sleep wake. 0 means no wake yet.
+    // Let buses and peripherals settle briefly after light-sleep wake. 0 means no
+    // wake yet.
     if (touchResumeAtMs != 0 && Throttle::isWithinTimespanMs(touchResumeAtMs, TOUCH_RESUME_BLOCK_MS)) {
         return false;
     }
@@ -607,21 +622,23 @@ bool readTouch(int16_t *x, int16_t *y)
         return false;
     }
 
-    // After a recovery pulse, emit a brief "released" window so gesture state can reset.
+    // After a recovery pulse, emit a brief "released" window so gesture state can
+    // reset.
     if (suppressFromMs != 0 && Throttle::isWithinTimespanMs(suppressFromMs, TOUCH_WAKE_SUPPRESS_MS)) {
         return false;
     }
+
 #endif
 
     if (!digitalRead(GT911_PIN_INT)) {
-        // 0.4.x deprecates getPoint() in favour of getTouchPoints(); only the first touch is used here.
         const TouchPoints &points = touch.getTouchPoints();
         if (points.getPointCount()) {
             const int16_t raw_x = static_cast<int16_t>(points.getPoint(0).x);
             const int16_t raw_y = static_cast<int16_t>(points.getPoint(0).y);
 #ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
-            // Transform raw GT911 axes to visual-frame coordinates for the current display rotation.
-            // rotation=3 is the physical identity (device's default orientation).
+            // Transform raw GT911 axes to visual-frame coordinates for the current
+            // display rotation. rotation=3 is the physical identity (device's default
+            // orientation).
             switch (NicheGraphics::InkHUD::InkHUD::getInstance()->persistence->settings.rotation) {
             default:
             case 3:

@@ -47,6 +47,16 @@ class Renderer : protected concurrency::OSThread
     // Receives pixel output from an applet (via a tile, which translates the coordinates)
     void handlePixel(int16_t x, int16_t y, Color c);
 
+#ifdef MESHTASTIC_INCLUDE_INKHUD_BOOKREADER
+    // Fast path for writing MSB-first 1-bpp bitmaps in the same coordinate space as handlePixel().
+    void writeBitmap(int16_t screenX, int16_t screenY, uint16_t w, uint16_t h, const uint8_t *bitmap, uint16_t bitmapStride,
+                     uint16_t sourceX = 0, uint16_t sourceY = 0);
+#if INKHUD_BOOKREADER_GRAYSCALE
+    void writeGrayBitmap(int16_t screenX, int16_t screenY, uint16_t w, uint16_t h, const uint8_t *bitmap, uint16_t bitmapStride,
+                         uint16_t sourceX = 0, uint16_t sourceY = 0);
+#endif
+#endif
+
     // Size of display, in context of current rotation
 
     uint16_t width();
@@ -61,6 +71,9 @@ class Renderer : protected concurrency::OSThread
 
     // Execute the render process now, then hand off to driver for display update
     void render(bool async = true);
+#ifdef MESHTASTIC_INCLUDE_INKHUD_BOOKREADER
+    void maintainRenderActivity();
+#endif
 
     // Steps of the rendering process
 
@@ -80,6 +93,12 @@ class Renderer : protected concurrency::OSThread
     uint16_t imageBufferHeight = 0;
     uint16_t imageBufferWidth = 0;
     uint32_t imageBufferSize = 0; // Bytes
+#if INKHUD_BOOKREADER_GRAYSCALE
+    uint8_t *grayBuffer = nullptr;
+    uint32_t grayPixelCount = 0;
+    bool monoBufferNeedsSync = false;
+    void setGrayPixel(uint16_t x, uint16_t y, uint8_t luminance);
+#endif
 
     SystemApplet *lockRendering = nullptr; // Render this applet *only*
     SystemApplet *lockRequests = nullptr;  // Honor update requests from this applet *only*
@@ -87,6 +106,9 @@ class Renderer : protected concurrency::OSThread
     bool requested = false;
     bool forced = false;
     bool renderAll = false;
+#ifdef MESHTASTIC_INCLUDE_INKHUD_BOOKREADER
+    bool keepAwakeUntilUpdateComplete = false;
+#endif
 
     // For convenience
     InkHUD *inkhud = nullptr;

@@ -129,8 +129,29 @@ bool TouchScreenImpl1::fastTapModeEnabled() const
 
 bool TouchScreenImpl1::longPressEnabled() const
 {
+#ifdef MESHTASTIC_INCLUDE_INKHUD_BOOKREADER
+    return !fastTapModeEnabled() && !swipeFriendlyModeEnabled();
+#else
     return !fastTapModeEnabled();
+#endif
 }
+
+#ifdef MESHTASTIC_INCLUDE_INKHUD_BOOKREADER
+bool TouchScreenImpl1::swipeFriendlyModeEnabled() const
+{
+#ifdef MESHTASTIC_INCLUDE_INKHUD
+    auto *inkhud = NicheGraphics::InkHUD::InkHUD::getInstance();
+    if (inkhud) {
+        for (auto *sa : inkhud->systemApplets)
+            if (sa && sa->handleInput)
+                return false;
+        auto *applet = inkhud->getActiveApplet();
+        return applet && applet->isForeground() && applet->name && strcmp(applet->name, "Book Reader") == 0;
+    }
+#endif
+    return false;
+}
+#endif
 
 /**
  * @brief forward touchscreen event

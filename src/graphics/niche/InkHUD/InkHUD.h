@@ -134,6 +134,17 @@ class InkHUD
     // Pass drawing output to Renderer
     void drawPixel(int16_t x, int16_t y, Color c);
 
+#ifdef MESHTASTIC_INCLUDE_INKHUD_BOOKREADER
+    // Fast bulk bitmap blit bypasses the per-pixel GFX/Tile call chain (used by BookReader for pan).
+    // screenX/screenY are post-tile-offset screen coordinates.
+    void writeBitmap(int16_t screenX, int16_t screenY, uint16_t w, uint16_t h, const uint8_t *bitmap, uint16_t bitmapStride,
+                     uint16_t sourceX = 0, uint16_t sourceY = 0);
+#if INKHUD_BOOKREADER_GRAYSCALE
+    void writeGrayBitmap(int16_t screenX, int16_t screenY, uint16_t w, uint16_t h, const uint8_t *bitmap, uint16_t bitmapStride,
+                         uint16_t sourceX = 0, uint16_t sourceY = 0);
+#endif
+#endif
+
     // Shared data which persists between boots
     Persistence *persistence = nullptr;
 

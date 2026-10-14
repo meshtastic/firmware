@@ -25,6 +25,9 @@ This is driven via the FastEPD library through the NicheGraphics ED047TC1 driver
 
 // Applets
 #include "graphics/niche/InkHUD/Applets/User/AllMessage/AllMessageApplet.h"
+#ifdef MESHTASTIC_INCLUDE_INKHUD_BOOKREADER
+#include "graphics/niche/InkHUD/Applets/User/BookReader/BookReaderApplet.h"
+#endif
 #include "graphics/niche/InkHUD/Applets/User/DM/DMApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/FavoritesMap/FavoritesMapApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/Heard/HeardApplet.h"
@@ -88,6 +91,9 @@ void setupNicheGraphics()
     inkhud->addApplet("Recents List", new InkHUD::RecentsListApplet, true, false);      // Activated, not autoshown
     inkhud->addApplet("Heard", new InkHUD::HeardApplet, true, false, 0); // Activated, not autoshown, default on tile 0
     inkhud->addApplet("Favorites Map", new InkHUD::FavoritesMapApplet, false, false); // Not Active, not autoshown
+#ifdef MESHTASTIC_INCLUDE_INKHUD_BOOKREADER
+    inkhud->addApplet("Book Reader", new InkHUD::BookReaderApplet, true, false); // Activated, not autoshown
+#endif
 
     // Enable reusable InkHUD touch status indicator for this touch-capable board.
     inkhud->setTouchEnabledProvider(isTouchInputEnabled);

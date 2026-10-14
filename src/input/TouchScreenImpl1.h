@@ -12,6 +12,9 @@ class TouchScreenImpl1 : public TouchScreenBase
     virtual void onEvent(const TouchEvent &event);
     bool fastTapModeEnabled() const override;
     bool longPressEnabled() const override;
+#ifdef MESHTASTIC_INCLUDE_INKHUD_BOOKREADER
+    bool swipeFriendlyModeEnabled() const override;
+#endif
 
     // Attach/detach a hardware interrupt on the touch IRQ pin (SCREEN_TOUCH_INT) so a new touch
     // wakes the polling thread immediately. No-op on boards without a usable touch interrupt line.

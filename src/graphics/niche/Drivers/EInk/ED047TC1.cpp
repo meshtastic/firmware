@@ -18,7 +18,16 @@
 #include "./ED047TC1.h"
 
 #include "FastEPD.h"
+#include "UptimeClock.h"
 #include "configuration.h"
+#include "mesh/Throttle.h"
+#if INKHUD_BOOKREADER_GRAYSCALE
+#include <esp_heap_caps.h>
+#endif
+
+extern volatile bool dma_is_done;
+extern void bbepRowControl(FASTEPDSTATE *state, int type);
+extern void bbepWriteRow(FASTEPDSTATE *state, uint8_t *data, int length, int rowStep);
 
 using namespace NicheGraphics::Drivers;
 
@@ -123,11 +132,282 @@ int safeEPDiyV7EinkPower(void *pBBEP, int bOn)
 class SafeFastEPD : public FASTEPD
 {
   public:
+    static constexpr unsigned whiteFinishPasses = 6;
+
     void installSafePowerHandler()
     {
 #if defined(T5_S3_EPAPER_PRO_V2)
         _state.pfnEinkPower = safeEPDiyV7EinkPower;
 #endif
+    }
+    int partialUpdateWithWhiteFinish(uint32_t whitePixels)
+    {
+        if (dmaFault || _state.mode != BB_MODE_1BPP || _state.native_width != 960 || _state.native_height != 540 ||
+            _state.rotation != 0 || (_state.iFlags & (BB_PANEL_FLAG_MIRROR_X | BB_PANEL_FLAG_MIRROR_Y)) ||
+            _state.panelDef.iLinePadding || !_state.pTemp || !_state.dma_buf)
+            return BBEP_ERROR_BAD_PARAMETER;
+        int rc = FASTEPD::partialUpdate(true, 0, 539);
+        if (rc == BBEP_SUCCESS && whitePixels)
+            rc = finishWhitePixels(_state.pTemp, whiteFinishPasses);
+        if (rc == BBEP_SUCCESS)
+            rc = writePulseFrame(nullptr);
+        const int offRc = einkPower(0);
+        return rc == BBEP_SUCCESS ? offRc : rc;
+    }
+
+    bool hasDmaFault() const { return dmaFault; }
+
+#if INKHUD_BOOKREADER_GRAYSCALE
+    bool promoteMonochromeBaseline()
+    {
+        if (dmaFault || _state.mode != BB_MODE_1BPP || _state.native_width != 960 || _state.native_height != 540 ||
+            _state.rotation != 0 || (_state.iFlags & (BB_PANEL_FLAG_MIRROR_X | BB_PANEL_FLAG_MIRROR_Y)) || !_state.pCurrent)
+            return false;
+        // Expand backwards; the larger gray plane overlaps the monochrome source.
+        for (size_t i = 960U * 540U / 8U; i-- > 0;) {
+            const uint8_t pixels = _state.pCurrent[i];
+            for (unsigned pair = 0; pair < 4; ++pair)
+                _state.pCurrent[i * 4U + pair] =
+                    ((pixels & (0x80U >> (pair * 2U))) ? 0xF0U : 0U) | ((pixels & (0x40U >> (pair * 2U))) ? 0x0FU : 0U);
+        }
+        return true;
+    }
+
+    // Optimize frame preparation only; panel drive timing stays unchanged.
+    __attribute__((optimize("O3"))) bool preparePanelGrayUpdate(const uint8_t *image, uint16_t width, uint16_t height,
+                                                                uint16_t left, uint16_t top, bool baselineValid,
+                                                                uint32_t &changed)
+    {
+        if (dmaFault || !image || _state.mode != BB_MODE_4BPP || _state.native_width != 960 || _state.native_height != 540 ||
+            _state.rotation != 0 || (_state.iFlags & (BB_PANEL_FLAG_MIRROR_X | BB_PANEL_FLAG_MIRROR_Y)) ||
+            _state.panelDef.iLinePadding || !_state.pCurrent || !_state.dma_buf || (left & 1U) || (width & 1U) ||
+            left + width > 960 || top + height > 540 || !_state.panelDef.pGrayMatrix || _state.panelDef.iMatrixSize != 16U * 8U)
+            return false;
+        if (baselineValid) {
+            uint16_t y = 0;
+            for (; y < height; ++y)
+                if (memcmp(_state.pCurrent + (top + y) * 480U + left / 2U, image + y * (width / 2U), width / 2U) != 0)
+                    break;
+            if (y == height) {
+                changed = 0;
+#if INKHUD_BOOKREADER_PERF_LOG
+                LOG_INFO("[BookReaderDraw] panel prepare skipped identical packed frame");
+#endif
+                return true;
+            }
+        }
+        if (!grayLookupReady) {
+            const uint8_t *matrix = _state.panelDef.pGrayMatrix;
+            for (unsigned pass = 0; pass < 8; ++pass)
+                for (unsigned packed = 0; packed < 256; ++packed)
+                    grayPairLookup[pass][packed] =
+                        (matrix[(packed >> 4U) * 8U + pass] << 2U) | matrix[(packed & 15U) * 8U + pass];
+            grayLookupReady = true;
+        }
+        constexpr size_t planeBytes = 960U * 540U / 4U;
+        if (!grayPulsePlanes)
+            grayPulsePlanes = static_cast<uint8_t *>(heap_caps_malloc(planeBytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+        if (!grayPulsePlanes)
+            return false;
+        memset(grayPulsePlanes, 0, planeBytes);
+        if (!baselineValid)
+            memset(_state.pCurrent, 0xFF, 960U * 540U / 2U);
+        changed = 0;
+#if INKHUD_BOOKREADER_PERF_LOG
+        uint32_t inputHash = 2166136261U, targetHash = 2166136261U;
+        uint32_t targetCounts[4] = {}, transitions[16] = {};
+        uint32_t packedCounts[256] = {};
+#endif
+
+        // Batch external-RAM transfers; compare packed pixels in local row buffers.
+        uint8_t oldRow[480], newRow[480];
+        const size_t rowBytes = width / 2U;
+        for (uint16_t y = 0; y < height; ++y) {
+            uint8_t *current = _state.pCurrent + (top + y) * 480U + left / 2U;
+            const uint8_t *next = image + y * (width / 2U);
+            memcpy(oldRow, current, rowBytes);
+            memcpy(newRow, next, rowBytes);
+            uint8_t *mask = grayPulsePlanes + (top + y) * 240U;
+            uint8_t pendingMask = 0;
+            bool rowChanged = false;
+            for (uint16_t x = 0; x < width; x += 2) {
+                const uint8_t oldPacked = oldRow[x / 2U];
+                const uint8_t input = newRow[x / 2U];
+                const uint8_t newPacked = input;
+#if INKHUD_BOOKREADER_PERF_LOG
+                inputHash = (inputHash ^ input) * 16777619U;
+                targetHash = (targetHash ^ newPacked) * 16777619U;
+                ++packedCounts[newPacked];
+#endif
+                const unsigned physicalX = left + x;
+                if (!baselineValid || oldPacked != newPacked) {
+                    const uint8_t difference = oldPacked ^ newPacked;
+                    const bool highChanged = !baselineValid || (difference & 0xF0U);
+                    const bool lowChanged = !baselineValid || (difference & 0x0FU);
+#if INKHUD_BOOKREADER_PERF_LOG
+                    if (highChanged)
+                        ++transitions[(oldPacked >> 6U) * 4U + (newPacked >> 6U)];
+                    if (lowChanged)
+                        ++transitions[((oldPacked & 15U) / 4U) * 4U + (newPacked & 15U) / 4U];
+#endif
+                    const uint8_t pairMask = (highChanged ? 12U : 0U) | (lowChanged ? 3U : 0U);
+                    pendingMask |= pairMask << ((physicalX & 2U) ? 0U : 4U);
+                    changed += highChanged + lowChanged;
+                    rowChanged = true;
+                }
+                if ((physicalX & 2U) || x + 2U == width) {
+                    if (pendingMask)
+                        mask[physicalX / 4U] = pendingMask;
+                    pendingMask = 0;
+                }
+            }
+            if (rowChanged)
+                memcpy(current, newRow, rowBytes);
+        }
+#if INKHUD_BOOKREADER_PERF_LOG
+        for (unsigned packed = 0; packed < 256U; ++packed) {
+            targetCounts[packed >> 6U] += packedCounts[packed];
+            targetCounts[(packed & 15U) >> 2U] += packedCounts[packed];
+        }
+        LOG_INFO("[BookReaderDraw] panel prepare inputHash=%08lx targetHash=%08lx baseline=%u "
+                 "targetBands0-3,4-7,8-11,12-15=%lu,%lu,%lu,%lu",
+                 static_cast<unsigned long>(inputHash), static_cast<unsigned long>(targetHash), baselineValid,
+                 static_cast<unsigned long>(targetCounts[0]), static_cast<unsigned long>(targetCounts[1]),
+                 static_cast<unsigned long>(targetCounts[2]), static_cast<unsigned long>(targetCounts[3]));
+        for (unsigned oldLevel = 0; oldLevel < 4; ++oldLevel)
+            LOG_INFO("[BookReaderDraw] transitions oldBand=%u toBands=%lu,%lu,%lu,%lu", oldLevel,
+                     static_cast<unsigned long>(transitions[oldLevel * 4U]),
+                     static_cast<unsigned long>(transitions[oldLevel * 4U + 1U]),
+                     static_cast<unsigned long>(transitions[oldLevel * 4U + 2U]),
+                     static_cast<unsigned long>(transitions[oldLevel * 4U + 3U]));
+#endif
+        return true;
+    }
+
+    int updatePanelGray()
+    {
+        if (dmaFault || !grayPulsePlanes || !grayLookupReady || !_state.dma_buf)
+            return BBEP_ERROR_BAD_PARAMETER;
+#if INKHUD_BOOKREADER_PERF_LOG
+        uint32_t passStarts[8] = {};
+#endif
+        const int powerRc = einkPower(1);
+        if (powerRc != BBEP_SUCCESS) {
+            einkPower(0);
+            return powerRc;
+        }
+        int rc = BBEP_SUCCESS;
+        for (unsigned pass = 0; pass < 8 && rc == BBEP_SUCCESS; ++pass) {
+#if INKHUD_BOOKREADER_PERF_LOG
+            passStarts[pass] = millis();
+#endif
+            rc = writePulseFrame(grayPulsePlanes, grayPairLookup[pass]);
+        }
+#if INKHUD_BOOKREADER_PERF_LOG
+        const uint32_t neutralStart = millis();
+#endif
+        if (rc == BBEP_SUCCESS)
+            rc = writePulseFrame(nullptr);
+#if INKHUD_BOOKREADER_PERF_LOG
+        const uint32_t powerOffStart = millis();
+#endif
+        const int offRc = einkPower(0);
+#if INKHUD_BOOKREADER_PERF_LOG
+        // Serial output must not stretch the powered waveform between phases.
+        for (unsigned pass = 0; pass < 8; ++pass)
+            LOG_INFO("[BookReaderDraw] panel-native streamed pass=%u at=%lu", pass, static_cast<unsigned long>(passStarts[pass]));
+        LOG_INFO("[BookReaderDraw] neutral at=%lu power-off at=%lu", static_cast<unsigned long>(neutralStart),
+                 static_cast<unsigned long>(powerOffStart));
+        LOG_INFO("[BookReaderDraw] panel phase power-off END at=%lu rc=%d powerRc=%d", static_cast<unsigned long>(millis()), rc,
+                 offRc);
+#endif
+        return rc == BBEP_SUCCESS ? offRc : rc;
+    }
+
+#endif
+
+  private:
+#if INKHUD_BOOKREADER_GRAYSCALE
+    uint8_t *grayPulsePlanes = nullptr;
+    uint8_t grayPairLookup[8][256] = {};
+    bool grayLookupReady = false;
+#endif
+    bool dmaFault = false;
+
+    int finishWhitePixels(uint8_t *plane, unsigned passes)
+    {
+        // Keep only the black-to-white pulses prepared by the monochrome partial update.
+#if INKHUD_BOOKREADER_PERF_LOG
+        const uint32_t prepareStart = millis();
+        uint32_t whitePixels = 0;
+#endif
+        uint8_t active = 0;
+        for (size_t i = 0; i < 960U * 540U / 4U; ++i) {
+            uint8_t finish = plane[i] & 0xAA;
+            plane[i] = finish;
+            active |= plane[i];
+#if INKHUD_BOOKREADER_PERF_LOG
+            whitePixels += __builtin_popcount(static_cast<unsigned>(finish));
+#endif
+        }
+        int rc = BBEP_SUCCESS;
+#if INKHUD_BOOKREADER_PERF_LOG
+        LOG_INFO("[BookReaderDraw] white-only finish BEGIN at=%lu pixels=%lu passes=%u prepareMs=%lu mode=%d",
+                 static_cast<unsigned long>(millis()), static_cast<unsigned long>(whitePixels), active ? passes : 0U,
+                 static_cast<unsigned long>(millis() - prepareStart), _state.mode);
+#endif
+        if (active)
+            for (unsigned pass = 0; pass < passes && rc == BBEP_SUCCESS; ++pass)
+                rc = writePulseFrame(plane);
+#if INKHUD_BOOKREADER_PERF_LOG
+        LOG_INFO("[BookReaderDraw] white-only finish END rc=%d", rc);
+#endif
+        return rc;
+    }
+
+    bool waitForDma()
+    {
+        if (dma_is_done)
+            return true;
+        const uint32_t start = Time::getMillis();
+        while (!dma_is_done) {
+            if (Throttle::hasElapsed(start, 250U)) {
+                dmaFault = true;
+                LOG_ERROR("ED047TC1 DMA timeout; display transfers stopped");
+                return false;
+            }
+            delayMicroseconds(1);
+        }
+        return true;
+    }
+
+    int writePulseFrame(const uint8_t *plane, const uint8_t *grayLookup = nullptr)
+    {
+        if (!waitForDma())
+            return BBEP_IO_ERROR;
+        bbepRowControl(&_state, ROW_START);
+        unsigned offset = 0;
+        for (unsigned row = 0; row < 540; ++row) {
+            // Alternate buffers keep the active DMA row untouched.
+            uint8_t *out = _state.dma_buf + offset;
+            if (grayLookup) {
+                const uint8_t *source = _state.pCurrent + row * 480U;
+                const uint8_t *mask = plane + row * 240U;
+                for (unsigned x = 0; x < 240; ++x)
+                    out[x] = mask[x] ? ((grayLookup[source[x * 2U]] << 4U) | grayLookup[source[x * 2U + 1U]]) & mask[x] : 0U;
+            } else if (plane)
+                memcpy(out, plane + row * 240U, 240);
+            else
+                memset(out, 0, 240);
+            if (!waitForDma())
+                return BBEP_IO_ERROR;
+            bbepWriteRow(&_state, out, 240, row != 0);
+            offset ^= 240U;
+        }
+        if (!waitForDma())
+            return BBEP_IO_ERROR;
+        delayMicroseconds(230);
+        return BBEP_SUCCESS;
     }
 };
 } // namespace
@@ -146,9 +426,9 @@ void ED047TC1::begin(SPIClass *spi, uint8_t pin_dc, uint8_t pin_cs, uint8_t pin_
 
     int initRc = BBEP_ERROR_BAD_PARAMETER;
 #if defined(T5_S3_EPAPER_PRO_V1)
-    initRc = epaper->initPanel(BB_PANEL_LILYGO_T5PRO, 28000000);
+    initRc = epaper->initPanel(BB_PANEL_LILYGO_T5PRO, 20000000);
 #elif defined(T5_S3_EPAPER_PRO_V2)
-    initRc = epaper->initPanel(BB_PANEL_LILYGO_T5PRO_V2, 28000000);
+    initRc = epaper->initPanel(BB_PANEL_LILYGO_T5PRO_V2, 20000000);
     // Initialize all PCA9535 port-0 pins as outputs / HIGH
     for (int i = 0; i < 8; i++) {
         epaper->ioPinMode(i, OUTPUT);
@@ -172,28 +452,42 @@ void ED047TC1::begin(SPIClass *spi, uint8_t pin_dc, uint8_t pin_cs, uint8_t pin_
     const int modeRc = epaper->setMode(BB_MODE_1BPP);
     if (modeRc != BBEP_SUCCESS) {
         LOG_WARN("ED047TC1 setMode failed rc=%d", modeRc);
+        return;
     }
-
-    const int clearRc = epaper->clearWhite();
-    if (clearRc != BBEP_SUCCESS) {
-        LOG_WARN("ED047TC1 clearWhite failed rc=%d", clearRc);
-    }
-
-    const int fullRc = epaper->fullUpdate(true); // Blocking initial clear
-    if (fullRc != BBEP_SUCCESS) {
+    panelReady = true;
+    // FastEPD clearWhite()/backupPlane() overrun the aliased previous plane.
+    epaper->fillScreen(BBEP_WHITE);
+    const int fullRc = epaper->fullUpdate(CLEAR_SLOW, false);
+    monochromeBaselineValid = fullRc == BBEP_SUCCESS;
+    failed = !monochromeBaselineValid;
+    if (failed)
         LOG_WARN("ED047TC1 initial fullUpdate failed rc=%d", fullRc);
-    }
+    LOG_INFO("ED047TC1 panel profile: clock=20MHz partialPasses=4 fullPasses=5");
 }
 
 void ED047TC1::update(uint8_t *imageData, UpdateTypes type)
 {
-    if (!epaper)
+    if (!panelReady || !imageData)
         return;
+#if INKHUD_BOOKREADER_GRAYSCALE
+    const bool leavingGrayscale = epaper->getMode() == BB_MODE_4BPP;
+    grayscaleBaselineValid = false;
+#endif
+
+    if (epaper->getMode() != BB_MODE_1BPP) {
+        monochromeBaselineValid = false;
+        const int rc = epaper->setMode(BB_MODE_1BPP);
+        if (rc != BBEP_SUCCESS) {
+            failed = true;
+            LOG_WARN("ED047TC1 monochrome setMode failed rc=%d", rc);
+            return;
+        }
+    }
 
     // InkHUD renders into a DISPLAY_WIDTH × DISPLAY_HEIGHT safe-area buffer.
     // We need to place that into the centre of the physical 960×540 FastEPD buffer,
     // leaving blank margins at every edge to avoid the panel's inactive border.
-    const uint32_t srcRowBytes = (DISPLAY_WIDTH + 7) / 8; // bytes per row in InkHUD buffer (118)
+    const uint32_t srcRowBytes = (DISPLAY_WIDTH + 7) / 8; // bytes per row in InkHUD buffer (116)
     const uint32_t dstRowBytes = (960 + 7) / 8;           // bytes per row in physical buffer (120)
     const uint32_t dstTotalRows = 540;
 
@@ -209,15 +503,90 @@ void ED047TC1::update(uint8_t *imageData, UpdateTypes type)
         memcpy(dstRow, srcRow, srcRowBytes);
     }
 
-    if (type == FULL) {
-        epaper->fullUpdate(CLEAR_SLOW, false);
-        epaper->backupPlane(); // Sync pPrevious so next partialUpdate has a correct baseline
+    int rc;
+    if (type == FULL || !monochromeBaselineValid) {
+#if INKHUD_BOOKREADER_GRAYSCALE
+        rc = epaper->fullUpdate(leavingGrayscale ? CLEAR_WHITE : CLEAR_SLOW, false);
+#else
+        rc = epaper->fullUpdate(CLEAR_SLOW, false);
+#endif
     } else {
-        // FAST: true partial update - compares pCurrent vs pPrevious and only applies
-        // update waveform to rows that changed. partialUpdate() updates pPrevious.
-        epaper->partialUpdate(false, 0, dstTotalRows - 1);
+        const uint32_t startMs = millis();
+        uint32_t blackToWhite = 0, whiteToBlack = 0;
+        const uint8_t *previous = epaper->previousBuffer();
+        for (size_t i = 0; i < dstRowBytes * dstTotalRows; ++i) {
+            blackToWhite += __builtin_popcount(static_cast<unsigned>(cur[i] & ~previous[i]));
+            whiteToBlack += __builtin_popcount(static_cast<unsigned>(~cur[i] & previous[i]));
+        }
+        auto *safeEpaper = static_cast<SafeFastEPD *>(epaper);
+        rc = safeEpaper->partialUpdateWithWhiteFinish(blackToWhite);
+        if (safeEpaper->hasDmaFault())
+            panelReady = false;
+        LOG_DEBUG("[EInkPerf] FAST blackToWhite=%lu whiteToBlack=%lu whiteExtraPasses=%u ms=%lu rc=%d",
+                  static_cast<unsigned long>(blackToWhite), static_cast<unsigned long>(whiteToBlack),
+                  blackToWhite ? SafeFastEPD::whiteFinishPasses : 0U, static_cast<unsigned long>(millis() - startMs), rc);
     }
+    monochromeBaselineValid = rc == BBEP_SUCCESS;
+    failed = !monochromeBaselineValid;
+    if (failed)
+        LOG_WARN("ED047TC1 monochrome update failed rc=%d", rc);
 }
+
+#if INKHUD_BOOKREADER_GRAYSCALE
+void ED047TC1::updateGrayscale(uint8_t *imageData)
+{
+    if (!panelReady || !imageData)
+        return;
+#if INKHUD_BOOKREADER_PERF_LOG
+    const uint32_t startMs = millis();
+#endif
+
+    auto *safeEpaper = static_cast<SafeFastEPD *>(epaper);
+    if (epaper->getMode() != BB_MODE_4BPP)
+        grayscaleBaselineValid = monochromeBaselineValid && safeEpaper->promoteMonochromeBaseline();
+    monochromeBaselineValid = false;
+    const int modeRc = epaper->setMode(BB_MODE_4BPP);
+    if (modeRc != BBEP_SUCCESS) {
+        failed = true;
+        grayscaleBaselineValid = false;
+        LOG_WARN("ED047TC1 grayscale setMode failed rc=%d", modeRc);
+        return;
+    }
+
+    uint32_t changedPixels = 0;
+    const bool establishBaseline = !grayscaleBaselineValid;
+    if (!safeEpaper->preparePanelGrayUpdate(imageData, DISPLAY_WIDTH, DISPLAY_HEIGHT, H_OFFSET_BYTES * 8U, V_OFFSET_TOP,
+                                            grayscaleBaselineValid, changedPixels)) {
+        failed = true;
+        LOG_WARN("ED047TC1 panel-native grayscale preparation failed; retaining visible frame");
+        return;
+    }
+    if (!establishBaseline && !changedPixels) {
+        failed = false;
+#if INKHUD_BOOKREADER_PERF_LOG
+        LOG_INFO("[BookReaderPerf] gray panel skipped unchanged ms=%lu", static_cast<unsigned long>(millis() - startMs));
+#endif
+        return;
+    }
+#if INKHUD_BOOKREADER_PERF_LOG
+    LOG_INFO("[BookReaderPerf] gray panel BEGIN clear=none waveform=panel-native shades=16 baseline=%u "
+             "changed=%lu prepareMs=%lu",
+             !establishBaseline, static_cast<unsigned long>(changedPixels), static_cast<unsigned long>(millis() - startMs));
+    const uint32_t driveStartMs = millis();
+#endif
+    const int rc = safeEpaper->updatePanelGray();
+    if (safeEpaper->hasDmaFault())
+        panelReady = false;
+#if INKHUD_BOOKREADER_PERF_LOG
+    LOG_INFO("[BookReaderPerf] gray panel END rc=%d driveMs=%lu totalMs=%lu", rc,
+             static_cast<unsigned long>(millis() - driveStartMs), static_cast<unsigned long>(millis() - startMs));
+#endif
+    failed = rc != BBEP_SUCCESS;
+    grayscaleBaselineValid = !failed;
+    if (failed)
+        LOG_WARN("ED047TC1 grayscale update failed rc=%d", rc);
+}
+#endif
 
 #endif // T5_S3_EPAPER_PRO
 #endif // MESHTASTIC_INCLUDE_NICHE_GRAPHICS

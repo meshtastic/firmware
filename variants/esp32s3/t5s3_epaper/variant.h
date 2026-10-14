@@ -80,6 +80,10 @@ void t5SetHomeCapButtonEventsEnabled(bool enabled);
 #define BOARD_PCA9535_BUTTON_MASK 0x04
 #endif
 // SD card
+#ifdef MESHTASTIC_INCLUDE_INKHUD_BOOKREADER
+// The reader uses the radio's SPI instance so SD and LoRa share its lock.
+#undef SDCARD_USE_SPI1
+#endif
 #define HAS_SDCARD
 #define SDCARD_CS SPI_CS
 #define SD_SPI_FREQUENCY 75000000U

@@ -553,4 +553,19 @@ void InkHUD::InkHUD::drawPixel(int16_t x, int16_t y, Color c)
     renderer->handlePixel(x, y, c);
 }
 
+#ifdef MESHTASTIC_INCLUDE_INKHUD_BOOKREADER
+#if INKHUD_BOOKREADER_GRAYSCALE
+void InkHUD::InkHUD::writeGrayBitmap(int16_t screenX, int16_t screenY, uint16_t w, uint16_t h, const uint8_t *bitmap,
+                                     uint16_t bitmapStride, uint16_t sourceX, uint16_t sourceY)
+{
+    renderer->writeGrayBitmap(screenX, screenY, w, h, bitmap, bitmapStride, sourceX, sourceY);
+}
+#endif
+void InkHUD::InkHUD::writeBitmap(int16_t screenX, int16_t screenY, uint16_t w, uint16_t h, const uint8_t *bitmap,
+                                 uint16_t bitmapStride, uint16_t sourceX, uint16_t sourceY)
+{
+    renderer->writeBitmap(screenX, screenY, w, h, bitmap, bitmapStride, sourceX, sourceY);
+}
+#endif
+
 #endif
