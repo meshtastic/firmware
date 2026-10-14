@@ -112,18 +112,10 @@ static void shutdownEnter()
 
 static uint32_t secsSlept;
 
-#ifdef ARCH_ESP32
-/// Whether a USB console host should stop a light sleep. Normally it should - see the note in
-/// lsIdle() below. A build that defines MESHTASTIC_LIGHT_SLEEP_IGNORE_USB_CONSOLE says it should
-/// not, trading the console for the ability to watch the light-sleep path in a debug log.
-static bool usbConsoleBlocksLightSleep()
-{
-#ifdef MESHTASTIC_LIGHT_SLEEP_IGNORE_USB_CONSOLE
-    return false;
-#else
-    return usbConsoleHostAttached();
-#endif
-}
+// Set to 1 to let light sleep proceed with a USB console host attached, trading the console for the
+// ability to watch the light-sleep path in a debug log. See the note in lsIdle() below.
+#ifndef MESHTASTIC_LIGHT_SLEEP_IGNORE_USB_CONSOLE
+#define MESHTASTIC_LIGHT_SLEEP_IGNORE_USB_CONSOLE 0
 #endif
 
 static void lsEnter()
@@ -150,10 +142,9 @@ static void lsIdle()
         // far too short for the host to re-enumerate. It gives up, and nothing on this side can ask
         // it to try again, so the port stays gone until the board is power cycled. Veto the sleep
         // while a host is there, like the preflight veto below; a node on a battery or a charger
-        // still sleeps. A build can opt out of that veto with
-        // MESHTASTIC_LIGHT_SLEEP_IGNORE_USB_CONSOLE - see usbConsoleBlocksLightSleep() above.
+        // still sleeps. A build can opt out with MESHTASTIC_LIGHT_SLEEP_IGNORE_USB_CONSOLE.
         // If some other service would stall sleep, don't let sleep happen yet
-        if (!usbConsoleBlocksLightSleep() && doPreflightSleep()) {
+        if ((MESHTASTIC_LIGHT_SLEEP_IGNORE_USB_CONSOLE || !usbConsoleHostAttached()) && doPreflightSleep()) {
             // Briefly come out of sleep long enough to blink the led once every few seconds
             uint32_t sleepTime = SLEEP_TIME;
 
@@ -208,7 +199,7 @@ static void lsIdle()
             // Say why once per stay in LS, so "power saving does nothing while it is plugged in" is
             // answerable from a log rather than from this comment.
             static bool loggedUsbVeto = false;
-            if (usbConsoleBlocksLightSleep()) {
+            if (usbConsoleHostAttached() && !MESHTASTIC_LIGHT_SLEEP_IGNORE_USB_CONSOLE) {
                 if (!loggedUsbVeto) {
                     LOG_INFO("Skip light sleep: USB console host attached");
                     loggedUsbVeto = true;
