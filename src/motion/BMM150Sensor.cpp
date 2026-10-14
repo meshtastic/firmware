@@ -46,6 +46,10 @@ int32_t BMM150Sensor::runOnce()
 #if !defined(MESHTASTIC_EXCLUDE_SCREEN) && HAS_SCREEN
     float magX = 0, magY = 0, magZ = 0;
     if (!readMagnetometer(magX, magY, magZ)) {
+        // A run of rejected samples must not hold calibration open past its deadline
+        if (doCalibration)
+            finishCalibrationIfExpired(showingScreen, compassCalibrationFileName, highestX, lowestX, highestY, lowestY, highestZ,
+                                       lowestZ);
         return BMM150_POLL_INTERVAL_MS;
     }
 
