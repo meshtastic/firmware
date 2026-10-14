@@ -698,6 +698,46 @@ static void test_clearReadIrqs_alsoDiscardsTheUnreadFrame()
     TEST_ASSERT_EQUAL_UINT32(1, radioIf.discardedRxFrames);
 }
 
+// A dropped frame's HEADER_VALID is the same hazard one step earlier: left latched, it starts the stale-flag window,
+// and the next frame's own HEADER_VALID lands on a bit already set, so that window is never restarted and its expiry
+// re-arms RX over a live frame. Regression guarded: clearing only RX_DONE and CRC_ERR, which leaves the dead frame's
+// header and preamble to time the next frame's window.
+static void test_clearReadIrqs_retiresTheDeadFramesHeaderAndPreamble()
+{
+    FakeIrqRadio phy;
+    auto *radioIf = new TestableRadioLibInterface(&phy);
+    radioIf->packetTimeMs = 100;
+    const uint32_t rxDone = phy.getIrqMapped(1UL << RADIOLIB_IRQ_RX_DONE);
+    const uint32_t valid = phy.getIrqMapped(1UL << RADIOLIB_IRQ_HEADER_VALID);
+    const uint32_t preamble = phy.getIrqMapped(1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED);
+
+    // A frame arrived and nobody will read it out, so its flags are all still up
+    Time::setTestMillis(1000);
+    phy.irqFlags = rxDone | valid | preamble;
+    radioIf->clearReadIrqsPublic();
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, phy.irqFlags & (valid | preamble), "the dead frame's header must go with its RX_DONE");
+
+    // Nothing is latched, so the poll has no window to start
+    radioIf->checkStaleRxFlags();
+    TEST_ASSERT_EQUAL_UINT32(0, radioIf->rxFlagsSeenMs);
+
+    // The next frame's header starts its own window, timed from here and not from the dead frame
+    Time::setTestMillis(1100);
+    phy.irqFlags = valid | preamble;
+    radioIf->checkStaleRxFlags();
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1100, radioIf->rxFlagsSeenMs, "the live frame's header must time its own window");
+    TEST_ASSERT_TRUE(radioIf->rxFlagsSeenValidHeader);
+
+    // Still inside that window one max packet after the drop: the live frame is not re-armed over
+    Time::setTestMillis(1150);
+    radioIf->checkStaleRxFlags();
+    TEST_ASSERT_EQUAL_UINT32(1100, radioIf->rxFlagsSeenMs);
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(valid, phy.irqFlags & valid, "the live frame's header must still be latched");
+
+    Time::useRealClock();
+    delete radioIf;
+}
+
 void setUp(void)
 {
     mockMeshService = new MockMeshService();
@@ -976,6 +1016,7 @@ void setup()
     RUN_TEST(test_computePacketTime_rxUsesHeaderInfoAndIsGuarded);
     RUN_TEST(test_isRadioLibTimeError_separatesCodesFromDurations);
     RUN_TEST(test_clearReadIrqs_alsoDiscardsTheUnreadFrame);
+    RUN_TEST(test_clearReadIrqs_retiresTheDeadFramesHeaderAndPreamble);
     RUN_TEST(test_staleRxFlagAction_keepsFlagsInsideTheWindow);
     RUN_TEST(test_staleRxFlagAction_windowEndsAtExactlyOneMaxPacket);
     RUN_TEST(test_staleRxFlagAction_barePreambleIsOnlyCleared);

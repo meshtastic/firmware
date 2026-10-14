@@ -1174,7 +1174,10 @@ bool RadioLibInterface::maybeRecoverChipStateLoss()
 
 void RadioLibInterface::clearReadIrqs()
 {
-    iface->clearIrq((1UL << RADIOLIB_IRQ_RX_DONE) | (1UL << RADIOLIB_IRQ_CRC_ERR));
+    // Everything readData() would have cleared: a HEADER_VALID left latched times the next frame's stale-flag
+    // window from this dead frame, so checkStaleRxFlags() re-arms over the next frame instead of behind it.
+    iface->clearIrq((1UL << RADIOLIB_IRQ_RX_DONE) | (1UL << RADIOLIB_IRQ_CRC_ERR) | (1UL << RADIOLIB_IRQ_HEADER_VALID) |
+                    (1UL << RADIOLIB_IRQ_HEADER_ERR) | (1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED));
     discardUnreadRxFrame();
 }
 
