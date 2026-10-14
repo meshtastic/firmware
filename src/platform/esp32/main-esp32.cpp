@@ -32,6 +32,35 @@
 #include <nvs.h>
 #include <nvs_flash.h>
 
+// The console is the hardware USB-serial/JTAG peripheral only when Arduino's CDC-on-boot is on and the
+// PHY is not routed to TinyUSB - the same pair of macros SerialConsole.cpp gates IS_USB_HWCDC on.
+#if defined(ARDUINO_USB_CDC_ON_BOOT) && ARDUINO_USB_CDC_ON_BOOT && defined(ARDUINO_USB_MODE) && ARDUINO_USB_MODE &&              \
+    __has_include(<driver/usb_serial_jtag.h>)
+#include "mesh/Throttle.h"
+#include <driver/usb_serial_jtag.h>
+#define HAS_USB_CONSOLE_HOST_DETECT 1
+// How long a host stays "attached" after the last frame seen. The detector is frame-based, so a
+// single missed frame must not be enough to let a sleep through and cost the port.
+#define USB_CONSOLE_HOST_GRACE_MS 5000
+#endif
+
+bool usbConsoleHostAttached()
+{
+#ifdef HAS_USB_CONSOLE_HOST_DETECT
+    // Not HWCDC::isPlugged(), which flaps false while USB is fine (#11864, and the comment at
+    // SerialConsole.cpp:183-185). This answers "a host has the port open", so a node on a power bank
+    // with no host is unaffected and still sleeps.
+    static uint32_t lastSeenMs = 0;
+    if (usb_serial_jtag_is_connected()) {
+        lastSeenMs = millis() | 1; // never 0, which is this cache's "no host seen yet"
+        return true;
+    }
+    return lastSeenMs && Throttle::isWithinTimespanMs(lastSeenMs, USB_CONSOLE_HOST_GRACE_MS);
+#else
+    return false;
+#endif
+}
+
 // Weak empty variant shutdown prep function.
 // May be redefined by variant files.
 void variant_shutdown() __attribute__((weak));

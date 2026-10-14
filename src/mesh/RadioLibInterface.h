@@ -179,6 +179,13 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     {
         if (instance == this)
             instance = nullptr;
+#ifdef MESHTASTIC_RX_READOUT_TASK
+        // initLoRa() destroys an interface whose init() failed, and the mutex is made in the constructor
+        if (radioSeqMutex) {
+            vSemaphoreDelete(radioSeqMutex);
+            radioSeqMutex = nullptr;
+        }
+#endif
     }
 
     /**
@@ -237,6 +244,13 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
     /** Re-arm if a CAD->RX handoff has produced no packet well past one max-length airtime. */
     void checkCadHandoffTimeout();
+
+    /** A CAD->RX handoff is outstanding and its RX has ended without a frame: TIMEOUT if it expired empty, CRC_ERR or
+     *  HEADER_ERR on a damaged header. Either way the chip may have stopped listening, so the handoff needs a re-arm. */
+    bool cadHandoffRxEnded();
+
+    // What a damaged header raises inside a handoff's RX, with no RX_DONE behind it. A handoff routes both to DIO1.
+    static constexpr uint32_t cadHandoffRxErrorIrqs = (1UL << RADIOLIB_IRQ_CRC_ERR) | (1UL << RADIOLIB_IRQ_HEADER_ERR);
 
     // Time::getMillis() when plain RX was first seen holding PREAMBLE/HEADER flags, or 0 if none.
     uint32_t rxFlagsSeenMs = 0;
@@ -633,8 +647,8 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     virtual void handleSoftwareLoraIrqPoll() {}
 
     /** Take the radio-sequence lock, returning whether it was actually taken - see RadioSequence. The lock is
-     *  created with the readout task, so a sequence that started before it has nothing to take, and must not
-     *  then release it. Without a readout task at all, both are no-ops. */
+     *  created in the constructor, so every sequence in a readout-task build holds it; a sequence that could not
+     *  take one has nothing to release. Without a readout task at all, both are no-ops. */
 #ifdef MESHTASTIC_RX_READOUT_TASK
     bool lockRadioSequence();
     void unlockRadioSequence();
