@@ -1540,6 +1540,21 @@ TFTDisplay::~TFTDisplay()
 }
 
 // Write the buffer to the display memory
+void TFTDisplay::display()
+{
+#if defined(TFT_NV3031B)
+    const bool waking = wakeRepaintPending;
+    display(waking);
+    if (waking) {
+        wakeRepaintPending = false;
+        backlightEnable->set(true);
+        tft->setBrightness(172);
+    }
+#else
+    display(false);
+#endif
+}
+
 void TFTDisplay::display(bool fromBlank)
 {
     concurrency::LockGuard g(spiLock);
@@ -1874,6 +1889,12 @@ void TFTDisplay::sendCommand(uint8_t com)
     switch (com) {
     case DISPLAYON: {
         LOG_DEBUG("Display on");
+#if defined(TFT_NV3031B)
+        if (panelAwake)
+            break;
+        panelAwake = true;
+        tft->setBrightness(0);
+#endif
 #if defined(TFT_NV3001B)
         // DISPLAYOFF cuts the panel rail, so the controller loses its configuration and sleep-out
         // alone cannot bring it back. Restore the rail, let it settle, then re-run the init sequence.
@@ -1886,7 +1907,9 @@ void TFTDisplay::sendCommand(uint8_t com)
             break;
         }
 #endif
+#if !defined(TFT_NV3031B)
         backlightEnable->set(true);
+#endif
 #if ARCH_PORTDUINO
         display(true);
         if (portduino_config.displayBacklight.pin > 0)
@@ -1930,7 +1953,9 @@ void TFTDisplay::sendCommand(uint8_t com)
         }
 #endif
 
-#if defined(TFT_NV3001B) || defined(TFT_BLANK_ON_DISPLAY_OFF)
+#if defined(TFT_NV3031B)
+        wakeRepaintPending = true;
+#elif defined(TFT_NV3001B) || defined(TFT_BLANK_ON_DISPLAY_OFF)
         // Display RAM no longer describes the panel - the NV3001B lost it with its rail, and
         // TFT_BLANK_ON_DISPLAY_OFF cleared it deliberately - so repaint in full rather than diff
         // against a buffer that would leave most of the screen black.
@@ -1944,7 +1969,7 @@ void TFTDisplay::sendCommand(uint8_t com)
         unphone.backlight(true); // using unPhone library
 #endif
 #if defined(RAK14014) || defined(HELTEC_MESH_NODE_T096) || defined(HELTEC_MESH_NODE_T1)
-#elif !defined(M5STACK) && !defined(ST7789_CS) &&                                                                                \
+#elif !defined(M5STACK) && !defined(ST7789_CS) && !defined(TFT_NV3031B) &&                                                       \
     !defined(USE_ARDUINO_GFX) // T-Deck gets brightness set in Screen.cpp in the handleSetOn function
         tft->setBrightness(172);
 #endif
@@ -1952,6 +1977,10 @@ void TFTDisplay::sendCommand(uint8_t com)
     }
     case DISPLAYOFF: {
         LOG_DEBUG("Display off");
+#if defined(TFT_NV3031B)
+        panelAwake = false;
+        wakeRepaintPending = false;
+#endif
         backlightEnable->set(false);
 #if ARCH_PORTDUINO
         tft->clear();
