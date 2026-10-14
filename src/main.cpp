@@ -114,6 +114,7 @@ LinuxBluetooth *linuxBluetooth = nullptr;
 #include "linux/LinuxHardwareI2C.h"
 #ifndef ARCH_PORTDUINO_WASM // raspi HTTP server (ulfius/zlib/openssl) excluded in the browser/wasm build
 #include "mesh/raspihttp/PiWebServer.h"
+#include "platform/portduino/NativeDiscovery.h"
 #endif
 #include "platform/portduino/PortduinoGlue.h"
 #ifdef _WIN32
@@ -1274,6 +1275,9 @@ void setup()
     }
 #endif
     initApiServer(TCPPort);
+#ifndef ARCH_PORTDUINO_WASM
+    startNativeDiscovery(TCPPort);
+#endif
 #endif
 
     // Start airtime logger thread.
@@ -1574,6 +1578,9 @@ void loop()
         inputBroker->processInputEventQueue();
 #endif
 #if ARCH_PORTDUINO
+#ifndef ARCH_PORTDUINO_WASM
+    serviceNativeDiscovery();
+#endif
     if (portduino_config.lora_spi_dev == "ch341" && ch341Hal != nullptr) {
         ch341Hal->checkError();
     }
