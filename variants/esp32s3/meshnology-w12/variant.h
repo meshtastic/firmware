@@ -44,9 +44,6 @@
 // points every interrupt at a floating pin and scanChannel() never returns.
 #define LR2021_IRQ_DIO_NUM 8
 // DIO7 -> IO7 is a second, unused IRQ line. Plain crystal on XTA/XTB, so no TCXO voltage.
-
-// ─── Not wired up yet ─────────────────────────────────────────────────────────
-// RGB LED on GPIO46 stays off: HAS_NEOPIXEL pulls in the RMT HAL, which fails to link here.
 // ─── GNSS (L76K header) ───────────────────────────────────────────────────────
 #define GPS_L76K
 #define GPS_RX_PIN 39 // bits going TOWARDS the CPU
@@ -58,3 +55,5 @@
 #define PIN_GPS_RESET 42 // low >100 ms resets the L76K
 #define GPS_RESET_MODE LOW
 #define GPS_THREAD_INTERVAL 50
+// ─── Not wired up yet ─────────────────────────────────────────────────────────
+// RGB LED on GPIO46 stays off: HAS_NEOPIXEL pulls in the RMT HAL, which fails to link here.
