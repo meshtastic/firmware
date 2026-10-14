@@ -83,6 +83,9 @@ void lateInitVariant()
 
 void variant_shutdown()
 {
+    // Ensure backlight is shut off before entering sleep (for InkHUD, redundant in BaseUI)
+    io.digitalWrite(PCA_PIN_EINK_EN, LOW);
+
 #if !MESHTASTIC_EXCLUDE_GPS
     if (m5HasAg3352) {
         digitalWrite(GPS_RTC_INT, LOW);
