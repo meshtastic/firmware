@@ -56,7 +56,7 @@ void earlyInitVariant()
 
     delay(2);
     uint8_t high = 0;
-    for (uint8_t i = 0; i < 5; i++)
+    for (uint8_t i = 0; i < 10; i++)
         high += io.digitalRead(PCA_PIN_GPS_VERSION) == HIGH;
     m5HasAg3352 = high >= 3;
 
