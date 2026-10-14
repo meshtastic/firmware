@@ -774,8 +774,13 @@ static void test_staleRxFlagAction_staleHeaderErrBesideValidHeaderIsRetired()
     // Inside the valid header's window and past it: either way the error goes first and nothing re-arms on it.
     TEST_ASSERT_EQUAL(static_cast<int>(StaleRxFlagAction::ClearHeaderErr), static_cast<int>(policy(true, true, 10, 2115)));
     TEST_ASSERT_EQUAL(static_cast<int>(StaleRxFlagAction::ClearHeaderErr), static_cast<int>(policy(true, true, 60000, 2115)));
-    // And on an SX1280, where a lone error does wedge RX, a valid header beside it still means two frames
-    TEST_ASSERT_EQUAL(static_cast<int>(StaleRxFlagAction::ClearHeaderErr),
+    // On a chip a header error wedges, the same pair means the opposite: RX could not have reached a later
+    // header while wedged, so the error came second, the valid header's frame is dead, and only a re-arm
+    // listens again. Guarded here: clearing the error there leaves the chip deaf until that window expires.
+    TEST_ASSERT_EQUAL_MESSAGE(static_cast<int>(StaleRxFlagAction::Rearm),
+                              static_cast<int>(staleRxFlagAction(true, true, true, 10, 2115)),
+                              "a wedging chip must re-arm, not wait out the valid header's window");
+    TEST_ASSERT_EQUAL(static_cast<int>(StaleRxFlagAction::Rearm),
                       static_cast<int>(staleRxFlagAction(true, true, true, 60000, 2115)));
 }
 
