@@ -530,6 +530,8 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
 #endif // KB_INT
 #ifdef BOARD_PCA9535_INT
     // Side-key interrupt line from PCA9535 expander (active low).
+    // Mask the CPU interrupt: the level type would storm an ISR that cannot clear the expander's latched INT.
+    gpio_intr_disable((gpio_num_t)BOARD_PCA9535_INT);
     gpio_wakeup_enable((gpio_num_t)BOARD_PCA9535_INT, GPIO_INTR_LOW_LEVEL);
 #endif
 #ifdef BUTTON_PIN
@@ -613,6 +615,18 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     // Disable wake-on-button interrupt. Re-attach normal button-interrupts
     gpio_wakeup_disable(pin);
 #endif
+#ifdef PMU_IRQ
+    // Undo the arming above. PMU_IRQ was the only light-sleep wake pin left armed after the sleep, so
+    // its GPIO_INTR_LOW_LEVEL type and wake-enable bit stayed in the GPIO registers indefinitely. A
+    // panic or software reset is CPU-only and leaves those registers intact, so the next boot's first
+    // attachInterrupt() - attachPowerInterrupts() on the boards that define PMU_IRQ - installs the ISR
+    // service with a level condition already pending and nothing to clear it. gpio_wakeup_disable()
+    // alone leaves int_type behind, so set an edge type too, matching what the button path does.
+    if (pmu_found) {
+        gpio_wakeup_disable((gpio_num_t)PMU_IRQ);
+        gpio_set_intr_type((gpio_num_t)PMU_IRQ, GPIO_INTR_NEGEDGE);
+    }
+#endif
 #ifdef INPUTDRIVER_WAKE_BTN_PIN
     gpio_wakeup_disable((gpio_num_t)INPUTDRIVER_WAKE_BTN_PIN);
 #undef INPUTDRIVER_WAKE_BTN_PIN
@@ -626,11 +640,7 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
 #endif
 #if defined(LORA_DIO1) || defined(SX128X_DIO1)
     const int wokeDio1 = loraWakeDio1Pin(); // must match what enableLoraInterrupt() armed
-#if SOC_PM_SUPPORT_EXT_WAKEUP
     if (wokeDio1 >= 0 && radioType != RF95_RADIO) {
-#else
-    if (wokeDio1 >= 0 && radioType != RF95_RADIO) {
-#endif
         restoreLoraIrqPin((gpio_num_t)wokeDio1);
     }
 #endif
@@ -703,7 +713,9 @@ void enableLoraInterrupt()
 {
 #if defined(LORA_DIO1_EXTENDED_IO)
     // DIO1 is a virtual pin on an I/O expander - it cannot be a GPIO wakeup source
-#elif SOC_PM_SUPPORT_EXT_WAKEUP && (defined(LORA_DIO1) || defined(SX128X_DIO1))
+#elif defined(LORA_DIO1) || defined(SX128X_DIO1)
+    // Not also gated on SOC_PM_SUPPORT_EXT_WAKEUP: that is an IDF alias for ESP32/S2/S3 only, and nothing
+    // here uses ext wakeup - GPIO light-sleep wake and the pin pulls exist on every ESP32 variant.
     const int loraDio1 = loraWakeDio1Pin();
     esp_err_t res;
     if (loraDio1 >= 0 && radioType != RF95_RADIO) {
@@ -731,12 +743,6 @@ void enableLoraInterrupt()
         armLoraWakePin((gpio_num_t)loraDio1);
     }
 
-#elif defined(LORA_DIO1) || defined(SX128X_DIO1)
-    const int loraDio1 = loraWakeDio1Pin();
-    if (loraDio1 >= 0 && radioType != RF95_RADIO) {
-        LOG_INFO("Wake on LoRa DIO1 (GPIO%02d) gpio interrupt", loraDio1);
-        armLoraWakePin((gpio_num_t)loraDio1); // SX126x/SX128x interrupt, active high
-    }
 #endif
 #if defined(RF95_IRQ) && (RF95_IRQ != RADIOLIB_NC)
     if (radioType == RF95_RADIO) {
