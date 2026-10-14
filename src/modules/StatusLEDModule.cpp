@@ -73,6 +73,9 @@ int StatusLEDModule::handleStatusUpdate(const meshtastic::Status *arg)
         case meshtastic::BluetoothStatus::ConnectionState::PAIRING: {
             ble_state = pairing;
             PAIRING_LED_starttime = millis();
+            PAIRING_LED_state = LED_STATE_ON;
+            setInterval(0);
+            runASAP = true;
             break;
         }
         case meshtastic::BluetoothStatus::ConnectionState::CONNECTED: {
@@ -155,6 +158,7 @@ int32_t StatusLEDModule::runOnce()
         digitalWrite(LED_HEARTBEAT, HEARTBEAT_LED_state);
     }
 #else
+#ifndef Nodara
     if (power_state != charging && power_state != charged && !doing_fast_blink && !config.device.led_heartbeat_disabled) {
         if (CHARGE_LED_state == LED_STATE_ON) {
             CHARGE_LED_state = LED_STATE_OFF;
@@ -165,11 +169,14 @@ int32_t StatusLEDModule::runOnce()
         }
     }
 #endif
+#endif
 #ifdef LED_PAIRING
     if (!config.bluetooth.enabled || Throttle::hasElapsed(PAIRING_LED_starttime, 30 * 1000) || doing_fast_blink) {
         PAIRING_LED_state = LED_STATE_OFF;
     } else if (ble_state == unpaired) {
-        if (slowTrack) {
+        if (PAIRING_LED_starttime + 30 * 1000 < millis()) {
+            PAIRING_LED_state = LED_STATE_OFF;
+        } else if (slowTrack) {
             PAIRING_LED_state = !PAIRING_LED_state;
             slowTrack = false;
         } else {
@@ -177,6 +184,9 @@ int32_t StatusLEDModule::runOnce()
         }
     } else if (ble_state == pairing) {
         PAIRING_LED_state = !PAIRING_LED_state;
+        my_interval = 100;
+    } else if (PAIRING_LED_starttime + 30 * 1000 < millis()) {
+        PAIRING_LED_state = LED_STATE_OFF;
     } else {
         PAIRING_LED_state = LED_STATE_ON;
     }
@@ -184,7 +194,12 @@ int32_t StatusLEDModule::runOnce()
 
     // Override if disabled in config
     if (config.device.led_heartbeat_disabled) {
+#ifndef Nodara
         CHARGE_LED_state = LED_STATE_OFF;
+#else
+        if (power_state != charging)
+            CHARGE_LED_state = LED_STATE_OFF;
+#endif
     }
 #ifdef Battery_LED_1
     bool chargeIndicatorLED1 = LED_STATE_OFF;
@@ -216,7 +231,7 @@ int32_t StatusLEDModule::runOnce()
 #ifdef PCA_LED_ENABLE
     io.digitalWrite(PCA_LED_ENABLE, CHARGE_LED_state);
 #endif
-
+#ifndef Nodara
 #ifdef LED_POWER
 #ifdef LED_POWER_CRITICAL
     if (LED_POWER != LED_POWER_CRITICAL) {
@@ -232,6 +247,7 @@ int32_t StatusLEDModule::runOnce()
     }
 #else
     digitalWrite(LED_POWER, CHARGE_LED_state);
+#endif
 #endif
 #endif
 
@@ -302,7 +318,9 @@ void StatusLEDModule::setPowerLED(bool LEDon)
     io.digitalWrite(PCA_LED_ENABLE, ledState);
 #endif
 #ifdef LED_POWER
+#ifndef Nodara
     digitalWrite(LED_POWER, ledState);
+#endif
 #endif
 #ifdef LED_PAIRING
     digitalWrite(LED_PAIRING, ledState);

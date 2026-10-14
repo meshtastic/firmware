@@ -23,13 +23,13 @@
 #include "target_specific.h"
 #include <OLEDDisplay.h>
 
+ 
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR_EXTERNAL
 
 // Sensors
 #include "Sensor/CGRadSensSensor.h"
 #include "Sensor/RCWL9620Sensor.h"
 #include "Sensor/nullSensor.h"
-
 namespace graphics
 {
 extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *titleStr, bool force_no_invert,
@@ -482,7 +482,11 @@ int32_t EnvironmentTelemetryModule::runOnce()
 
 bool EnvironmentTelemetryModule::wantUIFrame()
 {
+#ifdef NODARA_USB_INJECTED_TELEMETRY
+    return true;
+#else
     return moduleConfig.telemetry.environment_screen_enabled;
+#endif
 }
 
 #if HAS_SCREEN

@@ -1238,6 +1238,14 @@ void GPS::setPowerState(GPSPowerState newState, uint32_t sleepTime)
         writePinRFEN(true);     // External RF front-end: on
         writePinStandby(false); // Standby (pin): awake (not standby)
         setPowerUBLOX(true);    // Standby (UBLOX): awake
+#if defined(Nodara) && defined(ARCH_NRF52)
+        // Re-initialize UART after GPS_OFF released the pins to prevent missed bytes
+        if (oldState == GPS_OFF && _serial_gps) {
+            LOG_INFO("Re-initialize GPS UART after waking from GPS_OFF");
+            _serial_gps->setPins(rx_gpio, tx_gpio);
+            _serial_gps->begin(GPS_BAUDRATE);
+        }
+#endif // Nodara
         break;
 
     case GPS_SOFTSLEEP:
@@ -1274,6 +1282,16 @@ void GPS::setPowerState(GPSPowerState newState, uint32_t sleepTime)
         writePinEN(false);       // Power (EN pin): off
         setPowerPMU(false);      // Power (PMU): off
         setPowerUBLOX(false, 0); // Standby (UBLOX): asleep, indefinitely
+#if defined(Nodara) && defined(ARCH_NRF52)
+        // Release UART pins to high-Z to prevent current leakage through GP-02 ESD diodes
+        // when LDO is off (UART TX idles HIGH and would back-feed GPS VCC via protection diodes)
+        // Guard: Uart::end() on nRF52 waits forever for UARTE hardware events that never fire
+        // if the peripheral is already disabled (i.e. end() was already called). Skip if already GPS_OFF.
+        if (_serial_gps && oldState != GPS_OFF) {
+            LOG_INFO("Releasing GPS UART pins to high-Z to prevent current leakage");
+            _serial_gps->end();
+        }
+#endif // Nodara
         break;
     }
 }

@@ -49,8 +49,11 @@ void EInkDynamicDisplay::configForFastRefresh()
 {
     // Variant-specific code can go here
 #if defined(PRIVATE_HW)
-#else
+#if defined(Nodara)
+    adafruitDisplay->setPartialWindow(0, 0, adafruitDisplay->width(), adafruitDisplay->height());
+#endif
     // Otherwise:
+#else
     adafruitDisplay->setPartialWindow(0, 0, adafruitDisplay->width(), adafruitDisplay->height());
 #endif
 }
@@ -60,6 +63,9 @@ void EInkDynamicDisplay::configForFullRefresh()
 {
     // Variant-specific code can go here
 #if defined(PRIVATE_HW)
+#if defined(Nodara)
+    adafruitDisplay->setFullWindow();
+#endif
 #else
     // Otherwise:
     adafruitDisplay->setFullWindow();
@@ -148,13 +154,11 @@ bool EInkDynamicDisplay::determineMode()
     checkBusyAsyncRefresh();
 #endif
     checkRateLimiting();
-
     // If too soon for a new frame, or display busy, abort early
-    if (refresh == SKIPPED)
+    if (refresh == SKIPPED) {
         return false; // No refresh
-
+    }
     // -- New frame is due --
-
     resetRateLimiting(); // Once determineMode() ends, will have to wait again
     hashImage();         // Generate here, so we can still copy it to previousImageHash, even if we skip the comparison check
     LOG_TRACE("determineMode(): "); // Begin log entry
@@ -376,12 +380,22 @@ void EInkDynamicDisplay::resetRateLimiting()
 // Generate a hash of this frame, to compare against previous update
 void EInkDynamicDisplay::hashImage()
 {
+#ifdef Nodara
+    // FNV-1a over the full OLED buffer. The original `buffer[b] << b` is 0 for
+    // b>=32 on ARM, so list rows below the header hashed as identical.
+    imageHash = 2166136261u;
+    for (uint32_t b = 0; b < displayBufferSize; b++) {
+        imageHash ^= buffer[b];
+        imageHash *= 16777619u;
+    }
+#else
     imageHash = 0;
 
     // Sum all bytes of the image buffer together
     for (uint16_t b = 0; b < (displayWidth / 8) * displayHeight; b++) {
         imageHash ^= buffer[b] << b;
     }
+#endif
 }
 
 // Store the results of determineMode() for future use, and reset for next call

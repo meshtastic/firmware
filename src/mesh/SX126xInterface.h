@@ -41,6 +41,12 @@ template <class T> class SX126xInterface : public RadioLibInterface
     float currentLimit = 140; // Higher OCP limit for SX126x PA
     float tcxoVoltage = 0.0;
 
+#if defined(Nodara)
+    // True after the anti-leakage sequence (SPI.end + power cut) has run.
+    // Guards against re-entering hardware sleep when SPI bus is already closed.
+    bool loraHardwareSleeping = false;
+#endif // Nodara
+
     /**
      * Specific module instance
      */

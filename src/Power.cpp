@@ -1158,6 +1158,7 @@ void Power::readPowerStatus()
     OptionalBool hasBattery = OptUnknown; // These must be static because NRF_APM
                                           // code doesn't run every time
     OptionalBool isChargingNow = OptUnknown;
+    static bool lowBatteryOnePercentLogged = false;
 
     if (batteryLevel) {
         hasBattery = batteryLevel->isBatteryConnect() ? OptTrue : OptFalse;

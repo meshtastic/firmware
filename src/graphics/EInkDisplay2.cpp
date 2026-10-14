@@ -94,9 +94,9 @@ bool EInkDisplay::forceDisplay(uint32_t msecLimit)
 #endif
 
     // Trigger the refresh in GxEPD2
-    LOG_DEBUG("Update E-Paper");
+    LOG_DEBUG("Starting display update");
     adafruitDisplay->nextPage();
-
+    LOG_DEBUG("Display update complete");
     // End the update process
     endUpdate();
 
@@ -121,7 +121,6 @@ void EInkDisplay::display(void)
     // We don't allow regular 'dumb' display() calls to draw on eink until we've shown
     // at least one forceDisplay() keyframe.  This prevents flashing when we should the critical
     // bootscreen (that we want to look nice)
-
     if (lastDrawMsec) {
         forceDisplay(slowUpdateMsec); // Show the first screen a few seconds after boot, then slower
     }
@@ -139,6 +138,21 @@ void EInkDisplay::setDetected(uint8_t detected)
     (void)detected;
 }
 
+void EInkDisplay::setRotation(uint8_t rotation)
+{
+    if (adafruitDisplay) {
+        adafruitDisplay->setRotation(rotation);
+        LOG_INFO("EInkDisplay rotation set to %d", rotation);
+    }
+}
+
+void EInkDisplay::fillScreen(uint8_t color)
+{
+    if (adafruitDisplay) {
+        adafruitDisplay->fillScreen(color);
+        LOG_INFO("EInkDisplay fillScreen %d", color);
+    }
+}
 // Connect to the display - variant specific
 bool EInkDisplay::connect()
 {
@@ -246,7 +260,24 @@ bool EInkDisplay::connect()
 #if defined(CROWPANEL_ESP32S3_5_EPAPER) || defined(CROWPANEL_ESP32S3_4_EPAPER)
         adafruitDisplay->setRotation(0);
 #endif
+    }
 #endif
+#elif defined(Nodara)
+    {
+        pinMode(PIN_EINK_POWER, OUTPUT);
+        digitalWrite(PIN_EINK_POWER, EINK_POWER_ACTIVE);
+        delay(50);
+        SPI1.begin();
+        auto lowLevel = new EINK_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY, SPI1);
+
+        adafruitDisplay = new GxEPD2_BW<EINK_DISPLAY_MODEL, EINK_DISPLAY_MODEL::HEIGHT>(*lowLevel);
+        // serial_diag_bitrate=0 avoids re-initing Serial
+        adafruitDisplay->init(0, true, 10, false);
+        adafruitDisplay->setRotation(EINK_ROTATION);
+        // Use full-window mode here; EInkDynamicDisplay::checkInitialized() will
+        // issue a proper clearScreen() + switch to the right mode on first frame.
+        adafruitDisplay->setFullWindow();
+        // adafruitDisplay->setPartialWindow(0, 0, displayWidth, displayHeight);
     }
 #elif defined(PCA10059) || defined(ME25LS01)
     {
@@ -311,4 +342,33 @@ bool EInkDisplay::connect()
     return true;
 }
 
+#if defined(Nodara)
+void EInkDisplay::powerOn()
+{
+    LOG_DEBUG("powerOn — LDO enable + SPI1 restart + SSD1680 re-init");
+    digitalWrite(PIN_EINK_POWER, EINK_POWER_ACTIVE);
+    delay(50);
+    SPI1.begin();
+    // SSD1680 has completed POR; run full register initialization sequence.
+    // Parameters match connect(): no serial diagnostics, hard reset, 10ms reset pulse, no partial reset.
+    adafruitDisplay->init(0, true, 10, false);
+    adafruitDisplay->setRotation(EINK_ROTATION);
+    adafruitDisplay->setFullWindow();
+    // Reset rate-limiter so the next forceDisplay() renders immediately without waiting.
+    lastDrawMsec = 0;
+}
+
+void EInkDisplay::powerOff()
+{
+    LOG_DEBUG("powerOff — close SPI1 + anti-leakage tristate + cut LDO");
+    SPI1.end();
+    pinMode(PIN_EINK_DC, INPUT);
+    pinMode(PIN_EINK_RES, INPUT);
+    pinMode(PIN_EINK_CS, INPUT);
+    pinMode(PIN_EINK_MOSI, INPUT);
+    pinMode(PIN_EINK_SCLK, INPUT);
+    pinMode(PIN_EINK_BUSY, INPUT_PULLDOWN);
+    digitalWrite(PIN_EINK_POWER, !EINK_POWER_ACTIVE);
+}
+#endif // Nodara
 #endif

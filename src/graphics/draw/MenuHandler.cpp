@@ -40,6 +40,9 @@
 #if HAS_TELEMETRY && HAS_SENSOR && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
 #include "modules/Telemetry/EnvironmentTelemetry.h"
 #endif
+#ifdef Nodara
+#include "graphics/draw/NotificationRenderer.h"
+#endif
 #include "modules/TraceRouteModule.h"
 #include "modules/WaypointModule.h"
 #if !MESHTASTIC_EXCLUDE_WAYPOINT
@@ -233,6 +236,12 @@ void menuHandler::loraMenu()
     };
     screen->showOverlayBanner(bannerOptions);
 }
+
+#ifdef Nodara
+static char pendingConfirmMessage[256];
+static std::function<void()> pendingConfirmCallback;
+
+#endif
 
 void menuHandler::OnboardMessage()
 {
@@ -694,6 +703,21 @@ void menuHandler::twelveHourPicker()
 // Reusable confirmation prompt function
 void menuHandler::showConfirmationBanner(const char *message, std::function<void()> onConfirm)
 {
+    LOG_INFO("showConfirmationBanner called with message: %s", message);
+
+#ifdef Nodara
+    if (NotificationRenderer::isOverlayBannerShowing()) {
+        LOG_INFO("showConfirmationBanner: Overlay banner showing, using menuQueue mechanism");
+        strncpy(pendingConfirmMessage, message, sizeof(pendingConfirmMessage) - 1);
+        pendingConfirmMessage[sizeof(pendingConfirmMessage) - 1] = '\0';
+        pendingConfirmCallback = onConfirm;
+        menuHandler::menuQueue = menuHandler::confirmation_dialog_menu;
+        screen->runNow();
+        return;
+    }
+#endif
+
+    // 直接显示确认对话框（没有 overlay banner 显示时，如 CannedMessageModule）
     static const char *confirmOptions[] = {"No", "Yes"};
     static std::function<void()> pendingConfirm;
     pendingConfirm = std::move(onConfirm);
@@ -3400,9 +3424,17 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         LoRaFEMLNAToggleMenu();
         break;
 #endif
+#ifdef Nodara
+    case confirmation_dialog_menu:
+        LOG_INFO("handleMenuSwitch: Processing confirmation_dialog_menu");
+        showConfirmationBanner(pendingConfirmMessage, pendingConfirmCallback);
+        LOG_INFO("handleMenuSwitch: showConfirmationBanner called");
+        break;
+#endif
     }
     menuQueue = MenuNone;
 }
+
 
 // Flips the mute bit on a node and persists. Returns without writing if the node is unknown, so a
 // stale pickedNodeNum can't cause a pointless flash write.
