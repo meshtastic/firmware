@@ -420,15 +420,35 @@ static LGFX *tft = nullptr;
 
 #elif defined(ILI9488_CS)
 #include <LovyanGFX.hpp> // Graphics and font library for ILI9488 driver chip
+#ifndef ILI9488_RESET
+#define ILI9488_RESET -1
+#endif
+#ifndef TFT_INVERT
+#define TFT_INVERT true
+#endif
 
 class LGFX : public lgfx::LGFX_Device
 {
     lgfx::Panel_ILI9488 _panel_instance;
     lgfx::Bus_SPI _bus_instance;
     lgfx::Light_PWM _light_instance;
+#if defined(MAKERFABS_NOMAD_TERMINAL)
+    lgfx::Touch_FT5x06 _touch_instance;
+#else
     lgfx::Touch_GT911 _touch_instance;
+#endif
 
   public:
+#if defined(MAKERFABS_NOMAD_TERMINAL)
+    // Touch init resets the I2C0 peripheral that Wire also drives; restart Wire or its next transfer times out
+    bool init_impl(bool use_reset, bool use_clear) override
+    {
+        bool result = LGFX_Device::init_impl(use_reset, use_clear);
+        Wire.end();
+        Wire.begin(I2C_SDA, I2C_SCL);
+        return result;
+    }
+#endif
     LGFX(void)
     {
         {
@@ -456,9 +476,9 @@ class LGFX : public lgfx::LGFX_Device
         {                                        // Set the display panel control.
             auto cfg = _panel_instance.config(); // Gets a structure for display panel settings.
 
-            cfg.pin_cs = ILI9488_CS; // Pin number where CS is connected (-1 = disable)
-            cfg.pin_rst = -1;        // Pin number where RST is connected  (-1 = disable)
-            cfg.pin_busy = -1;       // Pin number where BUSY is connected (-1 = disable)
+            cfg.pin_cs = ILI9488_CS;     // Pin number where CS is connected (-1 = disable)
+            cfg.pin_rst = ILI9488_RESET; // Pin number where RST is connected  (-1 = disable)
+            cfg.pin_busy = -1;           // Pin number where BUSY is connected (-1 = disable)
 
             // The following setting values ​​are general initial values ​​for each panel, so please comment out any
             // unknown items and try them.
@@ -477,7 +497,7 @@ class LGFX : public lgfx::LGFX_Device
 #endif
             cfg.dummy_read_bits = 1; // Number of bits for dummy read before non-pixel data read
             cfg.readable = true;     // Set to true if data can be read
-            cfg.invert = true;       // Set to true if the light/darkness of the panel is reversed
+            cfg.invert = TFT_INVERT; // Set to true if the light/darkness of the panel is reversed
             cfg.rgb_order = false;   // Set to true if the panel's red and blue are swapped
             cfg.dlen_16bit =
                 false;             // Set to true for panels that transmit data length in 16-bit units with 16-bit parallel or SPI
@@ -534,6 +554,13 @@ class LGFX : public lgfx::LGFX_Device
             cfg.pin_scl = I2C_SCL;
 #endif
             // cfg.freq = 400000;
+#if defined(MAKERFABS_NOMAD_TERMINAL)
+            // FT6236 reports in the panel's native portrait frame, so the panel rotation alone maps it
+            cfg.x_max = TFT_WIDTH - 1;
+            cfg.y_max = TFT_HEIGHT - 1;
+            cfg.offset_rotation = 0;
+            cfg.freq = 100000; // shares the 100 kHz sensor bus
+#endif
 
             _touch_instance.config(cfg);
             _panel_instance.setTouch(&_touch_instance);
@@ -1540,6 +1567,21 @@ TFTDisplay::~TFTDisplay()
 }
 
 // Write the buffer to the display memory
+void TFTDisplay::display()
+{
+#if defined(TFT_NV3031B)
+    const bool waking = wakeRepaintPending;
+    display(waking);
+    if (waking) {
+        wakeRepaintPending = false;
+        backlightEnable->set(true);
+        tft->setBrightness(172);
+    }
+#else
+    display(false);
+#endif
+}
+
 void TFTDisplay::display(bool fromBlank)
 {
     concurrency::LockGuard g(spiLock);
@@ -1874,6 +1916,12 @@ void TFTDisplay::sendCommand(uint8_t com)
     switch (com) {
     case DISPLAYON: {
         LOG_DEBUG("Display on");
+#if defined(TFT_NV3031B)
+        if (panelAwake)
+            break;
+        panelAwake = true;
+        tft->setBrightness(0);
+#endif
 #if defined(TFT_NV3001B)
         // DISPLAYOFF cuts the panel rail, so the controller loses its configuration and sleep-out
         // alone cannot bring it back. Restore the rail, let it settle, then re-run the init sequence.
@@ -1886,7 +1934,9 @@ void TFTDisplay::sendCommand(uint8_t com)
             break;
         }
 #endif
+#if !defined(TFT_NV3031B)
         backlightEnable->set(true);
+#endif
 #if ARCH_PORTDUINO
         display(true);
         if (portduino_config.displayBacklight.pin > 0)
@@ -1930,7 +1980,9 @@ void TFTDisplay::sendCommand(uint8_t com)
         }
 #endif
 
-#if defined(TFT_NV3001B) || defined(TFT_BLANK_ON_DISPLAY_OFF)
+#if defined(TFT_NV3031B)
+        wakeRepaintPending = true;
+#elif defined(TFT_NV3001B) || defined(TFT_BLANK_ON_DISPLAY_OFF)
         // Display RAM no longer describes the panel - the NV3001B lost it with its rail, and
         // TFT_BLANK_ON_DISPLAY_OFF cleared it deliberately - so repaint in full rather than diff
         // against a buffer that would leave most of the screen black.
@@ -1944,7 +1996,7 @@ void TFTDisplay::sendCommand(uint8_t com)
         unphone.backlight(true); // using unPhone library
 #endif
 #if defined(RAK14014) || defined(HELTEC_MESH_NODE_T096) || defined(HELTEC_MESH_NODE_T1)
-#elif !defined(M5STACK) && !defined(ST7789_CS) &&                                                                                \
+#elif !defined(M5STACK) && !defined(ST7789_CS) && !defined(TFT_NV3031B) &&                                                       \
     !defined(USE_ARDUINO_GFX) // T-Deck gets brightness set in Screen.cpp in the handleSetOn function
         tft->setBrightness(172);
 #endif
@@ -1952,6 +2004,10 @@ void TFTDisplay::sendCommand(uint8_t com)
     }
     case DISPLAYOFF: {
         LOG_DEBUG("Display off");
+#if defined(TFT_NV3031B)
+        panelAwake = false;
+        wakeRepaintPending = false;
+#endif
         backlightEnable->set(false);
 #if ARCH_PORTDUINO
         tft->clear();

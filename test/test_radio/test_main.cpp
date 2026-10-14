@@ -569,6 +569,11 @@ class TestableRadioLibInterface : public RadioLibInterface
 
     static bool isRadioLibTimeErrorPublic(RadioLibTime_t usec) { return isRadioLibTimeError(usec); }
 
+    // What a chip with a receive FIFO is asked to drop when a frame is given up on unread
+    uint32_t discardedRxFrames = 0;
+    void discardUnreadRxFrame() override { discardedRxFrames++; }
+    void clearReadIrqsPublic() { clearReadIrqs(); }
+
     // Chip-specific hooks this test never reaches
     uint32_t getPacketTime(uint32_t, bool) override { return packetTimeMs; }
     int16_t getCurrentRSSI() override { return 0; }
@@ -664,6 +669,25 @@ static void test_isRadioLibTimeError_separatesCodesFromDurations()
     TEST_ASSERT_FALSE(TestableRadioLibInterface::isRadioLibTimeErrorPublic(229ul * 1000ul * 1000ul));
 }
 
+// clearReadIrqs() is how every early out gives up on a received frame unread: the readout task's bad length and full
+// ring, and the radio thread's bad length, unset region and failed readData(). The LR2021 receives into a FIFO that only
+// RadioLib's readData() empties, so r113 found each such drop left the frame's bytes at the front of the FIFO, and the
+// next frame was read out on top of them and failed to decode - 37 of 37 drops on an X1.
+//
+// Pinned: dropping a frame's flags also asks the chip to drop the frame. Regression guarded: a drop path that clears
+// only the IRQs, which corrupts the following frame on an LR2021 and is invisible on every other chip.
+
+static void test_clearReadIrqs_alsoDiscardsTheUnreadFrame()
+{
+    FakeIrqRadio phy;
+    TestableRadioLibInterface radioIf(&phy);
+    phy.irqFlags = (1UL << RADIOLIB_IRQ_RX_DONE);
+
+    radioIf.clearReadIrqsPublic();
+
+    TEST_ASSERT_EQUAL_UINT32(1, radioIf.discardedRxFrames);
+}
+
 void setUp(void)
 {
     mockMeshService = new MockMeshService();
@@ -751,6 +775,52 @@ static void test_checkStaleRxFlags_headerAfterPreambleRestartsTheWindow()
     delete radioIf;
 }
 
+// cadHandoffRxEnded() in src/mesh/RadioLibInterface.cpp: whether a CAD->RX handoff's RX has ended without a frame, so
+// the radio thread must end the handoff and re-arm. The readout task used to clear a damaged header's CRC_ERR or
+// HEADER_ERR and return, which left the handoff open and the chip possibly in standby until checkCadHandoffTimeout()
+// re-armed it up to a second later ("CAD>RX timeout" on an LR2021). Guards that every frameless end counts, and that
+// nothing counts outside a handoff, where plain RX leaves HEADER_ERR to checkStaleRxFlags().
+static void test_cadHandoffRxEnded_everyFramelessEndCounts()
+{
+    FakeIrqRadio phy;
+    auto *radioIf = new TestableRadioLibInterface(&phy);
+    radioIf->cadHandoffRxStart = 1000;
+
+    const uint32_t ends[] = {RADIOLIB_IRQ_TIMEOUT, RADIOLIB_IRQ_CRC_ERR, RADIOLIB_IRQ_HEADER_ERR};
+    for (uint32_t irq : ends) {
+        phy.irqFlags = phy.getIrqMapped(1UL << irq);
+        TEST_ASSERT_TRUE_MESSAGE(radioIf->cadHandoffRxEnded(), "a frameless end must close the handoff");
+    }
+
+    delete radioIf;
+}
+
+static void test_cadHandoffRxEnded_anRxStillRunningDoesNotCount()
+{
+    FakeIrqRadio phy;
+    auto *radioIf = new TestableRadioLibInterface(&phy);
+    radioIf->cadHandoffRxStart = 1000;
+
+    phy.irqFlags = 0;
+    TEST_ASSERT_FALSE(radioIf->cadHandoffRxEnded());
+    phy.irqFlags = phy.getIrqMapped((1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED) | (1UL << RADIOLIB_IRQ_HEADER_VALID));
+    TEST_ASSERT_FALSE_MESSAGE(radioIf->cadHandoffRxEnded(), "a frame still arriving must be left to finish");
+
+    delete radioIf;
+}
+
+static void test_cadHandoffRxEnded_falseWithoutAHandoff()
+{
+    FakeIrqRadio phy;
+    auto *radioIf = new TestableRadioLibInterface(&phy);
+    radioIf->cadHandoffRxStart = 0;
+
+    phy.irqFlags = phy.getIrqMapped((1UL << RADIOLIB_IRQ_HEADER_ERR) | (1UL << RADIOLIB_IRQ_TIMEOUT));
+    TEST_ASSERT_FALSE_MESSAGE(radioIf->cadHandoffRxEnded(), "plain RX's flags are not a handoff's end");
+
+    delete radioIf;
+}
+
 void setup()
 {
     delay(10);
@@ -789,11 +859,15 @@ void setup()
     RUN_TEST(test_computePacketTime_reportsNoAirtimeWhenNothingCanBeComputed);
     RUN_TEST(test_computePacketTime_rxUsesHeaderInfoAndIsGuarded);
     RUN_TEST(test_isRadioLibTimeError_separatesCodesFromDurations);
+    RUN_TEST(test_clearReadIrqs_alsoDiscardsTheUnreadFrame);
     RUN_TEST(test_staleRxFlagAction_keepsFlagsInsideTheWindow);
     RUN_TEST(test_staleRxFlagAction_windowEndsAtExactlyOneMaxPacket);
     RUN_TEST(test_staleRxFlagAction_barePreambleIsOnlyCleared);
     RUN_TEST(test_staleRxFlagAction_staleHeaderIsRearmed);
     RUN_TEST(test_checkStaleRxFlags_headerAfterPreambleRestartsTheWindow);
+    RUN_TEST(test_cadHandoffRxEnded_everyFramelessEndCounts);
+    RUN_TEST(test_cadHandoffRxEnded_anRxStillRunningDoesNotCount);
+    RUN_TEST(test_cadHandoffRxEnded_falseWithoutAHandoff);
     exit(UNITY_END());
 }
 

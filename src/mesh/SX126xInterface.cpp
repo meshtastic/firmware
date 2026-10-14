@@ -102,6 +102,7 @@ template <typename T> bool SX126xInterface<T>::init()
 
     if (!reinitChip())
         return false;
+    boundBusyWait();
 
     startReceive(); // start receiving
 
@@ -321,7 +322,17 @@ template <typename T> int16_t SX126xInterface<T>::programModemParams()
 
 template <typename T> bool SX126xInterface<T>::reconfigure()
 {
+    // A readout between these calls would clear the flags they set up, or move the chip out from under them
+    RadioSequence seq(this);
     RadioLibInterface::reconfigure();
+
+#ifdef MESHTASTIC_RX_READOUT_TASK
+    // A reconfigure standbys the chip and owns the re-arm that follows, so an RX the readout task armed at TX_DONE is
+    // void from here. Left set, adoptReceiveArmedFromIsr() would report armed for an RX that no longer exists and, via
+    // the base startReceive() it calls, clear rxOffline and chipRecoveryFailures for a chip that never took one -
+    // zeroing the ladder and the rxOffline that periodicRadioMaintenance() gates its retry on.
+    rearmState = REARM_NONE;
+#endif
 
     // set mode to standby - a chip that lost its state to a reset/brownout can time out here (-707),
     // so don't let setStandby()'s assert fire before the recovery below gets a chance
@@ -340,6 +351,15 @@ template <typename T> bool SX126xInterface<T>::reconfigure()
         }
         LOG_INFO("SX126x recovered after re-init");
     }
+
+#ifdef ARCH_PORTDUINO
+    // RadioLib's TX staging ends in fixSensitivity(), which programs the sensitivity register from the configured
+    // bandwidth (datasheet 15.1), and setBandwidth() does not redo it. The modem params just moved, so the next TX
+    // has to be a full staging and not the launch that skips the register fixes.
+    txStagedByRadioLib = false;
+    prestagedLen = 0;
+    earlyStagedLen = 0;
+#endif
 
     startReceive(); // restart receiving
 
@@ -410,7 +430,9 @@ template <typename T> void SX126xInterface<T>::handleSoftwareLoraIrqPoll()
 
 template <typename T> int16_t SX126xInterface<T>::trySetStandby()
 {
-    checkNotification(); // handle any pending interrupts before we force standby
+    // Handle any pending interrupts before we force standby, but not a TX whose backoff timer is pending: it would start
+    // here, before its delay is up, and the standby below would cut it off with its payload still in the radio
+    checkNotificationExcept(TRANSMIT_DELAY_COMPLETED);
 
     int16_t err = lora.standby();
     if (err == RADIOLIB_ERR_SPI_CMD_TIMEOUT) {
@@ -461,6 +483,10 @@ template <typename T> void SX126xInterface<T>::addReceiveMetadata(meshtastic_Mes
  */
 template <typename T> void SX126xInterface<T>::configHardwareForSend()
 {
+#ifdef MESHTASTIC_RX_READOUT_TASK
+    rearmState = REARM_NONE; // only this TX's TX_DONE may re-arm, never a stale one from a TX the poll completed
+    rxArmedBeforeTxDone = false;
+#endif
     setTransmitEnable(true);
     RadioLibInterface::configHardwareForSend();
 }
@@ -476,33 +502,14 @@ template <typename T> void SX126xInterface<T>::startReceive()
 
     setTransmitEnable(false);
 
-    // Continuous RX on a CH341 host: only a known-continuous RX can be resumed after RX_DONE (resumeRunningReceive())
-    // instead of restarted over the slow bus.
-    const bool continuousRx = irqPolledOverUsb();
-#ifdef ARCH_PORTDUINO_WASM
-    const char *rxMethod = "startReceive";
-#else
-    const char *rxMethod = continuousRx ? "startReceive" : "startReceiveDutyCycleAuto";
-#endif
-    auto tryStartRx = [&]() -> int16_t {
-#ifdef ARCH_PORTDUINO_WASM
-        // Continuous RX in the browser: duty-cycle sleep parks BUSY high between RX
-        // windows and stalls the slow WebUSB SPI link. No battery to save here.
-        return lora.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_INF, MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS);
-#else
-        if (continuousRx)
-            return lora.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_INF, MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS);
-        // We use a 16 bit preamble so this should save some power by letting radio sit in standby mostly.
-        return lora.startReceiveDutyCycleAuto(preambleLength, 8, MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS);
-#endif
-    };
+    auto tryStartRx = [&]() -> int16_t { return startRxCommand(); };
 
     int16_t err = trySetStandby();
     if (err == RADIOLIB_ERR_NONE)
         err = tryStartRx();
 
     if (err != RADIOLIB_ERR_NONE) {
-        LOG_ERROR("SX126X %s %s%d", rxMethod, radioLibErr, err);
+        LOG_ERROR("SX126X startReceive %s%d", radioLibErr, err);
         if (maybeRecoverChipStateLoss())
             err = tryStartRx();
     }
@@ -519,7 +526,7 @@ template <typename T> void SX126xInterface<T>::startReceive()
     }
 
     RadioLibInterface::startReceive();
-    rxArmedContinuous = continuousRx;
+    rxArmedContinuous = true;
 #ifdef ARCH_PORTDUINO
     rxWritePtr = 0;         // RX's base, which RadioLib's RX start always sets to 0
     rxClobberCheck = false; // the standby before it dropped the frame a stage was noted against
@@ -540,10 +547,10 @@ template <typename T> bool SX126xInterface<T>::resumeRunningReceive()
     // RX_DONE and CRC_ERR are never cleared here: whoever read a frame out cleared its own flags, so anything still
     // latched belongs to a frame that has not been read, and checkRxDoneIrqFlag() below drives that readout. Clearing
     // them would erase a frame that finished while we got here - on a CH341 host the readout's own bus traffic, the
-    // overlap check included, is several round trips wide. The two early outs in handleReceiveInterrupt() that return
-    // before readData() clear them where they return. PREAMBLE/HEADER_VALID stay: they may belong to the next frame,
-    // already arriving. A stale HEADER_ERR or TIMEOUT has no readout waiting and would cost checkStaleRxFlags() a
-    // re-arm, so those two go unconditionally.
+    // overlap check included, is several round trips wide. The early outs in handleReceiveInterrupt() that return
+    // before readData(), and readData()'s own error returns, clear them where they give up. PREAMBLE/HEADER_VALID
+    // stay: they may belong to the next frame, already arriving. A stale HEADER_ERR or TIMEOUT has no readout
+    // waiting and would cost checkStaleRxFlags() a re-arm, so those two go unconditionally.
     lora.clearIrqFlags(RADIOLIB_SX126X_IRQ_HEADER_ERR | RADIOLIB_SX126X_IRQ_TIMEOUT);
     activeReceiveStart = 0; // as the standby this replaces would
     RadioLibInterface::startReceive();
@@ -558,6 +565,76 @@ template <typename T> bool SX126xInterface<T>::resumeRunningReceive()
 #endif
     return true;
 }
+
+// RadioLib's duty cycle listens for 2 x minSymbols and sleeps through whatever preamble is left
+static constexpr uint16_t rxDutyCycleMinSymbols = 8;
+
+template <typename T> int16_t SX126xInterface<T>::startRxCommand()
+{
+    // Every preamble we ask for is no longer than the window the duty cycle stays awake for, so it would sleep through
+    // nothing and startReceiveDutyCycleAuto() falls back to this same command anyway. Sending it outright is what lets
+    // rxArmedContinuous describe the RX the chip is really in, so resumeRunningReceive() can pick it back up after
+    // RX_DONE instead of paying for a standby and a restart. A CH341 host and WASM need it for their own reasons: a
+    // restart is deaf for several round trips over that bus, and duty-cycle sleep parks BUSY high between windows and
+    // stalls the WebUSB link. If a preamble ever outgrows the wake window, restore the duty-cycled arm and a flag
+    // saying which one was sent; this assert is here to say so.
+    static_assert(preambleLengthDefault <= 2 * rxDutyCycleMinSymbols &&
+                      wideLoraPreambleLengthDefault <= 2 * rxDutyCycleMinSymbols,
+                  "a preamble longer than the duty cycle's wake window would really sleep, so this arm would no longer "
+                  "be the continuous RX rxArmedContinuous claims");
+    return lora.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_INF, MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS);
+}
+
+#ifdef MESHTASTIC_RX_READOUT_TASK
+template <typename T> bool INTERRUPT_ATTR SX126xInterface<T>::rearmReceiveFromIsr()
+{
+    // The interrupt cannot call RadioLib, so the readout task, above the main loop, re-arms as soon as it returns.
+    rearmState = REARM_PENDING;
+    if (requestRearmFromIsr())
+        return true;
+    rearmState = REARM_NONE;
+    return false;
+}
+
+template <typename T> void SX126xInterface<T>::rearmReceiveFromTask()
+{
+    // Outside any radio-thread sequence. If the thread got there first, it took the re-arm over and left nothing to do.
+    RadioSequence seq(this);
+    if (rearmState != REARM_PENDING)
+        return;
+    // What startReceive() sends, less the standby: after TX_DONE the chip has already fallen back to standby.
+    setTransmitEnable(false);
+    const int16_t err = startRxCommand();
+    rearmErr = err;
+    if (err != RADIOLIB_ERR_NONE) {
+        rearmState = REARM_FAILED;
+        return;
+    }
+    rearmState = REARM_ARMED;
+    // The TX_DONE interrupt detached the radio's interrupt. Attach the RX one now, so a frame that ends before the radio
+    // thread runs wakes this task to read it, rather than waiting in the chip for the next frame to overwrite it.
+    rxArmedBeforeTxDone = true;
+    enableInterrupt(isrRxLevel0);
+}
+
+template <typename T> bool SX126xInterface<T>::adoptReceiveArmedFromIsr()
+{
+    // Called inside the post-TX sequence, so the task cannot be mid re-arm: it has either finished or not started, and
+    // clearing the state here stops it starting.
+    const uint8_t state = rearmState;
+    rearmState = REARM_NONE;
+    rxArmedBeforeTxDone = false; // this is the TX_DONE; frames the task read meanwhile were delivered ahead of it
+    if (state == REARM_FAILED)
+        LOG_WARN("SX126X RX re-arm at TX_DONE failed %s%d, restarting RX", radioLibErr, rearmErr);
+    if (state != REARM_ARMED)
+        return false;
+    RadioLibInterface::startReceive();
+    rxArmedContinuous = true;
+    enableInterrupt(isrRxLevel0);
+    checkRxDoneIrqFlag(); // an RX_DONE that completed before the interrupt was attached
+    return true;
+}
+#endif
 
 /** Is the channel currently active? */
 template <typename T> bool SX126xInterface<T>::isChannelActive()
@@ -899,13 +976,18 @@ template <typename T> bool SX126xInterface<T>::sleep()
     earlyStagedLen = 0;         // nor the buffer
 #endif
     cadParamsValid = false; // likewise the CAD parameters
-    (void)trySetStandby();  // Stop any pending operations - the chip is being put to sleep, a failure must not crash
+    // trySetStandby() and the sleep command below are one sequence: a readout landing between them talks to a chip
+    // that is on its way down, and the standby would be undone by the arm a readout's caller can follow it with.
+    RadioSequence seq(this);
+    (void)trySetStandby(); // Stop any pending operations - the chip is being put to sleep, a failure must not crash
 
     // turn off TCXO if it was powered
     // FIXME - this isn't correct
     // lora.setTCXO(0);
 
-    // put chipset into sleep mode (we've already disabled interrupts by now)
+    // put chipset into sleep mode. Interrupts are not necessarily detached here - disable() and NodeDB's
+    // config-reload park both reach this with the ISR still attached - so the lock above is what keeps
+    // the readout task out of it rather than the absence of interrupts.
     bool keepConfig = true;
     lora.sleep(keepConfig); // Note: we do not keep the config, full reinit will be needed
 
