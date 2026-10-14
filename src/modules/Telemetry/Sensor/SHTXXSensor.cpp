@@ -50,12 +50,12 @@ bool SHTXXSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
     _address = dev->address.address;
 
     if (sht.init(*_bus)) {
-        LOG_INFO("%s: init(): success", sensorName);
+        LOG_INFO("%s init success", sensorName);
         getSensorVariant(sht.mSensorType);
         LOG_INFO("%s Sensor detected: %s on 0x%x", sensorName, sensorVariant, _address);
         status = 1;
     } else {
-        LOG_ERROR("%s: init(): failed", sensorName);
+        LOG_ERROR("%s init failed", sensorName);
     }
 
     initI2CSensor();

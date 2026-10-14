@@ -1,0 +1,18 @@
+# DIO3 is a real pin on the part but not one the LR20x0 can raise its interrupt on, so the value
+# is discarded when the config is read and the radio falls back to DIO5. The merged view cannot
+# tell that from an absent key, which is why the range is judged per file.
+Lora:
+  Module: lr2021
+  spidev: spidev0.0
+  CS: 21
+  IRQ: 16
+  Busy: 20
+  Reset: 18
+  IRQ_DIO_NUM: 3
+  rfswitch_table:
+    pins: [DIO6, DIO7, DIO8]
+    MODE_STBY: [LOW, LOW, LOW]
+    MODE_RX: [HIGH, LOW, HIGH]
+    MODE_TX: [HIGH, HIGH, HIGH]
+    MODE_RX_HF: [LOW, LOW, LOW]
+    MODE_TX_HF: [LOW, LOW, LOW]

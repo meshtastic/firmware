@@ -38,7 +38,6 @@ class TwoButton : protected concurrency::OSThread
     void setWiring(uint8_t whichButton, uint8_t pin, bool internalPullup = false);
     void setTiming(uint8_t whichButton, uint32_t debounceMs, uint32_t longpressMs);
     void setHandlerDown(uint8_t whichButton, Callback onDown);
-    void setHandlerUp(uint8_t whichButton, Callback onUp);
     void setHandlerShortPress(uint8_t whichButton, Callback onShortPress);
     void setHandlerLongPress(uint8_t whichButton, Callback onLongPress);
 
@@ -71,7 +70,7 @@ class TwoButton : protected concurrency::OSThread
         volatile uint32_t irqAtMillis;      // millis() when button went down
 
         // Per-button event callbacks
-        static void noop(){};
+        static void noop() {};
         std::function<void()> onDown = noop;
         std::function<void()> onUp = noop;
         std::function<void()> onShortPress = noop;

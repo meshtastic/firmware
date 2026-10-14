@@ -14,10 +14,10 @@ class RoutingModule : public ProtobufModule<meshtastic_Routing>
     RoutingModule();
 
     virtual void sendAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex, uint8_t hopLimit = 0,
-                            bool ackWantsAck = false);
+                            bool ackWantsAck = false, const meshtastic_MeshPacket *relaySource = nullptr);
 
     meshtastic_MeshPacket *allocAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex,
-                                       uint8_t hopLimit = 0);
+                                       uint8_t hopLimit = 0, const meshtastic_MeshPacket *relaySource = nullptr);
 
     // Given the hopStart and hopLimit upon reception of a request, return the hop limit to use for the response
     uint8_t getHopLimitForResponse(const meshtastic_MeshPacket &mp);

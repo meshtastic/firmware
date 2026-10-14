@@ -1,0 +1,6 @@
+# FAULT: Telemetry is not a section meshtasticd reads, so the whole block is ignored.
+# Expect an ERROR.
+Lora:
+  Module: sx1262
+Telemetry:
+  Enabled: true

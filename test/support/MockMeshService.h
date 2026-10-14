@@ -6,5 +6,11 @@
 class MockMeshService : public MeshService
 {
   public:
-    void sendClientNotification(meshtastic_ClientNotification *n) override { releaseClientNotificationToPool(n); }
+    void sendClientNotification(meshtastic_ClientNotification *n) override
+    {
+        notificationCount++;
+        releaseClientNotificationToPool(n);
+    }
+
+    uint32_t notificationCount = 0;
 };

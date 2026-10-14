@@ -2,6 +2,10 @@
 
 #include "../freertosinc.h"
 
+#if !defined(HAS_FREE_RTOS) && defined(ARCH_PORTDUINO)
+#include <pthread.h>
+#endif
+
 namespace concurrency
 {
 
@@ -22,6 +26,11 @@ class Lock
     // Must not be called from an ISR.
     void lock();
 
+    /// Locks the lock with timeout.
+    //
+    // Must not be called from an ISR.
+    bool lock(uint32_t timeout);
+
     // Unlocks the lock.
     //
     // Must not be called from an ISR.
@@ -30,6 +39,8 @@ class Lock
   private:
 #ifdef HAS_FREE_RTOS
     SemaphoreHandle_t handle;
+#elif defined(ARCH_PORTDUINO)
+    pthread_mutex_t mutex;
 #endif
 };
 

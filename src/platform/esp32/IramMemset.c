@@ -3,8 +3,13 @@
 #include <stdint.h>
 
 #include "esp_attr.h"
+#include "sdkconfig.h"
 
 #ifdef ESP32_FORCE_IRAM_MEMSET
+
+#if !defined(CONFIG_IDF_TARGET_ESP32)
+#error "ESP32_FORCE_IRAM_MEMSET is classic-ESP32 only: cache_is_enabled() reads a DPORT register that other targets do not map."
+#endif
 
 /*
  * T-Beam/classic ESP32 boot workaround
@@ -16,6 +21,9 @@
  * We wrap memcpy/memset for the T-Beam environment. Fast path uses the
  * normal libc routines when cache is enabled; slow path uses IRAM-safe byte
  * loops when cache is disabled.
+ *
+ * Classic ESP32 only: the probe below reads DPORT_PRO_CACHE_CTRL_REG, an address
+ * no other target maps, so the guard above keeps this off the S3/C3/C6.
  */
 
 extern void *__real_memset(void *dst, int c, size_t n);

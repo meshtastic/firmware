@@ -57,8 +57,8 @@ class NeighborInfoModule : public ProtobufModule<meshtastic_NeighborInfo>, priva
     /* update neighbors with subpacket sniffed from network */
     void updateNeighbors(const meshtastic_MeshPacket &mp, const meshtastic_NeighborInfo *np);
 
-    /* update a NeighborInfo packet with our NodeNum as last_sent_by_id */
-    void alterReceivedProtobuf(meshtastic_MeshPacket &p, meshtastic_NeighborInfo *n) override;
+    /* The node whose transmission of this NeighborInfo we heard, or 0 if it can't be identified */
+    NodeNum lastTransmitter(const meshtastic_MeshPacket &mp, const meshtastic_NeighborInfo *np);
 
     /* Does our periodic broadcast */
     int32_t runOnce() override;

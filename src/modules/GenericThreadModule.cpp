@@ -17,6 +17,9 @@ int32_t GenericThreadModule::runOnce()
     if (!enabled)
         return disable();
 
+    // Sample first-run gate: the body is where custom one-shot init goes. With logging compiled out (e.g.
+    // DEBUG_MUTE) only the flag assignment is left, which cppcheck reads as a redundant condition.
+    // cppcheck-suppress duplicateConditionalAssign
     if (firstTime) {
         // do something the first time we run
         firstTime = 0;

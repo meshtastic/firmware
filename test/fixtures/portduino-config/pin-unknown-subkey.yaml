@@ -1,0 +1,8 @@
+# FAULT: chipline is not a pin-mapping sub-key -- only pin, gpiochip and line are
+# read. The typo means the line number is never applied. Expect an ERROR.
+Lora:
+  Module: sx1262
+  CS:
+    pin: 21
+    gpiochip: 0
+    chipline: 4

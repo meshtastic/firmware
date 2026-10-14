@@ -50,10 +50,15 @@ class TouchScreenBase : public Observable<const InputEvent *>, public concurrenc
     bool _touchedOld = false;  // previous touch state
     int16_t _first_x, _last_x; // horizontal swipe direction
     int16_t _first_y, _last_y; // vertical swipe direction
-    time_t _start;             // for LONG_PRESS
-    uint32_t _lastTouchSeenMs; // helps suppress brief touch-controller dropouts
-    bool _tapped;              // for DOUBLE_TAP
-    uint32_t _lastRun = 0;     // helps suppress too fast consecutive runOnce() executions
+    uint32_t _pressStartMs;    // when the current touch began; read via Throttle::hasElapsed()
+
+    // LONG_PRESS repeat suppression while one touch is held: the bool is the armed flag, the
+    // deadline is read only while it is set. No value of the deadline can mean "unarmed".
+    bool _longPressSuppressed;
+    uint32_t _longPressSuppressUntilMs; // meaningful only while _longPressSuppressed
+    uint32_t _lastTouchSeenMs;          // helps suppress brief touch-controller dropouts
+    bool _tapped;                       // for DOUBLE_TAP
+    uint32_t _lastRun = 0;              // helps suppress too fast consecutive runOnce() executions
 
     const char *_originName;
 };

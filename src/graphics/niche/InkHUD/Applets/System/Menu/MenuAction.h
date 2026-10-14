@@ -57,7 +57,6 @@ enum MenuAction {
     SET_REGION_TH,
     SET_REGION_LORA_24,
     SET_REGION_UA_433,
-    SET_REGION_UA_868,
     SET_REGION_MY_433,
     SET_REGION_MY_919,
     SET_REGION_SG_923,
@@ -142,6 +141,12 @@ enum MenuAction {
     MAP_ZOOM_IN,
     MAP_ZOOM_OUT,
     MAP_ZOOM_RESET,
+    // Waypoints (WaypointListApplet)
+    REMOVE_WAYPOINT,
+    SELECT_GEOFENCE_WAYPOINT,
+    TOGGLE_GEOFENCE_ENTER,
+    TOGGLE_GEOFENCE_EXIT,
+    TOGGLE_GEOFENCE_FAVORITES_ONLY,
 };
 
 } // namespace NicheGraphics::InkHUD

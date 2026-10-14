@@ -8,7 +8,6 @@ namespace graphics
 
 /// Forward declarations
 class Screen;
-class DebugInfo;
 
 /**
  * @brief Debug and diagnostic drawing functions
@@ -18,15 +17,8 @@ class DebugInfo;
  */
 namespace DebugRenderer
 {
-// Debug frame functions
-void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
-void drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
+// WiFi status display
 void drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
-
-// Trampoline functions for framework callback compatibility
-void drawDebugInfoTrampoline(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
-void drawDebugInfoSettingsTrampoline(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
-void drawDebugInfoWiFiTrampoline(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
 
 // LoRa information display
 void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);

@@ -4,19 +4,16 @@
 # As this is not a long running service, health-checks are not required. ClusterFuzzLite
 # also only works if the user remains unchanged from the base image (it expects to run
 # as root).
-# trunk-ignore-all(trivy/DS026): No healthcheck is needed for this builder container
+# trunk-ignore-all(trivy/DS-0026): No healthcheck is needed for this builder container
 # trunk-ignore-all(checkov/CKV_DOCKER_2): No healthcheck is needed for this builder container
 # trunk-ignore-all(checkov/CKV_DOCKER_3): We must run as root for this container
-# trunk-ignore-all(trivy/DS002): We must run as root for this container
-# trunk-ignore-all(checkov/CKV_DOCKER_8): We must run as root for this container
-# trunk-ignore-all(hadolint/DL3002): We must run as root for this container
+# trunk-ignore-all(trivy/DS-0002): We must run as root for this container
 
 FROM gcr.io/oss-fuzz-base/base-builder:v1
 
 ENV PIP_ROOT_USER_ACTION=ignore
 
 # trunk-ignore(hadolint/DL3008): apt packages are not pinned.
-# trunk-ignore(terrascan/AC_DOCKER_0002): apt packages are not pinned.
 RUN apt-get update && apt-get install --no-install-recommends -y \
         cmake git zip libgpiod-dev libjsoncpp-dev libbluetooth-dev libi2c-dev \
         libunistring-dev libmicrohttpd-dev libgnutls28-dev libgcrypt20-dev \

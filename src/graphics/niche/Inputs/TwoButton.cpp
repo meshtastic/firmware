@@ -117,14 +117,6 @@ void TwoButton::setHandlerDown(uint8_t whichButton, Callback onDown)
     buttons[whichButton].onDown = onDown;
 }
 
-// Set what should happen when a button becomes unpressed
-// Use this to implement a "While held" behavior
-void TwoButton::setHandlerUp(uint8_t whichButton, Callback onUp)
-{
-    assert(whichButton < 2);
-    buttons[whichButton].onUp = onUp;
-}
-
 // Set what should happen when a "short press" event has occurred
 void TwoButton::setHandlerShortPress(uint8_t whichButton, Callback onShortPress)
 {

@@ -16,6 +16,7 @@
 #include "graphics/niche/InkHUD/Applets/User/Positions/PositionsApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/RecentsList/RecentsListApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/ThreadedMessage/ThreadedMessageApplet.h"
+#include "graphics/niche/InkHUD/Applets/User/Waypoints/WaypointListApplet.h"
 #include "graphics/niche/InkHUD/SystemApplet.h"
 
 // Shared NicheGraphics components
@@ -48,9 +49,9 @@ void setupNicheGraphics()
     inkhud->twoWayRocker = true;
 
     // Fonts
-    InkHUD::Applet::fontLarge = FREESANS_9PT_WIN1252;
-    InkHUD::Applet::fontMedium = FREESANS_6PT_WIN1252;
-    InkHUD::Applet::fontSmall = FREESANS_6PT_WIN1252;
+    InkHUD::Applet::fontLarge = FREESANS_9PT;
+    InkHUD::Applet::fontMedium = FREESANS_6PT;
+    InkHUD::Applet::fontSmall = FREESANS_6PT;
 
     // Small display defaults
     inkhud->persistence->settings.rotation = 0;
@@ -67,6 +68,7 @@ void setupNicheGraphics()
     inkhud->addApplet("Channel 0", new InkHUD::ThreadedMessageApplet(0), true, true);   // Activated, Autoshown
     inkhud->addApplet("Channel 1", new InkHUD::ThreadedMessageApplet(1), false, false); // -
     inkhud->addApplet("Positions", new InkHUD::PositionsApplet, true);                  // Activated
+    inkhud->addApplet("Waypoints", new InkHUD::WaypointListApplet, false, false);       // -
     inkhud->addApplet("Favorites Map", new InkHUD::FavoritesMapApplet, false, false);   // -
     inkhud->addApplet("Recents List", new InkHUD::RecentsListApplet, false, false);     // -
     inkhud->addApplet("Heard", new InkHUD::HeardApplet, true, false, 0); // Activated, not autoshown, default on tile 0

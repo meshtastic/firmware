@@ -1,0 +1,7 @@
+# FAULT: six pins declared but only the first five are read (rfswitch_dio_pins[5]),
+# so the last one is silently dropped.
+Lora:
+  Module: lr1121
+  rfswitch_table:
+    pins: [DIO5, DIO6, DIO7, DIO8, DIO10, DIO5]
+    MODE_STBY: [LOW, LOW, LOW, LOW, LOW, LOW]

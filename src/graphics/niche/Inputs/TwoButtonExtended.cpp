@@ -194,14 +194,6 @@ void TwoButtonExtended::setHandlerDown(uint8_t whichButton, Callback onDown)
     buttons[whichButton].onDown = onDown;
 }
 
-// Set what should happen when a button becomes unpressed
-// Use this to implement a "While held" behavior
-void TwoButtonExtended::setHandlerUp(uint8_t whichButton, Callback onUp)
-{
-    assert(whichButton < 2);
-    buttons[whichButton].onUp = onUp;
-}
-
 // Set what should happen when a "short press" event has occurred
 void TwoButtonExtended::setHandlerShortPress(uint8_t whichButton, Callback onPress)
 {
@@ -215,26 +207,6 @@ void TwoButtonExtended::setHandlerLongPress(uint8_t whichButton, Callback onLong
 {
     assert(whichButton < 2);
     buttons[whichButton].onLongPress = onLongPress;
-}
-
-// Set what should happen when a joystick button becomes pressed
-// Use this to implement a "while held" behavior
-void TwoButtonExtended::setJoystickDownHandlers(Callback uDown, Callback dDown, Callback lDown, Callback rDown)
-{
-    joystick[Direction::UP].onDown = uDown;
-    joystick[Direction::DOWN].onDown = dDown;
-    joystick[Direction::LEFT].onDown = lDown;
-    joystick[Direction::RIGHT].onDown = rDown;
-}
-
-// Set what should happen when a joystick button becomes unpressed
-// Use this to implement a "while held" behavior
-void TwoButtonExtended::setJoystickUpHandlers(Callback uUp, Callback dUp, Callback lUp, Callback rUp)
-{
-    joystick[Direction::UP].onUp = uUp;
-    joystick[Direction::DOWN].onUp = dUp;
-    joystick[Direction::LEFT].onUp = lUp;
-    joystick[Direction::RIGHT].onUp = rUp;
 }
 
 // Set what should happen when a "press" event has fired

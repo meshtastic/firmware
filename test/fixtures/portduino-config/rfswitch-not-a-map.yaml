@@ -1,0 +1,4 @@
+# FAULT: rfswitch_table given a scalar instead of a mapping.
+Lora:
+  Module: lr1121
+  rfswitch_table: DIO5

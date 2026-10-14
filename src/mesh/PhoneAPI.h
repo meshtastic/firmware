@@ -8,8 +8,8 @@
 #include <cstdint>
 #include <deque>
 #include <iterator>
+#include <map>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 // NodeNum stored as raw uint32_t below; including MeshTypes.h here breaks the
@@ -53,7 +53,8 @@ class PhoneAPI
         STATE_SEND_OTHER_NODEINFOS, // states progress in this order as the device sends to to the client
         STATE_SEND_FILEMANIFEST,    // Send file manifest
         STATE_SEND_COMPLETE_ID,
-        STATE_SEND_PACKETS // live mesh packets + any cached satellite-DB replay that trails sync completion
+        STATE_SEND_PACKETS,  // live mesh packets + any cached satellite-DB replay that trails sync completion
+        STATE_RESEND_MY_INFO // one-shot: our node num moved after the handshake, re-announce and fall back
     };
 
     // Satellite-DB replay (positions / telemetry / environment / status) used to live
@@ -73,8 +74,8 @@ class PhoneAPI
 
     uint8_t config_state = 0;
 
-    // Hashmap of timestamps for last time we received a packet on the API per portnum
-    std::unordered_map<meshtastic_PortNum, uint32_t> lastPortNumToRadio;
+    // Timestamps of the last API packet per portnum. std::map keeps the libstdc++ hashtable out of small images.
+    std::map<meshtastic_PortNum, uint32_t> lastPortNumToRadio;
     uint32_t recentToRadioPacketIds[20]; // Last 20 ToRadio MeshPacket IDs we have seen
 
     /**
@@ -132,6 +133,9 @@ class PhoneAPI
     std::vector<meshtastic_FileInfo> filesManifest = {};
 
     void resetReadIndex() { readIndex = 0; }
+
+    /// Load fromRadioScratch with a MyInfo for this connection and record the number it carried.
+    void fillMyInfo();
 
   public:
     PhoneAPI();
@@ -284,10 +288,12 @@ class PhoneAPI
     void prefetchReplayEnvironment();
     void beginReplayStatus();
     void prefetchReplayStatus();
-    meshtastic_MeshPacket makeReplayPositionPacket(uint32_t num, const meshtastic_PositionLite &pos);
-    meshtastic_MeshPacket makeReplayTelemetryPacket(uint32_t num, const meshtastic_DeviceMetrics &metrics);
-    meshtastic_MeshPacket makeReplayEnvironmentPacket(uint32_t num, const meshtastic_EnvironmentMetrics &env);
-    meshtastic_MeshPacket makeReplayStatusPacket(uint32_t num, const meshtastic_StatusMessage &status);
+    meshtastic_MeshPacket makeReplayPositionPacket(const meshtastic_NodeInfoLite *header, const meshtastic_PositionLite &pos);
+    meshtastic_MeshPacket makeReplayTelemetryPacket(const meshtastic_NodeInfoLite *header,
+                                                    const meshtastic_DeviceMetrics &metrics);
+    meshtastic_MeshPacket makeReplayEnvironmentPacket(const meshtastic_NodeInfoLite *header,
+                                                      const meshtastic_EnvironmentMetrics &env);
+    meshtastic_MeshPacket makeReplayStatusPacket(const meshtastic_NodeInfoLite *header, const meshtastic_StatusMessage &status);
 
     // Post-sync replay drain: pop one cached packet from the active phase, advancing
     // through positions -> telemetry -> environment -> status until everything is drained.
@@ -319,4 +325,18 @@ class PhoneAPI
 
     /// If the mesh service tells us fromNum has changed, tell the phone
     virtual int onNotify(uint32_t newValue) override;
+
+  public:
+    /// How the lockdown admin gate should treat a phone->radio packet.
+    enum class LocalAdminGate {
+        NotAdmin,              ///< Not a decodable ADMIN_APP payload; normal handling.
+        LockdownAuth,          ///< A lockdown_auth payload; authenticate the connection inline.
+        DropUnauthorized,      ///< Admin payload from a connection that has not authenticated; drop.
+        AuthorizedPassThrough, ///< Admin payload from an authorized connection; normal handling.
+    };
+
+    /// Classify a phone->radio packet for the lockdown admin gate, ignoring the wire `from` (which a
+    /// client can forge) and deciding on the connection's authorization. Fills outAdmin for lockdown.
+    static LocalAdminGate classifyLocalAdminPacket(const meshtastic_MeshPacket &p, bool adminAuthorized,
+                                                   meshtastic_AdminMessage &outAdmin);
 };

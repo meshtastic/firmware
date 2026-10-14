@@ -2,9 +2,9 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerMon.h"
-#include "RTC.h"
 #include "Router.h"
 #include "configuration.h"
+#include "gps/RTC.h"
 #include "main.h"
 #include "sleep.h"
 #include "target_specific.h"
@@ -125,7 +125,7 @@ int32_t PowerStressModule::runOnce()
                 // FIXME - implement
                 break;
             default:
-                LOG_ERROR("PowerStress operation %d not yet implemented!", p.cmd);
+                LOG_ERROR("PowerStress operation %d not yet implemented", p.cmd);
                 sleep_msec = 0; // Don't do whatever sleep was requested...
                 break;
             }

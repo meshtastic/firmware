@@ -1,0 +1,3 @@
+# DIO3 is out of range for the LR20x0 interrupt, so this overrides DIO9 with nothing usable.
+Lora:
+  IRQ_DIO_NUM: 3

@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Built by bin/build-winget-package.ps1, which supplies the preprocessor variables below. -->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
+  <!-- ProductCode is derived from the version by the build script so the winget manifest can
+       state it without having to read the finished MSI back. -->
+  <Package Name="meshtasticd"
+           Manufacturer="Meshtastic"
+           Version="$(var.Version)"
+           ProductCode="$(var.ProductCode)"
+           UpgradeCode="8f2c6d41-5b3a-4c8e-9f27-1d0a6b4e73c5"
+           Scope="perMachine"
+           Compressed="yes">
+
+    <SummaryInformation Description="Meshtastic daemon for attached LoRa radio hardware" />
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of meshtasticd is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <Launch Condition="Installed OR VersionNT64" Message="meshtasticd requires 64-bit Windows." />
+
+    <StandardDirectory Id="ProgramFiles6432Folder">
+      <Directory Id="INSTALLFOLDER" Name="Meshtastic" />
+    </StandardDirectory>
+
+    <!-- A LocalSystem service cannot read a user's Roaming profile, so config and the portduino
+         virtual filesystem both live in the machine-wide ProgramData tree. -->
+    <StandardDirectory Id="CommonAppDataFolder">
+      <Directory Id="DATAFOLDER" Name="Meshtastic" />
+    </StandardDirectory>
+
+    <Feature Id="Main" Title="meshtasticd" Level="1">
+      <ComponentGroupRef Id="ProductComponents" />
+    </Feature>
+
+    <ComponentGroup Id="ProductComponents">
+      <Component Directory="INSTALLFOLDER" Guid="3a7e9c02-6f14-4b58-8d93-2c5f0a1e64b7">
+        <File Id="meshtasticdExe" Source="$(var.BinaryPath)" Name="meshtasticd.exe" KeyPath="yes" />
+
+        <!-- -d keeps the portduino VFS out of the LocalSystem profile. Neither path may end in a
+             backslash: a trailing one would escape the closing quote in the ImagePath. -->
+        <ServiceInstall Id="MeshtasticdService"
+                        Name="meshtasticd"
+                        DisplayName="Meshtastic Daemon"
+                        Description="Runs a Meshtastic node against attached LoRa hardware and serves the client API."
+                        Type="ownProcess"
+                        Start="auto"
+                        ErrorControl="normal"
+                        Account="LocalSystem"
+                        Vital="no"
+                        Arguments="--service -c &quot;[DATAFOLDER]config.yaml&quot; -d &quot;[DATAFOLDER]data&quot;">
+          <!-- Covers a radio that is not enumerated yet at boot: the node exits, the SCM retries.
+               MSI's own ServiceConfig elements are documented as unreliable, hence the util ones. -->
+          <util:ServiceConfig FirstFailureActionType="restart"
+                              SecondFailureActionType="restart"
+                              ThirdFailureActionType="restart"
+                              RestartServiceDelayInSeconds="30"
+                              ResetPeriodInDays="1" />
+        </ServiceInstall>
+
+        <ServiceControl Id="MeshtasticdServiceControl"
+                        Name="meshtasticd"
+                        Start="install"
+                        Stop="both"
+                        Remove="uninstall"
+                        Wait="yes" />
+      </Component>
+
+      <!-- NeverOverwrite protects an edited config on upgrade and repair; Permanent leaves it (and
+           the node database beside it) in place on uninstall. -->
+      <Component Directory="DATAFOLDER"
+                 Guid="b41d8e57-9a20-4f63-b7c1-5e08d2a6394f"
+                 NeverOverwrite="yes"
+                 Permanent="yes">
+        <File Id="configYaml" Source="$(var.ConfigPath)" Name="config.yaml" KeyPath="yes" />
+      </Component>
+
+    </ComponentGroup>
+  </Package>
+</Wix>

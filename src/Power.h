@@ -30,6 +30,12 @@
 #define NUM_CELLS 1
 #endif
 
+/// Consecutive below-cutoff readings needed before the low-battery deep sleep fires.
+static constexpr uint8_t LOW_VOLTAGE_READINGS_BEFORE_SHUTDOWN = 10;
+
+/// Advance the low-battery shutdown counter by one reading; true once the device should deep sleep.
+bool updateLowVoltageCounter(uint8_t &counter, bool hasBattery, bool hasUsb, uint16_t battMv, uint16_t cutoffMv);
+
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
 #include "modules/Telemetry/Sensor/nullSensor.h"
 #if __has_include(<Adafruit_INA219.h>)
@@ -93,11 +99,12 @@ class Power : public concurrency::OSThread
 
     void powerCommandsCheck();
     void readPowerStatus();
+    void logHeapUsage();
     virtual bool setup();
     virtual int32_t runOnce() override;
     void setStatusHandler(meshtastic::PowerStatus *handler) { statusHandler = handler; }
     const uint16_t OCV[11] = {OCV_ARRAY};
-    bool isLowBattery() { return low_voltage_counter >= 10; };
+    bool isLowBattery() { return low_voltage_counter >= LOW_VOLTAGE_READINGS_BEFORE_SHUTDOWN; };
 
 #ifdef ARCH_ESP32
     int beforeLightSleep(void *unused);
@@ -120,10 +127,16 @@ class Power : public concurrency::OSThread
     bool max17048Init();
     /// Setup a Lipo charger
     bool lipoChargerInit();
+    /// Retry a fuel gauge that did not come up during setup
+    void lipoChargerRetry();
     /// Setup a meshSolar battery sensor
     bool meshSolarInit();
     /// Setup a serial battery sensor
     bool serialBatteryInit();
+#ifdef HAS_ADS1115
+    /// Setup ADS1115 I2C battery level sensor
+    bool ads1115Init();
+#endif
 
   private:
     void shutdown();
@@ -131,6 +144,9 @@ class Power : public concurrency::OSThread
     // open circuit voltage lookup table
     uint8_t low_voltage_counter;
     uint32_t lastLogTime = 0;
+    // Periodic free-heap logging: time of the last line emitted, and the reading it carried
+    uint32_t lastHeapLogTime = 0;
+    uint32_t lastHeapLogFree = 0;
 
 #ifdef ARCH_ESP32
     // Get notified when lightsleep begins and ends

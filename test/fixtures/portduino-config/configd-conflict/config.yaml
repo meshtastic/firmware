@@ -1,0 +1,12 @@
+# The primary config of a three-file set (see config.d/ alongside it).
+# FAULT, and it is invisible in this file alone: two more files in config.d/ each open
+# their own "Lora:" section, and the keys below that they do not repeat -- notably
+# DIO3_TCXO_VOLTAGE -- are reset to their defaults when the last of them is loaded.
+# The effective configuration ends up with no TCXO voltage at all.
+General:
+  ConfigDirectory: config.d/
+Lora:
+  Module: sx1262
+  spidev: spidev0.0
+  DIO3_TCXO_VOLTAGE: 1800
+  CS: 21

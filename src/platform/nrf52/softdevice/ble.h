@@ -139,7 +139,7 @@ enum BLE_COMMON_OPTS {
  * parameter. If that value has not been configured for any connections then @ref BLE_GATT_ATT_MTU_DEFAULT must be used instead.
  */
 #define BLE_EVT_LEN_MAX(ATT_MTU)                                                                                                 \
-    (offsetof(ble_evt_t, evt.gattc_evt.params.prim_srvc_disc_rsp.services) + ((ATT_MTU)-1) / 4 * sizeof(ble_gattc_service_t))
+    (offsetof(ble_evt_t, evt.gattc_evt.params.prim_srvc_disc_rsp.services) + ((ATT_MTU) - 1) / 4 * sizeof(ble_gattc_service_t))
 
 /** @defgroup BLE_USER_MEM_TYPES User Memory Types
  * @{ */

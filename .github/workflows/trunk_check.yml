@@ -9,9 +9,8 @@ permissions: read-all
 jobs:
   trunk_check:
     name: Trunk Check Runner
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
-      checks: write # For trunk to post annotations
       contents: read # For repo checkout
 
     steps:
@@ -19,6 +18,6 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Trunk Check
-        uses: trunk-io/trunk-action@v1
+        uses: trunk-io/trunk-action@v2.0.0
         with:
-          save-annotations: true
+          cache: false

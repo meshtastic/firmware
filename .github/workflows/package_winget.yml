@@ -1,0 +1,62 @@
+name: Validate winget manifest
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-winget:
+    runs-on: windows-2025
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Resolve the newest release and download its MSI
+        id: release
+        shell: pwsh
+        run: |
+          $tag = gh release list --limit 1 --json tagName --jq '.[0].tagName'
+          if (-not $tag) { throw 'No releases found.' }
+          New-Item -ItemType Directory -Force -Path release/download | Out-Null
+          gh release download $tag --pattern '*.msi' --dir release/download
+          $msis = @(Get-ChildItem release/download/*.msi)
+          if ($msis.Count -eq 0) { throw "Release $tag carries no MSI asset." }
+          if ($msis.Count -gt 1) { throw "Release $tag carries $($msis.Count) MSIs; this validates one architecture." }
+          $parsed = [regex]::Match($msis[0].Name, '^meshtasticd-([0-9][0-9A-Za-z.\-]*)-(x64|arm64)\.msi$')
+          if (-not $parsed.Success) { throw "Cannot parse version and architecture out of $($msis[0].Name)." }
+          "tag=$tag", "version=$($parsed.Groups[1].Value)", "arch=$($parsed.Groups[2].Value)", "msi=$($msis[0].FullName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate manifests for the published MSI
+        shell: pwsh
+        run: ./bin/build-winget-package.ps1 -MsiPath $env:MSI_PATH -Version $env:PKG_VERSION -Architecture $env:PKG_ARCH -ReleaseTag $env:RELEASE_TAG -Validate
+        env:
+          MSI_PATH: ${{ steps.release.outputs.msi }}
+          PKG_VERSION: ${{ steps.release.outputs.version }}
+          PKG_ARCH: ${{ steps.release.outputs.arch }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+
+      - name: Verify the manifest URL resolves to the published asset
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem release/winget/manifests -Recurse -Filter '*.installer.yaml' | Select-Object -First 1
+          $url = (Select-String -Path $installer.FullName -Pattern 'InstallerUrl:\s*(\S+)').Matches[0].Groups[1].Value
+          $expected = (Select-String -Path $installer.FullName -Pattern 'InstallerSha256:\s*(\S+)').Matches[0].Groups[1].Value
+          Invoke-WebRequest -Uri $url -OutFile fetched.msi
+          $actual = (Get-FileHash fetched.msi -Algorithm SHA256).Hash
+          if ($actual -ne $expected) {
+            throw "InstallerUrl $url hashes to $actual, manifest claims $expected"
+          }
+          "URL and hash agree: $url"
+
+      - name: Upload the manifests as an artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: winget-manifests-${{ steps.release.outputs.version }}
+          overwrite: true
+          path: release/winget/manifests/

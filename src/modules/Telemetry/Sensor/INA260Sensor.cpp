@@ -40,4 +40,9 @@ uint16_t INA260Sensor::getBusVoltageMv()
     return lround(ina260.readBusVoltage());
 }
 
+int16_t INA260Sensor::getCurrentMa()
+{
+    return lround(ina260.readCurrent());
+}
+
 #endif

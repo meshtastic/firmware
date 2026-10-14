@@ -1,0 +1,8 @@
+# FAULT: Logging.AsciiLogs is one of only two settings read WITHOUT a fallback
+# (.as<bool>() with no default), so a value that will not convert throws, loadConfig()
+# returns false and meshtasticd refuses to start. Before this check existed --check
+# called this file clean while the daemon would not boot on it.
+Lora:
+  Module: sx1262
+Logging:
+  AsciiLogs: yes-please

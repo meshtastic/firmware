@@ -496,8 +496,10 @@ We keep this separate latest-message cache for this purpose, because:
 
 Broadcasts and DMs take different paths into `messageStore`:
 
-- **Broadcasts** - `ThreadedMessageApplet::handleReceived()` calls `messageStore.addFromPacket()`. `Events::onReceiveTextMessage()` then updates `latestMessage.broadcast` separately for fast access by `AllMessageApplet` and `NotificationApplet`.
-- **DMs** - `ThreadedMessageApplet` skips DMs entirely. `Events::onReceiveTextMessage()` calls `messageStore.addFromPacket()` directly and stores the result in `latestMessage.dm`.
+- **Broadcasts** - `ThreadedMessageApplet::handleReceived()` calls `messageStore.tryAddFromPacket()`. `Events::onReceiveTextMessage()` then updates `latestMessage.broadcast` separately for fast access by `AllMessageApplet` and `NotificationApplet`.
+- **DMs** - `ThreadedMessageApplet` skips DMs entirely. `Events::onReceiveTextMessage()` calls `messageStore.tryAddFromPacket()` directly and stores the result in `latestMessage.dm`.
+
+`tryAddFromPacket()` returns `nullptr` when the packet is filtered out (see `shouldStorePacket()`), so both paths must null-check before use.
 
 #### Saving / Loading
 
@@ -788,7 +790,7 @@ This mapping of emoji to control characters is fairly arbitrary. Selection was i
 | `0x05`     | 👋                                             |
 | `0x06`     | ☀                                              |
 | ~~`0x07`~~ | (bell char, unused)                            |
-| `0x08`     | 🌧                                             |
+| `0x08`     | 🌧                                              |
 | `0x09`     | ☁                                              |
 | ~~`0x0A`~~ | (line feed, unused)                            |
 | `0x0B`     | ♥                                              |

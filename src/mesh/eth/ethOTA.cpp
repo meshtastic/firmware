@@ -1,3 +1,4 @@
+#include "UptimeClock.h"
 #include "configuration.h"
 
 #if HAS_ETHERNET && defined(HAS_ETHERNET_OTA)
@@ -99,7 +100,7 @@ static bool authenticateClient(EthernetClient &client)
     // Rate-limit after failed auth - close silently so the error byte is not
     // misinterpreted as part of the nonce by a re-trying client.
     if (lastAuthFailure != 0 && (millis() - lastAuthFailure) < OTA_AUTH_COOLDOWN_MS) {
-        LOG_WARN("ETH OTA: Auth cooldown active, rejecting connection");
+        LOG_WARN("ETH OTA: Auth cooldown, reject connection");
         client.stop();
         return false;
     }
@@ -119,7 +120,7 @@ static bool authenticateClient(EthernetClient &client)
     uint8_t clientHash[OTA_HASH_SIZE];
     if (!readExact(client, clientHash, OTA_HASH_SIZE)) {
         LOG_WARN("ETH OTA: Timeout reading auth response");
-        lastAuthFailure = millis();
+        lastAuthFailure = Time::skipZero(Time::getMillis());
         return false;
     }
 
@@ -136,7 +137,7 @@ static bool authenticateClient(EthernetClient &client)
     if (diff != 0) {
         LOG_WARN("ETH OTA: Authentication failed");
         client.write(OTA_ERR_AUTH);
-        lastAuthFailure = millis();
+        lastAuthFailure = Time::skipZero(Time::getMillis());
         return false;
     }
 
@@ -260,7 +261,7 @@ static void handleOTAClient(EthernetClient &client)
         return;
     }
 
-    LOG_INFO("ETH OTA: Update staged successfully (%u bytes). Rebooting...", hdr.firmwareSize);
+    LOG_INFO("ETH OTA: Update staged (%u bytes). Rebooting", hdr.firmwareSize);
     client.write(OTA_OK);
     client.flush();
     delay(500);

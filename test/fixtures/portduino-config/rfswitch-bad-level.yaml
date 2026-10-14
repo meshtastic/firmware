@@ -1,0 +1,9 @@
+# FAULT: anything that is not the exact string "HIGH" is treated as LOW, so the
+# lowercase "high" and the "On" below are silently switches that never close -- the
+# quietest way to end up with a radio that cannot transmit. Expect an ERROR each.
+Lora:
+  Module: lr1121
+  rfswitch_table:
+    pins: [DIO5, DIO6]
+    MODE_STBY: [LOW, LOW]
+    MODE_RX: [high, On]

@@ -16,6 +16,7 @@
 #include "graphics/niche/InkHUD/Applets/User/Positions/PositionsApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/RecentsList/RecentsListApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/ThreadedMessage/ThreadedMessageApplet.h"
+#include "graphics/niche/InkHUD/Applets/User/Waypoints/WaypointListApplet.h"
 
 // Shared NicheGraphics components
 // --------------------------------
@@ -57,9 +58,9 @@ void setupNicheGraphics()
     inkhud->setDisplayResilience(INKHUD_BUILDCONF_DISPLAYRESILIENCE); // Suggest roughly ten
 
     // Select fonts
-    InkHUD::Applet::fontLarge = FREESANS_12PT_WIN1252;
-    InkHUD::Applet::fontMedium = FREESANS_9PT_WIN1252;
-    InkHUD::Applet::fontSmall = FREESANS_6PT_WIN1252;
+    InkHUD::Applet::fontLarge = FREESANS_12PT;
+    InkHUD::Applet::fontMedium = FREESANS_9PT;
+    InkHUD::Applet::fontSmall = FREESANS_6PT;
 
     // Init settings, and customize defaults
     // Values ignored individually if found saved to flash
@@ -74,6 +75,7 @@ void setupNicheGraphics()
     inkhud->addApplet("Channel 0", new InkHUD::ThreadedMessageApplet(0), true, false, 2); // Default on tile 2
     inkhud->addApplet("Channel 1", new InkHUD::ThreadedMessageApplet(1));
     inkhud->addApplet("Positions", new InkHUD::PositionsApplet, true, false, 1); // Default on tile 1
+    inkhud->addApplet("Waypoints", new InkHUD::WaypointListApplet);
     inkhud->addApplet("Favorites Map", new InkHUD::FavoritesMapApplet);
     inkhud->addApplet("Recents List", new InkHUD::RecentsListApplet, true, false, 0); // Default on tile 0
     inkhud->addApplet("Heard", new InkHUD::HeardApplet, true);                        // Background

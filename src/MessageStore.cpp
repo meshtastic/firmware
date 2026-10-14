@@ -5,6 +5,8 @@
 #include "NodeDB.h"
 #include "SPILock.h"
 #include "SafeFile.h"
+#include "Throttle.h"
+#include "UptimeClock.h"
 #include "gps/RTC.h"
 #include "memory/MemAudit.h"
 #include <cstring> // memcpy
@@ -42,6 +44,10 @@ static inline void resetMessagePool()
 // If not enough space remains, wrap around (ring buffer style)
 static inline uint16_t storeTextInPool(const char *src, size_t len)
 {
+    // Pool allocation can fail at boot; getTextFromPool() already maps offset 0 to "" in that case
+    if (!g_messagePool)
+        return 0;
+
     if (len >= MAX_MESSAGE_SIZE)
         len = MAX_MESSAGE_SIZE - 1;
 
@@ -65,6 +71,15 @@ static inline const char *getTextFromPool(uint16_t offset)
     return &g_messagePool[offset];
 }
 
+static inline bool isIgnoredNodeNum(uint32_t nodeNum)
+{
+    if (nodeNum == 0 || nodeNum == NODENUM_BROADCAST)
+        return false;
+
+    const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeNum);
+    return nodeInfoLiteIsIgnored(node);
+}
+
 // Helper: assign a timestamp (RTC if available, else boot-relative)
 static inline void assignTimestamp(StoredMessage &sm)
 {
@@ -73,7 +88,9 @@ static inline void assignTimestamp(StoredMessage &sm)
         sm.timestamp = nowSecs;
         sm.isBootRelative = false;
     } else {
-        sm.timestamp = millis() / 1000;
+        // Uptime seconds, not millis()/1000: a stamp taken before the 32-bit wrap otherwise reads as
+        // newer than "now" afterwards, and upgradeBootRelativeTimestamps() then declines to heal it.
+        sm.timestamp = Time::getUptimeSecs();
         sm.isBootRelative = true;
     }
 }
@@ -121,18 +138,13 @@ static inline uint32_t autosaveIntervalMs()
     return sec * 1000UL;
 }
 
-static inline bool reachedMs(uint32_t now, uint32_t target)
-{
-    return (int32_t)(now - target) >= 0;
-}
-
 // Mark new messages in RAM that need to be saved later
 static inline void markMessageStoreUnsaved()
 {
     g_messageStoreHasUnsavedChanges = true;
 
     if (g_lastAutoSaveMs == 0) {
-        g_lastAutoSaveMs = millis();
+        g_lastAutoSaveMs = Time::getMillis();
     }
 }
 
@@ -142,14 +154,14 @@ static inline void autosaveTick(MessageStore *store)
     if (!store)
         return;
 
-    uint32_t now = millis();
+    uint32_t now = Time::getMillis();
 
     if (g_lastAutoSaveMs == 0) {
         g_lastAutoSaveMs = now;
         return;
     }
 
-    if (!reachedMs(now, g_lastAutoSaveMs + autosaveIntervalMs()))
+    if (Throttle::isWithinTimespanMs(g_lastAutoSaveMs, autosaveIntervalMs()))
         return;
 
     // Autosave interval reached, only save if there are unsaved messages.
@@ -163,15 +175,55 @@ static inline void autosaveTick(MessageStore *store)
 }
 #endif
 
-// Add from incoming/outgoing packet
-const StoredMessage &MessageStore::addFromPacket(const meshtastic_MeshPacket &packet)
+bool MessageStore::shouldStorePacket(const meshtastic_MeshPacket &packet) const
 {
+    const uint32_t localNode = nodeDB->getNodeNum();
+    const bool isDM = packet.to != 0 && packet.to != NODENUM_BROADCAST;
+    if (isDM) {
+        const bool outgoing = packet.from == 0 || packet.from == localNode;
+        const uint32_t peer = outgoing ? packet.to : packet.from;
+        return !isIgnoredNodeNum(peer);
+    }
+
+    if (packet.from != 0 && packet.from != localNode)
+        return !isIgnoredNodeNum(packet.from);
+
+    return true;
+}
+
+bool MessageStore::isMessageVisible(const StoredMessage &msg) const
+{
+    const uint32_t localNode = nodeDB->getNodeNum();
+    if (msg.type == MessageType::DM_TO_US) {
+        const uint32_t peer = (msg.sender == localNode) ? msg.dest : msg.sender;
+        return !isIgnoredNodeNum(peer);
+    }
+
+    if (msg.sender != 0 && msg.sender != localNode)
+        return !isIgnoredNodeNum(msg.sender);
+
+    return true;
+}
+
+// Add from incoming/outgoing packet
+const StoredMessage *MessageStore::tryAddFromPacket(const meshtastic_MeshPacket &packet)
+{
+    if (!shouldStorePacket(packet)) {
+        LOG_DEBUG("Drop store 0x%08x", packet.from);
+        return nullptr;
+    }
+
     StoredMessage sm;
     assignTimestamp(sm);
     sm.channelIndex = packet.channel;
 
     const char *payload = reinterpret_cast<const char *>(packet.decoded.payload.bytes);
-    size_t len = strnlen(payload, MAX_MESSAGE_SIZE - 1);
+    // payload.bytes is not NUL-terminated, so bound by the received size too: a shorter message
+    // stored after a longer one would otherwise pick up the previous occupant's trailing bytes.
+    size_t avail = packet.decoded.payload.size;
+    if (avail > MAX_MESSAGE_SIZE - 1)
+        avail = MAX_MESSAGE_SIZE - 1;
+    size_t len = strnlen(payload, avail);
     sm.textOffset = storeTextInPool(payload, len);
     sm.textLength = len;
 
@@ -196,34 +248,7 @@ const StoredMessage &MessageStore::addFromPacket(const meshtastic_MeshPacket &pa
     markMessageStoreUnsaved();
 #endif
 
-    return liveMessages.back();
-}
-
-// Outgoing/manual message
-void MessageStore::addFromString(uint32_t sender, uint8_t channelIndex, const std::string &text)
-{
-    StoredMessage sm;
-
-    // Always use our local time (helper handles RTC vs boot time)
-    assignTimestamp(sm);
-
-    sm.sender = sender;
-    sm.channelIndex = channelIndex;
-    sm.textOffset = storeTextInPool(text.c_str(), text.size());
-    sm.textLength = text.size();
-
-    // Use the provided destination
-    sm.dest = sender;
-    sm.type = MessageType::DM_TO_US;
-
-    // Outgoing messages always start with unknown ack status
-    sm.ackStatus = AckStatus::NONE;
-
-    addLiveMessage(sm);
-
-#if ENABLE_MESSAGE_PERSISTENCE
-    markMessageStoreUnsaved();
-#endif
+    return &liveMessages.back();
 }
 
 #if ENABLE_MESSAGE_PERSISTENCE
@@ -314,7 +339,7 @@ void MessageStore::saveToFlash()
 
     // Reset autosave state after any save
     g_messageStoreHasUnsavedChanges = false;
-    g_lastAutoSaveMs = millis();
+    g_lastAutoSaveMs = Time::getMillis();
 }
 
 void MessageStore::loadFromFlash()
@@ -323,32 +348,37 @@ void MessageStore::loadFromFlash()
     resetMessagePool(); // reset pool when loading
 
 #ifdef FSCom
-    concurrency::LockGuard guard(spiLock);
+    {
+        concurrency::LockGuard guard(spiLock);
 
-    if (!FSCom.exists(filename.c_str()))
-        return;
+        if (!FSCom.exists(filename.c_str()))
+            return;
 
-    auto f = FSCom.open(filename.c_str(), FILE_O_READ);
-    if (!f)
-        return;
+        auto f = FSCom.open(filename.c_str(), FILE_O_READ);
+        if (!f)
+            return;
 
-    uint8_t count = 0;
-    f.readBytes(reinterpret_cast<char *>(&count), 1);
-    if (count > MAX_MESSAGES_SAVED)
-        count = MAX_MESSAGES_SAVED;
+        uint8_t count = 0;
+        f.readBytes(reinterpret_cast<char *>(&count), 1);
+        if (count > MAX_MESSAGES_SAVED)
+            count = MAX_MESSAGES_SAVED;
 
-    for (uint8_t i = 0; i < count; ++i) {
-        StoredMessage m;
-        if (!readMessageRecord(f, m))
-            break;
-        liveMessages.push_back(m);
+        for (uint8_t i = 0; i < count; ++i) {
+            StoredMessage m;
+            if (!readMessageRecord(f, m))
+                break;
+            liveMessages.push_back(m);
+        }
+
+        f.close();
     }
 
-    f.close();
+    if (pruneHiddenMessages())
+        saveToFlash();
 #endif
     // Loading messages does not trigger an autosave
     g_messageStoreHasUnsavedChanges = false;
-    g_lastAutoSaveMs = millis();
+    g_lastAutoSaveMs = Time::getMillis();
 }
 
 #else
@@ -379,7 +409,7 @@ void MessageStore::clearAllMessages()
 
 #if ENABLE_MESSAGE_PERSISTENCE
     g_messageStoreHasUnsavedChanges = false;
-    g_lastAutoSaveMs = millis();
+    g_lastAutoSaveMs = Time::getMillis();
 #endif
 }
 
@@ -404,6 +434,13 @@ template <typename Predicate> static void eraseAllMatches(std::deque<StoredMessa
             ++it;
         }
     }
+}
+
+bool MessageStore::pruneHiddenMessages()
+{
+    const size_t before = liveMessages.size();
+    eraseAllMatches(liveMessages, [&](const StoredMessage &m) { return !isMessageVisible(m); });
+    return liveMessages.size() != before;
 }
 
 // Delete oldest message (RAM + persisted queue)
@@ -443,6 +480,20 @@ void MessageStore::deleteAllMessagesWithPeer(uint32_t peer)
     saveToFlash();
 }
 
+void MessageStore::deleteAllMessagesFromNode(uint32_t nodeNum)
+{
+    const uint32_t local = nodeDB->getNodeNum();
+    auto pred = [&](const StoredMessage &m) {
+        if (m.sender == nodeNum)
+            return true;
+        if (m.type != MessageType::DM_TO_US)
+            return false;
+        return m.sender == local ? m.dest == nodeNum : m.sender == nodeNum;
+    };
+    eraseAllMatches(liveMessages, pred);
+    saveToFlash();
+}
+
 // Delete oldest message in a direct chat with a node
 void MessageStore::deleteOldestMessageWithPeer(uint32_t peer)
 {
@@ -460,7 +511,7 @@ std::deque<StoredMessage> MessageStore::getChannelMessages(uint8_t channel) cons
 {
     std::deque<StoredMessage> result;
     for (const auto &m : liveMessages) {
-        if (m.type == MessageType::BROADCAST && m.channelIndex == channel) {
+        if (isMessageVisible(m) && m.type == MessageType::BROADCAST && m.channelIndex == channel) {
             result.push_back(m);
         }
     }
@@ -471,11 +522,20 @@ std::deque<StoredMessage> MessageStore::getDirectMessages() const
 {
     std::deque<StoredMessage> result;
     for (const auto &m : liveMessages) {
-        if (m.type == MessageType::DM_TO_US) {
+        if (isMessageVisible(m) && m.type == MessageType::DM_TO_US) {
             result.push_back(m);
         }
     }
     return result;
+}
+
+bool MessageStore::hasVisibleMessages() const
+{
+    for (const auto &m : liveMessages) {
+        if (isMessageVisible(m))
+            return true;
+    }
+    return false;
 }
 
 // Upgrade boot-relative timestamps once RTC is valid
@@ -487,7 +547,7 @@ void MessageStore::upgradeBootRelativeTimestamps()
     if (nowSecs == 0)
         return; // Still no valid RTC
 
-    uint32_t bootNow = millis() / 1000;
+    uint32_t bootNow = Time::getUptimeSecs();
 
     auto fix = [&](std::deque<StoredMessage> &dq) {
         for (auto &m : dq) {

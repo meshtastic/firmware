@@ -1,0 +1,8 @@
+# FAULT, and it used to be a hard crash: a ConfigDirectory that cannot be read made
+# std::filesystem::directory_iterator throw an uncaught filesystem_error, aborting
+# meshtasticd with SIGABRT -- and aborting --check along with it, so the one tool meant
+# to diagnose the problem died on it. It now fails cleanly and is reported here.
+Lora:
+  Module: sx1262
+General:
+  ConfigDirectory: /nonexistent/does-not-exist/

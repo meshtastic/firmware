@@ -1,0 +1,6 @@
+# FAULT: no pins list, so no switch pin is ever driven and the mode rows below have
+# nothing to apply to.
+Lora:
+  Module: lr1121
+  rfswitch_table:
+    MODE_STBY: [LOW, LOW]

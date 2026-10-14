@@ -92,7 +92,7 @@ uint32_t Default::getConfiguredOrMinimumValue(uint32_t configured, uint32_t minV
 uint8_t Default::getConfiguredOrDefaultHopLimit(uint8_t configured)
 {
 #if USERPREFS_EVENT_MODE
-    return (configured > HOP_RELIABLE) ? HOP_RELIABLE : config.lora.hop_limit;
+    return (configured >= eventModeHopLimit) ? eventModeHopLimit : config.lora.hop_limit;
 #else
     return (configured >= HOP_MAX) ? HOP_MAX : config.lora.hop_limit;
 #endif

@@ -1,3 +1,4 @@
+#include "UptimeClock.h"
 #include "configuration.h"
 
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && !MESHTASTIC_EXCLUDE_HEALTH_TELEMETRY && !defined(ARCH_PORTDUINO)
@@ -9,10 +10,10 @@
 #include "NodeDB.h"
 #include "Power.h"
 #include "PowerFSM.h"
-#include "RTC.h"
 #include "Router.h"
 #include "TransmitHistory.h"
 #include "UnitConversions.h"
+#include "gps/RTC.h"
 #include "main.h"
 #include "sleep.h"
 #include "target_specific.h"
@@ -90,7 +91,7 @@ int32_t HealthTelemetryModule::runOnce()
             // Just send to phone when it's not our time to send to mesh yet
             // Only send while queue is empty (phone assumed connected)
             sendTelemetry(NODENUM_BROADCAST, true);
-            lastSentToPhone = millis();
+            lastSentToPhone = Time::skipZero(Time::getMillis());
         }
     }
     if (sleepOnNextExecution) {
@@ -127,13 +128,18 @@ void HealthTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *
     const meshtastic_Data &p = lastMeasurementPacket->decoded;
     if (!pb_decode_from_bytes(p.payload.bytes, p.payload.size, &meshtastic_Telemetry_msg, &lastMeasurement)) {
         display->drawString(x, y, "Measurement Error");
-        LOG_ERROR("Unable to decode last packet");
+        LOG_ERROR("Can't decode last packet");
         return;
     }
 
     // Display "Health From: ..." on its own
+    char agoStr[16];
+    if (agoSecs == SINCE_UNKNOWN)
+        snprintf(agoStr, sizeof(agoStr), "?"); // no trustworthy arrival time to age against
+    else
+        snprintf(agoStr, sizeof(agoStr), "%us", (unsigned)agoSecs);
     char headerStr[64];
-    snprintf(headerStr, sizeof(headerStr), "Health From: %s(%ds)", lastSender, (int)agoSecs);
+    snprintf(headerStr, sizeof(headerStr), "Health From: %s(%s)", lastSender, agoStr);
     display->drawString(x, y, headerStr);
 
     char last_temp[16];
@@ -218,7 +224,7 @@ meshtastic_MeshPacket *HealthTelemetryModule::allocReply()
         if (pb_decode_from_bytes(p.payload.bytes, p.payload.size, &meshtastic_Telemetry_msg, &scratch)) {
             decoded = &scratch;
         } else {
-            LOG_ERROR("Error decoding HealthTelemetry module!");
+            LOG_ERROR("Error decoding HealthTelemetry module");
             return NULL;
         }
         // Check for a request for health metrics
@@ -248,23 +254,27 @@ bool HealthTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
         sensor_read_error_count = 0;
 
         meshtastic_MeshPacket *p = allocDataProtobuf(m);
-        p->to = dest;
-        p->decoded.want_response = false;
-        if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR)
-            p->priority = meshtastic_MeshPacket_Priority_RELIABLE;
-        else
-            p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
-        // release previous packet before occupying a new spot
-        if (lastMeasurementPacket != nullptr)
-            packetPool.release(lastMeasurementPacket);
-
-        lastMeasurementPacket = packetPool.allocCopy(*p);
-        if (phoneOnly) {
-            LOG_INFO("Send packet to phone");
-            service->sendToPhone(p);
+        if (!p) {
+            validTelemetry = false;
         } else {
-            LOG_INFO("Send packet to mesh");
-            service->sendToMesh(p, RX_SRC_LOCAL, true);
+            p->to = dest;
+            p->decoded.want_response = false;
+            if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR)
+                p->priority = meshtastic_MeshPacket_Priority_RELIABLE;
+            else
+                p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
+            // release previous packet before occupying a new spot
+            if (lastMeasurementPacket != nullptr)
+                packetPool.release(lastMeasurementPacket);
+
+            lastMeasurementPacket = packetPool.allocCopy(*p);
+            if (phoneOnly) {
+                LOG_INFO("Send packet to phone");
+                service->sendToPhone(p);
+            } else {
+                LOG_INFO("Send packet to mesh");
+                service->sendToMesh(p, RX_SRC_LOCAL, true);
+            }
         }
     }
 

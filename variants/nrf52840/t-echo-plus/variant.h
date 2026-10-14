@@ -59,7 +59,7 @@ static const uint8_t A0 = PIN_A0;
 #define WIRE_INTERFACES_COUNT 1
 #define PIN_WIRE_SDA (0 + 26)
 #define PIN_WIRE_SCL (0 + 27)
-#define HAS_BHI260AP
+// #define HAS_BHI260AP ; lewisxhe/SensorLib too big for nrf52
 
 #define TP_SER_IO (0 + 11)
 

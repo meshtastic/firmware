@@ -1,0 +1,3 @@
+# FAULT: the document root is a sequence, not a mapping, so nothing in it is read.
+- Lora
+- General

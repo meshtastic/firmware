@@ -1,0 +1,17 @@
+# CLEAN. Several physical buttons bound to one action: an action's value may be a single
+# evdev code or a list of them, so A and Y both select, B and X both cancel, and the
+# shoulder buttons work as left/right alongside the D-pad. Nothing here is a fault -- the
+# case exists so the checker cannot start rejecting the list form.
+Lora:
+  Module: sx1262
+  CS: 21
+  IRQ: 16
+  Busy: 20
+  Reset: 18
+Input:
+  JoystickDevice: /dev/input/by-id/usb-0079_USB_Gamepad-event-joystick
+  JoystickButtons:
+    select: [0x121, 0x123]
+    cancel: [0x122, 0x120]
+    left: 0x124
+    right: 0x125

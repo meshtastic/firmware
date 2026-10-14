@@ -16,7 +16,9 @@ meshtastic_MeshPacket *ReplyModule::allocReply()
 #endif
 
     const char *replyStr = "Message Received";
-    auto reply = allocDataPacket();                 // Allocate a packet for sending
+    auto reply = allocDataPacket(); // Allocate a packet for sending
+    if (!reply)
+        return nullptr;
     reply->decoded.payload.size = strlen(replyStr); // You must specify how many bytes are in the reply
     memcpy(reply->decoded.payload.bytes, replyStr, reply->decoded.payload.size);
 

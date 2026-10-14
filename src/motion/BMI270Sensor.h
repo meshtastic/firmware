@@ -18,7 +18,6 @@ class BMI270Sensor : public MotionSensor
 
     // BMI270 register access
     bool writeRegister(uint8_t reg, uint8_t value);
-    bool writeRegisters(uint8_t reg, const uint8_t *data, size_t len);
     uint8_t readRegister(uint8_t reg);
     bool readRegisters(uint8_t reg, uint8_t *data, size_t len);
 
