@@ -102,6 +102,9 @@ template <class T> class LR20x0Interface : public RadioLibInterface
     /** Empty the TX FIFO of anything an earlier TX left behind, then hand the packet to RadioLib */
     int16_t launchTransmit(size_t numbytes) override;
 
+    /** Empty the RX FIFO of a frame nothing read out: RadioLib empties it only at the end of readData() */
+    void discardUnreadRxFrame() override;
+
   private:
     /** The chip's TX FIFO fill level in bytes; false on SPI failure */
     bool readTxFifoLevel(uint16_t &level);
