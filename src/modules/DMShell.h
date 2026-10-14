@@ -102,6 +102,10 @@ class DMShellModule : private concurrency::OSThread, public SinglePortModule
     uint32_t maxConsecutiveRetransmits = 0;
     // Set once at construction from DMSHELL_LEGACY_RECOVERY; see the constructor.
     bool legacyRecovery = false;
+    // Set once at construction from DMSHELL_SLOT_PARITY, and stamped on every frame we originate.
+    // The two ends of a session want opposite parities, so their backoff draws cannot take the
+    // same slot of the grid anchored to the frame they both just heard.
+    meshtastic_MeshPacket_SlotParity slotParity = meshtastic_MeshPacket_SlotParity_SLOT_PARITY_UNSET;
 
     uint32_t replayRequestIntervalMs() const;
     void notePeerReceiveCursor(const meshtastic_RemoteShell &frame);
