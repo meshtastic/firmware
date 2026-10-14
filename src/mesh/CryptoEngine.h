@@ -201,6 +201,10 @@ class CryptoEngine
 #if !(MESHTASTIC_EXCLUDE_XEDDSA)
     /// Ed25519 signature verification. Platforms with a crypto accelerator override this.
     virtual bool ed25519Verify(const uint8_t *signature, const uint8_t *edPubKey, const uint8_t *msg, size_t msgLen);
+    // Encoded point scalar * B for XEdDSA's R (scalar 32 bytes little-endian, reduced mod q). The default
+    // returns false, so XEdDSA::sign computes it in software. Platforms with a crypto accelerator override this.
+    virtual bool ed25519BaseMul(uint8_t *point, const uint8_t *scalar);
+    static bool ed25519BaseMulThunk(void *engine, uint8_t point[32], const uint8_t scalar[32]);
     uint8_t xeddsa_public_key[32] = {0};
     uint8_t xeddsa_private_key[32] = {0};
     void curve_to_ed_pub(const uint8_t *curve_pubkey, uint8_t *ed_pubkey);
