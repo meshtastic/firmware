@@ -1297,8 +1297,9 @@ class ReentrantRadioInterface : public RadioInterface
     static constexpr int kReentryLimit = 16;
     int reconfigureCalls = 0;
     bool reenterOnReconfigure = false;
-    // Non-zero stands in for applyModemConfig() writing the region's clamped power back into config.lora.
+    // Non-zero stand in for applyModemConfig() writing region-clamped values back into config.lora.
     int8_t txPowerOnReconfigure = 0;
+    uint32_t bandwidthOnReconfigure = 0;
 
     ErrorCode send(meshtastic_MeshPacket *p) override
     {
@@ -1318,6 +1319,8 @@ class ReentrantRadioInterface : public RadioInterface
         reconfigureCalls++;
         if (txPowerOnReconfigure)
             config.lora.tx_power = txPowerOnReconfigure;
+        if (bandwidthOnReconfigure)
+            config.lora.bandwidth = bandwidthOnReconfigure;
         if (reenterOnReconfigure && reconfigureCalls < kReentryLimit)
             MeshBeaconModule::reconfigureForBeaconTX(this, nullptr);
         return true;
@@ -1687,6 +1690,67 @@ static void test_frequencySlotCount_unsetRegionHoldsNone(void)
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(
         1, RadioInterface::resolveFrequencySlot(loraProbe(meshtastic_Config_LoRaConfig_RegionCode_UNSET, longFast, 48), ""),
         "with no slots a pin cannot win, and UNSET resolves to slot 1");
+}
+
+/**
+ * frequencySlotCount() must count a custom bandwidth wider than the region at the region default, because
+ * checkOrClampConfigLora() clamps it to that before the radio tunes. Counting the raw 1625 kHz on EU_868 gave 0 slots,
+ * so a target pinned to slot 1 there was skipped and an unpinned one was dropped at the TX gate.
+ */
+static void test_frequencySlotCount_overWideCustomBandwidth_countsRegionDefault(void)
+{
+    resetConfig();
+    meshtastic_Config_LoRaConfig probe = config.lora;
+    probe.use_preset = false;
+    probe.bandwidth = 1600; // 1625 kHz, wider than EU_868's 250 kHz span
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, RadioInterface::frequencySlotCount(probe), "EU_868 holds one slot at its default");
+}
+
+/**
+ * resolveFrequencySlot() must never return a slot past frequencySlotCount(). ITU2_125CM's override slot 37 does not
+ * exist at a 1625 kHz custom bandwidth (3 slots), and returning it made the TX gate drop every unpinned target there.
+ * Past the count it falls back to the channel-name hash.
+ */
+static void test_resolveFrequencySlot_overrideSlotPastCount_derives(void)
+{
+    resetConfig();
+    meshtastic_Config_LoRaConfig probe = config.lora;
+    probe.region = meshtastic_Config_LoRaConfig_RegionCode_ITU2_125CM;
+    probe.use_preset = false;
+    probe.bandwidth = 1600;
+    probe.channel_num = 0;
+
+    const uint32_t count = RadioInterface::frequencySlotCount(probe);
+    const uint32_t slot = RadioInterface::resolveFrequencySlot(probe, "Home");
+    TEST_ASSERT_EQUAL_UINT32(3, count);
+    TEST_ASSERT_TRUE_MESSAGE(slot >= 1 && slot <= count, "the resolved slot must exist in the region");
+}
+
+/**
+ * The switch must give back a custom bandwidth that applyModemConfig() clamped for a narrower target region. It
+ * writes the clamp into config.lora.bandwidth, and without a restore the node kept the target's bandwidth after one
+ * beacon, and the next save wrote it to flash.
+ */
+static void test_beaconSwitch_restoresClampedCustomBandwidth(void)
+{
+    resetConfigUS();
+    installTestPrimaryChannel("Home", kHomePsk, sizeof(kHomePsk));
+    config.lora.use_preset = false;
+    config.lora.bandwidth = 500;
+
+    ReentrantRadioInterface radio;
+    radio.bandwidthOnReconfigure = 250; // EU_868's default, where 500 kHz does not fit
+    meshtastic_MeshPacket pkt = meshtastic_MeshPacket_init_zero;
+    pkt.id = 0x7C000004;
+    MeshBeaconModule::setTargetRadioSettings(&pkt, meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, 0, false,
+                                             meshtastic_Config_LoRaConfig_RegionCode_EU_868);
+    TEST_ASSERT_TRUE_MESSAGE(MeshBeaconModule::reconfigureForBeaconTX(&radio, &pkt), "beacon switch should have applied");
+
+    radio.bandwidthOnReconfigure = 0;
+    MeshBeaconModule::clearTargetRadioSettings(&pkt);
+    TEST_ASSERT_TRUE_MESSAGE(MeshBeaconModule::reconfigureForBeaconTX(&radio, nullptr), "restore should have applied");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(500, config.lora.bandwidth, "restore must undo the target region's bandwidth clamp");
 }
 
 /**
@@ -2301,6 +2365,9 @@ BEACON_TEST_ENTRY void setup()
 
     RUN_TEST(test_resolveFrequencySlot_pinWinsElseDerives);
     RUN_TEST(test_frequencySlotCount_unsetRegionHoldsNone);
+    RUN_TEST(test_frequencySlotCount_overWideCustomBandwidth_countsRegionDefault);
+    RUN_TEST(test_resolveFrequencySlot_overrideSlotPastCount_derives);
+    RUN_TEST(test_beaconSwitch_restoresClampedCustomBandwidth);
     RUN_TEST(test_broadcaster_pinnedTargetSlot_armsThatSlot);
     RUN_TEST(test_broadcaster_unpinnedTargetOnOtherPreset_derivesSlot);
     RUN_TEST(test_broadcaster_blankChannelOnOtherPreset_carriesTargetPresetHash);

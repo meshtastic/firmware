@@ -1290,11 +1290,14 @@ uint32_t RadioInterface::frequencySlotCount(const meshtastic_Config_LoRaConfig &
     // UNSET is no band: its table span is a placeholder, and unknown codes resolve to it too
     if (region->code == meshtastic_Config_LoRaConfig_RegionCode_UNSET)
         return 0;
-    const float bwKHz = loraConfig.use_preset ? modemPresetToBwKHz(loraConfig.modem_preset, region->wideLora)
-                                              : clampBandwidthKHz(bwCodeToKHz(loraConfig.bandwidth));
+    float bwKHz = loraConfig.use_preset ? modemPresetToBwKHz(loraConfig.modem_preset, region->wideLora)
+                                        : clampBandwidthKHz(bwCodeToKHz(loraConfig.bandwidth));
+    const float edges = region->profile->spacing + (region->profile->padding * 2); // in MHz
+    // A custom bandwidth wider than the region runs at the region default, as checkOrClampConfigLora() clamps it
+    if (!loraConfig.use_preset && (region->freqEnd - region->freqStart) < edges + (bwKHz / 1000))
+        bwKHz = bwCodeToKHz(bwKHzToCode(modemPresetToBwKHz(region->getDefaultPreset(), region->wideLora)));
     // Same arithmetic as applyModemConfig(), so a slot checked here is a slot the radio can tune
-    const float freqSlotWidth = region->profile->spacing + (region->profile->padding * 2) + (bwKHz / 1000); // in MHz
-    return round((region->freqEnd - region->freqStart + region->profile->spacing) / freqSlotWidth);
+    return round((region->freqEnd - region->freqStart + region->profile->spacing) / (edges + (bwKHz / 1000)));
 }
 
 uint32_t RadioInterface::resolveFrequencySlot(const meshtastic_Config_LoRaConfig &loraConfig, const char *channelName)
@@ -1303,7 +1306,7 @@ uint32_t RadioInterface::resolveFrequencySlot(const meshtastic_Config_LoRaConfig
     const uint32_t numFreqSlots = frequencySlotCount(loraConfig);
     if (loraConfig.channel_num > 0 && loraConfig.channel_num <= numFreqSlots)
         return loraConfig.channel_num;
-    if (region->overrideSlot > 0)
+    if (region->overrideSlot > 0 && (uint32_t)region->overrideSlot <= numFreqSlots)
         return region->overrideSlot;
     if (!numFreqSlots) // UNSET/degenerate region, and % 0 is a SIGFPE
         return 1;

@@ -19,6 +19,7 @@ uint16_t MeshBeaconModule::originalLoraChannel;
 meshtastic_Config_LoRaConfig_RegionCode MeshBeaconModule::originalRegion;
 float MeshBeaconModule::originalOverrideFrequency;
 int8_t MeshBeaconModule::originalTxPower;
+uint32_t MeshBeaconModule::originalBandwidth;
 
 // What the active switch installed, so the restore can tell a LoRa edit made mid-switch from its own.
 static struct {
@@ -27,6 +28,7 @@ static struct {
     meshtastic_Config_LoRaConfig_RegionCode region;
     float overrideFrequency;
     int8_t txPower;
+    uint32_t bandwidth;
 } switchedTo;
 
 static MeshBeaconModule_TargetRadioSettings targetRadioSettings[8];
@@ -438,6 +440,7 @@ bool MeshBeaconModule::reconfigureForBeaconTX(RadioInterface *iface, meshtastic_
             originalRegion = config.lora.region;
             originalOverrideFrequency = config.lora.override_frequency;
             originalTxPower = config.lora.tx_power;
+            originalBandwidth = config.lora.bandwidth;
             switchDepth = 0;
         }
         switchDepth++;
@@ -461,9 +464,9 @@ bool MeshBeaconModule::reconfigureForBeaconTX(RadioInterface *iface, meshtastic_
         radioSwitched = true; // set before reconfigure(), so the flag never lags the radio it describes
         switchedForId = p->id;
         iface->reconfigure();
-        // After reconfigure(): applyModemConfig() clamps tx_power for the target region in place.
-        switchedTo = {config.lora.modem_preset, config.lora.channel_num, config.lora.region, config.lora.override_frequency,
-                      config.lora.tx_power};
+        // After reconfigure(): applyModemConfig() clamps tx_power and an over-wide custom bandwidth in place.
+        switchedTo = {config.lora.modem_preset,       config.lora.channel_num, config.lora.region,
+                      config.lora.override_frequency, config.lora.tx_power,    config.lora.bandwidth};
         return true;
 
     } else if (radioSwitched) { // s is null here: either no packet, or one carrying no target
@@ -487,6 +490,7 @@ bool MeshBeaconModule::reconfigureForBeaconTX(RadioInterface *iface, meshtastic_
         restore(config.lora.region, switchedTo.region, originalRegion);
         restore(config.lora.override_frequency, switchedTo.overrideFrequency, originalOverrideFrequency);
         restore(config.lora.tx_power, switchedTo.txPower, originalTxPower);
+        restore(config.lora.bandwidth, switchedTo.bandwidth, originalBandwidth);
 
         if (nodeDB) { // config.lora describes the committed config again
             nodeDB->setLoraSlotTransient(false);
