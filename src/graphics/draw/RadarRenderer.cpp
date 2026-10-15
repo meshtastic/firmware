@@ -404,15 +404,16 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
     // Auto-scale from only the nodes we will actually plot, so a single
     // far-away node can't push the scale into a high bucket and squash all
     // the close nodes into an invisible cluster at the centre.
-    // High-res panels list in the smaller local font so more rows fit beside the radar.
-    const bool highRes = currentResolution == ScreenResolution::High;
-    const uint8_t *listFont = highRes ? FONT_SMALL_LOCAL : FONT_SMALL;
-    const int listFontH = highRes ? _fontHeight(FONT_SMALL_LOCAL) : FONT_HEIGHT_SMALL;
+    // Short high-res landscape panels (e.g. 250x122 e-ink): smaller font, two list columns.
+    const bool shortPanel = currentResolution == ScreenResolution::High && sh < 150;
+    const uint8_t *listFont = shortPanel ? FONT_SMALL_LOCAL : FONT_SMALL;
+    const int listFontH = shortPanel ? _fontHeight(FONT_SMALL_LOCAL) : FONT_HEIGHT_SMALL;
+    const int listCols = shortPanel ? 2 : 1;
     constexpr int kListTopPad = 5;
-    // Low-res keeps the overlapping-bbox pitch (ink is half the bbox); high-res rows stay clear of each other.
-    const int kMinRowPitch = highRes ? listFontH - 2 : FONT_HEIGHT_SMALL / 2 + 1;
+    // Short panels keep rows clear of each other; elsewhere rows may overlap the bbox (ink is half of it).
+    const int kMinRowPitch = shortPanel ? listFontH - 2 : FONT_HEIGHT_SMALL / 2 + 1;
     const int minDim = std::min(sw, sh);
-    const int kMaxPlotted = highRes          ? std::max(1, std::min(10, (listContentH - kListTopPad) / kMinRowPitch))
+    const int kMaxPlotted = shortPanel       ? std::max(1, std::min(10, listCols * ((listContentH - kListTopPad) / kMinRowPitch)))
                             : (minDim > 128) ? 8
                                              : 5;
     float maxDistM = 1.0f;
@@ -475,12 +476,14 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
     // -----------------------------------------------------------------------
     {
         const float northBrg = -headingRad;
-        const int nRadius = compact ? (radarRadius * 3) / 4 : radarRadius - FONT_HEIGHT_SMALL / 2;
+        const uint8_t *nFont = compact ? FONT_TINY : shortPanel ? FONT_SMALL_LOCAL : FONT_SMALL;
+        const int nHalfH = compact ? kTinyCapH / 2 : _fontHeight(nFont) / 2;
+        const int nRadius = compact ? (radarRadius * 3) / 4 : radarRadius - nHalfH;
         const int nx = radarCX + (int)(nRadius * sinf(northBrg));
         const int ny = radarCY - (int)(nRadius * cosf(northBrg));
-        display->setFont(compact ? FONT_TINY : FONT_SMALL);
+        display->setFont(nFont);
         display->setTextAlignment(TEXT_ALIGN_CENTER);
-        display->drawString(nx, ny - (compact ? kTinyCapH / 2 : FONT_HEIGHT_SMALL / 2), "N");
+        display->drawString(nx, ny - nHalfH, "N");
     }
 
     // Own-node marker: single pixel at centre.
@@ -510,14 +513,16 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
     // -----------------------------------------------------------------------
     display->setFont(listFont);
 
-    const int rowPitch = std::max(kMinRowPitch, (listContentH - kListTopPad) / kMaxPlotted);
-    const int listRows = std::min(plottedCount, std::max(1, (listContentH - kListTopPad) / rowPitch));
+    const int rowsPerCol = (kMaxPlotted + listCols - 1) / listCols;
+    const int rowPitch = std::max(kMinRowPitch, (listContentH - kListTopPad) / rowsPerCol);
+    const int listRows = std::min(plottedCount, listCols * std::max(1, (listContentH - kListTopPad) / rowPitch));
+    const int colW = (listRight - x) / listCols;
 
     // Marker centred on the visible text height, not the taller glyph bbox.
     const int symOffsetY = (listFontH - 2) / 2;
 
     // Distances sit just after the longest name, not at the far column edge.
-    const int nameX = x + 7 + 2 * markerRadius();
+    const int nameOffset = 7 + 2 * markerRadius();
     constexpr int kNameDistGap = 6;
     int maxNameW = 0;
     for (int i = 0; i < listRows; i++) {
@@ -525,12 +530,15 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
         nodeLabel(name, sizeof(name), entries[i].node);
         maxNameW = std::max(maxNameW, (int)display->getStringWidth(name));
     }
-    const int distX = nameX + maxNameW + kNameDistGap;
+    const int distOffset = nameOffset + maxNameW + kNameDistGap;
 
     for (int i = 0; i < listRows; i++) {
         const Entry &e = entries[i];
-        const int rowY = y + headerH + kListTopPad + rowPitch * i;
-        const int symCX = x + 4 + markerRadius(); // 4 px left margin + marker centre
+        // Fill column by column so the closest nodes stay in the first column.
+        const int colX = x + colW * (i / rowsPerCol);
+        const int colRight = colX + colW - (i / rowsPerCol + 1 < listCols ? kNameDistGap : 0);
+        const int rowY = y + headerH + kListTopPad + rowPitch * (i % rowsPerCol);
+        const int symCX = colX + 4 + markerRadius(); // 4 px left margin + marker centre
         const int symCY = rowY + symOffsetY;
 
         drawMarker(display, symCX, symCY, (uint8_t)i);
@@ -542,13 +550,13 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
         formatDistM(dist, sizeof(dist), e.distM);
 
         display->setTextAlignment(TEXT_ALIGN_LEFT);
-        display->drawString(nameX, rowY, name);
-        // Fall back to right-aligning at the column edge if a long name would push it into the radar.
-        if (distX + (int)display->getStringWidth(dist) <= listRight) {
-            display->drawString(distX, rowY, dist);
+        display->drawString(colX + nameOffset, rowY, name);
+        // Fall back to right-aligning at the column edge if a long name would push it past the column.
+        if (colX + distOffset + (int)display->getStringWidth(dist) <= colRight) {
+            display->drawString(colX + distOffset, rowY, dist);
         } else {
             display->setTextAlignment(TEXT_ALIGN_RIGHT);
-            display->drawString(listRight, rowY, dist);
+            display->drawString(colRight, rowY, dist);
             display->setTextAlignment(TEXT_ALIGN_LEFT);
         }
     }
