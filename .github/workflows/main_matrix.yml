@@ -6,8 +6,9 @@ on:
   # The merge queue is the pre-merge gate for the protected branches (master,
   # develop): a merge_group run validates the merged result before code lands. For
   # now PRs and merge_group runs build the same narrowed board subset (--level pr);
-  # see the setup job. push still runs the full matrix on master/develop (post-merge)
-  # as well as on the event/* and feature/* branches, which have no merge queue.
+  # see the setup job. Static checks (pio check) run on PRs only. push still runs
+  # the full matrix on master/develop (post-merge) as well as on the event/* and
+  # feature/* branches, which have no merge queue.
   merge_group:
     types: [checks_requested]
     branches:
@@ -128,8 +129,9 @@ jobs:
     # Runs on GitHub-hosted runners so checks don't compete with builds for the
     # self-hosted 'arctastic' pool (which builds use).
     runs-on: ubuntu-26.04
-    # Only run checks for PRs and Merge Queue runs.
-    if: contains(fromJSON('["pull_request", "merge_group"]'), github.event_name)
+    # PRs only: the merge queue checks the same boards the PR already checked, so it
+    # skips this job and ci-gate accepts the skip.
+    if: github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@v7
         with:
