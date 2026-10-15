@@ -12,6 +12,12 @@ on:
       pio_env:
         required: true
         type: string
+      # Set on post-merge pushes: copy this board's artifacts from that merge_group run
+      # (same commit) instead of building it again.
+      reuse_run_id:
+        required: false
+        type: string
+        default: ""
     secrets:
       MEMBROWSE_API_KEY:
         required: false
@@ -23,6 +29,7 @@ jobs:
     name: build-${{ inputs.platform }}
     # Use 'arctastic' self-hosted runner pool when building in the main repo
     runs-on: ${{ github.repository_owner == 'meshtastic' && 'arctastic' || 'ubuntu-latest' }}
+    if: inputs.reuse_run_id == ''
     outputs:
       artifact-id: ${{ steps.upload-firmware.outputs.artifact-id }}
     steps:
@@ -138,11 +145,50 @@ jobs:
           path: |
             release/*.mt.json
 
+  # Re-publishes the merge_group run's artifacts under this run, so size reports, the budget
+  # gate and MemBrowse see the same artifact names as from a local build.
+  reuse-build:
+    name: reuse-${{ inputs.platform }}
+    if: inputs.reuse_run_id != ''
+    runs-on: ubuntu-slim
+    steps:
+      - name: Download binaries from the merge queue run
+        uses: actions/download-artifact@v8
+        with:
+          name: firmware-${{ inputs.platform }}-${{ inputs.pio_env }}-${{ inputs.version }}
+          run-id: ${{ inputs.reuse_run_id }}
+          github-token: ${{ github.token }}
+          path: ./firmware
+
+      - name: Download manifests from the merge queue run
+        uses: actions/download-artifact@v8
+        with:
+          name: manifest-${{ inputs.platform }}-${{ inputs.pio_env }}-${{ inputs.version }}
+          run-id: ${{ inputs.reuse_run_id }}
+          github-token: ${{ github.token }}
+          path: ./manifest
+
+      - name: Store binaries as an artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: firmware-${{ inputs.platform }}-${{ inputs.pio_env }}-${{ inputs.version }}
+          overwrite: true
+          path: ./firmware/
+
+      - name: Store manifests as an artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: manifest-${{ inputs.platform }}-${{ inputs.pio_env }}-${{ inputs.version }}
+          overwrite: true
+          path: ./manifest/
+
   # Memory report on MemBrowse from this build's artifact. PRs and pushes only: merge-queue,
   # nightly and release runs rebuild commits MemBrowse already has.
   membrowse:
-    needs: pio-build
-    if: github.repository == 'meshtastic/firmware' && contains(fromJSON('["push", "pull_request"]'), github.event_name)
+    needs: [pio-build, reuse-build]
+    if: >-
+      !cancelled() && contains(needs.*.result, 'success') &&
+      github.repository == 'meshtastic/firmware' && contains(fromJSON('["push", "pull_request"]'), github.event_name)
     uses: ./.github/workflows/membrowse_report.yml
     with:
       version: ${{ inputs.version }}

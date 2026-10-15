@@ -9,8 +9,9 @@ on:
   # develop): a merge_group run validates the merged result before code lands. For
   # now PRs and merge_group runs build the same narrowed board subset (--level pr);
   # see the setup job. Static checks (pio check) run on PRs only. push still runs
-  # the full matrix on master/develop (post-merge) as well as on the event/* and
-  # feature/* branches, which have no merge queue.
+  # the full matrix on master/develop (post-merge), copying the PR-level boards from
+  # the merge_group run of the same commit, and on the event/* and feature/*
+  # branches, which have no merge queue.
   merge_group:
     types: [checks_requested]
     branches:
@@ -71,6 +72,7 @@ jobs:
         env:
           BASE_REF: ${{ github.base_ref }}
           MERGE_GROUP_BASE_SHA: ${{ github.event.merge_group.base_sha }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           # A new board is 'release' and gets no CI until after merge, so force-build the
           # first env of each ADDED variant config. A new env in an existing one does not count.
@@ -101,11 +103,36 @@ jobs:
           else
             TARGETS=$(./bin/generate_ci_matrix.py all)
           fi
+          # A post-merge push to master/develop lands the exact commit its merge_group run
+          # built, so the PR-level boards are marked 'reuse' and copied from that run instead
+          # of rebuilt. Only when that run's ci-gate passed; any lookup failure builds them.
+          REUSE_RUN_ID=""
+          if [[ "$GITHUB_EVENT_NAME" == "push" && ( "$GITHUB_REF_NAME" == "develop" || "$GITHUB_REF_NAME" == "master" ) ]]; then
+            MQ_RUN_ID=$(gh run list -R "$GITHUB_REPOSITORY" --workflow CI --event merge_group \
+              --commit "$GITHUB_SHA" --status completed --limit 1 \
+              --json databaseId --jq '.[0].databaseId // empty') || MQ_RUN_ID=""
+            if [[ -n "$MQ_RUN_ID" ]]; then
+              # The check-runs API, not the run's jobs list: that 502s on a run this size.
+              # The latest attempt's ci-gate decides, as it did for the merge.
+              GATE=$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/check-runs?check_name=ci-gate&filter=all" \
+                --jq "[.check_runs[] | select(.details_url | contains(\"/runs/$MQ_RUN_ID/\"))]
+                      | sort_by(.started_at) | last | .conclusion // empty") || GATE=""
+              if [[ "$GATE" == "success" ]]; then
+                REUSE_RUN_ID="$MQ_RUN_ID"
+                PR_TARGETS=$(./bin/generate_ci_matrix.py all --level pr)
+                TARGETS=$(jq -c --argjson pr "$PR_TARGETS" \
+                  'map(. as $b | if any($pr[]; . == $b) then . + {reuse: true} else . end)' <<<"$TARGETS")
+              fi
+            fi
+            echo "Reusing PR-level builds from merge_group run: ${REUSE_RUN_ID:-none}"
+          fi
           echo "Name: $GITHUB_REF_NAME Base: $GITHUB_BASE_REF Ref: $GITHUB_REF"
           echo "all=$TARGETS" >> $GITHUB_OUTPUT
+          echo "reuse_run_id=$REUSE_RUN_ID" >> $GITHUB_OUTPUT
           echo "$TARGETS" >> $GITHUB_STEP_SUMMARY
     outputs:
       all: ${{ steps.jsonStep.outputs.all }}
+      reuse_run_id: ${{ steps.jsonStep.outputs.reuse_run_id }}
 
   version:
     runs-on: ubuntu-26.04
@@ -156,6 +183,7 @@ jobs:
       version: ${{ needs.version.outputs.long }}
       pio_env: ${{ matrix.build.board }}
       platform: ${{ matrix.build.platform }}
+      reuse_run_id: ${{ matrix.build.reuse && needs.setup.outputs.reuse_run_id || '' }}
     secrets:
       MEMBROWSE_API_KEY: ${{ secrets.MEMBROWSE_API_KEY }}
 
