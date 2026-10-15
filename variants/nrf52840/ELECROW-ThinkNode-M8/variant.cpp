@@ -47,6 +47,16 @@ void initVariant()
     Wire.setPins(PIN_WIRE_SDA, PIN_WIRE_SCL);
 }
 
+// The AG3352 can still be in backup mode from before an MCU reset, and only RESETB ends that.
+// Here rather than initVariant(), whose delay() would run before the scheduler. No LOG_* yet.
+void earlyInitVariant()
+{
+    pinMode(PIN_GPS_RESET, OUTPUT);
+    digitalWrite(PIN_GPS_RESET, HIGH); // asserts RESETB through Q16
+    delay(10);
+    digitalWrite(PIN_GPS_RESET, LOW);
+}
+
 void variant_shutdown()
 {
     auto dispdev = screen->getDisplayDevice();
