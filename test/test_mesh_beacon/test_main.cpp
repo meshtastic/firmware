@@ -1754,6 +1754,49 @@ static void test_beaconSwitch_restoresClampedCustomBandwidth(void)
 }
 
 /**
+ * On a node with custom modem params (use_preset=false), a target that names a preset must go out on that preset, as
+ * the proto's "Modem preset to use for this target" requires. The switch only set modem_preset, which
+ * applyModemConfig() ignores without use_preset, so such beacons kept the node's custom SF/BW/CR and no node on the
+ * target preset could decode them. A target that names no preset keeps the custom params, and use_preset is restored.
+ */
+static void test_broadcaster_customParamsNode_runsNamedTargetPreset(void)
+{
+    resetConfigUS();
+    installTestPrimaryChannel("Home", kHomePsk, sizeof(kHomePsk));
+    config.lora.use_preset = false;
+    config.lora.bandwidth = 125;
+    moduleConfig.has_mesh_beacon = true;
+    moduleConfig.mesh_beacon.has_broadcast_offer_preset = true;
+    moduleConfig.mesh_beacon.broadcast_offer_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
+    moduleConfig.mesh_beacon.broadcast_targets_count = 2;
+    moduleConfig.mesh_beacon.broadcast_targets[0].has_preset = true;
+    moduleConfig.mesh_beacon.broadcast_targets[0].preset = meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST;
+    moduleConfig.mesh_beacon.broadcast_targets[1].region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
+
+    MeshBeaconBroadcastModuleTestShim bcast;
+    bcast.sendBeacon();
+
+    TEST_ASSERT_EQUAL_UINT32(2, mockRouter->sentPackets.size());
+    meshtastic_MeshPacket named = mockRouter->sentPackets[0];
+    const MeshBeaconModule_TargetRadioSettings *s0 = MeshBeaconModule::getTargetRadioSettings(&named);
+    const MeshBeaconModule_TargetRadioSettings *s1 = MeshBeaconModule::getTargetRadioSettings(&mockRouter->sentPackets[1]);
+    TEST_ASSERT_NOT_NULL(s0);
+    TEST_ASSERT_NOT_NULL(s1);
+    TEST_ASSERT_TRUE_MESSAGE(s0->usePreset, "a named target preset must be run");
+    TEST_ASSERT_FALSE_MESSAGE(s1->usePreset, "a target naming no preset keeps the custom params");
+
+    ReentrantRadioInterface radio;
+    TEST_ASSERT_TRUE_MESSAGE(MeshBeaconModule::reconfigureForBeaconTX(&radio, &named), "beacon switch should have applied");
+    TEST_ASSERT_TRUE_MESSAGE(config.lora.use_preset, "the switch must run the target preset");
+    TEST_ASSERT_EQUAL_INT(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST, config.lora.modem_preset);
+
+    MeshBeaconModule::clearTargetRadioSettings(&named);
+    MeshBeaconModule::clearTargetRadioSettings(&mockRouter->sentPackets[1]);
+    TEST_ASSERT_TRUE_MESSAGE(MeshBeaconModule::reconfigureForBeaconTX(&radio, nullptr), "restore should have applied");
+    TEST_ASSERT_FALSE_MESSAGE(config.lora.use_preset, "restore must put the custom params back");
+}
+
+/**
  * A target that pins a slot must arm exactly that slot. NYMesh's MediumSlow slot 48 is the case the field
  * exists for: its hash would put a joiner on another frequency.
  */
@@ -2368,6 +2411,7 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_frequencySlotCount_overWideCustomBandwidth_countsRegionDefault);
     RUN_TEST(test_resolveFrequencySlot_overrideSlotPastCount_derives);
     RUN_TEST(test_beaconSwitch_restoresClampedCustomBandwidth);
+    RUN_TEST(test_broadcaster_customParamsNode_runsNamedTargetPreset);
     RUN_TEST(test_broadcaster_pinnedTargetSlot_armsThatSlot);
     RUN_TEST(test_broadcaster_unpinnedTargetOnOtherPreset_derivesSlot);
     RUN_TEST(test_broadcaster_blankChannelOnOtherPreset_carriesTargetPresetHash);

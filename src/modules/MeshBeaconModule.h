@@ -32,6 +32,8 @@ typedef struct {
     int16_t channelHash;
     // When the entry was armed. A beacon still queued a broadcast interval later is dropped, not sent.
     uint32_t armedAtMs;
+    // False keeps the node's custom modem params, for a target that names no preset on a node not using one.
+    bool usePreset;
 } MeshBeaconModule_TargetRadioSettings;
 
 /**
@@ -59,7 +61,7 @@ class MeshBeaconModule
     setTargetRadioSettings(const meshtastic_MeshPacket *p, meshtastic_Config_LoRaConfig_ModemPreset preset, uint16_t slot,
                            bool legacyHopOverride = false,
                            meshtastic_Config_LoRaConfig_RegionCode region = meshtastic_Config_LoRaConfig_RegionCode_UNSET,
-                           int16_t channelHash = -1);
+                           int16_t channelHash = -1, bool usePreset = true);
 
     /** The sidecar entry for this packet, or nullptr. */
     static const MeshBeaconModule_TargetRadioSettings *getTargetRadioSettings(const meshtastic_MeshPacket *p);
@@ -85,9 +87,12 @@ class MeshBeaconModule
      */
     static bool beaconTxConfigInvalid(const meshtastic_MeshPacket *p);
 
-    /** The region that runs preset from region: region itself, its EU sibling, or nullptr. No side effects. */
+    /**
+     * The region that runs preset from region: region itself, its EU sibling, or nullptr. Without usePreset the preset
+     * is not run, so it is region itself. No side effects.
+     */
     static const RegionInfo *beaconRegionFor(meshtastic_Config_LoRaConfig_RegionCode region,
-                                             meshtastic_Config_LoRaConfig_ModemPreset preset);
+                                             meshtastic_Config_LoRaConfig_ModemPreset preset, bool usePreset = true);
 
     /** Clear what can never be valid in a beacon config. Run on admin writes and on the config loaded at boot. */
     static void sanitizeConfig(meshtastic_ModuleConfig_MeshBeaconConfig &bcfg);
@@ -107,7 +112,7 @@ class MeshBeaconModule
   protected:
     // The name a beacon channel transmits under: its own, or for a blank-named channel the target preset's.
     static void beaconChannelName(const meshtastic_ChannelSettings &ch, meshtastic_Config_LoRaConfig_ModemPreset preset,
-                                  char (&out)[sizeof(meshtastic_ChannelSettings::name)]);
+                                  char (&out)[sizeof(meshtastic_ChannelSettings::name)], bool usePreset = true);
 
     static meshtastic_Config_LoRaConfig_ModemPreset originalModemPreset;
     static uint16_t originalLoraChannel;
@@ -115,6 +120,7 @@ class MeshBeaconModule
     static float originalOverrideFrequency;
     static int8_t originalTxPower;
     static uint32_t originalBandwidth;
+    static bool originalUsePreset;
 };
 
 /**
