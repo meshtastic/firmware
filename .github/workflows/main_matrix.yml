@@ -56,6 +56,8 @@ permissions: read-all
 
 jobs:
   setup:
+    # version: the reuse check matches artifact names, which embed the version string.
+    needs: version
     runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
@@ -73,6 +75,8 @@ jobs:
           BASE_REF: ${{ github.base_ref }}
           MERGE_GROUP_BASE_SHA: ${{ github.event.merge_group.base_sha }}
           GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.version.outputs.long }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           # A new board is 'release' and gets no CI until after merge, so force-build the
           # first env of each ADDED variant config. A new env in an existing one does not count.
@@ -108,8 +112,10 @@ jobs:
           # of rebuilt. Only when that run's ci-gate passed; any lookup failure builds them.
           REUSE_RUN_ID=""
           if [[ "$GITHUB_EVENT_NAME" == "push" && ( "$GITHUB_REF_NAME" == "develop" || "$GITHUB_REF_NAME" == "master" ) ]]; then
+            # Any status: the queue merges once ci-gate passes, often while jobs outside it
+            # still run, so that run is usually not 'completed' when this push starts.
             MQ_RUN_ID=$(gh run list -R "$GITHUB_REPOSITORY" --workflow CI --event merge_group \
-              --commit "$GITHUB_SHA" --status completed --limit 1 \
+              --commit "$GITHUB_SHA" --limit 1 \
               --json databaseId --jq '.[0].databaseId // empty') || MQ_RUN_ID=""
             if [[ -n "$MQ_RUN_ID" ]]; then
               # The check-runs API, not the run's jobs list: that 502s on a run this size.
@@ -120,17 +126,28 @@ jobs:
               if [[ "$GATE" == "success" ]]; then
                 REUSE_RUN_ID="$MQ_RUN_ID"
                 PR_TARGETS=$(./bin/generate_ci_matrix.py all --level pr)
-                TARGETS=$(jq -c --argjson pr "$PR_TARGETS" \
-                  'map(. as $b | if any($pr[]; . == $b) then . + {reuse: true} else . end)' <<<"$TARGETS")
+                # Only boards whose firmware and manifest artifacts are still there (a re-run can
+                # outlive their retention); the rest compile as usual.
+                ARTIFACTS=$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$MQ_RUN_ID/artifacts?per_page=100" \
+                  --jq '[.artifacts[] | select(.expired | not) | .name]') || ARTIFACTS=""
+                TARGETS=$(jq -c --argjson pr "$PR_TARGETS" --argjson have "$(jq -s 'add // []' <<<"$ARTIFACTS")" \
+                  --arg ver "$VERSION" \
+                  'map(. as $b | if any($pr[]; . == $b)
+                          and any($have[]; . == "firmware-\($b.platform)-\($b.board)-\($ver)")
+                          and any($have[]; . == "manifest-\($b.platform)-\($b.board)-\($ver)")
+                        then . + {reuse: true} else . end)' <<<"$TARGETS")
                 # ci-gate does not cover MacOS, Windows or build-debian-src, so they are only
-                # skipped when that run's latest attempt of each passed and all three ran.
-                OS_JOBS=$(gh api --paginate "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/check-runs?per_page=100&filter=all" \
-                  --jq ".check_runs[] | select(.details_url | contains(\"/runs/$MQ_RUN_ID/\"))
-                        | select(.name | test(\"^(MacOS|Windows|build-debian-src) \"))
-                        | {name, started_at, conclusion}") || OS_JOBS=""
-                SKIP_OS_BUILDS=$(jq -rs 'group_by(.name) | map((map(.started_at) | max) as $t | .[] | select(.started_at == $t)) as $j
-                  | ($j | all(.conclusion == "success")) and ($j | map(.name | split(" ")[0]) | unique | length == 3)' \
-                  <<<"$OS_JOBS") || SKIP_OS_BUILDS=false
+                # skipped when that run's latest attempt of each passed and all three ran. Never
+                # on the default branch: these jobs save their caches only on its pushes.
+                if [[ "$GITHUB_REF_NAME" != "$DEFAULT_BRANCH" ]]; then
+                  OS_JOBS=$(gh api --paginate "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/check-runs?per_page=100&filter=all" \
+                    --jq ".check_runs[] | select(.details_url | contains(\"/runs/$MQ_RUN_ID/\"))
+                          | select(.name | test(\"^(MacOS|Windows|build-debian-src) \"))
+                          | {name, started_at, conclusion}") || OS_JOBS=""
+                  SKIP_OS_BUILDS=$(jq -rs 'group_by(.name) | map((map(.started_at) | max) as $t | .[] | select(.started_at == $t)) as $j
+                    | ($j | all(.conclusion == "success")) and ($j | map(.name | split(" ")[0]) | unique | length == 3)' \
+                    <<<"$OS_JOBS") || SKIP_OS_BUILDS=false
+                fi
               fi
             fi
             echo "Reusing PR-level builds from merge_group run: ${REUSE_RUN_ID:-none}; skipping OS builds: ${SKIP_OS_BUILDS:-false}"
@@ -198,8 +215,8 @@ jobs:
     secrets:
       MEMBROWSE_API_KEY: ${{ secrets.MEMBROWSE_API_KEY }}
 
-  # build-debian-src, MacOS and Windows are skipped on a post-merge push whose merge_group
-  # run already built this exact commit and passed all three (setup's skip_os_builds).
+  # build-debian-src, MacOS and Windows are skipped on a post-merge push to a non-default
+  # branch (master) whose merge_group run already passed all three (setup's skip_os_builds).
   build-debian-src:
     needs: setup
     if: github.repository_owner == 'meshtastic' && github.event_name != 'schedule' && github.event.inputs.nightly != 'true' && needs.setup.outputs.skip_os_builds != 'true'
