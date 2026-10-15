@@ -256,9 +256,14 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     uint32_t rxFlagsSeenMs = 0;
     // rxFlagsSeenMs was stamped by a header, not by a bare preamble before it
     bool rxFlagsSeenHeader = false;
+    // ...and that header was a valid one, not a failed header before it
+    bool rxFlagsSeenValidHeader = false;
 
     /** Plain-RX twin of checkCadHandoffTimeout(): retire flags no RX_DONE consumed within a max packet. */
     virtual void checkStaleRxFlags();
+
+    /** Whether a header error leaves this chip's RX wedged, so only a re-arm recovers it (SX1280 DS 16.2). */
+    virtual bool headerErrWedgesRx() const { return false; }
 
     /**
      * Reset AGC by power-cycling the analog frontend.

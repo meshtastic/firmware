@@ -997,6 +997,7 @@ void RadioLibInterface::startReceive()
     chipRecoveryFailures = 0;
     rxFlagsSeenMs = 0;
     rxFlagsSeenHeader = false;
+    rxFlagsSeenValidHeader = false;
     powerMon->setState(meshtastic_PowerMon_State_Lora_RXOn);
 }
 
@@ -1091,35 +1092,56 @@ void RadioLibInterface::checkStaleRxFlags()
     const uint32_t irq = iface->getIrqFlags();
     if (irq & iface->getIrqMapped(1UL << RADIOLIB_IRQ_RX_DONE))
         return;
-    // HEADER_ERR counts: on SX1280 it leaves RX wedged with no RX_DONE or TIMEOUT to follow.
-    const bool headerSeen = irq & iface->getIrqMapped((1UL << RADIOLIB_IRQ_HEADER_VALID) | (1UL << RADIOLIB_IRQ_HEADER_ERR));
+    const bool validSeen = irq & iface->getIrqMapped(1UL << RADIOLIB_IRQ_HEADER_VALID);
+    // HEADER_ERR counts on its own: on SX1280 it leaves RX wedged with no RX_DONE or TIMEOUT to follow.
+    const bool errSeen = irq & iface->getIrqMapped(1UL << RADIOLIB_IRQ_HEADER_ERR);
+    const bool headerSeen = validSeen || errSeen;
     const bool preambleSeen = irq & iface->getIrqMapped(1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED);
     if (!headerSeen && !preambleSeen) {
         rxFlagsSeenMs = 0;
         rxFlagsSeenHeader = false;
+        rxFlagsSeenValidHeader = false;
         return;
     }
-    // A header's window starts when the header shows, not when an earlier bare preamble did
-    if (!rxFlagsSeenMs || (headerSeen && !rxFlagsSeenHeader)) {
+    // A header's window starts when the header shows, not when an earlier bare preamble did - and a valid
+    // header's starts over a failed header's, whose flag stays latched beside it and is not this frame's.
+    if (!rxFlagsSeenMs || (headerSeen && !rxFlagsSeenHeader) || (validSeen && !rxFlagsSeenValidHeader)) {
         rxFlagsSeenMs = Time::skipZero(Time::getMillis());
         rxFlagsSeenHeader = headerSeen;
+        rxFlagsSeenValidHeader = validSeen;
         return;
     }
 
     const uint32_t maxPacketTimeMsec = getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN + sizeof(PacketHeader));
-    switch (staleRxFlagAction(headerSeen, Time::getMillis() - rxFlagsSeenMs, maxPacketTimeMsec)) {
+    switch (staleRxFlagAction(validSeen, errSeen, headerErrWedgesRx(), Time::getMillis() - rxFlagsSeenMs, maxPacketTimeMsec)) {
     case StaleRxFlagAction::Keep:
         break;
     case StaleRxFlagAction::Rearm:
         LOG_DEBUG("RX header stale, re-arm");
         startReceive(); // clears rxFlagsSeenMs
         break;
-    case StaleRxFlagAction::ClearPreamble:
+    case StaleRxFlagAction::ClearHeaderErr:
         // A clear never aborts a reception, unlike the standby inside startReceive().
+        LOG_DEBUG("RX header err stale, cleared");
+        if (validSeen) { // a valid header beside it keeps the window this error did not start
+            iface->clearIrq(1UL << RADIOLIB_IRQ_HEADER_ERR);
+            break;
+        }
+        // The failed frame's own preamble is latched beside its error. Retiring one and not the other
+        // leaves the next send's receiveDetected() holding TX a max packet over a frame already dead -
+        // a wait the re-arm this replaces never cost, because its standby cleared both flags at once.
+        iface->clearIrq((1UL << RADIOLIB_IRQ_HEADER_ERR) | (1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED));
+        rxFlagsSeenMs = 0;
+        rxFlagsSeenHeader = false;
+        rxFlagsSeenValidHeader = false;
+        break;
+    case StaleRxFlagAction::ClearPreamble:
+        // Also a clear, so also safe over a frame that may be arriving behind it.
         LOG_DEBUG("RX preamble stale, cleared");
         iface->clearIrq(1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED);
         rxFlagsSeenMs = 0;
         rxFlagsSeenHeader = false;
+        rxFlagsSeenValidHeader = false;
         break;
     }
 }
@@ -1189,7 +1211,10 @@ bool RadioLibInterface::maybeRecoverChipStateLoss()
 
 void RadioLibInterface::clearReadIrqs()
 {
-    iface->clearIrq((1UL << RADIOLIB_IRQ_RX_DONE) | (1UL << RADIOLIB_IRQ_CRC_ERR));
+    // Everything readData() would have cleared: a HEADER_VALID left latched times the next frame's stale-flag
+    // window from this dead frame, so checkStaleRxFlags() re-arms over the next frame instead of behind it.
+    iface->clearIrq((1UL << RADIOLIB_IRQ_RX_DONE) | (1UL << RADIOLIB_IRQ_CRC_ERR) | (1UL << RADIOLIB_IRQ_HEADER_VALID) |
+                    (1UL << RADIOLIB_IRQ_HEADER_ERR) | (1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED));
     discardUnreadRxFrame();
 }
 
