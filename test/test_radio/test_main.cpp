@@ -527,11 +527,15 @@ class FakeLoraRadio
     }
 };
 
-// A PhysicalLayer that answers only its IRQ flags, each generic RadioLib IRQ mapped to its own bit.
+// A PhysicalLayer that answers its IRQ flags, each generic RadioLib IRQ mapped to its own bit, and the
+// airtime it is asked for. A clear takes the bit down, as a chip's does.
 class FakeIrqRadio : public PhysicalLayer
 {
   public:
     uint32_t irqFlags = 0;
+    RadioLibTime_t timeOnAirUsec = 0; // what calculateTimeOnAir() answers; 0 reads as an error
+    uint8_t lastCodingRate = 0;       // the CR it was asked to time, so a caller's worst case is visible
+    bool lastCrcEnabled = false;
 
     FakeIrqRadio()
     {
@@ -539,7 +543,23 @@ class FakeIrqRadio : public PhysicalLayer
             irqMap[i] = 1UL << i;
     }
 
+    // What clearIrq() retired, and the register it retired it from: PhysicalLayer::clearIrq() maps the
+    // generic flags and hands them to clearIrqFlags(), which is the chip-specific half the fake stands in for.
+    uint32_t clearedIrqFlags = 0;
+
     uint32_t getIrqFlags() override { return irqFlags; }
+    int16_t clearIrqFlags(uint32_t irq) override
+    {
+        clearedIrqFlags |= irq;
+        irqFlags &= ~irq;
+        return RADIOLIB_ERR_NONE;
+    }
+    RadioLibTime_t calculateTimeOnAir(ModemType_t, DataRate_t dr, PacketConfig_t pc, size_t) override
+    {
+        lastCodingRate = dr.lora.codingRate;
+        lastCrcEnabled = pc.lora.crcEnabled;
+        return timeOnAirUsec;
+    }
     Module *getMod() override { return nullptr; }
 };
 
@@ -568,6 +588,16 @@ class TestableRadioLibInterface : public RadioLibInterface
     }
 
     static bool isRadioLibTimeErrorPublic(RadioLibTime_t usec) { return isRadioLibTimeError(usec); }
+
+    uint32_t maxRxFrameMsecPublic() { return maxRxFrameMsec(); }
+    bool preambleHoldActivePublic() { return preambleHoldActive(); }
+    bool preambleHoldPeekablePublic() { return preambleHoldPeekable(); }
+    void setPreambleLength(uint16_t len) { preambleLength = len; }
+    bool receiveDetectedPublic(uint16_t irq) { return receiveDetected(irq, kFakeHeaderValid, kFakePreambleDetected); }
+
+    // Chip IRQ masks, as each driver passes its own to receiveDetected()
+    static constexpr uint16_t kFakeHeaderValid = 1 << 1;
+    static constexpr uint16_t kFakePreambleDetected = 1 << 2;
 
     // What a chip with a receive FIFO is asked to drop when a frame is given up on unread
     uint32_t discardedRxFrames = 0;
@@ -688,6 +718,46 @@ static void test_clearReadIrqs_alsoDiscardsTheUnreadFrame()
     TEST_ASSERT_EQUAL_UINT32(1, radioIf.discardedRxFrames);
 }
 
+// A dropped frame's HEADER_VALID is the same hazard one step earlier: left latched, it starts the stale-flag window,
+// and the next frame's own HEADER_VALID lands on a bit already set, so that window is never restarted and its expiry
+// re-arms RX over a live frame. Regression guarded: clearing only RX_DONE and CRC_ERR, which leaves the dead frame's
+// header and preamble to time the next frame's window.
+static void test_clearReadIrqs_retiresTheDeadFramesHeaderAndPreamble()
+{
+    FakeIrqRadio phy;
+    auto *radioIf = new TestableRadioLibInterface(&phy);
+    radioIf->packetTimeMs = 100;
+    const uint32_t rxDone = phy.getIrqMapped(1UL << RADIOLIB_IRQ_RX_DONE);
+    const uint32_t valid = phy.getIrqMapped(1UL << RADIOLIB_IRQ_HEADER_VALID);
+    const uint32_t preamble = phy.getIrqMapped(1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED);
+
+    // A frame arrived and nobody will read it out, so its flags are all still up
+    Time::setTestMillis(1000);
+    phy.irqFlags = rxDone | valid | preamble;
+    radioIf->clearReadIrqsPublic();
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, phy.irqFlags & (valid | preamble), "the dead frame's header must go with its RX_DONE");
+
+    // Nothing is latched, so the poll has no window to start
+    radioIf->checkStaleRxFlags();
+    TEST_ASSERT_EQUAL_UINT32(0, radioIf->rxFlagsSeenMs);
+
+    // The next frame's header starts its own window, timed from here and not from the dead frame
+    Time::setTestMillis(1100);
+    phy.irqFlags = valid | preamble;
+    radioIf->checkStaleRxFlags();
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1100, radioIf->rxFlagsSeenMs, "the live frame's header must time its own window");
+    TEST_ASSERT_TRUE(radioIf->rxFlagsSeenValidHeader);
+
+    // Still inside that window one max packet after the drop: the live frame is not re-armed over
+    Time::setTestMillis(1150);
+    radioIf->checkStaleRxFlags();
+    TEST_ASSERT_EQUAL_UINT32(1100, radioIf->rxFlagsSeenMs);
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(valid, phy.irqFlags & valid, "the live frame's header must still be latched");
+
+    Time::useRealClock();
+    delete radioIf;
+}
+
 void setUp(void)
 {
     mockMeshService = new MockMeshService();
@@ -715,37 +785,267 @@ void tearDown(void)
 // latched one max packet after it was first seen has no frame behind it.
 //
 // Pinned: nothing happens inside that window (a frame may still be arriving); after it, a bare preamble is
-// only cleared, because a clear never aborts a reception; a header re-arms, because SX1280 DS rev 3.3 16.2
-// leaves RX wedged after a header error with no RX_DONE or timeout to follow, and a clear does not unwedge it.
+// only cleared, because a clear never aborts a reception; a valid header re-arms, because nothing short of a
+// restart retires HEADER_VALID. A header error re-arms only where it wedges RX - SX1280 DS rev 3.3 16.2 leaves
+// RX stuck after one with no RX_DONE or timeout to follow, and a clear does not unwedge it - and is otherwise
+// cleared, because on every other chip the demodulator is already back hunting for a preamble.
+//
+// One header raises HEADER_VALID or HEADER_ERR and never both (SX1262 DS rev 2.1 table 13-29), so the two
+// together are two frames: the error is the older one and must not decide anything about the valid header.
 // Regressions guarded: re-arming on a preamble (startReceive() goes through standby, which aborts a frame
-// that is in fact arriving), acting before the window closes, or never acting at all.
+// that is in fact arriving), re-arming on a stale error while a good frame is on air, acting before the
+// window closes, or never acting at all.
+
+// errWedgesRx false unless a case is about the SX1280 wedge: every other chip is the common path.
+static StaleRxFlagAction policy(bool validSeen, bool errSeen, uint32_t sinceMsec, uint32_t maxPacketMsec)
+{
+    return staleRxFlagAction(validSeen, errSeen, false, sinceMsec, maxPacketMsec);
+}
 
 static void test_staleRxFlagAction_keepsFlagsInsideTheWindow()
 {
-    TEST_ASSERT_EQUAL(static_cast<int>(StaleRxFlagAction::Keep), static_cast<int>(staleRxFlagAction(false, 0, 99)));
-    TEST_ASSERT_EQUAL(static_cast<int>(StaleRxFlagAction::Keep), static_cast<int>(staleRxFlagAction(true, 98, 99)));
+    TEST_ASSERT_EQUAL(static_cast<int>(StaleRxFlagAction::Keep), static_cast<int>(policy(false, false, 0, 99)));
+    TEST_ASSERT_EQUAL(static_cast<int>(StaleRxFlagAction::Keep), static_cast<int>(policy(true, false, 98, 99)));
+    TEST_ASSERT_EQUAL(static_cast<int>(StaleRxFlagAction::Keep), static_cast<int>(policy(false, true, 98, 99)));
 }
 
 static void test_staleRxFlagAction_windowEndsAtExactlyOneMaxPacket()
 {
     // Inclusive at the boundary, matching Throttle::hasElapsed().
-    TEST_ASSERT_EQUAL(static_cast<int>(StaleRxFlagAction::ClearPreamble), static_cast<int>(staleRxFlagAction(false, 99, 99)));
-    TEST_ASSERT_EQUAL(static_cast<int>(StaleRxFlagAction::Rearm), static_cast<int>(staleRxFlagAction(true, 99, 99)));
+    TEST_ASSERT_EQUAL(static_cast<int>(StaleRxFlagAction::ClearPreamble), static_cast<int>(policy(false, false, 99, 99)));
+    TEST_ASSERT_EQUAL(static_cast<int>(StaleRxFlagAction::Rearm), static_cast<int>(policy(true, false, 99, 99)));
 }
 
 static void test_staleRxFlagAction_barePreambleIsOnlyCleared()
 {
-    TEST_ASSERT_EQUAL(static_cast<int>(StaleRxFlagAction::ClearPreamble), static_cast<int>(staleRxFlagAction(false, 2200, 2115)));
+    TEST_ASSERT_EQUAL(static_cast<int>(StaleRxFlagAction::ClearPreamble), static_cast<int>(policy(false, false, 2200, 2115)));
 }
 
-static void test_staleRxFlagAction_staleHeaderIsRearmed()
+static void test_staleRxFlagAction_staleValidHeaderIsRearmed()
 {
-    TEST_ASSERT_EQUAL(static_cast<int>(StaleRxFlagAction::Rearm), static_cast<int>(staleRxFlagAction(true, 60000, 2115)));
+    TEST_ASSERT_EQUAL(static_cast<int>(StaleRxFlagAction::Rearm), static_cast<int>(policy(true, false, 60000, 2115)));
+}
+
+// The regression. A header error latches, no RX_DONE follows, and a good frame's HEADER_VALID lands beside it.
+// Deciding on "a header is up" re-arms one max packet after the ERROR was first seen - a standby in the middle
+// of the good frame. The error is the stale one, so it is retired and the valid header's own window decides.
+static void test_staleRxFlagAction_staleHeaderErrBesideValidHeaderIsRetired()
+{
+    // Inside the valid header's window and past it: either way the error goes first and nothing re-arms on it.
+    TEST_ASSERT_EQUAL(static_cast<int>(StaleRxFlagAction::ClearHeaderErr), static_cast<int>(policy(true, true, 10, 2115)));
+    TEST_ASSERT_EQUAL(static_cast<int>(StaleRxFlagAction::ClearHeaderErr), static_cast<int>(policy(true, true, 60000, 2115)));
+    // On a chip a header error wedges, the same pair means the opposite: RX could not have reached a later
+    // header while wedged, so the error came second, the valid header's frame is dead, and only a re-arm
+    // listens again. Guarded here: clearing the error there leaves the chip deaf until that window expires.
+    TEST_ASSERT_EQUAL_MESSAGE(static_cast<int>(StaleRxFlagAction::Rearm),
+                              static_cast<int>(staleRxFlagAction(true, true, true, 10, 2115)),
+                              "a wedging chip must re-arm, not wait out the valid header's window");
+    TEST_ASSERT_EQUAL(static_cast<int>(StaleRxFlagAction::Rearm),
+                      static_cast<int>(staleRxFlagAction(true, true, true, 60000, 2115)));
+}
+
+// A lone stale header error: only the chips it wedges pay a re-arm's standby for it.
+static void test_staleRxFlagAction_loneStaleHeaderErrRearmsOnlyWhereItWedgesRx()
+{
+    TEST_ASSERT_EQUAL(static_cast<int>(StaleRxFlagAction::ClearHeaderErr), static_cast<int>(policy(false, true, 60000, 2115)));
+    TEST_ASSERT_EQUAL(static_cast<int>(StaleRxFlagAction::Rearm),
+                      static_cast<int>(staleRxFlagAction(false, true, true, 60000, 2115)));
 }
 
 // checkStaleRxFlags() itself, which the cases above cannot see: a header that shows after a bare preamble gets its own
 // max-packet window, timed from when the header showed. Regression guarded: timing the header from the earlier
 // preamble's stamp, which re-arms RX - a standby that aborts the frame whose header has only just arrived.
+// maxRxFrameMsec() and the preamble hold in src/mesh/RadioLibInterface.cpp: how long a sighted preamble keeps TX off
+// the air. Neither PREAMBLE_DETECTED nor HEADER_VALID says when its frame ends - a foreign sync word never produces a
+// header at all - so the hold runs for the longest frame that could be arriving.
+//
+// Pinned: that length is the 255-byte PHY frame at CR 4/8 with CRC, not our own configured CR, because the sender's
+// header carries its CR and is unreadable when the hold starts. Regressions guarded: sizing the hold from
+// getPacketTime(DATA_PAYLOAD_LEN + header), which is 249 bytes at our own CR and expires with a legal maximum frame
+// still on air; and reading a RadioLib error code as a duration (#11935), which getPacketTime() then has to cover.
+
+static void test_preambleHold_isSizedForTheWorstCaseFrame()
+{
+    FakeIrqRadio phy;
+    phy.timeOnAirUsec = 158001; // 255 B at CR 4/8 with CRC, about SHORT_TURBO
+    auto *radioIf = new TestableRadioLibInterface(&phy);
+    radioIf->packetTimeMs = 100; // what 249 B at our own CR would have given
+
+    Time::setTestMillis(1000);
+    TEST_ASSERT_TRUE(radioIf->receiveDetectedPublic(TestableRadioLibInterface::kFakePreambleDetected));
+    // The first sighting short-circuits on the unset stamp, so the bound has to be asked for before the chip has been
+    // asked anything at all.
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(159, radioIf->maxRxFrameMsecPublic(), "part milliseconds round up");
+    TEST_ASSERT_EQUAL_UINT8_MESSAGE(8, phy.lastCodingRate, "the hold must be timed at the worst case CR, not ours");
+    TEST_ASSERT_TRUE_MESSAGE(phy.lastCrcEnabled, "a received frame may carry a CRC, which lengthens it");
+
+    Time::setTestMillis(1100); // the old sizing released here, with the frame still arriving
+    TEST_ASSERT_TRUE(radioIf->preambleHoldActivePublic());
+    Time::setTestMillis(1158);
+    TEST_ASSERT_TRUE(radioIf->preambleHoldActivePublic());
+    Time::setTestMillis(1159);
+    TEST_ASSERT_FALSE(radioIf->preambleHoldActivePublic());
+
+    Time::useRealClock();
+    delete radioIf;
+}
+
+static void test_preambleHold_fallsBackWhenTheRadioCannotTimeTheFrame()
+{
+    FakeIrqRadio phy; // answers 0 usec, which isRadioLibTimeError() reads as an error, not as no airtime
+    auto *radioIf = new TestableRadioLibInterface(&phy);
+    radioIf->packetTimeMs = 120;
+    radioIf->setModem(11, 250.0f, 8); // already the worst case, so nothing to scale
+
+    TEST_ASSERT_EQUAL_UINT32(120, radioIf->maxRxFrameMsecPublic());
+
+    delete radioIf;
+}
+
+static void test_preambleHold_fallbackIsScaledToTheWorstCaseCodingRate()
+{
+    // getPacketTime() times the frame at our own CR, so a configured rate below 4/8 would otherwise hold for less than
+    // the worst case a sender may be transmitting. Regression guarded: returning the configured-CR figure unscaled.
+    FakeIrqRadio phy; // 0 usec again, so the bound comes from the fallback
+    auto *radioIf = new TestableRadioLibInterface(&phy);
+    radioIf->packetTimeMs = 120;
+    radioIf->setModem(11, 250.0f, 5); // CR 4/5, the shortest we configure
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(192, radioIf->maxRxFrameMsecPublic(), "120 ms at CR 4/5 is 192 ms at CR 4/8");
+
+    delete radioIf;
+}
+
+static void test_preambleHold_clearsTheFlagAndSurvivesIt()
+{
+    // The hold is a timestamp, not a flag: the look that starts it clears PREAMBLE_DETECTED so the next look can see a
+    // fresh one, and the hold it started has to outlive that clear.
+    FakeIrqRadio phy;
+    phy.timeOnAirUsec = 50000;
+    auto *radioIf = new TestableRadioLibInterface(&phy);
+    radioIf->packetTimeMs = 50;
+
+    Time::setTestMillis(1000);
+    phy.irqFlags = phy.getIrqMapped(1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED);
+    TEST_ASSERT_TRUE(radioIf->receiveDetectedPublic(TestableRadioLibInterface::kFakePreambleDetected));
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, phy.irqFlags, "the look must clear the preamble it found");
+
+    Time::setTestMillis(1020);
+    TEST_ASSERT_TRUE_MESSAGE(radioIf->receiveDetectedPublic(0), "a look with no flags set must still see the hold");
+
+    Time::useRealClock();
+    delete radioIf;
+}
+
+// preambleHeaderGraceMsec() in src/mesh/RadioInterface.h and preambleHoldPeekable(): when the TX path may stop waiting
+// out a bare-preamble hold and let its pre-TX CAD judge the channel instead. The grace is the rest of the preamble plus
+// the ~12.25 symbols of sync word, SFD and explicit header, so once it has passed with no HEADER_VALID the sighting was
+// noise or LoRa we cannot decode - and a hold is 159 ms at SHORT_TURBO but 14 s at LONG_SLOW, long enough to overflow
+// the Tx queue.
+//
+// Pinned: nothing peeks inside the grace (our own header may still be coming), a header ends the peek for the whole
+// hold, and the grace is never zero. Regressions guarded: deriving the grace from RadioInterface::preambleTimeMsec,
+// whole milliseconds that truncate to 0 above 2 GHz where a 12-symbol preamble is 0.95 ms - every sighting then
+// peekable the moment it was seen, which is the one case the hold exists for.
+
+static void test_preambleHeaderGrace_wideLoraIsNeverZero()
+{
+    // SHORT_TURBO at 2.4 GHz: SF7, 1625 kHz, 12-symbol preamble. A symbol is 79 us and the whole preamble 0.95 ms.
+    TEST_ASSERT_EQUAL_UINT32(3, preambleHeaderGraceMsec(7, 1625.0f, 12));
+    // The shortest preamble we can be configured for stays above zero too.
+    TEST_ASSERT_EQUAL_UINT32(1, preambleHeaderGraceMsec(5, 1625.0f, 12));
+}
+
+static void test_preambleHeaderGrace_roundsUp()
+{
+    // SHORT_FAST at 2.4 GHz: 4.14 ms of symbols. Truncating the preamble to 1 ms first gave 3.
+    TEST_ASSERT_EQUAL_UINT32(5, preambleHeaderGraceMsec(7, 812.5f, 12));
+}
+
+static void test_preambleHeaderGrace_subGhzPresets()
+{
+    TEST_ASSERT_EQUAL_UINT32(8, preambleHeaderGraceMsec(7, 500.0f, 16));    // SHORT_TURBO
+    TEST_ASSERT_EQUAL_UINT32(248, preambleHeaderGraceMsec(11, 250.0f, 16)); // LONG_FAST
+    TEST_ASSERT_EQUAL_UINT32(992, preambleHeaderGraceMsec(12, 125.0f, 16)); // LONG_SLOW
+}
+
+// SHORT_TURBO sub-GHz: a 16-symbol preamble, so a grace of 8 ms inside a hold of 159 ms.
+static TestableRadioLibInterface *makeHoldingRadio(FakeIrqRadio &phy)
+{
+    phy.timeOnAirUsec = 159000;
+    auto *radioIf = new TestableRadioLibInterface(&phy);
+    radioIf->setModem(7, 500.0f, 5);
+    radioIf->setPreambleLength(16);
+    radioIf->packetTimeMs = 159;
+    return radioIf;
+}
+
+static void test_preambleHoldPeekable_onlyOnceTheHeaderWasDue()
+{
+    FakeIrqRadio phy;
+    auto *radioIf = makeHoldingRadio(phy);
+
+    Time::setTestMillis(1000);
+    TEST_ASSERT_FALSE_MESSAGE(radioIf->preambleHoldPeekablePublic(), "nothing has been sighted yet");
+    TEST_ASSERT_TRUE(radioIf->receiveDetectedPublic(TestableRadioLibInterface::kFakePreambleDetected));
+
+    Time::setTestMillis(1007);
+    TEST_ASSERT_FALSE_MESSAGE(radioIf->preambleHoldPeekablePublic(), "a frame we can decode may still show its header");
+    Time::setTestMillis(1008);
+    TEST_ASSERT_TRUE_MESSAGE(radioIf->preambleHoldPeekablePublic(), "past the header time, the CAD should settle it");
+
+    Time::setTestMillis(1159);
+    TEST_ASSERT_FALSE_MESSAGE(radioIf->preambleHoldPeekablePublic(),
+                              "the hold itself has ended, so there is nothing to peek past");
+
+    Time::useRealClock();
+    delete radioIf;
+}
+
+static void test_preambleHoldPeekable_aHeaderEndsThePeekForTheWholeHold()
+{
+    // HEADER_VALID means a real frame on a modem we share: wait it out rather than keying up over it.
+    FakeIrqRadio phy;
+    auto *radioIf = makeHoldingRadio(phy);
+
+    Time::setTestMillis(1000);
+    TEST_ASSERT_TRUE(radioIf->receiveDetectedPublic(TestableRadioLibInterface::kFakePreambleDetected));
+    Time::setTestMillis(1020);
+    TEST_ASSERT_TRUE(radioIf->receiveDetectedPublic(TestableRadioLibInterface::kFakeHeaderValid));
+    TEST_ASSERT_FALSE(radioIf->preambleHoldPeekablePublic());
+
+    Time::setTestMillis(1100);
+    TEST_ASSERT_TRUE_MESSAGE(radioIf->preambleHoldActivePublic(), "the hold still runs");
+    TEST_ASSERT_FALSE_MESSAGE(radioIf->preambleHoldPeekablePublic(), "and stays unpeekable for the rest of it");
+
+    Time::useRealClock();
+    delete radioIf;
+}
+
+static void test_preambleHoldPeekable_aNewHoldForgetsTheOldHeader()
+{
+    // The next sighting is its own frame: a header from the hold before it must not keep the CAD out.
+    FakeIrqRadio phy;
+    auto *radioIf = makeHoldingRadio(phy);
+
+    Time::setTestMillis(1000);
+    TEST_ASSERT_TRUE(radioIf->receiveDetectedPublic(TestableRadioLibInterface::kFakePreambleDetected));
+    Time::setTestMillis(1020);
+    TEST_ASSERT_TRUE(radioIf->receiveDetectedPublic(TestableRadioLibInterface::kFakeHeaderValid));
+    TEST_ASSERT_FALSE(radioIf->preambleHoldPeekablePublic());
+
+    Time::setTestMillis(1159); // that hold, and the frame it stood for, are over
+    TEST_ASSERT_FALSE(radioIf->preambleHoldActivePublic());
+    Time::setTestMillis(1160);
+    TEST_ASSERT_TRUE(radioIf->receiveDetectedPublic(TestableRadioLibInterface::kFakePreambleDetected));
+
+    Time::setTestMillis(1168);
+    TEST_ASSERT_TRUE_MESSAGE(radioIf->preambleHoldPeekablePublic(), "the new sighting is judged on its own");
+
+    Time::useRealClock();
+    delete radioIf;
+}
+
 static void test_checkStaleRxFlags_headerAfterPreambleRestartsTheWindow()
 {
     FakeIrqRadio phy;
@@ -772,6 +1072,119 @@ static void test_checkStaleRxFlags_headerAfterPreambleRestartsTheWindow()
     TEST_ASSERT_TRUE(radioIf->rxFlagsSeenHeader);
 
     Time::useRealClock();
+    delete radioIf;
+}
+
+// The regression, end to end through the poll. A header fails on noise or a collision, HEADER_ERR latches and
+// nothing clears it. A good frame then arrives and raises HEADER_VALID beside it. Timing a header from the
+// error's stamp re-arms RX one max packet later, and startReceive()'s standby aborts the frame being received.
+// Guarded here: the valid header gets its own window, and the error is retired instead of deciding anything.
+static void test_checkStaleRxFlags_validHeaderAfterHeaderErrRestartsTheWindow()
+{
+    FakeIrqRadio phy;
+    auto *radioIf = new TestableRadioLibInterface(&phy);
+    radioIf->packetTimeMs = 100;
+
+    // A failed header, seen by the poll: this is where develop starts the clock that goes on to abort the frame
+    Time::setTestMillis(1000);
+    phy.irqFlags = phy.getIrqMapped(1UL << RADIOLIB_IRQ_HEADER_ERR);
+    radioIf->checkStaleRxFlags();
+    TEST_ASSERT_EQUAL_UINT32(1000, radioIf->rxFlagsSeenMs);
+    TEST_ASSERT_TRUE(radioIf->rxFlagsSeenHeader);
+    TEST_ASSERT_FALSE(radioIf->rxFlagsSeenValidHeader);
+
+    // A good frame's header lands beside the stale error: its own window starts here
+    Time::setTestMillis(1090);
+    phy.irqFlags |= phy.getIrqMapped(1UL << RADIOLIB_IRQ_HEADER_VALID);
+    radioIf->checkStaleRxFlags();
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1090, radioIf->rxFlagsSeenMs, "a valid header must restart a failed header's window");
+    TEST_ASSERT_TRUE(radioIf->rxFlagsSeenValidHeader);
+
+    // Past one max packet from the error, inside the valid header's window: the error goes, the window stays
+    Time::setTestMillis(1150);
+    radioIf->checkStaleRxFlags();
+    TEST_ASSERT_EQUAL_UINT32(phy.getIrqMapped(1UL << RADIOLIB_IRQ_HEADER_ERR), phy.clearedIrqFlags);
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1090, radioIf->rxFlagsSeenMs, "retiring the error must not restart the window");
+    TEST_ASSERT_TRUE(radioIf->rxFlagsSeenValidHeader);
+
+    Time::useRealClock();
+    delete radioIf;
+}
+
+// A failed header latches beside its own preamble, and both are the dead frame's. Retiring only the error
+// leaves the preamble for the next send's receiveDetected(), which holds TX a max packet over nothing - a wait
+// the re-arm this replaces never cost, since its standby cleared the whole flag register.
+static void test_checkStaleRxFlags_loneStaleHeaderErrRetiresItsPreambleToo()
+{
+    FakeIrqRadio phy;
+    auto *radioIf = new TestableRadioLibInterface(&phy);
+    radioIf->packetTimeMs = 100;
+
+    const uint32_t preamble = phy.getIrqMapped(1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED);
+    const uint32_t headerErr = phy.getIrqMapped(1UL << RADIOLIB_IRQ_HEADER_ERR);
+
+    Time::setTestMillis(1000);
+    phy.irqFlags = preamble | headerErr;
+    radioIf->checkStaleRxFlags();
+    TEST_ASSERT_EQUAL_UINT32(1000, radioIf->rxFlagsSeenMs);
+    TEST_ASSERT_TRUE(radioIf->rxFlagsSeenHeader);
+    TEST_ASSERT_FALSE(radioIf->rxFlagsSeenValidHeader);
+
+    // Past one max packet with no valid header: the whole failed frame is retired, without a standby
+    Time::setTestMillis(1150);
+    radioIf->checkStaleRxFlags();
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(preamble | headerErr, phy.clearedIrqFlags, "the dead frame's preamble must go too");
+    TEST_ASSERT_EQUAL_UINT32(0, phy.irqFlags);
+    TEST_ASSERT_EQUAL_UINT32(0, radioIf->rxFlagsSeenMs);
+    TEST_ASSERT_FALSE(radioIf->rxFlagsSeenHeader);
+
+    Time::useRealClock();
+    delete radioIf;
+}
+
+// cadHandoffRxEnded() in src/mesh/RadioLibInterface.cpp: whether a CAD->RX handoff's RX has ended without a frame, so
+// the radio thread must end the handoff and re-arm. The readout task used to clear a damaged header's CRC_ERR or
+// HEADER_ERR and return, which left the handoff open and the chip possibly in standby until checkCadHandoffTimeout()
+// re-armed it up to a second later ("CAD>RX timeout" on an LR2021). Guards that every frameless end counts, and that
+// nothing counts outside a handoff, where plain RX leaves HEADER_ERR to checkStaleRxFlags().
+static void test_cadHandoffRxEnded_everyFramelessEndCounts()
+{
+    FakeIrqRadio phy;
+    auto *radioIf = new TestableRadioLibInterface(&phy);
+    radioIf->cadHandoffRxStart = 1000;
+
+    const uint32_t ends[] = {RADIOLIB_IRQ_TIMEOUT, RADIOLIB_IRQ_CRC_ERR, RADIOLIB_IRQ_HEADER_ERR};
+    for (uint32_t irq : ends) {
+        phy.irqFlags = phy.getIrqMapped(1UL << irq);
+        TEST_ASSERT_TRUE_MESSAGE(radioIf->cadHandoffRxEnded(), "a frameless end must close the handoff");
+    }
+
+    delete radioIf;
+}
+
+static void test_cadHandoffRxEnded_anRxStillRunningDoesNotCount()
+{
+    FakeIrqRadio phy;
+    auto *radioIf = new TestableRadioLibInterface(&phy);
+    radioIf->cadHandoffRxStart = 1000;
+
+    phy.irqFlags = 0;
+    TEST_ASSERT_FALSE(radioIf->cadHandoffRxEnded());
+    phy.irqFlags = phy.getIrqMapped((1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED) | (1UL << RADIOLIB_IRQ_HEADER_VALID));
+    TEST_ASSERT_FALSE_MESSAGE(radioIf->cadHandoffRxEnded(), "a frame still arriving must be left to finish");
+
+    delete radioIf;
+}
+
+static void test_cadHandoffRxEnded_falseWithoutAHandoff()
+{
+    FakeIrqRadio phy;
+    auto *radioIf = new TestableRadioLibInterface(&phy);
+    radioIf->cadHandoffRxStart = 0;
+
+    phy.irqFlags = phy.getIrqMapped((1UL << RADIOLIB_IRQ_HEADER_ERR) | (1UL << RADIOLIB_IRQ_TIMEOUT));
+    TEST_ASSERT_FALSE_MESSAGE(radioIf->cadHandoffRxEnded(), "plain RX's flags are not a handoff's end");
+
     delete radioIf;
 }
 
@@ -814,11 +1227,29 @@ void setup()
     RUN_TEST(test_computePacketTime_rxUsesHeaderInfoAndIsGuarded);
     RUN_TEST(test_isRadioLibTimeError_separatesCodesFromDurations);
     RUN_TEST(test_clearReadIrqs_alsoDiscardsTheUnreadFrame);
+    RUN_TEST(test_clearReadIrqs_retiresTheDeadFramesHeaderAndPreamble);
     RUN_TEST(test_staleRxFlagAction_keepsFlagsInsideTheWindow);
     RUN_TEST(test_staleRxFlagAction_windowEndsAtExactlyOneMaxPacket);
     RUN_TEST(test_staleRxFlagAction_barePreambleIsOnlyCleared);
-    RUN_TEST(test_staleRxFlagAction_staleHeaderIsRearmed);
+    RUN_TEST(test_staleRxFlagAction_staleValidHeaderIsRearmed);
+    RUN_TEST(test_staleRxFlagAction_staleHeaderErrBesideValidHeaderIsRetired);
+    RUN_TEST(test_staleRxFlagAction_loneStaleHeaderErrRearmsOnlyWhereItWedgesRx);
     RUN_TEST(test_checkStaleRxFlags_headerAfterPreambleRestartsTheWindow);
+    RUN_TEST(test_checkStaleRxFlags_validHeaderAfterHeaderErrRestartsTheWindow);
+    RUN_TEST(test_checkStaleRxFlags_loneStaleHeaderErrRetiresItsPreambleToo);
+    RUN_TEST(test_cadHandoffRxEnded_everyFramelessEndCounts);
+    RUN_TEST(test_cadHandoffRxEnded_anRxStillRunningDoesNotCount);
+    RUN_TEST(test_cadHandoffRxEnded_falseWithoutAHandoff);
+    RUN_TEST(test_preambleHold_isSizedForTheWorstCaseFrame);
+    RUN_TEST(test_preambleHold_fallsBackWhenTheRadioCannotTimeTheFrame);
+    RUN_TEST(test_preambleHold_fallbackIsScaledToTheWorstCaseCodingRate);
+    RUN_TEST(test_preambleHold_clearsTheFlagAndSurvivesIt);
+    RUN_TEST(test_preambleHeaderGrace_wideLoraIsNeverZero);
+    RUN_TEST(test_preambleHeaderGrace_roundsUp);
+    RUN_TEST(test_preambleHeaderGrace_subGhzPresets);
+    RUN_TEST(test_preambleHoldPeekable_onlyOnceTheHeaderWasDue);
+    RUN_TEST(test_preambleHoldPeekable_aHeaderEndsThePeekForTheWholeHold);
+    RUN_TEST(test_preambleHoldPeekable_aNewHoldForgetsTheOldHeader);
     exit(UNITY_END());
 }
 

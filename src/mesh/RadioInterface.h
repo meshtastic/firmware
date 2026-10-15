@@ -7,6 +7,7 @@
 #include "airtime.h"
 #include "error.h"
 #include <memory>
+#include <meshUtils.h> // for pow_of_2
 
 #if HAS_LORA_FEM
 #include "LoRaFEMInterface.h"
@@ -359,15 +360,35 @@ class RadioInterface
 std::unique_ptr<RadioInterface> initLoRa();
 
 // What the plain-RX poll does with PREAMBLE/HEADER flags that no RX_DONE has consumed.
-enum class StaleRxFlagAction : uint8_t { Keep, ClearPreamble, Rearm };
+enum class StaleRxFlagAction : uint8_t { Keep, ClearPreamble, ClearHeaderErr, Rearm };
 
 // RX_DONE clears every flag, so one still latched a max packet after first sight has no frame behind it.
-// A header may mean a wedged demodulator (SX1280 DS 16.2), so re-arm; a bare preamble is only cleared.
-constexpr StaleRxFlagAction staleRxFlagAction(bool headerSeen, uint32_t sinceFirstSeenMsec, uint32_t maxPacketTimeMsec)
+// One header raises HEADER_VALID or HEADER_ERR and never both (SX1262 DS rev 2.1 table 13-29), so an error
+// beside a valid header is an earlier frame's and is retired without touching the valid header's window.
+// Where a header error wedges RX instead (SX1280 DS rev 3.3 16.2) the two together mean something else: RX
+// could not have reached a later header while wedged, so the error is the NEWER of the two, the frame behind
+// that valid header is dead, and only a re-arm gets the chip listening again - there is nothing left to abort.
+constexpr StaleRxFlagAction staleRxFlagAction(bool validSeen, bool errSeen, bool errWedgesRx, uint32_t sinceFirstSeenMsec,
+                                              uint32_t maxPacketTimeMsec)
 {
-    return sinceFirstSeenMsec < maxPacketTimeMsec ? StaleRxFlagAction::Keep
-           : headerSeen                           ? StaleRxFlagAction::Rearm
-                                                  : StaleRxFlagAction::ClearPreamble;
+    return validSeen && errSeen                     ? (errWedgesRx ? StaleRxFlagAction::Rearm : StaleRxFlagAction::ClearHeaderErr)
+           : sinceFirstSeenMsec < maxPacketTimeMsec ? StaleRxFlagAction::Keep
+           : validSeen                              ? StaleRxFlagAction::Rearm
+           : !errSeen                               ? StaleRxFlagAction::ClearPreamble
+           : errWedgesRx                            ? StaleRxFlagAction::Rearm
+                                                    : StaleRxFlagAction::ClearHeaderErr;
+}
+
+// How long after a preamble sighting a frame we can decode would have latched HEADER_VALID: the rest of the preamble plus
+// the ~12.25 symbols of sync word, SFD and explicit header, and 2 more because PREAMBLE_DETECTED dates from a look, not
+// from the first symbol. Taken from sf and bw, never from preambleTimeMsec: that is whole milliseconds, and a wide-LoRa
+// symbol is tens of microseconds, so the stored value truncates to 0 and would make every sighting peekable at once.
+inline uint32_t preambleHeaderGraceMsec(uint8_t sf, float bwKhz, uint16_t preambleLength)
+{
+    const float symbolMsec = (float)pow_of_2(sf) / bwKhz; // bw is in kHz, so a symbol time comes out in milliseconds
+    const float grace = symbolMsec * (preambleLength + 14.25f);
+    const uint32_t whole = (uint32_t)grace;
+    return grace > (float)whole ? whole + 1 : whole; // round up, so a sub-millisecond grace is never zero
 }
 
 /// Debug printing for packets
