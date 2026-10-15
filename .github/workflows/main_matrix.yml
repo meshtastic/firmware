@@ -1,6 +1,8 @@
 name: CI
 concurrency:
-  group: ci-${{ github.head_ref || github.run_id }}
+  # PRs and pushes cancel the superseded run on the same branch. merge_group,
+  # schedule and workflow_dispatch (releases) runs each get their own group.
+  group: ci-${{ github.head_ref || (github.event_name == 'push' && github.ref) || github.run_id }}
   cancel-in-progress: true
 on:
   # The merge queue is the pre-merge gate for the protected branches (master,
