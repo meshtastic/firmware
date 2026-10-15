@@ -294,7 +294,7 @@ static void plotNode(OLEDDisplay *display, int cx, int cy, int radius, float bea
  *   - Header row: "Radar <scale>" - drawn here so the title can include the
  *     current outer-ring range
  *   - Right side: circular radar with 2 px padding on all sides
- *   - Left side: node list (up to 5 closest nodes, marker + name + distance)
+ *   - Left side: node list (closest nodes, as many rows as fit up to 10)
  *
  * Called from NodeListRenderer::drawDynamicListScreen_Location when
  * config.display.bearings_view_radar is true.  The caller draws the footer; this
@@ -354,27 +354,9 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
     const double myLat = ourPos.latitude_i * 1e-7;
     const double myLon = ourPos.longitude_i * 1e-7;
 
-    // -----------------------------------------------------------------------
-    // Heading.
-    //
-    // Priority:
-    //  1. BMX160/RAK12034 tilt-compensated heading (screen->hasHeading())
-    //  2. GPS movement track (estimatedHeading)
-    //  3. North-up fallback (0)
-    //
-    // s_forceNorthUp overrides (1) and (2) - set via the long-press menu.
-    // -----------------------------------------------------------------------
-    const bool imuAvailable = screen->hasHeading();
-    const bool headingUp = imuAvailable && !s_forceNorthUp;
-    float headingRad = 0.0f; // north-up fallback
-    if (headingUp) {
-        headingRad = screen->getHeading() * DEG_TO_RAD;
-    } else if (!s_forceNorthUp) {
-        // GPS movement track: estimatedHeading returns degrees, or -1.0f when unavailable.
-        const float estHeadingDeg = screen->estimatedHeading(myLat, myLon);
-        if (estHeadingDeg >= 0.0f)
-            headingRad = estHeadingDeg * DEG_TO_RAD;
-    }
+    // Heading-up only with a compass; GPS track heading spins on stationary jitter, so no-compass stays north-up.
+    const bool headingUp = screen->hasHeading() && !s_forceNorthUp;
+    const float headingRad = headingUp ? screen->getHeading() * DEG_TO_RAD : 0.0f;
 
     // -----------------------------------------------------------------------
     // Collect remote nodes with valid positions.
@@ -422,8 +404,17 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
     // Auto-scale from only the nodes we will actually plot, so a single
     // far-away node can't push the scale into a high bucket and squash all
     // the close nodes into an invisible cluster at the centre.
+    // High-res panels list in the smaller local font so more rows fit beside the radar.
+    const bool highRes = currentResolution == ScreenResolution::High;
+    const uint8_t *listFont = highRes ? FONT_SMALL_LOCAL : FONT_SMALL;
+    const int listFontH = highRes ? _fontHeight(FONT_SMALL_LOCAL) : FONT_HEIGHT_SMALL;
+    constexpr int kListTopPad = 5;
+    // Low-res keeps the overlapping-bbox pitch (ink is half the bbox); high-res rows stay clear of each other.
+    const int kMinRowPitch = highRes ? listFontH - 2 : FONT_HEIGHT_SMALL / 2 + 1;
     const int minDim = std::min(sw, sh);
-    const int kMaxPlotted = (minDim >= 230) ? 10 : (minDim > 128) ? 8 : 5;
+    const int kMaxPlotted = highRes          ? std::max(1, std::min(10, (listContentH - kListTopPad) / kMinRowPitch))
+                            : (minDim > 128) ? 8
+                                             : 5;
     float maxDistM = 1.0f;
     const int plottedCount = std::min((int)entries.size(), kMaxPlotted);
     for (int i = 0; i < plottedCount; i++) {
@@ -517,18 +508,24 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
     //
     // Each row: marker symbol (matches the radar dot) | short name | distance.
     // -----------------------------------------------------------------------
-    display->setFont(FONT_SMALL);
+    display->setFont(listFont);
 
-    constexpr int kListTopPad = 5;
-    // Half the font bbox is the glyph's visible ink, so the tightest legible pitch.
-    const int kMinRowPitch = FONT_HEIGHT_SMALL / 2 + 1;
     const int rowPitch = std::max(kMinRowPitch, (listContentH - kListTopPad) / kMaxPlotted);
     const int listRows = std::min(plottedCount, std::max(1, (listContentH - kListTopPad) / rowPitch));
 
-    // Marker centred to the visible text height (rowY is the top of the
-    // glyph bbox; centring on rowPitch/2 read as "top-aligned" because the
-    // font's bbox is taller than its visible ink).
-    const int symOffsetY = (FONT_HEIGHT_SMALL - 2) / 2;
+    // Marker centred on the visible text height, not the taller glyph bbox.
+    const int symOffsetY = (listFontH - 2) / 2;
+
+    // Distances sit just after the longest name, not at the far column edge.
+    const int nameX = x + 7 + 2 * markerRadius();
+    constexpr int kNameDistGap = 6;
+    int maxNameW = 0;
+    for (int i = 0; i < listRows; i++) {
+        char name[10];
+        nodeLabel(name, sizeof(name), entries[i].node);
+        maxNameW = std::max(maxNameW, (int)display->getStringWidth(name));
+    }
+    const int distX = nameX + maxNameW + kNameDistGap;
 
     for (int i = 0; i < listRows; i++) {
         const Entry &e = entries[i];
@@ -545,11 +542,15 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
         formatDistM(dist, sizeof(dist), e.distM);
 
         display->setTextAlignment(TEXT_ALIGN_LEFT);
-        // 3 px gap after the marker's right edge.
-        display->drawString(x + 7 + 2 * markerRadius(), rowY, name);
-        display->setTextAlignment(TEXT_ALIGN_RIGHT);
-        display->drawString(listRight, rowY, dist); // listRight already carries x
-        display->setTextAlignment(TEXT_ALIGN_LEFT);
+        display->drawString(nameX, rowY, name);
+        // Fall back to right-aligning at the column edge if a long name would push it into the radar.
+        if (distX + (int)display->getStringWidth(dist) <= listRight) {
+            display->drawString(distX, rowY, dist);
+        } else {
+            display->setTextAlignment(TEXT_ALIGN_RIGHT);
+            display->drawString(listRight, rowY, dist);
+            display->setTextAlignment(TEXT_ALIGN_LEFT);
+        }
     }
 
     // No active nodes in range - the radar above is intentionally empty (rings
