@@ -2,6 +2,8 @@
 
 #include "./MapApplet.h"
 #include "./MapTile.h"
+#include "./MapTileUtils.h"
+#include "./SDMapTiles.h"
 #include "WaypointStore.h"
 #include "WaypointUtils.h"
 
@@ -20,11 +22,18 @@ static int gridTilesPerBlock();
 static int tileZoomAt(int tileIndex);
 static int tileTxAt(int tileIndex);
 static int tileTyAt(int tileIndex);
+static bool hasMapTileZoom(int zoom);
 static int tileMetadataZoomCount();
 static int tileMetadataZoomAt(int index);
+static bool hasMapTiles();
 
 namespace
 {
+
+bool hasLiveGpsPosition()
+{
+    return gpsStatus && gpsStatus->getHasLock() && (gpsStatus->getLatitude() != 0 || gpsStatus->getLongitude() != 0);
+}
 
 bool waypointHasAnchor(const meshtastic_Waypoint &waypoint)
 {
@@ -121,7 +130,17 @@ int InkHUD::MapApplet::onGpsStatusUpdate(const meshtastic::Status *status)
     if (!isActive() || !gpsStatus->getHasLock())
         return 0;
 
-    requestUpdate();
+    const float lat = gpsStatus->getLatitude() * 1e-7f;
+    const float lng = gpsStatus->getLongitude() * 1e-7f;
+    const bool backgroundChanged = !hasRefreshGpsPosition || metersToPx <= 0.0f ||
+                                   GeoCoord::latLongToMeter(refreshGpsLat, refreshGpsLng, lat, lng) * metersToPx >= 1.0f;
+    if (backgroundChanged) {
+        hasRefreshGpsPosition = true;
+        refreshGpsLat = lat;
+        refreshGpsLng = lng;
+    }
+
+    requestMapUpdate(backgroundChanged);
     return 0;
 }
 
@@ -132,8 +151,15 @@ int InkHUD::MapApplet::onWaypointStoreChanged(const WaypointStore *store)
     if (!isActive())
         return 0;
 
-    requestUpdate(Drivers::EInk::UpdateTypes::FAST);
+    requestMapUpdate(true);
     return 0;
+}
+
+void InkHUD::MapApplet::requestMapUpdate(bool backgroundChanged)
+{
+    const Drivers::EInk::UpdateTypes type =
+        backgroundChanged && hasMapTiles() ? Drivers::EInk::UpdateTypes::FULL : Drivers::EInk::UpdateTypes::FAST;
+    requestUpdate(type);
 }
 
 // Zoom in one step from the current display zoom.
@@ -143,10 +169,11 @@ void InkHUD::MapApplet::zoomIn()
     if (baseZoom < 0)
         return;
 
-    if (map_tile_count == 0) {
+    if (!hasMapTiles()) {
         if (baseZoom < ZOOM_MAX_NO_TILES) {
             s_lockedZoom = baseZoom + 1;
             s_zoomLocked = true;
+            inkhud->forceUpdate(Drivers::EInk::UpdateTypes::FULL);
         }
         return;
     }
@@ -163,6 +190,7 @@ void InkHUD::MapApplet::zoomIn()
 
     s_lockedZoom = next;
     s_zoomLocked = true;
+    inkhud->forceUpdate(Drivers::EInk::UpdateTypes::FULL);
 }
 
 void InkHUD::MapApplet::resetZoom()
@@ -170,6 +198,7 @@ void InkHUD::MapApplet::resetZoom()
     s_zoomLocked = false;
     s_lockedZoom = -1;
     focusedWaypointId = 0;
+    inkhud->forceUpdate(Drivers::EInk::UpdateTypes::FULL);
 }
 
 bool InkHUD::MapApplet::focusWaypoint(uint32_t waypointId)
@@ -181,6 +210,7 @@ bool InkHUD::MapApplet::focusWaypoint(uint32_t waypointId)
     s_zoomLocked = false;
     s_lockedZoom = -1;
     focusedWaypointId = waypointId;
+    inkhud->forceUpdate(Drivers::EInk::UpdateTypes::FULL);
     return true;
 }
 
@@ -189,7 +219,7 @@ bool InkHUD::MapApplet::canZoomIn() const
     if (s_lastRenderedZoom < 0)
         return false;
     int ref = s_zoomLocked ? s_lockedZoom : s_lastRenderedZoom;
-    if (map_tile_count == 0)
+    if (!hasMapTiles())
         return ref < ZOOM_MAX_NO_TILES;
     for (int i = 0; i < tileMetadataZoomCount(); i++) {
         if (tileMetadataZoomAt(i) > ref)
@@ -207,14 +237,16 @@ void InkHUD::MapApplet::zoomOut()
         return;
     }
 
-    if (map_tile_count == 0) {
+    if (!hasMapTiles()) {
         int floor = (s_autoFitZoom >= 0) ? s_autoFitZoom : baseZoom;
         if (baseZoom > floor) {
             s_lockedZoom = baseZoom - 1;
             s_zoomLocked = true;
+            inkhud->forceUpdate(Drivers::EInk::UpdateTypes::FULL);
         } else {
             s_zoomLocked = false;
             s_lockedZoom = -1;
+            inkhud->forceUpdate(Drivers::EInk::UpdateTypes::FULL);
         }
         return;
     }
@@ -229,11 +261,13 @@ void InkHUD::MapApplet::zoomOut()
     if (next < 0) {
         s_zoomLocked = false;
         s_lockedZoom = -1;
+        inkhud->forceUpdate(Drivers::EInk::UpdateTypes::FULL);
         return;
     }
 
     s_lockedZoom = next;
     s_zoomLocked = true;
+    inkhud->forceUpdate(Drivers::EInk::UpdateTypes::FULL);
 }
 
 bool InkHUD::MapApplet::canZoomOut() const
@@ -241,7 +275,7 @@ bool InkHUD::MapApplet::canZoomOut() const
     if (s_lastRenderedZoom < 0)
         return false;
     int ref = s_zoomLocked ? s_lockedZoom : s_lastRenderedZoom;
-    if (map_tile_count == 0)
+    if (!hasMapTiles())
         return s_autoFitZoom >= 0 ? ref > s_autoFitZoom : false;
     for (int i = 0; i < tileMetadataZoomCount(); i++) {
         if (tileMetadataZoomAt(i) < ref)
@@ -250,65 +284,13 @@ bool InkHUD::MapApplet::canZoomOut() const
     return false;
 }
 
-// Raw LZ4 block decompressor. Returns bytes written, or -1 on error.
-static int lz4_decompress(const uint8_t *src, int src_len, uint8_t *dst, int dst_cap)
-{
-    const uint8_t *s = src;
-    const uint8_t *s_end = src + src_len;
-    uint8_t *d = dst;
-    const uint8_t *d_end = dst + dst_cap;
-    while (s < s_end) {
-        uint8_t token = *s++;
-        int lit_len = (token >> 4) & 0xF;
-        if (lit_len == 15) {
-            uint8_t x;
-            do {
-                x = *s++;
-                lit_len += x;
-            } while (x == 255 && s < s_end);
-        }
-        if (d + lit_len > d_end || s + lit_len > s_end)
-            return -1;
-        memcpy(d, s, lit_len);
-        d += lit_len;
-        s += lit_len;
-        if (s >= s_end)
-            break;
-        if (s + 2 > s_end)
-            return -1;
-        int offset = (int)s[0] | ((int)s[1] << 8);
-        s += 2;
-        if (offset == 0 || d - offset < dst)
-            return -1;
-        int mat_len = (token & 0xF) + 4;
-        if (mat_len == 4 + 15) {
-            uint8_t x;
-            do {
-                x = *s++;
-                mat_len += x;
-            } while (x == 255 && s < s_end);
-        }
-        if (d + mat_len > d_end)
-            return -1;
-        const uint8_t *m = d - offset;
-        for (int i = 0; i < mat_len; i++)
-            *d++ = m[i];
-    }
-    return (int)(d - dst);
-}
-
-// Tiles are 1 bit/pixel, column-major: [bx=0..31][y=0..255], 8 pixels per byte.
-static uint8_t s_tileCacheBuffer[8192];
-static constexpr uint8_t MAP_TILE_LAYOUT_SPARSE = 0;
-static constexpr uint8_t MAP_TILE_LAYOUT_GRID = 1;
-static constexpr uint8_t MAP_TILE_KIND_LZ4 = 0;
-static constexpr uint8_t MAP_TILE_KIND_WHITE = 1;
-static constexpr uint8_t MAP_TILE_KIND_BLACK = 2;
+// MTB1 tiles are column-major with the leftmost pixel in each byte's MSB.
+static uint8_t tileBuffer[::NicheGraphics::InkHUD::MapTileUtils::TILE_BYTES];
 
 static bool usesGridTileLayout()
 {
-    return map_tile_layout == MAP_TILE_LAYOUT_GRID && map_tile_grid_cols > 0 && map_tile_grid_rows > 0 &&
-           map_tile_block_count > 0;
+    return map_tile_layout == ::NicheGraphics::InkHUD::MapTileUtils::LAYOUT_GRID && map_tile_grid_cols > 0 &&
+           map_tile_grid_rows > 0 && map_tile_block_count > 0;
 }
 
 static int gridTilesPerBlock()
@@ -347,66 +329,96 @@ static int tileTyAt(int tileIndex)
     return map_tile_block_ty[blockIndex] + (rows > 0 ? (localIndex % rows) : 0);
 }
 
+static bool hasMapTileZoom(int zoom)
+{
+    const uint8_t *embeddedZooms = map_tile_zooms;
+    int embeddedCount = map_tile_count;
+    if (usesGridTileLayout()) {
+        embeddedZooms = map_tile_block_zooms;
+        embeddedCount = map_tile_block_count;
+    }
+
+    for (int i = 0; i < embeddedCount; i++)
+        if (embeddedZooms[i] == zoom)
+            return true;
+
+    return ::NicheGraphics::InkHUD::SDMapTiles::hasZoom(zoom);
+}
+
 static int tileMetadataZoomCount()
 {
-    if (usesGridTileLayout())
-        return map_tile_block_count;
-    return map_tile_count;
+    int count = 0;
+    for (int zoom = 0; zoom <= 22; zoom++) {
+        if (hasMapTileZoom(zoom))
+            count++;
+    }
+    return count;
 }
 
 static int tileMetadataZoomAt(int index)
 {
-    return usesGridTileLayout() ? map_tile_block_zooms[index] : map_tile_zooms[index];
+    for (int zoom = 0; zoom <= 22; zoom++) {
+        if (hasMapTileZoom(zoom) && index-- == 0)
+            return zoom;
+    }
+    return -1;
+}
+
+static bool hasMapTiles()
+{
+    return tileMetadataZoomCount() > 0;
 }
 
 static const uint8_t *decodeSparseTile(int tileIndex)
 {
     const uint8_t kind = map_tile_kinds[tileIndex];
-    if (kind == MAP_TILE_KIND_WHITE) {
-        memset(s_tileCacheBuffer, 0x00, sizeof(s_tileCacheBuffer));
-        return s_tileCacheBuffer;
+    if (kind == ::NicheGraphics::InkHUD::MapTileUtils::KIND_WHITE) {
+        memset(tileBuffer, 0xFF, sizeof(tileBuffer));
+        return tileBuffer;
     }
-    if (kind == MAP_TILE_KIND_BLACK) {
-        memset(s_tileCacheBuffer, 0xFF, sizeof(s_tileCacheBuffer));
-        return s_tileCacheBuffer;
+    if (kind == ::NicheGraphics::InkHUD::MapTileUtils::KIND_BLACK) {
+        memset(tileBuffer, 0x00, sizeof(tileBuffer));
+        return tileBuffer;
     }
     const uint8_t *compressed = map_tile_data + map_tile_offsets[tileIndex];
-    int n = lz4_decompress(compressed, map_tile_sizes[tileIndex], s_tileCacheBuffer, sizeof(s_tileCacheBuffer));
-    return n == sizeof(s_tileCacheBuffer) ? s_tileCacheBuffer : nullptr;
+    const int decoded =
+        ::NicheGraphics::InkHUD::MapTileUtils::decompress(compressed, map_tile_sizes[tileIndex], tileBuffer, sizeof(tileBuffer));
+    return decoded == sizeof(tileBuffer) ? tileBuffer : nullptr;
 }
 
-// Draw tiles centered on latCenter/lngCenter. Falls back to the nearest available zoom if
-// no tiles exist at exactly zoom (upsamples), enabling smooth zoom steps.
-void InkHUD::MapApplet::drawMapTileBackground(int zoom)
+static int findEmbeddedTileOrParent(int zoom, int tx, int ty)
 {
-    if (map_tile_count == 0 || metersToPx <= 0.0f)
+    int bestTile = -1;
+    int bestZoom = -1;
+    for (int i = 0; i < map_tile_count; i++) {
+        const int candidateZoom = tileZoomAt(i);
+        if (candidateZoom > zoom || candidateZoom <= bestZoom)
+            continue;
+        const int zoomDifference = zoom - candidateZoom;
+        if (tileTxAt(i) == (tx >> zoomDifference) && tileTyAt(i) == (ty >> zoomDifference)) {
+            bestTile = i;
+            bestZoom = candidateZoom;
+            if (candidateZoom == zoom)
+                break;
+        }
+    }
+    return bestTile;
+}
+
+// Draw tiles centered on latCenter/lngCenter. Missing tiles sample their highest
+// available ancestor so sparse detail regions remain backed by wider coverage.
+void InkHUD::MapApplet::drawMapTileBackground(int selectedZoom)
+{
+    if (!hasMapTiles() || metersToPx <= 0.0f || selectedZoom < 0 || selectedZoom > 22)
         return;
 
     const float R = 6378137.0f;
     const float latRad = latCenter * DEG_TO_RAD;
-    const float mpp = (2.0f * M_PI * R / (256.0f * (float)(1 << zoom))) * cosf(latRad);
+    const float mpp = (2.0f * M_PI * R / (256.0f * (float)(1 << selectedZoom))) * cosf(latRad);
     const float worldPxPerScreenPx = 1.0f / (metersToPx * mpp);
 
-    // Find best tile zoom: highest available <= zoom, or lowest available if none below.
-    int tileZoom = -1;
-    for (int i = 0; i < tileMetadataZoomCount(); i++) {
-        int z = tileMetadataZoomAt(i);
-        if (z <= zoom && (tileZoom < 0 || z > tileZoom))
-            tileZoom = z;
-    }
-    if (tileZoom < 0) {
-        for (int i = 0; i < tileMetadataZoomCount(); i++) {
-            int z = tileMetadataZoomAt(i);
-            if (tileZoom < 0 || z < tileZoom)
-                tileZoom = z;
-        }
-    }
-    if (tileZoom < 0)
-        return;
-
-    // Convert screen-pixel movement into tileZoom coordinate space.
-    // When tileZoom < zoom, tile pixels are upsampled (each tile pixel covers >1 screen px).
-    const float tileWorldPx = worldPxPerScreenPx * ((float)(1 << tileZoom) / (float)(1 << zoom));
+    const int tileZoom = selectedZoom;
+    const float tileWorldPx = worldPxPerScreenPx;
 
     const float sinLat = sinf(latRad);
     const float gpxX = ((lngCenter + 180.0f) / 360.0f) * (float)(1 << tileZoom) * 256.0f;
@@ -417,44 +429,60 @@ void InkHUD::MapApplet::drawMapTileBackground(int zoom)
     const float minWy = gpxY - height() * 0.5f * tileWorldPx;
     const float maxWy = gpxY + height() * 0.5f * tileWorldPx;
 
-    for (int i = 0; i < map_tile_count; i++) {
-        if (tileZoomAt(i) != tileZoom)
-            continue;
+    const int tilesAtZoom = 1 << tileZoom;
+    const int minTx = (int)floorf(minWx / 256.0f);
+    const int maxTx = (int)floorf(maxWx / 256.0f);
+    const int minTy = max(0, (int)floorf(minWy / 256.0f));
+    const int maxTy = min(tilesAtZoom - 1, (int)floorf(maxWy / 256.0f));
+    for (int worldTx = minTx; worldTx <= maxTx; worldTx++) {
+        const int fileTx = ((worldTx % tilesAtZoom) + tilesAtZoom) % tilesAtZoom;
+        for (int ty = minTy; ty <= maxTy; ty++) {
+            const int embeddedTile = findEmbeddedTileOrParent(tileZoom, fileTx, ty);
+            const int embeddedZoom = embeddedTile >= 0 ? tileZoomAt(embeddedTile) : -1;
+            uint8_t sdZoom = 0;
+            const bool sdTile = ::NicheGraphics::InkHUD::SDMapTiles::readTileOrParent(tileZoom, fileTx, ty, tileBuffer,
+                                                                                      sizeof(tileBuffer), sdZoom);
+            const uint8_t *tile = sdTile ? tileBuffer : nullptr;
+            int sourceZoom = sdTile ? sdZoom : -1;
 
-        const int tx = tileTxAt(i);
-        const int ty = tileTyAt(i);
-        const float tileMinWx = tx * 256.0f;
-        const float tileMaxWx = tileMinWx + 256.0f;
-        const float tileMinWy = ty * 256.0f;
-        const float tileMaxWy = tileMinWy + 256.0f;
-        if (tileMaxWx < minWx || tileMinWx > maxWx || tileMaxWy < minWy || tileMinWy > maxWy)
-            continue;
-
-        const uint8_t *tile = decodeSparseTile(i);
-        if (!tile)
-            continue;
-
-        const int sxStart = max(0, (int)floorf(((tileMinWx - gpxX) / tileWorldPx) + width() * 0.5f));
-        const int sxEnd = min(width() - 1, (int)ceilf(((tileMaxWx - gpxX) / tileWorldPx) + width() * 0.5f) - 1);
-        const int syStart = max(0, (int)floorf(((tileMinWy - gpxY) / tileWorldPx) + height() * 0.5f));
-        const int syEnd = min(height() - 1, (int)ceilf(((tileMaxWy - gpxY) / tileWorldPx) + height() * 0.5f) - 1);
-
-        for (int sy = syStart; sy <= syEnd; sy++) {
-            const float wy = gpxY + (sy - height() * 0.5f) * tileWorldPx;
-            const int py = (int)(wy - tileMinWy);
-            if (py < 0 || py > 255)
+            if (embeddedTile >= 0 && embeddedZoom >= sourceZoom) {
+                tile = decodeSparseTile(embeddedTile);
+                sourceZoom = tile ? embeddedZoom : -1;
+                if (!tile && sdTile &&
+                    ::NicheGraphics::InkHUD::SDMapTiles::readTileOrParent(tileZoom, fileTx, ty, tileBuffer, sizeof(tileBuffer),
+                                                                          sdZoom)) {
+                    tile = tileBuffer;
+                    sourceZoom = sdZoom;
+                }
+            }
+            if (!tile)
                 continue;
 
-            for (int sx = sxStart; sx <= sxEnd; sx++) {
-                const float wx = gpxX + (sx - width() * 0.5f) * tileWorldPx;
-                const int px = (int)(wx - tileMinWx);
-                if (px < 0 || px > 255)
-                    continue;
+            const uint8_t zoomDifference = tileZoom - sourceZoom;
 
-                if (!(tile[(px / 8) * 256 + py] & (1 << (px % 8))))
-                    continue;
+            const float tileMinWx = worldTx * 256.0f;
+            const float tileMaxWx = tileMinWx + 256.0f;
+            const float tileMinWy = ty * 256.0f;
+            const float tileMaxWy = tileMinWy + 256.0f;
+            const int sxStart = max(0, (int)floorf(((tileMinWx - gpxX) / tileWorldPx) + width() * 0.5f));
+            const int sxEnd = min(width() - 1, (int)ceilf(((tileMaxWx - gpxX) / tileWorldPx) + width() * 0.5f) - 1);
+            const int syStart = max(0, (int)floorf(((tileMinWy - gpxY) / tileWorldPx) + height() * 0.5f));
+            const int syEnd = min(height() - 1, (int)ceilf(((tileMaxWy - gpxY) / tileWorldPx) + height() * 0.5f) - 1);
 
-                drawPixel(sx, sy, BLACK);
+            for (int sy = syStart; sy <= syEnd; sy++) {
+                const int py = (int)(gpxY + (sy - height() * 0.5f) * tileWorldPx - tileMinWy);
+                if (py < 0 || py > 255)
+                    continue;
+                const uint16_t sourcePy = ::NicheGraphics::InkHUD::MapTileUtils::ancestorPixel(ty, py, zoomDifference);
+                for (int sx = sxStart; sx <= sxEnd; sx++) {
+                    const int px = (int)(gpxX + (sx - width() * 0.5f) * tileWorldPx - tileMinWx);
+                    if (px < 0 || px > 255)
+                        continue;
+                    const uint16_t sourcePx = ::NicheGraphics::InkHUD::MapTileUtils::ancestorPixel(fileTx, px, zoomDifference);
+                    if (!::NicheGraphics::InkHUD::MapTileUtils::mtb1PixelIsWhite(
+                            tile[::NicheGraphics::InkHUD::MapTileUtils::mtb1PixelOffset(sourcePx, sourcePy)], sourcePx))
+                        drawPixel(sx, sy, BLACK);
+                }
             }
         }
     }
@@ -709,12 +737,8 @@ void InkHUD::MapApplet::onRender(bool full)
 
     // Draw our node LAST with full white fill + outline
     if (centerIsOurNode) {
-        const meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
-        meshtastic_PositionLite ourSelfPos;
-        nodeDB->copyNodePosition(ourNode->num, ourSelfPos);
-        Marker self = calculateMarker(ourSelfPos.latitude_i * 1e-7, ourSelfPos.longitude_i * 1e-7, 0);
-        int16_t centerX = X(0.5) + (self.eastMeters * metersToPx);
-        int16_t centerY = Y(0.5) - (self.northMeters * metersToPx);
+        int16_t centerX = X(0.5);
+        int16_t centerY = Y(0.5);
 
         int16_t r = fontSmall.lineHeight() / 2; // scale marker with font
 
@@ -759,7 +783,22 @@ void InkHUD::MapApplet::getMapCenter(float *lat, float *lng)
         focusedWaypointId = 0;
     }
 
-    // If we have a valid position for our own node, use that as the anchor
+    // Prefer the current GPS fix so the first tile render does not use a stale cached position.
+    if (hasLiveGpsPosition()) {
+        *lat = gpsStatus->getLatitude() * 1e-7f;
+        *lng = gpsStatus->getLongitude() * 1e-7f;
+        centerIsOurNode = true;
+        if (!hasRefreshGpsPosition) {
+            hasRefreshGpsPosition = true;
+            refreshGpsLat = *lat;
+            refreshGpsLng = *lng;
+        }
+        latCenter = *lat;
+        lngCenter = *lng;
+        return;
+    }
+
+    // If we have a valid cached position for our own node, use that as the anchor.
     const meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
     meshtastic_PositionLite ourSelfPos;
     if (ourNode && nodeDB->hasValidPosition(ourNode) && nodeDB->copyNodePosition(ourNode->num, ourSelfPos)) {
@@ -892,7 +931,6 @@ void InkHUD::MapApplet::getMapCenter(float *lat, float *lng)
                         \- -----/                                   \- -----/
                          Pacific                                      South
         */
-
         float hypotenuse = sqrt((xAvg * xAvg) + (yAvg * yAvg)); // Distance from globe's north-south axis to surface intersect
         *lat = atan2(zAvg, hypotenuse) * RAD_TO_DEG;
     }
@@ -1168,6 +1206,9 @@ void InkHUD::MapApplet::drawLabeledMarker(meshtastic_NodeInfoLite *node)
 // Check if we actually have enough nodes which would be shown on the map
 bool InkHUD::MapApplet::enoughMarkers()
 {
+    if (hasLiveGpsPosition())
+        return true;
+
     for (size_t i = 0; i < nodeDB->getNumMeshNodes(); i++) {
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(i);
         if (nodeDB->hasValidPosition(node) && shouldDrawNode(node))
