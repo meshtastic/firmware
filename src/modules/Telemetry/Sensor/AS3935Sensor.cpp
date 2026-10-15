@@ -175,9 +175,9 @@ bool AS3935Sensor::saveCalibrationData()
     bool okay = false;
 
     LOG_INFO("%s state write to %s", sensorName, as3935ConfigFileName);
-    pb_ostream_t stream = {&writecb, static_cast<Print *>(&file), meshtastic_AS3935Config_size};
+    pb_ostream_t stream = {&writecb, static_cast<Print *>(&file), meshtastic_AS3935State_size};
 
-    if (!pb_encode(&stream, &meshtastic_AS3935Config_msg, &as3935config)) {
+    if (!pb_encode(&stream, &meshtastic_AS3935State_msg, &as3935config)) {
         LOG_ERROR("Can't encode protobuf %s", PB_GET_ERROR(&stream));
     } else {
         okay = true;
@@ -195,8 +195,8 @@ bool AS3935Sensor::loadCalibrationData()
     bool okay = false;
     if (file) {
         LOG_INFO("%s state read from %s", sensorName, as3935ConfigFileName);
-        pb_istream_t stream = {&readcb, &file, meshtastic_AS3935Config_size};
-        if (!pb_decode(&stream, &meshtastic_AS3935Config_msg, &as3935config)) {
+        pb_istream_t stream = {&readcb, &file, meshtastic_AS3935State_size};
+        if (!pb_decode(&stream, &meshtastic_AS3935State_msg, &as3935config)) {
             LOG_ERROR("Can't decode protobuf %s", PB_GET_ERROR(&stream));
         } else {
             okay = true;

@@ -8,6 +8,7 @@
 #include "PositionPrecision.h"
 #include "PowerFSM.h"
 #include "SPILock.h"
+#include "UptimeClock.h"
 #include "gps/RTC.h"
 #include "input/InputBroker.h"
 #include "meshUtils.h"
@@ -34,6 +35,7 @@
 #include "MessageStore.h"
 #include "RadioInterface.h"
 #include "TypeConversions.h"
+#include "mesh/AdminKeys.h"
 #include "mesh/RadioLibInterface.h"
 #ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
 #include "mesh/PhoneAPI.h"
@@ -186,12 +188,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
             return handled;
         }
     } else if (mp.pki_encrypted) {
-        if ((config.security.admin_key[0].size == 32 &&
-             memcmp(mp.public_key.bytes, config.security.admin_key[0].bytes, 32) == 0) ||
-            (config.security.admin_key[1].size == 32 &&
-             memcmp(mp.public_key.bytes, config.security.admin_key[1].bytes, 32) == 0) ||
-            (config.security.admin_key[2].size == 32 &&
-             memcmp(mp.public_key.bytes, config.security.admin_key[2].bytes, 32) == 0)) {
+        if (AdminKeys::isAuthorized(mp.public_key.bytes)) {
             LOG_INFO("PKC admin payload with authorized sender key");
 
             // Note: PKC admin does NOT automatically authorize the
@@ -417,8 +414,10 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
 
         if (MeshtasticOTA::trySwitchToOTA()) {
             suppressRebootBanner = true;
-            if (screen)
+            if (screen) {
+                powerFSM.trigger(EVENT_PRESS);
                 screen->startFirmwareUpdateScreen();
+            }
             MeshtasticOTA::saveConfig(&config.network, mode, r->ota_request.ota_hash.bytes);
             sendWarningAndLog("Rebooting to %s OTA", mode_name);
         } else {
@@ -427,13 +426,13 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
 #endif
         int s = 1; // Reboot in 1 second, hard coded
         LOG_INFO("Reboot in %d seconds", s);
-        rebootAtMsec = (s < 0) ? 0 : (millis() + s * 1000);
+        rebootAtMsec = (s < 0) ? 0 : Time::timerEndsAtMillis(s * 1000);
         break;
     }
     case meshtastic_AdminMessage_shutdown_seconds_tag: {
         int32_t s = r->shutdown_seconds;
         LOG_INFO("Shutdown in %d seconds", s);
-        shutdownAtMsec = (s < 0) ? 0 : (millis() + s * 1000);
+        shutdownAtMsec = (s < 0) ? 0 : Time::timerEndsAtMillis(s * 1000);
         break;
     }
     case meshtastic_AdminMessage_get_device_metadata_request_tag: {
@@ -628,10 +627,8 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         // Delay the jump so this ACK reaches the client and it releases the port before the
         // STM32WL ROM bootloader takes the UART and autobauds off the next byte it sees.
         LOG_INFO("Entering DFU in %us - disconnect now", (STM32_DFU_DETACH_DELAY_MS + 999) / 1000);
-        enterDfuAtMsec = millis() + STM32_DFU_DETACH_DELAY_MS;
-        // Guard against enterDfuAtMsec rolling over to 0, the sentinel powerCommandsCheck() reads as unarmed.
-        if (enterDfuAtMsec == 0)
-            enterDfuAtMsec = 1;
+        // timerEndsAtMillis() dodges 0, the sentinel powerCommandsCheck() reads as unarmed.
+        enterDfuAtMsec = Time::timerEndsAtMillis(STM32_DFU_DETACH_DELAY_MS);
 #elif defined(ARCH_NRF52) || defined(ARCH_RP2040)
         enterDfuMode();
 #endif
@@ -1069,11 +1066,11 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
                 if (getEffectiveDutyCycle() < 100) {
                     validatedLora.ignore_mqtt = true; // Ignore MQTT by default if region has a duty cycle limit
                 }
-                if (strncmp(moduleConfig.mqtt.root, default_mqtt_root, strlen(default_mqtt_root)) == 0) {
-                    //  Default root is in use, so subscribe to the appropriate MQTT topic for this region
-                    snprintf(moduleConfig.mqtt.root, sizeof(moduleConfig.mqtt.root), "%s/%s", default_mqtt_root, myRegion->name);
-                }
-                changes |= SEGMENT_CONFIG | SEGMENT_MODULECONFIG;
+#if !MESHTASTIC_EXCLUDE_MQTT
+                if (MQTT::applyRegionRootTopic(myRegion->name))
+                    changes |= SEGMENT_MODULECONFIG;
+#endif
+                changes |= SEGMENT_CONFIG;
             } else {
                 //  Region validation has failed, so just copy all of the old config over the new config
                 validatedLora = oldLoraConfig;
@@ -1109,11 +1106,11 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
                 if (getEffectiveDutyCycle() < 100) {
                     validatedLora.ignore_mqtt = true; // Ignore MQTT by default if region has a duty cycle limit
                 }
-                if (strncmp(moduleConfig.mqtt.root, default_mqtt_root, strlen(default_mqtt_root)) == 0) {
-                    //  Default root is in use, so subscribe to the appropriate MQTT topic for this region
-                    snprintf(moduleConfig.mqtt.root, sizeof(moduleConfig.mqtt.root), "%s/%s", default_mqtt_root, myRegion->name);
-                }
-                changes = SEGMENT_CONFIG | SEGMENT_MODULECONFIG;
+#if !MESHTASTIC_EXCLUDE_MQTT
+                if (MQTT::applyRegionRootTopic(myRegion->name))
+                    changes |= SEGMENT_MODULECONFIG;
+#endif
+                changes |= SEGMENT_CONFIG;
             }
             //  use_preset and bandwidth are coerced into valid values by the check.
         }
@@ -1151,9 +1148,11 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
 #endif
 
 #if !MESHTASTIC_EXCLUDE_GPS
-        // Enable gps if it was previously disabled due to region not being set
-        if (!requiresReboot && config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET && gps != nullptr &&
-            !gps->isEnabled() && config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
+        // Enable gps if it was previously disabled due to region not being set. Only then: a probe that
+        // gave up also leaves it disabled, and re-enabling on every LoRa save re-runs the blocking probe.
+        if (!requiresReboot && oldLoraConfig.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET &&
+            config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET && gps != nullptr && !gps->isEnabled() &&
+            config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
             gps->enable();
         }
 #endif
@@ -1205,6 +1204,8 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
         }
 #endif
         config.security = incoming;
+        // A remote admin does not get to drop the host's own admin keys.
+        AdminKeys::applyHostKeys();
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN) && !(MESHTASTIC_EXCLUDE_PKI)
         // First provisioning (no key) generates one; a private key supplied without its public key derives it.
         // A supplied public key that is itself blacklisted is re-derived too, so a restore carrying a whole
@@ -1223,8 +1224,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
             }
         }
 #endif
-        if (config.security.is_managed && !(config.security.admin_key[0].size == 32 || config.security.admin_key[1].size == 32 ||
-                                            config.security.admin_key[2].size == 32)) {
+        if (config.security.is_managed && !AdminKeys::any()) {
             config.security.is_managed = false;
             const char *warning = "You must provide at least one admin public key to enable managed mode";
             LOG_WARN(warning);
@@ -1383,8 +1383,8 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
         // Sanitize a local copy rather than const_cast-ing the const input (UB if a truly-const
         // object is ever passed); the validated copy is assigned into moduleConfig below.
         auto beaconCfg = c.payload_variant.mesh_beacon;
-        // Hard cap at 100 chars.
-        beaconCfg.broadcast_message[100] = '\0';
+        // Cap at the generated field size, so the limit follows the proto's max_size.
+        beaconCfg.broadcast_message[sizeof(beaconCfg.broadcast_message) - 1] = '\0';
         // Enforce interval minimum (0 means unset/use default).
         if (beaconCfg.broadcast_interval_secs != 0 &&
             beaconCfg.broadcast_interval_secs < default_mesh_beacon_min_broadcast_interval_secs)
@@ -1820,9 +1820,10 @@ void AdminModule::handleGetDeviceConnectionStatus(const meshtastic_MeshPacket &r
     if (config.bluetooth.enabled && nrf52Bluetooth) {
         conn.bluetooth.is_connected = nrf52Bluetooth->isConnected();
     }
-#elif defined(ARCH_NRF54L15)
-    if (config.bluetooth.enabled && nrf54l15Bluetooth) {
-        conn.bluetooth.is_connected = nrf54l15Bluetooth->isConnected();
+#elif defined(MESHTASTIC_LINUX_BLE)
+    if (config.bluetooth.enabled && linuxBluetooth) {
+        conn.bluetooth.is_connected = linuxBluetooth->isConnected();
+        conn.bluetooth.rssi = linuxBluetooth->getRssi();
     }
 #endif
 #endif
@@ -1883,7 +1884,7 @@ void AdminModule::reboot(int32_t seconds)
     LOG_INFO("Reboot in %d seconds", seconds);
     if (screen)
         screen->showSimpleBanner("Rebooting...", 0); // stays on screen
-    rebootAtMsec = (seconds < 0) ? 0 : (millis() + seconds * 1000);
+    rebootAtMsec = (seconds < 0) ? 0 : Time::timerEndsAtMillis(seconds * 1000);
 }
 
 // Without this, a commit that never arrives leaves the transaction open forever and every later
@@ -2513,9 +2514,9 @@ void disableBluetooth()
 #elif defined(ARCH_NRF52)
     if (nrf52Bluetooth)
         nrf52Bluetooth->shutdown();
-#elif defined(ARCH_NRF54L15)
-    if (nrf54l15Bluetooth)
-        nrf54l15Bluetooth->shutdown();
+#elif defined(MESHTASTIC_LINUX_BLE)
+    if (linuxBluetooth)
+        linuxBluetooth->deinit();
 #endif
 #endif
 }

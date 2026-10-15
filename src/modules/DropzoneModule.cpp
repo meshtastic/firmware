@@ -2,6 +2,7 @@
 
 #include "DropzoneModule.h"
 #include "Meshservice->h"
+#include "UptimeClock.h"
 #include "configuration.h"
 #include "gps/GeoCoord.h"
 #include "gps/RTC.h"
@@ -39,13 +40,13 @@ ProcessMessage DropzoneModule::handleReceived(const meshtastic_MeshPacket &mp)
     snprintf(matchCompare, sizeof(matchCompare), "%s conditions", owner.short_name);
     if (received >= strlen(matchCompare) && strncasecmp(incomingMessage, matchCompare, strlen(matchCompare)) == 0) {
         LOG_DEBUG("Received dropzone conditions request");
-        startSendConditions = millis();
+        startSendConditions = Time::skipZero(Time::getMillis());
     }
 
     snprintf(matchCompare, sizeof(matchCompare), "%s conditions", owner.long_name);
     if (received >= strlen(matchCompare) && strncasecmp(incomingMessage, matchCompare, strlen(matchCompare)) == 0) {
         LOG_DEBUG("Received dropzone conditions request");
-        startSendConditions = millis();
+        startSendConditions = Time::skipZero(Time::getMillis());
     }
     return ProcessMessage::CONTINUE;
 }

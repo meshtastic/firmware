@@ -23,7 +23,7 @@ class AS3935Sensor : public TelemetrySensor
 
   protected:
     const char *as3935ConfigFileName = "/prefs/as3935.dat";
-    meshtastic_AS3935Config as3935config = meshtastic_AS3935Config_init_zero;
+    meshtastic_AS3935State as3935config = meshtastic_AS3935State_init_zero;
     bool saveCalibrationData();
     bool loadCalibrationData();
 

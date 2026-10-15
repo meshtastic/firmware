@@ -120,7 +120,6 @@ extern "C" {
 
 // GPS
 #define HAS_GPS 1
-#define GNSS_AIROHA
 #define GPS_RX_PIN PIN_SERIAL1_RX
 #define GPS_TX_PIN PIN_SERIAL1_TX
 

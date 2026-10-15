@@ -1,6 +1,7 @@
 #ifdef SENSECAP_INDICATOR
 
 #include "IndicatorSerial.h"
+#include "UptimeClock.h"
 #include "concurrency/LockGuard.h"
 #include "mesh/comms/UARTProxy.h"
 #include <HardwareSerial.h>
@@ -61,7 +62,7 @@ void SensecapIndicator::probe_link()
     msg.data.ping = meshtastic_InterdeviceVersion_INTERDEVICE_VERSION_CURRENT;
     stamp_request(msg);
     send_uplink_unlocked(msg);
-    last_probe = millis();
+    last_probe = Time::skipZero(Time::getMillis());
 }
 
 // Read whatever is available on the link and process complete packets

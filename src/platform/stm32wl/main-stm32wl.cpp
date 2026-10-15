@@ -1,4 +1,5 @@
 #include "FSCommon.h"
+#include "UptimeClock.h"
 #include "configuration.h"
 #include "error.h"
 #include "gps/GPS.h"
@@ -228,7 +229,7 @@ void preFSBegin()
     if (g_lfsCorruptMagic != LFS_CORRUPT_MAGIC)
         return;
     g_lfsCorruptMagic = 0;
-    lastLfsFormatMs = millis();
+    lastLfsFormatMs = Time::skipZero(Time::getMillis());
     RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_FLASH_CORRUPTION_UNRECOVERABLE);
     fsFormat();
     LOG_INFO("LittleFS format complete; restoring default settings");

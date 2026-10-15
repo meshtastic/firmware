@@ -10,7 +10,9 @@
 #include "RadioLibInterface.h"
 #endif
 
-#if defined(ARCH_NRF52)
+#if defined(ARCH_NRF54L)
+#include <nRF54Crypto.h>
+#elif defined(ARCH_NRF52)
 #include <Adafruit_nRFCrypto.h>
 extern Adafruit_nRFCrypto nRFCrypto;
 #elif defined(ARCH_ESP32)
@@ -107,7 +109,12 @@ bool fill(uint8_t *buffer, size_t length, bool useRadioEntropy)
 
     bool filled = false;
 
-#if defined(ARCH_NRF52)
+#if defined(ARCH_NRF54L)
+    // CRACEN TRNG
+    nRF54Crypto.begin();
+    filled = nRF54Crypto.random(buffer, length);
+    nRF54Crypto.end();
+#elif defined(ARCH_NRF52)
     // The Nordic SDK RNG provides cryptographic-quality randomness backed by hardware.
     nRFCrypto.begin();
     auto result = nRFCrypto.Random.generate(buffer, length);

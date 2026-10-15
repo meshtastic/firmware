@@ -337,6 +337,25 @@ static void test_v24RoundTrip_migratesFieldsBitfieldAndSatellites(void)
 
 // has_position=false / has_device_metrics=false entries must not seed
 // zero-position ghosts in the satellite maps.
+// v24 assigned bits 0..10 of the bitfield; this build reads bit 11 as "heard over RF" and bits 12..23
+// as the slot it was heard on. A legacy record carrying anything up there must not arrive claiming to
+// have been heard, or a never-heard node reads as reachable whenever the stray slot matches ours.
+static void test_v24StrayHighBits_doNotBecomeRfHearState(void)
+{
+    auto n = makeLegacyNode(0xD4000001, 1000);
+    giveLegacyUser(n, "Stray", "ST");
+    n.is_favorite = true;     // a real bit 3, which must survive
+    n.bitfield = 0xFFFFFFFFu; // every reserved bit above 10 set
+    writeLegacyNodesFile(24, {n});
+    coldBoot();
+
+    const meshtastic_NodeInfoLite *m = db->getMeshNode(0xD4000001);
+    TEST_ASSERT_NOT_NULL(m);
+    TEST_ASSERT_FALSE(nodeInfoLiteHasRfHear(m));
+    TEST_ASSERT_EQUAL_UINT16(0, nodeInfoLiteHeardSlot(m));
+    TEST_ASSERT_TRUE(nodeInfoLiteIsFavorite(m)); // the legacy bits it did own are untouched
+}
+
 static void test_absentSubmessages_noSatelliteGhostRows(void)
 {
     auto a = makeLegacyNode(0xC3000001, 1000);
@@ -540,6 +559,7 @@ NDBM_TEST_ENTRY void setup()
 
     printf("\n=== Migration fidelity ===\n");
     RUN_TEST(test_v24RoundTrip_migratesFieldsBitfieldAndSatellites);
+    RUN_TEST(test_v24StrayHighBits_doNotBecomeRfHearState);
     RUN_TEST(test_absentSubmessages_noSatelliteGhostRows);
 
     printf("\n=== sanitizeUtf8 firewall ===\n");

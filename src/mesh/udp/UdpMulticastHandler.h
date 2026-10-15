@@ -17,6 +17,9 @@
 #if HAS_ETHERNET && defined(ETH_SHARED_SPI)
 #include "platform/esp32/SharedBusEthernet.h"
 #endif
+#if HAS_ETHERNET && defined(USE_CH390D)
+#include "ESP32_CH390.h"
+#endif
 #endif // HAS_ETHERNET
 
 #define UDP_MULTICAST_DEFAUL_PORT 4403 // Default port for UDP multicast is same as TCP api server
@@ -36,8 +39,10 @@ class UdpMulticastHandler final
 #if defined(ARCH_NRF52) || defined(ARCH_PORTDUINO)
             LOG_DEBUG("UDP Listening on IP: %u.%u.%u.%u:%u", udpIpAddress[0], udpIpAddress[1], udpIpAddress[2], udpIpAddress[3],
                       UDP_MULTICAST_DEFAUL_PORT);
-#elif defined(USE_WS5500) || defined(USE_CH390D)
+#elif defined(USE_WS5500)
             LOG_DEBUG("UDP Listening on IP: %s", ETH.localIP().toString().c_str());
+#elif defined(USE_CH390D)
+            LOG_DEBUG("UDP Listening on IP: %s", CH390.localIP().toString().c_str());
 #else
             LOG_DEBUG("UDP Listening on IP: %s", WiFi.localIP().toString().c_str());
 #endif
@@ -91,6 +96,10 @@ class UdpMulticastHandler final
             // Authentication metadata is local-only; Router re-establishes it after successful PKI decryption.
             mp.pki_encrypted = false;
             mp.public_key.size = 0;
+            // The LoRa header does not carry these, so a radio arrival has them at their defaults; a sent
+            // MAX priority would outrank the ACK ceiling and evict one of ours from the TX queue.
+            mp.tx_after = 0;
+            mp.priority = meshtastic_MeshPacket_Priority_UNSET;
             UniquePacketPoolPacket p = packetPool.allocUniqueCopy(mp);
             if (!p)
                 return;
@@ -114,8 +123,12 @@ class UdpMulticastHandler final
         if (!isEthernetAvailable()) {
             return false;
         }
-#elif defined(USE_WS5500) || defined(USE_CH390D)
+#elif defined(USE_WS5500)
         if (!ETH.connected()) {
+            return false;
+        }
+#elif defined(USE_CH390D)
+        if (!CH390.isConnected()) {
             return false;
         }
 #elif !defined(ARCH_PORTDUINO)

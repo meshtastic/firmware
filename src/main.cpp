@@ -76,10 +76,8 @@ NimbleBluetooth *nimbleBluetooth = nullptr;
 NRF52Bluetooth *nrf52Bluetooth = nullptr;
 #endif
 
-#ifdef ARCH_NRF54L15
-void nrf54l15Setup();
-void nrf54l15Loop();
-NRF54L15Bluetooth *nrf54l15Bluetooth = nullptr;
+#ifdef MESHTASTIC_LINUX_BLE
+LinuxBluetooth *linuxBluetooth = nullptr;
 #endif
 
 #ifdef MESHTASTIC_ENABLE_APPROTECT
@@ -113,6 +111,7 @@ NRF54L15Bluetooth *nrf54l15Bluetooth = nullptr;
 #include "linux/LinuxHardwareI2C.h"
 #ifndef ARCH_PORTDUINO_WASM // raspi HTTP server (ulfius/zlib/openssl) excluded in the browser/wasm build
 #include "mesh/raspihttp/PiWebServer.h"
+#include "platform/portduino/NativeDiscovery.h"
 #endif
 #include "platform/portduino/PortduinoGlue.h"
 #ifdef _WIN32
@@ -285,7 +284,7 @@ const char *firmware_version = optstr(APP_VERSION_SHORT);
 
 const char *getDeviceName()
 {
-    uint8_t dmac[6];
+    uint8_t dmac[6] = {0};
 
     getMacAddr(dmac);
 
@@ -452,6 +451,9 @@ void setup()
     // RTCQualityDevice rather than claim NTP quality we have not verified.
     std::string timeCommandResult = exec("timedatectl status | grep synchronized | grep yes -c");
     if (timeCommandResult[0] == '1') {
+        ourQuality = RTCQualityNTP;
+    } else if (access("/var/state/dnsmasqsec", F_OK) == 0) {
+        // OpenWrt marks the system time as valid after successful NTP synchronization.
         ourQuality = RTCQualityNTP;
     }
 #endif
@@ -813,6 +815,10 @@ void setup()
 #endif
 #if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_MAGNETOMETER
     auto mag_info = i2cScanner->firstMagnetometer();
+#if !MESHTASTIC_EXCLUDE_ACCELEROMETER
+    if (mag_info.type == acc_info.type) // a BMM150 with no accelerometer beside it is already the accelerometer thread's
+        mag_info = ScanI2C::DEVICE_NONE;
+#endif
     magnetometer_found = mag_info.type != ScanI2C::DeviceType::NONE ? mag_info.address : magnetometer_found;
     LOG_DEBUG("mag_info = %i", mag_info.type);
 #endif
@@ -851,9 +857,6 @@ void setup()
 
 #ifdef ARCH_NRF52
     nrf52Setup();
-#endif
-#ifdef ARCH_NRF54L15
-    nrf54l15Setup();
 #endif
 
 #ifdef ARCH_RP2040
@@ -1092,6 +1095,13 @@ void setup()
     osk_found = true;
 #endif
 #endif
+#if ARCH_PORTDUINO && defined(__linux__)
+    // Same idea for a gamepad: it can drive the on-screen keyboard but cannot type, so without a
+    // configured keyboard device it is the only way to compose freetext on this host.
+    if (portduino_config.joystickDevice != "" && portduino_config.keyboardDevice == "") {
+        osk_found = true;
+    }
+#endif
 
     // Now that the mesh service is created, create any modules
     setupModules();
@@ -1197,7 +1207,7 @@ void setup()
 
 #ifndef ARCH_PORTDUINO
 
-        // Initialize Wifi
+    // Initialize Wifi
 #if HAS_WIFI
     initWifi();
 #endif
@@ -1221,6 +1231,9 @@ void setup()
     }
 #endif
     initApiServer(TCPPort);
+#ifndef ARCH_PORTDUINO_WASM
+    startNativeDiscovery(TCPPort);
+#endif
 #endif
 
     // Start airtime logger thread.
@@ -1360,8 +1373,9 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
 
 // No bluetooth on these targets (yet):
 // Pico W / 2W may get it at some point
-// Portduino and ESP32-C6 are excluded because we don't have a working bluetooth stacks integrated yet.
-#if defined(ARCH_RP2040) || defined(ARCH_PORTDUINO) || defined(ARCH_STM32) || defined(CONFIG_IDF_TARGET_ESP32C6) || !HAS_BLUETOOTH
+// ESP32-C6 is excluded because we don't have a working bluetooth stack integrated yet.
+// Portduino only has BLE when built against BlueZ/sdbus-c++, so it falls out via !HAS_BLUETOOTH.
+#if defined(ARCH_RP2040) || defined(ARCH_STM32) || defined(CONFIG_IDF_TARGET_ESP32C6) || !HAS_BLUETOOTH
     deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_BLUETOOTH_CONFIG;
 #endif
 
@@ -1405,7 +1419,7 @@ void loop()
         if (nodeDB->disableLockdownToPlaintext()) {
             LOG_INFO("Lockdown: disabled, reboot to normal mode");
             PhoneAPI::broadcastLockdownStatus(meshtastic_LockdownStatus_State_DISABLED, "", 0, 0, 0);
-            rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
+            rebootAtMsec = Time::timerEndsAtMillis(DEFAULT_REBOOT_SECONDS * 1000);
         } else {
             // Revert failed mid-way (a file couldn't be decrypted/rewritten).
             // The DEK file is still present (it's deleted last), so the device
@@ -1459,7 +1473,7 @@ void loop()
                 EncryptedStorage::lockNow();
                 PhoneAPI::revokeAllAuth();
                 PhoneAPI::broadcastLockdownStatus(meshtastic_LockdownStatus_State_LOCKED, "session_budget_exhausted", 0, 0, 0);
-                rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
+                rebootAtMsec = Time::timerEndsAtMillis(DEFAULT_REBOOT_SECONDS * 1000);
             } else {
                 uint8_t newBoots = EncryptedStorage::consumeSessionBoot();
                 LOG_WARN("Lockdown: session expired, next budget slot (boots=%u left)", newBoots);
@@ -1483,13 +1497,11 @@ void loop()
 #ifdef ARCH_NRF52
     nrf52Loop();
 #endif
-#ifdef ARCH_NRF54L15
-    nrf54l15Loop();
-#endif
 #ifdef ARCH_RP2040
     rp2040Loop();
 #endif
     power->powerCommandsCheck();
+    nodeDB->saveNodeDatabaseIfDirty();
 
     if (RadioLibInterface::instance != nullptr) {
         static uint32_t lastRadioMissedIrqPoll;
@@ -1498,7 +1510,7 @@ void loop()
             RadioLibInterface::instance->pollMissedIrqs();
         }
 
-        // Periodic radio upkeep - re-arms RX if it was left off, else AGC reset (stuck-gain prevention)
+        // Periodic radio upkeep - re-arms RX if it was left off, else an AGC reset when one is due (stuck-gain prevention)
         static uint32_t lastAgcReset;
         if (!Throttle::isWithinTimespanMs(lastAgcReset, AGC_RESET_INTERVAL_MS)) {
             lastAgcReset = millis();
@@ -1522,6 +1534,9 @@ void loop()
         inputBroker->processInputEventQueue();
 #endif
 #if ARCH_PORTDUINO
+#ifndef ARCH_PORTDUINO_WASM
+    serviceNativeDiscovery();
+#endif
     if (portduino_config.lora_spi_dev == "ch341" && ch341Hal != nullptr) {
         ch341Hal->checkError();
     }
@@ -1551,10 +1566,10 @@ void loop()
             if (screen) {
                 screen->showSimpleBanner("Rebooting...");
             }
-            rebootAtMsec = millis() + 25;
+            rebootAtMsec = Time::timerEndsAtMillis(25);
         }
     }
-#if HAS_TFT
+#if HAS_TFT && HAS_SCREEN
     if (screen && portduino_config.displayPanel == x11 &&
         config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
         auto dispdev = screen->getDisplayDevice();

@@ -175,14 +175,6 @@ class MockRadioInterface : public RadioInterface
 class MockRouter : public Router
 {
   public:
-    ~MockRouter()
-    {
-        // Router allocates a global crypt lock in its constructor.
-        // Clean it up here so each test can build a fresh mock router.
-        delete cryptLock;
-        cryptLock = nullptr;
-    }
-
     ErrorCode send(meshtastic_MeshPacket *p) override
     {
         sentPackets.push_back(*p);
@@ -298,12 +290,6 @@ static meshtastic_MeshPacket makePositionPacketWithPrecision(NodeNum from, int32
     packet.decoded.payload.size =
         pb_encode_to_bytes(packet.decoded.payload.bytes, sizeof(packet.decoded.payload.bytes), &meshtastic_Position_msg, &pos);
     return packet;
-}
-
-static bool decodePositionPayload(const meshtastic_MeshPacket &packet, meshtastic_Position &out)
-{
-    out = meshtastic_Position_init_zero;
-    return pb_decode_from_bytes(packet.decoded.payload.bytes, packet.decoded.payload.size, &meshtastic_Position_msg, &out);
 }
 
 // Primary channel with a well-known single-byte PSK and the (empty -> preset)
@@ -2330,8 +2316,6 @@ static void test_tm_alterReceived_telemetryBroadcast_hopLimitUnchanged(void)
 
 /**
  * Verify alterReceived does not modify unicast or local-origin packets.
- * The precision clamp (the only active alterReceived path) only fires for
- * broadcast position packets from remote nodes - these should be untouched.
  */
 static void test_tm_alterReceived_skipsLocalAndUnicast(void)
 {
@@ -2834,12 +2818,12 @@ static void test_tm_nextHop_keptAliveAcrossMaintenanceSweep(void)
 
 /**
  * Verify TRACKER role caps the dedup window at 1 hour.
- * A duplicate position that would normally be blocked for 5 h (default) must
+ * A duplicate position that would normally be blocked for 6 h (default) must
  * be forwarded once the 1-hour tracker cap expires.
  */
 static void test_tm_trackerRole_capsDedupWindowAtOneHour(void)
 {
-    // Operator interval is 5 h - longer than the tracker cap.
+    // Operator interval is 6 h - longer than the tracker cap.
     moduleConfig.traffic_management.position_min_interval_secs = default_traffic_mgmt_position_min_interval_secs;
     installWellKnownPrimaryChannelWithPrecision(16);
 
@@ -2900,11 +2884,11 @@ static void test_tm_takTrackerRole_capsDedupWindowAtOneHour(void)
  * hot and warm NodeDB stores - the TMM unified cache is the third fallback. The
  * role is cached on the entry while NodeDB still knows the node; once NodeDB
  * forgets it (getNodeRole → CLIENT), the cached role must keep the 1-hour cap
- * applied instead of reverting to the 5-hour default interval.
+ * applied instead of reverting to the 6-hour default interval.
  */
 static void test_tm_trackerRole_survivesNodeDbEvictionViaCachedRole(void)
 {
-    // Operator interval is 5 h - longer than the tracker cap.
+    // Operator interval is 6 h - longer than the tracker cap.
     moduleConfig.traffic_management.position_min_interval_secs = default_traffic_mgmt_position_min_interval_secs;
     installWellKnownPrimaryChannelWithPrecision(16);
 
@@ -2924,8 +2908,8 @@ static void test_tm_trackerRole_survivesNodeDbEvictionViaCachedRole(void)
     mockNodeDB->clearCachedNode();
 
     ProcessMessage r2 = module.handleReceived(dup); // within 1-hour cap - still drop
-    // Advance past the tracker cap (3600 s) but stay well under the 5-hour default.
-    // Without the cached-role fallback this would still be inside the 5-hour window
+    // Advance past the tracker cap (3600 s) but stay well under the 6-hour default.
+    // Without the cached-role fallback this would still be inside the 6-hour window
     // (CLIENT → no exception) and wrongly drop; with it, the 1-hour cap lets it pass.
     TrafficManagementModule::s_testNowMs += (default_traffic_mgmt_tracker_position_min_interval_secs * 1000UL) + 1;
     ProcessMessage r3 = module.handleReceived(afterCap);
@@ -2963,7 +2947,7 @@ static void test_tm_roleChange_viaNodeInfo_dropsTrackerException(void)
     meshtastic_MeshPacket info = makeNodeInfoPacketWithRole(kRemoteNode, meshtastic_Config_DeviceConfig_Role_CLIENT);
     module.handleReceived(info);
 
-    // Past the 1-hour tracker cap but within the 5-hour CLIENT interval. With the stale
+    // Past the 1-hour tracker cap but within the 6-hour CLIENT interval. With the stale
     // TRACKER role this would pass; after the demotion it must drop (full interval applies).
     TrafficManagementModule::s_testNowMs += (default_traffic_mgmt_tracker_position_min_interval_secs * 1000UL) + 1;
     meshtastic_MeshPacket afterCap = makePositionPacket(kRemoteNode, 374221234, -1220845678);
@@ -3070,12 +3054,12 @@ static void test_tm_trackerRole_doesNotLengthenShorterOperatorInterval(void)
 
 /**
  * Verify LOST_AND_FOUND role caps duplicate-position dedup at ~15 min (2 pos-ticks),
- * not the old one-tick fast-announce. A configured 5-hour interval is shortened to the
+ * not the old one-tick fast-announce. A configured 6-hour interval is shortened to the
  * 15-min cap; a duplicate one tick later still drops, but one past the 2-tick cap passes.
  */
 static void test_tm_lostAndFoundRole_capsDedupAtFifteenMinutes(void)
 {
-    // Long interval that would normally suppress duplicates for 5 h.
+    // Long interval that would normally suppress duplicates for 6 h.
     moduleConfig.traffic_management.position_min_interval_secs = default_traffic_mgmt_position_min_interval_secs;
     installWellKnownPrimaryChannelWithPrecision(16);
 
@@ -3171,36 +3155,27 @@ static void test_tm_unknownRole_noUserBit_appliesFullInterval(void)
 }
 
 /**
- * Verify a LOST_AND_FOUND origin now GETS the relayed precision clamp - the
- * anti-dox exemption was removed, so a relayed position more precise than the
- * channel setting is clamped down to the channel ceiling like any other node's.
+ * Verify a relayed position broadcast more precise than the channel setting passes through
+ * handleReceived/alterReceived unmodified. Relays must forward position payloads byte-for-byte
+ * so the sender's XEdDSA signature still verifies downstream.
  */
-static void test_tm_lostAndFoundRole_getsAlterReceivedPrecisionClamp(void)
+static void test_tm_relayedPosition_payloadUnmodified(void)
 {
-    // Set channel precision ceiling to 13 bits. Must be <= MAX_POSITION_PRECISION_PUBLIC_KEY
-    // (15) - well-known channels have a public PSK (size==1), so getPositionPrecisionForChannel
-    // clamps any value above 15 via usesPublicKey().
     installWellKnownPrimaryChannelWithPrecision(13);
-
     mockNodeDB->setCachedNode(kRemoteNode);
-    mockNodeDB->setCachedNodeRole(meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND);
 
     TrafficManagementModuleTestShim module;
 
-    // Full-precision packet - 32 bits - exceeds the channel cap.
-    const uint32_t fullPrecision = 32;
-    meshtastic_MeshPacket packet = makePositionPacketWithPrecision(kRemoteNode, 374221234, -1220845678, fullPrecision);
+    meshtastic_MeshPacket packet = makePositionPacketWithPrecision(kRemoteNode, 374221234, -1220845678, 32);
     packet.hop_start = 3;
-    packet.hop_limit = 2; // relayed (hop_limit < hop_start) so clamp logic applies
+    packet.hop_limit = 2;
+    const meshtastic_Data_payload_t original = packet.decoded.payload;
 
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(module.handleReceived(packet)));
     module.alterReceived(packet);
 
-    meshtastic_Position out;
-    TEST_ASSERT_TRUE(decodePositionPayload(packet, out));
-    // Clamped to channel ceiling (13 bits) - lost-and-found is no longer exempt.
-    // Note: precision must be <= MAX_POSITION_PRECISION_PUBLIC_KEY (15); well-known
-    // channels always have a public PSK so getPositionPrecisionForChannel caps at 15.
-    TEST_ASSERT_EQUAL_UINT32(13, out.precision_bits);
+    TEST_ASSERT_EQUAL_UINT32(original.size, packet.decoded.payload.size);
+    TEST_ASSERT_EQUAL_MEMORY(original.bytes, packet.decoded.payload.bytes, original.size);
 }
 
 // ---------------------------------------------------------------------------
@@ -3413,7 +3388,7 @@ TM_TEST_ENTRY void setup()
     RUN_TEST(test_tm_specialRole_evictedLastUnderPressure);
     RUN_TEST(test_tm_trackerRole_doesNotLengthenShorterOperatorInterval);
     RUN_TEST(test_tm_lostAndFoundRole_capsDedupAtFifteenMinutes);
-    RUN_TEST(test_tm_lostAndFoundRole_getsAlterReceivedPrecisionClamp);
+    RUN_TEST(test_tm_relayedPosition_payloadUnmodified);
     RUN_TEST(test_tm_unknownRole_noDbEntry_appliesFullInterval);
     RUN_TEST(test_tm_unknownRole_noUserBit_appliesFullInterval);
     RUN_TEST(test_tm_fuzz_nodenum_blitz);

@@ -89,8 +89,8 @@
 
 // External expansion chip XL9555
 #define USE_PCA95X5
-#define PCA95X5_CLS ExtensionIOXL9555
-#define PCA95X5_INC "ExtensionIOXL9555.hpp"
+#define PCA95X5_CLS IoExpanderXL9555
+#define PCA95X5_INC "IoExpanderXL9555.hpp"
 #define EXPANDS_DRV_EN (0)
 #define EXPANDS_AMP_EN (1)
 #define EXPANDS_KB_RST (2)

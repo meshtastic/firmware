@@ -16,7 +16,17 @@
 #ifdef SERIAL_HAS_ON_RECEIVE
 #undef SERIAL_HAS_ON_RECEIVE
 #endif
+// Port is HWCDC only in hardware USB-Serial/JTAG mode. With ARDUINO_USB_MODE=0 it is TinyUSB
+// USBCDC, the PHY is routed away from the USJ peripheral, and isPlugged() would never see a SOF.
+#if defined(ARDUINO_USB_MODE) && ARDUINO_USB_MODE
+#define IS_USB_HWCDC
+#endif
 #include "HWCDC.h"
+#endif
+
+#if defined(IS_USB_HWCDC) && defined(CONFIG_IDF_TARGET_ESP32S3)
+#include "soc/usb_serial_jtag_struct.h"
+#define HWCDC_TX_KICK
 #endif
 
 #ifdef RP2040_SLOW_CLOCK
@@ -41,6 +51,45 @@ SerialConsole *console;
 // hierarchy has historically perturbed nRF52 USB-CDC enumeration (see PhoneAPI.h).
 // Only compiled on lockdown (nRF52) builds.
 static bool s_serialLinkUp = false;
+#endif
+
+#ifdef HWCDC_TX_KICK
+namespace
+{
+// HWCDC's TX interrupt can end up enabled but never raised again: its ISR clears it without moving data when it finds
+// the IN FIFO not writable. The ring then stays full, the FIFO empty, and every write is refused until the cable is
+// replugged. A byte written straight into the FIFO is a packet the host reads, which raises the interrupt again.
+constexpr uint32_t TX_LATCH_KICK_MS = 20;
+uint32_t txLatchedSinceMs = 0;
+
+/// The TX ring is full, yet the IN FIFO is free and its interrupt enabled but not raised: nothing will drain the ring
+bool txLatched()
+{
+    return Port.availableForWrite() == 0 && USB_SERIAL_JTAG.ep1_conf.serial_in_ep_data_free &&
+           USB_SERIAL_JTAG.int_ena.serial_in_empty_int_ena && !USB_SERIAL_JTAG.int_raw.serial_in_empty_int_raw;
+}
+
+/// Send c through the FIFO once the TX path has been latched for TX_LATCH_KICK_MS; false if c is left to the ring. The
+/// byte reaches the host ahead of the ring's older bytes; left to the ring, it would have been dropped.
+bool kickLatchedTx(uint8_t c)
+{
+    if (!txLatched()) {
+        txLatchedSinceMs = 0;
+        return false;
+    }
+    const uint32_t now = millis();
+    if (!txLatchedSinceMs) {
+        txLatchedSinceMs = now ? now : 1;
+        return false;
+    }
+    if (now - txLatchedSinceMs < TX_LATCH_KICK_MS)
+        return false;
+    txLatchedSinceMs = 0;
+    USB_SERIAL_JTAG.ep1.rdwr_byte = c;
+    USB_SERIAL_JTAG.ep1_conf.wr_done = 1;
+    return true;
+}
+} // namespace
 #endif
 
 /// Create the shared serial console once and register receive wakeups.
@@ -130,8 +179,10 @@ int32_t SerialConsole::runOnce()
     if (hasPendingOutput())
         return delay < 25 ? delay : 25; // 0 continues a budget slice; else short-poll TX drain
     return Port.available() ? delay : INT32_MAX;
-#elif defined(IS_USB_SERIAL)
-    return HWCDC::isPlugged() ? delay : (1000 * 20);
+#elif defined(IS_USB_HWCDC)
+    // isPlugged() is a SOF watchdog that flaps false while USB is fine (#11864), and nothing wakes
+    // this thread on RX, so cap the idle sleep at the rate readStream() already idles at.
+    return HWCDC::isPlugged() ? delay : 250;
 #else
     return delay;
 #endif
@@ -156,7 +207,20 @@ size_t SerialConsole::write(uint8_t c)
         return 1;
 
     if (c == '\n')
-        RedirectablePrint::write('\r');
+        writeText('\r');
+    return writeText(c);
+}
+
+/// Write one byte of console text, restarting a latched HWCDC TX path where it can
+size_t SerialConsole::writeText(uint8_t c)
+{
+#ifdef HWCDC_TX_KICK
+    // Only on the text path, where a byte sent ahead of the ring cannot land inside a protobuf frame, and only where
+    // RedirectablePrint::write() would send it at all
+    const bool serialEnabled = config.has_security ? config.security.serial_enabled : config.device.serial_enabled;
+    if ((!config.has_lora || serialEnabled) && kickLatchedTx(c))
+        return 1;
+#endif
     return RedirectablePrint::write(c);
 }
 

@@ -3,6 +3,7 @@
 #include "GPS.h"
 #endif
 #include "../detect/ScanI2C.h"
+#include "AdminKeys.h"
 #include "Channels.h"
 #include "CryptoEngine.h"
 #include "Default.h"
@@ -31,6 +32,7 @@
 #include "mesh/generated/meshtastic/deviceonly_legacy.pb.h"
 #include "meshUtils.h"
 #include "modules/NeighborInfoModule.h"
+#include "sleep.h"
 #include "target_specific.h"
 #if HAS_VARIABLE_HOPS
 #include "modules/HopScalingModule.h"
@@ -253,6 +255,12 @@ std::map<NodeNum, meshtastic_EnvironmentMetrics> *s_decodeEnvironmentTarget = nu
 #if !MESHTASTIC_EXCLUDE_STATUSDB
 std::map<NodeNum, meshtastic_StatusMessage> *s_decodeStatusTarget = nullptr;
 #endif
+
+// Keys that can never name a real node.
+[[maybe_unused]] inline bool isUsableSatelliteKey(NodeNum n)
+{
+    return n != 0 && !isBroadcast(n);
+}
 } // namespace
 
 bool meshtastic_NodeDatabase_callback(pb_istream_t *istream, pb_ostream_t *ostream, const pb_field_t *field)
@@ -306,7 +314,7 @@ bool meshtastic_NodeDatabase_callback(pb_istream_t *istream, pb_ostream_t *ostre
             if (pb_decode(istream, meshtastic_NodePositionEntry_fields, &entry)) {
 #if !MESHTASTIC_EXCLUDE_POSITIONDB
                 if (s_decodePositionsTarget) {
-                    if (entry.has_position)
+                    if (entry.has_position && isUsableSatelliteKey(entry.num))
                         (*s_decodePositionsTarget)[entry.num] = entry.position;
                     return true;
                 }
@@ -332,7 +340,7 @@ bool meshtastic_NodeDatabase_callback(pb_istream_t *istream, pb_ostream_t *ostre
             if (pb_decode(istream, meshtastic_NodeTelemetryEntry_fields, &entry)) {
 #if !MESHTASTIC_EXCLUDE_TELEMETRYDB
                 if (s_decodeTelemetryTarget) {
-                    if (entry.has_device_metrics)
+                    if (entry.has_device_metrics && isUsableSatelliteKey(entry.num))
                         (*s_decodeTelemetryTarget)[entry.num] = entry.device_metrics;
                     return true;
                 }
@@ -358,7 +366,7 @@ bool meshtastic_NodeDatabase_callback(pb_istream_t *istream, pb_ostream_t *ostre
             if (pb_decode(istream, meshtastic_NodeStatusEntry_fields, &entry)) {
 #if !MESHTASTIC_EXCLUDE_STATUSDB
                 if (s_decodeStatusTarget) {
-                    if (entry.has_status)
+                    if (entry.has_status && isUsableSatelliteKey(entry.num))
                         (*s_decodeStatusTarget)[entry.num] = entry.status;
                     return true;
                 }
@@ -384,7 +392,7 @@ bool meshtastic_NodeDatabase_callback(pb_istream_t *istream, pb_ostream_t *ostre
             if (pb_decode(istream, meshtastic_NodeEnvironmentEntry_fields, &entry)) {
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTDB
                 if (s_decodeEnvironmentTarget) {
-                    if (entry.has_environment_metrics)
+                    if (entry.has_environment_metrics && isUsableSatelliteKey(entry.num))
                         (*s_decodeEnvironmentTarget)[entry.num] = entry.environment_metrics;
                     return true;
                 }
@@ -469,6 +477,7 @@ static uint8_t ourMacAddr[6];
 NodeDB::NodeDB()
 {
     LOG_INFO("Init NodeDB");
+    rebootObserver.observe(&notifyReboot);
     loadFromDisk();
     cleanupMeshDB();
 
@@ -702,15 +711,24 @@ NodeDB::NodeDB()
 #if !MESHTASTIC_EXCLUDE_POSITIONDB
         {
             concurrency::LockGuard guard(&satelliteMutex);
-            nodePositions[info->num] = TypeConversions::ConvertToPositionLite(fixedGPS);
+            nodePositions[getNodeNum()] = TypeConversions::ConvertToPositionLite(fixedGPS);
         }
+        // nodePositions is a member map, so the nodeDatabase CRC compare above cannot see this write -
+        // and it has already run. Flag the segment or the fixed position is only persisted by chance.
+        saveWhat |= SEGMENT_NODEDATABASE;
 #endif
-        nodeDB->setLocalPosition(fixedGPS);
+        setLocalPosition(fixedGPS);
         config.position.fixed_position = true;
+        // Same for config, whose CRC compare also ran before this block. Keep that compare's
+        // degraded-boot guard so an unreadable config is never overwritten with UNSET defaults.
+        if (!configDecodeFailed)
+            saveWhat |= SEGMENT_CONFIG;
 #endif
     }
 #endif
     sortMeshDB();
+    // resetRadioConfig() above loaded config and channels, so this records the slot we booted on.
+    refreshCommittedLoraSlot();
     saveToDisk(saveWhat);
     bootInitializationInProgress = false;
 }
@@ -722,6 +740,29 @@ NodeDB::NodeDB()
 NodeNum getFrom(const meshtastic_MeshPacket *p)
 {
     return (p->from == 0) ? nodeDB->getNodeNum() : p->from;
+}
+
+// The re-encode below cannot overflow the payload buffer, so it never yields an empty payload.
+static_assert(meshtastic_User_size <= sizeof(meshtastic_Data_payload_t::bytes), "User no longer fits Data.payload");
+
+bool coerceNodeInfoUserId(meshtastic_MeshPacket &p)
+{
+    if (p.which_payload_variant != meshtastic_MeshPacket_decoded_tag || p.decoded.portnum != meshtastic_PortNum_NODEINFO_APP)
+        return false;
+
+    meshtastic_User user = meshtastic_User_init_zero;
+    if (!pb_decode_from_bytes(p.decoded.payload.bytes, p.decoded.payload.size, &meshtastic_User_msg, &user))
+        return false;
+
+    char expected[sizeof(user.id)];
+    snprintf(expected, sizeof(expected), "!%08x", getFrom(&p));
+    if (strcmp(user.id, expected) == 0)
+        return false;
+
+    memcpy(user.id, expected, sizeof(user.id));
+    p.decoded.payload.size =
+        pb_encode_to_bytes(p.decoded.payload.bytes, sizeof(p.decoded.payload.bytes), &meshtastic_User_msg, &user);
+    return true;
 }
 
 // Returns true if the packet originated from the local node
@@ -819,6 +860,63 @@ void NodeDB::resetRadioConfig(bool is_fresh_install)
     initRegion();
 }
 
+LoraSlotSnapshot loraSlotSnapshotFrom(const meshtastic_Config_LoRaConfig &lora, const char *primaryChannelName)
+{
+    LoraSlotSnapshot snap;
+    snap.region = lora.region;
+    snap.use_preset = lora.use_preset;
+    // Record only the modem fields the radio is actually using. The unused half of the pair keeps
+    // whatever the client last wrote into it, and editing a dormant field moves nothing on air.
+    if (lora.use_preset) {
+        snap.modem_preset = lora.modem_preset;
+    } else {
+        snap.bandwidth = lora.bandwidth;
+        snap.spread_factor = lora.spread_factor;
+        snap.coding_rate = lora.coding_rate;
+    }
+    snap.override_frequency = lora.override_frequency;
+    snap.channel_num = lora.channel_num;
+    strncpy(snap.primary_channel_name, primaryChannelName, sizeof(snap.primary_channel_name) - 1);
+    return snap;
+}
+
+uint16_t LoraSlotSnapshot::fingerprint() const
+{
+    // FNV-1a over the populated fields. Only ever compared against another fingerprint, so the hash
+    // needs to be stable and well-spread, not cryptographic.
+    uint32_t h = 2166136261u;
+    auto mix = [&h](const void *data, size_t len) {
+        const uint8_t *p = static_cast<const uint8_t *>(data);
+        for (size_t i = 0; i < len; i++) {
+            h ^= p[i];
+            h *= 16777619u;
+        }
+    };
+    const uint8_t scalars[] = {(uint8_t)region,        (uint8_t)use_preset,  (uint8_t)modem_preset,
+                               (uint8_t)coding_rate,   (uint8_t)bandwidth,   (uint8_t)(bandwidth >> 8),
+                               (uint8_t)spread_factor, (uint8_t)channel_num, (uint8_t)(channel_num >> 8)};
+    mix(scalars, sizeof(scalars));
+    mix(&override_frequency, sizeof(override_frequency));
+    mix(primary_channel_name, strnlen(primary_channel_name, sizeof(primary_channel_name)));
+    // Fold the full width down rather than truncating, so every input bit reaches the stored value.
+    const uint16_t folded = (uint16_t)((h ^ (h >> 16)) & ((1u << NODEINFO_BITFIELD_HEARD_SLOT_BITS) - 1));
+    return folded;
+}
+
+LoraSlotSnapshot NodeDB::currentLoraSlot() const
+{
+    return loraSlotSnapshotFrom(config.lora, channels.getName(channels.getPrimaryIndex()));
+}
+
+void NodeDB::refreshCommittedLoraSlot()
+{
+    // A beacon TX parks the radio on someone else's preset and puts it back; config.lora is not the
+    // committed config for that window, and adopting it would read every node as unheard meanwhile.
+    if (loraSlotTransient)
+        return;
+    committedSlot = currentLoraSlot().fingerprint();
+}
+
 bool NodeDB::factoryReset(bool eraseBleBonds)
 {
     LOG_INFO("Factory reset");
@@ -880,6 +978,18 @@ bool NodeDB::factoryReset(bool eraseBleBonds)
         bond_print_list(BLE_GAP_ROLE_CENTRAL);
         Bluefruit.Periph.clearBonds();
         Bluefruit.Central.clearBonds();
+#endif
+#ifdef MESHTASTIC_LINUX_BLE
+        // isEnabled(), not just the pointer: a setup() that threw leaves the object
+        // allocated with its bus torn down, and clearBonds() needs a live connection.
+        if (linuxBluetooth && linuxBluetooth->isEnabled()) {
+            LOG_INFO("Clear bluetooth bonds");
+            linuxBluetooth->clearBonds();
+        } else {
+            // BlueZ bonds live in the host adapter's store, not ours, so there is no
+            // removing them from here without that connection.
+            LOG_WARN("BLE off, host bluetooth bonds left in place");
+        }
 #endif
     }
     return true;
@@ -1278,7 +1388,7 @@ static void installTrafficManagementDefaults(meshtastic_LocalModuleConfig &mc)
     mc.has_traffic_management = true;
     mc.traffic_management = meshtastic_ModuleConfig_TrafficManagementConfig_init_zero;
 #if HAS_TRAFFIC_MANAGEMENT
-    // Position dedup ships enabled at the 5-hour default window on all supported targets.
+    // Position dedup ships enabled at the 6-hour default window on all supported targets.
     // STM32WL is excluded at compile time (HAS_TRAFFIC_MANAGEMENT=0 in mesh-pb-constants.h).
     // Set position_min_interval_secs=0 at runtime to disable dedup.
     mc.traffic_management.position_min_interval_secs = default_traffic_mgmt_position_min_interval_secs;
@@ -1374,6 +1484,15 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.external_notification.use_i2s_as_buzzer = true;
     moduleConfig.external_notification.alert_message_buzzer = true;
 #endif // HAS_I2S
+
+#if HAS_LIBNOTIFY
+    // meshtasticd has no buzzer or LED to drive, but the module is what raises desktop
+    // notifications (ExternalNotificationModule::portduinoNotify), so default it on. Gated on
+    // HAS_LIBNOTIFY rather than ARCH_PORTDUINO: without libnotify that code is not compiled in, so
+    // enabling the module by default would only add a config surface that can do nothing.
+    moduleConfig.external_notification.enabled = true;
+    moduleConfig.external_notification.alert_message = true;
+#endif // HAS_LIBNOTIFY
 
 #ifdef NANO_G2_ULTRA
     moduleConfig.external_notification.enabled = true;
@@ -1936,16 +2055,35 @@ bool NodeDB::enforceSatelliteCaps()
 {
     concurrency::LockGuard guard(&satelliteMutex);
     bool trimmedAny = false;
-    auto trim = [this, &trimmedAny](auto &map, const char *name) {
+    const NodeNum self = getNodeNum();
+    // One sorted snapshot of the hot keys serves all four maps; the orphan test is a binary search.
+    std::vector<NodeNum> hotNums;
+    hotNums.reserve(numMeshNodes);
+    for (int i = 0; i < numMeshNodes; i++)
+        hotNums.push_back(meshNodes->at(i).num);
+    std::sort(hotNums.begin(), hotNums.end());
+
+    auto trim = [this, &trimmedAny, &hotNums, self](auto &map, const char *name) {
         const size_t before = map.size();
+        // Orphans (key with no hot-table owner) only ever arrive from disk, and the
+        // cap paths never reclaim them because they fire above the cap, not at it.
+        size_t orphans = 0;
+        for (auto it = map.begin(); it != map.end();) {
+            if (it->first != self && !std::binary_search(hotNums.begin(), hotNums.end(), it->first)) {
+                it = map.erase(it);
+                orphans++;
+            } else {
+                ++it;
+            }
+        }
         while (map.size() > MAX_SATELLITE_NODES) {
             if (!evictStalestSatellite(*this, map))
                 break;
         }
         if (map.size() != before) {
             trimmedAny = true;
-            LOG_MIGRATION("Trimmed %s satellites %u -> %u (cap %d)", name, (unsigned)before, (unsigned)map.size(),
-                          MAX_SATELLITE_NODES);
+            LOG_MIGRATION("Trimmed %s satellites %u -> %u (cap %d, %u orphaned)", name, (unsigned)before, (unsigned)map.size(),
+                          MAX_SATELLITE_NODES, (unsigned)orphans);
         }
     };
 #if !MESHTASTIC_EXCLUDE_POSITIONDB
@@ -2860,6 +2998,10 @@ void NodeDB::loadFromDisk()
         saveToDisk(SEGMENT_CHANNELS);
     }
 #if ARCH_PORTDUINO
+    // The host's config.yaml is authoritative for admin keys: it is root-owned and cannot be
+    // rewritten by an authorized remote, so it decides who may administer this node.
+    AdminKeys::applyHostKeys();
+
     // set any config overrides
     if (portduino_config.has_configDisplayMode) {
         config.display.displaymode = (_meshtastic_Config_DisplayConfig_DisplayMode)portduino_config.configDisplayMode;
@@ -2937,6 +3079,9 @@ bool NodeDB::reloadFromDisk()
         channels.onConfigChanged();
         rIface->reconfigure();
     }
+    // The unlock replaced the locked-default config with the operator's, so the boot snapshot
+    // describes a slot we were never on.
+    refreshCommittedLoraSlot();
     return true;
 }
 
@@ -3041,6 +3186,7 @@ bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_
     if (!okay || !writeSucceeded) {
         LOG_ERROR("Can't write prefs");
     }
+    okay &= writeSucceeded;
 #else
     LOG_ERROR("Filesystem not implemented");
 #endif
@@ -3181,6 +3327,8 @@ bool NodeDB::saveNodeDatabaseToDisk()
     size_t nodeDatabaseSize;
     pb_get_encoded_size(&nodeDatabaseSize, meshtastic_NodeDatabase_fields, &nodeDatabase);
     bool ok = saveProto(nodeDatabaseFileName, nodeDatabaseSize, &meshtastic_NodeDatabase_msg, &nodeDatabase, false);
+    if (ok)
+        nodeDatabaseDirty = false;
 
     nodeDatabase.positions.clear();
     nodeDatabase.positions.shrink_to_fit();
@@ -3301,6 +3449,31 @@ bool NodeDB::saveToDiskNoRetry(int saveWhat)
     return success;
 }
 
+/// Reads never touch the write path a busy or lock-protected flash fails on, so metadata that still
+/// resolves means the write failure was transient, not a filesystem that needs formatting.
+static bool filesystemStillReadable()
+{
+    concurrency::LockGuard g(spiLock);
+
+    auto dir = FSCom.open("/prefs", FILE_O_READ);
+    if (!dir)
+        return false;
+    dir.close();
+
+    // An existing pref proves the metadata chain resolves; a fresh device has none to check.
+    for (const char *name : {deviceStateFileName, configFileName, channelFileName}) {
+        if (!FSCom.exists(name))
+            continue;
+        auto f = FSCom.open(name, FILE_O_READ);
+        if (!f)
+            return false;
+        const bool readable = f.read() >= 0;
+        f.close();
+        return readable;
+    }
+    return true;
+}
+
 bool NodeDB::saveToDisk(int saveWhat)
 {
     LOG_DEBUG("Save to disk %d", saveWhat);
@@ -3314,13 +3487,58 @@ bool NodeDB::saveToDisk(int saveWhat)
 
     bool success = saveToDiskNoRetry(saveWhat);
 
-    if (!success) {
-        LOG_ERROR("Save to disk failed, retry");
-        spiLock->lock();
-        fsFormat();
-        spiLock->unlock();
-
+    // A failed write is far more often a busy SoftDevice or a sagging rail than a corrupt filesystem,
+    // and the format below takes every file with it, so retry first and never format on a low rail.
+    for (int attempt = 1; !success && attempt <= 2; attempt++) {
+        delay(150);
+#ifdef ARCH_RP2040
+        watchdog_update();
+#endif
+        if (!powerHAL_isPowerLevelSafe()) {
+            LOG_ERROR("saveToDisk() on unsafe device power level");
+            return false;
+        }
+        LOG_WARN("Save to disk failed, retry %d", attempt);
         success = saveToDiskNoRetry(saveWhat);
+    }
+
+    if (!success) {
+        if (!powerHAL_isPowerLevelSafe()) {
+            LOG_ERROR("saveToDisk() on unsafe device power level");
+            return false;
+        }
+#ifdef ARCH_RP2040
+        // Probe, format and resave run back-to-back from here with no retry loop left to feed it.
+        watchdog_update();
+#endif
+        // The format below takes every file with it, so spend one read proving it is warranted.
+        if (filesystemStillReadable()) {
+            LOG_ERROR("Save to disk failed but the filesystem still reads, not formatting (full or busy?)");
+            return false;
+        }
+        LOG_ERROR("Save to disk failed and the filesystem is unreadable, formatting");
+#ifdef MESHTASTIC_ENCRYPTED_STORAGE
+        // The format takes the DEK with it, and without it the resave below would land the keys in plaintext.
+        const bool lockdownWasActive = EncryptedStorage::isLockdownActive();
+#else
+        const bool lockdownWasActive = false;
+#endif
+        spiLock->lock();
+        const bool formatted = fsFormat();
+        spiLock->unlock();
+#ifdef ARCH_RP2040
+        // The five-segment resave below needs a budget of its own.
+        watchdog_update();
+#endif
+
+        // The format took every segment, not just the ones asked for, so all of them must land again.
+        if (!formatted)
+            LOG_ERROR("Filesystem format failed");
+        else if (lockdownWasActive)
+            LOG_ERROR("Lockdown DEK formatted away, not resaving in plaintext");
+        else
+            success = saveToDiskNoRetry(SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS |
+                                        SEGMENT_NODEDATABASE);
 
         RECORD_CRITICALERROR(success ? meshtastic_CriticalErrorCode_FLASH_CORRUPTION_RECOVERABLE
                                      : meshtastic_CriticalErrorCode_FLASH_CORRUPTION_UNRECOVERABLE);
@@ -3625,6 +3843,33 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
     saveNodeDatabaseToDisk();
 }
 
+// Locked encrypted storage rejects every write; saveToDiskNoRetry() skips it the same way.
+static bool isStorageLocked()
+{
+#ifdef MESHTASTIC_ENCRYPTED_STORAGE
+    return EncryptedStorage::isLockdownActive() && !EncryptedStorage::isUnlocked();
+#else
+    return false;
+#endif
+}
+
+void NodeDB::saveNodeDatabaseIfDirty()
+{
+    // Single attempt; shares updateUser()'s once-a-minute budget, so the write rate is unchanged.
+    if (!nodeDatabaseDirty || isStorageLocked() || Throttle::isWithinTimespanMs(lastNodeDbSave, ONE_MINUTE_MS))
+        return;
+    lastNodeDbSave = Time::getMillis();
+    saveNodeDatabaseToDisk();
+}
+
+int NodeDB::onReboot(void *)
+{
+    // A graceful reboot has no other save point.
+    if (nodeDatabaseDirty && !isStorageLocked())
+        saveNodeDatabaseToDisk();
+    return 0;
+}
+
 /** Update user info and channel for this node based on received user data
  */
 bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelIndex, bool xeddsaSigned)
@@ -3706,9 +3951,9 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
         updateGUIforNode = info;
         notifyObservers(true); // Force an update whether or not our node counts have changed
 
-        // We just changed something about a User,
-        // store our DB unless we just did so less than a minute ago
-
+        // We just changed something about a User. Store our DB unless we just did so less than a minute
+        // ago; a deferred save stays pending and saveNodeDatabaseIfDirty() retries it.
+        nodeDatabaseDirty = true;
         if (!Throttle::isWithinTimespanMs(lastNodeDbSave, ONE_MINUTE_MS)) {
             saveToDisk(SEGMENT_NODEDATABASE);
             lastNodeDbSave = millis();
@@ -3784,6 +4029,11 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
             info->snr = mp.rx_snr; // keep the most recent SNR we received for this node.
             nodeInfoLiteSetBit(info, NODEINFO_BITFIELD_HAS_SNR_MASK, true);
         }
+
+        // RF-origin only (a via_mqtt rebroadcast proves the gateway is in earshot, not the node); not
+        // has_rx_rssi-gated, as SimRadio omits it. Live slot, so a beacon-preset hear fails to match home.
+        if (mp.transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA && !mp.via_mqtt)
+            nodeInfoLiteSetHeardSlot(info, currentLoraSlot().fingerprint());
 
         nodeInfoLiteSetBit(info, NODEINFO_BITFIELD_VIA_MQTT_MASK,
                            mp.via_mqtt); // Store if we received this packet via MQTT
@@ -3928,7 +4178,7 @@ void NodeDB::pause_sort(bool paused)
 void NodeDB::sortMeshDB()
 {
     if (!sortingIsPaused && (lastSort == 0 || !Throttle::isWithinTimespanMs(lastSort, 1000 * 5))) {
-        lastSort = millis();
+        lastSort = Time::skipZero(Time::getMillis());
         bool changed = true;
         while (changed) { // dumb reverse bubble sort, but probably not bad for what we're doing
             changed = false;
@@ -4053,6 +4303,14 @@ bool NodeDB::resolveUniqueLastByte(uint8_t lastByte, bool requireDirectNeighbor,
 bool NodeDB::isFull()
 {
     return (numMeshNodes >= MAX_NUM_NODES) || (memGet.getFreeHeap() < MINIMUM_SAFE_FREE_HEAP);
+}
+
+bool NodeDB::isHalfEmpty() const
+{
+    // MAX_NUM_NODES is a runtime call on portduino, so read it once. Strictly more than half the
+    // slots must be free, and low heap disqualifies the store just as it does in isFull().
+    const size_t cap = (size_t)MAX_NUM_NODES;
+    return ((size_t)numMeshNodes * 2 < cap) && (memGet.getFreeHeap() >= MINIMUM_SAFE_FREE_HEAP);
 }
 
 uint32_t NodeDB::hotNodeLastHeard(NodeNum n) const
@@ -4666,6 +4924,10 @@ bool NodeDB::restorePreferences(meshtastic_AdminMessage_BackupLocation location,
             }
             if (restoreWhat & SEGMENT_CHANNELS)
                 channels.onConfigChanged();
+
+            // Restore reboots without going through MeshService::reloadConfig(), which is where the
+            // committed slot is otherwise re-read.
+            refreshCommittedLoraSlot();
 
             success = saveToDisk(restoreWhat);
             if (success) {

@@ -58,6 +58,9 @@ class MQTT : private concurrency::OSThread
     bool isUsingDefaultServer() { return isConfiguredForDefaultServer; }
     bool isUsingDefaultRootTopic() { return isConfiguredForDefaultRootTopic; }
 
+    /** Point the root topic at the current region on the default broker. Returns true if it rewrote it. */
+    static bool applyRegionRootTopic(const char *regionName);
+
     /// Validate the meshtastic_ModuleConfig_MQTTConfig.
     static bool isValidConfig(const meshtastic_ModuleConfig_MQTTConfig &config) { return isValidConfig(config, nullptr); }
 
@@ -98,6 +101,7 @@ class MQTT : private concurrency::OSThread
     explicit MQTT(std::unique_ptr<MQTTClient> mqttClient);
 #endif
 
+    std::string topicRoot;            // moduleConfig.mqtt.root the topics below were built from
     std::string cryptTopic = "/2/e/"; // msh/2/e/CHANNELID/NODEID
     std::string mapTopic = "/2/map/"; // For protobuf-encoded MapReport messages
 
@@ -110,6 +114,9 @@ class MQTT : private concurrency::OSThread
     /** Attempt to connect to server if necessary
      */
     void reconnect();
+
+    /// Rebuild topics from moduleConfig.mqtt.root and force a resubscribe.
+    void reinitTopics();
 
     /** Tell the server what subscriptions we want (based on channels.downlink_enabled)
      */

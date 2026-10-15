@@ -18,29 +18,6 @@ LinuxJoystick::LinuxJoystick(const char *name) : concurrency::OSThread(name)
     this->_originName = name;
 }
 
-// Translate a config.yaml action name into a broker event. Returns INPUT_BROKER_NONE
-// for unknown names so a typo simply leaves that button unmapped.
-static input_broker_event joystickActionToEvent(const std::string &action)
-{
-    if (action == "select")
-        return INPUT_BROKER_SELECT;
-    if (action == "cancel")
-        return INPUT_BROKER_CANCEL;
-    if (action == "back")
-        return INPUT_BROKER_BACK;
-    if (action == "up")
-        return INPUT_BROKER_UP;
-    if (action == "down")
-        return INPUT_BROKER_DOWN;
-    if (action == "left")
-        return INPUT_BROKER_LEFT;
-    if (action == "right")
-        return INPUT_BROKER_RIGHT;
-    if (action == "user" || action == "userpress")
-        return INPUT_BROKER_USER_PRESS;
-    return INPUT_BROKER_NONE;
-}
-
 void LinuxJoystick::init()
 {
     if (portduino_config.joystickButtons.empty()) {
@@ -49,7 +26,7 @@ void LinuxJoystick::init()
         buttonMap[JOY_BTN_B] = INPUT_BROKER_CANCEL;
     } else {
         for (const auto &button : portduino_config.joystickButtons) {
-            input_broker_event event = joystickActionToEvent(button.second);
+            input_broker_event event = inputBrokerEventFromAction(button.second);
             if (event != INPUT_BROKER_NONE)
                 buttonMap[button.first] = event;
         }
@@ -79,12 +56,15 @@ static int axisZone(int value)
     return 0;
 }
 
-void LinuxJoystick::emitEvent(input_broker_event event)
+// kbchar carries which physical button produced the event (0 for the D-pad, which is an axis
+// rather than a button). Several buttons can be mapped to one action, so this is how a consumer
+// tells them apart -- see joyButtonToKbchar() in InputBroker.h.
+void LinuxJoystick::emitEvent(input_broker_event event, unsigned char kbchar)
 {
     InputEvent e = {};
     e.inputEvent = event;
     e.source = this->_originName;
-    e.kbchar = 0;
+    e.kbchar = kbchar;
     // LOG_DEBUG("joystick: %s event %d", this->_originName, event);
     this->notifyObservers(&e);
 }
@@ -138,6 +118,7 @@ int32_t LinuxJoystick::runOnce()
                         heldX = zone;
                         if (zone != 0) {
                             emitEvent((zone < 0) ? INPUT_BROKER_LEFT : INPUT_BROKER_RIGHT);
+                            // unset-sentinel-ok: heldX carries the armed state, so 0 is a legal deadline
                             nextRepeatX = millis() + JOY_REPEAT_DELAY_MS;
                         }
                     }
@@ -147,6 +128,7 @@ int32_t LinuxJoystick::runOnce()
                         heldY = zone;
                         if (zone != 0) {
                             emitEvent((zone < 0) ? INPUT_BROKER_UP : INPUT_BROKER_DOWN);
+                            // unset-sentinel-ok: heldY carries the armed state, so 0 is a legal deadline
                             nextRepeatY = millis() + JOY_REPEAT_DELAY_MS;
                         }
                     }
@@ -156,7 +138,7 @@ int32_t LinuxJoystick::runOnce()
                 // Buttons fire once per press (no auto-repeat).
                 auto mapped = buttonMap.find(code);
                 if (mapped != buttonMap.end())
-                    emitEvent(mapped->second);
+                    emitEvent(mapped->second, joyButtonToKbchar(code));
             }
         }
     }
@@ -165,10 +147,12 @@ int32_t LinuxJoystick::runOnce()
     uint32_t now = millis();
     if (heldX != 0 && (int32_t)(now - nextRepeatX) >= 0) {
         emitEvent((heldX < 0) ? INPUT_BROKER_LEFT : INPUT_BROKER_RIGHT);
+        // unset-sentinel-ok: heldX carries the armed state, so 0 is a legal deadline
         nextRepeatX = now + JOY_REPEAT_INTERVAL_MS;
     }
     if (heldY != 0 && (int32_t)(now - nextRepeatY) >= 0) {
         emitEvent((heldY < 0) ? INPUT_BROKER_UP : INPUT_BROKER_DOWN);
+        // unset-sentinel-ok: heldY carries the armed state, so 0 is a legal deadline
         nextRepeatY = now + JOY_REPEAT_INTERVAL_MS;
     }
 

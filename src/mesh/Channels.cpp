@@ -47,6 +47,12 @@ int16_t Channels::generateHash(ChannelIndex channelNum)
 
         h ^= xorHash(k.bytes, k.length);
 
+        // Differentiate AEAD channels in routing so AEAD and non-AEAD
+        // channels with the same PSK have different hashes
+        auto &ch = getByIndex(channelNum);
+        if (ch.has_settings && ch.settings.use_aead)
+            h ^= 0xAE;
+
         return h;
     }
 }
@@ -71,6 +77,13 @@ meshtastic_Channel &Channels::fixupChannel(ChannelIndex chIndex)
         // Convert the old string "Default" to our new short representation
         if (strcmp(meshtastic_channelSettings.name, "Default") == 0)
             *meshtastic_channelSettings.name = '\0';
+
+        // AEAD needs key material. Left set on a channel that resolves to no PSK it would make every
+        // send fail with BAD_REQUEST and every receive drop, with nothing in the config to show why.
+        if (meshtastic_channelSettings.use_aead && getKey(chIndex).length <= 0) {
+            LOG_WARN("Channel %d has AEAD enabled but no PSK; clearing use_aead", chIndex);
+            meshtastic_channelSettings.use_aead = false;
+        }
     }
 
     hashes[chIndex] = generateHash(chIndex);
@@ -317,16 +330,21 @@ void Channels::initDefaults()
 
 void Channels::onConfigChanged()
 {
-    // Make sure the phone hasn't mucked anything up
+    // Make sure the phone hasn't mucked anything up. Settle the primary first: fixupChannel()
+    // hashes through getKey(), which follows a keyless secondary to primaryIndex.
     bool hasPrimary = false;
     for (int i = 0; i < channelFile.channels_count; i++) {
-        const meshtastic_Channel &ch = fixupChannel(i);
+        const meshtastic_Channel &ch = getByIndex(i);
 
-        if (ch.role == meshtastic_Channel_Role_PRIMARY) {
+        if (ch.has_settings && ch.role == meshtastic_Channel_Role_PRIMARY) {
             primaryIndex = i;
             hasPrimary = true;
         }
     }
+
+    for (int i = 0; i < channelFile.channels_count; i++)
+        fixupChannel(i);
+
     // Enforce the invariant that primaryIndex references a PRIMARY channel: a malformed config can
     // demote every slot, which would leave all getPrimaryIndex() readers on a stale non-primary slot
     if (!hasPrimary) {
@@ -339,7 +357,9 @@ void Channels::onConfigChanged()
             initDefaultChannel(0);
         }
         LOG_WARN("Config has no PRIMARY channel, restored one at slot %u", primaryIndex);
-        fixupChannel(primaryIndex);
+        // The key every keyless secondary resolves through just changed, so re-run the lot
+        for (int i = 0; i < channelFile.channels_count; i++)
+            fixupChannel(i);
     }
 #if !MESHTASTIC_EXCLUDE_MQTT
     if (channels.anyMqttEnabled() && mqtt && !mqtt->isEnabled()) {
@@ -572,6 +592,12 @@ bool Channels::setDefaultPresetCryptoForHash(ChannelHash channelHash)
         }
     }
     return false;
+}
+
+bool Channels::isAEADEnabled(ChannelIndex chIndex)
+{
+    auto &ch = getByIndex(chIndex);
+    return ch.has_settings && ch.settings.use_aead;
 }
 
 /** Given a channel index setup crypto for encoding that channel (or the primary channel if that channel is unsecured)

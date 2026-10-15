@@ -45,6 +45,7 @@ int32_t StoreForwardModule::runOnce()
             }
         } else if (this->heartbeat && (!Throttle::isWithinTimespanMs(lastHeartbeat, heartbeatInterval * 1000)) &&
                    airTime->isTxAllowedChannelUtil(true)) {
+            // unset-sentinel-ok: the heartbeat bool gates it and the only read is elapsed math
             lastHeartbeat = millis();
             LOG_INFO("Send heartbeat");
             meshtastic_StoreAndForward sf = meshtastic_StoreAndForward_init_zero;
@@ -257,7 +258,6 @@ meshtastic_MeshPacket *StoreForwardModule::preparePayload(NodeNum dest, uint32_t
 
                 p->to = local ? this->packetHistory[i].to : dest; // PhoneAPI can handle original `to`
                 p->from = this->packetHistory[i].from;
-                p->id = this->packetHistory[i].id;
                 p->channel = this->packetHistory[i].channel;
                 p->decoded.reply_id = this->packetHistory[i].reply_id;
                 p->rx_time = this->packetHistory[i].time;
@@ -277,6 +277,7 @@ meshtastic_MeshPacket *StoreForwardModule::preparePayload(NodeNum dest, uint32_t
 
                 if (local) { // PhoneAPI gets normal TEXT_MESSAGE_APP
                     p->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
+                    p->id = this->packetHistory[i].id;
                     memcpy(p->decoded.payload.bytes, this->packetHistory[i].payload, this->packetHistory[i].payload_size);
                     p->decoded.payload.size = this->packetHistory[i].payload_size;
                 } else {
@@ -289,6 +290,7 @@ meshtastic_MeshPacket *StoreForwardModule::preparePayload(NodeNum dest, uint32_t
                     } else {
                         sf.rr = meshtastic_StoreAndForward_RequestResponse_ROUTER_TEXT_DIRECT;
                     }
+                    sf.original_id = this->packetHistory[i].id;
 
                     p->decoded.payload.size = pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes),
                                                                  &meshtastic_StoreAndForward_msg, &sf);
@@ -535,6 +537,7 @@ bool StoreForwardModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp,
             if (p->which_variant == meshtastic_StoreAndForward_heartbeat_tag) {
                 heartbeatInterval = p->variant.heartbeat.period;
             }
+            // unset-sentinel-ok: the heartbeat bool gates it and the only read is elapsed math
             lastHeartbeat = millis();
             LOG_INFO("StoreAndForward Heartbeat received");
         }
