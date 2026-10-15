@@ -112,6 +112,12 @@ static void shutdownEnter()
 
 static uint32_t secsSlept;
 
+// Set to 1 to let light sleep proceed with a USB console host attached, trading the console for the
+// ability to watch the light-sleep path in a debug log. See the note in lsIdle() below.
+#ifndef MESHTASTIC_LIGHT_SLEEP_IGNORE_USB_CONSOLE
+#define MESHTASTIC_LIGHT_SLEEP_IGNORE_USB_CONSOLE 0
+#endif
+
 static void lsEnter()
 {
     LOG_POWERFSM("lsEnter begin, ls_secs=%u", config.power.ls_secs);
@@ -131,8 +137,14 @@ static void lsIdle()
 
     // Do we have more sleeping to do?
     if (secsSlept < config.power.ls_secs) {
+        // A USB host with the console open cannot survive a light sleep. No shipping chip keeps the
+        // USB-serial/JTAG pad alive across one, and we surface for only 100 ms between 30 s chunks -
+        // far too short for the host to re-enumerate. It gives up, and nothing on this side can ask
+        // it to try again, so the port stays gone until the board is power cycled. Veto the sleep
+        // while a host is there, like the preflight veto below; a node on a battery or a charger
+        // still sleeps. A build can opt out with MESHTASTIC_LIGHT_SLEEP_IGNORE_USB_CONSOLE.
         // If some other service would stall sleep, don't let sleep happen yet
-        if (doPreflightSleep()) {
+        if ((MESHTASTIC_LIGHT_SLEEP_IGNORE_USB_CONSOLE || !usbConsoleHostAttached()) && doPreflightSleep()) {
             // Briefly come out of sleep long enough to blink the led once every few seconds
             uint32_t sleepTime = SLEEP_TIME;
 
@@ -184,6 +196,17 @@ static void lsIdle()
                 break;
             }
         } else {
+            // Say why once per stay in LS, so "power saving does nothing while it is plugged in" is
+            // answerable from a log rather than from this comment.
+            static bool loggedUsbVeto = false;
+            if (usbConsoleHostAttached() && !MESHTASTIC_LIGHT_SLEEP_IGNORE_USB_CONSOLE) {
+                if (!loggedUsbVeto) {
+                    LOG_INFO("Skip light sleep: USB console host attached");
+                    loggedUsbVeto = true;
+                }
+            } else {
+                loggedUsbVeto = false;
+            }
             // Someone says we can't sleep now, so just save some power by sleeping the CPU for 100ms or so
             delay(100);
         }

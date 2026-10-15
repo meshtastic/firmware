@@ -283,6 +283,8 @@ int16_t RF95Interface::programModemParams()
 
 bool RF95Interface::reconfigure()
 {
+    // A readout between these calls would clear the flags they set up, or move the chip out from under them
+    RadioSequence seq(this);
     RadioLibInterface::reconfigure();
 
     // set mode to standby - a chip that lost its state to a reset/brownout can fail here,
@@ -323,6 +325,10 @@ void RF95Interface::addReceiveMetadata(meshtastic_MeshPacket *mp)
 
 int16_t RF95Interface::trySetStandby()
 {
+    // Handle any pending interrupts before we force standby, but not a TX whose backoff timer is pending: it would start
+    // here, before its delay is up, and the standby below would cut it off with its payload still in the radio
+    checkNotificationExcept(TRANSMIT_DELAY_COMPLETED);
+
     int16_t err = lora->standby();
     if (err != RADIOLIB_ERR_NONE)
         LOG_ERROR("RF95 standby %s%d", radioLibErr, err);
@@ -407,7 +413,10 @@ bool RF95Interface::isActivelyReceiving()
 
 bool RF95Interface::sleep()
 {
-    // put chipset into sleep mode
+    // put chipset into sleep mode. trySetStandby() and the sleep command below are one sequence: a readout landing
+    // between them talks to a chip on its way down, and the standby would be undone by the arm its caller can follow
+    // the readout with.
+    RadioSequence seq(this);
     (void)trySetStandby(); // First cancel any active receiving/sending - going to sleep, a failure must not crash
     lora->sleep();
 

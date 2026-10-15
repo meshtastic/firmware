@@ -32,6 +32,9 @@ template <class T> class SX128xInterface : public RadioLibInterface
 
     bool isIRQPending() override { return lora.getIrqFlags() != 0; }
 
+    /// DS rev 3.3 16.2: a header error leaves RX wedged with no RX_DONE or timeout, so only a re-arm clears it
+    bool headerErrWedgesRx() const override { return true; }
+
   protected:
     /**
      * Specific module instance
@@ -74,6 +77,11 @@ template <class T> class SX128xInterface : public RadioLibInterface
     virtual void setStandby() override;
 
     uint32_t getPacketTime(uint32_t pl, bool received) override { return computePacketTime(lora, pl, received); }
+
+    bool readRxHeaderInfo(uint8_t &cr, bool &hasCRC) override
+    {
+        return lora.getLoRaRxHeaderInfo(&cr, &hasCRC) == RADIOLIB_ERR_NONE;
+    }
 
     // 2.4 GHz only. isChannelActive() passes CAD_ON_8_SYMB; keep the two in step.
     uint8_t getCadSymbolCountWideLora() const override { return 8; }

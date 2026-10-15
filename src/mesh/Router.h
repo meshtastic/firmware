@@ -208,6 +208,22 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     void dispatchReceived(meshtastic_MeshPacket *p, RxSource src);
 
     /**
+     * Publish a PKI DM between two other nodes to MQTT. Opaque to us, it never reaches the publish in
+     * dispatchReceived(). Marks p pki_encrypted so MQTT files it under the PKI topic.
+     */
+    void perhapsUplinkOpaquePki(meshtastic_MeshPacket *p);
+
+    /// (from, id) of recent opaque PKI uplinks, so the copy heard from each relay is published once.
+    /// Separate from PacketHistory: opaque frames must not touch routing state.
+    struct OpaqueUplink {
+        NodeNum from;
+        PacketId id;
+    };
+    static constexpr uint8_t opaqueUplinkCapacity = 8;
+    OpaqueUplink opaqueUplinkSeen[opaqueUplinkCapacity] = {};
+    uint8_t opaqueUplinkNext = 0;
+
+    /**
      * Route a packet addressed to us (or a local broadcast we loop back) into handleReceived().
      * Called synchronously at the top level, but if a module sends this from inside callModules()
      * (handleDepth > 0) the packet is copied into the deferred queue instead, so we never stack a
