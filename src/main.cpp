@@ -76,6 +76,10 @@ NimbleBluetooth *nimbleBluetooth = nullptr;
 NRF52Bluetooth *nrf52Bluetooth = nullptr;
 #endif
 
+#ifdef MESHTASTIC_LINUX_BLE
+LinuxBluetooth *linuxBluetooth = nullptr;
+#endif
+
 #ifdef MESHTASTIC_ENABLE_APPROTECT
 #include "security/APProtect.h"
 #endif
@@ -107,6 +111,7 @@ NRF52Bluetooth *nrf52Bluetooth = nullptr;
 #include "linux/LinuxHardwareI2C.h"
 #ifndef ARCH_PORTDUINO_WASM // raspi HTTP server (ulfius/zlib/openssl) excluded in the browser/wasm build
 #include "mesh/raspihttp/PiWebServer.h"
+#include "platform/portduino/NativeDiscovery.h"
 #endif
 #include "platform/portduino/PortduinoGlue.h"
 #ifdef _WIN32
@@ -279,7 +284,7 @@ const char *firmware_version = optstr(APP_VERSION_SHORT);
 
 const char *getDeviceName()
 {
-    uint8_t dmac[6];
+    uint8_t dmac[6] = {0};
 
     getMacAddr(dmac);
 
@@ -810,6 +815,10 @@ void setup()
 #endif
 #if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_MAGNETOMETER
     auto mag_info = i2cScanner->firstMagnetometer();
+#if !MESHTASTIC_EXCLUDE_ACCELEROMETER
+    if (mag_info.type == acc_info.type) // a BMM150 with no accelerometer beside it is already the accelerometer thread's
+        mag_info = ScanI2C::DEVICE_NONE;
+#endif
     magnetometer_found = mag_info.type != ScanI2C::DeviceType::NONE ? mag_info.address : magnetometer_found;
     LOG_DEBUG("mag_info = %i", mag_info.type);
 #endif
@@ -1222,6 +1231,9 @@ void setup()
     }
 #endif
     initApiServer(TCPPort);
+#ifndef ARCH_PORTDUINO_WASM
+    startNativeDiscovery(TCPPort);
+#endif
 #endif
 
     // Start airtime logger thread.
@@ -1361,8 +1373,9 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
 
 // No bluetooth on these targets (yet):
 // Pico W / 2W may get it at some point
-// Portduino and ESP32-C6 are excluded because we don't have a working bluetooth stacks integrated yet.
-#if defined(ARCH_RP2040) || defined(ARCH_PORTDUINO) || defined(ARCH_STM32) || defined(CONFIG_IDF_TARGET_ESP32C6) || !HAS_BLUETOOTH
+// ESP32-C6 is excluded because we don't have a working bluetooth stack integrated yet.
+// Portduino only has BLE when built against BlueZ/sdbus-c++, so it falls out via !HAS_BLUETOOTH.
+#if defined(ARCH_RP2040) || defined(ARCH_STM32) || defined(CONFIG_IDF_TARGET_ESP32C6) || !HAS_BLUETOOTH
     deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_BLUETOOTH_CONFIG;
 #endif
 
@@ -1488,6 +1501,7 @@ void loop()
     rp2040Loop();
 #endif
     power->powerCommandsCheck();
+    nodeDB->saveNodeDatabaseIfDirty();
 
     if (RadioLibInterface::instance != nullptr) {
         static uint32_t lastRadioMissedIrqPoll;
@@ -1496,7 +1510,7 @@ void loop()
             RadioLibInterface::instance->pollMissedIrqs();
         }
 
-        // Periodic radio upkeep - re-arms RX if it was left off, else AGC reset (stuck-gain prevention)
+        // Periodic radio upkeep - re-arms RX if it was left off, else an AGC reset when one is due (stuck-gain prevention)
         static uint32_t lastAgcReset;
         if (!Throttle::isWithinTimespanMs(lastAgcReset, AGC_RESET_INTERVAL_MS)) {
             lastAgcReset = millis();
@@ -1520,6 +1534,9 @@ void loop()
         inputBroker->processInputEventQueue();
 #endif
 #if ARCH_PORTDUINO
+#ifndef ARCH_PORTDUINO_WASM
+    serviceNativeDiscovery();
+#endif
     if (portduino_config.lora_spi_dev == "ch341" && ch341Hal != nullptr) {
         ch341Hal->checkError();
     }

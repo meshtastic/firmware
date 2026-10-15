@@ -124,7 +124,7 @@ bool KeyVerificationModule::handleReceivedProtobuf(const meshtastic_MeshPacket &
                       options.optionsArrayPtr = optionsArray; options.optionsCount = 2;
                       options.notificationType = graphics::notificationTypeEnum::selection_picker;
                       options.bannerCallback =
-                          [=](int selected) {
+                          [](int selected) {
                               LOG_DEBUG("User selected %d for key verification", selected);
                               if (selected == 1) {
                                   keyVerificationModule->commitVerifiedRemoteNode();

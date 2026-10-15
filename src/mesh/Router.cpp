@@ -1,4 +1,5 @@
 #include "Router.h"
+#include "AdminKeys.h"
 #include "Channels.h"
 #include "CryptoEngine.h"
 #include "MeshRadio.h"
@@ -243,8 +244,8 @@ Router::Router() : concurrency::OSThread("Router"), fromRadioQueue(MAX_RX_FROMRA
     fromRadioQueue.setReader(this);
 
     // init Lockguard for crypt operations
-    assert(!cryptLock);
-    cryptLock = new concurrency::Lock();
+    if (!cryptLock)
+        cryptLock = new concurrency::Lock();
     if (!routingAuthCacheLock)
         routingAuthCacheLock = new concurrency::Lock();
     // Runtime default for the auth-cache snapshot policy. Keep it here, saves flash.
@@ -887,14 +888,7 @@ void resetAdminKeyFallbackBudget()
 
 static bool adminKeyFallbackAllowed()
 {
-    bool haveAdminKey = false;
-    for (int i = 0; i < 3; i++) {
-        if (config.security.admin_key[i].size == 32) {
-            haveAdminKey = true;
-            break;
-        }
-    }
-    if (!haveAdminKey)
+    if (!AdminKeys::any())
         return false; // nothing to try, so do not spend a token
 
     // Injectable clock so the budget can be tested without sleeping, and without racing a slow host.
@@ -985,11 +979,12 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
             viaPendingKey = havePendingKey;
         }
         if (!decrypted && adminKeyFallbackAllowed()) {
-            for (int i = 0; i < 3 && !decrypted; i++) {
-                if (config.security.admin_key[i].size != 32)
-                    continue;
+            for (size_t i = 0, n = AdminKeys::count(); i < n && !decrypted; i++) {
+                const uint8_t *adminKey = AdminKeys::keyAt(i);
+                if (!adminKey)
+                    break;
                 remotePublic.size = 32;
-                memcpy(remotePublic.bytes, config.security.admin_key[i].bytes, 32);
+                memcpy(remotePublic.bytes, adminKey, 32);
 
                 if (crypto->decryptCurve25519(p->from, remotePublic, p->id, rawSize, p->encrypted.bytes, bytes)) {
                     decrypted = true;
@@ -1001,7 +996,6 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
                 adminKeyFallbackRefund();
         }
         if (decrypted) {
-            LOG_INFO("PKI Decryption worked");
             meshtastic_Data decodedtmp;
             memset(&decodedtmp, 0, sizeof(decodedtmp));
             size_t payloadSize = rawSize - MESHTASTIC_PKC_OVERHEAD;
@@ -1658,14 +1652,9 @@ void Router::dispatchReceived(meshtastic_MeshPacket *p, RxSource src)
         if (p_encrypted == nullptr) {
             LOG_WARN("p_encrypted null, skip MQTT publish");
         } else {
-            // Mark as pki_encrypted if it is not yet decoded and MQTT encryption is also enabled, hash matches and it's a DM not
-            // to us (because we would be able to decrypt it)
-            if (decodedState == DecodeState::DECODE_OPAQUE && moduleConfig.mqtt.encryption_enabled && p->channel == 0x00 &&
-                !isBroadcast(p->to) && !isToUs(p))
-                p_encrypted->pki_encrypted = true;
-            // After potentially altering it, publish received message to MQTT if we're not the original transmitter of the packet
-            if ((decodedState == DecodeState::DECODE_SUCCESS || p_encrypted->pki_encrypted) && moduleConfig.mqtt.enabled &&
-                !isFromUs(p) && mqtt) {
+            // Publish received message to MQTT if we're not the original transmitter of the packet. PKI DMs we can't
+            // decrypt never get here; perhapsUplinkOpaquePki() publishes those.
+            if (decodedState == DecodeState::DECODE_SUCCESS && moduleConfig.mqtt.enabled && !isFromUs(p) && mqtt) {
                 if (decodedState == DecodeState::DECODE_SUCCESS && p->decoded.portnum == meshtastic_PortNum_TRACEROUTE_APP &&
                     moduleConfig.mqtt.encryption_enabled) {
                     // For TRACEROUTE_APP packets release the original encrypted packet and encrypt a new from the changed packet
@@ -1696,6 +1685,30 @@ void Router::dispatchReceived(meshtastic_MeshPacket *p, RxSource src)
     }
 
     packetPool.release(p_encrypted); // Release the encrypted packet (release() handles nullptr)
+}
+
+void Router::perhapsUplinkOpaquePki(meshtastic_MeshPacket *p)
+{
+#if !MESHTASTIC_EXCLUDE_MQTT
+    // Only a PKI-shaped DM between two other nodes: a DM to us would have decrypted, and a still-encrypted
+    // packet is publishable only with MQTT encryption enabled.
+    if (!mqtt || !moduleConfig.mqtt.enabled || !moduleConfig.mqtt.encryption_enabled || p->via_mqtt || p->channel != 0 ||
+        p->id == 0 || isBroadcast(p->to) || isToUs(p) || isFromUs(p))
+        return;
+
+    for (const auto &seen : opaqueUplinkSeen) {
+        if (seen.from == p->from && seen.id == p->id)
+            return;
+    }
+    opaqueUplinkSeen[opaqueUplinkNext] = {p->from, p->id};
+    opaqueUplinkNext = (opaqueUplinkNext + 1) % opaqueUplinkCapacity;
+
+    p->pki_encrypted = true;
+    stampRxTime(p);
+    mqtt->onSend(*p, *p, 0);
+#else
+    (void)p;
+#endif
 }
 
 void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
@@ -1761,6 +1774,7 @@ void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
         if (isFromUs(p))
             perhapsGenerateImplicitAckForOwnOverheard(p);
         relayOpaquePacket(p);
+        perhapsUplinkOpaquePki(p);
         packetPool.release(p);
         return;
     }
