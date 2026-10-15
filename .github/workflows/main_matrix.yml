@@ -187,8 +187,11 @@ jobs:
     secrets:
       MEMBROWSE_API_KEY: ${{ secrets.MEMBROWSE_API_KEY }}
 
+  # build-debian-src, MacOS and Windows are skipped on a post-merge push whose merge_group
+  # run (setup's reuse_run_id) already built this exact commit.
   build-debian-src:
-    if: github.repository_owner == 'meshtastic' && github.event_name != 'schedule' && github.event.inputs.nightly != 'true'
+    needs: setup
+    if: github.repository_owner == 'meshtastic' && github.event_name != 'schedule' && github.event.inputs.nightly != 'true' && needs.setup.outputs.reuse_run_id == ''
     uses: ./.github/workflows/build_debian_src.yml
     with:
       series: UNRELEASED
@@ -196,7 +199,8 @@ jobs:
     secrets: inherit
 
   MacOS:
-    if: github.event_name != 'schedule' && github.event.inputs.nightly != 'true' && !contains(github.ref_name, 'event/')
+    needs: setup
+    if: github.event_name != 'schedule' && github.event.inputs.nightly != 'true' && !contains(github.ref_name, 'event/') && needs.setup.outputs.reuse_run_id == ''
     strategy:
       fail-fast: false
       matrix:
@@ -210,7 +214,8 @@ jobs:
     # secrets: inherit
 
   Windows:
-    if: github.event_name != 'schedule' && github.event.inputs.nightly != 'true' && !contains(github.ref_name, 'event/')
+    needs: setup
+    if: github.event_name != 'schedule' && github.event.inputs.nightly != 'true' && !contains(github.ref_name, 'event/') && needs.setup.outputs.reuse_run_id == ''
     strategy:
       fail-fast: false
       matrix:
