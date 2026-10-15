@@ -76,7 +76,6 @@ jobs:
           MERGE_GROUP_BASE_SHA: ${{ github.event.merge_group.base_sha }}
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.version.outputs.long }}
-          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           # A new board is 'release' and gets no CI until after merge, so force-build the
           # first env of each ADDED variant config. A new env in an existing one does not count.
@@ -136,31 +135,17 @@ jobs:
                           and any($have[]; . == "firmware-\($b.platform)-\($b.board)-\($ver)")
                           and any($have[]; . == "manifest-\($b.platform)-\($b.board)-\($ver)")
                         then . + {reuse: true} else . end)' <<<"$TARGETS")
-                # ci-gate does not cover MacOS, Windows or build-debian-src, so they are only
-                # skipped when that run's latest attempt of each passed and all three ran. Never
-                # on the default branch: these jobs save their caches only on its pushes.
-                if [[ "$GITHUB_REF_NAME" != "$DEFAULT_BRANCH" ]]; then
-                  OS_JOBS=$(gh api --paginate "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/check-runs?per_page=100&filter=all" \
-                    --jq ".check_runs[] | select(.details_url | contains(\"/runs/$MQ_RUN_ID/\"))
-                          | select(.name | test(\"^(MacOS|Windows|build-debian-src) \"))
-                          | {name, started_at, conclusion}") || OS_JOBS=""
-                  SKIP_OS_BUILDS=$(jq -rs 'group_by(.name) | map((map(.started_at) | max) as $t | .[] | select(.started_at == $t)) as $j
-                    | ($j | all(.conclusion == "success")) and ($j | map(.name | split(" ")[0]) | unique | length == 3)' \
-                    <<<"$OS_JOBS") || SKIP_OS_BUILDS=false
-                fi
               fi
             fi
-            echo "Reusing PR-level builds from merge_group run: ${REUSE_RUN_ID:-none}; skipping OS builds: ${SKIP_OS_BUILDS:-false}"
+            echo "Reusing PR-level builds from merge_group run: ${REUSE_RUN_ID:-none}"
           fi
           echo "Name: $GITHUB_REF_NAME Base: $GITHUB_BASE_REF Ref: $GITHUB_REF"
           echo "all=$TARGETS" >> $GITHUB_OUTPUT
           echo "reuse_run_id=$REUSE_RUN_ID" >> $GITHUB_OUTPUT
-          echo "skip_os_builds=${SKIP_OS_BUILDS:-false}" >> $GITHUB_OUTPUT
           echo "$TARGETS" >> $GITHUB_STEP_SUMMARY
     outputs:
       all: ${{ steps.jsonStep.outputs.all }}
       reuse_run_id: ${{ steps.jsonStep.outputs.reuse_run_id }}
-      skip_os_builds: ${{ steps.jsonStep.outputs.skip_os_builds }}
 
   version:
     runs-on: ubuntu-26.04
@@ -215,11 +200,8 @@ jobs:
     secrets:
       MEMBROWSE_API_KEY: ${{ secrets.MEMBROWSE_API_KEY }}
 
-  # build-debian-src, MacOS and Windows are skipped on a post-merge push to a non-default
-  # branch (master) whose merge_group run already passed all three (setup's skip_os_builds).
   build-debian-src:
-    needs: setup
-    if: github.repository_owner == 'meshtastic' && github.event_name != 'schedule' && github.event.inputs.nightly != 'true' && needs.setup.outputs.skip_os_builds != 'true'
+    if: github.repository_owner == 'meshtastic' && github.event_name != 'schedule' && github.event.inputs.nightly != 'true'
     uses: ./.github/workflows/build_debian_src.yml
     with:
       series: UNRELEASED
@@ -227,8 +209,7 @@ jobs:
     secrets: inherit
 
   MacOS:
-    needs: setup
-    if: github.event_name != 'schedule' && github.event.inputs.nightly != 'true' && !contains(github.ref_name, 'event/') && needs.setup.outputs.skip_os_builds != 'true'
+    if: github.event_name != 'schedule' && github.event.inputs.nightly != 'true' && !contains(github.ref_name, 'event/')
     strategy:
       fail-fast: false
       matrix:
@@ -242,8 +223,7 @@ jobs:
     # secrets: inherit
 
   Windows:
-    needs: setup
-    if: github.event_name != 'schedule' && github.event.inputs.nightly != 'true' && !contains(github.ref_name, 'event/') && needs.setup.outputs.skip_os_builds != 'true'
+    if: github.event_name != 'schedule' && github.event.inputs.nightly != 'true' && !contains(github.ref_name, 'event/')
     strategy:
       fail-fast: false
       matrix:
