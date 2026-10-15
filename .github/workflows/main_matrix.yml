@@ -113,7 +113,7 @@ jobs:
           if [[ "$GITHUB_EVENT_NAME" == "push" && ( "$GITHUB_REF_NAME" == "develop" || "$GITHUB_REF_NAME" == "master" ) ]]; then
             # Any status: the queue merges once ci-gate passes, often while jobs outside it
             # still run, so that run is usually not 'completed' when this push starts.
-            MQ_RUN_ID=$(gh run list -R "$GITHUB_REPOSITORY" --workflow CI --event merge_group \
+            MQ_RUN_ID=$(gh run list -R "$GITHUB_REPOSITORY" --workflow main_matrix.yml --event merge_group \
               --commit "$GITHUB_SHA" --limit 1 \
               --json databaseId --jq '.[0].databaseId // empty') || MQ_RUN_ID=""
             if [[ -n "$MQ_RUN_ID" ]]; then
