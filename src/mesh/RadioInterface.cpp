@@ -1287,6 +1287,9 @@ void RadioInterface::clampConfigLora(meshtastic_Config_LoRaConfig &loraConfig)
 uint32_t RadioInterface::frequencySlotCount(const meshtastic_Config_LoRaConfig &loraConfig)
 {
     const RegionInfo *region = getRegion(loraConfig.region);
+    // UNSET is no band: its table span is a placeholder, and unknown codes resolve to it too
+    if (region->code == meshtastic_Config_LoRaConfig_RegionCode_UNSET)
+        return 0;
     const float bwKHz = loraConfig.use_preset ? modemPresetToBwKHz(loraConfig.modem_preset, region->wideLora)
                                               : clampBandwidthKHz(bwCodeToKHz(loraConfig.bandwidth));
     // Same arithmetic as applyModemConfig(), so a slot checked here is a slot the radio can tune

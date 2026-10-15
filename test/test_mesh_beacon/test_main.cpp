@@ -1671,6 +1671,25 @@ static void test_resolveFrequencySlot_pinWinsElseDerives(void)
 }
 
 /**
+ * RadioInterface::frequencySlotCount() must report no slots for UNSET, which is no band: its table entry spans
+ * 902-928 MHz only as a placeholder. Counting that span (104 at LongFast) accepted beacon slot pins and derived
+ * slots for a node with no region. An unknown region code resolves to UNSET and must count the same.
+ */
+static void test_frequencySlotCount_unsetRegionHoldsNone(void)
+{
+    resetConfigUS();
+    const auto longFast = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+
+    TEST_ASSERT_EQUAL_UINT32(
+        0, RadioInterface::frequencySlotCount(loraProbe(meshtastic_Config_LoRaConfig_RegionCode_UNSET, longFast, 0)));
+    TEST_ASSERT_EQUAL_UINT32(
+        0, RadioInterface::frequencySlotCount(loraProbe((meshtastic_Config_LoRaConfig_RegionCode)255, longFast, 0)));
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(
+        1, RadioInterface::resolveFrequencySlot(loraProbe(meshtastic_Config_LoRaConfig_RegionCode_UNSET, longFast, 48), ""),
+        "with no slots a pin cannot win, and UNSET resolves to slot 1");
+}
+
+/**
  * A target that pins a slot must arm exactly that slot. NYMesh's MediumSlow slot 48 is the case the field
  * exists for: its hash would put a joiner on another frequency.
  */
@@ -2281,6 +2300,7 @@ BEACON_TEST_ENTRY void setup()
     printf("\n=== Frequency slots ===\n");
 
     RUN_TEST(test_resolveFrequencySlot_pinWinsElseDerives);
+    RUN_TEST(test_frequencySlotCount_unsetRegionHoldsNone);
     RUN_TEST(test_broadcaster_pinnedTargetSlot_armsThatSlot);
     RUN_TEST(test_broadcaster_unpinnedTargetOnOtherPreset_derivesSlot);
     RUN_TEST(test_broadcaster_blankChannelOnOtherPreset_carriesTargetPresetHash);
