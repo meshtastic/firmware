@@ -85,6 +85,13 @@ class MeshBeaconModule
      */
     static bool beaconTxConfigInvalid(const meshtastic_MeshPacket *p);
 
+    /** The region that runs preset from region: region itself, its EU sibling, or nullptr. No side effects. */
+    static const RegionInfo *beaconRegionFor(meshtastic_Config_LoRaConfig_RegionCode region,
+                                             meshtastic_Config_LoRaConfig_ModemPreset preset);
+
+    /** Clear what can never be valid in a beacon config. Run on admin writes and on the config loaded at boot. */
+    static void sanitizeConfig(meshtastic_ModuleConfig_MeshBeaconConfig &bcfg);
+
     /**
      * The 1-based slot the offer advertises: its pin, else what a receiver derives from the offered region,
      * preset and channel name. derivedOut, if given, receives the derived slot alone.
@@ -105,6 +112,8 @@ class MeshBeaconModule
     static meshtastic_Config_LoRaConfig_ModemPreset originalModemPreset;
     static uint16_t originalLoraChannel;
     static meshtastic_Config_LoRaConfig_RegionCode originalRegion;
+    static float originalOverrideFrequency;
+    static int8_t originalTxPower;
 };
 
 /**

@@ -32,6 +32,9 @@
 #include "mesh/generated/meshtastic/deviceonly_legacy.pb.h"
 #include "meshUtils.h"
 #include "modules/NeighborInfoModule.h"
+#if !MESHTASTIC_EXCLUDE_BEACON
+#include "modules/MeshBeaconModule.h"
+#endif
 #include "sleep.h"
 #include "target_specific.h"
 #if HAS_VARIABLE_HOPS
@@ -2879,6 +2882,10 @@ void NodeDB::loadFromDisk()
             LOG_INFO("Loaded saved moduleConfig v%d", moduleConfig.version);
         }
     }
+#if !MESHTASTIC_EXCLUDE_BEACON
+    // userPrefs and a config already in flash never pass through set_module_config
+    MeshBeaconModule::sanitizeConfig(moduleConfig.mesh_beacon);
+#endif
 
     // Always-on traffic management: a device that has NEVER configured TMM
     // (has_traffic_management false - AdminModule always sets the has_ flag on
