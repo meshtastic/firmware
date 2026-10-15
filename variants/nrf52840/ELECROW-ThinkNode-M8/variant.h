@@ -57,7 +57,9 @@ extern "C" {
 #define PIN_BUTTON_EC04_A (0 + 8)
 #define PIN_BUTTON_EC04_B (32 + 9)
 #define PIN_BUTTON_EC04 (0 + 6)
-#define PIN_BUTTON1 PIN_BUTTON_E
+#define CANCEL_BUTTON_PIN PIN_BUTTON_E
+#define CANCEL_BUTTON_ACTIVE_LOW true
+#define CANCEL_BUTTON_ACTIVE_PULLUP true
 // Press and turn the encoder to dim the frontlight
 #define INPUTDRIVER_PRESS_AND_TURN_CW INPUT_BROKER_MSG_BRIGHTNESS_UP
 #define INPUTDRIVER_PRESS_AND_TURN_CCW INPUT_BROKER_MSG_BRIGHTNESS_DOWN
@@ -87,12 +89,14 @@ extern "C" {
 #define PIN_WIRE_SCL (0 + 27)
 
 /*GPS*/
-// ATGM336H-5NR32. Probes as GNSS_MODEL_MTK; both branches speak CASIC $PCAS.
+// AG3352Q without RTC_INT: sleep is $PAIR650 then EN low, wake is EN high then a RESETB pulse.
+// EN gates only the 0.8 V core; the 1.8 V rail is always on.
 #define HAS_GPS 1
-#define GPS_BAUDRATE 9600
+#define GPS_BAUDRATE 115200
 #define PIN_GPS_RESET (0 + 17)
-#define PIN_GPS_STANDBY (0 + 15) // An output to wake GPS, low means allow sleep, high means force wake
-#define PIN_GPS_PPS (0 + 14)     // 1PPS output, configured as an input by GPS.cpp
+#define GPS_SLEEP_INT (32 + 7) // idle_int: rests HIGH, pulled LOW while sending the sleep command
+#define GPS_AIROHA_RESET_WAKE  // sleep in backup mode ($PAIR650); RESETB (P0.17, inverted by Q16) wakes it
+#define PIN_GPS_PPS (0 + 14)   // 1PPS output, configured as an input by GPS.cpp
 #define PIN_SERIAL1_RX (32 + 2)
 #define PIN_SERIAL1_TX (32 + 4)
 #define GPS_TX_PIN PIN_SERIAL1_TX
