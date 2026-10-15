@@ -179,6 +179,13 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     {
         if (instance == this)
             instance = nullptr;
+#ifdef MESHTASTIC_RX_READOUT_TASK
+        // initLoRa() destroys an interface whose init() failed, and the mutex is made in the constructor
+        if (radioSeqMutex) {
+            vSemaphoreDelete(radioSeqMutex);
+            radioSeqMutex = nullptr;
+        }
+#endif
     }
 
     /**
@@ -237,6 +244,13 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
     /** Re-arm if a CAD->RX handoff has produced no packet well past one max-length airtime. */
     void checkCadHandoffTimeout();
+
+    /** A CAD->RX handoff is outstanding and its RX has ended without a frame: TIMEOUT if it expired empty, CRC_ERR or
+     *  HEADER_ERR on a damaged header. Either way the chip may have stopped listening, so the handoff needs a re-arm. */
+    bool cadHandoffRxEnded();
+
+    // What a damaged header raises inside a handoff's RX, with no RX_DONE behind it. A handoff routes both to DIO1.
+    static constexpr uint32_t cadHandoffRxErrorIrqs = (1UL << RADIOLIB_IRQ_CRC_ERR) | (1UL << RADIOLIB_IRQ_HEADER_ERR);
 
     // Time::getMillis() when plain RX was first seen holding PREAMBLE/HEADER flags, or 0 if none.
     uint32_t rxFlagsSeenMs = 0;
@@ -433,12 +447,21 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     uint32_t activeReceiveStart = 0;
     // Time::getMillis() when a look cleared PREAMBLE_DETECTED and began holding TX, or 0 if no hold.
     uint32_t preambleHoldStart = 0;
+    // Whether a look has found HEADER_VALID since this hold began, which makes it a frame rather than a bare preamble.
+    bool preambleHoldHeaderSeen = false;
 
-    /** True while a cleared preamble still holds TX; ends the hold once one max packet has passed. */
+    /** Airtime of the longest frame we could be receiving: 255 bytes at CR 4/8 with CRC, whatever our own CR. */
+    uint32_t maxRxFrameMsec();
+
+    /** True while a cleared preamble still holds TX; ends the hold once one max frame has passed. */
     bool preambleHoldActive();
 
-    /** Clear a bare PREAMBLE_DETECTED and hold TX one max packet, unless a hold is already running. */
+    /** Clear a bare PREAMBLE_DETECTED and hold TX one max frame, unless a hold is already running. */
     void holdOnPreamble();
+
+    /** True while a bare-preamble hold has outlived the time a frame we could decode needs to show its header, so the
+     *  pre-TX CAD may settle it rather than the TX path waiting out the whole hold. */
+    bool preambleHoldPeekable();
 
     /** Whether a packet is waiting to transmit; txQueue itself stays private. */
     bool hasQueuedTx() { return !txQueue.empty(); }
@@ -495,6 +518,10 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      *  them. Read with the frame, not later: on a chip left listening the status describes whatever it is receiving. */
     virtual bool readRxHeaderInfo(uint8_t &, bool &) { return false; }
 
+    /** Drop what the chip still holds of a frame nobody will read out. Only a chip that receives into a FIFO keeps it:
+     *  there the next readout would start with the dropped frame's bytes. */
+    virtual void discardUnreadRxFrame() {}
+
     /// RadioLib returns its negative RADIOLIB_ERR_* codes through the same unsigned microsecond count it
     /// returns durations in, so an error reads as 4294967ms of airtime for one packet and takes the node
     /// off the air until it reboots (#11935). The codes are int16_t, so they wrap to the top of the
@@ -521,6 +548,7 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
                 rxCR = rxCapturedHeader->rxCR;
                 hasCRC = rxCapturedHeader->hasCRC;
             } else {
+                RadioSequence seq(this); // a chip read, from callers that hold no sequence: see getTimeOnAir() below
                 haveHeaderInfo = lora.getLoRaRxHeaderInfo(&rxCR, &hasCRC) == RADIOLIB_ERR_NONE;
             }
             if (haveHeaderInfo) {
@@ -541,8 +569,13 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
                 }
             }
         } else {
-            // Reads the packet type back over SPI, so a chip that lost its config answers WRONG_MODEM.
-            RadioLibTime_t reported = lora.getTimeOnAir(pl);
+            // Reads the packet type back over SPI, so a chip that lost its config answers WRONG_MODEM. Called after every
+            // send by finishSentPacket() and the router, which hold no sequence: unlocked, a readout could land inside it.
+            RadioLibTime_t reported;
+            {
+                RadioSequence seq(this);
+                reported = lora.getTimeOnAir(pl);
+            }
             if (!isRadioLibTimeError(reported))
                 return reported / 1000;
             LOG_WARN("%s%d from getTimeOnAir, use configured modem", radioLibErr, (int)(int16_t)reported);
@@ -589,9 +622,9 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
     bool removePendingTXPacket(NodeNum from, PacketId id, uint32_t hop_limit_lt) override;
 
-    /** Retire RX_DONE and CRC_ERR for a frame nothing will read out. readData() clears its own, so this is for the
-     * early outs in handleReceiveInterrupt() that return before it: left latched, they would be taken for an unread
-     * frame and re-notified for as long as they sit there. */
+    /** Retire RX_DONE and CRC_ERR, and the chip's copy of the frame, for a frame nothing will read out. readData() clears
+     * its own, so this is for the early outs in handleReceiveInterrupt() that return before it: left latched, they would
+     * be taken for an unread frame and re-notified for as long as they sit there. */
     void clearReadIrqs();
 
     /** @return whether a latched RX_DONE was found and notified, so a caller can say which look caught it */
@@ -614,8 +647,8 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     virtual void handleSoftwareLoraIrqPoll() {}
 
     /** Take the radio-sequence lock, returning whether it was actually taken - see RadioSequence. The lock is
-     *  created with the readout task, so a sequence that started before it has nothing to take, and must not
-     *  then release it. Without a readout task at all, both are no-ops. */
+     *  created in the constructor, so every sequence in a readout-task build holds it; a sequence that could not
+     *  take one has nothing to release. Without a readout task at all, both are no-ops. */
 #ifdef MESHTASTIC_RX_READOUT_TASK
     bool lockRadioSequence();
     void unlockRadioSequence();
