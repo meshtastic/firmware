@@ -35,6 +35,11 @@
 #include "input/cardKbI2cImpl.h"
 #endif
 #include "input/kbMatrixImpl.h"
+
+#if defined(EINK_RA01S_GP02) && !MESHTASTIC_EXCLUDE_SIXKEYNAVINPUT
+#include "input/NavCombos.h"
+#include "input/SixKeyNavInput.h"
+#endif
 #endif
 
 #if HAS_BUTTON || defined(ARCH_PORTDUINO)
@@ -526,5 +531,17 @@ void InputBroker::Init()
 #endif
 #ifdef INPUTBROKER_EXPRESSLRSFIVEWAY_TYPE
     expressLRSFiveWayInput = new ExpressLRSFiveWay();
+#endif
+
+#if defined(EINK_RA01S_GP02) && !MESHTASTIC_EXCLUDE_SIXKEYNAVINPUT
+    sixKeyNavInput = new SixKeyNavInput();
+    sixKeyNavInput->onComboUp = navComboUp;
+    sixKeyNavInput->onComboDown = navComboDown;
+    sixKeyNavInput->onComboRight = navComboRight;
+    sixKeyNavInput->onFnHeld = navComboFnHeld;
+    if (!sixKeyNavInput->init()) {
+        delete sixKeyNavInput;
+        sixKeyNavInput = nullptr;
+    }
 #endif
 }
