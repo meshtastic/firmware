@@ -58,6 +58,19 @@ const unsigned char lightning_bolt_v[] PROGMEM = {0b00000100, 0b00000110, 0b0001
 
 #define mail_width 10
 #define mail_height 7
+
+#ifdef Nodara
+
+static const uint8_t icon_CH[] PROGMEM = {
+    0b10010110, 0b10011001, 0b11110001, 0b10010001, 0b10011001, 0b10010110, 0b00000000, 0b11111111,
+};
+
+static const uint8_t icon_DM[] PROGMEM = {
+    0b10001011, 0b11011101, 0b10101101, 0b10001101, 0b10001101, 0b10001011, 0b00000000, 0b11111111,
+};
+
+#endif
+
 static const unsigned char mail[] PROGMEM = {
     0b11111111, 0b00, // Top line
     0b10000001, 0b00, // Edges
@@ -228,6 +241,26 @@ const uint8_t mute_symbol_big[] PROGMEM = {0b00000001, 0b00000000, 0b11000010, 0
                                            0b10001000, 0b00010000, 0b00001000, 0b00010001, 0b00001000, 0b00010010, 0b00001000,
                                            0b00010100, 0b00000100, 0b00101000, 0b11111100, 0b00111111, 0b01000000, 0b00100010,
                                            0b10000000, 0b01000001, 0b00000000, 0b10000000};
+
+#if defined(Nodara)
+// 12x12 muted bell for Nodara header (between 8x8 and 16x16)
+#define mute_symbol_medium_width 12
+#define mute_symbol_medium_height 12
+const uint8_t mute_symbol_medium[] PROGMEM = {
+    0b00000001, 0b00000000, // █···········
+    0b01110010, 0b00000000, // ·█··███·····
+    0b10001100, 0b00000001, // ··██···██···
+    0b00001100, 0b00000001, // ··██····█···
+    0b00010100, 0b00000010, // ··█·█····█··
+    0b00100100, 0b00000010, // ··█··█···█··
+    0b01000100, 0b00000010, // ··█···█··█··
+    0b10000100, 0b00000010, // ··█····█·█··
+    0b00000010, 0b00000010, // ·█······██··
+    0b11111110, 0b00000011, // ·█████████··
+    0b01010000, 0b00000100, // ····█·█···█·
+    0b00100000, 0b00001000, // ·····█·····█
+};
+#endif
 
 // Bell icon for Alert Message
 #define bell_alert_width 8

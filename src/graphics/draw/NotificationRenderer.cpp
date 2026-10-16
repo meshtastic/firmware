@@ -353,9 +353,15 @@ void NotificationRenderer::drawCharPicker(OLEDDisplay *display, OLEDDisplayUiSta
         curSelected++;
     } else if (event == INPUT_BROKER_LEFT) {
         curSelected--;
+#ifdef Nodara
+    } else if (inEvent.inputEvent == INPUT_BROKER_CANCEL || inEvent.inputEvent == INPUT_BROKER_ALT_LONG) {
+        resetBanner();
+        return;
+#else
     } else if ((event == INPUT_BROKER_CANCEL || event == INPUT_BROKER_ALT_LONG) && alertBannerUntil != 0) {
         resetBanner();
         return;
+#endif
     }
     if (curSelected < 0)
         curSelected = 0;
@@ -432,10 +438,16 @@ void NotificationRenderer::drawNodePicker(OLEDDisplay *display, OLEDDisplayUiSta
         alertBannerCallback(selectedNodenum);
         resetBanner();
         return;
+#ifdef Nodara
+    } else if (inEvent.inputEvent == INPUT_BROKER_CANCEL || inEvent.inputEvent == INPUT_BROKER_ALT_LONG) {
+        resetBanner();
+        return;
+#else
     } else if ((inEvent.inputEvent == INPUT_BROKER_CANCEL || inEvent.inputEvent == INPUT_BROKER_ALT_LONG) &&
                alertBannerUntil != 0) {
         resetBanner();
         return;
+#endif
     }
 
     if (curSelected == -1)
@@ -571,10 +583,16 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
             }
             resetBanner();
             return;
+#ifdef Nodara
+        } else if (inEvent.inputEvent == INPUT_BROKER_CANCEL || inEvent.inputEvent == INPUT_BROKER_ALT_LONG) {
+            resetBanner();
+            return;
+#else
         } else if ((inEvent.inputEvent == INPUT_BROKER_CANCEL || inEvent.inputEvent == INPUT_BROKER_ALT_LONG) &&
                    alertBannerUntil != 0) {
             resetBanner();
             return;
+#endif
         }
 
         if (curSelected == -1)

@@ -515,6 +515,11 @@ void cpuDeepSleep(uint32_t msecToWake)
         Serial1.end();
 #endif
 
+#if defined(Nodara) && defined(PIN_SERIAL2_RX) && defined(PIN_SERIAL2_TX)
+    if (Serial2)
+        Serial2.end();
+#endif
+
     setBluetoothEnable(false);
 
 #ifdef RAK4630

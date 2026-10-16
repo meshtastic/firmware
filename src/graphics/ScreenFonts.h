@@ -1,5 +1,5 @@
 #pragma once
-
+#include "graphics/fonts/OLEDDisplayFontsDL.h"
 #ifdef OLED_PL
 #include "graphics/fonts/OLEDDisplayFontsPL.h"
 #endif
@@ -111,6 +111,17 @@
 #define FONT_SMALL FONT_SMALL_LOCAL   // Height: 13
 #define FONT_MEDIUM FONT_MEDIUM_LOCAL // Height: 19
 #define FONT_LARGE FONT_LARGE_LOCAL   // Height: 28
+#endif
+
+
+#if defined(Nodara) && defined(USE_EINK)
+#undef FONT_SMALL
+#undef FONT_MEDIUM
+#undef FONT_LARGE
+#define FONT_SMALL Dialog_plain_12
+#define FONT_MEDIUM Dialog_plain_12
+#define FONT_LARGE Dialog_plain_16
+
 #endif
 
 #if defined(CROWPANEL_ESP32S3_5_EPAPER) || defined(T5_S3_EPAPER_PRO)

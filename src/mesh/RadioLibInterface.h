@@ -320,6 +320,21 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      */
     virtual void startReceive();
 
+#if defined(Nodara)
+    /**
+     * Re-enable this interface after disable().
+     *
+     * Full hardware re-initialization goes through virtual init(). The disabled
+     * flag is cleared only when that succeeds.
+     */
+    void enable()
+    {
+        if (!init()) // virtual dispatch → SX126xInterface::init(): power-on + lora.begin() + startReceive()
+            return;
+        disabled = false;
+    }
+#endif // Nodara
+
     /**
      * Re-arm RX after a busy-channel CAD detect or after servicing an RX_DONE. Normally a full
      * startReceive(); after a CAD->RX handoff the chip is already listening, so that one re-arm

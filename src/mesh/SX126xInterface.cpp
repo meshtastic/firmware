@@ -57,6 +57,17 @@ template <typename T> bool SX126xInterface<T>::init()
     digitalWrite(SX126X_POWER_EN, HIGH);
 #endif
 
+#if defined(Nodara)
+    // Symmetric counterpart to the SPI.end() in sleep()'s anti-leakage sequence.
+    // After disable() + sleep(), SPIM0 is uninitialized and all SPI pins are
+    // tristated. SPI.begin() re-initializes SPIM0 with the LoRa SPI pin assignments
+    // before RadioLib attempts any SPI transaction in lora.begin() below.
+    // During normal first-boot init, SPI is already running — calling SPI.begin()
+    // again is idempotent on Adafruit nRF52 (nrfx_spim is a no-op if already open).
+    SPI.begin();
+    loraHardwareSleeping = false; // SPI is now open; hardware sleep guard reset
+#endif                            // Nodara
+
 #if HAS_LORA_FEM
     loraFEMInterface.init();
     // Apply saved FEM LNA mode from config
@@ -968,6 +979,16 @@ template <typename T> bool SX126xInterface<T>::isActivelyReceiving()
 
 template <typename T> bool SX126xInterface<T>::sleep()
 {
+#if defined(Nodara)
+    // If the anti-leakage sequence (SPI.end + power cut) has already run,
+    // the SPI bus is closed and the chip is unpowered.  A second call from
+    // notifyDeepSleepCb during shutdown would hit setStandby() → lora.standby()
+    // on a dead bus → RadioLib err=-2 → assert crash.  Skip hardware access.
+    if (loraHardwareSleeping) {
+        LOG_DEBUG("SX126x already in hardware sleep, skipping redundant sleep()");
+        return true;
+    }
+#endif // Nodara
     // Not keeping config is busted - next time nrf52 board boots lora sending fails  tcxo related? - see datasheet
     // \todo Display actual typename of the adapter, not just `SX126x`
     LOG_DEBUG_RADIO("SX126x entering sleep mode"); // (FIXME, don't keep config)
@@ -992,6 +1013,32 @@ template <typename T> bool SX126xInterface<T>::sleep()
     lora.sleep(keepConfig); // Note: we do not keep the config, full reinit will be needed
 
 #ifdef SX126X_POWER_EN
+#if defined(Nodara)
+    // Anti-leakage sequence before cutting LoRa LDO (runtime sleep).
+    //
+    // Root cause: SPIM0 holds SCK/MOSI pin mux via PSEL registers;
+    // pinMode() is ineffective while SPIM0 is enabled.
+    // SPI.end() calls nrfx_spim_uninit(), releasing the pin mux so that
+    // subsequent pinMode() calls truly tristate each pin.
+    //
+    // Ordering is CRITICAL:
+    //   lora.sleep() must run BEFORE SPI.end() (SPI writes on a closed bus
+    //   cause a Hard Fault — same failure mode as the E-Ink SPI1 bug).
+    //   SPI.end() runs here, AFTER lora.sleep() has already returned.
+    //
+    // Wakeup: RadioLib Module::init() → SPI.begin() re-initialises SPIM0
+    // automatically; no manual SPI.begin() is needed.
+    LOG_DEBUG("SX126x anti-leakage: sleep, then SPI.end to release pin mux for tristate");
+    loraHardwareSleeping = true; // Mark SPI as closed; guard future sleep() calls
+    SPI.end();
+    pinMode(SX126X_RESET, INPUT);         // active-low → idle HIGH → leakage
+    pinMode(SX126X_CS, INPUT);            // active-low → idle HIGH → leakage
+    pinMode(PIN_SPI_MOSI, INPUT);         // last bit state unknown
+    pinMode(PIN_SPI_MISO, INPUT);         // SX1262 output; tristate after SPI.end()
+    pinMode(PIN_SPI_SCK, INPUT);          // MODE0 idle LOW, tristate for safety
+    pinMode(SX126X_DIO1, INPUT_PULLDOWN); // IRQ output; pull-down prevents false IRQ on wakeup
+    pinMode(SX126X_BUSY, INPUT_PULLDOWN); // prevents busy_wait() hang when unpowered
+#endif                                    // Nodara
     digitalWrite(SX126X_POWER_EN, LOW);
 #endif
 
