@@ -1243,7 +1243,7 @@ void GPS::setPowerState(GPSPowerState newState, uint32_t sleepTime)
         if (oldState == GPS_OFF && _serial_gps) {
             LOG_INFO("Re-initialize GPS UART after waking from GPS_OFF");
             _serial_gps->setPins(rx_gpio, tx_gpio);
-            _serial_gps->begin(GPS_BAUDRATE);
+            _serial_gps->begin(detectedBaud);
         }
 #endif // Nodara
         break;
