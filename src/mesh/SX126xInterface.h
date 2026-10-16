@@ -10,13 +10,13 @@
 
 /**
  * \brief Adapter for SX126x radio family. Implements common logic for child classes.
- * \tparam T RadioLib module type for SX126x: SX1262, SX1268.
+ * Written against RadioLib's SX126x base, so it is compiled once however many chip types a build supports.
  */
-template <class T> class SX126xInterface : public RadioLibInterface
+class SX126xInterface : public RadioLibInterface
 {
   public:
     SX126xInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst,
-                    RADIOLIB_PIN_TYPE busy);
+                    RADIOLIB_PIN_TYPE busy, SX126x &chip);
 
     /// Initialise the Driver transport hardware and software.
     /// Make sure the Driver is properly configured before calling init().
@@ -42,9 +42,17 @@ template <class T> class SX126xInterface : public RadioLibInterface
     float tcxoVoltage = 0.0;
 
     /**
-     * Specific module instance
+     * The module instance, owned by the chip-specific subclass
      */
-    T lora;
+    SX126x &lora;
+
+    /** lora.begin() with the current settings. SX126x::begin() is not virtual: each chip type has its own */
+    virtual int16_t beginChip(bool useRegulatorLDO) = 0;
+
+#ifdef SX126X_NO_POWER_OPTIMIZATION_TABLE
+    /** setOutputPower(power, false): the overload that skips the optimization table exists only per chip type */
+    virtual int16_t setOutputPowerFixedPa(int8_t txPower) = 0;
+#endif
 
     int16_t getCurrentRSSI() override;
 
