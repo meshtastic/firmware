@@ -585,12 +585,6 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
             return;
 #ifdef Nodara
         } else if (inEvent.inputEvent == INPUT_BROKER_CANCEL || inEvent.inputEvent == INPUT_BROKER_ALT_LONG) {
-            if (optionsEnumPtr != nullptr) {
-                alertBannerCallback(optionsEnumPtr[0]);
-                optionsEnumPtr = nullptr;
-            } else {
-                alertBannerCallback(0); 
-            }
             resetBanner();
             return;
 #else
