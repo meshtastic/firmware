@@ -91,31 +91,14 @@ class PhoneAPI
     meshtastic_XModem xmodemPacketForPhone = meshtastic_XModem_init_zero;
 
 #if HAS_SCREEN_MIRROR
-    // This connection's screen mirror subscription and its drain cursors into the current frame and palette.
-    bool mirrorSubscribed = false;
-    bool mirrorFramePending = false;
-    uint32_t mirrorRequestedAt = 0;
-    uint32_t mirrorFrameId = 0;
-    uint16_t mirrorOffset = 0;
-    uint32_t mirrorPaletteSig = 0;
-    uint8_t mirrorPaletteOffset = 0;
-
+    // The subscription and drain cursors live in a slot table in PhoneAPI.cpp, not here: per-instance
+    // members break nRF52 USB-CDC enumeration (see the auth slots).
     // Handles the local-only mirror verbs for this connection; true when the packet was one.
     bool handleScreenMirrorAdmin(const meshtastic_MeshPacket &p);
     void setMirrorSubscribed(bool subscribed);
     void releaseMirror();
-
     // screen pixels are operator content: same access rule as mesh packets
-    bool wantsMirror()
-    {
-        if (!mirrorSubscribed && !mirrorFramePending)
-            return false;
-#ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
-        return getAdminAuthorized();
-#else
-        return true;
-#endif
-    }
+    bool wantsMirror();
 #endif
 
     // Keep QueueStatus packet just as packetForPhone
