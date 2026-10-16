@@ -297,9 +297,8 @@ static const uint8_t A0 = PIN_BATTERY_ADC;
 #define MESHTASTIC_EXCLUDE_POWERSTRESS      1   // Stress-test tool
 
 // ---------------------------------------------------------------------------
-// Role assignments
+// Role assignments. No power LED: leave LED_POWER undefined.
 // ---------------------------------------------------------------------------
-#define LED_POWER       PINS_COUNT      // NULL
 #define LED_USB         PIN_LED2        // green: USB connected / charge complete
 #define LED_PAIRING     PIN_LED3        // blue: BLE pairing / connected
 
