@@ -223,7 +223,7 @@ SPIClass SPI1(HSPI);
 
 using namespace concurrency;
 
-volatile static const char slipstreamTZString[] = {"tzplaceholder                                         "};
+volatile static const char slipstreamTZString[] = {USERPREFS_TZ_STRING};
 
 // We always create a screen object, but we only init it if we find the hardware
 std::unique_ptr<graphics::Screen> screen = nullptr;
