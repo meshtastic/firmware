@@ -150,7 +150,14 @@ McuParsedCommand parseMcuDataPayload(const uint8_t *data, size_t size)
     return McuParsedCommand::Unsupported;
 }
 
-McuParsedCommand parseMcuDataFrame(const uint8_t *data, size_t size)
+struct McuParseResult {
+    McuParsedCommand cmd;
+    size_t consumed;
+};
+
+// Returns the first recognized command and the index just past that frame.
+// Unrecognized input consumes the whole buffer so it is not parsed again.
+McuParseResult parseMcuDataFrame(const uint8_t *data, size_t size)
 {
     bool sawValidCrc = false;
 
@@ -179,10 +186,10 @@ McuParsedCommand parseMcuDataFrame(const uint8_t *data, size_t size)
         if (offset > 0)
             LOG_DEBUG("MCU_DATA resynced frame at offset %u", static_cast<unsigned>(offset));
 
-        return cmd;
+        return {cmd, offset + frameLen};
     }
 
-    return sawValidCrc ? McuParsedCommand::Unsupported : McuParsedCommand::InvalidCrc;
+    return {sawValidCrc ? McuParsedCommand::Unsupported : McuParsedCommand::InvalidCrc, size};
 }
 
 void readSerialIntoFrame()
@@ -236,29 +243,47 @@ void McuDataInput::processCompletedFrame()
         return;
 
     logMcuDataFrame(frame, frameSize);
-    const McuParsedCommand parsed = parseMcuDataFrame(frame, frameSize);
-    frameSize = 0;
-    lastByteMs = 0;
 
-    switch (parsed) {
-    case McuParsedCommand::InvalidCrc:
-        LOG_WARN("MCU_DATA invalid CRC");
-        break;
-    case McuParsedCommand::Unsupported:
-        LOG_WARN("MCU_DATA unsupported Modbus frame");
-        break;
-    case McuParsedCommand::PowerOnConfirm:
-        handlePowerOnConfirm();
-        onPowerOn = true;
-        break;
-    case McuParsedCommand::ShutdownDelayed:
-        handleCommand03();
-        break;
-    case McuParsedCommand::ShutdownNow:
-        onPowerOn = false;
-        handleCommand05();
-        break;
+    while (frameSize > 0) {
+        const McuParseResult parsed = parseMcuDataFrame(frame, frameSize);
+        const size_t consumed = parsed.consumed > frameSize ? frameSize : parsed.consumed;
+        if (consumed == 0)
+            break;
+        if (consumed < frameSize) {
+            const size_t remain = frameSize - consumed;
+            for (size_t i = 0; i < remain; i++)
+                frame[i] = frame[consumed + i];
+            frameSize = remain;
+        } else {
+            frameSize = 0;
+        }
+
+        switch (parsed.cmd) {
+        case McuParsedCommand::InvalidCrc:
+            LOG_WARN("MCU_DATA invalid CRC");
+            break;
+        case McuParsedCommand::Unsupported:
+            LOG_WARN("MCU_DATA unsupported Modbus frame");
+            break;
+        case McuParsedCommand::PowerOnConfirm:
+            handlePowerOnConfirm();
+            onPowerOn = true;
+            break;
+        case McuParsedCommand::ShutdownDelayed:
+            handleCommand03();
+            break;
+        case McuParsedCommand::ShutdownNow:
+            onPowerOn = false;
+            handleCommand05();
+            break;
+        }
+
+        if (parsed.cmd == McuParsedCommand::InvalidCrc || parsed.cmd == McuParsedCommand::Unsupported)
+            break;
     }
+
+    if (frameSize == 0)
+        lastByteMs = 0;
 }
 
 void McuDataInput::loop()
