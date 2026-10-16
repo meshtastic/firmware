@@ -312,15 +312,14 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     /**
      * Re-enable this interface after disable().
      *
-     * Clears the disabled flag and performs a full hardware re-initialization
-     * via virtual init(). For boards that cut SPI power in sleep(), the
-     * chip-specific init() is responsible for calling SPI.begin() and
-     * re-running lora.begin() before startReceive().
+     * Full hardware re-initialization goes through virtual init(). The disabled
+     * flag is cleared only when that succeeds.
      */
     void enable()
     {
+        if (!init()) // virtual dispatch → SX126xInterface::init(): power-on + lora.begin() + startReceive()
+            return;
         disabled = false;
-        init(); // virtual dispatch → SX126xInterface::init(): power-on + lora.begin() + startReceive()
     }
 #endif // Nodara
 
