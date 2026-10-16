@@ -608,7 +608,7 @@ bool InkHUD::Events::dismissExternalNotification()
         return false;
 
     // Abort if nothing to dismiss
-    if (!externalNotificationModule->nagging())
+    if (!externalNotificationModule || !externalNotificationModule->nagging())
         return false;
 
     // Stop the beep buzz blink
