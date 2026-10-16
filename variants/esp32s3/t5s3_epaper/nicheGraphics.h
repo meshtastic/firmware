@@ -24,6 +24,7 @@ This is driven via the FastEPD library through the NicheGraphics ED047TC1 driver
 #include "graphics/niche/InkHUD/InkHUD.h"
 
 // Applets
+#include "graphics/niche/InkHUD/Applets/Bases/Map/SDMapTiles.h"
 #include "graphics/niche/InkHUD/Applets/User/AllMessage/AllMessageApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/DM/DMApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/FavoritesMap/FavoritesMapApplet.h"
@@ -49,6 +50,7 @@ void setupNicheGraphics()
 
     Drivers::EInk *driver = new Drivers::ED047TC1;
     driver->begin(nullptr, 0, 0, 0);
+    InkHUD::SDMapTiles::preload();
 
     // InkHUD
     // ----------------------------
