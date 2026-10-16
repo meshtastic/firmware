@@ -537,7 +537,7 @@ int32_t InkHUD::Renderer::runOnce()
 #else
     if (requested)
 #endif
-        return 250UL;
+        return 25UL;
     else
         return OSThread::disable();
 }
@@ -734,7 +734,7 @@ void InkHUD::Renderer::render(bool async)
         maintainRenderActivity();
         if (keepAwakeUntilUpdateComplete) {
             OSThread::enabled = true;
-            OSThread::setIntervalFromNow(250UL);
+            OSThread::setIntervalFromNow(25UL);
         }
 #endif
     }

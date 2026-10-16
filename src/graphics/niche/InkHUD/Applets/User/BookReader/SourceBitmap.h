@@ -4,6 +4,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <vector>
 
 #if INKHUD_BOOKREADER_GRAYSCALE && defined(ARCH_ESP32) && defined(__GNUC__)
@@ -69,6 +70,41 @@ inline void setReaderGray(uint8_t *data, size_t stride, uint16_t x, uint16_t y, 
     uint8_t &byte = data[y * stride + x / 2U];
     const unsigned shift = (x & 1U) ? 0U : 4U;
     byte = (byte & ~(15U << shift)) | ((ink & 15U) << shift);
+}
+
+inline void copyReaderGrayBitmap(const uint8_t *source, size_t sourceStride, uint16_t sourceWidth, uint16_t sourceHeight,
+                                 uint8_t *destination, size_t destinationStride, uint16_t destinationWidth,
+                                 uint16_t destinationHeight, int16_t left, int16_t top)
+{
+    const int32_t firstX = std::max<int32_t>(0, -static_cast<int32_t>(left));
+    const int32_t firstY = std::max<int32_t>(0, -static_cast<int32_t>(top));
+    const int32_t endX = std::min<int32_t>(sourceWidth, static_cast<int32_t>(destinationWidth) - left);
+    const int32_t endY = std::min<int32_t>(sourceHeight, static_cast<int32_t>(destinationHeight) - top);
+    if (firstX >= endX || firstY >= endY)
+        return;
+    for (int32_t y = firstY; y < endY; ++y) {
+        const uint8_t *row = source + y * sourceStride;
+        uint8_t *out = destination + (top + y) * destinationStride + (left + firstX) / 2U;
+        int32_t x = firstX;
+        if ((left + x) & 1U) {
+            *out = (*out & 0xF0U) | readerGrayAt(row, sourceStride, x, 0);
+            ++out;
+            ++x;
+        }
+        const int32_t pairs = (endX - x) / 2;
+        const uint8_t *in = row + x / 2U;
+        if (!(x & 1U)) {
+            std::memcpy(out, in, pairs);
+            out += pairs;
+        } else {
+            // Shift adjacent bytes when source and destination nibble alignment differs.
+            for (int32_t i = 0; i < pairs; ++i)
+                *out++ = static_cast<uint8_t>((in[i] << 4U) | (in[i + 1] >> 4U));
+        }
+        x += pairs * 2;
+        if (x < endX)
+            *out = (*out & 0x0FU) | (readerGrayAt(row, sourceStride, x, 0) << 4U);
+    }
 }
 #endif
 
@@ -197,8 +233,9 @@ inline bool scaleSourceBitmap(const std::vector<uint8_t> &source, uint16_t sw, u
         return true;
     }
     const size_t stride = readerBitmapStride(dw);
-    destination.assign(stride * dh, 0);
 #if INKHUD_BOOKREADER_GRAYSCALE
+    // Every output byte is assigned below, including an odd-width row's padding nibble.
+    destination.resize(stride * dh);
     std::vector<uint16_t> columns(static_cast<size_t>(dw) + 1U);
     for (uint32_t x = 0; x <= dw; ++x)
         columns[x] = x * sw / dw;
@@ -315,6 +352,7 @@ inline bool scaleSourceBitmap(const std::vector<uint8_t> &source, uint16_t sw, u
     }
     return true;
 #else
+    destination.assign(stride * dh, 0);
     if (dw < sw || dh < sh) {
         // Preserve source-pixel coverage when reducing fine lines and screentones.
         constexpr uint8_t bayer[] = {0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5};

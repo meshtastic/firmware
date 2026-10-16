@@ -1021,6 +1021,10 @@ void copyMonoBitmapInto(const std::vector<uint8_t> &src, uint16_t srcWidth, uint
             return;
         }
     }
+#if INKHUD_BOOKREADER_GRAYSCALE
+    InkHUD::copyReaderGrayBitmap(src.data(), InkHUD::readerBitmapStride(srcWidth), srcWidth, srcHeight, dst.data(),
+                                 InkHUD::readerBitmapStride(dstWidth), dstWidth, dstHeight, dstLeft, dstTop);
+#else
     for (uint16_t sy = 0; sy < srcHeight; sy++) {
         const int32_t dy = static_cast<int32_t>(dstTop) + sy;
         if (dy < 0 || dy >= dstHeight) {
@@ -1031,16 +1035,12 @@ void copyMonoBitmapInto(const std::vector<uint8_t> &src, uint16_t srcWidth, uint
             if (dx < 0 || dx >= dstWidth) {
                 continue;
             }
-#if INKHUD_BOOKREADER_GRAYSCALE
-            InkHUD::setReaderGray(dst.data(), InkHUD::readerBitmapStride(dstWidth), dx, dy,
-                                  InkHUD::readerGrayAt(src.data(), InkHUD::readerBitmapStride(srcWidth), sx, sy));
-#else
             if (monoBitmapBlackAt(src, srcWidth, sx, sy)) {
                 setMonoBitmapBlack(dst, dstWidth, static_cast<uint16_t>(dx), static_cast<uint16_t>(dy), true);
             }
-#endif
         }
     }
+#endif
 }
 
 size_t renderedImageCacheBytes()
@@ -4476,7 +4476,7 @@ int32_t InkHUD::BookReaderApplet::runOnce()
         return concurrency::OSThread::disable();
     }
     if (imageInteractionPending) {
-        if (readerInputPending() || !Throttle::hasElapsed(lastReaderInputMs, 150U))
+        if (readerInputPending() || !Throttle::hasElapsed(lastReaderInputMs, 25U))
             return 25;
         imageInteractionPending = false;
         BR_PERF_LOG("image interaction settled zoom=%u pan=%d,%d", imageZoomPermille, imagePanX, imagePanY);
@@ -6409,7 +6409,7 @@ void InkHUD::BookReaderApplet::queueImageInteractionUpdate(bool panOnly)
     imageInteractionPending = true;
     lastReaderInputMs = Time::skipZero(Time::getMillis());
     concurrency::OSThread::enabled = true;
-    setIntervalFromNow(150);
+    setIntervalFromNow(25);
 }
 
 int32_t InkHUD::BookReaderApplet::estimateImageLineSpan(const std::string &imagePath, uint16_t contentWidth,
@@ -6464,6 +6464,7 @@ bool InkHUD::BookReaderApplet::drawInlineImage(const std::string &imagePath, int
     BR_LOAD_SCOPE("image-load");
     [[maybe_unused]] uint32_t probeMs = 0;
     [[maybe_unused]] uint32_t decodeMs = 0;
+    uint32_t scaleMs = 0;
     if (imagePath.empty() || maxWidth == 0U || maxHeight == 0U) {
         return false;
     }
@@ -6478,7 +6479,8 @@ bool InkHUD::BookReaderApplet::drawInlineImage(const std::string &imagePath, int
     const std::string cacheKey = imageCacheKey(imagePath, maxWidth, maxHeight, zoomPermille, inlineRaster);
     if (!preloadOnly && useRenderedCache && !monoBitmap &&
         drawRenderedImageCache(this, cacheKey, left, top, maxWidth, maxHeight, zoomPermille, panX, panY, clipBottom)) {
-        BR_PERF_LOG("image rendered-cache HIT path=%s", imagePath.c_str());
+        LOG_DEBUG("[BookReaderPerf] cached image zoom=%u ms=%lu", zoomPermille,
+                  static_cast<unsigned long>(millis() - tImageStartMs));
         noteBookReaderLoadActivity(true);
         return true;
     }
@@ -6790,8 +6792,10 @@ bool InkHUD::BookReaderApplet::drawInlineImage(const std::string &imagePath, int
         gDecodedImage.ready = true;
         if (!preloadOnly) {
             BR_LOAD_SCOPE("image-source-scale");
+            const uint32_t scaleStartMs = millis();
             rendered = scaleSourceBitmap(gDecodedImage.bitmap, gDecodedImage.width, gDecodedImage.height, drawWidth, drawHeight,
                                          *monoBitmap);
+            scaleMs = millis() - scaleStartMs;
         }
     }
     if (!rendered) {
@@ -6819,6 +6823,12 @@ bool InkHUD::BookReaderApplet::drawInlineImage(const std::string &imagePath, int
                     static_cast<unsigned>(drawHeight), static_cast<unsigned>(cache ? cache->bitmap.size() : 0U));
         drawRenderedImageCache(this, cacheKey, left, top, maxWidth, maxHeight, requestedZoom, panX, panY, clipBottom);
     }
+    if (!preloadOnly)
+        LOG_DEBUG(
+            "[BookReaderPerf] image zoom=%u sourceHit=%u src=%ux%u dst=%ux%u probe=%lums decode=%lums scale=%lums total=%lums",
+            requestedZoom, reuseSource, gDecodedImage.width, gDecodedImage.height, drawWidth, drawHeight,
+            static_cast<unsigned long>(probeMs), static_cast<unsigned long>(decodeMs), static_cast<unsigned long>(scaleMs),
+            static_cast<unsigned long>(millis() - tImageStartMs));
     noteBookReaderLoadActivity(true);
     return rendered;
 #endif

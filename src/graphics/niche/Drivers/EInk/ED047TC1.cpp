@@ -210,6 +210,7 @@ class SafeFastEPD : public FASTEPD
         if (!grayPulsePlanes)
             return false;
         memset(grayPulsePlanes, 0, planeBytes);
+        memset(grayActiveRows, 0, sizeof(grayActiveRows));
         if (!baselineValid)
             memset(_state.pCurrent, 0xFF, 960U * 540U / 2U);
         changed = 0;
@@ -227,6 +228,10 @@ class SafeFastEPD : public FASTEPD
             const uint8_t *next = image + y * (width / 2U);
             memcpy(oldRow, current, rowBytes);
             memcpy(newRow, next, rowBytes);
+#if !INKHUD_BOOKREADER_PERF_LOG
+            if (baselineValid && memcmp(oldRow, newRow, rowBytes) == 0)
+                continue;
+#endif
             uint8_t *mask = grayPulsePlanes + (top + y) * 240U;
             uint8_t pendingMask = 0;
             bool rowChanged = false;
@@ -261,8 +266,10 @@ class SafeFastEPD : public FASTEPD
                     pendingMask = 0;
                 }
             }
-            if (rowChanged)
+            if (rowChanged) {
+                grayActiveRows[top + y] = true;
                 memcpy(current, newRow, rowBytes);
+            }
         }
 #if INKHUD_BOOKREADER_PERF_LOG
         for (unsigned packed = 0; packed < 256U; ++packed) {
@@ -331,6 +338,7 @@ class SafeFastEPD : public FASTEPD
     uint8_t *grayPulsePlanes = nullptr;
     uint8_t grayPairLookup[8][256] = {};
     bool grayLookupReady = false;
+    bool grayActiveRows[540] = {};
 #endif
     bool dmaFault = false;
 
@@ -390,12 +398,17 @@ class SafeFastEPD : public FASTEPD
         for (unsigned row = 0; row < 540; ++row) {
             // Alternate buffers keep the active DMA row untouched.
             uint8_t *out = _state.dma_buf + offset;
-            if (grayLookup) {
+#if INKHUD_BOOKREADER_GRAYSCALE
+            if (grayLookup && grayActiveRows[row]) {
                 const uint8_t *source = _state.pCurrent + row * 480U;
                 const uint8_t *mask = plane + row * 240U;
                 for (unsigned x = 0; x < 240; ++x)
                     out[x] = mask[x] ? ((grayLookup[source[x * 2U]] << 4U) | grayLookup[source[x * 2U + 1U]]) & mask[x] : 0U;
-            } else if (plane)
+            } else if (grayLookup)
+                memset(out, 0, 240);
+            else
+#endif
+                if (plane)
                 memcpy(out, plane + row * 240U, 240);
             else
                 memset(out, 0, 240);
@@ -463,14 +476,71 @@ void ED047TC1::begin(SPIClass *spi, uint8_t pin_dc, uint8_t pin_cs, uint8_t pin_
     if (failed)
         LOG_WARN("ED047TC1 initial fullUpdate failed rc=%d", fullRc);
     LOG_INFO("ED047TC1 panel profile: clock=20MHz partialPasses=4 fullPasses=5");
+    TaskHandle_t task = nullptr;
+    // Keep panel timing off the input/rendering core on dual-core boards.
+    const BaseType_t refreshCore = portNUM_PROCESSORS > 1 ? (xPortGetCoreID() ^ 1) : tskNO_AFFINITY;
+    if (xTaskCreatePinnedToCore(runUpdates, "eink-refresh", 8192, this, 2, &task, refreshCore) == pdPASS) {
+        updateTask = task;
+        LOG_INFO("ED047TC1 background refresh enabled core=%d", static_cast<int>(refreshCore));
+    } else
+        LOG_WARN("ED047TC1 refresh task unavailable; using blocking updates");
+}
+
+void ED047TC1::runUpdates(void *context)
+{
+    auto *display = static_cast<ED047TC1 *>(context);
+    for (;;) {
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        display->updateResult = display->driveUpdate();
+        display->updateComplete.store(true, std::memory_order_release);
+        concurrency::mainDelay.interrupt();
+    }
+}
+
+void ED047TC1::queueUpdate(UpdateTypes type, bool grayscale, bool leavingGrayscale)
+{
+    pendingType = !grayscale && !monochromeBaselineValid ? FULL : type;
+    pendingGrayscale = grayscale;
+    pendingLeavingGrayscale = leavingGrayscale;
+    monochromeBaselineValid = false;
+#if INKHUD_BOOKREADER_GRAYSCALE
+    grayscaleBaselineValid = false;
+#endif
+    updateStartedMs = Time::getMillis();
+    failed = false;
+    updateComplete.store(false, std::memory_order_relaxed);
+    beginPolling(5, 0);
+    if (updateTask)
+        xTaskNotifyGive(static_cast<TaskHandle_t>(updateTask));
+    else {
+        updateResult = driveUpdate();
+        updateComplete.store(true, std::memory_order_release);
+    }
+}
+
+bool ED047TC1::isUpdateDone()
+{
+    if (!updateComplete.load(std::memory_order_acquire))
+        return false;
+    monochromeBaselineValid = !pendingGrayscale && updateResult == BBEP_SUCCESS;
+#if INKHUD_BOOKREADER_GRAYSCALE
+    grayscaleBaselineValid = pendingGrayscale && updateResult == BBEP_SUCCESS;
+#endif
+    if (static_cast<SafeFastEPD *>(epaper)->hasDmaFault())
+        panelReady = false;
+    failed = updateResult != BBEP_SUCCESS;
+    LOG_DEBUG("[EInkPerf] refresh complete gray=%u type=%u ms=%lu rc=%d", pendingGrayscale, static_cast<unsigned>(pendingType),
+              static_cast<unsigned long>(Time::getMillis() - updateStartedMs), updateResult);
+    return !failed;
 }
 
 void ED047TC1::update(uint8_t *imageData, UpdateTypes type)
 {
-    if (!panelReady || !imageData)
+    if (!panelReady || !imageData || busy() || !updateComplete.load(std::memory_order_acquire))
         return;
+    bool leavingGrayscale = false;
 #if INKHUD_BOOKREADER_GRAYSCALE
-    const bool leavingGrayscale = epaper->getMode() == BB_MODE_4BPP;
+    leavingGrayscale = epaper->getMode() == BB_MODE_4BPP;
     grayscaleBaselineValid = false;
 #endif
 
@@ -503,39 +573,46 @@ void ED047TC1::update(uint8_t *imageData, UpdateTypes type)
         memcpy(dstRow, srcRow, srcRowBytes);
     }
 
-    int rc;
-    if (type == FULL || !monochromeBaselineValid) {
+    if (type != FULL && monochromeBaselineValid && memcmp(cur, epaper->previousBuffer(), dstRowBytes * dstTotalRows) == 0) {
+        failed = false;
+        return;
+    }
+    queueUpdate(type, false, leavingGrayscale);
+}
+
+int ED047TC1::driveUpdate()
+{
 #if INKHUD_BOOKREADER_GRAYSCALE
-        rc = epaper->fullUpdate(leavingGrayscale ? CLEAR_WHITE : CLEAR_SLOW, false);
-#else
-        rc = epaper->fullUpdate(CLEAR_SLOW, false);
+    if (pendingGrayscale) {
+        const int rc = static_cast<SafeFastEPD *>(epaper)->updatePanelGray();
+        LOG_DEBUG("[EInkPerf] grayscale drive ms=%lu rc=%d", static_cast<unsigned long>(Time::getMillis() - updateStartedMs), rc);
+        return rc;
+    }
 #endif
-    } else {
+    if (pendingType == FULL)
+        return epaper->fullUpdate(pendingLeavingGrayscale ? CLEAR_WHITE : CLEAR_SLOW, false);
+    else {
         const uint32_t startMs = millis();
         uint32_t blackToWhite = 0, whiteToBlack = 0;
+        const uint8_t *cur = epaper->currentBuffer();
         const uint8_t *previous = epaper->previousBuffer();
-        for (size_t i = 0; i < dstRowBytes * dstTotalRows; ++i) {
+        for (size_t i = 0; i < 960U * 540U / 8U; ++i) {
             blackToWhite += __builtin_popcount(static_cast<unsigned>(cur[i] & ~previous[i]));
             whiteToBlack += __builtin_popcount(static_cast<unsigned>(~cur[i] & previous[i]));
         }
         auto *safeEpaper = static_cast<SafeFastEPD *>(epaper);
-        rc = safeEpaper->partialUpdateWithWhiteFinish(blackToWhite);
-        if (safeEpaper->hasDmaFault())
-            panelReady = false;
+        const int rc = safeEpaper->partialUpdateWithWhiteFinish(blackToWhite);
         LOG_DEBUG("[EInkPerf] FAST blackToWhite=%lu whiteToBlack=%lu whiteExtraPasses=%u ms=%lu rc=%d",
                   static_cast<unsigned long>(blackToWhite), static_cast<unsigned long>(whiteToBlack),
                   blackToWhite ? SafeFastEPD::whiteFinishPasses : 0U, static_cast<unsigned long>(millis() - startMs), rc);
+        return rc;
     }
-    monochromeBaselineValid = rc == BBEP_SUCCESS;
-    failed = !monochromeBaselineValid;
-    if (failed)
-        LOG_WARN("ED047TC1 monochrome update failed rc=%d", rc);
 }
 
 #if INKHUD_BOOKREADER_GRAYSCALE
 void ED047TC1::updateGrayscale(uint8_t *imageData)
 {
-    if (!panelReady || !imageData)
+    if (!panelReady || !imageData || busy() || !updateComplete.load(std::memory_order_acquire))
         return;
 #if INKHUD_BOOKREADER_PERF_LOG
     const uint32_t startMs = millis();
@@ -572,19 +649,8 @@ void ED047TC1::updateGrayscale(uint8_t *imageData)
     LOG_INFO("[BookReaderPerf] gray panel BEGIN clear=none waveform=panel-native shades=16 baseline=%u "
              "changed=%lu prepareMs=%lu",
              !establishBaseline, static_cast<unsigned long>(changedPixels), static_cast<unsigned long>(millis() - startMs));
-    const uint32_t driveStartMs = millis();
 #endif
-    const int rc = safeEpaper->updatePanelGray();
-    if (safeEpaper->hasDmaFault())
-        panelReady = false;
-#if INKHUD_BOOKREADER_PERF_LOG
-    LOG_INFO("[BookReaderPerf] gray panel END rc=%d driveMs=%lu totalMs=%lu", rc,
-             static_cast<unsigned long>(millis() - driveStartMs), static_cast<unsigned long>(millis() - startMs));
-#endif
-    failed = rc != BBEP_SUCCESS;
-    grayscaleBaselineValid = !failed;
-    if (failed)
-        LOG_WARN("ED047TC1 grayscale update failed rc=%d", rc);
+    queueUpdate(FAST, true);
 }
 #endif
 

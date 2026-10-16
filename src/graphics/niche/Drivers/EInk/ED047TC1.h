@@ -31,6 +31,7 @@
 #include "configuration.h"
 
 #include "./EInk.h"
+#include <atomic>
 
 // Forward declare to avoid pulling FastEPD into all translation units
 class FASTEPD;
@@ -83,12 +84,22 @@ class ED047TC1 : public EInk
 #endif
 
   protected:
-    bool isUpdateDone() override { return true; } // FastEPD updates are blocking
+    bool isUpdateDone() override;
 
   private:
     FASTEPD *epaper = nullptr;
     bool panelReady = false;
     bool monochromeBaselineValid = false;
+    void *updateTask = nullptr;
+    std::atomic<bool> updateComplete{true};
+    UpdateTypes pendingType = FAST;
+    bool pendingGrayscale = false;
+    bool pendingLeavingGrayscale = false;
+    int updateResult = 0;
+    uint32_t updateStartedMs = 0;
+    static void runUpdates(void *context);
+    void queueUpdate(UpdateTypes type, bool grayscale, bool leavingGrayscale = false);
+    int driveUpdate();
 #if INKHUD_BOOKREADER_GRAYSCALE
     bool grayscaleBaselineValid = false;
 #endif
