@@ -3426,9 +3426,9 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
 #endif
 #ifdef Nodara
     case confirmation_dialog_menu:
-        LOG_INFO("handleMenuSwitch: Processing confirmation_dialog_menu");
+        if (NotificationRenderer::isOverlayBannerShowing())
+            return;
         showConfirmationBanner(pendingConfirmMessage, pendingConfirmCallback);
-        LOG_INFO("handleMenuSwitch: showConfirmationBanner called");
         break;
 #endif
     }
