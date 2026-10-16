@@ -13,6 +13,7 @@
 #include "graphics/DisplayMirror.h"
 #include "graphics/ScreenMirror.h"
 #include "input/InputBroker.h"
+#include "lvgl.h"
 #endif
 #include "util/ISpiLock.h"
 
