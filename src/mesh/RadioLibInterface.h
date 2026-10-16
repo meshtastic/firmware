@@ -245,13 +245,25 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     /** Re-arm if a CAD->RX handoff has produced no packet well past one max-length airtime. */
     void checkCadHandoffTimeout();
 
+    /** A CAD->RX handoff is outstanding and its RX has ended without a frame: TIMEOUT if it expired empty, CRC_ERR or
+     *  HEADER_ERR on a damaged header. Either way the chip may have stopped listening, so the handoff needs a re-arm. */
+    bool cadHandoffRxEnded();
+
+    // What a damaged header raises inside a handoff's RX, with no RX_DONE behind it. A handoff routes both to DIO1.
+    static constexpr uint32_t cadHandoffRxErrorIrqs = (1UL << RADIOLIB_IRQ_CRC_ERR) | (1UL << RADIOLIB_IRQ_HEADER_ERR);
+
     // Time::getMillis() when plain RX was first seen holding PREAMBLE/HEADER flags, or 0 if none.
     uint32_t rxFlagsSeenMs = 0;
     // rxFlagsSeenMs was stamped by a header, not by a bare preamble before it
     bool rxFlagsSeenHeader = false;
+    // ...and that header was a valid one, not a failed header before it
+    bool rxFlagsSeenValidHeader = false;
 
     /** Plain-RX twin of checkCadHandoffTimeout(): retire flags no RX_DONE consumed within a max packet. */
     virtual void checkStaleRxFlags();
+
+    /** Whether a header error leaves this chip's RX wedged, so only a re-arm recovers it (SX1280 DS 16.2). */
+    virtual bool headerErrWedgesRx() const { return false; }
 
     /**
      * Reset AGC by power-cycling the analog frontend.
@@ -440,12 +452,21 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     uint32_t activeReceiveStart = 0;
     // Time::getMillis() when a look cleared PREAMBLE_DETECTED and began holding TX, or 0 if no hold.
     uint32_t preambleHoldStart = 0;
+    // Whether a look has found HEADER_VALID since this hold began, which makes it a frame rather than a bare preamble.
+    bool preambleHoldHeaderSeen = false;
 
-    /** True while a cleared preamble still holds TX; ends the hold once one max packet has passed. */
+    /** Airtime of the longest frame we could be receiving: 255 bytes at CR 4/8 with CRC, whatever our own CR. */
+    uint32_t maxRxFrameMsec();
+
+    /** True while a cleared preamble still holds TX; ends the hold once one max frame has passed. */
     bool preambleHoldActive();
 
-    /** Clear a bare PREAMBLE_DETECTED and hold TX one max packet, unless a hold is already running. */
+    /** Clear a bare PREAMBLE_DETECTED and hold TX one max frame, unless a hold is already running. */
     void holdOnPreamble();
+
+    /** True while a bare-preamble hold has outlived the time a frame we could decode needs to show its header, so the
+     *  pre-TX CAD may settle it rather than the TX path waiting out the whole hold. */
+    bool preambleHoldPeekable();
 
     /** Whether a packet is waiting to transmit; txQueue itself stays private. */
     bool hasQueuedTx() { return !txQueue.empty(); }
