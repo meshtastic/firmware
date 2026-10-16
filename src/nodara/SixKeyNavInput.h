@@ -23,11 +23,11 @@ class SixKeyNavInput : public Observable<const InputEvent *>, public concurrency
 
   private:
     static const uint32_t DEBOUNCE_MS = 20;
-    uint32_t lastTime;
 
     struct {
-      bool press;
-      bool release;
+        bool press;
+        bool release;
+        uint32_t lastEdgeMs;
     } btn_state[BTN_NUM_MAX];
 };
 

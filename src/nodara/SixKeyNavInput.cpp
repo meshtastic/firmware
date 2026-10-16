@@ -54,16 +54,18 @@ static void gpiotePortHandler()
 // ---------------------------------------------------------------------------
 void SixKeyNavInput::captureSnapshotFromISR()
 {
+    uint32_t now = millis();
+
     for (int i = 0; i < BTN_NUM_MAX; i++) {
         if (digitalRead(NAV_TABLE[i].pin) == PIN_BTN_ACTIVE) {
             if (!btn_state[i].press) {
                 btn_state[i].press = true;
+                btn_state[i].lastEdgeMs = now;
             }
-        } else {
-            if (btn_state[i].press) {
-                btn_state[i].press = false;
-                btn_state[i].release = true;
-            }
+        } else if (btn_state[i].press) {
+            btn_state[i].press = false;
+            btn_state[i].release = true;
+            btn_state[i].lastEdgeMs = now;
         }
     }
 }
@@ -73,7 +75,6 @@ bool SixKeyNavInput::init()
 {
     s_instance = this;
     memset(btn_state, 0, sizeof(btn_state));
-    lastTime = 0;
 
     for (int i = 0; i < BTN_NUM_MAX; i++) {
         registerGpiotePortPin(NAV_TABLE[i].pin);
@@ -115,44 +116,57 @@ void SixKeyNavInput::fireKbEvent(uint8_t kbchar)
 int32_t SixKeyNavInput::runOnce()
 {
     uint32_t now = millis();
+    bool waiting = false;
 
     for (int i = 0; i < BTN_NUM_MAX; i++) {
-        if (btn_state[i].release) {
+        if (!btn_state[i].release)
+            continue;
+
+        // A bounce updates lastEdgeMs; wait until this button's own edge is stable.
+        if (now - btn_state[i].lastEdgeMs < DEBOUNCE_MS) {
+            waiting = true;
+            continue;
+        }
+
+        const bool stillDown = digitalRead(NAV_TABLE[i].pin) == PIN_BTN_ACTIVE;
+        if (stillDown) {
             btn_state[i].release = false;
-            if (now > lastTime + DEBOUNCE_MS) {
-                lastTime = now;
+            btn_state[i].press = true;
+            continue;
+        }
 
-                if (btn_state[BTN_NUM_MAX-1].press) {
-                    LOG_INFO("Fn + %s combo", NAV_TABLE[i].name);
-                    btn_state[BTN_NUM_MAX-1].press = false;
-                    btn_state[BTN_NUM_MAX-1].release = false;
-                    switch (NAV_TABLE[i].evt) {
-                        case INPUT_BROKER_UP: navComboUp();break;
-                        case INPUT_BROKER_DOWN: navComboDown();break;
-                        case INPUT_BROKER_LEFT: navComboLeft();break;
-                        case INPUT_BROKER_RIGHT: navComboRight();break;
-                        case INPUT_BROKER_SELECT: navComboEnter();break;
-                        default: break;
-                    }
-                } else {
-                    LOG_INFO("%s BTN release", NAV_TABLE[i].name);
-                    fireEvent(NAV_TABLE[i].evt);
-                }
-            } else {
-                LOG_INFO("%s BTN skip", NAV_TABLE[i].name);
+        btn_state[i].release = false;
+        const bool fnDown = digitalRead(NAV_TABLE[BTN_NUM_MAX - 1].pin) == PIN_BTN_ACTIVE;
+        if (i != BTN_NUM_MAX - 1 && fnDown) {
+            LOG_INFO("Fn + %s combo", NAV_TABLE[i].name);
+            btn_state[BTN_NUM_MAX - 1].press = false;
+            btn_state[BTN_NUM_MAX - 1].release = false;
+            switch (NAV_TABLE[i].evt) {
+            case INPUT_BROKER_UP:
+                navComboUp();
+                break;
+            case INPUT_BROKER_DOWN:
+                navComboDown();
+                break;
+            case INPUT_BROKER_LEFT:
+                navComboLeft();
+                break;
+            case INPUT_BROKER_RIGHT:
+                navComboRight();
+                break;
+            case INPUT_BROKER_SELECT:
+                navComboEnter();
+                break;
+            default:
+                break;
             }
+        } else {
+            LOG_INFO("%s BTN release", NAV_TABLE[i].name);
+            fireEvent(NAV_TABLE[i].evt);
         }
     }
 
-    bool ret = false;
-    for (int i = 0; i < BTN_NUM_MAX; i++) {
-        if (now <= lastTime + DEBOUNCE_MS) {
-            ret = true;
-            break;
-        }
-    }
-
-    return (ret ? DEBOUNCE_MS/2 : INT32_MAX);
+    return waiting ? DEBOUNCE_MS / 2 : INT32_MAX;
 }
 
 #endif // Nodara
