@@ -72,6 +72,15 @@ void ScreenMirror::freeIfIdleLocked()
     if (armedLocked())
         return;
     captureRequested = false;
+    captureFailed = false; // the next subscriber gets a fresh attempt
+    freeSnapshotLocked();
+}
+
+// Stop capturing without touching the counts, which each client still owns and will release itself.
+void ScreenMirror::failCaptureLocked()
+{
+    captureFailed = true;
+    captureRequested = false;
     freeSnapshotLocked();
 }
 
@@ -138,7 +147,7 @@ void ScreenMirror::onRendered(OLEDDisplay *display)
     uint32_t readyId = 0;
     {
         concurrency::LockGuard g(&lock);
-        if (!armedLocked())
+        if (!armedLocked() || captureFailed)
             return;
         if (!display || !display->buffer)
             return;
@@ -150,8 +159,7 @@ void ScreenMirror::onRendered(OLEDDisplay *display)
             return;
         if (fullSize > UINT16_MAX) {
             LOG_WARN("Screen mirror: %ux%u framebuffer too large to stream", w, h);
-            subscribers = pendingRequests = 0;
-            freeIfIdleLocked();
+            failCaptureLocked();
             return;
         }
         uint16_t size = (uint16_t)fullSize;
@@ -167,8 +175,7 @@ void ScreenMirror::onRendered(OLEDDisplay *display)
             snapshot = (uint8_t *)malloc(size);
             if (!snapshot) {
                 LOG_ERROR("Screen mirror: no memory for %u byte snapshot", size);
-                subscribers = pendingRequests = 0;
-                freeIfIdleLocked();
+                failCaptureLocked();
                 return;
             }
             memaudit::add(kMemTag, size);
@@ -267,7 +274,7 @@ void ScreenMirror::onMuiRect(int16_t x, int16_t y, uint16_t w, uint16_t h, const
     uint32_t readyId = 0;
     {
         concurrency::LockGuard g(&lock);
-        if (!armedLocked())
+        if (!armedLocked() || captureFailed)
             return;
         if (x < 0 || y < 0 || w == 0 || h == 0 || muiPanelW == 0 || stride < w)
             return;
@@ -282,8 +289,7 @@ void ScreenMirror::onMuiRect(int16_t x, int16_t y, uint16_t w, uint16_t h, const
                 muiPool = (uint8_t *)malloc(MUI_POOL_BYTES);
             if (!muiPool) {
                 LOG_ERROR("Screen mirror: no memory for the %u byte rect pool", (unsigned)MUI_POOL_BYTES);
-                subscribers = pendingRequests = 0;
-                freeIfIdleLocked();
+                failCaptureLocked();
                 return;
             }
             if (!muiPoolInPsram)

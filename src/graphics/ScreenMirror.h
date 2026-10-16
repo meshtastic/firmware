@@ -70,12 +70,15 @@ class ScreenMirror
     void kickCapture();
     void releaseLocked(const void *client);
     void freeIfIdleLocked();
+    void failCaptureLocked();
     void freeSnapshotLocked();
 
     concurrency::Lock lock;
     uint8_t subscribers = 0;
     uint8_t pendingRequests = 0;
     bool captureRequested = false;
+    // latched by an oversized panel or a failed allocation until the last client leaves
+    bool captureFailed = false;
     // Latest captured frame; doubles as the change-detection baseline.
     uint8_t *snapshot = nullptr;
     uint16_t frameSize = 0;
