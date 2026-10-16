@@ -137,10 +137,15 @@ bool FloodingRouter::roleAllowsCancelingDupe(const meshtastic_MeshPacket *p)
 void FloodingRouter::perhapsCancelDupe(const meshtastic_MeshPacket *p)
 {
     if (p->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA && roleAllowsCancelingDupe(p)) {
-        // cancel rebroadcast of this message *if* there was already one, unless we're a router!
-        // But only LoRa packets should be able to trigger this.
-        if (Router::cancelSending(p->from, p->id))
+        if (favoriteMayHaveMissedBroadcast(p)) {
+            // The relayer we just heard may be out of our favorite's range, so fill in late instead of dropping
+            if (iface)
+                iface->clampToLateRebroadcastWindow(getFrom(p), p->id);
+        } else if (Router::cancelSending(p->from, p->id)) {
+            // cancel rebroadcast of this message *if* there was already one, unless we're a router!
+            // But only LoRa packets should be able to trigger this.
             txRelayCanceled++;
+        }
     }
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_LATE && iface) {
         iface->clampToLateRebroadcastWindow(getFrom(p), p->id);
@@ -149,6 +154,28 @@ void FloodingRouter::perhapsCancelDupe(const meshtastic_MeshPacket *p)
         nodeDB->isFromOrToFavoritedNode(*p)) {
         iface->clampToLateRebroadcastWindow(getFrom(p), p->id);
     }
+}
+
+bool FloodingRouter::favoriteMayHaveMissedBroadcast(const meshtastic_MeshPacket *p)
+{
+    if (config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_BASE || !isBroadcast(p->to) || !nodeDB)
+        return false;
+
+    const NodeNum self = nodeDB->getNodeNum();
+    for (size_t i = 0; i < nodeDB->getNumMeshNodes(); i++) {
+        const meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(i);
+        if (!node || node->num == self || !nodeInfoLiteIsFavorite(node) || !node->has_hops_away || node->hops_away != 0)
+            continue;
+
+        const uint8_t relayer = nodeDB->getLastByteOfNodeNum(node->num);
+        NodeNum resolved = 0;
+        // A colliding relay byte can't prove this favorite has the packet, so it counts as missed
+        const bool favoriteRelayed =
+            p->relay_node == relayer && nodeDB->resolveUniqueLastByte(relayer, false, &resolved) && resolved == node->num;
+        if (!favoriteRelayed)
+            return true;
+    }
+    return false;
 }
 
 bool FloodingRouter::isRebroadcaster()
