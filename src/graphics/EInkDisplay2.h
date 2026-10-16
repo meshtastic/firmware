@@ -98,6 +98,10 @@ class EInkDisplay : public OLEDDisplay
     SPIClass *spi1 = NULL;
 #endif
 
+#if defined(EINK_RA01S_GP02)
+    SPIClass *spi1 = NULL;
+#endif
+
   private:
     // FIXME quick hack to limit drawing to a very slow rate
     uint32_t lastDrawMsec = 0;
