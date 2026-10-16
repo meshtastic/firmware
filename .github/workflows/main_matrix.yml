@@ -5,13 +5,11 @@ concurrency:
   group: ci-${{ github.head_ref || (github.event_name == 'push' && github.ref) || github.run_id }}
   cancel-in-progress: true
 on:
-  # The merge queue is the pre-merge gate for the protected branches (master,
-  # develop): a merge_group run validates the merged result before code lands. For
-  # now PRs and merge_group runs build the same narrowed board subset (--level pr);
-  # see the setup job. Static checks (pio check) run on PRs only. push still runs
-  # the full matrix on master/develop (post-merge), copying the PR-level boards from
-  # the merge_group run of the same commit, and on the event/* and feature/*
-  # branches, which have no merge queue.
+  # The merge queue batches PRs into the protected branches (master, develop). It
+  # builds no firmware: PRs build the narrowed board subset (--level pr, see the setup
+  # job) and push runs the full matrix on master/develop after merge, as well as on
+  # the event/* and feature/* branches, which have no merge queue. Static checks (pio
+  # check) run on PRs only.
   merge_group:
     types: [checks_requested]
     branches:
@@ -56,8 +54,9 @@ permissions: read-all
 
 jobs:
   setup:
-    # version: the reuse check matches artifact names, which embed the version string.
-    needs: version
+    # The merge queue only batches PRs: skipping setup skips the firmware build and
+    # check matrices that depend on it. ci-gate accepts that skip on merge_group.
+    if: github.event_name != 'merge_group'
     runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
@@ -73,9 +72,6 @@ jobs:
         id: jsonStep
         env:
           BASE_REF: ${{ github.base_ref }}
-          MERGE_GROUP_BASE_SHA: ${{ github.event.merge_group.base_sha }}
-          GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ needs.version.outputs.long }}
         run: |
           # A new board is 'release' and gets no CI until after merge, so force-build the
           # first env of each ADDED variant config. A new env in an existing one does not count.
@@ -86,8 +82,6 @@ jobs:
             # parentless, and merge-base then finds no common commit whenever the base
             # branch has moved past this merge commit, which is every re-run of an older run.
             DIFF_BASE=$(git merge-base "origin/$BASE_REF" HEAD)
-          elif [[ "$GITHUB_EVENT_NAME" == "merge_group" ]]; then
-            DIFF_BASE="$MERGE_GROUP_BASE_SHA"
           fi
           ADDED_ARGS=()
           if [[ -n "$DIFF_BASE" ]]; then
@@ -99,53 +93,18 @@ jobs:
               [[ -n "$cfg" ]] && ADDED_ARGS+=(--added-config "$cfg")
             done <<<"$ADDED_CONFIGS"
           fi
-          # PRs and (for now) merge_group builds use the narrowed --level pr board
-          # subset. Full-matrix builds run on push / schedule / workflow_dispatch.
-          if [[ "$GITHUB_EVENT_NAME" == "pull_request" || "$GITHUB_EVENT_NAME" == "merge_group" ]]; then
+          # PRs use the narrowed --level pr board subset. Full-matrix builds run on
+          # push / schedule / workflow_dispatch.
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
             TARGETS=$(./bin/generate_ci_matrix.py all --level pr "${ADDED_ARGS[@]}")
           else
             TARGETS=$(./bin/generate_ci_matrix.py all)
           fi
-          # A post-merge push to master/develop lands the exact commit its merge_group run
-          # built, so the PR-level boards are marked 'reuse' and copied from that run instead
-          # of rebuilt. Only when that run's ci-gate passed; any lookup failure builds them.
-          REUSE_RUN_ID=""
-          if [[ "$GITHUB_EVENT_NAME" == "push" && ( "$GITHUB_REF_NAME" == "develop" || "$GITHUB_REF_NAME" == "master" ) ]]; then
-            # Any status: the queue merges once ci-gate passes, often while jobs outside it
-            # still run, so that run is usually not 'completed' when this push starts.
-            MQ_RUN_ID=$(gh run list -R "$GITHUB_REPOSITORY" --workflow main_matrix.yml --event merge_group \
-              --commit "$GITHUB_SHA" --limit 1 \
-              --json databaseId --jq '.[0].databaseId // empty') || MQ_RUN_ID=""
-            if [[ -n "$MQ_RUN_ID" ]]; then
-              # The check-runs API, not the run's jobs list: that 502s on a run this size.
-              # The latest attempt's ci-gate decides, as it did for the merge.
-              GATE=$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/check-runs?check_name=ci-gate&filter=all" \
-                --jq "[.check_runs[] | select(.details_url | contains(\"/runs/$MQ_RUN_ID/\"))]
-                      | sort_by(.started_at) | last | .conclusion // empty") || GATE=""
-              if [[ "$GATE" == "success" ]]; then
-                REUSE_RUN_ID="$MQ_RUN_ID"
-                PR_TARGETS=$(./bin/generate_ci_matrix.py all --level pr)
-                # Only boards whose firmware and manifest artifacts are still there (a re-run can
-                # outlive their retention); the rest compile as usual.
-                ARTIFACTS=$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$MQ_RUN_ID/artifacts?per_page=100" \
-                  --jq '[.artifacts[] | select(.expired | not) | .name]') || ARTIFACTS=""
-                TARGETS=$(jq -c --argjson pr "$PR_TARGETS" --argjson have "$(jq -s 'add // []' <<<"$ARTIFACTS")" \
-                  --arg ver "$VERSION" \
-                  'map(. as $b | if any($pr[]; . == $b)
-                          and any($have[]; . == "firmware-\($b.platform)-\($b.board)-\($ver)")
-                          and any($have[]; . == "manifest-\($b.platform)-\($b.board)-\($ver)")
-                        then . + {reuse: true} else . end)' <<<"$TARGETS")
-              fi
-            fi
-            echo "Reusing PR-level builds from merge_group run: ${REUSE_RUN_ID:-none}"
-          fi
           echo "Name: $GITHUB_REF_NAME Base: $GITHUB_BASE_REF Ref: $GITHUB_REF"
           echo "all=$TARGETS" >> $GITHUB_OUTPUT
-          echo "reuse_run_id=$REUSE_RUN_ID" >> $GITHUB_OUTPUT
           echo "$TARGETS" >> $GITHUB_STEP_SUMMARY
     outputs:
       all: ${{ steps.jsonStep.outputs.all }}
-      reuse_run_id: ${{ steps.jsonStep.outputs.reuse_run_id }}
 
   version:
     runs-on: ubuntu-26.04
@@ -171,8 +130,7 @@ jobs:
     # Runs on GitHub-hosted runners so checks don't compete with builds for the
     # self-hosted 'arctastic' pool (which builds use).
     runs-on: ubuntu-26.04
-    # PRs only: the merge queue checks the same boards the PR already checked, so it
-    # skips this job and ci-gate accepts the skip.
+    # PRs only: the merge queue builds and checks no firmware.
     if: github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@v7
@@ -196,7 +154,6 @@ jobs:
       version: ${{ needs.version.outputs.long }}
       pio_env: ${{ matrix.build.board }}
       platform: ${{ matrix.build.platform }}
-      reuse_run_id: ${{ matrix.build.reuse && needs.setup.outputs.reuse_run_id || '' }}
     secrets:
       MEMBROWSE_API_KEY: ${{ secrets.MEMBROWSE_API_KEY }}
 
@@ -288,10 +245,14 @@ jobs:
       - name: Verify build and check results
         run: |
           echo "build=${{ needs.build.result }} check=${{ needs.check.result }}"
-          if [[ "${{ needs.build.result }}" != "success" ]]; then
-            echo "::error::One or more firmware builds failed, were cancelled, or did not run."
-            exit 1
-          fi
+          # The merge queue skips setup, and with it every build; a PR must build.
+          case "$GITHUB_EVENT_NAME:${{ needs.build.result }}" in
+            *:success | merge_group:skipped) ;;
+            *)
+              echo "::error::One or more firmware builds failed, were cancelled, or did not run."
+              exit 1
+              ;;
+          esac
           case "${{ needs.check.result }}" in
             success | skipped) ;;
             *)
