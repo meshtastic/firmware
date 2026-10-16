@@ -2,10 +2,10 @@
 
 /*
 
-Responsible for maintaining display health, by optimizing the ratio of FAST vs FULL refreshes
+Maintains display health by balancing fast updates with panel-specific cleanup or full refreshes.
 
-- counts number of FULL vs FAST refresh
-- suggests whether to use FAST or FULL, when not explicitly specified
+- tracks maintenance debt from fast updates
+- chooses fast refresh or maintenance when no update type is specified
 - periodically requests update unprovoked, if required for display health
 
 */
@@ -14,7 +14,7 @@ Responsible for maintaining display health, by optimizing the ratio of FAST vs F
 
 #include "configuration.h"
 
-#include "InkHUD.h"
+#include "concurrency/OSThread.h"
 
 #include "graphics/niche/Drivers/EInk/EInk.h"
 
@@ -30,8 +30,9 @@ class DisplayHealth : protected concurrency::OSThread
     void forceUpdateType(Drivers::EInk::UpdateTypes type);
     Drivers::EInk::UpdateTypes decideUpdateType();
 
-    uint8_t fastPerFull = 5;      // Ideal number of fast refreshes between full refreshes
+    uint8_t fastPerFull = 5;      // Ideal number of fast refreshes between maintenance refreshes
     float stressMultiplier = 2.0; // How bad for the display are extra fast refreshes beyond fastPerFull?
+    Drivers::EInk::UpdateTypes maintenanceUpdateType = Drivers::EInk::UpdateTypes::FULL;
 
   private:
     int32_t runOnce() override;
@@ -45,7 +46,7 @@ class DisplayHealth : protected concurrency::OSThread
     bool forced = false;
     Drivers::EInk::UpdateTypes workingDecision = Drivers::EInk::UpdateTypes::UNSPECIFIED;
 
-    float debt = 0.0; // How many full refreshes are due
+    float debt = 0.0; // How many maintenance refreshes are due
 };
 
 } // namespace NicheGraphics::InkHUD

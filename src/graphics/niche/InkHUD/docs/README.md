@@ -35,7 +35,7 @@ A haphazard collection of notes which _might_ be helpful for developers.
   - [`InkHUD::Persistence::LatestMessage`](#inkhudpersistencelatestmessage)
   - [`InkHUD::WindowManager`](#inkhudwindowmanager)
   - [`InkHUD::Renderer`](#inkhudrenderer)
-  - [`InkHUD::Renderer::DisplayHealth`](#inkhudrendererdisplayhealth)
+  - [`InkHUD::DisplayHealth`](#inkhuddisplayhealth)
   - [`InkHUD::Events`](#inkhudevents)
   - [`InkHUD::Applet`](#inkhudapplet)
   - [`InkHUD::SystemApplet`](#inkhudsystemapplet)
@@ -335,6 +335,8 @@ Resource limits have overridable defaults in `BookReaderApplet.cpp`. Set overrid
 ##### Loading and Implementation
 
 Opening a book or an uncached chapter/page uses a centered book icon and loading label. Chapter reads, wrapping, pagination, and image prefetch are deferred where possible so the reader can show content before preparing the entire book. A cached transition need not show a loading indicator. E-paper refresh time is separate from CPU rendering time and depends on the display driver.
+
+Explicit book opens check the archive's current size and last-write time before reusing caches. Changed metadata invalidates archive, stylesheet, image, and pagination caches. A replacement with identical size and timestamp is not distinguishable by this check. Background chapter expansion retries storage failures at most three times, at least one second apart, retaining the already displayed partial chapter if expansion fails.
 
 | Component | Responsibility |
 | --------- | -------------- |
@@ -656,47 +658,27 @@ The exact size / position / rotation of InkHUD applets is configurable by the us
 
 ---
 
-### `InkHUD::Renderer::DisplayHealth`
+### `InkHUD::DisplayHealth`
 
 _`src/graphics/niche/InkHUD/DisplayHealth.h`_
 
-Responsible for maintaining display health, by optimizing the ratio of FAST vs FULL refreshes
-
-- count number of FAST vs FULL refreshes (debt)
-- suggest either FAST or FULL type
-- periodically FULL refresh the display unprovoked, if needed
+Balances fast updates with the maintenance operation supported by the display driver.
 
 #### Background Info
 
-When the image on an E-Ink display is updated, different procedures can be used to move the pixels to their new states. We have defined two procedures: `FAST` and `FULL`.
+`FAST` requests a partial refresh. `FULL` requests the driver's full refresh sequence. Drivers can additionally advertise `CLEANUP`, a panel-specific maintenance operation that does not invert the entire image. The renderer selects `CLEANUP` for automatic maintenance only when the driver supports it; other displays continue using `FULL`.
 
-A `FAST` update moves pixels directly from their old position, to their new position. This is aesthetically pleasing, and quick, _but_ it is challenging for the display hardware. If used excessively, pixels can build up residual charge, which negatively impacts the display's lifespan and image quality.
-
-A `FULL` update first moves all pixels between black and white, before letting them eventually settle at their final position. This causes an unpleasant flashing of the display image, but is best for the display health and image quality.
-
-Most displays readily tolerate `FAST` updates, so long as a `FULL` update is occasionally performed. How often this `FULL` update is required depends on the display model.
+On the T5S3 ED047TC1, monochrome cleanup reinforces white pixels and existing black content within the short cleanup sequence. Startup, explicit full-refresh requests, and invalid-baseline recovery retain the original full-wipe path. Grayscale image updates use a separate driver path and the panel's grayscale waveform.
 
 #### Debt
 
-`InkHUD::DisplayHealth` records how many `FAST` refreshes have occurred since the previous `FULL` refresh.
+Fast updates accumulate maintenance debt. `InkHUD::setDisplayResilience` configures the target ratio and extra debt for prolonged fast-only interaction in the variant's `nicheGraphics.h`.
 
-This is referred to as the "full refresh debt".
-
-If an update of a specific type (`FULL` / `FAST`) is requested / forced, this will be granted.
-
-If an update is requested / forced _without_ a specified type (`UpdateTypes::UNSPECIFIED`), `DisplayHealth` will select either `FAST` or `FULL`, in an attempt to maintain a target ratio of fast to full updates.
-
-This target is set by `InkHUD::setDisplayResilience`, when setting up in `nichegraphics.h`
-
-If an _excessive_ amount of `FAST` refreshes are performed back-to-back, `DisplayHealth` will begin artificially inflating the full refresh debt. This will cause the next few `UNSPECIFIED` updates to _all_ be performed as `FULL`, while the debt is paid down.
-
-This system of "full refresh debt" allows us to increase perceived responsiveness by tolerating additional strain on the display during periods of user interaction, and attempting to "repair the damage" later, once user interaction ceases.
+An `UNSPECIFIED` update uses fast refresh while debt is low, then the driver's maintenance operation when cleanup is due. Explicit requests are prioritized as `FULL`, `CLEANUP`, `FAST`, then `UNSPECIFIED`. Each consumed maintenance request reduces debt once.
 
 #### Maintenance
 
-The system of "full refresh debt" assumes that the display will perform many updates of `UNSPECIFIED` type between periods of user interaction. Depending on the amount of mesh traffic / applet selection, this may not be the case.
-
-If debt is particularly high, and no updates are taking place organically, `DisplayHealth` will begin infrequently performing `FULL` updates, purely to pay down the full refresh debt.
+If explicit fast updates accumulate enough debt, a timer requests maintenance after interaction settles. The initial delay is one minute; further maintenance requests are one hour apart. The timer stops when the debt is cleared. Maintenance uses `CLEANUP` or `FULL` according to driver capability, without disabling cleanup on fast-refresh panels.
 
 ---
 

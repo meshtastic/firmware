@@ -63,8 +63,7 @@ void setupNicheGraphics()
     // Set the driver
     inkhud->setDriver(driver);
 
-    // Set how many FAST updates per FULL update
-    // Set how unhealthy additional FAST updates beyond this number are
+    // The driver supplies quick cleanup for scheduled maintenance; explicit full wipes remain available.
     inkhud->setDisplayResilience(7, 1.5);
 
     // Prepare fonts - use larger sizes to suit the 4.7" screen at ~234 DPI

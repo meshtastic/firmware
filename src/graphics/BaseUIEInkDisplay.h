@@ -11,7 +11,7 @@ Replaces the per-board branching in EInkDisplay2 / EInkDynamicDisplay / EInkPara
 
 #pragma once
 
-#ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
+#if defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS) && !defined(MESHTASTIC_INCLUDE_INKHUD)
 
 #include "configuration.h"
 

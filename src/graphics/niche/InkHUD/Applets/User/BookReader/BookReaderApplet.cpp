@@ -260,12 +260,16 @@ struct ZipCentralEntry {
 struct EpubArchiveCache {
     std::string epubPath;
     std::vector<ZipCentralEntry> entries;
+    uint64_t fileSize = 0;
+    int64_t lastWrite = 0;
     bool ready = false;
 
     void clear()
     {
         epubPath.clear();
         entries.clear();
+        fileSize = 0;
+        lastWrite = 0;
         ready = false;
     }
 };
@@ -405,7 +409,7 @@ struct ImageRenderContext {
     uint16_t srcHeight = 0;
     std::vector<uint8_t> *monoBitmap = nullptr;
     std::vector<uint8_t> *sourceBitmap = nullptr;
-    bool skipScreenWrite = false; // when true, caller writes the decoded bitmap with writeBitmap()
+    bool skipScreenWrite = false; // Bitmap-only rendering; the caller blits the finished image.
     bool inlineRaster = false;
     bool *prefetchInterrupted = nullptr;
 };
@@ -1174,7 +1178,7 @@ bool drawRenderedImageCache(InkHUD::BookReaderApplet *applet, const std::string 
     const uint16_t sourceY = static_cast<uint16_t>(visibleTop - imageTop);
 
     // Convert applet-local image position to screen coords, then use the
-    // renderer's fast 1-bpp blit path.
+    // renderer's fast bitmap blit path.
     InkHUD::Tile *tile = applet->getTile();
     const int16_t tileLeft = tile ? tile->getLeft() : 0;
     const int16_t tileTop = tile ? tile->getTop() : 0;
@@ -1896,6 +1900,11 @@ bool ensureEpubArchiveCached(const std::string &epubPath)
 
     gEpubArchiveCache.epubPath = epubPath;
     gEpubArchiveCache.entries = std::move(entries);
+    {
+        concurrency::LockGuard guard(spiLock);
+        gEpubArchiveCache.fileSize = gEpubArchiveFile.size();
+        gEpubArchiveCache.lastWrite = gEpubArchiveFile.getLastWrite();
+    }
     gEpubArchiveCache.ready = true;
     return true;
 #endif
@@ -4371,9 +4380,7 @@ std::string pickPreferredTocPath(const std::vector<std::string> &tocPaths)
 void InkHUD::BookReaderApplet::setDisplayRefreshActive(bool active)
 {
 #if INKHUD_BOOKREADER_HAS_SD && INKHUD_BOOKREADER_ENABLE_INLINE_IMAGES && INKHUD_BOOKREADER_USE_JPEGDEC
-    const bool previous = gReaderDisplayRefreshActive.exchange(active);
-    if (previous != active && gJpegPrefetchJob && !gJpegPrefetchJob->done.load())
-        BR_PERF_LOG("JPEG prefetch display priority active=%u", active);
+    gReaderDisplayRefreshActive.store(active);
 #else
     (void)active;
 #endif
@@ -4406,6 +4413,8 @@ uint64_t InkHUD::BookReaderApplet::pageIndexFingerprint() const
             hash = (hash ^ p[i]) * 1099511628211ULL;
     };
     bytes(bookPath.data(), bookPath.size());
+    bytes(&gEpubArchiveCache.fileSize, sizeof(gEpubArchiveCache.fileSize));
+    bytes(&gEpubArchiveCache.lastWrite, sizeof(gEpubArchiveCache.lastWrite));
     const uint8_t readingHeight = fontSmall.lineHeight();
     const uint8_t footerHeight = fontSmall.lineHeight();
     bytes(&readingHeight, sizeof(readingHeight));
@@ -4935,6 +4944,8 @@ void InkHUD::BookReaderApplet::updateBackgroundReaderPending()
 
 void InkHUD::BookReaderApplet::queueDeferredPartExpansion(int32_t partIndex)
 {
+    if (deferredPartLoad.partIndex != partIndex)
+        deferredPartLoad.clear();
     deferredPartLoad.partIndex = partIndex;
     backgroundReaderWorkArmed = true;
     updateBackgroundReaderPending();
@@ -4967,17 +4978,24 @@ bool InkHUD::BookReaderApplet::runBackgroundReaderPass()
     if (deferredPartLoad.partIndex >= 0) {
         const int32_t targetPartIndex = deferredPartLoad.partIndex;
         const int32_t savedScrollLine = scrollLine;
-        deferredPartLoad.clear();
-        updateBackgroundReaderPending();
         if (pagedBookMode && pagedPartIndex == targetPartIndex) {
+            if (deferredPartLoad.failures && !Throttle::hasElapsed(deferredPartLoad.lastFailureMs, 1000U))
+                return false;
             if (!loadPagedPart(targetPartIndex, false)) {
-                queueDeferredPartExpansion(targetPartIndex);
+                deferredPartLoad.lastFailureMs = Time::getMillis();
+                if (++deferredPartLoad.failures >= 3U) {
+                    // Leave the already displayed partial chapter available after storage failure.
+                    deferredPartLoad.clear();
+                }
+                updateBackgroundReaderPending();
                 backgroundReaderWorkArmed = false;
                 return false;
             }
             scrollLine = std::clamp<int32_t>(savedScrollLine, 0, readerLastPageStart(wrappedLines.size(), linesPerPage));
             return true;
         }
+        deferredPartLoad.clear();
+        updateBackgroundReaderPending();
         return true;
     }
 
@@ -5306,18 +5324,32 @@ BOOKREADER_NOINLINE bool InkHUD::BookReaderApplet::loadEpubContainerAsBook(const
 
 BOOKREADER_NOINLINE bool InkHUD::BookReaderApplet::loadFile(const BrowserEntry &entry)
 {
-    const bool reuseEpubCaches = fileLoaded && bookPath == entry.path && entry.format == BookFormat::EPUB_CONTAINER &&
-                                 gEpubArchiveCache.ready && gEpubArchiveCache.epubPath == entry.path;
+#if INKHUD_BOOKREADER_HAS_SD && INKHUD_BOOKREADER_ENABLE_INLINE_IMAGES && INKHUD_BOOKREADER_USE_JPEGDEC
+    clearJpegPrefetchJob();
+#endif
+    bool reuseEpubCaches = false;
+#if INKHUD_BOOKREADER_HAS_SD
+    if (ensureSDReady()) {
+        concurrency::LockGuard guard(spiLock);
+        // Check a fresh handle only at explicit opens. Equal size and timestamp cannot detect every replacement.
+        File current = SD.open(entry.path.c_str(), FILE_READ);
+        if (current && !current.isDirectory()) {
+            reuseEpubCaches = fileLoaded && bookPath == entry.path && entry.format == BookFormat::EPUB_CONTAINER &&
+                              gEpubArchiveCache.ready && gEpubArchiveCache.epubPath == entry.path &&
+                              gEpubArchiveCache.fileSize == current.size() &&
+                              gEpubArchiveCache.lastWrite == current.getLastWrite();
+        }
+        if (current)
+            current.close();
+    }
+#endif
     if (!reuseEpubCaches) {
+        closeCachedEpubFile();
+        gEpubArchiveCache.clear();
         gExternalCssCaches.clear();
         clearRenderedImageCaches();
         gImageProbeCache.clear();
     }
-#if INKHUD_BOOKREADER_HAS_SD && INKHUD_BOOKREADER_ENABLE_INLINE_IMAGES && INKHUD_BOOKREADER_USE_JPEGDEC
-    else {
-        clearJpegPrefetchJob();
-    }
-#endif
     BR_PERF_LOG("book image caches reused=%u path=%s", reuseEpubCaches, entry.path.c_str());
     resetPageIndex();
     contents.clear();
@@ -6660,7 +6692,7 @@ bool InkHUD::BookReaderApplet::drawInlineImage(const std::string &imagePath, int
                 BR_LOAD_SCOPE("jpeg-codec-and-raster");
                 decodeRc = gBookReaderJpegDec.decode(0, 0, options);
             }
-            rendered = (decodeRc != 0);
+            rendered = decodeRc != 0 && gBookReaderJpegDec.getLastError() == JPEG_SUCCESS;
             BR_PERF_LOG("JPEG decoded path=%s result=%d error=%d", imagePath.c_str(), decodeRc,
                         gBookReaderJpegDec.getLastError());
             epubStream.finishReadAhead();
@@ -6674,6 +6706,7 @@ bool InkHUD::BookReaderApplet::drawInlineImage(const std::string &imagePath, int
             gBookReaderJpegDec.close();
         }
         epubStream.finishReadAhead();
+        // JPEGDEC may return success after a callback abort; honor the explicit interruption before retrying or caching.
         if (prefetchInterrupted && *prefetchInterrupted) {
             BR_PERF_LOG("image prefetch interrupted path=%s", imagePath.c_str());
             return false;
@@ -6691,7 +6724,7 @@ bool InkHUD::BookReaderApplet::drawInlineImage(const std::string &imagePath, int
                 if (gBookReaderJpegDec.openRAM(imageBytes.data(), static_cast<int>(imageBytes.size()), jpegDecDrawCallback)) {
                     gBookReaderJpegDec.setPixelType(sourceBitmap ? EIGHT_BIT_GRAYSCALE : RGB565_LITTLE_ENDIAN);
                     gBookReaderJpegDec.setUserPointer(&ctx);
-                    rendered = gBookReaderJpegDec.decode(0, 0, options) != 0;
+                    rendered = gBookReaderJpegDec.decode(0, 0, options) != 0 && gBookReaderJpegDec.getLastError() == JPEG_SUCCESS;
                     BR_PERF_LOG("RAM retry: path=%s bytes=%u rendered=%u error=%d", imagePath.c_str(),
                                 static_cast<unsigned>(imageBytes.size()), rendered, gBookReaderJpegDec.getLastError());
                     gBookReaderJpegDec.close();

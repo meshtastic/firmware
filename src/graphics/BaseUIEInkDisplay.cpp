@@ -1,4 +1,4 @@
-#ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
+#if defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS) && !defined(MESHTASTIC_INCLUDE_INKHUD)
 
 #include "./BaseUIEInkDisplay.h"
 #include "UptimeClock.h"

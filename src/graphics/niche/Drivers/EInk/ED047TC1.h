@@ -70,7 +70,7 @@ class ED047TC1 : public EInk
     static constexpr uint8_t V_OFFSET_TOP = 16;    // visual RIGHT : 16px physical top margin
     static constexpr uint8_t V_OFFSET_BOTTOM = 16; // visual LEFT  : 16px physical bottom margin
 
-    static constexpr UpdateTypes supported = static_cast<UpdateTypes>(FULL | FAST);
+    static constexpr UpdateTypes supported = static_cast<UpdateTypes>(FULL | FAST | CLEANUP);
 
   public:
     ED047TC1() : EInk(DISPLAY_WIDTH, DISPLAY_HEIGHT, supported) {}

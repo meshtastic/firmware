@@ -106,8 +106,10 @@ class BookReaderApplet : public Applet, private concurrency::OSThread
     };
     struct DeferredPartLoad {
         int32_t partIndex = -1;
+        uint8_t failures = 0;
+        uint32_t lastFailureMs = 0;
 
-        void clear() { partIndex = -1; }
+        void clear() { *this = DeferredPartLoad{}; }
     };
     BookReaderApplet();
 

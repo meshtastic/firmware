@@ -24,7 +24,8 @@ class EInk : private concurrency::OSThread
     enum UpdateTypes : uint8_t {
         UNSPECIFIED = 0,
         FULL = 1 << 0,
-        FAST = 1 << 1, // "Partial Refresh"
+        FAST = 1 << 1,    // "Partial Refresh"
+        CLEANUP = 1 << 2, // Non-inverting maintenance, where supported
     };
 
     EInk(uint16_t width, uint16_t height, UpdateTypes supported);

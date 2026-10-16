@@ -45,9 +45,11 @@ void EInk::beginPolling(uint32_t interval, uint32_t expectedDuration)
 // This is what allows us to update the display asynchronously
 int32_t EInk::runOnce()
 {
+    // A long CPU task may delay polling after the hardware has already finished.
+    const bool updateDone = !failed && isUpdateDone();
     // Check for polling timeout
     // Manually set at 10 seconds, in case some big task holds up the firmware's cooperative multitasking
-    if (millis() - pollingBegunAt > 10000)
+    if (!updateDone && millis() - pollingBegunAt > 10000)
         failed = true;
 
     // Handle failure
@@ -61,7 +63,7 @@ int32_t EInk::runOnce()
     }
 
     // If update not yet done
-    if (!isUpdateDone())
+    if (!updateDone)
         return pollingInterval; // Poll again in a few ms
 
     // If update done

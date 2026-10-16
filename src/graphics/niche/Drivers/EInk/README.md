@@ -33,8 +33,8 @@ void setupNicheGraphics()
   - [`await()`](#await)
   - [`supports(UpdateTypes type)`](#supportsupdatetypes-type)
   - [`busy()`](#busy)
-  - [`width()`](#width)
-  - [`height()`](#height)
+  - [`width`](#width)
+  - [`height`](#height)
 - [Supporting New Displays](#supporting-new-displays)
   - [Controller IC](#controller-ic)
   - [Finding Information](#finding-information)
@@ -49,28 +49,33 @@ Update the image on the display
 - _`type`_ which type of update to perform.
   - `FULL`
   - `FAST` (partial refresh)
-  - (Other custom types may be possible)
+  - `CLEANUP` (optional non-inverting maintenance refresh)
 
-The imageData is a 1-bit image. X-Pixels are 8-per byte, with the MSB being the leftmost pixel. This was not an InkHUD design decision; it is the raw format accepted by the E-Ink display controllers ICs.
+Not every driver supports every update type. Check `driver->supports(EInk::CLEANUP)` before requesting maintenance; drivers advertise supported types as capability bits. `CLEANUP` does not imply support for grayscale.
 
-_To-do: add a helper method to `InkHUD::Drivers::EInk` to do this arithmetic for you._
+The image data is a row-major 1-bit image, with eight horizontal pixels per byte and the MSB representing the leftmost pixel. A set bit is white; a cleared bit is black. Each row occupies `(width + 7) / 8` bytes, including padding when the width is not divisible by eight. Keep the buffer alive and unchanged until the update completes.
 
 ```cpp
-uint16_t w = driver::width();
-uint16_t h = driver::height();
+#include <cstddef>
+#include <cstdint>
+#include <vector>
 
-uint8_t image[ (w/8) * h ]; // X pixels are 8-per-byte
+const uint16_t w = driver->width;
+const uint16_t h = driver->height;
+const std::size_t rowBytes = (static_cast<std::size_t>(w) + 7) / 8;
+std::vector<uint8_t> image(rowBytes * h, 0xFF); // Start with white pixels.
 
-image[0] |= (1 << 7); // Set pixel x=0, y=0
-image[0] |= (1 << 0); // Set pixel x=7, y=0
-image[1] |= (1 << 7); // Set pixel x=8, y=0
+const uint16_t x = 12;
+const uint16_t y = 2;
+if (x < w && y < h) {
+    const std::size_t yBytes = static_cast<std::size_t>(y) * rowBytes;
+    const std::size_t xBytes = x / 8;
+    const uint8_t mask = static_cast<uint8_t>(1U << (7 - (x % 8)));
+    image[yBytes + xBytes] &= static_cast<uint8_t>(~mask); // Draw black.
+}
 
-uint8_t x = 12;
-uint8_t y = 2;
-uint8_t yBytes = y * (w/8);
-uint8_t xBytes = x / 8;
-uint8_t xBits = (7-x) % 8;
-image[yByte + xByte] |= (1 << xBits); // Set pixel x=12, y=2
+driver->update(image.data(), NicheGraphics::Drivers::EInk::FULL);
+driver->await(); // Finish before the local vector is destroyed or reused.
 ```
 
 ### `await()`
@@ -87,19 +92,19 @@ Check if display supports a specific update type. `true` if supported.
 
 Check if display is already performing an `update()`. `true` if already updating.
 
-### `width()`
+### `width`
 
-Width of the display, in pixels. Note: most displays are portrait. Your UI will need to implement rotation in software.
+Read-only instance field (`driver->width`): width of the display, in pixels. Note: most displays are portrait. Your UI will need to implement rotation in software.
 
-### `height()`
+### `height`
 
-Height of the display, in pixels. Note: most displays are portrait. Your UI will need to implement rotation in software.
+Read-only instance field (`driver->height`): height of the display, in pixels. Note: most displays are portrait. Your UI will need to implement rotation in software.
 
 ## Supporting New Displays
 
 _This topic is not covered in depth, but these notes may be helpful._
 
-The `InkHUD::Drivers::EInk` class contains only the mechanism for implementing an E-Ink driver on-top of Meshtastic's `OSThread`. A driver for a specific display needs to extend this class.
+The `NicheGraphics::Drivers::EInk` class contains only the mechanism for implementing an E-Ink driver on-top of Meshtastic's `OSThread`. A driver for a specific display needs to extend this class.
 
 ### Controller IC
 

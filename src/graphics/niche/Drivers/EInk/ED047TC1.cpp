@@ -140,15 +140,15 @@ class SafeFastEPD : public FASTEPD
         _state.pfnEinkPower = safeEPDiyV7EinkPower;
 #endif
     }
-    int partialUpdateWithWhiteFinish(uint32_t whitePixels)
+    int partialUpdateWithWhiteFinish(uint32_t whitePixels, bool cleanup = false)
     {
         if (dmaFault || _state.mode != BB_MODE_1BPP || _state.native_width != 960 || _state.native_height != 540 ||
             _state.rotation != 0 || (_state.iFlags & (BB_PANEL_FLAG_MIRROR_X | BB_PANEL_FLAG_MIRROR_Y)) ||
             _state.panelDef.iLinePadding || !_state.pTemp || !_state.dma_buf)
             return BBEP_ERROR_BAD_PARAMETER;
         int rc = FASTEPD::partialUpdate(true, 0, 539);
-        if (rc == BBEP_SUCCESS && whitePixels)
-            rc = finishWhitePixels(_state.pTemp, whiteFinishPasses);
+        if (rc == BBEP_SUCCESS && (whitePixels || cleanup))
+            rc = finishMonochromePixels(_state.pTemp, whiteFinishPasses, cleanup);
         if (rc == BBEP_SUCCESS)
             rc = writePulseFrame(nullptr);
         const int offRc = einkPower(0);
@@ -342,9 +342,9 @@ class SafeFastEPD : public FASTEPD
 #endif
     bool dmaFault = false;
 
-    int finishWhitePixels(uint8_t *plane, unsigned passes)
+    int finishMonochromePixels(uint8_t *plane, unsigned passes, bool cleanup = false)
     {
-        // Keep only the black-to-white pulses prepared by the monochrome partial update.
+        // Maintenance restores both endpoints without inverting the visible image.
 #if INKHUD_BOOKREADER_PERF_LOG
         const uint32_t prepareStart = millis();
         uint32_t whitePixels = 0;
@@ -352,23 +352,36 @@ class SafeFastEPD : public FASTEPD
         uint8_t active = 0;
         for (size_t i = 0; i < 960U * 540U / 4U; ++i) {
             uint8_t finish = plane[i] & 0xAA;
+            if (cleanup) {
+                const uint8_t pixels = (_state.pCurrent[i / 2U] >> ((i & 1U) ? 0U : 4U)) & 15U;
+                finish = ((pixels & 8U) << 4U) | ((pixels & 4U) << 3U) | ((pixels & 2U) << 2U) | ((pixels & 1U) << 1U);
+#if INKHUD_BOOKREADER_PERF_LOG
+                whitePixels += __builtin_popcount(static_cast<unsigned>(finish));
+#endif
+                finish |= (finish ^ 0xAAU) >> 1U;
+            }
             plane[i] = finish;
             active |= plane[i];
 #if INKHUD_BOOKREADER_PERF_LOG
-            whitePixels += __builtin_popcount(static_cast<unsigned>(finish));
+            if (!cleanup)
+                whitePixels += __builtin_popcount(static_cast<unsigned>(finish));
 #endif
         }
         int rc = BBEP_SUCCESS;
 #if INKHUD_BOOKREADER_PERF_LOG
-        LOG_INFO("[BookReaderDraw] white-only finish BEGIN at=%lu pixels=%lu passes=%u prepareMs=%lu mode=%d",
+        LOG_INFO("[BookReaderDraw] monochrome finish BEGIN at=%lu whitePixels=%lu passes=%u prepareMs=%lu mode=%d cleanup=%u",
                  static_cast<unsigned long>(millis()), static_cast<unsigned long>(whitePixels), active ? passes : 0U,
-                 static_cast<unsigned long>(millis() - prepareStart), _state.mode);
+                 static_cast<unsigned long>(millis() - prepareStart), _state.mode, cleanup);
 #endif
         if (active)
-            for (unsigned pass = 0; pass < passes && rc == BBEP_SUCCESS; ++pass)
+            for (unsigned pass = 0; pass < passes && rc == BBEP_SUCCESS; ++pass) {
+                if (cleanup && pass == static_cast<unsigned>(_state.iFullPasses))
+                    for (size_t i = 0; i < 960U * 540U / 4U; ++i)
+                        plane[i] &= 0xAAU;
                 rc = writePulseFrame(plane);
+            }
 #if INKHUD_BOOKREADER_PERF_LOG
-        LOG_INFO("[BookReaderDraw] white-only finish END rc=%d", rc);
+        LOG_INFO("[BookReaderDraw] monochrome finish END rc=%d", rc);
 #endif
         return rc;
     }
@@ -573,7 +586,8 @@ void ED047TC1::update(uint8_t *imageData, UpdateTypes type)
         memcpy(dstRow, srcRow, srcRowBytes);
     }
 
-    if (type != FULL && monochromeBaselineValid && memcmp(cur, epaper->previousBuffer(), dstRowBytes * dstTotalRows) == 0) {
+    if (type != FULL && type != CLEANUP && monochromeBaselineValid &&
+        memcmp(cur, epaper->previousBuffer(), dstRowBytes * dstTotalRows) == 0) {
         failed = false;
         return;
     }
@@ -601,10 +615,12 @@ int ED047TC1::driveUpdate()
             whiteToBlack += __builtin_popcount(static_cast<unsigned>(~cur[i] & previous[i]));
         }
         auto *safeEpaper = static_cast<SafeFastEPD *>(epaper);
-        const int rc = safeEpaper->partialUpdateWithWhiteFinish(blackToWhite);
-        LOG_DEBUG("[EInkPerf] FAST blackToWhite=%lu whiteToBlack=%lu whiteExtraPasses=%u ms=%lu rc=%d",
-                  static_cast<unsigned long>(blackToWhite), static_cast<unsigned long>(whiteToBlack),
-                  blackToWhite ? SafeFastEPD::whiteFinishPasses : 0U, static_cast<unsigned long>(millis() - startMs), rc);
+        const bool cleanup = pendingType == CLEANUP;
+        const int rc = safeEpaper->partialUpdateWithWhiteFinish(blackToWhite, cleanup);
+        LOG_DEBUG("[EInkPerf] %s blackToWhite=%lu whiteToBlack=%lu whiteExtraPasses=%u ms=%lu rc=%d",
+                  cleanup ? "CLEANUP" : "FAST", static_cast<unsigned long>(blackToWhite),
+                  static_cast<unsigned long>(whiteToBlack), (blackToWhite || cleanup) ? SafeFastEPD::whiteFinishPasses : 0U,
+                  static_cast<unsigned long>(millis() - startMs), rc);
         return rc;
     }
 }

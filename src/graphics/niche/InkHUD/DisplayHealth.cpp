@@ -1,12 +1,12 @@
 #ifdef MESHTASTIC_INCLUDE_INKHUD
 
 #include "./DisplayHealth.h"
-#include "DisplayHealth.h"
+#include "./InkHUD.h"
 
 using namespace NicheGraphics;
 
 // Timing for "maintenance"
-// Paying off full-refresh debt with unprovoked updates, if the display is not very active
+// Restore the display after heavy interaction, then space any remaining maintenance an hour apart.
 static constexpr uint32_t MAINTENANCE_MS_INITIAL = 60 * 1000UL;
 static constexpr uint32_t MAINTENANCE_MS = 60 * 60 * 1000UL;
 
@@ -42,7 +42,7 @@ void InkHUD::DisplayHealth::forceUpdateType(Drivers::EInk::UpdateTypes type)
 // Calling this method consumes the result, and resets for the next update
 Drivers::EInk::UpdateTypes InkHUD::DisplayHealth::decideUpdateType()
 {
-    LOG_DEBUG("FULL-update debt:%f", debt);
+    LOG_DEBUG("Refresh maintenance debt:%f", debt);
 
     // For convenience
     typedef Drivers::EInk::UpdateTypes UpdateTypes;
@@ -59,11 +59,13 @@ Drivers::EInk::UpdateTypes InkHUD::DisplayHealth::decideUpdateType()
     if (OSThread::enabled && debt == 0.0)
         endMaintenance();
 
-    // Explicitly requested FULL
-    if (finalDecision == UpdateTypes::FULL) {
-        LOG_DEBUG("Explicit FULL");
-        debt = max(debt - 1.0, 0.0); // Record that we have paid back (some of) the FULL refresh debt
-        return UpdateTypes::FULL;
+    // Explicit full refresh or panel-specific cleanup.
+    if (finalDecision == UpdateTypes::FULL || finalDecision == UpdateTypes::CLEANUP) {
+        LOG_DEBUG("Explicit %s", finalDecision == UpdateTypes::FULL ? "FULL" : "CLEANUP");
+        debt = max(debt - 1.0, 0.0);
+        if (debt == 0.0)
+            endMaintenance();
+        return finalDecision;
     }
 
     // Explicitly requested FAST
@@ -95,18 +97,20 @@ Drivers::EInk::UpdateTypes InkHUD::DisplayHealth::decideUpdateType()
         return UpdateTypes::FAST;
     }
 
-    // In debt: suggest FULL
+    // In debt: use the driver's maintenance operation.
     else {
-        LOG_DEBUG("UNSPECIFIED: using FULL");
+        LOG_DEBUG("UNSPECIFIED: using %s", maintenanceUpdateType == UpdateTypes::FULL ? "FULL" : "CLEANUP");
         debt = max(debt - 1.0, 0.0); // Record that we have paid back (some of) the FULL refresh debt
 
         // When maintenance begins, the first refresh happens shortly after user interaction ceases (a minute or so)
         // If we *are* given an opportunity to refresh before that, we'll skip that initial maintenance refresh
-        // We were intending to use that initial refresh to redraw the screen as FULL, but we're doing that now, organically
-        if (OSThread::enabled && OSThread::interval == MAINTENANCE_MS_INITIAL)
+        // This update takes the place of the initial maintenance refresh.
+        if (debt == 0.0)
+            endMaintenance();
+        else if (OSThread::enabled && OSThread::interval == MAINTENANCE_MS_INITIAL)
             OSThread::setInterval(MAINTENANCE_MS); // Note: not intervalFromNow
 
-        return UpdateTypes::FULL;
+        return maintenanceUpdateType;
     }
 }
 
@@ -121,7 +125,10 @@ Drivers::EInk::UpdateTypes InkHUD::DisplayHealth::prioritize(Drivers::EInk::Upda
         return type2;
 
     case Drivers::EInk::UpdateTypes::FAST:
-        return (type2 == Drivers::EInk::UpdateTypes::FULL) ? Drivers::EInk::UpdateTypes::FULL : Drivers::EInk::UpdateTypes::FAST;
+        return (type2 == Drivers::EInk::UpdateTypes::FULL || type2 == Drivers::EInk::UpdateTypes::CLEANUP) ? type2 : type1;
+
+    case Drivers::EInk::UpdateTypes::CLEANUP:
+        return type2 == Drivers::EInk::UpdateTypes::FULL ? type2 : type1;
 
     case Drivers::EInk::UpdateTypes::FULL:
         return type1;
@@ -131,7 +138,7 @@ Drivers::EInk::UpdateTypes InkHUD::DisplayHealth::prioritize(Drivers::EInk::Upda
 }
 
 // We're using the timer to perform "maintenance"
-// If significant FULL-refresh debt has accumulated, we will occasionally run FULL refreshes unprovoked.
+// If significant debt has accumulated, periodically request the driver's maintenance operation.
 // This prevents gradual build-up of debt,
 // in case we aren't doing enough UNSPECIFIED refreshes to pay the debt back organically.
 // The first refresh takes place shortly after user finishes interacting with the device; this does the bulk of the restoration
@@ -144,12 +151,9 @@ int32_t InkHUD::DisplayHealth::runOnce()
 
         // Ask WindowManager to redraw everything, purely for the refresh
         // Todo: optimize? Could update without re-rendering
-        InkHUD::getInstance()->forceUpdate(Drivers::EInk::UpdateTypes::FULL);
+        InkHUD::getInstance()->forceUpdate(maintenanceUpdateType);
 
-        // Record that we have paid back (some of) the FULL refresh debt
-        debt = max(debt - 1.0, 0.0);
-
-        // Next maintenance refresh scheduled - long wait (an hour?)
+        // The renderer credits this request once; schedule any remaining maintenance an hour later.
         return MAINTENANCE_MS;
     }
 
@@ -159,8 +163,7 @@ int32_t InkHUD::DisplayHealth::runOnce()
 
 // Begin periodically refreshing the display, to repay FULL-refresh debt
 // We do this in case user doesn't have enough activity to repay it organically, with UpdateTypes::UNSPECIFIED
-// After an initial refresh, to redraw as FULL, we only perform these maintenance refreshes very infrequently
-// This gives the display a chance to heal by evaluating UNSPECIFIED as FULL, which is preferable
+// After the initial maintenance refresh, subsequent requests are much less frequent.
 void InkHUD::DisplayHealth::beginMaintenance()
 {
     OSThread::setIntervalFromNow(MAINTENANCE_MS_INITIAL);

@@ -52,6 +52,9 @@ void InkHUD::Renderer::setDriver(Drivers::EInk *driver)
 
     // Store the driver which was created in setupNicheGraphics()
     this->driver = driver;
+    displayHealth.maintenanceUpdateType = driver->supports(Drivers::EInk::UpdateTypes::CLEANUP)
+                                              ? Drivers::EInk::UpdateTypes::CLEANUP
+                                              : Drivers::EInk::UpdateTypes::FULL;
 
     // Determine the dimensions of the image buffer, in bytes.
     // Along rows, pixels are stored 8 per byte.
@@ -817,6 +820,8 @@ void InkHUD::Renderer::clearTile(Tile *t)
         xEnd = driver->width;
     if (yEnd > driver->height)
         yEnd = driver->height;
+    if (xStart >= xEnd || yStart >= yEnd)
+        return;
 #if INKHUD_BOOKREADER_GRAYSCALE && INKHUD_BOOKREADER_PERF_LOG
     LOG_INFO("[BookReaderDraw] clear tile xy=%u,%u-%u,%u gray=%u", xStart, yStart, xEnd, yEnd, grayBuffer != nullptr);
 #endif
@@ -855,21 +860,20 @@ void InkHUD::Renderer::clearTile(Tile *t)
     if (xStart == 0 && xEnd == driver->width) { // full width box is easier to clear
         memset(imageBuffer + (yStart * imageBufferWidth), 0xFF, (yEnd - yStart) * imageBufferWidth);
     } else {
-        const uint16_t byteStart = (xStart / 8) + 1;
-        const uint16_t byteEnd = xEnd / 8;
-        const uint8_t leadingByte = 0xFF >> (xStart - ((byteStart - 1) * 8));
-        const uint8_t trailingByte = (0xFF00 >> (xEnd - (byteEnd * 8))) & 0xFF;
-        for (uint16_t i = yStart * imageBufferWidth; i < yEnd * imageBufferWidth; i += imageBufferWidth) {
-            // Set the leading byte
-            imageBuffer[i + byteStart - 1] |= leadingByte;
-
-            // Set the continuous bytes
-            if (byteStart < byteEnd)
-                memset(imageBuffer + i + byteStart, 0xFF, byteEnd - byteStart);
-
-            // Set the trailing byte
-            if (byteEnd != imageBufferWidth)
+        const uint16_t byteStart = xStart / 8U;
+        const uint16_t byteEnd = (xEnd - 1U) / 8U;
+        const uint8_t leadingByte = 0xFFU >> (xStart & 7U);
+        const uint8_t trailingByte = 0xFFU << (7U - ((xEnd - 1U) & 7U));
+        for (size_t i = static_cast<size_t>(yStart) * imageBufferWidth; i < static_cast<size_t>(yEnd) * imageBufferWidth;
+             i += imageBufferWidth) {
+            if (byteStart == byteEnd)
+                imageBuffer[i + byteStart] |= leadingByte & trailingByte;
+            else {
+                imageBuffer[i + byteStart] |= leadingByte;
+                if (byteStart + 1U < byteEnd)
+                    memset(imageBuffer + i + byteStart + 1U, 0xFF, byteEnd - byteStart - 1U);
                 imageBuffer[i + byteEnd] |= trailingByte;
+            }
         }
     }
 }
