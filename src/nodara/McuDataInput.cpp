@@ -317,7 +317,8 @@ void McuDataInput::handleCommand03()
 
 void McuDataInput::handleCommand05()
 {
-    screen->showSimpleBanner("Power Off", 3000);
+    if (screen)
+        screen->showSimpleBanner("Power Off", 3000);
     if (isExternalPowerOff())
         return;
 
