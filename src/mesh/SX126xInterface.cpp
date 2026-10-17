@@ -23,10 +23,9 @@
 #define SX126X_MAX_POWER 22
 #endif
 
-template <typename T>
-SX126xInterface<T>::SX126xInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst,
-                                    RADIOLIB_PIN_TYPE busy)
-    : RadioLibInterface(hal, cs, irq, rst, busy, &lora), lora(&module)
+SX126xInterface::SX126xInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst,
+                                 RADIOLIB_PIN_TYPE busy, SX126x &chip)
+    : RadioLibInterface(hal, cs, irq, rst, busy, &chip), lora(chip)
 {
     LOG_DEBUG_RADIO("SX126xInterface(cs=%d, irq=%d, rst=%d, busy=%d)", cs, irq, rst, busy);
 }
@@ -34,7 +33,7 @@ SX126xInterface<T>::SX126xInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs
 /// Initialise the Driver transport hardware and software.
 /// Make sure the Driver is properly configured before calling init().
 /// \return true if initialisation succeeded.
-template <typename T> bool SX126xInterface<T>::init()
+bool SX126xInterface::init()
 {
 
 // Typically, the RF switch on SX126x boards is controlled by two signals, which are negations of each other (switched RFIO
@@ -112,7 +111,7 @@ template <typename T> bool SX126xInterface<T>::init()
 // begin() and the chip-side setup that a reset chip loses: begin() hardware-resets the chip, then
 // PA ramp, OCP limit, DIO2-as-RF-switch, RF switch pins, RX gain, the 0x8B5 RX patch, and CRC are
 // reprogrammed. Shared by init() and by reconfigure()'s recovery path.
-template <typename T> bool SX126xInterface<T>::reinitChip()
+bool SX126xInterface::reinitChip()
 {
     // Clamp here, not just in programModemParams(): applyModemConfig() resets `power` to the raw
     // config value, and the recovery path reaches begin() without passing through the params clamp
@@ -124,7 +123,7 @@ template <typename T> bool SX126xInterface<T>::reinitChip()
     // FIXME: May want to set depending on a definition, currently all SX126x variant files use the DC-DC regulator option
     bool useRegulatorLDO = false; // Seems to depend on the connection to pin 9/DCC_SW - if an inductor DCDC?
 
-    int res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage, useRegulatorLDO);
+    int res = beginChip(useRegulatorLDO);
 
     // Chip answered but would not start on the TCXO: retry on the XTAL. CHIP_NOT_FOUND is a
     // wiring or SPI fault, where a second attempt only hides it. Portduino only - an embedded
@@ -138,7 +137,7 @@ template <typename T> bool SX126xInterface<T>::reinitChip()
     if (TCXO_OPTIONAL_ENABLED && res != RADIOLIB_ERR_NONE && res != RADIOLIB_ERR_CHIP_NOT_FOUND && tcxoVoltage > 0) {
         LOG_WARN("SX126x init failed with TCXO Vref %f V (err %d), retrying without TCXO", tcxoVoltage, res);
         tcxoVoltage = 0;
-        res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage, useRegulatorLDO);
+        res = beginChip(useRegulatorLDO);
         if (res == RADIOLIB_ERR_NONE)
             LOG_INFO("SX126x init success without TCXO (XTAL mode)");
     }
@@ -242,7 +241,7 @@ template <typename T> bool SX126xInterface<T>::reinitChip()
 #ifdef SX126X_NO_POWER_OPTIMIZATION_TABLE
     // begin() applied the optimization table; re-apply the fixed PA config.
     if (res == RADIOLIB_ERR_NONE)
-        res = lora.setOutputPower(power, false);
+        res = setOutputPowerFixedPa(power);
 #endif
 
     if (res != RADIOLIB_ERR_NONE)
@@ -250,7 +249,7 @@ template <typename T> bool SX126xInterface<T>::reinitChip()
     return res == RADIOLIB_ERR_NONE;
 }
 
-template <typename T> int16_t SX126xInterface<T>::programModemParams()
+int16_t SX126xInterface::programModemParams()
 {
     // configure publicly accessible settings
     int16_t err = lora.setSpreadingFactor(sf);
@@ -301,7 +300,7 @@ template <typename T> int16_t SX126xInterface<T>::programModemParams()
         power = -9;
 
 #ifdef SX126X_NO_POWER_OPTIMIZATION_TABLE
-    err = lora.setOutputPower(power, false); // external PA: fixed PA config
+    err = setOutputPowerFixedPa(power); // external PA: fixed PA config
 #else
     err = lora.setOutputPower(power);
 #endif
@@ -320,7 +319,7 @@ template <typename T> int16_t SX126xInterface<T>::programModemParams()
     return RADIOLIB_ERR_NONE;
 }
 
-template <typename T> bool SX126xInterface<T>::reconfigure()
+bool SX126xInterface::reconfigure()
 {
     // A readout between these calls would clear the flags they set up, or move the chip out from under them
     RadioSequence seq(this);
@@ -366,13 +365,13 @@ template <typename T> bool SX126xInterface<T>::reconfigure()
     return true;
 }
 
-template <typename T> int16_t SX126xInterface<T>::getCurrentRSSI()
+int16_t SX126xInterface::getCurrentRSSI()
 {
     float rssi = lora.getRSSI(false);
     return (int16_t)round(rssi);
 }
 
-template <typename T> void SX126xInterface<T>::setRadioIsr(void (*callback)())
+void SX126xInterface::setRadioIsr(void (*callback)())
 {
 #ifdef LORA_DIO1_SOFTWARE_POLL
     irqPollingActive = true;
@@ -383,7 +382,7 @@ template <typename T> void SX126xInterface<T>::setRadioIsr(void (*callback)())
 #endif
 }
 
-template <typename T> void SX126xInterface<T>::clearRadioIsr()
+void SX126xInterface::clearRadioIsr()
 {
 #ifdef LORA_DIO1_SOFTWARE_POLL
     irqPollingActive = false;
@@ -393,7 +392,7 @@ template <typename T> void SX126xInterface<T>::clearRadioIsr()
 }
 
 #ifdef LORA_DIO1_SOFTWARE_POLL
-template <typename T> void SX126xInterface<T>::handleSoftwareLoraIrqPoll()
+void SX126xInterface::handleSoftwareLoraIrqPoll()
 {
     if (!irqPollingActive)
         return;
@@ -428,7 +427,7 @@ template <typename T> void SX126xInterface<T>::handleSoftwareLoraIrqPoll()
 }
 #endif
 
-template <typename T> int16_t SX126xInterface<T>::trySetStandby()
+int16_t SX126xInterface::trySetStandby()
 {
     // Handle any pending interrupts before we force standby, but not a TX whose backoff timer is pending: it would start
     // here, before its delay is up, and the standby below would cut it off with its payload still in the radio
@@ -457,7 +456,7 @@ template <typename T> int16_t SX126xInterface<T>::trySetStandby()
     return err;
 }
 
-template <typename T> void SX126xInterface<T>::setStandby()
+void SX126xInterface::setStandby()
 {
     int16_t err = trySetStandby();
 #ifdef ARCH_PORTDUINO
@@ -470,7 +469,7 @@ template <typename T> void SX126xInterface<T>::setStandby()
 /**
  * Add SNR data to received messages
  */
-template <typename T> void SX126xInterface<T>::addReceiveMetadata(meshtastic_MeshPacket *mp)
+void SX126xInterface::addReceiveMetadata(meshtastic_MeshPacket *mp)
 {
     // LOG_DEBUG("PacketStatus %x", lora.getPacketStatus());
     mp->rx_snr = lora.getSNR();
@@ -481,7 +480,7 @@ template <typename T> void SX126xInterface<T>::addReceiveMetadata(meshtastic_Mes
 
 /** We override to turn on transmitter power as needed.
  */
-template <typename T> void SX126xInterface<T>::configHardwareForSend()
+void SX126xInterface::configHardwareForSend()
 {
 #ifdef MESHTASTIC_RX_READOUT_TASK
     rearmState = REARM_NONE; // only this TX's TX_DONE may re-arm, never a stale one from a TX the poll completed
@@ -494,7 +493,7 @@ template <typename T> void SX126xInterface<T>::configHardwareForSend()
 // For power draw measurements, helpful to force radio to stay sleeping
 // #define SLEEP_ONLY
 
-template <typename T> void SX126xInterface<T>::startReceive()
+void SX126xInterface::startReceive()
 {
 #ifdef SLEEP_ONLY
     sleep();
@@ -538,7 +537,7 @@ template <typename T> void SX126xInterface<T>::startReceive()
 #endif
 }
 
-template <typename T> bool SX126xInterface<T>::resumeRunningReceive()
+bool SX126xInterface::resumeRunningReceive()
 {
     // Continuous RX survives RX_DONE and CRC or header errors: the chip is still listening. A restart is a standby
     // and ~10 bus transactions, deaf throughout on a CH341 host, so pick the RX back up instead.
@@ -569,7 +568,7 @@ template <typename T> bool SX126xInterface<T>::resumeRunningReceive()
 // RadioLib's duty cycle listens for 2 x minSymbols and sleeps through whatever preamble is left
 static constexpr uint16_t rxDutyCycleMinSymbols = 8;
 
-template <typename T> int16_t SX126xInterface<T>::startRxCommand()
+int16_t SX126xInterface::startRxCommand()
 {
     // Every preamble we ask for is no longer than the window the duty cycle stays awake for, so it would sleep through
     // nothing and startReceiveDutyCycleAuto() falls back to this same command anyway. Sending it outright is what lets
@@ -586,7 +585,7 @@ template <typename T> int16_t SX126xInterface<T>::startRxCommand()
 }
 
 #ifdef MESHTASTIC_RX_READOUT_TASK
-template <typename T> bool INTERRUPT_ATTR SX126xInterface<T>::rearmReceiveFromIsr()
+bool INTERRUPT_ATTR SX126xInterface::rearmReceiveFromIsr()
 {
     // The interrupt cannot call RadioLib, so the readout task, above the main loop, re-arms as soon as it returns.
     rearmState = REARM_PENDING;
@@ -596,7 +595,7 @@ template <typename T> bool INTERRUPT_ATTR SX126xInterface<T>::rearmReceiveFromIs
     return false;
 }
 
-template <typename T> void SX126xInterface<T>::rearmReceiveFromTask()
+void SX126xInterface::rearmReceiveFromTask()
 {
     // Outside any radio-thread sequence. If the thread got there first, it took the re-arm over and left nothing to do.
     RadioSequence seq(this);
@@ -617,7 +616,7 @@ template <typename T> void SX126xInterface<T>::rearmReceiveFromTask()
     enableInterrupt(isrRxLevel0);
 }
 
-template <typename T> bool SX126xInterface<T>::adoptReceiveArmedFromIsr()
+bool SX126xInterface::adoptReceiveArmedFromIsr()
 {
     // Called inside the post-TX sequence, so the task cannot be mid re-arm: it has either finished or not started, and
     // clearing the state here stops it starting.
@@ -637,7 +636,7 @@ template <typename T> bool SX126xInterface<T>::adoptReceiveArmedFromIsr()
 #endif
 
 /** Is the channel currently active? */
-template <typename T> bool SX126xInterface<T>::isChannelActive()
+bool SX126xInterface::isChannelActive()
 {
     // check if we can detect a LoRa preamble on the current channel.
     // NOTE: symNum is the *encoded* SET_CAD_PARAMS value, not a raw count - RADIOLIB_SX126X_CAD_ON_4_SYMB
@@ -702,7 +701,7 @@ template <typename T> bool SX126xInterface<T>::isChannelActive()
     return false; // report the channel free: a recovered chip can TX, a dead one fails startSend safely
 }
 
-template <typename T> int16_t SX126xInterface<T>::scanChannelForTx(const ChannelScanConfig_t &cfg)
+int16_t SX126xInterface::scanChannelForTx(const ChannelScanConfig_t &cfg)
 {
     if (!irqPolledOverUsb())
         return lora.scanChannel(cfg);
@@ -748,7 +747,7 @@ template <typename T> int16_t SX126xInterface<T>::scanChannelForTx(const Channel
 }
 
 #ifdef ARCH_PORTDUINO
-template <typename T> void SX126xInterface<T>::prestageTx()
+void SX126xInterface::prestageTx()
 {
     // The payload goes in now, while nothing is listening anyway, rather than after the verdict. The CAD leaves the
     // buffer alone; a detection's RX may overwrite it, but then there is no TX and the next scan writes it again.
@@ -764,7 +763,7 @@ template <typename T> void SX126xInterface<T>::prestageTx()
     }
 }
 
-template <typename T> int16_t SX126xInterface<T>::launchTransmit(size_t numbytes)
+int16_t SX126xInterface::launchTransmit(size_t numbytes)
 {
     const bool prestaged = prestagedLen != 0 && prestagedLen == numbytes && sendingPacket && sendingPacket->id == prestagedId;
     const bool inRx = prestagedInRx;
@@ -819,7 +818,7 @@ template <typename T> int16_t SX126xInterface<T>::launchTransmit(size_t numbytes
     return RADIOLIB_ERR_NONE;
 }
 
-template <typename T> uint8_t SX126xInterface<T>::txStageBase(size_t numbytes) const
+uint8_t SX126xInterface::txStageBase(size_t numbytes) const
 {
     // The bytes just behind the write point are the last RX reaches again. Kept clear of the wrap, which the chip's
     // TX would have to follow.
@@ -832,7 +831,7 @@ static bool bufferRangesOverlap(uint8_t a, size_t lenA, uint8_t b, size_t lenB)
     return lenA && lenB && ((uint8_t)(b - a) < lenA || (uint8_t)(a - b) < lenB);
 }
 
-template <typename T> void SX126xInterface<T>::noteStagedOverFrame(uint8_t base, size_t numbytes)
+void SX126xInterface::noteStagedOverFrame(uint8_t base, size_t numbytes)
 {
     rxClobberCheck = true;
     rxClobberBase = base;
@@ -840,7 +839,7 @@ template <typename T> void SX126xInterface<T>::noteStagedOverFrame(uint8_t base,
     memcpy(rxClobberBytes, &radioBuffer, numbytes); // still the payload just written
 }
 
-template <typename T> bool SX126xInterface<T>::stageTxInRx()
+bool SX126xInterface::stageTxInRx()
 {
     if (!scanForTx || !txStagedByRadioLib || !irqPolledOverUsb())
         return false;
@@ -873,7 +872,7 @@ template <typename T> bool SX126xInterface<T>::stageTxInRx()
     return false;
 }
 
-template <typename T> bool SX126xInterface<T>::rxFrameOverlapsTxStage(size_t length)
+bool SX126xInterface::rxFrameOverlapsTxStage(size_t length)
 {
     const bool clobberCheck = rxClobberCheck;
     rxClobberCheck = false; // the frame flagged at the stage is the next one read out
@@ -900,12 +899,12 @@ template <typename T> bool SX126xInterface<T>::rxFrameOverlapsTxStage(size_t len
     return ours;
 }
 
-template <typename T> bool SX126xInterface<T>::wantsEarlyTxStage() const
+bool SX126xInterface::wantsEarlyTxStage() const
 {
     return txStagedByRadioLib && irqPolledOverUsb();
 }
 
-template <typename T> void SX126xInterface<T>::stageTxEarly(meshtastic_MeshPacket *p)
+void SX126xInterface::stageTxEarly(meshtastic_MeshPacket *p)
 {
     // Only while RX runs: a TX in flight is using the buffer, and SPI would wake a sleeping chip
     if (!p || sendingPacket || !isReceiving || !wantsEarlyTxStage())
@@ -937,7 +936,7 @@ template <typename T> void SX126xInterface<T>::stageTxEarly(meshtastic_MeshPacke
     memcpy(earlyStagedBytes, &radioBuffer, numbytes);
 }
 
-template <typename T> bool SX126xInterface<T>::takeEarlyTxStage()
+bool SX126xInterface::takeEarlyTxStage()
 {
     bool held = false;
     if (earlyStagedLen && scanForTx) {
@@ -959,14 +958,14 @@ template <typename T> bool SX126xInterface<T>::takeEarlyTxStage()
 #endif
 
 /** Could we send right now (i.e. either not actively receiving or transmitting)? */
-template <typename T> bool SX126xInterface<T>::isActivelyReceiving()
+bool SX126xInterface::isActivelyReceiving()
 {
     // The IRQ status will be cleared when we start our read operation. Check if we've started a header, but haven't yet
     // received and handled the interrupt for reading the packet/handling errors.
     return receiveDetected(lora.getIrqFlags(), RADIOLIB_SX126X_IRQ_HEADER_VALID, RADIOLIB_SX126X_IRQ_PREAMBLE_DETECTED);
 }
 
-template <typename T> bool SX126xInterface<T>::sleep()
+bool SX126xInterface::sleep()
 {
     // Not keeping config is busted - next time nrf52 board boots lora sending fails  tcxo related? - see datasheet
     // \todo Display actual typename of the adapter, not just `SX126x`
@@ -1002,7 +1001,7 @@ template <typename T> bool SX126xInterface<T>::sleep()
     return true;
 }
 
-template <typename T> bool SX126xInterface<T>::resetAGC()
+bool SX126xInterface::resetAGC()
 {
     // Safety: don't reset mid-packet
     if (sendingPacket != NULL || (isReceiving && isActivelyReceiving()))
@@ -1078,7 +1077,7 @@ template <typename T> bool SX126xInterface<T>::resetAGC()
 }
 
 /** Control PA mode for GC1109 FEM - CPS pin selects full PA (txon=true) or bypass mode (txon=false) */
-template <typename T> void SX126xInterface<T>::setTransmitEnable(bool txon)
+void SX126xInterface::setTransmitEnable(bool txon)
 {
 #if HAS_LORA_FEM
     if (txon) {

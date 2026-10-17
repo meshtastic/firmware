@@ -5,7 +5,7 @@
 
 LLCC68Interface::LLCC68Interface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst,
                                  RADIOLIB_PIN_TYPE busy)
-    : SX126xInterface(hal, cs, irq, rst, busy)
+    : SX126xInterface(hal, cs, irq, rst, busy, chip), chip(&module)
 {
 }
 #endif
