@@ -1,6 +1,6 @@
 #include "QMI8658Sensor.h"
 
-#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && __has_include(<SensorQMI8658.hpp>)
+#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && __has_include(<ImuDrv.hpp>)
 
 #include "NodeDB.h"
 #include "detect/ScanI2CTwoWire.h"
@@ -8,8 +8,8 @@
 
 // Accelerometer configuration. 2G full-scale gives the best gravity resolution for the tilt
 // compensation that the (future) separate compass module will apply to these samples.
-static constexpr SensorQMI8658::AccelRange QMI8658_ACCEL_RANGE = SensorQMI8658::ACC_RANGE_2G;
-static constexpr SensorQMI8658::AccelODR QMI8658_ACCEL_ODR = SensorQMI8658::ACC_ODR_125Hz;
+static constexpr AccelFullScaleRange QMI8658_ACCEL_RANGE = AccelFullScaleRange::FS_2G;
+static constexpr float QMI8658_ACCEL_ODR_HZ = 112.0f; // same CTRL2 ODR code as the 0.4.x driver's 125Hz
 
 // Any-motion slope threshold (in mg) used to wake the screen. Tunable: raise to reduce false wakes,
 // lower to make it more sensitive. 200mg (~0.2g) requires a deliberate movement.
@@ -37,21 +37,19 @@ bool QMI8658Sensor::init()
         return false;
     }
 
-    sensor.configAccelerometer(QMI8658_ACCEL_RANGE, QMI8658_ACCEL_ODR, SensorQMI8658::LPF_MODE_0);
-    sensor.enableAccelerometer();
+    sensor.configAccel(QMI8658_ACCEL_RANGE, QMI8658_ACCEL_ODR_HZ);
+    sensor.enableAccel();
 
     // Configure the on-chip any-motion engine so we can wake the screen without a dedicated interrupt pin.
-    // configMotion() runs alongside normal accel data output (unlike Wake-on-Motion, which halts data), so
+    // Any-motion runs alongside normal accel data output (unlike Wake-on-Motion, which halts data), so
     // we keep publishing samples for compass fusion while still detecting motion.
     wakeOnMotion = config.display.wake_on_tap_or_motion;
     if (wakeOnMotion) {
-        const uint8_t modeCtrl = SensorQMI8658::ANY_MOTION_EN_X | SensorQMI8658::ANY_MOTION_EN_Y | SensorQMI8658::ANY_MOTION_EN_Z;
-        // No-motion detection is left disabled (unreliable per the SensorLib example); its thresholds/windows
-        // are still required arguments but are ignored when the mode bits above are clear.
-        sensor.configMotion(modeCtrl, QMI8658_ANY_MOTION_THRESHOLD_MG, QMI8658_ANY_MOTION_THRESHOLD_MG,
-                            QMI8658_ANY_MOTION_THRESHOLD_MG, QMI8658_ANY_MOTION_WINDOW, /*NoMotion X/Y/Z*/ 0.1f, 0.1f, 0.1f,
-                            /*NoMotionWindow*/ 1, /*SigMotionWaitWindow*/ 1, /*SigMotionConfirmWindow*/ 1);
+        sensor.configMotionDetect(SensorQMI8658::MotionType::ANY_MOTION, QMI8658_ANY_MOTION_THRESHOLD_MG,
+                                  QMI8658_ANY_MOTION_THRESHOLD_MG, QMI8658_ANY_MOTION_THRESHOLD_MG, QMI8658_ANY_MOTION_WINDOW);
         sensor.enableMotionDetect();
+        // Fired from sensor.update() in runOnce().
+        sensor.setAnyMotionCallback([this] { wakeScreen(); });
     }
 
     LOG_DEBUG("QMI8658 init ok");
@@ -60,8 +58,11 @@ bool QMI8658Sensor::init()
 
 int32_t QMI8658Sensor::runOnce()
 {
-    float ax, ay, az;
-    if (sensor.getAccelerometer(ax, ay, az)) {
+    int16_t rawX, rawY, rawZ;
+    if (sensor.readAccelRaw(rawX, rawY, rawZ)) {
+        // readAccel() reports m/s^2; the compass fusion path wants g.
+        const float scale = sensor.getAccelScale();
+        float ax = rawX * scale, ay = rawY * scale, az = rawZ * scale;
         if (QMI8658_ACCEL_TO_COMPASS_ROTATION_DEG_VALUE != 0.0f) {
             static const float rotRad = QMI8658_ACCEL_TO_COMPASS_ROTATION_DEG_VALUE * DEG_TO_RAD;
             static const float cosTheta = cosf(rotRad);
@@ -78,9 +79,8 @@ int32_t QMI8658Sensor::runOnce()
         publishCompassAccelSample(ax, ay, az);
     }
 
-    if (wakeOnMotion && (sensor.getStatusRegister() & SensorQMI8658::EVENT_ANY_MOTION)) {
-        wakeScreen();
-    }
+    if (wakeOnMotion)
+        sensor.update();
 
     return MOTION_SENSOR_CHECK_INTERVAL_MS;
 }

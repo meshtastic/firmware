@@ -1,6 +1,6 @@
 // Pin-level early init only. All touch, backlight, and InkHUD code lives in
 // src/platform/extra_variants/t5s3_epaper/variant.cpp where PlatformIO's
-// library dependency finder can resolve headers like TouchDrvGT911.hpp.
+// library dependency finder can resolve headers like TouchDrvGoodix.hpp.
 #include "variant.h"
 #include "Arduino.h"
 #include "pins_arduino.h"
