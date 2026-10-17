@@ -52,3 +52,6 @@
 
 #define SX126X_DIO2_AS_RF_SWITCH
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
+
+// 32768Hz Clock Crystal Osc
+#define HAS_32768HZ 1
