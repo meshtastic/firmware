@@ -1,13 +1,15 @@
 name: CI
 concurrency:
-  group: ci-${{ github.head_ref || github.run_id }}
+  # PRs and pushes cancel the superseded run on the same branch. merge_group,
+  # schedule and workflow_dispatch (releases) runs each get their own group.
+  group: ci-${{ github.head_ref || (github.event_name == 'push' && github.ref) || github.run_id }}
   cancel-in-progress: true
 on:
-  # The merge queue is the pre-merge gate for the protected branches (master,
-  # develop): a merge_group run validates the merged result before code lands. For
-  # now PRs and merge_group runs build the same narrowed board subset (--level pr);
-  # see the setup job. push still runs the full matrix on master/develop (post-merge)
-  # as well as on the event/* and feature/* branches, which have no merge queue.
+  # The merge queue batches PRs into the protected branches (master, develop). It
+  # builds no firmware: PRs build the narrowed board subset (--level pr, see the setup
+  # job) and push runs the full matrix on master/develop after merge, as well as on
+  # the event/* and feature/* branches, which have no merge queue. Static checks (pio
+  # check) run on PRs only.
   merge_group:
     types: [checks_requested]
     branches:
@@ -52,6 +54,9 @@ permissions: read-all
 
 jobs:
   setup:
+    # The merge queue only batches PRs: skipping setup skips the firmware build and
+    # check matrices that depend on it. ci-gate accepts that skip on merge_group.
+    if: github.event_name != 'merge_group'
     runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
@@ -67,7 +72,6 @@ jobs:
         id: jsonStep
         env:
           BASE_REF: ${{ github.base_ref }}
-          MERGE_GROUP_BASE_SHA: ${{ github.event.merge_group.base_sha }}
         run: |
           # A new board is 'release' and gets no CI until after merge, so force-build the
           # first env of each ADDED variant config. A new env in an existing one does not count.
@@ -78,8 +82,6 @@ jobs:
             # parentless, and merge-base then finds no common commit whenever the base
             # branch has moved past this merge commit, which is every re-run of an older run.
             DIFF_BASE=$(git merge-base "origin/$BASE_REF" HEAD)
-          elif [[ "$GITHUB_EVENT_NAME" == "merge_group" ]]; then
-            DIFF_BASE="$MERGE_GROUP_BASE_SHA"
           fi
           ADDED_ARGS=()
           if [[ -n "$DIFF_BASE" ]]; then
@@ -91,9 +93,9 @@ jobs:
               [[ -n "$cfg" ]] && ADDED_ARGS+=(--added-config "$cfg")
             done <<<"$ADDED_CONFIGS"
           fi
-          # PRs and (for now) merge_group builds use the narrowed --level pr board
-          # subset. Full-matrix builds run on push / schedule / workflow_dispatch.
-          if [[ "$GITHUB_EVENT_NAME" == "pull_request" || "$GITHUB_EVENT_NAME" == "merge_group" ]]; then
+          # PRs use the narrowed --level pr board subset. Full-matrix builds run on
+          # push / schedule / workflow_dispatch.
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
             TARGETS=$(./bin/generate_ci_matrix.py all --level pr "${ADDED_ARGS[@]}")
           else
             TARGETS=$(./bin/generate_ci_matrix.py all)
@@ -128,8 +130,8 @@ jobs:
     # Runs on GitHub-hosted runners so checks don't compete with builds for the
     # self-hosted 'arctastic' pool (which builds use).
     runs-on: ubuntu-26.04
-    # Only run checks for PRs and Merge Queue runs.
-    if: contains(fromJSON('["pull_request", "merge_group"]'), github.event_name)
+    # PRs only: the merge queue builds and checks no firmware.
+    if: github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@v7
         with:
@@ -243,10 +245,14 @@ jobs:
       - name: Verify build and check results
         run: |
           echo "build=${{ needs.build.result }} check=${{ needs.check.result }}"
-          if [[ "${{ needs.build.result }}" != "success" ]]; then
-            echo "::error::One or more firmware builds failed, were cancelled, or did not run."
-            exit 1
-          fi
+          # The merge queue skips setup, and with it every build; a PR must build.
+          case "$GITHUB_EVENT_NAME:${{ needs.build.result }}" in
+            *:success | merge_group:skipped) ;;
+            *)
+              echo "::error::One or more firmware builds failed, were cancelled, or did not run."
+              exit 1
+              ;;
+          esac
           case "${{ needs.check.result }}" in
             success | skipped) ;;
             *)
