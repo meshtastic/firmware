@@ -109,6 +109,12 @@ template <class T> class LR20x0Interface : public RadioLibInterface
     /** The chip's TX FIFO fill level in bytes; false on SPI failure */
     bool readTxFifoLevel(uint16_t &level);
 
+    /** lora.begin() with the PRAM load armed for right after its chip reset */
+    int16_t beginChip(float freq, float tcxoVoltage);
+
+    /** Set by sleep(): the chip slept without retention and lost its PRAM, so the next reconfigure() runs begin() */
+    bool patchLostInSleep = false;
+
     /** Chip-side re-init shared by the band-hop and recovery paths: front-end GPIOs, begin(), CRC, RF switch, RX gain */
     bool fullBegin(float freq);
 
