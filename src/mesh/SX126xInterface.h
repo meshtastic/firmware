@@ -36,6 +36,7 @@ template <class T> class SX126xInterface : public RadioLibInterface
     bool resetAGC() override;
 
     void setTCXOVoltage(float voltage) { tcxoVoltage = voltage; }
+    float getTCXOVoltage() const { return tcxoVoltage; }
 
   protected:
     float currentLimit = 140; // Higher OCP limit for SX126x PA
