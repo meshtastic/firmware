@@ -80,6 +80,16 @@ class DMShellTestModule : public SinglePortModule, private concurrency::OSThread
     uint32_t pendingInputLen = 0;
     bool commandTyped = false;
     bool commandRepeated = false;
+    uint32_t commandsTyped = 0;
+    // DMSHELL_TEST_UNTIL_DONE: what the shell prints once the command's output is complete, and once it has caught up
+    DMShellOutputMarker doneMarker{"<dmshell:done>"};
+    DMShellOutputMarker idleMarker{"<dmshell:idle>"};
+    uint32_t doneMarksSeen = 0;
+    uint32_t completeAtMs = 0;
+    uint32_t caughtUpAtMs = 0;
+    bool idleTyped = false;
+    bool typingEnded = false;
+    uint32_t typingEndedAtMs = 0;
     uint32_t keystrokesTyped = 0;
     uint32_t nextKeystrokeMs = 0;
     // The batch the client's stdin read would return, before it becomes one INPUT
@@ -96,6 +106,8 @@ class DMShellTestModule : public SinglePortModule, private concurrency::OSThread
     void serviceActive(uint32_t now);
     void typeWorkload(uint32_t now);
     void typeCommand(uint32_t now);
+    void typeText(const char *text, uint32_t now);
+    void noteOutput(const uint8_t *bytes, size_t len, uint32_t now);
     void addByte(uint8_t b, uint32_t now);
     bool batchDue(uint32_t now) const;
     void closeBatch();
