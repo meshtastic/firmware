@@ -436,6 +436,10 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      *  instead of reading the chip. Only ever set and cleared on the radio thread, inside handleReceiveInterrupt(). */
     const CapturedRxInfo *rxCapturedHeader = nullptr;
 
+    /** Set while the radio keeps reporting an RX coding rate that is not the configured one, so the
+     *  warning is logged once per run of mismatches rather than once per frame. */
+    bool rxCRMismatch = false;
+
     static void timerCallback(void *p1, uint32_t p2);
 
     virtual void onNotify(uint32_t notification) override;
@@ -557,20 +561,37 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
                 haveHeaderInfo = lora.getLoRaRxHeaderInfo(&rxCR, &hasCRC) == RADIOLIB_ERR_NONE;
             }
             if (haveHeaderInfo) {
-                // Raw 0 is reserved and >7 is either undefined or an LR2021-only convolutional rate no
-                // Meshtastic peer can send. calculateTimeOnAir() would multiply by it unchecked.
-                if (rxCR < 1 || rxCR > 7) {
-                    LOG_WARN("Bogus RX coding rate %d from radio, use configured %d", rxCR, dr.lora.codingRate);
-                } else {
-                    // Go from raw header value to denominator
-                    if (rxCR < 5) {
-                        rxCR += 4;
-                    } else if (rxCR == 7) {
-                        rxCR = 8;
-                    }
-
-                    dr.lora.codingRate = rxCR;
+                /* Every node on a channel shares a modem preset, so a peer's coding rate is our coding
+                 * rate: in explicit header mode the chip reports what the sender's header said, and on a
+                 * Meshtastic channel that must equal what we configured. So accept the readback only when
+                 * it does, and fall back to the configured rate otherwise.
+                 *
+                 * The previous test accepted anything in 1..7, which is far too loose. Raw 1-4 are the
+                 * plain rates 4/5 to 4/8 and 5-7 are long-interleaver variants no Meshtastic peer sends,
+                 * so most of that range could never be a real peer - and an accepted value is written
+                 * into dr.lora.codingRate and multiplied by calculateTimeOnAir(). A readback of 3 on a
+                 * 4/5 channel is taken as 4/7 and inflates the computed airtime of every frame by about
+                 * 37%; a readback of 7 is taken as 4/8 and inflates it by about 56% (SF7, BW500, 200
+                 * byte payload). That feeds slot timing and backoff, so a bad readback is not cosmetic.
+                 *
+                 * This has been observed on an LR2021: the reported rate departs from the configured one
+                 * mid-session and stays there for the rest of the run, surviving ResetRxStats, an RX
+                 * restart, a full modem reconfigure and a sleep with retention, and clearing only on a
+                 * hardware reset. Values 3, 6, 7, 9, 11, 13 and 15 have all been seen, on firmware 2.8.1
+                 * as well as on develop, and with the LR2021 patch RAM loaded and verified. Values above
+                 * 7 were already rejected here, which is why only part of it was ever visible in a log. */
+                const uint8_t cfgCR = dr.lora.codingRate;
+                // Raw header value to denominator: 1-4 are 4/5..4/8.
+                const uint8_t rxDenom = (rxCR >= 1 && rxCR <= 4) ? (uint8_t)(rxCR + 4) : 0;
+                if (rxDenom != 0 && rxDenom == cfgCR) {
+                    dr.lora.codingRate = rxDenom;
                     pc.lora.crcEnabled = hasCRC;
+                    rxCRMismatch = false;
+                } else if (!rxCRMismatch) {
+                    // Once per run of mismatches, not once per frame: a chip that latches a bad value
+                    // would otherwise log on every reception for the rest of the session.
+                    rxCRMismatch = true;
+                    LOG_WARN("RX coding rate %d from radio is not the configured 4/%d, using configured", rxCR, cfgCR);
                 }
             }
         } else {
