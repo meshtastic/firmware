@@ -18,6 +18,10 @@ int16_t LR2021Patched::standby()
 
 int16_t LR2021Patched::loadPatch()
 {
+    // The ROM version picks the image (DS 22.3.1: LR2021 is 0x01 0x18); RadioLib's getVersion() is private
+    uint8_t fw[2] = {0};
+    (void)SPIcommand(RADIOLIB_LR2021_CMD_GET_VERSION, false, fw, sizeof(fw));
+
     // RadioLib's writeRegMem32() is private, and its shared write path sends one stray byte after an LR2021's 24-bit
     // address frame. Send the exact frame instead, in Semtech's 32-word blocks.
     constexpr size_t blockWords = 32;
@@ -57,12 +61,13 @@ int16_t LR2021Patched::loadPatch()
     }
 
     if (res != RADIOLIB_ERR_NONE) {
-        LOG_ERROR("LR2021 PRAM load failed, err %d; running the ROM firmware", res);
+        LOG_ERROR("LR2021 FW 0x%02x%02x PRAM load failed, err %d; running the ROM firmware", fw[0], fw[1], res);
     } else if (magic != RADIOLIB_LR2021_PRAM_LOADED_MAGIC) {
-        LOG_ERROR("LR2021 PRAM not running after load, magic 0x%08x; running the ROM firmware", (unsigned)magic);
+        LOG_ERROR("LR2021 FW 0x%02x%02x PRAM not running after load, magic 0x%08x; running the ROM firmware", fw[0], fw[1],
+                  (unsigned)magic);
         res = RADIOLIB_ERR_UNKNOWN;
     } else {
-        LOG_INFO("LR2021 PRAM loaded, version 0x%04x", (unsigned)((versionWord >> 8) & 0xFFFF));
+        LOG_INFO("LR2021 FW 0x%02x%02x, PRAM version 0x%04x loaded", fw[0], fw[1], (unsigned)((versionWord >> 8) & 0xFFFF));
     }
     return res;
 }
