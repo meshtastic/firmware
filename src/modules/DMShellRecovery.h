@@ -6,6 +6,7 @@
 
 #include "mesh/Throttle.h"
 #include <stdint.h>
+#include <string.h>
 
 /// What the receive side wants done with one inbound sequenced frame.
 struct DMShellRxDecision {
@@ -453,3 +454,32 @@ inline bool retransmitDue(uint32_t nowMs, uint32_t lastSentMs, uint32_t interval
 {
     return (uint32_t)(nowMs - lastSentMs) >= intervalMs;
 }
+
+/// Finds a fixed marker in a byte stream fed one byte at a time, so a match may span frames.
+class DMShellOutputMarker
+{
+  public:
+    explicit DMShellOutputMarker(const char *marker) : text(marker) {}
+
+    void reset() { matched = 0; }
+
+    /// True on the byte that completes the marker; matching then starts afresh, so matches never overlap.
+    bool feed(uint8_t b)
+    {
+        // The longest prefix of the marker that ends at b: the bytes before b are the prefix matched so far
+        uint32_t k = matched + 1;
+        while (k > 0 && ((uint8_t)text[k - 1] != b || memcmp(text, text + matched + 1 - k, k - 1) != 0)) {
+            k--;
+        }
+        matched = k;
+        if (text[matched] == '\0') {
+            matched = 0;
+            return true;
+        }
+        return false;
+    }
+
+  private:
+    const char *text;
+    uint32_t matched = 0;
+};
