@@ -38,8 +38,10 @@ void GPSUpdateScheduling::informSearching()
 
 void GPSUpdateScheduling::informValidFix()
 {
-    if (searching)
+    if (searching && !validFixReceived) {
         validFixReceived = true;
+        firstFixMs = Time::getMillis();
+    }
 }
 
 // Mark the time when searching for GPS is complete,
@@ -48,7 +50,8 @@ void GPSUpdateScheduling::informGotLock()
 {
     searching = false;
     searchEndedMs = Time::getMillis();
-    LOG_DEBUG("Took %us to get lock", (searchEndedMs - searchStartedMs) / 1000);
+    LOG_DEBUG("Took %us to get lock, %us active", (firstFixMs - searchStartedMs) / 1000,
+              (searchEndedMs - searchStartedMs) / 1000);
     updateLockTimePrediction();
     consecutiveFailures = 0; // Drop back to fast cadence as soon as we acquire any fix
 }
@@ -73,9 +76,11 @@ void GPSUpdateScheduling::reset()
     searching = false;
     validFixReceived = false;
     searchStartedMs = 0;
+    firstFixMs = 0;
     searchEndedMs = 0;
     searchCount = 0;
     predictedMsToGetLock = 0;
+    predictedMsActive = 0;
     consecutiveFailures = 0;
 }
 
@@ -102,9 +107,10 @@ uint32_t GPSUpdateScheduling::msUntilNextSearch()
             updateInterval = failureSleepMs;
     }
 
-    // Check how long until we should start searching, to hopefully hit our target interval
+    // Check how long until we should start searching, to hopefully hit our target interval.
+    // The hold is included here: the fix is published when it ends, not at first lock.
     uint32_t dueAtMs = searchEndedMs + updateInterval;
-    uint32_t compensatedStart = dueAtMs - predictedMsToGetLock;
+    uint32_t compensatedStart = dueAtMs - predictedMsActive;
     int32_t remainingMs = compensatedStart - now;
 
     // If we should have already started (negative value), start ASAP
@@ -169,25 +175,31 @@ bool GPSUpdateScheduling::hasValidFixSinceSearchStarted() const
 void GPSUpdateScheduling::updateLockTimePrediction()
 {
 
-    // How long did it take to get GPS lock this time?
-    // Duration between down() calls
-    int32_t lockTime = searchEndedMs - searchStartedMs;
+    // How long did it take to get GPS lock this time, and how long was the receiver on?
+    int32_t lockTime = firstFixMs - searchStartedMs;
     if (lockTime < 0)
         lockTime = 0;
+    int32_t activeTime = searchEndedMs - searchStartedMs;
+    if (activeTime < lockTime)
+        activeTime = lockTime;
 
     // Ignore the first lock-time: likely to be long, will skew data
 
     // Second locktime: likely stable. Use to initialize the smoothing filter
-    if (searchCount == 1)
+    if (searchCount == 1) {
         predictedMsToGetLock = lockTime;
+        predictedMsActive = activeTime;
+    }
 
     // Third locktime and after: predict using exponential smoothing. Respond slowly to changes
-    else if (searchCount > 1)
+    else if (searchCount > 1) {
         predictedMsToGetLock = (lockTime * weighting) + (predictedMsToGetLock * (1 - weighting));
+        predictedMsActive = (activeTime * weighting) + (predictedMsActive * (1 - weighting));
+    }
 
     searchCount++; // Only tracked so we can disregard initial lock-times
 
-    LOG_DEBUG("Predict %us to get next lock", predictedMsToGetLock / 1000);
+    LOG_DEBUG("Predict %us to get next lock, %us active", predictedMsToGetLock / 1000, predictedMsActive / 1000);
 }
 
 // How long do we expect to spend searching for a lock?
