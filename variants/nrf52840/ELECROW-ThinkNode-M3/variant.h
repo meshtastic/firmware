@@ -36,7 +36,6 @@ extern "C" {
 #define NUM_ANALOG_OUTPUTS (0)
 
 // Power Pin
-#define NRF_APM
 #define PIN_GPS_EN 14
 #define GPS_EN_ACTIVE HIGH
 #define PIN_POWER_USB 31
