@@ -26,6 +26,9 @@ class LR2021Patched : public LR2021
 
   private:
     bool patchPending = false;
+
+    /// Read the PRAM magic word and the type/version word after it
+    int16_t readPatchState(uint32_t &magic, uint32_t &typeVersion);
 };
 
 #endif
