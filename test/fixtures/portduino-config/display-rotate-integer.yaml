@@ -1,0 +1,10 @@
+# FAULT: Display.Rotate is true/false (swap Width and Height); the turn is OffsetRotate. A
+# number here is silently read as false.
+Lora:
+  Module: sim
+Display:
+  Panel: ST7789
+  Width: 320
+  Height: 240
+  DC: 25
+  Rotate: 1

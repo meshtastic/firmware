@@ -1,0 +1,5 @@
+# FAULT: a keyboard path that does not exist. LinuxInput disables itself without a message.
+Lora:
+  Module: sim
+Input:
+  KeyboardDevice: /dev/input/by-id/usb-no-such-keyboard-event-kbd
