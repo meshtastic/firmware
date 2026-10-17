@@ -147,6 +147,10 @@ extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const c
 #ifdef HAS_RAKHUB
 #include "Sensor/RAKSensorHub.h" // env:rak_wismesh_sensorhub only
 #endif
+#ifdef HELTEC_V3
+#include "Sensor/HX711Sensor.h"
+#include "Sensor/DS18B20Sensor.h"
+#endif
 
 #define FAILED_STATE_SENSOR_READ_MULTIPLIER 10
 #define DISPLAY_RECEIVEID_MEASUREMENTS_ON_SCREEN true
@@ -337,6 +341,7 @@ void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
 #if __has_include("RAK12035_SoilMoisture.h") && defined(RAK_4631) && RAK_4631 == 1
     addSensor<RAK12035Sensor>(i2cScanner, ScanI2C::DeviceType::RAK12035);
 #endif
+
 #if __has_include(<Adafruit_VEML7700.h>)
     addSensor<VEML7700Sensor>(i2cScanner, ScanI2C::DeviceType::VEML7700);
 #endif
@@ -375,6 +380,11 @@ void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
 #if __has_include(<Adafruit_DS248x.h>)
     addSensor<DS248XSensor>(i2cScanner, ScanI2C::DeviceType::DS248X);
 #endif
+
+#ifdef HELTEC_V3
+    addSensor<HX711Sensor>(i2cScanner, ScanI2C::DeviceType::NONE);
+    addSensor<DS18B20Sensor>(i2cScanner, ScanI2C::DeviceType::NONE);
+#endif    
 
 #endif
 }
