@@ -48,7 +48,7 @@ int16_t LR2021Patched::loadPatch()
         res = SPIcommand(RADIOLIB_LR2021_CMD_ACTIVATE_PRAM, true, activate, sizeof(activate));
     }
 
-    // DS 22.3.2: the magic word at 0x800FF8 says the patch is running, the word after it carries the version
+    // DS 22.3.2: the magic word at 0x800FF8 says the patch is running, the word after it carries type and version
     uint32_t magic = 0;
     uint32_t versionWord = 0;
     if (res == RADIOLIB_ERR_NONE) {
@@ -67,7 +67,9 @@ int16_t LR2021Patched::loadPatch()
                   (unsigned)magic);
         res = RADIOLIB_ERR_UNKNOWN;
     } else {
-        LOG_INFO("LR2021 FW 0x%02x%02x, PRAM version 0x%04x loaded", fw[0], fw[1], (unsigned)((versionWord >> 8) & 0xFFFF));
+        // Semtech's driver reads two fields here (lr20xx_patch_get_version): type in bits 23:16, version in 15:8
+        LOG_INFO("LR2021 FW 0x%02x%02x, PRAM type 0x%02x version 0x%02x loaded", fw[0], fw[1],
+                 (unsigned)((versionWord >> 16) & 0xFF), (unsigned)((versionWord >> 8) & 0xFF));
     }
     return res;
 }
