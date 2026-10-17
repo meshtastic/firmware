@@ -97,6 +97,7 @@ class ScanI2C
         CST226SE,
         CST3530,
         BMI270,
+        BMI160,
         SEN5X,
         SEN6X,
         SFA30,
