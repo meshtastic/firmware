@@ -645,7 +645,9 @@ template <typename T> void LR20x0Interface<T>::discardUnreadRxFrame()
 template <typename T> bool LR20x0Interface<T>::readTxFifoLevel(uint16_t &level)
 {
     // RadioLib's getTxFifoLevel() is private, so read it as RadioLib does: the command, then the reply in a second transfer
-    // with no command in front. The width swap is safe for the reason readChipMode() gives.
+    // with no command in front. spiConfig belongs to the Module, so the width swap below would be visible to anything else
+    // talking to this radio: every caller of this is inside a RadioSequence, which is also what the readout task takes
+    // before it touches the chip, so nothing else can be mid-transfer here.
     uint8_t buff[2] = {0};
     if (module.SPIwriteStream((uint16_t)RADIOLIB_LR2021_CMD_GET_TX_FIFO_LEVEL, NULL, 0, true, false) != RADIOLIB_ERR_NONE)
         return false;
@@ -703,27 +705,16 @@ template <typename T> void LR20x0Interface<T>::startReceive()
 #endif
 }
 
-template <typename T> uint8_t LR20x0Interface<T>::readChipMode()
+template <typename T> RadioModeType_t LR20x0Interface<T>::readChipMode()
 {
-    // Any NOP transfer returns stat1 and stat2 first, but SPItransferStream() drops the configured 16-bit status from the
-    // front, so read them as data with the width cleared for the transfer, as RadioLib's own status reads do. stat2 bits
-    // 2..0 are the mode. FS is the chip on its way to TX or RX, so look again for up to 1 ms.
-    //
-    // spiConfig belongs to the Module, so the swap below would be visible to anything else talking to this radio: every
-    // caller of this is inside a RadioSequence, which is also what the readout task takes before it touches the chip, so
-    // nothing else can be mid-transfer here. RadioLib's own LRxxxx::getStatus() would make the swap unnecessary, but it
-    // is protected, and reads the reply at the wrong offset until jgromes/RadioLib fixes it.
-    uint8_t buff[2] = {0};
-    uint8_t mode = 0xFF;
+    // getMode() reports what the chip says it is doing, as against stagedMode's record of what was last asked of it.
+    // Frequency synthesis is the chip on its way to TX or RX and has no RadioModeType_t of its own, so the NONE it
+    // reports is looked at again for up to 1 ms before it counts as a mode the chip has left.
+    RadioModeType_t mode = RADIOLIB_RADIO_MODE_NONE;
     for (int tries = 0; tries < 10; tries++) {
-        const Module::BitWidth_t width = module.spiConfig.widths[RADIOLIB_MODULE_SPI_WIDTH_STATUS];
-        module.spiConfig.widths[RADIOLIB_MODULE_SPI_WIDTH_STATUS] = Module::BITS_0;
-        const int16_t res = module.SPItransferStream(NULL, 0, false, NULL, buff, sizeof(buff), true);
-        module.spiConfig.widths[RADIOLIB_MODULE_SPI_WIDTH_STATUS] = width;
-        if (res != RADIOLIB_ERR_NONE)
-            return 0xFF;
-        mode = buff[1] & 0x07;
-        if (mode != LR20X0_CHIP_MODE_FS)
+        if (lora.getMode(&mode) != RADIOLIB_ERR_NONE)
+            return RADIOLIB_RADIO_MODE_NONE;
+        if (mode != RADIOLIB_RADIO_MODE_NONE)
             break;
         delayMicroseconds(100);
     }
@@ -736,9 +727,9 @@ template <typename T> bool LR20x0Interface<T>::resumeRunningReceive()
     // and restart. Checked on the chip, as the LR2021 datasheet does not say it for every error.
     if (!rxArmedContinuous)
         return false;
-    const uint8_t mode = readChipMode();
-    if (mode != LR20X0_CHIP_MODE_RX) {
-        LOG_WARN("LR20x0 RX not running after a frame (chip mode %u), restarting it", (unsigned)mode);
+    const RadioModeType_t mode = readChipMode();
+    if (mode != RADIOLIB_RADIO_MODE_RX) {
+        LOG_WARN("LR20x0 RX not running after a frame (chip mode %d), restarting it", (int)mode);
         rxArmedContinuous = false;
         return false;
     }
@@ -829,15 +820,15 @@ template <typename T> bool LR20x0Interface<T>::isChannelActive()
     // datasheet's "32 MHz periods" disagrees); RadioLib scales it as 30.52, so we land ~2% long.
     const RadioLibTime_t cadRxTimeoutUsec =
         (RadioLibTime_t)getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN + sizeof(PacketHeader), false) * 1000;
-    // SetLoraCadParams exit mode: 0x00 CAD only, 0x01 RX on detection, 0x10 TX when clear, as on LR11x0. RadioLib's
-    // RADIOLIB_LR2021_CAD_EXIT_MODE_RX is 0x02, which the chip refuses with a processing error (-706), so no scan runs.
-    static constexpr uint8_t CAD_EXIT_MODE_RX = 0x01;
+    // SetLoraCadParams has its own exit-mode encoding, which RADIOLIB_LR2021_LORA_CAD_EXIT_MODE_* carries: the
+    // RADIOLIB_LR2021_CAD_EXIT_MODE_* values are the generic-CAD ones, and their RX (0x02) is a value SetLoraCadParams
+    // refuses with a processing error (-706), so no scan runs.
     ChannelScanConfig_t cfg = {.cad = {.symNum = symNum,
                                        .detPeak = detPeak,
                                        // ignored: SetLoraCadParams has no det_min - that byte carries
                                        // pnr_delta, which scanChannel() takes from lora.fastCad below
                                        .detMin = RADIOLIB_LR2021_CAD_PARAM_DEFAULT,
-                                       .exitMode = CAD_EXIT_MODE_RX,
+                                       .exitMode = RADIOLIB_LR2021_LORA_CAD_EXIT_MODE_RX,
                                        .timeout = cadRxTimeoutUsec,
                                        // DS rev 2.2 6.8.3: only routes IRQs to a pin, so keep
                                        // preamble/header off it - they would fire the ISR mid-frame

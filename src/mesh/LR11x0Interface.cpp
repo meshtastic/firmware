@@ -530,21 +530,16 @@ template <typename T> void LR11x0Interface<T>::startReceive()
 #endif
 }
 
-template <typename T> uint8_t LR11x0Interface<T>::readChipMode()
+template <typename T> RadioModeType_t LR11x0Interface<T>::readChipMode()
 {
-    // GetStatus is protected in RadioLib, so read it the way LRxxxx::getStatus() does: any NOP transfer returns stat1,
-    // stat2 and the IRQ word. SPItransferStream() drops the status width (8 bits on LR11x0) from the front of what it
-    // returns, so stat2 lands in buff[0]. FS is the chip on its way to TX or RX: look again for up to 1 ms.
-    const uint8_t skipped = module.spiConfig.widths[RADIOLIB_MODULE_SPI_WIDTH_STATUS] / 8;
-    if (skipped > 1)
-        return 0xFF;
-    uint8_t buff[6] = {0};
-    uint8_t mode = 0xFF;
+    // getMode() reports what the chip says it is doing, as against stagedMode's record of what was last asked of it.
+    // Frequency synthesis is the chip on its way to TX or RX and has no RadioModeType_t of its own, so the NONE it
+    // reports is looked at again for up to 1 ms before it counts as a mode the chip has left.
+    RadioModeType_t mode = RADIOLIB_RADIO_MODE_NONE;
     for (int tries = 0; tries < 10; tries++) {
-        if (module.SPItransferStream(NULL, 0, false, NULL, buff, sizeof(buff), true) != RADIOLIB_ERR_NONE)
-            return 0xFF;
-        mode = buff[1 - skipped] & 0x0E;
-        if (mode != RADIOLIB_LR11X0_STAT_2_MODE_FS)
+        if (lora.getMode(&mode) != RADIOLIB_ERR_NONE)
+            return RADIOLIB_RADIO_MODE_NONE;
+        if (mode != RADIOLIB_RADIO_MODE_NONE)
             break;
         delayMicroseconds(100);
     }
@@ -559,9 +554,9 @@ template <typename T> bool LR11x0Interface<T>::resumeRunningReceive()
         return false;
     // Only a chip that reports RX is resumed: one that left it unseen (a chip reset, or RX not surviving the frame) would
     // otherwise stay deaf with nothing left to re-arm it. The restart also runs the chip-state recovery.
-    const uint8_t mode = readChipMode();
-    if (mode != RADIOLIB_LR11X0_STAT_2_MODE_RX) {
-        LOG_WARN("LR11x0 RX not running after a frame (stat2 mode 0x%02x), restarting it", mode);
+    const RadioModeType_t mode = readChipMode();
+    if (mode != RADIOLIB_RADIO_MODE_RX) {
+        LOG_WARN("LR11x0 RX not running after a frame (chip mode %d), restarting it", (int)mode);
         rxArmedContinuous = false;
         return false;
     }

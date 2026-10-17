@@ -114,8 +114,8 @@ template <class T> class LR11x0Interface : public RadioLibInterface
     volatile int16_t rearmErr = 0;
 #endif
 
-    /** The chip's mode (stat2 bits 3..1, as RADIOLIB_LR11X0_STAT_2_MODE_*), waiting out a passing FS; 0xFF on failure */
-    uint8_t readChipMode();
+    /** The mode the chip reports, waiting out a passing frequency synthesis; RADIOLIB_RADIO_MODE_NONE on failure */
+    RadioModeType_t readChipMode();
 
     /** RX was armed continuous and nothing has taken the chip out of it since, so it is still listening */
     bool rxArmedContinuous = false;

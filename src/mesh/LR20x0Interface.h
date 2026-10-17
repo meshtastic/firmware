@@ -130,13 +130,8 @@ template <class T> class LR20x0Interface : public RadioLibInterface
     volatile int16_t rearmErr = 0;
 #endif
 
-    /** The chip's mode (stat2 bits 2..0, as the LR20X0_CHIP_MODE_* below), waiting out a passing FS; 0xFF on SPI failure */
-    uint8_t readChipMode();
-    static constexpr uint8_t LR20X0_CHIP_MODE_STBY_RC = 1;
-    static constexpr uint8_t LR20X0_CHIP_MODE_STBY_XOSC = 2;
-    static constexpr uint8_t LR20X0_CHIP_MODE_FS = 3;
-    static constexpr uint8_t LR20X0_CHIP_MODE_RX = 4;
-    static constexpr uint8_t LR20X0_CHIP_MODE_TX = 5;
+    /** The mode the chip reports, waiting out a passing frequency synthesis; RADIOLIB_RADIO_MODE_NONE on failure */
+    RadioModeType_t readChipMode();
 
     /** RX was armed continuous and nothing has put the chip into standby since */
     bool rxArmedContinuous = false;
