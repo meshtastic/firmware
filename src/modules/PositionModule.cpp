@@ -480,7 +480,9 @@ bool PositionModule::sendOurPosition(NodeNum dest, bool wantReplies, uint8_t cha
         LOG_WARN("Position send rejected by router: 0x%x", res);
         return false;
     }
-    lastPositionTxMs = millis();
+    // ERRNO_SHOULD_RELEASE means it was handled locally and never went out over LoRa.
+    if (res == ERRNO_OK)
+        lastPositionTxMs = millis();
 
     if (IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_TRACKER,
                   meshtastic_Config_DeviceConfig_Role_TAK_TRACKER) &&

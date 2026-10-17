@@ -536,7 +536,9 @@ static bool getDisplayPosition(const meshtastic::GPSStatus *gps, meshtastic_Posi
 
     const bool onboardGpsUnavailable = !gps || !gps->getIsConnected() || !gps->getHasLock() ||
                                        config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED;
-    if (onboardGpsUnavailable && nodeDB && nodeDB->hasLocalPositionSinceBoot() &&
+    // Only a position the phone sent this boot counts. A position restored from the saved
+    // node DB after a reboot also sets hasLocalPositionSinceBoot(), so it is not enough here.
+    if (onboardGpsUnavailable && lastLocalPositionUpdateMs != 0 &&
         (localPosition.latitude_i != 0 || localPosition.longitude_i != 0)) {
         position = localPosition;
         return true;
