@@ -9,6 +9,7 @@
 #include "yaml-cpp/eventhandler.h"
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <filesystem>
 #include <fstream>
@@ -77,13 +78,14 @@ const std::map<std::string, std::set<std::string>> &schema()
         {"General",
          {"MACAddress", "MACAddressSource", "MaxNodes", "MaxMessageQueue", "APIPort", "ConfigDirectory", "AvailableDirectory"}},
         {"Config", {"DisplayMode", "EnableUDP", "StatusMessage"}},
+        {"Security", {"AdminKeys"}},
         {"Display",
          {"Panel", "spidev", "BusFrequency", "Width", "Height", "Invert", "Rotate", "OffsetX", "OffsetY", "OffsetRotate",
           "RGBOrder", "HUB75", "DC", "CS", "Backlight", "BacklightInvert", "BacklightPWMChannel", "Reset"}},
         {"Touchscreen", {"Module", "spidev", "BusFrequency", "I2CAddr", "Rotate", "CS", "IRQ"}},
         {"Input",
-         {"KeyboardDevice", "PointerDevice", "JoystickDevice", "JoystickButtons", "TrackballDirection", "User", "TrackballUp",
-          "TrackballDown", "TrackballLeft", "TrackballRight", "TrackballPress"}},
+         {"KeyboardDevice", "PointerDevice", "JoystickDevice", "JoystickButtons", "ArcadeBonnet", "ArcadeBonnetButtons",
+          "TrackballDirection", "User", "TrackballUp", "TrackballDown", "TrackballLeft", "TrackballRight", "TrackballPress"}},
         {"GPIO", {"User", "ExtraPins"}},
         {"GPS", {"SerialPath", "GpsdHost", "GpsdPort"}},
         {"I2C", {"I2CDevice"}},
@@ -425,6 +427,54 @@ void checkJoystickButtons(const std::string &file, const YAML::Node &node, std::
     }
 }
 
+// Same shape as JoystickButtons, but the values are the button names printed on the bonnet.
+void checkArcadeBonnetButtons(const std::string &file, const YAML::Node &node, std::vector<Finding> &findings)
+{
+    if (!node.IsMap()) {
+        findings.push_back(
+            {kError, file, lineOf(node), "Input.ArcadeBonnetButtons must be a mapping of action name to bonnet button (1A-1F)"});
+        return;
+    }
+
+    std::map<int, std::string> owner; // expander bit -> the action that claimed it first
+    for (const auto &entry : node) {
+        std::string action = entry.first.as<std::string>("");
+        for (auto &c : action)
+            c = tolower(c);
+        if (!kJoystickActions.count(action)) {
+            findings.push_back({kWarn, file, lineOf(entry.first),
+                                "Input.ArcadeBonnetButtons: '" + action +
+                                    "' is not a recognised action, so those buttons do nothing. Valid actions are select, "
+                                    "cancel, back, up, down, left, right and user"});
+            continue;
+        }
+
+        std::vector<YAML::Node> pinNodes;
+        if (entry.second.IsSequence())
+            for (const auto &pinNode : entry.second)
+                pinNodes.push_back(pinNode);
+        else
+            pinNodes.push_back(entry.second);
+
+        for (const auto &pinNode : pinNodes) {
+            const std::string raw = pinNode.as<std::string>("");
+            const int bit = arcadeBonnetPinBit(raw);
+            if (bit < 0) {
+                findings.push_back({kWarn, file, lineOf(pinNode),
+                                    "Input.ArcadeBonnetButtons." + action + ": '" + raw +
+                                        "' is not a bonnet button (1A-1F), so it is unmapped"});
+                continue;
+            }
+            const auto claimed = owner.find(bit);
+            if (claimed != owner.end() && claimed->second != action)
+                findings.push_back({kWarn, file, lineOf(pinNode),
+                                    "Input.ArcadeBonnetButtons: button " + raw + " is mapped to both '" + claimed->second +
+                                        "' and '" + action + "'. Only '" + action + "' takes effect"});
+            owner[bit] = action;
+        }
+    }
+}
+
 void checkRfSwitchTable(const std::string &file, const YAML::Node &table, std::vector<Finding> &findings)
 {
     if (!table.IsMap()) {
@@ -577,6 +627,7 @@ const std::map<std::string, ValueSpec> &valueSpecs()
         {"Input.KeyboardDevice", {kString, false}},
         {"Input.PointerDevice", {kString, false}},
         {"Input.JoystickDevice", {kString, false}},
+        {"Input.ArcadeBonnet", {kInt, false}},
         {"Input.TrackballDirection", {kString, false}},
         {"GPS.SerialPath", {kString, false}},
         {"GPS.GpsdHost", {kString, false}},
@@ -769,6 +820,31 @@ void checkTxGain(const std::string &file, const YAML::Node &node, std::vector<Fi
                             "Lora.TX_GAIN_LORA is not a whole number, so it is silently read as 0 and no PA gain is applied"});
 }
 
+// Each entry is read without a fallback: loadConfig() exits on anything that is not a 32-byte
+// base64 public key, so a typo here stops meshtasticd rather than dropping one admin.
+void checkAdminKeys(const std::string &file, const YAML::Node &node, std::vector<Finding> &findings)
+{
+    if (!node.IsSequence()) {
+        findings.push_back({kError, file, lineOf(node),
+                            "Security.AdminKeys must be a list of base64 public keys, so meshtasticd refuses to start on "
+                            "this file"});
+        return;
+    }
+
+    if (node.size() > PORTDUINO_MAX_ADMIN_KEYS)
+        findings.push_back({kWarn, file, lineOf(node),
+                            "Security.AdminKeys lists " + std::to_string(node.size()) + " keys but only the first " +
+                                std::to_string(PORTDUINO_MAX_ADMIN_KEYS) + " are read; the rest are dropped"});
+
+    for (const auto &entry : node) {
+        std::array<uint8_t, 32> key;
+        if (!adminKeyFromBase64(entry.as<std::string>(""), key))
+            findings.push_back({kError, file, lineOf(entry),
+                                "Security.AdminKeys entry '" + entry.as<std::string>("") +
+                                    "' is not a 32-byte base64 public key, so meshtasticd refuses to start on this file"});
+    }
+}
+
 // Module names match exactly and are inconsistently cased (RF95 upper, sx1262 lower),
 // and loadConfig() exits on an unknown name without printing the valid set, so name it here.
 void checkLoraModule(const std::string &file, const YAML::Node &module, std::vector<Finding> &findings)
@@ -897,6 +973,8 @@ void checkSection(const std::string &file, const std::string &section, const YAM
             if (value.IsSequence())
                 for (const auto &pin : value)
                     checkPinNode(file, section + "." + key, pin, findings);
+        } else if (section == "Security" && key == "AdminKeys") {
+            checkAdminKeys(file, value, findings);
         } else if (section == "Bluetooth" && key == "AdapterId") {
             // LinuxBluetooth uses this verbatim as the BlueZ object path (/org/bluez/<id>), while the
             // MAC fallback only reads the leading hciN. A value like "hci1junk" therefore looks
@@ -912,6 +990,17 @@ void checkSection(const std::string &file, const std::string &section, const YAM
                                         "anything else leaves no /org/bluez entry to attach to and Bluetooth stays off"});
         } else if (key == "JoystickButtons") {
             checkJoystickButtons(file, value, findings);
+        } else if (key == "ArcadeBonnetButtons") {
+            checkArcadeBonnetButtons(file, value, findings);
+        } else if (section == "Input" && key == "ArcadeBonnet") {
+            // 0 is "not fitted"; anything else must be an address the MCP23017 can actually take.
+            int address = 0;
+            if (converts(value, kInt))
+                address = value.as<int>();
+            if (address != 0 && (address < ARCADE_BONNET_ADDR_MIN || address > ARCADE_BONNET_ADDR_MAX))
+                findings.push_back({kWarn, file, lineOf(value),
+                                    "Input.ArcadeBonnet '" + value.as<std::string>("") +
+                                        "' is not an MCP23017 address (0x20-0x27), so the bonnet is not started"});
         } else if ((section == "Lora" && kLoraPinKeys.count(key)) ||
                    (section == "Display" &&
                     (key == "DC" || key == "CS" || key == "Backlight" || key == "BacklightPWMChannel" || key == "Reset")) ||

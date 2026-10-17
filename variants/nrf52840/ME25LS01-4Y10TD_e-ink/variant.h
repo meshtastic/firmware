@@ -136,7 +136,6 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define GPS_RTC_INT -1
 #define GPS_RESETB_OUT -1
 
-#define BATTERY_PIN -1
 #define ADC_MULTIPLIER (2.0F)
 
 #define ADC_RESOLUTION 14

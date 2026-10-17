@@ -7,6 +7,7 @@
 #include "NodeDB.h"
 #include "Throttle.h"
 #include "configuration.h"
+#include "mesh/AdminKeys.h"
 #include "mesh/generated/meshtastic/mesh.pb.h"
 #include "mesh/mesh-pb-constants.h"
 #include "meshUtils.h"
@@ -23,6 +24,7 @@
 #include <sys/wait.h>
 #include <termios.h>
 #include <unistd.h>
+#include <vector>
 
 DMShellModule *dmShellModule;
 
@@ -483,12 +485,7 @@ bool DMShellModule::isAuthorizedPacket(const meshtastic_MeshPacket &mp) const
     }
 
     if (mp.pki_encrypted) {
-        for (uint8_t i = 0; i < 3; ++i) {
-            if (config.security.admin_key[i].size == 32 &&
-                memcmp(mp.public_key.bytes, config.security.admin_key[i].bytes, 32) == 0) {
-                return true;
-            }
-        }
+        return AdminKeys::isAuthorized(mp.public_key.bytes);
     }
 
     return false;
@@ -512,6 +509,35 @@ bool DMShellModule::openSession(const meshtastic_MeshPacket &mp, const meshtasti
     } else {
         ws.ws_col = PTY_COLS_DEFAULT;
     }
+    // Built before fork: the child may only make async-signal-safe calls until exec, and setenv() allocates.
+    const char *shell = getenv("SHELL");
+    if (!shell || !*shell) {
+        shell = "/bin/sh";
+    }
+    // TERM and LANG are replaced below, LC_* would override LANG, and the rest is systemd's service plumbing.
+    static const char *const strippedPrefixes[] = {"TERM=",          "LANG=",          "LC_",
+                                                   "NOTIFY_SOCKET=", "INVOCATION_ID=", "JOURNAL_STREAM=",
+                                                   "LISTEN_PID=",    "LISTEN_FDS=",    "LISTEN_FDNAMES="};
+    static char term[] = "TERM=xterm-256color";
+    // C.UTF-8 is built into glibc and musl is UTF-8 throughout; where it is missing, setlocale() falls back to C.
+    static char lang[] = "LANG=C.UTF-8";
+    std::vector<char *> childEnvp;
+    for (char **e = environ; e && *e; ++e) {
+        bool stripped = false;
+        for (const char *prefix : strippedPrefixes) {
+            if (strncmp(*e, prefix, strlen(prefix)) == 0) {
+                stripped = true;
+                break;
+            }
+        }
+        if (!stripped) {
+            childEnvp.push_back(*e);
+        }
+    }
+    childEnvp.push_back(term);
+    childEnvp.push_back(lang);
+    childEnvp.push_back(nullptr);
+
     const pid_t childPid = forkpty(&masterFd, nullptr, nullptr, &ws);
     if (childPid < 0) {
         LOG_ERROR("DMShell: forkpty failed errno=%d", errno);
@@ -519,11 +545,7 @@ bool DMShellModule::openSession(const meshtastic_MeshPacket &mp, const meshtasti
     }
 
     if (childPid == 0) {
-        const char *shell = getenv("SHELL");
-        if (!shell || !*shell) {
-            shell = "/bin/sh";
-        }
-        execl(shell, shell, "-i", static_cast<char *>(nullptr));
+        execle(shell, shell, "-i", static_cast<char *>(nullptr), childEnvp.data());
         _exit(127);
     }
 

@@ -239,6 +239,7 @@ static bool heartbeat = false;
 
 #include "graphics/ScreenFonts.h"
 #include <Throttle.h>
+#include <cmath>
 
 // Usage: int stringWidth = formatDateTime(datetimeStr, sizeof(datetimeStr), rtc_sec, display);
 // End Functions to write date/time to the screen
@@ -491,7 +492,7 @@ static void drawGamesFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
 float Screen::estimatedHeading(double lat, double lon)
 {
     static double oldLat, oldLon;
-    static float b = -1.0f;
+    static float b = NAN;
     static uint32_t lastHeadingAtMs = 0;
     const uint32_t now = Time::stampMillis();
     const uint32_t gpsUpdateIntervalSecs =
@@ -520,7 +521,7 @@ float Screen::estimatedHeading(double lat, double lon)
     if (d < 10) { // haven't moved enough, keep previous heading (invalid until first real movement)
         if (lastHeadingAtMs != 0 && (now - lastHeadingAtMs) >= headingStaleMs) {
             // Heading is stale after prolonged no-movement; force reacquire.
-            b = -1.0f;
+            b = NAN;
             oldLat = lat;
             oldLon = lon;
         }

@@ -328,6 +328,8 @@ static HasBatteryLevel *batteryLevel; // Default to NULL for no battery level se
 
 #ifdef BATTERY_PIN
 
+static_assert(BATTERY_PIN >= 0, "BATTERY_PIN must be a real ADC pin; leave it undefined when the board has no battery sense");
+
 void battery_adcEnable()
 {
 #ifdef ADC_CTRL // enable adc voltage divider when we need to read
@@ -897,13 +899,6 @@ Power::Power() : OSThread("Power")
 
 bool Power::analogInit()
 {
-#ifdef EXT_PWR_DETECT
-    pinMode(EXT_PWR_DETECT, EXT_PWR_DETECT_MODE);
-#endif
-#ifdef EXT_CHRG_DETECT
-    pinMode(EXT_CHRG_DETECT, EXT_CHRG_DETECT_MODE);
-#endif
-
 #ifdef BATTERY_PIN
     LOG_DEBUG("Use analog input %d for battery level", BATTERY_PIN);
 
@@ -952,7 +947,14 @@ bool Power::analogInit()
     batteryLevel = &analogLevel;
     return true;
 #else
+#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+    // No ADC pin: AnalogBatteryLevel still reads a configured INA (power.device_battery_ina_address), and with
+    // none it reports no battery, so the board keeps its 101% external-power status.
+    batteryLevel = &analogLevel;
+    return true;
+#else
     return false;
+#endif
 #endif
 }
 
@@ -963,6 +965,13 @@ bool Power::analogInit()
  */
 bool Power::setup()
 {
+    // Before the gauge probes: a gauge that keeps AnalogBatteryLevel::isVbusIn() still reads these pins
+#ifdef EXT_PWR_DETECT
+    pinMode(EXT_PWR_DETECT, EXT_PWR_DETECT_MODE);
+#endif
+#ifdef EXT_CHRG_DETECT
+    pinMode(EXT_CHRG_DETECT, EXT_CHRG_DETECT_MODE);
+#endif
 #ifdef HAS_SGM41562
     // Initialize the charger early so AnalogBatteryLevel can read charging
     // state from it. The charger does not provide battery voltage / percent -
@@ -1920,6 +1929,10 @@ bool Power::max17048Init()
 
 #if !MESHTASTIC_EXCLUDE_I2C && HAS_CW2015
 
+#ifndef CW2015_FULL_SOC
+#define CW2015_FULL_SOC 100 // gauge SOC that counts as full; boards whose charger tops out lower set their own
+#endif
+
 class CW2015BatteryLevel : public AnalogBatteryLevel
 {
   public:
@@ -1933,7 +1946,7 @@ class CW2015BatteryLevel : public AnalogBatteryLevel
         Wire.write(0x04);
         if (Wire.endTransmission() == 0) {
             if (Wire.requestFrom(CW2015_ADDR, (uint8_t)1)) {
-                data = Wire.read();
+                data = clamp(Wire.read() * 100 / CW2015_FULL_SOC, 0, 100);
             }
         }
         return data;
@@ -2370,13 +2383,6 @@ SerialBatteryLevel serialBatteryLevel;
  */
 bool Power::serialBatteryInit()
 {
-#ifdef EXT_PWR_DETECT
-    pinMode(EXT_PWR_DETECT, EXT_PWR_DETECT_MODE);
-#endif
-#ifdef EXT_CHRG_DETECT
-    pinMode(EXT_CHRG_DETECT, EXT_CHRG_DETECT_MODE);
-#endif
-
     bool result = serialBatteryLevel.runOnce();
     LOG_DEBUG("Power::serialBatteryInit sensor is %s", result ? "ready" : "not ready yet");
     if (!result)

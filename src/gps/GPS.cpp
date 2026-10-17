@@ -34,6 +34,19 @@
 #include <ctime>
 #endif
 
+#ifdef ARCH_RP2040
+#include <hardware/watchdog.h>
+#endif
+
+// GPS::setup() blocks the main loop for well over the RP2040 hardware watchdog window (8 s, fed only from loop()):
+// the u-blox M10 config alone is ~15 s of ACK waits and delays. Keep the watchdog fed while we wait on the module.
+static inline void feedWatchdogWhileWaiting()
+{
+#ifdef ARCH_RP2040
+    watchdog_update();
+#endif
+}
+
 #ifndef GPS_RESET_MODE
 #define GPS_RESET_MODE HIGH
 #endif
@@ -109,6 +122,10 @@ constexpr uint32_t AIROHA_WAKE_SETTLE_MS = 50;
 #elif defined(HAS_AIROHA_SLEEP)
 constexpr uint32_t AIROHA_IDLE_INT_LOW_MS = 5;
 #endif
+#ifdef HAS_AIROHA_RESET_WAKE
+constexpr uint32_t AIROHA_POWER_SETTLE_MS = 50;
+constexpr uint32_t AIROHA_RESET_PULSE_MS = 10;
+#endif
 
 struct GPSProbeCacheRecord {
     uint32_t magic;
@@ -151,6 +168,18 @@ template <typename T> static void airohaWriteIdleInt(T *serialGps, const char *c
     serialGps->flush();
     delay(AIROHA_IDLE_INT_LOW_MS);
     digitalWrite(GPS_SLEEP_INT, HIGH);
+}
+#endif
+
+#ifdef HAS_AIROHA_RESET_WAKE
+// Backup mode only ends on RESETB; the core supply must already be up.
+static void airohaPulseReset()
+{
+    delay(AIROHA_POWER_SETTLE_MS);
+    pinMode(PIN_GPS_RESET, OUTPUT);
+    digitalWrite(PIN_GPS_RESET, GPS_RESET_MODE);
+    delay(AIROHA_RESET_PULSE_MS);
+    digitalWrite(PIN_GPS_RESET, !GPS_RESET_MODE);
 }
 #endif
 
@@ -400,6 +429,7 @@ GPS_RESPONSE GPS::getACK(const char *message, uint32_t waitMillis)
     std::string debugmsg = "";
 #endif
     while (Throttle::isWithinTimespanMs(waitStartMs, waitMillis)) {
+        feedWatchdogWhileWaiting();
         if (_serial_gps->available()) {
             b = _serial_gps->read();
 
@@ -504,6 +534,7 @@ GPS_RESPONSE GPS::getACK(uint8_t class_id, uint8_t msg_id, uint32_t waitMillis)
     }
 
     while (Throttle::isWithinTimespanMs(startTime, waitMillis)) {
+        feedWatchdogWhileWaiting();
         if (ack > 9) {
             LOG_DEBUG_GPS("Got ACK for class %02X msg %02X in %dms", class_id, msg_id, millis() - startTime);
             return GNSS_RESPONSE_OK; // ACK received
@@ -555,6 +586,7 @@ int GPS::getACK(uint8_t *buffer, uint16_t size, uint8_t requestedClass, uint8_t 
     uint16_t needRead = 0;
 
     while (Throttle::isWithinTimespanMs(startTime, waitMillis)) {
+        feedWatchdogWhileWaiting();
         if (_serial_gps->available()) {
             int c = _serial_gps->read();
             switch (ubxFrameCounter) {
@@ -1218,6 +1250,10 @@ void GPS::setPowerState(GPSPowerState newState, uint32_t sleepTime)
         if (IS_ONE_OF(gnssModel, GNSS_MODEL_AG3335, GNSS_MODEL_AG3352))
             airohaPulseRtcInt(); // Airoha: leave software-RTC sleep, now that VCC is back
 #endif
+#ifdef HAS_AIROHA_RESET_WAKE
+        if (IS_ONE_OF(gnssModel, GNSS_MODEL_AG3335, GNSS_MODEL_AG3352))
+            airohaPulseReset(); // Airoha: leave backup mode, now that the core is powered
+#endif
         setPowerPMU(true);      // Power (PMU): on
         writePinRFEN(true);     // External RF front-end: on
         writePinStandby(false); // Standby (pin): awake (not standby)
@@ -1392,8 +1428,8 @@ void GPS::setPowerUBLOX(bool on, uint32_t sleepMs)
     }
 }
 
-// With RTC_INT, park the receiver in software RTC mode so a pulse can wake it once VCC is cut;
-// without it, only stop the GNSS engine.
+// With RTC_INT or a reset wake, park the receiver in backup mode so a pulse can wake it once VCC is cut;
+// without either, only stop the GNSS engine.
 void GPS::airohaEnterSleep()
 {
 #ifdef HAS_AIROHA_SLEEP
@@ -1401,7 +1437,7 @@ void GPS::airohaEnterSleep()
     if (!IS_ONE_OF(gnssModel, GNSS_MODEL_AG3335, GNSS_MODEL_AG3352) || airohaSleepMisses >= AIROHA_SLEEP_MAX_MISSES)
         return;
 
-#ifdef HAS_AIROHA_SOFT_RTC
+#if defined(HAS_AIROHA_SOFT_RTC) || defined(HAS_AIROHA_RESET_WAKE)
     const char *sleepCmd = "$PAIR650,0*25\r\n";
     const char *sleepAck = "$PAIR001,650,0";
 #else
@@ -1413,7 +1449,7 @@ void GPS::airohaEnterSleep()
 #ifdef HAS_AIROHA_SOFT_RTC
         _serial_gps->write(sleepCmd);
 #else
-        // $PAIR003 alone goes unanswered; locking sleep first with $PAIR382 gets it acked.
+        // The sleep command alone goes unanswered; locking sleep first with $PAIR382 gets it acked.
         airohaWriteIdleInt(_serial_gps, "$PAIR382,1*2E\r\n");
         airohaWriteIdleInt(_serial_gps, sleepCmd);
 #endif
