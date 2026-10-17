@@ -16,8 +16,14 @@
 #ifndef DMSHELL_TEST_SETTLE_MS
 #define DMSHELL_TEST_SETTLE_MS 12000
 #endif
+// How much the default command prints; a number, so a build flag can set it without quoting a string
+#ifndef DMSHELL_TEST_OUTPUT_BYTES
+#define DMSHELL_TEST_OUTPUT_BYTES 120000
+#endif
+#define DMSHELL_TEST_STR_(x) #x
+#define DMSHELL_TEST_STR(x) DMSHELL_TEST_STR_(x)
 #ifndef DMSHELL_TEST_COMMAND
-#define DMSHELL_TEST_COMMAND "head -c 120000 /etc/services\n"
+#define DMSHELL_TEST_COMMAND "head -c " DMSHELL_TEST_STR(DMSHELL_TEST_OUTPUT_BYTES) " /etc/services\n"
 #endif
 // Type the command a second time at this time from OPEN_OK, so a load burst lands mid-run as well as at the start; 0 = once
 #ifndef DMSHELL_TEST_COMMAND_AGAIN_MS
