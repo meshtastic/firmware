@@ -87,12 +87,9 @@ template <class T> class LR20x0Interface : public RadioLibInterface
      */
     void applyDcdcWorkaround();
 
-    uint32_t getPacketTime(uint32_t pl, bool received) override { return computePacketTime(lora, pl, received); }
-
-    bool readRxHeaderInfo(uint8_t &cr, bool &hasCRC) override
-    {
-        return lora.getLoRaRxHeaderInfo(&cr, &hasCRC) == RADIOLIB_ERR_NONE;
-    }
+    // The LR2021's reported RX coding rate can latch wrong after a post-TX status read, until a hard reset.
+    // The frame was already decoded on its own header's rate, so time received frames on the configured one.
+    uint32_t getPacketTime(uint32_t pl, bool received) override { return computePacketTime(lora, pl, received, false); }
 
     // LR2021 works in both bands. 4 sub-GHz is Table 6-19's row we use; 8 on 2.4 GHz matches SX1280,
     // the other part sharing that band, so one mesh keeps one CW slot.
