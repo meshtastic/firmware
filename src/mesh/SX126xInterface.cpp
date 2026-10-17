@@ -192,8 +192,8 @@ template <typename T> bool SX126xInterface<T>::reinitChip()
     }
 
     if (res == RADIOLIB_ERR_NONE && tcxoVoltage > 0) {
-        // Standby and TX/RX fallback on STDBY_XOSC keep the TCXO powered: from STDBY_RC every SetRx and SetTx
-        // first waits out the TCXO start-up delay (5 ms by RadioLib's default).
+        // Standby and TX/RX fallback on STDBY_XOSC keep the TCXO powered
+        // to avoid the TCXO startup time on each TX/RX transition.
         const int16_t xoscRes = lora.setStandbyXOSC(true);
         LOG_DEBUG("Keep TCXO on in standby, result: %d", xoscRes);
     }
