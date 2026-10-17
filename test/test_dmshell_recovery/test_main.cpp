@@ -760,6 +760,52 @@ void test_dmshell_retransmit_due_survives_millis_wrap()
     TEST_ASSERT_TRUE(retransmitDue(sent + 1400, sent, 1400));
 }
 
+static uint32_t feedAll(DMShellOutputMarker &marker, const char *bytes)
+{
+    uint32_t matches = 0;
+    for (const char *c = bytes; *c; c++) {
+        if (marker.feed((uint8_t)*c)) {
+            matches++;
+        }
+    }
+    return matches;
+}
+
+void test_dmshell_output_marker_matches_across_frames()
+{
+    // OUTPUT frames split wherever the PTY read did, so the marker can straddle two of them
+    DMShellOutputMarker marker("<dmshell:done>");
+    TEST_ASSERT_EQUAL_UINT32(0, feedAll(marker, "tail of the file\r\n<dmsh"));
+    TEST_ASSERT_EQUAL_UINT32(1, feedAll(marker, "ell:done>\r\n$ "));
+}
+
+void test_dmshell_output_marker_ignores_the_echoed_command()
+{
+    // The terminal echoes what was typed; printf's arguments are chosen so the echo cannot match
+    DMShellOutputMarker marker("<dmshell:done>");
+    TEST_ASSERT_EQUAL_UINT32(0, feedAll(marker, "$ printf '<%s:%s>\\n' dmshell done\r\n"));
+    TEST_ASSERT_EQUAL_UINT32(1, feedAll(marker, "<dmshell:done>\r\n"));
+}
+
+void test_dmshell_output_marker_recovers_from_a_false_start()
+{
+    // A partial match broken by a byte that itself starts the marker again
+    DMShellOutputMarker marker("<dmshell:done>");
+    TEST_ASSERT_EQUAL_UINT32(1, feedAll(marker, "<dmsh<dmshell:done>"));
+    // A marker whose prefix repeats inside it: restarting from its first byte alone would miss this one
+    DMShellOutputMarker repeating("aab");
+    TEST_ASSERT_EQUAL_UINT32(1, feedAll(repeating, "aaab"));
+}
+
+void test_dmshell_output_marker_counts_each_occurrence()
+{
+    DMShellOutputMarker marker("<dmshell:done>");
+    TEST_ASSERT_EQUAL_UINT32(2, feedAll(marker, "<dmshell:done>\r\n$ <dmshell:done>"));
+    marker.feed('<');
+    marker.reset();
+    TEST_ASSERT_EQUAL_UINT32(0, feedAll(marker, "dmshell:done>"));
+}
+
 void setup()
 {
     initializeTestEnvironment();
@@ -811,6 +857,10 @@ void setup()
     RUN_TEST(test_dmshell_ack_latency_interval_is_twice_the_estimate_within_bounds);
     RUN_TEST(test_dmshell_retransmit_waits_for_the_frame_not_the_poll);
     RUN_TEST(test_dmshell_retransmit_due_survives_millis_wrap);
+    RUN_TEST(test_dmshell_output_marker_matches_across_frames);
+    RUN_TEST(test_dmshell_output_marker_ignores_the_echoed_command);
+    RUN_TEST(test_dmshell_output_marker_recovers_from_a_false_start);
+    RUN_TEST(test_dmshell_output_marker_counts_each_occurrence);
     exit(UNITY_END());
 }
 

@@ -30,9 +30,18 @@
 #ifndef DMSHELL_TEST_CR_EVERY
 #define DMSHELL_TEST_CR_EVERY 10
 #endif
+// 1 = a session types until the command's output has all arrived, then closes once the shell has caught up with the
+// typing; DMSHELL_TEST_SESSION_MS is then only a cap
+#ifndef DMSHELL_TEST_UNTIL_DONE
+#define DMSHELL_TEST_UNTIL_DONE 0
+#endif
 // How long each session types for, from OPEN_OK; then it drains its input and closes
 #ifndef DMSHELL_TEST_SESSION_MS
+#if DMSHELL_TEST_UNTIL_DONE
+#define DMSHELL_TEST_SESSION_MS 1800000
+#else
 #define DMSHELL_TEST_SESSION_MS 300000
+#endif
 #endif
 #ifndef DMSHELL_TEST_SESSIONS
 #define DMSHELL_TEST_SESSIONS 1
@@ -78,8 +87,13 @@ static constexpr uint32_t OPEN_TIMEOUT_MS = 180000;
 static constexpr uint32_t HEARTBEAT_IDLE_MS = 5000;
 static constexpr uint32_t HEARTBEAT_REPEAT_MS = 15000;
 static constexpr uint32_t DRAIN_TIMEOUT_MS = 10000;
+static constexpr uint32_t CATCH_UP_TIMEOUT_MS = 60000;
 static constexpr uint32_t CLOSE_WAIT_MS = 7000;
 static constexpr uint32_t ACTIVE_POLL_MS = 20;
+
+// Typed after the command and when typing stops; printf's arguments keep the terminal's echo from matching the markers
+static const char DONE_COMMAND[] = "printf '<%s:%s>\\n' dmshell done\n";
+static const char IDLE_COMMAND[] = "printf '<%s:%s>\\n' dmshell idle\n";
 
 DMShellTestModule *dmShellTestModule;
 
@@ -122,6 +136,8 @@ DMShellTestModule::DMShellTestModule()
              (unsigned)DMSHELL_TEST_PEER, (unsigned)DMSHELL_TEST_SESSIONS, (unsigned)DMSHELL_TEST_SESSION_MS,
              (unsigned)DMSHELL_TEST_START_DELAY_MS, DMSHELL_TEST_BATCH_PIPE ? "pipe" : "terminal",
              (unsigned)DMSHELL_TEST_INPUT_WINDOW, (unsigned)DMSHELL_TEST_COMMAND_AGAIN_MS);
+    if (DMSHELL_TEST_UNTIL_DONE)
+        LOG_INFO("DMShellTest: a session ends when its output is complete, capped at %u ms", (unsigned)DMSHELL_TEST_SESSION_MS);
 }
 
 int32_t DMShellTestModule::runOnce()
@@ -189,6 +205,15 @@ void DMShellTestModule::startSession(uint32_t now)
     pendingInputLen = 0;
     commandTyped = false;
     commandRepeated = false;
+    commandsTyped = 0;
+    doneMarker.reset();
+    idleMarker.reset();
+    doneMarksSeen = 0;
+    completeAtMs = 0;
+    caughtUpAtMs = 0;
+    idleTyped = false;
+    typingEnded = false;
+    typingEndedAtMs = 0;
     keystrokesTyped = 0;
     batchLen = 0;
     batchFirstByteMs = batchLastByteMs = 0;
@@ -221,24 +246,42 @@ void DMShellTestModule::endSession(uint32_t now, const char *reason)
 
 void DMShellTestModule::serviceActive(uint32_t now)
 {
-    const bool typing = !Throttle::deadlinePassedAt(now, openedAtMs + DMSHELL_TEST_SESSION_MS);
-    if (typing)
-        typeWorkload(now);
-    else
-        closeBatch(); // time is up: whatever is still being batched goes out now, as EOF ends the client's read
+    if (!typingEnded) {
+        const bool capped = Throttle::deadlinePassedAt(now, openedAtMs + DMSHELL_TEST_SESSION_MS);
+        if (capped || completeAtMs) {
+            typingEnded = true;
+            typingEndedAtMs = now;
+            if (DMSHELL_TEST_UNTIL_DONE && !completeAtMs)
+                LOG_WARN("DMShellTest t=%u cap of %u ms reached before the output completed", (unsigned)now,
+                         (unsigned)DMSHELL_TEST_SESSION_MS);
+            closeBatch(); // whatever is still being batched goes out now, as EOF ends the client's read
+            if (completeAtMs) {
+                // Its output follows everything typed before it, so seeing it means the shell has caught up
+                typeText(IDLE_COMMAND, now);
+                closeBatch();
+                idleTyped = true;
+            }
+        } else {
+            typeWorkload(now);
+        }
+    }
     flushInput(now);
     serviceRetransmit(now);
     if (phase != Phase::Active)
         return; // the peer stopped answering and the session ended
     serviceHeartbeat(now);
-    if (typing)
+    if (!typingEnded)
         return;
 
     const bool drained = pendingInputLen == 0 && batchLen == 0 && txWindow.outstanding() == 0;
-    if (drained || Throttle::deadlinePassedAt(now, openedAtMs + DMSHELL_TEST_SESSION_MS + DRAIN_TIMEOUT_MS)) {
+    const bool caughtUp = !idleTyped || caughtUpAtMs;
+    if ((drained && caughtUp) ||
+        Throttle::deadlinePassedAt(now, typingEndedAtMs + (idleTyped ? CATCH_UP_TIMEOUT_MS : DRAIN_TIMEOUT_MS))) {
         if (!drained)
             LOG_WARN("DMShellTest t=%u closing with input unacknowledged: %u queued, %u outstanding", (unsigned)now,
                      (unsigned)pendingInputLen, (unsigned)txWindow.outstanding());
+        if (!caughtUp)
+            LOG_WARN("DMShellTest t=%u closing before the shell caught up", (unsigned)now);
         sendFrame(meshtastic_RemoteShell_OpCode_CLOSE, now);
         closeSent = true;
         phase = Phase::Closing;
@@ -284,15 +327,42 @@ void DMShellTestModule::closeBatch()
     batchFirstByteMs = 0;
 }
 
-void DMShellTestModule::typeCommand(uint32_t now)
+void DMShellTestModule::typeText(const char *text, uint32_t now)
 {
-    static const char command[] = DMSHELL_TEST_COMMAND;
-    for (size_t i = 0; i + 1 < sizeof(command); i++) {
-        addByte((uint8_t)command[i], now);
+    for (const char *c = text; *c; c++) {
+        addByte((uint8_t)*c, now);
         if (batchDue(now))
             closeBatch();
     }
+}
+
+void DMShellTestModule::typeCommand(uint32_t now)
+{
+    static const char command[] = DMSHELL_TEST_COMMAND;
+    typeText(command, now);
+    if (DMSHELL_TEST_UNTIL_DONE)
+        typeText(DONE_COMMAND, now);
+    commandsTyped++;
     LOG_INFO("DMShellTest t=%u typed the command (%u bytes)", (unsigned)now, (unsigned)(sizeof(command) - 1));
+}
+
+// Only in-order output reaches here, so a marker means everything the shell printed before it has arrived
+void DMShellTestModule::noteOutput(const uint8_t *bytes, size_t len, uint32_t now)
+{
+    const uint32_t commandsWanted = DMSHELL_TEST_COMMAND_AGAIN_MS ? 2 : 1;
+    for (size_t i = 0; i < len; i++) {
+        if (doneMarker.feed(bytes[i])) {
+            doneMarksSeen++;
+            LOG_INFO("DMShellTest t=%u command output %u of %u complete", (unsigned)now, (unsigned)doneMarksSeen,
+                     (unsigned)commandsWanted);
+            if (!completeAtMs && doneMarksSeen >= commandsWanted)
+                completeAtMs = now;
+        }
+        if (idleMarker.feed(bytes[i]) && idleTyped && !caughtUpAtMs) {
+            caughtUpAtMs = now;
+            LOG_INFO("DMShellTest t=%u shell caught up", (unsigned)now);
+        }
+    }
 }
 
 // The bench workload: after the settle time the command once, then one keystroke per interval
@@ -510,6 +580,8 @@ void DMShellTestModule::handleInOrder(const meshtastic_RemoteShell &frame, uint3
         break;
     case meshtastic_RemoteShell_OpCode_OUTPUT:
         stats.rxOutputBytes += frame.payload.size;
+        if (DMSHELL_TEST_UNTIL_DONE)
+            noteOutput(frame.payload.bytes, frame.payload.size, now);
         break;
     case meshtastic_RemoteShell_OpCode_ERROR:
         LOG_WARN("DMShellTest t=%u remote error seq=%u: %.*s", (unsigned)now, (unsigned)frame.seq, (int)frame.payload.size,
@@ -705,6 +777,12 @@ void DMShellTestModule::logStats(uint32_t now)
              (unsigned)stats.replayUnavailable, (unsigned)stats.replayEvicted, (unsigned)stats.openRetries);
     LOG_INFO("DMShellTest stats session=0x%08x recovery input_window_closed=%u input_dropped=%u", id,
              (unsigned)stats.inputWindowClosed, (unsigned)stats.pendingInputDropped);
+    if (DMSHELL_TEST_UNTIL_DONE) {
+        // From OPEN_OK; 0 = never
+        LOG_INFO("DMShellTest stats session=0x%08x until_done complete_ms=%u caught_up_ms=%u commands=%u", id,
+                 (unsigned)(completeAtMs ? completeAtMs - openedAtMs : 0),
+                 (unsigned)(caughtUpAtMs ? caughtUpAtMs - openedAtMs : 0), (unsigned)commandsTyped);
+    }
 }
 
 #endif
