@@ -119,6 +119,9 @@ class Channels
 
     int16_t getHash(ChannelIndex i) { return hashes[i]; }
 
+    /** The hash a channel would carry under another name, e.g. a blank-named one on another preset. -1 if invalid. */
+    int16_t hashFor(ChannelIndex chIndex, const char *name);
+
     /** Return true if the channel has AEAD (authenticated encryption) enabled */
     bool isAEADEnabled(ChannelIndex chIndex);
 
