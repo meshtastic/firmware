@@ -1,9 +1,9 @@
 name: CI
 concurrency:
-  # PRs and pushes share one group per branch. A PR cancels its superseded run. A push
-  # lets the running one finish and waits; a newer push replaces the waiting one, so
-  # pushes that land mid-run collapse into a single follow-up run. merge_group,
-  # schedule and workflow_dispatch (releases) runs each get their own group.
+  # One group per PR (head_ref) and one per pushed branch (ref). A PR cancels its
+  # superseded run. A push lets the running one finish and waits; a newer push replaces
+  # the waiting one, so pushes that land mid-run collapse into a single follow-up run.
+  # merge_group, schedule and workflow_dispatch (releases) runs each get their own group.
   group: ci-${{ github.head_ref || (github.event_name == 'push' && github.ref) || github.run_id }}
   cancel-in-progress: ${{ github.event_name != 'push' }}
 on:
