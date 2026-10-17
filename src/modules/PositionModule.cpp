@@ -351,7 +351,7 @@ meshtastic_MeshPacket *PositionModule::allocAtakPli()
     takPacket.latitude_i = localPosition.latitude_i;
     takPacket.longitude_i = localPosition.longitude_i;
     takPacket.altitude = localPosition.altitude_hae;
-    takPacket.speed = localPosition.ground_speed;
+    takPacket.speed = groundSpeedKmhToCmPerSec(localPosition.ground_speed);
     // ground_track is stored as degrees * 1e5, course field expects degrees * 100
     int32_t course = localPosition.ground_track / 1000;
     if (course < 0)
@@ -542,6 +542,13 @@ uint32_t PositionModule::effectiveBroadcastIntervalMs(uint32_t configuredInterva
     if (stationary && stationaryFloorMs > configuredIntervalMs)
         return stationaryFloorMs;
     return configuredIntervalMs;
+}
+
+uint32_t PositionModule::groundSpeedKmhToCmPerSec(uint32_t kmh)
+{
+    // 1 km/h = 100000 cm / 3600 s = 250/9 cm/s
+    const uint64_t cmPerSec = (static_cast<uint64_t>(kmh) * 250 + 4) / 9;
+    return cmPerSec > UINT32_MAX ? UINT32_MAX : static_cast<uint32_t>(cmPerSec);
 }
 
 int32_t PositionModule::runOnce()
