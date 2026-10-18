@@ -34,7 +34,6 @@
 #define BATTERY_PIN 1              // GPIO 1, ADC for VBAT with 2:1 divider
 #define ADC_CHANNEL ADC_CHANNEL_0  // ADC1_GPIO1_CHANNEL
 #define ADC_MULTIPLIER 2.0 * 1.045 // 2.0 divider + 4.5% correction
-#define ADC_ATTEN ADC_ATTEN_DB_12
 
 #define USE_POWERSAVE
 #define SLEEP_TIME 120
