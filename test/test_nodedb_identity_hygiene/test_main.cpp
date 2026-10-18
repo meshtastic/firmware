@@ -332,10 +332,12 @@ static void test_updateuser_id_derived_from_nodenum(void)
     TEST_ASSERT_EQUAL_STRING(expected, u.id);
 }
 
-// A known XEdDSA signer's identity only changes via a signed update - even a
-// same-key name change arriving unsigned is refused.
+// Under Balanced (and Strict) a known XEdDSA signer's identity only changes via a
+// signed update - even a same-key name change arriving unsigned is refused.
 static void test_updateuser_unsigned_update_refused_for_hot_signer(void)
 {
+    config.security.packet_signature_policy =
+        meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_BALANCED;
     db->push(kPeer, 1000, /*keySeed=*/0x42, /*xeddsaSigned=*/true);
     meshtastic_User u = makeUser("New name", "NN", /*keySeed=*/0x42);
 
@@ -343,6 +345,20 @@ static void test_updateuser_unsigned_update_refused_for_hot_signer(void)
     TEST_ASSERT_EQUAL_STRING("", db->getMeshNode(kPeer)->long_name);
 
     TEST_ASSERT_TRUE(db->updateUser(kPeer, u, 0, /*xeddsaSigned=*/true)); // signed control
+    TEST_ASSERT_EQUAL_STRING("New name", db->getMeshNode(kPeer)->long_name);
+}
+
+// Compatible accepts the same unsigned update: firmware before 2.8 strips signatures when
+// relaying, so refusing there would freeze a signer's name behind every older relay. The key
+// pin still holds (test_updateuser_pinned_key_blocks_mismatch); only name and role can change.
+static void test_updateuser_unsigned_update_accepted_for_signer_in_compatible(void)
+{
+    config.security.packet_signature_policy =
+        meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_COMPATIBLE;
+    db->push(kPeer, 1000, /*keySeed=*/0x42, /*xeddsaSigned=*/true);
+    meshtastic_User u = makeUser("New name", "NN", /*keySeed=*/0x42);
+
+    TEST_ASSERT_TRUE(db->updateUser(kPeer, u, 0, /*xeddsaSigned=*/false));
     TEST_ASSERT_EQUAL_STRING("New name", db->getMeshNode(kPeer)->long_name);
 }
 
@@ -364,6 +380,8 @@ static void test_updateuser_signed_update_cannot_rotate_pinned_key(void)
 // the signer, and must not consume its warm record.
 static void test_updateuser_warm_signer_refusal_does_not_evict(void)
 {
+    config.security.packet_signature_policy =
+        meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_BALANCED; // refusal applies
     const NodeNum signerNum = 0xE2000000 + 3;
     const int extra = MAX_NUM_NODES + 30; // overflow so the oldest non-protected demote to warm
     for (int i = 1; i <= extra; i++)
@@ -498,6 +516,7 @@ IH_TEST_ENTRY void setup()
     RUN_TEST(test_updateuser_own_key_advert_notifies_once);
     RUN_TEST(test_updateuser_id_derived_from_nodenum);
     RUN_TEST(test_updateuser_unsigned_update_refused_for_hot_signer);
+    RUN_TEST(test_updateuser_unsigned_update_accepted_for_signer_in_compatible);
     RUN_TEST(test_updateuser_signed_update_cannot_rotate_pinned_key);
 #if WARM_NODE_COUNT > 0
     RUN_TEST(test_updateuser_warm_signer_refusal_does_not_evict);
