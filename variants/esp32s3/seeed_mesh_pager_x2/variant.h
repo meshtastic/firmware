@@ -34,6 +34,7 @@
 #define BATTERY_PIN 1              // GPIO 1, ADC for VBAT with 2:1 divider
 #define ADC_CHANNEL ADC_CHANNEL_0  // ADC1_GPIO1_CHANNEL
 #define ADC_MULTIPLIER 2.0 * 1.045 // 2.0 divider + 4.5% correction
+#define USB_HOST_PWR_DETECT
 
 #define USE_POWERSAVE
 #define SLEEP_TIME 120
@@ -126,19 +127,18 @@
 
 // Audio Codec Addresses
 #define HAS_ES8311
-#define ES8311_I2C_ADDR 0x18 // I2C1 address for ES8311
+#define ES8311_I2C_ADDR 0x18 // I2C address for ES8311
 
 #define HAS_ES7243E
-#define ES7243E_I2C_ADDR                                                                                                         \
-    0x14 /* I2C1 address for ES7243E ADC                                                                                         \
-            Note: May conflict with BMM350 sensor in some configs */
+#define ES7243E_I2C_ADDR 0x14 // I2C address for ES7243E ADC Note: May conflict with BMM350 sensor in some configs
 
-// Sensors - I2C1
-#define HAS_BMM350  /* Magnetometer on I2C1 */
-#define HAS_SHT4X   /* Temperature/Humidity on I2C1 */
-#define HAS_LSM6DSO /* IMU (Accel/Gyro) on I2C1 */
+// Sensors
+#define HAS_BMM350  // Magnetometer on I2C
+#define HAS_SHT4X   // Temperature/Humidity on I2C
+#define HAS_LSM6DSO // IMU (Accel/Gyro) on I2C
 
-// RTC - via I2C0
+// RTC
+#define YSN8900E_RTC 0x32
 #define RTC_INT 45 // GPIO 45 (RTC interrupt input)
 
 // Debug UART

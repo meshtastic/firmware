@@ -11,6 +11,9 @@
 #if defined(SENSECAP_INDICATOR)
 #include "mesh/comms/I2CProxy.h"
 #endif
+#ifdef YSN8900E_RTC
+#include <YSN8900ERTC.h>
+#endif
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32)
 #include "meshUtils.h" // vformat
 
@@ -414,6 +417,19 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
 #endif
 #ifdef RX8130CE_RTC
                 SCAN_SIMPLE_CASE(RX8130CE_RTC, RTC_RX8130CE, "RX8130CE", (uint8_t)addr.address)
+#endif
+#ifdef YSN8900E_RTC
+            case YSN8900E_RTC: {
+                YSN8900ERTC ysn;
+                if (ysn.begin(*i2cBus, (uint8_t)addr.address)) {
+                    type = RTC_YSN8900E;
+                    logFoundDevice("YSN8900E", (uint8_t)addr.address);
+                    // Vendor firmware leaves a periodic timer pulsing /INT.
+                    if (!ysn.disableInterrupts())
+                        LOG_WARN("YSN8900E: failed to disable interrupts");
+                }
+                break;
+            }
 #endif
 
 #ifdef PCF85063_RTC

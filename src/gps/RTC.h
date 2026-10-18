@@ -7,6 +7,9 @@
 #ifdef RX8130CE_RTC
 #include <ArtronShop_RX8130CE.h>
 #endif
+#ifdef YSN8900E_RTC
+#include <YSN8900ERTC.h>
+#endif
 
 #if HAS_LSE
 // True once the STM32WL LSE crystal has locked and the hardware RTC is running (see stm32wlSetup()).
