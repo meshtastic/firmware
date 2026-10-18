@@ -189,7 +189,7 @@ void earlyInitVariant()
 
     // Keep board alive and power domains in known state.
     ok &= configureOutput(EXP_PIN_PWR_HOLD, true);
-    ok &= configureOutput(EXP_PIN_BAT_ADC_EN, false);
+    ok &= configureOutput(EXP_PIN_BAT_ADC_EN, true);
     ok &= configureOutput(EXP_PIN_SEN_EN, true);
     ok &= configureOutput(EXP_PIN_SD_PWR_EN, true);
     ok &= configureOutput(EXP_PIN_PA_PWR_EN, true);
