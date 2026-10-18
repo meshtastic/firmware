@@ -1,11 +1,11 @@
 #include "configuration.h"
 
-#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && defined(HELTEC_V3)
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && defined(ARCH_ESP32) && defined(PIN_DS18B20_DATA)
 
 #include "DS18B20Sensor.h"
 #include "TelemetrySensor.h"
-#include <Arduino.h>
 #include "soc/gpio_struct.h"
+#include <Arduino.h>
 
 // DS18B20 command set (see Maxim datasheet)
 #define DS18B20_CMD_SKIP_ROM 0xCC
@@ -38,23 +38,38 @@ static uint8_t ds18b20CRC8(const uint8_t *data, uint8_t len)
 // ---------------------------------------------------------------------------------
 // Direct GPIO register access: the Arduino digitalWrite/pinMode path has multi-
 // microsecond overhead and occasional flash-cache stalls, which breaks 1-Wire
-// slot timing (max 15us low for a write-1). GPIO4 < 32, so the first out/enable
-// register set applies. Single-write instructions keep slots deterministic.
+// slot timing (max 15us low for a write-1). Single-write instructions keep
+// slots deterministic.
+//
+// ESP32 GPIOs live in two register banks (0-31 and 32+); select the right one
+// at compile time so any pin works.
 // ---------------------------------------------------------------------------------
-#define OW_MASK (1 << 4) // GPIO4
+#if PIN_DS18B20_DATA < 32
+#define OW_MASK (1u << PIN_DS18B20_DATA)
+#define OW_OUTPUT_REG_LOW() (GPIO.out_w1tc = OW_MASK)
+#define OW_OUTPUT_ENABLE() (GPIO.enable_w1ts = OW_MASK)
+#define OW_OUTPUT_DISABLE() (GPIO.enable_w1tc = OW_MASK)
+#define OW_INPUT_READ() ((GPIO.in >> PIN_DS18B20_DATA) & 0x1)
+#else
+#define OW_MASK (1u << (PIN_DS18B20_DATA - 32))
+#define OW_OUTPUT_REG_LOW() (GPIO.out1_w1tc = OW_MASK)
+#define OW_OUTPUT_ENABLE() (GPIO.enable1_w1ts = OW_MASK)
+#define OW_OUTPUT_DISABLE() (GPIO.enable1_w1tc = OW_MASK)
+#define OW_INPUT_READ() ((GPIO.in1.val >> PIN_DS18B20_DATA) & 0x1)
+#endif
 
 // Drive the line low (output enabled + low)
-#define OW_DRIVE_LOW()                                                                                                          \
-    do {                                                                                                                        \
-        GPIO.out_w1tc = OW_MASK;        /* set output level low first */                                                        \
-        GPIO.enable_w1ts = OW_MASK;    /* then enable output driver */                                                          \
+#define OW_DRIVE_LOW()                                                                                                           \
+    do {                                                                                                                         \
+        OW_OUTPUT_REG_LOW(); /* set output level low first */                                                                    \
+        OW_OUTPUT_ENABLE();  /* then enable output driver */                                                                     \
     } while (0)
 
 // Release the bus (disable output driver; external 4.7k pull-up brings it high)
-#define OW_RELEASE() (GPIO.enable_w1tc = OW_MASK)
+#define OW_RELEASE() OW_OUTPUT_DISABLE()
 
 // Read the line state
-#define OW_READ() ((GPIO.in >> 4) & 0x1)
+#define OW_READ() OW_INPUT_READ()
 
 DS18B20Sensor::DS18B20Sensor() : TelemetrySensor(meshtastic_TelemetrySensorType_SENSOR_UNSET, "DS18B20") {}
 
@@ -107,8 +122,8 @@ bool IRAM_ATTR DS18B20Sensor::oneWireReadBit()
     OW_DRIVE_LOW();
     delayMicroseconds(3); // initiate read slot (min 1us)
     OW_RELEASE();
-    delayMicroseconds(8);  // data valid for 15us from slot start
-    bit = OW_READ();       // sample well inside the window
+    delayMicroseconds(8); // data valid for 15us from slot start
+    bit = OW_READ();      // sample well inside the window
     interrupts();
     delayMicroseconds(55); // complete the read slot
 
@@ -159,8 +174,8 @@ float DS18B20Sensor::readTemperature()
 
     // 4. Validate CRC over the first 8 bytes
     if (ds18b20CRC8(data, 8) != data[8]) {
-        LOG_WARN("%s: scratchpad CRC mismatch: %02X %02X %02X %02X %02X %02X %02X %02X CRC=%02X (want %02X)", sensorName,
-                 data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7], data[8], ds18b20CRC8(data, 8));
+        LOG_WARN("%s: scratchpad CRC mismatch: %02X %02X %02X %02X %02X %02X %02X %02X CRC=%02X (want %02X)", sensorName, data[0],
+                 data[1], data[2], data[3], data[4], data[5], data[6], data[7], data[8], ds18b20CRC8(data, 8));
         return INVALID_TEMPERATURE;
     }
 
@@ -171,7 +186,7 @@ float DS18B20Sensor::readTemperature()
 
 bool DS18B20Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 {
-    LOG_INFO("Init sensor: %s (GPIO4, bit-banged 1-Wire)", sensorName);
+    LOG_INFO("Init sensor: %s (GPIO%d, bit-banged 1-Wire)", sensorName, PIN_DS18B20_DATA);
 
     // The bus argument is unused (not an I2C sensor); we drive GPIO directly
     (void)bus;
@@ -179,7 +194,7 @@ bool DS18B20Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 
     // Enable the pin's input buffer (IO_MUX FUN_IE) via Arduino pinMode, then use
     // direct register access for the timing-critical 1-Wire primitives.
-    pinMode(ONE_WIRE_PIN, INPUT);
+    pinMode(PIN_DS18B20_DATA, INPUT);
     OW_RELEASE(); // idle high via external 4.7k pull-up
 
     // Try up to 3 times: 1-Wire detection can be flaky on the first attempt
@@ -193,7 +208,7 @@ bool DS18B20Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
         delay(100);
     }
 
-    LOG_ERROR("%s: no sensor found on GPIO4. Check wiring and 4.7k pull-up", sensorName);
+    LOG_ERROR("%s: no sensor found on GPIO%d. Check wiring and 4.7k pull-up", sensorName, PIN_DS18B20_DATA);
     return false;
 }
 

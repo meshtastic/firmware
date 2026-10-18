@@ -147,11 +147,12 @@ extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const c
 #ifdef HAS_RAKHUB
 #include "Sensor/RAKSensorHub.h" // env:rak_wismesh_sensorhub only
 #endif
-#ifdef HELTEC_V3
+#ifdef PIN_HX711_DATA
 #include "Sensor/HX711Sensor.h"
+#endif
+#ifdef PIN_DS18B20_DATA
 #include "Sensor/DS18B20Sensor.h"
 #endif
-
 #define FAILED_STATE_SENSOR_READ_MULTIPLIER 10
 #define DISPLAY_RECEIVEID_MEASUREMENTS_ON_SCREEN true
 
@@ -381,10 +382,12 @@ void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
     addSensor<DS248XSensor>(i2cScanner, ScanI2C::DeviceType::DS248X);
 #endif
 
-#ifdef HELTEC_V3
+#if defined(PIN_HX711_DATA) && defined(PIN_HX711_SCK)
     addSensor<HX711Sensor>(i2cScanner, ScanI2C::DeviceType::NONE);
+#endif
+#if defined(PIN_DS18B20_DATA)
     addSensor<DS18B20Sensor>(i2cScanner, ScanI2C::DeviceType::NONE);
-#endif    
+#endif
 
 #endif
 }

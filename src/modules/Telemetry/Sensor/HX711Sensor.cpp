@@ -1,6 +1,6 @@
 #include "configuration.h"
 
-#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && defined(HELTEC_V3)
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && defined(PIN_HX711_DATA) && defined(PIN_HX711_SCK)
 
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "FSCommon.h"
@@ -40,9 +40,9 @@ bool HX711Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 
     LOG_INFO("Init sensor: %s", sensorName);
 
-    pinMode(DATA_PIN, INPUT);
-    pinMode(CLOCK_PIN, OUTPUT);
-    digitalWrite(CLOCK_PIN, LOW);
+    pinMode(PIN_HX711_DATA, INPUT);
+    pinMode(PIN_HX711_SCK, OUTPUT);
+    digitalWrite(PIN_HX711_SCK, LOW);
 
     if (!waitReady(1000)) {
         LOG_WARN("HX711 not ready");
@@ -53,7 +53,7 @@ bool HX711Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
         LOG_INFO("No saved HX711 calibration found; using defaults (tare recommended)");
     }
 
-    LOG_INFO("HX711 ready: DOUT=%d SCK=%d, zeroOffset=%ld, calFactor=%.2f", DATA_PIN, CLOCK_PIN, (long)zeroOffset,
+    LOG_INFO("HX711 ready: DOUT=%d SCK=%d, zeroOffset=%ld, calFactor=%.2f", PIN_HX711_DATA, PIN_HX711_SCK, (long)zeroOffset,
              calibrationFactor);
     return true;
 }
@@ -62,7 +62,7 @@ bool HX711Sensor::waitReady(uint32_t timeoutMs)
 {
     const uint32_t start = millis();
 
-    while (digitalRead(DATA_PIN) != LOW) {
+    while (digitalRead(PIN_HX711_DATA) != LOW) {
         if ((uint32_t)(millis() - start) >= timeoutMs) {
             return false;
         }
@@ -82,23 +82,23 @@ bool HX711Sensor::readRaw(int32_t &value, uint32_t timeoutMs)
     uint32_t data = 0;
 
     for (uint8_t i = 0; i < 24; i++) {
-        digitalWrite(CLOCK_PIN, HIGH);
+        digitalWrite(PIN_HX711_SCK, HIGH);
         delayMicroseconds(HX711_CLOCK_DELAY_US);
 
         data <<= 1;
 
-        if (digitalRead(DATA_PIN)) {
+        if (digitalRead(PIN_HX711_DATA)) {
             data |= 1;
         }
 
-        digitalWrite(CLOCK_PIN, LOW);
+        digitalWrite(PIN_HX711_SCK, LOW);
         delayMicroseconds(HX711_CLOCK_DELAY_US);
     }
 
     // One additional pulse selects Channel A, gain 128
-    digitalWrite(CLOCK_PIN, HIGH);
+    digitalWrite(PIN_HX711_SCK, HIGH);
     delayMicroseconds(HX711_CLOCK_DELAY_US);
-    digitalWrite(CLOCK_PIN, LOW);
+    digitalWrite(PIN_HX711_SCK, LOW);
     delayMicroseconds(HX711_CLOCK_DELAY_US);
 
     // Sign-extend the 24-bit two's-complement value.

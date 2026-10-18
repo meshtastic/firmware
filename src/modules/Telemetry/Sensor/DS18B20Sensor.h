@@ -2,26 +2,32 @@
 
 #include "configuration.h"
 
-#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && defined(HELTEC_V3)
+/*
+ * Bit-banged 1-Wire DS18B20 temperature sensor.
+ *
+ * Board opt-in: the variant must define the data pin:
+ *   #define PIN_DS18B20_DATA 4        // in the board's variant.h
+ * A 4.7k pull-up between the data pin and 3V3 is required.
+ *
+ * Wiring (example, Heltec V3: PIN_DS18B20_DATA = GPIO4, J3 pin 15):
+ *   Red    -> 3V3
+ *   Black  -> GND
+ *   Yellow -> data pin, with 4.7k pull-up to 3V3
+ *
+ * ESP32-only: the driver uses direct GPIO register access because Arduino
+ * digitalWrite() overhead violates 1-Wire slot timing.
+ *
+ * Uses only the first sensor found on the bus (Skip ROM addressing).
+ */
+
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && defined(ARCH_ESP32) && defined(PIN_DS18B20_DATA)
 
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "TelemetrySensor.h"
 
-/**
- * Bit-banged 1-Wire DS18B20 temperature sensor.
- *
- * Wiring (Heltec V3):
- *   Red    -> 3V3   (J3 pin 2)
- *   Black  -> GND   (J3 pin 1)
- *   Yellow -> GPIO4 (J3 pin 15), with 4.7k pull-up between GPIO4 and 3V3
- *
- * Uses only the first sensor found on the bus (Skip ROM addressing).
- */
 class DS18B20Sensor : public TelemetrySensor
 {
   private:
-    static constexpr int ONE_WIRE_PIN = 4; // GPIO4 on Heltec V3 (J3 pin 15)
-
     // Returned when the 1-Wire transaction fails or scratchpad CRC mismatches
     static constexpr float INVALID_TEMPERATURE = -1000.0f;
 

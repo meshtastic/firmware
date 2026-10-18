@@ -42,3 +42,10 @@
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
 
 #define HAS_32768HZ 1
+
+// Beehive monitoring sensors (opt-in via variant defines; drivers are generic)
+// HX711 load cell (weight): DOUT and SCK
+#define PIN_HX711_DATA 48
+#define PIN_HX711_SCK 47
+// DS18B20 temperature probe: 1-Wire data, 4.7k pull-up to 3V3 required
+#define PIN_DS18B20_DATA 4

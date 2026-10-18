@@ -2,7 +2,23 @@
 
 #include "configuration.h"
 
-#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && defined(HELTEC_V3)
+/*
+ * HX711 24-bit load-cell ADC (weight sensor).
+ *
+ * Board opt-in: the variant must define both pins:
+ *   #define PIN_HX711_DATA 48       // in the board's variant.h
+ *   #define PIN_HX711_SCK  47
+ * The HX711's VCC/GND connect to 3V3/GND.
+ *
+ * Tare/calibration: send the set_scale admin message (0 = tare,
+ * N = calibrate to N kg); values persist in /prefs/hx711.dat.
+ *
+ * Uses only the portable Arduino API (digitalRead/digitalWrite) - the HX711
+ * protocol is self-clocked with millisecond-scale timing, so no
+ * architecture-specific GPIO access is needed.
+ */
+
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && defined(PIN_HX711_DATA) && defined(PIN_HX711_SCK)
 
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "TelemetrySensor.h"
@@ -10,9 +26,6 @@
 class HX711Sensor : public TelemetrySensor
 {
   private:
-    static constexpr int DATA_PIN = 48;
-    static constexpr int CLOCK_PIN = 47;
-
     // Number of raw ADC samples averaged per measurement
     static constexpr uint8_t SAMPLES_TO_AVERAGE = 8;
 
