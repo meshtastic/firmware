@@ -57,7 +57,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
           # Full history: the merge base must be computed, not guessed from a possibly stale
@@ -110,7 +110,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
 
@@ -166,7 +166,7 @@ jobs:
     name: Native Simulator Tests
     runs-on: ubuntu-26.04-arm
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
 
@@ -280,7 +280,7 @@ jobs:
       matrix: ${{ steps.shards.outputs.matrix }}
       suites: ${{ steps.shards.outputs.suites }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
 
@@ -349,7 +349,7 @@ jobs:
     steps:
       # No submodules: src/mesh/generated is tracked and meshtestic is the hardware harness, so neither
       # is reachable from .
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
 
@@ -484,7 +484,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
 
@@ -547,7 +547,7 @@ jobs:
     # Run this job even if the previous jobs failed, but skip if the workflow was cancelled.
     if: ${{ !cancelled() }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@v7
 
       - name: Get release version string
         run: echo "long=$(./bin/buildinfo.py long)" >> "$GITHUB_OUTPUT"
@@ -619,7 +619,7 @@ jobs:
 
       - name: Test Report
         if: always()
-        uses: dorny/test-reporter@v3.0.0
+        uses: dorny/test-reporter@v3
         with:
           name: PlatformIO Tests
           path: testreport.xml
