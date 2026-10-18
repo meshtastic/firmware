@@ -402,13 +402,18 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false, bool skipSaveN
 /**
  * The GPIO an SX126x/SX128x/LR part raises its IRQ on, or -1 if there is no usable pin.
  *
- * Nearly every variant spells it LORA_DIO1, but an SX1280 board may define SX128X_DIO1 on a different
- * pin (t-eth-elite, tlora_t3s3_v1) or as the only one of the two (tlora_v2_1_18, betafpv_2400_tx_micro),
- * because that is the name RadioInterface hands to the driver. Resolve it per radio rather than per
- * macro, so arming, polling and teardown below cannot pick different pins. RF95 keeps RF95_IRQ.
+ * Nearly every variant spells it LORA_DIO1, but a board may define SX126X_DIO1 / SX128X_DIO1 on a different
+ * pin (t-eth-elite, where LORA_DIO1 is the SX1262's BUSY) or as the only one of the two (tlora_v2_1_18,
+ * betafpv_2400_tx_micro), because that is the name RadioInterface hands to the driver. Resolve it per
+ * radio rather than per macro, so arming, polling and teardown below cannot pick different pins.
+ * RF95 keeps RF95_IRQ.
  */
 static int loraWakeDio1Pin()
 {
+#if defined(SX126X_DIO1) && (SX126X_DIO1 != RADIOLIB_NC)
+    if (radioType == SX1262_RADIO || radioType == SX1268_RADIO || radioType == LLCC68_RADIO)
+        return (int)SX126X_DIO1;
+#endif
 #if defined(SX128X_DIO1) && (SX128X_DIO1 != RADIOLIB_NC)
     if (radioType == SX1280_RADIO)
         return (int)SX128X_DIO1;
