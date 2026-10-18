@@ -13,9 +13,10 @@
  * Tare/calibration: send the set_scale admin message (0 = tare,
  * N = calibrate to N kg); values persist in /prefs/hx711.dat.
  *
- * Uses only the portable Arduino API (digitalRead/digitalWrite) - the HX711
- * protocol is self-clocked with millisecond-scale timing, so no
- * architecture-specific GPIO access is needed.
+ * Uses only the portable Arduino API (digitalRead/digitalWrite). Data-ready
+ * (DOUT low) works on millisecond scale, but the clock pulses are microsecond-
+ * scale: PD_SCK must never stay high longer than 60 us or the chip powers
+ * down, so the read loop brackets each pulse with noInterrupts()/interrupts().
  */
 
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && defined(PIN_HX711_DATA) && defined(PIN_HX711_SCK)

@@ -19,9 +19,12 @@ def main():
 
     port = sys.argv[1]
     try:
-        value = int(float(sys.argv[2]))
+        value = int(sys.argv[2])
     except ValueError:
-        print(f"Error: '{sys.argv[2]}' is not a number")
+        print(f"Error: '{sys.argv[2]}' is not an integer (weight in whole kg, e.g. 0 or 5)")
+        sys.exit(1)
+    if value < 0:
+        print(f"Error: '{sys.argv[2]}' is negative; weight must be >= 0")
         sys.exit(1)
 
     iface = SerialInterface(devPath=port)

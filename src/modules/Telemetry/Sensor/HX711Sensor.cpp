@@ -81,24 +81,29 @@ bool HX711Sensor::readRaw(int32_t &value, uint32_t timeoutMs)
 
     uint32_t data = 0;
 
+    // PD_SCK must never stay high longer than 60 us or the chip powers down and
+    // the sample is corrupted. A FreeRTOS context switch or ISR between SCK
+    // high and low can exceed that, so bracket each pulse with
+    // noInterrupts()/interrupts() and keep bit processing outside the critical
+    // section (same approach as common HX711 libraries).
     for (uint8_t i = 0; i < 24; i++) {
+        noInterrupts();
         digitalWrite(PIN_HX711_SCK, HIGH);
         delayMicroseconds(HX711_CLOCK_DELAY_US);
-
-        data <<= 1;
-
-        if (digitalRead(PIN_HX711_DATA)) {
-            data |= 1;
-        }
-
+        bool bit = digitalRead(PIN_HX711_DATA);
         digitalWrite(PIN_HX711_SCK, LOW);
+        interrupts();
+
+        data = (data << 1) | (bit ? 1 : 0);
         delayMicroseconds(HX711_CLOCK_DELAY_US);
     }
 
     // One additional pulse selects Channel A, gain 128
+    noInterrupts();
     digitalWrite(PIN_HX711_SCK, HIGH);
     delayMicroseconds(HX711_CLOCK_DELAY_US);
     digitalWrite(PIN_HX711_SCK, LOW);
+    interrupts();
     delayMicroseconds(HX711_CLOCK_DELAY_US);
 
     // Sign-extend the 24-bit two's-complement value.
@@ -254,7 +259,9 @@ bool HX711Sensor::loadCalibrationData()
         } else {
             zeroOffset = hx711config.zeroOffset;
             calibrationFactor = hx711config.calibrationFactor;
-            if (calibrationFactor <= 0) {
+            // A negative factor is valid (reversed load-cell polarity); only
+            // replace zero/NaN values so the calibration survives reboots.
+            if (calibrationFactor == 0 || !isfinite(calibrationFactor)) {
                 calibrationFactor = HX711_DEFAULT_CALIBRATION_FACTOR;
             }
             okay = true;

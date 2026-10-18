@@ -19,7 +19,14 @@ def main():
         sys.exit(1)
 
     port = sys.argv[1]
-    value = int(float(sys.argv[2]))
+    try:
+        value = int(sys.argv[2])
+    except ValueError:
+        print(f"Error: '{sys.argv[2]}' is not an integer (weight in whole kg, e.g. 0 or 5)")
+        sys.exit(1)
+    if value < 0:
+        print(f"Error: '{sys.argv[2]}' is negative; weight must be >= 0")
+        sys.exit(1)
 
     # Serial listener FIRST (grabs the port, sees everything that follows)
     ser = serial.Serial(port, 115200, timeout=1)

@@ -55,7 +55,7 @@ static uint8_t ds18b20CRC8(const uint8_t *data, uint8_t len)
 #define OW_OUTPUT_REG_LOW() (GPIO.out1_w1tc = OW_MASK)
 #define OW_OUTPUT_ENABLE() (GPIO.enable1_w1ts = OW_MASK)
 #define OW_OUTPUT_DISABLE() (GPIO.enable1_w1tc = OW_MASK)
-#define OW_INPUT_READ() ((GPIO.in1.val >> PIN_DS18B20_DATA) & 0x1)
+#define OW_INPUT_READ() ((GPIO.in1.val >> (PIN_DS18B20_DATA - 32)) & 0x1)
 #endif
 
 // Drive the line low (output enabled + low)
@@ -168,8 +168,19 @@ float DS18B20Sensor::readTemperature()
     oneWireWriteByte(DS18B20_CMD_READ_SCRATCHPAD);
 
     uint8_t data[9];
+    bool allZero = true;
     for (uint8_t i = 0; i < 9; i++) {
         data[i] = oneWireReadByte();
+        if (data[i] != 0) {
+            allZero = false;
+        }
+    }
+
+    // An all-zero scratchpad (which passes CRC by coincidence) means the bus is
+    // shorted or the sensor is absent; report failure instead of a bogus 0 C.
+    if (allZero) {
+        LOG_WARN("%s: scratchpad all zeros (bus shorted or sensor absent)", sensorName);
+        return INVALID_TEMPERATURE;
     }
 
     // 4. Validate CRC over the first 8 bytes
@@ -179,8 +190,18 @@ float DS18B20Sensor::readTemperature()
         return INVALID_TEMPERATURE;
     }
 
-    // 5. Convert raw reading to Celsius (12-bit resolution: 1/16 C per LSB)
+    // 5. Reject the power-on reset value: a DS18B20 that lost power or was
+    //    re-plugged reports exactly +85.0 C (raw 0x0550) until the first
+    //    conversion completes. Since we always issue CONVERT_T and wait the
+    //    full conversion time before reading, seeing 0x0550 here means the
+    //    conversion did not actually run (brownout, wiring fault).
     int16_t raw = (int16_t)((data[1] << 8) | data[0]);
+    if (raw == 0x0550) {
+        LOG_WARN("%s: power-on reset value +85.0C (conversion did not complete)", sensorName);
+        return INVALID_TEMPERATURE;
+    }
+
+    // 6. Convert raw reading to Celsius (12-bit resolution: 1/16 C per LSB)
     return (float)raw / 16.0f;
 }
 
