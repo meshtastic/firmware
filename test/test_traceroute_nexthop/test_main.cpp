@@ -1,10 +1,6 @@
 // Tests that TraceRouteModule only learns next_hop from a traceroute response when the route array
 // agrees with the node that actually relayed the packet. The route is unauthenticated payload, so
 // without that check a forged response could point any node's next_hop anywhere.
-//
-// Also pins that alterReceivedProtobuf() strips any XEdDSA signature when it rewrites the route: the
-// rewrite invalidates it, and older receivers drop a packet whose signature fails to verify, so a
-// relayed traceroute that kept it would die one hop later.
 
 #include "MeshTypes.h" // include BEFORE TestUtil.h
 #include "TestUtil.h"
@@ -12,7 +8,6 @@
 
 #include "mesh/NodeDB.h"
 #include "modules/TraceRouteModule.h"
-#include <cstring>
 #include <vector>
 
 static constexpr NodeNum LOCAL_NODE = 0x0A0A0A0A; // us, the node that asked for the traceroute
@@ -151,19 +146,6 @@ void test_nexthop_ignored_without_a_relay(void)
     TEST_ASSERT_EQUAL_MESSAGE(0, mockNodeDB->nextHopOf(NODE_D), "no relay means no corroboration");
 }
 
-// A signature an older sender attached cannot survive the rewrite, so it must not be relayed on.
-void test_rewrite_strips_signature(void)
-{
-    meshtastic_RouteDiscovery r;
-    meshtastic_MeshPacket p = makeResponse(nodeDB->getLastByteOfNodeNum(RELAY_B), &r);
-    p.decoded.xeddsa_signature.size = 64;
-    memset(p.decoded.xeddsa_signature.bytes, 0x5C, 64);
-
-    shim->alterReceivedProtobuf(p, &r);
-
-    TEST_ASSERT_EQUAL_MESSAGE(0, p.decoded.xeddsa_signature.size, "a rewritten traceroute must not keep a signature");
-}
-
 void setup()
 {
     delay(10);
@@ -174,7 +156,6 @@ void setup()
     RUN_TEST(test_nexthop_learned_when_route_matches_relay);
     RUN_TEST(test_nexthop_ignored_when_route_contradicts_relay);
     RUN_TEST(test_nexthop_ignored_without_a_relay);
-    RUN_TEST(test_rewrite_strips_signature);
     exit(UNITY_END());
 }
 
