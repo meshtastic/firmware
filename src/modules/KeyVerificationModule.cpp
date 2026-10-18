@@ -415,6 +415,12 @@ void KeyVerificationModule::resetToIdle()
 
 void KeyVerificationModule::commitVerifiedRemoteNode()
 {
+    // Only commit once the handshake has reached the user's final confirmation: the security
+    // number checked out (initiator) or hash1 matched (responder).
+    if (currentState != KEY_VERIFICATION_SENDER_AWAITING_USER && currentState != KEY_VERIFICATION_RECEIVER_AWAITING_USER) {
+        LOG_WARN("Key verification not awaiting confirmation, not committing");
+        return;
+    }
     // An initiator that did not know the responder can reach this with no NodeDB entry for it: this
     // module consumes the hash2 reply, so the routing module never sniffs it into NodeDB. The pending
     // key that reply carried is then the only record, and the user has just confirmed it, so create the
