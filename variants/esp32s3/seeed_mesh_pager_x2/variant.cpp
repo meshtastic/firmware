@@ -5,6 +5,9 @@
 #include <Wire.h>
 #include <driver/gpio.h>
 
+// PowerButton.cpp; kept apart because firmware headers and AudioBoard.h both define GpioPin.
+void startPowerButtonMonitor();
+
 namespace
 {
 
@@ -281,6 +284,8 @@ void lateInitVariant()
     board.begin(cfg);
     board.setVolume(75);
     // LOG_INFO("ES8311 audio board initialized on I2C1");
+
+    startPowerButtonMonitor();
 }
 
 extern "C" void meshtastic_variant_pre_radio_reset(void)
