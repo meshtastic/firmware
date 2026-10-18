@@ -11,7 +11,7 @@
 //   - A signed NodeInfo must claim the key that signed it, and that key must hash to the sender.
 //   - An AES-CCM channel is never signed and overrides the policy: its tag authenticates the packet.
 //   - Only Strict drops a packet for lacking a signature, and not on an AES-CCM channel, nor an ack or
-//     other routing packet (it carries its own proof), nor a traceroute.
+//     other routing packet (it carries its own proof), a traceroute, or a key verification message.
 //   - A traceroute is never signed, and a signature on one is ignored: every hop rewrites it.
 //   - A bad or malformed signature drops the packet in every mode.
 //   - Balanced and Strict refuse an unsigned identity update from a known signer, except on an
@@ -849,6 +849,20 @@ void test_A25_strict_accepts_unsigned_traceroute(void)
     meshtastic_MeshPacket reply = makeDecoded(REMOTE_NODE, LOCAL_NODE, meshtastic_PortNum_TRACEROUTE_APP, SMALL_PAYLOAD);
     reply.decoded.request_id = 0x7AACE001;
     TEST_ASSERT_EQUAL(DECODE_SUCCESS, roundTrip(&reply));
+}
+
+// A27: Strict accepts an unsigned key verification message. The bootstrap messages (M1/M2) go out
+// channel-encrypted precisely because the peer's key is not known yet, so they cannot carry a
+// signature the receiver could verify; the handshake is authenticated by the security number the
+// users exchange, which hash1 binds to both keys. If this fails, two Strict nodes that do not
+// already hold each other's keys can never run key verification.
+void test_A27_strict_accepts_unsigned_key_verification(void)
+{
+    setPolicy(meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_STRICT);
+    meshtastic_MeshPacket p = makeDecoded(REMOTE_NODE, LOCAL_NODE, meshtastic_PortNum_KEY_VERIFICATION_APP, SMALL_PAYLOAD);
+
+    TEST_ASSERT_EQUAL(DECODE_SUCCESS, roundTrip(&p));
+    TEST_ASSERT_FALSE(p.xeddsa_signed);
 }
 
 // A26: a signature on a traceroute is ignored rather than verified. Older firmware signed some
@@ -2634,6 +2648,7 @@ void setup()
     RUN_TEST(test_A24_strict_accepts_unsigned_ack);
     RUN_TEST(test_A25_strict_accepts_unsigned_traceroute);
     RUN_TEST(test_A26_traceroute_signature_ignored);
+    RUN_TEST(test_A27_strict_accepts_unsigned_key_verification);
 
     printf("\n=== Group B: send-side signing policy ===\n");
     RUN_TEST(test_B1_local_broadcast_is_signed);

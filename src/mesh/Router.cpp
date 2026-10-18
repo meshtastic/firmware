@@ -743,10 +743,13 @@ bool checkXeddsaReceivePolicy(meshtastic_MeshPacket *p)
         // senders emit only those two sizes (perhapsEncode sets 0 or XEDDSA_SIGNATURE_SIZE).
         LOG_WARN("Malformed XEdDSA signature (%u bytes) from 0x%08x, drop", (unsigned)p->decoded.xeddsa_signature.size, p->from);
         return false;
-    } else if (strict && !p->pki_encrypted && p->decoded.portnum != meshtastic_PortNum_ROUTING_APP) {
+    } else if (strict && !p->pki_encrypted && p->decoded.portnum != meshtastic_PortNum_ROUTING_APP &&
+               p->decoded.portnum != meshtastic_PortNum_KEY_VERIFICATION_APP) {
         // Only Strict drops a packet for being unsigned; Balanced and Compatible accept it, even from a
         // known signer, and NodeDB::refusesUnsignedIdentity() guards that signer's identity instead.
-        // Acks and other routing packets are exempt: an ack carries its own proof (AckProof.h).
+        // Acks and other routing packets are exempt: an ack carries its own proof (AckProof.h). So is key
+        // verification: its bootstrap messages precede any key to sign with, and the security number the
+        // users exchange authenticates the handshake.
         LOG_WARN("Drop unsigned packet from 0x%08x in Strict signature mode", p->from);
         return false;
     }
