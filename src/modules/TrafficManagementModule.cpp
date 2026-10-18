@@ -1069,14 +1069,14 @@ uint8_t TrafficManagementModule::computePositionFingerprint(int32_t lat_truncate
 
 /// Runs BEFORE RoutingModule in callModules(): STOP fully consumes the packet (no rebroadcast),
 /// ignoreRequest suppresses the default NAK for want_response packets, and exhaustRequested
-/// (set by alterReceived) makes perhapsRebroadcast() force hop_limit=0 on the relayed copy.
+/// makes perhapsRebroadcast() force hop_limit=0 on the relayed copy.
 ProcessMessage TrafficManagementModule::handleReceived(const meshtastic_MeshPacket &mp)
 {
     if (!moduleConfig.has_traffic_management)
         return ProcessMessage::CONTINUE;
 
     ignoreRequest = false;
-    exhaustRequested = false; // Reset per-packet; may be set by alterReceived() below
+    exhaustRequested = false; // Reset per-packet
     exhaustRequestedFrom = 0;
     exhaustRequestedId = 0;
     incrementStat(&stats.packets_inspected);
@@ -1180,52 +1180,6 @@ ProcessMessage TrafficManagementModule::handleReceived(const meshtastic_MeshPack
     }
 
     return ProcessMessage::CONTINUE;
-}
-
-void TrafficManagementModule::alterReceived(meshtastic_MeshPacket &mp)
-{
-    if (!moduleConfig.has_traffic_management)
-        return;
-
-    if (mp.which_payload_variant != meshtastic_MeshPacket_decoded_tag)
-        return;
-
-    if (isFromUs(&mp))
-        return;
-
-    // exhaust_hop_telemetry / exhaust_hop_position / router_preserve_hops: shelved until the
-    // right heuristics are clearer; exhaustRequested stays false and rebroadcast is normal.
-
-    const bool isPosition = mp.decoded.portnum == meshtastic_PortNum_POSITION_APP;
-
-    // -------------------------------------------------------------------------
-    // Relayed Position Precision Clamp
-    // -------------------------------------------------------------------------
-    // Never forward more-precise coordinates than the channel is configured to carry
-    // (chanPrec==0 = sharing disabled on channel: skip). Ham mode is exempt; lost-and-found
-    // is not. Compile USERPREFS_TMM_APPLY_TO_PRIVATE_CHANNELS to extend to private channels.
-    if (!owner.is_licensed && isPosition && isBroadcast(mp.to)) {
-#ifdef USERPREFS_TMM_APPLY_TO_PRIVATE_CHANNELS
-        const bool shouldClamp = true;
-#else
-        const bool shouldClamp = channels.isWellKnownChannel(mp.channel);
-#endif
-        if (shouldClamp) {
-            const uint32_t chanPrec = getPositionPrecisionForChannel(mp.channel);
-            if (chanPrec > 0) {
-                meshtastic_Position pos = meshtastic_Position_init_default;
-                if (pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, &meshtastic_Position_msg, &pos)) {
-                    const uint32_t packetPrec = pos.precision_bits > 0 ? pos.precision_bits : 32u;
-                    if (packetPrec > chanPrec) {
-                        applyPositionPrecision(pos, chanPrec);
-                        mp.decoded.payload.size = pb_encode_to_bytes(mp.decoded.payload.bytes, sizeof(mp.decoded.payload.bytes),
-                                                                     &meshtastic_Position_msg, &pos);
-                        logAction("clamp", &mp, "precision");
-                    }
-                }
-            }
-        }
-    }
 }
 
 // =============================================================================
@@ -1363,9 +1317,13 @@ bool TrafficManagementModule::shouldDropPosition(const meshtastic_MeshPacket *p,
     const int32_t lat_truncated = truncateCoordinate(pos->latitude_i, precision);
     const int32_t lon_truncated = truncateCoordinate(pos->longitude_i, precision);
     const uint8_t fingerprint = computePositionFingerprint(lat_truncated, lon_truncated, precision);
-    // Drop gate uses the RAW configured interval: 0 means "dedup disabled". The 5 h default
+    // Drop gate uses the RAW configured interval: 0 means "dedup disabled". The 6 h default
     // is only for TTL sizing - feeding it here would silently defeat that contract.
     uint32_t minIntervalMs = secsToMs(moduleConfig.traffic_management.position_min_interval_secs);
+    // Sender floor must clear the tick-quantised receiver window, else stationary refreshes are pure airtime.
+    static_assert(default_position_stationary_broadcast_secs * 1000UL >=
+                      default_traffic_mgmt_position_min_interval_secs * 1000UL + kPosTimeTickMs,
+                  "stationary broadcast floor must exceed the position dedup window by one dedup tick");
 
     bool isNew = false;
     concurrency::LockGuard guard(&cacheLock);

@@ -21,6 +21,8 @@ class ReliableRouter : public NextHopRouter
      */
     virtual ErrorCode send(meshtastic_MeshPacket *p) override;
 
+    virtual meshtastic_MeshPacket_AckProofStatus ackProofStatusFor(const meshtastic_MeshPacket &p) const override;
+
   protected:
     /**
      * Look for acks/naks or someone retransmitting us
@@ -53,4 +55,12 @@ class ReliableRouter : public NextHopRouter
      * destination, so it is never held to the sender check.
      */
     bool ackProofPermitsAction(const meshtastic_MeshPacket *p, PacketId originalId, bool isAck);
+
+    /** The last verdict ackProofPermitsAction() reached, keyed by the ack that carried it. */
+    struct AckProofVerdict {
+        NodeNum from = 0;
+        PacketId id = 0;
+        meshtastic_MeshPacket_AckProofStatus status = meshtastic_MeshPacket_AckProofStatus_ACK_PROOF_ABSENT;
+    };
+    AckProofVerdict lastAckProof;
 };

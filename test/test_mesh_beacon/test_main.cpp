@@ -61,12 +61,6 @@ constexpr NodeNum kRemoteNode = 0xBBBB0002;
 class MockRouter : public Router
 {
   public:
-    ~MockRouter()
-    {
-        delete cryptLock;
-        cryptLock = nullptr;
-    }
-
     ErrorCode send(meshtastic_MeshPacket *p) override
     {
         // Capture the primary channel as seen AT send() time. sendBeaconPacket() temporarily swaps
@@ -429,24 +423,24 @@ static void test_adminValidation_targetValidPresetForRegion_isPreserved(void)
 }
 
 /**
- * Verify broadcast_message is hard-capped at 100 characters (NUL forced at index 100).
- * Important to prevent oversized beacon payloads from abusing airtime across the mesh.
+ * Verify AdminModule::handleSetModuleConfig() NUL-terminates broadcast_message within the generated field.
+ * The cap keeps oversized beacon payloads from abusing airtime across the mesh, and it must follow the
+ * proto's max_size: a hard-coded index 100 outlived the shrink of the field to 61 bytes (60 characters)
+ * and wrote past the array. The input here is unterminated, so the admin path itself must terminate it.
  */
-static void test_adminValidation_messageTooLong_isTruncatedAt100(void)
+static void test_adminValidation_messageTooLong_isTruncatedToField(void)
 {
     resetConfig();
 
     meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
-    // Fill with 'A' up to the full array size; admin must enforce ≤100 chars.
     memset(bcfg.broadcast_message, 'A', sizeof(bcfg.broadcast_message));
-    bcfg.broadcast_message[sizeof(bcfg.broadcast_message) - 1] = '\0'; // pb_decode guarantee
 
     testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
 
-    // Byte at index 100 must be NUL (length capped at 100).
-    TEST_ASSERT_EQUAL('\0', moduleConfig.mesh_beacon.broadcast_message[100]);
-    // Bytes before it should still be 'A'.
-    TEST_ASSERT_EQUAL('A', moduleConfig.mesh_beacon.broadcast_message[0]);
+    const size_t last = sizeof(moduleConfig.mesh_beacon.broadcast_message) - 1;
+    TEST_ASSERT_EQUAL('\0', moduleConfig.mesh_beacon.broadcast_message[last]);
+    TEST_ASSERT_EQUAL('A', moduleConfig.mesh_beacon.broadcast_message[last - 1]);
+    TEST_ASSERT_EQUAL(last, strlen(moduleConfig.mesh_beacon.broadcast_message));
 }
 
 /**
@@ -1683,7 +1677,7 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_adminValidation_targetValidPresetForRegion_isPreserved);
     RUN_TEST(test_adminValidation_targetChannelIndexOutOfRange_isCleared);
     RUN_TEST(test_adminValidation_targetChannelIndexInRange_isPreserved);
-    RUN_TEST(test_adminValidation_messageTooLong_isTruncatedAt100);
+    RUN_TEST(test_adminValidation_messageTooLong_isTruncatedToField);
     RUN_TEST(test_adminValidation_intervalTooLow_isClamped);
     RUN_TEST(test_adminValidation_intervalTooHigh_isPreserved);
     RUN_TEST(test_adminValidation_intervalZero_isNotClamped);

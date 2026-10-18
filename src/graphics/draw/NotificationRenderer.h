@@ -45,9 +45,7 @@ class NotificationRenderer
     static void resetBanner();
     static void drawBannercallback(OLEDDisplay *display, OLEDDisplayUiState *state);
     static void drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisplayUiState *state);
-    static void drawNumberPicker(OLEDDisplay *display, OLEDDisplayUiState *state);
-    static void drawHexPicker(OLEDDisplay *display, OLEDDisplayUiState *state);
-    static void drawAlphanumericPicker(OLEDDisplay *display, OLEDDisplayUiState *state);
+    static void drawCharPicker(OLEDDisplay *display, OLEDDisplayUiState *state); // number, hex and alphanumeric pickers
     static void drawNodePicker(OLEDDisplay *display, OLEDDisplayUiState *state);
     static void drawTextInput(OLEDDisplay *display, OLEDDisplayUiState *state);
     static void drawNotificationBox(OLEDDisplay *display, OLEDDisplayUiState *state, const char *lines[MAX_LINES + 1],

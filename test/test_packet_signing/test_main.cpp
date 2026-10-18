@@ -23,6 +23,7 @@
 #if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
 
 #include "UptimeClock.h"
+#include "mesh/AckProof.h"
 #include "mesh/Channels.h"
 #include "mesh/CryptoEngine.h"
 #include "mesh/MeshRadio.h"
@@ -203,18 +204,25 @@ class AuthPipelineModule : public SinglePortModule
 {
   public:
     AuthPipelineModule() : SinglePortModule("authPipeline", meshtastic_PortNum_POSITION_APP) {}
-    ProcessMessage handleReceived(const meshtastic_MeshPacket &) override
+    ProcessMessage handleReceived(const meshtastic_MeshPacket &mp) override
     {
         calls++;
+        lastAckProofStatus = mp.ack_proof_status;
         return ProcessMessage::CONTINUE;
     }
     uint32_t calls = 0;
+    meshtastic_MeshPacket_AckProofStatus lastAckProofStatus = meshtastic_MeshPacket_AckProofStatus_ACK_PROOF_ABSENT;
 };
 
 class AuthPipelineMqtt : public MQTT
 {
   public:
     int queueSize() { return mqttQueue.numUsed(); }
+    std::string popTopic()
+    {
+        std::unique_ptr<QueueEntry> entry(mqttQueue.dequeuePtr(0));
+        return entry ? entry->topic : std::string();
+    }
     void clearQueue()
     {
         while (QueueEntry *entry = mqttQueue.dequeuePtr(0))
@@ -1725,6 +1733,125 @@ void test_C17_colliding_channel_hash_foreign_broadcast_is_relay_only(void)
     TEST_ASSERT_EQUAL(static_cast<int>(RoutingAuthVerdict::REJECT), static_cast<int>(passesRoutingAuthGate(&spoofed)));
 }
 
+// C18: MeshPacket.ack_proof_status is set only by our own ack verification. A value that arrives
+// with a packet must be gone by the time modules and the phone see it - including after the routing
+// auth cache restores its authenticated copy, which is how the clear was first lost.
+void test_C18_inbound_ack_proof_status_is_cleared_before_modules_and_phone(void)
+{
+    setPolicy(meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_COMPATIBLE);
+    mockNodeDB->addNode(REMOTE_NODE);
+    meshtastic_MeshPacket injected = makeDecoded(REMOTE_NODE, NODENUM_BROADCAST, meshtastic_PortNum_POSITION_APP, SMALL_PAYLOAD);
+    injected.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA;
+    injected.hop_start = 2; // a missing hop_start reads as pre-hop firmware and never reaches modules
+    injected.hop_limit = 1;
+    injected.ack_proof_status = meshtastic_MeshPacket_AckProofStatus_ACK_PROOF_VALID;
+    pipelineModule->lastAckProofStatus = meshtastic_MeshPacket_AckProofStatus_ACK_PROOF_VALID;
+
+    runPipelineIngress(injected);
+
+    TEST_ASSERT_EQUAL(1, pipelineModule->calls);
+    TEST_ASSERT_EQUAL(meshtastic_MeshPacket_AckProofStatus_ACK_PROOF_ABSENT, pipelineModule->lastAckProofStatus);
+    meshtastic_MeshPacket *toPhone = pipelineService->getForPhone();
+    TEST_ASSERT_NOT_NULL(toPhone);
+    TEST_ASSERT_EQUAL(meshtastic_MeshPacket_AckProofStatus_ACK_PROOF_ABSENT, toPhone->ack_proof_status);
+    packetPool.release(toPhone);
+}
+
+// C19: the other half of C18. A proven ack from the node we addressed, for a DM still pending, must
+// reach the phone reading ACK_PROOF_VALID - the verdict ReliableRouter reaches while sniffing has to
+// survive into the copy MeshService::handleFromRadio() queues, or the client never sees a receipt.
+void test_C19_proven_ack_reaches_phone_as_valid(void)
+{
+    uint8_t localPub[32], localPriv[32], remotePub[32], remotePriv[32];
+    crypto->generateKeyPair(localPub, localPriv);
+    crypto->generateKeyPair(remotePub, remotePriv);
+    mockNodeDB->addNode(REMOTE_NODE);
+    mockNodeDB->setPublicKey(REMOTE_NODE, remotePub);
+
+    meshtastic_MeshPacket original = makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_TEXT_MESSAGE_APP, SMALL_PAYLOAD);
+    original.id = 0xC1900019;
+    pipelineRouter->addPending(original, UINT32_MAX);
+
+    meshtastic_MeshPacket ack = makeDecoded(REMOTE_NODE, LOCAL_NODE, meshtastic_PortNum_ROUTING_APP, 0);
+    ack.id = 0xC1900020;
+    ack.hop_start = 2;
+    ack.hop_limit = 1;
+    ack.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA;
+    ack.decoded.request_id = original.id;
+    meshtastic_Routing routing = meshtastic_Routing_init_zero;
+    routing.which_variant = meshtastic_Routing_error_reason_tag;
+    routing.error_reason = meshtastic_Routing_Error_NONE;
+    ack.decoded.payload.size =
+        pb_encode_to_bytes(ack.decoded.payload.bytes, sizeof(ack.decoded.payload.bytes), &meshtastic_Routing_msg, &routing);
+    TEST_ASSERT_GREATER_THAN(0, ack.decoded.payload.size);
+    crypto->setDHPrivateKey(remotePriv);
+    TEST_ASSERT_TRUE(ackProofAttachWithKey(&ack, localPub));
+    crypto->setDHPrivateKey(localPriv);
+
+    runPipelineIngress(ack);
+
+    meshtastic_MeshPacket *delivered = nullptr;
+    while (meshtastic_MeshPacket *queued = pipelineService->getForPhone()) {
+        if (!delivered && queued->id == ack.id)
+            delivered = queued;
+        else
+            packetPool.release(queued);
+    }
+    TEST_ASSERT_NOT_NULL_MESSAGE(delivered, "the ack must reach the phone");
+    TEST_ASSERT_EQUAL(meshtastic_MeshPacket_AckProofStatus_ACK_PROOF_VALID, delivered->ack_proof_status);
+    packetPool.release(delivered);
+}
+
+// C20: a PKI DM between two other nodes is opaque to us, so it takes the relay-only path. It must still go
+// up to MQTT on the PKI topic, or a DM (and the ACK that answers it) never crosses a broker. The copy heard
+// from each relay is published only once.
+void test_C20_opaque_pki_dm_is_uplinked_to_mqtt_once(void)
+{
+    moduleConfig.mqtt.enabled = true;
+    moduleConfig.mqtt.encryption_enabled = true;
+    strcpy(moduleConfig.mqtt.root, "msh");
+    channels.getByIndex(0).settings.uplink_enabled = true;
+
+    meshtastic_MeshPacket dm = meshtastic_MeshPacket_init_zero;
+    dm.from = REMOTE_NODE;
+    dm.to = REMOTE_NODE + 1;
+    dm.id = 0xC2000020;
+    dm.channel = 0; // PKI packets carry no channel hash
+    dm.hop_limit = 2;
+    dm.hop_start = 3;
+    dm.which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
+    dm.encrypted.size = 40;
+    memset(dm.encrypted.bytes, 0x5A, dm.encrypted.size);
+
+    TEST_ASSERT_EQUAL(static_cast<int>(RoutingAuthVerdict::OPAQUE_RELAY_ONLY), static_cast<int>(passesRoutingAuthGate(&dm)));
+    runPipelineIngress(dm);
+    TEST_ASSERT_EQUAL_MESSAGE(1, pipelineRadio->sendCalls, "the DM is still relayed over LoRa");
+    TEST_ASSERT_EQUAL_MESSAGE(1, pipelineMqtt->queueSize(), "the DM must be uplinked to MQTT");
+    TEST_ASSERT_EQUAL_STRING("msh/2/e/PKI/!0a0a0a0a", pipelineMqtt->popTopic().c_str());
+    TEST_ASSERT_EQUAL(0, pipelineModule->calls);
+    TEST_ASSERT_NULL(pipelineService->getForPhone());
+    TEST_ASSERT_FALSE(pipelineRouter->historyContains(&dm));
+
+    meshtastic_MeshPacket relayed = dm;
+    relayed.hop_limit = 1;
+    runPipelineIngress(relayed);
+    TEST_ASSERT_EQUAL_MESSAGE(0, pipelineMqtt->queueSize(), "a relay's copy of the same DM must not be uplinked again");
+
+    // A frame on a channel we lack is not PKI-shaped and stays off MQTT.
+    meshtastic_MeshPacket foreign = dm;
+    foreign.id++;
+    foreign.channel = 0xFE;
+    runPipelineIngress(foreign);
+    TEST_ASSERT_EQUAL(0, pipelineMqtt->queueSize());
+
+    // Without MQTT encryption there is no plaintext to publish, so nothing goes up.
+    moduleConfig.mqtt.encryption_enabled = false;
+    meshtastic_MeshPacket plain = dm;
+    plain.id += 2;
+    runPipelineIngress(plain);
+    TEST_ASSERT_EQUAL(0, pipelineMqtt->queueSize());
+}
+
 // C5: the packet survives (C4) but the identity claim inside it must not land - the pubkey guard
 // can't tell a signer from an impersonator replaying its (public) key. Only the write is refused.
 void test_N5_unsigned_unicast_nodeinfo_from_signer_does_not_change_name(void)
@@ -2437,6 +2564,9 @@ void setup()
     RUN_TEST(test_C15_reliable_unicast_tracks_five_total_attempts);
     RUN_TEST(test_C16_reliable_broadcast_keeps_three_total_attempts);
     RUN_TEST(test_C17_colliding_channel_hash_foreign_broadcast_is_relay_only);
+    RUN_TEST(test_C18_inbound_ack_proof_status_is_cleared_before_modules_and_phone);
+    RUN_TEST(test_C19_proven_ack_reaches_phone_as_valid);
+    RUN_TEST(test_C20_opaque_pki_dm_is_uplinked_to_mqtt_once);
     printf("\n=== Group N: NodeInfoModule authentication ===\n");
     RUN_TEST(test_N1_unsigned_nodeinfo_from_signer_dropped);
     RUN_TEST(test_N2_signed_nodeinfo_from_signer_not_dropped);

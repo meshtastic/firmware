@@ -27,6 +27,10 @@ void test_empty_encrypted_packet();
 void test_timestamp_present_when_has_rx_time();
 void test_timestamp_zeroed_when_rx_time_absent();
 void test_encrypted_timestamp_zeroed_when_rx_time_absent();
+void test_dmshell_open_roundtrip();
+void test_dmshell_input_roundtrip();
+void test_dmshell_resize_roundtrip();
+void test_dmshell_close_roundtrip();
 
 // Required by Unity: PlatformIO's weak defaults do not link on MinGW (PE-COFF weak externals).
 void setUp(void) {}
@@ -68,6 +72,11 @@ void setup()
     RUN_TEST(test_timestamp_present_when_has_rx_time);
     RUN_TEST(test_timestamp_zeroed_when_rx_time_absent);
     RUN_TEST(test_encrypted_timestamp_zeroed_when_rx_time_absent);
+    // DMShell protobuf transport tests
+    RUN_TEST(test_dmshell_open_roundtrip);
+    RUN_TEST(test_dmshell_input_roundtrip);
+    RUN_TEST(test_dmshell_resize_roundtrip);
+    RUN_TEST(test_dmshell_close_roundtrip);
 
     // exit(), not a bare UNITY_END(): without it setup() returns and the runtime spins loop()
     // forever, so the process never terminates even though the suite is finished.

@@ -280,10 +280,13 @@ class ReentrantSpiLock : public ISpiLock
             depth++;
             return true;
         }
-        bool result = spiLock->lock(timeout);
+        // A timed-out take holds nothing: claiming ownership anyway would let this thread's next
+        // lock() skip the real acquire, and its unlock() release a bus it never held.
+        if (!spiLock->lock(timeout))
+            return false;
         owner = self;
         depth = 1;
-        return result;
+        return true;
     }
 
     void unlock(void) override

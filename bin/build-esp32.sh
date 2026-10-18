@@ -27,6 +27,10 @@ pio run --environment $1 -t mtjson # -v
 
 cp $BUILDDIR/$basename.elf $OUTDIR/$basename.elf
 
+echo "Copying linker scripts and map file"
+cp $BUILDDIR/$basename.*.ld $OUTDIR/ 2>/dev/null || true
+cp $BUILDDIR/$basename.map $OUTDIR/ 2>/dev/null || true
+
 echo "Copying ESP32 bin file"
 cp $BUILDDIR/$basename.factory.bin $OUTDIR/$basename.factory.bin
 

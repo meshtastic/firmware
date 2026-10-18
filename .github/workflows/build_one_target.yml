@@ -32,7 +32,7 @@ jobs:
       matrix:
         arch:
           - all
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -76,7 +76,7 @@ jobs:
 
   version:
     if: ${{ inputs.target != '' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
       - name: Get release version string
@@ -103,7 +103,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     needs: [version, build]
     steps:
       - name: Checkout code

@@ -26,6 +26,11 @@
 #include "mesh/generated/meshtastic/rtttl.pb.h"
 #include <Arduino.h>
 
+#if HAS_LIBNOTIFY
+#include "meshUtils.h"
+#include <libnotify/notify.h>
+#endif
+
 #if defined(HAS_RGB_LED)
 #include "AmbientLightingThread.h"
 uint8_t red = 0;
@@ -79,6 +84,11 @@ int32_t ExternalNotificationModule::runOnce()
     if (!moduleConfig.external_notification.enabled) {
         return INT32_MAX; // we don't need this thread here...
     } else {
+#if HAS_LIBNOTIFY
+        // Catches the case where traffic stops right after a failure, so the state change still
+        // gets reported without waiting for the next inbound alert.
+        reportNotifyStatus();
+#endif
         uint32_t delay = EXT_NOTIFICATION_MODULE_OUTPUT_MS;
         bool isRtttlPlaying = rtttl::isPlaying();
 #ifdef HAS_I2S
@@ -455,6 +465,9 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
             if (genericShouldAlert) {
                 LOG_INFO("externalNotificationModule - Generic alert");
                 setExternalState(0, true);
+#if HAS_LIBNOTIFY
+                portduinoNotify(mp);
+#endif
             }
 
             if (vibraShouldAlert) {
@@ -630,5 +643,212 @@ int ExternalNotificationModule::handleInputEvent(const InputEvent *event)
         return 1;
     }
     return 0;
+}
+#endif
+
+#if HAS_LIBNOTIFY
+/// Cap on undelivered notifications. A burst of traffic shouldn't grow the queue without bound while
+/// the notification daemon is slow; the oldest entries are the ones worth keeping.
+static constexpr size_t maxQueuedNotifications = 16;
+/// Consecutive show() failures before we back off. One failure can be a daemon restart; a run of
+/// them means there is nothing listening right now.
+static constexpr int maxNotifyFailures = 3;
+/// Backoff bounds. The packaged daemon runs as a system service with no session bus, so "nothing is
+/// listening" is an ordinary steady state rather than an error worth retrying per message - but a
+/// desktop session can appear at any point, so it must never become permanent either.
+static constexpr uint32_t notifyBackoffInitialMs = 30 * 1000;
+static constexpr uint32_t notifyBackoffMaxMs = 15 * 60 * 1000;
+
+/// Copy an untrusted mesh string into something GLib will accept. Embedded NULs become spaces -
+/// they would otherwise truncate the text at the first one - and invalid UTF-8 is replaced, because
+/// g_variant_new_string() rejects it: a GLib CRITICAL by default, and a hard abort under
+/// G_DEBUG=fatal-criticals, which an unauthenticated mesh packet must never be able to trigger.
+static std::string sanitizedMeshText(const char *src, size_t len)
+{
+    std::string out(src, len);
+    for (char &c : out) {
+        if (c == '\0')
+            c = ' ';
+    }
+    out.push_back('\0'); // sanitizeUtf8() works on a NUL-terminated buffer
+    sanitizeUtf8(out.data(), out.size());
+    out.pop_back(); // bad bytes are replaced in place, so the length is unchanged
+    return out;
+}
+
+/// Escape Pango markup in a notification body. Servers advertising "body-markup" parse a markup
+/// subset there, so an unescaped message can inject formatting - and where the server also
+/// advertises body-images or body-hyperlinks, tags that make the daemon fetch a remote URL. The
+/// escaping is unconditional: a server without body-markup renders the entities literally, which is
+/// cosmetic, while failing to escape one that has it is not, and mesh text carries no markup worth
+/// preserving. Only the body needs this; the spec gives the summary no markup.
+///
+/// Runs on the caller's thread rather than the worker's. That does not weaken the rule that the
+/// worker owns every libnotify call: this is a pure GLib string function, touching no libnotify or
+/// DBus state, and GLib has been thread-safe since 2.32.
+static std::string escapedNotificationBody(const std::string &text)
+{
+    gchar *escaped = g_markup_escape_text(text.data(), (gssize)text.size());
+    if (!escaped) {
+        // Fail closed. Returning the input here would hand libnotify the one string this function
+        // exists to neutralize, so drop the body instead - it cannot happen for the already
+        // sanitized input we pass, and if it ever does, losing a body beats injecting one.
+        return "[unprintable]";
+    }
+    std::string out(escaped);
+    g_free(escaped);
+    return out;
+}
+
+void ExternalNotificationModule::portduinoNotify(const meshtastic_MeshPacket &mp)
+{
+    std::string senderName;
+    const meshtastic_NodeInfoLite *sender = nodeDB->getMeshNode(mp.from);
+    if (nodeInfoLiteHasUser(sender)) {
+        if (sender->long_name[0] != '\0') {
+            senderName = sender->long_name;
+        } else {
+            senderName = sender->short_name;
+        }
+    } else {
+        senderName = std::to_string(mp.from);
+    }
+
+    // nodeDB is only safe to touch on this thread, so the strings are resolved here and the worker
+    // gets owned copies.
+    //
+    // Both are attacker-controlled - the body is the raw payload and the name came off the mesh -
+    // so neither reaches libnotify unsanitized. TypeConversions already sanitizes names on the way
+    // into NodeDB, but the abort described above is too sharp an edge to leave resting on an
+    // invariant owned by another file.
+    std::string notificationSummary = "From: " + sanitizedMeshText(senderName.data(), senderName.size());
+    std::string notificationBody =
+        escapedNotificationBody(sanitizedMeshText((const char *)mp.decoded.payload.bytes, mp.decoded.payload.size));
+
+    reportNotifyStatus();
+
+    {
+        std::lock_guard<std::mutex> lock(notifyLock);
+        if (notifyShutdown)
+            return;
+        // Inside a backoff window nothing is queued at all. The first message after the window
+        // expires is the probe that finds out whether the daemon came back.
+        if (notifyRetryArmed && !Throttle::deadlinePassed(notifyRetryAfter))
+            return;
+        if (notifyQueue.size() >= maxQueuedNotifications) {
+            LOG_WARN("Desktop notification queue full, dropping notification");
+            return;
+        }
+        notifyQueue.emplace_back(std::move(notificationSummary), std::move(notificationBody));
+        if (!notifyThread.joinable())
+            notifyThread = std::thread([this] { notifyWorker(); });
+    }
+    notifyWake.notify_one();
+}
+
+void ExternalNotificationModule::reportNotifyStatus()
+{
+    NotifyStatus status;
+    {
+        std::lock_guard<std::mutex> lock(notifyLock);
+        if (!notifyStatus.pending)
+            return;
+        status = notifyStatus;
+        notifyStatus.pending = false;
+    }
+    // Logged once the lock is released: LOG_* formats into RedirectablePrint's shared buffer and
+    // writes the logfile, neither of which belongs in a critical section the worker waits on.
+    if (status.recovered) {
+        LOG_INFO("Desktop notifications working again");
+    } else {
+        LOG_WARN("Desktop notifications unavailable (%s), retry in %us", status.reason, status.retryInMs / 1000);
+    }
+}
+
+void ExternalNotificationModule::notifyWorker()
+{
+    int consecutiveFailures = 0;
+    std::unique_lock<std::mutex> lock(notifyLock);
+    while (true) {
+        notifyWake.wait(lock, [this] { return notifyShutdown || !notifyQueue.empty(); });
+        if (notifyShutdown)
+            return;
+
+        std::pair<std::string, std::string> entry = std::move(notifyQueue.front());
+        notifyQueue.pop_front();
+
+        // Unlocked for the DBus round trip so handleReceived() never blocks behind the daemon.
+        lock.unlock();
+        char errorText[sizeof(NotifyStatus::reason)];
+        const char *failure = nullptr;
+        // Init is attempted per delivery rather than once before the loop, so a retry after a
+        // backoff window can still pick up a session bus that was absent at startup.
+        if (!notify_is_initted() && !notify_init("Meshtasticd")) {
+            failure = "libnotify init failed";
+        } else {
+            NotifyNotification *notification =
+                notify_notification_new(entry.first.c_str(), entry.second.c_str(), "org.meshtastic.meshtasticd");
+            if (notification) {
+                GError *error = nullptr;
+                if (!notify_notification_show(notification, &error)) {
+                    snprintf(errorText, sizeof(errorText), "%s", error && error->message ? error->message : "unknown error");
+                    failure = errorText;
+                    if (error)
+                        g_error_free(error);
+                }
+                g_object_unref(G_OBJECT(notification));
+            } else {
+                failure = "could not create notification";
+            }
+        }
+        lock.lock();
+
+        if (!failure) {
+            consecutiveFailures = 0;
+            notifyBackoffMs = 0;
+            // Only worth a line if we had actually stopped trying.
+            if (notifyRetryArmed) {
+                notifyRetryArmed = false;
+                notifyStatus.pending = true;
+                notifyStatus.recovered = true;
+            }
+            continue;
+        }
+
+        if (++consecutiveFailures < maxNotifyFailures)
+            continue;
+
+        // Back off instead of latching off for the process lifetime. The queue is dropped rather
+        // than held: a burst of popups for messages from fifteen minutes ago is noise, not a
+        // backlog worth delivering.
+        notifyBackoffMs = notifyBackoffMs ? notifyBackoffMs * 2 : notifyBackoffInitialMs;
+        if (notifyBackoffMs > notifyBackoffMaxMs)
+            notifyBackoffMs = notifyBackoffMaxMs;
+        notifyRetryAfter = millis() + notifyBackoffMs;
+        notifyRetryArmed = true;
+        notifyQueue.clear();
+        consecutiveFailures = 0;
+
+        notifyStatus.pending = true;
+        notifyStatus.recovered = false;
+        notifyStatus.retryInMs = notifyBackoffMs;
+        snprintf(notifyStatus.reason, sizeof(notifyStatus.reason), "%s", failure);
+    }
+}
+
+ExternalNotificationModule::~ExternalNotificationModule()
+{
+    {
+        std::lock_guard<std::mutex> lock(notifyLock);
+        notifyShutdown = true;
+        notifyQueue.clear();
+    }
+    notifyWake.notify_one();
+    if (notifyThread.joinable())
+        notifyThread.join();
+    // Only after the join: the worker owns every libnotify call, so tearing down while it is still
+    // running would be a use-after-uninit.
+    if (notify_is_initted())
+        notify_uninit();
 }
 #endif

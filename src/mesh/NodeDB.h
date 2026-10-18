@@ -341,6 +341,9 @@ class NodeDB
     bool saveToDisk(int saveWhat = SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS |
                                    SEGMENT_NODEDATABASE);
 
+    /// Write node changes that were deferred, at most once a minute. Called from the main loop.
+    void saveNodeDatabaseIfDirty();
+
     /** Reinit radio config if needed, because either:
      * a) sometimes a buggy android app might send us bogus settings or
      * b) the client set factory_reset
@@ -713,6 +716,10 @@ class NodeDB
     uint32_t lastFullEvictionMs = 0; // when we last evicted to admit a new node, once the db is full
     uint32_t lastBackupAttempt = 0;  // when we last tried a backup automatically or manually
     uint32_t lastSort = 0;           // When last sorted the nodeDB
+
+    bool nodeDatabaseDirty = false; // nodes.proto is behind the in-memory db
+    int onReboot(void *unused);
+    CallbackObserver<NodeDB, void *> rebootObserver = CallbackObserver<NodeDB, void *>(this, &NodeDB::onReboot);
 
     /// See NodeHeardAt. Caps how many distinct nodes can be dated once the clock arrives; a node
     /// pushed out by reuse-oldest just stays "last heard: unknown", the same as before this table.

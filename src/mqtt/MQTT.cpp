@@ -782,11 +782,16 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp_encrypted, const meshtastic_Me
 
     LOG_DEBUG("MQTT onSend - Publish ");
     const meshtastic_MeshPacket *p;
+    meshtastic_MeshPacket *coerced = nullptr;
     if (moduleConfig.mqtt.encryption_enabled) {
         p = &mp_encrypted;
         LOG_DEBUG("encrypted message");
     } else if (mp_decoded.which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
         p = &mp_decoded;
+        // A signed payload is published as sent: a coerced copy would no longer verify at downlink gateways.
+        if (mp_decoded.decoded.portnum == meshtastic_PortNum_NODEINFO_APP && mp_decoded.decoded.xeddsa_signature.size == 0 &&
+            (coerced = packetPool.allocCopy(mp_decoded, 0)) && coerceNodeInfoUserId(*coerced))
+            p = coerced;
         LOG_DEBUG("portnum %i message", mp_decoded.decoded.portnum);
     } else {
         LOG_DEBUG("nothing, pkt not decrypted");
@@ -800,6 +805,8 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp_encrypted, const meshtastic_Me
                                             .channel_id = const_cast<char *>(channelId),
                                             .gateway_id = const_cast<char *>(nodeId.c_str())};
     size_t numBytes = pb_encode_to_bytes(bytes, sizeof(bytes), &meshtastic_ServiceEnvelope_msg, &env);
+    if (coerced)
+        packetPool.release(coerced);
     if (topicRoot != moduleConfig.mqtt.root)
         reinitTopics(); // root changed before runOnce() noticed
     std::string topic = cryptTopic + channelId + "/" + nodeId;
