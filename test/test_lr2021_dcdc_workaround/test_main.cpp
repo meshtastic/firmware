@@ -6,11 +6,12 @@
 // with readRegMem32() and writes DCDC_FREQ_LF with writeRegMem32(). Both count `len` in 32-bit
 // words, and each call here moves exactly one: one register, one uint32_t local.
 //
-// The regression guarded is the one jgromes/RadioLib#1864 introduced: `sizeof(uint32_t)` passed as
-// that word count. The read then writes 12 bytes of stack past the local, and the write sends 12
-// bytes of adjacent stack to the three registers after DCDC_FREQ_LF. Under [env:coverage]
-// (-fsanitize=address) the call itself aborts with stack-buffer-overflow. Without ASan the
-// assertions below still fail, on the word count the chip is asked for.
+// The regression guarded is the one jgromes/RadioLib#1864 introduced in 7.8.0 and #1880 fixed in
+// 7.8.1: `sizeof(uint32_t)` passed as that word count. The read then wrote 12 bytes of stack past
+// the local, and the write sent 12 bytes of adjacent stack to the three registers after
+// DCDC_FREQ_LF. If it comes back, [env:coverage] (-fsanitize=address) aborts the call with
+// stack-buffer-overflow, and without ASan the assertions below fail on the word count the chip is
+// asked for.
 //
 // No chip is needed: a recording HAL answers every SPI byte with a CMD_OK status, which is all the
 // driver checks before running the workaround. resetDCDCworkaround() makes the same write call but is
