@@ -13,6 +13,8 @@
 #define BUTTON_PIN 9 // Power/wake button (GPIO 9), active high
 #define BUTTON_ACTIVE_LOW false
 #define BUTTON_ACTIVE_PULLUP false
+// The default ANY_LOW wakes instantly on the idle-low button, so shutdown turns into a reboot.
+#define ESP32S3_WAKE_TYPE ESP_EXT1_WAKEUP_ANY_HIGH
 
 // I2C Buses
 #define I2C_SDA 17 // I2C0: SDA (IO Expander, RTC)
