@@ -3,6 +3,7 @@
 
 #include "AudioBoard.h"
 #include <Wire.h>
+#include <driver/gpio.h>
 
 namespace
 {
@@ -128,11 +129,24 @@ bool configureOutput(uint8_t pin, bool level)
     return ioExpander.digitalWrite(pin, level) && ioExpander.pinMode(pin, true);
 }
 
+bool writeExpanderPin(uint8_t pin, bool level)
+{
+    for (int attempt = 0; attempt < 3; attempt++) {
+        if (ioExpander.digitalWrite(pin, level))
+            return true;
+        delay(2);
+    }
+    return false;
+}
+
 } // namespace
 
 void earlyInitVariant()
 {
     pinMode(BUTTON_PIN, INPUT);
+#ifdef LGFX_PIN_BL
+    gpio_hold_dis((gpio_num_t)LGFX_PIN_BL); // held low by variant_shutdown()
+#endif
 
     // After a warm reboot (RTC_SW_CPU_RST) I2C slaves-particularly the ES8311
     // audio codec at 0x18-can be left mid-transaction, holding SDA low.  This
@@ -280,4 +294,46 @@ extern "C" void meshtastic_variant_pre_radio_reset(void)
     delay(10);
     ioExpander.digitalWrite(EXP_PIN_LORA_RESET, true);
     delay(10);
+}
+
+// Called by cpuDeepSleep() right before esp_deep_sleep_start(); earlyInitVariant() restores the rails on wake.
+void variant_shutdown()
+{
+    // device-ui polls the expander on Wire from its own task; stop it so it cannot interleave with the writes below.
+    TaskHandle_t tftTask = xTaskGetHandle("tft");
+    if (tftTask)
+        vTaskSuspend(tftTask);
+
+    board.end();
+
+#ifdef LGFX_PIN_BL
+    ledcDetach(LGFX_PIN_BL);
+    pinMode(LGFX_PIN_BL, OUTPUT);
+    digitalWrite(LGFX_PIN_BL, LOW);
+    gpio_hold_en((gpio_num_t)LGFX_PIN_BL);
+    gpio_deep_sleep_hold_en();
+#endif
+
+    if (!expanderReady) {
+        return;
+    }
+
+    // doDeepSleep() has already ended Wire and parked its pins.
+    Wire.begin(I2C_SDA, I2C_SCL);
+
+    // Drive logic lines low first so they cannot back-power a chip whose rail is about to go.
+    writeExpanderPin(EXP_PIN_LCD_RST, false);
+    writeExpanderPin(EXP_PIN_GNSS_SLEEP_INT, false);
+
+    writeExpanderPin(EXP_PIN_LCD_PWR_EN, false);
+    writeExpanderPin(EXP_PIN_GNSS_PWR_EN, false);
+    writeExpanderPin(EXP_PIN_SD_PWR_EN, false);
+    writeExpanderPin(EXP_PIN_PA_PWR_EN, false);
+    writeExpanderPin(EXP_PIN_SEN_EN, false);
+    writeExpanderPin(EXP_PIN_BAT_ADC_EN, false);
+    // PWR_HOLD stays high so the RTC keeps time; GNSS_VRTC_EN stays on so the GNSS can hot-start after wake.
+
+    Wire.end();
+    pinMode(I2C_SDA, ANALOG);
+    pinMode(I2C_SCL, ANALOG);
 }
