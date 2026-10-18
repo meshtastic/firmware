@@ -6,8 +6,8 @@
 // no production changes); later groups exercise routing order and policy helpers directly.
 //
 // The policy contract pinned here:
-//   - Compatible (the default) never signs; Balanced and Strict sign broadcasts and NodeInfo, even
-//     unicast (ham: all unicasts).
+//   - Compatible (the default) never signs; Balanced and Strict sign broadcasts, and NodeInfo and
+//     position even when unicast (ham: all unicasts).
 //   - A signed NodeInfo must claim the key that signed it, and that key must hash to the sender.
 //   - An AES-CCM channel is never signed and overrides the policy: its tag authenticates the packet.
 //   - Only Strict drops a packet for lacking a signature, and not on an AES-CCM channel, nor an ack or
@@ -889,12 +889,13 @@ void test_B1_local_broadcast_is_signed(void)
     TEST_ASSERT_TRUE(p.xeddsa_signed);
 }
 
-// B2: preserve the existing wire behavior: non-PKI unicast is not signed.
+// B2: preserve the existing wire behavior: a non-PKI unicast is not signed, other than the NodeInfo
+// and position unicasts B21/B23 pin.
 void test_B2_local_unicast_not_signed(void)
 {
     mockNodeDB->addNode(REMOTE_NODE);
 
-    meshtastic_MeshPacket p = makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_POSITION_APP, SMALL_PAYLOAD);
+    meshtastic_MeshPacket p = makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_PRIVATE_APP, SMALL_PAYLOAD);
 
     TEST_ASSERT_EQUAL(DECODE_SUCCESS, roundTrip(&p));
     TEST_ASSERT_EQUAL_MESSAGE(0, p.decoded.xeddsa_signature.size, "unicast must remain unsigned");
@@ -951,7 +952,7 @@ void test_B5_preset_signature_on_local_packet_cleared(void)
 {
     mockNodeDB->addNode(REMOTE_NODE);
 
-    meshtastic_MeshPacket p = makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_POSITION_APP, SMALL_PAYLOAD);
+    meshtastic_MeshPacket p = makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_PRIVATE_APP, SMALL_PAYLOAD);
     p.decoded.xeddsa_signature.size = XEDDSA_SIGNATURE_SIZE;
     memset(p.decoded.xeddsa_signature.bytes, 0xAB, XEDDSA_SIGNATURE_SIZE);
 
@@ -1019,12 +1020,12 @@ void test_B7_infrastructure_port_signing_matrix(void)
         TEST_ASSERT_EQUAL_MESSAGE(broadcastExpected, broadcast.decoded.xeddsa_signature.size,
                                   "signable infrastructure broadcast must be signed, traceroute never");
 
-        // NodeInfo is signed even when unicast (B21); the other infrastructure unicasts stay unsigned.
+        // NodeInfo and position are signed even when unicast (B21, B23); acks and traceroutes are not.
         meshtastic_MeshPacket unicast = makeDecoded(LOCAL_NODE, REMOTE_NODE, port, SMALL_PAYLOAD);
         TEST_ASSERT_EQUAL(DECODE_SUCCESS, roundTrip(&unicast));
-        const size_t expected = port == meshtastic_PortNum_NODEINFO_APP ? XEDDSA_SIGNATURE_SIZE : 0;
-        TEST_ASSERT_EQUAL_MESSAGE(expected, unicast.decoded.xeddsa_signature.size,
-                                  "only NodeInfo may be signed among infrastructure unicasts");
+        const bool signedPort = port == meshtastic_PortNum_NODEINFO_APP || port == meshtastic_PortNum_POSITION_APP;
+        TEST_ASSERT_EQUAL_MESSAGE(signedPort ? XEDDSA_SIGNATURE_SIZE : 0, unicast.decoded.xeddsa_signature.size,
+                                  "only NodeInfo and position may be signed among infrastructure unicasts");
     }
 }
 
@@ -1321,6 +1322,31 @@ void test_B21_unicast_nodeinfo_signing_follows_policy(void)
     meshtastic_MeshPacket compatibleReply = makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_NODEINFO_APP, SMALL_PAYLOAD);
     TEST_ASSERT_EQUAL(DECODE_SUCCESS, roundTrip(&compatibleReply));
     TEST_ASSERT_EQUAL_MESSAGE(0, compatibleReply.decoded.xeddsa_signature.size, "Compatible must not sign a NodeInfo reply");
+}
+
+// B23: a unicast position - a "request position" or the reply to one - is PKI-excluded, so a
+// signature is its only authentication. Balanced and Strict sign it, and a Strict receiver accepts
+// it; Compatible signs nothing. If the Strict half fails, position requests to or from a Strict node
+// stop working; if the Compatible half fails, Compatible pays for signatures again.
+void test_B23_unicast_position_signing_follows_policy(void)
+{
+    uint8_t pub[32], priv[32];
+    crypto->generateKeyPair(pub, priv);
+    mockNodeDB->addNode(LOCAL_NODE);
+    mockNodeDB->setPublicKey(LOCAL_NODE, pub);
+
+    setPolicy(meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_STRICT);
+    meshtastic_MeshPacket strictReply = makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_POSITION_APP, SMALL_PAYLOAD);
+    strictReply.decoded.request_id = 0x5EED0003;
+    TEST_ASSERT_EQUAL(DECODE_SUCCESS, roundTrip(&strictReply));
+    TEST_ASSERT_EQUAL_MESSAGE(XEDDSA_SIGNATURE_SIZE, strictReply.decoded.xeddsa_signature.size,
+                              "Strict must sign a position reply");
+    TEST_ASSERT_TRUE(strictReply.xeddsa_signed);
+
+    setPolicy(meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_COMPATIBLE);
+    meshtastic_MeshPacket compatibleReply = makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_POSITION_APP, SMALL_PAYLOAD);
+    TEST_ASSERT_EQUAL(DECODE_SUCCESS, roundTrip(&compatibleReply));
+    TEST_ASSERT_EQUAL_MESSAGE(0, compatibleReply.decoded.xeddsa_signature.size, "Compatible must not sign a position reply");
 }
 
 // B22: a traceroute is never signed, under any policy and in ham mode, where every other unicast is.
@@ -2632,6 +2658,7 @@ void setup()
     RUN_TEST(test_B20_licensed_compatible_does_not_sign);
     RUN_TEST(test_B21_unicast_nodeinfo_signing_follows_policy);
     RUN_TEST(test_B22_traceroute_never_signed);
+    RUN_TEST(test_B23_unicast_position_signing_follows_policy);
 
     printf("\n=== Group C: routing pipeline authentication ordering ===\n");
     RUN_TEST(test_C1_invalid_first_copy_does_not_poison_valid_same_id);
