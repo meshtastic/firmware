@@ -50,8 +50,8 @@ extern int m5HasAg3352;
 #define GPS_RTC_INT 11
 
 // The GPS UART is crossed the other way on v1.0.
-#define GPS_TX_PIN (m5HasAg3352 ? 19 : 20) // This is for bits going TOWARDS the GPS
-#define GPS_RX_PIN (m5HasAg3352 ? 20 : 19) // This is for bits going TOWARDS the CPU
+#define GPS_TX_PIN (m5HasAg3352 ? 19 : 20)     // This is for bits going TOWARDS the GPS
+#define GPS_RX_PIN (m5HasAg3352 ? 20 : 19)     // This is for bits going TOWARDS the CPU
 #define PIN_GPS_SWITCH (m5HasAg3352 ? 18 : 10) // v1.0 senses the GPS switch on GPIO10
 #define GPS_THREAD_INTERVAL 50
 
