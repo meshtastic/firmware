@@ -45,17 +45,13 @@ class Tca6424
     {
         this->wire = &wire;
 
-        // Default all pins as inputs and all outputs low in our local shadow.
-        config[0] = 0xFF;
-        config[1] = 0xFF;
-        config[2] = 0xFF;
-        out[0] = 0x00;
-        out[1] = 0x00;
-        out[2] = 0x00;
-
-        return writeReg(TCA6424_OUTPUT_PORT0 + 0, out[0]) && writeReg(TCA6424_OUTPUT_PORT0 + 1, out[1]) &&
-               writeReg(TCA6424_OUTPUT_PORT0 + 2, out[2]) && writeReg(TCA6424_CONFIG_PORT0 + 0, config[0]) &&
-               writeReg(TCA6424_CONFIG_PORT0 + 1, config[1]) && writeReg(TCA6424_CONFIG_PORT0 + 2, config[2]);
+        // Adopt the live register state: the expander survives a CPU reset and still drives PWR_HOLD and the rails.
+        for (uint8_t port = 0; port < 3; port++) {
+            if (!readReg(TCA6424_OUTPUT_PORT0 + port, out[port]) || !readReg(TCA6424_CONFIG_PORT0 + port, config[port])) {
+                return false;
+            }
+        }
+        return true;
     }
 
     bool pinMode(uint8_t pin, bool output)
@@ -97,6 +93,17 @@ class Tca6424
         wire->write(reg);
         wire->write(value);
         return wire->endTransmission() == 0;
+    }
+
+    bool readReg(uint8_t reg, uint8_t &value)
+    {
+        wire->beginTransmission(address);
+        wire->write(reg);
+        if (wire->endTransmission(false) != 0 || wire->requestFrom(address, (uint8_t)1) != 1) {
+            return false;
+        }
+        value = wire->read();
+        return true;
     }
 
     uint8_t address;
@@ -175,8 +182,9 @@ void earlyInitVariant()
         return;
     }
 
+    bool ok = configureOutput(EXP_PIN_PWR_HOLD, true);
+
     // Buttons + SD detect + IMU interrupt are inputs.
-    bool ok = true;
     ok &= configureInput(EXP_PIN_BUTTON_UP);
     ok &= configureInput(EXP_PIN_BUTTON_DOWN);
     ok &= configureInput(EXP_PIN_BUTTON_LEFT);
@@ -187,12 +195,15 @@ void earlyInitVariant()
     ok &= configureInput(EXP_PIN_SD_DETECT);
     ok &= configureInput(EXP_PIN_IMU_INT1);
 
-    // Keep board alive and power domains in known state.
-    ok &= configureOutput(EXP_PIN_PWR_HOLD, true);
+    // Stagger rail enables as in bsp_power_startup_peripherals() to limit inrush current.
     ok &= configureOutput(EXP_PIN_BAT_ADC_EN, true);
+    delay(10);
     ok &= configureOutput(EXP_PIN_SEN_EN, true);
+    delay(10);
     ok &= configureOutput(EXP_PIN_SD_PWR_EN, true);
+    delay(100);
     ok &= configureOutput(EXP_PIN_PA_PWR_EN, true);
+    delay(10);
     ok &= configureOutput(EXP_PIN_LORA_RESET, true);
 
     // ST7789P3 power-on and reset sequence (mirrors bsp_lcd_hard_reset in BSP demo).
