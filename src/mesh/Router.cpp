@@ -695,6 +695,10 @@ bool checkXeddsaReceivePolicy(meshtastic_MeshPacket *p)
 
     // Only a signature we verify below may mark this packet signed; never trust an inbound flag.
     p->xeddsa_signed = false;
+    // Every hop rewrites a traceroute, so a signature on one cannot verify past its first hop: ignore it,
+    // and never require one, even in Strict.
+    if (p->decoded.portnum == meshtastic_PortNum_TRACEROUTE_APP)
+        return true;
     if (p->decoded.xeddsa_signature.size == XEDDSA_SIGNATURE_SIZE) {
         meshtastic_NodeInfoLite_public_key_t senderKey = {0, {0}};
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(p->from);
@@ -739,9 +743,10 @@ bool checkXeddsaReceivePolicy(meshtastic_MeshPacket *p)
         // senders emit only those two sizes (perhapsEncode sets 0 or XEDDSA_SIGNATURE_SIZE).
         LOG_WARN("Malformed XEdDSA signature (%u bytes) from 0x%08x, drop", (unsigned)p->decoded.xeddsa_signature.size, p->from);
         return false;
-    } else if (strict && !p->pki_encrypted) {
+    } else if (strict && !p->pki_encrypted && p->decoded.portnum != meshtastic_PortNum_ROUTING_APP) {
         // Only Strict drops a packet for being unsigned; Balanced and Compatible accept it, even from a
         // known signer, and NodeDB::refusesUnsignedIdentity() guards that signer's identity instead.
+        // Acks and other routing packets are exempt: an ack carries its own proof (AckProof.h).
         LOG_WARN("Drop unsigned packet from 0x%08x in Strict signature mode", p->from);
         return false;
     }
@@ -1205,14 +1210,15 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
 #if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
             // Compatible never signs, and an AES-CCM channel's tag already authenticates the packet.
             // Licensed packets stay plaintext, so ham signs unicasts as well as broadcasts. NodeInfo is
-            // signed even when unicast: requests and replies carry the key a peer will use for PKI. Use the
-            // exact encoded size: signing then failing TOO_LARGE would break packets deliverable unsigned.
+            // signed even when unicast: requests and replies carry the key a peer will use for PKI. A traceroute
+            // never is: every hop rewrites it. Use the exact encoded size: signing then failing TOO_LARGE would
+            // break packets deliverable unsigned.
             const bool signingPolicy = config.security.packet_signature_policy !=
                                        meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_COMPATIBLE;
             const bool signableDestination =
                 owner.is_licensed || isBroadcast(p->to) || p->decoded.portnum == meshtastic_PortNum_NODEINFO_APP;
             if (signingPolicy && !channels.isAEADEnabled(p->channel) && !p->pki_encrypted && signableDestination &&
-                signedDataFits(&p->decoded)) {
+                p->decoded.portnum != meshtastic_PortNum_TRACEROUTE_APP && signedDataFits(&p->decoded)) {
                 if (crypto->xeddsa_sign(p->from, p->id, p->to, &p->decoded, p->decoded.xeddsa_signature.bytes)) {
                     p->decoded.xeddsa_signature.size = XEDDSA_SIGNATURE_SIZE;
                     LOG_TRACE("XEdDSA signed packet 0x%08x", p->id);

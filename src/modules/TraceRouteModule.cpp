@@ -152,6 +152,8 @@ void TraceRouteModule::alterReceivedProtobuf(meshtastic_MeshPacket &p, meshtasti
     // Set updated route to the payload of the to be flooded packet
     p.decoded.payload.size =
         pb_encode_to_bytes(p.decoded.payload.bytes, sizeof(p.decoded.payload.bytes), &meshtastic_RouteDiscovery_msg, r);
+    // The rewrite invalidates any signature an older sender attached; relayed as is, older receivers would drop it.
+    p.decoded.xeddsa_signature.size = 0;
 
     if (tracingNode != 0) {
         // check isResponseFromTarget

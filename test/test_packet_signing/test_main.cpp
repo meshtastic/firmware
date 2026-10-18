@@ -10,7 +10,9 @@
 //     unicast (ham: all unicasts).
 //   - A signed NodeInfo must claim the key that signed it, and that key must hash to the sender.
 //   - An AES-CCM channel is never signed and overrides the policy: its tag authenticates the packet.
-//   - Only Strict drops a packet for lacking a signature, and not on an AES-CCM channel.
+//   - Only Strict drops a packet for lacking a signature, and not on an AES-CCM channel, nor an ack or
+//     other routing packet (it carries its own proof), nor a traceroute.
+//   - A traceroute is never signed, and a signature on one is ignored: every hop rewrites it.
 //   - A bad or malformed signature drops the packet in every mode.
 //   - Balanced and Strict refuse an unsigned identity update from a known signer, except on an
 //     AES-CCM channel (NodeDB::refusesUnsignedIdentity); Compatible accepts it.
@@ -821,6 +823,53 @@ void test_A23_consistent_signed_nodeinfo_reply_accepted(void)
     TEST_ASSERT_TRUE(p.xeddsa_signed);
 }
 
+// A24-A26: Strict does not drop acks or traceroutes. An ack carries its own proof (AckProof.h),
+// and a traceroute is rewritten at every hop so it can never carry a valid signature. If A24 fails,
+// a Strict node never sees an ack and retransmits every reliable packet to exhaustion; if A25
+// fails, traceroutes through or to a Strict node stop working.
+
+// A24: an unsigned ack reaches a Strict node.
+void test_A24_strict_accepts_unsigned_ack(void)
+{
+    setPolicy(meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_STRICT);
+    meshtastic_MeshPacket ack = makeDecoded(REMOTE_NODE, LOCAL_NODE, meshtastic_PortNum_ROUTING_APP, SMALL_PAYLOAD);
+    ack.decoded.request_id = 0xACC0FFEE;
+
+    TEST_ASSERT_EQUAL(DECODE_SUCCESS, roundTrip(&ack));
+    TEST_ASSERT_FALSE(ack.xeddsa_signed);
+}
+
+// A25: unsigned traceroute requests and replies reach a Strict node.
+void test_A25_strict_accepts_unsigned_traceroute(void)
+{
+    setPolicy(meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_STRICT);
+    meshtastic_MeshPacket request = makeDecoded(REMOTE_NODE, LOCAL_NODE, meshtastic_PortNum_TRACEROUTE_APP, SMALL_PAYLOAD);
+    TEST_ASSERT_EQUAL(DECODE_SUCCESS, roundTrip(&request));
+
+    meshtastic_MeshPacket reply = makeDecoded(REMOTE_NODE, LOCAL_NODE, meshtastic_PortNum_TRACEROUTE_APP, SMALL_PAYLOAD);
+    reply.decoded.request_id = 0x7AACE001;
+    TEST_ASSERT_EQUAL(DECODE_SUCCESS, roundTrip(&reply));
+}
+
+// A26: a signature on a traceroute is ignored rather than verified. Older firmware signed some
+// traceroutes, and after one relay rewrote them those signatures no longer verify; dropping them as
+// bad signatures would cut those traceroutes off. The packet is accepted but never marked signed.
+void test_A26_traceroute_signature_ignored(void)
+{
+    setPolicy(meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_COMPATIBLE);
+    uint8_t pub[32], priv[32];
+    crypto->generateKeyPair(pub, priv);
+    mockNodeDB->addNode(REMOTE_NODE);
+    mockNodeDB->setPublicKey(REMOTE_NODE, pub);
+
+    meshtastic_MeshPacket p = makeDecoded(REMOTE_NODE, LOCAL_NODE, meshtastic_PortNum_TRACEROUTE_APP, SMALL_PAYLOAD);
+    signWithCurrentKey(&p);
+    p.decoded.payload.bytes[0] ^= 0xFF; // a relay rewrote the route after it was signed
+
+    TEST_ASSERT_EQUAL(DECODE_SUCCESS, roundTrip(&p));
+    TEST_ASSERT_FALSE(p.xeddsa_signed);
+}
+
 // ===========================================================================
 // Group B - send-side signing policy (perhapsEncode)
 // ===========================================================================
@@ -963,10 +1012,12 @@ void test_B7_infrastructure_port_signing_matrix(void)
         meshtastic_PortNum_POSITION_APP,
     };
     for (const auto port : ports) {
+        // A traceroute is never signed: every hop rewrites it (B22).
+        const size_t broadcastExpected = port == meshtastic_PortNum_TRACEROUTE_APP ? 0 : XEDDSA_SIGNATURE_SIZE;
         meshtastic_MeshPacket broadcast = makeDecoded(LOCAL_NODE, NODENUM_BROADCAST, port, SMALL_PAYLOAD);
         TEST_ASSERT_EQUAL(DECODE_SUCCESS, roundTrip(&broadcast));
-        TEST_ASSERT_EQUAL_MESSAGE(XEDDSA_SIGNATURE_SIZE, broadcast.decoded.xeddsa_signature.size,
-                                  "signable infrastructure broadcast must be signed");
+        TEST_ASSERT_EQUAL_MESSAGE(broadcastExpected, broadcast.decoded.xeddsa_signature.size,
+                                  "signable infrastructure broadcast must be signed, traceroute never");
 
         // NodeInfo is signed even when unicast (B21); the other infrastructure unicasts stay unsigned.
         meshtastic_MeshPacket unicast = makeDecoded(LOCAL_NODE, REMOTE_NODE, port, SMALL_PAYLOAD);
@@ -1270,6 +1321,29 @@ void test_B21_unicast_nodeinfo_signing_follows_policy(void)
     meshtastic_MeshPacket compatibleReply = makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_NODEINFO_APP, SMALL_PAYLOAD);
     TEST_ASSERT_EQUAL(DECODE_SUCCESS, roundTrip(&compatibleReply));
     TEST_ASSERT_EQUAL_MESSAGE(0, compatibleReply.decoded.xeddsa_signature.size, "Compatible must not sign a NodeInfo reply");
+}
+
+// B22: a traceroute is never signed, under any policy and in ham mode, where every other unicast is.
+// Each relay rewrites the route, so a signature would be invalid from the second hop on - and a bad
+// signature drops the packet in every mode, which would cut every traceroute off after one hop.
+void test_B22_traceroute_never_signed(void)
+{
+    setPolicy(meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_STRICT);
+    uint8_t pub[32], priv[32];
+    crypto->generateKeyPair(pub, priv);
+    mockNodeDB->addNode(LOCAL_NODE);
+    mockNodeDB->setPublicKey(LOCAL_NODE, pub);
+
+    meshtastic_MeshPacket broadcast =
+        makeDecoded(LOCAL_NODE, NODENUM_BROADCAST, meshtastic_PortNum_TRACEROUTE_APP, SMALL_PAYLOAD);
+    TEST_ASSERT_EQUAL(DECODE_SUCCESS, roundTrip(&broadcast));
+    TEST_ASSERT_EQUAL_MESSAGE(0, broadcast.decoded.xeddsa_signature.size, "a traceroute broadcast must not be signed");
+
+    owner.is_licensed = true;
+    channels.ensureLicensedOperation();
+    meshtastic_MeshPacket hamUnicast = makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_TRACEROUTE_APP, SMALL_PAYLOAD);
+    TEST_ASSERT_EQUAL(DECODE_SUCCESS, roundTrip(&hamUnicast));
+    TEST_ASSERT_EQUAL_MESSAGE(0, hamUnicast.decoded.xeddsa_signature.size, "a ham traceroute must not be signed");
 }
 
 // B20: ham mode follows the policy like any other node. B8 pins that a licensed node signs
@@ -2531,6 +2605,9 @@ void setup()
     RUN_TEST(test_A21_signed_nodeinfo_advertising_another_key_dropped);
     RUN_TEST(test_A22_signed_nodeinfo_with_unbound_stored_key_dropped);
     RUN_TEST(test_A23_consistent_signed_nodeinfo_reply_accepted);
+    RUN_TEST(test_A24_strict_accepts_unsigned_ack);
+    RUN_TEST(test_A25_strict_accepts_unsigned_traceroute);
+    RUN_TEST(test_A26_traceroute_signature_ignored);
 
     printf("\n=== Group B: send-side signing policy ===\n");
     RUN_TEST(test_B1_local_broadcast_is_signed);
@@ -2554,6 +2631,7 @@ void setup()
     RUN_TEST(test_B19_aead_channel_broadcast_not_signed);
     RUN_TEST(test_B20_licensed_compatible_does_not_sign);
     RUN_TEST(test_B21_unicast_nodeinfo_signing_follows_policy);
+    RUN_TEST(test_B22_traceroute_never_signed);
 
     printf("\n=== Group C: routing pipeline authentication ordering ===\n");
     RUN_TEST(test_C1_invalid_first_copy_does_not_poison_valid_same_id);
