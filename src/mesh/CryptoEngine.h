@@ -195,7 +195,12 @@ class CryptoEngine
     uint8_t pendingKeyVerificationPublicKey[32] = {0};
     bool hasPendingKeyVerificationKey = false;
     concurrency::Lock pendingKeyLock;
+    // Curve25519::eval semantics: scalar not clamped, point == nullptr is the base point, false if point is
+    // non-canonical; no weak-point checks. Platforms with a crypto accelerator override this.
+    virtual bool x25519(uint8_t *out, const uint8_t *scalar, const uint8_t *point);
 #if !(MESHTASTIC_EXCLUDE_XEDDSA)
+    /// Ed25519 signature verification. Platforms with a crypto accelerator override this.
+    virtual bool ed25519Verify(const uint8_t *signature, const uint8_t *edPubKey, const uint8_t *msg, size_t msgLen);
     uint8_t xeddsa_public_key[32] = {0};
     uint8_t xeddsa_private_key[32] = {0};
     void curve_to_ed_pub(const uint8_t *curve_pubkey, uint8_t *ed_pubkey);

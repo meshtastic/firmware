@@ -23,7 +23,7 @@ permissions:
 jobs:
   membrowse:
     name: membrowse-${{ inputs.pio_env }}
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     # Informational, like firmware-size-report: a MemBrowse outage or budget alert must not fail
     # the build job that ci-gate checks, nor hold it up.
     continue-on-error: true

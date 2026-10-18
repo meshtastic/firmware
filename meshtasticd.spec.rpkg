@@ -32,7 +32,7 @@ BuildRequires: python3dist(protobuf)
 BuildRequires: python3dist(grpcio[protobuf])
 BuildRequires: python3dist(grpcio-tools)
 BuildRequires: git-core
-BuildRequires: gcc-c++
+BuildRequires: gcc-c++ >= 10
 BuildRequires: pkgconfig(yaml-cpp)
 BuildRequires: pkgconfig(jsoncpp)
 BuildRequires: pkgconfig(libgpiod)
@@ -43,6 +43,7 @@ BuildRequires: libi2c-devel
 BuildRequires: pkgconfig(libuv)
 BuildRequires: pkgconfig(sqlite3)
 BuildRequires: pkgconfig(libcurl)
+BuildRequires: pkgconfig(avahi-client)
 # Web components:
 BuildRequires: pkgconfig(openssl)
 BuildRequires: pkgconfig(liborcania)
@@ -63,6 +64,8 @@ BuildRequires: pkgconfig(libbsd-overlay)
 %endif
 
 Requires:      systemd-udev
+# mDNS discovery (_meshtastic._tcp) publishes through avahi-daemon
+Recommends:    avahi
 # bluetoothd and the 'bluetooth' group, needed for BLE peripheral support
 Recommends:    bluez
 
@@ -114,6 +117,9 @@ install -D -m 0755 bin/meshtasticd-start.sh %{buildroot}%{_bindir}/meshtasticd-s
 
 # Install D-Bus policy (lets the meshtasticd user talk to bluetoothd for BLE)
 install -D -m 0644 bin/dbus-1/meshtasticd.conf %{buildroot}%{_datadir}/dbus-1/system.d/meshtasticd.conf
+
+# Install polkit rule (lets the meshtasticd user halt the host for "Power Off Host")
+install -D -m 0644 bin/polkit-1/meshtasticd.rules %{buildroot}%{_datadir}/polkit-1/rules.d/meshtasticd.rules
 
 # Install the web files under /usr/share/meshtasticd/web
 mkdir -p %{buildroot}%{_datadir}/meshtasticd/web
@@ -182,6 +188,7 @@ fi
 %config %{_sysconfdir}/meshtasticd/available.d/*
 %{_unitdir}/meshtasticd.service
 %attr(0644,root,root) %{_datadir}/dbus-1/system.d/meshtasticd.conf
+%attr(0644,root,root) %{_datadir}/polkit-1/rules.d/meshtasticd.rules
 %dir %{_datadir}/meshtasticd
 %dir %{_datadir}/meshtasticd/web
 %{_datadir}/meshtasticd/web/*

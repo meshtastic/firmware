@@ -146,8 +146,6 @@ void MeshModule::callModules(meshtastic_MeshPacket &mp, RxSource src)
         assert(!pi.myReply); // If it is !null it means we have a bug, because it should have been sent the previous time
 
         if (wantsPacket) {
-            LOG_DEBUG("Module '%s' wantsPacket=%d", pi.name, wantsPacket);
-
             moduleFound = true;
 
             /// received channel (or NULL if not decoded)
@@ -191,8 +189,6 @@ void MeshModule::callModules(meshtastic_MeshPacket &mp, RxSource src)
                         LOG_DEBUG("Module '%s' can't respond on portnum=%d", pi.name, mp.decoded.portnum);
                     }
                     ignoreRequest = ignoreRequest || pi.ignoreRequest; // If at least one module asks it, we may ignore a request
-                } else {
-                    LOG_DEBUG("Module '%s' considered", pi.name);
                 }
 
                 // If the requester didn't ask for a response we might need to discard unused replies to prevent memory leaks

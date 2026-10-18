@@ -95,7 +95,7 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     void purgeAll();
 
     /// True when perhapsRebroadcast() must force hop_limit=0 for this packet, regardless of
-    /// router_preserve_hops or favorite-node logic (set by alterReceived()).
+    /// router_preserve_hops or favorite-node logic.
     bool shouldExhaustHops(const meshtastic_MeshPacket &mp) const
     {
         return exhaustRequested && exhaustRequestedFrom == getFrom(&mp) && exhaustRequestedId == mp.id;
@@ -116,8 +116,6 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     ProcessMessage handleReceived(const meshtastic_MeshPacket &mp) override;
     /// Promiscuous: this module inspects every packet.
     bool wantPacket(const meshtastic_MeshPacket *p) override { return true; }
-    /// Mutate relayed packets in place (position precision clamp).
-    void alterReceived(meshtastic_MeshPacket &mp) override;
     /// 60 s maintenance sweep: expire timed state, saturate tick stamps, reconcile with NodeDB.
     int32_t runOnce() override;
     /// Clear all per-node traffic state (protected for test shims).
@@ -299,8 +297,8 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
 
     meshtastic_TrafficManagementStats stats;
 
-    // Set during alterReceived() when the packet's hops should be exhausted; checked by
-    // perhapsRebroadcast() for the matching packet key. Reset at start of handleReceived().
+    // Set when the packet's hops should be exhausted; checked by perhapsRebroadcast() for the
+    // matching packet key. Reset at start of handleReceived().
     bool exhaustRequested = false;
     NodeNum exhaustRequestedFrom = 0;
     PacketId exhaustRequestedId = 0;

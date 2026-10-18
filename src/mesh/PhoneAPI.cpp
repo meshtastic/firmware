@@ -721,7 +721,11 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             LOG_DEBUG("Send config: power");
             fromRadioScratch.config.which_payload_variant = meshtastic_Config_power_tag;
             fromRadioScratch.config.payload_variant.power = config.power;
-            fromRadioScratch.config.payload_variant.power.ls_secs = default_ls_secs;
+            // The app is sent the effective value, so 0 ("use the default") still reads back as the default - see the
+            // note at the end of this state. A configured value has to survive the round trip, though: a client that
+            // writes this config back as it read it would otherwise store the default over it.
+            fromRadioScratch.config.payload_variant.power.ls_secs =
+                Default::getConfiguredOrDefault(config.power.ls_secs, default_ls_secs);
             break;
         case meshtastic_Config_network_tag:
             LOG_DEBUG("Send config: network");

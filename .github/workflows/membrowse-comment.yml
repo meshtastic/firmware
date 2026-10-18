@@ -18,7 +18,7 @@ jobs:
       github.event.workflow_run.conclusion != 'cancelled' &&
       github.event.workflow_run.conclusion != 'skipped'
     continue-on-error: true
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       # Only for gh to resolve the repo from the git remote; gh authenticates with GH_TOKEN.
       - uses: actions/checkout@v7

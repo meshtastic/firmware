@@ -38,6 +38,8 @@ void initVariant()
     digitalWrite(I2C_EN, HIGH);
     pinMode(VCC_ELNK_EN, OUTPUT);
     digitalWrite(VCC_ELNK_EN, HIGH);
+    pinMode(GPS_SLEEP_INT, OUTPUT);
+    digitalWrite(GPS_SLEEP_INT, HIGH);
     pinMode(PIN_GPS_EN, OUTPUT);
     digitalWrite(PIN_GPS_EN, HIGH);
     pinMode(ADC_EN, OUTPUT);
@@ -54,11 +56,15 @@ void variant_shutdown()
     digitalWrite(I2C_EN, LOW);
     digitalWrite(VCC_ELNK_EN, LOW);
     digitalWrite(PIN_GPS_EN, LOW);
+    digitalWrite(GPS_SLEEP_INT, HIGH); // idle_int must stay high through System OFF or the GPS never idles
+    pinMode(PIN_GPS_RESET, OUTPUT);
+    digitalWrite(PIN_GPS_RESET, LOW); // releases RESETB through Q16; a floating base could hold it asserted
     digitalWrite(ADC_EN, LOW);
     for (int pin = 0; pin < 48; pin++) {
-        if (pin == I2C_EN || pin == VCC_ELNK_EN || pin == PIN_GPS_EN || pin == ADC_EN || pin == PIN_BUTTON1 ||
-            pin == SX1262_SPI_NSS_PIN || pin == SX1262_SPI_SCK_PIN || pin == SX1262_SPI_MOSI_PIN || pin == SX1262_SPI_MISO_PIN ||
-            pin == SX1262_IRQ_PIN || pin == SX1262_NRESET_PIN || pin == SX126X_BUSY) {
+        if (pin == I2C_EN || pin == VCC_ELNK_EN || pin == PIN_GPS_EN || pin == GPS_SLEEP_INT || pin == PIN_GPS_RESET ||
+            pin == ADC_EN || pin == CANCEL_BUTTON_PIN || pin == SX1262_SPI_NSS_PIN || pin == SX1262_SPI_SCK_PIN ||
+            pin == SX1262_SPI_MOSI_PIN || pin == SX1262_SPI_MISO_PIN || pin == SX1262_IRQ_PIN || pin == SX1262_NRESET_PIN ||
+            pin == SX126X_BUSY) {
             continue;
         }
         pinMode(pin, OUTPUT);
@@ -69,7 +75,7 @@ void variant_shutdown()
             NRF_GPIO->DIRCLR = (1 << pin);
         }
     }
-    nrf_gpio_cfg_input(PIN_BUTTON1, NRF_GPIO_PIN_PULLUP); // Configure the pin to be woken up as an input
+    nrf_gpio_cfg_input(CANCEL_BUTTON_PIN, NRF_GPIO_PIN_PULLUP); // Configure the pin to be woken up as an input
     nrf_gpio_pin_sense_t sense1 = NRF_GPIO_PIN_SENSE_LOW;
-    nrf_gpio_cfg_sense_set(PIN_BUTTON1, sense1);
+    nrf_gpio_cfg_sense_set(CANCEL_BUTTON_PIN, sense1);
 }

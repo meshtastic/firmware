@@ -1,0 +1,14 @@
+# Admin keys append across files instead of the last file winning, so an operator can drop one
+# file per admin into config.d/. config.yaml is always loaded first, so the effective list is
+# deterministic here: this key plus the two in config.d/.
+General:
+  ConfigDirectory: config.d/
+Lora:
+  Module: sx1262
+  CS: 21
+  IRQ: 16
+  Busy: 20
+  Reset: 18
+Security:
+  AdminKeys:
+    - rvzaPCZmlh1nWnqNKUFHj0dLBJJIRJhRrkZmaFLHCVY=

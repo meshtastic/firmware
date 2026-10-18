@@ -218,6 +218,11 @@ class AuthPipelineMqtt : public MQTT
 {
   public:
     int queueSize() { return mqttQueue.numUsed(); }
+    std::string popTopic()
+    {
+        std::unique_ptr<QueueEntry> entry(mqttQueue.dequeuePtr(0));
+        return entry ? entry->topic : std::string();
+    }
     void clearQueue()
     {
         while (QueueEntry *entry = mqttQueue.dequeuePtr(0))
@@ -1797,6 +1802,56 @@ void test_C19_proven_ack_reaches_phone_as_valid(void)
     packetPool.release(delivered);
 }
 
+// C20: a PKI DM between two other nodes is opaque to us, so it takes the relay-only path. It must still go
+// up to MQTT on the PKI topic, or a DM (and the ACK that answers it) never crosses a broker. The copy heard
+// from each relay is published only once.
+void test_C20_opaque_pki_dm_is_uplinked_to_mqtt_once(void)
+{
+    moduleConfig.mqtt.enabled = true;
+    moduleConfig.mqtt.encryption_enabled = true;
+    strcpy(moduleConfig.mqtt.root, "msh");
+    channels.getByIndex(0).settings.uplink_enabled = true;
+
+    meshtastic_MeshPacket dm = meshtastic_MeshPacket_init_zero;
+    dm.from = REMOTE_NODE;
+    dm.to = REMOTE_NODE + 1;
+    dm.id = 0xC2000020;
+    dm.channel = 0; // PKI packets carry no channel hash
+    dm.hop_limit = 2;
+    dm.hop_start = 3;
+    dm.which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
+    dm.encrypted.size = 40;
+    memset(dm.encrypted.bytes, 0x5A, dm.encrypted.size);
+
+    TEST_ASSERT_EQUAL(static_cast<int>(RoutingAuthVerdict::OPAQUE_RELAY_ONLY), static_cast<int>(passesRoutingAuthGate(&dm)));
+    runPipelineIngress(dm);
+    TEST_ASSERT_EQUAL_MESSAGE(1, pipelineRadio->sendCalls, "the DM is still relayed over LoRa");
+    TEST_ASSERT_EQUAL_MESSAGE(1, pipelineMqtt->queueSize(), "the DM must be uplinked to MQTT");
+    TEST_ASSERT_EQUAL_STRING("msh/2/e/PKI/!0a0a0a0a", pipelineMqtt->popTopic().c_str());
+    TEST_ASSERT_EQUAL(0, pipelineModule->calls);
+    TEST_ASSERT_NULL(pipelineService->getForPhone());
+    TEST_ASSERT_FALSE(pipelineRouter->historyContains(&dm));
+
+    meshtastic_MeshPacket relayed = dm;
+    relayed.hop_limit = 1;
+    runPipelineIngress(relayed);
+    TEST_ASSERT_EQUAL_MESSAGE(0, pipelineMqtt->queueSize(), "a relay's copy of the same DM must not be uplinked again");
+
+    // A frame on a channel we lack is not PKI-shaped and stays off MQTT.
+    meshtastic_MeshPacket foreign = dm;
+    foreign.id++;
+    foreign.channel = 0xFE;
+    runPipelineIngress(foreign);
+    TEST_ASSERT_EQUAL(0, pipelineMqtt->queueSize());
+
+    // Without MQTT encryption there is no plaintext to publish, so nothing goes up.
+    moduleConfig.mqtt.encryption_enabled = false;
+    meshtastic_MeshPacket plain = dm;
+    plain.id += 2;
+    runPipelineIngress(plain);
+    TEST_ASSERT_EQUAL(0, pipelineMqtt->queueSize());
+}
+
 // C5: the packet survives (C4) but the identity claim inside it must not land - the pubkey guard
 // can't tell a signer from an impersonator replaying its (public) key. Only the write is refused.
 void test_N5_unsigned_unicast_nodeinfo_from_signer_does_not_change_name(void)
@@ -2511,6 +2566,7 @@ void setup()
     RUN_TEST(test_C17_colliding_channel_hash_foreign_broadcast_is_relay_only);
     RUN_TEST(test_C18_inbound_ack_proof_status_is_cleared_before_modules_and_phone);
     RUN_TEST(test_C19_proven_ack_reaches_phone_as_valid);
+    RUN_TEST(test_C20_opaque_pki_dm_is_uplinked_to_mqtt_once);
     printf("\n=== Group N: NodeInfoModule authentication ===\n");
     RUN_TEST(test_N1_unsigned_nodeinfo_from_signer_dropped);
     RUN_TEST(test_N2_signed_nodeinfo_from_signer_not_dropped);
