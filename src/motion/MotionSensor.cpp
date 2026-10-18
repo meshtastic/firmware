@@ -6,6 +6,9 @@
 #include "UptimeClock.h"
 #include "concurrency/LockGuard.h"
 #include "graphics/draw/CompassRenderer.h"
+#include "mesh/NodeDB.h" // for the global `config`; MotionSensor uses config.display unconditionally
+                         // but only reached it transitively, which breaks on screenless builds
+                         // that exclude the WiFi/web stack (the previous transitive path).
 
 #if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C
 
