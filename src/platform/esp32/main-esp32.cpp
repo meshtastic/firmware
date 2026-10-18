@@ -439,10 +439,12 @@ void cpuDeepSleep(uint32_t msecToWake)
             continue;
         gpio_pullup_en((gpio_num_t)pin);
         gpio_pulldown_dis((gpio_num_t)pin);
+#if SOC_RTCIO_PIN_COUNT > 0
         if (rtc_gpio_is_valid_gpio((gpio_num_t)pin)) {
             rtc_gpio_pullup_en((gpio_num_t)pin);
             rtc_gpio_pulldown_dis((gpio_num_t)pin);
         }
+#endif
     }
 #endif
 
