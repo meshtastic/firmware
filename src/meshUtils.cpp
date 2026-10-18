@@ -1,6 +1,7 @@
 #include "meshUtils.h"
 #include "configuration.h"
 #include "target_specific.h"
+#include <RadioLib.h>
 #include <string.h>
 
 /*
@@ -257,7 +258,7 @@ void clampLongName(char *longName)
 }
 
 // Radio pins the variant wires up; reassigning one from config (e.g. as a UART) cuts off the radio.
-// int64_t holds both -1 and RADIOLIB_NC (0xFFFFFFFF); the trailing -1 keeps the array non-empty.
+// int64_t fits -1 and RADIOLIB_NC; trailing -1 keeps it non-empty. No LORA_DIO2/3: radio-side pins, not MCU GPIOs.
 static const int64_t radioPins[] = {
 #ifdef LORA_SCK
     LORA_SCK,
@@ -279,12 +280,6 @@ static const int64_t radioPins[] = {
 #endif
 #ifdef LORA_DIO1
     LORA_DIO1,
-#endif
-#ifdef LORA_DIO2
-    LORA_DIO2,
-#endif
-#ifdef LORA_DIO3
-    LORA_DIO3,
 #endif
 #ifdef LORA_BUSY
     LORA_BUSY,
