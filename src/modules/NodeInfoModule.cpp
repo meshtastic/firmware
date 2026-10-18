@@ -51,8 +51,8 @@ bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
     }
     NodeNum sourceNum = getFrom(&mp);
     // Broadcasts only: unicast NodeInfo is unsigned off ham, so updateUser refuses the identity
-    // write instead. isKnownXeddsaSigner also covers the warm tier.
-    if (nodeDB->isKnownXeddsaSigner(sourceNum) && !mp.xeddsa_signed && isBroadcast(mp.to)) {
+    // write instead.
+    if (isBroadcast(mp.to) && nodeDB->refusesUnsignedIdentity(sourceNum, mp.channel, mp.xeddsa_signed)) {
         LOG_WARN("Dropping unsigned NodeInfo broadcast from node 0x%08x that previously signed", sourceNum);
         return true;
     }
@@ -60,8 +60,8 @@ bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
     // Coerce user.id to be derived from the node number
     snprintf(p.id, sizeof(p.id), "!%08x", getFrom(&mp));
 
-    // updateUser() refuses the identity write for a known signer sending unsigned (all unicast
-    // NodeInfo), so the exchange above still proceeds but cannot spoof the stored name.
+    // Outside Compatible, updateUser() refuses the identity write for a known signer sending unsigned
+    // (all unicast NodeInfo), so the exchange above still proceeds but cannot spoof the stored name.
     bool hasChanged = nodeDB->updateUser(getFrom(&mp), p, mp.channel, mp.xeddsa_signed);
 
     bool wasBroadcast = isBroadcast(mp.to);

@@ -1102,11 +1102,12 @@ ProcessMessage TrafficManagementModule::handleReceived(const meshtastic_MeshPack
         return ProcessMessage::CONTINUE;
     }
 
-    // A known signer's NodeInfo arriving unsigned is unauthenticated and must not drive any
-    // cache or identity write below. isKnownXeddsaSigner covers the warm tier too - a forged
-    // unsigned NodeInfo carrying a warm-evicted signer's real (public!) key passes the key pin.
+    // An unsigned NodeInfo NodeDB would refuse must not drive any cache or identity write below
+    // either. The signer check covers the warm tier too - a forged unsigned NodeInfo carrying a
+    // warm-evicted signer's real (public!) key passes the key pin.
     const bool isNodeInfo = mp.decoded.portnum == meshtastic_PortNum_NODEINFO_APP;
-    const bool unauthenticatedSigner = isNodeInfo && !mp.xeddsa_signed && nodeDB && nodeDB->isKnownXeddsaSigner(getFrom(&mp));
+    const bool unauthenticatedSigner =
+        isNodeInfo && nodeDB && nodeDB->refusesUnsignedIdentity(getFrom(&mp), mp.channel, mp.xeddsa_signed);
 
     // Learn NodeInfo payloads into the dedicated NodeInfo cache, and refresh the tier-3
     // role cache for any node we already track (keeps the dedup role exception current).

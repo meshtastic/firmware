@@ -505,6 +505,10 @@ class NodeDB
     /// xeddsa-signed bit - hot-only gates would let a warm-evicted signer be impersonated with unsigned frames.
     bool isKnownXeddsaSigner(NodeNum n);
 
+    /// Whether an unsigned identity update from n heard on channelIndex must be refused: Balanced and
+    /// Strict refuse one from a known signer, except on an AES-CCM channel, whose tag authenticates it.
+    bool refusesUnsignedIdentity(NodeNum n, uint8_t channelIndex, bool xeddsaSigned);
+
     /// Provenance of a bare-key commit that deliberately bypasses updateUser()'s
     /// User-payload / TOFU-pin path. Maps to the TrafficManagement cache's `proven` flag:
     /// only ManuallyVerified vouches for possession of exactly this key.

@@ -647,62 +647,6 @@ void Router::sniffReceived(const meshtastic_MeshPacket *p, const meshtastic_Rout
 }
 
 #if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
-/** Size a decoded Data as the sender's signedDataFits() gate would have, with padding stripped:
- * unknown fields inside Data.payload survive in payload.size and would otherwise let a forger
- * inflate an unsigned broadcast past the signable budget. Returns false only if sizing failed.
- * Sizing only what this build's schema decodes, so a signable type that later grows needs its
- * legitimate maximum re-checked against the budget or honest unsigned broadcasts get dropped. */
-static bool canonicalSignableSize(meshtastic_Data *d, size_t *size)
-{
-    const pb_msgdesc_t *fields = nullptr;
-    switch (d->portnum) {
-    case meshtastic_PortNum_POSITION_APP:
-        fields = &meshtastic_Position_msg;
-        break;
-    case meshtastic_PortNum_TELEMETRY_APP:
-        fields = &meshtastic_Telemetry_msg;
-        break;
-    case meshtastic_PortNum_WAYPOINT_APP:
-        fields = &meshtastic_Waypoint_msg;
-        break;
-    case meshtastic_PortNum_NODEINFO_APP:
-        fields = &meshtastic_User_msg;
-        break;
-    default:
-        break;
-    }
-
-    if (fields) {
-        // Scratch kept off the stack: these decoded structs are large for the smaller MCU targets.
-        // Safe as file-static state because both callers of checkXeddsaReceivePolicy hold cryptLock.
-        static union {
-            // cppcheck-suppress unusedStructMember ; written by pb_decode through &inner
-            meshtastic_Position position;
-            // cppcheck-suppress unusedStructMember ; written by pb_decode through &inner
-            meshtastic_Telemetry telemetry;
-            // cppcheck-suppress unusedStructMember ; written by pb_decode through &inner
-            meshtastic_Waypoint waypoint;
-            // cppcheck-suppress unusedStructMember ; written by pb_decode through &inner
-            meshtastic_User user;
-        } inner;
-
-        memset(&inner, 0, sizeof(inner));
-        size_t canonicalPayload;
-        if (pb_decode_from_bytes(d->payload.bytes, d->payload.size, fields, &inner) &&
-            pb_get_encoded_size(&canonicalPayload, fields, &inner) && canonicalPayload <= d->payload.size) {
-            // Only the length matters when sizing a bytes field, so swap it in place instead of
-            // copying the whole Data; restored below because modules still need the real payload.
-            const pb_size_t prevSize = d->payload.size;
-            d->payload.size = (pb_size_t)canonicalPayload;
-            const bool sized = pb_get_encoded_size(size, &meshtastic_Data_msg, d);
-            d->payload.size = prevSize;
-            return sized;
-        }
-    }
-
-    return pb_get_encoded_size(size, &meshtastic_Data_msg, d);
-}
-
 enum class NodeInfoBootstrapResult { NOT_APPLICABLE, VERIFIED, INVALID };
 
 static NodeInfoBootstrapResult verifyFirstContactNodeInfo(meshtastic_MeshPacket *p)
@@ -730,9 +674,11 @@ static NodeInfoBootstrapResult verifyFirstContactNodeInfo(meshtastic_MeshPacket 
 
 bool checkXeddsaReceivePolicy(meshtastic_MeshPacket *p)
 {
-    const auto policy = config.security.packet_signature_policy;
-    const bool strict = policy == meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_STRICT;
-    const bool compatible = policy == meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_COMPATIBLE;
+    // An AES-CCM channel overrides the policy: its tag authenticates every packet, so Strict does not
+    // apply there. A bad signature still drops the packet in every mode.
+    const bool strict = config.security.packet_signature_policy ==
+                            meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_STRICT &&
+                        !channels.isAEADEnabled(p->channel);
 
     // Only a signature we verify below may mark this packet signed; never trust an inbound flag.
     p->xeddsa_signed = false;
@@ -745,9 +691,9 @@ bool checkXeddsaReceivePolicy(meshtastic_MeshPacket *p)
             p->xeddsa_signed =
                 crypto->xeddsa_verify(senderKey.bytes, p->from, p->id, p->to, &p->decoded, p->decoded.xeddsa_signature.bytes);
             if (p->xeddsa_signed) {
-                // Learn this node as a signer, so a later unsigned signable broadcast from it is dropped
-                // A warm-tier key must be re-admitted before setting the signer bit; otherwise Balanced
-                // forgets downgrade protection as soon as the node is evicted from the hot store.
+                // Learn this node as a signer, so Balanced and Strict refuse its unsigned identity updates.
+                // A warm-tier key must be re-admitted before setting the signer bit; otherwise that
+                // protection is forgotten as soon as the node is evicted from the hot store.
                 if (!node)
                     node = nodeDB->getOrCreateMeshNode(p->from);
                 if (!node)
@@ -772,32 +718,14 @@ bool checkXeddsaReceivePolicy(meshtastic_MeshPacket *p)
         }
     } else if (p->decoded.xeddsa_signature.size != 0) {
         // A signature field that is neither empty nor a full 64 bytes is malformed - honest
-        // senders emit only those two sizes (perhapsEncode sets 0 or XEDDSA_SIGNATURE_SIZE). Drop
-        // it: a crafted partial signature would otherwise land in the unsigned branch below while
-        // its bytes inflated the size estimate, letting a forged broadcast dodge the downgrade drop.
+        // senders emit only those two sizes (perhapsEncode sets 0 or XEDDSA_SIGNATURE_SIZE).
         LOG_WARN("Malformed XEdDSA signature (%u bytes) from 0x%08x, drop", (unsigned)p->decoded.xeddsa_signature.size, p->from);
         return false;
-    } else {
-        if (p->pki_encrypted)
-            return true;
-        if (strict) {
-            LOG_WARN("Drop unsigned packet from 0x%08x in Strict signature mode", p->from);
-            return false;
-        }
-        if (compatible)
-            return true;
-
-        // Balanced rejects only what a signer always signs: non-PKI broadcasts whose signed encoding
-        // would have fit, plus unicasts on ham where licensed senders sign too. Mirrors perhapsEncode.
-        if (nodeDB->isKnownXeddsaSigner(p->from) && (isBroadcast(p->to) || owner.is_licensed)) {
-            size_t canonicalSize;
-            if (!canonicalSignableSize(&p->decoded, &canonicalSize))
-                return true; // can't size it; never drop on a sizing failure
-            if (canonicalSize + XEDDSA_SIGNATURE_FIELD_BYTES + MESHTASTIC_HEADER_LENGTH <= MAX_LORA_PAYLOAD_LEN) {
-                LOG_WARN("Drop unsigned packet from 0x%08x that previously signed", p->from);
-                return false;
-            }
-        }
+    } else if (strict && !p->pki_encrypted) {
+        // Only Strict drops a packet for being unsigned; Balanced and Compatible accept it, even from a
+        // known signer, and NodeDB::refusesUnsignedIdentity() guards that signer's identity instead.
+        LOG_WARN("Drop unsigned packet from 0x%08x in Strict signature mode", p->from);
+        return false;
     }
     return true;
 }
@@ -1257,12 +1185,13 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
             // verification at every XEdDSA-enabled receiver that knows our key.
             p->decoded.xeddsa_signature.size = 0;
 #if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
-            // Licensed packets stay plaintext, so sign both broadcasts and unicasts. Normal mode
-            // continues to sign broadcasts only. Use the exact encoded size: a payload-size heuristic
-            // where we sign-then-fail-TOO_LARGE breaks packets that
-            // were deliverable unsigned, and perhapsDecode() applies the mirror-image rule when
-            // deciding whether an unsigned broadcast from a known signer is a downgrade.
-            if (!p->pki_encrypted && (owner.is_licensed || isBroadcast(p->to)) && signedDataFits(&p->decoded)) {
+            // Compatible never signs, and an AES-CCM channel's tag already authenticates the packet.
+            // Licensed packets stay plaintext, so ham signs unicasts as well as broadcasts. Use the exact
+            // encoded size: signing then failing TOO_LARGE would break packets deliverable unsigned.
+            const bool signingPolicy = config.security.packet_signature_policy !=
+                                       meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_COMPATIBLE;
+            if (signingPolicy && !channels.isAEADEnabled(p->channel) && !p->pki_encrypted &&
+                (owner.is_licensed || isBroadcast(p->to)) && signedDataFits(&p->decoded)) {
                 if (crypto->xeddsa_sign(p->from, p->id, p->to, &p->decoded, p->decoded.xeddsa_signature.bytes)) {
                     p->decoded.xeddsa_signature.size = XEDDSA_SIGNATURE_SIZE;
                     LOG_TRACE("XEdDSA signed packet 0x%08x", p->id);
