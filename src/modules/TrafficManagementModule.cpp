@@ -1121,12 +1121,15 @@ ProcessMessage TrafficManagementModule::handleReceived(const meshtastic_MeshPack
     // -------------------------------------------------------------------------
     // Answer a unicast NodeInfo request for a known node straight from cache: STOP keeps the
     // request from being rebroadcast, and the reply goes back to the requestor with hop_limit=0.
+    // A signed request is forwarded instead: its sender signs, so it may require a signed reply,
+    // and only the target holds the key to sign one.
 
     if (cfg.nodeinfo_direct_response_max_hops > 0 && mp.decoded.portnum == meshtastic_PortNum_NODEINFO_APP &&
-        mp.decoded.want_response && !isBroadcast(mp.to) && !isToUs(&mp) && !isFromUs(&mp)) {
+        mp.decoded.want_response && !isBroadcast(mp.to) && !isToUs(&mp) && !isFromUs(&mp) &&
+        mp.decoded.xeddsa_signature.size == 0) {
         if (shouldRespondToNodeInfo(&mp, true)) {
-            // Unicast NodeInfo is never signed, so a known signer's identity claim here is
-            // unauthenticated: don't overwrite its stored name. The cached response is unaffected.
+            // This request is unsigned, so a known signer's identity claim here is unauthenticated:
+            // don't overwrite its stored name. The cached response is unaffected.
             meshtastic_User requester = meshtastic_User_init_zero;
             if (!unauthenticatedSigner &&
                 pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, &meshtastic_User_msg, &requester)) {

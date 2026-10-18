@@ -672,6 +672,19 @@ static NodeInfoBootstrapResult verifyFirstContactNodeInfo(meshtastic_MeshPacket 
     return NodeInfoBootstrapResult::VERIFIED;
 }
 
+/** A NodeInfo verified against a stored key must claim that same key, and the key must hash to the
+ * sender's node number as first contact requires. An undecodable or keyless payload has nothing to compare. */
+static bool signedNodeInfoConsistent(const meshtastic_MeshPacket *p, const uint8_t *signerKey)
+{
+    if (p->decoded.portnum != meshtastic_PortNum_NODEINFO_APP)
+        return true;
+    meshtastic_User user = meshtastic_User_init_zero;
+    if (!pb_decode_from_bytes(p->decoded.payload.bytes, p->decoded.payload.size, &meshtastic_User_msg, &user) ||
+        user.public_key.size != 32)
+        return true;
+    return memcmp(user.public_key.bytes, signerKey, 32) == 0 && crc32Buffer(user.public_key.bytes, 32) == p->from;
+}
+
 bool checkXeddsaReceivePolicy(meshtastic_MeshPacket *p)
 {
     // An AES-CCM channel overrides the policy: its tag authenticates every packet, so Strict does not
@@ -690,6 +703,11 @@ bool checkXeddsaReceivePolicy(meshtastic_MeshPacket *p)
         if (nodeDB->copyPublicKeyAuthoritative(p->from, senderKey)) {
             p->xeddsa_signed =
                 crypto->xeddsa_verify(senderKey.bytes, p->from, p->id, p->to, &p->decoded, p->decoded.xeddsa_signature.bytes);
+            if (p->xeddsa_signed && !signedNodeInfoConsistent(p, senderKey.bytes)) {
+                LOG_WARN("Signed NodeInfo from 0x%08x claims a key that did not sign it, drop", p->from);
+                p->xeddsa_signed = false;
+                return false;
+            }
             if (p->xeddsa_signed) {
                 // Learn this node as a signer, so Balanced and Strict refuse its unsigned identity updates.
                 // A warm-tier key must be re-admitted before setting the signer bit; otherwise that
@@ -1186,12 +1204,15 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
             p->decoded.xeddsa_signature.size = 0;
 #if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
             // Compatible never signs, and an AES-CCM channel's tag already authenticates the packet.
-            // Licensed packets stay plaintext, so ham signs unicasts as well as broadcasts. Use the exact
-            // encoded size: signing then failing TOO_LARGE would break packets deliverable unsigned.
+            // Licensed packets stay plaintext, so ham signs unicasts as well as broadcasts. NodeInfo is
+            // signed even when unicast: requests and replies carry the key a peer will use for PKI. Use the
+            // exact encoded size: signing then failing TOO_LARGE would break packets deliverable unsigned.
             const bool signingPolicy = config.security.packet_signature_policy !=
                                        meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_COMPATIBLE;
-            if (signingPolicy && !channels.isAEADEnabled(p->channel) && !p->pki_encrypted &&
-                (owner.is_licensed || isBroadcast(p->to)) && signedDataFits(&p->decoded)) {
+            const bool signableDestination =
+                owner.is_licensed || isBroadcast(p->to) || p->decoded.portnum == meshtastic_PortNum_NODEINFO_APP;
+            if (signingPolicy && !channels.isAEADEnabled(p->channel) && !p->pki_encrypted && signableDestination &&
+                signedDataFits(&p->decoded)) {
                 if (crypto->xeddsa_sign(p->from, p->id, p->to, &p->decoded, p->decoded.xeddsa_signature.bytes)) {
                     p->decoded.xeddsa_signature.size = XEDDSA_SIGNATURE_SIZE;
                     LOG_TRACE("XEdDSA signed packet 0x%08x", p->id);

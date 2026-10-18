@@ -796,6 +796,53 @@ static void test_tm_nodeinfo_directResponse_psramCacheRespondsAndPreservesBitfie
 }
 
 /**
+ * A signed NodeInfo request comes from a node running Balanced or Strict, which may drop an unsigned
+ * reply - and a cached reply sent on the target's behalf can never be signed, since only the target
+ * holds its key. So the request must be forwarded to the target rather than answered and consumed
+ * here. The previous test is the control: the same request unsigned is answered from cache. If this
+ * fails, Strict requesters behind a direct-response router never get a NodeInfo reply at all.
+ */
+static void test_tm_nodeinfo_directResponse_signedRequestForwarded(void)
+{
+    moduleConfig.traffic_management.nodeinfo_direct_response_max_hops = 10;
+    config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
+    mockNodeDB->clearCachedNode();
+
+    MockRouter mockRouter;
+    mockRouter.addInterface(std::unique_ptr<RadioInterface>(new MockRadioInterface()));
+    MeshService mockService;
+    router = &mockRouter;
+    service = &mockService;
+
+    TrafficManagementModuleTestShim module;
+    module.handleReceived(makeNodeInfoPacket(kTargetNode, "target-long", "tg"));
+    module.markKeyXeddsaSignedForTest(kTargetNode); // servable, so only the signature can stop the reply
+
+    meshtastic_MeshPacket request = makeDecodedPacket(meshtastic_PortNum_NODEINFO_APP, kRemoteNode, kTargetNode);
+    request.decoded.want_response = true;
+    request.id = 0x24681358;
+    request.hop_start = 3;
+    request.hop_limit = 3;
+    request.decoded.xeddsa_signature.size = XEDDSA_SIGNATURE_SIZE;
+    memset(request.decoded.xeddsa_signature.bytes, 0x5C, XEDDSA_SIGNATURE_SIZE);
+
+    ProcessMessage result = module.handleReceived(request);
+
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(result));
+    TEST_ASSERT_FALSE(module.ignoreRequestFlag());
+    TEST_ASSERT_EQUAL_UINT32(0, module.getStats().nodeinfo_cache_hits);
+    TEST_ASSERT_EQUAL_UINT32(0, static_cast<uint32_t>(mockRouter.sentPackets.size()));
+
+    // Control, after the signed request so it cannot have throttled it: the same request unsigned is
+    // answered from cache, proving the signature alone caused the forward above.
+    meshtastic_MeshPacket unsignedRequest = request;
+    unsignedRequest.id = 0x24681359;
+    unsignedRequest.decoded.xeddsa_signature.size = 0;
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(module.handleReceived(unsignedRequest)));
+    TEST_ASSERT_EQUAL_UINT32(1, static_cast<uint32_t>(mockRouter.sentPackets.size()));
+}
+
+/**
  * Verify NodeInfo cache misses do not fall back to NodeDB.
  * Important so the dedicated cache index stays logically separate from
  * NodeInfoModule/NodeDB when the cache is available.
@@ -3381,6 +3428,7 @@ TM_TEST_ENTRY void setup()
 #endif
 #if TMM_HAS_NODEINFO_CACHE
     RUN_TEST(test_tm_nodeinfo_directResponse_psramCacheRespondsAndPreservesBitfield);
+    RUN_TEST(test_tm_nodeinfo_directResponse_signedRequestForwarded);
     RUN_TEST(test_tm_nodeinfo_directResponse_psramMissDoesNotFallbackToNodeDb);
     RUN_TEST(test_tm_nodeinfo_directResponse_psramStaleEntryNotServed);
     RUN_TEST(test_tm_nodeinfo_directResponse_psramThrottlesWithinWindow);

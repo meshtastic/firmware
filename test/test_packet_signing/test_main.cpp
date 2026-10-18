@@ -6,7 +6,9 @@
 // no production changes); later groups exercise routing order and policy helpers directly.
 //
 // The policy contract pinned here:
-//   - Compatible (the default) never signs; Balanced and Strict sign broadcasts (ham: unicasts too).
+//   - Compatible (the default) never signs; Balanced and Strict sign broadcasts and NodeInfo, even
+//     unicast (ham: all unicasts).
+//   - A signed NodeInfo must claim the key that signed it, and that key must hash to the sender.
 //   - An AES-CCM channel is never signed and overrides the policy: its tag authenticates the packet.
 //   - Only Strict drops a packet for lacking a signature, and not on an AES-CCM channel.
 //   - A bad or malformed signature drops the packet in every mode.
@@ -753,6 +755,72 @@ void test_A20_bad_signature_dropped_on_aead_channel(void)
     TEST_ASSERT_EQUAL(DECODE_POLICY_REJECT, roundTrip(&p));
 }
 
+// A21-A23: a signed NodeInfo verified against a key we already store must be internally
+// consistent - it claims the key that signed it, and that key hashes to the sender's node number,
+// as first contact already requires (A14/A15). Without this, a valid signature would vouch for a
+// NodeInfo advertising someone else's key, or a key planted on trust under the wrong node number
+// could keep proving itself with fresh signatures.
+
+// Encode a NodeInfo from `from` advertising `advertised`, signed with the engine's current key.
+static meshtastic_MeshPacket makeSignedNodeInfo(NodeNum from, const uint8_t *advertised)
+{
+    meshtastic_User user = meshtastic_User_init_zero;
+    user.public_key.size = 32;
+    memcpy(user.public_key.bytes, advertised, 32);
+    meshtastic_MeshPacket p = makeDecoded(from, LOCAL_NODE, meshtastic_PortNum_NODEINFO_APP, 0);
+    p.decoded.request_id = 0x5EED0002; // shaped as a reply to our request
+    p.decoded.payload.size =
+        pb_encode_to_bytes(p.decoded.payload.bytes, sizeof(p.decoded.payload.bytes), &meshtastic_User_msg, &user);
+    signWithCurrentKey(&p);
+    return p;
+}
+
+// A21: signed by the stored key, but advertising a different key -> dropped, signer not learned.
+void test_A21_signed_nodeinfo_advertising_another_key_dropped(void)
+{
+    uint8_t otherPub[32], otherPriv[32], pub[32], priv[32];
+    crypto->generateKeyPair(otherPub, otherPriv);
+    crypto->generateKeyPair(pub, priv); // generated last, so the engine signs with this one
+    const NodeNum signer = crc32Buffer(pub, sizeof(pub));
+    mockNodeDB->addNode(signer);
+    mockNodeDB->setPublicKey(signer, pub);
+
+    meshtastic_MeshPacket p = makeSignedNodeInfo(signer, otherPub);
+
+    TEST_ASSERT_EQUAL(DECODE_POLICY_REJECT, roundTrip(&p));
+    TEST_ASSERT_FALSE(nodeInfoLiteHasXeddsaSigned(mockNodeDB->getMeshNode(signer)));
+}
+
+// A22: advertising the stored key that signed it, but that key does not hash to the sender -> a key
+// planted on trust under the wrong node number, dropped.
+void test_A22_signed_nodeinfo_with_unbound_stored_key_dropped(void)
+{
+    uint8_t pub[32], priv[32];
+    crypto->generateKeyPair(pub, priv);
+    mockNodeDB->addNode(REMOTE_NODE); // REMOTE_NODE is not crc32(pub)
+    mockNodeDB->setPublicKey(REMOTE_NODE, pub);
+
+    meshtastic_MeshPacket p = makeSignedNodeInfo(REMOTE_NODE, pub);
+
+    TEST_ASSERT_EQUAL(DECODE_POLICY_REJECT, roundTrip(&p));
+    TEST_ASSERT_FALSE(remoteSignerBit());
+}
+
+// A23: control - the consistent reply is accepted and marked signed.
+void test_A23_consistent_signed_nodeinfo_reply_accepted(void)
+{
+    uint8_t pub[32], priv[32];
+    crypto->generateKeyPair(pub, priv);
+    const NodeNum signer = crc32Buffer(pub, sizeof(pub));
+    mockNodeDB->addNode(signer);
+    mockNodeDB->setPublicKey(signer, pub);
+
+    meshtastic_MeshPacket p = makeSignedNodeInfo(signer, pub);
+
+    TEST_ASSERT_EQUAL(DECODE_SUCCESS, roundTrip(&p));
+    TEST_ASSERT_TRUE(p.xeddsa_signed);
+}
+
 // ===========================================================================
 // Group B - send-side signing policy (perhapsEncode)
 // ===========================================================================
@@ -900,10 +968,12 @@ void test_B7_infrastructure_port_signing_matrix(void)
         TEST_ASSERT_EQUAL_MESSAGE(XEDDSA_SIGNATURE_SIZE, broadcast.decoded.xeddsa_signature.size,
                                   "signable infrastructure broadcast must be signed");
 
+        // NodeInfo is signed even when unicast (B21); the other infrastructure unicasts stay unsigned.
         meshtastic_MeshPacket unicast = makeDecoded(LOCAL_NODE, REMOTE_NODE, port, SMALL_PAYLOAD);
         TEST_ASSERT_EQUAL(DECODE_SUCCESS, roundTrip(&unicast));
-        TEST_ASSERT_EQUAL_MESSAGE(0, unicast.decoded.xeddsa_signature.size,
-                                  "infrastructure unicast must preserve existing unsigned behavior");
+        const size_t expected = port == meshtastic_PortNum_NODEINFO_APP ? XEDDSA_SIGNATURE_SIZE : 0;
+        TEST_ASSERT_EQUAL_MESSAGE(expected, unicast.decoded.xeddsa_signature.size,
+                                  "only NodeInfo may be signed among infrastructure unicasts");
     }
 }
 
@@ -1174,6 +1244,32 @@ void test_B19_aead_channel_broadcast_not_signed(void)
         TEST_ASSERT_EQUAL(DECODE_SUCCESS, roundTrip(&p));
         TEST_ASSERT_EQUAL_MESSAGE(0, p.decoded.xeddsa_signature.size, "an AES-CCM channel must not be signed");
     }
+}
+
+// B21: a unicast NodeInfo - a request or a reply - carries the key the peer will use for PKI, so
+// Balanced and Strict sign it like a broadcast. That lets a Strict node learn a new peer's key from
+// a reply, which it would otherwise drop, and lets first contact verify the key. Compatible still
+// signs nothing (B18). If the Strict assertion fails, Strict nodes can no longer exchange keys on
+// request; if the Compatible one fails, Compatible pays for signatures again.
+void test_B21_unicast_nodeinfo_signing_follows_policy(void)
+{
+    uint8_t pub[32], priv[32];
+    crypto->generateKeyPair(pub, priv);
+    mockNodeDB->addNode(LOCAL_NODE);
+    mockNodeDB->setPublicKey(LOCAL_NODE, pub);
+
+    setPolicy(meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_STRICT);
+    meshtastic_MeshPacket strictReply = makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_NODEINFO_APP, SMALL_PAYLOAD);
+    strictReply.decoded.request_id = 0x5EED0001;
+    TEST_ASSERT_EQUAL(DECODE_SUCCESS, roundTrip(&strictReply));
+    TEST_ASSERT_EQUAL_MESSAGE(XEDDSA_SIGNATURE_SIZE, strictReply.decoded.xeddsa_signature.size,
+                              "Strict must sign a NodeInfo reply");
+    TEST_ASSERT_TRUE(strictReply.xeddsa_signed);
+
+    setPolicy(meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_COMPATIBLE);
+    meshtastic_MeshPacket compatibleReply = makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_NODEINFO_APP, SMALL_PAYLOAD);
+    TEST_ASSERT_EQUAL(DECODE_SUCCESS, roundTrip(&compatibleReply));
+    TEST_ASSERT_EQUAL_MESSAGE(0, compatibleReply.decoded.xeddsa_signature.size, "Compatible must not sign a NodeInfo reply");
 }
 
 // B20: ham mode follows the policy like any other node. B8 pins that a licensed node signs
@@ -2432,6 +2528,9 @@ void setup()
     RUN_TEST(test_A18_strict_accepts_unsigned_on_aead_channel);
     RUN_TEST(test_A19_strict_accepts_unverifiable_signature_on_aead_channel);
     RUN_TEST(test_A20_bad_signature_dropped_on_aead_channel);
+    RUN_TEST(test_A21_signed_nodeinfo_advertising_another_key_dropped);
+    RUN_TEST(test_A22_signed_nodeinfo_with_unbound_stored_key_dropped);
+    RUN_TEST(test_A23_consistent_signed_nodeinfo_reply_accepted);
 
     printf("\n=== Group B: send-side signing policy ===\n");
     RUN_TEST(test_B1_local_broadcast_is_signed);
@@ -2454,6 +2553,7 @@ void setup()
     RUN_TEST(test_B18_compatible_does_not_sign);
     RUN_TEST(test_B19_aead_channel_broadcast_not_signed);
     RUN_TEST(test_B20_licensed_compatible_does_not_sign);
+    RUN_TEST(test_B21_unicast_nodeinfo_signing_follows_policy);
 
     printf("\n=== Group C: routing pipeline authentication ordering ===\n");
     RUN_TEST(test_C1_invalid_first_copy_does_not_poison_valid_same_id);
