@@ -52,7 +52,7 @@
 // TFT uses SPI bus (SPI2_HOST on ESP32-S3)
 #define HAS_SPI_TFT 1
 #define USE_TFTDISPLAY 1 // Enable legacy BaseUI TFTDisplay.cpp build
-#define ST7789P3
+#define ST7789P3_PANEL
 #define ST7789_CS TFT_CS
 #define ST7789_RS TFT_A0
 #define ST7789_SDA TFT_SDA

@@ -573,7 +573,7 @@ class LGFX : public lgfx::LGFX_Device
 
 static LGFX *tft = nullptr;
 
-#elif defined(ST7789_CS) || defined(ST7789P3)
+#elif defined(ST7789_CS) || defined(ST7789P3_PANEL)
 #include <LovyanGFX.hpp> // Graphics and font library for ST7735 driver chip
 #if defined(HELTEC_V4_TFT) || defined(HELTEC_V4_R8_TFT)
 #include "chsc6x.h"
@@ -632,7 +632,7 @@ class TOUCH_CHSC6X : public ITouch
 #endif
 class LGFX : public lgfx::LGFX_Device
 {
-#if defined(ST7789P3)
+#if defined(ST7789P3_PANEL)
     lgfx::Panel_ST7789P3 _panel_instance;
 #else
     lgfx::Panel_ST7789 _panel_instance;
