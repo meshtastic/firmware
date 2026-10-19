@@ -306,6 +306,21 @@ bool EInkDisplay::connect()
     adafruitDisplay->init();
     adafruitDisplay->setRotation(3);
 
+#elif defined(Nodara)
+    {
+        pinMode(PIN_EINK_POWER, OUTPUT);
+        digitalWrite(PIN_EINK_POWER, EINK_POWER_ACTIVE);
+        delay(50);
+        SPI1.begin();
+        auto lowLevel = new EINK_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY, SPI1);
+
+        adafruitDisplay = new GxEPD2_BW<EINK_DISPLAY_MODEL, EINK_DISPLAY_MODEL::HEIGHT>(*lowLevel);
+        // serial_diag_bitrate=0 avoids re-initing Serial
+        adafruitDisplay->init(0, true, 10, false);
+        adafruitDisplay->setRotation(EINK_ROTATION);
+        // Full window until EInkDynamicDisplay::checkInitialized() clears the panel.
+        adafruitDisplay->setFullWindow();
+    }
 #endif
 
     return true;
