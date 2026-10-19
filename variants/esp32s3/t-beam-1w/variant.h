@@ -28,9 +28,6 @@
 #define SDCARD_USE_SPI1
 #define SDCARD_CS SPI_CS
 
-// LoRa Radio - SX1262 with 1W PA
-#define USE_SX1262
-
 #define LORA_SCK SPI_SCK
 #define LORA_MISO SPI_MISO
 #define LORA_MOSI SPI_MOSI
@@ -39,12 +36,34 @@
 #define LORA_DIO1 1
 #define LORA_BUSY 38
 
+// The board ships with either an SX1262 or an LR2021 module on the same pins; initLoRa() probes
+// the SX1262 first and keeps whichever answers.
+#define USE_SX1262
+#define USE_LR2021
+
 // CRITICAL: Radio power enable - MUST be HIGH before lora.begin()!
-// GPIO 40 powers the SX1262 + PA module via LDO
+// GPIO 40 powers the radio + PA module via LDO
 #define SX126X_POWER_EN 40
 
-// TX power offset for external PA (0 = no offset, full SX1262 power)
+// TX power offset for external PA (0 = no offset, full radio power). The SX1262 module's PA gain;
+// the LR2021 module's is about 8 dB, so it is driven slightly below its maximum.
 #define TX_GAIN_LORA 10
+
+#ifdef USE_LR2021
+// LR2021 module (XY16E3AXP33) with sub-GHz and 2.4 GHz PAs, per LilyGO t_beam_1w_lr2021.md
+#define LR2021_SPI_NSS_PIN LORA_CS
+#define LR2021_IRQ_PIN LORA_DIO1 // GPIO1 is radio DIO10
+#define LR2021_NRESET_PIN LORA_RESET
+#define LR2021_BUSY_PIN LORA_BUSY
+#define LR2021_IRQ_DIO_NUM 10
+// GPIO21 is radio DIO11 on this module; the SX1262 probe only claims it after a successful begin().
+#define LR2021_POWER_EN SX126X_POWER_EN
+#define LR2021_DIO3_TCXO_VOLTAGE 3.0f
+#define LR2021_DIO_AS_RF_SWITCH // PA/LNA switching on radio DIO5-DIO8, see rfswitch.h
+#define LR2021_MAX_POWER 22
+// LilyGO: more than 8 dBm into the 2.4 GHz PA can permanently damage it.
+#define LR2021_MAX_POWER_HF 8
+#endif
 
 #ifdef USE_SX1262
 #define SX126X_CS LORA_CS
