@@ -32,6 +32,16 @@ void copyNodeLongNameOrUnknown(char *dest, size_t destSize, const meshtastic_Nod
     strncpy(dest, name, destSize - 1);
     dest[destSize - 1] = '\0';
 }
+
+// Licensed (ham) operation has no PKI: a licensed node neither sends nor decrypts PKI packets, and the
+// handshake's third message must be PKI-encrypted, so a session could only time out.
+bool licensedRefusesKeyVerification()
+{
+    if (!owner.is_licensed)
+        return false;
+    LOG_WARN("Key verification is unavailable in licensed (ham) mode");
+    return true;
+}
 } // namespace
 
 KeyVerificationModule::KeyVerificationModule()
@@ -155,6 +165,15 @@ bool KeyVerificationModule::handleReceivedProtobuf(const meshtastic_MeshPacket &
 bool KeyVerificationModule::sendInitialRequest(NodeNum remoteNode)
 {
     LOG_DEBUG("keyVerification start");
+    if (licensedRefusesKeyVerification()) {
+        meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
+        if (cn) {
+            cn->level = meshtastic_LogRecord_Level_WARNING;
+            snprintf(cn->message, sizeof(cn->message), "Key verification is unavailable in licensed (ham) mode");
+            service->sendClientNotification(cn);
+        }
+        return false;
+    }
     // generate nonce
     updateState(false);
     if (currentState != KEY_VERIFICATION_IDLE) {
@@ -199,6 +218,10 @@ bool KeyVerificationModule::sendInitialRequest(NodeNum remoteNode)
 
 meshtastic_MeshPacket *KeyVerificationModule::allocReply()
 {
+    if (licensedRefusesKeyVerification()) {
+        ignoreRequest = true; // no NAK: the requester times out as it would against a busy node
+        return nullptr;
+    }
     SHA256 hash;
     NodeNum ourNodeNum = nodeDB->getNodeNum();
     updateState();
