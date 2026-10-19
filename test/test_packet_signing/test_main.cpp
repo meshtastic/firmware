@@ -7,7 +7,8 @@
 //
 // The policy contract pinned here:
 //   - Compatible (the default) never signs; Balanced and Strict sign broadcasts, and NodeInfo and
-//     position even when unicast (ham: all unicasts).
+//     position even when unicast. Ham mode, which has no PKI, also signs the unicasts PKI would cover;
+//     its acks carry an ack proof instead.
 //   - A signed NodeInfo must claim the key that signed it, and that key must hash to the sender.
 //   - An AES-CCM channel is never signed and overrides the policy: its tag authenticates the packet.
 //   - Only Strict drops a packet for lacking a signature, and not on an AES-CCM channel, nor an ack or
@@ -1164,8 +1165,12 @@ void test_B13_licensed_port_and_destination_signing_matrix(void)
         for (const auto destination : destinations) {
             meshtastic_MeshPacket packet = makeDecoded(LOCAL_NODE, destination, port, SMALL_PAYLOAD);
             TEST_ASSERT_EQUAL(DECODE_SUCCESS, roundTrip(&packet));
-            TEST_ASSERT_EQUAL(XEDDSA_SIGNATURE_SIZE, packet.decoded.xeddsa_signature.size);
-            TEST_ASSERT_TRUE(packet.xeddsa_signed);
+            // A ham ack is not signed: it carries an ack proof instead (B24). A routing broadcast is
+            // signed like any other broadcast.
+            const bool hamAck = port == meshtastic_PortNum_ROUTING_APP && destination != NODENUM_BROADCAST;
+            TEST_ASSERT_EQUAL_MESSAGE(hamAck ? 0 : XEDDSA_SIGNATURE_SIZE, packet.decoded.xeddsa_signature.size,
+                                      hamAck ? "a ham ack must not be signed" : "ham must sign this packet");
+            TEST_ASSERT_EQUAL(!hamAck, packet.xeddsa_signed);
             TEST_ASSERT_FALSE(packet.pki_encrypted);
         }
     }
@@ -1384,6 +1389,48 @@ void test_B22_traceroute_never_signed(void)
     meshtastic_MeshPacket hamUnicast = makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_TRACEROUTE_APP, SMALL_PAYLOAD);
     TEST_ASSERT_EQUAL(DECODE_SUCCESS, roundTrip(&hamUnicast));
     TEST_ASSERT_EQUAL_MESSAGE(0, hamUnicast.decoded.xeddsa_signature.size, "a ham traceroute must not be signed");
+}
+
+// B24: ham mode authenticates an ack the way regular mode does, with the ack proof, not a signature.
+// Pins both halves: the ack goes out unsigned (a 66-byte signature would cost more than the ~10-byte
+// proof, and a Strict peer that lacks our key would drop a signature it cannot check, retransmitting
+// to exhaustion), and the proof is still attached, because it needs only the two keys, not PKI.
+// Guards against ham mode drifting back to signing acks, or losing its delivery receipt.
+void test_B24_licensed_ack_carries_proof_not_signature(void)
+{
+    setPolicy(meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_STRICT);
+    uint8_t localPub[32], localPriv[32], remotePub[32], remotePriv[32];
+    crypto->generateKeyPair(localPub, localPriv);
+    crypto->generateKeyPair(remotePub, remotePriv);
+    mockNodeDB->addNode(LOCAL_NODE);
+    mockNodeDB->setPublicKey(LOCAL_NODE, localPub);
+    mockNodeDB->addNode(REMOTE_NODE);
+    mockNodeDB->setPublicKey(REMOTE_NODE, remotePub);
+    memcpy(config.security.private_key.bytes, localPriv, sizeof(localPriv));
+    config.security.private_key.size = sizeof(localPriv);
+    crypto->setDHPrivateKey(localPriv);
+    owner.is_licensed = true;
+    channels.ensureLicensedOperation();
+
+    meshtastic_MeshPacket ack = makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_ROUTING_APP, 0);
+    ack.decoded.request_id = 0xB2400024;
+    meshtastic_Routing routing = meshtastic_Routing_init_zero;
+    routing.which_variant = meshtastic_Routing_error_reason_tag;
+    routing.error_reason = meshtastic_Routing_Error_NONE;
+    ack.decoded.payload.size =
+        pb_encode_to_bytes(ack.decoded.payload.bytes, sizeof(ack.decoded.payload.bytes), &meshtastic_Routing_msg, &routing);
+    TEST_ASSERT_GREATER_THAN(0, ack.decoded.payload.size);
+    ackProofAttach(&ack);
+
+    TEST_ASSERT_EQUAL(DECODE_SUCCESS, roundTrip(&ack));
+    TEST_ASSERT_EQUAL_MESSAGE(0, ack.decoded.xeddsa_signature.size, "a ham ack must not be signed");
+    TEST_ASSERT_FALSE(ack.pki_encrypted);
+
+    // The peer verifies the proof under our key, as ReliableRouter does when the ack arrives.
+    myNodeInfo.my_node_num = REMOTE_NODE;
+    crypto->setDHPrivateKey(remotePriv);
+    TEST_ASSERT_EQUAL_MESSAGE((int)AckProofResult::VALID, (int)ackProofVerifyWithKey(&ack, ack.decoded.request_id, localPub),
+                              "a ham ack must carry a valid ack proof");
 }
 
 // B20: ham mode follows the policy like any other node. B8 pins that a licensed node signs
@@ -2674,6 +2721,7 @@ void setup()
     RUN_TEST(test_B21_unicast_nodeinfo_signing_follows_policy);
     RUN_TEST(test_B22_traceroute_never_signed);
     RUN_TEST(test_B23_unicast_position_signing_follows_policy);
+    RUN_TEST(test_B24_licensed_ack_carries_proof_not_signature);
 
     printf("\n=== Group C: routing pipeline authentication ordering ===\n");
     RUN_TEST(test_C1_invalid_first_copy_does_not_poison_valid_same_id);
