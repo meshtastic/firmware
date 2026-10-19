@@ -114,8 +114,10 @@ constexpr uint32_t AIROHA_SLEEP_BUDGET_MS = 400;
 #else
 // $PAIR003 first answers ",1" (processing); the final ",0" can take longer than 40 ms.
 constexpr uint32_t AIROHA_SLEEP_ACK_MS = 100;
-// Some commands go unheard outright, so keep resending across a whole 1 Hz NMEA cycle.
-constexpr uint32_t AIROHA_SLEEP_BUDGET_MS = 1500;
+// A successful $PAIR650 need not answer at all, but either command stops NMEA once it takes effect,
+// so silence for longer than one 1 Hz NMEA cycle also counts as asleep.
+constexpr uint32_t AIROHA_SLEEP_QUIET_MS = 1100;
+constexpr uint8_t AIROHA_SLEEP_ATTEMPTS = 2;
 #endif
 // Stop parking a receiver that never acks, rather than blocking for the budget every cycle forever.
 constexpr uint8_t AIROHA_SLEEP_MAX_MISSES = 3;
@@ -125,7 +127,9 @@ constexpr uint32_t AIROHA_POWER_SETTLE_MS = 50;
 constexpr uint32_t AIROHA_RTC_INT_PULSE_MS = 3;
 constexpr uint32_t AIROHA_WAKE_SETTLE_MS = 50;
 #elif defined(HAS_AIROHA_SLEEP)
-constexpr uint32_t AIROHA_IDLE_INT_LOW_MS = 5;
+constexpr uint32_t AIROHA_IDLE_INT_LEAD_MS = 50;
+// The ack can precede the transition itself, so give the receiver time before its core supply goes.
+constexpr uint32_t AIROHA_SLEEP_SETTLE_MS = 50;
 #endif
 #ifdef HAS_AIROHA_RESET_WAKE
 constexpr uint32_t AIROHA_POWER_SETTLE_MS = 50;
@@ -168,11 +172,28 @@ static void airohaPulseRtcInt()
 template <typename T> static void airohaWriteIdleInt(T *serialGps, const char *cmd)
 {
     digitalWrite(GPS_SLEEP_INT, LOW);
-    delay(AIROHA_IDLE_INT_LOW_MS);
+    delay(AIROHA_IDLE_INT_LEAD_MS);
     serialGps->write(cmd);
     serialGps->flush();
-    delay(AIROHA_IDLE_INT_LOW_MS);
     digitalWrite(GPS_SLEEP_INT, HIGH);
+}
+
+// True if no NMEA sentence starts for a whole NMEA cycle. Late $PAIR001 replies don't count.
+template <typename T> static bool airohaWentQuiet(T *serialGps)
+{
+    const uint32_t start = Time::getMillis();
+    int prev = 0;
+    while (Throttle::isWithinTimespanMs(start, AIROHA_SLEEP_QUIET_MS)) {
+        feedWatchdogWhileWaiting();
+        while (serialGps->available()) {
+            int c = serialGps->read();
+            if (prev == '$' && c == 'G')
+                return false;
+            prev = c;
+        }
+        delay(10);
+    }
+    return true;
 }
 #endif
 
@@ -1454,24 +1475,32 @@ void GPS::airohaEnterSleep()
     const char *sleepCmd = "$PAIR003*39\r\n";
     const char *sleepAck = "$PAIR001,003,0";
 #endif
+#ifdef HAS_AIROHA_SOFT_RTC
     const uint32_t start = Time::getMillis();
     do {
-#ifdef HAS_AIROHA_SOFT_RTC
         _serial_gps->write(sleepCmd);
-#else
-        // The sleep command alone goes unanswered; locking sleep first with $PAIR382 gets it acked.
-        airohaWriteIdleInt(_serial_gps, "$PAIR382,1*2E\r\n");
-        airohaWriteIdleInt(_serial_gps, sleepCmd);
-#endif
         if (getACK(sleepAck, AIROHA_SLEEP_ACK_MS) == GNSS_RESPONSE_OK) {
             airohaSleepMisses = 0;
             return;
         }
         // Only start another attempt while a whole ack window still fits inside the budget.
     } while (Throttle::isWithinTimespanMs(start, AIROHA_SLEEP_BUDGET_MS - AIROHA_SLEEP_ACK_MS));
+#else
+    // No $PAIR382 first: it locks the CPU out of sleep, the opposite of what we want here.
+    for (uint8_t attempt = 0; attempt < AIROHA_SLEEP_ATTEMPTS; attempt++) {
+        airohaWriteIdleInt(_serial_gps, sleepCmd);
+        const bool acked = getACK(sleepAck, AIROHA_SLEEP_ACK_MS) == GNSS_RESPONSE_OK;
+        if (acked || airohaWentQuiet(_serial_gps)) {
+            LOG_DEBUG("GPS: %.8s took (%s, attempt %u)", sleepCmd, acked ? "acked" : "NMEA stopped", attempt + 1);
+            airohaSleepMisses = 0;
+            delay(AIROHA_SLEEP_SETTLE_MS);
+            return;
+        }
+    }
+#endif
 
     airohaSleepMisses++;
-    LOG_WARN("GPS: no ack for %.8s (%u/%u)", sleepCmd, airohaSleepMisses, AIROHA_SLEEP_MAX_MISSES);
+    LOG_WARN("GPS: %.8s did not take (%u/%u)", sleepCmd, airohaSleepMisses, AIROHA_SLEEP_MAX_MISSES);
 #endif
 }
 
