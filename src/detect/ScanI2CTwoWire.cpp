@@ -541,10 +541,20 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 }
                 break;
 #ifndef HAS_NCP5623
-            case AHT10_ADDR:
+            case AHT10_ADDR: { // same as FocalTech FT6x06/FT6x36 touch controllers
+                // An AHT has no register map and answers every read with its status byte, so FocalTech ID registers
+                // (vendor 0xA8, chip 0xA3) that read back different values can only be a touch controller
+                uint8_t vendor = 0, chip = 0;
+                if (readByteRegister(i2cBus, addr.address, 0xA8, vendor) && vendor != 0 &&
+                    readByteRegister(i2cBus, addr.address, 0xA3, chip) && chip != vendor) {
+                    LOG_INFO("FocalTech touch (chip 0x%x, vendor 0x%x) at 0x%x, not an AHT10", chip, vendor,
+                             (uint8_t)addr.address);
+                    break;
+                }
                 logFoundDevice("AHT10", (uint8_t)addr.address);
                 type = AHT10;
                 break;
+            }
 #endif
 #if !defined(M5STACK_UNITC6L)
             case INA_ADDR: // same as HM330X, ES7210 and SHT2X
@@ -879,7 +889,27 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 break;
 
                 SCAN_SIMPLE_CASE(LSM6DS3_ADDR, LSM6DS3, "LSM6DS3", (uint8_t)addr.address);
-                SCAN_SIMPLE_CASE(VEML7700_ADDR, VEML7700, "VEML7700", (uint8_t)addr.address);
+            case VEML7700_ADDR: { // same as BMM150 with CSB and SDO low
+                // VEML7700 ID (0x07) low byte is 0x81. A BMM150 chip ID (0x40) reads 0x32, but only once the power bit
+                // (0x4B bit 0) has taken it out of suspend
+                uint8_t id = 0;
+                if (!readByteRegister(i2cBus, addr.address, 0x07, id) || id != 0x81) {
+                    i2cBus->beginTransmission(addr.address);
+                    i2cBus->write((uint8_t)0x4B);
+                    i2cBus->write((uint8_t)0x01);
+                    if (i2cBus->endTransmission() == 0) {
+                        delay(3); // BMM150 start-up time
+                        if (readByteRegister(i2cBus, addr.address, 0x40, id) && id == 0x32) {
+                            logFoundDevice("BMM150", (uint8_t)addr.address);
+                            type = BMM150;
+                            break;
+                        }
+                    }
+                }
+                logFoundDevice("VEML7700", (uint8_t)addr.address);
+                type = VEML7700;
+                break;
+            }
             case TCA9555_ADDR:
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x01), 1);
                 if (registerValue == 0x13) {

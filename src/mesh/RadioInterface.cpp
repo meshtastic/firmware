@@ -511,7 +511,7 @@ std::unique_ptr<RadioInterface> initLoRa()
             LOG_WARN("No SX1262 radio with TCXO, Vref %fV", SX126X_DIO3_TCXO_VOLTAGE);
             rIf = nullptr;
         } else {
-            LOG_INFO("SX1262 init success, TCXO, Vref %fV", SX126X_DIO3_TCXO_VOLTAGE);
+            LOG_INFO("SX1262 init success, %s, Vref %.1fV", sxIf->getTCXOVoltage() > 0 ? "TCXO" : "XTAL", sxIf->getTCXOVoltage());
             rIf = std::move(sxIf);
             radioType = SX1262_RADIO;
         }
@@ -541,7 +541,7 @@ std::unique_ptr<RadioInterface> initLoRa()
             LOG_WARN("No SX1268 radio with TCXO, Vref %fV", SX126X_DIO3_TCXO_VOLTAGE);
             rIf = nullptr;
         } else {
-            LOG_INFO("SX1268 init success, TCXO, Vref %fV", SX126X_DIO3_TCXO_VOLTAGE);
+            LOG_INFO("SX1268 init success, %s, Vref %.1fV", sxIf->getTCXOVoltage() > 0 ? "TCXO" : "XTAL", sxIf->getTCXOVoltage());
             rIf = std::move(sxIf);
             radioType = SX1268_RADIO;
         }

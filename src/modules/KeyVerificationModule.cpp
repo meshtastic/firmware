@@ -415,17 +415,30 @@ void KeyVerificationModule::resetToIdle()
 
 void KeyVerificationModule::commitVerifiedRemoteNode()
 {
-    // The remote node already has a NodeDB entry by this point (packets were exchanged during the
-    // handshake), so getMeshNode is sufficient; bail defensively if it is somehow absent.
+    // Only commit once the handshake has reached the user's final confirmation: the security
+    // number checked out (initiator) or hash1 matched (responder).
+    if (currentState != KEY_VERIFICATION_SENDER_AWAITING_USER && currentState != KEY_VERIFICATION_RECEIVER_AWAITING_USER) {
+        LOG_WARN("Key verification not awaiting confirmation, not committing");
+        return;
+    }
+    // An initiator that did not know the responder can reach this with no NodeDB entry for it: this
+    // module consumes the hash2 reply, so the routing module never sniffs it into NodeDB. The pending
+    // key that reply carried is then the only record, and the user has just confirmed it, so create the
+    // entry from it.
+    meshtastic_NodeInfoLite_public_key_t pending = {0, {0}};
+    const bool hasPending = crypto->getPendingPublicKey(currentRemoteNode, pending);
     meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(currentRemoteNode);
+    if (!node && hasPending) {
+        nodeDB->commitRemoteKey(currentRemoteNode, pending.bytes, NodeDB::KeyCommitTrust::ManuallyVerified);
+        node = nodeDB->getMeshNode(currentRemoteNode);
+    }
     if (!node) {
         LOG_WARN("Attempted to commit key, but unknown node");
         return;
     }
     // If we only held the peer's key as a pending (unverified) key during the handshake, commit it to
     // NodeDB now that the user has confirmed the verification, so future PKI traffic can use it.
-    meshtastic_NodeInfoLite_public_key_t pending = {0, {0}};
-    if (node->public_key.size != 32 && crypto->getPendingPublicKey(currentRemoteNode, pending))
+    if (node->public_key.size != 32 && hasPending)
         node->public_key = pending;
     node->bitfield |= NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK;
     // Re-commit via the bare-key primitive: writing the same bytes back is a no-op for the hot
