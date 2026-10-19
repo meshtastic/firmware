@@ -3876,8 +3876,7 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
 {
     // Checked before getOrCreateMeshNode so a refusal cannot evict.
     if (refusesUnsignedIdentity(nodeId, channelIndex, xeddsaSigned)) {
-        LOG_WARN("Refuse unsigned identity update for 0x%08x that previously signed", nodeId);
-        notifyRefusedIdentity(nodeId);
+        notifyRefusedIdentity(nodeId, p);
         return false;
     }
 
@@ -4412,9 +4411,20 @@ bool NodeDB::refusesUnsignedIdentity(NodeNum n, uint8_t channelIndex, bool xedds
     return isKnownXeddsaSigner(n);
 }
 
-void NodeDB::notifyRefusedIdentity(NodeNum n)
+void NodeDB::notifyRefusedIdentity(NodeNum n, const meshtastic_User &claimed)
 {
     if (!service)
+        return;
+    // Only a name or role change is worth a notice; a NodeInfo repeating what we hold loses nothing. Compare
+    // through the conversion that stores a User, so truncation and sanitizing cannot read as a change. A
+    // signer that lives only in the warm tier keeps no name to compare, so it is not reported.
+    const meshtastic_NodeInfoLite *info = getMeshNode(n);
+    if (!info || !nodeInfoLiteHasUser(info))
+        return;
+    meshtastic_NodeInfoLite incoming = meshtastic_NodeInfoLite_init_zero;
+    TypeConversions::CopyUserToNodeInfoLite(&incoming, claimed);
+    if (strcmp(incoming.long_name, info->long_name) == 0 && strcmp(incoming.short_name, info->short_name) == 0 &&
+        incoming.role == info->role)
         return;
     for (NodeNum noticed : refusedIdentityNoticed)
         if (noticed == n)
@@ -4430,12 +4440,9 @@ void NodeDB::notifyRefusedIdentity(NodeNum n)
     lastRefusedIdentityNoticeMs = Time::stampMillis();
 
     // The name we already hold, never the refused update's claim.
-    const meshtastic_NodeInfoLite *info = getMeshNode(n);
     char safeName[sizeof(info->long_name)] = "";
-    if (info && nodeInfoLiteHasUser(info)) {
-        strncpy(safeName, info->long_name, sizeof(safeName) - 1);
-        sanitizeUtf8(safeName, sizeof(safeName));
-    }
+    strncpy(safeName, info->long_name, sizeof(safeName) - 1);
+    sanitizeUtf8(safeName, sizeof(safeName));
     char who[sizeof(safeName) + 14];
     if (safeName[0])
         snprintf(who, sizeof(who), "%s (!%08x)", safeName, n);

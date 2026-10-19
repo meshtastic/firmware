@@ -509,10 +509,10 @@ class NodeDB
     /// Strict refuse one from a known signer, except on an AES-CCM channel, whose tag authenticates it.
     bool refusesUnsignedIdentity(NodeNum n, uint8_t channelIndex, bool xeddsaSigned);
 
-    /// Tell the client that an unsigned identity update from n was refused, naming the node and how to accept
-    /// its updates again. At most once per node per boot (the last REFUSED_IDENTITY_NOTICE_SLOTS nodes) and
-    /// once per REFUSED_IDENTITY_NOTICE_INTERVAL_MS overall.
-    void notifyRefusedIdentity(NodeNum n);
+    /// Tell the client that an unsigned identity update from n was refused, when it would have changed the
+    /// node's stored name or role, naming the node and how to accept its updates again. At most once per node
+    /// per boot (the last REFUSED_IDENTITY_NOTICE_SLOTS nodes) and once per REFUSED_IDENTITY_NOTICE_INTERVAL_MS.
+    void notifyRefusedIdentity(NodeNum n, const meshtastic_User &claimed);
 
     /// Provenance of a bare-key commit that deliberately bypasses updateUser()'s
     /// User-payload / TOFU-pin path. Maps to the TrafficManagement cache's `proven` flag:

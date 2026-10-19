@@ -372,6 +372,27 @@ static void test_updateuser_refused_identity_notifies_once_per_node(void)
     TEST_ASSERT_EQUAL_MESSAGE(1, mockService->notificationCount, "the same node must not be reported twice");
 }
 
+// A refused NodeInfo that repeats the stored name, short name and role loses the user nothing, so it
+// must not notify: an unchanged signer relayed through pre-2.8 firmware would otherwise report itself
+// on every NodeInfo. A role change alone is a change the user would miss, and does notify.
+static void test_updateuser_refused_unchanged_identity_does_not_notify(void)
+{
+    config.security.packet_signature_policy =
+        meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_BALANCED;
+    db->push(kPeer, 1000, /*keySeed=*/0x42, /*xeddsaSigned=*/true);
+    meshtastic_NodeInfoLite *stored = db->getMeshNode(kPeer);
+    strncpy(stored->long_name, "Same name", sizeof(stored->long_name) - 1);
+    strncpy(stored->short_name, "SN", sizeof(stored->short_name) - 1);
+    meshtastic_User u = makeUser("Same name", "SN", /*keySeed=*/0x42);
+
+    TEST_ASSERT_FALSE(db->updateUser(kPeer, u, 0, /*xeddsaSigned=*/false));
+    TEST_ASSERT_EQUAL_MESSAGE(0, mockService->notificationCount, "an unchanged identity must not notify");
+
+    u.role = meshtastic_Config_DeviceConfig_Role_ROUTER;
+    TEST_ASSERT_FALSE(db->updateUser(kPeer, u, 0, /*xeddsaSigned=*/false));
+    TEST_ASSERT_EQUAL_MESSAGE(1, mockService->notificationCount, "a refused role change must notify");
+}
+
 // The per-node limit alone would still let a burst of distinct signers flood the client, so notices
 // are also spaced globally: a second node refused right after the first gets none. Its next refused
 // NodeInfo after the interval reports it, since it was never recorded as told.
@@ -561,6 +582,7 @@ IH_TEST_ENTRY void setup()
     RUN_TEST(test_updateuser_id_derived_from_nodenum);
     RUN_TEST(test_updateuser_unsigned_update_refused_for_hot_signer);
     RUN_TEST(test_updateuser_refused_identity_notifies_once_per_node);
+    RUN_TEST(test_updateuser_refused_unchanged_identity_does_not_notify);
     RUN_TEST(test_updateuser_refused_identity_notices_rate_limited);
     RUN_TEST(test_updateuser_unsigned_update_accepted_for_signer_in_compatible);
     RUN_TEST(test_updateuser_signed_update_cannot_rotate_pinned_key);
