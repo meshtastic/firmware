@@ -26,6 +26,9 @@
 #include "error.h"
 #include "main.h"
 #include "meshUtils.h"
+#ifdef NODARA
+#include "nodara/McuDataInput.h"
+#endif
 #include <power/PowerHAL.h>
 
 #include "Nrf52SaadcLock.h"
@@ -513,6 +516,10 @@ void cpuDeepSleep(uint32_t msecToWake)
 #ifdef PIN_SERIAL1_RX
     if (Serial1) // A straightforward solution to the wake from deepsleep problem
         Serial1.end();
+#endif
+
+#if defined(NODARA)
+    nodara::endExternalUart();
 #endif
 
     setBluetoothEnable(false);

@@ -204,6 +204,10 @@ void setupNicheGraphics();
 #include "nicheGraphics.h"
 #endif
 
+#ifdef NODARA
+#include "nodara/McuDataInput.h"
+#endif
+
 #if defined(HW_SPI1_DEVICE) && defined(ARCH_ESP32)
 #if defined(HAS_SDCARD) && defined(SDCARD_USE_SPI1)
 // Reuse FSCommon's SPI_HSPI instance to avoid double-initializing SPI2_HOST in arduino-esp32 3.x.
@@ -547,6 +551,11 @@ void setup()
     LOG_INFO("Wait for peripherals to stabilize");
     delay(PERIPHERAL_WARMUP_MS);
 #endif
+
+#if defined(NODARA)
+    nodara::setup();
+#endif
+
     initSPI();
 
     OSThread::setup();
@@ -1515,6 +1524,10 @@ void loop()
             RadioLibInterface::instance->periodicRadioMaintenance();
         }
     }
+
+#if defined(NODARA)
+    nodara::loop();
+#endif
 
 #ifdef DEBUG_STACK
     static uint32_t lastPrint = 0;
