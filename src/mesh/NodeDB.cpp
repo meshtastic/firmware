@@ -4426,17 +4426,12 @@ void NodeDB::notifyRefusedIdentity(NodeNum n, const meshtastic_User &claimed)
     if (strcmp(incoming.long_name, info->long_name) == 0 && strcmp(incoming.short_name, info->short_name) == 0 &&
         incoming.role == info->role)
         return;
-    for (NodeNum noticed : refusedIdentityNoticed)
-        if (noticed == n)
-            return;
     if (lastRefusedIdentityNoticeMs != 0 &&
         Throttle::isWithinTimespanMs(lastRefusedIdentityNoticeMs, REFUSED_IDENTITY_NOTICE_INTERVAL_MS))
         return;
     meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
     if (!cn)
         return;
-    refusedIdentityNoticed[refusedIdentityNoticeNext] = n;
-    refusedIdentityNoticeNext = (refusedIdentityNoticeNext + 1) % REFUSED_IDENTITY_NOTICE_SLOTS;
     lastRefusedIdentityNoticeMs = Time::stampMillis();
 
     // The name we already hold, never the refused update's claim.

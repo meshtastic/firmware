@@ -510,8 +510,8 @@ class NodeDB
     bool refusesUnsignedIdentity(NodeNum n, uint8_t channelIndex, bool xeddsaSigned);
 
     /// Tell the client that an unsigned identity update from n was refused, when it would have changed the
-    /// node's stored name or role, naming the node and how to accept its updates again. At most once per node
-    /// per boot (the last REFUSED_IDENTITY_NOTICE_SLOTS nodes) and once per REFUSED_IDENTITY_NOTICE_INTERVAL_MS.
+    /// node's stored name or role, naming the node and how to accept its updates again. At most one notice per
+    /// REFUSED_IDENTITY_NOTICE_INTERVAL_MS.
     void notifyRefusedIdentity(NodeNum n, const meshtastic_User &claimed);
 
     /// Provenance of a bare-key commit that deliberately bypasses updateUser()'s
@@ -707,10 +707,7 @@ class NodeDB
   private:
     mutable concurrency::Lock satelliteMutex;
     bool duplicateWarned = false;
-    static constexpr size_t REFUSED_IDENTITY_NOTICE_SLOTS = 8;
-    static constexpr uint32_t REFUSED_IDENTITY_NOTICE_INTERVAL_MS = 60 * 1000UL;
-    NodeNum refusedIdentityNoticed[REFUSED_IDENTITY_NOTICE_SLOTS] = {};
-    size_t refusedIdentityNoticeNext = 0;
+    static constexpr uint32_t REFUSED_IDENTITY_NOTICE_INTERVAL_MS = 60 * 60 * 1000UL;
     uint32_t lastRefusedIdentityNoticeMs = 0;
     bool localPositionUpdatedSinceBoot = false;
     bool migrationSavePending = false;
