@@ -1212,14 +1212,15 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
             p->decoded.xeddsa_signature.size = 0;
 #if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
             // Compatible never signs, and an AES-CCM channel's tag already authenticates the packet.
-            // Licensed packets stay plaintext, so ham signs unicasts as well as broadcasts. NodeInfo and position
-            // are signed even when unicast: they are PKI-excluded, so a signature is their only authentication,
-            // and a NodeInfo carries the key a peer will use for PKI. A traceroute never is: every hop rewrites
-            // it. Use the exact encoded size: signing then failing TOO_LARGE would break packets deliverable
-            // unsigned.
+            // NodeInfo and position are signed even when unicast: they are PKI-excluded, so a signature is their
+            // only authentication, and a NodeInfo carries the key a peer will use for PKI. Ham mode has no PKI, so
+            // it signs the unicasts PKI would otherwise cover; an ack carries its ack proof instead (AckProof.h).
+            // A traceroute is never signed: every hop rewrites it. Use the exact encoded size: signing then
+            // failing TOO_LARGE would break packets deliverable unsigned.
             const bool signingPolicy = config.security.packet_signature_policy !=
                                        meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_COMPATIBLE;
-            const bool signableDestination = owner.is_licensed || isBroadcast(p->to) ||
+            const bool hamInPlaceOfPki = owner.is_licensed && p->decoded.portnum != meshtastic_PortNum_ROUTING_APP;
+            const bool signableDestination = hamInPlaceOfPki || isBroadcast(p->to) ||
                                              p->decoded.portnum == meshtastic_PortNum_NODEINFO_APP ||
                                              p->decoded.portnum == meshtastic_PortNum_POSITION_APP;
             if (signingPolicy && !channels.isAEADEnabled(p->channel) && !p->pki_encrypted && signableDestination &&
