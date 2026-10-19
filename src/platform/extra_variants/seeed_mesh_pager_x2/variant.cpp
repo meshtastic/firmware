@@ -1,6 +1,8 @@
 #include "variant.h"
 #include "Arduino.h"
 
+#ifdef SEEED_MESHPAGER_X2
+
 #include "AudioBoard.h"
 #include <Wire.h>
 #include <driver/gpio.h>
@@ -342,3 +344,5 @@ void variant_shutdown()
     pinMode(I2C_SDA, ANALOG);
     pinMode(I2C_SCL, ANALOG);
 }
+
+#endif

@@ -1,3 +1,5 @@
+#ifdef SEEED_MESHPAGER_X2
+
 #include "UptimeClock.h"
 #include "concurrency/OSThread.h"
 #include "configuration.h"
@@ -54,3 +56,5 @@ void startPowerButtonMonitor()
 #endif
     new PowerButtonThread();
 }
+
+#endif
