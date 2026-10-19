@@ -573,7 +573,7 @@ class LGFX : public lgfx::LGFX_Device
 
 static LGFX *tft = nullptr;
 
-#elif defined(ST7789_CS)
+#elif defined(ST7789_CS) || defined(ST7789P3)
 #include <LovyanGFX.hpp> // Graphics and font library for ST7735 driver chip
 #if defined(HELTEC_V4_TFT) || defined(HELTEC_V4_R8_TFT)
 #include "chsc6x.h"
@@ -632,7 +632,11 @@ class TOUCH_CHSC6X : public ITouch
 #endif
 class LGFX : public lgfx::LGFX_Device
 {
+#if defined(ST7789P3)
+    lgfx::Panel_ST7789P3 _panel_instance;
+#else
     lgfx::Panel_ST7789 _panel_instance;
+#endif
     lgfx::Bus_SPI _bus_instance;
     lgfx::Light_PWM _light_instance;
 #if HAS_TOUCHSCREEN
@@ -2189,7 +2193,7 @@ bool TFTDisplay::connect()
 #elif defined(T_WATCH_S3)
     tft->setRotation(2); // T-Watch S3 left-handed orientation
 #elif ARCH_PORTDUINO || defined(SENSECAP_INDICATOR) || defined(T_LORA_PAGER) || defined(T_WATCH_ULTRA) ||                        \
-    defined(SEEED_WIO_TRACKER_L2)
+    defined(SEEED_WIO_TRACKER_L2) || defined(SEEED_MESHPAGER_X2)
     tft->setRotation(0); // use config.yaml to set rotation
 #else
     tft->setRotation(3); // Orient horizontal and wide underneath the silkscreen name label

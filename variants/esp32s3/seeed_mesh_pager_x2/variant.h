@@ -41,7 +41,6 @@
 #define USE_POWERSAVE
 #define SLEEP_TIME 120
 
-#if 0
 #define TFT_CS 10    // Chip select (GPIO 10, SPI2)
 #define TFT_SDA 11   // MOSI (GPIO 11)
 #define TFT_SCK 12   // Clock (GPIO 12)
@@ -51,6 +50,9 @@
 #define TFT_RESET -1 // Reset via expander (EXP pin 21), managed separately
 
 // TFT uses SPI bus (SPI2_HOST on ESP32-S3)
+#define HAS_SPI_TFT 1
+#define USE_TFTDISPLAY 1 // Enable legacy BaseUI TFTDisplay.cpp build
+#define ST7789P3
 #define ST7789_CS TFT_CS
 #define ST7789_RS TFT_A0
 #define ST7789_SDA TFT_SDA
@@ -61,17 +63,16 @@
 #define ST7789_BL TFT_BL
 #define ST7789_SPI_HOST SPI2_HOST
 
-//#define SPI_FREQUENCY       80000000
 #define SPI_READ_FREQUENCY 16000000
-#define TFT_HEIGHT 320
-#define TFT_WIDTH 240
+#define TFT_WIDTH 320
+#define TFT_HEIGHT 240
 #define TFT_OFFSET_X 0
 #define TFT_OFFSET_Y 0
-#define TFT_OFFSET_ROTATION 0
+#define TFT_OFFSET_ROTATION 1
+#define USE_VIRTUAL_KEYBOARD 1
 
 #define BRIGHTNESS_DEFAULT 130 // Medium-low brightness (0-255)
 #define SCREEN_TRANSITION_FRAMERATE 5
-#endif
 
 // LoRa Radio - Semtech LR2021 (Wio-LR2021 module)
 #define USE_LR2021 // Wideband radio supporting sub-GHz and 2.4 GHz
