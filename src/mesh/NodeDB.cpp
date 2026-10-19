@@ -4450,10 +4450,14 @@ void NodeDB::notifyRefusedIdentity(NodeNum n, const meshtastic_User &claimed)
         snprintf(who, sizeof(who), "!%08x", n);
     cn->level = meshtastic_LogRecord_Level_WARNING;
     cn->time = getValidTime(RTCQualityFromNet);
+    // Only Balanced and Strict refuse, so the setting is one of the two.
+    const char *setting = config.security.packet_signature_policy ==
+                                  meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_STRICT
+                              ? "Strict"
+                              : "Balanced";
     snprintf(cn->message, sizeof(cn->message),
-             "Ignored an unsigned name or role change from %s, which has signed before. Remove the node to accept its "
-             "unsigned updates.",
-             who);
+             "Unsigned update from %s ignored, due to %s security setting. Remove the node to accept its unsigned updates.", who,
+             setting);
     service->sendClientNotification(cn);
 }
 
