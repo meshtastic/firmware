@@ -38,7 +38,6 @@
 #endif
 
 #if defined(NODARA)
-#include "nodara/NavCombos.h"
 #include "nodara/SixKeyNavInput.h"
 #endif
 

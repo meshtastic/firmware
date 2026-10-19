@@ -1,6 +1,5 @@
 #include "SixKeyNavInput.h"
 #include "GpioteOverride.h"
-#include "NavCombos.h"
 
 #if defined(NODARA)
 
@@ -136,34 +135,8 @@ int32_t SixKeyNavInput::runOnce()
         }
 
         btn_state[i].release = false;
-        const bool fnDown = digitalRead(NAV_TABLE[BTN_NUM_MAX - 1].pin) == PIN_BTN_ACTIVE;
-        if (i != BTN_NUM_MAX - 1 && fnDown) {
-            LOG_INFO("Fn + %s combo", NAV_TABLE[i].name);
-            btn_state[BTN_NUM_MAX - 1].press = false;
-            btn_state[BTN_NUM_MAX - 1].release = false;
-            switch (NAV_TABLE[i].evt) {
-            case INPUT_BROKER_UP:
-                navComboUp();
-                break;
-            case INPUT_BROKER_DOWN:
-                navComboDown();
-                break;
-            case INPUT_BROKER_LEFT:
-                navComboLeft();
-                break;
-            case INPUT_BROKER_RIGHT:
-                navComboRight();
-                break;
-            case INPUT_BROKER_SELECT:
-                navComboEnter();
-                break;
-            default:
-                break;
-            }
-        } else {
-            LOG_INFO("%s BTN release", NAV_TABLE[i].name);
-            fireEvent(NAV_TABLE[i].evt);
-        }
+        LOG_INFO("%s BTN release", NAV_TABLE[i].name);
+        fireEvent(NAV_TABLE[i].evt);
     }
 
     return waiting ? DEBOUNCE_MS / 2 : INT32_MAX;
