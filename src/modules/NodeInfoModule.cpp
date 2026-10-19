@@ -54,6 +54,7 @@ bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
     // which cannot be signed, so the exchange proceeds and updateUser refuses just the identity write.
     if (isBroadcast(mp.to) && nodeDB->refusesUnsignedIdentity(sourceNum, mp.channel, mp.xeddsa_signed)) {
         LOG_WARN("Dropping unsigned NodeInfo broadcast from node 0x%08x that previously signed", sourceNum);
+        nodeDB->notifyRefusedIdentity(sourceNum);
         return true;
     }
 

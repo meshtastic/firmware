@@ -3877,6 +3877,7 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
     // Checked before getOrCreateMeshNode so a refusal cannot evict.
     if (refusesUnsignedIdentity(nodeId, channelIndex, xeddsaSigned)) {
         LOG_WARN("Refuse unsigned identity update for 0x%08x that previously signed", nodeId);
+        notifyRefusedIdentity(nodeId);
         return false;
     }
 
@@ -4409,6 +4410,44 @@ bool NodeDB::refusesUnsignedIdentity(NodeNum n, uint8_t channelIndex, bool xedds
     if (channels.isAEADEnabled(channelIndex))
         return false;
     return isKnownXeddsaSigner(n);
+}
+
+void NodeDB::notifyRefusedIdentity(NodeNum n)
+{
+    if (!service)
+        return;
+    for (NodeNum noticed : refusedIdentityNoticed)
+        if (noticed == n)
+            return;
+    if (lastRefusedIdentityNoticeMs != 0 &&
+        Throttle::isWithinTimespanMs(lastRefusedIdentityNoticeMs, REFUSED_IDENTITY_NOTICE_INTERVAL_MS))
+        return;
+    meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
+    if (!cn)
+        return;
+    refusedIdentityNoticed[refusedIdentityNoticeNext] = n;
+    refusedIdentityNoticeNext = (refusedIdentityNoticeNext + 1) % REFUSED_IDENTITY_NOTICE_SLOTS;
+    lastRefusedIdentityNoticeMs = Time::stampMillis();
+
+    // The name we already hold, never the refused update's claim.
+    const meshtastic_NodeInfoLite *info = getMeshNode(n);
+    char safeName[sizeof(info->long_name)] = "";
+    if (info && nodeInfoLiteHasUser(info)) {
+        strncpy(safeName, info->long_name, sizeof(safeName) - 1);
+        sanitizeUtf8(safeName, sizeof(safeName));
+    }
+    char who[sizeof(safeName) + 14];
+    if (safeName[0])
+        snprintf(who, sizeof(who), "%s (!%08x)", safeName, n);
+    else
+        snprintf(who, sizeof(who), "!%08x", n);
+    cn->level = meshtastic_LogRecord_Level_WARNING;
+    cn->time = getValidTime(RTCQualityFromNet);
+    snprintf(cn->message, sizeof(cn->message),
+             "Ignored an unsigned name or role change from %s, which has signed before. Remove the node to accept its "
+             "unsigned updates.",
+             who);
+    service->sendClientNotification(cn);
 }
 
 void NodeDB::commitRemoteKey(NodeNum n, const uint8_t key32[32], KeyCommitTrust trust)

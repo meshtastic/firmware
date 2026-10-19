@@ -509,6 +509,11 @@ class NodeDB
     /// Strict refuse one from a known signer, except on an AES-CCM channel, whose tag authenticates it.
     bool refusesUnsignedIdentity(NodeNum n, uint8_t channelIndex, bool xeddsaSigned);
 
+    /// Tell the client that an unsigned identity update from n was refused, naming the node and how to accept
+    /// its updates again. At most once per node per boot (the last REFUSED_IDENTITY_NOTICE_SLOTS nodes) and
+    /// once per REFUSED_IDENTITY_NOTICE_INTERVAL_MS overall.
+    void notifyRefusedIdentity(NodeNum n);
+
     /// Provenance of a bare-key commit that deliberately bypasses updateUser()'s
     /// User-payload / TOFU-pin path. Maps to the TrafficManagement cache's `proven` flag:
     /// only ManuallyVerified vouches for possession of exactly this key.
@@ -702,6 +707,11 @@ class NodeDB
   private:
     mutable concurrency::Lock satelliteMutex;
     bool duplicateWarned = false;
+    static constexpr size_t REFUSED_IDENTITY_NOTICE_SLOTS = 8;
+    static constexpr uint32_t REFUSED_IDENTITY_NOTICE_INTERVAL_MS = 60 * 1000UL;
+    NodeNum refusedIdentityNoticed[REFUSED_IDENTITY_NOTICE_SLOTS] = {};
+    size_t refusedIdentityNoticeNext = 0;
+    uint32_t lastRefusedIdentityNoticeMs = 0;
     bool localPositionUpdatedSinceBoot = false;
     bool migrationSavePending = false;
     /// Set when loadFromDisk() hit a present-but-undecodable config (DECODE_FAILED). The ctor uses it to
