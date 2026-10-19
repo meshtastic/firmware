@@ -37,6 +37,11 @@
 #include "input/kbMatrixImpl.h"
 #endif
 
+#if defined(NODARA)
+#include "nodara/NavCombos.h"
+#include "nodara/SixKeyNavInput.h"
+#endif
+
 #if HAS_BUTTON || defined(ARCH_PORTDUINO)
 #include "graphics/Backlight.h"
 #include "input/ButtonThread.h"
@@ -471,8 +476,10 @@ void InputBroker::Init()
             rotaryEncoderInterruptImpl1 = nullptr;
         }
 #endif
+#if !defined(NODARA) && !MESHTASTIC_EXCLUDE_I2C
         cardKbI2cImpl = new CardKbI2cImpl();
         cardKbI2cImpl->init();
+#endif
 #if defined(M5STACK_UNITC6L)
         i2cButton = new i2cButtonThread("i2cButtonThread");
 #endif
@@ -551,5 +558,13 @@ void InputBroker::Init()
 #endif
 #ifdef INPUTBROKER_EXPRESSLRSFIVEWAY_TYPE
     expressLRSFiveWayInput = new ExpressLRSFiveWay();
+#endif
+
+#if defined(NODARA) && !MESHTASTIC_EXCLUDE_SIXKEYNAVINPUT
+    sixKeyNavInput = new SixKeyNavInput();
+    if (!sixKeyNavInput->init()) {
+        delete sixKeyNavInput;
+        sixKeyNavInput = nullptr;
+    }
 #endif
 }
