@@ -284,6 +284,19 @@ static const uint8_t A0 = PIN_BATTERY_ADC;
 #define PIN_BUTTON_B PIN_BTN_F6
 #define PIN_BUTTON_UP PIN_BTN_F1
 
+// Five-way keys through the trackball driver, A as the cancel button (also the wake key)
+#define HAS_TRACKBALL 1
+#define TB_UP PIN_BUTTON_UP
+#define TB_DOWN PIN_BUTTON_DOWN
+#define TB_LEFT PIN_BUTTON_LEFT
+#define TB_RIGHT PIN_BUTTON_RIGHT
+#define TB_PRESS PIN_BUTTON_B
+#define TB_DIRECTION FALLING
+
+#define CANCEL_BUTTON_PIN PIN_BUTTON_A
+#define CANCEL_BUTTON_ACTIVE_LOW true
+#define CANCEL_BUTTON_ACTIVE_PULLUP true
+
 // ---------------------------------------------------------------------------
 // Radio module selection
 // Probe both: RadioLib tells them apart by the chip's version string, and the
