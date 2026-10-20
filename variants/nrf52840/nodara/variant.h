@@ -85,7 +85,8 @@ extern "C" {
 // Adafruit core Serial2 (UART2) - MCU
 // ---------------------------------------------------------------------------
 #define PIN_SERIAL2_RX MCU_DATA_PIN
-#define PIN_SERIAL2_TX (-1)
+// RX-only line: the core needs a valid TX pin, which the power MCU link disconnects after begin()
+#define PIN_SERIAL2_TX MCU_DATA_PIN
 
 // ===========================================================================
 // Battery ADC  - P0.04 (AIN2), 50:50 divider (×2)
