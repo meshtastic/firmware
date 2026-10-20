@@ -1,15 +1,13 @@
 {
   "build": {
     "arduino": {
-      "ldscript": "nrf52840_s140_v6_nodara.ld"
+      "ldscript": "nrf52840_s140_v6.ld"
     },
     "core": "nRF5",
     "cpu": "cortex-m4",
     "extra_flags": "-DNRF52840_XXAA -DNODARA",
     "f_cpu": "64000000L",
-    "hwids": [
-      ["0x239A", "0x4405"]
-    ],
+    "hwids": [["0x239A", "0x4405"]],
     "usb_product": "Nodara",
     "mcu": "nrf52840",
     "variant": "nodara",
