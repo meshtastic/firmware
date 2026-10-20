@@ -412,19 +412,6 @@ void tftSetup(void)
     deviceScreen = &DeviceScreen::create(reentrantSpiLock);
     PacketAPI::create(PacketServer::init());
     deviceScreen->init(new PacketClient);
-#if HAS_MUI_MIRROR
-    // LVGL is up and the view has not built its widgets yet, which DisplayMirror::start needs
-    DisplayMirror::start(deviceScreen->getDisplayDriver());
-    {
-        lv_display_t *disp = lv_display_get_default();
-        graphics::screenMirror.setMuiSource(
-            []() { DisplayMirror::requestFullRefresh(); }, disp ? (uint16_t)lv_display_get_horizontal_resolution(disp) : 0,
-            disp ? (uint16_t)lv_display_get_vertical_resolution(disp) : 0, DisplayMirror::pixelsByteSwapped());
-    }
-    DisplayMirror::setFrameObserver([](int16_t x, int16_t y, uint16_t w, uint16_t h, const uint16_t *px, uint16_t stride) {
-        graphics::screenMirror.onMuiRect(x, y, w, h, px, stride);
-    });
-#endif
 #else
     if (portduino_config.displayPanel != no_screen) {
         DisplayDriverConfig displayConfig;
@@ -510,6 +497,19 @@ void tftSetup(void)
 #endif
 
     if (deviceScreen) {
+#if HAS_MUI_MIRROR
+        // LVGL is up and the UI task has not started, which DisplayMirror::start needs
+        DisplayMirror::start(deviceScreen->getDisplayDriver());
+        {
+            lv_display_t *disp = lv_display_get_default();
+            graphics::screenMirror.setMuiSource(
+                []() { DisplayMirror::requestFullRefresh(); }, disp ? (uint16_t)lv_display_get_horizontal_resolution(disp) : 0,
+                disp ? (uint16_t)lv_display_get_vertical_resolution(disp) : 0, DisplayMirror::pixelsByteSwapped());
+        }
+        DisplayMirror::setFrameObserver([](int16_t x, int16_t y, uint16_t w, uint16_t h, const uint16_t *px, uint16_t stride) {
+            graphics::screenMirror.onMuiRect(x, y, w, h, px, stride);
+        });
+#endif
 #ifdef ARCH_ESP32
         if (!tftSleepObserver) {
             tftSleepObserver = new CallbackObserver<DeviceScreen, void *>(deviceScreen, &DeviceScreen::prepareSleep);
