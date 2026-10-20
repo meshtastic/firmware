@@ -1748,8 +1748,11 @@ void menuHandler::manageNodeMenu()
     optionsArray[options] = "Trace Route";
     optionsEnumArray[options++] = TraceRoute;
 
-    optionsArray[options] = "Key Verification";
-    optionsEnumArray[options++] = KeyVerification;
+    // Key verification needs PKI, which licensed (ham) operation does not use.
+    if (!owner.is_licensed) {
+        optionsArray[options] = "Key Verification";
+        optionsEnumArray[options++] = KeyVerification;
+    }
 
     if (nodeInfoLiteIsIgnored(node)) {
         optionsArray[options] = "Unignore Node";
