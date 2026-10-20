@@ -29,7 +29,9 @@ source "$SCRIPT_DIR/lib/sanitizer.sh"
 
 if grep -qE "$SAN_RE" "$LOG"; then
 	echo "::error title=Sanitizer fault in ${WHAT}::A sanitizer report is in ${WHAT}'s output. The coverage env is built with -fsanitize=address, so this is a real memory fault in src/, not a test artifact. First matching lines below; the full output is in this step's log."
-	grep -nE "$SAN_RE" "$LOG" | head -4 | sed 's/^/    /'
+	# -m 4, not `| head -4`: head closing the pipe early is a SIGPIPE that pipefail reports and
+	# set -e then exits on, in place of the status 1 this is documented to give.
+	grep -m 4 -nE "$SAN_RE" "$LOG" | sed 's/^/    /'
 	exit 1
 fi
 
