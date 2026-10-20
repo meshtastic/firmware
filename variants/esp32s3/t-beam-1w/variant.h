@@ -53,13 +53,15 @@
 #ifdef USE_LR1121
 // LR1121 module (XY16E8P33) with sub-GHz and 2.4 GHz PAs, per LilyGO t_beam_1w_lr1121.md
 #define LR1121_SPI_NSS_PIN LORA_CS
-#define LR1121_IRQ_PIN LORA_DIO1
+#define LR1121_IRQ_PIN 21 // radio DIO11; GPIO1 (DIO10) carries no IRQ on this module, per LilyGO utilities.h
 #define LR1121_NRESET_PIN LORA_RESET
 #define LR1121_BUSY_PIN LORA_BUSY
 #define LR11X0_POWER_EN SX126X_POWER_EN
 #define LR11X0_DIO3_TCXO_VOLTAGE 3.0
 #define LR11X0_DIO_AS_RF_SWITCH // PA/LNA switching on radio DIO6-DIO8, see rfswitch.h
-#define LR1110_MAX_POWER 22     // sub-GHz
+// The sub-GHz antenna is only reachable through the high-power PA path (external PA on DIO8).
+#define LR11X0_FORCE_HP_PA
+#define LR1110_MAX_POWER 22 // sub-GHz
 // LilyGO: more than 1 dBm into the 2.4 GHz PA can permanently damage it.
 #define LR1120_MAX_POWER 1
 #endif
@@ -71,7 +73,8 @@
 #define LR2021_NRESET_PIN LORA_RESET
 #define LR2021_BUSY_PIN LORA_BUSY
 #define LR2021_IRQ_DIO_NUM 10
-// GPIO21 is radio DIO11 on this module; the SX1262 probe only claims it after a successful begin().
+// GPIO21 is radio DIO11 here (the LR1121's IRQ on that module); the SX1262 probe only claims it as RXEN after a
+// successful begin(), and SX1262 boards never reach the LR1121 probe.
 #define LR2021_POWER_EN SX126X_POWER_EN
 #define LR2021_DIO3_TCXO_VOLTAGE 3.0f
 #define LR2021_DIO_AS_RF_SWITCH // PA/LNA switching on radio DIO5-DIO8, see rfswitch.h
