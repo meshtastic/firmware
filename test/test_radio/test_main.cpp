@@ -504,10 +504,16 @@ class FakeLoraRadio
     bool headerCrcEnabled = true;
 
     uint32_t calculateCalls = 0;
+    uint32_t timeOnAirCalls = 0;
+    uint32_t headerInfoCalls = 0;
     uint8_t lastCodingRate = 0;
     bool lastCrcEnabled = false;
 
-    RadioLibTime_t getTimeOnAir(size_t) { return reportedTimeOnAir; }
+    RadioLibTime_t getTimeOnAir(size_t)
+    {
+        timeOnAirCalls++;
+        return reportedTimeOnAir;
+    }
 
     RadioLibTime_t calculateTimeOnAir(ModemType_t, DataRate_t dr, PacketConfig_t pc, size_t)
     {
@@ -519,6 +525,7 @@ class FakeLoraRadio
 
     int16_t getLoRaRxHeaderInfo(uint8_t *cr, bool *crc)
     {
+        headerInfoCalls++;
         if (headerInfoResult == RADIOLIB_ERR_NONE) {
             *cr = headerCodingRate;
             *crc = headerCrcEnabled;
@@ -582,9 +589,9 @@ class TestableRadioLibInterface : public RadioLibInterface
         cr = codingRate;
     }
 
-    uint32_t computePacketTimePublic(FakeLoraRadio &radio, uint32_t pl, bool received)
+    uint32_t computePacketTimePublic(FakeLoraRadio &radio, uint32_t pl, bool received, bool useRxHeaderInfo = true)
     {
-        return computePacketTime(radio, pl, received);
+        return computePacketTime(radio, pl, received, useRxHeaderInfo);
     }
 
     static bool isRadioLibTimeErrorPublic(RadioLibTime_t usec) { return isRadioLibTimeError(usec); }
@@ -681,6 +688,33 @@ static void test_computePacketTime_rxUsesHeaderInfoAndIsGuarded()
 
     radio.calculatedTimeOnAir = (RadioLibTime_t)RADIOLIB_ERR_WRONG_MODEM;
     TEST_ASSERT_EQUAL_UINT32(0, radioIf->computePacketTimePublic(radio, 32, true));
+
+    delete radioIf;
+}
+
+// The LR2021 times received frames without the header info: the chip ORs every received header's coding rate into
+// one field, so a receiver configured 4/5 (raw 1) reports raw 7 once frames at 4/6 and 4/8 have been on air, and
+// keeps it for the session. That reads as 4/8 below, timing a 200-byte frame about 55% long. So the configured rate
+// and CRC are used, and neither the header nor the chip's own airtime answer is asked for.
+static void test_computePacketTime_rxWithoutHeaderInfoUsesConfiguredModem()
+{
+    auto *radioIf = makeTestableRadioLibInterface(); // configured 4/5
+    FakeLoraRadio radio;
+    radio.headerInfoResult = RADIOLIB_ERR_NONE;
+    radio.headerCodingRate = 7; // 1|2|4: the configured 4/5 ORed with frames at 4/6 and 4/8, read below as 4/8
+    radio.headerCrcEnabled = false;
+    radio.calculatedTimeOnAir = 79000;
+    radio.reportedTimeOnAir = 999000;
+
+    TEST_ASSERT_EQUAL_UINT32(79, radioIf->computePacketTimePublic(radio, 32, true, false));
+    TEST_ASSERT_EQUAL_UINT8_MESSAGE(5, radio.lastCodingRate, "the configured coding rate must be timed, not the header's");
+    TEST_ASSERT_TRUE_MESSAGE(radio.lastCrcEnabled, "the configured CRC setting must be timed, not the header's");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, radio.headerInfoCalls, "the header info must not be read at all");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, radio.timeOnAirCalls, "a received frame must not be timed as our own TX");
+
+    // TX is unchanged: the chip's own answer still wins
+    radio.reportedTimeOnAir = 123456;
+    TEST_ASSERT_EQUAL_UINT32(123, radioIf->computePacketTimePublic(radio, 32, false, false));
 
     delete radioIf;
 }
@@ -1225,6 +1259,7 @@ void setup()
     RUN_TEST(test_computePacketTime_txFallsBackWhenTheRadioReportsAnError);
     RUN_TEST(test_computePacketTime_reportsNoAirtimeWhenNothingCanBeComputed);
     RUN_TEST(test_computePacketTime_rxUsesHeaderInfoAndIsGuarded);
+    RUN_TEST(test_computePacketTime_rxWithoutHeaderInfoUsesConfiguredModem);
     RUN_TEST(test_isRadioLibTimeError_separatesCodesFromDurations);
     RUN_TEST(test_clearReadIrqs_alsoDiscardsTheUnreadFrame);
     RUN_TEST(test_clearReadIrqs_retiresTheDeadFramesHeaderAndPreamble);

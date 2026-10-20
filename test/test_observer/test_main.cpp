@@ -1,5 +1,6 @@
 // Unit tests for src/Observer.h: notification order, the nonzero-return abort chain,
-// CallbackObserver dispatch, ~Observer auto-detach, and list mutation from inside onNotify.
+// CallbackObserver dispatch, ~Observer and ~Observable auto-detach, and list mutation from inside
+// onNotify.
 #include "Arduino.h"
 #include "Observer.h"
 #include "TestUtil.h"
@@ -186,6 +187,50 @@ void test_observer_watching_two_observables_detaches_from_both()
     TEST_ASSERT_EQUAL_STRING("", callOrder.c_str());
 }
 
+// The other half of the same contract: an Observable destroyed while it still has watchers. On the
+// simulator's exit path exit_simulator exit()s from AdminModule, and static destruction takes the
+// global xModem (an XModemAdapter, whose packetReady is an Observable) before the heap-allocated
+// ServerAPI that PhoneAPI::handleStartConfig attached to it. PhoneAPI::close() then calls
+// unobserve(&xModem.packetReady) on the dead observable, and ~Observer would walk it afterwards.
+// AddressSanitizer reported both as heap-use-after-free in Observable::removeObserver.
+//
+// The regression guarded: ~Observable not clearing its watchers' back-pointers, or unobserve()
+// dereferencing an observable this observer does not hold. Both observables are heap-allocated so
+// that the reads are on freed memory and ASan sees them; a stack object would merely be stale.
+
+void test_unobserve_after_the_observable_is_destroyed_is_noop()
+{
+    auto *dead = new Observable<int>();
+    RecordingObserver a('A');
+    a.observe(dead);
+
+    delete dead; // ~Observable must drop itself from a's list
+
+    a.unobserve(dead); // the exit-path call: a no-op, never a read through the freed observable
+    TEST_ASSERT_EQUAL(0, a.calls);
+}
+
+void test_destroyed_observable_leaves_no_dangling_pointer_in_the_observer()
+{
+    auto *dead = new Observable<int>();
+    Observable<int> alive;
+    {
+        RecordingObserver a('A');
+        a.observe(dead);
+        a.observe(&alive);
+
+        delete dead;
+
+        // Still attached to the survivor: ~Observable cleared only its own entry.
+        TEST_ASSERT_EQUAL(0, alive.notifyObservers(1));
+        TEST_ASSERT_EQUAL(1, a.calls);
+    } // ~Observer here - must not walk the freed observable
+
+    callOrder.clear();
+    TEST_ASSERT_EQUAL(0, alive.notifyObservers(2));
+    TEST_ASSERT_EQUAL_STRING("", callOrder.c_str());
+}
+
 // --- duplicate observe / unobserve semantics ---
 
 void test_duplicate_observe_delivers_twice_and_unobserve_removes_all()
@@ -360,6 +405,8 @@ void setup()
     printf("\n=== Lifecycle ===\n");
     RUN_TEST(test_destroyed_observer_is_not_notified);
     RUN_TEST(test_observer_watching_two_observables_detaches_from_both);
+    RUN_TEST(test_unobserve_after_the_observable_is_destroyed_is_noop);
+    RUN_TEST(test_destroyed_observable_leaves_no_dangling_pointer_in_the_observer);
 
     printf("\n=== Duplicate observe / unobserve ===\n");
     RUN_TEST(test_duplicate_observe_delivers_twice_and_unobserve_removes_all);
