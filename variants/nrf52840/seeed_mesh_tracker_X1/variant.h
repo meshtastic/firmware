@@ -143,8 +143,11 @@ extern "C" {
 
 #define EXT_CHRG_DETECT (32 + 3) // P1.03
 #define EXT_CHRG_DETECT_VALUE LOW
-// #define EXT_IS_CHRGD (32 + 4)   // P1.04
-// #define EXT_IS_CHRGD_VALUE LOW
+#define EXT_IS_CHRGD (32 + 4) // P1.04
+#define EXT_IS_CHRGD_VALUE LOW
+
+// Bench probe only: P0.04/AIN2 is VCC_ADC, the system rail. Nothing upstream reads it.
+#define X1_PROBE_VCC_ADC_PIN 4
 #define EXT_PWR_DETECT (0 + 5) // P0.05
 
 #define ADC_RESOLUTION 14

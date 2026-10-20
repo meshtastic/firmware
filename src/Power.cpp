@@ -1156,6 +1156,39 @@ bool updateLowVoltageCounter(uint8_t &counter, bool hasBattery, bool hasUsb, uin
     return counter > LOW_VOLTAGE_READINGS_BEFORE_SHUTDOWN;
 }
 
+#if defined(MESH_TRACKER_X1) && defined(X1_PROBE_VCC_ADC_PIN)
+// BENCH PROBE - not for upstream. The X1 drops off USB with no explanation and nothing in the tree
+// reads its charger, so there is no record of what the charger was doing when it went. Log the
+// charger's own three pins and the system rail once per Power cycle (20s), so a window that ends
+// with the board gone still leaves its last charger state on the wire. The rail divider ratio is
+// unknown, so the raw count goes out beside the scaled value.
+static void logX1ChargeProbe(int32_t batMv, bool usbPowered)
+{
+    static bool pinsReady = false;
+    if (!pinsReady) {
+        pinMode(EXT_IS_CHRGD, INPUT);
+        pinsReady = true;
+    }
+
+    const int sta = digitalRead(EXT_CHRG_DETECT); // P1.03 CHARGE_STA, LOW = charging
+    const int done = digitalRead(EXT_IS_CHRGD);   // P1.04 CHARGE_DONE, LOW = complete
+    const int det = digitalRead(EXT_PWR_DETECT);  // P0.05 CHARGER_DET
+
+    uint32_t railRaw = 0;
+    {
+        concurrency::LockGuard saadcGuard(concurrency::nrf52SaadcLock);
+        for (int i = 0; i < 4; i++)
+            railRaw += analogRead(X1_PROBE_VCC_ADC_PIN);
+    }
+    railRaw /= 4;
+    const uint32_t railMv =
+        (uint32_t)(ADC_MULTIPLIER * ((1000 * AREF_VOLTAGE) / pow(2, BATTERY_SENSE_RESOLUTION_BITS)) * railRaw);
+
+    LOG_INFO("ChargeProbe: sta=%d done=%d det=%d usb=%d batMv=%d railRaw=%u railMv=%u", sta, done, det,
+             usbPowered ? 1 : 0, batMv, railRaw, railMv);
+}
+#endif
+
 OptionalBool resolveApmChargingStatus(bool apmUsbConnected, OptionalBool pinCharging)
 {
     // The nRF52 APM block only knows whether VBUS is present, which stays true long after the
@@ -1219,6 +1252,10 @@ void Power::readPowerStatus()
     usbPowered = apmUsbConnected ? OptTrue : OptFalse;
     isChargingNow = resolveApmChargingStatus(apmUsbConnected, isChargingNow);
 
+#endif
+
+#if defined(MESH_TRACKER_X1) && defined(X1_PROBE_VCC_ADC_PIN)
+    logX1ChargeProbe(batteryVoltageMv, usbPowered == OptTrue);
 #endif
 
     // Notify any status instances that are observing us
