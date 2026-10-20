@@ -87,7 +87,8 @@ template <class T> class LR20x0Interface : public RadioLibInterface
      */
     void applyDcdcWorkaround();
 
-    // The LR2021's reported RX coding rate can latch wrong after a post-TX status read, until a hard reset.
+    // GetLoraPacketStatus's coding rate accumulates the bitwise OR of every received header's rate since reset,
+    // so one frame at another rate corrupts it for the session - it even reports values DS Table 9-4 does not define.
     // The frame was already decoded on its own header's rate, so time received frames on the configured one.
     uint32_t getPacketTime(uint32_t pl, bool received) override { return computePacketTime(lora, pl, received, false); }
 

@@ -692,15 +692,16 @@ static void test_computePacketTime_rxUsesHeaderInfoAndIsGuarded()
     delete radioIf;
 }
 
-// The LR2021 times received frames without the header info: its reported coding rate can latch wrong (4/8 here,
-// against a configured 4/5) and stay that way until a hard reset, which times a 200-byte frame about 55% long.
-// So the configured rate and CRC are used, and neither the header nor the chip's own airtime answer is asked for.
+// The LR2021 times received frames without the header info: the chip ORs every received header's coding rate into
+// one field, so a receiver configured 4/5 (raw 1) reports raw 7 once frames at 4/6 and 4/8 have been on air, and
+// keeps it for the session. That reads as 4/8 below, timing a 200-byte frame about 55% long. So the configured rate
+// and CRC are used, and neither the header nor the chip's own airtime answer is asked for.
 static void test_computePacketTime_rxWithoutHeaderInfoUsesConfiguredModem()
 {
     auto *radioIf = makeTestableRadioLibInterface(); // configured 4/5
     FakeLoraRadio radio;
     radio.headerInfoResult = RADIOLIB_ERR_NONE;
-    radio.headerCodingRate = 7; // raw header value for 4/8, what a latched LR2021 reports
+    radio.headerCodingRate = 7; // 1|2|4: the configured 4/5 ORed with frames at 4/6 and 4/8, read below as 4/8
     radio.headerCrcEnabled = false;
     radio.calculatedTimeOnAir = 79000;
     radio.reportedTimeOnAir = 999000;
