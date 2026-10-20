@@ -5,6 +5,28 @@
 #define LR20x0 LR2021
 #endif
 
+#ifdef USE_LR1121
+// T-Beam 1W with the LR1121 module (LilyGO t_beam_1w_lr1121.md): DIO8 enables the sub-GHz PA (high-power
+// path), DIO7 the 2.4 GHz PA and DIO6 the 2.4 GHz LNA.
+static const uint32_t rfswitch_dio_pins[] = {RADIOLIB_LR11X0_DIO6, RADIOLIB_LR11X0_DIO7, RADIOLIB_LR11X0_DIO8, RADIOLIB_NC,
+                                             RADIOLIB_NC};
+
+static const Module::RfSwitchMode_t rfswitch_table[] = {
+    // clang-format off
+    // mode              DIO6  DIO7  DIO8
+    {LR11x0::MODE_STBY,  {LOW,  LOW,  LOW}},
+    {LR11x0::MODE_TX,    {LOW,  LOW,  LOW}},
+    {LR11x0::MODE_RX,    {LOW,  LOW,  LOW}},
+    {LR11x0::MODE_TX_HP, {LOW,  LOW,  HIGH}}, // sub-GHz TX
+    {LR11x0::MODE_TX_HF, {LOW,  HIGH, LOW}},  // 2.4 GHz TX
+    {LR11x0::MODE_GNSS,  {LOW,  LOW,  LOW}},
+    {LR11x0::MODE_WIFI,  {HIGH, LOW,  LOW}},  // 2.4 GHz RX
+    END_OF_MODE_TABLE,
+    // clang-format on
+};
+#endif
+
+#ifdef USE_LR2021
 // T-Beam 1W with the LR2021 module (LilyGO t_beam_1w_lr2021.md): DIO8 enables the sub-GHz PA for TX,
 // DIO6 the 2.4 GHz LNA for RX and DIO7 the 2.4 GHz PA for TX. DIO5 stays low.
 static const uint32_t lr20x0_rfswitch_dio_pins[] = {RADIOLIB_LR2021_DIO5, RADIOLIB_LR2021_DIO6, RADIOLIB_LR2021_DIO7,
@@ -21,3 +43,4 @@ static const Module::RfSwitchMode_t lr20x0_rfswitch_table[] = {
     END_OF_MODE_TABLE,
     // clang-format on
 };
+#endif
