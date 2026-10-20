@@ -4,7 +4,7 @@
       "ldscript": "esp32_out.ld"
     },
     "core": "esp32",
-    "extra_flags": "-DARDUINO_T_Beam",
+    "extra_flags": "-DARDUINO_T_Beam -DBOARD_HAS_PSRAM -mfix-esp32-psram-cache-issue",
     "f_cpu": "240000000L",
     "f_flash": "40000000L",
     "flash_mode": "dio",
@@ -16,7 +16,7 @@
     "openocd_board": "esp-wroom-32.cfg"
   },
   "frameworks": ["arduino", "espidf"],
-  "name": "TTGO T-Beam (PSRAM Disabled)",
+  "name": "TTGO T-Beam (PSRAM Enabled)",
   "upload": {
     "flash_size": "4MB",
     "maximum_ram_size": 1310720,
