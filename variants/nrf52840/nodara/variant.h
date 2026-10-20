@@ -286,10 +286,11 @@ static const uint8_t A0 = PIN_BATTERY_ADC;
 
 // ---------------------------------------------------------------------------
 // Radio module selection
-// The RA-01S physically contains an SX1268 (China-band); its register map is
-// identical to SX1262.  USE_SX1262 is correct - do NOT use USE_SX1268.
+// Probe both: RadioLib tells them apart by the chip's version string, and the
+// boot log reports which one answered.
 // ---------------------------------------------------------------------------
 #define USE_SX1262
+#define USE_SX1268
 
 // ---------------------------------------------------------------------------
 // Framework pin aliases (SX126xInterface constructor args)
@@ -301,12 +302,11 @@ static const uint8_t A0 = PIN_BATTERY_ADC;
 #define SX1262_DIO3 PIN_LORA_DIO3
 
 // ---------------------------------------------------------------------------
-// TCXO - NOT present on RA-01S (crystal oscillator variant).
-// Do NOT define SX126X_DIO3_TCXO_VOLTAGE.
-// (Uncomment only for RA-01SH which has a TCXO.)
+// Oscillator: try a DIO3-powered TCXO first, fall back to the crystal.
+// The boot log reports "TCXO" or "XTAL".
 // ---------------------------------------------------------------------------
-// #define SX126X_DIO3_TCXO_VOLTAGE  1.8
-// #define TCXO_OPTIONAL
+#define SX126X_DIO3_TCXO_VOLTAGE 1.8
+#define TCXO_OPTIONAL
 
 // ---------------------------------------------------------------------------
 // Power enable - RA-01S LDO on P0.13 (active-high)
