@@ -492,6 +492,11 @@ std::unique_ptr<RadioInterface> initLoRa()
 #endif
         if (!sxIf->init()) {
             LOG_WARN("No SX1262 radio");
+#if (defined(USE_LR1121) || defined(USE_LR2021)) && defined(SX126X_RXEN) && (SX126X_RXEN != RADIOLIB_NC)
+            // A begin() that succeeded before a later setup call failed leaves RXEN an output, and the
+            // LR2021 module drives the same pin itself; on the LR1121 module it is the radio's IRQ
+            pinMode(SX126X_RXEN, INPUT);
+#endif
             rIf = nullptr;
         } else {
             LOG_INFO("SX1262 init success");
