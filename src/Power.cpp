@@ -1156,6 +1156,16 @@ bool updateLowVoltageCounter(uint8_t &counter, bool hasBattery, bool hasUsb, uin
     return counter > LOW_VOLTAGE_READINGS_BEFORE_SHUTDOWN;
 }
 
+OptionalBool resolveApmChargingStatus(bool apmUsbConnected, OptionalBool pinCharging)
+{
+    // The nRF52 APM block only knows whether VBUS is present, which stays true long after the
+    // charger has stopped - a charge-status pin reading outranks it wherever a board has one.
+    if (pinCharging != OptUnknown)
+        return pinCharging;
+
+    return apmUsbConnected ? OptTrue : OptFalse;
+}
+
 /// Reads power status to powerStatus singleton.
 //
 // TODO(girts): move this and other axp stuff to power.h/power.cpp.
@@ -1172,6 +1182,10 @@ void Power::readPowerStatus()
         hasBattery = batteryLevel->isBatteryConnect() ? OptTrue : OptFalse;
 #ifndef NRF_APM
         usbPowered = batteryLevel->isVbusIn() ? OptTrue : OptFalse;
+        isChargingNow = batteryLevel->isCharging() ? OptTrue : OptFalse;
+#elif defined(EXT_CHRG_DETECT) || defined(EXT_IS_CHRGD) || defined(BATTERY_CHARGING_INV)
+        // The APM block below reads VBUS, not the charger, so on its own it reports charging for as
+        // long as a cable is attached. A board with its own charge-status pin knows better.
         isChargingNow = batteryLevel->isCharging() ? OptTrue : OptFalse;
 #endif
         if (hasBattery) {
@@ -1201,12 +1215,9 @@ void Power::readPowerStatus()
     nrfx_power_usb_state_t nrf_usb_state = nrfx_power_usbstatus_get();
     // LOG_DEBUG("NRF Power %d", nrf_usb_state);
 
-    // If changed to DISCONNECTED
-    if (nrf_usb_state == NRFX_POWER_USB_STATE_DISCONNECTED)
-        isChargingNow = usbPowered = OptFalse;
-    // If changed to CONNECTED / READY
-    else
-        isChargingNow = usbPowered = OptTrue;
+    const bool apmUsbConnected = nrf_usb_state != NRFX_POWER_USB_STATE_DISCONNECTED;
+    usbPowered = apmUsbConnected ? OptTrue : OptFalse;
+    isChargingNow = resolveApmChargingStatus(apmUsbConnected, isChargingNow);
 
 #endif
 

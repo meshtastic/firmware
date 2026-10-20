@@ -33,6 +33,10 @@
 /// Consecutive below-cutoff readings needed before the low-battery deep sleep fires.
 static constexpr uint8_t LOW_VOLTAGE_READINGS_BEFORE_SHUTDOWN = 10;
 
+/// Resolve the charge state reported on an NRF_APM board: the charge-status pin wherever the board
+/// has one, otherwise VBUS presence as seen by the APM block.
+meshtastic::OptionalBool resolveApmChargingStatus(bool apmUsbConnected, meshtastic::OptionalBool pinCharging);
+
 /// Advance the low-battery shutdown counter by one reading; true once the device should deep sleep.
 bool updateLowVoltageCounter(uint8_t &counter, bool hasBattery, bool hasUsb, uint16_t battMv, uint16_t cutoffMv);
 
