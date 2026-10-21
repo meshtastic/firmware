@@ -1546,12 +1546,20 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
             addInfoRow("Battery left: " + left);
         }
 
-        // Memory: a label row ("Heap 89/153K 58%") with a full-width usage bar underneath, as on baseUI's system screen
+        // Memory: a label row ("Heap 89/153K 58%" or "Flash 1.2/14M 9%") with a full-width usage bar underneath, as on baseUI's system screen
         auto addUsageRow = [&](const char *name, uint64_t usedBytes, uint64_t totalBytes) {
             const uint32_t usedK = usedBytes / 1024, totalK = totalBytes / 1024;
             MenuItem bar = MenuItem::Usage(usedK, totalK);
-            addInfoRow(std::string(name) + " " + std::to_string(usedK) + "/" + std::to_string(totalK) + "K " +
-                       std::to_string(bar.usagePercent) + "%");
+
+            // Unit follows the total: K below 1 MB, otherwise M (one decimal on used, and on total while it's small)
+            char sizes[24];
+            if (totalBytes >= 1024 * 1024) {
+                const float usedM = usedBytes / (1024.0f * 1024.0f), totalM = totalBytes / (1024.0f * 1024.0f);
+                snprintf(sizes, sizeof(sizes), totalM < 10 ? "%.1f/%.1fM" : "%.1f/%.0fM", usedM, totalM);
+            } else {
+                snprintf(sizes, sizeof(sizes), "%u/%uK", (unsigned)usedK, (unsigned)totalK);
+            }
+            addInfoRow(std::string(name) + " " + sizes + " " + std::to_string(bar.usagePercent) + "%");
             items.push_back(bar);
         };
 
