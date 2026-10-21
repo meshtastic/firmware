@@ -1517,7 +1517,8 @@ typedef struct _meshtastic_DisplayPalette_ColorRegion {
  them. All colors are RGB565 in logical bit layout (RRRRRGGGGGGBBBBB). */
 typedef struct _meshtastic_DisplayPalette {
     /* Identity of this palette; DisplayFrame.palette_signature references it.
- Changes whenever the region table or theme changes. */
+ Changes whenever the region table or theme changes. Never 0, which
+ DisplayFrame.palette_signature reserves for monochrome. */
     uint32_t signature;
     /* RGB565 for set pixels outside all regions. The region_offset 0 chunk is authoritative. */
     uint32_t default_on_color;
