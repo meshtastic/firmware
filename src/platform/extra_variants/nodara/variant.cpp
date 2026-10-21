@@ -12,9 +12,11 @@
 namespace
 {
 constexpr uint32_t MCU_BAUD = 1200;
-constexpr uint32_t POLL_MS = 20; // a quiet poll ends a frame; one 1200 baud byte takes ~8 ms
-// The power MCU powers us as soon as the button goes down and confirms after a ~5 s hold
-constexpr uint32_t POWER_ON_WAIT_MS = 5500;
+constexpr uint32_t POLL_MS = 20;       // a quiet poll ends a frame; one 1200 baud byte takes ~8 ms
+constexpr uint32_t IDLE_POLL_MS = 250; // the 64-byte UART buffer holds ~0.5 s of the line
+// The power MCU powers us as soon as the button goes down and confirms after a ~5 s hold. An
+// uptime deadline, not a duration: the confirm is timed from power-on, not from this wait.
+constexpr uint32_t POWER_ON_DEADLINE_MS = 5500;
 constexpr uint8_t MODBUS_ADDR = 0x01;
 constexpr uint16_t POWER_REG = 0x1000;
 constexpr uint16_t CMD_SHUTDOWN_DELAYED = 0x0003;
@@ -77,7 +79,7 @@ class PowerMcuLink : public concurrency::OSThread
             handleFrames();
             len = 0;
         }
-        return POLL_MS;
+        return len > 0 ? POLL_MS : IDLE_POLL_MS;
     }
 
   private:
@@ -127,16 +129,18 @@ void earlyInitVariant()
     waitedForPowerOn = true;
     uint8_t buf[32] = {};
     size_t len = 0;
-    while (!Throttle::deadlinePassed(POWER_ON_WAIT_MS)) {
+    while (!Throttle::deadlinePassed(POWER_ON_DEADLINE_MS)) {
         if (len == sizeof(buf)) // noise filled it: start over rather than stop matching
             len = 0;
         if (Serial2.available() > 0)
             buf[len++] = Serial2.read();
         size_t pos = 0;
         uint16_t cmd, value;
-        if (nextFrame(buf, len, pos, cmd, value) && cmd == CMD_POWER && value) {
-            powerOnConfirmMs = millis();
-            return;
+        while (nextFrame(buf, len, pos, cmd, value)) {
+            if (cmd == CMD_POWER && value) {
+                powerOnConfirmMs = millis();
+                return;
+            }
         }
         delay(1);
     }
@@ -147,7 +151,7 @@ void lateInitVariant()
     if (powerOnConfirmMs)
         LOG_INFO("Power MCU confirmed power-on at %u ms", (unsigned)powerOnConfirmMs);
     else if (waitedForPowerOn)
-        LOG_WARN("No power-on confirm from the power MCU within %u ms", (unsigned)POWER_ON_WAIT_MS);
+        LOG_WARN("No power-on confirm from the power MCU by %u ms", (unsigned)POWER_ON_DEADLINE_MS);
     powerMcuLink = new PowerMcuLink();
 }
 
