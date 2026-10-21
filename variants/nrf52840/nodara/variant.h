@@ -298,6 +298,9 @@ static const uint8_t A0 = PIN_BATTERY_ADC;
 #define CANCEL_BUTTON_ACTIVE_LOW true
 #define CANCEL_BUTTON_ACTIVE_PULLUP true
 
+// The power MCU only cuts power on its own button, so the menu points there instead of shutting down
+#define POWER_BUTTON_SHUTDOWN_HINT "Hold the power button\nfor 5 seconds\nto shut down"
+
 // ---------------------------------------------------------------------------
 // Radio module selection
 // Probe both: RadioLib tells them apart by the chip's version string, and the
