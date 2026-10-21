@@ -122,7 +122,7 @@
 #elif defined(MS24SF1)
 #define HW_VENDOR meshtastic_HardwareModel_MS24SF1
 #elif defined(NODARA)
-#define HW_VENDOR meshtastic_HardwareModel_PRIVATE_HW
+#define HW_VENDOR meshtastic_HardwareModel_NODARA
 #elif defined(PRIVATE_HW) || defined(FEATHER_DIY)
 #define HW_VENDOR meshtastic_HardwareModel_PRIVATE_HW
 #elif defined(HELTEC_T114)
