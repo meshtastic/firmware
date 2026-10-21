@@ -203,6 +203,9 @@ void ScreenMirror::capturePalette(uint32_t signature, uint16_t defaultOnBe, uint
 {
     // regions alone do not change on a recolor, so the theme defaults are part of the signature
     signature ^= (((uint32_t)defaultOnBe << 16) | defaultOffBe) * 2654435761u;
+    // 0 is DisplayFrame.palette_signature's monochrome value
+    if (signature == 0)
+        signature = 1;
     concurrency::LockGuard g(&lock);
     if (!armedLocked())
         return;
