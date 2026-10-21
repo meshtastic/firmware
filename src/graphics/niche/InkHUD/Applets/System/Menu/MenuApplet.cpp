@@ -3,6 +3,7 @@
 #include "./MenuApplet.h"
 
 #include "DisplayFormatters.h"
+#include "FSCommon.h"
 #include "GPS.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
@@ -12,6 +13,7 @@
 #include "UptimeClock.h"
 #include "airtime.h"
 #include "gps/RTC.h"
+#include "graphics/TimeFormatters.h"
 #if !MESHTASTIC_EXCLUDE_MQTT
 #include "mqtt/MQTT.h"
 #endif
@@ -24,6 +26,10 @@
 #include "modules/WaypointModule.h"
 #include <RadioLibInterface.h>
 #include <target_specific.h>
+#if defined(HAS_SDCARD) && !defined(SDCARD_USE_SOFT_SPI) && !defined(HAS_SD_MMC)
+#include <SD.h>
+#define INKHUD_SYSTEM_INFO_SD 1
+#endif
 #if defined(ARCH_ESP32) && HAS_WIFI
 #include "mesh/wifi/WiFiAPClient.h"
 #include <WiFi.h>
@@ -31,6 +37,11 @@
 #endif
 
 using namespace NicheGraphics;
+
+// External Notification settings only make sense with a buzzer pin or I2S audio output
+#if defined(PIN_BUZZER) || defined(HAS_I2S) || defined(HAS_I2S_SPEAKER_NRF52)
+#define INKHUD_HAS_AUDIO_OUTPUT 1
+#endif
 
 static constexpr uint8_t MENU_TIMEOUT_SEC = 60; // How many seconds before menu auto-closes
 
@@ -52,6 +63,9 @@ static constexpr DisplayTimeoutOption DISPLAY_TIMEOUT_OPTIONS[] = {
     {0, "Forever"},      {30, "30 secs"},     {60, "1 min"},     {5 * 60, "5 min"},
     {15 * 60, "15 min"}, {30 * 60, "30 min"}, {60 * 60, "1 hr"},
 };
+
+// Order matches meshtastic_Config_DeviceConfig_BuzzerMode
+static constexpr const char *BUZZER_MODE_LABELS[] = {"All Enabled", "All Disabled", "Notifications", "System Only", "DMs Only"};
 
 static constexpr UInt32Option POSITION_BROADCAST_OPTIONS[] = {
     {60, "1 min"},           {90, "90 sec"},          {5 * 60, "5 min"},       {15 * 60, "15 min"},
@@ -180,6 +194,28 @@ void saveT5BacklightKeepOn(bool keepOn)
 } // namespace
 #endif
 
+// Generic single-cell LiPo state of charge from resting voltage, piecewise linear
+static float lipoPercentFromMv(float mv)
+{
+    struct Point {
+        float mv;
+        float percent;
+    };
+    static constexpr Point curve[] = {{4200, 100}, {4150, 95}, {4110, 90}, {4080, 85}, {4020, 80}, {3980, 75}, {3950, 70},
+                                      {3910, 65},  {3870, 60}, {3850, 55}, {3840, 50}, {3820, 45}, {3800, 40}, {3790, 35},
+                                      {3770, 30},  {3750, 25}, {3730, 20}, {3710, 15}, {3690, 10}, {3610, 5},  {3300, 0}};
+    constexpr uint8_t count = sizeof(curve) / sizeof(curve[0]);
+    if (mv >= curve[0].mv)
+        return 100;
+    for (uint8_t i = 1; i < count; i++) {
+        if (mv >= curve[i].mv) {
+            const float t = (mv - curve[i].mv) / (curve[i - 1].mv - curve[i].mv);
+            return curve[i].percent + t * (curve[i - 1].percent - curve[i].percent);
+        }
+    }
+    return 0;
+}
+
 InkHUD::MenuApplet::MenuApplet() : concurrency::OSThread("MenuApplet")
 {
     // No timer tasks at boot
@@ -200,6 +236,34 @@ InkHUD::MenuApplet::MenuApplet() : concurrency::OSThread("MenuApplet")
     // - handles loading & parsing the canned messages
     // - handles setting / getting of canned messages via apps (Client API Admin Messages)
     cm.store = CannedMessageStore::getInstance();
+
+    // Follow the battery from boot, so System Info can estimate the remaining runtime
+    powerStatusObserver.observe(&powerStatus->onNewStatus);
+}
+
+int InkHUD::MenuApplet::onPowerStatusUpdate(const meshtastic::Status *status)
+{
+    assert(status->getStatusType() == STATUS_TYPE_POWER);
+    const meshtastic::PowerStatus *pwr = (const meshtastic::PowerStatus *)status;
+
+    batteryPresent = pwr->getHasBattery();
+    batteryCharging = pwr->getIsCharging() || pwr->getHasUSB();
+
+    // Smooth the voltage (first reading seeds it)
+    const float mv = pwr->getBatteryVoltageMv();
+    batteryVoltageMvSmoothed = batteryVoltageMvSmoothed > 0 ? (batteryVoltageMvSmoothed * 0.9f + mv * 0.1f) : mv;
+    batteryPercent = lipoPercentFromMv(batteryVoltageMvSmoothed);
+
+    if (!batteryPresent || batteryCharging) {
+        // Drain is only meaningful off the charger. Start over once unplugged
+        batteryBaselineUptimeSecs = 0;
+        batteryVoltageMvSmoothed = 0;
+    } else if (batteryBaselineUptimeSecs == 0) {
+        batteryBaselinePercent = batteryPercent;
+        batteryBaselineUptimeSecs = max<uint32_t>(1, Time::getUptimeSecs());
+    }
+
+    return 0; // Keep informing other observers
 }
 
 void InkHUD::MenuApplet::onForeground()
@@ -767,6 +831,33 @@ void InkHUD::MenuApplet::execute(MenuItem item)
 
         nodeDB->saveToDisk(SEGMENT_CONFIG);
         break;
+
+    // External Notification
+    case TOGGLE_EXT_NOTIFICATION:
+        moduleConfig.external_notification.enabled = !moduleConfig.external_notification.enabled;
+        applyConfigReload(SEGMENT_MODULECONFIG, true);
+        break;
+
+    case TOGGLE_EXT_NOTIFICATION_MESSAGE_BUZZER:
+        moduleConfig.external_notification.alert_message_buzzer = !moduleConfig.external_notification.alert_message_buzzer;
+        applyConfigReload(SEGMENT_MODULECONFIG);
+        break;
+
+    case TOGGLE_EXT_NOTIFICATION_BELL_BUZZER:
+        moduleConfig.external_notification.alert_bell_buzzer = !moduleConfig.external_notification.alert_bell_buzzer;
+        applyConfigReload(SEGMENT_MODULECONFIG);
+        break;
+
+    case SET_BUZZER_MODE: {
+        // cursor - 1 because index 0 is "Back"
+        const uint8_t index = cursor - 1;
+        constexpr uint8_t optionCount = sizeof(BUZZER_MODE_LABELS) / sizeof(BUZZER_MODE_LABELS[0]);
+        if (index < optionCount && config.device.buzzer_mode != (meshtastic_Config_DeviceConfig_BuzzerMode)index) {
+            config.device.buzzer_mode = (meshtastic_Config_DeviceConfig_BuzzerMode)index;
+            applyConfigReload(SEGMENT_CONFIG);
+        }
+        break;
+    }
 
     // Bluetooth
     case TOGGLE_BLUETOOTH:
@@ -1366,7 +1457,11 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         // Device Config Section
         items.push_back(MenuItem::Header("Device Config"));
         items.push_back(MenuItem("Device", MenuPage::NODE_CONFIG_DEVICE));
+        items.push_back(MenuItem("System Info", MenuPage::NODE_CONFIG_SYSTEM_INFO));
         items.push_back(MenuItem("Position", MenuPage::NODE_CONFIG_POSITION));
+#ifdef INKHUD_HAS_AUDIO_OUTPUT
+        items.push_back(MenuItem("Ext. Notification", MenuPage::NODE_CONFIG_EXT_NOTIFICATION));
+#endif
         items.push_back(MenuItem("Power", MenuPage::NODE_CONFIG_POWER));
 #if defined(ARCH_ESP32)
         items.push_back(MenuItem("Network", MenuPage::NODE_CONFIG_NETWORK));
@@ -1394,6 +1489,85 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         const char *tzLabel = getTimezoneLabelFromValue(config.device.tzdef);
         nodeConfigLabels.emplace_back("Timezone: " + std::string(tzLabel));
         items.push_back(MenuItem(nodeConfigLabels.back().c_str(), MenuAction::NO_ACTION, MenuPage::TIMEZONE));
+
+        items.push_back(MenuItem("Exit", MenuPage::EXIT));
+        break;
+    }
+
+    case NODE_CONFIG_SYSTEM_INFO: {
+        previousPage = MenuPage::NODE_CONFIG;
+        items.push_back(MenuItem("Back", previousPage));
+
+        // Read-only rows: selecting one just stays on this page
+        auto addInfoRow = [&](const std::string &label) {
+            nodeConfigLabels.push_back(label);
+            items.push_back(MenuItem(nodeConfigLabels.back().c_str(), MenuAction::NO_ACTION, MenuPage::NODE_CONFIG_SYSTEM_INFO));
+        };
+
+        items.push_back(MenuItem::Header("Node Name"));
+        addInfoRow("Long: " + parse(owner.long_name));
+        addInfoRow(std::string("Short: ") + parse(owner.short_name));
+        // Last two MAC bytes, as on baseUI's LoRa screen
+        uint8_t mac[6] = {0};
+        getMacAddr(mac);
+        char bleId[8];
+        snprintf(bleId, sizeof(bleId), "%02x%02x", mac[4], mac[5]);
+        addInfoRow(std::string("BLE: ") + bleId);
+
+        items.push_back(MenuItem::Header("Firmware"));
+        addInfoRow(std::string("Model: ") + optstr(APP_ENV));
+        addInfoRow(std::string("Ver: ") + optstr(APP_VERSION));
+
+        // Days / hours / minutes, from seconds
+        auto formatDuration = [](uint32_t secs) {
+            const uint32_t d = secs / 86400, h = (secs % 86400) / 3600, m = (secs % 3600) / 60;
+            if (d)
+                return std::to_string(d) + "d " + std::to_string(h) + "h";
+            if (h)
+                return std::to_string(h) + "h " + std::to_string(m) + "m";
+            return std::to_string(m) + "m";
+        };
+
+        items.push_back(MenuItem::Header("Runtime"));
+        addInfoRow("Uptime: " + formatDuration(Time::getUptimeSecs()));
+        if (batteryPresent) {
+            std::string left = "measuring...";
+            if (batteryCharging) {
+                left = "charging";
+            } else if (batteryBaselineUptimeSecs) {
+                // Extrapolate the drain seen since the baseline. Needs a couple of % and a few hours to mean anything
+                const uint32_t elapsed = Time::getUptimeSecs() - batteryBaselineUptimeSecs;
+                const float drop = batteryBaselinePercent - batteryPercent;
+                if (drop >= 2 && elapsed >= 2 * 3600) {
+                    const uint32_t leftSecs = batteryPercent * elapsed / drop;
+                    left = leftSecs > 30 * 86400UL ? ">30d" : "~" + formatDuration(leftSecs);
+                }
+            }
+            addInfoRow("Battery left: " + left);
+        }
+
+        // Memory: a label row ("Heap 89/153K 58%") with a full-width usage bar underneath, as on baseUI's system screen
+        auto addUsageRow = [&](const char *name, uint64_t usedBytes, uint64_t totalBytes) {
+            const uint32_t usedK = usedBytes / 1024, totalK = totalBytes / 1024;
+            MenuItem bar = MenuItem::Usage(usedK, totalK);
+            addInfoRow(std::string(name) + " " + std::to_string(usedK) + "/" + std::to_string(totalK) + "K " +
+                       std::to_string(bar.usagePercent) + "%");
+            items.push_back(bar);
+        };
+
+        items.push_back(MenuItem::Header("Memory"));
+        addUsageRow("Heap", memGet.getHeapSize() - memGet.getFreeHeap(), memGet.getHeapSize());
+#if defined(ARCH_ESP32) && !defined(T5_S3_EPAPER_PRO)
+        if (memGet.getPsramSize() > 0)
+            addUsageRow("PSRAM", memGet.getPsramSize() - memGet.getFreePsram(), memGet.getPsramSize());
+#endif
+        const size_t flashTotal = fsTotalBytes();
+        if (flashTotal > 0)
+            addUsageRow("Flash", fsUsedBytes(), flashTotal);
+#ifdef INKHUD_SYSTEM_INFO_SD
+        if (SD.cardType() != CARD_NONE && SD.totalBytes() > 0)
+            addUsageRow("SD", SD.usedBytes(), SD.totalBytes());
+#endif
 
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
         break;
@@ -1498,6 +1672,39 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         }
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
         break;
+
+#ifdef INKHUD_HAS_AUDIO_OUTPUT
+    case NODE_CONFIG_EXT_NOTIFICATION: {
+        previousPage = MenuPage::NODE_CONFIG;
+        items.push_back(MenuItem("Back", previousPage));
+
+        items.push_back(MenuItem("Enabled", MenuAction::TOGGLE_EXT_NOTIFICATION, MenuPage::EXIT,
+                                 &moduleConfig.external_notification.enabled));
+
+        items.push_back(MenuItem::Header("Buzzer"));
+
+        const uint8_t mode = config.device.buzzer_mode;
+        nodeConfigLabels.emplace_back(std::string("Mode: ") +
+                                      (mode < BUZZER_MODE_COUNT ? BUZZER_MODE_LABELS[mode] : "Custom"));
+        items.push_back(
+            MenuItem(nodeConfigLabels.back().c_str(), MenuAction::NO_ACTION, MenuPage::NODE_CONFIG_EXT_NOTIFICATION_BUZZER_MODE));
+
+        items.push_back(MenuItem("Alert Message", MenuAction::TOGGLE_EXT_NOTIFICATION_MESSAGE_BUZZER,
+                                 MenuPage::NODE_CONFIG_EXT_NOTIFICATION, &moduleConfig.external_notification.alert_message_buzzer));
+        items.push_back(MenuItem("Alert Bell", MenuAction::TOGGLE_EXT_NOTIFICATION_BELL_BUZZER,
+                                 MenuPage::NODE_CONFIG_EXT_NOTIFICATION, &moduleConfig.external_notification.alert_bell_buzzer));
+
+        items.push_back(MenuItem("Exit", MenuPage::EXIT));
+        break;
+    }
+
+    case NODE_CONFIG_EXT_NOTIFICATION_BUZZER_MODE:
+        previousPage = MenuPage::NODE_CONFIG_EXT_NOTIFICATION;
+        items.push_back(MenuItem("Back", previousPage));
+        populateBuzzerModePage();
+        items.push_back(MenuItem("Exit", MenuPage::EXIT));
+        break;
+#endif
 
     case NODE_CONFIG_POWER: {
         previousPage = MenuPage::NODE_CONFIG;
@@ -1965,11 +2172,16 @@ void InkHUD::MenuApplet::onRender(bool full)
 
     // Which item will be drawn to the top-most slot?
     // Initially, this is the item 0, but may increase once we begin scrolling
+    // Usage bars aren't selectable, so keep the one under the cursor in view
+    uint8_t scrollAnchor = cursor;
+    while (scrollAnchor + 1 < items.size() && items.at(scrollAnchor + 1).usagePercent >= 0)
+        scrollAnchor++;
+
     uint8_t firstItem;
-    if (cursor < slotCount)
+    if (scrollAnchor < slotCount)
         firstItem = 0;
     else
-        firstItem = cursor - (slotCount - 1);
+        firstItem = scrollAnchor - (slotCount - 1);
 
     // Which item will be drawn to the bottom-most slot?
     // This may be beyond the slot-count, to draw a partially off-screen item below the bottom-most slow
@@ -1985,8 +2197,17 @@ void InkHUD::MenuApplet::onRender(bool full)
         // Vertical center of this slot
         int16_t center = itemT + (itemH / 2);
 
+        // Usage bar (non-selectable): full-width gauge, like the bars on baseUI's system screen
+        if (item.usagePercent >= 0) {
+            const uint16_t barH = max<uint16_t>(4, menuItemFont.lineHeight() / 2);
+            const int16_t barL = itemL + X(padding * 2);
+            const uint16_t barW = (itemR - X(padding * 2)) - barL;
+            const int16_t barT = center - (barH / 2) - (itemH / 4); // Nudged up, closer to its label
+            drawRect(barL, barT, barW, barH, BLACK);
+            fillRect(barL, barT, (barW * item.usagePercent) / 100, barH, BLACK);
+        }
         // Header (non-selectable section label)
-        if (item.isHeader) {
+        else if (item.isHeader) {
             // Header text (flush left)
             printAt(itemL + X(padding), center, item.label, LEFT, MIDDLE);
 
@@ -2095,7 +2316,10 @@ bool InkHUD::MenuApplet::onTouchPoint(uint16_t x, uint16_t y, bool longPress)
         itemT = max((int16_t)(siT + siH), (int16_t)0);
     }
 
-    const uint8_t firstItem = (cursor < slotCount) ? 0 : (cursor - (slotCount - 1));
+    uint8_t scrollAnchor = cursor; // Must match onRender: keep a usage bar under the cursor in view
+    while (scrollAnchor + 1 < items.size() && items.at(scrollAnchor + 1).usagePercent >= 0)
+        scrollAnchor++;
+    const uint8_t firstItem = (scrollAnchor < slotCount) ? 0 : (scrollAnchor - (slotCount - 1));
     uint16_t visibleEnd = (uint16_t)firstItem + (uint16_t)slotCount;
     const uint8_t maxIndex = (uint8_t)items.size() - 1;
     if (visibleEnd > maxIndex) {
@@ -2418,6 +2642,17 @@ void InkHUD::MenuApplet::populateDisplayTimeoutPage()
         nodeConfigLabels.emplace_back(DISPLAY_TIMEOUT_OPTIONS[i].label);
         items.push_back(MenuItem(nodeConfigLabels.back().c_str(), MenuAction::SET_DISPLAY_TIMEOUT, MenuPage::NODE_CONFIG_DISPLAY,
                                  &displayTimeoutSelected[i]));
+    }
+}
+
+void InkHUD::MenuApplet::populateBuzzerModePage()
+{
+    constexpr uint8_t optionCount = sizeof(BUZZER_MODE_LABELS) / sizeof(BUZZER_MODE_LABELS[0]);
+    static_assert(optionCount == BUZZER_MODE_COUNT, "BUZZER_MODE_COUNT must match BUZZER_MODE_LABELS");
+    for (uint8_t i = 0; i < optionCount; i++) {
+        buzzerModeSelected[i] = (config.device.buzzer_mode == (meshtastic_Config_DeviceConfig_BuzzerMode)i);
+        items.push_back(MenuItem(BUZZER_MODE_LABELS[i], MenuAction::SET_BUZZER_MODE, MenuPage::NODE_CONFIG_EXT_NOTIFICATION,
+                                 &buzzerModeSelected[i]));
     }
 }
 

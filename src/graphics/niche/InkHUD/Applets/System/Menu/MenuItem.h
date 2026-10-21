@@ -31,6 +31,7 @@ class MenuItem
     MenuPage nextPage = EXIT;
     bool *checkState = nullptr;
     bool isHeader = false; // Non-selectable section label
+    int8_t usagePercent = -1; // 0-100: draw a full-width usage bar instead of text. -1: no bar
 
     // Various constructors, depending on the intended function of the item
 
@@ -40,6 +41,15 @@ class MenuItem
     MenuItem(const char *label, MenuAction action, MenuPage nextPage, bool *checkState)
         : label(label), action(action), nextPage(nextPage), checkState(checkState)
     {
+    }
+    // Read-only full-width bar showing used / total. Non-selectable; place it under a label row
+    static MenuItem Usage(uint32_t used, uint32_t total)
+    {
+        MenuItem item("", NO_ACTION, EXIT);
+        item.isHeader = true;
+        const uint64_t pct = total ? (uint64_t)used * 100 / total : 0;
+        item.usagePercent = (int8_t)(pct > 100 ? 100 : pct);
+        return item;
     }
     static MenuItem Header(const char *label)
     {

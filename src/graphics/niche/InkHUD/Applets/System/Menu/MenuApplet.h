@@ -12,6 +12,7 @@
 #include "./MenuPage.h"
 
 #include "Channels.h"
+#include "PowerStatus.h"
 #include "concurrency/OSThread.h"
 
 namespace NicheGraphics::InkHUD
@@ -55,6 +56,8 @@ class MenuApplet : public SystemApplet, public concurrency::OSThread
     void populateAutoshowPage();       // Dynamically create MenuItems for selecting which applets can autoshow
     void populateRecentsPage();        // Create menu items: a choice of values for settings.recentlyActiveSeconds
     void populateDisplayTimeoutPage(); // Create menu items for config.display.screen_on_secs
+    int onPowerStatusUpdate(const meshtastic::Status *status); // Track battery discharge for the runtime estimate
+    void populateBuzzerModePage();     // Create menu items for config.device.buzzer_mode
     void populateRemoveWaypointPage(); // Create menu items: one per waypoint in the active WaypointListApplet
     void populateGeofenceWaypointPage();
 
@@ -76,6 +79,19 @@ class MenuApplet : public SystemApplet, public concurrency::OSThread
     uint16_t systemInfoPanelHeight = 0; // Need to know before we render
     uint16_t menuTextLimit = 200;
 
+    // Battery discharge tracking, for the System Info runtime estimate
+    // Baseline is the first reading since we last stopped charging; the estimate extrapolates the drain since then
+    CallbackObserver<MenuApplet, const meshtastic::Status *> powerStatusObserver =
+        CallbackObserver<MenuApplet, const meshtastic::Status *>(this, &MenuApplet::onPowerStatusUpdate);
+    // Charge is derived from smoothed cell voltage with a generic LiPo curve, not the variant's percent,
+    // which can be far off for some variants' OCV tables
+    float batteryBaselinePercent = 0;
+    uint32_t batteryBaselineUptimeSecs = 0; // 0: no baseline yet
+    float batteryVoltageMvSmoothed = 0;     // Averaged, so TX load sag doesn't skew the estimate
+    float batteryPercent = 0;
+    bool batteryCharging = false;
+    bool batteryPresent = false;
+
     std::vector<MenuItem> items;             // MenuItems for the current page. Filled by ShowPage
     std::vector<uint32_t> removeWaypointIds; // Parallel to items, for REMOVE_WAYPOINT page
     std::vector<uint32_t> geofenceWaypointIds;
@@ -90,6 +106,8 @@ class MenuApplet : public SystemApplet, public concurrency::OSThread
     bool recentsSelected[RECENTS_COUNT] = {};
     static constexpr uint8_t DISPLAY_TIMEOUT_COUNT = 7;
     bool displayTimeoutSelected[DISPLAY_TIMEOUT_COUNT] = {};
+    static constexpr uint8_t BUZZER_MODE_COUNT = 5;
+    bool buzzerModeSelected[BUZZER_MODE_COUNT] = {};
 
     // Data for selecting and sending canned messages via the menu
     // Placed into a sub-class for organization only
