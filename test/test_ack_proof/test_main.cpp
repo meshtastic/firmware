@@ -19,6 +19,7 @@
 
 static constexpr NodeNum ALICE = 0x0A0A0A0A; // sends the DM, verifies the ack
 static constexpr NodeNum BOB = 0x0B0B0B0B;   // receives the DM, produces the ack
+static constexpr NodeNum CAROL = 0x0C0C0C0C; // a third node whose key we also hold
 static constexpr uint32_t REQUEST_ID = 0xABCD1234;
 
 // Stand-in for the encoded Routing message the proof covers.
@@ -332,6 +333,30 @@ void test_proof_binds_direction(void)
                              "A->B and B->A proofs must differ despite the symmetric shared secret");
 }
 
+// The MAC only proves its author holds a pairwise key with us, and every keyed peer holds one.
+// test_proof_binds_direction covers A->B against B->A; this covers a THIRD keyed peer, which is the
+// case that decides whether "receipt from the recipient" is true. Carol, whose key Alice holds,
+// mints an ack for a packet Alice sent to Bob. It verifies under Carol's key - so a verifier that
+// keys off the ack's claimed sender accepts it - and must fail under Bob's, which is the key
+// ReliableRouter::ackProofPermitsAction now looks up.
+void test_proof_from_third_peer_fails_under_recipient_key(void)
+{
+    const Identity alice = makeIdentity();
+    const Identity bob = makeIdentity();
+    const Identity carol = makeIdentity();
+
+    // Carol acks a packet that Alice actually sent to Bob.
+    becomeNode(carol);
+    meshtastic_MeshPacket ack = makeAck(CAROL, ALICE, REQUEST_ID);
+    TEST_ASSERT_TRUE(ackProofAttachWithKey(&ack, alice.pub));
+
+    becomeNode(alice);
+    TEST_ASSERT_EQUAL_MESSAGE(AckProofResult::VALID, ackProofVerifyWithKey(&ack, REQUEST_ID, carol.pub),
+                              "keying off the ack's claimed sender is what accepts a third-party proof");
+    TEST_ASSERT_EQUAL_MESSAGE(AckProofResult::INVALID, ackProofVerifyWithKey(&ack, REQUEST_ID, bob.pub),
+                              "under the addressed node's key a third peer's proof must fail");
+}
+
 // Two proof fields mean two possible excisions and so two possible verdicts. Refuse rather than
 // silently pick one, since an attacker with the channel key can append a second field at will.
 void test_duplicate_proof_field_is_rejected(void)
@@ -409,6 +434,7 @@ void setup()
     RUN_TEST(test_verify_verdicts);
     RUN_TEST(test_verify_rejects_tampered_proof);
     RUN_TEST(test_malformed_proof_field_is_absent);
+    RUN_TEST(test_proof_from_third_peer_fails_under_recipient_key);
     RUN_TEST(test_duplicate_proof_field_is_rejected);
     RUN_TEST(test_proof_covers_unknown_routing_fields);
     RUN_TEST(test_attach_only_applies_to_routing_unicasts);

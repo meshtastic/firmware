@@ -85,13 +85,13 @@ RF95Interface::RF95Interface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIO
                              RADIOLIB_PIN_TYPE busy)
     : RadioLibInterface(hal, cs, irq, rst, busy)
 {
-    LOG_DEBUG("RF95Interface(cs=%d, irq=%d, rst=%d, busy=%d)", cs, irq, rst, busy);
+    LOG_DEBUG_RADIO("RF95Interface(cs=%d, irq=%d, rst=%d, busy=%d)", cs, irq, rst, busy);
 }
 
 /** Some boards require GPIO control of tx vs rx paths */
 void RF95Interface::setTransmitEnable(bool txon)
 {
-#ifdef RF95_TXEN
+#if defined(RF95_TXEN) && (RF95_TXEN != RADIOLIB_NC)
     digitalWrite(RF95_TXEN, txon ? 1 : 0);
 #elif ARCH_PORTDUINO
     if (portduino_config.lora_txen_pin.pin != RADIOLIB_NC) {
@@ -99,7 +99,7 @@ void RF95Interface::setTransmitEnable(bool txon)
     }
 #endif
 
-#ifdef RF95_RXEN
+#if defined(RF95_RXEN) && (RF95_RXEN != RADIOLIB_NC)
     digitalWrite(RF95_RXEN, txon ? 0 : 1);
 #elif ARCH_PORTDUINO
     if (portduino_config.lora_rxen_pin.pin != RADIOLIB_NC) {
@@ -113,7 +113,7 @@ void RF95Interface::setTransmitEnable(bool txon)
 /// \return true if initialisation succeeded.
 bool RF95Interface::init()
 {
-#ifdef RF95_POWER_EN
+#if defined(RF95_POWER_EN) && (RF95_POWER_EN != RADIOLIB_NC)
     pinMode(RF95_POWER_EN, OUTPUT);
     digitalWrite(RF95_POWER_EN, HIGH);
 #endif
@@ -153,17 +153,17 @@ bool RF95Interface::init()
     #define RF95_RXEN (23) // If defined, this pin should be set high prior to receive (controls an external analog switch)
     */
 
-#ifdef RF95_TXEN
+#if defined(RF95_TXEN) && (RF95_TXEN != RADIOLIB_NC)
     pinMode(RF95_TXEN, OUTPUT);
     digitalWrite(RF95_TXEN, 0);
 #endif
 
-#ifdef RF95_FAN_EN
+#if defined(RF95_FAN_EN) && (RF95_FAN_EN != RADIOLIB_NC)
     pinMode(RF95_FAN_EN, OUTPUT);
     digitalWrite(RF95_FAN_EN, 1);
 #endif
 
-#ifdef RF95_RXEN
+#if defined(RF95_RXEN) && (RF95_RXEN != RADIOLIB_NC)
     pinMode(RF95_RXEN, OUTPUT);
     digitalWrite(RF95_RXEN, 1);
 #endif
@@ -283,6 +283,8 @@ int16_t RF95Interface::programModemParams()
 
 bool RF95Interface::reconfigure()
 {
+    // A readout between these calls would clear the flags they set up, or move the chip out from under them
+    RadioSequence seq(this);
     RadioLibInterface::reconfigure();
 
     // set mode to standby - a chip that lost its state to a reset/brownout can fail here,
@@ -318,11 +320,15 @@ void RF95Interface::addReceiveMetadata(meshtastic_MeshPacket *mp)
     mp->rx_snr = lora->getSNR();
     mp->rx_rssi = lround(lora->getRSSI());
     mp->has_rx_rssi = true; // rx_rssi has explicit presence - a genuine reading must be marked present to survive encoding
-    LOG_DEBUG("Corrected frequency offset: %f", lora->getFrequencyError());
+    LOG_DEBUG_RADIO("Corrected frequency offset: %f", lora->getFrequencyError());
 }
 
 int16_t RF95Interface::trySetStandby()
 {
+    // Handle any pending interrupts before we force standby, but not a TX whose backoff timer is pending: it would start
+    // here, before its delay is up, and the standby below would cut it off with its payload still in the radio
+    checkNotificationExcept(TRANSMIT_DELAY_COMPLETED);
+
     int16_t err = lora->standby();
     if (err != RADIOLIB_ERR_NONE)
         LOG_ERROR("RF95 standby %s%d", radioLibErr, err);
@@ -407,15 +413,18 @@ bool RF95Interface::isActivelyReceiving()
 
 bool RF95Interface::sleep()
 {
-    // put chipset into sleep mode
+    // put chipset into sleep mode. trySetStandby() and the sleep command below are one sequence: a readout landing
+    // between them talks to a chip on its way down, and the standby would be undone by the arm its caller can follow
+    // the readout with.
+    RadioSequence seq(this);
     (void)trySetStandby(); // First cancel any active receiving/sending - going to sleep, a failure must not crash
     lora->sleep();
 
-#ifdef RF95_POWER_EN
+#if defined(RF95_POWER_EN) && (RF95_POWER_EN != RADIOLIB_NC)
     digitalWrite(RF95_POWER_EN, LOW);
 #endif
 
-#ifdef RF95_FAN_EN
+#if defined(RF95_FAN_EN) && (RF95_FAN_EN != RADIOLIB_NC)
     digitalWrite(RF95_FAN_EN, 0);
 #endif
 

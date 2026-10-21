@@ -4,13 +4,17 @@ on:
   pull_request:
     types: [opened, edited, labeled, unlabeled, synchronize, reopened]
 
+concurrency:
+  group: pr-labels-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
 permissions:
   pull-requests: read
   contents: read
 
 jobs:
   check-label:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     steps:
       - name: Check for PR labels
         uses: actions/github-script@v9

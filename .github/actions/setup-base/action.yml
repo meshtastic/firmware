@@ -13,12 +13,12 @@ runs:
       shell: bash
       run: |
         sudo apt-get -y update --fix-missing
-        sudo apt-get install -y cppcheck libbluetooth-dev libgpiod-dev libyaml-cpp-dev libjsoncpp-dev lsb-release
+        sudo apt-get install -y cppcheck libbluetooth-dev libsdbus-c++-dev libgpiod-dev libyaml-cpp-dev libjsoncpp-dev lsb-release
 
     - name: Setup Python
       uses: actions/setup-python@v7
       with:
-        python-version: 3.x
+        python-version: "3.14"
         cache: pip
         cache-dependency-path: |
           .github/actions/**

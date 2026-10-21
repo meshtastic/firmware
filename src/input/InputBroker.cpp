@@ -9,6 +9,7 @@
 #endif
 
 #if ARCH_PORTDUINO
+#include "input/ArcadeBonnet.h"
 #include "input/LinuxInputImpl.h"
 #include "input/LinuxJoystick.h"
 #include "input/SeesawRotary.h"
@@ -196,30 +197,6 @@ static void setupUserButton(int pullup_sense)
     }
     LOG_DEBUG("Use GPIO%02d for user button", _pinNum);
 
-#if defined(ELECROW_ThinkNode_M8)
-    // Rotary encoder drives the UI, so the function button keeps a fixed map.
-    LOG_DEBUG("ThinkNode_M8 button");
-    UserButtonThread = new ButtonThread("FunctionButton");
-    {
-        ButtonConfig userConfig;
-        userConfig.pinNumber = (uint8_t)_pinNum;
-        userConfig.activeLow = BUTTON_ACTIVE_LOW;
-        userConfig.activePullup = BUTTON_ACTIVE_PULLUP;
-        userConfig.pullupSense = pullup_sense;
-        userConfig.intRoutine = []() {
-            UserButtonThread->userButton.tick();
-            UserButtonThread->setIntervalFromNow(0);
-            runASAP = true;
-            BaseType_t higherWake = 0;
-            concurrency::mainDelay.interruptFromISR(&higherWake);
-        };
-        userConfig.singlePress = INPUT_BROKER_SEND_PING;
-        userConfig.longPress = INPUT_BROKER_SHUTDOWN;
-        userConfig.longPressTime = 5000;
-        userConfig.doublePress = INPUT_BROKER_PRIVACY_TOGGLE;
-        UserButtonThread->initButton(userConfig);
-    }
-#else
     // Buttons. Moved here cause we need NodeDB to be initialized
     // If your variant.h has a BUTTON_PIN defined, go ahead and define BUTTON_ACTIVE_LOW and BUTTON_ACTIVE_PULLUP
     UserButtonThread = new ButtonThread("UserButton");
@@ -271,7 +248,6 @@ static void setupUserButton(int pullup_sense)
         userConfigNoScreen.triplePress = INPUT_BROKER_GPS_TOGGLE;
         UserButtonThread->initButton(userConfigNoScreen);
     }
-#endif // ELECROW_ThinkNode_M8
 }
 #endif
 
@@ -518,6 +494,13 @@ void InputBroker::Init()
             if (!seesawRotary->init()) {
                 delete seesawRotary;
                 seesawRotary = nullptr;
+            }
+            if (portduino_config.arcadeBonnetAddress != 0) {
+                arcadeBonnet = new ArcadeBonnet("ArcadeBonnet");
+                if (!arcadeBonnet->init()) {
+                    delete arcadeBonnet;
+                    arcadeBonnet = nullptr;
+                }
             }
         }
 #ifdef __linux__
