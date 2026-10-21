@@ -2441,6 +2441,11 @@ void menuHandler::rebootMenu()
 
 void menuHandler::shutdownMenu()
 {
+#ifdef POWER_BUTTON_SHUTDOWN_HINT
+    // The power button owns power on this board: a software shutdown would leave the board powered
+    screen->showSimpleBanner(POWER_BUTTON_SHUTDOWN_HINT, 3000);
+    return;
+#endif
     static const char *optionsArray[] = {"Back", "Confirm"};
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Shutdown Device?";
