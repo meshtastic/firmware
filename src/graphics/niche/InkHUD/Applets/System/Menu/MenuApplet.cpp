@@ -1546,7 +1546,8 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
             addInfoRow("Battery left: " + left);
         }
 
-        // Memory: a label row ("Heap 89/153K 58%" or "Flash 1.2/14M 9%") with a full-width usage bar underneath, as on baseUI's system screen
+        // Memory: a label row ("Heap 89/153K 58%" or "Flash 1.2/14M 9%") with a full-width usage bar underneath, as on baseUI's
+        // system screen
         auto addUsageRow = [&](const char *name, uint64_t usedBytes, uint64_t totalBytes) {
             const uint32_t usedK = usedBytes / 1024, totalK = totalBytes / 1024;
             MenuItem bar = MenuItem::Usage(usedK, totalK);
@@ -1692,13 +1693,13 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         items.push_back(MenuItem::Header("Buzzer"));
 
         const uint8_t mode = config.device.buzzer_mode;
-        nodeConfigLabels.emplace_back(std::string("Mode: ") +
-                                      (mode < BUZZER_MODE_COUNT ? BUZZER_MODE_LABELS[mode] : "Custom"));
+        nodeConfigLabels.emplace_back(std::string("Mode: ") + (mode < BUZZER_MODE_COUNT ? BUZZER_MODE_LABELS[mode] : "Custom"));
         items.push_back(
             MenuItem(nodeConfigLabels.back().c_str(), MenuAction::NO_ACTION, MenuPage::NODE_CONFIG_EXT_NOTIFICATION_BUZZER_MODE));
 
         items.push_back(MenuItem("Alert Message", MenuAction::TOGGLE_EXT_NOTIFICATION_MESSAGE_BUZZER,
-                                 MenuPage::NODE_CONFIG_EXT_NOTIFICATION, &moduleConfig.external_notification.alert_message_buzzer));
+                                 MenuPage::NODE_CONFIG_EXT_NOTIFICATION,
+                                 &moduleConfig.external_notification.alert_message_buzzer));
         items.push_back(MenuItem("Alert Bell", MenuAction::TOGGLE_EXT_NOTIFICATION_BELL_BUZZER,
                                  MenuPage::NODE_CONFIG_EXT_NOTIFICATION, &moduleConfig.external_notification.alert_bell_buzzer));
 

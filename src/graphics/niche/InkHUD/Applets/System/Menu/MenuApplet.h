@@ -57,7 +57,7 @@ class MenuApplet : public SystemApplet, public concurrency::OSThread
     void populateRecentsPage();        // Create menu items: a choice of values for settings.recentlyActiveSeconds
     void populateDisplayTimeoutPage(); // Create menu items for config.display.screen_on_secs
     int onPowerStatusUpdate(const meshtastic::Status *status); // Track battery discharge for the runtime estimate
-    void populateBuzzerModePage();     // Create menu items for config.device.buzzer_mode
+    void populateBuzzerModePage();                             // Create menu items for config.device.buzzer_mode
     void populateRemoveWaypointPage(); // Create menu items: one per waypoint in the active WaypointListApplet
     void populateGeofenceWaypointPage();
 

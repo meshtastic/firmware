@@ -30,7 +30,7 @@ class MenuItem
     MenuAction action = NO_ACTION;
     MenuPage nextPage = EXIT;
     bool *checkState = nullptr;
-    bool isHeader = false; // Non-selectable section label
+    bool isHeader = false;    // Non-selectable section label
     int8_t usagePercent = -1; // 0-100: draw a full-width usage bar instead of text. -1: no bar
 
     // Various constructors, depending on the intended function of the item
