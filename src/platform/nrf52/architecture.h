@@ -121,6 +121,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_ME25LS01_4Y10TD
 #elif defined(MS24SF1)
 #define HW_VENDOR meshtastic_HardwareModel_MS24SF1
+#elif defined(Nodara)
+#define HW_VENDOR meshtastic_HardwareModel_PRIVATE_HW
 #elif defined(PRIVATE_HW) || defined(FEATHER_DIY)
 #define HW_VENDOR meshtastic_HardwareModel_PRIVATE_HW
 #elif defined(HELTEC_T114)

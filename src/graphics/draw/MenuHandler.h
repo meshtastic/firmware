@@ -63,6 +63,7 @@ class menuHandler
         FrameToggles,
         DisplayUnits,
         MessageBubblesMenu,
+        confirmation_dialog_menu,
         ThemeMenu,
         HamModeConfirm,
         LicensedToNormalConfirm,
