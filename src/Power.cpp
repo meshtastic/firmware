@@ -1168,6 +1168,19 @@ static void logX1ChargeProbe(int32_t batMv, bool usbPowered)
     if (!pinsReady) {
         pinMode(EXT_IS_CHRGD, INPUT);
         pinsReady = true;
+
+        // One-shot I2C sweep, logged once per boot. The variant declares only the haptic driver and
+        // the pressure sensor on this bus and no charger-control pin anywhere, so the question this
+        // answers is whether the charger is reachable at all: if an address in the usual charger
+        // range answers, firmware can re-arm a latched charge termination, and if nothing does then
+        // the only re-arm is a physical VBUS event. Note the variant sets I2C_NO_RESCAN because this
+        // bus is finicky - this is a single pass, not a periodic scan.
+        for (uint8_t addr = 0x03; addr <= 0x77; addr++) {
+            Wire.beginTransmission(addr);
+            if (Wire.endTransmission() == 0)
+                LOG_INFO("ChargeProbe: i2c device at 0x%02x", addr);
+        }
+        LOG_INFO("ChargeProbe: i2c sweep done");
     }
 
     const int sta = digitalRead(EXT_CHRG_DETECT); // P1.03 CHARGE_STA, LOW = charging
