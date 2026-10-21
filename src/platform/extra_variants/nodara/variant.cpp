@@ -7,6 +7,7 @@
 #include "concurrency/OSThread.h"
 #include "configuration.h"
 #include "main.h"
+#include "mesh/Throttle.h"
 
 namespace
 {
@@ -80,7 +81,7 @@ class PowerMcuLink : public concurrency::OSThread
     }
 
   private:
-    uint8_t buf[32];
+    uint8_t buf[32] = {};
     size_t len = 0;
 
     void handleFrames()
@@ -124,9 +125,9 @@ void earlyInitVariant()
     if (readResetReason() != 0)
         return;
     waitedForPowerOn = true;
-    uint8_t buf[32];
+    uint8_t buf[32] = {};
     size_t len = 0;
-    while (millis() < POWER_ON_WAIT_MS) {
+    while (!Throttle::deadlinePassed(POWER_ON_WAIT_MS)) {
         if (len == sizeof(buf)) // noise filled it: start over rather than stop matching
             len = 0;
         if (Serial2.available() > 0)
