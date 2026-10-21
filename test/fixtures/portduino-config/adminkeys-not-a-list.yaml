@@ -1,0 +1,11 @@
+# FAULT: one key written as a scalar rather than a list, which is the obvious way to get it wrong
+# with a single admin. Nothing in it would be read, so meshtasticd refuses the file rather than
+# starting with no admin key. Expect an ERROR and exit 1.
+Lora:
+  Module: sx1262
+  CS: 21
+  IRQ: 16
+  Busy: 20
+  Reset: 18
+Security:
+  AdminKeys: rvzaPCZmlh1nWnqNKUFHj0dLBJJIRJhRrkZmaFLHCVY=

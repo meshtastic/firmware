@@ -54,6 +54,14 @@ static pthread_mutex_t usb_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_t poll_thread;
 static volatile bool poll_thread_exit = false;
 static int int_running_cnt = 0;
+// Poll threads not returned yet, self-detached ones included: pinedio_deinit() waits it out.
+static int poll_threads_alive = 0;
+static pthread_cond_t poll_thread_gone = PTHREAD_COND_INITIALIZER;
+// Set once pinedio_deinit() starts tearing down; no further attachment is accepted.
+static bool deinit_started = false;
+// True on any poll thread, superseded ones included: a successor overwrites poll_thread, so the
+// handle cannot answer that.
+static __thread bool this_is_poll_thread = false;
 
 // CH341PAR installs the 64-bit library as CH341DLLA64.DLL and the 32-bit one as
 // CH341DLL.DLL, so try the name matching this process first.
@@ -117,6 +125,7 @@ int32_t pinedio_init(struct pinedio_inst *inst, void *driver)
 {
     (void)driver;
     inst->in_error = false;
+    deinit_started = false; // statics outlive a destroyed instance; a re-init reopens the door
     for (int i = 0; i < PINEDIO_INT_PIN_MAX; i++)
         inst->interrupts[i].callback = NULL;
 
@@ -279,6 +288,7 @@ static void *pin_poll_thread_fn(void *arg)
 {
     struct pinedio_inst *inst = (struct pinedio_inst *)arg;
     bool should_exit = false;
+    this_is_poll_thread = true;
 
     while (!should_exit) {
         uint32_t input = 0;
@@ -309,14 +319,31 @@ static void *pin_poll_thread_fn(void *arg)
                     pthread_mutex_unlock(&usb_mutex);
                     cb();
                     pthread_mutex_lock(&usb_mutex);
+                    // A re-arm during the callback hands the pin to a successor with
+                    // previous_state reset to 255; our older sample must not become its baseline.
+                    if (poll_thread_exit || !pthread_equal(poll_thread, pthread_self()))
+                        break;
+                    // Same thread, same sentinel: it was not 255 when this branch was entered.
+                    if (inst_int->previous_state == 255)
+                        continue;
                 }
             }
             inst_int->previous_state = state;
         }
-        should_exit = poll_thread_exit;
+        // A re-attach can start the successor and clear the exit flag before we read it, so the
+        // handle is the tiebreak: stand down rather than poll alongside it.
+        should_exit = poll_thread_exit || !pthread_equal(poll_thread, pthread_self());
         pthread_mutex_unlock(&usb_mutex);
+        if (should_exit)
+            break; // no point sleeping on the way out, and it keeps a deinit wait short
         Sleep(PIN_POLL_INTERVAL_MS);
     }
+
+    // Last touch of inst: after this a deinit may free it and close the device.
+    pthread_mutex_lock(&usb_mutex);
+    poll_threads_alive--;
+    pthread_cond_broadcast(&poll_thread_gone);
+    pthread_mutex_unlock(&usb_mutex);
     return NULL;
 }
 
@@ -328,6 +355,10 @@ int32_t pinedio_attach_interrupt(struct pinedio_inst *inst, enum pinedio_int_pin
 
     int32_t res = 0;
     pthread_mutex_lock(&usb_mutex);
+    if (deinit_started) {
+        pthread_mutex_unlock(&usb_mutex);
+        return -1;
+    }
     bool was_attached = inst->interrupts[int_pin].callback != NULL;
     inst->interrupts[int_pin].previous_state = 255;
     inst->interrupts[int_pin].mode = int_mode;
@@ -345,6 +376,7 @@ int32_t pinedio_attach_interrupt(struct pinedio_inst *inst, enum pinedio_int_pin
                 pthread_mutex_unlock(&usb_mutex);
                 return res;
             }
+            poll_threads_alive++;
         }
         int_running_cnt++;
     }
@@ -373,7 +405,10 @@ int32_t pinedio_deattach_interrupt(struct pinedio_inst *inst, enum pinedio_int_p
     pthread_mutex_unlock(&usb_mutex);
 
     // Joining under the lock would deadlock against the poll thread taking it.
-    if (stop && !pthread_equal(thread_to_join, pthread_self()))
+    // Called from the poll thread's own callback there is no one left to join it, so detach.
+    if (stop && pthread_equal(thread_to_join, pthread_self()))
+        pthread_detach(thread_to_join);
+    else if (stop)
         pthread_join(thread_to_join, NULL);
     return 0;
 }
@@ -387,8 +422,18 @@ void pinedio_deinit(struct pinedio_inst *inst)
     int_running_cnt = 0;
     if (stop)
         thread_to_join = poll_thread; // copy before dropping the lock, as above
+    // pthread_cond_wait() below drops the mutex: an attach getting in would start a poll thread we
+    // then wait on forever, or tear the device out from under.
+    deinit_started = true;
+    // A self-detached thread is not joinable but still reads inst, so wait every live one out.
+    // Waiting when we are one would deadlock: only it can decrement the count.
+    bool self_is_poll = this_is_poll_thread;
+    while (poll_threads_alive > 0 && !self_is_poll)
+        pthread_cond_wait(&poll_thread_gone, &usb_mutex);
     pthread_mutex_unlock(&usb_mutex);
 
+    // Keyed on the handle, not on self_is_poll: a superseded thread calling this is not the one
+    // named by poll_thread, and has already detached itself.
     if (stop && !pthread_equal(thread_to_join, pthread_self()))
         pthread_join(thread_to_join, NULL);
 

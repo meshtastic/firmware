@@ -1,0 +1,12 @@
+# FAULT: the two TCXO keys ask for opposite things. Writing the voltage out as false says
+# leave DIO3 alone; TCXO_OPTIONAL drives it at the radio default before trying the crystal.
+# Both are honoured as documented, which is exactly why the outcome surprises people.
+Lora:
+  Module: sx1262
+  spidev: spidev0.0
+  CS: 21
+  IRQ: 16
+  Busy: 20
+  Reset: 18
+  DIO3_TCXO_VOLTAGE: false
+  TCXO_OPTIONAL: true

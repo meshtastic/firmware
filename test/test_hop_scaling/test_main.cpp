@@ -1,3 +1,23 @@
+// Unit tests for HopScalingModule in src/modules/HopScalingModule.{h,cpp} - the sampled hop
+// histogram and the hop limit it recommends for this node's own routine broadcasts.
+//
+// What is pinned:
+//   - HopScalingModule::rollHour() walks the scaled per-hop buckets and recommends the smallest
+//     hop limit that still reaches default_hop_scaling_min_target_nodes, extended by at most one
+//     hop when the politeness envelope allows it.
+//   - HopScalingModule::runOnce() applies that recommendation only while the congestion gate is
+//     engaged, floors it by the sending node's role, and hands a hop back per hourly roll once
+//     congestion clears. Router.cpp reads the result through getLastRequiredHop() and only ever
+//     lowers a packet below the user's configured hop_limit.
+//   - The sampling/filtering denominator state machine, which keeps the 128-entry histogram
+//     bounded while leaving the population estimate invariant.
+//
+// The regression guarded: before the congestion gate, the recommendation was driven by node
+// density alone, so a dense but idle mesh was throttled exactly as hard as a saturated one and
+// remote routers on a near-idle MEDIUM_SLOW mesh went silent (meshtastic/firmware#11794). Delete
+// or relax the gate assertions and that returns: scaling engages on node count, with no reference
+// to whether the channel is actually busy.
+
 #include "MeshTypes.h"
 #include "TestUtil.h"
 #include <unity.h>
@@ -8,6 +28,7 @@
 #include "gps/RTC.h"
 #include "mesh/NodeDB.h"
 #include "modules/HopScalingModule.h"
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <memory>
@@ -80,6 +101,20 @@ class HopScalingTestShim : public HopScalingModule
     }
     uint8_t getFilteringDenomHoldRollsRemaining() const { return filteringDenomHoldRollsRemaining; }
 
+    /// Put the congestion gate directly into a state, bypassing the confirm counter, and seed the
+    /// EMA to a value consistent with it so the next runOnce() does not immediately count toward
+    /// the opposite flip.
+    void forceCongestion(bool value)
+    {
+        congested = value;
+        congestionConfirmRuns = 0;
+        utilizationAvg = value ? static_cast<float>(CONGESTION_ENGAGE_PCT) : 0.0f;
+    }
+
+    /// Set the smoothed utilization directly, so a test can sit on a band boundary without
+    /// pumping the EMA there sample by sample.
+    void setSmoothedChannelUtilization(float pct) { utilizationAvg = pct; }
+
     /// Insert an entry with an explicit hash, bypassing the sampling filter.
     /// Used to fill the histogram to a known state without depending on hashNodeId distribution.
     void forceInsertEntry(uint16_t hash, uint8_t hops)
@@ -130,6 +165,11 @@ static void injectSampleTraffic(HopScalingTestShim &shim, uint32_t baseId, const
 {
     shim.setHistogramDenominator(HopScalingModule::DENOM_MIN);
 
+    // The scenario suites below all assert on an applied hop limit, which only happens while the
+    // congestion gate is engaged. Put the channel at a busy reading and engage it up front.
+    HopScalingModule::s_testChannelUtil = 45.0f;
+    shim.forceCongestion(true);
+
     for (uint8_t roll = 0; roll < numRolls; ++roll) {
         mockTime += ONE_HOUR_MS;
 
@@ -143,6 +183,15 @@ static void injectSampleTraffic(HopScalingTestShim &shim, uint32_t baseId, const
         }
         shim.rollHourTest();
     }
+}
+
+// Drive N runOnce() ticks with AirTime reporting a fixed smoothed utilization.
+// The gate reads it once per tick, so this is how a test moves it through the confirm counter.
+static void pumpRuns(HopScalingTestShim &shim, float channelUtilPct, int runs)
+{
+    HopScalingModule::s_testChannelUtil = channelUtilPct;
+    for (int i = 0; i < runs; i++)
+        shim.runOnce();
 }
 
 static void assertCompactHistogramActive(HopScalingTestShim &shim)
@@ -495,6 +544,281 @@ void test_startup_blank_state()
 }
 
 // ---------------------------------------------------------------------------
+// Tests - Congestion gate
+// ---------------------------------------------------------------------------
+
+// Pins the fix for meshtastic/firmware#11794: hop scaling used to trigger on node density alone,
+// so a dense but idle mesh was throttled exactly as hard as a saturated one. The reporter's
+// MEDIUM_SLOW mesh sat at 10-15% channel utilization with spikes into the high teens and went
+// silent. A node that is not congested must leave hop_limit alone no matter how dense it is.
+void test_congestion_gate_idle_channel_does_not_scale()
+{
+    TEST_MESSAGE("=== Congestion gate: dense mesh, idle channel ===");
+    TEST_MESSAGE("Topology: the dense 110-node mesh that scales to <= 3 hops when the channel is busy.");
+    TEST_MESSAGE("Expectation: with the channel reading 10%, nothing is applied and hop returns to HOP_MAX.");
+
+    auto shim = std::unique_ptr<HopScalingTestShim>(new HopScalingTestShim());
+    hopScalingModule = shim.get();
+    buildDenseLocalMesh();
+    const uint16_t distA[HOP_MAX + 1] = {25, 30, 15, 5, 10, 15, 10, 0};
+    injectSampleTraffic(*shim, 0x9E000000, distA);
+
+    // The histogram recommendation itself is unchanged - it is the application that is gated.
+    shim->runOnce();
+    TEST_ASSERT_TRUE(shim->isCongested());
+    const uint8_t scaledWhileBusy = shim->getLastRequiredHop();
+    TEST_MSG_FMT("While congested: hop=%u", scaledWhileBusy);
+    TEST_ASSERT_TRUE(scaledWhileBusy <= 3);
+
+    // 10% is inside the band the reporter measured; it must release and stay released.
+    pumpRuns(*shim, 10.0f, HopScalingModule::RUNS_PER_HOUR * 8);
+
+    TEST_MSG_FMT("After idle channel: congested=%u hop=%u", shim->isCongested() ? 1u : 0u, shim->getLastRequiredHop());
+    TEST_ASSERT_FALSE(shim->isCongested());
+    TEST_ASSERT_EQUAL_UINT8(HOP_MAX, shim->getLastRequiredHop());
+    TEST_ASSERT_TRUE(shim->getLastSuggestedHop() <= 3); // recommendation still warm, just not applied
+
+    hopScalingModule = nullptr;
+}
+
+// The complement of the test above: the gate must still engage on a genuinely busy channel, driven
+// through the real EMA and confirm counter rather than forced, or the scaler is dead code.
+void test_congestion_gate_scales_on_busy_channel()
+{
+    TEST_MESSAGE("=== Congestion gate: dense mesh, busy channel ===");
+    TEST_MESSAGE("Expectation: a sustained 45% channel reading engages the gate and applies the hop walk.");
+
+    auto shim = std::unique_ptr<HopScalingTestShim>(new HopScalingTestShim());
+    hopScalingModule = shim.get();
+    buildDenseLocalMesh();
+    const uint16_t distA[HOP_MAX + 1] = {25, 30, 15, 5, 10, 15, 10, 0};
+    injectSampleTraffic(*shim, 0x9F000000, distA);
+
+    shim->forceCongestion(false);
+    HopScalingModule::s_testChannelUtil = 0.0f;
+    TEST_ASSERT_FALSE(shim->isCongested());
+    // Pin the precondition: injectSampleTraffic() drives rollHour() directly and never runOnce(),
+    // so nothing has been applied yet. Without this the final assertion could pass vacuously.
+    TEST_ASSERT_EQUAL_UINT8(HOP_MAX, shim->getLastRequiredHop());
+
+    pumpRuns(*shim, 45.0f, HopScalingModule::RUNS_PER_HOUR * 2);
+
+    TEST_MSG_FMT("After busy channel: congested=%u hop=%u", shim->isCongested() ? 1u : 0u, shim->getLastRequiredHop());
+    TEST_ASSERT_TRUE(shim->isCongested());
+    TEST_ASSERT_TRUE(shim->getLastRequiredHop() <= 3);
+
+    hopScalingModule = nullptr;
+}
+
+// HopScalingModule::updateCongestion() in src/modules/HopScalingModule.cpp.
+// A mesh idling near a threshold would otherwise toggle the gate - and therefore hop_limit - on
+// every roll. Smoothing lives in AirTime now, so what this pins is the confirm counter alone:
+// readings that cross a threshold on alternate ticks never hold it for CONGESTION_CONFIRM_RUNS
+// in a row, so the state must not flip in either direction. Delete the counter and it flaps.
+void test_congestion_gate_does_not_flap_at_threshold()
+{
+    TEST_MESSAGE("=== Congestion gate: no flapping around the thresholds ===");
+    TEST_MESSAGE("Phase 1: released gate, samples alternating either side of the engage threshold.");
+    TEST_MESSAGE("Phase 2: engaged gate, samples alternating either side of the release threshold.");
+
+    // Straddle each threshold rather than hard-coding percentages, so the test follows Default.h.
+    constexpr float kStraddle = 4.0f;
+    constexpr float kEngage = static_cast<float>(HopScalingModule::CONGESTION_ENGAGE_PCT);
+    constexpr float kRelease = static_cast<float>(HopScalingModule::CONGESTION_RELEASE_PCT);
+
+    auto shim = std::unique_ptr<HopScalingTestShim>(new HopScalingTestShim());
+    hopScalingModule = shim.get();
+    buildDenseLocalMesh();
+    const uint16_t distA[HOP_MAX + 1] = {25, 30, 15, 5, 10, 15, 10, 0};
+    injectSampleTraffic(*shim, 0xA0000000, distA);
+
+    shim->forceCongestion(false);
+    HopScalingModule::s_testChannelUtil = 0.0f;
+    for (int i = 0; i < 60; i++) {
+        HopScalingModule::s_testChannelUtil = (i % 2) ? kEngage - kStraddle : kEngage + kStraddle;
+        shim->runOnce();
+        TEST_ASSERT_FALSE_MESSAGE(shim->isCongested(), "gate engaged on samples whose average stays below the threshold");
+    }
+
+    shim->forceCongestion(true);
+    for (int i = 0; i < 60; i++) {
+        HopScalingModule::s_testChannelUtil = (i % 2) ? kRelease - kStraddle : kRelease + kStraddle;
+        shim->runOnce();
+        TEST_ASSERT_TRUE_MESSAGE(shim->isCongested(), "gate released on a dip that never held for the confirm window");
+    }
+
+    hopScalingModule = nullptr;
+}
+
+// HopScalingModule::updateCongestion() in src/modules/HopScalingModule.cpp.
+// Both threshold tests are inclusive - at exactly CONGESTION_ENGAGE_PCT the gate engages, at
+// exactly CONGESTION_RELEASE_PCT it releases - and nothing else pins that. It is worth pinning
+// because the comparison is made on a float average: AirTime's EMA converging on a threshold from
+// above settles one ULP off it (12.00006103515625 for a sustained 12%), so comparing at full float
+// precision left an inclusive test that could never fire and a gate that never released.
+// smoothedUtilPct() rounds to the whole percent the thresholds are declared in; drop that rounding
+// and a node sitting exactly on the release threshold stays throttled forever.
+void test_congestion_gate_thresholds_are_inclusive()
+{
+    TEST_MESSAGE("=== Congestion gate: engage and release thresholds are inclusive ===");
+    TEST_MESSAGE("Expectation: exactly the engage percent engages; exactly the release percent releases.");
+
+    auto shim = std::unique_ptr<HopScalingTestShim>(new HopScalingTestShim());
+    hopScalingModule = shim.get();
+    buildDenseLocalMesh();
+    const uint16_t distA[HOP_MAX + 1] = {25, 30, 15, 5, 10, 15, 10, 0};
+    injectSampleTraffic(*shim, 0xA5000000, distA);
+
+    shim->forceCongestion(false);
+    pumpRuns(*shim, static_cast<float>(HopScalingModule::CONGESTION_ENGAGE_PCT), HopScalingModule::CONGESTION_CONFIRM_RUNS);
+    TEST_MSG_FMT("At exactly %u%%: congested=%u", HopScalingModule::CONGESTION_ENGAGE_PCT, shim->isCongested() ? 1u : 0u);
+    TEST_ASSERT_TRUE_MESSAGE(shim->isCongested(), "sitting exactly on the engage threshold must engage");
+
+    pumpRuns(*shim, static_cast<float>(HopScalingModule::CONGESTION_RELEASE_PCT), HopScalingModule::CONGESTION_CONFIRM_RUNS);
+    TEST_MSG_FMT("At exactly %u%%: congested=%u", HopScalingModule::CONGESTION_RELEASE_PCT, shim->isCongested() ? 1u : 0u);
+    TEST_ASSERT_FALSE_MESSAGE(shim->isCongested(), "sitting exactly on the release threshold must release");
+
+    // The dead zone itself: one ULP above the threshold is where AirTime's EMA actually settles
+    // when it converges on it from above, and a raw float compare reads that as "still congested"
+    // forever. Rounding to the whole percent is what makes it releasable.
+    shim->forceCongestion(true);
+    const float justAbove = std::nextafterf(static_cast<float>(HopScalingModule::CONGESTION_RELEASE_PCT), 100.0f);
+    pumpRuns(*shim, justAbove, HopScalingModule::CONGESTION_CONFIRM_RUNS);
+    TEST_ASSERT_FALSE_MESSAGE(shim->isCongested(), "one ULP above the release threshold must still release");
+
+    hopScalingModule = nullptr;
+}
+
+// Releasing the gate must not hand every node its full hop_limit back in the same roll - that turns
+// a mesh that just quietened into a broadcast storm. Recovery is one hop per hourly roll.
+void test_congestion_release_ramps_one_hop_per_roll()
+{
+    TEST_MESSAGE("=== Congestion gate: release ramps one hop per hourly roll ===");
+    TEST_MESSAGE("Expectation: after release, hop rises by exactly 1 per rollover, not straight to HOP_MAX.");
+
+    auto shim = std::unique_ptr<HopScalingTestShim>(new HopScalingTestShim());
+    hopScalingModule = shim.get();
+    buildDenseLocalMesh();
+    const uint16_t distA[HOP_MAX + 1] = {25, 30, 15, 5, 10, 15, 10, 0};
+    injectSampleTraffic(*shim, 0xA1000000, distA);
+
+    shim->runOnce();
+    uint8_t previous = shim->getLastRequiredHop();
+    TEST_MSG_FMT("Engaged at hop=%u", previous);
+    TEST_ASSERT_TRUE(previous < HOP_MAX);
+
+    shim->forceCongestion(false);
+    HopScalingModule::s_testChannelUtil = 0.0f;
+
+    for (uint8_t roll = 0; roll < 3; roll++) {
+        for (int run = 0; run < HopScalingModule::RUNS_PER_HOUR; run++)
+            shim->runOnce();
+        const uint8_t now = shim->getLastRequiredHop();
+        TEST_MSG_FMT("Roll %u: hop=%u", roll + 1, now);
+        TEST_ASSERT_EQUAL_UINT8(previous + 1, now);
+        previous = now;
+    }
+
+    hopScalingModule = nullptr;
+}
+
+// HopScalingModule::runOnce() in src/modules/HopScalingModule.cpp.
+// The role floor is keyed on the sending node's own role, so this lets a remote site's telemetry
+// travel without loosening anything for client nodes. Operators read that telemetry to know a
+// mountain-top site is alive; issue #11794 is a report of exactly those routers going quiet.
+//
+// The floored set is the same one Router.cpp groups for zero-cost hops: ROUTER, ROUTER_LATE and
+// CLIENT_BASE. REPEATER is deliberately absent - it is deprecated and AdminModule demotes it to
+// CLIENT on config set, so a floor keyed on it could never fire.
+void test_infrastructure_role_floor_applies_when_congested()
+{
+    TEST_MESSAGE("=== Role floor: infrastructure roles keep a minimum hop count ===");
+    TEST_MESSAGE("Topology: 200 nodes at hop 0, so the hop walk recommends 0 for an unfloored role.");
+    TEST_MESSAGE("Expectation: CLIENT scales below the floor, ROUTER/ROUTER_LATE/CLIENT_BASE sit on it.");
+
+    const uint16_t distLocal[HOP_MAX + 1] = {200, 60, 20, 5, 3, 2, 2, 1};
+    const meshtastic_Config_DeviceConfig_Role savedRole = config.device.role;
+
+    config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
+    uint8_t clientHop = HOP_MAX;
+    {
+        auto shim = std::unique_ptr<HopScalingTestShim>(new HopScalingTestShim());
+        hopScalingModule = shim.get();
+        buildDenseLocalMesh();
+        injectSampleTraffic(*shim, 0xA2000000, distLocal);
+        shim->runOnce();
+        clientHop = shim->getLastRequiredHop();
+        hopScalingModule = nullptr;
+    }
+    TEST_MSG_FMT("CLIENT: hop=%u", clientHop);
+    TEST_ASSERT_TRUE(clientHop < HopScalingModule::INFRASTRUCTURE_HOP_FLOOR);
+
+    const meshtastic_Config_DeviceConfig_Role infraRoles[] = {meshtastic_Config_DeviceConfig_Role_ROUTER,
+                                                              meshtastic_Config_DeviceConfig_Role_ROUTER_LATE,
+                                                              meshtastic_Config_DeviceConfig_Role_CLIENT_BASE};
+    for (size_t i = 0; i < sizeof(infraRoles) / sizeof(infraRoles[0]); i++) {
+        config.device.role = infraRoles[i];
+        auto shim = std::unique_ptr<HopScalingTestShim>(new HopScalingTestShim());
+        hopScalingModule = shim.get();
+        buildDenseLocalMesh();
+        injectSampleTraffic(*shim, 0xA3000000 + (static_cast<uint32_t>(i) << 20), distLocal);
+        shim->runOnce();
+
+        TEST_MSG_FMT("Infrastructure role %u: hop=%u", static_cast<unsigned>(infraRoles[i]), shim->getLastRequiredHop());
+        TEST_ASSERT_EQUAL_UINT8(HopScalingModule::INFRASTRUCTURE_HOP_FLOOR, shim->getLastRequiredHop());
+        hopScalingModule = nullptr;
+    }
+
+    config.device.role = savedRole;
+}
+
+// The one-hop extension used to be graded by a density trend (0-2 h vs 1-3 h node counts) while the
+// gate that decides whether the walk applies at all reads measured airtime. A node could therefore
+// be told the mesh was filling up by node counts while the channel sat idle, which is the same
+// mismatch issue #11794 reports one level up. Both now read the smoothed channel utilization.
+//
+// The three regimes PR #10176 defined are preserved, read from airtime instead of node counts:
+// GENEROUS while the channel is quiet or clearing, DEFAULT once past the gate's engage point, and
+// STRICT at the polite gate, where the radio is already withholding metadata traffic.
+void test_politeness_tracks_channel_utilization()
+{
+    TEST_MESSAGE("=== Politeness: graded by measured utilization, not by node-count trend ===");
+    TEST_MESSAGE("Expectation: 4/4 below the engage point, 2/4 from it, 1/4 from the strict point.");
+
+    auto shim = std::unique_ptr<HopScalingTestShim>(new HopScalingTestShim());
+    hopScalingModule = shim.get();
+    buildDenseLocalMesh();
+    const uint16_t distA[HOP_MAX + 1] = {25, 30, 15, 5, 10, 15, 10, 0};
+    injectSampleTraffic(*shim, 0xA4000000, distA);
+
+    struct Band {
+        float util;
+        uint8_t numer;
+    };
+    // forceCongestion() seeds the EMA, so each band is reached without pumping it there sample by
+    // sample; rollHour() then reads utilizationAvg directly.
+    constexpr float kEngage = static_cast<float>(HopScalingModule::CONGESTION_ENGAGE_PCT);
+    constexpr float kStrict = static_cast<float>(HopScalingModule::CONGESTION_STRICT_PCT);
+    // Both band edges are inclusive, so each is probed exactly and one below.
+    const Band bands[] = {
+        {0.0f, HopScalingModule::POLITENESS_GENEROUS},   {kEngage - 1.0f, HopScalingModule::POLITENESS_GENEROUS},
+        {kEngage, HopScalingModule::POLITENESS_DEFAULT}, {kStrict - 1.0f, HopScalingModule::POLITENESS_DEFAULT},
+        {kStrict, HopScalingModule::POLITENESS_STRICT},  {100.0f, HopScalingModule::POLITENESS_STRICT}};
+
+    for (size_t i = 0; i < sizeof(bands) / sizeof(bands[0]); i++) {
+        shim->setSmoothedChannelUtilization(bands[i].util);
+        shim->rollHourTest();
+
+        const float expected = bands[i].numer / static_cast<float>(HopScalingModule::POLITENESS_DENOM);
+        TEST_MSG_FMT("util=%u%% -> polite=%u/4", static_cast<unsigned>(bands[i].util),
+                     static_cast<unsigned>(shim->getPoliteness() * HopScalingModule::POLITENESS_DENOM));
+        TEST_ASSERT_EQUAL_FLOAT(expected, shim->getPoliteness());
+    }
+
+    hopScalingModule = nullptr;
+}
+
+// ---------------------------------------------------------------------------
 // Tests - Denominator state machine
 // ---------------------------------------------------------------------------
 
@@ -760,6 +1084,16 @@ void setup()
     RUN_TEST(test_hourly_roll);
     RUN_TEST(test_intermediate_status);
     RUN_TEST(test_startup_blank_state);
+
+    printf("\n=== Congestion gate ===\n");
+    RUN_TEST(test_congestion_gate_idle_channel_does_not_scale);
+    RUN_TEST(test_congestion_gate_scales_on_busy_channel);
+    RUN_TEST(test_congestion_gate_does_not_flap_at_threshold);
+    RUN_TEST(test_congestion_gate_thresholds_are_inclusive);
+    RUN_TEST(test_congestion_release_ramps_one_hop_per_roll);
+    RUN_TEST(test_infrastructure_role_floor_applies_when_congested);
+
+    RUN_TEST(test_politeness_tracks_channel_utilization);
 
     printf("\n=== Denominator state machine ===\n");
     RUN_TEST(test_denominator_rises_on_overflow);
