@@ -2,6 +2,12 @@
 
 // SenseCAP MeshPager X2
 
+#define INPUTBROKER_KEYPAD_READ_CALLBACK readKeypadState
+#ifdef __cplusplus
+#include <stdint.h>
+bool readKeypadState(uint8_t &pressedKeys);
+#endif
+
 // Buttons - via IO Expander (TCA6424)
 #define BUTTON_UP GPIO_NUM_NC      // EXP pin 0, active low
 #define BUTTON_DOWN GPIO_NUM_NC    // EXP pin 1, active low

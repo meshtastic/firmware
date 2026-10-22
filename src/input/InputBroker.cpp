@@ -18,6 +18,7 @@
 
 #if !MESHTASTIC_EXCLUDE_INPUTBROKER
 #include "input/ExpressLRSFiveWay.h"
+#include "input/KeypadInput.h"
 #include "input/QuadratureEncoder.h"
 #include "input/RotaryEncoderImpl.h"
 #include "input/RotaryEncoderInterruptImpl1.h"
@@ -492,6 +493,15 @@ void InputBroker::Init()
         aLinuxJoystick = new LinuxJoystick("LinuxJoystick");
         aLinuxJoystick->init();
 #endif
+    }
+#endif
+#if !MESHTASTIC_EXCLUDE_INPUTBROKER && defined(INPUTBROKER_KEYPAD_READ_CALLBACK)
+    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
+        auto *keypadInput = new KeypadInput(INPUTBROKER_KEYPAD_READ_CALLBACK);
+        if (!keypadInput->init()) {
+            LOG_WARN("Keypad input initialization failed");
+            delete keypadInput;
+        }
     }
 #endif
 #if !MESHTASTIC_EXCLUDE_INPUTBROKER && HAS_TRACKBALL

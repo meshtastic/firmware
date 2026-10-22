@@ -92,6 +92,8 @@ class Tca6424
         return writeReg(TCA6424_OUTPUT_PORT0 + port, out[port]);
     }
 
+    bool readInputPort(uint8_t port, uint8_t &value) { return port < 3 && readReg(TCA6424_INPUT_PORT0 + port, value); }
+
   private:
     bool writeReg(uint8_t reg, uint8_t value)
     {
@@ -145,6 +147,16 @@ bool writeExpanderPin(uint8_t pin, bool level)
 }
 
 } // namespace
+
+bool readKeypadState(uint8_t &pressedKeys)
+{
+    uint8_t portState = 0;
+    if (!expanderReady || !ioExpander.readInputPort(0, portState))
+        return false;
+
+    pressedKeys = static_cast<uint8_t>(~portState) & 0x3F;
+    return true;
+}
 
 void earlyInitVariant()
 {
