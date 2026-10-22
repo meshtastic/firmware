@@ -1589,6 +1589,16 @@ void Screen::setFrames(FrameFocus focus)
     if (numMeshNodes > 0)
         numMeshNodes--;
 
+#ifdef HELTEC_MESH_POCKET_V2
+    if (meshPocketV2PowerBank != nullptr && meshPocketV2PowerBank->isAvailable()) {
+        fsi.positions.powerBank = numframes;
+        normalFrames[numframes++] = graphics::UIRenderer::drawMeshPocketV2PowerBank;
+        indicatorIcons.push_back(icon_power_bank);
+        PUSH_FRAME_TITLE("Power Bank");
+    }
+#endif
+
+    // Favorite renderers derive node indexes from their position at the end of the frame list.
     if (!hiddenFrames.show_favorites) {
         // Temporary array to hold favorite node frames
         std::vector<FrameCallback> favoriteFrames;
@@ -1614,15 +1624,6 @@ void Screen::setFrames(FrameFocus focus)
             fsi.positions.lastFavorite = 255;
         }
     }
-
-#ifdef HELTEC_MESH_POCKET_V2
-    if (meshPocketV2PowerBank != nullptr && meshPocketV2PowerBank->isAvailable()) {
-        fsi.positions.powerBank = numframes;
-        normalFrames[numframes++] = graphics::UIRenderer::drawMeshPocketV2PowerBank;
-        indicatorIcons.push_back(icon_power_bank);
-        PUSH_FRAME_TITLE("Power Bank");
-    }
-#endif
 
     fsi.frameCount = numframes;   // Total framecount is used to apply FOCUS_PRESERVE
     this->frameCount = numframes; // Save frame count for use in custom overlay
@@ -1660,6 +1661,13 @@ void Screen::setFrames(FrameFocus focus)
         break;
 
     case FOCUS_PRESERVE:
+#ifdef HELTEC_MESH_POCKET_V2
+        if (previousFramesetInfo.positions.powerBank != 255 && originalPosition == previousFramesetInfo.positions.powerBank &&
+            fsi.positions.powerBank != 255) {
+            ui->switchToFrame(fsi.positions.powerBank);
+            break;
+        }
+#endif
         if (previousFramesetInfo.positions.waypoint == 255 && fsi.positions.waypoint != 255) {
             const uint8_t target = originalPosition >= fsi.positions.waypoint ? originalPosition + 1 : originalPosition;
             ui->switchToFrame(target);
