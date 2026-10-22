@@ -302,7 +302,7 @@ void lateInitVariant()
     startPowerButtonMonitor();
 }
 
-extern "C" void meshtastic_variant_pre_radio_reset(void)
+extern "C" void variant_pre_radio_reset(void)
 {
     if (!expanderReady) {
         return;
