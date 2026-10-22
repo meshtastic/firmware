@@ -2213,6 +2213,7 @@ int Screen::handlePowerBankEvent(const MeshPocketV2PowerBankEvent *event)
     if (!screenOn)
         powerFSM.trigger(EVENT_INPUT);
     ui->switchToFrame(framesetInfo.positions.powerBank);
+    lastScreenTransition = millis();
 #ifdef USERPREFS_UI_TEST_LOG
     logFrameChange("powerbank", framesetInfo.positions.powerBank);
 #endif
