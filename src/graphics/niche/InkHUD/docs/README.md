@@ -281,7 +281,7 @@ InkHUD's `Node Config -> Position` page now exposes the common position controls
 
 - Node Name: long name, short name, BLE ID (last two MAC bytes)
 - Firmware: build environment (model), firmware version
-- Runtime: uptime, and an estimated battery runtime. The estimate uses the smoothed cell voltage and a generic single-cell LiPo curve (independent of the variant's own battery percent), and extrapolates the drain seen since boot or since last unplugged. It reads "measuring..." until at least 2% has drained over at least 2 hours, ">30d" for long estimates, "charging" on external power, and is hidden without a battery.
+- Runtime: uptime, and an estimated battery runtime. The estimate uses the smoothed cell voltage and a generic single-cell LiPo curve (independent of the variant's own battery percent), and extrapolates the drain seen since boot or since last unplugged. It reads "measuring..." until at least 2% has drained over at least 2 hours, ">30d" for long estimates, "charging" on external power, "no battery" without one. The row is always shown.
 - Memory: heap, PSRAM (ESP32), flash and SD card (when mounted) as used/total and percent (K below 1 MB, otherwise M), each with a full-width usage bar under its label. A bar row is added with `MenuItem::Usage()`.
 
 ##### External Notification Menu

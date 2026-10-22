@@ -29,6 +29,8 @@
 #if defined(HAS_SDCARD) && !defined(SDCARD_USE_SOFT_SPI) && !defined(HAS_SD_MMC)
 #include <SD.h>
 #define INKHUD_SYSTEM_INFO_SD 1
+#include "SPILock.h"
+#include "concurrency/LockGuard.h"
 #endif
 #if defined(ARCH_ESP32) && HAS_WIFI
 #include "mesh/wifi/WiFiAPClient.h"
@@ -1530,21 +1532,23 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
 
         items.push_back(MenuItem::Header("Runtime"));
         addInfoRow("Uptime: " + formatDuration(Time::getUptimeSecs()));
-        if (batteryPresent) {
-            std::string left = "measuring...";
-            if (batteryCharging) {
-                left = "charging";
-            } else if (batteryBaselineUptimeSecs) {
-                // Extrapolate the drain seen since the baseline. Needs a couple of % and a few hours to mean anything
-                const uint32_t elapsed = Time::getUptimeSecs() - batteryBaselineUptimeSecs;
-                const float drop = batteryBaselinePercent - batteryPercent;
-                if (drop >= 2 && elapsed >= 2 * 3600) {
-                    const uint32_t leftSecs = batteryPercent * elapsed / drop;
-                    left = leftSecs > 30 * 86400UL ? ">30d" : "~" + formatDuration(leftSecs);
-                }
+        // Always shown. Feed in the current reading too: the menu can miss the change notifications
+        onPowerStatusUpdate(powerStatus);
+        std::string left = "measuring...";
+        if (!batteryPresent) {
+            left = "no battery";
+        } else if (batteryCharging) {
+            left = "charging";
+        } else if (batteryBaselineUptimeSecs) {
+            // Extrapolate the drain seen since the baseline. Needs a couple of % and a few hours to mean anything
+            const uint32_t elapsed = Time::getUptimeSecs() - batteryBaselineUptimeSecs;
+            const float drop = batteryBaselinePercent - batteryPercent;
+            if (drop >= 2 && elapsed >= 2 * 3600) {
+                const uint32_t leftSecs = batteryPercent * elapsed / drop;
+                left = leftSecs > 30 * 86400UL ? ">30d" : "~" + formatDuration(leftSecs);
             }
-            addInfoRow("Battery left: " + left);
         }
+        addInfoRow("Battery left: " + left);
 
         // Memory: a label row ("Heap 89/153K 58%" or "Flash 1.2/14M 9%") with a full-width usage bar underneath, as on baseUI's
         // system screen
@@ -1574,8 +1578,17 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         if (flashTotal > 0)
             addUsageRow("Flash", fsUsedBytes(), flashTotal);
 #ifdef INKHUD_SYSTEM_INFO_SD
-        if (SD.cardType() != CARD_NONE && SD.totalBytes() > 0)
-            addUsageRow("SD", SD.usedBytes(), SD.totalBytes());
+        // The SD card shares its SPI bus with the radio and the map tiles, so read it under spiLock
+        uint64_t sdUsed = 0, sdTotal = 0;
+        {
+            concurrency::LockGuard g(spiLock);
+            if (SD.cardType() != CARD_NONE) {
+                sdTotal = SD.totalBytes();
+                sdUsed = SD.usedBytes();
+            }
+        }
+        if (sdTotal > 0)
+            addUsageRow("SD", sdUsed, sdTotal);
 #endif
 
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
