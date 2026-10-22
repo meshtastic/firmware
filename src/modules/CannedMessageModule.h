@@ -179,6 +179,9 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
 #if defined(USE_VIRTUAL_KEYBOARD)
     bool shift = false;
     int charSet = 0; // 0=ABC, 1=123
+    bool keypadKeyboardActive = false;
+    uint8_t keyboardRow = 0;
+    uint8_t keyboardColumn = 0;
 #endif
 
     void updateState(cannedMessageModuleRunState, bool shouldRequestFocus = false);
