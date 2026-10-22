@@ -196,6 +196,11 @@ static void setupUserButton(int pullup_sense)
         return;
     }
     LOG_DEBUG("Use GPIO%02d for user button", _pinNum);
+#if defined(ARCH_ESP32) && defined(BUTTON_PIN_RUNTIME_ONLY)
+    // Input-only pads (ESP32 GPIO34-39) have no internal pullup, so a bare switch to ground floats.
+    if (!GPIO_IS_VALID_OUTPUT_GPIO(_pinNum))
+        LOG_WARN("GPIO%02d has no internal pullup: the user button needs an external one", _pinNum);
+#endif
 
     // Buttons. Moved here cause we need NodeDB to be initialized
     // If your variant.h has a BUTTON_PIN defined, go ahead and define BUTTON_ACTIVE_LOW and BUTTON_ACTIVE_PULLUP
