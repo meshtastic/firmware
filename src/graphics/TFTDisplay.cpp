@@ -2136,7 +2136,7 @@ bool TFTDisplay::connect()
                                  nv3007_279_init_operations, sizeof(nv3007_279_init_operations));
 #elif defined(TFT_NV3001B)
         // The Heltec RC panels all use the same controller and differ only in how the bus is wired.
-#if defined(HELTEC_RC52)
+#if defined(HELTEC_RC52) || defined(HELTEC_MESH_POCKET_V2)
         // nRF52840: the panel sits on SPI1, clear of the LoRa radio on SPI0.
         Arduino_DataBus *bus = new Arduino_HWSPI(TFT_RS, TFT_CS, &SPI1, true /* is_shared_interface */);
 #elif defined(HELTEC_RCC6)
@@ -2184,7 +2184,8 @@ bool TFTDisplay::connect()
     ft6336u.begin();
     pinMode(SCREEN_TOUCH_INT, INPUT_PULLUP);
     attachInterrupt(digitalPinToInterrupt(SCREEN_TOUCH_INT), rak14014_tpIntHandle, FALLING);
-#elif defined(T_DECK) || defined(PICOMPUTER_S3) || defined(CHATTER_2) || defined(HELTEC_MESH_NODE_T096)
+#elif defined(T_DECK) || defined(PICOMPUTER_S3) || defined(CHATTER_2) || defined(HELTEC_MESH_NODE_T096) ||                       \
+    defined(HELTEC_MESH_POCKET_V2)
     tft->setRotation(1); // T-Deck has the TFT in landscape
 #elif defined(T_WATCH_S3)
     tft->setRotation(2); // T-Watch S3 left-handed orientation

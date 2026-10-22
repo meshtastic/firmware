@@ -143,6 +143,10 @@ class Power : public concurrency::OSThread
     void reboot();
     // open circuit voltage lookup table
     uint8_t low_voltage_counter;
+#ifdef HELTEC_MESH_POCKET_V2
+    void checkMeshPocketV2LowBattery();
+    uint8_t lowSocCounter = 0;
+#endif
     uint32_t lastLogTime = 0;
     // Periodic free-heap logging: time of the last line emitted, and the reading it carried
     uint32_t lastHeapLogTime = 0;
