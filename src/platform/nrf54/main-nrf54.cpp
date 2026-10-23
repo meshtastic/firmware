@@ -363,8 +363,10 @@ void nrf52Setup()
     // Set up nrfx watchdog. Do not enable the watchdog yet (we do that
     // the first time through the main loop), so that other threads can
     // allocate their own wdt channel to protect themselves from hangs.
-    // behaviour is a RUN_* mask, 0 pauses the watchdog in sleep and halt
-    nrfx_wdt_config_t wdt0_config = {.behaviour = 0, .reload_value = APP_WATCHDOG_SECS * 1000};
+    // behaviour is a RUN_* mask. Keep counting while the CPU sleeps: a core that never wakes from the
+    // tickless idle is exactly the hang a watchdog paused in sleep cannot see. Stay paused in HALT so a
+    // debugger stop does not turn into a reset.
+    nrfx_wdt_config_t wdt0_config = {.behaviour = NRF_WDT_BEHAVIOUR_RUN_SLEEP_MASK, .reload_value = APP_WATCHDOG_SECS * 1000};
     int r = nrfx_wdt_init(&nrfx_wdt, &wdt0_config, nullptr, nullptr);
     assert(r == 0);
 
