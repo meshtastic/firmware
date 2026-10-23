@@ -70,6 +70,82 @@ static void test_lr11x0_other_setters_and_modes_succeed()
     TEST_ASSERT_TRUE(hal.count(op16(RADIOLIB_LR11X0_CMD_SET_RX)) >= 1);
 }
 
+// --- CAD: LR11x0Interface::isChannelActive() -> startChannelScan(cfg) -> startCad() ---
+//
+// SetCadParams (0x020D), 9 bytes: [0-1] opcode [2] symNum [3] detPeak [4] detMin [5] exit mode
+// [6-8] timeout, 24-bit big-endian. Unlike the LR2021 (lr2021_tests.h), RadioLib's LR11x0 exit
+// defines are already the chip's values (STBY_RC 0x00, RX 0x01, LBT 0x10), so these pin them against
+// a regression, e.g. an LR2021 "fix" copied across the LRxxxx family the wrong way round.
+
+static ChannelScanConfig_t lr11x0CadConfig(uint8_t exitMode = RADIOLIB_LR11X0_CAD_PARAM_DEFAULT)
+{
+    return {.cad = {.symNum = RADIOLIB_LR11X0_CAD_PARAM_DEFAULT,
+                    .detPeak = RADIOLIB_LR11X0_CAD_PARAM_DEFAULT,
+                    .detMin = RADIOLIB_LR11X0_CAD_PARAM_DEFAULT,
+                    .exitMode = exitMode,
+                    .timeout = 0,
+                    .irqFlags = RADIOLIB_IRQ_CAD_DEFAULT_FLAGS,
+                    .irqMask = RADIOLIB_IRQ_CAD_DEFAULT_MASK}};
+}
+
+// As on the LR2021, startCad() indexes det_peak by SF - 5 and the SF starts at 0 without begin().
+static void lr11x0SetSf(RecordingHal &hal, LR1121 &radio, uint8_t sf)
+{
+    TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_NONE, radio.setSpreadingFactor(sf));
+    hal.transactions.clear();
+}
+
+static const std::vector<uint8_t> &lr11x0CadParams(const RecordingHal &hal)
+{
+    const auto *t = hal.last(op16(RADIOLIB_LR11X0_CMD_SET_CAD_PARAMS));
+    TEST_ASSERT_NOT_NULL_MESSAGE(t, "no SetCadParams sent");
+    TEST_ASSERT_EQUAL_UINT32(9, t->size());
+    return *t;
+}
+
+static void test_lr11x0_cad_exit_defines_match_datasheet()
+{
+    TEST_ASSERT_EQUAL_UINT8(0x00, RADIOLIB_LR11X0_CAD_EXIT_MODE_STBY_RC);
+    TEST_ASSERT_EQUAL_UINT8(0x01, RADIOLIB_LR11X0_CAD_EXIT_MODE_RX);
+    TEST_ASSERT_EQUAL_UINT8(0x10, RADIOLIB_LR11X0_CAD_EXIT_MODE_LBT);
+}
+
+// develop's config at SF9: the default exit is standby (0x00), the byte LR11x0Interface sends today.
+static void test_lr11x0_cad_default_config_frame()
+{
+    LR11X0_RADIO(hal);
+    lr11x0SetSf(hal, radio, 9);
+    TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_NONE, radio.startChannelScan(lr11x0CadConfig()));
+    const auto &t = lr11x0CadParams(hal);
+    TEST_ASSERT_EQUAL_UINT8(2, t[2]);    // symNum: sentinel -> 2
+    TEST_ASSERT_EQUAL_UINT8(55, t[3]);   // detPeak, SF9 entry of RadioLib's table
+    TEST_ASSERT_EQUAL_UINT8(10, t[4]);   // detMin
+    TEST_ASSERT_EQUAL_UINT8(0x00, t[5]); // STBY_RC
+    const uint8_t noTimeout[] = {0, 0, 0};
+    TEST_ASSERT_EQUAL_UINT8_ARRAY(noTimeout, t.data() + 6, 3);
+    TEST_ASSERT_EQUAL_UINT32(1, hal.count(op16(RADIOLIB_LR11X0_CMD_SET_CAD)));
+}
+
+// The RX exit define reaches the chip as 0x01, CAD-to-RX, the byte a CAD-to-RX handoff relies on.
+static void test_lr11x0_cad_rx_exit_byte_sent()
+{
+    LR11X0_RADIO(hal);
+    lr11x0SetSf(hal, radio, 9);
+    TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_NONE, radio.startChannelScan(lr11x0CadConfig(RADIOLIB_LR11X0_CAD_EXIT_MODE_RX)));
+    TEST_ASSERT_EQUAL_UINT8(0x01, lr11x0CadParams(hal)[5]);
+}
+
+// A refused SetCadParams (CMD_PERR) returns -706 and starts no CAD, the same contract as the LR2021:
+// LR11x0Interface::isChannelActive() also reads any error but WRONG_MODEM as a free channel.
+static void test_lr11x0_cad_params_rejected_returns_spi_cmd_invalid()
+{
+    LR11X0_RADIO(hal);
+    lr11x0SetSf(hal, radio, 9);
+    hal.reply(op16(RADIOLIB_LR11X0_CMD_SET_CAD_PARAMS), 0x04, {0x02}, 1);
+    TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_SPI_CMD_INVALID, radio.startChannelScan(lr11x0CadConfig()));
+    TEST_ASSERT_EQUAL_UINT32(0, hal.count(op16(RADIOLIB_LR11X0_CMD_SET_CAD)));
+}
+
 // Grows here - each needs replies scripted per opcode:
 //   begin(): getVersion() device-type check
 //   updateFirmware(): enter bootloader, report RADIOLIB_LR11X0_DEVICE_BOOT, then normal. Pins every
@@ -77,7 +153,6 @@ static void test_lr11x0_other_setters_and_modes_succeed()
 //     chunk in 7.8.0) and a failed chunk being reported (its result is currently dropped)
 //   readData() / getPacketLength(): a chip-reported length longer than the caller's buffer
 //   getRSSI() / getSNR() / getPacketStatus(): decoding of known reply bytes
-//   scanChannel(): the CAD parameters sent
 
 static void runLr11x0Tests()
 {
@@ -86,4 +161,8 @@ static void runLr11x0Tests()
     RUN_TEST(test_lr11x0_coding_rate_long_interleaves_except_4_7);
     RUN_TEST(test_lr11x0_packet_setters_send_packet_params);
     RUN_TEST(test_lr11x0_other_setters_and_modes_succeed);
+    RUN_TEST(test_lr11x0_cad_exit_defines_match_datasheet);
+    RUN_TEST(test_lr11x0_cad_default_config_frame);
+    RUN_TEST(test_lr11x0_cad_rx_exit_byte_sent);
+    RUN_TEST(test_lr11x0_cad_params_rejected_returns_spi_cmd_invalid);
 }
