@@ -374,21 +374,40 @@ static void test_adminValidation_targetInvalidPresetForRegion_isCleared(void)
 }
 
 /**
- * Verify a channel_index beyond the channel-table capacity is cleared on write.
- * Important so the broadcaster never indexes out of bounds when resolving a target channel.
+ * Verify a channel_index beyond the channel-table capacity SURVIVES the write, and that the target it
+ * names is skipped at send.
+ *
+ * Clearing the index instead would leave an unset-index target, which sendBeacon() sends on the primary -
+ * under a name and key the operator never named. sanitizeConfig() also runs from loadFromDisk(), so a
+ * cleared index would do that at every boot, not only on the admin write that set it.
  */
-static void test_adminValidation_targetChannelIndexOutOfRange_isCleared(void)
+static void test_adminValidation_targetChannelIndexOutOfRange_isKeptAndSkipped(void)
 {
     resetConfig();
+    static const uint8_t homePsk[16] = {0xAA, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                        0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    installTestPrimaryChannel("Home", homePsk, sizeof(homePsk));
 
     meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
+    bcfg.has_broadcast_offer_preset = true; // content, so "nothing sent" is not vacuous
+    bcfg.broadcast_offer_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
     bcfg.broadcast_targets_count = 1;
     bcfg.broadcast_targets[0].has_channel_index = true;
     bcfg.broadcast_targets[0].channel_index = MAX_NUM_CHANNELS; // one past the last valid slot
 
     testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
 
-    TEST_ASSERT_FALSE(moduleConfig.mesh_beacon.broadcast_targets[0].has_channel_index);
+    TEST_ASSERT_TRUE_MESSAGE(moduleConfig.mesh_beacon.broadcast_targets[0].has_channel_index,
+                             "an out-of-range index must be kept, so the target is skipped rather than moved");
+    TEST_ASSERT_EQUAL_UINT32(MAX_NUM_CHANNELS, moduleConfig.mesh_beacon.broadcast_targets[0].channel_index);
+
+    // And the stored config produces no beacon at all, rather than one on the primary.
+    mockRouter->sentPackets.clear(); // only what sendBeacon() emits counts below
+    MeshBeaconBroadcastModuleTestShim bcast;
+    bcast.sendBeacon();
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, mockRouter->sentPackets.size(),
+                                     "an out-of-range index must skip the target, not use the primary");
 }
 
 /**
@@ -2331,7 +2350,7 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_adminValidation_targetUnknownRegion_isCleared);
     RUN_TEST(test_adminValidation_targetInvalidPresetForRegion_isCleared);
     RUN_TEST(test_adminValidation_targetValidPresetForRegion_isPreserved);
-    RUN_TEST(test_adminValidation_targetChannelIndexOutOfRange_isCleared);
+    RUN_TEST(test_adminValidation_targetChannelIndexOutOfRange_isKeptAndSkipped);
     RUN_TEST(test_adminValidation_targetChannelIndexInRange_isPreserved);
     RUN_TEST(test_adminValidation_messageTooLong_isTruncatedToField);
     RUN_TEST(test_adminValidation_intervalTooLow_isClamped);

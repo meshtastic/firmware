@@ -364,10 +364,10 @@ void MeshBeaconModule::sanitizeConfig(meshtastic_ModuleConfig_MeshBeaconConfig &
             LOG_WARN("Beacon: broadcast_targets[%u] preset %d invalid for region, clearing", i, t.preset);
             t.has_preset = false;
         }
-        if (t.has_channel_index && t.channel_index >= MAX_NUM_CHANNELS) {
-            LOG_WARN("Beacon: broadcast_targets[%u] channel_index %u out of range, clearing", i, t.channel_index);
-            t.has_channel_index = false;
-        }
+        // channel_index is kept: sendBeacon() skips an unusable index, where clearing it would leave an
+        // unset-index target, which beacons on the primary - under another name and key, at every boot.
+        if (t.has_channel_index && t.channel_index >= MAX_NUM_CHANNELS)
+            LOG_WARN("Beacon: broadcast_targets[%u] channel_index %u out of range, target will be skipped", i, t.channel_index);
         if (t.has_frequency_slot && !beaconSlotValid(t.frequency_slot, t.region, t.has_preset, t.preset)) {
             LOG_WARN("Beacon: broadcast_targets[%u] frequency_slot %u invalid, clearing", i, t.frequency_slot);
             t.has_frequency_slot = false;
