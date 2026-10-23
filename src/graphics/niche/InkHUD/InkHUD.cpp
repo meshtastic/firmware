@@ -13,6 +13,9 @@
 #include "MessageStore.h"
 #include "SPILock.h"
 #include "concurrency/LockGuard.h"
+#include <string>
+#include <utility>
+#include <vector>
 
 using namespace NicheGraphics;
 
@@ -98,39 +101,43 @@ static void migrateOldInkHUDMessages()
 
         uint8_t count = 0;
         f.readBytes(reinterpret_cast<char *>(&count), 1);
+        if (count > MAX_MESSAGES_SAVED)
+            count = MAX_MESSAGES_SAVED; // file is newest-first; anything beyond the cap could not survive anyway
 
-        std::vector<StoredMessage> channelMsgs;
+        // Text stays in RAM until each record is pushed: pool bytes are only protected behind a live record
+        std::vector<std::pair<StoredMessage, std::string>> channelMsgs;
         for (uint8_t i = 0; i < count; i++) {
             StoredMessage sm;
             f.readBytes(reinterpret_cast<char *>(&sm.timestamp), sizeof(sm.timestamp));
             f.readBytes(reinterpret_cast<char *>(&sm.sender), sizeof(sm.sender));
             f.readBytes(reinterpret_cast<char *>(&sm.channelIndex), sizeof(sm.channelIndex));
 
-            char textBuf[OLD_MAX_MSG_SIZE + 1] = {};
-            uint32_t textLen = 0;
+            std::string text;
             char c;
-            while (textLen < OLD_MAX_MSG_SIZE) {
+            while (text.size() < OLD_MAX_MSG_SIZE) {
                 if (f.readBytes(&c, 1) != 1)
                     break;
                 if (c == '\0')
                     break;
-                textBuf[textLen++] = c;
+                text += c;
             }
+            if (text.size() >= MAX_MESSAGE_SIZE)
+                text.resize(MAX_MESSAGE_SIZE - 1);
 
             sm.dest = NODENUM_BROADCAST;
             sm.type = MessageType::BROADCAST;
             sm.isBootRelative = false;
             sm.ackStatus = AckStatus::ACKED;
-            size_t storedLen = (textLen >= MAX_MESSAGE_SIZE) ? MAX_MESSAGE_SIZE - 1 : textLen;
-            sm.textOffset = MessageStore::storeText(textBuf, storedLen);
-            sm.textLength = static_cast<uint16_t>(storedLen);
-
-            channelMsgs.push_back(sm);
+            sm.textLength = static_cast<uint16_t>(text.size());
+            channelMsgs.emplace_back(sm, std::move(text));
         }
 
         // Old format stored newest-first (push_front); insert oldest-first for correct chronological order
-        for (int i = static_cast<int>(channelMsgs.size()) - 1; i >= 0; i--)
-            messageStore.addLiveMessage(channelMsgs[i]);
+        for (int i = static_cast<int>(channelMsgs.size()) - 1; i >= 0; i--) {
+            StoredMessage &sm = channelMsgs[i].first;
+            sm.textOffset = messageStore.allocText(channelMsgs[i].second.c_str(), sm.textLength);
+            messageStore.addLiveMessage(sm);
+        }
         if (!channelMsgs.empty())
             migrated = true;
 
