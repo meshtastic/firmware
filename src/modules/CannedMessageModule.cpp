@@ -17,8 +17,6 @@
 #include "graphics/EmoteRenderer.h"
 #include "graphics/Screen.h"
 #include "graphics/SharedUIDisplay.h"
-#include "graphics/TFTColorRegions.h"
-#include "graphics/TFTPalette.h"
 #include "graphics/draw/MessageRenderer.h"
 #include "graphics/draw/NotificationRenderer.h"
 #include "graphics/draw/UIRenderer.h"
@@ -844,51 +842,8 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
         return false;
 
 #if defined(USE_VIRTUAL_KEYBOARD)
-    const bool isKeypad = event->source && strcmp(event->source, "KeypadInput") == 0;
-    String keyTapped;
-    if (isKeypad) {
-        const auto rowKeyCount = [this](uint8_t row) {
-            uint8_t count = 0;
-            for (const Letter &letter : keyboard[charSet][row]) {
-                if (letter.character == "")
-                    break;
-                count++;
-            }
-            return count;
-        };
-        const uint8_t columnCount = rowKeyCount(keyboardRow);
-        keyboardColumn = std::min<uint8_t>(keyboardColumn, columnCount - 1);
-        const uint8_t rowCount = sizeof(keyboard[charSet]) / sizeof(keyboard[charSet][0]);
-        bool moved = true;
-        switch (event->inputEvent) {
-        case INPUT_BROKER_UP:
-        case INPUT_BROKER_DOWN:
-            keyboardRow = (keyboardRow + (event->inputEvent == INPUT_BROKER_UP ? rowCount - 1 : 1)) % rowCount;
-            keyboardColumn = ((2 * keyboardColumn + 1) * rowKeyCount(keyboardRow)) / (2 * columnCount);
-            break;
-        case INPUT_BROKER_LEFT:
-            keyboardColumn = (keyboardColumn + columnCount - 1) % columnCount;
-            break;
-        case INPUT_BROKER_RIGHT:
-            keyboardColumn = (keyboardColumn + 1) % columnCount;
-            break;
-        default:
-            moved = false;
-            break;
-        }
-        if (moved || event->inputEvent == INPUT_BROKER_SELECT) {
-            keypadKeyboardActive = true;
-            lastTouchMillis = millis();
-            if (moved) {
-                requestFocus();
-                screen->forceDisplay();
-                return true;
-            }
-            keyTapped = keyboard[charSet][keyboardRow][keyboardColumn].character;
-        }
-    }
     // Cancel (dismiss freetext screen)
-    if (!isKeypad && event->inputEvent == INPUT_BROKER_LEFT) {
+    if (event->inputEvent == INPUT_BROKER_LEFT) {
         updateState(CANNED_MESSAGE_RUN_STATE_INACTIVE);
         freetext = "";
         cursor = 0;
@@ -902,12 +857,10 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
         screen->forceDisplay();
         return true;
     }
-    // Touch and keypad selection share the same virtual-key actions.
+    // Touch input (virtual keyboard) handling
+    // Only handle if touch coordinates present (CardKB won't set these)
     if (event->touchX != 0 || event->touchY != 0) {
-        keypadKeyboardActive = false;
-        keyTapped = keyForCoordinates(event->touchX, event->touchY);
-    }
-    if (keyTapped != "") {
+        String keyTapped = keyForCoordinates(event->touchX, event->touchY);
         bool valid = false;
 
         if (keyTapped == "⇧") {
@@ -955,7 +908,7 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
             lastTouchMillis = millis();
             runOnce();
             payload = 0;
-            return true;
+            return true; // STOP: We handled a VKB touch
         }
     }
 #endif // USE_VIRTUAL_KEYBOARD
@@ -1617,29 +1570,7 @@ void CannedMessageModule::drawKeyboard(OLEDDisplay *display, OLEDDisplayUiState 
 
             float characterOffset = ((cellWidth / 2) - (letter.width / 2));
 
-            const bool selected = keypadKeyboardActive && outerIndex == keyboardRow && innerIndex == keyboardColumn;
-#if GRAPHICS_TFT_COLORING_ENABLED
-            if (selected) {
-                graphics::registerTFTColorRegionDirect(xOffset, yOffset, cellWidth, cellHeight,
-                                                       graphics::TFTPalette::MeshtasticGreen, graphics::TFTPalette::Black);
-                display->setColor(OLEDDISPLAY_COLOR::WHITE);
-                display->fillRect(xOffset, yOffset, cellWidth, cellHeight);
-                display->setColor(OLEDDISPLAY_COLOR::BLACK);
-
-                if (letter.character == "⇧")
-                    drawShiftIcon(display, xOffset + characterOffset, yOffset + yCorrection + 5, 1.2);
-                else if (letter.character == "⌫")
-                    drawBackspaceIcon(display, xOffset + characterOffset, yOffset + yCorrection + 5, 1.2);
-                else if (letter.character == "↵")
-                    drawEnterIcon(display, xOffset + characterOffset, yOffset + yCorrection + 5, 1.7);
-                else
-                    display->drawString(xOffset + characterOffset, yOffset + yCorrection,
-                                        letter.character == " " ? "space" : letter.character);
-
-                display->setColor(OLEDDISPLAY_COLOR::WHITE);
-            } else
-#endif
-                if (letter.character == "⇧") {
+            if (letter.character == "⇧") {
                 if (this->shift) {
                     display->fillRect(xOffset, yOffset, cellWidth, cellHeight);
 
@@ -1692,11 +1623,6 @@ void CannedMessageModule::drawKeyboard(OLEDDisplay *display, OLEDDisplayUiState 
                                         letter.character == " " ? "space" : letter.character);
                 }
             }
-
-#if !GRAPHICS_TFT_COLORING_ENABLED
-            if (selected)
-                display->drawRect(xOffset + 2, yOffset + 2, cellWidth - 4, cellHeight - 4);
-#endif
         }
 
         xOffset = BASEUI_BODY_LR_MARGIN;

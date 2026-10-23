@@ -502,6 +502,8 @@ void InputBroker::Init()
             LOG_WARN("Keypad input initialization failed");
             delete keypadInput;
         }
+        else
+            osk_found = true;
     }
 #endif
 #if !MESHTASTIC_EXCLUDE_INPUTBROKER && HAS_TRACKBALL

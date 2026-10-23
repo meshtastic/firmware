@@ -76,7 +76,6 @@ bool readKeypadState(uint8_t &pressedKeys);
 #define TFT_OFFSET_Y 0
 #define TFT_OFFSET_ROTATION 1
 #define SCREEN_ROTATE
-#define USE_VIRTUAL_KEYBOARD 1
 
 #define BRIGHTNESS_DEFAULT 130 // Medium-low brightness (0-255)
 #define SCREEN_TRANSITION_FRAMERATE 5
