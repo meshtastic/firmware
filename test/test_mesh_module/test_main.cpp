@@ -603,6 +603,21 @@ static void test_dispatch_refusalWithoutWantAck_isDiscarded()
     TEST_ASSERT_EQUAL_UINT32(0, mockRouter->sentPackets.size());
 }
 
+// PhoneAPI rate-limits a phone packet before MeshService clears the from the client supplied, so the
+// NAK must go to our own node. Addressed by that from, a client could send it over the air to any node.
+static void test_phoneErrorResponse_ignoresForgedFrom()
+{
+    meshtastic_MeshPacket fromPhone = makeRequest(meshtastic_PortNum_POSITION_APP);
+    fromPhone.from = REMOTE_NODE;
+
+    service->sendRoutingErrorResponse(meshtastic_Routing_Error_RATE_LIMIT_EXCEEDED, &fromPhone);
+
+    TEST_ASSERT_EQUAL_UINT32(1, mockRoutingModule->ackNaks.size());
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_RATE_LIMIT_EXCEEDED, mockRoutingModule->ackNaks[0].error);
+    TEST_ASSERT_EQUAL_HEX32(LOCAL_NODE, mockRoutingModule->ackNaks[0].to);
+    TEST_ASSERT_EQUAL_HEX32(fromPhone.id, mockRoutingModule->ackNaks[0].requestId);
+}
+
 static void test_dispatch_ignoreRequestIsClearedPerPacket()
 {
     auto *ignoring = registerDispatchModule(new ReplyIgnoreModule());
@@ -1068,6 +1083,7 @@ void setup()
     RUN_TEST(test_dispatch_noResponderSendsNak);
     RUN_TEST(test_dispatch_refusalWithoutWantResponse_sendsNak);
     RUN_TEST(test_dispatch_refusalWithoutWantAck_isDiscarded);
+    RUN_TEST(test_phoneErrorResponse_ignoresForgedFrom);
     RUN_TEST(test_dispatch_ignoreRequestIsClearedPerPacket);
     RUN_TEST(test_dispatch_realNeighborInfoCannotShadowTelemetryOwner);
     RUN_TEST(test_localReplyToSelf_isDeliveredToPhone);
