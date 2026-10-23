@@ -89,6 +89,14 @@ class TestableRadioInterface : public RadioInterface
     ErrorCode send(meshtastic_MeshPacket *p) override { return ERRNO_OK; }
 };
 
+// Stands in for a part whose driver has no 1625 kHz bandwidth, as the LR2021 does not: DS Table 9-3 stops
+// at LORA_BW_812 for the SX1280-compatible set. Everything else is TestableRadioInterface's behaviour.
+class NarrowBandwidthRadioInterface : public TestableRadioInterface
+{
+  public:
+    float maxBandwidthKHz() const override { return 812.5f; }
+};
+
 static void test_bwCodeToKHz_specialMappings()
 {
     TEST_ASSERT_FLOAT_WITHIN(0.0001f, 7.8f, bwCodeToKHz(8));
@@ -271,6 +279,61 @@ static void test_applyModemConfig_mediumTurbo()
     TEST_ASSERT_EQUAL_UINT8(5, testRadio->getCr());
     TEST_ASSERT_EQUAL_UINT8(9, testRadio->getSf());
     TEST_ASSERT_FLOAT_WITHIN(0.01f, 500.0f, testRadio->getBw());
+}
+
+// The wide-LoRa turbo presets ask for 1625 kHz. A part that cannot program it must come up on the
+// widest it has rather than fail begin() and leave the node with no radio; SF and CR still come from
+// the preset, so what changes is only the bandwidth.
+static void test_applyModemConfig_wideLoraTurboClampedToRadioMaximum()
+{
+    NarrowBandwidthRadioInterface narrowRadio;
+
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_LORA_24;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_TURBO;
+
+    narrowRadio.reconfigure();
+
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 812.5f, narrowRadio.getBw());
+    TEST_ASSERT_EQUAL_UINT8(11, narrowRadio.getSf());
+    TEST_ASSERT_EQUAL_UINT8(8, narrowRadio.getCr());
+}
+
+// The clamp binds only above the limit: LONG_FAST on a wide region is already 812.5 kHz, and a sub-GHz
+// region's widest preset is 500 kHz, so neither moves.
+static void test_applyModemConfig_bandwidthWithinRadioMaximumIsUntouched()
+{
+    NarrowBandwidthRadioInterface narrowRadio;
+
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_LORA_24;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+
+    narrowRadio.reconfigure();
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 812.5f, narrowRadio.getBw());
+
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_TURBO;
+
+    narrowRadio.reconfigure();
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 500.0f, narrowRadio.getBw());
+}
+
+// A part that declares no limit keeps the preset's bandwidth, 1625 kHz included.
+static void test_applyModemConfig_wideLoraTurboUnclampedWithoutARadioMaximum()
+{
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_LORA_24;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_TURBO;
+
+    testRadio->reconfigure();
+
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 1625.0f, testRadio->getBw());
 }
 
 // MEDIUM_TURBO is a 500 kHz preset, so it is invalid for EU_868 and must clamp to the region default.
@@ -1248,6 +1311,9 @@ void setup()
     RUN_TEST(test_applyModemConfig_customCodingRateHigherThanPreset);
     RUN_TEST(test_applyModemConfig_customCodingRateLowerThanPreset);
     RUN_TEST(test_applyModemConfig_mediumTurbo);
+    RUN_TEST(test_applyModemConfig_wideLoraTurboClampedToRadioMaximum);
+    RUN_TEST(test_applyModemConfig_bandwidthWithinRadioMaximumIsUntouched);
+    RUN_TEST(test_applyModemConfig_wideLoraTurboUnclampedWithoutARadioMaximum);
     RUN_TEST(test_clampConfigLora_mediumTurboInvalidForEU868);
     RUN_TEST(test_clampConfigLora_mediumTurboValidForUS);
     RUN_TEST(test_regionPresetMap_coversAllRegionsWithinBounds);

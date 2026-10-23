@@ -1332,6 +1332,15 @@ void RadioInterface::applyModemConfig()
         cr = loraConfig.coding_rate;
     }
 
+    // A bandwidth the driver cannot program fails begin() outright, which leaves the node with no radio at
+    // all. Clamp to what this part can do instead, and say so: the airtime no longer matches a node of
+    // another part on the same preset, so the two will not hear each other.
+    const float bwLimit = maxBandwidthKHz();
+    if (bwLimit > 0.0f && bw > bwLimit) {
+        LOG_WARN("Bandwidth %.1f kHz above radio max %.1f kHz, clamp - will not reach nodes on %.1f kHz", bw, bwLimit, bw);
+        bw = bwLimit;
+    }
+
     power = loraConfig.tx_power;
 
     if ((power == 0) || ((power > newRegion->powerLimit) && !devicestate.owner.is_licensed))

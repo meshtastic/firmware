@@ -97,6 +97,10 @@ template <class T> class LR20x0Interface : public RadioLibInterface
     uint8_t getCadSymbolCountSubGhz() const override { return 4; }
     uint8_t getCadSymbolCountWideLora() const override { return 8; }
 
+    // DS Table 9-3 has no 1625 kHz: the widest of the SX1280-compatible set is LORA_BW_812, and the whole
+    // table tops out at LORA_BW_1000. The wide-LoRa turbo presets ask for 1625, which RadioLib rejects.
+    float maxBandwidthKHz() const override { return 812.5f; }
+
     /** Empty the TX FIFO of anything an earlier TX left behind, then hand the packet to RadioLib */
     int16_t launchTransmit(size_t numbytes) override;
 

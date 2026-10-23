@@ -133,6 +133,10 @@ class RadioInterface
     /** Whichever of the two applies to the band actually in use. */
     uint8_t getCadSymbolCount() const;
 
+    // Widest LoRa bandwidth this part can program, in kHz; 0 for a part with no limit the presets can reach.
+    // applyModemConfig() clamps to it, because a bandwidth the driver rejects fails begin() and leaves no radio.
+    virtual float maxBandwidthKHz() const { return 0.0f; }
+
     /**
      * A temporary buffer used for sending/receiving packets, sized to hold the biggest buffer we might need
      * */
