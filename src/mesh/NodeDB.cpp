@@ -32,6 +32,7 @@
 #include "mesh/generated/meshtastic/deviceonly_legacy.pb.h"
 #include "meshUtils.h"
 #include "modules/NeighborInfoModule.h"
+#include "sleep.h"
 #include "target_specific.h"
 #if HAS_VARIABLE_HOPS
 #include "modules/HopScalingModule.h"
@@ -476,6 +477,7 @@ static uint8_t ourMacAddr[6];
 NodeDB::NodeDB()
 {
     LOG_INFO("Init NodeDB");
+    rebootObserver.observe(&notifyReboot);
     loadFromDisk();
     cleanupMeshDB();
 
@@ -1386,7 +1388,7 @@ static void installTrafficManagementDefaults(meshtastic_LocalModuleConfig &mc)
     mc.has_traffic_management = true;
     mc.traffic_management = meshtastic_ModuleConfig_TrafficManagementConfig_init_zero;
 #if HAS_TRAFFIC_MANAGEMENT
-    // Position dedup ships enabled at the 5-hour default window on all supported targets.
+    // Position dedup ships enabled at the 6-hour default window on all supported targets.
     // STM32WL is excluded at compile time (HAS_TRAFFIC_MANAGEMENT=0 in mesh-pb-constants.h).
     // Set position_min_interval_secs=0 at runtime to disable dedup.
     mc.traffic_management.position_min_interval_secs = default_traffic_mgmt_position_min_interval_secs;
@@ -3325,6 +3327,8 @@ bool NodeDB::saveNodeDatabaseToDisk()
     size_t nodeDatabaseSize;
     pb_get_encoded_size(&nodeDatabaseSize, meshtastic_NodeDatabase_fields, &nodeDatabase);
     bool ok = saveProto(nodeDatabaseFileName, nodeDatabaseSize, &meshtastic_NodeDatabase_msg, &nodeDatabase, false);
+    if (ok)
+        nodeDatabaseDirty = false;
 
     nodeDatabase.positions.clear();
     nodeDatabase.positions.shrink_to_fit();
@@ -3839,14 +3843,40 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
     saveNodeDatabaseToDisk();
 }
 
+// Locked encrypted storage rejects every write; saveToDiskNoRetry() skips it the same way.
+static bool isStorageLocked()
+{
+#ifdef MESHTASTIC_ENCRYPTED_STORAGE
+    return EncryptedStorage::isLockdownActive() && !EncryptedStorage::isUnlocked();
+#else
+    return false;
+#endif
+}
+
+void NodeDB::saveNodeDatabaseIfDirty()
+{
+    // Single attempt; shares updateUser()'s once-a-minute budget, so the write rate is unchanged.
+    if (!nodeDatabaseDirty || isStorageLocked() || Throttle::isWithinTimespanMs(lastNodeDbSave, ONE_MINUTE_MS))
+        return;
+    lastNodeDbSave = Time::getMillis();
+    saveNodeDatabaseToDisk();
+}
+
+int NodeDB::onReboot(void *)
+{
+    // A graceful reboot has no other save point.
+    if (nodeDatabaseDirty && !isStorageLocked())
+        saveNodeDatabaseToDisk();
+    return 0;
+}
+
 /** Update user info and channel for this node based on received user data
  */
 bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelIndex, bool xeddsaSigned)
 {
-    // Only a signed update may change the identity of a proven signer; our own record is exempt.
-    // Checked before getOrCreateMeshNode so a refusal cannot evict; isKnownXeddsaSigner covers the warm tier.
-    if (nodeId != getNodeNum() && isKnownXeddsaSigner(nodeId) && !xeddsaSigned) {
-        LOG_WARN("Refuse unsigned identity update for 0x%08x that previously signed", nodeId);
+    // Checked before getOrCreateMeshNode so a refusal cannot evict.
+    if (refusesUnsignedIdentity(nodeId, channelIndex, xeddsaSigned)) {
+        notifyRefusedIdentity(nodeId, p);
         return false;
     }
 
@@ -3920,9 +3950,9 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
         updateGUIforNode = info;
         notifyObservers(true); // Force an update whether or not our node counts have changed
 
-        // We just changed something about a User,
-        // store our DB unless we just did so less than a minute ago
-
+        // We just changed something about a User. Store our DB unless we just did so less than a minute
+        // ago; a deferred save stays pending and saveNodeDatabaseIfDirty() retries it.
+        nodeDatabaseDirty = true;
         if (!Throttle::isWithinTimespanMs(lastNodeDbSave, ONE_MINUTE_MS)) {
             saveToDisk(SEGMENT_NODEDATABASE);
             lastNodeDbSave = millis();
@@ -4367,6 +4397,63 @@ bool NodeDB::isKnownXeddsaSigner(NodeNum n)
 #else
     return false;
 #endif
+}
+
+bool NodeDB::refusesUnsignedIdentity(NodeNum n, uint8_t channelIndex, bool xeddsaSigned)
+{
+    if (xeddsaSigned || n == getNodeNum())
+        return false;
+    if (config.security.packet_signature_policy ==
+        meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_COMPATIBLE)
+        return false;
+    if (channels.isAEADEnabled(channelIndex))
+        return false;
+    return isKnownXeddsaSigner(n);
+}
+
+void NodeDB::notifyRefusedIdentity(NodeNum n, const meshtastic_User &claimed)
+{
+    if (!service)
+        return;
+    // Only a name or role change is worth a notice; a NodeInfo repeating what we hold loses nothing. Compare
+    // through the conversion that stores a User, so truncation and sanitizing cannot read as a change. A
+    // signer that lives only in the warm tier keeps no name to compare, so it is not reported.
+    const meshtastic_NodeInfoLite *info = getMeshNode(n);
+    if (!info || !nodeInfoLiteHasUser(info))
+        return;
+    meshtastic_NodeInfoLite incoming = meshtastic_NodeInfoLite_init_zero;
+    TypeConversions::CopyUserToNodeInfoLite(&incoming, claimed);
+    if (strcmp(incoming.long_name, info->long_name) == 0 && strcmp(incoming.short_name, info->short_name) == 0 &&
+        incoming.role == info->role)
+        return;
+    if (lastRefusedIdentityNoticeMs != 0 &&
+        Throttle::isWithinTimespanMs(lastRefusedIdentityNoticeMs, REFUSED_IDENTITY_NOTICE_INTERVAL_MS))
+        return;
+    meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
+    if (!cn)
+        return;
+    lastRefusedIdentityNoticeMs = Time::stampMillis();
+
+    // The name we already hold, never the refused update's claim.
+    char safeName[sizeof(info->long_name)] = "";
+    strncpy(safeName, info->long_name, sizeof(safeName) - 1);
+    sanitizeUtf8(safeName, sizeof(safeName));
+    char who[sizeof(safeName) + 14];
+    if (safeName[0])
+        snprintf(who, sizeof(who), "%s (!%08x)", safeName, n);
+    else
+        snprintf(who, sizeof(who), "!%08x", n);
+    cn->level = meshtastic_LogRecord_Level_WARNING;
+    cn->time = getValidTime(RTCQualityFromNet);
+    // Only Balanced and Strict refuse, so the setting is one of the two.
+    const char *setting = config.security.packet_signature_policy ==
+                                  meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_STRICT
+                              ? "Strict"
+                              : "Balanced";
+    snprintf(cn->message, sizeof(cn->message),
+             "Unsigned update from %s ignored, due to %s security setting. Remove the node to accept its unsigned updates.", who,
+             setting);
+    service->sendClientNotification(cn);
 }
 
 void NodeDB::commitRemoteKey(NodeNum n, const uint8_t key32[32], KeyCommitTrust trust)

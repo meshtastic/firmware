@@ -206,6 +206,16 @@ single evdev code or a list of them and every one of those buttons drives it.
 | `joystick-buttons.yaml`     | **Clean, and a regression guard** - four actions, two of them with several codes.                              |
 | `joystick-buttons-bad.yaml` | Three silent no-ops: an action name nothing reads, an evdev name where a code belongs, one code claimed twice. |
 
+## Arcade Bonnet buttons
+
+`Input.ArcadeBonnetButtons` has the same shape as `JoystickButtons`, but names buttons as
+printed on the bonnet (`1A`-`1F`) instead of by evdev code.
+
+| File                     | Expected                                                                                                                  |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
+| `arcade-bonnet.yaml`     | **Clean** - hex address, mixed-case names, single and list forms.                                                         |
+| `arcade-bonnet-bad.yaml` | Four silent no-ops: an address outside 0x20-0x27, an unknown action, a button the bonnet doesn't have, one claimed twice. |
+
 ## CH341 USB-SPI adapters
 
 `spidev: ch341` is a different hardware model, not a variant of the same one. The Lora

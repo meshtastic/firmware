@@ -53,8 +53,15 @@ class RF95Interface : public RadioLibInterface
     /** can we detect a LoRa preamble on the current channel? */
     virtual bool isChannelActive() override;
 
+    // Sub-GHz only, CAD fixed in hardware at ~2.25 symbols; the legacy scanChannel() takes no symNum.
+    // 2 puts the slot on its 2.5-symbol floor, which is the closest the shared formula gets.
+    uint8_t getCadSymbolCountSubGhz() const override { return 2; }
+
     /** are we actively receiving a packet (only called during receiving state) */
     virtual bool isActivelyReceiving() override;
+
+    // Carrier sense here reads modem status, not latched flags, and SX127x maps no PREAMBLE or HEADER_ERR.
+    void checkStaleRxFlags() override {}
 
     /**
      * Start waiting to receive a message
@@ -74,6 +81,11 @@ class RF95Interface : public RadioLibInterface
     virtual void configHardwareForSend() override;
 
     uint32_t getPacketTime(uint32_t pl, bool received) override { return computePacketTime(*lora, pl, received); }
+
+    bool readRxHeaderInfo(uint8_t &cr, bool &hasCRC) override
+    {
+        return lora->getLoRaRxHeaderInfo(&cr, &hasCRC) == RADIOLIB_ERR_NONE;
+    }
 
   private:
     /** Some boards require GPIO control of tx vs rx paths */

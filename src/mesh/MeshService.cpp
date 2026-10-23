@@ -500,7 +500,7 @@ void MeshService::sendToPhone(meshtastic_MeshPacket *p)
 
 #ifdef ARCH_ESP32
 #if !MESHTASTIC_EXCLUDE_STOREFORWARD
-    if (moduleConfig.store_forward.enabled && storeForwardModule->isServer() &&
+    if (moduleConfig.store_forward.enabled && storeForwardModule && storeForwardModule->isServer() &&
         p->decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP) {
         releaseToPool(p); // Copy is already stored in StoreForward history
         fromNum++;        // Notify observers for packet from radio

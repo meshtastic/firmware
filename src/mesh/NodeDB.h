@@ -341,6 +341,9 @@ class NodeDB
     bool saveToDisk(int saveWhat = SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS |
                                    SEGMENT_NODEDATABASE);
 
+    /// Write node changes that were deferred, at most once a minute. Called from the main loop.
+    void saveNodeDatabaseIfDirty();
+
     /** Reinit radio config if needed, because either:
      * a) sometimes a buggy android app might send us bogus settings or
      * b) the client set factory_reset
@@ -501,6 +504,15 @@ class NodeDB
     /// Key-agnostic "should n's signable traffic arrive signed", per hot bitfield or warm
     /// xeddsa-signed bit - hot-only gates would let a warm-evicted signer be impersonated with unsigned frames.
     bool isKnownXeddsaSigner(NodeNum n);
+
+    /// Whether an unsigned identity update from n heard on channelIndex must be refused: Balanced and
+    /// Strict refuse one from a known signer, except on an AES-CCM channel, whose tag authenticates it.
+    bool refusesUnsignedIdentity(NodeNum n, uint8_t channelIndex, bool xeddsaSigned);
+
+    /// Tell the client that an unsigned identity update from n was refused, when it would have changed the
+    /// node's stored name or role, naming the node and how to accept its updates again. At most one notice per
+    /// REFUSED_IDENTITY_NOTICE_INTERVAL_MS.
+    void notifyRefusedIdentity(NodeNum n, const meshtastic_User &claimed);
 
     /// Provenance of a bare-key commit that deliberately bypasses updateUser()'s
     /// User-payload / TOFU-pin path. Maps to the TrafficManagement cache's `proven` flag:
@@ -695,6 +707,8 @@ class NodeDB
   private:
     mutable concurrency::Lock satelliteMutex;
     bool duplicateWarned = false;
+    static constexpr uint32_t REFUSED_IDENTITY_NOTICE_INTERVAL_MS = 60 * 60 * 1000UL;
+    uint32_t lastRefusedIdentityNoticeMs = 0;
     bool localPositionUpdatedSinceBoot = false;
     bool migrationSavePending = false;
     /// Set when loadFromDisk() hit a present-but-undecodable config (DECODE_FAILED). The ctor uses it to
@@ -713,6 +727,10 @@ class NodeDB
     uint32_t lastFullEvictionMs = 0; // when we last evicted to admit a new node, once the db is full
     uint32_t lastBackupAttempt = 0;  // when we last tried a backup automatically or manually
     uint32_t lastSort = 0;           // When last sorted the nodeDB
+
+    bool nodeDatabaseDirty = false; // nodes.proto is behind the in-memory db
+    int onReboot(void *unused);
+    CallbackObserver<NodeDB, void *> rebootObserver = CallbackObserver<NodeDB, void *>(this, &NodeDB::onReboot);
 
     /// See NodeHeardAt. Caps how many distinct nodes can be dated once the clock arrives; a node
     /// pushed out by reuse-oldest just stays "last heard: unknown", the same as before this table.
