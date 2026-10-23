@@ -563,7 +563,8 @@ void MeshService::sendRoutingErrorResponse(meshtastic_Routing_Error error, const
 
     // Use the routing module to send the error response
     if (routingModule) {
-        routingModule->sendAckNak(error, getFrom(mp), mp->id, mp->channel);
+        // The phone's from is unvalidated here, so address our own node rather than whatever it claims
+        routingModule->sendAckNak(error, nodeDB->getNodeNum(), mp->id, mp->channel);
     } else {
         LOG_ERROR("Can't send routing error response: no routing module");
     }
