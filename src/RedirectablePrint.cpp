@@ -7,6 +7,7 @@
 #include "memGet.h"
 #include "mesh/generated/meshtastic/mesh.pb.h"
 #include <assert.h>
+#include <atomic>
 #include <cstring>
 #include <memory>
 #include <stdexcept>
@@ -20,6 +21,24 @@
 #if HAS_NETWORKING
 extern meshtastic::Syslog syslog;
 #endif
+
+#if HAS_SERIAL_HAL_DEVICE
+namespace
+{
+std::atomic<bool> serialHalLogSuppressed{false};
+}
+
+void RedirectablePrint::setSerialHalLogSuppressed(bool suppressed)
+{
+    serialHalLogSuppressed.store(suppressed);
+}
+
+bool RedirectablePrint::isSerialHalLogSuppressed()
+{
+    return serialHalLogSuppressed.load();
+}
+#endif
+
 void RedirectablePrint::rpInit()
 {
 #ifdef HAS_FREE_RTOS
@@ -293,6 +312,13 @@ meshtastic_LogRecord_Level RedirectablePrint::getLogLevel(const char *logLevel)
 
 void RedirectablePrint::log(const char *logLevel, const char *format, ...)
 {
+#if HAS_SERIAL_HAL_DEVICE
+    // Mute chatter during a SerialHal transaction, but never hide errors.
+    if (isSerialHalLogSuppressed() && strcmp(logLevel, MESHTASTIC_LOG_LEVEL_ERROR) != 0 &&
+        strcmp(logLevel, MESHTASTIC_LOG_LEVEL_CRIT) != 0) {
+        return;
+    }
+#endif
 
 #if ARCH_PORTDUINO
     // level trace is special, two possible ways to handle it.
