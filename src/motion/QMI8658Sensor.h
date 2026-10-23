@@ -4,9 +4,9 @@
 
 #include "MotionSensor.h"
 
-#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && __has_include(<SensorQMI8658.hpp>)
+#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && __has_include(<ImuDrv.hpp>)
 
-#include <SensorQMI8658.hpp>
+#include <ImuDrv.hpp>
 
 class QMI8658Sensor : public MotionSensor
 {

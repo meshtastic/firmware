@@ -4,12 +4,11 @@
 
 #include "MotionSensor.h"
 
-#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && defined(HAS_BHI260AP) && __has_include(<SensorBHI260AP.hpp>)
+#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && defined(HAS_BHI260AP) && __has_include(<ImuDrv.hpp>)
 
 // Sensor lib
-#include <SensorBHI260AP.hpp>
+#include <ImuDrv.hpp>
 #include <Wire.h>
-#include <bosch/BoschSensorDataHelper.hpp>
 
 class BHI260APSensor : public MotionSensor
 {
