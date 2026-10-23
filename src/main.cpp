@@ -384,8 +384,12 @@ static void meshtasticMainTask(void *)
 void setup()
 {
     TaskHandle_t h = nullptr;
-    xTaskCreate(meshtasticMainTask, "meshtastic", 2560, nullptr, configMAX_PRIORITIES / 2, &h);
-    vTaskCoreAffinitySet(h, 1 << 0);
+    if (xTaskCreateAffinitySet(meshtasticMainTask, "meshtastic", 2560, nullptr, configMAX_PRIORITIES / 2, 1 << 0, &h) !=
+        pdPASS) {
+        // Out of heap this early is not recoverable; the watchdog armed by rp2040Loop() never runs, so reboot.
+        LOG_ERROR("Can't create the firmware task");
+        rp2040.reboot();
+    }
     vTaskDelete(nullptr); // the core's own task is no longer needed
 }
 void loop() {}

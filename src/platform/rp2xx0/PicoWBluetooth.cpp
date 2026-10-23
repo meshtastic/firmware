@@ -54,6 +54,9 @@ std::atomic<bool> evtConnected{false}, evtDisconnected{false}, evtPasskey{false}
     btRestarting{false};
 std::atomic<uint32_t> passkeyToShow{0};
 std::atomic<uint8_t> pairingStatus{0};
+std::atomic<uint8_t> disconnectReason{0};
+std::atomic<uint8_t> reencryptStatus{0};
+std::atomic<bool> evtReencrypt{false};
 std::atomic<uint16_t> peerMtu{23};
 std::atomic<uint32_t> lastClientActivityMs{0}; // last ATT read/write from the phone
 std::atomic<bool> dropRequested{false};
@@ -65,6 +68,11 @@ uint8_t toPhoneBuf[meshtastic_FromRadio_size];
 std::atomic<uint16_t> toPhoneLen{0};
 std::atomic<uint32_t> toPhoneSetMs{0};
 std::atomic<bool> emptyReadSeen{false};
+
+// ---- from phone: prepared (long) write staging, BT task only ----
+uint8_t prepBuf[meshtastic_ToRadio_size];
+uint16_t prepLen = 0;
+bool prepValid = false;
 
 // ---- from phone: ring of ToRadio packets (BT task writes, main task reads) ----
 constexpr int FROM_PHONE_SLOTS = 8;
@@ -167,21 +175,48 @@ int attWrite(hci_con_handle_t con, uint16_t handle, uint16_t mode, uint16_t offs
     (void)con;
     (void)offset;
     lastClientActivityMs = millis();
-    if (mode != ATT_TRANSACTION_MODE_NONE)
-        return 0; // prepared/long writes: nothing to do per chunk
-    if (handle == toRadioHandle) {
-        uint8_t head = fromPhoneHead.load(), tail = fromPhoneTail.load();
-        if ((uint8_t)(head - tail) >= FROM_PHONE_SLOTS)
-            return ATT_ERROR_INSUFFICIENT_RESOURCES; // main task hasn't drained the queue yet
-        ToRadioSlot &s = fromPhone[head % FROM_PHONE_SLOTS];
-        if (size > sizeof(s.data))
-            size = sizeof(s.data);
-        memcpy(s.data, buffer, size);
-        s.len = size;
-        fromPhoneHead = head + 1;
+    // Prepared (long) writes: a ToRadio packet larger than MTU-3 arrives as ACTIVE chunks at increasing offsets,
+    // followed by EXECUTE (commit) or CANCEL; VALIDATE and EXECUTE/CANCEL come with handle 0.
+    switch (mode) {
+    case ATT_TRANSACTION_MODE_ACTIVE:
+        if (handle != toRadioHandle)
+            return 0;
+        if (offset + size > sizeof(prepBuf))
+            return ATT_ERROR_INVALID_OFFSET;
+        memcpy(prepBuf + offset, buffer, size);
+        if (offset + size > prepLen)
+            prepLen = offset + size;
+        prepValid = true;
         return 0;
+    case ATT_TRANSACTION_MODE_VALIDATE:
+        return 0;
+    case ATT_TRANSACTION_MODE_EXECUTE:
+        if (!prepValid)
+            return 0;
+        buffer = prepBuf;
+        size = prepLen;
+        prepLen = 0;
+        prepValid = false;
+        break; // enqueue the assembled packet below
+    case ATT_TRANSACTION_MODE_CANCEL:
+        prepLen = 0;
+        prepValid = false;
+        return 0;
+    default:
+        if (handle != toRadioHandle)
+            return 0; // CCC descriptors etc.: accepted, we notify whenever connected
+        break;
     }
-    return 0; // CCC descriptors etc.: accepted, we notify whenever connected
+    uint8_t head = fromPhoneHead.load(), tail = fromPhoneTail.load();
+    if ((uint8_t)(head - tail) >= FROM_PHONE_SLOTS)
+        return ATT_ERROR_INSUFFICIENT_RESOURCES; // main task hasn't drained the queue yet
+    ToRadioSlot &s = fromPhone[head % FROM_PHONE_SLOTS];
+    if (size > sizeof(s.data))
+        size = sizeof(s.data);
+    memcpy(s.data, buffer, size);
+    s.len = size;
+    fromPhoneHead = head + 1;
+    return 0;
 }
 
 void applyAdvertisingSettings()
@@ -196,6 +231,8 @@ void applyAdvertisingSettings()
 
 void onLeConnected(uint16_t handle)
 {
+    if (handle == HCI_CON_HANDLE_INVALID)
+        return; // a failed connection attempt (the disconnect event with its reason follows)
     conHandle = handle;
     connected = true;
     evtConnected = true;
@@ -210,23 +247,33 @@ void packetHandler(uint8_t type, uint16_t channel, uint8_t *packet, uint16_t siz
         return;
     switch (hci_event_packet_get_type(packet)) {
     case HCI_EVENT_LE_META:
-        if (hci_event_le_meta_get_subevent_code(packet) == HCI_SUBEVENT_LE_CONNECTION_COMPLETE)
-            onLeConnected(hci_subevent_le_connection_complete_get_connection_handle(packet));
-        else if (hci_event_le_meta_get_subevent_code(packet) == HCI_SUBEVENT_LE_ENHANCED_CONNECTION_COMPLETE_V1)
-            onLeConnected(hci_subevent_le_enhanced_connection_complete_v1_get_connection_handle(packet));
+        // status != 0 means the connection attempt failed; the handle in the event is then meaningless
+        if (hci_event_le_meta_get_subevent_code(packet) == HCI_SUBEVENT_LE_CONNECTION_COMPLETE) {
+            if (hci_subevent_le_connection_complete_get_status(packet) == ERROR_CODE_SUCCESS)
+                onLeConnected(hci_subevent_le_connection_complete_get_connection_handle(packet));
+        } else if (hci_event_le_meta_get_subevent_code(packet) == HCI_SUBEVENT_LE_ENHANCED_CONNECTION_COMPLETE_V1) {
+            if (hci_subevent_le_enhanced_connection_complete_v1_get_status(packet) == ERROR_CODE_SUCCESS)
+                onLeConnected(hci_subevent_le_enhanced_connection_complete_v1_get_connection_handle(packet));
+        }
         break;
     case HCI_EVENT_META_GAP:
         // BTstack re-emits LE connections as a GAP event and stops forwarding the raw HCI one once address
         // resolution is active (i.e. as soon as a bond with an IRK exists).
-        if (hci_event_gap_meta_get_subevent_code(packet) == GAP_SUBEVENT_LE_CONNECTION_COMPLETE)
+        if (hci_event_gap_meta_get_subevent_code(packet) == GAP_SUBEVENT_LE_CONNECTION_COMPLETE &&
+            gap_subevent_le_connection_complete_get_status(packet) == ERROR_CODE_SUCCESS)
             onLeConnected(gap_subevent_le_connection_complete_get_connection_handle(packet));
         break;
     case HCI_EVENT_DISCONNECTION_COMPLETE:
         if (hci_event_disconnection_complete_get_connection_handle(packet) == conHandle.load()) {
+            disconnectReason = hci_event_disconnection_complete_get_reason(packet);
             connected = false;
             conHandle = HCI_CON_HANDLE_INVALID;
             evtDisconnected = true;
         }
+        break;
+    case SM_EVENT_REENCRYPTION_COMPLETE:
+        reencryptStatus = sm_event_reencryption_complete_get_status(packet);
+        evtReencrypt = true;
         break;
     case HCI_EVENT_COMMAND_COMPLETE:
         if (hci_event_command_complete_get_command_opcode(packet) == HCI_OPCODE_HCI_LE_SET_ADVERTISE_ENABLE)
@@ -403,8 +450,15 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
             else
                 LOG_WARN("BLE pairing failed, status 0x%02x", s);
         }
+        if (evtReencrypt.exchange(false)) {
+            uint8_t s = reencryptStatus.load();
+            if (s == ERROR_CODE_SUCCESS)
+                LOG_INFO("BLE link re-encrypted with the stored bond");
+            else
+                LOG_WARN("BLE re-encryption with the stored bond failed, status 0x%02x (phone forgot us, or we forgot it)", s);
+        }
         if (evtDisconnected.exchange(false)) {
-            LOG_INFO("BLE client disconnected");
+            LOG_INFO("BLE client disconnected (reason 0x%02x)", disconnectReason.load());
             close(); // PhoneAPI: back to STATE_SEND_NOTHING
             toPhoneLen = 0;
             emptyReadSeen = false;
@@ -415,8 +469,9 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
             advAckSinceDisconnect = false;
             meshtastic::BluetoothStatus st(meshtastic::BluetoothStatus::ConnectionState::DISCONNECTED);
             bluetoothStatus->updateStatus(&st);
-            if (picoWBluetooth)
-                picoWBluetooth->startAdvertising(); // advertising stops on connect; resume it
+            // advertising stops on connect; resume it unless the radio is meant to be off
+            if (picoWBluetooth && config.bluetooth.enabled && !config.network.wifi_enabled)
+                picoWBluetooth->startAdvertising();
         }
         // BTstack occasionally never re-sends the advertise-enable after a disconnect (no controller ack arrives);
         // the phone can then not find the radio until a reboot. Power-cycle the controller through BTstack
