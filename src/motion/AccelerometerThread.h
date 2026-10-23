@@ -13,6 +13,9 @@
 #ifdef HAS_BMI270
 #include "BMI270Sensor.h"
 #endif
+#ifdef HAS_BMI160
+#include "BMI160Sensor.h"
+#endif
 #include "BMM150Sensor.h"
 #include "BMX160Sensor.h"
 #include "ICM20948Sensor.h"
@@ -144,6 +147,11 @@ class AccelerometerThread : public concurrency::OSThread
 #ifdef HAS_BMI270
         case ScanI2C::DeviceType::BMI270:
             sensor.reset(new BMI270Sensor(device));
+            break;
+#endif
+#ifdef HAS_BMI160
+        case ScanI2C::DeviceType::BMI160:
+            sensor.reset(new BMI160Sensor(device));
             break;
 #endif
 #ifdef HAS_QMA6100P
