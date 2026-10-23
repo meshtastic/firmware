@@ -396,6 +396,8 @@ void cpuDeepSleep(uint32_t msecToWake)
     const int wakeButton = DEEP_SLEEP_WAKE_PIN;
 #elif defined(BUTTON_PIN)
     const int wakeButton = config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN;
+#elif defined(BUTTON_PIN_RUNTIME_ONLY)
+    const int wakeButton = IS_RUNTIME_BUTTON_PIN(config.device.button_gpio) ? (int)config.device.button_gpio : -1;
 #else
     const int wakeButton = -1;
 #endif
@@ -432,8 +434,9 @@ void cpuDeepSleep(uint32_t msecToWake)
 
     // FIXME, disable internal rtc pullups/pulldowns on the non isolated pins. for inputs that we aren't using
     // to detect wake and in normal operation the external part drives them hard.
-#if defined(BUTTON_PIN) || defined(DEEP_SLEEP_WAKE_PIN)
-#ifdef BUTTON_NEED_PULLUP
+#if defined(BUTTON_PIN) || defined(DEEP_SLEEP_WAKE_PIN) || defined(BUTTON_PIN_RUNTIME_ONLY)
+// A user-added runtime switch pulls to ground, so it needs our pullup too.
+#if defined(BUTTON_NEED_PULLUP) || defined(BUTTON_PIN_RUNTIME_ONLY)
     for (int pin : wakePins) {
         if (pin < 0)
             continue;
