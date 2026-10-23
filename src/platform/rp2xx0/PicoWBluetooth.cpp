@@ -181,14 +181,21 @@ int attWrite(hci_con_handle_t con, uint16_t handle, uint16_t mode, uint16_t offs
     case ATT_TRANSACTION_MODE_ACTIVE:
         if (handle != toRadioHandle)
             return 0;
+        if (offset != prepLen) // chunks must be contiguous from offset 0: no gaps, no stale bytes
+            return ATT_ERROR_INVALID_OFFSET;
         if (offset + size > sizeof(prepBuf))
             return ATT_ERROR_INVALID_OFFSET;
         memcpy(prepBuf + offset, buffer, size);
-        if (offset + size > prepLen)
-            prepLen = offset + size;
+        prepLen = offset + size;
         prepValid = true;
         return 0;
     case ATT_TRANSACTION_MODE_VALIDATE:
+        // BTstack ignores the EXECUTE result, so a full queue has to be reported here for the phone to see it
+        if (prepValid && (uint8_t)(fromPhoneHead.load() - fromPhoneTail.load()) >= FROM_PHONE_SLOTS) {
+            prepLen = 0;
+            prepValid = false;
+            return ATT_ERROR_INSUFFICIENT_RESOURCES;
+        }
         return 0;
     case ATT_TRANSACTION_MODE_EXECUTE:
         if (!prepValid)

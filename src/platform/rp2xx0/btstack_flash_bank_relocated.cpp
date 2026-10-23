@@ -144,6 +144,9 @@ void picoWBondStoreFlush()
 {
     if (!filesLoaded || millis() - lastDirtyMs < 1000)
         return;
+    static uint32_t lastFailMs = 0;
+    if (lastFailMs && millis() - lastFailMs < 10000)
+        return; // back off after a failed write instead of hammering the filesystem
     for (int b = 0; b < BANK_COUNT; b++) {
         if (!dirty[b])
             continue;
@@ -153,13 +156,20 @@ void picoWBondStoreFlush()
         dirty[b] = false;
         exitCritical();
         concurrency::LockGuard g(spiLock);
+        bool saved = false;
         File f = FSCom.open(bankPath(b), FILE_O_WRITE);
         if (f) {
-            f.write(snapshot, BANK_SIZE);
+            saved = f.write(snapshot, BANK_SIZE) == BANK_SIZE;
             f.close();
+        }
+        if (saved) {
             LOG_INFO("BLE bond store saved (%s)", bankPath(b));
         } else {
-            LOG_ERROR("BLE bond store: can't write %s", bankPath(b));
+            LOG_ERROR("BLE bond store: can't write %s, will retry", bankPath(b));
+            lastFailMs = millis() ? millis() : 1;
+            enterCritical();
+            dirty[b] = true; // retry on a later flush (a newer write may already have re-dirtied it)
+            exitCritical();
         }
     }
 }
