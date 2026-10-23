@@ -563,7 +563,7 @@ void MeshService::sendRoutingErrorResponse(meshtastic_Routing_Error error, const
 
     // Use the routing module to send the error response
     if (routingModule) {
-        routingModule->sendAckNak(error, mp->from, mp->id, mp->channel);
+        routingModule->sendAckNak(error, getFrom(mp), mp->id, mp->channel);
     } else {
         LOG_ERROR("Can't send routing error response: no routing module");
     }

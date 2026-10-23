@@ -94,6 +94,22 @@ class MockRoutingModule : public RoutingModule
     }
 };
 
+// Refuses every packet the way AdminModule does: an error reply in myReply, whatever want_response says.
+class RefusingModule : public MeshModule
+{
+  public:
+    RefusingModule() : MeshModule("admin-shaped", meshtastic_PortNum_ADMIN_APP) {}
+
+  protected:
+    bool wantPacket(const meshtastic_MeshPacket *p) override { return p->decoded.portnum == ourPortNum; }
+
+    ProcessMessage handleReceived(const meshtastic_MeshPacket &mp) override
+    {
+        myReply = allocErrorResponse(meshtastic_Routing_Error_ADMIN_PUBLIC_KEY_UNAUTHORIZED, &mp);
+        return ProcessMessage::CONTINUE;
+    }
+};
+
 class SyntheticReplyModule : public MeshModule
 {
   public:
@@ -553,6 +569,38 @@ static void test_dispatch_noResponderSendsNak()
     TEST_ASSERT_EQUAL_UINT32(1, mockRoutingModule->ackNaks.size());
     TEST_ASSERT_EQUAL(meshtastic_Routing_Error_NO_RESPONSE, mockRoutingModule->ackNaks[0].error);
     TEST_ASSERT_EQUAL_HEX32(REMOTE_NODE, mockRoutingModule->ackNaks[0].to);
+}
+
+// A refused admin write asks for an ACK but no response. The refusal must reach the sender as a NAK,
+// or ReliableRouter's plain ACK tells the client the write was applied.
+static void test_dispatch_refusalWithoutWantResponse_sendsNak()
+{
+    registerDispatchModule(new RefusingModule());
+    meshtastic_MeshPacket request = makeRequest(meshtastic_PortNum_ADMIN_APP);
+    request.decoded.want_response = false;
+    request.want_ack = true;
+
+    MeshModule::callModules(request);
+
+    TEST_ASSERT_EQUAL_UINT32(1, mockRouter->sentPackets.size());
+    const meshtastic_MeshPacket &nak = mockRouter->sentPackets[0];
+    TEST_ASSERT_EQUAL(meshtastic_PortNum_ROUTING_APP, nak.decoded.portnum);
+    TEST_ASSERT_EQUAL_HEX32(REMOTE_NODE, nak.to);
+    TEST_ASSERT_EQUAL_HEX32(request.id, nak.decoded.request_id);
+    TEST_ASSERT_FALSE(nak.want_ack);
+    TEST_ASSERT_EQUAL_UINT32(0, mockRoutingModule->ackNaks.size());
+}
+
+// Without want_ack the sender expects no answer at all, so the refusal is still discarded.
+static void test_dispatch_refusalWithoutWantAck_isDiscarded()
+{
+    registerDispatchModule(new RefusingModule());
+    meshtastic_MeshPacket request = makeRequest(meshtastic_PortNum_ADMIN_APP);
+    request.decoded.want_response = false;
+
+    MeshModule::callModules(request);
+
+    TEST_ASSERT_EQUAL_UINT32(0, mockRouter->sentPackets.size());
 }
 
 static void test_dispatch_ignoreRequestIsClearedPerPacket()
@@ -1018,6 +1066,8 @@ void setup()
     RUN_TEST(test_dispatch_crossPortReplyUsesRequestOwner);
     RUN_TEST(test_dispatch_foreignPortObserverCanSuppressNak);
     RUN_TEST(test_dispatch_noResponderSendsNak);
+    RUN_TEST(test_dispatch_refusalWithoutWantResponse_sendsNak);
+    RUN_TEST(test_dispatch_refusalWithoutWantAck_isDiscarded);
     RUN_TEST(test_dispatch_ignoreRequestIsClearedPerPacket);
     RUN_TEST(test_dispatch_realNeighborInfoCannotShadowTelemetryOwner);
     RUN_TEST(test_localReplyToSelf_isDeliveredToPhone);
