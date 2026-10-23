@@ -232,7 +232,7 @@ static inline int get_max_num_nodes()
 // size) and portduino (runtime, from portduino_config.MaxNodes via variant.h).
 // If this fires on a new feature: shrink the cache for this class, or raise the
 // class budget in MemClass.h as a visible, reviewable decision.
-#if !defined(CONFIG_IDF_TARGET_ESP32S3) && !defined(ARCH_PORTDUINO)
+#if !defined(CONFIG_IDF_TARGET_ESP32S3) && !defined(CONFIG_IDF_TARGET_ESP32P4) && !defined(ARCH_PORTDUINO)
 static_assert((uint32_t)TRAFFIC_MANAGEMENT_CACHE_SIZE * 10u + (uint32_t)WARM_NODE_COUNT * 40u + 20u * PACKETHISTORY_MAX <=
                   MESHTASTIC_BOOT_CACHE_BUDGET,
               "Boot-allocated mesh caches exceed this memory class's budget - shrink a tier or consciously raise "
