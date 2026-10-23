@@ -15,6 +15,7 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
     libssl-dev \
     libulfius-dev \
     libyaml-cpp-dev \
+    libavahi-client-dev \
     libjsoncpp-dev \
     pipx \
     pkg-config \

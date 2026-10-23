@@ -596,6 +596,9 @@ bool Channels::setDefaultPresetCryptoForHash(ChannelHash channelHash)
 
 bool Channels::isAEADEnabled(ChannelIndex chIndex)
 {
+    // Receive paths pass a packet's channel index unchecked; an out-of-range one is simply not AEAD.
+    if (chIndex >= getNumChannels())
+        return false;
     auto &ch = getByIndex(chIndex);
     return ch.has_settings && ch.settings.use_aead;
 }
