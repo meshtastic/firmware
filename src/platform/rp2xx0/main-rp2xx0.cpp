@@ -88,15 +88,41 @@ void cpuDeepSleep(uint32_t msecs)
 }
 #endif
 
+#if HAS_BLUETOOTH
+#include "NodeDB.h"
+#include "PicoWBluetooth.h"
 void setBluetoothEnable(bool enable)
 {
-    // not needed
+    // One-time BTstack bring-up, then advertising follows the user's Bluetooth config only. The power FSM also calls
+    // this with enable=false from its battery-saving states, which a USB-powered Pico has no use for; a Wi-Fi-enabled
+    // node never advertises (the CYW43 runs one radio stack at a time from the phone's point of view).
+    (void)enable;
+    if (!picoWBluetooth) {
+        picoWBluetooth = new PicoWBluetooth();
+        picoWBluetooth->setup();
+    }
+    if (!config.bluetooth.enabled || config.network.wifi_enabled)
+        picoWBluetooth->shutdown();
+    else
+        picoWBluetooth->startAdvertising();
+}
+
+void updateBatteryLevel(uint8_t level)
+{
+    if (picoWBluetooth)
+        picoWBluetooth->setBatteryLevel(level);
+}
+#else
+void setBluetoothEnable(bool enable)
+{
+    // no BLE stack on this target
 }
 
 void updateBatteryLevel(uint8_t level)
 {
     // not needed
 }
+#endif
 
 void getMacAddr(uint8_t *dmac)
 {
