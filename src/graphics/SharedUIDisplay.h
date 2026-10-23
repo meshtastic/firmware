@@ -73,7 +73,8 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
                       uint16_t title_color_override = 0);
 
 // Shared battery/time/mail header
-void drawCommonFooter(OLEDDisplay *display, int16_t x, int16_t y);
+// wipe=false omits the black band behind the icon.
+void drawCommonFooter(OLEDDisplay *display, int16_t x, int16_t y, bool wipe = true);
 
 // Inline so non-compact boards fold this to a constant false at every call site, cost-free.
 static inline bool isCompactPanel(OLEDDisplay *display)
