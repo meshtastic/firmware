@@ -492,6 +492,11 @@ std::unique_ptr<RadioInterface> initLoRa()
 #endif
         if (!sxIf->init()) {
             LOG_WARN("No SX1262 radio");
+#if (defined(USE_LR1121) || defined(USE_LR2021)) && defined(SX126X_RXEN) && (SX126X_RXEN != RADIOLIB_NC)
+            // A begin() that succeeded before a later setup call failed leaves RXEN an output, and the
+            // LR2021 module drives the same pin itself; on the LR1121 module it is the radio's IRQ
+            pinMode(SX126X_RXEN, INPUT);
+#endif
             rIf = nullptr;
         } else {
             LOG_INFO("SX1262 init success");
@@ -511,7 +516,7 @@ std::unique_ptr<RadioInterface> initLoRa()
             LOG_WARN("No SX1262 radio with TCXO, Vref %fV", SX126X_DIO3_TCXO_VOLTAGE);
             rIf = nullptr;
         } else {
-            LOG_INFO("SX1262 init success, TCXO, Vref %fV", SX126X_DIO3_TCXO_VOLTAGE);
+            LOG_INFO("SX1262 init success, %s, Vref %.1fV", sxIf->getTCXOVoltage() > 0 ? "TCXO" : "XTAL", sxIf->getTCXOVoltage());
             rIf = std::move(sxIf);
             radioType = SX1262_RADIO;
         }
@@ -541,7 +546,7 @@ std::unique_ptr<RadioInterface> initLoRa()
             LOG_WARN("No SX1268 radio with TCXO, Vref %fV", SX126X_DIO3_TCXO_VOLTAGE);
             rIf = nullptr;
         } else {
-            LOG_INFO("SX1268 init success, TCXO, Vref %fV", SX126X_DIO3_TCXO_VOLTAGE);
+            LOG_INFO("SX1268 init success, %s, Vref %.1fV", sxIf->getTCXOVoltage() > 0 ? "TCXO" : "XTAL", sxIf->getTCXOVoltage());
             rIf = std::move(sxIf);
             radioType = SX1268_RADIO;
         }

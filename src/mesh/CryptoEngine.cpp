@@ -125,7 +125,7 @@ static void putLE32(uint8_t *out, uint32_t v)
  *  - to: without it a signed broadcast can be re-addressed as a direct message and still verify,
  *    delivering a public statement as an apparent private one. Relays rewrite hop_limit, next_hop
  *    and relay_node, never `to`, so it is stable end to end.
- *  - request_id: only reachable in ham mode, where licensed nodes sign unicasts too, but free.
+ *  - request_id: carried by signed replies - NodeInfo and position replies, and replies in ham mode.
  *
  * Deliberately NOT covered: dest and source (one write in the tree, no readers), channel (the wire
  * carries a hash where the decoded packet carries an index), and the hop fields, which relays

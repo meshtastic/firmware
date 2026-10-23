@@ -256,9 +256,14 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     uint32_t rxFlagsSeenMs = 0;
     // rxFlagsSeenMs was stamped by a header, not by a bare preamble before it
     bool rxFlagsSeenHeader = false;
+    // ...and that header was a valid one, not a failed header before it
+    bool rxFlagsSeenValidHeader = false;
 
     /** Plain-RX twin of checkCadHandoffTimeout(): retire flags no RX_DONE consumed within a max packet. */
     virtual void checkStaleRxFlags();
+
+    /** Whether a header error leaves this chip's RX wedged, so only a re-arm recovers it (SX1280 DS 16.2). */
+    virtual bool headerErrWedgesRx() const { return false; }
 
     /**
      * Reset AGC by power-cycling the analog frontend.
@@ -529,14 +534,15 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     static bool isRadioLibTimeError(RadioLibTime_t usec) { return usec == 0 || usec >= (RadioLibTime_t)0 - 32768; }
 
     /**
-     * Derive packet time either for a received (using header info) or a transmitted packet
+     * Derive packet time either for a received (using header info) or a transmitted packet.
+     * Without useRxHeaderInfo a received packet is timed on the configured coding rate and CRC.
      */
-    template <typename T> uint32_t computePacketTime(T &lora, uint32_t pl, bool received)
+    template <typename T> uint32_t computePacketTime(T &lora, uint32_t pl, bool received, bool useRxHeaderInfo = true)
     {
         DataRate_t dr = getDataRate();
         PacketConfig_t pc = getPacketConfig();
 
-        if (received) {
+        if (received && useRxHeaderInfo) {
             // Received packet configuration must be the same as configured, except for coding rate and CRC
             uint8_t rxCR = 0;
             bool hasCRC = true;
@@ -568,7 +574,7 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
                     pc.lora.crcEnabled = hasCRC;
                 }
             }
-        } else {
+        } else if (!received) {
             // Reads the packet type back over SPI, so a chip that lost its config answers WRONG_MODEM. Called after every
             // send by finishSentPacket() and the router, which hold no sequence: unlocked, a readout could land inside it.
             RadioLibTime_t reported;
