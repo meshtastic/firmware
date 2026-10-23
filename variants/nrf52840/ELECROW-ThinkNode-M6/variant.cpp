@@ -45,8 +45,9 @@ void variant_shutdown()
 {
     // This sets the pin to OUTPUT and LOW for the pins *not* in the if block.
     for (int pin = 0; pin < 48; pin++) {
-        if (pin == PIN_GPS_EN || pin == ADC_CTRL || pin == PIN_BUTTON1 || pin == PIN_SPI_MISO || pin == PIN_SPI_MOSI ||
-            pin == PIN_SPI_SCK || pin == SX126X_CS || pin == SX126X_RESET || pin == SX126X_BUSY || pin == SX126X_DIO1) {
+        if (pin == PIN_GPS_EN || pin == ADC_CTRL || pin == PIN_BUTTON1 || pin == EXT_PWR_DETECT || pin == BATTERY_PIN ||
+            pin == PIN_SPI_MISO || pin == PIN_SPI_MOSI || pin == PIN_SPI_SCK || pin == SX126X_CS || pin == SX126X_RESET ||
+            pin == SX126X_BUSY || pin == SX126X_DIO1) {
             continue;
         }
         pinMode(pin, OUTPUT);
@@ -66,11 +67,11 @@ void variant_shutdown()
     nrf_gpio_pin_sense_t sense1 = NRF_GPIO_PIN_SENSE_LOW;
     nrf_gpio_cfg_sense_set(PIN_BUTTON1, sense1);
 
-    // If we are sleeping because of low battery, wake up when the solar charger detects power.
-    // But if the user intentionally put us to sleep with the button, don't wake up just because the lights are on
-    if (power->isLowBattery()) {
-        nrf_gpio_cfg_input(EXT_CHRG_DETECT, NRF_GPIO_PIN_PULLUP); // Configure the pin to be woken up as an input
-        nrf_gpio_pin_sense_t sense2 = NRF_GPIO_PIN_SENSE_LOW;
-        nrf_gpio_cfg_sense_set(EXT_CHRG_DETECT, sense2);
-    }
+    nrf_gpio_cfg_sense_input(EXT_PWR_DETECT, NRF_GPIO_PIN_NOPULL, NRF_GPIO_PIN_SENSE_HIGH);
+    nrf_gpio_cfg_default(BATTERY_PIN);
+}
+
+bool variant_enableBatteryLpcompWake()
+{
+    return power && power->isLowBattery();
 }
