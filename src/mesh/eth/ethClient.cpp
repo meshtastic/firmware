@@ -27,19 +27,25 @@
 #endif
 #include <SPI.h>
 
+#ifdef RAK3312_ETH_GW
+// Dedicated second SPI peripheral for the RAK13800: the shared global `SPI` object is
+// already begin()'d for the LoRa radio and a re-begin() with different pins is a no-op.
+SPIClass EthSPI(HSPI);
+#endif
+
 #if HAS_NETWORKING && !defined(USE_WS5500) && !defined(USE_CH390D)
 
 #ifndef DISABLE_NTP
 #include <NTPClient.h>
 
 // NTP
-EthernetUDP ntpUDP;
-NTPClient timeClient(ntpUDP, config.network.ntp_server);
+EthernetUDP ethNtpUDP;
+NTPClient ethTimeClient(ethNtpUDP, config.network.ntp_server);
 uint32_t ntp_renew = 0;
 #endif
 
-EthernetUDP syslogClient;
-meshtastic::Syslog syslog(syslogClient);
+EthernetUDP ethSyslogClient;
+meshtastic::Syslog ethSyslog(ethSyslogClient);
 
 bool ethStartupComplete = 0;
 
@@ -64,9 +70,9 @@ static int32_t reconnectETH()
         if (memcmp(currentMac, expectedMac, 6) != 0) {
             LOG_WARN("W5100S MAC mismatch (chip reset detected), reinitializing Ethernet");
 
-            syslog.disable();
+            ethSyslog.disable();
 #if !MESHTASTIC_EXCLUDE_SOCKETAPI
-            deInitApiServer();
+            deInitEthSocketApiServer();
 #endif
 #if HAS_ETHERNET && defined(HAS_ETHERNET_API)
             // Drop the HTTP/80 listener; the restart path below rebinds it. Without
@@ -109,6 +115,8 @@ static int32_t reconnectETH()
             ETH_SPI_PORT.setTX(PIN_SPI0_MOSI);
             ETH_SPI_PORT.setRX(PIN_SPI0_MISO);
             ETH_SPI_PORT.begin();
+#elif defined(RAK3312_ETH_GW)
+            ETH_SPI_PORT.begin(ETH_SCLK_PIN, ETH_MISO_PIN, ETH_MOSI_PIN, PIN_ETHERNET_SS);
 #endif
             Ethernet.init(ETH_SPI_PORT, PIN_ETHERNET_SS);
 #endif
@@ -142,7 +150,7 @@ static int32_t reconnectETH()
 
 #ifndef DISABLE_NTP
             LOG_INFO("Start NTP time client");
-            timeClient.setUpdateInterval(60 * 60); // Update once an hour
+            ethTimeClient.setUpdateInterval(60 * 60); // Update once an hour
 #endif
 
             if (config.network.rsyslog_server[0]) {
@@ -158,16 +166,16 @@ static int32_t reconnectETH()
                     serverPort = port.toInt();
                     serverAddr = server.c_str();
                 }
-                syslog.server(serverAddr, serverPort);
-                syslog.deviceHostname(getDeviceName());
-                syslog.appName("Meshtastic");
-                syslog.defaultPriority(LOGLEVEL_USER);
-                syslog.enable();
+                ethSyslog.server(serverAddr, serverPort);
+                ethSyslog.deviceHostname(getDeviceName());
+                ethSyslog.appName("Meshtastic");
+                ethSyslog.defaultPriority(LOGLEVEL_USER);
+                ethSyslog.enable();
             }
 
 #if !MESHTASTIC_EXCLUDE_SOCKETAPI
             if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
-                initApiServer();
+                initEthSocketApiServer(SERVER_API_DEFAULT_PORT);
             }
 #endif
 #if HAS_UDP_MULTICAST
@@ -203,11 +211,11 @@ static int32_t reconnectETH()
     if (isEthernetAvailable() && (ntp_renew == 0 || Throttle::deadlinePassed(ntp_renew))) {
 
         LOG_INFO("Update NTP time from %s", config.network.ntp_server);
-        if (timeClient.update()) {
+        if (ethTimeClient.update()) {
             LOG_DEBUG("NTP Request Success - Set RTCQualityNTP if needed");
 
             struct timeval tv;
-            tv.tv_sec = timeClient.getEpochTime();
+            tv.tv_sec = ethTimeClient.getEpochTime();
             tv.tv_usec = 0;
 
             perhapsSetRTC(RTCQualityNTP, &tv);
@@ -217,7 +225,7 @@ static int32_t reconnectETH()
             LOG_ERROR("NTP Update failed");
             ntp_renew = Time::timerEndsAtMillis(300 * 1000); // failure, retry every 5 minutes
         }
-        timeClient.end(); // W5100S: release UDP socket for other services
+        ethTimeClient.end(); // W5100S: release UDP socket for other services
     }
 #endif
 
@@ -258,6 +266,8 @@ bool initEthernet()
         ETH_SPI_PORT.setTX(PIN_SPI0_MOSI);
         ETH_SPI_PORT.setRX(PIN_SPI0_MISO);
         ETH_SPI_PORT.begin();
+#elif defined(RAK3312_ETH_GW)
+        ETH_SPI_PORT.begin(ETH_SCLK_PIN, ETH_MISO_PIN, ETH_MOSI_PIN, PIN_ETHERNET_SS);
 #endif
         Ethernet.init(ETH_SPI_PORT, PIN_ETHERNET_SS);
 #endif
@@ -323,13 +333,13 @@ bool isEthernetAvailable()
 {
 
     if (!config.network.eth_enabled) {
-        syslog.disable();
+        ethSyslog.disable();
         return false;
     } else if (Ethernet.hardwareStatus() == EthernetNoHardware) {
-        syslog.disable();
+        ethSyslog.disable();
         return false;
     } else if (Ethernet.linkStatus() == LinkOFF) {
-        syslog.disable();
+        ethSyslog.disable();
         return false;
     } else {
         return true;
