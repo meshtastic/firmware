@@ -26,6 +26,22 @@
 #include <RAK13800_W5100S.h>
 #endif
 #include <SPI.h>
+#ifdef ARCH_ESP32
+#include <esp_mac.h>
+#endif
+
+// MAC address for the Ethernet interface. On ESP32 boards the default MAC is the WiFi station MAC,
+// so with WiFi and Ethernet enabled at the same time both interfaces would share one MAC and the
+// Ethernet side becomes unreachable. Use the chip's dedicated Ethernet MAC there instead.
+static void getEthMacAddr(uint8_t *mac)
+{
+#ifdef ARCH_ESP32
+    if (esp_read_mac(mac, ESP_MAC_ETH) == ESP_OK)
+        return;
+#endif
+    getMacAddr(mac); // FIXME use the BLE MAC for now...
+    mac[0] &= 0xfe;  // Make sure this is not a multicast MAC
+}
 
 #ifdef RAK3312_ETH_GW
 // Dedicated second SPI peripheral for the RAK13800: the shared global `SPI` object is
@@ -64,8 +80,7 @@ static int32_t reconnectETH()
         Ethernet.MACAddress(currentMac);
 
         uint8_t expectedMac[6];
-        getMacAddr(expectedMac);
-        expectedMac[0] &= 0xfe;
+        getEthMacAddr(expectedMac);
 
         if (memcmp(currentMac, expectedMac, 6) != 0) {
             LOG_WARN("W5100S MAC mismatch (chip reset detected), reinitializing Ethernet");
@@ -278,8 +293,7 @@ bool initEthernet()
 
         //        createSSLCert();
 
-        getMacAddr(mac); // FIXME use the BLE MAC for now...
-        mac[0] &= 0xfe;  // Make sure this is not a multicast MAC
+        getEthMacAddr(mac);
 
         if (config.network.address_mode == meshtastic_Config_NetworkConfig_AddressMode_DHCP) {
             LOG_INFO("Start Ethernet DHCP");
