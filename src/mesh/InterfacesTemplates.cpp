@@ -2,6 +2,7 @@
 
 #include "LR11x0Interface.cpp"
 #include "LR11x0Interface.h"
+#include "LR2021Patched.h"
 #include "LR20x0Interface.cpp"
 #include "LR20x0Interface.h"
 #include "SX126xInterface.cpp"
@@ -28,7 +29,7 @@ template class LR11x0Interface<LR1120>;
 template class LR11x0Interface<LR1121>;
 #endif
 #if (defined(USE_LR2021) || defined(ARCH_PORTDUINO)) && RADIOLIB_EXCLUDE_LR2021 != 1
-template class LR20x0Interface<LR2021>;
+template class LR20x0Interface<LR2021Patched>;
 #endif
 #ifdef ARCH_STM32WL
 template class SX126xInterface<STM32WLx>;
