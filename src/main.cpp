@@ -163,11 +163,11 @@ void printPartitionTable()
 #include "AmbientLightingThread.h"
 #include "PowerFSMThread.h"
 
-#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && !MESHTASTIC_EXCLUDE_ACCELEROMETER
+#if !MESHTASTIC_EXCLUDE_ACCELEROMETER
 #include "motion/AccelerometerThread.h"
 AccelerometerThread *accelerometerThread = nullptr;
 #endif
-#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && !MESHTASTIC_EXCLUDE_MAGNETOMETER
+#if !MESHTASTIC_EXCLUDE_MAGNETOMETER
 #include "motion/MagnetometerThread.h"
 MagnetometerThread *magnetometerThread = nullptr;
 #endif
@@ -273,8 +273,9 @@ bool pauseBluetoothLogging = false;
 
 bool pmu_found;
 
-#if !MESHTASTIC_EXCLUDE_I2C
-// Array map of sensor types with i2c address and wire as we'll find in the i2c scan
+#if !MESHTASTIC_EXCLUDE_I2C || !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR || !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR
+// Array map of sensor types with i2c address and wire as we'll find in the i2c scan.
+// Telemetry sensors (TelemetrySensor.h) read it, so keep it (empty) when only I2C is excluded.
 std::pair<uint8_t, TwoWire *> nodeTelemetrySensorsMap[_meshtastic_TelemetrySensorType_MAX + 1] = {};
 #endif
 
@@ -808,12 +809,12 @@ void setup()
     }
 #endif
 
-#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ACCELEROMETER
+#if !MESHTASTIC_EXCLUDE_ACCELEROMETER
     auto acc_info = i2cScanner->firstAccelerometer();
     accelerometer_found = acc_info.type != ScanI2C::DeviceType::NONE ? acc_info.address : accelerometer_found;
     LOG_DEBUG("acc_info = %i", acc_info.type);
 #endif
-#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_MAGNETOMETER
+#if !MESHTASTIC_EXCLUDE_MAGNETOMETER
     auto mag_info = i2cScanner->firstMagnetometer();
 #if !MESHTASTIC_EXCLUDE_ACCELEROMETER
     if (mag_info.type == acc_info.type) // a BMM150 with no accelerometer beside it is already the accelerometer thread's
@@ -918,12 +919,12 @@ void setup()
 #endif
 
 #if !MESHTASTIC_EXCLUDE_I2C
-#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ACCELEROMETER
+#if !MESHTASTIC_EXCLUDE_ACCELEROMETER
     if (acc_info.type != ScanI2C::DeviceType::NONE) {
         accelerometerThread = new AccelerometerThread(acc_info.type);
     }
 #endif
-#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_MAGNETOMETER
+#if !MESHTASTIC_EXCLUDE_MAGNETOMETER
     if (mag_info.type != ScanI2C::DeviceType::NONE) {
         magnetometerThread = new MagnetometerThread(mag_info.type);
     }
@@ -1147,13 +1148,14 @@ void setup()
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_NO_AXP192); // Record a hardware fault for missing hardware
 #endif
 
-#if !MESHTASTIC_EXCLUDE_I2C
 // Don't call screen setup until after nodedb is setup (because we need
 // the current region name)
 #if defined(HAS_SPI_TFT) || defined(USE_EINK) || defined(USE_SPISSD1306)
+    // SPI/e-ink panels don't depend on the I2C scan, so set them up even with I2C excluded
     if (screen)
         screen->setup();
-#elif defined(ARCH_PORTDUINO)
+#elif !MESHTASTIC_EXCLUDE_I2C
+#if defined(ARCH_PORTDUINO)
     if ((screen_found.port != ScanI2C::I2CPort::NO_I2C || portduino_config.displayPanel) &&
         config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
         screen->setup();
