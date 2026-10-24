@@ -17,7 +17,12 @@ struct TFTColorRegion {
     bool enabled = false;
 };
 #ifndef MAX_TFT_COLOR_REGIONS
+#ifdef HELTEC_MESH_POCKET_V2
+// Keep the power-page sprites and navigation overlay in the same frame.
+static constexpr size_t MAX_TFT_COLOR_REGIONS = 96;
+#else
 static constexpr size_t MAX_TFT_COLOR_REGIONS = 48;
+#endif
 #endif
 extern TFTColorRegion colorRegions[MAX_TFT_COLOR_REGIONS];
 
