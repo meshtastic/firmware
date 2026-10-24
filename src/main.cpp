@@ -367,7 +367,36 @@ void printInfo()
     LOG_INFO("S:B:%d,%s,%s,%s", HW_VENDOR, optstr(APP_VERSION), optstr(APP_ENV), optstr(APP_REPO));
 }
 #ifndef PIO_UNIT_TESTING
+#if defined(ARCH_RP2040) && HAS_BLUETOOTH
+// The arduino-pico core runs setup()/loop() on a 4 KB FreeRTOS task. With the Bluetooth transport in the loop that
+// overflows (config/nodeinfo structs on the stack), so the firmware runs on its own, larger task instead, pinned to
+// core 0 like the core's own task: the CYW43 glue asserts that its GPIO interrupt and poll run there.
+#include <FreeRTOS.h>
+#include <task.h>
+static void meshtasticSetup();
+static void meshtasticLoop();
+static void meshtasticMainTask(void *)
+{
+    meshtasticSetup();
+    for (;;)
+        meshtasticLoop();
+}
 void setup()
+{
+    TaskHandle_t h = nullptr;
+    if (xTaskCreateAffinitySet(meshtasticMainTask, "meshtastic", 2560, nullptr, configMAX_PRIORITIES / 2, 1 << 0, &h) !=
+        pdPASS) {
+        // Out of heap this early is not recoverable; the watchdog armed by rp2040Loop() never runs, so reboot.
+        LOG_ERROR("Can't create the firmware task");
+        rp2040.reboot();
+    }
+    vTaskDelete(nullptr); // the core's own task is no longer needed
+}
+void loop() {}
+static void meshtasticSetup()
+#else
+void setup()
+#endif
 {
 
     // initialize power HAL layer as early as possible
@@ -1375,7 +1404,7 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
 // Pico W / 2W may get it at some point
 // ESP32-C6 is excluded because we don't have a working bluetooth stack integrated yet.
 // Portduino only has BLE when built against BlueZ/sdbus-c++, so it falls out via !HAS_BLUETOOTH.
-#if defined(ARCH_RP2040) || defined(ARCH_STM32) || defined(CONFIG_IDF_TARGET_ESP32C6) || !HAS_BLUETOOTH
+#if defined(ARCH_STM32) || defined(CONFIG_IDF_TARGET_ESP32C6) || !HAS_BLUETOOTH
     deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_BLUETOOTH_CONFIG;
 #endif
 
@@ -1405,7 +1434,11 @@ void scannerToSensorsMap(const std::unique_ptr<ScanI2CTwoWire> &i2cScanner, Scan
 #endif
 
 #ifndef PIO_UNIT_TESTING
+#if defined(ARCH_RP2040) && HAS_BLUETOOTH
+static void meshtasticLoop()
+#else
 void loop()
+#endif
 {
     runASAP = false;
 
