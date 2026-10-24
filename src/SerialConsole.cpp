@@ -340,6 +340,19 @@ bool SerialConsole::handleToRadio(const uint8_t *buf, size_t len)
     }
 }
 
+#if HAS_SERIAL_HAL_DEVICE
+/// Arm the TX path for a SerialHal reply, then dispatch to the device handler.
+/// handleToRadio() normally flips canWrite/host-draining, but a pure serial-hal host
+/// never sends a ToRadio frame, so without this every emitSerialHalResponse() is
+/// dropped (canWrite stays false) and the host only ever sees a response timeout.
+void SerialConsole::handleSerialHalCommand(const uint8_t *buf, size_t len)
+{
+    setHostDraining(true);
+    canWrite = true;
+    StreamAPI::handleSerialHalCommand(buf, len);
+}
+#endif
+
 /// Route logs without allowing raw bytes into an active protobuf stream.
 void SerialConsole::log_to_serial(const char *logLevel, const char *format, va_list arg)
 {
