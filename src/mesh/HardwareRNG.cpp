@@ -82,6 +82,8 @@ bool fillFromStm32Rng(uint8_t *buffer, size_t length)
     }
     HAL_RNG_DeInit(&rng);
     __HAL_RCC_RNG_CLK_DISABLE();
+    if (!ok)
+        LOG_WARN("STM32WL RNG failed, falling back to software entropy");
     return ok;
 }
 #endif
@@ -170,8 +172,6 @@ bool fill(uint8_t *buffer, size_t length, bool useRadioEntropy)
     filled = true;
 #elif defined(ARCH_STM32WL) && defined(HAL_RNG_MODULE_ENABLED)
     filled = fillFromStm32Rng(buffer, length);
-    if (!filled)
-        LOG_WARN("STM32WL RNG failed, falling back to software entropy");
 #elif defined(ARCH_PORTDUINO)
     // Prefer the host OS RNG first when running under Portduino.
 #ifdef __linux__
