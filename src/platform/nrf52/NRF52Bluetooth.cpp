@@ -25,14 +25,73 @@ static int lastBatteryLevel = -1; // last value written to BAS, to skip redundan
 #ifndef BLE_DFU_SECURE
 namespace
 {
-// The library's DFU handler jumps to the bootloader from the callback task with no flash quiesce, so
-// wrap it: wait out any write in flight first, and unlock again if it comes back without jumping.
+// START_DFU is handled here rather than by the library: wait out any flash write in flight, then reset into the
+// bootloader with the OTA magic instead of the library's jump, and unlock again if it returns without resetting.
 class QuiescingBLEDfu : public BLEDfu
 {
     struct Peek : BLECharacteristic {
         using BLECharacteristic::_wr_authorize_cb;
     };
     static BLECharacteristic::write_authorize_cb_t libraryCb;
+
+    // The bootloader reads this from .noinit to reconnect to the same peer; layout and CRC match the library's.
+    struct PeerData {
+        ble_gap_addr_t addr;
+        ble_gap_irk_t irk;
+        ble_gap_enc_key_t enc_key;
+        uint8_t sys_attr[8];
+        uint16_t crc16;
+    };
+    static_assert(offsetof(PeerData, crc16) == 60, "bootloader peer data layout");
+
+    static uint16_t crc16(const uint8_t *data, uint8_t length)
+    {
+        uint16_t crc = 0xFFFF;
+        while (length--) {
+            uint8_t x = crc >> 8 ^ *data++;
+            x ^= x >> 4;
+            crc = (crc << 8) ^ (uint16_t)(x << 12) ^ (uint16_t)(x << 5) ^ (uint16_t)x;
+        }
+        return crc;
+    }
+
+    // Leaves through a reset, never the library's switch to the main stack and jump: the compiler may still pop the
+    // task's frame after the switch, from the wrong stack.
+    static void startDfu(uint16_t conn_hdl, BLECharacteristic *chr, ble_gatts_evt_write_t *request)
+    {
+        if (request->handle != chr->handles().value_handle || request->op == BLE_GATTS_OP_PREP_WRITE_REQ ||
+            request->op == BLE_GATTS_OP_EXEC_WRITE_REQ_NOW || request->op == BLE_GATTS_OP_EXEC_WRITE_REQ_CANCEL)
+            return;
+
+        BLEConnection *conn = Bluefruit.Connection(conn_hdl);
+        ble_gatts_rw_authorize_reply_params_t reply = {.type = BLE_GATTS_AUTHORIZE_TYPE_WRITE};
+        if (!chr->notifyEnabled(conn_hdl)) {
+            reply.params.write.gatt_status = BLE_GATT_STATUS_ATTERR_CPS_CCCD_CONFIG_ERROR;
+            sd_ble_gatts_rw_authorize_reply(conn_hdl, &reply);
+            return;
+        }
+        reply.params.write.gatt_status = BLE_GATT_STATUS_SUCCESS;
+        sd_ble_gatts_rw_authorize_reply(conn_hdl, &reply);
+
+        PeerData *peer = reinterpret_cast<PeerData *>(0x20007F80UL);
+        memset(peer, 0, sizeof(*peer));
+        uint16_t sysAttrLen = sizeof(peer->sys_attr);
+        sd_ble_gatts_sys_attr_get(conn_hdl, peer->sys_attr, &sysAttrLen, BLE_GATTS_SYS_ATTR_FLAG_SYS_SRVCS);
+        peer->addr = conn->getPeerAddr();
+        if (conn->secured()) {
+            bond_keys_t keys;
+            if (conn->loadBondKey(&keys)) {
+                peer->addr = keys.peer_id.id_addr_info;
+                peer->irk = keys.peer_id.id_info;
+                peer->enc_key = keys.own_enc;
+            }
+        }
+        peer->crc16 = crc16(reinterpret_cast<const uint8_t *>(peer), offsetof(PeerData, crc16));
+
+        Bluefruit.Advertising.restartOnDisconnect(false);
+        conn->disconnect();
+        enterOTADfu();
+    }
 
     static void onControlWrite(uint16_t conn_hdl, BLECharacteristic *chr, ble_gatts_evt_write_t *request)
     {
@@ -42,10 +101,10 @@ class QuiescingBLEDfu : public BLEDfu
             return;
         }
         nrf52FlashQuiesce();
-        // The handler reloads the bond keys through LittleFS, so it cannot run under the FS mutex; spiLock still
-        // fences every other writer until the jump.
+        // Loading the bond keys goes through LittleFS, so it cannot run under the FS mutex; spiLock still fences
+        // every other writer until the reset.
         InternalFS._unlockFS();
-        libraryCb(conn_hdl, chr, request);
+        startDfu(conn_hdl, chr, request);
         spiLock->unlock();
     }
 
