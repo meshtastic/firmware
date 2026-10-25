@@ -99,5 +99,6 @@ static const uint8_t SCK = PIN_SPI_SCK;
 
 #define LR11X0_DIO_AS_RF_SWITCH
 #define LR11X0_DIO3_TCXO_VOLTAGE 1.8f
+#define LR11X0_FORCE_HP_PA
 
 #endif
