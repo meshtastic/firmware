@@ -91,7 +91,7 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define LR1121_NRESET_PIN   64   // P2.00
 #define LR1121_BUSY_PIN     67   // P2.03
 #define LR1121_SPI_NSS_PIN  69   // P2.05
-#define LR1121_IRQ_PIN      70   // P2.06
+#define LR1121_IRQ_PIN      44   // P1.12
 
 #define LR1121_SPI_SCK_PIN  PIN_SPI_SCK
 #define LR1121_SPI_MOSI_PIN PIN_SPI_MOSI
