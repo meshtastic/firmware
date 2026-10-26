@@ -23,6 +23,75 @@
 #include "nrf.h"
 #include "wiring_constants.h"
 #include "wiring_digital.h"
+#include <Arduino.h>
+#include <nrf_sdm.h>
+#include <nrf_soc.h>
+
+// GPREGRET2 survives a soft reset but is cleared on power-on/brownout
+#define LOWBAT_DUTY_MAGIC 0xB5
+
+void nrf52FlashQuiesce();
+
+static TaskHandle_t lowBatWaitTask;
+
+static void lowBatWakeIsr()
+{
+    BaseType_t woken = pdFALSE;
+    vTaskNotifyGiveFromISR(lowBatWaitTask, &woken);
+    portYIELD_FROM_ISR(woken);
+}
+
+static uint32_t readBatteryMv()
+{
+    pinMode(ADC_CTRL, OUTPUT);
+    digitalWrite(ADC_CTRL, ADC_CTRL_ENABLED);
+    delay(10);
+    analogReference(VBAT_AR_INTERNAL);
+    analogReadResolution(BATTERY_SENSE_RESOLUTION_BITS);
+    uint32_t raw = 0;
+    for (int i = 0; i < BATTERY_SENSE_SAMPLES; i++)
+        raw += analogRead(BATTERY_PIN);
+    digitalWrite(ADC_CTRL, !ADC_CTRL_ENABLED);
+    return (float)raw / BATTERY_SENSE_SAMPLES * (AREF_VOLTAGE * 1000.0F / BATTERY_SENSE_RESOLUTION) * ADC_MULTIPLIER;
+}
+
+// No LOG_* here: runs before consoleInit()
+void earlyInitVariant()
+{
+    if (NRF_POWER->GPREGRET2 != LOWBAT_DUTY_MAGIC)
+        return;
+
+    const uint16_t ocv[NUM_OCV_POINTS] = {OCV_ARRAY};
+
+    pinMode(PIN_POWER_EN, OUTPUT);
+    digitalWrite(PIN_POWER_EN, LOW);
+    pinMode(PIN_GPS_EN, OUTPUT);
+    digitalWrite(PIN_GPS_EN, LOW);
+    digitalWrite(VDD_FLASH_EN, LOW);
+    pinMode(EXT_PWR_DETECT, INPUT);
+    pinMode(EXT_CHRG_DETECT, INPUT);
+    pinMode(PIN_BUTTON1, INPUT_PULLUP);
+
+    uint32_t threshold = ocv[NUM_OCV_POINTS - 1] + SOLAR_WAKE_THRESHOLD;
+    if (digitalRead(EXT_CHRG_DETECT) == EXT_CHRG_DETECT_VALUE)
+        threshold += SOLAR_CHARGE_LIFT;
+
+    if (readBatteryMv() < threshold && digitalRead(EXT_PWR_DETECT) != HIGH) {
+        lowBatWaitTask = xTaskGetCurrentTaskHandle();
+        ulTaskNotifyTake(pdTRUE, 0);
+        attachInterrupt(PIN_BUTTON1, lowBatWakeIsr, FALLING);
+        attachInterrupt(EXT_PWR_DETECT, lowBatWakeIsr, RISING);
+
+        delay(300);
+        digitalWrite(LED_POWER, LED_STATE_OFF);
+        // Timeout keeps the flag set so the next boot rechecks; button/USB fall through to a normal boot
+        if (!ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(SOLAR_LOWBAT_RECHECK_SECS * 1000UL)))
+            NVIC_SystemReset();
+    }
+
+    NRF_POWER->GPREGRET2 = 0;
+    NVIC_SystemReset();
+}
 
 const uint32_t g_ADigitalPinMap[] = {
     // P0 - pins 0 and 1 are hardwired for xtal and should never be enabled
@@ -43,6 +112,20 @@ void initVariant()
 // called from main-nrf52.cpp during the cpuDeepSleep() function
 void variant_shutdown()
 {
+    // Low battery: reset into the earlyInitVariant() periodic recheck instead of System OFF
+    if (power && power->isLowBattery()) {
+        uint8_t sdEnabled = 0;
+        sd_softdevice_is_enabled(&sdEnabled);
+        if (sdEnabled) {
+            sd_power_gpregret_clr(1, 0xFF);
+            sd_power_gpregret_set(1, LOWBAT_DUTY_MAGIC);
+        } else {
+            NRF_POWER->GPREGRET2 = LOWBAT_DUTY_MAGIC;
+        }
+        nrf52FlashQuiesce();
+        NVIC_SystemReset();
+    }
+
     // This sets the pin to OUTPUT and LOW for the pins *not* in the if block.
     for (int pin = 0; pin < 48; pin++) {
         if (pin == PIN_GPS_EN || pin == ADC_CTRL || pin == PIN_BUTTON1 || pin == EXT_PWR_DETECT || pin == BATTERY_PIN ||
@@ -69,9 +152,4 @@ void variant_shutdown()
 
     nrf_gpio_cfg_sense_input(EXT_PWR_DETECT, NRF_GPIO_PIN_NOPULL, NRF_GPIO_PIN_SENSE_HIGH);
     nrf_gpio_cfg_default(BATTERY_PIN);
-}
-
-bool variant_enableBatteryLpcompWake()
-{
-    return power && power->isLowBattery();
 }

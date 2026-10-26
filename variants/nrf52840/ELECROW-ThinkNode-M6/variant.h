@@ -137,8 +137,10 @@ static const uint8_t A0 = PIN_A0;
 #define VBAT_AR_INTERNAL AR_INTERNAL_2_4
 #define ADC_MULTIPLIER (1.75F)
 
-#define BATTERY_LPCOMP_INPUT NRF_LPCOMP_INPUT_4
-#define BATTERY_LPCOMP_THRESHOLD NRF_LPCOMP_REF_SUPPLY_5_8 // VDD=3.3V AIN4=5/8*VDD=2.06V VBAT=1.75*AIN4=3.61V
+// Low-battery shutdown rechecks VBAT periodically and boots once it exceeds OCV[last] + threshold
+#define SOLAR_WAKE_THRESHOLD 25       // mV
+#define SOLAR_CHARGE_LIFT 80          // mV, VBAT lift measured while the solar charger is active
+#define SOLAR_LOWBAT_RECHECK_SECS 600 // s
 
 #define HAS_SOLAR
 
