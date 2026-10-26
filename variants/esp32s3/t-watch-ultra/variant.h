@@ -42,7 +42,9 @@
 #define SLEEP_TIME 120
 
 // External expansion chip XL9555
-#define USE_XL9555
+#define USE_PCA95X5
+#define PCA95X5_CLS IoExpanderXL9555
+#define PCA95X5_INC "IoExpanderXL9555.hpp"
 
 // PCF85063 RTC Module
 #define PCF85063_RTC 0x51

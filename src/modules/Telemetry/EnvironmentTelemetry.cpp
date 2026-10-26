@@ -1,3 +1,4 @@
+#include "UptimeClock.h"
 #include "configuration.h"
 
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
@@ -141,6 +142,10 @@ extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const c
 
 #if __has_include(<Adafruit_DS248x.h>)
 #include "Sensor/DS248XSensor.h"
+#endif
+
+#ifdef HAS_RAKHUB
+#include "Sensor/RAKSensorHub.h" // env:rak_wismesh_sensorhub only
 #endif
 
 #define FAILED_STATE_SENSOR_READ_MULTIPLIER 10
@@ -416,11 +421,16 @@ int32_t EnvironmentTelemetryModule::runOnce()
                 result = ina3221Sensor.runOnce();
             if (max17048Sensor.hasSensor())
                 result = max17048Sensor.runOnce();
-                // this only works on the wismesh hub with the solar option. This is not an I2C sensor, so we don't need the
-                // sensormap here.
+            // this only works on the wismesh hub with the solar option. This is not an I2C sensor, so we don't need the
+            // sensormap here.
 #ifdef HAS_RAKPROT
             if (rak9154Sensor.hasSensor())
                 result = rak9154Sensor.runOnce();
+#endif
+#ifdef HAS_RAKHUB
+            // 1-Wire SensorHub poll (not I2C); same UART as legacy RAK9154 but different env macro
+            if (rakSensorHub.hasSensor())
+                result = rakSensorHub.runOnce();
 #endif
 #endif
             refreshDisplayedMeasurement();
@@ -466,7 +476,7 @@ int32_t EnvironmentTelemetryModule::runOnce()
             // Just send to phone when it's not our time to send to mesh yet
             // Only send while queue is empty (phone assumed connected)
             sendTelemetry(NODENUM_BROADCAST, true);
-            lastSentToPhone = millis();
+            lastSentToPhone = Time::skipZero(Time::getMillis());
         }
     }
     if (sleepOnNextExecution) {
@@ -737,6 +747,14 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
 #ifdef HAS_RAKPROT
     if (rak9154Sensor.hasSensor()) {
         get_metrics = rak9154Sensor.getMetrics(m);
+        valid = valid || get_metrics;
+        hasSensor = true;
+    }
+#endif
+#ifdef HAS_RAKHUB
+    // IPSO cache -> EnvironmentMetrics; chemistry off unless RAK_SENSORHUB_EXTENDED_ENV_METRICS.
+    if (rakSensorHub.hasSensor()) {
+        get_metrics = rakSensorHub.getMetrics(m);
         valid = valid || get_metrics;
         hasSensor = true;
     }

@@ -2,6 +2,7 @@
 
 // First, in its own block so the include sorter keeps it there: configuration.h supplies the
 // variant defines mesh-pb-constants.h needs (portduino resolves MAX_NUM_NODES at runtime).
+#include "UptimeClock.h"
 #include "configuration.h"
 
 #include "MeshService.h"
@@ -59,7 +60,7 @@ bool PacketAPI::receivePacket(void)
         data_received = true;
 
         powerFSM.trigger(EVENT_INPUT);
-        lastContactMsec = millis();
+        lastContactMsec = Time::skipZero(Time::getMillis());
 
         meshtastic_ToRadio *mr;
         auto p = server->receivePacket()->move();

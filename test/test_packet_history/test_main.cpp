@@ -10,8 +10,11 @@
 
 #include "PacketHistory.h"
 
+#include "SerialConsole.h"
 #include "TestUtil.h"
+#include <string>
 #include <unity.h>
+#include <vector>
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -24,6 +27,18 @@ static constexpr uint32_t SMALL_CAPACITY = 8;
 // Per-test state
 // ---------------------------------------------------------------------------
 static PacketHistory *ph = nullptr;
+
+class RecordingPrint : public Print
+{
+  public:
+    size_t write(uint8_t value) override
+    {
+        output.push_back(value);
+        return 1;
+    }
+
+    std::vector<uint8_t> output;
+};
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -63,6 +78,19 @@ void test_init_valid_size(void)
 {
     PacketHistory h(8);
     TEST_ASSERT_TRUE(h.initOk());
+}
+
+void test_init_default_size_does_not_warn(void)
+{
+    RecordingPrint sink;
+    console->setDestination(&sink);
+
+    PacketHistory h;
+
+    console->setDestination(&Serial);
+    const std::string output(sink.output.begin(), sink.output.end());
+    TEST_ASSERT_TRUE(h.initOk());
+    TEST_ASSERT_NULL(strstr(output.c_str(), "Packet History - Invalid size"));
 }
 
 void test_init_minimum_size(void)
@@ -741,6 +769,7 @@ void setup()
 
     // Group 1 - Initialization
     RUN_TEST(test_init_valid_size);
+    RUN_TEST(test_init_default_size_does_not_warn);
     RUN_TEST(test_init_minimum_size);
     RUN_TEST(test_init_too_small_falls_back);
 

@@ -3,6 +3,8 @@
 #include "MessageRenderer.h"
 
 // Core includes
+#include "Channels.h"
+#include "MeshService.h"
 #include "MessageStore.h"
 #include "NodeDB.h"
 #include "UIRenderer.h"
@@ -1132,18 +1134,13 @@ void handleNewMessage(OLEDDisplay *display, const StoredMessage &sm, const mesht
 {
     if (packet.from != 0) {
         hasUnreadMessage = true;
-        const bool suppressBanner = cannedMessageModule && cannedMessageModule->isFreeTextActive();
+        const bool suppressBanner =
+            (cannedMessageModule && cannedMessageModule->isFreeTextActive()) || (screen && screen->isTextMessageFrameShown());
         // Don't let the pop-up clobber a menu/picker the user is interacting with; the wake below
         // still happens so a message can light the screen back up.
         const bool menuShowing = NotificationRenderer::isMenuShowing();
 
-        // Determine if message belongs to a muted channel
-        bool isChannelMuted = false;
-        if (sm.type == MessageType::BROADCAST) {
-            const meshtastic_Channel channel = channels.getByIndex(packet.channel ? packet.channel : channels.getPrimaryIndex());
-            if (channel.settings.has_module_settings && channel.settings.module_settings.is_muted)
-                isChannelMuted = true;
-        }
+        const bool isMuted = isMutedForPacket(packet);
 
         // Banner logic
         const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(packet.from);
@@ -1163,21 +1160,9 @@ void handleNewMessage(OLEDDisplay *display, const StoredMessage &sm, const mesht
         char truncatedLongName[64];
         graphics::UIRenderer::truncateStringWithEmotes(display, longName, truncatedLongName, sizeof(truncatedLongName),
                                                        availWidth);
-        const char *msgRaw = reinterpret_cast<const char *>(packet.decoded.payload.bytes);
 
         char banner[256];
-        bool isAlert = false;
-
-        // Check if alert detection is enabled via external notification module
-        if (moduleConfig.external_notification.alert_bell || moduleConfig.external_notification.alert_bell_vibra ||
-            moduleConfig.external_notification.alert_bell_buzzer) {
-            for (size_t i = 0; i < packet.decoded.payload.size && i < 100; i++) {
-                if (msgRaw[i] == '\x07') {
-                    isAlert = true;
-                    break;
-                }
-            }
-        }
+        const bool isAlert = MeshService::isAlertPayload(packet);
 
         if (isAlert) {
             if (truncatedLongName[0])
@@ -1185,8 +1170,8 @@ void handleNewMessage(OLEDDisplay *display, const StoredMessage &sm, const mesht
             else
                 strcpy(banner, "Alert Received");
         } else {
-            // Skip muted channels unless it's an alert
-            if (isChannelMuted)
+            // Skip muted channels/senders unless it's an alert
+            if (isMuted)
                 return;
 
             if (truncatedLongName[0]) {
@@ -1230,9 +1215,14 @@ void handleNewMessage(OLEDDisplay *display, const StoredMessage &sm, const mesht
             screen->setOn(true);
         }
 
-        if (!suppressBanner && !menuShowing) {
+        // Don't let the banner interrupt whatever the user is in the middle of -- it would cover an
+        // active module/game, and worse, a transient banner replaces any interactive overlay, so it
+        // would discard a half-entered picker / text entry (e.g. high-score initials). The message
+        // is still stored, its thread still selected below, and the unread indicator set, so nothing
+        // is lost -- the user just sees it once they're done. (isInteractionBusy() subsumes the
+        // modal-module check this guard used to make.)
+        if (!screen->isInteractionBusy() && !menuShowing && !suppressBanner)
             screen->showSimpleBanner(banner, inThread ? 1000 : 3000);
-        }
     }
 
     // Always focus into the correct conversation thread when a message with real text arrives

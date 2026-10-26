@@ -42,12 +42,6 @@ namespace
 class MockRouter : public Router
 {
   public:
-    ~MockRouter()
-    {
-        // cryptLock is created in the constructor for Router.
-        delete cryptLock;
-        cryptLock = NULL;
-    }
     void enqueueReceivedMessage(meshtastic_MeshPacket *p) override
     {
         packets_.emplace_back(*p);
@@ -851,10 +845,11 @@ static meshtastic_MeshPacket makeDecodedBroadcast()
 }
 
 // Decoded (plaintext-broker) downlink skips perhapsDecode's crypto path, so MQTT applies
-// checkXeddsaReceivePolicy at ingress. An unsigned broadcast claiming to come from a node that
-// previously signed must be dropped - without this, a rogue broker peer could impersonate any
-// signing node (audit F3).
-void test_receiveDropsUnsignedBroadcastFromSigner(void)
+// checkXeddsaReceivePolicy at ingress. Balanced accepts an unsigned broadcast even from a node
+// that previously signed - only Strict drops a packet for being unsigned - but it must arrive
+// unmarked, so clients never show a broker peer's forgery as signed. A drop here means the old
+// Balanced downgrade rule is back; xeddsa_signed set means an unverified packet is vouched for.
+void test_receiveBalancedAcceptsUnsignedBroadcastFromSigner(void)
 {
     config.security.packet_signature_policy =
         meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_BALANCED;
@@ -863,7 +858,29 @@ void test_receiveDropsUnsignedBroadcastFromSigner(void)
     const meshtastic_MeshPacket p = makeDecodedBroadcast();
     unitTest->publish(&p);
 
-    TEST_ASSERT_TRUE(mockRouter->packets_.empty());
+    TEST_ASSERT_EQUAL(1, mockRouter->packets_.size());
+    TEST_ASSERT_FALSE(mockRouter->packets_.front().xeddsa_signed);
+}
+
+// An AES-CCM channel overrides the signature policy, and turning MQTT encryption off trusts the
+// broker like a channel member. So Strict accepts unsigned plaintext downlink on a CCM channel,
+// where AES-CCM traffic is never signed. A drop here would cut every CCM channel off a decoded
+// MQTT bridge under Strict.
+void test_receiveStrictAcceptsUnsignedDownlinkOnAeadChannel(void)
+{
+    config.security.packet_signature_policy =
+        meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_STRICT;
+    channelFile.channels[0].settings.psk.size = 1;
+    channelFile.channels[0].settings.psk.bytes[0] = 1;
+    channelFile.channels[0].settings.use_aead = true;
+    channels.onConfigChanged();
+    TEST_ASSERT_TRUE_MESSAGE(channels.isAEADEnabled(0), "fixture must leave channel 0 on AES-CCM");
+
+    const meshtastic_MeshPacket p = makeDecodedBroadcast();
+    unitTest->publish(&p);
+
+    TEST_ASSERT_EQUAL(1, mockRouter->packets_.size());
+    TEST_ASSERT_FALSE(mockRouter->packets_.front().xeddsa_signed);
 }
 
 // The same unsigned broadcast from a node never seen signing is accepted.
@@ -888,8 +905,7 @@ void test_receiveVerifiesSignedDecodedDownlink(void)
     memcpy(mockNodeDB->emptyNode.public_key.bytes, pub, 32);
 
     meshtastic_MeshPacket p = makeDecodedBroadcast();
-    TEST_ASSERT_TRUE(crypto->xeddsa_sign(p.from, p.id, p.decoded.portnum, p.decoded.payload.bytes, p.decoded.payload.size,
-                                         p.decoded.xeddsa_signature.bytes));
+    TEST_ASSERT_TRUE(crypto->xeddsa_sign(p.from, p.id, p.to, &p.decoded, p.decoded.xeddsa_signature.bytes));
     p.decoded.xeddsa_signature.size = XEDDSA_SIGNATURE_SIZE;
 
     unitTest->publish(&p);
@@ -910,8 +926,7 @@ void test_receiveDropsBadSignatureOnDecodedDownlink(void)
     memcpy(mockNodeDB->emptyNode.public_key.bytes, pub, 32);
 
     meshtastic_MeshPacket p = makeDecodedBroadcast();
-    TEST_ASSERT_TRUE(crypto->xeddsa_sign(p.from, p.id, p.decoded.portnum, p.decoded.payload.bytes, p.decoded.payload.size,
-                                         p.decoded.xeddsa_signature.bytes));
+    TEST_ASSERT_TRUE(crypto->xeddsa_sign(p.from, p.id, p.to, &p.decoded, p.decoded.xeddsa_signature.bytes));
     p.decoded.xeddsa_signature.size = XEDDSA_SIGNATURE_SIZE;
     p.decoded.xeddsa_signature.bytes[0] ^= 0xFF;
 
@@ -1360,6 +1375,87 @@ void test_customMqttRoot(void)
         [] { return pubsub->subscriptions_.count("custom/2/e/test/+") && pubsub->subscriptions_.count("custom/2/e/PKI/+"); }));
 }
 
+// A LoRa region change rewrites moduleConfig.mqtt.root without telling MQTT (AdminModule, MenuHandler,
+// InkHUD). MQTT must pick it up, rebuild the topics and resubscribe; otherwise the node keeps
+// publishing and subscribing under the old region's root until reboot. An uplink sent before
+// runOnce() runs must already use the new root.
+void test_rootChange_rebuildsTopics(void)
+{
+    // Start MQTT with a US region root.
+    strcpy(moduleConfig.mqtt.root, "msh/US");
+    MQTTUnitTest::restart();
+
+    TEST_ASSERT_TRUE(loopUntil(
+        [] { return pubsub->subscriptions_.count("msh/US/2/e/test/+") && pubsub->subscriptions_.count("msh/US/2/e/PKI/+"); }));
+
+    // Simulate region change: only the root changes, nobody notifies MQTT.
+    strcpy(moduleConfig.mqtt.root, "msh/EU_868");
+    pubsub->subscriptions_.clear();
+    pubsub->published_.clear();
+    mqtt->onSend(encrypted, decoded, 0);
+
+    // Subscriptions are refreshed, and the uplink is published under the new root after the reconnect.
+    TEST_ASSERT_TRUE(loopUntil([] {
+        return pubsub->subscriptions_.count("msh/EU_868/2/e/test/+") && pubsub->subscriptions_.count("msh/EU_868/2/e/PKI/+") &&
+               !pubsub->published_.empty();
+    }));
+    TEST_ASSERT_EQUAL(1, pubsub->published_.size());
+    const auto &[topic, payload] = pubsub->published_.front();
+    TEST_ASSERT_EQUAL_STRING("msh/EU_868/2/e/test/!12345678", topic.c_str());
+}
+
+// The "<root>/<region>" suffix (msh/US, msh/EU_868) is a convention of the default Meshtastic broker, so a
+// region change only rewrites the root there, and only when the root is still the default one. Guards against
+// clobbering a root the user chose (including one that merely starts with "msh"), and against moving a private
+// broker's topics, which are regional already if they need to be.
+void test_applyRegionRootTopic_rewritesDefaultBrokerRootsOnly(void)
+{
+    strcpy(moduleConfig.mqtt.root, "msh/US");
+    TEST_ASSERT_TRUE(MQTT::applyRegionRootTopic("EU_868"));
+    TEST_ASSERT_EQUAL_STRING("msh/EU_868", moduleConfig.mqtt.root);
+
+    strcpy(moduleConfig.mqtt.root, default_mqtt_root);
+    TEST_ASSERT_TRUE(MQTT::applyRegionRootTopic("EU_868"));
+    TEST_ASSERT_EQUAL_STRING("msh/EU_868", moduleConfig.mqtt.root);
+
+    // An empty root is the default too: MQTT falls back to "msh" when building its topics.
+    moduleConfig.mqtt.root[0] = '\0';
+    strcpy(moduleConfig.mqtt.address, default_mqtt_address);
+    TEST_ASSERT_TRUE(MQTT::applyRegionRootTopic("EU_868"));
+    TEST_ASSERT_EQUAL_STRING("msh/EU_868", moduleConfig.mqtt.root);
+
+    // The default broker with an explicit port is still the default broker.
+    strcpy(moduleConfig.mqtt.address, default_mqtt_address ":1883");
+    strcpy(moduleConfig.mqtt.root, "msh/US");
+    TEST_ASSERT_TRUE(MQTT::applyRegionRootTopic("EU_868"));
+    TEST_ASSERT_EQUAL_STRING("msh/EU_868", moduleConfig.mqtt.root);
+
+    // A root of the user's own is left alone, even when it starts with "msh".
+    strcpy(moduleConfig.mqtt.root, "msh/home");
+    TEST_ASSERT_FALSE(MQTT::applyRegionRootTopic("EU_868"));
+    TEST_ASSERT_EQUAL_STRING("msh/home", moduleConfig.mqtt.root);
+
+    // A private broker keeps its topics across a region change.
+    strcpy(moduleConfig.mqtt.address, "mqtt.example.org");
+    strcpy(moduleConfig.mqtt.root, "msh/US");
+    TEST_ASSERT_FALSE(MQTT::applyRegionRootTopic("EU_868"));
+    TEST_ASSERT_EQUAL_STRING("msh/US", moduleConfig.mqtt.root);
+}
+
+// USERPREFS_EVENT_MODE gates the public broker on isUsingDefaultRootTopic() (Channels::anyMqttEnabled()).
+// A "msh/<region>" root is what a region change writes on the default broker, so it has to keep counting as
+// the default root; otherwise an event build silently loses that guard the first time the region changes.
+void test_regionRootTopic_countsAsTheDefaultRoot(void)
+{
+    strcpy(moduleConfig.mqtt.root, "msh/EU_868");
+    MQTTUnitTest::restart();
+    TEST_ASSERT_TRUE(mqtt->isUsingDefaultRootTopic());
+
+    strcpy(moduleConfig.mqtt.root, "msh/home");
+    MQTTUnitTest::restart();
+    TEST_ASSERT_FALSE(mqtt->isUsingDefaultRootTopic());
+}
+
 // Empty configuration is valid.
 void test_configEmptyIsValid(void)
 {
@@ -1514,7 +1610,8 @@ void setup()
     RUN_TEST(test_receiveIgnoresDecodedWhenEncryptionEnabled);
     RUN_TEST(test_receiveIgnoresDecodedAdminApp);
 #if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
-    RUN_TEST(test_receiveDropsUnsignedBroadcastFromSigner);
+    RUN_TEST(test_receiveBalancedAcceptsUnsignedBroadcastFromSigner);
+    RUN_TEST(test_receiveStrictAcceptsUnsignedDownlinkOnAeadChannel);
     RUN_TEST(test_receiveAcceptsUnsignedBroadcastFromNonSigner);
     RUN_TEST(test_receiveVerifiesSignedDecodedDownlink);
     RUN_TEST(test_receiveDropsBadSignatureOnDecodedDownlink);
@@ -1555,6 +1652,9 @@ void setup()
     RUN_TEST(test_disabled);
     RUN_TEST(test_mqttInitSkipsAllocationWhenDisabled);
     RUN_TEST(test_customMqttRoot);
+    RUN_TEST(test_rootChange_rebuildsTopics);
+    RUN_TEST(test_applyRegionRootTopic_rewritesDefaultBrokerRootsOnly);
+    RUN_TEST(test_regionRootTopic_countsAsTheDefaultRoot);
     RUN_TEST(test_configEmptyIsValid);
     RUN_TEST(test_configEnabledEmptyIsValid);
     RUN_TEST(test_configWithDefaultServer);

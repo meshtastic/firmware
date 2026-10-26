@@ -22,6 +22,7 @@ meshtastic_NodeInfo TypeConversions::ConvertToNodeInfo(const meshtastic_NodeInfo
     info.is_key_manually_verified = nodeInfoLiteIsKeyManuallyVerified(lite);
     info.is_muted = nodeInfoLiteIsMuted(lite);
     info.has_xeddsa_signed = nodeInfoLiteHasXeddsaSigned(lite);
+    info.heard_on_current_lora = nodeDB && nodeInfoLiteHeardOnSlot(lite, nodeDB->committedLoraSlot());
 
     if (lite->has_hops_away) {
         info.has_hops_away = true;

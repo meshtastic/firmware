@@ -1,4 +1,5 @@
 #include "RotaryEncoderInterruptBase.h"
+#include "UptimeClock.h"
 #include "configuration.h"
 
 RotaryEncoderInterruptBase::RotaryEncoderInterruptBase(const char *name) : concurrency::OSThread(name)
@@ -48,13 +49,14 @@ int32_t RotaryEncoderInterruptBase::runOnce()
     InputEvent e = {};
     e.inputEvent = INPUT_BROKER_NONE;
     e.source = this->_originName;
-    unsigned long now = millis();
+    unsigned long now = Time::stampMillis();
 
     // Handle press long/short detection
     if (this->action == ROTARY_ACTION_PRESSED) {
         bool buttonPressed = !digitalRead(_pinPress);
         if (!pressDetected && buttonPressed) {
             pressDetected = true;
+            // unset-sentinel-ok: pressDetected is the armed flag; no read tests the stamp against 0
             pressStartTime = now;
             pressAndTurnFired = false;
         }

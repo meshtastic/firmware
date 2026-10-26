@@ -1,0 +1,21 @@
+# The other half of the "last file wins" contract: that the winning table *replaces* the loser
+# rather than merging over it. config.yaml is always loaded before config.d/, so unlike two files
+# inside config.d/ - whose order the filesystem decides - the winner here is deterministic, which
+# is what lets the effective table be asserted by value.
+#
+# This table is the loser, and is deliberately the wider of the two: four pins where the winner
+# has two, and every mode row HIGH where the winner sets LOW. Any carryover therefore shows up in
+# the emitted table as a surviving pin, a surviving mode row, or a HIGH that should be LOW.
+General:
+  ConfigDirectory: config.d/
+Lora:
+  Module: lr2021
+  CS: 21
+  IRQ: 16
+  Busy: 20
+  Reset: 18
+  rfswitch_table:
+    pins: [DIO5, DIO6, DIO7, DIO8]
+    MODE_STBY: [HIGH, HIGH, HIGH, HIGH]
+    MODE_RX: [HIGH, HIGH, HIGH, HIGH]
+    MODE_TX: [HIGH, HIGH, HIGH, HIGH]

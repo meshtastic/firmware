@@ -2,10 +2,12 @@
 
 #if !MESHTASTIC_EXCLUDE_WAYPOINT
 
+#include "UptimeClock.h"
 #include "WaypointStore.h"
 #include "gps/GeoCoord.h"
 #include "gps/RTC.h"
 #include "mesh/NodeDB.h"
+#include "mesh/Throttle.h"
 #include <cstring>
 
 #if HAS_SCREEN
@@ -22,7 +24,6 @@ static constexpr size_t GEOFENCE_MAX_CROSSING = 256;
 
 GeofenceModule::GeofenceModule()
 {
-    crossingInside.reserve(GEOFENCE_MAX_CROSSING);
     waypointStoreObserver.observe(&waypointStore);
 }
 
@@ -73,11 +74,20 @@ GeofenceModule::Crossing GeofenceModule::classify(bool firstSighting, bool wasIn
     return notifyOnExit ? Crossing::Exit : Crossing::None;
 }
 
+/// One block for the whole cap on first use. malloc() refuses where a vector's operator new would abort,
+/// so a refusal falls into the caller's bounded-drop path.
+bool GeofenceModule::ensureCrossingCapacity()
+{
+    if (!crossingInside)
+        crossingInside.reset(static_cast<CrossingState *>(malloc(GEOFENCE_MAX_CROSSING * sizeof(CrossingState))));
+    return crossingInside != nullptr;
+}
+
 GeofenceModule::CrossingState *GeofenceModule::findCrossingState(uint64_t key)
 {
-    for (auto &state : crossingInside) {
-        if (state.key == key)
-            return &state;
+    for (size_t i = 0; i < crossingCount; i++) {
+        if (crossingInside[i].key == key)
+            return &crossingInside[i];
     }
 
     return nullptr;
@@ -99,10 +109,10 @@ bool GeofenceModule::shouldTrack(const meshtastic_Waypoint &wp, uint8_t notifica
     return true;
 }
 
-int GeofenceModule::onWaypointStoreChanged(const WaypointStore *store)
+int GeofenceModule::onWaypointStoreChanged(const WaypointStore *)
 {
-    (void)store;
-    crossingInside.clear();
+    crossingCount = 0;
+    crossingInside.reset();
     return 0;
 }
 
@@ -138,15 +148,26 @@ void GeofenceModule::evaluatePosition(NodeNum node, const meshtastic_Position &p
 
         // Record/baseline the current state (bounded - drop new pairs once the map is full).
         if (!hasTrackedState) {
-            if (crossingInside.size() < GEOFENCE_MAX_CROSSING) {
-                crossingInside.push_back(CrossingState{key, isInside});
-            } else {
+            if (crossingCount >= GEOFENCE_MAX_CROSSING) {
+                // Stays full until a waypoint goes away, so say it once.
                 static bool warnedCrossingFull = false;
                 if (!warnedCrossingFull) {
-                    LOG_WARN("Geofence crossing-state full (%u); new (waypoint,node) pairs will not alert until space frees",
+                    LOG_WARN("Geofence crossing-state full (%u max); new (waypoint,node) pairs will not alert until "
+                             "space frees",
                              (unsigned)GEOFENCE_MAX_CROSSING);
                     warnedCrossingFull = true;
                 }
+            } else if (!ensureCrossingCapacity()) {
+                // A refused malloc is a heap blip, not a full table: throttle it rather than spend the
+                // one-shot above, because the next position may well find the memory.
+                static uint32_t lastAllocWarning = 0;
+                if (lastAllocWarning == 0 || !Throttle::isWithinTimespanMs(lastAllocWarning, 60000)) {
+                    LOG_WARN("No heap for the geofence crossing-state (%u bytes); no (waypoint,node) pair will alert",
+                             (unsigned)(GEOFENCE_MAX_CROSSING * sizeof(CrossingState)));
+                    lastAllocWarning = Time::stampMillis();
+                }
+            } else {
+                crossingInside[crossingCount++] = CrossingState{key, isInside};
             }
         } else {
             state->inside = isInside;
