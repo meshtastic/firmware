@@ -1,11 +1,18 @@
 // Deterministic reproduction of the admin session-key behavior discussed on PR #10669
 // (ndoo's "Admin message without session_key!" report), plus the remote-vs-local redaction of
 // secret material in admin GET responses, plus the request/response pairing that decides which
-// admin responses are accepted at all.
+// admin responses are accepted at all, plus the origin check on local (from == 0) admin.
 //
 // Drives the REAL incoming-admin path (AdminModule::handleReceivedProtobuf) with a remote
 // (from != 0) PKC-authorized set_owner, exercising the exact checkPassKey/setPassKey gate.
 // A local (from == 0) admin bypasses that gate, so the bug only reproduces from != 0.
+//
+// Because from == 0 skips the admin_key and session checks, AdminModule accepts it only when
+// MeshModule::callModules() is dispatching that exact packet with currentRequestSource
+// RX_SRC_USER or RX_SRC_LOCAL. Ingress (RadioLibInterface, MQTT, UDP) already drops from == 0;
+// this gate keeps a forged one from becoming unauthenticated remote admin if a path ever misses
+// that drop (the external from == 0 report). Relaxing it to a bare `mp.from == 0` check brings
+// back that report's scenario: any setter, up to factory_reset, accepted without credentials.
 
 #include "MeshTypes.h" // include BEFORE TestUtil.h
 #include "TestUtil.h"
@@ -652,6 +659,102 @@ void test_solicited_response_updates_pins(void)
                                      "a response we asked for must reach the handler");
 }
 
+// ---- from == 0 is trusted only when callModules() reports a local origin ----
+
+// The packet shape from the external from == 0 report: addressed to us, no PKI, no session passkey,
+// payload encoded so it can also go through MeshModule::callModules(). It carries a set_config
+// (network.wifi_ssid) rather than the report's set_owner: the gate runs before the switch, so any
+// setter proves it, and set_owner's reloadOwner() needs a NodeInfoModule this fixture lacks.
+static meshtastic_MeshPacket makeFrom0SetSsid(const char *ssid, meshtastic_AdminMessage &out)
+{
+    out = meshtastic_AdminMessage_init_zero;
+    out.which_payload_variant = meshtastic_AdminMessage_set_config_tag;
+    out.set_config.which_payload_variant = meshtastic_Config_network_tag;
+    out.set_config.payload_variant.network = config.network;
+    strncpy(out.set_config.payload_variant.network.wifi_ssid, ssid, sizeof(out.set_config.payload_variant.network.wifi_ssid) - 1);
+
+    meshtastic_MeshPacket mp = meshtastic_MeshPacket_init_zero;
+    mp.from = 0;
+    mp.to = LOCAL_NODE;
+    mp.id = 0x0F0F0001;
+    mp.channel = 0;
+    mp.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    mp.decoded.portnum = meshtastic_PortNum_ADMIN_APP;
+    mp.decoded.payload.size =
+        pb_encode_to_bytes(mp.decoded.payload.bytes, sizeof(mp.decoded.payload.bytes), &meshtastic_AdminMessage_msg, &out);
+    return mp;
+}
+
+// Control: a phone/serial client (RX_SRC_USER) keeps full local admin. Without this, the
+// rejections below could pass because the setter never applies in this fixture at all.
+void test_from0_admin_from_phone_client_is_applied(void)
+{
+    meshtastic_AdminMessage m;
+    meshtastic_MeshPacket mp = makeFrom0SetSsid("Phone", m);
+    admin->handleReceivedProtobuf(mp, &m, RX_SRC_USER);
+    admin->drainReply();
+
+    TEST_ASSERT_EQUAL_STRING("Phone", config.network.wifi_ssid);
+}
+
+// The reported attack: the same packet tagged as radio ingress must not take the local-client
+// branch, which would skip both the admin_key check and the session passkey.
+void test_from0_admin_from_radio_is_dropped(void)
+{
+    meshtastic_AdminMessage m;
+    meshtastic_MeshPacket mp = makeFrom0SetSsid("Hijacked", m);
+    admin->handleReceivedProtobuf(mp, &m, RX_SRC_RADIO);
+
+    TEST_ASSERT_EQUAL_STRING("", config.network.wifi_ssid);
+    TEST_ASSERT_NULL_MESSAGE(admin->reply(), "a forged local packet is dropped silently, not answered");
+}
+
+// Fail closed: a caller that reaches the handler without going through callModules() has no
+// source to vouch for it, so from == 0 alone must not be enough.
+void test_from0_admin_without_dispatch_context_is_dropped(void)
+{
+    meshtastic_AdminMessage m;
+    meshtastic_MeshPacket mp = makeFrom0SetSsid("Hijacked", m);
+    admin->handleWithDispatchContext(nullptr, RX_SRC_USER, mp, &m);
+    admin->drainReply();
+
+    TEST_ASSERT_EQUAL_STRING("", config.network.wifi_ssid);
+}
+
+// The source belongs to the packet callModules() is dispatching. A local source recorded for some
+// other packet must not vouch for this one.
+void test_from0_admin_with_another_packets_context_is_dropped(void)
+{
+    meshtastic_AdminMessage m;
+    meshtastic_MeshPacket mp = makeFrom0SetSsid("Hijacked", m);
+    meshtastic_MeshPacket other = mp;
+    admin->handleWithDispatchContext(&other, RX_SRC_USER, mp, &m);
+    admin->drainReply();
+
+    TEST_ASSERT_EQUAL_STRING("", config.network.wifi_ssid);
+}
+
+// End to end through the real dispatcher, as the report's "callModules(mp, RX_SRC_RADIO)" variant:
+// callModules() must hand AdminModule the source it was given.
+void test_from0_admin_via_callModules_from_radio_is_dropped(void)
+{
+    meshtastic_AdminMessage m;
+    meshtastic_MeshPacket mp = makeFrom0SetSsid("Hijacked", m);
+    MeshModule::callModules(mp, RX_SRC_RADIO);
+
+    TEST_ASSERT_EQUAL_STRING("", config.network.wifi_ssid);
+}
+
+// Control for the above: the same dispatch from a phone client still applies the setter.
+void test_from0_admin_via_callModules_from_phone_client_is_applied(void)
+{
+    meshtastic_AdminMessage m;
+    meshtastic_MeshPacket mp = makeFrom0SetSsid("Phone", m);
+    MeshModule::callModules(mp, RX_SRC_USER);
+
+    TEST_ASSERT_EQUAL_STRING("Phone", config.network.wifi_ssid);
+}
+
 #endif // !(MESHTASTIC_EXCLUDE_PKI)
 
 void setup()
@@ -685,6 +788,12 @@ void setup()
     RUN_TEST(test_outgoing_setter_does_not_admit_responses);
     RUN_TEST(test_unsolicited_response_does_not_poison_pins);
     RUN_TEST(test_solicited_response_updates_pins);
+    RUN_TEST(test_from0_admin_from_phone_client_is_applied);
+    RUN_TEST(test_from0_admin_from_radio_is_dropped);
+    RUN_TEST(test_from0_admin_without_dispatch_context_is_dropped);
+    RUN_TEST(test_from0_admin_with_another_packets_context_is_dropped);
+    RUN_TEST(test_from0_admin_via_callModules_from_radio_is_dropped);
+    RUN_TEST(test_from0_admin_via_callModules_from_phone_client_is_applied);
 #endif
     exit(UNITY_END());
 }
