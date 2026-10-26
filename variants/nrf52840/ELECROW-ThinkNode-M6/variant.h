@@ -79,6 +79,7 @@ static const uint8_t A0 = PIN_A0;
 // Solar charger status
 #define EXT_CHRG_DETECT (15)
 #define EXT_CHRG_DETECT_VALUE LOW
+#define EXT_CHRG_DETECT_IS_SOLAR
 
 // QSPI Flash
 #define PIN_QSPI_SCK (32 + 3)
@@ -136,9 +137,14 @@ static const uint8_t A0 = PIN_A0;
 #define VBAT_AR_INTERNAL AR_INTERNAL_2_4
 #define ADC_MULTIPLIER (1.75F)
 
+// Low-battery shutdown rechecks VBAT periodically and boots once it exceeds OCV[last] + threshold
+#define SOLAR_WAKE_THRESHOLD 25       // mV
+#define SOLAR_CHARGE_LIFT 80          // mV, VBAT lift measured while the solar charger is active
+#define SOLAR_LOWBAT_RECHECK_SECS 600 // s
+
 #define HAS_SOLAR
 
-#define OCV_ARRAY 4080, 3990, 3935, 3880, 3825, 3770, 3715, 3660, 3605, 3550, 3490
+#define OCV_ARRAY 4080, 3990, 3935, 3880, 3825, 3770, 3715, 3660, 3605, 3550, 3500
 
 #ifdef __cplusplus
 }
