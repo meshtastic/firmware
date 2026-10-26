@@ -55,7 +55,9 @@ static uint32_t readBatteryMv()
     return (float)raw / BATTERY_SENSE_SAMPLES * (AREF_VOLTAGE * 1000.0F / BATTERY_SENSE_RESOLUTION) * ADC_MULTIPLIER;
 }
 
-// No LOG_* here: runs before consoleInit()
+// Low-battery recheck, armed by variant_shutdown(). Each boot measures VBAT once: if still low, blink the
+// power LED, idle SOLAR_LOWBAT_RECHECK_SECS and reset to recheck; otherwise clear the flag and reset into a
+// normal boot. Button or USB during the idle also boots normally. No LOG_* here: runs before consoleInit().
 void earlyInitVariant()
 {
     if (NRF_POWER->GPREGRET2 != LOWBAT_DUTY_MAGIC)
@@ -63,6 +65,7 @@ void earlyInitVariant()
 
     const uint16_t ocv[NUM_OCV_POINTS] = {OCV_ARRAY};
 
+    // Keep peripherals unpowered; the reset at the end restores all pin states
     pinMode(PIN_POWER_EN, OUTPUT);
     digitalWrite(PIN_POWER_EN, LOW);
     pinMode(PIN_GPS_EN, OUTPUT);
@@ -72,16 +75,22 @@ void earlyInitVariant()
     pinMode(EXT_CHRG_DETECT, INPUT);
     pinMode(PIN_BUTTON1, INPUT_PULLUP);
 
+    // An active solar charger lifts VBAT above its open-circuit voltage
     uint32_t threshold = ocv[NUM_OCV_POINTS - 1] + SOLAR_WAKE_THRESHOLD;
     if (digitalRead(EXT_CHRG_DETECT) == EXT_CHRG_DETECT_VALUE)
         threshold += SOLAR_CHARGE_LIFT;
 
     if (readBatteryMv() < threshold && digitalRead(EXT_PWR_DETECT) != HIGH) {
+        // Button or USB plug-in ends the idle wait early
         lowBatWaitTask = xTaskGetCurrentTaskHandle();
         ulTaskNotifyTake(pdTRUE, 0);
         attachInterrupt(PIN_BUTTON1, lowBatWakeIsr, FALLING);
         attachInterrupt(EXT_PWR_DETECT, lowBatWakeIsr, RISING);
+        // Edge interrupts miss a level already active at attach time
+        if (digitalRead(PIN_BUTTON1) == LOW || digitalRead(EXT_PWR_DETECT) == HIGH)
+            xTaskNotifyGive(lowBatWaitTask);
 
+        // LED_POWER was switched on in setup(); keep it visible ~0.3 s as a liveness blink
         delay(300);
         digitalWrite(LED_POWER, LED_STATE_OFF);
         // Timeout keeps the flag set so the next boot rechecks; button/USB fall through to a normal boot
@@ -150,6 +159,8 @@ void variant_shutdown()
     nrf_gpio_pin_sense_t sense1 = NRF_GPIO_PIN_SENSE_LOW;
     nrf_gpio_cfg_sense_set(PIN_BUTTON1, sense1);
 
-    nrf_gpio_cfg_sense_input(EXT_PWR_DETECT, NRF_GPIO_PIN_NOPULL, NRF_GPIO_PIN_SENSE_HIGH);
+    // SENSE is level-triggered: arming while USB is present would wake immediately
+    if (digitalRead(EXT_PWR_DETECT) == LOW)
+        nrf_gpio_cfg_sense_input(EXT_PWR_DETECT, NRF_GPIO_PIN_NOPULL, NRF_GPIO_PIN_SENSE_HIGH);
     nrf_gpio_cfg_default(BATTERY_PIN);
 }
