@@ -70,6 +70,7 @@ void earlyInitVariant()
     digitalWrite(PIN_POWER_EN, LOW);
     pinMode(PIN_GPS_EN, OUTPUT);
     digitalWrite(PIN_GPS_EN, LOW);
+    pinMode(VDD_FLASH_EN, OUTPUT);
     digitalWrite(VDD_FLASH_EN, LOW);
     pinMode(EXT_PWR_DETECT, INPUT);
     pinMode(EXT_CHRG_DETECT, INPUT);
