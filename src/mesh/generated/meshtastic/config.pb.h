@@ -380,7 +380,18 @@ typedef enum _meshtastic_Config_LoRaConfig_ModemPreset {
     /* Medium Range - Turbo
  This preset performs similarly to MEDIUM_FAST, but with 500kHz bandwidth.
  It is not legal to use in all regions due to this wider bandwidth. */
-    meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_TURBO = 16
+    meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_TURBO = 16,
+    /* SX128x non-LoRa presets, LORA_24 region only (local extension, not in upstream meshtastic/protobufs).
+ FLRC: 1300 kb/s CR1/1, 1300 kb/s CR1/2, 650 kb/s CR1/2, 260 kb/s CR1/2 */
+    meshtastic_Config_LoRaConfig_ModemPreset_FLRC_TURBO = 64,
+    meshtastic_Config_LoRaConfig_ModemPreset_FLRC_FAST = 65,
+    meshtastic_Config_LoRaConfig_ModemPreset_FLRC_MEDIUM = 66,
+    meshtastic_Config_LoRaConfig_ModemPreset_FLRC_LONG = 67,
+    /* GFSK: 2000 kb/s, 1000 kb/s, 500 kb/s, 250 kb/s */
+    meshtastic_Config_LoRaConfig_ModemPreset_GFSK_TURBO = 72,
+    meshtastic_Config_LoRaConfig_ModemPreset_GFSK_FAST = 73,
+    meshtastic_Config_LoRaConfig_ModemPreset_GFSK_MEDIUM = 74,
+    meshtastic_Config_LoRaConfig_ModemPreset_GFSK_LONG = 75
 } meshtastic_Config_LoRaConfig_ModemPreset;
 
 typedef enum _meshtastic_Config_LoRaConfig_FEM_LNA_Mode {
@@ -831,8 +842,8 @@ extern "C" {
 #define _meshtastic_Config_LoRaConfig_RegionCode_ARRAYSIZE ((meshtastic_Config_LoRaConfig_RegionCode)(meshtastic_Config_LoRaConfig_RegionCode_ITU2_125CM+1))
 
 #define _meshtastic_Config_LoRaConfig_ModemPreset_MIN meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST
-#define _meshtastic_Config_LoRaConfig_ModemPreset_MAX meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_TURBO
-#define _meshtastic_Config_LoRaConfig_ModemPreset_ARRAYSIZE ((meshtastic_Config_LoRaConfig_ModemPreset)(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_TURBO+1))
+#define _meshtastic_Config_LoRaConfig_ModemPreset_MAX meshtastic_Config_LoRaConfig_ModemPreset_GFSK_LONG
+#define _meshtastic_Config_LoRaConfig_ModemPreset_ARRAYSIZE ((meshtastic_Config_LoRaConfig_ModemPreset)(meshtastic_Config_LoRaConfig_ModemPreset_GFSK_LONG+1))
 
 #define _meshtastic_Config_LoRaConfig_FEM_LNA_Mode_MIN meshtastic_Config_LoRaConfig_FEM_LNA_Mode_DISABLED
 #define _meshtastic_Config_LoRaConfig_FEM_LNA_Mode_MAX meshtastic_Config_LoRaConfig_FEM_LNA_Mode_NOT_PRESENT

@@ -56,6 +56,13 @@ static const meshtastic_Config_LoRaConfig_ModemPreset PRESETS_NARROW[] = {PRESET
 
 static const meshtastic_Config_LoRaConfig_ModemPreset PRESETS_TINY[] = {PRESET(TINY_FAST), PRESET(TINY_SLOW), MODEM_PRESET_END};
 
+// LORA_24: the standard LoRa presets plus the SX128x FLRC/GFSK ones (applyModemConfig() refuses those on other chips)
+static const meshtastic_Config_LoRaConfig_ModemPreset PRESETS_24[] = {
+    PRESET(LONG_FAST),     PRESET(LONG_SLOW),   PRESET(MEDIUM_SLOW), PRESET(MEDIUM_FAST),  PRESET(SHORT_SLOW),  PRESET(SHORT_FAST),
+    PRESET(LONG_MODERATE), PRESET(SHORT_TURBO), PRESET(LONG_TURBO),  PRESET(MEDIUM_TURBO), PRESET(FLRC_TURBO),  PRESET(FLRC_FAST),
+    PRESET(FLRC_MEDIUM),   PRESET(FLRC_LONG),   PRESET(GFSK_TURBO),  PRESET(GFSK_FAST),    PRESET(GFSK_MEDIUM), PRESET(GFSK_LONG),
+    MODEM_PRESET_END};
+
 // The EU_868/EU_866/EU_N_868 trio share the 868 band but own mutually exclusive preset
 // profiles. Selecting a preset locked to a sibling swaps the region to that sibling (see
 // regionSwapForPreset), so from any region in the trio every one of these presets is
@@ -88,7 +95,8 @@ static bool isSwappableEuRegion(meshtastic_Config_LoRaConfig_RegionCode code)
 // presets, spacing, padding, audio, licensed, text throttle, position throttle, telemetry throttle
 const RegionProfile PROFILE_STD = {PRESETS_STD, 0, 0, true, false, 0, 1, 1};
 const RegionProfile PROFILE_EU868 = {PRESETS_EU_868, 0, 0, false, false, 0, 1, 1};
-const RegionProfile PROFILE_UNDEF = {PRESETS_UNDEF, 0, 0, true, false, 0, 1, 1};
+const RegionProfile PROFILE_24 = {PRESETS_24, 0, 0, true, false, 0, 1, 1};
+const RegionProfile PROFILE_UNDEF ={PRESETS_UNDEF, 0, 0, true, false, 0, 1, 1};
 const RegionProfile PROFILE_LITE = {PRESETS_LITE, 0.4, 0.0375f, false, false, 0, 10, 10};
 const RegionProfile PROFILE_NARROW = {PRESETS_NARROW, 0, 0.0104f, true, false, 0, 1, 1};
 // Ham '20kHz' profile. 15.6kHz bandwidth coerced to 20kHz via padding.
@@ -351,7 +359,7 @@ const RegionInfo regions[] = {
     /*
        2.4 GHZ WLAN Band equivalent. Only for SX128x chips.
     */
-    RDEF(LORA_24, 2400.0f, 2483.5f, 100, 10, false, true, PROFILE_STD, PRESET(LONG_FAST), 0),
+    RDEF(LORA_24, 2400.0f, 2483.5f, 100, 10, false, true, PROFILE_24, PRESET(LONG_FAST), 0),
 
     /*
         This needs to be last. Same as US.
@@ -749,8 +757,12 @@ void getRegionPresetMap(meshtastic_LoRaRegionPresetMap &map)
             // advertises exactly its own enforced profile list.
             const meshtastic_Config_LoRaConfig_ModemPreset *advertised =
                 isSwappableEuRegion(r->code) ? PRESETS_EU_SUPERSET : r->profile->presets;
-            for (size_t i = 0; advertised[i] != MODEM_PRESET_END && grp.presets_count < maxPresets; i++)
+            for (size_t i = 0; advertised[i] != MODEM_PRESET_END && grp.presets_count < maxPresets; i++) {
+                // Not in meshtastic/protobufs, so clients would not know them; they are set by number
+                if (isFastModemPreset(advertised[i]))
+                    continue;
                 grp.presets[grp.presets_count++] = advertised[i];
+            }
         }
 
         // Map this region to its group (capacity checked at the top of the loop).
@@ -822,7 +834,7 @@ uint32_t RadioInterface::getRetransmissionMsec(const meshtastic_MeshPacket *p)
     uint8_t CWsize = map(channelUtil, 0, 100, CWmin, CWmax);
     // Assuming we pick max. of CWsize and there will be a client with SNR at half the range
     return 2 * packetAirtime + (pow_of_2(CWsize) + 2 * CWmax + pow_of_2(int((CWmax + CWmin) / 2))) * slotTimeMsec +
-           PROCESSING_TIME_MSEC;
+           (isFastModem() ? FAST_PROCESSING_TIME_MSEC : PROCESSING_TIME_MSEC);
 }
 
 /** The delay to use when we want to send something */
@@ -834,7 +846,7 @@ uint32_t RadioInterface::getTxDelayMsec()
     float channelUtil = airTime->channelUtilizationPercent();
     uint8_t CWsize = map(channelUtil, 0, 100, CWmin, CWmax);
     // LOG_DEBUG("Current channel utilization is %f so setting CWsize to %d", channelUtil, CWsize);
-    return random(0, pow_of_2(CWsize)) * slotTimeMsec;
+    return random(0, pow_of_2(CWsize)) * slotTimeMsec + (isFastModem() ? FAST_MIN_TX_GAP_MSEC : 0);
 }
 
 /** The CW size to use when calculating SNR_based delays */
@@ -886,7 +898,7 @@ uint32_t RadioInterface::getTxDelayMsecWeighted(meshtastic_MeshPacket *p)
         LOG_DEBUG_RADIO("rx_snr in packet. Tx delay:%d", delay);
     }
 
-    return delay;
+    return delay + (isFastModem() ? FAST_MIN_TX_GAP_MSEC : 0); // as getTxDelayMsec(), for rebroadcasts
 }
 
 // Node IDs and packet IDs are formatted as 0x%08x in logs, and !%08x in user-facing display.
@@ -1350,6 +1362,13 @@ void RadioInterface::applyModemConfig()
         if (!validateConfigLora(loraConfig)) {
             loraConfig.modem_preset = newRegion->getDefaultPreset();
         }
+        if (isFastModemPreset(loraConfig.modem_preset) && !supportsFastModems()) {
+            LOG_ERROR("FLRC/GFSK presets need an SX128x radio, using %s",
+                      DisplayFormatters::getModemPresetDisplayName(newRegion->getDefaultPreset(), false, true));
+            RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+            loraConfig.modem_preset = newRegion->getDefaultPreset();
+        }
+        fastModemParams(loraConfig.modem_preset, fastModem);
         uint8_t newcr;
         modemPresetToParams(loraConfig.modem_preset, newRegion->wideLora, bw, sf, newcr);
         // If custom CR is being used already, check if the new preset is higher
@@ -1366,6 +1385,7 @@ void RadioInterface::applyModemConfig()
         }
 
     } else { // if not using preset, then just use the custom settings
+        fastModem = FastModemParams();
         if (validateConfigLora(loraConfig)) {
         } else {
             LOG_WARN("Invalid LoRa config, can't apply modem config - fall back to %s defaults", newRegion->name);
@@ -1452,7 +1472,7 @@ void RadioInterface::applyModemConfig()
     }
 
     slotTimeMsec = computeSlotTimeMsec();
-    preambleTimeMsec = preambleLength * (pow_of_2(sf) / bw);
+    preambleTimeMsec = isFastModem() ? 1 : preambleLength * (pow_of_2(sf) / bw);
 
     LOG_INFO("Radio freq=%.3f, config.lora.frequency_offset=%.3f", freq, loraConfig.frequency_offset);
     LOG_INFO("Set radio: region=%s, name=%s, config=%u, ch=%d, power=%d", newRegion->name, channelName, loraConfig.modem_preset,
@@ -1482,6 +1502,9 @@ uint8_t RadioInterface::getCadSymbolCount() const
 
 uint32_t RadioInterface::computeSlotTimeMsec()
 {
+    if (isFastModem())
+        return FAST_SLOT_TIME_MSEC;
+
     float sumPropagationTurnaroundMACTime = 0.2 + 0.4 + 7; // in milliseconds
     float symbolTime = pow_of_2(sf) / bw;                  // in milliseconds
 

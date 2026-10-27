@@ -1,5 +1,6 @@
 #pragma once
 
+#include "FastModem.h"
 #include "MemoryPool.h"
 #include "MeshTypes.h"
 #include "PointerQueue.h"
@@ -213,9 +214,59 @@ static inline uint16_t clampBandwidthCode(uint16_t bwCode)
     return bwCode;
 }
 
+/// SX128x FLRC/GFSK presets: a local extension (64..75), not part of meshtastic/protobufs
+static inline bool isFastModemPreset(meshtastic_Config_LoRaConfig_ModemPreset preset)
+{
+    return preset >= PRESET(FLRC_TURBO) && preset <= PRESET(GFSK_LONG);
+}
+
+static inline bool fastModemParams(meshtastic_Config_LoRaConfig_ModemPreset preset, FastModemParams &p)
+{
+    p = FastModemParams();
+    switch (preset) {
+    case PRESET(FLRC_TURBO):
+        p = {MODULATION_FLRC, 1300, 1200.0f, 1, 1, -96};
+        break;
+    case PRESET(FLRC_FAST):
+        p = {MODULATION_FLRC, 1300, 1200.0f, 1, 2, -99};
+        break;
+    case PRESET(FLRC_MEDIUM):
+        p = {MODULATION_FLRC, 650, 600.0f, 1, 2, -104};
+        break;
+    case PRESET(FLRC_LONG):
+        p = {MODULATION_FLRC, 260, 300.0f, 1, 2, -106};
+        break;
+    case PRESET(GFSK_TURBO):
+        p = {MODULATION_GFSK, 2000, 2400.0f, 1, 1, -83};
+        break;
+    // RadioLib fixes the GFSK receiver bandwidth per bit rate: 1000 kb/s -> 2.4 MHz, 500 -> 1.2, 250 -> 0.6
+    case PRESET(GFSK_FAST):
+        p = {MODULATION_GFSK, 1000, 2400.0f, 1, 1, -87};
+        break;
+    case PRESET(GFSK_MEDIUM):
+        p = {MODULATION_GFSK, 500, 1200.0f, 1, 1, -90};
+        break;
+    case PRESET(GFSK_LONG):
+        p = {MODULATION_GFSK, 250, 600.0f, 1, 1, -92};
+        break;
+    default:
+        return false;
+    }
+    return true;
+}
+
 static inline void modemPresetToParams(meshtastic_Config_LoRaConfig_ModemPreset preset, bool wideLora, float &bwKHz, uint8_t &sf,
                                        uint8_t &cr)
 {
+    FastModemParams fast;
+    if (fastModemParams(preset, fast)) {
+        // sf/cr are unused by these modems; keep LoRa-valid values for code that still reads them
+        bwKHz = fast.bwKHz;
+        sf = 7;
+        cr = 5;
+        return;
+    }
+
     switch (preset) {
     case PRESET(SHORT_TURBO):
         bwKHz = wideLora ? 1625.0f : 500.0f;

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "FastModem.h"
 #include "MemoryPool.h"
 #include "MeshTypes.h"
 #include "Observer.h"
@@ -99,6 +100,15 @@ class RadioInterface
     uint8_t sf = 9;
     uint8_t cr = 5;
 
+    // FLRC/GFSK presets (SX128x). Declared before slotTimeMsec, whose initializer reads it.
+    FastModemParams fastModem;
+    // Their packets last ~1 ms, so slots are bounded by MCU latency, not by a LoRa CAD
+    static constexpr uint32_t FAST_SLOT_TIME_MSEC = 1;
+    // A receiver must read each frame out before the next one overwrites the chip buffer
+    static constexpr uint32_t FAST_MIN_TX_GAP_MSEC = 10;
+    static constexpr uint32_t FAST_PROCESSING_TIME_MSEC = 1000;
+    bool isFastModem() const { return fastModem.modulation != MODULATION_LORA; }
+
     // Fallback per-band counts for a driver that states nothing of its own. Every driver in the tree
     // states its own, and they do NOT all agree: the slot has to match the scan each part really runs,
     // so a mesh mixing RF95 (2.25 symbols, fixed in hardware) with SX126x/LR (4) runs two slot lengths.
@@ -174,6 +184,9 @@ class RadioInterface
     /// Whether the radio can tune sub-GHz bands. False for 2.4 GHz-only chips (SX128x);
     /// multiband chips like the LR1121 keep the default.
     virtual bool supportsSubGhz() { return true; }
+
+    /// Whether the chip can run the FLRC/GFSK presets (SX128x)
+    virtual bool supportsFastModems() { return false; }
 
     /// Prepare hardware for sleep.  Call this _only_ for deep sleep, not needed for light sleep.
     virtual bool sleep() { return true; }

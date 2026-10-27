@@ -377,12 +377,15 @@ static void test_regionPresetMap_matchesRegionTable()
             bool selectable =
                 r->supportsPreset(grp.presets[p]) || RadioInterface::regionSwapForPreset(code, grp.presets[p]) != nullptr;
             TEST_ASSERT_TRUE(selectable);
+            TEST_ASSERT_FALSE(isFastModemPreset(grp.presets[p])); // FLRC/GFSK presets are never advertised to clients
         }
 
         // The region's own enforced presets must all be advertised (advertised is a
         // superset of the enforced list, never a subset).
         const meshtastic_Config_LoRaConfig_ModemPreset *enforced = r->getAvailablePresets();
         for (size_t e = 0; e < r->getNumPresets(); e++) {
+            if (isFastModemPreset(enforced[e]))
+                continue; // FLRC/GFSK presets are selectable by number only and deliberately not advertised
             bool advertised = false;
             for (pb_size_t p = 0; p < grp.presets_count; p++)
                 if (grp.presets[p] == enforced[e])

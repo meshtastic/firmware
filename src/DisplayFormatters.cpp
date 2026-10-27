@@ -60,6 +60,22 @@ const char *DisplayFormatters::getModemPresetDisplayName(meshtastic_Config_LoRaC
     case PRESET(TINY_SLOW):
         return useShortName ? "TinyS" : "TinySlow";
         break;
+    case PRESET(FLRC_TURBO):
+        return useShortName ? "FlrcT" : "FlrcTurbo";
+    case PRESET(FLRC_FAST):
+        return useShortName ? "FlrcF" : "FlrcFast";
+    case PRESET(FLRC_MEDIUM):
+        return useShortName ? "FlrcM" : "FlrcMedium";
+    case PRESET(FLRC_LONG):
+        return useShortName ? "FlrcL" : "FlrcLong";
+    case PRESET(GFSK_TURBO):
+        return useShortName ? "GfskT" : "GfskTurbo";
+    case PRESET(GFSK_FAST):
+        return useShortName ? "GfskF" : "GfskFast";
+    case PRESET(GFSK_MEDIUM):
+        return useShortName ? "GfskM" : "GfskMedium";
+    case PRESET(GFSK_LONG):
+        return useShortName ? "GfskL" : "GfskLong";
     default:
         return useShortName ? "Custom" : "Invalid";
         break;
