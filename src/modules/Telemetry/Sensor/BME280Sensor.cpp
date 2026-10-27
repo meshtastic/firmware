@@ -32,17 +32,17 @@ bool BME280Sensor::getMetrics(meshtastic_Telemetry *measurement)
 {
     LOG_DEBUG("BME280 getMetrics");
     if (!bme280.takeForcedMeasurement()) {
-        LOG_WARN("%s measurement timed out", sensorName);
+        LOG_WARN("%s read failed", sensorName);
         return false;
     }
-    float temperature = bme280.readTemperature();
+    // Temperature last: the library drops I2C errors, so a bus that fails mid-sequence must still trip the range check.
     float humidity = bme280.readHumidity();
     float pressure = bme280.readPressure() / 100.0F;
+    float temperature = bme280.readTemperature();
 
-    // Outside the datasheet operating range: a failed I2C read returns 0xFF bytes, which compensate to ~180 °C.
-    if (isnan(temperature) || isnan(humidity) || isnan(pressure) || temperature < -40 || temperature > 85 || pressure < 300 ||
-        pressure > 1100) {
-        LOG_WARN("%s reading out of range (T %.2f, RH %.2f, P %.2f), dropped", sensorName, temperature, humidity, pressure);
+    // Datasheet operating range; a failed I2C read compensates to ~180 °C. NaN fails these compares too.
+    if (!(temperature >= -40 && temperature <= 85 && pressure >= 300 && pressure <= 1100)) {
+        LOG_WARN("%s read failed", sensorName);
         return false;
     }
 
