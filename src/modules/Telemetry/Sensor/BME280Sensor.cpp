@@ -30,16 +30,28 @@ bool BME280Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 
 bool BME280Sensor::getMetrics(meshtastic_Telemetry *measurement)
 {
+    LOG_DEBUG("BME280 getMetrics");
+    if (!bme280.takeForcedMeasurement()) {
+        LOG_WARN("%s measurement timed out", sensorName);
+        return false;
+    }
+    float temperature = bme280.readTemperature();
+    float humidity = bme280.readHumidity();
+    float pressure = bme280.readPressure() / 100.0F;
+
+    // Outside the datasheet operating range: a failed I2C read returns 0xFF bytes, which compensate to ~180 °C.
+    if (isnan(temperature) || isnan(humidity) || isnan(pressure) || temperature < -40 || temperature > 85 || pressure < 300 ||
+        pressure > 1100) {
+        LOG_WARN("%s reading out of range (T %.2f, RH %.2f, P %.2f), dropped", sensorName, temperature, humidity, pressure);
+        return false;
+    }
+
     measurement->variant.environment_metrics.has_temperature = true;
     measurement->variant.environment_metrics.has_relative_humidity = true;
     measurement->variant.environment_metrics.has_barometric_pressure = true;
-
-    LOG_DEBUG("BME280 getMetrics");
-    bme280.takeForcedMeasurement();
-    measurement->variant.environment_metrics.temperature = bme280.readTemperature();
-    measurement->variant.environment_metrics.relative_humidity = bme280.readHumidity();
-    measurement->variant.environment_metrics.barometric_pressure = bme280.readPressure() / 100.0F;
-
+    measurement->variant.environment_metrics.temperature = temperature;
+    measurement->variant.environment_metrics.relative_humidity = humidity;
+    measurement->variant.environment_metrics.barometric_pressure = pressure;
     return true;
 }
 #endif
