@@ -2,12 +2,12 @@
 
 > **TL;DR**
 >
-> |                |                                                                                                                        |
-> | -------------- | ---------------------------------------------------------------------------------------------------------------------- |
-> | Local tests    | `./bin/run-tests.sh` (exit 0 GREEN · 1 RED · 2 AMBER · 3 FILTERED)                                                     |
-> | Hardware tests | [meshtastic/meshtastic-mcp](https://github.com/meshtastic/meshtastic-mcp) (`MESHTASTIC_FIRMWARE_ROOT` → this checkout) |
-> | Format         | `trunk fmt`                                                                                                            |
-> | Mirror docs    | `AGENTS.md` (short pointer for agents that don't read this file) · `CLAUDE.md` (Claude Code)                           |
+> |                |                                                                                                                           |
+> | -------------- | ------------------------------------------------------------------------------------------------------------------------- |
+> | Local tests    | `./bin/run-tests.sh` (exit 0 GREEN · 1 RED · 2 AMBER · 3 FILTERED · 4 BUSY · 5 ABORTED · 6 UNSUPPORTED); `--status` first |
+> | Hardware tests | [meshtastic/meshtastic-mcp](https://github.com/meshtastic/meshtastic-mcp) (`MESHTASTIC_FIRMWARE_ROOT` → this checkout)    |
+> | Format         | `trunk fmt`                                                                                                               |
+> | Mirror docs    | `AGENTS.md` (short pointer for agents that don't read this file) · `CLAUDE.md` (Claude Code)                              |
 >
 > **Need this? It's here.**
 >
@@ -27,7 +27,8 @@ Meshtastic is an open-source LoRa mesh networking project for long-range, low-po
 ### Supported Hardware Platforms
 
 - **ESP32** (ESP32, ESP32-S3, ESP32-C3, ESP32-C6) - Most common platform
-- **nRF52** (nRF52840, nRF52833) - Low power Nordic chips
+- **nRF52** (nRF52840) - Low power Nordic chips
+- **nRF54** - `ARCH_NRF54L`, its own platform layer in `src/platform/nrf54` (`architecture.h`, `main-nrf54.cpp`; env base `nrf54_base` in `variants/nrf54l15/nrf54.ini`) that shares only `NRF52Bluetooth.cpp`, `Nrf52SaadcLock.cpp`, `alloc.cpp` and `hardfault.cpp` with `src/platform/nrf52`, built through the out-of-tree `meshtastic/platform-nordicnrf54` platform and its s145 SoftDevice Arduino core. Boards under `variants/nrf54l15/`: `xiao_nrf54l15_lr2021` is the per-PR canary, `xiao_nrf54l15` and `nrf54l15dk` are `board_level = extra`. Memory class SMALL: 120 hot nodes, 100 warm in `/prefs/warm.dat` (not the nRF52840 raw-flash ring)
 - **RP2040/RP2350** - Raspberry Pi Pico variants
 - **STM32WL** - STM32 with integrated LoRa
 - **Linux/Portduino** - Native Linux builds (Raspberry Pi, etc.)
@@ -97,7 +98,7 @@ Meshtastic packets on the air are typically encrypted one of two ways: the **per
 
 - **Channels** are symmetric rooms: anyone with the PSK can read any message on the channel. Channel 0 is the "primary" channel and ships with the short-form default PSK on factory devices, forming the public mesh most users join. (The LoRa modem preset `LONG_FAST` lives on `config.lora.modem_preset` and is an independent field - don't conflate "channel 0 default PSK" with the modem preset name.)
 - **DMs** addressed to a single node require PKI so that other holders of the channel PSK can't read them. Outside Ham mode, Meshtastic does not fall back to channel-symmetric encryption when the destination public key is unknown.
-- **Remote admin** is a DM carrying an `AdminMessage`. The receiver only acts on it if the sender's public key is on its allowlist (`config.security.admin_key[0..2]`).
+- **Remote admin** is a DM carrying an `AdminMessage`. The receiver only acts on it if the sender's public key is on its allowlist (`AdminKeys::isAuthorized()` in `src/mesh/AdminKeys.h`: `config.security.admin_key[0..2]`, plus any further keys meshtasticd's `Security.AdminKeys` supplied).
 - **Ham mode** (`owner.is_licensed=true`, where `owner` is the local `meshtastic_User` record) disables PKI entirely and sends cleartext - FCC Part 97 prohibits encryption on amateur bands.
 - **No ratchet, no session.** Every packet is encrypted from scratch - a stateless design that matches the high-loss, store-and-forward nature of LoRa.
 
@@ -137,7 +138,7 @@ Implemented in `src/modules/AdminModule.cpp` → `handleReceivedProtobuf`. The a
 1. **Response messages** - if `messageIsResponse(r)` is true (the payload is a response to one of our earlier admin requests), it's accepted without any further check. The in-file comment flags this as a known-untightened gap: a stricter implementation would remember which `public_key` we last queried and reject responses that don't match.
 2. **Local admin** - `mp.from == 0` (phone app over BLE, serial CLI, internal module); never travels over the air. **Rejected** if `config.security.is_managed` is true, because managed devices expect admin to arrive over the air through an authorized remote path.
 3. **Legacy admin channel (deprecated)** - the packet arrived on a channel named literally `"admin"`. Gated by `config.security.admin_channel_enabled`; returns `NOT_AUTHORIZED` if the flag is false. Kept for backward compatibility; new deployments should use PKI admin.
-4. **PKI admin (preferred for remote)** - `mp.pki_encrypted == true` AND `mp.public_key` matches one of `config.security.admin_key[0..2]` (up to three authorized 32-byte Curve25519 public keys, typically copied from the admin node's own `user.public_key`).
+4. **PKI admin (preferred for remote)** - `mp.pki_encrypted == true` AND `AdminKeys::isAuthorized(mp.public_key.bytes)`. That is `config.security.admin_key[0..2]` (up to three authorized 32-byte Curve25519 public keys, typically copied from the admin node's own `user.public_key`), plus, on meshtasticd, the keys `Security.AdminKeys` in `config.yaml` carried past those three. The same list backs `DMShell::isAuthorizedPacket`, the `is_managed` guard, and the admin-key trial decrypt in `Router::perhapsDecode` - add a key source there, not at a call site. On meshtasticd the file wins: `AdminKeys::applyHostKeys()` re-asserts it at boot and after every remote write of the security config.
 5. **Fallthrough** → `NOT_AUTHORIZED`.
 
 On top of authorization, any remote admin message that **mutates** state (not a request, not a response) also has to pass a session-key check (`checkPassKey`): the client must first pull a fresh 8-byte `session_passkey` via `get_admin_session_key_request`, then echo that passkey back in the mutating message. The device rotates the passkey after 150 s and rejects values older than 300 s - a narrow anti-replay window on top of the PKI layer.
@@ -213,11 +214,13 @@ Every code path that drops a node from the header table must also evict the sate
 
 ### Warm tier (long-tail identity)
 
-On every arch except STM32WL and bare nRF52832 (`WARM_NODE_COUNT > 0`), a node evicted from the header table is not forgotten outright: `WarmNodeStore` (`src/mesh/WarmNodeStore.{h,cpp}`) keeps a 40 B `{num, last_heard, public_key}` record per evicted node - primarily so PKI DMs to/from a long-tail node keep decrypting without re-running a NodeInfo exchange (the rest of `NodeInfoLite` rebuilds from traffic in seconds).
+The tier is gated on `WARM_NODE_COUNT > 0`. `MESHTASTIC_MEM_CLASS <= MEM_CLASS_TINY` sets it to `0` and compiles the tier out; STM32WL is the only such part, so every other arch has the tier.
+
+Where it is enabled, a node evicted from the header table is not forgotten outright: `WarmNodeStore` (`src/mesh/WarmNodeStore.{h,cpp}`) keeps a 40 B `{num, last_heard, public_key}` record per evicted node - primarily so PKI DMs to/from a long-tail node keep decrypting without re-running a NodeInfo exchange (the rest of `NodeInfoLite` rebuilds from traffic in seconds).
 
 - **Write:** `getOrCreateMeshNode`'s eviction and `demoteOldestHotNodesToWarm` (the over-cap boot migration) call `warmStore.absorb(num, last_heard, key)` _before_ the node leaves the header.
 - **Read-back:** `getOrCreateMeshNode` calls `warmStore.take()` to rehydrate `last_heard` + key when a warm node is re-admitted; `copyPublicKey()` falls back to the warm tier so the PKI send path finds keys for evicted peers.
-- **Persistence:** nRF52840 uses a 12 KB raw-flash record-ring at `0xEA000` (below LittleFS; append + replay + compact-on-rotate, link-guarded by `nrf52840_s140_v7.ld` and `extra_scripts/nrf52_warm_region.py`). Everywhere else: a `/prefs/warm.dat` snapshot flushed by `saveIfDirty()` on the node-DB save cadence.
+- **Persistence:** nRF52840 uses a 12 KB raw-flash record-ring at `0xEA000` (below LittleFS; append + replay + compact-on-rotate, link-guarded by `nrf52840_s140_v7.ld` and `extra_scripts/nrf52_warm_region.py`). Every other arch (nRF54 included): a `/prefs/warm.dat` snapshot flushed by `saveIfDirty()` on the node-DB save cadence.
 - **Tunables** (`mesh-pb-constants.h`): `WARM_NODE_COUNT` (per-arch; `0` disables the tier) and `MAX_NUM_NODES` (hot cap - 120 on nRF52840/generic ESP32 to fit the 28 KB LittleFS; ESP32-S3 picks 100/200/250 at boot from its flash size). Verbose migration/self-care tracing routes through `LOG_MIGRATION`, gated by `MESHTASTIC_NODEDB_MIGRATION_VERBOSE`.
 - **`MAX_NUM_NODES` on native is not in that header and is not a constant.** `variants/native/portduino{,-buildroot}/variant.h` define it as `portduino_config.MaxNodes` - resolved at **runtime**, default **200**, overridable per-host with `General: MaxNodes` in the portduino YAML. `variant.h` is reached first, so the `ARCH_PORTDUINO` branch in `mesh-pb-constants.h` never fires; it is now `#error`-guarded rather than holding a plausible-looking `250`. Reading 250 there yields a protected-node cap of 248 when the real one is 198 (`numProtectedNodes() < MAX_NUM_NODES - 2`), which has already produced one wrong diagnosis. The separate 250 in `NodeDB::getMaxNodesAllocatedSize()` is `NODEDB_MIGRATION_LOAD_CEILING`, a decode allowance for files from larger-cap firmware - not a cap.
 
@@ -332,7 +335,7 @@ firmware/
 
 - Follow existing code style - run `trunk fmt` before commits
 - Prefer `LOG_DEBUG`, `LOG_INFO`, `LOG_WARN`, `LOG_ERROR` for logging
-- **Three logging tiers for diagnostics.** `LOG_TRACE` is the per-packet/per-poll firehose - compiled out by default (`MESHTASTIC_TRACE_LOGGING=1` enables; always on for portduino). Subsystem bring-up detail routes through a per-subsystem gate macro instead, e.g. `LOG_DEBUG_GPS(...)` in `src/gps/GPSLog.h` (`GPS_DEBUG=1` enables; costs no flash when off) - model new subsystem gates on it or on `LOG_MIGRATION` (`src/mesh/WarmNodeStore.h`): `#ifndef` value-default, `#if SYM` value test, `((void)0)` off-branch. Genuine anomalies stay unconditional `LOG_WARN`/`LOG_ERROR`.
+- **Three logging tiers for diagnostics.** `LOG_TRACE` is the per-packet/per-poll firehose - compiled out by default (`MESHTASTIC_TRACE_LOGGING=1` enables; always on for portduino). Subsystem bring-up detail routes through a per-subsystem gate macro instead, e.g. `LOG_DEBUG_GPS(...)` in `src/gps/GPSLog.h` (`GPS_DEBUG=1` enables; costs no flash when off) and `LOG_DEBUG_RADIO(...)` (`RADIO_DEBUG=1` enables; covers chip bring-up detail and per-event driver chatter in `RadioInterface`/`RadioLibInterface` and the SX126x/SX128x/LR11x0/LR20x0/RF95 drivers). `LOG_DEBUG_RADIO` sits in `src/DebugConfiguration.h` beside `LOG_TRACE` rather than in a header of its own, since every radio driver already includes it - a gate only needs its own header when its subsystem has one to hang it on - model new subsystem gates on it or on `LOG_MIGRATION` (`src/mesh/WarmNodeStore.h`): `#ifndef` value-default, `#if SYM` value test, `((void)0)` off-branch. Genuine anomalies stay unconditional `LOG_WARN`/`LOG_ERROR`.
 - **Format node IDs and packet IDs as `0x%08x` in logs.** This covers `NodeNum`/`PacketId` and the `uint32_t` packet fields `from`, `to`, `id`, `dest`, `source`, `request_id`, and `node_id`. They are 32-bit, so 8 hex digits is exact - `%08x` never truncates or leaves a value ragged. Do **not** use `%x` (variable width) or `%0x` (a no-op typo for `%08x` - the `0` flag does nothing without a width). User-facing display uses `!%08x` (the `!xxxxxxxx` convention), e.g. `Applet::hexifyNodeNum`.
 - **Do not zero-pad one-byte values to 8.** `next_hop`, `relay_node`, and the next-hop hint are `uint8_t` last-byte route hints, and `channel` is a one-byte hash/index - log these as `0x%x` (or `%d`). Padding a byte to `0x000000ab` falsely implies a full node number. The same goes for I2C addresses, register values, flags/bitmasks, and error/reason codes: they are not IDs, so leave them `0x%x`.
 - Use `assert()` for invariants that should never fail
@@ -769,12 +772,15 @@ Unit tests in `test/` directory. The canonical suite count is detected on the fl
 
 Exit codes and verdicts (exact counts will vary; examples below are illustrative):
 
-| Exit | Verdict    | Meaning                                                                                                                                                                                                              |
-| ---- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0    | `GREEN`    | All canonical suites ran, all passed, no ignored test cases                                                                                                                                                          |
-| 1    | `RED`      | At least one failure, build error, or sanitizer fault                                                                                                                                                                |
-| 2    | `AMBER`    | All that ran passed, but something was lost or unexplained: a suite silently went missing on a full run, individual test cases were skipped (`TEST_IGNORE`), or a suite left behind shared state it does not declare |
-| 3    | `FILTERED` | A `-f` run completed cleanly; suites outside the filter were intentionally not run                                                                                                                                   |
+| Exit | Verdict       | Meaning                                                                                                                                                                                                              |
+| ---- | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0    | `GREEN`       | All canonical suites ran, all passed, no ignored test cases                                                                                                                                                          |
+| 1    | `RED`         | At least one failure, build error, or sanitizer fault                                                                                                                                                                |
+| 2    | `AMBER`       | All that ran passed, but something was lost or unexplained: a suite silently went missing on a full run, individual test cases were skipped (`TEST_IGNORE`), or a suite left behind shared state it does not declare |
+| 3    | `FILTERED`    | A `-f` run completed cleanly; suites outside the filter were intentionally not run                                                                                                                                   |
+| 4    | `BUSY`        | A run is already in progress (this or another session); nothing was started. `--status` to see it, `--wait` to attach, `--abort` to stop it                                                                          |
+| 5    | `ABORTED`     | The run was stopped by a signal or `--abort`; its log is kept. `--status` shows it                                                                                                                                   |
+| 6    | `UNSUPPORTED` | Not a Linux host; nothing ran. Use WSL (`bin\run-tests.cmd` forwards) or `./bin/test-native-docker.sh`                                                                                                               |
 
 Examples - exact counts will vary by suite count and env:
 
@@ -789,11 +795,13 @@ RESULT: RED 1 failed
 RESULT: RED exit-time abort (tests passed; likely sanitizer - see hint above)
 
 # AMBER: a suite silently went missing on a full run
-RESULT: AMBER 23/24 suites ran (missing: test_radio) - all that ran passed
+RESULT: AMBER N-1/N suites ran (missing: test_radio) - all that ran passed
 
 # FILTERED: single suite run completed cleanly
-RESULT: FILTERED 1/24 suites ran (not run: test_admin_radio test_atak …) - filtered: test_serial
+RESULT: FILTERED 1/N suites ran (N-1 not run) - filtered: test_serial
 ```
+
+The script is written to be driven by a caller that cannot see the terminal: the final `RESULT:` line is the only verdict (pio's own `[PASSED]` and `N succeeded` lines precede it and mean nothing on their own); a second invocation while a run is in progress is refused with `BUSY` rather than started; the last verdict is kept in `.pio/runtests/last-result.tsv` with its log, and `./bin/run-tests.sh --status` prints it, marking it **STALE** when the tree has changed since. Never `pgrep` for a run - ask `--status`.
 
 > **Copilot interface note:** When running tests via the Copilot chat interface, edits made through the chat may not be reflected in the on-disk files that the test binary reads. If tests pass in chat but fail locally (or vice versa), verify the files on disk match what you expect before trusting the result. Always confirm with a local terminal run.
 

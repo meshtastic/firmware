@@ -38,11 +38,15 @@ uint8_t xorHash(const uint8_t *p, size_t len)
  */
 int16_t Channels::generateHash(ChannelIndex channelNum)
 {
+    return hashFor(channelNum, getName(channelNum));
+}
+
+int16_t Channels::hashFor(ChannelIndex channelNum, const char *name)
+{
     auto k = getKey(channelNum);
     if (k.length < 0)
         return -1; // invalid
     else {
-        const char *name = getName(channelNum);
         uint8_t h = xorHash((const uint8_t *)name, strlen(name));
 
         h ^= xorHash(k.bytes, k.length);
@@ -596,6 +600,9 @@ bool Channels::setDefaultPresetCryptoForHash(ChannelHash channelHash)
 
 bool Channels::isAEADEnabled(ChannelIndex chIndex)
 {
+    // Receive paths pass a packet's channel index unchecked; an out-of-range one is simply not AEAD.
+    if (chIndex >= getNumChannels())
+        return false;
     auto &ch = getByIndex(chIndex);
     return ch.has_settings && ch.settings.use_aead;
 }

@@ -5,6 +5,7 @@
 #define PB_MESHTASTIC_MESHTASTIC_CONFIG_PB_H_INCLUDED
 #include <pb.h>
 #include "meshtastic/device_ui.pb.h"
+#include "meshtastic/field_metadata.pb.h"
 
 #if PB_PROTO_HEADER_VERSION != 40
 #error Regenerate this file with the current version of nanopb generator.
@@ -13,7 +14,7 @@
 /* Enum definitions */
 /* Defines the device's role on the Mesh network */
 typedef enum _meshtastic_Config_DeviceConfig_Role {
-    /* Description: App connected or stand alone messaging device.
+    /* Description: App connected or standalone messaging device.
  Technical Details: Default Role */
     meshtastic_Config_DeviceConfig_Role_CLIENT = 0,
     /* Description: Device that does not forward packets from other devices. */
@@ -50,7 +51,7 @@ typedef enum _meshtastic_Config_DeviceConfig_Role {
     Still rebroadcasts, but with local only rebroadcast mode (known meshes only)
     Can be used for clandestine operation or to dramatically reduce airtime / power consumption */
     meshtastic_Config_DeviceConfig_Role_CLIENT_HIDDEN = 8,
-    /* Description: Broadcasts location as message to default channel regularly for to assist with device recovery.
+    /* Description: Broadcasts location as message to default channel regularly to assist with device recovery.
  Technical Details: Used to automatically send a text message to the mesh
     with the current position of the device on a frequent interval:
     "I'm lost! Position: lat / long" */
@@ -82,10 +83,10 @@ typedef enum _meshtastic_Config_DeviceConfig_RebroadcastMode {
  Only available in Repeater role. Setting this on any other roles will result in ALL behavior. */
     meshtastic_Config_DeviceConfig_RebroadcastMode_ALL_SKIP_DECODING = 1,
     /* Ignores observed messages from foreign meshes that are open or those which it cannot decrypt.
- Only rebroadcasts message on the nodes local primary / secondary channels. */
+ Only rebroadcasts messages on the node's local primary / secondary channels. */
     meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY = 2,
     /* Ignores observed messages from foreign meshes like LOCAL_ONLY,
- but takes it step further by also ignoring messages from nodenums not in the node's known list (NodeDB) */
+ but takes it a step further by also ignoring messages from nodenums not in the node's known list (NodeDB) */
     meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY = 3,
     /* Only permitted for SENSOR, TRACKER and TAK_TRACKER roles, this will inhibit all rebroadcasts, not unlike CLIENT_MUTE role. */
     meshtastic_Config_DeviceConfig_RebroadcastMode_NONE = 4,
@@ -174,7 +175,8 @@ typedef enum _meshtastic_Config_NetworkConfig_ProtocolFlags {
     meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST = 1
 } meshtastic_Config_NetworkConfig_ProtocolFlags;
 
-/* Deprecated in 2.7.4: Unused */
+/* Unused. Kept so the deprecated gps_format field still has a type; when
+ firmware stopped reading that field is recorded on the field itself. */
 typedef enum _meshtastic_Config_DisplayConfig_DeprecatedGpsCoordinateFormat {
     meshtastic_Config_DisplayConfig_DeprecatedGpsCoordinateFormat_UNUSED = 0
 } meshtastic_Config_DisplayConfig_DeprecatedGpsCoordinateFormat;
@@ -210,7 +212,7 @@ typedef enum _meshtastic_Config_DisplayConfig_DisplayMode {
     meshtastic_Config_DisplayConfig_DisplayMode_TWOCOLOR = 1,
     /* Same as TwoColor, but with inverted top bar. Not so good for Epaper displays */
     meshtastic_Config_DisplayConfig_DisplayMode_INVERTED = 2,
-    /* TFT Full Color Displays (not implemented yet) */
+    /* TFT Full Color Displays, which select the MUI */
     meshtastic_Config_DisplayConfig_DisplayMode_COLOR = 3
 } meshtastic_Config_DisplayConfig_DisplayMode;
 
@@ -338,11 +340,11 @@ typedef enum _meshtastic_Config_LoRaConfig_ModemPreset {
     /* Long Range - Moderately Fast */
     meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE = 7,
     /* Short Range - Turbo
- This is the fastest preset and the only one with 500kHz bandwidth.
+ This is the fastest preset, and one of three with 500kHz bandwidth.
  It is not legal to use in all regions due to this wider bandwidth. */
     meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO = 8,
     /* Long Range - Turbo
- This preset performs similarly to LongFast, but with 500Khz bandwidth. */
+ This preset performs similarly to LongFast, but with 500kHz bandwidth. */
     meshtastic_Config_LoRaConfig_ModemPreset_LONG_TURBO = 9,
     /* Lite Fast
  Medium range preset optimized for EU 866MHz SRD band with 125kHz bandwidth.
@@ -429,7 +431,7 @@ typedef struct _meshtastic_Config_DeviceConfig {
     /* Sets the role of node */
     meshtastic_Config_DeviceConfig_RebroadcastMode rebroadcast_mode;
     /* Send our nodeinfo this often
- Defaults to 900 Seconds (15 minutes) */
+ Defaults to 10800 seconds (3 hours), minimum 3600 (1 hour) */
     uint32_t node_info_broadcast_secs;
     /* Treat double tap interrupt on supported accelerometers as a button press if set to true */
     bool double_tap_as_button_press;
@@ -451,7 +453,7 @@ typedef struct _meshtastic_Config_DeviceConfig {
 /* Position Config */
 typedef struct _meshtastic_Config_PositionConfig {
     /* We should send our position this often (but only if it has changed significantly)
- Defaults to 15 minutes */
+ Defaults to 1 hour (12 hours on routers) */
     uint32_t position_broadcast_secs;
     /* Adaptive position braoadcast, which is now the default. */
     bool position_broadcast_smart_enabled;
@@ -462,7 +464,7 @@ typedef struct _meshtastic_Config_PositionConfig {
     /* Is GPS enabled for this node? */
     bool gps_enabled;
     /* How often should we try to get GPS position (in seconds)
- or zero for the default of once every 30 seconds
+ or zero for the default of once every 2 minutes (24 hours on routers)
  or a very large value (maxint) to update only once at boot. */
     uint32_t gps_update_interval;
     /* Deprecated in favor of using smart / regular broadcast intervals as implicit attempt time */
@@ -487,7 +489,7 @@ typedef struct _meshtastic_Config_PositionConfig {
 /* Power Config\
  See [Power Config](/docs/settings/config/power) for additional power config details. */
 typedef struct _meshtastic_Config_PowerConfig {
-    /* Description: Will sleep everything as much as possible, for the tracker and sensor role this will also include the lora radio.
+    /* Description: Will sleep everything as much as possible, for the Tracker and Sensor roles this also includes the LoRa radio.
  Don't use this setting if you want to use your device with the phone apps or are using a device without a user button.
  Technical Details: Works for ESP32 devices and NRF52 devices in the Sensor or Tracker roles */
     bool is_power_saving;
@@ -559,10 +561,9 @@ typedef struct _meshtastic_Config_NetworkConfig {
 /* Display Config */
 typedef struct _meshtastic_Config_DisplayConfig {
     /* Number of seconds the screen stays on after pressing the user button or receiving a message
- 0 for default of one minute MAXUINT for always on */
+ 0 for default of ten minutes, MAXUINT for always on */
     uint32_t screen_on_secs;
-    /* Deprecated in 2.7.4: Unused
- How the GPS coordinates are formatted on the OLED screen. */
+    /* How the GPS coordinates are formatted on the OLED screen. */
     meshtastic_Config_DisplayConfig_DeprecatedGpsCoordinateFormat gps_format;
     /* Automatically toggles to the next page on the screen like a carousel, based the specified interval in seconds.
  Potentially useful for devices without user buttons. */
@@ -596,24 +597,43 @@ typedef struct _meshtastic_Config_DisplayConfig {
 
 /* Lora Config */
 typedef struct _meshtastic_Config_LoRaConfig {
-    /* When enabled, the `modem_preset` fields will be adhered to, else the `bandwidth`/`spread_factor`/`coding_rate`
- will be taked from their respective manually defined fields */
+    /* When enabled, the `modem_preset` sets the bandwidth and spread factor, and the
+ `bandwidth`/`spread_factor` fields are ignored. `coding_rate` is the exception:
+ see that field. When disabled, all three are taken from their respective
+ manually defined fields. */
     bool use_preset;
     /* Either modem_config or bandwidth/spreading/coding will be specified - NOT BOTH.
  As a heuristic: If bandwidth is specified, do not use modem_config.
  Because protobufs take ZERO space when the value is zero this works out nicely.
  This value is replaced by bandwidth/spread_factor/coding_rate.
+ The one exception is `coding_rate`, which can raise the preset's coding rate
+ without moving off the preset; see that field.
  If you'd like to experiment with other options add them to MeshRadio.cpp in the device code. */
     meshtastic_Config_LoRaConfig_ModemPreset modem_preset;
-    /* Bandwidth in MHz
+    /* Bandwidth in kHz
  Certain bandwidth numbers are 'special' and will be converted to the
- appropriate floating point value: 31 -> 31.25MHz */
+ appropriate floating point value: 31 -> 31.25kHz */
     uint16_t bandwidth;
-    /* A number from 7 to 12.
- Indicates number of chirps per symbol as 1<<spread_factor. */
+    /* A number from 5 to 12; firmware replaces a value outside that range with 11.
+ Indicates number of chirps per symbol as 1<<spread_factor.
+ RF95 radios additionally reject 5 and 6; that exclusion is per hardware
+ and so is not expressible as a bound here. */
     uint32_t spread_factor;
     /* The denominator of the coding rate.
- ie for 4/5, the value is 5. 4/8 the value is 8. */
+ ie for 4/5, the value is 5. 4/8 the value is 8.
+
+ With `use_preset` disabled this is the coding rate, 4 through 8; firmware replaces a value outside that range with 5.
+
+ With `use_preset` enabled, since 2.7.18 this raises the preset's coding rate
+ when it is 5 through 8 AND higher than the preset's. A lower value, a value
+ out of range, and 0 all leave the preset's coding rate in place, so 0 is how
+ a client says "use the preset's". Bandwidth and spread factor still come from
+ the preset, and the coding rate travels in the explicit LoRa header, so nodes
+ on the same preset still hear each other either way.
+
+ No bound is stated here because the valid set differs between the two cases:
+ 5 through 8 with `use_preset` off, and 0 plus anything from above the preset's
+ own coding rate up to 8 with it on. */
     uint8_t coding_rate;
     /* This parameter is for advanced users with advanced test equipment, we do not recommend most users use it.
  A frequency offset that is added to to the calculated band center frequency.
@@ -623,7 +643,7 @@ typedef struct _meshtastic_Config_LoRaConfig {
     meshtastic_Config_LoRaConfig_RegionCode region;
     /* Maximum number of hops. This can't be greater than 7.
  Default of 3
- Attempting to set a value > 7 results in the default */
+ Values above 7 are treated as 7 */
     uint32_t hop_limit;
     /* Disable TX from the LoRa radio. Useful for hot-swapping antennas and other tests.
  Defaults to false */
@@ -695,7 +715,7 @@ typedef struct _meshtastic_Config_SecurityConfig {
     /* If true, device is considered to be "managed" by a mesh administrator via admin messages
  Device is managed by a mesh administrator. */
     bool is_managed;
-    /* Serial Console over the Stream API." */
+    /* Serial Console over the Stream API. */
     bool serial_enabled;
     /* By default we turn off logging as soon as an API client connects (to keep shared serial link quiet).
  Output live debug logging over serial or bluetooth is set to true. */

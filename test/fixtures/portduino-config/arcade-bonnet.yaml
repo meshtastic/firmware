@@ -1,0 +1,17 @@
+# CLEAN. An Arcade Bonnet at its shipped address with a custom map: the buttons are named as
+# printed on the board, and an action may list several of them. Guards both the hex address
+# and the list form staying accepted.
+Lora:
+  Module: sx1262
+  CS: 21
+  IRQ: 16
+  Busy: 20
+  Reset: 18
+I2C:
+  I2CDevice: /dev/i2c-1
+Input:
+  ArcadeBonnet: 0x26
+  ArcadeBonnetButtons:
+    select: [1A, 1f]
+    cancel: 1B
+    left: 1C

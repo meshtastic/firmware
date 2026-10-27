@@ -139,7 +139,9 @@ uint16_t ScanI2CTwoWire::getRegisterValue(const ScanI2CTwoWire::RegisterLocation
     return value;
 }
 
-bool ScanI2CTwoWire::i2cCommandResponseLength(ScanI2C::DeviceAddress addr, uint16_t command, uint8_t expectedLength) const
+// requestFrom() reports the full length for any device that ACKs, so only the per-word Sensirion
+// CRC-8 (poly 0x31, init 0xFF) proves a Sensirion device answered.
+bool ScanI2CTwoWire::sensirionResponseValid(ScanI2C::DeviceAddress addr, uint16_t command, uint8_t expectedLength) const
 {
     TwoWire *i2cBus = fetchI2CBus(addr);
     i2cBus->beginTransmission(addr.address);
@@ -151,11 +153,20 @@ bool ScanI2CTwoWire::i2cCommandResponseLength(ScanI2C::DeviceAddress addr, uint1
         return false;
     }
     delay(20);
-    uint8_t received = i2cBus->requestFrom(addr.address, expectedLength);
-    bool match = (received == expectedLength);
+    bool valid = (i2cBus->requestFrom(addr.address, expectedLength) == expectedLength);
+    for (uint8_t i = 0; valid && i + 2 < expectedLength; i += 3) {
+        uint8_t crc = 0xFF;
+        for (uint8_t j = 0; j < 2; j++) {
+            crc ^= (uint8_t)i2cBus->read();
+            for (uint8_t bit = 0; bit < 8; bit++) {
+                crc = (crc & 0x80) ? (crc << 1) ^ 0x31 : crc << 1;
+            }
+        }
+        valid = (crc == i2cBus->read());
+    }
     while (i2cBus->available())
         i2cBus->read();
-    return match;
+    return valid;
 }
 
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR
@@ -422,8 +433,12 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 }
                 break;
 
+#ifdef HAS_BQ27220
+                // A gauge needing a config reset reads zero at register 0x04, so skip the T-Deck keyboard heuristic.
+                SCAN_SIMPLE_CASE(BQ27220_ADDR, BQ27220, "BQ27220", (uint8_t)addr.address)
+#else
             case TDECK_KB_ADDR:
-                // Do we have the T-Deck keyboard or the T-Deck Pro battery sensor?
+                // Do we have the T-Deck keyboard or a BQ27220 battery sensor?
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x04), 1);
                 if (registerValue != 0) {
                     logFoundDevice("BQ27220", (uint8_t)addr.address);
@@ -433,6 +448,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                     type = TDECKKB;
                 }
                 break;
+#endif
             case BBQ10_KB_ADDR:
                 // Check status register (0xF0) for DS284X status and one-wire reset
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xF0), 1);
@@ -444,7 +460,8 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 type = BBQ10KB;
                 logFoundDevice("BB Q10", (uint8_t)addr.address);
                 break;
-                SCAN_SIMPLE_CASE(TSTC8_KB_ADDR, STC8HKB, "STC8H KB", (uint8_t)addr.address);
+                SCAN_SIMPLE_CASE(TSTC8_KB_V1_ADDR, STC8HKB, "STC8H KB", (uint8_t)addr.address);
+                SCAN_SIMPLE_CASE(TSTC8_KB_V2_ADDR, STC8HKB, "STC8H KB", (uint8_t)addr.address);
                 SCAN_SIMPLE_CASE(ST7567_ADDRESS, SCREEN_ST7567, "ST7567", (uint8_t)addr.address);
 #ifdef HAS_NCP5623
                 SCAN_SIMPLE_CASE(NCP5623_ADDR, NCP5623, "NCP5623", (uint8_t)addr.address);
@@ -524,10 +541,20 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 }
                 break;
 #ifndef HAS_NCP5623
-            case AHT10_ADDR:
+            case AHT10_ADDR: { // same as FocalTech FT6x06/FT6x36 touch controllers
+                // An AHT has no register map and answers every read with its status byte, so FocalTech ID registers
+                // (vendor 0xA8, chip 0xA3) that read back different values can only be a touch controller
+                uint8_t vendor = 0, chip = 0;
+                if (readByteRegister(i2cBus, addr.address, 0xA8, vendor) && vendor != 0 &&
+                    readByteRegister(i2cBus, addr.address, 0xA3, chip) && chip != vendor) {
+                    LOG_INFO("FocalTech touch (chip 0x%x, vendor 0x%x) at 0x%x, not an AHT10", chip, vendor,
+                             (uint8_t)addr.address);
+                    break;
+                }
                 logFoundDevice("AHT10", (uint8_t)addr.address);
                 type = AHT10;
                 break;
+            }
 #endif
 #if !defined(M5STACK_UNITC6L)
             case INA_ADDR: // same as HM330X, ES7210 and SHT2X
@@ -706,17 +733,18 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                         }
                     }
                 }
-                // SFA30 detection: send 2-byte command 0xD060 (Get Device Marking) and check for 48-byte response
-                if (i2cCommandResponseLength(addr, 0xD060, 48)) {
-                    type = SFA30;
-                    logFoundDevice("SFA30", (uint8_t)addr.address);
-                    break;
-                }
-                // Fallback: LPS22HB detection at alternate address using WHO_AM_I register (0x0F == 0xB1)
+                // LPS22HB family (also LPS33HW/LPS35HW): WHO_AM_I (0x0F) == 0xB1. Checked before SFA30, whose
+                // command an ST sensor would take as a write to a reserved register.
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x0F), 1);
                 if (registerValue == 0xB1) {
                     type = LPS22HB;
                     logFoundDevice("LPS22HB", (uint8_t)addr.address);
+                    break;
+                }
+                // SFA30 detection: 2-byte command 0xD060 (Get Device Marking) returns 48 bytes of CRC-checked words
+                if (sensirionResponseValid(addr, 0xD060, 48)) {
+                    type = SFA30;
+                    logFoundDevice("SFA30", (uint8_t)addr.address);
                 }
                 break;
                 SCAN_SIMPLE_CASE(LPS22HB_ADDR, LPS22HB, "LPS22HB", (uint8_t)addr.address)
@@ -861,7 +889,27 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 break;
 
                 SCAN_SIMPLE_CASE(LSM6DS3_ADDR, LSM6DS3, "LSM6DS3", (uint8_t)addr.address);
-                SCAN_SIMPLE_CASE(VEML7700_ADDR, VEML7700, "VEML7700", (uint8_t)addr.address);
+            case VEML7700_ADDR: { // same as BMM150 with CSB and SDO low
+                // VEML7700 ID (0x07) low byte is 0x81. A BMM150 chip ID (0x40) reads 0x32, but only once the power bit
+                // (0x4B bit 0) has taken it out of suspend
+                uint8_t id = 0;
+                if (!readByteRegister(i2cBus, addr.address, 0x07, id) || id != 0x81) {
+                    i2cBus->beginTransmission(addr.address);
+                    i2cBus->write((uint8_t)0x4B);
+                    i2cBus->write((uint8_t)0x01);
+                    if (i2cBus->endTransmission() == 0) {
+                        delay(3); // BMM150 start-up time
+                        if (readByteRegister(i2cBus, addr.address, 0x40, id) && id == 0x32) {
+                            logFoundDevice("BMM150", (uint8_t)addr.address);
+                            type = BMM150;
+                            break;
+                        }
+                    }
+                }
+                logFoundDevice("VEML7700", (uint8_t)addr.address);
+                type = VEML7700;
+                break;
+            }
             case TCA9555_ADDR:
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x01), 1);
                 if (registerValue == 0x13) {
@@ -1079,6 +1127,14 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                     logFoundDevice("ADS1X15 ADC", (uint8_t)addr.address);
                     break;
                 }
+#ifdef HAS_ADS1115
+                // Already configured by the battery driver in Power.cpp, so the default-config check above misses it.
+                if (addr.address == ADS1115_ADDR) {
+                    type = ADS1X15;
+                    logFoundDevice("ADS1115 ADC", (uint8_t)addr.address);
+                    break;
+                }
+#endif
 
                 // T=1oI2C soft reset; an SE050 answers A5 E0 00 3F 19. requestFrom() is
                 // required: readBytes() only drains the RX buffer requestFrom() fills.

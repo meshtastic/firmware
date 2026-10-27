@@ -8,8 +8,8 @@
 #include <cstdint>
 #include <deque>
 #include <iterator>
+#include <map>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 // NodeNum stored as raw uint32_t below; including MeshTypes.h here breaks the
@@ -74,8 +74,8 @@ class PhoneAPI
 
     uint8_t config_state = 0;
 
-    // Hashmap of timestamps for last time we received a packet on the API per portnum
-    std::unordered_map<meshtastic_PortNum, uint32_t> lastPortNumToRadio;
+    // Timestamps of the last API packet per portnum. std::map keeps the libstdc++ hashtable out of small images.
+    std::map<meshtastic_PortNum, uint32_t> lastPortNumToRadio;
     uint32_t recentToRadioPacketIds[20]; // Last 20 ToRadio MeshPacket IDs we have seen
 
     /**

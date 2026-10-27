@@ -269,8 +269,6 @@ class HopScalingModule : private concurrency::OSThread
     /// double samplingDenominator and filteringDenominator and remove non-matching entries.
     void trimIfNeeded();
 
-    void logStatusReport(bool didHourlyUpdate) const;
-
     // -----------------------------------------------------------------------
     // Histogram storage
     // -----------------------------------------------------------------------
@@ -323,7 +321,6 @@ class HopScalingModule : private concurrency::OSThread
     // Cached hourly results
     // -----------------------------------------------------------------------
     PerHopCounts lastPerHopCounts = {};
-    uint16_t lastScaledPerHop[MAX_HOP + 1] = {};
     uint8_t lastSuggestedHop = MAX_HOP;
     uint8_t lastPoliteNumer = POLITENESS_DEFAULT;
     MeshTrendStats lastTrendStats = {};

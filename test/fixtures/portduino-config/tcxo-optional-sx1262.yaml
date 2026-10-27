@@ -1,0 +1,11 @@
+# CLEAN. The same flag on another family, with an explicit Vref. That voltage is what gets
+# tried first, so the report must name it rather than the 1.6 V default.
+Lora:
+  Module: sx1262
+  spidev: spidev0.0
+  CS: 21
+  IRQ: 16
+  Busy: 20
+  Reset: 18
+  DIO3_TCXO_VOLTAGE: 1.8
+  TCXO_OPTIONAL: true

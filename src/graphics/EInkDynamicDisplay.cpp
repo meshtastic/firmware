@@ -128,7 +128,7 @@ void EInkDynamicDisplay::endOrDetach()
     else if (previousRefresh == FAST)
         EInkDisplay::endUpdate(); // Still block while updating, but EInkDisplay needs us to call endUpdate() ourselves.
 
-        // Fallback - If using an unmodified version of GxEPD2 for some reason
+    // Fallback - If using an unmodified version of GxEPD2 for some reason
 #else
     if (previousRefresh == FULL || previousRefresh == FAST) { // If refresh wasn't skipped (on unspecified..)
         LOG_WARN(

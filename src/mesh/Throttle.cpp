@@ -38,6 +38,15 @@ bool Throttle::isWithinTimespanMs(uint32_t lastExecutionMs, uint32_t timeSpanMs)
     return (now - lastExecutionMs) < timeSpanMs;
 }
 
+/// @brief How much of an interval is left since a stored event, 0 once the interval has passed
+/// @param lastExecutionMs The last execution time in milliseconds
+/// @param intervalMs The interval in milliseconds
+uint32_t Throttle::remainingMs(uint32_t lastExecutionMs, uint32_t intervalMs)
+{
+    uint32_t elapsed = Time::getMillis() - lastExecutionMs;
+    return elapsed < intervalMs ? intervalMs - elapsed : 0;
+}
+
 /// @brief Check whether an absolute deadline has arrived, correctly across the millis() wrap
 /// @param deadlineMs The deadline, as a millis() value
 /// See the header for the range limit and the sentinel requirement.
