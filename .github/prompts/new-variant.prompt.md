@@ -88,8 +88,8 @@ Optional files:
 [env:my_variant]
 extends = esp32s3_base            ; Use architecture-specific base
 board = esp32-s3-devkitc-1        ; PlatformIO board definition (or custom in boards/)
-board_level = extra               ; Build level: extra, or omit for default
-custom_meshtastic_support_level = 1  ; 1 = PR builds, 2 = merge builds only
+board_level = extra               ; Required: pr, release, or extra
+custom_meshtastic_support_level = 1  ; Hardware-list metadata, not a CI build selector
 
 build_flags =
     ${esp32s3_base.build_flags}
@@ -108,11 +108,23 @@ upload_speed = 921600
 - `nrf52840_base` / `nrf52.ini` - nRF52840
 - `rp2040_base` - RP2040/RP2350
 
-### Support Levels
+### CI Build Selection
 
-- `custom_meshtastic_support_level = 1` - Built on every PR (actively supported)
-- `custom_meshtastic_support_level = 2` - Built only on merge to main branches
-- `board_level = extra` - Only built on full releases
+Every variant must declare `board_level`; the CI matrix generator rejects missing
+or unrecognized values:
+
+- `board_level = pr` - Included in every PR build matrix.
+- `board_level = release` - Included in the full release matrix, but not the PR subset.
+- `board_level = extra` - Included only when the `extra` level is requested.
+
+When a PR adds a new `platformio.ini`, the matrix generator may also include
+its first environment regardless of `board_level`.
+
+### Hardware Support Metadata
+
+`custom_meshtastic_support_level` (1-3) is emitted as `supportLevel` in the
+generated hardware list by `bin/platformio-custom.py`. It does not determine
+which environments CI builds; that is controlled by `board_level`.
 
 ## Build Manifest Metadata
 
@@ -170,7 +182,8 @@ If the PlatformIO board doesn't exist, create a custom board JSON in `boards/`:
 
 - [ ] Create `variants/<arch>/<name>/variant.h` with pin definitions
 - [ ] Create `variants/<arch>/<name>/platformio.ini` extending correct base
-- [ ] Set `custom_meshtastic_support_level` (1 or 2)
+- [ ] Set `board_level` (`pr`, `release`, or `extra`)
+- [ ] Set `custom_meshtastic_support_level` (1-3) for hardware-list metadata
 - [ ] Verify radio chip define matches hardware (`USE_SX1262`, etc.)
 - [ ] Set hardware capability flags (`HAS_GPS`, `HAS_SCREEN`, etc.)
 - [ ] Add custom board JSON in `boards/` if needed
