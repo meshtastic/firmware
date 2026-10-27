@@ -8,6 +8,7 @@
 #include "modules/OnScreenKeyboardModule.h"
 #include <Arduino.h>
 #include <algorithm>
+#include <cstring>
 
 namespace graphics
 {
@@ -73,14 +74,22 @@ bool OnScreenKeyboardModule::processVirtualKeyboardInput(const InputEvent &event
     if (!targetKeyboard)
         return false;
 
+    const bool isRotary = event.source && strcmp(event.source, "rotEnc1") == 0;
+
     switch (event.inputEvent) {
     case INPUT_BROKER_UP:
     case INPUT_BROKER_UP_LONG:
-        targetKeyboard->moveCursorUp();
+        if (isRotary)
+            targetKeyboard->moveCursorLeft();
+        else
+            targetKeyboard->moveCursorUp();
         return true;
     case INPUT_BROKER_DOWN:
     case INPUT_BROKER_DOWN_LONG:
-        targetKeyboard->moveCursorDown();
+        if (isRotary)
+            targetKeyboard->moveCursorRight();
+        else
+            targetKeyboard->moveCursorDown();
         return true;
     case INPUT_BROKER_LEFT:
     case INPUT_BROKER_ALT_PRESS:
