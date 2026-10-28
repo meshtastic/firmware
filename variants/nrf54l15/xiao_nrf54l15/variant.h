@@ -1,14 +1,20 @@
 #pragma once
 
 /*
- * Seeed XIAO nRF54L15 with a Wio-SX1262 for XIAO (SKU 113010003), or with XIAO_NRF54L15_LR2021 the
- * Wio-LR2021 on the LoRa Plus expansion board (SKU 100039980, SSD1306 OLED and Grove I2C on D4/D5).
- * The two modules share D1..D3 with different roles, so they are separate build environments.
+ * Seeed XIAO nRF54L15 with a Wio-SX1262 for XIAO (SKU 113010003), or on the LoRa Plus expansion
+ * board (SSD1306 OLED and Grove I2C on D4/D5) with either a Wio-LR2021 (XIAO_NRF54L15_LR2021,
+ * SKU 100039980) or a Wio-LR2012 (XIAO_NRF54L15_LR2012, SKU 100015571). The Wio-SX1262 shares
+ * D1..D3 with the expansion board in different roles, so they are separate build environments.
  *
  * This header shadows the framework's variants/xiao_nrf54l15/variant.h, so it carries the core
  * pin table definitions as well. Arduino pins 0..10 are the XIAO header D0..D10, 11..23 are
  * internal signals (see variant.cpp for the physical GPIO of each index).
  */
+
+#if defined(XIAO_NRF54L15_LR2021) || defined(XIAO_NRF54L15_LR2012)
+// Both LoRa Plus kits are the same carrier board, so everything but the radio itself is shared
+#define XIAO_NRF54L15_LORA_PLUS
+#endif
 
 #define VARIANT_MCK (128000000ul)
 #define USE_LFXO
@@ -58,7 +64,7 @@ static const uint8_t A5 = PIN_A5;
 // User button P0.00 (active low)
 #define PIN_BUTTON1 17
 #define BUTTON_NEED_PULLUP
-#ifdef XIAO_NRF54L15_LR2021
+#ifdef XIAO_NRF54L15_LORA_PLUS
 // K1 on the LoRa Plus expansion board, D14 (P2.09)
 #define PIN_BUTTON2 14
 #endif
@@ -82,7 +88,7 @@ static const uint8_t A5 = PIN_A5;
 #define PIN_SPI_MISO D9
 #define PIN_SPI_MOSI D10
 #define PIN_SPI_SCK D8
-#ifdef XIAO_NRF54L15_LR2021
+#ifdef XIAO_NRF54L15_LORA_PLUS
 static const uint8_t SS = D3;
 #else
 static const uint8_t SS = D4;
@@ -91,7 +97,7 @@ static const uint8_t MOSI = PIN_SPI_MOSI;
 static const uint8_t MISO = PIN_SPI_MISO;
 static const uint8_t SCK = PIN_SPI_SCK;
 
-#ifdef XIAO_NRF54L15_LR2021
+#ifdef XIAO_NRF54L15_LORA_PLUS
 // Wire (TWIM22): header I2C on D4 (SDA, P1.10) / D5 (SCL, P1.11)
 #define PIN_WIRE_SDA D4
 #define PIN_WIRE_SCL D5
@@ -125,6 +131,18 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define LR2021_SPI_SCK_PIN PIN_SPI_SCK
 #define LR2021_SPI_MOSI_PIN PIN_SPI_MOSI
 #define LR2021_SPI_MISO_PIN PIN_SPI_MISO
+#define IRQ_DIO_NUM 8
+#elif defined(XIAO_NRF54L15_LR2012)
+// Wio-LR2012 on the same LoRa Plus expansion board, so the same pinout as the Wio-LR2021 above.
+// Sub-GHz only: no 2.4 GHz band, so LORA_24 is rejected in LR2012Interface::wideLora().
+#define USE_LR2012
+#define LR2012_SPI_NSS_PIN D3
+#define LR2012_IRQ_PIN D0
+#define LR2012_NRESET_PIN D2
+#define LR2012_BUSY_PIN D1
+#define LR2012_SPI_SCK_PIN PIN_SPI_SCK
+#define LR2012_SPI_MOSI_PIN PIN_SPI_MOSI
+#define LR2012_SPI_MISO_PIN PIN_SPI_MISO
 #define IRQ_DIO_NUM 8
 #else
 // Wio-SX1262 for XIAO

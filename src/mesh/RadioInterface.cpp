@@ -5,6 +5,7 @@
 #include "LR1110Interface.h"
 #include "LR1120Interface.h"
 #include "LR1121Interface.h"
+#include "LR2012Interface.h"
 #include "LR2021Interface.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
@@ -629,6 +630,20 @@ std::unique_ptr<RadioInterface> initLoRa()
         } else {
             LOG_INFO("LR2021 init success");
             radioType = LR2021_RADIO;
+        }
+    }
+#endif
+
+#if defined(USE_LR2012) && RADIOLIB_EXCLUDE_LR2021 != 1
+    if (!rIf) {
+        rIf = std::unique_ptr<LR2012Interface>(
+            new LR2012Interface(loraHal, LR2012_SPI_NSS_PIN, LR2012_IRQ_PIN, LR2012_NRESET_PIN, LR2012_BUSY_PIN));
+        if (!rIf->init()) {
+            LOG_WARN("No LR2012 radio");
+            rIf = nullptr;
+        } else {
+            LOG_INFO("LR2012 init success");
+            radioType = LR2012_RADIO;
         }
     }
 #endif

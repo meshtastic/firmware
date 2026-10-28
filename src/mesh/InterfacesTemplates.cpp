@@ -30,6 +30,9 @@ template class LR11x0Interface<LR1121>;
 #if (defined(USE_LR2021) || defined(ARCH_PORTDUINO)) && RADIOLIB_EXCLUDE_LR2021 != 1
 template class LR20x0Interface<LR2021>;
 #endif
+#if defined(USE_LR2012) && RADIOLIB_EXCLUDE_LR2021 != 1
+template class LR20x0Interface<LR2012>;
+#endif
 #ifdef ARCH_STM32WL
 template class SX126xInterface<STM32WLx>;
 #endif
