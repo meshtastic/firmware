@@ -448,6 +448,11 @@ class Screen : public concurrency::OSThread
         switch (last) {
         case 0xC2: {
             SKIPREST = false;
+#if defined(OLED_GR)
+            // The GR font holds Greek glyphs in the slots of ¡ ¢ ª ¸ ¹ º ¼ ¾, so show ¿ instead
+            if (ch == 0xA1 || ch == 0xA2 || ch == 0xAA || ch == 0xB8 || ch == 0xB9 || ch == 0xBA || ch == 0xBC || ch == 0xBE)
+                break;
+#endif
             return (uint8_t)ch;
         }
 
