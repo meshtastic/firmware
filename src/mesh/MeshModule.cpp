@@ -193,8 +193,15 @@ void MeshModule::callModules(meshtastic_MeshPacket &mp, RxSource src)
 
                 // If the requester didn't ask for a response we might need to discard unused replies to prevent memory leaks
                 if (pi.myReply) {
-                    LOG_DEBUG("Discard an unneeded response");
-                    packetPool.release(pi.myReply);
+                    if (pi.myReply->decoded.portnum == meshtastic_PortNum_ROUTING_APP && !currentReply && isDecoded &&
+                        !mp.decoded.want_response && mp.want_ack && isToUs(&mp)) {
+                        // A refusal NAK takes the place of the plain ACK ReliableRouter would otherwise send
+                        currentReply = pi.myReply;
+                        currentReply->want_ack = false;
+                    } else {
+                        LOG_DEBUG("Discard an unneeded response");
+                        packetPool.release(pi.myReply);
+                    }
                     pi.myReply = NULL;
                 }
 
@@ -226,6 +233,10 @@ void MeshModule::callModules(meshtastic_MeshPacket &mp, RxSource src)
             routingModule->sendAckNak(meshtastic_Routing_Error_NO_RESPONSE, getFrom(&mp), mp.id, mp.channel,
                                       routingModule->getHopLimitForResponse(mp));
         }
+    } else if (currentReply && toUs) {
+        printPacket("Send refusal", currentReply);
+        service->sendToMesh(currentReply);
+        currentReply = NULL;
     }
 
     if (!moduleFound && isDecoded) {
