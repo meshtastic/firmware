@@ -1383,63 +1383,7 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
         // Sanitize a local copy rather than const_cast-ing the const input (UB if a truly-const
         // object is ever passed); the validated copy is assigned into moduleConfig below.
         auto beaconCfg = c.payload_variant.mesh_beacon;
-        // Cap at the generated field size, so the limit follows the proto's max_size.
-        beaconCfg.broadcast_message[sizeof(beaconCfg.broadcast_message) - 1] = '\0';
-        // Enforce interval minimum (0 means unset/use default).
-        if (beaconCfg.broadcast_interval_secs != 0 &&
-            beaconCfg.broadcast_interval_secs < default_mesh_beacon_min_broadcast_interval_secs)
-            beaconCfg.broadcast_interval_secs = default_mesh_beacon_min_broadcast_interval_secs;
-        // Validate broadcast_offer_preset against broadcast_offer_region (or current region if unset).
-        if (beaconCfg.has_broadcast_offer_preset) {
-            meshtastic_Config_LoRaConfig probe = config.lora;
-            probe.use_preset = true;
-            probe.modem_preset = beaconCfg.broadcast_offer_preset;
-            if (beaconCfg.broadcast_offer_region != meshtastic_Config_LoRaConfig_RegionCode_UNSET)
-                probe.region = beaconCfg.broadcast_offer_region;
-            if (!RadioInterface::validateConfigLora(probe)) {
-                LOG_WARN("Beacon: broadcast_offer_preset %d invalid for region, clearing", beaconCfg.broadcast_offer_preset);
-                beaconCfg.has_broadcast_offer_preset = false;
-            }
-        }
-        // Validate broadcast_offer_region is a known region code.
-        if (beaconCfg.broadcast_offer_region != meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
-            const RegionInfo *r = getRegion(beaconCfg.broadcast_offer_region);
-            if (r->code != beaconCfg.broadcast_offer_region) {
-                LOG_WARN("Beacon: broadcast_offer_region %d invalid, clearing", beaconCfg.broadcast_offer_region);
-                beaconCfg.broadcast_offer_region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
-            }
-        }
-        // Validate each broadcast target so a bad preset/region is cleared on write rather than
-        // relying on the runtime TX drop.
-        for (pb_size_t i = 0; i < beaconCfg.broadcast_targets_count; i++) {
-            auto &t = beaconCfg.broadcast_targets[i];
-            // Region must be a known region code (UNSET = use running config at TX time).
-            if (t.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
-                const RegionInfo *r = getRegion(t.region);
-                if (r->code != t.region) {
-                    LOG_WARN("Beacon: broadcast_targets[%u] region %d invalid, clearing", i, t.region);
-                    t.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
-                }
-            }
-            // Preset must be valid for the target region (or current region if unset).
-            if (t.has_preset) {
-                meshtastic_Config_LoRaConfig probe = config.lora;
-                probe.use_preset = true;
-                probe.modem_preset = t.preset;
-                if (t.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET)
-                    probe.region = t.region;
-                if (!RadioInterface::validateConfigLora(probe)) {
-                    LOG_WARN("Beacon: broadcast_targets[%u] preset %d invalid for region, clearing", i, t.preset);
-                    t.has_preset = false;
-                    t.has_channel_index = false;
-                }
-            }
-            // channel_index must reference a real channel-table slot.
-            if (t.has_channel_index && t.channel_index >= MAX_NUM_CHANNELS) {
-                LOG_WARN("Beacon: broadcast_targets[%u] channel_index %u out of range, clearing", i, t.channel_index);
-                t.has_channel_index = false;
-            }
-        }
+        MeshBeaconModule::sanitizeConfig(beaconCfg);
         moduleConfig.has_mesh_beacon = true;
         moduleConfig.mesh_beacon = beaconCfg;
         shouldReboot = false;
