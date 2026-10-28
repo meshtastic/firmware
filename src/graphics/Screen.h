@@ -458,7 +458,11 @@ class Screen : public concurrency::OSThread
 
         case 0xC3: {
             SKIPREST = false;
+#if defined(OLED_GR)
+            break; // The GR font holds Greek glyphs in 0xC0-0xFF, so U+00C0-U+00FF show ¿ instead
+#else
             return (uint8_t)(ch | 0xC0);
+#endif
         }
         }
 
