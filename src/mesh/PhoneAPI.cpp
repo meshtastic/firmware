@@ -24,6 +24,7 @@
 #include "TypeConversions.h"
 #include "UptimeClock.h"
 #include "concurrency/LockGuard.h"
+#include "graphics/ScreenMirror.h"
 #include "main.h"
 #include "modules/NodeInfoModule.h"
 #include "xmodem.h"
@@ -40,6 +41,49 @@
 #endif
 #include "Throttle.h"
 #include "gps/RTC.h"
+
+#if HAS_SCREEN_MIRROR
+// Per-connection mirror subscription and drain cursors, keyed by PhoneAPI* and kept out of the class for the same
+// nRF52 USB-CDC reason as the auth slots. A slot is claimed on the first subscribe or frame request and cleared by
+// releaseMirror(); after that only its own connection touches it, so the lock guards claiming and clearing alone.
+static constexpr size_t MAX_MIRROR_SLOTS = 6;
+struct MirrorSlot {
+    const PhoneAPI *who = nullptr;
+    bool subscribed = false;
+    bool framePending = false;
+    uint32_t requestedAt = 0; // frame id at the time of a one-shot request
+    uint32_t frameId = 0;
+    uint16_t offset = 0;
+    uint32_t paletteSig = 0;
+    uint8_t paletteOffset = 0;
+};
+static MirrorSlot g_mirrorSlots[MAX_MIRROR_SLOTS];
+static concurrency::Lock g_mirrorSlotsLock;
+
+static MirrorSlot *mirrorSlotFor(const PhoneAPI *p, bool claim = false)
+{
+    bool full = false;
+    {
+        concurrency::LockGuard g(&g_mirrorSlotsLock);
+        MirrorSlot *empty = nullptr;
+        for (auto &slot : g_mirrorSlots) {
+            if (slot.who == p)
+                return &slot;
+            if (!slot.who && !empty)
+                empty = &slot;
+        }
+        if (claim && empty) {
+            empty->who = p;
+            return empty;
+        }
+        full = claim;
+    }
+    // logged outside the lock: the log path can reach a PhoneAPI
+    if (full)
+        LOG_WARN("Screen mirror: every connection slot is in use");
+    return nullptr;
+}
+#endif
 
 namespace
 {
@@ -274,6 +318,9 @@ void PhoneAPI::handleStartConfig()
 #ifdef FSCom
         observe(&xModem.packetReady);
 #endif
+#if HAS_SCREEN_MIRROR
+        observe(&graphics::screenMirror.frameReady);
+#endif
 #ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
         // New physical connection: clear this PhoneAPI's auth slot so the new
         // client must present a passphrase or PKC admin signature before
@@ -378,6 +425,9 @@ void PhoneAPI::close()
 #ifdef FSCom
         unobserve(&xModem.packetReady);
 #endif
+#if HAS_SCREEN_MIRROR
+        unobserve(&graphics::screenMirror.frameReady);
+#endif
         releasePhonePacket(); // Don't leak phone packets on shutdown
         releaseQueueStatusPhonePacket();
         releaseMqttClientProxyPhonePacket();
@@ -416,6 +466,10 @@ void PhoneAPI::close()
         }
 #endif
     }
+#if HAS_SCREEN_MIRROR
+    // outside the block above: a client can subscribe before it asks for config
+    releaseMirror();
+#endif
 }
 
 bool PhoneAPI::checkConnectionTimeout()
@@ -1097,6 +1151,24 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
                 fromRadioScratch.which_payload_variant = meshtastic_FromRadio_packet_tag;
                 fromRadioScratch.packet = replayPkt;
             }
+#if HAS_SCREEN_MIRROR
+        } else if (wantsMirror() &&
+                   graphics::screenMirror.copyPaletteChunk(mirrorSlotFor(this)->paletteSig, mirrorSlotFor(this)->paletteOffset,
+                                                           fromRadioScratch.display_palette)) {
+            // palette first, so the client can colorize the first frame it renders
+            fromRadioScratch.which_payload_variant = meshtastic_FromRadio_display_palette_tag;
+        } else if (wantsMirror() &&
+                   graphics::screenMirror.copyChunk(this, mirrorSlotFor(this)->frameId, mirrorSlotFor(this)->offset,
+                                                    fromRadioScratch.display_frame)) {
+            // lowest priority: mesh traffic and notifications outrank pixels
+            fromRadioScratch.which_payload_variant = meshtastic_FromRadio_display_frame_tag;
+            MirrorSlot *m = mirrorSlotFor(this);
+            if (m->framePending && m->frameId != m->requestedAt &&
+                !graphics::screenMirror.hasChunkFor(this, m->frameId, m->offset)) {
+                m->framePending = false;
+                graphics::screenMirror.frameRequestDone(this);
+            }
+#endif
         }
         break;
 
@@ -1741,7 +1813,18 @@ bool PhoneAPI::available()
             return true;
         // Trailing replay drain - feeds cached satellite-DB packets alongside
         // (lower priority than) live traffic.
-        return replayPending();
+        if (replayPending())
+            return true;
+
+#if HAS_SCREEN_MIRROR
+        if (!wantsMirror())
+            return false;
+        const MirrorSlot *m = mirrorSlotFor(this);
+        return graphics::screenMirror.hasPaletteChunkFor(m->paletteSig, m->paletteOffset) ||
+               graphics::screenMirror.hasChunkFor(this, m->frameId, m->offset);
+#else
+        return false;
+#endif
     }
     default:
         LOG_ERROR("PhoneAPI::available unexpected state %d", state);
@@ -1792,6 +1875,79 @@ PhoneAPI::LocalAdminGate PhoneAPI::classifyLocalAdminPacket(const meshtastic_Mes
         return LocalAdminGate::LockdownAuth; // the passphrase itself; authenticate regardless of prior state
     return adminAuthorized ? LocalAdminGate::AuthorizedPassThrough : LocalAdminGate::DropUnauthorized;
 }
+
+#if HAS_SCREEN_MIRROR
+// Handled here rather than in AdminModule: the subscription belongs to this connection, which the router task cannot see.
+bool PhoneAPI::handleScreenMirrorAdmin(const meshtastic_MeshPacket &p)
+{
+    if (p.which_payload_variant != meshtastic_MeshPacket_decoded_tag || p.decoded.portnum != meshtastic_PortNum_ADMIN_APP ||
+        p.to != nodeDB->getNodeNum())
+        return false;
+    meshtastic_AdminMessage admin = meshtastic_AdminMessage_init_zero;
+    if (!pb_decode_from_bytes(p.decoded.payload.bytes, p.decoded.payload.size, &meshtastic_AdminMessage_msg, &admin))
+        return false;
+    switch (admin.which_payload_variant) {
+    case meshtastic_AdminMessage_set_display_mirror_tag:
+        LOG_INFO("Client sets display mirror: %d", admin.set_display_mirror);
+        setMirrorSubscribed(admin.set_display_mirror);
+        return true;
+    case meshtastic_AdminMessage_get_display_frame_request_tag:
+        LOG_INFO("Client requests display frame");
+        if (MirrorSlot *m = mirrorSlotFor(this, true)) {
+            if (!m->framePending) {
+                if (!m->subscribed)
+                    graphics::screenMirror.cursorAtHead(m->frameId, m->offset);
+                m->requestedAt = m->frameId;
+                m->framePending = true;
+                graphics::screenMirror.requestFrame();
+            }
+        }
+        return true;
+    default:
+        return false;
+    }
+}
+
+void PhoneAPI::setMirrorSubscribed(bool subscribed)
+{
+    MirrorSlot *m = mirrorSlotFor(this, subscribed);
+    if (!m || subscribed == m->subscribed)
+        return;
+    m->subscribed = subscribed;
+    if (subscribed) {
+        graphics::screenMirror.cursorAtHead(m->frameId, m->offset);
+        graphics::screenMirror.subscribe();
+    } else {
+        graphics::screenMirror.unsubscribe(this);
+    }
+}
+
+void PhoneAPI::releaseMirror()
+{
+    MirrorSlot *m = mirrorSlotFor(this);
+    if (!m)
+        return;
+    setMirrorSubscribed(false);
+    if (m->framePending) {
+        m->framePending = false;
+        graphics::screenMirror.frameRequestDone(this);
+    }
+    concurrency::LockGuard g(&g_mirrorSlotsLock);
+    *m = MirrorSlot{};
+}
+
+bool PhoneAPI::wantsMirror()
+{
+    const MirrorSlot *m = mirrorSlotFor(this);
+    if (!m || (!m->subscribed && !m->framePending))
+        return false;
+#ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
+    return getAdminAuthorized();
+#else
+    return true;
+#endif
+}
+#endif
 
 /**
  * Handle a packet that the phone wants us to send.  It is our responsibility to free the packet to the pool
@@ -1845,6 +2001,11 @@ bool PhoneAPI::handleToRadioPacket(meshtastic_MeshPacket &p)
             break; // normal handling
         }
     }
+#endif
+
+#if HAS_SCREEN_MIRROR
+    if (handleScreenMirrorAdmin(p))
+        return true;
 #endif
 
     // Coordinates aimed at the event channel go out on the position channel instead (the phone picks the
