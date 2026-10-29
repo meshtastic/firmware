@@ -36,7 +36,8 @@ static bool isPowered()
 {
 // Circumvent the battery sensing logic and assumes constant power if no battery pin or power mgmt IC
 #if !defined(BATTERY_PIN) && !defined(HAS_AXP192) && !defined(HAS_AXP2101) && !defined(NRF_APM)
-    return true;
+    if (!powerStatus || !powerStatus->getHasBattery()) // no battery source, e.g. no configured INA
+        return true;
 #endif
 
     bool isRouter = ((config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER ||
@@ -112,6 +113,12 @@ static void shutdownEnter()
 
 static uint32_t secsSlept;
 
+// Set to 1 to let light sleep proceed with a USB console host attached, trading the console for the
+// ability to watch the light-sleep path in a debug log. See the note in lsIdle() below.
+#ifndef MESHTASTIC_LIGHT_SLEEP_IGNORE_USB_CONSOLE
+#define MESHTASTIC_LIGHT_SLEEP_IGNORE_USB_CONSOLE 0
+#endif
+
 static void lsEnter()
 {
     LOG_POWERFSM("lsEnter begin, ls_secs=%u", config.power.ls_secs);
@@ -136,9 +143,9 @@ static void lsIdle()
         // far too short for the host to re-enumerate. It gives up, and nothing on this side can ask
         // it to try again, so the port stays gone until the board is power cycled. Veto the sleep
         // while a host is there, like the preflight veto below; a node on a battery or a charger
-        // still sleeps.
+        // still sleeps. A build can opt out with MESHTASTIC_LIGHT_SLEEP_IGNORE_USB_CONSOLE.
         // If some other service would stall sleep, don't let sleep happen yet
-        if (!usbConsoleHostAttached() && doPreflightSleep()) {
+        if ((MESHTASTIC_LIGHT_SLEEP_IGNORE_USB_CONSOLE || !usbConsoleHostAttached()) && doPreflightSleep()) {
             // Briefly come out of sleep long enough to blink the led once every few seconds
             uint32_t sleepTime = SLEEP_TIME;
 
@@ -181,6 +188,10 @@ static void lsIdle()
                     powerFSM.trigger(EVENT_INPUT);
                 }
 #endif
+                else {
+                    // Let loop() service LoRa or another GPIO source before light sleep is attempted again.
+                    powerFSM.trigger(EVENT_WAKE_TIMER);
+                }
                 break;
             }
             default:
@@ -193,7 +204,7 @@ static void lsIdle()
             // Say why once per stay in LS, so "power saving does nothing while it is plugged in" is
             // answerable from a log rather than from this comment.
             static bool loggedUsbVeto = false;
-            if (usbConsoleHostAttached()) {
+            if (usbConsoleHostAttached() && !MESHTASTIC_LIGHT_SLEEP_IGNORE_USB_CONSOLE) {
                 if (!loggedUsbVeto) {
                     LOG_INFO("Skip light sleep: USB console host attached");
                     loggedUsbVeto = true;

@@ -78,8 +78,8 @@
  Downstream apps use this to drive UI decisions (e.g. hiding DIY-only settings
  on pre-assembled boards) directly from the protobuf schema. */
 typedef struct _meshtastic_FieldMetadata {
-    /* Field is only relevant to DIY hardware builds. Apps may hide it when
- connected to a pre-assembled / commercial board. */
+    /* Field is only relevant to DIY hardware builds. Apps hide a GPS field
+ tagged this way when the board's `HardwareModel` sets `oem_fixed_gps`. */
     bool has_diy_only;
     bool diy_only;
     /* Field is only relevant in advanced / administrative contexts and may be
@@ -163,6 +163,11 @@ typedef struct _meshtastic_FieldMetadata {
  MACHINE-READABLE, and presentation metadata, on the same terms as
  `since_firmware`. */
     pb_callback_t deprecated_since;
+    /* Set on a `HardwareModel` value: the maker wired the board's GPS, so the
+ `diy_only` GPS pin fields do not apply. Apps hide those fields on these
+ boards and keep them on any other or unknown board. */
+    bool has_oem_fixed_gps;
+    bool oem_fixed_gps;
 } meshtastic_FieldMetadata;
 
 
@@ -175,8 +180,8 @@ extern "C" {
 #endif
 
 /* Initializer values for message structs */
-#define meshtastic_FieldMetadata_init_default    {false, 0, false, 0, false, 0, false, 0, {{NULL}, NULL}, false, 0, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}}
-#define meshtastic_FieldMetadata_init_zero       {false, 0, false, 0, false, 0, false, 0, {{NULL}, NULL}, false, 0, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}}
+#define meshtastic_FieldMetadata_init_default    {false, 0, false, 0, false, 0, false, 0, {{NULL}, NULL}, false, 0, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, false, 0}
+#define meshtastic_FieldMetadata_init_zero       {false, 0, false, 0, false, 0, false, 0, {{NULL}, NULL}, false, 0, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, false, 0}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define meshtastic_FieldMetadata_diy_only_tag    1
@@ -190,6 +195,7 @@ extern "C" {
 #define meshtastic_FieldMetadata_keywords_tag    9
 #define meshtastic_FieldMetadata_since_firmware_tag 10
 #define meshtastic_FieldMetadata_deprecated_since_tag 11
+#define meshtastic_FieldMetadata_oem_fixed_gps_tag 12
 #define meshtastic_field_metadata_tag            51001
 #define meshtastic_enum_value_metadata_tag       51001
 
@@ -205,7 +211,8 @@ X(a, CALLBACK, OPTIONAL, STRING,   label,             7) \
 X(a, CALLBACK, OPTIONAL, STRING,   description,       8) \
 X(a, CALLBACK, OPTIONAL, STRING,   keywords,          9) \
 X(a, CALLBACK, OPTIONAL, STRING,   since_firmware,   10) \
-X(a, CALLBACK, OPTIONAL, STRING,   deprecated_since,  11)
+X(a, CALLBACK, OPTIONAL, STRING,   deprecated_since,  11) \
+X(a, STATIC,   OPTIONAL, BOOL,     oem_fixed_gps,    12)
 #define meshtastic_FieldMetadata_CALLBACK pb_default_field_callback
 #define meshtastic_FieldMetadata_DEFAULT NULL
 
