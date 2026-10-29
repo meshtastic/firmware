@@ -402,13 +402,18 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false, bool skipSaveN
 /**
  * The GPIO an SX126x/SX128x/LR part raises its IRQ on, or -1 if there is no usable pin.
  *
- * Nearly every variant spells it LORA_DIO1, but an SX1280 board may define SX128X_DIO1 on a different
- * pin (t-eth-elite, tlora_t3s3_v1) or as the only one of the two (tlora_v2_1_18, betafpv_2400_tx_micro),
- * because that is the name RadioInterface hands to the driver. Resolve it per radio rather than per
- * macro, so arming, polling and teardown below cannot pick different pins. RF95 keeps RF95_IRQ.
+ * Nearly every variant spells it LORA_DIO1, but a board may define SX126X_DIO1 / SX128X_DIO1 on a different
+ * pin (t-eth-elite, where LORA_DIO1 is the SX1262's BUSY) or as the only one of the two (tlora_v2_1_18,
+ * betafpv_2400_tx_micro), because that is the name RadioInterface hands to the driver. Resolve it per
+ * radio rather than per macro, so arming, polling and teardown below cannot pick different pins.
+ * RF95 keeps RF95_IRQ.
  */
 static int loraWakeDio1Pin()
 {
+#if defined(SX126X_DIO1) && (SX126X_DIO1 != RADIOLIB_NC)
+    if (radioType == SX1262_RADIO || radioType == SX1268_RADIO || radioType == LLCC68_RADIO)
+        return (int)SX126X_DIO1;
+#endif
 #if defined(SX128X_DIO1) && (SX128X_DIO1 != RADIOLIB_NC)
     if (radioType == SX1280_RADIO)
         return (int)SX128X_DIO1;
@@ -441,6 +446,18 @@ static bool loraWakeIrqAsserted()
     if (dio1 >= 0 && radioType != RF95_RADIO)
         return gpio_get_level((gpio_num_t)dio1) == 1;
     return false;
+}
+
+// Drop the wake enable on every LoRa line enableLoraInterrupt() may have armed, without touching the edge ISR.
+static void disarmLoraWake()
+{
+    const int dio1 = loraWakeDio1Pin();
+    if (dio1 >= 0)
+        gpio_wakeup_disable((gpio_num_t)dio1);
+#if defined(RF95_IRQ) && (RF95_IRQ != RADIOLIB_NC)
+    if (radioType == RF95_RADIO)
+        gpio_wakeup_disable((gpio_num_t)RF95_IRQ);
+#endif
 }
 
 // The radio ISR is rising-edge and stays attached with the RX readout task. As a level wake source it would fire
@@ -518,7 +535,6 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     // assert(esp_sleep_enable_uart_wakeup(0) == ESP_OK);
 #endif
 #ifdef ROTARY_PRESS
-    // The enableLoraInterrupt() method is using ext0_wakeup, so we are forced to use GPIO wakeup
     gpio_wakeup_enable((gpio_num_t)ROTARY_PRESS, GPIO_INTR_LOW_LEVEL);
 #endif
 #ifdef KB_INT
@@ -599,8 +615,14 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
         // stuck-high line give LORA_IRQ_SKIP_SLEEP_MAX skips, one sleep, repeat, forever - and each
         // skipped attempt still runs waitEnterSleep() and the whole notifyLightSleep/End pass, which
         // detaches, arms and restores every wake pin. Once we have given up, stay given up.
-        if (!loraIrqAsserted)
+        if (!loraIrqAsserted) {
             loraIrqSkippedSleeps = 0;
+        } else {
+            // Stuck past LORA_IRQ_SKIP_SLEEP_MAX: the high level would wake this sleep at once, so disarm the
+            // wake; the timer and buttons still wake it, and restoreLoraIrqPin() below re-arms the edge ISR.
+            LOG_WARN("LoRa IRQ stuck high, sleep with LoRa wake disarmed");
+            disarmLoraWake();
+        }
         res = esp_light_sleep_start();
     }
     if (res != ESP_OK) {
