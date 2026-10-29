@@ -20,6 +20,9 @@
 #include "airtime.h"
 #include "buzz.h"
 #include "power/PowerHAL.h"
+#ifdef HELTEC_MESH_POCKET_V2
+#include "power/MeshPocketV2PowerBank.h"
+#endif
 
 #include "FSCommon.h"
 #include "Power.h"
@@ -616,6 +619,10 @@ void setup()
 #elif HAS_WIRE
     Wire.begin();
 #endif
+#endif
+
+#ifdef HELTEC_MESH_POCKET_V2
+    meshPocketV2PowerBankSetup();
 #endif
 
 #if defined(M5STACK_UNITC6L)

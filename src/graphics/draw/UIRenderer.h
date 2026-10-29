@@ -61,6 +61,9 @@ class UIRenderer
     static void scrollFavoriteDown();
     static void scrollFavoriteUp();
 
+#ifdef HELTEC_MESH_POCKET_V2
+    static void drawMeshPocketV2PowerBank(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
+#endif
     static void drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
 
     static void drawBootIconScreen(const char *upperMsg, OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
