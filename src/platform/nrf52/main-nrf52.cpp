@@ -514,6 +514,8 @@ void cpuDeepSleep(uint32_t msecToWake)
     if (Serial1) // A straightforward solution to the wake from deepsleep problem
         Serial1.end();
 #endif
+    // Run shutdown code if specified in variant.cpp
+    variant_shutdown();
 
     setBluetoothEnable(false);
 
@@ -526,8 +528,6 @@ void cpuDeepSleep(uint32_t msecToWake)
     digitalWrite(AQ_SET_PIN, LOW);
 #endif
 #endif
-    // Run shutdown code if specified in variant.cpp
-    variant_shutdown();
 
     nrf52FlashQuiesce();
 
