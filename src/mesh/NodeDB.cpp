@@ -1049,7 +1049,7 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     config.lora.override_duty_cycle = false;
     config.lora.config_ok_to_mqtt = false;
 #if HAS_LORA_FEM
-    config.lora.fem_lna_mode = meshtastic_Config_LoRaConfig_FEM_LNA_Mode_ENABLED;
+    config.lora.fem_lna_mode = meshtastic_Config_LoRaConfig_FEM_LNA_Mode_DISABLED;
 #else
     config.lora.fem_lna_mode = meshtastic_Config_LoRaConfig_FEM_LNA_Mode_NOT_PRESENT;
 #endif
@@ -2780,7 +2780,7 @@ void NodeDB::loadFromDisk()
 #ifdef USERPREFS_CONFIG_LORA_REGION
     // Skip on a degraded boot to keep the radio silent (identity is already protected by the keygen gate).
     if (!configDecodeFailed)
-        config.lora.region = USERPREFS_CONFIG_LORA_REGION;
+        config.lora.region = USERPREFS_CONFIG_LORAConfig_RegionCode_UNSET;
 #endif
 
 #ifdef USERPREFS_LORACONFIG_USE_PRESET
@@ -2805,7 +2805,7 @@ void NodeDB::loadFromDisk()
 
 #if USERPREFS_EVENT_MODE
     if (initializedEventConfig) {
-        // This is the first durable event-profile write.  A failed write is
+        // This is the first durable event-profile write. A failed write is
         // safe: normal files remain untouched and the next event boot retries.
         if (!saveToDisk(SEGMENT_CONFIG))
             LOG_ERROR("Can't persist initial event config");
@@ -3732,7 +3732,7 @@ void NodeDB::updatePosition(uint32_t nodeId, const meshtastic_Position &p, RxSou
             slot.time = p.time;
         } else {
             // Be careful to only update fields that have been set by the REMOTE sender
-            // A lot of position reports don't have time populated.  In that case, be careful to not blow away the time we
+            // A lot of position reports don't have time populated. In that case, be careful to not blow away the time we
             // recorded based on the packet rxTime
             //
             // FIXME perhaps handle RX_SRC_USER separately?
@@ -5046,7 +5046,7 @@ void recordCriticalError(meshtastic_CriticalErrorCode code, uint32_t address, co
     error_code = code;
     error_address = address;
 
-    // Currently portuino is mostly used for simulation.  Make sure the user notices something really bad happened
+    // Currently portuino is mostly used for simulation. Make sure the user notices something really bad happened
 #ifdef ARCH_PORTDUINO
     LOG_ERROR("Critical failure");
     // TODO: Determine if other critical errors should also cause an immediate exit
