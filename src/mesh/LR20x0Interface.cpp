@@ -72,6 +72,9 @@ static const Module::RfSwitchMode_t lr20x0_rfswitch_table[] = {
 // Last programmed carrier; LF/HF hops use full begin() (live setOutputPower returns -706).
 static float lr20x0LastFreqMHz = 0;
 
+// Boards whose NRESET is not a GPIO (e.g. behind an IO expander) pulse it here; RadioLib's reset() is a no-op then.
+extern "C" void variant_pre_radio_reset(void) __attribute__((weak));
+
 // Unlike SX126x/LR11x0 (on/off bool), the LR2021 RX gain boost is a 0-7 level (0 = disabled, 7 = max boost).
 // Map the historical on/off sx126x_rx_boosted_gain flag to max boost when enabled.
 #ifndef LR2021_RX_GAIN_BOOST_LEVEL
@@ -421,6 +424,9 @@ template <typename T> bool LR20x0Interface<T>::fullBegin(float freq)
 #else
         float tcxoVoltage = 0;
 #endif
+
+        if (variant_pre_radio_reset)
+            variant_pre_radio_reset();
 
         delay(10); // same TCXO settle window as init()
 

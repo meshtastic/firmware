@@ -243,6 +243,55 @@ RTCSetResult readFromRTC()
             return RTCSetResultSuccess;
         }
     }
+#elif defined(YSN8900E_RTC)
+    if (rtc_found.address == YSN8900E_RTC) {
+        YSN8900ERTC rtc;
+        const uint64_t now = Time::getMillisMonotonic();
+
+#if WIRE_INTERFACES_COUNT == 2
+        TwoWire &rtcBus = *ScanI2CTwoWire::fetchI2CBus(rtc_found);
+#else
+        TwoWire &rtcBus = Wire;
+#endif
+        tm t;
+        if (!rtc.begin(rtcBus, YSN8900E_RTC)) {
+            LOG_WARN("%s not responding at 0x%02X", rtc.chipName(), YSN8900E_RTC);
+            return RTCSetResultInvalidTime;
+        }
+        if (!rtc.getTime(t)) {
+            LOG_WARN("%s read failed%s", rtc.chipName(), rtc.lostPower() ? " (power lost, time not set)" : "");
+            return RTCSetResultInvalidTime;
+        }
+        tv.tv_sec = gm_mktime(&t);
+        tv.tv_usec = 0;
+        uint32_t printableEpoch = tv.tv_sec; // Print lib only supports 32 bit but time_t can be 64 bit on some platforms
+
+#ifdef BUILD_EPOCH
+        if (tv.tv_sec < BUILD_EPOCH) {
+            if (Throttle::isWithinTimespanMs(lastTimeValidationWarning, TIME_VALIDATION_WARNING_INTERVAL_MS) == false) {
+                LOG_WARN("Ignore time (%ld) before build epoch (%ld)", printableEpoch, BUILD_EPOCH);
+                lastTimeValidationWarning = millis();
+            }
+            return RTCSetResultInvalidTime;
+        }
+#endif
+
+        LOG_DEBUG_GPS("RTC time from %s getTime: %02d-%02d-%02d %02d:%02d:%02d (%ld)", rtc.chipName(), t.tm_year + 1900,
+                      t.tm_mon + 1, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec, printableEpoch);
+        if (currentQuality == RTCQualityNone) {
+            RTCQuality oldQuality = currentQuality;
+            timeStartMs64 = now;
+            zeroOffsetSecs = tv.tv_sec;
+#if defined(ARCH_ESP32) || defined(ARCH_RP2040)
+            settimeofday(&tv, NULL);
+#endif
+            currentQuality = RTCQualityDevice;
+            onTimeSourceQualityChanged(oldQuality, currentQuality);
+        }
+        return RTCSetResultSuccess;
+    } else {
+        LOG_WARN("RTC read: not found (addr 0x%02X)", rtc_found.address);
+    }
 #elif HAS_LSE
     if (stm32wlRtcAvailable()) {
         const uint64_t now = Time::getMillisMonotonic();
@@ -395,6 +444,27 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpd
             } else {
                 LOG_WARN("RX8130CE set time failed");
             }
+        }
+#elif defined(YSN8900E_RTC)
+        if (rtc_found.address == YSN8900E_RTC) {
+            YSN8900ERTC rtc;
+#if WIRE_INTERFACES_COUNT == 2
+            TwoWire &rtcBus = *ScanI2CTwoWire::fetchI2CBus(rtc_found);
+#else
+            TwoWire &rtcBus = Wire;
+#endif
+            // tv_sec is a long, which is not time_t everywhere: on Windows
+            // time_t is 64-bit while long is 32-bit. Copy before taking &.
+            time_t setSecs = tv->tv_sec;
+            const tm *t = gmtime(&setSecs);
+            if (rtc.begin(rtcBus, YSN8900E_RTC) && rtc.setTime(*t)) {
+                LOG_DEBUG_GPS("%s setTime %02d-%02d-%02d %02d:%02d:%02d (%ld)", rtc.chipName(), t->tm_year + 1900, t->tm_mon + 1,
+                              t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec, printableEpoch);
+            } else {
+                LOG_WARN("%s set time failed", rtc.chipName());
+            }
+        } else {
+            LOG_WARN("RTC set: not found (addr 0x%02X)", rtc_found.address);
         }
 #elif HAS_LSE
         if (stm32wlRtcAvailable()) {
