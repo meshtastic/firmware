@@ -65,6 +65,9 @@ bool getMacAddrDeviceId(uint8_t *deviceId);
 
 bool isOneOf(int item, int count, ...);
 
+// True if the variant wires pin to the LoRa radio; config must not hand such a pin to anything else.
+bool isRadioPin(uint32_t pin);
+
 const std::string vformat(const char *const zcFormat, ...);
 
 // Get actual string length for nanopb char array fields.

@@ -1,5 +1,7 @@
 #include "meshUtils.h"
+#include "configuration.h"
 #include "target_specific.h"
+#include <RadioLib.h>
 #include <string.h>
 
 /*
@@ -253,4 +255,87 @@ void clampLongName(char *longName)
 {
     longName[MAX_LONG_NAME_BYTES] = '\0';
     sanitizeUtf8(longName, MAX_LONG_NAME_BYTES + 1);
+}
+
+// Radio pins the variant wires up; reassigning one from config (e.g. as a UART) cuts off the radio.
+// int64_t fits -1 and RADIOLIB_NC; trailing -1 keeps it non-empty. No LORA_DIO2/3: radio-side pins, not MCU GPIOs.
+static const int64_t radioPins[] = {
+#ifdef LORA_SCK
+    LORA_SCK,
+#endif
+#ifdef LORA_MISO
+    LORA_MISO,
+#endif
+#ifdef LORA_MOSI
+    LORA_MOSI,
+#endif
+#ifdef LORA_CS
+    LORA_CS,
+#endif
+#ifdef LORA_RESET
+    LORA_RESET,
+#endif
+#ifdef LORA_DIO0
+    LORA_DIO0,
+#endif
+#ifdef LORA_DIO1
+    LORA_DIO1,
+#endif
+#ifdef LORA_BUSY
+    LORA_BUSY,
+#endif
+#ifdef LORA_RXEN
+    LORA_RXEN,
+#endif
+#ifdef LORA_TXEN
+    LORA_TXEN,
+#endif
+#ifdef SX126X_CS
+    SX126X_CS,
+#endif
+#ifdef SX126X_BUSY
+    SX126X_BUSY,
+#endif
+#ifdef SX126X_RESET
+    SX126X_RESET,
+#endif
+#ifdef SX126X_DIO1
+    SX126X_DIO1,
+#endif
+#ifdef SX126X_RXEN
+    SX126X_RXEN,
+#endif
+#ifdef SX126X_TXEN
+    SX126X_TXEN,
+#endif
+#ifdef SX126X_POWER_EN
+    SX126X_POWER_EN,
+#endif
+#ifdef SX128X_CS
+    SX128X_CS,
+#endif
+#ifdef SX128X_BUSY
+    SX128X_BUSY,
+#endif
+#ifdef SX128X_RESET
+    SX128X_RESET,
+#endif
+#ifdef SX128X_DIO1
+    SX128X_DIO1,
+#endif
+#ifdef SX128X_RXEN
+    SX128X_RXEN,
+#endif
+#ifdef SX128X_TXEN
+    SX128X_TXEN,
+#endif
+    -1};
+
+bool isRadioPin(uint32_t pin)
+{
+    for (int64_t radioPin : radioPins) {
+        if (radioPin >= 0 && radioPin == (int64_t)pin)
+            return true;
+    }
+    return false;
 }
