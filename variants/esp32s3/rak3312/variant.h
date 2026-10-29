@@ -55,4 +55,19 @@
 #define GPS_TX_PIN 43
 #define GPS_RX_PIN 44
 
+#ifdef RAK3312_ETH_GW
+// RAK13800 Ethernet module (WIZnet W5100S-L) on the WisBlock IO slot,
+// pins per RAK5005-O/RAK3312/RAK13800 datasheets.
+#define HAS_ETHERNET 1
+#define PIN_ETHERNET_RESET 41 // WB_IO3
+#define PIN_ETHERNET_SS 12    // shared WisBlock SPI_CS
+#define ETH_SCLK_PIN 13       // shared WisBlock SPI_CLK
+#define ETH_MISO_PIN 10       // shared WisBlock SPI_MISO
+#define ETH_MOSI_PIN 11       // shared WisBlock SPI_MOSI
+// Must be a SECOND SPI peripheral, not the shared `SPI` object: that one is already
+// begin()'d for the LoRa radio (pins 5/3/6/7), and ESP32 Arduino's SPIClass::begin()
+// silently no-ops on a second call, so re-pinning it here would not actually move it.
+#define ETH_SPI_PORT EthSPI
+#endif // RAK3312_ETH_GW
+
 #endif
