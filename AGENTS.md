@@ -18,7 +18,7 @@
 > | New module skeleton                         | inherit `ProtobufModule<T>` in `src/mesh/ProtobufModule.h` |
 > | Observer / event wiring                     | `src/Observer.h`                                           |
 
-This repository is the [Meshtastic](https://meshtastic.org) firmware - a C++17 embedded codebase targeting ESP32 / nRF52 / RP2040 / STM32WL / Linux-Portduino LoRa mesh radios. The Python MCP server that AI agents use to flash, configure, and test connected devices now lives in its own repo, [meshtastic/meshtastic-mcp](https://github.com/meshtastic/meshtastic-mcp); this repo registers it via `.mcp.json` (run through `uvx`) so its tools are available automatically.
+This repository is the [Meshtastic](https://meshtastic.org) firmware - a C++20 embedded codebase targeting ESP32 / nRF52 / RP2040 / STM32WL / Linux-Portduino LoRa mesh radios. The Python MCP server that AI agents use to flash, configure, and test connected devices now lives in its own repo, [meshtastic/meshtastic-mcp](https://github.com/meshtastic/meshtastic-mcp); this repo registers it via `.mcp.json` (run through `uvx`) so its tools are available automatically.
 
 ## Primary instruction file
 
