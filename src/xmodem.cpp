@@ -139,6 +139,17 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
     switch (xmodemPacket.control) {
     case meshtastic_XModem_Control_SOH:
     case meshtastic_XModem_Control_STX:
+        if (xmodemPacket.seq == 0 && isReceiving && packetno != 0) {
+            // A new transfer while one is in progress: the old one was interrupted (its client is gone). Abandon it,
+            // or every new transfer would be refused until a reboot. (Packet 0 is data only when the 16-bit packet
+            // number has wrapped, after 8 MB: packetno is then 0.)
+            LOG_WARN("XModem: abandon the interrupted transfer of %s", filename);
+            spiLock->lock();
+            file.close();
+            FSCom.remove(filename);
+            spiLock->unlock();
+            isReceiving = false;
+        }
         if ((xmodemPacket.seq == 0) && !isReceiving && !isTransmitting) {
             // NULL packet has the destination filename
             strncpy(filename, (const char *)xmodemPacket.buffer.bytes, sizeof(filename) - 1);
