@@ -442,5 +442,9 @@ void clearBonds()
 void enterDfuMode()
 {
     nrf52FlashQuiesce();
+#ifdef USE_TINYUSB
+    enterUf2Dfu(); // native USB (nRF54LM20): the bootloader shows its UF2 drive
+#else
     enterSerialDfu(); // no USB, so no UF2 bootloader
+#endif
 }
