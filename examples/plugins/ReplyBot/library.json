@@ -1,0 +1,12 @@
+{
+  "name": "ReplyBot",
+  "version": "0.1.0",
+  "description": "Example Meshtastic module plugin: /ping /hello /test mic-check replies with hops, RSSI, SNR",
+  "license": "MIT",
+  "frameworks": "arduino",
+  "platforms": "*",
+  "build": {
+    "libArchive": false,
+    "libLDFMode": "deep+"
+  }
+}

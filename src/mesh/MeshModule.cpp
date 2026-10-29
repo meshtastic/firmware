@@ -36,6 +36,13 @@ bool MeshModule::replyPortMatches(meshtastic_PortNum modulePort, const meshtasti
 
 void MeshModule::setup() {}
 
+void MeshModule::runSetup(MeshModule *module)
+{
+    if (module) {
+        module->setup();
+    }
+}
+
 MeshModule::~MeshModule()
 {
     auto it = std::find(modules->begin(), modules->end(), this);
