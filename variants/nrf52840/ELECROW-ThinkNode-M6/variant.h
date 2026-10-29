@@ -139,7 +139,7 @@ static const uint8_t A0 = PIN_A0;
 
 // Low-battery shutdown rechecks VBAT periodically and boots once it exceeds OCV[last] + threshold
 #define SOLAR_WAKE_THRESHOLD 25       // mV
-#define SOLAR_CHARGE_LIFT 80          // mV, VBAT lift measured while the solar charger is active
+#define SOLAR_CHARGE_LIFT 50          // mV, VBAT lift measured while the solar charger is active
 #define SOLAR_LOWBAT_RECHECK_SECS 600 // s
 
 #define HAS_SOLAR

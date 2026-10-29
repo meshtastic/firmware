@@ -45,14 +45,14 @@ static uint32_t readBatteryMv()
 {
     pinMode(ADC_CTRL, OUTPUT);
     digitalWrite(ADC_CTRL, ADC_CTRL_ENABLED);
-    delay(10);
+    delay(20);
     analogReference(VBAT_AR_INTERNAL);
     analogReadResolution(BATTERY_SENSE_RESOLUTION_BITS);
-    uint32_t raw = 0;
+    float raw = 0.0F;
     for (int i = 0; i < BATTERY_SENSE_SAMPLES; i++)
         raw += analogRead(BATTERY_PIN);
     digitalWrite(ADC_CTRL, !ADC_CTRL_ENABLED);
-    return (float)raw / BATTERY_SENSE_SAMPLES * (AREF_VOLTAGE * 1000.0F / BATTERY_SENSE_RESOLUTION) * ADC_MULTIPLIER;
+    return raw / BATTERY_SENSE_SAMPLES * (AREF_VOLTAGE * 1000.0F / BATTERY_SENSE_RESOLUTION) * ADC_MULTIPLIER;
 }
 
 // Low-battery recheck, armed by variant_shutdown(). Each boot measures VBAT once: if still low, blink the
@@ -76,6 +76,8 @@ void earlyInitVariant()
     pinMode(EXT_CHRG_DETECT, INPUT);
     pinMode(PIN_BUTTON1, INPUT_PULLUP);
 
+    delay(300);
+
     // An active solar charger lifts VBAT above its open-circuit voltage
     uint32_t threshold = ocv[NUM_OCV_POINTS - 1] + SOLAR_WAKE_THRESHOLD;
     if (digitalRead(EXT_CHRG_DETECT) == EXT_CHRG_DETECT_VALUE)
@@ -92,7 +94,6 @@ void earlyInitVariant()
             xTaskNotifyGive(lowBatWaitTask);
 
         // LED_POWER was switched on in setup(); keep it visible ~0.3 s as a liveness blink
-        delay(300);
         digitalWrite(LED_POWER, LED_STATE_OFF);
         // Timeout keeps the flag set so the next boot rechecks; button/USB fall through to a normal boot
         if (!ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(SOLAR_LOWBAT_RECHECK_SECS * 1000UL)))
