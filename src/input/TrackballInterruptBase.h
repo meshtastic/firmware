@@ -1,7 +1,12 @@
 #pragma once
 
 #include "InputBroker.h"
+#include "Observer.h"
 #include "mesh/NodeDB.h"
+
+#ifdef ARCH_ESP32
+#include <esp_sleep.h>
+#endif
 
 #ifndef TB_DIRECTION
 #if ARCH_PORTDUINO
@@ -83,6 +88,24 @@ class TrackballInterruptBase : public Observable<const InputEvent *>, public con
     volatile uint32_t lastPressInterruptTime = 0;
     uint32_t pressIrqSeen = 0;
     bool longPressRepeatSent = false;
+
+    void (*_onIntDown)() = nullptr;
+    void (*_onIntUp)() = nullptr;
+    void (*_onIntLeft)() = nullptr;
+    void (*_onIntRight)() = nullptr;
+    void (*_onIntPress)() = nullptr;
+
+    void attachTrackballInterrupts();
+    void detachTrackballInterrupts();
+
+#ifdef ARCH_ESP32
+    int beforeLightSleep(void *);
+    int afterLightSleep(esp_sleep_wakeup_cause_t);
+    CallbackObserver<TrackballInterruptBase, void *> lsObserver =
+        CallbackObserver<TrackballInterruptBase, void *>(this, &TrackballInterruptBase::beforeLightSleep);
+    CallbackObserver<TrackballInterruptBase, esp_sleep_wakeup_cause_t> lsEndObserver =
+        CallbackObserver<TrackballInterruptBase, esp_sleep_wakeup_cause_t>(this, &TrackballInterruptBase::afterLightSleep);
+#endif
 
 #if TB_THRESHOLD
     volatile uint8_t left_counter = 0;
