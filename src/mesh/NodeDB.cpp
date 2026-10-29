@@ -485,7 +485,7 @@ NodeDB::NodeDB()
     cleanupMeshDB();
 
     uint32_t devicestateCRC = crc32Buffer(&devicestate, sizeof(devicestate));
-    uint32_t nodeDatabaseCRC = crc32Buffer(&nodeDatabase, sizeof(NodeDatabase));
+    uint32_t nodeDatabaseCRC = crc32Buffer(&nodeDatabase, sizeof(nodeDatabase));
     uint32_t configCRC = crc32Buffer(&config, sizeof(config));
     uint32_t channelFileCRC = crc32Buffer(&channelFile, sizeof(channelFile));
 
@@ -611,8 +611,8 @@ NodeDB::NodeDB()
         LOG_DEBUG("Coerce position broadcasts to role-aware min and smart broadcast min of 5 min on defaults");
         config.position.position_broadcast_secs =
             Default::getConfiguredOrMinimumValue(config.position.position_broadcast_secs, min_default_broadcast_interval_secs);
-        config.position.position_broadcast_smart_minimum_interval_secs = Default::getConfiguredOrMinimumValue(
-            config.position.position_broadcast_smart_minimum_interval_secs, min_default_broadcast_smart_minimum_interval_secs);
+        config.position.broadcast_smart_minimum_interval_secs = Default::getConfiguredOrMinimumValue(
+            config.position.broadcast_smart_minimum_interval_secs, min_default_broadcast_smart_minimum_interval_secs);
     }
     // FIXME: UINT32_MAX intervals overflows Apple clients until they are fully patched
     if (config.device.node_info_broadcast_secs > MAX_INTERVAL)
@@ -1208,8 +1208,8 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     config.position.position_broadcast_smart_enabled = true;
 #endif
 
-    config.position.position_broadcast_smart_minimum_distance = 100;
-    config.position.position_broadcast_smart_minimum_interval_secs = default_broadcast_smart_minimum_interval_secs;
+    config.position.broadcast_smart_minimum_distance = 100;
+    config.position.broadcast_smart_minimum_interval_secs = default_broadcast_smart_minimum_interval_secs;
     if (config.device.role != meshtastic_Config_DeviceConfig_Role_ROUTER &&
         config.device.role != meshtastic_Config_DeviceConfig_Role_ROUTER_LATE)
         config.device.node_info_broadcast_secs = default_node_info_broadcast_secs;
@@ -1955,7 +1955,7 @@ bool NodeDB::copyNodePosition(NodeNum n, meshtastic_PositionLite &out) const
 #endif
 }
 
-bool NodeDB::copyNodeTelemetry(NodeNum n, meshtastic_PositionLite &out) const
+bool NodeDB::copyNodeTelemetry(NodeNum n, meshtastic_DeviceMetrics &out) const
 {
 #if MESHTASTIC_EXCLUDE_TELEMETRYDB
     (void)n;
@@ -3623,7 +3623,7 @@ HopStartStatus classifyHopStart(const meshtastic_MeshPacket &p)
 
     if (p.hop_start == 0) {
         // hop_start == 0 is either a modern zero-hop broadcast (e.g. beacon) or pre-2.3.0 firmware (585805c)
-        // that never populated hop_start. Firmware version 2.5.0 (bf34329) introduced a bitfield that is always
+        // that never populated hop_start. Firmware 2.5.0 (bf34329) introduced a bitfield that is always
         // present; use it to tell the two apart. The bitfield is encrypted under the channel key, so this can
         // only be resolved for decoded packets - until then the status stays MISSING_OR_UNKNOWN. Callers
         // acting before decode must therefore not treat UNKNOWN as a drop (the bitfield isn't readable yet);
