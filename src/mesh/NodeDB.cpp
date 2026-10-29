@@ -1048,12 +1048,6 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
         true; // FIXME: maybe false in the future, and setting region to enable it. (unset region forces it off)
     config.lora.override_duty_cycle = false;
     config.lora.config_ok_to_mqtt = false;
-#if HAS_LORA_FEM
-    config.lora.fem_lna_mode = meshtastic_Config_LoRaConfig_FEM_LNA_Mode_ENABLED;
-#else
-    config.lora.fem_lna_mode = meshtastic_Config_LoRaConfig_FEM_LNA_Mode_NOT_PRESENT;
-#endif
-
 #if HAS_TFT // For the devices that support MUI, default to that
     config.display.displaymode = meshtastic_Config_DisplayConfig_DisplayMode_COLOR;
 #endif
@@ -2769,6 +2763,11 @@ void NodeDB::loadFromDisk()
     if (config.has_lora && config.lora.use_preset) {
         RadioInterface::clampConfigLora(config.lora);
     }
+    #if HAS_LORA_FEM
+    config.lora.fem_lna_mode = meshtastic_Config_LoRaConfig_FEM_LNA_Mode_ENABLED; //Enable LNA if device has it
+#else
+    config.lora.fem_lna_mode = meshtastic_Config_LoRaConfig_FEM_LNA_Mode_NOT_PRESENT; //Set as NOT_PRESENT if NOT_PRESENT
+#endif
 
 #if defined(USERPREFS_LORA_TX_DISABLED) && USERPREFS_LORA_TX_DISABLED
     config.lora.tx_enabled = false;
