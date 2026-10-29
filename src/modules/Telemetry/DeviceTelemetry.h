@@ -19,7 +19,14 @@ class DeviceTelemetryModule : private concurrency::OSThread,
           ProtobufModule("DeviceTelemetry", meshtastic_PortNum_TELEMETRY_APP, &meshtastic_Telemetry_msg)
     {
         nodeStatusObserver.observe(&nodeStatus->onNewStatus);
-        setIntervalFromNow(setStartDelay()); // Wait until NodeInfo is sent
+        // The framework start delay (30s + 15s per periodic module) exists to let NodeInfo
+        // go out first, but a power-saving SENSOR node deep-sleeps ~18s after boot - long
+        // before that delay elapses - so device telemetry (battery/voltage) would never be
+        // sent. In that mode, run early inside the wake window instead.
+        int32_t startDelay = setStartDelay();
+        if (isPowerSavingSensor())
+            startDelay = 5 * 1000;
+        setIntervalFromNow(startDelay); // Wait until NodeInfo is sent
     }
     virtual bool wantUIFrame() { return false; }
 
