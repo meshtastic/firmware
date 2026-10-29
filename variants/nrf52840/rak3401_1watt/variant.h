@@ -163,10 +163,8 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define SX126X_DIO2_AS_RF_SWITCH
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
 
-// Testing USB detection
-#define NRF_APM
 // If using a power chip like the INA3221 you can override the default battery voltage channel below
-// and comment out NRF_APM to use the INA3221 instead of the USB detection for charging.
+// and to use the INA3221 instead of the USB detection for charging.
 // INA3221Sensor.h provides INA3221_CH1/INA3221_CH2/INA3221_CH3 compatibility aliases, so
 // board variants can continue to use the named channel constants here.
 // #define INA3221_BAT_CH INA3221_CH2
