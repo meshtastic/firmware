@@ -214,15 +214,36 @@ static inline uint16_t clampBandwidthCode(uint16_t bwCode)
     return bwCode;
 }
 
-/// SX128x FLRC/GFSK presets: a local extension (64..75), not part of meshtastic/protobufs
+/// FLRC/GFSK presets: a local extension (64..75), not part of meshtastic/protobufs
 static inline bool isFastModemPreset(meshtastic_Config_LoRaConfig_ModemPreset preset)
 {
     return preset >= PRESET(FLRC_TURBO) && preset <= PRESET(GFSK_LONG);
 }
 
-static inline bool fastModemParams(meshtastic_Config_LoRaConfig_ModemPreset preset, FastModemParams &p)
+static inline bool fastModemParams(meshtastic_Config_LoRaConfig_ModemPreset preset, bool wideLora, FastModemParams &p)
 {
     p = FastModemParams();
+    if (!wideLora) {
+        // Sub-GHz (SX126x): GFSK only, every preset in one 250 kHz channel (EU_868's 869.4-869.65 MHz band), with the
+        // smallest receiver filter that holds Carson's bandwidth (br + 2 * deviation) plus crystal offset.
+        switch (preset) {
+        case PRESET(GFSK_TURBO): // modulation index 0.5: 225 kHz occupied
+            p = {MODULATION_GFSK, 150, 250.0f, 1, 1, -105, 37.5f, 234.3f};
+            break;
+        case PRESET(GFSK_FAST): // index 1 from here down
+            p = {MODULATION_GFSK, 100, 250.0f, 1, 1, -106, 50.0f, 234.3f};
+            break;
+        case PRESET(GFSK_MEDIUM):
+            p = {MODULATION_GFSK, 50, 250.0f, 1, 1, -108, 25.0f, 117.3f};
+            break;
+        case PRESET(GFSK_LONG):
+            p = {MODULATION_GFSK, 25, 250.0f, 1, 1, -111, 12.5f, 58.6f};
+            break;
+        default:
+            return false; // FLRC is 2.4 GHz only
+        }
+        return true;
+    }
     switch (preset) {
     case PRESET(FLRC_TURBO):
         p = {MODULATION_FLRC, 1300, 1200.0f, 1, 1, -96};
@@ -259,7 +280,7 @@ static inline void modemPresetToParams(meshtastic_Config_LoRaConfig_ModemPreset 
                                        uint8_t &cr)
 {
     FastModemParams fast;
-    if (fastModemParams(preset, fast)) {
+    if (fastModemParams(preset, wideLora, fast)) {
         // sf/cr are unused by these modems; keep LoRa-valid values for code that still reads them
         bwKHz = fast.bwKHz;
         sf = 7;

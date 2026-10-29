@@ -185,8 +185,8 @@ class RadioInterface
     /// multiband chips like the LR1121 keep the default.
     virtual bool supportsSubGhz() { return true; }
 
-    /// Whether the chip can run the FLRC/GFSK presets (SX128x)
-    virtual bool supportsFastModems() { return false; }
+    /// Whether the chip can run the FLRC/GFSK presets of this modulation (SX128x: both; SX126x: GFSK)
+    virtual bool supportsModulation(RadioModulation m) { return m == MODULATION_LORA; }
 
     /// Prepare hardware for sleep.  Call this _only_ for deep sleep, not needed for light sleep.
     virtual bool sleep() { return true; }

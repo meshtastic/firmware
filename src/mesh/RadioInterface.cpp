@@ -43,9 +43,11 @@ static const meshtastic_Config_LoRaConfig_ModemPreset PRESETS_STD[] = {
     PRESET(LONG_FAST),     PRESET(LONG_SLOW),   PRESET(MEDIUM_SLOW), PRESET(MEDIUM_FAST),  PRESET(SHORT_SLOW), PRESET(SHORT_FAST),
     PRESET(LONG_MODERATE), PRESET(SHORT_TURBO), PRESET(LONG_TURBO),  PRESET(MEDIUM_TURBO), MODEM_PRESET_END};
 
+// The GFSK presets need an SX126x (applyModemConfig() refuses them on other chips)
 static const meshtastic_Config_LoRaConfig_ModemPreset PRESETS_EU_868[] = {
-    PRESET(LONG_FAST),  PRESET(LONG_SLOW),  PRESET(MEDIUM_SLOW),   PRESET(MEDIUM_FAST),
-    PRESET(SHORT_SLOW), PRESET(SHORT_FAST), PRESET(LONG_MODERATE), MODEM_PRESET_END};
+    PRESET(LONG_FAST),     PRESET(LONG_SLOW),  PRESET(MEDIUM_SLOW), PRESET(MEDIUM_FAST),
+    PRESET(SHORT_SLOW),    PRESET(SHORT_FAST), PRESET(LONG_MODERATE), PRESET(GFSK_TURBO),
+    PRESET(GFSK_FAST),     PRESET(GFSK_MEDIUM), PRESET(GFSK_LONG),   MODEM_PRESET_END};
 
 static const meshtastic_Config_LoRaConfig_ModemPreset PRESETS_UNDEF[] = {PRESET(LONG_FAST), MODEM_PRESET_END};
 
@@ -1362,13 +1364,16 @@ void RadioInterface::applyModemConfig()
         if (!validateConfigLora(loraConfig)) {
             loraConfig.modem_preset = newRegion->getDefaultPreset();
         }
-        if (isFastModemPreset(loraConfig.modem_preset) && !supportsFastModems()) {
-            LOG_ERROR("FLRC/GFSK presets need an SX128x radio, using %s",
+        if (isFastModemPreset(loraConfig.modem_preset) &&
+            (!fastModemParams(loraConfig.modem_preset, newRegion->wideLora, fastModem) ||
+             !supportsModulation(fastModem.modulation))) {
+            LOG_ERROR("This radio cannot run preset %s in %s, using %s",
+                      DisplayFormatters::getModemPresetDisplayName(loraConfig.modem_preset, false, true), newRegion->name,
                       DisplayFormatters::getModemPresetDisplayName(newRegion->getDefaultPreset(), false, true));
             RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
             loraConfig.modem_preset = newRegion->getDefaultPreset();
         }
-        fastModemParams(loraConfig.modem_preset, fastModem);
+        fastModemParams(loraConfig.modem_preset, newRegion->wideLora, fastModem);
         uint8_t newcr;
         modemPresetToParams(loraConfig.modem_preset, newRegion->wideLora, bw, sf, newcr);
         // If custom CR is being used already, check if the new preset is higher

@@ -22,7 +22,7 @@ template <class T> class SX128xInterface : public RadioLibInterface
     /// SX128x is a 2.4 GHz-only chip; it cannot tune sub-GHz regions
     virtual bool supportsSubGhz() override { return false; }
 
-    bool supportsFastModems() override { return true; }
+    bool supportsModulation(RadioModulation m) override { return true; }
 
     /// Apply any radio provisioning changes
     /// Make sure the Driver is properly configured before calling init().
