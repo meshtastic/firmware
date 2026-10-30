@@ -57,7 +57,7 @@ def ffconf_paths(env, phase):
     platform = env.PioPlatform()
     board = env.BoardConfig()
     # same resolution as the platform builder, e.g. esp32p4_es for pre-v3 P4 silicon
-    chip = board.get("build.chip_variant", "").lower() or board.get("build.mcu", "")
+    chip = board.get("build.chip_variant", "").lower() or board.get("build.mcu", "esp32")
 
 
     paths = []
