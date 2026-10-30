@@ -26,7 +26,7 @@ Import("env")
 #      it, so this copy is patched again in the post: pass.
 #
 # framework-espidf is shared by every ESP32 env while this script is registered
-# only on the SDIO variants, so the patch there is undone once the build is
+# only on the device-ui variants, so the patch there is undone once the build is
 # done: an env that never asked for exFAT must not rebuild its IDF libs against
 # a header the rest of its build does not see. The per-chip -libs copy stays
 # patched, matching the libfatfs.a it was built with.
@@ -56,9 +56,9 @@ def wants_exfat(env):
 def ffconf_paths(env, phase):
     platform = env.PioPlatform()
     board = env.BoardConfig()
-    chip = board.get("build.chip_variant", "").lower() or board.get(
-        "build.mcu", "esp32"
-    )
+    # same resolution as the platform builder, e.g. esp32p4_es for pre-v3 P4 silicon
+    chip = board.get("build.chip_variant", "").lower() or board.get("build.mcu", "esp32")
+
 
     paths = []
     if phase == "pre":

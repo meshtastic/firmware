@@ -424,7 +424,7 @@ void fsInit()
  */
 void setupSDCard()
 {
-#if defined(HAS_SDCARD) && !defined(SDCARD_USE_SOFT_SPI) && !defined(HAS_SD_MMC)
+#if defined(HAS_SDCARD) && !defined(SDCARD_USE_SOFT_SPI) && !defined(HAS_SD_MMC) && !defined(USE_PICO_SDK)
     concurrency::LockGuard g(spiLock);
     SDHandler.begin(SPI_SCK, SPI_MISO, SPI_MOSI);
     if (!SD.begin(SDCARD_CS, SDHandler, SD_SPI_FREQUENCY)) {
