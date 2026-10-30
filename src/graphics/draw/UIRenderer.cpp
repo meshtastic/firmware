@@ -2056,9 +2056,11 @@ void UIRenderer::drawOEMIconScreen(const char *upperMsg, OLEDDisplay *display, O
 
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     const char *title = USERPREFS_OEM_TEXT;
-    if (currentResolution == ScreenResolution::High) {
-        display->drawString(x + getStringCenteredX(title), y + SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM, title);
-    }
+    // Draw the OEM title on all display resolutions. Previously this was gated
+    // on ScreenResolution::High, which meant low-resolution OLED panels (e.g.
+    // 128x64 SSD1306) never rendered USERPREFS_OEM_TEXT at all. The OEM image
+    // above is drawn for both resolutions, so the title should be too.
+    display->drawString(x + getStringCenteredX(title), y + SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM, title);
     display->setFont(FONT_SMALL);
 
     // Draw region in upper left
