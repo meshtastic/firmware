@@ -56,9 +56,9 @@ def wants_exfat(env):
 def ffconf_paths(env, phase):
     platform = env.PioPlatform()
     board = env.BoardConfig()
-    chip = board.get("build.chip_variant", "").lower() or board.get(
-        "build.mcu", "esp32"
-    )
+    # same resolution as the platform builder, e.g. esp32p4_es for pre-v3 P4 silicon
+    chip = board.get("build.chip_variant", "").lower() or board.get("build.mcu", "")
+
 
     paths = []
     if phase == "pre":
