@@ -190,8 +190,6 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     } else if (mp.pki_encrypted) {
         if (AdminKeys::isAuthorized(mp.public_key.bytes)) {
             LOG_INFO("PKC admin payload with authorized sender key");
-            remoteSessionNode = mp.from;
-            remoteSessionMs = Time::stampMillis();
 
             // Note: PKC admin does NOT automatically authorize the
             // originating local PhoneAPI connection for content
@@ -1987,13 +1985,8 @@ bool AdminModule::checkPassKey(meshtastic_AdminMessage *res)
     printBytes("Incoming session key: ", res->session_passkey.bytes, 8);
     printBytes("Expected session key: ", session_passkey, 8);
     // Key is valid for 300s from issue; sessionPasskeyValid guards an unissued session.
-    return (sessionPasskeyValid && Throttle::isWithinTimespanMs(session_time, SESSION_EXPIRE_MS) &&
-            res->session_passkey.size == 8 && memcmp(res->session_passkey.bytes, session_passkey, 8) == 0);
-}
-
-bool AdminModule::hasRemoteAdminSession(NodeNum node) const
-{
-    return node != 0 && node == remoteSessionNode && Throttle::isWithinTimespanMs(remoteSessionMs, SESSION_EXPIRE_MS);
+    return (sessionPasskeyValid && Throttle::isWithinTimespanMs(session_time, 300 * 1000UL) && res->session_passkey.size == 8 &&
+            memcmp(res->session_passkey.bytes, session_passkey, 8) == 0);
 }
 
 bool AdminModule::messageIsResponse(const meshtastic_AdminMessage *r)

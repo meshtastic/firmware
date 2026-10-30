@@ -235,41 +235,6 @@ void test_session_gate_accepts_key_from_a_get_response(void)
     TEST_ASSERT_FALSE(admin->checkPassKey(&bad));
 }
 
-// hasRemoteAdminSession() lets NodeInfoModule answer a NodeInfo request past its routine throttles,
-// so only a PKC-authorized admin message may open it, and only for the node that sent it.
-static meshtastic_MeshPacket makeRemoteMetadataRequest(meshtastic_AdminMessage &out)
-{
-    meshtastic_MeshPacket mp = makeRemoteSetOwner("unused", nullptr, 0, out);
-    out = meshtastic_AdminMessage_init_zero;
-    out.which_payload_variant = meshtastic_AdminMessage_get_device_metadata_request_tag;
-    out.get_device_metadata_request = true;
-    return mp;
-}
-
-void test_pkc_admin_message_opens_session_for_its_sender_only(void)
-{
-    TEST_ASSERT_FALSE(admin->hasRemoteAdminSession(ADMIN_NODE));
-
-    meshtastic_AdminMessage m;
-    meshtastic_MeshPacket mp = makeRemoteMetadataRequest(m);
-    admin->handleReceivedProtobuf(mp, &m);
-    admin->drainReply();
-
-    TEST_ASSERT_TRUE(admin->hasRemoteAdminSession(ADMIN_NODE));
-    TEST_ASSERT_FALSE(admin->hasRemoteAdminSession(STRANGER_NODE));
-}
-
-void test_unauthorized_pkc_key_opens_no_session(void)
-{
-    meshtastic_AdminMessage m;
-    meshtastic_MeshPacket mp = makeRemoteMetadataRequest(m);
-    memset(mp.public_key.bytes, 0x77, 32); // not an admin key
-    admin->handleReceivedProtobuf(mp, &m);
-    admin->drainReply();
-
-    TEST_ASSERT_FALSE(admin->hasRemoteAdminSession(ADMIN_NODE));
-}
-
 // Decode the SecurityConfig out of the get_config response a handler queued in myReply.
 static bool decodeSecurityFromReply(meshtastic_MeshPacket *reply, meshtastic_Config_SecurityConfig &out)
 {
@@ -698,8 +663,6 @@ void setup()
     RUN_TEST(test_remote_setter_without_session_is_rejected);
     RUN_TEST(test_expected_session_key_is_zero_before_any_get);
     RUN_TEST(test_session_gate_accepts_key_from_a_get_response);
-    RUN_TEST(test_pkc_admin_message_opens_session_for_its_sender_only);
-    RUN_TEST(test_unauthorized_pkc_key_opens_no_session);
     RUN_TEST(test_remote_security_config_omits_private_key);
     RUN_TEST(test_local_security_config_keeps_private_key);
     RUN_TEST(test_local_security_config_applies_packet_signature_policy);
