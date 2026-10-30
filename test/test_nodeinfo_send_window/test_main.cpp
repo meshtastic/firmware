@@ -29,6 +29,14 @@
 // The window probes step an injected clock (Time::setTestMillis) rather than sleeping;
 // TransmitHistory, which is where allocReply() reads "last sent" from, reads the same clock.
 //
+// 3. A NodeInfo request from a node that holds a remote admin session (AdminModule::
+//    hasRemoteAdminSession()) is answered on the interactive 60 second gate, past both the 30 minute
+//    floor and the 12 hour per-requester reply suppression - an admin who just renamed or re-roled a
+//    node has to be able to see the result. The bypass needs a verified XEdDSA signature, because
+//    only that proves the request's `from`; an unsigned request naming the admin node gets the
+//    routine treatment. Regressions guarded: dropping the signature check (anyone can spoof the
+//    admin's node number), and a bypass that outlives the session or skips the 60 second gate.
+//
 // Also covered here: a relayed NodeInfo payload leaves the module byte-for-byte as received, so the
 // sender's XEdDSA signature still verifies downstream, and coerceNodeInfoUserId() - which applies the
 // user.id fix to local copies instead - rewrites only a mismatched id.
@@ -52,6 +60,7 @@
 #include "mesh/TransmitHistory.h"
 #include "mesh/mesh-pb-constants.h"
 #include "modules/NodeInfoModule.h"
+#include "support/AdminModuleTestShim.h"
 #include "support/MockMeshService.h"
 #include <memory>
 #include <vector>
@@ -64,6 +73,19 @@ class NodeInfoModuleTestShim : public NodeInfoModule
   public:
     using MeshModule::alterReceived;
     using NodeInfoModule::runOnce;
+
+    // The receive-then-reply sequence MeshModule::callModules() runs for a want_response request.
+    // Returns the reply, or nullptr when the module declined to answer.
+    meshtastic_MeshPacket *replyTo(const meshtastic_MeshPacket &req)
+    {
+        meshtastic_User user = meshtastic_User_init_zero;
+        pb_decode_from_bytes(req.decoded.payload.bytes, req.decoded.payload.size, &meshtastic_User_msg, &user);
+        currentRequest = &req;
+        handleReceivedProtobuf(req, &user);
+        meshtastic_MeshPacket *reply = allocReply();
+        currentRequest = nullptr;
+        return reply;
+    }
 };
 
 namespace
@@ -403,6 +425,99 @@ static void test_coerceUserId_rewritesOnlyAMismatchedId(void)
     TEST_ASSERT_EQUAL_STRING("remote", user.long_name);
 }
 
+constexpr NodeNum kAdminNode = 0x0B0B0B0B;
+constexpr NodeNum kOtherNode = 0x0D0D0D0D;
+
+// A unicast NodeInfo request to us, as the router hands it over: xeddsa_signed is the router's
+// verdict on the signature, never a field the sender controls.
+static meshtastic_MeshPacket makeNodeInfoRequest(NodeNum from, bool signedBySender)
+{
+    meshtastic_MeshPacket p = makeNodeInfoPacket(from, "");
+    p.to = nodeDB->getNodeNum();
+    p.decoded.want_response = true;
+    p.xeddsa_signed = signedBySender;
+    return p;
+}
+
+// True when the module answered `req`. Releases the reply so the pool does not leak.
+static bool answers(const meshtastic_MeshPacket &req)
+{
+    meshtastic_MeshPacket *reply = mod->replyTo(req);
+    if (!reply)
+        return false;
+    packetPool.release(reply);
+    return true;
+}
+
+// A fresh TransmitHistory: no "last sent" stamp, so only the per-requester suppression can refuse.
+static void clearTransmitHistory()
+{
+    delete transmitHistory;
+    transmitHistory = nullptr;
+    transmitHistory = TransmitHistory::getInstance();
+}
+
+static AdminModuleTestShim *openAdminSession(NodeNum node)
+{
+    AdminModuleTestShim *admin = new AdminModuleTestShim();
+    admin->openRemoteSession(node);
+    adminModule = admin;
+    return admin;
+}
+
+static void closeAdminSession(AdminModuleTestShim *admin)
+{
+    adminModule = nullptr;
+    delete admin;
+}
+
+static void test_adminRequest_answeredInsideTheFloor(void)
+{
+    transmitHistory->setLastSentToMesh(meshtastic_PortNum_NODEINFO_APP);
+    Time::advanceTestMillis(5 * 60 * 1000);
+    AdminModuleTestShim *admin = openAdminSession(kAdminNode); // after the jump: the session lasts 300 s
+
+    TEST_ASSERT_FALSE_MESSAGE(answers(makeNodeInfoRequest(kOtherNode, true)), "a non-admin request is inside the floor");
+    TEST_ASSERT_FALSE_MESSAGE(answers(makeNodeInfoRequest(kAdminNode, false)),
+                              "an unsigned request cannot prove it came from the admin node");
+    TEST_ASSERT_TRUE_MESSAGE(answers(makeNodeInfoRequest(kAdminNode, true)), "the admin's signed request is answered");
+    closeAdminSession(admin);
+}
+
+static void test_adminRequest_bypassesPerRequesterSuppression(void)
+{
+    AdminModuleTestShim *admin = openAdminSession(kAdminNode);
+    TEST_ASSERT_TRUE(answers(makeNodeInfoRequest(kOtherNode, true)));
+    clearTransmitHistory();
+    TEST_ASSERT_TRUE(answers(makeNodeInfoRequest(kAdminNode, true)));
+
+    clearTransmitHistory(); // take the floor out, leaving the 12 h suppression as the only gate
+    Time::advanceTestMillis(2 * 60 * 1000);
+    TEST_ASSERT_FALSE_MESSAGE(answers(makeNodeInfoRequest(kOtherNode, true)), "a repeat requester is suppressed for 12 h");
+    TEST_ASSERT_TRUE_MESSAGE(answers(makeNodeInfoRequest(kAdminNode, true)), "the admin is not");
+    closeAdminSession(admin);
+}
+
+static void test_adminRequest_keepsTheSixtySecondGate(void)
+{
+    AdminModuleTestShim *admin = openAdminSession(kAdminNode);
+    transmitHistory->setLastSentToMesh(meshtastic_PortNum_NODEINFO_APP);
+    Time::advanceTestMillis(30 * 1000);
+
+    TEST_ASSERT_FALSE(answers(makeNodeInfoRequest(kAdminNode, true)));
+    closeAdminSession(admin);
+}
+
+static void test_adminRequest_endsWithTheSession(void)
+{
+    AdminModuleTestShim *admin = openAdminSession(kAdminNode);
+    transmitHistory->setLastSentToMesh(meshtastic_PortNum_NODEINFO_APP);
+    Time::advanceTestMillis(5 * 60 * 1000 + 1000); // past the 300 s session, still inside the floor
+
+    TEST_ASSERT_FALSE(answers(makeNodeInfoRequest(kAdminNode, true)));
+    closeAdminSession(admin);
+}
+
 NI_TEST_ENTRY void setup()
 {
     initializeTestEnvironment();
@@ -421,6 +536,10 @@ NI_TEST_ENTRY void setup()
     RUN_TEST(test_presetChange_isConsumedOnlyByASendThatGoesOut);
     RUN_TEST(test_relay_userPayloadUnmodified);
     RUN_TEST(test_coerceUserId_rewritesOnlyAMismatchedId);
+    RUN_TEST(test_adminRequest_answeredInsideTheFloor);
+    RUN_TEST(test_adminRequest_bypassesPerRequesterSuppression);
+    RUN_TEST(test_adminRequest_keepsTheSixtySecondGate);
+    RUN_TEST(test_adminRequest_endsWithTheSession);
     exit(UNITY_END());
 }
 NI_TEST_ENTRY void loop() {}
