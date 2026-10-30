@@ -777,8 +777,9 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         scrollY = 0;
     }
 #else
-    // E-Ink: disable autoscroll
-    scrollY = 0.0f;
+    // E-Ink: no autoscroll (it would refresh the panel continuously), but keep where UP/DOWN scrolled to
+    if (!manualScrolling)
+        scrollY = 0.0f;
     waitingToReset = false;
     scrollStarted = false;
     lastTime = millis();
