@@ -61,7 +61,7 @@ class NodeInfoModule : public ProtobufModule<meshtastic_User>, private concurren
     /// Set across sendOurNodeInfo()'s own allocReply(), so the transmit stamp waits for an accepted send.
     bool deferHistoryStamp = false;
     bool suppressReplyForCurrentRequest = false;
-    /// The request came from a node holding a remote admin session, so it is answered on the interactive path.
+    /// The request was signed by a key in our admin list, so it is answered on the interactive path.
     bool adminRequestForCurrentRequest = false;
     /// Sender -> uptime seconds (Time::getUptimeSecs()) at our last reply. Seconds, not millis:
     /// the suppression window is hours wide. See handleReceivedProtobuf().

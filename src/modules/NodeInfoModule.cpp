@@ -1,4 +1,5 @@
 #include "NodeInfoModule.h"
+#include "AdminKeys.h"
 #include "Default.h"
 #include "MeshService.h"
 #include "NodeDB.h"
@@ -9,9 +10,6 @@
 #include "configuration.h"
 #include "gps/RTC.h"
 #include "main.h"
-#if !MESHTASTIC_EXCLUDE_ADMIN
-#include "modules/AdminModule.h"
-#endif
 #include <Throttle.h>
 #include <algorithm>
 
@@ -38,10 +36,10 @@ bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
     // Suppress replies to senders we've replied to recently (12H window)
     if (mp.decoded.want_response && !isFromUs(&mp)) {
         const NodeNum sender = getFrom(&mp);
-#if !MESHTASTIC_EXCLUDE_ADMIN
-        // Only a verified signature proves `from`, so only a signed request can claim the sender's admin session.
-        adminRequestForCurrentRequest = mp.xeddsa_signed && adminModule && adminModule->hasRemoteAdminSession(sender);
-#endif
+        // Only a verified signature proves `from`, and it verified against the key NodeDB now holds for it.
+        meshtastic_NodeInfoLite_public_key_t senderKey = {0, {0}};
+        adminRequestForCurrentRequest =
+            mp.xeddsa_signed && nodeDB->copyPublicKeyAuthoritative(sender, senderKey) && AdminKeys::isAuthorized(senderKey.bytes);
         // A local dedup window, not a wall-clock reading - uptime avoids RTC jumps and replayed
         // packets' stale rx_time perturbing it. Seconds, not millis - this is a wide window.
         const uint32_t nowSecs = Time::getUptimeSecs();

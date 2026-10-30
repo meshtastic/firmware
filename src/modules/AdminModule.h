@@ -31,9 +31,6 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
      */
     AdminModule();
 
-    /// True while `node` holds a remote admin session: a PKC-authorized admin message from it within the session-key lifetime
-    bool hasRemoteAdminSession(NodeNum node) const;
-
   protected:
     /** Called to handle a particular incoming message
 
@@ -58,9 +55,6 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
     uint8_t session_passkey[8] = {0};
     uint32_t session_time = 0;        // millis() when the current session passkey was issued
     bool sessionPasskeyValid = false; // separate flag: millis() 0 at boot is a valid issue time
-    static constexpr uint32_t SESSION_EXPIRE_MS = 300 * 1000UL;
-    NodeNum remoteSessionNode = 0; // last PKC-authorized remote admin
-    uint32_t remoteSessionMs = 0;  // Time::stampMillis() of its last admin message
 
     void saveChanges(int saveWhat, bool shouldReboot = true);
 
