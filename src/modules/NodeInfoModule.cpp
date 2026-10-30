@@ -9,6 +9,9 @@
 #include "configuration.h"
 #include "gps/RTC.h"
 #include "main.h"
+#if !MESHTASTIC_EXCLUDE_ADMIN
+#include "modules/AdminModule.h"
+#endif
 #include <Throttle.h>
 #include <algorithm>
 
@@ -23,6 +26,7 @@ static constexpr uint32_t NodeInfoReplySuppressSeconds = USERPREFS_NODEINFO_REPL
 bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_User *pptr)
 {
     suppressReplyForCurrentRequest = false;
+    adminRequestForCurrentRequest = false;
 
     if (mp.from == nodeDB->getNodeNum()) {
         LOG_WARN("Ignoring packet supposed to be from our own node: 0x%08x", mp.from);
@@ -34,11 +38,16 @@ bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
     // Suppress replies to senders we've replied to recently (12H window)
     if (mp.decoded.want_response && !isFromUs(&mp)) {
         const NodeNum sender = getFrom(&mp);
+#if !MESHTASTIC_EXCLUDE_ADMIN
+        // Only a verified signature proves `from`, so only a signed request can claim the sender's admin session.
+        adminRequestForCurrentRequest = mp.xeddsa_signed && adminModule && adminModule->hasRemoteAdminSession(sender);
+#endif
         // A local dedup window, not a wall-clock reading - uptime avoids RTC jumps and replayed
         // packets' stale rx_time perturbing it. Seconds, not millis - this is a wide window.
         const uint32_t nowSecs = Time::getUptimeSecs();
         auto it = lastNodeInfoSeen.find(sender);
-        if (it != lastNodeInfoSeen.end() && (uint32_t)(nowSecs - it->second) < NodeInfoReplySuppressSeconds) {
+        if (!adminRequestForCurrentRequest && it != lastNodeInfoSeen.end() &&
+            (uint32_t)(nowSecs - it->second) < NodeInfoReplySuppressSeconds) {
             suppressReplyForCurrentRequest = true;
         }
         lastNodeInfoSeen[sender] = nowSecs;
@@ -173,11 +182,12 @@ meshtastic_MeshPacket *NodeInfoModule::allocReply()
             timeoutMs = hamMs;
     }
     uint32_t lastNodeInfo = transmitHistory ? transmitHistory->getLastSentToMeshMillis(meshtastic_PortNum_NODEINFO_APP) : 0;
-    if (!shorterTimeout && lastNodeInfo && Throttle::isWithinTimespanMs(lastNodeInfo, timeoutMs)) {
+    const bool interactive = shorterTimeout || (adminRequestForCurrentRequest && isReplyingToExternalRequest);
+    if (!interactive && lastNodeInfo && Throttle::isWithinTimespanMs(lastNodeInfo, timeoutMs)) {
         LOG_DEBUG("Skip send NodeInfo since we sent it <%us ago", timeoutMs / 1000);
         ignoreRequest = true; // Mark it as ignored for MeshModule
         return NULL;
-    } else if (shorterTimeout && lastNodeInfo && Throttle::isWithinTimespanMs(lastNodeInfo, 60 * 1000)) {
+    } else if (interactive && lastNodeInfo && Throttle::isWithinTimespanMs(lastNodeInfo, 60 * 1000)) {
         // For interactive/urgent requests (e.g., user-triggered or implicit requests), use a shorter 60s timeout
         LOG_DEBUG("Skip send NodeInfo since we sent it <60s ago");
         ignoreRequest = true;

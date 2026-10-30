@@ -2,6 +2,7 @@
 // The one class AdminModule.h befriends (test seam): exposes the protected/private handlers to the
 // native suites and defers persistence so setters exercise in-RAM logic without disk/reboot effects.
 #include "MeshTypes.h" // packetPool
+#include "UptimeClock.h"
 #include "modules/AdminModule.h"
 
 class AdminModuleTestShim : public AdminModule
@@ -30,6 +31,12 @@ class AdminModuleTestShim : public AdminModule
     int savedSegments() const { return lastSaveWhatForTest; }
 
     bool editTransactionOpen() const { return hasOpenEditTransaction; }
+    // Stand in for a PKC-authorized admin message from `node`, without the key setup that path needs.
+    void openRemoteSession(NodeNum node)
+    {
+        remoteSessionNode = node;
+        remoteSessionMs = Time::stampMillis();
+    }
     // Backdate past the idle window so a test sees an abandoned transaction without waiting it out.
     void ageEditTransaction() { editTransactionActivityMs = millis() - EDIT_TRANSACTION_IDLE_MS - 1; }
 
