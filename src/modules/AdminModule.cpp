@@ -197,6 +197,8 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     } else if (mp.pki_encrypted) {
         if (AdminKeys::isAuthorized(mp.public_key.bytes)) {
             LOG_INFO("PKC admin payload with authorized sender key");
+            remoteSessionNode = mp.from;
+            remoteSessionMs = Time::stampMillis();
 
             // Note: PKC admin does NOT automatically authorize the
             // originating local PhoneAPI connection for content
@@ -852,7 +854,8 @@ void AdminModule::handleSetOwner(const meshtastic_User &o)
     }
 
     if (changed) { // If nothing really changed, don't broadcast on the network or write to flash
-        service->reloadOwner(!hasOpenEditTransaction);
+        service->reloadOwner(false);
+        ownerAnnouncePending = true;
         saveChanges(SEGMENT_DEVICESTATE | SEGMENT_NODEDATABASE | (identityUpdated ? SEGMENT_CONFIG : 0) |
                     (channelsSanitized ? SEGMENT_CHANNELS : 0));
     }
@@ -1886,6 +1889,11 @@ void AdminModule::saveChanges(int saveWhat, bool shouldReboot)
     if (!hasOpenEditTransaction) {
         LOG_INFO("Save changes to disk");
         service->reloadConfig(saveWhat); // Calls saveToDisk among other things
+        // The routine NodeInfo throttle would drop it, and the reboot that follows inherits that throttle.
+        if (ownerAnnouncePending) {
+            ownerAnnouncePending = false;
+            service->announceOwnerChange();
+        }
     } else {
         LOG_INFO("Delay disk save until open transaction commits");
         editTransactionActivityMs = millis(); // still in use, so not the abandoned kind we time out
@@ -2013,8 +2021,13 @@ bool AdminModule::checkPassKey(meshtastic_AdminMessage *res)
               in[2], in[3], in[4], in[5], in[6], in[7], session_passkey[0], session_passkey[1], session_passkey[2],
               session_passkey[3], session_passkey[4], session_passkey[5], session_passkey[6], session_passkey[7]);
     // Key is valid for 300s from issue; sessionPasskeyValid guards an unissued session.
-    return (sessionPasskeyValid && Throttle::isWithinTimespanMs(session_time, 300 * 1000UL) && res->session_passkey.size == 8 &&
-            memcmp(res->session_passkey.bytes, session_passkey, 8) == 0);
+    return (sessionPasskeyValid && Throttle::isWithinTimespanMs(session_time, SESSION_EXPIRE_MS) &&
+            res->session_passkey.size == 8 && memcmp(res->session_passkey.bytes, session_passkey, 8) == 0);
+}
+
+bool AdminModule::hasRemoteAdminSession(NodeNum node) const
+{
+    return node != 0 && node == remoteSessionNode && Throttle::isWithinTimespanMs(remoteSessionMs, SESSION_EXPIRE_MS);
 }
 
 bool AdminModule::messageIsResponse(const meshtastic_AdminMessage *r)
