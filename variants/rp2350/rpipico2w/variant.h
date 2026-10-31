@@ -19,6 +19,13 @@
 #define EXT_NOTIFY_OUT 22
 #define BUTTON_PIN 17
 
+// GPS on UART0 (Serial1): GPS module TX -> GPIO1 (Pico RX), GPS module RX -> GPIO0 (Pico TX).
+// Tested with the Adafruit Ultimate GPS v3 (PA6H, 9600 baud). The pins can still be changed at runtime
+// through Position config (rx_gpio / tx_gpio) from the app.
+#define HAS_GPS 1
+#define GPS_RX_PIN 1
+#define GPS_TX_PIN 0
+
 #define BATTERY_PIN 26
 // ratio of voltage divider = 3.0 (R17=200k, R18=100k)
 #define ADC_MULTIPLIER 3.1 // 3.0 + a bit for being optimistic
