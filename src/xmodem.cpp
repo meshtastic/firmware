@@ -139,16 +139,31 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
     switch (xmodemPacket.control) {
     case meshtastic_XModem_Control_SOH:
     case meshtastic_XModem_Control_STX:
-        if (xmodemPacket.seq == 0 && isReceiving && packetno != 0) {
+        if (xmodemPacket.seq == 0 && isReceiving && packetno != 0 && !acceptedWrappedSeq0) {
             // A new transfer while one is in progress: the old one was interrupted (its client is gone). Abandon it,
             // or every new transfer would be refused until a reboot. (Packet 0 is data only when the 16-bit packet
-            // number has wrapped, after 8 MB: packetno is then 0.)
+            // number has wrapped, after 8 MB: packetno is then 0, or 1 for a retry of that packet.)
+            // A start the next step would refuse leaves the transfer in progress alone
+            char next[sizeof(filename)];
+            strncpy(next, (const char *)xmodemPacket.buffer.bytes, sizeof(next) - 1);
+            next[sizeof(next) - 1] = '\0';
+            if (!isValidFilename(next)) {
+                LOG_WARN("XModem: rejecting unsafe filename");
+                sendControl(meshtastic_XModem_Control_NAK);
+                break;
+            }
             LOG_WARN("XModem: abandon the interrupted transfer of %s", filename);
             spiLock->lock();
             file.close();
-            FSCom.remove(filename);
+            bool removed = FSCom.remove(filename);
             spiLock->unlock();
             isReceiving = false;
+            if (!removed) {
+                // The partial file stays: the new transfer is refused, and the client can try again
+                LOG_ERROR("XModem: can't remove the partial file %s", filename);
+                sendControl(meshtastic_XModem_Control_NAK);
+                break;
+            }
         }
         if ((xmodemPacket.seq == 0) && !isReceiving && !isTransmitting) {
             // NULL packet has the destination filename
@@ -175,6 +190,7 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
                     sendControl(meshtastic_XModem_Control_ACK);
                     isReceiving = true;
                     packetno = 1;
+                    acceptedWrappedSeq0 = false;
                     break;
                 }
                 LOG_WARN("XModem: open(%s, WRITE) failed", filename);
@@ -222,6 +238,7 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
                                  (int)xmodemPacket.seq, (int)xmodemPacket.buffer.size, (int)written);
                     }
                     sendControl(meshtastic_XModem_Control_ACK);
+                    acceptedWrappedSeq0 = (xmodemPacket.seq == 0);
                     packetno++;
                     break;
                 }

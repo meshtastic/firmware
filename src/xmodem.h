@@ -69,6 +69,10 @@ class XModemAdapter
 
     uint16_t packetno = 0;
 
+    // True right after a data packet with seq 0 (the 16-bit packet number wrapped) was accepted: its retry, after a
+    // lost ACK, is a duplicate, not a new start
+    bool acceptedWrappedSeq0 = false;
+
     File file;
 
     char filename[sizeof(meshtastic_XModem_buffer_t::bytes)] = {0};

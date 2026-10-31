@@ -410,6 +410,60 @@ void test_xmodem_seq0_after_wrap_is_data(void)
     TEST_ASSERT_EQUAL_HEX8(wrapped, last);
 }
 
+void test_xmodem_seq0_retry_after_wrap_is_a_duplicate(void)
+{
+    // The ACK of the wrapped seq-0 packet is lost and the client sends it again: a duplicate (NAK, as for any wrong
+    // seq), not a new start that would abandon the transfer. The next packet still goes in.
+    startReceive();
+    for (uint32_t seq = 1; seq <= 0xFFFF; seq++) {
+        const uint8_t b = (uint8_t)seq;
+        xm->handlePacket(makeData((uint16_t)seq, &b, 1));
+    }
+    const uint8_t wrapped = 0xA5;
+    xm->handlePacket(makeData(0, &wrapped, 1));
+    TEST_ASSERT_EQUAL(meshtastic_XModem_Control_ACK, xm->getForPhone().control);
+
+    xm->handlePacket(makeData(0, &wrapped, 1));
+    TEST_ASSERT_EQUAL(meshtastic_XModem_Control_NAK, xm->getForPhone().control);
+    TEST_ASSERT_TRUE(xm->isBusy());
+    TEST_ASSERT_TRUE(FSCom.exists(kRxPath));
+
+    const uint8_t after = 0x5A;
+    xm->handlePacket(makeData(1, &after, 1));
+    TEST_ASSERT_EQUAL(meshtastic_XModem_Control_ACK, xm->getForPhone().control);
+    xm->handlePacket(makeControl(meshtastic_XModem_Control_EOT));
+    TEST_ASSERT_FALSE(xm->isBusy());
+
+    File f = FSCom.open(kRxPath, FILE_O_READ);
+    TEST_ASSERT_TRUE(f);
+    TEST_ASSERT_EQUAL_size_t(0x10001, f.size());
+    f.close();
+}
+
+void test_xmodem_unsafe_new_start_keeps_the_transfer(void)
+{
+    // A new start with a filename the adapter refuses must not abandon the transfer in progress
+    uint8_t payload[kChunk];
+    fillPattern(payload, sizeof(payload), 33);
+
+    startReceive();
+    xm->handlePacket(makeData(1, payload, sizeof(payload)));
+    TEST_ASSERT_EQUAL(meshtastic_XModem_Control_ACK, xm->getForPhone().control);
+
+    xm->handlePacket(makeStart(meshtastic_XModem_Control_SOH, "../escape.bin"));
+    TEST_ASSERT_EQUAL(meshtastic_XModem_Control_NAK, xm->getForPhone().control);
+    TEST_ASSERT_TRUE(xm->isBusy());
+    TEST_ASSERT_TRUE(FSCom.exists(kRxPath));
+
+    xm->handlePacket(makeData(2, payload, sizeof(payload)));
+    TEST_ASSERT_EQUAL(meshtastic_XModem_Control_ACK, xm->getForPhone().control);
+    xm->handlePacket(makeControl(meshtastic_XModem_Control_EOT));
+    TEST_ASSERT_FALSE(xm->isBusy());
+
+    uint8_t readBack[3 * kChunk];
+    TEST_ASSERT_EQUAL_size_t(2 * kChunk, readAll(kRxPath, readBack, sizeof(readBack)));
+}
+
 // --- Transmit path ---
 
 void test_xmodem_transmit_happy_path(void)
@@ -607,6 +661,8 @@ void setup()
     RUN_TEST(test_xmodem_new_start_abandons_interrupted_receive);
     RUN_TEST(test_xmodem_new_start_restarts_same_file);
     RUN_TEST(test_xmodem_seq0_after_wrap_is_data);
+    RUN_TEST(test_xmodem_seq0_retry_after_wrap_is_a_duplicate);
+    RUN_TEST(test_xmodem_unsafe_new_start_keeps_the_transfer);
 
     printf("\n=== Transmit path ===\n");
     RUN_TEST(test_xmodem_transmit_happy_path);
