@@ -42,7 +42,7 @@ extern "C" {
 #define ST7735_MISO -1
 #define ST7735_BUSY -1
 #define ST7735_BL (0 + 15)
-#define VTFT_CTRL (0 + 13) // Active HIGH, powers the ST7735 display
+#define VTFT_CTRL (0 + 13) // Active LOW: LOW powers the ST7735 display rail
 #define SPI_FREQUENCY 80000000
 #define SPI_READ_FREQUENCY 16000000
 #define SCREEN_ROTATE
@@ -51,6 +51,7 @@ extern "C" {
 #define TFT_OFFSET_X 24
 #define TFT_OFFSET_Y 0
 #define TFT_INVERT false
+#define TFT_SLEEP_WHEN_OFF // sleep the panel on screen-off instead of driving it unlit
 #define DISPLAY_FORCE_SMALL_FONTS
 #define FORCE_LOW_RES 1 // 80px-wide panel causes artifacts with full-res UI elements
 

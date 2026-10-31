@@ -359,15 +359,24 @@ void WaypointStore::clearAllWaypoints()
     std::deque<StoredWaypoint>().swap(waypoints);
 
 #if ENABLE_WAYPOINT_PERSISTENCE && defined(FSCom)
-    SafeFile f(WAYPOINT_STORE_FILENAME, false);
+    // Rewrite an existing store (stale or unreadable included) as empty; never create one just to
+    // say so. Checked before SafeFile, which takes spiLock itself.
+    bool onFlash;
     {
         concurrency::LockGuard guard(spiLock);
-        const uint8_t version = WAYPOINT_STORE_VERSION;
-        const uint8_t count = 0;
-        f.write(&version, 1);
-        f.write(&count, 1);
+        onFlash = FSCom.exists(WAYPOINT_STORE_FILENAME);
     }
-    f.close();
+    if (onFlash) {
+        SafeFile f(WAYPOINT_STORE_FILENAME, false);
+        {
+            concurrency::LockGuard guard(spiLock);
+            const uint8_t version = WAYPOINT_STORE_VERSION;
+            const uint8_t count = 0;
+            f.write(&version, 1);
+            f.write(&count, 1);
+        }
+        f.close();
+    }
 #endif
 
 #if ENABLE_WAYPOINT_PERSISTENCE

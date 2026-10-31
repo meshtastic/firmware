@@ -52,6 +52,8 @@ class NodeDBTestShim : public NodeDB
 
     void resetDuplicateWarned() { duplicateWarned = false; }
 
+    void resetRefusedIdentityNotices() { lastRefusedIdentityNoticeMs = 0; }
+
 #if WARM_NODE_COUNT > 0
     void runDemote() { demoteOldestHotNodesToWarm(); }
 #endif
@@ -332,10 +334,12 @@ static void test_updateuser_id_derived_from_nodenum(void)
     TEST_ASSERT_EQUAL_STRING(expected, u.id);
 }
 
-// A known XEdDSA signer's identity only changes via a signed update - even a
-// same-key name change arriving unsigned is refused.
+// Under Balanced (and Strict) a known XEdDSA signer's identity only changes via a
+// signed update - even a same-key name change arriving unsigned is refused.
 static void test_updateuser_unsigned_update_refused_for_hot_signer(void)
 {
+    config.security.packet_signature_policy =
+        meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_BALANCED;
     db->push(kPeer, 1000, /*keySeed=*/0x42, /*xeddsaSigned=*/true);
     meshtastic_User u = makeUser("New name", "NN", /*keySeed=*/0x42);
 
@@ -344,6 +348,63 @@ static void test_updateuser_unsigned_update_refused_for_hot_signer(void)
 
     TEST_ASSERT_TRUE(db->updateUser(kPeer, u, 0, /*xeddsaSigned=*/true)); // signed control
     TEST_ASSERT_EQUAL_STRING("New name", db->getMeshNode(kPeer)->long_name);
+}
+
+// Without a notice the user sees a stale name or role and no reason for it. Pins one
+// ClientNotification for a refused identity change, and none for further refusals within the hour,
+// from the same node or another: signers whose NodeInfo keeps arriving unsigned (every relay through
+// pre-2.8 firmware) must not flood the client.
+static void test_updateuser_refused_identity_notifies_rate_limited(void)
+{
+    config.security.packet_signature_policy =
+        meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_STRICT;
+    const NodeNum other = kPeer + 1;
+    db->push(kPeer, 1000, /*keySeed=*/0x42, /*xeddsaSigned=*/true);
+    db->push(other, 1000, /*keySeed=*/0x43, /*xeddsaSigned=*/true);
+    meshtastic_User a = makeUser("A", "A", /*keySeed=*/0x42);
+    meshtastic_User b = makeUser("B", "B", /*keySeed=*/0x43);
+
+    TEST_ASSERT_FALSE(db->updateUser(kPeer, a, 0, /*xeddsaSigned=*/false));
+    TEST_ASSERT_EQUAL_MESSAGE(1, mockService->notificationCount, "a refused identity change must notify the client");
+    TEST_ASSERT_FALSE(db->updateUser(kPeer, a, 0, /*xeddsaSigned=*/false));
+    TEST_ASSERT_FALSE(db->updateUser(other, b, 0, /*xeddsaSigned=*/false));
+    TEST_ASSERT_EQUAL_MESSAGE(1, mockService->notificationCount, "notices must be spaced, not one per refusal");
+}
+
+// A refused NodeInfo that repeats the stored name, short name and role loses the user nothing, so it
+// must not notify: an unchanged signer relayed through pre-2.8 firmware would otherwise report itself
+// on every NodeInfo. A role change alone is a change the user would miss, and does notify.
+static void test_updateuser_refused_unchanged_identity_does_not_notify(void)
+{
+    config.security.packet_signature_policy =
+        meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_BALANCED;
+    db->push(kPeer, 1000, /*keySeed=*/0x42, /*xeddsaSigned=*/true);
+    meshtastic_NodeInfoLite *stored = db->getMeshNode(kPeer);
+    strncpy(stored->long_name, "Same name", sizeof(stored->long_name) - 1);
+    strncpy(stored->short_name, "SN", sizeof(stored->short_name) - 1);
+    meshtastic_User u = makeUser("Same name", "SN", /*keySeed=*/0x42);
+
+    TEST_ASSERT_FALSE(db->updateUser(kPeer, u, 0, /*xeddsaSigned=*/false));
+    TEST_ASSERT_EQUAL_MESSAGE(0, mockService->notificationCount, "an unchanged identity must not notify");
+
+    u.role = meshtastic_Config_DeviceConfig_Role_ROUTER;
+    TEST_ASSERT_FALSE(db->updateUser(kPeer, u, 0, /*xeddsaSigned=*/false));
+    TEST_ASSERT_EQUAL_MESSAGE(1, mockService->notificationCount, "a refused role change must notify");
+}
+
+// Compatible accepts the same unsigned update: firmware before 2.8 strips signatures when
+// relaying, so refusing there would freeze a signer's name behind every older relay. The key
+// pin still holds (test_updateuser_pinned_key_blocks_mismatch); only name and role can change.
+static void test_updateuser_unsigned_update_accepted_for_signer_in_compatible(void)
+{
+    config.security.packet_signature_policy =
+        meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_COMPATIBLE;
+    db->push(kPeer, 1000, /*keySeed=*/0x42, /*xeddsaSigned=*/true);
+    meshtastic_User u = makeUser("New name", "NN", /*keySeed=*/0x42);
+
+    TEST_ASSERT_TRUE(db->updateUser(kPeer, u, 0, /*xeddsaSigned=*/false));
+    TEST_ASSERT_EQUAL_STRING("New name", db->getMeshNode(kPeer)->long_name);
+    TEST_ASSERT_EQUAL_MESSAGE(0, mockService->notificationCount, "an accepted update must not notify");
 }
 
 // The key pin outranks the signature: a signed update still cannot rotate a
@@ -364,6 +425,8 @@ static void test_updateuser_signed_update_cannot_rotate_pinned_key(void)
 // the signer, and must not consume its warm record.
 static void test_updateuser_warm_signer_refusal_does_not_evict(void)
 {
+    config.security.packet_signature_policy =
+        meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_BALANCED; // refusal applies
     const NodeNum signerNum = 0xE2000000 + 3;
     const int extra = MAX_NUM_NODES + 30; // overflow so the oldest non-protected demote to warm
     for (int i = 1; i <= extra; i++)
@@ -454,6 +517,7 @@ void setUp(void)
     db->clearHot();
     db->seedSelf();
     db->resetDuplicateWarned();
+    db->resetRefusedIdentityNotices();
 }
 
 void tearDown(void)
@@ -498,6 +562,9 @@ IH_TEST_ENTRY void setup()
     RUN_TEST(test_updateuser_own_key_advert_notifies_once);
     RUN_TEST(test_updateuser_id_derived_from_nodenum);
     RUN_TEST(test_updateuser_unsigned_update_refused_for_hot_signer);
+    RUN_TEST(test_updateuser_refused_identity_notifies_rate_limited);
+    RUN_TEST(test_updateuser_refused_unchanged_identity_does_not_notify);
+    RUN_TEST(test_updateuser_unsigned_update_accepted_for_signer_in_compatible);
     RUN_TEST(test_updateuser_signed_update_cannot_rotate_pinned_key);
 #if WARM_NODE_COUNT > 0
     RUN_TEST(test_updateuser_warm_signer_refusal_does_not_evict);

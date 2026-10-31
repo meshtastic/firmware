@@ -59,24 +59,6 @@ char NotificationRenderer::alphanumericValue[16] = {0};
 VirtualKeyboard *NotificationRenderer::virtualKeyboard = nullptr;
 std::function<void(const std::string &)> NotificationRenderer::textInputCallback = nullptr;
 
-uint32_t pow_of_10(uint32_t n)
-{
-    uint32_t ret = 1;
-    for (uint32_t i = 0; i < n; i++) {
-        ret *= 10;
-    }
-    return ret;
-}
-
-uint64_t pow_of_16(uint32_t n)
-{
-    uint64_t ret = 1;
-    for (uint32_t i = 0; i < n; i++) {
-        ret *= 16ULL;
-    }
-    return ret;
-}
-
 char graphics::NotificationRenderer::alertBannerLines[MAX_LINES + 1][64] = {};
 uint8_t graphics::NotificationRenderer::alertBannerLineCount = 0;
 graphics::NotificationRenderer::BannerFont graphics::NotificationRenderer::alertBannerLineFonts[MAX_LINES + 1] = {};
@@ -249,6 +231,22 @@ void NotificationRenderer::resetBanner()
     }
 }
 
+// Split alertBannerMessage at '\n' into at most MAX_LINES line starts; returns the line count.
+static uint16_t splitBannerMessageLines(const char *lineStarts[MAX_LINES + 1])
+{
+    char *message = NotificationRenderer::alertBannerMessage;
+    char *alertEnd = message + strnlen(message, sizeof(NotificationRenderer::alertBannerMessage));
+    uint16_t lineCount = 0;
+    lineStarts[0] = message;
+    while ((lineCount < MAX_LINES) && (lineStarts[lineCount] < alertEnd)) {
+        lineStarts[lineCount + 1] = std::find((char *)lineStarts[lineCount], alertEnd, '\n');
+        if (lineStarts[lineCount + 1][0] == '\n')
+            lineStarts[lineCount + 1] += 1;
+        lineCount++;
+    }
+    return lineCount;
+}
+
 void NotificationRenderer::drawBannercallback(OLEDDisplay *display, OLEDDisplayUiState *state)
 {
     // Handle text_input notifications first - they have their own timeout/banner logic
@@ -298,263 +296,92 @@ void NotificationRenderer::drawBannercallback(OLEDDisplay *display, OLEDDisplayU
         drawNodePicker(display, state);
         break;
     case notificationTypeEnum::number_picker:
-        drawNumberPicker(display, state);
-        break;
     case notificationTypeEnum::hex_picker:
-        drawHexPicker(display, state);
-        break;
     case notificationTypeEnum::alphanumeric_picker:
-        drawAlphanumericPicker(display, state);
+        drawCharPicker(display, state);
         break;
     }
 }
 
-void NotificationRenderer::drawNumberPicker(OLEDDisplay *display, OLEDDisplayUiState *state)
+// Number, hex and alphanumeric pickers share one flow: UP/DOWN cycle the character under the cursor
+// through its charset, SELECT/RIGHT/LEFT move the cursor, a typed character is entered directly, and
+// stepping past the last position confirms.
+void NotificationRenderer::drawCharPicker(OLEDDisplay *display, OLEDDisplayUiState *state)
 {
-    const char *lineStarts[MAX_LINES + 1] = {0};
-    uint16_t lineCount = 0;
-
-    // Parse lines
-    char *alertEnd = alertBannerMessage + strnlen(alertBannerMessage, sizeof(alertBannerMessage));
-    lineStarts[lineCount] = alertBannerMessage;
-
-    // Find lines
-    while ((lineCount < MAX_LINES) && (lineStarts[lineCount] < alertEnd)) {
-        lineStarts[lineCount + 1] = std::find((char *)lineStarts[lineCount], alertEnd, '\n');
-        if (lineStarts[lineCount + 1][0] == '\n')
-            lineStarts[lineCount + 1] += 1;
-        lineCount++;
-    }
-    // modulo to extract
-    uint8_t this_digit = (currentNumber % (pow_of_10(numDigits - curSelected))) / (pow_of_10(numDigits - curSelected - 1));
-    // Handle input
-    if (inEvent.inputEvent == INPUT_BROKER_UP || inEvent.inputEvent == INPUT_BROKER_ALT_PRESS ||
-        inEvent.inputEvent == INPUT_BROKER_UP_LONG) {
-        if (this_digit == 9) {
-            currentNumber -= 9 * (pow_of_10(numDigits - curSelected - 1));
-        } else {
-            currentNumber += (pow_of_10(numDigits - curSelected - 1));
-        }
-    } else if (inEvent.inputEvent == INPUT_BROKER_DOWN || inEvent.inputEvent == INPUT_BROKER_USER_PRESS ||
-               inEvent.inputEvent == INPUT_BROKER_DOWN_LONG) {
-        if (this_digit == 0) {
-            currentNumber += 9 * (pow_of_10(numDigits - curSelected - 1));
-        } else {
-            currentNumber -= (pow_of_10(numDigits - curSelected - 1));
-        }
-    } else if (inEvent.inputEvent == INPUT_BROKER_ANYKEY) {
-        if (inEvent.kbchar > 47 && inEvent.kbchar < 58) { // have a digit
-            currentNumber -= this_digit * (pow_of_10(numDigits - curSelected - 1));
-            currentNumber += (inEvent.kbchar - 48) * (pow_of_10(numDigits - curSelected - 1));
-            curSelected++;
-        }
-    } else if (inEvent.inputEvent == INPUT_BROKER_SELECT || inEvent.inputEvent == INPUT_BROKER_RIGHT) {
-        curSelected++;
-    } else if (inEvent.inputEvent == INPUT_BROKER_LEFT) {
-        curSelected--;
-    } else if ((inEvent.inputEvent == INPUT_BROKER_CANCEL || inEvent.inputEvent == INPUT_BROKER_ALT_LONG) &&
-               alertBannerUntil != 0) {
-        resetBanner();
-        return;
-    }
-    if (curSelected == static_cast<int8_t>(numDigits)) {
-        alertBannerCallback(currentNumber);
-        resetBanner();
-        return;
-    }
-
-    inEvent.inputEvent = INPUT_BROKER_NONE;
-    if (alertBannerMessage[0] == '\0')
-        return;
-
-    uint16_t totalLines = lineCount + 2;
-    const char *linePointers[totalLines + 1] = {0}; // this is sort of a dynamic allocation
-
-    // copy the linestarts to display to the linePointers holder
-    for (uint16_t i = 0; i < lineCount; i++) {
-        linePointers[i] = lineStarts[i];
-    }
-    std::string digits = " ";
-    std::string arrowPointer = " ";
-    for (uint16_t i = 0; i < numDigits; i++) {
-        // Modulo minus modulo to return just the current number
-        digits += std::to_string((currentNumber % (pow_of_10(numDigits - i))) / (pow_of_10(numDigits - i - 1))) + " ";
-        if (curSelected == i) {
-            arrowPointer += "^ ";
-        } else {
-            arrowPointer += "_ ";
-        }
-    }
-
-    linePointers[lineCount++] = digits.c_str();
-    linePointers[lineCount++] = arrowPointer.c_str();
-
-    drawNotificationBox(display, state, linePointers, totalLines, 0);
-}
-
-void NotificationRenderer::drawHexPicker(OLEDDisplay *display, OLEDDisplayUiState *state)
-{
-    const char *lineStarts[MAX_LINES + 1] = {0};
-    uint16_t lineCount = 0;
-
-    // Parse lines
-    char *alertEnd = alertBannerMessage + strnlen(alertBannerMessage, sizeof(alertBannerMessage));
-    lineStarts[lineCount] = alertBannerMessage;
-
-    // Find lines
-    while ((lineCount < MAX_LINES) && (lineStarts[lineCount] < alertEnd)) {
-        lineStarts[lineCount + 1] = std::find((char *)lineStarts[lineCount], alertEnd, '\n');
-        if (lineStarts[lineCount + 1][0] == '\n')
-            lineStarts[lineCount + 1] += 1;
-        lineCount++;
-    }
-    // modulo to extract
-    uint8_t this_digit = (currentNumber % (pow_of_16(numDigits - curSelected))) / (pow_of_16(numDigits - curSelected - 1));
-    // Handle input
-    if (inEvent.inputEvent == INPUT_BROKER_UP || inEvent.inputEvent == INPUT_BROKER_ALT_PRESS ||
-        inEvent.inputEvent == INPUT_BROKER_UP_LONG) {
-        if (this_digit == 15) {
-            currentNumber -= 15 * (pow_of_16(numDigits - curSelected - 1));
-        } else {
-            currentNumber += (pow_of_16(numDigits - curSelected - 1));
-        }
-    } else if (inEvent.inputEvent == INPUT_BROKER_DOWN || inEvent.inputEvent == INPUT_BROKER_USER_PRESS ||
-               inEvent.inputEvent == INPUT_BROKER_DOWN_LONG) {
-        if (this_digit == 0) {
-            currentNumber += 15 * (pow_of_16(numDigits - curSelected - 1));
-        } else {
-            currentNumber -= (pow_of_16(numDigits - curSelected - 1));
-        }
-    } else if (inEvent.inputEvent == INPUT_BROKER_ANYKEY) {
-        if (inEvent.kbchar > 47 && inEvent.kbchar < 58) { // have a digit
-            currentNumber -= this_digit * (pow_of_16(numDigits - curSelected - 1));
-            currentNumber += (inEvent.kbchar - 48) * (pow_of_16(numDigits - curSelected - 1));
-            curSelected++;
-        }
-    } else if (inEvent.inputEvent == INPUT_BROKER_SELECT || inEvent.inputEvent == INPUT_BROKER_RIGHT) {
-        curSelected++;
-    } else if (inEvent.inputEvent == INPUT_BROKER_LEFT) {
-        curSelected--;
-    } else if ((inEvent.inputEvent == INPUT_BROKER_CANCEL || inEvent.inputEvent == INPUT_BROKER_ALT_LONG) &&
-               alertBannerUntil != 0) {
-        resetBanner();
-        return;
-    }
-    if (curSelected == static_cast<int8_t>(numDigits)) {
-        alertBannerCallback(currentNumber);
-        resetBanner();
-        return;
-    }
-
-    inEvent.inputEvent = INPUT_BROKER_NONE;
-    if (alertBannerMessage[0] == '\0')
-        return;
-
-    uint16_t totalLines = lineCount + 2;
-    const char *linePointers[totalLines + 1] = {0}; // this is sort of a dynamic allocation
-
-    // copy the linestarts to display to the linePointers holder
-    for (uint16_t i = 0; i < lineCount; i++) {
-        linePointers[i] = lineStarts[i];
-    }
-    std::string digits = " ";
-    std::string arrowPointer = " ";
-    for (uint16_t i = 0; i < numDigits; i++) {
-        // Modulo minus modulo to return just the current number
-        uint8_t digitValue = (currentNumber % (pow_of_16(numDigits - i))) / (pow_of_16(numDigits - i - 1));
-        if (digitValue < 10) {
-            digits += std::to_string(digitValue) + " ";
-        } else if (digitValue == 10) {
-            digits += "A ";
-        } else if (digitValue == 11) {
-            digits += "B ";
-        } else if (digitValue == 12) {
-            digits += "C ";
-        } else if (digitValue == 13) {
-            digits += "D ";
-        } else if (digitValue == 14) {
-            digits += "E ";
-        } else if (digitValue == 15) {
-            digits += "F ";
-        }
-
-        if (curSelected == i) {
-            arrowPointer += "^ ";
-        } else {
-            arrowPointer += "_ ";
-        }
-    }
-
-    linePointers[lineCount++] = digits.c_str();
-    linePointers[lineCount++] = arrowPointer.c_str();
-
-    drawNotificationBox(display, state, linePointers, totalLines, 0);
-}
-
-// Arcade-style initials entry. Mirrors drawHexPicker's cursor/confirm flow, but each position
-// holds a character from ALPHANUMERIC_CHARS (cycled with UP/DOWN) instead of a packed digit, and
-// the assembled string is returned through textInputCallback.
-void NotificationRenderer::drawAlphanumericPicker(OLEDDisplay *display, OLEDDisplayUiState *state)
-{
+    static const char HEX_CHARS[] = "0123456789ABCDEF";
     static const char ALPHANUMERIC_CHARS[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-    constexpr int ALPHANUMERIC_COUNT = sizeof(ALPHANUMERIC_CHARS) - 1; // exclude the NUL
 
-    const char *lineStarts[MAX_LINES + 1] = {0};
-    uint16_t lineCount = 0;
+    const bool alphanumeric = current_notification_type == notificationTypeEnum::alphanumeric_picker;
+    const char *charset = alphanumeric ? ALPHANUMERIC_CHARS : HEX_CHARS;
+    const uint8_t base =
+        alphanumeric ? sizeof(ALPHANUMERIC_CHARS) - 1 : (current_notification_type == notificationTypeEnum::hex_picker ? 16 : 10);
+    const uint8_t positions = std::min<uint32_t>(numDigits, sizeof(alphanumericValue) - 1);
+    auto findChar = [&](char c) { return static_cast<const char *>(memchr(charset, c, base)); };
 
-    // Parse lines (identical to the number/hex pickers)
-    char *alertEnd = alertBannerMessage + strnlen(alertBannerMessage, sizeof(alertBannerMessage));
-    lineStarts[lineCount] = alertBannerMessage;
-    while ((lineCount < MAX_LINES) && (lineStarts[lineCount] < alertEnd)) {
-        lineStarts[lineCount + 1] = std::find((char *)lineStarts[lineCount], alertEnd, '\n');
-        if (lineStarts[lineCount + 1][0] == '\n')
-            lineStarts[lineCount + 1] += 1;
-        lineCount++;
+    // Number and hex pickers keep their value packed in currentNumber; unpack it to one character per position.
+    char value[sizeof(alphanumericValue)];
+    if (alphanumeric) {
+        memcpy(value, alphanumericValue, positions);
+    } else {
+        uint32_t packed = currentNumber;
+        for (int i = positions - 1; i >= 0; i--) {
+            value[i] = HEX_CHARS[packed % base];
+            packed /= base;
+        }
     }
 
-    auto alphaIndex = [&](char c) -> int {
-        for (int i = 0; i < ALPHANUMERIC_COUNT; i++)
-            if (ALPHANUMERIC_CHARS[i] == c)
-                return i;
-        return 0;
-    };
-
     // Handle input
-    if (inEvent.inputEvent == INPUT_BROKER_UP || inEvent.inputEvent == INPUT_BROKER_ALT_PRESS ||
-        inEvent.inputEvent == INPUT_BROKER_UP_LONG) {
-        int idx = (alphaIndex(alphanumericValue[curSelected]) + 1) % ALPHANUMERIC_COUNT;
-        alphanumericValue[curSelected] = ALPHANUMERIC_CHARS[idx];
-    } else if (inEvent.inputEvent == INPUT_BROKER_DOWN || inEvent.inputEvent == INPUT_BROKER_USER_PRESS ||
-               inEvent.inputEvent == INPUT_BROKER_DOWN_LONG) {
-        int idx = (alphaIndex(alphanumericValue[curSelected]) + ALPHANUMERIC_COUNT - 1) % ALPHANUMERIC_COUNT;
-        alphanumericValue[curSelected] = ALPHANUMERIC_CHARS[idx];
-    } else if (inEvent.inputEvent == INPUT_BROKER_ANYKEY) {
-        char k = inEvent.kbchar;
-        if (k >= 'a' && k <= 'z')
-            k = static_cast<char>(k - 'a' + 'A');
-        if ((k >= 'A' && k <= 'Z') || (k >= '0' && k <= '9')) { // direct keyboard entry
-            alphanumericValue[curSelected] = k;
-            curSelected++;
+    const input_broker_event event = inEvent.inputEvent;
+    if (curSelected < static_cast<int8_t>(positions)) {
+        const char *current = findChar(value[curSelected]);
+        const int index = current ? current - charset : 0;
+        if (event == INPUT_BROKER_UP || event == INPUT_BROKER_ALT_PRESS || event == INPUT_BROKER_UP_LONG) {
+            value[curSelected] = charset[(index + 1) % base];
+        } else if (event == INPUT_BROKER_DOWN || event == INPUT_BROKER_USER_PRESS || event == INPUT_BROKER_DOWN_LONG) {
+            value[curSelected] = charset[(index + base - 1) % base];
+        } else if (event == INPUT_BROKER_ANYKEY) {
+            char k = inEvent.kbchar;
+            if (k >= 'a' && k <= 'z')
+                k = static_cast<char>(k - 'a' + 'A');
+            if (findChar(k)) { // direct keyboard entry
+                value[curSelected] = k;
+                curSelected++;
+            }
         }
-    } else if (inEvent.inputEvent == INPUT_BROKER_SELECT || inEvent.inputEvent == INPUT_BROKER_RIGHT) {
+    }
+    if (event == INPUT_BROKER_SELECT || event == INPUT_BROKER_RIGHT) {
         curSelected++;
-    } else if (inEvent.inputEvent == INPUT_BROKER_LEFT) {
+    } else if (event == INPUT_BROKER_LEFT) {
         curSelected--;
-    } else if ((inEvent.inputEvent == INPUT_BROKER_CANCEL || inEvent.inputEvent == INPUT_BROKER_ALT_LONG) &&
-               alertBannerUntil != 0) {
+    } else if ((event == INPUT_BROKER_CANCEL || event == INPUT_BROKER_ALT_LONG) && alertBannerUntil != 0) {
         resetBanner();
         return;
     }
-
     if (curSelected < 0)
         curSelected = 0;
-    if (curSelected == static_cast<int8_t>(numDigits)) {
-        auto callback = textInputCallback; // capture before clearing to avoid re-entrancy surprises
-        std::string result(alphanumericValue, numDigits);
-        textInputCallback = nullptr;
-        resetBanner();
-        if (callback)
-            callback(result);
+
+    if (alphanumeric) {
+        memcpy(alphanumericValue, value, positions);
+    } else {
+        uint32_t packed = 0;
+        for (uint8_t i = 0; i < positions; i++)
+            packed = packed * base + (findChar(value[i]) - charset);
+        currentNumber = packed;
+    }
+
+    if (curSelected >= static_cast<int8_t>(positions)) {
+        if (alphanumeric) {
+            auto callback = textInputCallback; // capture before clearing to avoid re-entrancy surprises
+            std::string result(alphanumericValue, positions);
+            textInputCallback = nullptr;
+            resetBanner();
+            if (callback)
+                callback(result);
+        } else {
+            if (alertBannerCallback)
+                alertBannerCallback(currentNumber);
+            resetBanner();
+        }
         return;
     }
 
@@ -562,23 +389,23 @@ void NotificationRenderer::drawAlphanumericPicker(OLEDDisplay *display, OLEDDisp
     if (alertBannerMessage[0] == '\0')
         return;
 
-    uint16_t totalLines = lineCount + 2;
-    const char *linePointers[totalLines + 1] = {0}; // this is sort of a dynamic allocation
-
-    for (uint16_t i = 0; i < lineCount; i++) {
-        linePointers[i] = lineStarts[i];
+    // Message lines, then " 1 2 3 " with a " ^ _ _ " cursor row under it, then the nullptr terminator.
+    const char *linePointers[MAX_LINES + 3] = {0};
+    uint16_t lineCount = splitBannerMessageLines(linePointers);
+    char cells[2 * sizeof(alphanumericValue) + 1];
+    char cursor[sizeof(cells)];
+    cells[0] = cursor[0] = ' ';
+    for (uint8_t i = 0; i < positions; i++) {
+        cells[1 + 2 * i] = value[i];
+        cursor[1 + 2 * i] = (i == curSelected) ? '^' : '_';
+        cells[2 + 2 * i] = cursor[2 + 2 * i] = ' ';
     }
-    std::string chars = " ";
-    std::string arrowPointer = " ";
-    for (uint16_t i = 0; i < numDigits; i++) {
-        chars += std::string(1, alphanumericValue[i]) + " ";
-        arrowPointer += (curSelected == static_cast<int8_t>(i)) ? "^ " : "_ ";
-    }
+    cells[1 + 2 * positions] = cursor[1 + 2 * positions] = '\0';
+    linePointers[lineCount] = cells;
+    linePointers[lineCount + 1] = cursor;
+    linePointers[lineCount + 2] = nullptr;
 
-    linePointers[lineCount++] = chars.c_str();
-    linePointers[lineCount++] = arrowPointer.c_str();
-
-    drawNotificationBox(display, state, linePointers, totalLines, 0);
+    drawNotificationBox(display, state, linePointers, lineCount + 2, 0);
 }
 
 void NotificationRenderer::drawNodePicker(OLEDDisplay *display, OLEDDisplayUiState *state)
@@ -592,18 +419,7 @@ void NotificationRenderer::drawNodePicker(OLEDDisplay *display, OLEDDisplayUiSta
     // let the box drawing function calculate the widths?
 
     const char *lineStarts[MAX_LINES + 1] = {0};
-    uint16_t lineCount = 0;
-
-    // Parse lines
-    char *alertEnd = alertBannerMessage + strnlen(alertBannerMessage, sizeof(alertBannerMessage));
-    lineStarts[lineCount] = alertBannerMessage;
-
-    while ((lineCount < MAX_LINES) && (lineStarts[lineCount] < alertEnd)) {
-        lineStarts[lineCount + 1] = std::find((char *)lineStarts[lineCount], alertEnd, '\n');
-        if (lineStarts[lineCount + 1][0] == '\n')
-            lineStarts[lineCount + 1] += 1;
-        lineCount++;
-    }
+    uint16_t lineCount = splitBannerMessageLines(lineStarts);
 
     // Handle input
     if (inEvent.inputEvent == INPUT_BROKER_UP || inEvent.inputEvent == INPUT_BROKER_LEFT ||
@@ -658,12 +474,7 @@ void NotificationRenderer::drawNodePicker(OLEDDisplay *display, OLEDDisplayUiSta
         char tempName[48] = {0};
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(i + 1);
         if (nodeInfoLiteHasUser(node)) {
-            const char *rawName = nullptr;
-            if (node->long_name[0]) {
-                rawName = node->long_name;
-            } else if (node->short_name[0]) {
-                rawName = node->short_name;
-            }
+            const char *rawName = node->long_name[0] ? node->long_name : (node->short_name[0] ? node->short_name : nullptr);
             if (rawName) {
                 const int arrowWidth = (currentResolution == ScreenResolution::High)
                                            ? UIRenderer::measureStringWithEmotes(display, ">  <")
@@ -675,32 +486,16 @@ void NotificationRenderer::drawNodePicker(OLEDDisplay *display, OLEDDisplayUiSta
                 UIRenderer::truncateStringWithEmotes(display, rawName, tempName, sizeof(tempName), maxTextWidth,
                                                      compactPanel ? "" : "...");
             }
-        } else {
-            snprintf(tempName, sizeof(tempName), "(%04X)", (uint16_t)(node ? (node->num & 0xFFFF) : 0));
         }
         if (!tempName[0]) {
             snprintf(tempName, sizeof(tempName), "(%04X)", (uint16_t)(node ? (node->num & 0xFFFF) : 0));
         }
+        const char *format = "%s";
         if (i == curSelected) {
             selectedNodenum = node ? node->num : 0;
-            if (currentResolution == ScreenResolution::High) {
-                strncpy(scratchLineBuffer[scratchLineNum], "> ", 3);
-                strncpy(scratchLineBuffer[scratchLineNum] + 2, tempName, sizeof(scratchLineBuffer[scratchLineNum]) - 3);
-                scratchLineBuffer[scratchLineNum][sizeof(scratchLineBuffer[scratchLineNum]) - 1] = '\0';
-                const size_t used = strnlen(scratchLineBuffer[scratchLineNum], sizeof(scratchLineBuffer[scratchLineNum]) - 1);
-                strncpy(scratchLineBuffer[scratchLineNum] + used, " <", sizeof(scratchLineBuffer[scratchLineNum]) - used - 1);
-            } else {
-                strncpy(scratchLineBuffer[scratchLineNum], ">", 2);
-                strncpy(scratchLineBuffer[scratchLineNum] + 1, tempName, sizeof(scratchLineBuffer[scratchLineNum]) - 2);
-                scratchLineBuffer[scratchLineNum][sizeof(scratchLineBuffer[scratchLineNum]) - 1] = '\0';
-                const size_t used = strnlen(scratchLineBuffer[scratchLineNum], sizeof(scratchLineBuffer[scratchLineNum]) - 1);
-                strncpy(scratchLineBuffer[scratchLineNum] + used, "<", sizeof(scratchLineBuffer[scratchLineNum]) - used - 1);
-            }
-            scratchLineBuffer[scratchLineNum][sizeof(scratchLineBuffer[scratchLineNum]) - 1] = '\0';
-        } else {
-            strncpy(scratchLineBuffer[scratchLineNum], tempName, sizeof(scratchLineBuffer[scratchLineNum]) - 1);
-            scratchLineBuffer[scratchLineNum][sizeof(scratchLineBuffer[scratchLineNum]) - 1] = '\0';
+            format = (currentResolution == ScreenResolution::High) ? "> %s <" : ">%s<";
         }
+        snprintf(scratchLineBuffer[scratchLineNum], sizeof(scratchLineBuffer[scratchLineNum]), format, tempName);
         linePointers[linesShown] = scratchLineBuffer[scratchLineNum++];
     }
     drawNotificationBox(display, state, linePointers, totalLines, firstOptionToShow);
@@ -833,16 +628,8 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
 
     for (int i = firstOptionToShow; i < alertBannerOptions && linesShown < visibleTotalLines; i++, linesShown++) {
         if (i == curSelected) {
-            if (currentResolution == ScreenResolution::High) {
-                strncpy(lineBuffer, "> ", 3);
-                strncpy(lineBuffer + 2, optionsArrayPtr[i], 36);
-                strncpy(lineBuffer + strlen(optionsArrayPtr[i]) + 2, " <", 3);
-            } else {
-                strncpy(lineBuffer, ">", 2);
-                strncpy(lineBuffer + 1, optionsArrayPtr[i], 37);
-                strncpy(lineBuffer + strlen(optionsArrayPtr[i]) + 1, "<", 2);
-            }
-            lineBuffer[39] = '\0';
+            snprintf(lineBuffer, sizeof(lineBuffer), (currentResolution == ScreenResolution::High) ? "> %s <" : ">%s<",
+                     optionsArrayPtr[i]);
             linePointers[linesShown] = lineBuffer;
         } else {
             linePointers[linesShown] = optionsArrayPtr[i];
