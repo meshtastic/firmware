@@ -276,11 +276,13 @@ static uint8_t assignPid(const uint8_t *sn, uint8_t requested)
     if (isProbePid(requested) && (!pidSn.count(requested) || pidSn[requested] == unknownSn)) {
         pid = requested;
     } else {
-        for (uint8_t p = PROBE_PID_MIN; p <= PROBE_PID_MAX; p++)
-            if (!pidSn.count(p)) {
+        // Reclaim a dropped serial-unknown PID first (likely this probe), then the lowest free one
+        for (uint8_t p = PROBE_PID_MIN; p <= PROBE_PID_MAX && pid == 0; p++)
+            if (pidSn.count(p) && pidSn[p] == unknownSn && !probes.count(p))
                 pid = p;
-                break;
-            }
+        for (uint8_t p = PROBE_PID_MIN; p <= PROBE_PID_MAX && pid == 0; p++)
+            if (!pidSn.count(p))
+                pid = p;
     }
     if (pid != 0)
         memcpy(pidSn[pid].data(), sn, PROV_SN_LEN);
