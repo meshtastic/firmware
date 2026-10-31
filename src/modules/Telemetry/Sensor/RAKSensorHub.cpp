@@ -72,6 +72,7 @@ struct ProbeState {
     uint32_t lastPollMs = 0;
     bool polled = false;                // false: poll on next tick
     uint8_t missed = 0;                 // consecutive unanswered polls
+    uint32_t retryMs = 0;               // retry delay after a miss, 0 = regular interval
     std::map<uint8_t, uint8_t> sidIpso; // SID -> IPSO, from provisioning or first data
     std::set<uint8_t> paramPending;     // SIDs to query interval/rule
 };
@@ -251,7 +252,7 @@ static void onRequestTimeout(uint32_t now)
         probes.erase(it);
         last_boot_time = 0; // re-broadcast BOOT right away
     } else {
-        it->second.polled = false; // retry next tick
+        it->second.retryMs = it->second.missed == 1 ? 3000 : 8000; // probes can stall for several seconds
     }
 }
 
@@ -265,7 +266,25 @@ static uint8_t frameChecksum(const uint8_t *frm, uint16_t payloadLen)
 }
 
 /** Known serial keeps its PID, else the requested PID if free, else the lowest free. */
-static uint8_t assignPid(const uint8_t *sn, uint8_t requested)
+/** True if a serial-unknown PID can be this joining probe: dropped, or its seen SID/IPSO pairs match the declared list. */
+static bool sameSensors(uint8_t pid, const uint8_t *snsr, uint8_t count)
+{
+    auto it = probes.find(pid);
+    if (it == probes.end())
+        return true;
+    if (it->second.sidIpso.empty())
+        return false;
+    for (const auto &[sid, ipso] : it->second.sidIpso) {
+        bool found = false;
+        for (uint8_t i = 0; i < count && !found; i++)
+            found = snsr[4 * i] == sid && snsr[4 * i + 1] == ipso;
+        if (!found)
+            return false;
+    }
+    return true;
+}
+
+static uint8_t assignPid(const uint8_t *sn, uint8_t requested, const uint8_t *snsr, uint8_t count)
 {
     for (const auto &[pid, known] : pidSn)
         if (memcmp(known.data(), sn, PROV_SN_LEN) == 0)
@@ -276,9 +295,9 @@ static uint8_t assignPid(const uint8_t *sn, uint8_t requested)
     if (isProbePid(requested) && (!pidSn.count(requested) || pidSn[requested] == unknownSn)) {
         pid = requested;
     } else {
-        // Reclaim a dropped serial-unknown PID first (likely this probe), then the lowest free one
+        // Reclaim a serial-unknown PID first (a probe that answered before joining), then the lowest free one
         for (uint8_t p = PROBE_PID_MIN; p <= PROBE_PID_MAX && pid == 0; p++)
-            if (pidSn.count(p) && pidSn[p] == unknownSn && !probes.count(p))
+            if (pidSn.count(p) && pidSn[p] == unknownSn && sameSensors(p, snsr, count))
                 pid = p;
         for (uint8_t p = PROBE_PID_MIN; p <= PROBE_PID_MAX && pid == 0; p++)
             if (!pidSn.count(p))
@@ -306,7 +325,10 @@ static bool handleProvisionRequest(uint16_t total, uint16_t payloadLen)
     }
 
     const uint8_t requested = buff[PROV_ID];
-    const uint8_t pid = assignPid(&buff[PROV_SN], requested);
+    uint8_t sensors = buff[PROV_SNSR_NUM];
+    while (sensors > 0 && PROV_SNSR + 4u * sensors - 1 >= (uint32_t)FRM_RUI3_PAYLOAD + payloadLen)
+        sensors--; // entries must end before the checksum
+    const uint8_t pid = assignPid(&buff[PROV_SN], requested, &buff[PROV_SNSR], sensors);
     if (pid == 0) {
         LOG_WARN("RAKSensorHub: no free probe PID, ignoring provision request");
         return true;
@@ -329,22 +351,28 @@ static bool handleProvisionRequest(uint16_t total, uint16_t payloadLen)
         model[i] = (c >= 0x20 && c < 0x7F) ? c : 0;
     }
     model[PROV_MODEL_LEN] = 0;
-    const uint8_t sensors = buff[PROV_SNSR_NUM];
     LOG_INFO("RAKSensorHub: provision '%s' fw %u.%u.%u sn %02x%02x%02x%02x.. asked PID[%02x] -> PID[%02x], %u sensors", model,
              (unsigned)buff[12], (unsigned)buff[13], (unsigned)buff[14], buff[PROV_SN], buff[PROV_SN + 1], buff[PROV_SN + 2],
              buff[PROV_SN + 3], (unsigned)requested, (unsigned)pid, (unsigned)sensors);
 
     ProbeState *st = addProbe(pid, "provision");
-    for (uint16_t i = 0; i < sensors && PROV_SNSR + 4u * i + 3 < (uint32_t)FRM_RUI3_PAYLOAD + payloadLen; i++) {
+    if (st) {
+        st->sidIpso.clear();
+        st->paramPending.clear();
+    }
+    for (uint16_t i = 0; i < sensors; i++) {
         const uint8_t *s = &buff[PROV_SNSR + 4 * i];
         LOG_INFO("RAKSensorHub: PID[%02x] SID[%02x] IPSO[%02x] rule=0x%04x%s", (unsigned)pid, (unsigned)s[0], (unsigned)s[1],
                  (unsigned)(s[2] | (s[3] << 8)), s[0] == RAKHUB_PROBE_DI_SNSR_BASE ? " (ProbeIO DI slot)" : "");
-        if (st)
+        if (st) {
             noteSid(*st, s[0], s[1]);
+            st->paramPending.insert(s[0]); // sensor probes stall ~5 s about 30 s after a join without it
+        }
     }
     if (st) {
         st->polled = false; // first data right after joining
         st->missed = 0;
+        st->retryMs = 0;
     }
     return true;
 }
@@ -361,8 +389,10 @@ static void onewire_evt(const uint8_t pid, const uint8_t sid, const SNHUBAPI_EVT
     case SNHUBAPI_EVT_RECV_RSP: {
         LOG_DEBUG("+EVT:PID[%02x],RSP", pid);
         ProbeState *st = addProbe(pid, (last_sent_pid_valid && pid == last_sent_pid) ? "discovery response" : "response");
-        if (st)
+        if (st) {
             st->missed = 0;
+            st->retryMs = 0;
+        }
         if (last_sent_pid_valid && pid == last_sent_pid)
             awaiting_rsp = false;
         break;
@@ -609,7 +639,8 @@ static int32_t onewirePollHandle()
 
     uint32_t next_due_ms = RAKHUB_POLL_INTERVAL_MS;
     for (auto &[pid, st] : probes) {
-        if (!st.polled || !Throttle::isWithinTimespanMs(st.lastPollMs, RAKHUB_POLL_INTERVAL_MS)) {
+        const uint32_t interval = st.retryMs ? st.retryMs : RAKHUB_POLL_INTERVAL_MS;
+        if (!st.polled || !Throttle::isWithinTimespanMs(st.lastPollMs, interval)) {
             st.polled = true;
             st.lastPollMs = now;
             LOG_DEBUG("RAKSensorHub: poll get.data(PID=0x%02x)", pid);
@@ -617,7 +648,7 @@ static int32_t onewirePollHandle()
             RakSNHub_Protocl_API.get.data(pid);
             return 100;
         }
-        const uint32_t remaining = Throttle::remainingMs(st.lastPollMs, RAKHUB_POLL_INTERVAL_MS);
+        const uint32_t remaining = Throttle::remainingMs(st.lastPollMs, interval);
         if (remaining < next_due_ms)
             next_due_ms = remaining;
     }
