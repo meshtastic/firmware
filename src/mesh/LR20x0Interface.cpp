@@ -167,20 +167,20 @@ template <typename T> bool LR20x0Interface<T>::init()
     // Allow extra time for TCXO to stabilize after power-on
     delay(10);
 
-    int res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage);
+    int res = beginChip(getFreq(), tcxoVoltage);
 
     // Retry if we get SPI command failed - some units need extra TCXO stabilization time
     if (res == RADIOLIB_ERR_SPI_CMD_FAILED) {
         LOG_WARN("LR20x0 init failed with %d (SPI_CMD_FAILED), retry after delay", res);
         delay(100);
-        res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage);
+        res = beginChip(getFreq(), tcxoVoltage);
     }
 
     // If init failed for any reason other than chip not found, retry without TCXO (XTAL mode)
     if (TCXO_OPTIONAL_ENABLED && res != RADIOLIB_ERR_NONE && res != RADIOLIB_ERR_CHIP_NOT_FOUND && tcxoVoltage > 0) {
         LOG_WARN("LR20x0 init failed with TCXO Vref %f V (err %d), retry without TCXO", tcxoVoltage, res);
         tcxoVoltage = 0;
-        res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage);
+        res = beginChip(getFreq(), tcxoVoltage);
         if (res == RADIOLIB_ERR_NONE)
             LOG_INFO("LR20x0 init success without TCXO (XTAL mode)");
     }
@@ -290,8 +290,11 @@ template <typename T> bool LR20x0Interface<T>::reconfigure()
     const float freq = getFreq();
     const bool bandHop = lr20x0ReconfigurePath(lr20x0LastFreqMHz, freq) == Lr20x0ReconfigurePath::FullBegin;
 
-    if (bandHop) {
-        LOG_INFO("LR20x0 LF/HF band hop %.1f -> %.1f MHz, full begin()", lr20x0LastFreqMHz, freq);
+    if (bandHop || patchLostInSleep) {
+        if (bandHop)
+            LOG_INFO("LR20x0 LF/HF band hop %.1f -> %.1f MHz, full begin()", lr20x0LastFreqMHz, freq);
+        else
+            LOG_INFO("LR20x0 woke from sleep without retention, full begin() to reload the PRAM");
         // fullBegin() hardware-resets the chip, so a standby failure is survivable here
         (void)trySetStandby();
 
@@ -389,6 +392,23 @@ template <typename T> bool LR20x0Interface<T>::reconfigure()
     return reconfigureSuccess;
 }
 
+// begin() with the PRAM load armed, so LR2021Patched::standby() runs it right after begin()'s reset, before the TCXO
+// setup and calibration. If begin() succeeded without reaching that standby(), RadioLib's order has changed: load it
+// late rather than run without it.
+template <typename T> int16_t LR20x0Interface<T>::beginChip(float freq, float tcxoVoltage)
+{
+    lora.armPatchLoad();
+    const int16_t res = lora.begin(freq, bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage);
+    if (res == RADIOLIB_ERR_NONE) {
+        if (lora.patchLoadPending()) {
+            LOG_WARN("LR2021 PRAM not loaded during begin(), loading it after configuration");
+            (void)lora.loadPatch();
+        }
+        patchLostInSleep = false;
+    }
+    return res;
+}
+
 // The chip-side re-init the band-hop and recovery paths share: front-end switch GPIOs for the target
 // band, a fresh begin() (which hardware-resets the chip), CRC, DIO RF-switch table, and RX gain.
 template <typename T> bool LR20x0Interface<T>::fullBegin(float freq)
@@ -425,16 +445,16 @@ template <typename T> bool LR20x0Interface<T>::fullBegin(float freq)
         delay(10); // same TCXO settle window as init()
 
         rxArmedContinuous = false; // begin() resets the chip
-        int res = lora.begin(freq, bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage);
+        int res = beginChip(freq, tcxoVoltage);
         if (res == RADIOLIB_ERR_SPI_CMD_FAILED) {
             LOG_WARN("LR20x0 band-hop begin SPI_CMD_FAILED, retrying");
             delay(100);
-            res = lora.begin(freq, bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage);
+            res = beginChip(freq, tcxoVoltage);
         }
         if (TCXO_OPTIONAL_ENABLED && res != RADIOLIB_ERR_NONE && res != RADIOLIB_ERR_CHIP_NOT_FOUND && tcxoVoltage > 0) {
             LOG_WARN("LR20x0 band-hop begin TCXO failed (%s%d), retry without TCXO", radioLibErr, res);
             tcxoVoltage = 0;
-            res = lora.begin(freq, bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage);
+            res = beginChip(freq, tcxoVoltage);
         }
         if (res != RADIOLIB_ERR_NONE) {
             LOG_ERROR("LR20x0 band-hop begin %s%d", radioLibErr, res);
@@ -929,6 +949,7 @@ template <typename T> bool LR20x0Interface<T>::sleep()
     // the readout task out of it rather than the absence of interrupts.
     bool keepConfig = false;
     lora.sleep(keepConfig, 0); // Note: we do not keep the config, full reinit will be needed
+    patchLostInSleep = true;   // sleep without retention drops the PRAM; reconfigure() reloads it through begin()
 
 #ifdef LR2021_POWER_EN
     digitalWrite(LR2021_POWER_EN, LOW);
