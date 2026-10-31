@@ -34,6 +34,7 @@ namespace
 constexpr uint16_t kPreferredBleMtu = 517;
 constexpr uint16_t kPreferredBleTxOctets = 251;
 constexpr uint16_t kPreferredBleTxTimeUs = (kPreferredBleTxOctets + 14) * 8;
+constexpr int32_t kBleAdvertisingRetryMs = 2000;
 } // namespace
 
 #ifdef ARCH_ESP32
@@ -223,15 +224,14 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
         // Service a deferred advertising restart from onDisconnect, gated on ble_hs_synced() so we
         // never re-enter the GAP API while the host is still mid-reset.
         if (pendingStartAdvertising) {
-            if (checkIsConnected()) {
-                pendingStartAdvertising = false; // a new physical connection beat us to it; nothing to do
-            } else if (ble_hs_synced()) {
-                pendingStartAdvertising = false;
-                if (nimbleBluetooth) {
-                    nimbleBluetooth->startAdvertising();
-                }
-            } else {
+            if (!nimbleBluetooth || nimbleBluetooth->isDeInit || !bleServer || bleServer->getConnectedCount() > 0) {
+                pendingStartAdvertising = false; // teardown or a new physical connection beat the retry
+            } else if (!ble_hs_synced()) {
                 return 200; // host still re-syncing after a reset; retry shortly
+            } else if (!nimbleBluetooth->startAdvertising()) {
+                return kBleAdvertisingRetryMs;
+            } else {
+                pendingStartAdvertising = false;
             }
         }
 
@@ -792,7 +792,7 @@ class NimbleBluetoothServerCallback : public BLEServerCallbacks
     }
 };
 
-void NimbleBluetooth::startAdvertising()
+bool NimbleBluetooth::startAdvertising()
 {
     BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
     pAdvertising->stop();
@@ -811,8 +811,10 @@ void NimbleBluetooth::startAdvertising()
 
     if (!pAdvertising->start(0)) {
         LOG_ERROR("BLE advertising start failed");
+        return false;
     } else {
         LOG_DEBUG("BLE Advertising started");
+        return true;
     }
 }
 
@@ -972,7 +974,10 @@ void NimbleBluetooth::setup()
     static NimbleBluetoothServerCallback serverCallbacks(this); // safe: NimbleBluetooth is a never-deleted singleton
     bleServer->setCallbacks(&serverCallbacks);
     setupService();
-    startAdvertising();
+    if (!startAdvertising()) {
+        pendingStartAdvertising = true;
+        bluetoothPhoneAPI->setIntervalFromNow(kBleAdvertisingRetryMs);
+    }
 }
 
 void NimbleBluetooth::setupService()
