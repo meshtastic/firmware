@@ -1049,7 +1049,7 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     config.lora.override_duty_cycle = false;
     config.lora.config_ok_to_mqtt = false;
 #if HAS_LORA_FEM
-    config.lora.fem_lna_mode = meshtastic_Config_LoRaConfig_FEM_LNA_Mode_ENABLED;
+    config.lora.fem_lna_mode = meshtastic_Config_LoRaConfig_FEM_LNA_Mode_DISABLED;
 #else
     config.lora.fem_lna_mode = meshtastic_Config_LoRaConfig_FEM_LNA_Mode_NOT_PRESENT;
 #endif
