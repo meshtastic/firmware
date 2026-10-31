@@ -5,6 +5,7 @@
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && defined(HAS_RAKHUB)
 
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
+#include "RAKSensorHub.h"
 #include "UptimeClock.h"
 #include <onewire_master_api.h>
 
@@ -887,9 +888,7 @@ bool getMetrics(meshtastic_Telemetry *measurement)
 {
     bool any = false;
     const uint32_t now = Time::stampMillis();
-    // Allow cached readings to be reused for a while because 1-Wire frames can be
-    // missed under BLE/app load. Five minutes keeps outdoor use stable.
-    const uint32_t maxAgeMs = 5 * 60 * 1000;
+    const uint32_t maxAgeMs = RAKHUB_MAX_READING_AGE_MS;
 
     // CO2 is reported in AirQualityMetrics, not EnvironmentMetrics
     if (measurement->which_variant == meshtastic_Telemetry_air_quality_metrics_tag) {
@@ -990,7 +989,7 @@ bool getMetrics(meshtastic_Telemetry *measurement)
 /** Bus voltage in mV from RAK power module (IPSO 0xBA DC_VOLTAGE). */
 uint16_t getBusVoltageMv()
 {
-    const uint32_t maxAgeMs = 5 * 60 * 1000;
+    const uint32_t maxAgeMs = RAKHUB_MAX_READING_AGE_MS;
     const uint32_t now = Time::stampMillis();
     return (powerFieldFresh(power.volMs, now, maxAgeMs) && power.volMv > 0) ? power.volMv : 0;
 }
@@ -998,21 +997,21 @@ uint16_t getBusVoltageMv()
 /** Bus current in mA from RAK power module (IPSO 0xB9 DC_CURRENT). */
 int16_t getCurrentMa()
 {
-    const uint32_t maxAgeMs = 5 * 60 * 1000;
+    const uint32_t maxAgeMs = RAKHUB_MAX_READING_AGE_MS;
     return powerFieldFresh(power.curMs, Time::stampMillis(), maxAgeMs) ? power.curMa : 0;
 }
 
 /** Battery capacity 0..100 % from RAK power module (IPSO 0xB8 CAPACITY). */
 int getBusBatteryPercent()
 {
-    const uint32_t maxAgeMs = 5 * 60 * 1000;
+    const uint32_t maxAgeMs = RAKHUB_MAX_READING_AGE_MS;
     return powerFieldFresh(power.percentMs, Time::stampMillis(), maxAgeMs) ? (int)power.percent : -1;
 }
 
 /** True if current > 0 (charging). */
 bool isCharging()
 {
-    const uint32_t maxAgeMs = 5 * 60 * 1000;
+    const uint32_t maxAgeMs = RAKHUB_MAX_READING_AGE_MS;
     return powerFieldFresh(power.curMs, Time::stampMillis(), maxAgeMs) && (power.curMa > 0);
 }
 
