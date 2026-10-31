@@ -639,16 +639,8 @@ FAIL_RE=':FAIL\b|\[FAILED\]|\[ERRORED\]|[1-9][0-9]* failed|[0-9]+ Tests [1-9][0-
 # Positive proof tests actually ran & passed (absence != success). Accept any pass spelling:
 # the per-test/per-suite tokens OR a success summary line.
 PASS_RE=':PASS\b|\[PASSED\]|test cases: *[0-9]+ succeeded|[0-9]+ Tests 0 Failures'
-# Sanitizer (ASan/LSan/UBSan/TSan) fault signatures. The coverage build is sanitizer-instrumented
-# and aborts NON-ZERO at exit on a fault - most often a LeakSanitizer leak - AFTER every test has
-# already printed [PASSED]. pio then reports [ERRORED]/SIGHUP with no :FAIL: anywhere, so it
-# masquerades as a phantom "N-1 of N succeeded". See .notes/test-passfail-filter.md.
-# Match only real FAULT lines, never the benign "AddressSanitizer: failed to intercept '...'"
-# startup noise that prints on every sanitizer run (it'd mislabel a normal [FAILED] as a leak).
-# Formats per LLVM/Google sanitizer docs: ASan/LSan emit "==PID==ERROR: <San>: ...", UBSan emits
-# "file:line:col: runtime error: ...", TSan emits "WARNING: ThreadSanitizer: ..."; all close with
-# a "SUMMARY: <San>: ..." line (LSan-under-ASan reports its SUMMARY as "AddressSanitizer").
-SAN_RE='(ERROR|WARNING): (Address|Leak|Thread|UndefinedBehavior)Sanitizer:|SUMMARY: (Address|Leak|Thread|UndefinedBehavior)Sanitizer:|Direct leak of|Indirect leak of|detected memory leaks|heap-use-after-free|heap-buffer-overflow|stack-buffer-overflow|attempting double-free|LeakSanitizer has encountered a fatal error|runtime error:'
+# Sanitizer (ASan/LSan/UBSan/TSan) fault signatures, shared with the simulator-log gate in CI.
+source "$SCRIPT_DIR/lib/sanitizer.sh"
 
 # Suites that produced a per-suite verdict. pio emits "coverage:test_x [PASSED|FAILED|ERRORED]";
 # a SKIPPED suite (hardware-only on native) is "accounted for" too, so it doesn't read as missing.

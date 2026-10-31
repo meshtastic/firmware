@@ -328,6 +328,8 @@ static HasBatteryLevel *batteryLevel; // Default to NULL for no battery level se
 
 #ifdef BATTERY_PIN
 
+static_assert(BATTERY_PIN >= 0, "BATTERY_PIN must be a real ADC pin; leave it undefined when the board has no battery sense");
+
 void battery_adcEnable()
 {
 #ifdef ADC_CTRL // enable adc voltage divider when we need to read
@@ -945,7 +947,14 @@ bool Power::analogInit()
     batteryLevel = &analogLevel;
     return true;
 #else
+#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+    // No ADC pin: AnalogBatteryLevel still reads a configured INA (power.device_battery_ina_address), and with
+    // none it reports no battery, so the board keeps its 101% external-power status.
+    batteryLevel = &analogLevel;
+    return true;
+#else
     return false;
+#endif
 #endif
 }
 
