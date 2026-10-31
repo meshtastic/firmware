@@ -24,6 +24,12 @@ class RedirectablePrint : public Print
   public:
     explicit RedirectablePrint(Print *_dest) : dest(_dest) {}
 
+    /// Suppress all log output while a SerialHal transaction is in progress.
+    // Unclear if this is necessary, but it seems to help with response speeds.
+    // Defined only when HAS_SERIAL_HAL_DEVICE; declared always so the class shape does not depend on include order.
+    static void setSerialHalLogSuppressed(bool suppressed);
+    static bool isSerialHalLogSuppressed();
+
     /**
      * Set a new destination
      */
