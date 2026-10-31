@@ -62,7 +62,7 @@
 #include "modules/PositionModule.h"
 #endif
 
-#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && !MESHTASTIC_EXCLUDE_ACCELEROMETER
+#if !MESHTASTIC_EXCLUDE_ACCELEROMETER
 #include "motion/AccelerometerThread.h"
 #endif
 // Unguarded: serialConfigIsValid() is needed on every platform. The class stays guarded in the header.
@@ -837,8 +837,7 @@ void AdminModule::handleSetOwner(const meshtastic_User &o)
     }
 }
 
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR &&                            \
-    !MESHTASTIC_EXCLUDE_ACCELEROMETER
+#if !defined(ARCH_PORTDUINO) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && !MESHTASTIC_EXCLUDE_ACCELEROMETER
 // Shared by double-tap-as-button (device) and wake-on-motion (display). Start on either flag's
 // off->on edge; stop on the on->off edge once neither needs it (disable() clears `enabled` so a
 // later re-enable restarts). Skip the stop if the sensor also drives the compass, else the heading
@@ -888,8 +887,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
     case meshtastic_Config_device_tag: {
         LOG_INFO("Set config: Device");
         config.has_device = true;
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR &&                            \
-    !MESHTASTIC_EXCLUDE_ACCELEROMETER
+#if !defined(ARCH_PORTDUINO) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && !MESHTASTIC_EXCLUDE_ACCELEROMETER
         reconcileAccelerometerThread(config.device.double_tap_as_button_press,
                                      c.payload_variant.device.double_tap_as_button_press, config.display.wake_on_tap_or_motion);
 #endif
@@ -992,8 +990,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
                    c.payload_variant.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
             config.bluetooth.enabled = false;
         }
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR &&                            \
-    !MESHTASTIC_EXCLUDE_ACCELEROMETER
+#if !defined(ARCH_PORTDUINO) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && !MESHTASTIC_EXCLUDE_ACCELEROMETER
         reconcileAccelerometerThread(config.display.wake_on_tap_or_motion, c.payload_variant.display.wake_on_tap_or_motion,
                                      config.device.double_tap_as_button_press);
 #endif
