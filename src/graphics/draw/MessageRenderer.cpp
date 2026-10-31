@@ -105,6 +105,7 @@ void nudgeScroll(int8_t direction)
 {
     if (direction == 0)
         return;
+    manualScrolling = true; // or the next e-ink redraw puts the messages back at the top
 
     if (cachedHeights.empty()) {
         scrollY = 0.0f;

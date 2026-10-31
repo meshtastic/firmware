@@ -380,7 +380,7 @@ void EInkDynamicDisplay::hashImage()
     // and 0 on ARM, so only the first 32 bytes counted and a change below them, such as scrolling the messages, left
     // the hash unchanged and the update was skipped)
     uint32_t hash = 2166136261u;
-    for (uint32_t b = 0; b < (uint32_t)(displayWidth / 8) * displayHeight; b++) {
+    for (uint32_t b = 0; b < displayBufferSize; b++) {
         hash ^= buffer[b];
         hash *= 16777619u;
     }
