@@ -26,7 +26,8 @@ jobs:
           persist-credentials: false
 
       - name: Post combined PR comment
-        uses: membrowse/membrowse-action/comment-action@v1
+        # Same repo, same reason as the pin in membrowse_report.yml - keep the two together.
+        uses: membrowse/membrowse-action/comment-action@34719bdb04722be5cbe9c1d6df4a1567ae98238d
         # gh posts the comment; without a token it fails and the action only logs a warning.
         env:
           GH_TOKEN: ${{ github.token }}
