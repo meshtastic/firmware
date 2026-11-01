@@ -41,6 +41,7 @@ struct HubPower {
 struct EnvCache {
     // IPSO IDs from RAK-OneWireSerial (CayenneLPP-style offset from 3200).
     ScalarReading temperature;             // 0x67 TEMP_SENSOR
+    ScalarReading soil_temperature;        // 0x67 from a soil probe
     ScalarReading humidity;                // 0x68 HUMIDITY_SENSOR
     ScalarReading pressure;                // 0x73 BAROMETER
     ScalarReading distance;                // 0x82 custom AIC distance (not IPSO DISTANCE)
@@ -170,7 +171,7 @@ static void setHpHumidity(float v, uint32_t nowMs, uint8_t pid)
     hpHumidityPidValid = true;
 }
 
-static bool hpHumidityIsSoil(uint8_t pid)
+static bool probeIsSoil(uint8_t pid)
 {
     const uint16_t m = probeMask(pid);
     const bool weather = (m & (SIG_PRESS | SIG_WIND | SIG_WIND_DIR)) != 0;
@@ -248,12 +249,8 @@ static inline bool powerFieldFresh(uint32_t lastMs, uint32_t nowMs, uint32_t max
     return lastMs != 0 && (nowMs - lastMs) <= maxAgeMs;
 }
 
-#if defined(RAK_SENSORHUB_EXTENDED_ENV_METRICS) && RAK_SENSORHUB_EXTENDED_ENV_METRICS
-
-/** Optional on-air export of soil/water chemistry + solar irradiance.
- * Still targets legacy EnvironmentMetrics tags; retarget to SoilWaterMetrics after
- * firmware protobuf sync (protobufs#1071). Off by default: parsed into EnvCache only. */
-static bool fillExtendedEnvironmentMetrics(meshtastic_EnvironmentMetrics *m, uint32_t now, uint32_t maxAgeMs)
+/** Soil/water chemistry and solar irradiance. */
+static bool fillSoilWaterMetrics(meshtastic_SoilWaterMetrics *m, uint32_t now, uint32_t maxAgeMs)
 {
     bool any = false;
     // Proto soil_ph/ph map IPSO 0xC1/0xC2 (high/low precision), not soil vs water.
@@ -340,8 +337,6 @@ static bool fillExtendedEnvironmentMetrics(meshtastic_EnvironmentMetrics *m, uin
     return any;
 }
 
-#endif // RAK_SENSORHUB_EXTENDED_ENV_METRICS
-
 static inline bool isAllZero(const uint8_t *p, uint16_t n)
 {
     if (p == nullptr)
@@ -420,7 +415,8 @@ static bool parseConfiguredModbusReading(uint8_t pid, uint8_t taskId, uint8_t *m
         int16_t signedRaw = (int16_t)raw;
         float temperature = signedRaw / 10.0f;
         if (temperature >= -50.0f && temperature <= 130.0f) {
-            setScalar(env.temperature, temperature, now);
+            noteProbeMask(pid, SIG_SOIL_GE);
+            setScalar(env.soil_temperature, temperature, now);
             LOG_INFO("GE temperature(task=2): raw=%d, %.1f C", (int)signedRaw, temperature);
             return true;
         }
@@ -509,8 +505,8 @@ static bool parseIpsoEvent(const char *via, uint8_t pid, uint8_t sid, uint8_t *m
             LOG_INFO("Ignore temperature value out of range: %.2f C", temperature);
             return false;
         }
-        setScalar(env.temperature, temperature, now);
-        LOG_INFO("Temperature: %.2f C", temperature);
+        setScalar(probeIsSoil(pid) ? env.soil_temperature : env.temperature, temperature, now);
+        LOG_INFO("%s: %.2f C", probeIsSoil(pid) ? "Soil temperature" : "Temperature", temperature);
         return true;
     }
     case RAK_IPSO_HUMIDITY_SENSOR: {
@@ -871,6 +867,19 @@ static bool parseIpsoEvent(const char *via, uint8_t pid, uint8_t sid, uint8_t *m
     }
 }
 
+/** Replace a PID's signature with its provisioned sensor list, so the first frame is classified. */
+void setProbeSensors(uint8_t pid, const uint8_t *ipso, uint16_t n)
+{
+    uint16_t bits = 0;
+    for (uint16_t i = 0; i < n; i++)
+        bits = (uint16_t)(bits | ipsoToSigBit(ipso[i]));
+    for (int i = 0; i < kMaxProbeSigs; i++) {
+        if (probeSigs[i].used && probeSigs[i].pid == pid)
+            probeSigs[i].mask = 0;
+    }
+    noteProbeMask(pid, bits);
+}
+
 bool handleIpsoEvent(const char *via, uint8_t pid, uint8_t sid, uint8_t *msg, uint16_t len)
 {
     logIpsoEventPrefix(via, pid, msg[0]);
@@ -881,9 +890,8 @@ bool handleIpsoEvent(const char *via, uint8_t pid, uint8_t sid, uint8_t *msg, ui
     return ok;
 }
 
-/** Fill measurement variant from EnvCache. air_quality_metrics: CO2 only (IPSO 0x7D).
- * environment_metrics: standard fields always; chemistry/irradiance only when
- * RAK_SENSORHUB_EXTENDED_ENV_METRICS is on (retarget to soil_water_metrics later). */
+/** Fill measurement variant from EnvCache: air_quality_metrics (CO2), soil_water_metrics
+ * (chemistry, irradiance) or environment_metrics (everything else). */
 bool getMetrics(meshtastic_Telemetry *measurement)
 {
     bool any = false;
@@ -900,6 +908,8 @@ bool getMetrics(meshtastic_Telemetry *measurement)
         }
         return false;
     }
+    if (measurement->which_variant == meshtastic_Telemetry_soil_water_metrics_tag)
+        return fillSoilWaterMetrics(&measurement->variant.soil_water_metrics, now, maxAgeMs);
 
     if (powerFieldFresh(power.volMs, now, maxAgeMs) && power.volMv > 0) {
         measurement->variant.environment_metrics.has_voltage = true; // Voltage in V (IPSO 0xBA).
@@ -916,6 +926,11 @@ bool getMetrics(meshtastic_Telemetry *measurement)
         measurement->variant.environment_metrics.has_temperature = true;
         measurement->variant.environment_metrics.temperature = env.temperature.value; // Temperature in °C from RAK environmental
                                                                                       // sensor (IPSO 0x67 TEMPERATURE).
+        any = true;
+    }
+    if (scalarFresh(env.soil_temperature, now, maxAgeMs)) {
+        measurement->variant.environment_metrics.has_soil_temperature = true;
+        measurement->variant.environment_metrics.soil_temperature = env.soil_temperature.value;
         any = true;
     }
     if (scalarFresh(env.humidity, now, maxAgeMs)) {
@@ -961,7 +976,7 @@ bool getMetrics(meshtastic_Telemetry *measurement)
         // IPSO 0x70 is air RH on weather probes and water content on soil probes.
         float v = env.high_precision_humidity.value;
         const uint8_t pid = hpHumidityPidValid ? hpHumidityPid : 0;
-        if (hpHumidityIsSoil(pid)) {
+        if (probeIsSoil(pid)) {
             if (!measurement->variant.environment_metrics.has_soil_moisture) {
                 measurement->variant.environment_metrics.has_soil_moisture = true;
                 measurement->variant.environment_metrics.soil_moisture = (uint8_t)(v < 0 ? 0 : (v > 100 ? 100 : (uint32_t)v));
@@ -977,11 +992,6 @@ bool getMetrics(meshtastic_Telemetry *measurement)
         measurement->variant.environment_metrics.lux = env.lux.value; // Illuminance in lux (IPSO 0x65).
         any = true;
     }
-
-#if defined(RAK_SENSORHUB_EXTENDED_ENV_METRICS) && RAK_SENSORHUB_EXTENDED_ENV_METRICS
-    if (fillExtendedEnvironmentMetrics(&measurement->variant.environment_metrics, now, maxAgeMs))
-        any = true;
-#endif
 
     return any;
 }

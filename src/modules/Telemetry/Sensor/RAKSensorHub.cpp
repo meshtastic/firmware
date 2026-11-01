@@ -22,6 +22,7 @@
 namespace RAKSensorHubUplink
 {
 bool handleIpsoEvent(const char *via, uint8_t pid, uint8_t sid, uint8_t *msg, uint16_t len);
+void setProbeSensors(uint8_t pid, const uint8_t *ipso, uint16_t n);
 bool getMetrics(meshtastic_Telemetry *measurement);
 uint16_t getBusVoltageMv();
 int16_t getCurrentMa();
@@ -360,8 +361,10 @@ static bool handleProvisionRequest(uint16_t total, uint16_t payloadLen)
         st->sidIpso.clear();
         st->paramPending.clear();
     }
+    uint8_t ipsoList[UINT8_MAX];
     for (uint16_t i = 0; i < sensors; i++) {
         const uint8_t *s = &buff[PROV_SNSR + 4 * i];
+        ipsoList[i] = s[1];
         LOG_INFO("RAKSensorHub: PID[%02x] SID[%02x] IPSO[%02x] rule=0x%04x%s", (unsigned)pid, (unsigned)s[0], (unsigned)s[1],
                  (unsigned)(s[2] | (s[3] << 8)), s[0] == RAKHUB_PROBE_DI_SNSR_BASE ? " (ProbeIO DI slot)" : "");
         if (st) {
@@ -369,6 +372,7 @@ static bool handleProvisionRequest(uint16_t total, uint16_t payloadLen)
             st->paramPending.insert(s[0]); // sensor probes stall ~5 s about 30 s after a join without it
         }
     }
+    RAKSensorHubUplink::setProbeSensors(pid, ipsoList, sensors);
     if (st) {
         st->polled = false; // first data right after joining
         st->missed = 0;
