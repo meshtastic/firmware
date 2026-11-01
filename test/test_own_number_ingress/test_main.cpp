@@ -1,5 +1,6 @@
 // Received frames that carry this node's own number in `from`, through Router::perhapsHandleReceived()
-// in src/mesh/Router.cpp.
+// in src/mesh/Router.cpp, and the duplicate paths in FloodingRouter (reprocessPacket(),
+// perhapsHandleUpgradedPacket()) that run before it.
 //
 // Why: every packet we transmit is recorded in PacketHistory when it is sent
 // (NextHopRouter/FloodingRouter::send), so an echo heard back off the mesh is consumed by
@@ -11,7 +12,10 @@
 //
 // Regression guarded: delete the isFromUs() drop after shouldFilterReceived() and such a frame
 // addressed to us is dispatched to modules and forwarded to the client, and a broadcast one reaches
-// module dispatch (MessageStore, the screen). Moving that drop ahead of the filter, or to the radio
+// module dispatch (MessageStore, the screen). The first copy of such a frame still enters PacketHistory,
+// so a repeated copy goes down the dupe path: delete the isFromUs() guards in FloodingRouter and it is
+// reprocessed (a want_ack one is ACKed), and an "upgraded" copy evicts our own queued transmission.
+// Moving that drop ahead of the filter, or to the radio
 // intake, instead breaks the echo case below: the implicit ACK and the retransmission cancel that our
 // own rebroadcast heard back must still produce.
 
@@ -29,6 +33,8 @@
 static constexpr PacketId REMOTE_ID = 0x5E1F0001;
 static constexpr PacketId UNKNOWN_DM_ID = 0x5E1F0002;
 static constexpr PacketId UNKNOWN_BROADCAST_ID = 0x5E1F0003;
+static constexpr PacketId REPEATED_ID = 0x5E1F0004;
+static constexpr PacketId UPGRADED_ID = 0x5E1F0005;
 static constexpr PacketId OUR_ID = 0x0A0A0001;
 
 void setUp(void)
@@ -84,6 +90,51 @@ void test_unrecognised_broadcast_with_our_number_is_dropped(void)
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, pipelineRadio->sendCalls, "an own-number broadcast is never rebroadcast");
 }
 
+// The first copy of an unrecognised own-number frame enters PacketHistory before the drop, so a second
+// copy is a dupe. A dupe with hop_start == hop_limit is treated as the originator retrying and is
+// reprocessed (NextHopRouter::shouldFilterReceived), which for a want_ack frame to us sends an ACK.
+// Reprocessing is never for our own packets: we do not relay them, and their implicit ACK is
+// generated earlier, in ReliableRouter::shouldFilterReceived.
+void test_repeated_own_number_frame_is_not_reprocessed(void)
+{
+    meshtastic_MeshPacket p = makeDecoded(LOCAL_NODE, LOCAL_NODE, meshtastic_PortNum_POSITION_APP, SMALL_PAYLOAD);
+    p.id = REPEATED_ID;
+    p.hop_limit = 2;
+    p.hop_start = 2;
+    p.want_ack = true;
+    p.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA;
+    const meshtastic_MeshPacket frame = channelEncode(p);
+
+    runPipelineIngress(frame);
+    runPipelineIngress(frame);
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, pipelineRouting->ackCalls, "a repeated own-number frame must not be ACKed");
+    TEST_ASSERT_EQUAL_UINT32(0, pipelineModule->calls);
+    TEST_ASSERT_EQUAL(0, drainPhoneQueue());
+}
+
+// An own-number copy with more hops left than the one we sent looks like an "upgraded" duplicate.
+// That path removes the lower-hop copy from the TX queue to relay the better one, but we never relay
+// our own packets, so it must leave our queued transmission alone.
+void test_upgraded_own_number_copy_keeps_our_queued_packet(void)
+{
+    meshtastic_MeshPacket ours = makeLoraFrame(LOCAL_NODE, NODENUM_BROADCAST, UPGRADED_ID);
+    pipelineRouter->remember(&ours); // sent with hop_limit 1, still waiting in the TX queue
+    pipelineRadio->holdInTxQueue(LOCAL_NODE, UPGRADED_ID);
+
+    meshtastic_MeshPacket upgraded = makeDecoded(LOCAL_NODE, NODENUM_BROADCAST, meshtastic_PortNum_POSITION_APP, SMALL_PAYLOAD);
+    upgraded.id = UPGRADED_ID;
+    upgraded.hop_limit = 3;
+    upgraded.hop_start = 3;
+    upgraded.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA;
+    runPipelineIngress(channelEncode(upgraded));
+
+    TEST_ASSERT_TRUE_MESSAGE(pipelineRadio->txQueueHolds(LOCAL_NODE, UPGRADED_ID), "our queued packet must stay queued");
+    TEST_ASSERT_EQUAL_UINT32(0, pipelineRadio->removeCalls);
+    TEST_ASSERT_EQUAL_UINT32(0, pipelineModule->calls);
+    TEST_ASSERT_EQUAL(0, drainPhoneQueue());
+}
+
 // A recognised echo: a neighbour rebroadcasts a want_ack broadcast we sent and are still
 // retransmitting. It is in PacketHistory from our send, so shouldFilterReceived() handles it before
 // the drop: the implicit ACK is generated and the pending retransmission cancelled.
@@ -111,6 +162,8 @@ void setup()
     RUN_TEST(test_frame_from_another_node_reaches_modules_and_phone);
     RUN_TEST(test_unrecognised_frame_to_us_with_our_number_is_dropped);
     RUN_TEST(test_unrecognised_broadcast_with_our_number_is_dropped);
+    RUN_TEST(test_repeated_own_number_frame_is_not_reprocessed);
+    RUN_TEST(test_upgraded_own_number_copy_keeps_our_queued_packet);
     RUN_TEST(test_echo_of_our_own_packet_still_acks_implicitly);
     const int result = UNITY_END();
     pipelineHarnessDestroy();
