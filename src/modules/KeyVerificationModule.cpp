@@ -32,6 +32,16 @@ void copyNodeLongNameOrUnknown(char *dest, size_t destSize, const meshtastic_Nod
     strncpy(dest, name, destSize - 1);
     dest[destSize - 1] = '\0';
 }
+
+// Licensed (ham) operation has no PKI: a licensed node neither sends nor decrypts PKI packets, and the
+// handshake's third message must be PKI-encrypted, so a session could only time out.
+bool licensedRefusesKeyVerification()
+{
+    if (!owner.is_licensed)
+        return false;
+    LOG_WARN("Key verification is unavailable in licensed (ham) mode");
+    return true;
+}
 } // namespace
 
 KeyVerificationModule::KeyVerificationModule()
@@ -155,6 +165,15 @@ bool KeyVerificationModule::handleReceivedProtobuf(const meshtastic_MeshPacket &
 bool KeyVerificationModule::sendInitialRequest(NodeNum remoteNode)
 {
     LOG_DEBUG("keyVerification start");
+    if (licensedRefusesKeyVerification()) {
+        meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
+        if (cn) {
+            cn->level = meshtastic_LogRecord_Level_WARNING;
+            snprintf(cn->message, sizeof(cn->message), "Key verification is unavailable in licensed (ham) mode");
+            service->sendClientNotification(cn);
+        }
+        return false;
+    }
     // generate nonce
     updateState(false);
     if (currentState != KEY_VERIFICATION_IDLE) {
@@ -199,6 +218,10 @@ bool KeyVerificationModule::sendInitialRequest(NodeNum remoteNode)
 
 meshtastic_MeshPacket *KeyVerificationModule::allocReply()
 {
+    if (licensedRefusesKeyVerification()) {
+        ignoreRequest = true; // no NAK: the requester times out as it would against a busy node
+        return nullptr;
+    }
     SHA256 hash;
     NodeNum ourNodeNum = nodeDB->getNodeNum();
     updateState();
@@ -415,17 +438,30 @@ void KeyVerificationModule::resetToIdle()
 
 void KeyVerificationModule::commitVerifiedRemoteNode()
 {
-    // The remote node already has a NodeDB entry by this point (packets were exchanged during the
-    // handshake), so getMeshNode is sufficient; bail defensively if it is somehow absent.
+    // Only commit once the handshake has reached the user's final confirmation: the security
+    // number checked out (initiator) or hash1 matched (responder).
+    if (currentState != KEY_VERIFICATION_SENDER_AWAITING_USER && currentState != KEY_VERIFICATION_RECEIVER_AWAITING_USER) {
+        LOG_WARN("Key verification not awaiting confirmation, not committing");
+        return;
+    }
+    // An initiator that did not know the responder can reach this with no NodeDB entry for it: this
+    // module consumes the hash2 reply, so the routing module never sniffs it into NodeDB. The pending
+    // key that reply carried is then the only record, and the user has just confirmed it, so create the
+    // entry from it.
+    meshtastic_NodeInfoLite_public_key_t pending = {0, {0}};
+    const bool hasPending = crypto->getPendingPublicKey(currentRemoteNode, pending);
     meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(currentRemoteNode);
+    if (!node && hasPending) {
+        nodeDB->commitRemoteKey(currentRemoteNode, pending.bytes, NodeDB::KeyCommitTrust::ManuallyVerified);
+        node = nodeDB->getMeshNode(currentRemoteNode);
+    }
     if (!node) {
         LOG_WARN("Attempted to commit key, but unknown node");
         return;
     }
     // If we only held the peer's key as a pending (unverified) key during the handshake, commit it to
     // NodeDB now that the user has confirmed the verification, so future PKI traffic can use it.
-    meshtastic_NodeInfoLite_public_key_t pending = {0, {0}};
-    if (node->public_key.size != 32 && crypto->getPendingPublicKey(currentRemoteNode, pending))
+    if (node->public_key.size != 32 && hasPending)
         node->public_key = pending;
     node->bitfield |= NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK;
     // Re-commit via the bare-key primitive: writing the same bytes back is a no-op for the hot
