@@ -66,9 +66,13 @@ bool FloodingRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
 
 bool FloodingRouter::perhapsHandleUpgradedPacket(const meshtastic_MeshPacket *p)
 {
-    // isRebroadcaster() is duplicated in perhapsRebroadcast(), but this avoids confusing log messages.
-    // We never relay our own packets, so a copy with our number must not displace our queued one.
-    if (isRebroadcaster() && iface && p->hop_limit > 0 && !isFromUs(p)) {
+    // We never relay our own packets: consume an upgraded copy with our number without touching the TX
+    // queue, rather than let it fall through to the dupe handling (perhapsCancelDupe) as well.
+    if (isFromUs(p))
+        return true;
+
+    // isRebroadcaster() is duplicated in perhapsRebroadcast(), but this avoids confusing log messages
+    if (isRebroadcaster() && iface && p->hop_limit > 0) {
         // Verify the replacement before deleting the valid lower-hop copy waiting in the TX queue.
         // This is intentionally redundant with ReliableRouter's ingress gate: it keeps this helper
         // safe if another caller is introduced later.
