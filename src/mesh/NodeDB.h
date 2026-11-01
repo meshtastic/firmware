@@ -505,6 +505,15 @@ class NodeDB
     /// xeddsa-signed bit - hot-only gates would let a warm-evicted signer be impersonated with unsigned frames.
     bool isKnownXeddsaSigner(NodeNum n);
 
+    /// Whether an unsigned identity update from n heard on channelIndex must be refused: Balanced and
+    /// Strict refuse one from a known signer, except on an AES-CCM channel, whose tag authenticates it.
+    bool refusesUnsignedIdentity(NodeNum n, uint8_t channelIndex, bool xeddsaSigned);
+
+    /// Tell the client that an unsigned identity update from n was refused, when it would have changed the
+    /// node's stored name or role, naming the node and how to accept its updates again. At most one notice per
+    /// REFUSED_IDENTITY_NOTICE_INTERVAL_MS.
+    void notifyRefusedIdentity(NodeNum n, const meshtastic_User &claimed);
+
     /// Provenance of a bare-key commit that deliberately bypasses updateUser()'s
     /// User-payload / TOFU-pin path. Maps to the TrafficManagement cache's `proven` flag:
     /// only ManuallyVerified vouches for possession of exactly this key.
@@ -698,6 +707,8 @@ class NodeDB
   private:
     mutable concurrency::Lock satelliteMutex;
     bool duplicateWarned = false;
+    static constexpr uint32_t REFUSED_IDENTITY_NOTICE_INTERVAL_MS = 60 * 60 * 1000UL;
+    uint32_t lastRefusedIdentityNoticeMs = 0;
     bool localPositionUpdatedSinceBoot = false;
     bool migrationSavePending = false;
     /// Set when loadFromDisk() hit a present-but-undecodable config (DECODE_FAILED). The ctor uses it to

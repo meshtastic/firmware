@@ -177,11 +177,11 @@ inline void onReceiveProto(char *topic, byte *payload, size_t length)
         p->channel = ch.index;
 #if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
         // Already-decoded downlink skips perhapsDecode's crypto path entirely, so enforce the
-        // signature policy here: verify a carried signature and apply unsigned-downgrade
-        // protection for known signers. Without this, a peer on a plaintext broker could
-        // impersonate a signing node with unsigned broadcasts. Hold cryptLock like the RF path
-        // (perhapsDecode) does - checkXeddsaReceivePolicy -> xeddsa_verify mutates shared
-        // CryptoEngine cache state, and MQTT ingress can run on a different task.
+        // signature policy here: verify a carried signature, and in Strict drop an unsigned one.
+        // Without this, a peer on a plaintext broker could forge a signed node's packets. Hold
+        // cryptLock like the RF path (perhapsDecode) does - checkXeddsaReceivePolicy ->
+        // xeddsa_verify mutates shared CryptoEngine cache state, and MQTT ingress can run on a
+        // different task.
         if (passesRoutingAuthGate(p.get()) != RoutingAuthVerdict::ACCEPT) {
             LOG_INFO("Ignore decoded msg failing XEdDSA policy");
             return;
