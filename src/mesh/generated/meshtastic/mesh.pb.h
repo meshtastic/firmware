@@ -7,6 +7,7 @@
 #include "meshtastic/channel.pb.h"
 #include "meshtastic/config.pb.h"
 #include "meshtastic/device_ui.pb.h"
+#include "meshtastic/field_metadata.pb.h"
 #include "meshtastic/module_config.pb.h"
 #include "meshtastic/portnums.pb.h"
 #include "meshtastic/telemetry.pb.h"
@@ -353,6 +354,8 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_MAKERFABS_NOMAD_TERMINAL = 149,
     /* Elecrow ThinkNode MX */
     meshtastic_HardwareModel_THINKNODE_MX = 150,
+    /* Radioddity Nodara */
+    meshtastic_HardwareModel_NODARA = 151,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */
