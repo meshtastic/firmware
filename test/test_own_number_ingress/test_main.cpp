@@ -1,0 +1,134 @@
+// Received frames that carry this node's own number in `from`, through Router::perhapsHandleReceived()
+// in src/mesh/Router.cpp.
+//
+// Why: every packet we transmit is recorded in PacketHistory when it is sent
+// (NextHopRouter/FloodingRouter::send), so an echo heard back off the mesh is consumed by
+// shouldFilterReceived(): that is where the implicit ACK fires and retransmissions stop. A frame with
+// our number that the filter does not recognise (one of ours that has aged out of PacketHistory, or
+// that was sent before a reboot) is not new inbound traffic. It must reach neither module dispatch nor
+// the client, which would otherwise see it as a fresh packet from this node. MQTT and UDP ingress
+// already drop from == us; this keeps LoRa ingress consistent with them.
+//
+// Regression guarded: delete the isFromUs() drop after shouldFilterReceived() and such a frame
+// addressed to us is dispatched to modules and forwarded to the client, and a broadcast one reaches
+// module dispatch (MessageStore, the screen). Moving that drop ahead of the filter, or to the radio
+// intake, instead breaks the echo case below: the implicit ACK and the retransmission cancel that our
+// own rebroadcast heard back must still produce.
+
+#include "MeshTypes.h" // BEFORE TestUtil.h
+#include "TestUtil.h"
+#include <unity.h>
+
+#if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
+
+// Inside the guard: the harness pulls in CryptoEngine entry points a PKI-excluded build lacks.
+#include "support/AuthPipelineHarness.h"
+
+// One id per case: the router and its PacketHistory outlive a test, so a reused (from,id) would be
+// dropped as a dupe and pass for the wrong reason.
+static constexpr PacketId REMOTE_ID = 0x5E1F0001;
+static constexpr PacketId UNKNOWN_DM_ID = 0x5E1F0002;
+static constexpr PacketId UNKNOWN_BROADCAST_ID = 0x5E1F0003;
+static constexpr PacketId OUR_ID = 0x0A0A0001;
+
+void setUp(void)
+{
+    pipelineHarnessSetUp();
+}
+
+void tearDown(void)
+{
+    pipelineHarnessTearDown();
+}
+
+// A channel-encrypted POSITION_APP frame (the port the harness module counts) as it arrives off LoRa.
+static meshtastic_MeshPacket makeLoraFrame(NodeNum from, NodeNum to, PacketId id)
+{
+    meshtastic_MeshPacket p = makeDecoded(from, to, meshtastic_PortNum_POSITION_APP, SMALL_PAYLOAD);
+    p.id = id;
+    p.hop_limit = 1;
+    p.hop_start = 2;
+    p.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA;
+    return channelEncode(p);
+}
+
+// Control: an ordinary frame from another node addressed to us reaches module dispatch and the phone.
+// Without it, the drops below could pass because this fixture delivers nothing at all.
+void test_frame_from_another_node_reaches_modules_and_phone(void)
+{
+    runPipelineIngress(makeLoraFrame(REMOTE_NODE, LOCAL_NODE, REMOTE_ID));
+
+    TEST_ASSERT_EQUAL_UINT32(1, pipelineModule->calls);
+    TEST_ASSERT_EQUAL(1, drainPhoneQueue());
+}
+
+// from == to == our node number, not in PacketHistory: before the drop it reached modules and,
+// because it is addressed to us, MeshService::handleFromRadio forwarded it to the client.
+void test_unrecognised_frame_to_us_with_our_number_is_dropped(void)
+{
+    runPipelineIngress(makeLoraFrame(LOCAL_NODE, LOCAL_NODE, UNKNOWN_DM_ID));
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, pipelineModule->calls, "an unrecognised own-number frame must not reach modules");
+    TEST_ASSERT_EQUAL_MESSAGE(0, drainPhoneQueue(), "an unrecognised own-number frame must not reach the client");
+    TEST_ASSERT_EQUAL_UINT32(0, pipelineRouting->ackCalls);
+}
+
+// A broadcast with our number, not in PacketHistory. The phone already skipped it
+// (isFromUs && !isToUs), but modules did not: this pins the module-dispatch half.
+void test_unrecognised_broadcast_with_our_number_is_dropped(void)
+{
+    runPipelineIngress(makeLoraFrame(LOCAL_NODE, NODENUM_BROADCAST, UNKNOWN_BROADCAST_ID));
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, pipelineModule->calls, "an unrecognised own-number broadcast must not reach modules");
+    TEST_ASSERT_EQUAL(0, drainPhoneQueue());
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, pipelineRadio->sendCalls, "an own-number broadcast is never rebroadcast");
+}
+
+// A recognised echo: a neighbour rebroadcasts a want_ack broadcast we sent and are still
+// retransmitting. It is in PacketHistory from our send, so shouldFilterReceived() handles it before
+// the drop: the implicit ACK is generated and the pending retransmission cancelled.
+void test_echo_of_our_own_packet_still_acks_implicitly(void)
+{
+    meshtastic_MeshPacket ours = makeLoraFrame(LOCAL_NODE, NODENUM_BROADCAST, OUR_ID);
+    ours.hop_limit = 2;
+    ours.want_ack = true;
+    pipelineRouter->remember(&ours); // what NextHopRouter/FloodingRouter::send records
+    pipelineRouter->addPending(ours, UINT32_MAX);
+    TEST_ASSERT_EQUAL(1, pipelineRouter->pendingCount());
+
+    runPipelineIngress(makeRelayedCopy(ours));
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, pipelineRouting->ackCalls, "our echo must still produce the implicit ACK");
+    TEST_ASSERT_EQUAL_MESSAGE(0, pipelineRouter->pendingCount(), "our echo must still cancel the retransmission");
+    TEST_ASSERT_EQUAL_UINT32(0, pipelineModule->calls);
+    TEST_ASSERT_EQUAL(0, drainPhoneQueue());
+}
+
+void setup()
+{
+    pipelineHarnessCreate();
+    UNITY_BEGIN();
+    RUN_TEST(test_frame_from_another_node_reaches_modules_and_phone);
+    RUN_TEST(test_unrecognised_frame_to_us_with_our_number_is_dropped);
+    RUN_TEST(test_unrecognised_broadcast_with_our_number_is_dropped);
+    RUN_TEST(test_echo_of_our_own_packet_still_acks_implicitly);
+    const int result = UNITY_END();
+    pipelineHarnessDestroy();
+    exit(result);
+}
+
+void loop() {}
+
+#else // XEdDSA or PKI excluded
+
+void setUp(void) {}
+void tearDown(void) {}
+void setup()
+{
+    initializeTestEnvironment();
+    UNITY_BEGIN();
+    exit(UNITY_END());
+}
+void loop() {}
+
+#endif
