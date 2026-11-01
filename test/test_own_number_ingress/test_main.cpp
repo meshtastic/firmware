@@ -16,6 +16,9 @@
 // so a repeated copy goes down the dupe path: delete the isFromUs() guards in FloodingRouter and it is
 // reprocessed (a want_ack one is ACKed), and an "upgraded" copy evicts our own queued transmission,
 // either in perhapsHandleUpgradedPacket() or, if that lets it fall through, in perhapsCancelDupe().
+// The echo cases also follow the implicit ACK through the real RoutingModule::sendAckNak() to the phone
+// queue, for a channel broadcast and for an opaque PKI DM: filtering our number at phone delivery
+// (#11487) or skipping the opaque ACK (#11502) loses the client's "Delivered to mesh".
 // Moving that drop ahead of the filter, or to the radio
 // intake, instead breaks the echo case below: the implicit ACK and the retransmission cancel that our
 // own rebroadcast heard back must still produce.
@@ -38,6 +41,7 @@ static constexpr PacketId REPEATED_ID = 0x5E1F0004;
 static constexpr PacketId UPGRADED_ID = 0x5E1F0005;
 static constexpr PacketId UPGRADED_SPENT_ID = 0x5E1F0006;
 static constexpr PacketId OUR_ID = 0x0A0A0001;
+static constexpr PacketId OUR_PKI_DM_ID = 0x0A0A0002;
 
 void setUp(void)
 {
@@ -160,11 +164,33 @@ void test_upgraded_own_number_copy_with_hops_spent_keeps_our_queued_packet(void)
     TEST_ASSERT_EQUAL(0, drainPhoneQueue());
 }
 
+// Drain the phone queue and require exactly one frame: the success ACK for `requestId`, as the client
+// sees it ("Delivered to mesh"). Anything else there - the echo itself, a second ACK - fails.
+static void expectOnlyImplicitAckOnPhone(PacketId requestId)
+{
+    int acks = 0, others = 0;
+    while (meshtastic_MeshPacket *queued = pipelineService->getForPhone()) {
+        meshtastic_Routing r = meshtastic_Routing_init_zero;
+        const bool isAck =
+            queued->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
+            queued->decoded.portnum == meshtastic_PortNum_ROUTING_APP && queued->decoded.request_id == requestId &&
+            pb_decode_from_bytes(queued->decoded.payload.bytes, queued->decoded.payload.size, &meshtastic_Routing_msg, &r) &&
+            r.which_variant == meshtastic_Routing_error_reason_tag && r.error_reason == meshtastic_Routing_Error_NONE;
+        isAck ? acks++ : others++;
+        packetPool.release(queued);
+    }
+    TEST_ASSERT_EQUAL_MESSAGE(1, acks, "the implicit ACK must reach the phone with the original request_id");
+    TEST_ASSERT_EQUAL_MESSAGE(0, others, "nothing but the ACK reaches the phone");
+}
+
 // A recognised echo: a neighbour rebroadcasts a want_ack broadcast we sent and are still
 // retransmitting. It is in PacketHistory from our send, so shouldFilterReceived() handles it before
-// the drop: the implicit ACK is generated and the pending retransmission cancelled.
+// the drop: the implicit ACK is generated and the pending retransmission cancelled. The ACK goes
+// through the real RoutingModule::sendAckNak() -> Router::sendLocal() path, which does not pass the
+// drop, so the client still gets its "Delivered to mesh" (the failure mode fixed in #11487).
 void test_echo_of_our_own_packet_still_acks_implicitly(void)
 {
+    pipelineRouting->deliverAcks = true;
     meshtastic_MeshPacket ours = makeLoraFrame(LOCAL_NODE, NODENUM_BROADCAST, OUR_ID);
     ours.hop_limit = 2;
     ours.want_ack = true;
@@ -177,7 +203,40 @@ void test_echo_of_our_own_packet_still_acks_implicitly(void)
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, pipelineRouting->ackCalls, "our echo must still produce the implicit ACK");
     TEST_ASSERT_EQUAL_MESSAGE(0, pipelineRouter->pendingCount(), "our echo must still cancel the retransmission");
     TEST_ASSERT_EQUAL_UINT32(0, pipelineModule->calls);
-    TEST_ASSERT_EQUAL(0, drainPhoneQueue());
+    expectOnlyImplicitAckOnPhone(OUR_ID);
+}
+
+// The opaque case: a want_ack PKI DM we sent, overheard being rebroadcast, cannot be decrypted by us.
+// It takes the OPAQUE_RELAY_ONLY branch, which returns before shouldFilterReceived() and the drop, and
+// generates the implicit ACK there (the failure mode fixed in #11502). That ACK must reach the phone.
+void test_opaque_echo_of_our_pki_dm_delivers_implicit_ack_to_phone(void)
+{
+    pipelineRouting->deliverAcks = true;
+    meshtastic_MeshPacket ours = makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_TEXT_MESSAGE_APP, SMALL_PAYLOAD);
+    ours.id = OUR_PKI_DM_ID;
+    ours.want_ack = true;
+    pipelineRouter->addPending(ours, UINT32_MAX);
+
+    // As overheard: still ciphertext, on a channel hash we hold no key for, one hop spent.
+    meshtastic_MeshPacket overheard = meshtastic_MeshPacket_init_zero;
+    overheard.from = LOCAL_NODE;
+    overheard.to = REMOTE_NODE;
+    overheard.id = OUR_PKI_DM_ID;
+    overheard.channel = 0x5A;
+    overheard.hop_start = 3;
+    overheard.hop_limit = 2;
+    overheard.relay_node = 0x42;
+    overheard.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA;
+    overheard.which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
+    overheard.encrypted.size = 32;
+    memset(overheard.encrypted.bytes, 0xC3, overheard.encrypted.size);
+
+    runPipelineIngress(overheard);
+
+    TEST_ASSERT_EQUAL_UINT32(1, pipelineRouting->ackCalls);
+    TEST_ASSERT_EQUAL_MESSAGE(0, pipelineRouter->pendingCount(), "our opaque echo must cancel the retransmission");
+    TEST_ASSERT_EQUAL_UINT32(0, pipelineModule->calls);
+    expectOnlyImplicitAckOnPhone(OUR_PKI_DM_ID);
 }
 
 void setup()
@@ -191,6 +250,7 @@ void setup()
     RUN_TEST(test_upgraded_own_number_copy_keeps_our_queued_packet);
     RUN_TEST(test_upgraded_own_number_copy_with_hops_spent_keeps_our_queued_packet);
     RUN_TEST(test_echo_of_our_own_packet_still_acks_implicitly);
+    RUN_TEST(test_opaque_echo_of_our_pki_dm_delivers_implicit_ack_to_phone);
     const int result = UNITY_END();
     pipelineHarnessDestroy();
     exit(result);
