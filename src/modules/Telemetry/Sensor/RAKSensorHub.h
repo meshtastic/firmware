@@ -10,8 +10,10 @@
 #include "TelemetrySensor.h"
 #include "VoltageSensor.h"
 
-/// get.data cadence per probe.
-static constexpr uint32_t RAKHUB_POLL_INTERVAL_MS = 30 * 1000;
+/// get.data cadence per probe; override with -DRAKHUB_POLL_INTERVAL_MS=<ms>.
+#ifndef RAKHUB_POLL_INTERVAL_MS
+#define RAKHUB_POLL_INTERVAL_MS (30 * 1000)
+#endif
 /// Readings older than two missed polls are not reported.
 static constexpr uint32_t RAKHUB_MAX_READING_AGE_MS = 2 * RAKHUB_POLL_INTERVAL_MS + 5 * 1000;
 
