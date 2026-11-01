@@ -12,6 +12,7 @@
 #include <Throttle.h>
 #include <onewire_master_protocol.h> // for DELIMTER/WAKEUPBYTE and frame layout
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <cstring>
@@ -76,6 +77,8 @@ struct ProbeState {
     uint32_t retryMs = 0;               // retry delay after a miss, 0 = regular interval
     std::map<uint8_t, uint8_t> sidIpso; // SID -> IPSO, from provisioning or first data
     std::set<uint8_t> paramPending;     // SIDs to query interval/rule
+    uint32_t joinMs = 0;                // zero readings are dropped for one sensor interval after this
+    uint32_t sensorIntervalMs = 60 * 1000;
 };
 static std::map<uint8_t, ProbeState> probes;                      // active probes by PID
 static std::map<uint8_t, std::array<uint8_t, PROV_SN_LEN>> pidSn; // assigned PIDs by serial
@@ -93,6 +96,7 @@ static uint32_t awaiting_rsp_since = 0;
 static uint32_t awaiting_rsp_timeout = RSP_TIMEOUT_MS;
 static bool last_sent_pid_valid = false;
 static uint8_t last_sent_pid = 0;
+static bool last_sent_poll = false; // only unanswered get.data counts as a miss
 
 // ----- Frame parse state (safe resync on checksum/seq error) -----
 static bool processing_frame = false;
@@ -152,7 +156,9 @@ static ProbeState *addProbe(uint8_t pid, const char *how)
     LOG_INFO("RAKSensorHub: probe PID[%02x] added (%s)", pid, how);
     if (!pidSn.count(pid))
         pidSn[pid].fill(0); // reserve until it provisions
-    return &probes[pid];
+    ProbeState &st = probes[pid];
+    st.joinMs = Time::skipZero(millis());
+    return &st;
 }
 
 static void noteSid(ProbeState &st, uint8_t sid, uint8_t ipso)
@@ -229,8 +235,9 @@ static bool libraryKnowsIpso(uint8_t ipso)
     }
 }
 
-static void sendRequest(uint8_t pid, uint32_t now, uint32_t timeoutMs)
+static void sendRequest(uint8_t pid, uint32_t now, uint32_t timeoutMs, bool poll)
 {
+    last_sent_poll = poll;
     last_sent_pid = pid;
     last_sent_pid_valid = true;
     awaiting_rsp = true;
@@ -246,7 +253,7 @@ static void onRequestTimeout(uint32_t now)
     if (!last_sent_pid_valid)
         return;
     auto it = probes.find(last_sent_pid);
-    if (it == probes.end())
+    if (it == probes.end() || !last_sent_poll)
         return;
     if (++it->second.missed >= MAX_MISSED_POLLS) {
         LOG_WARN("RAKSensorHub: probe PID[%02x] silent for %u polls, rediscovering", last_sent_pid, (unsigned)MAX_MISSED_POLLS);
@@ -375,6 +382,7 @@ static bool handleProvisionRequest(uint16_t total, uint16_t payloadLen)
     RAKSensorHubUplink::setProbeSensors(pid, ipsoList, sensors);
     if (st) {
         st->polled = false; // first data right after joining
+        st->joinMs = Time::skipZero(millis());
         st->missed = 0;
         st->retryMs = 0;
     }
@@ -416,6 +424,9 @@ static void onewire_evt(const uint8_t pid, const uint8_t sid, const SNHUBAPI_EVT
             const uint32_t intv =
                 (uint32_t)msg[0] | ((uint32_t)msg[1] << 8) | ((uint32_t)msg[2] << 16) | ((uint32_t)msg[3] << 24);
             LOG_INFO("RAKSensorHub: PID[%02x] SID[%02x] sensor interval %lu s", pid, sid, (unsigned long)intv);
+            auto it = probes.find(pid);
+            if (it != probes.end() && intv > 0 && intv <= 3600)
+                it->second.sensorIntervalMs = intv * 1000;
         }
         break;
 
@@ -436,6 +447,12 @@ static void onewire_evt(const uint8_t pid, const uint8_t sid, const SNHUBAPI_EVT
         }
         if (st)
             noteSid(*st, sid, msg[0]);
+        // Probes answer with zeros until their first measurement after power-up or a join
+        if (st && len > 1 && Throttle::isWithinTimespanMs(st->joinMs, st->sensorIntervalMs) &&
+            std::all_of(msg + 1, msg + len, [](uint8_t b) { return b == 0; })) {
+            LOG_DEBUG("RAKSensorHub: PID[%02x] SID[%02x] zero reading before first measurement, skipped", pid, sid);
+            break;
+        }
         if (RAKSensorHubUplink::handleIpsoEvent(via, pid, sid, msg, len))
             rakSensorHub.setLastRead(millis());
         break;
@@ -623,7 +640,7 @@ static int32_t onewirePollHandle()
             last_discovery_time = now;
             const uint8_t pid = nextDiscoveryPid();
             if (pid != 0) {
-                sendRequest(pid, now, DISCOVERY_RSP_TIMEOUT_MS);
+                sendRequest(pid, now, DISCOVERY_RSP_TIMEOUT_MS, true);
                 RakSNHub_Protocl_API.get.data(pid);
                 return 100;
             }
@@ -636,7 +653,7 @@ static int32_t onewirePollHandle()
             continue;
         const uint8_t sid = *st.paramPending.begin();
         st.paramPending.erase(st.paramPending.begin());
-        sendRequest(pid, now, RSP_TIMEOUT_MS);
+        sendRequest(pid, now, RSP_TIMEOUT_MS, false);
         RakSNHub_Protocl_API.get.param(pid, sid);
         return 100;
     }
@@ -648,7 +665,7 @@ static int32_t onewirePollHandle()
             st.polled = true;
             st.lastPollMs = now;
             LOG_DEBUG("RAKSensorHub: poll get.data(PID=0x%02x)", pid);
-            sendRequest(pid, now, RSP_TIMEOUT_MS);
+            sendRequest(pid, now, RSP_TIMEOUT_MS, true);
             RakSNHub_Protocl_API.get.data(pid);
             return 100;
         }
