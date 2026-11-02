@@ -823,23 +823,34 @@ int32_t MeshBeaconBroadcastModule::runOnce()
 {
     const auto &bcfg = moduleConfig.mesh_beacon;
     const uint32_t intervalMs = beaconIntervalMs();
+    uint32_t nextRunMs = intervalMs;
 
     if ((bcfg.flags & MESH_BEACON_FLAG_BROADCAST_ENABLED) && airTime->isTxAllowedAirUtil() &&
         config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_HIDDEN) {
         // Throttle against the reboot-safe transmit history (mirrors NodeInfoModule): skip if we
         // broadcast within the interval, even across a reboot. 0 = never sent → send now.
         uint32_t lastSent = transmitHistory ? transmitHistory->getLastSentToMeshMillis(meshtastic_PortNum_MESH_BEACON_APP) : 0;
-        if (lastSent == 0 || !Throttle::isWithinTimespanMs(lastSent, intervalMs)) {
+        const uint32_t remainingMs = lastSent == 0 ? 0 : Throttle::remainingMs(lastSent, intervalMs);
+        if (remainingMs == 0) {
             // Record the send BEFORE transmitting: the LoRa TX is a high-current event that can
             // brown out a marginal supply, and if that reboots us mid-transmit we still want the
             // "sent" marker persisted so we don't re-broadcast immediately on every boot.
             if (transmitHistory)
                 transmitHistory->setLastSentToMesh(meshtastic_PortNum_MESH_BEACON_APP);
             sendBeacon();
+        } else {
+            // Wake when the last send's interval runs out, not a full interval from now
+            nextRunMs = remainingMs;
         }
     }
 
-    return static_cast<int32_t>(intervalMs);
+    return static_cast<int32_t>(nextRunMs);
+}
+
+void MeshBeaconBroadcastModule::reschedule()
+{
+    // runOnce() re-reads the config and the transmit history, so it sends or waits out the remainder
+    setIntervalFromNow(MESHMODULE_MIN_BROADCAST_DELAY_MS);
 }
 
 // ---------------------------------------------------------------------------

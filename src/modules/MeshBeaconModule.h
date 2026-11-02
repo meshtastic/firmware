@@ -153,11 +153,16 @@ class MeshBeaconBroadcastModule : private MeshBeaconModule,
                                   public ProtobufModule<meshtastic_MeshBeacon>,
                                   private concurrency::OSThread
 {
+    friend class MeshBeaconBroadcastModuleTestShim; // test/test_mesh_beacon reads the thread interval
+
   public:
     MeshBeaconBroadcastModule();
 
     // Mark the cached payload dirty (call after config change).
     void invalidateCache() { payloadCacheDirty = true; }
+
+    // Re-evaluate the schedule shortly, so a saved enable or interval change does not wait out the old period.
+    void reschedule();
 
   protected:
     virtual bool handleReceivedProtobuf(const meshtastic_MeshPacket &, meshtastic_MeshBeacon *) override { return false; }

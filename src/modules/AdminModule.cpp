@@ -1388,8 +1388,10 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
         moduleConfig.mesh_beacon = beaconCfg;
         shouldReboot = false;
         // Payload content changed - invalidate the broadcaster's cache.
-        if (meshBeaconBroadcastModule)
+        if (meshBeaconBroadcastModule) {
             meshBeaconBroadcastModule->invalidateCache();
+            meshBeaconBroadcastModule->reschedule();
+        }
         break;
     }
 #endif
