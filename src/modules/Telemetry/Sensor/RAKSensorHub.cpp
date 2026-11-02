@@ -77,6 +77,7 @@ struct ProbeState {
     uint32_t retryMs = 0;               // retry delay after a miss, 0 = regular interval
     std::map<uint8_t, uint8_t> sidIpso; // SID -> IPSO, from provisioning or first data
     std::set<uint8_t> paramPending;     // SIDs to query interval/rule
+    std::set<uint8_t> paramRetried;     // SIDs whose query timed out once
     uint32_t joinMs = 0;                // zero readings are dropped for one sensor interval after this
     uint32_t sensorIntervalMs = 60 * 1000;
 };
@@ -97,6 +98,7 @@ static uint32_t awaiting_rsp_timeout = RSP_TIMEOUT_MS;
 static bool last_sent_pid_valid = false;
 static uint8_t last_sent_pid = 0;
 static bool last_sent_poll = false; // only unanswered get.data counts as a miss
+static uint8_t last_sent_param_sid = 0;
 
 // ----- Frame parse state (safe resync on checksum/seq error) -----
 static bool processing_frame = false;
@@ -253,8 +255,13 @@ static void onRequestTimeout(uint32_t now)
     if (!last_sent_pid_valid)
         return;
     auto it = probes.find(last_sent_pid);
-    if (it == probes.end() || !last_sent_poll)
+    if (it == probes.end())
         return;
+    if (!last_sent_poll) {
+        if (it->second.paramRetried.insert(last_sent_param_sid).second)
+            it->second.paramPending.insert(last_sent_param_sid);
+        return;
+    }
     if (++it->second.missed >= MAX_MISSED_POLLS) {
         LOG_WARN("RAKSensorHub: probe PID[%02x] silent for %u polls, rediscovering", last_sent_pid, (unsigned)MAX_MISSED_POLLS);
         probes.erase(it);
@@ -367,6 +374,7 @@ static bool handleProvisionRequest(uint16_t total, uint16_t payloadLen)
     if (st) {
         st->sidIpso.clear();
         st->paramPending.clear();
+        st->paramRetried.clear();
     }
     uint8_t ipsoList[UINT8_MAX];
     for (uint16_t i = 0; i < sensors; i++) {
@@ -655,6 +663,7 @@ static int32_t onewirePollHandle()
         const uint8_t sid = *st.paramPending.begin();
         st.paramPending.erase(st.paramPending.begin());
         sendRequest(pid, now, RSP_TIMEOUT_MS, false);
+        last_sent_param_sid = sid;
         RakSNHub_Protocl_API.get.param(pid, sid);
         return 100;
     }

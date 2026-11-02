@@ -80,7 +80,6 @@ static HubPower power;
 static EnvCache env;
 
 // Per-PID IPSO signature so 0x70 is air RH (weather) or soil moisture, never both.
-static constexpr int kMaxProbeSigs = 8;
 static constexpr uint16_t SIG_PRESS = 1u << 0;
 static constexpr uint16_t SIG_WIND = 1u << 1;
 static constexpr uint16_t SIG_WIND_DIR = 1u << 2;
@@ -89,13 +88,7 @@ static constexpr uint16_t SIG_MOISTURE = 1u << 4;
 static constexpr uint16_t SIG_SOIL_GE = 1u << 5;
 static constexpr uint16_t SIG_NPK = 1u << 6;
 
-struct ProbeSig {
-    uint8_t pid = 0;
-    bool used = false;
-    uint16_t mask = 0;
-};
-
-static ProbeSig probeSigs[kMaxProbeSigs];
+static uint16_t probeSigs[UINT8_MAX + 1];
 static uint8_t hpHumidityPid = 0;
 static bool hpHumidityPidValid = false;
 
@@ -125,34 +118,12 @@ static uint16_t ipsoToSigBit(uint8_t ipso)
 
 static void noteProbeMask(uint8_t pid, uint16_t bits)
 {
-    if (bits == 0)
-        return;
-    for (int i = 0; i < kMaxProbeSigs; i++) {
-        if (probeSigs[i].used && probeSigs[i].pid == pid) {
-            probeSigs[i].mask = (uint16_t)(probeSigs[i].mask | bits);
-            return;
-        }
-    }
-    for (int i = 0; i < kMaxProbeSigs; i++) {
-        if (!probeSigs[i].used) {
-            probeSigs[i].used = true;
-            probeSigs[i].pid = pid;
-            probeSigs[i].mask = bits;
-            return;
-        }
-    }
-    probeSigs[0].used = true;
-    probeSigs[0].pid = pid;
-    probeSigs[0].mask = bits;
+    probeSigs[pid] = (uint16_t)(probeSigs[pid] | bits);
 }
 
 static uint16_t probeMask(uint8_t pid)
 {
-    for (int i = 0; i < kMaxProbeSigs; i++) {
-        if (probeSigs[i].used && probeSigs[i].pid == pid)
-            return probeSigs[i].mask;
-    }
-    return 0;
+    return probeSigs[pid];
 }
 
 /** Write a scalar sensor reading: update value, valid flag and last update time
@@ -873,11 +844,7 @@ void setProbeSensors(uint8_t pid, const uint8_t *ipso, uint16_t n)
     uint16_t bits = 0;
     for (uint16_t i = 0; i < n; i++)
         bits = (uint16_t)(bits | ipsoToSigBit(ipso[i]));
-    for (int i = 0; i < kMaxProbeSigs; i++) {
-        if (probeSigs[i].used && probeSigs[i].pid == pid)
-            probeSigs[i].mask = 0;
-    }
-    noteProbeMask(pid, bits);
+    probeSigs[pid] = bits;
 }
 
 bool handleIpsoEvent(const char *via, uint8_t pid, uint8_t sid, uint8_t *msg, uint16_t len)
