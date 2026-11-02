@@ -124,6 +124,10 @@ extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const c
 #include "Sensor/T1000xSensor.h"
 #endif
 
+#if ARCH_PORTDUINO
+#include "Sensor/CommandSensor.h"
+#endif
+
 #if __has_include(<Adafruit_SPA06_003.h>)
 #include "Sensor/SPA06Sensor.h"
 #endif
@@ -285,6 +289,10 @@ void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
     // order by priority of metrics/values (low top, high bottom)
 
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+#if ARCH_PORTDUINO
+    // Not an I2C device. Added first so it is read last, letting a configured command win a shared field.
+    addSensor<CommandSensor>(i2cScanner, ScanI2C::DeviceType::NONE);
+#endif
 #ifdef T1000X_SENSOR_EN
     // Not a real I2C device
     addSensor<T1000xSensor>(i2cScanner, ScanI2C::DeviceType::NONE);

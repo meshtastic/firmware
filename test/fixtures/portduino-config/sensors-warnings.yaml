@@ -1,0 +1,16 @@
+# FAULT: three mistakes that still start meshtasticd. Scale is not a number (silently read as 1), an
+# unknown key (ignored), and temperature listed twice (both run, one value is sent). Expect three
+# WARNINGs and exit 0.
+Lora:
+  Module: sx1262
+  CS: 21
+  IRQ: 16
+  Busy: 20
+  Reset: 18
+Sensors:
+  - Type: temperature
+    Command: cat /sys/class/thermal/thermal_zone0/temp
+    Scale: milli
+  - Type: temperature
+    Command: /usr/local/bin/outdoor-temp
+    Interval: 60
