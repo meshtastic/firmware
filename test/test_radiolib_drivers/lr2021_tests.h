@@ -29,7 +29,7 @@ static void lr2021Tune(RecordingHal &hal, LR2021 &radio)
 // As LR11x0: the packet type comes back in the data byte of the next transaction. 0x00 is LoRa.
 #define LR2021_RADIO(hal)                                                                                                        \
     RecordingHal &hal = freshHal();                                                                                              \
-    hal.reply(op16(RADIOLIB_LR2021_CMD_GET_PACKET_TYPE), 0x04, {0x04, RADIOLIB_LR2021_PACKET_TYPE_LORA}, true);                  \
+    hal.reply(op16(RADIOLIB_LR2021_CMD_GET_PACKET_TYPE), 0x04, {0x04, RADIOLIB_LR2021_PACKET_TYPE_LORA}, 1);                     \
     Module mod(&hal, 1, RADIOLIB_NC, RADIOLIB_NC, 2);                                                                            \
     LR2021 radio(&mod);                                                                                                          \
     lr2021Tune(hal, radio)
@@ -143,8 +143,9 @@ static void test_lr2021_other_setters_and_modes_succeed()
 // Exit mode for this command is CAD_ONLY 0x00, CAD_RX 0x01, CAD_LBT 0x10 (Table 6-18). RadioLib's
 // RADIOLIB_LR2021_CAD_EXIT_MODE_* hold the SetCadParams (0x021B) values instead, so its _RX is 0x02.
 // On hardware the chip rejects 0x02 with CMD_PERR, scanChannel() returns -706, and
-// LR20x0Interface::isChannelActive() reads that as a free channel: the node transmits over live
-// frames (16/16 trials on the bench). develop sends the default, 0x00, and is not affected.
+// LR20x0Interface::isChannelActive() reads that as a free channel, so a node sending it would transmit over
+// live frames (16/16 trials on the bench). develop does not: it sends 0x01 from its own local
+// CAD_EXIT_MODE_RX, which is what these tests keep it doing.
 //
 // Never call scanChannel() here: it spins on digitalRead(irq), which RecordingHal holds at 0.
 
@@ -304,7 +305,8 @@ static void test_lr2021_cad_command_sequence()
     TEST_ASSERT_EQUAL_UINT32(0, hal.count(op16(RADIOLIB_LR2021_CMD_SET_CAD)));
 }
 
-// CAD_DONE and CAD_DETECTED routed to DIO5 (irqDioNum), the line the interface's ISR watches.
+// CAD_DONE and CAD_DETECTED routed to DIO5, which is LR2021::irqDioNum's default in RadioLib. The firmware
+// sets irqDioNum per variant (LR20x0Interface::init()), so this pins RadioLib's default, not that line.
 static void test_lr2021_cad_irq_routed_to_dio()
 {
     LR2021_RADIO(hal);
