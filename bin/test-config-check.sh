@@ -188,10 +188,18 @@ assert "sensors written as a mapping are refused" 1 sensors-not-a-list.yaml chec
 	"Sensors must be a list of entries with a Type and a Command" \
 	"Result: 1 error, 0 warnings"
 assert "bad Scale, unknown key and duplicate Type are warned" 0 sensors-warnings.yaml check \
-	"Sensors Scale 'milli' is not a number" \
+	"Sensors Scale 'milli' is not a finite number" \
+	"Sensors Scale '.inf' is not a finite number" \
 	"unknown key 'Sensors.Interval'" \
 	"Sensors lists temperature 2 times" \
-	"Result: 0 errors, 3 warnings"
+	"Result: 0 errors, 4 warnings"
+# A non-finite Scale falls back to 1, so it is not written back out.
+assert "a non-finite Scale is replaced by 1" 0 sensors-warnings.yaml yaml \
+	"!Scale: .inf" \
+	"!Scale: inf"
+assert "an empty Sensors section is skipped" 0 sensors-empty.yaml check \
+	"!Sensors must be a list" \
+	"Result: 0 errors, 0 warnings"
 # Like admin keys, sensors append across files so one file per sensor works. --output-yaml reports
 # the merged list, with the Type normalised to the field name.
 assert "sensors append across config.d" 0 sensors-append/config.yaml yaml \

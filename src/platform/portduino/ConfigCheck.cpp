@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -891,10 +892,10 @@ void checkCommandSensors(const std::string &file, const YAML::Node &node, std::v
                                 "Sensors entry has no Command, so meshtasticd refuses to start on this file"});
 
         const YAML::Node scale = entry["Scale"];
-        if (scale && !converts(scale, kFloat))
+        if (scale && (!converts(scale, kFloat) || !std::isfinite(scale.as<float>())))
             findings.push_back(
                 {kWarn, file, lineOf(scale),
-                 "Sensors Scale '" + scale.as<std::string>("") + "' is not a number, so it is silently replaced by 1"});
+                 "Sensors Scale '" + scale.as<std::string>("") + "' is not a finite number, so it is silently replaced by 1"});
     }
 }
 

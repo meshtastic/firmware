@@ -190,12 +190,13 @@ Each entry runs a shell command and puts the number it prints into the named
 `EnvironmentMetrics` field. An entry meshtasticd cannot place stops it, rather than
 booting a node that silently never reports that reading.
 
-| File                      | Expected                                                                                    |
-| ------------------------- | ------------------------------------------------------------------------------------------- |
-| `sensors.yaml`            | Two sensors, one Type in mixed case. Clean apart from the info line about enabling them.    |
-| `sensors-bad-type.yaml`   | `humidity` is not a field name, so the file is refused and the valid types are listed.      |
-| `sensors-not-a-list.yaml` | One sensor written as a mapping, not a one-item list: nothing would be read, so refused.    |
-| `sensors-warnings.yaml`   | Non-numeric `Scale` (read as 1), an unknown key, and one Type listed twice. Three warnings. |
+| File                      | Expected                                                                                               |
+| ------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `sensors.yaml`            | Two sensors, one Type in mixed case. Clean apart from the info line about enabling them.               |
+| `sensors-bad-type.yaml`   | `humidity` is not a field name, so the file is refused and the valid types are listed.                 |
+| `sensors-not-a-list.yaml` | One sensor written as a mapping, not a one-item list: nothing would be read, so refused.               |
+| `sensors-warnings.yaml`   | Non-numeric and `.inf` `Scale` (both read as 1), an unknown key, one Type listed twice. Four warnings. |
+| `sensors-empty.yaml`      | A bare `Sensors:` with its entries commented out is skipped like any empty section.                    |
 
 `sensors-append/` mirrors `adminkeys-append/`: sensors append across files, so one
 file per sensor in `config.d/` works, and `--output-yaml` asserts both by value.

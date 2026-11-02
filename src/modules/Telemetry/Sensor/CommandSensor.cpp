@@ -7,6 +7,7 @@
 #include "PortduinoGlue.h"
 #include "UptimeClock.h"
 #include "mesh/Throttle.h"
+#include <cmath>
 
 // getMetrics() also runs for screen refreshes and phone requests; this keeps those from re-running every command.
 static constexpr uint32_t COMMAND_SENSOR_CACHE_MS = 30 * 1000;
@@ -45,7 +46,12 @@ void CommandSensor::refresh(size_t index)
         LOG_WARN("Sensor %s: command output is not a number: '%s'", sensor.type.c_str(), output.c_str());
         return;
     }
-    reading.value = value * sensor.scale;
+    const float scaled = value * sensor.scale;
+    if (!std::isfinite(scaled)) {
+        LOG_WARN("Sensor %s: %f scaled by %f is not a finite number", sensor.type.c_str(), value, sensor.scale);
+        return;
+    }
+    reading.value = scaled;
     reading.valid = true;
     LOG_DEBUG("Sensor %s: %f", sensor.type.c_str(), reading.value);
 }

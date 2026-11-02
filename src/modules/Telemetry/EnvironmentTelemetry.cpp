@@ -161,6 +161,11 @@ extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const c
 
 EnvironmentTelemetryModule *environmentTelemetryModule = nullptr;
 
+#if ARCH_PORTDUINO
+// Also in `sensors`, but read last in getEnvironmentTelemetry() so a configured command wins a shared field.
+static TelemetrySensor *commandSensor = nullptr;
+#endif
+
 namespace
 {
 EnvironmentTelemetryModule::DisplaySource gDisplaySource = EnvironmentTelemetryModule::DisplaySource::Mesh;
@@ -290,8 +295,14 @@ void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
 
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
 #if ARCH_PORTDUINO
-    // Not an I2C device. Added first so it is read last, letting a configured command win a shared field.
-    addSensor<CommandSensor>(i2cScanner, ScanI2C::DeviceType::NONE);
+    // Not an I2C device.
+    commandSensor = new CommandSensor();
+    if (commandSensor->initDevice(nullptr, nullptr)) {
+        sensors.push_front(commandSensor);
+    } else {
+        delete commandSensor;
+        commandSensor = nullptr;
+    }
 #endif
 #ifdef T1000X_SENSOR_EN
     // Not a real I2C device
@@ -725,6 +736,10 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
     m->variant.environment_metrics = meshtastic_EnvironmentMetrics_init_zero;
 
     for (TelemetrySensor *sensor : sensors) {
+#if ARCH_PORTDUINO
+        if (sensor == commandSensor)
+            continue;
+#endif
         get_metrics = sensor->getMetrics(m); // avoid short-circuit evaluation rules
         valid = valid || get_metrics;
         hasSensor = true;
@@ -763,6 +778,13 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
     // IPSO cache -> EnvironmentMetrics; chemistry off unless RAK_SENSORHUB_EXTENDED_ENV_METRICS.
     if (rakSensorHub.hasSensor()) {
         get_metrics = rakSensorHub.getMetrics(m);
+        valid = valid || get_metrics;
+        hasSensor = true;
+    }
+#endif
+#if ARCH_PORTDUINO
+    if (commandSensor) {
+        get_metrics = commandSensor->getMetrics(m);
         valid = valid || get_metrics;
         hasSensor = true;
     }

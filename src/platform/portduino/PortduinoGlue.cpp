@@ -20,6 +20,7 @@
 #include <array>
 #include <assert.h>
 #include <cctype>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <filesystem>
@@ -1483,7 +1484,8 @@ bool loadConfig(const char *configPath)
             portduino_config.hostMetrics_user_command = (yamlConfig["HostMetrics"]["UserStringCommand"]).as<std::string>("");
         }
 
-        if (yamlConfig["Sensors"]) {
+        // An empty `Sensors:` is null; skip it like any other empty section.
+        if (yamlConfig["Sensors"] && !yamlConfig["Sensors"].IsNull()) {
             const YAML::Node sensors = yamlConfig["Sensors"];
             if (!sensors.IsSequence()) {
                 std::cout << "Sensors must be a list of entries with a Type and a Command!" << std::endl;
@@ -1503,6 +1505,8 @@ bool loadConfig(const char *configPath)
                     sensor.type = CommandSensorFields::canonicalType(type);
                     sensor.command = entry["Command"].as<std::string>("");
                     sensor.scale = entry["Scale"].as<float>(1.0f);
+                    if (!std::isfinite(sensor.scale))
+                        sensor.scale = 1.0f;
                     if (sensor.type.empty() || sensor.command.empty()) {
                         if (sensor.type.empty())
                             std::cout << "Sensors: '" << type

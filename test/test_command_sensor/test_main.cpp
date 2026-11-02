@@ -26,7 +26,8 @@
 //
 // Regressions guarded: an unbounded wait on a hung or stdout-closing command; a timeout that kills
 // only /bin/sh and leaves the pipeline running; trailing text accepted as a number; NaN/inf sent;
-// integer fields wrapping; the cache either missing or never expiring; Scale not applied.
+// integer fields wrapping; a scaled value overflowing to inf and being sent; the cache either missing or
+// never expiring; Scale not applied.
 #include "TestUtil.h"
 #include "configuration.h"
 #include <unity.h>
@@ -250,6 +251,19 @@ void test_CommandSensor_applies_scale_and_skips_bad_output()
     TEST_ASSERT_FALSE(t.variant.environment_metrics.has_lux);
 }
 
+void test_CommandSensor_rejects_scale_overflow()
+{
+    // Both factors are finite but the product is not; it must not be sent, nor reach an integer cast.
+    portduino_config.command_sensors.push_back({"temperature", "echo 3e38", 10.0f});
+    portduino_config.command_sensors.push_back({"soil_moisture", "echo 3e38", 10.0f});
+    CommandSensor sensor;
+    TEST_ASSERT_TRUE(sensor.initDevice(nullptr, nullptr));
+    meshtastic_Telemetry t = emptyEnvironment();
+    TEST_ASSERT_FALSE(sensor.getMetrics(&t));
+    TEST_ASSERT_FALSE(t.variant.environment_metrics.has_temperature);
+    TEST_ASSERT_FALSE(t.variant.environment_metrics.has_soil_moisture);
+}
+
 void test_CommandSensor_all_failing_reports_no_metrics()
 {
     portduino_config.command_sensors.push_back({"temperature", "echo oops", 1.0f});
@@ -305,6 +319,7 @@ void setup()
     RUN_TEST(test_apply_unknown_type_changes_nothing);
     RUN_TEST(test_CommandSensor_not_added_without_config);
     RUN_TEST(test_CommandSensor_applies_scale_and_skips_bad_output);
+    RUN_TEST(test_CommandSensor_rejects_scale_overflow);
     RUN_TEST(test_CommandSensor_all_failing_reports_no_metrics);
     RUN_TEST(test_CommandSensor_caches_readings_then_refreshes);
     const int failures = UNITY_END();

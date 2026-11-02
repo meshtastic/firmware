@@ -1,6 +1,6 @@
-# FAULT: three mistakes that still start meshtasticd. Scale is not a number (silently read as 1), an
-# unknown key (ignored), and temperature listed twice (both run, one value is sent). Expect three
-# WARNINGs and exit 0.
+# FAULT: four mistakes that still start meshtasticd. Two Scales that are not finite numbers (both
+# silently read as 1), an unknown key (ignored), and temperature listed twice (both run, one value is
+# sent). Expect four WARNINGs and exit 0.
 Lora:
   Module: sx1262
   CS: 21
@@ -14,3 +14,6 @@ Sensors:
   - Type: temperature
     Command: /usr/local/bin/outdoor-temp
     Interval: 60
+  - Type: lux
+    Command: cat /sys/bus/iio/devices/iio:device1/in_illuminance_input
+    Scale: .inf
