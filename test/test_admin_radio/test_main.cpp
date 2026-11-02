@@ -2332,6 +2332,29 @@ static void test_notificationType_transaction_coalescedWarnings_useCatchAllType(
     TEST_ASSERT_EQUAL(meshtastic_ClientNotification_NotificationType_CHANNEL_NAME_ISSUES, capturedTypes[0]);
 }
 
+static void test_notificationType_transaction_coalescedPskWarnings_usePskCatchAllType()
+{
+    usePresetLongFast();
+    sendBeginEdit();
+    // Blank names resolve to the preset; a non-default key on each is a PSK issue only.
+    sendSetChannel(makeChannel(0, meshtastic_Channel_Role_PRIMARY, "", CUSTOM_KEY, 2));
+    sendSetChannel(makeChannel(1, meshtastic_Channel_Role_SECONDARY, "", CUSTOM_KEY, 2));
+    sendCommitEdit();
+    TEST_ASSERT_EQUAL_INT(1, (int)capturedTypes.size());
+    TEST_ASSERT_EQUAL(meshtastic_ClientNotification_NotificationType_CHANNEL_PSK_ISSUES, capturedTypes[0]);
+}
+
+static void test_notificationType_transaction_mixedWarnings_useNameAndPskCatchAllType()
+{
+    usePresetLongFast();
+    sendBeginEdit();
+    sendSetChannel(makeChannel(0, meshtastic_Channel_Role_PRIMARY, "long fast", DEFAULT_KEY, 1)); // name issue
+    sendSetChannel(makeChannel(1, meshtastic_Channel_Role_SECONDARY, "", CUSTOM_KEY, 2));         // PSK issue
+    sendCommitEdit();
+    TEST_ASSERT_EQUAL_INT(1, (int)capturedTypes.size());
+    TEST_ASSERT_EQUAL(meshtastic_ClientNotification_NotificationType_CHANNEL_NAME_AND_PSK_ISSUES, capturedTypes[0]);
+}
+
 static void test_notificationType_licensedMode_deferredNoticeKeepsItsType()
 {
     usePresetLongFast();
@@ -2767,6 +2790,8 @@ void setup()
     RUN_TEST(test_notificationType_loneChannelWarning_keepsItsType);
     RUN_TEST(test_notificationType_transaction_loneChannelWarning_keepsItsType);
     RUN_TEST(test_notificationType_transaction_coalescedWarnings_useCatchAllType);
+    RUN_TEST(test_notificationType_transaction_coalescedPskWarnings_usePskCatchAllType);
+    RUN_TEST(test_notificationType_transaction_mixedWarnings_useNameAndPskCatchAllType);
     RUN_TEST(test_notificationType_licensedMode_deferredNoticeKeepsItsType);
     RUN_TEST(test_notificationType_checkConfigRegion_reportsFailureType);
     RUN_TEST(test_notificationType_validateConfigRegion_sendsFailureType);
