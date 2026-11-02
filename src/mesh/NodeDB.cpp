@@ -32,6 +32,9 @@
 #include "mesh/generated/meshtastic/deviceonly_legacy.pb.h"
 #include "meshUtils.h"
 #include "modules/NeighborInfoModule.h"
+#if !MESHTASTIC_EXCLUDE_BEACON
+#include "modules/MeshBeaconModule.h"
+#endif
 #include "sleep.h"
 #include "target_specific.h"
 #if HAS_VARIABLE_HOPS
@@ -1388,7 +1391,7 @@ static void installTrafficManagementDefaults(meshtastic_LocalModuleConfig &mc)
     mc.has_traffic_management = true;
     mc.traffic_management = meshtastic_ModuleConfig_TrafficManagementConfig_init_zero;
 #if HAS_TRAFFIC_MANAGEMENT
-    // Position dedup ships enabled at the 5-hour default window on all supported targets.
+    // Position dedup ships enabled at the 6-hour default window on all supported targets.
     // STM32WL is excluded at compile time (HAS_TRAFFIC_MANAGEMENT=0 in mesh-pb-constants.h).
     // Set position_min_interval_secs=0 at runtime to disable dedup.
     mc.traffic_management.position_min_interval_secs = default_traffic_mgmt_position_min_interval_secs;
@@ -1618,6 +1621,10 @@ void NodeDB::installDefaultModuleConfig()
 #ifdef USERPREFS_MESH_BEACON_OFFER_REGION
     moduleConfig.mesh_beacon.broadcast_offer_region = USERPREFS_MESH_BEACON_OFFER_REGION;
 #endif
+#ifdef USERPREFS_MESH_BEACON_OFFER_FREQUENCY_SLOT
+    moduleConfig.mesh_beacon.has_broadcast_offer_frequency_slot = true;
+    moduleConfig.mesh_beacon.broadcast_offer_frequency_slot = USERPREFS_MESH_BEACON_OFFER_FREQUENCY_SLOT;
+#endif
 #ifdef USERPREFS_MESH_BEACON_OFFER_CHANNEL_NAME
     moduleConfig.mesh_beacon.has_broadcast_offer_channel = true;
     strncpy(moduleConfig.mesh_beacon.broadcast_offer_channel.name, USERPREFS_MESH_BEACON_OFFER_CHANNEL_NAME,
@@ -1668,6 +1675,14 @@ void NodeDB::installDefaultModuleConfig()
         moduleConfig.mesh_beacon.broadcast_targets[(N)].has_channel_index = true;                                                \
         moduleConfig.mesh_beacon.broadcast_targets[(N)].channel_index = (VAL);                                                   \
     } while (0)
+// 1-based frequency slot, as Config.LoRaConfig.channel_num. Unset derives it from the target channel.
+#define BEACON_TARGET_SLOT(N, VAL)                                                                                               \
+    do {                                                                                                                         \
+        if (moduleConfig.mesh_beacon.broadcast_targets_count < (N) + 1)                                                          \
+            moduleConfig.mesh_beacon.broadcast_targets_count = (N) + 1;                                                          \
+        moduleConfig.mesh_beacon.broadcast_targets[(N)].has_frequency_slot = true;                                               \
+        moduleConfig.mesh_beacon.broadcast_targets[(N)].frequency_slot = (VAL);                                                  \
+    } while (0)
 #ifdef USERPREFS_MESH_BEACON_TARGET_0_PRESET
     BEACON_TARGET_PRESET(0, USERPREFS_MESH_BEACON_TARGET_0_PRESET);
 #endif
@@ -1676,6 +1691,9 @@ void NodeDB::installDefaultModuleConfig()
 #endif
 #ifdef USERPREFS_MESH_BEACON_TARGET_0_CHANNEL_INDEX
     BEACON_TARGET_CH_INDEX(0, USERPREFS_MESH_BEACON_TARGET_0_CHANNEL_INDEX);
+#endif
+#ifdef USERPREFS_MESH_BEACON_TARGET_0_FREQUENCY_SLOT
+    BEACON_TARGET_SLOT(0, USERPREFS_MESH_BEACON_TARGET_0_FREQUENCY_SLOT);
 #endif
 #ifdef USERPREFS_MESH_BEACON_TARGET_1_PRESET
     BEACON_TARGET_PRESET(1, USERPREFS_MESH_BEACON_TARGET_1_PRESET);
@@ -1686,6 +1704,9 @@ void NodeDB::installDefaultModuleConfig()
 #ifdef USERPREFS_MESH_BEACON_TARGET_1_CHANNEL_INDEX
     BEACON_TARGET_CH_INDEX(1, USERPREFS_MESH_BEACON_TARGET_1_CHANNEL_INDEX);
 #endif
+#ifdef USERPREFS_MESH_BEACON_TARGET_1_FREQUENCY_SLOT
+    BEACON_TARGET_SLOT(1, USERPREFS_MESH_BEACON_TARGET_1_FREQUENCY_SLOT);
+#endif
 #ifdef USERPREFS_MESH_BEACON_TARGET_2_PRESET
     BEACON_TARGET_PRESET(2, USERPREFS_MESH_BEACON_TARGET_2_PRESET);
 #endif
@@ -1694,6 +1715,9 @@ void NodeDB::installDefaultModuleConfig()
 #endif
 #ifdef USERPREFS_MESH_BEACON_TARGET_2_CHANNEL_INDEX
     BEACON_TARGET_CH_INDEX(2, USERPREFS_MESH_BEACON_TARGET_2_CHANNEL_INDEX);
+#endif
+#ifdef USERPREFS_MESH_BEACON_TARGET_2_FREQUENCY_SLOT
+    BEACON_TARGET_SLOT(2, USERPREFS_MESH_BEACON_TARGET_2_FREQUENCY_SLOT);
 #endif
 #ifdef USERPREFS_MESH_BEACON_TARGET_3_PRESET
     BEACON_TARGET_PRESET(3, USERPREFS_MESH_BEACON_TARGET_3_PRESET);
@@ -1704,9 +1728,13 @@ void NodeDB::installDefaultModuleConfig()
 #ifdef USERPREFS_MESH_BEACON_TARGET_3_CHANNEL_INDEX
     BEACON_TARGET_CH_INDEX(3, USERPREFS_MESH_BEACON_TARGET_3_CHANNEL_INDEX);
 #endif
+#ifdef USERPREFS_MESH_BEACON_TARGET_3_FREQUENCY_SLOT
+    BEACON_TARGET_SLOT(3, USERPREFS_MESH_BEACON_TARGET_3_FREQUENCY_SLOT);
+#endif
 #undef BEACON_TARGET_PRESET
 #undef BEACON_TARGET_REGION
 #undef BEACON_TARGET_CH_INDEX
+#undef BEACON_TARGET_SLOT
 #endif // !MESHTASTIC_EXCLUDE_BEACON
 
     initModuleConfigIntervals();
@@ -2854,6 +2882,10 @@ void NodeDB::loadFromDisk()
             LOG_INFO("Loaded saved moduleConfig v%d", moduleConfig.version);
         }
     }
+#if !MESHTASTIC_EXCLUDE_BEACON
+    // userPrefs and a config already in flash never pass through set_module_config
+    MeshBeaconModule::sanitizeConfig(moduleConfig.mesh_beacon);
+#endif
 
     // Always-on traffic management: a device that has NEVER configured TMM
     // (has_traffic_management false - AdminModule always sets the has_ flag on
@@ -3874,10 +3906,9 @@ int NodeDB::onReboot(void *)
  */
 bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelIndex, bool xeddsaSigned)
 {
-    // Only a signed update may change the identity of a proven signer; our own record is exempt.
-    // Checked before getOrCreateMeshNode so a refusal cannot evict; isKnownXeddsaSigner covers the warm tier.
-    if (nodeId != getNodeNum() && isKnownXeddsaSigner(nodeId) && !xeddsaSigned) {
-        LOG_WARN("Refuse unsigned identity update for 0x%08x that previously signed", nodeId);
+    // Checked before getOrCreateMeshNode so a refusal cannot evict.
+    if (refusesUnsignedIdentity(nodeId, channelIndex, xeddsaSigned)) {
+        notifyRefusedIdentity(nodeId, p);
         return false;
     }
 
@@ -4398,6 +4429,63 @@ bool NodeDB::isKnownXeddsaSigner(NodeNum n)
 #else
     return false;
 #endif
+}
+
+bool NodeDB::refusesUnsignedIdentity(NodeNum n, uint8_t channelIndex, bool xeddsaSigned)
+{
+    if (xeddsaSigned || n == getNodeNum())
+        return false;
+    if (config.security.packet_signature_policy ==
+        meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_COMPATIBLE)
+        return false;
+    if (channels.isAEADEnabled(channelIndex))
+        return false;
+    return isKnownXeddsaSigner(n);
+}
+
+void NodeDB::notifyRefusedIdentity(NodeNum n, const meshtastic_User &claimed)
+{
+    if (!service)
+        return;
+    // Only a name or role change is worth a notice; a NodeInfo repeating what we hold loses nothing. Compare
+    // through the conversion that stores a User, so truncation and sanitizing cannot read as a change. A
+    // signer that lives only in the warm tier keeps no name to compare, so it is not reported.
+    const meshtastic_NodeInfoLite *info = getMeshNode(n);
+    if (!info || !nodeInfoLiteHasUser(info))
+        return;
+    meshtastic_NodeInfoLite incoming = meshtastic_NodeInfoLite_init_zero;
+    TypeConversions::CopyUserToNodeInfoLite(&incoming, claimed);
+    if (strcmp(incoming.long_name, info->long_name) == 0 && strcmp(incoming.short_name, info->short_name) == 0 &&
+        incoming.role == info->role)
+        return;
+    if (lastRefusedIdentityNoticeMs != 0 &&
+        Throttle::isWithinTimespanMs(lastRefusedIdentityNoticeMs, REFUSED_IDENTITY_NOTICE_INTERVAL_MS))
+        return;
+    meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
+    if (!cn)
+        return;
+    lastRefusedIdentityNoticeMs = Time::stampMillis();
+
+    // The name we already hold, never the refused update's claim.
+    char safeName[sizeof(info->long_name)] = "";
+    strncpy(safeName, info->long_name, sizeof(safeName) - 1);
+    sanitizeUtf8(safeName, sizeof(safeName));
+    char who[sizeof(safeName) + 14];
+    if (safeName[0])
+        snprintf(who, sizeof(who), "%s (!%08x)", safeName, n);
+    else
+        snprintf(who, sizeof(who), "!%08x", n);
+    cn->level = meshtastic_LogRecord_Level_WARNING;
+    cn->time = getValidTime(RTCQualityFromNet);
+    // Only Balanced and Strict refuse, so the setting is one of the two.
+    const char *setting = config.security.packet_signature_policy ==
+                                  meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_STRICT
+                              ? "Strict"
+                              : "Balanced";
+    snprintf(cn->message, sizeof(cn->message),
+             "Unsigned update from %s ignored, due to %s security setting. Remove the node to accept its unsigned updates.", who,
+             setting);
+    service->sendClientNotification(cn);
 }
 
 void NodeDB::commitRemoteKey(NodeNum n, const uint8_t key32[32], KeyCommitTrust trust)
