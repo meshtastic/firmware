@@ -160,13 +160,13 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
     void flushChannelWarnings();
 
     char pendingWarningText[250] = {};    // the lone queued message, used verbatim when only one fired
-    meshtastic_ClientNotification_NotificationType pendingWarningType =
-        meshtastic_ClientNotification_NotificationType_UNSET; // type of that lone message
     uint32_t pendingWarningChannels = 0;  // bitmask of channel indices with a queued warning
     uint8_t pendingWarningCount = 0;      // number of queued warnings this transaction
     bool pendingWarningNameIssue = false; // any queued warning was about a channel name
     bool pendingWarningPskIssue = false;  // any queued warning was about a PSK
     bool pendingLicenseWarning = false;   // a licensed-mode notice is queued for this transaction
+    // Notification type of the lone queued message.
+    meshtastic_ClientNotification_NotificationType pendingWarningType = meshtastic_ClientNotification_NotificationType_UNSET;
 };
 
 static constexpr const char *licensedModeMessage =
