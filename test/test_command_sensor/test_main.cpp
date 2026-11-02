@@ -44,6 +44,7 @@
 #include "modules/Telemetry/Sensor/CommandSensorFields.h"
 
 #include <chrono>
+#include <csignal>
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
@@ -144,14 +145,34 @@ void test_execCommand_hung_command_is_killed_at_timeout()
 
 void test_execCommand_timeout_kills_the_whole_pipeline()
 {
-    // If only /bin/sh were killed, `sleep` would survive holding the pipe's write end. The marker file
-    // proves the pipeline's last stage never ran.
-    const std::string marker = scratchFile("pipeline-survived");
-    const std::string cmd = "sleep 2 | cat; touch " + marker;
+    // The timeout must kill the command's whole process group, not just /bin/sh: a surviving child keeps
+    // running (and holding the pipe) after the sensor gave up on it. The shell records its background
+    // child's PID, which must be gone once execCommand() returns. A zombie counts as gone: it has exited
+    // and only waits to be reaped by whatever adopted it.
+    const std::string pidFile = scratchFile("descendant-pid");
+    const std::string cmd = "sleep 30 & echo $! > " + pidFile + "; wait";
     std::string output;
     TEST_ASSERT_TRUE(execCommand(cmd.c_str(), 300, output) == ExecResult::TimedOut);
-    usleep(2500 * 1000);
-    TEST_ASSERT_EQUAL(-1, access(marker.c_str(), F_OK));
+
+    long descendant = 0;
+    std::ifstream(pidFile) >> descendant;
+    TEST_ASSERT_GREATER_THAN(0, descendant);
+    bool gone = false;
+    for (int i = 0; i < 50 && !gone; i++) {
+        std::ifstream stat("/proc/" + std::to_string(descendant) + "/stat");
+        std::string line;
+        if (!std::getline(stat, line)) {
+            gone = true;
+        } else {
+            const size_t close = line.rfind(')');
+            gone = close != std::string::npos && close + 2 < line.size() && line[close + 2] == 'Z';
+        }
+        if (!gone)
+            usleep(20 * 1000);
+    }
+    if (!gone)
+        kill(static_cast<pid_t>(descendant), SIGKILL);
+    TEST_ASSERT_TRUE(gone);
 }
 
 void test_execCommand_closed_stdout_still_bounded_by_timeout()
@@ -386,7 +407,7 @@ void setup()
     const int failures = UNITY_END();
 
     std::remove(scratchFile("runs").c_str());
-    std::remove(scratchFile("pipeline-survived").c_str());
+    std::remove(scratchFile("descendant-pid").c_str());
     rmdir(scratchDir.c_str());
     exit(failures);
 }
