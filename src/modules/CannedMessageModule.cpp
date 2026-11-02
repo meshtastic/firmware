@@ -1037,12 +1037,15 @@ int CannedMessageModule::handleEmotePickerInput(const InputEvent *event)
     if (isSelect) {
         String label = graphics::emotes[emotePickerIndex].label;
         String emoteInsert = label; // Just the text label, e.g., ":thumbsup:"
-        if (cursor == freetext.length()) {
-            freetext += emoteInsert;
-        } else {
-            freetext = freetext.substring(0, cursor) + emoteInsert + freetext.substring(cursor);
+        // Whole or not at all: the editor's limit applies, and half a label would be garbage
+        if (freetext.length() + emoteInsert.length() <= maxFreetextBytes()) {
+            if (cursor == freetext.length()) {
+                freetext += emoteInsert;
+            } else {
+                freetext = freetext.substring(0, cursor) + emoteInsert + freetext.substring(cursor);
+            }
+            cursor += emoteInsert.length();
         }
-        cursor += emoteInsert.length();
         updateState(CANNED_MESSAGE_RUN_STATE_FREETEXT, true);
         screen->forceDisplay();
         return 1;
@@ -1095,8 +1098,11 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
     // Track this packet’s request ID for matching ACKs
     this->lastRequestId = p->id;
 
-    // Copy payload
-    p->decoded.payload.size = strlen(message);
+    // Copy payload, never past its buffer
+    size_t copyLen = strlen(message);
+    if (copyLen > sizeof(p->decoded.payload.bytes))
+        copyLen = sizeof(p->decoded.payload.bytes);
+    p->decoded.payload.size = copyLen;
     memcpy(p->decoded.payload.bytes, message, p->decoded.payload.size);
 
     if (moduleConfig.canned_message.send_bell && p->decoded.payload.size + 1 < meshtastic_Constants_DATA_PAYLOAD_LEN) {
