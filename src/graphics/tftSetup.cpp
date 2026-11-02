@@ -342,25 +342,25 @@ bool muiDisplayInfo(uint16_t &width, uint16_t &height, bool &hasTouch)
     return width > 0 && height > 0;
 }
 
-// The broker's LEFT/RIGHT codes are swapped relative to LVGL's, hence the cross-map below.
+// Broker and LVGL key codes disagree (LEFT/RIGHT are swapped), so map by name.
 bool muiInjectInputEvent(uint32_t eventCode, uint32_t kbChar, uint32_t touchX, uint32_t touchY)
 {
     if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR)
         return false;
 
-    // trackball semantics: vertical is encoder rotation (moves group focus), horizontal the slider keys
+    // arrows go in as D-pad keys; device-ui's input policy decides focus traversal per context
     switch (eventCode) {
     case INPUT_BROKER_UP:
-        DisplayMirror::injectEncoder(-1);
+        DisplayMirror::injectKey(LV_KEY_UP);
         break;
     case INPUT_BROKER_DOWN:
-        DisplayMirror::injectEncoder(1);
-        break;
-    case INPUT_BROKER_LEFT:
         DisplayMirror::injectKey(LV_KEY_DOWN);
         break;
+    case INPUT_BROKER_LEFT:
+        DisplayMirror::injectKey(LV_KEY_LEFT);
+        break;
     case INPUT_BROKER_RIGHT:
-        DisplayMirror::injectKey(LV_KEY_UP);
+        DisplayMirror::injectKey(LV_KEY_RIGHT);
         break;
     case INPUT_BROKER_SELECT:
         // with coordinates this is a touch long-press, as the physical touch driver emits it
