@@ -31,19 +31,15 @@ template <typename T> T roundAndClamp(float value)
 }
 
 #define FLOAT_FIELD(f)                                                                                                           \
-    {                                                                                                                            \
-        #f, [](meshtastic_EnvironmentMetrics &m, float v) {                                                                      \
-            m.f = v;                                                                                                             \
-            m.has_##f = true;                                                                                                    \
-        }                                                                                                                        \
-    }
+    {#f, [](meshtastic_EnvironmentMetrics &m, float v) {                                                                         \
+         m.f = v;                                                                                                                \
+         m.has_##f = true;                                                                                                       \
+     }}
 #define INT_FIELD(f)                                                                                                             \
-    {                                                                                                                            \
-        #f, [](meshtastic_EnvironmentMetrics &m, float v) {                                                                      \
-            m.f = roundAndClamp<decltype(m.f)>(v);                                                                               \
-            m.has_##f = true;                                                                                                    \
-        }                                                                                                                        \
-    }
+    {#f, [](meshtastic_EnvironmentMetrics &m, float v) {                                                                         \
+         m.f = roundAndClamp<decltype(m.f)>(v);                                                                                  \
+         m.has_##f = true;                                                                                                       \
+     }}
 
 const Field kFields[] = {
     FLOAT_FIELD(temperature),
