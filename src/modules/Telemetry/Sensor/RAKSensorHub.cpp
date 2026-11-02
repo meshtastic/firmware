@@ -55,6 +55,8 @@ static constexpr uint32_t DISCOVERY_RSP_TIMEOUT_MS = 1200;       // probes answe
 static constexpr uint32_t DISCOVERY_INTERVAL_MS = 2000;          // PID sweep step while empty
 static constexpr uint32_t BOOT_RESCAN_EMPTY_MS = 60 * 1000;      // BOOT while no probe known
 static constexpr uint32_t BOOT_RESCAN_KNOWN_MS = 15 * 60 * 1000; // BOOT for late probes
+static constexpr uint32_t SENSOR_INTV_DEFAULT_MS = 60 * 1000;    // until get.param answers
+static constexpr uint32_t LOST_PID_POLL_MS = 60 * 1000;          // get.data to dropped PIDs
 static constexpr uint8_t MAX_MISSED_POLLS = 3;                   // then forget and rediscover
 static constexpr uint32_t TX_SETTLE_MS = 2;                      // last stop bit + echo after ENDTX
 
@@ -79,7 +81,8 @@ struct ProbeState {
     std::set<uint8_t> paramPending;     // SIDs to query interval/rule
     std::set<uint8_t> paramRetried;     // SIDs whose query timed out once
     uint32_t joinMs = 0;                // zero readings are dropped for one sensor interval after this
-    uint32_t sensorIntervalMs = 60 * 1000;
+    // SID -> sensor interval; SENSOR_INTV_DEFAULT_MS if unknown
+    std::map<uint8_t, uint32_t> sensorIntervalMs;
 };
 static std::map<uint8_t, ProbeState> probes;                      // active probes by PID
 static std::map<uint8_t, std::array<uint8_t, PROV_SN_LEN>> pidSn; // assigned PIDs by serial
@@ -90,6 +93,8 @@ static uint32_t last_err_time = 0;       // Last checksum/sequence error
 static uint32_t last_discovery_time = 0; // Last PID sweep request
 static uint32_t last_boot_time = 0;      // Last provision BOOT broadcast
 static uint8_t discovery_pid = PROBE_PID_MIN;
+static uint8_t lost_pid = 0;
+static uint32_t last_lost_poll_time = 0;
 
 // ----- Request/response state (half-duplex: only one outstanding request) -----
 static bool awaiting_rsp = false;
@@ -375,6 +380,7 @@ static bool handleProvisionRequest(uint16_t total, uint16_t payloadLen)
         st->sidIpso.clear();
         st->paramPending.clear();
         st->paramRetried.clear();
+        st->sensorIntervalMs.clear();
     }
     uint8_t ipsoList[UINT8_MAX];
     for (uint16_t i = 0; i < sensors; i++) {
@@ -434,7 +440,7 @@ static void onewire_evt(const uint8_t pid, const uint8_t sid, const SNHUBAPI_EVT
             LOG_INFO("RAKSensorHub: PID[%02x] SID[%02x] sensor interval %lu s", pid, sid, (unsigned long)intv);
             auto it = probes.find(pid);
             if (it != probes.end() && intv > 0 && intv <= 3600)
-                it->second.sensorIntervalMs = intv * 1000;
+                it->second.sensorIntervalMs[sid] = intv * 1000;
         }
         break;
 
@@ -457,7 +463,8 @@ static void onewire_evt(const uint8_t pid, const uint8_t sid, const SNHUBAPI_EVT
             noteSid(*st, sid, msg[0]);
         // Probes answer with zeros until their first measurement after power-up or a join; digital low is a real state
         if (st && len > 1 && msg[0] != RAK_IPSO_DIGITAL_INPUT && msg[0] != RAK_IPSO_DIGITAL_OUTPUT &&
-            Throttle::isWithinTimespanMs(st->joinMs, st->sensorIntervalMs) &&
+            Throttle::isWithinTimespanMs(st->joinMs,
+                                         st->sensorIntervalMs.count(sid) ? st->sensorIntervalMs[sid] : SENSOR_INTV_DEFAULT_MS) &&
             std::all_of(msg + 1, msg + len, [](uint8_t b) { return b == 0; })) {
             LOG_DEBUG("RAKSensorHub: PID[%02x] SID[%02x] zero reading before first measurement, skipped", pid, sid);
             break;
@@ -599,6 +606,19 @@ static int32_t onewireRxHandle()
     return Throttle::isWithinTimespanMs(last_rx_time, 200) ? 5 : 40;
 }
 
+/** Next PID assigned earlier whose probe has since dropped, 0 if none. */
+static uint8_t nextLostPid()
+{
+    auto it = pidSn.upper_bound(lost_pid);
+    for (size_t n = 0; n < pidSn.size(); n++, it++) {
+        if (it == pidSn.end())
+            it = pidSn.begin();
+        if (!probes.count(it->first))
+            return lost_pid = it->first;
+    }
+    return 0;
+}
+
 /** Next PID for the discovery sweep, skipping PIDs that are already active. */
 static uint8_t nextDiscoveryPid()
 {
@@ -655,6 +675,17 @@ static int32_t onewirePollHandle()
             }
         }
         return 200;
+    }
+
+    if (!Throttle::isWithinTimespanMs(last_lost_poll_time, LOST_PID_POLL_MS)) {
+        last_lost_poll_time = now;
+        const uint8_t pid = nextLostPid();
+        if (pid != 0) {
+            LOG_DEBUG("RAKSensorHub: dropped PID[%02x], get.data", pid);
+            sendRequest(pid, now, DISCOVERY_RSP_TIMEOUT_MS, true);
+            RakSNHub_Protocl_API.get.data(pid);
+            return 100;
+        }
     }
 
     for (auto &[pid, st] : probes) {
