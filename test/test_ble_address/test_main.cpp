@@ -12,8 +12,8 @@
 // - the bytes emitted in reverse, the SoftDevice's own little-endian order;
 // - a write past a short buffer instead of truncating with a terminating NUL;
 // - native (portduino), which has no BLE address source wired in, reporting an address anyway.
-//
-// Deliberately does NOT include TestUtil.h: nothing here needs NodeDB, the router or the RTC.
+#include "MeshTypes.h"
+#include "TestUtil.h"
 #include "mesh/generated/meshtastic/mesh.pb.h"
 #include "meshUtils.h"
 #include <cstring>
@@ -65,6 +65,7 @@ static void test_getDeviceMetadata_native_reportsNoBleAddress()
 
 void setup()
 {
+    initializeTestEnvironment();
     UNITY_BEGIN();
     RUN_TEST(test_formatMacAddr_uppercaseMostSignificantFirst);
     RUN_TEST(test_formatMacAddr_keepsLeadingZeros);
