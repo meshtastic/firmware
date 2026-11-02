@@ -495,6 +495,7 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
                 cn->has_reply_id = true;
                 cn->reply_id = p->id;
                 cn->level = meshtastic_LogRecord_Level_WARNING;
+                cn->type = meshtastic_ClientNotification_NotificationType_DUTY_CYCLE_LIMIT_EXCEEDED;
                 cn->time = getValidTime(RTCQualityFromNet);
                 snprintf(cn->message, sizeof(cn->message), "Duty cycle limit exceeded. You can send again in %d mins",
                          silentMinutes);

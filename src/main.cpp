@@ -1123,6 +1123,7 @@ void setup()
         meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
         if (cn) {
             cn->level = meshtastic_LogRecord_Level_WARNING;
+            cn->type = meshtastic_ClientNotification_NotificationType_LOW_ENTROPY_KEY_REGENERATED;
             cn->time = getValidTime(RTCQualityFromNet);
             sprintf(cn->message, LOW_ENTROPY_WARNING);
             service->sendClientNotification(cn);
