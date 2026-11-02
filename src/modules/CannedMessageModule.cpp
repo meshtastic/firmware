@@ -1411,7 +1411,7 @@ int32_t CannedMessageModule::runOnce()
                                          this->freetext.substring(this->cursor);
                     }
                     this->cursor++;
-                    const uint16_t maxChars = 200 - (moduleConfig.canned_message.send_bell ? 1 : 0);
+                    const unsigned int maxChars = maxFreetextBytes();
                     if (this->freetext.length() > maxChars) {
                         this->cursor = maxChars;
                         this->freetext = this->freetext.substring(0, maxChars);
@@ -1973,8 +1973,9 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
 
         // Char count right-aligned
         if (runState != CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION) {
-            uint16_t charsLeft =
-                meshtastic_Constants_DATA_PAYLOAD_LEN - this->freetext.length() - (moduleConfig.canned_message.send_bell ? 1 : 0);
+            // The limit the editor keeps to, not the whole payload: the counter showed 33 left when no more could be typed
+            const unsigned int used = this->freetext.length();
+            int charsLeft = used < maxFreetextBytes() ? (int)(maxFreetextBytes() - used) : 0;
             snprintf(buffer, sizeof(buffer), "%d left", charsLeft);
             display->drawString(x + display->getWidth() - display->getStringWidth(buffer) - BASEUI_HEADER_LR_MARGIN,
                                 y + BASEUI_HEADER_MARGIN, buffer);
@@ -2418,6 +2419,12 @@ void CannedMessageModule::handleSetCannedMessageModuleMessages(const char *from_
             moduleConfig.canned_message.enabled = true;
         }
     }
+}
+
+unsigned int CannedMessageModule::maxFreetextBytes() const
+{
+    // Below the payload size (meshtastic_Constants_DATA_PAYLOAD_LEN, 233)
+    return 200 - (moduleConfig.canned_message.send_bell ? 1 : 0);
 }
 
 String CannedMessageModule::drawWithCursor(String text, int cursor)
