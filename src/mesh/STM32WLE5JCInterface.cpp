@@ -39,15 +39,16 @@ bool STM32WLE5JCInterface::init()
             LOG_INFO("STM32WLx init success without TCXO (XTAL mode)");
     }
 #endif
-
     LOG_INFO("STM32WLx init result %d", res);
 
     LOG_INFO("Frequency set to %f", getFreq());
     LOG_INFO("Bandwidth set to %f", bw);
     LOG_INFO("Power output set to %d", power);
 
-    if (res == RADIOLIB_ERR_NONE)
+    if (res == RADIOLIB_ERR_NONE) {
+        applyTcxoStartupDelay(lora, tcxoVoltage);
         startReceive(); // start receiving
+    }
 
     return res == RADIOLIB_ERR_NONE;
 }
