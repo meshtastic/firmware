@@ -106,8 +106,9 @@ class ScreenMirror
         uint32_t id;
     };
     static constexpr uint8_t MUI_MAX_RECTS = 64;
-    // Holds a full 320x240 repaint plus incremental rects, or no first frame can complete.
+    // floor for the panel-sized pool; a 320x240 repaint plus incremental rects
     static constexpr uint32_t MUI_POOL_BYTES = 192 * 1024;
+    uint32_t muiPoolBytes = 0;
     MuiRect muiRects[MUI_MAX_RECTS];
     uint8_t muiHead = 0;
     uint8_t muiCount = 0;

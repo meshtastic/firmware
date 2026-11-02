@@ -45,7 +45,7 @@ void ScreenMirror::freeSnapshotLocked()
 #if HAS_MUI_MIRROR
     if (muiPool) {
         if (!muiPoolInPsram)
-            memaudit::add(kMemTag, -(int32_t)MUI_POOL_BYTES);
+            memaudit::add(kMemTag, -(int32_t)muiPoolBytes);
         free(muiPool);
         muiPool = nullptr;
     }
@@ -284,23 +284,28 @@ void ScreenMirror::onMuiRect(int16_t x, int16_t y, uint16_t w, uint16_t h, const
 
         uint32_t bytes = (uint32_t)w * h * 2;
         if (!muiPool) {
+            // a full repaint plus a quarter screen of incremental rects, or the overflow repaint below never fits and loops
+            uint32_t panelBytes = (uint32_t)muiPanelW * muiPanelH * 2;
+            muiPoolBytes = panelBytes + panelBytes / 4;
+            if (muiPoolBytes < MUI_POOL_BYTES)
+                muiPoolBytes = MUI_POOL_BYTES;
 #ifdef ESP32
-            muiPool = (uint8_t *)ps_malloc(MUI_POOL_BYTES);
+            muiPool = (uint8_t *)ps_malloc(muiPoolBytes);
 #endif
             muiPoolInPsram = muiPool != nullptr;
             if (!muiPool)
-                muiPool = (uint8_t *)malloc(MUI_POOL_BYTES);
+                muiPool = (uint8_t *)malloc(muiPoolBytes);
             if (!muiPool) {
-                LOG_ERROR("Screen mirror: no memory for the %u byte rect pool", (unsigned)MUI_POOL_BYTES);
+                LOG_ERROR("Screen mirror: no memory for the %u byte rect pool", (unsigned)muiPoolBytes);
                 failCaptureLocked();
                 return;
             }
             if (!muiPoolInPsram)
-                memaudit::add(kMemTag, MUI_POOL_BYTES); // PSRAM is not the constrained budget
+                memaudit::add(kMemTag, muiPoolBytes); // PSRAM is not the constrained budget
         }
-        if (bytes > MUI_POOL_BYTES)
+        if (bytes > muiPoolBytes)
             return; // a rect larger than the whole pool can never be sent
-        if (muiCount >= MUI_MAX_RECTS || muiPoolUsed + bytes > MUI_POOL_BYTES) {
+        if (muiCount >= MUI_MAX_RECTS || muiPoolUsed + bytes > muiPoolBytes) {
             // consumer is behind: drop the backlog, not the newest pixels, and repaint once
             muiHead = muiCount = 0;
             muiPoolUsed = 0;
