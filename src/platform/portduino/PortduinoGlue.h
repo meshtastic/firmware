@@ -144,9 +144,12 @@ void readGPIOFromYaml(YAML::Node sourceNode, pinMapping &destPin, int pinDefault
 // stalls the main loop for at most this long.
 constexpr uint32_t EXEC_DEFAULT_TIMEOUT_MS = 10000;
 constexpr uint32_t COMMAND_SENSOR_TIMEOUT_MS = 2000;
+// Logs a timeout or a failure to start; returns whatever the command printed, whatever its exit status.
 std::string exec(const char *cmd, uint32_t timeoutMs = EXEC_DEFAULT_TIMEOUT_MS);
-// Runs cmd under /bin/sh and captures stdout. True only if it exited 0 within timeoutMs.
-bool execCommand(const char *cmd, uint32_t timeoutMs, std::string &output);
+enum class ExecResult { Ok, Failed, TimedOut, NotStarted };
+// Runs cmd under /bin/sh and captures stdout. Ok only if it exited 0 within timeoutMs. Never logs, so it
+// is safe off the main thread.
+ExecResult execCommand(const char *cmd, uint32_t timeoutMs, std::string &output);
 
 // One Sensors: entry. type is an EnvironmentMetrics field name, see CommandSensorFields.h.
 struct commandSensorConfig {

@@ -1723,30 +1723,28 @@ bool MAC_from_string(std::string mac_str, uint8_t *dmac)
 // Captured output beyond this is drained and dropped; nothing that reads it wants more.
 static constexpr size_t EXEC_MAX_OUTPUT = 4096;
 
-bool execCommand(const char *cmd, uint32_t timeoutMs, std::string &output)
+ExecResult execCommand(const char *cmd, uint32_t timeoutMs, std::string &output)
 {
     output.clear();
 #if defined(ARCH_PORTDUINO_WASM)
     (void)cmd; // no shell/popen in the browser - shell-outs degrade to empty
     (void)timeoutMs;
-    return false;
+    return ExecResult::NotStarted;
 #elif defined(_WIN32)
     // No process group to kill here, so the timeout is not enforced on Windows.
     (void)timeoutMs;
     FILE *pipe = popen(cmd, "r");
     if (!pipe)
-        return false;
+        return ExecResult::NotStarted;
     std::array<char, 128> buffer;
     while (fgets(buffer.data(), static_cast<int>(buffer.size()), pipe) != nullptr)
         if (output.size() < EXEC_MAX_OUTPUT)
             output += buffer.data();
-    return pclose(pipe) == 0;
+    return pclose(pipe) == 0 ? ExecResult::Ok : ExecResult::Failed;
 #else
     int fds[2];
-    if (pipe(fds) != 0) {
-        LOG_WARN("Can't run '%s': pipe: %s", cmd, strerror(errno));
-        return false;
-    }
+    if (pipe(fds) != 0)
+        return ExecResult::NotStarted;
     fcntl(fds[0], F_SETFD, FD_CLOEXEC);
     fcntl(fds[1], F_SETFD, FD_CLOEXEC);
 
@@ -1771,8 +1769,7 @@ bool execCommand(const char *cmd, uint32_t timeoutMs, std::string &output)
     close(fds[1]);
     if (spawnError != 0) {
         close(fds[0]);
-        LOG_WARN("Can't run '%s': %s", cmd, strerror(spawnError));
-        return false;
+        return ExecResult::NotStarted;
     }
 
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeoutMs);
@@ -1823,21 +1820,24 @@ bool execCommand(const char *cmd, uint32_t timeoutMs, std::string &output)
             usleep(5000);
     }
     if (timedOut) {
-        LOG_WARN("Command timed out after %ums, killed: %s", static_cast<unsigned>(timeoutMs), cmd);
         kill(-pid, SIGKILL);
         do {
             waited = waitpid(pid, &status, 0);
         } while (waited < 0 && errno == EINTR);
-        return false;
+        return ExecResult::TimedOut;
     }
-    return waited == pid && WIFEXITED(status) && WEXITSTATUS(status) == 0;
+    return waited == pid && WIFEXITED(status) && WEXITSTATUS(status) == 0 ? ExecResult::Ok : ExecResult::Failed;
 #endif
 }
 
 std::string exec(const char *cmd, uint32_t timeoutMs)
 {
     std::string output;
-    execCommand(cmd, timeoutMs, output);
+    const ExecResult result = execCommand(cmd, timeoutMs, output);
+    if (result == ExecResult::TimedOut)
+        LOG_WARN("Command timed out after %ums, killed: %s", static_cast<unsigned>(timeoutMs), cmd);
+    else if (result == ExecResult::NotStarted)
+        LOG_WARN("Command could not be started: %s", cmd);
     return output;
 }
 

@@ -3,15 +3,16 @@
 //   - execCommand() / exec() in src/platform/portduino/PortduinoGlue.cpp
 //   - CommandSensorFields::{canonicalType, apply, parseValue} in
 //     src/modules/Telemetry/Sensor/CommandSensorFields.cpp
-//   - CommandSensor::getMetrics() in src/modules/Telemetry/Sensor/CommandSensor.cpp
+//   - CommandSensor (worker thread and getMetrics()) in src/modules/Telemetry/Sensor/CommandSensor.cpp
 //
 // Why these contracts matter:
 //
-// execCommand() runs on the main loop, the same thread that services the radio. A sensor script that
-// hangs - a stuck I2C read in Python, a network call with no timeout, a command that closes stdout and
-// keeps running - must cost at most its timeout, and the whole pipeline it started must be killed so it
-// cannot keep holding the pipe. exec() keeps its old contract for HostMetrics.UserStringCommand: it
-// returns whatever the command printed, whether or not it exited 0.
+// A sensor script that hangs - a stuck I2C read in Python, a network call with no timeout, a command
+// that closes stdout and keeps running - must cost at most its timeout, and the whole pipeline it
+// started must be killed so it cannot keep holding the pipe. exec() still runs on the main loop for
+// HostMetrics, and keeps its old contract there: it returns whatever the command printed, whether or
+// not it exited 0. execCommand() reports the outcome instead of logging, because CommandSensor calls
+// it from a worker thread and portduino's log buffer is not thread-safe.
 //
 // parseValue() is the only thing between arbitrary command output and a field broadcast over the mesh.
 // It must take exactly one finite number: "21.5 C", an empty line, an error message or "nan" must be
@@ -20,14 +21,17 @@
 // apply() writes into nanopb fields of several widths. A value outside a narrow integer field
 // (soil_moisture is uint8_t) must clamp, not wrap: 300 wrapping to 44% moisture is a silent lie.
 //
-// CommandSensor caches readings because getMetrics() is also called for screen refreshes and phone
-// requests. Without the cache every command reruns on each of those calls, multiplying the main-loop
-// stall; with a cache that never expires the node broadcasts the first reading forever.
+// CommandSensor runs commands on a worker thread and getMetrics() only reads the latest results.
+// getMetrics() is called on the main loop, which also drives the radio, so it must return at once even
+// while a command is hanging. On Windows, where the timeout cannot be enforced, that is the only thing
+// that keeps a command that never exits from freezing the node. Each command is re-run every 30 s:
+// re-running on every getMetrics() call (screen refreshes, phone requests) would multiply the work, and
+// never re-running would broadcast the first reading forever.
 //
-// Regressions guarded: an unbounded wait on a hung or stdout-closing command; a timeout that kills
-// only /bin/sh and leaves the pipeline running; trailing text accepted as a number; NaN/inf sent;
-// integer fields wrapping; a scaled value overflowing to inf and being sent; the cache either missing or
-// never expiring; Scale not applied.
+// Regressions guarded: getMetrics() waiting on a command; an unbounded wait on a hung or
+// stdout-closing command; a timeout that kills only /bin/sh and leaves the pipeline running; trailing
+// text accepted as a number; NaN/inf sent; integer fields wrapping; a scaled value overflowing to inf
+// and being sent; the refresh either missing or never happening; Scale not applied.
 #include "TestUtil.h"
 #include "configuration.h"
 #include <unity.h>
@@ -72,6 +76,18 @@ int countLines(const std::string &path)
     return lines;
 }
 
+// Waits, in real time, for the worker to finish `reads` command runs.
+bool waitForReads(CommandSensor &sensor, uint32_t reads, long timeoutMs = 5000)
+{
+    const auto start = std::chrono::steady_clock::now();
+    while (sensor.finishedReads() < reads) {
+        if (elapsedMs(start) > timeoutMs)
+            return false;
+        usleep(10 * 1000);
+    }
+    return true;
+}
+
 meshtastic_Telemetry emptyEnvironment()
 {
     meshtastic_Telemetry t = meshtastic_Telemetry_init_zero;
@@ -99,14 +115,14 @@ void tearDown(void)
 void test_execCommand_captures_stdout_and_reports_success()
 {
     std::string output;
-    TEST_ASSERT_TRUE(execCommand("echo 21.5", 2000, output));
+    TEST_ASSERT_TRUE(execCommand("echo 21.5", 2000, output) == ExecResult::Ok);
     TEST_ASSERT_EQUAL_STRING("21.5\n", output.c_str());
 }
 
 void test_execCommand_nonzero_exit_is_failure()
 {
     std::string output;
-    TEST_ASSERT_FALSE(execCommand("echo 3; exit 3", 2000, output));
+    TEST_ASSERT_TRUE(execCommand("echo 3; exit 3", 2000, output) == ExecResult::Failed);
     TEST_ASSERT_EQUAL_STRING("3\n", output.c_str());
 }
 
@@ -114,7 +130,7 @@ void test_execCommand_stdin_is_not_inherited()
 {
     // A command that reads stdin must see EOF at once, not block on meshtasticd's terminal or socket.
     std::string output;
-    TEST_ASSERT_TRUE(execCommand("cat; echo done", 2000, output));
+    TEST_ASSERT_TRUE(execCommand("cat; echo done", 2000, output) == ExecResult::Ok);
     TEST_ASSERT_EQUAL_STRING("done\n", output.c_str());
 }
 
@@ -122,7 +138,7 @@ void test_execCommand_hung_command_is_killed_at_timeout()
 {
     const auto start = std::chrono::steady_clock::now();
     std::string output;
-    TEST_ASSERT_FALSE(execCommand("sleep 10", 300, output));
+    TEST_ASSERT_TRUE(execCommand("sleep 10", 300, output) == ExecResult::TimedOut);
     TEST_ASSERT_LESS_THAN(2000, elapsedMs(start));
 }
 
@@ -133,7 +149,7 @@ void test_execCommand_timeout_kills_the_whole_pipeline()
     const std::string marker = scratchFile("pipeline-survived");
     const std::string cmd = "sleep 2 | cat; touch " + marker;
     std::string output;
-    TEST_ASSERT_FALSE(execCommand(cmd.c_str(), 300, output));
+    TEST_ASSERT_TRUE(execCommand(cmd.c_str(), 300, output) == ExecResult::TimedOut);
     usleep(2500 * 1000);
     TEST_ASSERT_EQUAL(-1, access(marker.c_str(), F_OK));
 }
@@ -143,7 +159,7 @@ void test_execCommand_closed_stdout_still_bounded_by_timeout()
     // EOF on stdout is not exit: the wait for the process must also respect the deadline.
     const auto start = std::chrono::steady_clock::now();
     std::string output;
-    TEST_ASSERT_FALSE(execCommand("echo early; exec >&-; sleep 10", 300, output));
+    TEST_ASSERT_TRUE(execCommand("echo early; exec >&-; sleep 10", 300, output) == ExecResult::TimedOut);
     TEST_ASSERT_LESS_THAN(2000, elapsedMs(start));
     TEST_ASSERT_EQUAL_STRING("early\n", output.c_str());
 }
@@ -151,7 +167,7 @@ void test_execCommand_closed_stdout_still_bounded_by_timeout()
 void test_execCommand_output_is_capped()
 {
     std::string output;
-    TEST_ASSERT_TRUE(execCommand("head -c 20000 /dev/zero | tr '\\0' a", 2000, output));
+    TEST_ASSERT_TRUE(execCommand("head -c 20000 /dev/zero | tr '\\0' a", 2000, output) == ExecResult::Ok);
     TEST_ASSERT_EQUAL(4096, output.size());
 }
 
@@ -242,6 +258,7 @@ void test_CommandSensor_applies_scale_and_skips_bad_output()
     portduino_config.command_sensors.push_back({"lux", "exit 1", 1.0f});
     CommandSensor sensor;
     TEST_ASSERT_TRUE(sensor.initDevice(nullptr, nullptr));
+    TEST_ASSERT_TRUE(waitForReads(sensor, 3));
 
     meshtastic_Telemetry t = emptyEnvironment();
     TEST_ASSERT_TRUE(sensor.getMetrics(&t));
@@ -258,6 +275,7 @@ void test_CommandSensor_rejects_scale_overflow()
     portduino_config.command_sensors.push_back({"soil_moisture", "echo 3e38", 10.0f});
     CommandSensor sensor;
     TEST_ASSERT_TRUE(sensor.initDevice(nullptr, nullptr));
+    TEST_ASSERT_TRUE(waitForReads(sensor, 2));
     meshtastic_Telemetry t = emptyEnvironment();
     TEST_ASSERT_FALSE(sensor.getMetrics(&t));
     TEST_ASSERT_FALSE(t.variant.environment_metrics.has_temperature);
@@ -269,6 +287,7 @@ void test_CommandSensor_all_failing_reports_no_metrics()
     portduino_config.command_sensors.push_back({"temperature", "echo oops", 1.0f});
     CommandSensor sensor;
     TEST_ASSERT_TRUE(sensor.initDevice(nullptr, nullptr));
+    TEST_ASSERT_TRUE(waitForReads(sensor, 1));
     meshtastic_Telemetry t = emptyEnvironment();
     TEST_ASSERT_FALSE(sensor.getMetrics(&t));
     TEST_ASSERT_FALSE(t.variant.environment_metrics.has_temperature);
@@ -282,18 +301,58 @@ void test_CommandSensor_caches_readings_then_refreshes()
     portduino_config.command_sensors.push_back({"weight", cmd, 1.0f});
     CommandSensor sensor;
     TEST_ASSERT_TRUE(sensor.initDevice(nullptr, nullptr));
+    TEST_ASSERT_TRUE(waitForReads(sensor, 1));
 
+    // Inside the refresh interval: several worker polls go by (it wakes every 100ms) without a re-run,
+    // and the last value is still reported.
+    Time::setTestMillis(1000 + 29 * 1000);
+    usleep(500 * 1000);
     meshtastic_Telemetry t = emptyEnvironment();
     TEST_ASSERT_TRUE(sensor.getMetrics(&t));
-    Time::setTestMillis(1000 + 29 * 1000);
-    t = emptyEnvironment();
-    TEST_ASSERT_TRUE(sensor.getMetrics(&t)); // cached value is still reported
     TEST_ASSERT_TRUE(t.variant.environment_metrics.has_weight);
+    TEST_ASSERT_EQUAL(1, sensor.finishedReads());
     TEST_ASSERT_EQUAL(1, countLines(runs));
 
     Time::setTestMillis(1000 + 31 * 1000);
-    TEST_ASSERT_TRUE(sensor.getMetrics(&t));
+    TEST_ASSERT_TRUE(waitForReads(sensor, 2));
     TEST_ASSERT_EQUAL(2, countLines(runs));
+}
+
+void test_CommandSensor_getMetrics_does_not_wait_for_a_hung_command()
+{
+    // The worker is stuck in this command for its full 2 s timeout; getMetrics() must not be.
+    portduino_config.command_sensors.push_back({"lux", "sleep 10", 1.0f});
+    CommandSensor sensor;
+    TEST_ASSERT_TRUE(sensor.initDevice(nullptr, nullptr));
+    usleep(200 * 1000);
+
+    const auto start = std::chrono::steady_clock::now();
+    meshtastic_Telemetry t = emptyEnvironment();
+    TEST_ASSERT_FALSE(sensor.getMetrics(&t));
+    TEST_ASSERT_LESS_THAN(100, elapsedMs(start));
+    TEST_ASSERT_EQUAL(0, sensor.finishedReads());
+
+    // ...and the hung command is still bounded: the worker gets it back at the timeout.
+    TEST_ASSERT_TRUE(waitForReads(sensor, 1));
+    TEST_ASSERT_FALSE(sensor.getMetrics(&t));
+}
+
+void test_CommandSensor_destructor_stops_the_worker()
+{
+    // Destroying the sensor must join its worker rather than leave a thread running a destroyed object.
+    const std::string runs = scratchFile("runs-after-destroy");
+    std::remove(runs.c_str());
+    const std::string cmd = "echo x >> " + runs + "; echo 1";
+    portduino_config.command_sensors.push_back({"weight", cmd, 1.0f});
+    {
+        CommandSensor sensor;
+        TEST_ASSERT_TRUE(sensor.initDevice(nullptr, nullptr));
+        TEST_ASSERT_TRUE(waitForReads(sensor, 1));
+    }
+    Time::setTestMillis(1000 + 60 * 1000);
+    usleep(300 * 1000);
+    TEST_ASSERT_EQUAL(1, countLines(runs));
+    std::remove(runs.c_str());
 }
 
 void setup()
@@ -322,6 +381,8 @@ void setup()
     RUN_TEST(test_CommandSensor_rejects_scale_overflow);
     RUN_TEST(test_CommandSensor_all_failing_reports_no_metrics);
     RUN_TEST(test_CommandSensor_caches_readings_then_refreshes);
+    RUN_TEST(test_CommandSensor_getMetrics_does_not_wait_for_a_hung_command);
+    RUN_TEST(test_CommandSensor_destructor_stops_the_worker);
     const int failures = UNITY_END();
 
     std::remove(scratchFile("runs").c_str());
