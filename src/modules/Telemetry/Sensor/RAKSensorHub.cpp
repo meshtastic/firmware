@@ -447,8 +447,9 @@ static void onewire_evt(const uint8_t pid, const uint8_t sid, const SNHUBAPI_EVT
         }
         if (st)
             noteSid(*st, sid, msg[0]);
-        // Probes answer with zeros until their first measurement after power-up or a join
-        if (st && len > 1 && Throttle::isWithinTimespanMs(st->joinMs, st->sensorIntervalMs) &&
+        // Probes answer with zeros until their first measurement after power-up or a join; digital low is a real state
+        if (st && len > 1 && msg[0] != RAK_IPSO_DIGITAL_INPUT && msg[0] != RAK_IPSO_DIGITAL_OUTPUT &&
+            Throttle::isWithinTimespanMs(st->joinMs, st->sensorIntervalMs) &&
             std::all_of(msg + 1, msg + len, [](uint8_t b) { return b == 0; })) {
             LOG_DEBUG("RAKSensorHub: PID[%02x] SID[%02x] zero reading before first measurement, skipped", pid, sid);
             break;
