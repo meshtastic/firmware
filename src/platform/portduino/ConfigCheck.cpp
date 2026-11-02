@@ -84,8 +84,8 @@ const std::map<std::string, std::set<std::string>> &schema()
           "RGBOrder", "HUB75", "DC", "CS", "Backlight", "BacklightInvert", "BacklightPWMChannel", "Reset"}},
         {"Touchscreen", {"Module", "spidev", "BusFrequency", "I2CAddr", "Rotate", "CS", "IRQ"}},
         {"Input",
-         {"KeyboardDevice", "PointerDevice", "JoystickDevice", "JoystickButtons", "TrackballDirection", "User", "TrackballUp",
-          "TrackballDown", "TrackballLeft", "TrackballRight", "TrackballPress"}},
+         {"KeyboardDevice", "PointerDevice", "JoystickDevice", "JoystickButtons", "ArcadeBonnet", "ArcadeBonnetButtons",
+          "TrackballDirection", "User", "TrackballUp", "TrackballDown", "TrackballLeft", "TrackballRight", "TrackballPress"}},
         {"GPIO", {"User", "ExtraPins"}},
         {"GPS", {"SerialPath", "GpsdHost", "GpsdPort"}},
         {"I2C", {"I2CDevice"}},
@@ -427,6 +427,54 @@ void checkJoystickButtons(const std::string &file, const YAML::Node &node, std::
     }
 }
 
+// Same shape as JoystickButtons, but the values are the button names printed on the bonnet.
+void checkArcadeBonnetButtons(const std::string &file, const YAML::Node &node, std::vector<Finding> &findings)
+{
+    if (!node.IsMap()) {
+        findings.push_back(
+            {kError, file, lineOf(node), "Input.ArcadeBonnetButtons must be a mapping of action name to bonnet button (1A-1F)"});
+        return;
+    }
+
+    std::map<int, std::string> owner; // expander bit -> the action that claimed it first
+    for (const auto &entry : node) {
+        std::string action = entry.first.as<std::string>("");
+        for (auto &c : action)
+            c = tolower(c);
+        if (!kJoystickActions.count(action)) {
+            findings.push_back({kWarn, file, lineOf(entry.first),
+                                "Input.ArcadeBonnetButtons: '" + action +
+                                    "' is not a recognised action, so those buttons do nothing. Valid actions are select, "
+                                    "cancel, back, up, down, left, right and user"});
+            continue;
+        }
+
+        std::vector<YAML::Node> pinNodes;
+        if (entry.second.IsSequence())
+            for (const auto &pinNode : entry.second)
+                pinNodes.push_back(pinNode);
+        else
+            pinNodes.push_back(entry.second);
+
+        for (const auto &pinNode : pinNodes) {
+            const std::string raw = pinNode.as<std::string>("");
+            const int bit = arcadeBonnetPinBit(raw);
+            if (bit < 0) {
+                findings.push_back({kWarn, file, lineOf(pinNode),
+                                    "Input.ArcadeBonnetButtons." + action + ": '" + raw +
+                                        "' is not a bonnet button (1A-1F), so it is unmapped"});
+                continue;
+            }
+            const auto claimed = owner.find(bit);
+            if (claimed != owner.end() && claimed->second != action)
+                findings.push_back({kWarn, file, lineOf(pinNode),
+                                    "Input.ArcadeBonnetButtons: button " + raw + " is mapped to both '" + claimed->second +
+                                        "' and '" + action + "'. Only '" + action + "' takes effect"});
+            owner[bit] = action;
+        }
+    }
+}
+
 void checkRfSwitchTable(const std::string &file, const YAML::Node &table, std::vector<Finding> &findings)
 {
     if (!table.IsMap()) {
@@ -579,6 +627,7 @@ const std::map<std::string, ValueSpec> &valueSpecs()
         {"Input.KeyboardDevice", {kString, false}},
         {"Input.PointerDevice", {kString, false}},
         {"Input.JoystickDevice", {kString, false}},
+        {"Input.ArcadeBonnet", {kInt, false}},
         {"Input.TrackballDirection", {kString, false}},
         {"GPS.SerialPath", {kString, false}},
         {"GPS.GpsdHost", {kString, false}},
@@ -941,6 +990,17 @@ void checkSection(const std::string &file, const std::string &section, const YAM
                                         "anything else leaves no /org/bluez entry to attach to and Bluetooth stays off"});
         } else if (key == "JoystickButtons") {
             checkJoystickButtons(file, value, findings);
+        } else if (key == "ArcadeBonnetButtons") {
+            checkArcadeBonnetButtons(file, value, findings);
+        } else if (section == "Input" && key == "ArcadeBonnet") {
+            // 0 is "not fitted"; anything else must be an address the MCP23017 can actually take.
+            int address = 0;
+            if (converts(value, kInt))
+                address = value.as<int>();
+            if (address != 0 && (address < ARCADE_BONNET_ADDR_MIN || address > ARCADE_BONNET_ADDR_MAX))
+                findings.push_back({kWarn, file, lineOf(value),
+                                    "Input.ArcadeBonnet '" + value.as<std::string>("") +
+                                        "' is not an MCP23017 address (0x20-0x27), so the bonnet is not started"});
         } else if ((section == "Lora" && kLoraPinKeys.count(key)) ||
                    (section == "Display" &&
                     (key == "DC" || key == "CS" || key == "Backlight" || key == "BacklightPWMChannel" || key == "Reset")) ||

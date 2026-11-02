@@ -63,6 +63,9 @@
 #include "modules/GeofenceModule.h"
 #include "modules/WaypointModule.h"
 #endif
+#ifdef DMSHELL_TEST_PEER
+#include "modules/DMShellTestModule.h"
+#endif
 #if ARCH_PORTDUINO
 #include "modules/DMShell.h"
 #include "modules/Telemetry/HostMetrics.h"
@@ -228,6 +231,9 @@ void setupModules()
 #if defined(MESHTASTIC_HAS_DMSHELL)
     dmShellModule = new DMShellModule();
 #endif
+#endif
+#ifdef DMSHELL_TEST_PEER
+    dmShellTestModule = new DMShellTestModule();
 #endif
 #if HAS_TELEMETRY
     new DeviceTelemetryModule();

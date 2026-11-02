@@ -1654,12 +1654,15 @@ static void test_handleSetConfig_security_rotationPreservesAdminKeys()
     c.which_payload_variant = meshtastic_Config_security_tag;
     c.payload_variant.security.private_key.size = 32;
     memset(c.payload_variant.security.private_key.bytes, 0x33, 32);
+    // A generated key arrives clamped; an unclamped one would be clamped in place on derivation.
+    c.payload_variant.security.private_key.bytes[0] &= 0xF8;
+    c.payload_variant.security.private_key.bytes[31] = (c.payload_variant.security.private_key.bytes[31] & 0x7F) | 0x40;
+    uint8_t expectedPriv[32];
+    memcpy(expectedPriv, c.payload_variant.security.private_key.bytes, 32);
 
     testAdmin->deferSaves();
     testAdmin->handleSetConfig(c, false);
 
-    uint8_t expectedPriv[32];
-    memset(expectedPriv, 0x33, 32);
     TEST_ASSERT_EQUAL_UINT(32, config.security.private_key.size);
     TEST_ASSERT_EQUAL_MEMORY(expectedPriv, config.security.private_key.bytes, 32);
 

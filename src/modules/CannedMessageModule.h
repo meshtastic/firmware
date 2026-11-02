@@ -110,7 +110,7 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
 
 #if defined(USE_VIRTUAL_KEYBOARD)
     void drawKeyboard(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
-    String keyForCoordinates(uint x, uint y);
+    String keyForCoordinates(int x, int y);
     void drawShiftIcon(OLEDDisplay *display, int x, int y, float scale = 1);
     void drawBackspaceIcon(OLEDDisplay *display, int x, int y, float scale = 1);
     void drawEnterIcon(OLEDDisplay *display, int x, int y, float scale = 1);

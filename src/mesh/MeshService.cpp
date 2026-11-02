@@ -487,6 +487,7 @@ bool MeshService::phonePayloadIsDecodable(const meshtastic_Data &d)
 void MeshService::sendToPhone(meshtastic_MeshPacket *p)
 {
     perhapsDecode(p);
+    coerceNodeInfoUserId(*p);
 
     // Withhold decoded nested payloads a strict phone decoder would reject; still-encrypted packets
     // pass through (the phone may hold the key).
@@ -499,7 +500,7 @@ void MeshService::sendToPhone(meshtastic_MeshPacket *p)
 
 #ifdef ARCH_ESP32
 #if !MESHTASTIC_EXCLUDE_STOREFORWARD
-    if (moduleConfig.store_forward.enabled && storeForwardModule->isServer() &&
+    if (moduleConfig.store_forward.enabled && storeForwardModule && storeForwardModule->isServer() &&
         p->decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP) {
         releaseToPool(p); // Copy is already stored in StoreForward history
         fromNum++;        // Notify observers for packet from radio
