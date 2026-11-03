@@ -126,6 +126,11 @@ void getMacAddr(uint8_t *dmac)
     dmac[0] = (uint8_t)(uid2 >> 8);
 }
 
+bool getBluetoothAddr(uint8_t *addr)
+{
+    return false;
+}
+
 bool getDeviceId(uint8_t *deviceId)
 {
     // STM32WL: 96-bit factory silicon UID (words w0..w2, little-endian) in bytes 0-11 (rest stay zero).
