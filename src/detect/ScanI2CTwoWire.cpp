@@ -491,6 +491,19 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
 #ifdef HAS_ES7243E
                 SCAN_SIMPLE_CASE(ES7243E_ADDR, ES7243E, "ES7243E", (uint8_t)addr.address);
 #endif
+            case BMM350_ADDR: {
+                i2cBus->beginTransmission(addr.address);
+                i2cBus->write((uint8_t)0x00);
+                if (i2cBus->endTransmission() == 0 && i2cBus->requestFrom((int)addr.address, 3) == 3) {
+                    i2cBus->read();
+                    i2cBus->read();
+                    if (i2cBus->read() == 0x33) {
+                        logFoundDevice("BMM350", (uint8_t)addr.address);
+                        type = BMM350;
+                    }
+                }
+                break;
+            }
             case XPOWERS_AXP192_AXP2101_ADDRESS:
 #ifndef SEEED_WIO_TRACKER_L2 // false positive on Wio Tracker L2
                 // Do we have the axp2101/192 or the TCA8418
