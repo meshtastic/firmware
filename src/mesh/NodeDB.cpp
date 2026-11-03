@@ -3447,17 +3447,20 @@ bool NodeDB::saveNodeDatabaseToDisk()
 
     // Encode the satellite maps in place. Projecting them into the vectors first needed a second, contiguous copy on
     // every save (40 x 312 B for environment alone), which ran nRF52 out of heap. The lock keeps the maps unchanged
-    // between the sizing pass and the write.
-    concurrency::LockGuard guard(&satelliteMutex);
-    armNodeDatabaseEncodeSources();
-    struct Disarm {
-        NodeDB &self;
-        ~Disarm() { self.disarmNodeDatabaseEncodeSources(); }
-    } disarm{*this};
+    // between the sizing pass and the write; it is released before warm.dat, which never reads them.
+    bool ok;
+    {
+        concurrency::LockGuard guard(&satelliteMutex);
+        armNodeDatabaseEncodeSources();
+        struct Disarm {
+            NodeDB &self;
+            ~Disarm() { self.disarmNodeDatabaseEncodeSources(); }
+        } disarm{*this};
 
-    size_t nodeDatabaseSize;
-    pb_get_encoded_size(&nodeDatabaseSize, meshtastic_NodeDatabase_fields, &nodeDatabase);
-    bool ok = saveProto(nodeDatabaseFileName, nodeDatabaseSize, &meshtastic_NodeDatabase_msg, &nodeDatabase, false);
+        size_t nodeDatabaseSize;
+        pb_get_encoded_size(&nodeDatabaseSize, meshtastic_NodeDatabase_fields, &nodeDatabase);
+        ok = saveProto(nodeDatabaseFileName, nodeDatabaseSize, &meshtastic_NodeDatabase_msg, &nodeDatabase, false);
+    }
     if (ok)
         nodeDatabaseDirty = false;
 
