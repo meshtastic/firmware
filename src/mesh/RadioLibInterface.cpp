@@ -45,6 +45,15 @@ RadioLibInterface::RadioLibInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE c
 {
     instance = this;
 
+#ifdef MESHTASTIC_RX_READOUT_TASK
+    // Before any sequence can start, not with the task in startReceive(): the first RadioSequence to wrap that call
+    // would otherwise have taken nothing (the mutex was still null), leaving it with held == false while the task it
+    // creates is already live and able to read out between the rest of that sequence's RadioLib calls.
+    radioSeqMutex = xSemaphoreCreateRecursiveMutex();
+    if (!radioSeqMutex)
+        LOG_ERROR("No radio sequence mutex, RX readout task will not start");
+#endif
+
     // Initialize unused sample slots to a sane default; sample count controls averaging.
     for (uint8_t i = 0; i < NOISE_FLOOR_SAMPLES; i++) {
         noiseFloorSamples[i] = NOISE_FLOOR_DEFAULT;
@@ -154,11 +163,28 @@ bool RadioLibInterface::canSendImmediately()
         return true;
 }
 
+uint32_t RadioLibInterface::maxRxFrameMsec()
+{
+    // A sender's header can carry any CR up to 4/8, and a hold starts before that header can be read.
+    DataRate_t dr = getDataRate();
+    const uint8_t ourCR = dr.lora.codingRate;
+    dr.lora.codingRate = 8;
+    PacketConfig_t pc = getPacketConfig();
+    pc.lora.crcEnabled = true;
+    const RadioLibTime_t usec = iface->calculateTimeOnAir(modemType, dr, pc, MAX_LORA_PAYLOAD_LEN);
+    if (!isRadioLibTimeError(usec))
+        return (usec + 999) / 1000;
+    // The fallback times the frame at our own CR, which is short of the 4/8 bound the hold is for, so scale it up.
+    // The preamble does not scale with CR, so the result runs long - the safe direction for a hold.
+    const uint32_t ourMsec = getPacketTime(MAX_LORA_PAYLOAD_LEN);
+    const uint8_t scaleCR = (ourCR >= 5 && ourCR <= 8) ? ourCR : 8;
+    return (uint32_t)(((uint64_t)ourMsec * 8 + scaleCR - 1) / scaleCR);
+}
+
 bool RadioLibInterface::preambleHoldActive()
 {
-    // Whatever sent the cleared preamble is off the air one max packet later.
-    if (preambleHoldStart && !Throttle::isWithinTimespanMs(
-                                 preambleHoldStart, getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN + sizeof(PacketHeader))))
+    // Whatever sent the cleared preamble is off the air one max frame later.
+    if (preambleHoldStart && !Throttle::isWithinTimespanMs(preambleHoldStart, maxRxFrameMsec()))
         preambleHoldStart = 0;
     return preambleHoldStart != 0;
 }
@@ -170,19 +196,30 @@ void RadioLibInterface::holdOnPreamble()
         return;
     iface->clearIrq(1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED);
     preambleHoldStart = Time::skipZero(Time::getMillis());
+    preambleHoldHeaderSeen = false; // nothing says this preamble belongs to a frame we can decode yet
     LOG_TRACE("Preamble seen, cleared, holding TX");
+}
+
+bool RadioLibInterface::preambleHoldPeekable()
+{
+    // A frame we could decode has shown its header by now, so what is left is noise or LoRa we cannot read. Neither is
+    // worth the rest of a max-frame hold: let the pre-TX CAD listen and decide (#11933).
+    return preambleHoldActive() && !preambleHoldHeaderSeen &&
+           Throttle::hasElapsed(preambleHoldStart, preambleHeaderGraceMsec(sf, bw, preambleLength));
 }
 
 bool RadioLibInterface::receiveDetected(uint16_t irq, unsigned long syncWordHeaderValidFlag, unsigned long preambleDetectedFlag)
 {
+    if (irq & syncWordHeaderValidFlag)
+        preambleHoldHeaderSeen = true; // a real frame, so the hold is no longer a bare preamble the CAD may settle
+
     if (preambleHoldActive())
         return true;
 
     if (irq & syncWordHeaderValidFlag) {
         if (!activeReceiveStart) {
             activeReceiveStart = Time::skipZero(Time::getMillis());
-        } else if (!Throttle::isWithinTimespanMs(activeReceiveStart,
-                                                 getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN + sizeof(PacketHeader)))) {
+        } else if (!Throttle::isWithinTimespanMs(activeReceiveStart, maxRxFrameMsec())) {
             // We should have gotten an RX_DONE IRQ by now if it was really a packet, so ignore HEADER_VALID flag
             activeReceiveStart = 0;
             LOG_TRACE("Ignore false header detection");
@@ -506,13 +543,13 @@ void RadioLibInterface::onNotify(uint32_t notification)
             if (!isReceiving) {
                 rearmWanted = false; // this thread has since moved the radio on (a scan or a TX): leave it there
             } else if (cadHandoffRxStart) {
-                // No frame for the handoff. Its RX is still running, unless it expired empty: TIMEOUT alone, which the
-                // task does not read, and the chip now in standby.
+                // No frame for the handoff. Its RX is still running, unless it ended without one, which the task leaves
+                // to this thread: expired empty or a damaged header, with the chip possibly in standby.
                 RadioSequence seq(this);
-                if (iface->checkIrq(RADIOLIB_IRQ_TIMEOUT) != 1)
+                if (!cadHandoffRxEnded())
                     rearmWanted = false; // the handoff's own RX is still running: nothing to re-arm
                 else
-                    handleReceiveInterrupt(); // logs it and drops the TIMEOUT; the re-arm below puts the chip back in RX
+                    handleReceiveInterrupt(); // logs it and clears the flags; the re-arm below puts the chip back in RX
             }
         } else {
             RadioSequence seq(this);
@@ -547,7 +584,12 @@ void RadioLibInterface::onNotify(uint32_t notification)
         // If we are not currently in receive mode, then restart the random delay (this can happen if the main thread
         // has placed the unit into standby)  FIXME, how will this work if the chipset is in sleep mode?
         if (!txQueue.empty()) {
-            if (!canSendImmediately()) {
+            const bool clear = canSendImmediately();
+            // An old bare preamble is noise or LoRa we cannot decode; the CAD below judges the channel instead.
+            const bool peek = !clear && sendingPacket == NULL && preambleHoldPeekable();
+            // Snapshotted: the scan below can age the hold out, and the log would then read the cleared stamp.
+            const uint32_t peekHoldStart = peek ? preambleHoldStart : 0;
+            if (!clear && !peek) {
                 setTransmitDelay(); // currently Rx/Tx-ing: reset random delay
             } else {
                 meshtastic_MeshPacket *txp = txQueue.getFront();
@@ -592,6 +634,9 @@ void RadioLibInterface::onNotify(uint32_t notification)
                         setTransmitDelay();
                     } else {
                         LOG_DEBUG("CAD free");
+                        if (peek)
+                            LOG_DEBUG("Preamble hold released, CAD clear %ums after the sighting",
+                                      Time::getMillis() - peekHoldStart);
                         // Send any outgoing packets we have ready as fast as possible to keep the time between channel scan and
                         // actual transmission as short as possible
                         txp = txQueue.dequeue();
@@ -776,6 +821,7 @@ void RadioLibInterface::handleReceiveInterrupt(const CapturedRxInfo *captured)
     const bool wasCadHandoff = cadHandoffRxStart != 0;
     cadHandoffRxStart = 0; // this RX ends the wait either way; the outcome is logged below
     preambleHoldStart = 0; // likewise the reception a held preamble announced
+    preambleHoldHeaderSeen = false;
 
     size_t length;
     if (captured) {
@@ -791,11 +837,28 @@ void RadioLibInterface::handleReceiveInterrupt(const CapturedRxInfo *captured)
 
         isReceiving = false;
 
+        const bool haveFrame = iface->checkIrq(RADIOLIB_IRQ_RX_DONE) == 1;
+
         // A CAD handoff's RX window expired with nothing on air. There is no packet to read, so don't count
         // it as a bad one - the caller's rearmReceive() puts the radio back to listening.
-        if (iface->checkIrq(RADIOLIB_IRQ_RX_DONE) != 1 && iface->checkIrq(RADIOLIB_IRQ_TIMEOUT) == 1) {
+        if (!haveFrame && iface->checkIrq(RADIOLIB_IRQ_TIMEOUT) == 1) {
             LOG_DEBUG("CAD>RX empty");
-            iface->clearIrq(1UL << RADIOLIB_IRQ_TIMEOUT);
+            // Inside a handoff a damaged header's flags can be set alongside the timeout, both routed to DIO1:
+            // clear them together, or the line stays asserted and the next frame's RX_DONE raises no edge. Plain
+            // RX keeps leaving HEADER_ERR for checkStaleRxFlags() to judge.
+            uint32_t endedIrqs = 1UL << RADIOLIB_IRQ_TIMEOUT;
+            if (wasCadHandoff)
+                endedIrqs |= cadHandoffRxErrorIrqs;
+            iface->clearIrq(endedIrqs);
+            return;
+        }
+
+        // The other frameless end of a handoff: a damaged header, raising CRC_ERR or HEADER_ERR with no RX_DONE
+        // behind it. getPacketLength() would not be a frame's length here, so take the same exit as the empty
+        // window, clearing what ended the RX instead of reading a packet that never arrived.
+        if (wasCadHandoff && !haveFrame) {
+            LOG_DEBUG("CAD>RX damaged");
+            iface->clearIrq(cadHandoffRxErrorIrqs);
             return;
         }
 
@@ -941,6 +1004,7 @@ void RadioLibInterface::startReceive()
     chipRecoveryFailures = 0;
     rxFlagsSeenMs = 0;
     rxFlagsSeenHeader = false;
+    rxFlagsSeenValidHeader = false;
     powerMon->setState(meshtastic_PowerMon_State_Lora_RXOn);
 }
 
@@ -1003,6 +1067,12 @@ void RadioLibInterface::rearmReceive()
     checkRxDoneIrqFlag();
 }
 
+bool RadioLibInterface::cadHandoffRxEnded()
+{
+    const uint32_t endIrqs = (1UL << RADIOLIB_IRQ_TIMEOUT) | cadHandoffRxErrorIrqs;
+    return cadHandoffRxStart && (iface->getIrqFlags() & iface->getIrqMapped(endIrqs));
+}
+
 void RadioLibInterface::checkCadHandoffTimeout()
 {
     // Backstop to the chip's own cadTimeout, which is the primary bound. Doubled so the hardware always
@@ -1029,35 +1099,56 @@ void RadioLibInterface::checkStaleRxFlags()
     const uint32_t irq = iface->getIrqFlags();
     if (irq & iface->getIrqMapped(1UL << RADIOLIB_IRQ_RX_DONE))
         return;
-    // HEADER_ERR counts: on SX1280 it leaves RX wedged with no RX_DONE or TIMEOUT to follow.
-    const bool headerSeen = irq & iface->getIrqMapped((1UL << RADIOLIB_IRQ_HEADER_VALID) | (1UL << RADIOLIB_IRQ_HEADER_ERR));
+    const bool validSeen = irq & iface->getIrqMapped(1UL << RADIOLIB_IRQ_HEADER_VALID);
+    // HEADER_ERR counts on its own: on SX1280 it leaves RX wedged with no RX_DONE or TIMEOUT to follow.
+    const bool errSeen = irq & iface->getIrqMapped(1UL << RADIOLIB_IRQ_HEADER_ERR);
+    const bool headerSeen = validSeen || errSeen;
     const bool preambleSeen = irq & iface->getIrqMapped(1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED);
     if (!headerSeen && !preambleSeen) {
         rxFlagsSeenMs = 0;
         rxFlagsSeenHeader = false;
+        rxFlagsSeenValidHeader = false;
         return;
     }
-    // A header's window starts when the header shows, not when an earlier bare preamble did
-    if (!rxFlagsSeenMs || (headerSeen && !rxFlagsSeenHeader)) {
+    // A header's window starts when the header shows, not when an earlier bare preamble did - and a valid
+    // header's starts over a failed header's, whose flag stays latched beside it and is not this frame's.
+    if (!rxFlagsSeenMs || (headerSeen && !rxFlagsSeenHeader) || (validSeen && !rxFlagsSeenValidHeader)) {
         rxFlagsSeenMs = Time::skipZero(Time::getMillis());
         rxFlagsSeenHeader = headerSeen;
+        rxFlagsSeenValidHeader = validSeen;
         return;
     }
 
     const uint32_t maxPacketTimeMsec = getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN + sizeof(PacketHeader));
-    switch (staleRxFlagAction(headerSeen, Time::getMillis() - rxFlagsSeenMs, maxPacketTimeMsec)) {
+    switch (staleRxFlagAction(validSeen, errSeen, headerErrWedgesRx(), Time::getMillis() - rxFlagsSeenMs, maxPacketTimeMsec)) {
     case StaleRxFlagAction::Keep:
         break;
     case StaleRxFlagAction::Rearm:
         LOG_DEBUG("RX header stale, re-arm");
         startReceive(); // clears rxFlagsSeenMs
         break;
-    case StaleRxFlagAction::ClearPreamble:
+    case StaleRxFlagAction::ClearHeaderErr:
         // A clear never aborts a reception, unlike the standby inside startReceive().
+        LOG_DEBUG("RX header err stale, cleared");
+        if (validSeen) { // a valid header beside it keeps the window this error did not start
+            iface->clearIrq(1UL << RADIOLIB_IRQ_HEADER_ERR);
+            break;
+        }
+        // The failed frame's own preamble is latched beside its error. Retiring one and not the other
+        // leaves the next send's receiveDetected() holding TX a max packet over a frame already dead -
+        // a wait the re-arm this replaces never cost, because its standby cleared both flags at once.
+        iface->clearIrq((1UL << RADIOLIB_IRQ_HEADER_ERR) | (1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED));
+        rxFlagsSeenMs = 0;
+        rxFlagsSeenHeader = false;
+        rxFlagsSeenValidHeader = false;
+        break;
+    case StaleRxFlagAction::ClearPreamble:
+        // Also a clear, so also safe over a frame that may be arriving behind it.
         LOG_DEBUG("RX preamble stale, cleared");
         iface->clearIrq(1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED);
         rxFlagsSeenMs = 0;
         rxFlagsSeenHeader = false;
+        rxFlagsSeenValidHeader = false;
         break;
     }
 }
@@ -1127,7 +1218,10 @@ bool RadioLibInterface::maybeRecoverChipStateLoss()
 
 void RadioLibInterface::clearReadIrqs()
 {
-    iface->clearIrq((1UL << RADIOLIB_IRQ_RX_DONE) | (1UL << RADIOLIB_IRQ_CRC_ERR));
+    // Everything readData() would have cleared: a HEADER_VALID left latched times the next frame's stale-flag
+    // window from this dead frame, so checkStaleRxFlags() re-arms over the next frame instead of behind it.
+    iface->clearIrq((1UL << RADIOLIB_IRQ_RX_DONE) | (1UL << RADIOLIB_IRQ_CRC_ERR) | (1UL << RADIOLIB_IRQ_HEADER_VALID) |
+                    (1UL << RADIOLIB_IRQ_HEADER_ERR) | (1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED));
     discardUnreadRxFrame();
 }
 
@@ -1170,8 +1264,7 @@ void RadioLibInterface::unlockRadioSequence()
 void RadioLibInterface::startRxReadoutTask()
 {
     rxReadoutTaskTried = true;
-    // Before the task, so it can never run unguarded
-    radioSeqMutex = xSemaphoreCreateRecursiveMutex();
+    // Created in the constructor, so a sequence already in flight is holding it as the task appears
     if (!radioSeqMutex) {
         LOG_ERROR("RX readout task not started, no mutex");
         return;
@@ -1259,18 +1352,15 @@ void RadioLibInterface::readOutFromTask()
     // flags, and on SX128x drops it to standby, either of which would break a scan, arm or transmit in flight.
     RadioSequence seq(this);
     if (iface->checkIrq(RADIOLIB_IRQ_RX_DONE) != 1) {
-        // A CAD handoff's RX that expired empty raises TIMEOUT alone. The radio thread logs it and re-arms; left here, the
-        // chip would stay in standby until checkCadHandoffTimeout().
-        if (cadHandoffRxStart && iface->checkIrq(RADIOLIB_IRQ_TIMEOUT) == 1)
-            notify(ISR_RX, !rxArmedBeforeTxDone);
-        // A handoff's RX also routes CRC_ERR and HEADER_ERR to DIO1, and a damaged header raises one of those with no
-        // RX_DONE behind it. Left latched, the line stays asserted and the next frame's RX_DONE raises no edge:
-        // checkStaleRxFlags() steps aside for a handoff, so nothing would notice until checkCadHandoffTimeout().
-        // Only inside the handoff window: plain RX leaves HEADER_ERR for checkStaleRxFlags() to judge a wedged SX1280 on.
-        if (cadHandoffRxStart) {
-            const uint32_t errIrqs = (1UL << RADIOLIB_IRQ_CRC_ERR) | (1UL << RADIOLIB_IRQ_HEADER_ERR);
-            if (iface->getIrqFlags() & iface->getIrqMapped(errIrqs))
-                iface->clearIrq(errIrqs);
+        // A CAD handoff's RX that ends without a frame (TIMEOUT, or CRC_ERR / HEADER_ERR on a damaged header) can leave the
+        // chip in standby. The radio thread clears the flags and re-arms; cleared here instead, the handoff stays open,
+        // the chip deaf, until checkCadHandoffTimeout(). Plain RX leaves HEADER_ERR for checkStaleRxFlags() to judge.
+        if (cadHandoffRxEnded() && !notify(ISR_RX, !rxArmedBeforeTxDone)) {
+            // The one notification slot already held a TX: that path re-arms RX itself, but nothing there would
+            // clear a damaged header's flags, and a latched line raises no edge for the next frame's RX_DONE. So
+            // clear them here, as this site did before the handoff end was handed to the radio thread, and leave
+            // the open handoff to checkCadHandoffTimeout().
+            iface->clearIrq(cadHandoffRxErrorIrqs);
         }
         return; // otherwise an edge for a frame already taken
     }
@@ -1378,6 +1468,10 @@ void RadioLibInterface::setStandby()
 bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
 {
     cadHandoffRxStart = 0; // TX ends any handoff wait; completeSending() re-arms RX itself
+    // A peek reaches here with its hold still running; the CAD judged the channel clear and we are about to key up, so
+    // the next packet must not wait out the rest of it.
+    preambleHoldStart = 0;
+    preambleHoldHeaderSeen = false;
 
     /* NOTE: Minimize the actions before startTransmit() to keep the time between
              channel scan and actual transmit as low as possible to avoid collisions. */

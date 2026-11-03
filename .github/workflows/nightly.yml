@@ -10,7 +10,7 @@ jobs:
   trunk_check:
     if: github.repository == 'meshtastic/firmware'
     name: Trunk Check and Upload
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
 
     steps:
       - name: Checkout
@@ -25,7 +25,7 @@ jobs:
     if: github.repository == 'meshtastic/firmware'
     # See: https://github.com/trunk-io/trunk-action/blob/v1/readme.md#automatic-upgrades
     name: Trunk Upgrade (PR)
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
       contents: write # For trunk to create PRs
       pull-requests: write # For trunk to create PRs
