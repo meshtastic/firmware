@@ -182,11 +182,26 @@ bool loopCanSleep()
     // return !(TinyUSBDevice.mounted() && !TinyUSBDevice.suspended());
 }
 
+// TinyUSB's flush only queues the next USB packet, so a reset straight after it drops the rest of the CDC FIFO.
+// Wait, bounded, for the FIFO to drain. Skipped where the USB task can't run (ISR, scheduler stopped).
+static void drainConsoleBeforeReset()
+{
+    Serial.flush();
+    if (__get_IPSR() != 0 || xTaskGetSchedulerState() != taskSCHEDULER_RUNNING || !tud_cdc_connected())
+        return;
+    for (uint32_t waitedMs = 0; waitedMs < 250 && tud_cdc_write_available() < CFG_TUD_CDC_TX_BUFSIZE; waitedMs++) {
+        tud_cdc_write_flush();
+        delay(1);
+    }
+    // An empty FIFO means the last packet reached the endpoint buffer, not the host; it's collected on the next 1 ms frame
+    delay(20);
+}
+
 // handle standard gcc assert failures
 void __attribute__((noreturn)) __assert_func(const char *file, int line, const char *func, const char *failedexpr)
 {
     LOG_ERROR("assert failed %s: %d, %s, test=%s", file, line, func, failedexpr);
-    Serial.flush(); // the reset below would cut the message short
+    drainConsoleBeforeReset();
     // debugger_break(); FIXME doesn't work, possibly for segger
     // Reboot cpu
     NVIC_SystemReset();
