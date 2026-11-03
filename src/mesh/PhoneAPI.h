@@ -90,6 +90,17 @@ class PhoneAPI
     // file transfer packets destined for phone. Push it to the queue then free it.
     meshtastic_XModem xmodemPacketForPhone = meshtastic_XModem_init_zero;
 
+#if HAS_SCREEN_MIRROR
+    // The subscription and drain cursors live in a slot table in PhoneAPI.cpp, not here: per-instance
+    // members break nRF52 USB-CDC enumeration (see the auth slots).
+    // Handles the local-only mirror verbs for this connection; true when the packet was one.
+    bool handleScreenMirrorAdmin(const meshtastic_MeshPacket &p);
+    void setMirrorSubscribed(bool subscribed);
+    void releaseMirror();
+    // screen pixels are operator content: same access rule as mesh packets
+    bool wantsMirror();
+#endif
+
     // Keep QueueStatus packet just as packetForPhone
     meshtastic_QueueStatus *queueStatusPacketForPhone = NULL;
 
