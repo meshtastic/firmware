@@ -26,8 +26,8 @@
 // In addition to the default Rx flags, we need the PREAMBLE_DETECTED flag to detect whether we are actively receiving
 #define MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS (RADIOLIB_IRQ_RX_DEFAULT_FLAGS | (1 << RADIOLIB_IRQ_PREAMBLE_DETECTED))
 
-// 1 = write the TX payload into the chip in the channel scan's standby, so a clear verdict sends only the TX staging and
-// SET_TX. Off by default: measured on the T1000-E only, so far.
+// 1 = write the TX payload into the chip while the CAD runs (LR11x0, LR20x0, SX126x), so a clear verdict sends only the
+// TX staging and SET_TX. Off by default: unmeasured in this form.
 #ifndef RADIO_TX_PRESTAGE
 #define RADIO_TX_PRESTAGE 0
 #endif
@@ -490,8 +490,10 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     meshtastic_MeshPacket *scanForTx = nullptr;
 
 #if RADIO_TX_PRESTAGE
-    /** In the scan's standby: write scanForTx's payload into the chip's TX buffer */
+    /** While the CAD runs: write scanForTx's payload into the chip's TX buffer */
     void prestageTxBuffer();
+    /** scanChannel(cfg) with prestageTxBuffer() inside the CAD, so the write adds no deaf time before the scan */
+    int16_t scanChannelWritingTx(const ChannelScanConfig_t &cfg);
     /** After any verdict but a clear one: no TX follows, and a detection's RX may overwrite the buffer */
     void dropTxPrestage() { txPrestageLive = false; }
     /** Whether launchTransmit(numbytes) will send the prestaged payload rather than write it again */
@@ -504,6 +506,8 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     uint32_t txPrestagedId = 0;
     /** The scan that wrote it came back clear and no TX has taken it yet */
     bool txPrestageLive = false;
+    /** How long the write ran when the CAD had already ended by its finish; 0 when it ended inside the CAD */
+    uint32_t txPrestageLateUs = 0;
 #endif
 
     /** Could we send right now (i.e. either not actively receiving or transmitting)? */

@@ -709,12 +709,9 @@ template <typename T> bool LR11x0Interface<T>::isChannelActive()
     int16_t result = trySetStandby();
     if (result == RADIOLIB_ERR_NONE) {
 #if RADIO_TX_PRESTAGE
-        prestageTxBuffer(); // the CAD leaves the TX buffer alone
-#endif
+        result = scanChannelWritingTx(cfg); // the TX buffer is separate from RX's
+#else
         result = lora.scanChannel(cfg);
-#if RADIO_TX_PRESTAGE
-        if (result != RADIOLIB_CHANNEL_FREE)
-            dropTxPrestage();
 #endif
         if (result == RADIOLIB_LORA_DETECTED) {
             // The chip auto-entered RX. Drop the latched CAD verdict so the pin releases and the coming

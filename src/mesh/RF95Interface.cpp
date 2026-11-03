@@ -388,14 +388,7 @@ bool RF95Interface::isChannelActive()
     setTransmitEnable(false);
     int16_t result = trySetStandby(); // needed for smooth transition
     if (result == RADIOLIB_ERR_NONE) {
-#if RADIO_TX_PRESTAGE
-        prestageTxBuffer(); // the CAD leaves the FIFO alone
-#endif
         result = lora->scanChannel();
-#if RADIO_TX_PRESTAGE
-        if (result != RADIOLIB_CHANNEL_FREE)
-            dropTxPrestage();
-#endif
 
         if (result == RADIOLIB_PREAMBLE_DETECTED) {
             // LOG_DEBUG("Channel is busy");
