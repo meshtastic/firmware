@@ -98,7 +98,7 @@ uint8_t TDeckProKeyboard::modifierForKey(uint8_t key)
 
 void TDeckProKeyboard::pressed(uint8_t key)
 {
-    if (key == 0 || key > _TCA8418_NUM_KEYS || state == Init)
+    if (key == 0 || _TCA8418_NUM_KEYS < key || state == Init)
         return;
     if (Throttle::hasElapsed(lastModifierMs, MODIFIER_TIMEOUT_MS))
         latchedModifiers = 0;

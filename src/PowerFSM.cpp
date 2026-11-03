@@ -88,6 +88,9 @@ static void screenOffForTimeout()
 #endif
 #ifdef MESHTASTIC_INCLUDE_INKHUD
     NicheGraphics::InkHUD::InkHUD::getInstance()->setTouchTimedOut(true);
+#ifdef T_DECK_PRO
+    tDeckProUpdateBacklights();
+#endif
 #endif
 }
 
@@ -99,6 +102,9 @@ static void screenOnFromUserInput()
 #endif
 #ifdef MESHTASTIC_INCLUDE_INKHUD
     NicheGraphics::InkHUD::InkHUD::getInstance()->setTouchTimedOut(false);
+#ifdef T_DECK_PRO
+    tDeckProUpdateBacklights();
+#endif
 #endif
 }
 

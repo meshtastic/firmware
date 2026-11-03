@@ -5,7 +5,6 @@
 #if defined(T_DECK_PRO) && defined(MESHTASTIC_INCLUDE_INKHUD)
 
 #include "PowerFSM.h"
-#include "graphics/niche/Drivers/Backlight/LatchingBacklight.h"
 #include "graphics/niche/InkHUD/InkHUD.h"
 #include "graphics/niche/InkHUD/Persistence.h"
 #include "graphics/niche/InkHUD/SystemApplet.h"
@@ -58,7 +57,7 @@ class TDeckProInkHUDInput : public Observer<const InputEvent *>
 
         switch (input) {
         case INPUT_BROKER_ALT_PRESS:
-            toggleBacklights();
+            tDeckProToggleBacklights();
             break;
         case INPUT_BROKER_USER_PRESS:
         case INPUT_BROKER_SELECT:
@@ -132,34 +131,23 @@ class TDeckProInkHUDInput : public Observer<const InputEvent *>
     CallbackObserver<TDeckProInkHUDInput, void *> lightSleepObserver{this, &TDeckProInkHUDInput::beforeLightSleep};
     CallbackObserver<TDeckProInkHUDInput, esp_sleep_wakeup_cause_t> wakeObserver{this, &TDeckProInkHUDInput::afterLightSleep};
 
-    void toggleBacklights()
-    {
-        const bool on = !digitalRead(KB_BL_PIN);
-        keyboard.toggleBacklight(on);
-        if (tDeckProIsV11()) {
-            auto *backlight = NicheGraphics::Drivers::LatchingBacklight::getInstance();
-            if (on)
-                backlight->latch();
-            else
-                backlight->off();
-        }
-    }
-
     int beforeLightSleep(void *)
     {
+        tDeckProUpdateBacklights(true);
         detachInterrupt(CST328_PIN_INT);
         return 0;
     }
 
     int afterLightSleep(esp_sleep_wakeup_cause_t)
     {
+        tDeckProUpdateBacklights();
         attachTDeckProTouchInterrupt();
         return 0;
     }
 
     int beforeSleep(void *)
     {
-        keyboard.toggleBacklight(false);
+        tDeckProUpdateBacklights(true);
         digitalWrite(PIN_VIBRATION, LOW);
         return 0;
     }

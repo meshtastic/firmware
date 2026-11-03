@@ -4,12 +4,15 @@
 #ifdef MESHTASTIC_INCLUDE_INKHUD
 #include "NodeDB.h"
 #include "concurrency/Periodic.h"
+#include "graphics/niche/Drivers/Backlight/LatchingBacklight.h"
+#include "graphics/niche/InkHUD/InkHUD.h"
 #include "modules/ExternalNotificationModule.h"
 #include <Adafruit_DRV2605.h>
 #include <Wire.h>
 
 static Adafruit_DRV2605 haptic;
 static bool hapticReady = false;
+static bool backlightsEnabled = false;
 static concurrency::Periodic *touchFeedbackTimer = nullptr;
 
 static int32_t stopTouchFeedback()
@@ -50,6 +53,27 @@ bool tDeckProIsV11()
         return found;
     }();
     return v11;
+}
+
+void tDeckProUpdateBacklights(bool sleeping)
+{
+    const bool on = backlightsEnabled && !sleeping && !NicheGraphics::InkHUD::InkHUD::getInstance()->isTouchTimedOut();
+    digitalWrite(KB_BL_PIN, on);
+    if (tDeckProIsV11()) {
+        auto *backlight = NicheGraphics::Drivers::LatchingBacklight::getInstance();
+        if (backlight->isOn() == on)
+            return;
+        if (on)
+            backlight->latch();
+        else
+            backlight->off();
+    }
+}
+
+void tDeckProToggleBacklights()
+{
+    backlightsEnabled = !backlightsEnabled;
+    tDeckProUpdateBacklights();
 }
 
 void tDeckProSetVibration(int pin, bool on)

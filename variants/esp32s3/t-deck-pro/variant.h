@@ -2,6 +2,8 @@
 #ifdef MESHTASTIC_INCLUDE_INKHUD
 bool tDeckProIsV11();
 void tDeckProSetVibration(int pin, bool on);
+void tDeckProUpdateBacklights(bool sleeping = false);
+void tDeckProToggleBacklights();
 #define EXT_NOTIFY_VIBRA_WRITE(pin, on) tDeckProSetVibration(pin, on)
 #else
 #define T_DECK_PRO_V1_0
