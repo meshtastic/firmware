@@ -1748,6 +1748,15 @@ void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
         return;
     }
 
+    // Echoes of packets we sent are in PacketHistory, so the filter above consumed them (implicit ACK,
+    // dupe). Our number on anything else is not new inbound traffic: keep it from modules and the phone.
+    if (isFromUs(p)) {
+        clearRoutingAuthCache();
+        LOG_DEBUG("Drop received packet 0x%08x with our own node number", p->id);
+        packetPool.release(p);
+        return;
+    }
+
     // Note: we avoid calling shouldFilterReceived if we are supposed to ignore certain nodes - because some overrides might
     // cache/learn of the existence of nodes (i.e. FloodRouter) that they should not
     handleReceived(p);

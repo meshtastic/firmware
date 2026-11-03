@@ -135,6 +135,12 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     if (mp.which_payload_variant != meshtastic_MeshPacket_decoded_tag) {
         return handled;
     }
+    // from == 0 is trusted as a local client below, so require callModules() to vouch for its origin.
+    if (mp.from == 0 &&
+        !(currentRequest == &mp && (currentRequestSource == RX_SRC_USER || currentRequestSource == RX_SRC_LOCAL))) {
+        LOG_WARN("Drop admin payload with from=0 that did not arrive from a local client");
+        return handled;
+    }
 #ifdef ARCH_PORTDUINO
     // Simulator only: honor exit_simulator unconditionally for the local client (from==0).
     // The from==0 branch below now covers pki_encrypted local packets too, but is_managed
@@ -161,8 +167,8 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         LOG_TRACE("Allow admin response message");
     } else if (mp.from == 0) {
         // Local admin from a BLE/USB/TCP client. from == 0 cannot arrive from the
-        // mesh: RF drops packets without a sender (RadioLibInterface) and MQTT treats
-        // from == 0 as our own downlink and ignores it. Clients may set pki_encrypted
+        // mesh: RF, MQTT and UDP ingress drop it, and the source gate above rejects
+        // any from == 0 not dispatched as RX_SRC_USER/LOCAL. Clients may set pki_encrypted
         // on self-addressed admin (the python CLI does), so don't use it to reroute
         // local packets into the remote-PKC key check.
         //
