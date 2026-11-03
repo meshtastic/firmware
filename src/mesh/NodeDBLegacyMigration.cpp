@@ -110,11 +110,15 @@ bool NodeDB::migrateLegacyNodeDatabase()
             }
             nodeDatabase.nodes.push_back(slim);
 #if !MESHTASTIC_EXCLUDE_POSITIONDB
-            if (legacy.has_position)
+            if (legacy.has_position &&
+                (nodePositions.count(legacy.num) || (nodePositions.size() < MAX_SATELLITE_NODES &&
+                                                     satelliteBudgetAllowsLocked(sizeof(decltype(nodePositions)::value_type)))))
                 nodePositions[legacy.num] = legacy.position;
 #endif
 #if !MESHTASTIC_EXCLUDE_TELEMETRYDB
-            if (legacy.has_device_metrics)
+            if (legacy.has_device_metrics &&
+                (nodeTelemetry.count(legacy.num) || (nodeTelemetry.size() < MAX_SATELLITE_NODES &&
+                                                     satelliteBudgetAllowsLocked(sizeof(decltype(nodeTelemetry)::value_type)))))
                 nodeTelemetry[legacy.num] = legacy.device_metrics;
 #endif
         }

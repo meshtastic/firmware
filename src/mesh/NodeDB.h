@@ -427,6 +427,12 @@ class NodeDB
     /// @return our node number
     NodeNum getNodeNum() { return myNodeInfo.my_node_num; }
 
+#ifdef PIO_UNIT_TESTING
+    static void setSatelliteTestFreeHeap(size_t bytes);
+    static void setSatelliteTestBudget(size_t bytes);
+    static size_t satelliteTestBudgetBytes();
+#endif
+
     /// @return our node ID as a string in the format "!xxxxxxxx"
     std::string getNodeId() const;
 
@@ -787,6 +793,9 @@ class NodeDB
     /// stalest entries (used after loading files written before the cap, or by
     /// a build with a larger cap). Returns true iff anything was trimmed.
     bool enforceSatelliteCaps();
+    bool enforceSatelliteCapsLocked(bool repairOrphans, NodeNum incoming);
+    size_t satelliteBytesLocked() const;
+    bool satelliteBudgetAllowsLocked(size_t extraValueBytes) const;
 
     /// Node-DB self-care; call only once identity is established (getNodeNum()
     /// valid). Confirms self is present, trims/demotes only NON-self overflow, and

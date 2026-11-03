@@ -149,6 +149,21 @@ static inline int get_max_num_nodes()
 #endif                         // platform
 #endif                         // MAX_SATELLITE_NODES
 
+/// Aggregate RAM ceiling for the four satellite maps; the effective budget is
+/// measured and heap-clamped lower at boot. This is only the per-class ceiling.
+#ifndef MAX_SATELLITE_BYTES
+#if MESHTASTIC_MEM_CLASS >= MEM_CLASS_LARGE
+#define MAX_SATELLITE_BYTES (256 * 1024)
+#elif MESHTASTIC_MEM_CLASS == MEM_CLASS_MEDIUM
+#define MAX_SATELLITE_BYTES (16 * 1024)
+#elif MESHTASTIC_MEM_CLASS <= MEM_CLASS_TINY
+#define MAX_SATELLITE_BYTES (4 * 1024)
+#else
+// Above the ~11.5 KB that position + telemetry + status fill at 40 nodes, so only environment-heavy stores trim.
+#define MAX_SATELLITE_BYTES (12 * 1024)
+#endif
+#endif // MAX_SATELLITE_BYTES
+
 /// Warm tier: 40 B {num, last_heard, public_key} records kept for evicted nodes
 /// so DMs to/from them keep decrypting. 0 disables it; size is per-platform
 /// below, persisted to /prefs/warm.dat (or the nRF52840 raw-flash ring).
