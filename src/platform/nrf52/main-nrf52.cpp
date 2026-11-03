@@ -1,5 +1,6 @@
 #include "UptimeClock.h"
 #include "configuration.h"
+#include "memGet.h"
 #include "mesh/Throttle.h"
 #include <Adafruit_TinyUSB.h>
 #include <Adafruit_nRFCrypto.h>
@@ -197,10 +198,32 @@ static void drainConsoleBeforeReset()
     delay(20);
 }
 
+// What file:line can't say: the task that asserted (the log's [thread] tag is the last OSThread to run), how close
+// its stack came to overflowing, and whether the heap was exhausted, fragmented or corrupt.
+static void logAssertContext()
+{
+    if (__get_IPSR() != 0) {
+        LOG_ERROR("assert context: exception %lu", (unsigned long)__get_IPSR());
+        return;
+    }
+    if (xTaskGetSchedulerState() != taskSCHEDULER_RUNNING)
+        return;
+    const char *task = pcTaskGetName(NULL);
+    const unsigned stackFree = uxTaskGetStackHighWaterMark(NULL) * sizeof(StackType_t);
+    // mallinfo() behind getFreeHeap() walks the same list unchecked, so only call it once the list checks out
+    if (!memGet.heapLooksIntact()) {
+        LOG_ERROR("assert context: task %s, stack free %u B, heap free list corrupt", task, stackFree);
+        return;
+    }
+    LOG_ERROR("assert context: task %s, stack free %u B, heap free %u, largest block %u", task, stackFree, memGet.getFreeHeap(),
+              memGet.getMaxAllocHeap());
+}
+
 // handle standard gcc assert failures
 void __attribute__((noreturn)) __assert_func(const char *file, int line, const char *func, const char *failedexpr)
 {
     LOG_ERROR("assert failed %s: %d, %s, test=%s", file, line, func, failedexpr);
+    logAssertContext();
     drainConsoleBeforeReset();
     // debugger_break(); FIXME doesn't work, possibly for segger
     // Reboot cpu

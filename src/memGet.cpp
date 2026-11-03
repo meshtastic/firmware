@@ -37,6 +37,43 @@ static uint32_t sbrkHeadroom()
 
 MemGet memGet;
 
+#ifdef ARCH_NRF52
+#include <unistd.h> // sbrk
+
+extern "C" char __HeapBase[], __HeapLimit[];
+// newlib-nano's free list: each chunk starts with its size (header included) and the next free chunk
+struct NanoFreeChunk {
+    long size;
+    NanoFreeChunk *next;
+};
+extern "C" NanoFreeChunk *__malloc_free_list;
+
+/// Walk newlib-nano's free list for the largest free chunk; false if a link leaves the heap or the list doesn't end.
+static bool walkNrf52FreeList(uint32_t &largest)
+{
+    largest = 0;
+    bool intact = true;
+    uint32_t chunks = 0;
+    vTaskSuspendAll();
+    for (const NanoFreeChunk *c = __malloc_free_list; c; c = c->next) {
+        const char *p = reinterpret_cast<const char *>(c);
+        if (p < __HeapBase || p >= __HeapLimit || (reinterpret_cast<uintptr_t>(p) & 3) || c->size <= 0 ||
+            c->size > __HeapLimit - p || ++chunks > 2048) {
+            intact = false;
+            break;
+        }
+        if ((uint32_t)c->size > largest)
+            largest = c->size;
+    }
+    const char *brk = static_cast<const char *>(sbrk(0));
+    (void)xTaskResumeAll();
+    // The never-claimed space above the break is one more block
+    if (brk >= __HeapBase && brk <= __HeapLimit && (uint32_t)(__HeapLimit - brk) > largest)
+        largest = __HeapLimit - brk;
+    return intact;
+}
+#endif
+
 /**
  * Returns the amount of free heap memory in bytes.
  * @return uint32_t The amount of free heap memory in bytes.
@@ -100,8 +137,26 @@ uint32_t MemGet::getMaxAllocHeap()
 {
 #ifdef ARCH_ESP32
     return ESP.getMaxAllocHeap();
+#elif defined(ARCH_NRF52)
+    uint32_t largest;
+    walkNrf52FreeList(largest);
+    return largest;
 #else
     return 0;
+#endif
+}
+
+/**
+ * Sanity-walks the allocator's free list, where the platform allows it.
+ * @return false if the list looks corrupt, true if it is intact or can't be checked.
+ */
+bool MemGet::heapLooksIntact()
+{
+#ifdef ARCH_NRF52
+    uint32_t largest;
+    return walkNrf52FreeList(largest);
+#else
+    return true;
 #endif
 }
 
