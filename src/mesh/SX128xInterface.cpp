@@ -405,7 +405,14 @@ template <typename T> bool SX128xInterface<T>::isChannelActive()
                                        .irqMask = RADIOLIB_IRQ_CAD_DEFAULT_MASK}};
     int16_t result = trySetStandby();
     if (result == RADIOLIB_ERR_NONE) {
+#if RADIO_TX_PRESTAGE
+        prestageTxBuffer(); // the CAD leaves the buffer alone
+#endif
         result = lora.scanChannel(cfg);
+#if RADIO_TX_PRESTAGE
+        if (result != RADIOLIB_CHANNEL_FREE)
+            dropTxPrestage();
+#endif
         if (result == RADIOLIB_LORA_DETECTED)
             return true;
         if (result != RADIOLIB_CHANNEL_FREE)

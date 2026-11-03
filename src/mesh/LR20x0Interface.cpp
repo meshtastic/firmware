@@ -629,7 +629,18 @@ template <typename T> int16_t LR20x0Interface<T>::launchTransmit(size_t numbytes
     // ahead of this packet, at this packet's length, and push every later packet out of line by the same amount.
     uint16_t level = 0;
     const bool levelRead = readTxFifoLevel(level);
-    if (level)
+#if RADIO_TX_PRESTAGE
+    // A prestaged payload is launched only if the FIFO holds exactly it; one a busy scan left behind is no surprise
+    if (txPrestageMatches(numbytes) && levelRead && level == numbytes)
+        return RadioLibInterface::launchTransmit(numbytes);
+    if (txPrestageMatches(numbytes))
+        LOG_WARN("LR20x0 TX FIFO held %u bytes, not the %u prestaged; writing them again", (unsigned)level, (unsigned)numbytes);
+    const bool ownLeftover = levelRead && level && level == txPrestagedLen;
+    dropTxPrestage(); // the FIFO is cleared below, so the launch must write the payload again
+#else
+    const bool ownLeftover = false;
+#endif
+    if (level && !ownLeftover)
         LOG_WARN("LR20x0 TX FIFO held %u bytes from an earlier TX, cleared", (unsigned)level);
     if (!levelRead || level)
         module.SPIwriteStream((uint16_t)RADIOLIB_LR2021_CMD_CLEAR_TX_FIFO, NULL, 0, true, true); // private in RadioLib
@@ -851,7 +862,14 @@ template <typename T> bool LR20x0Interface<T>::isChannelActive()
 
     int16_t result = trySetStandby();
     if (result == RADIOLIB_ERR_NONE) {
+#if RADIO_TX_PRESTAGE
+        prestageTxBuffer(); // the TX FIFO is separate from RX's, and the CAD leaves it alone
+#endif
         result = lora.scanChannel(cfg);
+#if RADIO_TX_PRESTAGE
+        if (result != RADIOLIB_CHANNEL_FREE)
+            dropTxPrestage();
+#endif
         if (result == RADIOLIB_LORA_DETECTED) {
             // The chip auto-entered RX. Drop the latched CAD verdict so the pin releases and the coming
             // RX_DONE is a clean edge.

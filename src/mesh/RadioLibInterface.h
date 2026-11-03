@@ -26,6 +26,12 @@
 // In addition to the default Rx flags, we need the PREAMBLE_DETECTED flag to detect whether we are actively receiving
 #define MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS (RADIOLIB_IRQ_RX_DEFAULT_FLAGS | (1 << RADIOLIB_IRQ_PREAMBLE_DETECTED))
 
+// 1 = write the TX payload into the chip in the channel scan's standby, so a clear verdict sends only the TX staging and
+// SET_TX. Off by default: measured on the T1000-E only, so far.
+#ifndef RADIO_TX_PRESTAGE
+#define RADIO_TX_PRESTAGE 0
+#endif
+
 #define AGC_RESET_INTERVAL_MS (60 * 1000) // 60 seconds: how often the loop runs periodicRadioMaintenance()
 // An AGC reset takes the radio off the air for over 100 ms, so it runs only on a radio that has decoded nothing for
 // AGC_IDLE_RESET_MS (gain stuck low would look like that), or at least once per AGC_FORCED_RESET_MS on a busy one
@@ -482,6 +488,23 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
     /** The packet the running channel scan is clearing the way for, so the scan can stage it; null otherwise */
     meshtastic_MeshPacket *scanForTx = nullptr;
+
+#if RADIO_TX_PRESTAGE
+    /** In the scan's standby: write scanForTx's payload into the chip's TX buffer */
+    void prestageTxBuffer();
+    /** After any verdict but a clear one: no TX follows, and a detection's RX may overwrite the buffer */
+    void dropTxPrestage() { txPrestageLive = false; }
+    /** Whether launchTransmit(numbytes) will send the prestaged payload rather than write it again */
+    bool txPrestageMatches(size_t numbytes) const
+    {
+        return txPrestageLive && txPrestagedLen == numbytes && sendingPacket && sendingPacket->id == txPrestagedId;
+    }
+    /** Bytes the last prestage wrote, launched or not (0 once a TX takes the buffer), and its packet id */
+    size_t txPrestagedLen = 0;
+    uint32_t txPrestagedId = 0;
+    /** The scan that wrote it came back clear and no TX has taken it yet */
+    bool txPrestageLive = false;
+#endif
 
     /** Could we send right now (i.e. either not actively receiving or transmitting)? */
     virtual bool canSendImmediately();

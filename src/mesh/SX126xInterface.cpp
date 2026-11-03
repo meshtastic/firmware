@@ -686,10 +686,20 @@ template <typename T> bool SX126xInterface<T>::isChannelActive()
 #ifdef ARCH_PORTDUINO
         prestageTx();
 #endif
+#if RADIO_TX_PRESTAGE
+#ifdef ARCH_PORTDUINO
+        if (!irqPolledOverUsb()) // a CH341 host prestages its own way, above
+#endif
+            prestageTxBuffer(); // the CAD leaves the buffer alone
+#endif
         result = scanChannelForTx(cfg);
 #ifdef ARCH_PORTDUINO
         if (result != RADIOLIB_CHANNEL_FREE)
             prestagedLen = 0; // no TX follows, and a detection's RX may overwrite the buffer
+#endif
+#if RADIO_TX_PRESTAGE
+        if (result != RADIOLIB_CHANNEL_FREE)
+            dropTxPrestage();
 #endif
         if (result == RADIOLIB_LORA_DETECTED) {
             // The chip auto-entered RX (GOTO_RX). Drop the latched CAD verdict so the pin releases and the

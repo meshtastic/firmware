@@ -44,6 +44,9 @@ RadioLibInterface::RadioLibInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE c
     : NotifiedWorkerThread("RadioIf"), module(hal, cs, irq, rst, busy), iface(_iface)
 {
     instance = this;
+#if RADIO_TX_PRESTAGE
+    LOG_INFO("RADIO_TX_PRESTAGE: TX payload written before the channel scan");
+#endif
 
 #ifdef MESHTASTIC_RX_READOUT_TASK
     // Before any sequence can start, not with the task in startReceive(): the first RadioSequence to wrap that call
@@ -618,6 +621,9 @@ void RadioLibInterface::onNotify(uint32_t notification)
                     // Listen-before-talk: a CAD preamble scan immediately before we key up.
                     LOG_DEBUG("CAD arm");
                     scanForTx = txp;
+#if RADIO_TX_PRESTAGE
+                    txPrestageLive = false; // only this scan's clear verdict may launch what it stages
+#endif
                     const bool channelActive = isChannelActive();
                     scanForTx = nullptr;
                     if (channelActive) { // currently traffic on the channel?
@@ -1440,8 +1446,39 @@ void RadioLibInterface::configHardwareForSend()
 
 int16_t RadioLibInterface::launchTransmit(size_t numbytes)
 {
+#if RADIO_TX_PRESTAGE
+    const bool prestaged = txPrestageMatches(numbytes);
+    if (txPrestageLive && !prestaged)
+        LOG_DEBUG("TX prestage unused: %u bytes for 0x%08x, sending %u for 0x%08x", (unsigned)txPrestagedLen, txPrestagedId,
+                  (unsigned)numbytes, sendingPacket ? sendingPacket->id : 0);
+    txPrestageLive = false;
+    txPrestagedLen = 0; // this TX takes the buffer, prestaged or not
+    if (prestaged) {
+        // startTransmit() less the buffer write: no payload pointer tells stageMode() the buffer already holds it
+        RadioModeConfig_t cfg = {.transmit = {.data = nullptr, .len = numbytes, .addr = 0}};
+        const int16_t res = iface->stageMode(RADIOLIB_RADIO_MODE_TX, &cfg);
+        return res == RADIOLIB_ERR_NONE ? iface->launchMode() : res;
+    }
+#endif
     return iface->startTransmit((uint8_t *)&radioBuffer, numbytes);
 }
+
+#if RADIO_TX_PRESTAGE
+void RadioLibInterface::prestageTxBuffer()
+{
+    // Only the buffer: the packet params keep RX's maximum length, so a detection's RX still takes a full-length frame
+    txPrestageLive = false;
+    if (!scanForTx)
+        return;
+    const size_t numbytes = encodeRadioBuffer(scanForTx);
+    txPrestagedLen = 0;
+    if (numbytes == 0 || iface->writeTxBuffer((uint8_t *)&radioBuffer, numbytes) != RADIOLIB_ERR_NONE)
+        return;
+    txPrestagedLen = numbytes;
+    txPrestagedId = scanForTx->id;
+    txPrestageLive = true;
+}
+#endif
 
 void RadioLibInterface::setStandby()
 {
