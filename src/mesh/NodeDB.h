@@ -823,6 +823,8 @@ class NodeDB
     // temp vectors. Must be paired - disarm before any other NodeDatabase decode.
     void armNodeDatabaseDecodeTargets();
     void disarmNodeDatabaseDecodeTargets();
+    void armNodeDatabaseEncodeSources();
+    void disarmNodeDatabaseEncodeSources();
 };
 
 extern NodeDB *nodeDB;
