@@ -4,6 +4,7 @@
 #ifdef SEEED_MESHPAGER_X2
 
 #include "AudioBoard.h"
+#include "DebugConfiguration.h"
 #include <Wire.h>
 #include <driver/gpio.h>
 
@@ -124,6 +125,9 @@ Tca6424 ioExpander(IO_EXPANDER_I2C_ADDR);
 DriverPins pinsAudioBoardES8311;
 AudioBoard board(AudioDriverES8311, pinsAudioBoardES8311);
 bool expanderReady = false;
+bool expanderInitialized = false;
+bool keypadReady = false;
+bool loraResetReady = false;
 bool earlyInitFailed = false;
 
 bool configureInput(uint8_t pin)
@@ -151,7 +155,7 @@ bool writeExpanderPin(uint8_t pin, bool level)
 bool readKeypadState(uint8_t &pressedKeys)
 {
     uint8_t portState = 0;
-    if (!expanderReady || !ioExpander.readInputPort(0, portState))
+    if (!keypadReady || !ioExpander.readInputPort(0, portState))
         return false;
 
     pressedKeys = static_cast<uint8_t>(~portState) & 0x3F;
@@ -212,16 +216,19 @@ void earlyInitVariant()
         earlyInitFailed = true;
         return;
     }
+    expanderInitialized = true;
 
     bool ok = configureOutput(EXP_PIN_PWR_HOLD, true);
 
     // Buttons + SD detect + IMU interrupt are inputs.
-    ok &= configureInput(EXP_PIN_BUTTON_UP);
-    ok &= configureInput(EXP_PIN_BUTTON_DOWN);
-    ok &= configureInput(EXP_PIN_BUTTON_LEFT);
-    ok &= configureInput(EXP_PIN_BUTTON_RIGHT);
-    ok &= configureInput(EXP_PIN_BUTTON_CONFIRM);
-    ok &= configureInput(EXP_PIN_BUTTON_RETURN);
+    bool keypadOk = true;
+    keypadOk &= configureInput(EXP_PIN_BUTTON_UP);
+    keypadOk &= configureInput(EXP_PIN_BUTTON_DOWN);
+    keypadOk &= configureInput(EXP_PIN_BUTTON_LEFT);
+    keypadOk &= configureInput(EXP_PIN_BUTTON_RIGHT);
+    keypadOk &= configureInput(EXP_PIN_BUTTON_CONFIRM);
+    keypadOk &= configureInput(EXP_PIN_BUTTON_RETURN);
+    ok &= keypadOk;
     ok &= configureInput(EXP_PIN_BUTTON_PWR);
     ok &= configureInput(EXP_PIN_SD_DETECT);
     ok &= configureInput(EXP_PIN_IMU_INT1);
@@ -235,7 +242,8 @@ void earlyInitVariant()
     delay(100);
     ok &= configureOutput(EXP_PIN_PA_PWR_EN, true);
     delay(10);
-    ok &= configureOutput(EXP_PIN_LORA_RESET, true);
+    loraResetReady = configureOutput(EXP_PIN_LORA_RESET, true);
+    ok &= loraResetReady;
 
     // ST7789P3 power-on and reset sequence (mirrors bsp_lcd_hard_reset in BSP demo).
     ok &= configureOutput(EXP_PIN_LCD_PWR_EN, true);
@@ -246,9 +254,11 @@ void earlyInitVariant()
     delay(120);                                           // allow ST7789P3 to complete internal initialization
 
     // Match demo LR20xx reset sequence on expander pin 22.
-    ok &= ioExpander.digitalWrite(EXP_PIN_LORA_RESET, false);
+    loraResetReady &= ioExpander.digitalWrite(EXP_PIN_LORA_RESET, false);
+    ok &= loraResetReady;
     delay(10);
-    ok &= ioExpander.digitalWrite(EXP_PIN_LORA_RESET, true);
+    loraResetReady &= ioExpander.digitalWrite(EXP_PIN_LORA_RESET, true);
+    ok &= loraResetReady;
     delay(10);
 
     // GNSS sequence from demo firmware.
@@ -264,6 +274,7 @@ void earlyInitVariant()
     delay(10);
     ok &= configureOutput(EXP_PIN_GNSS_RTC_INT, false);
 
+    keypadReady = keypadOk;
     expanderReady = ok;
     earlyInitFailed = !ok;
 }
@@ -304,7 +315,7 @@ void lateInitVariant()
 
 extern "C" void variant_pre_radio_reset(void)
 {
-    if (!expanderReady) {
+    if (!loraResetReady) {
         return;
     }
 
@@ -333,7 +344,7 @@ void variant_shutdown()
     gpio_deep_sleep_hold_en();
 #endif
 
-    if (!expanderReady) {
+    if (!expanderInitialized) {
         return;
     }
 
@@ -341,15 +352,19 @@ void variant_shutdown()
     Wire.begin(I2C_SDA, I2C_SCL);
 
     // Drive logic lines low first so they cannot back-power a chip whose rail is about to go.
-    writeExpanderPin(EXP_PIN_LCD_RST, false);
-    writeExpanderPin(EXP_PIN_GNSS_SLEEP_INT, false);
+    auto shutDownPin = [](uint8_t pin) {
+        if (!writeExpanderPin(pin, false))
+            LOG_WARN("Failed to turn off expander pin %u before deep sleep", pin);
+    };
+    shutDownPin(EXP_PIN_LCD_RST);
+    shutDownPin(EXP_PIN_GNSS_SLEEP_INT);
 
-    writeExpanderPin(EXP_PIN_LCD_PWR_EN, false);
-    writeExpanderPin(EXP_PIN_GNSS_PWR_EN, false);
-    writeExpanderPin(EXP_PIN_SD_PWR_EN, false);
-    writeExpanderPin(EXP_PIN_PA_PWR_EN, false);
-    writeExpanderPin(EXP_PIN_SEN_EN, false);
-    writeExpanderPin(EXP_PIN_BAT_ADC_EN, false);
+    shutDownPin(EXP_PIN_LCD_PWR_EN);
+    shutDownPin(EXP_PIN_GNSS_PWR_EN);
+    shutDownPin(EXP_PIN_SD_PWR_EN);
+    shutDownPin(EXP_PIN_PA_PWR_EN);
+    shutDownPin(EXP_PIN_SEN_EN);
+    shutDownPin(EXP_PIN_BAT_ADC_EN);
     // PWR_HOLD stays high so the RTC keeps time; GNSS_VRTC_EN stays on so the GNSS can hot-start after wake.
 
     Wire.end();

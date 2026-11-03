@@ -502,15 +502,12 @@ void InputBroker::Init()
     }
 #endif
 #if !MESHTASTIC_EXCLUDE_INPUTBROKER && defined(INPUTBROKER_KEYPAD_READ_CALLBACK)
-    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
-        auto *keypadInput = new KeypadInput(INPUTBROKER_KEYPAD_READ_CALLBACK);
-        if (!keypadInput->init()) {
-            LOG_WARN("Keypad input initialization failed");
-            delete keypadInput;
-        }
-        else
-            osk_found = true;
-    }
+    auto *keypadInput = new KeypadInput(INPUTBROKER_KEYPAD_READ_CALLBACK);
+    if (!keypadInput->init()) {
+        LOG_WARN("Keypad input initialization failed");
+        delete keypadInput;
+    } else
+        osk_found = true;
 #endif
 #if !MESHTASTIC_EXCLUDE_INPUTBROKER && HAS_TRACKBALL
     if (screen && config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {

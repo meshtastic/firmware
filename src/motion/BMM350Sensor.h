@@ -22,6 +22,7 @@ class BMM350Sensor : public MotionSensor
       public:
         Sensor(TwoWire *wire, uint8_t address);
         uint8_t begin();
+        bool configure();
         bool readSample(sBmm350MagData_t &data);
     };
 

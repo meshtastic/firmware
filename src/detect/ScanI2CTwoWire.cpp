@@ -920,14 +920,21 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
             case LSM6DS3_ADDR: {
 #ifdef SEEED_MESHPAGER_X2
                 uint8_t imuId = 0;
-                if (readByteRegister(i2cBus, addr.address, 0x0F, imuId) && imuId == 0x6C) {
+                if (!readByteRegister(i2cBus, addr.address, 0x0F, imuId)) {
+                    LOG_WARN("Failed to read IMU WHO_AM_I at 0x%x", (uint8_t)addr.address);
+                } else if (imuId == 0x6C) {
                     type = LSM6DSOX;
                     logFoundDevice("LSM6DSOX", (uint8_t)addr.address);
-                    break;
+                } else if (imuId == 0x6A) {
+                    type = LSM6DS3;
+                    logFoundDevice("LSM6DS3", (uint8_t)addr.address);
+                } else {
+                    LOG_WARN("Unsupported IMU WHO_AM_I 0x%x at 0x%x", imuId, (uint8_t)addr.address);
                 }
-#endif
+#else
                 type = LSM6DS3;
                 logFoundDevice("LSM6DS3", (uint8_t)addr.address);
+#endif
                 break;
             }
             case VEML7700_ADDR: { // same as BMM150 with CSB and SDO low

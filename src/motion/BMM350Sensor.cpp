@@ -61,6 +61,15 @@ uint8_t BMM350Sensor::Sensor::begin()
     return sensorInit() && !transferFailed ? 0 : 1;
 }
 
+bool BMM350Sensor::Sensor::configure()
+{
+    transferFailed = false;
+    setPresetMode(BMM350_PRESETMODE_ENHANCED, BMM350_DATA_RATE_12_5HZ);
+    setMeasurementXYZ();
+    setOperationMode(eBmm350NormalMode);
+    return !transferFailed;
+}
+
 bool BMM350Sensor::Sensor::readSample(sBmm350MagData_t &data)
 {
     transferFailed = false;
@@ -82,9 +91,10 @@ bool BMM350Sensor::init()
         return false;
     }
 
-    sensor->setPresetMode(BMM350_PRESETMODE_ENHANCED, BMM350_DATA_RATE_12_5HZ);
-    sensor->setMeasurementXYZ();
-    sensor->setOperationMode(eBmm350NormalMode);
+    if (!sensor->configure()) {
+        LOG_WARN("BMM350 setup write failed");
+        return false;
+    }
     loadMagnetometerCalibration(compassCalibrationFileName, highestX, lowestX, highestY, lowestY, highestZ, lowestZ);
     return true;
 }

@@ -20,6 +20,10 @@ bool KeypadInput::init()
     for (uint8_t keyIndex = 0; keyIndex < KEY_COUNT; keyIndex++)
         changedAtMs[keyIndex] = nowMs;
 
+    stableKeys = sampledKeys;
+    for (uint8_t keyIndex = 0; keyIndex < 4; keyIndex++)
+        repeatAtMs[keyIndex] = nowMs;
+
     inputBroker->registerSource(this);
     ready = true;
     return true;
