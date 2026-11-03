@@ -188,6 +188,12 @@ void MeshService::reloadOwner(bool shouldSave)
     }
 }
 
+void MeshService::announceOwnerChange()
+{
+    if (nodeInfoModule)
+        nodeInfoModule->sendOurNodeInfo(NODENUM_BROADCAST, false, 0, true);
+}
+
 // search the queue for a request id and return the matching nodenum
 NodeNum MeshService::getNodenumFromRequestId(uint32_t request_id)
 {

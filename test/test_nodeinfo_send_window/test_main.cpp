@@ -29,6 +29,14 @@
 // The window probes step an injected clock (Time::setTestMillis) rather than sleeping;
 // TransmitHistory, which is where allocReply() reads "last sent" from, reads the same clock.
 //
+// 3. A NodeInfo request signed by a key in our admin list (AdminKeys) is answered on the interactive
+//    60 second gate, past both the 30 minute floor and the 12 hour per-requester reply suppression -
+//    an admin has to be able to see the node it manages. The bypass needs a verified XEdDSA
+//    signature, because only that proves the request's `from`; an unsigned request naming the admin
+//    node gets the routine treatment. Regressions guarded: dropping the signature check (anyone can
+//    spoof the admin's node number), a bypass that outlives the key's removal from the list, and one
+//    that skips the 60 second gate.
+//
 // Also covered here: a relayed NodeInfo payload leaves the module byte-for-byte as received, so the
 // sender's XEdDSA signature still verifies downstream, and coerceNodeInfoUserId() - which applies the
 // user.id fix to local copies instead - rewrites only a mismatched id.
@@ -64,6 +72,19 @@ class NodeInfoModuleTestShim : public NodeInfoModule
   public:
     using MeshModule::alterReceived;
     using NodeInfoModule::runOnce;
+
+    // The receive-then-reply sequence MeshModule::callModules() runs for a want_response request.
+    // Returns the reply, or nullptr when the module declined to answer.
+    meshtastic_MeshPacket *replyTo(const meshtastic_MeshPacket &req)
+    {
+        meshtastic_User user = meshtastic_User_init_zero;
+        pb_decode_from_bytes(req.decoded.payload.bytes, req.decoded.payload.size, &meshtastic_User_msg, &user);
+        currentRequest = &req;
+        handleReceivedProtobuf(req, &user);
+        meshtastic_MeshPacket *reply = allocReply();
+        currentRequest = nullptr;
+        return reply;
+    }
 };
 
 namespace
@@ -403,6 +424,121 @@ static void test_coerceUserId_rewritesOnlyAMismatchedId(void)
     TEST_ASSERT_EQUAL_STRING("remote", user.long_name);
 }
 
+constexpr NodeNum kAdminNode = 0x0B0B0B0B;
+constexpr NodeNum kOtherNode = 0x0D0D0D0D;
+
+// Each node's key is 32 copies of one byte, held in NodeDB as the router leaves it after verifying a signature.
+static uint8_t keyByteFor(NodeNum n)
+{
+    return n == kAdminNode ? 0xA1 : 0xD1;
+}
+
+static void storeNodeKey(NodeNum n)
+{
+    meshtastic_NodeInfoLite *node = nodeDB->getOrCreateMeshNode(n);
+    TEST_ASSERT_NOT_NULL(node);
+    node->public_key.size = 32;
+    memset(node->public_key.bytes, keyByteFor(n), 32);
+}
+
+static void listAdminKey(NodeNum n)
+{
+    config.security.admin_key[0].size = 32;
+    memset(config.security.admin_key[0].bytes, keyByteFor(n), 32);
+    config.security.admin_key_count = 1;
+}
+
+static void clearAdminKeys()
+{
+    memset(config.security.admin_key, 0, sizeof(config.security.admin_key));
+    config.security.admin_key_count = 0;
+}
+
+// A unicast NodeInfo request to us, as the router hands it over: xeddsa_signed is the router's
+// verdict on the signature, never a field the sender controls. The payload carries the sender's
+// key, as a real request must or NodeDB drops it as a key mismatch.
+static meshtastic_MeshPacket makeNodeInfoRequest(NodeNum from, bool signedBySender)
+{
+    storeNodeKey(from);
+    meshtastic_MeshPacket p = makeNodeInfoPacket(from, "");
+    meshtastic_User user = meshtastic_User_init_zero;
+    strncpy(user.long_name, "remote", sizeof(user.long_name) - 1);
+    strncpy(user.short_name, "rm", sizeof(user.short_name) - 1);
+    user.public_key.size = 32;
+    memset(user.public_key.bytes, keyByteFor(from), 32);
+    p.decoded.payload.size =
+        pb_encode_to_bytes(p.decoded.payload.bytes, sizeof(p.decoded.payload.bytes), &meshtastic_User_msg, &user);
+    p.to = nodeDB->getNodeNum();
+    p.decoded.want_response = true;
+    p.xeddsa_signed = signedBySender;
+    return p;
+}
+
+// True when the module answered `req`. Releases the reply so the pool does not leak.
+static bool answers(const meshtastic_MeshPacket &req)
+{
+    meshtastic_MeshPacket *reply = mod->replyTo(req);
+    if (!reply)
+        return false;
+    packetPool.release(reply);
+    return true;
+}
+
+// A fresh TransmitHistory: no "last sent" stamp, so only the per-requester suppression can refuse.
+static void clearTransmitHistory()
+{
+    delete transmitHistory;
+    transmitHistory = nullptr;
+    transmitHistory = TransmitHistory::getInstance();
+}
+
+static void test_adminRequest_answeredInsideTheFloor(void)
+{
+    listAdminKey(kAdminNode);
+    transmitHistory->setLastSentToMesh(meshtastic_PortNum_NODEINFO_APP);
+    Time::advanceTestMillis(5 * 60 * 1000);
+
+    TEST_ASSERT_FALSE_MESSAGE(answers(makeNodeInfoRequest(kOtherNode, true)), "a non-admin request is inside the floor");
+    TEST_ASSERT_FALSE_MESSAGE(answers(makeNodeInfoRequest(kAdminNode, false)),
+                              "an unsigned request cannot prove it came from the admin node");
+    TEST_ASSERT_TRUE_MESSAGE(answers(makeNodeInfoRequest(kAdminNode, true)), "the admin's signed request is answered");
+    clearAdminKeys();
+}
+
+static void test_adminRequest_bypassesPerRequesterSuppression(void)
+{
+    listAdminKey(kAdminNode);
+    TEST_ASSERT_TRUE(answers(makeNodeInfoRequest(kOtherNode, true)));
+    clearTransmitHistory();
+    TEST_ASSERT_TRUE(answers(makeNodeInfoRequest(kAdminNode, true)));
+
+    clearTransmitHistory(); // take the floor out, leaving the 12 h suppression as the only gate
+    Time::advanceTestMillis(2 * 60 * 1000);
+    TEST_ASSERT_FALSE_MESSAGE(answers(makeNodeInfoRequest(kOtherNode, true)), "a repeat requester is suppressed for 12 h");
+    TEST_ASSERT_TRUE_MESSAGE(answers(makeNodeInfoRequest(kAdminNode, true)), "the admin is not");
+    clearAdminKeys();
+}
+
+static void test_adminRequest_keepsTheSixtySecondGate(void)
+{
+    listAdminKey(kAdminNode);
+    transmitHistory->setLastSentToMesh(meshtastic_PortNum_NODEINFO_APP);
+    Time::advanceTestMillis(30 * 1000);
+
+    TEST_ASSERT_FALSE(answers(makeNodeInfoRequest(kAdminNode, true)));
+    clearAdminKeys();
+}
+
+static void test_adminRequest_routineOnceTheKeyIsUnlisted(void)
+{
+    listAdminKey(kAdminNode);
+    clearAdminKeys();
+    transmitHistory->setLastSentToMesh(meshtastic_PortNum_NODEINFO_APP);
+    Time::advanceTestMillis(5 * 60 * 1000);
+
+    TEST_ASSERT_FALSE(answers(makeNodeInfoRequest(kAdminNode, true)));
+}
+
 NI_TEST_ENTRY void setup()
 {
     initializeTestEnvironment();
@@ -421,6 +557,10 @@ NI_TEST_ENTRY void setup()
     RUN_TEST(test_presetChange_isConsumedOnlyByASendThatGoesOut);
     RUN_TEST(test_relay_userPayloadUnmodified);
     RUN_TEST(test_coerceUserId_rewritesOnlyAMismatchedId);
+    RUN_TEST(test_adminRequest_answeredInsideTheFloor);
+    RUN_TEST(test_adminRequest_bypassesPerRequesterSuppression);
+    RUN_TEST(test_adminRequest_keepsTheSixtySecondGate);
+    RUN_TEST(test_adminRequest_routineOnceTheKeyIsUnlisted);
     exit(UNITY_END());
 }
 NI_TEST_ENTRY void loop() {}

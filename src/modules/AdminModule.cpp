@@ -831,7 +831,8 @@ void AdminModule::handleSetOwner(const meshtastic_User &o)
     }
 
     if (changed) { // If nothing really changed, don't broadcast on the network or write to flash
-        service->reloadOwner(!hasOpenEditTransaction);
+        service->reloadOwner(false);
+        ownerAnnouncePending = true;
         saveChanges(SEGMENT_DEVICESTATE | SEGMENT_NODEDATABASE | (identityUpdated ? SEGMENT_CONFIG : 0) |
                     (channelsSanitized ? SEGMENT_CHANNELS : 0));
     }
@@ -1856,6 +1857,11 @@ void AdminModule::saveChanges(int saveWhat, bool shouldReboot)
     if (!hasOpenEditTransaction) {
         LOG_INFO("Save changes to disk");
         service->reloadConfig(saveWhat); // Calls saveToDisk among other things
+        // The routine NodeInfo throttle would drop it, and the reboot that follows inherits that throttle.
+        if (ownerAnnouncePending) {
+            ownerAnnouncePending = false;
+            service->announceOwnerChange();
+        }
     } else {
         LOG_INFO("Delay disk save until open transaction commits");
         editTransactionActivityMs = millis(); // still in use, so not the abandoned kind we time out
