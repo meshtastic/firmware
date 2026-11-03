@@ -117,6 +117,7 @@ class ScanI2C
         ES8311,
         ES7243E,
         BMM350,
+        LSM6DSOX,
     } DeviceType;
 
     // typedef uint8_t DeviceAddress;

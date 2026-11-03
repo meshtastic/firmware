@@ -917,7 +917,19 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
 
                 break;
 
-                SCAN_SIMPLE_CASE(LSM6DS3_ADDR, LSM6DS3, "LSM6DS3", (uint8_t)addr.address);
+            case LSM6DS3_ADDR: {
+#ifdef SEEED_MESHPAGER_X2
+                uint8_t imuId = 0;
+                if (readByteRegister(i2cBus, addr.address, 0x0F, imuId) && imuId == 0x6C) {
+                    type = LSM6DSOX;
+                    logFoundDevice("LSM6DSOX", (uint8_t)addr.address);
+                    break;
+                }
+#endif
+                type = LSM6DS3;
+                logFoundDevice("LSM6DS3", (uint8_t)addr.address);
+                break;
+            }
             case VEML7700_ADDR: { // same as BMM150 with CSB and SDO low
                 // VEML7700 ID (0x07) low byte is 0x81. A BMM150 chip ID (0x40) reads 0x32, but only once the power bit
                 // (0x4B bit 0) has taken it out of suspend

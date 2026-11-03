@@ -19,6 +19,7 @@
 #include "ICM42607PSensor.h"
 #include "LIS3DHSensor.h"
 #include "LSM6DS3Sensor.h"
+#include "LSM6DSOXSensor.h"
 #include "MPU6050Sensor.h"
 #include "MotionSensor.h"
 #include "QMI8658Sensor.h"
@@ -119,6 +120,11 @@ class AccelerometerThread : public concurrency::OSThread
 #if __has_include(<Adafruit_LSM6DS3TRC.h>)
         case ScanI2C::DeviceType::LSM6DS3:
             sensor.reset(new LSM6DS3Sensor(device));
+            break;
+#endif
+#if __has_include(<Adafruit_LSM6DSOX.h>)
+        case ScanI2C::DeviceType::LSM6DSOX:
+            sensor.reset(new LSM6DSOXSensor(device));
             break;
 #endif
 #ifdef HAS_STK8XXX
