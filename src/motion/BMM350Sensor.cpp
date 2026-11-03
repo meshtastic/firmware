@@ -12,12 +12,68 @@ extern std::unique_ptr<graphics::Screen> screen;
 static constexpr float BMM350_MIN_AXIS_RADIUS = 1.0f;
 static constexpr int32_t BMM350_POLL_INTERVAL_MS = 200;
 
+TwoWire *BMM350Sensor::Sensor::bus = nullptr;
+bool BMM350Sensor::Sensor::transferFailed = false;
+
+BMM350Sensor::Sensor::Sensor(TwoWire *wire, uint8_t address) : DFRobot_BMM350(readRegisters, writeRegisters, delayUs, address)
+{
+    bus = wire;
+}
+
+int8_t BMM350Sensor::Sensor::readRegisters(uint8_t reg, uint8_t *data, uint32_t length, void *context)
+{
+    const uint8_t address = *static_cast<uint8_t *>(context);
+    bus->beginTransmission(address);
+    bus->write(reg);
+    if (bus->endTransmission() != 0 || bus->requestFrom(address, static_cast<uint8_t>(length)) != length) {
+        transferFailed = true;
+        return -1;
+    }
+    for (uint32_t index = 0; index < length; ++index)
+        data[index] = bus->read();
+    return 0;
+}
+
+int8_t BMM350Sensor::Sensor::writeRegisters(uint8_t reg, const uint8_t *data, uint32_t length, void *context)
+{
+    const uint8_t address = *static_cast<uint8_t *>(context);
+    bus->beginTransmission(address);
+    const bool buffered = bus->write(reg) == 1 && bus->write(data, length) == length;
+    const uint8_t status = bus->endTransmission();
+    if (!buffered || status != 0) {
+        transferFailed = true;
+        return -1;
+    }
+    return 0;
+}
+
+void BMM350Sensor::Sensor::delayUs(uint32_t period, void *)
+{
+    if (period >= 1000)
+        delay(period / 1000);
+    if (period % 1000)
+        delayMicroseconds(period % 1000);
+}
+
+uint8_t BMM350Sensor::Sensor::begin()
+{
+    transferFailed = false;
+    return sensorInit() && !transferFailed ? 0 : 1;
+}
+
+bool BMM350Sensor::Sensor::readSample(sBmm350MagData_t &data)
+{
+    transferFailed = false;
+    data = getGeomagneticData();
+    return !transferFailed;
+}
+
 BMM350Sensor::BMM350Sensor(ScanI2C::FoundDevice foundDevice) : MotionSensor(foundDevice) {}
 
 bool BMM350Sensor::init()
 {
     if (!sensor)
-        sensor = std::make_unique<DFRobot_BMM350_I2C>(ScanI2CTwoWire::fetchI2CBus(device.address), device.address.address);
+        sensor = std::make_unique<Sensor>(ScanI2CTwoWire::fetchI2CBus(device.address), device.address.address);
 
     LOG_DEBUG("BMM350 begin on addr 0x%x (port=%d)", device.address.address, device.address.port);
     const uint8_t status = sensor->begin();
@@ -35,9 +91,9 @@ bool BMM350Sensor::init()
 
 bool BMM350Sensor::readMagnetometer(float &xMicroTesla, float &yMicroTesla, float &zMicroTesla)
 {
-    const sBmm350MagData_t data = sensor->getGeomagneticData();
-    if (!std::isfinite(data.float_x) || !std::isfinite(data.float_y) || !std::isfinite(data.float_z) ||
-        (data.float_x == 0.0f && data.float_y == 0.0f && data.float_z == 0.0f)) {
+    sBmm350MagData_t data = {};
+    if (!sensor->readSample(data) || !std::isfinite(data.float_x) || !std::isfinite(data.float_y) ||
+        !std::isfinite(data.float_z) || (data.float_x == 0.0f && data.float_y == 0.0f && data.float_z == 0.0f)) {
         return false;
     }
 

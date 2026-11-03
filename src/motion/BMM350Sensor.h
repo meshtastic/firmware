@@ -10,7 +10,22 @@
 class BMM350Sensor : public MotionSensor
 {
   private:
-    std::unique_ptr<DFRobot_BMM350_I2C> sensor;
+    class Sensor : public DFRobot_BMM350
+    {
+      private:
+        static TwoWire *bus;
+        static bool transferFailed;
+        static int8_t readRegisters(uint8_t reg, uint8_t *data, uint32_t length, void *context);
+        static int8_t writeRegisters(uint8_t reg, const uint8_t *data, uint32_t length, void *context);
+        static void delayUs(uint32_t period, void *context);
+
+      public:
+        Sensor(TwoWire *wire, uint8_t address);
+        uint8_t begin();
+        bool readSample(sBmm350MagData_t &data);
+    };
+
+    std::unique_ptr<Sensor> sensor;
     bool showingScreen = false;
     bool seedPending = false;
     static constexpr const char *compassCalibrationFileName = "/prefs/compass_bmm350.dat";
