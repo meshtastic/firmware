@@ -270,7 +270,7 @@ int32_t KbI2cBase::runOnce()
                 break;
             }
             if (e.inputEvent != INPUT_BROKER_NONE) {
-                LOG_DEBUG("MP121 Notifying: %i Char: %i", e.inputEvent, e.kbchar);
+                LOG_INPUT("MP121 Notifying: %i Char: %i", e.inputEvent, e.kbchar);
                 this->notifyObservers(&e);
             }
         }
@@ -398,7 +398,7 @@ int32_t KbI2cBase::runOnce()
             }
         }
         if (PrintDataBuf != 0) {
-            LOG_DEBUG("RAK14004 key 0x%x pressed", PrintDataBuf);
+            LOG_INPUT("RAK14004 key 0x%x pressed", PrintDataBuf);
             InputEvent e = {};
             e.inputEvent = INPUT_BROKER_MATRIXKEY;
             e.source = this->_originName;
