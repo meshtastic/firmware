@@ -50,7 +50,7 @@ void ScreenMirror::freeSnapshotLocked()
         muiPool = nullptr;
     }
     muiHead = muiCount = 0;
-    muiPoolUsed = 0;
+    muiPoolTail = 0;
     muiRectSendOffset = 0;
     muiOwner = nullptr;
 #endif
@@ -103,6 +103,19 @@ void ScreenMirror::subscribe()
             return;
         subscribers++;
         captureRequested = true;
+        captureFailed = false; // an explicit client action retries a failed capture
+    }
+    kickCapture();
+}
+
+void ScreenMirror::retryCapture()
+{
+    {
+        concurrency::LockGuard g(&lock);
+        if (!armedLocked())
+            return;
+        captureRequested = true;
+        captureFailed = false;
     }
     kickCapture();
 }
@@ -123,6 +136,7 @@ void ScreenMirror::requestFrame()
             return;
         pendingRequests++;
         captureRequested = true;
+        captureFailed = false;
     }
     kickCapture();
 }
@@ -305,16 +319,31 @@ void ScreenMirror::onMuiRect(int16_t x, int16_t y, uint16_t w, uint16_t h, const
         }
         if (bytes > muiPoolBytes)
             return; // a rect larger than the whole pool can never be sent
-        if (muiCount >= MUI_MAX_RECTS || muiPoolUsed + bytes > muiPoolBytes) {
+        // ring of whole rects: live bytes run from the head rect to muiPoolTail, wrapping to 0 when the end is short
+        uint32_t at = muiCount ? muiPoolTail : 0;
+        bool fits = muiCount < MUI_MAX_RECTS;
+        if (fits && muiCount) {
+            uint32_t head = muiRects[muiHead].poolOffset;
+            // strict < keeps a full ring from looking empty (tail == head)
+            if (at > head) {
+                if (at + bytes > muiPoolBytes) {
+                    at = 0;
+                    fits = bytes < head;
+                }
+            } else {
+                fits = at + bytes < head;
+            }
+        }
+        if (!fits) {
             // consumer is behind: drop the backlog, not the newest pixels, and repaint once
             muiHead = muiCount = 0;
-            muiPoolUsed = 0;
+            muiPoolTail = 0;
             muiRectSendOffset = 0;
             if (muiRefresh)
                 muiRefresh();
             return;
         }
-        uint8_t *dst = muiPool + muiPoolUsed;
+        uint8_t *dst = muiPool + at;
         if (!muiByteSwapped && stride == w) {
             memcpy(dst, pixels, bytes);
         } else {
@@ -328,8 +357,8 @@ void ScreenMirror::onMuiRect(int16_t x, int16_t y, uint16_t w, uint16_t h, const
             }
         }
         MuiRect &r = muiRects[(muiHead + muiCount) % MUI_MAX_RECTS];
-        r = {(uint16_t)x, (uint16_t)y, w, h, bytes, muiPoolUsed, ++frameId};
-        muiPoolUsed += bytes;
+        r = {(uint16_t)x, (uint16_t)y, w, h, bytes, at, ++frameId};
+        muiPoolTail = at + bytes;
         muiCount++;
         // only empty -> non-empty needs a wakeup; available() keeps the client draining
         if (muiCount == 1)
@@ -368,7 +397,7 @@ bool ScreenMirror::copyMuiChunkLocked(uint32_t &clientFrameId, meshtastic_Displa
         muiCount--;
         muiRectSendOffset = 0;
         if (muiCount == 0)
-            muiPoolUsed = 0;
+            muiPoolTail = 0;
     }
     return true;
 }

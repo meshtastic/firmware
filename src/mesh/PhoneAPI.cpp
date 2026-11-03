@@ -1900,6 +1900,8 @@ bool PhoneAPI::handleScreenMirrorAdmin(const meshtastic_MeshPacket &p)
                 m->requestedAt = m->frameId;
                 m->framePending = true;
                 graphics::screenMirror.requestFrame();
+            } else {
+                graphics::screenMirror.retryCapture();
             }
         }
         return true;

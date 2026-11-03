@@ -32,6 +32,9 @@ class ScreenMirror
     void requestFrame();
     void frameRequestDone(const void *client);
 
+    /// A client re-asks while its request is still pending; clears a latched capture failure and captures again.
+    void retryCapture();
+
     /// Places a cursor after the current frame, so a new consumer only receives frames captured from now on.
     void cursorAtHead(uint32_t &clientFrameId, uint16_t &clientOffset);
 
@@ -98,7 +101,7 @@ class ScreenMirror
     uint16_t paletteDefaultOff = 0;
 
 #if HAS_MUI_MIRROR
-    // FIFO rect headers over a linear pixel pool, compacted whenever it drains; one consumer at a time.
+    // FIFO rect headers over a ring of whole-rect pixel runs; one consumer at a time.
     struct MuiRect {
         uint16_t x, y, w, h;
         uint32_t bytes;
@@ -113,7 +116,7 @@ class ScreenMirror
     uint8_t muiHead = 0;
     uint8_t muiCount = 0;
     uint8_t *muiPool = nullptr;
-    uint32_t muiPoolUsed = 0;
+    uint32_t muiPoolTail = 0;
     uint32_t muiRectSendOffset = 0;
     uint16_t muiPanelW = 0;
     uint16_t muiPanelH = 0;
