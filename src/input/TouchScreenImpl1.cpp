@@ -1,8 +1,10 @@
 #include "TouchScreenImpl1.h"
 #include "InputBroker.h"
 #include "PowerFSM.h"
+#include "UptimeClock.h"
 #include "configuration.h"
 #include "main.h"
+#include "mesh/Throttle.h"
 #include "modules/ExternalNotificationModule.h"
 #include "sleep.h"
 #include <cstring>
@@ -65,7 +67,7 @@ void TouchScreenImpl1::init()
     attachTouchInterrupt();
 #endif
 
-#if defined(ENABLE_TOUCH_INT) && defined(ARCH_ESP32)
+#if defined(ARCH_ESP32) && (defined(ENABLE_TOUCH_INT) || defined(MESHTASTIC_INCLUDE_INKHUD))
     // Detach/reattach our interrupt around light sleep, so sleep.cpp can configure the touch
     // pin as a wake source without our handler interfering.
     lsObserver.observe(&notifyLightSleep);
@@ -88,6 +90,10 @@ void TouchScreenImpl1::attachTouchInterrupt()
 // Detach our interrupt before light sleep; sleep.cpp configures its own wake-on-touch.
 int TouchScreenImpl1::beforeLightSleep(void *unused)
 {
+#ifdef MESHTASTIC_INCLUDE_INKHUD
+    suppressUntilRelease = true;
+    releasePending = false;
+#endif
 #ifdef ENABLE_TOUCH_INT
     detachInterrupt(SCREEN_TOUCH_INT);
 #endif
@@ -107,8 +113,23 @@ bool TouchScreenImpl1::getTouch(int16_t &x, int16_t &y)
     x = y = 0;
     const bool touched = _getTouch(&x, &y);
 #ifdef MESHTASTIC_INCLUDE_INKHUD
-    if (!NicheGraphics::InkHUD::InkHUD::getInstance()->isTouchEnabled() || suppressUntilRelease) {
-        suppressUntilRelease = touched;
+    if (!NicheGraphics::InkHUD::InkHUD::getInstance()->isTouchEnabled()) {
+        suppressUntilRelease = true;
+        releasePending = false;
+        resetTouchState();
+        return false;
+    }
+    if (suppressUntilRelease) {
+        if (touched)
+            releasePending = false;
+        else if (!releasePending) {
+            releaseStartedMs = Time::getMillis();
+            releasePending = true;
+        } else if (Throttle::hasElapsed(releaseStartedMs, TOUCH_RELEASE_GRACE_MS)) {
+            suppressUntilRelease = false;
+            releasePending = false;
+        }
+        setInterval(TOUCH_RELEASE_GRACE_MS);
         resetTouchState();
         return false;
     }

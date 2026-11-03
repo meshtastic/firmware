@@ -43,12 +43,6 @@ static_assert(TIME_LONG_PRESS >= 50, "TIME_LONG_PRESS must be at least 50ms: see
 #define TOUCH_POLL_INTERVAL_RELEASE_FAST TOUCH_POLL_INTERVAL_RELEASE
 #endif
 
-// Ignore very short "finger lifted" glitches from noisy touch controllers.
-// A release is only accepted once we've seen no-touch for at least this duration.
-#ifndef TOUCH_RELEASE_GRACE_MS
-#define TOUCH_RELEASE_GRACE_MS 35
-#endif
-
 // move a minimum distance over the screen to detect a "swipe"
 #ifndef TOUCH_THRESHOLD_X
 #define TOUCH_THRESHOLD_X 30

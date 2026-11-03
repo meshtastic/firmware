@@ -3,6 +3,8 @@
 #ifdef T_DECK_PRO
 
 #include "InkHUDInput.h"
+#include "Throttle.h"
+#include "UptimeClock.h"
 #include "input/TouchScreenImpl1.h"
 #include <CSE_CST328.h>
 #include <Wire.h>
@@ -67,6 +69,9 @@ bool read_cst3530_touch(int16_t *x, int16_t *y)
         LOG_DEBUG("CST3530 touch points invalid: %d", touch_points);
         return false;
     }
+    // A lift report can still contain one finger.
+    if ((buffer[8] >> 4) == 0)
+        return false;
 
     *x = buffer[4] + ((uint16_t)(buffer[7] & 0x0F) << 8);
     *y = buffer[5] + ((uint16_t)(buffer[7] & 0xF0) << 4);
@@ -82,9 +87,12 @@ bool readTouch(int16_t *x, int16_t *y)
     if (is_cst3530) {
         static bool touched = false;
         static int16_t lastX = 0, lastY = 0;
-        if (touch_isr) {
+        static uint32_t lastReadMs = 0;
+        // Recover a missed release without polling the controller while idle.
+        if (touch_isr || (touched && Throttle::hasElapsed(lastReadMs, 50))) {
             touch_isr = false;
             touched = read_cst3530_touch(&lastX, &lastY);
+            lastReadMs = Time::getMillis();
         }
         *x = lastX;
         *y = lastY;

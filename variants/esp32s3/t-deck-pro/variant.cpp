@@ -28,12 +28,18 @@ bool tDeckProIsV11()
         digitalWrite(PIN_VIBRATION, HIGH);
         delay(10);
         int deviceId = -1;
-        Wire.beginTransmission(DRV2605_ADDR);
-        if (Wire.endTransmission() == 0) {
+        for (uint8_t attempt = 0; attempt < 3; ++attempt) {
             Wire.beginTransmission(DRV2605_ADDR);
-            Wire.write(DRV2605_REG_STATUS);
-            if (Wire.endTransmission(false) == 0 && Wire.requestFrom(uint8_t(DRV2605_ADDR), size_t(1)) == 1)
-                deviceId = Wire.read() >> 5;
+            if (Wire.endTransmission() == 0) {
+                Wire.beginTransmission(DRV2605_ADDR);
+                Wire.write(DRV2605_REG_STATUS);
+                if (Wire.endTransmission(false) == 0 && Wire.requestFrom(uint8_t(DRV2605_ADDR), size_t(1)) == 1) {
+                    deviceId = Wire.read() >> 5;
+                    break;
+                }
+            }
+            if (attempt < 2)
+                delay(10);
         }
         const bool found = deviceId == 3 || deviceId == 7;
         if (found) {

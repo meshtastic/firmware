@@ -5,6 +5,10 @@
 #include "mesh/NodeDB.h"
 #include "time.h"
 
+#ifndef TOUCH_RELEASE_GRACE_MS
+#define TOUCH_RELEASE_GRACE_MS 35
+#endif
+
 typedef struct _TouchEvent {
     const char *source;
     char touchEvent;
