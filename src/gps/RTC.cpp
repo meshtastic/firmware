@@ -259,9 +259,12 @@ RTCSetResult readFromRTC()
             return RTCSetResultInvalidTime;
         }
         if (!rtc.getTime(t)) {
-            LOG_WARN("%s read failed%s", rtc.chipName(), rtc.lostPower() ? " (power lost, time not set)" : "");
+            LOG_WARN("%s read failed", rtc.chipName());
             return RTCSetResultInvalidTime;
         }
+        // Vendor firmware sets the clock without clearing VLF; a real power loss resets to 2000, caught by BUILD_EPOCH.
+        if (rtc.lostPower())
+            LOG_INFO("%s VLF set, time may be stale", rtc.chipName());
         tv.tv_sec = gm_mktime(&t);
         tv.tv_usec = 0;
         uint32_t printableEpoch = tv.tv_sec; // Print lib only supports 32 bit but time_t can be 64 bit on some platforms
@@ -269,7 +272,7 @@ RTCSetResult readFromRTC()
 #ifdef BUILD_EPOCH
         if (tv.tv_sec < BUILD_EPOCH) {
             if (Throttle::isWithinTimespanMs(lastTimeValidationWarning, TIME_VALIDATION_WARNING_INTERVAL_MS) == false) {
-                LOG_WARN("Ignore time (%ld) before build epoch (%ld)", printableEpoch, BUILD_EPOCH);
+                LOG_WARN("Ignore time (%lu) before build epoch (%lu)", printableEpoch, BUILD_EPOCH);
                 lastTimeValidationWarning = millis();
             }
             return RTCSetResultInvalidTime;
