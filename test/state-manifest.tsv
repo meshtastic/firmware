@@ -55,7 +55,7 @@ test_fuzz_decode	errors=20000..250000	fuzzes protobuf decode; every rejection lo
 test_fuzz_packets	writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto,warm.dat,Messages_default.msgs errors=5000..60000	drives decode of fuzzed packets through the real NodeDB and message store
 test_hop_scaling	writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto	constructs a NodeDB to hold the hop-distance fixtures
 test_hop_start_policy	writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto	constructs a NodeDB (isFromUs needs nodeDB->getNodeNum()), whose constructor persists a default set when the prefs directory is empty
-test_mesh_beacon	writes=module.proto	exercises the beacon's module-config save path
+test_mesh_beacon	writes=module.proto,transmit_history.dat	exercises the beacon's module-config save path; the broadcaster's interval tests stamp TransmitHistory, which persists the beacon send time
 test_mesh_module	writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto,warm.dat	module framework tests construct a NodeDB
 test_mqtt	writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto errors=1000..12000	constructs a NodeDB for node lookups in the MQTT paths
 test_muted_source	writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto	constructs a NodeDB (isToUs needs nodeDB->getNodeNum(), and the DM branch looks the sender up), whose constructor persists a default set when the prefs directory is empty
