@@ -127,7 +127,6 @@ AudioBoard board(AudioDriverES8311, pinsAudioBoardES8311);
 bool expanderReady = false;
 bool expanderInitialized = false;
 bool keypadReady = false;
-bool loraResetReady = false;
 bool earlyInitFailed = false;
 
 bool configureInput(uint8_t pin)
@@ -242,8 +241,7 @@ void earlyInitVariant()
     delay(100);
     ok &= configureOutput(EXP_PIN_PA_PWR_EN, true);
     delay(10);
-    loraResetReady = configureOutput(EXP_PIN_LORA_RESET, true);
-    ok &= loraResetReady;
+    ok &= configureOutput(EXP_PIN_LORA_RESET, true);
 
     // ST7789P3 power-on and reset sequence (mirrors bsp_lcd_hard_reset in BSP demo).
     ok &= configureOutput(EXP_PIN_LCD_PWR_EN, true);
@@ -254,11 +252,9 @@ void earlyInitVariant()
     delay(120);                                           // allow ST7789P3 to complete internal initialization
 
     // Match demo LR20xx reset sequence on expander pin 22.
-    loraResetReady &= ioExpander.digitalWrite(EXP_PIN_LORA_RESET, false);
-    ok &= loraResetReady;
+    ok &= ioExpander.digitalWrite(EXP_PIN_LORA_RESET, false);
     delay(10);
-    loraResetReady &= ioExpander.digitalWrite(EXP_PIN_LORA_RESET, true);
-    ok &= loraResetReady;
+    ok &= ioExpander.digitalWrite(EXP_PIN_LORA_RESET, true);
     delay(10);
 
     // GNSS sequence from demo firmware.
@@ -313,17 +309,18 @@ void lateInitVariant()
     startPowerButtonMonitor();
 }
 
-extern "C" void variant_pre_radio_reset(void)
+extern "C" bool variant_pre_radio_reset(void)
 {
-    if (!loraResetReady) {
-        return;
+    if (!expanderInitialized || !configureOutput(EXP_PIN_LORA_RESET, true)) {
+        return false;
     }
 
-    // Match SenseCAP demo: pulse LR20xx reset through expander right before radio init.
-    ioExpander.digitalWrite(EXP_PIN_LORA_RESET, false);
+    // Reapply output mode before each pulse in case the startup write failed.
+    const bool resetAsserted = ioExpander.digitalWrite(EXP_PIN_LORA_RESET, false);
     delay(10);
-    ioExpander.digitalWrite(EXP_PIN_LORA_RESET, true);
+    const bool resetReleased = ioExpander.digitalWrite(EXP_PIN_LORA_RESET, true);
     delay(10);
+    return resetAsserted && resetReleased;
 }
 
 // Called by cpuDeepSleep() right before esp_deep_sleep_start(); earlyInitVariant() restores the rails on wake.
