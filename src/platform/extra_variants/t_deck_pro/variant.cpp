@@ -29,9 +29,11 @@ static CSE_CST328 &touchPanel()
 static bool is_cst3530 = false;
 volatile bool touch_isr = false;
 #define CST3530_ADDR 0x1A
+constexpr uint32_t CST3530_FAIL_HOLD_MS = 100;
 
-bool read_cst3530_touch(int16_t *x, int16_t *y)
+bool read_cst3530_touch(int16_t *x, int16_t *y, bool &readSucceeded)
 {
+    readSucceeded = false;
     uint8_t buffer[9] = {0};
     uint8_t r_cmd[] = {0xD0, 0x07, 0x00, 0x00};
     uint8_t clear_cmd[] = {0xD0, 0x00, 0x02, 0xAB};
@@ -53,6 +55,7 @@ bool read_cst3530_touch(int16_t *x, int16_t *y)
         LOG_DEBUG("CST3530 read bytes error: %d (expect 9)", actual_read);
         return false;
     }
+    readSucceeded = true;
 
     // Acknowledge release and malformed reports too, so the IRQ can assert again.
     Wire.beginTransmission(CST3530_ADDR);
@@ -88,11 +91,19 @@ bool readTouch(int16_t *x, int16_t *y)
         static bool touched = false;
         static int16_t lastX = 0, lastY = 0;
         static uint32_t lastReadMs = 0;
+        static uint32_t lastGoodReadMs = 0;
         // Recover a missed release without polling the controller while idle.
         if (touch_isr || (touched && Throttle::hasElapsed(lastReadMs, 50))) {
             touch_isr = false;
-            touched = read_cst3530_touch(&lastX, &lastY);
+            bool readSucceeded;
+            const bool contact = read_cst3530_touch(&lastX, &lastY, readSucceeded);
             lastReadMs = Time::getMillis();
+            if (readSucceeded) {
+                touched = contact;
+                lastGoodReadMs = lastReadMs;
+            } else if (touched && Throttle::hasElapsed(lastGoodReadMs, CST3530_FAIL_HOLD_MS)) {
+                touched = false;
+            }
         }
         *x = lastX;
         *y = lastY;
