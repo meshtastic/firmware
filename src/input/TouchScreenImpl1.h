@@ -18,6 +18,9 @@ class TouchScreenImpl1 : public TouchScreenBase
     void attachTouchInterrupt();
 
     bool (*_getTouch)(int16_t *, int16_t *);
+#ifdef MESHTASTIC_INCLUDE_INKHUD
+    bool suppressUntilRelease = false;
+#endif
 
 #ifdef ARCH_ESP32
     // Detach the touch interrupt before light sleep (so sleep.cpp can own the wake config),

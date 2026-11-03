@@ -424,6 +424,9 @@ void t5BacklightHandleUserInput()
 
 void t5TouchSetForcedByTimeout(bool forced)
 {
+#ifdef MESHTASTIC_INCLUDE_INKHUD
+    NicheGraphics::InkHUD::InkHUD::getInstance()->setTouchTimedOut(forced);
+#endif
     if (touchForcedByTimeout == forced) {
         return;
     }

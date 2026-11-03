@@ -104,7 +104,16 @@ int TouchScreenImpl1::afterLightSleep(esp_sleep_wakeup_cause_t cause)
 
 bool TouchScreenImpl1::getTouch(int16_t &x, int16_t &y)
 {
-    return _getTouch(&x, &y);
+    x = y = 0;
+    const bool touched = _getTouch(&x, &y);
+#ifdef MESHTASTIC_INCLUDE_INKHUD
+    if (!NicheGraphics::InkHUD::InkHUD::getInstance()->isTouchEnabled() || suppressUntilRelease) {
+        suppressUntilRelease = touched;
+        resetTouchState();
+        return false;
+    }
+#endif
+    return touched;
 }
 
 bool TouchScreenImpl1::fastTapModeEnabled() const
@@ -141,6 +150,10 @@ bool TouchScreenImpl1::longPressEnabled() const
  */
 void TouchScreenImpl1::onEvent(const TouchEvent &event)
 {
+#ifdef MESHTASTIC_INCLUDE_INKHUD
+    if (!NicheGraphics::InkHUD::InkHUD::getInstance()->isTouchEnabled())
+        return;
+#endif
     InputEvent e = {};
     e.source = event.source;
     e.kbchar = 0;

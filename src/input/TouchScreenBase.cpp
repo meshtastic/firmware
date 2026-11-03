@@ -2,6 +2,10 @@
 #include "main.h"
 #include "mesh/Throttle.h"
 
+#if defined(T_DECK_PRO) && defined(MESHTASTIC_INCLUDE_INKHUD)
+void tDeckProTouchFeedback();
+#endif
+
 #if defined(RAK14014) && !defined(MESHTASTIC_EXCLUDE_CANNEDMESSAGES)
 #include "modules/CannedMessageModule.h"
 #endif
@@ -70,6 +74,15 @@ void TouchScreenBase::init(bool hasTouch)
         disable();
         this->setInterval(UINT_MAX);
     }
+}
+
+void TouchScreenBase::resetTouchState()
+{
+    _state = TOUCH_EVENT_CLEARED;
+    _action = TOUCH_ACTION_NONE;
+    _touchedOld = false;
+    _tapped = false;
+    _longPressSuppressed = false;
 }
 
 int32_t TouchScreenBase::runOnce()
@@ -209,6 +222,8 @@ void TouchScreenBase::hapticFeedback()
     drv.setWaveform(0, 75);
     drv.setWaveform(1, 0); // end waveform
     drv.go();
+#elif defined(T_DECK_PRO) && defined(MESHTASTIC_INCLUDE_INKHUD)
+    tDeckProTouchFeedback();
 #endif
 }
 
