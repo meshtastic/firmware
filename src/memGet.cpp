@@ -54,11 +54,13 @@ static bool walkNrf52FreeList(uint32_t &largest)
     largest = 0;
     bool intact = true;
     uint32_t chunks = 0;
+    // No valid list holds more chunks than fit in the heap at the 8 B minimum, so passing that means a loop
+    const uint32_t maxChunks = (uint32_t)(__HeapLimit - __HeapBase) / 8;
     vTaskSuspendAll();
     for (const NanoFreeChunk *c = __malloc_free_list; c; c = c->next) {
         const char *p = reinterpret_cast<const char *>(c);
         if (p < __HeapBase || p >= __HeapLimit || (reinterpret_cast<uintptr_t>(p) & 3) || c->size <= 0 ||
-            c->size > __HeapLimit - p || ++chunks > 2048) {
+            c->size > __HeapLimit - p || ++chunks > maxChunks) {
             intact = false;
             break;
         }
