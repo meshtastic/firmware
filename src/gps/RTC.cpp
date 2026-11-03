@@ -258,13 +258,17 @@ RTCSetResult readFromRTC()
             LOG_WARN("%s not responding at 0x%02X", rtc.chipName(), YSN8900E_RTC);
             return RTCSetResultInvalidTime;
         }
+        if (rtc.lostPower()) {
+            if (!Throttle::isWithinTimespanMs(lastTimeValidationWarning, TIME_VALIDATION_WARNING_INTERVAL_MS)) {
+                LOG_WARN("%s VLF set or status read failed, ignoring calendar", rtc.chipName());
+                lastTimeValidationWarning = millis();
+            }
+            return RTCSetResultInvalidTime;
+        }
         if (!rtc.getTime(t)) {
             LOG_WARN("%s read failed", rtc.chipName());
             return RTCSetResultInvalidTime;
         }
-        // Vendor firmware sets the clock without clearing VLF; a real power loss resets to 2000, caught by BUILD_EPOCH.
-        if (rtc.lostPower())
-            LOG_INFO("%s VLF set, time may be stale", rtc.chipName());
         tv.tv_sec = gm_mktime(&t);
         tv.tv_usec = 0;
         uint32_t printableEpoch = tv.tv_sec; // Print lib only supports 32 bit but time_t can be 64 bit on some platforms
