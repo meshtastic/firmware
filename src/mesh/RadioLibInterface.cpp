@@ -45,7 +45,7 @@ RadioLibInterface::RadioLibInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE c
 {
     instance = this;
 #if RADIO_TX_PRESTAGE
-    LOG_INFO("RADIO_TX_PRESTAGE: TX payload written before the channel scan");
+    LOG_INFO("RADIO_TX_PRESTAGE: TX payload written during the channel scan");
 #endif
 
 #ifdef MESHTASTIC_RX_READOUT_TASK
@@ -1456,8 +1456,12 @@ int16_t RadioLibInterface::launchTransmit(size_t numbytes)
     if (prestaged) {
         // startTransmit() less the buffer write: no payload pointer tells stageMode() the buffer already holds it
         RadioModeConfig_t cfg = {.transmit = {.data = nullptr, .len = numbytes, .addr = 0}};
-        const int16_t res = iface->stageMode(RADIOLIB_RADIO_MODE_TX, &cfg);
-        return res == RADIOLIB_ERR_NONE ? iface->launchMode() : res;
+        int16_t res = iface->stageMode(RADIOLIB_RADIO_MODE_TX, &cfg);
+        if (res == RADIOLIB_ERR_NONE)
+            res = iface->launchMode();
+        if (txPrestageLateUs)
+            LOG_DEBUG("TX prestage outlasted the CAD: %u us", (unsigned)txPrestageLateUs);
+        return res;
     }
 #endif
     return iface->startTransmit((uint8_t *)&radioBuffer, numbytes);
@@ -1472,11 +1476,34 @@ void RadioLibInterface::prestageTxBuffer()
         return;
     const size_t numbytes = encodeRadioBuffer(scanForTx);
     txPrestagedLen = 0;
-    if (numbytes == 0 || iface->writeTxBuffer((uint8_t *)&radioBuffer, numbytes) != RADIOLIB_ERR_NONE)
+    if (numbytes == 0)
         return;
+    const int16_t res = iface->writeTxBuffer((uint8_t *)&radioBuffer, numbytes);
+    if (res != RADIOLIB_ERR_NONE) {
+        LOG_WARN("TX prestage write during CAD failed %s%d, the launch writes it", radioLibErr, res);
+        return;
+    }
     txPrestagedLen = numbytes;
     txPrestagedId = scanForTx->id;
     txPrestageLive = true;
+}
+
+int16_t RadioLibInterface::scanChannelWritingTx(const ChannelScanConfig_t &cfg)
+{
+    // As the drivers' scanChannel(cfg): start the CAD, wait for the pin, read the verdict; the write runs in between
+    int16_t res = iface->startChannelScan(cfg);
+    if (res != RADIOLIB_ERR_NONE)
+        return res;
+    const RadioLibTime_t writeStart = module.hal->micros();
+    prestageTxBuffer();
+    // Logged by the launch, once on air, so a slow log adds no deaf time here
+    txPrestageLateUs = module.hal->digitalRead(module.getIrq()) ? (uint32_t)(module.hal->micros() - writeStart) : 0;
+    while (!module.hal->digitalRead(module.getIrq()))
+        module.hal->yield();
+    res = iface->getChannelScanResult();
+    if (res != RADIOLIB_CHANNEL_FREE)
+        dropTxPrestage(); // no TX follows, and a detection's RX may overwrite the buffer
+    return res;
 }
 #endif
 
