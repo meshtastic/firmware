@@ -28,6 +28,7 @@ class NodeDBTestShim : public NodeDB
 {
   public:
     bool saveDatabase() { return saveNodeDatabaseToDisk(); }
+    size_t satelliteBytes() { return satelliteBytesLocked(); }
 };
 
 namespace
@@ -113,6 +114,15 @@ meshtastic_StatusMessage makeStatus(const char *text)
     meshtastic_StatusMessage st = meshtastic_StatusMessage_init_zero;
     snprintf(st.status, sizeof(st.status), "%s", text);
     return st;
+}
+
+meshtastic_Telemetry makeEnvTelemetry(float temperature)
+{
+    meshtastic_Telemetry t = meshtastic_Telemetry_init_zero;
+    t.which_variant = meshtastic_Telemetry_environment_metrics_tag;
+    t.variant.environment_metrics.has_temperature = true;
+    t.variant.environment_metrics.temperature = temperature;
+    return t;
 }
 
 /// A header row as a saved nodes.proto carries it. HAS_USER matters: cleanupMeshDB
@@ -486,6 +496,8 @@ static void test_satelliteCap_evictionPolicy(void)
         TEST_IGNORE_MESSAGE("hot cap too small to own a full satellite map on this build");
 
     clearAllSatellites();
+    const size_t cap = MAX_SATELLITE_NODES;
+    const size_t low = cap - 2;
     TEST_ASSERT_EQUAL_UINT(0, (unsigned)nodeDB->snapshotStatusNodeNums(0).size());
 
     const NodeNum self = nodeDB->getNodeNum();
@@ -494,42 +506,70 @@ static void test_satelliteCap_evictionPolicy(void)
     selfRow->last_heard = 0; // stalest possible: only the identity exemption can protect it
     nodeDB->setNodeStatus(self, makeStatus("self"));
 
-    // Fill to exactly the cap with hot-owned entries; owner i heard at 1000+i.
-    const size_t owners = (size_t)MAX_SATELLITE_NODES - 1;
+    // Fill to exactly the hard cap; owner i heard at 1000+i.
     const NodeNum ownerBase = 0x60000000u;
-    for (size_t i = 0; i < owners; i++) {
+    for (size_t i = 0; i < cap - 1; i++) {
         meshtastic_NodeInfoLite *info = nodeDB->getOrCreateMeshNode(ownerBase + i);
         TEST_ASSERT_NOT_NULL(info);
         info->last_heard = 1000 + (uint32_t)i;
         nodeDB->setNodeStatus(ownerBase + i, makeStatus("owned"));
     }
-    TEST_ASSERT_EQUAL_UINT((unsigned)MAX_SATELLITE_NODES, (unsigned)nodeDB->snapshotStatusNodeNums(0).size());
+    TEST_ASSERT_EQUAL_UINT((unsigned)cap, (unsigned)nodeDB->snapshotStatusNodeNums(0).size());
 
-    // (a) At cap, a new entry evicts the stalest-by-owner victim - never self,
-    // even though self ranks stalest of all.
-    const NodeNum orphan1 = 0x60FFFF01u;
-    nodeDB->setNodeStatus(orphan1, makeStatus("new"));
+    // Trigger: one past the cap trims to the low-water mark (cap - 2), not the cap.
+    const NodeNum newcomer1 = 0x60FFFF01u;
+    meshtastic_NodeInfoLite *n1 = nodeDB->getOrCreateMeshNode(newcomer1);
+    TEST_ASSERT_NOT_NULL(n1);
+    n1->last_heard = 5000;
+    nodeDB->setNodeStatus(newcomer1, makeStatus("new"));
+    TEST_ASSERT_EQUAL_UINT((unsigned)low, (unsigned)nodeDB->snapshotStatusNodeNums(0).size());
     TEST_ASSERT_TRUE_MESSAGE(db->hasNodeStatus(self), "self must never be evicted");
     TEST_ASSERT_FALSE_MESSAGE(db->hasNodeStatus(ownerBase + 0), "stalest owner must be the victim");
-    TEST_ASSERT_TRUE(db->hasNodeStatus(ownerBase + 1));
-    TEST_ASSERT_TRUE(db->hasNodeStatus(orphan1));
-    TEST_ASSERT_EQUAL_UINT((unsigned)MAX_SATELLITE_NODES, (unsigned)nodeDB->snapshotStatusNodeNums(0).size());
+    TEST_ASSERT_FALSE(db->hasNodeStatus(ownerBase + 1));
+    TEST_ASSERT_FALSE(db->hasNodeStatus(ownerBase + 2));
+    TEST_ASSERT_TRUE(db->hasNodeStatus(ownerBase + 3));
+    TEST_ASSERT_TRUE(db->hasNodeStatus(newcomer1));
 
-    // (b) Orphans (owner absent from the hot store) are evicted before any owner,
-    // however stale the owner: orphan1 (recency 0) loses to owner1 (1001).
-    const NodeNum orphan2 = 0x60FFFF02u;
-    nodeDB->setNodeStatus(orphan2, makeStatus("new2"));
-    TEST_ASSERT_FALSE_MESSAGE(db->hasNodeStatus(orphan1), "orphan must be evicted before any owned entry");
-    TEST_ASSERT_TRUE(db->hasNodeStatus(ownerBase + 1));
-    TEST_ASSERT_TRUE(db->hasNodeStatus(orphan2));
-    TEST_ASSERT_EQUAL_UINT((unsigned)MAX_SATELLITE_NODES, (unsigned)nodeDB->snapshotStatusNodeNums(0).size());
+    // The slack absorbs the next two inserts without another eviction.
+    const NodeNum newcomer2 = 0x60FFFF02u, newcomer3 = 0x60FFFF03u;
+    for (NodeNum n : {newcomer2, newcomer3}) {
+        meshtastic_NodeInfoLite *info = nodeDB->getOrCreateMeshNode(n);
+        TEST_ASSERT_NOT_NULL(info);
+        info->last_heard = 5001;
+        nodeDB->setNodeStatus(n, makeStatus("slack"));
+    }
+    TEST_ASSERT_EQUAL_UINT((unsigned)cap, (unsigned)nodeDB->snapshotStatusNodeNums(0).size());
+    TEST_ASSERT_TRUE_MESSAGE(db->hasNodeStatus(ownerBase + 3), "slack inserts must not evict");
+    TEST_ASSERT_TRUE(db->hasNodeStatus(newcomer2));
+    TEST_ASSERT_TRUE(db->hasNodeStatus(newcomer3));
 
-    // (c) Updating an existing key at cap must not evict anything.
-    nodeDB->setNodeStatus(ownerBase + 1, makeStatus("updated"));
-    TEST_ASSERT_EQUAL_UINT((unsigned)MAX_SATELLITE_NODES, (unsigned)nodeDB->snapshotStatusNodeNums(0).size());
-    TEST_ASSERT_TRUE_MESSAGE(db->hasNodeStatus(orphan2), "update-in-place must not trigger eviction");
+    // The just-inserted orphan is exempt; the trigger evicts the stalest owners instead.
+    const NodeNum orphan = 0x60FFFF04u;
+    nodeDB->setNodeStatus(orphan, makeStatus("orphan"));
+    TEST_ASSERT_EQUAL_UINT((unsigned)low, (unsigned)nodeDB->snapshotStatusNodeNums(0).size());
+    TEST_ASSERT_TRUE(db->hasNodeStatus(orphan));
+    TEST_ASSERT_FALSE_MESSAGE(db->hasNodeStatus(ownerBase + 3), "stalest owner must be the victim");
+    TEST_ASSERT_TRUE(db->hasNodeStatus(self));
+
+    // Refill the slack; the next trigger drops the now-non-incoming orphan first.
+    const NodeNum newcomer4 = 0x60FFFF05u, newcomer5 = 0x60FFFF06u, newcomer6 = 0x60FFFF07u;
+    for (NodeNum n : {newcomer4, newcomer5}) {
+        meshtastic_NodeInfoLite *row = nodeDB->getOrCreateMeshNode(n);
+        TEST_ASSERT_NOT_NULL(row);
+        row->last_heard = 5002;
+        nodeDB->setNodeStatus(n, makeStatus("slack2"));
+    }
+    TEST_ASSERT_EQUAL_UINT((unsigned)cap, (unsigned)nodeDB->snapshotStatusNodeNums(0).size());
+    nodeDB->setNodeStatus(newcomer6, makeStatus("trigger"));
+    TEST_ASSERT_EQUAL_UINT((unsigned)low, (unsigned)nodeDB->snapshotStatusNodeNums(0).size());
+    TEST_ASSERT_FALSE_MESSAGE(db->hasNodeStatus(orphan), "orphan must be evicted before any owner once it is not incoming");
+    TEST_ASSERT_TRUE(db->hasNodeStatus(newcomer6));
+
+    // Updating an existing key does not trigger any eviction.
+    nodeDB->setNodeStatus(ownerBase + 8, makeStatus("updated"));
+    TEST_ASSERT_EQUAL_UINT((unsigned)low, (unsigned)nodeDB->snapshotStatusNodeNums(0).size());
     meshtastic_StatusMessage got;
-    TEST_ASSERT_TRUE(db->copyNodeStatus(ownerBase + 1, got));
+    TEST_ASSERT_TRUE(db->copyNodeStatus(ownerBase + 8, got));
     TEST_ASSERT_EQUAL_STRING("updated", got.status);
 }
 #endif // !MESHTASTIC_EXCLUDE_STATUSDB
@@ -558,9 +598,11 @@ static void test_bootTrim_overCapSatellitesHealedOnDisk(void)
 
     coldBoot();
 
-    // Trimmed in RAM to exactly the cap, stalest owner first.
-    TEST_ASSERT_EQUAL_UINT((unsigned)MAX_SATELLITE_NODES, (unsigned)nodeDB->snapshotPositionNodeNums(0).size());
-    TEST_ASSERT_TRUE(db->hasNodePosition(base + (uint32_t)MAX_SATELLITE_NODES + (uint32_t)overBy - 1));
+    // Decode admits the first hard-cap entries; self-care then trims to the low-water mark.
+    const size_t low = MAX_SATELLITE_NODES - 2;
+    TEST_ASSERT_EQUAL_UINT((unsigned)low, (unsigned)nodeDB->snapshotPositionNodeNums(0).size());
+    TEST_ASSERT_TRUE(db->hasNodePosition(base + (uint32_t)MAX_SATELLITE_NODES - 1));
+    TEST_ASSERT_FALSE(db->hasNodePosition(base + (uint32_t)MAX_SATELLITE_NODES));
     TEST_ASSERT_FALSE(db->hasNodePosition(base));
 
     // And healed on disk: nodeDBSelfCare rewrote the store once during the boot.
@@ -570,8 +612,7 @@ static void test_bootTrim_overCapSatellitesHealedOnDisk(void)
     for (const auto &e : reloaded.positions)
         if (e.has_position)
             persisted++;
-    TEST_ASSERT_EQUAL_UINT_MESSAGE((unsigned)MAX_SATELLITE_NODES, (unsigned)persisted,
-                                   "boot must rewrite the over-cap store trimmed");
+    TEST_ASSERT_EQUAL_UINT_MESSAGE((unsigned)low, (unsigned)persisted, "boot must rewrite the over-cap store trimmed");
 }
 #endif // !MESHTASTIC_EXCLUDE_POSITIONDB
 
@@ -627,6 +668,90 @@ static void test_bootHeal_unownedSatellitesDropped(void)
     TEST_ASSERT_EQUAL_UINT_MESSAGE((unsigned)owned, (unsigned)persisted, "boot must rewrite the store without the orphans");
 }
 #endif // !MESHTASTIC_EXCLUDE_POSITIONDB
+
+// --- Aggregate byte budget and two-entry slack ---
+
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTDB
+static void test_satelliteBudget_aggregateSlack(void)
+{
+    clearAllSatellites();
+    const size_t originalBudget = NodeDB::satelliteTestBudgetBytes();
+
+    const NodeNum base = 0x64000000u;
+    meshtastic_NodeInfoLite *info = nodeDB->getOrCreateMeshNode(base);
+    TEST_ASSERT_NOT_NULL(info);
+    info->last_heard = 1000;
+    nodeDB->updateTelemetry(base, makeEnvTelemetry(20.0f));
+    const size_t entry = db->satelliteBytes();
+    TEST_ASSERT_GREATER_THAN_UINT(0, (unsigned)entry);
+
+    const size_t budget = entry * 10;
+    NodeDB::setSatelliteTestBudget(budget);
+    clearAllSatellites();
+
+    // Ten entries fit, the eleventh trims to budget - two max entries.
+    for (size_t i = 0; i < 10; i++) {
+        meshtastic_NodeInfoLite *row = nodeDB->getOrCreateMeshNode(base + (uint32_t)i);
+        TEST_ASSERT_NOT_NULL(row);
+        row->last_heard = 1000 + (uint32_t)i;
+        nodeDB->updateTelemetry(base + (uint32_t)i, makeEnvTelemetry(20.0f + (float)i));
+    }
+    TEST_ASSERT_EQUAL_UINT((unsigned)budget, (unsigned)db->satelliteBytes());
+    nodeDB->updateTelemetry(base + 10, makeEnvTelemetry(30.0f));
+    TEST_ASSERT_EQUAL_UINT((unsigned)(budget - 2 * entry), (unsigned)db->satelliteBytes());
+
+    // The next two inserts occupy the slack without another trim.
+    nodeDB->updateTelemetry(base + 11, makeEnvTelemetry(31.0f));
+    nodeDB->updateTelemetry(base + 12, makeEnvTelemetry(32.0f));
+    TEST_ASSERT_EQUAL_UINT((unsigned)budget, (unsigned)db->satelliteBytes());
+    TEST_ASSERT_TRUE(db->hasNodeEnvironment(base + 12));
+
+    // One more crosses the limit and trims back to the low-water mark.
+    nodeDB->updateTelemetry(base + 13, makeEnvTelemetry(33.0f));
+    TEST_ASSERT_EQUAL_UINT((unsigned)(budget - 2 * entry), (unsigned)db->satelliteBytes());
+
+    NodeDB::setSatelliteTestBudget(originalBudget);
+    clearAllSatellites();
+}
+#endif // !MESHTASTIC_EXCLUDE_ENVIRONMENTDB
+
+// --- Low-heap shrink ---
+
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTDB
+static void test_satelliteBudget_lowHeapShrinks(void)
+{
+    clearAllSatellites();
+    const size_t originalBudget = NodeDB::satelliteTestBudgetBytes();
+    const NodeNum base = 0x65000000u;
+
+    meshtastic_NodeInfoLite *info = nodeDB->getOrCreateMeshNode(base);
+    TEST_ASSERT_NOT_NULL(info);
+    info->last_heard = 1000;
+    nodeDB->updateTelemetry(base, makeEnvTelemetry(20.0f));
+    const size_t entry = db->satelliteBytes();
+
+    NodeDB::setSatelliteTestBudget(entry * 20);
+    for (size_t i = 1; i < 10; i++) {
+        meshtastic_NodeInfoLite *row = nodeDB->getOrCreateMeshNode(base + (uint32_t)i);
+        TEST_ASSERT_NOT_NULL(row);
+        row->last_heard = 1000 + (uint32_t)i;
+        nodeDB->updateTelemetry(base + (uint32_t)i, makeEnvTelemetry(20.0f + (float)i));
+    }
+    const size_t before = db->satelliteBytes();
+
+    // Below the floor: the next insert trims by the heap deficit, not just the slack.
+    NodeDB::setSatelliteTestFreeHeap(1000);
+    meshtastic_NodeInfoLite *row = nodeDB->getOrCreateMeshNode(base + 10);
+    TEST_ASSERT_NOT_NULL(row);
+    row->last_heard = 2000;
+    nodeDB->updateTelemetry(base + 10, makeEnvTelemetry(30.0f));
+    TEST_ASSERT_LESS_THAN_UINT((unsigned)before, (unsigned)db->satelliteBytes());
+
+    NodeDB::setSatelliteTestFreeHeap((size_t)-1);
+    NodeDB::setSatelliteTestBudget(originalBudget);
+    clearAllSatellites();
+}
+#endif // !MESHTASTIC_EXCLUDE_ENVIRONMENTDB
 
 // --- resetNodes(keepFavorites): no ghost rows above numMeshNodes ---
 
@@ -738,6 +863,10 @@ NDBR_TEST_ENTRY void setup()
 #if !MESHTASTIC_EXCLUDE_POSITIONDB
     RUN_TEST(test_bootTrim_overCapSatellitesHealedOnDisk);
     RUN_TEST(test_bootHeal_unownedSatellitesDropped);
+#endif
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTDB
+    RUN_TEST(test_satelliteBudget_aggregateSlack);
+    RUN_TEST(test_satelliteBudget_lowHeapShrinks);
 #endif
 
     printf("\n=== resetNodes ghost rows ===\n");
