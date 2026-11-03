@@ -110,6 +110,11 @@ void getMacAddr(uint8_t *dmac)
     dmac[0] = src.id[2];
 }
 
+bool getBluetoothAddr(uint8_t *addr)
+{
+    return false;
+}
+
 bool getDeviceId(uint8_t *deviceId)
 {
     // RP2040/RP2350: 64-bit unique board id (flash serial / OTP) in bytes 0-7 (rest stay zero).

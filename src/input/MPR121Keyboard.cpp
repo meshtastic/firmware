@@ -286,10 +286,10 @@ void MPR121Keyboard::pressed(uint16_t keyRegister)
         return;
     }
     if (keyCount(keyRegister) != 1) {
-        LOG_DEBUG("Multipress");
+        LOG_INPUT("Multipress");
         return;
     } else {
-        LOG_DEBUG("Pressed");
+        LOG_INPUT("Pressed");
     }
     uint16_t buttonState = keyRegister & _KEY_MASK;
     uint8_t next_pin = 0;
@@ -299,7 +299,7 @@ void MPR121Keyboard::pressed(uint16_t keyRegister)
         }
     }
     uint8_t next_key = MPR121_KeyMap[next_pin];
-    LOG_DEBUG("MPR121 Pin: %i Key: %i", next_pin, next_key);
+    LOG_INPUT("MPR121 Pin: %i Key: %i", next_pin, next_key);
     uint32_t now = millis();
     int32_t tap_interval = now - last_tap;
     if (tap_interval < 0) {
@@ -327,7 +327,7 @@ void MPR121Keyboard::held(uint16_t keyRegister)
     if (keyCount(keyRegister) != 1) {
         return;
     }
-    LOG_DEBUG("Held");
+    LOG_INPUT("Held");
     uint16_t buttonState = keyRegister & _KEY_MASK;
     uint8_t next_key = 0;
     for (uint8_t i = 0; i < 12; ++i) {
@@ -348,7 +348,7 @@ void MPR121Keyboard::held(uint16_t keyRegister)
         state = HeldLong; // heldlong will allow this function to still fire, but prevent a "release"
         queueEvent(MPR121_LongPressMap[last_key]);
         last_tap = now;
-        LOG_DEBUG("Long Press Key: %i Map: %i", last_key, MPR121_LongPressMap[last_key]);
+        LOG_INPUT("Long Press Key: %i Map: %i", last_key, MPR121_LongPressMap[last_key]);
     }
     return;
 }
@@ -364,13 +364,13 @@ void MPR121Keyboard::released()
         state = Idle;
         return;
     }
-    LOG_DEBUG("Released");
+    LOG_INPUT("Released");
     if (char_idx > 0 && TapMod[last_key] > 1) {
         queueEvent(MPR121_BSP);
-        LOG_DEBUG("Multi Press, Backspace");
+        LOG_INPUT("Multi Press, Backspace");
     }
     queueEvent(MPR121_TapMap[last_key][(char_idx % TapMod[last_key])]);
-    LOG_DEBUG("Key Press: %i Index:%i if %i Map: %i", last_key, char_idx, TapMod[last_key],
+    LOG_INPUT("Key Press: %i Index:%i if %i Map: %i", last_key, char_idx, TapMod[last_key],
               MPR121_TapMap[last_key][(char_idx % TapMod[last_key])]);
 }
 

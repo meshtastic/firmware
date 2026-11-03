@@ -96,6 +96,18 @@ extern MemGet memGet;
 #define LOG_DEBUG_RADIO(...) ((void)0)
 #endif
 
+// INPUT_DEBUG=1 logs every input event: button presses and holds, rotary and trackball motion,
+// touch taps and swipes, keypad keys, and the events the screen and modules receive. Off by default
+// because it floods the console and puts typed keystrokes in the log.
+#ifndef INPUT_DEBUG
+#define INPUT_DEBUG 0
+#endif
+#if INPUT_DEBUG
+#define LOG_INPUT(...) LOG_DEBUG(__VA_ARGS__)
+#else
+#define LOG_INPUT(...) ((void)0)
+#endif
+
 #if defined(DEBUG_HEAP)
 #define LOG_HEAP(...) DEBUG_PORT.log(MESHTASTIC_LOG_LEVEL_HEAP, __VA_ARGS__)
 
