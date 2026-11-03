@@ -60,6 +60,11 @@ class TestLr2021Interface : public LR2021Interface
 
     // init() would set the SF via begin(); RadioLib's default det_peak lookup needs one (see lr2021SetSf).
     void setSpreadingFactor(uint8_t sf) { TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_NONE, lora.setSpreadingFactor(sf)); }
+
+    // begin() also tunes before it writes the SF, and that ordering is load-bearing: the SF write ends
+    // in the DC-DC workaround's closing setFrequency(freqMHz), so without a frequency it fails with
+    // INVALID_FREQUENCY (see lr2021Tune).
+    void tune(RecordingHal &hal) { lr2021Tune(hal, lora); }
 };
 
 // One interface for the whole suite, never destroyed: the constructor registers a worker thread and
@@ -78,6 +83,7 @@ static TestLr2021Interface &lr20x0Interface(RecordingHal &hal)
     hal.reply(op16(RADIOLIB_LR2021_CMD_GET_PACKET_TYPE), 0x04, {0x04, RADIOLIB_LR2021_PACKET_TYPE_LORA}, 1);
     lr2021ModelCadExitCheck(hal);
     hal.irqPin = LR20X0_TEST_IRQ_PIN;
+    iface->tune(hal);
     iface->setSpreadingFactor(9);
     hal.transactions.clear();
     return *iface;
