@@ -15,6 +15,7 @@
 #include <assert.h>
 #include <ble_gap.h>
 #include <memory.h>
+#include <nrf_sdm.h>
 #include <nrfx_wdt.c>
 #include <nrfx_wdt.h>
 #include <stdio.h>
@@ -208,6 +209,20 @@ void getMacAddr(uint8_t *dmac)
     dmac[2] = src[3];
     dmac[1] = src[4];
     dmac[0] = src[5] | 0xc0; // MSB high two bits get set elsewhere in the bluetooth stack
+}
+
+bool getBluetoothAddr(uint8_t *addr)
+{
+    uint8_t sdEnabled = 0;
+    ble_gap_addr_t gapAddr;
+    if (sd_softdevice_is_enabled(&sdEnabled) == NRF_SUCCESS && sdEnabled && sd_ble_gap_addr_get(&gapAddr) == NRF_SUCCESS) {
+        for (size_t i = 0; i < BLE_GAP_ADDR_LEN; i++)
+            addr[i] = gapAddr.addr[BLE_GAP_ADDR_LEN - 1 - i]; // the SoftDevice stores it least significant byte first
+        return true;
+    }
+    // SoftDevice not running: it would advertise on its default identity address, the FICR one getMacAddr() reads.
+    getMacAddr(addr);
+    return true;
 }
 
 bool getDeviceId(uint8_t *deviceId)

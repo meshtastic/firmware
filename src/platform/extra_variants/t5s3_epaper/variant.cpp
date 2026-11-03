@@ -645,7 +645,7 @@ bool readTouch(int16_t *x, int16_t *y)
             *x = raw_x;
             *y = raw_y;
 #endif
-            LOG_DEBUG("touched(%d/%d)", *x, *y);
+            LOG_INPUT("touched(%d/%d)", *x, *y);
             return true;
         }
     }

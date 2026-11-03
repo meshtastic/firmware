@@ -10,12 +10,34 @@ class AdminModuleTestShim : public AdminModule
     using AdminModule::checkPassKey; // session-key gate seam (see test_admin_session_repro)
     using AdminModule::handleGetConfig;
     using AdminModule::handleGetModuleConfig;
-    using AdminModule::handleReceivedProtobuf;
     using AdminModule::handleSetConfig;
     using AdminModule::handleSetModuleConfig;
     using AdminModule::handleSetOwner;
     using AdminModule::responseIsSolicited; // request/response pairing gate
     using AdminModule::setPassKey;
+
+    // Run the handler as MeshModule::callModules() would for a packet that arrived via `src`.
+    // AdminModule trusts from == 0 only when the dispatcher reports a local origin, so the default is
+    // RX_SRC_USER: the phone/serial client every from == 0 caller in these suites stands in for.
+    bool handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_AdminMessage *r, RxSource src = RX_SRC_USER)
+    {
+        return handleWithDispatchContext(&mp, src, mp, r);
+    }
+
+    // Run the handler while callModules() is dispatching `dispatched` from `src`. Pass nullptr for a
+    // caller outside callModules(), or a different packet for a context that does not belong to `mp`.
+    bool handleWithDispatchContext(const meshtastic_MeshPacket *dispatched, RxSource src, const meshtastic_MeshPacket &mp,
+                                   meshtastic_AdminMessage *r)
+    {
+        const meshtastic_MeshPacket *savedRequest = currentRequest;
+        const RxSource savedSource = currentRequestSource;
+        currentRequest = dispatched;
+        currentRequestSource = src;
+        const bool handled = AdminModule::handleReceivedProtobuf(mp, r);
+        currentRequest = savedRequest;
+        currentRequestSource = savedSource;
+        return handled;
+    }
 
     // Peek at the reply a handler queued, before drainReply() releases it.
     meshtastic_MeshPacket *reply() { return myReply; }
