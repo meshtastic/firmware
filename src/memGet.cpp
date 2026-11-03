@@ -51,28 +51,31 @@ extern "C" NanoFreeChunk *__malloc_free_list;
 /// Walk newlib-nano's free list for the largest free chunk; false if a link leaves the heap or the list doesn't end.
 static bool walkNrf52FreeList(uint32_t &largest)
 {
+    // Linker symbols are distinct objects, so compare addresses as integers rather than subtracting pointers
+    const uintptr_t heapBase = reinterpret_cast<uintptr_t>(__HeapBase);
+    const uintptr_t heapLimit = reinterpret_cast<uintptr_t>(__HeapLimit);
+    const long minChunk = 12; // newlib-nano's MALLOC_MINCHUNK on 32-bit: it never frees a smaller chunk
+    // No valid list holds more chunks than fit in the heap at that minimum, so passing the bound means a loop
+    const uint32_t maxChunks = (heapLimit - heapBase) / minChunk;
     largest = 0;
     bool intact = true;
     uint32_t chunks = 0;
-    const long minChunk = 12; // newlib-nano's MALLOC_MINCHUNK on 32-bit: it never frees a smaller chunk
-    // No valid list holds more chunks than fit in the heap at that minimum, so passing the bound means a loop
-    const uint32_t maxChunks = (uint32_t)(__HeapLimit - __HeapBase) / minChunk;
     vTaskSuspendAll();
     for (const NanoFreeChunk *c = __malloc_free_list; c; c = c->next) {
-        const char *p = reinterpret_cast<const char *>(c);
-        if (p < __HeapBase || p >= __HeapLimit || (reinterpret_cast<uintptr_t>(p) & 3) || c->size < minChunk ||
-            c->size > __HeapLimit - p || ++chunks > maxChunks) {
+        const uintptr_t p = reinterpret_cast<uintptr_t>(c);
+        if (p < heapBase || p >= heapLimit || (p & 3) || c->size < minChunk || (uintptr_t)c->size > heapLimit - p ||
+            ++chunks > maxChunks) {
             intact = false;
             break;
         }
         if ((uint32_t)c->size > largest)
             largest = c->size;
     }
-    const char *brk = static_cast<const char *>(sbrk(0));
+    const uintptr_t brk = reinterpret_cast<uintptr_t>(sbrk(0));
     (void)xTaskResumeAll();
     // The never-claimed space above the break is one more block
-    if (brk >= __HeapBase && brk <= __HeapLimit && (uint32_t)(__HeapLimit - brk) > largest)
-        largest = __HeapLimit - brk;
+    if (brk >= heapBase && brk <= heapLimit && heapLimit - brk > largest)
+        largest = heapLimit - brk;
     return intact;
 }
 #endif
