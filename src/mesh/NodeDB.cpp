@@ -3451,6 +3451,11 @@ bool NodeDB::saveNodeDatabaseToDisk()
     bool ok;
     {
         concurrency::LockGuard guard(&satelliteMutex);
+        // An armed source encodes from its map; a compiled-out DB's decoded leftovers in the vectors must not be re-saved
+        nodeDatabase.positions.clear();
+        nodeDatabase.telemetry.clear();
+        nodeDatabase.environment.clear();
+        nodeDatabase.status.clear();
         armNodeDatabaseEncodeSources();
         struct Disarm {
             NodeDB &self;
