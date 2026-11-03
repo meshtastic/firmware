@@ -19,6 +19,7 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "Router.h"
+#include "SPILock.h"
 #include "buzz/buzz.h"
 #include "configuration.h"
 #include "gps/RTC.h"
