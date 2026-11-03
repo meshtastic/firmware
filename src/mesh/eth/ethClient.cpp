@@ -171,7 +171,7 @@ static int32_t reconnectETH()
             }
 #endif
 #if HAS_UDP_MULTICAST
-            if (udpHandler && config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST) {
+            if (udpHandler && udpHandler->isEnabled()) {
                 udpHandler->start();
             }
 #endif

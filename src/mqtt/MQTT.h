@@ -5,6 +5,7 @@
 
 #include "concurrency/OSThread.h"
 #include "mesh/Channels.h"
+#include "mesh/MeshTransportBase.h"
 #include "mesh/generated/meshtastic/mqtt.pb.h"
 #if HAS_WIFI
 #include <WiFiClient.h>
@@ -22,6 +23,28 @@
 #endif
 
 #define MAX_MQTT_QUEUE 16
+
+/**
+ * Adapter that plugs the MQTT singleton into Router::send()'s PreEncode transport registry, so the
+ * router funnel no longer names MQTT directly. It carries no state of its own: onSendPreEncode()
+ * forwards to mqtt->onSend(), which keeps every MQTT-side gate (via_mqtt loop-prevention, per-channel
+ * uplink, DontMqttMeBro, range-test suppression, PKI-vs-channel encryption choice) exactly where it was.
+ *
+ * It is a PreEncode transport, so it is invisible to callTransports() (the post-encode fan-out) and
+ * never receives relayed traffic; onSendPreEncode() forwards only our own originations.
+ */
+class MQTTTransport : public MeshTransportBase
+{
+  public:
+    MQTTTransport() : MeshTransportBase(MeshTransportBase::PreEncode) {}
+
+    bool isEnabled() const override; // moduleConfig.mqtt.enabled
+
+  protected:
+    // Defined out-of-line at the bottom of this header, where MQTT and the mqtt global are complete.
+    void onSendPreEncode(const meshtastic_MeshPacket &mp_encrypted, const meshtastic_MeshPacket &mp_decoded,
+                         ChannelIndex chIndex) override;
+};
 
 /**
  * Our wrapper/singleton for sending/receiving MQTT "udp" packets.  This object isolates the MQTT protocol implementation from
@@ -65,6 +88,10 @@ class MQTT : private concurrency::OSThread
     static bool isValidConfig(const meshtastic_ModuleConfig_MQTTConfig &config) { return isValidConfig(config, nullptr); }
 
   protected:
+    // Registers this MQTT instance into the PreEncode transport registry for its whole lifetime, so
+    // Router::send() reaches onSend() through the registry instead of a hardcoded tap.
+    MQTTTransport transport;
+
     struct QueueEntry {
         std::string topic;
         std::basic_string<uint8_t> envBytes; // binary/pb_encode_to_bytes ServiceEnvelope
@@ -144,3 +171,14 @@ class MQTT : private concurrency::OSThread
 void mqttInit();
 
 extern MQTT *mqtt;
+
+// Defined here, after MQTT and the mqtt global are complete. The `if (mqtt)` guard preserves the old
+// tap's `&& mqtt` check: an MQTTTransport can be registered (constructed with MQTT) while the mqtt
+// global is still null (MQTT constructed while mqtt.enabled was false), exactly as before.
+inline void MQTTTransport::onSendPreEncode(const meshtastic_MeshPacket &mp_encrypted, const meshtastic_MeshPacket &mp_decoded,
+                                           ChannelIndex chIndex)
+{
+    // Only the original transmitter publishes.
+    if (mqtt && isFromUs(&mp_encrypted))
+        mqtt->onSend(mp_encrypted, mp_decoded, chIndex);
+}
