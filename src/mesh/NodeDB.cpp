@@ -259,10 +259,39 @@ std::map<NodeNum, meshtastic_EnvironmentMetrics> *s_decodeEnvironmentTarget = nu
 std::map<NodeNum, meshtastic_StatusMessage> *s_decodeStatusTarget = nullptr;
 #endif
 
+// When armed by saveNodeDatabaseToDisk, the encode callback reads satellite entries straight from these maps, so a
+// save never builds a second, contiguous copy of them. Nullptr = encode from the vectors.
+#if !MESHTASTIC_EXCLUDE_POSITIONDB
+const std::map<NodeNum, meshtastic_PositionLite> *s_encodePositionsSource = nullptr;
+#endif
+#if !MESHTASTIC_EXCLUDE_TELEMETRYDB
+const std::map<NodeNum, meshtastic_DeviceMetrics> *s_encodeTelemetrySource = nullptr;
+#endif
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTDB
+const std::map<NodeNum, meshtastic_EnvironmentMetrics> *s_encodeEnvironmentSource = nullptr;
+#endif
+#if !MESHTASTIC_EXCLUDE_STATUSDB
+const std::map<NodeNum, meshtastic_StatusMessage> *s_encodeStatusSource = nullptr;
+#endif
+
 // Keys that can never name a real node.
 [[maybe_unused]] inline bool isUsableSatelliteKey(NodeNum n)
 {
     return n != 0 && !isBroadcast(n);
+}
+
+// Encode a satellite map as repeated entries, building one entry at a time on the stack.
+template <typename Entry, typename Value, typename Fill>
+[[maybe_unused]] bool encodeSatelliteMap(pb_ostream_t *ostream, const pb_field_iter_t *iter, const pb_msgdesc_t *fields,
+                                         const std::map<NodeNum, Value> &source, Fill fill)
+{
+    for (const auto &kv : source) {
+        Entry entry = {};
+        fill(entry, kv.first, kv.second);
+        if (!pb_encode_tag_for_field(ostream, iter) || !pb_encode_submessage(ostream, fields, &entry))
+            return false;
+    }
+    return true;
 }
 } // namespace
 
@@ -304,6 +333,16 @@ bool meshtastic_NodeDatabase_callback(pb_istream_t *istream, pb_ostream_t *ostre
     }
     case meshtastic_NodeDatabase_positions_tag: {
         if (ostream) {
+#if !MESHTASTIC_EXCLUDE_POSITIONDB
+            if (s_encodePositionsSource)
+                return encodeSatelliteMap<meshtastic_NodePositionEntry>(
+                    ostream, iter, meshtastic_NodePositionEntry_fields, *s_encodePositionsSource,
+                    [](meshtastic_NodePositionEntry &e, NodeNum num, const meshtastic_PositionLite &v) {
+                        e.num = num;
+                        e.has_position = true;
+                        e.position = v;
+                    });
+#endif
             const auto *vec = static_cast<const std::vector<meshtastic_NodePositionEntry> *>(iter->pData);
             for (const auto &item : *vec) {
                 if (!pb_encode_tag_for_field(ostream, iter))
@@ -330,6 +369,16 @@ bool meshtastic_NodeDatabase_callback(pb_istream_t *istream, pb_ostream_t *ostre
     }
     case meshtastic_NodeDatabase_telemetry_tag: {
         if (ostream) {
+#if !MESHTASTIC_EXCLUDE_TELEMETRYDB
+            if (s_encodeTelemetrySource)
+                return encodeSatelliteMap<meshtastic_NodeTelemetryEntry>(
+                    ostream, iter, meshtastic_NodeTelemetryEntry_fields, *s_encodeTelemetrySource,
+                    [](meshtastic_NodeTelemetryEntry &e, NodeNum num, const meshtastic_DeviceMetrics &v) {
+                        e.num = num;
+                        e.has_device_metrics = true;
+                        e.device_metrics = v;
+                    });
+#endif
             const auto *vec = static_cast<const std::vector<meshtastic_NodeTelemetryEntry> *>(iter->pData);
             for (const auto &item : *vec) {
                 if (!pb_encode_tag_for_field(ostream, iter))
@@ -356,6 +405,16 @@ bool meshtastic_NodeDatabase_callback(pb_istream_t *istream, pb_ostream_t *ostre
     }
     case meshtastic_NodeDatabase_status_tag: {
         if (ostream) {
+#if !MESHTASTIC_EXCLUDE_STATUSDB
+            if (s_encodeStatusSource)
+                return encodeSatelliteMap<meshtastic_NodeStatusEntry>(
+                    ostream, iter, meshtastic_NodeStatusEntry_fields, *s_encodeStatusSource,
+                    [](meshtastic_NodeStatusEntry &e, NodeNum num, const meshtastic_StatusMessage &v) {
+                        e.num = num;
+                        e.has_status = true;
+                        e.status = v;
+                    });
+#endif
             const auto *vec = static_cast<const std::vector<meshtastic_NodeStatusEntry> *>(iter->pData);
             for (const auto &item : *vec) {
                 if (!pb_encode_tag_for_field(ostream, iter))
@@ -382,6 +441,16 @@ bool meshtastic_NodeDatabase_callback(pb_istream_t *istream, pb_ostream_t *ostre
     }
     case meshtastic_NodeDatabase_environment_tag: {
         if (ostream) {
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTDB
+            if (s_encodeEnvironmentSource)
+                return encodeSatelliteMap<meshtastic_NodeEnvironmentEntry>(
+                    ostream, iter, meshtastic_NodeEnvironmentEntry_fields, *s_encodeEnvironmentSource,
+                    [](meshtastic_NodeEnvironmentEntry &e, NodeNum num, const meshtastic_EnvironmentMetrics &v) {
+                        e.num = num;
+                        e.has_environment_metrics = true;
+                        e.environment_metrics = v;
+                    });
+#endif
             const auto *vec = static_cast<const std::vector<meshtastic_NodeEnvironmentEntry> *>(iter->pData);
             for (const auto &item : *vec) {
                 if (!pb_encode_tag_for_field(ostream, iter))
@@ -428,6 +497,38 @@ void NodeDB::armNodeDatabaseDecodeTargets()
 #if !MESHTASTIC_EXCLUDE_STATUSDB
     nodeStatus.clear();
     s_decodeStatusTarget = &nodeStatus;
+#endif
+}
+
+void NodeDB::armNodeDatabaseEncodeSources()
+{
+#if !MESHTASTIC_EXCLUDE_POSITIONDB
+    s_encodePositionsSource = &nodePositions;
+#endif
+#if !MESHTASTIC_EXCLUDE_TELEMETRYDB
+    s_encodeTelemetrySource = &nodeTelemetry;
+#endif
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTDB
+    s_encodeEnvironmentSource = &nodeEnvironment;
+#endif
+#if !MESHTASTIC_EXCLUDE_STATUSDB
+    s_encodeStatusSource = &nodeStatus;
+#endif
+}
+
+void NodeDB::disarmNodeDatabaseEncodeSources()
+{
+#if !MESHTASTIC_EXCLUDE_POSITIONDB
+    s_encodePositionsSource = nullptr;
+#endif
+#if !MESHTASTIC_EXCLUDE_TELEMETRYDB
+    s_encodeTelemetrySource = nullptr;
+#endif
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTDB
+    s_encodeEnvironmentSource = nullptr;
+#endif
+#if !MESHTASTIC_EXCLUDE_STATUSDB
+    s_encodeStatusSource = nullptr;
 #endif
 }
 
@@ -3297,64 +3398,20 @@ bool NodeDB::saveNodeDatabaseToDisk()
     spiLock->unlock();
 #endif
 
-    // Project the maps into the on-disk vectors just before encoding; cleared
-    // again on the way out so we don't carry duplicate state.
+    // Encode the satellite maps in place. Projecting them into the vectors first needed a second, contiguous copy on
+    // every save (40 x 312 B for environment alone), which ran nRF52 out of heap. The lock keeps the maps unchanged
+    // between the sizing pass and the write.
     concurrency::LockGuard guard(&satelliteMutex);
-#if !MESHTASTIC_EXCLUDE_POSITIONDB
+    // An armed source encodes from its map; a compiled-out DB's decoded leftovers in the vectors must not be re-saved
     nodeDatabase.positions.clear();
-    nodeDatabase.positions.reserve(nodePositions.size());
-    for (const auto &kv : nodePositions) {
-        meshtastic_NodePositionEntry entry = meshtastic_NodePositionEntry_init_default;
-        entry.num = kv.first;
-        entry.has_position = true;
-        entry.position = kv.second;
-        nodeDatabase.positions.push_back(entry);
-    }
-#else
-    nodeDatabase.positions.clear();
-#endif
-
-#if !MESHTASTIC_EXCLUDE_TELEMETRYDB
     nodeDatabase.telemetry.clear();
-    nodeDatabase.telemetry.reserve(nodeTelemetry.size());
-    for (const auto &kv : nodeTelemetry) {
-        meshtastic_NodeTelemetryEntry entry = meshtastic_NodeTelemetryEntry_init_default;
-        entry.num = kv.first;
-        entry.has_device_metrics = true;
-        entry.device_metrics = kv.second;
-        nodeDatabase.telemetry.push_back(entry);
-    }
-#else
-    nodeDatabase.telemetry.clear();
-#endif
-
-#if !MESHTASTIC_EXCLUDE_ENVIRONMENTDB
     nodeDatabase.environment.clear();
-    nodeDatabase.environment.reserve(nodeEnvironment.size());
-    for (const auto &kv : nodeEnvironment) {
-        meshtastic_NodeEnvironmentEntry entry = meshtastic_NodeEnvironmentEntry_init_default;
-        entry.num = kv.first;
-        entry.has_environment_metrics = true;
-        entry.environment_metrics = kv.second;
-        nodeDatabase.environment.push_back(entry);
-    }
-#else
-    nodeDatabase.environment.clear();
-#endif
-
-#if !MESHTASTIC_EXCLUDE_STATUSDB
     nodeDatabase.status.clear();
-    nodeDatabase.status.reserve(nodeStatus.size());
-    for (const auto &kv : nodeStatus) {
-        meshtastic_NodeStatusEntry entry = meshtastic_NodeStatusEntry_init_default;
-        entry.num = kv.first;
-        entry.has_status = true;
-        entry.status = kv.second;
-        nodeDatabase.status.push_back(entry);
-    }
-#else
-    nodeDatabase.status.clear();
-#endif
+    armNodeDatabaseEncodeSources();
+    struct Disarm {
+        NodeDB &self;
+        ~Disarm() { self.disarmNodeDatabaseEncodeSources(); }
+    } disarm{*this};
 
     size_t nodeDatabaseSize;
     pb_get_encoded_size(&nodeDatabaseSize, meshtastic_NodeDatabase_fields, &nodeDatabase);
