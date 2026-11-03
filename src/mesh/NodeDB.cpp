@@ -3402,6 +3402,11 @@ bool NodeDB::saveNodeDatabaseToDisk()
     // every save (40 x 312 B for environment alone), which ran nRF52 out of heap. The lock keeps the maps unchanged
     // between the sizing pass and the write.
     concurrency::LockGuard guard(&satelliteMutex);
+    // An armed source encodes from its map; a compiled-out DB's decoded leftovers in the vectors must not be re-saved
+    nodeDatabase.positions.clear();
+    nodeDatabase.telemetry.clear();
+    nodeDatabase.environment.clear();
+    nodeDatabase.status.clear();
     armNodeDatabaseEncodeSources();
     struct Disarm {
         NodeDB &self;
