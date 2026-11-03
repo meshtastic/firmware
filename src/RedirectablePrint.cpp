@@ -327,10 +327,17 @@ void RedirectablePrint::log(const char *logLevel, const char *format, ...)
         return;
     }
 
-    // Append \n here rather than in every call site; past the early returns, so a filtered line allocates nothing
+    // Append \n here rather than in every call site. A usual-length format is copied on the stack, so logging needs no
+    // heap; an out-of-memory report depends on that. Sized small: some tasks run with well under 1 KB of stack free.
     size_t len = strlen(format);
-    auto newFormat = std::unique_ptr<char[]>(new char[len + 2]);
-    strcpy(newFormat.get(), format);
+    char stackFormat[96];
+    std::unique_ptr<char[]> heapFormat;
+    char *newFormat = stackFormat;
+    if (len + 2 > sizeof(stackFormat)) {
+        heapFormat.reset(new char[len + 2]);
+        newFormat = heapFormat.get();
+    }
+    memcpy(newFormat, format, len);
     newFormat[len] = '\n';
     newFormat[len + 1] = '\0';
 
@@ -347,14 +354,14 @@ void RedirectablePrint::log(const char *logLevel, const char *format, ...)
         va_start(arg, format);
 
         va_copy(arg_copy, arg);
-        log_to_serial(logLevel, newFormat.get(), arg_copy);
+        log_to_serial(logLevel, newFormat, arg_copy);
         va_end(arg_copy);
 
         va_copy(arg_copy, arg);
-        log_to_syslog(logLevel, newFormat.get(), arg_copy);
+        log_to_syslog(logLevel, newFormat, arg_copy);
         va_end(arg_copy);
 
-        log_to_ble(logLevel, newFormat.get(), arg);
+        log_to_ble(logLevel, newFormat, arg);
 
         va_end(arg);
 #ifdef HAS_FREE_RTOS

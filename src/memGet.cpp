@@ -138,9 +138,11 @@ uint32_t MemGet::getMaxAllocHeap()
 #ifdef ARCH_ESP32
     return ESP.getMaxAllocHeap();
 #elif defined(ARCH_NRF52)
+    // A chunk serves a request 8 B smaller (4 B header, alignment); a failed walk's partial figure would mislead
     uint32_t largest;
-    walkNrf52FreeList(largest);
-    return largest;
+    if (!walkNrf52FreeList(largest))
+        return 0;
+    return largest > 8 ? largest - 8 : 0;
 #else
     return 0;
 #endif

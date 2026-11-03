@@ -222,6 +222,11 @@ static void logAssertContext()
 // handle standard gcc assert failures
 void __attribute__((noreturn)) __assert_func(const char *file, int line, const char *func, const char *failedexpr)
 {
+    // An assert raised while logging this one (an allocation failing inside the log) resets rather than recursing
+    static bool asserting = false;
+    if (asserting)
+        NVIC_SystemReset();
+    asserting = true;
     LOG_ERROR("assert failed %s: %d, %s, test=%s", file, line, func, failedexpr);
     logAssertContext();
     drainConsoleBeforeReset();
