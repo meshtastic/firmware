@@ -1286,6 +1286,13 @@ typedef struct _meshtastic_TAKPacketV2 {
      GeoChat.room_id) to display name + roster on receivers. */
         meshtastic_TakTalkRoomData taktalk_room;
     } payload_variant;
+    /* Low 14 bits of the event's `start` time, as epoch seconds UTC. 14 bits rather
+ than a full timestamp, so the field costs 4 bytes on the wire instead of 7.
+ Order and deduplicates packets from a single sender. Valid only when within an
+ hour of current wall time. `optional` is deliberate. It costs essentially
+ nothing and distinguishes "sender did not populate this" from a legitimate zero. */
+    bool has_start_epoch_lo14;
+    uint32_t start_epoch_lo14;
 } meshtastic_TAKPacketV2;
 
 
@@ -1438,7 +1445,7 @@ extern "C" {
 #define meshtastic_TakTalkMessage_init_default   {{{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, 0}
 #define meshtastic_TakTalkRoomData_init_default  {{{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}}
 #define meshtastic_Marti_init_default            {{{NULL}, NULL}}
-#define meshtastic_TAKPacketV2_init_default      {_meshtastic_CotType_MIN, _meshtastic_CotHow_MIN, "", _meshtastic_Team_MIN, _meshtastic_MemberRole_MIN, 0, 0, 0, 0, 0, 0, _meshtastic_GeoPointSource_MIN, _meshtastic_GeoPointSource_MIN, "", "", 0, "", "", "", "", "", "", "", {{NULL}, NULL}, false, meshtastic_TAKEnvironment_init_default, false, meshtastic_SensorFov_init_default, false, meshtastic_Marti_init_default, 0, {meshtastic_GeoChat_init_default}}
+#define meshtastic_TAKPacketV2_init_default      {_meshtastic_CotType_MIN, _meshtastic_CotHow_MIN, "", _meshtastic_Team_MIN, _meshtastic_MemberRole_MIN, 0, 0, 0, 0, 0, 0, _meshtastic_GeoPointSource_MIN, _meshtastic_GeoPointSource_MIN, "", "", 0, "", "", "", "", "", "", "", {{NULL}, NULL}, false, meshtastic_TAKEnvironment_init_default, false, meshtastic_SensorFov_init_default, false, meshtastic_Marti_init_default, 0, {meshtastic_GeoChat_init_default}, false, 0}
 #define meshtastic_TAKPacket_init_zero           {0, false, meshtastic_Contact_init_zero, false, meshtastic_Group_init_zero, false, meshtastic_Status_init_zero, 0, {meshtastic_PLI_init_zero}}
 #define meshtastic_GeoChat_init_zero             {"", false, "", false, "", "", _meshtastic_GeoChat_ReceiptType_MIN, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}}
 #define meshtastic_Group_init_zero               {_meshtastic_MemberRole_MIN, _meshtastic_Team_MIN}
@@ -1461,7 +1468,7 @@ extern "C" {
 #define meshtastic_TakTalkMessage_init_zero      {{{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, 0}
 #define meshtastic_TakTalkRoomData_init_zero     {{{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}}
 #define meshtastic_Marti_init_zero               {{{NULL}, NULL}}
-#define meshtastic_TAKPacketV2_init_zero         {_meshtastic_CotType_MIN, _meshtastic_CotHow_MIN, "", _meshtastic_Team_MIN, _meshtastic_MemberRole_MIN, 0, 0, 0, 0, 0, 0, _meshtastic_GeoPointSource_MIN, _meshtastic_GeoPointSource_MIN, "", "", 0, "", "", "", "", "", "", "", {{NULL}, NULL}, false, meshtastic_TAKEnvironment_init_zero, false, meshtastic_SensorFov_init_zero, false, meshtastic_Marti_init_zero, 0, {meshtastic_GeoChat_init_zero}}
+#define meshtastic_TAKPacketV2_init_zero         {_meshtastic_CotType_MIN, _meshtastic_CotHow_MIN, "", _meshtastic_Team_MIN, _meshtastic_MemberRole_MIN, 0, 0, 0, 0, 0, 0, _meshtastic_GeoPointSource_MIN, _meshtastic_GeoPointSource_MIN, "", "", 0, "", "", "", "", "", "", "", {{NULL}, NULL}, false, meshtastic_TAKEnvironment_init_zero, false, meshtastic_SensorFov_init_zero, false, meshtastic_Marti_init_zero, 0, {meshtastic_GeoChat_init_zero}, false, 0}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define meshtastic_GeoChat_message_tag           1
@@ -1650,6 +1657,7 @@ extern "C" {
 #define meshtastic_TAKPacketV2_task_tag          40
 #define meshtastic_TAKPacketV2_taktalk_tag       41
 #define meshtastic_TAKPacketV2_taktalk_room_tag  42
+#define meshtastic_TAKPacketV2_start_epoch_lo14_tag 43
 
 /* Struct field encoding specification for nanopb */
 #define meshtastic_TAKPacket_FIELDLIST(X, a) \
@@ -1935,7 +1943,8 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,casevac,payload_variant.case
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,emergency,payload_variant.emergency),  39) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,task,payload_variant.task),  40) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,taktalk,payload_variant.taktalk),  41) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,taktalk_room,payload_variant.taktalk_room),  42)
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,taktalk_room,payload_variant.taktalk_room),  42) \
+X(a, STATIC,   OPTIONAL, UINT32,   start_epoch_lo14,  43)
 #define meshtastic_TAKPacketV2_CALLBACK pb_default_field_callback
 #define meshtastic_TAKPacketV2_DEFAULT NULL
 #define meshtastic_TAKPacketV2_environment_MSGTYPE meshtastic_TAKEnvironment
