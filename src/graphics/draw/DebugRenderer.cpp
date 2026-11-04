@@ -701,11 +701,16 @@ void drawFrameBluetoothPair(OLEDDisplay *display, OLEDDisplayUiState *state, int
         return;
     }
 
-    // 2-module quiet zone; largest whole-pixel scale that fits below the header
-    const int span = qr.size + 4;
+    // Largest whole-pixel scale that fits below the header, with the spec's 4-module quiet zone,
+    // or 2 modules (which phones still read) when 4 won't fit at one pixel per module
     const int availH = display->getHeight() - (top - y);
     const int availW = display->getWidth();
-    int scale = (availH < availW ? availH : availW) / span;
+    const int avail = availH < availW ? availH : availW;
+    int quiet = 4;
+    if (avail < qr.size + 2 * quiet)
+        quiet = 2;
+    const int span = qr.size + 2 * quiet;
+    const int scale = avail / span;
     if (scale < 1) {
         display->drawString(x + BASEUI_BODY_LR_MARGIN, top, "Screen too small");
         return;
@@ -720,7 +725,7 @@ void drawFrameBluetoothPair(OLEDDisplay *display, OLEDDisplayUiState *state, int
     for (uint8_t my = 0; my < qr.size; my++)
         for (uint8_t mx = 0; mx < qr.size; mx++)
             if (qrGetModule(&qr, mx, my))
-                display->fillRect(qrX + (mx + 2) * scale, qrY + (my + 2) * scale, scale, scale);
+                display->fillRect(qrX + (mx + quiet) * scale, qrY + (my + quiet) * scale, scale, scale);
     display->setColor(WHITE);
 #if GRAPHICS_TFT_COLORING_ENABLED
     // Keep dark-on-light whatever the theme, so phone scanners read it

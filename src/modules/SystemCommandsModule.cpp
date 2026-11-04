@@ -69,6 +69,7 @@ int SystemCommandsModule::handleInputEvent(const InputEvent *event)
         if (!config.bluetooth.enabled) {
             disableBluetooth();
             IF_SCREEN(screen->showSimpleBanner("Bluetooth OFF", 3000));
+            IF_SCREEN(screen->setFrames(graphics::Screen::FOCUS_PRESERVE)); // Drop the Pair frame
         } else {
             IF_SCREEN(screen->showSimpleBanner("Bluetooth ON\nRebooting", 3000));
             rebootAtMsec = Time::timerEndsAtMillis(DEFAULT_REBOOT_SECONDS * 1000);
