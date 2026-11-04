@@ -2,6 +2,7 @@
 
 #if HAS_TRANSPARENT_RADIO
 
+#include <algorithm>
 #include <cerrno>
 #include <chrono>
 #include <cstdlib>
@@ -12,6 +13,7 @@
 #include <netinet/tcp.h>
 #include <poll.h>
 #include <sys/socket.h>
+#include <system_error>
 #include <termios.h>
 #include <unistd.h>
 
@@ -20,7 +22,20 @@ namespace
 
 constexpr int DEFAULT_API_PORT = 4403;
 constexpr int CONNECT_TIMEOUT_MS = 1000; // keep a dead host from stalling meshtasticd's main loop
+constexpr int CONNECT_BUDGET_MS = 2000;  // all resolved addresses together, so a v4 after a dead v6 still gets a try
 constexpr int WRITE_DEADLINE_MS = 200;   // a frame the kernel can't take in this long means a dead link
+
+using Deadline = std::chrono::steady_clock::time_point;
+
+Deadline deadlineIn(int ms)
+{
+    return std::chrono::steady_clock::now() + std::chrono::milliseconds(ms);
+}
+
+int msLeft(Deadline deadline)
+{
+    return (int)std::chrono::duration_cast<std::chrono::milliseconds>(deadline - std::chrono::steady_clock::now()).count();
+}
 
 bool wouldBlock()
 {
@@ -52,7 +67,7 @@ class FdLink : public TransparentLink
     bool write(const uint8_t *buf, size_t len) override
     {
         // One deadline for the whole frame: runOnce() is blocked until this returns.
-        const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(WRITE_DEADLINE_MS);
+        const Deadline deadline = deadlineIn(WRITE_DEADLINE_MS);
         while (fd >= 0 && len > 0) {
             ssize_t n = sendBytes(buf, len);
             if (n > 0) {
@@ -60,9 +75,7 @@ class FdLink : public TransparentLink
                 len -= (size_t)n;
                 continue;
             }
-            const auto remaining =
-                std::chrono::duration_cast<std::chrono::milliseconds>(deadline - std::chrono::steady_clock::now()).count();
-            if (n < 0 && wouldBlock() && waitWritable(fd, (int)remaining))
+            if (n < 0 && wouldBlock() && waitWritable(fd, msLeft(deadline)))
                 continue;
             return false;
         }
@@ -144,7 +157,11 @@ class TcpLink : public FdLink
         close();
         // getaddrinfo() has no timeout and runOnce() is on meshtasticd's main loop, so resolve on a worker thread.
         if (!resolving) {
-            pending = std::async(std::launch::async, resolve, host, port);
+            try {
+                pending = std::async(std::launch::async, resolve, host, port);
+            } catch (const std::system_error &) { // no thread to spare: a failed open, so runOnce() backs off
+                return false;
+            }
             resolving = true;
         }
         if (pending.wait_for(std::chrono::seconds(0)) != std::future_status::ready)
@@ -153,12 +170,13 @@ class TcpLink : public FdLink
         struct addrinfo *res = pending.get();
         if (!res)
             return false;
-        for (struct addrinfo *rp = res; rp != nullptr && fd < 0; rp = rp->ai_next) {
+        const Deadline budget = deadlineIn(CONNECT_BUDGET_MS);
+        for (struct addrinfo *rp = res; rp != nullptr && fd < 0 && msLeft(budget) > 0; rp = rp->ai_next) {
             int f = ::socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
             if (f < 0)
                 continue;
             ::fcntl(f, F_SETFL, O_NONBLOCK);
-            if (connectWithTimeout(f, rp->ai_addr, rp->ai_addrlen)) {
+            if (connectWithTimeout(f, rp->ai_addr, rp->ai_addrlen, std::min(CONNECT_TIMEOUT_MS, msLeft(budget)))) {
                 int one = 1;
                 ::setsockopt(f, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
 #ifdef SO_NOSIGPIPE
@@ -206,14 +224,14 @@ class TcpLink : public FdLink
         return res;
     }
 
-    static bool connectWithTimeout(int f, const struct sockaddr *addr, socklen_t addrlen)
+    static bool connectWithTimeout(int f, const struct sockaddr *addr, socklen_t addrlen, int timeoutMs)
     {
         if (::connect(f, addr, addrlen) == 0)
             return true;
         if (errno != EINPROGRESS)
             return false;
         struct pollfd pfd = {f, POLLOUT, 0};
-        if (::poll(&pfd, 1, CONNECT_TIMEOUT_MS) <= 0)
+        if (timeoutMs <= 0 || ::poll(&pfd, 1, timeoutMs) <= 0)
             return false;
         int err = 0;
         socklen_t errLen = sizeof(err);

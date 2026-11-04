@@ -1169,11 +1169,12 @@ void checkPinValues(std::vector<Finding> &findings)
                                    "non-numeric value, or a stray line folded into it by YAML indentation"});
     };
 
+    const bool loraPinsUnused = portduino_config.lora_module == use_transparent; // startup never claims them
     for (const auto *pin : portduino_config.all_pins)
-        if (pin->enabled && pin->pin < 0)
+        if (pin->enabled && pin->pin < 0 && !(loraPinsUnused && pin->config_section == "Lora"))
             report(pin->config_section + "." + pin->config_name);
     for (const auto &pin : portduino_config.extra_pins)
-        if (pin.enabled && pin.pin < 0)
+        if (pin.enabled && pin.pin < 0 && !(loraPinsUnused && pin.config_section == "Lora"))
             report(pin.config_section + "." + pin.config_name);
 }
 

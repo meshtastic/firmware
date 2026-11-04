@@ -925,7 +925,7 @@ void portduinoSetup()
     }
 
     // In one test, this dance seemed necessary to trigger the pin to detect properly.
-    if (portduino_config.lora_pa_detect_pin.enabled) {
+    if (portduino_config.lora_pa_detect_pin.enabled && portduino_config.lora_module != use_transparent) {
         pinMode(portduino_config.lora_pa_detect_pin.pin, INPUT_PULLDOWN);
         sleep(1);
         if (digitalRead(portduino_config.lora_pa_detect_pin.pin) == LOW) {

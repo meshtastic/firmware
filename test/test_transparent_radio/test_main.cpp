@@ -450,7 +450,9 @@ void test_device_refusing_our_settings_is_retried_not_written_off(void)
 }
 
 // The timed retry from Refused, without a config change to prompt it: after REFUSED_RETRY_MS (5 min) the
-// radio asks for the config again, and not before.
+// radio asks for the config again, and not before. If the device has since been set up the way we want it
+// (its owner changed it by hand), that retry reaches Ready; a retry that re-entered Configuring but could never
+// leave it would strand the radio until a restart.
 void test_refused_device_is_retried_after_the_backoff(void)
 {
     radio->runOnce();
@@ -477,6 +479,10 @@ void test_refused_device_is_retried_after_the_backoff(void)
     for (const meshtastic_ToRadio &tr : takeToRadio()) // a heartbeat can share this pass
         askedAgain |= tr.which_payload_variant == meshtastic_ToRadio_want_config_id_tag;
     TEST_ASSERT_TRUE(askedAgain);
+
+    deviceSendsConfigDump(expectedDeviceLora());
+    radio->runOnce();
+    TEST_ASSERT_EQUAL_MESSAGE((int)TransparentRadio::State::Ready, (int)radio->getState(), "the retry reaches Ready");
 }
 
 // A device with lockdown on drops an unauthenticated client's admin traffic and mesh packets alike. The radio
