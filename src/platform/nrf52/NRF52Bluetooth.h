@@ -13,6 +13,8 @@ class NRF52Bluetooth : BluetoothApi
     void clearBonds();
     bool isConnected();
     int getRssi();
+    // The PIN pairing asks for; false in NO_PIN mode or before setup()
+    bool getPasskey(uint32_t *pin);
     void sendLog(const uint8_t *logMessage, size_t length);
 
   private:

@@ -121,6 +121,9 @@ const uint8_t icon_system[] PROGMEM = {
     0x24  // Row 7: ..#..#..
 };
 
+// QR code (BLE pairing)
+const uint8_t icon_qr[] PROGMEM = {0xE7, 0xA5, 0xE7, 0x18, 0x18, 0x27, 0x25, 0xA7};
+
 // 🌐 Wi-Fi
 const uint8_t icon_wifi[] PROGMEM = {0b00000000, 0b00011000, 0b00111100, 0b01111110,
                                      0b11011011, 0b00011000, 0b00011000, 0b00000000};

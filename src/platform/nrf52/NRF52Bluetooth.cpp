@@ -338,6 +338,16 @@ void setupMeshService(void)
     logRadio.begin();
 }
 static uint32_t configuredPasskey;
+static bool passkeyConfigured;
+
+bool NRF52Bluetooth::getPasskey(uint32_t *pin)
+{
+    if (!passkeyConfigured)
+        return false;
+    *pin = configuredPasskey;
+    return true;
+}
+
 void NRF52Bluetooth::shutdown()
 {
     // Shutdown bluetooth for minimum power draw
@@ -404,6 +414,7 @@ void NRF52Bluetooth::setup()
             HardwareRNG::fill(reinterpret_cast<uint8_t *>(&hwrand), sizeof(hwrand));
             configuredPasskey = hwrand % 900000u + 100000u;
         }
+        passkeyConfigured = true;
         auto pinString = std::to_string(configuredPasskey);
         LOG_INFO("Bluetooth pin set to '%i'", configuredPasskey);
         Bluefruit.Security.setPIN(pinString.c_str());
@@ -413,6 +424,7 @@ void NRF52Bluetooth::setup()
         Bluefruit.Security.setSecuredCallback(NRF52Bluetooth::onConnectionSecured);
         meshBleService.setPermission(SECMODE_ENC_WITH_MITM, SECMODE_ENC_WITH_MITM);
     } else {
+        passkeyConfigured = false;
         Bluefruit.Security.setIOCaps(false, false, false);
         meshBleService.setPermission(SECMODE_OPEN, SECMODE_OPEN);
     }
