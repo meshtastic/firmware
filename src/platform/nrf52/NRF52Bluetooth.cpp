@@ -338,6 +338,16 @@ void setupMeshService(void)
     logRadio.begin();
 }
 static uint32_t configuredPasskey;
+static bool passkeyConfigured;
+
+bool NRF52Bluetooth::getPasskey(uint32_t *pin)
+{
+    if (!passkeyConfigured)
+        return false;
+    *pin = configuredPasskey;
+    return true;
+}
+
 void NRF52Bluetooth::shutdown()
 {
     // Shutdown bluetooth for minimum power draw
@@ -404,15 +414,19 @@ void NRF52Bluetooth::setup()
             HardwareRNG::fill(reinterpret_cast<uint8_t *>(&hwrand), sizeof(hwrand));
             configuredPasskey = hwrand % 900000u + 100000u;
         }
-        auto pinString = std::to_string(configuredPasskey);
-        LOG_INFO("Bluetooth pin set to '%i'", configuredPasskey);
-        Bluefruit.Security.setPIN(pinString.c_str());
+        passkeyConfigured = true;
+        // setPIN wants exactly six digits, so keep a fixed PIN's leading zeros
+        char pinString[12];
+        snprintf(pinString, sizeof(pinString), "%06lu", (unsigned long)configuredPasskey);
+        LOG_INFO("Bluetooth pin set to '%s'", pinString);
+        Bluefruit.Security.setPIN(pinString);
         Bluefruit.Security.setIOCaps(true, false, false);
         Bluefruit.Security.setPairPasskeyCallback(NRF52Bluetooth::onPairingPasskey);
         Bluefruit.Security.setPairCompleteCallback(NRF52Bluetooth::onPairingCompleted);
         Bluefruit.Security.setSecuredCallback(NRF52Bluetooth::onConnectionSecured);
         meshBleService.setPermission(SECMODE_ENC_WITH_MITM, SECMODE_ENC_WITH_MITM);
     } else {
+        passkeyConfigured = false;
         Bluefruit.Security.setIOCaps(false, false, false);
         meshBleService.setPermission(SECMODE_OPEN, SECMODE_OPEN);
     }
@@ -530,7 +544,9 @@ bool NRF52Bluetooth::onPairingPasskey(uint16_t conn_handle, uint8_t const passke
 
 #if HAS_SCREEN && !defined(MESHTASTIC_EXCLUDE_SCREEN)
     if (screen) {
-        std::string configuredPasskeyText = std::to_string(configuredPasskey);
+        char pinText[12];
+        snprintf(pinText, sizeof(pinText), "%06lu", (unsigned long)configuredPasskey);
+        std::string configuredPasskeyText = pinText;
         std::string ble_message =
             "Bluetooth\nPIN\n[M]" + configuredPasskeyText.substr(0, 3) + " " + configuredPasskeyText.substr(3, 6);
         // Use the pairing_pin notification type so the lockdown UI short-

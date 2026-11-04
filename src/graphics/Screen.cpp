@@ -1542,6 +1542,14 @@ void Screen::setFrames(FrameFocus focus)
     }
 #endif
 
+#if HAS_BLUETOOTH
+    if (config.bluetooth.enabled) {
+        normalFrames[numframes++] = graphics::DebugRenderer::drawFrameBluetoothPair;
+        indicatorIcons.push_back(icon_qr);
+        PUSH_FRAME_TITLE("Pair");
+    }
+#endif
+
     // Beware of what changes you make in this code!
     // We pass numframes into GetMeshModulesWithUIFrames() which is highly important!
     // Inside of that callback, goes over to MeshModule.cpp and we run

@@ -101,6 +101,8 @@ BLECharacteristic *logRadioCharacteristic;
 BLEServer *bleServer;
 
 static bool passkeyShowing;
+static uint32_t configuredPasskey;
+static bool passkeyConfigured;
 static std::atomic<uint16_t> nimbleBluetoothConnHandle{BLE_HS_CONN_HANDLE_NONE}; // BLE_HS_CONN_HANDLE_NONE means "no connection"
 
 // Set by onDisconnect to defer (re)starting advertising to the main task. A stale-bond reconnect
@@ -876,6 +878,14 @@ bool NimbleBluetooth::isActive()
     return bleServer != nullptr;
 }
 
+bool NimbleBluetooth::getPasskey(uint32_t *pin)
+{
+    if (!passkeyConfigured)
+        return false;
+    *pin = configuredPasskey;
+    return true;
+}
+
 bool NimbleBluetooth::isConnected()
 {
     return nimbleBluetoothConnHandle.load() != BLE_HS_CONN_HANDLE_NONE;
@@ -940,17 +950,19 @@ void NimbleBluetooth::setup()
         // Set the passkey
         if (config.bluetooth.mode == meshtastic_Config_BluetoothConfig_PairingMode_RANDOM_PIN) {
             LOG_INFO("Use random passkey");
-            security.setPassKey(false); // generate a random passkey
+            configuredPasskey = security.setPassKey(false); // generate a random passkey
         } else {
             LOG_INFO("Use fixed passkey");
-            security.setPassKey(true, config.bluetooth.fixed_pin);
+            configuredPasskey = security.setPassKey(true, config.bluetooth.fixed_pin);
         }
+        passkeyConfigured = true;
         // Enable authorization requirements:
         // - bonding: true (for persistent storage of the keys)
         // - MITM: true (enables Man-In-The-Middle protection for password prompts)
         // - secure connection: true (enables secure connection for encryption)
         security.setAuthenticationMode(true, true, true);
     } else {
+        passkeyConfigured = false;
         // No IO capability for no PIN mode
         security.setCapability(ESP_IO_CAP_NONE);
         // No PIN mode: no MITM protection

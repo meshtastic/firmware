@@ -8,6 +8,7 @@
 #include "UIRenderer.h"
 #include "airtime.h"
 #include "gps/RTC.h"
+#include "graphics/QrEncode.h"
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
 #include "graphics/TFTColorRegions.h"
@@ -15,6 +16,7 @@
 #include "graphics/TimeFormatters.h"
 #include "graphics/images.h"
 #include "main.h"
+#include "meshUtils.h"
 
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
 #include "mesh/wifi/WiFiAPClient.h"
@@ -646,6 +648,89 @@ void drawChirpy(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int1
     display->drawString(textX, getTextPositions(display)[line++], "Hello");
     textX = (display->getWidth() / 2) - textX_offset - (display->getStringWidth("World!") / 2);
     display->drawString(textX, getTextPositions(display)[line++], "World!");
+}
+
+// The PIN pairing will ask for: the fixed one, or the random one picked when Bluetooth started
+static bool getPairingPin(uint32_t *pin)
+{
+#if defined(ARCH_ESP32) && !defined(CONFIG_IDF_TARGET_ESP32S2) && !MESHTASTIC_EXCLUDE_BLUETOOTH
+    return nimbleBluetooth && nimbleBluetooth->getPasskey(pin);
+#elif defined(ARCH_NRF52)
+    return nrf52Bluetooth && nrf52Bluetooth->getPasskey(pin);
+#else
+    (void)pin;
+    return false;
+#endif
+}
+
+void drawFrameBluetoothPair(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    display->clear();
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    display->setFont(FONT_SMALL);
+    graphics::drawCommonHeader(display, x, y, "Pair");
+
+    uint32_t pin = 0;
+    const bool hasPin = getPairingPin(&pin);
+    char mac[18] = "";
+    uint8_t addr[6];
+    if (getBluetoothAddr(addr))
+        formatMacAddr(addr, mac, sizeof(mac));
+
+    // Re-encode only when the link changes, not on every redraw
+    static char cachedLink[96];
+    static uint8_t modules[QR_ENCODE_BUFFER_SIZE(QR_ENCODE_MAX_VERSION)];
+    static QrEncode qr;
+    static bool valid = false;
+    char link[sizeof(cachedLink)];
+    if (hasPin)
+        snprintf(link, sizeof(link), "meshtastic://meshtastic/connections?address=x%s&pin=%06u", mac, (unsigned)pin);
+    else
+        snprintf(link, sizeof(link), "meshtastic://meshtastic/connections?address=x%s", mac);
+    if (!mac[0]) {
+        valid = false;
+        cachedLink[0] = '\0'; // Re-encode once the address is back, even if unchanged
+    } else if (strcmp(link, cachedLink) != 0) {
+        strcpy(cachedLink, link);
+        valid = qrEncodeText(&qr, modules, link);
+    }
+
+    const int top = getTextPositions(display)[1] + y;
+    if (!valid) {
+        display->drawString(x + BASEUI_BODY_LR_MARGIN, top, "No BLE address");
+        return;
+    }
+
+    // Largest whole-pixel scale that fits below the header, with the spec's 4-module quiet zone,
+    // or 2 modules (which phones still read) when 4 won't fit at one pixel per module
+    const int availH = display->getHeight() - (top - y);
+    const int availW = display->getWidth();
+    const int avail = availH < availW ? availH : availW;
+    int quiet = 4;
+    if (avail < qr.size + 2 * quiet)
+        quiet = 2;
+    const int span = qr.size + 2 * quiet;
+    const int scale = avail / span;
+    if (scale < 1) {
+        display->drawString(x + BASEUI_BODY_LR_MARGIN, top, "Screen too small");
+        return;
+    }
+    const int qrPx = span * scale;
+    const int qrX = x + (availW - qrPx) / 2;
+    const int qrY = top + (availH - qrPx) / 2;
+
+    display->setColor(WHITE);
+    display->fillRect(qrX, qrY, qrPx, qrPx);
+    display->setColor(BLACK);
+    for (uint8_t my = 0; my < qr.size; my++)
+        for (uint8_t mx = 0; mx < qr.size; mx++)
+            if (qrGetModule(&qr, mx, my))
+                display->fillRect(qrX + (mx + quiet) * scale, qrY + (my + quiet) * scale, scale, scale);
+    display->setColor(WHITE);
+#if GRAPHICS_TFT_COLORING_ENABLED
+    // Keep dark-on-light whatever the theme, so phone scanners read it
+    graphics::registerTFTColorRegionDirect(qrX, qrY, qrPx, qrPx, graphics::TFTPalette::White, graphics::TFTPalette::Black);
+#endif
 }
 
 } // namespace DebugRenderer
