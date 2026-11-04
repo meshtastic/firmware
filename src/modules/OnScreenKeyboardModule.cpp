@@ -74,7 +74,7 @@ bool OnScreenKeyboardModule::processVirtualKeyboardInput(const InputEvent &event
     if (!targetKeyboard)
         return false;
 
-    const bool isRotary = event.source && strcmp(event.source, "rotEnc1") == 0;
+    const bool isRotary = event.source && (strcmp(event.source, "rotEnc1") == 0 || strcmp(event.source, "quadEnc") == 0);
 
     switch (event.inputEvent) {
     case INPUT_BROKER_UP:
