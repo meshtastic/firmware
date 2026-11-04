@@ -2,13 +2,16 @@
 
 #if HAS_TRANSPARENT_RADIO
 
+#include "MeshRadio.h"
 #include "MeshService.h"
 #include "NodeDB.h"
+#include "RadioTxHook.h"
 #include "Router.h"
 #include "Throttle.h"
 #include "UptimeClock.h"
 #include "airtime.h"
 #include <algorithm>
+#include <cstdio>
 #include <cstring>
 
 namespace
@@ -17,18 +20,50 @@ constexpr uint8_t FRAME_START1 = 0x94;
 constexpr uint8_t FRAME_START2 = 0xc3;
 constexpr size_t WAKE_BYTES = 32; // a sleeping device's serial API wakes on a run of START2
 
-bool sameLoraConfig(const meshtastic_Config_LoRaConfig &a, const meshtastic_Config_LoRaConfig &b)
+// First release with LoRaConfig.transparent_mode. Older firmware would apply our settings, then route on its own.
+constexpr unsigned MIN_FIRMWARE[3] = {2, 8, 3};
+
+bool firmwareSupportsTransparentMode(const char *version)
 {
-    uint8_t encA[meshtastic_Config_LoRaConfig_size], encB[meshtastic_Config_LoRaConfig_size];
-    const size_t lenA = pb_encode_to_bytes(encA, sizeof(encA), &meshtastic_Config_LoRaConfig_msg, &a);
-    const size_t lenB = pb_encode_to_bytes(encB, sizeof(encB), &meshtastic_Config_LoRaConfig_msg, &b);
-    return lenA == lenB && memcmp(encA, encB, lenA) == 0;
+    unsigned v[3] = {0, 0, 0};
+    if (sscanf(version, "%u.%u.%u", &v[0], &v[1], &v[2]) < 3)
+        return true; // unparseable: let the read-back decide
+    for (int i = 0; i < 3; i++)
+        if (v[i] != MIN_FIRMWARE[i])
+            return v[i] > MIN_FIRMWARE[i];
+    return true;
+}
+
+/// The first setting that puts the two configs on different air, or nullptr if they agree.
+const char *firstRfDifference(const meshtastic_Config_LoRaConfig &a, const meshtastic_Config_LoRaConfig &b, bool withPower)
+{
+    if (a.region != b.region)
+        return "region";
+    if (a.use_preset != b.use_preset || (a.use_preset && a.modem_preset != b.modem_preset))
+        return "modem preset";
+    if (!a.use_preset && (a.bandwidth != b.bandwidth || a.spread_factor != b.spread_factor))
+        return "bandwidth or spreading factor";
+    if (a.coding_rate != b.coding_rate)
+        return "coding rate";
+    if (a.override_frequency != b.override_frequency || (!a.override_frequency && a.channel_num != b.channel_num))
+        return "frequency slot";
+    if (a.tx_enabled != b.tx_enabled)
+        return "tx_enabled";
+    if (withPower && a.tx_power != b.tx_power) // the device may clamp this to its own limits, so never fatal
+        return "tx_power";
+    return nullptr;
 }
 } // namespace
 
 TransparentRadio::TransparentRadio(std::unique_ptr<TransparentLink> link)
     : concurrency::OSThread("TransparentRadio"), link(std::move(link))
 {
+}
+
+TransparentRadio::~TransparentRadio()
+{
+    while (meshtastic_MeshPacket *p = txQueue.dequeue())
+        releaseFrame(p);
 }
 
 bool TransparentRadio::init()
@@ -41,7 +76,7 @@ bool TransparentRadio::init()
 bool TransparentRadio::reconfigure()
 {
     RadioInterface::reconfigure();
-    if (state == State::Pushing || state == State::Ready)
+    if (state == State::WaitingForRegion || state == State::Refused || state == State::Pushing || state == State::Ready)
         pushConfig();
     return true;
 }
@@ -87,7 +122,7 @@ bool TransparentRadio::cancelSending(NodeNum from, PacketId id)
     meshtastic_MeshPacket *p = txQueue.remove(from, id);
     if (!p)
         return false;
-    releaseRemoved(p);
+    releaseFrame(p);
     return true;
 }
 
@@ -101,15 +136,8 @@ bool TransparentRadio::removePendingTXPacket(NodeNum from, PacketId id, uint32_t
     meshtastic_MeshPacket *p = txQueue.remove(from, id, true, true, hop_limit_lt);
     if (!p)
         return false;
-    releaseRemoved(p);
+    releaseFrame(p);
     return true;
-}
-
-void TransparentRadio::releaseRemoved(meshtastic_MeshPacket *p)
-{
-    if (p == scheduledPacket) // its address can come back from the pool as a different packet
-        scheduledPacket = nullptr;
-    packetPool.release(p);
 }
 
 void TransparentRadio::clampToLateRebroadcastWindow(NodeNum from, PacketId id)
@@ -119,26 +147,40 @@ void TransparentRadio::clampToLateRebroadcastWindow(NodeNum from, PacketId id)
         return;
     p->tx_after = Time::timerEndsAtMillis(getTxDelayMsecWeightedWorst(p->rx_snr));
     bool dropped = false;
-    if (!txQueue.enqueue(p, &dropped))
-        packetPool.release(p);
+    if (!txQueue.enqueue(p, &dropped)) {
+        txDrop++;
+        releaseFrame(p);
+        return;
+    }
     if (dropped)
         txDrop++;
-    scheduleTx(); // the moved packet may be the front, now with a later due time
+    if (txQueue.getFront() == p) // its due time moved; any other front is picked up by serviceTxQueue()
+        scheduleTx();
+}
+
+void TransparentRadio::releaseFrame(meshtastic_MeshPacket *p)
+{
+    if (p == scheduledPacket) // its address can come back from the pool as a different packet
+        scheduledPacket = nullptr;
+    RadioTxHooks::packetReleased(this, p);
+    packetPool.release(p);
 }
 
 int32_t TransparentRadio::runOnce()
 {
-    if (state == State::Disconnected && (!openAttempted || Throttle::hasElapsed(lastOpenAttemptMs, RECONNECT_INTERVAL_MS))) {
+    if (state == State::Disconnected && (!openAttempted || Throttle::hasElapsed(lastOpenAttemptMs, reconnectIntervalMs))) {
         openAttempted = true;
         lastOpenAttemptMs = Time::getMillis();
         if (link->open()) {
             LOG_INFO("Transparent radio: connected to %s", link->describe().c_str());
             openFailureLogged = false;
+            reconnectIntervalMs = RECONNECT_MIN_MS;
             startHandshake();
-        } else if (!openFailureLogged) {
-            LOG_WARN("Transparent radio: can't open %s, retrying every %us", link->describe().c_str(),
-                     (unsigned)(RECONNECT_INTERVAL_MS / 1000));
+        } else {
+            if (!openFailureLogged)
+                LOG_WARN("Transparent radio: can't open %s, retrying", link->describe().c_str());
             openFailureLogged = true;
+            reconnectIntervalMs = std::min(reconnectIntervalMs * 2, RECONNECT_MAX_MS);
         }
     }
 
@@ -148,13 +190,15 @@ int32_t TransparentRadio::runOnce()
     if ((state == State::Configuring || state == State::Pushing) && Throttle::hasElapsed(stateSinceMs, HANDSHAKE_TIMEOUT_MS)) {
         LOG_WARN("Transparent radio: %s did not finish its handshake, asking again", link->describe().c_str());
         startHandshake();
+    } else if (state == State::Refused && Throttle::hasElapsed(stateSinceMs, REFUSED_RETRY_MS)) {
+        startHandshake();
     }
 
     if (link->isOpen() && Throttle::hasElapsed(lastWriteMs, HEARTBEAT_INTERVAL_MS))
         sendHeartbeat();
 
     serviceTxQueue();
-    return (link->isOpen() || scheduledPacket) ? POLL_INTERVAL_MS : RECONNECT_INTERVAL_MS;
+    return (link->isOpen() || scheduledPacket) ? POLL_INTERVAL_MS : reconnectIntervalMs;
 }
 
 void TransparentRadio::setState(State next)
@@ -167,6 +211,7 @@ void TransparentRadio::startHandshake()
 {
     rxPtr = 0;
     deviceNodeNum = 0;
+    deviceFirmwareTooOld = false;
     haveDeviceLora = false;
     verifyRequestId = 0;
     deviceQueueFree = -1;
@@ -241,6 +286,9 @@ void TransparentRadio::handleFromRadio()
     case meshtastic_FromRadio_my_info_tag:
         deviceNodeNum = fromRadio.my_info.my_node_num;
         break;
+    case meshtastic_FromRadio_metadata_tag:
+        deviceFirmwareTooOld = !firmwareSupportsTransparentMode(fromRadio.metadata.firmware_version);
+        break;
     case meshtastic_FromRadio_config_tag:
         if (fromRadio.config.which_payload_variant == meshtastic_Config_lora_tag) {
             deviceLora = fromRadio.config.payload_variant.lora;
@@ -280,6 +328,11 @@ meshtastic_Config_LoRaConfig TransparentRadio::desiredLoraConfig() const
 {
     meshtastic_Config_LoRaConfig lora = config.lora;
     lora.transparent_mode = true;
+    // The device's AdminModule rewrites these when out of range; match it, or the read-back never agrees.
+    lora.coding_rate = clampCodingRate(lora.coding_rate);
+    lora.spread_factor = clampSpreadFactor(lora.spread_factor);
+    if (!lora.use_preset)
+        lora.bandwidth = clampBandwidthCode(lora.bandwidth);
     // The slot comes from the primary channel name, and the device's name is not ours: pin the slot we resolved.
     if (!lora.override_frequency)
         lora.channel_num = savedChannelNum + 1;
@@ -300,8 +353,22 @@ void TransparentRadio::pushConfig()
         LOG_WARN("Transparent radio: %s sent no node number; waiting to retry", link->describe().c_str());
         return; // the handshake timeout asks again
     }
+    if (deviceFirmwareTooOld) {
+        LOG_ERROR("Transparent radio: %s runs firmware older than %u.%u.%u, which has no transparent mode",
+                  link->describe().c_str(), MIN_FIRMWARE[0], MIN_FIRMWARE[1], MIN_FIRMWARE[2]);
+        link->close();
+        setState(State::Unsupported);
+        return;
+    }
+    if (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
+        if (state != State::WaitingForRegion)
+            LOG_WARN("Transparent radio: no LoRa region set, so %s is left as it is", link->describe().c_str());
+        setState(State::WaitingForRegion);
+        return;
+    }
+
     const meshtastic_Config_LoRaConfig want = desiredLoraConfig();
-    if (haveDeviceLora && sameLoraConfig(deviceLora, want)) {
+    if (haveDeviceLora && deviceLora.transparent_mode && !firstRfDifference(want, deviceLora, true)) {
         setState(State::Ready);
         LOG_INFO("Transparent radio: %s ready", link->describe().c_str());
         return;
@@ -313,6 +380,7 @@ void TransparentRadio::pushConfig()
     set.set_config.payload_variant.lora = want;
     if (!sendAdmin(set, false))
         return;
+    pushedLora = want;
 
     meshtastic_AdminMessage get = meshtastic_AdminMessage_init_zero;
     get.which_payload_variant = meshtastic_AdminMessage_get_config_request_tag;
@@ -333,6 +401,15 @@ void TransparentRadio::handleAdminReply(const meshtastic_MeshPacket &p)
 
     deviceLora = admin.get_config_response.payload_variant.lora;
     haveDeviceLora = true;
+    // A device that rejects a LoRa config restores its old one whole, transparent_mode included, so check the radio
+    // settings first: only a device that took them and still reads transparent_mode false lacks the feature.
+    if (const char *difference = firstRfDifference(pushedLora, deviceLora, false)) {
+        LOG_WARN("Transparent radio: %s did not take our LoRa settings (%s differs); retrying in %u min or on the next "
+                 "config change",
+                 link->describe().c_str(), difference, (unsigned)(REFUSED_RETRY_MS / 60000));
+        setState(State::Refused);
+        return;
+    }
     if (!deviceLora.transparent_mode) {
         LOG_ERROR("Transparent radio: %s kept transparent_mode off; its firmware predates transparent mode",
                   link->describe().c_str());
@@ -397,14 +474,13 @@ bool TransparentRadio::forward(const meshtastic_MeshPacket *p)
     out.to = p->to;
     out.id = p->id;
     out.channel = p->channel;
-    out.hop_limit = p->hop_limit;
-    out.hop_start = p->hop_start;
+    out.hop_limit = p->hop_limit > HOP_MAX ? HOP_RELIABLE : p->hop_limit; // as encodeRadioBuffer() does for a local chip
+    out.hop_start = p->hop_start & HOP_MAX;
     out.want_ack = p->want_ack;
     out.via_mqtt = p->via_mqtt;
     out.next_hop = p->next_hop;
     out.relay_node = p->relay_node;
     out.priority = p->priority;
-    out.slot_parity = p->slot_parity;
     out.which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
     out.encrypted = p->encrypted;
     return writeToRadio();
@@ -458,7 +534,11 @@ void TransparentRadio::serviceTxQueue()
 
     meshtastic_MeshPacket *p = txQueue.dequeue();
     if (state != State::Ready) {
-        LOG_DEBUG("Transparent radio: drop 0x%08x, device not ready", p->id);
+        LOG_DEBUG_RADIO("Transparent radio: drop 0x%08x, device not ready", p->id);
+        txDrop++;
+    } else if (RadioTxHooks::holdsRadio(p)) {
+        LOG_WARN("Transparent radio: drop 0x%08x, it needs its own radio settings, which the device can't switch per packet",
+                 p->id);
         txDrop++;
     } else if (p->which_payload_variant != meshtastic_MeshPacket_encrypted_tag) {
         LOG_WARN("Transparent radio: drop 0x%08x, not encrypted", p->id);
@@ -476,7 +556,7 @@ void TransparentRadio::serviceTxQueue()
     } else {
         txDrop++;
     }
-    packetPool.release(p);
+    releaseFrame(p);
     scheduleTx();
 }
 

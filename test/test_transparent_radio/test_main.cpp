@@ -169,11 +169,15 @@ static void deviceSendsLora(const meshtastic_Config_LoRaConfig &lora)
 }
 
 /// The device's answer to want_config: its node number, its LoRa config, then config_complete_id.
-static void deviceSendsConfigDump(const meshtastic_Config_LoRaConfig &lora)
+static void deviceSendsConfigDump(const meshtastic_Config_LoRaConfig &lora, const char *firmwareVersion = "2.8.3.abcdef0")
 {
     meshtastic_FromRadio fr = meshtastic_FromRadio_init_zero;
     fr.which_payload_variant = meshtastic_FromRadio_my_info_tag;
     fr.my_info.my_node_num = DEVICE_NODE;
+    deviceSends(fr);
+    fr = meshtastic_FromRadio_init_zero;
+    fr.which_payload_variant = meshtastic_FromRadio_metadata_tag;
+    strncpy(fr.metadata.firmware_version, firmwareVersion, sizeof(fr.metadata.firmware_version) - 1);
     deviceSends(fr);
     deviceSendsLora(lora);
     fr = meshtastic_FromRadio_init_zero;
@@ -209,7 +213,28 @@ static meshtastic_Config_LoRaConfig expectedDeviceLora()
     meshtastic_Config_LoRaConfig lora = config.lora;
     lora.transparent_mode = true;
     lora.channel_num = radio->getChannelNum() + 1;
+    lora.coding_rate = clampCodingRate(lora.coding_rate); // as the device's AdminModule stores it
+    lora.spread_factor = clampSpreadFactor(lora.spread_factor);
     return lora;
+}
+
+/// The device's answer to the read-back (get_config_request) the radio sent as `request`.
+static void deviceAnswersReadBack(const meshtastic_ToRadio &request, const meshtastic_Config_LoRaConfig &lora)
+{
+    meshtastic_FromRadio reply = meshtastic_FromRadio_init_zero;
+    reply.which_payload_variant = meshtastic_FromRadio_packet_tag;
+    reply.packet.from = DEVICE_NODE;
+    reply.packet.to = DEVICE_NODE;
+    reply.packet.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    reply.packet.decoded.portnum = meshtastic_PortNum_ADMIN_APP;
+    reply.packet.decoded.request_id = request.packet.id;
+    meshtastic_AdminMessage readBack = meshtastic_AdminMessage_init_zero;
+    readBack.which_payload_variant = meshtastic_AdminMessage_get_config_response_tag;
+    readBack.get_config_response.which_payload_variant = meshtastic_Config_lora_tag;
+    readBack.get_config_response.payload_variant.lora = lora;
+    reply.packet.decoded.payload.size = pb_encode_to_bytes(
+        reply.packet.decoded.payload.bytes, sizeof(reply.packet.decoded.payload.bytes), &meshtastic_AdminMessage_msg, &readBack);
+    deviceSends(reply);
 }
 
 /// Run the handshake against a device already in the state we want, so no config is pushed.
@@ -344,20 +369,7 @@ void test_handshake_pushes_our_lora_config_with_transparent_mode(void)
     TEST_ASSERT_TRUE(sent[1].packet.decoded.want_response);
     TEST_ASSERT_EQUAL((int)TransparentRadio::State::Pushing, (int)radio->getState());
 
-    meshtastic_FromRadio reply = meshtastic_FromRadio_init_zero;
-    reply.which_payload_variant = meshtastic_FromRadio_packet_tag;
-    reply.packet.from = DEVICE_NODE;
-    reply.packet.to = DEVICE_NODE;
-    reply.packet.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
-    reply.packet.decoded.portnum = meshtastic_PortNum_ADMIN_APP;
-    reply.packet.decoded.request_id = sent[1].packet.id;
-    meshtastic_AdminMessage readBack = meshtastic_AdminMessage_init_zero;
-    readBack.which_payload_variant = meshtastic_AdminMessage_get_config_response_tag;
-    readBack.get_config_response.which_payload_variant = meshtastic_Config_lora_tag;
-    readBack.get_config_response.payload_variant.lora = pushed;
-    reply.packet.decoded.payload.size = pb_encode_to_bytes(
-        reply.packet.decoded.payload.bytes, sizeof(reply.packet.decoded.payload.bytes), &meshtastic_AdminMessage_msg, &readBack);
-    deviceSends(reply);
+    deviceAnswersReadBack(sent[1], pushed);
     radio->runOnce();
 
     TEST_ASSERT_EQUAL((int)TransparentRadio::State::Ready, (int)radio->getState());
@@ -370,8 +382,9 @@ void test_device_already_set_up_goes_ready_without_pushing(void)
     bringReady();
 }
 
-// Firmware that predates transparent_mode drops the unknown field, so the read-back comes back without it.
-// The radio must refuse that device rather than hand frames to a node that will route them itself.
+// Firmware that predates transparent_mode drops the unknown field: it takes our radio settings, but the
+// read-back comes back without transparent_mode. The radio must refuse that device rather than hand frames
+// to a node that will route them itself.
 void test_firmware_without_transparent_mode_is_refused(void)
 {
     radio->runOnce();
@@ -381,19 +394,9 @@ void test_firmware_without_transparent_mode_is_refused(void)
     std::vector<meshtastic_ToRadio> sent = takeToRadio();
     TEST_ASSERT_EQUAL(2, sent.size());
 
-    meshtastic_FromRadio reply = meshtastic_FromRadio_init_zero;
-    reply.which_payload_variant = meshtastic_FromRadio_packet_tag;
-    reply.packet.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
-    reply.packet.decoded.portnum = meshtastic_PortNum_ADMIN_APP;
-    reply.packet.decoded.request_id = sent[1].packet.id;
-    meshtastic_AdminMessage readBack = meshtastic_AdminMessage_init_zero;
-    readBack.which_payload_variant = meshtastic_AdminMessage_get_config_response_tag;
-    readBack.get_config_response.which_payload_variant = meshtastic_Config_lora_tag;
-    readBack.get_config_response.payload_variant.lora = adminIn(sent[0]).set_config.payload_variant.lora;
-    readBack.get_config_response.payload_variant.lora.transparent_mode = false;
-    reply.packet.decoded.payload.size = pb_encode_to_bytes(
-        reply.packet.decoded.payload.bytes, sizeof(reply.packet.decoded.payload.bytes), &meshtastic_AdminMessage_msg, &readBack);
-    deviceSends(reply);
+    meshtastic_Config_LoRaConfig tookItAll = adminIn(sent[0]).set_config.payload_variant.lora;
+    tookItAll.transparent_mode = false;
+    deviceAnswersReadBack(sent[1], tookItAll);
     radio->runOnce();
 
     TEST_ASSERT_EQUAL((int)TransparentRadio::State::Unsupported, (int)radio->getState());
@@ -401,6 +404,76 @@ void test_firmware_without_transparent_mode_is_refused(void)
     Time::advanceTestMillis(60000);
     radio->runOnce();
     TEST_ASSERT_EQUAL_MESSAGE(1, fakeLink->opens, "an unsupported device is not retried");
+}
+
+// A release the device reports as older than transparent mode is refused before anything is written to it:
+// old firmware would apply and save our region and preset, and only then fail the read-back.
+void test_old_firmware_version_is_refused_before_any_write(void)
+{
+    radio->runOnce();
+    takeToRadio();
+    deviceSendsConfigDump(meshtastic_Config_LoRaConfig_init_zero, "2.7.15.1234abc");
+    radio->runOnce();
+
+    TEST_ASSERT_EQUAL((int)TransparentRadio::State::Unsupported, (int)radio->getState());
+    TEST_ASSERT_EQUAL_MESSAGE(0, takeToRadio().size(), "no set_config may reach old firmware");
+}
+
+// A device that rejects a LoRa config restores its old one whole, so transparent_mode reads back false
+// there too. That is not old firmware: the radio waits and retries, and retries at once when this node's
+// config changes, instead of writing the device off until restart.
+void test_device_refusing_our_settings_is_retried_not_written_off(void)
+{
+    radio->runOnce();
+    takeToRadio();
+    meshtastic_Config_LoRaConfig deviceNow = meshtastic_Config_LoRaConfig_init_zero;
+    deviceNow.region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
+    deviceNow.use_preset = true;
+    deviceSendsConfigDump(deviceNow);
+    radio->runOnce();
+    std::vector<meshtastic_ToRadio> sent = takeToRadio();
+    TEST_ASSERT_EQUAL(2, sent.size());
+
+    deviceAnswersReadBack(sent[1], deviceNow); // kept its own settings
+    radio->runOnce();
+    TEST_ASSERT_EQUAL((int)TransparentRadio::State::Refused, (int)radio->getState());
+    TEST_ASSERT_TRUE_MESSAGE(fakeLink->isOpen(), "a refusal is not a reason to drop the link");
+
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST;
+    TEST_ASSERT_TRUE(radio->reconfigure());
+    sent = takeToRadio();
+    TEST_ASSERT_EQUAL_MESSAGE(2, sent.size(), "a config change retries straight away");
+    TEST_ASSERT_EQUAL(meshtastic_AdminMessage_set_config_tag, adminIn(sent[0]).which_payload_variant);
+    TEST_ASSERT_EQUAL((int)TransparentRadio::State::Pushing, (int)radio->getState());
+}
+
+// With no region set here, pushing would set the device's region to UNSET (and turn its TX off) and persist
+// that. Nothing is pushed until this node has a region; setting one pushes at once.
+void test_no_region_here_leaves_the_device_alone_until_one_is_set(void)
+{
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
+    initRegion();
+    TEST_ASSERT_TRUE(radio->reconfigure());
+    radio->runOnce();
+    takeToRadio();
+    meshtastic_Config_LoRaConfig deviceNow = meshtastic_Config_LoRaConfig_init_zero;
+    deviceNow.region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
+    deviceSendsConfigDump(deviceNow);
+    radio->runOnce();
+    TEST_ASSERT_EQUAL((int)TransparentRadio::State::WaitingForRegion, (int)radio->getState());
+    TEST_ASSERT_EQUAL_MESSAGE(0, takeToRadio().size(), "no admin traffic without a region");
+
+    Time::advanceTestMillis(60000);
+    radio->runOnce();
+    TEST_ASSERT_EQUAL_MESSAGE((int)TransparentRadio::State::WaitingForRegion, (int)radio->getState(),
+                              "waiting for a region is not a stuck handshake");
+
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    initRegion();
+    TEST_ASSERT_TRUE(radio->reconfigure());
+    std::vector<meshtastic_ToRadio> sent = takeToRadio();
+    TEST_ASSERT_EQUAL(2, sent.size());
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_US, adminIn(sent[0]).set_config.payload_variant.lora.region);
 }
 
 // ---------------------------------------------------------------------------
@@ -473,9 +546,7 @@ void test_full_device_queue_holds_frames_until_space_is_reported(void)
 
     deviceSendsQueueFree(3);
     Time::advanceTestMillis(100);
-    radio->runOnce(); // reads the QueueStatus
-    Time::advanceTestMillis(100);
-    radio->runOnce();
+    radio->runOnce(); // reads the QueueStatus, then forwards the held frame in the same pass
     std::vector<meshtastic_ToRadio> sent = takeToRadio();
     TEST_ASSERT_EQUAL(1, sent.size());
     TEST_ASSERT_EQUAL_HEX32(0x5002, sent[0].packet.id);
@@ -628,6 +699,9 @@ void setup()
     RUN_TEST(test_handshake_pushes_our_lora_config_with_transparent_mode);
     RUN_TEST(test_device_already_set_up_goes_ready_without_pushing);
     RUN_TEST(test_firmware_without_transparent_mode_is_refused);
+    RUN_TEST(test_old_firmware_version_is_refused_before_any_write);
+    RUN_TEST(test_device_refusing_our_settings_is_retried_not_written_off);
+    RUN_TEST(test_no_region_here_leaves_the_device_alone_until_one_is_set);
     RUN_TEST(test_frame_goes_out_at_its_due_time_with_header_and_ciphertext_only);
     RUN_TEST(test_cancelled_frame_never_reaches_the_device);
     RUN_TEST(test_full_device_queue_holds_frames_until_space_is_reported);
