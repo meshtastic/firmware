@@ -1847,6 +1847,13 @@ bool PhoneAPI::handleToRadioPacket(meshtastic_MeshPacket &p)
     }
 #endif
 
+    // Transparent mode: the client runs the mesh, including retries that reuse an id, so none of the
+    // decoded-payload policy below applies to its frames.
+    if (config.lora.transparent_mode && p.which_payload_variant == meshtastic_MeshPacket_encrypted_tag) {
+        service->handleToRadio(p);
+        return true;
+    }
+
     // Coordinates aimed at the event channel go out on the position channel instead (the phone picks the
     // channel it last heard the node on, which is the event channel for everyone). Only when there is no
     // channel to move them to is the send rejected. Reject before recording duplicate or per-port cooldown
