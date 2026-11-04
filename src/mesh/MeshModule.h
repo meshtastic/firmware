@@ -138,6 +138,9 @@ class MeshModule
      */
     static const meshtastic_MeshPacket *currentRequest;
 
+    /// Where currentRequest came from. Only meaningful while currentRequest points at the packet being handled.
+    static RxSource currentRequestSource;
+
     // We keep track of the number of modules that send a periodic broadcast to schedule them spaced out over time
     static uint8_t numPeriodicModules;
 
