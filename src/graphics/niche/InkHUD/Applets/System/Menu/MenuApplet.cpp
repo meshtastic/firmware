@@ -9,11 +9,11 @@
 #include "MeshService.h"
 #include "MessageStore.h"
 #include "Power.h"
+#include "PowerStatus.h"
 #include "Router.h"
 #include "UptimeClock.h"
 #include "airtime.h"
 #include "gps/RTC.h"
-#include "graphics/TimeFormatters.h"
 #if !MESHTASTIC_EXCLUDE_MQTT
 #include "mqtt/MQTT.h"
 #endif
@@ -196,28 +196,6 @@ void saveT5BacklightKeepOn(bool keepOn)
 } // namespace
 #endif
 
-// Generic single-cell LiPo state of charge from resting voltage, piecewise linear
-static float lipoPercentFromMv(float mv)
-{
-    struct Point {
-        float mv;
-        float percent;
-    };
-    static constexpr Point curve[] = {{4200, 100}, {4150, 95}, {4110, 90}, {4080, 85}, {4020, 80}, {3980, 75}, {3950, 70},
-                                      {3910, 65},  {3870, 60}, {3850, 55}, {3840, 50}, {3820, 45}, {3800, 40}, {3790, 35},
-                                      {3770, 30},  {3750, 25}, {3730, 20}, {3710, 15}, {3690, 10}, {3610, 5},  {3300, 0}};
-    constexpr uint8_t count = sizeof(curve) / sizeof(curve[0]);
-    if (mv >= curve[0].mv)
-        return 100;
-    for (uint8_t i = 1; i < count; i++) {
-        if (mv >= curve[i].mv) {
-            const float t = (mv - curve[i].mv) / (curve[i - 1].mv - curve[i].mv);
-            return curve[i].percent + t * (curve[i - 1].percent - curve[i].percent);
-        }
-    }
-    return 0;
-}
-
 InkHUD::MenuApplet::MenuApplet() : concurrency::OSThread("MenuApplet")
 {
     // No timer tasks at boot
@@ -238,34 +216,6 @@ InkHUD::MenuApplet::MenuApplet() : concurrency::OSThread("MenuApplet")
     // - handles loading & parsing the canned messages
     // - handles setting / getting of canned messages via apps (Client API Admin Messages)
     cm.store = CannedMessageStore::getInstance();
-
-    // Follow the battery from boot, so System Info can estimate the remaining runtime
-    powerStatusObserver.observe(&powerStatus->onNewStatus);
-}
-
-int InkHUD::MenuApplet::onPowerStatusUpdate(const meshtastic::Status *status)
-{
-    assert(status->getStatusType() == STATUS_TYPE_POWER);
-    const meshtastic::PowerStatus *pwr = (const meshtastic::PowerStatus *)status;
-
-    batteryPresent = pwr->getHasBattery();
-    batteryCharging = pwr->getIsCharging() || pwr->getHasUSB();
-
-    // Smooth the voltage (first reading seeds it)
-    const float mv = pwr->getBatteryVoltageMv();
-    batteryVoltageMvSmoothed = batteryVoltageMvSmoothed > 0 ? (batteryVoltageMvSmoothed * 0.9f + mv * 0.1f) : mv;
-    batteryPercent = lipoPercentFromMv(batteryVoltageMvSmoothed);
-
-    if (!batteryPresent || batteryCharging) {
-        // Drain is only meaningful off the charger. Start over once unplugged
-        batteryBaselineUptimeSecs = 0;
-        batteryVoltageMvSmoothed = 0;
-    } else if (batteryBaselineUptimeSecs == 0) {
-        batteryBaselinePercent = batteryPercent;
-        batteryBaselineUptimeSecs = max<uint32_t>(1, Time::getUptimeSecs());
-    }
-
-    return 0; // Keep informing other observers
 }
 
 void InkHUD::MenuApplet::onForeground()
@@ -1532,23 +1482,6 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
 
         items.push_back(MenuItem::Header("Runtime"));
         addInfoRow("Uptime: " + formatDuration(Time::getUptimeSecs()));
-        // Always shown. Feed in the current reading too: the menu can miss the change notifications
-        onPowerStatusUpdate(powerStatus);
-        std::string left = "measuring...";
-        if (!batteryPresent) {
-            left = "no battery";
-        } else if (batteryCharging) {
-            left = "charging";
-        } else if (batteryBaselineUptimeSecs) {
-            // Extrapolate the drain seen since the baseline. Needs a couple of % and a few hours to mean anything
-            const uint32_t elapsed = Time::getUptimeSecs() - batteryBaselineUptimeSecs;
-            const float drop = batteryBaselinePercent - batteryPercent;
-            if (drop >= 2 && elapsed >= 2 * 3600) {
-                const uint32_t leftSecs = batteryPercent * elapsed / drop;
-                left = leftSecs > 30 * 86400UL ? ">30d" : "~" + formatDuration(leftSecs);
-            }
-        }
-        addInfoRow("Battery left: " + left);
 
         // Memory: a label row ("Heap 89/153K 58%" or "Flash 1.2/14M 9%") with a full-width usage bar underneath, as on baseUI's
         // system screen
@@ -1578,9 +1511,10 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         if (flashTotal > 0)
             addUsageRow("Flash", fsUsedBytes(), flashTotal);
 #ifdef INKHUD_SYSTEM_INFO_SD
-        // The SD card shares its SPI bus with the radio and the map tiles, so read it under spiLock
-        uint64_t sdUsed = 0, sdTotal = 0;
-        {
+        // Cache SD usage until we leave this page; repeated selections must not hold up other SPI users.
+        static uint64_t sdUsed = 0, sdTotal = 0;
+        if (currentPage != MenuPage::NODE_CONFIG_SYSTEM_INFO) {
+            sdUsed = sdTotal = 0;
             concurrency::LockGuard g(spiLock);
             if (SD.cardType() != CARD_NONE) {
                 sdTotal = SD.totalBytes();
