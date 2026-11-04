@@ -4045,6 +4045,7 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
                 meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
                 if (cn) {
                     cn->level = meshtastic_LogRecord_Level_WARNING;
+                    cn->type = meshtastic_ClientNotification_NotificationType_DUPLICATED_PUBLIC_KEY;
                     cn->time = getValidTime(RTCQualityFromNet);
                     snprintf(cn->message, sizeof(cn->message), warning, safeName);
                     service->sendClientNotification(cn);
@@ -4975,6 +4976,7 @@ bool NodeDB::notifyPendingLicensedIdentityMigration()
     if (!notification)
         return false;
     notification->level = meshtastic_LogRecord_Level_WARNING;
+    notification->type = meshtastic_ClientNotification_NotificationType_LICENSED_IDENTITY_CHANGED;
     notification->time = getValidTime(RTCQualityFromNet);
     snprintf(notification->message, sizeof(notification->message), "%s", LICENSED_IDENTITY_MIGRATION_WARNING);
     service->sendClientNotification(notification);
