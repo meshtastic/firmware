@@ -1402,6 +1402,9 @@ void printSummary()
                                                         : "DIO" + std::to_string(kLr20x0DefaultIrqDio) + " (radio default)")
                   << "\n";
 
+    if (portduino_config.lora_module == use_transparent)
+        return; // no local radio: startup claims no Lora lines
+
     // A ch341 adapter's Lora pins are adapter indexes handed to Ch341Hal, not gpiochip lines
     // (portduinoSetup() skips initGPIOPin()), so pointing the user at gpioinfo would be wrong.
     const bool usbAdapter = portduino_config.lora_spi_dev == "ch341";
