@@ -135,6 +135,12 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     if (mp.which_payload_variant != meshtastic_MeshPacket_decoded_tag) {
         return handled;
     }
+    // from == 0 is trusted as a local client below, so require callModules() to vouch for its origin.
+    if (mp.from == 0 &&
+        !(currentRequest == &mp && (currentRequestSource == RX_SRC_USER || currentRequestSource == RX_SRC_LOCAL))) {
+        LOG_WARN("Drop admin payload with from=0 that did not arrive from a local client");
+        return handled;
+    }
 #ifdef ARCH_PORTDUINO
     // Simulator only: honor exit_simulator unconditionally for the local client (from==0).
     // The from==0 branch below now covers pki_encrypted local packets too, but is_managed
@@ -161,8 +167,8 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         LOG_TRACE("Allow admin response message");
     } else if (mp.from == 0) {
         // Local admin from a BLE/USB/TCP client. from == 0 cannot arrive from the
-        // mesh: RF drops packets without a sender (RadioLibInterface) and MQTT treats
-        // from == 0 as our own downlink and ignores it. Clients may set pki_encrypted
+        // mesh: RF, MQTT and UDP ingress drop it, and the source gate above rejects
+        // any from == 0 not dispatched as RX_SRC_USER/LOCAL. Clients may set pki_encrypted
         // on self-addressed admin (the python CLI does), so don't use it to reroute
         // local packets into the remote-PKC key check.
         //
@@ -384,7 +390,8 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
 
         if (r->ota_request.ota_hash.size != 32) {
             suppressRebootBanner = true;
-            sendWarningAndLog("Cannot start OTA: Invalid `ota_hash` provided.");
+            sendWarningAndLog(meshtastic_ClientNotification_NotificationType_OTA_INVALID_HASH,
+                              "Cannot start OTA: Invalid `ota_hash` provided.");
             break;
         }
 
@@ -395,20 +402,23 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         const esp_partition_t *part = MeshtasticOTA::getAppPartition();
         if (part == NULL) {
             suppressRebootBanner = true;
-            sendWarningAndLog("Cannot start OTA: Cannot find OTA Loader partition.");
+            sendWarningAndLog(meshtastic_ClientNotification_NotificationType_OTA_LOADER_PARTITION_MISSING,
+                              "Cannot start OTA: Cannot find OTA Loader partition.");
             break;
         }
 
         static esp_app_desc_t app_desc;
         if (!MeshtasticOTA::getAppDesc(part, &app_desc)) {
             suppressRebootBanner = true;
-            sendWarningAndLog("Cannot start OTA: Device does have a valid OTA Loader.");
+            sendWarningAndLog(meshtastic_ClientNotification_NotificationType_OTA_LOADER_INVALID,
+                              "Cannot start OTA: Device does have a valid OTA Loader.");
             break;
         }
 
         if (!MeshtasticOTA::checkOTACapability(&app_desc, mode)) {
             suppressRebootBanner = true;
-            sendWarningAndLog("OTA Loader does not support %s", mode_name);
+            sendWarningAndLog(meshtastic_ClientNotification_NotificationType_OTA_MODE_UNSUPPORTED,
+                              "OTA Loader does not support %s", mode_name);
             break;
         }
 
@@ -419,9 +429,10 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
                 screen->startFirmwareUpdateScreen();
             }
             MeshtasticOTA::saveConfig(&config.network, mode, r->ota_request.ota_hash.bytes);
-            sendWarningAndLog("Rebooting to %s OTA", mode_name);
+            sendWarningAndLog(meshtastic_ClientNotification_NotificationType_OTA_REBOOTING, "Rebooting to %s OTA", mode_name);
         } else {
-            sendWarningAndLog("Unable to switch to the OTA partition.");
+            sendWarningAndLog(meshtastic_ClientNotification_NotificationType_OTA_PARTITION_SWITCH_FAILED,
+                              "Unable to switch to the OTA partition.");
         }
 #endif
         int s = 1; // Reboot in 1 second, hard coded
@@ -522,7 +533,8 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
                 if (screen)
                     screen->setFrames(graphics::Screen::FOCUS_PRESERVE); // <-- Rebuild screens
             } else if (mp.from == 0) { // local request from the phone - tell the user why it didn't take
-                sendWarning(NodeDB::PROTECTED_CAP_WARN_FMT, "favorite", r->set_favorite_node, MAX_NUM_NODES - 2);
+                sendWarning(meshtastic_ClientNotification_NotificationType_PROTECTED_NODE_LIMIT_REACHED,
+                            NodeDB::PROTECTED_CAP_WARN_FMT, "favorite", r->set_favorite_node, MAX_NUM_NODES - 2);
             } else {
                 LOG_WARN("Remote set_favorite_node for 0x%08x refused: protected-node cap", r->set_favorite_node);
             }
@@ -558,7 +570,8 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
                     screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
 #endif
             } else if (mp.from == 0) { // local request from the phone - tell the user why it didn't take
-                sendWarning(NodeDB::PROTECTED_CAP_WARN_FMT, "ignore", r->set_ignored_node, MAX_NUM_NODES - 2);
+                sendWarning(meshtastic_ClientNotification_NotificationType_PROTECTED_NODE_LIMIT_REACHED,
+                            NodeDB::PROTECTED_CAP_WARN_FMT, "ignore", r->set_ignored_node, MAX_NUM_NODES - 2);
             } else {
                 LOG_WARN("Remote set_ignored_node for 0x%08x refused: protected-node cap", r->set_ignored_node);
             }
@@ -807,7 +820,8 @@ void AdminModule::handleSetOwner(const meshtastic_User &o)
         const bool identityWillMigrate =
             o.is_licensed && config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET && licensedIdentityWillMigrate();
         if (identityWillMigrate)
-            sendWarning(licensedIdentityMigrationMessage);
+            sendWarning(meshtastic_ClientNotification_NotificationType_LICENSED_IDENTITY_WILL_CHANGE,
+                        licensedIdentityMigrationMessage);
 #endif
         owner.is_licensed = o.is_licensed;
         if (channels.ensureLicensedOperation()) {
@@ -906,7 +920,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
             config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_ALL;
             const char *warning = "Rebroadcast mode can't be set to NONE for a router role";
             LOG_WARN(warning);
-            sendWarning(warning);
+            sendWarning(meshtastic_ClientNotification_NotificationType_ROUTER_REBROADCAST_NONE_REJECTED, warning);
         }
         // If we're setting router role for the first time, install its intervals
         if (existingRole != c.payload_variant.device.role) {
@@ -1055,7 +1069,8 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
                 if (owner.is_licensed && isRegionUnset && validatedLora.region > meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
                     const bool identityWillMigrate = licensedIdentityWillMigrate();
                     if (identityWillMigrate)
-                        sendWarning(licensedIdentityMigrationMessage);
+                        sendWarning(meshtastic_ClientNotification_NotificationType_LICENSED_IDENTITY_WILL_CHANGE,
+                                    licensedIdentityMigrationMessage);
                     nodeDB->generateCryptoKeyPair();
                     changes |= SEGMENT_DEVICESTATE | SEGMENT_NODEDATABASE;
                     if (identityWillMigrate)
@@ -1200,7 +1215,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
                 meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_COMPATIBLE;
             const char *warning = "Packet authenticity policy is unavailable on this firmware build";
             LOG_WARN(warning);
-            sendWarning(warning);
+            sendWarning(meshtastic_ClientNotification_NotificationType_PACKET_SIGNATURE_POLICY_UNAVAILABLE, warning);
         }
 #endif
         config.security = incoming;
@@ -1220,7 +1235,8 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
             const bool keygenSucceeded = nodeDB->generateCryptoKeyPair(priorPrivateKey);
             const bool keyWasReplaced = memcmp(priorPrivateKey, config.security.private_key.bytes, 32) != 0;
             if (keygenSucceeded && keyWasReplaced && nodeDB->keyIsLowEntropy) {
-                sendWarning(LOW_ENTROPY_RESTORE_WARNING);
+                sendWarning(meshtastic_ClientNotification_NotificationType_LOW_ENTROPY_KEY_RESTORE_REJECTED,
+                            LOW_ENTROPY_RESTORE_WARNING);
             }
         }
 #endif
@@ -1228,7 +1244,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
             config.security.is_managed = false;
             const char *warning = "You must provide at least one admin public key to enable managed mode";
             LOG_WARN(warning);
-            sendWarning(warning);
+            sendWarning(meshtastic_ClientNotification_NotificationType_MANAGED_MODE_REQUIRES_ADMIN_KEY, warning);
         }
 
         changes = SEGMENT_CONFIG | SEGMENT_DEVICESTATE | SEGMENT_NODEDATABASE;
@@ -1388,8 +1404,10 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
         moduleConfig.mesh_beacon = beaconCfg;
         shouldReboot = false;
         // Payload content changed - invalidate the broadcaster's cache.
-        if (meshBeaconBroadcastModule)
+        if (meshBeaconBroadcastModule) {
             meshBeaconBroadcastModule->invalidateCache();
+            meshBeaconBroadcastModule->reschedule();
+        }
         break;
     }
 #endif
@@ -1423,7 +1441,8 @@ void AdminModule::handleSetChannel(const meshtastic_Channel &cc)
         }
     }
     if (clamped)
-        sendWarning(publicChannelPrecisionMessage);
+        sendWarning(meshtastic_ClientNotification_NotificationType_PUBLIC_CHANNEL_POSITION_PRECISION_REDUCED,
+                    publicChannelPrecisionMessage);
     saveChanges(SEGMENT_CHANNELS, false);
     warnOnChannelSet(channels.getByIndex(cc.index)); // passes the saved channel
     // Inside an edit transaction the queued warnings are flushed once at commit; otherwise emit now.
@@ -1922,7 +1941,8 @@ bool AdminModule::handleSetHamMode(const meshtastic_HamParameters &p)
     if (config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
         const bool identityWillMigrate = licensedIdentityWillMigrate();
         if (identityWillMigrate)
-            sendWarning(licensedIdentityMigrationMessage);
+            sendWarning(meshtastic_ClientNotification_NotificationType_LICENSED_IDENTITY_WILL_CHANGE,
+                        licensedIdentityMigrationMessage);
         nodeDB->generateCryptoKeyPair();
         if (identityWillMigrate)
             nodeDB->licensedIdentityMigrationPending = false;
@@ -2166,13 +2186,14 @@ void AdminModule::handleSendInputEvent(const meshtastic_AdminMessage_InputEvent 
 #endif
 }
 
-void AdminModule::sendWarning(const char *format, ...)
+void AdminModule::sendWarning(meshtastic_ClientNotification_NotificationType type, const char *format, ...)
 {
     meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
     if (!cn)
         return;
 
     cn->level = meshtastic_LogRecord_Level_WARNING;
+    cn->type = type;
     cn->time = getValidTime(RTCQualityFromNet);
 
     va_list args;
@@ -2184,7 +2205,7 @@ void AdminModule::sendWarning(const char *format, ...)
     service->sendClientNotification(cn);
 }
 
-void AdminModule::sendWarningAndLog(const char *format, ...)
+void AdminModule::sendWarningAndLog(meshtastic_ClientNotification_NotificationType type, const char *format, ...)
 {
     // We need a temporary buffer to hold the formatted text so we can log it
     // Using 250 bytes as a safe upper limit for typical text notifications
@@ -2200,7 +2221,7 @@ void AdminModule::sendWarningAndLog(const char *format, ...)
     // user-supplied channel name like "50%"), passing it as the format string would
     // read bogus varargs and could crash. "%s" treats it purely as text.
     LOG_WARN("%s", buf);
-    sendWarning("%s", buf);
+    sendWarning(type, "%s", buf);
 }
 
 // Strip spaces and fold to lowercase for loose preset-name comparison.
@@ -2217,9 +2238,11 @@ static void normalizePresetName(const char *src, char *dst, size_t dstLen)
 // Record one channel-configuration warning. The first message is kept verbatim in case it
 // turns out to be the only one; nameIssue/pskIssue and the channel bitmask feed the catch-all
 // wording if more than one channel ends up flagged. flushChannelWarnings() emits the result.
-void AdminModule::queueChannelWarning(uint8_t channelIndex, bool nameIssue, bool pskIssue, const char *format, ...)
+void AdminModule::queueChannelWarning(uint8_t channelIndex, bool nameIssue, bool pskIssue,
+                                      meshtastic_ClientNotification_NotificationType type, const char *format, ...)
 {
     if (pendingWarningCount == 0) {
+        pendingWarningType = type;
         va_list args;
         va_start(args, format);
         vsnprintf(pendingWarningText, sizeof(pendingWarningText), format, args);
@@ -2239,7 +2262,7 @@ void AdminModule::warnLicensedMode()
     if (hasOpenEditTransaction)
         pendingLicenseWarning = true;
     else
-        sendWarning(licensedModeMessage);
+        sendWarning(meshtastic_ClientNotification_NotificationType_LICENSED_MODE_ACTIVATED, licensedModeMessage);
 }
 
 // Emit the coalesced channel warning(s): nothing if none queued, the lone message verbatim if
@@ -2248,10 +2271,10 @@ void AdminModule::warnLicensedMode()
 void AdminModule::flushChannelWarnings()
 {
     if (pendingLicenseWarning)
-        sendWarning(licensedModeMessage);
+        sendWarning(meshtastic_ClientNotification_NotificationType_LICENSED_MODE_ACTIVATED, licensedModeMessage);
 
     if (pendingWarningCount == 1) {
-        sendWarningAndLog("%s", pendingWarningText);
+        sendWarningAndLog(pendingWarningType, "%s", pendingWarningText);
     } else if (pendingWarningCount > 1) {
         char list[48] = {};
         for (uint8_t i = 0; i < MAX_NUM_CHANNELS; i++) {
@@ -2262,13 +2285,17 @@ void AdminModule::flushChannelWarnings()
             strncat(list, num, sizeof(list) - strlen(list) - 1);
         }
         if (pendingWarningNameIssue && pendingWarningPskIssue)
-            sendWarningAndLog("There may be name and PSK issues on channels %s", list); // max 60 bytes
+            sendWarningAndLog(meshtastic_ClientNotification_NotificationType_CHANNEL_NAME_AND_PSK_ISSUES,
+                              "There may be name and PSK issues on channels %s", list); // max 60 bytes
         else if (pendingWarningNameIssue)
-            sendWarningAndLog("There may be name issues on channels %s", list); // max 52 bytes
+            sendWarningAndLog(meshtastic_ClientNotification_NotificationType_CHANNEL_NAME_ISSUES,
+                              "There may be name issues on channels %s", list); // max 52 bytes
         else
-            sendWarningAndLog("There may be PSK issues on channels %s", list); // max 51 bytes
+            sendWarningAndLog(meshtastic_ClientNotification_NotificationType_CHANNEL_PSK_ISSUES,
+                              "There may be PSK issues on channels %s", list); // max 51 bytes
     }
     pendingWarningText[0] = '\0';
+    pendingWarningType = meshtastic_ClientNotification_NotificationType_UNSET;
     pendingWarningChannels = 0;
     pendingWarningCount = 0;
     pendingWarningNameIssue = false;
@@ -2323,14 +2350,15 @@ void AdminModule::warnOnChannelSet(const meshtastic_Channel &cc)
         }
         // At most one warning: collapse blank-PSK + mistype into a single catch-all.
         if (blankPsk && mistypePreset)
-            queueChannelWarning(cc.index, true, true, "There may be name and PSK issues on channel %d", cc.index);
+            queueChannelWarning(cc.index, true, true, meshtastic_ClientNotification_NotificationType_CHANNEL_NAME_AND_PSK_ISSUES,
+                                "There may be name and PSK issues on channel %d", cc.index);
         else if (mistypePreset)
-            queueChannelWarning(cc.index, true, false,
+            queueChannelWarning(cc.index, true, false, meshtastic_ClientNotification_NotificationType_CHANNEL_NAME_PRESET_MISTYPE,
                                 "Channel %d name '%s' looks like a mistype of '%s' - "
                                 "make sure to type it exactly!", // max 90 bytes
                                 cc.index, cc.settings.name, mistypePreset);
         else if (blankPsk)
-            queueChannelWarning(cc.index, false, true,
+            queueChannelWarning(cc.index, false, true, meshtastic_ClientNotification_NotificationType_CHANNEL_BLANK_PSK,
                                 "Channel %d '%s' has a blank PSK (no encryption) instead of default key", // max 100 bytes
                                 cc.index, cc.settings.name);
         return;
@@ -2345,11 +2373,12 @@ void AdminModule::warnOnChannelSet(const meshtastic_Channel &cc)
     if (!*cc.settings.name) {
         // Blank name resolves to the preset name - A and B are mutually exclusive (psk.size can't be both 0 and >0)
         if (blankPsk)
-            queueChannelWarning(cc.index, false, true,
+            queueChannelWarning(cc.index, false, true, meshtastic_ClientNotification_NotificationType_CHANNEL_BLANK_PSK,
                                 "Channel %d '%s' has a blank PSK (no encryption) instead of default key", // max 100 bytes
                                 cc.index, cc.settings.name);
         else if (!isDefaultKey && cc.settings.psk.size > 0)
             queueChannelWarning(cc.index, false, true,
+                                meshtastic_ClientNotification_NotificationType_CHANNEL_PRESET_NON_DEFAULT_KEY,
                                 "Channel %d will resolve to preset '%s' but uses a non-default key - "
                                 "default-key nodes can't decode it.", // max 102 bytes
                                 cc.index, presetName);
@@ -2358,7 +2387,7 @@ void AdminModule::warnOnChannelSet(const meshtastic_Channel &cc)
 
     if (strcmp(normChan, normPreset) != 0) { // name unrelated to preset
         if (blankPsk)
-            queueChannelWarning(cc.index, false, true,
+            queueChannelWarning(cc.index, false, true, meshtastic_ClientNotification_NotificationType_CHANNEL_BLANK_PSK,
                                 "Channel %d '%s' has a blank PSK (no encryption) instead of default key", // max 100 bytes
                                 cc.index, cc.settings.name);
         return;
@@ -2372,25 +2401,29 @@ void AdminModule::warnOnChannelSet(const meshtastic_Channel &cc)
         bool hasNameIssue = variantName;
         bool hasPskIssue = blankPsk || keyMismatch;
         if (hasNameIssue && hasPskIssue)
-            queueChannelWarning(cc.index, true, true, "There may be name and PSK issues on channel %d", cc.index);
+            queueChannelWarning(cc.index, true, true, meshtastic_ClientNotification_NotificationType_CHANNEL_NAME_AND_PSK_ISSUES,
+                                "There may be name and PSK issues on channel %d", cc.index);
         else if (hasNameIssue)
-            queueChannelWarning(cc.index, true, false, "There may be name issues on channel %d", cc.index);
+            queueChannelWarning(cc.index, true, false, meshtastic_ClientNotification_NotificationType_CHANNEL_NAME_ISSUES,
+                                "There may be name issues on channel %d", cc.index);
         else
-            queueChannelWarning(cc.index, false, true, "There may be PSK issues on channel %d", cc.index);
+            queueChannelWarning(cc.index, false, true, meshtastic_ClientNotification_NotificationType_CHANNEL_PSK_ISSUES,
+                                "There may be PSK issues on channel %d", cc.index);
         return;
     }
 
     if (blankPsk)
-        queueChannelWarning(cc.index, false, true,
+        queueChannelWarning(cc.index, false, true, meshtastic_ClientNotification_NotificationType_CHANNEL_BLANK_PSK,
                             "Channel %d '%s' has a blank PSK (no encryption) instead of default key", // max 100 bytes
                             cc.index, cc.settings.name);
     if (variantName)
         queueChannelWarning(cc.index, true, false,
+                            meshtastic_ClientNotification_NotificationType_CHANNEL_NAME_PRESET_MISTYPE_CLEAR_NAME,
                             "Channel %d name '%s' looks like a mistype of '%s' - "
                             "clear the name to use the preset name automatically.", // max 113 bytes
                             cc.index, cc.settings.name, presetName);
     if (keyMismatch)
-        queueChannelWarning(cc.index, false, true,
+        queueChannelWarning(cc.index, false, true, meshtastic_ClientNotification_NotificationType_CHANNEL_PRESET_NON_DEFAULT_KEY,
                             "Channel %d '%s' matches preset '%s' but uses a non-default key - "
                             "default-key nodes can't decode it.", // max 108 bytes
                             cc.index, cc.settings.name, presetName);
@@ -2436,12 +2469,12 @@ void AdminModule::warnOnLoraPresetChange(const meshtastic_Config_LoRaConfig &old
         char normChan[32];
         normalizePresetName(ch.settings.name, normChan, sizeof(normChan));
         if (*normOld && strcmp(normChan, normOld) == 0)
-            queueChannelWarning(i, true, false,
+            queueChannelWarning(i, true, false, meshtastic_ClientNotification_NotificationType_CHANNEL_NAME_MATCHES_OLD_PRESET,
                                 "Channel %d name '%s' matches the old preset. "
                                 "Rename it manually if it should track the new preset.", // max 98 bytes
                                 i, ch.settings.name);
         else if (strcmp(normChan, normNew) == 0)
-            queueChannelWarning(i, true, false,
+            queueChannelWarning(i, true, false, meshtastic_ClientNotification_NotificationType_CHANNEL_NAME_WONT_AUTO_RESOLVE,
                                 "Channel %d '%s' looks like preset '%s' but won't auto-resolve - "
                                 "clear the name to fix it.", // max 98 bytes
                                 i, ch.settings.name, newName);

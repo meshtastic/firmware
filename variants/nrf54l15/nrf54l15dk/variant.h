@@ -9,9 +9,17 @@
  * GPIO supply domains: P0 3.0 V, P1 1.8 V (too low for the SX1262), P2 3.0 V.
  * Serial peripherals are port bound: SERIAL00 (UARTE00/SPIM00) -> P2, SERIAL2x -> P1, SERIAL30 -> P0.
  *
- * E22 wiring (all P2, SPIM00):
- *   SCK P2.01, MOSI P2.02, BUSY P2.03, MISO P2.04, NSS P2.05, DIO1 P2.06, RXEN P2.07, NRESET P2.00
+ * E22 wiring (SPIM00 on P2, DIO1 on P0):
+ *   SCK P2.01, MOSI P2.02, BUSY P2.03, MISO P2.04, NSS P2.05, RXEN P2.07, NRESET P2.00, DIO1 P0.00
  *   DIO2 -> TXEN bridge on the module, DIO3 drives the TCXO (1.8 V).
+ *
+ * DIO1 cannot live on P2: the fast port has no GPIOTE instance (only P0 -> GPIOTE30 and P1 -> GPIOTE20
+ * can raise pin interrupts), so a P2 DIO1 leaves the radio on the driver's polling fallback and drops
+ * back-to-back packets. P0.00 is used here; a free P1 pin would work as well.
+ *
+ * The E22's logic is 3.3 V and every nRF54L15 port runs at the DK's VDD, which is 1.8 V out of the box:
+ * set VDD to 3.3 V in the nRF Connect Board Configurator before wiring the module. P0.00-P0.03 are also
+ * wired to the interface MCU's UART by default; disable that VCOM there too, so it does not drive P0.00.
  */
 
 #define VARIANT_MCK (128000000ul)
@@ -79,7 +87,7 @@ static const uint8_t SCK = PIN_SPI_SCK;
 // SX1262 / E22-900M30S
 #define USE_SX1262
 #define SX126X_CS 69
-#define SX126X_DIO1 70
+#define SX126X_DIO1 0 // P0.00: P2 has no GPIOTE, see the header comment
 #define SX126X_BUSY 67
 #define SX126X_RESET 64
 // RXEN is held high permanently (LNA always on); TXEN follows DIO2.

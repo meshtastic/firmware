@@ -401,16 +401,36 @@ typedef enum _meshtastic_Config_BluetoothConfig_PairingMode {
     meshtastic_Config_BluetoothConfig_PairingMode_NO_PIN = 2
 } meshtastic_Config_BluetoothConfig_PairingMode;
 
-/* Controls how the device authenticates remotely received mesh packets. */
+/* Controls whether the device signs the packets it sends with XEdDSA, and which received packets it accepts.
+ In every mode a packet whose signature is malformed or fails verification is dropped, except a traceroute,
+ and so is a signed NodeInfo whose public key is not the key that signed it or does not hash to the sender's
+ node number.
+ A traceroute is never signed, and a signature on one is ignored: every hop rewrites it.
+ A channel with use_aead set overrides this policy: its packets are never signed, and are not dropped
+ for lacking a signature, because the AES-CCM tag authenticates them. */
 typedef enum _meshtastic_Config_SecurityConfig_PacketSignaturePolicy {
-    /* Accept unsigned packets for maximum compatibility while still rejecting malformed or invalid signatures.
- This is the default to avoid legacy nodes dropping signed packets during rebroadcast. */
+    /* Packets are not signed. Unsigned packets are accepted, including from nodes that have signed before,
+ and an unsigned NodeInfo may update such a node's name and role.
+ Signatures are still checked: a signed packet whose signature is malformed or fails verification is
+ dropped. A signature from a node whose key is not yet known cannot be checked, and the packet is
+ accepted as unsigned.
+ This is the default: firmware before 2.8 strips signatures when relaying. */
     meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_COMPATIBLE = 0,
-    /* Prefer authenticated packets while retaining compatibility with unsigned packets from nodes not known to sign.
- Rejects unsigned, signable broadcasts from nodes that have previously signed. */
+    /* Broadcasts are signed, and NodeInfo and position even when unicast. Licensed (ham) mode has no PKI, so it
+ also signs the unicasts PKI would cover; its acks carry an ack proof instead of a signature.
+ Unsigned packets are accepted, including from nodes that have signed before, but an unsigned NodeInfo
+ does not change the name or role of a node that has signed before.
+ Recommended only on a mesh with no relays running firmware older than 2.8: those strip signatures, so a
+ signer's NodeInfo relayed through them arrives unsigned and its name and role changes are not applied.
+ The same holds for a node that has signed before and no longer signs. */
     meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_BALANCED = 1,
-    /* Accept only packets authenticated by a verified XEdDSA signature or successful PKI decryption.
- Unsigned, malformed, invalid, or unverifiable packets are ignored. */
+    /* Broadcasts are signed, and NodeInfo and position even when unicast. Licensed (ham) mode has no PKI, so it
+ also signs the unicasts PKI would cover; its acks carry an ack proof instead of a signature.
+ Only packets with a verified signature, or PKI-encrypted packets, are accepted.
+ Unsigned packets are dropped, except acks and other routing packets, which carry their own proof,
+ traceroutes, and key verification messages, which the users' security number authenticates.
+ A signature from a node whose key is not yet known cannot be checked, and the packet is dropped,
+ except a traceroute. */
     meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_STRICT = 2
 } meshtastic_Config_SecurityConfig_PacketSignaturePolicy;
 
@@ -688,6 +708,10 @@ typedef struct _meshtastic_Config_LoRaConfig {
     meshtastic_Config_LoRaConfig_FEM_LNA_Mode fem_lna_mode;
     /* Don't use radiolib to initialize the radio, instead listen for a serialHal connection */
     bool serial_hal_only;
+    /* Act as a transparent LoRa modem: run RadioLib on-device but do no encryption, decryption, or mesh routing.
+ The connected client sets the PHY settings via this LoRaConfig, supplies fully-formed (already-encrypted) frames to transmit verbatim,
+ and receives every frame the radio hears delivered raw (never decrypted) back over the API. */
+    bool transparent_mode;
 } meshtastic_Config_LoRaConfig;
 
 typedef struct _meshtastic_Config_BluetoothConfig {
@@ -722,7 +746,8 @@ typedef struct _meshtastic_Config_SecurityConfig {
     bool debug_log_api_enabled;
     /* Allow incoming device control over the insecure legacy admin channel. */
     bool admin_channel_enabled;
-    /* Determines the packet signature policy applied to remotely received mesh packets. */
+    /* Determines whether this device signs the packets it sends, and which received packets it accepts.
+ See PacketSignaturePolicy. */
     meshtastic_Config_SecurityConfig_PacketSignaturePolicy packet_signature_policy;
 } meshtastic_Config_SecurityConfig;
 
@@ -856,7 +881,7 @@ extern "C" {
 #define meshtastic_Config_NetworkConfig_init_default {0, "", "", "", 0, _meshtastic_Config_NetworkConfig_AddressMode_MIN, false, meshtastic_Config_NetworkConfig_IpV4Config_init_default, "", 0, 0}
 #define meshtastic_Config_NetworkConfig_IpV4Config_init_default {0, 0, 0, 0}
 #define meshtastic_Config_DisplayConfig_init_default {0, _meshtastic_Config_DisplayConfig_DeprecatedGpsCoordinateFormat_MIN, 0, 0, 0, _meshtastic_Config_DisplayConfig_DisplayUnits_MIN, _meshtastic_Config_DisplayConfig_OledType_MIN, _meshtastic_Config_DisplayConfig_DisplayMode_MIN, 0, 0, _meshtastic_Config_DisplayConfig_CompassOrientation_MIN, 0, 0, 0}
-#define meshtastic_Config_LoRaConfig_init_default {0, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, _meshtastic_Config_LoRaConfig_RegionCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, _meshtastic_Config_LoRaConfig_FEM_LNA_Mode_MIN, 0}
+#define meshtastic_Config_LoRaConfig_init_default {0, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, _meshtastic_Config_LoRaConfig_RegionCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, _meshtastic_Config_LoRaConfig_FEM_LNA_Mode_MIN, 0, 0}
 #define meshtastic_Config_BluetoothConfig_init_default {0, _meshtastic_Config_BluetoothConfig_PairingMode_MIN, 0}
 #define meshtastic_Config_SecurityConfig_init_default {{0, {0}}, {0, {0}}, 0, {{0, {0}}, {0, {0}}, {0, {0}}}, 0, 0, 0, 0, _meshtastic_Config_SecurityConfig_PacketSignaturePolicy_MIN}
 #define meshtastic_Config_SessionkeyConfig_init_default {0}
@@ -867,7 +892,7 @@ extern "C" {
 #define meshtastic_Config_NetworkConfig_init_zero {0, "", "", "", 0, _meshtastic_Config_NetworkConfig_AddressMode_MIN, false, meshtastic_Config_NetworkConfig_IpV4Config_init_zero, "", 0, 0}
 #define meshtastic_Config_NetworkConfig_IpV4Config_init_zero {0, 0, 0, 0}
 #define meshtastic_Config_DisplayConfig_init_zero {0, _meshtastic_Config_DisplayConfig_DeprecatedGpsCoordinateFormat_MIN, 0, 0, 0, _meshtastic_Config_DisplayConfig_DisplayUnits_MIN, _meshtastic_Config_DisplayConfig_OledType_MIN, _meshtastic_Config_DisplayConfig_DisplayMode_MIN, 0, 0, _meshtastic_Config_DisplayConfig_CompassOrientation_MIN, 0, 0, 0}
-#define meshtastic_Config_LoRaConfig_init_zero   {0, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, _meshtastic_Config_LoRaConfig_RegionCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, _meshtastic_Config_LoRaConfig_FEM_LNA_Mode_MIN, 0}
+#define meshtastic_Config_LoRaConfig_init_zero   {0, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, _meshtastic_Config_LoRaConfig_RegionCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, _meshtastic_Config_LoRaConfig_FEM_LNA_Mode_MIN, 0, 0}
 #define meshtastic_Config_BluetoothConfig_init_zero {0, _meshtastic_Config_BluetoothConfig_PairingMode_MIN, 0}
 #define meshtastic_Config_SecurityConfig_init_zero {{0, {0}}, {0, {0}}, 0, {{0, {0}}, {0, {0}}, {0, {0}}}, 0, 0, 0, 0, _meshtastic_Config_SecurityConfig_PacketSignaturePolicy_MIN}
 #define meshtastic_Config_SessionkeyConfig_init_zero {0}
@@ -955,6 +980,7 @@ extern "C" {
 #define meshtastic_Config_LoRaConfig_config_ok_to_mqtt_tag 105
 #define meshtastic_Config_LoRaConfig_fem_lna_mode_tag 106
 #define meshtastic_Config_LoRaConfig_serial_hal_only_tag 107
+#define meshtastic_Config_LoRaConfig_transparent_mode_tag 108
 #define meshtastic_Config_BluetoothConfig_enabled_tag 1
 #define meshtastic_Config_BluetoothConfig_mode_tag 2
 #define meshtastic_Config_BluetoothConfig_fixed_pin_tag 3
@@ -1109,7 +1135,8 @@ X(a, STATIC,   REPEATED, UINT32,   ignore_incoming, 103) \
 X(a, STATIC,   SINGULAR, BOOL,     ignore_mqtt,     104) \
 X(a, STATIC,   SINGULAR, BOOL,     config_ok_to_mqtt, 105) \
 X(a, STATIC,   SINGULAR, UENUM,    fem_lna_mode,    106) \
-X(a, STATIC,   SINGULAR, BOOL,     serial_hal_only, 107)
+X(a, STATIC,   SINGULAR, BOOL,     serial_hal_only, 107) \
+X(a, STATIC,   SINGULAR, BOOL,     transparent_mode, 108)
 #define meshtastic_Config_LoRaConfig_CALLBACK NULL
 #define meshtastic_Config_LoRaConfig_DEFAULT NULL
 
@@ -1167,7 +1194,7 @@ extern const pb_msgdesc_t meshtastic_Config_SessionkeyConfig_msg;
 #define meshtastic_Config_BluetoothConfig_size   10
 #define meshtastic_Config_DeviceConfig_size      100
 #define meshtastic_Config_DisplayConfig_size     36
-#define meshtastic_Config_LoRaConfig_size        91
+#define meshtastic_Config_LoRaConfig_size        94
 #define meshtastic_Config_NetworkConfig_IpV4Config_size 20
 #define meshtastic_Config_NetworkConfig_size     204
 #define meshtastic_Config_PositionConfig_size    62
