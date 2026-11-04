@@ -52,7 +52,9 @@ static constexpr NodeNum DEVICE_NODE = 0x0D0D0D0D;
 static constexpr NodeNum LOCAL_NODE = 0x0A0A0A0A;
 static constexpr NodeNum REMOTE_NODE = 0x0B0B0B0B;
 static constexpr uint32_t CLOCK_BASE_MS = 100000;
-static constexpr const char *PRIMARY_CHANNEL_NAME = "transparent-test";
+static constexpr char PRIMARY_CHANNEL_NAME[] = "xparent";
+// Stored whole, or the radio hashes the truncated name and the slot assertion compares against the wrong one.
+static_assert(sizeof(PRIMARY_CHANNEL_NAME) <= sizeof(meshtastic_ChannelSettings::name), "channel name must fit");
 
 /// The serial/TCP connection, in memory: what the radio wrote, and what the "device" will send back.
 class FakeLink : public TransparentLink
