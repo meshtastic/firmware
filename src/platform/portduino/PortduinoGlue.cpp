@@ -426,6 +426,11 @@ void getMacAddr(uint8_t *dmac)
     }
 }
 
+bool getBluetoothAddr(uint8_t *addr)
+{
+    return false;
+}
+
 bool getDeviceId(uint8_t *deviceId)
 {
     if (portduino_config.has_device_id) {

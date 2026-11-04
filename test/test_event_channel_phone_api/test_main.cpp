@@ -252,6 +252,8 @@ static void test_event_position_ingress_does_not_poison_retry_state()
     mockService->assertQueueStatus(BLOCKED_PACKET_ID);
     TEST_ASSERT_EQUAL(1, mockService->notifications.size());
     TEST_ASSERT_EQUAL_UINT32(BLOCKED_PACKET_ID, mockService->notifications[0].reply_id);
+    TEST_ASSERT_EQUAL(meshtastic_ClientNotification_NotificationType_POSITION_SHARING_DISABLED,
+                      mockService->notifications[0].type);
 
     TEST_ASSERT_TRUE(sendToRadio(sameIdPrivateRetry));
     TEST_ASSERT_EQUAL(1, mockRouter->sentPackets.size());
