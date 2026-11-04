@@ -176,6 +176,8 @@ int32_t TransparentRadio::runOnce()
             openFailureLogged = false;
             reconnectIntervalMs = RECONNECT_MIN_MS;
             startHandshake();
+        } else if (link->openPending()) {
+            openAttempted = false; // still resolving the host: ask again on the next poll, without backing off
         } else {
             if (!openFailureLogged)
                 LOG_WARN("Transparent radio: can't open %s, retrying", link->describe().c_str());
@@ -198,7 +200,7 @@ int32_t TransparentRadio::runOnce()
         sendHeartbeat();
 
     serviceTxQueue();
-    return (link->isOpen() || scheduledPacket) ? POLL_INTERVAL_MS : reconnectIntervalMs;
+    return (link->isOpen() || link->openPending() || scheduledPacket) ? POLL_INTERVAL_MS : reconnectIntervalMs;
 }
 
 void TransparentRadio::setState(State next)
@@ -212,6 +214,7 @@ void TransparentRadio::startHandshake()
     rxPtr = 0;
     deviceNodeNum = 0;
     deviceFirmwareTooOld = false;
+    deviceLocked = false;
     haveDeviceLora = false;
     verifyRequestId = 0;
     deviceQueueFree = -1;
@@ -289,6 +292,13 @@ void TransparentRadio::handleFromRadio()
     case meshtastic_FromRadio_metadata_tag:
         deviceFirmwareTooOld = !firmwareSupportsTransparentMode(fromRadio.metadata.firmware_version);
         break;
+    case meshtastic_FromRadio_lockdown_status_tag:
+        // A locked device drops an unauthenticated client's admin traffic and mesh packets alike.
+        deviceLocked = fromRadio.lockdown_status.state == meshtastic_LockdownStatus_State_LOCKED ||
+                       fromRadio.lockdown_status.state == meshtastic_LockdownStatus_State_UNLOCK_FAILED;
+        if (deviceLocked && (state == State::Pushing || state == State::Ready))
+            pushConfig(); // reports it and backs off
+        break;
     case meshtastic_FromRadio_config_tag:
         if (fromRadio.config.which_payload_variant == meshtastic_Config_lora_tag) {
             deviceLora = fromRadio.config.payload_variant.lora;
@@ -337,13 +347,11 @@ meshtastic_Config_LoRaConfig TransparentRadio::desiredLoraConfig() const
     if (!lora.override_frequency)
         lora.channel_num = savedChannelNum + 1;
     // Calibration and front-end settings describe the device's hardware, not this node's.
-    if (haveDeviceLora) {
-        lora.frequency_offset = deviceLora.frequency_offset;
-        lora.sx126x_rx_boosted_gain = deviceLora.sx126x_rx_boosted_gain;
-        lora.pa_fan_disabled = deviceLora.pa_fan_disabled;
-        lora.fem_lna_mode = deviceLora.fem_lna_mode;
-        lora.serial_hal_only = deviceLora.serial_hal_only;
-    }
+    lora.frequency_offset = deviceLora.frequency_offset;
+    lora.sx126x_rx_boosted_gain = deviceLora.sx126x_rx_boosted_gain;
+    lora.pa_fan_disabled = deviceLora.pa_fan_disabled;
+    lora.fem_lna_mode = deviceLora.fem_lna_mode;
+    lora.serial_hal_only = deviceLora.serial_hal_only;
     return lora;
 }
 
@@ -360,6 +368,17 @@ void TransparentRadio::pushConfig()
         setState(State::Unsupported);
         return;
     }
+    if (deviceLocked) {
+        LOG_ERROR("Transparent radio: %s is locked, and meshtasticd can't unlock it; unlock it or turn lockdown off",
+                  link->describe().c_str());
+        setState(State::Refused);
+        return;
+    }
+    if (!haveDeviceLora) {
+        // Without it we would overwrite the device's own calibration fields with ours.
+        LOG_WARN("Transparent radio: %s sent no LoRa config; waiting to retry", link->describe().c_str());
+        return; // the handshake timeout asks again
+    }
     if (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
         if (state != State::WaitingForRegion)
             LOG_WARN("Transparent radio: no LoRa region set, so %s is left as it is", link->describe().c_str());
@@ -368,7 +387,7 @@ void TransparentRadio::pushConfig()
     }
 
     const meshtastic_Config_LoRaConfig want = desiredLoraConfig();
-    if (haveDeviceLora && deviceLora.transparent_mode && !firstRfDifference(want, deviceLora, true)) {
+    if (deviceLora.transparent_mode && !firstRfDifference(want, deviceLora, true)) {
         setState(State::Ready);
         LOG_INFO("Transparent radio: %s ready", link->describe().c_str());
         return;
@@ -515,7 +534,8 @@ void TransparentRadio::scheduleTx()
     else // a relay: SNR-weighted, so the best-placed relayer goes first and the rest can cancel
         delay = getTxDelayMsecWeighted(p);
     const uint32_t busy = (txBusySet && !Throttle::deadlinePassedAt(now, txBusyUntilMs)) ? txBusyUntilMs - now : 0;
-    txDueMs = now + busy + delay;
+    // An explicit tx_after is a deadline of its own, so it overlaps the busy time rather than following it.
+    txDueMs = p->tx_after ? now + std::max(busy, delay) : now + busy + delay;
 }
 
 void TransparentRadio::serviceTxQueue()

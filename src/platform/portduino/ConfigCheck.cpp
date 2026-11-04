@@ -5,6 +5,7 @@
 #include "configuration.h"
 
 #include "PortduinoGlue.h"
+#include "TransparentLink.h"
 
 #include "yaml-cpp/eventhandler.h"
 
@@ -1186,6 +1187,17 @@ void checkMergedConfig(const PathIndex &paths, std::vector<Finding> &findings)
         findings.push_back({kError, merged, 0,
                             "Module is transparent but Lora.TransparentDevice is not set, so there is no radio to connect to. "
                             "Set it to the node's serial device path or to host[:port] for its TCP API"});
+    if (portduino_config.lora_module == use_transparent && !portduino_config.lora_transparent_device.empty()) {
+#if HAS_TRANSPARENT_RADIO
+        // The same parser startup uses, so --check and a real start agree; it only parses, nothing is opened.
+        if (!makeTransparentLink(portduino_config.lora_transparent_device))
+            findings.push_back({kError, merged, 0,
+                                "Lora.TransparentDevice '" + portduino_config.lora_transparent_device +
+                                    "' is neither a serial device path nor host[:port], so meshtasticd exits at startup"});
+#else
+        findings.push_back({kError, merged, 0, "Module is transparent, which this platform does not support"});
+#endif
+    }
     if (portduino_config.lora_module != use_transparent && !portduino_config.lora_transparent_device.empty())
         findings.push_back(
             {kWarn, merged, 0, "Lora.TransparentDevice is set but Module is " + moduleName() + ", so it is never used"});

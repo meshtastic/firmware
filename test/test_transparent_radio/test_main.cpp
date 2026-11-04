@@ -449,6 +449,80 @@ void test_device_refusing_our_settings_is_retried_not_written_off(void)
     TEST_ASSERT_EQUAL((int)TransparentRadio::State::Pushing, (int)radio->getState());
 }
 
+// The timed retry from Refused, without a config change to prompt it: after REFUSED_RETRY_MS (5 min) the
+// radio asks for the config again, and not before.
+void test_refused_device_is_retried_after_the_backoff(void)
+{
+    radio->runOnce();
+    takeToRadio();
+    meshtastic_Config_LoRaConfig deviceNow = meshtastic_Config_LoRaConfig_init_zero;
+    deviceNow.region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
+    deviceNow.use_preset = true;
+    deviceSendsConfigDump(deviceNow);
+    radio->runOnce();
+    std::vector<meshtastic_ToRadio> sent = takeToRadio();
+    TEST_ASSERT_EQUAL(2, sent.size());
+    deviceAnswersReadBack(sent[1], deviceNow);
+    radio->runOnce();
+    TEST_ASSERT_EQUAL((int)TransparentRadio::State::Refused, (int)radio->getState());
+
+    Time::advanceTestMillis(4 * 60 * 1000);
+    radio->runOnce();
+    TEST_ASSERT_EQUAL_MESSAGE((int)TransparentRadio::State::Refused, (int)radio->getState(), "no retry inside the backoff");
+
+    Time::advanceTestMillis(60 * 1000);
+    radio->runOnce();
+    TEST_ASSERT_EQUAL((int)TransparentRadio::State::Configuring, (int)radio->getState());
+    bool askedAgain = false;
+    for (const meshtastic_ToRadio &tr : takeToRadio()) // a heartbeat can share this pass
+        askedAgain |= tr.which_payload_variant == meshtastic_ToRadio_want_config_id_tag;
+    TEST_ASSERT_TRUE(askedAgain);
+}
+
+// A device with lockdown on drops an unauthenticated client's admin traffic and mesh packets alike. The radio
+// says so and backs off, instead of pushing into silence and timing out every 15 s.
+void test_locked_device_is_reported_not_pushed_to(void)
+{
+    radio->runOnce();
+    takeToRadio();
+    meshtastic_FromRadio locked = meshtastic_FromRadio_init_zero;
+    locked.which_payload_variant = meshtastic_FromRadio_lockdown_status_tag;
+    locked.lockdown_status.state = meshtastic_LockdownStatus_State_LOCKED;
+    deviceSends(locked);
+    deviceSendsConfigDump(meshtastic_Config_LoRaConfig_init_zero);
+    radio->runOnce();
+
+    TEST_ASSERT_EQUAL((int)TransparentRadio::State::Refused, (int)radio->getState());
+    TEST_ASSERT_EQUAL_MESSAGE(0, takeToRadio().size(), "nothing is pushed to a locked device");
+}
+
+// Without the device's own LoRa config the radio can't keep the device's calibration fields, so it pushes
+// nothing and lets the handshake timeout ask again.
+void test_no_lora_config_from_the_device_means_no_push(void)
+{
+    radio->runOnce();
+    takeToRadio();
+    meshtastic_FromRadio fr = meshtastic_FromRadio_init_zero;
+    fr.which_payload_variant = meshtastic_FromRadio_my_info_tag;
+    fr.my_info.my_node_num = DEVICE_NODE;
+    deviceSends(fr);
+    fr = meshtastic_FromRadio_init_zero;
+    fr.which_payload_variant = meshtastic_FromRadio_config_complete_id_tag;
+    fr.config_complete_id = SPECIAL_NONCE_ONLY_CONFIG;
+    deviceSends(fr);
+    radio->runOnce();
+
+    TEST_ASSERT_EQUAL((int)TransparentRadio::State::Configuring, (int)radio->getState());
+    TEST_ASSERT_EQUAL(0, takeToRadio().size());
+
+    Time::advanceTestMillis(15000);
+    radio->runOnce();
+    std::vector<meshtastic_ToRadio> sent = takeToRadio();
+    TEST_ASSERT_EQUAL(1, sent.size());
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_ToRadio_want_config_id_tag, sent[0].which_payload_variant,
+                              "the handshake timeout asks again");
+}
+
 // With no region set here, pushing would set the device's region to UNSET (and turn its TX off) and persist
 // that. Nothing is pushed until this node has a region; setting one pushes at once.
 void test_no_region_here_leaves_the_device_alone_until_one_is_set(void)
@@ -690,6 +764,8 @@ void test_endpoint_parsing(void)
     TEST_ASSERT_NULL(makeTransparentLink("host:0").get());
     TEST_ASSERT_NULL(makeTransparentLink("host:70000").get());
     TEST_ASSERT_NULL(makeTransparentLink("host:abc").get());
+    TEST_ASSERT_NULL_MESSAGE(makeTransparentLink("host:").get(), "a separator with no port is not the default port");
+    TEST_ASSERT_NULL(makeTransparentLink("[fe80::1]:").get());
     TEST_ASSERT_NULL(makeTransparentLink("[fe80::1").get());
     TEST_ASSERT_NULL(makeTransparentLink(":4403").get());
 }
@@ -704,6 +780,9 @@ void setup()
     RUN_TEST(test_old_firmware_version_is_refused_before_any_write);
     RUN_TEST(test_device_refusing_our_settings_is_retried_not_written_off);
     RUN_TEST(test_no_region_here_leaves_the_device_alone_until_one_is_set);
+    RUN_TEST(test_refused_device_is_retried_after_the_backoff);
+    RUN_TEST(test_locked_device_is_reported_not_pushed_to);
+    RUN_TEST(test_no_lora_config_from_the_device_means_no_push);
     RUN_TEST(test_frame_goes_out_at_its_due_time_with_header_and_ciphertext_only);
     RUN_TEST(test_cancelled_frame_never_reaches_the_device);
     RUN_TEST(test_full_device_queue_holds_frames_until_space_is_reported);

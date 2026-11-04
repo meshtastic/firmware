@@ -3,8 +3,10 @@
 #if HAS_TRANSPARENT_RADIO
 
 #include <cerrno>
+#include <chrono>
 #include <cstdlib>
 #include <fcntl.h>
+#include <future>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
@@ -18,17 +20,17 @@ namespace
 
 constexpr int DEFAULT_API_PORT = 4403;
 constexpr int CONNECT_TIMEOUT_MS = 1000; // keep a dead host from stalling meshtasticd's main loop
-constexpr int WRITE_STALL_MS = 200;      // a full kernel buffer that doesn't drain in this long is a dead link
+constexpr int WRITE_DEADLINE_MS = 200;   // a frame the kernel can't take in this long means a dead link
 
 bool wouldBlock()
 {
     return errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR;
 }
 
-bool waitWritable(int fd)
+bool waitWritable(int fd, int timeoutMs)
 {
     struct pollfd pfd = {fd, POLLOUT, 0};
-    return ::poll(&pfd, 1, WRITE_STALL_MS) > 0 && (pfd.revents & POLLOUT);
+    return timeoutMs > 0 && ::poll(&pfd, 1, timeoutMs) > 0 && (pfd.revents & POLLOUT);
 }
 
 class FdLink : public TransparentLink
@@ -49,16 +51,20 @@ class FdLink : public TransparentLink
 
     bool write(const uint8_t *buf, size_t len) override
     {
+        // One deadline for the whole frame: runOnce() is blocked until this returns.
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(WRITE_DEADLINE_MS);
         while (fd >= 0 && len > 0) {
             ssize_t n = sendBytes(buf, len);
             if (n > 0) {
                 buf += n;
                 len -= (size_t)n;
-            } else if (n < 0 && wouldBlock() && waitWritable(fd)) {
                 continue;
-            } else {
-                return false;
             }
+            const auto remaining =
+                std::chrono::duration_cast<std::chrono::milliseconds>(deadline - std::chrono::steady_clock::now()).count();
+            if (n < 0 && wouldBlock() && waitWritable(fd, (int)remaining))
+                continue;
+            return false;
         }
         return fd >= 0;
     }
@@ -107,8 +113,12 @@ class SerialLink : public FdLink
         if (fd < 0)
             return -1;
         ssize_t n = ::read(fd, buf, len);
-        if (n >= 0) // a raw tty with VMIN 0 reads 0 when nothing is waiting, not at EOF
+        if (n > 0)
             return (int)n;
+        if (n == 0) { // a raw tty with VMIN 0 reads 0 when nothing is waiting, and also once the device is unplugged
+            struct pollfd pfd = {fd, POLLIN, 0};
+            return (::poll(&pfd, 1, 0) > 0 && (pfd.revents & (POLLHUP | POLLERR | POLLNVAL))) ? -1 : 0;
+        }
         return wouldBlock() ? 0 : -1;
     }
 };
@@ -120,14 +130,28 @@ class TcpLink : public FdLink
         : FdLink(endpoint), host(std::move(host)), port(std::to_string(port))
     {
     }
+    ~TcpLink() override
+    {
+        if (resolving) // the lookup can't be cancelled; wait it out so its result is freed
+            if (struct addrinfo *res = pending.get())
+                freeaddrinfo(res);
+    }
+
+    bool openPending() const override { return resolving; }
 
     bool open() override
     {
         close();
-        struct addrinfo hints = {}, *res = nullptr;
-        hints.ai_family = AF_UNSPEC;
-        hints.ai_socktype = SOCK_STREAM;
-        if (getaddrinfo(host.c_str(), port.c_str(), &hints, &res) != 0 || !res)
+        // getaddrinfo() has no timeout and runOnce() is on meshtasticd's main loop, so resolve on a worker thread.
+        if (!resolving) {
+            pending = std::async(std::launch::async, resolve, host, port);
+            resolving = true;
+        }
+        if (pending.wait_for(std::chrono::seconds(0)) != std::future_status::ready)
+            return false;
+        resolving = false;
+        struct addrinfo *res = pending.get();
+        if (!res)
             return false;
         for (struct addrinfo *rp = res; rp != nullptr && fd < 0; rp = rp->ai_next) {
             int f = ::socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
@@ -172,6 +196,16 @@ class TcpLink : public FdLink
     }
 
   private:
+    static struct addrinfo *resolve(std::string host, std::string port)
+    {
+        struct addrinfo hints = {}, *res = nullptr;
+        hints.ai_family = AF_UNSPEC;
+        hints.ai_socktype = SOCK_STREAM;
+        if (getaddrinfo(host.c_str(), port.c_str(), &hints, &res) != 0)
+            return nullptr;
+        return res;
+    }
+
     static bool connectWithTimeout(int f, const struct sockaddr *addr, socklen_t addrlen)
     {
         if (::connect(f, addr, addrlen) == 0)
@@ -188,6 +222,8 @@ class TcpLink : public FdLink
 
     std::string host;
     std::string port;
+    std::future<struct addrinfo *> pending;
+    bool resolving = false;
 };
 
 } // namespace
@@ -209,13 +245,15 @@ std::unique_ptr<TransparentLink> makeTransparentLink(const std::string &endpoint
             return nullptr;
         host = endpoint.substr(1, bracket - 1);
         if (bracket + 1 < endpoint.size()) {
-            if (endpoint[bracket + 1] != ':')
+            if (endpoint[bracket + 1] != ':' || bracket + 2 == endpoint.size())
                 return nullptr;
             portText = endpoint.substr(bracket + 2);
         }
     } else if (endpoint.find(':') == endpoint.rfind(':') && endpoint.find(':') != std::string::npos) {
         host = endpoint.substr(0, endpoint.find(':'));
         portText = endpoint.substr(endpoint.find(':') + 1);
+        if (portText.empty())
+            return nullptr;
     }
     if (!portText.empty()) {
         char *end = nullptr;

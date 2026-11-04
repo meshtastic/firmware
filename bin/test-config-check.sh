@@ -190,6 +190,9 @@ echo "transparent radio:"
 assert "transparent with no device is refused" 1 module-transparent-no-device.yaml check \
 	"Lora.TransparentDevice is not set" \
 	"Result: 1 error, 0 warnings"
+assert "an endpoint startup would refuse is refused" 1 transparent-device-bad.yaml check \
+	"is neither a serial device path nor host[:port]" \
+	"Result: 1 error, 0 warnings"
 assert "a device for another module is flagged" 0 transparent-device-unused.yaml check \
 	"Lora.TransparentDevice is set but Module is sim" \
 	"Result: 0 errors, 1 warning"

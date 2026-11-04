@@ -881,12 +881,15 @@ void portduinoSetup()
 
     gpioInit(max_GPIO + 1); // Done here so we can inform Portduino how many GPIOs we need.
 
+    // A ch341 adapter drives its Lora pins over USB, and a transparent radio has none here: leave those lines alone.
+    const bool loraPinsUnused = portduino_config.lora_spi_dev == "ch341" || portduino_config.lora_module == use_transparent;
+
     // Need to bind all the configured GPIO pins so they're not simulated
     // TODO: If one of these fails, we should log and terminate
     for (const auto *i : portduino_config.all_pins) {
         // In the case of a ch341 Lora device, we don't want to touch the system GPIO lines for Lora
         // Those GPIO are handled in our usermode driver instead.
-        if (i->config_section == "Lora" && portduino_config.lora_spi_dev == "ch341") {
+        if (i->config_section == "Lora" && loraPinsUnused) {
             continue;
         }
         if (i->enabled) {
@@ -905,7 +908,7 @@ void portduinoSetup()
     for (auto i : portduino_config.extra_pins) {
         // In the case of a ch341 Lora device, we don't want to touch the system GPIO lines for Lora
         // Those GPIO are handled in our usermode driver instead.
-        if (i.config_section == "Lora" && portduino_config.lora_spi_dev == "ch341") {
+        if (i.config_section == "Lora" && loraPinsUnused) {
             continue;
         }
         if (i.enabled) {
@@ -952,7 +955,7 @@ void portduinoSetup()
     for (auto i : portduino_config.extra_pins) {
         // In the case of a ch341 Lora device, we don't want to touch the system GPIO lines for Lora
         // Those GPIO are handled in our usermode driver instead.
-        if (i.config_section == "Lora" && portduino_config.lora_spi_dev == "ch341") {
+        if (i.config_section == "Lora" && loraPinsUnused) {
             continue;
         }
         if (i.enabled && i.default_high) {

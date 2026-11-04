@@ -20,7 +20,7 @@ class TransparentRadio : public RadioInterface, protected concurrency::OSThread
         Configuring,      // asked for the device's config dump
         WaitingForRegion, // this node has no LoRa region yet, so there is nothing to push
         Pushing,          // sent our LoRaConfig, waiting to read it back
-        Refused,          // the device kept other radio settings; retried later or on our next config change
+        Refused,          // the device kept other settings or is locked; retried later or on our next config change
         Ready,            // device confirmed transparent_mode with our settings
         Unsupported,      // device firmware predates transparent_mode; stays here until restart
     };
@@ -93,6 +93,7 @@ class TransparentRadio : public RadioInterface, protected concurrency::OSThread
 
     NodeNum deviceNodeNum = 0;
     bool deviceFirmwareTooOld = false;
+    bool deviceLocked = false;
     bool haveDeviceLora = false;
     meshtastic_Config_LoRaConfig deviceLora = meshtastic_Config_LoRaConfig_init_zero;
     meshtastic_Config_LoRaConfig pushedLora = meshtastic_Config_LoRaConfig_init_zero;

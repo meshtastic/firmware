@@ -24,6 +24,8 @@ class TransparentLink
 
     /// (Re)open the link. Returns false if the device can't be reached right now.
     virtual bool open() = 0;
+    /// True when open() returned false only because it is still resolving the host; call open() again soon.
+    virtual bool openPending() const { return false; }
     virtual void close() = 0;
     virtual bool isOpen() const = 0;
 
