@@ -1341,8 +1341,10 @@ static meshtastic_Routing_Error setLora24Through(bool radioIsWide)
 
     meshtastic_AdminMessage m = meshtastic_AdminMessage_init_zero;
     m.which_payload_variant = meshtastic_AdminMessage_set_config_tag;
-    m.set_config = makeLoraSetConfig(meshtastic_Config_LoRaConfig_RegionCode_LORA_24, true,
-                                     meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST);
+    m.set_config.which_payload_variant = meshtastic_Config_lora_tag;
+    m.set_config.payload_variant.lora.region = meshtastic_Config_LoRaConfig_RegionCode_LORA_24;
+    m.set_config.payload_variant.lora.use_preset = true;
+    m.set_config.payload_variant.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
     meshtastic_MeshPacket mp = meshtastic_MeshPacket_init_zero;
     mp.from = 0;
     mp.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
