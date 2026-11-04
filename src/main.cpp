@@ -1123,6 +1123,7 @@ void setup()
         meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
         if (cn) {
             cn->level = meshtastic_LogRecord_Level_WARNING;
+            cn->type = meshtastic_ClientNotification_NotificationType_LOW_ENTROPY_KEY_REGENERATED;
             cn->time = getValidTime(RTCQualityFromNet);
             sprintf(cn->message, LOW_ENTROPY_WARNING);
             service->sendClientNotification(cn);
@@ -1321,6 +1322,9 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
     deviceMetadata.canShutdown = pmu_found || HAS_CPU_SHUTDOWN;
 #endif
     deviceMetadata.hasBluetooth = HAS_BLUETOOTH;
+    uint8_t bleAddr[6];
+    if (deviceMetadata.hasBluetooth && getBluetoothAddr(bleAddr))
+        formatMacAddr(bleAddr, deviceMetadata.ble_address, sizeof(deviceMetadata.ble_address));
     deviceMetadata.hasWifi = HAS_WIFI;
     deviceMetadata.hasEthernet = HAS_ETHERNET;
     deviceMetadata.role = config.device.role;
