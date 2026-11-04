@@ -602,13 +602,20 @@ void drawCompassUnknown(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
     if (!nodeDB->hasValidPosition(node))
         return;
 
-    bool isLeftCol = (x < SCREEN_WIDTH / 2);
-    int arrowXOffset = (currentResolution == ScreenResolution::High) ? (isLeftCol ? 22 : 24) : (isLeftCol ? 12 : 18);
-    int centerX = x + columnWidth - arrowXOffset;
+    meshtastic_PositionLite nodePos;
+    if (!nodeDB->copyNodePosition(node->num, nodePos))
+        return;
+
+    // Without a fix of our own we cannot draw a bearing: print the node's own
+    // coordinates instead, so GPS-less devices (e.g. a paired child device)
+    // can still read where the tracker is.
+    char coords[24];
+    snprintf(coords, sizeof(coords), "%.5f%c %.5f%c", nodePos.latitude_i * 1e-7, nodePos.latitude_i >= 0 ? 'N' : 'S',
+             nodePos.longitude_i * 1e-7, nodePos.longitude_i >= 0 ? 'E' : 'W');
 
     display->setFont(FONT_SMALL);
-    display->setTextAlignment(TEXT_ALIGN_CENTER);
-    display->drawString(centerX, y, "?");
+    display->setTextAlignment(TEXT_ALIGN_RIGHT);
+    display->drawString(x + columnWidth - 2, y, coords);
 }
 
 void drawRelativeCompassArrow(OLEDDisplay *display, int16_t centerX, int16_t centerY, float relativeBearingDeg)
@@ -647,6 +654,27 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
 
     if (graphics::isCompactPanel(display)) {
         totalColumns = 1; // Too narrow to split - use the full line per entry.
+    } else if (locationScreen) {
+        const meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
+        if (!nodeDB->hasValidPosition(ourNode)) {
+            // No fix of our own: bearings are impossible, so use the full line
+            // to print each node's coordinates instead (drawCompassUnknown).
+            totalColumns = 1;
+        } else if (config.display.use_long_node_name) {
+            if (SCREEN_WIDTH <= 240) {
+                totalColumns = 1;
+            } else if (SCREEN_WIDTH > 240) {
+                totalColumns = 2;
+            }
+        } else {
+            if (SCREEN_WIDTH <= 64) {
+                totalColumns = 1;
+            } else if ((SCREEN_WIDTH > 64 && SCREEN_WIDTH <= 240) || ROUNDED_SCREEN) {
+                totalColumns = 2;
+            } else {
+                totalColumns = 3;
+            }
+        }
     } else if (config.display.use_long_node_name) {
         if (SCREEN_WIDTH <= 240) {
             totalColumns = 1;
