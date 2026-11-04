@@ -66,6 +66,11 @@ bool FloodingRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
 
 bool FloodingRouter::perhapsHandleUpgradedPacket(const meshtastic_MeshPacket *p)
 {
+    // We never relay our own packets: consume an upgraded copy with our number without touching the TX
+    // queue, rather than let it fall through to the dupe handling (perhapsCancelDupe) as well.
+    if (isFromUs(p))
+        return true;
+
     // isRebroadcaster() is duplicated in perhapsRebroadcast(), but this avoids confusing log messages
     if (isRebroadcaster() && iface && p->hop_limit > 0) {
         // Verify the replacement before deleting the valid lower-hop copy waiting in the TX queue.
@@ -96,6 +101,11 @@ bool FloodingRouter::perhapsHandleUpgradedPacket(const meshtastic_MeshPacket *p)
 
 bool FloodingRouter::reprocessPacket(const meshtastic_MeshPacket *p)
 {
+    // Reprocessing a dupe is for relaying it; our own packets are never relayed, and their implicit ACK
+    // is generated in ReliableRouter::shouldFilterReceived before any dupe handling.
+    if (isFromUs(p))
+        return false;
+
     if (p->which_payload_variant != meshtastic_MeshPacket_decoded_tag) {
         auto decodedState = perhapsDecode(const_cast<meshtastic_MeshPacket *>(p));
         if (decodedState != DecodeState::DECODE_SUCCESS && decodedState != DecodeState::DECODE_OPAQUE)

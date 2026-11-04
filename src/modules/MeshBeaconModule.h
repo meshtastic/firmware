@@ -7,6 +7,7 @@
 #include "concurrency/OSThread.h"
 #include "mesh/generated/meshtastic/mesh_beacon.pb.h"
 #include "mesh/generated/meshtastic/module_config.pb.h"
+#include <atomic>
 
 // Short aliases for the MeshBeaconConfig.flags bitfield (see module_config.proto MeshBeaconConfig.Flags).
 #define MESH_BEACON_FLAG_LISTEN_ENABLED meshtastic_ModuleConfig_MeshBeaconConfig_Flags_FLAG_LISTEN_ENABLED
@@ -153,11 +154,16 @@ class MeshBeaconBroadcastModule : private MeshBeaconModule,
                                   public ProtobufModule<meshtastic_MeshBeacon>,
                                   private concurrency::OSThread
 {
+    friend class MeshBeaconBroadcastModuleTestShim; // test/test_mesh_beacon reads the thread interval
+
   public:
     MeshBeaconBroadcastModule();
 
     // Mark the cached payload dirty (call after config change).
     void invalidateCache() { payloadCacheDirty = true; }
+
+    // Re-evaluate the schedule shortly, so a saved enable or interval change does not wait out the old period.
+    void reschedule();
 
   protected:
     virtual bool handleReceivedProtobuf(const meshtastic_MeshPacket &, meshtastic_MeshBeacon *) override { return false; }
@@ -174,6 +180,14 @@ class MeshBeaconBroadcastModule : private MeshBeaconModule,
     bool payloadCacheDirty = true;
     uint8_t payloadCache[meshtastic_MeshBeacon_size] = {};
     pb_size_t payloadCacheSize = 0;
+
+    // Backoff while a due beacon is held by the air-util limit; 0 when not held.
+    static constexpr uint32_t kAirtimeRetryMinMs = 5 * 60 * 1000;
+    static constexpr uint32_t kAirtimeRetryMaxMs = 60 * 60 * 1000;
+    uint32_t airtimeRetryMs = 0;
+
+    // Set by reschedule(), which may run on another task; runOnce() honors one that lands while it runs.
+    std::atomic<bool> rescheduleRequested{false};
 };
 extern MeshBeaconBroadcastModule *meshBeaconBroadcastModule;
 

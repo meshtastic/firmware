@@ -25,12 +25,14 @@
 #include "RadioInterface.h"
 #include "UptimeClock.h"
 #include "airtime.h"
+#include "mesh/TransmitHistory.h"
 #include "modules/AdminModule.h"
 #include "modules/MeshBeaconModule.h"
 #include "support/AdminModuleTestShim.h"
 #include "support/MockMeshService.h"
 #include <cstdio>
 #include <cstring>
+#include <functional>
 #include <memory>
 #include <pb_decode.h>
 #include <vector>
@@ -71,6 +73,8 @@ class MockRouter : public Router
         if (channelFile.channels_count > 0)
             primaryAtSend.push_back(channels.getByIndex(channels.getPrimaryIndex()).settings);
         sentPackets.push_back(*p);
+        if (onSend)
+            onSend();
         // Router::send() frees p on every path but ERRNO_SHOULD_RELEASE, which leaves it to the caller
         if (nextResult != ERRNO_SHOULD_RELEASE)
             packetPool.release(p);
@@ -78,6 +82,8 @@ class MockRouter : public Router
     }
 
     ErrorCode nextResult = ERRNO_OK;
+    // Runs inside send(), so a test can act while the broadcaster's runOnce() is still on the stack
+    std::function<void()> onSend;
 
     // Locally-addressed packets land here instead of send().  Release immediately
     // rather than queuing into fromRadioQueue (which is never drained in tests).
@@ -89,8 +95,11 @@ class MockRouter : public Router
 
 // AdminModuleTestShim (test/support) exposes protected handleSetModuleConfig.
 
+} // namespace
+
 // ---------------------------------------------------------------------------
-// MeshBeaconBroadcastModuleTestShim - exposes private internals for testing.
+// MeshBeaconBroadcastModuleTestShim - exposes private internals for testing. Outside the anonymous
+// namespace so it is the class MeshBeaconBroadcastModule names as a friend.
 // ---------------------------------------------------------------------------
 class MeshBeaconBroadcastModuleTestShim : public MeshBeaconBroadcastModule
 {
@@ -101,7 +110,13 @@ class MeshBeaconBroadcastModuleTestShim : public MeshBeaconBroadcastModule
     using MeshBeaconBroadcastModule::rebuildCache;
     using MeshBeaconBroadcastModule::runOnce;
     using MeshBeaconBroadcastModule::sendBeacon;
+
+    void setThreadInterval(unsigned long ms) { static_cast<MeshBeaconBroadcastModule &>(*this).setInterval(ms); }
+    unsigned long threadInterval() const { return static_cast<const MeshBeaconBroadcastModule &>(*this).interval; }
 };
+
+namespace
+{
 
 // ---------------------------------------------------------------------------
 // MeshBeaconListenerModuleTestShim - exposes handleReceivedProtobuf.
@@ -834,6 +849,103 @@ static void test_broadcaster_runOnce_silentWhenDisabled(void)
     bcast.runOnce();
 
     TEST_ASSERT_EQUAL_UINT32(0, mockRouter->sentPackets.size());
+}
+
+/**
+ * Verify runOnce sleeps only the rest of the interval when the history shows a recent send.
+ * Important because a reboot inside the window otherwise pushes the next beacon to boot + a full interval,
+ * nearly doubling the gap on a long interval.
+ */
+static void test_broadcaster_runOnce_withinInterval_waitsRemainder(void)
+{
+    resetConfig();
+    moduleConfig.has_mesh_beacon = true;
+    moduleConfig.mesh_beacon.flags |= MESH_BEACON_FLAG_BROADCAST_ENABLED;
+    moduleConfig.mesh_beacon.broadcast_interval_secs = 48 * 3600;
+    strncpy(moduleConfig.mesh_beacon.broadcast_message, "remainder", sizeof(moduleConfig.mesh_beacon.broadcast_message) - 1);
+
+    const uint32_t intervalMs = 48UL * 3600 * 1000;
+    const uint32_t elapsedMs = 12UL * 3600 * 1000;
+    Time::setTestMillis(3600UL * 1000);
+    TransmitHistory::getInstance()->setLastSentToMesh(meshtastic_PortNum_MESH_BEACON_APP); // tearDown frees it
+    Time::advanceTestMillis(elapsedMs);
+
+    MeshBeaconBroadcastModuleTestShim bcast;
+    const int32_t next = bcast.runOnce();
+
+    TEST_ASSERT_EQUAL_UINT32(0, mockRouter->sentPackets.size());
+    TEST_ASSERT_EQUAL_INT32((int32_t)(intervalMs - elapsedMs), next);
+
+    Time::advanceTestMillis((uint32_t)next);
+    TEST_ASSERT_EQUAL_INT32((int32_t)intervalMs, bcast.runOnce());
+    TEST_ASSERT_EQUAL_UINT32(1, mockRouter->sentPackets.size());
+}
+
+/**
+ * Verify a due beacon held by the air-util limit retries on a capped doubling backoff, then sends once the limit clears.
+ * Important because a held beacon otherwise waits a whole interval, and the TX budget it waits on clears within the hour.
+ */
+static void test_broadcaster_runOnce_airtimeHeld_backsOffThenSends(void)
+{
+    resetConfig();
+    config.lora.override_duty_cycle = false; // EU_868 is 10% duty cycle, so the polite TX limit is 5%
+    moduleConfig.has_mesh_beacon = true;
+    moduleConfig.mesh_beacon.flags |= MESH_BEACON_FLAG_BROADCAST_ENABLED;
+    moduleConfig.mesh_beacon.broadcast_interval_secs = 48 * 3600;
+    strncpy(moduleConfig.mesh_beacon.broadcast_message, "held", sizeof(moduleConfig.mesh_beacon.broadcast_message) - 1);
+    testAirTime->logAirtime(TX_LOG, 10 * 60 * 1000); // 10 minutes of TX in the last hour
+    TEST_ASSERT_FALSE(testAirTime->isTxAllowedAirUtil());
+
+    MeshBeaconBroadcastModuleTestShim bcast;
+    const int32_t expected[] = {5, 10, 20, 40, 60, 60};
+    for (int32_t minutes : expected)
+        TEST_ASSERT_EQUAL_INT32(minutes * 60 * 1000, bcast.runOnce());
+    TEST_ASSERT_EQUAL_UINT32(0, mockRouter->sentPackets.size());
+
+    config.lora.override_duty_cycle = true;
+    TEST_ASSERT_EQUAL_INT32(48 * 3600 * 1000, bcast.runOnce());
+    TEST_ASSERT_EQUAL_UINT32(1, mockRouter->sentPackets.size());
+}
+
+/**
+ * Verify saving the beacon config pulls the broadcaster's next run in from the old period.
+ * Important because enabling broadcast or shortening the interval otherwise waits out the period in force.
+ */
+static void test_broadcaster_setModuleConfig_reschedulesSoon(void)
+{
+    resetConfig();
+    MeshBeaconBroadcastModuleTestShim bcast;
+    meshBeaconBroadcastModule = &bcast;
+    bcast.setThreadInterval(48UL * 3600 * 1000);
+
+    meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
+    bcfg.flags = MESH_BEACON_FLAG_BROADCAST_ENABLED;
+    bcfg.broadcast_interval_secs = 2 * 3600;
+    testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
+
+    TEST_ASSERT_EQUAL_UINT32(MESHMODULE_MIN_BROADCAST_DELAY_MS, bcast.threadInterval());
+}
+
+/**
+ * Verify a config save that lands while runOnce() runs still shortens the next run.
+ * Important because on nRF52 the BLE write callback saves on its own task, and run() applies runOnce()'s return after
+ * any setIntervalFromNow() made meanwhile, which would leave the new config waiting out the old interval.
+ */
+static void test_broadcaster_rescheduleDuringRun_isKept(void)
+{
+    resetConfig();
+    moduleConfig.has_mesh_beacon = true;
+    moduleConfig.mesh_beacon.flags |= MESH_BEACON_FLAG_BROADCAST_ENABLED;
+    moduleConfig.mesh_beacon.broadcast_interval_secs = 48 * 3600;
+    strncpy(moduleConfig.mesh_beacon.broadcast_message, "mid-run", sizeof(moduleConfig.mesh_beacon.broadcast_message) - 1);
+
+    MeshBeaconBroadcastModuleTestShim bcast;
+    mockRouter->onSend = [&bcast]() { bcast.reschedule(); };
+    TEST_ASSERT_EQUAL_INT32(MESHMODULE_MIN_BROADCAST_DELAY_MS, bcast.runOnce());
+    TEST_ASSERT_EQUAL_UINT32(1, mockRouter->sentPackets.size());
+
+    mockRouter->onSend = nullptr;
+    TEST_ASSERT_EQUAL_INT32(48 * 3600 * 1000, bcast.runOnce()); // the request does not outlive the run that saw it
 }
 
 // ===========================================================================
@@ -2307,6 +2419,10 @@ void tearDown(void)
 {
     meshBeaconBroadcastModule = nullptr;
 
+    delete transmitHistory;
+    transmitHistory = nullptr;
+    Time::useRealClock();
+
     delete testAdmin;
     testAdmin = nullptr;
 
@@ -2377,6 +2493,10 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_broadcaster_sendBeacon_offerOnly_isSent);
     RUN_TEST(test_broadcaster_runOnce_sendsWhenEnabled);
     RUN_TEST(test_broadcaster_runOnce_silentWhenDisabled);
+    RUN_TEST(test_broadcaster_runOnce_withinInterval_waitsRemainder);
+    RUN_TEST(test_broadcaster_runOnce_airtimeHeld_backsOffThenSends);
+    RUN_TEST(test_broadcaster_setModuleConfig_reschedulesSoon);
+    RUN_TEST(test_broadcaster_rescheduleDuringRun_isKept);
 
     printf("\n=== Listener offer caching ===\n");
 
