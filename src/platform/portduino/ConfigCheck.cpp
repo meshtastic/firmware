@@ -67,6 +67,7 @@ const std::map<std::string, std::set<std::string>> &schema()
           "USB_PID",
           "USB_VID",
           "USB_Serialnum",
+          "TransparentDevice",
           "CS",
           "IRQ",
           "Busy",
@@ -599,6 +600,7 @@ const std::map<std::string, ValueSpec> &valueSpecs()
         {"Lora.USB_PID", {kInt, false}},
         {"Lora.USB_VID", {kInt, false}},
         {"Lora.USB_Serialnum", {kString, false}},
+        {"Lora.TransparentDevice", {kString, false}},
         {"General.MaxNodes", {kInt, false}},
         {"General.MaxMessageQueue", {kInt, false}},
         {"General.APIPort", {kInt, false}},
@@ -1180,6 +1182,14 @@ void checkMergedConfig(const PathIndex &paths, std::vector<Finding> &findings)
 
     checkPinValues(findings);
 
+    if (portduino_config.lora_module == use_transparent && portduino_config.lora_transparent_device.empty())
+        findings.push_back({kError, merged, 0,
+                            "Module is transparent but Lora.TransparentDevice is not set, so there is no radio to connect to. "
+                            "Set it to the node's serial device path or to host[:port] for its TCP API"});
+    if (portduino_config.lora_module != use_transparent && !portduino_config.lora_transparent_device.empty())
+        findings.push_back(
+            {kWarn, merged, 0, "Lora.TransparentDevice is set but Module is " + moduleName() + ", so it is never used"});
+
     // portduinoSetup() skips initGPIOPin() for every Lora pin when spidev is ch341, so a
     // gpiochip or line mapping written next to one is read, stored, and never used.
     if (portduino_config.lora_spi_dev == "ch341") {
@@ -1346,6 +1356,8 @@ void printSummary()
 {
     std::cout << "\nEffective radio configuration:\n";
     std::cout << "  Module            : " << moduleName() << "\n";
+    if (portduino_config.lora_module == use_transparent)
+        std::cout << "  Transparent device: " << portduino_config.lora_transparent_device << "\n";
     if (!portduino_config.lora_spi_dev.empty())
         std::cout << "  spidev            : " << portduino_config.lora_spi_dev << "\n";
     std::cout << "  SPI speed         : " << portduino_config.spiSpeed << "\n";

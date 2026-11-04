@@ -20,7 +20,9 @@
 #include "main.h"
 #include "meshUtils.h" // for pow_of_2
 #include "sleep.h"
+#include <algorithm>
 #include <assert.h>
+#include <cmath>
 #include <pb_decode.h>
 #include <pb_encode.h>
 #include <string.h>
@@ -28,6 +30,7 @@
 #ifdef ARCH_PORTDUINO
 #include "platform/portduino/PortduinoGlue.h"
 #include "platform/portduino/SimRadio.h"
+#include "platform/portduino/TransparentRadio.h"
 #include "platform/portduino/USBHal.h"
 #endif
 
@@ -389,6 +392,23 @@ std::unique_ptr<RadioInterface> initLoRa()
 #endif
 
 #ifdef ARCH_PORTDUINO
+    if (portduino_config.lora_module == use_transparent) {
+#if HAS_TRANSPARENT_RADIO
+        std::unique_ptr<TransparentLink> link = makeTransparentLink(portduino_config.lora_transparent_device);
+        if (!link) {
+            LOG_ERROR("Lora.TransparentDevice '%s' is neither a serial device path nor host[:port]",
+                      portduino_config.lora_transparent_device.c_str());
+            exit(EXIT_FAILURE);
+        }
+        rIf = std::unique_ptr<RadioInterface>(new TransparentRadio(std::move(link)));
+        rIf->init(); // the link connects in the background and retries until the device answers
+        return rIf;
+#else
+        LOG_ERROR("Lora.Module transparent is not supported on this platform");
+        exit(EXIT_FAILURE);
+#endif
+    }
+
     // as one can't use a function pointer to the class constructor:
     auto loraModuleInterface = [](LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst,
                                   RADIOLIB_PIN_TYPE busy) {
@@ -807,6 +827,28 @@ uint32_t RadioInterface::getPacketTime(const meshtastic_MeshPacket *p, bool rece
         pl = numbytes + sizeof(PacketHeader);
     }
     return getPacketTime(pl, received);
+}
+
+/**
+ * Calculate airtime per
+ * https://www.rs-online.com/designspark/rel-assets/ds-assets/uploads/knowledge-items/application-notes-for-the-internet-of-things/LoRa%20Design%20Guide.pdf
+ * section 4
+ */
+uint32_t RadioInterface::computeTimeOnAirMsec(uint32_t pl) const
+{
+    float bandwidthHz = bw * 1000.0f;
+    bool headDisable = false; // we currently always use the header
+    float tSym = (1 << sf) / bandwidthHz;
+
+    bool lowDataOptEn = tSym > 16e-3 ? true : false; // Needed if symbol time is >16ms
+
+    float tPreamble = (preambleLength + 4.25f) * tSym;
+    float numPayloadSym =
+        8 + std::max(ceilf(((8.0f * pl - 4 * sf + 28 + 16 - 20 * headDisable) / (4 * (sf - 2 * lowDataOptEn))) * cr), 0.0f);
+    float tPayload = numPayloadSym * tSym;
+    float tPacket = tPreamble + tPayload;
+
+    return tPacket * 1000;
 }
 
 /** The delay to use for retransmitting dropped packets */

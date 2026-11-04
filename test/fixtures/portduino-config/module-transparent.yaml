@@ -1,0 +1,4 @@
+# CLEAN. A transparent-mode node's radio over its serial API: no pins or SPI device.
+Lora:
+  Module: transparent
+  TransparentDevice: /dev/ttyACM0

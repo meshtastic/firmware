@@ -1,0 +1,9 @@
+Meta:
+  name: Transparent-mode node
+  support: community
+
+# The LoRa radio of another Meshtastic node, which must run firmware with LoRaConfig.transparent_mode.
+# meshtasticd enables transparent mode on it and pushes its own LoRa settings when it connects.
+Lora:
+  Module: transparent
+  TransparentDevice: /dev/ttyACM0 # the node's serial port, or host[:port] for its TCP API (port 4403 by default)

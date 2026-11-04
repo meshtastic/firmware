@@ -1102,6 +1102,8 @@ bool loadConfig(const char *configPath)
                     exit(EXIT_FAILURE);
                 }
             }
+            if (yamlConfig["Lora"]["TransparentDevice"])
+                portduino_config.lora_transparent_device = yamlConfig["Lora"]["TransparentDevice"].as<std::string>("");
             if (yamlConfig["Lora"]["SX126X_MAX_POWER"])
                 portduino_config.sx126x_max_power = yamlConfig["Lora"]["SX126X_MAX_POWER"].as<int>(22);
             if (yamlConfig["Lora"]["SX128X_MAX_POWER"])
@@ -1131,7 +1133,7 @@ bool loadConfig(const char *configPath)
             }
 
             if (portduino_config.lora_module != use_autoconf && portduino_config.lora_module != use_simradio &&
-                !portduino_config.force_simradio) {
+                portduino_config.lora_module != use_transparent && !portduino_config.force_simradio) {
                 portduino_config.dio2_as_rf_switch = yamlConfig["Lora"]["DIO2_AS_RF_SWITCH"].as<bool>(false);
                 portduino_config.dio3_tcxo_voltage = yamlConfig["Lora"]["DIO3_TCXO_VOLTAGE"].as<float>(0) * 1000;
                 if (portduino_config.dio3_tcxo_voltage == 0 && yamlConfig["Lora"]["DIO3_TCXO_VOLTAGE"].as<bool>(false)) {
