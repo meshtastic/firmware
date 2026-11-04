@@ -76,6 +76,7 @@ bool TransparentRadio::init()
 bool TransparentRadio::reconfigure()
 {
     RadioInterface::reconfigure();
+    refusalNotified = false;
     if (state == State::WaitingForRegion || state == State::Refused || state == State::Pushing || state == State::Ready)
         pushConfig();
     return true;
@@ -334,6 +335,27 @@ void TransparentRadio::handleFromRadio()
     }
 }
 
+/// Tell the client, not just the log: meshtasticd kept the settings the device would not take, so nothing is on air.
+void TransparentRadio::notifyRefusal(const char *difference)
+{
+    if (refusalNotified || !service)
+        return;
+    meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
+    if (!cn)
+        return;
+    cn->level = meshtastic_LogRecord_Level_WARNING;
+    if (deviceLora.region != pushedLora.region) {
+        cn->type = meshtastic_ClientNotification_NotificationType_LORA_REGION_UNSUPPORTED_BY_RADIO;
+        snprintf(cn->message, sizeof(cn->message), "Transparent radio %s did not take region %s", link->describe().c_str(),
+                 getRegion(pushedLora.region)->name);
+    } else {
+        snprintf(cn->message, sizeof(cn->message), "Transparent radio %s did not take the LoRa settings (%s differs)",
+                 link->describe().c_str(), difference);
+    }
+    service->sendClientNotification(cn);
+    refusalNotified = true;
+}
+
 meshtastic_Config_LoRaConfig TransparentRadio::desiredLoraConfig() const
 {
     meshtastic_Config_LoRaConfig lora = config.lora;
@@ -426,6 +448,7 @@ void TransparentRadio::handleAdminReply(const meshtastic_MeshPacket &p)
         LOG_WARN("Transparent radio: %s did not take our LoRa settings (%s differs); retrying in %u min or on the next "
                  "config change",
                  link->describe().c_str(), difference, (unsigned)(REFUSED_RETRY_MS / 60000));
+        notifyRefusal(difference);
         setState(State::Refused);
         return;
     }

@@ -1305,6 +1305,69 @@ static void test_handleSetHamMode_acceptedRequestAcksSuccess()
     testAdmin->drainReply();
 }
 
+// The LORA_24 gate in handleReceivedProtobuf must ask the interface the router actually holds. It used
+// to ask RadioLibInterface::instance, which is null for any interface that is not a local RadioLib chip
+// (meshtasticd's transparent radio drives another node's chip), so LORA_24 was refused there even when
+// the radio behind it does 2.4 GHz.
+class WideLoraGateRadio : public RadioInterface
+{
+  public:
+    explicit WideLoraGateRadio(bool wide) : wide(wide) {}
+    ErrorCode send(meshtastic_MeshPacket *p) override
+    {
+        packetPool.release(p);
+        return ERRNO_OK;
+    }
+    uint32_t getPacketTime(uint32_t totalPacketLen, bool received = false) override { return 100; }
+    bool wideLora() override { return wide; }
+
+  private:
+    bool wide;
+};
+
+// Send set_config{region LORA_24} from a local client through a router whose interface reports
+// `radioIsWide`, and return the Routing error the dispatcher answered with.
+static meshtastic_Routing_Error setLora24Through(bool radioIsWide)
+{
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    initRegion();
+    testAdmin->deferSaves();
+    hamMockRouter = new HamModeMockRouter();
+    hamMockRouter->addInterface(std::unique_ptr<RadioInterface>(new WideLoraGateRadio(radioIsWide)));
+    router = hamMockRouter;
+
+    meshtastic_AdminMessage m = meshtastic_AdminMessage_init_zero;
+    m.which_payload_variant = meshtastic_AdminMessage_set_config_tag;
+    m.set_config = makeLoraSetConfig(meshtastic_Config_LoRaConfig_RegionCode_LORA_24, true,
+                                     meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST);
+    meshtastic_MeshPacket mp = meshtastic_MeshPacket_init_zero;
+    mp.from = 0;
+    mp.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    mp.decoded.want_response = true;
+    testAdmin->handleReceivedProtobuf(mp, &m);
+
+    meshtastic_Routing_Error err = meshtastic_Routing_Error_MAX_RETRANSMIT; // neither answer the test expects
+    TEST_ASSERT_TRUE_MESSAGE(decodeRoutingError(testAdmin->reply(), err), "want_response must be answered");
+    testAdmin->drainReply();
+    return err;
+}
+
+static void test_setConfig_lora24_acceptedWhenTheRouterInterfaceDoes2_4GHz()
+{
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_NONE, setLora24Through(true));
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_LORA_24, config.lora.region);
+}
+
+// The fail-closed half: an interface without 2.4 GHz still gets BAD_REQUEST and keeps its region.
+static void test_setConfig_lora24_rejectedWhenTheRouterInterfaceCannot()
+{
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_BAD_REQUEST, setLora24Through(false));
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_US, config.lora.region);
+}
+
 static void test_bootDefense_sanitizesStaleLicensedChannelsOnce()
 {
     owner = meshtastic_User_init_zero;
@@ -2668,6 +2731,8 @@ void setup()
     RUN_TEST(test_handleSetHamMode_blankCallSignIsRejected);
     RUN_TEST(test_handleSetHamMode_blankCallSignRepliesBadRequest);
     RUN_TEST(test_handleSetHamMode_acceptedRequestAcksSuccess);
+    RUN_TEST(test_setConfig_lora24_acceptedWhenTheRouterInterfaceDoes2_4GHz);
+    RUN_TEST(test_setConfig_lora24_rejectedWhenTheRouterInterfaceCannot);
     RUN_TEST(test_handleSetConfig_persistsLicensedFirstRegionIdentity);
     RUN_TEST(test_handleSetConfig_persistsUnlicensedFirstRegionIdentity);
     RUN_TEST(test_bootDefense_sanitizesStaleLicensedChannelsOnce);

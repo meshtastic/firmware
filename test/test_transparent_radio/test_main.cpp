@@ -46,6 +46,7 @@
 #include <deque>
 #include <pb_decode.h>
 #include <pb_encode.h>
+#include <string>
 #include <vector>
 
 static constexpr NodeNum DEVICE_NODE = 0x0D0D0D0D;
@@ -119,7 +120,21 @@ class TestRadio : public TransparentRadio
 static FakeLink *fakeLink = nullptr;
 static TestRadio *radio = nullptr;
 static CaptureRouter *captureRouter = nullptr;
-static MockMeshService *mockService = nullptr;
+/// Keeps the last client notification's type and text; the shared mock only counts them.
+class NotifyingService : public MockMeshService
+{
+  public:
+    void sendClientNotification(meshtastic_ClientNotification *n) override
+    {
+        lastType = n->type;
+        lastMessage = n->message;
+        MockMeshService::sendClientNotification(n);
+    }
+    meshtastic_ClientNotification_NotificationType lastType = meshtastic_ClientNotification_NotificationType_UNSET;
+    std::string lastMessage;
+};
+
+static NotifyingService *mockService = nullptr;
 static AirTime *testAirTime = nullptr;
 
 // ---------------------------------------------------------------------------
@@ -297,7 +312,7 @@ void setUp(void)
     strncpy(channelFile.channels[0].settings.name, PRIMARY_CHANNEL_NAME, sizeof(channelFile.channels[0].settings.name) - 1);
     channels.onConfigChanged();
 
-    service = mockService = new MockMeshService();
+    service = mockService = new NotifyingService();
     router = captureRouter = new CaptureRouter();
     airTime = testAirTime = new AirTime();
 
@@ -483,6 +498,94 @@ void test_refused_device_is_retried_after_the_backoff(void)
     deviceSendsConfigDump(expectedDeviceLora());
     radio->runOnce();
     TEST_ASSERT_EQUAL_MESSAGE((int)TransparentRadio::State::Ready, (int)radio->getState(), "the retry reaches Ready");
+}
+
+// ---------------------------------------------------------------------------
+// LORA_24 (2.4 GHz)
+// ---------------------------------------------------------------------------
+
+/// The get_config read-back among `sent`; a heartbeat can share the pass, so don't assume its position.
+static meshtastic_ToRadio readBackIn(const std::vector<meshtastic_ToRadio> &sent)
+{
+    for (const meshtastic_ToRadio &tr : sent)
+        if (tr.which_payload_variant == meshtastic_ToRadio_packet_tag &&
+            adminIn(tr).which_payload_variant == meshtastic_AdminMessage_get_config_request_tag)
+            return tr;
+    TEST_FAIL_MESSAGE("no read-back request was sent");
+    return meshtastic_ToRadio_init_zero;
+}
+
+/// Put this node on LORA_24 and run the handshake against a device on `deviceNow` up to the read-back.
+/// Returns the LoRa config pushed; `readBack` is the request the device answers next.
+static meshtastic_Config_LoRaConfig pushLora24(const meshtastic_Config_LoRaConfig &deviceNow, meshtastic_ToRadio &readBack)
+{
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_LORA_24;
+    initRegion();
+    TEST_ASSERT_TRUE(radio->reconfigure()); // still Disconnected: this only re-derives the modem settings
+    radio->runOnce();
+    takeToRadio();
+    deviceSendsConfigDump(deviceNow);
+    radio->runOnce();
+    std::vector<meshtastic_ToRadio> sent = takeToRadio();
+    TEST_ASSERT_EQUAL(2, sent.size());
+    readBack = readBackIn(sent);
+    return adminIn(sent[0]).set_config.payload_variant.lora;
+}
+
+// meshtasticd can't see the device's chip, so it lets the device decide. wideLora() reports 2.4 GHz, which is
+// what AdminModule's LORA_24 gate asks the router's interface (refusing LORA_24 on meshtasticd outright when it
+// said no). LORA_24 then goes to the device unchanged, and a device with a 2.4 GHz chip goes Ready, unreported.
+void test_lora_24_is_pushed_and_a_device_that_takes_it_goes_ready(void)
+{
+    TEST_ASSERT_TRUE_MESSAGE(radio->wideLora(), "AdminModule refuses LORA_24 unless the interface reports 2.4 GHz");
+    meshtastic_Config_LoRaConfig deviceNow = meshtastic_Config_LoRaConfig_init_zero;
+    deviceNow.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    deviceNow.use_preset = true;
+    meshtastic_ToRadio readBack = meshtastic_ToRadio_init_zero;
+    const meshtastic_Config_LoRaConfig pushed = pushLora24(deviceNow, readBack);
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_LORA_24, pushed.region);
+    const uint32_t notifiedBefore = mockService->notificationCount;
+
+    deviceAnswersReadBack(readBack, pushed);
+    radio->runOnce();
+    TEST_ASSERT_EQUAL((int)TransparentRadio::State::Ready, (int)radio->getState());
+    TEST_ASSERT_EQUAL_MESSAGE(notifiedBefore, mockService->notificationCount, "nothing to tell the client");
+}
+
+// A device without a 2.4 GHz chip keeps its own region, so nothing is on air: that has to reach the client, not
+// only the log. It is told once, as LORA_REGION_UNSUPPORTED_BY_RADIO naming the region. The timed retries that
+// follow stay quiet (one notification every 5 minutes would bury the app), and a config change re-arms it.
+void test_a_device_that_refuses_lora_24_is_reported_to_the_client_once(void)
+{
+    meshtastic_Config_LoRaConfig deviceNow = meshtastic_Config_LoRaConfig_init_zero;
+    deviceNow.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    deviceNow.use_preset = true;
+    meshtastic_ToRadio readBack = meshtastic_ToRadio_init_zero;
+    pushLora24(deviceNow, readBack);
+    const uint32_t notifiedBefore = mockService->notificationCount;
+
+    deviceAnswersReadBack(readBack, deviceNow); // kept US
+    radio->runOnce();
+    TEST_ASSERT_EQUAL((int)TransparentRadio::State::Refused, (int)radio->getState());
+    TEST_ASSERT_EQUAL(notifiedBefore + 1, mockService->notificationCount);
+    TEST_ASSERT_EQUAL(meshtastic_ClientNotification_NotificationType_LORA_REGION_UNSUPPORTED_BY_RADIO, mockService->lastType);
+    TEST_ASSERT_TRUE_MESSAGE(mockService->lastMessage.find("LORA_24") != std::string::npos, "the message names the region");
+
+    Time::advanceTestMillis(5 * 60 * 1000); // the timed retry, refused the same way
+    radio->runOnce();
+    takeToRadio();
+    deviceSendsConfigDump(deviceNow);
+    radio->runOnce();
+    deviceAnswersReadBack(readBackIn(takeToRadio()), deviceNow);
+    radio->runOnce();
+    TEST_ASSERT_EQUAL((int)TransparentRadio::State::Refused, (int)radio->getState());
+    TEST_ASSERT_EQUAL_MESSAGE(notifiedBefore + 1, mockService->notificationCount, "a timed retry is not news");
+
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST; // a new config, refused again
+    TEST_ASSERT_TRUE(radio->reconfigure());
+    deviceAnswersReadBack(readBackIn(takeToRadio()), deviceNow);
+    radio->runOnce();
+    TEST_ASSERT_EQUAL_MESSAGE(notifiedBefore + 2, mockService->notificationCount, "a config change is reported afresh");
 }
 
 // A device with lockdown on drops an unauthenticated client's admin traffic and mesh packets alike. The radio
@@ -787,6 +890,8 @@ void setup()
     RUN_TEST(test_device_refusing_our_settings_is_retried_not_written_off);
     RUN_TEST(test_no_region_here_leaves_the_device_alone_until_one_is_set);
     RUN_TEST(test_refused_device_is_retried_after_the_backoff);
+    RUN_TEST(test_lora_24_is_pushed_and_a_device_that_takes_it_goes_ready);
+    RUN_TEST(test_a_device_that_refuses_lora_24_is_reported_to_the_client_once);
     RUN_TEST(test_locked_device_is_reported_not_pushed_to);
     RUN_TEST(test_no_lora_config_from_the_device_means_no_push);
     RUN_TEST(test_frame_goes_out_at_its_due_time_with_header_and_ciphertext_only);

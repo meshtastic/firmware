@@ -336,9 +336,9 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
             break;
         }
 
-        // Hardware supports 2.4 GHz - apply the config.
-        // Fail closed: null instance is treated as incapable.
-        if (RadioLibInterface::instance && RadioLibInterface::instance->wideLora()) {
+        // Hardware supports 2.4 GHz - apply the config. Ask the active interface, which is not always a RadioLib
+        // chip (meshtasticd's transparent radio is another node's). Fail closed: no interface is incapable.
+        if (router && router->getRadioIface() && router->getRadioIface()->wideLora()) {
             LOG_DEBUG("LORA_24 requested, radio hardware supports 2.4 GHz, applying");
             handleSetConfig(r->set_config, fromOthers);
             break;

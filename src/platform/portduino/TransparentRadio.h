@@ -37,6 +37,8 @@ class TransparentRadio : public RadioInterface, protected concurrency::OSThread
     void clampToLateRebroadcastWindow(NodeNum from, PacketId id) override;
     meshtastic_QueueStatus getQueueStatus() override;
     bool canSleep(bool deepSleep = false) override { return txQueue.empty(); }
+    /// The chip is on the device, which checks it when we push LORA_24 and keeps its own region if it can't.
+    bool wideLora() override { return true; }
 
     using RadioInterface::getPacketTime;
     uint32_t getPacketTime(uint32_t totalPacketLen, bool received = false) override;
@@ -64,6 +66,7 @@ class TransparentRadio : public RadioInterface, protected concurrency::OSThread
     void parseByte(uint8_t c);
     void handleFromRadio();
     void handleAdminReply(const meshtastic_MeshPacket &p);
+    void notifyRefusal(const char *difference);
     void pushConfig();
     meshtastic_Config_LoRaConfig desiredLoraConfig() const;
     bool sendAdmin(const meshtastic_AdminMessage &msg, bool wantResponse, PacketId *idOut = nullptr);
@@ -98,6 +101,7 @@ class TransparentRadio : public RadioInterface, protected concurrency::OSThread
     meshtastic_Config_LoRaConfig deviceLora = meshtastic_Config_LoRaConfig_init_zero;
     meshtastic_Config_LoRaConfig pushedLora = meshtastic_Config_LoRaConfig_init_zero;
     PacketId verifyRequestId = 0;
+    bool refusalNotified = false; // one client notification per config change, not one per timed retry
     int32_t deviceQueueFree = -1; // unknown until the device reports a QueueStatus
 
     uint8_t rxBuf[FRAME_HEADER_LEN + MAX_TO_FROM_RADIO_SIZE];
