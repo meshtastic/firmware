@@ -405,7 +405,9 @@ static int noFixCoordReserve = 0;
 
 static int buildCoordString(const meshtastic_PositionLite &pos, char *buf, size_t bufSize)
 {
-    return snprintf(buf, bufSize, "%.5f%c %.5f%c", pos.latitude_i * 1e-7, pos.latitude_i >= 0 ? 'N' : 'S', pos.longitude_i * 1e-7,
+    const int32_t latAbs = pos.latitude_i < 0 ? -pos.latitude_i : pos.latitude_i;
+    const int32_t lonAbs = pos.longitude_i < 0 ? -pos.longitude_i : pos.longitude_i;
+    return snprintf(buf, bufSize, "%.5f%c %.5f%c", latAbs * 1e-7, pos.latitude_i >= 0 ? 'N' : 'S', lonAbs * 1e-7,
                     pos.longitude_i >= 0 ? 'E' : 'W');
 }
 
@@ -505,9 +507,8 @@ void drawNodeDistance(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
         // No fix of our own: no distance is computable. Fall back to the
         // node's coordinates so a GPS-less device still gets useful text.
         meshtastic_PositionLite nodePos;
-        distanceLabel =
-            (nodeDB->copyNodePosition(node->num, nodePos) && buildCoordString(nodePos, coordStr, sizeof(coordStr)) > 0) ? coordStr
-                                                                                                                        : "?";
+        const bool haveNodePos = nodeDB->hasValidPosition(node) && nodeDB->copyNodePosition(node->num, nodePos);
+        distanceLabel = (haveNodePos && buildCoordString(nodePos, coordStr, sizeof(coordStr)) > 0) ? coordStr : "?";
     }
     int offset = (currentResolution == ScreenResolution::High)
                      ? (isLeftCol ? 7 : 10) // Offset for Wide Screens (Left Column:Right Column)
@@ -624,6 +625,18 @@ void drawCompassUnknown(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
 {
     if (!nodeDB->hasValidPosition(node))
         return;
+
+    // Coordinates are only drawn in the single-column no-local-fix layout
+    // (noFixCoordReserve > 0) and never on compact panels whose width cannot
+    // fit the string; other callers keep the previous "?" placeholder.
+    if (noFixCoordReserve <= 0 || graphics::isCompactPanel(display)) {
+        bool isLeftCol = (x < SCREEN_WIDTH / 2);
+        int arrowXOffset = (currentResolution == ScreenResolution::High) ? (isLeftCol ? 22 : 24) : (isLeftCol ? 12 : 18);
+        display->setFont(FONT_SMALL);
+        display->setTextAlignment(TEXT_ALIGN_CENTER);
+        display->drawString(x + columnWidth - arrowXOffset, y, "?");
+        return;
+    }
 
     meshtastic_PositionLite nodePos;
     if (!nodeDB->copyNodePosition(node->num, nodePos))
