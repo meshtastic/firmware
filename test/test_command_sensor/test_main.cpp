@@ -1,7 +1,7 @@
 // Tests for the config.yaml "Sensors:" feature on Linux (meshtasticd):
 //
 //   - execCommand() / exec() in src/platform/portduino/PortduinoGlue.cpp
-//   - CommandSensorFields::{canonicalType, apply, parseValue} in
+//   - CommandSensorFields::{canonicalType, messageFor, apply, parseValue} in
 //     src/modules/Telemetry/Sensor/CommandSensorFields.cpp
 //   - CommandSensor (worker thread and getMetrics()) in src/modules/Telemetry/Sensor/CommandSensor.cpp
 //
@@ -20,6 +20,11 @@
 //
 // apply() writes into nanopb fields of several widths. A value outside a narrow integer field
 // (soil_moisture is uint8_t) must clamp, not wrap: 300 wrapping to 44% moisture is a silent lie.
+//
+// A Type belongs to exactly one telemetry message, EnvironmentMetrics or AirQualityMetrics, and each
+// telemetry module owns one CommandSensor that runs only its own entries. An entry claimed by both would
+// run its command twice and could land in the wrong message; one claimed by neither would be silently
+// dropped after loadConfig() accepted it.
 //
 // CommandSensor runs commands on a worker thread and getMetrics() only reads the latest results.
 // getMetrics() is called on the main loop, which also drives the radio, so it must return at once even
@@ -87,6 +92,14 @@ bool waitForReads(CommandSensor &sensor, uint32_t reads, long timeoutMs = 5000)
         usleep(10 * 1000);
     }
     return true;
+}
+
+meshtastic_Telemetry emptyAirQuality()
+{
+    meshtastic_Telemetry t = meshtastic_Telemetry_init_zero;
+    t.which_variant = meshtastic_Telemetry_air_quality_metrics_tag;
+    t.variant.air_quality_metrics = meshtastic_AirQualityMetrics_init_zero;
+    return t;
 }
 
 meshtastic_Telemetry emptyEnvironment()
@@ -264,11 +277,38 @@ void test_apply_unknown_type_changes_nothing()
     TEST_ASSERT_EQUAL_MEMORY(&zero, &m, sizeof(m));
 }
 
+void test_messageFor_routes_each_type_to_one_message()
+{
+    using CommandSensorFields::Message;
+    TEST_ASSERT_TRUE(CommandSensorFields::messageFor("temperature") == Message::Environment);
+    TEST_ASSERT_TRUE(CommandSensorFields::messageFor("iaq") == Message::Environment);
+    TEST_ASSERT_TRUE(CommandSensorFields::messageFor("PM25_Standard") == Message::AirQuality);
+    TEST_ASSERT_TRUE(CommandSensorFields::messageFor("co2") == Message::AirQuality);
+    TEST_ASSERT_TRUE(CommandSensorFields::messageFor("humidity") == Message::None);
+    // A status bitmask, not a measurement: deliberately not a Type.
+    TEST_ASSERT_TRUE(CommandSensorFields::messageFor("pm_status_flags") == Message::None);
+    TEST_ASSERT_EQUAL_STRING("pm25_standard", CommandSensorFields::canonicalType("PM25_Standard").c_str());
+}
+
+void test_apply_air_quality_fields()
+{
+    meshtastic_AirQualityMetrics m = meshtastic_AirQualityMetrics_init_zero;
+    TEST_ASSERT_TRUE(CommandSensorFields::apply(m, "co2", 412.6f));
+    TEST_ASSERT_TRUE(m.has_co2);
+    TEST_ASSERT_EQUAL_UINT32(413, m.co2);
+    TEST_ASSERT_TRUE(CommandSensorFields::apply(m, "pm25_standard", -3.0f));
+    TEST_ASSERT_EQUAL_UINT32(0, m.pm25_standard);
+    TEST_ASSERT_TRUE(CommandSensorFields::apply(m, "pm_voc_idx", 101.5f));
+    TEST_ASSERT_EQUAL_FLOAT(101.5f, m.pm_voc_idx);
+    // An environment type is not an air-quality field.
+    TEST_ASSERT_FALSE(CommandSensorFields::apply(m, "temperature", 20.0f));
+}
+
 // --- CommandSensor ---
 
 void test_CommandSensor_not_added_without_config()
 {
-    CommandSensor sensor;
+    CommandSensor sensor(CommandSensorFields::Message::Environment);
     TEST_ASSERT_FALSE(sensor.initDevice(nullptr, nullptr));
 }
 
@@ -277,7 +317,7 @@ void test_CommandSensor_applies_scale_and_skips_bad_output()
     portduino_config.command_sensors.push_back({"temperature", "echo 21500", 0.001f});
     portduino_config.command_sensors.push_back({"relative_humidity", "echo 'no sensor'", 1.0f});
     portduino_config.command_sensors.push_back({"lux", "exit 1", 1.0f});
-    CommandSensor sensor;
+    CommandSensor sensor(CommandSensorFields::Message::Environment);
     TEST_ASSERT_TRUE(sensor.initDevice(nullptr, nullptr));
     TEST_ASSERT_TRUE(waitForReads(sensor, 3));
 
@@ -294,7 +334,7 @@ void test_CommandSensor_rejects_scale_overflow()
     // Both factors are finite but the product is not; it must not be sent, nor reach an integer cast.
     portduino_config.command_sensors.push_back({"temperature", "echo 3e38", 10.0f});
     portduino_config.command_sensors.push_back({"soil_moisture", "echo 3e38", 10.0f});
-    CommandSensor sensor;
+    CommandSensor sensor(CommandSensorFields::Message::Environment);
     TEST_ASSERT_TRUE(sensor.initDevice(nullptr, nullptr));
     TEST_ASSERT_TRUE(waitForReads(sensor, 2));
     meshtastic_Telemetry t = emptyEnvironment();
@@ -306,7 +346,7 @@ void test_CommandSensor_rejects_scale_overflow()
 void test_CommandSensor_all_failing_reports_no_metrics()
 {
     portduino_config.command_sensors.push_back({"temperature", "echo oops", 1.0f});
-    CommandSensor sensor;
+    CommandSensor sensor(CommandSensorFields::Message::Environment);
     TEST_ASSERT_TRUE(sensor.initDevice(nullptr, nullptr));
     TEST_ASSERT_TRUE(waitForReads(sensor, 1));
     meshtastic_Telemetry t = emptyEnvironment();
@@ -320,7 +360,7 @@ void test_CommandSensor_caches_readings_then_refreshes()
     std::remove(runs.c_str());
     const std::string cmd = "echo x >> " + runs + "; echo 7";
     portduino_config.command_sensors.push_back({"weight", cmd, 1.0f});
-    CommandSensor sensor;
+    CommandSensor sensor(CommandSensorFields::Message::Environment);
     TEST_ASSERT_TRUE(sensor.initDevice(nullptr, nullptr));
     TEST_ASSERT_TRUE(waitForReads(sensor, 1));
 
@@ -343,7 +383,7 @@ void test_CommandSensor_getMetrics_does_not_wait_for_a_hung_command()
 {
     // The worker is stuck in this command for its full 2 s timeout; getMetrics() must not be.
     portduino_config.command_sensors.push_back({"lux", "sleep 10", 1.0f});
-    CommandSensor sensor;
+    CommandSensor sensor(CommandSensorFields::Message::Environment);
     TEST_ASSERT_TRUE(sensor.initDevice(nullptr, nullptr));
     usleep(200 * 1000);
 
@@ -358,6 +398,44 @@ void test_CommandSensor_getMetrics_does_not_wait_for_a_hung_command()
     TEST_ASSERT_FALSE(sensor.getMetrics(&t));
 }
 
+void test_CommandSensor_each_module_runs_only_its_own_types()
+{
+    portduino_config.command_sensors.push_back({"temperature", "echo 21", 1.0f});
+    portduino_config.command_sensors.push_back({"co2", "echo 415", 1.0f});
+    CommandSensor environment(CommandSensorFields::Message::Environment);
+    CommandSensor airQuality(CommandSensorFields::Message::AirQuality);
+    TEST_ASSERT_TRUE(environment.initDevice(nullptr, nullptr));
+    TEST_ASSERT_TRUE(airQuality.initDevice(nullptr, nullptr));
+    TEST_ASSERT_TRUE(waitForReads(environment, 1));
+    TEST_ASSERT_TRUE(waitForReads(airQuality, 1));
+    usleep(300 * 1000);
+    // One command each: neither instance runs the other's entry.
+    TEST_ASSERT_EQUAL(1, environment.finishedReads());
+    TEST_ASSERT_EQUAL(1, airQuality.finishedReads());
+
+    meshtastic_Telemetry env = emptyEnvironment();
+    TEST_ASSERT_TRUE(environment.getMetrics(&env));
+    TEST_ASSERT_TRUE(env.variant.environment_metrics.has_temperature);
+
+    meshtastic_Telemetry aq = emptyAirQuality();
+    TEST_ASSERT_TRUE(airQuality.getMetrics(&aq));
+    TEST_ASSERT_TRUE(aq.variant.air_quality_metrics.has_co2);
+    TEST_ASSERT_EQUAL_UINT32(415, aq.variant.air_quality_metrics.co2);
+
+    // Handed the other module's message, an instance writes nothing into it.
+    meshtastic_Telemetry wrong = emptyAirQuality();
+    TEST_ASSERT_FALSE(environment.getMetrics(&wrong));
+    meshtastic_AirQualityMetrics zero = meshtastic_AirQualityMetrics_init_zero;
+    TEST_ASSERT_EQUAL_MEMORY(&zero, &wrong.variant.air_quality_metrics, sizeof(zero));
+}
+
+void test_CommandSensor_not_added_without_its_module_types()
+{
+    portduino_config.command_sensors.push_back({"temperature", "echo 21", 1.0f});
+    CommandSensor airQuality(CommandSensorFields::Message::AirQuality);
+    TEST_ASSERT_FALSE(airQuality.initDevice(nullptr, nullptr));
+}
+
 void test_CommandSensor_destructor_stops_the_worker()
 {
     // Destroying the sensor must join its worker rather than leave a thread running a destroyed object.
@@ -366,7 +444,7 @@ void test_CommandSensor_destructor_stops_the_worker()
     const std::string cmd = "echo x >> " + runs + "; echo 1";
     portduino_config.command_sensors.push_back({"weight", cmd, 1.0f});
     {
-        CommandSensor sensor;
+        CommandSensor sensor(CommandSensorFields::Message::Environment);
         TEST_ASSERT_TRUE(sensor.initDevice(nullptr, nullptr));
         TEST_ASSERT_TRUE(waitForReads(sensor, 1));
     }
@@ -397,12 +475,16 @@ void setup()
     RUN_TEST(test_apply_sets_value_and_has_flag);
     RUN_TEST(test_apply_rounds_and_clamps_integer_fields);
     RUN_TEST(test_apply_unknown_type_changes_nothing);
+    RUN_TEST(test_messageFor_routes_each_type_to_one_message);
+    RUN_TEST(test_apply_air_quality_fields);
     RUN_TEST(test_CommandSensor_not_added_without_config);
     RUN_TEST(test_CommandSensor_applies_scale_and_skips_bad_output);
     RUN_TEST(test_CommandSensor_rejects_scale_overflow);
     RUN_TEST(test_CommandSensor_all_failing_reports_no_metrics);
     RUN_TEST(test_CommandSensor_caches_readings_then_refreshes);
     RUN_TEST(test_CommandSensor_getMetrics_does_not_wait_for_a_hung_command);
+    RUN_TEST(test_CommandSensor_each_module_runs_only_its_own_types);
+    RUN_TEST(test_CommandSensor_not_added_without_its_module_types);
     RUN_TEST(test_CommandSensor_destructor_stops_the_worker);
     const int failures = UNITY_END();
 

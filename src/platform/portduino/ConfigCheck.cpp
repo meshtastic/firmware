@@ -1409,8 +1409,9 @@ void checkMergedConfig(const PathIndex &paths, std::vector<Finding> &findings)
                                     " times. Every command runs, but only one value can be sent"});
     if (!portduino_config.command_sensors.empty())
         findings.push_back({kInfo, merged, 0,
-                            "Sensors are only read while environment measurement is enabled in the Telemetry module "
-                            "config, and are then broadcast at its update interval"});
+                            "Sensors are only read while the Telemetry module setting for their Type is enabled "
+                            "(environment measurement, or air quality for air-quality types), and are then broadcast "
+                            "at that setting's update interval"});
 }
 
 void printSummary()

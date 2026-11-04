@@ -192,7 +192,7 @@ booting a node that silently never reports that reading.
 
 | File                      | Expected                                                                                               |
 | ------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `sensors.yaml`            | Two sensors, one Type in mixed case. Clean apart from the info line about enabling them.               |
+| `sensors.yaml`            | Three sensors, one an air-quality type, two Types in mixed case. Clean apart from the info line.       |
 | `sensors-bad-type.yaml`   | `humidity` is not a field name, so the file is refused and the valid types are listed.                 |
 | `sensors-not-a-list.yaml` | One sensor written as a mapping, not a one-item list: nothing would be read, so refused.               |
 | `sensors-warnings.yaml`   | Non-numeric and `.inf` `Scale` (both read as 1), an unknown key, one Type listed twice. Four warnings. |

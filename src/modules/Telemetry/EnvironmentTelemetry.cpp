@@ -296,7 +296,7 @@ void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
 #if ARCH_PORTDUINO
     // Not an I2C device.
-    commandSensor = new CommandSensor();
+    commandSensor = new CommandSensor(CommandSensorFields::Message::Environment);
     if (commandSensor->initDevice(nullptr, nullptr)) {
         sensors.push_front(commandSensor);
     } else {

@@ -1,9 +1,8 @@
 #include "configuration.h"
 
-#if ARCH_PORTDUINO && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+#if ARCH_PORTDUINO && (!MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR || !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR)
 
 #include "CommandSensor.h"
-#include "CommandSensorFields.h"
 #include "UptimeClock.h"
 #include "mesh/Throttle.h"
 #include <chrono>
@@ -15,7 +14,10 @@ static constexpr uint32_t COMMAND_SENSOR_REFRESH_MS = 30 * 1000;
 static constexpr uint32_t COMMAND_SENSOR_POLL_MS = 100;
 static constexpr size_t COMMAND_SENSOR_MAX_QUOTED_OUTPUT = 64;
 
-CommandSensor::CommandSensor() : TelemetrySensor(meshtastic_TelemetrySensorType_SENSOR_UNSET, "Command") {}
+CommandSensor::CommandSensor(CommandSensorFields::Message message)
+    : TelemetrySensor(meshtastic_TelemetrySensorType_SENSOR_UNSET, "Command"), message(message)
+{
+}
 
 CommandSensor::~CommandSensor()
 {
@@ -26,13 +28,16 @@ CommandSensor::~CommandSensor()
 
 bool CommandSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 {
-    if (portduino_config.command_sensors.empty())
+    for (const auto &sensor : portduino_config.command_sensors)
+        if (CommandSensorFields::messageFor(sensor.type) == message)
+            configs.push_back(sensor);
+    if (configs.empty())
         return false;
 
-    configs = portduino_config.command_sensors;
     readings.assign(configs.size(), Reading());
     loggedGenerations.assign(configs.size(), 0);
-    LOG_INFO("Init sensor: %s, %u from config.yaml Sensors", sensorName, static_cast<unsigned>(configs.size()));
+    LOG_INFO("Init sensor: %s, %u %s entries from config.yaml Sensors", sensorName, static_cast<unsigned>(configs.size()),
+             message == CommandSensorFields::Message::AirQuality ? "air quality" : "environment");
     status = 1;
     initialized = true;
     worker = std::thread(&CommandSensor::run, this);
@@ -115,8 +120,14 @@ bool CommandSensor::getMetrics(meshtastic_Telemetry *measurement)
             else
                 LOG_WARN("Sensor %s: command %s: %s", sensor.type.c_str(), reading.problem.c_str(), sensor.command.c_str());
         }
-        if (reading.valid && CommandSensorFields::apply(measurement->variant.environment_metrics, sensor.type, reading.value))
-            any = true;
+        if (!reading.valid)
+            continue;
+        if (message == CommandSensorFields::Message::Environment &&
+            measurement->which_variant == meshtastic_Telemetry_environment_metrics_tag)
+            any = CommandSensorFields::apply(measurement->variant.environment_metrics, sensor.type, reading.value) || any;
+        else if (message == CommandSensorFields::Message::AirQuality &&
+                 measurement->which_variant == meshtastic_Telemetry_air_quality_metrics_tag)
+            any = CommandSensorFields::apply(measurement->variant.air_quality_metrics, sensor.type, reading.value) || any;
     }
     return any;
 }
