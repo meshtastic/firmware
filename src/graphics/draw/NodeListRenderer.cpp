@@ -509,6 +509,16 @@ void drawEntryDynamic_Nodes(OLEDDisplay *display, meshtastic_NodeInfoLite *node,
     }
 }
 
+// Width reserved for the coordinate text in the no-local-fix layout, so names
+// cannot run into the digits. Zero in every other layout.
+static int noFixCoordReserve = 0;
+
+static int buildCoordString(const meshtastic_PositionLite &pos, char *buf, size_t bufSize)
+{
+    return snprintf(buf, bufSize, "%.5f%c %.5f%c", pos.latitude_i * 1e-7, pos.latitude_i >= 0 ? 'N' : 'S', pos.longitude_i * 1e-7,
+                    pos.longitude_i >= 0 ? 'E' : 'W');
+}
+
 void drawEntryCompass(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16_t x, int16_t y, int columnWidth)
 {
     bool isLeftCol = (x < SCREEN_WIDTH / 2);
@@ -517,6 +527,7 @@ void drawEntryCompass(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
     int nameMaxWidth =
         getNodeNameMaxWidth(columnWidth, columnWidth - ((currentResolution == ScreenResolution::High) ? (isLeftCol ? 25 : 28)
                                                                                                       : (isLeftCol ? 20 : 22)));
+    nameMaxWidth -= noFixCoordReserve;
 
     const int nameX = x + ((currentResolution == ScreenResolution::High) ? 6 : 3);
     char nodeName[96];
@@ -610,8 +621,7 @@ void drawCompassUnknown(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
     // coordinates instead, so GPS-less devices (e.g. a paired child device)
     // can still read where the tracker is.
     char coords[24];
-    snprintf(coords, sizeof(coords), "%.5f%c %.5f%c", nodePos.latitude_i * 1e-7, nodePos.latitude_i >= 0 ? 'N' : 'S',
-             nodePos.longitude_i * 1e-7, nodePos.longitude_i >= 0 ? 'E' : 'W');
+    buildCoordString(nodePos, coords, sizeof(coords));
 
     display->setFont(FONT_SMALL);
     display->setTextAlignment(TEXT_ALIGN_RIGHT);
@@ -692,6 +702,19 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
     }
 
     int columnWidth = display->getWidth() / totalColumns;
+
+    // Size the coordinate reserve for the widest possible coordinate string,
+    // leaving the name at least a short stub so it stays readable.
+    noFixCoordReserve = 0;
+    if (locationScreen) {
+        const meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
+        if (!nodeDB->hasValidPosition(ourNode)) {
+            char sample[24];
+            snprintf(sample, sizeof(sample), "-88.88888W -188.88888W");
+            display->setFont(FONT_SMALL);
+            noFixCoordReserve = std::min(display->getStringWidth(sample) + 4, columnWidth - 44);
+        }
+    }
 
     int totalEntries = nodeDB->getNumMeshNodes();
     int totalRowsAvailable = (display->getHeight() - y) / rowYOffset;
