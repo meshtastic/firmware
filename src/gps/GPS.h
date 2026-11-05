@@ -37,12 +37,12 @@
 #define HAS_AIROHA_SOFT_RTC 1
 #endif
 // Without RTC_INT, a board whose RESETB is wired can still use backup mode and reset out of it.
-#if !defined(HAS_AIROHA_SOFT_RTC) && defined(GPS_AIROHA_RESET_WAKE) && defined(PIN_GPS_RESET) && defined(GPS_SLEEP_INT) &&       \
-    defined(PIN_GPS_EN)
+// EN is optional there: on a board without it (ThinkNode M1) the receiver stays powered in backup mode.
+#if !defined(HAS_AIROHA_SOFT_RTC) && defined(GPS_AIROHA_RESET_WAKE) && defined(PIN_GPS_RESET) && defined(GPS_SLEEP_INT)
 #define HAS_AIROHA_RESET_WAKE 1
 #endif
 // Without RTC_INT only the GNSS engine is stopped; powering EN back up reboots the core on its own.
-#if defined(HAS_AIROHA_SOFT_RTC) || (defined(GPS_SLEEP_INT) && defined(PIN_GPS_EN))
+#if defined(HAS_AIROHA_SOFT_RTC) || defined(HAS_AIROHA_RESET_WAKE) || (defined(GPS_SLEEP_INT) && defined(PIN_GPS_EN))
 #define HAS_AIROHA_SLEEP 1
 #endif
 
