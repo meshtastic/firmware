@@ -1,11 +1,8 @@
 #pragma once
-#include "AES.h"
-#include "CTR.h"
 #include "concurrency/LockGuard.h"
 #include "configuration.h"
 #include "mesh-pb-constants.h"
 #include <Arduino.h>
-#include <memory>
 
 extern concurrency::Lock *cryptLock;
 
@@ -46,7 +43,6 @@ struct CachedSharedSecret {
 #endif
 
 #define MAX_BLOCKSIZE 256
-#define TEST_CURVE25519_FIELD_OPS // Exposes Curve25519::isWeakPoint() for testing keys
 #define XEDDSA_SIGNATURE_SIZE 64
 // Length of Routing.ack_proof, taken from the generated field so the protocol owns the number.
 static constexpr size_t ACK_PROOF_SIZE = sizeof(meshtastic_Routing_ack_proof_t::bytes);
@@ -72,12 +68,11 @@ class CryptoEngine
     uint8_t public_key[32] = {0};
 #endif
 
-    virtual ~CryptoEngine() {}
 #if !(MESHTASTIC_EXCLUDE_PKI)
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN)
-    virtual void generateKeyPair(uint8_t *pubKey, uint8_t *privKey);
-    virtual bool regeneratePublicKey(uint8_t *pubKey, uint8_t *privKey);
-    virtual bool ensurePkiKeys(meshtastic_Config_SecurityConfig &security, meshtastic_User &user);
+    void generateKeyPair(uint8_t *pubKey, uint8_t *privKey);
+    bool regeneratePublicKey(uint8_t *pubKey, uint8_t *privKey);
+    bool ensurePkiKeys(meshtastic_Config_SecurityConfig &security, meshtastic_User &user);
 #endif
 #if !(MESHTASTIC_EXCLUDE_XEDDSA)
     // The whole Data envelope is covered, not just its payload - see buildSigningBuffer. Takes the
@@ -123,11 +118,11 @@ class CryptoEngine
     // The remotePublic key parameter takes the public_key bytes container from
     // a stored node header. NodeInfoLite is the on-device storage type since
     // the slim refactor flattened UserLite into it.
-    virtual bool encryptCurve25519(uint32_t toNode, uint32_t fromNode, meshtastic_NodeInfoLite_public_key_t remotePublic,
-                                   uint64_t packetNum, size_t numBytes, const uint8_t *bytes, uint8_t *bytesOut);
-    virtual bool decryptCurve25519(uint32_t fromNode, meshtastic_NodeInfoLite_public_key_t remotePublic, uint64_t packetNum,
-                                   size_t numBytes, const uint8_t *bytes, uint8_t *bytesOut);
-    virtual bool setDHPublicKey(uint8_t *publicKey);
+    bool encryptCurve25519(uint32_t toNode, uint32_t fromNode, meshtastic_NodeInfoLite_public_key_t remotePublic,
+                           uint64_t packetNum, size_t numBytes, const uint8_t *bytes, uint8_t *bytesOut);
+    bool decryptCurve25519(uint32_t fromNode, meshtastic_NodeInfoLite_public_key_t remotePublic, uint64_t packetNum,
+                           size_t numBytes, const uint8_t *bytes, uint8_t *bytesOut);
+    bool setDHPublicKey(const uint8_t *publicKey);
 
     // Temporary holder for a peer's not-yet-verified public key, learned in-band during an
     // in-progress key-verification handshake before it is committed to NodeDB. Lets the Router
@@ -141,24 +136,19 @@ class CryptoEngine
     bool getPendingPublicKey(uint32_t node, meshtastic_NodeInfoLite_public_key_t &out);
 #endif
 
-    // Plain SHA256; outside the guard because PortduinoGlue uses it on EXCLUDE_PKI builds.
-    virtual void hash(uint8_t *bytes, size_t numBytes);
-
-    virtual void aesSetKey(const uint8_t *key, size_t key_len);
-
-    virtual void aesEncrypt(uint8_t *in, uint8_t *out);
-    std::unique_ptr<BlockCipher> aes = nullptr;
+    // In-place SHA256 of the first numBytes into bytes[0..32).
+    void hash(uint8_t *bytes, size_t numBytes);
 
     static constexpr size_t AEAD_TAG_SIZE = 12;
     // Sender and destination IDs are authenticated as associated data: the nonce already binds
     // `from` and the packet id, and the hop fields are left out because relays rewrite them.
     static constexpr size_t AEAD_AAD_SIZE = 2 * sizeof(uint32_t);
 
-    virtual bool encryptPacketCCM(const CryptoKey &psk, uint32_t fromNode, uint32_t toNode, uint64_t packetId, size_t numBytes,
-                                  const uint8_t *plaintext, uint8_t *ciphertextWithTag);
+    bool encryptPacketCCM(const CryptoKey &psk, uint32_t fromNode, uint32_t toNode, uint64_t packetId, size_t numBytes,
+                          const uint8_t *plaintext, uint8_t *ciphertextWithTag);
 
-    virtual bool decryptPacketCCM(const CryptoKey &psk, uint32_t fromNode, uint32_t toNode, uint64_t packetId, size_t totalBytes,
-                                  const uint8_t *ciphertextWithTag, uint8_t *plaintext);
+    bool decryptPacketCCM(const CryptoKey &psk, uint32_t fromNode, uint32_t toNode, uint64_t packetId, size_t totalBytes,
+                          const uint8_t *ciphertextWithTag, uint8_t *plaintext);
 
     /**
      * Set the key used for encrypt, decrypt.
@@ -169,16 +159,16 @@ class CryptoEngine
      * @param bytes a _static_ buffer that will remain valid for the life of this crypto instance (i.e. this class will cache the
      * provided pointer)
      */
-    virtual void setKey(const CryptoKey &k);
+    void setKey(const CryptoKey &k);
 
     /**
      * Encrypt a packet
      *
      * @param bytes is updated in place
      */
-    virtual void encryptPacket(uint32_t fromNode, uint64_t packetId, size_t numBytes, uint8_t *bytes);
-    virtual void decrypt(uint32_t fromNode, uint64_t packetId, size_t numBytes, uint8_t *bytes);
-    virtual void encryptAESCtr(CryptoKey key, uint8_t *nonce, size_t numBytes, uint8_t *bytes);
+    void encryptPacket(uint32_t fromNode, uint64_t packetId, size_t numBytes, uint8_t *bytes);
+    void decrypt(uint32_t fromNode, uint64_t packetId, size_t numBytes, uint8_t *bytes);
+    void encryptAESCtr(CryptoKey key, uint8_t *nonce, size_t numBytes, uint8_t *bytes);
 #ifndef PIO_UNIT_TESTING
   protected:
 #endif
@@ -192,20 +182,11 @@ class CryptoEngine
     uint8_t pendingKeyVerificationPublicKey[32] = {0};
     bool hasPendingKeyVerificationKey = false;
     concurrency::Lock pendingKeyLock;
-    // Curve25519::eval semantics: scalar not clamped, point == nullptr is the base point, false if point is
-    // non-canonical; no weak-point checks. Platforms with a crypto accelerator override this.
-    virtual bool x25519(uint8_t *out, const uint8_t *scalar, const uint8_t *point);
 #if !(MESHTASTIC_EXCLUDE_XEDDSA)
-    /// Ed25519 signature verification. Platforms with a crypto accelerator override this.
-    virtual bool ed25519Verify(const uint8_t *signature, const uint8_t *edPubKey, const uint8_t *msg, size_t msgLen);
-    // Encoded point scalar * B for XEdDSA's R (scalar 32 bytes little-endian, reduced mod q). The default
-    // returns false, so XEdDSA::sign computes it in software. Platforms with a crypto accelerator override this.
-    virtual bool ed25519BaseMul(uint8_t *point, const uint8_t *scalar);
-    static bool ed25519BaseMulThunk(void *engine, uint8_t point[32], const uint8_t scalar[32]);
     uint8_t xeddsa_public_key[32] = {0};
     uint8_t xeddsa_private_key[32] = {0};
-    void curve_to_ed_pub(const uint8_t *curve_pubkey, uint8_t *ed_pubkey);
-    // Single-entry cache for curve_to_ed_pub conversion (avoids expensive field inversion per packet)
+    // Single-entry cache for curve_to_ed_pub conversion (avoids expensive field
+    // inversion per packet)
     uint8_t cached_curve_pubkey[32] = {0};
     uint8_t cached_ed_pubkey[32] = {0};
 #endif

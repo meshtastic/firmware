@@ -3,7 +3,7 @@
 #include "mesh/Router.h" // BITFIELD_* masks the signing buffer covers
 
 #include "TestUtil.h"
-#include "aes-ccm.h"
+#include "crypto/crypto_api.h"
 #include <XEdDSA.h>
 #include <cassert>
 #include <unity.h>
@@ -28,6 +28,12 @@ void setUp(void)
 void tearDown(void)
 {
     // clean stuff up here
+}
+
+static void aesEcbBlock(const uint8_t *key, size_t keyLen, const uint8_t *in, uint8_t *out)
+{
+    const uint8_t zeros[16] = {0};
+    TEST_ASSERT_TRUE(crypto_aes_ctr(key, keyLen, in, zeros, sizeof(zeros), out));
 }
 
 void test_SHA256(void)
@@ -73,20 +79,17 @@ void test_ECB_AES256(void)
 
     HexToBytes(plain, "6BC1BEE22E409F96E93D7E117393172A");
     HexToBytes(expected, "F3EED1BDB5D2A03C064B5A7E3DB181F8");
-    crypto->aesSetKey(key, 32);
-    crypto->aesEncrypt(plain, result); // Does 16 bytes at a time
+    aesEcbBlock(key, 32, plain, result);
     TEST_ASSERT_EQUAL_MEMORY(expected, result, 16);
 
     HexToBytes(plain, "AE2D8A571E03AC9C9EB76FAC45AF8E51");
     HexToBytes(expected, "591CCB10D410ED26DC5BA74A31362870");
-    crypto->aesSetKey(key, 32);
-    crypto->aesEncrypt(plain, result); // Does 16 bytes at a time
+    aesEcbBlock(key, 32, plain, result);
     TEST_ASSERT_EQUAL_MEMORY(expected, result, 16);
 
     HexToBytes(plain, "30C81C46A35CE411E5FBC1191A0A52EF");
     HexToBytes(expected, "B6ED21B99CA6F4F9F153E7B1BEAFED1D");
-    crypto->aesSetKey(key, 32);
-    crypto->aesEncrypt(plain, result); // Does 16 bytes at a time
+    aesEcbBlock(key, 32, plain, result);
     TEST_ASSERT_EQUAL_MEMORY(expected, result, 16);
 }
 void test_ECB_AES128(void)
@@ -101,14 +104,12 @@ void test_ECB_AES128(void)
 
     HexToBytes(plain, "6BC1BEE22E409F96E93D7E117393172A");
     HexToBytes(expected, "3AD77BB40D7A3660A89ECAF32466EF97");
-    crypto->aesSetKey(key, 16);
-    crypto->aesEncrypt(plain, result);
+    aesEcbBlock(key, 16, plain, result);
     TEST_ASSERT_EQUAL_MEMORY(expected, result, 16);
 
     HexToBytes(plain, "AE2D8A571E03AC9C9EB76FAC45AF8E51");
     HexToBytes(expected, "F5D3D58503B9699DE785895A96FDBAAF");
-    crypto->aesSetKey(key, 16);
-    crypto->aesEncrypt(plain, result);
+    aesEcbBlock(key, 16, plain, result);
     TEST_ASSERT_EQUAL_MEMORY(expected, result, 16);
 }
 
@@ -229,7 +230,7 @@ void test_XEdDSA(void)
         printf("Start of time %u\n", times);
         crypto->generateKeyPair(x_public_key, private_key);
         XEdDSA::priv_curve_to_ed_keys(private_key, ed_private_key, ed_public_key);
-        crypto->curve_to_ed_pub(x_public_key, ed_public_key2);
+        crypto_xeddsa_pub_from_x25519(ed_public_key2, x_public_key);
         TEST_ASSERT_EQUAL_MEMORY(ed_public_key, ed_public_key2, 32);
 
         TEST_ASSERT(crypto->xeddsa_sign(fromNode, packetId, toNode, &d, signature));
@@ -420,82 +421,13 @@ void test_XEdDSA_repeated_sign_is_randomized(void)
     TEST_ASSERT_TRUE(crypto->xeddsa_verify(pub, fromNode, packetId, toNode, &d, sig2));
 }
 
-// CryptoEngine::xeddsa_sign hands XEdDSA::sign its ed25519BaseMul() hook (src/mesh/CryptoEngine.cpp), which
-// NRF52CryptoEngine overrides to compute R = r * B on the CryptoCell CC310. The hook's contract: return the
-// encoded point and true, or false to let the library compute R in software; the signature must verify either
-// way. This pins the wiring and both outcomes with an engine whose hook does R in software: if xeddsa_sign
-// stops passing the hook, the call count fails; if the hook's R is ignored, the wrong-point case still
-// verifies; if a declining hook's output is used, the decline case fails to verify. Byte-identical output
-// with and without the hook is meshtastic/Crypto's own test (XEdDSA::sign, Crypto#7).
-struct SoftwareBaseMul : public XEdDSA {
-    static void mulBase(uint8_t point[32], const uint8_t scalar[32])
-    {
-        limb_t s[(256 + 8 * sizeof(limb_t) - 1) / (8 * sizeof(limb_t))];
-        BigNumberUtil::unpackLE(s, sizeof(s) / sizeof(s[0]), scalar, 32);
-        Point P;
-        mul(P, s);
-        encodePoint(point, P);
-    }
-};
-
-class BaseMulProbeEngine : public CryptoEngine
-{
-  public:
-    enum class Mode { Software, WrongPoint, Decline };
-    Mode mode = Mode::Software;
-    int calls = 0;
-
-    bool ed25519BaseMul(uint8_t *point, const uint8_t *scalar) override
-    {
-        calls++;
-        switch (mode) {
-        case Mode::Software:
-            SoftwareBaseMul::mulBase(point, scalar);
-            return true;
-        case Mode::WrongPoint:
-            memset(point, 0, 32);
-            point[0] = 1; // the identity point, not r * B
-            return true;
-        case Mode::Decline:
-            memset(point, 0xA5, 32);
-            return false;
-        }
-        return false;
-    }
-};
-
-void test_XEdDSA_baseMul_hook(void)
-{
-    BaseMulProbeEngine engine;
-    uint8_t pub[32], priv[32], sig[64];
-    uint8_t message[] = "signed with a base point hook";
-    uint32_t fromNode = 0x11, packetId = 0x22, toNode = 0x33;
-    meshtastic_Data d = makeSignableData(message, sizeof(message), 3);
-    engine.generateKeyPair(pub, priv);
-
-    for (int i = 0; i < 4; i++) {
-        TEST_ASSERT(engine.xeddsa_sign(fromNode, packetId + i, toNode, &d, sig));
-        TEST_ASSERT_TRUE(crypto->xeddsa_verify(pub, fromNode, packetId + i, toNode, &d, sig));
-    }
-    TEST_ASSERT_EQUAL_INT_MESSAGE(4, engine.calls, "xeddsa_sign must pass the hook to XEdDSA::sign");
-
-    engine.mode = BaseMulProbeEngine::Mode::WrongPoint;
-    TEST_ASSERT(engine.xeddsa_sign(fromNode, packetId, toNode, &d, sig));
-    TEST_ASSERT_FALSE_MESSAGE(crypto->xeddsa_verify(pub, fromNode, packetId, toNode, &d, sig),
-                              "a wrong R from the hook must end up in the signature");
-
-    engine.mode = BaseMulProbeEngine::Mode::Decline;
-    TEST_ASSERT(engine.xeddsa_sign(fromNode, packetId, toNode, &d, sig));
-    TEST_ASSERT_TRUE_MESSAGE(crypto->xeddsa_verify(pub, fromNode, packetId, toNode, &d, sig),
-                             "a declining hook must leave R to the software");
-    TEST_ASSERT_EQUAL_INT(6, engine.calls);
-}
-
-// CryptoEngine::regeneratePublicKey must clamp the private key it is handed, in place. Curve25519::eval
-// uses the scalar as given while XEdDSA::priv_curve_to_ed_keys clamps it, so an unclamped key (set via
-// admin, an app's private-key field, or a backup restore) derives an X25519 public key that disagrees
-// with the signing key: every signature the node sends then fails xeddsa_verify at its peers. If the
-// clamp is dropped, the bit assertions and the final verify fail for this 0x11-filled key.
+// CryptoEngine::regeneratePublicKey must clamp the private key it is handed, in
+// place. Curve25519::eval uses the scalar as given while
+// XEdDSA::priv_curve_to_ed_keys clamps it, so an unclamped key (set via admin,
+// an app's private-key field, or a backup restore) derives an X25519 public key
+// that disagrees with the signing key: every signature the node sends then
+// fails xeddsa_verify at its peers. If the clamp is dropped, the bit assertions
+// and the final verify fail for this 0x11-filled key.
 void test_regeneratePublicKey_clamps_imported_key(void)
 {
     uint8_t pub[32], priv[32], signature[64];
@@ -657,11 +589,11 @@ void test_AES_CCM_partial_block_bounds(void)
         memset(crypt + len, guard, guardLen);
         memset(decrypted + len, guard, guardLen);
 
-        TEST_ASSERT_EQUAL(0, aes_ccm_ae(key, sizeof(key), nonce, sizeof(auth), plain, len, nullptr, 0, crypt, auth));
+        TEST_ASSERT_TRUE(crypto_aes_ccm_seal(key, sizeof(key), nonce, nullptr, 0, plain, len, crypt, auth, sizeof(auth)));
         for (size_t i = 0; i < guardLen; i++)
             TEST_ASSERT_EQUAL_UINT8(guard, crypt[len + i]);
 
-        TEST_ASSERT_TRUE(aes_ccm_ad(key, sizeof(key), nonce, sizeof(auth), crypt, len, nullptr, 0, auth, decrypted));
+        TEST_ASSERT_TRUE(crypto_aes_ccm_open(key, sizeof(key), nonce, nullptr, 0, crypt, len, auth, sizeof(auth), decrypted));
         for (size_t i = 0; i < guardLen; i++)
             TEST_ASSERT_EQUAL_UINT8(guard, decrypted[len + i]);
         TEST_ASSERT_EQUAL_MEMORY(plain, decrypted, len);
@@ -670,8 +602,8 @@ void test_AES_CCM_partial_block_bounds(void)
 
 void test_AES_CCM_rfc3610(void)
 {
-    // Known-answer vectors from RFC 3610 section 8. They all use L=2, which is what
-    // aes_ccm_ae()/aes_ccm_ad() hardcode, and each ends in a partial block.
+    // Known-answer vectors from RFC 3610 section 8. They all use L=2, which is
+    // what the CCM API hardcodes, and each ends in a partial block.
     struct CcmVector {
         const char *key;
         const char *nonce;
@@ -711,16 +643,16 @@ void test_AES_CCM_rfc3610(void)
         HexToBytes(expectedCrypt, vec.crypt);
         HexToBytes(expectedTag, vec.tag);
 
-        TEST_ASSERT_EQUAL(0, aes_ccm_ae(key, sizeof(key), nonce, tagLen, plain, plainLen, aad, aadLen, crypt, tag));
+        TEST_ASSERT_TRUE(crypto_aes_ccm_seal(key, sizeof(key), nonce, aad, aadLen, plain, plainLen, crypt, tag, tagLen));
         TEST_ASSERT_EQUAL_MEMORY(expectedCrypt, crypt, plainLen);
         TEST_ASSERT_EQUAL_MEMORY(expectedTag, tag, tagLen);
 
-        TEST_ASSERT_TRUE(aes_ccm_ad(key, sizeof(key), nonce, tagLen, crypt, plainLen, aad, aadLen, tag, decrypted));
+        TEST_ASSERT_TRUE(crypto_aes_ccm_open(key, sizeof(key), nonce, aad, aadLen, crypt, plainLen, tag, tagLen, decrypted));
         TEST_ASSERT_EQUAL_MEMORY(plain, decrypted, plainLen);
 
         // The AAD is authenticated but not encrypted: corrupting it must fail the tag check
         aad[0] ^= 0x01;
-        TEST_ASSERT_FALSE(aes_ccm_ad(key, sizeof(key), nonce, tagLen, crypt, plainLen, aad, aadLen, tag, decrypted));
+        TEST_ASSERT_FALSE(crypto_aes_ccm_open(key, sizeof(key), nonce, aad, aadLen, crypt, plainLen, tag, tagLen, decrypted));
     }
 }
 
@@ -1118,7 +1050,6 @@ void setup()
     RUN_TEST(test_XEdDSA_curve_to_ed_cache);
     RUN_TEST(test_XEdDSA_max_payload);
     RUN_TEST(test_XEdDSA_repeated_sign_is_randomized);
-    RUN_TEST(test_XEdDSA_baseMul_hook);
     RUN_TEST(test_regeneratePublicKey_clamps_imported_key);
     RUN_TEST(test_AES_CCM_AEAD_smoke);
     RUN_TEST(test_AES_CCM_AEAD_roundtrip_aes256);

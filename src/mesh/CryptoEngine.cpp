@@ -1,27 +1,12 @@
 #include "CryptoEngine.h"
-// #include "NodeDB.h"
-#include "aes-ccm.h"
 #include "architecture.h"
-#include <SHA256.h>
-#include <memory>
+#include "crypto/crypto_api.h"
 
 #if !(MESHTASTIC_EXCLUDE_PKI)
 #include "HardwareRNG.h"
 #include "NodeDB.h"
 #include "meshUtils.h"
-#include <Crypto.h>
-#include <Curve25519.h>
 #include <RNG.h>
-
-#if !(MESHTASTIC_EXCLUDE_XEDDSA)
-#include "XEdDSA.h"
-#include <Ed25519.h>
-
-#ifndef NUM_LIMBS_256BIT
-#define NUM_LIMBS_BITS(n) (((n) + sizeof(limb_t) * 8 - 1) / (8 * sizeof(limb_t)))
-#define NUM_LIMBS_256BIT NUM_LIMBS_BITS(256)
-#endif
-#endif
 
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN)
 
@@ -38,25 +23,28 @@ void CryptoEngine::generateKeyPair(uint8_t *pubKey, uint8_t *privKey)
 
     uint8_t hardwareEntropy[64] = {0};
     if (HardwareRNG::fill(hardwareEntropy, sizeof(hardwareEntropy), true)) {
-        CryptRNG.stir(hardwareEntropy, sizeof(hardwareEntropy));
+        crypto_random_add(hardwareEntropy, sizeof(hardwareEntropy));
     } else {
         LOG_WARN("Hardware entropy unavailable, falling back to software RNG");
     }
     memset(hardwareEntropy, 0, sizeof(hardwareEntropy));
 
     if (myNodeInfo.device_id.size == 16) {
-        CryptRNG.stir(myNodeInfo.device_id.bytes, myNodeInfo.device_id.size);
+        crypto_random_add(myNodeInfo.device_id.bytes, myNodeInfo.device_id.size);
     }
     auto noise = random();
-    CryptRNG.stir((uint8_t *)&noise, sizeof(noise));
+    crypto_random_add((uint8_t *)&noise, sizeof(noise));
 
     LOG_DEBUG("Generate Curve25519 keypair");
-    Curve25519::dh1(public_key, private_key);
+    crypto_random(private_key, sizeof(private_key));
+    private_key[0] &= 0xF8;
+    private_key[31] = (private_key[31] & 0x7F) | 0x40;
+    crypto_x25519(public_key, private_key, nullptr);
     memcpy(pubKey, public_key, sizeof(public_key));
     memcpy(privKey, private_key, sizeof(private_key));
     clearSharedSecretCache();
 #if !(MESHTASTIC_EXCLUDE_XEDDSA)
-    XEdDSA::priv_curve_to_ed_keys(private_key, xeddsa_private_key, xeddsa_public_key);
+    crypto_xeddsa_keys_from_x25519(xeddsa_private_key, xeddsa_public_key, private_key);
 #endif
 }
 
@@ -69,14 +57,15 @@ void CryptoEngine::generateKeyPair(uint8_t *pubKey, uint8_t *privKey)
 bool CryptoEngine::regeneratePublicKey(uint8_t *pubKey, uint8_t *privKey)
 {
     if (!memfll(privKey, 0, sizeof(private_key))) {
-        // x25519 uses the scalar as given but the XEdDSA signing key is clamped, so clamp here to keep them one key.
+        // Clamp in place so the stored key is the one x25519 and the XEdDSA key
+        // both derive from.
         const uint8_t first = privKey[0], last = privKey[31];
         privKey[0] &= 0xF8;
         privKey[31] = (privKey[31] & 0x7F) | 0x40;
         if (privKey[0] != first || privKey[31] != last)
             LOG_WARN("Private key was not clamped; its public key and node number change");
-        x25519(pubKey, privKey, nullptr);
-        if (Curve25519::isWeakPoint(pubKey)) {
+        crypto_x25519(pubKey, privKey, nullptr);
+        if (crypto_x25519_is_weak(pubKey)) {
             LOG_ERROR("PKI key generation failed. Specified private key results in a weak");
             memset(pubKey, 0, 32);
             return false;
@@ -85,7 +74,7 @@ bool CryptoEngine::regeneratePublicKey(uint8_t *pubKey, uint8_t *privKey)
         memcpy(public_key, pubKey, sizeof(public_key));
         clearSharedSecretCache();
 #if !(MESHTASTIC_EXCLUDE_XEDDSA)
-        XEdDSA::priv_curve_to_ed_keys(private_key, xeddsa_private_key, xeddsa_public_key);
+        crypto_xeddsa_keys_from_x25519(xeddsa_private_key, xeddsa_public_key, private_key);
 #endif
     } else {
         LOG_WARN("X25519 key generation failed due to blank private key");
@@ -188,13 +177,7 @@ bool CryptoEngine::xeddsa_sign(uint32_t fromNode, uint32_t packetId, uint32_t to
     size_t sigLen = buildSigningBuffer(sigBuf, sizeof(sigBuf), fromNode, packetId, toNode, d);
     if (sigLen == 0)
         return false;
-    // XEdDSA::sign mixes signature[0..31] into the nonce as the spec's random Z (meshtastic/Crypto#3)
-    // for hedged signatures, so seed it - hardware RNG, else the seeded CSPRNG. A weak Z is still
-    // safe against nonce reuse (defense-in-depth only), so we never fail signing over it.
-    if (!HardwareRNG::fill(signature, 32))
-        CryptRNG.rand(signature, 32);
-    XEdDSA::sign(signature, xeddsa_private_key, xeddsa_public_key, sigBuf, sigLen, ed25519BaseMulThunk, this);
-    return true;
+    return crypto_xeddsa_sign(signature, xeddsa_private_key, xeddsa_public_key, sigBuf, sigLen);
 }
 
 bool CryptoEngine::xeddsa_verify(const uint8_t *pubKey, uint32_t fromNode, uint32_t packetId, uint32_t toNode,
@@ -202,54 +185,16 @@ bool CryptoEngine::xeddsa_verify(const uint8_t *pubKey, uint32_t fromNode, uint3
 {
     // Use cached Ed25519 key if the Curve25519 key matches, avoiding expensive field inversion
     if (memcmp(pubKey, cached_curve_pubkey, 32) != 0) {
-        curve_to_ed_pub(pubKey, cached_ed_pubkey);
+        crypto_xeddsa_pub_from_x25519(cached_ed_pubkey, pubKey);
         memcpy(cached_curve_pubkey, pubKey, 32);
     }
     alignas(4) uint8_t sigBuf[XEDDSA_SIGN_BUF_LEN]; // aligned: hardware verifiers DMA it in place
     size_t sigLen = buildSigningBuffer(sigBuf, sizeof(sigBuf), fromNode, packetId, toNode, d);
     if (sigLen == 0)
         return false;
-    return ed25519Verify(signature, cached_ed_pubkey, sigBuf, sigLen);
+    return crypto_ed25519_verify(signature, cached_ed_pubkey, sigBuf, sigLen);
 }
 
-void CryptoEngine::curve_to_ed_pub(const uint8_t *curve_pubkey, uint8_t *ed_pubkey)
-{
-
-    // Apply the birational map defined in RFC 7748, section 4.1 "Curve25519" to calculate an Ed25519 public
-    // key from a Curve25519 public key. Because the serialization format of Curve25519 public keys only
-    // contains the u coordinate, the x coordinate of the corresponding Ed25519 public key can't be uniquely
-    // calculated as defined by the birational map. The x coordinate is represented in the serialization
-    // format of Ed25519 public keys only in a single sign bit. XEdDSA always normalizes the Ed25519 public
-    // key to a sign bit of zero (the signer negates its key pair when needed), so this function clears the
-    // sign bit unconditionally below instead of taking it as an input.
-    fe u, y;
-    fe one;
-    fe u_minus_one, u_plus_one, u_plus_one_inv;
-
-    // Parse the Curve25519 public key input as a field element containing the u coordinate. RFC 7748,
-    // section 5 "The X25519 and X448 Functions", mandates that the most significant bit of the Curve25519
-    // public key has to be zeroized. This is handled by fe_frombytes internally.
-    fe_frombytes(u, curve_pubkey);
-
-    // Calculate the parameters (u - 1) and (u + 1)
-    fe_1(one);
-    fe_sub(u_minus_one, u, one);
-    fe_add(u_plus_one, u, one);
-
-    // Invert u + 1
-    fe_invert(u_plus_one_inv, u_plus_one);
-
-    // Calculate y = (u - 1) * inv(u + 1) (mod p)
-    fe_mul(y, u_minus_one, u_plus_one_inv);
-
-    // Serialize the field element containing the y coordinate to the Ed25519 public key output
-    fe_tobytes(ed_pubkey, y);
-
-    // Set the sign bit to zero
-    ed_pubkey[31] &= 0x7f;
-
-    // need to convert the pubkey y = ( u - 1) * inv( u + 1) (mod p).
-}
 #endif
 
 bool CryptoEngine::ensurePkiKeys(meshtastic_Config_SecurityConfig &security, meshtastic_User &user)
@@ -299,8 +244,7 @@ bool CryptoEngine::encryptCurve25519(uint32_t toNode, uint32_t fromNode, meshtas
     // The extra nonce must be unpredictable: use the hardware RNG, falling back to the
     // seeded CSPRNG only when no hardware source is available.
     uint32_t extraNonceTmp;
-    if (!HardwareRNG::fill((uint8_t *)&extraNonceTmp, sizeof(extraNonceTmp)))
-        CryptRNG.rand((uint8_t *)&extraNonceTmp, sizeof(extraNonceTmp));
+    crypto_random((uint8_t *)&extraNonceTmp, sizeof(extraNonceTmp));
     auth = bytesOut + numBytes;
     if (remotePublic.size == 0) {
         LOG_DEBUG("Node %d or their public_key not found", toNode);
@@ -312,7 +256,8 @@ bool CryptoEngine::encryptCurve25519(uint32_t toNode, uint32_t fromNode, meshtas
     initNonce(fromNode, packetNum, extraNonceTmp);
 
     // Calculate the shared secret with the destination node and encrypt
-    aes_ccm_ae(shared_key, 32, nonce, 8, bytes, numBytes, nullptr, 0, bytesOut, auth);
+    if (!crypto_aes_ccm_seal(shared_key, 32, nonce, nullptr, 0, bytes, numBytes, bytesOut, auth, 8))
+        return false;
     memcpy((uint8_t *)(auth + 8), &extraNonceTmp,
            sizeof(uint32_t)); // do not use dereference on potential non aligned pointers : *extraNonce = extraNonceTmp;
     return true;
@@ -332,8 +277,10 @@ bool CryptoEngine::encryptCurve25519(uint32_t toNode, uint32_t fromNode, meshtas
 bool CryptoEngine::decryptCurve25519(uint32_t fromNode, meshtastic_NodeInfoLite_public_key_t remotePublic, uint64_t packetNum,
                                      size_t numBytes, const uint8_t *bytes, uint8_t *bytesOut)
 {
-    const uint8_t *auth = bytes + numBytes - 12; // set to last 8 bytes of text?
-    uint32_t extraNonce;                         // pointer was not really used
+    if (numBytes < 12)
+        return false;
+    const uint8_t *auth = bytes + numBytes - 12;
+    uint32_t extraNonce; // pointer was not really used
     memcpy(&extraNonce, auth + 8,
            sizeof(uint32_t)); // do not use dereference on potential non aligned pointers : (uint32_t *)(auth + 8);
     if (remotePublic.size == 0) {
@@ -347,7 +294,7 @@ bool CryptoEngine::decryptCurve25519(uint32_t fromNode, meshtastic_NodeInfoLite_
     }
 
     initNonce(fromNode, packetNum, extraNonce);
-    return aes_ccm_ad(shared_key, 32, nonce, 8, bytes, numBytes - 12, nullptr, 0, auth, bytesOut);
+    return crypto_aes_ccm_open(shared_key, 32, nonce, nullptr, 0, bytes, numBytes - 12, auth, 8, bytesOut);
 }
 
 // The label is domain separation only - it never needs to be secret. It is fixed length and
@@ -372,13 +319,9 @@ bool CryptoEngine::ackProofCompute(const uint8_t *peerPubKey, uint32_t ackFrom, 
     putLE32(header + ACK_PROOF_LABEL_LEN + 4, ackTo);
     putLE32(header + ACK_PROOF_LABEL_LEN + 8, requestId);
 
+    const crypto_part parts[] = {{header, sizeof(header)}, {routing, routing ? routingLen : 0}};
     uint8_t digest[32];
-    SHA256 mac;
-    mac.resetHMAC(shared_key, 32);
-    mac.update(header, sizeof(header));
-    if (routing && routingLen)
-        mac.update(routing, routingLen);
-    mac.finalizeHMAC(shared_key, 32, digest, sizeof(digest));
+    crypto_hmac_sha256(shared_key, 32, parts, 2, digest);
     memcpy(proofOut, digest, ACK_PROOF_SIZE);
 
     memset(digest, 0, sizeof(digest));
@@ -404,10 +347,6 @@ void CryptoEngine::clearSharedSecretCache()
  */
 bool CryptoEngine::setCryptoSharedSecret(const uint8_t *peerPubKey)
 {
-    // setDHPublicKey takes a mutable buffer, so copy the peer key.
-    uint8_t peer[32];
-    memcpy(peer, peerPubKey, 32);
-
     // The last used timestamp is in units of ~1.165 hours, which gives us
     // ~12.3 days before the timestamps roll over. This is ok since a periodic
     // misfire on evicting the oldest secret has very little impact.
@@ -453,7 +392,7 @@ bool CryptoEngine::setCryptoSharedSecret(const uint8_t *peerPubKey)
     }
 
     // Cache miss. Generate the shared secret.
-    if (!setDHPublicKey(peer)) {
+    if (!setDHPublicKey(peerPubKey)) {
         return false;
     }
     hash(shared_key, 32);
@@ -477,77 +416,25 @@ bool CryptoEngine::setCryptoSharedSecret(const uint8_t *peerPubKey)
  */
 void CryptoEngine::hash(uint8_t *bytes, size_t numBytes)
 {
-    SHA256 hash;
-    size_t posn;
-    size_t size = numBytes;
-    constexpr size_t inc = 16;
-    hash.reset();
-    for (posn = 0; posn < size; posn += inc) {
-        size_t len = size - posn;
-        if (len > inc)
-            len = inc;
-        hash.update(bytes + posn, len);
-    }
-    hash.finalize(bytes, 32);
-}
-
-// aes-ccm.cpp drives the block cipher through these two, and it is compiled in every build,
-// so they must stay outside the PKI guard or MESHTASTIC_EXCLUDE_PKI=1 fails to link.
-void CryptoEngine::aesSetKey(const uint8_t *key_bytes, size_t key_len)
-{
-    aes = nullptr;
-    // Full key schedule: faster per block than AESSmall*, and encryptAESCtr already links these classes.
-    if (key_len == 16) {
-        aes = std::unique_ptr<BlockCipher>(new AES128());
-        aes->setKey(key_bytes, 16);
-    } else if (key_len != 0) {
-        aes = std::unique_ptr<BlockCipher>(new AES256());
-        aes->setKey(key_bytes, key_len);
-    }
-}
-
-void CryptoEngine::aesEncrypt(uint8_t *in, uint8_t *out)
-{
-    aes->encryptBlock(out, in);
+    const crypto_part part = {bytes, numBytes};
+    crypto_sha256(&part, 1, bytes);
 }
 
 #if !(MESHTASTIC_EXCLUDE_PKI)
 
-bool CryptoEngine::setDHPublicKey(uint8_t *pubKey)
+bool CryptoEngine::setDHPublicKey(const uint8_t *pubKey)
 {
-    // Same checks as Curve25519::dh2 (rejects e.g. an all-0 public or shared key); all of them run
-    // so timing doesn't depend on which one fails.
-    uint8_t weak = Curve25519::isWeakPoint(pubKey);
-    weak |= x25519(shared_key, private_key, pubKey) ? 0 : 1;
-    weak |= Curve25519::isWeakPoint(shared_key);
+    // Same checks as Curve25519::dh2 (rejects e.g. an all-0 public or shared
+    // key); all of them run so timing doesn't depend on which one fails.
+    uint8_t weak = crypto_x25519_is_weak(pubKey);
+    weak |= crypto_x25519(shared_key, private_key, pubKey) ? 0 : 1;
+    weak |= crypto_x25519_is_weak(shared_key);
     if (weak) {
         LOG_WARN("Curve25519DH step 2 failed");
         return false;
     }
     return true;
 }
-
-bool CryptoEngine::x25519(uint8_t *out, const uint8_t *scalar, const uint8_t *point)
-{
-    return Curve25519::eval(out, scalar, point);
-}
-
-#if !(MESHTASTIC_EXCLUDE_XEDDSA)
-bool CryptoEngine::ed25519Verify(const uint8_t *signature, const uint8_t *edPubKey, const uint8_t *msg, size_t msgLen)
-{
-    return XEdDSA::verify(signature, edPubKey, msg, msgLen);
-}
-
-bool CryptoEngine::ed25519BaseMul(uint8_t *, const uint8_t *)
-{
-    return false;
-}
-
-bool CryptoEngine::ed25519BaseMulThunk(void *engine, uint8_t point[32], const uint8_t scalar[32])
-{
-    return static_cast<CryptoEngine *>(engine)->ed25519BaseMul(point, scalar);
-}
-#endif
 
 void CryptoEngine::setPendingPublicKey(uint32_t node, const uint8_t *key)
 {
@@ -598,8 +485,8 @@ bool CryptoEngine::encryptPacketCCM(const CryptoKey &psk, uint32_t fromNode, uin
     uint8_t aad[AEAD_AAD_SIZE];
     initAad(fromNode, toNode, aad);
     // Output layout: [ciphertext (numBytes)] [auth_tag (AEAD_TAG_SIZE bytes)]
-    return aes_ccm_ae(psk.bytes, psk.length, nonce, AEAD_TAG_SIZE, plaintext, numBytes, aad, sizeof(aad), ciphertextWithTag,
-                      ciphertextWithTag + numBytes) == 0;
+    return crypto_aes_ccm_seal(psk.bytes, psk.length, nonce, aad, sizeof(aad), plaintext, numBytes, ciphertextWithTag,
+                               ciphertextWithTag + numBytes, AEAD_TAG_SIZE);
 }
 
 bool CryptoEngine::decryptPacketCCM(const CryptoKey &psk, uint32_t fromNode, uint32_t toNode, uint64_t packetId,
@@ -616,8 +503,8 @@ bool CryptoEngine::decryptPacketCCM(const CryptoKey &psk, uint32_t fromNode, uin
     initAad(fromNode, toNode, aad);
     size_t crypt_len = totalBytes - AEAD_TAG_SIZE;
     const uint8_t *auth = ciphertextWithTag + crypt_len;
-    return aes_ccm_ad(psk.bytes, psk.length, nonce, AEAD_TAG_SIZE, ciphertextWithTag, crypt_len, aad, sizeof(aad), auth,
-                      plaintext);
+    return crypto_aes_ccm_open(psk.bytes, psk.length, nonce, aad, sizeof(aad), ciphertextWithTag, crypt_len, auth, AEAD_TAG_SIZE,
+                               plaintext);
 }
 
 concurrency::Lock *cryptLock;
@@ -651,32 +538,10 @@ void CryptoEngine::decrypt(uint32_t fromNode, uint64_t packetId, size_t numBytes
     encryptPacket(fromNode, packetId, numBytes, bytes);
 }
 
-// Generic implementation of AES-CTR encryption.
 void CryptoEngine::encryptAESCtr(CryptoKey _key, uint8_t *_nonce, size_t numBytes, uint8_t *bytes)
 {
-    // Reused instead of reallocated per packet: safe because all callers hold cryptLock and setKey/setIV reset the
-    // full cipher state. Lazy so overriding platforms reserve nothing; key material now lives until the next call.
-    static CTR<AES128> *ctr128 = nullptr;
-    static CTR<AES256> *ctr256 = nullptr;
-    CTRCommon *ctr;
-    if (_key.length == 16) {
-        if (!ctr128)
-            ctr128 = new CTR<AES128>();
-        ctr = ctr128;
-    } else {
-        if (!ctr256)
-            ctr256 = new CTR<AES256>();
-        ctr = ctr256;
-    }
-    ctr->setKey(_key.bytes, _key.length);
-    static uint8_t scratch[MAX_BLOCKSIZE];
-    memcpy(scratch, bytes, numBytes);
-    memset(scratch + numBytes, 0,
-           sizeof(scratch) - numBytes); // Fill rest of buffer with zero (in case cypher looks at it)
-
-    ctr->setIV(_nonce, 16);
-    ctr->setCounterSize(4);
-    ctr->encrypt(bytes, scratch, numBytes);
+    if (_key.length > 0 && !crypto_aes_ctr(_key.bytes, _key.length, _nonce, bytes, numBytes, bytes))
+        LOG_ERROR("AES-CTR failed, key length %d", _key.length);
 }
 
 /**
@@ -692,6 +557,4 @@ void CryptoEngine::initNonce(uint32_t fromNode, uint64_t packetId, uint32_t extr
     if (extraNonce)
         memcpy(nonce + sizeof(uint32_t), &extraNonce, sizeof(uint32_t));
 }
-#ifndef HAS_CUSTOM_CRYPTO_ENGINE
 CryptoEngine *crypto = new CryptoEngine;
-#endif

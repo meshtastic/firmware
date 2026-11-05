@@ -1,6 +1,7 @@
-// Known-answer and golden-wire-vector pins for the crypto layer, driven through the API as it is
-// today: CryptoEngine (src/mesh/CryptoEngine.cpp), aes_ccm_ae/aes_ccm_ad (src/mesh/aes-ccm.cpp)
-// and the Crypto library primitives they sit on (SHA256, SHA512, Curve25519, XEdDSA).
+// Known-answer and golden-wire-vector pins for the crypto layer, driven through
+// the API as it is today: CryptoEngine (src/mesh/CryptoEngine.cpp),
+// crypto_aes_ccm_seal/open (src/crypto) and the Crypto library primitives they
+// sit on (SHA256, SHA512, Curve25519, XEdDSA).
 //
 // Why: later changes replace this layer behind a new API. The packets already in the air and the
 // keys already on devices were made by this code, so the replacement has to reproduce its output
@@ -19,7 +20,6 @@
 #ifndef CRYPTO_TEST_MINIMAL
 #include "TestUtil.h"
 #endif
-#include "aes-ccm.h"
 #include "crypto/crypto_api.h"
 #include "support/crypto_vectors.h"
 #include <Curve25519.h>
@@ -171,11 +171,11 @@ void test_aes_ccm_standard_vectors(void)
         const size_t n = cv::hex(v.plain, bufA, sizeof(bufA));
         const size_t tagLen = cv::hex(v.tag, expectedTag, sizeof(expectedTag));
 
-        TEST_ASSERT_EQUAL_MESSAGE(0, aes_ccm_ae(key, keyLen, nonce, tagLen, bufA, n, aad, aadLen, bufB, tag), v.name);
+        TEST_ASSERT_TRUE_MESSAGE(crypto_aes_ccm_seal(key, keyLen, nonce, aad, aadLen, bufA, n, bufB, tag, tagLen), v.name);
         assertHex(v.crypt, bufB, n, v.name);
         assertMem(expectedTag, tag, tagLen, v.name);
 
-        TEST_ASSERT_TRUE_MESSAGE(aes_ccm_ad(key, keyLen, nonce, tagLen, bufB, n, aad, aadLen, tag, bufC), v.name);
+        TEST_ASSERT_TRUE_MESSAGE(crypto_aes_ccm_open(key, keyLen, nonce, aad, aadLen, bufB, n, tag, tagLen, bufC), v.name);
         assertHex(v.plain, bufC, n, v.name);
     }
 }
@@ -190,13 +190,13 @@ void test_aes_ccm_lengths_match_independent_implementation(void)
         char what[48];
         snprintf(what, sizeof(what), "AES-%d M=%d aad=%d len %d", v.keyLen * 8, v.tagLen, v.aadLen, v.len);
 
-        TEST_ASSERT_EQUAL_MESSAGE(0, aes_ccm_ae(key, v.keyLen, cv::kLenCcmNonce, v.tagLen, bufA, v.len, aad, v.aadLen, bufB, tag),
-                                  what);
+        TEST_ASSERT_TRUE_MESSAGE(
+            crypto_aes_ccm_seal(key, v.keyLen, cv::kLenCcmNonce, aad, v.aadLen, bufA, v.len, bufB, tag, v.tagLen), what);
         memcpy(bufB + v.len, tag, v.tagLen);
         assertSha256Hex(v.cryptTagSha256, bufB, v.len + v.tagLen, what);
 
-        TEST_ASSERT_TRUE_MESSAGE(aes_ccm_ad(key, v.keyLen, cv::kLenCcmNonce, v.tagLen, bufB, v.len, aad, v.aadLen, tag, bufC),
-                                 what);
+        TEST_ASSERT_TRUE_MESSAGE(
+            crypto_aes_ccm_open(key, v.keyLen, cv::kLenCcmNonce, aad, v.aadLen, bufB, v.len, tag, v.tagLen, bufC), what);
         assertMem(bufA, bufC, v.len, what);
     }
 }
@@ -209,46 +209,47 @@ void test_aes_ccm_every_flipped_bit_is_rejected(void)
     memcpy(nonce, cv::kLenCcmNonce, sizeof(nonce));
     memcpy(aad, cv::kLenCcmAad, sizeof(aad));
     cv::pattern(bufA, len);
-    TEST_ASSERT_EQUAL(0, aes_ccm_ae(key, 32, nonce, tagLen, bufA, len, aad, aadLen, bufB, tag));
-    TEST_ASSERT_TRUE(aes_ccm_ad(key, 32, nonce, tagLen, bufB, len, aad, aadLen, tag, bufC));
+    TEST_ASSERT_TRUE(crypto_aes_ccm_seal(key, 32, nonce, aad, aadLen, bufA, len, bufB, tag, tagLen));
+    TEST_ASSERT_TRUE(crypto_aes_ccm_open(key, 32, nonce, aad, aadLen, bufB, len, tag, tagLen, bufC));
 
     for (size_t bit = 0; bit < len * 8; bit++) {
         bufB[bit / 8] ^= (uint8_t)(1u << (bit % 8));
-        TEST_ASSERT_FALSE_MESSAGE(aes_ccm_ad(key, 32, nonce, tagLen, bufB, len, aad, aadLen, tag, bufC), "ciphertext bit");
+        TEST_ASSERT_FALSE_MESSAGE(crypto_aes_ccm_open(key, 32, nonce, aad, aadLen, bufB, len, tag, tagLen, bufC),
+                                  "ciphertext bit");
         bufB[bit / 8] ^= (uint8_t)(1u << (bit % 8));
     }
     for (size_t bit = 0; bit < tagLen * 8; bit++) {
         tag[bit / 8] ^= (uint8_t)(1u << (bit % 8));
-        TEST_ASSERT_FALSE_MESSAGE(aes_ccm_ad(key, 32, nonce, tagLen, bufB, len, aad, aadLen, tag, bufC), "tag bit");
+        TEST_ASSERT_FALSE_MESSAGE(crypto_aes_ccm_open(key, 32, nonce, aad, aadLen, bufB, len, tag, tagLen, bufC), "tag bit");
         tag[bit / 8] ^= (uint8_t)(1u << (bit % 8));
     }
     for (size_t bit = 0; bit < aadLen * 8; bit++) {
         aad[bit / 8] ^= (uint8_t)(1u << (bit % 8));
-        TEST_ASSERT_FALSE_MESSAGE(aes_ccm_ad(key, 32, nonce, tagLen, bufB, len, aad, aadLen, tag, bufC), "aad bit");
+        TEST_ASSERT_FALSE_MESSAGE(crypto_aes_ccm_open(key, 32, nonce, aad, aadLen, bufB, len, tag, tagLen, bufC), "aad bit");
         aad[bit / 8] ^= (uint8_t)(1u << (bit % 8));
     }
     for (size_t bit = 0; bit < sizeof(nonce) * 8; bit++) {
         nonce[bit / 8] ^= (uint8_t)(1u << (bit % 8));
-        TEST_ASSERT_FALSE_MESSAGE(aes_ccm_ad(key, 32, nonce, tagLen, bufB, len, aad, aadLen, tag, bufC), "nonce bit");
+        TEST_ASSERT_FALSE_MESSAGE(crypto_aes_ccm_open(key, 32, nonce, aad, aadLen, bufB, len, tag, tagLen, bufC), "nonce bit");
         nonce[bit / 8] ^= (uint8_t)(1u << (bit % 8));
     }
     for (size_t bit = 0; bit < 32 * 8; bit += 7) {
         key[bit / 8] ^= (uint8_t)(1u << (bit % 8));
-        TEST_ASSERT_FALSE_MESSAGE(aes_ccm_ad(key, 32, nonce, tagLen, bufB, len, aad, aadLen, tag, bufC), "key bit");
+        TEST_ASSERT_FALSE_MESSAGE(crypto_aes_ccm_open(key, 32, nonce, aad, aadLen, bufB, len, tag, tagLen, bufC), "key bit");
         key[bit / 8] ^= (uint8_t)(1u << (bit % 8));
     }
-    TEST_ASSERT_TRUE(aes_ccm_ad(key, 32, nonce, tagLen, bufB, len, aad, aadLen, tag, bufC));
+    TEST_ASSERT_TRUE(crypto_aes_ccm_open(key, 32, nonce, aad, aadLen, bufB, len, tag, tagLen, bufC));
 }
 
 void test_aes_ccm_empty_payload_still_authenticates_tag(void)
 {
     uint8_t key[16], tag[8];
     cv::seqKey(key, 16);
-    TEST_ASSERT_EQUAL(0, aes_ccm_ae(key, 16, cv::kLenCcmNonce, 8, bufA, 0, nullptr, 0, bufB, tag));
-    TEST_ASSERT_TRUE(aes_ccm_ad(key, 16, cv::kLenCcmNonce, 8, bufB, 0, nullptr, 0, tag, bufC));
+    TEST_ASSERT_TRUE(crypto_aes_ccm_seal(key, 16, cv::kLenCcmNonce, nullptr, 0, bufA, 0, bufB, tag, 8));
+    TEST_ASSERT_TRUE(crypto_aes_ccm_open(key, 16, cv::kLenCcmNonce, nullptr, 0, bufB, 0, tag, 8, bufC));
     for (size_t bit = 0; bit < sizeof(tag) * 8; bit++) {
         tag[bit / 8] ^= (uint8_t)(1u << (bit % 8));
-        TEST_ASSERT_FALSE(aes_ccm_ad(key, 16, cv::kLenCcmNonce, 8, bufB, 0, nullptr, 0, tag, bufC));
+        TEST_ASSERT_FALSE(crypto_aes_ccm_open(key, 16, cv::kLenCcmNonce, nullptr, 0, bufB, 0, tag, 8, bufC));
         tag[bit / 8] ^= (uint8_t)(1u << (bit % 8));
     }
 }
@@ -312,7 +313,7 @@ void test_x25519_rfc7748_section_5_2(void)
         cv::hex(v.scalar, scalar, sizeof(scalar));
         cv::hex(v.point, point, sizeof(point));
         clamp(scalar);
-        TEST_ASSERT_TRUE_MESSAGE(crypto->x25519(out, scalar, point), v.name);
+        TEST_ASSERT_TRUE_MESSAGE(crypto_x25519(out, scalar, point), v.name);
         assertHex(v.out, out, 32, v.name);
     }
 }
@@ -323,7 +324,7 @@ void test_x25519_rfc7748_one_iteration_from_base_point(void)
     cv::hex(cv::kX25519Base, k, sizeof(k));
     cv::hex(cv::kX25519Base, u, sizeof(u));
     clamp(k);
-    TEST_ASSERT_TRUE(crypto->x25519(out, k, u));
+    TEST_ASSERT_TRUE(crypto_x25519(out, k, u));
     assertHex(cv::kX25519NineIter1, out, 32, "k=u=9, 1 iteration");
 }
 
@@ -338,13 +339,13 @@ void test_x25519_rfc7748_section_6_1_key_agreement(void)
     clamp(a);
     clamp(b);
 
-    TEST_ASSERT_TRUE(crypto->x25519(out, a, nullptr));
+    TEST_ASSERT_TRUE(crypto_x25519(out, a, nullptr));
     assertMem(aPub, out, 32);
-    TEST_ASSERT_TRUE(crypto->x25519(out, b, nullptr));
+    TEST_ASSERT_TRUE(crypto_x25519(out, b, nullptr));
     assertMem(bPub, out, 32);
-    TEST_ASSERT_TRUE(crypto->x25519(out, a, bPub));
+    TEST_ASSERT_TRUE(crypto_x25519(out, a, bPub));
     assertMem(k, out, 32);
-    TEST_ASSERT_TRUE(crypto->x25519(out, b, aPub));
+    TEST_ASSERT_TRUE(crypto_x25519(out, b, aPub));
     assertMem(k, out, 32);
 
     crypto->setDHPrivateKey(a);
@@ -352,18 +353,14 @@ void test_x25519_rfc7748_section_6_1_key_agreement(void)
     assertMem(k, crypto->shared_key, 32);
 }
 
-// Golden (fw): x25519() uses the scalar as given. RFC 7748 clamps inside the function, so every
-// RFC vector above is clamped by the caller. A backend that clamps internally makes this fail, and
-// that change is intended.
-void test_x25519_does_not_clamp_the_scalar_today(void)
+void test_x25519_clamps_the_scalar(void)
 {
     const cv::X25519Vector &v = cv::kX25519Std[0];
-    uint8_t scalar[32], point[32], out[32], expected[32];
+    uint8_t scalar[32], point[32], out[32];
     cv::hex(v.scalar, scalar, sizeof(scalar));
     cv::hex(v.point, point, sizeof(point));
-    cv::hex(v.out, expected, sizeof(expected));
-    TEST_ASSERT_TRUE(crypto->x25519(out, scalar, point));
-    TEST_ASSERT_NOT_EQUAL(0, memcmp(out, expected, 32));
+    TEST_ASSERT_TRUE(crypto_x25519(out, scalar, point));
+    assertHex(v.out, out, 32, v.name);
 }
 
 #if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
@@ -376,7 +373,7 @@ void test_ed25519_verify_rfc8032(void)
         cv::hex(v.pub, pub, sizeof(pub));
         cv::hex(v.sig, sig, sizeof(sig));
         const size_t n = cv::hex(v.msg, bufA, sizeof(bufA));
-        TEST_ASSERT_TRUE_MESSAGE(crypto->ed25519Verify(sig, pub, bufA, n), v.name);
+        TEST_ASSERT_TRUE_MESSAGE(crypto_ed25519_verify(sig, pub, bufA, n), v.name);
     }
 }
 
@@ -390,20 +387,20 @@ void test_ed25519_verify_rejects_flipped_bits(void)
         const size_t n = cv::hex(v.msg, bufA, sizeof(bufA));
         for (size_t i = 0; i < sizeof(sig); i++) {
             sig[i] ^= (uint8_t)(1u << (i % 8));
-            TEST_ASSERT_FALSE_MESSAGE(crypto->ed25519Verify(sig, pub, bufA, n), v.name);
+            TEST_ASSERT_FALSE_MESSAGE(crypto_ed25519_verify(sig, pub, bufA, n), v.name);
             sig[i] ^= (uint8_t)(1u << (i % 8));
         }
         for (size_t i = 0; i < n; i++) {
             bufA[i] ^= (uint8_t)(1u << (i % 8));
-            TEST_ASSERT_FALSE_MESSAGE(crypto->ed25519Verify(sig, pub, bufA, n), v.name);
+            TEST_ASSERT_FALSE_MESSAGE(crypto_ed25519_verify(sig, pub, bufA, n), v.name);
             bufA[i] ^= (uint8_t)(1u << (i % 8));
         }
         for (size_t i = 0; i < sizeof(pub); i++) {
             pub[i] ^= (uint8_t)(1u << (i % 8));
-            TEST_ASSERT_FALSE_MESSAGE(crypto->ed25519Verify(sig, pub, bufA, n), v.name);
+            TEST_ASSERT_FALSE_MESSAGE(crypto_ed25519_verify(sig, pub, bufA, n), v.name);
             pub[i] ^= (uint8_t)(1u << (i % 8));
         }
-        TEST_ASSERT_TRUE_MESSAGE(crypto->ed25519Verify(sig, pub, bufA, n), v.name);
+        TEST_ASSERT_TRUE_MESSAGE(crypto_ed25519_verify(sig, pub, bufA, n), v.name);
     }
 }
 
@@ -421,7 +418,7 @@ void test_ed25519_verify_noncanonical_s_outcome_is_pinned(void)
     cv::hex(v.pub, pub, sizeof(pub));
     cv::hex(cv::kEd25519MalleatedSig, sig, sizeof(sig));
     const size_t n = cv::hex(v.msg, bufA, sizeof(bufA));
-    const bool accepted = crypto->ed25519Verify(sig, pub, bufA, n);
+    const bool accepted = crypto_ed25519_verify(sig, pub, bufA, n);
     TEST_ASSERT_EQUAL_MESSAGE(!CRYPTO_VECTORS_EXPECT_NONCANONICAL_S_REJECTED, accepted,
                               "non-canonical S outcome differs from the recorded one for this Crypto pin");
 }
@@ -482,7 +479,7 @@ void test_golden_psk_ccm_with_12_byte_tag_and_aad_byte_order(void)
         uint8_t aad[8], nonce[16], tag[12];
         cv::hex(v.aad, aad, sizeof(aad));
         buildNonce(nonce, v.from, v.packetId, 0);
-        TEST_ASSERT_EQUAL(0, aes_ccm_ae(k.bytes, k.length, nonce, 12, bufA, n, aad, sizeof(aad), bufC, tag));
+        TEST_ASSERT_TRUE(crypto_aes_ccm_seal(k.bytes, k.length, nonce, aad, sizeof(aad), bufA, n, bufC, tag, 12));
         assertMem(bufB + n, tag, 12);
 
         TEST_ASSERT_FALSE(crypto->decryptPacketCCM(k, v.from, v.to ^ 1, v.packetId, wireLen, bufB, bufC));
@@ -599,7 +596,7 @@ void test_golden_pki_encrypt_layout_and_round_trip(void)
         uint8_t sharedKey[32], nonce[16], tag[8];
         cv::hex(cv::kPkiSharedKey, sharedKey, sizeof(sharedKey));
         buildNonce(nonce, from, id, extra);
-        TEST_ASSERT_EQUAL(0, aes_ccm_ae(sharedKey, 32, nonce, 8, bufA, n, nullptr, 0, bufC, tag));
+        TEST_ASSERT_TRUE(crypto_aes_ccm_seal(sharedKey, 32, nonce, nullptr, 0, bufA, n, bufC, tag, 8));
         assertMem(bufC, bufB, n);
         assertMem(tag, bufB + n, 8);
 
@@ -766,25 +763,37 @@ void test_new_api_ctr_and_ccm_match_the_old_paths(void)
             TEST_ASSERT_TRUE(crypto_aes_ctr(k.bytes, keyLen, cv::kLenCtrBlock, bufA, len, bufC));
             assertMem(bufB, bufC, len, "ctr");
         }
-        for (size_t len : ccmLens) {
-            for (size_t tagLen : tagLens) {
-                for (size_t aadLen : aadLens) {
-                    uint8_t oldTag[16], newTag[16];
-                    const uint8_t *aad = aadLen ? cv::kLenCcmAad : nullptr;
-                    cv::pattern(bufA, len);
-                    TEST_ASSERT_EQUAL(
-                        0, aes_ccm_ae(k.bytes, keyLen, cv::kLenCcmNonce, tagLen, bufA, len, aad, aadLen, bufB, oldTag));
-                    TEST_ASSERT_TRUE(
-                        crypto_aes_ccm_seal(k.bytes, keyLen, cv::kLenCcmNonce, aad, aadLen, bufA, len, bufC, newTag, tagLen));
-                    assertMem(bufB, bufC, len, "ccm ciphertext");
-                    assertMem(oldTag, newTag, tagLen, "ccm tag");
-                    TEST_ASSERT_TRUE(
-                        crypto_aes_ccm_open(k.bytes, keyLen, cv::kLenCcmNonce, aad, aadLen, bufB, len, oldTag, tagLen, bufC));
-                    assertMem(bufA, bufC, len, "ccm open of old output");
-                }
-            }
-        }
     }
+}
+
+void test_encrypted_storage_primitive_compositions(void)
+{
+    uint8_t efuse[16], key[16], iv[16] = {0}, plain[33], out[33], digest[32];
+    for (int i = 0; i < 16; i++) {
+        efuse[i] = 0xa0 + i;
+        key[i] = i;
+    }
+    for (int i = 0; i < 13; i++)
+        iv[i] = 0x10 + i;
+    for (int i = 0; i < 33; i++)
+        plain[i] = 1 + i;
+
+    const char *prefix = "device-efuse-data", *pass = "passphrase", *kekDomain = "meshtastic-tak-kek-v2",
+               *ephDomain = "meshtastic-tak-ephemeral-v1";
+    const crypto_part kekParts[] = {{prefix, strlen(prefix)}, {efuse, 16}, {pass, strlen(pass)}, {kekDomain, strlen(kekDomain)}};
+    crypto_sha256(kekParts, 4, digest);
+    assertHex("3387d207f2d8a9d807e8f0f9d9cd9095", digest, 16, "kek");
+    const crypto_part ephParts[] = {{prefix, strlen(prefix)}, {efuse, 16}, {ephDomain, strlen(ephDomain)}};
+    crypto_sha256(ephParts, 3, digest);
+    assertHex("31f1ba24e04419b6318ad6ef3e5465e0", digest, 16, "ephemeral kek");
+
+    TEST_ASSERT_TRUE(crypto_aes_ctr(key, 16, iv, plain, sizeof(plain), out));
+    assertHex("50bc5dbce72d597aa893001c36284ea3cbfa3ae2def3058e911a45f8cc559ac15f", out, 33, "ctr, 13 byte nonce");
+
+    const uint8_t body[6] = {3, 1, 9, 0, 0, 0};
+    const crypto_part macParts[] = {{"backoff-auth", 12}, {body, sizeof(body)}};
+    crypto_hmac_sha256(key, 16, macParts, 2, digest);
+    assertHex("37782d783404781b15770fcaac15b4b9b0407640cc3c851ce242d1ba368c3a53", digest, 32, "hmac");
 }
 
 void test_new_api_hashes_match_the_old_paths(void)
@@ -814,22 +823,6 @@ void test_new_api_hashes_match_the_old_paths(void)
     }
 }
 
-#if !(MESHTASTIC_EXCLUDE_PKI)
-void test_new_api_x25519_matches_the_old_path_for_clamped_scalars(void)
-{
-    uint8_t a[32], bPub[32], oldOut[32], newOut[32];
-    cv::hex(cv::kRfc7748Dh[0], a, sizeof(a));
-    cv::hex(cv::kRfc7748Dh[3], bPub, sizeof(bPub));
-    clamp(a);
-    TEST_ASSERT_TRUE(crypto->x25519(oldOut, a, bPub));
-    TEST_ASSERT_TRUE(crypto_x25519(newOut, a, bPub));
-    assertMem(oldOut, newOut, 32, "agreement");
-    TEST_ASSERT_TRUE(crypto->x25519(oldOut, a, nullptr));
-    TEST_ASSERT_TRUE(crypto_x25519(newOut, a, nullptr));
-    assertMem(oldOut, newOut, 32, "public key");
-}
-#endif
-
 #if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
 void test_new_api_ed25519_interoperates_with_the_old_path(void)
 {
@@ -841,12 +834,12 @@ void test_new_api_ed25519_interoperates_with_the_old_path(void)
     assertMem(crypto->xeddsa_private_key, edPriv, 32, "ed private key");
     assertMem(crypto->xeddsa_public_key, edPub, 32, "ed public key");
     crypto_xeddsa_pub_from_x25519(converted, aPub);
-    crypto->curve_to_ed_pub(aPub, bufB);
+    crypto_xeddsa_pub_from_x25519(bufB, aPub);
     assertMem(bufB, converted, 32, "public key conversion");
 
     cv::pattern(bufA, 17);
     TEST_ASSERT_TRUE(crypto_xeddsa_sign(sig, edPriv, edPub, bufA, 17));
-    TEST_ASSERT_TRUE(crypto->ed25519Verify(sig, edPub, bufA, 17));
+    TEST_ASSERT_TRUE(crypto_ed25519_verify(sig, edPub, bufA, 17));
     memset(sig, 0x5A, 32);
     XEdDSA::sign(sig, edPriv, edPub, bufA, 17);
     TEST_ASSERT_TRUE(crypto_ed25519_verify(sig, edPub, bufA, 17));
@@ -869,7 +862,6 @@ void setup()
     RUN_TEST(test_new_api_ctr_and_ccm_match_the_old_paths);
     RUN_TEST(test_new_api_hashes_match_the_old_paths);
 #if !(MESHTASTIC_EXCLUDE_PKI)
-    RUN_TEST(test_new_api_x25519_matches_the_old_path_for_clamped_scalars);
 #endif
 #if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
     RUN_TEST(test_new_api_ed25519_interoperates_with_the_old_path);
@@ -889,7 +881,8 @@ void setup()
     RUN_TEST(test_x25519_rfc7748_section_5_2);
     RUN_TEST(test_x25519_rfc7748_one_iteration_from_base_point);
     RUN_TEST(test_x25519_rfc7748_section_6_1_key_agreement);
-    RUN_TEST(test_x25519_does_not_clamp_the_scalar_today);
+    RUN_TEST(test_x25519_clamps_the_scalar);
+    RUN_TEST(test_encrypted_storage_primitive_compositions);
 #endif
 #if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
     RUN_TEST(test_ed25519_verify_rfc8032);
