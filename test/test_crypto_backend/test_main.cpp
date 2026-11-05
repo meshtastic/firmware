@@ -9,6 +9,10 @@
 // provenance; none is derived from the code under test. This source names only crypto_api.h, so it
 // runs unchanged on Linux and through `pio test -e crypto-<board> -f test_crypto_backend`.
 //
+// On ESP32 the hardware functions are also compared directly with the Crypto library, and the suite checks
+// the backend chosen per primitive against a per-target table, so a dispatch that silently falls back to
+// software fails.
+//
 // Regressions guarded: a changed nonce or AAD layout, tag length or CCM length field; in-place calls
 // corrupting data (the old aes_ccm_* wrote the keystream into out before reading in, so the moved
 // code must not); buffers misread when unaligned or at block boundaries; forged or tampered input
@@ -17,6 +21,7 @@
 #include "configuration.h"
 
 #include "crypto/crypto_api.h"
+#include "crypto/crypto_backends.h"
 #ifndef CRYPTO_TEST_MINIMAL
 #include "TestUtil.h"
 #endif
@@ -33,6 +38,12 @@
 #ifdef ARCH_NRF52
 #include <Adafruit_nRFCrypto.h>
 #endif
+#endif
+#ifdef ARCH_ESP32
+#include <esp_heap_caps.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
+#include <freertos/task.h>
 #endif
 #include <string.h>
 #include <unity.h>
@@ -594,6 +605,319 @@ void test_golden_xeddsa_signature_verifies_over_the_signing_buffer_layout(void)
 #endif
 #endif
 
+// ---- Backend selection --------------------------------------------------------------------------
+
+#if defined(ARCH_ESP32)
+#if defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32C6)
+#define EXPECT_SHA512 "lib"
+#else
+#define EXPECT_SHA512 "esp-sha"
+#endif
+#define EXPECT_AES "esp-aes"
+#define EXPECT_SHA256 "esp-sha"
+#define EXPECT_CURVES "lib"
+#elif defined(ARCH_NRF52) && !defined(ARCH_NRF54L)
+#define EXPECT_AES "lib"
+#define EXPECT_SHA256 "lib"
+#define EXPECT_SHA512 "lib"
+#define EXPECT_CURVES "cc310"
+#else
+#define EXPECT_AES "lib"
+#define EXPECT_SHA256 "lib"
+#define EXPECT_SHA512 "lib"
+#define EXPECT_CURVES "lib"
+#endif
+
+#if defined(ARCH_ESP32)
+#define ACTUAL_AES "esp-aes"
+#define ACTUAL_SHA256 "esp-sha"
+#else
+#define ACTUAL_AES "lib"
+#define ACTUAL_SHA256 "lib"
+#endif
+#ifdef CRYPTO_ESP32_HAS_SHA512
+#define ACTUAL_SHA512 "esp-sha"
+#else
+#define ACTUAL_SHA512 "lib"
+#endif
+#ifdef CRYPTO_HAS_CC310
+#define ACTUAL_CURVES "cc310"
+#else
+#define ACTUAL_CURVES "lib"
+#endif
+
+void test_backend_per_primitive_is_the_one_expected_for_this_target(void)
+{
+    struct BackendName {
+        const char *primitive, *actual, *expected;
+    };
+    const BackendName names[] = {
+        {"aes-ctr", ACTUAL_AES, EXPECT_AES},       {"aes-ccm", ACTUAL_AES, EXPECT_AES},
+        {"sha-256", ACTUAL_SHA256, EXPECT_SHA256}, {"hmac-sha-256", ACTUAL_SHA256, EXPECT_SHA256},
+        {"sha-512", ACTUAL_SHA512, EXPECT_SHA512}, {"curves", ACTUAL_CURVES, EXPECT_CURVES},
+    };
+    for (const BackendName &n : names) {
+        char line[64];
+        snprintf(line, sizeof(line), "backend %s = %s", n.primitive, n.actual);
+        TEST_MESSAGE(line);
+        TEST_ASSERT_EQUAL_STRING_MESSAGE(n.expected, n.actual, n.primitive);
+    }
+}
+
+#ifdef ARCH_ESP32
+// ---- ESP32: hardware against the Crypto library ---------------------------------------------------
+
+static const size_t kHwLengths[] = {0,   1,   15,  16,  17,  63,  64,  65,  127, 128, 129, 240, 241, 242, 243,
+                                    244, 245, 246, 247, 248, 249, 250, 251, 252, 253, 254, 255, 256, 1024};
+static const size_t kTagLengths[] = {4, 8, 12, 16};
+static const size_t kAadLengths[] = {0, 1, 13, 30};
+static constexpr size_t HW_BUF = 1024 + 16;
+
+static uint8_t hwAad[32], hwIn[HW_BUF], hwHw[HW_BUF], hwLib[HW_BUF], hwTmp[HW_BUF], hwTagA[16], hwTagB[16];
+
+static void describe(char *what, size_t cap, size_t keyLen, size_t len, size_t tagLen = 0, size_t aadLen = 0)
+{
+    snprintf(what, cap, "AES-%d len %d M=%d aad=%d", (int)keyLen * 8, (int)len, (int)tagLen, (int)aadLen);
+}
+
+void test_esp32_aes_ctr_matches_library_for_every_key_size_and_length(void)
+{
+    for (size_t keyLen : kKeyLengths) {
+        uint8_t key[32];
+        cv::seqKey(key, keyLen);
+        for (size_t len : kHwLengths) {
+            char what[48];
+            describe(what, sizeof(what), keyLen, len);
+            cv::pattern(hwIn, len);
+            TEST_ASSERT_TRUE_MESSAGE(crypto_esp32_aes_ctr(key, keyLen, cv::kLenCtrBlock, hwIn, len, hwHw), what);
+            TEST_ASSERT_TRUE_MESSAGE(crypto_lib_aes_ctr(key, keyLen, cv::kLenCtrBlock, hwIn, len, hwLib), what);
+            assertMem(hwLib, hwHw, len, what);
+            memcpy(hwTmp, hwIn, len);
+            TEST_ASSERT_TRUE_MESSAGE(crypto_esp32_aes_ctr(key, keyLen, cv::kLenCtrBlock, hwTmp, len, hwTmp), what);
+            assertMem(hwLib, hwTmp, len, what);
+        }
+    }
+}
+
+void test_esp32_aes_ccm_matches_library_for_every_key_size_length_tag_and_aad(void)
+{
+    cv::pattern(hwAad, sizeof(hwAad));
+    for (size_t keyLen : kKeyLengths) {
+        uint8_t key[32];
+        cv::seqKey(key, keyLen);
+        for (size_t len : kHwLengths) {
+            cv::pattern(hwIn, len);
+            for (size_t tagLen : kTagLengths) {
+                for (size_t aadLen : kAadLengths) {
+                    char what[48];
+                    describe(what, sizeof(what), keyLen, len, tagLen, aadLen);
+                    const uint8_t *aad = aadLen ? hwAad : nullptr;
+
+                    TEST_ASSERT_TRUE_MESSAGE(
+                        crypto_esp32_aes_ccm_seal(key, keyLen, cv::kLenCcmNonce, aad, aadLen, hwIn, len, hwHw, hwTagA, tagLen),
+                        what);
+                    crypto_lib_aes_ccm_seal(key, keyLen, cv::kLenCcmNonce, aad, aadLen, hwIn, len, hwLib, hwTagB, tagLen);
+                    assertMem(hwLib, hwHw, len, what);
+                    assertMem(hwTagB, hwTagA, tagLen, what);
+
+                    TEST_ASSERT_TRUE_MESSAGE(
+                        crypto_esp32_aes_ccm_open(key, keyLen, cv::kLenCcmNonce, aad, aadLen, hwLib, len, hwTagB, tagLen, hwTmp),
+                        what);
+                    assertMem(hwIn, hwTmp, len, what);
+                    TEST_ASSERT_TRUE_MESSAGE(
+                        crypto_lib_aes_ccm_open(key, keyLen, cv::kLenCcmNonce, aad, aadLen, hwHw, len, hwTagA, tagLen, hwTmp),
+                        what);
+                    assertMem(hwIn, hwTmp, len, what);
+
+                    hwTagA[0] ^= 1;
+                    TEST_ASSERT_FALSE_MESSAGE(
+                        crypto_esp32_aes_ccm_open(key, keyLen, cv::kLenCcmNonce, aad, aadLen, hwHw, len, hwTagA, tagLen, hwTmp),
+                        what);
+                }
+            }
+        }
+    }
+}
+
+void test_esp32_sha_and_hmac_match_library_for_every_length_and_split(void)
+{
+    uint8_t keyBytes[100];
+    cv::pattern(keyBytes, sizeof(keyBytes));
+    for (size_t len : kHwLengths) {
+        cv::pattern(hwIn, len);
+        const size_t cut = len / 3;
+        const crypto_part parts[3] = {{hwIn, cut}, {hwIn + cut, len / 3}, {hwIn + cut + len / 3, len - cut - len / 3}};
+        uint8_t a[64], b[64];
+
+        crypto_esp32_sha256(parts, 3, a);
+        crypto_lib_sha256(parts, 3, b);
+        assertMem(b, a, 32, "sha-256");
+        crypto_esp32_sha512(parts, 3, a);
+        crypto_lib_sha512(parts, 3, b);
+        assertMem(b, a, 64, "sha-512");
+        for (size_t keyLen : {(size_t)0, (size_t)1, (size_t)32, (size_t)64, (size_t)65, (size_t)100}) {
+            crypto_esp32_hmac_sha256(keyBytes, keyLen, parts, 3, a);
+            crypto_lib_hmac_sha256(keyBytes, keyLen, parts, 3, b);
+            assertMem(b, a, 32, "hmac-sha-256");
+        }
+    }
+}
+
+// constexpr data lands in .rodata, which is flash-mapped and which a DMA engine cannot read directly.
+struct FlashBytes {
+    uint8_t key[32], data[256];
+    constexpr FlashBytes() : key(), data()
+    {
+        for (size_t i = 0; i < 32; i++)
+            key[i] = (uint8_t)i;
+        for (size_t i = 0; i < 256; i++)
+            data[i] = (uint8_t)(i * 7 + 3);
+    }
+};
+static constexpr FlashBytes kFlash;
+
+static void runAllPrimitives(const uint8_t *key, size_t keyLen, const uint8_t *in, uint8_t *out, uint8_t *digest)
+{
+    const crypto_part part = {in, 256};
+    TEST_ASSERT_TRUE(crypto_aes_ctr(key, keyLen, cv::kLenCtrBlock, in, 256, out));
+    TEST_ASSERT_TRUE(crypto_aes_ccm_seal(key, keyLen, cv::kLenCcmNonce, in, 13, in, 256, out + 256, out + 512, 8));
+    crypto_sha256(&part, 1, digest);
+    crypto_sha512(&part, 1, digest + 32);
+    crypto_hmac_sha256(key, keyLen, &part, 1, digest + 96);
+}
+
+void test_esp32_key_and_input_in_flash_give_the_same_results_as_in_ram(void)
+{
+    static uint8_t ramKey[32], ramData[256], outFlash[528], outRam[528], digFlash[128], digRam[128];
+    memcpy(ramKey, kFlash.key, sizeof(ramKey));
+    memcpy(ramData, kFlash.data, sizeof(ramData));
+    cv::pattern(hwIn, 256);
+    assertMem(hwIn, kFlash.data, 256, "flash data is the pattern");
+    for (size_t keyLen : kKeyLengths) {
+        runAllPrimitives(kFlash.key, keyLen, kFlash.data, outFlash, digFlash);
+        runAllPrimitives(ramKey, keyLen, ramData, outRam, digRam);
+        assertMem(outRam, outFlash, 520, "ctr and ccm");
+        assertMem(digRam, digFlash, 128, "hashes");
+    }
+}
+
+void test_esp32_unaligned_in_place_and_hash_inputs_match_library_at_block_boundaries(void)
+{
+    static const size_t lens[] = {31, 32, 33, 63, 64, 65, 127, 128, 129, 191, 192, 193};
+    uint8_t key[32];
+    cv::seqKey(key, 32);
+    for (size_t len : lens) {
+        cv::pattern(hwIn, len);
+        crypto_lib_aes_ctr(key, 32, cv::kLenCtrBlock, hwIn, len, hwLib);
+        crypto_lib_aes_ccm_seal(key, 32, cv::kLenCcmNonce, nullptr, 0, hwIn, len, hwLib + 256, hwTagB, 8);
+        const crypto_part ref = {hwIn, len};
+        uint8_t digestLib[32], digestHw[32];
+        crypto_lib_sha256(&ref, 1, digestLib);
+        for (size_t offset = 0; offset < 4; offset++) {
+            memcpy(hwTmp + offset, hwIn, len);
+            TEST_ASSERT_TRUE(crypto_esp32_aes_ctr(key, 32, cv::kLenCtrBlock, hwTmp + offset, len, hwTmp + offset));
+            assertMem(hwLib, hwTmp + offset, len, "ctr in place");
+
+            memcpy(hwTmp + offset, hwIn, len);
+            TEST_ASSERT_TRUE(
+                crypto_esp32_aes_ccm_seal(key, 32, cv::kLenCcmNonce, nullptr, 0, hwTmp + offset, len, hwTmp + offset, hwTagA, 8));
+            assertMem(hwLib + 256, hwTmp + offset, len, "ccm in place");
+            assertMem(hwTagB, hwTagA, 8, "ccm tag");
+            TEST_ASSERT_TRUE(
+                crypto_esp32_aes_ccm_open(key, 32, cv::kLenCcmNonce, nullptr, 0, hwTmp + offset, len, hwTagA, 8, hwTmp + offset));
+            assertMem(hwIn, hwTmp + offset, len, "ccm open in place");
+
+            const crypto_part part = {hwTmp + offset, len};
+            crypto_esp32_sha256(&part, 1, digestHw);
+            assertMem(digestLib, digestHw, 32, "sha-256 unaligned");
+        }
+    }
+}
+
+void test_esp32_psram_buffers_give_the_same_results_as_internal_ram(void)
+{
+    if (!psramFound())
+        TEST_IGNORE_MESSAGE("no PSRAM on this board");
+    uint8_t *ps = (uint8_t *)heap_caps_malloc(2048, MALLOC_CAP_SPIRAM);
+    TEST_ASSERT_NOT_NULL(ps);
+    uint8_t *psKey = ps, *psIn = ps + 64, *psOut = ps + 512, *psDigest = ps + 1536;
+    static uint8_t ramOut[528], ramDigest[128];
+    uint8_t key[32];
+    cv::seqKey(key, 32);
+    memcpy(psKey, key, 32);
+    cv::pattern(psIn, 256);
+    runAllPrimitives(psKey, 32, psIn, psOut, psDigest);
+    cv::pattern(hwIn, 256);
+    runAllPrimitives(key, 32, hwIn, ramOut, ramDigest);
+    assertMem(ramOut, psOut, 520, "ctr and ccm");
+    assertMem(ramDigest, psDigest, 128, "hashes");
+    heap_caps_free(ps);
+}
+
+// ---- ESP32: shared engine across tasks ------------------------------------------------------------
+
+struct LockTask {
+    volatile int failures;
+    SemaphoreHandle_t done;
+};
+
+static uint8_t lockKey[32], lockCounter[16], lockPlain[64], lockCrypt[64], lockCcmKey[32], lockCcmNonce[13], lockCcmAad[16],
+    lockCcmPlain[24], lockCcmCrypt[24], lockCcmTag[16], lockAbcDigest[32];
+static size_t lockKeyLen, lockCcmKeyLen, lockCcmAadLen, lockCcmLen, lockCcmTagLen;
+static constexpr int LOCK_ROUNDS = 400;
+
+static void lockWorker(void *arg)
+{
+    LockTask *t = (LockTask *)arg;
+    const uint8_t abc[3] = {'a', 'b', 'c'};
+    for (int i = 0; i < LOCK_ROUNDS; i++) {
+        uint8_t out[64], tag[16], digest[32];
+        if (!crypto_aes_ctr(lockKey, lockKeyLen, lockCounter, lockPlain, sizeof(lockPlain), out) ||
+            memcmp(out, lockCrypt, sizeof(lockCrypt)) != 0)
+            t->failures++;
+        const crypto_part part = {abc, 3};
+        crypto_sha256(&part, 1, digest);
+        if (memcmp(digest, lockAbcDigest, 32) != 0)
+            t->failures++;
+        if (!crypto_aes_ccm_seal(lockCcmKey, lockCcmKeyLen, lockCcmNonce, lockCcmAad, lockCcmAadLen, lockCcmPlain, lockCcmLen,
+                                 out, tag, lockCcmTagLen) ||
+            memcmp(out, lockCcmCrypt, lockCcmLen) != 0 || memcmp(tag, lockCcmTag, lockCcmTagLen) != 0)
+            t->failures++;
+    }
+    xSemaphoreGive(t->done);
+    vTaskDelete(nullptr);
+}
+
+void test_esp32_concurrent_tasks_get_correct_aes_and_sha_results(void)
+{
+    const cv::CtrVector &c = cv::kCtrStd[1];
+    lockKeyLen = cv::hex(c.key, lockKey, sizeof(lockKey));
+    cv::hex(c.counter, lockCounter, sizeof(lockCounter));
+    TEST_ASSERT_EQUAL(64, cv::hex(c.plain, lockPlain, sizeof(lockPlain)));
+    cv::hex(c.crypt, lockCrypt, sizeof(lockCrypt));
+    const cv::CcmVector &m = cv::kCcmStd[0];
+    lockCcmKeyLen = cv::hex(m.key, lockCcmKey, sizeof(lockCcmKey));
+    cv::hex(m.nonce, lockCcmNonce, sizeof(lockCcmNonce));
+    lockCcmAadLen = cv::hex(m.aad, lockCcmAad, sizeof(lockCcmAad));
+    lockCcmLen = cv::hex(m.plain, lockCcmPlain, sizeof(lockCcmPlain));
+    cv::hex(m.crypt, lockCcmCrypt, sizeof(lockCcmCrypt));
+    lockCcmTagLen = cv::hex(m.tag, lockCcmTag, sizeof(lockCcmTag));
+    cv::hex(cv::kSha256Std[1].digest, lockAbcDigest, sizeof(lockAbcDigest));
+
+    LockTask tasks[2] = {{0, xSemaphoreCreateBinary()}, {0, xSemaphoreCreateBinary()}};
+    for (int i = 0; i < 2; i++) {
+        const BaseType_t core = SOC_CPU_CORES_NUM > 1 ? i : tskNO_AFFINITY;
+        TEST_ASSERT_EQUAL(pdPASS, xTaskCreatePinnedToCore(lockWorker, "crypto_lock", 8192, &tasks[i], 1, nullptr, core));
+    }
+    for (LockTask &t : tasks)
+        TEST_ASSERT_EQUAL(pdTRUE, xSemaphoreTake(t.done, pdMS_TO_TICKS(60000)));
+    TEST_ASSERT_EQUAL(0, tasks[0].failures);
+    TEST_ASSERT_EQUAL(0, tasks[1].failures);
+    vSemaphoreDelete(tasks[0].done);
+    vSemaphoreDelete(tasks[1].done);
+}
+#endif
+
 // Weak: the hybrid ESP32 build links its throwaway dummy sketch, with its own setup(), next to the tests.
 #ifdef CRYPTO_TEST_MINIMAL
 __attribute__((weak))
@@ -607,6 +931,7 @@ void setup()
     initializeTestEnvironment();
 #endif
     UNITY_BEGIN();
+    RUN_TEST(test_backend_per_primitive_is_the_one_expected_for_this_target);
     RUN_TEST(test_aes_ctr_sp800_38a_encrypt_and_decrypt);
     RUN_TEST(test_aes_ctr_lengths_match_independent_implementation);
     RUN_TEST(test_aes_ctr_in_place_and_unaligned_match_disjoint_output);
@@ -622,6 +947,15 @@ void setup()
     RUN_TEST(test_sha_of_zero_parts_is_the_empty_digest);
     RUN_TEST(test_hmac_sha256_rfc4231_whole_and_split);
     RUN_TEST(test_random_fills_the_buffer_and_stays_inside_it);
+#ifdef ARCH_ESP32
+    RUN_TEST(test_esp32_aes_ctr_matches_library_for_every_key_size_and_length);
+    RUN_TEST(test_esp32_aes_ccm_matches_library_for_every_key_size_length_tag_and_aad);
+    RUN_TEST(test_esp32_sha_and_hmac_match_library_for_every_length_and_split);
+    RUN_TEST(test_esp32_key_and_input_in_flash_give_the_same_results_as_in_ram);
+    RUN_TEST(test_esp32_unaligned_in_place_and_hash_inputs_match_library_at_block_boundaries);
+    RUN_TEST(test_esp32_psram_buffers_give_the_same_results_as_internal_ram);
+    RUN_TEST(test_esp32_concurrent_tasks_get_correct_aes_and_sha_results);
+#endif
 #if !(MESHTASTIC_EXCLUDE_PKI)
     RUN_TEST(test_x25519_rfc7748_section_5_2_with_unclamped_scalars);
     RUN_TEST(test_x25519_rfc7748_one_iteration_from_base_point);
