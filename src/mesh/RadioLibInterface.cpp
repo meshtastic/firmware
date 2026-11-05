@@ -32,10 +32,14 @@ void LockingArduinoHal::spiEndTransaction()
     spiLock->unlock();
 }
 
-#if ARCH_PORTDUINO
+#if RADIO_SPI_BULK_ACTIVE
 void LockingArduinoHal::spiTransfer(uint8_t *out, size_t len, uint8_t *in)
 {
-    spi->transfer(out, in, len);
+#if defined(ARDUINO_ARCH_ESP32)
+    spi->transferBytes(out, in, len);
+#else
+    spi->transfer(out, in, len); // on nRF52 one EasyDMA transfer, not one per byte
+#endif
 }
 #endif
 
@@ -46,6 +50,9 @@ RadioLibInterface::RadioLibInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE c
     instance = this;
 #if RADIO_TX_PRESTAGE
     LOG_INFO("RADIO_TX_PRESTAGE: TX payload written during the channel scan");
+#endif
+#if RADIO_SPI_BULK && RADIO_SPI_BULK_ACTIVE && !ARCH_PORTDUINO
+    LOG_INFO("RADIO_SPI_BULK: one SPI transfer per radio command");
 #endif
 
 #ifdef MESHTASTIC_RX_READOUT_TASK

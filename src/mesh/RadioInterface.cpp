@@ -385,7 +385,11 @@ std::unique_ptr<RadioInterface> initLoRa()
 #if ARCH_PORTDUINO
     SPISettings loraSpiSettings(portduino_config.spiSpeed, MSBFIRST, SPI_MODE0);
 #else
-    SPISettings loraSpiSettings(4000000, MSBFIRST, SPI_MODE0);
+#ifndef RADIO_SPI_HZ
+#define RADIO_SPI_HZ 4000000 // bench knob: the radio's SPI clock on MCU builds
+#endif
+    SPISettings loraSpiSettings(RADIO_SPI_HZ, MSBFIRST, SPI_MODE0);
+    LOG_INFO("Radio SPI clock %u Hz", (unsigned)RADIO_SPI_HZ);
 #endif
 
 #ifdef ARCH_PORTDUINO
