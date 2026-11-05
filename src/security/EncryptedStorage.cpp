@@ -15,6 +15,7 @@
 #ifdef ARCH_NRF52
 
 #include "crypto/crypto_api.h"
+#include "mesh/HardwareRNG.h"
 #include <nrf.h>
 
 namespace EncryptedStorage
@@ -438,7 +439,7 @@ static bool saveDEK()
 #ifdef FSCom
     // Generate random nonce
     uint8_t nonce[NONCE_SIZE];
-    if (!crypto_random(nonce, NONCE_SIZE)) {
+    if (!HardwareRNG::fill(nonce, NONCE_SIZE)) {
         LOG_ERROR("EncryptedStorage: TRNG failed for DEK nonce");
         return false;
     }
@@ -620,7 +621,7 @@ static bool writeUnlockToken(uint8_t bootsRemaining, uint32_t validUntilEpoch, u
 {
 #ifdef FSCom
     uint8_t nonce[NONCE_SIZE];
-    if (!crypto_random(nonce, NONCE_SIZE)) {
+    if (!HardwareRNG::fill(nonce, NONCE_SIZE)) {
         LOG_ERROR("EncryptedStorage: TRNG failed for token nonce");
         return false;
     }
@@ -882,7 +883,7 @@ static bool readAndConsumeToken()
 
 static bool generateDEK()
 {
-    bool ok = crypto_random(dek, AES_KEY_SIZE);
+    bool ok = HardwareRNG::fill(dek, AES_KEY_SIZE);
 
     if (!ok) {
         LOG_ERROR("EncryptedStorage: TRNG failed generating DEK");
@@ -1449,7 +1450,7 @@ bool encryptAndWrite(const char *filename, const uint8_t *plaintext, size_t plai
 
 #ifdef FSCom
     uint8_t nonce[NONCE_SIZE];
-    if (!crypto_random(nonce, NONCE_SIZE)) {
+    if (!HardwareRNG::fill(nonce, NONCE_SIZE)) {
         LOG_ERROR("EncryptedStorage: TRNG failed for file nonce");
         meshtastic_security::secure_zero(dekSnapshot, sizeof(dekSnapshot));
         return false;
