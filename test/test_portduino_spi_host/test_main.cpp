@@ -10,8 +10,8 @@
 //
 // It also pins the framework's per-host registry contract: host 0 is the global
 // SPI object, other hosts get a stable cached instance, and a negative host is
-// refused. That registry is what LovyanGFX looks up when
-// LGFX_PORTDUINO_PER_HOST_SPI is defined.
+// refused. That registry is what LovyanGFX reaches through the weak external
+// lgfx_get_spi_instance() hook.
 //
 // The packed value is asserted against the decoder's own arithmetic (bus =
 // host & 0x0F, device = host >> 4), not against a duplicate table of magic
