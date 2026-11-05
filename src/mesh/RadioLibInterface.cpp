@@ -32,7 +32,7 @@ void LockingArduinoHal::spiEndTransaction()
     spiLock->unlock();
 }
 
-#if RADIO_SPI_BULK_ACTIVE
+#if RADIO_SPI_BULK
 void LockingArduinoHal::spiTransfer(uint8_t *out, size_t len, uint8_t *in)
 {
 #if defined(ARDUINO_ARCH_ESP32)
@@ -49,7 +49,7 @@ RadioLibInterface::RadioLibInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE c
 {
     instance = this;
 
-#if RADIO_SPI_BULK && RADIO_SPI_BULK_ACTIVE && !ARCH_PORTDUINO
+#if RADIO_SPI_BULK && !ARCH_PORTDUINO
     LOG_INFO("RADIO_SPI_BULK: one SPI transfer per radio command");
 #endif
 

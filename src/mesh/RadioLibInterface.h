@@ -36,15 +36,18 @@
 #define AGC_FORCED_RESET_MS (24 * 60 * 60 * 1000UL)
 #endif
 
-// 1 = move each radio command as one buffered SPI transfer on nRF52 and ESP32, as Portduino already does, instead of
-// RadioLib's one SPI.transfer() call per byte. Off by default pending wider soak.
+// 1 = send each radio command as one buffered SPI transfer, instead of RadioLib's one
+// SPI.transfer() call per byte. Portduino has always done this; nRF52 and ESP32 can opt in, and no
+// other architecture has a buffered call to use. Off by default there pending a wider soak.
 #ifndef RADIO_SPI_BULK
+#if ARCH_PORTDUINO
+#define RADIO_SPI_BULK 1
+#else
 #define RADIO_SPI_BULK 0
 #endif
-#if ARCH_PORTDUINO || (RADIO_SPI_BULK && (defined(ARDUINO_NRF52_ADAFRUIT) || defined(ARDUINO_ARCH_ESP32)))
-#define RADIO_SPI_BULK_ACTIVE 1
-#else
-#define RADIO_SPI_BULK_ACTIVE 0
+#endif
+#if RADIO_SPI_BULK && !(ARCH_PORTDUINO || defined(ARDUINO_NRF52_ADAFRUIT) || defined(ARDUINO_ARCH_ESP32))
+#error "RADIO_SPI_BULK: no buffered SPI call on this architecture"
 #endif
 
 /**
@@ -57,7 +60,7 @@ class LockingArduinoHal : public ArduinoHal
 
     void spiBeginTransaction() override;
     void spiEndTransaction() override;
-#if RADIO_SPI_BULK_ACTIVE
+#if RADIO_SPI_BULK
     void spiTransfer(uint8_t *out, size_t len, uint8_t *in) override;
 
 #endif
