@@ -1,0 +1,31 @@
+/*
+ * Pin map for the probe, as a /zephyr,user node so that no custom devicetree binding is needed.
+ *
+ * CONFIRM EVERY LINE AGAINST THE BOARD BEFORE FLASHING. The controller label, the GPIO ports and
+ * the pin numbers below are placeholders in the shape the code expects, not a known-good XIAO
+ * nRF54L15 wiring. Getting them wrong makes GetVersion return something other than 0x01 0x18, or
+ * leaves BUSY stuck high - both of which the probe reports and refuses to continue past, so a
+ * wiring error cannot be mistaken for a radio result.
+ *
+ * Rename the file to match the board target you build for (west picks up
+ * boards/<board>.overlay automatically), or pass it with -DDTC_OVERLAY_FILE=.
+ */
+
+/ {
+	zephyr,user {
+		spi-bus = <&spi00>;
+		/* NSS: driven by the application, one assert per command frame */
+		cs-gpios = <&gpio1 12 GPIO_ACTIVE_LOW>;
+		/* BUSY: high while the chip is processing a command */
+		busy-gpios = <&gpio1 13 GPIO_ACTIVE_HIGH>;
+		/* NRESET */
+		reset-gpios = <&gpio1 14 GPIO_ACTIVE_LOW>;
+	};
+};
+
+&spi00 {
+	status = "okay";
+	/* SCK, MOSI and MISO come from the board's own pinctrl for this controller. If the radio is
+	 * not on the board's default SPI pins, add a pinctrl group here and point the controller at
+	 * it with pinctrl-0/pinctrl-names. */
+};
