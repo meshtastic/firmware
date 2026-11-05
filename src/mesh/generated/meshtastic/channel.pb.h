@@ -101,6 +101,8 @@ typedef struct _meshtastic_ChannelSettings {
  When true, messages include a 12-byte authentication tag that prevents
  forgery and bit-flipping attacks. All nodes on the channel must have
  this enabled - unauthenticated (AES-CTR) packets are rejected.
+ Overrides SecurityConfig.packet_signature_policy for this channel: its packets are never XEdDSA signed,
+ and are not dropped for lacking a signature, because the tag authenticates them.
  Experimental. Default: false (standard AES-CTR encryption). */
     bool use_aead;
 } meshtastic_ChannelSettings;

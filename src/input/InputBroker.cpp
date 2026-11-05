@@ -43,6 +43,12 @@
 
 #if defined(BUTTON_PIN_TOUCH)
 ButtonThread *TouchButtonThread = nullptr;
+#ifndef TOUCH_SINGLEPRESS
+#define TOUCH_SINGLEPRESS INPUT_BROKER_NONE
+#endif
+#ifndef TOUCH_LONGPRESS
+#define TOUCH_LONGPRESS INPUT_BROKER_BACK
+#endif
 #if HAS_BACKLIGHT
 static bool touchBacklightWasOn = false;
 static bool touchBacklightActive = false;
@@ -247,8 +253,8 @@ void InputBroker::Init()
         BaseType_t higherWake = 0;
         concurrency::mainDelay.interruptFromISR(&higherWake);
     };
-    touchConfig.singlePress = INPUT_BROKER_NONE;
-    touchConfig.longPress = INPUT_BROKER_BACK;
+    touchConfig.singlePress = TOUCH_SINGLEPRESS;
+    touchConfig.longPress = TOUCH_LONGPRESS;
 #if HAS_BACKLIGHT
     // Touch pad drives the backlight on devices that have one
     touchConfig.longPress = INPUT_BROKER_NONE;
