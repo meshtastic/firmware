@@ -1543,7 +1543,8 @@ void Screen::setFrames(FrameFocus focus)
 #endif
 
 #if HAS_BLUETOOTH
-    if (config.bluetooth.enabled) {
+    uint8_t bleAddr[6];
+    if (config.bluetooth.enabled && getBluetoothAddr(bleAddr)) { // false on Linux and nRF54, which have no link to show
         normalFrames[numframes++] = graphics::DebugRenderer::drawFrameBluetoothPair;
         indicatorIcons.push_back(icon_qr);
         PUSH_FRAME_TITLE("Pair");
