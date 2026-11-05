@@ -86,13 +86,8 @@ void ReliableRouter::perhapsGenerateImplicitAckForOwnOverheard(const meshtastic_
         // marked as wantAck
         // Pass the overheard rebroadcast as the relay source so the ack carries the relaying node's id
         // and the RSSI/SNR we heard it at.
-        auto pAck = routingModule->allocAckNak(meshtastic_Routing_Error_NONE, getFrom(p), p->id, old->packet->channel, 0, p);
-        if (!pAck)
-            return;
-        // sniffReceived() stops the retries on this ack only when the copy was heard on LoRa.
-        pAck->transport_mechanism = p->transport_mechanism;
-        if (sendLocal(pAck) == ERRNO_SHOULD_RELEASE)
-            packetPool.release(pAck);
+        // The ack also carries the copy's transport, so sniffReceived() stops the retries only for a LoRa copy.
+        sendAckNak(meshtastic_Routing_Error_NONE, getFrom(p), p->id, old->packet->channel, 0, false, p);
     } else {
         LOG_DEBUG("Didn't find pending packet");
     }
@@ -105,10 +100,12 @@ bool ReliableRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
     /* At this point we have already deleted the pending retransmission if this packet was an (implicit) ACK to it.
        Now for all other pending retransmissions, we have to add the airtime of this received packet to the retransmission timer,
        because while receiving this packet, we could not have received an (implicit) ACK for it.
-       If we don't add this, we will likely retransmit too early.
+       If we don't add this, we will likely retransmit too early. A copy heard on MQTT or UDP never held the radio.
     */
-    for (auto i = pending.begin(); i != pending.end(); i++) {
-        i->second.nextTxMsec += iface->getPacketTime(p, true);
+    if (isLoRaTransport(p->transport_mechanism)) {
+        for (auto i = pending.begin(); i != pending.end(); i++) {
+            i->second.nextTxMsec += iface->getPacketTime(p, true);
+        }
     }
 
     return isBroadcast(p->to) ? FloodingRouter::shouldFilterReceived(p) : NextHopRouter::shouldFilterReceived(p);
