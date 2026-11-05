@@ -420,6 +420,77 @@ void test_XEdDSA_repeated_sign_is_randomized(void)
     TEST_ASSERT_TRUE(crypto->xeddsa_verify(pub, fromNode, packetId, toNode, &d, sig2));
 }
 
+// CryptoEngine::xeddsa_sign hands XEdDSA::sign its ed25519BaseMul() hook (src/mesh/CryptoEngine.cpp), which
+// NRF52CryptoEngine overrides to compute R = r * B on the CryptoCell CC310. The hook's contract: return the
+// encoded point and true, or false to let the library compute R in software; the signature must verify either
+// way. This pins the wiring and both outcomes with an engine whose hook does R in software: if xeddsa_sign
+// stops passing the hook, the call count fails; if the hook's R is ignored, the wrong-point case still
+// verifies; if a declining hook's output is used, the decline case fails to verify. Byte-identical output
+// with and without the hook is meshtastic/Crypto's own test (XEdDSA::sign, Crypto#7).
+struct SoftwareBaseMul : public XEdDSA {
+    static void mulBase(uint8_t point[32], const uint8_t scalar[32])
+    {
+        limb_t s[(256 + 8 * sizeof(limb_t) - 1) / (8 * sizeof(limb_t))];
+        BigNumberUtil::unpackLE(s, sizeof(s) / sizeof(s[0]), scalar, 32);
+        Point P;
+        mul(P, s);
+        encodePoint(point, P);
+    }
+};
+
+class BaseMulProbeEngine : public CryptoEngine
+{
+  public:
+    enum class Mode { Software, WrongPoint, Decline };
+    Mode mode = Mode::Software;
+    int calls = 0;
+
+    bool ed25519BaseMul(uint8_t *point, const uint8_t *scalar) override
+    {
+        calls++;
+        switch (mode) {
+        case Mode::Software:
+            SoftwareBaseMul::mulBase(point, scalar);
+            return true;
+        case Mode::WrongPoint:
+            memset(point, 0, 32);
+            point[0] = 1; // the identity point, not r * B
+            return true;
+        case Mode::Decline:
+            memset(point, 0xA5, 32);
+            return false;
+        }
+        return false;
+    }
+};
+
+void test_XEdDSA_baseMul_hook(void)
+{
+    BaseMulProbeEngine engine;
+    uint8_t pub[32], priv[32], sig[64];
+    uint8_t message[] = "signed with a base point hook";
+    uint32_t fromNode = 0x11, packetId = 0x22, toNode = 0x33;
+    meshtastic_Data d = makeSignableData(message, sizeof(message), 3);
+    engine.generateKeyPair(pub, priv);
+
+    for (int i = 0; i < 4; i++) {
+        TEST_ASSERT(engine.xeddsa_sign(fromNode, packetId + i, toNode, &d, sig));
+        TEST_ASSERT_TRUE(crypto->xeddsa_verify(pub, fromNode, packetId + i, toNode, &d, sig));
+    }
+    TEST_ASSERT_EQUAL_INT_MESSAGE(4, engine.calls, "xeddsa_sign must pass the hook to XEdDSA::sign");
+
+    engine.mode = BaseMulProbeEngine::Mode::WrongPoint;
+    TEST_ASSERT(engine.xeddsa_sign(fromNode, packetId, toNode, &d, sig));
+    TEST_ASSERT_FALSE_MESSAGE(crypto->xeddsa_verify(pub, fromNode, packetId, toNode, &d, sig),
+                              "a wrong R from the hook must end up in the signature");
+
+    engine.mode = BaseMulProbeEngine::Mode::Decline;
+    TEST_ASSERT(engine.xeddsa_sign(fromNode, packetId, toNode, &d, sig));
+    TEST_ASSERT_TRUE_MESSAGE(crypto->xeddsa_verify(pub, fromNode, packetId, toNode, &d, sig),
+                             "a declining hook must leave R to the software");
+    TEST_ASSERT_EQUAL_INT(6, engine.calls);
+}
+
 // CryptoEngine::regeneratePublicKey must clamp the private key it is handed, in place. Curve25519::eval
 // uses the scalar as given while XEdDSA::priv_curve_to_ed_keys clamps it, so an unclamped key (set via
 // admin, an app's private-key field, or a backup restore) derives an X25519 public key that disagrees
@@ -1047,6 +1118,7 @@ void setup()
     RUN_TEST(test_XEdDSA_curve_to_ed_cache);
     RUN_TEST(test_XEdDSA_max_payload);
     RUN_TEST(test_XEdDSA_repeated_sign_is_randomized);
+    RUN_TEST(test_XEdDSA_baseMul_hook);
     RUN_TEST(test_regeneratePublicKey_clamps_imported_key);
     RUN_TEST(test_AES_CCM_AEAD_smoke);
     RUN_TEST(test_AES_CCM_AEAD_roundtrip_aes256);
