@@ -930,6 +930,8 @@ void checkSpidevPath(const std::string &file, const std::string &section, const 
     const bool isLora = section == "Lora";
     if (isLora && text == "ch341")
         return;
+    if (isLora && text.empty())
+        return; // the merged check reports this only if no later file supplies a path
     if (section == "Touchscreen" && text.empty())
         return; // no touchscreen bus was asked for
 

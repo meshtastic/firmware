@@ -568,12 +568,16 @@ extern struct portduino_config_struct {
             switch (touchscreenModule) {
             case xpt2046:
                 out << YAML::Key << "Module" << YAML::Value << "XPT2046";
+                break;
             case stmpe610:
                 out << YAML::Key << "Module" << YAML::Value << "STMPE610";
+                break;
             case gt911:
                 out << YAML::Key << "Module" << YAML::Value << "GT911";
+                break;
             case ft5x06:
                 out << YAML::Key << "Module" << YAML::Value << "FT5x06";
+                break;
             }
             for (const auto *touchscreen_pin : all_pins) {
                 if (touchscreen_pin->config_section == "Touchscreen" && touchscreen_pin->enabled) {
