@@ -189,6 +189,16 @@ void getMacAddr(uint8_t *dmac)
 #endif
 }
 
+bool getBluetoothAddr(uint8_t *addr)
+{
+#if HAS_BLUETOOTH && !defined(CONFIG_IDF_TARGET_ESP32S2)
+    // NimBLE advertises on the controller's public address: the BT MAC efuse derives, not the base MAC.
+    return esp_read_mac(addr, ESP_MAC_BT) == ESP_OK;
+#else
+    return false;
+#endif
+}
+
 bool getDeviceId(uint8_t *deviceId)
 {
 #if defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32S3) ||            \

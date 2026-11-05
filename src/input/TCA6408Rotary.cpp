@@ -149,7 +149,7 @@ void TCA6408Rotary::handleTransition(uint8_t newState)
     InputEvent event = {};
     event.source = _originName;
     event.inputEvent = action == RotaryAction::DOWN ? INPUT_BROKER_DOWN : INPUT_BROKER_UP;
-    LOG_DEBUG("TCA6408 rotary event %d state=0x%02x", event.inputEvent, newState);
+    LOG_INPUT("TCA6408 rotary event %d state=0x%02x", event.inputEvent, newState);
     notifyObservers(&event);
 }
 
