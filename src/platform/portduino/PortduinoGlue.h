@@ -493,7 +493,7 @@ extern struct portduino_config_struct {
             out << YAML::Key << "Display" << YAML::Value << YAML::BeginMap;
             for (const auto &screen_name : screen_names) {
                 if (displayPanel == screen_name.first)
-                    out << YAML::Key << "Module" << YAML::Value << screen_name.second;
+                    out << YAML::Key << "Panel" << YAML::Value << screen_name.second;
             }
             for (const auto *display_pin : all_pins) {
                 if (display_pin->config_section == "Display" && display_pin->enabled) {

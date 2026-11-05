@@ -499,13 +499,34 @@ assert "a Lora path outside the packing range is informational only" 0 spidev-lo
 assert "an empty Lora path on a hardware radio is refused" 1 spidev-lora-empty.yaml check \
 	"Lora.spidev is empty, but a hardware radio needs a SPI device" \
 	"Result: 1 error, 0 warnings"
+assert "a later file supplies the radio path" 0 spidev-lora-override/config.yaml check \
+	"!Lora.spidev is empty" \
+	"Result: 0 errors,"
 assert "a display without spidev emits no empty key" 0 spidev-display-default.yaml yaml \
-	"Module: ILI9488" \
+	"Panel: ILI9488" \
 	'!spidev: ""'
 assert "emitted display and touchscreen paths keep no /dev prefix" 0 spidev-valid.yaml yaml \
 	"spidev: spidev1.0" \
 	"spidev: spidev0.1" \
 	"!spidev: /dev/"
+
+# The writer and reader must agree on the Display key. Emit a config, then load
+# the emitted file again: a "Module" emitter would leave the panel unset and the
+# reload would report Display.Module as unknown.
+ROUNDTRIP_YAML="$WORKDIR/roundtrip.yaml"
+(cd "$WORKDIR" && timeout 60 "$BIN" --config "$FIXTURES/spidev-valid.yaml" --output-yaml -d "$WORKDIR/fs" 2>&1) |
+	awk '/^Lora:/{emit=1} emit' >"$ROUNDTRIP_YAML"
+roundtrip_out="$(cd "$WORKDIR" && timeout 60 "$BIN" --config "$ROUNDTRIP_YAML" --check -d "$WORKDIR/fs" 2>&1)"
+roundtrip_rc=$?
+if [[ $roundtrip_rc -eq 0 ]] && ! grep -qF "unknown key 'Display.Module'" <<<"$roundtrip_out" &&
+	grep -qF "Result: 0 errors" <<<"$roundtrip_out"; then
+	PASS=$((PASS + 1))
+	echo "  ok    emitted YAML loads back with Display.Panel"
+else
+	FAIL=$((FAIL + 1))
+	echo "  FAIL  emitted YAML loads back with Display.Panel"
+	sed 's/^/          | /' <<<"$roundtrip_out"
+fi
 
 echo
 echo "across a config directory:"
