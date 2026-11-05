@@ -154,9 +154,10 @@ assert "bluetooth section parses" 0 bluetooth.yaml check \
 assert "bluetooth bad Enabled is silently defaulted" 0 bluetooth-bad-enabled.yaml check \
 	"Bluetooth.Enabled is not a true/false value" \
 	"Result: 0 errors, 1 warning"
+# A build without BLE support adds its own build-time warning, so do not pin the count.
 assert "bluetooth AdapterId must name a real adapter" 0 bluetooth-bad-adapter.yaml check \
 	"is not a BlueZ adapter name" \
-	"Result: 0 errors, 1 warning"
+	"Result: 0 errors,"
 
 echo
 echo "admin keys in the host config:"
@@ -479,6 +480,32 @@ assert "unparseable config still reaches the report" 1 malformed-indent.yaml che
 	"could not be parsed" \
 	"error at line 7" \
 	"Result: 1 error, 0 warnings"
+
+echo
+echo "SPI device paths:"
+assert "valid display and touchscreen paths are clean" 0 spidev-valid.yaml check \
+	"Display spidev    : /dev/spidev1.0" \
+	"Touchscreen spidev: /dev/spidev0.1" \
+	"Result: 0 errors, 0 warnings"
+assert "display path on a bus the decoder cannot name is refused" 1 spidev-invalid-display.yaml check \
+	"Display.spidev 'spidev10.0' is not a usable path" \
+	"Result: 1 error, 0 warnings"
+assert "touchscreen device above 7 is refused" 1 spidev-invalid-touch.yaml check \
+	"Touchscreen.spidev 'spidev1.8' is not a usable path" \
+	"Result: 1 error, 0 warnings"
+assert "a Lora path outside the packing range is informational only" 0 spidev-lora-info.yaml check \
+	"Lora.spidev 'spidev10.0' is not a usable path" \
+	"Result: 0 errors, 0 warnings"
+assert "an empty Lora path on a hardware radio is refused" 1 spidev-lora-empty.yaml check \
+	"Lora.spidev is empty, but a hardware radio needs a SPI device" \
+	"Result: 1 error, 0 warnings"
+assert "a display without spidev emits no empty key" 0 spidev-display-default.yaml yaml \
+	"Panel: ILI9488" \
+	'!spidev: ""'
+assert "emitted display and touchscreen paths keep no /dev prefix" 0 spidev-valid.yaml yaml \
+	"spidev: spidev1.0" \
+	"spidev: spidev0.1" \
+	"!spidev: /dev/"
 
 echo
 echo "across a config directory:"
