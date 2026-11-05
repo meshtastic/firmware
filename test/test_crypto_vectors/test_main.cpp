@@ -20,6 +20,7 @@
 #include "TestUtil.h"
 #endif
 #include "aes-ccm.h"
+#include "crypto/crypto_api.h"
 #include "support/crypto_vectors.h"
 #include <Curve25519.h>
 #include <SHA256.h>
@@ -743,6 +744,115 @@ void test_golden_xeddsa_signature_verifies_and_binds_every_field(void)
 
 #endif
 
+// ---- New API (src/crypto) against the old paths --------------------------------------------------
+// Until callers migrate, both paths are live and must stay interchangeable on the wire. The CTR
+// lengths stop at 240 because that is the most the CC310 path takes in one call.
+
+void test_new_api_ctr_and_ccm_match_the_old_paths(void)
+{
+    static const size_t ctrLens[] = {1, 15, 16, 17, 240};
+    static const size_t ccmLens[] = {0, 1, 15, 16, 17, 255, 256};
+    static const size_t tagLens[] = {8, 12};
+    static const size_t aadLens[] = {0, 8};
+    static const size_t keyLens[] = {16, 32};
+    for (size_t keyLen : keyLens) {
+        CryptoKey k = seqCryptoKey(keyLen);
+        for (size_t len : ctrLens) {
+            uint8_t counter[16];
+            memcpy(counter, cv::kLenCtrBlock, sizeof(counter));
+            cv::pattern(bufA, len);
+            memcpy(bufB, bufA, len);
+            crypto->encryptAESCtr(k, counter, len, bufB);
+            TEST_ASSERT_TRUE(crypto_aes_ctr(k.bytes, keyLen, cv::kLenCtrBlock, bufA, len, bufC));
+            assertMem(bufB, bufC, len, "ctr");
+        }
+        for (size_t len : ccmLens) {
+            for (size_t tagLen : tagLens) {
+                for (size_t aadLen : aadLens) {
+                    uint8_t oldTag[16], newTag[16];
+                    const uint8_t *aad = aadLen ? cv::kLenCcmAad : nullptr;
+                    cv::pattern(bufA, len);
+                    TEST_ASSERT_EQUAL(
+                        0, aes_ccm_ae(k.bytes, keyLen, cv::kLenCcmNonce, tagLen, bufA, len, aad, aadLen, bufB, oldTag));
+                    TEST_ASSERT_TRUE(
+                        crypto_aes_ccm_seal(k.bytes, keyLen, cv::kLenCcmNonce, aad, aadLen, bufA, len, bufC, newTag, tagLen));
+                    assertMem(bufB, bufC, len, "ccm ciphertext");
+                    assertMem(oldTag, newTag, tagLen, "ccm tag");
+                    TEST_ASSERT_TRUE(
+                        crypto_aes_ccm_open(k.bytes, keyLen, cv::kLenCcmNonce, aad, aadLen, bufB, len, oldTag, tagLen, bufC));
+                    assertMem(bufA, bufC, len, "ccm open of old output");
+                }
+            }
+        }
+    }
+}
+
+void test_new_api_hashes_match_the_old_paths(void)
+{
+    static const size_t lens[] = {0, 1, 55, 56, 64, 111, 112, 128, 256};
+    const uint8_t key[] = {1, 2, 3, 4, 5};
+    for (size_t len : lens) {
+        uint8_t digest[64], expected[64];
+        cv::pattern(bufA, len);
+        const crypto_part part = {bufA, len};
+
+        sha512Of(bufA, len, expected);
+        crypto_sha512(&part, 1, digest);
+        assertMem(expected, digest, 64, "sha512");
+
+        crypto_sha256(&part, 1, digest);
+        crypto->hash(bufA, len);
+        assertMem(bufA, digest, 32, "sha256");
+
+        cv::pattern(bufA, len);
+        SHA256 mac;
+        mac.resetHMAC(key, sizeof(key));
+        mac.update(bufA, len);
+        mac.finalizeHMAC(key, sizeof(key), expected, 32);
+        crypto_hmac_sha256(key, sizeof(key), &part, 1, digest);
+        assertMem(expected, digest, 32, "hmac");
+    }
+}
+
+#if !(MESHTASTIC_EXCLUDE_PKI)
+void test_new_api_x25519_matches_the_old_path_for_clamped_scalars(void)
+{
+    uint8_t a[32], bPub[32], oldOut[32], newOut[32];
+    cv::hex(cv::kRfc7748Dh[0], a, sizeof(a));
+    cv::hex(cv::kRfc7748Dh[3], bPub, sizeof(bPub));
+    clamp(a);
+    TEST_ASSERT_TRUE(crypto->x25519(oldOut, a, bPub));
+    TEST_ASSERT_TRUE(crypto_x25519(newOut, a, bPub));
+    assertMem(oldOut, newOut, 32, "agreement");
+    TEST_ASSERT_TRUE(crypto->x25519(oldOut, a, nullptr));
+    TEST_ASSERT_TRUE(crypto_x25519(newOut, a, nullptr));
+    assertMem(oldOut, newOut, 32, "public key");
+}
+#endif
+
+#if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
+void test_new_api_ed25519_interoperates_with_the_old_path(void)
+{
+    uint8_t aPub[32], bPub[32], a[32], edPriv[32], edPub[32], converted[32], sig[64];
+    loadAlice(aPub, bPub);
+    cv::hex(cv::kRfc7748Dh[0], a, sizeof(a));
+    clamp(a);
+    crypto_xeddsa_keys_from_x25519(edPriv, edPub, a);
+    assertMem(crypto->xeddsa_private_key, edPriv, 32, "ed private key");
+    assertMem(crypto->xeddsa_public_key, edPub, 32, "ed public key");
+    crypto_xeddsa_pub_from_x25519(converted, aPub);
+    crypto->curve_to_ed_pub(aPub, bufB);
+    assertMem(bufB, converted, 32, "public key conversion");
+
+    cv::pattern(bufA, 17);
+    TEST_ASSERT_TRUE(crypto_xeddsa_sign(sig, edPriv, edPub, bufA, 17));
+    TEST_ASSERT_TRUE(crypto->ed25519Verify(sig, edPub, bufA, 17));
+    memset(sig, 0x5A, 32);
+    XEdDSA::sign(sig, edPriv, edPub, bufA, 17);
+    TEST_ASSERT_TRUE(crypto_ed25519_verify(sig, edPub, bufA, 17));
+}
+#endif
+
 // Weak: the hybrid ESP32 build links its throwaway dummy sketch, with its own setup(), next to the tests.
 #ifdef CRYPTO_TEST_MINIMAL
 __attribute__((weak))
@@ -756,6 +866,14 @@ void setup()
     initializeTestEnvironment();
 #endif
     UNITY_BEGIN();
+    RUN_TEST(test_new_api_ctr_and_ccm_match_the_old_paths);
+    RUN_TEST(test_new_api_hashes_match_the_old_paths);
+#if !(MESHTASTIC_EXCLUDE_PKI)
+    RUN_TEST(test_new_api_x25519_matches_the_old_path_for_clamped_scalars);
+#endif
+#if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
+    RUN_TEST(test_new_api_ed25519_interoperates_with_the_old_path);
+#endif
     RUN_TEST(test_aes_ctr_sp800_38a_encrypt_and_decrypt);
     RUN_TEST(test_aes_ctr_lengths_match_independent_implementation);
     RUN_TEST(test_aes_ctr_packet_over_256_bytes_is_left_untouched);
