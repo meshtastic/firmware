@@ -16,13 +16,23 @@
 #include "configuration.h"
 
 #include "CryptoEngine.h"
+#ifndef CRYPTO_TEST_MINIMAL
 #include "TestUtil.h"
+#endif
 #include "aes-ccm.h"
 #include "support/crypto_vectors.h"
 #include <Curve25519.h>
 #include <SHA256.h>
 #include <SHA512.h>
 #include <XEdDSA.h>
+#include <pb.h>
+#ifdef CRYPTO_TEST_MINIMAL
+// Test-mode library discovery only follows includes in the test sources, so name what the crypto sources need.
+#include <Thread.h>
+#ifdef ARCH_NRF52
+#include <Adafruit_nRFCrypto.h>
+#endif
+#endif
 #include <unity.h>
 
 namespace cv = crypto_vectors;
@@ -291,6 +301,7 @@ void test_hmac_sha256_rfc4231(void)
     }
 }
 
+#if !(MESHTASTIC_EXCLUDE_PKI)
 // ---- X25519 -------------------------------------------------------------------------------------
 
 void test_x25519_rfc7748_section_5_2(void)
@@ -354,6 +365,7 @@ void test_x25519_does_not_clamp_the_scalar_today(void)
     TEST_ASSERT_NOT_EQUAL(0, memcmp(out, expected, 32));
 }
 
+#if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
 // ---- Ed25519 verify -----------------------------------------------------------------------------
 
 void test_ed25519_verify_rfc8032(void)
@@ -412,6 +424,9 @@ void test_ed25519_verify_noncanonical_s_outcome_is_pinned(void)
     TEST_ASSERT_EQUAL_MESSAGE(!CRYPTO_VECTORS_EXPECT_NONCANONICAL_S_REJECTED, accepted,
                               "non-canonical S outcome differs from the recorded one for this Crypto pin");
 }
+
+#endif
+#endif
 
 // ---- Golden wire vectors ------------------------------------------------------------------------
 
@@ -496,6 +511,7 @@ void test_golden_psk_ccm_lengths_round_trip(void)
     TEST_ASSERT_FALSE_MESSAGE(crypto->decryptPacketCCM(k, 1, 2, 3, 11, bufB, bufC), "shorter than the tag");
 }
 
+#if !(MESHTASTIC_EXCLUDE_PKI)
 static void loadAlice(uint8_t aPub[32], uint8_t bPub[32])
 {
     uint8_t a[32];
@@ -626,6 +642,9 @@ void test_golden_ack_proof(void)
     }
 }
 
+#endif
+
+#if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
 // ---- XEdDSA -------------------------------------------------------------------------------------
 
 static meshtastic_Data makeData(size_t len)
@@ -722,12 +741,20 @@ void test_golden_xeddsa_signature_verifies_and_binds_every_field(void)
     }
 }
 
+#endif
+
+// Weak: the hybrid ESP32 build links its throwaway dummy sketch, with its own setup(), next to the tests.
+#ifdef CRYPTO_TEST_MINIMAL
+__attribute__((weak))
+#endif
 void setup()
 {
     delay(10);
     delay(2000);
 
+#ifndef CRYPTO_TEST_MINIMAL
     initializeTestEnvironment();
+#endif
     UNITY_BEGIN();
     RUN_TEST(test_aes_ctr_sp800_38a_encrypt_and_decrypt);
     RUN_TEST(test_aes_ctr_lengths_match_independent_implementation);
@@ -740,27 +767,35 @@ void setup()
     RUN_TEST(test_sha512_fips180);
     RUN_TEST(test_sha_lengths_across_block_boundaries);
     RUN_TEST(test_hmac_sha256_rfc4231);
+#if !(MESHTASTIC_EXCLUDE_PKI)
     RUN_TEST(test_x25519_rfc7748_section_5_2);
     RUN_TEST(test_x25519_rfc7748_one_iteration_from_base_point);
     RUN_TEST(test_x25519_rfc7748_section_6_1_key_agreement);
     RUN_TEST(test_x25519_does_not_clamp_the_scalar_today);
+#endif
+#if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
     RUN_TEST(test_ed25519_verify_rfc8032);
     RUN_TEST(test_ed25519_verify_rejects_flipped_bits);
     RUN_TEST(test_ed25519_verify_noncanonical_s_outcome_is_pinned);
+#endif
     RUN_TEST(test_golden_init_nonce_layout);
     RUN_TEST(test_golden_init_nonce_extra_nonce_overwrites_upper_packet_id_half);
     RUN_TEST(test_golden_psk_channel_encryption);
     RUN_TEST(test_golden_psk_ccm_with_12_byte_tag_and_aad_byte_order);
     RUN_TEST(test_golden_psk_ccm_lengths_round_trip);
+#if !(MESHTASTIC_EXCLUDE_PKI)
     RUN_TEST(test_golden_pki_decrypt_uses_ccm_l2_8_byte_tag_and_trailing_extra_nonce);
     RUN_TEST(test_golden_pki_peer_derives_the_same_key);
     RUN_TEST(test_golden_pki_upper_packet_id_half_is_not_authenticated_when_extra_nonce_is_set);
     RUN_TEST(test_golden_pki_encrypt_layout_and_round_trip);
     RUN_TEST(test_golden_pki_rejects_empty_or_weak_peer_key);
     RUN_TEST(test_golden_ack_proof);
+#endif
+#if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
     RUN_TEST(test_xeddsa_sign_then_verify_for_payload_lengths_and_reject_bit_flips);
     RUN_TEST(test_xeddsa_signature_does_not_verify_under_another_key);
     RUN_TEST(test_golden_xeddsa_signature_verifies_and_binds_every_field);
+#endif
 #if defined(ARCH_PORTDUINO)
     exit(UNITY_END());
 #else
@@ -768,4 +803,9 @@ void setup()
 #endif
 }
 
-void loop() {}
+#ifdef CRYPTO_TEST_MINIMAL
+__attribute__((weak))
+#endif
+void loop()
+{
+}
