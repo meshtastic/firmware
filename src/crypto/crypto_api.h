@@ -26,6 +26,9 @@ void crypto_hmac_sha256(const uint8_t *key, size_t key_len, const crypto_part *p
 // Clamps the scalar (RFC 7748). point == nullptr is the base point. False on a non-canonical point.
 // No weak-point check: an all-zero out is returned as is.
 bool crypto_x25519(uint8_t out[32], const uint8_t scalar[32], const uint8_t *point);
+// True for the small-order points a peer can send to force a known shared
+// secret. Constant time.
+bool crypto_x25519_is_weak(const uint8_t point[32]);
 
 bool crypto_ed25519_verify(const uint8_t signature[64], const uint8_t pub[32], const void *msg, size_t len);
 // scalar is little-endian and reduced mod q.

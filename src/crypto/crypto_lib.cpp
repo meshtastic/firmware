@@ -1,4 +1,6 @@
-// Backend over the Crypto library, including the CCM mode built on its block cipher.
+// Backend over the Crypto library, including the CCM mode built on its block
+// cipher.
+#define TEST_CURVE25519_FIELD_OPS // makes Curve25519::isWeakPoint public
 #include "crypto_backends.h"
 #include "mesh/HardwareRNG.h"
 #include <AES.h>
@@ -211,6 +213,11 @@ void crypto_lib_random_add(const uint8_t *data, size_t len)
 bool crypto_lib_x25519(uint8_t out[32], const uint8_t scalar[32], const uint8_t *point)
 {
     return Curve25519::eval(out, scalar, point);
+}
+
+bool crypto_lib_x25519_is_weak(const uint8_t point[32])
+{
+    return Curve25519::isWeakPoint(point) != 0;
 }
 
 #if !(MESHTASTIC_EXCLUDE_XEDDSA)

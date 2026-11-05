@@ -22,6 +22,7 @@ void crypto_lib_sha256(const crypto_part *parts, size_t num_parts, uint8_t out[3
 void crypto_lib_sha512(const crypto_part *parts, size_t num_parts, uint8_t out[64]);
 void crypto_lib_hmac_sha256(const uint8_t *key, size_t key_len, const crypto_part *parts, size_t num_parts, uint8_t out[32]);
 bool crypto_lib_x25519(uint8_t out[32], const uint8_t scalar[32], const uint8_t *point);
+bool crypto_lib_x25519_is_weak(const uint8_t point[32]);
 bool crypto_lib_ed25519_verify(const uint8_t signature[64], const uint8_t pub[32], const void *msg, size_t len);
 void crypto_lib_ed25519_basemul(uint8_t point[32], const uint8_t scalar[32]);
 void crypto_lib_xeddsa_sign(uint8_t signature[64], const uint8_t ed_priv[32], const uint8_t ed_pub[32], const void *msg,

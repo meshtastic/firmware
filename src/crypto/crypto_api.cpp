@@ -88,6 +88,11 @@ bool crypto_x25519(uint8_t out[32], const uint8_t scalar[32], const uint8_t *poi
     return ok;
 }
 
+bool crypto_x25519_is_weak(const uint8_t point[32])
+{
+    return crypto_lib_x25519_is_weak(point);
+}
+
 #if !(MESHTASTIC_EXCLUDE_XEDDSA)
 // Checked here so that no backend can accept a malleated signature.
 static bool isCanonicalS(const uint8_t s[32])
