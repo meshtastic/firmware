@@ -942,12 +942,7 @@ void checkSpidevPath(const std::string &file, const std::string &section, const 
 
     if (text.empty() || spiHostFromDevicePath(text) < 0) {
         const std::string what = text.empty() ? std::string("is empty") : "'" + text + "' is not a usable path";
-        const bool hardwareRadio = portduino_config.lora_module != use_simradio && portduino_config.lora_module != use_autoconf;
-        if (isLora && text.empty() && hardwareRadio) {
-            findings.push_back({kError, file, lineOf(value),
-                                "Lora.spidev is empty, but a hardware radio needs a SPI device. Expected "
-                                "/dev/spidev<bus>.<device> with bus 0-9 and device 0-7"});
-        } else if (isLora) {
+        if (isLora) {
             findings.push_back({kInfo, file, lineOf(value),
                                 "Lora.spidev " + what +
                                     ". The radio still opens that name directly, but display/touchscreen host packing "
@@ -1223,6 +1218,14 @@ void checkMergedConfig(const PathIndex &paths, std::vector<Finding> &findings)
     const std::string merged = "(merged configuration)";
 
     checkPinValues(findings);
+
+    // A later config file can still supply the radio path. Only the final merged
+    // value decides whether a hardware radio is left without one.
+    if (portduino_config.lora_spi_dev == "/dev/" && portduino_config.lora_module != use_simradio &&
+        portduino_config.lora_module != use_autoconf)
+        findings.push_back({kError, merged, 0,
+                            "Lora.spidev is empty, but a hardware radio needs a SPI device. Expected "
+                            "/dev/spidev<bus>.<device> with bus 0-9 and device 0-7"});
 
     // portduinoSetup() skips initGPIOPin() for every Lora pin when spidev is ch341, so a
     // gpiochip or line mapping written next to one is read, stored, and never used.
