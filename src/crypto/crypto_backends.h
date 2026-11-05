@@ -7,6 +7,14 @@
 #define CRYPTO_HAS_CC310 1
 #endif
 
+#ifdef ARCH_ESP32
+#include "soc/soc_caps.h"
+// C3 and C6 have no SHA-512 engine.
+#if SOC_SHA_SUPPORT_SHA512 && !defined(CRYPTO_ESP32_NO_SHA512)
+#define CRYPTO_ESP32_HAS_SHA512 1
+#endif
+#endif
+
 // Unavailable means the hardware gave no answer, so the caller computes it in software.
 enum crypto_hw_result : uint8_t { CRYPTO_HW_OK, CRYPTO_HW_REJECTED, CRYPTO_HW_UNAVAILABLE };
 
@@ -41,6 +49,13 @@ crypto_hw_result crypto_cc310_ed25519_basemul(uint8_t point[32], const uint8_t s
 #endif
 
 #ifdef ARCH_ESP32
-bool crypto_mbedtls_aes_ctr(const uint8_t *key, size_t key_len, const uint8_t counter[16], const uint8_t *in, size_t len,
-                            uint8_t *out);
+bool crypto_esp32_aes_ctr(const uint8_t *key, size_t key_len, const uint8_t counter[16], const uint8_t *in, size_t len,
+                          uint8_t *out);
+bool crypto_esp32_aes_ccm_seal(const uint8_t *key, size_t key_len, const uint8_t nonce[13], const uint8_t *aad, size_t aad_len,
+                               const uint8_t *in, size_t len, uint8_t *out, uint8_t *tag, size_t tag_len);
+bool crypto_esp32_aes_ccm_open(const uint8_t *key, size_t key_len, const uint8_t nonce[13], const uint8_t *aad, size_t aad_len,
+                               const uint8_t *in, size_t len, const uint8_t *tag, size_t tag_len, uint8_t *out);
+void crypto_esp32_sha256(const crypto_part *parts, size_t num_parts, uint8_t out[32]);
+void crypto_esp32_sha512(const crypto_part *parts, size_t num_parts, uint8_t out[64]);
+void crypto_esp32_hmac_sha256(const uint8_t *key, size_t key_len, const crypto_part *parts, size_t num_parts, uint8_t out[32]);
 #endif

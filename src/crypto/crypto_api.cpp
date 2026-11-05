@@ -16,7 +16,7 @@ bool crypto_aes_ctr(const uint8_t *key, size_t key_len, const uint8_t counter[16
     if (key_len == 16 && crypto_cc310_aes128_ctr(key, counter, in, len, out) == CRYPTO_HW_OK)
         return true;
 #elif defined(ARCH_ESP32)
-    return crypto_mbedtls_aes_ctr(key, key_len, counter, in, len, out);
+    return crypto_esp32_aes_ctr(key, key_len, counter, in, len, out);
 #endif
     return crypto_lib_aes_ctr(key, key_len, counter, in, len, out);
 }
@@ -31,8 +31,12 @@ bool crypto_aes_ccm_seal(const uint8_t *key, size_t key_len, const uint8_t nonce
 {
     if (!validCcmParams(key_len, aad_len, len, tag_len))
         return false;
+#ifdef ARCH_ESP32
+    return crypto_esp32_aes_ccm_seal(key, key_len, nonce, aad, aad_len, in, len, out, tag, tag_len);
+#else
     crypto_lib_aes_ccm_seal(key, key_len, nonce, aad, aad_len, in, len, out, tag, tag_len);
     return true;
+#endif
 }
 
 bool crypto_aes_ccm_open(const uint8_t *key, size_t key_len, const uint8_t nonce[13], const uint8_t *aad, size_t aad_len,
@@ -40,22 +44,38 @@ bool crypto_aes_ccm_open(const uint8_t *key, size_t key_len, const uint8_t nonce
 {
     if (!validCcmParams(key_len, aad_len, len, tag_len))
         return false;
+#ifdef ARCH_ESP32
+    return crypto_esp32_aes_ccm_open(key, key_len, nonce, aad, aad_len, in, len, tag, tag_len, out);
+#else
     return crypto_lib_aes_ccm_open(key, key_len, nonce, aad, aad_len, in, len, tag, tag_len, out);
+#endif
 }
 
 void crypto_sha256(const crypto_part *parts, size_t num_parts, uint8_t out[32])
 {
+#ifdef ARCH_ESP32
+    crypto_esp32_sha256(parts, num_parts, out);
+#else
     crypto_lib_sha256(parts, num_parts, out);
+#endif
 }
 
 void crypto_sha512(const crypto_part *parts, size_t num_parts, uint8_t out[64])
 {
+#ifdef CRYPTO_ESP32_HAS_SHA512
+    crypto_esp32_sha512(parts, num_parts, out);
+#else
     crypto_lib_sha512(parts, num_parts, out);
+#endif
 }
 
 void crypto_hmac_sha256(const uint8_t *key, size_t key_len, const crypto_part *parts, size_t num_parts, uint8_t out[32])
 {
+#ifdef ARCH_ESP32
+    crypto_esp32_hmac_sha256(key, key_len, parts, num_parts, out);
+#else
     crypto_lib_hmac_sha256(key, key_len, parts, num_parts, out);
+#endif
 }
 
 bool crypto_random(uint8_t *out, size_t len)
