@@ -24,6 +24,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <map>
 #include <memory>
 #include <set>
@@ -1178,10 +1179,12 @@ bool loadConfig(const char *configPath)
                 if (host >= 0) {
                     portduino_config.lora_spi_dev_int = host;
                     // Let a display/touchscreen from an earlier config file keep its own bus.
-                    if (portduino_config.display_spi_dev.empty())
+                    // The touchscreen follows the display when it has no spidev of its own.
+                    if (portduino_config.display_spi_dev.empty()) {
                         portduino_config.display_spi_dev_int = host;
-                    if (portduino_config.touchscreen_spi_dev.empty())
-                        portduino_config.touchscreen_spi_dev_int = host;
+                        if (portduino_config.touchscreen_spi_dev.empty())
+                            portduino_config.touchscreen_spi_dev_int = host;
+                    }
                 } else {
                     LOG_WARN("Lora.spidev \"%s\" is not a usable spidev path; display and touch keep their own bus",
                              portduino_config.lora_spi_dev.c_str());
@@ -1650,6 +1653,21 @@ std::string adminKeyToBase64(const std::array<uint8_t, 32> &key)
     return out;
 }
 
+static bool parseSpidevNumber(const char *&cursor, unsigned &value)
+{
+    if (*cursor < '0' || *cursor > '9')
+        return false;
+    value = 0;
+    while (*cursor >= '0' && *cursor <= '9') {
+        const unsigned digit = (unsigned)(*cursor - '0');
+        if (value > (std::numeric_limits<unsigned>::max() - digit) / 10)
+            return false;
+        value = value * 10 + digit;
+        ++cursor;
+    }
+    return true;
+}
+
 int spiHostFromDevicePath(const std::string &devicePath)
 {
     std::string name = devicePath;
@@ -1660,15 +1678,16 @@ int spiHostFromDevicePath(const std::string &devicePath)
     if (name.rfind("spidev", 0) != 0)
         return -1;
 
+    // Digit-only fields: reject signs, whitespace and overflow rather than
+    // letting scanf's %u accept them.
+    const char *cursor = name.c_str() + 6;
     unsigned bus = 0;
     unsigned device = 0;
-    char trailing = 0;
-    // %c makes a third conversion on trailing junk, so anything but exactly two
-    // fields rejects "spidev1.0/foo", "spidev1.0 " and friends.
-    if (sscanf(name.c_str() + 6, "%u.%u%c", &bus, &device, &trailing) != 2)
+    if (!parseSpidevNumber(cursor, bus) || *cursor++ != '.' || !parseSpidevNumber(cursor, device) || *cursor != '\0')
         return -1;
-    // HardwareSPI takes int8_t and decodes bus from bits 0-3, device from 4-7.
-    if (bus > 15 || device > 7)
+    // HardwareSPI turns the bus into one decimal character and the device into a
+    // signed high nibble, so only 0-9 and 0-7 round-trip through it.
+    if (bus > 9 || device > 7)
         return -1;
     return (int)(bus | (device << 4));
 }

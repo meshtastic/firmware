@@ -8,9 +8,10 @@
 // frame to the radio's SPI0. The parser also replaces the old 14-character
 // string check, which silently skipped multi-digit buses/devices.
 //
-// The packed value is asserted against the decoder's own arithmetic (bus =
-// host & 0x0F, device = host >> 4), not against a duplicate table of magic
-// numbers, so the test fails if either side changes the contract.
+// The packed value from spiHostFromDevicePath() is checked against local
+// helpers that encode the expected nibble layout (bus = host & 0x0F,
+// device = (host >> 4) & 0x0F). These tests do not call HardwareSPI, so a
+// change to its decoder does not fail them.
 
 #include "Arduino.h"
 #include "TestUtil.h"
@@ -88,14 +89,20 @@ void test_path_without_dev_prefix_is_accepted()
     TEST_ASSERT_EQUAL_INT(2, decodedDevice(host));
 }
 
-void test_multi_digit_bus_is_accepted()
+void test_two_digit_bus_is_rejected()
 {
-    // The old length()==14 check silently skipped this and left the previous
-    // device's bus in place.
-    const int host = spiHostFromDevicePath("/dev/spidev10.0");
+    // HardwareSPI turns the bus nibble into a single character with + '0', so
+    // 10 would decode as ':' and name the wrong device.
+    TEST_ASSERT_EQUAL_INT(-1, spiHostFromDevicePath("/dev/spidev10.0"));
+    TEST_ASSERT_EQUAL_INT(-1, spiHostFromDevicePath("/dev/spidev15.0"));
+}
+
+void test_bus_nine_is_the_highest_accepted()
+{
+    const int host = spiHostFromDevicePath("/dev/spidev9.7");
     TEST_ASSERT_GREATER_OR_EQUAL(0, host);
-    TEST_ASSERT_EQUAL_INT(10, decodedBus(host));
-    TEST_ASSERT_EQUAL_INT(0, decodedDevice(host));
+    TEST_ASSERT_EQUAL_INT(9, decodedBus(host));
+    TEST_ASSERT_EQUAL_INT(7, decodedDevice(host));
 }
 
 void test_device_above_signed_nibble_is_rejected()
@@ -109,6 +116,15 @@ void test_device_above_signed_nibble_is_rejected()
 void test_bus_above_nibble_is_rejected()
 {
     TEST_ASSERT_EQUAL_INT(-1, spiHostFromDevicePath("/dev/spidev16.0"));
+}
+
+void test_signed_whitespace_and_overflow_fields_are_rejected()
+{
+    TEST_ASSERT_EQUAL_INT(-1, spiHostFromDevicePath("/dev/spidev+1.0"));
+    TEST_ASSERT_EQUAL_INT(-1, spiHostFromDevicePath("/dev/spidev 1.0"));
+    TEST_ASSERT_EQUAL_INT(-1, spiHostFromDevicePath("/dev/spidev1. 0"));
+    TEST_ASSERT_EQUAL_INT(-1, spiHostFromDevicePath("/dev/spidev4294967296.0"));
+    TEST_ASSERT_EQUAL_INT(-1, spiHostFromDevicePath("/dev/spidev1.4294967296"));
 }
 
 void test_non_spidev_paths_are_rejected()
@@ -129,9 +145,8 @@ void test_non_spidev_paths_are_rejected()
 
 void test_double_dev_prefix_is_rejected()
 {
-    // Guards the round-trip path: an earlier emitter wrote "/dev/" into the
-    // YAML value, which the loader then prefixed again. The helper must not
-    // silently accept the malformed result.
+    // Pins the helper's rejection of a doubled "/dev/" prefix. This does not
+    // cover the emitter and loader round trip.
     TEST_ASSERT_EQUAL_INT(-1, spiHostFromDevicePath("/dev//dev/spidev1.0"));
 }
 
@@ -145,9 +160,11 @@ void setup()
     RUN_TEST(test_spidev1_1_is_bus1_device1);
     RUN_TEST(test_spidev2_3_is_bus2_device3);
     RUN_TEST(test_path_without_dev_prefix_is_accepted);
-    RUN_TEST(test_multi_digit_bus_is_accepted);
+    RUN_TEST(test_two_digit_bus_is_rejected);
+    RUN_TEST(test_bus_nine_is_the_highest_accepted);
     RUN_TEST(test_device_above_signed_nibble_is_rejected);
     RUN_TEST(test_bus_above_nibble_is_rejected);
+    RUN_TEST(test_signed_whitespace_and_overflow_fields_are_rejected);
     RUN_TEST(test_non_spidev_paths_are_rejected);
     RUN_TEST(test_double_dev_prefix_is_rejected);
     exit(UNITY_END());
