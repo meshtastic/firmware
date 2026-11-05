@@ -14,15 +14,8 @@
 
 #ifdef ARCH_NRF52
 
-// nRF52 CC310 hardware crypto
-#include <Adafruit_nRFCrypto.h>
+#include "crypto/crypto_api.h"
 #include <nrf.h>
-
-extern "C" {
-#include "nrf_cc310/include/crys_hmac.h"
-#include "nrf_cc310/include/ssi_aes.h"
-#include "nrf_cc310/include/ssi_aes_defs.h"
-}
 
 namespace EncryptedStorage
 {
@@ -131,7 +124,6 @@ static constexpr size_t BACKOFF_SIZE = BACKOFF_BODY_SIZE + HMAC_SIZE; // 38 byte
 static constexpr uint8_t kBackoffMaxAttempts = 255;
 
 // Compute HMAC-SHA256(ephemeralKek, "backoff-auth" || body) into `out`.
-// Caller must already hold CC310 (nRFCrypto.begin/end).
 static bool computeBackoffHmac(const uint8_t body[BACKOFF_BODY_SIZE], uint8_t out[HMAC_SIZE])
 {
     if (!ephemeralKekDerived)
@@ -177,11 +169,8 @@ static void readBackoff(uint8_t &attempts, uint8_t &bootsSinceFail, uint32_t &la
             return;
         }
     }
-    // Verify HMAC under lock-free CC310 access (we hold no spiLock here).
     uint8_t expected[HMAC_SIZE];
-    nRFCrypto.begin();
     bool ok = computeBackoffHmac(buf.data(), expected);
-    nRFCrypto.end();
     if (!ok || !constTimeEq(expected, buf.data() + BACKOFF_BODY_SIZE, HMAC_SIZE)) {
         // Tampered or attacker-rewritten file. Fail closed.
         attempts = kBackoffMaxAttempts;
@@ -201,9 +190,7 @@ static void writeBackoff(uint8_t attempts, uint8_t bootsSinceFail, uint32_t last
     buf.data()[1] = bootsSinceFail;
     memcpy(buf.data() + 2, &lastFailEpoch, 4);
     uint8_t mac[HMAC_SIZE];
-    nRFCrypto.begin();
     bool ok = computeBackoffHmac(buf.data(), mac);
-    nRFCrypto.end();
     if (!ok) {
         LOG_ERROR("EncryptedStorage: backoff HMAC failed");
         return;
@@ -265,81 +252,28 @@ static void readFICR(uint8_t efuseData[16])
 }
 
 // ---------------------------------------------------------------------------
-// Internal helpers: CC310 crypto primitives
+// Internal helpers: crypto primitives
 // ---------------------------------------------------------------------------
 
-/// AES-128-CTR encrypt/decrypt (symmetric). Caller holds CC310.
+/// AES-128-CTR encrypt/decrypt (symmetric); the nonce is zero-padded into the
+/// counter block.
 static bool aesCtr128(const uint8_t *key, const uint8_t *nonce, size_t nonceLen, const uint8_t *input, size_t inputLen,
                       uint8_t *output)
 {
-    if (inputLen == 0)
-        return true;
-
-    SaSiAesUserContext_t ctx;
-    SaSiAesUserKeyData_t keyData;
-    SaSiAesIv_t iv;
-
-    memset(iv, 0, sizeof(iv));
-    size_t copyLen = (nonceLen < sizeof(iv)) ? nonceLen : sizeof(iv);
-    memcpy(iv, nonce, copyLen);
-
-    SaSiError_t err = SaSi_AesInit(&ctx, SASI_AES_ENCRYPT, SASI_AES_MODE_CTR, SASI_AES_PADDING_NONE);
-    if (err != 0) {
-        LOG_ERROR("EncryptedStorage: AES init failed: 0x%x", err);
+    uint8_t iv[16] = {0};
+    memcpy(iv, nonce, nonceLen < sizeof(iv) ? nonceLen : sizeof(iv));
+    if (!crypto_aes_ctr(key, AES_KEY_SIZE, iv, input, inputLen, output)) {
+        LOG_ERROR("EncryptedStorage: AES-CTR failed");
         return false;
     }
-
-    keyData.pKey = (uint8_t *)key;
-    keyData.keySize = AES_KEY_SIZE;
-    err = SaSi_AesSetKey(&ctx, SASI_AES_USER_KEY, &keyData, sizeof(keyData));
-    if (err != 0) {
-        LOG_ERROR("EncryptedStorage: AES setkey failed: 0x%x", err);
-        SaSi_AesFree(&ctx);
-        return false;
-    }
-
-    err = SaSi_AesSetIv(&ctx, iv);
-    if (err != 0) {
-        LOG_ERROR("EncryptedStorage: AES setiv failed: 0x%x", err);
-        SaSi_AesFree(&ctx);
-        return false;
-    }
-
-    size_t processed = 0;
-    size_t fullBlocks = (inputLen / AES_BLOCK_SIZE) * AES_BLOCK_SIZE;
-    if (fullBlocks > 0) {
-        err = SaSi_AesBlock(&ctx, (uint8_t *)input, fullBlocks, output);
-        if (err != 0) {
-            LOG_ERROR("EncryptedStorage: AES block failed: 0x%x", err);
-            SaSi_AesFree(&ctx);
-            return false;
-        }
-        processed = fullBlocks;
-    }
-
-    size_t remaining = inputLen - processed;
-    size_t finishOutSize = remaining;
-    err = SaSi_AesFinish(&ctx, remaining, (uint8_t *)input + processed, remaining, output + processed, &finishOutSize);
-    if (err != 0) {
-        LOG_ERROR("EncryptedStorage: AES finish failed: 0x%x", err);
-        SaSi_AesFree(&ctx);
-        return false;
-    }
-
-    SaSi_AesFree(&ctx);
     return true;
 }
 
-/// Compute HMAC-SHA256(key, data). Caller holds CC310.
+/// HMAC-SHA256(key, data).
 static bool computeHMAC(const uint8_t *key, size_t keyLen, const uint8_t *data, size_t dataLen, uint8_t *hmacOut)
 {
-    CRYS_HASH_Result_t hmacResult;
-    CRYSError_t err = CRYS_HMAC(CRYS_HASH_SHA256_mode, (uint8_t *)key, (uint16_t)keyLen, (uint8_t *)data, dataLen, hmacResult);
-    if (err != 0) {
-        LOG_ERROR("EncryptedStorage: CRYS_HMAC failed: 0x%x", err);
-        return false;
-    }
-    memcpy(hmacOut, hmacResult, HMAC_SIZE);
+    const crypto_part part = {data, dataLen};
+    crypto_hmac_sha256(key, keyLen, &part, 1, hmacOut);
     return true;
 }
 
@@ -358,8 +292,8 @@ static bool constTimeEq(const uint8_t *a, const uint8_t *b, size_t len)
 
 /**
  * Derive the passphrase-mixed KEK and store in module-level kek[].
- * SHA-256("device-efuse-data" || FICR_16 || passphrase || KEK_DOMAIN) → first 16 bytes.
- * Caller must hold CC310 (nRFCrypto.begin()).
+ * SHA-256("device-efuse-data" || FICR_16 || passphrase || KEK_DOMAIN) → first
+ * 16 bytes.
  */
 static bool deriveKEK(const uint8_t *passphrase, size_t passphraseLen)
 {
@@ -369,17 +303,9 @@ static bool deriveKEK(const uint8_t *passphrase, size_t passphraseLen)
     static const char *prefix = "device-efuse-data";
     uint8_t sha256Result[32];
 
-    nRFCrypto_Hash hash;
-    if (!hash.begin(CRYS_HASH_SHA256_mode)) {
-        LOG_ERROR("EncryptedStorage: SHA-256 init failed (KEK)");
-        meshtastic_security::secure_zero(efuseData, sizeof(efuseData));
-        return false;
-    }
-    hash.update((uint8_t *)prefix, strlen(prefix));
-    hash.update(efuseData, sizeof(efuseData));
-    hash.update((uint8_t *)passphrase, passphraseLen);
-    hash.update((uint8_t *)KEK_DOMAIN, strlen(KEK_DOMAIN));
-    hash.end(sha256Result);
+    const crypto_part parts[] = {
+        {prefix, strlen(prefix)}, {efuseData, sizeof(efuseData)}, {passphrase, passphraseLen}, {KEK_DOMAIN, strlen(KEK_DOMAIN)}};
+    crypto_sha256(parts, 4, sha256Result);
 
     memcpy(kek, sha256Result, AES_KEY_SIZE);
     meshtastic_security::secure_zero(sha256Result, sizeof(sha256Result));
@@ -392,7 +318,6 @@ static bool deriveKEK(const uint8_t *passphrase, size_t passphraseLen)
 /**
  * Derive the ephemeral KEK (FICR-only, separate domain) into ephemeralKek[].
  * Used only for wrapping/unwrapping the unlock token.
- * Caller must hold CC310.
  */
 static bool deriveEphemeralKEK()
 {
@@ -405,16 +330,9 @@ static bool deriveEphemeralKEK()
     static const char *prefix = "device-efuse-data";
     uint8_t sha256Result[32];
 
-    nRFCrypto_Hash hash;
-    if (!hash.begin(CRYS_HASH_SHA256_mode)) {
-        LOG_ERROR("EncryptedStorage: SHA-256 init failed (ephemeral KEK)");
-        meshtastic_security::secure_zero(efuseData, sizeof(efuseData));
-        return false;
-    }
-    hash.update((uint8_t *)prefix, strlen(prefix));
-    hash.update(efuseData, sizeof(efuseData));
-    hash.update((uint8_t *)EPHEMERAL_KEK_DOMAIN, strlen(EPHEMERAL_KEK_DOMAIN));
-    hash.end(sha256Result);
+    const crypto_part parts[] = {
+        {prefix, strlen(prefix)}, {efuseData, sizeof(efuseData)}, {EPHEMERAL_KEK_DOMAIN, strlen(EPHEMERAL_KEK_DOMAIN)}};
+    crypto_sha256(parts, 3, sha256Result);
 
     memcpy(ephemeralKek, sha256Result, AES_KEY_SIZE);
     meshtastic_security::secure_zero(sha256Result, sizeof(sha256Result));
@@ -479,9 +397,7 @@ static bool loadDEK()
     memcpy(hmacInput.get() + authLabelLen + NONCE_SIZE, encDek, AES_KEY_SIZE);
 
     meshtastic_security::ZeroizingBuffer<HMAC_SIZE> expectedHmac;
-    nRFCrypto.begin();
     bool hmacOk = computeHMAC(kek, AES_KEY_SIZE, hmacInput.get(), hmacInputLen, expectedHmac.data());
-    nRFCrypto.end();
     hmacInput.reset();
 
     if (!hmacOk) {
@@ -497,9 +413,7 @@ static bool loadDEK()
     // Decrypt DEK into a local candidate - only write to global dek[] on success so that
     // a wrong passphrase attempt does not destroy the live DEK in RAM.
     meshtastic_security::ZeroizingBuffer<AES_KEY_SIZE> dekCandidate;
-    nRFCrypto.begin();
     bool decOk = aesCtr128(kek, nonce, NONCE_SIZE, encDek, AES_KEY_SIZE, dekCandidate.data());
-    nRFCrypto.end();
 
     if (!decOk) {
         LOG_ERROR("EncryptedStorage: DEK decrypt failed");
@@ -524,10 +438,8 @@ static bool saveDEK()
 #ifdef FSCom
     // Generate random nonce
     uint8_t nonce[NONCE_SIZE];
-    nRFCrypto.begin();
-    if (!nRFCrypto.Random.generate(nonce, NONCE_SIZE)) {
+    if (!crypto_random(nonce, NONCE_SIZE)) {
         LOG_ERROR("EncryptedStorage: TRNG failed for DEK nonce");
-        nRFCrypto.end();
         return false;
     }
 
@@ -536,7 +448,6 @@ static bool saveDEK()
     bool encOk = aesCtr128(kek, nonce, NONCE_SIZE, dek, AES_KEY_SIZE, encDek);
     if (!encOk) {
         LOG_ERROR("EncryptedStorage: DEK encrypt failed");
-        nRFCrypto.end();
         meshtastic_security::secure_zero(encDek, sizeof(encDek));
         return false;
     }
@@ -547,7 +458,6 @@ static bool saveDEK()
     auto hmacInput = meshtastic_security::make_zeroizing_array(hmacInputLen);
     if (!hmacInput) {
         LOG_ERROR("EncryptedStorage: OOM for DEK HMAC");
-        nRFCrypto.end();
         return false;
     }
     memcpy(hmacInput.get(), DEK_AUTH_LABEL, authLabelLen);
@@ -556,7 +466,6 @@ static bool saveDEK()
 
     uint8_t hmac[HMAC_SIZE];
     bool hmacOk = computeHMAC(kek, AES_KEY_SIZE, hmacInput.get(), hmacInputLen, hmac);
-    nRFCrypto.end();
     hmacInput.reset();
 
     if (!hmacOk) {
@@ -618,8 +527,7 @@ static const char *MONO_AUTH_LABEL = "tokmono-auth";
 static constexpr size_t MONO_BODY_SIZE = 4;
 static constexpr size_t MONO_TOTAL_SIZE = MONO_BODY_SIZE + HMAC_SIZE; // 36 bytes
 
-// Compute HMAC-SHA256(ephemeralKek, MONO_AUTH_LABEL || body). Caller holds
-// CC310 (nRFCrypto.begin/end).
+// Compute HMAC-SHA256(ephemeralKek, MONO_AUTH_LABEL || body).
 static bool computeMonoHmac(const uint8_t body[MONO_BODY_SIZE], uint8_t out[HMAC_SIZE])
 {
     if (!ephemeralKekDerived)
@@ -656,9 +564,7 @@ static uint32_t readMonoCounter()
             return 0;
     }
     uint8_t expected[HMAC_SIZE];
-    nRFCrypto.begin();
     bool ok = computeMonoHmac(buf.data(), expected);
-    nRFCrypto.end();
     if (!ok || !constTimeEq(expected, buf.data() + MONO_BODY_SIZE, HMAC_SIZE))
         return 0;
     uint32_t counter;
@@ -680,9 +586,7 @@ static bool writeMonoCounter(uint32_t counter)
     meshtastic_security::ZeroizingBuffer<MONO_TOTAL_SIZE> buf;
     memcpy(buf.data(), &counter, 4);
     uint8_t mac[HMAC_SIZE];
-    nRFCrypto.begin();
     bool ok = computeMonoHmac(buf.data(), mac);
-    nRFCrypto.end();
     if (!ok) {
         LOG_ERROR("EncryptedStorage: mono-counter HMAC failed");
         return false;
@@ -716,10 +620,8 @@ static bool writeUnlockToken(uint8_t bootsRemaining, uint32_t validUntilEpoch, u
 {
 #ifdef FSCom
     uint8_t nonce[NONCE_SIZE];
-    nRFCrypto.begin();
-    if (!nRFCrypto.Random.generate(nonce, NONCE_SIZE)) {
+    if (!crypto_random(nonce, NONCE_SIZE)) {
         LOG_ERROR("EncryptedStorage: TRNG failed for token nonce");
-        nRFCrypto.end();
         return false;
     }
 
@@ -727,7 +629,6 @@ static bool writeUnlockToken(uint8_t bootsRemaining, uint32_t validUntilEpoch, u
     bool encOk = aesCtr128(ephemeralKek, nonce, NONCE_SIZE, dek, AES_KEY_SIZE, encDek);
     if (!encOk) {
         LOG_ERROR("EncryptedStorage: Token DEK encrypt failed");
-        nRFCrypto.end();
         meshtastic_security::secure_zero(encDek, sizeof(encDek));
         return false;
     }
@@ -759,7 +660,6 @@ static bool writeUnlockToken(uint8_t bootsRemaining, uint32_t validUntilEpoch, u
 
     uint8_t hmac[HMAC_SIZE];
     bool hmacOk = computeHMAC(ephemeralKek, AES_KEY_SIZE, body, TOKEN_BODY_SIZE, hmac);
-    nRFCrypto.end();
 
     meshtastic_security::secure_zero(encDek, sizeof(encDek));
 
@@ -854,9 +754,7 @@ static bool readAndConsumeToken()
 
     // Verify HMAC-SHA256(ephemeralKek, body). M10: ZeroizingBuffer wipes on scope exit.
     meshtastic_security::ZeroizingBuffer<HMAC_SIZE> computedHmac;
-    nRFCrypto.begin();
     bool hmacOk = computeHMAC(ephemeralKek, AES_KEY_SIZE, buf.data(), TOKEN_BODY_SIZE, computedHmac.data());
-    nRFCrypto.end();
 
     if (!hmacOk || !constTimeEq(computedHmac.data(), buf.data() + TOKEN_BODY_SIZE, HMAC_SIZE)) {
         LOG_ERROR("EncryptedStorage: Token HMAC failed - tampered or wrong device, deleting");
@@ -943,9 +841,7 @@ static bool readAndConsumeToken()
     }
 
     // Decrypt DEK from token
-    nRFCrypto.begin();
     bool decOk = aesCtr128(ephemeralKek, nonce, NONCE_SIZE, encDek, AES_KEY_SIZE, dek);
-    nRFCrypto.end();
 
     if (!decOk) {
         LOG_ERROR("EncryptedStorage: Token DEK decrypt failed");
@@ -986,9 +882,7 @@ static bool readAndConsumeToken()
 
 static bool generateDEK()
 {
-    nRFCrypto.begin();
-    bool ok = nRFCrypto.Random.generate(dek, AES_KEY_SIZE);
-    nRFCrypto.end();
+    bool ok = crypto_random(dek, AES_KEY_SIZE);
 
     if (!ok) {
         LOG_ERROR("EncryptedStorage: TRNG failed generating DEK");
@@ -1004,9 +898,7 @@ static bool generateDEK()
 
 void initLocked()
 {
-    nRFCrypto.begin();
     bool ephOk = deriveEphemeralKEK();
-    nRFCrypto.end();
 
     if (!ephOk) {
         LOG_ERROR("EncryptedStorage: Ephemeral KEK derivation failed");
@@ -1117,9 +1009,7 @@ bool provisionPassphrase(const uint8_t *passphrase, size_t passphraseLen, uint8_
     }
 
     if (!ephemeralKekDerived) {
-        nRFCrypto.begin();
         bool ok = deriveEphemeralKEK();
-        nRFCrypto.end();
         if (!ok)
             return false;
     }
@@ -1128,9 +1018,7 @@ bool provisionPassphrase(const uint8_t *passphrase, size_t passphraseLen, uint8_
         return false;
 
     // Derive KEK from passphrase
-    nRFCrypto.begin();
     bool kekOk = deriveKEK(passphrase, passphraseLen);
-    nRFCrypto.end();
     if (!kekOk) {
         meshtastic_security::secure_zero(dek, sizeof(dek));
         return false;
@@ -1242,17 +1130,13 @@ bool unlockWithPassphrase(const uint8_t *passphrase, size_t passphraseLen, uint8
     }
 
     if (!ephemeralKekDerived) {
-        nRFCrypto.begin();
         bool ok = deriveEphemeralKEK();
-        nRFCrypto.end();
         if (!ok)
             return false;
     }
 
     // Derive KEK
-    nRFCrypto.begin();
     bool kekOk = deriveKEK(passphrase, passphraseLen);
-    nRFCrypto.end();
     if (!kekOk)
         return false;
 
@@ -1505,9 +1389,7 @@ bool readAndDecrypt(const char *filename, uint8_t *outBuf, size_t outBufSize, si
     memcpy(hmacData.get() + 4 + NONCE_SIZE + 4, ciphertext, ciphertextLen);
 
     uint8_t computedHmac[HMAC_SIZE];
-    nRFCrypto.begin();
     bool hmacOk = computeHMAC(dekSnapshot, AES_KEY_SIZE, hmacData.get(), hmacDataLen, computedHmac);
-    nRFCrypto.end();
     hmacData.reset();
 
     if (!hmacOk || !constTimeEq(computedHmac, storedHmac, HMAC_SIZE)) {
@@ -1535,9 +1417,7 @@ bool readAndDecrypt(const char *filename, uint8_t *outBuf, size_t outBufSize, si
         return false;
     }
 
-    nRFCrypto.begin();
     bool decOk = aesCtr128(dekSnapshot, nonce, NONCE_SIZE, ciphertext, ciphertextLen, outBuf);
-    nRFCrypto.end();
     fileBuf.reset();
     meshtastic_security::secure_zero(dekSnapshot, sizeof(dekSnapshot));
 
@@ -1569,10 +1449,8 @@ bool encryptAndWrite(const char *filename, const uint8_t *plaintext, size_t plai
 
 #ifdef FSCom
     uint8_t nonce[NONCE_SIZE];
-    nRFCrypto.begin();
-    if (!nRFCrypto.Random.generate(nonce, NONCE_SIZE)) {
+    if (!crypto_random(nonce, NONCE_SIZE)) {
         LOG_ERROR("EncryptedStorage: TRNG failed for file nonce");
-        nRFCrypto.end();
         meshtastic_security::secure_zero(dekSnapshot, sizeof(dekSnapshot));
         return false;
     }
@@ -1581,7 +1459,6 @@ bool encryptAndWrite(const char *filename, const uint8_t *plaintext, size_t plai
     auto ciphertext = meshtastic_security::make_zeroizing_array(ciphertextLen > 0 ? ciphertextLen : 1);
     if (!ciphertext) {
         LOG_ERROR("EncryptedStorage: OOM for ciphertext");
-        nRFCrypto.end();
         meshtastic_security::secure_zero(dekSnapshot, sizeof(dekSnapshot));
         return false;
     }
@@ -1589,7 +1466,6 @@ bool encryptAndWrite(const char *filename, const uint8_t *plaintext, size_t plai
     bool encOk = aesCtr128(dekSnapshot, nonce, NONCE_SIZE, plaintext, plaintextLen, ciphertext.get());
     if (!encOk) {
         LOG_ERROR("EncryptedStorage: Encrypt failed for %s", filename);
-        nRFCrypto.end();
         meshtastic_security::secure_zero(dekSnapshot, sizeof(dekSnapshot));
         return false;
     }
@@ -1603,7 +1479,6 @@ bool encryptAndWrite(const char *filename, const uint8_t *plaintext, size_t plai
     auto hmacData = meshtastic_security::make_zeroizing_array(hmacDataLen);
     if (!hmacData) {
         LOG_ERROR("EncryptedStorage: OOM for HMAC data");
-        nRFCrypto.end();
         meshtastic_security::secure_zero(dekSnapshot, sizeof(dekSnapshot));
         return false;
     }
@@ -1615,7 +1490,6 @@ bool encryptAndWrite(const char *filename, const uint8_t *plaintext, size_t plai
 
     uint8_t hmac[HMAC_SIZE];
     bool hmacOk = computeHMAC(dekSnapshot, AES_KEY_SIZE, hmacData.get(), hmacDataLen, hmac);
-    nRFCrypto.end();
     hmacData.reset();
 
     if (!hmacOk) {

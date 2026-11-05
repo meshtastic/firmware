@@ -1,4 +1,3 @@
-#include "CryptoEngine.h"
 #include "HardwareRNG.h"
 #include "PortduinoGPIO.h"
 #include "SPIChip.h"
@@ -8,9 +7,9 @@
 
 #include "ConfigCheck.h"
 #include "PortduinoGlue.h"
-#include "SHA256.h"
 #include "UptimeClock.h"
 #include "api/ServerAPI.h"
+#include "crypto/crypto_api.h"
 #include "mesh/Throttle.h"
 #include "meshUtils.h"
 #include <ErriezCRC32.h>
@@ -638,12 +637,9 @@ void portduinoSetup()
                     hatUUID.read(uuid, 37);
                     hatUUID.close();
                     std::cout << "autoconf: UUID " << uuid << std::endl;
-                    SHA256 uuid_hash;
                     uint8_t uuid_hash_bytes[32] = {0};
-
-                    uuid_hash.reset();
-                    uuid_hash.update(uuid, 37);
-                    uuid_hash.finalize(uuid_hash_bytes, 32);
+                    const crypto_part uuid_part = {uuid, 37};
+                    crypto_sha256(&uuid_part, 1, uuid_hash_bytes);
 
                     for (int j = 0; j < 16; j++) {
                         portduino_config.device_id[j] = uuid_hash_bytes[j];
@@ -836,7 +832,8 @@ void portduinoSetup()
             uint8_t hash[104] = {0};
             memcpy(hash, serial, 8);
             memcpy(hash + 8, product_string, strlen(product_string));
-            crypto->hash(hash, 8 + strlen(product_string));
+            const crypto_part hash_part = {hash, 8 + strlen(product_string)};
+            crypto_sha256(&hash_part, 1, hash);
             dmac[0] = (hash[0] << 4) | 2;
             dmac[1] = hash[1];
             dmac[2] = hash[2];
