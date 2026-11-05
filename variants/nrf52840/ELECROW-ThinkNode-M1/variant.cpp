@@ -42,12 +42,14 @@ void initVariant()
 // Here rather than initVariant(), whose delay() would run before the scheduler. No LOG_* yet.
 void earlyInitVariant()
 {
-    pinMode(PIN_GPS_VERSION, INPUT);
+    // L76K boards leave P1.02 floating, and it floats high, so read it against the internal pull-down.
+    pinMode(PIN_GPS_VERSION, INPUT_PULLDOWN);
     delay(2);
     uint8_t high = 0;
     for (uint8_t i = 0; i < 10; i++)
         high += digitalRead(PIN_GPS_VERSION) == HIGH;
     m1HasAg3352 = high >= 3;
+    pinMode(PIN_GPS_VERSION, INPUT); // release the pull-down; GPS.cpp drives the pin later on L76K boards
 
 #if !MESHTASTIC_EXCLUDE_GPS
     if (m1HasAg3352) {

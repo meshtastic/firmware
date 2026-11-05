@@ -144,7 +144,7 @@ External serial flash WP25R1635FZUIL0
 #define GPS_BAUDRATE 9600
 
 // Older boards have an L76K, newer ones an AG3352. variant.cpp reads the strap on P1.02 at boot.
-#define PIN_GPS_VERSION (32 + 2) // strap: HIGH = AG3352, LOW = L76K
+#define PIN_GPS_VERSION (32 + 2) // strap: HIGH = AG3352, LOW (floating, read with pull-down) = L76K
 extern int m1HasAg3352;
 
 // L76K: standby, low means allow sleep, high means force wake. AG3352: VGPS_EN, not a standby, so GPS.cpp leaves it alone.
