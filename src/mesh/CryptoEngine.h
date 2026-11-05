@@ -61,6 +61,13 @@ static constexpr size_t XEDDSA_SIGN_BUF_LEN = XEDDSA_SIGNED_HEADER_LEN + meshtas
 #define XEDDSA_SIGNED_FLAG_WANT_RESPONSE 0x01
 #define XEDDSA_SIGNED_FLAG_HAS_BITFIELD 0x02
 
+// Only tests stub key generation, so production builds have no vtable.
+#ifdef PIO_UNIT_TESTING
+#define CRYPTO_TEST_VIRTUAL virtual
+#else
+#define CRYPTO_TEST_VIRTUAL
+#endif
+
 class CryptoEngine
 {
   public:
@@ -70,8 +77,8 @@ class CryptoEngine
 
 #if !(MESHTASTIC_EXCLUDE_PKI)
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN)
-    void generateKeyPair(uint8_t *pubKey, uint8_t *privKey);
-    bool regeneratePublicKey(uint8_t *pubKey, uint8_t *privKey);
+    CRYPTO_TEST_VIRTUAL void generateKeyPair(uint8_t *pubKey, uint8_t *privKey);
+    CRYPTO_TEST_VIRTUAL bool regeneratePublicKey(uint8_t *pubKey, uint8_t *privKey);
     bool ensurePkiKeys(meshtastic_Config_SecurityConfig &security, meshtastic_User &user);
 #endif
 #if !(MESHTASTIC_EXCLUDE_XEDDSA)
