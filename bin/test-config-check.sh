@@ -481,6 +481,26 @@ assert "unparseable config still reaches the report" 1 malformed-indent.yaml che
 	"Result: 1 error, 0 warnings"
 
 echo
+echo "SPI device paths:"
+assert "valid display and touchscreen paths are clean" 0 spidev-valid.yaml check \
+	"Display spidev    : /dev/spidev1.0" \
+	"Touchscreen spidev: /dev/spidev0.1" \
+	"Result: 0 errors, 0 warnings"
+assert "display path on a bus the decoder cannot name is refused" 1 spidev-invalid-display.yaml check \
+	"Display.spidev 'spidev10.0' is not a usable path" \
+	"Result: 1 error, 0 warnings"
+assert "touchscreen device above 7 is refused" 1 spidev-invalid-touch.yaml check \
+	"Touchscreen.spidev 'spidev1.8' is not a usable path" \
+	"Result: 1 error, 0 warnings"
+assert "a Lora path outside the packing range is informational only" 0 spidev-lora-info.yaml check \
+	"Lora.spidev 'spidev10.0' is not a usable path" \
+	"Result: 0 errors, 0 warnings"
+assert "emitted display and touchscreen paths keep no /dev prefix" 0 spidev-valid.yaml yaml \
+	"spidev: spidev1.0" \
+	"spidev: spidev0.1" \
+	"!spidev: /dev/"
+
+echo
 echo "across a config directory:"
 # Three files each opening a 'Lora:' section. Every key not repeated in the last
 # one loaded is silently reset to its default - here config.yaml's TCXO voltage.
