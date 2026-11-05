@@ -8,6 +8,11 @@
 // frame to the radio's SPI0. The parser also replaces the old 14-character
 // string check, which silently skipped multi-digit buses/devices.
 //
+// It also pins the framework's per-host registry contract: host 0 is the global
+// SPI object, other hosts get a stable cached instance, and a negative host is
+// refused. That registry is what LovyanGFX looks up when
+// LGFX_PORTDUINO_PER_HOST_SPI is defined.
+//
 // The packed value is asserted against the decoder's own arithmetic (bus =
 // host & 0x0F, device = host >> 4), not against a duplicate table of magic
 // numbers, so the test fails if either side changes the contract.
@@ -135,6 +140,25 @@ void test_double_dev_prefix_is_rejected()
     TEST_ASSERT_EQUAL_INT(-1, spiHostFromDevicePath("/dev//dev/spidev1.0"));
 }
 
+void test_registry_host_zero_is_the_global_spi()
+{
+    TEST_ASSERT_EQUAL_PTR(&SPI, HardwareSPI::getInstance(0));
+}
+
+void test_registry_is_stable_per_host()
+{
+    HardwareSPI *first = HardwareSPI::getInstance(5);
+    HardwareSPI *second = HardwareSPI::getInstance(5);
+    TEST_ASSERT_NOT_NULL(first);
+    TEST_ASSERT_EQUAL_PTR(first, second);
+    TEST_ASSERT_NOT_EQUAL(&SPI, first);
+}
+
+void test_registry_rejects_negative_host()
+{
+    TEST_ASSERT_NULL(HardwareSPI::getInstance(-1));
+}
+
 void setup()
 {
     initializeTestEnvironment();
@@ -150,6 +174,9 @@ void setup()
     RUN_TEST(test_bus_above_nibble_is_rejected);
     RUN_TEST(test_non_spidev_paths_are_rejected);
     RUN_TEST(test_double_dev_prefix_is_rejected);
+    RUN_TEST(test_registry_host_zero_is_the_global_spi);
+    RUN_TEST(test_registry_is_stable_per_host);
+    RUN_TEST(test_registry_rejects_negative_host);
     exit(UNITY_END());
 }
 

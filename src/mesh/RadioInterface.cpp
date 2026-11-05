@@ -429,7 +429,9 @@ std::unique_ptr<RadioInterface> initLoRa()
             delete RadioLibHAL;
             RadioLibHAL = nullptr;
         }
-        RadioLibHAL = new LockingArduinoHal(SPI, loraSpiSettings);
+        HardwareSPI *loraSpi = HardwareSPI::getInstance((int8_t)portduino_config.lora_spi_dev_int);
+        loraSpi->begin(portduino_config.lora_spi_dev.c_str());
+        RadioLibHAL = new LockingArduinoHal(*loraSpi, loraSpiSettings);
     }
     rIf =
         loraModuleInterface((LockingArduinoHal *)RadioLibHAL, portduino_config.lora_cs_pin.pin, portduino_config.lora_irq_pin.pin,

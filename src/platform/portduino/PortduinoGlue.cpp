@@ -961,10 +961,7 @@ void portduinoSetup()
         }
     }
 
-    // Only initialize the radio pins when dealing with real, kernel controlled SPI hardware
-    if (portduino_config.lora_spi_dev != "" && portduino_config.lora_spi_dev != "ch341") {
-        SPI.begin(portduino_config.lora_spi_dev.c_str());
-    }
+    // The radio opens its own per-host SPI instance in initLoRa(); leave the global SPI for the display.
 
     if (portduino_config.traceFilename != "") {
         try {
