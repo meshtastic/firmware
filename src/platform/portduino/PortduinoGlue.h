@@ -59,9 +59,13 @@ inline const std::unordered_map<std::string, std::string> configProducts = {
 enum screen_modules { no_screen, x11, fb, st7789, st7735, st7735s, st7796, ili9341, ili9342, ili9486, ili9488, hx8357d, hub75 };
 
 // ILI9486 needs 16-bit data words over SPI; ILI9488 sends 18-bit RGB666 and must
-// not take this path.
-inline bool displayPanelUses16BitData(screen_modules panel)
+// not take this path. Display.DataBits overrides the panel default (16 or 18).
+inline bool displayPanelUses16BitData(screen_modules panel, int dataBits)
 {
+    if (dataBits == 16)
+        return true;
+    if (dataBits == 18)
+        return false;
     return panel == ili9486;
 }
 enum touchscreen_modules { no_touchscreen, xpt2046, stmpe610, gt911, ft5x06 };
@@ -221,6 +225,8 @@ extern struct portduino_config_struct {
     std::string display_spi_dev = "";
     int display_spi_dev_int = 0;
     int displayBusFrequency = 40000000;
+    // 0 = panel default; 16 or 18 overrides the SPI data width.
+    int displayDataBits = 0;
     screen_modules displayPanel = no_screen;
     int displayWidth = 0;
     int displayHeight = 0;
@@ -510,6 +516,8 @@ extern struct portduino_config_struct {
             }
             out << YAML::Key << "spidev" << YAML::Value << display_spi_dev;
             out << YAML::Key << "BusFrequency" << YAML::Value << displayBusFrequency;
+            if (displayDataBits)
+                out << YAML::Key << "DataBits" << YAML::Value << displayDataBits;
             if (displayWidth)
                 out << YAML::Key << "Width" << YAML::Value << displayWidth;
             if (displayHeight)

@@ -361,21 +361,19 @@ void tftSetup(void)
 #endif
         {
             displayConfig.device(DisplayDriverConfig::device_t::CUSTOM_TFT)
-                .panel(
-                    DisplayDriverConfig::panel_config_t{.type = panels[portduino_config.displayPanel],
-                                                        .panel_width = (uint16_t)portduino_config.displayWidth,
-                                                        .panel_height = (uint16_t)portduino_config.displayHeight,
-                                                        .rotation = (bool)portduino_config.displayRotate,
-                                                        .pin_cs = (int16_t)portduino_config.displayCS.pin,
-                                                        .pin_rst = (int16_t)portduino_config.displayReset.pin,
-                                                        .offset_x = (uint16_t)portduino_config.displayOffsetX,
-                                                        .offset_y = (uint16_t)portduino_config.displayOffsetY,
-                                                        .offset_rotation = (uint8_t)portduino_config.displayOffsetRotate,
-                                                        // LGFX turns this into INVON after panel init, which
-                                                        // covers the ILI9488's otherwise short init list.
-                                                        .invert = portduino_config.displayInvert,
-                                                        .rgb_order = (bool)portduino_config.displayRGBOrder,
-                                                        .dlen_16bit = displayPanelUses16BitData(portduino_config.displayPanel)})
+                .panel(DisplayDriverConfig::panel_config_t{
+                    .type = panels[portduino_config.displayPanel],
+                    .panel_width = (uint16_t)portduino_config.displayWidth,
+                    .panel_height = (uint16_t)portduino_config.displayHeight,
+                    .rotation = (bool)portduino_config.displayRotate,
+                    .pin_cs = (int16_t)portduino_config.displayCS.pin,
+                    .pin_rst = (int16_t)portduino_config.displayReset.pin,
+                    .offset_x = (uint16_t)portduino_config.displayOffsetX,
+                    .offset_y = (uint16_t)portduino_config.displayOffsetY,
+                    .offset_rotation = (uint8_t)portduino_config.displayOffsetRotate,
+                    .invert = portduino_config.displayInvert ? true : false,
+                    .rgb_order = (bool)portduino_config.displayRGBOrder,
+                    .dlen_16bit = displayPanelUses16BitData(portduino_config.displayPanel, portduino_config.displayDataBits)})
                 .bus(DisplayDriverConfig::bus_config_t{.freq_write = (uint32_t)portduino_config.displayBusFrequency,
                                                        .freq_read = 16000000,
                                                        .spi{.pin_dc = (int8_t)portduino_config.displayDC.pin,
