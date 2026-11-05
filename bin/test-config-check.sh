@@ -496,6 +496,12 @@ assert "touchscreen device above 7 is refused" 1 spidev-invalid-touch.yaml check
 assert "a Lora path outside the packing range is informational only" 0 spidev-lora-info.yaml check \
 	"Lora.spidev 'spidev10.0' is not a usable path" \
 	"Result: 0 errors, 0 warnings"
+assert "an empty Lora path on a hardware radio is refused" 1 spidev-lora-empty.yaml check \
+	"Lora.spidev is empty, but a hardware radio needs a SPI device" \
+	"Result: 1 error, 0 warnings"
+assert "a display without spidev emits no empty key" 0 spidev-display-default.yaml yaml \
+	"Panel: ILI9488" \
+	'!spidev: ""'
 assert "emitted display and touchscreen paths keep no /dev prefix" 0 spidev-valid.yaml yaml \
 	"spidev: spidev1.0" \
 	"spidev: spidev0.1" \

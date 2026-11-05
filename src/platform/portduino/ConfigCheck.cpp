@@ -942,7 +942,12 @@ void checkSpidevPath(const std::string &file, const std::string &section, const 
 
     if (text.empty() || spiHostFromDevicePath(text) < 0) {
         const std::string what = text.empty() ? std::string("is empty") : "'" + text + "' is not a usable path";
-        if (isLora) {
+        const bool hardwareRadio = portduino_config.lora_module != use_simradio && portduino_config.lora_module != use_autoconf;
+        if (isLora && text.empty() && hardwareRadio) {
+            findings.push_back({kError, file, lineOf(value),
+                                "Lora.spidev is empty, but a hardware radio needs a SPI device. Expected "
+                                "/dev/spidev<bus>.<device> with bus 0-9 and device 0-7"});
+        } else if (isLora) {
             findings.push_back({kInfo, file, lineOf(value),
                                 "Lora.spidev " + what +
                                     ". The radio still opens that name directly, but display/touchscreen host packing "
@@ -1395,7 +1400,7 @@ void printSummary()
     std::cout << "  SPI speed         : " << portduino_config.spiSpeed << "\n";
     if (portduino_config.displayPanel != no_screen)
         std::cout << "  Display spidev    : " << describeSpiHost(portduino_config.display_spi_dev_int) << "\n";
-    if (portduino_config.touchscreenModule != no_touchscreen)
+    if (portduino_config.touchscreenModule != no_touchscreen && portduino_config.touchscreenI2CAddr == -1)
         std::cout << "  Touchscreen spidev: " << describeSpiHost(portduino_config.touchscreen_spi_dev_int) << "\n";
     if (portduino_config.dio3_tcxo_voltage)
         std::cout << "  DIO3 TCXO voltage : " << portduino_config.dio3_tcxo_voltage << " mV\n";

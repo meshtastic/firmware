@@ -1305,15 +1305,17 @@ bool loadConfig(const char *configPath)
             portduino_config.displayBusFrequency = yamlConfig["Display"]["BusFrequency"].as<int>(40000000);
             if (yamlConfig["Display"]["spidev"]) {
                 portduino_config.display_spi_dev = yamlConfig["Display"]["spidev"].as<std::string>("spidev0.1");
-                if (portduino_config.display_spi_dev.rfind("/dev/", 0) != 0)
-                    portduino_config.display_spi_dev = "/dev/" + portduino_config.display_spi_dev;
-                const int host = spiHostFromDevicePath(portduino_config.display_spi_dev);
-                if (host >= 0) {
-                    portduino_config.display_spi_dev_int = host;
-                    if (portduino_config.touchscreen_spi_dev.empty())
-                        portduino_config.touchscreen_spi_dev_int = host;
-                } else {
-                    LOG_WARN("Display.spidev \"%s\" is not a usable spidev path", portduino_config.display_spi_dev.c_str());
+                if (!portduino_config.display_spi_dev.empty()) {
+                    if (portduino_config.display_spi_dev.rfind("/dev/", 0) != 0)
+                        portduino_config.display_spi_dev = "/dev/" + portduino_config.display_spi_dev;
+                    const int host = spiHostFromDevicePath(portduino_config.display_spi_dev);
+                    if (host >= 0) {
+                        portduino_config.display_spi_dev_int = host;
+                        if (portduino_config.touchscreen_spi_dev.empty())
+                            portduino_config.touchscreen_spi_dev_int = host;
+                    } else {
+                        LOG_WARN("Display.spidev \"%s\" is not a usable spidev path", portduino_config.display_spi_dev.c_str());
+                    }
                 }
             }
 #if !defined(HAS_HUB75_NATIVE)

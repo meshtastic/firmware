@@ -1,0 +1,6 @@
+# CLEAN. A display with no explicit spidev must not emit an empty key when the
+# config is written back out.
+Lora:
+  Module: sim
+Display:
+  Panel: ILI9488

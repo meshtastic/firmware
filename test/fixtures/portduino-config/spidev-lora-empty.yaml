@@ -1,0 +1,8 @@
+# FAULT. An explicit empty path leaves a hardware radio with no SPI device.
+Lora:
+  Module: sx1262
+  spidev: ""
+  CS: 21
+  IRQ: 16
+  Busy: 20
+  Reset: 18

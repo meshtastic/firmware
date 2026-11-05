@@ -504,10 +504,12 @@ extern struct portduino_config_struct {
                     out << YAML::EndMap;
                 }
             }
-            std::string displaySpiDev = display_spi_dev;
-            if (displaySpiDev.rfind("/dev/", 0) == 0)
-                displaySpiDev.erase(0, 5);
-            out << YAML::Key << "spidev" << YAML::Value << displaySpiDev;
+            if (!display_spi_dev.empty()) {
+                std::string displaySpiDev = display_spi_dev;
+                if (displaySpiDev.rfind("/dev/", 0) == 0)
+                    displaySpiDev.erase(0, 5);
+                out << YAML::Key << "spidev" << YAML::Value << displaySpiDev;
+            }
             out << YAML::Key << "BusFrequency" << YAML::Value << displayBusFrequency;
             if (displayWidth)
                 out << YAML::Key << "Width" << YAML::Value << displayWidth;
