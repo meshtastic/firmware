@@ -1,0 +1,9 @@
+# FAULT: with Panel X11 the pointer path is never handed to the display driver.
+Lora:
+  Module: sim
+Display:
+  Panel: X11
+  Width: 320
+  Height: 240
+Input:
+  PointerDevice: /dev/null

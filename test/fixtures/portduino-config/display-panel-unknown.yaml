@@ -1,0 +1,6 @@
+# FAULT: a Panel name meshtasticd does not know. loadConfig() leaves the display off with no
+# message; --check lists the names it does accept.
+Lora:
+  Module: sim
+Display:
+  Panel: ST7798
