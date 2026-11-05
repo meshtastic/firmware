@@ -882,7 +882,10 @@ typedef enum _meshtastic_ClientNotification_NotificationType {
     /* OTA accepted: rebooting into the OTA loader for the requested mode. */
     meshtastic_ClientNotification_NotificationType_OTA_REBOOTING = 47,
     /* OTA refused: switching to the OTA partition failed. */
-    meshtastic_ClientNotification_NotificationType_OTA_PARTITION_SWITCH_FAILED = 48
+    meshtastic_ClientNotification_NotificationType_OTA_PARTITION_SWITCH_FAILED = 48,
+    /* A NodeInfo update without a valid signature tried to change a known node's name or role,
+ and packet_signature_policy (Balanced or Strict) refused it. The stored identity is kept. */
+    meshtastic_ClientNotification_NotificationType_UNSIGNED_IDENTITY_UPDATE_IGNORED = 49
 } meshtastic_ClientNotification_NotificationType;
 
 /* Physical panel technology, as a hint for client rendering and refresh
@@ -2101,8 +2104,8 @@ extern "C" {
 #define _meshtastic_LockdownStatus_State_ARRAYSIZE ((meshtastic_LockdownStatus_State)(meshtastic_LockdownStatus_State_DISABLED+1))
 
 #define _meshtastic_ClientNotification_NotificationType_MIN meshtastic_ClientNotification_NotificationType_UNSET
-#define _meshtastic_ClientNotification_NotificationType_MAX meshtastic_ClientNotification_NotificationType_OTA_PARTITION_SWITCH_FAILED
-#define _meshtastic_ClientNotification_NotificationType_ARRAYSIZE ((meshtastic_ClientNotification_NotificationType)(meshtastic_ClientNotification_NotificationType_OTA_PARTITION_SWITCH_FAILED+1))
+#define _meshtastic_ClientNotification_NotificationType_MAX meshtastic_ClientNotification_NotificationType_UNSIGNED_IDENTITY_UPDATE_IGNORED
+#define _meshtastic_ClientNotification_NotificationType_ARRAYSIZE ((meshtastic_ClientNotification_NotificationType)(meshtastic_ClientNotification_NotificationType_UNSIGNED_IDENTITY_UPDATE_IGNORED+1))
 
 #define _meshtastic_DisplayInfo_PanelClass_MIN meshtastic_DisplayInfo_PanelClass_PANEL_CLASS_UNSPECIFIED
 #define _meshtastic_DisplayInfo_PanelClass_MAX meshtastic_DisplayInfo_PanelClass_HUB75
