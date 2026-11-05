@@ -500,7 +500,7 @@ assert "an empty Lora path on a hardware radio is refused" 1 spidev-lora-empty.y
 	"Lora.spidev is empty, but a hardware radio needs a SPI device" \
 	"Result: 1 error, 0 warnings"
 assert "a display without spidev emits no empty key" 0 spidev-display-default.yaml yaml \
-	"Panel: ILI9488" \
+	"Module: ILI9488" \
 	'!spidev: ""'
 assert "emitted display and touchscreen paths keep no /dev prefix" 0 spidev-valid.yaml yaml \
 	"spidev: spidev1.0" \
