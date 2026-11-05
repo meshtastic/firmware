@@ -15,7 +15,12 @@ meshtastic_MyNodeInfo &myNodeInfo = myNodeInfoStorage;
 
 // RadioLibInterface is not linked; HardwareRNG only needs the instance pointer to be null.
 void *radioLibInstanceStub asm("_ZN17RadioLibInterface8instanceE") = nullptr;
-bool radioLibRandomBytesStub(void *, uint8_t *, size_t) asm("_ZN17RadioLibInterface11randomBytesEPhj");
+#if __SIZEOF_SIZE_T__ == 8
+#define RADIOLIB_RANDOM_BYTES_SYMBOL "_ZN17RadioLibInterface11randomBytesEPhm"
+#else
+#define RADIOLIB_RANDOM_BYTES_SYMBOL "_ZN17RadioLibInterface11randomBytesEPhj"
+#endif
+bool radioLibRandomBytesStub(void *, uint8_t *, size_t) asm(RADIOLIB_RANDOM_BYTES_SYMBOL);
 bool radioLibRandomBytesStub(void *, uint8_t *, size_t)
 {
     return false;
