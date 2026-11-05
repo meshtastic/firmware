@@ -57,6 +57,13 @@ inline const std::unordered_map<std::string, std::string> configProducts = {
     {"RAK6421-13300-S2", "lora-RAK6421-13300-slot2.yaml"}};
 
 enum screen_modules { no_screen, x11, fb, st7789, st7735, st7735s, st7796, ili9341, ili9342, ili9486, ili9488, hx8357d, hub75 };
+
+// ILI9486 needs 16-bit data words over SPI; ILI9488 sends 18-bit RGB666 and must
+// not take this path.
+inline bool displayPanelUses16BitData(screen_modules panel)
+{
+    return panel == ili9486;
+}
 enum touchscreen_modules { no_touchscreen, xpt2046, stmpe610, gt911, ft5x06 };
 enum portduino_log_level { level_error, level_warn, level_info, level_debug, level_trace };
 enum lora_module_enum {
