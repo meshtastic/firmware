@@ -19,8 +19,10 @@
     --notice-bg: #fff9e8;
     --notice-rule: #e8b931;
   }
+  /* One dark palette, reached two ways: the system preference unless light was
+     picked explicitly, or an explicit dark pick. Keep the two selectors in step. */
   @media (prefers-color-scheme: dark) {
-    :root {
+    :root:not([data-theme="light"]) {
       --bg: #1b1c26;
       --panel: #23242f;
       --fg: #e7e8ee;
@@ -31,6 +33,17 @@
       --notice-bg: #2b2618;
       --notice-rule: #b9902a;
     }
+  }
+  :root[data-theme="dark"] {
+    --bg: #1b1c26;
+    --panel: #23242f;
+    --fg: #e7e8ee;
+    --muted: #9a9cb0;
+    --rule: #32343f;
+    --accent: #67ea94;
+    --logo: #ffffff;
+    --notice-bg: #2b2618;
+    --notice-rule: #b9902a;
   }
   * { box-sizing: border-box; }
   body {
@@ -44,6 +57,30 @@
   a { color: var(--accent); }
   header { display: flex; align-items: center; gap: 0.85rem; }
   header svg { width: 46px; height: auto; fill: var(--logo); flex: none; }
+  #theme-toggle {
+    margin-left: auto;
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.35rem 0.7rem;
+    font: inherit;
+    font-size: 0.82rem;
+    color: var(--muted);
+    background: var(--panel);
+    border: 1px solid var(--rule);
+    border-radius: 999px;
+    cursor: pointer;
+  }
+  #theme-toggle:hover { color: var(--fg); border-color: var(--muted); }
+  #theme-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  #theme-toggle svg { width: 15px; height: 15px; fill: currentColor; }
+  /* Show the icon for the active mode only. */
+  #theme-toggle [data-icon] { display: none; }
+  :root:not([data-theme]) #theme-toggle [data-icon="auto"],
+  :root[data-theme="light"] #theme-toggle [data-icon="light"],
+  :root[data-theme="dark"] #theme-toggle [data-icon="dark"] { display: inline-flex; }
+  @media (max-width: 30rem) { #theme-toggle .label { display: none; } }
   h1 {
     margin: 0;
     font-size: 1.6rem;
@@ -117,6 +154,21 @@
   }
   footer a { margin-right: 1.25rem; white-space: nowrap; }
 </style>
+<script>
+  // Matches the Docusaurus bootstrap on the rest of the site: localStorage "theme"
+  // holds "light" or "dark", and its absence means follow the system. Runs before
+  // paint so the page never flashes the wrong palette.
+  (function () {
+    try {
+      var t = localStorage.getItem("theme");
+      if (t === "light" || t === "dark") {
+        document.documentElement.setAttribute("data-theme", t);
+      }
+    } catch (e) {
+      /* storage blocked: fall back to the media query alone */
+    }
+  })();
+</script>
 </head>
 <body>
 <main>
@@ -128,6 +180,12 @@
       </g>
     </svg>
     <h1>Meshtastic<span class="sub">Nightly Firmware</span></h1>
+    <button id="theme-toggle" type="button" aria-live="polite">
+      <span data-icon="auto" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1Zm0 1.5v11a5.5 5.5 0 0 1 0-11Z"/></svg></span>
+      <span data-icon="light" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M8 4.5A3.5 3.5 0 1 0 8 11.5 3.5 3.5 0 0 0 8 4.5ZM8 0l1 2.2H7L8 0Zm0 16-1-2.2h2L8 16ZM0 8l2.2-1v2L0 8Zm16 0-2.2 1V7L16 8ZM2.3 2.3l2.3.9-.8.8-1.5-1.7Zm11.4 11.4-2.3-.9.8-.8 1.5 1.7ZM13.7 2.3l-1.5 1.7-.8-.8 2.3-.9ZM2.3 13.7l1.5-1.7.8.8-2.3.9Z"/></svg></span>
+      <span data-icon="dark" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M6.2 1.4a6.6 6.6 0 1 0 8.4 8.4A7 7 0 0 1 6.2 1.4Z"/></svg></span>
+      <span class="label"></span>
+    </button>
   </header>
 
   <p class="lede">
