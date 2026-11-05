@@ -36,6 +36,17 @@
 #define AGC_FORCED_RESET_MS (24 * 60 * 60 * 1000UL)
 #endif
 
+// 1 = move each radio command as one buffered SPI transfer on nRF52 and ESP32, as Portduino already does, instead of
+// RadioLib's one SPI.transfer() call per byte. Off by default pending wider soak.
+#ifndef RADIO_SPI_BULK
+#define RADIO_SPI_BULK 0
+#endif
+#if ARCH_PORTDUINO || (RADIO_SPI_BULK && (defined(ARDUINO_NRF52_ADAFRUIT) || defined(ARDUINO_ARCH_ESP32)))
+#define RADIO_SPI_BULK_ACTIVE 1
+#else
+#define RADIO_SPI_BULK_ACTIVE 0
+#endif
+
 /**
  * We need to override the RadioLib ArduinoHal class to add mutex protection for SPI bus access
  */
@@ -46,7 +57,7 @@ class LockingArduinoHal : public ArduinoHal
 
     void spiBeginTransaction() override;
     void spiEndTransaction() override;
-#if ARCH_PORTDUINO
+#if RADIO_SPI_BULK_ACTIVE
     void spiTransfer(uint8_t *out, size_t len, uint8_t *in) override;
 
 #endif
