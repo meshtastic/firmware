@@ -616,6 +616,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define MESHTASTIC_EXCLUDE_STOREFORWARD 1
 #endif
 
+// Modbus needs a UART of the serial module's own; on nRF52/RP2040 with SERIAL_PRINT_PORT 0 it only has the console
+#if defined(SERIAL_PRINT_PORT) && SERIAL_PRINT_PORT == 0 && !defined(ARCH_ESP32) && !defined(ARCH_STM32WL) &&                    \
+    !defined(MESHTASTIC_EXCLUDE_MODBUS)
+#define MESHTASTIC_EXCLUDE_MODBUS 1
+#endif
+
 // Turn off wifi even if HW supports wifi (webserver relies on wifi and is also disabled)
 #ifdef MESHTASTIC_EXCLUDE_WIFI
 #define MESHTASTIC_EXCLUDE_WEBSERVER 1
