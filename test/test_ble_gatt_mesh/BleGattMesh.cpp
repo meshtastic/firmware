@@ -848,7 +848,7 @@ void tearDown(void) {}
 void setup()
 {
     initializeTestEnvironment();
-    // deliverToRouter consults nodeDB to drop a peer claiming our own node number.
+    // deliverToRouter's ingress rules read our own node number from nodeDB.
     if (!nodeDB)
         nodeDB = new NodeDB();
     UNITY_BEGIN();

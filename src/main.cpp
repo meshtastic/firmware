@@ -45,6 +45,11 @@
 #include "detect/einkScan.h"
 #include "graphics/Screen.h"
 #include "main.h"
+#if HAS_BLE_MESH && defined(ARCH_ESP32)
+#include "platform/esp32/ESP32BLEMesh.h"
+#elif HAS_BLE_MESH && defined(ARCH_NRF52)
+#include "platform/nrf52/NRF52BLEMesh.h"
+#endif
 #if HAS_BLE_GATT_MESH && defined(ARCH_NRF52)
 #include "platform/nrf52/NRF52BLEGattMesh.h"
 #endif
@@ -1088,6 +1093,25 @@ void setup()
 #endif
 #endif
 
+#if HAS_BLE_MESH
+    // start() only arms the handler; the platform waits for onBluetoothReady() before touching GAP,
+    // because the BLE stack comes up asynchronously well after this point.
+    LOG_DEBUG("Start BLE mesh transport thread");
+#if defined(ARCH_ESP32)
+    bleMeshHandler = new ESP32BLEMesh();
+#elif defined(ARCH_NRF52)
+    bleMeshHandler = new NRF52BLEMesh();
+#endif
+    if (bleMeshHandler && bleMeshHandler->isEnabled()) {
+#if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_BLUETOOTH
+        // The scanner and the burst wait on NimbleBluetooth, which setBluetoothEnable() may never start.
+        if (const char *why = bluetoothBlockedReason())
+            LOG_WARN("BLE mesh: the transport config asks for it, but Bluetooth will not start: %s", why);
+        else
+#endif
+            bleMeshHandler->start();
+    }
+#endif
 #if HAS_BLE_GATT_MESH && defined(ARCH_NRF52)
     // The service is registered by NRF52Bluetooth's setupMeshService(); this is the pump.
     bleGattMeshHandler = new NRF52BLEGattMesh();
@@ -1423,6 +1447,10 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
 #if HAS_BLE_GATT_MESH && (defined(ARCH_NRF52) || (defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_BLUETOOTH))
     deviceMetadata.supported_transports[deviceMetadata.supported_transports_count++] =
         meshtastic_Config_TransportConfig_Transport_TRANSPORT_BLE_GATT;
+#endif
+#if HAS_BLE_MESH && (defined(ARCH_ESP32) || defined(ARCH_NRF52))
+    deviceMetadata.supported_transports[deviceMetadata.supported_transports_count++] =
+        meshtastic_Config_TransportConfig_Transport_TRANSPORT_BLE_ADV;
 #endif
     return deviceMetadata;
 }

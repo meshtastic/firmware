@@ -1767,6 +1767,16 @@ void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
         packetPool.release(p);
         return;
     }
+    // A BLE copy of our own packet exists only to raise its implicit ack. Past here it would reach the
+    // paths that trust isFromUs, the phone and a relay. Our own relay byte means our own scanner heard
+    // our own burst, which proves no neighbor has it.
+    if (isFromUs(p) && MeshTransportBase::carriesOwnEcho(p->transport_mechanism)) {
+        if (p->relay_node != nodeDB->getLastByteOfNodeNum(getNodeNum()))
+            perhapsGenerateImplicitAckForOwnOverheard(p);
+        clearRoutingAuthCache();
+        packetPool.release(p);
+        return;
+    }
     if (authVerdict == RoutingAuthVerdict::OPAQUE_RELAY_ONLY) {
         // A packet we originated but cannot decrypt (a PKI DM we sent, overheard being rebroadcast)
         // is opaque to us and would otherwise skip shouldFilterReceived entirely, so the implicit
