@@ -18,7 +18,10 @@
 #endif
 
 #if HAS_NETWORKING
-extern meshtastic::Syslog syslog;
+// syslog is defined by WiFiAPClient.cpp, ethSyslog by ethClient.cpp. Boards compile one or both
+// network stacks, so both are weak and checked for null before use.
+extern meshtastic::Syslog syslog __attribute__((weak));
+extern meshtastic::Syslog ethSyslog __attribute__((weak));
 #endif
 void RedirectablePrint::rpInit()
 {
@@ -194,8 +197,10 @@ void RedirectablePrint::log_to_serial(const char *logLevel, const char *format, 
 void RedirectablePrint::log_to_syslog(const char *logLevel, const char *format, va_list arg)
 {
 #if HAS_NETWORKING && !defined(ARCH_PORTDUINO)
+    meshtastic::Syslog *wifiLog = (&syslog && syslog.isEnabled()) ? &syslog : nullptr;
+    meshtastic::Syslog *ethLog = (&ethSyslog && ethSyslog.isEnabled()) ? &ethSyslog : nullptr;
     // if syslog is in use, collect the log messages and send them to syslog
-    if (syslog.isEnabled()) {
+    if (wifiLog || ethLog) {
         int ll = 0;
         switch (logLevel[0]) {
         case 'D':
@@ -217,10 +222,17 @@ void RedirectablePrint::log_to_syslog(const char *logLevel, const char *format, 
             ll = 0;
         }
         auto thread = concurrency::OSThread::currentThread;
-        if (thread) {
-            syslog.vlogf(ll, thread->ThreadName.c_str(), format, arg);
-        } else {
-            syslog.vlogf(ll, format, arg);
+        for (meshtastic::Syslog *log : {wifiLog, ethLog}) {
+            if (!log)
+                continue;
+            va_list argCopy;
+            va_copy(argCopy, arg);
+            if (thread) {
+                log->vlogf(ll, thread->ThreadName.c_str(), format, argCopy);
+            } else {
+                log->vlogf(ll, format, argCopy);
+            }
+            va_end(argCopy);
         }
     }
 #endif
