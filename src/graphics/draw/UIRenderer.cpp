@@ -21,6 +21,7 @@
 #include "graphics/TFTColorRegions.h"
 #include "graphics/TFTPalette.h"
 #include "graphics/TimeFormatters.h"
+#include "graphics/draw/NotificationRenderer.h"
 #include "graphics/images.h"
 #include "main.h"
 #include "target_specific.h"
@@ -2232,7 +2233,10 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
         navBarLastShown = Time::skipZero(Time::getMillis()); // Mark when it disappeared
     }
 
-    if (!navBarVisible && navBarLastShown != 0 && !cosmeticRefreshDone) {
+    // Not while the on-screen keyboard is up: its key presses demand fast refreshes, and COSMETIC would override that.
+    // The cleanup runs on a later frame, once the keyboard has closed
+    if (!navBarVisible && navBarLastShown != 0 && !cosmeticRefreshDone &&
+        NotificationRenderer::current_notification_type != notificationTypeEnum::text_input) {
         if (millis() - navBarLastShown > 10000) {  // 10s after hidden
             EINK_ADD_FRAMEFLAG(display, COSMETIC); // One-time ghost cleanup
             cosmeticRefreshDone = true;
