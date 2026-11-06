@@ -157,9 +157,10 @@ static void lsIdle()
             switch (wakeCause2) {
             case ESP_SLEEP_WAKEUP_TIMER:
                 // Normal case: timer expired, we should just go back to sleep ASAP
-
-                statusLEDModule->setPowerLED(true);
-                wakeCause2 = doLightSleep(100); // leave led on for 1ms
+                if (!config.device.led_heartbeat_disabled) {
+                    statusLEDModule->setPowerLED(true);
+                    wakeCause2 = doLightSleep(100); // leave led on for 1ms
+                }
 
                 secsSlept += sleepTime;
                 // LOG_INFO("Sleep, flash led");
