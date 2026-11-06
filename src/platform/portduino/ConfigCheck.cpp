@@ -5,12 +5,14 @@
 #include "configuration.h"
 
 #include "PortduinoGlue.h"
+#include "modules/Telemetry/Sensor/CommandSensorFields.h"
 
 #include "yaml-cpp/eventhandler.h"
 
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -93,6 +95,8 @@ const std::map<std::string, std::set<std::string>> &schema()
         {"Webserver", {"Port", "RootPath", "SSLCert", "SSLKey"}},
         {"Bluetooth", {"Enabled", "AdapterId"}},
         {"HostMetrics", {"ReportInterval", "Channel", "UserStringCommand"}},
+        // A list, not a mapping: these are the keys of each entry. See checkCommandSensors().
+        {"Sensors", {"Type", "Command", "Scale"}},
         // Read by packaging/menu tooling rather than by meshtasticd itself.
         {"Meta", {}},
     };
@@ -845,6 +849,56 @@ void checkAdminKeys(const std::string &file, const YAML::Node &node, std::vector
     }
 }
 
+// loadConfig() exits on an entry with no usable Type or Command, so those stop meshtasticd.
+void checkCommandSensors(const std::string &file, const YAML::Node &node, std::vector<Finding> &findings)
+{
+    if (node.IsNull())
+        return;
+    if (!node.IsSequence()) {
+        findings.push_back({kError, file, lineOf(node),
+                            "Sensors must be a list of entries with a Type and a Command, so meshtasticd refuses to start "
+                            "on this file"});
+        return;
+    }
+
+    for (const auto &entry : node) {
+        if (!entry.IsMap()) {
+            findings.push_back({kError, file, lineOf(entry),
+                                "Sensors entry is not a Type/Command mapping, so meshtasticd refuses to start on this file"});
+            continue;
+        }
+        for (const auto &field : entry) {
+            const std::string key = field.first.as<std::string>("");
+            if (!schema().at("Sensors").count(key))
+                findings.push_back(
+                    {kWarn, file, lineOf(field.first), "unknown key 'Sensors." + key + "', ignored by meshtasticd"});
+        }
+
+        const YAML::Node type = entry["Type"];
+        const std::string typeText = type ? type.as<std::string>("") : "";
+        if (typeText.empty())
+            findings.push_back({kError, file, lineOf(entry),
+                                "Sensors entry has no Type, so meshtasticd refuses to start on this file. Valid: " +
+                                    CommandSensorFields::knownTypes()});
+        else if (CommandSensorFields::canonicalType(typeText).empty())
+            findings.push_back({kError, file, lineOf(type),
+                                "Sensors Type '" + typeText +
+                                    "' is not an environment metric, so meshtasticd refuses to start on this file. Valid: " +
+                                    CommandSensorFields::knownTypes()});
+
+        const YAML::Node command = entry["Command"];
+        if (!command || command.as<std::string>("").empty())
+            findings.push_back({kError, file, lineOf(command ? command : entry),
+                                "Sensors entry has no Command, so meshtasticd refuses to start on this file"});
+
+        const YAML::Node scale = entry["Scale"];
+        if (scale && (!converts(scale, kFloat) || !std::isfinite(scale.as<float>())))
+            findings.push_back(
+                {kWarn, file, lineOf(scale),
+                 "Sensors Scale '" + scale.as<std::string>("") + "' is not a finite number, so it is silently replaced by 1"});
+    }
+}
+
 // Module names match exactly and are inconsistently cased (RF95 upper, sx1262 lower),
 // and loadConfig() exits on an unknown name without printing the valid set, so name it here.
 void checkLoraModule(const std::string &file, const YAML::Node &module, std::vector<Finding> &findings)
@@ -923,6 +977,10 @@ void checkSection(const std::string &file, const std::string &section, const YAM
     const auto &allowed = schema().at(section);
     if (kFreeFormSections.count(section))
         return;
+    if (section == "Sensors") {
+        checkCommandSensors(file, body, findings);
+        return;
+    }
     // An empty section (`Lora:` with no body) is null, not a map, and loadConfig() tests
     // before reading it. Any other non-map shape is unreadable, so do not call the file clean.
     if (body.IsNull())
@@ -1340,6 +1398,19 @@ void checkMergedConfig(const PathIndex &paths, std::vector<Finding> &findings)
                                 ") and Lora.CS are set. If your device tree already assigns a chip select to that spidev "
                                 "node, meshtasticd will fail to claim the CS line at startup; if it does not, CS must be "
                                 "set here. Check with 'gpioinfo'"});
+
+    std::map<std::string, int> sensorTypes;
+    for (const auto &sensor : portduino_config.command_sensors)
+        sensorTypes[sensor.type]++;
+    for (const auto &type : sensorTypes)
+        if (type.second > 1)
+            findings.push_back({kWarn, merged, 0,
+                                "Sensors lists " + type.first + " " + std::to_string(type.second) +
+                                    " times. Every command runs, but only one value can be sent"});
+    if (!portduino_config.command_sensors.empty())
+        findings.push_back({kInfo, merged, 0,
+                            "Sensors are only read while environment measurement is enabled in the Telemetry module "
+                            "config, and are then broadcast at its update interval"});
 }
 
 void printSummary()

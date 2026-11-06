@@ -1,0 +1,13 @@
+# Sensors append across files instead of the last file winning, so an operator can drop one file
+# per sensor into config.d/. config.yaml is always loaded first: this sensor plus the one in config.d/.
+General:
+  ConfigDirectory: config.d/
+Lora:
+  Module: sx1262
+  CS: 21
+  IRQ: 16
+  Busy: 20
+  Reset: 18
+Sensors:
+  - Type: temperature
+    Command: echo 21.5
