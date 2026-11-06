@@ -31,6 +31,9 @@
 #define PIN_SERIAL1_RX NC
 #define PIN_SERIAL1_TX PB6
 
+// Bind the Serial module to Serial1; SerialModule defaults to Serial2, which the RAK3172 module lacks
+#define SERIAL_PRINT_PORT 1
+
 // LoRa
 #define SX126X_DIO3_TCXO_VOLTAGE 3.0
 
