@@ -21,6 +21,7 @@
 #include "TransmitHistory.h"
 #include "TypeConversions.h"
 #include "UptimeClock.h"
+#include "mesh/TransportConfig.h"
 #if HAS_SCREEN && !MESHTASTIC_EXCLUDE_WAYPOINT
 #include "WaypointStore.h"
 #endif
@@ -1272,6 +1273,13 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     config.network.enabled_protocols = 0;
 #endif // Network enabled protocols
 #endif // UDP Multicast
+
+    // Every radio runs LoRa; UDP follows the userprefs bit above.
+    config.has_transport = true;
+    config.transport = meshtastic_Config_TransportConfig_init_default;
+    TransportConfig::set(config.transport, meshtastic_Config_TransportConfig_Transport_TRANSPORT_LORA, true);
+    if (config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST)
+        TransportConfig::set(config.transport, meshtastic_Config_TransportConfig_Transport_TRANSPORT_MULTICAST_UDP, true);
 
 #ifdef USERPREFS_NETWORK_WIFI_ENABLED
     config.network.wifi_enabled = USERPREFS_NETWORK_WIFI_ENABLED;
@@ -2997,6 +3005,16 @@ void NodeDB::loadFromDisk()
         LOG_WARN("Licensed operation removed persisted channel encryption/admin access");
         saveToDisk(SEGMENT_CHANNELS);
     }
+    if (!config.has_transport) {
+        // A config saved before the transport list existed: derive it from the switches it replaces.
+        config.has_transport = true;
+        config.transport = meshtastic_Config_TransportConfig_init_default;
+        TransportConfig::set(config.transport, meshtastic_Config_TransportConfig_Transport_TRANSPORT_LORA, true);
+        const bool udp = config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST;
+        TransportConfig::set(config.transport, meshtastic_Config_TransportConfig_Transport_TRANSPORT_MULTICAST_UDP, udp);
+        LOG_INFO("Derived transport config from enabled_protocols: udp=%d", udp);
+        saveToDisk(SEGMENT_CONFIG);
+    }
 #if ARCH_PORTDUINO
     // The host's config.yaml is authoritative for admin keys: it is root-owned and cannot be
     // rewritten by an authorized remote, so it decides who may administer this node.
@@ -3014,6 +3032,7 @@ void NodeDB::loadFromDisk()
     }
     if (portduino_config.enable_UDP) {
         config.network.enabled_protocols = meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST;
+        TransportConfig::set(config.transport, meshtastic_Config_TransportConfig_Transport_TRANSPORT_MULTICAST_UDP, true);
     }
 
 #endif

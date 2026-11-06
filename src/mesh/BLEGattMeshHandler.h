@@ -8,6 +8,7 @@
 #include "Router.h"
 #include "concurrency/OSThread.h"
 #include "mesh-pb-constants.h"
+#include "mesh/TransportConfig.h"
 
 #include <array>
 
@@ -114,10 +115,10 @@ class BLEGattMeshHandler : private concurrency::OSThread, public MeshTransportBa
 
     bool isEnabled() const override { return protocolEnabled(); }
 
-    /// The BLE_GATT_PEER bit, for the platform's static hooks that run without an instance.
+    /// TRANSPORT_BLE_GATT in config.transport, for the platform's static hooks that run without an instance.
     static bool protocolEnabled()
     {
-        return config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_BLE_GATT_PEER;
+        return TransportConfig::enables(config.transport, meshtastic_Config_TransportConfig_Transport_TRANSPORT_BLE_GATT);
     }
 
     /// Called from Router::send(). Encodes and queues; never notifies inline.
