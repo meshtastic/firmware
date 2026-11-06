@@ -1,0 +1,4 @@
+# ERROR. The port is not a number, so startup would refuse it.
+Lora:
+  Module: transparent
+  TransparentDevice: meshnode.local:abc

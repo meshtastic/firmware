@@ -881,12 +881,15 @@ void portduinoSetup()
 
     gpioInit(max_GPIO + 1); // Done here so we can inform Portduino how many GPIOs we need.
 
+    // A ch341 adapter drives its Lora pins over USB, and a transparent radio has none here: leave those lines alone.
+    const bool loraPinsUnused = portduino_config.lora_spi_dev == "ch341" || portduino_config.lora_module == use_transparent;
+
     // Need to bind all the configured GPIO pins so they're not simulated
     // TODO: If one of these fails, we should log and terminate
     for (const auto *i : portduino_config.all_pins) {
         // In the case of a ch341 Lora device, we don't want to touch the system GPIO lines for Lora
         // Those GPIO are handled in our usermode driver instead.
-        if (i->config_section == "Lora" && portduino_config.lora_spi_dev == "ch341") {
+        if (i->config_section == "Lora" && loraPinsUnused) {
             continue;
         }
         if (i->enabled) {
@@ -905,7 +908,7 @@ void portduinoSetup()
     for (auto i : portduino_config.extra_pins) {
         // In the case of a ch341 Lora device, we don't want to touch the system GPIO lines for Lora
         // Those GPIO are handled in our usermode driver instead.
-        if (i.config_section == "Lora" && portduino_config.lora_spi_dev == "ch341") {
+        if (i.config_section == "Lora" && loraPinsUnused) {
             continue;
         }
         if (i.enabled) {
@@ -922,7 +925,7 @@ void portduinoSetup()
     }
 
     // In one test, this dance seemed necessary to trigger the pin to detect properly.
-    if (portduino_config.lora_pa_detect_pin.enabled) {
+    if (portduino_config.lora_pa_detect_pin.enabled && portduino_config.lora_module != use_transparent) {
         pinMode(portduino_config.lora_pa_detect_pin.pin, INPUT_PULLDOWN);
         sleep(1);
         if (digitalRead(portduino_config.lora_pa_detect_pin.pin) == LOW) {
@@ -952,7 +955,7 @@ void portduinoSetup()
     for (auto i : portduino_config.extra_pins) {
         // In the case of a ch341 Lora device, we don't want to touch the system GPIO lines for Lora
         // Those GPIO are handled in our usermode driver instead.
-        if (i.config_section == "Lora" && portduino_config.lora_spi_dev == "ch341") {
+        if (i.config_section == "Lora" && loraPinsUnused) {
             continue;
         }
         if (i.enabled && i.default_high) {
@@ -1102,6 +1105,8 @@ bool loadConfig(const char *configPath)
                     exit(EXIT_FAILURE);
                 }
             }
+            if (yamlConfig["Lora"]["TransparentDevice"])
+                portduino_config.lora_transparent_device = yamlConfig["Lora"]["TransparentDevice"].as<std::string>("");
             if (yamlConfig["Lora"]["SX126X_MAX_POWER"])
                 portduino_config.sx126x_max_power = yamlConfig["Lora"]["SX126X_MAX_POWER"].as<int>(22);
             if (yamlConfig["Lora"]["SX128X_MAX_POWER"])
@@ -1131,7 +1136,7 @@ bool loadConfig(const char *configPath)
             }
 
             if (portduino_config.lora_module != use_autoconf && portduino_config.lora_module != use_simradio &&
-                !portduino_config.force_simradio) {
+                portduino_config.lora_module != use_transparent && !portduino_config.force_simradio) {
                 portduino_config.dio2_as_rf_switch = yamlConfig["Lora"]["DIO2_AS_RF_SWITCH"].as<bool>(false);
                 portduino_config.dio3_tcxo_voltage = yamlConfig["Lora"]["DIO3_TCXO_VOLTAGE"].as<float>(0) * 1000;
                 if (portduino_config.dio3_tcxo_voltage == 0 && yamlConfig["Lora"]["DIO3_TCXO_VOLTAGE"].as<bool>(false)) {
@@ -1171,7 +1176,9 @@ bool loadConfig(const char *configPath)
             portduino_config.lora_usb_vid = yamlConfig["Lora"]["USB_VID"].as<int>(0x1A86);
 
             portduino_config.lora_spi_dev = yamlConfig["Lora"]["spidev"].as<std::string>("spidev0.0");
-            if (portduino_config.lora_spi_dev != "ch341") {
+            if (portduino_config.lora_module == use_transparent) {
+                portduino_config.lora_spi_dev = ""; // the radio is on the other node, so leave the SPI bus alone
+            } else if (portduino_config.lora_spi_dev != "ch341") {
                 portduino_config.lora_spi_dev = "/dev/" + portduino_config.lora_spi_dev;
                 if (portduino_config.lora_spi_dev.length() == 14) {
                     int x = portduino_config.lora_spi_dev.at(11) - '0';

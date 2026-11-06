@@ -5,6 +5,7 @@
 #include "configuration.h"
 
 #include "PortduinoGlue.h"
+#include "TransparentLink.h"
 
 #include "yaml-cpp/eventhandler.h"
 
@@ -67,6 +68,7 @@ const std::map<std::string, std::set<std::string>> &schema()
           "USB_PID",
           "USB_VID",
           "USB_Serialnum",
+          "TransparentDevice",
           "CS",
           "IRQ",
           "Busy",
@@ -599,6 +601,7 @@ const std::map<std::string, ValueSpec> &valueSpecs()
         {"Lora.USB_PID", {kInt, false}},
         {"Lora.USB_VID", {kInt, false}},
         {"Lora.USB_Serialnum", {kString, false}},
+        {"Lora.TransparentDevice", {kString, false}},
         {"General.MaxNodes", {kInt, false}},
         {"General.MaxMessageQueue", {kInt, false}},
         {"General.APIPort", {kInt, false}},
@@ -1166,11 +1169,12 @@ void checkPinValues(std::vector<Finding> &findings)
                                    "non-numeric value, or a stray line folded into it by YAML indentation"});
     };
 
+    const bool loraPinsUnused = portduino_config.lora_module == use_transparent; // startup never claims them
     for (const auto *pin : portduino_config.all_pins)
-        if (pin->enabled && pin->pin < 0)
+        if (pin->enabled && pin->pin < 0 && !(loraPinsUnused && pin->config_section == "Lora"))
             report(pin->config_section + "." + pin->config_name);
     for (const auto &pin : portduino_config.extra_pins)
-        if (pin.enabled && pin.pin < 0)
+        if (pin.enabled && pin.pin < 0 && !(loraPinsUnused && pin.config_section == "Lora"))
             report(pin.config_section + "." + pin.config_name);
 }
 
@@ -1179,6 +1183,25 @@ void checkMergedConfig(const PathIndex &paths, std::vector<Finding> &findings)
     const std::string merged = "(merged configuration)";
 
     checkPinValues(findings);
+
+    if (portduino_config.lora_module == use_transparent && portduino_config.lora_transparent_device.empty())
+        findings.push_back({kError, merged, 0,
+                            "Module is transparent but Lora.TransparentDevice is not set, so there is no radio to connect to. "
+                            "Set it to the node's serial device path or to host[:port] for its TCP API"});
+    if (portduino_config.lora_module == use_transparent && !portduino_config.lora_transparent_device.empty()) {
+#if HAS_TRANSPARENT_RADIO
+        // The same parser startup uses, so --check and a real start agree; it only parses, nothing is opened.
+        if (!makeTransparentLink(portduino_config.lora_transparent_device))
+            findings.push_back({kError, merged, 0,
+                                "Lora.TransparentDevice '" + portduino_config.lora_transparent_device +
+                                    "' is neither a serial device path nor host[:port], so meshtasticd exits at startup"});
+#else
+        findings.push_back({kError, merged, 0, "Module is transparent, which this platform does not support"});
+#endif
+    }
+    if (portduino_config.lora_module != use_transparent && !portduino_config.lora_transparent_device.empty())
+        findings.push_back(
+            {kWarn, merged, 0, "Lora.TransparentDevice is set but Module is " + moduleName() + ", so it is never used"});
 
     // portduinoSetup() skips initGPIOPin() for every Lora pin when spidev is ch341, so a
     // gpiochip or line mapping written next to one is read, stored, and never used.
@@ -1346,6 +1369,8 @@ void printSummary()
 {
     std::cout << "\nEffective radio configuration:\n";
     std::cout << "  Module            : " << moduleName() << "\n";
+    if (portduino_config.lora_module == use_transparent)
+        std::cout << "  Transparent device: " << portduino_config.lora_transparent_device << "\n";
     if (!portduino_config.lora_spi_dev.empty())
         std::cout << "  spidev            : " << portduino_config.lora_spi_dev << "\n";
     std::cout << "  SPI speed         : " << portduino_config.spiSpeed << "\n";
@@ -1376,6 +1401,9 @@ void printSummary()
                   << (portduino_config.irq_dio_num >= 0 ? "DIO" + std::to_string(portduino_config.irq_dio_num)
                                                         : "DIO" + std::to_string(kLr20x0DefaultIrqDio) + " (radio default)")
                   << "\n";
+
+    if (portduino_config.lora_module == use_transparent)
+        return; // no local radio: startup claims no Lora lines
 
     // A ch341 adapter's Lora pins are adapter indexes handed to Ch341Hal, not gpiochip lines
     // (portduinoSetup() skips initGPIOPin()), so pointing the user at gpioinfo would be wrong.
