@@ -238,6 +238,12 @@ INA226Sensor ina226Sensor;
 NullSensor ina226Sensor;
 #endif
 
+#if __has_include(<INA228.h>)
+INA228Sensor ina228Sensor;
+#else
+NullSensor ina228Sensor;
+#endif
+
 #if __has_include(<Adafruit_INA260.h>)
 INA260Sensor ina260Sensor;
 #else
@@ -701,6 +707,9 @@ class AnalogBatteryLevel : public HasBatteryLevel
         } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA226].first ==
                    config.power.device_battery_ina_address) {
             return ina226Sensor.getBusVoltageMv();
+        } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA228].first ==
+                   config.power.device_battery_ina_address) {
+            return ina228Sensor.getBusVoltageMv();
         } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA260].first ==
                    config.power.device_battery_ina_address) {
             return ina260Sensor.getBusVoltageMv();
@@ -718,6 +727,9 @@ class AnalogBatteryLevel : public HasBatteryLevel
         } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA226].first ==
                    config.power.device_battery_ina_address) {
             return ina226Sensor.getCurrentMa();
+        } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA228].first ==
+                   config.power.device_battery_ina_address) {
+            return ina228Sensor.getCurrentMa();
         } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA260].first ==
                    config.power.device_battery_ina_address) {
             return ina260Sensor.getCurrentMa();
@@ -747,6 +759,8 @@ class AnalogBatteryLevel : public HasBatteryLevel
             return sensorReady(ina219Sensor);
         } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA226].first == inaAddress) {
             return sensorReady(ina226Sensor);
+        } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA228].first == inaAddress) {
+            return sensorReady(ina228Sensor);
         } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA260].first == inaAddress) {
             return sensorReady(ina260Sensor);
         } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA3221].first == inaAddress) {
