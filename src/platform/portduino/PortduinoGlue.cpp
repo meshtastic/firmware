@@ -1475,6 +1475,11 @@ bool loadConfig(const char *configPath)
             portduino_config.hostMetrics_user_command = (yamlConfig["HostMetrics"]["UserStringCommand"]).as<std::string>("");
         }
 
+        if (yamlConfig["MeshMap"]) {
+            portduino_config.meshmap_enabled = (yamlConfig["MeshMap"]["Enabled"]).as<bool>(false);
+            portduino_config.meshmap_db_path = (yamlConfig["MeshMap"]["DBPath"]).as<std::string>("/var/lib/meshtasticd/");
+        }
+
         if (yamlConfig["Security"] && yamlConfig["Security"]["AdminKeys"]) {
             const YAML::Node keys = yamlConfig["Security"]["AdminKeys"];
             if (!keys.IsSequence()) {

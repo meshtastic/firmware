@@ -68,7 +68,9 @@
 #endif
 #if ARCH_PORTDUINO
 #include "modules/DMShell.h"
+#include "modules/Native/MeshMapModule.h"
 #include "modules/Telemetry/HostMetrics.h"
+#include "platform/portduino/PortduinoGlue.h"
 #if !MESHTASTIC_EXCLUDE_STOREFORWARD
 #include "modules/StoreForwardModule.h"
 #endif
@@ -228,6 +230,13 @@ void setupModules()
 #endif
 #if ARCH_PORTDUINO
     new HostMetricsModule();
+#if HAS_SQLITE3
+    if (portduino_config.meshmap_enabled)
+        meshMapModule = new MeshMapModule(SqliteDb::pathIn(portduino_config.meshmap_db_path, MeshMapModule::DB_FILE_NAME));
+#else
+    if (portduino_config.meshmap_enabled)
+        LOG_WARN("MeshMap: enabled in config, but this build has no SQLite support");
+#endif
 #if defined(MESHTASTIC_HAS_DMSHELL)
     dmShellModule = new DMShellModule();
 #endif

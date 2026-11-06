@@ -309,6 +309,10 @@ extern struct portduino_config_struct {
     int hostMetrics_interval = 0;
     int hostMetrics_channel = 0;
 
+    // MeshMap
+    bool meshmap_enabled = false;
+    std::string meshmap_db_path = "/var/lib/meshtasticd/";
+
     // Security
     std::vector<std::array<uint8_t, 32>> admin_keys;
 
@@ -723,6 +727,14 @@ extern struct portduino_config_struct {
             out << YAML::Key << "Channel" << YAML::Value << hostMetrics_channel;
 
             out << YAML::EndMap; // HostMetrics
+        }
+
+        // MeshMap
+        if (meshmap_enabled) {
+            out << YAML::Key << "MeshMap" << YAML::Value << YAML::BeginMap;
+            out << YAML::Key << "Enabled" << YAML::Value << meshmap_enabled;
+            out << YAML::Key << "DBPath" << YAML::Value << meshmap_db_path;
+            out << YAML::EndMap; // MeshMap
         }
 
         // Security
