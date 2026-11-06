@@ -17,17 +17,19 @@
 // helpers that encode the expected nibble layout (bus = host & 0x0F,
 // device = (host >> 4) & 0x0F). These tests do not call HardwareSPI, so a
 // change to its decoder does not fail them.
+//
+// The config-loader tests pin two cross-file state rules: a radio path outside
+// the packed range is left as the -1 sentinel (initLoRa() then opens it in its
+// own instance instead of host 0), and clearing a touchscreen override makes it
+// follow the display host again rather than keeping the old one.
 
 #include "Arduino.h"
+#include "PortduinoGlue.h"
 #include "TestUtil.h"
+#include <filesystem>
+#include <fstream>
 #include <string>
 #include <unity.h>
-
-// Forward-declare instead of including PortduinoGlue.h to avoid pulling in
-// LR11x0Interface, USBHal, mesh.pb.h, yaml-cpp, and the full portduino_config
-// struct just to test a self-contained string parser. The symbol is defined
-// in PortduinoGlue.cpp and resolved at link time.
-int spiHostFromDevicePath(const std::string &devicePath);
 
 static int decodedBus(int host)
 {
@@ -174,6 +176,48 @@ void test_registry_rejects_negative_host()
     TEST_ASSERT_NULL(HardwareSPI::getInstance(-1));
 }
 
+static std::string writeConfig(const char *name, const std::string &body)
+{
+    const auto path = std::filesystem::temp_directory_path() / name;
+    std::ofstream out(path);
+    out << body;
+    return path.string();
+}
+
+void test_unpackable_radio_path_is_not_left_on_host_zero()
+{
+    const std::string path = writeConfig("meshtastic-spi-radio.yaml", "Lora:\n"
+                                                                      "  Module: sim\n"
+                                                                      "  spidev: spidev10.0\n");
+    TEST_ASSERT_TRUE(loadConfig(path.c_str()));
+    TEST_ASSERT_EQUAL_INT(-1, portduino_config.lora_spi_dev_int);
+    TEST_ASSERT_EQUAL_STRING("/dev/spidev10.0", portduino_config.lora_spi_dev.c_str());
+    std::error_code ec;
+    std::filesystem::remove(path, ec);
+}
+
+void test_clearing_touchscreen_spidev_returns_to_the_display_host()
+{
+    const std::string first = writeConfig("meshtastic-spi-touch-a.yaml", "Lora:\n"
+                                                                         "  Module: sim\n"
+                                                                         "Display:\n"
+                                                                         "  Panel: ILI9488\n"
+                                                                         "  spidev: spidev1.0\n"
+                                                                         "Touchscreen:\n"
+                                                                         "  Module: XPT2046\n"
+                                                                         "  spidev: spidev2.0\n");
+    const std::string second = writeConfig("meshtastic-spi-touch-b.yaml", "Touchscreen:\n"
+                                                                          "  spidev: \"\"\n");
+    TEST_ASSERT_TRUE(loadConfig(first.c_str()));
+    TEST_ASSERT_EQUAL_INT(1, portduino_config.display_spi_dev_int);
+    TEST_ASSERT_EQUAL_INT(2, portduino_config.touchscreen_spi_dev_int);
+    TEST_ASSERT_TRUE(loadConfig(second.c_str()));
+    TEST_ASSERT_EQUAL_INT(portduino_config.display_spi_dev_int, portduino_config.touchscreen_spi_dev_int);
+    std::error_code ec;
+    std::filesystem::remove(first, ec);
+    std::filesystem::remove(second, ec);
+}
+
 void setup()
 {
     initializeTestEnvironment();
@@ -194,6 +238,8 @@ void setup()
     RUN_TEST(test_registry_host_zero_is_the_global_spi);
     RUN_TEST(test_registry_is_stable_per_host);
     RUN_TEST(test_registry_rejects_negative_host);
+    RUN_TEST(test_unpackable_radio_path_is_not_left_on_host_zero);
+    RUN_TEST(test_clearing_touchscreen_spidev_returns_to_the_display_host);
     exit(UNITY_END());
 }
 

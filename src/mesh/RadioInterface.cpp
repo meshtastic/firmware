@@ -434,9 +434,18 @@ std::unique_ptr<RadioInterface> initLoRa()
         // host spidev to select.
         RadioLibHAL = new LockingArduinoHal(SPI, loraSpiSettings);
 #else
-        HardwareSPI *loraSpi = HardwareSPI::getInstance((int8_t)portduino_config.lora_spi_dev_int);
-        loraSpi->begin(portduino_config.lora_spi_dev.c_str());
-        RadioLibHAL = new LockingArduinoHal(*loraSpi, loraSpiSettings);
+        const int loraHost = portduino_config.lora_spi_dev_int;
+        if (loraHost < 0) {
+            // Path outside the host packing range. Its own instance keeps it off host 0,
+            // which the display may already have opened for a different device.
+            static HardwareSPI byNameSpi;
+            byNameSpi.begin(portduino_config.lora_spi_dev.c_str());
+            RadioLibHAL = new LockingArduinoHal(byNameSpi, loraSpiSettings);
+        } else {
+            HardwareSPI *loraSpi = HardwareSPI::getInstance((int8_t)loraHost);
+            loraSpi->begin(portduino_config.lora_spi_dev.c_str());
+            RadioLibHAL = new LockingArduinoHal(*loraSpi, loraSpiSettings);
+        }
 #endif
     }
     rIf =

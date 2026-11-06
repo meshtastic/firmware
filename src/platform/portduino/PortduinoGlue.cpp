@@ -1183,7 +1183,10 @@ bool loadConfig(const char *configPath)
                             portduino_config.touchscreen_spi_dev_int = host;
                     }
                 } else {
-                    LOG_WARN("Lora.spidev \"%s\" is not a usable spidev path; display and touch keep their own bus",
+                    // The path cannot be packed into a host byte. Keep it out of host 0 so a
+                    // display that already opened that instance cannot capture the radio.
+                    portduino_config.lora_spi_dev_int = -1;
+                    LOG_WARN("Lora.spidev \"%s\" is not a usable spidev path; the radio opens it in its own instance",
                              portduino_config.lora_spi_dev.c_str());
                 }
             }
@@ -1378,6 +1381,9 @@ bool loadConfig(const char *configPath)
                     else
                         LOG_WARN("Touchscreen.spidev \"%s\" is not a usable spidev path",
                                  portduino_config.touchscreen_spi_dev.c_str());
+                } else {
+                    // An explicit empty value means "no separate bus", so follow the display.
+                    portduino_config.touchscreen_spi_dev_int = portduino_config.display_spi_dev_int;
                 }
             }
         }

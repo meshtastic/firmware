@@ -505,6 +505,19 @@ assert "a later file supplies the radio path" 0 spidev-lora-override/config.yaml
 assert "a display without spidev emits no empty key" 0 spidev-display-default.yaml yaml \
 	"Panel: ILI9488" \
 	'!spidev: ""'
+assert "an explicit empty display path is accepted" 0 spidev-display-empty.yaml check \
+	"Display spidev    : /dev/spidev0.0" \
+	"Result: 0 errors, 0 warnings"
+assert "clearing Touchscreen.spidev follows the display" 0 spidev-touch-clear/config.yaml check \
+	"Display spidev    : /dev/spidev1.0" \
+	"Touchscreen spidev: /dev/spidev1.0" \
+	"Result: 0 errors, 0 warnings"
+assert "an X11 panel reports no display spidev" 0 spidev-x11.yaml check \
+	"!Display spidev" \
+	"Result: 0 errors, 0 warnings"
+assert "an I2C touchscreen reports no touchscreen spidev" 0 spidev-i2c-touch.yaml check \
+	"!Touchscreen spidev" \
+	"Result: 0 errors, 0 warnings"
 assert "emitted display and touchscreen paths keep no /dev prefix" 0 spidev-valid.yaml yaml \
 	"spidev: spidev1.0" \
 	"spidev: spidev0.1" \
