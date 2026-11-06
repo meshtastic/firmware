@@ -543,7 +543,11 @@ static int8_t prevFrame = -1;
 // Combined dynamic node list frame cycling through LastHeard, HopSignal, and Distance modes
 // Uses a single frame and changes data every few seconds (E-Ink variant is separate)
 
-#if defined(ESP_PLATFORM) && (defined(USE_ST7789) || defined(USE_ST7796))
+#if defined(ST7789_SHARED_SPI) && CONFIG_DISABLE_HAL_LOCKS
+#error "ST7789_SHARED_SPI requires Arduino HAL locks"
+#endif
+
+#if defined(ESP_PLATFORM) && (defined(USE_ST7789) || defined(USE_ST7796)) && !defined(ST7789_SHARED_SPI)
 SPIClass SPI1(HSPI);
 #endif
 
@@ -558,7 +562,12 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
     isI2cScreen = true;
 #elif defined(USE_ST7789)
 #ifdef ESP_PLATFORM
-    dispdev = new ST7789Spi(&SPI1, ST7789_RESET, ST7789_RS, ST7789_NSS, GEOMETRY_RAWMODE, TFT_WIDTH, TFT_HEIGHT, ST7789_SDA,
+#ifdef ST7789_SHARED_SPI
+    SPIClass *displaySpi = &SPI;
+#else
+    SPIClass *displaySpi = &SPI1;
+#endif
+    dispdev = new ST7789Spi(displaySpi, ST7789_RESET, ST7789_RS, ST7789_NSS, GEOMETRY_RAWMODE, TFT_WIDTH, TFT_HEIGHT, ST7789_SDA,
                             ST7789_MISO, ST7789_SCK);
 #else
     dispdev = new ST7789Spi(&SPI1, ST7789_RESET, ST7789_RS, ST7789_NSS, GEOMETRY_RAWMODE, TFT_WIDTH, TFT_HEIGHT);
@@ -778,7 +787,9 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
             digitalWrite(SCREEN_12V_ENABLE, LOW);
 #endif
 #ifdef USE_ST7789
+#ifndef ST7789_SHARED_SPI
             SPI1.end();
+#endif
             // Keep TFT control pins in deterministic states while timed-off.
             // Floating/default pin states can corrupt panel edge rows on wake.
 #ifdef VTFT_LEDA
