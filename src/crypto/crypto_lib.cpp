@@ -275,9 +275,9 @@ void crypto_lib_ed25519_basemul(uint8_t point[32], const uint8_t scalar[32])
 }
 
 void crypto_lib_xeddsa_sign(uint8_t signature[64], const uint8_t ed_priv[32], const uint8_t ed_pub[32], const void *msg,
-                            size_t len, crypto_basemul_fn basemul)
+                            size_t len, crypto_basemul_fn basemul, void *basemul_ctx)
 {
-    XEdDSA::sign(signature, ed_priv, ed_pub, msg, len, basemul, nullptr);
+    XEdDSA::sign(signature, ed_priv, ed_pub, msg, len, basemul, basemul_ctx);
 }
 
 void crypto_lib_xeddsa_keys_from_x25519(uint8_t ed_priv[32], uint8_t ed_pub[32], const uint8_t x25519_priv[32])

@@ -1361,7 +1361,17 @@ WRAP(hwCalls, void, crypto_nrf52_sha256, HASH_PARAMS, HASH_ARGS)
 WRAP(hwCalls, void, crypto_nrf52_hmac_sha256, HMAC_PARAMS, HMAC_ARGS)
 WRAP(hwCalls, bool, crypto_nrf52_x25519, X25519_PARAMS, X25519_ARGS)
 WRAP(hwCalls, bool, crypto_nrf52_ed25519_verify, VERIFY_PARAMS, VERIFY_ARGS)
-WRAP(hwCalls, bool, crypto_nrf52_ed25519_basemul, (uint8_t *point, const uint8_t *scalar), (point, scalar))
+static bool failNextBaseMul;
+extern "C" bool __real_crypto_nrf52_ed25519_basemul(uint8_t *point, const uint8_t *scalar);
+extern "C" bool __wrap_crypto_nrf52_ed25519_basemul(uint8_t *point, const uint8_t *scalar)
+{
+    hwCalls++;
+    if (failNextBaseMul) {
+        failNextBaseMul = false;
+        return false;
+    }
+    return __real_crypto_nrf52_ed25519_basemul(point, scalar);
+}
 WRAP(libCalls, bool, crypto_lib_aes256_ctr, CTR_PARAMS, CTR_ARGS)
 WRAP(libCalls, void, crypto_lib_aes256_ccm_seal, SEAL_PARAMS, SEAL_ARGS)
 WRAP(libCalls, bool, crypto_lib_aes256_ccm_open, OPEN_PARAMS, OPEN_ARGS)
@@ -1372,8 +1382,9 @@ WRAP(libCalls, bool, crypto_lib_x25519, X25519_PARAMS, X25519_ARGS)
 WRAP(libCalls, bool, crypto_lib_ed25519_verify, VERIFY_PARAMS, VERIFY_ARGS)
 WRAP(libCalls, void, crypto_lib_ed25519_basemul, (uint8_t *point, const uint8_t *scalar), (point, scalar))
 WRAP(libCalls, void, crypto_lib_xeddsa_sign,
-     (uint8_t *signature, const uint8_t *ed_priv, const uint8_t *ed_pub, const void *msg, size_t len, crypto_basemul_fn basemul),
-     (signature, ed_priv, ed_pub, msg, len, basemul))
+     (uint8_t *signature, const uint8_t *ed_priv, const uint8_t *ed_pub, const void *msg, size_t len, crypto_basemul_fn basemul,
+      void *basemul_ctx),
+     (signature, ed_priv, ed_pub, msg, len, basemul, basemul_ctx))
 
 #define EXPECT_BACKEND(primitive, expectHw, expectLib, call)                                                                     \
     do {                                                                                                                         \
@@ -1383,6 +1394,22 @@ WRAP(libCalls, void, crypto_lib_xeddsa_sign,
         TEST_ASSERT_EQUAL_UINT_MESSAGE(expectHw, hwCalls, primitive " hardware calls");                                          \
         TEST_ASSERT_EQUAL_UINT_MESSAGE(expectLib, libCalls, primitive " library calls");                                         \
     } while (0)
+
+#if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
+// A software R would keep the packet signed after a CC310 fault; the design has no hardware-to-software fallback.
+void test_nrf52_xeddsa_sign_fails_and_clears_the_signature_when_cc310_R_fails(void)
+{
+    uint8_t priv[32], edPriv[32], edPub[32], sig[64], zero[64] = {0};
+    cv::hex(cv::kRfc7748Dh[0], priv, sizeof(priv));
+    crypto_xeddsa_keys_from_x25519(edPriv, edPub, priv);
+    static const uint8_t msg[] = "xeddsa over cc310";
+    failNextBaseMul = true;
+    TEST_ASSERT_FALSE(crypto_xeddsa_sign(sig, edPriv, edPub, msg, sizeof(msg)));
+    TEST_ASSERT_EQUAL_MEMORY(zero, sig, sizeof(sig));
+    TEST_ASSERT_TRUE(crypto_xeddsa_sign(sig, edPriv, edPub, msg, sizeof(msg)));
+    TEST_ASSERT_TRUE(crypto_lib_ed25519_verify(sig, edPub, msg, sizeof(msg)));
+}
+#endif
 
 void test_nrf52_each_public_call_reaches_the_backend_in_the_design_table(void)
 {
@@ -1478,6 +1505,9 @@ void setup()
 #ifdef CRYPTO_HAS_CC310
 #ifdef CRYPTO_TEST_WRAP_DISPATCH
     RUN_TEST(test_nrf52_each_public_call_reaches_the_backend_in_the_design_table);
+#if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
+    RUN_TEST(test_nrf52_xeddsa_sign_fails_and_clears_the_signature_when_cc310_R_fails);
+#endif
 #endif
     RUN_TEST(test_nrf52_aes_ctr_matches_library_for_every_key_size_and_length);
     RUN_TEST(test_nrf52_aes_ccm_matches_library_for_every_key_size_length_tag_and_aad);

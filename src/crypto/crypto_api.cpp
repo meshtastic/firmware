@@ -162,12 +162,14 @@ bool crypto_aes_ccm_seal(const uint8_t *key, size_t key_len, const uint8_t nonce
                 }
 
 #ifdef CRYPTO_HAS_CC310
-                // On false XEdDSA::sign computes R itself. Receivers drop an unsigned broadcast from a known signer
-                // as a downgrade, so failing the signature instead would lose the packet.
-                static bool nrf52BaseMulHook(void *, uint8_t point[32], const uint8_t scalar[32])
-                {
-                    return crypto_nrf52_ed25519_basemul(point, scalar);
-                }
+// XEdDSA::sign computes R in software after a false return, so the failure is recorded for the caller to discard that.
+static bool nrf52BaseMulHook(void *failed, uint8_t point[32], const uint8_t scalar[32])
+{
+    const bool ok = crypto_nrf52_ed25519_basemul(point, scalar);
+    if (!ok)
+        *static_cast<bool *>(failed) = true;
+    return ok;
+}
 #endif
 
                 bool crypto_xeddsa_sign(uint8_t signature[64], const uint8_t ed_priv[32], const uint8_t ed_pub[32],
@@ -176,10 +178,15 @@ bool crypto_aes_ccm_seal(const uint8_t *key, size_t key_len, const uint8_t nonce
                     // XEdDSA mixes signature[0..31] into the nonce as its random Z.
                     crypto_random(signature, 32);
 #ifdef CRYPTO_HAS_CC310
-                    crypto_lib_xeddsa_sign(signature, ed_priv, ed_pub, msg, len, nrf52BaseMulHook);
-#else
-                    crypto_lib_xeddsa_sign(signature, ed_priv, ed_pub, msg, len, nullptr);
-#endif
+                    bool failed = false;
+                    crypto_lib_xeddsa_sign(signature, ed_priv, ed_pub, msg, len, nrf52BaseMulHook, &failed);
+                    if (failed) {
+                        memset(signature, 0, 64);
+                        return false;
+                    }
+                #else
+                                    crypto_lib_xeddsa_sign(signature, ed_priv, ed_pub, msg, len, nullptr, nullptr);
+                #endif
                     return true;
                 }
 
