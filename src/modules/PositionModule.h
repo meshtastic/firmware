@@ -77,6 +77,8 @@ class PositionModule : public ProtobufModule<meshtastic_Position>, private concu
     /** Does our periodic broadcast */
     virtual int32_t runOnce() override;
 
+    meshtastic_MeshPacket *allocAtakPli();
+
   private:
     meshtastic_MeshPacket *allocPositionPacket(uint32_t atPrecision);
     // Streams our own position to the connected phone/UI at full precision without touching the
@@ -96,7 +98,6 @@ class PositionModule : public ProtobufModule<meshtastic_Position>, private concu
     // gauges movement at our own configured (unclamped) precision rather than the on-wire
     // (public-clamped) precision - trackers report finer movement.
     bool positionUnchangedSinceLastSend(const meshtastic_PositionLite &selfPos, bool useConfiguredPrecision);
-    meshtastic_MeshPacket *allocAtakPli();
     void trySetRtc(meshtastic_Position p, bool isLocal, bool forceUpdate = false);
     uint32_t precision;
     void sendLostAndFoundText();
