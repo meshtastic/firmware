@@ -11,6 +11,7 @@
 #include "UptimeClock.h"
 #include "gps/RTC.h"
 #include "input/InputBroker.h"
+#include "mesh/TransportConfig.h"
 #include "meshUtils.h"
 #include <ErriezCRC32.h>
 #include <FSCommon.h>
@@ -978,8 +979,21 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
         memcpy(prevPsk, config.network.wifi_psk, sizeof(prevPsk));
         config.network = c.payload_variant.network;
         writeSecret(config.network.wifi_psk, sizeof(config.network.wifi_psk), prevPsk);
+        // A client still switching UDP through the deprecated bit keeps its switch.
+        TransportConfig::set(config.transport, meshtastic_Config_TransportConfig_Transport_TRANSPORT_MULTICAST_UDP,
+                             config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST);
         break;
     }
+    case meshtastic_Config_transport_tag:
+        LOG_INFO("Set config: Transport");
+        config.has_transport = true;
+        config.transport = c.payload_variant.transport;
+        // The deprecated bit keeps telling an older client the truth about UDP.
+        if (TransportConfig::enables(config.transport, meshtastic_Config_TransportConfig_Transport_TRANSPORT_MULTICAST_UDP))
+            config.network.enabled_protocols |= meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST;
+        else
+            config.network.enabled_protocols &= ~meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST;
+        break;
     case meshtastic_Config_display_tag:
         LOG_INFO("Set config: Display");
         config.has_display = true;
@@ -1575,6 +1589,11 @@ void AdminModule::handleGetConfig(const meshtastic_MeshPacket &req, const uint32
         case meshtastic_AdminMessage_ConfigType_DEVICEUI_CONFIG:
             // NOOP! This is handled by handleGetDeviceUIConfig
             res.get_config_response.which_payload_variant = meshtastic_Config_device_ui_tag;
+            break;
+        case meshtastic_AdminMessage_ConfigType_TRANSPORT_CONFIG:
+            LOG_INFO("Get config: Transport");
+            res.get_config_response.which_payload_variant = meshtastic_Config_transport_tag;
+            res.get_config_response.payload_variant.transport = config.transport;
             break;
         }
         // NOTE: The phone app needs to know the ls_secs value so it can properly expect sleep behavior.
