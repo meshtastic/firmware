@@ -512,20 +512,26 @@ assert "emitted display and touchscreen paths keep no /dev prefix" 0 spidev-vali
 
 # The writer and reader must agree on the Display key. Emit a config, then load
 # the emitted file again: a "Module" emitter would leave the panel unset and the
-# reload would report Display.Module as unknown.
+# reload would report Display.Module as unknown. The summary names each host from
+# its own field, so it also catches an emitter that swaps Display and Touchscreen.
 ROUNDTRIP_YAML="$WORKDIR/roundtrip.yaml"
 (cd "$WORKDIR" && timeout 60 "$BIN" --config "$FIXTURES/spidev-valid.yaml" --output-yaml -d "$WORKDIR/fs" 2>&1) |
 	awk '/^Lora:/{emit=1} emit' >"$ROUNDTRIP_YAML"
 roundtrip_out="$(cd "$WORKDIR" && timeout 60 "$BIN" --config "$ROUNDTRIP_YAML" --check -d "$WORKDIR/fs" 2>&1)"
 roundtrip_rc=$?
+roundtrip_yaml="$(cd "$WORKDIR" && timeout 60 "$BIN" --config "$ROUNDTRIP_YAML" --output-yaml -d "$WORKDIR/fs" 2>&1)"
 if [[ $roundtrip_rc -eq 0 ]] && ! grep -qF "unknown key 'Display.Module'" <<<"$roundtrip_out" &&
+	grep -qF "Display spidev    : /dev/spidev1.0" <<<"$roundtrip_out" &&
+	grep -qF "Touchscreen spidev: /dev/spidev0.1" <<<"$roundtrip_out" &&
+	grep -qF "Panel: ILI9488" <<<"$roundtrip_yaml" &&
 	grep -qF "Result: 0 errors" <<<"$roundtrip_out"; then
 	PASS=$((PASS + 1))
-	echo "  ok    emitted YAML loads back with Display.Panel"
+	echo "  ok    emitted YAML reloads with Display.Panel and both SPI hosts"
 else
 	FAIL=$((FAIL + 1))
-	echo "  FAIL  emitted YAML loads back with Display.Panel"
+	echo "  FAIL  emitted YAML reloads with Display.Panel and both SPI hosts"
 	sed 's/^/          | /' <<<"$roundtrip_out"
+	sed 's/^/          | /' <<<"$roundtrip_yaml"
 fi
 
 echo
