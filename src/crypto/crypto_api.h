@@ -23,7 +23,8 @@ void crypto_sha256(const crypto_part *parts, size_t num_parts, uint8_t out[32]);
 void crypto_sha512(const crypto_part *parts, size_t num_parts, uint8_t out[64]);
 void crypto_hmac_sha256(const uint8_t *key, size_t key_len, const crypto_part *parts, size_t num_parts, uint8_t out[32]);
 
-// Clamps the scalar (RFC 7748). point == nullptr is the base point. False on a non-canonical point.
+// Clamps the scalar (RFC 7748). point == nullptr is the base point.
+// False on a non-canonical point or a hardware error, and out is then all zero.
 // No weak-point check: an all-zero out is returned as is.
 bool crypto_x25519(uint8_t out[32], const uint8_t scalar[32], const uint8_t *point);
 // True for the small-order points a peer can send to force a known shared

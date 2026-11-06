@@ -211,7 +211,8 @@ bool CryptoEngine::ensurePkiKeys(meshtastic_Config_SecurityConfig &security, mes
     } else {
         LOG_INFO("Generate new PKI keys");
         generateKeyPair(security.public_key.bytes, security.private_key.bytes);
-        keygenSuccess = true;
+        // A hardware error leaves an all-zero public key, which must not be stored as an identity.
+        keygenSuccess = !memfll(security.public_key.bytes, 0, 32);
     }
 
     if (keygenSuccess) {

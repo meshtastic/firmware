@@ -22,33 +22,28 @@
 static constexpr size_t AES_BLOCK = 16;
 static constexpr size_t CCM_L = 2;
 
+static bool ctrRun(CTRCommon &ctr, const uint8_t *key, size_t key_len, const uint8_t counter[16], const uint8_t *in, size_t len,
+                   uint8_t *out)
+{
+    if (!ctr.setKey(key, key_len) || !ctr.setIV(counter, 16) || !ctr.setCounterSize(4))
+        return false;
+    ctr.encrypt(out, in, len);
+    return true;
+}
+
+bool crypto_lib_aes256_ctr(const uint8_t key[32], const uint8_t counter[16], const uint8_t *in, size_t len, uint8_t *out)
+{
+    CTR<AES256> ctr;
+    return ctrRun(ctr, key, 32, counter, in, len, out);
+}
+
 bool crypto_lib_aes_ctr(const uint8_t *key, size_t key_len, const uint8_t counter[16], const uint8_t *in, size_t len,
                         uint8_t *out)
 {
-    auto run = [&](CTRCommon &ctr) {
-        if (!ctr.setKey(key, key_len) || !ctr.setIV(counter, 16) || !ctr.setCounterSize(4))
-            return false;
-        ctr.encrypt(out, in, len);
-        return true;
-    };
-    if (key_len == 16) {
-        CTR<AES128> ctr;
-        return run(ctr);
-    }
-    CTR<AES256> ctr;
-    return run(ctr);
-}
-
-template <typename F> static auto withAes(const uint8_t *key, size_t key_len, F f) -> decltype(f(*(BlockCipher *)nullptr))
-{
-    if (key_len == 16) {
-        AES128 aes;
-        aes.setKey(key, key_len);
-        return f(aes);
-    }
-    AES256 aes;
-    aes.setKey(key, key_len);
-    return f(aes);
+    if (key_len != 16)
+        return crypto_lib_aes256_ctr(key, counter, in, len, out);
+    CTR<AES128> ctr;
+    return ctrRun(ctr, key, 16, counter, in, len, out);
 }
 
 static void putBe16(uint8_t *a, uint16_t val)
@@ -140,31 +135,65 @@ static bool constantTimeEqual(const uint8_t *a, const uint8_t *b, size_t len)
     return d == 0;
 }
 
+static void ccmSeal(BlockCipher &aes, const uint8_t nonce[13], const uint8_t *aad, size_t aad_len, const uint8_t *in, size_t len,
+                    uint8_t *out, uint8_t *tag, size_t tag_len)
+{
+    uint8_t x[AES_BLOCK], a[AES_BLOCK];
+    ccmAuthStart(aes, tag_len, nonce, aad, aad_len, len, x);
+    ccmAuth(aes, in, len, x);
+    ccmCounterStart(nonce, a);
+    ccmCrypt(aes, in, len, out, a);
+    ccmCryptTag(aes, tag_len, x, a, tag);
+}
+
+static bool ccmOpen(BlockCipher &aes, const uint8_t nonce[13], const uint8_t *aad, size_t aad_len, const uint8_t *in, size_t len,
+                    const uint8_t *tag, size_t tag_len, uint8_t *out)
+{
+    uint8_t x[AES_BLOCK], a[AES_BLOCK], t[AES_BLOCK];
+    ccmCounterStart(nonce, a);
+    ccmCryptTag(aes, tag_len, tag, a, t);
+    ccmCrypt(aes, in, len, out, a);
+    ccmAuthStart(aes, tag_len, nonce, aad, aad_len, len, x);
+    ccmAuth(aes, out, len, x);
+    return constantTimeEqual(x, t, tag_len);
+}
+
+void crypto_lib_aes256_ccm_seal(const uint8_t key[32], const uint8_t nonce[13], const uint8_t *aad, size_t aad_len,
+                                const uint8_t *in, size_t len, uint8_t *out, uint8_t *tag, size_t tag_len)
+{
+    AES256 aes;
+    aes.setKey(key, 32);
+    ccmSeal(aes, nonce, aad, aad_len, in, len, out, tag, tag_len);
+}
+
+bool crypto_lib_aes256_ccm_open(const uint8_t key[32], const uint8_t nonce[13], const uint8_t *aad, size_t aad_len,
+                                const uint8_t *in, size_t len, const uint8_t *tag, size_t tag_len, uint8_t *out)
+{
+    AES256 aes;
+    aes.setKey(key, 32);
+    return ccmOpen(aes, nonce, aad, aad_len, in, len, tag, tag_len, out);
+}
+
 void crypto_lib_aes_ccm_seal(const uint8_t *key, size_t key_len, const uint8_t nonce[13], const uint8_t *aad, size_t aad_len,
                              const uint8_t *in, size_t len, uint8_t *out, uint8_t *tag, size_t tag_len)
 {
-    withAes(key, key_len, [&](BlockCipher &aes) {
-        uint8_t x[AES_BLOCK], a[AES_BLOCK];
-        ccmAuthStart(aes, tag_len, nonce, aad, aad_len, len, x);
-        ccmAuth(aes, in, len, x);
-        ccmCounterStart(nonce, a);
-        ccmCrypt(aes, in, len, out, a);
-        ccmCryptTag(aes, tag_len, x, a, tag);
-    });
+    if (key_len != 16) {
+        crypto_lib_aes256_ccm_seal(key, nonce, aad, aad_len, in, len, out, tag, tag_len);
+        return;
+    }
+    AES128 aes;
+    aes.setKey(key, 16);
+    ccmSeal(aes, nonce, aad, aad_len, in, len, out, tag, tag_len);
 }
 
 bool crypto_lib_aes_ccm_open(const uint8_t *key, size_t key_len, const uint8_t nonce[13], const uint8_t *aad, size_t aad_len,
                              const uint8_t *in, size_t len, const uint8_t *tag, size_t tag_len, uint8_t *out)
 {
-    return withAes(key, key_len, [&](BlockCipher &aes) {
-        uint8_t x[AES_BLOCK], a[AES_BLOCK], t[AES_BLOCK];
-        ccmCounterStart(nonce, a);
-        ccmCryptTag(aes, tag_len, tag, a, t);
-        ccmCrypt(aes, in, len, out, a);
-        ccmAuthStart(aes, tag_len, nonce, aad, aad_len, len, x);
-        ccmAuth(aes, out, len, x);
-        return constantTimeEqual(x, t, tag_len);
-    });
+    if (key_len != 16)
+        return crypto_lib_aes256_ccm_open(key, nonce, aad, aad_len, in, len, tag, tag_len, out);
+    AES128 aes;
+    aes.setKey(key, 16);
+    return ccmOpen(aes, nonce, aad, aad_len, in, len, tag, tag_len, out);
 }
 
 template <typename H> static void updateParts(H &h, const crypto_part *parts, size_t num_parts)
