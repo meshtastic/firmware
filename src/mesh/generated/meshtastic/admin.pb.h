@@ -47,7 +47,9 @@ typedef enum _meshtastic_AdminMessage_ConfigType {
     /* Session key config */
     meshtastic_AdminMessage_ConfigType_SESSIONKEY_CONFIG = 8,
     /* device-ui config */
-    meshtastic_AdminMessage_ConfigType_DEVICEUI_CONFIG = 9
+    meshtastic_AdminMessage_ConfigType_DEVICEUI_CONFIG = 9,
+    /* Transport config */
+    meshtastic_AdminMessage_ConfigType_TRANSPORT_CONFIG = 10
 } meshtastic_AdminMessage_ConfigType;
 
 /* TODO: REPLACE */
@@ -502,6 +504,21 @@ typedef struct _meshtastic_AdminMessage {
         uint32_t remove_ignored_node;
         /* Set specified node-num to be muted */
         uint32_t toggle_muted_node;
+        /* Request a single frame of the device's display framebuffer.
+     The frame is delivered to the local client as FromRadio.display_frame
+     chunks (see DisplayFrame in mesh.proto). There is no AdminMessage
+     response. Local connection only: a node receiving this over the mesh,
+     or a build without a display, ignores it. During active mirroring it
+     forces one frame on the next redraw even if the screen is unchanged. */
+        bool get_display_frame_request;
+        /* Enable (true) or disable (false) continuous mirroring of the device
+     display. Unlike most bool verbs in this oneof, false is meaningful.
+     While enabled, the device sends a DisplayFrame after each screen
+     redraw that changed the framebuffer, as FromRadio.display_frame
+     chunks; the first frame arrives immediately and acts as the
+     acknowledgement. Local connection only (see get_display_frame_request)
+     and not persisted across reboot. */
+        bool set_display_mirror;
         /* Begins an edit transaction for config, module config, owner, and channel settings changes
      This will delay the standard *implicit* save to the file system and subsequent reboot behavior until committed (commit_edit_settings) */
         bool begin_edit_settings;
@@ -560,8 +577,8 @@ extern "C" {
 #define _meshtastic_OTAMode_ARRAYSIZE ((meshtastic_OTAMode)(meshtastic_OTAMode_OTA_WIFI+1))
 
 #define _meshtastic_AdminMessage_ConfigType_MIN meshtastic_AdminMessage_ConfigType_DEVICE_CONFIG
-#define _meshtastic_AdminMessage_ConfigType_MAX meshtastic_AdminMessage_ConfigType_DEVICEUI_CONFIG
-#define _meshtastic_AdminMessage_ConfigType_ARRAYSIZE ((meshtastic_AdminMessage_ConfigType)(meshtastic_AdminMessage_ConfigType_DEVICEUI_CONFIG+1))
+#define _meshtastic_AdminMessage_ConfigType_MAX meshtastic_AdminMessage_ConfigType_TRANSPORT_CONFIG
+#define _meshtastic_AdminMessage_ConfigType_ARRAYSIZE ((meshtastic_AdminMessage_ConfigType)(meshtastic_AdminMessage_ConfigType_TRANSPORT_CONFIG+1))
 
 #define _meshtastic_AdminMessage_ModuleConfigType_MIN meshtastic_AdminMessage_ModuleConfigType_MQTT_CONFIG
 #define _meshtastic_AdminMessage_ModuleConfigType_MAX meshtastic_AdminMessage_ModuleConfigType_MESHBEACON_CONFIG
@@ -738,6 +755,8 @@ extern "C" {
 #define meshtastic_AdminMessage_set_ignored_node_tag 47
 #define meshtastic_AdminMessage_remove_ignored_node_tag 48
 #define meshtastic_AdminMessage_toggle_muted_node_tag 49
+#define meshtastic_AdminMessage_get_display_frame_request_tag 50
+#define meshtastic_AdminMessage_set_display_mirror_tag 51
 #define meshtastic_AdminMessage_begin_edit_settings_tag 64
 #define meshtastic_AdminMessage_commit_edit_settings_tag 65
 #define meshtastic_AdminMessage_add_contact_tag  66
@@ -800,6 +819,8 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,store_ui_config,store_ui_con
 X(a, STATIC,   ONEOF,    UINT32,   (payload_variant,set_ignored_node,set_ignored_node),  47) \
 X(a, STATIC,   ONEOF,    UINT32,   (payload_variant,remove_ignored_node,remove_ignored_node),  48) \
 X(a, STATIC,   ONEOF,    UINT32,   (payload_variant,toggle_muted_node,toggle_muted_node),  49) \
+X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,get_display_frame_request,get_display_frame_request),  50) \
+X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,set_display_mirror,set_display_mirror),  51) \
 X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,begin_edit_settings,begin_edit_settings),  64) \
 X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,commit_edit_settings,commit_edit_settings),  65) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,add_contact,add_contact),  66) \
