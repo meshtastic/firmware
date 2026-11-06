@@ -56,7 +56,6 @@ bool crypto_stm32wl_aes_ccm_seal(const uint8_t *key, size_t key_len, const uint8
 bool crypto_stm32wl_aes_ccm_open(const uint8_t *key, size_t key_len, const uint8_t nonce[13], const uint8_t *aad, size_t aad_len,
                                  const uint8_t *in, size_t len, const uint8_t *tag, size_t tag_len, uint8_t *out);
 #endif
-}
 
 #ifdef CRYPTO_HAS_CC310
 bool crypto_nrf52_aes128_ctr(const uint8_t key[16], const uint8_t counter[16], const uint8_t *in, size_t len, uint8_t *out);
