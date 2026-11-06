@@ -10,23 +10,32 @@ namespace graphics
 namespace EmoteRenderer
 {
 
+#if defined(OLED_UA) || defined(OLED_RU) || defined(OLED_GR) || defined(OLED_PL) || defined(OLED_CS)
+#define LOCALE_FONT_UTF8_WIDTH 1
+#endif
+
 static inline int getStringWidth(OLEDDisplay *display, const char *text, size_t len)
 {
-#if defined(OLED_UA) || defined(OLED_RU)
-    return display->getStringWidth(text, len, true);
-#else
-    // OLEDDisplay::getStringWidth (utf8=false) indexes the font jump table by (c - firstChar) with a
-    // signed char and no bounds check, so any byte outside printable ASCII (high bytes, but also
-    // control bytes like a stray 0x0A) reads outside the font array. Measure a sanitized copy in which
-    // unrepresentable bytes count as a '?' placeholder; printable ASCII is passed through unchanged.
+    // OLEDDisplay::getStringWidth indexes the font jump table by (c - firstChar) with a plain char and
+    // no bounds check, so control bytes (and, where char is signed, high bytes) read outside the font
+    // array. Measure a sanitized copy in which such bytes count as a '?' placeholder. Locale fonts pass
+    // high bytes through the UTF-8 lookup so each character is measured as the glyph that gets drawn;
+    // char is unsigned on every firmware target, and those tables cover 0x20-0xFF.
     char safe[64];
     if (len > sizeof(safe) - 1)
         len = sizeof(safe) - 1;
     for (size_t i = 0; i < len; i++) {
         const uint8_t c = static_cast<uint8_t>(text[i]);
+#ifdef LOCALE_FONT_UTF8_WIDTH
+        safe[i] = (c >= 0x20) ? static_cast<char>(c) : '?';
+#else
         safe[i] = (c >= 0x20 && c <= 0x7E) ? static_cast<char>(c) : '?';
+#endif
     }
     safe[len] = '\0';
+#ifdef LOCALE_FONT_UTF8_WIDTH
+    return display->getStringWidth(safe, len, true);
+#else
     return display->getStringWidth(safe, len, false);
 #endif
 }
