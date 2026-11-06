@@ -29,7 +29,7 @@ bool crypto_esp32_aes_ctr(const uint8_t *key, size_t key_len, const uint8_t coun
     return ok;
 }
 
-// The prebuilt mbedTLS has no CCM, so it is built from hardware CBC (the MAC) and CTR (the payload).
+// esp32-common.ini sets CONFIG_MBEDTLS_CCM_C=n, so CCM is built from hardware CBC (the MAC) and CTR (the payload).
 static constexpr size_t CCM_L = 2;
 
 static bool ccmCtrBlock(mbedtls_aes_context *ctx, const uint8_t nonce[13], uint16_t counter, const uint8_t *in, size_t len,

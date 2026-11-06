@@ -10,7 +10,7 @@
 #ifdef ARCH_ESP32
 #include "soc/soc_caps.h"
 // C3 and C6 have no SHA-512 engine.
-#if SOC_SHA_SUPPORT_SHA512 && !defined(CRYPTO_ESP32_NO_SHA512)
+#if SOC_SHA_SUPPORT_SHA512
 #define CRYPTO_ESP32_HAS_SHA512 1
 #endif
 #endif
