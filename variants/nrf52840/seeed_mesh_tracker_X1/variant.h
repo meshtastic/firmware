@@ -40,9 +40,6 @@ extern "C" {
 #define NUM_ANALOG_INPUTS (6)
 #define NUM_ANALOG_OUTPUTS (0)
 
-// Use the native nrf52 usb power detection
-#define NRF_APM
-
 // PIN_3V3_EN use in deep sleep , as power pin.
 #define PIN_3V3_EN (32 + 7)     // P1.7, Power to Sensors
 #define PIN_BAT_ADC_EN (32 + 6) // P1.6, Power to battery ADC
