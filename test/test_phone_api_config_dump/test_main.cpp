@@ -36,10 +36,10 @@ constexpr unsigned NUM_MODULE_CONFIG_MESSAGES = _meshtastic_AdminMessage_ModuleC
 // Config oneof tags: a proto bump that grows one without the other makes a config message
 // carry inner variant 0. The static_asserts turn that drift into a compile error here.
 const pb_size_t kExpectedConfigVariants[] = {
-    meshtastic_Config_device_tag,    meshtastic_Config_position_tag, meshtastic_Config_power_tag,
-    meshtastic_Config_network_tag,   meshtastic_Config_display_tag,  meshtastic_Config_lora_tag,
-    meshtastic_Config_bluetooth_tag, meshtastic_Config_security_tag, meshtastic_Config_sessionkey_tag,
-    meshtastic_Config_device_ui_tag,
+    meshtastic_Config_device_tag,    meshtastic_Config_position_tag,  meshtastic_Config_power_tag,
+    meshtastic_Config_network_tag,   meshtastic_Config_display_tag,   meshtastic_Config_lora_tag,
+    meshtastic_Config_bluetooth_tag, meshtastic_Config_security_tag,  meshtastic_Config_sessionkey_tag,
+    meshtastic_Config_device_ui_tag, meshtastic_Config_transport_tag,
 };
 static_assert(sizeof(kExpectedConfigVariants) / sizeof(kExpectedConfigVariants[0]) == NUM_CONFIG_MESSAGES,
               "AdminMessage ConfigType enum and Config oneof diverged - update PhoneAPI's STATE_SEND_CONFIG and this list");

@@ -1411,6 +1411,15 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
 #if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
     deviceMetadata.has_xeddsa = true;
 #endif
+
+    // Every transport this build can run, whether or not config.transport enables it.
+    deviceMetadata.supported_transports_count = 0;
+    deviceMetadata.supported_transports[deviceMetadata.supported_transports_count++] =
+        meshtastic_Config_TransportConfig_Transport_TRANSPORT_LORA;
+#if HAS_UDP_MULTICAST
+    deviceMetadata.supported_transports[deviceMetadata.supported_transports_count++] =
+        meshtastic_Config_TransportConfig_Transport_TRANSPORT_MULTICAST_UDP;
+#endif
     return deviceMetadata;
 }
 
