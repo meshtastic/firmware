@@ -1,0 +1,7 @@
+# CLEAN. Display.DataBits is a supported override, so it is neither an unknown
+# key nor an out-of-range value.
+Lora:
+  Module: sim
+Display:
+  Panel: ILI9488
+  DataBits: 16
