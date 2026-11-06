@@ -953,8 +953,11 @@ void NimbleBluetooth::setup()
     } else {
         // No IO capability for no PIN mode
         security.setCapability(ESP_IO_CAP_NONE);
-        // No PIN mode: no MITM protection
-        security.setAuthenticationMode(true, false, false);
+        // No PIN mode: no MITM protection, and no bonding either. With bonding on, the node advertises
+        // the SMP bonding bit and a central "just works"-pairs on connect; if that pairing fails the ACL
+        // is torn down before an open characteristic can be subscribed. Nothing in NO_PIN needs an
+        // encrypted link, so don't offer to bond at all.
+        security.setAuthenticationMode(false, false, false);
     }
     // Statics: setup() re-runs on BLE re-enable, and the library never frees these
     // caller-owned callback objects, so register the same instances every cycle.
