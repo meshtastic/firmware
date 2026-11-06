@@ -1,0 +1,6 @@
+# FAULT. Display.DataBits is read as an int, so a name is ignored with a warning.
+Lora:
+  Module: sim
+Display:
+  Panel: ILI9488
+  DataBits: sixteen
