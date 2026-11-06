@@ -14,6 +14,9 @@
 #define CRYPTO_ESP32_HAS_SHA512 1
 #endif
 #endif
+#ifdef ARCH_STM32WL
+#define CRYPTO_HAS_STM32_AES 1
+#endif
 
 typedef bool (*crypto_basemul_fn)(void *ctx, uint8_t point[32], const uint8_t scalar[32]);
 
@@ -44,6 +47,16 @@ void crypto_lib_xeddsa_keys_from_x25519(uint8_t ed_priv[32], uint8_t ed_pub[32],
 void crypto_lib_xeddsa_pub_from_x25519(uint8_t ed_pub[32], const uint8_t x25519_pub[32]);
 bool crypto_lib_random(uint8_t *out, size_t len);
 void crypto_lib_random_add(const uint8_t *data, size_t len);
+
+#ifdef CRYPTO_HAS_STM32_AES
+bool crypto_stm32wl_aes_ctr(const uint8_t *key, size_t key_len, const uint8_t counter[16], const uint8_t *in, size_t len,
+                            uint8_t *out);
+bool crypto_stm32wl_aes_ccm_seal(const uint8_t *key, size_t key_len, const uint8_t nonce[13], const uint8_t *aad, size_t aad_len,
+                                 const uint8_t *in, size_t len, uint8_t *out, uint8_t *tag, size_t tag_len);
+bool crypto_stm32wl_aes_ccm_open(const uint8_t *key, size_t key_len, const uint8_t nonce[13], const uint8_t *aad, size_t aad_len,
+                                 const uint8_t *in, size_t len, const uint8_t *tag, size_t tag_len, uint8_t *out);
+#endif
+}
 
 #ifdef CRYPTO_HAS_CC310
 bool crypto_nrf52_aes128_ctr(const uint8_t key[16], const uint8_t counter[16], const uint8_t *in, size_t len, uint8_t *out);
