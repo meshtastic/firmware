@@ -1094,7 +1094,7 @@ void setup()
     if (bleGattMeshHandler->isEnabled()) {
         // startDisabled() registers the service but never advertises it, so no peer can find it.
         if (!config.bluetooth.enabled)
-            LOG_WARN("BLE GATT mesh: enabled_protocols asks for it, but bluetooth.enabled is false");
+            LOG_WARN("BLE GATT mesh: the transport config asks for it, but bluetooth.enabled is false");
         else
             bleGattMeshHandler->start();
     }
@@ -1105,7 +1105,7 @@ void setup()
     bleGattMeshHandler = new ESP32BLEGattMesh();
     if (bleGattMeshHandler->isEnabled()) {
         if (const char *why = bluetoothBlockedReason())
-            LOG_WARN("BLE GATT mesh: enabled_protocols asks for it, but Bluetooth will not start: %s", why);
+            LOG_WARN("BLE GATT mesh: the transport config asks for it, but Bluetooth will not start: %s", why);
         else
             bleGattMeshHandler->start();
     }
@@ -1419,6 +1419,10 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
 #if HAS_UDP_MULTICAST
     deviceMetadata.supported_transports[deviceMetadata.supported_transports_count++] =
         meshtastic_Config_TransportConfig_Transport_TRANSPORT_MULTICAST_UDP;
+#endif
+#if HAS_BLE_GATT_MESH && (defined(ARCH_NRF52) || (defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_BLUETOOTH))
+    deviceMetadata.supported_transports[deviceMetadata.supported_transports_count++] =
+        meshtastic_Config_TransportConfig_Transport_TRANSPORT_BLE_GATT;
 #endif
     return deviceMetadata;
 }
