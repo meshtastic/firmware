@@ -48,7 +48,9 @@ typedef enum _meshtastic_AdminMessage_ConfigType {
     /* Session key config */
     meshtastic_AdminMessage_ConfigType_SESSIONKEY_CONFIG = 8,
     /* device-ui config */
-    meshtastic_AdminMessage_ConfigType_DEVICEUI_CONFIG = 9
+    meshtastic_AdminMessage_ConfigType_DEVICEUI_CONFIG = 9,
+    /* Transport config */
+    meshtastic_AdminMessage_ConfigType_TRANSPORT_CONFIG = 10
 } meshtastic_AdminMessage_ConfigType;
 
 /* TODO: REPLACE */
@@ -155,7 +157,23 @@ typedef struct _meshtastic_LockdownAuth {
     /* Optional override of the boot-count token TTL granted on success.
  0 = use firmware default (TOKEN_DEFAULT_BOOTS).
  On reboot the firmware decrements this; when it reaches 0 the
- device boots fully locked and requires a fresh passphrase. */
+ device boots fully locked and requires a fresh passphrase.
+
+ SECURITY: a non-zero count is what makes the device able to unlock
+ itself after a reboot, and it pays for that with a stored key. The
+ unlock token holds the data-encryption key wrapped under a key the
+ firmware derives from device identifiers alone - no passphrase. So
+ for as long as a token exists, anyone who can read the flash can
+ recover the DEK without knowing the passphrase, and at-rest
+ encryption protects the data only against a casual dump.
+
+ This bounds exposure by reboot count; it does not eliminate it. 0 is
+ the sentinel for TOKEN_DEFAULT_BOOTS, not a request for zero boots,
+ so it selects a lenient default rather than the strictest setting;
+ 1 is the lowest, granting a single unlocked boot. No value of this
+ field requires a passphrase on every boot. Clients offering a
+ default should send an explicit count and present it as a
+ convenience trade-off. */
     uint32_t boots_remaining;
     /* Optional wall-clock expiry for the unlock token, as absolute
  Unix-epoch seconds. 0 = no time limit (only the boot-count TTL
@@ -584,8 +602,8 @@ extern "C" {
 #define _meshtastic_OTAMode_ARRAYSIZE ((meshtastic_OTAMode)(meshtastic_OTAMode_OTA_WIFI+1))
 
 #define _meshtastic_AdminMessage_ConfigType_MIN meshtastic_AdminMessage_ConfigType_DEVICE_CONFIG
-#define _meshtastic_AdminMessage_ConfigType_MAX meshtastic_AdminMessage_ConfigType_DEVICEUI_CONFIG
-#define _meshtastic_AdminMessage_ConfigType_ARRAYSIZE ((meshtastic_AdminMessage_ConfigType)(meshtastic_AdminMessage_ConfigType_DEVICEUI_CONFIG+1))
+#define _meshtastic_AdminMessage_ConfigType_MAX meshtastic_AdminMessage_ConfigType_TRANSPORT_CONFIG
+#define _meshtastic_AdminMessage_ConfigType_ARRAYSIZE ((meshtastic_AdminMessage_ConfigType)(meshtastic_AdminMessage_ConfigType_TRANSPORT_CONFIG+1))
 
 #define _meshtastic_AdminMessage_ModuleConfigType_MIN meshtastic_AdminMessage_ModuleConfigType_MQTT_CONFIG
 #define _meshtastic_AdminMessage_ModuleConfigType_MAX meshtastic_AdminMessage_ModuleConfigType_MESHBEACON_CONFIG

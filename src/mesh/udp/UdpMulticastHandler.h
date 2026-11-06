@@ -5,6 +5,7 @@
 #include "mesh/MeshTransportBase.h"
 #include "mesh/NodeDB.h"
 #include "mesh/Router.h"
+#include "mesh/TransportConfig.h"
 
 #if HAS_ETHERNET && defined(ARCH_NRF52)
 #include "mesh/eth/ethClient.h"
@@ -33,7 +34,7 @@ class UdpMulticastHandler final : public MeshTransportBase
 
     bool isEnabled() const override
     {
-        return config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST;
+        return TransportConfig::enables(config.transport, meshtastic_Config_TransportConfig_Transport_TRANSPORT_MULTICAST_UDP);
     }
 
     void start()

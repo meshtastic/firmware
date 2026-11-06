@@ -670,7 +670,17 @@ typedef enum _meshtastic_MeshPacket_TransportMechanism {
     /* Arrived via API connection */
     meshtastic_MeshPacket_TransportMechanism_TRANSPORT_API = 7,
     /* Arrived via Unicast UDP */
-    meshtastic_MeshPacket_TransportMechanism_TRANSPORT_UNICAST_UDP = 8
+    meshtastic_MeshPacket_TransportMechanism_TRANSPORT_UNICAST_UDP = 8,
+    /* Arrived via a connectionless BLE 5 extended advertisement */
+    meshtastic_MeshPacket_TransportMechanism_TRANSPORT_BLE_ADV = 9,
+    /* Arrived via a BLE GATT mesh-peer connection, in either GATT role */
+    meshtastic_MeshPacket_TransportMechanism_TRANSPORT_BLE_GATT = 10,
+    /* Arrived as sound, over a speaker and the microphones in earshot of it */
+    meshtastic_MeshPacket_TransportMechanism_TRANSPORT_AUDIO = 11,
+    /* Arrived over meshtastic-node-kmp's video bearer, as QR frames on a screen read by a camera */
+    meshtastic_MeshPacket_TransportMechanism_TRANSPORT_VIDEO = 12,
+    /* Arrived over meshtastic-node-kmp's Wi-Fi Aware bearer, a NAN data path to a nearby device */
+    meshtastic_MeshPacket_TransportMechanism_TRANSPORT_WIFI_AWARE = 13
 } meshtastic_MeshPacket_TransportMechanism;
 
 /* Outcome of checking Routing.ack_proof on a received ack or nak.
@@ -1828,6 +1838,14 @@ typedef struct _meshtastic_DeviceMetadata {
  hardware address is known. Empty when the device has no BLE radio or the
  address cannot be determined. */
     char ble_address[18];
+    /* Every transport this node can run that Config.TransportConfig.enabled switches,
+ whether or not it is enabled there. A client offers a switch for each one listed
+ here, backed by that field, and for nothing else. Values enabled is not the
+ switch for are never listed: TRANSPORT_MQTT (switched by MQTTConfig.enabled),
+ TRANSPORT_UNICAST_UDP (part of TRANSPORT_MULTICAST_UDP), TRANSPORT_INTERNAL and
+ TRANSPORT_API. Empty on firmware older than 2.8.3. */
+    pb_size_t supported_transports_count;
+    meshtastic_Config_TransportConfig_Transport supported_transports[16];
     /* nRF52 bootloader version, packed as major << 16 | minor << 8 | patch, as the
  bootloader hands it to the application at boot. Meshtastic nRF52 Bootloader
  releases before 2.6.0 report 0.9.2, the same as stock Adafruit 0.9.2. 0 means
@@ -2085,8 +2103,8 @@ extern "C" {
 #define _meshtastic_MeshPacket_Delayed_ARRAYSIZE ((meshtastic_MeshPacket_Delayed)(meshtastic_MeshPacket_Delayed_DELAYED_DIRECT+1))
 
 #define _meshtastic_MeshPacket_TransportMechanism_MIN meshtastic_MeshPacket_TransportMechanism_TRANSPORT_INTERNAL
-#define _meshtastic_MeshPacket_TransportMechanism_MAX meshtastic_MeshPacket_TransportMechanism_TRANSPORT_UNICAST_UDP
-#define _meshtastic_MeshPacket_TransportMechanism_ARRAYSIZE ((meshtastic_MeshPacket_TransportMechanism)(meshtastic_MeshPacket_TransportMechanism_TRANSPORT_UNICAST_UDP+1))
+#define _meshtastic_MeshPacket_TransportMechanism_MAX meshtastic_MeshPacket_TransportMechanism_TRANSPORT_WIFI_AWARE
+#define _meshtastic_MeshPacket_TransportMechanism_ARRAYSIZE ((meshtastic_MeshPacket_TransportMechanism)(meshtastic_MeshPacket_TransportMechanism_TRANSPORT_WIFI_AWARE+1))
 
 #define _meshtastic_MeshPacket_AckProofStatus_MIN meshtastic_MeshPacket_AckProofStatus_ACK_PROOF_ABSENT
 #define _meshtastic_MeshPacket_AckProofStatus_MAX meshtastic_MeshPacket_AckProofStatus_ACK_PROOF_NO_KEY
@@ -2171,6 +2189,7 @@ extern "C" {
 
 #define meshtastic_DeviceMetadata_role_ENUMTYPE meshtastic_Config_DeviceConfig_Role
 #define meshtastic_DeviceMetadata_hw_model_ENUMTYPE meshtastic_HardwareModel
+#define meshtastic_DeviceMetadata_supported_transports_ENUMTYPE meshtastic_Config_TransportConfig_Transport
 
 #define meshtastic_DisplayInfo_format_ENUMTYPE meshtastic_DisplayFrame_Format
 #define meshtastic_DisplayInfo_panel_class_ENUMTYPE meshtastic_DisplayInfo_PanelClass
@@ -2221,7 +2240,7 @@ extern "C" {
 #define meshtastic_Compressed_init_default       {_meshtastic_PortNum_MIN, {0, {0}}}
 #define meshtastic_NeighborInfo_init_default     {0, 0, 0, 0, {meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default}}
 #define meshtastic_Neighbor_init_default         {0, 0, 0, 0}
-#define meshtastic_DeviceMetadata_init_default   {"", 0, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_Role_MIN, 0, _meshtastic_HardwareModel_MIN, 0, 0, 0, 0, false, meshtastic_DisplayInfo_init_default, "", 0}
+#define meshtastic_DeviceMetadata_init_default   {"", 0, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_Role_MIN, 0, _meshtastic_HardwareModel_MIN, 0, 0, 0, 0, false, meshtastic_DisplayInfo_init_default, "", 0, {_meshtastic_Config_TransportConfig_Transport_MIN, _meshtastic_Config_TransportConfig_Transport_MIN, _meshtastic_Config_TransportConfig_Transport_MIN, _meshtastic_Config_TransportConfig_Transport_MIN, _meshtastic_Config_TransportConfig_Transport_MIN, _meshtastic_Config_TransportConfig_Transport_MIN, _meshtastic_Config_TransportConfig_Transport_MIN, _meshtastic_Config_TransportConfig_Transport_MIN, _meshtastic_Config_TransportConfig_Transport_MIN, _meshtastic_Config_TransportConfig_Transport_MIN, _meshtastic_Config_TransportConfig_Transport_MIN, _meshtastic_Config_TransportConfig_Transport_MIN, _meshtastic_Config_TransportConfig_Transport_MIN, _meshtastic_Config_TransportConfig_Transport_MIN, _meshtastic_Config_TransportConfig_Transport_MIN, _meshtastic_Config_TransportConfig_Transport_MIN}, 0}
 #define meshtastic_DisplayInfo_init_default      {0, 0, _meshtastic_DisplayFrame_Format_MIN, _meshtastic_DisplayInfo_PanelClass_MIN, 0}
 #define meshtastic_LoRaPresetGroup_init_default  {0, {_meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN}, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, 0}
 #define meshtastic_LoRaRegionPresets_init_default {_meshtastic_Config_LoRaConfig_RegionCode_MIN, 0}
@@ -2264,7 +2283,7 @@ extern "C" {
 #define meshtastic_Compressed_init_zero          {_meshtastic_PortNum_MIN, {0, {0}}}
 #define meshtastic_NeighborInfo_init_zero        {0, 0, 0, 0, {meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero}}
 #define meshtastic_Neighbor_init_zero            {0, 0, 0, 0}
-#define meshtastic_DeviceMetadata_init_zero      {"", 0, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_Role_MIN, 0, _meshtastic_HardwareModel_MIN, 0, 0, 0, 0, false, meshtastic_DisplayInfo_init_zero, "", 0}
+#define meshtastic_DeviceMetadata_init_zero      {"", 0, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_Role_MIN, 0, _meshtastic_HardwareModel_MIN, 0, 0, 0, 0, false, meshtastic_DisplayInfo_init_zero, "", 0, {_meshtastic_Config_TransportConfig_Transport_MIN, _meshtastic_Config_TransportConfig_Transport_MIN, _meshtastic_Config_TransportConfig_Transport_MIN, _meshtastic_Config_TransportConfig_Transport_MIN, _meshtastic_Config_TransportConfig_Transport_MIN, _meshtastic_Config_TransportConfig_Transport_MIN, _meshtastic_Config_TransportConfig_Transport_MIN, _meshtastic_Config_TransportConfig_Transport_MIN, _meshtastic_Config_TransportConfig_Transport_MIN, _meshtastic_Config_TransportConfig_Transport_MIN, _meshtastic_Config_TransportConfig_Transport_MIN, _meshtastic_Config_TransportConfig_Transport_MIN, _meshtastic_Config_TransportConfig_Transport_MIN, _meshtastic_Config_TransportConfig_Transport_MIN, _meshtastic_Config_TransportConfig_Transport_MIN, _meshtastic_Config_TransportConfig_Transport_MIN}, 0}
 #define meshtastic_DisplayInfo_init_zero         {0, 0, _meshtastic_DisplayFrame_Format_MIN, _meshtastic_DisplayInfo_PanelClass_MIN, 0}
 #define meshtastic_LoRaPresetGroup_init_zero     {0, {_meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN}, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, 0}
 #define meshtastic_LoRaRegionPresets_init_zero   {_meshtastic_Config_LoRaConfig_RegionCode_MIN, 0}
@@ -2505,6 +2524,7 @@ extern "C" {
 #define meshtastic_DeviceMetadata_has_xeddsa_tag 14
 #define meshtastic_DeviceMetadata_display_tag    16
 #define meshtastic_DeviceMetadata_ble_address_tag 17
+#define meshtastic_DeviceMetadata_supported_transports_tag 18
 #define meshtastic_DeviceMetadata_bootloader_version_tag 19
 #define meshtastic_LoRaPresetGroup_presets_tag   1
 #define meshtastic_LoRaPresetGroup_default_preset_tag 2
@@ -2976,6 +2996,7 @@ X(a, STATIC,   SINGULAR, UINT32,   excluded_modules,  12) \
 X(a, STATIC,   SINGULAR, BOOL,     has_xeddsa,       14) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  display,          16) \
 X(a, STATIC,   SINGULAR, STRING,   ble_address,      17) \
+X(a, STATIC,   REPEATED, UENUM,    supported_transports,  18) \
 X(a, STATIC,   SINGULAR, UINT32,   bootloader_version,  19)
 #define meshtastic_DeviceMetadata_CALLBACK NULL
 #define meshtastic_DeviceMetadata_DEFAULT NULL
@@ -3143,7 +3164,7 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 #define meshtastic_ClientNotification_size       484
 #define meshtastic_Compressed_size               239
 #define meshtastic_Data_size                     335
-#define meshtastic_DeviceMetadata_size           100
+#define meshtastic_DeviceMetadata_size           148
 #define meshtastic_DisplayFrame_size             437
 #define meshtastic_DisplayInfo_size              14
 #define meshtastic_DisplayPalette_ColorRegion_size 24
