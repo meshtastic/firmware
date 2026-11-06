@@ -9,6 +9,7 @@
 #include "Router.h"
 #include "concurrency/OSThread.h"
 #include "mesh-pb-constants.h"
+#include "mesh/TransportConfig.h"
 
 #include <array>
 
@@ -91,7 +92,7 @@ class BLEMeshHandler : private concurrency::OSThread, public MeshTransportBase
 
     bool isEnabled() const override
     {
-        return config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_BLE_BROADCAST;
+        return TransportConfig::enables(config.transport, meshtastic_Config_TransportConfig_Transport_TRANSPORT_BLE_ADV);
     }
 
     /// Packets refused for not fitting one advertisement. The ceiling is the whole encoded
