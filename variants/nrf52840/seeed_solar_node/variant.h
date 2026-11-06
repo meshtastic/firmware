@@ -104,6 +104,8 @@ static const uint8_t SCL = PIN_WIRE_SCL;
         // program pin 32 / or P0.31)
 #define ADC_CTRL BAT_READ
 #define ADC_CTRL_ENABLED LOW
+// Battery is built into the Solar Node; do not infer presence from the OCV cutoff.
+#define BATTERY_IMMUTABLE
 #define BATTERY_SENSE_RESOLUTION_BITS 12
 #define ADC_MULTIPLIER 3.3
 #define BATTERY_PIN PIN_VBAT // PIN_A7
