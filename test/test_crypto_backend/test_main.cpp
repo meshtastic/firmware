@@ -13,6 +13,11 @@
 // the backend chosen per primitive against a per-target table, so a dispatch that silently falls back to
 // software fails.
 //
+// On nRF52840 the CC310 functions are also compared directly with the Crypto library, including every
+// CCM key size, length, tag and AAD; flash-resident and unaligned buffers; and the edge keys whose verdict
+// the software path used to give. crypto-nrf52840-backend links with --wrap, so the suite counts real calls
+// per primitive and fails if a public function reaches the wrong backend, for example software AES-128.
+//
 // Regressions guarded: a changed nonce or AAD layout, tag length or CCM length field; in-place calls
 // corrupting data (the old aes_ccm_* wrote the keystream into out before reading in, so the moved
 // code must not); buffers misread when unaligned or at block boundaries; forged or tampered input
@@ -917,6 +922,496 @@ void test_esp32_concurrent_tasks_get_correct_aes_and_sha_results(void)
     vSemaphoreDelete(tasks[1].done);
 }
 #endif
+// ---- Long lengths, on every target -------------------------------------------------------------
+
+static const size_t kLongLengths[] = {240, 241, 242, 243, 244, 245, 246, 247, 248, 249,
+                                      250, 251, 252, 253, 254, 255, 256, 257, 512, 1024};
+static constexpr size_t LONG_BUF = 1024 + 16;
+static uint8_t longIn[LONG_BUF], longOut[LONG_BUF], longRef[LONG_BUF];
+
+// The old CC310 path passed the length through a uint8_t, so 241-256 wrapped to a short run.
+void test_aes_ctr_long_lengths_equal_block_by_block_counter(void)
+{
+    for (size_t keyLen : kKeyLengths) {
+        uint8_t key[32];
+        cv::seqKey(key, keyLen);
+        for (size_t len : kLongLengths) {
+            cv::pattern(longIn, len);
+            memset(longOut + len, 0xA5, 16);
+            TEST_ASSERT_TRUE(crypto_aes_ctr(key, keyLen, cv::kLenCtrBlock, longIn, len, longOut));
+            uint8_t counter[16];
+            memcpy(counter, cv::kLenCtrBlock, sizeof(counter));
+            for (size_t off = 0; off < len; off += 16) {
+                TEST_ASSERT_TRUE(
+                    crypto_aes_ctr(key, keyLen, counter, longIn + off, len - off < 16 ? len - off : 16, longRef + off));
+                for (int i = 15; i >= 12 && ++counter[i] == 0; i--) {
+                }
+            }
+            assertMem(longRef, longOut, len, "long ctr");
+            TEST_ASSERT_EACH_EQUAL_UINT8(0xA5, longOut + len, 16);
+        }
+    }
+}
+
+void test_aes_ccm_long_lengths_round_trip_and_reject_tamper(void)
+{
+    for (size_t keyLen : kKeyLengths) {
+        uint8_t key[32], tag[16];
+        cv::seqKey(key, keyLen);
+        for (size_t len : kLongLengths) {
+            cv::pattern(longIn, len);
+            TEST_ASSERT_TRUE(crypto_aes_ccm_seal(key, keyLen, cv::kLenCcmNonce, nullptr, 0, longIn, len, longOut, tag, 8));
+            TEST_ASSERT_TRUE(crypto_aes_ccm_open(key, keyLen, cv::kLenCcmNonce, nullptr, 0, longOut, len, tag, 8, longRef));
+            assertMem(longIn, longRef, len, "long ccm");
+            longOut[len - 1] ^= 1;
+            TEST_ASSERT_FALSE(crypto_aes_ccm_open(key, keyLen, cv::kLenCcmNonce, nullptr, 0, longOut, len, tag, 8, longRef));
+        }
+    }
+}
+
+#if !(MESHTASTIC_EXCLUDE_PKI)
+// generateKeyPair and regeneratePublicKey rely on this: a stale out would pass as a public key.
+void test_x25519_failure_leaves_out_all_zero(void)
+{
+    uint8_t scalar[32], point[32], out[32];
+    cv::hex(cv::kRfc7748Dh[0], scalar, sizeof(scalar));
+    memset(point, 0xFF, sizeof(point));
+    point[0] = 0xED;
+    point[31] = 0x7F;
+    memset(out, 0xA5, sizeof(out));
+    TEST_ASSERT_FALSE(crypto_x25519(out, scalar, point));
+    TEST_ASSERT_EACH_EQUAL_UINT8(0, out, sizeof(out));
+}
+#endif
+
+#ifdef CRYPTO_HAS_CC310
+// ---- nRF52840: CC310 against the Crypto library ---------------------------------------------------
+
+static const size_t kHwLengths[] = {0,   1,   15,  16,  17,  63,  64,  65,  127, 128, 129, 240, 241, 242, 243,
+                                    244, 245, 246, 247, 248, 249, 250, 251, 252, 253, 254, 255, 256, 257, 1024};
+static const size_t kTagLengths[] = {4, 8, 12, 16};
+static const size_t kAadLengths[] = {0, 1, 13, 14, 15, 30};
+static constexpr size_t HW_BUF = 1024 + 16;
+
+static uint8_t hwAad[32], hwIn[HW_BUF], hwHw[HW_BUF], hwLib[HW_BUF], hwTmp[HW_BUF], hwTagA[16], hwTagB[16];
+
+static void describe(char *what, size_t cap, size_t keyLen, size_t len, size_t tagLen = 0, size_t aadLen = 0)
+{
+    snprintf(what, cap, "AES-%d len %d M=%d aad=%d", (int)keyLen * 8, (int)len, (int)tagLen, (int)aadLen);
+}
+
+void test_nrf52_aes_ctr_matches_library_for_every_key_size_and_length(void)
+{
+    for (size_t keyLen : kKeyLengths) {
+        uint8_t key[32];
+        cv::seqKey(key, keyLen);
+        for (size_t len : kHwLengths) {
+            char what[48];
+            describe(what, sizeof(what), keyLen, len);
+            cv::pattern(hwIn, len);
+            TEST_ASSERT_TRUE_MESSAGE(crypto_aes_ctr(key, keyLen, cv::kLenCtrBlock, hwIn, len, hwHw), what);
+            TEST_ASSERT_TRUE_MESSAGE(crypto_lib_aes_ctr(key, keyLen, cv::kLenCtrBlock, hwIn, len, hwLib), what);
+            assertMem(hwLib, hwHw, len, what);
+            memcpy(hwTmp, hwIn, len);
+            TEST_ASSERT_TRUE_MESSAGE(crypto_aes_ctr(key, keyLen, cv::kLenCtrBlock, hwTmp, len, hwTmp), what);
+            assertMem(hwLib, hwTmp, len, what);
+        }
+    }
+}
+
+void test_nrf52_aes_ccm_matches_library_for_every_key_size_length_tag_and_aad(void)
+{
+    cv::pattern(hwAad, sizeof(hwAad));
+    for (size_t keyLen : kKeyLengths) {
+        uint8_t key[32];
+        cv::seqKey(key, keyLen);
+        for (size_t len : kHwLengths) {
+            cv::pattern(hwIn, len);
+            for (size_t tagLen : kTagLengths) {
+                for (size_t aadLen : kAadLengths) {
+                    char what[48];
+                    describe(what, sizeof(what), keyLen, len, tagLen, aadLen);
+                    const uint8_t *aad = aadLen ? hwAad : nullptr;
+
+                    TEST_ASSERT_TRUE_MESSAGE(
+                        crypto_aes_ccm_seal(key, keyLen, cv::kLenCcmNonce, aad, aadLen, hwIn, len, hwHw, hwTagA, tagLen), what);
+                    crypto_lib_aes_ccm_seal(key, keyLen, cv::kLenCcmNonce, aad, aadLen, hwIn, len, hwLib, hwTagB, tagLen);
+                    assertMem(hwLib, hwHw, len, what);
+                    assertMem(hwTagB, hwTagA, tagLen, what);
+
+                    TEST_ASSERT_TRUE_MESSAGE(
+                        crypto_aes_ccm_open(key, keyLen, cv::kLenCcmNonce, aad, aadLen, hwLib, len, hwTagB, tagLen, hwTmp), what);
+                    assertMem(hwIn, hwTmp, len, what);
+                    TEST_ASSERT_TRUE_MESSAGE(
+                        crypto_lib_aes_ccm_open(key, keyLen, cv::kLenCcmNonce, aad, aadLen, hwHw, len, hwTagA, tagLen, hwTmp),
+                        what);
+                    assertMem(hwIn, hwTmp, len, what);
+
+                    hwTagA[0] ^= 1;
+                    TEST_ASSERT_FALSE_MESSAGE(
+                        crypto_aes_ccm_open(key, keyLen, cv::kLenCcmNonce, aad, aadLen, hwHw, len, hwTagA, tagLen, hwTmp), what);
+                    if (len) {
+                        hwTagA[0] ^= 1;
+                        hwHw[len / 2] ^= 0x40;
+                        TEST_ASSERT_FALSE_MESSAGE(
+                            crypto_aes_ccm_open(key, keyLen, cv::kLenCcmNonce, aad, aadLen, hwHw, len, hwTagA, tagLen, hwTmp),
+                            what);
+                        if (keyLen == 16)
+                            TEST_ASSERT_EACH_EQUAL_UINT8_MESSAGE(0, hwTmp, len, "failed open wipes out");
+                    }
+                    if (aadLen) {
+                        hwAad[0] ^= 1;
+                        crypto_lib_aes_ccm_seal(key, keyLen, cv::kLenCcmNonce, aad, aadLen, hwIn, len, hwHw, hwTagA, tagLen);
+                        hwAad[0] ^= 1;
+                        TEST_ASSERT_FALSE_MESSAGE(
+                            crypto_aes_ccm_open(key, keyLen, cv::kLenCcmNonce, aad, aadLen, hwHw, len, hwTagA, tagLen, hwTmp),
+                            what);
+                    }
+                }
+            }
+        }
+    }
+}
+
+void test_nrf52_sha_and_hmac_match_library_for_every_length_and_split(void)
+{
+    uint8_t keyBytes[100];
+    cv::pattern(keyBytes, sizeof(keyBytes));
+    for (size_t len : kHwLengths) {
+        cv::pattern(hwIn, len);
+        const size_t cut = len / 3;
+        const crypto_part parts[3] = {{hwIn, cut}, {hwIn + cut, len / 3}, {hwIn + cut + len / 3, len - cut - len / 3}};
+        uint8_t a[64], b[64];
+
+        crypto_sha256(parts, 3, a);
+        crypto_lib_sha256(parts, 3, b);
+        assertMem(b, a, 32, "sha-256");
+        crypto_sha512(parts, 3, a);
+        crypto_lib_sha512(parts, 3, b);
+        assertMem(b, a, 64, "sha-512");
+        for (size_t keyLen : {(size_t)0, (size_t)1, (size_t)32, (size_t)64, (size_t)65, (size_t)100}) {
+            crypto_hmac_sha256(keyBytes, keyLen, parts, 3, a);
+            crypto_lib_hmac_sha256(keyBytes, keyLen, parts, 3, b);
+            assertMem(b, a, 32, "hmac-sha-256");
+        }
+    }
+}
+
+// constexpr data lands in .rodata, in flash, which the CC310 DMA cannot read.
+struct FlashBytes {
+    uint8_t key[32], data[256];
+    constexpr FlashBytes() : key(), data()
+    {
+        for (size_t i = 0; i < 32; i++)
+            key[i] = (uint8_t)i;
+        for (size_t i = 0; i < 256; i++)
+            data[i] = (uint8_t)(i * 7 + 3);
+    }
+};
+static constexpr FlashBytes kFlash;
+
+static void runAllPrimitives(const uint8_t *key, size_t keyLen, const uint8_t *in, uint8_t *out, uint8_t *digest)
+{
+    const crypto_part part = {in, 256};
+    TEST_ASSERT_TRUE(crypto_aes_ctr(key, keyLen, cv::kLenCtrBlock, in, 256, out));
+    TEST_ASSERT_TRUE(crypto_aes_ccm_seal(key, keyLen, cv::kLenCcmNonce, in, 13, in, 256, out + 256, out + 512, 8));
+    crypto_sha256(&part, 1, digest);
+    crypto_sha512(&part, 1, digest + 32);
+    crypto_hmac_sha256(key, keyLen, &part, 1, digest + 96);
+}
+
+void test_nrf52_key_and_input_in_flash_give_the_same_results_as_in_ram(void)
+{
+    TEST_ASSERT_TRUE((uintptr_t)kFlash.data < 0x20000000);
+    static uint8_t ramKey[32], ramData[256], outFlash[528], outRam[528], digFlash[128], digRam[128];
+    memcpy(ramKey, kFlash.key, sizeof(ramKey));
+    memcpy(ramData, kFlash.data, sizeof(ramData));
+    for (size_t keyLen : kKeyLengths) {
+        runAllPrimitives(kFlash.key, keyLen, kFlash.data, outFlash, digFlash);
+        runAllPrimitives(ramKey, keyLen, ramData, outRam, digRam);
+        assertMem(outRam, outFlash, 520, "ctr and ccm");
+        assertMem(digRam, digFlash, 128, "hashes");
+    }
+}
+
+void test_nrf52_unaligned_and_in_place_match_library_at_block_boundaries(void)
+{
+    static const size_t lens[] = {31, 32, 33, 63, 64, 65, 127, 128, 129, 191, 192, 193, 256, 257};
+    for (size_t keyLen : kKeyLengths) {
+        uint8_t key[32];
+        cv::seqKey(key, keyLen);
+        for (size_t len : lens) {
+            cv::pattern(hwIn, len);
+            crypto_lib_aes_ctr(key, keyLen, cv::kLenCtrBlock, hwIn, len, hwLib);
+            crypto_lib_aes_ccm_seal(key, keyLen, cv::kLenCcmNonce, nullptr, 0, hwIn, len, hwLib + 300, hwTagB, 8);
+            const crypto_part ref = {hwIn, len};
+            uint8_t digestLib[32], digestHw[32];
+            crypto_lib_sha256(&ref, 1, digestLib);
+            for (size_t offset = 0; offset < 4; offset++) {
+                memcpy(hwTmp + offset, hwIn, len);
+                TEST_ASSERT_TRUE(crypto_aes_ctr(key, keyLen, cv::kLenCtrBlock, hwTmp + offset, len, hwTmp + offset));
+                assertMem(hwLib, hwTmp + offset, len, "ctr in place");
+
+                memcpy(hwTmp + offset, hwIn, len);
+                TEST_ASSERT_TRUE(crypto_aes_ccm_seal(key, keyLen, cv::kLenCcmNonce, nullptr, 0, hwTmp + offset, len,
+                                                     hwTmp + offset, hwTagA, 8));
+                assertMem(hwLib + 300, hwTmp + offset, len, "ccm in place");
+                assertMem(hwTagB, hwTagA, 8, "ccm tag");
+                TEST_ASSERT_TRUE(crypto_aes_ccm_open(key, keyLen, cv::kLenCcmNonce, nullptr, 0, hwTmp + offset, len, hwTagA, 8,
+                                                     hwTmp + offset));
+                assertMem(hwIn, hwTmp + offset, len, "ccm open in place");
+
+                const crypto_part part = {hwTmp + offset, len};
+                crypto_sha256(&part, 1, digestHw);
+                assertMem(digestLib, digestHw, 32, "sha-256 unaligned");
+            }
+        }
+    }
+}
+
+#if !(MESHTASTIC_EXCLUDE_PKI)
+static bool x25519Rejected(bool ok, const uint8_t out[32])
+{
+    return !ok || crypto_x25519_is_weak(out);
+}
+
+void test_nrf52_x25519_matches_library_for_canonical_points_and_top_bit(void)
+{
+    uint8_t scalar[32], point[32], hw[32], lib[32];
+    cv::hex(cv::kRfc7748Dh[0], scalar, sizeof(scalar));
+    scalar[0] &= 0xF8;
+    scalar[31] = (scalar[31] & 0x7F) | 0x40;
+    for (int i = 0; i < 16; i++) {
+        memset(point, 0x11 * (i + 1), sizeof(point));
+        point[0] = (uint8_t)(i * 13 + 9);
+        TEST_ASSERT_TRUE(crypto_nrf52_x25519(hw, scalar, point));
+        TEST_ASSERT_TRUE(crypto_lib_x25519(lib, scalar, point));
+        assertMem(lib, hw, 32, "x25519");
+    }
+    TEST_ASSERT_TRUE(crypto_nrf52_x25519(hw, scalar, nullptr));
+    TEST_ASSERT_TRUE(crypto_lib_x25519(lib, scalar, nullptr));
+    assertMem(lib, hw, 32, "x25519 base point");
+}
+
+// isCanonicalPoint and the all-zero result decide which peer keys a node accepts. The software path
+// used to answer whenever the CC310 returned an error, so what is rejected must still be rejected.
+void test_nrf52_x25519_rejects_exactly_what_the_library_rejects_on_edge_points(void)
+{
+    static const char *const edge[] = {
+        "0000000000000000000000000000000000000000000000000000000000000000", // u = 0
+        "0100000000000000000000000000000000000000000000000000000000000000", // u = 1
+        "ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f", // u = -1
+        "e0eb7a7c3b41b8ae1656e3faf19fc46ada098deb9c32b1fd866205165f49b800", // order 8
+        "5f9c95bca3508c24b1d0b1559c83ef5b04445cc4581c8e86d8224eddd09f1157", // order 8
+        "edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f", // u = p
+        "eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f", // u = p + 1
+        "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", // u = 2^255 - 1
+    };
+    uint8_t scalar[32], point[32], hw[32], lib[32];
+    cv::hex(cv::kRfc7748Dh[0], scalar, sizeof(scalar));
+    scalar[0] &= 0xF8;
+    scalar[31] = (scalar[31] & 0x7F) | 0x40;
+    for (const char *h : edge) {
+        cv::hex(h, point, sizeof(point));
+        const bool hwOk = crypto_nrf52_x25519(hw, scalar, point);
+        const bool libOk = crypto_lib_x25519(lib, scalar, point);
+        TEST_ASSERT_TRUE_MESSAGE(x25519Rejected(libOk, lib), h);
+        TEST_ASSERT_TRUE_MESSAGE(x25519Rejected(hwOk, hw), h);
+    }
+}
+
+void test_nrf52_x25519_scalar_and_point_in_flash(void)
+{
+    uint8_t scalar[32], point[32], fromFlash[32], fromRam[32];
+    memcpy(scalar, kFlash.key, sizeof(scalar));
+    memcpy(point, kFlash.data, sizeof(point));
+    scalar[0] &= 0xF8;
+    scalar[31] = (scalar[31] & 0x7F) | 0x40;
+    TEST_ASSERT_TRUE(crypto_x25519(fromFlash, kFlash.key, kFlash.data));
+    TEST_ASSERT_TRUE(crypto_nrf52_x25519(fromRam, scalar, point));
+    assertMem(fromRam, fromFlash, 32, "x25519 flash");
+}
+
+#if !(MESHTASTIC_EXCLUDE_XEDDSA)
+// RFC 8032 7.1 TEST 3, as bytes so that it stays in flash.
+static const uint8_t kFlashEdPub[32] = {0x3d, 0x40, 0x17, 0xc3, 0xe8, 0x43, 0x89, 0x5a, 0x92, 0xb7, 0x0a,
+                                        0xa7, 0x4d, 0x1b, 0x7e, 0xbc, 0x9c, 0x98, 0x2c, 0xcf, 0x2e, 0xc4,
+                                        0x96, 0x8c, 0xc0, 0xcd, 0x55, 0xf1, 0x2a, 0xf4, 0x66, 0x0c};
+static const uint8_t kFlashEdSig[64] = {0x62, 0x91, 0xd6, 0x57, 0xde, 0xec, 0x24, 0x02, 0x48, 0x27, 0xe6, 0x9c, 0x3a,
+                                        0xbe, 0x01, 0xa3, 0x0c, 0xe5, 0x48, 0xa2, 0x84, 0x74, 0x3a, 0x44, 0x5e, 0x36,
+                                        0x80, 0xd7, 0xdb, 0x5a, 0xc3, 0xac, 0x18, 0xff, 0x9b, 0x53, 0x8d, 0x16, 0xf2,
+                                        0x90, 0xae, 0x67, 0xf7, 0x60, 0x98, 0x4d, 0xc6, 0x59, 0x4a, 0x7c, 0x15, 0xe9,
+                                        0x71, 0x6e, 0xd2, 0x8d, 0xc0, 0x27, 0xbe, 0xce, 0xea, 0x1e, 0xc4, 0x0a};
+static const uint8_t kFlashEdMsg[2] = {0xaf, 0x82};
+
+void test_nrf52_ed25519_verify_rfc8032_through_flash_and_unaligned_buffers(void)
+{
+    TEST_ASSERT_TRUE(crypto_ed25519_verify(kFlashEdSig, kFlashEdPub, kFlashEdMsg, sizeof(kFlashEdMsg)));
+    for (const cv::Ed25519Vector &v : cv::kEd25519Std) {
+        uint8_t pub[32], sig[64];
+        cv::hex(v.pub, pub, sizeof(pub));
+        cv::hex(v.sig, sig, sizeof(sig));
+        const size_t n = cv::hex(v.msg, hwIn, sizeof(hwIn));
+        TEST_ASSERT_TRUE_MESSAGE(crypto_ed25519_verify(sig, pub, hwIn, n), v.name);
+        for (size_t offset = 1; offset < 4; offset++) {
+            memmove(hwTmp + offset, hwIn, n);
+            TEST_ASSERT_TRUE_MESSAGE(crypto_ed25519_verify(sig, pub, hwTmp + offset, n), v.name);
+            if (n) {
+                hwTmp[offset] ^= 1;
+                TEST_ASSERT_FALSE_MESSAGE(crypto_ed25519_verify(sig, pub, hwTmp + offset, n), v.name);
+            }
+        }
+    }
+}
+
+// The software path used to decide every CC310 error other than "verify failed". A node must keep
+// giving the library's verdict on these keys, or dropping that path changed what it accepts.
+void test_nrf52_ed25519_verify_gives_the_library_verdict_on_edge_keys(void)
+{
+    static const char *const pubs[] = {
+        "0100000000000000000000000000000000000000000000000000000000000000", // y = 1, identity
+        "0000000000000000000000000000000000000000000000000000000000000000", // y = 0, order 4
+        "0000000000000000000000000000000000000000000000000000000000000080", // y = 0, x sign set
+        "ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f", // y = -1, order 2
+        "edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f", // y = p, non-canonical
+        "eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f", // y = p + 1, non-canonical
+        "0200000000000000000000000000000000000000000000000000000000000000", // y = 2, not on the curve
+    };
+    static const uint8_t msg[4] = {1, 2, 3, 4};
+    uint8_t pub[32], sig[64] = {0};
+    for (const char *h : pubs) {
+        cv::hex(h, pub, sizeof(pub));
+        // R = identity, S = 0 is the classic forgery for a small-order key.
+        memset(sig, 0, sizeof(sig));
+        sig[0] = 1;
+        TEST_ASSERT_EQUAL_MESSAGE(crypto_lib_ed25519_verify(sig, pub, msg, sizeof(msg)),
+                                  crypto_nrf52_ed25519_verify(sig, pub, msg, sizeof(msg)), h);
+    }
+}
+
+void test_nrf52_ed25519_basemul_matches_library_and_refuses_unreduced_scalars(void)
+{
+    uint8_t scalar[32], hw[32], lib[32];
+    for (int i = 0; i < 8; i++) {
+        cv::pattern(scalar, sizeof(scalar));
+        scalar[0] ^= (uint8_t)i;
+        scalar[31] = (uint8_t)(i * 2);
+        TEST_ASSERT_TRUE(crypto_nrf52_ed25519_basemul(hw, scalar));
+        crypto_lib_ed25519_basemul(lib, scalar);
+        assertMem(lib, hw, 32, "r * B");
+    }
+    memset(scalar, 0, sizeof(scalar));
+    scalar[0] = 1;
+    TEST_ASSERT_TRUE(crypto_nrf52_ed25519_basemul(hw, scalar));
+    crypto_lib_ed25519_basemul(lib, scalar);
+    assertMem(lib, hw, 32, "1 * B");
+    memset(scalar, 0xFF, sizeof(scalar));
+    TEST_ASSERT_FALSE(crypto_nrf52_ed25519_basemul(hw, scalar));
+}
+
+// XEdDSA takes R from the CC310 and everything else from portable code, so the software verifier checks it.
+void test_nrf52_xeddsa_signature_with_cc310_R_verifies_in_software(void)
+{
+    uint8_t priv[32], edPriv[32], edPub[32], sig[64];
+    cv::hex(cv::kRfc7748Dh[0], priv, sizeof(priv));
+    crypto_xeddsa_keys_from_x25519(edPriv, edPub, priv);
+    static const uint8_t msg[] = "xeddsa over cc310";
+    TEST_ASSERT_TRUE(crypto_xeddsa_sign(sig, edPriv, edPub, msg, sizeof(msg)));
+    TEST_ASSERT_TRUE(crypto_lib_ed25519_verify(sig, edPub, msg, sizeof(msg)));
+    TEST_ASSERT_TRUE(crypto_nrf52_ed25519_verify(sig, edPub, msg, sizeof(msg)));
+}
+#endif
+#endif
+
+#ifdef CRYPTO_TEST_WRAP_DISPATCH
+// ---- nRF52840: which backend really ran -----------------------------------------------------------
+
+static unsigned hwCalls, libCalls;
+
+#define WRAP(counter, ret, name, params, args)                                                                                   \
+    extern "C" ret __real_##name params;                                                                                         \
+    extern "C" ret __wrap_##name params                                                                                          \
+    {                                                                                                                            \
+        counter++;                                                                                                               \
+        return __real_##name args;                                                                                               \
+    }
+#define CTR_PARAMS (const uint8_t *key, const uint8_t *counter, const uint8_t *in, size_t len, uint8_t *out)
+#define CTR_ARGS (key, counter, in, len, out)
+#define SEAL_PARAMS                                                                                                              \
+    (const uint8_t *key, const uint8_t *nonce, const uint8_t *aad, size_t aad_len, const uint8_t *in, size_t len, uint8_t *out,  \
+     uint8_t *tag, size_t tag_len)
+#define SEAL_ARGS (key, nonce, aad, aad_len, in, len, out, tag, tag_len)
+#define OPEN_PARAMS                                                                                                              \
+    (const uint8_t *key, const uint8_t *nonce, const uint8_t *aad, size_t aad_len, const uint8_t *in, size_t len,                \
+     const uint8_t *tag, size_t tag_len, uint8_t *out)
+#define OPEN_ARGS (key, nonce, aad, aad_len, in, len, tag, tag_len, out)
+#define HASH_PARAMS (const crypto_part *parts, size_t num_parts, uint8_t *out)
+#define HASH_ARGS (parts, num_parts, out)
+#define HMAC_PARAMS (const uint8_t *key, size_t key_len, const crypto_part *parts, size_t num_parts, uint8_t *out)
+#define HMAC_ARGS (key, key_len, parts, num_parts, out)
+#define X25519_PARAMS (uint8_t *out, const uint8_t *scalar, const uint8_t *point)
+#define X25519_ARGS (out, scalar, point)
+#define VERIFY_PARAMS (const uint8_t *signature, const uint8_t *pub, const void *msg, size_t len)
+#define VERIFY_ARGS (signature, pub, msg, len)
+
+WRAP(hwCalls, bool, crypto_nrf52_aes128_ctr, CTR_PARAMS, CTR_ARGS)
+WRAP(hwCalls, bool, crypto_nrf52_aes128_ccm_seal, SEAL_PARAMS, SEAL_ARGS)
+WRAP(hwCalls, bool, crypto_nrf52_aes128_ccm_open, OPEN_PARAMS, OPEN_ARGS)
+WRAP(hwCalls, void, crypto_nrf52_sha256, HASH_PARAMS, HASH_ARGS)
+WRAP(hwCalls, void, crypto_nrf52_hmac_sha256, HMAC_PARAMS, HMAC_ARGS)
+WRAP(hwCalls, bool, crypto_nrf52_x25519, X25519_PARAMS, X25519_ARGS)
+WRAP(hwCalls, bool, crypto_nrf52_ed25519_verify, VERIFY_PARAMS, VERIFY_ARGS)
+WRAP(hwCalls, bool, crypto_nrf52_ed25519_basemul, (uint8_t *point, const uint8_t *scalar), (point, scalar))
+WRAP(libCalls, bool, crypto_lib_aes256_ctr, CTR_PARAMS, CTR_ARGS)
+WRAP(libCalls, void, crypto_lib_aes256_ccm_seal, SEAL_PARAMS, SEAL_ARGS)
+WRAP(libCalls, bool, crypto_lib_aes256_ccm_open, OPEN_PARAMS, OPEN_ARGS)
+WRAP(libCalls, void, crypto_lib_sha256, HASH_PARAMS, HASH_ARGS)
+WRAP(libCalls, void, crypto_lib_sha512, HASH_PARAMS, HASH_ARGS)
+WRAP(libCalls, void, crypto_lib_hmac_sha256, HMAC_PARAMS, HMAC_ARGS)
+WRAP(libCalls, bool, crypto_lib_x25519, X25519_PARAMS, X25519_ARGS)
+WRAP(libCalls, bool, crypto_lib_ed25519_verify, VERIFY_PARAMS, VERIFY_ARGS)
+WRAP(libCalls, void, crypto_lib_ed25519_basemul, (uint8_t *point, const uint8_t *scalar), (point, scalar))
+WRAP(libCalls, void, crypto_lib_xeddsa_sign,
+     (uint8_t *signature, const uint8_t *ed_priv, const uint8_t *ed_pub, const void *msg, size_t len, crypto_basemul_fn basemul),
+     (signature, ed_priv, ed_pub, msg, len, basemul))
+
+#define EXPECT_BACKEND(primitive, expectHw, expectLib, call)                                                                     \
+    do {                                                                                                                         \
+        hwCalls = libCalls = 0;                                                                                                  \
+        call;                                                                                                                    \
+        TEST_MESSAGE("backend " primitive " = " #expectHw " hw, " #expectLib " lib");                                            \
+        TEST_ASSERT_EQUAL_UINT_MESSAGE(expectHw, hwCalls, primitive " hardware calls");                                          \
+        TEST_ASSERT_EQUAL_UINT_MESSAGE(expectLib, libCalls, primitive " library calls");                                         \
+    } while (0)
+
+void test_nrf52_each_public_call_reaches_the_backend_in_the_design_table(void)
+{
+    uint8_t key[32], data[32] = {0}, out[64], tag[8], sig[64], edPriv[32], edPub[32];
+    const crypto_part part = {data, sizeof(data)};
+    cv::seqKey(key, sizeof(key));
+
+    EXPECT_BACKEND("aes128-ctr", 1, 0, crypto_aes_ctr(key, 16, cv::kLenCtrBlock, data, 16, out));
+    EXPECT_BACKEND("aes256-ctr", 0, 1, crypto_aes_ctr(key, 32, cv::kLenCtrBlock, data, 16, out));
+    EXPECT_BACKEND("aes128-ccm-seal", 1, 0, crypto_aes_ccm_seal(key, 16, cv::kLenCcmNonce, nullptr, 0, data, 16, out, tag, 8));
+    EXPECT_BACKEND("aes128-ccm-open", 1, 0, crypto_aes_ccm_open(key, 16, cv::kLenCcmNonce, nullptr, 0, out, 16, tag, 8, data));
+    EXPECT_BACKEND("aes256-ccm-seal", 0, 1, crypto_aes_ccm_seal(key, 32, cv::kLenCcmNonce, nullptr, 0, data, 16, out, tag, 8));
+    EXPECT_BACKEND("aes256-ccm-open", 0, 1, crypto_aes_ccm_open(key, 32, cv::kLenCcmNonce, nullptr, 0, out, 16, tag, 8, data));
+    EXPECT_BACKEND("sha-256", 1, 0, crypto_sha256(&part, 1, out));
+    EXPECT_BACKEND("sha-512", 0, 1, crypto_sha512(&part, 1, out));
+    EXPECT_BACKEND("hmac-sha-256", 1, 0, crypto_hmac_sha256(key, 16, &part, 1, out));
+#if !(MESHTASTIC_EXCLUDE_PKI)
+    EXPECT_BACKEND("x25519", 1, 0, crypto_x25519(out, key, nullptr));
+#if !(MESHTASTIC_EXCLUDE_XEDDSA)
+    crypto_xeddsa_keys_from_x25519(edPriv, edPub, key);
+    EXPECT_BACKEND("xeddsa-sign", 1, 1, crypto_xeddsa_sign(sig, edPriv, edPub, data, sizeof(data)));
+    EXPECT_BACKEND("ed25519-verify", 1, 0, crypto_ed25519_verify(sig, edPub, data, sizeof(data)));
+    data[0] = 1;
+    EXPECT_BACKEND("ed25519-basemul", 1, 0, crypto_ed25519_basemul(out, data));
+#endif
+#endif
+}
+#endif
+#endif
 
 // Weak: the hybrid ESP32 build links its throwaway dummy sketch, with its own setup(), next to the tests.
 #ifdef CRYPTO_TEST_MINIMAL
@@ -973,6 +1468,32 @@ void setup()
     RUN_TEST(test_xeddsa_public_key_conversions_agree);
     RUN_TEST(test_xeddsa_sign_then_verify_randomized_and_tamper_evident);
     RUN_TEST(test_golden_xeddsa_signature_verifies_over_the_signing_buffer_layout);
+#endif
+#endif
+    RUN_TEST(test_aes_ctr_long_lengths_equal_block_by_block_counter);
+    RUN_TEST(test_aes_ccm_long_lengths_round_trip_and_reject_tamper);
+#if !(MESHTASTIC_EXCLUDE_PKI)
+    RUN_TEST(test_x25519_failure_leaves_out_all_zero);
+#endif
+#ifdef CRYPTO_HAS_CC310
+#ifdef CRYPTO_TEST_WRAP_DISPATCH
+    RUN_TEST(test_nrf52_each_public_call_reaches_the_backend_in_the_design_table);
+#endif
+    RUN_TEST(test_nrf52_aes_ctr_matches_library_for_every_key_size_and_length);
+    RUN_TEST(test_nrf52_aes_ccm_matches_library_for_every_key_size_length_tag_and_aad);
+    RUN_TEST(test_nrf52_sha_and_hmac_match_library_for_every_length_and_split);
+    RUN_TEST(test_nrf52_key_and_input_in_flash_give_the_same_results_as_in_ram);
+    RUN_TEST(test_nrf52_unaligned_and_in_place_match_library_at_block_boundaries);
+#if !(MESHTASTIC_EXCLUDE_PKI)
+    RUN_TEST(test_nrf52_x25519_matches_library_for_canonical_points_and_top_bit);
+    RUN_TEST(test_nrf52_x25519_rejects_exactly_what_the_library_rejects_on_edge_points);
+    RUN_TEST(test_nrf52_x25519_scalar_and_point_in_flash);
+#if !(MESHTASTIC_EXCLUDE_XEDDSA)
+    RUN_TEST(test_nrf52_ed25519_verify_rfc8032_through_flash_and_unaligned_buffers);
+    RUN_TEST(test_nrf52_ed25519_verify_gives_the_library_verdict_on_edge_keys);
+    RUN_TEST(test_nrf52_ed25519_basemul_matches_library_and_refuses_unreduced_scalars);
+    RUN_TEST(test_nrf52_xeddsa_signature_with_cc310_R_verifies_in_software);
+#endif
 #endif
 #endif
 #if defined(ARCH_PORTDUINO)
