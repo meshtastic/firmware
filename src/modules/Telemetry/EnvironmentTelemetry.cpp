@@ -618,7 +618,8 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
             screen->showSimpleBanner(bannerMsg, 3000);
 
             // Only buzz if IAQ is over 200
-            if (m.iaq > 200 && moduleConfig.external_notification.enabled && !externalNotificationModule->getMute()) {
+            if (m.iaq > 200 && moduleConfig.external_notification.enabled && externalNotificationModule &&
+                !externalNotificationModule->getMute()) {
                 playLongBeep();
             }
 
