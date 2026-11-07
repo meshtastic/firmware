@@ -23,6 +23,9 @@ uint32_t lastSetFromPhoneNtpOrGps = 0;
 static uint32_t lastTimeValidationWarning = 0;
 static const uint32_t TIME_VALIDATION_WARNING_INTERVAL_MS = 15000; // 15 seconds
 
+// Set when the hardware RTC answers but its clock is not counting, so whatever it returns is stale.
+static bool rtcStalled = false;
+
 static void onTimeSourceQualityChanged(RTCQuality oldQuality, RTCQuality newQuality)
 {
     if (oldQuality == RTCQualityNone && newQuality > RTCQualityNone && nodeInfoModule) {
@@ -45,6 +48,11 @@ static void onTimeSourceQualityChanged(RTCQuality oldQuality, RTCQuality newQual
 RTCQuality getRTCQuality()
 {
     return currentQuality;
+}
+
+bool hasWorkingHardwareRTC()
+{
+    return rtc_found.address != ScanI2C::ADDRESS_NONE.address && !rtcStalled;
 }
 
 // stuff that really should be in in the instance instead...
@@ -157,6 +165,10 @@ RTCSetResult readFromRTC()
     }
 #elif defined(PCF8563_RTC) || defined(PCF85063_RTC)
     if (rtc_found.address == PCF_RTC_ADDRESS) {
+        static bool stallChecked = false;
+        if (rtcStalled)
+            return RTCSetResultInvalidTime;
+
         PCF8xRTC rtc;
         const uint64_t now = Time::getMillisMonotonic();
 
@@ -177,6 +189,20 @@ RTCSetResult readFromRTC()
         }
         tv.tv_sec = gm_mktime(&t);
         tv.tv_usec = 0;
+
+        // A PCF8563 whose clock is not running still reads back cleanly with VL clear, returning the last
+        // time written on every boot. Read again across a seconds boundary once per boot to catch that.
+        if (!stallChecked && currentQuality == RTCQualityNone) {
+            stallChecked = true;
+            delay(1100);
+            tm t2;
+            if (rtc.getTime(t2) && gm_mktime(&t2) <= tv.tv_sec) {
+                LOG_WARN("%s clock is not counting (%02d:%02d:%02d on both reads), ignore it as a time source", rtc.chipName(),
+                         t.tm_hour, t.tm_min, t.tm_sec);
+                rtcStalled = true;
+                return RTCSetResultInvalidTime;
+            }
+        }
         uint32_t printableEpoch = tv.tv_sec; // Print lib only supports 32 bit but time_t can be 64 bit on some platforms
 
 #ifdef BUILD_EPOCH
@@ -559,9 +585,15 @@ void setReadFromRTCUseSystemTimeForTests(bool enabled)
     forceSystemTimeFallback = enabled;
 }
 
+void setRTCStalledForTests(bool stalled)
+{
+    rtcStalled = stalled;
+}
+
 void resetRTCStateForTests()
 {
     currentQuality = RTCQualityNone;
+    rtcStalled = false;
     timeStartMs64 = 0;
     zeroOffsetSecs = 0;
     lastSetFromPhoneNtpOrGps = 0;

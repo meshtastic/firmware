@@ -1,6 +1,7 @@
 #include "TestUtil.h"
 #include "UptimeClock.h"
 #include "gps/RTC.h"
+#include "main.h"
 #include <cstdio>
 #include <sys/time.h>
 #include <time.h>
@@ -421,6 +422,32 @@ static void test_gm_mktime_leap_rule_sweep(void)
     }
 }
 
+// hasWorkingHardwareRTC() in src/gps/RTC.cpp decides whether a detected RTC chip counts as a
+// quality time source (PositionModule::hasQualityTimesource() and the RTC branch that stamps
+// outgoing position times). A chip that answers on I2C but whose clock is not counting returns
+// the last time written on every boot. If it still counted as a quality source, the node would
+// ignore mesh time forever and keep broadcasting that stale time, which is what happened on a
+// T-Watch S3 with a stopped PCF8563.
+static void test_hasWorkingHardwareRTC_stalledChipIsNotATimeSource(void)
+{
+    const ScanI2C::DeviceAddress saved = rtc_found;
+
+    rtc_found = ScanI2C::ADDRESS_NONE;
+    TEST_ASSERT_FALSE(hasWorkingHardwareRTC());
+
+    rtc_found = ScanI2C::DeviceAddress(ScanI2C::I2CPort::WIRE, 0x51);
+    TEST_ASSERT_TRUE(hasWorkingHardwareRTC());
+
+    setRTCStalledForTests(true);
+    TEST_ASSERT_FALSE(hasWorkingHardwareRTC());
+
+    // A fresh boot (state reset) re-trusts the chip until the stall check runs again.
+    resetRTCStateForTests();
+    TEST_ASSERT_TRUE(hasWorkingHardwareRTC());
+
+    rtc_found = saved;
+}
+
 void setup()
 {
     delay(10);
@@ -445,6 +472,9 @@ void setup()
     printf("\n=== getValidTime / quality-source stamp ===\n");
     RUN_TEST(test_getvalidtime_threshold_gating);
     RUN_TEST(test_lastSetFromPhoneNtpOrGps_stamp);
+
+    printf("\n=== hardware RTC trust ===\n");
+    RUN_TEST(test_hasWorkingHardwareRTC_stalledChipIsNotATimeSource);
 
     printf("\n=== gm_mktime known answers ===\n");
     RUN_TEST(test_gm_mktime_known_epochs);
