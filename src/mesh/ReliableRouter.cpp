@@ -55,7 +55,7 @@ ErrorCode ReliableRouter::send(meshtastic_MeshPacket *p)
     return result;
 }
 
-void ReliableRouter::perhapsGenerateImplicitAckForOwnOverheard(const meshtastic_MeshPacket *p)
+void ReliableRouter::perhapsAckOurRelayedPacket(const meshtastic_MeshPacket *p)
 {
     // Note: do not use getFrom() here, because we want to ignore messages sent from phone
     if (p->from != getNodeNum())
@@ -65,14 +65,25 @@ void ReliableRouter::perhapsGenerateImplicitAckForOwnOverheard(const meshtastic_
 
     // We are seeing someone rebroadcast one of our transmissions. If this is the first time we saw
     // this, cancel any retransmissions we have queued up and generate an internal ack for the
-    // original sending process. Header-only (from/id), so it works even for a packet we cannot
-    // decrypt - notably a PKI DM we originated, which is opaque to us when overheard.
+    // original sending process. Works for a packet we cannot decrypt - notably a PKI DM we
+    // originated, which is opaque to us when overheard - because the check below needs no decode.
 
     // This "optimization", does save lots of airtime. For DMs, you also get a real ACK back
     // from the intended recipient.
-    auto key = GlobalPacketId(getFrom(p), p->id);
+    // p->from for origin safety: the guard above accepted only our own address, and a received frame
+    // never carries 0 (the radio drops sender==0), so this is the sender as heard, not a client's claim.
+    auto key = GlobalPacketId(p->from, p->id);
     auto old = findPendingPacket(key);
     if (old) {
+        // The header is cleartext anyone can copy. For a PKI DM send() recorded the ciphertext, which no
+        // relay can alter, so an encrypted copy must carry those exact bytes; anything else keeps the
+        // header match, as a relay holding the channel key may legitimately re-encode what it forwards.
+        if (!old->wire.empty() && p->which_payload_variant == meshtastic_MeshPacket_encrypted_tag &&
+            (p->encrypted.size != old->wire.size() || memcmp(p->encrypted.bytes, old->wire.data(), old->wire.size()) != 0)) {
+            // Attacker-triggerable at will, so DEBUG: a flood of these is the check working, not a fault.
+            LOG_DEBUG("Overheard 0x%08x with our header but not our bytes, ignore", p->id);
+            return;
+        }
         LOG_DEBUG("Generate implicit ack");
         // NOTE: we do NOT check p->wantAck here because p is the INCOMING rebroadcast and that packet is not expected to be
         // marked as wantAck
@@ -91,7 +102,7 @@ void ReliableRouter::perhapsGenerateImplicitAckForOwnOverheard(const meshtastic_
 
 bool ReliableRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
 {
-    perhapsGenerateImplicitAckForOwnOverheard(p);
+    perhapsAckOurRelayedPacket(p);
 
     /* At this point we have already deleted the pending retransmission if this packet was an (implicit) ACK to it.
        Now for all other pending retransmissions, we have to add the airtime of this received packet to the retransmission timer,
