@@ -142,16 +142,32 @@ External serial flash WP25R1635FZUIL0
 // #define HAS_GPS 1
 #define GPS_L76K
 #define GPS_BAUDRATE 9600
-#define PIN_GPS_REINIT (32 + 5)  // An output to reset L76K GPS. As per datasheet, low for > 100ms will reset the L76K
-#define PIN_GPS_STANDBY (32 + 2) // An output to wake GPS, low means allow sleep, high means force wake
-// Seems to be missing on this new board
-// #define PIN_GPS_PPS (32 + 4)  // Pulse per second input from the GPS
+
+// Older boards have an L76K, newer ones an AG3352. variant.cpp reads the strap on P1.02 at boot.
+#define PIN_GPS_VERSION (32 + 2) // strap: HIGH = AG3352, LOW (floating, read with pull-down) = L76K
+extern int m1HasAg3352;
+
+// L76K: standby, low means allow sleep, high means force wake. AG3352: VGPS_EN, not a standby, so GPS.cpp leaves it alone.
+#define PIN_GPS_STANDBY (32 + 2)
+#define GPS_STANDBY_L76K_ONLY
+
+// L76K: REINIT, left untouched as before. AG3352: RESET, inverted by Q16 (high asserts RESETB).
+// The AG3352 is reset at boot (variant.cpp) and to wake it from backup mode.
+#define PIN_GPS_RESET (32 + 5)
+#define GPS_RESET_IN_USE (m1HasAg3352)
+
+// AG3352 only. idle_int: rests HIGH, pulled LOW while sending the sleep command.
+#define GPS_SLEEP_INT (0 + 11)
+#define GPS_AIROHA_RESET_WAKE // sleep in backup mode ($PAIR650); a RESETB pulse wakes it
+#define PIN_GPS_PPS (32 + 0)  // AG3352 1PPS output, configured as an input by GPS.cpp
+
 #define GPS_TX_PIN (32 + 8) // This is for bits going TOWARDS the GPS
 #define GPS_RX_PIN (32 + 9) // This is for bits going TOWARDS the CPU
 
 #define GPS_THREAD_INTERVAL 50
 
-#define PIN_GPS_SWITCH (32 + 1) // GPS开关判断
+// GPS开关判断. On AG3352 boards the K5 switch also gates the GPS 0.8 V core supply in hardware.
+#define PIN_GPS_SWITCH (32 + 1)
 
 #define PIN_SERIAL1_TX GPS_TX_PIN
 #define PIN_SERIAL1_RX GPS_RX_PIN
