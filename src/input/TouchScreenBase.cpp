@@ -2,6 +2,10 @@
 #include "main.h"
 #include "mesh/Throttle.h"
 
+#if defined(T_DECK_PRO) && defined(MESHTASTIC_INCLUDE_INKHUD)
+void tDeckProTouchFeedback();
+#endif
+
 #if defined(RAK14014) && !defined(MESHTASTIC_EXCLUDE_CANNEDMESSAGES)
 #include "modules/CannedMessageModule.h"
 #endif
@@ -39,12 +43,6 @@ static_assert(TIME_LONG_PRESS >= 50, "TIME_LONG_PRESS must be at least 50ms: see
 #define TOUCH_POLL_INTERVAL_RELEASE_FAST TOUCH_POLL_INTERVAL_RELEASE
 #endif
 
-// Ignore very short "finger lifted" glitches from noisy touch controllers.
-// A release is only accepted once we've seen no-touch for at least this duration.
-#ifndef TOUCH_RELEASE_GRACE_MS
-#define TOUCH_RELEASE_GRACE_MS 35
-#endif
-
 // move a minimum distance over the screen to detect a "swipe"
 #ifndef TOUCH_THRESHOLD_X
 #define TOUCH_THRESHOLD_X 30
@@ -70,6 +68,15 @@ void TouchScreenBase::init(bool hasTouch)
         disable();
         this->setInterval(UINT_MAX);
     }
+}
+
+void TouchScreenBase::resetTouchState()
+{
+    _state = TOUCH_EVENT_CLEARED;
+    _action = TOUCH_ACTION_NONE;
+    _touchedOld = false;
+    _tapped = false;
+    _longPressSuppressed = false;
 }
 
 int32_t TouchScreenBase::runOnce()
@@ -209,6 +216,8 @@ void TouchScreenBase::hapticFeedback()
     drv.setWaveform(0, 75);
     drv.setWaveform(1, 0); // end waveform
     drv.go();
+#elif defined(T_DECK_PRO) && defined(MESHTASTIC_INCLUDE_INKHUD)
+    tDeckProTouchFeedback();
 #endif
 }
 

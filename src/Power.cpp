@@ -2148,7 +2148,7 @@ class LipoCharger : public HasBatteryLevel
     /**
      * return true if there is a battery installed in this unit
      */
-    virtual bool isBatteryConnect() override { return PPM->getBattVoltage() > 0; }
+    virtual bool isBatteryConnect() override { return getBattVoltage() > 0; }
 
     /**
      * return true if there is an external power source detected
