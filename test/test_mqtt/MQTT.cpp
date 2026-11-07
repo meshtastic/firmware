@@ -16,6 +16,7 @@
 
 #include <PubSubClient.h>
 #include <WiFiClient.h>
+#include <vector>
 
 // htonl() for remoteIP() below. MinGW has no <arpa/inet.h>; the byte-order helpers live in
 // winsock2.h, which must precede any <windows.h> the Arduino shims pull in.
@@ -285,13 +286,16 @@ class MQTTUnitTest : public MQTT
         map_publish_interval_msecs = 0;
         perhapsReportToMap();
     }
-    void publish(const meshtastic_MeshPacket *p, std::string gateway = "!87654321", std::string channel = "test")
+    void publish(const meshtastic_MeshPacket *p, std::string gateway = "!87654321", std::string channel = "test",
+                 std::vector<uint32_t> targetGateways = {})
     {
         std::stringstream topic;
         topic << "msh/2/e/" << channel << "/!" << gateway;
-        const meshtastic_ServiceEnvelope env = {.packet = const_cast<meshtastic_MeshPacket *>(p),
-                                                .channel_id = const_cast<char *>(channel.c_str()),
-                                                .gateway_id = const_cast<char *>(gateway.c_str())};
+        meshtastic_ServiceEnvelope env = {.packet = const_cast<meshtastic_MeshPacket *>(p),
+                                          .channel_id = const_cast<char *>(channel.c_str()),
+                                          .gateway_id = const_cast<char *>(gateway.c_str())};
+        for (uint32_t target : targetGateways)
+            env.target_gateways[env.target_gateways_count++] = target;
         uint8_t bytes[256];
         size_t numBytes = pb_encode_to_bytes(bytes, sizeof(bytes), &meshtastic_ServiceEnvelope_msg, &env);
         mqttCallback(const_cast<char *>(topic.str().c_str()), bytes, numBytes);
@@ -456,6 +460,17 @@ void test_sendDirectlyConnectedDecoded(void)
     TEST_ASSERT_EQUAL_STRING("msh/2/e/test/!12345678", topic.c_str());
     TEST_ASSERT_TRUE(env.validDecode);
     TEST_ASSERT_EQUAL(decoded.id, env.packet->id);
+}
+
+// Uplinked envelopes never carry target_gateways.
+void test_sendDirectlyConnectedHasNoTargetGateways(void)
+{
+    mqtt->onSend(encrypted, decoded, 0);
+
+    TEST_ASSERT_EQUAL(1, pubsub->published_.size());
+    const DecodedServiceEnvelope &env = std::get<DecodedServiceEnvelope>(pubsub->published_.front().second);
+    TEST_ASSERT_TRUE(env.validDecode);
+    TEST_ASSERT_EQUAL(0, env.target_gateways_count);
 }
 
 // Test that the encrypted MeshPacket is published when encryption_enabled = true.
@@ -806,6 +821,121 @@ void test_receiveIgnoresSentMessagesFromOthers(void)
 
     TEST_ASSERT_TRUE(mockRouter->packets_.empty());
     TEST_ASSERT_TRUE(mockRoutingModule->ackNacks_.empty());
+}
+
+// A downlink targeted at this gateway is accepted like an untargeted one.
+void test_receiveAcceptsDownlinkTargetedAtUs(void)
+{
+    unitTest->publish(&decoded, "!87654321", "test", {myNodeInfo.my_node_num});
+
+    TEST_ASSERT_EQUAL(1, mockRouter->packets_.size());
+    TEST_ASSERT_TRUE(mockRouter->packets_.front().via_mqtt);
+}
+
+// A downlink may target several gateways; each listed one transmits it.
+void test_receiveAcceptsDownlinkListingUsAmongOthers(void)
+{
+    unitTest->publish(&decoded, "!87654321", "test", {0xabcdef01, myNodeInfo.my_node_num});
+
+    TEST_ASSERT_EQUAL(1, mockRouter->packets_.size());
+}
+
+// A downlink targeted at other gateways is not transmitted by this one.
+void test_receiveIgnoresDownlinkTargetedAtOtherGateways(void)
+{
+    unitTest->publish(&decoded, "!87654321", "test", {0xabcdef01, 0xabcdef02});
+
+    TEST_ASSERT_TRUE(mockRouter->packets_.empty());
+}
+
+// With downlink_targeted_only, untargeted downlink is ignored.
+void test_receiveTargetedOnlyIgnoresUntargetedDownlink(void)
+{
+    moduleConfig.mqtt.downlink_targeted_only = true;
+
+    unitTest->publish(&decoded);
+
+    TEST_ASSERT_TRUE(mockRouter->packets_.empty());
+}
+
+// With downlink_targeted_only, downlink targeted at this gateway is still accepted.
+void test_receiveTargetedOnlyAcceptsDownlinkTargetedAtUs(void)
+{
+    moduleConfig.mqtt.downlink_targeted_only = true;
+
+    unitTest->publish(&decoded, "!87654321", "test", {myNodeInfo.my_node_num});
+
+    TEST_ASSERT_EQUAL(1, mockRouter->packets_.size());
+}
+
+// With downlink_targeted_only, our own packet echoed back on our gateway topic still acks it.
+void test_receiveTargetedOnlyStillAcksOwnSentMessages(void)
+{
+    moduleConfig.mqtt.downlink_targeted_only = true;
+    meshtastic_MeshPacket p = decoded;
+    p.from = myNodeInfo.my_node_num;
+
+    unitTest->publish(&p, nodeDB->getNodeId().c_str());
+
+    TEST_ASSERT_TRUE(mockRouter->packets_.empty());
+    meshtastic_MeshPacket *ack = mockMeshService->getForPhone();
+    TEST_ASSERT_NOT_NULL(ack);
+    TEST_ASSERT_EQUAL(meshtastic_PortNum_ROUTING_APP, ack->decoded.portnum);
+    TEST_ASSERT_EQUAL(p.id, ack->decoded.request_id);
+    mockMeshService->releaseToPool(ack);
+}
+
+// Downlink through the client proxy honours target_gateways too.
+void test_receiveProxyIgnoresDownlinkTargetedAtOtherGateways(void)
+{
+    meshtastic_ServiceEnvelope env = {
+        .packet = const_cast<meshtastic_MeshPacket *>(&decoded), .channel_id = "test", .gateway_id = "!87654321"};
+    env.target_gateways[env.target_gateways_count++] = 0xabcdef01;
+    meshtastic_MqttClientProxyMessage message = meshtastic_MqttClientProxyMessage_init_default;
+    strcat(message.topic, "msh/2/e/test/!87654321");
+    message.which_payload_variant = meshtastic_MqttClientProxyMessage_data_tag;
+    message.payload_variant.data.size = pb_encode_to_bytes(
+        message.payload_variant.data.bytes, sizeof(message.payload_variant.data.bytes), &meshtastic_ServiceEnvelope_msg, &env);
+
+    mqtt->onClientProxyReceive(message);
+
+    TEST_ASSERT_TRUE(mockRouter->packets_.empty());
+}
+
+// An envelope listing more targets than the firmware holds fails to decode and is dropped.
+void test_receiveDropsEnvelopeWithTooManyTargets(void)
+{
+    const meshtastic_ServiceEnvelope env = {.packet = const_cast<meshtastic_MeshPacket *>(&decoded),
+                                            .channel_id = const_cast<char *>("test"),
+                                            .gateway_id = const_cast<char *>("!87654321")};
+    uint8_t bytes[256];
+    size_t numBytes = pb_encode_to_bytes(bytes, sizeof(bytes), &meshtastic_ServiceEnvelope_msg, &env);
+    const size_t maxTargets = sizeof(env.target_gateways) / sizeof(env.target_gateways[0]);
+    for (size_t i = 0; i <= maxTargets; i++) {
+        bytes[numBytes++] = (meshtastic_ServiceEnvelope_target_gateways_tag << 3) | PB_WT_32BIT;
+        memcpy(&bytes[numBytes], &myNodeInfo.my_node_num, sizeof(uint32_t)); // little endian on all test hosts
+        numBytes += sizeof(uint32_t);
+    }
+
+    unitTest->deliverRaw("msh/2/e/test/!87654321", bytes, numBytes);
+
+    TEST_ASSERT_TRUE(mockRouter->packets_.empty());
+}
+
+// Fields unknown to this firmware are skipped, as older firmware skips target_gateways.
+void test_receiveSkipsUnknownEnvelopeFields(void)
+{
+    const meshtastic_ServiceEnvelope env = {.packet = const_cast<meshtastic_MeshPacket *>(&decoded),
+                                            .channel_id = const_cast<char *>("test"),
+                                            .gateway_id = const_cast<char *>("!87654321")};
+    uint8_t bytes[256];
+    size_t numBytes = pb_encode_to_bytes(bytes, sizeof(bytes), &meshtastic_ServiceEnvelope_msg, &env);
+    bytes[numBytes++] = (15 << 3) | PB_WT_VARINT; // field 15, not defined in ServiceEnvelope
+    bytes[numBytes++] = 1;
+
+    unitTest->deliverRaw("msh/2/e/test/!87654321", bytes, numBytes);
+
+    TEST_ASSERT_EQUAL(1, mockRouter->packets_.size());
 }
 
 // Decoded MQTT messages should be ignored when encryption is enabled.
@@ -1584,6 +1714,7 @@ void setup()
 
     UNITY_BEGIN();
     RUN_TEST(test_sendDirectlyConnectedDecoded);
+    RUN_TEST(test_sendDirectlyConnectedHasNoTargetGateways);
     RUN_TEST(test_sendDirectlyConnectedEncrypted);
     RUN_TEST(test_eventPositionPublicationFollowsCompileTimePolicy);
     RUN_TEST(test_privatePositionStillPublishesWithEventPolicy);
@@ -1607,6 +1738,15 @@ void setup()
     RUN_TEST(test_receiveIgnoresOwnPublishedMessages);
     RUN_TEST(test_receiveAcksOwnSentMessages);
     RUN_TEST(test_receiveIgnoresSentMessagesFromOthers);
+    RUN_TEST(test_receiveAcceptsDownlinkTargetedAtUs);
+    RUN_TEST(test_receiveAcceptsDownlinkListingUsAmongOthers);
+    RUN_TEST(test_receiveIgnoresDownlinkTargetedAtOtherGateways);
+    RUN_TEST(test_receiveTargetedOnlyIgnoresUntargetedDownlink);
+    RUN_TEST(test_receiveTargetedOnlyAcceptsDownlinkTargetedAtUs);
+    RUN_TEST(test_receiveTargetedOnlyStillAcksOwnSentMessages);
+    RUN_TEST(test_receiveProxyIgnoresDownlinkTargetedAtOtherGateways);
+    RUN_TEST(test_receiveDropsEnvelopeWithTooManyTargets);
+    RUN_TEST(test_receiveSkipsUnknownEnvelopeFields);
     RUN_TEST(test_receiveIgnoresDecodedWhenEncryptionEnabled);
     RUN_TEST(test_receiveIgnoresDecodedAdminApp);
 #if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)

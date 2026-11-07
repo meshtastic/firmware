@@ -22,6 +22,14 @@ typedef struct _meshtastic_ServiceEnvelope {
  nodeid impersonation for senders? - i.e. use gateway/mesh id (which is authenticated) + local node id as
  the globally trusted nodenum */
     char *gateway_id;
+    /* Node numbers of the gateways that should transmit this packet over LoRa when it is received via
+ downlink. Empty means every gateway with downlink enabled transmits it, as before.
+ Lets a service reply through the gateways that uplinked the request instead of every gateway.
+ At most eight entries; firmware rejects an envelope with more as invalid.
+ Best effort: only firmware that knows this field checks it. Older gateways ignore it and transmit
+ the packet like any other downlink. */
+    pb_size_t target_gateways_count;
+    uint32_t target_gateways[8];
 } meshtastic_ServiceEnvelope;
 
 /* Information about a node intended to be reported unencrypted to a map using MQTT. */
@@ -65,15 +73,16 @@ extern "C" {
 #endif
 
 /* Initializer values for message structs */
-#define meshtastic_ServiceEnvelope_init_default  {NULL, NULL, NULL}
+#define meshtastic_ServiceEnvelope_init_default  {NULL, NULL, NULL, 0, {0, 0, 0, 0, 0, 0, 0, 0}}
 #define meshtastic_MapReport_init_default        {"", "", _meshtastic_Config_DeviceConfig_Role_MIN, _meshtastic_HardwareModel_MIN, "", _meshtastic_Config_LoRaConfig_RegionCode_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, 0, 0, 0}
-#define meshtastic_ServiceEnvelope_init_zero     {NULL, NULL, NULL}
+#define meshtastic_ServiceEnvelope_init_zero     {NULL, NULL, NULL, 0, {0, 0, 0, 0, 0, 0, 0, 0}}
 #define meshtastic_MapReport_init_zero           {"", "", _meshtastic_Config_DeviceConfig_Role_MIN, _meshtastic_HardwareModel_MIN, "", _meshtastic_Config_LoRaConfig_RegionCode_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, 0, 0, 0}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define meshtastic_ServiceEnvelope_packet_tag    1
 #define meshtastic_ServiceEnvelope_channel_id_tag 2
 #define meshtastic_ServiceEnvelope_gateway_id_tag 3
+#define meshtastic_ServiceEnvelope_target_gateways_tag 4
 #define meshtastic_MapReport_long_name_tag       1
 #define meshtastic_MapReport_short_name_tag      2
 #define meshtastic_MapReport_role_tag            3
@@ -93,7 +102,8 @@ extern "C" {
 #define meshtastic_ServiceEnvelope_FIELDLIST(X, a) \
 X(a, POINTER,  OPTIONAL, MESSAGE,  packet,            1) \
 X(a, POINTER,  SINGULAR, STRING,   channel_id,        2) \
-X(a, POINTER,  SINGULAR, STRING,   gateway_id,        3)
+X(a, POINTER,  SINGULAR, STRING,   gateway_id,        3) \
+X(a, STATIC,   REPEATED, FIXED32,  target_gateways,   4)
 #define meshtastic_ServiceEnvelope_CALLBACK NULL
 #define meshtastic_ServiceEnvelope_DEFAULT NULL
 #define meshtastic_ServiceEnvelope_packet_MSGTYPE meshtastic_MeshPacket

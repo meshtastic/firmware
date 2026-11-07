@@ -89,6 +89,19 @@ inline bool shouldDropMqttDownlink(const meshtastic_MeshPacket &packet)
     return false;
 }
 
+// A targeted downlink (ServiceEnvelope.target_gateways) is ours only when it lists us. Untargeted downlink is ours
+// unless downlink_targeted_only is set.
+inline bool isDownlinkForUs(const meshtastic_ServiceEnvelope &e)
+{
+    if (e.target_gateways_count == 0)
+        return !moduleConfig.mqtt.downlink_targeted_only;
+    for (pb_size_t i = 0; i < e.target_gateways_count; i++) {
+        if (e.target_gateways[i] == nodeDB->getNodeNum())
+            return true;
+    }
+    return false;
+}
+
 inline void onReceiveProto(char *topic, byte *payload, size_t length)
 {
     const DecodedServiceEnvelope e(payload, length);
@@ -137,6 +150,10 @@ inline void onReceiveProto(char *topic, byte *payload, size_t length)
     }
     if (isFromUs(e.packet)) {
         LOG_INFO("Ignore downlink msg we sent");
+        return;
+    }
+    if (!isDownlinkForUs(e)) {
+        LOG_DEBUG("Ignore downlink not targeted at us");
         return;
     }
 
