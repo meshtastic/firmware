@@ -37,6 +37,9 @@ class RadioTxHook
 
     /// The driver is done with p - sent, cancelled or dropped. Release anything held for it.
     virtual void packetReleased(RadioInterface *iface, const meshtastic_MeshPacket *p) {}
+
+    /// p is on the air: the transmit has started and cannot be called off. Observation only.
+    virtual void transmitStarted(RadioInterface *iface, const meshtastic_MeshPacket *p) {}
 };
 
 /// Driver-side fan-out over the registered hooks; every call is a no-op when none are registered.
@@ -47,4 +50,5 @@ class RadioTxHooks
     static RadioTxHook::PreTxAction beforeTransmit(RadioInterface *iface, meshtastic_MeshPacket *p);
     static bool holdsRadio(const meshtastic_MeshPacket *p);
     static void packetReleased(RadioInterface *iface, const meshtastic_MeshPacket *p);
+    static void transmitStarted(RadioInterface *iface, const meshtastic_MeshPacket *p);
 };
