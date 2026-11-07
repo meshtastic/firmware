@@ -129,6 +129,9 @@ class Screen
 #include "EInkDynamicDisplay.h"
 #endif
 #include "PointStruct.h"
+#ifdef HELTEC_MESH_POCKET_V2
+#include "power/MeshPocketV2PowerBank.h"
+#endif
 #include "Power.h"
 #include "TFTDisplay.h"
 #include "TypedQueue.h"
@@ -234,6 +237,11 @@ class Screen : public concurrency::OSThread
         CallbackObserver<Screen, const InputEvent *>(this, &Screen::handleInputEvent);
     CallbackObserver<Screen, AdminModule_ObserverData *> adminMessageObserver =
         CallbackObserver<Screen, AdminModule_ObserverData *>(this, &Screen::handleAdminMessage);
+
+#ifdef HELTEC_MESH_POCKET_V2
+    CallbackObserver<Screen, const MeshPocketV2PowerBankEvent *> powerBankObserver =
+        CallbackObserver<Screen, const MeshPocketV2PowerBankEvent *>(this, &Screen::handlePowerBankEvent);
+#endif
 
   public:
     OLEDDisplay *getDisplayDevice() { return dispdev; }
@@ -681,6 +689,9 @@ class Screen : public concurrency::OSThread
     // Handle observer events
     int handleStatusUpdate(const meshtastic::Status *arg);
     int handleUIFrameEvent(const UIFrameEvent *arg);
+#ifdef HELTEC_MESH_POCKET_V2
+    int handlePowerBankEvent(const MeshPocketV2PowerBankEvent *arg);
+#endif
     int handleInputEvent(const InputEvent *arg);
     int handleAdminMessage(AdminModule_ObserverData *arg);
 
@@ -788,6 +799,9 @@ class Screen : public concurrency::OSThread
             uint8_t firstFavorite = 255;
             uint8_t lastFavorite = 255;
             uint8_t lora = 255;
+#ifdef HELTEC_MESH_POCKET_V2
+            uint8_t powerBank = 255;
+#endif
         } positions;
 
         uint8_t frameCount = 0;

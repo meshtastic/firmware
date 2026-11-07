@@ -392,6 +392,9 @@ void PowerFSM_setup()
     powerFSM.add_transition(&stateDARK, &stateLowBattSDS, EVENT_LOW_BATTERY, NULL, "LowBat");
     powerFSM.add_transition(&stateON, &stateLowBattSDS, EVENT_LOW_BATTERY, NULL, "LowBat");
     powerFSM.add_transition(&stateSERIAL, &stateLowBattSDS, EVENT_LOW_BATTERY, NULL, "LowBat");
+#ifdef HELTEC_MESH_POCKET_V2
+    powerFSM.add_transition(&statePOWER, &stateLowBattSDS, EVENT_LOW_BATTERY, NULL, "LowBat");
+#endif
 
     // Handle being told to power off
     powerFSM.add_transition(&stateBOOT, &stateSHUTDOWN, EVENT_SHUTDOWN, NULL, "Shutdown");

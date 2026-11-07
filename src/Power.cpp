@@ -27,6 +27,9 @@
 #include "memory/MemAudit.h"
 #include "meshUtils.h"
 #include "power/PowerHAL.h"
+#ifdef HELTEC_MESH_POCKET_V2
+#include "power/MeshPocketV2PowerBank.h"
+#endif
 #include "power/SGM41562.h"
 #include "sleep.h"
 #ifdef ARCH_ESP32
@@ -979,7 +982,12 @@ bool Power::setup()
     initSGM41562(SGM41562_WIRE);
 #endif
     bool found = false;
-    if (axpChipInit()) {
+#ifdef HELTEC_MESH_POCKET_V2
+    if (meshPocketV2PowerBank != nullptr && meshPocketV2PowerBank->isAvailable()) {
+        found = true;
+    } else
+#endif
+        if (axpChipInit()) {
         found = true;
     } else if (cw2015Init()) {
         found = true;
@@ -1005,6 +1013,9 @@ bool Power::setup()
     attachPowerInterrupts();
     enabled = found;
     low_voltage_counter = 0;
+#ifdef HELTEC_MESH_POCKET_V2
+    lowSocCounter = 0;
+#endif
 
 #ifdef ARCH_ESP32
     // Register callbacks for before and after lightsleep
@@ -1156,6 +1167,34 @@ bool updateLowVoltageCounter(uint8_t &counter, bool hasBattery, bool hasUsb, uin
     return counter > LOW_VOLTAGE_READINGS_BEFORE_SHUTDOWN;
 }
 
+#ifdef HELTEC_MESH_POCKET_V2
+void Power::checkMeshPocketV2LowBattery()
+{
+    constexpr uint32_t GAUGE_STALE_MS = 10000;
+    constexpr uint32_t HLT_STALE_MS = 3000;
+    MeshPocketV2PowerBankSnapshot snapshot;
+    const bool hasSnapshot = meshPocketV2PowerBankCopySnapshot(snapshot);
+    const bool gaugeLive = hasSnapshot && snapshot.cwReady && snapshot.cw.ready &&
+                           Throttle::isWithinTimespanMs(snapshot.cwUpdatedMs, GAUGE_STALE_MS);
+    const bool hltLive = hasSnapshot && snapshot.hltValid && snapshot.hltIo2Working &&
+                         Throttle::isWithinTimespanMs(snapshot.hlt.lastFrameMs, HLT_STALE_MS + 1);
+    // Unknown input is treated as absent; only a live charging indication suppresses sleep.
+    const bool inputPresent = hltLive && (snapshot.hlt.charging || snapshot.hlt.c1State == HLT331Serial::PORT_CHARGING ||
+                                          snapshot.hlt.c2State == HLT331Serial::PORT_CHARGING);
+    const bool lowVoltage = updateLowVoltageCounter(low_voltage_counter, gaugeLive && snapshot.cw.voltageMv > 0, inputPresent,
+                                                    snapshot.cw.voltageMv, OCV[NUM_OCV_POINTS - 1] * NUM_CELLS);
+    if (!gaugeLive || !snapshot.cw.profile.matches || inputPresent || snapshot.cw.socPercent != 0) {
+        lowSocCounter = 0;
+    } else if (lowSocCounter < UINT8_MAX) {
+        lowSocCounter++;
+    }
+    if (lowVoltage || lowSocCounter > LOW_VOLTAGE_READINGS_BEFORE_SHUTDOWN) {
+        LOG_INFO("Low battery detected, trigger deep sleep");
+        powerFSM.trigger(EVENT_LOW_BATTERY);
+    }
+}
+#endif
+
 /// Reads power status to powerStatus singleton.
 //
 // TODO(girts): move this and other axp stuff to power.h/power.cpp.
@@ -1168,7 +1207,12 @@ void Power::readPowerStatus()
                                           // code doesn't run every time
     OptionalBool isChargingNow = OptUnknown;
 
-    if (batteryLevel) {
+    bool usedMeshPocketV2PowerBank = false;
+#ifdef HELTEC_MESH_POCKET_V2
+    usedMeshPocketV2PowerBank =
+        meshPocketV2PowerBankCopyPowerStatusFields(hasBattery, usbPowered, isChargingNow, batteryVoltageMv, batteryChargePercent);
+#endif
+    if (!usedMeshPocketV2PowerBank && batteryLevel) {
         hasBattery = batteryLevel->isBatteryConnect() ? OptTrue : OptFalse;
 #ifndef NRF_APM
         usbPowered = batteryLevel->isVbusIn() ? OptTrue : OptFalse;
@@ -1283,11 +1327,12 @@ void Power::readPowerStatus()
 
 #endif
 
-    // If we have a battery at all and it is less than 0%, force deep sleep if we
-    // have more than 10 low readings in a row. NOTE: min LiIon/LiPo voltage
-    // is 2.0 to 2.5V, current OCV min is set to 3100 that is large enough.
-    //
-
+#ifdef HELTEC_MESH_POCKET_V2
+    if (meshPocketV2PowerBank != nullptr && meshPocketV2PowerBank->isAvailable()) {
+        checkMeshPocketV2LowBattery();
+        return;
+    }
+#endif
     if (batteryLevel) {
         // getBattVoltage() reports pack voltage; the OCV table is per cell.
         const bool shutdownNow =

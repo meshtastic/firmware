@@ -22,6 +22,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "Screen.h"
 #include "NodeDB.h"
+#ifdef HELTEC_MESH_POCKET_V2
+#include "PowerFSM.h"
+#endif
 #include "PowerMon.h"
 #include "Throttle.h"
 #include "UptimeClock.h"
@@ -550,7 +553,11 @@ SPIClass SPI1(HSPI);
 Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_OledType screenType, OLEDDISPLAY_GEOMETRY geometry)
     : concurrency::OSThread("Screen"), address_found(address), model(screenType), geometry(geometry), cmdQueue(32)
 {
+#ifdef HELTEC_MESH_POCKET_V2
+    graphics::normalFrames = new FrameCallback[MAX_NUM_NODES + NUM_EXTRA_FRAMES + 1];
+#else
     graphics::normalFrames = new FrameCallback[MAX_NUM_NODES + NUM_EXTRA_FRAMES];
+#endif
 
 #if defined(USE_SH1106) || defined(USE_SH1107) || defined(USE_SH1107_128_64)
     dispdev = new SH1106Wire(address.address, -1, -1, geometry,
@@ -1004,6 +1011,10 @@ void Screen::setup()
 #endif
     if (inputBroker)
         inputObserver.observe(inputBroker);
+#ifdef HELTEC_MESH_POCKET_V2
+    if (meshPocketV2PowerBank)
+        powerBankObserver.observe(&meshPocketV2PowerBank->onEvent);
+#endif
 
     // Load persisted messages into RAM
     messageStore.loadFromFlash();
@@ -1578,6 +1589,16 @@ void Screen::setFrames(FrameFocus focus)
     if (numMeshNodes > 0)
         numMeshNodes--;
 
+#ifdef HELTEC_MESH_POCKET_V2
+    if (meshPocketV2PowerBank != nullptr && meshPocketV2PowerBank->isAvailable()) {
+        fsi.positions.powerBank = numframes;
+        normalFrames[numframes++] = graphics::UIRenderer::drawMeshPocketV2PowerBank;
+        indicatorIcons.push_back(icon_power_bank);
+        PUSH_FRAME_TITLE("Power Bank");
+    }
+#endif
+
+    // Favorite renderers derive node indexes from their position at the end of the frame list.
     if (!hiddenFrames.show_favorites) {
         // Temporary array to hold favorite node frames
         std::vector<FrameCallback> favoriteFrames;
@@ -1640,6 +1661,13 @@ void Screen::setFrames(FrameFocus focus)
         break;
 
     case FOCUS_PRESERVE:
+#ifdef HELTEC_MESH_POCKET_V2
+        if (previousFramesetInfo.positions.powerBank != 255 && originalPosition == previousFramesetInfo.positions.powerBank &&
+            fsi.positions.powerBank != 255) {
+            ui->switchToFrame(fsi.positions.powerBank);
+            break;
+        }
+#endif
         if (previousFramesetInfo.positions.waypoint == 255 && fsi.positions.waypoint != 255) {
             const uint8_t target = originalPosition >= fsi.positions.waypoint ? originalPosition + 1 : originalPosition;
             ui->switchToFrame(target);
@@ -2011,6 +2039,10 @@ void Screen::logFrameChange(const char *reason, uint8_t targetIdx)
         name = "nodelist_distance";
     else if (targetIdx == p.nodelist_bearings)
         name = "nodelist_bearings";
+#ifdef HELTEC_MESH_POCKET_V2
+    else if (targetIdx == p.powerBank)
+        name = "powerBank";
+#endif
     else if (targetIdx == p.system)
         name = "system";
     else if (targetIdx == p.gps)
@@ -2159,6 +2191,37 @@ static bool moduleFrameHasMenu(size_t frame)
     return false;
 #endif
 }
+
+#ifdef HELTEC_MESH_POCKET_V2
+int Screen::handlePowerBankEvent(const MeshPocketV2PowerBankEvent *event)
+{
+    if (!event)
+        return 0;
+
+    const bool isAutoSwitchEvent = event->kind == MeshPocketV2PowerBankEventKind::StatusEdge ||
+                                   event->kind == MeshPocketV2PowerBankEventKind::FaultEdge ||
+                                   event->kind == MeshPocketV2PowerBankEventKind::Io1Pulse;
+    if (!isAutoSwitchEvent)
+        return 0;
+
+    const bool canAutoSwitchToPowerBank =
+        showingNormalScreen && !isInteractionBusy() && !NotificationRenderer::isOverlayBannerShowing() &&
+        menuHandler::menuQueue == menuHandler::MenuNone && framesetInfo.positions.powerBank != 255;
+    if (!canAutoSwitchToPowerBank)
+        return 0;
+
+    if (!screenOn)
+        powerFSM.trigger(EVENT_INPUT);
+    ui->switchToFrame(framesetInfo.positions.powerBank);
+    lastScreenTransition = millis();
+#ifdef USERPREFS_UI_TEST_LOG
+    logFrameChange("powerbank", framesetInfo.positions.powerBank);
+#endif
+    setFastFramerate();
+
+    return 0;
+}
+#endif
 
 int Screen::handleInputEvent(const InputEvent *event)
 {
