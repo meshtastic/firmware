@@ -4,6 +4,7 @@
 #include "HardwareRNG.h"
 #include "MeshService.h"
 #include "UptimeClock.h"
+#include "crypto/crypto_api.h"
 #include "gps/RTC.h"
 #include "graphics/draw/MenuHandler.h"
 #include "main.h"
@@ -11,8 +12,6 @@
 #include "meshUtils.h"
 #include "modules/AdminModule.h"
 #include "modules/NodeInfoModule.h"
-#include <RNG.h>
-#include <SHA256.h>
 
 #define KEY_VERIFICATION_TIMEOUT_SECS 60
 // Hard cap on one session, independent of the refreshable idle timeout above.
@@ -189,8 +188,7 @@ bool KeyVerificationModule::sendInitialRequest(NodeNum remoteNode)
     // only 32 bits wide, leaving half of this nonce zero.
     {
         concurrency::LockGuard g(cryptLock);
-        if (!HardwareRNG::fill((uint8_t *)&currentNonce, sizeof(currentNonce)))
-            CryptRNG.rand((uint8_t *)&currentNonce, sizeof(currentNonce));
+        crypto_random((uint8_t *)&currentNonce, sizeof(currentNonce));
     }
     currentNonceTimestamp = getTime();
     sessionStartedMs = millis();
@@ -225,7 +223,6 @@ meshtastic_MeshPacket *KeyVerificationModule::allocReply()
         ignoreRequest = true; // no NAK: the requester times out as it would against a busy node
         return nullptr;
     }
-    SHA256 hash;
     NodeNum ourNodeNum = nodeDB->getNodeNum();
     updateState();
     if (currentState != KEY_VERIFICATION_IDLE) {
@@ -261,8 +258,7 @@ meshtastic_MeshPacket *KeyVerificationModule::allocReply()
     uint32_t securityEntropy = 0;
     {
         concurrency::LockGuard g(cryptLock);
-        if (!HardwareRNG::fill((uint8_t *)&securityEntropy, sizeof(securityEntropy)))
-            CryptRNG.rand((uint8_t *)&securityEntropy, sizeof(securityEntropy));
+        crypto_random((uint8_t *)&securityEntropy, sizeof(securityEntropy));
     }
     currentSecurityNumber = (securityEntropy % 999999) + 1;
 
@@ -285,21 +281,23 @@ meshtastic_MeshPacket *KeyVerificationModule::allocReply()
         crypto->setPendingPublicKey(currentRemoteNode, senderKey);
 
     // generate local hash1
-    hash.reset();
-    hash.update(&currentSecurityNumber, sizeof(currentSecurityNumber));
-    hash.update(&currentNonce, sizeof(currentNonce));
-    hash.update(&currentRemoteNode, sizeof(currentRemoteNode));
-    hash.update(&ourNodeNum, sizeof(ourNodeNum));
-    hash.update(senderKey, 32);
-    hash.update(owner.public_key.bytes, owner.public_key.size);
-    hash.finalize(hash1, 32);
+    {
+        const crypto_part parts[] = {{&currentSecurityNumber, sizeof(currentSecurityNumber)},
+                                     {&currentNonce, sizeof(currentNonce)},
+                                     {&currentRemoteNode, sizeof(currentRemoteNode)},
+                                     {&ourNodeNum, sizeof(ourNodeNum)},
+                                     {senderKey, 32},
+                                     {owner.public_key.bytes, owner.public_key.size}};
+        crypto_sha256(parts, 6, hash1);
+    }
 
     // generate hash2
-    hash.reset();
-    hash.update(&currentNonce, sizeof(currentNonce));
-    hash.update(hash1, 32);
-    hash.finalize(hash2, 32);
-    // Carry our public key in hash1 of the response so the requester can bootstrap our key as well.
+    {
+        const crypto_part parts[] = {{&currentNonce, sizeof(currentNonce)}, {hash1, 32}};
+        crypto_sha256(parts, 2, hash2);
+    }
+    // Carry our public key in hash1 of the response so the requester can
+    // bootstrap our key as well.
     response.hash1.size = 32;
     memcpy(response.hash1.bytes, owner.public_key.bytes, 32);
     response.hash2.size = 32;
@@ -338,7 +336,6 @@ meshtastic_MeshPacket *KeyVerificationModule::allocReply()
 
 void KeyVerificationModule::processSecurityNumber(uint32_t incomingNumber)
 {
-    SHA256 hash;
     NodeNum ourNodeNum = nodeDB->getNodeNum();
     uint8_t scratch_hash[32] = {0};
     LOG_DEBUG("received security number: %u", incomingNumber);
@@ -354,20 +351,19 @@ void KeyVerificationModule::processSecurityNumber(uint32_t incomingNumber)
         return;
     }
     // calculate hash1
-    hash.reset();
-    hash.update(&incomingNumber, sizeof(incomingNumber));
-    hash.update(&currentNonce, sizeof(currentNonce));
-    hash.update(&ourNodeNum, sizeof(ourNodeNum));
-    hash.update(&currentRemoteNode, sizeof(currentRemoteNode));
-    hash.update(owner.public_key.bytes, owner.public_key.size);
-
-    hash.update(remotePublic.bytes, 32);
-    hash.finalize(hash1, 32);
-
-    hash.reset();
-    hash.update(&currentNonce, sizeof(currentNonce));
-    hash.update(hash1, 32);
-    hash.finalize(scratch_hash, 32);
+    {
+        const crypto_part parts[] = {{&incomingNumber, sizeof(incomingNumber)},
+                                     {&currentNonce, sizeof(currentNonce)},
+                                     {&ourNodeNum, sizeof(ourNodeNum)},
+                                     {&currentRemoteNode, sizeof(currentRemoteNode)},
+                                     {owner.public_key.bytes, owner.public_key.size},
+                                     {remotePublic.bytes, 32}};
+        crypto_sha256(parts, 6, hash1);
+    }
+    {
+        const crypto_part parts[] = {{&currentNonce, sizeof(currentNonce)}, {hash1, 32}};
+        crypto_sha256(parts, 2, scratch_hash);
+    }
 
     if (memcmp(scratch_hash, hash2, 32) != 0) {
         LOG_WARN("Hash2 did not match");

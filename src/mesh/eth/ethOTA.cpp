@@ -3,9 +3,9 @@
 
 #if HAS_ETHERNET && defined(HAS_ETHERNET_OTA)
 
+#include "crypto/crypto_api.h"
 #include "ethOTA.h"
 #include <ErriezCRC32.h>
-#include <SHA256.h>
 #include <Updater.h>
 #ifdef ARCH_RP2040
 #include <hardware/watchdog.h>
@@ -87,11 +87,9 @@ static bool readExact(EthernetClient &client, uint8_t *buf, size_t len)
 /// Compute SHA256(nonce || psk) for challenge-response authentication
 static void computeAuthHash(const uint8_t *nonce, size_t nonceLen, const uint8_t *psk, size_t pskLen, uint8_t *hashOut)
 {
-    SHA256 sha;
-    sha.reset();
-    sha.update(nonce, nonceLen);
-    sha.update(psk, pskLen);
-    sha.finalize(hashOut, OTA_HASH_SIZE);
+    static_assert(OTA_HASH_SIZE == 32, "SHA-256 digest");
+    const crypto_part parts[] = {{nonce, nonceLen}, {psk, pskLen}};
+    crypto_sha256(parts, 2, hashOut);
 }
 
 /// Challenge-response authentication. Returns true if client is authenticated.
