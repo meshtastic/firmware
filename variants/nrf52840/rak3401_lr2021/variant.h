@@ -142,8 +142,12 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define EXTERNAL_FLASH_USE_QSPI
 
 /*
- * RAK13700 (LR2021) on WisBlock IO slot
- * GPIO numbers match RAK13302 on the same slot (rak3401_1watt).
+ * RAK13700 (LR2021) on WisBlock IO slot, via the RAK13702 breakout
+ * (RAK13702 datasheet V1.0 schematic):
+ *   SPI_CS/CLK/MISO/MOSI -> NSS/SCK/MISO/MOSI
+ *   IO3 -> ANT_SW1_EN + ANT_SW2_EN, IO4 -> NRESET, IO5 -> BUSY, IO6 -> IRQ (DIO8)
+ *   IO1 can be strapped to DIO5/6/10/11 (all 0R/NC, unpopulated by default)
+ * Module is powered directly from 3V3; there is no separate power enable.
  */
 #define HW_SPI1_DEVICE 1
 
@@ -165,12 +169,13 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define LR2021_SPI_MISO_PIN LORA_MISO
 #define LR2021_IRQ_DIO_NUM 8
 
-// Stable default on current samples; see docs/lr2021_tcxo_calibrate_707.md.
+// Stable default on current samples.
 #define LR2021_DIO3_TCXO_VOLTAGE 1.6f
 #define LR2021_DIO_AS_RF_SWITCH
 #define LR2021_CUSTOM_PA_TABLE // board LF PA table - see pa_table.h
 
-// UNCERTAIN: same as RAK13302 SX126X_POWER_EN (WB IO3)
+// WB IO3 drives the module's ANT_SW1_EN/ANT_SW2_EN (RF switch enables), not a power rail.
+// LR20x0Interface drives it HIGH at init and LOW in deep sleep.
 #define LR2021_POWER_EN (21)
 #define LR2021_MAX_POWER 22
 #define LR2021_MAX_POWER_HF 12
