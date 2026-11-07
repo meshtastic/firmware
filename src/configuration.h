@@ -107,6 +107,18 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define MESHTASTIC_ENABLE_FRAME_INJECTION 0
 #endif
 
+// Answer a unicast NodeInfo request aimed at another node from our local cache, replying with the
+// sender spoofed as that node. Off by default; enable per-build with
+// -D MESHTASTIC_ENABLE_NODEINFO_DIRECT_RESPONSE=1. Unit-test builds opt in so the suite keeps
+// covering the path (mirrors TMM_HAS_NODEINFO_CACHE's PIO_UNIT_TESTING opt-in).
+#ifndef MESHTASTIC_ENABLE_NODEINFO_DIRECT_RESPONSE
+#ifdef PIO_UNIT_TESTING
+#define MESHTASTIC_ENABLE_NODEINFO_DIRECT_RESPONSE 1
+#else
+#define MESHTASTIC_ENABLE_NODEINFO_DIRECT_RESPONSE 0
+#endif
+#endif
+
 /// Convert a preprocessor name into a quoted string
 #define xstr(s) ystr(s)
 #define ystr(s) #s
