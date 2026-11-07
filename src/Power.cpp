@@ -1650,9 +1650,8 @@ bool Power::axpChipInit()
 
             /**
              * ALDO2 cannot be turned off.
-             * It is a necessary condition for sensor communication.
-             * It must be turned on to properly access the sensor and screen
-             * It is also responsible for the power supply of PCF8563
+             * T-Beam S3 Core: needed for sensor communication and the screen, and powers the PCF8563.
+             * T-Watch S3: display backlight. Its PCF8563 runs from VBACKUP instead (see below).
              */
             PMU->setPowerChannelVoltage(XPOWERS_ALDO2, 3300);
             PMU->enablePowerOutput(XPOWERS_ALDO2);
@@ -1679,7 +1678,13 @@ bool Power::axpChipInit()
             PMU->disablePowerOutput(XPOWERS_DCDC5); // not elicited
             PMU->disablePowerOutput(XPOWERS_DLDO1); // Invalid power channel, it does not exist
             PMU->disablePowerOutput(XPOWERS_DLDO2); // Invalid power channel, it does not exist
+#ifdef T_WATCH_S3
+            // VBACKUP supplies the PCF8563 and charges its backup cell; with it off the RTC oscillator never runs
+            PMU->setPowerChannelVoltage(XPOWERS_VBACKUP, 3300);
+            PMU->enablePowerOutput(XPOWERS_VBACKUP);
+#else
             PMU->disablePowerOutput(XPOWERS_VBACKUP);
+#endif
         } else if (HW_VENDOR == meshtastic_HardwareModel_T_WATCH_ULTRA) {
             PMU->clearIrqStatus();
 

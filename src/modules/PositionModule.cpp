@@ -166,9 +166,9 @@ bool PositionModule::hasQualityTimesource()
     bool setFromPhoneOrNtpToday =
         lastSetFromPhoneNtpOrGps == 0 ? false : Throttle::isWithinTimespanMs(lastSetFromPhoneNtpOrGps, SEC_PER_DAY * 1000UL);
 #if MESHTASTIC_EXCLUDE_GPS
-    bool hasGpsOrRtc = (rtc_found.address != ScanI2C::ADDRESS_NONE.address);
+    bool hasGpsOrRtc = hasWorkingHardwareRTC();
 #else
-    bool hasGpsOrRtc = hasGPS() || (rtc_found.address != ScanI2C::ADDRESS_NONE.address);
+    bool hasGpsOrRtc = hasGPS() || hasWorkingHardwareRTC();
 #endif
     return hasGpsOrRtc || setFromPhoneOrNtpToday;
 }
@@ -221,7 +221,7 @@ meshtastic_MeshPacket *PositionModule::allocPositionPacket(uint32_t atPrecision)
     // Always use NTP / GPS time if available
     if (getValidTime(RTCQualityNTP) > 0) {
         p.time = getValidTime(RTCQualityNTP);
-    } else if (rtc_found.address != ScanI2C::ADDRESS_NONE.address) {
+    } else if (hasWorkingHardwareRTC()) {
         LOG_INFO("Use RTC time for position");
         p.time = getValidTime(RTCQualityDevice);
     } else if (getRTCQuality() < RTCQualityNTP) {

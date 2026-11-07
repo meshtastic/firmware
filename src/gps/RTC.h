@@ -42,6 +42,9 @@ enum RTCSetResult {
 
 RTCQuality getRTCQuality();
 
+/// True if a hardware RTC was found and its clock is counting, so it can be trusted as a time source
+bool hasWorkingHardwareRTC();
+
 extern uint32_t lastSetFromPhoneNtpOrGps;
 
 /// If we haven't yet set our RTC this boot, set it from a GPS derived time
@@ -65,6 +68,7 @@ void resetRTCStateForTests();
 void setRTCSystemTimeForTests(const struct timeval *tv);
 void clearRTCSystemTimeForTests();
 void setReadFromRTCUseSystemTimeForTests(bool enabled);
+void setRTCStalledForTests(bool stalled);
 #endif
 
 time_t gm_mktime(const struct tm *tm);
