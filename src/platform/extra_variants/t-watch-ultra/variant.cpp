@@ -6,8 +6,8 @@
 // input/TouchScreenImpl1.h pulls in transitively. See extra_variants/README.md.
 
 #include "input/TouchScreenImpl1.h"
-#include "touch/TouchDrvCST92xx.h"
-#include <IoExpanderXL9555.hpp>
+#include <IoExpanderDrv.hpp>
+#include <TouchDrvCST.hpp>
 #include <Wire.h>
 
 static IoExpanderXL9555 io;
@@ -49,11 +49,10 @@ void earlyInitVariant()
 
 static bool readTouch(int16_t *x, int16_t *y)
 {
-    int16_t x_array[1], y_array[1];
-    uint8_t touched = touchDrv.getPoint(x_array, y_array, 1);
-    if (touched > 0) {
-        *x = (x_array[0]);
-        *y = (y_array[0]);
+    const TouchPoints &points = touchDrv.getTouchPoints();
+    if (points.hasPoints()) {
+        *x = points.getPoint(0).x;
+        *y = points.getPoint(0).y;
         // Check bounds
         if (*x < 0 || *x >= TFT_WIDTH || *y < 0 || *y >= TFT_HEIGHT) {
             return false;

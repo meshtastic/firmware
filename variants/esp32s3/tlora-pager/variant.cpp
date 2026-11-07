@@ -1,5 +1,5 @@
 #include "variant.h"
-#include "IoExpanderXL9555.hpp"
+#include "IoExpanderDrv.hpp"
 extern IoExpanderXL9555 io;
 
 void earlyInitVariant()

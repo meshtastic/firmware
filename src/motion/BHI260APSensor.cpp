@@ -1,6 +1,6 @@
 #include "BHI260APSensor.h"
 
-#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && defined(HAS_BHI260AP) && __has_include(<SensorBHI260AP.hpp>)
+#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && defined(HAS_BHI260AP) && __has_include(<ImuDrv.hpp>)
 #define BOSCH_BHI260_KLIO
 
 #include "mesh/Throttle.h"
