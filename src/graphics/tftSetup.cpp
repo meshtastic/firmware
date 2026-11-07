@@ -360,6 +360,7 @@ void tftSetup(void)
         } else
 #endif
         {
+            const bool use16BitData = displayPanelUses16BitData(portduino_config.displayPanel, portduino_config.displayDataBits);
             displayConfig.device(DisplayDriverConfig::device_t::CUSTOM_TFT)
                 .panel(DisplayDriverConfig::panel_config_t{.type = panels[portduino_config.displayPanel],
                                                            .panel_width = (uint16_t)portduino_config.displayWidth,
@@ -372,8 +373,7 @@ void tftSetup(void)
                                                            .offset_rotation = (uint8_t)portduino_config.displayOffsetRotate,
                                                            .invert = portduino_config.displayInvert ? true : false,
                                                            .rgb_order = (bool)portduino_config.displayRGBOrder,
-                                                           .dlen_16bit = portduino_config.displayPanel == ili9486 ||
-                                                                         portduino_config.displayPanel == ili9488})
+                                                           .dlen_16bit = use16BitData})
                 .bus(DisplayDriverConfig::bus_config_t{.freq_write = (uint32_t)portduino_config.displayBusFrequency,
                                                        .freq_read = 16000000,
                                                        .spi{.pin_dc = (int8_t)portduino_config.displayDC.pin,

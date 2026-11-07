@@ -470,6 +470,16 @@ assert "empty file" 0 empty-file.yaml check \
 # expectation across builds.
 assert "unknown HUB75 option" 1 hub75-unknown-key.yaml check \
 	"unknown key 'Display.HUB75.Colours'"
+echo
+echo "Display data width:"
+assert "Display.DataBits is a known key with a valid value" 0 display-databits.yaml check \
+	"Result: 0 errors, 0 warnings"
+assert "an unsupported Display.DataBits warns and keeps the panel default" 0 display-databits-unsupported.yaml check \
+	"Display.DataBits is 17, but only 16 or 18 is used; the panel default is kept" \
+	"Result: 0 errors, 1 warning"
+assert "a non-numeric Display.DataBits is reported as ignored" 0 display-databits-type.yaml check \
+	"Display.DataBits is not a whole number" \
+	"Result: 0 errors, 1 warning"
 # The point of the case: a config that will not parse must still reach the report
 # with a file and a line, rather than exiting early with just "Unable to use ...".
 # The asserted line number counts the fixture's comment header - the only assertion
