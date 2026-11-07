@@ -16,6 +16,7 @@ class ScanI2C
         RTC_PCF8563,
         RTC_PCF85063,
         RTC_RX8130CE,
+        RTC_YSN8900E,
         CARDKB,
         TDECKKB,
         BBQ10KB,
@@ -115,6 +116,8 @@ class ScanI2C
         LP5814,
         ES8311,
         ES7243E,
+        BMM350,
+        LSM6DSOX,
     } DeviceType;
 
     // typedef uint8_t DeviceAddress;
