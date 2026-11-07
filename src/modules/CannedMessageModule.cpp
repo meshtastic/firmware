@@ -74,6 +74,10 @@ CannedMessageModule::CannedMessageModule()
         LOG_INFO("CannedMessage: none configured, disabled");
         this->updateState(CANNED_MESSAGE_RUN_STATE_DISABLED);
         disable();
+    } else if (!inputBroker) {
+        LOG_INFO("CannedMessage: no InputBroker, disabled");
+        this->updateState(CANNED_MESSAGE_RUN_STATE_DISABLED);
+        disable();
     } else {
         LOG_INFO("CannedMessageModule is enabled");
         moduleConfig.canned_message.enabled = true;
@@ -115,6 +119,61 @@ void CannedMessageModule::LaunchWithDestination(NodeNum newDest, uint8_t newChan
     LOG_TRACE("[CannedMessage] LaunchWithDestination dest=0x%08x ch=%d", dest, channel);
 }
 
+// Compose through the on-screen keyboard used by devices without a physical one
+// (rotary encoder, trackball, joystick). Returns false when no such keyboard exists,
+// so callers can fall back to the plain freetext screen.
+bool CannedMessageModule::showOnScreenKeyboard()
+{
+    if (!osk_found || !screen)
+        return false;
+
+    char headerBuffer[64];
+    if (this->dest == NODENUM_BROADCAST) {
+        snprintf(headerBuffer, sizeof(headerBuffer), "To: #%s", channels.getName(this->channel));
+    } else {
+        snprintf(headerBuffer, sizeof(headerBuffer), "To: @%s", getNodeName(this->dest));
+    }
+    screen->showTextInput(headerBuffer, "", 300000, [this](const std::string &text) {
+        if (!text.empty()) {
+            this->freetext = text.c_str();
+            this->payload = CANNED_MESSAGE_RUN_STATE_FREETEXT;
+            updateState(CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE);
+            currentMessageIndex = -1;
+
+            UIFrameEvent e;
+            e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
+            this->notifyObservers(&e);
+            screen->forceDisplay();
+
+            setIntervalFromNow(500);
+            return;
+        } else {
+            // Don't delete virtual keyboard immediately - it might still be executing
+            // Instead, just clear the callback and reset banner to stop input processing
+            graphics::NotificationRenderer::textInputCallback = nullptr;
+            graphics::NotificationRenderer::resetBanner();
+
+            // Return to inactive state
+            this->updateState(CANNED_MESSAGE_RUN_STATE_INACTIVE);
+            this->currentMessageIndex = -1;
+            this->freetext = "";
+            this->cursor = 0;
+
+            // Force display update to show normal screen
+            UIFrameEvent e;
+            e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
+            this->notifyObservers(&e);
+            screen->forceDisplay();
+
+            // Schedule cleanup for next loop iteration to ensure safe deletion
+            setIntervalFromNow(50);
+            return;
+        }
+    });
+
+    return true;
+}
+
 void CannedMessageModule::LaunchFreetextWithDestination(NodeNum newDest, uint8_t newChannel)
 {
     // Do NOT override explicit broadcast replies
@@ -129,6 +188,19 @@ void CannedMessageModule::LaunchFreetextWithDestination(NodeNum newDest, uint8_t
     lastDest = dest;
     lastChannel = channel;
     lastDestSet = true;
+
+#if !defined(USE_VIRTUAL_KEYBOARD)
+    // The freetext screen needs real key input, so devices without a physical keyboard
+    // compose on the on-screen keyboard instead. Open it from runOnce() rather than here:
+    // menus call us from a banner callback, and the banner is torn down as soon as that
+    // callback returns, which would take the keyboard down with it.
+    if (!kb_found && osk_found && screen) {
+        pendingOskLaunch = true;
+        setIntervalFromNow(0);
+        LOG_TRACE("[CannedMessage] LaunchFreetextWithDestination (OSK) dest=0x%08x ch=%d", dest, channel);
+        return;
+    }
+#endif
 
     updateState(CANNED_MESSAGE_RUN_STATE_FREETEXT, true);
     UIFrameEvent e;
@@ -476,12 +548,15 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
 void CannedMessageModule::updateState(cannedMessageModuleRunState newState, bool shouldRequestFocus)
 {
     runState = newState;
-    if (runState == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
-        inputBroker->menuMode =
-            false; // Allow any key input to be sent to the message composer instead of being interpreted as menu navigation
-    } else {
-        inputBroker->menuMode = true; // Re-enable menu navigation for destination selection
+    if (inputBroker) {
+        if (runState == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
+            inputBroker->menuMode =
+                false; // Allow any key input to be sent to the message composer instead of being interpreted as menu navigation
+        } else {
+            inputBroker->menuMode = true; // Re-enable menu navigation for destination selection
+        }
     }
+
     if (shouldRequestFocus) {
         requestFocus();
     }
@@ -717,65 +792,18 @@ bool CannedMessageModule::handleMessageSelectorInput(const InputEvent *event, bo
         }
 
         // [Free Text] triggers the free text input (virtual keyboard)
-#if defined(USE_VIRTUAL_KEYBOARD)
         if (strcmp(current, "[-- Free Text --]") == 0) {
+#if defined(USE_VIRTUAL_KEYBOARD)
             updateState(CANNED_MESSAGE_RUN_STATE_FREETEXT, true);
             UIFrameEvent e;
             e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
             notifyObservers(&e);
             return true;
-        }
 #else
-        if (strcmp(current, "[-- Free Text --]") == 0) {
-            if (osk_found && screen) {
-                char headerBuffer[64];
-                if (this->dest == NODENUM_BROADCAST) {
-                    snprintf(headerBuffer, sizeof(headerBuffer), "To: #%s", channels.getName(this->channel));
-                } else {
-                    snprintf(headerBuffer, sizeof(headerBuffer), "To: @%s", getNodeName(this->dest));
-                }
-                screen->showTextInput(headerBuffer, "", 300000, [this](const std::string &text) {
-                    if (!text.empty()) {
-                        this->freetext = text.c_str();
-                        this->payload = CANNED_MESSAGE_RUN_STATE_FREETEXT;
-                        updateState(CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE);
-                        currentMessageIndex = -1;
-
-                        UIFrameEvent e;
-                        e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
-                        this->notifyObservers(&e);
-                        screen->forceDisplay();
-
-                        setIntervalFromNow(500);
-                        return;
-                    } else {
-                        // Don't delete virtual keyboard immediately - it might still be executing
-                        // Instead, just clear the callback and reset banner to stop input processing
-                        graphics::NotificationRenderer::textInputCallback = nullptr;
-                        graphics::NotificationRenderer::resetBanner();
-
-                        // Return to inactive state
-                        this->updateState(CANNED_MESSAGE_RUN_STATE_INACTIVE);
-                        this->currentMessageIndex = -1;
-                        this->freetext = "";
-                        this->cursor = 0;
-
-                        // Force display update to show normal screen
-                        UIFrameEvent e;
-                        e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
-                        this->notifyObservers(&e);
-                        screen->forceDisplay();
-
-                        // Schedule cleanup for next loop iteration to ensure safe deletion
-                        setIntervalFromNow(50);
-                        return;
-                    }
-                });
-
+            if (showOnScreenKeyboard())
                 return true;
-            }
-        }
 #endif
+        }
 
         // Normal canned message selection
         if (runState == CANNED_MESSAGE_RUN_STATE_INACTIVE || runState == CANNED_MESSAGE_RUN_STATE_DISABLED) {
@@ -1009,12 +1037,15 @@ int CannedMessageModule::handleEmotePickerInput(const InputEvent *event)
     if (isSelect) {
         String label = graphics::emotes[emotePickerIndex].label;
         String emoteInsert = label; // Just the text label, e.g., ":thumbsup:"
-        if (cursor == freetext.length()) {
-            freetext += emoteInsert;
-        } else {
-            freetext = freetext.substring(0, cursor) + emoteInsert + freetext.substring(cursor);
+        // Whole or not at all: the editor's limit applies, and half a label would be garbage
+        if (freetext.length() + emoteInsert.length() <= maxFreetextBytes()) {
+            if (cursor == freetext.length()) {
+                freetext += emoteInsert;
+            } else {
+                freetext = freetext.substring(0, cursor) + emoteInsert + freetext.substring(cursor);
+            }
+            cursor += emoteInsert.length();
         }
-        cursor += emoteInsert.length();
         updateState(CANNED_MESSAGE_RUN_STATE_FREETEXT, true);
         screen->forceDisplay();
         return 1;
@@ -1067,8 +1098,11 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
     // Track this packet’s request ID for matching ACKs
     this->lastRequestId = p->id;
 
-    // Copy payload
-    p->decoded.payload.size = strlen(message);
+    // Copy payload, never past its buffer
+    size_t copyLen = strlen(message);
+    if (copyLen > sizeof(p->decoded.payload.bytes))
+        copyLen = sizeof(p->decoded.payload.bytes);
+    p->decoded.payload.size = copyLen;
     memcpy(p->decoded.payload.bytes, message, p->decoded.payload.size);
 
     if (moduleConfig.canned_message.send_bell && p->decoded.payload.size + 1 < meshtastic_Constants_DATA_PAYLOAD_LEN) {
@@ -1144,6 +1178,14 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
 
 int32_t CannedMessageModule::runOnce()
 {
+    // A menu asked to compose freetext on the on-screen keyboard; the menu banner is gone
+    // by now, so it is safe to bring the keyboard up.
+    if (this->pendingOskLaunch) {
+        this->pendingOskLaunch = false;
+        if (showOnScreenKeyboard())
+            return INT32_MAX; // the text input callback drives everything from here
+    }
+
     if (this->runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION && needsUpdate) {
         updateDestinationSelectionList();
         needsUpdate = false;
@@ -1375,7 +1417,7 @@ int32_t CannedMessageModule::runOnce()
                                          this->freetext.substring(this->cursor);
                     }
                     this->cursor++;
-                    const uint16_t maxChars = 200 - (moduleConfig.canned_message.send_bell ? 1 : 0);
+                    const unsigned int maxChars = maxFreetextBytes();
                     if (this->freetext.length() > maxChars) {
                         this->cursor = maxChars;
                         this->freetext = this->freetext.substring(0, maxChars);
@@ -1457,7 +1499,7 @@ int CannedMessageModule::getPrevIndex()
 
 #if defined(USE_VIRTUAL_KEYBOARD)
 
-String CannedMessageModule::keyForCoordinates(uint x, uint y)
+String CannedMessageModule::keyForCoordinates(int x, int y)
 {
     int outerSize = *(&this->keyboard[this->charSet] + 1) - this->keyboard[this->charSet];
 
@@ -1937,8 +1979,9 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
 
         // Char count right-aligned
         if (runState != CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION) {
-            uint16_t charsLeft =
-                meshtastic_Constants_DATA_PAYLOAD_LEN - this->freetext.length() - (moduleConfig.canned_message.send_bell ? 1 : 0);
+            // The limit the editor keeps to, not the whole payload: the counter showed 33 left when no more could be typed
+            const unsigned int used = this->freetext.length();
+            int charsLeft = used < maxFreetextBytes() ? (int)(maxFreetextBytes() - used) : 0;
             snprintf(buffer, sizeof(buffer), "%d left", charsLeft);
             display->drawString(x + display->getWidth() - display->getStringWidth(buffer) - BASEUI_HEADER_LR_MARGIN,
                                 y + BASEUI_HEADER_MARGIN, buffer);
@@ -2382,6 +2425,12 @@ void CannedMessageModule::handleSetCannedMessageModuleMessages(const char *from_
             moduleConfig.canned_message.enabled = true;
         }
     }
+}
+
+unsigned int CannedMessageModule::maxFreetextBytes() const
+{
+    // Below the payload size (meshtastic_Constants_DATA_PAYLOAD_LEN, 233)
+    return 200 - (moduleConfig.canned_message.send_bell ? 1 : 0);
 }
 
 String CannedMessageModule::drawWithCursor(String text, int cursor)

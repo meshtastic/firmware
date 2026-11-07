@@ -235,6 +235,8 @@ void RedirectablePrint::log_to_ble(const char *logLevel, const char *format, va_
         isBleConnected = nimbleBluetooth && nimbleBluetooth->isActive() && nimbleBluetooth->isConnected();
 #elif defined(ARCH_NRF52)
         isBleConnected = nrf52Bluetooth != nullptr && nrf52Bluetooth->isConnected();
+#elif defined(MESHTASTIC_LINUX_BLE)
+        isBleConnected = linuxBluetooth != nullptr && linuxBluetooth->isEnabled() && linuxBluetooth->isConnected();
 #endif
         if (isBleConnected) {
             auto thread = concurrency::OSThread::currentThread;
@@ -251,6 +253,8 @@ void RedirectablePrint::log_to_ble(const char *logLevel, const char *format, va_
             nimbleBluetooth->sendLog(buffer.get(), size);
 #elif defined(ARCH_NRF52)
             nrf52Bluetooth->sendLog(buffer.get(), size);
+#elif defined(MESHTASTIC_LINUX_BLE)
+            linuxBluetooth->sendLog(buffer.get(), size);
 #endif
         }
     }
@@ -265,6 +269,9 @@ meshtastic_LogRecord_Level RedirectablePrint::getLogLevel(const char *logLevel)
 {
     meshtastic_LogRecord_Level ll = meshtastic_LogRecord_Level_UNSET; // default to unset
     switch (logLevel[0]) {
+    case 'T':
+        ll = meshtastic_LogRecord_Level_TRACE;
+        break;
     case 'D':
         ll = meshtastic_LogRecord_Level_DEBUG;
         break;
@@ -286,13 +293,6 @@ meshtastic_LogRecord_Level RedirectablePrint::getLogLevel(const char *logLevel)
 
 void RedirectablePrint::log(const char *logLevel, const char *format, ...)
 {
-
-    // append \n to format
-    size_t len = strlen(format);
-    auto newFormat = std::unique_ptr<char[]>(new char[len + 2]);
-    strcpy(newFormat.get(), format);
-    newFormat[len] = '\n';
-    newFormat[len + 1] = '\0';
 
 #if ARCH_PORTDUINO
     // level trace is special, two possible ways to handle it.
@@ -327,6 +327,20 @@ void RedirectablePrint::log(const char *logLevel, const char *format, ...)
         return;
     }
 
+    // Append \n here rather than in every call site. A usual-length format is copied on the stack, so logging needs no
+    // heap; an out-of-memory report depends on that. Sized small: some tasks run with well under 1 KB of stack free.
+    size_t len = strlen(format);
+    char stackFormat[96];
+    std::unique_ptr<char[]> heapFormat;
+    char *newFormat = stackFormat;
+    if (len + 2 > sizeof(stackFormat)) {
+        heapFormat.reset(new char[len + 2]);
+        newFormat = heapFormat.get();
+    }
+    memcpy(newFormat, format, len);
+    newFormat[len] = '\n';
+    newFormat[len + 1] = '\0';
+
 #ifdef HAS_FREE_RTOS
     if (inDebugPrint != nullptr && xSemaphoreTake(inDebugPrint, portMAX_DELAY) == pdTRUE) {
 #else
@@ -340,14 +354,14 @@ void RedirectablePrint::log(const char *logLevel, const char *format, ...)
         va_start(arg, format);
 
         va_copy(arg_copy, arg);
-        log_to_serial(logLevel, newFormat.get(), arg_copy);
+        log_to_serial(logLevel, newFormat, arg_copy);
         va_end(arg_copy);
 
         va_copy(arg_copy, arg);
-        log_to_syslog(logLevel, newFormat.get(), arg_copy);
+        log_to_syslog(logLevel, newFormat, arg_copy);
         va_end(arg_copy);
 
-        log_to_ble(logLevel, newFormat.get(), arg);
+        log_to_ble(logLevel, newFormat, arg);
 
         va_end(arg);
 #ifdef HAS_FREE_RTOS

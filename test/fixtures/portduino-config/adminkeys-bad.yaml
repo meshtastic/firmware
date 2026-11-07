@@ -1,0 +1,13 @@
+# FAULT: the second key is three characters short of 32 bytes. Each entry is read without a
+# fallback, because a truncated admin key would authorize something other than what was written,
+# so meshtasticd refuses to start on this file. Expect an ERROR and exit 1.
+Lora:
+  Module: sx1262
+  CS: 21
+  IRQ: 16
+  Busy: 20
+  Reset: 18
+Security:
+  AdminKeys:
+    - rvzaPCZmlh1nWnqNKUFHj0dLBJJIRJhRrkZmaFLHCVY=
+    - NGC+MSAeaf7aoO7ouZl/XHwpmf2v5ZMlPNZUr036

@@ -17,6 +17,11 @@ class Throttle
         return !isWithinTimespanMs(lastExecutionMs, intervalMs);
     }
 
+    /// What is left of intervalMs since lastExecutionMs, 0 once it has passed. One clock read, so a
+    /// caller waiting out the remainder cannot be preempted between the test and the subtraction.
+    /// Same sentinel rule as isWithinTimespanMs(): 0 is not treated as "never run".
+    static uint32_t remainingMs(uint32_t lastExecutionMs, uint32_t intervalMs);
+
     /// True once an absolute deadline has arrived. Use this rather than comparing against millis()
     /// directly: that inverts while the deadline sits on the far side of the 32-bit wrap, so the
     /// action either fires immediately or blocks for about the interval it should have waited.

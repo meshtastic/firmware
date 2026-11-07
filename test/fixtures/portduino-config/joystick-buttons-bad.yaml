@@ -1,0 +1,16 @@
+# FAULT: three ways a joystick mapping silently does nothing. 'fire' is not an action
+# LinuxJoystick knows, so those buttons are dropped; 'BTN_SOUTH' is a name rather than the
+# numeric evdev code the loader parses; and 0x121 appears under two actions, where the
+# later one wins and the earlier binding is lost.
+Lora:
+  Module: sx1262
+  CS: 21
+  IRQ: 16
+  Busy: 20
+  Reset: 18
+Input:
+  JoystickDevice: /dev/input/by-id/usb-0079_USB_Gamepad-event-joystick
+  JoystickButtons:
+    select: [0x121, BTN_SOUTH]
+    fire: 0x123
+    cancel: [0x122, 0x121]

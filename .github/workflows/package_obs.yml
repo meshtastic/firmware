@@ -29,7 +29,7 @@ jobs:
       build_location: obs
 
   package-obs:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     needs: build-debian-src
     steps:
       - name: Checkout code
@@ -43,8 +43,8 @@ jobs:
       - name: Install OpenSUSE Build Service deps
         shell: bash
         run: |
-          echo 'deb http://download.opensuse.org/repositories/openSUSE:/Tools/xUbuntu_24.04/ /' | sudo tee /etc/apt/sources.list.d/openSUSE:Tools.list
-          curl -fsSL https://download.opensuse.org/repositories/openSUSE:Tools/xUbuntu_24.04/Release.key | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/openSUSE_Tools.gpg > /dev/null
+          echo 'deb http://download.opensuse.org/repositories/openSUSE:/Tools/xUbuntu_26.04/ /' | sudo tee /etc/apt/sources.list.d/openSUSE:Tools.list
+          curl -fsSL https://download.opensuse.org/repositories/openSUSE:Tools/xUbuntu_26.04/Release.key | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/openSUSE_Tools.gpg > /dev/null
           sudo apt-get update -y --fix-missing
           sudo apt-get install -y osc
 

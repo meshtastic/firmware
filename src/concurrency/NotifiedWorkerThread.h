@@ -47,6 +47,9 @@ class NotifiedWorkerThread : public OSThread
     /// any notifications are currently pending they will be handled immediately.
     void checkNotification();
 
+    /// As checkNotification(), but a pending `deferred` is left for the wake-up it was scheduled for
+    void checkNotificationExcept(uint32_t deferred);
+
   private:
     /**
      * Notify this thread so it can run

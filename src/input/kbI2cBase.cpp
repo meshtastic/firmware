@@ -71,8 +71,8 @@ int32_t KbI2cBase::runOnce()
             // than the local Wire1 (e.g. SenseCAP Indicator)
             i2cBus = ScanI2CTwoWire::fetchI2CBus(cardkb_found);
 #if defined(ELECROW_ThinkNode_M9)
-            if (cardkb_found.address == TSTC8_KB_ADDR) {
-                Stc8HKeyBoard.begin(TSTC8_KB_ADDR, &Wire1);
+            if (cardkb_found.address == TSTC8_KB_V1_ADDR) {
+                Stc8HKeyBoard.begin(TSTC8_KB_V1_ADDR, &Wire1);
             }
 #endif
             if (cardkb_found.address == BBQ10_KB_ADDR) {
@@ -91,8 +91,8 @@ int32_t KbI2cBase::runOnce()
             LOG_DEBUG("Use I2C Bus 0 (the first one)");
             i2cBus = &Wire;
 #if defined(ELECROW_ThinkNode_M9)
-            if (cardkb_found.address == TSTC8_KB_ADDR) {
-                Stc8HKeyBoard.begin(TSTC8_KB_ADDR, &Wire);
+            if (cardkb_found.address == TSTC8_KB_V1_ADDR || cardkb_found.address == TSTC8_KB_V2_ADDR) {
+                Stc8HKeyBoard.begin(cardkb_found.address, &Wire);
             }
 #endif
             if (cardkb_found.address == BBQ10_KB_ADDR) {
@@ -270,7 +270,7 @@ int32_t KbI2cBase::runOnce()
                 break;
             }
             if (e.inputEvent != INPUT_BROKER_NONE) {
-                LOG_DEBUG("MP121 Notifying: %i Char: %i", e.inputEvent, e.kbchar);
+                LOG_INPUT("MP121 Notifying: %i Char: %i", e.inputEvent, e.kbchar);
                 this->notifyObservers(&e);
             }
         }
@@ -398,7 +398,7 @@ int32_t KbI2cBase::runOnce()
             }
         }
         if (PrintDataBuf != 0) {
-            LOG_DEBUG("RAK14004 key 0x%x pressed", PrintDataBuf);
+            LOG_INPUT("RAK14004 key 0x%x pressed", PrintDataBuf);
             InputEvent e = {};
             e.inputEvent = INPUT_BROKER_MATRIXKEY;
             e.source = this->_originName;
