@@ -4147,9 +4147,14 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
         }
 
         // Gate on has_rx_time, not truthiness - rx_time may hold an uptime-seconds placeholder.
-        if (mp.has_rx_time)
+        if (mp.has_rx_time) {
+            if (info->last_heard != mp.rx_time) {
             info->last_heard = mp.rx_time;
-        else
+                // last_heard is persisted in nodes.proto. Mark the database dirty so the
+                // normal throttled save path can retain a recent contact across reconnects.
+                nodeDatabaseDirty = true;
+            }
+        } else
             // rx_time is the arrival instant in uptime seconds. It goes to the RAM sidecar, not
             // last_heard, which only ever holds a real epoch or 0.
             recordHeardWhileClockUntrusted(getFrom(&mp), mp.rx_time);
@@ -4709,8 +4714,10 @@ void NodeDB::backfillHeardAt()
             // Both stamps are monotonic uptime seconds, so the elapsed term is exact at any age.
             // Never move last_heard backwards: the node may since have been re-heard on a good clock.
             const uint32_t elapsedSecs = nowUptimeSecs - h.heardAtUptimeSecs;
-            if (elapsedSecs < nowEpoch && nowEpoch - elapsedSecs > info->last_heard)
+            if (elapsedSecs < nowEpoch && nowEpoch - elapsedSecs > info->last_heard) {
                 info->last_heard = nowEpoch - elapsedSecs;
+              nodeDatabaseDirty = true;
+            }
         }
         h = {}; // evicted or converted either way, the stamp's job is done
     }
