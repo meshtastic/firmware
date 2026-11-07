@@ -67,6 +67,7 @@ typedef enum {
     GNSS_MODEL_LS20031,
     GNSS_MODEL_CM121,
     GNSS_MODEL_LC760CA,
+    GNSS_MODEL_MTK_PA6H, // GlobalTop PA6H (MTK3339, AXN 2.31): Adafruit Ultimate GPS v3
     // Keep GNSS_MODEL_GENERIC_NMEA last: isValidGnssModel() uses it as the exclusive upper bound
     // for values the probe cache is allowed to hold.
     GNSS_MODEL_GENERIC_NMEA // generic NMEA source (e.g. gpsd); skips chip-specific probe and init
@@ -214,6 +215,9 @@ class GPS : private concurrency::OSThread
     uint32_t fixHoldEnds = 0;
     uint32_t rx_gpio = 0;
     uint32_t tx_gpio = 0;
+    /** True when we can talk to the module (a TX pin exists). Kept separate from tx_gpio because GPIO0 is a valid
+     *  UART TX pin (the RP2040/RP2350 UART0 default) but reads as "unset" in tx_gpio. */
+    bool hasTxPin = false;
 
     uint8_t speedSelect = 0;
     uint8_t probeTries = 0;

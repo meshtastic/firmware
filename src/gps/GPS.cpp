@@ -901,7 +901,7 @@ bool GPS::setup()
 {
     if (!didSerialInit) {
         int msglen = 0;
-        if (tx_gpio && gnssModel == GNSS_MODEL_UNKNOWN) {
+        if (hasTxPin && gnssModel == GNSS_MODEL_UNKNOWN) {
             if (!hasProbeCache && !triedProbeCache) {
                 (void)loadProbeCache();
             }
@@ -993,6 +993,20 @@ bool GPS::setup()
             _serial_gps->write("$PMTK314,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0*28\r\n");
             delay(250);
             // Enable SBAS / WAAS
+            _serial_gps->write("$PMTK301,2*2E\r\n");
+            delay(250);
+        } else if (gnssModel == GNSS_MODEL_MTK_PA6H) {
+            // PA6H (MTK3339) on the Adafruit Ultimate GPS v3 breakout. GPS-only chip: no PMTK353 constellation
+            // select (the module answers "unsupported"), so no post-command reset wait either.
+            // Only ask for RMC and GGA
+            _serial_gps->write("$PMTK314,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0*28\r\n");
+            delay(250);
+            // 1 Hz position updates
+            _serial_gps->write("$PMTK220,1000*1F\r\n");
+            delay(250);
+            // Enable SBAS satellite search and WAAS differential corrections
+            _serial_gps->write("$PMTK313,1*2E\r\n");
+            delay(250);
             _serial_gps->write("$PMTK301,2*2E\r\n");
             delay(250);
         } else if (gnssModel == GNSS_MODEL_MTK_PA1616S) {
@@ -1931,10 +1945,11 @@ GnssModel_t GPS::probe(int serialSpeed)
         // Close all NMEA sentences, valid for MTK3333 and MTK3339 platforms
         _serial_gps->write("$PMTK514,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0*2E\r\n");
         delay(20);
-        std::vector<ChipInfo> mtk = {{"L76B", "Quectel-L76B", GNSS_MODEL_MTK_L76B}, {"PA1010D", "1010D", GNSS_MODEL_MTK_PA1010D},
-                                     {"PA1616S", "1616S", GNSS_MODEL_MTK_PA1616S},  {"LS20031", "MC-1513", GNSS_MODEL_MTK_L76B},
-                                     {"L96", "Quectel-L96", GNSS_MODEL_MTK_L76B},   {"L80-R", "_3337_", GNSS_MODEL_MTK_L76B},
-                                     {"L80", "_3339_", GNSS_MODEL_MTK_L76B}};
+        // PA6H must come before the generic "_3339_" L80 entry: its version string is "AXN_2.31_3339_...,PA6H,1.0"
+        std::vector<ChipInfo> mtk = {{"PA6H", "PA6H", GNSS_MODEL_MTK_PA6H},        {"L76B", "Quectel-L76B", GNSS_MODEL_MTK_L76B},
+                                     {"PA1010D", "1010D", GNSS_MODEL_MTK_PA1010D}, {"PA1616S", "1616S", GNSS_MODEL_MTK_PA1616S},
+                                     {"LS20031", "MC-1513", GNSS_MODEL_MTK_L76B},  {"L96", "Quectel-L96", GNSS_MODEL_MTK_L76B},
+                                     {"L80-R", "_3337_", GNSS_MODEL_MTK_L76B},     {"L80", "_3339_", GNSS_MODEL_MTK_L76B}};
 
         PROBE_FAMILY("MTK Family", "$PMTK605*31", mtk, 500);
         currentDelay = 20;
@@ -2057,6 +2072,10 @@ GnssModel_t GPS::getProbeResponse(unsigned long timeout, const std::vector<ChipI
     response[0] = '\0';
     uint16_t responseLen = 0;
     unsigned long start = millis();
+    // A match seen mid-line (at a ',') is only a candidate: a more specific entry earlier in the map may match once
+    // the rest of the line arrives (e.g. "$PMTK705,AXN_2.31_3339_...,PA6H,1.0" matches the generic "_3339_" L80
+    // entry before the "PA6H" field has been received). Decide at end of line, fall back to the candidate on timeout.
+    const ChipInfo *candidate = nullptr;
     while (millis() - start < timeout) {
         if (_serial_gps->available()) {
             char c = _serial_gps->read();
@@ -2067,18 +2086,28 @@ GnssModel_t GPS::getProbeResponse(unsigned long timeout, const std::vector<ChipI
                 response[responseLen] = '\0';
             }
 
-            if (c == ',' || (responseLen >= 2 && response[responseLen - 2] == '\r' && response[responseLen - 1] == '\n')) {
+            bool endOfLine = responseLen >= 2 && response[responseLen - 2] == '\r' && response[responseLen - 1] == '\n';
+            if (c == ',' || endOfLine) {
                 // check if we can see our chips
                 for (const auto &chipInfo : responseMap) {
                     if (strstr(response.get(), chipInfo.detectionString.c_str()) != nullptr) {
+                        if (!endOfLine) {
+                            if (!candidate)
+                                candidate = &chipInfo;
+                            break;
+                        }
                         LOG_DEBUG_GPS("%s", response.get());
                         LOG_INFO("%s detected", chipInfo.chipName.c_str());
                         return chipInfo.driver;
                     }
                 }
             }
-            if (responseLen >= 2 && response[responseLen - 2] == '\r' && response[responseLen - 1] == '\n') {
+            if (endOfLine) {
                 LOG_DEBUG_GPS("%s", response.get());
+                if (candidate) { // matched earlier in this line, nothing more specific showed up
+                    LOG_INFO("%s detected", candidate->chipName.c_str());
+                    return candidate->driver;
+                }
                 // Reset the response buffer for the next potential message
                 responseLen = 0;
                 response[0] = '\0';
@@ -2086,6 +2115,10 @@ GnssModel_t GPS::getProbeResponse(unsigned long timeout, const std::vector<ChipI
         }
     }
     LOG_DEBUG_GPS("%s", response.get());
+    if (candidate) {
+        LOG_INFO("%s detected", candidate->chipName.c_str());
+        return candidate->driver;
+    }
     return GNSS_MODEL_UNKNOWN; // Return unknown on timeout
 }
 
@@ -2134,6 +2167,10 @@ std::unique_ptr<GPS> GPS::createGps()
     auto new_gps = std::unique_ptr<GPS>(new GPS());
     new_gps->rx_gpio = _rx_gpio;
     new_gps->tx_gpio = _tx_gpio;
+    new_gps->hasTxPin = _tx_gpio != 0;
+#if defined(GPS_TX_PIN)
+    new_gps->hasTxPin = true; // the variant wired a TX pin, even if it happens to be GPIO0
+#endif
 #ifdef ARCH_PORTDUINO
     // Skip chip-specific probing for gpsd - it's a generic NMEA stream.
     if (!portduino_config.gpsd_host.empty())
