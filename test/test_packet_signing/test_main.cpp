@@ -5,10 +5,24 @@
 // encode -> decode round-trip through the default channel (perhapsEncode/perhapsDecode, black-box,
 // no production changes); later groups exercise routing order and policy helpers directly.
 //
-//   Group A  receive-side accept/reject matrix (verify, downgrade protection, signer-bit learning)
+// The policy contract pinned here:
+//   - Compatible (the default) never signs; Balanced and Strict sign broadcasts, and NodeInfo and
+//     position even when unicast. Ham mode, which has no PKI, also signs the unicasts PKI would cover;
+//     its acks carry an ack proof instead.
+//   - A signed NodeInfo must claim the key that signed it, and that key must hash to the sender.
+//   - An AES-CCM channel is never signed and overrides the policy: its tag authenticates the packet.
+//   - Only Strict drops a packet for lacking a signature, and not on an AES-CCM channel, nor an ack or
+//     other routing packet (it carries its own proof), a traceroute, or a key verification message.
+//   - A traceroute is never signed, and a signature on one is ignored: every hop rewrites it.
+//   - A bad or malformed signature drops the packet in every mode.
+//   - Balanced and Strict refuse an unsigned identity update from a known signer, except on an
+//     AES-CCM channel (NodeDB::refusesUnsignedIdentity); Compatible accepts it.
+// The regressions guarded are both directions of each rule: signatures spent where they buy nothing
+// (Compatible, CCM), and unsigned traffic dropped or trusted where the rule says otherwise.
+//
+//   Group A  receive-side accept/reject matrix (verify, Strict, AES-CCM override, signer-bit learning)
 //   Group B  send-side signing policy (which outgoing packets perhapsEncode signs)
 //   Group C  routing pipeline ordering (authenticate before duplicate/retry/relay state)
-//   Group D  encoding invariants the routing gates depend on
 //   Group E  decoded-ingress policy (checkXeddsaReceivePolicy, the plaintext-MQTT trust boundary)
 
 #include "MeshTypes.h" // include BEFORE TestUtil.h
@@ -327,7 +341,7 @@ static size_t encodedDataSize(const meshtastic_Data *d)
 }
 
 // Would this Data still fit a LoRa frame with a 64-byte signature attached? Mirror of the
-// production gate in Router.cpp (signedDataFits / the perhapsDecode downgrade predicate).
+// production gate in Router.cpp (signedDataFits).
 static bool signedEncodingFits(const meshtastic_Data *d)
 {
     meshtastic_Data copy = *d;
@@ -335,56 +349,13 @@ static bool signedEncodingFits(const meshtastic_Data *d)
     return encodedDataSize(&copy) + MESHTASTIC_HEADER_LENGTH <= MAX_LORA_PAYLOAD_LEN;
 }
 
-// Append a length-delimited field whose tag this build's Data schema does not define, as a sender
-// on a newer schema would emit. nanopb skips unknown fields at decode, so these bytes count toward
-// the raw wire size but not the decoded struct. Returns the number of bytes appended.
-static size_t appendUnknownField(uint8_t *dst, size_t dstLen, size_t contentLen)
+// Switch the primary channel (index 0, default PSK) to AES-CCM, as `use_aead` on a real channel does.
+// The default PSK keeps fixupChannel() from clearing the flag again.
+static void useAeadPrimaryChannel()
 {
-    constexpr uint32_t UNKNOWN_FIELD_NUMBER = 100; // not a field of meshtastic_Data
-    std::vector<uint8_t> content(contentLen, 0x77);
-    pb_ostream_t stream = pb_ostream_from_buffer(dst, dstLen);
-    TEST_ASSERT_TRUE(pb_encode_tag(&stream, PB_WT_STRING, UNKNOWN_FIELD_NUMBER));
-    TEST_ASSERT_TRUE(pb_encode_string(&stream, content.data(), content.size()));
-    return stream.bytes_written;
-}
-
-// Channel-encrypt raw Data bytes into a packet, exactly as perhapsEncode's non-PKI path does.
-// Used to inject wire bytes perhapsEncode would never produce (it only encodes p->decoded).
-static void encryptAsChannelPacket(meshtastic_MeshPacket *p, uint8_t *wire, size_t size)
-{
-    const int16_t hash = channels.setActiveByIndex(0);
-    TEST_ASSERT_GREATER_OR_EQUAL_MESSAGE(0, hash, "no usable primary channel");
-    crypto->encryptPacket(getFrom(p), p->id, size, wire);
-    memcpy(p->encrypted.bytes, wire, size);
-    p->encrypted.size = size;
-    p->channel = hash; // on the wire the channel field carries the hash, not the index
-    p->which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
-}
-
-// Build A10's frame: an unsigned broadcast carrying a POSITION payload plus unknown fields, sized
-// so the raw wire length exceeds the signature-fit threshold while the decoded fields stay under
-// it. Channel-encrypted like a normal sender. The asserts pin that split, which is what makes A10
-// and A11 meaningful.
-static meshtastic_MeshPacket makeBroadcastWithUnknownFields()
-{
-    meshtastic_MeshPacket p = makeDecoded(REMOTE_NODE, NODENUM_BROADCAST, meshtastic_PortNum_POSITION_APP, SMALL_PAYLOAD);
-
-    uint8_t wire[MAX_LORA_PAYLOAD_LEN + 1];
-    const size_t base = pb_encode_to_bytes(wire, sizeof(wire), &meshtastic_Data_msg, &p.decoded);
-    TEST_ASSERT_GREATER_THAN_MESSAGE(0, base, "failed to encode the base Data");
-    const size_t raw = base + appendUnknownField(wire + base, sizeof(wire) - base, 160);
-
-    // The decoded fields fit a signature, so a sender that signs would have signed this Data.
-    TEST_ASSERT_LESS_OR_EQUAL_MESSAGE(MAX_LORA_PAYLOAD_LEN, base + XEDDSA_SIGNATURE_FIELD_BYTES + MESHTASTIC_HEADER_LENGTH,
-                                      "decoded fields must fit a signature, else the test is vacuous");
-    // The unknown fields put the raw size over that threshold, so the two sizings disagree here.
-    TEST_ASSERT_GREATER_THAN_MESSAGE(MAX_LORA_PAYLOAD_LEN, raw + XEDDSA_SIGNATURE_FIELD_BYTES + MESHTASTIC_HEADER_LENGTH,
-                                     "unknown fields must push the raw size past the fit threshold");
-    // The frame is still one a radio could actually send.
-    TEST_ASSERT_LESS_OR_EQUAL_MESSAGE(MAX_LORA_PAYLOAD_LEN, raw + MESHTASTIC_HEADER_LENGTH, "frame must still fit a LoRa frame");
-
-    encryptAsChannelPacket(&p, wire, raw);
-    return p;
+    channels.getByIndex(0).settings.use_aead = true;
+    channels.onConfigChanged();
+    TEST_ASSERT_TRUE_MESSAGE(channels.isAEADEnabled(0), "fixture must leave channel 0 on AES-CCM");
 }
 
 // ---------------------------------------------------------------------------
@@ -409,9 +380,8 @@ void setUp(void)
     config = meshtastic_LocalConfig_init_zero;
     moduleConfig = meshtastic_LocalModuleConfig_init_zero;
     owner = meshtastic_User_init_zero;
-    // Exercise the downgrade-protection matrix by default. Production defaults to
-    // COMPATIBLE so existing meshes remain interoperable; tests that cover that
-    // mode opt in explicitly.
+    // Default to Balanced, the lowest policy that signs and guards signer identity. Production
+    // defaults to COMPATIBLE; tests that cover that mode opt in explicitly.
     setPolicy(meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_BALANCED);
     myNodeInfo.my_node_num = LOCAL_NODE; // drives isFromUs()/getFrom()/isToUs()
 
@@ -510,8 +480,11 @@ void test_A3_signed_no_pubkey_accepted_unverified(void)
     TEST_ASSERT_FALSE_MESSAGE(remoteSignerBit(), "must not learn signer without verifying");
 }
 
-// A4: downgrade protection - unsigned small broadcast from a known signer -> dropped.
-void test_A4_downgrade_unsigned_broadcast_from_signer_dropped(void)
+// A4: Balanced accepts an unsigned broadcast even from a known signer - only Strict drops a packet
+// for being unsigned. Firmware before 2.8 strips signatures when relaying, so this is normal
+// traffic. It must arrive unmarked, and the signer memory must survive for the identity guard
+// (NodeDB::refusesUnsignedIdentity). A reject here means the removed downgrade drop is back.
+void test_A4_balanced_accepts_unsigned_broadcast_from_signer(void)
 {
     mockNodeDB->addNode(REMOTE_NODE);
     mockNodeDB->setSignerBit(REMOTE_NODE, true); // we've seen this node sign before
@@ -519,7 +492,9 @@ void test_A4_downgrade_unsigned_broadcast_from_signer_dropped(void)
     meshtastic_MeshPacket p = makeDecoded(REMOTE_NODE, NODENUM_BROADCAST, meshtastic_PortNum_TEXT_MESSAGE_APP, SMALL_PAYLOAD);
     // from != us, so perhapsEncode leaves it unsigned.
 
-    TEST_ASSERT_EQUAL(DECODE_POLICY_REJECT, roundTrip(&p));
+    TEST_ASSERT_EQUAL(DECODE_SUCCESS, roundTrip(&p));
+    TEST_ASSERT_FALSE(p.xeddsa_signed);
+    TEST_ASSERT_TRUE_MESSAGE(remoteSignerBit(), "an unsigned packet must not erase the signer memory");
 }
 
 // A5: no prior knowledge - unsigned small broadcast from a non-signer -> accepted.
@@ -543,65 +518,6 @@ void test_A6_unsigned_unicast_from_signer_accepted(void)
     meshtastic_MeshPacket p = makeDecoded(REMOTE_NODE, LOCAL_NODE, meshtastic_PortNum_PRIVATE_APP, SMALL_PAYLOAD);
 
     TEST_ASSERT_EQUAL(DECODE_SUCCESS, roundTrip(&p));
-}
-
-// A7: unsigned OVERSIZED broadcast from a known signer -> accepted (couldn't have carried a sig).
-void test_A7_unsigned_oversized_broadcast_from_signer_accepted(void)
-{
-    mockNodeDB->addNode(REMOTE_NODE);
-    mockNodeDB->setSignerBit(REMOTE_NODE, true);
-
-    meshtastic_MeshPacket p = makeDecoded(REMOTE_NODE, NODENUM_BROADCAST, meshtastic_PortNum_TEXT_MESSAGE_APP, OVERSIZED_PAYLOAD);
-
-    TEST_ASSERT_EQUAL(DECODE_SUCCESS, roundTrip(&p));
-}
-
-// A8: F2 regression - unsigned broadcast from a signer in the old "dead band": its *encoded* Data
-// can't take a 64-byte signature and still fit a LoRa frame, but the old payload-size heuristic
-// (payload + 64 < DATA_PAYLOAD_LEN) judged it signable and dropped it as a downgrade. Must be
-// accepted: an honest signer physically cannot sign this packet.
-void test_A8_unsigned_deadband_broadcast_from_signer_accepted(void)
-{
-    mockNodeDB->addNode(REMOTE_NODE);
-    mockNodeDB->setSignerBit(REMOTE_NODE, true);
-
-    // Shape it like a real sender's Data: perhapsEncode adds the bitfield to packets a node
-    // originates, so remote broadcast traffic carries it too.
-    meshtastic_MeshPacket p = makeDecoded(REMOTE_NODE, NODENUM_BROADCAST, meshtastic_PortNum_TEXT_MESSAGE_APP, 167);
-    p.decoded.has_bitfield = true;
-    p.decoded.bitfield = 0;
-
-    // Pin the payload inside the dead band; if Data's encoding ever shifts, retune the payload
-    // size above instead of letting this test pass vacuously.
-    TEST_ASSERT_TRUE_MESSAGE(p.decoded.payload.size + XEDDSA_SIGNATURE_SIZE < meshtastic_Constants_DATA_PAYLOAD_LEN,
-                             "payload must sit in the old heuristic's drop range");
-    TEST_ASSERT_FALSE_MESSAGE(signedEncodingFits(&p.decoded), "signed encoding must NOT fit a LoRa frame");
-
-    TEST_ASSERT_EQUAL(DECODE_SUCCESS, roundTrip(&p));
-    TEST_ASSERT_FALSE(p.xeddsa_signed);
-}
-
-// A9: the boundary holds - the largest broadcast whose signed encoding still fits is still
-// subject to the downgrade drop when it arrives unsigned from a known signer.
-// (Deliberately non-discriminating: the old heuristic dropped this packet too. A9 pins the
-// boundary against over-correction; A8 and B4 are the F2 regression discriminators.)
-void test_A9_unsigned_boundary_broadcast_from_signer_still_dropped(void)
-{
-    mockNodeDB->addNode(REMOTE_NODE);
-    mockNodeDB->setSignerBit(REMOTE_NODE, true);
-
-    meshtastic_MeshPacket p = makeDecoded(REMOTE_NODE, NODENUM_BROADCAST, meshtastic_PortNum_TEXT_MESSAGE_APP, 166);
-    p.decoded.has_bitfield = true;
-    p.decoded.bitfield = 0;
-
-    // Exactly at the limit: signed encoding fills the frame to the last byte. Pinned so the
-    // boundary can't silently drift.
-    meshtastic_Data signedCopy = p.decoded;
-    signedCopy.xeddsa_signature.size = XEDDSA_SIGNATURE_SIZE;
-    TEST_ASSERT_EQUAL_MESSAGE(MAX_LORA_PAYLOAD_LEN, encodedDataSize(&signedCopy) + MESHTASTIC_HEADER_LENGTH,
-                              "payload no longer sits exactly on the fit boundary - retune it");
-
-    TEST_ASSERT_EQUAL(DECODE_POLICY_REJECT, roundTrip(&p));
 }
 
 void test_A10_compatible_accepts_unsigned_broadcast_from_signer(void)
@@ -772,10 +688,10 @@ void test_A17_strict_verifies_signer_from_warm_key_store(void)
     const meshtastic_NodeInfoLite *rehydrated = mockNodeDB->getMeshNode(REMOTE_NODE);
     TEST_ASSERT_NOT_NULL_MESSAGE(rehydrated, "verified warm signer must be re-admitted to the hot store");
     TEST_ASSERT_EQUAL_UINT8_ARRAY(pub, rehydrated->public_key.bytes, sizeof(pub));
-    TEST_ASSERT_TRUE_MESSAGE(nodeInfoLiteHasXeddsaSigned(rehydrated), "re-admitted signer must retain Balanced downgrade memory");
+    TEST_ASSERT_TRUE_MESSAGE(nodeInfoLiteHasXeddsaSigned(rehydrated), "re-admitted signer must retain its signer memory");
 
-    // Model its next hot-store eviction and prove Balanced still remembers the signer without
-    // allocating a hot node merely to evaluate an unsigned packet.
+    // Model its next hot-store eviction and prove Balanced still remembers the signer - so it keeps
+    // refusing unsigned identity updates - without allocating a hot node merely to ask.
     // Mirror what NodeDB eviction actually stores for a signer: warmProtectedCategory() yields
     // XeddsaSigner *and* the dedicated warm signer bit is set from nodeInfoLiteHasXeddsaSigned().
     // isKnownXeddsaSigner() reads that signer bit, not the protected category.
@@ -783,37 +699,190 @@ void test_A17_strict_verifies_signer_from_warm_key_store(void)
                                                   static_cast<uint8_t>(WarmProtected::XeddsaSigner), /*signer=*/true));
     mockNodeDB->clearTestNodes();
     setPolicy(meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_BALANCED);
-    meshtastic_MeshPacket unsignedPacket =
-        makeDecoded(REMOTE_NODE, NODENUM_BROADCAST, meshtastic_PortNum_POSITION_APP, SMALL_PAYLOAD);
-    TEST_ASSERT_FALSE_MESSAGE(checkXeddsaReceivePolicy(&unsignedPacket),
-                              "Balanced downgrade memory must survive repeated hot-store eviction");
+    TEST_ASSERT_TRUE_MESSAGE(mockNodeDB->refusesUnsignedIdentity(REMOTE_NODE, 0, false),
+                             "Balanced signer memory must survive repeated hot-store eviction");
+    TEST_ASSERT_NULL_MESSAGE(mockNodeDB->getMeshNode(REMOTE_NODE), "asking must not allocate a hot node");
 }
 #endif
 
-void test_A18_unsigned_broadcast_from_signer_with_unknown_fields_dropped(void)
+// A18-A20: an AES-CCM channel overrides the signature policy. Its packets are never signed (B19),
+// and the CCM tag already authenticates them, so Strict must not drop them for lacking a
+// signature - otherwise Strict and a CCM channel could not be used together at all. A bad
+// signature is still dropped there, as in every mode.
+
+// A18: Strict accepts an unsigned packet on a CCM channel.
+void test_A18_strict_accepts_unsigned_on_aead_channel(void)
 {
+    setPolicy(meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_STRICT);
+    useAeadPrimaryChannel();
     mockNodeDB->addNode(REMOTE_NODE);
     mockNodeDB->setSignerBit(REMOTE_NODE, true);
 
-    meshtastic_MeshPacket p = makeBroadcastWithUnknownFields();
+    meshtastic_MeshPacket p = makeDecoded(REMOTE_NODE, NODENUM_BROADCAST, meshtastic_PortNum_POSITION_APP, SMALL_PAYLOAD);
 
-    TEST_ASSERT_EQUAL_MESSAGE(DECODE_POLICY_REJECT, perhapsDecode(&p),
-                              "unsigned broadcast from a signer must be dropped despite unknown fields");
+    TEST_ASSERT_EQUAL(DECODE_SUCCESS, roundTrip(&p));
+    TEST_ASSERT_FALSE(p.xeddsa_signed);
 }
 
-void test_A19_unsigned_broadcast_from_nonsigner_with_unknown_fields_accepted(void)
+// A19: Strict accepts a signature it cannot verify on a CCM channel - an older node still signs
+// there, and its key may not be known yet. Off a CCM channel A12 drops the same packet.
+void test_A19_strict_accepts_unverifiable_signature_on_aead_channel(void)
 {
+    setPolicy(meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_STRICT);
+    useAeadPrimaryChannel();
+    uint8_t pub[32], priv[32];
+    crypto->generateKeyPair(pub, priv); // signing key the receiver does not hold
+
+    meshtastic_MeshPacket p = makeDecoded(REMOTE_NODE, NODENUM_BROADCAST, meshtastic_PortNum_POSITION_APP, SMALL_PAYLOAD);
+    signWithCurrentKey(&p);
+
+    TEST_ASSERT_EQUAL(DECODE_SUCCESS, roundTrip(&p));
+    TEST_ASSERT_FALSE_MESSAGE(p.xeddsa_signed, "cannot be marked verified without a key");
+}
+
+// A20: a bad signature is dropped on a CCM channel too: the override relaxes what must be signed,
+// not what a signature that is present must prove.
+void test_A20_bad_signature_dropped_on_aead_channel(void)
+{
+    setPolicy(meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_STRICT);
+    useAeadPrimaryChannel();
+    uint8_t pub[32], priv[32];
+    crypto->generateKeyPair(pub, priv);
     mockNodeDB->addNode(REMOTE_NODE);
+    mockNodeDB->setPublicKey(REMOTE_NODE, pub);
 
-    meshtastic_MeshPacket p = makeBroadcastWithUnknownFields();
-    const size_t rawSize = p.encrypted.size;
+    meshtastic_MeshPacket p = makeDecoded(REMOTE_NODE, NODENUM_BROADCAST, meshtastic_PortNum_POSITION_APP, SMALL_PAYLOAD);
+    signWithCurrentKey(&p);
+    p.decoded.xeddsa_signature.bytes[0] ^= 0xFF;
 
-    TEST_ASSERT_EQUAL_MESSAGE(DECODE_SUCCESS, perhapsDecode(&p), "frame from a non-signer must still decode");
-    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_PortNum_POSITION_APP, p.decoded.portnum, "unknown fields must not disturb the portnum");
-    TEST_ASSERT_EQUAL_MESSAGE(SMALL_PAYLOAD, p.decoded.payload.size, "payload must survive the unknown fields");
+    TEST_ASSERT_EQUAL(DECODE_POLICY_REJECT, roundTrip(&p));
+}
+
+// A21-A23: a signed NodeInfo verified against a key we already store must be internally
+// consistent - it claims the key that signed it, and that key hashes to the sender's node number,
+// as first contact already requires (A14/A15). Without this, a valid signature would vouch for a
+// NodeInfo advertising someone else's key, or a key planted on trust under the wrong node number
+// could keep proving itself with fresh signatures.
+
+// Encode a NodeInfo from `from` advertising `advertised`, signed with the engine's current key.
+static meshtastic_MeshPacket makeSignedNodeInfo(NodeNum from, const uint8_t *advertised)
+{
+    meshtastic_User user = meshtastic_User_init_zero;
+    user.public_key.size = 32;
+    memcpy(user.public_key.bytes, advertised, 32);
+    meshtastic_MeshPacket p = makeDecoded(from, LOCAL_NODE, meshtastic_PortNum_NODEINFO_APP, 0);
+    p.decoded.request_id = 0x5EED0002; // shaped as a reply to our request
+    p.decoded.payload.size =
+        pb_encode_to_bytes(p.decoded.payload.bytes, sizeof(p.decoded.payload.bytes), &meshtastic_User_msg, &user);
+    signWithCurrentKey(&p);
+    return p;
+}
+
+// A21: signed by the stored key, but advertising a different key -> dropped, signer not learned.
+void test_A21_signed_nodeinfo_advertising_another_key_dropped(void)
+{
+    uint8_t otherPub[32], otherPriv[32], pub[32], priv[32];
+    crypto->generateKeyPair(otherPub, otherPriv);
+    crypto->generateKeyPair(pub, priv); // generated last, so the engine signs with this one
+    const NodeNum signer = crc32Buffer(pub, sizeof(pub));
+    mockNodeDB->addNode(signer);
+    mockNodeDB->setPublicKey(signer, pub);
+
+    meshtastic_MeshPacket p = makeSignedNodeInfo(signer, otherPub);
+
+    TEST_ASSERT_EQUAL(DECODE_POLICY_REJECT, roundTrip(&p));
+    TEST_ASSERT_FALSE(nodeInfoLiteHasXeddsaSigned(mockNodeDB->getMeshNode(signer)));
+}
+
+// A22: advertising the stored key that signed it, but that key does not hash to the sender -> a key
+// planted on trust under the wrong node number, dropped.
+void test_A22_signed_nodeinfo_with_unbound_stored_key_dropped(void)
+{
+    uint8_t pub[32], priv[32];
+    crypto->generateKeyPair(pub, priv);
+    mockNodeDB->addNode(REMOTE_NODE); // REMOTE_NODE is not crc32(pub)
+    mockNodeDB->setPublicKey(REMOTE_NODE, pub);
+
+    meshtastic_MeshPacket p = makeSignedNodeInfo(REMOTE_NODE, pub);
+
+    TEST_ASSERT_EQUAL(DECODE_POLICY_REJECT, roundTrip(&p));
+    TEST_ASSERT_FALSE(remoteSignerBit());
+}
+
+// A23: control - the consistent reply is accepted and marked signed.
+void test_A23_consistent_signed_nodeinfo_reply_accepted(void)
+{
+    uint8_t pub[32], priv[32];
+    crypto->generateKeyPair(pub, priv);
+    const NodeNum signer = crc32Buffer(pub, sizeof(pub));
+    mockNodeDB->addNode(signer);
+    mockNodeDB->setPublicKey(signer, pub);
+
+    meshtastic_MeshPacket p = makeSignedNodeInfo(signer, pub);
+
+    TEST_ASSERT_EQUAL(DECODE_SUCCESS, roundTrip(&p));
+    TEST_ASSERT_TRUE(p.xeddsa_signed);
+}
+
+// A24-A26: Strict does not drop acks or traceroutes. An ack carries its own proof (AckProof.h),
+// and a traceroute is rewritten at every hop so it can never carry a valid signature. If A24 fails,
+// a Strict node never sees an ack and retransmits every reliable packet to exhaustion; if A25
+// fails, traceroutes through or to a Strict node stop working.
+
+// A24: an unsigned ack reaches a Strict node.
+void test_A24_strict_accepts_unsigned_ack(void)
+{
+    setPolicy(meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_STRICT);
+    meshtastic_MeshPacket ack = makeDecoded(REMOTE_NODE, LOCAL_NODE, meshtastic_PortNum_ROUTING_APP, SMALL_PAYLOAD);
+    ack.decoded.request_id = 0xACC0FFEE;
+
+    TEST_ASSERT_EQUAL(DECODE_SUCCESS, roundTrip(&ack));
+    TEST_ASSERT_FALSE(ack.xeddsa_signed);
+}
+
+// A25: unsigned traceroute requests and replies reach a Strict node.
+void test_A25_strict_accepts_unsigned_traceroute(void)
+{
+    setPolicy(meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_STRICT);
+    meshtastic_MeshPacket request = makeDecoded(REMOTE_NODE, LOCAL_NODE, meshtastic_PortNum_TRACEROUTE_APP, SMALL_PAYLOAD);
+    TEST_ASSERT_EQUAL(DECODE_SUCCESS, roundTrip(&request));
+
+    meshtastic_MeshPacket reply = makeDecoded(REMOTE_NODE, LOCAL_NODE, meshtastic_PortNum_TRACEROUTE_APP, SMALL_PAYLOAD);
+    reply.decoded.request_id = 0x7AACE001;
+    TEST_ASSERT_EQUAL(DECODE_SUCCESS, roundTrip(&reply));
+}
+
+// A27: Strict accepts an unsigned key verification message. The bootstrap messages (M1/M2) go out
+// channel-encrypted precisely because the peer's key is not known yet, so they cannot carry a
+// signature the receiver could verify; the handshake is authenticated by the security number the
+// users exchange, which hash1 binds to both keys. If this fails, two Strict nodes that do not
+// already hold each other's keys can never run key verification.
+void test_A27_strict_accepts_unsigned_key_verification(void)
+{
+    setPolicy(meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_STRICT);
+    meshtastic_MeshPacket p = makeDecoded(REMOTE_NODE, LOCAL_NODE, meshtastic_PortNum_KEY_VERIFICATION_APP, SMALL_PAYLOAD);
+
+    TEST_ASSERT_EQUAL(DECODE_SUCCESS, roundTrip(&p));
     TEST_ASSERT_FALSE(p.xeddsa_signed);
-    TEST_ASSERT_LESS_THAN_MESSAGE(rawSize, encodedDataSize(&p.decoded),
-                                  "unknown fields must drop at decode, leaving decoded size < raw");
+}
+
+// A26: a signature on a traceroute is ignored rather than verified. Older firmware signed some
+// traceroutes, and after one relay rewrote them those signatures no longer verify; dropping them as
+// bad signatures would cut those traceroutes off. The packet is accepted but never marked signed.
+void test_A26_traceroute_signature_ignored(void)
+{
+    setPolicy(meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_COMPATIBLE);
+    uint8_t pub[32], priv[32];
+    crypto->generateKeyPair(pub, priv);
+    mockNodeDB->addNode(REMOTE_NODE);
+    mockNodeDB->setPublicKey(REMOTE_NODE, pub);
+
+    meshtastic_MeshPacket p = makeDecoded(REMOTE_NODE, LOCAL_NODE, meshtastic_PortNum_TRACEROUTE_APP, SMALL_PAYLOAD);
+    signWithCurrentKey(&p);
+    p.decoded.payload.bytes[0] ^= 0xFF; // a relay rewrote the route after it was signed
+
+    TEST_ASSERT_EQUAL(DECODE_SUCCESS, roundTrip(&p));
+    TEST_ASSERT_FALSE(p.xeddsa_signed);
 }
 
 // ===========================================================================
@@ -835,12 +904,13 @@ void test_B1_local_broadcast_is_signed(void)
     TEST_ASSERT_TRUE(p.xeddsa_signed);
 }
 
-// B2: preserve the existing wire behavior: non-PKI unicast is not signed.
+// B2: preserve the existing wire behavior: a non-PKI unicast is not signed, other than the NodeInfo
+// and position unicasts B21/B23 pin.
 void test_B2_local_unicast_not_signed(void)
 {
     mockNodeDB->addNode(REMOTE_NODE);
 
-    meshtastic_MeshPacket p = makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_POSITION_APP, SMALL_PAYLOAD);
+    meshtastic_MeshPacket p = makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_PRIVATE_APP, SMALL_PAYLOAD);
 
     TEST_ASSERT_EQUAL(DECODE_SUCCESS, roundTrip(&p));
     TEST_ASSERT_EQUAL_MESSAGE(0, p.decoded.xeddsa_signature.size, "unicast must remain unsigned");
@@ -858,8 +928,8 @@ void test_B3_local_oversized_broadcast_not_signed(void)
 // B4: F2 regression sweep - every broadcast payload size that fits a LoRa frame unsigned must
 // still be deliverable: signing steps aside exactly when the signed encoding stops fitting,
 // never producing TOO_LARGE (the old heuristic dead-banded payloads 167-168). Because the first
-// verified packet sets our signer bit in the mock DB, the later unsigned sizes also prove the
-// receiver's downgrade predicate stays exactly symmetric with the sender's sign gate.
+// verified packet sets our signer bit in the mock DB, the later unsigned sizes also prove an
+// unsigned packet from a known signer is still accepted under Balanced.
 void test_B4_all_broadcast_sizes_deliverable_no_deadband(void)
 {
     uint8_t pub[32], priv[32];
@@ -897,7 +967,7 @@ void test_B5_preset_signature_on_local_packet_cleared(void)
 {
     mockNodeDB->addNode(REMOTE_NODE);
 
-    meshtastic_MeshPacket p = makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_POSITION_APP, SMALL_PAYLOAD);
+    meshtastic_MeshPacket p = makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_PRIVATE_APP, SMALL_PAYLOAD);
     p.decoded.xeddsa_signature.size = XEDDSA_SIGNATURE_SIZE;
     memset(p.decoded.xeddsa_signature.bytes, 0xAB, XEDDSA_SIGNATURE_SIZE);
 
@@ -908,7 +978,7 @@ void test_B5_preset_signature_on_local_packet_cleared(void)
 // B6: the exact-fit gate tracks Data *shape*, not just payload size. A tapback-style broadcast
 // (want_response + reply_id + emoji) carries extra wire bytes that shift the fit boundary; the
 // sweep proves no dead band exists for that shape either, and - once the signer bit is learned -
-// that the receiver's downgrade predicate stays symmetric for it too. Window
+// that its unsigned sizes are still accepted. Window
 // straddles this shape's boundary; capped at 200 so even the unsigned rich encoding stays well
 // inside the frame (at n=221 it first hits the pre-existing, signing-unrelated TOO_LARGE).
 void test_B6_rich_shape_sweep_no_deadband(void)
@@ -958,15 +1028,19 @@ void test_B7_infrastructure_port_signing_matrix(void)
         meshtastic_PortNum_POSITION_APP,
     };
     for (const auto port : ports) {
+        // A traceroute is never signed: every hop rewrites it (B22).
+        const size_t broadcastExpected = port == meshtastic_PortNum_TRACEROUTE_APP ? 0 : XEDDSA_SIGNATURE_SIZE;
         meshtastic_MeshPacket broadcast = makeDecoded(LOCAL_NODE, NODENUM_BROADCAST, port, SMALL_PAYLOAD);
         TEST_ASSERT_EQUAL(DECODE_SUCCESS, roundTrip(&broadcast));
-        TEST_ASSERT_EQUAL_MESSAGE(XEDDSA_SIGNATURE_SIZE, broadcast.decoded.xeddsa_signature.size,
-                                  "signable infrastructure broadcast must be signed");
+        TEST_ASSERT_EQUAL_MESSAGE(broadcastExpected, broadcast.decoded.xeddsa_signature.size,
+                                  "signable infrastructure broadcast must be signed, traceroute never");
 
+        // NodeInfo and position are signed even when unicast (B21, B23); acks and traceroutes are not.
         meshtastic_MeshPacket unicast = makeDecoded(LOCAL_NODE, REMOTE_NODE, port, SMALL_PAYLOAD);
         TEST_ASSERT_EQUAL(DECODE_SUCCESS, roundTrip(&unicast));
-        TEST_ASSERT_EQUAL_MESSAGE(0, unicast.decoded.xeddsa_signature.size,
-                                  "infrastructure unicast must preserve existing unsigned behavior");
+        const bool signedPort = port == meshtastic_PortNum_NODEINFO_APP || port == meshtastic_PortNum_POSITION_APP;
+        TEST_ASSERT_EQUAL_MESSAGE(signedPort ? XEDDSA_SIGNATURE_SIZE : 0, unicast.decoded.xeddsa_signature.size,
+                                  "only NodeInfo and position may be signed among infrastructure unicasts");
     }
 }
 
@@ -1091,8 +1165,12 @@ void test_B13_licensed_port_and_destination_signing_matrix(void)
         for (const auto destination : destinations) {
             meshtastic_MeshPacket packet = makeDecoded(LOCAL_NODE, destination, port, SMALL_PAYLOAD);
             TEST_ASSERT_EQUAL(DECODE_SUCCESS, roundTrip(&packet));
-            TEST_ASSERT_EQUAL(XEDDSA_SIGNATURE_SIZE, packet.decoded.xeddsa_signature.size);
-            TEST_ASSERT_TRUE(packet.xeddsa_signed);
+            // A ham ack is not signed: it carries an ack proof instead (B24). A routing broadcast is
+            // signed like any other broadcast.
+            const bool hamAck = port == meshtastic_PortNum_ROUTING_APP && destination != NODENUM_BROADCAST;
+            TEST_ASSERT_EQUAL_MESSAGE(hamAck ? 0 : XEDDSA_SIGNATURE_SIZE, packet.decoded.xeddsa_signature.size,
+                                      hamAck ? "a ham ack must not be signed" : "ham must sign this packet");
+            TEST_ASSERT_EQUAL(!hamAck, packet.xeddsa_signed);
             TEST_ASSERT_FALSE(packet.pki_encrypted);
         }
     }
@@ -1198,6 +1276,185 @@ void test_B17_ack_on_a_usable_channel_stays_on_the_channel(void)
     TEST_ASSERT_FALSE_MESSAGE(ack.pki_encrypted, "a sendable ack must stay readable to relays");
 }
 
+// B18: Compatible never signs. It is the default, and a signature costs 66 bytes of airtime on
+// every broadcast - the overhead a crowded mesh cannot afford - for receivers that by default do
+// not require one. A signature here means Compatible started paying that cost again.
+void test_B18_compatible_does_not_sign(void)
+{
+    setPolicy(meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_COMPATIBLE);
+    uint8_t pub[32], priv[32];
+    crypto->generateKeyPair(pub, priv);
+    mockNodeDB->addNode(LOCAL_NODE);
+    mockNodeDB->setPublicKey(LOCAL_NODE, pub);
+
+    meshtastic_MeshPacket p = makeDecoded(LOCAL_NODE, NODENUM_BROADCAST, meshtastic_PortNum_TEXT_MESSAGE_APP, SMALL_PAYLOAD);
+
+    TEST_ASSERT_EQUAL(DECODE_SUCCESS, roundTrip(&p));
+    TEST_ASSERT_EQUAL_MESSAGE(0, p.decoded.xeddsa_signature.size, "Compatible must not sign");
+    TEST_ASSERT_FALSE(p.xeddsa_signed);
+}
+
+// B19: an AES-CCM channel is never signed, under any policy: its 12-byte tag already authenticates
+// the packet, so a signature would only spend 66 bytes. A18 is the receive-side half: Strict
+// accepts these unsigned packets.
+void test_B19_aead_channel_broadcast_not_signed(void)
+{
+    uint8_t pub[32], priv[32];
+    crypto->generateKeyPair(pub, priv);
+    mockNodeDB->addNode(LOCAL_NODE);
+    mockNodeDB->setPublicKey(LOCAL_NODE, pub);
+    useAeadPrimaryChannel();
+
+    const meshtastic_Config_SecurityConfig_PacketSignaturePolicy signingPolicies[] = {
+        meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_BALANCED,
+        meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_STRICT,
+    };
+    for (const auto policy : signingPolicies) {
+        setPolicy(policy);
+        meshtastic_MeshPacket p = makeDecoded(LOCAL_NODE, NODENUM_BROADCAST, meshtastic_PortNum_TEXT_MESSAGE_APP, SMALL_PAYLOAD);
+        TEST_ASSERT_EQUAL(DECODE_SUCCESS, roundTrip(&p));
+        TEST_ASSERT_EQUAL_MESSAGE(0, p.decoded.xeddsa_signature.size, "an AES-CCM channel must not be signed");
+    }
+}
+
+// B21: a unicast NodeInfo - a request or a reply - carries the key the peer will use for PKI, so
+// Balanced and Strict sign it like a broadcast. That lets a Strict node learn a new peer's key from
+// a reply, which it would otherwise drop, and lets first contact verify the key. Compatible still
+// signs nothing (B18). If the Strict assertion fails, Strict nodes can no longer exchange keys on
+// request; if the Compatible one fails, Compatible pays for signatures again.
+void test_B21_unicast_nodeinfo_signing_follows_policy(void)
+{
+    uint8_t pub[32], priv[32];
+    crypto->generateKeyPair(pub, priv);
+    mockNodeDB->addNode(LOCAL_NODE);
+    mockNodeDB->setPublicKey(LOCAL_NODE, pub);
+
+    setPolicy(meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_STRICT);
+    meshtastic_MeshPacket strictReply = makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_NODEINFO_APP, SMALL_PAYLOAD);
+    strictReply.decoded.request_id = 0x5EED0001;
+    TEST_ASSERT_EQUAL(DECODE_SUCCESS, roundTrip(&strictReply));
+    TEST_ASSERT_EQUAL_MESSAGE(XEDDSA_SIGNATURE_SIZE, strictReply.decoded.xeddsa_signature.size,
+                              "Strict must sign a NodeInfo reply");
+    TEST_ASSERT_TRUE(strictReply.xeddsa_signed);
+
+    setPolicy(meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_COMPATIBLE);
+    meshtastic_MeshPacket compatibleReply = makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_NODEINFO_APP, SMALL_PAYLOAD);
+    TEST_ASSERT_EQUAL(DECODE_SUCCESS, roundTrip(&compatibleReply));
+    TEST_ASSERT_EQUAL_MESSAGE(0, compatibleReply.decoded.xeddsa_signature.size, "Compatible must not sign a NodeInfo reply");
+}
+
+// B23: a unicast position - a "request position" or the reply to one - is PKI-excluded, so a
+// signature is its only authentication. Balanced and Strict sign it, and a Strict receiver accepts
+// it; Compatible signs nothing. If the Strict half fails, position requests to or from a Strict node
+// stop working; if the Compatible half fails, Compatible pays for signatures again.
+void test_B23_unicast_position_signing_follows_policy(void)
+{
+    uint8_t pub[32], priv[32];
+    crypto->generateKeyPair(pub, priv);
+    mockNodeDB->addNode(LOCAL_NODE);
+    mockNodeDB->setPublicKey(LOCAL_NODE, pub);
+
+    setPolicy(meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_STRICT);
+    meshtastic_MeshPacket strictReply = makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_POSITION_APP, SMALL_PAYLOAD);
+    strictReply.decoded.request_id = 0x5EED0003;
+    TEST_ASSERT_EQUAL(DECODE_SUCCESS, roundTrip(&strictReply));
+    TEST_ASSERT_EQUAL_MESSAGE(XEDDSA_SIGNATURE_SIZE, strictReply.decoded.xeddsa_signature.size,
+                              "Strict must sign a position reply");
+    TEST_ASSERT_TRUE(strictReply.xeddsa_signed);
+
+    setPolicy(meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_COMPATIBLE);
+    meshtastic_MeshPacket compatibleReply = makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_POSITION_APP, SMALL_PAYLOAD);
+    TEST_ASSERT_EQUAL(DECODE_SUCCESS, roundTrip(&compatibleReply));
+    TEST_ASSERT_EQUAL_MESSAGE(0, compatibleReply.decoded.xeddsa_signature.size, "Compatible must not sign a position reply");
+}
+
+// B22: a traceroute is never signed, under any policy and in ham mode, where every other unicast is.
+// Each relay rewrites the route, so a signature would be invalid from the second hop on - and a bad
+// signature drops the packet in every mode, which would cut every traceroute off after one hop.
+void test_B22_traceroute_never_signed(void)
+{
+    setPolicy(meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_STRICT);
+    uint8_t pub[32], priv[32];
+    crypto->generateKeyPair(pub, priv);
+    mockNodeDB->addNode(LOCAL_NODE);
+    mockNodeDB->setPublicKey(LOCAL_NODE, pub);
+
+    meshtastic_MeshPacket broadcast =
+        makeDecoded(LOCAL_NODE, NODENUM_BROADCAST, meshtastic_PortNum_TRACEROUTE_APP, SMALL_PAYLOAD);
+    TEST_ASSERT_EQUAL(DECODE_SUCCESS, roundTrip(&broadcast));
+    TEST_ASSERT_EQUAL_MESSAGE(0, broadcast.decoded.xeddsa_signature.size, "a traceroute broadcast must not be signed");
+
+    owner.is_licensed = true;
+    channels.ensureLicensedOperation();
+    meshtastic_MeshPacket hamUnicast = makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_TRACEROUTE_APP, SMALL_PAYLOAD);
+    TEST_ASSERT_EQUAL(DECODE_SUCCESS, roundTrip(&hamUnicast));
+    TEST_ASSERT_EQUAL_MESSAGE(0, hamUnicast.decoded.xeddsa_signature.size, "a ham traceroute must not be signed");
+}
+
+// B24: ham mode authenticates an ack the way regular mode does, with the ack proof, not a signature.
+// Pins both halves: the ack goes out unsigned (a 66-byte signature would cost more than the ~10-byte
+// proof, and a Strict peer that lacks our key would drop a signature it cannot check, retransmitting
+// to exhaustion), and the proof is still attached, because it needs only the two keys, not PKI.
+// Guards against ham mode drifting back to signing acks, or losing its delivery receipt.
+void test_B24_licensed_ack_carries_proof_not_signature(void)
+{
+    setPolicy(meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_STRICT);
+    uint8_t localPub[32], localPriv[32], remotePub[32], remotePriv[32];
+    crypto->generateKeyPair(localPub, localPriv);
+    crypto->generateKeyPair(remotePub, remotePriv);
+    mockNodeDB->addNode(LOCAL_NODE);
+    mockNodeDB->setPublicKey(LOCAL_NODE, localPub);
+    mockNodeDB->addNode(REMOTE_NODE);
+    mockNodeDB->setPublicKey(REMOTE_NODE, remotePub);
+    memcpy(config.security.private_key.bytes, localPriv, sizeof(localPriv));
+    config.security.private_key.size = sizeof(localPriv);
+    crypto->setDHPrivateKey(localPriv);
+    owner.is_licensed = true;
+    channels.ensureLicensedOperation();
+
+    meshtastic_MeshPacket ack = makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_ROUTING_APP, 0);
+    ack.decoded.request_id = 0xB2400024;
+    meshtastic_Routing routing = meshtastic_Routing_init_zero;
+    routing.which_variant = meshtastic_Routing_error_reason_tag;
+    routing.error_reason = meshtastic_Routing_Error_NONE;
+    ack.decoded.payload.size =
+        pb_encode_to_bytes(ack.decoded.payload.bytes, sizeof(ack.decoded.payload.bytes), &meshtastic_Routing_msg, &routing);
+    TEST_ASSERT_GREATER_THAN(0, ack.decoded.payload.size);
+    ackProofAttach(&ack);
+
+    TEST_ASSERT_EQUAL(DECODE_SUCCESS, roundTrip(&ack));
+    TEST_ASSERT_EQUAL_MESSAGE(0, ack.decoded.xeddsa_signature.size, "a ham ack must not be signed");
+    TEST_ASSERT_FALSE(ack.pki_encrypted);
+
+    // The peer verifies the proof under our key, as ReliableRouter does when the ack arrives.
+    myNodeInfo.my_node_num = REMOTE_NODE;
+    crypto->setDHPrivateKey(remotePriv);
+    TEST_ASSERT_EQUAL_MESSAGE((int)AckProofResult::VALID, (int)ackProofVerifyWithKey(&ack, ack.decoded.request_id, localPub),
+                              "a ham ack must carry a valid ack proof");
+}
+
+// B20: ham mode follows the policy like any other node. B8 pins that a licensed node signs
+// broadcasts and unicasts under Balanced; under Compatible it signs neither.
+void test_B20_licensed_compatible_does_not_sign(void)
+{
+    setPolicy(meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_COMPATIBLE);
+    uint8_t pub[32], priv[32];
+    crypto->generateKeyPair(pub, priv);
+    mockNodeDB->addNode(LOCAL_NODE);
+    mockNodeDB->setPublicKey(LOCAL_NODE, pub);
+    owner.is_licensed = true;
+    channels.ensureLicensedOperation();
+
+    meshtastic_MeshPacket broadcast =
+        makeDecoded(LOCAL_NODE, NODENUM_BROADCAST, meshtastic_PortNum_TEXT_MESSAGE_APP, SMALL_PAYLOAD);
+    TEST_ASSERT_EQUAL(DECODE_SUCCESS, roundTrip(&broadcast));
+    TEST_ASSERT_EQUAL(0, broadcast.decoded.xeddsa_signature.size);
+
+    meshtastic_MeshPacket direct = makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_TEXT_MESSAGE_APP, SMALL_PAYLOAD);
+    TEST_ASSERT_EQUAL(DECODE_SUCCESS, roundTrip(&direct));
+    TEST_ASSERT_EQUAL(0, direct.decoded.xeddsa_signature.size);
+}
+
 // ===========================================================================
 // Group C - routing pipeline and NodeInfo authentication ordering
 // ===========================================================================
@@ -1268,6 +1525,46 @@ void test_N4_unsigned_unicast_nodeinfo_from_signer_accepted(void)
 
     TEST_ASSERT_FALSE_MESSAGE(shim.handleReceivedProtobuf(mp, &user),
                               "unsigned unicast NodeInfo from signer must not be dropped");
+}
+
+// N12-N13: N1's refusal of an unsigned NodeInfo broadcast from a known signer applies under
+// Balanced and Strict only. Compatible accepts it, because firmware before 2.8 strips signatures
+// when relaying; refusing there would freeze every signer's name behind an older relay.
+void test_N12_compatible_unsigned_nodeinfo_from_signer_not_dropped(void)
+{
+    setPolicy(meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_COMPATIBLE);
+    mockNodeDB->addNode(REMOTE_NODE);
+    mockNodeDB->setSignerBit(REMOTE_NODE, true);
+    mockNodeDB->setLongName(REMOTE_NODE, "Genuine");
+
+    NodeInfoTestShim shim;
+    meshtastic_MeshPacket mp = makeNodeInfoPacket(false);
+    meshtastic_User user = meshtastic_User_init_zero;
+    user.is_licensed = owner.is_licensed;
+    strcpy(user.long_name, "Renamed");
+
+    TEST_ASSERT_FALSE_MESSAGE(shim.handleReceivedProtobuf(mp, &user), "Compatible must accept unsigned NodeInfo");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("Renamed", mockNodeDB->longName(REMOTE_NODE), "Compatible must apply the update");
+}
+
+// N13: an AES-CCM channel overrides the policy: its packets are never signed and its tag
+// authenticates them, so even under Balanced an unsigned NodeInfo heard there updates a signer.
+// If this fails, a node's name freezes as soon as it talks only on a CCM channel.
+void test_N13_unsigned_nodeinfo_from_signer_on_aead_channel_not_dropped(void)
+{
+    useAeadPrimaryChannel();
+    mockNodeDB->addNode(REMOTE_NODE);
+    mockNodeDB->setSignerBit(REMOTE_NODE, true);
+    mockNodeDB->setLongName(REMOTE_NODE, "Genuine");
+
+    NodeInfoTestShim shim;
+    meshtastic_MeshPacket mp = makeNodeInfoPacket(false); // heard on channel index 0, now AES-CCM
+    meshtastic_User user = meshtastic_User_init_zero;
+    user.is_licensed = owner.is_licensed;
+    strcpy(user.long_name, "Renamed");
+
+    TEST_ASSERT_FALSE_MESSAGE(shim.handleReceivedProtobuf(mp, &user), "a CCM-authenticated NodeInfo must be accepted");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("Renamed", mockNodeDB->longName(REMOTE_NODE), "a CCM-authenticated update must land");
 }
 
 static void preparePipelineSigner(NodeNum sender)
@@ -2113,45 +2410,25 @@ void test_L4_licensed_low_entropy_identity_is_regenerated(void)
 }
 
 // ===========================================================================
-// Group D - encoding invariants the routing gates depend on
-// ===========================================================================
-
-// D1: the encoded overhead of the signature field must be exactly XEDDSA_SIGNATURE_FIELD_BYTES
-// (1 tag byte + 1 length byte + 64 signature bytes). The receiver downgrade predicate adds this
-// constant to the unsigned size; this test pins that it matches the real wire overhead the
-// sender's encoder produces, keeping the two sides symmetric. It drifts if the field number ever
-// moves to >= 16 or the signature grows past 127 bytes.
-void test_D1_signature_field_overhead_exact(void)
-{
-    meshtastic_Data d = meshtastic_Data_init_zero;
-    d.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
-    d.payload.size = 100;
-
-    const size_t without = encodedDataSize(&d);
-    d.xeddsa_signature.size = XEDDSA_SIGNATURE_SIZE;
-    const size_t with = encodedDataSize(&d);
-
-    TEST_ASSERT_EQUAL_MESSAGE(XEDDSA_SIGNATURE_FIELD_BYTES, with - without, "signature field wire overhead drifted");
-}
-
-// ===========================================================================
 // Group E - decoded-ingress policy (checkXeddsaReceivePolicy)
 // ===========================================================================
 // Already-decoded packets never reach perhapsDecode's crypto path (it early-returns), so
 // plaintext-MQTT downlink applies this policy function directly at ingress (MQTT.cpp). These
-// tests drive it the same way: decoded packets, sized from p->decoded exactly as the RF path is.
+// tests drive it the same way, with decoded packets.
 // End-to-end MQTT wiring is covered in test_mqtt.
 
-// E1: unsigned small broadcast from a known signer -> dropped (downgrade protection holds on
-// the decoded-ingress path too - the F3 bypass).
-void test_E1_decoded_unsigned_broadcast_from_signer_dropped(void)
+// E1: unsigned broadcast from a known signer -> accepted unmarked under Balanced, exactly as on the
+// RF path (A4). Only Strict drops for a missing signature; the signer's identity is guarded by
+// NodeDB::refusesUnsignedIdentity instead.
+void test_E1_decoded_unsigned_broadcast_from_signer_accepted(void)
 {
     mockNodeDB->addNode(REMOTE_NODE);
     mockNodeDB->setSignerBit(REMOTE_NODE, true);
 
     meshtastic_MeshPacket p = makeDecoded(REMOTE_NODE, NODENUM_BROADCAST, meshtastic_PortNum_TEXT_MESSAGE_APP, SMALL_PAYLOAD);
 
-    TEST_ASSERT_FALSE(checkXeddsaReceivePolicy(&p));
+    TEST_ASSERT_TRUE(checkXeddsaReceivePolicy(&p));
+    TEST_ASSERT_FALSE(p.xeddsa_signed);
 }
 
 // E2: unsigned broadcast from a non-signer -> accepted.
@@ -2197,18 +2474,6 @@ void test_E4_decoded_bad_signature_dropped(void)
     TEST_ASSERT_FALSE(p.xeddsa_signed);
 }
 
-// E5: unsigned oversized broadcast from a signer -> accepted (packets whose signed encoding
-// wouldn't fit are exempt, identically to the RF path: both size p->decoded).
-void test_E5_decoded_unsigned_oversized_broadcast_from_signer_accepted(void)
-{
-    mockNodeDB->addNode(REMOTE_NODE);
-    mockNodeDB->setSignerBit(REMOTE_NODE, true);
-
-    meshtastic_MeshPacket p = makeDecoded(REMOTE_NODE, NODENUM_BROADCAST, meshtastic_PortNum_TEXT_MESSAGE_APP, OVERSIZED_PAYLOAD);
-
-    TEST_ASSERT_TRUE(checkXeddsaReceivePolicy(&p));
-}
-
 // E6: Balanced accepts unsigned unicast from a signer for legacy compatibility.
 void test_E6_decoded_unsigned_unicast_from_signer_accepted(void)
 {
@@ -2220,17 +2485,14 @@ void test_E6_decoded_unsigned_unicast_from_signer_accepted(void)
     TEST_ASSERT_TRUE(checkXeddsaReceivePolicy(&p));
 }
 
-// E8: a crafted partial (non-0, non-64) signature must not let a forged broadcast dodge the
-// downgrade drop. A 63-byte junk signature inflates the encoded size past the fit threshold, so
-// a size-only predicate would treat the packet as "too big to sign" and accept it as an
-// impersonation of signer REMOTE. The malformed-size reject drops it before that math runs.
+// E8: a crafted partial (non-0, non-64) signature is malformed - honest senders emit only 0 or 64
+// bytes - and is dropped in every mode, like a bad signature. Accepting it as "unsigned" would let a
+// forger keep junk in the field that clients and later relays might misread as a signature.
 void test_E8_decoded_partial_signature_from_signer_dropped(void)
 {
     mockNodeDB->addNode(REMOTE_NODE);
     mockNodeDB->setSignerBit(REMOTE_NODE, true);
 
-    // 146-byte payload sits in the band that WOULD fit a signature (so an honest unsigned one is a
-    // downgrade), but the 63 bogus signature bytes push the raw size over the frame limit.
     meshtastic_MeshPacket p = makeDecoded(REMOTE_NODE, NODENUM_BROADCAST, meshtastic_PortNum_TEXT_MESSAGE_APP, 146);
     p.decoded.xeddsa_signature.size = XEDDSA_SIGNATURE_SIZE - 1;
     memset(p.decoded.xeddsa_signature.bytes, 0xCD, p.decoded.xeddsa_signature.size);
@@ -2250,103 +2512,6 @@ void test_E9_decoded_partial_signature_from_nonsigner_dropped(void)
     memset(p.decoded.xeddsa_signature.bytes, 0x5A, p.decoded.xeddsa_signature.size);
 
     TEST_ASSERT_FALSE_MESSAGE(checkXeddsaReceivePolicy(&p), "partial signature must be dropped as malformed");
-}
-
-// Build an unsigned broadcast whose inner message is padded with an unknown field, and pin that the
-// padding pushes the RAW size past the fit threshold - the exemption the attacker is buying - while
-// the frame stays sendable. Without canonical inner sizing these packets are wrongly accepted.
-static meshtastic_MeshPacket makePayloadPaddedBroadcast(meshtastic_PortNum port, const pb_msgdesc_t *fields, const void *inner,
-                                                        size_t padLen)
-{
-    meshtastic_MeshPacket p = makeDecoded(REMOTE_NODE, NODENUM_BROADCAST, port, 0);
-    const size_t innerLen = pb_encode_to_bytes(p.decoded.payload.bytes, sizeof(p.decoded.payload.bytes), fields, inner);
-    TEST_ASSERT_GREATER_THAN_MESSAGE(0, innerLen, "failed to encode the spoofed inner message");
-    p.decoded.payload.size =
-        innerLen + appendUnknownField(p.decoded.payload.bytes + innerLen, sizeof(p.decoded.payload.bytes) - innerLen, padLen);
-
-    TEST_ASSERT_FALSE_MESSAGE(signedEncodingFits(&p.decoded), "padding must push the raw size past the fit threshold");
-    TEST_ASSERT_LESS_OR_EQUAL_MESSAGE(MAX_LORA_PAYLOAD_LEN, encodedDataSize(&p.decoded) + MESHTASTIC_HEADER_LENGTH,
-                                      "padded frame must still be one a radio could send");
-    return p;
-}
-
-// E10: unknown fields buried inside Data.payload are discarded by the module's own pb_decode, so
-// they must not sway the downgrade decision the way A10 already pins for Data-level unknown fields.
-void test_E10_decoded_unsigned_position_padded_inside_payload_dropped(void)
-{
-    mockNodeDB->addNode(REMOTE_NODE);
-    mockNodeDB->setSignerBit(REMOTE_NODE, true);
-
-    meshtastic_Position pos = meshtastic_Position_init_zero;
-    pos.has_latitude_i = pos.has_longitude_i = true;
-    pos.latitude_i = 371234567;
-    pos.longitude_i = -1221234567;
-
-    meshtastic_MeshPacket p = makePayloadPaddedBroadcast(meshtastic_PortNum_POSITION_APP, &meshtastic_Position_msg, &pos, 163);
-
-    TEST_ASSERT_FALSE_MESSAGE(checkXeddsaReceivePolicy(&p), "payload-padded unsigned Position from a signer must be dropped");
-    TEST_ASSERT_FALSE(p.xeddsa_signed);
-}
-
-// E11: over-correction guard. Telemetry (272 bytes max) and Waypoint (199) can legitimately exceed
-// the signable budget, so canonical sizing must not shrink an honest one into the drop range.
-void test_E11_decoded_unsigned_oversized_telemetry_from_signer_accepted(void)
-{
-    mockNodeDB->addNode(REMOTE_NODE);
-    mockNodeDB->setSignerBit(REMOTE_NODE, true);
-
-    meshtastic_Telemetry t = meshtastic_Telemetry_init_zero;
-    t.which_variant = meshtastic_Telemetry_host_metrics_tag;
-    t.variant.host_metrics.uptime_seconds = 123456;
-    t.variant.host_metrics.has_user_string = true;
-    memset(t.variant.host_metrics.user_string, 'x', sizeof(t.variant.host_metrics.user_string) - 1);
-
-    meshtastic_MeshPacket p = makeDecoded(REMOTE_NODE, NODENUM_BROADCAST, meshtastic_PortNum_TELEMETRY_APP, 0);
-    p.decoded.payload.size =
-        pb_encode_to_bytes(p.decoded.payload.bytes, sizeof(p.decoded.payload.bytes), &meshtastic_Telemetry_msg, &t);
-    TEST_ASSERT_GREATER_THAN_MESSAGE(0, p.decoded.payload.size, "failed to encode the oversized Telemetry");
-
-    // Every byte here is a field this build understands, so canonical sizing must leave it alone.
-    TEST_ASSERT_FALSE_MESSAGE(signedEncodingFits(&p.decoded), "telemetry must be too big to sign, else the test is vacuous");
-
-    TEST_ASSERT_TRUE_MESSAGE(checkXeddsaReceivePolicy(&p), "honest oversized telemetry from a signer must not be dropped");
-}
-
-// E12: E10 for the Waypoint branch of the canonical-sizing switch.
-void test_E12_decoded_unsigned_waypoint_padded_inside_payload_dropped(void)
-{
-    mockNodeDB->addNode(REMOTE_NODE);
-    mockNodeDB->setSignerBit(REMOTE_NODE, true);
-
-    meshtastic_Waypoint w = meshtastic_Waypoint_init_zero;
-    w.id = 42;
-    w.has_latitude_i = w.has_longitude_i = true;
-    w.latitude_i = 371234567;
-    w.longitude_i = -1221234567;
-    strcpy(w.name, "spoofed");
-
-    meshtastic_MeshPacket p = makePayloadPaddedBroadcast(meshtastic_PortNum_WAYPOINT_APP, &meshtastic_Waypoint_msg, &w, 150);
-
-    TEST_ASSERT_FALSE_MESSAGE(checkXeddsaReceivePolicy(&p), "payload-padded unsigned Waypoint from a signer must be dropped");
-    TEST_ASSERT_FALSE(p.xeddsa_signed);
-}
-
-// E13: E10 for the NodeInfo/User branch. Router drops it before rebroadcast; NodeInfoModule's own
-// check (Group C) is receiver-local and would not stop the packet propagating.
-void test_E13_decoded_unsigned_nodeinfo_padded_inside_payload_dropped(void)
-{
-    mockNodeDB->addNode(REMOTE_NODE);
-    mockNodeDB->setSignerBit(REMOTE_NODE, true);
-
-    meshtastic_User u = meshtastic_User_init_zero;
-    strcpy(u.id, "!0b0b0b0b");
-    strcpy(u.long_name, "spoofed node");
-    strcpy(u.short_name, "SPF");
-
-    meshtastic_MeshPacket p = makePayloadPaddedBroadcast(meshtastic_PortNum_NODEINFO_APP, &meshtastic_User_msg, &u, 150);
-
-    TEST_ASSERT_FALSE_MESSAGE(checkXeddsaReceivePolicy(&p), "payload-padded unsigned NodeInfo from a signer must be dropped");
-    TEST_ASSERT_FALSE(p.xeddsa_signed);
 }
 
 // E14: the reason this change exists. A signed broadcast reply (a tapback: the client sets reply_id
@@ -2507,12 +2672,9 @@ void setup()
     RUN_TEST(test_A1_valid_signature_accepted_and_learns_signer);
     RUN_TEST(test_A2_bad_signature_dropped);
     RUN_TEST(test_A3_signed_no_pubkey_accepted_unverified);
-    RUN_TEST(test_A4_downgrade_unsigned_broadcast_from_signer_dropped);
+    RUN_TEST(test_A4_balanced_accepts_unsigned_broadcast_from_signer);
     RUN_TEST(test_A5_unsigned_broadcast_from_nonsigner_accepted);
     RUN_TEST(test_A6_unsigned_unicast_from_signer_accepted);
-    RUN_TEST(test_A7_unsigned_oversized_broadcast_from_signer_accepted);
-    RUN_TEST(test_A8_unsigned_deadband_broadcast_from_signer_accepted);
-    RUN_TEST(test_A9_unsigned_boundary_broadcast_from_signer_still_dropped);
     RUN_TEST(test_A10_compatible_accepts_unsigned_broadcast_from_signer);
     RUN_TEST(test_A11_strict_rejects_unsigned_all_portnums_destinations_and_sizes);
     RUN_TEST(test_A12_strict_rejects_signed_packet_without_key);
@@ -2524,8 +2686,16 @@ void setup()
 #if WARM_NODE_COUNT > 0
     RUN_TEST(test_A17_strict_verifies_signer_from_warm_key_store);
 #endif
-    RUN_TEST(test_A18_unsigned_broadcast_from_signer_with_unknown_fields_dropped);
-    RUN_TEST(test_A19_unsigned_broadcast_from_nonsigner_with_unknown_fields_accepted);
+    RUN_TEST(test_A18_strict_accepts_unsigned_on_aead_channel);
+    RUN_TEST(test_A19_strict_accepts_unverifiable_signature_on_aead_channel);
+    RUN_TEST(test_A20_bad_signature_dropped_on_aead_channel);
+    RUN_TEST(test_A21_signed_nodeinfo_advertising_another_key_dropped);
+    RUN_TEST(test_A22_signed_nodeinfo_with_unbound_stored_key_dropped);
+    RUN_TEST(test_A23_consistent_signed_nodeinfo_reply_accepted);
+    RUN_TEST(test_A24_strict_accepts_unsigned_ack);
+    RUN_TEST(test_A25_strict_accepts_unsigned_traceroute);
+    RUN_TEST(test_A26_traceroute_signature_ignored);
+    RUN_TEST(test_A27_strict_accepts_unsigned_key_verification);
 
     printf("\n=== Group B: send-side signing policy ===\n");
     RUN_TEST(test_B1_local_broadcast_is_signed);
@@ -2545,6 +2715,13 @@ void setup()
     RUN_TEST(test_B15_ack_with_no_channel_and_no_key_still_fails);
     RUN_TEST(test_B16_non_ack_on_unusable_channel_still_fails);
     RUN_TEST(test_B17_ack_on_a_usable_channel_stays_on_the_channel);
+    RUN_TEST(test_B18_compatible_does_not_sign);
+    RUN_TEST(test_B19_aead_channel_broadcast_not_signed);
+    RUN_TEST(test_B20_licensed_compatible_does_not_sign);
+    RUN_TEST(test_B21_unicast_nodeinfo_signing_follows_policy);
+    RUN_TEST(test_B22_traceroute_never_signed);
+    RUN_TEST(test_B23_unicast_position_signing_follows_policy);
+    RUN_TEST(test_B24_licensed_ack_carries_proof_not_signature);
 
     printf("\n=== Group C: routing pipeline authentication ordering ===\n");
     RUN_TEST(test_C1_invalid_first_copy_does_not_poison_valid_same_id);
@@ -2572,6 +2749,8 @@ void setup()
     RUN_TEST(test_N2_signed_nodeinfo_from_signer_not_dropped);
     RUN_TEST(test_N3_unsigned_nodeinfo_from_nonsigner_not_dropped);
     RUN_TEST(test_N4_unsigned_unicast_nodeinfo_from_signer_accepted);
+    RUN_TEST(test_N12_compatible_unsigned_nodeinfo_from_signer_not_dropped);
+    RUN_TEST(test_N13_unsigned_nodeinfo_from_signer_on_aead_channel_not_dropped);
     RUN_TEST(test_N5_unsigned_unicast_nodeinfo_from_signer_does_not_change_name);
     RUN_TEST(test_N6_signed_unicast_nodeinfo_from_signer_changes_name);
     RUN_TEST(test_N7_unsigned_unicast_nodeinfo_from_nonsigner_changes_name);
@@ -2586,22 +2765,14 @@ void setup()
     RUN_TEST(test_L3_factory_config_reset_preserves_valid_identity_private_key);
     RUN_TEST(test_L4_licensed_low_entropy_identity_is_regenerated);
 
-    printf("\n=== Group D: encoding invariants ===\n");
-    RUN_TEST(test_D1_signature_field_overhead_exact);
-
     printf("\n=== Group E: decoded-ingress policy ===\n");
-    RUN_TEST(test_E1_decoded_unsigned_broadcast_from_signer_dropped);
+    RUN_TEST(test_E1_decoded_unsigned_broadcast_from_signer_accepted);
     RUN_TEST(test_E2_decoded_unsigned_broadcast_from_nonsigner_accepted);
     RUN_TEST(test_E3_decoded_valid_signature_verified_and_learns_signer);
     RUN_TEST(test_E4_decoded_bad_signature_dropped);
-    RUN_TEST(test_E5_decoded_unsigned_oversized_broadcast_from_signer_accepted);
     RUN_TEST(test_E6_decoded_unsigned_unicast_from_signer_accepted);
     RUN_TEST(test_E8_decoded_partial_signature_from_signer_dropped);
     RUN_TEST(test_E9_decoded_partial_signature_from_nonsigner_dropped);
-    RUN_TEST(test_E10_decoded_unsigned_position_padded_inside_payload_dropped);
-    RUN_TEST(test_E11_decoded_unsigned_oversized_telemetry_from_signer_accepted);
-    RUN_TEST(test_E12_decoded_unsigned_waypoint_padded_inside_payload_dropped);
-    RUN_TEST(test_E13_decoded_unsigned_nodeinfo_padded_inside_payload_dropped);
     RUN_TEST(test_E14_decoded_signed_reply_retargeted_reply_id_dropped);
     RUN_TEST(test_E15_decoded_signed_response_retargeted_request_id_dropped);
     RUN_TEST(test_E16_decoded_signed_broadcast_without_linkage_still_verifies);

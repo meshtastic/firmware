@@ -16,7 +16,7 @@ jobs:
       github.event.workflow_run.conclusion != 'cancelled' &&
       github.repository == 'meshtastic/firmware'
     continue-on-error: true
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - name: Download size report
         id: download

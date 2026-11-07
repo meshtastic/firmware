@@ -1216,7 +1216,7 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
     case ROOT:
         previousPage = MenuPage::EXIT;
         // Optional: next applet
-        if (settings->optionalMenuItems.nextTile && settings->userTiles.count > 1)
+        if (settings->optionalMenuItems.nextTile && settings->userTiles.count > 1 && !inkhud->hasTouchEnabledProvider())
             items.push_back(MenuItem("Next Tile", MenuAction::NEXT_TILE, MenuPage::ROOT)); // Only if multiple applets shown
 
         items.push_back(MenuItem("Send", MenuPage::SEND));
@@ -2428,7 +2428,7 @@ void InkHUD::MenuApplet::populateSendPage()
     // Position / NodeInfo packet
     items.push_back(MenuItem("Ping", MenuAction::SEND_PING, MenuPage::EXIT));
 
-    // Show the Free Text option on any node that supports the on-screen keyboard.
+    // Offer free text with either a physical or on-screen keyboard.
     if (supportsFreeTextKeyboard(inkhud, settings))
         items.push_back(MenuItem("Free Text", MenuAction::FREE_TEXT, MenuPage::SEND));
 
