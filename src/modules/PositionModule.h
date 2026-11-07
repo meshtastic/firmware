@@ -58,6 +58,8 @@ class PositionModule : public ProtobufModule<meshtastic_Position>, private concu
     // still honors the cadence.
     static bool shouldSendPositionToPhone(bool hasValidPosition, bool phoneQueueEmpty, bool everSentToPhone, uint32_t nowMs,
                                           uint32_t lastSentMs, uint32_t intervalMs);
+    // Position.ground_speed is km/h; TAKPacketV2.speed is cm/s. Rounds to nearest, saturates at UINT32_MAX.
+    static uint32_t groundSpeedKmhToCmPerSec(uint32_t kmh);
 
   protected:
     /** Called to handle a particular incoming message
@@ -74,6 +76,8 @@ class PositionModule : public ProtobufModule<meshtastic_Position>, private concu
 
     /** Does our periodic broadcast */
     virtual int32_t runOnce() override;
+
+    meshtastic_MeshPacket *allocAtakPli();
 
   private:
     meshtastic_MeshPacket *allocPositionPacket(uint32_t atPrecision);
@@ -94,7 +98,6 @@ class PositionModule : public ProtobufModule<meshtastic_Position>, private concu
     // gauges movement at our own configured (unclamped) precision rather than the on-wire
     // (public-clamped) precision - trackers report finer movement.
     bool positionUnchangedSinceLastSend(const meshtastic_PositionLite &selfPos, bool useConfiguredPrecision);
-    meshtastic_MeshPacket *allocAtakPli();
     void trySetRtc(meshtastic_Position p, bool isLocal, bool forceUpdate = false);
     uint32_t precision;
     void sendLostAndFoundText();
