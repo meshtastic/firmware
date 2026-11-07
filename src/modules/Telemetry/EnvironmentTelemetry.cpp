@@ -752,7 +752,7 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
     }
 #endif
 #ifdef HAS_RAKHUB
-    // IPSO cache -> EnvironmentMetrics; chemistry off unless RAK_SENSORHUB_EXTENDED_ENV_METRICS.
+    // IPSO cache -> EnvironmentMetrics; chemistry and irradiance go out as SoilWaterMetrics.
     if (rakSensorHub.hasSensor()) {
         get_metrics = rakSensorHub.getMetrics(m);
         valid = valid || get_metrics;
@@ -881,6 +881,29 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
             }
         }
     }
+
+#ifdef HAS_RAKHUB
+    // Chemistry and irradiance have their own variant; send it alongside when any is fresh.
+    if (rakSensorHub.hasSensor()) {
+        meshtastic_Telemetry sw = meshtastic_Telemetry_init_zero;
+        sw.which_variant = meshtastic_Telemetry_soil_water_metrics_tag;
+        sw.time = getTime();
+        meshtastic_MeshPacket *p = rakSensorHub.getMetrics(&sw) ? allocDataProtobuf(sw) : nullptr;
+        if (p) {
+            p->to = dest;
+            p->decoded.want_response = false;
+            p->priority = config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR
+                              ? meshtastic_MeshPacket_Priority_RELIABLE
+                              : meshtastic_MeshPacket_Priority_BACKGROUND;
+            LOG_INFO("Send: soil/water metrics%s", phoneOnly ? " to phone" : "");
+            if (phoneOnly)
+                service->sendToPhone(p);
+            else
+                service->sendToMesh(p, RX_SRC_LOCAL, true);
+            validTelemetry = true;
+        }
+    }
+#endif
 
     // Arm the pre-sleep sequence even when no valid reading was available this cycle (e.g. a
     // failed sensor read): a power-saving SENSOR node must still return to deep sleep,
