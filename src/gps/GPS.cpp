@@ -1233,6 +1233,9 @@ bool GPS::setup()
     }
 
     notifyDeepSleepObserver.observe(&notifyDeepSleep);
+#ifdef ARCH_ESP32
+    notifyLightSleepObserver.observe(&notifyLightSleep);
+#endif
 
     return true;
 }
@@ -1241,6 +1244,9 @@ GPS::~GPS()
 {
     // we really should unregister our sleep observer
     notifyDeepSleepObserver.unobserve(&notifyDeepSleep);
+#ifdef ARCH_ESP32
+    notifyLightSleepObserver.unobserve(&notifyLightSleep);
+#endif
 }
 
 // Put the GPS hardware into a specified state
@@ -1303,9 +1309,9 @@ void GPS::setPowerState(GPSPowerState newState, uint32_t sleepTime)
 #endif
         writePinRFEN(false);             // External RF front-end: off
         writePinStandby(true);           // Standby (pin): asleep (not awake)
+        setPowerUBLOX(false, sleepTime); // Standby (UBLOX): asleep, timed
         writePinEN(false);               // Power (EN pin): off
         setPowerPMU(false);              // Power (PMU): off
-        setPowerUBLOX(false, sleepTime); // Standby (UBLOX): asleep, timed
         break;
 
     case GPS_OFF:
@@ -1317,9 +1323,9 @@ void GPS::setPowerState(GPSPowerState newState, uint32_t sleepTime)
 #endif
         writePinRFEN(false);     // External RF front-end: off
         writePinStandby(true);   // Standby (pin): asleep
+        setPowerUBLOX(false, 0); // Standby (UBLOX): asleep, indefinitely
         writePinEN(false);       // Power (EN pin): off
         setPowerPMU(false);      // Power (PMU): off
-        setPowerUBLOX(false, 0); // Standby (UBLOX): asleep, indefinitely
         break;
     }
 }
@@ -1455,6 +1461,7 @@ void GPS::setPowerUBLOX(bool on, uint32_t sleepMs)
 
         // Send the UBX packet
         gps->_serial_gps->write(gps->UBXscratch, msglen);
+        gps->_serial_gps->flush();
         LOG_DEBUG_GPS("UBLOX: sleep for %dmS", sleepMs);
     }
 }
@@ -1793,6 +1800,16 @@ int GPS::prepareDeepSleep(void *unused)
     disable();
     return 0;
 }
+
+#ifdef ARCH_ESP32
+int GPS::prepareLightSleep(void *unused)
+{
+    if (_serial_gps) {
+        _serial_gps->flush();
+    }
+    return 0;
+}
+#endif
 
 static const char *PROBE_MESSAGE = "Trying %s (%s)...";
 static const char *DETECTED_MESSAGE = "%s detected";
