@@ -1,0 +1,5 @@
+# INFO. The radio opens the string directly, so this is not a radio fault; it is
+# only outside what display/touchscreen host packing can represent.
+Lora:
+  Module: sim
+  spidev: spidev10.0

@@ -1,0 +1,11 @@
+# CLEAN. Display and touchscreen on different, decodable SPI buses, and a Lora
+# path at the top of the range the host packing supports.
+Lora:
+  Module: sim
+  spidev: spidev9.7
+Display:
+  Panel: ILI9488
+  spidev: spidev1.0
+Touchscreen:
+  Module: XPT2046
+  spidev: spidev0.1

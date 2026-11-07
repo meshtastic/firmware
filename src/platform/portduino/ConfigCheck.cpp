@@ -918,6 +918,45 @@ void checkMacAddress(const std::string &file, const YAML::Node &general, std::ve
     }
 }
 
+// Display and touchscreen host packing only understands bus 0-9 and device 0-7
+// (see spiHostFromDevicePath); the radio opens its own string in a dedicated
+// instance, so a Lora path outside that range is information rather than a fault.
+void checkSpidevPath(const std::string &file, const std::string &section, const YAML::Node &value, std::vector<Finding> &findings)
+{
+    if (!converts(value, kString))
+        return; // checkValueType() already reported it
+
+    const std::string text = value.as<std::string>("");
+    const bool isLora = section == "Lora";
+    if (isLora && text == "ch341")
+        return;
+    if (isLora && text.empty())
+        return; // the merged check reports this only if no later file supplies a path
+    if ((section == "Display" || section == "Touchscreen") && text.empty())
+        return; // no separate bus was asked for; the peripheral follows the radio host
+
+    if (text == "ch341") {
+        findings.push_back({kError, file, lineOf(value),
+                            section + ".spidev is 'ch341', which names a USB adapter rather than a SPI bus, so the " + section +
+                                " cannot use it"});
+        return;
+    }
+
+    if (text.empty() || spiHostFromDevicePath(text) < 0) {
+        const std::string what = text.empty() ? std::string("is empty") : "'" + text + "' is not a usable path";
+        if (isLora) {
+            findings.push_back({kInfo, file, lineOf(value),
+                                "Lora.spidev " + what +
+                                    ". The radio still opens that name directly, but display/touchscreen host packing "
+                                    "will not use it. Expected /dev/spidev<bus>.<device> with bus 0-9 and device 0-7"});
+        } else {
+            findings.push_back(
+                {kError, file, lineOf(value),
+                 section + ".spidev " + what + ". Expected /dev/spidev<bus>.<device> with bus 0-9 and device 0-7"});
+        }
+    }
+}
+
 void checkSection(const std::string &file, const std::string &section, const YAML::Node &body, std::vector<Finding> &findings)
 {
     const auto &allowed = schema().at(section);
@@ -951,6 +990,8 @@ void checkSection(const std::string &file, const std::string &section, const YAM
             checkRfSwitchTable(file, value, findings);
         } else if (section == "Lora" && key == "Module") {
             checkLoraModule(file, value, findings);
+        } else if ((section == "Lora" || section == "Display" || section == "Touchscreen") && key == "spidev") {
+            checkSpidevPath(file, section, value, findings);
         } else if (section == "Lora" && key == "TX_GAIN_LORA") {
             checkTxGain(file, value, findings);
         } else if (section == "Lora" && isIrqDioName(key)) {
@@ -1180,6 +1221,14 @@ void checkMergedConfig(const PathIndex &paths, std::vector<Finding> &findings)
 
     checkPinValues(findings);
 
+    // A later config file can still supply the radio path. Only the final merged
+    // value decides whether a hardware radio is left without one.
+    if (portduino_config.lora_spi_dev == "/dev/" && portduino_config.lora_module != use_simradio &&
+        portduino_config.lora_module != use_autoconf)
+        findings.push_back({kError, merged, 0,
+                            "Lora.spidev is empty, but a hardware radio needs a SPI device. Expected "
+                            "/dev/spidev<bus>.<device> with bus 0-9 and device 0-7"});
+
     // portduinoSetup() skips initGPIOPin() for every Lora pin when spidev is ch341, so a
     // gpiochip or line mapping written next to one is read, stored, and never used.
     if (portduino_config.lora_spi_dev == "ch341") {
@@ -1342,6 +1391,11 @@ void checkMergedConfig(const PathIndex &paths, std::vector<Finding> &findings)
                                 "set here. Check with 'gpioinfo'"});
 }
 
+std::string describeSpiHost(int host)
+{
+    return "/dev/spidev" + std::to_string(host & 0x0F) + "." + std::to_string((host >> 4) & 0x0F);
+}
+
 void printSummary()
 {
     std::cout << "\nEffective radio configuration:\n";
@@ -1349,6 +1403,14 @@ void printSummary()
     if (!portduino_config.lora_spi_dev.empty())
         std::cout << "  spidev            : " << portduino_config.lora_spi_dev << "\n";
     std::cout << "  SPI speed         : " << portduino_config.spiSpeed << "\n";
+    const bool displayUsesSpi = portduino_config.displayPanel != no_screen && portduino_config.displayPanel != x11 &&
+                                portduino_config.displayPanel != fb && portduino_config.displayPanel != hub75;
+    if (displayUsesSpi)
+        std::cout << "  Display spidev    : " << describeSpiHost(portduino_config.display_spi_dev_int) << "\n";
+    const bool touchUsesSpi = portduino_config.touchscreenI2CAddr == -1 &&
+                              (portduino_config.touchscreenModule == xpt2046 || portduino_config.touchscreenModule == stmpe610);
+    if (touchUsesSpi)
+        std::cout << "  Touchscreen spidev: " << describeSpiHost(portduino_config.touchscreen_spi_dev_int) << "\n";
     if (portduino_config.dio3_tcxo_voltage)
         std::cout << "  DIO3 TCXO voltage : " << portduino_config.dio3_tcxo_voltage << " mV\n";
     if (portduino_config.tcxo_optional) {
