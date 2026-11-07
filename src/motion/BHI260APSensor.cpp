@@ -81,8 +81,10 @@ int32_t BHI260APSensor::runOnce()
     if (stepCounter->hasUpdated()) {
         steps = stepCounter->getStepCount();
         LOG_WARN("Step count updated: %u", steps);
+#if HAS_SCREEN
         if (screen)
             screen->steps = steps;
+#endif
     }
     if (wakeRequested) {
         wakeRequested = false;

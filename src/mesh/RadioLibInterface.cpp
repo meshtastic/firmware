@@ -32,10 +32,14 @@ void LockingArduinoHal::spiEndTransaction()
     spiLock->unlock();
 }
 
-#if ARCH_PORTDUINO
+#if RADIO_SPI_BULK
 void LockingArduinoHal::spiTransfer(uint8_t *out, size_t len, uint8_t *in)
 {
-    spi->transfer(out, in, len);
+#if defined(ARDUINO_ARCH_ESP32)
+    spi->transferBytes(out, in, len);
+#else
+    spi->transfer(out, in, len); // on nRF52 one EasyDMA transfer, not one per byte
+#endif
 }
 #endif
 
@@ -44,6 +48,10 @@ RadioLibInterface::RadioLibInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE c
     : NotifiedWorkerThread("RadioIf"), module(hal, cs, irq, rst, busy), iface(_iface)
 {
     instance = this;
+
+#if RADIO_SPI_BULK && !ARCH_PORTDUINO
+    LOG_INFO("RADIO_SPI_BULK: one SPI transfer per radio command");
+#endif
 
 #ifdef MESHTASTIC_RX_READOUT_TASK
     // Before any sequence can start, not with the task in startReceive(): the first RadioSequence to wrap that call

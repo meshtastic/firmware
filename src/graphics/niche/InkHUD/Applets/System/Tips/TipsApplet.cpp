@@ -154,6 +154,17 @@ void InkHUD::TipsApplet::onRender(bool full)
             cursorY += bh + (fontSmall.lineHeight() / 3);
         };
 
+#if defined(T_DECK_PRO)
+        drawBullet("Touch: tap to select, hold for menu.");
+        drawBullet("Swipe to scroll or change app.");
+        drawBullet("Use the keyboard to type messages.");
+        if (tDeckProIsV11())
+            drawBullet("Alt+B: toggle screen and keyboard lights together.");
+        else
+            drawBullet("Alt+B: toggle keyboard light.");
+        drawBullet("Enter: finish text. Backspace: delete.");
+        drawBullet("Alt+Q: cancel text.");
+#else
         if (!settings->joystick.enabled) {
             drawBullet("User Button");
             drawBullet("- short press: next");
@@ -169,6 +180,7 @@ void InkHUD::TipsApplet::onRender(bool full)
             drawBullet("Exit Button");
             drawBullet("- press: switch tile or close menu");
         }
+#endif
 
         printAt(0, Y(1.0), continuePrompt, LEFT, BOTTOM);
 #endif

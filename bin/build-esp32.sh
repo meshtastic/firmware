@@ -15,6 +15,8 @@ rm -r $OUTDIR/* || true
 # platformio pkg install -e $1
 # ...redundant with pioarduino
 
+pio --version
+
 echo "Building for $1 with $PLATFORMIO_BUILD_FLAGS"
 rm -f $BUILDDIR/firmware*
 

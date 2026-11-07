@@ -41,6 +41,12 @@ OSThread::OSThread(const char *_name, uint32_t period, ThreadController *_contro
 
 OSThread::~OSThread()
 {
+    // A thread can be destroyed while it is the running thread (exit_simulator exit()s from inside
+    // ServerAPI's runOnce), and the log path reads ThreadName through this pointer after the Thread
+    // base has freed it.
+    if (currentThread == this)
+        currentThread = NULL;
+
     if (controller)
         controller->remove(this);
 }

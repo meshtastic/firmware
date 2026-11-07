@@ -184,6 +184,13 @@ template <typename T> bool LR11x0Interface<T>::init()
 
     resolvedTcxoVoltage = attemptVoltage;
 
+    if (res == RADIOLIB_ERR_NONE && resolvedTcxoVoltage > 0) {
+        // Standby and TX/RX fallback on STDBY_XOSC keep the TCXO powered
+        // to avoid the TCXO startup time on each TX/RX transition.
+        const int16_t xoscRes = lora.setStandbyXOSC(true);
+        LOG_DEBUG("Keep TCXO on in standby, result: %d", xoscRes);
+    }
+
     // \todo Display actual typename of the adapter, not just `LR11x0`
     LOG_INFO("LR11x0 init result %d", res);
 
@@ -276,6 +283,12 @@ template <typename T> bool LR11x0Interface<T>::init()
         LOG_DEBUG_RADIO("Set DIO RF switch");
     }
 
+#ifdef LR11X0_FORCE_HP_PA
+    // begin() picked the PA from the power level; re-apply it on the high-power PA (see applyOutputPower())
+    if (res == RADIOLIB_ERR_NONE)
+        res = applyOutputPower();
+#endif
+
     if (res == RADIOLIB_ERR_NONE) {
         if (config.lora.sx126x_rx_boosted_gain) { // the name is unfortunate but historically accurate
             res = lora.setRxBoostedGainMode(true);
@@ -292,6 +305,17 @@ template <typename T> bool LR11x0Interface<T>::init()
     }
 
     return res == RADIOLIB_ERR_NONE;
+}
+
+template <typename T> int16_t LR11x0Interface<T>::applyOutputPower()
+{
+#ifdef LR11X0_FORCE_HP_PA
+    // The board reaches its sub-GHz antenna only through the high-power PA, but RadioLib picks the
+    // low-power PA at 14 dBm and below. The high-power PA's lower limit is -9 dBm.
+    return lora.setOutputPower(power < -9 ? (int8_t)-9 : power, true);
+#else
+    return lora.setOutputPower(power);
+#endif
 }
 
 template <typename T> int16_t LR11x0Interface<T>::programModemParams()
@@ -339,7 +363,7 @@ template <typename T> int16_t LR11x0Interface<T>::programModemParams()
         return err;
     }
 
-    err = lora.setOutputPower(power);
+    err = applyOutputPower();
     if (err != RADIOLIB_ERR_NONE) {
         LOG_ERROR("LR11x0 setOutputPower(%d) %s%d", power, radioLibErr, err);
         return err;
