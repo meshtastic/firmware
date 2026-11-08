@@ -179,6 +179,37 @@ static void test_gps_reapply_always_accepted(void)
     TEST_ASSERT_EQUAL_UINT32((uint32_t)firstEpoch + 123, getTime());
 }
 
+// The sub-second part of a time source must survive into the running clock: perhapsSetRTC() used to keep whole
+// seconds and anchor them at the call, so the clock's seconds rolled over at an arbitrary phase of the true second,
+// up to a second late. The second boundary must now fall exactly where the source put it.
+static void test_subsecond_fraction_is_kept(void)
+{
+    beginFakeClock(60 * 1000);
+    const time_t epoch = makeValidEpoch();
+    struct timeval tv = makeTv(epoch);
+    tv.tv_usec = 750 * 1000;
+    TEST_ASSERT_EQUAL_INT(RTCSetResultSuccess, perhapsSetRTC(RTCQualityGPS, &tv));
+    TEST_ASSERT_EQUAL_UINT64((uint64_t)epoch * 1000 + 750, getUtcMillis());
+    TEST_ASSERT_EQUAL_UINT32((uint32_t)epoch, getTime());
+
+    advanceFakeClock(249);
+    TEST_ASSERT_EQUAL_UINT32((uint32_t)epoch, getTime());
+    advanceFakeClock(1);
+    TEST_ASSERT_EQUAL_UINT32((uint32_t)epoch + 1, getTime());
+    TEST_ASSERT_EQUAL_UINT64((uint64_t)epoch * 1000 + 1000, getUtcMillis());
+}
+
+// A malformed tv_usec is a caller bug; the whole seconds still apply rather than a fraction past a second boundary.
+static void test_out_of_range_usec_is_dropped(void)
+{
+    beginFakeClock(60 * 1000);
+    const time_t epoch = makeValidEpoch();
+    struct timeval tv = makeTv(epoch);
+    tv.tv_usec = 1500 * 1000;
+    TEST_ASSERT_EQUAL_INT(RTCSetResultSuccess, perhapsSetRTC(RTCQualityGPS, &tv));
+    TEST_ASSERT_EQUAL_UINT64((uint64_t)epoch * 1000, getUtcMillis());
+}
+
 // Equal-quality NTP reapplies only after the 30-minute drift-correction throttle.
 static void test_ntp_drift_throttle(void)
 {
@@ -434,6 +465,8 @@ void setup()
     RUN_TEST(test_downgrade_rejected_state_untouched);
     RUN_TEST(test_equal_quality_fromnet_is_not_reapplied);
     RUN_TEST(test_gps_reapply_always_accepted);
+    RUN_TEST(test_subsecond_fraction_is_kept);
+    RUN_TEST(test_out_of_range_usec_is_dropped);
     RUN_TEST(test_ntp_drift_throttle);
     RUN_TEST(test_force_update_overrides_downgrade);
     RUN_TEST(test_build_epoch_bounds_rejected);

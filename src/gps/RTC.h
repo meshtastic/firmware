@@ -54,6 +54,9 @@ const char *RtcName(RTCQuality quality);
 /// Return time since 1970 in secs.  While quality is RTCQualityNone we will be returning time based at zero
 uint32_t getTime(bool local = false);
 
+/// UTC milliseconds since 1970, with the sub-second part of the last time source kept. Same caveats as getTime().
+uint64_t getUtcMillis();
+
 /// Return time since 1970 in secs.  If quality is RTCQualityNone return zero
 uint32_t getValidTime(RTCQuality minQuality, bool local = false);
 

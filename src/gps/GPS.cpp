@@ -1,4 +1,5 @@
 #include <cstring> // Include for strstr
+#include <algorithm>
 #include <vector>
 
 #include "configuration.h"
@@ -105,6 +106,7 @@ constexpr uint16_t GPS_PROBE_CACHE_VERSION = 1;
 constexpr const char *GPS_PROBE_CACHE_FILE = "/prefs/gps_probe_cache.dat";
 constexpr int MIN_PLAUSIBLE_GPS_YEAR = 2020;
 constexpr int MAX_PLAUSIBLE_GPS_YEAR = 2100;
+constexpr uint32_t NMEA_MAX_SENTENCE_BYTES = 120; // NMEA allows 82; longer means its '$' was lost
 constexpr uint32_t AIROHA_PROBE_SETTLE_MS = 20;
 #ifdef HAS_AIROHA_SLEEP
 // The receiver may already have auto-slept and missed the first sleep command, so resend until it acks.
@@ -1257,6 +1259,7 @@ void GPS::setPowerState(GPSPowerState newState, uint32_t sleepTime)
         if (oldState == GPS_ACTIVE)
             break;
         gotTime = false;
+        nmeaTime.reset();         // the module may have re-acquired, and our clock drifted while it slept
         if (oldState == GPS_IDLE) // If hardware already awake, no changes needed
             break;
         if (oldState != GPS_ACTIVE && oldState != GPS_IDLE) // If hardware just waking now, clear buffer
@@ -1696,8 +1699,9 @@ int32_t GPS::runOnce()
         // if gps_update_interval is <=10s, GPS never goes off, so we treat that differently
         uint32_t updateInterval = Default::getConfiguredOrDefaultMs(config.position.gps_update_interval);
 
-        // 1. Got a time for the first time this cycle
-        if (!gotTime && lookForTime()) { // Note: we count on this && short-circuiting and not resetting the RTC time
+        // 1. Got a time for the first time this cycle. lookForTime() keeps refining the RTC after that.
+        const bool hadTime = gotTime;
+        if (lookForTime() && !hadTime) {
             gotTime = true;
             // Publish immediately (rather than via the block below, which would clear fixHoldEnds) so the
             // time-only state reaches the UI without waiting for a location. Safe without a valid location:
@@ -1771,7 +1775,8 @@ int32_t GPS::runOnce()
 
     // 9600bps is approx 1 byte per msec, so considering our buffer size we never need to wake more often than 200ms
     // if not awake we can run super infrequently (once every 5 secs?) to see if we need to wake.
-    return (powerState == GPS_ACTIVE) ? GPS_THREAD_INTERVAL : 5000;
+    // The spread keeps drains from locking to the GPS's 1 s bursts, so NMEA arrival bounds tighten (NmeaTimeEstimator)
+    return (powerState == GPS_ACTIVE) ? GPS_THREAD_INTERVAL + (int32_t)random(16) : 5000;
 }
 
 // clear the GPS rx/tx buffer as quickly as possible
@@ -2231,43 +2236,34 @@ static int32_t toDegInt(RawDegrees d)
 }
 
 /**
- * Perform any processing that should be done only while the GPS is awake and looking for a fix.
- * Override this method to check for new locations
+ * Step the RTC to the time the GPS reports, when that improves on what the clock already holds.
  *
- * @return true if we've set a new time
+ * @return true if the GPS has reported a usable time
  */
 bool GPS::lookForTime()
 {
-    auto ti = reader.time;
-    auto d = reader.date;
-    if (ti.isValid() && d.isValid()) { // Note: we don't check for updated, because we'll only be called if needed
-        /* Convert to unix time
-The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of seconds that have elapsed since January 1,
-1970 (midnight UTC/GMT), not counting leap seconds (in ISO 8601: 1970-01-01T00:00:00Z).
-*/
-        struct tm t;
-        t.tm_sec = ti.second() + round(ti.age() / 1000);
-        t.tm_min = ti.minute();
-        t.tm_hour = ti.hour();
-        t.tm_mday = d.day();
-        t.tm_mon = d.month() - 1;
-        t.tm_year = d.year() - 1900;
-        t.tm_isdst = false;
-        if (t.tm_mon > -1) {
-            if (!isPlausibleNmeaTime(t)) {
-                return false;
-            }
-            if (perhapsSetRTC(RTCQualityGPS, t) == RTCSetResultSuccess) {
-                LOG_DEBUG("NMEA GPS time set %02d-%02d-%02d %02d:%02d:%02d age %d", d.year(), d.month(), t.tm_mday, t.tm_hour,
-                          t.tm_min, t.tm_sec, ti.age());
-                return true;
-            } else {
-                return false;
-            }
-        } else
-            return false;
-    } else
+    if (!nmeaTime.hasEstimate())
         return false;
+
+    const uint64_t nowMs = Time::getMillisMonotonic();
+    const uint64_t utcMs = nmeaTime.utcMillisAt(nowMs);
+    const int64_t clockAheadMs = (int64_t)(getUtcMillis() - utcMs);
+    const uint64_t msSinceApplied = lastNmeaTimeApplyMs ? nowMs - lastNmeaTimeApplyMs : UINT64_MAX;
+    if (!shouldApplyNmeaTime(getRTCQuality() == RTCQualityGPS, clockAheadMs, msSinceApplied, nmeaTime.sampleCount()))
+        return true;
+
+    struct timeval tv;
+    tv.tv_sec = utcMs / 1000;
+    tv.tv_usec = (utcMs % 1000) * 1000;
+    if (perhapsSetRTC(RTCQualityGPS, &tv) != RTCSetResultSuccess)
+        return false;
+
+    lastNmeaTimeApplyMs = nowMs ? nowMs : 1;
+    const uint32_t uncertaintyUs = nmeaTime.uncertaintyUs();
+    LOG_DEBUG("NMEA GPS time set %lu.%03u, step %ld ms, %lu samples, window %ld us", (unsigned long)tv.tv_sec,
+              (unsigned)(utcMs % 1000), (long)std::max<int64_t>(INT32_MIN, std::min<int64_t>(INT32_MAX, -clockAheadMs)),
+              (unsigned long)nmeaTime.sampleCount(), uncertaintyUs == UINT32_MAX ? -1L : (long)uncertaintyUs);
+    return true;
 }
 
 /**
@@ -2419,6 +2415,48 @@ bool GPS::hasLock()
     return false;
 }
 
+// 8N1 framing: ten bit times per byte. 0 where the GPS "UART" has no line rate (a gpsd socket, a bridged port).
+static uint32_t gpsByteTimeUs(int32_t baud)
+{
+#if defined(ARCH_PORTDUINO) || defined(SENSECAP_INDICATOR)
+    (void)baud;
+    return 0;
+#else
+    return baud > 0 ? 10000000UL / (uint32_t)baud : 0;
+#endif
+}
+
+// Longest a received byte can wait in the UART before available() counts it, plus interrupt latency.
+static uint32_t gpsUartHoldBackUs(uint32_t byteTimeUs)
+{
+#if defined(ARCH_ESP32)
+    // arduino-esp32 picks its RX FIFO threshold at the first begin(): 1 byte up to 57600 baud, else 120
+    const uint32_t bytes = GPS_BAUDRATE > 57600 ? 122 : 3;
+#elif defined(ARCH_RP2040)
+    const uint32_t bytes = 36; // 32-byte RX FIFO and its receive timeout
+#else
+    const uint32_t bytes = 8;
+#endif
+    return bytes * byteTimeUs + 2000;
+}
+
+// The UTC an RMC sentence just committed names, centiseconds included. Reading the fields clears their updated flags.
+bool GPS::readNmeaUtcMs(int64_t &utcMs)
+{
+    struct tm t = {};
+    t.tm_year = reader.date.year() - 1900;
+    t.tm_mon = reader.date.month() - 1;
+    t.tm_mday = reader.date.day();
+    t.tm_hour = reader.time.hour();
+    t.tm_min = reader.time.minute();
+    t.tm_sec = reader.time.second();
+    const uint8_t centis = reader.time.centisecond();
+    if (t.tm_mon < 0 || !isPlausibleNmeaTime(t))
+        return false;
+    utcMs = (int64_t)gm_mktime(&t) * 1000 + centis * 10;
+    return true;
+}
+
 bool GPS::whileActive()
 {
     unsigned int charsInBuf = 0;
@@ -2436,23 +2474,54 @@ bool GPS::whileActive()
         clearBuffer();
     }
 #endif
-    // First consume any chars that have piled up at the receiver
-    while (_serial_gps->available() > 0) {
-        int c = _serial_gps->read();
-        UBXscratch[charsInBuf] = c;
+    // RMC sentences committed in this drain: where each ends, its length, and the UTC it names
+    struct PendingTime {
+        uint32_t lastIndex;
+        uint32_t length;
+        int64_t utcMs;
+    } pending[2];
+    uint8_t pendingCount = 0;
+    const uint32_t drainStartCount = nmeaByteCount;
+    uint64_t drainEndMs;
+
+    // Consume what has piled up, then stamp the time just before seeing the buffer empty: the arrival bounds need both
+    do {
+        while (_serial_gps->available() > 0) {
+            int c = _serial_gps->read();
+            UBXscratch[charsInBuf] = c;
 #if GPS_DEBUG
-        debugmsg += vformat("%c", (c >= 32 && c <= 126) ? c : '.');
+            debugmsg += vformat("%c", (c >= 32 && c <= 126) ? c : '.');
 #endif
-        isValid |= reader.encode(c);
-        if (charsInBuf > sizeof(UBXscratch) - 10 || c == '\r') {
-            if (strnstr((char *)UBXscratch, "$GPTXT,01,01,02,u-blox ag - www.u-blox.com*50", charsInBuf)) {
-                rebootsSeen++;
+            if (c == '$')
+                lastDollarByteCount = nmeaByteCount;
+            const bool committed = reader.encode(c);
+            isValid |= committed;
+            if (committed && reader.date.isUpdated() && reader.time.isUpdated()) {
+                int64_t utcMs;
+                if (readNmeaUtcMs(utcMs) && pendingCount < 2)
+                    pending[pendingCount++] = {nmeaByteCount - drainStartCount, nmeaByteCount - lastDollarByteCount + 1, utcMs};
             }
-            charsInBuf = 0;
-        } else {
-            charsInBuf++;
+            nmeaByteCount++;
+            if (charsInBuf > sizeof(UBXscratch) - 10 || c == '\r') {
+                if (strnstr((char *)UBXscratch, "$GPTXT,01,01,02,u-blox ag - www.u-blox.com*50", charsInBuf)) {
+                    rebootsSeen++;
+                }
+                charsInBuf = 0;
+            } else {
+                charsInBuf++;
+            }
         }
+        drainEndMs = Time::getMillisMonotonic();
+    } while (_serial_gps->available() > 0);
+
+    const uint32_t byteTimeUs = gpsByteTimeUs(detectedBaud);
+    const NmeaDrain drain = {lastDrainEndMs, drainEndMs, nmeaByteCount - drainStartCount, byteTimeUs,
+                             gpsUartHoldBackUs(byteTimeUs)};
+    for (uint8_t i = 0; i < pendingCount; i++) {
+        if (pending[i].length <= NMEA_MAX_SENTENCE_BYTES)
+            nmeaTime.addSample(pending[i].utcMs, nmeaSentenceArrival(drain, pending[i].lastIndex, pending[i].length));
     }
+    lastDrainEndMs = drainEndMs;
 #if GPS_DEBUG
     if (debugmsg != "") {
         LOG_DEBUG("%s", debugmsg.c_str());

@@ -48,10 +48,10 @@ RTCQuality getRTCQuality()
 }
 
 // stuff that really should be in in the instance instead...
-// The Time::getMillisMonotonic() instant corresponding to zeroOffsetSecs. 64-bit so getTime()'s
+// The Time::getMillisMonotonic() instant corresponding to zeroOffsetMs. 64-bit so getTime()'s
 // elapsed term cannot wrap: a 32-bit anchor walks the wall clock back 49.7 days per millis() cycle.
 static uint64_t timeStartMs64;
-static uint64_t zeroOffsetSecs; // GPS based time in secs since 1970 - only updated once on initial lock
+static uint64_t zeroOffsetMs; // Wall-clock ms since 1970 at timeStartMs64; keeps the sub-second part sources give us
 
 #ifdef PIO_UNIT_TESTING
 // Test seam: unit tests can inject a fake system clock (e.g. the uptime seconds that
@@ -87,7 +87,7 @@ static struct timeval mockSystemTime = {};
         if (currentQuality == RTCQualityNone) {
             LOG_DEBUG("Seed time from system clock: %lu", (unsigned long)printableEpoch);
             timeStartMs64 = now;
-            zeroOffsetSecs = tv.tv_sec;
+            zeroOffsetMs = (uint64_t)tv.tv_sec * 1000;
         } else {
             LOG_DEBUG("Ignore system clock fallback (%lu); RTC quality is %s", (unsigned long)printableEpoch,
                       RtcName(currentQuality));
@@ -144,7 +144,7 @@ RTCSetResult readFromRTC()
         if (currentQuality == RTCQualityNone) {
             RTCQuality oldQuality = currentQuality;
             timeStartMs64 = now;
-            zeroOffsetSecs = tv.tv_sec;
+            zeroOffsetMs = (uint64_t)tv.tv_sec * 1000;
 #if defined(ARCH_ESP32) || defined(ARCH_RP2040)
             settimeofday(&tv, NULL);
 #endif
@@ -194,7 +194,7 @@ RTCSetResult readFromRTC()
         if (currentQuality == RTCQualityNone) {
             RTCQuality oldQuality = currentQuality;
             timeStartMs64 = now;
-            zeroOffsetSecs = tv.tv_sec;
+            zeroOffsetMs = (uint64_t)tv.tv_sec * 1000;
 #if defined(ARCH_ESP32) || defined(ARCH_RP2040)
             settimeofday(&tv, NULL);
 #endif
@@ -233,7 +233,7 @@ RTCSetResult readFromRTC()
             if (currentQuality == RTCQualityNone) {
                 RTCQuality oldQuality = currentQuality;
                 timeStartMs64 = now;
-                zeroOffsetSecs = tv.tv_sec;
+                zeroOffsetMs = (uint64_t)tv.tv_sec * 1000;
 #if defined(ARCH_ESP32) || defined(ARCH_RP2040)
                 settimeofday(&tv, NULL);
 #endif
@@ -261,7 +261,7 @@ RTCSetResult readFromRTC()
         if (currentQuality == RTCQualityNone) {
             RTCQuality oldQuality = currentQuality;
             timeStartMs64 = now;
-            zeroOffsetSecs = tv.tv_sec;
+            zeroOffsetMs = (uint64_t)tv.tv_sec * 1000;
             currentQuality = RTCQualityDevice;
             onTimeSourceQualityChanged(oldQuality, currentQuality);
         }
@@ -271,6 +271,13 @@ RTCSetResult readFromRTC()
     return readFromSystemTimeFallback();
 #endif
     return RTCSetResultNotSet;
+}
+
+static uint64_t timevalToMs(const struct timeval *tv)
+{
+    // An out-of-range fraction is a caller bug; keep the whole seconds rather than trusting it.
+    const uint64_t fracMs = (tv->tv_usec >= 0 && tv->tv_usec < 1000000) ? (uint64_t)tv->tv_usec / 1000 : 0;
+    return (uint64_t)tv->tv_sec * 1000 + fracMs;
 }
 
 /**
@@ -337,7 +344,7 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpd
 
         // This delta value works on all platforms
         timeStartMs64 = now64;
-        zeroOffsetSecs = tv->tv_sec;
+        zeroOffsetMs = timevalToMs(tv);
         // If this platform has a settable RTC, set it
 #ifdef RV3028_RTC
         if (rtc_found.address == RV3028_RTC) {
@@ -452,7 +459,7 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct tm &t)
     time_t res = gm_mktime(&t);
     struct timeval tv;
     tv.tv_sec = res;
-    tv.tv_usec = 0;                      // time.centisecond() * (10 / 1000);
+    tv.tv_usec = 0;
     uint32_t printableEpoch = tv.tv_sec; // Print lib only supports 32 bit but time_t can be 64 bit on some platforms
 #ifdef BUILD_EPOCH
     if (tv.tv_sec < BUILD_EPOCH) {
@@ -508,13 +515,14 @@ int32_t getTZOffset()
  */
 uint32_t getTime(bool local)
 {
+    const uint32_t secs = getUtcMillis() / 1000;
+    return local ? secs + getTZOffset() : secs;
+}
+
+uint64_t getUtcMillis()
+{
     // Both terms are 64-bit monotonic, so the elapsed time cannot wrap - see timeStartMs64.
-    const uint64_t elapsedSecs = (Time::getMillisMonotonic() - timeStartMs64) / 1000;
-    if (local) {
-        return elapsedSecs + zeroOffsetSecs + getTZOffset();
-    } else {
-        return elapsedSecs + zeroOffsetSecs;
-    }
+    return zeroOffsetMs + (Time::getMillisMonotonic() - timeStartMs64);
 }
 
 /**
@@ -532,7 +540,7 @@ uint32_t getValidTime(RTCQuality minQuality, bool local)
 void setBootRelativeTimeForUnitTest(uint32_t secondsSinceBoot)
 {
     currentQuality = RTCQualityNone;
-    zeroOffsetSecs = 0;
+    zeroOffsetMs = 0;
     timeStartMs64 = Time::getMillisMonotonic() - ((uint64_t)secondsSinceBoot * 1000);
     lastSetFromPhoneNtpOrGps = 0;
     lastTimeValidationWarning = 0;
@@ -563,7 +571,7 @@ void resetRTCStateForTests()
 {
     currentQuality = RTCQualityNone;
     timeStartMs64 = 0;
-    zeroOffsetSecs = 0;
+    zeroOffsetMs = 0;
     lastSetFromPhoneNtpOrGps = 0;
     lastTimeValidationWarning = 0;
     setReadFromRTCUseSystemTimeForTests(false);

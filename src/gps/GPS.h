@@ -6,6 +6,7 @@
 
 #include "GPSStatus.h"
 #include "GpioLogic.h"
+#include "NmeaTimeEstimator.h"
 #include "Observer.h"
 #include "TinyGPS++.h"
 #include "concurrency/OSThread.h"
@@ -171,9 +172,12 @@ class GPS : private concurrency::OSThread
      * Perform any processing that should be done only while the GPS is awake and looking for a fix.
      * Override this method to check for new locations
      *
-     * @return true if we've acquired a time
+     * @return true if the GPS has reported a usable time this cycle
      */
     virtual bool lookForTime();
+
+    /// The UTC the sentence just committed names, in ms; false if implausible
+    bool readNmeaUtcMs(int64_t &utcMs);
 
     /**
      * Perform any processing that should be done only while the GPS is awake and looking for a fix.
@@ -202,6 +206,12 @@ class GPS : private concurrency::OSThread
     uint8_t currentStep = 0;
     int32_t currentDelay = 2000;
     bool gotTime = false;
+
+    NmeaTimeEstimator nmeaTime;
+    uint64_t lastDrainEndMs = 0;      // when whileActive() last saw the UART empty; 0 = unknown
+    uint32_t nmeaByteCount = 0;       // bytes read from the GPS UART, wrapping
+    uint32_t lastDollarByteCount = 0; // nmeaByteCount at the last '$'
+    uint64_t lastNmeaTimeApplyMs = 0; // monotonic ms of the last RTC step from NMEA; 0 = never
 
 #ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
     // (20210908) TinyGps++ can only read the GPGSA "FIX TYPE" field
