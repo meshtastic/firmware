@@ -18,6 +18,9 @@ however this class handles general events which concern InkHUD as a whole, e.g. 
 #include "./InkHUD.h"
 #include "./Persistence.h"
 #include <stdint.h>
+#ifdef ARCH_ESP32
+#include <esp_sleep.h>
+#endif
 
 namespace NicheGraphics::InkHUD
 {
@@ -54,6 +57,7 @@ class Events
     int onAdminMessage(AdminModule_ObserverData *data);            // Handle incoming admin messages
 #ifdef ARCH_ESP32
     int beforeLightSleep(void *unused); // Prepare for light sleep
+    int afterLightSleep(esp_sleep_wakeup_cause_t cause);
 #endif
 
   private:
@@ -78,6 +82,7 @@ class Events
 #ifdef ARCH_ESP32
     // Get notified when the system is entering light sleep
     CallbackObserver<Events, void *> lightSleepObserver = CallbackObserver<Events, void *>(this, &Events::beforeLightSleep);
+    CallbackObserver<Events, esp_sleep_wakeup_cause_t> lightSleepEndObserver{this, &Events::afterLightSleep};
 #endif
 
     // End any externalNotification beeping, buzzing, blinking etc
