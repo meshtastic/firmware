@@ -49,6 +49,15 @@ bool SHTXXSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
     _bus = bus;
     _address = dev->address.address;
 
+    // SHTC3 may be asleep (left so by older firmware) and arduino-sht never wakes it; send wakeup 0x3517 before init
+    if (_address == SHTC3_ADDR) {
+        _bus->beginTransmission(_address);
+        _bus->write((uint8_t)0x35);
+        _bus->write((uint8_t)0x17);
+        _bus->endTransmission();
+        delay(1);
+    }
+
     if (sht.init(*_bus)) {
         LOG_INFO("%s init success", sensorName);
         getSensorVariant(sht.mSensorType);
