@@ -1,5 +1,5 @@
-#include <cstring> // Include for strstr
 #include <algorithm>
+#include <cstring> // Include for strstr
 #include <vector>
 
 #include "configuration.h"
