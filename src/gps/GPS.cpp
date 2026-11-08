@@ -106,7 +106,12 @@ constexpr uint16_t GPS_PROBE_CACHE_VERSION = 1;
 constexpr const char *GPS_PROBE_CACHE_FILE = "/prefs/gps_probe_cache.dat";
 constexpr int MIN_PLAUSIBLE_GPS_YEAR = 2020;
 constexpr int MAX_PLAUSIBLE_GPS_YEAR = 2100;
-constexpr uint32_t NMEA_MAX_SENTENCE_BYTES = 120; // NMEA allows 82; longer means its '$' was lost
+constexpr uint32_t NMEA_MAX_SENTENCE_BYTES = 120;          // NMEA allows 82; longer means its '$' was lost
+constexpr uint64_t PPS_HOLDS_CLOCK_MS = 3000;              // NMEA stands aside this long after a PPS edge pins the clock
+constexpr uint64_t PPS_RECENT_MS = 30 * 60 * 1000;         // after that, NMEA may still step forward but not back
+constexpr uint32_t PPS_BURST_EDGES = 5;                    // edges accepted per burst; the rate trim carries the clock between
+constexpr uint64_t PPS_BURST_INTERVAL_MS = 10 * 60 * 1000; // between bursts while the GPS stays on
+constexpr uint64_t PPS_BURST_TIMEOUT_MS = 30 * 1000;       // give up on a burst that gets no usable edges
 constexpr uint32_t AIROHA_PROBE_SETTLE_MS = 20;
 #ifdef HAS_AIROHA_SLEEP
 // The receiver may already have auto-slept and missed the first sleep command, so resend until it acks.
@@ -1252,6 +1257,8 @@ void GPS::setPowerState(GPSPowerState newState, uint32_t sleepTime)
     GPSPowerState oldState = powerState;
     powerState = newState;
     LOG_INFO("GPS power state %s -> %s", getGPSPowerStateString(oldState), getGPSPowerStateString(newState));
+    if (newState != GPS_ACTIVE)
+        disarmPps(0); // no pulses while it sleeps; burst again once it wakes with a fix
 
     switch (newState) {
     case GPS_ACTIVE:
@@ -2094,6 +2101,28 @@ GnssModel_t GPS::getProbeResponse(unsigned long timeout, const std::vector<ChipI
     return GNSS_MODEL_UNKNOWN; // Return unknown on timeout
 }
 
+#if defined(PIN_GPS_PPS)
+// Written only by gpsPpsIsr(): the edge's low 32 bits of Time::getMicrosMonotonic(), and an edge count
+static volatile uint32_t ppsEdgeUs32 = 0;
+static volatile uint32_t ppsEdgeCount = 0;
+
+#if defined(ARCH_ESP32)
+static void IRAM_ATTR gpsPpsIsr()
+{
+    ppsEdgeUs32 = (uint32_t)esp_timer_get_time();
+#elif defined(ARCH_RP2040)
+static void gpsPpsIsr()
+{
+    ppsEdgeUs32 = time_us_32();
+#else
+static void gpsPpsIsr()
+{
+    ppsEdgeUs32 = Time::getMillis() * 1000U; // Time::getMicrosMonotonic() is ms * 1000 here, and so are its low bits
+#endif
+    ppsEdgeCount = ppsEdgeCount + 1;
+}
+#endif
+
 std::unique_ptr<GPS> GPS::createGps()
 {
     int8_t _rx_gpio = config.position.rx_gpio;
@@ -2246,10 +2275,14 @@ bool GPS::lookForTime()
         return false;
 
     const uint64_t nowMs = Time::getMillisMonotonic();
+    // PPS pinned the clock in the last few seconds: NMEA, which lags it, has nothing to add
+    if (lastPpsAcceptMs && nowMs - lastPpsAcceptMs < PPS_HOLDS_CLOCK_MS)
+        return true;
     const uint64_t utcMs = nmeaTime.utcMillisAt(nowMs);
     const int64_t clockAheadMs = (int64_t)(getUtcMillis() - utcMs);
     const uint64_t msSinceApplied = lastNmeaTimeApplyMs ? nowMs - lastNmeaTimeApplyMs : UINT64_MAX;
-    if (!shouldApplyNmeaTime(getRTCQuality() == RTCQualityGPS, clockAheadMs, msSinceApplied, nmeaTime.sampleCount()))
+    const bool ppsRecent = lastPpsAcceptMs && nowMs - lastPpsAcceptMs < PPS_RECENT_MS;
+    if (!shouldApplyNmeaTime(getRTCQuality() == RTCQualityGPS, clockAheadMs, msSinceApplied, nmeaTime.sampleCount(), ppsRecent))
         return true;
 
     const RTCQuality prevQuality = getRTCQuality();
@@ -2464,6 +2497,91 @@ bool GPS::readNmeaUtcMs(int64_t &utcMs)
     return true;
 }
 
+void GPS::disarmPps(uint64_t nextBurstMs)
+{
+#if defined(PIN_GPS_PPS)
+    if (ppsArmed && PIN_GPS_PPS >= 0)
+        detachInterrupt(digitalPinToInterrupt(PIN_GPS_PPS));
+#endif
+    ppsArmed = false;
+    pps.reset();
+    nextPpsBurstMs = nextBurstMs;
+}
+
+void GPS::processPps()
+{
+#if defined(PIN_GPS_PPS)
+    if (PIN_GPS_PPS < 0)
+        return;
+    const uint64_t nowMs = Time::getMillisMonotonic();
+
+    if (!ppsArmed) {
+        // The clock must already name the second (NMEA sets it), and the receiver only pulses on UTC with a fix
+        if (getRTCQuality() != RTCQualityGPS || !hasLock() || (nextPpsBurstMs && nowMs < nextPpsBurstMs))
+            return;
+        lastPpsCount = ppsEdgeCount;
+#if defined(ARCH_NRF52)
+        if (attachInterrupt(digitalPinToInterrupt(PIN_GPS_PPS), gpsPpsIsr, RISING) == 0) {
+            LOG_WARN("GPS PPS: no free GPIOTE channel, keeping NMEA time");
+            nextPpsBurstMs = nowMs + PPS_BURST_INTERVAL_MS;
+            return;
+        }
+#else
+        attachInterrupt(digitalPinToInterrupt(PIN_GPS_PPS), gpsPpsIsr, RISING);
+#endif
+        ppsArmed = true;
+        ppsArmedAtMs = nowMs;
+        ppsBurstAccepted = 0;
+        return;
+    }
+
+    if (nowMs - ppsArmedAtMs >= PPS_BURST_TIMEOUT_MS) {
+        LOG_DEBUG_GPS("GPS PPS burst ended with %lu edges", (unsigned long)ppsBurstAccepted);
+        disarmPps(nowMs + (ppsBurstAccepted ? PPS_BURST_INTERVAL_MS : PPS_BURST_TIMEOUT_MS));
+        return;
+    }
+
+    noInterrupts();
+    const uint32_t count = ppsEdgeCount;
+    const uint32_t edgeUs32 = ppsEdgeUs32;
+    interrupts();
+    if (count == lastPpsCount)
+        return;
+    lastPpsCount = count;
+
+    // The edge is under a poll interval old, so its low 32 bits extend unambiguously
+    const uint64_t nowUs = Time::getMicrosMonotonic();
+    const uint64_t edgeMonoUs = nowUs - (uint32_t)((uint32_t)nowUs - edgeUs32);
+    const uint64_t clockAtEdgeUs = getUtcMicros() - (nowUs - edgeMonoUs);
+    const PpsEdgeResult r = pps.onEdge(edgeMonoUs, clockAtEdgeUs, hasLock());
+    if (!r.accepted) {
+        LOG_DEBUG_GPS("GPS PPS edge not used: %s", r.reason);
+        return;
+    }
+
+    const bool fullSet =
+        r.errorUs > 100000 || r.errorUs < -100000 || !lastPpsFullSetMs || nowMs - lastPpsFullSetMs >= PPS_BURST_INTERVAL_MS;
+    if (fullSet) {
+        // Also writes the hardware RTC and system time, which only need to be close
+        const uint64_t utcNowUs = r.utcUs + (Time::getMicrosMonotonic() - edgeMonoUs);
+        struct timeval tv;
+        tv.tv_sec = utcNowUs / 1000000;
+        tv.tv_usec = utcNowUs % 1000000;
+        perhapsSetRTC(RTCQualityGPS, &tv);
+        lastPpsFullSetMs = nowMs;
+    }
+    disciplineRTC(edgeMonoUs, r.utcUs);
+    if (pps.hasRate())
+        setRTCRateTrimPpb(-pps.ratePpb());
+    lastPpsAcceptMs = Time::skipZero(nowMs);
+
+    LOG_DEBUG("GPS PPS edge %lu: clock was %ld us off, rate %s%ld ppb", (unsigned long)(r.utcUs / 1000000), (long)r.errorUs,
+              pps.hasRate() ? "" : "unknown ", (long)pps.ratePpb());
+    if (++ppsBurstAccepted >= PPS_BURST_EDGES)
+        disarmPps(nowMs + PPS_BURST_INTERVAL_MS);
+#endif
+}
+
 bool GPS::whileActive()
 {
     unsigned int charsInBuf = 0;
@@ -2529,6 +2647,7 @@ bool GPS::whileActive()
             nmeaTime.addSample(pending[i].utcMs, nmeaSentenceArrival(drain, pending[i].lastIndex, pending[i].length));
     }
     lastDrainEndMs = drainEndMs;
+    processPps();
 #if GPS_DEBUG
     if (debugmsg != "") {
         LOG_DEBUG("%s", debugmsg.c_str());

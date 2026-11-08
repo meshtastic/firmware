@@ -72,13 +72,16 @@ uint32_t NmeaTimeEstimator::uncertaintyUs() const
     return width >= (int64_t)UINT32_MAX ? UINT32_MAX - 1 : (uint32_t)width;
 }
 
-bool shouldApplyNmeaTime(bool clockIsGps, int64_t clockAheadMs, uint64_t msSinceApplied, uint32_t samples)
+bool shouldApplyNmeaTime(bool clockIsGps, int64_t clockAheadMs, uint64_t msSinceApplied, uint32_t samples, bool ppsRecent)
 {
     if (!clockIsGps)
         return true;
     // The estimate never runs ahead of the module, so a clock behind it is wrong and stepping forward only helps.
     if (clockAheadMs <= -FORWARD_STEP_MIN_MS)
         return true;
+    // A PPS-pinned clock is ahead of the estimate by the module's output latency, and right to be
+    if (ppsRecent)
+        return false;
     // A clock ahead may be right; step it back only now and then, to undo crystal drift.
     return msSinceApplied >= RESYNC_INTERVAL_MS && samples >= RESYNC_MIN_SAMPLES;
 }

@@ -2,6 +2,11 @@
 #include "UptimeClock.h"
 #include <Arduino.h>
 #include <atomic>
+#if defined(ARDUINO_ARCH_ESP32)
+#include <esp_timer.h>
+#elif defined(ARDUINO_ARCH_RP2040)
+#include <pico/time.h>
+#endif
 
 uint32_t Time::getMillis()
 {
@@ -55,6 +60,21 @@ uint64_t Time::getMillisMonotonic()
     readPublished(high, low);
     // The reader writes nothing back; it just extends the last published carry to now.
     return extendPublished(high, low, getMillis());
+}
+
+uint64_t Time::getMicrosMonotonic()
+{
+#ifdef PIO_UNIT_TESTING
+    if (Time::useTestClock.load(std::memory_order_relaxed))
+        return getMillisMonotonic() * 1000;
+#endif
+#if defined(ARDUINO_ARCH_ESP32)
+    return (uint64_t)esp_timer_get_time();
+#elif defined(ARDUINO_ARCH_RP2040)
+    return time_us_64();
+#else
+    return getMillisMonotonic() * 1000;
+#endif
 }
 
 uint32_t Time::getUptimeSecs()

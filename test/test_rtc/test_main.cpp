@@ -210,6 +210,52 @@ static void test_out_of_range_usec_is_dropped(void)
     TEST_ASSERT_EQUAL_UINT64((uint64_t)epoch * 1000, getUtcMillis());
 }
 
+// getUtcMicros() keeps the whole fraction a source gives, so a PPS-set clock is not truncated to the millisecond.
+static void test_utc_micros_keeps_the_fraction(void)
+{
+    beginFakeClock(60 * 1000);
+    const time_t epoch = makeValidEpoch();
+    struct timeval tv = makeTv(epoch);
+    tv.tv_usec = 123456;
+    TEST_ASSERT_EQUAL_INT(RTCSetResultSuccess, perhapsSetRTC(RTCQualityGPS, &tv));
+    TEST_ASSERT_EQUAL_UINT64((uint64_t)epoch * 1000000 + 123456, getUtcMicros());
+    TEST_ASSERT_EQUAL_UINT64((uint64_t)epoch * 1000 + 123, getUtcMillis());
+}
+
+// disciplineRTC() pins the clock at a past instant (the PPS edge), so the time read now includes what has elapsed
+// since the edge; it must not change quality.
+static void test_discipline_pins_the_clock_at_the_edge(void)
+{
+    beginFakeClock(60 * 1000);
+    const time_t epoch = makeValidEpoch();
+    struct timeval tv = makeTv(epoch);
+    TEST_ASSERT_EQUAL_INT(RTCSetResultSuccess, perhapsSetRTC(RTCQualityGPS, &tv));
+    const uint64_t edgeMonoUs = Time::getMicrosMonotonic() - 250000;
+    const uint64_t secondUs = (uint64_t)(epoch + 7) * 1000000;
+    disciplineRTC(edgeMonoUs, secondUs);
+    TEST_ASSERT_EQUAL_UINT64(secondUs + 250000, getUtcMicros());
+    TEST_ASSERT_EQUAL_INT(RTCQualityGPS, getRTCQuality());
+}
+
+// The rate trim cancels a monotonic clock that runs fast: -30 ppm takes 3 ms off 100 s. Setting it must not jump
+// the time already read, and it is clamped to MAX_RATE_TRIM_PPB.
+static void test_rate_trim_bends_the_clock_without_a_jump(void)
+{
+    beginFakeClock(60 * 1000);
+    const time_t epoch = makeValidEpoch();
+    struct timeval tv = makeTv(epoch);
+    TEST_ASSERT_EQUAL_INT(RTCSetResultSuccess, perhapsSetRTC(RTCQualityGPS, &tv));
+    advanceFakeClock(5000);
+    const uint64_t before = getUtcMicros();
+    setRTCRateTrimPpb(-30000);
+    TEST_ASSERT_EQUAL_UINT64(before, getUtcMicros());
+    advanceFakeClock(100 * 1000);
+    TEST_ASSERT_EQUAL_UINT64(before + 100 * 1000000ULL - 3000, getUtcMicros());
+
+    setRTCRateTrimPpb(MAX_RATE_TRIM_PPB * 2);
+    TEST_ASSERT_EQUAL_INT32(MAX_RATE_TRIM_PPB, getRTCRateTrimPpb());
+}
+
 // Equal-quality NTP reapplies only after the 30-minute drift-correction throttle.
 static void test_ntp_drift_throttle(void)
 {
@@ -467,6 +513,9 @@ void setup()
     RUN_TEST(test_gps_reapply_always_accepted);
     RUN_TEST(test_subsecond_fraction_is_kept);
     RUN_TEST(test_out_of_range_usec_is_dropped);
+    RUN_TEST(test_utc_micros_keeps_the_fraction);
+    RUN_TEST(test_discipline_pins_the_clock_at_the_edge);
+    RUN_TEST(test_rate_trim_bends_the_clock_without_a_jump);
     RUN_TEST(test_ntp_drift_throttle);
     RUN_TEST(test_force_update_overrides_downgrade);
     RUN_TEST(test_build_epoch_bounds_rejected);

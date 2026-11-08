@@ -206,23 +206,23 @@ static void test_upper_bounds_only(void)
 
 static void test_apply_when_clock_is_not_gps(void)
 {
-    TEST_ASSERT_TRUE(shouldApplyNmeaTime(false, 0, 0, 1));
+    TEST_ASSERT_TRUE(shouldApplyNmeaTime(false, 0, 0, 1, false));
 }
 
 // The estimate is a lower bound on UTC, so a clock behind it is wrong; a 1 ms lag is the millisecond clock's floor.
 static void test_apply_forward_steps_only_past_threshold(void)
 {
-    TEST_ASSERT_TRUE(shouldApplyNmeaTime(true, -2, 0, 1));
-    TEST_ASSERT_FALSE(shouldApplyNmeaTime(true, -1, 0, 1));
+    TEST_ASSERT_TRUE(shouldApplyNmeaTime(true, -2, 0, 1, false));
+    TEST_ASSERT_FALSE(shouldApplyNmeaTime(true, -1, 0, 1, false));
 }
 
 // A clock ahead of the estimate may well be right, so stepping back waits for the drift resync.
 static void test_apply_back_steps_only_on_resync(void)
 {
-    TEST_ASSERT_FALSE(shouldApplyNmeaTime(true, 50, 9 * 60 * 1000, 30));
-    TEST_ASSERT_TRUE(shouldApplyNmeaTime(true, 50, 10 * 60 * 1000, 5));
-    TEST_ASSERT_FALSE(shouldApplyNmeaTime(true, 50, 10 * 60 * 1000, 4));
-    TEST_ASSERT_TRUE(shouldApplyNmeaTime(true, 50, UINT64_MAX, 5));
+    TEST_ASSERT_FALSE(shouldApplyNmeaTime(true, 50, 9 * 60 * 1000, 30, false));
+    TEST_ASSERT_TRUE(shouldApplyNmeaTime(true, 50, 10 * 60 * 1000, 5, false));
+    TEST_ASSERT_FALSE(shouldApplyNmeaTime(true, 50, 10 * 60 * 1000, 4, false));
+    TEST_ASSERT_TRUE(shouldApplyNmeaTime(true, 50, UINT64_MAX, 5, false));
 }
 
 void setup()

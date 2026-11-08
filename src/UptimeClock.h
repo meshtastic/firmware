@@ -86,6 +86,11 @@ static_assert(skipZero(UINT32_MAX) == UINT32_MAX, "skipZero must not wrap the la
 /// every supported toolchain. ISRs use getMillis(); the publication protocol itself never waits.
 uint64_t getMillisMonotonic();
 
+/// Microseconds since boot, 64-bit, on the same timebase as getMillisMonotonic(). ESP32 and RP2040 read their
+/// hardware microsecond timer, which is what their millis() divides down; elsewhere this is getMillisMonotonic()
+/// * 1000, so it never runs out of step with the millisecond clock. Same not-from-ISR caveat.
+uint64_t getMicrosMonotonic();
+
 /// Whole seconds since boot, derived from getMillisMonotonic() (~136 years of range). This is
 /// the unit to store when an instant must be dated before the wall clock is trustworthy.
 uint32_t getUptimeSecs();

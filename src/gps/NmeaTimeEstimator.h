@@ -56,4 +56,5 @@ class NmeaTimeEstimator
 /// Whether to step the clock to the estimator's time.
 /// clockIsGps: the RTC holds GPS-quality time. clockAheadMs: current clock minus estimate.
 /// msSinceApplied: since the last step from this source (UINT64_MAX if never).
-bool shouldApplyNmeaTime(bool clockIsGps, int64_t clockAheadMs, uint64_t msSinceApplied, uint32_t samples);
+/// ppsRecent: the clock was pinned to a PPS edge recently, so its lead over the estimate is real.
+bool shouldApplyNmeaTime(bool clockIsGps, int64_t clockAheadMs, uint64_t msSinceApplied, uint32_t samples, bool ppsRecent);
