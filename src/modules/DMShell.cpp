@@ -5,6 +5,7 @@
 #include "Channels.h"
 #include "MeshService.h"
 #include "NodeDB.h"
+#include "RadioLibInterface.h"
 #include "Throttle.h"
 #include "configuration.h"
 #include "mesh/AdminKeys.h"
@@ -14,17 +15,21 @@
 #include "pb_decode.h"
 #include "pb_encode.h"
 #include <errno.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/types.h>
+#if DMSHELL_USE_PTY
 #include <fcntl.h>
 #include <pty.h>
 #include <signal.h>
-#include <stdlib.h>
-#include <string.h>
 #include <sys/ioctl.h>
-#include <sys/types.h>
 #include <sys/wait.h>
 #include <termios.h>
 #include <unistd.h>
 #include <vector>
+#else
+#include <new>
+#endif
 
 DMShellModule *dmShellModule;
 
@@ -121,12 +126,60 @@ uint32_t txWindowFromEnv()
     }
     return (uint32_t)parsed;
 }
+
+// The shell behind the session, with read()/write() semantics on a nonblocking fd: -1 and EAGAIN when nothing moves.
+#if DMSHELL_USE_PTY
+ssize_t shellRead(DMShellSession &session, uint8_t *buf, size_t len)
+{
+    return read(session.masterFd, buf, len);
+}
+
+ssize_t shellWrite(DMShellSession &session, const uint8_t *bytes, size_t len)
+{
+    return write(session.masterFd, bytes, len);
+}
+
+void shellResize(DMShellSession &session, uint16_t rows, uint16_t cols)
+{
+    struct winsize ws = {};
+    ws.ws_row = rows;
+    ws.ws_col = cols;
+    if (session.masterFd >= 0) {
+        ioctl(session.masterFd, TIOCSWINSZ, &ws);
+    }
+}
+#else
+ssize_t shellRead(DMShellSession &session, uint8_t *buf, size_t len)
+{
+    const int bytesRead = session.shell.read(buf, len);
+    if (bytesRead < 0) {
+        errno = EAGAIN;
+    }
+    return bytesRead;
+}
+
+ssize_t shellWrite(DMShellSession &session, const uint8_t *bytes, size_t len)
+{
+    const size_t taken = session.shell.write(bytes, len);
+    if (taken == 0 && len > 0) {
+        errno = EAGAIN;
+        return -1;
+    }
+    return (ssize_t)taken;
+}
+
+void shellResize(DMShellSession &, uint16_t, uint16_t) {}
+#endif
 } // namespace
 
 DMShellModule::DMShellModule()
     : SinglePortModule("DMShellModule", meshtastic_PortNum_REMOTE_SHELL_APP), concurrency::OSThread("DMShell", 100)
 {
+#if DMSHELL_USE_PTY
     LOG_WARN("DMShell enabled on Portduino: remote shell access is dangerous and intended for trusted debugging only");
+#else
+    LOG_WARN("DMShell enabled with the synthetic bench shell: any PKI peer may open a session, bench builds only");
+#endif
     legacyRecovery = legacyRecoveryRequested();
     if (legacyRecovery) {
         LOG_WARN("DMShell: DMSHELL_LEGACY_RECOVERY set, replay-request damping and eviction reporting are OFF");
@@ -280,7 +333,7 @@ void DMShellModule::applySessionFrame(const meshtastic_RemoteShell &frame)
             LOG_DEBUG("DMShell: window closed, deferring output after INPUT");
         } else {
             uint8_t outBuf[MAX_MESSAGE_SIZE];
-            const ssize_t bytesRead = read(session.masterFd, outBuf, sizeof(outBuf));
+            const ssize_t bytesRead = shellRead(session, outBuf, sizeof(outBuf));
             if (bytesRead > 0) {
                 LOG_TRACE("DMShell: read %zd bytes from PTY", bytesRead);
                 meshtastic_RemoteShell frame = {
@@ -302,12 +355,7 @@ void DMShellModule::applySessionFrame(const meshtastic_RemoteShell &frame)
         break;
     case meshtastic_RemoteShell_OpCode_RESIZE:
         if (frame.rows > 0 && frame.cols > 0) {
-            struct winsize ws = {};
-            ws.ws_row = frame.rows;
-            ws.ws_col = frame.cols;
-            if (session.masterFd >= 0) {
-                ioctl(session.masterFd, TIOCSWINSZ, &ws);
-            }
+            shellResize(session, frame.rows, frame.cols);
         }
         break;
     case meshtastic_RemoteShell_OpCode_PING: {
@@ -402,7 +450,7 @@ int32_t DMShellModule::runOnce()
 
     uint8_t outBuf[MAX_MESSAGE_SIZE];
     while (session.masterFd >= 0) {
-        const ssize_t bytesRead = read(session.masterFd, outBuf, sizeof(outBuf));
+        const ssize_t bytesRead = shellRead(session, outBuf, sizeof(outBuf));
         if (bytesRead > 0) {
             LOG_TRACE("DMShell: read %zd bytes from PTY", bytesRead);
 
@@ -475,6 +523,10 @@ bool DMShellModule::parseFrame(const meshtastic_MeshPacket &mp, meshtastic_Remot
 
 bool DMShellModule::isAuthorizedPacket(const meshtastic_MeshPacket &mp) const
 {
+#if !DMSHELL_USE_PTY
+    // A bench board has no admin keys, and this shell runs nothing; PKI is still required, here and in handleReceived
+    return mp.pki_encrypted;
+#else
     if (mp.from == 0) {
         return !config.security.is_managed;
     }
@@ -489,6 +541,7 @@ bool DMShellModule::isAuthorizedPacket(const meshtastic_MeshPacket &mp) const
     }
 
     return false;
+#endif
 }
 
 bool DMShellModule::openSession(const meshtastic_MeshPacket &mp, const meshtastic_RemoteShell &frame)
@@ -497,18 +550,14 @@ bool DMShellModule::openSession(const meshtastic_MeshPacket &mp, const meshtasti
         closeSession("preempted", false);
     }
 
+    // 16 bits, as winsize holds them
+    const uint16_t rows = frame.rows > 0 ? frame.rows : PTY_ROWS_DEFAULT;
+    const uint16_t cols = frame.cols > 0 ? frame.cols : PTY_COLS_DEFAULT;
+#if DMSHELL_USE_PTY
     int masterFd = -1;
     struct winsize ws = {};
-    if (frame.rows > 0) {
-        ws.ws_row = frame.rows;
-    } else {
-        ws.ws_row = PTY_ROWS_DEFAULT;
-    }
-    if (frame.cols > 0) {
-        ws.ws_col = frame.cols;
-    } else {
-        ws.ws_col = PTY_COLS_DEFAULT;
-    }
+    ws.ws_row = rows;
+    ws.ws_col = cols;
     // Built before fork: the child may only make async-signal-safe calls until exec, and setenv() allocates.
     const char *shell = getenv("SHELL");
     if (!shell || !*shell) {
@@ -553,6 +602,11 @@ bool DMShellModule::openSession(const meshtastic_MeshPacket &mp, const meshtasti
     if (flags >= 0) {
         fcntl(masterFd, F_SETFL, flags | O_NONBLOCK);
     }
+#else
+    const int masterFd = 0;
+    const int childPid = -1;
+    session.shell.open();
+#endif
 
     session.active = true;
     session.sessionId = (frame.session_id != 0) ? frame.session_id : static_cast<uint32_t>(random(1, 0x7fffffff));
@@ -585,8 +639,8 @@ bool DMShellModule::openSession(const meshtastic_MeshPacket &mp, const meshtasti
         .session_id = session.sessionId,
         .seq = session.nextTxSeq++,
         .ack_seq = frame.seq,
-        .cols = ws.ws_col,
-        .rows = ws.ws_row,
+        .cols = cols,
+        .rows = rows,
         .flags = 0,
     };
     newFrame.payload.size = 0;
@@ -605,6 +659,9 @@ bool DMShellModule::openSession(const meshtastic_MeshPacket &mp, const meshtasti
 /// just cancelled. Flush before writing the interrupt, so the shell's own response to it survives.
 void DMShellModule::flushPendingOutputOnInterrupt(const meshtastic_RemoteShell &frame)
 {
+#if !DMSHELL_USE_PTY
+    (void)frame; // the synthetic shell discards its own output when it takes the interrupt
+#else
     struct termios tio = {};
     if (tcgetattr(session.masterFd, &tio) != 0 || (tio.c_lflag & ISIG) == 0) {
         return; // signals are not being generated, so nothing here would be cancelled
@@ -625,6 +682,7 @@ void DMShellModule::flushPendingOutputOnInterrupt(const meshtastic_RemoteShell &
         }
         return;
     }
+#endif
 }
 
 bool DMShellModule::writeSessionInput(const meshtastic_RemoteShell &frame)
@@ -643,7 +701,7 @@ bool DMShellModule::writeSessionInput(const meshtastic_RemoteShell &frame)
         return queuePendingWrite(frame.payload.bytes, frame.payload.size);
     }
 
-    const ssize_t bytesWritten = write(session.masterFd, frame.payload.bytes, frame.payload.size);
+    const ssize_t bytesWritten = shellWrite(session, frame.payload.bytes, frame.payload.size);
     if (bytesWritten < 0) {
         if (errno == EAGAIN || errno == EINTR) {
             return queuePendingWrite(frame.payload.bytes, frame.payload.size);
@@ -668,7 +726,7 @@ bool DMShellModule::flushPendingWrite()
     }
 
     while (session.pendingWriteLen > 0) {
-        const ssize_t bytesWritten = write(session.masterFd, session.pendingWrite, session.pendingWriteLen);
+        const ssize_t bytesWritten = shellWrite(session, session.pendingWrite, session.pendingWriteLen);
         if (bytesWritten <= 0) {
             return false;
         }
@@ -719,10 +777,13 @@ void DMShellModule::closeSession(const char *reason, bool notifyPeer)
     }
 
     if (session.masterFd >= 0) {
+#if DMSHELL_USE_PTY
         close(session.masterFd);
+#endif
         session.masterFd = -1;
     }
 
+#if DMSHELL_USE_PTY
     if (session.childPid > 0) {
         // Run this to avoid forgetting a child
         processPendingChildReap();
@@ -734,11 +795,19 @@ void DMShellModule::closeSession(const char *reason, bool notifyPeer)
         rememberPendingChild(session.childPid);
         session.childPid = -1;
     }
+#endif
 
     LOG_INFO("DMShell: closed session=0x%x reason=%s", session.sessionId, reason);
+#if DMSHELL_USE_PTY
     session = DMShellSession{};
+#else
+    // In place: a DMShellSession temporary (~17 KB) is twice the ESP32 loop task's whole stack
+    session.~DMShellSession();
+    new (&session) DMShellSession();
+#endif
 }
 
+#if DMSHELL_USE_PTY
 void DMShellModule::reapChildIfExited()
 {
     if (!session.active || session.childPid <= 0) {
@@ -824,6 +893,12 @@ void DMShellModule::processPendingChildReap()
         }
     }
 }
+#else
+// The synthetic shell has no child: `exit` ends it as EOF from shellRead(), which runOnce closes on.
+void DMShellModule::reapChildIfExited() {}
+
+void DMShellModule::processPendingChildReap() {}
+#endif
 
 // Invariant, relied on by DMShellTxHistoryWindow: every sequence number drawn from nextTxSeq gets
 // stored here exactly once, in order, so the retained range can be derived arithmetically rather than

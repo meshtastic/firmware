@@ -11,13 +11,27 @@
 #include <array>
 #include <functional>
 
+// Bench: -DDMSHELL_SYNTHETIC_SHELL=1 serves DMSHELL_TEST_PEER's workload from a built-in stand-in for the shell, so the
+// server can run on any board. It runs nothing, so any PKI peer may open a session; never ship it.
+#ifndef DMSHELL_SYNTHETIC_SHELL
+#define DMSHELL_SYNTHETIC_SHELL 0
+#endif
+
 // The module drives a login shell through forkpty(), which only the Linux Portduino hosts have:
 // the Windows and macOS builds have no <pty.h>.
-#if defined(ARCH_PORTDUINO) && defined(__linux__)
+#if DMSHELL_SYNTHETIC_SHELL
 #define MESHTASTIC_HAS_DMSHELL 1
+#define DMSHELL_USE_PTY 0
+#elif defined(ARCH_PORTDUINO) && defined(__linux__)
+#define MESHTASTIC_HAS_DMSHELL 1
+#define DMSHELL_USE_PTY 1
 #endif
 
 #if defined(MESHTASTIC_HAS_DMSHELL)
+
+#if !DMSHELL_USE_PTY
+#include "DMShellSyntheticShell.h"
+#endif
 
 // Enough for the peer's whole input window (four frames of 64 bytes, with slack), so a PTY that
 // stalls mid-frame never forces us to drop bytes the peer has been told we took.
@@ -28,8 +42,12 @@ struct DMShellSession {
     uint32_t sessionId = 0;
     NodeNum peer = 0;
     uint8_t channel = 0;
+    // The synthetic shell has no fd; it sets 0 while open, so the masterFd >= 0 checks still read "open".
     int masterFd = -1;
     int childPid = -1;
+#if !DMSHELL_USE_PTY
+    DMShellSyntheticShell shell;
+#endif
     // masterFd is nonblocking, so write() can take only part of an INPUT frame. The rest waits here
     // and goes out ahead of any later input; dropping it would lose bytes the peer counts as
     // delivered, since its receive cursor has already moved past them.
@@ -88,6 +106,7 @@ class DMShellModule : private concurrency::OSThread, public SinglePortModule
     static constexpr uint32_t SESSION_IDLE_TIMEOUT_MS = 5 * 60 * 1000;
 
     DMShellSession session;
+#if DMSHELL_USE_PTY
     struct PendingChild {
         pid_t pid = -1;
         // SIGKILL has been sent; the pid is kept until waitpid() reaps it.
@@ -96,6 +115,7 @@ class DMShellModule : private concurrency::OSThread, public SinglePortModule
     // Children whose exit has not been collected yet. More than one slot because a close can land
     // while the previous child is still dying, and losing a pid means leaving a zombie.
     std::array<PendingChild, 4> pendingChildren = {};
+#endif
     // Set once at construction from DMSHELL_TX_WINDOW (0 = unbounded); see the constructor.
     uint32_t txWindowFrames = 0;
     // Set once at construction from DMSHELL_MAX_RETRANSMITS (0 = no bound).
@@ -125,7 +145,9 @@ class DMShellModule : private concurrency::OSThread, public SinglePortModule
     void closeSession(const char *reason, bool notifyPeer);
     void reapChildIfExited();
     void processPendingChildReap();
+#if DMSHELL_USE_PTY
     void rememberPendingChild(pid_t pid);
+#endif
 
     void rememberSentFrame(meshtastic_RemoteShell frame);
     void resendFramesFrom(uint32_t startSeq);

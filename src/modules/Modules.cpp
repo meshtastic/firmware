@@ -66,6 +66,9 @@
 #ifdef DMSHELL_TEST_PEER
 #include "modules/DMShellTestModule.h"
 #endif
+#if DMSHELL_SYNTHETIC_SHELL && !ARCH_PORTDUINO
+#include "modules/DMShell.h"
+#endif
 #if ARCH_PORTDUINO
 #include "modules/DMShell.h"
 #include "modules/Telemetry/HostMetrics.h"
@@ -231,6 +234,9 @@ void setupModules()
 #if defined(MESHTASTIC_HAS_DMSHELL)
     dmShellModule = new DMShellModule();
 #endif
+#endif
+#if defined(MESHTASTIC_HAS_DMSHELL) && !ARCH_PORTDUINO
+    dmShellModule = new DMShellModule();
 #endif
 #ifdef DMSHELL_TEST_PEER
     dmShellTestModule = new DMShellTestModule();
