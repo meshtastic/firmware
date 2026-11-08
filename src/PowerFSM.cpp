@@ -178,7 +178,7 @@ static void lsIdle()
     }
 
     // Do we have more sleeping to do?
-    if (secsSlept < config.power.ls_secs) {
+    if (secsSlept < Default::getConfiguredOrDefault(config.power.ls_secs, default_ls_secs)) {
         // A USB host with the console open cannot survive a light sleep. No shipping chip keeps the
         // USB-serial/JTAG pad alive across one, and we surface for only 100 ms between 30 s chunks -
         // far too short for the host to re-enumerate. It gives up, and nothing on this side can ask
