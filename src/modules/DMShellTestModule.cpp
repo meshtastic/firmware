@@ -7,10 +7,17 @@
 #include "configuration.h"
 #include "mesh/mesh-pb-constants.h"
 #include <string.h>
+#if DMSHELL_TEST_WAIT_PPS && !MESHTASTIC_EXCLUDE_GPS
+#include "gps/GPS.h"
+#endif
 
 // When the first session opens, after boot, so the node has its config and the peer's key
 #ifndef DMSHELL_TEST_START_DELAY_MS
 #define DMSHELL_TEST_START_DELAY_MS 60000
+#endif
+// Bench: also wait until PPS has synced and held the clock (PPS_BENCH_HOLD_SECS), so no step lands mid-run
+#ifndef DMSHELL_TEST_WAIT_PPS
+#define DMSHELL_TEST_WAIT_PPS 0
 #endif
 // The workload, as the bench harness types it: wait, type the command, then a keystroke per interval
 #ifndef DMSHELL_TEST_SETTLE_MS
@@ -153,6 +160,18 @@ int32_t DMShellTestModule::runOnce()
     case Phase::Waiting:
         if (!Throttle::deadlinePassedAt(now, nextSessionAtMs))
             return (int32_t)(nextSessionAtMs - now);
+#if DMSHELL_TEST_WAIT_PPS
+#if MESHTASTIC_EXCLUDE_GPS
+#error "DMSHELL_TEST_WAIT_PPS needs the GPS"
+#endif
+        if (!gps || !gps->isClockHeld()) {
+            if (!Throttle::isWithinTimespanMs(lastPpsWaitLogMs, 30000)) {
+                lastPpsWaitLogMs = now;
+                LOG_INFO("DMShellTest: waiting for the PPS clock hold");
+            }
+            return 1000;
+        }
+#endif
         startSession(now);
         return ACTIVE_POLL_MS;
     case Phase::Opening:

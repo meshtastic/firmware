@@ -112,6 +112,9 @@ constexpr uint64_t PPS_RECENT_MS = 30 * 60 * 1000;         // after that, NMEA m
 constexpr uint32_t PPS_BURST_EDGES = 5;                    // edges accepted per burst; the rate trim carries the clock between
 constexpr uint64_t PPS_BURST_INTERVAL_MS = 10 * 60 * 1000; // between bursts while the GPS stays on
 constexpr uint64_t PPS_BURST_TIMEOUT_MS = 30 * 1000;       // give up on a burst that gets no usable edges
+#ifndef PPS_BENCH_HOLD_SECS
+#define PPS_BENCH_HOLD_SECS 0 // bench: >0 holds the clock after this many seconds of edges, then only logs them
+#endif
 constexpr uint32_t AIROHA_PROBE_SETTLE_MS = 20;
 #ifdef HAS_AIROHA_SLEEP
 // The receiver may already have auto-slept and missed the first sleep command, so resend until it acks.
@@ -2102,7 +2105,7 @@ GnssModel_t GPS::getProbeResponse(unsigned long timeout, const std::vector<ChipI
 }
 
 #if defined(PIN_GPS_PPS)
-// Written only by gpsPpsIsr(): the edge's low 32 bits of Time::getMicrosMonotonic(), and an edge count
+// Written only by gpsPpsIsr(): the edge's Time::isrStamp(), and an edge count
 static volatile uint32_t ppsEdgeUs32 = 0;
 static volatile uint32_t ppsEdgeCount = 0;
 
@@ -2117,7 +2120,7 @@ static void gpsPpsIsr()
 #else
 static void gpsPpsIsr()
 {
-    ppsEdgeUs32 = Time::getMillis() * 1000U; // Time::getMicrosMonotonic() is ms * 1000 here, and so are its low bits
+    ppsEdgeUs32 = Time::isrStamp();
 #endif
     ppsEdgeCount = ppsEdgeCount + 1;
 }
@@ -2275,6 +2278,8 @@ bool GPS::lookForTime()
         return false;
 
     const uint64_t nowMs = Time::getMillisMonotonic();
+    if (ppsClockHeld)
+        return true;
     // PPS pinned the clock in the last few seconds: NMEA, which lags it, has nothing to add
     if (lastPpsAcceptMs && nowMs - lastPpsAcceptMs < PPS_HOLDS_CLOCK_MS)
         return true;
@@ -2505,6 +2510,7 @@ void GPS::disarmPps(uint64_t nextBurstMs)
 #endif
     ppsArmed = false;
     pps.reset();
+    ppsHoldStartMs = 0;
     nextPpsBurstMs = nextBurstMs;
 }
 
@@ -2535,7 +2541,9 @@ void GPS::processPps()
         return;
     }
 
-    if (nowMs - ppsArmedAtMs >= PPS_BURST_TIMEOUT_MS) {
+    // A held clock keeps the IRQ for logging; a hold in progress lasts as long as edges keep coming
+    const uint64_t burstStartMs = PPS_BENCH_HOLD_SECS && lastPpsAcceptMs > ppsArmedAtMs ? lastPpsAcceptMs : ppsArmedAtMs;
+    if (!ppsClockHeld && nowMs - burstStartMs >= PPS_BURST_TIMEOUT_MS) {
         LOG_DEBUG_GPS("GPS PPS burst ended with %lu edges", (unsigned long)ppsBurstAccepted);
         disarmPps(nowMs + (ppsBurstAccepted ? PPS_BURST_INTERVAL_MS : PPS_BURST_TIMEOUT_MS));
         return;
@@ -2549,12 +2557,21 @@ void GPS::processPps()
         return;
     lastPpsCount = count;
 
-    // The edge is under a poll interval old, so its low 32 bits extend unambiguously
+    // The edge is under a poll interval old, so its stamp extends unambiguously
     const uint64_t nowUs = Time::getMicrosMonotonic();
-    const uint64_t edgeMonoUs = nowUs - (uint32_t)((uint32_t)nowUs - edgeUs32);
+    const uint64_t edgeMonoUs = Time::stampToMicros(edgeUs32);
     const uint64_t clockAtEdgeUs = getUtcMicros() - (nowUs - edgeMonoUs);
+    if (ppsClockHeld) {
+        // Raw edge times only: a scorer maps each node's monotonic µs to UTC offline, so the run sees no step
+        const uint64_t secondUs = (clockAtEdgeUs + 500000) / 1000000 * 1000000;
+        LOG_INFO("PPS map: mono=%lu.%06lu utc=%lu err_us=%ld", (unsigned long)(edgeMonoUs / 1000000),
+                 (unsigned long)(edgeMonoUs % 1000000), (unsigned long)(secondUs / 1000000),
+                 (long)(int64_t)(clockAtEdgeUs - secondUs));
+        return;
+    }
     const PpsEdgeResult r = pps.onEdge(edgeMonoUs, clockAtEdgeUs, hasLock());
     if (!r.accepted) {
+        ppsHoldStartMs = 0;
         LOG_DEBUG_GPS("GPS PPS edge not used: %s", r.reason);
         return;
     }
@@ -2577,7 +2594,15 @@ void GPS::processPps()
 
     LOG_DEBUG("GPS PPS edge %lu: clock was %ld us off, rate %s%ld ppb", (unsigned long)(r.utcUs / 1000000), (long)r.errorUs,
               pps.hasRate() ? "" : "unknown ", (long)pps.ratePpb());
-    if (++ppsBurstAccepted >= PPS_BURST_EDGES)
+    if (!ppsHoldStartMs)
+        ppsHoldStartMs = nowMs;
+    if (PPS_BENCH_HOLD_SECS && pps.hasRate() && nowMs - ppsHoldStartMs >= (uint64_t)PPS_BENCH_HOLD_SECS * 1000) {
+        ppsClockHeld = true;
+        LOG_INFO("PPS hold: clock held after %lu s of edges, rate %ld ppb", (unsigned long)((nowMs - ppsHoldStartMs) / 1000),
+                 (long)pps.ratePpb());
+        return;
+    }
+    if (++ppsBurstAccepted >= PPS_BURST_EDGES && !PPS_BENCH_HOLD_SECS)
         disarmPps(nowMs + PPS_BURST_INTERVAL_MS);
 #endif
 }

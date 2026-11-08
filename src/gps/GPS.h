@@ -139,6 +139,9 @@ class GPS : private concurrency::OSThread
     /// Returns true if we have acquired GPS lock.
     virtual bool hasLock();
 
+    /// Bench (PPS_BENCH_HOLD_SECS): PPS synced the clock and nothing will step it again this boot
+    bool isClockHeld() const { return ppsClockHeld; }
+
     /// Return true if we are connected to a GPS
     bool isConnected() const { return hasGPS; }
 
@@ -227,6 +230,8 @@ class GPS : private concurrency::OSThread
     uint64_t nextPpsBurstMs = 0;   // monotonic ms; 0 = arm once there is a fix
     uint64_t lastPpsAcceptMs = 0;  // monotonic ms of the last edge the RTC was pinned to; 0 = never
     uint64_t lastPpsFullSetMs = 0; // last PPS set that also wrote the hardware RTC and system time
+    uint64_t ppsHoldStartMs = 0;   // bench hold: first accepted edge of the current run
+    bool ppsClockHeld = false;     // bench hold: nothing steps or trims the clock any more
 
 #ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
     // (20210908) TinyGps++ can only read the GPGSA "FIX TYPE" field

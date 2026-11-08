@@ -43,6 +43,7 @@ class DMShellTestModule : public SinglePortModule, private concurrency::OSThread
     Phase phase = Phase::Waiting;
     uint32_t sessionsDone = 0;
     uint32_t nextSessionAtMs = 0;
+    uint32_t lastPpsWaitLogMs = 0; // DMSHELL_TEST_WAIT_PPS: last "waiting" line
 
     uint32_t sessionId = 0;
     uint32_t nextTxSeq = 1;
