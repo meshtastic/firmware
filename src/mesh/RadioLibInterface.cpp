@@ -18,6 +18,9 @@
 #include "meshUtils.h"
 #endif
 
+#ifndef RADIO_LOG_CAD_FREE_AFTER_TX
+#define RADIO_LOG_CAD_FREE_AFTER_TX 0 // bench: log the clear-scan verdict after the TX launch, not between the two
+#endif
 #ifndef RADIO_EDGE_LOG
 #define RADIO_EDGE_LOG 0 // bench: one "RadioEdge:" line per frame with µs stamps, for cross-node timing
 #endif
@@ -704,15 +707,22 @@ void RadioLibInterface::onNotify(uint32_t notification)
                         edgeCadBusyId = txp->id; // logged once the radio-sequence lock is released
 #endif
                     } else {
+                        const uint32_t peekClearMs = peek ? Time::getMillis() - peekHoldStart : 0;
+#if !RADIO_LOG_CAD_FREE_AFTER_TX
                         LOG_DEBUG("CAD free");
                         if (peek)
-                            LOG_DEBUG("Preamble hold released, CAD clear %ums after the sighting",
-                                      Time::getMillis() - peekHoldStart);
+                            LOG_DEBUG("Preamble hold released, CAD clear %ums after the sighting", peekClearMs);
+#endif
                         // Send any outgoing packets we have ready as fast as possible to keep the time between channel scan and
                         // actual transmission as short as possible
                         txp = txQueue.dequeue();
                         assert(txp);
                         startSend(txp);
+#if RADIO_LOG_CAD_FREE_AFTER_TX
+                        LOG_DEBUG("CAD free"); // after the launch: a log line here was ms of scan going stale
+                        if (peek)
+                            LOG_DEBUG("Preamble hold released, CAD clear %ums after the sighting", peekClearMs);
+#endif
                         LOG_TRACE("%d packets in TX queue", txQueue.getMaxLen() - txQueue.getFree());
                     }
                 }
