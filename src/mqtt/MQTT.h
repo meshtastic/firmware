@@ -43,6 +43,16 @@ class MQTT : private concurrency::OSThread
      */
     void onSend(const meshtastic_MeshPacket &mp_encrypted, const meshtastic_MeshPacket &mp_decoded, ChannelIndex chIndex);
 
+    /**
+     * Publish a packet this node generated straight to the broker, without going on air. Primary
+     * channel, only when its uplink is enabled; encrypted like Router::send() iff
+     * moduleConfig.mqtt.encryption_enabled. False if not connected or the channel does not uplink.
+     */
+    bool publishOwnPacket(meshtastic_MeshPacket &mp);
+
+    /// True when a packet this node sends on chIndex reaches the broker through onSend()
+    bool uplinksOwnPacketsOn(ChannelIndex chIndex);
+
     bool isConnectedDirectly();
 
     bool publish(const char *topic, const char *payload, bool retained);

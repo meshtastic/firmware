@@ -1,6 +1,8 @@
 #include "TestUtil.h"
+#include "modules/Telemetry/TelemetryBatch.h"
 #include "modules/Telemetry/TelemetryScheduler.h"
 #include "modules/Telemetry/TelemetrySensorPower.h"
+#include "modules/Telemetry/TelemetryStore.h"
 #include <unity.h>
 #include <vector>
 
@@ -13,6 +15,9 @@
 //    (src/modules/Telemetry/TelemetrySensorPower.h): a sensor that can sleep is woken its own
 //    wakeUpTimeMs() ahead of the read, the read waits for the slowest one, and after the read a
 //    sensor is slept only if it can warm up again before the next read.
+//  - encodeTelemetryBatch() (src/modules/Telemetry/TelemetryBatch.h): SENSOR batches take the oldest
+//    readings the channel has not had, carry time or the gap since the previous reading, and shrink
+//    until the encoding fits.
 //
 // Regressions guarded: reads drifting by the warm-up each cycle, or happening on a cold sensor;
 // phone cadence filling the store and multiplying mesh/MQTT traffic; a sensor slept when it cannot
@@ -421,6 +426,93 @@ static void test_sensors_leadIsSlowestSleepingSensor()
     TEST_ASSERT_EQUAL_UINT32(45000U, sensorWakeLeadMs(sensors));
 }
 
+// ------------------------------------------------------------------ batch encoding
+
+static meshtastic_AirQualityMetrics aq(uint32_t pm25)
+{
+    meshtastic_AirQualityMetrics m = meshtastic_AirQualityMetrics_init_zero;
+    m.has_pm25_standard = true;
+    m.pm25_standard = pm25;
+    return m;
+}
+
+static bool decodeBatch(const uint8_t *buf, size_t size, meshtastic_TelemetryRecordHistory &out)
+{
+    out = meshtastic_TelemetryRecordHistory_init_zero;
+    return pb_decode_from_bytes(buf, size, &meshtastic_TelemetryRecordHistory_msg, &out);
+}
+
+static void test_batch_takesUnpublishedOldestFirstWithTimeOrDelta()
+{
+    RamTelemetryStore<meshtastic_AirQualityMetrics> store(8);
+    store.push(aq(1), 0, 0);            // no clock, first reading: neither
+    store.push(aq(2), 0, 360);          // no clock: gap
+    store.push(aq(3), 1700000000, 360); // clock valid: time wins
+    store.markPublished(0, TELEMETRY_PUBLISHED_MESH);
+
+    uint8_t buf[meshtastic_Constants_DATA_PAYLOAD_LEN];
+    uint16_t idx[TELEMETRY_MAX_READINGS_PER_BATCH];
+    size_t size = 0;
+    TEST_ASSERT_EQUAL_UINT16(2, encodeTelemetryBatch(store, TELEMETRY_PUBLISHED_MESH, 10, buf, sizeof(buf), size, idx));
+    TEST_ASSERT_EQUAL_UINT16(1, idx[0]);
+    TEST_ASSERT_EQUAL_UINT16(2, idx[1]);
+
+    meshtastic_TelemetryRecordHistory h;
+    TEST_ASSERT_TRUE(decodeBatch(buf, size, h));
+    TEST_ASSERT_EQUAL(2, h.readings_count);
+    TEST_ASSERT_EQUAL_UINT32(2, h.readings[0].telemetry_variant.air_quality_metrics.pm25_standard);
+    TEST_ASSERT_FALSE(h.readings[0].has_time);
+    TEST_ASSERT_TRUE(h.readings[0].has_delta_secs);
+    TEST_ASSERT_EQUAL_UINT32(360, h.readings[0].delta_secs);
+    TEST_ASSERT_TRUE(h.readings[1].has_time);
+    TEST_ASSERT_FALSE(h.readings[1].has_delta_secs);
+
+    // The other channels still see all three
+    TEST_ASSERT_EQUAL_UINT16(3, encodeTelemetryBatch(store, TELEMETRY_PUBLISHED_MQTT, 10, buf, sizeof(buf), size, idx));
+}
+
+static void test_batch_capsAtMaxReadings()
+{
+    RamTelemetryStore<meshtastic_AirQualityMetrics> store(8);
+    for (uint32_t i = 0; i < 6; i++)
+        store.push(aq(i), 0, 360);
+    uint8_t buf[meshtastic_Constants_DATA_PAYLOAD_LEN];
+    uint16_t idx[TELEMETRY_MAX_READINGS_PER_BATCH];
+    size_t size = 0;
+    TEST_ASSERT_EQUAL_UINT16(4, encodeTelemetryBatch(store, TELEMETRY_PUBLISHED_MESH, 4, buf, sizeof(buf), size, idx));
+    TEST_ASSERT_EQUAL_UINT16(3, idx[3]);
+}
+
+// Too big for the buffer: drop the newest until it fits, they go in the next batch
+static void test_batch_shrinksToFit()
+{
+    RamTelemetryStore<meshtastic_AirQualityMetrics> store(8);
+    for (uint32_t i = 0; i < 6; i++)
+        store.push(aq(1000 + i), 1700000000 + i, 0);
+    uint8_t buf[40];
+    uint16_t idx[TELEMETRY_MAX_READINGS_PER_BATCH];
+    size_t size = 0;
+    const uint16_t taken = encodeTelemetryBatch(store, TELEMETRY_PUBLISHED_MESH, 10, buf, sizeof(buf), size, idx);
+    TEST_ASSERT_TRUE(taken > 0 && taken < 6);
+    TEST_ASSERT_TRUE(size <= sizeof(buf));
+    meshtastic_TelemetryRecordHistory h;
+    TEST_ASSERT_TRUE(decodeBatch(buf, size, h));
+    TEST_ASSERT_EQUAL(taken, h.readings_count);
+    TEST_ASSERT_EQUAL_UINT32(1000, h.readings[0].telemetry_variant.air_quality_metrics.pm25_standard);
+}
+
+static void test_batch_nothingUnpublishedEncodesNothing()
+{
+    RamTelemetryStore<meshtastic_AirQualityMetrics> store(4);
+    uint8_t buf[meshtastic_Constants_DATA_PAYLOAD_LEN];
+    uint16_t idx[TELEMETRY_MAX_READINGS_PER_BATCH];
+    size_t size = 0;
+    TEST_ASSERT_EQUAL_UINT16(0, encodeTelemetryBatch(store, TELEMETRY_PUBLISHED_MESH, 10, buf, sizeof(buf), size, idx));
+    store.push(aq(1), 0, 0);
+    store.markNewestPublished(TELEMETRY_PUBLISHED_MESH);
+    TEST_ASSERT_EQUAL_UINT16(0, encodeTelemetryBatch(store, TELEMETRY_PUBLISHED_MESH, 10, buf, sizeof(buf), size, idx));
+}
+
 void setUp(void) {}
 void tearDown(void) {}
 
@@ -457,6 +549,10 @@ void setup()
     RUN_TEST(test_sensors_withoutSleepSupportUntouched);
     RUN_TEST(test_sensors_sleptOnlyWhenNextReadOutlastsWarmUp);
     RUN_TEST(test_sensors_leadIsSlowestSleepingSensor);
+    RUN_TEST(test_batch_takesUnpublishedOldestFirstWithTimeOrDelta);
+    RUN_TEST(test_batch_capsAtMaxReadings);
+    RUN_TEST(test_batch_shrinksToFit);
+    RUN_TEST(test_batch_nothingUnpublishedEncodesNothing);
     exit(UNITY_END());
 }
 
