@@ -1013,7 +1013,7 @@ void test_early_flood_preserves_fresh_verified_route(void)
 
 // Seeded with one attempt, the first due pass NAKs and the loopback deletes the entry before control
 // returns, so anything doRetransmissions() reads afterwards is a use-after-free. ASAN catches it.
-void test_retransmissionSurvivesLoopbackErasingItsOwnRecord(void)
+void test_retransmission_survives_loopback_erasing_its_own_record(void)
 {
     LoopbackRoutingModule loopback;
     loopback.target = reliableShim;
@@ -1198,7 +1198,7 @@ void setup()
     RUN_TEST(test_eventPolicy_repeatedLocalPacketSuppressesCoordinateAckButKeepsTextAck);
     RUN_TEST(test_eventPolicy_seededRetrySuppressesTxUntilGateOff);
     RUN_TEST(test_reliableAckStopsNormalPendingTransmission);
-    RUN_TEST(test_retransmissionSurvivesLoopbackErasingItsOwnRecord);
+    RUN_TEST(test_retransmission_survives_loopback_erasing_its_own_record);
 
     printf("\n=== pending retransmission bookkeeping ===\n");
     RUN_TEST(test_implicit_ack_for_opaque_own_packet);
