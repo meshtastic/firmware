@@ -10,97 +10,32 @@
 #include "modules/Telemetry/FileTelemetryStore.h"
 #endif
 
-// AirQualityTelemetryModule's scheduling policy, and the TelemetryStore contract run against every
-// backend since the module must not be able to tell them apart.
-
-constexpr uint32_t LOCAL_MS = 60000U; // local loop cadence
-
-// ---------------------------------------------------------------- local loop
-
-// Nothing read yet: measure immediately, whatever the clock or the consumers say.
-static void test_read_firstReadIsImmediate()
-{
-    TEST_ASSERT_TRUE(AirQualityTelemetryModule::shouldReadSensors(false, 5000U, 0U, LOCAL_MS, true, false));
-    TEST_ASSERT_TRUE(AirQualityTelemetryModule::shouldReadSensors(false, 0U, 0U, LOCAL_MS, false, false));
-}
-
-static void test_read_holdsUntilLocalCadenceElapses()
-{
-    TEST_ASSERT_FALSE(AirQualityTelemetryModule::shouldReadSensors(true, 59999U, 0U, LOCAL_MS, true, false));
-}
-
-static void test_read_readsWhenLocalCadenceElapses()
-{
-    TEST_ASSERT_TRUE(AirQualityTelemetryModule::shouldReadSensors(true, 60000U, 0U, LOCAL_MS, true, false));
-}
-
-// A read stamped at millis()==0 must still hold the cadence; everRead, not lastReadMs, marks the
-// never-read state.
-static void test_read_readAtTimeZeroStillHoldsCadence()
-{
-    TEST_ASSERT_FALSE(AirQualityTelemetryModule::shouldReadSensors(true, 30000U, 0U, LOCAL_MS, true, false));
-}
-
-// A backed-up toPhone queue means no client is draining it; the local loop pauses rather than
-// warming the sensor for nobody.
-static void test_read_backedUpPhoneQueuePausesLocalLoop()
-{
-    TEST_ASSERT_FALSE(AirQualityTelemetryModule::shouldReadSensors(true, 120000U, 0U, LOCAL_MS, false, false));
-}
-
-// ...but the offload still needs something to publish, so a due on-air send keeps the loop running.
-static void test_read_offloadKeepsLoopAliveWhilePhoneQueueIsStalled()
-{
-    TEST_ASSERT_TRUE(AirQualityTelemetryModule::shouldReadSensors(true, 120000U, 0U, LOCAL_MS, false, true));
-}
-
-// The offload never reads ahead of the local cadence - it samples what the loop already took.
-static void test_read_offloadDoesNotOutpaceLocalCadence()
-{
-    TEST_ASSERT_FALSE(AirQualityTelemetryModule::shouldReadSensors(true, 30000U, 0U, LOCAL_MS, true, true));
-}
-
-// millis() rollover: unsigned subtraction keeps the elapsed math correct across the wrap.
-static void test_read_survivesMillisRollover()
-{
-    constexpr uint32_t lastRead = UINT32_MAX - 29999U; // 30,000 ms before the wrap to 0
-    // 40s past the wrap: 70,000 ms elapsed, past the 60s cadence.
-    TEST_ASSERT_TRUE(AirQualityTelemetryModule::shouldReadSensors(true, 40000U, lastRead, LOCAL_MS, true, false));
-    // 10s past the wrap: only 40,000 ms elapsed, still held.
-    TEST_ASSERT_FALSE(AirQualityTelemetryModule::shouldReadSensors(true, 10000U, lastRead, LOCAL_MS, true, false));
-}
+// AirQualityTelemetryModule's mesh policy, and the TelemetryStore contract run against every
+// backend since the module must not be able to tell them apart. The read cadence lives in
+// TelemetryScheduler, tested in test_telemetry_scheduler.
 
 // ------------------------------------------------------------------ offload
 
 static void test_mesh_publishesUnsentReadingWhenDueAndAllowed()
 {
-    TEST_ASSERT_TRUE(AirQualityTelemetryModule::shouldSendToMesh(true, true, true, false));
+    TEST_ASSERT_TRUE(AirQualityTelemetryModule::shouldSendToMesh(true, true, true));
 }
 
 // Between offloads the local loop keeps reading, but nothing goes on air.
 static void test_mesh_holdsUntilDue()
 {
-    TEST_ASSERT_FALSE(AirQualityTelemetryModule::shouldSendToMesh(true, false, true, false));
+    TEST_ASSERT_FALSE(AirQualityTelemetryModule::shouldSendToMesh(true, false, true));
 }
 
 static void test_mesh_holdsWhileAirtimeVetoes()
 {
-    TEST_ASSERT_FALSE(AirQualityTelemetryModule::shouldSendToMesh(true, true, false, false));
-    // Even the power-saving sensor's sleep-arming path respects the airtime veto.
-    TEST_ASSERT_FALSE(AirQualityTelemetryModule::shouldSendToMesh(false, true, false, true));
+    TEST_ASSERT_FALSE(AirQualityTelemetryModule::shouldSendToMesh(true, true, false));
 }
 
 // The same reading is never broadcast twice; once offloaded there is nothing left to publish.
 static void test_mesh_doesNotResendTheSameReading()
 {
-    TEST_ASSERT_FALSE(AirQualityTelemetryModule::shouldSendToMesh(false, true, true, false));
-}
-
-// A power-saving SENSOR still takes the send path with nothing to send: that call is what arms its
-// deep sleep, so skipping it would leave the node awake until the next interval.
-static void test_mesh_powerSavingSensorRunsEvenWithNothingToSend()
-{
-    TEST_ASSERT_TRUE(AirQualityTelemetryModule::shouldSendToMesh(false, true, true, true));
+    TEST_ASSERT_FALSE(AirQualityTelemetryModule::shouldSendToMesh(false, true, true));
 }
 
 // ----------------------------------------------------------- store contract
@@ -409,19 +344,10 @@ void setup()
         initSPI();
 #endif
     UNITY_BEGIN();
-    RUN_TEST(test_read_firstReadIsImmediate);
-    RUN_TEST(test_read_holdsUntilLocalCadenceElapses);
-    RUN_TEST(test_read_readsWhenLocalCadenceElapses);
-    RUN_TEST(test_read_readAtTimeZeroStillHoldsCadence);
-    RUN_TEST(test_read_backedUpPhoneQueuePausesLocalLoop);
-    RUN_TEST(test_read_offloadKeepsLoopAliveWhilePhoneQueueIsStalled);
-    RUN_TEST(test_read_offloadDoesNotOutpaceLocalCadence);
-    RUN_TEST(test_read_survivesMillisRollover);
     RUN_TEST(test_mesh_publishesUnsentReadingWhenDueAndAllowed);
     RUN_TEST(test_mesh_holdsUntilDue);
     RUN_TEST(test_mesh_holdsWhileAirtimeVetoes);
     RUN_TEST(test_mesh_doesNotResendTheSameReading);
-    RUN_TEST(test_mesh_powerSavingSensorRunsEvenWithNothingToSend);
     RUN_TEST(test_store_ramHonoursContract);
     RUN_TEST(test_store_ramWithoutCapacityStoresNothing);
 #ifdef FSCom

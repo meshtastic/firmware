@@ -11,6 +11,8 @@
 #include "Power.h"
 #include "PowerFSM.h"
 #include "Router.h"
+#include "TelemetryPublish.h"
+#include "TelemetrySensorPower.h"
 #include "TransmitHistory.h"
 #include "UnitConversions.h"
 #include "buzz.h"
@@ -151,7 +153,15 @@ extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const c
 #define FAILED_STATE_SENSOR_READ_MULTIPLIER 10
 #define DISPLAY_RECEIVEID_MEASUREMENTS_ON_SCREEN true
 
+#include "FSCommon.h"
 #include "Sensor/AddI2CSensorTemplate.h"
+// SENSOR role keeps its readings in a file, so a batch survives reboot and deep sleep. Not on STM32: tiny flash.
+#if !defined(ENVIRONMENT_TELEMETRY_HISTORY_PATH) && defined(FSCom) && !defined(ARCH_STM32)
+#define ENVIRONMENT_TELEMETRY_HISTORY_PATH "/prefs/env_history.bin"
+#endif
+#ifdef ENVIRONMENT_TELEMETRY_HISTORY_PATH
+#include "FileTelemetryStore.h"
+#endif
 #include "graphics/ScreenFonts.h"
 #include <Throttle.h>
 
@@ -385,10 +395,7 @@ int32_t EnvironmentTelemetryModule::runOnce()
         if (shouldDeferDeepSleep())
             return PREFLIGHT_SLEEP_RETRY_MS;
         sleepOnNextExecution = false;
-        uint32_t nightyNightMs = Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.environment_update_interval,
-                                                                   default_telemetry_broadcast_interval_secs);
-        LOG_DEBUG("Sleep %ims until next send", nightyNightMs);
-        doDeepSleep(nightyNightMs, true, false);
+        enterSharedDeepSleep(); // returns only when a read or publish is too close to be worth sleeping
     }
 
     uint32_t result = UINT32_MAX;
@@ -398,6 +405,9 @@ int32_t EnvironmentTelemetryModule::runOnce()
         // If this module is not enabled, and the user doesn't want the display screen don't waste any OSThread time on it
         return disable();
     }
+
+    if (!history)
+        return disable();
 
     if (firstTime) {
         // This is the first time the OSThread library has called this function, so do some setup
@@ -435,58 +445,201 @@ int32_t EnvironmentTelemetryModule::runOnce()
 #endif
             refreshDisplayedMeasurement();
         }
+
+        if (restoreScheduleAfterSleep(TELEMETRY_SLEEP_SLOT_ENVIRONMENT, schedule))
+            LOG_DEBUG("Env: schedule restored after deep sleep");
+
         // it's possible to have this module enabled, only for displaying values on the screen.
-        // therefore, we should only enable the sensor loop if measurement is also enabled
-        return result == UINT32_MAX ? disable() : setStartDelay();
-    } else {
-        // if we somehow got to a second run of this module with measurement disabled, then just wait forever
-        if (!moduleConfig.telemetry.environment_measurement_enabled && !ENVIRONMENTAL_TELEMETRY_MODULE_ENABLE) {
+        // therefore, we should only enable the sensor loop if measurement is also enabled.
+        // A power-saving SENSOR woke up for this read, so it does not wait out the broadcast spacing.
+        if (result == UINT32_MAX)
             return disable();
-        }
+        measuring = true;
+        return isPowerSavingSensor() ? result : setStartDelay();
+    }
 
-        for (TelemetrySensor *sensor : sensors) {
-            uint32_t delay = sensor->runOnce();
-            if (delay < result) {
-                result = delay;
-            }
-        }
-        refreshDisplayedMeasurement();
+    // if we somehow got to a second run of this module with measurement disabled, then just wait forever
+    if (!moduleConfig.telemetry.environment_measurement_enabled && !ENVIRONMENTAL_TELEMETRY_MODULE_ENABLE) {
+        measuring = false;
+        return disable();
+    }
 
-        // Give up on a stale immediate-send request rather than fire an arbitrarily late broadcast.
-        if (immediateSendRequested &&
-            !Throttle::isWithinTimespanMs(immediateSendRequestedAtMs, IMMEDIATE_SEND_MAX_STALENESS_MS)) {
+    // Some sensors need polling between reads (e.g. BME680 measurement in flight)
+    uint32_t pollMs = UINT32_MAX;
+    for (TelemetrySensor *sensor : sensors) {
+        uint32_t delay = sensor->runOnce();
+        if (delay < pollMs)
+            pollMs = delay;
+    }
+    refreshDisplayedMeasurement();
+
+    // Give up on a stale immediate-send request rather than fire an arbitrarily late broadcast.
+    if (immediateSendRequested && !Throttle::isWithinTimespanMs(immediateSendRequestedAtMs, IMMEDIATE_SEND_MAX_STALENESS_MS)) {
+        immediateSendRequested = false;
+    }
+    if (immediateSendRequested && immediateReadPending) {
+        immediateReadPending = false;
+        schedule.lastStoredMs = 0; // read and store now, the gap since the last reading stays known
+    }
+
+    const TelemetryCadence c = cadence();
+    const bool phoneConnected = service->api_state != MeshService::STATE_DISCONNECTED && !isPowerSavingSensor();
+    uint32_t nowMs = Time::getMillis();
+
+    const uint32_t msUntilRead = schedule.msUntilRead(nowMs, c, phoneConnected);
+    const uint32_t waitMs = prepareSensorsForRead(sensors, msUntilRead);
+    warmingUp = msUntilRead == 0 && waitMs > 0;
+    if (warmingUp) {
+        LOG_DEBUG("Env: sensors warming up, %ums", (unsigned)waitMs);
+        return min(waitMs, pollMs);
+    }
+
+    if (msUntilRead == 0) {
+        captureReading(nowMs, c, phoneConnected);
+        nowMs = Time::getMillis();
+        sleepSensorsUntilNextRead(sensors, schedule.msUntilRead(nowMs, c, phoneConnected));
+    }
+
+    const uint32_t lastMesh = lastMeshMs();
+    const bool meshAllowed = airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR) &&
+                             airTime->isTxAllowedAirUtil();
+    const bool meshDue = immediateSendRequested || (schedule.meshDue(nowMs, lastMesh, c) && !schedule.storedReadSoon(nowMs, c));
+
+    if (meshDue) {
+        bool sent = false;
+        if (meshAllowed && history->hasUnpublishedNewest(TELEMETRY_PUBLISHED_MESH))
+            sent = config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR ? sendBufferedTelemetry()
+                                                                                    : sendTelemetry(NODENUM_BROADCAST, false);
+        if (sent) {
             immediateSendRequested = false;
-        }
-
-        uint32_t lastTelemetry =
-            transmitHistory ? transmitHistory->getLastSentToMeshMillis(TX_HISTORY_KEY_ENVIRONMENT_TELEMETRY) : 0;
-        if (((lastTelemetry == 0) || immediateSendRequested ||
-             !Throttle::isWithinTimespanMs(
-                 lastTelemetry, Default::getConfiguredOrDefaultMsScaled(moduleConfig.telemetry.environment_update_interval,
-                                                                        default_telemetry_broadcast_interval_secs, numOnlineNodes,
-                                                                        TrafficType::TELEMETRY))) &&
-            airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR) &&
-            airTime->isTxAllowedAirUtil()) {
-            sendTelemetry();
-            immediateSendRequested = false;
+            schedule.onMeshSent(nowMs);
+            noteSentToMesh();
             if (transmitHistory)
                 transmitHistory->setLastSentToMesh(TX_HISTORY_KEY_ENVIRONMENT_TELEMETRY);
-        } else if (((lastSentToPhone == 0) || !Throttle::isWithinTimespanMs(lastSentToPhone, sendToPhoneIntervalMs)) &&
-                   (service->isToPhoneQueueEmpty())) {
-            // Just send to phone when it's not our time to send to mesh yet
-            // Only send while queue is empty (phone assumed connected)
-            sendTelemetry(NODENUM_BROADCAST, true);
-            lastSentToPhone = Time::skipZero(Time::getMillis());
+        } else {
+            LOG_DEBUG("Env: mesh due, %s, retry later", meshAllowed ? "nothing new to send" : "airtime limit");
+            schedule.onMeshSkipped(nowMs,
+                                   meshAllowed ? schedule.meshRetryWhenEmpty(nowMs, c) : TelemetryScheduler::MESH_RETRY_MS);
         }
     }
-    if (sleepOnNextExecution) {
-        // Honor the pre-sleep grace period armed in sendTelemetry(): OSThread reschedules with
-        // this return value, which would otherwise override setIntervalFromNow() with the sensor
-        // polling interval (sub-second while a BME680 reading is in flight) and trigger deep sleep
-        // while the TX is still on air
+
+    // SENSOR role: readings the broker has not had, straight to it without going on air.
+    // Unreachable broker: the readings stay pending for MQTT. Awake, that counts as an attempt so the due
+    // uplink does not spin; on reads, the next read's wake-up tries again.
+    if (schedule.mqttDue(nowMs, c)) {
+        if (telemetryMqttUplinkAvailable()) {
+            sendTelemetryBatch(*history, allocDataPacket(), TELEMETRY_PUBLISHED_MQTT);
+            schedule.onMqttPublished(nowMs);
+        } else if (!c.publishOnReads) {
+            schedule.onMqttPublished(nowMs);
+        }
+    }
+
+    if (isPowerSavingSensor() && sharedSleepBudgetMs() >= TELEMETRY_MIN_DEEP_SLEEP_MS) {
+        // Grace period so the queued packet leaves before the radio is powered down
+        sleepOnNextExecution = true;
+        preflightSleepDeferrals = 0;
+        LOG_DEBUG("Start next execution in 5s, then sleep");
         return FIVE_SECONDS_MS;
     }
-    return min(sendToPhoneIntervalMs, result);
+
+    nowMs = Time::getMillis();
+    const uint32_t nextMs = schedule.msUntilNextAction(nowMs, c, phoneConnected, lastMeshMs(), sensorWakeLeadMs(sensors));
+    const uint32_t nextWakeMs = prepareSensorsForRead(sensors, schedule.msUntilRead(nowMs, c, phoneConnected));
+    uint32_t next = min(nextMs, nextWakeMs);
+    if (immediateSendRequested)
+        next = min(next, TelemetryScheduler::MESH_RETRY_MS);
+    return max((uint32_t)DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS, min(next, pollMs));
+}
+
+TelemetryCadence EnvironmentTelemetryModule::cadence() const
+{
+    const uint32_t meshSecs = moduleConfig.telemetry.environment_update_interval;
+    TelemetryCadence c;
+    c.meshMs = Default::getConfiguredOrDefaultMsScaled(meshSecs, default_telemetry_broadcast_interval_secs, numOnlineNodes,
+                                                       TrafficType::TELEMETRY);
+    // Unset: read as often as the mesh publishes, as before the read interval existed
+    const uint32_t readSecs = moduleConfig.telemetry.environment_telemetry_read_interval;
+    c.readMs = readSecs ? Default::getConfiguredOrMinimumValue(readSecs, min_telemetry_read_interval_secs) * 1000
+                        : Default::getConfiguredOrDefaultMs(meshSecs, default_telemetry_broadcast_interval_secs);
+    c.phoneMs = Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.environment_phone_interval,
+                                                  default_telemetry_phone_interval_secs);
+    // Deep sleeping, each uplink costs a Wi-Fi join: batch it like the mesh, on the read wake-ups
+    c.publishOnReads = isPowerSavingSensor();
+    c.mqttMs = config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR && moduleConfig.mqtt.telemetry_uplink_enabled
+                   ? (c.publishOnReads ? c.meshMs : c.readMs)
+                   : 0;
+    return c;
+}
+
+uint32_t EnvironmentTelemetryModule::lastMeshMs() const
+{
+    return schedule.lastMeshMs(transmitHistory ? transmitHistory->getLastSentToMeshMillis(TX_HISTORY_KEY_ENVIRONMENT_TELEMETRY)
+                                               : 0);
+}
+
+uint32_t EnvironmentTelemetryModule::msUntilNeededAwake()
+{
+    if (!measuring)
+        return UINT32_MAX;
+    return schedule.msUntilNextAction(Time::getMillis(), cadence(), false, lastMeshMs(), sensorWakeLeadMs(sensors));
+}
+
+bool EnvironmentTelemetryModule::isTelemetryBusy()
+{
+    // Not yet initialised: it may still want a read before the node sleeps
+    return warmingUp || immediateSendRequested ||
+           (firstTime && (moduleConfig.telemetry.environment_measurement_enabled || ENVIRONMENTAL_TELEMETRY_MODULE_ENABLE));
+}
+
+void EnvironmentTelemetryModule::onTelemetryDeepSleep(uint32_t sleepMs)
+{
+    sleepSensorsUntilNextRead(sensors, sleepMs);
+    saveScheduleForSleep(TELEMETRY_SLEEP_SLOT_ENVIRONMENT, schedule);
+}
+
+void EnvironmentTelemetryModule::openHistory()
+{
+#ifdef ENVIRONMENT_TELEMETRY_HISTORY_PATH
+    // A SENSOR batches between publishes, so its readings have to outlive a reboot or deep sleep
+    if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR) {
+        auto *persistent = makeFileTelemetryStore<meshtastic_EnvironmentMetrics>(
+            ENVIRONMENT_TELEMETRY_HISTORY_PATH, ENVIRONMENT_TELEMETRY_HISTORY_SIZE, ENVIRONMENT_TELEMETRY_HISTORY_FS);
+        if (persistent && persistent->isUsable()) {
+            history.reset(persistent);
+            return;
+        }
+
+        // No card, full filesystem, whatever: measuring into RAM beats not measuring
+        delete persistent;
+        LOG_WARN("Env history: %s unusable, keeping readings in RAM", ENVIRONMENT_TELEMETRY_HISTORY_PATH);
+    }
+#endif
+
+    history.reset(new (std::nothrow) RamTelemetryStore<meshtastic_EnvironmentMetrics>(ENVIRONMENT_TELEMETRY_HISTORY_SIZE));
+    if (!history)
+        LOG_ERROR("Env history: no memory for a store, telemetry disabled");
+}
+
+void EnvironmentTelemetryModule::captureReading(uint32_t nowMs, const TelemetryCadence &cadence, bool phoneConnected)
+{
+    const bool stored = schedule.readIsStored(nowMs, cadence);
+    meshtastic_Telemetry m = meshtastic_Telemetry_init_zero;
+    const bool valid = getEnvironmentTelemetry(&m);
+
+    if (valid) {
+        latest = m;
+        hasLatest = true;
+        if (stored)
+            history->push(m.variant.environment_metrics, m.time, schedule.deltaSecs(nowMs));
+        LOG_INFO("Env: read %s, %u stored", stored ? "stored" : "for phone", (unsigned)history->size());
+    } else {
+        LOG_WARN("Env read failed, keep the previous reading");
+    }
+    schedule.onRead(nowMs, stored, valid, cadence.readMs, sharedReadAnchorMs(this));
+
+    if (valid && phoneConnected && service->isToPhoneQueueEmpty() && sendTelemetry(NODENUM_BROADCAST, true) && stored)
+        history->markNewestPublished(TELEMETRY_PUBLISHED_PHONE);
 }
 
 bool EnvironmentTelemetryModule::wantUIFrame()
@@ -712,7 +865,8 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
     // getMetrics() doesn't always get evaluated because of
     // short-circuit evaluation rules in c++
     bool get_metrics;
-    m->time = getTime();
+    // getTime() falls back to uptime-as-epoch when unset; 0 lets the receiver use its rx time
+    m->time = getValidTime(RTCQualityDevice);
     m->which_variant = meshtastic_Telemetry_environment_metrics_tag;
     m->variant.environment_metrics = meshtastic_EnvironmentMetrics_init_zero;
 
@@ -794,106 +948,117 @@ meshtastic_MeshPacket *EnvironmentTelemetryModule::allocReply()
     return NULL;
 }
 
+void EnvironmentTelemetryModule::logTelemetry(const meshtastic_Telemetry &m)
+{
+    if (m.variant.environment_metrics.has_temperature || m.variant.environment_metrics.has_relative_humidity ||
+        m.variant.environment_metrics.has_barometric_pressure)
+        LOG_INFO("Send: barometric_pressure=%fkPa, relative_humidity=%f%RH, temperature=%fdegC",
+                 m.variant.environment_metrics.barometric_pressure, m.variant.environment_metrics.relative_humidity,
+                 m.variant.environment_metrics.temperature);
+
+    if (m.variant.environment_metrics.has_voltage || m.variant.environment_metrics.has_current ||
+        m.variant.environment_metrics.has_iaq || m.variant.environment_metrics.has_gas_resistance)
+        LOG_INFO("Send: voltage=%f, current=%f, IAQ=%d, gas_resistance=%f", m.variant.environment_metrics.voltage,
+                 m.variant.environment_metrics.current, m.variant.environment_metrics.iaq,
+                 m.variant.environment_metrics.gas_resistance);
+
+    if (m.variant.environment_metrics.has_distance || m.variant.environment_metrics.has_lux)
+        LOG_INFO("Send: distance=%f, lux=%f", m.variant.environment_metrics.distance, m.variant.environment_metrics.lux);
+
+    if (m.variant.environment_metrics.has_wind_speed || m.variant.environment_metrics.has_wind_direction)
+        LOG_INFO("Send: wind speed=%fm/s, direction=%d degrees", m.variant.environment_metrics.wind_speed,
+                 m.variant.environment_metrics.wind_direction);
+
+    if (m.variant.environment_metrics.has_weight)
+        LOG_INFO("Send: weight=%fkg", m.variant.environment_metrics.weight);
+
+    if (m.variant.environment_metrics.has_radiation)
+        LOG_INFO("Send: radiation=%fµR/h", m.variant.environment_metrics.radiation);
+
+    if (m.variant.environment_metrics.has_soil_temperature || m.variant.environment_metrics.has_soil_moisture)
+        LOG_INFO("Send: soil_temperature=%f, soil_moisture=%u", m.variant.environment_metrics.soil_temperature,
+                 m.variant.environment_metrics.soil_moisture);
+
+    if (m.variant.environment_metrics.has_adc_voltage_ch0 || m.variant.environment_metrics.has_adc_voltage_ch1 ||
+        m.variant.environment_metrics.has_adc_voltage_ch2 || m.variant.environment_metrics.has_adc_voltage_ch3)
+        LOG_INFO("Send: adc_ch0=%f, adc_ch1=%f, adc_ch2=%f, adc_ch3=%f", m.variant.environment_metrics.adc_voltage_ch0,
+                 m.variant.environment_metrics.adc_voltage_ch1, m.variant.environment_metrics.adc_voltage_ch2,
+                 m.variant.environment_metrics.adc_voltage_ch3);
+
+    if (m.variant.environment_metrics.has_adc_voltage_ch4 || m.variant.environment_metrics.has_adc_voltage_ch5 ||
+        m.variant.environment_metrics.has_adc_voltage_ch6 || m.variant.environment_metrics.has_adc_voltage_ch7)
+        LOG_INFO("Send: adc_ch4=%f, adc_ch5=%f, adc_ch6=%f, adc_ch7=%f", m.variant.environment_metrics.adc_voltage_ch4,
+                 m.variant.environment_metrics.adc_voltage_ch5, m.variant.environment_metrics.adc_voltage_ch6,
+                 m.variant.environment_metrics.adc_voltage_ch7);
+
+    if (m.variant.environment_metrics.has_lightning_strike_count_1h)
+        LOG_INFO("Send: lightning=%u, distance=%fkm", m.variant.environment_metrics.lightning_strike_count_1h,
+                 m.variant.environment_metrics.lightning_distance_km);
+}
+
 bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
 {
     meshtastic_Telemetry m = meshtastic_Telemetry_init_zero;
-    m.which_variant = meshtastic_Telemetry_environment_metrics_tag;
-    m.time = getTime();
-
-    bool validTelemetry = getEnvironmentTelemetry(&m);
-
-    if (validTelemetry) {
-        if (m.variant.environment_metrics.has_temperature || m.variant.environment_metrics.has_relative_humidity ||
-            m.variant.environment_metrics.has_barometric_pressure)
-            LOG_INFO("Send: barometric_pressure=%fkPa, relative_humidity=%f%RH, temperature=%fdegC",
-                     m.variant.environment_metrics.barometric_pressure, m.variant.environment_metrics.relative_humidity,
-                     m.variant.environment_metrics.temperature);
-
-        if (m.variant.environment_metrics.has_voltage || m.variant.environment_metrics.has_current ||
-            m.variant.environment_metrics.has_iaq || m.variant.environment_metrics.has_gas_resistance)
-            LOG_INFO("Send: voltage=%f, current=%f, IAQ=%d, gas_resistance=%f", m.variant.environment_metrics.voltage,
-                     m.variant.environment_metrics.current, m.variant.environment_metrics.iaq,
-                     m.variant.environment_metrics.gas_resistance);
-
-        if (m.variant.environment_metrics.has_distance || m.variant.environment_metrics.has_lux)
-            LOG_INFO("Send: distance=%f, lux=%f", m.variant.environment_metrics.distance, m.variant.environment_metrics.lux);
-
-        if (m.variant.environment_metrics.has_wind_speed || m.variant.environment_metrics.has_wind_direction)
-            LOG_INFO("Send: wind speed=%fm/s, direction=%d degrees", m.variant.environment_metrics.wind_speed,
-                     m.variant.environment_metrics.wind_direction);
-
-        if (m.variant.environment_metrics.has_weight)
-            LOG_INFO("Send: weight=%fkg", m.variant.environment_metrics.weight);
-
-        if (m.variant.environment_metrics.has_radiation)
-            LOG_INFO("Send: radiation=%fµR/h", m.variant.environment_metrics.radiation);
-
-        if (m.variant.environment_metrics.has_soil_temperature || m.variant.environment_metrics.has_soil_moisture)
-            LOG_INFO("Send: soil_temperature=%f, soil_moisture=%u", m.variant.environment_metrics.soil_temperature,
-                     m.variant.environment_metrics.soil_moisture);
-
-        if (m.variant.environment_metrics.has_adc_voltage_ch0 || m.variant.environment_metrics.has_adc_voltage_ch1 ||
-            m.variant.environment_metrics.has_adc_voltage_ch2 || m.variant.environment_metrics.has_adc_voltage_ch3)
-            LOG_INFO("Send: adc_ch0=%f, adc_ch1=%f, adc_ch2=%f, adc_ch3=%f", m.variant.environment_metrics.adc_voltage_ch0,
-                     m.variant.environment_metrics.adc_voltage_ch1, m.variant.environment_metrics.adc_voltage_ch2,
-                     m.variant.environment_metrics.adc_voltage_ch3);
-
-        if (m.variant.environment_metrics.has_adc_voltage_ch4 || m.variant.environment_metrics.has_adc_voltage_ch5 ||
-            m.variant.environment_metrics.has_adc_voltage_ch6 || m.variant.environment_metrics.has_adc_voltage_ch7)
-            LOG_INFO("Send: adc_ch4=%f, adc_ch5=%f, adc_ch6=%f, adc_ch7=%f", m.variant.environment_metrics.adc_voltage_ch4,
-                     m.variant.environment_metrics.adc_voltage_ch5, m.variant.environment_metrics.adc_voltage_ch6,
-                     m.variant.environment_metrics.adc_voltage_ch7);
-
-        if (m.variant.environment_metrics.has_lightning_strike_count_1h)
-            LOG_INFO("Send: lightning=%u, distance=%fkm", m.variant.environment_metrics.lightning_strike_count_1h,
-                     m.variant.environment_metrics.lightning_distance_km);
-
-        meshtastic_MeshPacket *p = allocDataProtobuf(m);
-        if (!p) {
-            validTelemetry = false;
-        } else {
-            p->to = dest;
-            p->decoded.want_response = false;
-            if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR)
-                p->priority = meshtastic_MeshPacket_Priority_RELIABLE;
-            else
-                p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
-            if (phoneOnly) {
-                LOG_INFO("Send packet to phone");
-                service->sendToPhone(p);
-            } else {
-                LOG_INFO("Send packet to mesh");
-                service->sendToMesh(p, RX_SRC_LOCAL, true);
-
-                if (isPowerSavingSensor()) {
-                    meshtastic_ClientNotification *notification = clientNotificationPool.allocZeroed();
-                    if (notification) {
-                        notification->level = meshtastic_LogRecord_Level_INFO;
-                        notification->type = meshtastic_ClientNotification_NotificationType_TELEMETRY_SENT_SLEEPING;
-                        notification->time = getValidTime(RTCQualityFromNet);
-                        sprintf(notification->message, "Sending telemetry and sleeping for %us interval in a moment",
-                                Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.environment_update_interval,
-                                                                  default_telemetry_broadcast_interval_secs) /
-                                    1000U);
-                        service->sendClientNotification(notification);
-                    }
-                }
-            }
-        }
+    if (phoneOnly) {
+        // The phone gets every read, stored or not
+        if (!hasLatest)
+            return false;
+        m = latest;
+    } else {
+        // One fetch then check the mask: on a file-backed store each read costs an open
+        TelemetryReading<meshtastic_EnvironmentMetrics> reading;
+        if (!history->newest(reading) || (reading.publishedMask & TELEMETRY_PUBLISHED_MESH))
+            return false;
+        m.which_variant = meshtastic_Telemetry_environment_metrics_tag;
+        m.time = reading.time;
+        m.variant.environment_metrics = reading.metrics;
     }
 
-    // Arm the pre-sleep sequence even when no valid reading was available this cycle (e.g. a
-    // failed sensor read): a power-saving SENSOR node must still return to deep sleep,
-    // otherwise it stays awake until the next telemetry interval and drains its battery
-    if (!phoneOnly && isPowerSavingSensor()) {
-        if (!validTelemetry)
-            LOG_WARN("Env telemetry unavailable, sleep without send");
-        sleepOnNextExecution = true;
-        preflightSleepDeferrals = 0;
-        LOG_DEBUG("Start next execution in 5s, then sleep");
-        setIntervalFromNow(FIVE_SECONDS_MS);
+    logTelemetry(m);
+
+    meshtastic_MeshPacket *p = allocDataProtobuf(m);
+    if (!p)
+        return false;
+    p->to = dest;
+    p->decoded.want_response = false;
+    p->priority = config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR ? meshtastic_MeshPacket_Priority_RELIABLE
+                                                                                   : meshtastic_MeshPacket_Priority_BACKGROUND;
+
+    if (phoneOnly) {
+        LOG_INFO("Send packet to phone");
+        service->sendToPhone(p);
+        return true;
     }
-    return validTelemetry;
+
+    LOG_INFO("Send packet to mesh");
+    service->sendToMesh(p, RX_SRC_LOCAL, true);
+    history->markNewestPublished(TELEMETRY_PUBLISHED_MESH);
+    // ccToPhone above hands the phone this very reading, no separate phone send needed
+    history->markNewestPublished(TELEMETRY_PUBLISHED_PHONE);
+    notifySleepAfterSend();
+    return true;
+}
+
+bool EnvironmentTelemetryModule::sendBufferedTelemetry()
+{
+    if (sendTelemetryBatch(*history, allocDataPacket(), TELEMETRY_PUBLISHED_MESH) == 0)
+        return false;
+    notifySleepAfterSend();
+    return true;
+}
+
+void EnvironmentTelemetryModule::notifySleepAfterSend()
+{
+    if (!isPowerSavingSensor())
+        return;
+    meshtastic_ClientNotification *notification = clientNotificationPool.allocZeroed();
+    if (!notification)
+        return;
+    notification->level = meshtastic_LogRecord_Level_INFO;
+    notification->type = meshtastic_ClientNotification_NotificationType_TELEMETRY_SENT_SLEEPING;
+    notification->time = getValidTime(RTCQualityFromNet);
+    snprintf(notification->message, sizeof(notification->message), "Sending telemetry and sleeping until the next read");
+    service->sendClientNotification(notification);
 }
 
 AdminMessageHandleResult EnvironmentTelemetryModule::handleAdminMessageForModule(const meshtastic_MeshPacket &mp,
