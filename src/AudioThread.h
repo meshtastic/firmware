@@ -27,6 +27,10 @@ extern PCA95X5_CLS io;
 
 #define AUDIO_THREAD_INTERVAL_MS 100
 
+#ifndef AUDIO_OUTPUT_GAIN
+#define AUDIO_OUTPUT_GAIN 0.2f
+#endif
+
 class AudioThread : public concurrency::OSThread
 {
   public:
@@ -38,6 +42,9 @@ class AudioThread : public concurrency::OSThread
         setCPUFast(true);
         rtttlFile = std::unique_ptr<AudioFileSourcePROGMEM>(new AudioFileSourcePROGMEM(data, len));
         i2sRtttl = std::unique_ptr<AudioGeneratorRTTTL>(new AudioGeneratorRTTTL());
+#ifdef AUDIO_RTTTL_SAMPLE_RATE
+        i2sRtttl->SetRate(AUDIO_RTTTL_SAMPLE_RATE);
+#endif
         i2sRtttl->begin(rtttlFile.get(), audioOut.get());
     }
 
@@ -109,7 +116,7 @@ class AudioThread : public concurrency::OSThread
     {
         audioOut = std::unique_ptr<AudioOutputI2S>(new AudioOutputI2S(1, AudioOutputI2S::EXTERNAL_I2S));
         audioOut->SetPinout(DAC_I2S_BCK, DAC_I2S_WS, DAC_I2S_DOUT, DAC_I2S_MCLK);
-        audioOut->SetGain(0.2);
+        audioOut->SetGain(AUDIO_OUTPUT_GAIN);
     };
 
     std::unique_ptr<AudioGeneratorRTTTL> i2sRtttl = nullptr;

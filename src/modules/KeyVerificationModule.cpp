@@ -108,6 +108,7 @@ bool KeyVerificationModule::handleReceivedProtobuf(const meshtastic_MeshPacket &
         meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
         if (cn) {
             cn->level = meshtastic_LogRecord_Level_WARNING;
+            cn->type = meshtastic_ClientNotification_NotificationType_KEY_VERIFICATION_NUMBER_REQUEST;
             snprintf(cn->message, sizeof(cn->message), "Enter Security Number for Key Verification");
             cn->which_payload_variant = meshtastic_ClientNotification_key_verification_number_request_tag;
             cn->payload_variant.key_verification_number_request.nonce = currentNonce;
@@ -144,6 +145,7 @@ bool KeyVerificationModule::handleReceivedProtobuf(const meshtastic_MeshPacket &
             meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
             if (cn) {
                 cn->level = meshtastic_LogRecord_Level_WARNING;
+                cn->type = meshtastic_ClientNotification_NotificationType_KEY_VERIFICATION_FINAL_INCOMING;
                 snprintf(cn->message, sizeof(cn->message), "Final confirmation for incoming manual key verification %s", message);
                 cn->which_payload_variant = meshtastic_ClientNotification_key_verification_final_tag;
                 cn->payload_variant.key_verification_final.nonce = currentNonce;
@@ -169,6 +171,7 @@ bool KeyVerificationModule::sendInitialRequest(NodeNum remoteNode)
         meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
         if (cn) {
             cn->level = meshtastic_LogRecord_Level_WARNING;
+            cn->type = meshtastic_ClientNotification_NotificationType_KEY_VERIFICATION_LICENSED_UNAVAILABLE;
             snprintf(cn->message, sizeof(cn->message), "Key verification is unavailable in licensed (ham) mode");
             service->sendClientNotification(cn);
         }
@@ -318,6 +321,7 @@ meshtastic_MeshPacket *KeyVerificationModule::allocReply()
     meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
     if (cn) {
         cn->level = meshtastic_LogRecord_Level_WARNING;
+        cn->type = meshtastic_ClientNotification_NotificationType_KEY_VERIFICATION_NUMBER_INFORM;
         snprintf(cn->message, sizeof(cn->message), "Incoming Key Verification.\nSecurity Number\n%03u %03u",
                  currentSecurityNumber / 1000, currentSecurityNumber % 1000);
         cn->which_payload_variant = meshtastic_ClientNotification_key_verification_number_inform_tag;
@@ -390,6 +394,7 @@ void KeyVerificationModule::processSecurityNumber(uint32_t incomingNumber)
     meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
     if (cn) {
         cn->level = meshtastic_LogRecord_Level_WARNING;
+        cn->type = meshtastic_ClientNotification_NotificationType_KEY_VERIFICATION_FINAL_OUTGOING;
         snprintf(cn->message, sizeof(cn->message), "Final confirmation for outgoing manual key verification %s", message);
         cn->which_payload_variant = meshtastic_ClientNotification_key_verification_final_tag;
         cn->payload_variant.key_verification_final.nonce = currentNonce;

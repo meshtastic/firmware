@@ -55,6 +55,7 @@ class MenuApplet : public SystemApplet, public concurrency::OSThread
     void populateAutoshowPage();       // Dynamically create MenuItems for selecting which applets can autoshow
     void populateRecentsPage();        // Create menu items: a choice of values for settings.recentlyActiveSeconds
     void populateDisplayTimeoutPage(); // Create menu items for config.display.screen_on_secs
+    void populateBuzzerModePage();     // Create menu items for config.device.buzzer_mode
     void populateRemoveWaypointPage(); // Create menu items: one per waypoint in the active WaypointListApplet
     void populateGeofenceWaypointPage();
 
@@ -90,6 +91,8 @@ class MenuApplet : public SystemApplet, public concurrency::OSThread
     bool recentsSelected[RECENTS_COUNT] = {};
     static constexpr uint8_t DISPLAY_TIMEOUT_COUNT = 7;
     bool displayTimeoutSelected[DISPLAY_TIMEOUT_COUNT] = {};
+    static constexpr uint8_t BUZZER_MODE_COUNT = 5;
+    bool buzzerModeSelected[BUZZER_MODE_COUNT] = {};
 
     // Data for selecting and sending canned messages via the menu
     // Placed into a sub-class for organization only
