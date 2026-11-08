@@ -95,6 +95,14 @@ RadioLibInterface::RadioLibInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE c
 #if RADIO_SPI_BULK && !ARCH_PORTDUINO
     LOG_INFO("RADIO_SPI_BULK: one SPI transfer per radio command");
 #endif
+#if RADIO_EDGE_LOG
+    // Bench arm gate: only one of these strings is in each image
+#if RADIOLIB_SPI_PARANOID
+    LOG_INFO("RadioLib SPI paranoid: on");
+#else
+    LOG_INFO("RadioLib SPI paranoid: off");
+#endif
+#endif
 
 #ifdef MESHTASTIC_RX_READOUT_TASK
     // Before any sequence can start, not with the task in startReceive(): the first RadioSequence to wrap that call
