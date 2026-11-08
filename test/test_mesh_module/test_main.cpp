@@ -357,12 +357,37 @@ static void test_routingErrorResponse_setFromIsPassedThrough()
                                      "a sender that is already set must be left alone");
 }
 
-// A null packet is the other caller-side mistake available here; it must not reach the routing
-// module at all rather than producing a NAK addressed to nothing.
 static void test_routingErrorResponse_nullPacketGeneratesNothing()
 {
     service->sendRoutingErrorResponse(meshtastic_Routing_Error_RATE_LIMIT_EXCEEDED, nullptr);
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, mockRoutingModule->ackNaks.size(), "a null packet must not generate a NAK");
+}
+
+// Same request through the real RoutingModule and Router::sendLocal(): the verdict has to land in the
+// phone queue, and nothing may be handed to the radio.
+static void test_routingErrorResponse_unsetFromReachesPhoneViaRealRoutingModule()
+{
+    installRealRoutingModule();
+
+    meshtastic_MeshPacket request = meshtastic_MeshPacket_init_zero;
+    request.from = 0;
+    request.to = REMOTE_NODE;
+    request.id = 0x5EED0201;
+    request.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    request.decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
+
+    service->sendRoutingErrorResponse(meshtastic_Routing_Error_RATE_LIMIT_EXCEEDED, &request);
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, mockRouter->sentPackets.size(), "the NAK must not be sent towards the radio");
+    meshtastic_MeshPacket *toPhone = mockService->getForPhone();
+    TEST_ASSERT_NOT_NULL_MESSAGE(toPhone, "the NAK must reach the phone");
+    TEST_ASSERT_EQUAL(meshtastic_PortNum_ROUTING_APP, toPhone->decoded.portnum);
+    TEST_ASSERT_EQUAL_UINT32(0x5EED0201, toPhone->decoded.request_id);
+    meshtastic_Routing routing = meshtastic_Routing_init_zero;
+    TEST_ASSERT_TRUE(
+        pb_decode_from_bytes(toPhone->decoded.payload.bytes, toPhone->decoded.payload.size, &meshtastic_Routing_msg, &routing));
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_RATE_LIMIT_EXCEEDED, routing.error_reason);
+    mockService->releaseToPool(toPhone);
 }
 
 } // namespace
@@ -1086,6 +1111,7 @@ void setup()
     RUN_TEST(test_routingErrorResponse_unsetFromAddressesUs);
     RUN_TEST(test_routingErrorResponse_setFromIsPassedThrough);
     RUN_TEST(test_routingErrorResponse_nullPacketGeneratesNothing);
+    RUN_TEST(test_routingErrorResponse_unsetFromReachesPhoneViaRealRoutingModule);
     RUN_TEST(test_neighborInfo_relayedPayloadIsNotModified);
     RUN_TEST(test_neighborInfo_directCopyRecordsSenderAndOursOmitsLastSentBy);
     RUN_TEST(test_neighborInfo_olderRelayRewriteMatchingHeaderIsTrusted);
