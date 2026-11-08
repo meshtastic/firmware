@@ -44,6 +44,13 @@ class OSThread : public Thread
   public:
     /// For debug printing only (might be null)
     static const OSThread *currentThread;
+#ifdef MESHTASTIC_RADIO_TASK
+    /// currentThread for the radio task, so the two tasks' log lines keep their own thread names
+    static const OSThread *radioTaskThread;
+#endif
+
+    /// The thread running on the calling task, for debug printing only (might be null)
+    static const OSThread *current();
 
     OSThread(const char *name, uint32_t period = 0, ThreadController *controller = &mainController);
 

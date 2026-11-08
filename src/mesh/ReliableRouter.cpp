@@ -99,6 +99,7 @@ bool ReliableRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
        If we don't add this, we will likely retransmit too early.
     */
     for (auto i = pending.begin(); i != pending.end(); i++) {
+        RADIO_TASK_LOCK(); // a received packet's time reads the header info the radio thread sets during a readout
         i->second.nextTxMsec += iface->getPacketTime(p, true);
     }
 

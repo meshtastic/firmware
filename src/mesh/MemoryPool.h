@@ -131,6 +131,21 @@ template <class T, int MaxSize> class MemoryPool : public Allocator<T>
   private:
     T pool[MaxSize];
     bool used[MaxSize];
+#ifdef MESHTASTIC_RADIO_TASK
+    // The radio task allocates and releases packets beside the loop, so a slot's claim must be atomic. A critical section,
+    // not a mutex: it is a few dozen flag reads.
+#ifdef ARCH_ESP32
+    portMUX_TYPE usedMux = portMUX_INITIALIZER_UNLOCKED;
+    void enterUsed() { portENTER_CRITICAL(&usedMux); }
+    void exitUsed() { portEXIT_CRITICAL(&usedMux); }
+#else
+    void enterUsed() { taskENTER_CRITICAL(); }
+    void exitUsed() { taskEXIT_CRITICAL(); }
+#endif
+#else
+    void enterUsed() {}
+    void exitUsed() {}
+#endif
 
   public:
     explicit MemoryPool(const char *auditTag = nullptr) : Allocator<T>(auditTag), pool{}, used{}
@@ -151,8 +166,11 @@ template <class T, int MaxSize> class MemoryPool : public Allocator<T>
         // Find the index of this pointer in our pool
         int index = p - pool;
         if (index >= 0 && index < MaxSize) {
-            assert(used[index]); // Should be marked as used
+            enterUsed();
+            const bool wasUsed = used[index];
             used[index] = false;
+            exitUsed();
+            assert(wasUsed); // Should be marked as used
             this->auditAdd(-(int32_t)sizeof(T));
             LOG_HEAP("Released static pool item %d at 0x%x", index, p);
         } else {
@@ -166,8 +184,11 @@ template <class T, int MaxSize> class MemoryPool : public Allocator<T>
     {
         // Find first free slot
         for (int i = 0; i < MaxSize; i++) {
-            if (!used[i]) {
-                used[i] = true;
+            enterUsed();
+            const bool claimed = !used[i];
+            used[i] = true;
+            exitUsed();
+            if (claimed) {
                 this->auditAdd((int32_t)sizeof(T));
                 LOG_HEAP("Allocated static pool item %d at 0x%x", i, &pool[i]);
                 return &pool[i];

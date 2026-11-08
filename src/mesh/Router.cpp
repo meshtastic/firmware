@@ -407,7 +407,19 @@ void Router::setReceivedMessage()
     // LOG_DEBUG("set interval to ASAP");
     setInterval(0); // Run ASAP, so we can figure out our correct sleep time
     runASAP = true;
+#ifdef MESHTASTIC_RADIO_TASK
+    if (concurrency::inRadioTask())
+        concurrency::mainDelay.interrupt(); // runASAP alone does not end a sleep the loop is already in
+#endif
 }
+
+#ifdef MESHTASTIC_RADIO_TASK
+void Router::wakeIfReceived()
+{
+    if (!fromRadioQueue.isEmpty())
+        setInterval(0);
+}
+#endif
 
 meshtastic_QueueStatus Router::getQueueStatus()
 {
@@ -415,8 +427,10 @@ meshtastic_QueueStatus Router::getQueueStatus()
         meshtastic_QueueStatus qs;
         qs.res = qs.mesh_packet_id = qs.free = qs.maxlen = 0;
         return qs;
-    } else
+    } else {
+        RADIO_TASK_LOCK();
         return iface->getQueueStatus();
+    }
 }
 
 ErrorCode Router::sendLocal(meshtastic_MeshPacket *p, RxSource src)
@@ -628,6 +642,7 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
     }
 
     assert(iface); // This should have been detected already in sendLocal (or we just received a packet from outside)
+    RADIO_TASK_LOCK();
     return iface->send(p);
 }
 
@@ -644,7 +659,11 @@ ErrorCode Router::sendTransparent(meshtastic_MeshPacket *p)
     }
 
     fixPriority(p); // queue ordering only; nothing on the air changes
-    ErrorCode res = iface->send(p);
+    ErrorCode res;
+    {
+        RADIO_TASK_LOCK();
+        res = iface->send(p);
+    }
     if (res == ERRNO_SHOULD_RELEASE) { // the radio declined a no-LoRa destination without taking ownership
         packetPool.release(p);
         res = meshtastic_Routing_Error_BAD_REQUEST;
@@ -655,6 +674,7 @@ ErrorCode Router::sendTransparent(meshtastic_MeshPacket *p)
 /** Attempt to cancel a previously sent packet.  Returns true if a packet was found we could cancel */
 bool Router::cancelSending(NodeNum from, PacketId id)
 {
+    RADIO_TASK_LOCK();
     if (iface && iface->cancelSending(from, id)) {
         // We are not a relayer of this packet anymore
         removeRelayer(nodeDB->getLastByteOfNodeNum(nodeDB->getNodeNum()), id, from);
@@ -666,6 +686,7 @@ bool Router::cancelSending(NodeNum from, PacketId id)
 /** Attempt to find a packet in the TxQueue. Returns true if the packet was found. */
 bool Router::findInTxQueue(NodeNum from, PacketId id)
 {
+    RADIO_TASK_LOCK();
     return iface->findInTxQueue(from, id);
 }
 

@@ -458,8 +458,10 @@ static void restoreLoraIrqPin(gpio_num_t pin)
     gpio_set_intr_type(pin, GPIO_INTR_POSEDGE);
     gpio_intr_enable(pin);
     // The edge that woke us was consumed by the sleep; deliver an IRQ that is already pending.
-    if (gpio_get_level(pin) == 1 && RadioLibInterface::instance)
+    if (gpio_get_level(pin) == 1 && RadioLibInterface::instance) {
+        RADIO_TASK_LOCK();
         RadioLibInterface::instance->pollMissedIrqs();
+    }
 }
 
 // Consecutive sleeps skipped because the LoRa IRQ was already asserted. A line stuck high would

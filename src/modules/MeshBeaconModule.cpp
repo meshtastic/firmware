@@ -761,6 +761,8 @@ void MeshBeaconBroadcastModule::sendBeacon()
         const int16_t wireHash = radioDiffers ? channels.hashFor(tgt.channelIndex, tgt.channelName) : -1;
 
         const auto applyTarget = [&](meshtastic_MeshPacket *p) {
+            // The radio thread reads the target table from its TX hook, so the entry and the send() land as one
+            RADIO_TASK_LOCK();
             // perhapsEncode() keys encryption and the channel hash off this index, so the primary slot is never touched
             p->channel = tgt.channelIndex;
             if (radioDiffers || legacySplit) {

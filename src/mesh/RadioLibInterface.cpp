@@ -19,7 +19,11 @@
 #endif
 
 #ifndef RADIO_LOG_CAD_FREE_AFTER_TX
-#define RADIO_LOG_CAD_FREE_AFTER_TX 0 // bench: log the clear-scan verdict after the TX launch, not between the two
+#define RADIO_LOG_CAD_FREE_AFTER_TX 0 // bench: log the scan's verdict after the TX launch or RX re-arm, not before it
+#endif
+#if defined(MESHTASTIC_RADIO_TASK) && !RADIO_LOG_CAD_FREE_AFTER_TX
+#undef RADIO_LOG_CAD_FREE_AFTER_TX
+#define RADIO_LOG_CAD_FREE_AFTER_TX 1 // the radio task logs nothing between its TX timer and the radio event
 #endif
 #ifndef RADIO_EDGE_LOG
 #define RADIO_EDGE_LOG 0 // bench: one "RadioEdge:" line per frame with µs stamps, for cross-node timing
@@ -88,7 +92,12 @@ void LockingArduinoHal::spiTransfer(uint8_t *out, size_t len, uint8_t *in)
 
 RadioLibInterface::RadioLibInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst,
                                      RADIOLIB_PIN_TYPE busy, PhysicalLayer *_iface)
+#ifdef MESHTASTIC_RADIO_TASK
+    : NotifiedWorkerThread("RadioIf", &concurrency::radioController, &concurrency::radioDelay), module(hal, cs, irq, rst, busy),
+      iface(_iface)
+#else
     : NotifiedWorkerThread("RadioIf"), module(hal, cs, irq, rst, busy), iface(_iface)
+#endif
 {
     instance = this;
 
@@ -694,7 +703,9 @@ void RadioLibInterface::onNotify(uint32_t notification)
                     // clear the flags startTransmit() is about to set up, or on SX128x leave the chip in standby.
                     RadioSequence seq(this);
                     // Listen-before-talk: a CAD preamble scan immediately before we key up.
-                    LOG_DEBUG("CAD arm");
+#ifndef MESHTASTIC_RADIO_TASK
+                    LOG_DEBUG("CAD arm"); // the radio task logs it after the scan: no line between its TX timer and SET_TX
+#endif
                     scanForTx = txp;
 #if RADIO_EDGE_LOG
                     edgeCadStart = edgeStampNow();
@@ -706,10 +717,18 @@ void RadioLibInterface::onNotify(uint32_t notification)
 #endif
                     scanForTx = nullptr;
                     if (channelActive) { // currently traffic on the channel?
+#if !RADIO_LOG_CAD_FREE_AFTER_TX
                         LOG_DEBUG("CAD busy");
+#endif
                         // Beacon target or not: reconfigureForBeaconTX() already left RX running on that
                         // config, so skipping this only ever left the node deaf in standby.
                         rearmReceive();
+#if RADIO_LOG_CAD_FREE_AFTER_TX
+#ifdef MESHTASTIC_RADIO_TASK
+                        LOG_DEBUG("CAD arm");
+#endif
+                        LOG_DEBUG("CAD busy"); // after the RX re-arm, as "CAD free" goes after the launch
+#endif
                         setTransmitDelay();
 #if RADIO_EDGE_LOG
                         edgeCadBusyId = txp->id; // logged once the radio-sequence lock is released
@@ -727,6 +746,9 @@ void RadioLibInterface::onNotify(uint32_t notification)
                         assert(txp);
                         startSend(txp);
 #if RADIO_LOG_CAD_FREE_AFTER_TX
+#ifdef MESHTASTIC_RADIO_TASK
+                        LOG_DEBUG("CAD arm");
+#endif
                         LOG_DEBUG("CAD free"); // after the launch: a log line here was ms of scan going stale
                         if (peek)
                             LOG_DEBUG("Preamble hold released, CAD clear %ums after the sighting", peekClearMs);
