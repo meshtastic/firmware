@@ -1,4 +1,5 @@
 #include "TestUtil.h"
+#include "modules/Telemetry/BaseTelemetryModule.h"
 #include "modules/Telemetry/TelemetryBatch.h"
 #include "modules/Telemetry/TelemetryScheduler.h"
 #include "modules/Telemetry/TelemetrySensorPower.h"
@@ -18,11 +19,14 @@
 //  - encodeTelemetryBatch() (src/modules/Telemetry/TelemetryBatch.h): SENSOR batches take the oldest
 //    readings the channel has not had, carry time or the gap since the previous reading, and shrink
 //    until the encoding fits.
+//  - BaseTelemetryModule::sharedSleepBudgetMs(): a power-saving SENSOR sleeps only while every
+//    registered module is idle, until the earliest one needs the node.
 //
 // Regressions guarded: reads drifting by the warm-up each cycle, or happening on a cold sensor;
 // phone cadence filling the store and multiplying mesh/MQTT traffic; a sensor slept when it cannot
 // warm up in time (it would never produce a reading); a busy loop while airtime blocks the mesh;
-// deltaSecs lost or doubled across deep sleep.
+// deltaSecs lost or doubled across deep sleep; one module putting the node to sleep through another
+// module's read.
 
 static constexpr uint32_t READ_MS = 360000U;  // 6 min
 static constexpr uint32_t PHONE_MS = 60000U;  // 1 min
@@ -513,6 +517,64 @@ static void test_batch_nothingUnpublishedEncodesNothing()
     TEST_ASSERT_EQUAL_UINT16(0, encodeTelemetryBatch(store, TELEMETRY_PUBLISHED_MESH, 10, buf, sizeof(buf), size, idx));
 }
 
+// ------------------------------------------------------------------ shared deep sleep
+
+class FakeModule : public BaseTelemetryModule
+{
+  public:
+    uint32_t neededMs = UINT32_MAX;
+    bool busy = false;
+
+    FakeModule() { registerForSharedSleep(); }
+    uint32_t msUntilNeededAwake() override { return neededMs; }
+    bool isTelemetryBusy() override { return busy; }
+    static uint32_t budget() { return sharedSleepBudgetMs(); }
+};
+
+static void test_sleep_budgetIsEarliestModuleMinusBootMargin()
+{
+    FakeModule env, aqm;
+    env.neededMs = 600000U;
+    aqm.neededMs = 330000U;
+    TEST_ASSERT_EQUAL_UINT32(330000U - TELEMETRY_BOOT_MARGIN_MS, FakeModule::budget());
+}
+
+static void test_sleep_busyModuleKeepsNodeAwake()
+{
+    FakeModule env, aqm;
+    env.neededMs = 600000U;
+    aqm.neededMs = 600000U;
+    aqm.busy = true;
+    TEST_ASSERT_EQUAL_UINT32(0, FakeModule::budget());
+}
+
+static void test_sleep_imminentWorkGivesNoBudget()
+{
+    FakeModule m;
+    m.neededMs = TELEMETRY_BOOT_MARGIN_MS - 1U;
+    TEST_ASSERT_EQUAL_UINT32(0, FakeModule::budget());
+}
+
+// No module schedules anything: leave the node to its usual sleep rather than sleep forever
+static void test_sleep_noScheduleNoBudget()
+{
+    FakeModule m;
+    TEST_ASSERT_EQUAL_UINT32(0, FakeModule::budget());
+}
+
+// A destroyed module stops taking part
+static void test_sleep_unregisteredOnDestruction()
+{
+    FakeModule keep;
+    keep.neededMs = 600000U;
+    {
+        FakeModule gone;
+        gone.neededMs = 60000U;
+        TEST_ASSERT_EQUAL_UINT32(60000U - TELEMETRY_BOOT_MARGIN_MS, FakeModule::budget());
+    }
+    TEST_ASSERT_EQUAL_UINT32(600000U - TELEMETRY_BOOT_MARGIN_MS, FakeModule::budget());
+}
+
 void setUp(void) {}
 void tearDown(void) {}
 
@@ -553,6 +615,11 @@ void setup()
     RUN_TEST(test_batch_capsAtMaxReadings);
     RUN_TEST(test_batch_shrinksToFit);
     RUN_TEST(test_batch_nothingUnpublishedEncodesNothing);
+    RUN_TEST(test_sleep_budgetIsEarliestModuleMinusBootMargin);
+    RUN_TEST(test_sleep_busyModuleKeepsNodeAwake);
+    RUN_TEST(test_sleep_imminentWorkGivesNoBudget);
+    RUN_TEST(test_sleep_noScheduleNoBudget);
+    RUN_TEST(test_sleep_unregisteredOnDestruction);
     exit(UNITY_END());
 }
 
