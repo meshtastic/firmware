@@ -182,6 +182,8 @@ class GPS : private concurrency::OSThread
 
     /// Arm the PPS IRQ for a burst when one is due, pin the RTC to each edge the fix vouches for, disarm after
     void processPps();
+    /// A fix the PPS can be trusted on: any GGA fix, as hasLock()'s 3D rule would keep an indoor receiver out
+    bool ppsFixUsable();
     /// Release the PPS IRQ; the next burst is due at nextBurstMs (monotonic ms, 0 = as soon as there is a fix)
     void disarmPps(uint64_t nextBurstMs);
 

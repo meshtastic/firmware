@@ -2455,6 +2455,12 @@ bool GPS::hasLock()
     return false;
 }
 
+bool GPS::ppsFixUsable()
+{
+    // Any GGA fix: the receiver's pulse is disciplined from a 2D fix too, and indoors a 3D one may never come
+    return fixQual >= 1 && fixQual <= 5;
+}
+
 // 8N1 framing: ten bit times per byte. 0 where the GPS "UART" has no line rate (a gpsd socket, a bridged port).
 static uint32_t gpsByteTimeUs(int32_t baud)
 {
@@ -2517,7 +2523,7 @@ void GPS::processPps()
 
     if (!ppsArmed) {
         // The clock must already name the second (NMEA sets it), and the receiver only pulses on UTC with a fix
-        if (getRTCQuality() != RTCQualityGPS || !hasLock() || (nextPpsBurstMs && nowMs < nextPpsBurstMs))
+        if (getRTCQuality() != RTCQualityGPS || !ppsFixUsable() || (nextPpsBurstMs && nowMs < nextPpsBurstMs))
             return;
         lastPpsCount = ppsEdgeCount;
 #if defined(ARCH_NRF52)
@@ -2553,7 +2559,7 @@ void GPS::processPps()
     const uint64_t nowUs = Time::getMicrosMonotonic();
     const uint64_t edgeMonoUs = Time::stampToMicros(edgeUs32);
     const uint64_t clockAtEdgeUs = getUtcMicros() - (nowUs - edgeMonoUs);
-    const PpsEdgeResult r = pps.onEdge(edgeMonoUs, clockAtEdgeUs, hasLock());
+    const PpsEdgeResult r = pps.onEdge(edgeMonoUs, clockAtEdgeUs, ppsFixUsable());
     if (!r.accepted) {
         LOG_DEBUG_GPS("GPS PPS edge not used: %s", r.reason);
         return;
