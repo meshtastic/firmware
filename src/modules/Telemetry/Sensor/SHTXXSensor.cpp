@@ -42,6 +42,11 @@ void SHTXXSensor::getSensorVariant(SHTSensor::SHTSensorType sensorType)
     }
 }
 
+/**
+ * Initialise the SHTxx sensor found by the I2C scan. A SHTC3 at 0x70 is sent the wakeup command first,
+ * since it may have been left asleep by older firmware.
+ * @return true if the sensor was initialised
+ */
 bool SHTXXSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 {
     LOG_INFO("Init sensor: %s", sensorName);
