@@ -298,6 +298,7 @@ class LoopbackRoutingModule : public RoutingModule
     ReliableRouterTestShim *target = nullptr;
     bool enabled = false;
     size_t loopbacks = 0;
+    meshtastic_Routing_Error lastError = meshtastic_Routing_Error_NONE;
 
     void sendAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex, uint8_t hopLimit = 0,
                     bool ackWantsAck = false, const meshtastic_MeshPacket *relaySource = nullptr) override
@@ -307,6 +308,7 @@ class LoopbackRoutingModule : public RoutingModule
             return;
 
         loopbacks++;
+        lastError = err;
         meshtastic_MeshPacket nak = meshtastic_MeshPacket_init_zero;
         nak.from = to; // a self-addressed NAK, exactly what abortSendAndNak()/MAX_RETRANSMIT produce
         nak.to = to;
@@ -462,7 +464,11 @@ void setUp(void)
     configureBehaviorChannels();
 }
 
-void tearDown(void) {}
+// A test that swaps in a stack-local routing module may abort on an assertion before restoring it.
+void tearDown(void)
+{
+    routingModule = mockRoutingModule;
+}
 
 // ===========================================================================
 // Group 1 - resolveLastByte (M1)
@@ -1019,7 +1025,6 @@ void test_retransmission_survives_loopback_erasing_its_own_record(void)
     loopback.target = reliableShim;
     loopback.enabled = true;
 
-    RoutingModule *previous = routingModule;
     routingModule = &loopback;
 
     auto original = makeBehaviorPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kLocalNode, kRemoteNode, 1, /*wantAck=*/true);
@@ -1029,9 +1034,9 @@ void test_retransmission_survives_loopback_erasing_its_own_record(void)
 
     reliableShim->runDueRetries();
 
-    routingModule = previous;
-
     TEST_ASSERT_EQUAL_MESSAGE(1, loopback.loopbacks, "the NAK must have re-entered the router");
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Routing_Error_MAX_RETRANSMIT, loopback.lastError,
+                              "the NAK must be the MAX_RETRANSMIT one");
     TEST_ASSERT_EQUAL_MESSAGE(0, reliableShim->pendingCount(), "the record must be gone exactly once");
 }
 
@@ -1043,7 +1048,6 @@ void test_retry_send_survives_abort_nak_erasing_its_own_record(void)
     loopback.target = reliableShim;
     loopback.enabled = true;
 
-    RoutingModule *previous = routingModule;
     routingModule = &loopback;
 
     auto original = makeBehaviorPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kLocalNode, kRemoteNode, 0, /*wantAck=*/true);
@@ -1054,9 +1058,9 @@ void test_retry_send_survives_abort_nak_erasing_its_own_record(void)
 
     reliableShim->runDueRetries();
 
-    routingModule = previous;
-
     TEST_ASSERT_EQUAL_MESSAGE(1, loopback.loopbacks, "the abort NAK must have re-entered the router");
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Routing_Error_PKI_FAILED, loopback.lastError,
+                              "the NAK must come from the failed encode, not an early MAX_RETRANSMIT");
     TEST_ASSERT_EQUAL_MESSAGE(0, reliableShim->pendingCount(), "the record must be gone");
 }
 
