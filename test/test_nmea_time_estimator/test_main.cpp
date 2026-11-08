@@ -13,6 +13,7 @@
 //    module's time steps (leap second, re-acquisition);
 //  - the apply policy stepping the clock back on every noisy estimate, or never stepping it back, which lets a
 //    fast crystal on an always-on GPS run ahead for the rest of the boot.
+#include "Arduino.h" // declares setup()/loop() with the linkage the framework's main() calls
 #include "TestUtil.h"
 #include "gps/NmeaTimeEstimator.h"
 #include <cstdlib>
