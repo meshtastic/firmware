@@ -8,7 +8,9 @@
 #include "GpioLogic.h"
 #include "NmeaTimeEstimator.h"
 #include "Observer.h"
+#if GPS_PPS_DISCIPLINE
 #include "PpsDiscipline.h"
+#endif
 #include "TinyGPS++.h"
 #include "concurrency/OSThread.h"
 #include "input/RotaryEncoderInterruptImpl1.h"
@@ -180,12 +182,14 @@ class GPS : private concurrency::OSThread
     /// The UTC the sentence just committed names, in ms; false if implausible
     bool readNmeaUtcMs(int64_t &utcMs);
 
+#if GPS_PPS_DISCIPLINE
     /// Arm the PPS IRQ for a burst when one is due, pin the RTC to each edge the fix vouches for, disarm after
     void processPps();
     /// A fix the PPS can be trusted on: any GGA fix, as hasLock()'s 3D rule would keep an indoor receiver out
     bool ppsFixUsable();
     /// Release the PPS IRQ; the next burst is due at nextBurstMs (monotonic ms, 0 = as soon as there is a fix)
     void disarmPps(uint64_t nextBurstMs);
+#endif
 
     /**
      * Perform any processing that should be done only while the GPS is awake and looking for a fix.
@@ -221,6 +225,7 @@ class GPS : private concurrency::OSThread
     uint32_t lastDollarByteCount = 0; // nmeaByteCount at the last '$'
     uint64_t lastNmeaTimeApplyMs = 0; // monotonic ms of the last RTC step from NMEA; 0 = never
 
+#if GPS_PPS_DISCIPLINE
     PpsDiscipline pps;
     bool ppsArmed = false;         // the PPS IRQ is attached; only during a burst, as IRQ slots are scarce
     uint32_t lastPpsCount = 0;     // edge count already handled
@@ -229,6 +234,7 @@ class GPS : private concurrency::OSThread
     uint64_t nextPpsBurstMs = 0;   // monotonic ms; 0 = arm once there is a fix
     uint64_t lastPpsAcceptMs = 0;  // monotonic ms of the last edge the RTC was pinned to; 0 = never
     uint64_t lastPpsFullSetMs = 0; // last PPS set that also wrote the hardware RTC and system time
+#endif
 
 #ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
     // (20210908) TinyGps++ can only read the GPGSA "FIX TYPE" field
