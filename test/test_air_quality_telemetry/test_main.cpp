@@ -120,18 +120,21 @@ static void checkStoreContract(TelemetryStore<uint32_t> &s, const char *backend)
     TEST_ASSERT_FALSE_MESSAGE(s.at(0, r), backend);
 
     // Capture time travels with the reading it belongs to.
+    // So does the gap since the previous stored reading, 0 when unknown.
     TEST_ASSERT_TRUE_MESSAGE(s.push(11U, 1000U), backend);
-    TEST_ASSERT_TRUE_MESSAGE(s.push(22U, 1060U), backend);
+    TEST_ASSERT_TRUE_MESSAGE(s.push(22U, 1060U, 60U), backend);
     TEST_ASSERT_EQUAL_UINT16_MESSAGE(2, s.size(), backend);
 
     TEST_ASSERT_TRUE_MESSAGE(s.newest(r), backend);
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(22U, r.metrics, backend);
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(1060U, r.time, backend);
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(60U, r.deltaSecs, backend);
 
     // Oldest first, so a batched offload can walk them in the order they were taken.
     TEST_ASSERT_TRUE_MESSAGE(s.at(0, r), backend);
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(11U, r.metrics, backend);
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(1000U, r.time, backend);
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0U, r.deltaSecs, backend);
 
     // Each consumer tracks what it has taken independently.
     TEST_ASSERT_TRUE_MESSAGE(s.hasUnpublishedNewest(TELEMETRY_PUBLISHED_MESH), backend);
@@ -146,6 +149,13 @@ static void checkStoreContract(TelemetryStore<uint32_t> &s, const char *backend)
     TEST_ASSERT_TRUE_MESSAGE(r.publishedMask & TELEMETRY_PUBLISHED_MESH, backend);
     TEST_ASSERT_TRUE_MESSAGE(s.at(1, r), backend);
     TEST_ASSERT_FALSE_MESSAGE(r.publishedMask & TELEMETRY_PUBLISHED_MESH, backend);
+
+    // The direct uplink is a third, independent consumer.
+    s.markPublished(1, TELEMETRY_PUBLISHED_MQTT);
+    TEST_ASSERT_TRUE_MESSAGE(s.at(1, r), backend);
+    TEST_ASSERT_TRUE_MESSAGE(r.publishedMask & TELEMETRY_PUBLISHED_MQTT, backend);
+    TEST_ASSERT_FALSE_MESSAGE(r.publishedMask & TELEMETRY_PUBLISHED_MESH, backend);
+    TEST_ASSERT_TRUE_MESSAGE(s.hasUnpublishedNewest(TELEMETRY_PUBLISHED_MESH), backend);
 
     // Filling past capacity drops the oldest and keeps the order. That is the steady state: the
     // offload samples the loop rather than draining it.

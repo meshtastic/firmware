@@ -10,11 +10,13 @@
 enum TelemetryPublishChannel : uint8_t {
     TELEMETRY_PUBLISHED_MESH = 1 << 0,
     TELEMETRY_PUBLISHED_PHONE = 1 << 1,
+    TELEMETRY_PUBLISHED_MQTT = 1 << 2,
 };
 
 template <typename T> struct TelemetryReading {
     T metrics{};
     uint32_t time = 0;         // seconds since 1970 when captured, 0 if the clock was not valid then
+    uint32_t deltaSecs = 0;    // seconds since the previous stored reading, 0 if unknown
     uint8_t publishedMask = 0; // which consumers have taken it
 };
 
@@ -26,7 +28,7 @@ template <typename T> class TelemetryStore
     virtual ~TelemetryStore() = default;
 
     /// False only if nothing was stored; evicting the oldest to make room is the steady state.
-    virtual bool push(const T &metrics, uint32_t time) = 0;
+    virtual bool push(const T &metrics, uint32_t time, uint32_t deltaSecs = 0) = 0;
 
     virtual uint16_t size() const = 0;
     virtual uint16_t capacity() const = 0;
@@ -76,7 +78,7 @@ template <typename T> class RamTelemetryStore : public TelemetryStore<T>
     RamTelemetryStore(const RamTelemetryStore &) = delete;
     RamTelemetryStore &operator=(const RamTelemetryStore &) = delete;
 
-    bool push(const T &metrics, uint32_t time) override
+    bool push(const T &metrics, uint32_t time, uint32_t deltaSecs = 0) override
     {
         if (slots == 0)
             return false;
@@ -84,6 +86,7 @@ template <typename T> class RamTelemetryStore : public TelemetryStore<T>
         const uint16_t writeIdx = (head + count) % slots;
         readings[writeIdx].metrics = metrics;
         readings[writeIdx].time = time;
+        readings[writeIdx].deltaSecs = deltaSecs;
         readings[writeIdx].publishedMask = 0;
 
         if (count < slots)

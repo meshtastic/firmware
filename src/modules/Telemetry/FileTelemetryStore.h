@@ -23,7 +23,7 @@ template <typename T, typename FsT = typename std::remove_reference<decltype(FSC
 class FileTelemetryStore : public TelemetryStore<T>
 {
     static constexpr uint32_t MAGIC = 0x4D544853; // "MTHS"
-    static constexpr uint16_t VERSION = 3;
+    static constexpr uint16_t VERSION = 4;
 
     // Packed, and immutable once written: its layout has to be stable to reopen a file.
     struct __attribute__((packed)) Header {
@@ -40,6 +40,7 @@ class FileTelemetryStore : public TelemetryStore<T>
     struct Record {
         uint32_t seq;
         uint32_t time;
+        uint32_t deltaSecs;
         uint8_t publishedMask;
         T metrics;
         uint32_t seqEnd;
@@ -200,7 +201,7 @@ class FileTelemetryStore : public TelemetryStore<T>
     FileTelemetryStore(const FileTelemetryStore &) = delete;
     FileTelemetryStore &operator=(const FileTelemetryStore &) = delete;
 
-    bool push(const T &metrics, uint32_t time) override
+    bool push(const T &metrics, uint32_t time, uint32_t deltaSecs = 0) override
     {
         if (!usable || hdr.slots == 0)
             return false;
@@ -208,6 +209,7 @@ class FileTelemetryStore : public TelemetryStore<T>
         Record r = {};
         r.seq = r.seqEnd = lastSeq + 1;
         r.time = time;
+        r.deltaSecs = deltaSecs;
         r.publishedMask = 0;
         r.metrics = metrics;
 
@@ -248,6 +250,7 @@ class FileTelemetryStore : public TelemetryStore<T>
 
         out.metrics = r.metrics;
         out.time = r.time;
+        out.deltaSecs = r.deltaSecs;
         out.publishedMask = r.publishedMask;
         return true;
     }
