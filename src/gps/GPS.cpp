@@ -2252,6 +2252,7 @@ bool GPS::lookForTime()
     if (!shouldApplyNmeaTime(getRTCQuality() == RTCQualityGPS, clockAheadMs, msSinceApplied, nmeaTime.sampleCount()))
         return true;
 
+    const RTCQuality prevQuality = getRTCQuality();
     struct timeval tv;
     tv.tv_sec = utcMs / 1000;
     tv.tv_usec = (utcMs % 1000) * 1000;
@@ -2260,9 +2261,15 @@ bool GPS::lookForTime()
 
     lastNmeaTimeApplyMs = nowMs ? nowMs : 1;
     const uint32_t uncertaintyUs = nmeaTime.uncertaintyUs();
-    LOG_DEBUG("NMEA GPS time set %lu.%03u, step %ld ms, %lu samples, window %ld us", (unsigned long)tv.tv_sec,
-              (unsigned)(utcMs % 1000), (long)std::max<int64_t>(INT32_MIN, std::min<int64_t>(INT32_MAX, -clockAheadMs)),
-              (unsigned long)nmeaTime.sampleCount(), uncertaintyUs == UINT32_MAX ? -1L : (long)uncertaintyUs);
+    const long windowUs = uncertaintyUs == UINT32_MAX ? -1L : (long)uncertaintyUs;
+    if (prevQuality == RTCQualityNone) { // the clock was counting from boot, so a step would mean nothing
+        LOG_DEBUG("NMEA GPS time set %lu.%03u, %lu samples, window %ld us", (unsigned long)tv.tv_sec, (unsigned)(utcMs % 1000),
+                  (unsigned long)nmeaTime.sampleCount(), windowUs);
+    } else {
+        LOG_DEBUG("NMEA GPS time set %lu.%03u, step %ld ms, %lu samples, window %ld us", (unsigned long)tv.tv_sec,
+                  (unsigned)(utcMs % 1000), (long)std::max<int64_t>(INT32_MIN, std::min<int64_t>(INT32_MAX, -clockAheadMs)),
+                  (unsigned long)nmeaTime.sampleCount(), windowUs);
+    }
     return true;
 }
 
