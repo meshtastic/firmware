@@ -21,6 +21,11 @@
 #ifndef RADIO_LOG_CAD_FREE_AFTER_TX
 #define RADIO_LOG_CAD_FREE_AFTER_TX 0 // bench: log the clear-scan verdict after the TX launch, not between the two
 #endif
+#ifndef RADIO_CAD_HANDOFF_HOLDS_TX
+#define RADIO_CAD_HANDOFF_HOLDS_TX 0 // hold TX while a busy scan's handoff RX is open; a scan's standby would drop its frame
+#endif
+// Age in ms (+1, so 0 means none) of a handoff RX that a standby dropped; logged at the end of onNotify, off the air path
+static uint32_t cadHandoffDroppedAge = 0;
 #ifndef RADIO_EDGE_LOG
 #define RADIO_EDGE_LOG 0 // bench: one "RadioEdge:" line per frame with µs stamps, for cross-node timing
 #endif
@@ -101,6 +106,11 @@ RadioLibInterface::RadioLibInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE c
     LOG_INFO("RadioLib SPI paranoid: on");
 #else
     LOG_INFO("RadioLib SPI paranoid: off");
+#endif
+#if RADIO_CAD_HANDOFF_HOLDS_TX
+    LOG_INFO("CAD handoff hold: on");
+#else
+    LOG_INFO("CAD handoff hold: off");
 #endif
 #endif
 
@@ -662,9 +672,14 @@ void RadioLibInterface::onNotify(uint32_t notification)
         // If we are not currently in receive mode, then restart the random delay (this can happen if the main thread
         // has placed the unit into standby)  FIXME, how will this work if the chipset is in sleep mode?
         if (!txQueue.empty()) {
-            const bool clear = canSendImmediately();
+#if RADIO_CAD_HANDOFF_HOLDS_TX
+            const bool handoffOpen = cadHandoffRxStart != 0; // the chip's own cadTimeout, or the backstop, closes it
+#else
+            const bool handoffOpen = false;
+#endif
+            const bool clear = !handoffOpen && canSendImmediately();
             // An old bare preamble is noise or LoRa we cannot decode; the CAD below judges the channel instead.
-            const bool peek = !clear && sendingPacket == NULL && preambleHoldPeekable();
+            const bool peek = !clear && !handoffOpen && sendingPacket == NULL && preambleHoldPeekable();
             // Snapshotted: the scan below can age the hold out, and the log would then read the cleared stamp.
             const uint32_t peekHoldStart = peek ? preambleHoldStart : 0;
             if (!clear && !peek) {
@@ -741,6 +756,10 @@ void RadioLibInterface::onNotify(uint32_t notification)
         break;
     default:
         assert(0); // We expected to receive a valid notification from the ISR
+    }
+    if (cadHandoffDroppedAge) {
+        LOG_INFO("CAD>RX dropped by standby %lu ms into its RX", (unsigned long)(cadHandoffDroppedAge - 1));
+        cadHandoffDroppedAge = 0;
     }
 #if RADIO_EDGE_LOG
     if (edgeCadBusyId) {
@@ -1569,6 +1588,8 @@ void RadioLibInterface::setStandby()
     // a no-op on a standby chip - deaf with no recovery - and the window would re-arm over a live packet.
     if (cadHandedToRx) // standby between the handoff and the re-arm that adopts it: should not happen
         LOG_WARN("CAD>RX void");
+    if (cadHandoffRxStart) // the handoff's RX ends here with no outcome of its own: name it, but log it off the air path
+        cadHandoffDroppedAge = Time::getMillis() - cadHandoffRxStart + 1;
     cadHandedToRx = false;
     cadHandoffRxStart = 0;
 
