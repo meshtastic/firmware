@@ -491,6 +491,7 @@ void nrf52InitSemiHosting()
 
 void nrf52Setup()
 {
+    Time::startMicrosClock();
 #ifdef ADC_V
     pinMode(ADC_V, INPUT);
 #endif

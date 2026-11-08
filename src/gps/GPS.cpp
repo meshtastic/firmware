@@ -2102,7 +2102,7 @@ GnssModel_t GPS::getProbeResponse(unsigned long timeout, const std::vector<ChipI
 }
 
 #if defined(PIN_GPS_PPS)
-// Written only by gpsPpsIsr(): the edge's low 32 bits of Time::getMicrosMonotonic(), and an edge count
+// Written only by gpsPpsIsr(): the edge's Time::isrStamp(), and an edge count
 static volatile uint32_t ppsEdgeUs32 = 0;
 static volatile uint32_t ppsEdgeCount = 0;
 
@@ -2117,7 +2117,7 @@ static void gpsPpsIsr()
 #else
 static void gpsPpsIsr()
 {
-    ppsEdgeUs32 = Time::getMillis() * 1000U; // Time::getMicrosMonotonic() is ms * 1000 here, and so are its low bits
+    ppsEdgeUs32 = Time::isrStamp();
 #endif
     ppsEdgeCount = ppsEdgeCount + 1;
 }
@@ -2549,9 +2549,9 @@ void GPS::processPps()
         return;
     lastPpsCount = count;
 
-    // The edge is under a poll interval old, so its low 32 bits extend unambiguously
+    // The edge is under a poll interval old, so its stamp extends unambiguously
     const uint64_t nowUs = Time::getMicrosMonotonic();
-    const uint64_t edgeMonoUs = nowUs - (uint32_t)((uint32_t)nowUs - edgeUs32);
+    const uint64_t edgeMonoUs = Time::stampToMicros(edgeUs32);
     const uint64_t clockAtEdgeUs = getUtcMicros() - (nowUs - edgeMonoUs);
     const PpsEdgeResult r = pps.onEdge(edgeMonoUs, clockAtEdgeUs, hasLock());
     if (!r.accepted) {
