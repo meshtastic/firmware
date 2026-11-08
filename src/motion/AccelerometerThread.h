@@ -80,15 +80,28 @@ class AccelerometerThread : public concurrency::OSThread
     void setTrackingSteps(bool tracking)
     {
         auto &tracker = sensor->stepTracker();
+        const bool restartPolling = tracking && !enabled;
+        if (tracking && sensor->stepSource() == MotionSensor::StepSource::Hardware) {
+            // Read queued totals before starting the session. If polling was stopped and no total
+            // is available, the next report must establish the baseline.
+            if (!sensor->syncStepCounter() && restartPolling)
+                tracker.invalidateHardwareBaseline();
+        }
         tracker.setTracking(tracking, Time::getMillisMonotonic());
-        if (tracking && !enabled) {
-            tracker.invalidateHardwareBaseline();
+        if (restartPolling) {
             motionStopRequested = true;
             enabled = true;
             start();
         } else if (!tracking && motionStopRequested) {
             disable();
         }
+    }
+
+    void resetStepSession()
+    {
+        // Apply queued hardware steps to the old session before clearing its total.
+        sensor->syncStepCounter();
+        sensor->stepTracker().reset(Time::getMillisMonotonic());
     }
 
     void setMotionPolling(bool requested)

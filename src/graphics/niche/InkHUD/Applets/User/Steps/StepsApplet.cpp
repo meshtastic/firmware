@@ -76,7 +76,7 @@ void StepsApplet::setGoal(uint32_t newGoal)
 
 void StepsApplet::resetSession()
 {
-    tracker.reset(Time::getMillisMonotonic());
+    motion.resetStepSession();
     requestUpdate();
 }
 

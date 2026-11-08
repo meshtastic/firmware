@@ -51,6 +51,8 @@ class MotionSensor
 #ifdef MESHTASTIC_INCLUDE_INKHUD
     enum class StepSource { None, Software, Hardware };
     virtual StepSource stepSource() const { return StepSource::None; }
+    // Process queued step reports and return whether a fresh hardware total was received.
+    virtual bool syncStepCounter() { return false; }
     StepTracker &stepTracker() { return tracker; }
 #endif
 

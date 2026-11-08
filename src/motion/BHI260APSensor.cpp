@@ -72,12 +72,26 @@ int32_t BHI260APSensor::runOnce()
     // The INT line is the fast path; the keepalive keeps the step counter alive without it.
     if (!BHI_IRQ && !Throttle::hasElapsed(lastPollMs, MOTION_SENSOR_IRQ_KEEPALIVE_MS))
         return MOTION_SENSOR_CHECK_INTERVAL_MS;
+#endif
+    pollSensor();
+#ifdef BHI260AP_INT
+    // Tick fast for tilt latency; without the INT line every tick would be an I2C drain.
+    return MOTION_SENSOR_CHECK_INTERVAL_MS;
+#else
+    return 1000;
+#endif
+}
+
+bool BHI260APSensor::pollSensor()
+{
+#ifdef BHI260AP_INT
     BHI_IRQ = false;
     lastPollMs = millis();
 #endif
 
     sensor.update();
-    if (stepCounterReady && stepCounter->hasUpdated()) {
+    const bool stepUpdated = stepCounterReady && stepCounter->hasUpdated();
+    if (stepUpdated) {
 #ifdef MESHTASTIC_INCLUDE_INKHUD
         stepTracker().hardwareTotal(stepCounter->getStepCount());
 #endif
@@ -90,12 +104,7 @@ int32_t BHI260APSensor::runOnce()
         wakeRequested = false;
         wakeScreen();
     }
-#ifdef BHI260AP_INT
-    // Tick fast for tilt latency; without the INT line every tick would be an I2C drain.
-    return MOTION_SENSOR_CHECK_INTERVAL_MS;
-#else
-    return 1000;
-#endif
+    return stepUpdated;
 }
 
 #endif
