@@ -112,6 +112,9 @@ constexpr uint64_t PPS_RECENT_MS = 30 * 60 * 1000;         // after that, NMEA m
 constexpr uint32_t PPS_BURST_EDGES = 5;                    // edges accepted per burst; the rate trim carries the clock between
 constexpr uint64_t PPS_BURST_INTERVAL_MS = 10 * 60 * 1000; // between bursts while the GPS stays on
 constexpr uint64_t PPS_BURST_TIMEOUT_MS = 30 * 1000;       // give up on a burst that gets no usable edges
+#ifndef PPS_ALLOW_2D_FIX
+#define PPS_ALLOW_2D_FIX 0 // bench: accept PPS on any GGA fix; a timing receiver needs no altitude, hasLock() wants 3D
+#endif
 #ifndef PPS_BENCH_HOLD_SECS
 #define PPS_BENCH_HOLD_SECS 0 // bench: >0 holds the clock after this many seconds of edges, then only logs them
 #endif
@@ -2460,6 +2463,14 @@ bool GPS::hasLock()
     return false;
 }
 
+bool GPS::ppsFixUsable()
+{
+    // Both the arm and every edge go through this: an edge judged on hasLock() alone would be discarded as "no fix"
+    if (PPS_ALLOW_2D_FIX)
+        return fixQual >= 1 && fixQual <= 5;
+    return hasLock();
+}
+
 // 8N1 framing: ten bit times per byte. 0 where the GPS "UART" has no line rate (a gpsd socket, a bridged port).
 static uint32_t gpsByteTimeUs(int32_t baud)
 {
@@ -2523,7 +2534,7 @@ void GPS::processPps()
 
     if (!ppsArmed) {
         // The clock must already name the second (NMEA sets it), and the receiver only pulses on UTC with a fix
-        if (getRTCQuality() != RTCQualityGPS || !hasLock() || (nextPpsBurstMs && nowMs < nextPpsBurstMs))
+        if (getRTCQuality() != RTCQualityGPS || !ppsFixUsable() || (nextPpsBurstMs && nowMs < nextPpsBurstMs))
             return;
         lastPpsCount = ppsEdgeCount;
 #if defined(ARCH_NRF52)
@@ -2569,7 +2580,7 @@ void GPS::processPps()
                  (long)(int64_t)(clockAtEdgeUs - secondUs));
         return;
     }
-    const PpsEdgeResult r = pps.onEdge(edgeMonoUs, clockAtEdgeUs, hasLock());
+    const PpsEdgeResult r = pps.onEdge(edgeMonoUs, clockAtEdgeUs, ppsFixUsable());
     if (!r.accepted) {
         ppsHoldStartMs = 0;
         LOG_DEBUG_GPS("GPS PPS edge not used: %s", r.reason);
