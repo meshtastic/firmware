@@ -1035,6 +1035,31 @@ void test_retransmission_survives_loopback_erasing_its_own_record(void)
     TEST_ASSERT_EQUAL_MESSAGE(0, reliableShim->pendingCount(), "the record must be gone exactly once");
 }
 
+// Retry branch: with no PKI key the resend fails to encode, and the abort NAK loops back and erases the
+// record mid-pass. Requeueing through the stale reference crashes here even without ASAN.
+void test_retry_send_survives_abort_nak_erasing_its_own_record(void)
+{
+    LoopbackRoutingModule loopback;
+    loopback.target = reliableShim;
+    loopback.enabled = true;
+
+    RoutingModule *previous = routingModule;
+    routingModule = &loopback;
+
+    auto original = makeBehaviorPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kLocalNode, kRemoteNode, 0, /*wantAck=*/true);
+    original.pki_encrypted = true;
+    reliableShim->seedRetry(original, /*attempts=*/3);
+    reliableShim->makeRetryDue(kLocalNode, original.id);
+    TEST_ASSERT_EQUAL_UINT32(1, reliableShim->pendingCount());
+
+    reliableShim->runDueRetries();
+
+    routingModule = previous;
+
+    TEST_ASSERT_EQUAL_MESSAGE(1, loopback.loopbacks, "the abort NAK must have re-entered the router");
+    TEST_ASSERT_EQUAL_MESSAGE(0, reliableShim->pendingCount(), "the record must be gone");
+}
+
 // Control: proves the NO_LORA case below turns on the `to` field alone.
 void test_rebroadcast_normal_broadcast_is_relayed(void)
 {
@@ -1199,6 +1224,7 @@ void setup()
     RUN_TEST(test_eventPolicy_seededRetrySuppressesTxUntilGateOff);
     RUN_TEST(test_reliableAckStopsNormalPendingTransmission);
     RUN_TEST(test_retransmission_survives_loopback_erasing_its_own_record);
+    RUN_TEST(test_retry_send_survives_abort_nak_erasing_its_own_record);
 
     printf("\n=== pending retransmission bookkeeping ===\n");
     RUN_TEST(test_implicit_ack_for_opaque_own_packet);
