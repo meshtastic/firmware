@@ -147,12 +147,13 @@ void RedirectablePrint::log_to_serial(const char *logLevel, const char *format, 
     }
 
     // The uptime stamp is formatted once here, for both the known-time and unknown-time headers below.
-    char uptime[16];
+    // The arithmetic stays in millis()'s own type, which is wider than 32 bits on Portduino.
+    char uptime[24];
 #if MESHTASTIC_LOG_MILLIS
-    uint32_t now = millis();
-    snprintf(uptime, sizeof(uptime), "%u.%03u", now / 1000, now % 1000);
+    auto now = millis();
+    snprintf(uptime, sizeof(uptime), "%lu.%03lu", (unsigned long)(now / 1000), (unsigned long)(now % 1000));
 #else
-    snprintf(uptime, sizeof(uptime), "%u", (uint32_t)(millis() / 1000));
+    snprintf(uptime, sizeof(uptime), "%lu", (unsigned long)(millis() / 1000));
 #endif
 
     uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice, true); // display local time on logfile
