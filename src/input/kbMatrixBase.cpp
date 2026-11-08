@@ -70,7 +70,7 @@ int32_t KbMatrixBase::runOnce()
         // debounce
         if (key != prevkey) {
             if (key != 0) {
-                LOG_DEBUG("Key 0x%x pressed", key);
+                LOG_INPUT("Key 0x%x pressed", key);
                 // reset shift now that we have a keypress
                 InputEvent e = {};
                 e.inputEvent = INPUT_BROKER_NONE;

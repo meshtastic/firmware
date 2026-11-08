@@ -4,10 +4,12 @@
 // include RadioLib
 #include "platform/portduino/PortduinoGlue.h"
 #include <RadioLib.h>
+#include <chrono>
 #include <csignal>
 #include <cstring>
 #include <iostream>
 #include <libpinedio-usb.h>
+#include <optional>
 #include <sys/time.h> // gettimeofday(), previously pulled in via libusb.h
 #include <unistd.h>
 
@@ -24,6 +26,9 @@ extern uint32_t rebootAtMsec;
 
 #define CH341_PIN_CS (101)
 #define CH341_PIN_IRQ (0)
+
+// The adapter's chip select, D0, which pinedio_transceive_select() drives
+#define CH341_PIN_D0 (0)
 
 // the HAL must inherit from the base RadioLibHal class
 // and implement all of its virtual methods
@@ -58,6 +63,18 @@ class Ch341Hal : public RadioLibHal
     }
 
     ~Ch341Hal() { pinedio_deinit(&pinedio); }
+
+    /** The radio's CS and BUSY pins, as handed to its RadioLib Module, so the HAL can save bus round trips on them */
+    void setRadioPins(uint32_t csPin, uint32_t busyPin)
+    {
+        this->busyPin = busyPin;
+        busyLowAtUs.reset();
+#ifdef PINEDIO_HAS_TRANSCEIVE_SELECT
+        // pinedio_transceive_select() drives D0, so it only stands in for RadioLib's CS writes where D0 is the CS line
+        packedCs = csPin == CH341_PIN_D0;
+        LOG_INFO("CH341: CS %s", packedCs ? "carried in each SPI transfer" : "written separately, as it is not D0");
+#endif
+    }
 
     void getSerialString(char *_serial, size_t len)
     {
@@ -101,6 +118,10 @@ class Ch341Hal : public RadioLibHal
         if (pin == RADIOLIB_NC) {
             return;
         }
+        busyLowAtUs.reset(); // a write can start the chip on something, so the last BUSY read no longer holds
+        if (packedCs && pin == CH341_PIN_D0) {
+            return; // spiTransfer() drives both levels itself
+        }
         auto res = pinedio_digital_write(&pinedio, pin, value);
         if (res < 0 && rebootAtMsec == 0) {
             LOG_ERROR("USBHal digitalWrite: Can't write pin %u: %d", pin, res);
@@ -116,11 +137,25 @@ class Ch341Hal : public RadioLibHal
         if (pin == RADIOLIB_NC) {
             return 0;
         }
+        // RadioLib waits for BUSY low after each command and again before the next. With nothing sent to the chip in
+        // between, the second wait can only repeat the first, so it is answered from it, once, saving a round trip.
+        const bool busyStillLow = pin == busyPin && busyLowAtUs && micros() - *busyLowAtUs < BUSY_REUSE_US;
+        busyLowAtUs.reset();
+        if (busyStillLow) {
+            return 0;
+        }
         auto res = pinedio_digital_read(&pinedio, pin);
         if (res < 0 && rebootAtMsec == 0) {
             LOG_ERROR("USBHal digitalRead: Can't read pin %u: %d", pin, res);
             portduino_status.LoRa_in_error = true;
             return 0;
+        }
+        // The reads after a transfer are RadioLib's wait for BUSY low; the one that ends it is the one worth keeping
+        if (afterSpi && pin == busyPin && res == 0) {
+            busyLowAtUs = micros();
+        }
+        if (pin != busyPin || res == 0) {
+            afterSpi = false;
         }
         return res;
     }
@@ -157,6 +192,13 @@ class Ch341Hal : public RadioLibHal
             sched_yield();
             return;
         }
+        // usleep() rounds a few microseconds up to the timer slack, ~50 us, and RadioLib waits 1 us around each command
+        if (us < SPIN_DELAY_MAX_US) {
+            const auto until = std::chrono::steady_clock::now() + std::chrono::microseconds(us);
+            while (std::chrono::steady_clock::now() < until) {
+            }
+            return;
+        }
         usleep(us);
     }
 
@@ -190,7 +232,16 @@ class Ch341Hal : public RadioLibHal
         if (checkError()) {
             return;
         }
+        busyLowAtUs.reset();
+        afterSpi = true;
+#ifdef PINEDIO_HAS_TRANSCEIVE_SELECT
+        // RadioLib does exactly one spiTransfer per CS window, so the chip sees the same traffic, but select, command
+        // and deselect cost one wait on the bus instead of three
+        int32_t ret =
+            packedCs ? pinedio_transceive_select(&this->pinedio, out, in, len) : pinedio_transceive(&this->pinedio, out, in, len);
+#else
         int32_t ret = pinedio_transceive(&this->pinedio, out, in, len);
+#endif
         if (ret < 0) {
             std::cerr << "Could not perform SPI transfer: " << ret << std::endl;
         }
@@ -212,8 +263,18 @@ class Ch341Hal : public RadioLibHal
     }
 
   private:
+    static constexpr unsigned long BUSY_REUSE_US = 1000;
+    static constexpr unsigned long SPIN_DELAY_MAX_US = 100;
+
     pinedio_inst pinedio = {0};
     bool has_warned = false;
+    uint32_t busyPin = RADIOLIB_NC;
+    /** CS is D0 and the library can carry it in the SPI transfer */
+    bool packedCs = false;
+    /** An SPI transfer went out and nothing has yet found BUSY low after it */
+    bool afterSpi = false;
+    /** When the first read after a transfer found BUSY low; cleared once anything else touches the adapter */
+    std::optional<unsigned long> busyLowAtUs;
 };
 
 #endif

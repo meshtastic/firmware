@@ -54,6 +54,7 @@ extern "C" {
 #define TFT_OFFSET_X 24
 #define TFT_OFFSET_Y 0
 #define TFT_INVERT false
+#define TFT_SLEEP_WHEN_OFF            // sleep the panel on screen-off instead of driving it unlit
 #define SCREEN_TRANSITION_FRAMERATE 3 // fps
 #define DISPLAY_FORCE_SMALL_FONTS
 

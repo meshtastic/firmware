@@ -156,7 +156,8 @@ class PhoneAPI
     /**
      * Send a (client)notification to the phone
      */
-    virtual void sendNotification(meshtastic_LogRecord_Level level, uint32_t replyId, const char *message);
+    virtual void sendNotification(meshtastic_LogRecord_Level level, uint32_t replyId, const char *message,
+                                  meshtastic_ClientNotification_NotificationType type);
 
     /**
      * Get the next packet we want to send to the phone

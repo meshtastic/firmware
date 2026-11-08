@@ -70,7 +70,7 @@ class TwoButton : protected concurrency::OSThread
         volatile uint32_t irqAtMillis;      // millis() when button went down
 
         // Per-button event callbacks
-        static void noop(){};
+        static void noop() {};
         std::function<void()> onDown = noop;
         std::function<void()> onUp = noop;
         std::function<void()> onShortPress = noop;

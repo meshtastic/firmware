@@ -46,8 +46,7 @@ bool BHI260APSensor::init()
         InterruptConfig intConfig;
         sensor.configureInterrupt(intConfig);
         pinMode(BHI260AP_INT, INPUT);
-        attachInterrupt(
-            BHI260AP_INT, [] { BHI_IRQ = true; }, RISING);
+        attachInterrupt(BHI260AP_INT, [] { BHI_IRQ = true; }, RISING);
 #endif
 
         // Wrist tilt wakes the screen. Not every firmware image ships it and SensorAnyMotion
@@ -82,8 +81,10 @@ int32_t BHI260APSensor::runOnce()
     if (stepCounter->hasUpdated()) {
         steps = stepCounter->getStepCount();
         LOG_WARN("Step count updated: %u", steps);
+#if HAS_SCREEN
         if (screen)
             screen->steps = steps;
+#endif
     }
     if (wakeRequested) {
         wakeRequested = false;
