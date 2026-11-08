@@ -18,6 +18,46 @@
 #include "meshUtils.h"
 #endif
 
+#ifndef RADIO_EDGE_LOG
+#define RADIO_EDGE_LOG 0 // bench: one "RadioEdge:" line per frame with µs stamps, for cross-node timing
+#endif
+#if RADIO_EDGE_LOG
+#if defined(ARCH_ESP32)
+#include <esp_timer.h>
+#endif
+// RX_DONE and TX_DONE are stamped in the ISR; the CAD and the TX call on the radio thread
+static volatile uint32_t edgeRxIsrStamp = 0, edgeTxIsrStamp = 0;
+static volatile bool edgeTxIsrSeen = false;
+static uint32_t edgeCadStart = 0, edgeCadEnd = 0, edgeTxCallStart = 0, edgeTxCallEnd = 0;
+static bool edgeCadForTx = false;
+static uint32_t edgeCadBusyId = 0;
+static size_t edgeTxLen = 0;
+
+static inline uint32_t INTERRUPT_ATTR edgeStampNow()
+{
+#if defined(ARCH_ESP32)
+    return (uint32_t)esp_timer_get_time(); // in IRAM, unlike Time::isrStamp(); same value
+#else
+    return Time::isrStamp();
+#endif
+}
+
+struct EdgeUs {
+    unsigned long s, us;
+};
+// Monotonic µs as seconds and micros: newlib-nano's printf has no %llu
+static EdgeUs edgeUs(uint32_t stamp)
+{
+    const uint64_t v = Time::stampToMicros(stamp);
+    return {(unsigned long)(v / 1000000), (unsigned long)(v % 1000000)};
+}
+static unsigned long edgeSpanUs(uint32_t from, uint32_t to)
+{
+    return (unsigned long)(Time::stampToMicros(to) - Time::stampToMicros(from));
+}
+#define EDGE_FMT "%lu.%06lu"
+#endif
+
 void LockingArduinoHal::spiBeginTransaction()
 {
     spiLock->lock();
@@ -108,6 +148,9 @@ void INTERRUPT_ATTR RadioLibInterface::isrLevel0Common(PendingISR cause)
 
 void INTERRUPT_ATTR RadioLibInterface::isrRxLevel0()
 {
+#if RADIO_EDGE_LOG
+    edgeRxIsrStamp = edgeStampNow();
+#endif
     // With a readout task, it takes the frame out of the radio, and the interrupt stays enabled for the next one
     if (instance->rxDoneFromIsr())
         return;
@@ -116,6 +159,10 @@ void INTERRUPT_ATTR RadioLibInterface::isrRxLevel0()
 
 void INTERRUPT_ATTR RadioLibInterface::isrTxLevel0()
 {
+#if RADIO_EDGE_LOG
+    edgeTxIsrStamp = edgeStampNow();
+    edgeTxIsrSeen = true;
+#endif
     // Before the notify: the handler that would otherwise re-arm RX can wait behind a main-loop hold.
     instance->rearmReceiveFromIsr();
     isrLevel0Common(ISR_TX);
@@ -534,6 +581,18 @@ void RadioLibInterface::onNotify(uint32_t notification)
                 startReceive();
         }
         setTransmitDelay();
+#if RADIO_EDGE_LOG
+        if (sent) {
+            const EdgeUs cad = edgeUs(edgeCadStart), call = edgeUs(edgeTxCallStart), done = edgeUs(edgeTxIsrStamp);
+            LOG_INFO("RadioEdge: tx id=0x%08x len=%u cad=" EDGE_FMT " cad_us=%lu call=" EDGE_FMT " call_us=%lu done=" EDGE_FMT
+                     "%s air_ms=%u",
+                     sent->id, (unsigned)edgeTxLen, edgeCadForTx ? cad.s : 0UL, edgeCadForTx ? cad.us : 0UL,
+                     edgeCadForTx ? edgeSpanUs(edgeCadStart, edgeCadEnd) : 0UL, call.s, call.us,
+                     edgeSpanUs(edgeTxCallStart, edgeTxCallEnd), done.s, done.us, edgeTxIsrSeen ? "" : " polled",
+                     (unsigned)getPacketTime(sent));
+        }
+        edgeCadForTx = false;
+#endif
         finishSentPacket(sent); // outside the lock: it only logs airtime and prints
         break;
     }
@@ -626,7 +685,14 @@ void RadioLibInterface::onNotify(uint32_t notification)
                     // Listen-before-talk: a CAD preamble scan immediately before we key up.
                     LOG_DEBUG("CAD arm");
                     scanForTx = txp;
+#if RADIO_EDGE_LOG
+                    edgeCadStart = edgeStampNow();
+#endif
                     const bool channelActive = isChannelActive();
+#if RADIO_EDGE_LOG
+                    edgeCadEnd = edgeStampNow();
+                    edgeCadForTx = !channelActive;
+#endif
                     scanForTx = nullptr;
                     if (channelActive) { // currently traffic on the channel?
                         LOG_DEBUG("CAD busy");
@@ -634,6 +700,9 @@ void RadioLibInterface::onNotify(uint32_t notification)
                         // config, so skipping this only ever left the node deaf in standby.
                         rearmReceive();
                         setTransmitDelay();
+#if RADIO_EDGE_LOG
+                        edgeCadBusyId = txp->id; // logged once the radio-sequence lock is released
+#endif
                     } else {
                         LOG_DEBUG("CAD free");
                         if (peek)
@@ -655,6 +724,14 @@ void RadioLibInterface::onNotify(uint32_t notification)
     default:
         assert(0); // We expected to receive a valid notification from the ISR
     }
+#if RADIO_EDGE_LOG
+    if (edgeCadBusyId) {
+        const EdgeUs cad = edgeUs(edgeCadStart);
+        LOG_INFO("RadioEdge: cad_busy id=0x%08x cad=" EDGE_FMT " cad_us=%lu", edgeCadBusyId, cad.s, cad.us,
+                 edgeSpanUs(edgeCadStart, edgeCadEnd));
+        edgeCadBusyId = 0;
+    }
+#endif
 }
 
 void RadioLibInterface::setTransmitDelay()
@@ -914,6 +991,13 @@ void RadioLibInterface::handleReceiveInterrupt(const CapturedRxInfo *captured)
                   captured ? captured->snr : iface->getSNR(), captured ? (long)captured->rssi : lround(iface->getRSSI()),
                   radioBuffer.header.next_hop, radioBuffer.header.relay_node);
         rxBad++;
+#if RADIO_EDGE_LOG
+        {
+            const EdgeUs done = edgeUs(captured ? captured->edgeStamp : edgeRxIsrStamp);
+            LOG_INFO("RadioEdge: rx_err id=0x%08x from=0x%08x len=%u state=%d done=" EDGE_FMT " air_ms=%u", radioBuffer.header.id,
+                     radioBuffer.header.from, (unsigned)length, state, done.s, done.us, (unsigned)rxMsec);
+        }
+#endif
 
         airTime->logAirtime(RX_ALL_LOG, rxMsec);
         // Only where readData() returned before its own clear. A CRC mismatch is the common error on a noisy
@@ -980,6 +1064,13 @@ void RadioLibInterface::handleReceiveInterrupt(const CapturedRxInfo *captured)
             mp->encrypted.size = payloadLen;
 
             printPacket("Lora RX", mp);
+#if RADIO_EDGE_LOG
+            {
+                const EdgeUs done = edgeUs(captured ? captured->edgeStamp : edgeRxIsrStamp);
+                LOG_INFO("RadioEdge: rx id=0x%08x from=0x%08x len=%u done=" EDGE_FMT " air_ms=%u snr=%.2f rssi=%d", mp->id,
+                         mp->from, (unsigned)length, done.s, done.us, (unsigned)rxMsec, mp->rx_snr, (int)mp->rx_rssi);
+            }
+#endif
 
 #ifdef LED_LORA
             loraRxPacketObservable.notifyObservers(mp->from);
@@ -1380,6 +1471,9 @@ void RadioLibInterface::readOutFromTask()
         return;
     }
     CapturedFrame &f = rxRing[head];
+#if RADIO_EDGE_LOG
+    f.info.edgeStamp = edgeRxIsrStamp; // before the read: the next frame's ISR can only come after it
+#endif
     f.info.state = iface->readData(f.data, len);
     if (readDataLeftIrqFlags(f.info.state)) {
         // This read came back before RadioLib's own clear, so RX_DONE is still latched for a frame nobody will ever
@@ -1490,7 +1584,15 @@ bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
 
         size_t numbytes = beginSending(txp);
 
+#if RADIO_EDGE_LOG
+        edgeTxLen = numbytes;
+        edgeTxIsrSeen = false;
+        edgeTxCallStart = edgeStampNow();
+#endif
         int res = launchTransmit(numbytes);
+#if RADIO_EDGE_LOG
+        edgeTxCallEnd = edgeStampNow();
+#endif
         if (res != RADIOLIB_ERR_NONE) {
             LOG_ERROR("startTransmit failed, error=%d", res);
             RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_RADIO_SPI_BUG);

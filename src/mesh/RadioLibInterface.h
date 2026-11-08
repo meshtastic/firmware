@@ -444,6 +444,9 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
         uint8_t rxCR;         // the LoRa header's raw coding rate, read with the frame
         bool hasCRC;          // the LoRa header's CRC flag, likewise
         bool headerInfoValid; // false where the chip would not report them
+#if defined(RADIO_EDGE_LOG) && RADIO_EDGE_LOG
+        uint32_t edgeStamp; // Time::isrStamp() of its RX_DONE
+#endif
     };
 
     /** Read out and deliver the frame behind RX_DONE; with captured, deliver one the readout task already took */
