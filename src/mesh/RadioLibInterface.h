@@ -36,6 +36,23 @@
 #define AGC_FORCED_RESET_MS (24 * 60 * 60 * 1000UL)
 #endif
 
+// 1 = send each radio command as one buffered SPI transfer, instead of RadioLib's one
+// SPI.transfer() call per byte. On nRF52 and ESP32 that per-byte call is its own DMA transfer, which
+// put a 200-byte payload write about 1.9 ms past the end of a SHORT_TURBO channel scan; buffered, it
+// finishes inside the scan. On every other architecture there is no buffered call to use.
+// This guards a virtual override, so it must hold the same value in every translation unit: set it
+// here rather than per-env, or the vtable disagrees across the build.
+#ifndef RADIO_SPI_BULK
+#if ARCH_PORTDUINO || defined(ARDUINO_NRF52_ADAFRUIT) || defined(ARDUINO_ARCH_ESP32)
+#define RADIO_SPI_BULK 1
+#else
+#define RADIO_SPI_BULK 0
+#endif
+#endif
+#if RADIO_SPI_BULK && !(ARCH_PORTDUINO || defined(ARDUINO_NRF52_ADAFRUIT) || defined(ARDUINO_ARCH_ESP32))
+#error "RADIO_SPI_BULK: no buffered SPI call on this architecture"
+#endif
+
 /**
  * We need to override the RadioLib ArduinoHal class to add mutex protection for SPI bus access
  */
@@ -46,7 +63,7 @@ class LockingArduinoHal : public ArduinoHal
 
     void spiBeginTransaction() override;
     void spiEndTransaction() override;
-#if ARCH_PORTDUINO
+#if RADIO_SPI_BULK
     void spiTransfer(uint8_t *out, size_t len, uint8_t *in) override;
 
 #endif
@@ -534,14 +551,15 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     static bool isRadioLibTimeError(RadioLibTime_t usec) { return usec == 0 || usec >= (RadioLibTime_t)0 - 32768; }
 
     /**
-     * Derive packet time either for a received (using header info) or a transmitted packet
+     * Derive packet time either for a received (using header info) or a transmitted packet.
+     * Without useRxHeaderInfo a received packet is timed on the configured coding rate and CRC.
      */
-    template <typename T> uint32_t computePacketTime(T &lora, uint32_t pl, bool received)
+    template <typename T> uint32_t computePacketTime(T &lora, uint32_t pl, bool received, bool useRxHeaderInfo = true)
     {
         DataRate_t dr = getDataRate();
         PacketConfig_t pc = getPacketConfig();
 
-        if (received) {
+        if (received && useRxHeaderInfo) {
             // Received packet configuration must be the same as configured, except for coding rate and CRC
             uint8_t rxCR = 0;
             bool hasCRC = true;
@@ -573,7 +591,7 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
                     pc.lora.crcEnabled = hasCRC;
                 }
             }
-        } else {
+        } else if (!received) {
             // Reads the packet type back over SPI, so a chip that lost its config answers WRONG_MODEM. Called after every
             // send by finishSentPacket() and the router, which hold no sequence: unlocked, a readout could land inside it.
             RadioLibTime_t reported;

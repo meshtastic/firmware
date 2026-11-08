@@ -32,6 +32,9 @@
 #include "mesh/generated/meshtastic/deviceonly_legacy.pb.h"
 #include "meshUtils.h"
 #include "modules/NeighborInfoModule.h"
+#if !MESHTASTIC_EXCLUDE_BEACON
+#include "modules/MeshBeaconModule.h"
+#endif
 #include "sleep.h"
 #include "target_specific.h"
 #if HAS_VARIABLE_HOPS
@@ -250,10 +253,25 @@ std::map<NodeNum, meshtastic_PositionLite> *s_decodePositionsTarget = nullptr;
 std::map<NodeNum, meshtastic_DeviceMetrics> *s_decodeTelemetryTarget = nullptr;
 #endif
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTDB
-std::map<NodeNum, meshtastic_EnvironmentMetrics> *s_decodeEnvironmentTarget = nullptr;
+std::map<NodeNum, PackedEnvironmentMetrics> *s_decodeEnvironmentTarget = nullptr;
 #endif
 #if !MESHTASTIC_EXCLUDE_STATUSDB
 std::map<NodeNum, meshtastic_StatusMessage> *s_decodeStatusTarget = nullptr;
+#endif
+
+// When armed by saveNodeDatabaseToDisk, the encode callback reads satellite entries straight from these maps, so a
+// save never builds a second, contiguous copy of them. Nullptr = encode from the vectors.
+#if !MESHTASTIC_EXCLUDE_POSITIONDB
+const std::map<NodeNum, meshtastic_PositionLite> *s_encodePositionsSource = nullptr;
+#endif
+#if !MESHTASTIC_EXCLUDE_TELEMETRYDB
+const std::map<NodeNum, meshtastic_DeviceMetrics> *s_encodeTelemetrySource = nullptr;
+#endif
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTDB
+const std::map<NodeNum, PackedEnvironmentMetrics> *s_encodeEnvironmentSource = nullptr;
+#endif
+#if !MESHTASTIC_EXCLUDE_STATUSDB
+const std::map<NodeNum, meshtastic_StatusMessage> *s_encodeStatusSource = nullptr;
 #endif
 
 // Keys that can never name a real node.
@@ -261,6 +279,32 @@ std::map<NodeNum, meshtastic_StatusMessage> *s_decodeStatusTarget = nullptr;
 {
     return n != 0 && !isBroadcast(n);
 }
+
+// Encode a satellite map as repeated entries, building one entry at a time on the stack.
+template <typename Entry, typename Value, typename Fill>
+[[maybe_unused]] bool encodeSatelliteMap(pb_ostream_t *ostream, const pb_field_iter_t *iter, const pb_msgdesc_t *fields,
+                                         const std::map<NodeNum, Value> &source, Fill fill)
+{
+    for (const auto &kv : source) {
+        Entry entry = {};
+        fill(entry, kv.first, kv.second);
+        if (!pb_encode_tag_for_field(ostream, iter) || !pb_encode_submessage(ostream, fields, &entry))
+            return false;
+    }
+    return true;
+}
+
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTDB
+// One NodeEnvironmentEntry body: num, then the stored environment_metrics bytes as-is (what pb_encode would write)
+bool encodePackedEnvironmentEntryBody(pb_ostream_t *ostream, NodeNum num, const PackedEnvironmentMetrics &packed)
+{
+    if (num &&
+        (!pb_encode_tag(ostream, PB_WT_VARINT, meshtastic_NodeEnvironmentEntry_num_tag) || !pb_encode_varint(ostream, num)))
+        return false;
+    return pb_encode_tag(ostream, PB_WT_STRING, meshtastic_NodeEnvironmentEntry_environment_metrics_tag) &&
+           pb_encode_string(ostream, packed.bytes.data(), packed.bytes.size());
+}
+#endif
 } // namespace
 
 bool meshtastic_NodeDatabase_callback(pb_istream_t *istream, pb_ostream_t *ostream, const pb_field_t *field)
@@ -301,6 +345,16 @@ bool meshtastic_NodeDatabase_callback(pb_istream_t *istream, pb_ostream_t *ostre
     }
     case meshtastic_NodeDatabase_positions_tag: {
         if (ostream) {
+#if !MESHTASTIC_EXCLUDE_POSITIONDB
+            if (s_encodePositionsSource)
+                return encodeSatelliteMap<meshtastic_NodePositionEntry>(
+                    ostream, iter, meshtastic_NodePositionEntry_fields, *s_encodePositionsSource,
+                    [](meshtastic_NodePositionEntry &e, NodeNum num, const meshtastic_PositionLite &v) {
+                        e.num = num;
+                        e.has_position = true;
+                        e.position = v;
+                    });
+#endif
             const auto *vec = static_cast<const std::vector<meshtastic_NodePositionEntry> *>(iter->pData);
             for (const auto &item : *vec) {
                 if (!pb_encode_tag_for_field(ostream, iter))
@@ -327,6 +381,16 @@ bool meshtastic_NodeDatabase_callback(pb_istream_t *istream, pb_ostream_t *ostre
     }
     case meshtastic_NodeDatabase_telemetry_tag: {
         if (ostream) {
+#if !MESHTASTIC_EXCLUDE_TELEMETRYDB
+            if (s_encodeTelemetrySource)
+                return encodeSatelliteMap<meshtastic_NodeTelemetryEntry>(
+                    ostream, iter, meshtastic_NodeTelemetryEntry_fields, *s_encodeTelemetrySource,
+                    [](meshtastic_NodeTelemetryEntry &e, NodeNum num, const meshtastic_DeviceMetrics &v) {
+                        e.num = num;
+                        e.has_device_metrics = true;
+                        e.device_metrics = v;
+                    });
+#endif
             const auto *vec = static_cast<const std::vector<meshtastic_NodeTelemetryEntry> *>(iter->pData);
             for (const auto &item : *vec) {
                 if (!pb_encode_tag_for_field(ostream, iter))
@@ -353,6 +417,16 @@ bool meshtastic_NodeDatabase_callback(pb_istream_t *istream, pb_ostream_t *ostre
     }
     case meshtastic_NodeDatabase_status_tag: {
         if (ostream) {
+#if !MESHTASTIC_EXCLUDE_STATUSDB
+            if (s_encodeStatusSource)
+                return encodeSatelliteMap<meshtastic_NodeStatusEntry>(
+                    ostream, iter, meshtastic_NodeStatusEntry_fields, *s_encodeStatusSource,
+                    [](meshtastic_NodeStatusEntry &e, NodeNum num, const meshtastic_StatusMessage &v) {
+                        e.num = num;
+                        e.has_status = true;
+                        e.status = v;
+                    });
+#endif
             const auto *vec = static_cast<const std::vector<meshtastic_NodeStatusEntry> *>(iter->pData);
             for (const auto &item : *vec) {
                 if (!pb_encode_tag_for_field(ostream, iter))
@@ -379,6 +453,18 @@ bool meshtastic_NodeDatabase_callback(pb_istream_t *istream, pb_ostream_t *ostre
     }
     case meshtastic_NodeDatabase_environment_tag: {
         if (ostream) {
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTDB
+            if (s_encodeEnvironmentSource) {
+                for (const auto &kv : *s_encodeEnvironmentSource) {
+                    pb_ostream_t sizing = PB_OSTREAM_SIZING;
+                    if (!encodePackedEnvironmentEntryBody(&sizing, kv.first, kv.second) ||
+                        !pb_encode_tag_for_field(ostream, iter) || !pb_encode_varint(ostream, sizing.bytes_written) ||
+                        !encodePackedEnvironmentEntryBody(ostream, kv.first, kv.second))
+                        return false;
+                }
+                return true;
+            }
+#endif
             const auto *vec = static_cast<const std::vector<meshtastic_NodeEnvironmentEntry> *>(iter->pData);
             for (const auto &item : *vec) {
                 if (!pb_encode_tag_for_field(ostream, iter))
@@ -393,7 +479,7 @@ bool meshtastic_NodeDatabase_callback(pb_istream_t *istream, pb_ostream_t *ostre
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTDB
                 if (s_decodeEnvironmentTarget) {
                     if (entry.has_environment_metrics && isUsableSatelliteKey(entry.num))
-                        (*s_decodeEnvironmentTarget)[entry.num] = entry.environment_metrics;
+                        (*s_decodeEnvironmentTarget)[entry.num].pack(entry.environment_metrics);
                     return true;
                 }
 #endif
@@ -425,6 +511,38 @@ void NodeDB::armNodeDatabaseDecodeTargets()
 #if !MESHTASTIC_EXCLUDE_STATUSDB
     nodeStatus.clear();
     s_decodeStatusTarget = &nodeStatus;
+#endif
+}
+
+void NodeDB::armNodeDatabaseEncodeSources()
+{
+#if !MESHTASTIC_EXCLUDE_POSITIONDB
+    s_encodePositionsSource = &nodePositions;
+#endif
+#if !MESHTASTIC_EXCLUDE_TELEMETRYDB
+    s_encodeTelemetrySource = &nodeTelemetry;
+#endif
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTDB
+    s_encodeEnvironmentSource = &nodeEnvironment;
+#endif
+#if !MESHTASTIC_EXCLUDE_STATUSDB
+    s_encodeStatusSource = &nodeStatus;
+#endif
+}
+
+void NodeDB::disarmNodeDatabaseEncodeSources()
+{
+#if !MESHTASTIC_EXCLUDE_POSITIONDB
+    s_encodePositionsSource = nullptr;
+#endif
+#if !MESHTASTIC_EXCLUDE_TELEMETRYDB
+    s_encodeTelemetrySource = nullptr;
+#endif
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTDB
+    s_encodeEnvironmentSource = nullptr;
+#endif
+#if !MESHTASTIC_EXCLUDE_STATUSDB
+    s_encodeStatusSource = nullptr;
 #endif
 }
 
@@ -1618,6 +1736,10 @@ void NodeDB::installDefaultModuleConfig()
 #ifdef USERPREFS_MESH_BEACON_OFFER_REGION
     moduleConfig.mesh_beacon.broadcast_offer_region = USERPREFS_MESH_BEACON_OFFER_REGION;
 #endif
+#ifdef USERPREFS_MESH_BEACON_OFFER_FREQUENCY_SLOT
+    moduleConfig.mesh_beacon.has_broadcast_offer_frequency_slot = true;
+    moduleConfig.mesh_beacon.broadcast_offer_frequency_slot = USERPREFS_MESH_BEACON_OFFER_FREQUENCY_SLOT;
+#endif
 #ifdef USERPREFS_MESH_BEACON_OFFER_CHANNEL_NAME
     moduleConfig.mesh_beacon.has_broadcast_offer_channel = true;
     strncpy(moduleConfig.mesh_beacon.broadcast_offer_channel.name, USERPREFS_MESH_BEACON_OFFER_CHANNEL_NAME,
@@ -1668,6 +1790,14 @@ void NodeDB::installDefaultModuleConfig()
         moduleConfig.mesh_beacon.broadcast_targets[(N)].has_channel_index = true;                                                \
         moduleConfig.mesh_beacon.broadcast_targets[(N)].channel_index = (VAL);                                                   \
     } while (0)
+// 1-based frequency slot, as Config.LoRaConfig.channel_num. Unset derives it from the target channel.
+#define BEACON_TARGET_SLOT(N, VAL)                                                                                               \
+    do {                                                                                                                         \
+        if (moduleConfig.mesh_beacon.broadcast_targets_count < (N) + 1)                                                          \
+            moduleConfig.mesh_beacon.broadcast_targets_count = (N) + 1;                                                          \
+        moduleConfig.mesh_beacon.broadcast_targets[(N)].has_frequency_slot = true;                                               \
+        moduleConfig.mesh_beacon.broadcast_targets[(N)].frequency_slot = (VAL);                                                  \
+    } while (0)
 #ifdef USERPREFS_MESH_BEACON_TARGET_0_PRESET
     BEACON_TARGET_PRESET(0, USERPREFS_MESH_BEACON_TARGET_0_PRESET);
 #endif
@@ -1676,6 +1806,9 @@ void NodeDB::installDefaultModuleConfig()
 #endif
 #ifdef USERPREFS_MESH_BEACON_TARGET_0_CHANNEL_INDEX
     BEACON_TARGET_CH_INDEX(0, USERPREFS_MESH_BEACON_TARGET_0_CHANNEL_INDEX);
+#endif
+#ifdef USERPREFS_MESH_BEACON_TARGET_0_FREQUENCY_SLOT
+    BEACON_TARGET_SLOT(0, USERPREFS_MESH_BEACON_TARGET_0_FREQUENCY_SLOT);
 #endif
 #ifdef USERPREFS_MESH_BEACON_TARGET_1_PRESET
     BEACON_TARGET_PRESET(1, USERPREFS_MESH_BEACON_TARGET_1_PRESET);
@@ -1686,6 +1819,9 @@ void NodeDB::installDefaultModuleConfig()
 #ifdef USERPREFS_MESH_BEACON_TARGET_1_CHANNEL_INDEX
     BEACON_TARGET_CH_INDEX(1, USERPREFS_MESH_BEACON_TARGET_1_CHANNEL_INDEX);
 #endif
+#ifdef USERPREFS_MESH_BEACON_TARGET_1_FREQUENCY_SLOT
+    BEACON_TARGET_SLOT(1, USERPREFS_MESH_BEACON_TARGET_1_FREQUENCY_SLOT);
+#endif
 #ifdef USERPREFS_MESH_BEACON_TARGET_2_PRESET
     BEACON_TARGET_PRESET(2, USERPREFS_MESH_BEACON_TARGET_2_PRESET);
 #endif
@@ -1694,6 +1830,9 @@ void NodeDB::installDefaultModuleConfig()
 #endif
 #ifdef USERPREFS_MESH_BEACON_TARGET_2_CHANNEL_INDEX
     BEACON_TARGET_CH_INDEX(2, USERPREFS_MESH_BEACON_TARGET_2_CHANNEL_INDEX);
+#endif
+#ifdef USERPREFS_MESH_BEACON_TARGET_2_FREQUENCY_SLOT
+    BEACON_TARGET_SLOT(2, USERPREFS_MESH_BEACON_TARGET_2_FREQUENCY_SLOT);
 #endif
 #ifdef USERPREFS_MESH_BEACON_TARGET_3_PRESET
     BEACON_TARGET_PRESET(3, USERPREFS_MESH_BEACON_TARGET_3_PRESET);
@@ -1704,9 +1843,13 @@ void NodeDB::installDefaultModuleConfig()
 #ifdef USERPREFS_MESH_BEACON_TARGET_3_CHANNEL_INDEX
     BEACON_TARGET_CH_INDEX(3, USERPREFS_MESH_BEACON_TARGET_3_CHANNEL_INDEX);
 #endif
+#ifdef USERPREFS_MESH_BEACON_TARGET_3_FREQUENCY_SLOT
+    BEACON_TARGET_SLOT(3, USERPREFS_MESH_BEACON_TARGET_3_FREQUENCY_SLOT);
+#endif
 #undef BEACON_TARGET_PRESET
 #undef BEACON_TARGET_REGION
 #undef BEACON_TARGET_CH_INDEX
+#undef BEACON_TARGET_SLOT
 #endif // !MESHTASTIC_EXCLUDE_BEACON
 
     initModuleConfigIntervals();
@@ -1947,8 +2090,39 @@ bool NodeDB::copyNodeEnvironment(NodeNum n, meshtastic_EnvironmentMetrics &out) 
     return false;
 #else
     concurrency::LockGuard guard(&satelliteMutex);
-    return copySatelliteEntry(nodeEnvironment, n, out);
+    auto it = nodeEnvironment.find(n);
+    return it != nodeEnvironment.end() && it->second.unpack(out);
 #endif
+}
+
+bool NodeDB::hasNodeEnvironment(NodeNum n) const
+{
+#if MESHTASTIC_EXCLUDE_ENVIRONMENTDB
+    (void)n;
+    return false;
+#else
+    concurrency::LockGuard guard(&satelliteMutex);
+    return nodeEnvironment.count(n) != 0;
+#endif
+}
+
+bool PackedEnvironmentMetrics::pack(const meshtastic_EnvironmentMetrics &metrics)
+{
+    uint8_t buf[meshtastic_EnvironmentMetrics_size];
+    pb_ostream_t stream = pb_ostream_from_buffer(buf, sizeof(buf));
+    if (!pb_encode(&stream, meshtastic_EnvironmentMetrics_fields, &metrics)) {
+        bytes.clear();
+        return false;
+    }
+    std::vector<uint8_t>(buf, buf + stream.bytes_written).swap(bytes); // exact capacity, no growth slack
+    return true;
+}
+
+bool PackedEnvironmentMetrics::unpack(meshtastic_EnvironmentMetrics &out) const
+{
+    out = meshtastic_EnvironmentMetrics_init_zero;
+    pb_istream_t stream = pb_istream_from_buffer(bytes.data(), bytes.size());
+    return pb_decode(&stream, meshtastic_EnvironmentMetrics_fields, &out);
 }
 
 bool NodeDB::copyNodeStatus(NodeNum n, meshtastic_StatusMessage &out) const
@@ -2115,7 +2289,9 @@ bool NodeDB::enforceSatelliteCaps()
     satBytes += nodeTelemetry.size() * (sizeof(decltype(nodeTelemetry)::value_type) + 44);
 #endif
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTDB
-    satBytes += nodeEnvironment.size() * (sizeof(decltype(nodeEnvironment)::value_type) + 44);
+    // plus each entry's own encoded bytes, a separate allocation (~8 B allocator header)
+    for (const auto &kv : nodeEnvironment)
+        satBytes += sizeof(decltype(nodeEnvironment)::value_type) + 44 + kv.second.bytes.capacity() + 8;
 #endif
 #if !MESHTASTIC_EXCLUDE_STATUSDB
     satBytes += nodeStatus.size() * (sizeof(decltype(nodeStatus)::value_type) + 44);
@@ -2854,6 +3030,10 @@ void NodeDB::loadFromDisk()
             LOG_INFO("Loaded saved moduleConfig v%d", moduleConfig.version);
         }
     }
+#if !MESHTASTIC_EXCLUDE_BEACON
+    // userPrefs and a config already in flash never pass through set_module_config
+    MeshBeaconModule::sanitizeConfig(moduleConfig.mesh_beacon);
+#endif
 
     // Always-on traffic management: a device that has NEVER configured TMM
     // (has_traffic_management false - AdminModule always sets the has_ flag on
@@ -3265,68 +3445,27 @@ bool NodeDB::saveNodeDatabaseToDisk()
     spiLock->unlock();
 #endif
 
-    // Project the maps into the on-disk vectors just before encoding; cleared
-    // again on the way out so we don't carry duplicate state.
-    concurrency::LockGuard guard(&satelliteMutex);
-#if !MESHTASTIC_EXCLUDE_POSITIONDB
-    nodeDatabase.positions.clear();
-    nodeDatabase.positions.reserve(nodePositions.size());
-    for (const auto &kv : nodePositions) {
-        meshtastic_NodePositionEntry entry = meshtastic_NodePositionEntry_init_default;
-        entry.num = kv.first;
-        entry.has_position = true;
-        entry.position = kv.second;
-        nodeDatabase.positions.push_back(entry);
-    }
-#else
-    nodeDatabase.positions.clear();
-#endif
+    // Encode the satellite maps in place. Projecting them into the vectors first needed a second, contiguous copy on
+    // every save (40 x 312 B for environment alone), which ran nRF52 out of heap. The lock keeps the maps unchanged
+    // between the sizing pass and the write; it is released before warm.dat, which never reads them.
+    bool ok;
+    {
+        concurrency::LockGuard guard(&satelliteMutex);
+        // An armed source encodes from its map; a compiled-out DB's decoded leftovers in the vectors must not be re-saved
+        nodeDatabase.positions.clear();
+        nodeDatabase.telemetry.clear();
+        nodeDatabase.environment.clear();
+        nodeDatabase.status.clear();
+        armNodeDatabaseEncodeSources();
+        struct Disarm {
+            NodeDB &self;
+            ~Disarm() { self.disarmNodeDatabaseEncodeSources(); }
+        } disarm{*this};
 
-#if !MESHTASTIC_EXCLUDE_TELEMETRYDB
-    nodeDatabase.telemetry.clear();
-    nodeDatabase.telemetry.reserve(nodeTelemetry.size());
-    for (const auto &kv : nodeTelemetry) {
-        meshtastic_NodeTelemetryEntry entry = meshtastic_NodeTelemetryEntry_init_default;
-        entry.num = kv.first;
-        entry.has_device_metrics = true;
-        entry.device_metrics = kv.second;
-        nodeDatabase.telemetry.push_back(entry);
+        size_t nodeDatabaseSize;
+        pb_get_encoded_size(&nodeDatabaseSize, meshtastic_NodeDatabase_fields, &nodeDatabase);
+        ok = saveProto(nodeDatabaseFileName, nodeDatabaseSize, &meshtastic_NodeDatabase_msg, &nodeDatabase, false);
     }
-#else
-    nodeDatabase.telemetry.clear();
-#endif
-
-#if !MESHTASTIC_EXCLUDE_ENVIRONMENTDB
-    nodeDatabase.environment.clear();
-    nodeDatabase.environment.reserve(nodeEnvironment.size());
-    for (const auto &kv : nodeEnvironment) {
-        meshtastic_NodeEnvironmentEntry entry = meshtastic_NodeEnvironmentEntry_init_default;
-        entry.num = kv.first;
-        entry.has_environment_metrics = true;
-        entry.environment_metrics = kv.second;
-        nodeDatabase.environment.push_back(entry);
-    }
-#else
-    nodeDatabase.environment.clear();
-#endif
-
-#if !MESHTASTIC_EXCLUDE_STATUSDB
-    nodeDatabase.status.clear();
-    nodeDatabase.status.reserve(nodeStatus.size());
-    for (const auto &kv : nodeStatus) {
-        meshtastic_NodeStatusEntry entry = meshtastic_NodeStatusEntry_init_default;
-        entry.num = kv.first;
-        entry.has_status = true;
-        entry.status = kv.second;
-        nodeDatabase.status.push_back(entry);
-    }
-#else
-    nodeDatabase.status.clear();
-#endif
-
-    size_t nodeDatabaseSize;
-    pb_get_encoded_size(&nodeDatabaseSize, meshtastic_NodeDatabase_fields, &nodeDatabase);
-    bool ok = saveProto(nodeDatabaseFileName, nodeDatabaseSize, &meshtastic_NodeDatabase_msg, &nodeDatabase, false);
     if (ok)
         nodeDatabaseDirty = false;
 
@@ -3754,7 +3893,7 @@ void NodeDB::updateTelemetry(uint32_t nodeId, const meshtastic_Telemetry &t, RxS
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTDB
         concurrency::LockGuard guard(&satelliteMutex);
         evictSatelliteOverCap(*this, nodeEnvironment, nodeId);
-        nodeEnvironment[nodeId] = t.variant.environment_metrics;
+        nodeEnvironment[nodeId].pack(t.variant.environment_metrics);
 #endif
 
     } else {
@@ -3874,10 +4013,9 @@ int NodeDB::onReboot(void *)
  */
 bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelIndex, bool xeddsaSigned)
 {
-    // Only a signed update may change the identity of a proven signer; our own record is exempt.
-    // Checked before getOrCreateMeshNode so a refusal cannot evict; isKnownXeddsaSigner covers the warm tier.
-    if (nodeId != getNodeNum() && isKnownXeddsaSigner(nodeId) && !xeddsaSigned) {
-        LOG_WARN("Refuse unsigned identity update for 0x%08x that previously signed", nodeId);
+    // Checked before getOrCreateMeshNode so a refusal cannot evict.
+    if (refusesUnsignedIdentity(nodeId, channelIndex, xeddsaSigned)) {
+        notifyRefusedIdentity(nodeId, p);
         return false;
     }
 
@@ -3907,6 +4045,7 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
                 meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
                 if (cn) {
                     cn->level = meshtastic_LogRecord_Level_WARNING;
+                    cn->type = meshtastic_ClientNotification_NotificationType_DUPLICATED_PUBLIC_KEY;
                     cn->time = getValidTime(RTCQualityFromNet);
                     snprintf(cn->message, sizeof(cn->message), warning, safeName);
                     service->sendClientNotification(cn);
@@ -4400,6 +4539,63 @@ bool NodeDB::isKnownXeddsaSigner(NodeNum n)
 #endif
 }
 
+bool NodeDB::refusesUnsignedIdentity(NodeNum n, uint8_t channelIndex, bool xeddsaSigned)
+{
+    if (xeddsaSigned || n == getNodeNum())
+        return false;
+    if (config.security.packet_signature_policy ==
+        meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_COMPATIBLE)
+        return false;
+    if (channels.isAEADEnabled(channelIndex))
+        return false;
+    return isKnownXeddsaSigner(n);
+}
+
+void NodeDB::notifyRefusedIdentity(NodeNum n, const meshtastic_User &claimed)
+{
+    if (!service)
+        return;
+    // Only a name or role change is worth a notice; a NodeInfo repeating what we hold loses nothing. Compare
+    // through the conversion that stores a User, so truncation and sanitizing cannot read as a change. A
+    // signer that lives only in the warm tier keeps no name to compare, so it is not reported.
+    const meshtastic_NodeInfoLite *info = getMeshNode(n);
+    if (!info || !nodeInfoLiteHasUser(info))
+        return;
+    meshtastic_NodeInfoLite incoming = meshtastic_NodeInfoLite_init_zero;
+    TypeConversions::CopyUserToNodeInfoLite(&incoming, claimed);
+    if (strcmp(incoming.long_name, info->long_name) == 0 && strcmp(incoming.short_name, info->short_name) == 0 &&
+        incoming.role == info->role)
+        return;
+    if (lastRefusedIdentityNoticeMs != 0 &&
+        Throttle::isWithinTimespanMs(lastRefusedIdentityNoticeMs, REFUSED_IDENTITY_NOTICE_INTERVAL_MS))
+        return;
+    meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
+    if (!cn)
+        return;
+    lastRefusedIdentityNoticeMs = Time::stampMillis();
+
+    // The name we already hold, never the refused update's claim.
+    char safeName[sizeof(info->long_name)] = "";
+    strncpy(safeName, info->long_name, sizeof(safeName) - 1);
+    sanitizeUtf8(safeName, sizeof(safeName));
+    char who[sizeof(safeName) + 14];
+    if (safeName[0])
+        snprintf(who, sizeof(who), "%s (!%08x)", safeName, n);
+    else
+        snprintf(who, sizeof(who), "!%08x", n);
+    cn->level = meshtastic_LogRecord_Level_WARNING;
+    cn->time = getValidTime(RTCQualityFromNet);
+    // Only Balanced and Strict refuse, so the setting is one of the two.
+    const char *setting = config.security.packet_signature_policy ==
+                                  meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_STRICT
+                              ? "Strict"
+                              : "Balanced";
+    snprintf(cn->message, sizeof(cn->message),
+             "Unsigned update from %s ignored, due to %s security setting. Remove the node to accept its unsigned updates.", who,
+             setting);
+    service->sendClientNotification(cn);
+}
+
 void NodeDB::commitRemoteKey(NodeNum n, const uint8_t key32[32], KeyCommitTrust trust)
 {
     if (!key32 || n == 0)
@@ -4780,6 +4976,7 @@ bool NodeDB::notifyPendingLicensedIdentityMigration()
     if (!notification)
         return false;
     notification->level = meshtastic_LogRecord_Level_WARNING;
+    notification->type = meshtastic_ClientNotification_NotificationType_LICENSED_IDENTITY_CHANGED;
     notification->time = getValidTime(RTCQualityFromNet);
     snprintf(notification->message, sizeof(notification->message), "%s", LICENSED_IDENTITY_MIGRATION_WARNING);
     service->sendClientNotification(notification);

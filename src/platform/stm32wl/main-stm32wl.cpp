@@ -4,6 +4,7 @@
 #include "error.h"
 #include "gps/GPS.h"
 #include "gps/RTC.h"
+#include "mesh/HardwareRNG.h"
 #include <Throttle.h>
 #include <cstring>
 #include <stdarg.h>
@@ -125,6 +126,11 @@ void getMacAddr(uint8_t *dmac)
     dmac[0] = (uint8_t)(uid2 >> 8);
 }
 
+bool getBluetoothAddr(uint8_t *addr)
+{
+    return false;
+}
+
 bool getDeviceId(uint8_t *deviceId)
 {
     // STM32WL: 96-bit factory silicon UID (words w0..w2, little-endian) in bytes 0-11 (rest stay zero).
@@ -133,9 +139,20 @@ bool getDeviceId(uint8_t *deviceId)
     return true;
 }
 
+// Seeds random() once per boot. Without it newlib starts every boot from the same state, so anything drawn
+// from random() - packet ids among them - repeats after each reset.
+static void seedRandom()
+{
+    uint32_t seed = 0;
+    HardwareRNG::fill(reinterpret_cast<uint8_t *>(&seed), sizeof(seed)); // the on-chip TRNG
+    // Fold in the chip UID and the boot timer too, so even a fallback seed differs per chip and per boot.
+    seed ^= HAL_GetUIDw0() ^ HAL_GetUIDw1() ^ HAL_GetUIDw2() ^ micros();
+    randomSeed(seed);
+}
+
 #if HAS_LSE
 // Starts the LSE crystal with a bounded timeout and, if it locks, brings up the STM32 hardware RTC on it.
-void stm32wlSetup()
+static void startLse()
 {
     HAL_PWR_EnableBkUpAccess();
     __HAL_RCC_LSEDRIVE_CONFIG(STM32WL_LSE_DRIVE);
@@ -171,9 +188,15 @@ bool stm32wlRtcAvailable()
 {
     return stm32wlRtcValid;
 }
-#else
-void stm32wlSetup() {}
 #endif
+
+void stm32wlSetup()
+{
+    seedRandom();
+#if HAS_LSE
+    startLse();
+#endif
+}
 
 void cpuDeepSleep(uint32_t msecToWake)
 {
