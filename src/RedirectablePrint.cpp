@@ -20,6 +20,18 @@
 #if HAS_NETWORKING
 extern meshtastic::Syslog syslog;
 #endif
+
+// Log lines stamp the uptime with milliseconds as well as whole seconds. Portduino has always printed
+// them; set this to 1 in a board's build flags to get the same resolution on device, for timing work
+// that whole seconds cannot resolve.
+#ifndef MESHTASTIC_LOG_MILLIS
+#ifdef ARCH_PORTDUINO
+#define MESHTASTIC_LOG_MILLIS 1
+#else
+#define MESHTASTIC_LOG_MILLIS 0
+#endif
+#endif
+
 void RedirectablePrint::rpInit()
 {
 #ifdef HAS_FREE_RTOS
@@ -134,6 +146,15 @@ void RedirectablePrint::log_to_serial(const char *logLevel, const char *format, 
             Print::write("\u001b[35m", 5);
     }
 
+    // The uptime stamp is formatted once here, for both the known-time and unknown-time headers below.
+    char uptime[16];
+#if MESHTASTIC_LOG_MILLIS
+    uint32_t now = millis();
+    snprintf(uptime, sizeof(uptime), "%u.%03u", now / 1000, now % 1000);
+#else
+    snprintf(uptime, sizeof(uptime), "%u", (uint32_t)(millis() / 1000));
+#endif
+
     uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice, true); // display local time on logfile
     if (rtc_sec > 0) {
         long hms = rtc_sec % SEC_PER_DAY;
@@ -152,13 +173,13 @@ void RedirectablePrint::log_to_serial(const char *logLevel, const char *format, 
         if (color) {
             ::printf("\u001b[0m");
         }
-        ::printf("| %02d:%02d:%02d %u.%03u ", hour, min, sec, millis() / 1000, millis() % 1000);
+        ::printf("| %02d:%02d:%02d %s ", hour, min, sec, uptime);
 #else
         printf("%s ", logLevel);
         if (color) {
             printf("\u001b[0m");
         }
-        printf("| %02d:%02d:%02d %u ", hour, min, sec, millis() / 1000);
+        printf("| %02d:%02d:%02d %s ", hour, min, sec, uptime);
 #endif
     } else {
 #ifdef ARCH_PORTDUINO
@@ -166,13 +187,13 @@ void RedirectablePrint::log_to_serial(const char *logLevel, const char *format, 
         if (color) {
             ::printf("\u001b[0m");
         }
-        ::printf("| ??:??:?? %u.%03u ", millis() / 1000, millis() % 1000);
+        ::printf("| ??:??:?? %s ", uptime);
 #else
         printf("%s ", logLevel);
         if (color) {
             printf("\u001b[0m");
         }
-        printf("| ??:??:?? %u ", millis() / 1000);
+        printf("| ??:??:?? %s ", uptime);
 #endif
     }
     auto thread = concurrency::OSThread::currentThread;
