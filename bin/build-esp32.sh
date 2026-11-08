@@ -15,6 +15,8 @@ rm -r $OUTDIR/* || true
 # platformio pkg install -e $1
 # ...redundant with pioarduino
 
+pio --version
+
 echo "Building for $1 with $PLATFORMIO_BUILD_FLAGS"
 rm -f $BUILDDIR/firmware*
 
@@ -26,6 +28,10 @@ basename=firmware-$1-$VERSION
 pio run --environment $1 -t mtjson # -v
 
 cp $BUILDDIR/$basename.elf $OUTDIR/$basename.elf
+
+echo "Copying linker scripts and map file"
+cp $BUILDDIR/$basename.*.ld $OUTDIR/ 2>/dev/null || true
+cp $BUILDDIR/$basename.map $OUTDIR/ 2>/dev/null || true
 
 echo "Copying ESP32 bin file"
 cp $BUILDDIR/$basename.factory.bin $OUTDIR/$basename.factory.bin

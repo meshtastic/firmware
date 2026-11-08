@@ -19,13 +19,13 @@
 #endif
 
 #ifdef SENSECAP_INDICATOR
-#include "graphics/map/RemoteSDService.h"
 #include "input/I2CKeyboardScanner.h"
 #include "mesh/IndicatorSerial.h"
 #include "mesh/comms/I2CProxy.h"
+#include "storage/RemoteStorage.h"
 
-// Serves the UI map tiles from the SD card behind the RP2040, chunk-wise
-// over the interdevice link.
+// Serves the UI storage (map tiles, key backups) from the SD card behind the
+// RP2040, chunk-wise over the interdevice link.
 //
 // Retry policy: a lost frame (timeout) and a co-processor busy with card
 // maintenance (FILE_BUSY) are transient, so they are retried; a request the
@@ -280,10 +280,13 @@ class ReentrantSpiLock : public ISpiLock
             depth++;
             return true;
         }
-        bool result = spiLock->lock(timeout);
+        // A timed-out take holds nothing: claiming ownership anyway would let this thread's next
+        // lock() skip the real acquire, and its unlock() release a bus it never held.
+        if (!spiLock->lock(timeout))
+            return false;
         owner = self;
         depth = 1;
-        return result;
+        return true;
     }
 
     void unlock(void) override
@@ -323,7 +326,7 @@ void tft_task_handler(void *param = nullptr)
 void tftSetup(void)
 {
 #ifdef SENSECAP_INDICATOR
-    RemoteSDService::setBackend(new IndicatorRemoteFS());
+    RemoteStorage::setBackend(new IndicatorRemoteFS());
     // the second bus is bridged to the RP2040, keep the keyboard scan off the
     // uninitialized local Wire1
     I2CKeyboardScanner::setSecondaryBus(i2cProxy);

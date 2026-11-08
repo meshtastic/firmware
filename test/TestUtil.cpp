@@ -2,9 +2,11 @@
 // variant defines mesh-pb-constants.h needs (portduino resolves MAX_NUM_NODES at runtime).
 #include "configuration.h"
 
+#include "SPILock.h"
 #include "SerialConsole.h"
 #include "concurrency/OSThread.h"
 #include "gps/RTC.h"
+#include "mesh/CryptoEngine.h"
 
 #include "TestUtil.h"
 
@@ -164,6 +166,18 @@ void initializeTestEnvironment()
 {
     concurrency::hasBeenSetup = true;
     consoleInit();
+
+    // NodeDB's constructor reaches spiLock through loadFromDisk(), and no test runs main.cpp, so
+    // nothing has created it. Suites got away with the null pointer while Lock::lock() was an empty
+    // function on Portduino; it is a real mutex now, so the call has to have something to lock.
+    if (!spiLock)
+        initSPI();
+
+    // Same story for cryptLock, which perhapsDecode() and the ack-proof paths take. Router's
+    // constructor makes one, but plenty of suites reach those paths without building a Router.
+    // Router reuses this one rather than allocating its own, so making it here is safe either way.
+    if (!cryptLock)
+        cryptLock = new concurrency::Lock();
 #if ARCH_PORTDUINO
     baselineEnvironment();
 

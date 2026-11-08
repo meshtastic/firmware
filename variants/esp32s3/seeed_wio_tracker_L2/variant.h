@@ -90,7 +90,7 @@
 #define SX126X_DIO1 LORA_DIO1
 #define SX126X_BUSY LORA_DIO2
 #define SX126X_RESET LORA_RESET
-#define SX126X_DIO3_TCXO_VOLTAGE 1.8
+#define SX126X_DIO3_TCXO_VOLTAGE 3.0
 #define SX126X_DIO2_AS_RF_SWITCH
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -111,8 +111,9 @@
 #define HAS_SPI_TFT 1
 #define HAS_TOUCHSCREEN 1
 #define USE_TFTDISPLAY 1 // Enable legacy BaseUI TFTDisplay.cpp build
-#define TFT_WIDTH 320    // Required by BaseUI setGeometry
-#define TFT_HEIGHT 240   // Required by BaseUI setGeometry
+#define TFT_NV3031B
+#define TFT_WIDTH 320  // Required by BaseUI setGeometry
+#define TFT_HEIGHT 240 // Required by BaseUI setGeometry
 #define USE_VIRTUAL_KEYBOARD 1
 #endif
 

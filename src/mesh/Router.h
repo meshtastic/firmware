@@ -98,6 +98,16 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     [[nodiscard]] meshtastic_QueueStatus getQueueStatus();
 
     /**
+     * The ack proof verdict sniffReceived() reached for this packet, or ACK_PROOF_ABSENT when it
+     * reached none. Only valid until the next packet is sniffed.
+     */
+    virtual meshtastic_MeshPacket_AckProofStatus ackProofStatusFor(const meshtastic_MeshPacket &p) const
+    {
+        (void)p;
+        return meshtastic_MeshPacket_AckProofStatus_ACK_PROOF_ABSENT;
+    }
+
+    /**
      * @return our local nodenum */
     [[nodiscard]] NodeNum getNodeNum();
 
@@ -120,6 +130,12 @@ class Router : protected concurrency::OSThread, protected PacketHistory
      * NOTE: This method will free the provided packet (even if we return an error code)
      */
     virtual ErrorCode send(meshtastic_MeshPacket *p);
+
+    /**
+     * Transparent mode: queue a client-built, already-encrypted frame on the radio exactly as given.
+     * Only the radio's payload capacity is enforced; airtime rules are the client's. Always takes ownership of p.
+     */
+    ErrorCode sendTransparent(meshtastic_MeshPacket *p);
 
     /* Statistics for the amount of duplicate received packets and the amount of times we cancel a relay because someone did it
         before us */
@@ -196,6 +212,22 @@ class Router : protected concurrency::OSThread, protected PacketHistory
      * the drain (and without touching handleDepth) - keeping the stack flat.
      */
     void dispatchReceived(meshtastic_MeshPacket *p, RxSource src);
+
+    /**
+     * Publish a PKI DM between two other nodes to MQTT. Opaque to us, it never reaches the publish in
+     * dispatchReceived(). Marks p pki_encrypted so MQTT files it under the PKI topic.
+     */
+    void perhapsUplinkOpaquePki(meshtastic_MeshPacket *p);
+
+    /// (from, id) of recent opaque PKI uplinks, so the copy heard from each relay is published once.
+    /// Separate from PacketHistory: opaque frames must not touch routing state.
+    struct OpaqueUplink {
+        NodeNum from;
+        PacketId id;
+    };
+    static constexpr uint8_t opaqueUplinkCapacity = 8;
+    OpaqueUplink opaqueUplinkSeen[opaqueUplinkCapacity] = {};
+    uint8_t opaqueUplinkNext = 0;
 
     /**
      * Route a packet addressed to us (or a local broadcast we loop back) into handleReceived().
