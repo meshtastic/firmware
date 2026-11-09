@@ -635,15 +635,16 @@ void RadioLibInterface::onNotify(uint32_t notification)
                         rearmReceive();
                         setTransmitDelay();
                     } else {
-                        LOG_DEBUG("CAD free");
-                        if (peek)
-                            LOG_DEBUG("Preamble hold released, CAD clear %ums after the sighting",
-                                      Time::getMillis() - peekHoldStart);
+                        const uint32_t peekClearMs = peek ? Time::getMillis() - peekHoldStart : 0;
                         // Send any outgoing packets we have ready as fast as possible to keep the time between channel scan and
                         // actual transmission as short as possible
                         txp = txQueue.dequeue();
                         assert(txp);
                         startSend(txp);
+                        // Logged after the launch: a console write here is ms of the scan's verdict going stale
+                        LOG_DEBUG("CAD free");
+                        if (peek)
+                            LOG_DEBUG("Preamble hold released, CAD clear %ums after the sighting", peekClearMs);
                         LOG_TRACE("%d packets in TX queue", txQueue.getMaxLen() - txQueue.getFree());
                     }
                 }
