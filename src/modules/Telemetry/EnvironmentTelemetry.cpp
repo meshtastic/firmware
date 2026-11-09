@@ -241,18 +241,12 @@ bool EnvironmentTelemetryModule::shouldDisplayLocalMeasurement() const
 
 bool EnvironmentTelemetryModule::refreshLocalMeasurementPacket()
 {
-    // While measuring, the screen shows the scheduled reading: reading the sensors again here would double
-    // every read and wake sleeping sensors. Only a screen-only module reads for the display.
-    meshtastic_Telemetry local = meshtastic_Telemetry_init_zero;
-    if (moduleConfig.telemetry.environment_measurement_enabled || ENVIRONMENTAL_TELEMETRY_MODULE_ENABLE) {
-        if (!hasLatest)
-            return false;
-        local = latest;
-    } else if (!getEnvironmentTelemetry(&local)) {
+    // The scheduled reading: reading the sensors here would double every read and wake sleeping sensors.
+    // A screen-only module has no sensors (i2cScanFinished adds none), so it shows only mesh readings.
+    if (!hasLatest)
         return false;
-    }
 
-    meshtastic_MeshPacket *localPacket = allocDataProtobuf(local);
+    meshtastic_MeshPacket *localPacket = allocDataProtobuf(latest);
     if (localPacket == nullptr) {
         return false;
     }
@@ -638,17 +632,7 @@ void EnvironmentTelemetryModule::openHistory()
 
 bool EnvironmentTelemetryModule::storeReading(const meshtastic_EnvironmentMetrics &metrics, uint32_t time, uint32_t deltaSecs)
 {
-    if (history->push(metrics, time, deltaSecs))
-        return true;
-    // A file store that stopped working (card out, filesystem full): keep measuring into RAM
-    LOG_WARN("Env history: store refused a reading, continue in RAM");
-    auto *ram = new (std::nothrow) RamTelemetryStore<meshtastic_EnvironmentMetrics>(ENVIRONMENT_TELEMETRY_HISTORY_SIZE);
-    if (!ram)
-        return false;
-    // Whatever the failing store can still read comes along, with what each channel has had
-    LOG_INFO("Env history: %u readings kept", (unsigned)copyTelemetryReadings(*history, *ram));
-    history.reset(ram);
-    return history->push(metrics, time, deltaSecs);
+    return storeWithRamFallback(history, ENVIRONMENT_TELEMETRY_HISTORY_SIZE, metrics, time, deltaSecs, "Env");
 }
 
 void EnvironmentTelemetryModule::seedLatestFromHistory()

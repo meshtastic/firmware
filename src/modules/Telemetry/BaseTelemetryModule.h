@@ -3,8 +3,10 @@
 #include "DebugConfiguration.h"
 #include "NodeDB.h"
 #include "TelemetryScheduler.h"
+#include "TelemetryStore.h"
 #include "configuration.h"
 #include "sleep.h"
+#include <memory>
 
 /// Where each module keeps its schedule across a deep sleep
 enum TelemetrySleepSlot : uint8_t {
@@ -87,6 +89,29 @@ class BaseTelemetryModule
     static void saveScheduleForSleep(TelemetrySleepSlot slot, const TelemetryScheduler &schedule);
     /// At init: true if this boot is the wake-up from a telemetry deep sleep and the schedule carried on
     static bool restoreScheduleAfterSleep(TelemetrySleepSlot slot, TelemetryScheduler &schedule);
+
+    /**
+     * Store a reading. A store that refuses it twice (filesystem full or failing) is replaced by RAM for the
+     * rest of this boot, keeping what it could still read. A deep sleep loses what RAM holds; the next boot
+     * opens the file store again.
+     */
+    template <typename T>
+    static bool storeWithRamFallback(std::unique_ptr<TelemetryStore<T>> &store, uint16_t ramSlots, const T &metrics,
+                                     uint32_t time, uint32_t deltaSecs, const char *tag)
+    {
+        if (store->push(metrics, time, deltaSecs))
+            return true;
+        // A failed slot write leaves the rest of a file store working
+        if (store->capacity() > 0 && store->push(metrics, time, deltaSecs))
+            return true;
+        LOG_ERROR("%s history: store refused a reading, continue in RAM", tag);
+        auto *ram = new (std::nothrow) RamTelemetryStore<T>(ramSlots);
+        if (!ram)
+            return false;
+        LOG_INFO("%s history: %u readings kept", tag, (unsigned)copyTelemetryReadings(*store, *ram));
+        store.reset(ram);
+        return store->push(metrics, time, deltaSecs);
+    }
 
   private:
     static constexpr uint8_t MAX_SLEEP_PARTICIPANTS = 4;

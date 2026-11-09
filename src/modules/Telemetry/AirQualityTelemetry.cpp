@@ -344,17 +344,7 @@ void AirQualityTelemetryModule::openHistory()
 
 bool AirQualityTelemetryModule::storeReading(const meshtastic_AirQualityMetrics &metrics, uint32_t time, uint32_t deltaSecs)
 {
-    if (history->push(metrics, time, deltaSecs))
-        return true;
-    // A file store that stopped working (card out, filesystem full): keep measuring into RAM
-    LOG_WARN("AQ history: store refused a reading, continue in RAM");
-    auto *ram = new (std::nothrow) RamTelemetryStore<meshtastic_AirQualityMetrics>(AIR_QUALITY_TELEMETRY_HISTORY_SIZE);
-    if (!ram)
-        return false;
-    // Whatever the failing store can still read comes along, with what each channel has had
-    LOG_INFO("AQ history: %u readings kept", (unsigned)copyTelemetryReadings(*history, *ram));
-    history.reset(ram);
-    return history->push(metrics, time, deltaSecs);
+    return storeWithRamFallback(history, AIR_QUALITY_TELEMETRY_HISTORY_SIZE, metrics, time, deltaSecs, "AQ");
 }
 
 void AirQualityTelemetryModule::seedLatestFromHistory()
