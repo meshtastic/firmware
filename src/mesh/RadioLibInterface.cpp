@@ -24,6 +24,13 @@
 #ifndef RADIO_CAD_HANDOFF_HOLDS_TX
 #define RADIO_CAD_HANDOFF_HOLDS_TX 0 // hold TX while a busy scan's handoff RX is open; a scan's standby would drop its frame
 #endif
+#ifndef RADIO_PREAMBLE_RECHECK
+// Re-read the RX flags just before the pre-TX scan's standby, and let a fresh preamble restart the peek grace
+#define RADIO_PREAMBLE_RECHECK 0
+#endif
+#if RADIO_PREAMBLE_RECHECK
+static bool cadArmLogPending = false; // "CAD arm" waits for the end of onNotify, off the path from RX look to scan
+#endif
 // Age in ms (+1, so 0 means none) of a handoff RX that a standby dropped; logged at the end of onNotify, off the air path
 static uint32_t cadHandoffDroppedAge = 0;
 #ifndef RADIO_EDGE_LOG
@@ -39,6 +46,11 @@ static volatile bool edgeTxIsrSeen = false;
 static uint32_t edgeCadStart = 0, edgeCadEnd = 0, edgeTxCallStart = 0, edgeTxCallEnd = 0;
 static bool edgeCadForTx = false;
 static uint32_t edgeCadBusyId = 0;
+// The TX path's look at the RX flags before a scan: what it saw and how long before the scan's standby it was taken
+static bool edgeLookSeen = false, edgeLookPre = false, edgeLookHdr = false;
+static uint32_t edgeCheckId = 0, edgeCheckStamp = 0, edgeCheckEnd = 0;
+static bool edgeCheckRx = false, edgeCheckPeek = false, edgeCheckHeld = false;
+static long edgeCheckHoldMs = -1;
 static size_t edgeTxLen = 0;
 
 static inline uint32_t INTERRUPT_ATTR edgeStampNow()
@@ -111,6 +123,11 @@ RadioLibInterface::RadioLibInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE c
     LOG_INFO("CAD handoff hold: on");
 #else
     LOG_INFO("CAD handoff hold: off");
+#endif
+#if RADIO_PREAMBLE_RECHECK
+    LOG_INFO("Preamble recheck: on");
+#else
+    LOG_INFO("Preamble recheck: off");
 #endif
 #endif
 
@@ -272,6 +289,7 @@ void RadioLibInterface::holdOnPreamble()
         return;
     iface->clearIrq(1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED);
     preambleHoldStart = Time::skipZero(Time::getMillis());
+    preambleGraceStart = preambleHoldStart;
     preambleHoldHeaderSeen = false; // nothing says this preamble belongs to a frame we can decode yet
     LOG_TRACE("Preamble seen, cleared, holding TX");
 }
@@ -281,16 +299,33 @@ bool RadioLibInterface::preambleHoldPeekable()
     // A frame we could decode has shown its header by now, so what is left is noise or LoRa we cannot read. Neither is
     // worth the rest of a max-frame hold: let the pre-TX CAD listen and decide (#11933).
     return preambleHoldActive() && !preambleHoldHeaderSeen &&
-           Throttle::hasElapsed(preambleHoldStart, preambleHeaderGraceMsec(sf, bw, preambleLength));
+           Throttle::hasElapsed(preambleGraceStart, preambleHeaderGraceMsec(sf, bw, preambleLength));
+}
+
+void RadioLibInterface::restartPreambleGrace()
+{
+    // Clear the latched refire so the next look sees only a newer one; the hold's own expiry stays as it was
+    iface->clearIrq(1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED);
+    preambleGraceStart = Time::skipZero(Time::getMillis());
 }
 
 bool RadioLibInterface::receiveDetected(uint16_t irq, unsigned long syncWordHeaderValidFlag, unsigned long preambleDetectedFlag)
 {
+#if RADIO_EDGE_LOG
+    edgeLookSeen = true;
+    edgeLookPre = irq & preambleDetectedFlag;
+    edgeLookHdr = irq & syncWordHeaderValidFlag;
+#endif
     if (irq & syncWordHeaderValidFlag)
         preambleHoldHeaderSeen = true; // a real frame, so the hold is no longer a bare preamble the CAD may settle
 
-    if (preambleHoldActive())
+    if (preambleHoldActive()) {
+#if RADIO_PREAMBLE_RECHECK
+        if (irq & preambleDetectedFlag)
+            restartPreambleGrace(); // a fresh preamble: the peek must not fire on the old one's age
+#endif
         return true;
+    }
 
     if (irq & syncWordHeaderValidFlag) {
         if (!activeReceiveStart) {
@@ -677,6 +712,11 @@ void RadioLibInterface::onNotify(uint32_t notification)
 #else
             const bool handoffOpen = false;
 #endif
+#if RADIO_EDGE_LOG
+            edgeLookSeen = false;
+            const uint32_t lookStamp = edgeStampNow();
+            const bool lookRx = isReceiving;
+#endif
             const bool clear = !handoffOpen && canSendImmediately();
             // An old bare preamble is noise or LoRa we cannot decode; the CAD below judges the channel instead.
             const bool peek = !clear && !handoffOpen && sendingPacket == NULL && preambleHoldPeekable();
@@ -708,11 +748,40 @@ void RadioLibInterface::onNotify(uint32_t notification)
                     // The scan and the transmit it decides are one sequence: a readout landing between them would
                     // clear the flags startTransmit() is about to set up, or on SX128x leave the chip in standby.
                     RadioSequence seq(this);
+#if RADIO_EDGE_LOG
+                    edgeCheckId = txp->id;
+                    edgeCheckStamp = lookStamp;
+                    edgeCheckRx = lookRx;
+                    edgeCheckPeek = peek;
+                    edgeCheckHoldMs = preambleHoldStart ? (long)(Time::getMillis() - preambleHoldStart) : -1;
+                    edgeCheckHeld = false;
+#endif
+#if RADIO_PREAMBLE_RECHECK
+                    // The look above can be ms old. A frame that started since is being received now, and the scan's
+                    // standby would abort it: look again, under the sequence, and leave the RX running if one is there.
+                    const uint32_t arriving =
+                        iface->getIrqMapped((1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED) | (1UL << RADIOLIB_IRQ_HEADER_VALID));
+                    if (isReceiving && (iface->getIrqFlags() & arriving)) {
+#if RADIO_EDGE_LOG
+                        edgeCheckEnd = edgeStampNow();
+                        edgeCheckHeld = true;
+#endif
+                        if (preambleHoldActive())
+                            restartPreambleGrace();
+                        else
+                            holdOnPreamble();
+                        setTransmitDelay();
+                        break;
+                    }
+                    cadArmLogPending = true;
+#else
                     // Listen-before-talk: a CAD preamble scan immediately before we key up.
                     LOG_DEBUG("CAD arm");
+#endif
                     scanForTx = txp;
 #if RADIO_EDGE_LOG
                     edgeCadStart = edgeStampNow();
+                    edgeCheckEnd = edgeCadStart;
 #endif
                     const bool channelActive = isChannelActive();
 #if RADIO_EDGE_LOG
@@ -757,6 +826,22 @@ void RadioLibInterface::onNotify(uint32_t notification)
     default:
         assert(0); // We expected to receive a valid notification from the ISR
     }
+#if RADIO_PREAMBLE_RECHECK
+    if (cadArmLogPending) {
+        LOG_DEBUG("CAD arm"); // logged after the scan, not between the RX look and the scan's standby
+        cadArmLogPending = false;
+    }
+#endif
+#if RADIO_EDGE_LOG
+    if (edgeCheckId) {
+        const EdgeUs at = edgeUs(edgeCheckStamp);
+        LOG_INFO("RadioEdge: tx_check id=0x%08x check=" EDGE_FMT " to_scan_us=%lu rx=%d look=%d pre=%d hdr=%d verdict=%s "
+                 "hold_ms=%ld recheck=%s",
+                 edgeCheckId, at.s, at.us, edgeSpanUs(edgeCheckStamp, edgeCheckEnd), edgeCheckRx, edgeLookSeen, edgeLookPre,
+                 edgeLookHdr, edgeCheckPeek ? "peek" : "clear", edgeCheckHoldMs, edgeCheckHeld ? "held" : "scan");
+        edgeCheckId = 0;
+    }
+#endif
     if (cadHandoffDroppedAge) {
         LOG_INFO("CAD>RX dropped by standby %lu ms into its RX", (unsigned long)(cadHandoffDroppedAge - 1));
         cadHandoffDroppedAge = 0;
