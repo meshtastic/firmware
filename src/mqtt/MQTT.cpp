@@ -69,6 +69,9 @@ bool isDirectlyUplinkedTelemetry(const meshtastic_Data &d)
 {
     if (!moduleConfig.mqtt.telemetry_uplink_enabled || config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR)
         return false;
+    // A reply to a request is not a stored reading: the requester may be listening on MQTT
+    if (d.request_id != 0)
+        return false;
     if (d.portnum == meshtastic_PortNum_TELEMETRY_HISTORY_APP)
         return true;
     if (d.portnum != meshtastic_PortNum_TELEMETRY_APP)
