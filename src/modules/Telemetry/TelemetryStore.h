@@ -1,5 +1,6 @@
 #pragma once
 
+#include <initializer_list>
 #include <new>
 #include <stdint.h>
 #include <string.h>
@@ -114,3 +115,21 @@ template <typename T> class RamTelemetryStore : public TelemetryStore<T>
             readings[(head + i) % slots].publishedMask |= ch;
     }
 };
+
+/// Copy every readable reading, oldest first, with what each channel has had, so switching stores loses nothing
+/// still readable. @return readings copied
+template <typename T> uint16_t copyTelemetryReadings(TelemetryStore<T> &from, TelemetryStore<T> &to)
+{
+    uint16_t copied = 0;
+    TelemetryReading<T> r;
+    for (uint16_t i = 0; i < from.size(); i++) {
+        if (!from.at(i, r) || !to.push(r.metrics, r.time, r.deltaSecs))
+            continue;
+        for (TelemetryPublishChannel ch : {TELEMETRY_PUBLISHED_MESH, TELEMETRY_PUBLISHED_PHONE, TELEMETRY_PUBLISHED_MQTT}) {
+            if (r.publishedMask & ch)
+                to.markPublished(to.size() - 1, ch);
+        }
+        copied++;
+    }
+    return copied;
+}

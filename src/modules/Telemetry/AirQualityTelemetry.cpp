@@ -351,6 +351,8 @@ bool AirQualityTelemetryModule::storeReading(const meshtastic_AirQualityMetrics 
     auto *ram = new (std::nothrow) RamTelemetryStore<meshtastic_AirQualityMetrics>(AIR_QUALITY_TELEMETRY_HISTORY_SIZE);
     if (!ram)
         return false;
+    // Whatever the failing store can still read comes along, with what each channel has had
+    LOG_INFO("AQ history: %u readings kept", (unsigned)copyTelemetryReadings(*history, *ram));
     history.reset(ram);
     return history->push(metrics, time, deltaSecs);
 }

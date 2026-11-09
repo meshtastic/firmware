@@ -528,6 +528,37 @@ static void test_batch_nothingUnpublishedEncodesNothing()
     TEST_ASSERT_EQUAL_UINT16(0, encodeTelemetryBatch(store, TELEMETRY_PUBLISHED_MESH, 10, buf, sizeof(buf), size, idx));
 }
 
+// Falling back to another store keeps every readable reading, in order, with what each channel has had
+static void test_store_copyKeepsReadingsAndMasks()
+{
+    RamTelemetryStore<meshtastic_AirQualityMetrics> from(4), to(4);
+    from.push(aq(10), 1000U);
+    from.push(aq(20), 0U, 60U);
+    from.push(aq(30), 1120U);
+    from.markPublished(0, TELEMETRY_PUBLISHED_MESH);
+    from.markPublished(1, TELEMETRY_PUBLISHED_MQTT);
+
+    TEST_ASSERT_EQUAL_UINT16(3, copyTelemetryReadings(from, to));
+    TEST_ASSERT_EQUAL_UINT16(3, to.size());
+    TelemetryReading<meshtastic_AirQualityMetrics> r;
+    TEST_ASSERT_TRUE(to.at(0, r));
+    TEST_ASSERT_EQUAL_UINT32(10U, r.metrics.pm25_standard);
+    TEST_ASSERT_EQUAL_UINT32(1000U, r.time);
+    TEST_ASSERT_EQUAL_UINT8(TELEMETRY_PUBLISHED_MESH, r.publishedMask);
+    TEST_ASSERT_TRUE(to.at(1, r));
+    TEST_ASSERT_EQUAL_UINT32(60U, r.deltaSecs);
+    TEST_ASSERT_EQUAL_UINT8(TELEMETRY_PUBLISHED_MQTT, r.publishedMask);
+    TEST_ASSERT_TRUE(to.at(2, r));
+    TEST_ASSERT_EQUAL_UINT8(0, r.publishedMask);
+
+    // A smaller store keeps the newest, masks still on the right readings
+    RamTelemetryStore<meshtastic_AirQualityMetrics> small(2);
+    copyTelemetryReadings(from, small);
+    TEST_ASSERT_TRUE(small.at(0, r));
+    TEST_ASSERT_EQUAL_UINT32(20U, r.metrics.pm25_standard);
+    TEST_ASSERT_EQUAL_UINT8(TELEMETRY_PUBLISHED_MQTT, r.publishedMask);
+}
+
 // ------------------------------------------------------------------ shared deep sleep
 
 class FakeModule : public BaseTelemetryModule
@@ -627,6 +658,7 @@ void setup()
     RUN_TEST(test_batch_capsAtMaxReadings);
     RUN_TEST(test_batch_shrinksToFit);
     RUN_TEST(test_batch_nothingUnpublishedEncodesNothing);
+    RUN_TEST(test_store_copyKeepsReadingsAndMasks);
     RUN_TEST(test_sleep_budgetIsEarliestModuleMinusBootMargin);
     RUN_TEST(test_sleep_busyModuleKeepsNodeAwake);
     RUN_TEST(test_sleep_imminentWorkGivesNoBudget);
