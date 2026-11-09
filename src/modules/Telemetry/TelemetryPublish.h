@@ -18,7 +18,8 @@ inline bool telemetryMqttUplinkAvailable()
 #endif
 }
 
-/// Send the readings target has not had yet as one TelemetryRecordHistory, taking ownership of p
+/// Send the readings target has not had yet as one TelemetryRecordHistory, taking ownership of p.
+/// They are marked only once the mesh queue or the broker has taken the packet.
 /// @return readings sent, 0 if none
 template <typename T>
 uint16_t sendTelemetryBatch(TelemetryStore<T> &store, meshtastic_MeshPacket *p, TelemetryPublishChannel target)
@@ -45,8 +46,12 @@ uint16_t sendTelemetryBatch(TelemetryStore<T> &store, meshtastic_MeshPacket *p, 
 
     if (target == TELEMETRY_PUBLISHED_MESH) {
         // MQTT::onSend() leaves our batches to the direct uplink when it is on, so no MQTT mark here
+        const ErrorCode res = service->sendToMesh(p, RX_SRC_LOCAL, false);
+        if (res != ERRNO_OK) {
+            LOG_WARN("Telemetry: mesh refused %u buffered readings (%d), keep them for later", (unsigned)taken, res);
+            return 0;
+        }
         LOG_INFO("Telemetry: send %u buffered readings to mesh, %u bytes", (unsigned)taken, (unsigned)size);
-        service->sendToMesh(p, RX_SRC_LOCAL, false);
     } else {
 #if !MESHTASTIC_EXCLUDE_MQTT
         const bool sent = mqtt && mqtt->publishOwnPacket(*p);

@@ -607,7 +607,11 @@ bool AirQualityTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     }
 
     LOG_INFO("Sending packet to mesh");
-    service->sendToMesh(p, RX_SRC_LOCAL, true);
+    const ErrorCode res = service->sendToMesh(p, RX_SRC_LOCAL, true);
+    if (res != ERRNO_OK) {
+        LOG_WARN("AQ: mesh refused the reading (%d), keep it for later", res);
+        return false;
+    }
     history->markNewestPublished(TELEMETRY_PUBLISHED_MESH);
     // ccToPhone above hands the phone this very reading, no separate phone send needed
     history->markNewestPublished(TELEMETRY_PUBLISHED_PHONE);
