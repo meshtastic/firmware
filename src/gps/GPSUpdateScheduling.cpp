@@ -1,6 +1,7 @@
 #include "GPSUpdateScheduling.h"
 
 #include "Default.h"
+#include "PowerStatus.h"
 #include "UptimeClock.h"
 
 // Sampled from the original `2750 * seconds^1.22` curve. Interpolation tracks it within 0.6% for
@@ -11,6 +12,17 @@ static constexpr uint32_t kThresholdCurveMs[] = {0,       2750,    6406,    1050
                                                  106314,  174350,  285925,  406141,  666053,  946093, 1551548,
                                                  2203893, 2893481, 4745172, 6740269, 11053722};
 static constexpr size_t kThresholdCurvePoints = sizeof(kThresholdCurveSecs) / sizeof(kThresholdCurveSecs[0]);
+
+// The post-failure backoff below trades fix latency for battery. On external power there is nothing
+// to save and the trade is harmful: the next search goes an hour out while powerState sits at
+// GPS_IDLE, where whileActive() clears the buffer and returns false - so the node discards every
+// NMEA sentence until that window, with a working receiver and nothing in the log to say why. The
+// shortened post-failure dwell compounds it, capping each later search below what a cold start in a
+// poor sky needs, so consecutiveFailures never clears.
+static bool gpsOnExternalPower()
+{
+    return powerStatus && powerStatus->getHasUSB();
+}
 
 // How long does gps_update_interval need to be, for GPS_HARDSLEEP to become more efficient than
 // GPS_SOFTSLEEP? Avoids pow() so this heuristic doesn't pull double-precision libm into the image.
@@ -92,7 +104,7 @@ uint32_t GPSUpdateScheduling::msUntilNextSearch()
     // so wake at most once per broadcast interval rather than once per gps_update_interval.
     // Capped at 1 hour so a user-configured very-long broadcast interval still retries
     // periodically (in case conditions change). Reset on any successful lock.
-    if (consecutiveFailures > 0) {
+    if (consecutiveFailures > 0 && !gpsOnExternalPower()) {
         constexpr uint32_t failureRetryCapMs = 60UL * 60UL * 1000UL; // 1 hour cap
         uint32_t failureSleepMs =
             Default::getConfiguredOrDefaultMs(config.position.position_broadcast_secs, default_broadcast_interval_secs);
@@ -144,8 +156,9 @@ bool GPSUpdateScheduling::searchedTooLong()
     if (elapsed > maxSearchClampMs)
         return true;
 
-    // After a prior failed search, shorten the dwell
-    if (consecutiveFailures > 0 && elapsed > postFailureSearchMs)
+    // After a prior failed search, shorten the dwell -- but not on external power, where a longer
+    // search costs nothing and a 5-minute cap is what prevents recovery in a marginal location.
+    if (consecutiveFailures > 0 && !gpsOnExternalPower() && elapsed > postFailureSearchMs)
         return true;
 
     uint32_t minimumOrConfiguredSecs =
