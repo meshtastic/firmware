@@ -130,17 +130,26 @@ void BaseTelemetryModule::enterSharedDeepSleep()
     // Waking for every read, saving the NodeDB each time would wear the flash several times faster than
     // sleeping per mesh interval did: only after a mesh publish. Done here, before the sleep state is
     // stamped, so the seconds it takes are not missing from the time away.
-    if (sentToMeshThisWake && nodeDB)
+    if (sentToMeshThisWake && nodeDB) {
         nodeDB->saveToDisk();
+        sentToMeshThisWake = false;
+    }
 
     for (uint8_t i = 0; i < numSleepParticipants; i++)
         sleepParticipants[i]->onTelemetryDeepSleep(sleepMs);
+
+    // Again now that the save has taken its time and the hooks may have slept sensors that need waking early
+    const uint32_t finalMs = sharedSleepBudgetMs();
+    if (finalMs < TELEMETRY_MIN_DEEP_SLEEP_MS) {
+        LOG_DEBUG("Telemetry: next wake-up in %ums after the pre-sleep work, stay awake", (unsigned)finalMs);
+        return;
+    }
 #ifdef TELEMETRY_SLEEP_FILE
-    writeSleepState(sleepMs);
+    writeSleepState(finalMs);
 #endif
 
-    LOG_INFO("Telemetry: deep sleep %ums until the next read or publish", (unsigned)sleepMs);
-    doDeepSleep(sleepMs, true, true);
+    LOG_INFO("Telemetry: deep sleep %ums until the next read or publish", (unsigned)finalMs);
+    doDeepSleep(finalMs, true, true);
 }
 
 void BaseTelemetryModule::saveScheduleForSleep(TelemetrySleepSlot slot, const TelemetryScheduler &schedule)

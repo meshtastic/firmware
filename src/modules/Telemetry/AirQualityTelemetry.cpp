@@ -151,11 +151,11 @@ int32_t AirQualityTelemetryModule::runOnce()
     if (!(moduleConfig.telemetry.air_quality_enabled || moduleConfig.telemetry.air_quality_screen_enabled ||
           AIR_QUALITY_TELEMETRY_MODULE_ENABLE)) {
         // If this module is not enabled, and the user doesn't want the display screen don't waste any OSThread time on it
-        return disable();
+        return disableTelemetry();
     }
 
     if (!history)
-        return disable();
+        return disableTelemetry();
 
     if (firstTime) {
         // This is the first time the OSThread library has called this function, so
@@ -184,7 +184,7 @@ int32_t AirQualityTelemetryModule::runOnce()
         // therefore, we should only enable the sensor loop if measurement is also enabled.
         // A power-saving SENSOR woke up for this read, so it does not wait out the broadcast spacing.
         if (result == UINT32_MAX)
-            return disable();
+            return disableTelemetry();
         measuring = true;
         return isPowerSavingSensor() ? result : setStartDelay();
     }
@@ -192,7 +192,7 @@ int32_t AirQualityTelemetryModule::runOnce()
     // if we somehow got to a second run of this module with measurement disabled, then just wait forever
     if (!moduleConfig.telemetry.air_quality_enabled && !AIR_QUALITY_TELEMETRY_MODULE_ENABLE) {
         measuring = false;
-        return disable();
+        return disableTelemetry();
     }
 
     const TelemetryCadence c = cadence();

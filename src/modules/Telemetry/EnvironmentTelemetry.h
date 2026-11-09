@@ -113,6 +113,13 @@ class EnvironmentTelemetryModule : private concurrency::OSThread,
 
   private:
     void openHistory();
+    /// Stop for good, and stop counting in the shared deep sleep
+    int32_t disableTelemetry()
+    {
+        measuring = false;
+        unregisterForSharedSleep();
+        return disable();
+    }
     /// Read every sensor once; store it when on the read cadence, hand it to a connected phone
     void captureReading(uint32_t nowMs, const TelemetryCadence &cadence, bool phoneConnected);
     /// SENSOR role: the readings the mesh has not had yet, as one TelemetryRecordHistory

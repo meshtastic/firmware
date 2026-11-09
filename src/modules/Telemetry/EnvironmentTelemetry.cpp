@@ -403,11 +403,11 @@ int32_t EnvironmentTelemetryModule::runOnce()
     if (!(moduleConfig.telemetry.environment_measurement_enabled || moduleConfig.telemetry.environment_screen_enabled ||
           ENVIRONMENTAL_TELEMETRY_MODULE_ENABLE)) {
         // If this module is not enabled, and the user doesn't want the display screen don't waste any OSThread time on it
-        return disable();
+        return disableTelemetry();
     }
 
     if (!history)
-        return disable();
+        return disableTelemetry();
 
     if (firstTime) {
         // This is the first time the OSThread library has called this function, so do some setup
@@ -453,7 +453,7 @@ int32_t EnvironmentTelemetryModule::runOnce()
         // therefore, we should only enable the sensor loop if measurement is also enabled.
         // A power-saving SENSOR woke up for this read, so it does not wait out the broadcast spacing.
         if (result == UINT32_MAX)
-            return disable();
+            return disableTelemetry();
         measuring = true;
         return isPowerSavingSensor() ? result : setStartDelay();
     }
@@ -461,7 +461,7 @@ int32_t EnvironmentTelemetryModule::runOnce()
     // if we somehow got to a second run of this module with measurement disabled, then just wait forever
     if (!moduleConfig.telemetry.environment_measurement_enabled && !ENVIRONMENTAL_TELEMETRY_MODULE_ENABLE) {
         measuring = false;
-        return disable();
+        return disableTelemetry();
     }
 
     // Some sensors need polling between reads (e.g. BME680 measurement in flight)
