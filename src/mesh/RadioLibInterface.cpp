@@ -78,9 +78,137 @@ static unsigned long edgeSpanUs(uint32_t from, uint32_t to)
 #define EDGE_FMT "%lu.%06lu"
 #endif
 
+#if RADIO_EDGE_SEQ
+#if !RADIO_EDGE_LOG
+#error "RADIO_EDGE_SEQ needs RADIO_EDGE_LOG"
+#endif
+// One window per scan, from just before the scan to startTransmit() returning. Times are ticks since the window opened:
+// the CPU cycle counter on nRF52 (its µs clock steps 30.5 µs), µs elsewhere.
+struct EdgeSeqEv {
+    uint16_t op;   // first two bytes sent (the opcode), or a marker below
+    uint16_t len;  // bytes sent, or a delay's argument
+    uint32_t at;   // the call, before the bus lock
+    uint32_t lock; // waiting for the bus lock
+    uint32_t xfer; // lock taken to transfer done
+    uint32_t busy; // transfer done to the first low BUSY read; UINT32_MAX if BUSY was not polled
+};
+enum : uint16_t {
+    EDGE_SEQ_SCANNED = 0xFF01, // isChannelActive() returned
+    EDGE_SEQ_CALL,             // launchTransmit() called
+    EDGE_SEQ_CALLED,           // launchTransmit() returned
+    EDGE_SEQ_IRQ,              // a poll of the IRQ pin read high after reading low
+    EDGE_SEQ_DELAY_MS,         // RadioLib delay(len) ms
+    EDGE_SEQ_DELAY_US,         // RadioLib delayMicroseconds(len), 10 µs or more
+};
+static constexpr size_t EDGE_SEQ_MAX = 64;
+static EdgeSeqEv edgeSeqEv[EDGE_SEQ_MAX];
+static size_t edgeSeqN = 0, edgeSeqLost = 0;
+static bool edgeSeqArmed = false, edgeSeqKept = false, edgeSeqIrqLow = false;
+static int edgeSeqCur = -1, edgeSeqBusyIdx = -1;
+static uint32_t edgeSeqId = 0, edgeSeqLook = 0, edgeSeqStamp0 = 0, edgeSeqStamp1 = 0, edgeSeqT0 = 0, edgeSeqT1 = 0;
+
+static inline uint32_t edgeSeqTicks()
+{
+#if defined(ARDUINO_NRF52_ADAFRUIT)
+    return DWT->CYCCNT;
+#else
+    return edgeStampNow();
+#endif
+}
+static unsigned long edgeSeqUs(uint32_t ticks)
+{
+#if defined(ARDUINO_NRF52_ADAFRUIT)
+    return ticks / (SystemCoreClock / 1000000U);
+#else
+    return ticks;
+#endif
+}
+static EdgeSeqEv *edgeSeqAdd(uint16_t op, uint16_t len)
+{
+    if (edgeSeqN >= EDGE_SEQ_MAX) {
+        edgeSeqLost++;
+        return nullptr;
+    }
+    EdgeSeqEv &e = edgeSeqEv[edgeSeqN++];
+    e = {op, len, edgeSeqTicks() - edgeSeqT0, 0, 0, UINT32_MAX};
+    return &e;
+}
+static void edgeSeqMark(uint16_t op, uint16_t len = 0)
+{
+    if (edgeSeqArmed)
+        edgeSeqAdd(op, len);
+}
+static void edgeSeqArm(uint32_t id, uint32_t lookStamp)
+{
+    edgeSeqN = edgeSeqLost = 0;
+    edgeSeqCur = edgeSeqBusyIdx = -1;
+    edgeSeqIrqLow = edgeSeqKept = false;
+    edgeSeqId = id;
+    edgeSeqLook = lookStamp;
+    edgeSeqStamp0 = edgeStampNow();
+    edgeSeqT0 = edgeSeqTicks();
+    edgeSeqArmed = true;
+}
+static void edgeSeqDisarm(bool keep)
+{
+    edgeSeqT1 = edgeSeqTicks();
+    edgeSeqStamp1 = edgeStampNow();
+    edgeSeqArmed = false;
+    edgeSeqKept = keep;
+}
+// Logged after TX_DONE. win_us (ticks) against clk_us (the µs clock) shows a window the CPU slept in, where the cycle
+// counter stops. Events: op/len@at+lock,xfer,busy for a command; S scanned, T call, t returned, I IRQ pin high, D/U delay.
+static void edgeSeqLog()
+{
+    const EdgeUs at = edgeUs(edgeSeqStamp0);
+    LOG_INFO("RadioEdge: tx_seq id=0x%08x at=" EDGE_FMT " look_us=%lu win_us=%lu clk_us=%lu n=%u lost=%u", edgeSeqId, at.s, at.us,
+             edgeSpanUs(edgeSeqLook, edgeSeqStamp0), edgeSeqUs(edgeSeqT1 - edgeSeqT0), edgeSpanUs(edgeSeqStamp0, edgeSeqStamp1),
+             (unsigned)edgeSeqN, (unsigned)edgeSeqLost);
+    char line[112];
+    size_t pos = 0;
+    unsigned part = 0;
+    for (size_t i = 0; i < edgeSeqN; i++) {
+        const EdgeSeqEv &e = edgeSeqEv[i];
+        char ev[48];
+        if (e.op >= EDGE_SEQ_SCANNED && e.op <= EDGE_SEQ_DELAY_US) {
+            static const char tags[] = "STtIDU";
+            const char tag = tags[e.op - EDGE_SEQ_SCANNED];
+            if (e.op >= EDGE_SEQ_DELAY_MS)
+                snprintf(ev, sizeof(ev), "%c%u@%lu", tag, (unsigned)e.len, edgeSeqUs(e.at));
+            else
+                snprintf(ev, sizeof(ev), "%c@%lu", tag, edgeSeqUs(e.at));
+        } else if (e.busy == UINT32_MAX) {
+            snprintf(ev, sizeof(ev), "%04x/%u@%lu+%lu,%lu,-", (unsigned)e.op, (unsigned)e.len, edgeSeqUs(e.at), edgeSeqUs(e.lock),
+                     edgeSeqUs(e.xfer));
+        } else {
+            snprintf(ev, sizeof(ev), "%04x/%u@%lu+%lu,%lu,%lu", (unsigned)e.op, (unsigned)e.len, edgeSeqUs(e.at),
+                     edgeSeqUs(e.lock), edgeSeqUs(e.xfer), edgeSeqUs(e.busy));
+        }
+        if (pos && pos + 1 + strlen(ev) >= sizeof(line)) {
+            LOG_INFO("RadioEdge: tx_seq_ev id=0x%08x p=%u%s", edgeSeqId, part++, line);
+            pos = 0;
+        }
+        pos += snprintf(line + pos, sizeof(line) - pos, " %s", ev);
+    }
+    if (pos)
+        LOG_INFO("RadioEdge: tx_seq_ev id=0x%08x p=%u%s", edgeSeqId, part, line);
+}
+#endif
+
 void LockingArduinoHal::spiBeginTransaction()
 {
+#if RADIO_EDGE_SEQ
+    EdgeSeqEv *e = edgeSeqArmed ? edgeSeqAdd(0, 0) : nullptr;
+#endif
     spiLock->lock();
+#if RADIO_EDGE_SEQ
+    if (edgeSeqArmed) {
+        edgeSeqBusyIdx = -1;
+        edgeSeqCur = e ? (int)(e - edgeSeqEv) : -1;
+        if (e)
+            e->lock = edgeSeqTicks() - edgeSeqT0 - e->at;
+    }
+#endif
 
     ArduinoHal::spiBeginTransaction();
 }
@@ -88,18 +216,69 @@ void LockingArduinoHal::spiBeginTransaction()
 void LockingArduinoHal::spiEndTransaction()
 {
     ArduinoHal::spiEndTransaction();
+#if RADIO_EDGE_SEQ
+    if (edgeSeqArmed && edgeSeqCur >= 0) {
+        EdgeSeqEv &e = edgeSeqEv[edgeSeqCur];
+        e.xfer = edgeSeqTicks() - edgeSeqT0 - e.at - e.lock;
+        edgeSeqBusyIdx = edgeSeqCur;
+        edgeSeqCur = -1;
+    }
+#endif
 
     spiLock->unlock();
 }
 
-#if RADIO_SPI_BULK
+#if RADIO_SPI_BULK || RADIO_EDGE_SEQ
 void LockingArduinoHal::spiTransfer(uint8_t *out, size_t len, uint8_t *in)
 {
-#if defined(ARDUINO_ARCH_ESP32)
+#if RADIO_EDGE_SEQ
+    if (edgeSeqArmed && edgeSeqCur >= 0) {
+        edgeSeqEv[edgeSeqCur].op = (uint16_t)((len > 0 ? out[0] << 8 : 0) | (len > 1 ? out[1] : 0));
+        edgeSeqEv[edgeSeqCur].len = (uint16_t)len;
+    }
+#endif
+#if !RADIO_SPI_BULK
+    ArduinoHal::spiTransfer(out, len, in);
+#elif defined(ARDUINO_ARCH_ESP32)
     spi->transferBytes(out, in, len);
 #else
     spi->transfer(out, in, len); // on nRF52 one EasyDMA transfer, not one per byte
 #endif
+}
+#endif
+
+#if RADIO_EDGE_SEQ
+uint32_t LockingArduinoHal::digitalRead(uint32_t pin)
+{
+    const uint32_t v = ArduinoHal::digitalRead(pin);
+    if (edgeSeqArmed) {
+        if (pin == edgeSeqBusyPin && !v && edgeSeqBusyIdx >= 0) {
+            EdgeSeqEv &e = edgeSeqEv[edgeSeqBusyIdx];
+            e.busy = edgeSeqTicks() - edgeSeqT0 - e.at - e.lock - e.xfer;
+            edgeSeqBusyIdx = -1;
+        } else if (pin == edgeSeqIrqPin) {
+            if (!v)
+                edgeSeqIrqLow = true;
+            else if (edgeSeqIrqLow) {
+                edgeSeqIrqLow = false;
+                edgeSeqMark(EDGE_SEQ_IRQ);
+            }
+        }
+    }
+    return v;
+}
+
+void LockingArduinoHal::delay(RadioLibTime_t ms)
+{
+    edgeSeqMark(EDGE_SEQ_DELAY_MS, (uint16_t)ms);
+    ArduinoHal::delay(ms);
+}
+
+void LockingArduinoHal::delayMicroseconds(RadioLibTime_t us)
+{
+    if (us >= 10) // not the 1 µs RadioLib waits after every command for BUSY to rise
+        edgeSeqMark(EDGE_SEQ_DELAY_US, (uint16_t)us);
+    ArduinoHal::delayMicroseconds(us);
 }
 #endif
 
@@ -109,6 +288,14 @@ RadioLibInterface::RadioLibInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE c
 {
     instance = this;
 
+#if RADIO_EDGE_SEQ
+    hal->setEdgeSeqPins(irq, busy);
+#if defined(ARDUINO_NRF52_ADAFRUIT)
+    CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+    DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+#endif
+    LOG_INFO("RadioEdge: tx_seq on");
+#endif
 #if RADIO_SPI_BULK && !ARCH_PORTDUINO
     LOG_INFO("RADIO_SPI_BULK: one SPI transfer per radio command");
 #endif
@@ -646,8 +833,15 @@ void RadioLibInterface::onNotify(uint32_t notification)
                      edgeCadForTx ? edgeSpanUs(edgeCadStart, edgeCadEnd) : 0UL, call.s, call.us,
                      edgeSpanUs(edgeTxCallStart, edgeTxCallEnd), done.s, done.us, edgeTxIsrSeen ? "" : " polled",
                      (unsigned)getPacketTime(sent));
+#if RADIO_EDGE_SEQ
+            if (edgeSeqKept && edgeSeqId == sent->id)
+                edgeSeqLog();
+#endif
         }
         edgeCadForTx = false;
+#endif
+#if RADIO_EDGE_SEQ
+        edgeSeqKept = false;
 #endif
         finishSentPacket(sent); // outside the lock: it only logs airtime and prints
         break;
@@ -778,12 +972,20 @@ void RadioLibInterface::onNotify(uint32_t notification)
                     // Listen-before-talk: a CAD preamble scan immediately before we key up.
                     LOG_DEBUG_RADIO("CAD arm");
 #endif
+#if RADIO_EDGE_SEQ
+                    edgeSeqArm(txp->id, lookStamp);
+#endif
                     scanForTx = txp;
 #if RADIO_EDGE_LOG
                     edgeCadStart = edgeStampNow();
                     edgeCheckEnd = edgeCadStart;
 #endif
                     const bool channelActive = isChannelActive();
+#if RADIO_EDGE_SEQ
+                    edgeSeqMark(EDGE_SEQ_SCANNED);
+                    if (channelActive)
+                        edgeSeqDisarm(false);
+#endif
 #if RADIO_EDGE_LOG
                     edgeCadEnd = edgeStampNow();
                     edgeCadForTx = !channelActive;
@@ -811,6 +1013,9 @@ void RadioLibInterface::onNotify(uint32_t notification)
                         txp = txQueue.dequeue();
                         assert(txp);
                         startSend(txp);
+#if RADIO_EDGE_SEQ
+                        edgeSeqDisarm(true);
+#endif
 #if RADIO_LOG_CAD_FREE_AFTER_TX
                         LOG_DEBUG_RADIO("CAD free"); // after the launch: a log line here was ms of scan going stale
                         if (peek)
@@ -1714,7 +1919,13 @@ bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
         edgeTxIsrSeen = false;
         edgeTxCallStart = edgeStampNow();
 #endif
+#if RADIO_EDGE_SEQ
+        edgeSeqMark(EDGE_SEQ_CALL);
+#endif
         int res = launchTransmit(numbytes);
+#if RADIO_EDGE_SEQ
+        edgeSeqMark(EDGE_SEQ_CALLED);
+#endif
 #if RADIO_EDGE_LOG
         edgeTxCallEnd = edgeStampNow();
 #endif

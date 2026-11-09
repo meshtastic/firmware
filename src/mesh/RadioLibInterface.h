@@ -53,6 +53,12 @@
 #error "RADIO_SPI_BULK: no buffered SPI call on this architecture"
 #endif
 
+// Bench, with RADIO_EDGE_LOG: time every radio command, BUSY wait and IRQ-pin poll from the pre-TX scan to the transmit
+// call, logged as "RadioEdge: tx_seq" lines. It guards virtual overrides: set it for the whole build, never per file.
+#ifndef RADIO_EDGE_SEQ
+#define RADIO_EDGE_SEQ 0
+#endif
+
 /**
  * We need to override the RadioLib ArduinoHal class to add mutex protection for SPI bus access
  */
@@ -63,9 +69,21 @@ class LockingArduinoHal : public ArduinoHal
 
     void spiBeginTransaction() override;
     void spiEndTransaction() override;
-#if RADIO_SPI_BULK
+#if RADIO_SPI_BULK || RADIO_EDGE_SEQ
     void spiTransfer(uint8_t *out, size_t len, uint8_t *in) override;
+#endif
+#if RADIO_EDGE_SEQ
+    uint32_t digitalRead(uint32_t pin) override;
+    void delay(RadioLibTime_t ms) override;
+    void delayMicroseconds(RadioLibTime_t us) override;
+    void setEdgeSeqPins(uint32_t irq, uint32_t busy)
+    {
+        edgeSeqIrqPin = irq;
+        edgeSeqBusyPin = busy;
+    }
 
+  private:
+    uint32_t edgeSeqIrqPin = RADIOLIB_NC, edgeSeqBusyPin = RADIOLIB_NC;
 #endif
 };
 
