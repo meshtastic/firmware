@@ -970,9 +970,20 @@ bool MQTT::publishOwnPacket(meshtastic_MeshPacket &mp)
             return false;
         }
         mp.channel = hash;
-        crypto->encryptPacket(mp.from, mp.id, numBytes, scratch);
-        memcpy(mp.encrypted.bytes, scratch, numBytes);
-        mp.encrypted.size = numBytes;
+        if (channels.isAEADEnabled(chIndex)) {
+            // Same AES-CCM as Router on an AEAD channel, or receivers reject it
+            if (numBytes + MESHTASTIC_AEAD_OVERHEAD > sizeof(mp.encrypted.bytes) ||
+                !crypto->encryptPacketCCM(channels.getKey(chIndex), mp.from, mp.to, mp.id, numBytes, scratch,
+                                          mp.encrypted.bytes)) {
+                LOG_WARN("MQTT publishOwnPacket: AEAD encryption failed, drop");
+                return false;
+            }
+            mp.encrypted.size = numBytes + MESHTASTIC_AEAD_OVERHEAD;
+        } else {
+            crypto->encryptPacket(mp.from, mp.id, numBytes, scratch);
+            memcpy(mp.encrypted.bytes, scratch, numBytes);
+            mp.encrypted.size = numBytes;
+        }
         mp.which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
     }
 

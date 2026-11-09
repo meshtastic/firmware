@@ -1,6 +1,7 @@
 #pragma once
 
 #include "MeshService.h"
+#include "RadioInterface.h"
 #include "TelemetryBatch.h"
 #include "mesh/Channels.h"
 #if !MESHTASTIC_EXCLUDE_MQTT
@@ -18,6 +19,17 @@ inline bool telemetryMqttUplinkAvailable()
 #endif
 }
 
+/// Bytes a batch may take so the whole frame fits on air: LoRa header, the Data fields around the
+/// payload, and the AEAD tag when the primary channel uses it. The direct MQTT uplink keeps the same
+/// limit, so a batch it publishes could also have gone over the mesh.
+inline size_t telemetryBatchBudget()
+{
+    constexpr size_t DATA_FIELDS_BYTES = 10; // portnum, payload tag and length, bitfield
+    const size_t aead = channels.isAEADEnabled(channels.getPrimaryIndex()) ? MESHTASTIC_AEAD_OVERHEAD : 0;
+    const size_t frame = MAX_LORA_PAYLOAD_LEN - MESHTASTIC_HEADER_LENGTH - DATA_FIELDS_BYTES - aead;
+    return frame < meshtastic_Constants_DATA_PAYLOAD_LEN ? frame : meshtastic_Constants_DATA_PAYLOAD_LEN;
+}
+
 /// Send the readings target has not had yet as one TelemetryRecordHistory, taking ownership of p.
 /// They are marked only once the mesh queue or the broker has taken the packet.
 /// @return readings sent, 0 if none
@@ -31,8 +43,8 @@ uint16_t sendTelemetryBatch(TelemetryStore<T> &store, meshtastic_MeshPacket *p, 
         target == TELEMETRY_PUBLISHED_MESH ? TELEMETRY_MAX_READINGS_PER_MESH_PACKET : TELEMETRY_MAX_READINGS_PER_BATCH;
     uint16_t indices[TELEMETRY_MAX_READINGS_PER_BATCH];
     size_t size = 0;
-    const uint16_t taken = encodeTelemetryBatch(store, target, maxReadings, p->decoded.payload.bytes,
-                                                sizeof(p->decoded.payload.bytes), size, indices);
+    const uint16_t taken =
+        encodeTelemetryBatch(store, target, maxReadings, p->decoded.payload.bytes, telemetryBatchBudget(), size, indices);
     if (taken == 0) {
         packetPool.release(p);
         return 0;
