@@ -8,6 +8,7 @@
 #include "SPILock.h"
 #include "SafeFile.h"
 #include "TelemetrySensor.h"
+#include "Throttle.h"
 #include <float.h> // FLT_MAX
 #include <pb_decode.h>
 #include <pb_encode.h>
@@ -1056,10 +1057,17 @@ int32_t SENXXSensor::pendingForReadyMs()
         }
 
         // Get PN values to check if we are above or below threshold, once per measurement: polling again
-        // on every call would keep the next read inside SENXX_POLL_INTERVAL forever
-        if (!lastDataPoll || (int32_t)(lastDataPoll - pmMeasureStarted) < SENXX_PM_WARMUP_MS_1) {
-            readPNValues(true);
-            lastDataPoll = now;
+        // on every call would keep the next read inside SENXX_POLL_INTERVAL forever. Polled in this
+        // measurement = polled after its first warm-up; unsigned ages, so it holds however long it runs.
+        const bool pnPolled =
+            lastDataPoll && Throttle::isWithinTimespanMs(lastDataPoll, sincePmMeasureStarted - SENXX_PM_WARMUP_MS_1 + 1);
+        if (!pnPolled) {
+            if (readPNValues(true)) {
+                lastDataPoll = now;
+            } else if (sincePmMeasureStarted < SENXX_PM_WARMUP_MS_2) {
+                // Unknown concentration: retry, and never read before the full warm-up
+                return min((uint32_t)SENXX_POLL_INTERVAL, SENXX_PM_WARMUP_MS_2 - sincePmMeasureStarted);
+            }
         }
 
         // If the reading is low (the threshold is in #/cm3) and second warmUp hasn't passed we return to come back later
