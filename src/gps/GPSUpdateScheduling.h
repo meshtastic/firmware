@@ -2,6 +2,9 @@
 
 #include "configuration.h"
 
+// gps_update_interval at or below this keeps the receiver powered between searches (GPS_IDLE)
+static constexpr uint32_t GPS_UPDATE_ALWAYS_ON_THRESHOLD_MS = 10 * 1000UL;
+
 // Approximates the GPS_HARDSLEEP/GPS_SOFTSLEEP crossover curve without pow(); see .cpp for the
 // sampled reference values it interpolates between.
 uint32_t gpsHardsleepThresholdMs(uint32_t predictedSearchSecs);
