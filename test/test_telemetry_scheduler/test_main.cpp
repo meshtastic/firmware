@@ -265,6 +265,17 @@ static void test_scheduler_publishesRideOnReadsWhenSleepy()
     TEST_ASSERT_FALSE(s.mqttDue(read5 - 2000U - TelemetryScheduler::PUBLISH_SLACK_MS, sleepyCadence()));
 }
 
+// The publish slack never shortens an airtime retry: a rejected send waits its full backoff
+static void test_scheduler_slackDoesNotShortenRetry()
+{
+    TelemetryScheduler s;
+    const uint32_t now = 1000U + MESH_MS;
+    s.onMeshSkipped(now, TelemetryScheduler::MESH_RETRY_MS);
+    TEST_ASSERT_FALSE(s.meshDue(now + 1000U, 1000U, sleepyCadence()));
+    TEST_ASSERT_FALSE(s.meshDue(now + TelemetryScheduler::MESH_RETRY_MS - 1U, 1000U, sleepyCadence()));
+    TEST_ASSERT_TRUE(s.meshDue(now + TelemetryScheduler::MESH_RETRY_MS, 1000U, sleepyCadence()));
+}
+
 // ------------------------------------------------------------------ deep sleep retention
 
 // The cadence and deltaSecs carry across a sleep that restarts millis() from 0
@@ -602,6 +613,7 @@ void setup()
     RUN_TEST(test_scheduler_nextActionSubtractsWarmUpLead);
     RUN_TEST(test_scheduler_nextActionTakesEarliestOfReadMeshMqtt);
     RUN_TEST(test_scheduler_publishesRideOnReadsWhenSleepy);
+    RUN_TEST(test_scheduler_slackDoesNotShortenRetry);
     RUN_TEST(test_scheduler_retainedAcrossDeepSleep);
     RUN_TEST(test_scheduler_retainedNeverStaysNever);
     RUN_TEST(test_sensors_wokenOnlyWithinTheirLead);

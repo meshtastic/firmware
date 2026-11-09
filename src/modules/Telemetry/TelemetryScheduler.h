@@ -96,10 +96,12 @@ class TelemetryScheduler
         return due > retry ? due : retry;
     }
 
-    /// Due now, or for publishOnReads within PUBLISH_SLACK_MS: the read wake-up that comes just before it carries it
+    /// Due now, or for publishOnReads within PUBLISH_SLACK_MS: the read wake-up that comes just before it carries it.
+    /// The slack is for the interval only, a retry backoff always runs out in full.
     bool meshDue(uint32_t nowMs, uint32_t lastMeshMs, const TelemetryCadence &c) const
     {
-        return msUntilMesh(nowMs, lastMeshMs, c.meshMs) <= publishSlackMs(c);
+        return remaining(nowMs, lastMeshMs, c.meshMs) <= publishSlackMs(c) &&
+               remaining(nowMs, lastMeshAttemptMs, meshRetryMs) == 0;
     }
 
     /// Wake-ups drift by a few seconds against a publish interval that is a multiple of the read one
