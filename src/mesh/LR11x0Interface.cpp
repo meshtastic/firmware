@@ -194,21 +194,31 @@ template <typename T> bool LR11x0Interface<T>::init()
     // \todo Display actual typename of the adapter, not just `LR11x0`
     LOG_INFO("LR11x0 init result %d", res);
 
-    if (res == RADIOLIB_ERR_CHIP_NOT_FOUND || lr11x0SpiFailed(res)) {
 #ifdef LR11X0_UPDATE_FIRMWARE_TO
-        // An interrupted update leaves the radio sitting in bootloader mode, where begin() fails. Retry the
-        // flash from here rather than giving up, otherwise the device could never recover on its own.
-        LOG_WARN("LR11x0 did not start; firmware recovery in case update was interrupted");
-        if (lora.updateFirmware(lr11xx_firmware_image, LR11XX_FIRMWARE_IMAGE_SIZE, true) == RADIOLIB_ERR_NONE) {
-            LOG_INFO("LR1110 firmware recovery OK, re-init radio");
-            res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage);
-            if (res == RADIOLIB_ERR_NONE)
-                resolvedTcxoVoltage = tcxoVoltage;
+    if (res != RADIOLIB_ERR_NONE) {
+        // An interrupted update leaves the radio in its bootloader, where begin() fails (SPI_CMD_INVALID). Re-flash only
+        // when the radio reports bootloader mode, so a failure on running (possibly newer) firmware never replaces it.
+        LR11x0VersionInfo_t boot = {};
+        lora.getVersionInfo(&boot); // device is set by the base read; in bootloader the later WiFi/GNSS reads fail
+        if (boot.device == RADIOLIB_LR11X0_DEVICE_BOOT) {
+            LOG_WARN("LR11x0 in bootloader mode (init result %d); retrying the interrupted firmware update", res);
+            const int16_t upd = lora.updateFirmware(lr11xx_firmware_image, LR11XX_FIRMWARE_IMAGE_SIZE, true);
+            if (upd == RADIOLIB_ERR_NONE) {
+                LOG_INFO("LR1110 firmware recovery OK, re-init radio");
+                res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage);
+                if (res == RADIOLIB_ERR_NONE)
+                    resolvedTcxoVoltage = tcxoVoltage;
+            } else {
+                LOG_ERROR("LR1110 firmware recovery FAILED %s%d - power-cycle to retry", radioLibErr, upd);
+            }
+            if (res != RADIOLIB_ERR_NONE)
+                return false;
         }
-#endif
-        if (res != RADIOLIB_ERR_NONE)
-            return false;
     }
+#endif
+
+    if (res == RADIOLIB_ERR_CHIP_NOT_FOUND || lr11x0SpiFailed(res))
+        return false;
 
     LR11x0VersionInfo_t version;
     res = lora.getVersionInfo(&version);
