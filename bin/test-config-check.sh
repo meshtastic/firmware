@@ -137,6 +137,7 @@ assert_clean_module module-lr1120.yaml lr1120
 assert_clean_module module-lr1121.yaml lr1121
 assert_clean_module module-sim.yaml sim
 assert_clean_module module-auto.yaml auto
+assert_clean_module module-transparent.yaml transparent
 
 echo
 echo "other configs that must not be flagged:"
@@ -183,6 +184,18 @@ assert "unknown module names the valid set" 1 module-unknown.yaml check \
 assert "wrong-case module suggests the right spelling" 1 module-wrong-case.yaml check \
 	"did you mean 'LLCC68'?" \
 	"Result: 1 error, 0 warnings"
+
+echo
+echo "transparent radio:"
+assert "transparent with no device is refused" 1 module-transparent-no-device.yaml check \
+	"Lora.TransparentDevice is not set" \
+	"Result: 1 error, 0 warnings"
+assert "an endpoint startup would refuse is refused" 1 transparent-device-bad.yaml check \
+	"is neither a serial device path nor host[:port]" \
+	"Result: 1 error, 0 warnings"
+assert "a device for another module is flagged" 0 transparent-device-unused.yaml check \
+	"Lora.TransparentDevice is set but Module is sim" \
+	"Result: 0 errors, 1 warning"
 
 echo
 echo "LR11xx rfswitch table:"

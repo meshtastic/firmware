@@ -397,29 +397,9 @@ int16_t SimRadio::readData(uint8_t *data, size_t len)
     return state;
 }
 
-/**
- * Calculate airtime per
- * https://www.rs-online.com/designspark/rel-assets/ds-assets/uploads/knowledge-items/application-notes-for-the-internet-of-things/LoRa%20Design%20Guide.pdf
- * section 4
- *
- * @return num msecs for the packet
- */
 uint32_t SimRadio::getPacketTime(uint32_t pl, bool received)
 {
-    float bandwidthHz = bw * 1000.0f;
-    bool headDisable = false; // we currently always use the header
-    float tSym = (1 << sf) / bandwidthHz;
-
-    bool lowDataOptEn = tSym > 16e-3 ? true : false; // Needed if symbol time is >16ms
-
-    float tPreamble = (preambleLength + 4.25f) * tSym;
-    float numPayloadSym =
-        8 + max(ceilf(((8.0f * pl - 4 * sf + 28 + 16 - 20 * headDisable) / (4 * (sf - 2 * lowDataOptEn))) * cr), 0.0f);
-    float tPayload = numPayloadSym * tSym;
-    float tPacket = tPreamble + tPayload;
-
-    uint32_t msecs = tPacket * 1000;
-    return msecs;
+    return computeTimeOnAirMsec(pl);
 }
 
 int16_t SimRadio::getCurrentRSSI()
