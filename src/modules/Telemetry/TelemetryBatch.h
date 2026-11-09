@@ -33,6 +33,33 @@ inline void setTelemetryRecordMetrics(meshtastic_TelemetryRecord &r, const mesht
     r.telemetry_variant.power_metrics = m;
 }
 
+inline void setTelemetryMetrics(meshtastic_Telemetry &t, const meshtastic_EnvironmentMetrics &m)
+{
+    t.which_variant = meshtastic_Telemetry_environment_metrics_tag;
+    t.variant.environment_metrics = m;
+}
+
+inline void setTelemetryMetrics(meshtastic_Telemetry &t, const meshtastic_AirQualityMetrics &m)
+{
+    t.which_variant = meshtastic_Telemetry_air_quality_metrics_tag;
+    t.variant.air_quality_metrics = m;
+}
+
+inline void setTelemetryMetrics(meshtastic_Telemetry &t, const meshtastic_PowerMetrics &m)
+{
+    t.which_variant = meshtastic_Telemetry_power_metrics_tag;
+    t.variant.power_metrics = m;
+}
+
+/// A stored reading as a single Telemetry, the way it goes out when readings are not batched
+template <typename T> meshtastic_Telemetry toTelemetry(const TelemetryReading<T> &reading)
+{
+    meshtastic_Telemetry t = meshtastic_Telemetry_init_zero;
+    setTelemetryMetrics(t, reading.metrics);
+    t.time = reading.time;
+    return t;
+}
+
 /// A record carries its time when the clock was valid, else the gap since the previous one
 template <typename T> void fillTelemetryRecord(meshtastic_TelemetryRecord &r, const TelemetryReading<T> &reading)
 {

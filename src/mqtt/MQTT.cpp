@@ -63,6 +63,23 @@ static bool isConnected = false;
 static uint32_t lastPositionUnavailableWarning = 0;
 static const uint32_t POSITION_UNAVAILABLE_WARNING_INTERVAL_MS = 15000; // 15 seconds
 
+// What a SENSOR with the direct telemetry uplink publishes itself: its batches, and its environment and
+// air quality readings when it does not batch. Device metrics and the rest still go by the channel uplink.
+bool isDirectlyUplinkedTelemetry(const meshtastic_Data &d)
+{
+    if (!moduleConfig.mqtt.telemetry_uplink_enabled || config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR)
+        return false;
+    if (d.portnum == meshtastic_PortNum_TELEMETRY_HISTORY_APP)
+        return true;
+    if (d.portnum != meshtastic_PortNum_TELEMETRY_APP)
+        return false;
+    meshtastic_Telemetry t = meshtastic_Telemetry_init_zero;
+    if (!pb_decode_from_bytes(d.payload.bytes, d.payload.size, &meshtastic_Telemetry_msg, &t))
+        return false;
+    return t.which_variant == meshtastic_Telemetry_environment_metrics_tag ||
+           t.which_variant == meshtastic_Telemetry_air_quality_metrics_tag;
+}
+
 inline bool shouldDropMqttDownlink(const meshtastic_MeshPacket &packet)
 {
     if (is_in_repeated(config.lora.ignore_incoming, packet.from)) {
@@ -770,10 +787,9 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp_encrypted, const meshtastic_Me
             return;
         }
 
-        // With the direct telemetry uplink on, our batches reach the broker only that way, never twice
-        if (isFromUs(&mp_decoded) && mp_decoded.decoded.portnum == meshtastic_PortNum_TELEMETRY_HISTORY_APP &&
-            moduleConfig.mqtt.telemetry_uplink_enabled) {
-            LOG_DEBUG("MQTT onSend - own telemetry batch goes by direct uplink");
+        // With the direct telemetry uplink on, our stored readings reach the broker only that way, never twice
+        if (isFromUs(&mp_decoded) && isDirectlyUplinkedTelemetry(mp_decoded.decoded)) {
+            LOG_DEBUG("MQTT onSend - own telemetry goes by direct uplink");
             return;
         }
 

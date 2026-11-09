@@ -63,3 +63,37 @@ uint16_t sendTelemetryBatch(TelemetryStore<T> &store, meshtastic_MeshPacket *p, 
         store.markPublished(indices[i], target);
     return taken;
 }
+
+/// Publish the readings the broker has not had yet one by one as Telemetry, oldest first, the way a
+/// SENSOR that does not batch sends them over the mesh. alloc(const meshtastic_Telemetry &) returns a
+/// packet for one reading. Stops at the first one the broker does not take.
+/// @return readings published
+template <typename T, typename Alloc> uint16_t publishTelemetryReadings(TelemetryStore<T> &store, Alloc alloc)
+{
+#if !MESHTASTIC_EXCLUDE_MQTT
+    uint16_t sent = 0;
+    TelemetryReading<T> reading;
+    for (uint16_t i = 0; i < store.size() && sent < TELEMETRY_MAX_READINGS_PER_BATCH; i++) {
+        if (!store.at(i, reading) || (reading.publishedMask & TELEMETRY_PUBLISHED_MQTT))
+            continue;
+        meshtastic_MeshPacket *p = alloc(toTelemetry(reading));
+        if (!p)
+            break;
+        p->to = NODENUM_BROADCAST;
+        p->decoded.want_response = false;
+        const bool ok = mqtt && mqtt->publishOwnPacket(*p);
+        packetPool.release(p);
+        if (!ok)
+            break;
+        store.markPublished(i, TELEMETRY_PUBLISHED_MQTT);
+        sent++;
+    }
+    if (sent)
+        LOG_INFO("Telemetry: publish %u readings to MQTT", (unsigned)sent);
+    return sent;
+#else
+    (void)store;
+    (void)alloc;
+    return 0;
+#endif
+}

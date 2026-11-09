@@ -6,12 +6,14 @@
 /// Cadences of one telemetry module, in ms. readMs paces stored readings, phoneMs paces reads while a
 /// client is connected, meshMs paces what goes on air, mqttMs the direct uplink (0 = off).
 /// publishOnReads: mesh and mqtt go out only in a read's wake-up, so a deep-sleeping node does not wake for them.
+/// batchReadings: several readings per publish, sent as one TelemetryRecordHistory instead of the newest alone.
 struct TelemetryCadence {
     uint32_t readMs;
     uint32_t phoneMs;
     uint32_t meshMs;
     uint32_t mqttMs;
     bool publishOnReads = false;
+    bool batchReadings = false;
 };
 
 /// When a telemetry module reads its sensors and publishes. Pure: every input is passed in, so the

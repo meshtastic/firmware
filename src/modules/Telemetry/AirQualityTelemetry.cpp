@@ -221,8 +221,7 @@ int32_t AirQualityTelemetryModule::runOnce()
     if (meshDue) {
         bool sent = false;
         if (shouldSendToMesh(history->hasUnpublishedNewest(TELEMETRY_PUBLISHED_MESH), meshDue, meshAllowed))
-            sent = config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR ? sendBufferedTelemetry()
-                                                                                    : sendTelemetry(NODENUM_BROADCAST, false);
+            sent = c.batchReadings ? sendBufferedTelemetry() : sendTelemetry(NODENUM_BROADCAST, false);
         if (sent) {
             schedule.onMeshSent(nowMs);
             noteSentToMesh();
@@ -240,7 +239,10 @@ int32_t AirQualityTelemetryModule::runOnce()
     // uplink does not spin; on reads, the next read's wake-up tries again.
     if (schedule.mqttDue(nowMs, c)) {
         if (telemetryMqttUplinkAvailable()) {
-            sendTelemetryBatch(*history, allocDataPacket(), TELEMETRY_PUBLISHED_MQTT);
+            if (c.batchReadings)
+                sendTelemetryBatch(*history, allocDataPacket(), TELEMETRY_PUBLISHED_MQTT);
+            else
+                publishTelemetryReadings(*history, [this](const meshtastic_Telemetry &t) { return allocDataProtobuf(t); });
             schedule.onMqttPublished(nowMs);
         } else if (!c.publishOnReads) {
             schedule.onMqttPublished(nowMs);
@@ -277,6 +279,9 @@ TelemetryCadence AirQualityTelemetryModule::cadence() const
     c.mqttMs = config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR && moduleConfig.mqtt.telemetry_uplink_enabled
                    ? (c.publishOnReads ? c.meshMs : c.readMs)
                    : 0;
+    // A SENSOR batches only when it reads more often than it publishes; otherwise each reading goes out
+    // on its own as Telemetry, which every client and node already understands
+    c.batchReadings = config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR && c.readMs < c.meshMs;
     return c;
 }
 
@@ -614,6 +619,9 @@ bool AirQualityTelemetryModule::sendBufferedTelemetry()
 {
     if (sendTelemetryBatch(*history, allocDataPacket(), TELEMETRY_PUBLISHED_MESH) == 0)
         return false;
+    // The batch is not copied to the client, so it gets the newest reading on its own
+    if (service->api_state != MeshService::STATE_DISCONNECTED && hasLatest && sendTelemetry(NODENUM_BROADCAST, true))
+        history->markNewestPublished(TELEMETRY_PUBLISHED_PHONE);
     notifySleepAfterSend();
     return true;
 }
