@@ -414,7 +414,8 @@ void test_stream_api_finishes_pending_before_advancing_phone_api()
     ScriptedStream stream;
     StreamAPITestShim api(&stream);
     api.sendConfigComplete();
-    api.sendNotification(meshtastic_LogRecord_Level_WARNING, 42, "still queued");
+    api.sendNotification(meshtastic_LogRecord_Level_WARNING, 42, "still queued",
+                         meshtastic_ClientNotification_NotificationType_UNSET);
     api.finishReady = false;
 
     api.runOncePart(nullptr, 0);
