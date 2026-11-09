@@ -196,10 +196,11 @@ template <typename T> bool LR11x0Interface<T>::init()
 
 #ifdef LR11X0_UPDATE_FIRMWARE_TO
     if (res != RADIOLIB_ERR_NONE) {
-        // An interrupted update leaves the radio in its bootloader, where begin() fails (SPI_CMD_INVALID). Re-flash only
-        // when the radio reports bootloader mode, so a failure on running (possibly newer) firmware never replaces it.
+        // An interrupted update leaves the radio in its bootloader, where begin() fails; re-flash only then, so running
+        // firmware is never replaced. Read twice: the first read can fail on the status of begin()'s rejected command.
         LR11x0VersionInfo_t boot = {};
-        lora.getVersionInfo(&boot); // device is set by the base read; in bootloader the later WiFi/GNSS reads fail
+        for (int i = 0; i < 2 && boot.device == 0; i++)
+            lora.getVersionInfo(&boot);
         if (boot.device == RADIOLIB_LR11X0_DEVICE_BOOT) {
             LOG_WARN("LR11x0 in bootloader mode (init result %d); retrying the interrupted firmware update", res);
             const int16_t upd = lora.updateFirmware(lr11xx_firmware_image, LR11XX_FIRMWARE_IMAGE_SIZE, true);
