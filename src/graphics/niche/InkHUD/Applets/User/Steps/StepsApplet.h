@@ -31,7 +31,6 @@ class StepsApplet : public Applet, private concurrency::OSThread
 
     AccelerometerThread &motion;
     StepTracker &tracker;
-    const bool hardware;
     uint32_t goal = 15000;
     uint32_t renderedSteps = 0;
     uint64_t renderedMinutes = 0;

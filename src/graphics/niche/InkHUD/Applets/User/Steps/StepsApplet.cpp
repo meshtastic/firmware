@@ -55,8 +55,7 @@ std::string formatDistance(uint32_t steps, bool imperial)
 } // namespace
 
 StepsApplet::StepsApplet(AccelerometerThread &motion, MotionSensor &sensor)
-    : OSThread("InkHUD Steps"), motion(motion), tracker(sensor.stepTracker()),
-      hardware(sensor.stepSource() == MotionSensor::StepSource::Hardware)
+    : OSThread("InkHUD Steps"), motion(motion), tracker(sensor.stepTracker())
 {
     uint32_t storedGoal = 0;
     if (FlashData<uint32_t>::load(&storedGoal, GOAL_FILE) &&
@@ -127,10 +126,11 @@ void StepsApplet::onRender(bool)
     const int16_t topMargin = std::clamp(height() / 16, 5, 16);
     int16_t y = std::min(margin, topMargin);
     setFont(fontSmall);
-    printAt(margin, y, "STEPS");
-    const char *source = hardware ? "IMU" : "EST.";
-    if (getTextWidth("STEPS") + getTextWidth(source) + gap <= innerWidth)
-        printAt(right, y, source, RIGHT);
+    const char *header = "STEPS (Resets on reboot)";
+    const char *notice = "Resets on reboot";
+    if (getTextWidth(header) > innerWidth)
+        header = getTextWidth(notice) <= innerWidth ? notice : "STEPS";
+    printAt(margin, y, header);
     y += line + gap;
     drawLine(margin, y, right - 1, y, BLACK);
     y += gap;
