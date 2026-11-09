@@ -213,9 +213,9 @@ template <typename T> bool LR11x0Interface<T>::init()
     LR11x0VersionInfo_t version;
     res = lora.getVersionInfo(&version);
     if (res == RADIOLIB_ERR_NONE) {
-        LOG_DEBUG_RADIO("LR11x0 Device %d, HW %d, FW %d.%d, WiFi %d.%d, GNSS %d.%d", version.device, version.hardware,
-                        version.fwMajor, version.fwMinor, version.fwMajorWiFi, version.fwMinorWiFi, version.fwGNSS,
-                        version.almanacGNSS);
+        // INFO, not radio debug: a transceiver firmware too old for a preset is otherwise invisible in a normal log
+        LOG_INFO("LR11x0 Device %d, HW %d, FW %d.%d, WiFi %d.%d, GNSS %d.%d", version.device, version.hardware, version.fwMajor,
+                 version.fwMinor, version.fwMajorWiFi, version.fwMinorWiFi, version.fwGNSS, version.almanacGNSS);
         transceiverFw = ((uint16_t)version.fwMajor << 8) | version.fwMinor;
         transceiverDevice = version.device;
     }
