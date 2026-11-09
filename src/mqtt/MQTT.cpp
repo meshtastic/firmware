@@ -787,8 +787,11 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp_encrypted, const meshtastic_Me
             return;
         }
 
-        // With the direct telemetry uplink on, our stored readings reach the broker only that way, never twice
-        if (isFromUs(&mp_decoded) && isDirectlyUplinkedTelemetry(mp_decoded.decoded)) {
+        // With the direct telemetry uplink on, our stored readings reach the broker only that way, never twice.
+        // It publishes on the primary channel when that channel uplinks, so anything else still goes by the
+        // normal uplink. Configuration, not the live connection: while offline the readings wait for it.
+        if (isFromUs(&mp_decoded) && chIndex == channels.getPrimaryIndex() && ch.settings.uplink_enabled &&
+            isDirectlyUplinkedTelemetry(mp_decoded.decoded)) {
             LOG_DEBUG("MQTT onSend - own telemetry goes by direct uplink");
             return;
         }
