@@ -570,8 +570,10 @@ TelemetryCadence EnvironmentTelemetryModule::cadence() const
                                                        TrafficType::TELEMETRY);
     // Unset: read as often as the mesh publishes, as before the read interval existed
     const uint32_t readSecs = moduleConfig.telemetry.environment_telemetry_read_interval;
-    c.readMs = readSecs ? Default::getConfiguredOrMinimumValue(readSecs, min_telemetry_read_interval_secs) * 1000
-                        : Default::getConfiguredOrDefaultMs(meshSecs, default_telemetry_broadcast_interval_secs);
+    c.readMs =
+        readSecs
+            ? Default::getConfiguredOrDefaultMs(Default::getConfiguredOrMinimumValue(readSecs, min_telemetry_read_interval_secs))
+            : Default::getConfiguredOrDefaultMs(meshSecs, default_telemetry_broadcast_interval_secs);
     c.phoneMs = Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.environment_phone_interval,
                                                   default_telemetry_phone_interval_secs);
     // Deep sleeping, each uplink costs a Wi-Fi join: batch it like the mesh, on the read wake-ups
@@ -634,6 +636,19 @@ void EnvironmentTelemetryModule::openHistory()
         LOG_ERROR("Env history: no memory for a store, telemetry disabled");
 }
 
+bool EnvironmentTelemetryModule::storeReading(const meshtastic_EnvironmentMetrics &metrics, uint32_t time, uint32_t deltaSecs)
+{
+    if (history->push(metrics, time, deltaSecs))
+        return true;
+    // A file store that stopped working (card out, filesystem full): keep measuring into RAM
+    LOG_WARN("Env history: store refused a reading, continue in RAM");
+    auto *ram = new (std::nothrow) RamTelemetryStore<meshtastic_EnvironmentMetrics>(ENVIRONMENT_TELEMETRY_HISTORY_SIZE);
+    if (!ram)
+        return false;
+    history.reset(ram);
+    return history->push(metrics, time, deltaSecs);
+}
+
 void EnvironmentTelemetryModule::seedLatestFromHistory()
 {
     // So a request right after boot or a wake-up is answered before the first read
@@ -646,7 +661,8 @@ void EnvironmentTelemetryModule::seedLatestFromHistory()
 
 void EnvironmentTelemetryModule::captureReading(uint32_t nowMs, const TelemetryCadence &cadence, bool phoneConnected)
 {
-    const bool stored = schedule.readIsStored(nowMs, cadence);
+    const bool onCadence = schedule.readIsStored(nowMs, cadence);
+    bool stored = onCadence;
     meshtastic_Telemetry m = meshtastic_Telemetry_init_zero;
     const bool valid = getEnvironmentTelemetry(&m);
 
@@ -656,12 +672,13 @@ void EnvironmentTelemetryModule::captureReading(uint32_t nowMs, const TelemetryC
         lastLocalDisplayRefreshMs = 0; // the screen picks up the new reading now
         refreshDisplayedMeasurement();
         if (stored)
-            history->push(m.variant.environment_metrics, m.time, schedule.deltaSecs(nowMs));
+            stored = storeReading(m.variant.environment_metrics, m.time, schedule.deltaSecs(nowMs));
         LOG_INFO("Env: read %s, %u stored", stored ? "stored" : "for phone", (unsigned)history->size());
     } else {
         LOG_WARN("Env read failed, keep the previous reading");
     }
-    schedule.onRead(nowMs, stored, valid, cadence.readMs, sharedReadAnchorMs(this));
+    // A reading the store refused does not count as the previous one for deltaSecs
+    schedule.onRead(nowMs, onCadence, valid && stored, cadence.readMs, sharedReadAnchorMs(this));
 
     if (valid && phoneConnected && service->isToPhoneQueueEmpty() && sendTelemetry(NODENUM_BROADCAST, true) && stored)
         history->markNewestPublished(TELEMETRY_PUBLISHED_PHONE);

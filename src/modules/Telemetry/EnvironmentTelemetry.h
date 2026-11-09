@@ -113,6 +113,7 @@ class EnvironmentTelemetryModule : private concurrency::OSThread,
 
   private:
     void openHistory();
+    bool storeReading(const meshtastic_EnvironmentMetrics &metrics, uint32_t time, uint32_t deltaSecs);
     void seedLatestFromHistory();
     /// Stop for good, and stop counting in the shared deep sleep
     int32_t disableTelemetry()
