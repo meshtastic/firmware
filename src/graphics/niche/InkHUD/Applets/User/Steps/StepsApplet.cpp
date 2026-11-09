@@ -124,7 +124,8 @@ void StepsApplet::onRender(bool)
 
     const int16_t line = fontSmall.lineHeight();
     const int16_t gap = std::clamp(height() / 18, 4, 14);
-    int16_t y = margin;
+    const int16_t topMargin = std::clamp(height() / 16, 5, 16);
+    int16_t y = std::min(margin, topMargin);
     setFont(fontSmall);
     printAt(margin, y, "STEPS");
     const char *source = hardware ? "IMU" : "EST.";
