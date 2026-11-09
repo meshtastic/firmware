@@ -655,9 +655,20 @@ bool AirQualityTelemetryModule::sendBufferedTelemetry()
 {
     if (sendTelemetryBatch(*history, allocDataPacket(), TELEMETRY_PUBLISHED_MESH) == 0)
         return false;
-    // The batch is not copied to the client, so it gets the newest reading on its own
-    if (service->api_state != MeshService::STATE_DISCONNECTED && hasLatest && sendTelemetry(NODENUM_BROADCAST, true))
-        history->markNewestPublished(TELEMETRY_PUBLISHED_PHONE);
+    // TOFIX(3.0): the newest reading also goes out alone as Telemetry, for the clients, NodeDB caches, screens
+    // and maps that only read TELEMETRY_APP. Drop it once TELEMETRY_HISTORY_APP is understood everywhere.
+    // ccToPhone also hands it to a connected client, which never gets the batch.
+    TelemetryReading<meshtastic_AirQualityMetrics> newest;
+    if (history->newest(newest)) {
+        meshtastic_MeshPacket *p = allocDataProtobuf(toTelemetry(newest));
+        if (p) {
+            p->to = NODENUM_BROADCAST;
+            p->decoded.want_response = false;
+            p->priority = meshtastic_MeshPacket_Priority_RELIABLE;
+            if (service->sendToMesh(p, RX_SRC_LOCAL, true) == ERRNO_OK)
+                history->markNewestPublished(TELEMETRY_PUBLISHED_PHONE);
+        }
+    }
     notifySleepAfterSend();
     return true;
 }
