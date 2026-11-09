@@ -116,14 +116,14 @@ void StepsApplet::onRender(bool)
     renderedMinutes = tracker.elapsedMs(Time::getMillisMonotonic()) / 60000;
     renderedImperial = usesImperialUnits();
 
-    const int16_t margin = std::clamp<int16_t>(width() / 16, 5, 16);
+    const int16_t margin = std::clamp(width() / 16, 5, 16);
     const int16_t right = width() - margin;
     const int16_t innerWidth = right - margin;
     if (innerWidth < 24)
         return;
 
     const int16_t line = fontSmall.lineHeight();
-    const int16_t gap = std::clamp<int16_t>(height() / 18, 4, 14);
+    const int16_t gap = std::clamp(height() / 18, 4, 14);
     int16_t y = margin;
     setFont(fontSmall);
     printAt(margin, y, "STEPS");
