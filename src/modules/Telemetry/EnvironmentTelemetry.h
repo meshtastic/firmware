@@ -113,6 +113,7 @@ class EnvironmentTelemetryModule : private concurrency::OSThread,
 
   private:
     void openHistory();
+    void seedLatestFromHistory();
     /// Stop for good, and stop counting in the shared deep sleep
     int32_t disableTelemetry()
     {

@@ -241,8 +241,14 @@ bool EnvironmentTelemetryModule::shouldDisplayLocalMeasurement() const
 
 bool EnvironmentTelemetryModule::refreshLocalMeasurementPacket()
 {
+    // While measuring, the screen shows the scheduled reading: reading the sensors again here would double
+    // every read and wake sleeping sensors. Only a screen-only module reads for the display.
     meshtastic_Telemetry local = meshtastic_Telemetry_init_zero;
-    if (!getEnvironmentTelemetry(&local)) {
+    if (moduleConfig.telemetry.environment_measurement_enabled || ENVIRONMENTAL_TELEMETRY_MODULE_ENABLE) {
+        if (!hasLatest)
+            return false;
+        local = latest;
+    } else if (!getEnvironmentTelemetry(&local)) {
         return false;
     }
 
@@ -448,6 +454,8 @@ int32_t EnvironmentTelemetryModule::runOnce()
 
         if (restoreScheduleAfterSleep(TELEMETRY_SLEEP_SLOT_ENVIRONMENT, schedule))
             LOG_DEBUG("Env: schedule restored after deep sleep");
+        seedLatestFromHistory();
+        refreshDisplayedMeasurement();
 
         // it's possible to have this module enabled, only for displaying values on the screen.
         // therefore, we should only enable the sensor loop if measurement is also enabled.
@@ -626,6 +634,16 @@ void EnvironmentTelemetryModule::openHistory()
         LOG_ERROR("Env history: no memory for a store, telemetry disabled");
 }
 
+void EnvironmentTelemetryModule::seedLatestFromHistory()
+{
+    // So a request right after boot or a wake-up is answered before the first read
+    TelemetryReading<meshtastic_EnvironmentMetrics> reading;
+    if (hasLatest || !history->newest(reading))
+        return;
+    latest = toTelemetry(reading);
+    hasLatest = true;
+}
+
 void EnvironmentTelemetryModule::captureReading(uint32_t nowMs, const TelemetryCadence &cadence, bool phoneConnected)
 {
     const bool stored = schedule.readIsStored(nowMs, cadence);
@@ -635,6 +653,8 @@ void EnvironmentTelemetryModule::captureReading(uint32_t nowMs, const TelemetryC
     if (valid) {
         latest = m;
         hasLatest = true;
+        lastLocalDisplayRefreshMs = 0; // the screen picks up the new reading now
+        refreshDisplayedMeasurement();
         if (stored)
             history->push(m.variant.environment_metrics, m.time, schedule.deltaSecs(nowMs));
         LOG_INFO("Env: read %s, %u stored", stored ? "stored" : "for phone", (unsigned)history->size());
@@ -941,13 +961,13 @@ meshtastic_MeshPacket *EnvironmentTelemetryModule::allocReply()
         }
         // Check for a request for environment metrics
         if (decoded->which_variant == meshtastic_Telemetry_environment_metrics_tag) {
-            meshtastic_Telemetry m = meshtastic_Telemetry_init_zero;
-            if (getEnvironmentTelemetry(&m)) {
-                LOG_INFO("Environment telemetry reply to request");
-                return allocDataProtobuf(m);
-            } else {
+            // From the last read, like the screen: no extra read on request
+            if (!hasLatest) {
+                LOG_INFO("No environment reading yet, no reply to request");
                 return NULL;
             }
+            LOG_INFO("Environment telemetry reply to request");
+            return allocDataProtobuf(latest);
         }
     }
     return NULL;

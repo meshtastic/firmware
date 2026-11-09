@@ -179,6 +179,7 @@ int32_t AirQualityTelemetryModule::runOnce()
 
         if (restoreScheduleAfterSleep(TELEMETRY_SLEEP_SLOT_AIR_QUALITY, schedule))
             LOG_DEBUG("AQ: schedule restored after deep sleep");
+        seedLatestFromHistory();
 
         // it's possible to have this module enabled, only for displaying values on the screen.
         // therefore, we should only enable the sensor loop if measurement is also enabled.
@@ -336,6 +337,17 @@ void AirQualityTelemetryModule::openHistory()
     history.reset(new (std::nothrow) RamTelemetryStore<meshtastic_AirQualityMetrics>(AIR_QUALITY_TELEMETRY_HISTORY_SIZE));
     if (!history)
         LOG_ERROR("AQ history: no memory for a store, telemetry disabled");
+}
+
+void AirQualityTelemetryModule::seedLatestFromHistory()
+{
+    // So a request right after boot or a wake-up is answered before the first read
+    TelemetryReading<meshtastic_AirQualityMetrics> reading;
+    if (hasLatest || !history->newest(reading))
+        return;
+    latest = toTelemetry(reading);
+    hasLatest = true;
+    rememberForScreen(latest);
 }
 
 void AirQualityTelemetryModule::captureReading(uint32_t nowMs, const TelemetryCadence &cadence, bool phoneConnected)
