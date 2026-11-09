@@ -98,6 +98,9 @@ extern int m9Version;
 #define LR1110_SPI_MISO_PIN LORA_MISO
 #define LR11X0_DIO3_TCXO_VOLTAGE 3.3
 #define LR11X0_DIO_AS_RF_SWITCH
+// M9 units have shipped with LR1110 transceiver FW 0x0303, which cannot receive 500 kHz LoRa (Turbo presets), as on the
+// ThinkNode M7: update on first boot. Costs ~240 kB of flash. Remove once the affected units are updated.
+#define LR11X0_UPDATE_FIRMWARE_TO 0x0402
 
 /*RTC*/
 #define PCF8563_RTC 0x51
