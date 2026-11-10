@@ -749,7 +749,11 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         }
 
         // Target voltage considered 100% by UI
+#ifdef ELECROW_ThinkNode_M5
+        constexpr float TARGET_VOLTAGE = 4.20f;
+#else
         constexpr float TARGET_VOLTAGE = 4.19f;
+#endif
 
         // Calculate new multiplier
         float newMult = baseMult * (TARGET_VOLTAGE / measuredV);
