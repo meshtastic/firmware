@@ -111,6 +111,7 @@ LinuxBluetooth *linuxBluetooth = nullptr;
 #include "linux/LinuxHardwareI2C.h"
 #ifndef ARCH_PORTDUINO_WASM // raspi HTTP server (ulfius/zlib/openssl) excluded in the browser/wasm build
 #include "mesh/raspihttp/PiWebServer.h"
+#include "platform/portduino/NativeDiscovery.h"
 #endif
 #include "platform/portduino/PortduinoGlue.h"
 #ifdef _WIN32
@@ -814,6 +815,10 @@ void setup()
 #endif
 #if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_MAGNETOMETER
     auto mag_info = i2cScanner->firstMagnetometer();
+#if !MESHTASTIC_EXCLUDE_ACCELEROMETER
+    if (mag_info.type == acc_info.type) // a BMM150 with no accelerometer beside it is already the accelerometer thread's
+        mag_info = ScanI2C::DEVICE_NONE;
+#endif
     magnetometer_found = mag_info.type != ScanI2C::DeviceType::NONE ? mag_info.address : magnetometer_found;
     LOG_DEBUG("mag_info = %i", mag_info.type);
 #endif
@@ -1118,6 +1123,7 @@ void setup()
         meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
         if (cn) {
             cn->level = meshtastic_LogRecord_Level_WARNING;
+            cn->type = meshtastic_ClientNotification_NotificationType_LOW_ENTROPY_KEY_REGENERATED;
             cn->time = getValidTime(RTCQualityFromNet);
             sprintf(cn->message, LOW_ENTROPY_WARNING);
             service->sendClientNotification(cn);
@@ -1226,6 +1232,9 @@ void setup()
     }
 #endif
     initApiServer(TCPPort);
+#ifndef ARCH_PORTDUINO_WASM
+    startNativeDiscovery(TCPPort);
+#endif
 #endif
 
     // Start airtime logger thread.
@@ -1313,6 +1322,13 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
     deviceMetadata.canShutdown = pmu_found || HAS_CPU_SHUTDOWN;
 #endif
     deviceMetadata.hasBluetooth = HAS_BLUETOOTH;
+    uint8_t bleAddr[6];
+    if (deviceMetadata.hasBluetooth && getBluetoothAddr(bleAddr))
+        formatMacAddr(bleAddr, deviceMetadata.ble_address, sizeof(deviceMetadata.ble_address));
+#if defined(ARCH_NRF52) && !defined(ARCH_NRF54L)
+    // Read from NRF_TIMER2->CC[0] by the Adafruit core at startup, where the bootloader leaves it
+    deviceMetadata.bootloader_version = bootloaderVersion;
+#endif
     deviceMetadata.hasWifi = HAS_WIFI;
     deviceMetadata.hasEthernet = HAS_ETHERNET;
     deviceMetadata.role = config.device.role;
@@ -1493,6 +1509,7 @@ void loop()
     rp2040Loop();
 #endif
     power->powerCommandsCheck();
+    nodeDB->saveNodeDatabaseIfDirty();
 
     if (RadioLibInterface::instance != nullptr) {
         static uint32_t lastRadioMissedIrqPoll;
@@ -1525,6 +1542,9 @@ void loop()
         inputBroker->processInputEventQueue();
 #endif
 #if ARCH_PORTDUINO
+#ifndef ARCH_PORTDUINO_WASM
+    serviceNativeDiscovery();
+#endif
     if (portduino_config.lora_spi_dev == "ch341" && ch341Hal != nullptr) {
         ch341Hal->checkError();
     }

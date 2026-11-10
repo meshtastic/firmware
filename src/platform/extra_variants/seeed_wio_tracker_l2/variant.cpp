@@ -6,6 +6,7 @@
 #include "DebugConfiguration.h"
 #include "SPILock.h"
 #include "WakeKey.h"
+#include "driver/gpio.h"
 #include "input/InputBroker.h"
 
 #include PCA95X5_INC
@@ -18,6 +19,10 @@ static bool initOK = false;
 
 void earlyInitVariant()
 {
+    gpio_intr_disable((gpio_num_t)LORA_DIO1);
+    gpio_wakeup_disable((gpio_num_t)LORA_DIO1);
+    gpio_set_intr_type((gpio_num_t)LORA_DIO1, GPIO_INTR_DISABLE);
+
     Wire.begin(I2C_SDA, I2C_SCL);
     Wire.setClock(100000); // Pin main I2C0 bus to 100 kHz (TCA9535, ADS1115, AW35615, ES8311 share this Wire)
     if (io.begin(Wire, BOARD_PCA9535_ADDR, I2C_SDA, I2C_SCL)) {
@@ -104,6 +109,43 @@ void lateInitVariant()
     board.begin(cfg);
     board.setVolume(75); // 75% volume
     LOG_INFO("ES8311 Audio board initialized");
+}
+
+static void lp5814Write(uint8_t reg, uint8_t value)
+{
+    Wire.beginTransmission(LP5814_ADDR);
+    Wire.write(reg);
+    Wire.write(value);
+    Wire.endTransmission();
+}
+
+// The LP5814 backlight and the PCA9555 rails are externally powered and keep their state through deep sleep.
+void variant_shutdown()
+{
+    // doDeepSleep() has already released the I2C bus
+    Wire.begin(I2C_SDA, I2C_SCL);
+    Wire.setClock(100000);
+
+    for (uint8_t i = 0; i < 4; i++)
+        lp5814Write(0x18 + i, 0); // LED0..3 PWM
+    lp5814Write(0x02, 0x00);      // disable all channels
+    lp5814Write(0x0F, 0x55);      // latch
+    lp5814Write(0x00, 0x00);      // chip standby
+
+    if (initOK) {
+        // Turn off Port 1 peripherals (GNSS, SD, PA) first, then Port 0 (LCD/touch) last.
+        // Once the LCD rail drops, the unpowered touch controller clamps SDA/SCL.
+        // Starting at register 0x03 writes Port 1, then decrements to Port 0.
+        Wire.beginTransmission(BOARD_PCA9535_ADDR);
+        Wire.write(0x03); // output port 1, then wraps to port 0
+        Wire.write(0x00);
+        Wire.write(0x00);
+        Wire.endTransmission();
+    }
+
+    Wire.end();
+    pinMode(I2C_SDA, ANALOG);
+    pinMode(I2C_SCL, ANALOG);
 }
 
 #endif

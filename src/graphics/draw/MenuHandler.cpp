@@ -1748,8 +1748,11 @@ void menuHandler::manageNodeMenu()
     optionsArray[options] = "Trace Route";
     optionsEnumArray[options++] = TraceRoute;
 
-    optionsArray[options] = "Key Verification";
-    optionsEnumArray[options++] = KeyVerification;
+    // Key verification needs PKI, which licensed (ham) operation does not use.
+    if (!owner.is_licensed) {
+        optionsArray[options] = "Key Verification";
+        optionsEnumArray[options++] = KeyVerification;
+    }
 
     if (nodeInfoLiteIsIgnored(node)) {
         optionsArray[options] = "Unignore Node";
@@ -2438,6 +2441,11 @@ void menuHandler::rebootMenu()
 
 void menuHandler::shutdownMenu()
 {
+#ifdef POWER_BUTTON_SHUTDOWN_HINT
+    // The power button owns power on this board: a software shutdown would leave the board powered
+    screen->showSimpleBanner(POWER_BUTTON_SHUTDOWN_HINT, 3000);
+    return;
+#endif
     static const char *optionsArray[] = {"Back", "Confirm"};
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Shutdown Device?";

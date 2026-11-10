@@ -1,5 +1,5 @@
 #include "Breakout.h"
-#include <cstring> // strcmp, for the joystick-source test in handleInput()
+#include <cstring> // strcmp, for the stick-source test in isPolledStickRepeat()
 
 // ===========================================================================
 // Pure BreakoutGame logic (no display/FS dependencies; always compiled)
@@ -184,6 +184,9 @@ bool BreakoutGame::step()
 #include "graphics/TFTPalette.h"
 #include "graphics/images.h"
 #include "main.h"
+#if ARCH_PORTDUINO
+#include "input/ArcadeBonnet.h"
+#endif
 #if ARCH_PORTDUINO && defined(__linux__)
 #include "input/LinuxJoystick.h"
 #endif
@@ -227,19 +230,56 @@ int32_t Breakout::tickIntervalMs() const
     return iv / 2;
 }
 
-bool Breakout::tick()
+// The held horizontal zone (-1 / 0 / +1) of whichever polled stick is pushed: the USB gamepad's
+// D-pad or the Arcade Bonnet's joystick. Both report it the instant the stick moves, independent of
+// their slow typematic repeat.
+static int heldPaddleZone()
 {
 #if ARCH_PORTDUINO && defined(__linux__)
-    // Poll the joystick's held direction directly so the paddle glides continuously instead of
-    // creeping along at the D-pad's slow auto-repeat rate.
-    if (aLinuxJoystick) {
-        const int held = aLinuxJoystick->heldXZone();
-        if (held < 0)
-            game.movePaddle(-PADDLE_POLL_STEP);
-        else if (held > 0)
-            game.movePaddle(PADDLE_POLL_STEP);
-    }
+    if (aLinuxJoystick && aLinuxJoystick->heldXZone() != 0)
+        return aLinuxJoystick->heldXZone();
 #endif
+#if ARCH_PORTDUINO
+    if (arcadeBonnet && arcadeBonnet->heldXZone() != 0)
+        return arcadeBonnet->heldXZone();
+#endif
+    return 0;
+}
+
+// True if this LEFT/RIGHT is a polled stick's own repeat while that stick is held, which tick()
+// already turns into paddle movement. All three parts are load-bearing:
+//   source  -- the event actually came from that stick. Without it, LEFT/RIGHT from the keyboard
+//              or touchscreen is swallowed too; aLinuxJoystick is constructed on every Linux host
+//              whether or not a gamepad is configured, so a pointer check alone is true even with
+//              nothing attached.
+//   kbchar  -- no button produced it, so it is the stick axis. A shoulder button mapped to
+//              left/right is a discrete press the axis poll knows nothing about, and must still
+//              nudge the paddle.
+//   heldX   -- the axis is what is driving right now, so tick() already has it covered.
+static bool isPolledStickRepeat(const InputEvent *event)
+{
+    if (event->kbchar != 0 || !event->source)
+        return false;
+#if ARCH_PORTDUINO && defined(__linux__)
+    if (aLinuxJoystick && aLinuxJoystick->originName() && strcmp(event->source, aLinuxJoystick->originName()) == 0)
+        return aLinuxJoystick->heldXZone() != 0;
+#endif
+#if ARCH_PORTDUINO
+    if (arcadeBonnet && arcadeBonnet->originName() && strcmp(event->source, arcadeBonnet->originName()) == 0)
+        return arcadeBonnet->heldXZone() != 0;
+#endif
+    return false;
+}
+
+bool Breakout::tick()
+{
+    // Poll the stick's held direction directly so the paddle glides continuously instead of
+    // creeping along at the D-pad's slow auto-repeat rate.
+    const int held = heldPaddleZone();
+    if (held < 0)
+        game.movePaddle(-PADDLE_POLL_STEP);
+    else if (held > 0)
+        game.movePaddle(PADDLE_POLL_STEP);
     return game.step();
 }
 
@@ -249,24 +289,9 @@ void Breakout::handleInput(const InputEvent *event)
     switch (ev) {
     case INPUT_BROKER_LEFT:
     case INPUT_BROKER_RIGHT:
-#if ARCH_PORTDUINO && defined(__linux__)
-        // While the stick is held, tick() polls heldXZone() and moves the paddle itself, so the
-        // joystick's own discrete (and slow) repeat events would double-move. Suppress exactly
-        // those and nothing else.
-        //
-        // All three parts are load-bearing:
-        //   source  -- the event actually came from this gamepad. Without it, LEFT/RIGHT from the
-        //              keyboard or touchscreen is swallowed too; aLinuxJoystick is constructed on
-        //              every Linux host whether or not a gamepad is configured, so a pointer check
-        //              alone is true even with nothing attached.
-        //   kbchar  -- no button produced it, so it is the D-pad axis. A shoulder button mapped to
-        //              left/right is a discrete press the axis poll knows nothing about, and must
-        //              still nudge the paddle.
-        //   heldX   -- the axis is what is driving right now, so tick() already has it covered.
-        if (aLinuxJoystick && event->kbchar == 0 && event->source && aLinuxJoystick->originName() &&
-            strcmp(event->source, aLinuxJoystick->originName()) == 0 && aLinuxJoystick->heldXZone() != 0)
+        // While a polled stick is held, tick() moves the paddle itself; its repeats would double-move.
+        if (isPolledStickRepeat(event))
             break;
-#endif
         if (ev == INPUT_BROKER_LEFT)
             game.moveLeft();
         else

@@ -48,9 +48,6 @@ struct CachedSharedSecret {
 #define MAX_BLOCKSIZE 256
 #define TEST_CURVE25519_FIELD_OPS // Exposes Curve25519::isWeakPoint() for testing keys
 #define XEDDSA_SIGNATURE_SIZE 64
-// Encoded size the signature adds to the Data protobuf: 1 tag byte (field 10 < 16) +
-// 1 length byte (64 < 128) + 64 signature bytes. test_packet_signing asserts this stays exact.
-#define XEDDSA_SIGNATURE_FIELD_BYTES (XEDDSA_SIGNATURE_SIZE + 2)
 // Length of Routing.ack_proof, taken from the generated field so the protocol owns the number.
 static constexpr size_t ACK_PROOF_SIZE = sizeof(meshtastic_Routing_ack_proof_t::bytes);
 
@@ -195,7 +192,12 @@ class CryptoEngine
     uint8_t pendingKeyVerificationPublicKey[32] = {0};
     bool hasPendingKeyVerificationKey = false;
     concurrency::Lock pendingKeyLock;
+    // Curve25519::eval semantics: scalar not clamped, point == nullptr is the base point, false if point is
+    // non-canonical; no weak-point checks. Platforms with a crypto accelerator override this.
+    virtual bool x25519(uint8_t *out, const uint8_t *scalar, const uint8_t *point);
 #if !(MESHTASTIC_EXCLUDE_XEDDSA)
+    /// Ed25519 signature verification. Platforms with a crypto accelerator override this.
+    virtual bool ed25519Verify(const uint8_t *signature, const uint8_t *edPubKey, const uint8_t *msg, size_t msgLen);
     uint8_t xeddsa_public_key[32] = {0};
     uint8_t xeddsa_private_key[32] = {0};
     void curve_to_ed_pub(const uint8_t *curve_pubkey, uint8_t *ed_pubkey);

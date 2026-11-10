@@ -18,6 +18,13 @@
 // the gate-driven cases are compiled out there and only the rename case runs. The format branch
 // itself cannot be reached in a native test: on portduino a FLASH_CORRUPTION critical error exits the
 // process, which is exactly the outcome the assertions here prove is not taken.
+//
+// NodeDB::saveNodeDatabaseIfDirty() and the reboot observer must eventually persist a node change that
+// updateUser() deferred under its once-a-minute budget. updateUser() used to skip the save outright
+// when the last one was under a minute old, so a NodeInfo from a new peer heard in that window was
+// never written and the peer was gone after the next restart (#11928). The contract pinned: a pending
+// change survives the throttle and is written once the minute passes, and a reboot writes it at once.
+// The regression guarded: a dirty node database that is never saved.
 #include "MeshTypes.h" // Include BEFORE TestUtil.h
 #include "TestUtil.h"
 #include <unity.h>
@@ -32,14 +39,31 @@
 
 #if defined(FSCom)
 
+#include "UptimeClock.h" // test clock
 #include "mesh/NodeDB.h"
 #include "power/PowerHAL.h"
+#include "sleep.h" // notifyReboot
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <string>
 #include <unistd.h>
 #include <vector>
+
+// Friend seam declared in NodeDB.h (PIO_UNIT_TESTING): drive the deferred-save state directly.
+// Never instantiated - constructing one would run the real boot sequence.
+class NodeDBTestShim : public NodeDB
+{
+  public:
+    static void markDirty(NodeDB *db, uint32_t lastSaveMs)
+    {
+        db->nodeDatabaseDirty = true;
+        db->lastNodeDbSave = lastSaveMs;
+    }
+    static bool dirty(const NodeDB *db) { return db->nodeDatabaseDirty; }
+    // A node save "just happened", so updateUser()'s next save is deferred by the one-minute throttle.
+    static void markSaved(NodeDB *db, uint32_t lastSaveMs) { db->lastNodeDbSave = lastSaveMs; }
+};
 
 namespace
 {
@@ -100,6 +124,34 @@ uint64_t fileFingerprint(const char *path)
 void bumpConfig()
 {
     config.device.node_info_broadcast_secs += 1;
+}
+
+// Read nodes.proto back from flash and report whether it holds this node, and under which name.
+bool persistedNodeName(NodeNum num, std::string &longName)
+{
+    meshtastic_NodeDatabase reloaded{};
+    if (nodeDB->loadProto(nodeDatabaseFileName, nodeDB->getMaxNodesAllocatedSize(), sizeof(meshtastic_NodeDatabase),
+                          &meshtastic_NodeDatabase_msg, &reloaded) != LoadFileResult::LOAD_SUCCESS)
+        return false;
+    for (const auto &n : reloaded.nodes) {
+        if (n.num == num) {
+            longName = n.long_name;
+            return true;
+        }
+    }
+    return false;
+}
+
+// A peer heard for the first time, with a key so updateUser() takes the normal path.
+meshtastic_User makePeer(const char *longName)
+{
+    meshtastic_User u = meshtastic_User_init_zero;
+    strncpy(u.long_name, longName, sizeof(u.long_name) - 1);
+    strncpy(u.short_name, "PR", sizeof(u.short_name) - 1);
+    u.public_key.size = 32;
+    memset(u.public_key.bytes, 0x5A, 32);
+    u.public_key.bytes[0] = 0x01;
+    return u;
 }
 
 // PortduinoFS::rmdir() is unlink() underneath and cannot remove a directory, so go to the host.
@@ -223,12 +275,84 @@ static void test_saveToDisk_railUnsafeAtEntry_returnsFalseImmediately(void)
 }
 #endif // !_WIN32
 
+// --- Deferred node database save -------------------------------------------------------------------
+
+static void test_saveNodeDatabaseIfDirty_waitsOutThrottleThenSaves(void)
+{
+    TEST_MESSAGE("=== saveNodeDatabaseIfDirty: a deferred change is written once the minute passes ===");
+    Time::setTestMillis(10 * 60 * 1000);
+    NodeDBTestShim::markDirty(nodeDB, Time::getMillis()); // a save just happened, so this change was deferred
+
+    nodeDB->saveNodeDatabaseIfDirty();
+    TEST_ASSERT_TRUE(NodeDBTestShim::dirty(nodeDB)); // still inside the minute: nothing written yet
+
+    Time::advanceTestMillis(60 * 1000);
+    nodeDB->saveNodeDatabaseIfDirty();
+    TEST_ASSERT_FALSE(NodeDBTestShim::dirty(nodeDB)); // cleared only by a save that landed
+}
+
+static void test_rebootObserver_savesDirtyNodeDatabase(void)
+{
+    TEST_MESSAGE("=== reboot: a pending node change is written before restart ===");
+    Time::setTestMillis(20 * 60 * 1000);
+    NodeDBTestShim::markDirty(nodeDB, Time::getMillis()); // the throttle alone would hold it back
+
+    notifyReboot.notifyObservers(NULL);
+
+    TEST_ASSERT_FALSE(NodeDBTestShim::dirty(nodeDB));
+}
+
+// The same contract driven from a real peer: a NodeInfo arriving inside the throttle window must reach
+// nodes.proto once the window passes, not just clear the dirty flag.
+static void test_updateUser_deferredPeer_isPersistedAfterThrottle(void)
+{
+    TEST_MESSAGE("=== updateUser: a peer deferred by the throttle is written to nodes.proto later ===");
+    constexpr NodeNum kPeer = 0xE1000101;
+    Time::setTestMillis(30 * 60 * 1000);
+    NodeDBTestShim::markSaved(nodeDB, Time::getMillis());
+
+    meshtastic_User u = makePeer("Bob");
+    TEST_ASSERT_TRUE(nodeDB->updateUser(kPeer, u));
+
+    std::string name;
+    TEST_ASSERT_FALSE(persistedNodeName(kPeer, name)); // deferred: not on flash yet
+
+    Time::advanceTestMillis(60 * 1000);
+    nodeDB->saveNodeDatabaseIfDirty();
+
+    TEST_ASSERT_TRUE(persistedNodeName(kPeer, name));
+    TEST_ASSERT_EQUAL_STRING("Bob", name.c_str());
+}
+
+// A reboot inside the throttle window must not lose a peer heard just before it.
+static void test_updateUser_deferredPeer_isPersistedOnReboot(void)
+{
+    TEST_MESSAGE("=== updateUser: a deferred peer is written to nodes.proto at reboot ===");
+    constexpr NodeNum kPeer = 0xE1000102;
+    Time::setTestMillis(40 * 60 * 1000);
+    NodeDBTestShim::markSaved(nodeDB, Time::getMillis());
+
+    meshtastic_User u = makePeer("Carol");
+    TEST_ASSERT_TRUE(nodeDB->updateUser(kPeer, u));
+
+    std::string name;
+    TEST_ASSERT_FALSE(persistedNodeName(kPeer, name));
+
+    notifyReboot.notifyObservers(NULL);
+
+    TEST_ASSERT_TRUE(persistedNodeName(kPeer, name));
+    TEST_ASSERT_EQUAL_STRING("Carol", name.c_str());
+}
+
 void setUp(void)
 {
     scriptRail({});
 }
 
-void tearDown(void) {}
+void tearDown(void)
+{
+    Time::useRealClock();
+}
 
 NSR_TEST_ENTRY void setup()
 {
@@ -247,6 +371,12 @@ NSR_TEST_ENTRY void setup()
     RUN_TEST(test_saveToDisk_writeFailsButFsReadable_doesNotFormat);
     RUN_TEST(test_saveToDisk_railUnsafeAtEntry_returnsFalseImmediately);
 #endif
+
+    printf("\n=== deferred node database save ===\n");
+    RUN_TEST(test_saveNodeDatabaseIfDirty_waitsOutThrottleThenSaves);
+    RUN_TEST(test_rebootObserver_savesDirtyNodeDatabase);
+    RUN_TEST(test_updateUser_deferredPeer_isPersistedAfterThrottle);
+    RUN_TEST(test_updateUser_deferredPeer_isPersistedOnReboot);
 
     exit(UNITY_END());
 }
