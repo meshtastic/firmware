@@ -474,7 +474,7 @@ template <typename T> int16_t LR11x0Interface<T>::trySetStandby()
     isReceiving = false; // If we were receiving, not any more
     rxArmedContinuous = false;
     activeReceiveStart = 0;
-    disableInterrupt();
+    disableInterruptTimed();
     completeSending(); // If we were sending, not anymore
     RadioLibInterface::setStandby();
     return err;
@@ -713,6 +713,13 @@ template <typename T> bool LR11x0Interface<T>::isChannelActive()
                                        .timeout = cadRxTimeoutUsec,
                                        .irqFlags = cadIrqFlags,
                                        .irqMask = cadIrqFlags}}; // ignored: startChannelScan() sends irqFlags twice
+#if LR11X0_CAD_LBT
+    lbtSentId = 0;
+    lbtSentLen = 0;
+    // Only a packet startSend() will go on to send: nothing after a clear LBT scan can stop it
+    if (scanForTx && !disabled && config.lora.tx_enabled)
+        return scanThenTransmit(cfg);
+#endif
     int16_t result = trySetStandby();
     if (result == RADIOLIB_ERR_NONE) {
         result = lora.scanChannel(cfg);
@@ -731,6 +738,62 @@ template <typename T> bool LR11x0Interface<T>::isChannelActive()
     maybeRecoverChipStateLoss();
     return false; // report the channel free: a recovered chip can TX, a dead one fails startSend safely
 }
+
+#if LR11X0_CAD_LBT
+template <typename T> bool LR11x0Interface<T>::scanThenTransmit(ChannelScanConfig_t &cfg)
+{
+    const size_t numbytes = encodeRadioBuffer(scanForTx); // CPU only
+    cfg.cad.exitMode = RADIOLIB_LR11X0_CAD_EXIT_MODE_LBT;
+    cfg.cad.timeout = 0; // with LBT this is the TX timeout: none, as SetTx
+    cfg.cad.irqFlags = cfg.cad.irqMask =
+        RADIOLIB_IRQ_CAD_DEFAULT_FLAGS | (1UL << RADIOLIB_IRQ_TX_DONE) | (1UL << RADIOLIB_IRQ_TIMEOUT);
+    RadioModeConfig_t txCfg = {};
+    txCfg.transmit.data = (const uint8_t *)&radioBuffer;
+    txCfg.transmit.len = numbytes;
+    if (trySetStandby() != RADIOLIB_ERR_NONE) {
+        maybeRecoverChipStateLoss(); // as isChannelActive()
+        return false;
+    }
+    // Packet params and payload first; the scan's standby and IRQ setup leave both in place
+    int16_t result = lora.stageMode(RADIOLIB_RADIO_MODE_TX, &txCfg);
+    if (result == RADIOLIB_ERR_NONE)
+        result = lora.startChannelScan(cfg);
+    if (result == RADIOLIB_ERR_NONE) {
+        // As scanChannel(): wait for the CAD to finish, then read the verdict
+        while (!module.hal->digitalRead(module.getIrq()))
+            module.hal->yield();
+        const uint32_t irq = lora.getIrqStatus();
+        if (irq & RADIOLIB_LR11X0_IRQ_CAD_DETECTED) {
+            // The chip went back to STDBY_RC; the caller's rearmReceive() restarts RX
+            lora.clearIrqFlags(RADIOLIB_LR11X0_IRQ_ALL);
+            return true;
+        }
+        if (irq & (RADIOLIB_LR11X0_IRQ_CAD_DONE | RADIOLIB_LR11X0_IRQ_TX_DONE)) {
+            // On air already. Drop the CAD flags so the pin falls and TX_DONE is a fresh edge for the ISR
+            lora.clearIrqFlags(RADIOLIB_LR11X0_IRQ_CAD_DONE | RADIOLIB_LR11X0_IRQ_CAD_DETECTED);
+            lbtSentId = scanForTx->id;
+            lbtSentLen = numbytes;
+            return false;
+        }
+        LOG_WARN("LR11x0 LBT scan ended with IRQ 0x%08lx, sending with SetTx", (unsigned long)irq);
+        return false;
+    }
+    // Free either way, as isChannelActive(): startSend() sends with SetTx, or fails safely on a dead chip
+    if (result == RADIOLIB_ERR_WRONG_MODEM)
+        maybeRecoverChipStateLoss();
+    else
+        LOG_ERROR("LR11x0 LBT scan %s%d", radioLibErr, result);
+    return false;
+}
+
+template <typename T> int16_t LR11x0Interface<T>::launchTransmit(size_t numbytes)
+{
+    const bool onAir = lbtSentId && sendingPacket && sendingPacket->id == lbtSentId && lbtSentLen == numbytes;
+    lbtSentId = 0;
+    lbtSentLen = 0;
+    return onAir ? RADIOLIB_ERR_NONE : RadioLibInterface::launchTransmit(numbytes);
+}
+#endif
 
 /** Could we send right now (i.e. either not actively receiving or transmitting)? */
 template <typename T> bool LR11x0Interface<T>::isActivelyReceiving()

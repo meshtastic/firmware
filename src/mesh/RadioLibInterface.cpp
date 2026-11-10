@@ -99,12 +99,14 @@ enum : uint16_t {
     EDGE_SEQ_IRQ,              // a poll of the IRQ pin read high after reading low
     EDGE_SEQ_DELAY_MS,         // RadioLib delay(len) ms
     EDGE_SEQ_DELAY_US,         // RadioLib delayMicroseconds(len), 10 µs or more
+    EDGE_SEQ_DETACH,           // the standby's interrupt detach, len µs long
 };
 static constexpr size_t EDGE_SEQ_MAX = 64;
 static EdgeSeqEv edgeSeqEv[EDGE_SEQ_MAX];
 static size_t edgeSeqN = 0, edgeSeqLost = 0;
 static bool edgeSeqArmed = false, edgeSeqKept = false, edgeSeqIrqLow = false;
 static int edgeSeqCur = -1, edgeSeqBusyIdx = -1;
+static uint32_t edgeSeqTxCount = 0; // TXs launched, for RADIO_EDGE_SEQ_EVERY
 static uint32_t edgeSeqId = 0, edgeSeqLook = 0, edgeSeqStamp0 = 0, edgeSeqStamp1 = 0, edgeSeqT0 = 0, edgeSeqT1 = 0;
 
 static inline uint32_t edgeSeqTicks()
@@ -153,11 +155,12 @@ static void edgeSeqDisarm(bool keep)
 {
     edgeSeqT1 = edgeSeqTicks();
     edgeSeqStamp1 = edgeStampNow();
+    edgeSeqKept = keep && edgeSeqArmed;
     edgeSeqArmed = false;
-    edgeSeqKept = keep;
 }
 // Logged after TX_DONE. win_us (ticks) against clk_us (the µs clock) shows a window the CPU slept in, where the cycle
-// counter stops. Events: op/len@at+lock,xfer,busy for a command; S scanned, T call, t returned, I IRQ pin high, D/U delay.
+// counter stops. Events: op/len@at+lock,xfer,busy for a command; S scanned, T call, t returned, I IRQ pin high, D/U delay,
+// X<us> interrupt detach.
 static void edgeSeqLog()
 {
     const EdgeUs at = edgeUs(edgeSeqStamp0);
@@ -170,8 +173,8 @@ static void edgeSeqLog()
     for (size_t i = 0; i < edgeSeqN; i++) {
         const EdgeSeqEv &e = edgeSeqEv[i];
         char ev[48];
-        if (e.op >= EDGE_SEQ_SCANNED && e.op <= EDGE_SEQ_DELAY_US) {
-            static const char tags[] = "STtIDU";
+        if (e.op >= EDGE_SEQ_SCANNED && e.op <= EDGE_SEQ_DETACH) {
+            static const char tags[] = "STtIDUX";
             const char tag = tags[e.op - EDGE_SEQ_SCANNED];
             if (e.op >= EDGE_SEQ_DELAY_MS)
                 snprintf(ev, sizeof(ev), "%c%u@%lu", tag, (unsigned)e.len, edgeSeqUs(e.at));
@@ -194,6 +197,21 @@ static void edgeSeqLog()
         LOG_INFO("RadioEdge: tx_seq_ev id=0x%08x p=%u%s", edgeSeqId, part, line);
 }
 #endif
+
+void RadioLibInterface::disableInterruptTimed()
+{
+#if RADIO_EDGE_SEQ
+    const uint32_t t0 = edgeSeqTicks();
+    disableInterrupt();
+    if (edgeSeqArmed) {
+        const unsigned long us = edgeSeqUs(edgeSeqTicks() - t0);
+        if (EdgeSeqEv *e = edgeSeqAdd(EDGE_SEQ_DETACH, (uint16_t)(us > 65535 ? 65535 : us)))
+            e->at = t0 - edgeSeqT0;
+    }
+#else
+    disableInterrupt();
+#endif
+}
 
 void LockingArduinoHal::spiBeginTransaction()
 {
@@ -294,7 +312,21 @@ RadioLibInterface::RadioLibInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE c
     CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
     DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
 #endif
-    LOG_INFO("RadioEdge: tx_seq on");
+    LOG_INFO("RadioEdge: tx_seq on every=%d", RADIO_EDGE_SEQ_EVERY);
+#endif
+#if RADIO_EDGE_LOG
+    // r148f arm gate; the chip flags live in their drivers' headers, so read the build flags here
+#if defined(SX126X_CAD_XOSC_AT_DONE) && SX126X_CAD_XOSC_AT_DONE
+    const int armXosc = 1;
+#else
+    const int armXosc = 0;
+#endif
+#if defined(LR11X0_CAD_LBT) && LR11X0_CAD_LBT
+    const int armLbt = 1;
+#else
+    const int armLbt = 0;
+#endif
+    LOG_INFO("r148f: sx126x_xosc_at_cad_done=%d lr11x0_cad_lbt=%d skip_idle_detach=%d", armXosc, armLbt, RADIO_SKIP_IDLE_DETACH);
 #endif
 #if RADIO_SPI_BULK && !ARCH_PORTDUINO
     LOG_INFO("RADIO_SPI_BULK: one SPI transfer per radio command");
@@ -973,7 +1005,8 @@ void RadioLibInterface::onNotify(uint32_t notification)
                     LOG_DEBUG_RADIO("CAD arm");
 #endif
 #if RADIO_EDGE_SEQ
-                    edgeSeqArm(txp->id, lookStamp);
+                    if (edgeSeqTxCount % RADIO_EDGE_SEQ_EVERY == 0)
+                        edgeSeqArm(txp->id, lookStamp);
 #endif
                     scanForTx = txp;
 #if RADIO_EDGE_LOG
@@ -1015,6 +1048,7 @@ void RadioLibInterface::onNotify(uint32_t notification)
                         startSend(txp);
 #if RADIO_EDGE_SEQ
                         edgeSeqDisarm(true);
+                        edgeSeqTxCount++;
 #endif
 #if RADIO_LOG_CAD_FREE_AFTER_TX
                         LOG_DEBUG_RADIO("CAD free"); // after the launch: a log line here was ms of scan going stale

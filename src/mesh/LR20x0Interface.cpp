@@ -593,7 +593,7 @@ template <typename T> int16_t LR20x0Interface<T>::trySetStandby()
     isReceiving = false; // If we were receiving, not any more
     activeReceiveStart = 0;
     rxArmedContinuous = false;
-    disableInterrupt();
+    disableInterruptTimed();
     completeSending(); // If we were sending, not anymore
     RadioLibInterface::setStandby();
     return err;

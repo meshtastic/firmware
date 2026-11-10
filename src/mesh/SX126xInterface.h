@@ -4,6 +4,12 @@
 #include "RadioLibInterface.h"
 #include "configuration.h"
 
+// Bench (r148f): a clear pre-TX CAD leaves the SX126x in STDBY_RC, so SetTx waits ~1.4 ms for the TCXO. This sends
+// SetStandby(XOSC) as soon as the verdict is read, without waiting on BUSY, so the TCXO starts before the TX setup.
+#ifndef SX126X_CAD_XOSC_AT_DONE
+#define SX126X_CAD_XOSC_AT_DONE 0
+#endif
+
 // After TX_DONE the SX126x waits in standby for the radio thread to restart RX, which a main-loop hold can stretch by
 // hundreds of ms. With the readout task, the TX_DONE interrupt has the task restart it instead, on every platform the
 // task runs on.

@@ -464,7 +464,7 @@ template <typename T> int16_t SX126xInterface<T>::trySetStandby()
     isReceiving = false; // If we were receiving, not any more
     activeReceiveStart = 0;
     rxArmedContinuous = false;
-    disableInterrupt();
+    disableInterruptTimed();
     completeSending(); // If we were sending, not anymore
     RadioLibInterface::setStandby();
     return err;
@@ -717,8 +717,27 @@ template <typename T> bool SX126xInterface<T>::isChannelActive()
 
 template <typename T> int16_t SX126xInterface<T>::scanChannelForTx(const ChannelScanConfig_t &cfg)
 {
-    if (!irqPolledOverUsb())
+    if (!irqPolledOverUsb()) {
+#if SX126X_CAD_XOSC_AT_DONE
+        // lora.scanChannel(cfg), less the verdict's packet-type read, and a clear verdict starts the TCXO at once
+        int16_t res = lora.startChannelScan(cfg);
+        if (res != RADIOLIB_ERR_NONE)
+            return res;
+        while (!module.hal->digitalRead(module.getIrq()))
+            module.hal->yield();
+        const uint32_t irq = lora.getIrqFlags();
+        if (irq & RADIOLIB_SX126X_IRQ_CAD_DETECTED)
+            return RADIOLIB_LORA_DETECTED;
+        if (!(irq & RADIOLIB_SX126X_IRQ_CAD_DONE))
+            return RADIOLIB_ERR_UNKNOWN;
+        // No BUSY wait after it: the next command's wait absorbs whatever of the TCXO start is left by then
+        const uint8_t xosc = RADIOLIB_SX126X_STANDBY_XOSC;
+        res = module.SPIwriteStream(RADIOLIB_SX126X_CMD_SET_STANDBY, &xosc, 1, false, false);
+        return res == RADIOLIB_ERR_NONE ? RADIOLIB_CHANNEL_FREE : res;
+#else
         return lora.scanChannel(cfg);
+#endif
+    }
     // lora.scanChannel(cfg) less its two packet-type reads and its standby, which trySetStandby() has just done, and
     // with the CAD parameters sent only when they change: three commands instead of six before the CAD starts.
     module.setRfSwitchState(Module::MODE_RX);

@@ -58,6 +58,14 @@
 #ifndef RADIO_EDGE_SEQ
 #define RADIO_EDGE_SEQ 0
 #endif
+// Bench: with RADIO_EDGE_SEQ, time one TX in this many (its log lines cost the M9 TX time).
+#ifndef RADIO_EDGE_SEQ_EVERY
+#define RADIO_EDGE_SEQ_EVERY 1
+#endif
+// Bench: skip the radio interrupt detach when no handler is attached (ESP32's costs ~240 us before the pre-TX scan).
+#ifndef RADIO_SKIP_IDLE_DETACH
+#define RADIO_SKIP_IDLE_DETACH 0
+#endif
 
 /**
  * We need to override the RadioLib ArduinoHal class to add mutex protection for SPI bus access
@@ -183,6 +191,10 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
     /// has the radio IRQ ever been armed? latches true and is never cleared, so ISR context only reads it
     volatile bool isrEverArmed = false;
+#if RADIO_SKIP_IDLE_DETACH
+    /// a handler is attached: set by enableInterrupt(), cleared by disableInterrupt()
+    volatile bool isrAttached = false;
+#endif
 
   protected:
     // Noise floor tracking - rolling window of samples.
@@ -244,8 +256,16 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     {
         if (!isrEverArmed)
             return;
+#if RADIO_SKIP_IDLE_DETACH
+        if (!isrAttached)
+            return;
+        isrAttached = false;
+#endif
         clearRadioIsr();
     }
+
+    /// disableInterrupt() for the thread's standby before a scan; RADIO_EDGE_SEQ times it
+    void disableInterruptTimed();
 
     /**
      * Enable a particular ISR callback glue function
@@ -254,6 +274,9 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     {
         // Latch before arming: the ISR can fire the moment the handler is installed.
         isrEverArmed = true;
+#if RADIO_SKIP_IDLE_DETACH
+        isrAttached = true;
+#endif
         setRadioIsr(callback);
     }
 
