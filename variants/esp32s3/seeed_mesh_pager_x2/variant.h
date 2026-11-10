@@ -14,7 +14,7 @@ bool readKeypadState(uint8_t &pressedKeys);
 #define BUTTON_LEFT GPIO_NUM_NC    // EXP pin 2, active low
 #define BUTTON_RIGHT GPIO_NUM_NC   // EXP pin 3, active low
 #define BUTTON_CONFIRM GPIO_NUM_NC // EXP pin 4, active low
-#define BUTTON_RETURN GPIO_NUM_NC  // EXP pin 5, active low
+#define BUTTON_RETURN GPIO_NUM_NC  // EXP pin 5 (or GPIO INPUTDRIVER_DIRECTIONALPAD_RETURN_GPIO), active low
 
 #define BUTTON_PIN 9 // Power/wake button (GPIO 9), active high
 #define BUTTON_ACTIVE_LOW false

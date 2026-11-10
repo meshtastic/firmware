@@ -158,12 +158,20 @@ bool readKeypadState(uint8_t &pressedKeys)
         return false;
 
     pressedKeys = static_cast<uint8_t>(~portState) & 0x3F;
+#ifdef INPUTDRIVER_DIRECTIONALPAD_RETURN_GPIO
+    pressedKeys &= ~(1U << EXP_PIN_BUTTON_RETURN);
+    if (digitalRead(INPUTDRIVER_DIRECTIONALPAD_RETURN_GPIO) == LOW)
+        pressedKeys |= 1U << EXP_PIN_BUTTON_RETURN;
+#endif
     return true;
 }
 
 void earlyInitVariant()
 {
     pinMode(BUTTON_PIN, INPUT);
+#ifdef INPUTDRIVER_DIRECTIONALPAD_RETURN_GPIO
+    pinMode(INPUTDRIVER_DIRECTIONALPAD_RETURN_GPIO, INPUT); // external pull-up
+#endif
 #ifdef LGFX_PIN_BL
     gpio_hold_dis((gpio_num_t)LGFX_PIN_BL); // held low by variant_shutdown()
 #endif
@@ -226,7 +234,12 @@ void earlyInitVariant()
     keypadOk &= configureInput(EXP_PIN_BUTTON_LEFT);
     keypadOk &= configureInput(EXP_PIN_BUTTON_RIGHT);
     keypadOk &= configureInput(EXP_PIN_BUTTON_CONFIRM);
+#ifdef INPUTDRIVER_DIRECTIONALPAD_RETURN_GPIO
+    // P05 is unconnected on this revision: drive it LOW so it neither floats nor lets PORT0 read 0xFF.
+    keypadOk &= configureOutput(EXP_PIN_BUTTON_RETURN, false);
+#else
     keypadOk &= configureInput(EXP_PIN_BUTTON_RETURN);
+#endif
     ok &= keypadOk;
     ok &= configureInput(EXP_PIN_BUTTON_PWR);
     ok &= configureInput(EXP_PIN_SD_DETECT);
