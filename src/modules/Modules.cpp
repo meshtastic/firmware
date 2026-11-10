@@ -67,6 +67,7 @@
 #include "modules/DMShellTestModule.h"
 #endif
 #if ARCH_PORTDUINO
+#include "PortduinoGlue.h"
 #include "modules/DMShell.h"
 #include "modules/Telemetry/HostMetrics.h"
 #if !MESHTASTIC_EXCLUDE_STOREFORWARD
@@ -229,7 +230,11 @@ void setupModules()
 #if ARCH_PORTDUINO
     new HostMetricsModule();
 #if defined(MESHTASTIC_HAS_DMSHELL)
-    dmShellModule = new DMShellModule();
+    // A shell on the host is a bigger grant than control of the node, so the operator opts in.
+    if (portduino_config.dmshell_enabled)
+        dmShellModule = new DMShellModule();
+    else
+        LOG_INFO("DMShell disabled, set Security.DMShell: true in config.yaml to enable");
 #endif
 #endif
 #ifdef DMSHELL_TEST_PEER
