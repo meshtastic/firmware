@@ -536,7 +536,11 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
 #endif
 #ifdef BUTTON_PIN
     gpio_num_t pin = (gpio_num_t)(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN);
+#ifdef BUTTON_WAKE_ACTIVE_HIGH
+    gpio_wakeup_enable(pin, GPIO_INTR_HIGH_LEVEL);
+#else
     gpio_wakeup_enable(pin, GPIO_INTR_LOW_LEVEL);
+#endif
 #endif
 #if defined(INPUTDRIVER_TWO_WAY_ROCKER_BTN) || defined(INPUTDRIVER_ENCODER_BTN)
 #if defined(INPUTDRIVER_TWO_WAY_ROCKER_BTN)

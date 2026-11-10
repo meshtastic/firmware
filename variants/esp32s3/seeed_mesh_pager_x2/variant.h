@@ -5,7 +5,37 @@
 #define INPUTBROKER_KEYPAD_READ_CALLBACK readKeypadState
 #ifdef __cplusplus
 #include <stdint.h>
+namespace meshpager_x2
+{
+constexpr uint8_t EXP_PIN_BUTTON_UP = 0;
+constexpr uint8_t EXP_PIN_BUTTON_DOWN = 1;
+constexpr uint8_t EXP_PIN_BUTTON_LEFT = 2;
+constexpr uint8_t EXP_PIN_BUTTON_RIGHT = 3;
+constexpr uint8_t EXP_PIN_BUTTON_CONFIRM = 4;
+constexpr uint8_t EXP_PIN_BUTTON_RETURN = 5;
+constexpr uint8_t EXP_PIN_BUTTON_PWR = 6;
+constexpr uint8_t EXP_PIN_SD_DETECT = 7;
+constexpr uint8_t EXP_PIN_GNSS_RTC_INT = 8;
+constexpr uint8_t EXP_PIN_GNSS_SLEEP_INT = 9;
+constexpr uint8_t EXP_PIN_IMU_INT1 = 10;
+constexpr uint8_t EXP_PIN_SEN_EN = 12;
+constexpr uint8_t EXP_PIN_SD_PWR_EN = 13;
+constexpr uint8_t EXP_PIN_LCD_PWR_EN = 14;
+constexpr uint8_t EXP_PIN_GNSS_VRTC_EN = 15;
+constexpr uint8_t EXP_PIN_GNSS_PWR_EN = 16;
+constexpr uint8_t EXP_PIN_BAT_ADC_EN = 17;
+constexpr uint8_t EXP_PIN_PA_PWR_EN = 18;
+constexpr uint8_t EXP_PIN_PWR_HOLD = 20;
+constexpr uint8_t EXP_PIN_LCD_RST = 21;
+constexpr uint8_t EXP_PIN_LORA_RESET = 22;
+constexpr uint8_t EXP_PIN_GNSS_RST = 23;
+}
 bool readKeypadState(uint8_t &pressedKeys);
+#ifdef X2_POWER_KEY_UI
+bool x2ChargeModeRequested();
+void x2RunChargeMode(bool (*readPort)(uint8_t, uint8_t &), bool (*drivePin)(uint8_t, bool));
+void x2PowerOff();
+#endif
 #endif
 
 // Buttons - via IO Expander (TCA6424)
