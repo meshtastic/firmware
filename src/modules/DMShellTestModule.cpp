@@ -19,6 +19,10 @@
 #ifndef DMSHELL_TEST_WAIT_PPS
 #define DMSHELL_TEST_WAIT_PPS 0
 #endif
+// ...for at most this long from the first session's due time, then start without it (a client whose GPS sees no sky)
+#ifndef DMSHELL_TEST_WAIT_PPS_MAX_S
+#define DMSHELL_TEST_WAIT_PPS_MAX_S 300
+#endif
 // The workload, as the bench harness types it: wait, type the command, then a keystroke per interval
 #ifndef DMSHELL_TEST_SETTLE_MS
 #define DMSHELL_TEST_SETTLE_MS 12000
@@ -164,12 +168,21 @@ int32_t DMShellTestModule::runOnce()
 #if MESHTASTIC_EXCLUDE_GPS
 #error "DMSHELL_TEST_WAIT_PPS needs the GPS"
 #endif
-        if (!gps || !gps->isClockHeld()) {
-            if (!Throttle::isWithinTimespanMs(lastPpsWaitLogMs, 30000)) {
-                lastPpsWaitLogMs = now;
-                LOG_INFO("DMShellTest: waiting for the PPS clock hold");
+        if (!ppsWaitOver && (!gps || !gps->isClockHeld())) {
+            if (!ppsWaitStarted) {
+                ppsWaitStarted = true;
+                ppsWaitStartMs = now;
             }
-            return 1000;
+            if (!Throttle::isWithinTimespanMs(ppsWaitStartMs, (uint32_t)DMSHELL_TEST_WAIT_PPS_MAX_S * 1000)) {
+                ppsWaitOver = true; // later sessions do not wait either
+                LOG_WARN("DMShellTest: no PPS clock hold after %u s, starting without it", (unsigned)DMSHELL_TEST_WAIT_PPS_MAX_S);
+            } else {
+                if (!Throttle::isWithinTimespanMs(lastPpsWaitLogMs, 30000)) {
+                    lastPpsWaitLogMs = now;
+                    LOG_INFO("DMShellTest: waiting for the PPS clock hold");
+                }
+                return 1000;
+            }
         }
 #endif
         startSession(now);

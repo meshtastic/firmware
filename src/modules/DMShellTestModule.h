@@ -44,6 +44,9 @@ class DMShellTestModule : public SinglePortModule, private concurrency::OSThread
     uint32_t sessionsDone = 0;
     uint32_t nextSessionAtMs = 0;
     uint32_t lastPpsWaitLogMs = 0; // DMSHELL_TEST_WAIT_PPS: last "waiting" line
+    uint32_t ppsWaitStartMs = 0;   // DMSHELL_TEST_WAIT_PPS: when the wait began (valid once ppsWaitStarted)
+    bool ppsWaitStarted = false;
+    bool ppsWaitOver = false; // the wait timed out: sessions start without the PPS clock hold
 
     uint32_t sessionId = 0;
     uint32_t nextTxSeq = 1;
