@@ -22,6 +22,17 @@
 #ifndef SX126X_CAD_TCXO_RESTORE
 #define SX126X_CAD_TCXO_RESTORE 1
 #endif
+// Bench (r148k): write the TX payload while the pre-TX CAD runs, with the packet params set and TX_DONE mapped before
+// it, so a clear verdict leaves ClearIrq and SetTx. Needs the SX126X_CAD_XOSC_AT_DONE scan; MCU hosts only.
+#ifndef SX126X_TX_DURING_CAD
+#define SX126X_TX_DURING_CAD 0
+#endif
+#if SX126X_TX_DURING_CAD && !SX126X_CAD_XOSC_AT_DONE
+#error "SX126X_TX_DURING_CAD extends the SX126X_CAD_XOSC_AT_DONE scan"
+#endif
+#if SX126X_TX_DURING_CAD && defined(ARCH_PORTDUINO)
+#error "SX126X_TX_DURING_CAD is for MCU hosts; a CH341 host has its own prestage"
+#endif
 
 // After TX_DONE the SX126x waits in standby for the radio thread to restart RX, which a main-loop hold can stretch by
 // hundreds of ms. With the readout task, the TX_DONE interrupt has the task restart it instead, on every platform the
@@ -119,6 +130,10 @@ template <class T> class SX126xInterface : public RadioLibInterface
     /** On a CH341 host: launch a payload the scan staged, sending only what the scan overwrote */
     int16_t launchTransmit(size_t numbytes) override;
 #endif
+#if SX126X_TX_DURING_CAD
+    /** Launch a payload the scan wrote during its CAD with SetTx alone */
+    int16_t launchTransmit(size_t numbytes) override;
+#endif
 
   private:
 #ifdef LORA_DIO1_SOFTWARE_POLL
@@ -166,6 +181,15 @@ template <class T> class SX126xInterface : public RadioLibInterface
     bool rxFrameOverlapsTxStage(size_t length) override;
     bool wantsEarlyTxStage() const override;
     void stageTxEarly(meshtastic_MeshPacket *p) override;
+#endif
+#if SX126X_TX_DURING_CAD
+    /** A full RadioLib TX staging, which applies the register fixes, has run since the chip last lost its registers */
+    bool cadTxFixesSet = false;
+    /** The payload the scan wrote during its CAD (0 bytes if none) and its packet id */
+    size_t cadTxLen = 0;
+    uint32_t cadTxId = 0;
+    /** The write during the CAD was refused: logged after the launch, off the air path */
+    int16_t cadTxWriteErr = RADIOLIB_ERR_NONE;
 #endif
     /** The SET_CAD_PARAMS bytes last sent, resent only when they change; invalid once the chip can have lost them */
     uint8_t cadParamsSent[7] = {};

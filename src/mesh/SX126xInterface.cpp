@@ -172,6 +172,11 @@ template <typename T> bool SX126xInterface<T>::reinitChip()
     txStagedByRadioLib = false; // begin() reset the chip, and the register fixes with it
     earlyStagedLen = 0;         // and the buffer with them
 #endif
+#if SX126X_TX_DURING_CAD
+    cadTxFixesSet = false; // as txStagedByRadioLib on a CH341 host
+    cadTxLen = 0;
+#endif
+    LOG_INFO("r148k: sx126x_tx_during_cad=%d", SX126X_TX_DURING_CAD); // bench: which arm is flashed
     // \todo Display actual typename of the adapter, not just `SX126x`
     LOG_INFO("SX126x init result %d", res);
     if (res == RADIOLIB_ERR_CHIP_NOT_FOUND || res == RADIOLIB_ERR_SPI_CMD_FAILED)
@@ -377,6 +382,10 @@ template <typename T> bool SX126xInterface<T>::reconfigure()
     prestagedLen = 0;
     earlyStagedLen = 0;
 #endif
+#if SX126X_TX_DURING_CAD
+    cadTxFixesSet = false; // the modem params moved: the next TX gets RadioLib's full staging and its register fixes
+    cadTxLen = 0;
+#endif
 
     startReceive(); // restart receiving
 
@@ -516,6 +525,9 @@ template <typename T> void SX126xInterface<T>::startReceive()
 #ifdef SLEEP_ONLY
     sleep();
 #else
+#if SX126X_TX_DURING_CAD
+    cadTxLen = 0; // RX writes over the payload a scan left in the buffer
+#endif
     postTxChecks();
 
     setTransmitEnable(false);
@@ -721,6 +733,12 @@ template <typename T> bool SX126xInterface<T>::isChannelActive()
                                        .timeout = cadRxTimeoutUsec,
                                        .irqFlags = cadIrqFlags,
                                        .irqMask = cadIrqMask}};
+#if SX126X_TX_DURING_CAD
+    // TX_DONE goes on DIO1 with the CAD's interrupts, so a clear verdict needs no SetDioIrqParams before SetTx. It never
+    // fires during the CAD, or in the RX a detection enters.
+    cfg.cad.irqFlags |= 1UL << RADIOLIB_IRQ_TX_DONE;
+    cfg.cad.irqMask |= 1UL << RADIOLIB_IRQ_TX_DONE;
+#endif
 #ifdef ARCH_PORTDUINO
     prestagedLen = 0; // only a clear verdict from this scan may launch what it stages
     prestagedInRx = false;
@@ -855,9 +873,41 @@ template <typename T> int16_t SX126xInterface<T>::scanChannelForTx(const Channel
     if (!irqPolledOverUsb()) {
 #if SX126X_CAD_XOSC_AT_DONE
         // lora.scanChannel(cfg), less the verdict's packet-type read, and a clear verdict starts the TCXO at once
+#if SX126X_TX_DURING_CAD
+        // RadioLib's TX staging, less its packet-type read, buffer base (RadioLib only ever uses 0/0) and register fixes
+        // (a full staging since the chip last lost its registers set them): packet params here, TX_DONE in the CAD's
+        // interrupt map, the payload while the CAD runs and ClearIrq after a clear verdict.
+        cadTxLen = 0;
+        size_t txLen = 0;
+        if (scanForTx && cadTxFixesSet) {
+            txLen = encodeRadioBuffer(scanForTx); // CPU only; after trySetStandby(), which can read a pending RX into radioBuffer
+            if (txLen > RADIOLIB_SX126X_MAX_PACKET_LENGTH)
+                txLen = 0;
+        }
+        if (txLen) {
+            // Fixed for Meshtastic: explicit header, CRC on, IQ standard, as programModemParams() gives RadioLib
+            const uint8_t packetParams[] = {(uint8_t)(preambleLength >> 8),       (uint8_t)(preambleLength & 0xFF),
+                                            RADIOLIB_SX126X_LORA_HEADER_EXPLICIT, (uint8_t)txLen,
+                                            RADIOLIB_SX126X_LORA_CRC_ON,          RADIOLIB_SX126X_LORA_IQ_STANDARD};
+            const int16_t ppRes =
+                module.SPIwriteStream(RADIOLIB_SX126X_CMD_SET_PACKET_PARAMS, packetParams, sizeof(packetParams));
+            if (ppRes != RADIOLIB_ERR_NONE)
+                return ppRes;
+        }
+#endif
         int16_t res = lora.startChannelScan(cfg);
         if (res != RADIOLIB_ERR_NONE)
             return res;
+#if SX126X_TX_DURING_CAD
+        // The chip takes commands while the CAD runs, so the payload goes in now rather than after the verdict. The pin is
+        // read first so the edge log sees the CAD's end even when the write outlasts it.
+        bool txWritten = false;
+        if (txLen && !module.hal->digitalRead(module.getIrq())) {
+            const uint8_t writeBuffer[] = {RADIOLIB_SX126X_CMD_WRITE_BUFFER, 0x00}; // offset 0, RadioLib's TX base
+            cadTxWriteErr = module.SPIwriteStream(writeBuffer, sizeof(writeBuffer), (uint8_t *)&radioBuffer, txLen);
+            txWritten = cadTxWriteErr == RADIOLIB_ERR_NONE; // if refused, RadioLib's full staging sends it after the verdict
+        }
+#endif
         while (!module.hal->digitalRead(module.getIrq()))
             module.hal->yield();
         const uint32_t irq = lora.getIrqFlags();
@@ -865,6 +915,14 @@ template <typename T> int16_t SX126xInterface<T>::scanChannelForTx(const Channel
             return RADIOLIB_LORA_DETECTED;
         if (!(irq & RADIOLIB_SX126X_IRQ_CAD_DONE))
             return RADIOLIB_ERR_UNKNOWN;
+#if SX126X_TX_DURING_CAD
+        // Drop the CAD's flags while still in STDBY_RC, where nothing waits on the TCXO, so the pin falls and TX_DONE
+        // is a fresh edge. RadioLib's staging would clear them after the TCXO wait.
+        if (txWritten && lora.clearIrqFlags(RADIOLIB_SX126X_IRQ_ALL) == RADIOLIB_ERR_NONE) {
+            cadTxLen = txLen;
+            cadTxId = scanForTx->id;
+        }
+#endif
 #if SX126X_CAD_TCXO_SHORT_US
         // Still in STDBY_RC, where RadioLib sets the TCXO wait too: shorten it for this start; postTxChecks() restores it
         if (tcxoCtrlReady && module.SPIwriteStream(RADIOLIB_SX126X_CMD_SET_DIO3_AS_TCXO_CTRL, tcxoCtrlShort,
@@ -919,6 +977,41 @@ template <typename T> int16_t SX126xInterface<T>::scanChannelForTx(const Channel
         return RADIOLIB_CHANNEL_FREE;
     return RADIOLIB_ERR_UNKNOWN;
 }
+
+#if SX126X_TX_DURING_CAD
+template <typename T> int16_t SX126xInterface<T>::launchTransmit(size_t numbytes)
+{
+    const bool staged = cadTxLen != 0 && cadTxLen == numbytes && sendingPacket && sendingPacket->id == cadTxId;
+    cadTxLen = 0;
+    int16_t res;
+    if (!staged) {
+        res = RadioLibInterface::launchTransmit(numbytes);
+        if (res == RADIOLIB_ERR_NONE)
+            cadTxFixesSet = true;
+    } else {
+        // As RadioLib's launchMode(): SetTx, then BUSY drops once the PA has ramped, after the TCXO start the scan began
+        // module.setRfSwitchState(txMode); setTx(RADIOLIB_SX126X_TX_TIMEOUT_NONE);
+        module.setRfSwitchState(Module::MODE_TX);
+        const uint8_t txTimeout[] = {0, 0, 0}; // RADIOLIB_SX126X_TX_TIMEOUT_NONE: single TX
+        res = module.SPIwriteStream(RADIOLIB_SX126X_CMD_SET_TX, txTimeout, sizeof(txTimeout));
+        if (res == RADIOLIB_ERR_NONE) {
+            const uint32_t start = Time::getMillis();
+            while (module.hal->digitalRead(module.getGpio())) {
+                if (Throttle::hasElapsed(start, 100)) {
+                    res = RADIOLIB_ERR_SPI_CMD_TIMEOUT;
+                    break;
+                }
+                module.hal->yield();
+            }
+        }
+    }
+    if (cadTxWriteErr != RADIOLIB_ERR_NONE) { // after the launch, so the log costs no air time
+        LOG_WARN("r148k: TX write during CAD %s%d, sent with RadioLib's staging", radioLibErr, cadTxWriteErr);
+        cadTxWriteErr = RADIOLIB_ERR_NONE;
+    }
+    return res;
+}
+#endif
 
 #ifdef ARCH_PORTDUINO
 template <typename T> void SX126xInterface<T>::prestageTx()
@@ -1148,6 +1241,10 @@ template <typename T> bool SX126xInterface<T>::sleep()
     txStagedByRadioLib = false; // sleep does not keep every register; let RadioLib stage the next TX in full
     earlyStagedLen = 0;         // nor the buffer
 #endif
+#if SX126X_TX_DURING_CAD
+    cadTxFixesSet = false; // as above
+    cadTxLen = 0;
+#endif
     cadParamsValid = false; // likewise the CAD parameters
     // trySetStandby() and the sleep command below are one sequence: a readout landing between them talks to a chip
     // that is on its way down, and the standby would be undone by the arm a readout's caller can follow it with.
@@ -1185,6 +1282,10 @@ template <typename T> bool SX126xInterface<T>::resetAGC()
 #ifdef ARCH_PORTDUINO
     txStagedByRadioLib = false; // as in sleep(): the next TX gets RadioLib's full staging
     earlyStagedLen = 0;
+#endif
+#if SX126X_TX_DURING_CAD
+    cadTxFixesSet = false;
+    cadTxLen = 0;
 #endif
     cadParamsValid = false; // and the CAD parameters are sent again
 
