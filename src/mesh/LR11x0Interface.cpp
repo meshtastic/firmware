@@ -518,6 +518,7 @@ template <typename T> void LR11x0Interface<T>::startReceive()
 #ifdef SLEEP_ONLY
     sleep();
 #else
+    postTxChecks();
 
     int16_t err = trySetStandby();
 
@@ -551,6 +552,31 @@ template <typename T> void LR11x0Interface<T>::startReceive()
     // Must be done AFTER, starting transmit, because startTransmit clears (possibly stale) interrupt pending register bits
     enableInterrupt(isrRxLevel0);
     checkRxDoneIrqFlag();
+#endif
+}
+
+template <typename T> void LR11x0Interface<T>::postTxChecks()
+{
+#if RADIO_TXDONE_MODE_CHECK
+    if (!takeTxModeCheck())
+        return;
+    txDoneMode = readChipMode();
+    // GetErrors and ClearErrors are not public in RadioLib: send them as LRxxxx::SPIcommand() does, the read in two
+    // transactions. Errors latch, so a sampled read still counts each one since the last.
+    uint16_t errs = 0;
+    uint8_t eb[2] = {0};
+    if (module.SPIwriteStream(RADIOLIB_LR11X0_CMD_GET_ERRORS, NULL, 0, true, false) == RADIOLIB_ERR_NONE) {
+        module.spiConfig.widths[RADIOLIB_MODULE_SPI_WIDTH_CMD] = Module::BITS_0;
+        const int16_t st = module.SPIreadStream(RADIOLIB_LRXXXX_CMD_NOP, eb, sizeof(eb), true, false);
+        module.spiConfig.widths[RADIOLIB_MODULE_SPI_WIDTH_CMD] = Module::BITS_16;
+        if (st == RADIOLIB_ERR_NONE)
+            errs = ((uint16_t)eb[0] << 8) | eb[1];
+    }
+    if (errs)
+        (void)module.SPIwriteStream(RADIOLIB_LR11X0_CMD_CLEAR_ERRORS, NULL, 0, true, true);
+    txDoneErrs = errs;
+    txDoneModeAfter = 0xFF; // nothing here changes the chip's oscillator
+    txModeLogDue = true;
 #endif
 }
 
@@ -615,6 +641,7 @@ template <typename T> void LR11x0Interface<T>::rearmReceiveFromTask()
     RadioSequence seq(this);
     if (rearmState != REARM_PENDING)
         return;
+    postTxChecks();
     // What startReceive() sends, less the standby: after TX_DONE the chip has already fallen back to standby.
     int16_t err = lora.setPreambleLength(preambleLength);
     if (err == RADIOLIB_ERR_NONE)
@@ -754,10 +781,15 @@ template <typename T> bool LR11x0Interface<T>::scanThenTransmit(ChannelScanConfi
         maybeRecoverChipStateLoss(); // as isChannelActive()
         return false;
     }
+#if LR11X0_CAD_LBT_SLIM
+    (void)txCfg;
+    int16_t result = startLbtScanSlim(cfg, numbytes);
+#else
     // Packet params and payload first; the scan's standby and IRQ setup leave both in place
     int16_t result = lora.stageMode(RADIOLIB_RADIO_MODE_TX, &txCfg);
     if (result == RADIOLIB_ERR_NONE)
         result = lora.startChannelScan(cfg);
+#endif
     if (result == RADIOLIB_ERR_NONE) {
         // As scanChannel(): wait for the CAD to finish, then read the verdict
         while (!module.hal->digitalRead(module.getIrq()))
@@ -785,6 +817,45 @@ template <typename T> bool LR11x0Interface<T>::scanThenTransmit(ChannelScanConfi
         LOG_ERROR("LR11x0 LBT scan %s%d", radioLibErr, result);
     return false;
 }
+
+#if LR11X0_CAD_LBT_SLIM
+template <typename T> int16_t LR11x0Interface<T>::startLbtScanSlim(const ChannelScanConfig_t &cfg, size_t numbytes)
+{
+    // The bytes RadioLib's stageMode(TX), startChannelScan() and startCad() send for a LoRa packet, in its order, with
+    // one IRQ clear for both and the CAD defaults resolved as startCad() does
+    uint8_t packetParams[6] = {(uint8_t)(preambleLength >> 8),       (uint8_t)(preambleLength & 0xFF),
+                               RADIOLIB_LRXXXX_LORA_HEADER_EXPLICIT, (uint8_t)numbytes,
+                               RADIOLIB_LRXXXX_LORA_CRC_ENABLED,     RADIOLIB_LR11X0_LORA_IQ_STANDARD};
+    int16_t res = module.SPIwriteStream(RADIOLIB_LR11X0_CMD_SET_PACKET_PARAMS, packetParams, sizeof(packetParams), true, false);
+    if (res == RADIOLIB_ERR_NONE)
+        res = module.SPIwriteStream(RADIOLIB_LR11X0_CMD_WRITE_BUFFER, (uint8_t *)&radioBuffer, numbytes, true, false);
+    module.setRfSwitchState(Module::MODE_RX);
+    const uint32_t irq = lora.getIrqMapped(cfg.cad.irqFlags);
+    uint8_t dioIrq[8] = {(uint8_t)(irq >> 24), (uint8_t)(irq >> 16), (uint8_t)(irq >> 8), (uint8_t)irq,
+                         (uint8_t)(irq >> 24), (uint8_t)(irq >> 16), (uint8_t)(irq >> 8), (uint8_t)irq};
+    if (res == RADIOLIB_ERR_NONE)
+        res = module.SPIwriteStream(RADIOLIB_LR11X0_CMD_SET_DIO_IRQ_PARAMS, dioIrq, sizeof(dioIrq), true, false);
+    uint8_t clearAll[4] = {(uint8_t)(RADIOLIB_LR11X0_IRQ_ALL >> 24), (uint8_t)(RADIOLIB_LR11X0_IRQ_ALL >> 16),
+                           (uint8_t)(RADIOLIB_LR11X0_IRQ_ALL >> 8), (uint8_t)RADIOLIB_LR11X0_IRQ_ALL};
+    if (res == RADIOLIB_ERR_NONE)
+        res = module.SPIwriteStream(RADIOLIB_LR11X0_CMD_CLEAR_IRQ, clearAll, sizeof(clearAll), true, false);
+    static const uint8_t detPeakBySf[8] = {48, 48, 50, 55, 55, 59, 61, 65}; // startCad()'s defaults, SF5..SF12
+    const uint32_t timeoutRaw = (uint32_t)((float)cfg.cad.timeout / 30.52f);
+    uint8_t cadParams[7] = {
+        cfg.cad.symNum != RADIOLIB_LR11X0_CAD_PARAM_DEFAULT ? cfg.cad.symNum : (uint8_t)2,
+        cfg.cad.detPeak != RADIOLIB_LR11X0_CAD_PARAM_DEFAULT ? cfg.cad.detPeak : detPeakBySf[(sf >= 5 && sf <= 12) ? sf - 5 : 4],
+        cfg.cad.detMin != RADIOLIB_LR11X0_CAD_PARAM_DEFAULT ? cfg.cad.detMin : (uint8_t)10,
+        cfg.cad.exitMode,
+        (uint8_t)(timeoutRaw >> 16),
+        (uint8_t)(timeoutRaw >> 8),
+        (uint8_t)timeoutRaw};
+    if (res == RADIOLIB_ERR_NONE)
+        res = module.SPIwriteStream(RADIOLIB_LR11X0_CMD_SET_CAD_PARAMS, cadParams, sizeof(cadParams), true, false);
+    if (res == RADIOLIB_ERR_NONE)
+        res = module.SPIwriteStream(RADIOLIB_LR11X0_CMD_SET_CAD, NULL, 0, true, false);
+    return res;
+}
+#endif
 
 template <typename T> int16_t LR11x0Interface<T>::launchTransmit(size_t numbytes)
 {

@@ -11,6 +11,14 @@
 #if LR11X0_CAD_LBT && !defined(LR11X0_DIO_AS_RF_SWITCH)
 #error "LR11X0_CAD_LBT needs the chip's DIOs on the RF switch"
 #endif
+// Bench (r148g), with LR11X0_CAD_LBT: the LBT scan's staging and CAD start as raw commands, without RadioLib's three
+// GetPacketType reads (0x0202) and its second standby. It also drops their check that the chip is still in LoRa.
+#ifndef LR11X0_CAD_LBT_SLIM
+#define LR11X0_CAD_LBT_SLIM 0
+#endif
+#if LR11X0_CAD_LBT_SLIM && !LR11X0_CAD_LBT
+#error "LR11X0_CAD_LBT_SLIM trims the LR11X0_CAD_LBT scan"
+#endif
 
 // After TX_DONE the LR11x0 waits in standby for the radio thread to restart RX, which a main-loop hold can stretch by
 // hundreds of ms. With the readout task, the TX_DONE interrupt has the task restart it instead.
@@ -81,7 +89,13 @@ template <class T> class LR11x0Interface : public RadioLibInterface
     size_t lbtSentLen = 0;
     /// The LBT scan: true if the channel is busy; a clear one has keyed the chip up with scanForTx unless it fails
     bool scanThenTransmit(ChannelScanConfig_t &cfg);
+#if LR11X0_CAD_LBT_SLIM
+    /// stageMode(TX) and startChannelScan(cfg) for the LBT scan, in six commands; the chip is already in standby
+    int16_t startLbtScanSlim(const ChannelScanConfig_t &cfg, size_t numbytes);
 #endif
+#endif
+    /** After TX_DONE, before RX is re-armed: on a sampled TX, read the chip's mode and errors */
+    void postTxChecks();
 
     /** are we actively receiving a packet (only called during receiving state) */
     virtual bool isActivelyReceiving() override;

@@ -9,6 +9,14 @@
 #ifndef SX126X_CAD_XOSC_AT_DONE
 #define SX126X_CAD_XOSC_AT_DONE 0
 #endif
+// Bench (r148g), with SX126X_CAD_XOSC_AT_DONE: the TCXO start-up wait (us, in 15.625 us steps) for that one TCXO start,
+// set while the chip is still in STDBY_RC; the full wait is restored after TX_DONE, before RX is re-armed. 0 = off.
+#ifndef SX126X_CAD_TCXO_SHORT_US
+#define SX126X_CAD_TCXO_SHORT_US 0
+#endif
+#if SX126X_CAD_TCXO_SHORT_US && !SX126X_CAD_XOSC_AT_DONE
+#error "SX126X_CAD_TCXO_SHORT_US shortens the TCXO start that SX126X_CAD_XOSC_AT_DONE makes"
+#endif
 
 // After TX_DONE the SX126x waits in standby for the radio thread to restart RX, which a main-loop hold can stretch by
 // hundreds of ms. With the readout task, the TX_DONE interrupt has the task restart it instead, on every platform the
@@ -159,6 +167,22 @@ template <class T> class SX126xInterface : public RadioLibInterface
     bool cadParamsValid = false;
     /** lora.scanChannel(cfg), in fewer commands on a CH341 host */
     int16_t scanChannelForTx(const ChannelScanConfig_t &cfg);
+
+    /** After TX_DONE, before RX is re-armed: restore the full TCXO wait, and on a sampled TX read the chip's mode */
+    void postTxChecks();
+#if RADIO_TXDONE_MODE_CHECK
+    /** GetStatus, as RadioLib's protected getStatus(): chip mode in bits 6:4 */
+    uint8_t readStatusByte();
+#endif
+#if SX126X_CAD_TCXO_SHORT_US
+    /** SetDIO3AsTCXOCtrl payloads (Vref code, 24-bit wait) for the full and the short TCXO wait */
+    uint8_t tcxoCtrlFull[4] = {};
+    uint8_t tcxoCtrlShort[4] = {};
+    bool tcxoCtrlReady = false;
+    /** The short wait is set on the chip and postTxChecks() has not restored the full one yet */
+    bool tcxoShortActive = false;
+    bool buildTcxoCtrl(float vref);
+#endif
 
     /** Program all modem parameters into the chip; returns the first RadioLib error, or RADIOLIB_ERR_NONE */
     int16_t programModemParams();

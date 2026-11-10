@@ -327,6 +327,18 @@ RadioLibInterface::RadioLibInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE c
     const int armLbt = 0;
 #endif
     LOG_INFO("r148f: sx126x_xosc_at_cad_done=%d lr11x0_cad_lbt=%d skip_idle_detach=%d", armXosc, armLbt, RADIO_SKIP_IDLE_DETACH);
+#if defined(SX126X_CAD_TCXO_SHORT_US)
+    const int tcxoShortUs = SX126X_CAD_TCXO_SHORT_US;
+#else
+    const int tcxoShortUs = 0;
+#endif
+#if defined(LR11X0_CAD_LBT_SLIM) && LR11X0_CAD_LBT_SLIM
+    const int lbtSlim = 1;
+#else
+    const int lbtSlim = 0;
+#endif
+    LOG_INFO("r148g: sx126x_tcxo_short_us=%d lr11x0_lbt_slim=%d txdone_mode_check=%d spi_paranoid=%d", tcxoShortUs, lbtSlim,
+             RADIO_TXDONE_MODE_CHECK, RADIOLIB_SPI_PARANOID);
 #endif
 #if RADIO_SPI_BULK && !ARCH_PORTDUINO
     LOG_INFO("RADIO_SPI_BULK: one SPI transfer per radio command");
@@ -872,6 +884,13 @@ void RadioLibInterface::onNotify(uint32_t notification)
         }
         edgeCadForTx = false;
 #endif
+#if RADIO_TXDONE_MODE_CHECK
+        if (txModeLogDue) {
+            txModeLogDue = false;
+            LOG_INFO("RadioEdge: txdone_mode id=0x%08x mode=0x%02x errs=0x%04x after=0x%02x", sent ? sent->id : 0, txDoneMode,
+                     txDoneErrs, txDoneModeAfter);
+        }
+#endif
 #if RADIO_EDGE_SEQ
         edgeSeqKept = false;
 #endif
@@ -1045,6 +1064,10 @@ void RadioLibInterface::onNotify(uint32_t notification)
                         // actual transmission as short as possible
                         txp = txQueue.dequeue();
                         assert(txp);
+#if RADIO_TXDONE_MODE_CHECK
+                        txModeLogDue = false; // a failed launch's check must not be logged against this TX
+                        txModeCheckDue = edgeSeqTxCount % RADIO_EDGE_SEQ_EVERY == 0;
+#endif
                         startSend(txp);
 #if RADIO_EDGE_SEQ
                         edgeSeqDisarm(true);

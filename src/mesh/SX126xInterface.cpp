@@ -158,6 +158,10 @@ template <typename T> bool SX126xInterface<T>::reinitChip()
 #endif
     if (res == RADIOLIB_ERR_NONE) {
         applyTcxoStartupDelay(lora, tcxoVoltage);
+#if SX126X_CAD_TCXO_SHORT_US
+        tcxoCtrlReady = buildTcxoCtrl(tcxoVoltage);
+        tcxoShortActive = false; // begin() and the delay above set the full wait
+#endif
 #ifdef SX126X_PA_RAMP_US
         // Set custom PA ramp time for boards requiring longer stabilization (e.g., T-Beam 1W needs >800us)
         lora.setPaRampTime(SX126X_PA_RAMP_US);
@@ -512,6 +516,7 @@ template <typename T> void SX126xInterface<T>::startReceive()
 #ifdef SLEEP_ONLY
     sleep();
 #else
+    postTxChecks();
 
     setTransmitEnable(false);
 
@@ -615,6 +620,7 @@ template <typename T> void SX126xInterface<T>::rearmReceiveFromTask()
     RadioSequence seq(this);
     if (rearmState != REARM_PENDING)
         return;
+    postTxChecks();
     // What startReceive() sends, less the standby: after TX_DONE the chip has already fallen back to standby.
     setTransmitEnable(false);
     const int16_t err = startRxCommand();
@@ -715,6 +721,79 @@ template <typename T> bool SX126xInterface<T>::isChannelActive()
     return false; // report the channel free: a recovered chip can TX, a dead one fails startSend safely
 }
 
+template <typename T> void SX126xInterface<T>::postTxChecks()
+{
+#if RADIO_TXDONE_MODE_CHECK
+    const bool check = takeTxModeCheck();
+    if (check)
+        txDoneMode = readStatusByte();
+#endif
+#if SX126X_CAD_TCXO_SHORT_US
+    if (tcxoShortActive) {
+        tcxoShortActive = false;
+        (void)module.SPIwriteStream(RADIOLIB_SX126X_CMD_SET_DIO3_AS_TCXO_CTRL, tcxoCtrlFull, sizeof(tcxoCtrlFull), true, false);
+    }
+#endif
+#if RADIO_TXDONE_MODE_CHECK
+    if (check) {
+        // Device errors latch until cleared, so a sampled read still counts every XOSC_START_ERR (bit 5) since the last one
+        uint8_t errs[2] = {0, 0};
+        (void)module.SPIreadStream(RADIOLIB_SX126X_CMD_GET_DEVICE_ERRORS, errs, sizeof(errs));
+        txDoneErrs = ((uint16_t)errs[0] << 8) | errs[1];
+        if (txDoneErrs) {
+            const uint8_t clear[2] = {RADIOLIB_SX126X_CMD_NOP, RADIOLIB_SX126X_CMD_NOP};
+            (void)module.SPIwriteStream(RADIOLIB_SX126X_CMD_CLEAR_DEVICE_ERRORS, clear, sizeof(clear));
+        }
+        txDoneModeAfter = readStatusByte();
+        txModeLogDue = true;
+    }
+#endif
+}
+
+#if RADIO_TXDONE_MODE_CHECK
+template <typename T> uint8_t SX126xInterface<T>::readStatusByte()
+{
+    const uint8_t cmd = RADIOLIB_SX126X_CMD_GET_STATUS;
+    uint8_t status = 0;
+    module.spiConfig.widths[RADIOLIB_MODULE_SPI_WIDTH_STATUS] = Module::BITS_0; // the status byte is what is read
+    (void)module.SPItransferStream(&cmd, 1, false, NULL, &status, 1, true);
+    module.spiConfig.widths[RADIOLIB_MODULE_SPI_WIDTH_STATUS] = Module::BITS_8;
+    return status;
+}
+#endif
+
+#if SX126X_CAD_TCXO_SHORT_US
+template <typename T> bool SX126xInterface<T>::buildTcxoCtrl(float vref)
+{
+    // RadioLib's setTCXO() Vref table; the wait counts 15.625 us steps, rounded here
+    static const struct {
+        float v;
+        uint8_t code;
+    } codes[] = {{1.6f, RADIOLIB_SX126X_DIO3_OUTPUT_1_6}, {1.7f, RADIOLIB_SX126X_DIO3_OUTPUT_1_7},
+                 {1.8f, RADIOLIB_SX126X_DIO3_OUTPUT_1_8}, {2.2f, RADIOLIB_SX126X_DIO3_OUTPUT_2_2},
+                 {2.4f, RADIOLIB_SX126X_DIO3_OUTPUT_2_4}, {2.7f, RADIOLIB_SX126X_DIO3_OUTPUT_2_7},
+                 {3.0f, RADIOLIB_SX126X_DIO3_OUTPUT_3_0}, {3.3f, RADIOLIB_SX126X_DIO3_OUTPUT_3_3}};
+    for (const auto &c : codes) {
+        if (fabsf(vref - c.v) > 0.001f)
+            continue;
+        const uint32_t waits[2] = {(tcxoStartupDelayUs() * 64 + 500) / 1000,
+                                   ((uint32_t)SX126X_CAD_TCXO_SHORT_US * 64 + 500) / 1000};
+        uint8_t *frames[2] = {tcxoCtrlFull, tcxoCtrlShort};
+        for (int i = 0; i < 2; i++) {
+            frames[i][0] = c.code;
+            frames[i][1] = (uint8_t)(waits[i] >> 16);
+            frames[i][2] = (uint8_t)(waits[i] >> 8);
+            frames[i][3] = (uint8_t)waits[i];
+        }
+        LOG_INFO("r148g: TCXO wait %u us, %u us at a clear CAD's end", (unsigned)(waits[0] * 1000 / 64),
+                 (unsigned)(waits[1] * 1000 / 64));
+        return true;
+    }
+    LOG_WARN("r148g: no TCXO Vref (%f V), short TCXO wait off", vref);
+    return false;
+}
+#endif
+
 template <typename T> int16_t SX126xInterface<T>::scanChannelForTx(const ChannelScanConfig_t &cfg)
 {
     if (!irqPolledOverUsb()) {
@@ -730,6 +809,12 @@ template <typename T> int16_t SX126xInterface<T>::scanChannelForTx(const Channel
             return RADIOLIB_LORA_DETECTED;
         if (!(irq & RADIOLIB_SX126X_IRQ_CAD_DONE))
             return RADIOLIB_ERR_UNKNOWN;
+#if SX126X_CAD_TCXO_SHORT_US
+        // Still in STDBY_RC, where RadioLib sets the TCXO wait too: shorten it for this start; postTxChecks() restores it
+        if (tcxoCtrlReady && module.SPIwriteStream(RADIOLIB_SX126X_CMD_SET_DIO3_AS_TCXO_CTRL, tcxoCtrlShort,
+                                                   sizeof(tcxoCtrlShort), true, false) == RADIOLIB_ERR_NONE)
+            tcxoShortActive = true;
+#endif
         // No BUSY wait after it: the next command's wait absorbs whatever of the TCXO start is left by then
         const uint8_t xosc = RADIOLIB_SX126X_STANDBY_XOSC;
         res = module.SPIwriteStream(RADIOLIB_SX126X_CMD_SET_STANDBY, &xosc, 1, false, false);

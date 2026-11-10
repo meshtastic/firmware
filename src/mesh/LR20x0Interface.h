@@ -128,6 +128,9 @@ template <class T> class LR20x0Interface : public RadioLibInterface
     volatile int16_t rearmErr = 0;
 #endif
 
+    /** After TX_DONE, before RX is re-armed: on a sampled TX, read the chip's mode and errors */
+    void postTxChecks();
+
     /** The chip's mode (stat2 bits 2..0, as the LR20X0_CHIP_MODE_* below), waiting out a passing FS; 0xFF on SPI failure */
     uint8_t readChipMode();
     static constexpr uint8_t LR20X0_CHIP_MODE_STBY_RC = 1;

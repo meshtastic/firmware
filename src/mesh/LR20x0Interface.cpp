@@ -674,6 +674,7 @@ template <typename T> void LR20x0Interface<T>::startReceive()
 #ifdef SLEEP_ONLY
     sleep();
 #else
+    postTxChecks();
 
     int16_t err = trySetStandby();
 
@@ -707,6 +708,31 @@ template <typename T> void LR20x0Interface<T>::startReceive()
     // Must be done AFTER starting receive, because startReceive clears (possibly stale) interrupt pending register bits
     enableInterrupt(isrRxLevel0);
     checkRxDoneIrqFlag();
+#endif
+}
+
+template <typename T> void LR20x0Interface<T>::postTxChecks()
+{
+#if RADIO_TXDONE_MODE_CHECK
+    if (!takeTxModeCheck())
+        return;
+    txDoneMode = readChipMode();
+    // GetErrors and ClearErrors are not public in RadioLib: send them as LRxxxx::SPIcommand() does, the read in two
+    // transactions. Errors latch, so a sampled read still counts each one since the last.
+    uint16_t errs = 0;
+    uint8_t eb[2] = {0};
+    if (module.SPIwriteStream(RADIOLIB_LR2021_CMD_GET_ERRORS, NULL, 0, true, false) == RADIOLIB_ERR_NONE) {
+        module.spiConfig.widths[RADIOLIB_MODULE_SPI_WIDTH_CMD] = Module::BITS_0;
+        const int16_t st = module.SPIreadStream(RADIOLIB_LRXXXX_CMD_NOP, eb, sizeof(eb), true, false);
+        module.spiConfig.widths[RADIOLIB_MODULE_SPI_WIDTH_CMD] = Module::BITS_16;
+        if (st == RADIOLIB_ERR_NONE)
+            errs = ((uint16_t)eb[0] << 8) | eb[1];
+    }
+    if (errs)
+        (void)module.SPIwriteStream(RADIOLIB_LR2021_CMD_CLEAR_ERRORS, NULL, 0, true, true);
+    txDoneErrs = errs;
+    txDoneModeAfter = 0xFF;
+    txModeLogDue = true;
 #endif
 }
 
@@ -774,6 +800,7 @@ template <typename T> void LR20x0Interface<T>::rearmReceiveFromTask()
     RadioSequence seq(this);
     if (rearmState != REARM_PENDING)
         return;
+    postTxChecks();
     // What startReceive() sends, less the standby: after TX_DONE the chip has already fallen back to standby.
     int16_t err = lora.setPreambleLength(preambleLength);
     if (err == RADIOLIB_ERR_NONE)

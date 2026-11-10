@@ -62,6 +62,14 @@
 #ifndef RADIO_EDGE_SEQ_EVERY
 #define RADIO_EDGE_SEQ_EVERY 1
 #endif
+// Bench (r148g): on one TX in RADIO_EDGE_SEQ_EVERY, read the chip's mode at TX_DONE before RX is re-armed, and log it
+// as "RadioEdge: txdone_mode". Each driver does the read in postTxChecks().
+#ifndef RADIO_TXDONE_MODE_CHECK
+#define RADIO_TXDONE_MODE_CHECK 0
+#endif
+#if RADIO_TXDONE_MODE_CHECK && !RADIO_EDGE_SEQ
+#error "RADIO_TXDONE_MODE_CHECK samples TXs with RADIO_EDGE_SEQ's counter"
+#endif
 // Bench: skip the radio interrupt detach when no handler is attached (ESP32's costs ~240 us before the pre-TX scan).
 #ifndef RADIO_SKIP_IDLE_DETACH
 #define RADIO_SKIP_IDLE_DETACH 0
@@ -197,6 +205,21 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 #endif
 
   protected:
+#if RADIO_TXDONE_MODE_CHECK
+    /// Set at a sampled TX's launch; the first RX re-arm after it reads the chip (postTxChecks()) and sets txModeLogDue
+    volatile bool txModeCheckDue = false;
+    volatile bool txModeLogDue = false;
+    /// The chip's raw mode at TX_DONE and after the driver's post-TX commands, and its error flags (SX126x, LR11x0)
+    uint8_t txDoneMode = 0xFF;
+    uint8_t txDoneModeAfter = 0xFF;
+    uint16_t txDoneErrs = 0;
+    bool takeTxModeCheck()
+    {
+        const bool due = txModeCheckDue;
+        txModeCheckDue = false;
+        return due;
+    }
+#endif
     // Noise floor tracking - rolling window of samples.
     static const uint8_t NOISE_FLOOR_SAMPLES = 20;
     static const int32_t NOISE_FLOOR_DEFAULT = -120;
