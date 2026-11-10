@@ -956,11 +956,13 @@ template <typename T> int16_t LR20x0Interface<T>::startLbtScan(const ChannelScan
     // these commands.
     // The TX FIFO appends, so empty it first, as writeTxBuffer() does.
     int16_t res = module.SPIwriteStream((uint16_t)RADIOLIB_LR2021_CMD_CLEAR_TX_FIFO, NULL, 0);
-    // Fixed for Meshtastic: LoRa, explicit header, CRC on, IQ standard, as the radio setup sets them.
+    // Fixed for Meshtastic: LoRa, explicit header, CRC on, IQ standard, as the radio setup sets them. Built with |= so
+    // cppcheck does not flag the zero-valued fields (badBitmaskCheck).
+    uint8_t packetFlags = (uint8_t)((RADIOLIB_LRXXXX_LORA_HEADER_EXPLICIT & 0x01) << 2);
+    packetFlags |= (uint8_t)((RADIOLIB_LRXXXX_LORA_CRC_ENABLED & 0x01) << 1);
+    packetFlags |= (uint8_t)(RADIOLIB_LR2021_LORA_IQ_STANDARD & 0x01);
     const uint8_t packetParams[4] = {(uint8_t)(preambleLength >> 8), (uint8_t)(preambleLength & 0xFF), (uint8_t)numbytes,
-                                     (uint8_t)(((RADIOLIB_LRXXXX_LORA_HEADER_EXPLICIT & 0x01) << 2) |
-                                               ((RADIOLIB_LRXXXX_LORA_CRC_ENABLED & 0x01) << 1) |
-                                               (RADIOLIB_LR2021_LORA_IQ_STANDARD & 0x01))};
+                                     packetFlags};
     if (res == RADIOLIB_ERR_NONE)
         res = module.SPIwriteStream((uint16_t)RADIOLIB_LR2021_CMD_SET_LORA_PACKET_PARAMS, packetParams, sizeof(packetParams));
     if (res == RADIOLIB_ERR_NONE)
