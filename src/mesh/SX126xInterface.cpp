@@ -622,15 +622,23 @@ template <typename T> void SX126xInterface<T>::rearmReceiveFromTask()
 {
     // Outside any radio-thread sequence. If the thread got there first, it took the re-arm over and left nothing to do.
     RadioSequence seq(this);
-    if (rearmState != REARM_PENDING)
+    if (rearmState != REARM_PENDING) {
+        edgeRearmMark(EDGE_REARM_LATE);
         return;
+    }
+    edgeRearmMark(EDGE_REARM_LOCK);
     postTxChecks();
     // What startReceive() sends, less the standby: after TX_DONE the chip has already fallen back to standby.
     setTransmitEnable(false);
+#if RADIO_SLIM_REARM
+    const int16_t err = slimRearmRx();
+#else
     const int16_t err = startRxCommand();
+#endif
     rearmErr = err;
     if (err != RADIOLIB_ERR_NONE) {
         rearmState = REARM_FAILED;
+        edgeRearmMark(EDGE_REARM_ARMED);
         return;
     }
     rearmState = REARM_ARMED;
@@ -638,7 +646,36 @@ template <typename T> void SX126xInterface<T>::rearmReceiveFromTask()
     // thread runs wakes this task to read it, rather than waiting in the chip for the next frame to overwrite it.
     rxArmedBeforeTxDone = true;
     enableInterrupt(isrRxLevel0);
+    edgeRearmMark(EDGE_REARM_ARMED);
 }
+
+#if RADIO_SLIM_REARM
+template <typename T> int16_t SX126xInterface<T>::slimRearmRx()
+{
+    // After TX_DONE the chip is in its STDBY_XOSC fallback, and TX changed only the IRQ routing and the payload length.
+    // The RadioLib call this replaces, which also sends a standby, the buffer base addresses, a GetPacketType read and the
+    // IQ register's read and write, none of which a TX changes (10 transactions against 4):
+    //     return startRxCommand(); // lora.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_INF, MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS)
+    const uint32_t irq = lora.getIrqMapped(MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS);
+    const uint32_t dio1 = lora.getIrqMapped(RADIOLIB_IRQ_RX_DEFAULT_MASK);
+    const uint8_t dioIrq[8] = {(uint8_t)(irq >> 8), (uint8_t)irq, (uint8_t)(dio1 >> 8), (uint8_t)dio1, 0, 0, 0, 0};
+    int16_t res = module.SPIwriteStream(RADIOLIB_SX126X_CMD_SET_DIO_IRQ_PARAMS, dioIrq, sizeof(dioIrq));
+    const uint8_t clearAll[2] = {(uint8_t)(RADIOLIB_SX126X_IRQ_ALL >> 8), (uint8_t)RADIOLIB_SX126X_IRQ_ALL};
+    if (res == RADIOLIB_ERR_NONE)
+        res = module.SPIwriteStream(RADIOLIB_SX126X_CMD_CLEAR_IRQ_STATUS, clearAll, sizeof(clearAll));
+    // Fixed for Meshtastic: explicit header, CRC on, IQ standard; the RX payload length is the maximum, as RadioLib's
+    const uint8_t packetParams[6] = {(uint8_t)(preambleLength >> 8),       (uint8_t)(preambleLength & 0xFF),
+                                     RADIOLIB_SX126X_LORA_HEADER_EXPLICIT, RADIOLIB_SX126X_MAX_PACKET_LENGTH,
+                                     RADIOLIB_SX126X_LORA_CRC_ON,          RADIOLIB_SX126X_LORA_IQ_STANDARD};
+    if (res == RADIOLIB_ERR_NONE)
+        res = module.SPIwriteStream(RADIOLIB_SX126X_CMD_SET_PACKET_PARAMS, packetParams, sizeof(packetParams));
+    module.setRfSwitchState(Module::MODE_RX);
+    const uint8_t rxTimeout[3] = {0xFF, 0xFF, 0xFF}; // continuous, as RADIOLIB_SX126X_RX_TIMEOUT_INF
+    if (res == RADIOLIB_ERR_NONE)
+        res = module.SPIwriteStream(RADIOLIB_SX126X_CMD_SET_RX, rxTimeout, sizeof(rxTimeout), true, false);
+    return res;
+}
+#endif
 
 template <typename T> bool SX126xInterface<T>::adoptReceiveArmedFromIsr()
 {

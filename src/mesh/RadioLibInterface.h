@@ -70,6 +70,20 @@
 #if RADIO_TXDONE_MODE_CHECK && !RADIO_EDGE_SEQ
 #error "RADIO_TXDONE_MODE_CHECK samples TXs with RADIO_EDGE_SEQ's counter"
 #endif
+// Bench (r148j), with RADIO_EDGE_SEQ: on a sampled TX, time TX_DONE to RX armed - the readout task's re-arm and the radio
+// thread's pickup - as "RadioEdge: rearm" lines, and a busy pre-TX scan to RX armed as "RadioEdge: busy_seq" lines.
+#ifndef RADIO_EDGE_REARM
+#define RADIO_EDGE_REARM 0
+#endif
+#if RADIO_EDGE_REARM && !RADIO_EDGE_SEQ
+#error "RADIO_EDGE_REARM records into RADIO_EDGE_SEQ's window"
+#endif
+// Bench (r148j): the readout task's re-arm after TX_DONE sends only what TX changed (IRQ routing, IRQ clear, packet
+// params) and SetRx, as raw commands: no standby, packet-type reads, buffer base, IQ register or repeats, and on LR2021
+// no RX path and DC-DC workaround, which RadioLib does not touch on TX. An error leaves the thread's startReceive().
+#ifndef RADIO_SLIM_REARM
+#define RADIO_SLIM_REARM 0
+#endif
 // Bench: skip the radio interrupt detach when no handler is attached (ESP32's costs ~240 us before the pre-TX scan).
 #ifndef RADIO_SKIP_IDLE_DETACH
 #define RADIO_SKIP_IDLE_DETACH 0
@@ -289,6 +303,23 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
     /// disableInterrupt() for the thread's standby before a scan; RADIO_EDGE_SEQ times it
     void disableInterruptTimed();
+
+    /// RADIO_EDGE_REARM: points on the way from TX_DONE to RX armed
+    enum EdgeRearmMark : uint8_t {
+        EDGE_REARM_WAKE,   // the readout task took the re-arm request
+        EDGE_REARM_LOCK,   // the task holds the radio sequence, re-arm still pending
+        EDGE_REARM_ARMED,  // the task finished its re-arm (armed or failed)
+        EDGE_REARM_LATE,   // the task found the thread had taken the re-arm over
+        EDGE_REARM_THREAD, // the radio thread's TX_DONE handler started
+        EDGE_REARM_TLOCK,  // the thread holds the radio sequence
+        EDGE_REARM_END,    // the thread adopted the task's RX or restarted it
+        EDGE_REARM_MARKS
+    };
+#if RADIO_EDGE_REARM
+    static void edgeRearmMark(EdgeRearmMark mark);
+#else
+    static void edgeRearmMark(EdgeRearmMark) {}
+#endif
 
     /**
      * Enable a particular ISR callback glue function

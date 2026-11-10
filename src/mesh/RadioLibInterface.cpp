@@ -100,16 +100,20 @@ enum : uint16_t {
     EDGE_SEQ_DELAY_MS,         // RadioLib delay(len) ms
     EDGE_SEQ_DELAY_US,         // RadioLib delayMicroseconds(len), 10 µs or more
     EDGE_SEQ_DETACH,           // the standby's interrupt detach, len µs long
+    EDGE_SEQ_REARMED,          // a busy scan's rearmReceive() returned
 };
-static constexpr size_t EDGE_SEQ_MAX = 64;
+// With RADIO_EDGE_REARM a sampled TX's re-arm is recorded after its TX window, in the same buffer
+static constexpr size_t EDGE_SEQ_MAX = RADIO_EDGE_REARM ? 112 : 64;
 static EdgeSeqEv edgeSeqEv[EDGE_SEQ_MAX];
 static size_t edgeSeqN = 0, edgeSeqLost = 0;
 static bool edgeSeqArmed = false, edgeSeqKept = false, edgeSeqIrqLow = false;
 static int edgeSeqCur = -1, edgeSeqBusyIdx = -1;
 static uint32_t edgeSeqTxCount = 0; // TXs launched, for RADIO_EDGE_SEQ_EVERY
 static uint32_t edgeSeqId = 0, edgeSeqLook = 0, edgeSeqStamp0 = 0, edgeSeqStamp1 = 0, edgeSeqT0 = 0, edgeSeqT1 = 0;
+static size_t edgeSeqWinN = 0;          // events in the window edgeSeqDisarm() closed
+static bool edgeBusySeqPending = false; // RADIO_EDGE_REARM: a busy scan's window, logged after the lock is released
 
-static inline uint32_t edgeSeqTicks()
+static inline uint32_t INTERRUPT_ATTR edgeSeqTicks()
 {
 #if defined(ARDUINO_NRF52_ADAFRUIT)
     return DWT->CYCCNT;
@@ -140,8 +144,14 @@ static void edgeSeqMark(uint16_t op, uint16_t len = 0)
     if (edgeSeqArmed)
         edgeSeqAdd(op, len);
 }
+#if RADIO_EDGE_REARM
+static volatile bool edgeRearmOn = false;
+#endif
 static void edgeSeqArm(uint32_t id, uint32_t lookStamp)
 {
+#if RADIO_EDGE_REARM
+    edgeRearmOn = false;
+#endif
     edgeSeqN = edgeSeqLost = 0;
     edgeSeqCur = edgeSeqBusyIdx = -1;
     edgeSeqIrqLow = edgeSeqKept = false;
@@ -155,28 +165,24 @@ static void edgeSeqDisarm(bool keep)
 {
     edgeSeqT1 = edgeSeqTicks();
     edgeSeqStamp1 = edgeStampNow();
+    edgeSeqWinN = edgeSeqN;
     edgeSeqKept = keep && edgeSeqArmed;
     edgeSeqArmed = false;
 }
-// Logged after TX_DONE. win_us (ticks) against clk_us (the µs clock) shows a window the CPU slept in, where the cycle
-// counter stops. Events: op/len@at+lock,xfer,busy for a command; S scanned, T call, t returned, I IRQ pin high, D/U delay,
-// X<us> interrupt detach.
-static void edgeSeqLog()
+// Events [from, to) as "RadioEdge: <what>_ev" lines: op/len@at+lock,xfer,busy for a command; S scanned, T call,
+// t returned, I IRQ pin high, D/U delay, X<us> interrupt detach, R a busy scan's re-arm returned.
+static void edgeSeqLogEvents(const char *what, uint32_t id, size_t from, size_t to)
 {
-    const EdgeUs at = edgeUs(edgeSeqStamp0);
-    LOG_INFO("RadioEdge: tx_seq id=0x%08x at=" EDGE_FMT " look_us=%lu win_us=%lu clk_us=%lu n=%u lost=%u", edgeSeqId, at.s, at.us,
-             edgeSpanUs(edgeSeqLook, edgeSeqStamp0), edgeSeqUs(edgeSeqT1 - edgeSeqT0), edgeSpanUs(edgeSeqStamp0, edgeSeqStamp1),
-             (unsigned)edgeSeqN, (unsigned)edgeSeqLost);
     char line[112];
     size_t pos = 0;
     unsigned part = 0;
-    for (size_t i = 0; i < edgeSeqN; i++) {
+    for (size_t i = from; i < to && i < EDGE_SEQ_MAX; i++) {
         const EdgeSeqEv &e = edgeSeqEv[i];
         char ev[48];
-        if (e.op >= EDGE_SEQ_SCANNED && e.op <= EDGE_SEQ_DETACH) {
-            static const char tags[] = "STtIDUX";
+        if (e.op >= EDGE_SEQ_SCANNED && e.op <= EDGE_SEQ_REARMED) {
+            static const char tags[] = "STtIDUXR";
             const char tag = tags[e.op - EDGE_SEQ_SCANNED];
-            if (e.op >= EDGE_SEQ_DELAY_MS)
+            if (e.op >= EDGE_SEQ_DELAY_MS && e.op <= EDGE_SEQ_DETACH)
                 snprintf(ev, sizeof(ev), "%c%u@%lu", tag, (unsigned)e.len, edgeSeqUs(e.at));
             else
                 snprintf(ev, sizeof(ev), "%c@%lu", tag, edgeSeqUs(e.at));
@@ -188,14 +194,92 @@ static void edgeSeqLog()
                      edgeSeqUs(e.lock), edgeSeqUs(e.xfer), edgeSeqUs(e.busy));
         }
         if (pos && pos + 1 + strlen(ev) >= sizeof(line)) {
-            LOG_INFO("RadioEdge: tx_seq_ev id=0x%08x p=%u%s", edgeSeqId, part++, line);
+            LOG_INFO("RadioEdge: %s_ev id=0x%08x p=%u%s", what, id, part++, line);
             pos = 0;
         }
         pos += snprintf(line + pos, sizeof(line) - pos, " %s", ev);
     }
     if (pos)
-        LOG_INFO("RadioEdge: tx_seq_ev id=0x%08x p=%u%s", edgeSeqId, part, line);
+        LOG_INFO("RadioEdge: %s_ev id=0x%08x p=%u%s", what, id, part, line);
 }
+
+// The window edgeSeqDisarm() closed, as "tx_seq" after TX_DONE or "busy_seq" after a busy scan's re-arm. win_us (ticks)
+// against clk_us (the µs clock) shows a window the CPU slept in, where the cycle counter stops.
+static void edgeSeqLog(const char *what)
+{
+    const EdgeUs at = edgeUs(edgeSeqStamp0);
+    LOG_INFO("RadioEdge: %s id=0x%08x at=" EDGE_FMT " look_us=%lu win_us=%lu clk_us=%lu n=%u lost=%u", what, edgeSeqId, at.s,
+             at.us, edgeSpanUs(edgeSeqLook, edgeSeqStamp0), edgeSeqUs(edgeSeqT1 - edgeSeqT0),
+             edgeSpanUs(edgeSeqStamp0, edgeSeqStamp1), (unsigned)edgeSeqWinN, (unsigned)edgeSeqLost);
+    edgeSeqLogEvents(what, edgeSeqId, 0, edgeSeqWinN);
+}
+
+#if RADIO_EDGE_REARM
+// TX_DONE to RX armed for a TX whose window was kept. Per mark, ticks (cyc) and the µs clock (clk) since the TX_DONE
+// interrupt; the cycle counter stops while the CPU sleeps, so clk is the one to trust across the thread's pickup.
+static size_t edgeRearmFirst = 0;
+static uint32_t edgeRearmIsrCyc = 0, edgeRearmIsrClk = 0, edgeRearmId = 0;
+static uint32_t edgeRearmCyc[RadioLibInterface::EDGE_REARM_MARKS], edgeRearmClk[RadioLibInterface::EDGE_REARM_MARKS];
+static bool edgeRearmSeen[RadioLibInterface::EDGE_REARM_MARKS];
+
+static void INTERRUPT_ATTR edgeRearmStartFromIsr()
+{
+    if (!edgeSeqKept || edgeSeqArmed || edgeRearmOn)
+        return; // not a sampled TX, or its TX window is still open
+    edgeRearmIsrCyc = edgeSeqTicks();
+    edgeRearmIsrClk = edgeStampNow();
+    for (int i = 0; i < RadioLibInterface::EDGE_REARM_MARKS; i++)
+        edgeRearmSeen[i] = false;
+    edgeRearmId = edgeSeqId;
+    edgeRearmFirst = edgeSeqN;
+    edgeSeqT0 = edgeRearmIsrCyc; // the HAL hooks time the re-arm's commands from the interrupt
+    edgeSeqCur = edgeSeqBusyIdx = -1;
+    edgeSeqIrqLow = false;
+    edgeRearmOn = true;
+    edgeSeqArmed = true;
+}
+
+void RadioLibInterface::edgeRearmMark(EdgeRearmMark mark)
+{
+    if (!edgeRearmOn || edgeRearmSeen[mark])
+        return;
+    edgeRearmCyc[mark] = edgeSeqTicks() - edgeRearmIsrCyc;
+    edgeRearmClk[mark] = edgeStampNow();
+    edgeRearmSeen[mark] = true;
+}
+
+/// Stops the recording; true if there is a re-arm to log
+static bool edgeRearmStop()
+{
+    const bool on = edgeRearmOn;
+    edgeRearmOn = false;
+    edgeSeqArmed = false;
+    return on;
+}
+
+// "RadioEdge: rearm id done= path=adopt|restart cyc=wake,lock,armed,late,thread,tlock,end clk=... n lost", then the
+// commands from TX_DONE to the thread's end as rearm_ev lines (at = ticks since the interrupt)
+static void edgeRearmLog(bool adopted)
+{
+    char cyc[80], clk[80];
+    size_t pc = 0, pk = 0;
+    for (int i = 0; i < RadioLibInterface::EDGE_REARM_MARKS; i++) {
+        const char *sep = i ? "," : "";
+        if (edgeRearmSeen[i]) {
+            pc += snprintf(cyc + pc, sizeof(cyc) - pc, "%s%lu", sep, edgeSeqUs(edgeRearmCyc[i]));
+            pk += snprintf(clk + pk, sizeof(clk) - pk, "%s%lu", sep, edgeSpanUs(edgeRearmIsrClk, edgeRearmClk[i]));
+        } else {
+            pc += snprintf(cyc + pc, sizeof(cyc) - pc, "%s-", sep);
+            pk += snprintf(clk + pk, sizeof(clk) - pk, "%s-", sep);
+        }
+    }
+    const EdgeUs done = edgeUs(edgeRearmIsrClk);
+    LOG_INFO("RadioEdge: rearm id=0x%08x done=" EDGE_FMT " path=%s slim=%d cyc=%s clk=%s n=%u lost=%u", edgeRearmId, done.s,
+             done.us, adopted ? "adopt" : "restart", RADIO_SLIM_REARM, cyc, clk, (unsigned)(edgeSeqN - edgeRearmFirst),
+             (unsigned)edgeSeqLost);
+    edgeSeqLogEvents("rearm", edgeRearmId, edgeRearmFirst, edgeSeqN);
+}
+#endif
 #endif
 
 void RadioLibInterface::disableInterruptTimed()
@@ -327,6 +411,7 @@ RadioLibInterface::RadioLibInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE c
     const int armLbt = 0;
 #endif
     LOG_INFO("r148f: sx126x_xosc_at_cad_done=%d lr11x0_cad_lbt=%d skip_idle_detach=%d", armXosc, armLbt, RADIO_SKIP_IDLE_DETACH);
+    LOG_INFO("r148j: slim_rearm=%d edge_rearm=%d", RADIO_SLIM_REARM, RADIO_EDGE_REARM);
 #if defined(SX126X_CAD_TCXO_SHORT_US)
     const int tcxoShortUs = SX126X_CAD_TCXO_SHORT_US;
 #else
@@ -436,6 +521,9 @@ void INTERRUPT_ATTR RadioLibInterface::isrTxLevel0()
 #if RADIO_EDGE_LOG
     edgeTxIsrStamp = edgeStampNow();
     edgeTxIsrSeen = true;
+#endif
+#if RADIO_EDGE_REARM
+    edgeRearmStartFromIsr();
 #endif
     // Before the notify: the handler that would otherwise re-arm RX can wait behind a main-loop hold.
     instance->rearmReceiveFromIsr();
@@ -858,20 +946,30 @@ void RadioLibInterface::onNotify(uint32_t notification)
     switch (notification) {
     case ISR_TX: {
         // The chip is deaf in standby until startReceive(), so the airtime log and printPacket() wait until after it.
+        edgeRearmMark(EDGE_REARM_THREAD);
         meshtastic_MeshPacket *sent;
+        bool adopted;
         {
             // The detach and the re-arm are one sequence: a readout between them would clear the flags the arm
             // sets up, and the hook's pre-stage switch must not land mid-readout either. The adopt below needs it
             // too: inside it the readout task cannot be partway through the re-arm it is taking over.
             RadioSequence seq(this);
+            edgeRearmMark(EDGE_REARM_TLOCK);
             sent = handleTransmitInterrupt(); // radio already back on the home config
             // Let the hooks pre-stage the radio for the NEXT queued packet. Not required for correctness -
             // TRANSMIT_DELAY_COMPLETED asks again before the scan, which is where the answer is acted on -
             // but it keeps the post-TX listen window on the channel we are about to transmit on.
             (void)RadioTxHooks::beforeTransmit(this, txQueue.getFront());
-            if (!adoptReceiveArmedFromIsr())
+            adopted = adoptReceiveArmedFromIsr();
+            if (!adopted)
                 startReceive();
+            edgeRearmMark(EDGE_REARM_END);
         }
+#if RADIO_EDGE_REARM
+        const bool rearmToLog = edgeRearmStop();
+#else
+        (void)adopted;
+#endif
         setTransmitDelay();
 #if RADIO_EDGE_LOG
         if (sent) {
@@ -884,7 +982,11 @@ void RadioLibInterface::onNotify(uint32_t notification)
                      (unsigned)getPacketTime(sent));
 #if RADIO_EDGE_SEQ
             if (edgeSeqKept && edgeSeqId == sent->id)
-                edgeSeqLog();
+                edgeSeqLog("tx_seq");
+#endif
+#if RADIO_EDGE_REARM
+            if (rearmToLog && edgeRearmId == sent->id)
+                edgeRearmLog(adopted);
 #endif
         }
         edgeCadForTx = false;
@@ -1040,8 +1142,10 @@ void RadioLibInterface::onNotify(uint32_t notification)
                     const bool channelActive = isChannelActive();
 #if RADIO_EDGE_SEQ
                     edgeSeqMark(EDGE_SEQ_SCANNED);
+#if !RADIO_EDGE_REARM
                     if (channelActive)
                         edgeSeqDisarm(false);
+#endif
 #endif
 #if RADIO_EDGE_LOG
                     edgeCadEnd = edgeStampNow();
@@ -1053,6 +1157,11 @@ void RadioLibInterface::onNotify(uint32_t notification)
                         // Beacon target or not: reconfigureForBeaconTX() already left RX running on that
                         // config, so skipping this only ever left the node deaf in standby.
                         rearmReceive();
+#if RADIO_EDGE_REARM
+                        edgeSeqMark(EDGE_SEQ_REARMED);
+                        edgeBusySeqPending = edgeSeqArmed;
+                        edgeSeqDisarm(false);
+#endif
                         setTransmitDelay();
 #if RADIO_EDGE_LOG
                         edgeCadBusyId = txp->id; // logged once the radio-sequence lock is released
@@ -1071,7 +1180,10 @@ void RadioLibInterface::onNotify(uint32_t notification)
                         assert(txp);
 #if RADIO_TXDONE_MODE_CHECK
                         txModeLogDue = false; // a failed launch's check must not be logged against this TX
-                        txModeCheckDue = edgeSeqTxCount % RADIO_EDGE_SEQ_EVERY == 0;
+                        // With RADIO_EDGE_REARM, half a sample period away from the timed TX: its reads would sit inside
+                        // the re-arm being timed
+                        txModeCheckDue =
+                            edgeSeqTxCount % RADIO_EDGE_SEQ_EVERY == (RADIO_EDGE_REARM ? RADIO_EDGE_SEQ_EVERY / 2 : 0);
 #endif
                         startSend(txp);
 #if RADIO_EDGE_SEQ
@@ -1120,6 +1232,12 @@ void RadioLibInterface::onNotify(uint32_t notification)
         LOG_INFO("RadioEdge: cad_busy id=0x%08x cad=" EDGE_FMT " cad_us=%lu", edgeCadBusyId, cad.s, cad.us,
                  edgeSpanUs(edgeCadStart, edgeCadEnd));
         edgeCadBusyId = 0;
+    }
+#endif
+#if RADIO_EDGE_REARM
+    if (edgeBusySeqPending) {
+        edgeBusySeqPending = false;
+        edgeSeqLog("busy_seq");
     }
 #endif
 }
@@ -1820,6 +1938,7 @@ void RadioLibInterface::rxReadoutTaskMain(void *arg)
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
         if (self->rxRearmFromTaskPending) {
             self->rxRearmFromTaskPending = false;
+            edgeRearmMark(EDGE_REARM_WAKE);
             self->rearmReceiveFromTask();
         }
         self->readOutFromTask();

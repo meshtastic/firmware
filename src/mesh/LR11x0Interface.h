@@ -138,6 +138,10 @@ template <class T> class LR11x0Interface : public RadioLibInterface
 #ifdef MESHTASTIC_RX_READOUT_TASK
     bool rearmReceiveFromIsr() override;
     void rearmReceiveFromTask() override;
+#if RADIO_SLIM_REARM
+    /** The readout task's RX re-arm after TX_DONE, as the four commands TX makes necessary, and a status check */
+    int16_t slimRearmRx();
+#endif
     bool adoptReceiveArmedFromIsr() override;
     enum RearmState : uint8_t { REARM_NONE, REARM_PENDING, REARM_ARMED, REARM_FAILED };
     volatile uint8_t rearmState = REARM_NONE;

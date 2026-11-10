@@ -812,17 +812,25 @@ template <typename T> void LR20x0Interface<T>::rearmReceiveFromTask()
 {
     // Outside any radio-thread sequence. If the thread got there first, it took the re-arm over and left nothing to do.
     RadioSequence seq(this);
-    if (rearmState != REARM_PENDING)
+    if (rearmState != REARM_PENDING) {
+        edgeRearmMark(EDGE_REARM_LATE);
         return;
+    }
+    edgeRearmMark(EDGE_REARM_LOCK);
     postTxChecks();
+#if RADIO_SLIM_REARM
+    const int16_t err = slimRearmRx();
+#else
     // What startReceive() sends, less the standby: after TX_DONE the chip has already fallen back to standby.
     int16_t err = lora.setPreambleLength(preambleLength);
     if (err == RADIOLIB_ERR_NONE)
         err =
             lora.startReceive(RADIOLIB_LR2021_RX_TIMEOUT_INF, MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS, RADIOLIB_IRQ_RX_DEFAULT_MASK, 0);
+#endif
     rearmErr = err;
     if (err != RADIOLIB_ERR_NONE) {
         rearmState = REARM_FAILED;
+        edgeRearmMark(EDGE_REARM_ARMED);
         return;
     }
     rearmState = REARM_ARMED;
@@ -831,7 +839,45 @@ template <typename T> void LR20x0Interface<T>::rearmReceiveFromTask()
     // thread runs wakes this task to read it, rather than waiting in the chip for the next frame to overwrite it.
     rxArmedBeforeTxDone = true;
     enableInterrupt(isrRxLevel0);
+    edgeRearmMark(EDGE_REARM_ARMED);
 }
+
+#if RADIO_SLIM_REARM
+template <typename T> int16_t LR20x0Interface<T>::slimRearmRx()
+{
+    // After TX_DONE the chip is in its standby fallback, and TX changed only the IRQ routing and the payload length. The
+    // RadioLib calls this replaces also send two GetPacketType reads (two transactions each), the packet params twice,
+    // and SetRxPath, which re-runs the DC-DC workaround (a register read in two transactions, three writes and
+    // SetRfFrequency): 16 transactions against 5. RadioLib changes neither the RX path nor the DC-DC registers on TX.
+    //     int16_t err = lora.setPreambleLength(preambleLength);
+    //     if (err == RADIOLIB_ERR_NONE)
+    //         err = lora.startReceive(RADIOLIB_LR2021_RX_TIMEOUT_INF, MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS,
+    //                                 RADIOLIB_IRQ_RX_DEFAULT_MASK, 0);
+    const uint32_t irq = lora.getIrqMapped(MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS & RADIOLIB_IRQ_RX_DEFAULT_MASK);
+    const uint8_t dioIrq[5] = {(uint8_t)lora.irqDioNum, (uint8_t)(irq >> 24), (uint8_t)(irq >> 16), (uint8_t)(irq >> 8),
+                               (uint8_t)irq};
+    int16_t res = module.SPIwriteStream((uint16_t)RADIOLIB_LR2021_CMD_SET_DIO_IRQ_CONFIG, dioIrq, sizeof(dioIrq));
+    const uint8_t clearAll[4] = {(uint8_t)(RADIOLIB_LR2021_IRQ_ALL >> 24), (uint8_t)(RADIOLIB_LR2021_IRQ_ALL >> 16),
+                                 (uint8_t)(RADIOLIB_LR2021_IRQ_ALL >> 8), (uint8_t)RADIOLIB_LR2021_IRQ_ALL};
+    if (res == RADIOLIB_ERR_NONE)
+        res = module.SPIwriteStream((uint16_t)RADIOLIB_LR2021_CMD_CLEAR_IRQ, clearAll, sizeof(clearAll));
+    // Fixed for Meshtastic: explicit header, CRC on, IQ standard; the RX payload length is the maximum, as RadioLib's
+    const uint8_t packetParams[4] = {
+        (uint8_t)(preambleLength >> 8), (uint8_t)(preambleLength & 0xFF), (uint8_t)RADIOLIB_LR2021_MAX_PACKET_LENGTH,
+        (uint8_t)(((RADIOLIB_LRXXXX_LORA_HEADER_EXPLICIT & 0x01) << 2) | ((RADIOLIB_LRXXXX_LORA_CRC_ENABLED & 0x01) << 1) |
+                  (RADIOLIB_LR2021_LORA_IQ_STANDARD & 0x01))};
+    if (res == RADIOLIB_ERR_NONE)
+        res = module.SPIwriteStream((uint16_t)RADIOLIB_LR2021_CMD_SET_LORA_PACKET_PARAMS, packetParams, sizeof(packetParams));
+    module.setRfSwitchState(Module::MODE_RX);
+    const uint8_t rxTimeout[3] = {0xFF, 0xFF, 0xFF}; // continuous, as RADIOLIB_LR2021_RX_TIMEOUT_INF
+    if (res == RADIOLIB_ERR_NONE)
+        res = module.SPIwriteStream((uint16_t)RADIOLIB_LR2021_CMD_SET_RX, rxTimeout, sizeof(rxTimeout));
+    // A refused SetRx would show only in the next transfer, and the chip would sit deaf in standby until then
+    if (res == RADIOLIB_ERR_NONE && module.spiConfig.checkStatusCb)
+        res = module.spiConfig.checkStatusCb(&module);
+    return res;
+}
+#endif
 
 template <typename T> bool LR20x0Interface<T>::adoptReceiveArmedFromIsr()
 {
