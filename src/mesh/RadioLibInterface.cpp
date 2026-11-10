@@ -1904,7 +1904,14 @@ void RadioLibInterface::configHardwareForSend()
 
 int16_t RadioLibInterface::launchTransmit(size_t numbytes)
 {
-    return iface->startTransmit((uint8_t *)&radioBuffer, numbytes);
+    int16_t res = iface->startTransmit((uint8_t *)&radioBuffer, numbytes);
+#if !RADIOLIB_SPI_PARANOID
+    // Without paranoid SPI nothing reads SetTx's status (LR11x0/LR20x0 report it on the next transfer), so a refused
+    // SetTx would wait for a TX_DONE that never comes. Chips without checkStatusCb (SX12xx) have nothing to read.
+    if (res == RADIOLIB_ERR_NONE && module.spiConfig.checkStatusCb)
+        res = module.spiConfig.checkStatusCb(&module);
+#endif
+    return res;
 }
 
 void RadioLibInterface::setStandby()
