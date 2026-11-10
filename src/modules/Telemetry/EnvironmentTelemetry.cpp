@@ -448,7 +448,6 @@ int32_t EnvironmentTelemetryModule::runOnce()
 
         if (restoreScheduleAfterSleep(TELEMETRY_SLEEP_SLOT_ENVIRONMENT, schedule))
             LOG_DEBUG("Env: schedule restored after deep sleep");
-        seedLatestFromHistory();
         refreshDisplayedMeasurement();
 
         // it's possible to have this module enabled, only for displaying values on the screen.

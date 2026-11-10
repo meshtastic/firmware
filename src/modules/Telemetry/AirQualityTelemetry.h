@@ -57,6 +57,8 @@ class AirQualityTelemetryModule : private concurrency::OSThread,
         nodeStatusObserver.observe(&nodeStatus->onNewStatus);
         setIntervalFromNow(10 * 1000);
         openHistory(); // safe here: fsInit() and setupSDCard() both run before setupModules()
+        if (history)
+            seedLatestFromHistory(); // a request can arrive before the first runOnce()
         registerForSharedSleep();
     }
 
