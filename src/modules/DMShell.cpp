@@ -126,7 +126,7 @@ uint32_t txWindowFromEnv()
 DMShellModule::DMShellModule()
     : SinglePortModule("DMShellModule", meshtastic_PortNum_REMOTE_SHELL_APP), concurrency::OSThread("DMShell", 100)
 {
-    LOG_WARN("DMShell enabled on Portduino: remote shell access is dangerous and intended for trusted debugging only");
+    LOG_WARN("DMShell enabled: holders of an authorized admin key can open a shell on this host");
     legacyRecovery = legacyRecoveryRequested();
     if (legacyRecovery) {
         LOG_WARN("DMShell: DMSHELL_LEGACY_RECOVERY set, replay-request damping and eviction reporting are OFF");
@@ -473,22 +473,17 @@ bool DMShellModule::parseFrame(const meshtastic_MeshPacket &mp, meshtastic_Remot
     return true;
 }
 
-bool DMShellModule::isAuthorizedPacket(const meshtastic_MeshPacket &mp) const
+bool DMShellModule::isAuthorizedPacket(const meshtastic_MeshPacket &mp)
 {
+    // A local API client sets pki_encrypted and public_key itself, so they prove nothing for
+    // from == 0. The shell is for remote admins only; a client that can reach the API gets none.
     if (mp.from == 0) {
-        return !config.security.is_managed;
+        return false;
     }
 
-    const meshtastic_Channel *ch = &channels.getByIndex(mp.channel);
-    if (strcasecmp(ch->settings.name, Channels::adminChannel) == 0) {
-        return config.security.admin_channel_enabled;
-    }
-
-    if (mp.pki_encrypted) {
-        return AdminKeys::isAuthorized(mp.public_key.bytes);
-    }
-
-    return false;
+    // Admin keys only, not the legacy admin channel: a PKI DM decodes as channel 0, so that check
+    // would let any node with a key in when the primary channel is named "admin".
+    return mp.pki_encrypted && AdminKeys::isAuthorized(mp.public_key.bytes);
 }
 
 bool DMShellModule::openSession(const meshtastic_MeshPacket &mp, const meshtastic_RemoteShell &frame)

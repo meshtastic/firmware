@@ -278,6 +278,9 @@ Security:
 # this file is the authority: a key removed from here loses access, and remote admin cannot drop it.
 #  AdminKeys:
 #    - rvzaPCZmlh1nWnqNKUFHj0dLBJJIRJhRrkZmaFLHCVY=
+# Remote shell over the mesh (DMShell, Linux only). Off by default. When on, any sender holding an
+# authorized admin key can open a shell on this host as the meshtasticd user. API clients cannot.
+#  DMShell: true
 
 Config:
 #  DisplayMode: TWOCOLOR # uncomment to force BaseUI
