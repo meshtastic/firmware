@@ -743,7 +743,7 @@ template <typename T> bool LR11x0Interface<T>::isChannelActive()
 #if LR11X0_CAD_LBT
     lbtSentId = 0;
     lbtSentLen = 0;
-    // Only a packet startSend() will go on to send: nothing after a clear LBT scan can stop it
+    // Only for a packet startSend() will go on to send: nothing after a clear LBT scan can stop it
     if (scanForTx && !disabled && config.lora.tx_enabled)
         return scanThenTransmit(cfg);
 #endif
@@ -769,34 +769,31 @@ template <typename T> bool LR11x0Interface<T>::isChannelActive()
 #if LR11X0_CAD_LBT
 template <typename T> bool LR11x0Interface<T>::scanThenTransmit(ChannelScanConfig_t &cfg)
 {
-    const size_t numbytes = encodeRadioBuffer(scanForTx); // CPU only
     cfg.cad.exitMode = RADIOLIB_LR11X0_CAD_EXIT_MODE_LBT;
     cfg.cad.timeout = 0; // with LBT this is the TX timeout: none, as SetTx
     cfg.cad.irqFlags = cfg.cad.irqMask =
         RADIOLIB_IRQ_CAD_DEFAULT_FLAGS | (1UL << RADIOLIB_IRQ_TX_DONE) | (1UL << RADIOLIB_IRQ_TIMEOUT);
-    RadioModeConfig_t txCfg = {};
-    txCfg.transmit.data = (const uint8_t *)&radioBuffer;
-    txCfg.transmit.len = numbytes;
     if (trySetStandby() != RADIOLIB_ERR_NONE) {
         maybeRecoverChipStateLoss(); // as isChannelActive()
         return false;
     }
-#if LR11X0_CAD_LBT_SLIM
-    (void)txCfg;
-    int16_t result = startLbtScanSlim(cfg, numbytes);
-#else
-    // Packet params and payload first; the scan's standby and IRQ setup leave both in place
-    int16_t result = lora.stageMode(RADIOLIB_RADIO_MODE_TX, &txCfg);
-    if (result == RADIOLIB_ERR_NONE)
-        result = lora.startChannelScan(cfg);
-#endif
+    // After the standby: it can deliver a pending RX, which reads that frame into radioBuffer
+    const size_t numbytes = encodeRadioBuffer(scanForTx); // CPU only
+    // The RadioLib calls startLbtScan() replaces, which send the same commands plus the reads it skips:
+    //     RadioModeConfig_t txCfg = {};
+    //     txCfg.transmit.data = (const uint8_t *)&radioBuffer;
+    //     txCfg.transmit.len = numbytes;
+    //     int16_t result = lora.stageMode(RADIOLIB_RADIO_MODE_TX, &txCfg);
+    //     if (result == RADIOLIB_ERR_NONE)
+    //         result = lora.startChannelScan(cfg);
+    int16_t result = startLbtScan(cfg, numbytes);
     if (result == RADIOLIB_ERR_NONE) {
         // As scanChannel(): wait for the CAD to finish, then read the verdict
         while (!module.hal->digitalRead(module.getIrq()))
             module.hal->yield();
         const uint32_t irq = lora.getIrqStatus();
         if (irq & RADIOLIB_LR11X0_IRQ_CAD_DETECTED) {
-            // The chip went back to STDBY_RC; the caller's rearmReceive() restarts RX
+            // The chip went back to standby; the caller's rearmReceive() restarts RX
             lora.clearIrqFlags(RADIOLIB_LR11X0_IRQ_ALL);
             return true;
         }
@@ -810,38 +807,41 @@ template <typename T> bool LR11x0Interface<T>::scanThenTransmit(ChannelScanConfi
         LOG_WARN("LR11x0 LBT scan ended with IRQ 0x%08lx, sending with SetTx", (unsigned long)irq);
         return false;
     }
-    // Free either way, as isChannelActive(): startSend() sends with SetTx, or fails safely on a dead chip
-    if (result == RADIOLIB_ERR_WRONG_MODEM)
-        maybeRecoverChipStateLoss();
-    else
-        LOG_ERROR("LR11x0 LBT scan %s%d", radioLibErr, result);
+    // Free either way, as isChannelActive(): startSend() sends with SetTx, or fails safely on a dead chip. A refused
+    // command here is what RadioLib's packet-type check would have caught as WRONG_MODEM: a chip that lost its state.
+    LOG_ERROR("LR11x0 LBT scan %s%d", radioLibErr, result);
+    maybeRecoverChipStateLoss();
     return false;
 }
 
-#if LR11X0_CAD_LBT_SLIM
-template <typename T> int16_t LR11x0Interface<T>::startLbtScanSlim(const ChannelScanConfig_t &cfg, size_t numbytes)
+template <typename T> int16_t LR11x0Interface<T>::startLbtScan(const ChannelScanConfig_t &cfg, size_t numbytes)
 {
-    // The bytes RadioLib's stageMode(TX), startChannelScan() and startCad() send for a LoRa packet, in its order, with
-    // one IRQ clear for both and the CAD defaults resolved as startCad() does
-    uint8_t packetParams[6] = {(uint8_t)(preambleLength >> 8),       (uint8_t)(preambleLength & 0xFF),
-                               RADIOLIB_LRXXXX_LORA_HEADER_EXPLICIT, (uint8_t)numbytes,
-                               RADIOLIB_LRXXXX_LORA_CRC_ENABLED,     RADIOLIB_LR11X0_LORA_IQ_STANDARD};
-    int16_t res = module.SPIwriteStream(RADIOLIB_LR11X0_CMD_SET_PACKET_PARAMS, packetParams, sizeof(packetParams), true, false);
+    // RadioLib's stageMode(TX) and startChannelScan() send these six commands, plus three GetPacketType reads (two SPI
+    // transactions each), a second SetDioIrqParams and ClearIrq, and a standby the caller has just done: 13
+    // transactions against 7 here. Each one costs host time whatever its length (lock, transfer, BUSY wait), so on the
+    // ThinkNode M9 (ESP32-S3) this cut the scan setup from 3.9 to 2.1 ms. The packet-type check those reads made is
+    // kept by the status check below: a chip that lost its LoRa state refuses these commands.
+    // Fixed for Meshtastic: LoRa, explicit header, CRC on, IQ standard, as programModemParams() sets them.
+    const uint8_t packetParams[6] = {(uint8_t)(preambleLength >> 8),       (uint8_t)(preambleLength & 0xFF),
+                                     RADIOLIB_LRXXXX_LORA_HEADER_EXPLICIT, (uint8_t)numbytes,
+                                     RADIOLIB_LRXXXX_LORA_CRC_ENABLED,     RADIOLIB_LR11X0_LORA_IQ_STANDARD};
+    int16_t res = module.SPIwriteStream(RADIOLIB_LR11X0_CMD_SET_PACKET_PARAMS, packetParams, sizeof(packetParams));
     if (res == RADIOLIB_ERR_NONE)
-        res = module.SPIwriteStream(RADIOLIB_LR11X0_CMD_WRITE_BUFFER, (uint8_t *)&radioBuffer, numbytes, true, false);
+        res = module.SPIwriteStream(RADIOLIB_LR11X0_CMD_WRITE_BUFFER, (const uint8_t *)&radioBuffer, numbytes);
     module.setRfSwitchState(Module::MODE_RX);
     const uint32_t irq = lora.getIrqMapped(cfg.cad.irqFlags);
-    uint8_t dioIrq[8] = {(uint8_t)(irq >> 24), (uint8_t)(irq >> 16), (uint8_t)(irq >> 8), (uint8_t)irq,
-                         (uint8_t)(irq >> 24), (uint8_t)(irq >> 16), (uint8_t)(irq >> 8), (uint8_t)irq};
+    const uint8_t dioIrq[8] = {(uint8_t)(irq >> 24), (uint8_t)(irq >> 16), (uint8_t)(irq >> 8), (uint8_t)irq,
+                               (uint8_t)(irq >> 24), (uint8_t)(irq >> 16), (uint8_t)(irq >> 8), (uint8_t)irq};
     if (res == RADIOLIB_ERR_NONE)
-        res = module.SPIwriteStream(RADIOLIB_LR11X0_CMD_SET_DIO_IRQ_PARAMS, dioIrq, sizeof(dioIrq), true, false);
-    uint8_t clearAll[4] = {(uint8_t)(RADIOLIB_LR11X0_IRQ_ALL >> 24), (uint8_t)(RADIOLIB_LR11X0_IRQ_ALL >> 16),
-                           (uint8_t)(RADIOLIB_LR11X0_IRQ_ALL >> 8), (uint8_t)RADIOLIB_LR11X0_IRQ_ALL};
+        res = module.SPIwriteStream(RADIOLIB_LR11X0_CMD_SET_DIO_IRQ_PARAMS, dioIrq, sizeof(dioIrq));
+    const uint8_t clearAll[4] = {(uint8_t)(RADIOLIB_LR11X0_IRQ_ALL >> 24), (uint8_t)(RADIOLIB_LR11X0_IRQ_ALL >> 16),
+                                 (uint8_t)(RADIOLIB_LR11X0_IRQ_ALL >> 8), (uint8_t)RADIOLIB_LR11X0_IRQ_ALL};
     if (res == RADIOLIB_ERR_NONE)
-        res = module.SPIwriteStream(RADIOLIB_LR11X0_CMD_CLEAR_IRQ, clearAll, sizeof(clearAll), true, false);
-    static const uint8_t detPeakBySf[8] = {48, 48, 50, 55, 55, 59, 61, 65}; // startCad()'s defaults, SF5..SF12
+        res = module.SPIwriteStream(RADIOLIB_LR11X0_CMD_CLEAR_IRQ, clearAll, sizeof(clearAll));
+    // startCad()'s defaults for any parameter left at RADIOLIB_LR11X0_CAD_PARAM_DEFAULT
+    static const uint8_t detPeakBySf[8] = {48, 48, 50, 55, 55, 59, 61, 65};
     const uint32_t timeoutRaw = (uint32_t)((float)cfg.cad.timeout / 30.52f);
-    uint8_t cadParams[7] = {
+    const uint8_t cadParams[7] = {
         cfg.cad.symNum != RADIOLIB_LR11X0_CAD_PARAM_DEFAULT ? cfg.cad.symNum : (uint8_t)2,
         cfg.cad.detPeak != RADIOLIB_LR11X0_CAD_PARAM_DEFAULT ? cfg.cad.detPeak : detPeakBySf[(sf >= 5 && sf <= 12) ? sf - 5 : 4],
         cfg.cad.detMin != RADIOLIB_LR11X0_CAD_PARAM_DEFAULT ? cfg.cad.detMin : (uint8_t)10,
@@ -850,19 +850,28 @@ template <typename T> int16_t LR11x0Interface<T>::startLbtScanSlim(const Channel
         (uint8_t)(timeoutRaw >> 8),
         (uint8_t)timeoutRaw};
     if (res == RADIOLIB_ERR_NONE)
-        res = module.SPIwriteStream(RADIOLIB_LR11X0_CMD_SET_CAD_PARAMS, cadParams, sizeof(cadParams), true, false);
+        res = module.SPIwriteStream(RADIOLIB_LR11X0_CMD_SET_CAD_PARAMS, cadParams, sizeof(cadParams));
     if (res == RADIOLIB_ERR_NONE)
-        res = module.SPIwriteStream(RADIOLIB_LR11X0_CMD_SET_CAD, NULL, 0, true, false);
+        res = module.SPIwriteStream(RADIOLIB_LR11X0_CMD_SET_CAD, NULL, 0);
+    // A refused SetCad would show only in the next transfer, and the caller would wait on an IRQ that never comes
+    if (res == RADIOLIB_ERR_NONE && module.spiConfig.checkStatusCb)
+        res = module.spiConfig.checkStatusCb(&module);
     return res;
 }
-#endif
 
 template <typename T> int16_t LR11x0Interface<T>::launchTransmit(size_t numbytes)
 {
     const bool onAir = lbtSentId && sendingPacket && sendingPacket->id == lbtSentId && lbtSentLen == numbytes;
     lbtSentId = 0;
     lbtSentLen = 0;
-    return onAir ? RADIOLIB_ERR_NONE : RadioLibInterface::launchTransmit(numbytes);
+    if (!onAir)
+        return RadioLibInterface::launchTransmit(numbytes);
+    // The scan started this TX, so TX_DONE can come before startSend() arms the ISR. Arm it here and catch a TX_DONE
+    // that already raised the pin: the ISR is edge-triggered and would never see it.
+    enableInterrupt(isrTxLevel0);
+    if (module.hal->digitalRead(module.getIrq()))
+        deliverPendingIrqFromPoll(ISR_TX);
+    return RADIOLIB_ERR_NONE;
 }
 #endif
 

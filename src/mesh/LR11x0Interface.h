@@ -2,22 +2,18 @@
 #if RADIOLIB_EXCLUDE_LR11X0 != 1
 #include "RadioLibInterface.h"
 
-// Bench (r148f): the pre-TX CAD exits straight to TX when clear (CadExitMode LBT), with the payload written before it,
-// instead of a verdict read and a separate SetTx. A busy scan then leaves the chip in STDBY_RC, with no CAD->RX handoff.
-// The chip must drive its own RF switch, as it keys up with no host call. Guards a virtual override: set it per build.
+// The pre-TX CAD exits straight to TX when the channel is clear (CAD exit mode LBT), with the payload written before
+// it, instead of a verdict read and a separate SetTx. The chip keys up with no host call, so it must drive its own RF
+// switch. A busy scan leaves the chip in standby, with no CAD->RX handoff; the caller restarts RX.
 #ifndef LR11X0_CAD_LBT
+#ifdef LR11X0_DIO_AS_RF_SWITCH
+#define LR11X0_CAD_LBT 1
+#else
 #define LR11X0_CAD_LBT 0
+#endif
 #endif
 #if LR11X0_CAD_LBT && !defined(LR11X0_DIO_AS_RF_SWITCH)
 #error "LR11X0_CAD_LBT needs the chip's DIOs on the RF switch"
-#endif
-// Bench (r148g), with LR11X0_CAD_LBT: the LBT scan's staging and CAD start as raw commands, without RadioLib's three
-// GetPacketType reads (0x0202) and its second standby. It also drops their check that the chip is still in LoRa.
-#ifndef LR11X0_CAD_LBT_SLIM
-#define LR11X0_CAD_LBT_SLIM 0
-#endif
-#if LR11X0_CAD_LBT_SLIM && !LR11X0_CAD_LBT
-#error "LR11X0_CAD_LBT_SLIM trims the LR11X0_CAD_LBT scan"
 #endif
 
 // After TX_DONE the LR11x0 waits in standby for the radio thread to restart RX, which a main-loop hold can stretch by
@@ -82,17 +78,15 @@ template <class T> class LR11x0Interface : public RadioLibInterface
     virtual bool isChannelActive() override;
 
 #if LR11X0_CAD_LBT
-    /// No SetTx for the packet a clear LBT scan has already put on air
+    /** No SetTx for the packet a clear LBT scan has already put on air */
     int16_t launchTransmit(size_t numbytes) override;
-    /// Id and length of the packet a clear LBT scan put on air, or 0
+    /** Id and length of the packet a clear LBT scan put on air, or 0 */
     uint32_t lbtSentId = 0;
     size_t lbtSentLen = 0;
-    /// The LBT scan: true if the channel is busy; a clear one has keyed the chip up with scanForTx unless it fails
+    /** The LBT scan: true if the channel is busy; a clear one has put scanForTx on air unless the scan failed */
     bool scanThenTransmit(ChannelScanConfig_t &cfg);
-#if LR11X0_CAD_LBT_SLIM
-    /// stageMode(TX) and startChannelScan(cfg) for the LBT scan, in six commands; the chip is already in standby
-    int16_t startLbtScanSlim(const ChannelScanConfig_t &cfg, size_t numbytes);
-#endif
+    /** stageMode(TX) and startChannelScan(cfg) for the LBT scan, as raw commands; the chip must be in standby */
+    int16_t startLbtScan(const ChannelScanConfig_t &cfg, size_t numbytes);
 #endif
     /** After TX_DONE, before RX is re-armed: on a sampled TX, read the chip's mode and errors */
     void postTxChecks();
