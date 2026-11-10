@@ -42,19 +42,22 @@ void initVariant()
 // Here rather than initVariant(), whose delay() would run before the scheduler. No LOG_* yet.
 void earlyInitVariant()
 {
-    // L76K boards leave P1.02 floating, and it floats high, so read it against the internal pull-down.
-    pinMode(PIN_GPS_VERSION, INPUT_PULLDOWN);
+    // No internal pull: either one would swamp the AG3352 board's 100K pull-down or the L76K's weak pull-up.
+    pinMode(PIN_GPS_VERSION, INPUT);
     delay(2);
     uint8_t high = 0;
     for (uint8_t i = 0; i < 10; i++)
         high += digitalRead(PIN_GPS_VERSION) == HIGH;
-    m1HasAg3352 = high >= 3;
-    pinMode(PIN_GPS_VERSION, INPUT); // release the pull-down; GPS.cpp drives the pin later on L76K boards
+    m1HasAg3352 = high < 3;
 
 #if !MESHTASTIC_EXCLUDE_GPS
     if (m1HasAg3352) {
         pinMode(GPS_SLEEP_INT, OUTPUT);
         digitalWrite(GPS_SLEEP_INT, HIGH);
+        // The core supply must be up before the reset, or the GPS boots and then stalls without it.
+        pinMode(PIN_GPS_EN, OUTPUT);
+        digitalWrite(PIN_GPS_EN, HIGH);
+        delay(50);
         // The AG3352 stays powered across an MCU reset and may still be in backup mode; only RESETB ends that.
         pinMode(PIN_GPS_RESET, OUTPUT);
         digitalWrite(PIN_GPS_RESET, HIGH); // asserts RESETB through Q16
@@ -73,6 +76,8 @@ void variant_shutdown()
 {
 #if !MESHTASTIC_EXCLUDE_GPS
     if (m1HasAg3352) {
+        pinMode(PIN_GPS_EN, OUTPUT);
+        digitalWrite(PIN_GPS_EN, LOW);     // core supply off; the 1.8 V rail keeps the GPS in backup mode
         digitalWrite(GPS_SLEEP_INT, HIGH); // idle_int must stay high through System OFF or the GPS never idles
         pinMode(PIN_GPS_RESET, OUTPUT);
         digitalWrite(PIN_GPS_RESET, LOW); // releases RESETB through Q16; a floating base could hold it asserted
@@ -85,7 +90,7 @@ void variant_shutdown()
             continue;
         }
 #if !MESHTASTIC_EXCLUDE_GPS
-        if (m1HasAg3352 && (pin == GPS_SLEEP_INT || pin == PIN_GPS_RESET))
+        if (m1HasAg3352 && (pin == GPS_SLEEP_INT || pin == PIN_GPS_RESET || pin == PIN_GPS_EN))
             continue;
 #endif
         pinMode(pin, OUTPUT);
