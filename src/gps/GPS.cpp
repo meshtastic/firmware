@@ -316,13 +316,18 @@ static const char *getGPSPowerStateString(GPSPowerState state)
 // If we have a hardware switch, define a periodic watcher outside of the GPS runOnce thread, since this can be sleeping
 // indefinitely
 
+#ifndef GPS_SWITCH_ON_LEVEL
+#define GPS_SWITCH_ON_LEVEL HIGH
+#endif
+
 int lastState = LOW;
 bool firstrun = true;
 
 static int32_t gpsSwitch()
 {
     if (gps) {
-        int currentState = digitalRead(PIN_GPS_SWITCH);
+        // HIGH below means switched on, whatever level the board's switch uses for that.
+        int currentState = digitalRead(PIN_GPS_SWITCH) == GPS_SWITCH_ON_LEVEL ? HIGH : LOW;
 
         // Respect explicit NOT_PRESENT mode and do not let the hardware switch re-enable GPS.
         if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT) {
