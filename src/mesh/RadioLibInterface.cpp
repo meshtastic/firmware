@@ -339,6 +339,11 @@ RadioLibInterface::RadioLibInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE c
 #endif
     LOG_INFO("r148g: sx126x_tcxo_short_us=%d lr11x0_lbt_slim=%d txdone_mode_check=%d spi_paranoid=%d", tcxoShortUs, lbtSlim,
              RADIO_TXDONE_MODE_CHECK, RADIOLIB_SPI_PARANOID);
+#if defined(SX126X_CAD_TCXO_RESTORE)
+    LOG_INFO("r148h: sx126x_tcxo_restore=%d", SX126X_CAD_TCXO_RESTORE);
+#else
+    LOG_INFO("r148h: sx126x_tcxo_restore=1");
+#endif
 #endif
 #if RADIO_SPI_BULK && !ARCH_PORTDUINO
     LOG_INFO("RADIO_SPI_BULK: one SPI transfer per radio command");

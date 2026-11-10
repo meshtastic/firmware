@@ -523,6 +523,10 @@ template <typename T> void SX126xInterface<T>::startReceive()
     auto tryStartRx = [&]() -> int16_t { return startRxCommand(); };
 
     int16_t err = trySetStandby();
+#if SX126X_CAD_TCXO_SHORT_US
+    if (err == RADIOLIB_ERR_NONE)
+        restoreTcxoWaitInRc(); // before this RX start's TCXO start
+#endif
     if (err == RADIOLIB_ERR_NONE)
         err = tryStartRx();
 
@@ -728,7 +732,7 @@ template <typename T> void SX126xInterface<T>::postTxChecks()
     if (check)
         txDoneMode = readStatusByte();
 #endif
-#if SX126X_CAD_TCXO_SHORT_US
+#if SX126X_CAD_TCXO_SHORT_US && SX126X_CAD_TCXO_RESTORE == 1
     if (tcxoShortActive) {
         tcxoShortActive = false;
         (void)module.SPIwriteStream(RADIOLIB_SX126X_CMD_SET_DIO3_AS_TCXO_CTRL, tcxoCtrlFull, sizeof(tcxoCtrlFull), true, false);
@@ -763,6 +767,18 @@ template <typename T> uint8_t SX126xInterface<T>::readStatusByte()
 #endif
 
 #if SX126X_CAD_TCXO_SHORT_US
+template <typename T> void SX126xInterface<T>::restoreTcxoWaitInRc()
+{
+#if SX126X_CAD_TCXO_RESTORE == 2
+    if (!tcxoShortActive)
+        return;
+    tcxoShortActive = false;
+    const int16_t err = module.SPIwriteStream(RADIOLIB_SX126X_CMD_SET_DIO3_AS_TCXO_CTRL, tcxoCtrlFull, sizeof(tcxoCtrlFull));
+    if (err != RADIOLIB_ERR_NONE)
+        LOG_WARN("r148h: TCXO wait restore %s%d", radioLibErr, err);
+#endif
+}
+
 template <typename T> bool SX126xInterface<T>::buildTcxoCtrl(float vref)
 {
     // RadioLib's setTCXO() Vref table; the wait counts 15.625 us steps, rounded here
@@ -796,6 +812,9 @@ template <typename T> bool SX126xInterface<T>::buildTcxoCtrl(float vref)
 
 template <typename T> int16_t SX126xInterface<T>::scanChannelForTx(const ChannelScanConfig_t &cfg)
 {
+#if SX126X_CAD_TCXO_SHORT_US
+    restoreTcxoWaitInRc(); // trySetStandby() has just put the chip in STDBY_RC
+#endif
     if (!irqPolledOverUsb()) {
 #if SX126X_CAD_XOSC_AT_DONE
         // lora.scanChannel(cfg), less the verdict's packet-type read, and a clear verdict starts the TCXO at once

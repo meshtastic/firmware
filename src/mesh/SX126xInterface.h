@@ -17,6 +17,11 @@
 #if SX126X_CAD_TCXO_SHORT_US && !SX126X_CAD_XOSC_AT_DONE
 #error "SX126X_CAD_TCXO_SHORT_US shortens the TCXO start that SX126X_CAD_XOSC_AT_DONE makes"
 #endif
+// Bench (r148h): where the full TCXO wait goes back after a short one. 1: after TX_DONE, with the chip in STDBY_XOSC
+// (r148g). 2: in STDBY_RC, at the next pre-TX scan or RX start. 0: never (for a short wait equal to the full one).
+#ifndef SX126X_CAD_TCXO_RESTORE
+#define SX126X_CAD_TCXO_RESTORE 1
+#endif
 
 // After TX_DONE the SX126x waits in standby for the radio thread to restart RX, which a main-loop hold can stretch by
 // hundreds of ms. With the readout task, the TX_DONE interrupt has the task restart it instead, on every platform the
@@ -182,6 +187,8 @@ template <class T> class SX126xInterface : public RadioLibInterface
     /** The short wait is set on the chip and postTxChecks() has not restored the full one yet */
     bool tcxoShortActive = false;
     bool buildTcxoCtrl(float vref);
+    /** SX126X_CAD_TCXO_RESTORE 2: write the full wait back if the short one is set; the chip must be in STDBY_RC */
+    void restoreTcxoWaitInRc();
 #endif
 
     /** Program all modem parameters into the chip; returns the first RadioLib error, or RADIOLIB_ERR_NONE */
