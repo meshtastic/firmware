@@ -44,8 +44,8 @@ class RecordingHal : public RadioLibHal
     std::vector<std::vector<uint8_t>> transactions;
     std::vector<Reply> replies;
 
-    // SX127x mode: no status byte, and RADIOLIB_SPI_PARANOID reads every register write back, so
-    // writes are stored and reads answered from the store.
+    // SX127x mode: no status byte, and with RADIOLIB_SPI_PARANOID RadioLib reads every register write
+    // back, so writes are stored and reads answered from the store.
     bool registerEcho = false;
     uint8_t registers[128] = {};
 
@@ -55,7 +55,8 @@ class RecordingHal : public RadioLibHal
     }
 
     // Chip model: a command matching `prefix` whose bytes `accepts` refuses gets `status` in the first
-    // byte of the next transaction, where LRxxxx paranoid SPI reads a verified write's status.
+    // byte of the next transaction, where an LRxxxx reports it: paranoid SPI's status read, or else the
+    // next command's own status byte (see SENT_AFTER_REFUSAL).
     using Accepts = std::function<bool(const std::vector<uint8_t> &)>;
     void rejectUnless(std::vector<uint8_t> prefix, Accepts accepts, uint8_t status)
     {
@@ -171,6 +172,11 @@ class RecordingHal : public RadioLibHal
         }
     }
 };
+
+// How many times an LRxxxx command following a refused one reaches the chip. Paranoid SPI reads the
+// status after every write and stops at the refusal. Without it (the shipped config) the refusal comes
+// back in the next command's own status byte, after that command has gone out.
+static constexpr uint32_t SENT_AFTER_REFUSAL = RADIOLIB_SPI_PARANOID ? 0 : 1;
 
 // Big-endian opcode bytes, for the 16-bit LRxxxx command set.
 inline std::vector<uint8_t> op16(uint16_t opcode)
