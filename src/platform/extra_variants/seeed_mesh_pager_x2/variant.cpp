@@ -7,41 +7,22 @@
 #include "DebugConfiguration.h"
 #include <Wire.h>
 #include <driver/gpio.h>
+#ifdef X2_POWER_KEY_UI
+bool x2BaseScreenOn();
+void x2RequestChargeMode();
+#endif
 
 // PowerButton.cpp; kept apart because firmware headers and AudioBoard.h both define GpioPin.
 void startPowerButtonMonitor();
 
 namespace
 {
+using namespace meshpager_x2;
 
 // TCA6424 register map
 constexpr uint8_t TCA6424_INPUT_PORT0 = 0x00;
 constexpr uint8_t TCA6424_OUTPUT_PORT0 = 0x04;
 constexpr uint8_t TCA6424_CONFIG_PORT0 = 0x0C;
-
-constexpr uint8_t EXP_PIN_BUTTON_UP = 0;
-constexpr uint8_t EXP_PIN_BUTTON_DOWN = 1;
-constexpr uint8_t EXP_PIN_BUTTON_LEFT = 2;
-constexpr uint8_t EXP_PIN_BUTTON_RIGHT = 3;
-constexpr uint8_t EXP_PIN_BUTTON_CONFIRM = 4;
-constexpr uint8_t EXP_PIN_BUTTON_RETURN = 5;
-constexpr uint8_t EXP_PIN_BUTTON_PWR = 6;
-constexpr uint8_t EXP_PIN_SD_DETECT = 7;
-constexpr uint8_t EXP_PIN_GNSS_RTC_INT = 8;
-constexpr uint8_t EXP_PIN_GNSS_SLEEP_INT = 9;
-constexpr uint8_t EXP_PIN_IMU_INT1 = 10;
-
-constexpr uint8_t EXP_PIN_SEN_EN = 12;
-constexpr uint8_t EXP_PIN_SD_PWR_EN = 13;
-constexpr uint8_t EXP_PIN_LCD_PWR_EN = 14;
-constexpr uint8_t EXP_PIN_GNSS_VRTC_EN = 15;
-constexpr uint8_t EXP_PIN_GNSS_PWR_EN = 16;
-constexpr uint8_t EXP_PIN_BAT_ADC_EN = 17;
-constexpr uint8_t EXP_PIN_PA_PWR_EN = 18;
-constexpr uint8_t EXP_PIN_PWR_HOLD = 20;
-constexpr uint8_t EXP_PIN_LCD_RST = 21;
-constexpr uint8_t EXP_PIN_LORA_RESET = 22;
-constexpr uint8_t EXP_PIN_GNSS_RST = 23;
 
 class Tca6424
 {
@@ -163,6 +144,15 @@ bool readKeypadState(uint8_t &pressedKeys)
     if (digitalRead(INPUTDRIVER_DIRECTIONALPAD_RETURN_GPIO) == LOW)
         pressedKeys |= 1U << EXP_PIN_BUTTON_RETURN;
 #endif
+#ifdef X2_POWER_KEY_UI
+    static bool waitingForRelease = false;
+    if (!x2BaseScreenOn())
+        waitingForRelease = true;
+    if (waitingForRelease) {
+        waitingForRelease = pressedKeys != 0;
+        pressedKeys = 0;
+    }
+#endif
     return true;
 }
 
@@ -225,6 +215,12 @@ void earlyInitVariant()
     }
     expanderInitialized = true;
 
+#ifdef X2_POWER_KEY_UI
+    if (x2ChargeModeRequested()) {
+        if (configureInput(EXP_PIN_BUTTON_PWR))
+            x2RunChargeMode([](uint8_t port, uint8_t &value) { return ioExpander.readInputPort(port, value); }, configureOutput);
+    }
+#endif
     bool ok = configureOutput(EXP_PIN_PWR_HOLD, true);
 
     // Buttons + SD detect + IMU interrupt are inputs.
@@ -381,5 +377,21 @@ void variant_shutdown()
     pinMode(I2C_SDA, ANALOG);
     pinMode(I2C_SCL, ANALOG);
 }
+
+#ifdef X2_POWER_KEY_UI
+void x2PowerOff()
+{
+    if (!expanderInitialized)
+        return;
+    Wire.begin(I2C_SDA, I2C_SCL);
+    if (!writeExpanderPin(EXP_PIN_PWR_HOLD, false)) {
+        LOG_WARN("X2 power latch release failed");
+        Wire.end();
+        return;
+    }
+    delay(50);
+    x2RequestChargeMode();
+}
+#endif
 
 #endif
