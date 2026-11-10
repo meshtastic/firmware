@@ -151,7 +151,7 @@ class AccelerometerThread : public concurrency::OSThread
             sensor.reset(new QMA6100PSensor(device));
             break;
 #endif
-#if __has_include(<SensorQMI8658.hpp>)
+#if __has_include(<ImuDrv.hpp>)
         case ScanI2C::DeviceType::QMI8658:
             sensor.reset(new QMI8658Sensor(device));
             break;
