@@ -123,6 +123,7 @@ template <typename T> bool LR20x0Interface<T>::init()
 #endif
 
     RadioLibInterface::init();
+    LOG_INFO("r148i: lr2021_cad_lbt=%d", LR2021_CAD_LBT); // bench: which arm is flashed
 
 #ifdef LR2021_IRQ_DIO_NUM
     lora.irqDioNum = LR2021_IRQ_DIO_NUM;
