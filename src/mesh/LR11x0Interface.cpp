@@ -742,7 +742,6 @@ template <typename T> bool LR11x0Interface<T>::isChannelActive()
 #if LR11X0_CAD_LBT
 template <typename T> bool LR11x0Interface<T>::scanThenTransmit(ChannelScanConfig_t &cfg)
 {
-    const size_t numbytes = encodeRadioBuffer(scanForTx); // CPU only
     cfg.cad.exitMode = RADIOLIB_LR11X0_CAD_EXIT_MODE_LBT;
     cfg.cad.timeout = 0; // with LBT this is the TX timeout: none, as SetTx
     cfg.cad.irqFlags = cfg.cad.irqMask =
@@ -751,6 +750,8 @@ template <typename T> bool LR11x0Interface<T>::scanThenTransmit(ChannelScanConfi
         maybeRecoverChipStateLoss(); // as isChannelActive()
         return false;
     }
+    // After the standby: it can deliver a pending RX, which reads that frame into radioBuffer
+    const size_t numbytes = encodeRadioBuffer(scanForTx); // CPU only
     // The RadioLib calls startLbtScan() replaces, which send the same commands plus the reads it skips:
     //     RadioModeConfig_t txCfg = {};
     //     txCfg.transmit.data = (const uint8_t *)&radioBuffer;
@@ -836,7 +837,14 @@ template <typename T> int16_t LR11x0Interface<T>::launchTransmit(size_t numbytes
     const bool onAir = lbtSentId && sendingPacket && sendingPacket->id == lbtSentId && lbtSentLen == numbytes;
     lbtSentId = 0;
     lbtSentLen = 0;
-    return onAir ? RADIOLIB_ERR_NONE : RadioLibInterface::launchTransmit(numbytes);
+    if (!onAir)
+        return RadioLibInterface::launchTransmit(numbytes);
+    // The scan started this TX, so TX_DONE can come before startSend() arms the ISR. Arm it here and catch a TX_DONE
+    // that already raised the pin: the ISR is edge-triggered and would never see it.
+    enableInterrupt(isrTxLevel0);
+    if (module.hal->digitalRead(module.getIrq()))
+        deliverPendingIrqFromPoll(ISR_TX);
+    return RADIOLIB_ERR_NONE;
 }
 #endif
 
