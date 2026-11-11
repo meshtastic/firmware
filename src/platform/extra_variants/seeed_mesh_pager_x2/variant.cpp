@@ -141,10 +141,10 @@ bool writeExpanderPin(uint8_t pin, bool level)
     return false;
 }
 
-constexpr uint32_t AUDIO_AMP_GRACE_MS = 2000;    // keeps the amp warm between back-to-back tones
-constexpr uint32_t AUDIO_AMP_POWER_UP_MS = 600;  // amp rail + NS4150B start-up from a cold amp
-constexpr uint32_t CODEC_IDLE_MS = 30000;        // awake idle time before the ES8311 powers down
-constexpr uint32_t CODEC_BOOT_SETTLE_MS = 2000;  // the first frames after a codec init are swallowed
+constexpr uint32_t AUDIO_AMP_GRACE_MS = 2000;   // keeps the amp warm between back-to-back tones
+constexpr uint32_t AUDIO_AMP_POWER_UP_MS = 600; // amp rail + NS4150B start-up from a cold amp
+constexpr uint32_t CODEC_IDLE_MS = 30000;       // awake idle time before the ES8311 powers down
+constexpr uint32_t CODEC_BOOT_SETTLE_MS = 2000; // the first frames after a codec init are swallowed
 constexpr uint32_t CODEC_WAKE_SETTLE_MS = 500;
 constexpr uint32_t AUDIO_POWER_POLL_MS = 100;
 
@@ -210,7 +210,8 @@ void codecPowerDown()
         return;
     }
     codecSuspended = true;
-    // The codec init leaves the I2S clocks high, feeding the powered-down codec; after a playback the I2S teardown leaves them low.
+    // The codec init leaves the I2S clocks high, feeding the powered-down codec; after a playback the I2S teardown leaves them
+    // low.
     if (!audioPlayedOnce) {
         pinMode(DAC_I2S_MCLK, INPUT_PULLDOWN);
         pinMode(DAC_I2S_BCK, INPUT_PULLDOWN);

@@ -82,11 +82,11 @@ class PowerButtonThread : public concurrency::OSThread
 #endif
             pressedSinceMs = 0;
         }
-    #ifdef X2_POWER_KEY_UI
+#ifdef X2_POWER_KEY_UI
         return 10;
-    #else
+#else
         return 100;
-    #endif
+#endif
     }
 
   private:
@@ -111,10 +111,7 @@ class PowerButtonThread : public concurrency::OSThread
     uint32_t pressedSinceMs = 0;
     uint32_t lastLeadUpNoteMs = 0;
 #ifdef X2_POWER_KEY_UI
-    int preflight(void *deepSleep)
-    {
-        return !deepSleep && digitalRead(BUTTON_PIN) == HIGH ? 1 : 0;
-    }
+    int preflight(void *deepSleep) { return !deepSleep && digitalRead(BUTTON_PIN) == HIGH ? 1 : 0; }
 
     int afterSleep(esp_sleep_wakeup_cause_t)
     {

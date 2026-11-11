@@ -1,9 +1,9 @@
 #if defined(SEEED_MESHPAGER_X2) && defined(X2_POWER_KEY_UI)
 
-#include "variant.h"
 #include "Arduino.h"
 #include "graphics/LGFX/LGFX_GENERIC.h"
 #include "mesh/Throttle.h"
+#include "variant.h"
 #include <driver/gpio.h>
 #include <esp_attr.h>
 #include <esp_sleep.h>
@@ -80,8 +80,8 @@ bool x2ChargeModeRequested()
 void x2RunChargeMode(bool (*readPort)(uint8_t, uint8_t &), bool (*drivePin)(uint8_t, bool))
 {
     bool ready = true;
-    for (uint8_t pin : {EXP_PIN_GNSS_SLEEP_INT, EXP_PIN_SEN_EN, EXP_PIN_SD_PWR_EN, EXP_PIN_GNSS_VRTC_EN,
-                        EXP_PIN_GNSS_PWR_EN, EXP_PIN_PA_PWR_EN, EXP_PIN_LORA_RESET})
+    for (uint8_t pin : {EXP_PIN_GNSS_SLEEP_INT, EXP_PIN_SEN_EN, EXP_PIN_SD_PWR_EN, EXP_PIN_GNSS_VRTC_EN, EXP_PIN_GNSS_PWR_EN,
+                        EXP_PIN_PA_PWR_EN, EXP_PIN_LORA_RESET})
         ready &= drivePin(pin, false);
     ready &= drivePin(EXP_PIN_BUTTON_RETURN, false);
     ready &= drivePin(EXP_PIN_BAT_ADC_EN, true);

@@ -29,7 +29,7 @@ constexpr uint8_t EXP_PIN_PWR_HOLD = 20;
 constexpr uint8_t EXP_PIN_LCD_RST = 21;
 constexpr uint8_t EXP_PIN_LORA_RESET = 22;
 constexpr uint8_t EXP_PIN_GNSS_RST = 23;
-}
+} // namespace meshpager_x2
 bool readKeypadState(uint8_t &pressedKeys);
 void x2AudioAmpSet(bool on);
 uint32_t x2TakeCodecLeadInMs();
