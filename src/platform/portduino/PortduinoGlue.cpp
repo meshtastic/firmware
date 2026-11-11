@@ -1697,6 +1697,19 @@ int spiHostFromDevicePath(const std::string &devicePath)
     return (int)(bus | (device << 4));
 }
 
+#ifndef ARCH_PORTDUINO_WASM
+extern "C" bool lgfx_borrow_spiclass(int spi_host, SPIClass *&spi)
+{
+    if (spi_host < 0)
+        return false;
+    HardwareSPI *instance = HardwareSPI::getInstance((int8_t)spi_host);
+    // Opens /dev/spidev<bus>.<device> on first use; later calls keep the open device.
+    instance->begin();
+    spi = instance;
+    return true;
+}
+#endif
+
 bool MAC_from_string(std::string mac_str, uint8_t *dmac)
 {
     mac_str.erase(std::remove(mac_str.begin(), mac_str.end(), ':'), mac_str.end());

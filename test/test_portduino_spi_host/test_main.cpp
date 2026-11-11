@@ -10,8 +10,9 @@
 //
 // It also pins the framework's per-host registry contract: host 0 is the global
 // SPI object, other hosts get a stable cached instance, and a negative host is
-// refused. That registry is what LovyanGFX reaches through the weak external
-// lgfx_get_spi_instance() hook.
+// refused. LovyanGFX reaches that registry through lgfx_borrow_spiclass(),
+// which the firmware defines: it lends the per-host instance, host 0 included,
+// and leaves negative (software SPI) hosts to LovyanGFX.
 //
 // The packed value from spiHostFromDevicePath() is checked against local
 // helpers that encode the expected nibble layout (bus = host & 0x0F,
@@ -176,6 +177,27 @@ void test_registry_rejects_negative_host()
     TEST_ASSERT_NULL(HardwareSPI::getInstance(-1));
 }
 
+void test_borrow_lends_the_global_spi_for_host_zero()
+{
+    SPIClass *spi = nullptr;
+    TEST_ASSERT_TRUE(lgfx_borrow_spiclass(0, spi));
+    TEST_ASSERT_EQUAL_PTR(&SPI, spi);
+}
+
+void test_borrow_lends_the_registry_instance()
+{
+    SPIClass *spi = nullptr;
+    TEST_ASSERT_TRUE(lgfx_borrow_spiclass(5, spi));
+    TEST_ASSERT_EQUAL_PTR(HardwareSPI::getInstance(5), spi);
+}
+
+void test_borrow_leaves_negative_hosts_to_lovyangfx()
+{
+    SPIClass *spi = nullptr;
+    TEST_ASSERT_FALSE(lgfx_borrow_spiclass(-1, spi));
+    TEST_ASSERT_NULL(spi);
+}
+
 static std::string writeConfig(const char *name, const std::string &body)
 {
     const auto path = std::filesystem::temp_directory_path() / name;
@@ -238,6 +260,9 @@ void setup()
     RUN_TEST(test_registry_host_zero_is_the_global_spi);
     RUN_TEST(test_registry_is_stable_per_host);
     RUN_TEST(test_registry_rejects_negative_host);
+    RUN_TEST(test_borrow_lends_the_global_spi_for_host_zero);
+    RUN_TEST(test_borrow_lends_the_registry_instance);
+    RUN_TEST(test_borrow_leaves_negative_hosts_to_lovyangfx);
     RUN_TEST(test_unpackable_radio_path_is_not_left_on_host_zero);
     RUN_TEST(test_clearing_touchscreen_spidev_returns_to_the_display_host);
     exit(UNITY_END());

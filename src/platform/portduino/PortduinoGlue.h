@@ -141,6 +141,11 @@ bool MAC_from_string(std::string mac_str, uint8_t *dmac);
 // high nibble device). Returns -1 when the path cannot be represented.
 int spiHostFromDevicePath(const std::string &devicePath);
 #ifndef ARCH_PORTDUINO_WASM
+// LovyanGFX's optional hook (arduino_default/common.hpp): lends the per-host
+// HardwareSPI instance for spi_host, opened before it is returned. LovyanGFX does
+// not begin() or end() a lent instance, so the display and touchscreen cannot close
+// a bus the radio shares. Negative hosts return false (LovyanGFX's own selection).
+extern "C" bool lgfx_borrow_spiclass(int spi_host, SPIClass *&spi);
 void readGPIOFromYaml(YAML::Node sourceNode, pinMapping &destPin, int pinDefault = RADIOLIB_NC);
 #endif
 std::string exec(const char *cmd);
