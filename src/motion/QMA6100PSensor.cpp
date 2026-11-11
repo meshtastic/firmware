@@ -113,10 +113,32 @@ bool QMA6100PSensor::init()
 #endif
 }
 
+#ifdef MESHTASTIC_INCLUDE_INKHUD
+void QMA6100PSensor::sampleAccelerationForSteps()
+{
+    if (!stepTracker().isTracking())
+        return;
+#ifdef ARCH_NRF52
+    uint8_t data[6];
+    if (Nrf52Twim::readRegisters(deviceAddress(), SFE_QMA6100P_DX_L, data, sizeof(data))) {
+        const auto axis = [&data](size_t index) { return static_cast<int16_t>(data[index + 1] << 8 | data[index]) >> 2; };
+        sampleSteps(axis(0), axis(2), axis(4));
+    }
+#else
+    outputData data{};
+    if (sensor->getAccelData(&data))
+        sampleSteps(data.xData, data.yData, data.zData);
+#endif
+}
+#endif
+
 #ifdef QMA_6100P_INT_PIN
 
 int32_t QMA6100PSensor::runOnce()
 {
+#ifdef MESHTASTIC_INCLUDE_INKHUD
+    sampleAccelerationForSteps();
+#endif
     // Wake on motion using hardware interrupts - this is the most efficient way to check for motion
     if (QMA6100P_IRQ) {
         QMA6100P_IRQ = false;
@@ -129,6 +151,9 @@ int32_t QMA6100PSensor::runOnce()
 
 int32_t QMA6100PSensor::runOnce()
 {
+#ifdef MESHTASTIC_INCLUDE_INKHUD
+    sampleAccelerationForSteps();
+#endif
 #ifdef ARCH_NRF52
     // restoreBus() is intentionally omitted here: it tears down and re-initialises Wire,
     // which would be destructive on every poll. The bus is stable after init(); a failed

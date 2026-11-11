@@ -18,7 +18,21 @@ typedef enum _meshtastic_SerialHalCommand_Type {
     meshtastic_SerialHalCommand_Type_ATTACH_INTERRUPT = 4,
     meshtastic_SerialHalCommand_Type_DETACH_INTERRUPT = 5,
     meshtastic_SerialHalCommand_Type_SPI_TRANSFER = 6,
-    meshtastic_SerialHalCommand_Type_NOOP = 7
+    meshtastic_SerialHalCommand_Type_NOOP = 7,
+    /* One radio SPI command: wait for BUSY (value) to read low, drive CS (pin)
+ low, transfer data, drive CS high, then wait for BUSY low again. The
+ response carries the received bytes in data and the BUSY level after the
+ second wait in value (0 = low, 1 = still high).
+
+ Each wait is bounded by the device (the firmware uses 10 ms). If the
+ first wait times out, nothing is transferred and the response is ERROR
+ with value = 1; the host waits for BUSY itself and resends. If the second
+ wait times out, the response is OK with value = 1, and the host polls
+ BUSY with DIGITAL_READ before its next command.
+
+ A value of 0xFFFFFFFF means no BUSY line: both waits are skipped, and the
+ response value is 0 and carries no meaning. */
+    meshtastic_SerialHalCommand_Type_SPI_TRANSACTION = 8
 } meshtastic_SerialHalCommand_Type;
 
 typedef enum _meshtastic_SerialHalResponse_Result {
@@ -65,8 +79,8 @@ extern "C" {
 
 /* Helper constants for enums */
 #define _meshtastic_SerialHalCommand_Type_MIN meshtastic_SerialHalCommand_Type_UNSET
-#define _meshtastic_SerialHalCommand_Type_MAX meshtastic_SerialHalCommand_Type_NOOP
-#define _meshtastic_SerialHalCommand_Type_ARRAYSIZE ((meshtastic_SerialHalCommand_Type)(meshtastic_SerialHalCommand_Type_NOOP+1))
+#define _meshtastic_SerialHalCommand_Type_MAX meshtastic_SerialHalCommand_Type_SPI_TRANSACTION
+#define _meshtastic_SerialHalCommand_Type_ARRAYSIZE ((meshtastic_SerialHalCommand_Type)(meshtastic_SerialHalCommand_Type_SPI_TRANSACTION+1))
 
 #define _meshtastic_SerialHalResponse_Result_MIN meshtastic_SerialHalResponse_Result_OK
 #define _meshtastic_SerialHalResponse_Result_MAX meshtastic_SerialHalResponse_Result_UNSUPPORTED
