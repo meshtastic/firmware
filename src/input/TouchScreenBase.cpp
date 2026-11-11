@@ -2,6 +2,10 @@
 #include "main.h"
 #include "mesh/Throttle.h"
 
+#if defined(T_DECK_PRO) && defined(MESHTASTIC_INCLUDE_INKHUD)
+void tDeckProTouchFeedback();
+#endif
+
 #if defined(RAK14014) && !defined(MESHTASTIC_EXCLUDE_CANNEDMESSAGES)
 #include "modules/CannedMessageModule.h"
 #endif
@@ -39,12 +43,6 @@ static_assert(TIME_LONG_PRESS >= 50, "TIME_LONG_PRESS must be at least 50ms: see
 #define TOUCH_POLL_INTERVAL_RELEASE_FAST TOUCH_POLL_INTERVAL_RELEASE
 #endif
 
-// Ignore very short "finger lifted" glitches from noisy touch controllers.
-// A release is only accepted once we've seen no-touch for at least this duration.
-#ifndef TOUCH_RELEASE_GRACE_MS
-#define TOUCH_RELEASE_GRACE_MS 35
-#endif
-
 // move a minimum distance over the screen to detect a "swipe"
 #ifndef TOUCH_THRESHOLD_X
 #define TOUCH_THRESHOLD_X 30
@@ -70,6 +68,15 @@ void TouchScreenBase::init(bool hasTouch)
         disable();
         this->setInterval(UINT_MAX);
     }
+}
+
+void TouchScreenBase::resetTouchState()
+{
+    _state = TOUCH_EVENT_CLEARED;
+    _action = TOUCH_ACTION_NONE;
+    _touchedOld = false;
+    _tapped = false;
+    _longPressSuppressed = false;
 }
 
 int32_t TouchScreenBase::runOnce()
@@ -124,20 +131,20 @@ int32_t TouchScreenBase::runOnce()
             if (adx > ady && adx > TOUCH_THRESHOLD_X) {
                 if (0 > dx) { // swipe right to left
                     e.touchEvent = static_cast<char>(TOUCH_ACTION_LEFT);
-                    LOG_DEBUG("action SWIPE: right to left");
+                    LOG_INPUT("action SWIPE: right to left");
                 } else { // swipe left to right
                     e.touchEvent = static_cast<char>(TOUCH_ACTION_RIGHT);
-                    LOG_DEBUG("action SWIPE: left to right");
+                    LOG_INPUT("action SWIPE: left to right");
                 }
             }
             // swipe vertical
             else if (ady > adx && ady > TOUCH_THRESHOLD_Y) {
                 if (0 > dy) { // swipe bottom to top
                     e.touchEvent = static_cast<char>(TOUCH_ACTION_UP);
-                    LOG_DEBUG("action SWIPE: bottom to top");
+                    LOG_INPUT("action SWIPE: bottom to top");
                 } else { // swipe top to bottom
                     e.touchEvent = static_cast<char>(TOUCH_ACTION_DOWN);
-                    LOG_DEBUG("action SWIPE: top to bottom");
+                    LOG_INPUT("action SWIPE: top to bottom");
                 }
             }
             // tap
@@ -163,13 +170,13 @@ int32_t TouchScreenBase::runOnce()
         if (_tapped) {
             _tapped = false;
             e.touchEvent = static_cast<char>(TOUCH_ACTION_TAP);
-            LOG_DEBUG("action TAP(%d/%d)", _last_x, _last_y);
+            LOG_INPUT("action TAP(%d/%d)", _last_x, _last_y);
         }
     } else {
         if (_tapped && Throttle::hasElapsed(_pressStartMs, TIME_LONG_PRESS - 50)) {
             _tapped = false;
             e.touchEvent = static_cast<char>(TOUCH_ACTION_TAP);
-            LOG_DEBUG("action TAP(%d/%d)", _last_x, _last_y);
+            LOG_INPUT("action TAP(%d/%d)", _last_x, _last_y);
         }
     }
 #else
@@ -177,7 +184,7 @@ int32_t TouchScreenBase::runOnce()
     if (_tapped) {
         _tapped = false;
         e.touchEvent = static_cast<char>(TOUCH_ACTION_TAP);
-        LOG_DEBUG("action TAP(%d/%d)", _last_x, _last_y);
+        LOG_INPUT("action TAP(%d/%d)", _last_x, _last_y);
     }
 #endif
 
@@ -190,7 +197,7 @@ int32_t TouchScreenBase::runOnce()
         _longPressSuppressed = true;
         _longPressSuppressUntilMs = nowMs + LONG_PRESS_REPEAT_SUPPRESS_MS;
         e.touchEvent = static_cast<char>(TOUCH_ACTION_LONG_PRESS);
-        LOG_DEBUG("action LONG PRESS(%d/%d)", _last_x, _last_y);
+        LOG_INPUT("action LONG PRESS(%d/%d)", _last_x, _last_y);
     }
 
     if (e.touchEvent != TOUCH_ACTION_NONE) {
@@ -209,6 +216,8 @@ void TouchScreenBase::hapticFeedback()
     drv.setWaveform(0, 75);
     drv.setWaveform(1, 0); // end waveform
     drv.go();
+#elif defined(T_DECK_PRO) && defined(MESHTASTIC_INCLUDE_INKHUD)
+    tDeckProTouchFeedback();
 #endif
 }
 
