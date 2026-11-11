@@ -141,7 +141,7 @@ bool writeExpanderPin(uint8_t pin, bool level)
 }
 
 constexpr uint32_t AUDIO_AMP_GRACE_MS = 2000;    // keeps the amp warm between back-to-back tones
-constexpr uint32_t AUDIO_AMP_POWER_UP_MS = 150;  // NS4150B needs ~120 ms to leave shutdown
+constexpr uint32_t AUDIO_AMP_POWER_UP_MS = 600;  // amp rail + NS4150B start-up from a cold amp
 constexpr uint32_t CODEC_IDLE_MS = 30000;        // awake idle time before the ES8311 powers down
 constexpr uint32_t CODEC_BOOT_SETTLE_MS = 2000;  // the first frames after a codec init are swallowed
 constexpr uint32_t CODEC_WAKE_SETTLE_MS = 500;
@@ -330,10 +330,13 @@ void x2AudioAmpSet(bool on)
     codecResume(); // codec before the amp, so the amp never amplifies the init transients
     if (!audioAmpOn) {
         audioAmpOn = writeExpanderPin(EXP_PIN_PA_PWR_EN, true);
-        if (audioAmpOn)
-            delay(AUDIO_AMP_POWER_UP_MS);
-        else
+        if (audioAmpOn) {
+            // Streamed as silence by AudioThread, so the codec is clocked while the amp comes up.
+            if (codecLeadInMs < AUDIO_AMP_POWER_UP_MS)
+                codecLeadInMs = AUDIO_AMP_POWER_UP_MS;
+        } else {
             LOG_WARN("Speaker amp enable failed");
+        }
     }
 }
 
