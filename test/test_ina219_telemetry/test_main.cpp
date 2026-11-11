@@ -5,6 +5,7 @@
 // channel 3 in the union, silently publishing the sensor on the wrong channel.
 // A counting sensor also guards against reading I2C for unsupported telemetry variants.
 
+#include "Arduino.h"
 #include "TestUtil.h"
 #include "modules/Telemetry/Sensor/INA219Telemetry.h"
 #include <cstdlib>
