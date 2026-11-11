@@ -238,6 +238,7 @@ class GPS : private concurrency::OSThread
     uint64_t lastPpsAcceptMs = 0;  // monotonic ms of the last edge the RTC was pinned to; 0 = never
     uint64_t lastPpsFullSetMs = 0; // last PPS set that also wrote the hardware RTC and system time
     uint64_t lastGgaFixMs = 0;     // monotonic ms of the last GGA reporting a fix; 0 = none since the wake
+    uint8_t commasSinceDollar = 0; // fields seen in the sentence being read, which may span drains
 #endif
 
 #ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS

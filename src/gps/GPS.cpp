@@ -114,6 +114,7 @@ constexpr uint32_t PPS_BURST_EDGES = 5;                    // edges accepted per
 constexpr uint64_t PPS_BURST_INTERVAL_MS = 10 * 60 * 1000; // between bursts while the GPS stays on
 constexpr uint64_t PPS_BURST_TIMEOUT_MS = 30 * 1000;       // give up on a burst that gets no usable edges
 constexpr uint64_t PPS_FIX_MAX_AGE_MS = 3 * 1000;          // GGA is 1 Hz, so this tolerates one lost sentence
+constexpr uint8_t GGA_FIX_QUALITY_FIELD = 6;               // commas before it, counted from the sentence's '$'
 #endif
 constexpr uint32_t AIROHA_PROBE_SETTLE_MS = 20;
 #ifdef HAS_AIROHA_SLEEP
@@ -2647,12 +2648,19 @@ bool GPS::whileActive()
 #endif
             if (c == '$')
                 lastDollarByteCount = nmeaByteCount;
+#if GPS_PPS_DISCIPLINE
+            if (c == '$')
+                commasSinceDollar = 0;
+            else if (c == ',' && commasSinceDollar < UINT8_MAX)
+                commasSinceDollar++;
+#endif
             const bool committed = reader.encode(c);
             isValid |= committed;
 #if GPS_PPS_DISCIPLINE
-            // Field 6 of this GGA just set the parser's fix quality, so the reading is this sentence's own
+            // Only a GGA carrying field 6 has just set the parser's quality; without it (a truncated
+            // "$GPGGA*56" still commits) the value is the previous sentence's, so count that as no fix
             if (committed && reader.sentenceType() == GPS_SENTENCE_GPGGA)
-                notePpsFixQuality(reader.fixQuality());
+                notePpsFixQuality(commasSinceDollar >= GGA_FIX_QUALITY_FIELD ? reader.fixQuality() : 0);
 #endif
             if (committed && reader.date.isUpdated() && reader.time.isUpdated()) {
                 int64_t utcMs;

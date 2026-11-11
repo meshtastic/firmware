@@ -522,9 +522,8 @@ uint32_t getTime(bool local)
     return local ? secs + getTZOffset() : secs;
 }
 
-// What the rate correction has taken off (or added to) the elapsed time. The product is split into
-// whole billions of microseconds and the remainder: elapsedUs * rateTrimPpb in one step passes
-// INT64_MAX after 214 days at the +-500000 ppb clamp, which a clock never re-anchored can reach.
+// Split into whole billions of microseconds and the remainder: elapsedUs * rateTrimPpb in one step
+// passes INT64_MAX after 214 days at the +-500000 ppb clamp, which a clock never re-anchored reaches.
 static int64_t rateTrimUs(uint64_t elapsedUs)
 {
     const int64_t kiloSeconds = (int64_t)(elapsedUs / 1000000000ULL);
