@@ -256,6 +256,30 @@ static void test_rate_trim_bends_the_clock_without_a_jump(void)
     TEST_ASSERT_EQUAL_INT32(MAX_RATE_TRIM_PPB, getRTCRateTrimPpb());
 }
 
+// A clock left on the rate trim for months must not overflow the trim product. At the +-500000 ppb clamp,
+// elapsedUs * rateTrimPpb passes INT64_MAX after 214 days, which a node that keeps running without a new
+// PPS edge or NMEA fix reaches. The expected trim is computed independently of the implementation here.
+static void test_rate_trim_survives_months_without_reanchoring(void)
+{
+    beginFakeClock(60 * 1000);
+    const time_t epoch = makeValidEpoch();
+    struct timeval tv = makeTv(epoch);
+    TEST_ASSERT_EQUAL_INT(RTCSetResultSuccess, perhapsSetRTC(RTCQualityGPS, &tv));
+    const uint64_t before = getUtcMicros();
+    setRTCRateTrimPpb(MAX_RATE_TRIM_PPB);
+
+    const uint32_t thirtyDaysMs = 30u * 24 * 60 * 60 * 1000;
+    for (int i = 0; i < 8; i++) // 240 days, past the 214 where the single-step product overflows
+        advanceFakeClock(thirtyDaysMs);
+
+    const uint64_t elapsedUs = (uint64_t)thirtyDaysMs * 8 * 1000;
+    const long double expectedTrimUs = (long double)elapsedUs * MAX_RATE_TRIM_PPB / 1000000000.0L;
+    const uint64_t expected = before + elapsedUs + (uint64_t)expectedTrimUs;
+    const uint64_t read = getUtcMicros();
+    TEST_ASSERT_TRUE_MESSAGE(read > before, "the trimmed clock ran backwards: the trim product overflowed");
+    TEST_ASSERT_UINT64_WITHIN(2, expected, read);
+}
+
 // Equal-quality NTP reapplies only after the 30-minute drift-correction throttle.
 static void test_ntp_drift_throttle(void)
 {
@@ -516,6 +540,7 @@ void setup()
     RUN_TEST(test_utc_micros_keeps_the_fraction);
     RUN_TEST(test_discipline_pins_the_clock_at_the_edge);
     RUN_TEST(test_rate_trim_bends_the_clock_without_a_jump);
+    RUN_TEST(test_rate_trim_survives_months_without_reanchoring);
     RUN_TEST(test_ntp_drift_throttle);
     RUN_TEST(test_force_update_overrides_downgrade);
     RUN_TEST(test_build_epoch_bounds_rejected);
