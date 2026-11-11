@@ -384,12 +384,6 @@ static uint64_t filterExt1WakeMask(uint64_t gpioMask)
 
 void cpuDeepSleep(uint32_t msecToWake)
 {
-#ifdef X2_POWER_KEY_UI
-    if (msecToWake == portMAX_DELAY) {
-        variant_shutdown();
-        x2PowerOff();
-    }
-#endif
     /*
     Some ESP32 IOs have internal pullups or pulldowns, which are enabled by default.
     If an external circuit drives this pin in deep sleep mode, current consumption may

@@ -31,10 +31,11 @@ constexpr uint8_t EXP_PIN_LORA_RESET = 22;
 constexpr uint8_t EXP_PIN_GNSS_RST = 23;
 }
 bool readKeypadState(uint8_t &pressedKeys);
+void x2AudioAmpSet(bool on);
+uint32_t x2TakeCodecLeadInMs();
 #ifdef X2_POWER_KEY_UI
 bool x2ChargeModeRequested();
 void x2RunChargeMode(bool (*readPort)(uint8_t, uint8_t &), bool (*drivePin)(uint8_t, bool));
-void x2PowerOff();
 #endif
 #endif
 
@@ -170,6 +171,10 @@ void x2PowerOff();
 
 #define HAS_ES7243E
 #define ES7243E_I2C_ADDR 0x14 // I2C address for ES7243E ADC Note: May conflict with BMM350 sensor in some configs
+
+// NS4150B amp rail on the expander: powered per playback with a short off-grace; the codec idles down when unused.
+#define AUDIO_AMP_ENABLE(on) x2AudioAmpSet(on)
+#define AUDIO_TAKE_LEAD_IN_MS() x2TakeCodecLeadInMs()
 
 // Sensors
 #define HAS_BMM350  // Magnetometer on I2C

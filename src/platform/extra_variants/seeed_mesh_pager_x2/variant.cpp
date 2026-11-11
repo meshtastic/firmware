@@ -5,6 +5,11 @@
 
 #include "AudioBoard.h"
 #include "DebugConfiguration.h"
+#include "UptimeClock.h"
+#include "concurrency/LockGuard.h"
+#include "concurrency/OSThread.h"
+#include "mesh/Throttle.h"
+#include "sleep.h"
 #include <Wire.h>
 #include <driver/gpio.h>
 #ifdef X2_POWER_KEY_UI
@@ -23,6 +28,9 @@ using namespace meshpager_x2;
 constexpr uint8_t TCA6424_INPUT_PORT0 = 0x00;
 constexpr uint8_t TCA6424_OUTPUT_PORT0 = 0x04;
 constexpr uint8_t TCA6424_CONFIG_PORT0 = 0x0C;
+
+// The device-ui task polls the keypad while the main loop drives rails, and HAL locks are disabled.
+concurrency::Lock expanderLock;
 
 class Tca6424
 {
@@ -79,6 +87,7 @@ class Tca6424
   private:
     bool writeReg(uint8_t reg, uint8_t value)
     {
+        concurrency::LockGuard guard(&expanderLock);
         wire->beginTransmission(address);
         wire->write(reg);
         wire->write(value);
@@ -87,6 +96,7 @@ class Tca6424
 
     bool readReg(uint8_t reg, uint8_t &value)
     {
+        concurrency::LockGuard guard(&expanderLock);
         wire->beginTransmission(address);
         wire->write(reg);
         if (wire->endTransmission(false) != 0 || wire->requestFrom(address, (uint8_t)1) != 1) {
@@ -130,7 +140,215 @@ bool writeExpanderPin(uint8_t pin, bool level)
     return false;
 }
 
+constexpr uint32_t AUDIO_AMP_GRACE_MS = 2000;    // keeps the amp warm between back-to-back tones
+constexpr uint32_t AUDIO_AMP_POWER_UP_MS = 150;  // NS4150B needs ~120 ms to leave shutdown
+constexpr uint32_t CODEC_IDLE_MS = 30000;        // awake idle time before the ES8311 powers down
+constexpr uint32_t CODEC_BOOT_SETTLE_MS = 2000;  // the first frames after a codec init are swallowed
+constexpr uint32_t CODEC_WAKE_SETTLE_MS = 500;
+constexpr uint32_t AUDIO_POWER_POLL_MS = 100;
+
+bool audioAmpOn = false;
+bool audioPlaying = false;
+bool audioPlayedOnce = false;
+bool codecActive = false;
+bool codecSuspended = false;
+uint32_t audioAmpOffAt = 0; // 0 = no deadline pending
+uint32_t codecIdleAt = 0;   // 0 = no deadline pending
+uint32_t codecLeadInMs = 0;
+
+CodecConfig codecConfig()
+{
+    CodecConfig cfg;
+    cfg.input_device = ADC_INPUT_LINE1;
+    cfg.output_device = DAC_OUTPUT_ALL;
+    cfg.i2s.bits = BIT_LENGTH_16BITS;
+    cfg.i2s.rate = RATE_44K;
+    return cfg;
+}
+
+// The ES7243E mic ADC is unused, but its power-on state draws current. A chip id of 0x32 means BMM350 instead.
+void es7243ePowerDown()
+{
+    const uint8_t addr = ES7243E_I2C_ADDR;
+    Wire1.beginTransmission(addr);
+    Wire1.write(0x00);
+    if (Wire1.endTransmission(false) != 0 || Wire1.requestFrom((int)addr, 1, (int)true) != 1)
+        return;
+    const uint8_t id = Wire1.read();
+    if (id == 0x32)
+        return;
+    static const uint8_t stop[][2] = {
+        {0x04, 0x02}, {0x04, 0x01}, {0xF7, 0x30}, {0xF9, 0x01}, {0x16, 0xFF}, {0x17, 0x00}, {0x01, 0x38},
+        {0x20, 0x00}, {0x21, 0x00}, {0x00, 0x00}, {0x00, 0x1E}, {0x01, 0x30}, {0x01, 0x00},
+    };
+    for (const auto &reg : stop) {
+        Wire1.beginTransmission(addr);
+        Wire1.write(reg[0]);
+        Wire1.write(reg[1]);
+        if (Wire1.endTransmission() != 0) {
+            LOG_WARN("ES7243E power-down failed at reg 0x%02x", reg[0]);
+            return;
+        }
+    }
+}
+
+void audioAmpForceOff()
+{
+    audioAmpOffAt = 0;
+    if (audioAmpOn && writeExpanderPin(EXP_PIN_PA_PWR_EN, false))
+        audioAmpOn = false;
+}
+
+void codecPowerDown()
+{
+    codecIdleAt = 0;
+    if (!codecActive || codecSuspended)
+        return;
+    if (es8311_stop(CODEC_MODE_BOTH) != RESULT_OK) {
+        LOG_WARN("ES8311 power-down failed");
+        return;
+    }
+    codecSuspended = true;
+    // The codec init leaves the I2S clocks high, feeding the powered-down codec; after a playback the I2S teardown leaves them low.
+    if (!audioPlayedOnce) {
+        pinMode(DAC_I2S_MCLK, INPUT_PULLDOWN);
+        pinMode(DAC_I2S_BCK, INPUT_PULLDOWN);
+        pinMode(DAC_I2S_WS, INPUT_PULLDOWN);
+        pinMode(DAC_I2S_DOUT, INPUT_PULLDOWN);
+    }
+}
+
+void codecResume()
+{
+    if (!codecSuspended)
+        return;
+    if (!board.begin(codecConfig())) {
+        LOG_WARN("ES8311 re-init failed");
+        return;
+    }
+    board.setVolume(75);
+    codecSuspended = false;
+    codecLeadInMs = CODEC_WAKE_SETTLE_MS;
+}
+
+class AudioPowerThread : public concurrency::OSThread
+{
+  public:
+    AudioPowerThread() : OSThread("AudioPower")
+    {
+        preflightObserver.observe(&preflightSleep);
+        lightSleepObserver.observe(&notifyLightSleep);
+    }
+
+  protected:
+    int32_t runOnce() override
+    {
+        if (audioAmpOffAt && Throttle::deadlinePassed(audioAmpOffAt))
+            audioAmpForceOff();
+        if (codecIdleAt && Throttle::deadlinePassed(codecIdleAt))
+            codecPowerDown();
+        return (audioAmpOffAt || codecIdleAt) ? AUDIO_POWER_POLL_MS : INT32_MAX;
+    }
+
+  private:
+    int preflight(void *deepSleep) { return !deepSleep && audioPlaying ? 1 : 0; }
+
+    // The deadline ticker is frozen in light sleep, so power down now; playback re-inits the codec on demand.
+    int beforeLightSleep(void *)
+    {
+        audioAmpForceOff();
+        codecPowerDown();
+        return 0;
+    }
+
+    CallbackObserver<AudioPowerThread, void *> preflightObserver{this, &AudioPowerThread::preflight};
+    CallbackObserver<AudioPowerThread, void *> lightSleepObserver{this, &AudioPowerThread::beforeLightSleep};
+};
+
+AudioPowerThread *audioPowerThread = nullptr;
+
+// Drive logic lines low before their rails go so they cannot back-power an unpowered chip.
+void parkPeripherals()
+{
+    // device-ui polls the expander on Wire from its own task; stop it so it cannot interleave with the writes below.
+    TaskHandle_t tftTask = xTaskGetHandle("tft");
+    if (tftTask) {
+        // Not while it holds the expander lock, or every write below would block forever.
+        concurrency::LockGuard guard(&expanderLock);
+        vTaskSuspend(tftTask);
+    }
+
+    if (codecActive) {
+        board.end();
+        codecActive = false;
+    }
+
+#ifdef LGFX_PIN_BL
+    ledcDetach(LGFX_PIN_BL);
+    pinMode(LGFX_PIN_BL, OUTPUT);
+    digitalWrite(LGFX_PIN_BL, LOW);
+#endif
+
+    if (!expanderInitialized)
+        return;
+
+    auto shutDownPin = [](uint8_t pin) {
+        if (!writeExpanderPin(pin, false))
+            LOG_WARN("Failed to turn off expander pin %u", pin);
+    };
+    shutDownPin(EXP_PIN_LCD_RST);
+    shutDownPin(EXP_PIN_GNSS_SLEEP_INT);
+
+    shutDownPin(EXP_PIN_LCD_PWR_EN);
+    shutDownPin(EXP_PIN_GNSS_PWR_EN);
+    shutDownPin(EXP_PIN_SD_PWR_EN);
+    shutDownPin(EXP_PIN_PA_PWR_EN);
+    audioAmpOn = false;
+    shutDownPin(EXP_PIN_SEN_EN);
+    shutDownPin(EXP_PIN_BAT_ADC_EN);
+}
+
 } // namespace
+
+void x2AudioAmpSet(bool on)
+{
+    if (!expanderInitialized)
+        return;
+
+    audioPlaying = on;
+    if (!on) {
+        audioAmpOffAt = Time::timerEndsAtMillis(AUDIO_AMP_GRACE_MS);
+        codecIdleAt = Time::timerEndsAtMillis(CODEC_IDLE_MS);
+        if (audioPowerThread)
+            audioPowerThread->setIntervalFromNow(AUDIO_POWER_POLL_MS);
+        return;
+    }
+
+    audioPlayedOnce = true;
+    audioAmpOffAt = 0;
+    codecIdleAt = 0;
+    codecResume(); // codec before the amp, so the amp never amplifies the init transients
+    if (!audioAmpOn) {
+        audioAmpOn = writeExpanderPin(EXP_PIN_PA_PWR_EN, true);
+        if (audioAmpOn)
+            delay(AUDIO_AMP_POWER_UP_MS);
+        else
+            LOG_WARN("Speaker amp enable failed");
+    }
+}
+
+uint32_t x2TakeCodecLeadInMs()
+{
+    const uint32_t ms = codecLeadInMs;
+    codecLeadInMs = 0;
+    return ms;
+}
+
+// device-ui's keypad driver reads through here so its tft task shares expanderLock with the main loop.
+bool directionalPadReadPort(uint8_t port, uint8_t &value)
+{
+    return expanderInitialized && ioExpander.readInputPort(port, value);
+}
 
 bool readKeypadState(uint8_t &pressedKeys)
 {
@@ -158,6 +376,9 @@ bool readKeypadState(uint8_t &pressedKeys)
 
 void earlyInitVariant()
 {
+    // A software reset keeps the level wake type the charge screen or light sleep armed; pinMode() would re-enable it.
+    gpio_wakeup_disable((gpio_num_t)BUTTON_PIN);
+    gpio_set_intr_type((gpio_num_t)BUTTON_PIN, GPIO_INTR_DISABLE);
     pinMode(BUTTON_PIN, INPUT);
 #ifdef INPUTDRIVER_DIRECTIONALPAD_RETURN_GPIO
     pinMode(INPUTDRIVER_DIRECTIONALPAD_RETURN_GPIO, INPUT); // external pull-up
@@ -248,7 +469,7 @@ void earlyInitVariant()
     delay(10);
     ok &= configureOutput(EXP_PIN_SD_PWR_EN, true);
     delay(100);
-    ok &= configureOutput(EXP_PIN_PA_PWR_EN, true);
+    ok &= configureOutput(EXP_PIN_PA_PWR_EN, false); // powered per playback by x2AudioAmpSet()
     delay(10);
     ok &= configureOutput(EXP_PIN_LORA_RESET, true);
 
@@ -305,14 +526,12 @@ void lateInitVariant()
     // I2S: function, mclk, bck, ws, data_out, data_in
     pinsAudioBoardES8311.addI2S(PinFunction::CODEC, DAC_I2S_MCLK, DAC_I2S_BCK, DAC_I2S_WS, DAC_I2S_DOUT, DAC_I2S_DIN);
 
-    CodecConfig cfg;
-    cfg.input_device = ADC_INPUT_LINE1;
-    cfg.output_device = DAC_OUTPUT_ALL;
-    cfg.i2s.bits = BIT_LENGTH_16BITS;
-    cfg.i2s.rate = RATE_44K;
-
-    board.begin(cfg);
+    codecActive = board.begin(codecConfig());
     board.setVolume(75);
+    codecLeadInMs = CODEC_BOOT_SETTLE_MS;
+    codecIdleAt = Time::timerEndsAtMillis(CODEC_IDLE_MS);
+    es7243ePowerDown();
+    audioPowerThread = new AudioPowerThread();
     // LOG_INFO("ES8311 audio board initialized on I2C1");
 
     startPowerButtonMonitor();
@@ -335,58 +554,32 @@ extern "C" bool variant_pre_radio_reset(void)
 // Called by cpuDeepSleep() right before esp_deep_sleep_start(); earlyInitVariant() restores the rails on wake.
 void variant_shutdown()
 {
-    // device-ui polls the expander on Wire from its own task; stop it so it cannot interleave with the writes below.
-    TaskHandle_t tftTask = xTaskGetHandle("tft");
-    if (tftTask)
-        vTaskSuspend(tftTask);
-
-    board.end();
-
+    // doDeepSleep() has already ended Wire and parked its pins.
+    if (expanderInitialized)
+        Wire.begin(I2C_SDA, I2C_SCL);
+    parkPeripherals();
+    // PWR_HOLD stays high so the RTC keeps time; GNSS_VRTC_EN stays on so the GNSS can hot-start after wake.
 #ifdef LGFX_PIN_BL
-    ledcDetach(LGFX_PIN_BL);
-    pinMode(LGFX_PIN_BL, OUTPUT);
-    digitalWrite(LGFX_PIN_BL, LOW);
     gpio_hold_en((gpio_num_t)LGFX_PIN_BL);
     gpio_deep_sleep_hold_en();
 #endif
-
-    if (!expanderInitialized) {
-        return;
+    if (expanderInitialized) {
+        Wire.end();
+        pinMode(I2C_SDA, ANALOG);
+        pinMode(I2C_SCL, ANALOG);
     }
-
-    // doDeepSleep() has already ended Wire and parked its pins.
-    Wire.begin(I2C_SDA, I2C_SCL);
-
-    // Drive logic lines low first so they cannot back-power a chip whose rail is about to go.
-    auto shutDownPin = [](uint8_t pin) {
-        if (!writeExpanderPin(pin, false))
-            LOG_WARN("Failed to turn off expander pin %u before deep sleep", pin);
-    };
-    shutDownPin(EXP_PIN_LCD_RST);
-    shutDownPin(EXP_PIN_GNSS_SLEEP_INT);
-
-    shutDownPin(EXP_PIN_LCD_PWR_EN);
-    shutDownPin(EXP_PIN_GNSS_PWR_EN);
-    shutDownPin(EXP_PIN_SD_PWR_EN);
-    shutDownPin(EXP_PIN_PA_PWR_EN);
-    shutDownPin(EXP_PIN_SEN_EN);
-    shutDownPin(EXP_PIN_BAT_ADC_EN);
-    // PWR_HOLD stays high so the RTC keeps time; GNSS_VRTC_EN stays on so the GNSS can hot-start after wake.
-
-    Wire.end();
-    pinMode(I2C_SDA, ANALOG);
-    pinMode(I2C_SCL, ANALOG);
 }
 
 #ifdef X2_POWER_KEY_UI
-void x2PowerOff()
+// Called by doDeepSleep() for a shutdown, before the radio is slept: on battery the board dies here,
+// with USB holding the rails up it restarts into the charge screen.
+extern "C" void variant_power_off(void)
 {
     if (!expanderInitialized)
         return;
-    Wire.begin(I2C_SDA, I2C_SCL);
+    parkPeripherals();
     if (!writeExpanderPin(EXP_PIN_PWR_HOLD, false)) {
         LOG_WARN("X2 power latch release failed");
-        Wire.end();
         return;
     }
     delay(50);

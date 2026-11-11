@@ -47,24 +47,19 @@ class PowerButtonThread : public concurrency::OSThread
             pendingPressed = pressed;
             changedAtMs = Time::getMillis();
         }
-        if (!Throttle::hasElapsed(changedAtMs, 30) || pressed == stablePressed)
+        if (!Throttle::hasElapsed(changedAtMs, 30) || pressed == stablePressed) {
+            playLeadUp(stablePressed);
             return 10;
+        }
         stablePressed = pressed;
 #endif
         if (pressed && !pressedSinceMs) {
             pressedSinceMs = Time::stampMillis();
             leadUpActive = false;
             resetLeadUpSequence();
-        } else if (pressed && Throttle::hasElapsed(pressedSinceMs, LEADUP_MS)) {
-            // Same rising lead-up as ButtonThread so the long press is audible before release.
-            if (!leadUpActive) {
-                leadUpActive = true;
-                lastLeadUpNoteMs = Time::stampMillis();
-                playNextLeadUpNote();
-            } else if (Throttle::hasElapsed(lastLeadUpNoteMs, 400) && playNextLeadUpNote()) {
-                lastLeadUpNoteMs = Time::stampMillis();
-            }
-        } else if (!pressed && pressedSinceMs) {
+        } else if (pressed) {
+            playLeadUp(true);
+        } else if (pressedSinceMs) {
             leadUpActive = false;
             resetLeadUpSequence();
             // Act on release: with ext1 ANY_HIGH a still-held button would wake the device at once.
@@ -96,6 +91,21 @@ class PowerButtonThread : public concurrency::OSThread
 
   private:
     static constexpr uint32_t LEADUP_MS = 2200;
+
+    // Same rising lead-up as ButtonThread so the long press is audible before release.
+    void playLeadUp(bool held)
+    {
+        if (!held || !pressedSinceMs || !Throttle::hasElapsed(pressedSinceMs, LEADUP_MS))
+            return;
+        if (!leadUpActive) {
+            leadUpActive = true;
+            lastLeadUpNoteMs = Time::stampMillis();
+            playNextLeadUpNote();
+        } else if (Throttle::hasElapsed(lastLeadUpNoteMs, 400) && playNextLeadUpNote()) {
+            lastLeadUpNoteMs = Time::stampMillis();
+        }
+    }
+
     bool armed = false;
     bool leadUpActive = false;
     uint32_t pressedSinceMs = 0;

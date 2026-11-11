@@ -1,9 +1,11 @@
 #pragma once
 #include "PowerFSM.h"
 #include "SPILock.h"
+#include "UptimeClock.h"
 #include "concurrency/OSThread.h"
 #include "configuration.h"
 #include "main.h"
+#include "mesh/Throttle.h"
 #include "sleep.h"
 #include <memory>
 
@@ -38,7 +40,8 @@ class AudioThread : public concurrency::OSThread
         setCPUFast(true);
         rtttlFile = std::unique_ptr<AudioFileSourcePROGMEM>(new AudioFileSourcePROGMEM(data, len));
         i2sRtttl = std::unique_ptr<AudioGeneratorRTTTL>(new AudioGeneratorRTTTL());
-        i2sRtttl->begin(rtttlFile.get(), audioOut.get());
+        if (i2sRtttl->begin(rtttlFile.get(), audioOut.get()))
+            playLeadIn();
     }
 
     // Also handles actually playing the RTTTL, needs to be called in loop
@@ -71,6 +74,8 @@ class AudioThread : public concurrency::OSThread
         }
 
         ampEnable(true);
+        if (audioOut->begin())
+            playLeadIn();
         auto sam = std::unique_ptr<ESP8266SAM>(new ESP8266SAM);
         sam->Say(audioOut.get(), text);
         setCPUFast(false);
@@ -102,6 +107,22 @@ class AudioThread : public concurrency::OSThread
 #endif
 #else
         (void)on;
+#endif
+    }
+
+    // A codec that swallows its first frames after power-up defines AUDIO_TAKE_LEAD_IN_MS() (consume-once).
+    void playLeadIn()
+    {
+#ifdef AUDIO_TAKE_LEAD_IN_MS
+        const uint32_t leadInMs = AUDIO_TAKE_LEAD_IN_MS();
+        if (!leadInMs)
+            return;
+        const uint32_t until = Time::timerEndsAtMillis(leadInMs);
+        int16_t silence[2] = {0, 0};
+        while (!Throttle::deadlinePassed(until)) {
+            if (!audioOut->ConsumeSample(silence))
+                delay(1);
+        }
 #endif
     }
 
