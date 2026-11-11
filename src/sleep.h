@@ -56,6 +56,9 @@ extern Observable<void *> notifyDeepSleep;
 /// Called to tell observers we are rebooting ASAP.  Must return 0
 extern Observable<void *> notifyReboot;
 
+/// Set by boards with a soft power latch: cuts power on shutdown, returning only if power stayed on.
+extern void (*variantPowerOff)();
+
 #ifdef ARCH_ESP32
 /// Called to tell observers that light sleep is about to begin
 extern Observable<void *> notifyLightSleep;
