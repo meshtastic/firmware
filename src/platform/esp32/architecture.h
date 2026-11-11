@@ -237,6 +237,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_AXIOMETA_GENESIS_MINI
 #elif defined(MAKERFABS_NOMAD_TERMINAL)
 #define HW_VENDOR meshtastic_HardwareModel_MAKERFABS_NOMAD_TERMINAL
+#elif defined(SEEED_MESHPAGER_X2)
+#define HW_VENDOR meshtastic_HardwareModel_MESHPAGER_X2
 #else
 #define HW_VENDOR meshtastic_HardwareModel_PRIVATE_HW
 #endif
