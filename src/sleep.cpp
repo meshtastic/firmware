@@ -46,8 +46,7 @@ extern XPowersPPM *PPM;
 #define INCLUDE_vTaskSuspend 0
 #endif
 
-// Boards with a soft power latch cut their own power here; it returns only if power stayed on.
-extern "C" void variant_power_off(void) __attribute__((weak));
+void (*variantPowerOff)() = nullptr;
 
 /// Called to ask any observers if they want to veto sleep. Return 1 to veto or 0 to allow sleep to happen
 Observable<void *> preflightSleep;
@@ -246,13 +245,13 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false, bool skipSaveN
 #endif
 
     // Before the observers: they park peripherals (and pin holds) that a board kept alive by USB cannot recover.
-    if (msecToWake == portMAX_DELAY && variant_power_off) {
+    if (msecToWake == portMAX_DELAY && variantPowerOff) {
         if (!skipSaveNodeDb)
             nodeDB->saveToDisk();
         if (transmitHistory)
             transmitHistory->saveToDisk();
         console->flush();
-        variant_power_off();
+        variantPowerOff();
         skipSaveNodeDb = true;
     }
 

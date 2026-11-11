@@ -15,6 +15,7 @@
 #ifdef X2_POWER_KEY_UI
 bool x2BaseScreenOn();
 void x2RequestChargeMode();
+static void x2PowerOff();
 #endif
 
 // PowerButton.cpp; kept apart because firmware headers and AudioBoard.h both define GpioPin.
@@ -444,6 +445,7 @@ void earlyInitVariant()
         if (configureInput(EXP_PIN_BUTTON_PWR))
             x2RunChargeMode([](uint8_t port, uint8_t &value) { return ioExpander.readInputPort(port, value); }, configureOutput);
     }
+    variantPowerOff = x2PowerOff;
 #endif
     bool ok = configureOutput(EXP_PIN_PWR_HOLD, true);
 
@@ -576,7 +578,7 @@ void variant_shutdown()
 #ifdef X2_POWER_KEY_UI
 // Called by doDeepSleep() for a shutdown, before the radio is slept: on battery the board dies here,
 // with USB holding the rails up it restarts into the charge screen.
-extern "C" void variant_power_off(void)
+static void x2PowerOff()
 {
     if (!expanderInitialized)
         return;
