@@ -624,21 +624,21 @@ void RadioLibInterface::onNotify(uint32_t notification)
                     // clear the flags startTransmit() is about to set up, or on SX128x leave the chip in standby.
                     RadioSequence seq(this);
                     // Listen-before-talk: a CAD preamble scan immediately before we key up.
-                    LOG_DEBUG("CAD arm");
+                    LOG_DEBUG_RADIO("CAD arm");
                     scanForTx = txp;
                     const bool channelActive = isChannelActive();
                     scanForTx = nullptr;
                     if (channelActive) { // currently traffic on the channel?
-                        LOG_DEBUG("CAD busy");
+                        LOG_DEBUG_RADIO("CAD busy");
                         // Beacon target or not: reconfigureForBeaconTX() already left RX running on that
                         // config, so skipping this only ever left the node deaf in standby.
                         rearmReceive();
                         setTransmitDelay();
                     } else {
-                        LOG_DEBUG("CAD free");
+                        LOG_DEBUG_RADIO("CAD free");
                         if (peek)
-                            LOG_DEBUG("Preamble hold released, CAD clear %ums after the sighting",
-                                      Time::getMillis() - peekHoldStart);
+                            LOG_DEBUG_RADIO("Preamble hold released, CAD clear %ums after the sighting",
+                                            Time::getMillis() - peekHoldStart);
                         // Send any outgoing packets we have ready as fast as possible to keep the time between channel scan and
                         // actual transmission as short as possible
                         txp = txQueue.dequeue();
@@ -843,7 +843,7 @@ void RadioLibInterface::handleReceiveInterrupt(const CapturedRxInfo *captured)
         // A CAD handoff's RX window expired with nothing on air. There is no packet to read, so don't count
         // it as a bad one - the caller's rearmReceive() puts the radio back to listening.
         if (!haveFrame && iface->checkIrq(RADIOLIB_IRQ_TIMEOUT) == 1) {
-            LOG_DEBUG("CAD>RX empty");
+            LOG_DEBUG_RADIO("CAD>RX empty");
             // Inside a handoff a damaged header's flags can be set alongside the timeout, both routed to DIO1:
             // clear them together, or the line stays asserted and the next frame's RX_DONE raises no edge. Plain
             // RX keeps leaving HEADER_ERR for checkStaleRxFlags() to judge.
@@ -858,7 +858,7 @@ void RadioLibInterface::handleReceiveInterrupt(const CapturedRxInfo *captured)
         // behind it. getPacketLength() would not be a frame's length here, so take the same exit as the empty
         // window, clearing what ended the RX instead of reading a packet that never arrived.
         if (wasCadHandoff && !haveFrame) {
-            LOG_DEBUG("CAD>RX damaged");
+            LOG_DEBUG_RADIO("CAD>RX damaged");
             iface->clearIrq(cadHandoffRxErrorIrqs);
             return;
         }
@@ -868,7 +868,7 @@ void RadioLibInterface::handleReceiveInterrupt(const CapturedRxInfo *captured)
     }
 
     if (wasCadHandoff)
-        LOG_DEBUG("CAD>RX pkt");
+        LOG_DEBUG_RADIO("CAD>RX pkt");
 
     // Some drivers report this as a 16 bit value, so a bad readback can overrun radioBuffer in readData()
     if (length > sizeof(radioBuffer)) {
@@ -1033,7 +1033,7 @@ bool RadioLibInterface::resetAGC()
 
 void RadioLibInterface::noteCadHandoffToRx()
 {
-    LOG_DEBUG("CAD>RX started");
+    LOG_DEBUG_RADIO("CAD>RX started");
     cadHandedToRx = true;
     // Same clock Throttle compares against, so a native test can drive both across the wrap. 0 is the
     // "none outstanding" sentinel and getMillis() does land on it once per wrap, so step past it.
@@ -1448,7 +1448,14 @@ void RadioLibInterface::configHardwareForSend()
 
 int16_t RadioLibInterface::launchTransmit(size_t numbytes)
 {
-    return iface->startTransmit((uint8_t *)&radioBuffer, numbytes);
+    int16_t res = iface->startTransmit((uint8_t *)&radioBuffer, numbytes);
+#if !RADIOLIB_SPI_PARANOID
+    // Without paranoid SPI nothing reads SetTx's status (LR11x0/LR20x0 report it on the next transfer), so a refused
+    // SetTx would wait for a TX_DONE that never comes. Chips without checkStatusCb (SX12xx) have nothing to read.
+    if (res == RADIOLIB_ERR_NONE && module.spiConfig.checkStatusCb)
+        res = module.spiConfig.checkStatusCb(&module);
+#endif
+    return res;
 }
 
 void RadioLibInterface::setStandby()

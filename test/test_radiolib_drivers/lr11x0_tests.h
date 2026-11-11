@@ -135,15 +135,33 @@ static void test_lr11x0_cad_rx_exit_byte_sent()
     TEST_ASSERT_EQUAL_UINT8(0x01, lr11x0CadParams(hal)[5]);
 }
 
-// A refused SetCadParams (CMD_PERR) returns -706 and starts no CAD, the same contract as the LR2021:
-// LR11x0Interface::isChannelActive() also reads any error but WRONG_MODEM as a free channel.
+// A refused SetCadParams (CMD_PERR) returns -706, the same contract as the LR2021:
+// LR11x0Interface::isChannelActive() also reads any error but WRONG_MODEM as a free channel. Only paranoid
+// SPI stops the SetCad that follows; without it the CAD runs on the old parameters (SENT_AFTER_REFUSAL).
 static void test_lr11x0_cad_params_rejected_returns_spi_cmd_invalid()
 {
     LR11X0_RADIO(hal);
     lr11x0SetSf(hal, radio, 9);
     hal.reply(op16(RADIOLIB_LR11X0_CMD_SET_CAD_PARAMS), 0x04, {0x02}, 1);
     TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_SPI_CMD_INVALID, radio.startChannelScan(lr11x0CadConfig()));
-    TEST_ASSERT_EQUAL_UINT32(0, hal.count(op16(RADIOLIB_LR11X0_CMD_SET_CAD)));
+    TEST_ASSERT_EQUAL_UINT32(SENT_AFTER_REFUSAL, hal.count(op16(RADIOLIB_LR11X0_CMD_SET_CAD)));
+}
+
+// A SetTx the chip refuses: as on the LR2021 (lr2021_tests.h), without paranoid SPI only a status read finds it.
+static void test_lr11x0_refused_settx_found_by_a_status_read()
+{
+    LR11X0_RADIO(hal);
+    hal.rejectUnless(op16(RADIOLIB_LR11X0_CMD_SET_TX), [](const std::vector<uint8_t> &) { return false; }, 0x02);
+    uint8_t payload[8] = {};
+    const int16_t state = radio.startTransmit(payload, sizeof(payload));
+    TEST_ASSERT_EQUAL_UINT32(1, hal.count(op16(RADIOLIB_LR11X0_CMD_SET_TX)));
+#if RADIOLIB_SPI_PARANOID
+    TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_SPI_CMD_INVALID, state);
+#else
+    TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_NONE, state);
+    TEST_ASSERT_NOT_NULL(mod.spiConfig.checkStatusCb);
+    TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_SPI_CMD_INVALID, mod.spiConfig.checkStatusCb(&mod));
+#endif
 }
 
 // Grows here - each needs replies scripted per opcode:
@@ -165,4 +183,5 @@ static void runLr11x0Tests()
     RUN_TEST(test_lr11x0_cad_default_config_frame);
     RUN_TEST(test_lr11x0_cad_rx_exit_byte_sent);
     RUN_TEST(test_lr11x0_cad_params_rejected_returns_spi_cmd_invalid);
+    RUN_TEST(test_lr11x0_refused_settx_found_by_a_status_read);
 }
