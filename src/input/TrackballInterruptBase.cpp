@@ -102,11 +102,9 @@ int32_t TrackballInterruptBase::runOnce()
         down_counter = 0;
         lastInterruptTime = 0;
     }
-#ifdef INPUT_DEBUG
     if (left_counter > 0 || right_counter > 0 || up_counter > 0 || down_counter > 0) {
-        LOG_DEBUG("L %u R %u U %u D %u, time %u", left_counter, right_counter, up_counter, down_counter, millis());
+        LOG_INPUT("L %u R %u U %u D %u, time %u", left_counter, right_counter, up_counter, down_counter, millis());
     }
-#endif
 #endif
 
     bool pressLatched = false;
@@ -177,24 +175,16 @@ int32_t TrackballInterruptBase::runOnce()
     // emitted this poll (a release classified on a later poll) must not be overwritten either.
     if (!pressLatched && e.inputEvent == INPUT_BROKER_NONE) {
         if (up_counter >= TB_THRESHOLD) {
-#ifdef INPUT_DEBUG
-            LOG_DEBUG("Trackball event UP %u", millis());
-#endif
+            LOG_INPUT("Trackball event UP %u", millis());
             e.inputEvent = this->_eventUp;
         } else if (down_counter >= TB_THRESHOLD) {
-#ifdef INPUT_DEBUG
-            LOG_DEBUG("Trackball event DOWN %u", millis());
-#endif
+            LOG_INPUT("Trackball event DOWN %u", millis());
             e.inputEvent = this->_eventDown;
         } else if (left_counter >= TB_THRESHOLD) {
-#ifdef INPUT_DEBUG
-            LOG_DEBUG("Trackball event LEFT %u", millis());
-#endif
+            LOG_INPUT("Trackball event LEFT %u", millis());
             e.inputEvent = this->_eventLeft;
         } else if (right_counter >= TB_THRESHOLD) {
-#ifdef INPUT_DEBUG
-            LOG_DEBUG("Trackball event RIGHT %u", millis());
-#endif
+            LOG_INPUT("Trackball event RIGHT %u", millis());
             e.inputEvent = this->_eventRight;
         }
     }

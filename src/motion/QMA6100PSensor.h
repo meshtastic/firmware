@@ -56,6 +56,12 @@ class QMA6100PSensor : public MotionSensor
 
     // Called each time our sensor gets a chance to run
     virtual int32_t runOnce() override;
+#ifdef MESHTASTIC_INCLUDE_INKHUD
+    StepSource stepSource() const override { return StepSource::Software; }
+
+  private:
+    void sampleAccelerationForSteps();
+#endif
 };
 
 #endif
