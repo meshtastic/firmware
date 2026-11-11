@@ -113,6 +113,7 @@ constexpr uint64_t PPS_RECENT_MS = 30 * 60 * 1000;         // after that, NMEA m
 constexpr uint32_t PPS_BURST_EDGES = 5;                    // edges accepted per burst; the rate trim carries the clock between
 constexpr uint64_t PPS_BURST_INTERVAL_MS = 10 * 60 * 1000; // between bursts while the GPS stays on
 constexpr uint64_t PPS_BURST_TIMEOUT_MS = 30 * 1000;       // give up on a burst that gets no usable edges
+constexpr uint64_t PPS_FIX_MAX_AGE_MS = 3 * 1000;          // GGA is 1 Hz, so this tolerates one lost sentence
 #endif
 constexpr uint32_t AIROHA_PROBE_SETTLE_MS = 20;
 #ifdef HAS_AIROHA_SLEEP
@@ -1260,8 +1261,10 @@ void GPS::setPowerState(GPSPowerState newState, uint32_t sleepTime)
     powerState = newState;
     LOG_INFO("GPS power state %s -> %s", getGPSPowerStateString(oldState), getGPSPowerStateString(newState));
 #if GPS_PPS_DISCIPLINE
-    if (newState != GPS_ACTIVE)
-        disarmPps(0); // no pulses while it sleeps; burst again once it wakes with a fix
+    if (newState != GPS_ACTIVE) {
+        disarmPps(0);     // no pulses while it sleeps; burst again once it wakes with a fix
+        lastGgaFixMs = 0; // and not before a GGA reports a fix after the wake
+    }
 #endif
 
     switch (newState) {
@@ -2464,10 +2467,21 @@ bool GPS::hasLock()
 }
 
 #if GPS_PPS_DISCIPLINE
-bool GPS::ppsFixUsable()
+void GPS::notePpsFixQuality(uint8_t quality)
 {
     // Any GGA fix: the receiver's pulse is disciplined from a 2D fix too, and indoors a 3D one may never come
-    return fixQual >= 1 && fixQual <= 5;
+    const bool usable = quality >= 1 && quality <= 5;
+    const uint64_t nowMs = Time::getMillisMonotonic();
+    // 0 means "none since the wake", so lift the one zero tick, as Time::skipZero() does - but not with it,
+    // since it takes uint32_t and this clock is 64-bit, and the stamp is compared against the whole of it
+    lastGgaFixMs = usable ? (nowMs ? nowMs : 1) : 0;
+}
+
+bool GPS::ppsFixUsable()
+{
+    // Positive evidence, not a cached quality: TinyGPS++ keeps its last fixQ across a sleep, and a receiver
+    // that has lost its fix keeps pulsing on its own clock, which no interval check can tell from UTC
+    return lastGgaFixMs && Time::getMillisMonotonic() - lastGgaFixMs <= PPS_FIX_MAX_AGE_MS;
 }
 #endif
 
@@ -2587,7 +2601,7 @@ void GPS::processPps()
     disciplineRTC(edgeMonoUs, r.utcUs);
     if (pps.hasRate())
         setRTCRateTrimPpb(-pps.ratePpb());
-    lastPpsAcceptMs = Time::skipZero(nowMs);
+    lastPpsAcceptMs = nowMs ? nowMs : 1; // not skipZero(), which would narrow this 64-bit stamp to 32 bits
 
     LOG_DEBUG("GPS PPS edge %lu: clock was %ld us off, rate %s%ld ppb", (unsigned long)(r.utcUs / 1000000), (long)r.errorUs,
               pps.hasRate() ? "" : "unknown ", (long)pps.ratePpb());
@@ -2635,6 +2649,11 @@ bool GPS::whileActive()
                 lastDollarByteCount = nmeaByteCount;
             const bool committed = reader.encode(c);
             isValid |= committed;
+#if GPS_PPS_DISCIPLINE
+            // Field 6 of this GGA just set the parser's fix quality, so the reading is this sentence's own
+            if (committed && reader.sentenceType() == GPS_SENTENCE_GPGGA)
+                notePpsFixQuality(reader.fixQuality());
+#endif
             if (committed && reader.date.isUpdated() && reader.time.isUpdated()) {
                 int64_t utcMs;
                 if (readNmeaUtcMs(utcMs) && pendingCount < 2)

@@ -185,8 +185,11 @@ class GPS : private concurrency::OSThread
 #if GPS_PPS_DISCIPLINE
     /// Arm the PPS IRQ for a burst when one is due, pin the RTC to each edge the fix vouches for, disarm after
     void processPps();
-    /// A fix the PPS can be trusted on: any GGA fix, as hasLock()'s 3D rule would keep an indoor receiver out
+    /// A fix the PPS can be trusted on: a GGA fix seen since the wake, as hasLock()'s 3D rule would keep an
+    /// indoor receiver out and a cached quality outlives the sleep that invalidated it
     bool ppsFixUsable();
+    /// Note the fix quality a GGA just reported, which is what ppsFixUsable() goes by
+    void notePpsFixQuality(uint8_t quality);
     /// Release the PPS IRQ; the next burst is due at nextBurstMs (monotonic ms, 0 = as soon as there is a fix)
     void disarmPps(uint64_t nextBurstMs);
 #endif
@@ -234,6 +237,7 @@ class GPS : private concurrency::OSThread
     uint64_t nextPpsBurstMs = 0;   // monotonic ms; 0 = arm once there is a fix
     uint64_t lastPpsAcceptMs = 0;  // monotonic ms of the last edge the RTC was pinned to; 0 = never
     uint64_t lastPpsFullSetMs = 0; // last PPS set that also wrote the hardware RTC and system time
+    uint64_t lastGgaFixMs = 0;     // monotonic ms of the last GGA reporting a fix; 0 = none since the wake
 #endif
 
 #ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
