@@ -522,13 +522,28 @@ uint32_t getTime(bool local)
     return local ? secs + getTZOffset() : secs;
 }
 
-uint64_t getUtcMicros()
+// What the rate correction has taken off (or added to) the elapsed time. The product is split into
+// whole billions of microseconds and the remainder: elapsedUs * rateTrimPpb in one step passes
+// INT64_MAX after 214 days at the +-500000 ppb clamp, which a clock never re-anchored can reach.
+static int64_t rateTrimUs(uint64_t elapsedUs)
+{
+    const int64_t kiloSeconds = (int64_t)(elapsedUs / 1000000000ULL);
+    const int64_t remainderUs = (int64_t)(elapsedUs % 1000000000ULL);
+    return kiloSeconds * rateTrimPpb + remainderUs * rateTrimPpb / 1000000000;
+}
+
+// The UTC this clock names at a monotonic instant already read, so a caller re-anchoring the clock
+// at that instant cannot shift it by whatever ran between two reads of the monotonic clock.
+static uint64_t utcMicrosAt(uint64_t monoUs)
 {
     // Both terms are 64-bit monotonic, so the elapsed time cannot wrap - see timeStartUs.
-    const uint64_t elapsedUs = Time::getMicrosMonotonic() - timeStartUs;
-    // 2^63 / 500 ppm trim bounds elapsedUs to ~584 years before the product overflows
-    const int64_t trimUs = (int64_t)elapsedUs * rateTrimPpb / 1000000000;
-    return zeroOffsetUs + elapsedUs + trimUs;
+    const uint64_t elapsedUs = monoUs - timeStartUs;
+    return zeroOffsetUs + elapsedUs + rateTrimUs(elapsedUs);
+}
+
+uint64_t getUtcMicros()
+{
+    return utcMicrosAt(Time::getMicrosMonotonic());
 }
 
 uint64_t getUtcMillis()
@@ -547,7 +562,7 @@ void setRTCRateTrimPpb(int32_t ppb)
 {
     // Re-anchor at the current reading first, so a new trim bends the clock from now instead of jumping it
     const uint64_t nowUs = Time::getMicrosMonotonic();
-    zeroOffsetUs = getUtcMicros();
+    zeroOffsetUs = utcMicrosAt(nowUs); // the instant we anchor to, so preemption between the two cannot move the clock
     timeStartUs = nowUs;
     rateTrimPpb = std::max<int32_t>(-MAX_RATE_TRIM_PPB, std::min<int32_t>(MAX_RATE_TRIM_PPB, ppb));
 }
