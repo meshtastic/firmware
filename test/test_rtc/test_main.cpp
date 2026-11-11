@@ -268,16 +268,31 @@ static void test_rate_trim_survives_months_without_reanchoring(void)
     const uint64_t before = getUtcMicros();
     setRTCRateTrimPpb(MAX_RATE_TRIM_PPB);
 
+    // 240 days, past the 214 where the single-step product overflows, plus a tail so the elapsed
+    // time is not a whole number of billions of microseconds and the remainder term is exercised
     const uint32_t thirtyDaysMs = 30u * 24 * 60 * 60 * 1000;
-    for (int i = 0; i < 8; i++) // 240 days, past the 214 where the single-step product overflows
+    const uint32_t tailMs = 1234567;
+    for (int i = 0; i < 8; i++)
         advanceFakeClock(thirtyDaysMs);
+    advanceFakeClock(tailMs);
 
-    const uint64_t elapsedUs = (uint64_t)thirtyDaysMs * 8 * 1000;
+    const uint64_t elapsedUs = ((uint64_t)thirtyDaysMs * 8 + tailMs) * 1000;
+    TEST_ASSERT_TRUE(elapsedUs % 1000000000ULL != 0); // the remainder term carries the sub-1000 s part
     const long double expectedTrimUs = (long double)elapsedUs * MAX_RATE_TRIM_PPB / 1000000000.0L;
-    const uint64_t expected = before + elapsedUs + (uint64_t)expectedTrimUs;
     const uint64_t read = getUtcMicros();
     TEST_ASSERT_TRUE_MESSAGE(read > before, "the trimmed clock ran backwards: the trim product overflowed");
-    TEST_ASSERT_UINT64_WITHIN(2, expected, read);
+    TEST_ASSERT_UINT64_WITHIN(2, before + elapsedUs + (uint64_t)expectedTrimUs, read);
+
+    // The same span with the trim negative: re-anchoring keeps the time read, then it falls behind
+    const uint64_t afterReanchor = getUtcMicros();
+    setRTCRateTrimPpb(-MAX_RATE_TRIM_PPB);
+    TEST_ASSERT_EQUAL_UINT64(afterReanchor, getUtcMicros());
+    for (int i = 0; i < 8; i++)
+        advanceFakeClock(thirtyDaysMs);
+    advanceFakeClock(tailMs);
+    const uint64_t slowRead = getUtcMicros();
+    TEST_ASSERT_TRUE_MESSAGE(slowRead > afterReanchor, "the negatively trimmed clock ran backwards");
+    TEST_ASSERT_UINT64_WITHIN(2, afterReanchor + elapsedUs - (uint64_t)expectedTrimUs, slowRead);
 }
 
 // Equal-quality NTP reapplies only after the 30-minute drift-correction throttle.
