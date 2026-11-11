@@ -25,6 +25,13 @@ bool STK8XXXSensor::init()
 
 int32_t STK8XXXSensor::runOnce()
 {
+#ifdef MESHTASTIC_INCLUDE_INKHUD
+    if (stepTracker().isTracking()) {
+        float x = 0, y = 0, z = 0;
+        sensor.STK8xxx_Getregister_data(&x, &y, &z);
+        sampleSteps(x, y, z);
+    }
+#endif
     if (STK_IRQ) {
         STK_IRQ = false;
         if (config.display.wake_on_tap_or_motion) {
