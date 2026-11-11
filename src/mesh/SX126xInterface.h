@@ -33,6 +33,19 @@
 #if SX126X_TX_DURING_CAD && defined(ARCH_PORTDUINO)
 #error "SX126X_TX_DURING_CAD is for MCU hosts; a CH341 host has its own prestage"
 #endif
+// Bench (r148m): listen before talk on the RX already running instead of a CAD. Once RX has listened unbroken for one
+// max frame, any frame on air started while it listened, so a clear IRQ read lets the TX go from STDBY_XOSC with no
+// CAD and no TCXO start; otherwise the CAD runs as before. MCU hosts only.
+#ifndef SX126X_RX_LBT
+#define SX126X_RX_LBT 0
+#endif
+// Bench (r148m): how long RX must have listened before its flags stand in for a CAD (ms). 0 = one max frame.
+#ifndef SX126X_RX_LBT_GATE_MS
+#define SX126X_RX_LBT_GATE_MS 0
+#endif
+#if SX126X_RX_LBT && defined(ARCH_PORTDUINO)
+#error "SX126X_RX_LBT is for MCU hosts"
+#endif
 
 // After TX_DONE the SX126x waits in standby for the radio thread to restart RX, which a main-loop hold can stretch by
 // hundreds of ms. With the readout task, the TX_DONE interrupt has the task restart it instead, on every platform the
@@ -130,8 +143,8 @@ template <class T> class SX126xInterface : public RadioLibInterface
     /** On a CH341 host: launch a payload the scan staged, sending only what the scan overwrote */
     int16_t launchTransmit(size_t numbytes) override;
 #endif
-#if SX126X_TX_DURING_CAD
-    /** Launch a payload the scan wrote during its CAD with SetTx alone */
+#if SX126X_TX_DURING_CAD || SX126X_RX_LBT
+    /** Launch a payload the scan wrote during its CAD with SetTx alone; log the RX LBT counts off the air path */
     int16_t launchTransmit(size_t numbytes) override;
 #endif
 
@@ -226,6 +239,16 @@ template <class T> class SX126xInterface : public RadioLibInterface
 
     /** RX was armed continuous and nothing has put the chip into standby since, so it is still listening */
     bool rxArmedContinuous = false;
+#if SX126X_RX_LBT
+    /** When the continuous RX was armed (0 while not armed); the task's arm time until the radio thread adopts it */
+    uint32_t rxArmedSinceMs = 0;
+#ifdef MESHTASTIC_RX_READOUT_TASK
+    uint32_t rxTaskArmedMs = 0;
+#endif
+    /** TX decisions: keyed up from RX, held on RX flags, CAD because RX was armed too briefly, CAD for anything else */
+    uint32_t rxLbtClear = 0, rxLbtHeld = 0, rxLbtCadShort = 0, rxLbtCadOther = 0;
+    uint32_t rxLbtLastLogMs = 0;
+#endif
 
     bool resumeRunningReceive() override;
 

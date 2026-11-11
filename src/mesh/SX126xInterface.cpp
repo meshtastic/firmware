@@ -177,6 +177,7 @@ template <typename T> bool SX126xInterface<T>::reinitChip()
     cadTxLen = 0;
 #endif
     LOG_INFO("r148k: sx126x_tx_during_cad=%d", SX126X_TX_DURING_CAD); // bench: which arm is flashed
+    LOG_INFO("r148m: sx126x_rx_lbt=%d gate_ms=%d", SX126X_RX_LBT, SX126X_RX_LBT_GATE_MS);
     // \todo Display actual typename of the adapter, not just `SX126x`
     LOG_INFO("SX126x init result %d", res);
     if (res == RADIOLIB_ERR_CHIP_NOT_FOUND || res == RADIOLIB_ERR_SPI_CMD_FAILED)
@@ -477,6 +478,9 @@ template <typename T> int16_t SX126xInterface<T>::trySetStandby()
     isReceiving = false; // If we were receiving, not any more
     activeReceiveStart = 0;
     rxArmedContinuous = false;
+#if SX126X_RX_LBT
+    rxArmedSinceMs = 0;
+#endif
     disableInterruptTimed();
     completeSending(); // If we were sending, not anymore
     RadioLibInterface::setStandby();
@@ -561,6 +565,9 @@ template <typename T> void SX126xInterface<T>::startReceive()
 
     RadioLibInterface::startReceive();
     rxArmedContinuous = true;
+#if SX126X_RX_LBT
+    rxArmedSinceMs = Time::skipZero(Time::getMillis());
+#endif
 #ifdef ARCH_PORTDUINO
     rxWritePtr = 0;         // RX's base, which RadioLib's RX start always sets to 0
     rxClobberCheck = false; // the standby before it dropped the frame a stage was noted against
@@ -654,6 +661,9 @@ template <typename T> void SX126xInterface<T>::rearmReceiveFromTask()
         return;
     }
     rearmState = REARM_ARMED;
+#if SX126X_RX_LBT
+    rxTaskArmedMs = Time::skipZero(Time::getMillis());
+#endif
     // The TX_DONE interrupt detached the radio's interrupt. Attach the RX one now, so a frame that ends before the radio
     // thread runs wakes this task to read it, rather than waiting in the chip for the next frame to overwrite it.
     rxArmedBeforeTxDone = true;
@@ -702,6 +712,9 @@ template <typename T> bool SX126xInterface<T>::adoptReceiveArmedFromIsr()
         return false;
     RadioLibInterface::startReceive();
     rxArmedContinuous = true;
+#if SX126X_RX_LBT
+    rxArmedSinceMs = rxTaskArmedMs; // listening since the task armed it, not since this adoption
+#endif
     enableInterrupt(isrRxLevel0);
     checkRxDoneIrqFlag(); // an RX_DONE that completed before the interrupt was attached
     return true;
@@ -744,6 +757,26 @@ template <typename T> bool SX126xInterface<T>::isChannelActive()
     prestagedInRx = false;
     if (!takeEarlyTxStage() && stageTxInRx())
         return true; // report busy without the standby, which would abort the frame; rearmReceive() keeps the RX
+#endif
+#if SX126X_RX_LBT
+    // The continuous RX has listened unbroken for one max frame, so any frame on air now started while it listened and
+    // shows in its preamble or header flag. A peek at an old preamble hold is the CAD's to judge, as is everything else.
+    const uint32_t rxLbtGateMs = SX126X_RX_LBT_GATE_MS ? (uint32_t)SX126X_RX_LBT_GATE_MS : maxRxFrameMsec();
+    if (!rxArmedContinuous || !isReceiving || !rxArmedSinceMs || preambleHoldActive()) {
+        rxLbtCadOther++;
+    } else if (!Throttle::hasElapsed(rxArmedSinceMs, rxLbtGateMs)) {
+        rxLbtCadShort++; // a frame that began before the RX was armed may still be on air, its preamble unseen
+    } else if (isActivelyReceiving()) {
+        rxLbtHeld++;
+        return true; // busy, without the standby that would abort the frame; the caller's rearmReceive() resumes the RX
+    } else {
+        // Clear: STDBY_XOSC (setStandbyXOSC) keeps the TCXO running, so RadioLib's TX staging and SetTx follow at once
+        rxLbtClear++;
+        setTransmitEnable(false);
+        if (trySetStandby() != RADIOLIB_ERR_NONE)
+            maybeRecoverChipStateLoss();
+        return false; // a recovered chip can TX, a dead one fails startSend safely
+    }
 #endif
     setTransmitEnable(false);
     int16_t result = trySetStandby();
@@ -978,9 +1011,10 @@ template <typename T> int16_t SX126xInterface<T>::scanChannelForTx(const Channel
     return RADIOLIB_ERR_UNKNOWN;
 }
 
-#if SX126X_TX_DURING_CAD
+#if SX126X_TX_DURING_CAD || SX126X_RX_LBT
 template <typename T> int16_t SX126xInterface<T>::launchTransmit(size_t numbytes)
 {
+#if SX126X_TX_DURING_CAD
     const bool staged = cadTxLen != 0 && cadTxLen == numbytes && sendingPacket && sendingPacket->id == cadTxId;
     cadTxLen = 0;
     int16_t res;
@@ -1009,6 +1043,16 @@ template <typename T> int16_t SX126xInterface<T>::launchTransmit(size_t numbytes
         LOG_WARN("r148k: TX write during CAD %s%d, sent with RadioLib's staging", radioLibErr, cadTxWriteErr);
         cadTxWriteErr = RADIOLIB_ERR_NONE;
     }
+#else
+    const int16_t res = RadioLibInterface::launchTransmit(numbytes);
+#endif
+#if SX126X_RX_LBT
+    if (!rxLbtLastLogMs || Throttle::hasElapsed(rxLbtLastLogMs, 60000)) { // after the launch, off the air path
+        rxLbtLastLogMs = Time::skipZero(Time::getMillis());
+        LOG_INFO("r148m: rx_lbt clear=%u held=%u cad_short=%u cad_other=%u", (unsigned)rxLbtClear, (unsigned)rxLbtHeld,
+                 (unsigned)rxLbtCadShort, (unsigned)rxLbtCadOther);
+    }
+#endif
     return res;
 }
 #endif
