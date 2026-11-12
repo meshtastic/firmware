@@ -332,10 +332,8 @@ void Channels::initDefaults()
 #endif
 }
 
-void Channels::onConfigChanged()
+bool Channels::resolvePrimaryIndex()
 {
-    // Make sure the phone hasn't mucked anything up. Settle the primary first: fixupChannel()
-    // hashes through getKey(), which follows a keyless secondary to primaryIndex.
     bool hasPrimary = false;
     for (int i = 0; i < channelFile.channels_count; i++) {
         const meshtastic_Channel &ch = getByIndex(i);
@@ -345,6 +343,14 @@ void Channels::onConfigChanged()
             hasPrimary = true;
         }
     }
+    return hasPrimary;
+}
+
+void Channels::onConfigChanged()
+{
+    // Make sure the phone hasn't mucked anything up. Settle the primary first: fixupChannel()
+    // hashes through getKey(), which follows a keyless secondary to primaryIndex.
+    bool hasPrimary = resolvePrimaryIndex();
 
     for (int i = 0; i < channelFile.channels_count; i++)
         fixupChannel(i);

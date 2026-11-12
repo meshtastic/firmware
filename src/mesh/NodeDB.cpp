@@ -3056,6 +3056,7 @@ void NodeDB::loadFromDisk()
     // Some clients/UI components display bandwidth/spread_factor directly from config even in preset mode.
     // After the channels are loaded: the frequency slot check hashes the primary channel's name.
     if (config.has_lora && config.lora.use_preset) {
+        channels.resolvePrimaryIndex();
         RadioInterface::clampConfigLora(config.lora);
     }
 
