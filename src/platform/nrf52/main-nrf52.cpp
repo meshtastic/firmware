@@ -1,5 +1,6 @@
 #include "UptimeClock.h"
 #include "configuration.h"
+#include "memGet.h"
 #include "mesh/Throttle.h"
 #include <Adafruit_TinyUSB.h>
 #include <Adafruit_nRFCrypto.h>
@@ -182,11 +183,56 @@ bool loopCanSleep()
     // return !(TinyUSBDevice.mounted() && !TinyUSBDevice.suspended());
 }
 
+// TinyUSB's flush only queues the next USB packet, so a reset straight after it drops the rest of the CDC FIFO.
+// Wait, bounded, for the FIFO to drain. Skipped where the USB task can't run (ISR, scheduler stopped).
+static void drainConsoleBeforeReset()
+{
+    Serial.flush();
+    if (__get_IPSR() != 0 || xTaskGetSchedulerState() != taskSCHEDULER_RUNNING || !tud_cdc_connected())
+        return;
+    for (uint32_t waitedMs = 0; waitedMs < 250 && tud_cdc_write_available() < CFG_TUD_CDC_TX_BUFSIZE; waitedMs++) {
+        tud_cdc_write_flush();
+        delay(1);
+    }
+    // An empty FIFO means the last packet reached the endpoint buffer, not the host; it's collected on the next 1 ms frame
+    delay(20);
+}
+
+// What file:line can't say: the task that asserted (the log's [thread] tag is the last OSThread to run), how close
+// its stack came to overflowing, and whether the heap was exhausted, fragmented or corrupt.
+static void logAssertContext()
+{
+    if (__get_IPSR() != 0) {
+        LOG_ERROR("assert context: exception %lu", (unsigned long)__get_IPSR());
+        return;
+    }
+    if (xTaskGetSchedulerState() != taskSCHEDULER_RUNNING)
+        return;
+    const char *task = pcTaskGetName(NULL);
+    const unsigned stackFree = uxTaskGetStackHighWaterMark(NULL) * sizeof(StackType_t);
+    // mallinfo() behind getFreeHeap() walks the same list unchecked, so only call it once the list checks out
+    if (!memGet.heapLooksIntact()) {
+        LOG_ERROR("assert context: task %s, stack free %u B, heap free list corrupt", task, stackFree);
+        return;
+    }
+    LOG_ERROR("assert context: task %s, stack free %u B, heap free %u, largest block %u", task, stackFree, memGet.getFreeHeap(),
+              memGet.getMaxAllocHeap());
+}
+
 // handle standard gcc assert failures
 void __attribute__((noreturn)) __assert_func(const char *file, int line, const char *func, const char *failedexpr)
 {
+    // An assert raised while logging this one (an allocation failing inside the log) resets rather than recursing;
+    // the drain neither logs nor allocates, so the lines already written still reach the host
+    static bool asserting = false;
+    if (asserting) {
+        drainConsoleBeforeReset();
+        NVIC_SystemReset();
+    }
+    asserting = true;
     LOG_ERROR("assert failed %s: %d, %s, test=%s", file, line, func, failedexpr);
-    Serial.flush(); // the reset below would cut the message short
+    logAssertContext();
+    drainConsoleBeforeReset();
     // debugger_break(); FIXME doesn't work, possibly for segger
     // Reboot cpu
     NVIC_SystemReset();

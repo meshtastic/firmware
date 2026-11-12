@@ -543,6 +543,7 @@ bool AirQualityTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
                     meshtastic_ClientNotification *notification = clientNotificationPool.allocZeroed();
                     if (notification) {
                         notification->level = meshtastic_LogRecord_Level_INFO;
+                        notification->type = meshtastic_ClientNotification_NotificationType_TELEMETRY_SENT_SLEEPING;
                         notification->time = getValidTime(RTCQualityFromNet);
                         sprintf(notification->message, "Sending telemetry and sleeping for %us interval in a moment",
                                 Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.air_quality_interval,

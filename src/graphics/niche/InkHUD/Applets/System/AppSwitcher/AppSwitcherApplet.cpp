@@ -335,7 +335,6 @@ void InkHUD::AppSwitcherApplet::onForeground()
     clampSelection();
     handleInput = true;
     lockRequests = true;
-    requestUpdate(Drivers::EInk::UpdateTypes::FAST);
 }
 
 void InkHUD::AppSwitcherApplet::onBackground()
@@ -363,6 +362,7 @@ void InkHUD::AppSwitcherApplet::show(Tile *t)
 
     t->assignApplet(this);
     bringToForeground();
+    requestUpdate(Drivers::EInk::UpdateTypes::FAST);
 }
 
 void InkHUD::AppSwitcherApplet::onRender(bool full)
