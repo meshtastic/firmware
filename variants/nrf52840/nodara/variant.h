@@ -195,7 +195,7 @@ static const uint8_t A0 = PIN_BATTERY_ADC;
 #define PIN_GNSS_RST (32 + 5)    // P1.05  hard reset (active-high via NPN)
 #define PIN_GNSS_PWR (0 + 12)    // P0.12  LDO enable (active-high)
 #define PIN_GNSS_STBY (32 + 7)   // P1.07  standby (active-low; HIGH=normal)
-#define PIN_GNSS_PPS (32 + 4)    // P1.04  pulse-per-second output
+#define PIN_GPS_PPS (32 + 4)     // P1.04  pulse-per-second output
 #define PIN_GNSS_REGION (32 + 2) // P1.02  constellation selection
 
 #define GNSS_PWR_ACTIVE (HIGH)
@@ -349,7 +349,6 @@ static const uint8_t A0 = PIN_BATTERY_ADC;
 #define PIN_GPS_RESET PIN_GNSS_RST
 #define PIN_GPS_EN PIN_GNSS_PWR
 #define PIN_GPS_STANDBY PIN_GNSS_STBY
-#define PIN_GPS_PPS PIN_GNSS_PPS
 
 #define GPS_EN_ACTIVE GNSS_PWR_ACTIVE
 #define GPS_STANDBY_ACTIVE GNSS_STBY_ACTIVE
