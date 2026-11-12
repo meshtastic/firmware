@@ -215,6 +215,15 @@ int findTile(int zoom, int x, int y)
 
 void preload()
 {
+    if (SD.cardType() == CARD_NONE) {
+        header = {};
+        free(indexData);
+        indexData = nullptr;
+        indexSize = 0;
+        mapFileSize = 0;
+        headerRetryAt = 0;
+        return;
+    }
     if (header.checked || indexData)
         return;
     if (headerRetryAt && !Throttle::deadlinePassed(headerRetryAt))
