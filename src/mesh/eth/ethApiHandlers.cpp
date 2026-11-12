@@ -13,19 +13,10 @@
 #include <hardware/watchdog.h>
 #endif
 
-// HEADER_TIMEOUT_MS doubles as the keep-alive idle window: handleApiClient
-// loops reading requests on the same connection, and bails out if no new
-// request line arrives within this budget. 3 s is comfortable for browser
-// pipelining without leaving the OSThread blocked too long after a client
-// goes quiet.
-static constexpr uint32_t HEADER_TIMEOUT_MS = 3000;
-static constexpr uint32_t BODY_TIMEOUT_MS = 5000;
 // A request body still missing when the session window closes gets at least this long, so a PUT
 // that lands right at the end of a session is not dropped over a few milliseconds of lag.
 static constexpr uint32_t BODY_MIN_WAIT_MS = 500;
-// Input that keeps arriving is read for at most this long past a deadline. Reading what is already
-// buffered takes milliseconds (the W5x00 holds 2 KB per socket), but without a cap a client feeding
-// one byte per poll could stretch a request by MAX_HEADER_LINES * MAX_LINE_LEN polls, about 8 s.
+// Input that keeps arriving is read for at most this long past a deadline, so a trickling client cannot hold the session.
 static constexpr uint32_t CONSUME_GRACE_MS = 500;
 static constexpr size_t MAX_LINE_LEN = 256;
 static constexpr size_t MAX_HEADER_LINES = 32;
@@ -52,29 +43,18 @@ struct Request {
     long contentLength = 0;
 };
 
-// One keep-alive connection, bounded by handleApiClient(). The response that reaches either bound
-// says Connection: close, so the client does not send its next request down a connection that is
-// about to be closed.
+// One keep-alive connection (see handleApiClient()); the response that reaches either bound says Connection: close.
 struct Session {
     uint32_t deadlineMs;
     int requestsLeft;
+    const char *closedBy = nullptr; // which bound the closing response reached, for the end-of-session log
 
-    // Asked right before a response's headers are written, because reading a PUT body can run past
-    // the deadline.
+    // Asked right before the headers are written, since reading a PUT body can run past the deadline.
     bool lastResponse() const { return requestsLeft <= 1 || Throttle::deadlinePassed(deadlineMs); }
 };
 
-// Whichever of two deadlines comes first, safe across the 32-bit wrap: a is first if it has already
-// passed at time b.
-static uint32_t earlierDeadline(uint32_t a, uint32_t b)
-{
-    return Throttle::deadlinePassedAt(b, a) ? a : b;
-}
-
 // Read up to one CRLF-terminated line; returns false on timeout or oversize.
-// The deadline bounds how long we wait for more bytes; input that has already arrived is still read
-// for up to CONSUME_GRACE_MS after it, so a request that is fully buffered is never dropped just
-// because its window closed, and one that keeps trickling in cannot hold the session open.
+// The deadline bounds the wait for more bytes; input already arriving is read for CONSUME_GRACE_MS past it.
 static bool readLine(IStreamReadWrite &client, String &out, uint32_t deadlineMs)
 {
     out = "";
@@ -191,14 +171,16 @@ static void writeCorsHeaders(IStreamReadWrite &client, const char *allowMethods)
 }
 
 // Ends the headers of a successful response. Returns whether the connection stays open.
-static bool writeConnectionHeader(IStreamReadWrite &client, const Session &session)
+static bool writeConnectionHeader(IStreamReadWrite &client, Session &session)
 {
     const bool keepAlive = !session.lastResponse();
+    if (!keepAlive)
+        session.closedBy = session.requestsLeft <= 1 ? "request cap" : "time cap";
     client.print(keepAlive ? "Connection: keep-alive\r\n\r\n" : "Connection: close\r\n\r\n");
     return keepAlive;
 }
 
-static bool sendPreflight(IStreamReadWrite &client, const char *allowMethods, const Session &session)
+static bool sendPreflight(IStreamReadWrite &client, const char *allowMethods, Session &session)
 {
     writeStatusLine(client, 204, "No Content");
     writeCorsHeaders(client, allowMethods);
@@ -223,7 +205,7 @@ static void sendError(IStreamReadWrite &client, int status, const char *reason, 
 
 // Returns true if the connection may stay open (keep-alive), false if the
 // response said Connection: close (an error, or the last one of the session).
-static bool handleFromRadio(IStreamReadWrite &client, const Request &req, const Session &session)
+static bool handleFromRadio(IStreamReadWrite &client, const Request &req, Session &session)
 {
     if (req.method == "OPTIONS")
         return sendPreflight(client, "GET, OPTIONS", session);
@@ -270,7 +252,7 @@ static bool handleFromRadio(IStreamReadWrite &client, const Request &req, const 
 
 // Returns true if the connection may stay open (keep-alive), false if the
 // response said Connection: close (an error, or the last one of the session).
-static bool handleToRadio(IStreamReadWrite &client, const Request &req, const Session &session)
+static bool handleToRadio(IStreamReadWrite &client, const Request &req, Session &session)
 {
     if (req.method == "OPTIONS")
         return sendPreflight(client, "PUT, OPTIONS", session);
@@ -291,7 +273,6 @@ static bool handleToRadio(IStreamReadWrite &client, const Request &req, const Se
     uint32_t deadline = session.deadlineMs;
     if (Throttle::deadlinePassedAt(now + BODY_MIN_WAIT_MS, deadline))
         deadline = now + BODY_MIN_WAIT_MS;
-    deadline = earlierDeadline(deadline, now + BODY_TIMEOUT_MS);
     while (got < (size_t)req.contentLength) {
         if (!client.connected())
             break;
@@ -336,70 +317,48 @@ static bool handleToRadio(IStreamReadWrite &client, const Request &req, const Se
 
 void handleApiClient(IStreamReadWrite &client)
 {
-    // HTTP/1.1 keep-alive loop. parseRequest returns false on idle timeout
-    // (3 s) or peer close, which is also our exit signal. Errors close the
-    // connection eagerly via sendError; normal responses use Content-Length
-    // framing + Connection: keep-alive so the loop can read the next request
-    // on the same TLS session.
-    //
-    // MAX_REQUESTS_PER_SESSION and MAX_SESSION_MS bound the loop because, while we are inside it,
-    // the parent OSThread does not return to mainController. The watchdog is fed below after every
-    // request, so the board stays up, but nothing else on core0 runs: MQTT, the radio, the router.
-    // (yield() does not help: on RP2350 it is a bare taskYIELD() and does not run the OSThreads.)
-    // A client.meshtastic.org sync produces ~80 back-to-back requests on one session, and a client
-    // that keeps polling /api/v1/fromradio can hold a session for minutes. On a pico2_w5500_e22 that
-    // was long enough for the 15 s MQTT keep-alive to lapse and for the broker to drop the node.
-    // MAX_SESSION_MS bounds the time rather than the request count, and every wait below (next
-    // request, request body) ends at the session deadline, so control is back in loop() within a
-    // few seconds. The response that reaches either cap says Connection: close (Session), and the
-    // client just re-handshakes once and carries on.
+    // HTTP/1.1 keep-alive loop. Nothing else on core0 runs meanwhile (MQTT, radio, router), so it is bounded by
+    // MAX_REQUESTS_PER_SESSION and MAX_SESSION_MS, and the response that reaches either says Connection: close.
     static constexpr int MAX_REQUESTS_PER_SESSION = 64;
     static constexpr uint32_t MAX_SESSION_MS = 3000;
 
     Session session{Time::getMillis() + MAX_SESSION_MS, MAX_REQUESTS_PER_SESSION};
-    // No cap test here: the handlers end the loop at either cap, through the response that says so.
-    // A deadline that passes while a keep-alive response is being written leaves parseRequest()
-    // nothing to wait for, so the session still ends at once, unless the next request is already in.
+    const char *endedBy = "peer close";
     while (client.connected()) {
-        const uint32_t deadline = earlierDeadline(Time::getMillis() + HEADER_TIMEOUT_MS, session.deadlineMs);
+        // Past the deadline this reads only a request already buffered within CONSUME_GRACE_MS of it.
         Request req;
-        if (!parseRequest(client, req, deadline)) {
+        if (!parseRequest(client, req, session.deadlineMs)) {
             if (session.requestsLeft == MAX_REQUESTS_PER_SESSION)
                 LOG_DEBUG("ETH API: bad/timeout request from %s", client.remoteIP().toString().c_str());
-            return;
+            endedBy = Throttle::deadlinePassed(session.deadlineMs) ? "time cap" : "bad request or peer close";
+            break;
         }
 
         LOG_INFO("ETH API: %s %s%s%s (from %s)", req.method.c_str(), req.path.c_str(), req.query.length() ? "?" : "",
                  req.query.c_str(), client.remoteIP().toString().c_str());
 
-        bool keepAlive = true;
+        bool keepAlive;
         if (req.path == "/api/v1/fromradio") {
             keepAlive = handleFromRadio(client, req, session);
         } else if (req.path == "/api/v1/toradio") {
             keepAlive = handleToRadio(client, req, session);
         } else {
             sendError(client, 404, "Not Found", "unknown endpoint");
-            return; // errors are terminal - Connection: close framing
-        }
-        // A response that said Connection: close ends the keep-alive loop. After an error that also
-        // keeps any unread/leftover body bytes (e.g. after a 408 short read or a 400 oversized PUT)
-        // from being misparsed as the next request.
-        if (!keepAlive) {
-            if (session.requestsLeft == 1)
-                LOG_DEBUG("ETH API: session capped at %d requests (will redo handshake on next batch)", MAX_REQUESTS_PER_SESSION);
-            return;
+            keepAlive = false;
         }
         session.requestsLeft--;
+        // After an error this also keeps a leftover body (408 short read, 400 oversized PUT) from parsing as a request.
+        if (!keepAlive) {
+            endedBy = session.closedBy ? session.closedBy : "error response";
+            break;
+        }
 #ifdef ARCH_RP2040
-        // yield() ONLY cedes to the OSThread scheduler; it does not call
-        // rp2040Loop() where watchdog_update() lives. While we sit inside
-        // serveClient() looping over keep-alive requests, main loop() is
-        // not running and the 8 s hardware watchdog WILL fire. Pet it
-        // explicitly here.
-        watchdog_update();
+        watchdog_update(); // only the main loop feeds it, and it does not run while we are in here
 #endif
-        yield();
     }
+    const int served = MAX_REQUESTS_PER_SESSION - session.requestsLeft;
+    if (served > 0)
+        LOG_DEBUG("ETH API: session ended by %s after %d request(s)", endedBy, served);
 }
 
 #endif // HAS_ETHERNET && (HAS_ETHERNET_API || HAS_ETHERNET_TLS_API)
