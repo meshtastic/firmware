@@ -50,13 +50,12 @@ __attribute__((noinline)) void variant_nrf52LoopHook(void) {}
 static nrfx_wdt_t nrfx_wdt = NRFX_WDT_INSTANCE(NRF_WDT31);
 static nrfx_wdt_channel_id nrfx_wdt_channel_id_main;
 
-// For the long pauses that block the main loop. The watchdog counts while the CPU sleeps (see nrf52Setup())
-// and only nrf52Loop() feeds it, so feed it between steps: the pause can finish, and a core that never wakes
-// from a step still trips the watchdog. Before nrf52Setup() this only writes the reload register, which is
-// what a watchdog still running across a warm boot needs.
+// A pause that blocks the main loop, fed in steps because the watchdog counts in sleep and only nrf52Loop()
+// feeds it. A step that never returns still trips it.
 static void delayFeedingWatchdog(uint32_t ms)
 {
     constexpr uint32_t maxStepMs = APP_WATCHDOG_SECS * 1000 / 3;
+    nrfx_wdt_channel_feed(&nrfx_wdt, nrfx_wdt_channel_id_main);
     while (ms > 0) {
         const uint32_t step = ms < maxStepMs ? ms : maxStepMs;
         delay(step);
@@ -383,9 +382,7 @@ void nrf52Setup()
     // Set up nrfx watchdog. Do not enable the watchdog yet (we do that
     // the first time through the main loop), so that other threads can
     // allocate their own wdt channel to protect themselves from hangs.
-    // behaviour is a RUN_* mask. Keep counting while the CPU sleeps: a core that never wakes from the
-    // tickless idle is exactly the hang a watchdog paused in sleep cannot see. Stay paused in HALT so a
-    // debugger stop does not turn into a reset.
+    // Count in sleep too (a core stuck in tickless idle is the hang to catch); stay paused in HALT for debuggers.
     nrfx_wdt_config_t wdt0_config = {.behaviour = NRF_WDT_BEHAVIOUR_RUN_SLEEP_MASK, .reload_value = APP_WATCHDOG_SECS * 1000};
     int r = nrfx_wdt_init(&nrfx_wdt, &wdt0_config, nullptr, nullptr);
     assert(r == 0);
