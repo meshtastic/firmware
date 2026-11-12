@@ -241,13 +241,7 @@ class GPS : private concurrency::OSThread
     uint8_t commasSinceDollar = 0; // fields seen in the sentence being read, which may span drains
 #endif
 
-#ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
-    // (20210908) TinyGps++ can only read the GPGSA "FIX TYPE" field
-    // via optional feature "custom fields", currently disabled (bug #525)
-    TinyGPSCustom gsafixtype; // custom extract fix type from GPGSA
-    TinyGPSCustom gsapdop;    // custom extract PDOP from GPGSA
-    uint8_t fixType = 0;      // fix type from GPGSA
-#endif
+    uint8_t fixType = 0; // fix type from GSA: 1 = no fix, 2 = 2D, 3 = 3D
 
     uint32_t fixHoldEnds = 0;
     uint32_t rx_gpio = 0;
