@@ -86,6 +86,25 @@ static_assert(skipZero(UINT32_MAX) == UINT32_MAX, "skipZero must not wrap the la
 /// every supported toolchain. ISRs use getMillis(); the publication protocol itself never waits.
 uint64_t getMillisMonotonic();
 
+/// Microseconds since boot, 64-bit, on the same timebase as getMillisMonotonic(). ESP32 and RP2040 read their
+/// hardware microsecond timer, which is what their millis() divides down; nRF52 reads RTC2 (30.5 µs ticks) once
+/// startMicrosClock() has run; elsewhere this is getMillisMonotonic() * 1000. Same not-from-ISR caveat.
+uint64_t getMicrosMonotonic();
+
+/// Start the hardware behind getMicrosMonotonic() where it needs starting (nRF52 RTC2). Call once, early in setup.
+void startMicrosClock();
+
+/// An ISR-safe instant: raw RTC2 counter on nRF52, the low 32 bits of getMicrosMonotonic() elsewhere.
+uint32_t isrStamp();
+
+/// The getMicrosMonotonic() value of an isrStamp() under 256 s old. Not from an ISR.
+uint64_t stampToMicros(uint32_t stamp);
+
+#if defined(ARDUINO_NRF52_ADAFRUIT)
+/// RTC2 counter + the ms clock read at the same moment -> µs. Exposed for stampToMicros().
+uint64_t nrf52MicrosFromCounter(uint32_t counter, uint64_t refMs);
+#endif
+
 /// Whole seconds since boot, derived from getMillisMonotonic() (~136 years of range). This is
 /// the unit to store when an instant must be dated before the wall clock is trustworthy.
 uint32_t getUptimeSecs();

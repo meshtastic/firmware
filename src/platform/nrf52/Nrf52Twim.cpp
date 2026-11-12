@@ -117,6 +117,11 @@ void restoreBus()
 
 bool readRegister(uint8_t address, uint8_t reg, uint8_t &value)
 {
+    return readRegisters(address, reg, &value, 1);
+}
+
+bool readRegisters(uint8_t address, uint8_t reg, uint8_t *data, uint8_t count)
+{
     NRF_TWIM_Type *twim = NRF_TWIM0;
 
     configureTwim(twim);
@@ -137,13 +142,13 @@ bool readRegister(uint8_t address, uint8_t reg, uint8_t &value)
 
     twim->EVENTS_SUSPENDED = 0;
     twim->EVENTS_LASTRX = 0;
-    twim->RXD.PTR = (uint32_t)&value;
-    twim->RXD.MAXCNT = 1;
+    twim->RXD.PTR = (uint32_t)data;
+    twim->RXD.MAXCNT = count;
     twim->SHORTS = TWIM_SHORTS_LASTRX_STOP_Msk;
     twim->TASKS_RESUME = 1;
     twim->TASKS_STARTRX = 1;
 
-    return waitForStop(twim) && twim->RXD.AMOUNT == 1;
+    return waitForStop(twim) && twim->RXD.AMOUNT == count;
 }
 
 bool writeRegister(uint8_t address, uint8_t reg, uint8_t value)

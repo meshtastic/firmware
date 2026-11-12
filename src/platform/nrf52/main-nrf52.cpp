@@ -491,6 +491,9 @@ void nrf52InitSemiHosting()
 
 void nrf52Setup()
 {
+#if GPS_PPS_DISCIPLINE
+    Time::startMicrosClock(); // RTC2: the PPS edge to 30.5 µs instead of 1 ms
+#endif
 #ifdef ADC_V
     pinMode(ADC_V, INPUT);
 #endif
