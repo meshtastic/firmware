@@ -16,3 +16,6 @@ Lora:
   Busy: 22
   DIO2_AS_RF_SWITCH: true
   DIO3_TCXO_VOLTAGE: 3.0
+
+GPS:
+  SerialPath: /dev/serial0 # Cap GNSS on GPIO14/15; baud rate is detected.
