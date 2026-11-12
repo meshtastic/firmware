@@ -3396,6 +3396,9 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
     case ThemeMenu:
         themeMenu();
         break;
+#else
+    case ThemeMenu:
+        break;
 #endif
     case HamModeConfirm:
         hamModeConfirmMenu();
