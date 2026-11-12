@@ -55,7 +55,7 @@
 #include "GPS.h"
 #endif
 
-#include <RNG.h>      // CryptRNG, the seeded CSPRNG used as fallback for the session passkey
+#include "crypto/crypto_api.h"
 #include <Throttle.h> // rollover-safe elapsed-time checks for the session passkey
 
 #if MESHTASTIC_EXCLUDE_GPS
@@ -1988,8 +1988,7 @@ void AdminModule::setPassKey(meshtastic_AdminMessage *res)
         // the CryptRNG state is shared with signing.
         {
             concurrency::LockGuard g(cryptLock);
-            if (!HardwareRNG::fill(session_passkey, sizeof(session_passkey)))
-                CryptRNG.rand(session_passkey, sizeof(session_passkey));
+            crypto_random(session_passkey, sizeof(session_passkey));
         }
         session_time = millis();
         sessionPasskeyValid = true;

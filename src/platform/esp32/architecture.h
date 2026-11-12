@@ -39,9 +39,6 @@
 #ifndef DEFAULT_VREF
 #define DEFAULT_VREF 1100
 #endif
-#ifndef HAS_CUSTOM_CRYPTO_ENGINE
-#define HAS_CUSTOM_CRYPTO_ENGINE 1
-#endif
 #ifndef HAS_32768HZ
 #define HAS_32768HZ 0
 #endif

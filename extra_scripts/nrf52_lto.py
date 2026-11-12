@@ -206,6 +206,10 @@ def _assert_isr_handlers_survived(source, target, env):
     ]
     if "USE_TINYUSB" in defines:
         required += _REQUIRED_STRONG_USB
+    if "CRYPTO_TEST_MINIMAL" in defines:
+        required = ["RTC1_IRQHandler"] + (
+            list(_REQUIRED_STRONG_USB) if "USE_TINYUSB" in defines else []
+        )  # no BLE, no GPIO
     dropped = [h for h in required if kind.get(h, "W").upper() != "T"]
     if dropped:
         sys.stderr.write(
