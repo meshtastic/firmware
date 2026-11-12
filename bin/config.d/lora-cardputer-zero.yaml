@@ -1,5 +1,6 @@
 # Before each start, write 1 to /sys/class/leds/ext_5v_out/brightness on the vendor image.
 # Also drive PI4IOE5V6408 P0 HIGH on I2C1 0x43; this YAML does not configure the expander.
+# The cap is rated for 868-923 MHz; select a mesh frequency within that range.
 Meta:
   name: M5Stack CardputerZero v5 with Cap LoRa-1262 (U214)
   support: community
@@ -18,4 +19,5 @@ Lora:
   DIO3_TCXO_VOLTAGE: 3.0
 
 GPS:
+  # Enable GPS in the saved Position settings to use this UART.
   SerialPath: /dev/serial0 # Cap GNSS on GPIO14/15; baud rate is detected.
