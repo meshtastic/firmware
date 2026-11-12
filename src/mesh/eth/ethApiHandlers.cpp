@@ -2,6 +2,8 @@
 
 #if HAS_ETHERNET && (defined(HAS_ETHERNET_API) || defined(HAS_ETHERNET_TLS_API))
 
+#include "Throttle.h"
+#include "UptimeClock.h"
 #include "ethApiHandlers.h"
 #include "mesh/PhoneAPI.h"
 #include <Arduino.h>
@@ -50,15 +52,23 @@ struct Request {
     long contentLength = 0;
 };
 
-// Whichever of two millis() deadlines comes first, safe across the 32-bit wrap.
+// One keep-alive connection, bounded by handleApiClient(). The response that reaches either bound
+// says Connection: close, so the client does not send its next request down a connection that is
+// about to be closed.
+struct Session {
+    uint32_t deadlineMs;
+    int requestsLeft;
+
+    // Asked right before a response's headers are written, because reading a PUT body can run past
+    // the deadline.
+    bool lastResponse() const { return requestsLeft <= 1 || Throttle::deadlinePassed(deadlineMs); }
+};
+
+// Whichever of two deadlines comes first, safe across the 32-bit wrap: a is first if it has already
+// passed at time b.
 static uint32_t earlierDeadline(uint32_t a, uint32_t b)
 {
-    return (int32_t)(a - b) < 0 ? a : b;
-}
-
-static bool deadlinePassed(uint32_t deadlineMs)
-{
-    return (int32_t)(millis() - deadlineMs) >= 0;
+    return Throttle::deadlinePassedAt(b, a) ? a : b;
 }
 
 // Read up to one CRLF-terminated line; returns false on timeout or oversize.
@@ -72,17 +82,17 @@ static bool readLine(IStreamReadWrite &client, String &out, uint32_t deadlineMs)
         if (!client.connected())
             return false;
         if (!client.available()) {
-            if (deadlinePassed(deadlineMs))
+            if (Throttle::deadlinePassed(deadlineMs))
                 return false;
             delay(1);
             continue;
         }
-        if (deadlinePassed(deadlineMs + CONSUME_GRACE_MS))
+        if (Throttle::deadlinePassed(deadlineMs + CONSUME_GRACE_MS))
             return false;
         int c = client.read();
         if (c < 0) {
             // available() can count raw bytes that do not yet decode (a partial TLS record).
-            if (deadlinePassed(deadlineMs))
+            if (Throttle::deadlinePassed(deadlineMs))
                 return false;
             delay(1);
             continue;
@@ -180,13 +190,22 @@ static void writeCorsHeaders(IStreamReadWrite &client, const char *allowMethods)
     client.print("\r\n");
 }
 
-static void sendPreflight(IStreamReadWrite &client, const char *allowMethods)
+// Ends the headers of a successful response. Returns whether the connection stays open.
+static bool writeConnectionHeader(IStreamReadWrite &client, const Session &session)
+{
+    const bool keepAlive = !session.lastResponse();
+    client.print(keepAlive ? "Connection: keep-alive\r\n\r\n" : "Connection: close\r\n\r\n");
+    return keepAlive;
+}
+
+static bool sendPreflight(IStreamReadWrite &client, const char *allowMethods, const Session &session)
 {
     writeStatusLine(client, 204, "No Content");
     writeCorsHeaders(client, allowMethods);
     client.print("Content-Length: 0\r\n");
-    client.print("Connection: keep-alive\r\n\r\n");
+    const bool keepAlive = writeConnectionHeader(client, session);
     client.flush();
+    return keepAlive;
 }
 
 static void sendError(IStreamReadWrite &client, int status, const char *reason, const char *body)
@@ -203,13 +222,11 @@ static void sendError(IStreamReadWrite &client, int status, const char *reason, 
 }
 
 // Returns true if the connection may stay open (keep-alive), false if the
-// handler emitted an error response with Connection: close framing.
-static bool handleFromRadio(IStreamReadWrite &client, const Request &req)
+// response said Connection: close (an error, or the last one of the session).
+static bool handleFromRadio(IStreamReadWrite &client, const Request &req, const Session &session)
 {
-    if (req.method == "OPTIONS") {
-        sendPreflight(client, "GET, OPTIONS");
-        return true;
-    }
+    if (req.method == "OPTIONS")
+        return sendPreflight(client, "GET, OPTIONS", session);
     if (req.method != "GET") {
         sendError(client, 405, "Method Not Allowed", "method must be GET or OPTIONS");
         return false;
@@ -243,22 +260,20 @@ static bool handleFromRadio(IStreamReadWrite &client, const Request &req)
     client.print("Content-Length: ");
     client.print((unsigned)body.size());
     client.print("\r\n");
-    client.print("Connection: keep-alive\r\n\r\n");
+    const bool keepAlive = writeConnectionHeader(client, session);
     if (!body.empty())
         client.write(body.data(), body.size());
     client.flush();
     LOG_DEBUG("ETH API: fromradio sent %d packet(s), %u bytes (all=%d)", packets, (unsigned)body.size(), (int)drainAll);
-    return true;
+    return keepAlive;
 }
 
 // Returns true if the connection may stay open (keep-alive), false if the
-// handler emitted an error response with Connection: close framing.
-static bool handleToRadio(IStreamReadWrite &client, const Request &req, uint32_t sessionDeadlineMs)
+// response said Connection: close (an error, or the last one of the session).
+static bool handleToRadio(IStreamReadWrite &client, const Request &req, const Session &session)
 {
-    if (req.method == "OPTIONS") {
-        sendPreflight(client, "PUT, OPTIONS");
-        return true;
-    }
+    if (req.method == "OPTIONS")
+        return sendPreflight(client, "PUT, OPTIONS", session);
     if (req.method != "PUT") {
         sendError(client, 405, "Method Not Allowed", "method must be PUT or OPTIONS");
         return false;
@@ -271,28 +286,28 @@ static bool handleToRadio(IStreamReadWrite &client, const Request &req, uint32_t
 
     uint8_t buf[MAX_TO_FROM_RADIO_SIZE];
     size_t got = 0;
-    const uint32_t now = millis();
+    const uint32_t now = Time::getMillis();
     // Stay inside the session window (see handleApiClient), but never wait less than BODY_MIN_WAIT_MS.
-    uint32_t deadline = sessionDeadlineMs;
-    if ((int32_t)(deadline - (now + BODY_MIN_WAIT_MS)) < 0)
+    uint32_t deadline = session.deadlineMs;
+    if (Throttle::deadlinePassedAt(now + BODY_MIN_WAIT_MS, deadline))
         deadline = now + BODY_MIN_WAIT_MS;
     deadline = earlierDeadline(deadline, now + BODY_TIMEOUT_MS);
     while (got < (size_t)req.contentLength) {
         if (!client.connected())
             break;
         if (!client.available()) {
-            if (deadlinePassed(deadline))
+            if (Throttle::deadlinePassed(deadline))
                 break;
             delay(1);
             continue;
         }
-        if (deadlinePassed(deadline + CONSUME_GRACE_MS))
+        if (Throttle::deadlinePassed(deadline + CONSUME_GRACE_MS))
             break;
         int n = client.read(buf + got, (size_t)req.contentLength - got);
         if (n > 0) {
             got += n;
         } else {
-            if (deadlinePassed(deadline))
+            if (Throttle::deadlinePassed(deadline))
                 break;
             delay(1);
         }
@@ -312,11 +327,11 @@ static bool handleToRadio(IStreamReadWrite &client, const Request &req, uint32_t
     client.print("Content-Length: ");
     client.print((unsigned)got);
     client.print("\r\n");
-    client.print("Connection: keep-alive\r\n\r\n");
+    const bool keepAlive = writeConnectionHeader(client, session);
     client.write(buf, got);
     client.flush();
     LOG_DEBUG("ETH API: toradio handled %u bytes", (unsigned)got);
-    return true;
+    return keepAlive;
 }
 
 void handleApiClient(IStreamReadWrite &client)
@@ -336,17 +351,20 @@ void handleApiClient(IStreamReadWrite &client)
     // was long enough for the 15 s MQTT keep-alive to lapse and for the broker to drop the node.
     // MAX_SESSION_MS bounds the time rather than the request count, and every wait below (next
     // request, request body) ends at the session deadline, so control is back in loop() within a
-    // few seconds. After either cap the client just re-handshakes once and carries on.
+    // few seconds. The response that reaches either cap says Connection: close (Session), and the
+    // client just re-handshakes once and carries on.
     static constexpr int MAX_REQUESTS_PER_SESSION = 64;
     static constexpr uint32_t MAX_SESSION_MS = 3000;
 
-    const uint32_t sessionDeadline = millis() + MAX_SESSION_MS;
-    int requestsServed = 0;
-    while (client.connected() && requestsServed < MAX_REQUESTS_PER_SESSION && !deadlinePassed(sessionDeadline)) {
-        const uint32_t deadline = earlierDeadline(millis() + HEADER_TIMEOUT_MS, sessionDeadline);
+    Session session{Time::getMillis() + MAX_SESSION_MS, MAX_REQUESTS_PER_SESSION};
+    // No cap test here: the handlers end the loop at either cap, through the response that says so.
+    // A deadline that passes while a keep-alive response is being written leaves parseRequest()
+    // nothing to wait for, so the session still ends at once, unless the next request is already in.
+    while (client.connected()) {
+        const uint32_t deadline = earlierDeadline(Time::getMillis() + HEADER_TIMEOUT_MS, session.deadlineMs);
         Request req;
         if (!parseRequest(client, req, deadline)) {
-            if (requestsServed == 0)
+            if (session.requestsLeft == MAX_REQUESTS_PER_SESSION)
                 LOG_DEBUG("ETH API: bad/timeout request from %s", client.remoteIP().toString().c_str());
             return;
         }
@@ -356,19 +374,22 @@ void handleApiClient(IStreamReadWrite &client)
 
         bool keepAlive = true;
         if (req.path == "/api/v1/fromradio") {
-            keepAlive = handleFromRadio(client, req);
+            keepAlive = handleFromRadio(client, req, session);
         } else if (req.path == "/api/v1/toradio") {
-            keepAlive = handleToRadio(client, req, sessionDeadline);
+            keepAlive = handleToRadio(client, req, session);
         } else {
             sendError(client, 404, "Not Found", "unknown endpoint");
             return; // errors are terminal - Connection: close framing
         }
-        // A handler that emitted an error advertised Connection: close. Stop the
-        // keep-alive loop so any unread/leftover body bytes (e.g. after a 408
-        // short read or a 400 oversized PUT) aren't misparsed as the next request.
-        if (!keepAlive)
+        // A response that said Connection: close ends the keep-alive loop. After an error that also
+        // keeps any unread/leftover body bytes (e.g. after a 408 short read or a 400 oversized PUT)
+        // from being misparsed as the next request.
+        if (!keepAlive) {
+            if (session.requestsLeft == 1)
+                LOG_DEBUG("ETH API: session capped at %d requests (will redo handshake on next batch)", MAX_REQUESTS_PER_SESSION);
             return;
-        requestsServed++;
+        }
+        session.requestsLeft--;
 #ifdef ARCH_RP2040
         // yield() ONLY cedes to the OSThread scheduler; it does not call
         // rp2040Loop() where watchdog_update() lives. While we sit inside
@@ -379,9 +400,6 @@ void handleApiClient(IStreamReadWrite &client)
 #endif
         yield();
     }
-
-    if (requestsServed >= MAX_REQUESTS_PER_SESSION)
-        LOG_DEBUG("ETH API: session capped at %d requests (will redo handshake on next batch)", MAX_REQUESTS_PER_SESSION);
 }
 
 #endif // HAS_ETHERNET && (HAS_ETHERNET_API || HAS_ETHERNET_TLS_API)
