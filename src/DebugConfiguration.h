@@ -58,6 +58,25 @@ extern MemGet memGet;
 #endif
 #endif
 
+// Log lines stamp the uptime with milliseconds as well as whole seconds. Portduino has always printed
+// them; set this to 1 in a board's build flags to get the same resolution on device, for timing work
+// that whole seconds cannot resolve.
+#ifndef MESHTASTIC_LOG_MILLIS
+#ifdef ARCH_PORTDUINO
+#define MESHTASTIC_LOG_MILLIS 1
+#else
+#define MESHTASTIC_LOG_MILLIS 0
+#endif
+#endif
+
+// GPS PPS discipline (tens of µs, src/gps/GPS.cpp) is timing work too, so it comes with the millisecond stamps.
+// Without it the clock is set from NMEA alone, to a few ms.
+#if defined(PIN_GPS_PPS) && MESHTASTIC_LOG_MILLIS
+#define GPS_PPS_DISCIPLINE 1
+#else
+#define GPS_PPS_DISCIPLINE 0
+#endif
+
 // USE_SEGGER no longer maps LOG_* to SEGGER_RTT_printf(): it has no float
 // support, and a skipped %f leaves its argument on the va_list, so a later %s
 // dereferences garbage and HardFaults (e.g. PacketHistory's
