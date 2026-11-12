@@ -3,6 +3,7 @@
 #if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && defined(HAS_BHI260AP) && __has_include(<SensorBHI260AP.hpp>)
 #define BOSCH_BHI260_KLIO
 
+#include "detect/ScanI2CTwoWire.h"
 #include "mesh/Throttle.h"
 #include <BoschFirmware.h>
 
@@ -23,7 +24,7 @@ bool BHI260APSensor::init()
     LOG_WARN("Initializing BHI260AP sensor %u", deviceAddress());
     sensor.setFirmware(bosch_firmware_image, bosch_firmware_size, bosch_firmware_type);
     sensor.setBootFromFlash(bosch_firmware_type);
-    if (sensor.begin(Wire, deviceAddress())) {
+    if (sensor.begin(*ScanI2CTwoWire::fetchI2CBus(device.address), deviceAddress())) {
         sensor.setRemapAxes(SensorRemap::TOP_LAYER_BOTTOM_RIGHT_CORNER);
         BoschSensorInfo info = sensor.getSensorInfo();
 
@@ -35,8 +36,7 @@ bool BHI260APSensor::init()
         LOG_INFO("Host interface : %s\n", (info.getHostStatus() & BHY2_HST_HOST_PROTOCOL) ? "SPI" : "I2C");
         LOG_INFO("Feature status : 0x%02x\n", info.getFeatStatus());
 
-        stepCounter = new SensorStepCounter(sensor);
-        // stepDetector = new SensorStepDetector(sensor);
+        stepCounter = std::make_unique<SensorStepCounter>(sensor);
 
         // sensor.configAccelerometer(sensor.RANGE_2G, sensor.ODR_100HZ, sensor.BW_NORMAL_AVG4, sensor.PERF_CONTINUOUS_MODE);
         // sensor.enableAccelerometer();
@@ -58,8 +58,7 @@ bool BHI260APSensor::init()
             LOG_WARN("BHI260AP firmware has no wrist tilt gesture, motion wake unavailable");
         }
 
-        // stepDetector->enable(1.0, 0);
-        stepCounter->enable(1.0, 0);
+        stepCounterReady = stepCounter->enable(1.0, 0);
         LOG_DEBUG("BHI260AP init ok");
         return true;
     }
@@ -73,29 +72,39 @@ int32_t BHI260APSensor::runOnce()
     // The INT line is the fast path; the keepalive keeps the step counter alive without it.
     if (!BHI_IRQ && !Throttle::hasElapsed(lastPollMs, MOTION_SENSOR_IRQ_KEEPALIVE_MS))
         return MOTION_SENSOR_CHECK_INTERVAL_MS;
-    BHI_IRQ = false;
-    lastPollMs = millis();
 #endif
-
-    sensor.update();
-    if (stepCounter->hasUpdated()) {
-        steps = stepCounter->getStepCount();
-        LOG_WARN("Step count updated: %u", steps);
-#if HAS_SCREEN
-        if (screen)
-            screen->steps = steps;
-#endif
-    }
-    if (wakeRequested) {
-        wakeRequested = false;
-        wakeScreen();
-    }
+    pollSensor();
 #ifdef BHI260AP_INT
     // Tick fast for tilt latency; without the INT line every tick would be an I2C drain.
     return MOTION_SENSOR_CHECK_INTERVAL_MS;
 #else
     return 1000;
 #endif
+}
+
+bool BHI260APSensor::pollSensor()
+{
+#ifdef BHI260AP_INT
+    BHI_IRQ = false;
+    lastPollMs = millis();
+#endif
+
+    sensor.update();
+    const bool stepUpdated = stepCounterReady && stepCounter->hasUpdated();
+    if (stepUpdated) {
+#ifdef MESHTASTIC_INCLUDE_INKHUD
+        stepTracker().hardwareTotal(stepCounter->getStepCount());
+#endif
+#if !defined(MESHTASTIC_EXCLUDE_SCREEN) && HAS_SCREEN
+        if (screen)
+            screen->steps = stepCounter->getStepCount();
+#endif
+    }
+    if (wakeRequested) {
+        wakeRequested = false;
+        wakeScreen();
+    }
+    return stepUpdated;
 }
 
 #endif

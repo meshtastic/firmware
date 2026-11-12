@@ -1325,6 +1325,10 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
     uint8_t bleAddr[6];
     if (deviceMetadata.hasBluetooth && getBluetoothAddr(bleAddr))
         formatMacAddr(bleAddr, deviceMetadata.ble_address, sizeof(deviceMetadata.ble_address));
+#if defined(ARCH_NRF52) && !defined(ARCH_NRF54L)
+    // Read from NRF_TIMER2->CC[0] by the Adafruit core at startup, where the bootloader leaves it
+    deviceMetadata.bootloader_version = bootloaderVersion;
+#endif
     deviceMetadata.hasWifi = HAS_WIFI;
     deviceMetadata.hasEthernet = HAS_ETHERNET;
     deviceMetadata.role = config.device.role;
