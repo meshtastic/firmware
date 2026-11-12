@@ -33,6 +33,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #if defined(HELTEC_V3_USE_ADAFRUIT_OLED)
 #include <Adafruit_SSD1306.h>
 #include <cstring>
+#include <Wire.h>
 #endif
 #if defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS) && !defined(MESHTASTIC_INCLUDE_INKHUD)
 // Provided by each niche-enabled variant's nicheGraphics.h (defined once, in the main.cpp TU).
@@ -119,7 +120,8 @@ namespace
 class AdafruitOLEDDisplay final : public OLEDDisplay
 {
   public:
-    explicit AdafruitOLEDDisplay(uint8_t address) : panel(128, 64, &Wire, RESET_OLED), address(address)
+    explicit AdafruitOLEDDisplay(uint8_t address, TwoWire *i2cBus)
+        : i2cBus(i2cBus), panel(128, 64, i2cBus, RESET_OLED), address(address)
     {
         setGeometry(GEOMETRY_128_64);
     }
@@ -142,11 +144,11 @@ class AdafruitOLEDDisplay final : public OLEDDisplay
     {
         const uint8_t commands[] = {SSD1306_SETPRECHARGE, 0xF1, SSD1306_SETCONTRAST, brightness, SSD1306_SETVCOMDETECT,
                                     0x40, SSD1306_DISPLAYALLON_RESUME, SSD1306_NORMALDISPLAY, SSD1306_DISPLAYON};
-        Wire.beginTransmission(address);
-        Wire.write(0x00);
+        i2cBus->beginTransmission(address);
+        i2cBus->write(0x00);
         for (uint8_t command : commands)
-            Wire.write(command);
-        const uint8_t status = Wire.endTransmission();
+            i2cBus->write(command);
+        const uint8_t status = i2cBus->endTransmission();
         if (status != 0)
             LOG_ERROR("Adafruit SSD1306 brightness command failed (status=%d)", status);
     }
@@ -156,14 +158,14 @@ class AdafruitOLEDDisplay final : public OLEDDisplay
 
     bool connect() override
     {
-        Wire.setClock(100000);
+        i2cBus->setClock(100000);
         if (!panel.begin(SSD1306_SWITCHCAPVCC, address, true, false)) {
             LOG_ERROR("Adafruit SSD1306 init failed");
             return false;
         }
 
-        Wire.beginTransmission(address);
-        const uint8_t status = Wire.endTransmission();
+        i2cBus->beginTransmission(address);
+        const uint8_t status = i2cBus->endTransmission();
         if (status != 0) {
             LOG_ERROR("Adafruit SSD1306 I2C probe failed (status=%d)", status);
             return false;
@@ -175,6 +177,7 @@ class AdafruitOLEDDisplay final : public OLEDDisplay
     void sendCommand(uint8_t command) override { panel.ssd1306_command(command); }
 
   private:
+    TwoWire *i2cBus;
     Adafruit_SSD1306 panel;
     uint8_t address;
 };
@@ -645,7 +648,8 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
 #elif defined(USE_HUB75)
     dispdev = new HUB75Display(address.address, -1, -1, GEOMETRY_RAWMODE, HW_I2C::I2C_ONE);
 #elif defined(HELTEC_V3_USE_ADAFRUIT_OLED)
-    dispdev = new AdafruitOLEDDisplay(address.address);
+    dispdev = new AdafruitOLEDDisplay(
+        address.address, (address.port == ScanI2C::I2CPort::WIRE1) ? &Wire1 : &Wire);
     isI2cScreen = true;
 #elif defined(USE_SSD1306)
     dispdev = new SSD1306Wire(address.address, -1, -1, geometry,
@@ -946,7 +950,12 @@ void Screen::setup()
 #endif
 
     // Initialize display and UI system
-    ui->init();
+    if (!dispdev->init()) {
+        LOG_ERROR("Display initialization failed; disabling UI rendering");
+        useDisplay = false;
+        return;
+    }
+
     displayWidth = dispdev->width();
     displayHeight = dispdev->height();
 
