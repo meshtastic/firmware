@@ -22,6 +22,9 @@ class BMA423Sensor : public MotionSensor
     explicit BMA423Sensor(ScanI2C::FoundDevice foundDevice);
     virtual bool init() override;
     virtual int32_t runOnce() override;
+#ifdef MESHTASTIC_INCLUDE_INKHUD
+    StepSource stepSource() const override { return StepSource::Software; }
+#endif
 };
 
 #endif

@@ -26,6 +26,13 @@ bool BMX160Sensor::init()
 
 int32_t BMX160Sensor::runOnce()
 {
+#ifdef MESHTASTIC_INCLUDE_INKHUD
+    if (stepTracker().isTracking()) {
+        sBmx160SensorData_t acceleration{};
+        sensor.getAllData(nullptr, nullptr, &acceleration);
+        sampleSteps(acceleration.x, acceleration.y, acceleration.z);
+    }
+#endif
 #if !defined(MESHTASTIC_EXCLUDE_SCREEN)
     sBmx160SensorData_t magAccel;
     sBmx160SensorData_t gAccel;

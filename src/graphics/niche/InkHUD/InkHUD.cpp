@@ -15,6 +15,11 @@
 #include "concurrency/LockGuard.h"
 #include <cstring>
 
+#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && !MESHTASTIC_EXCLUDE_ACCELEROMETER
+#include "./Applets/User/Steps/StepsApplet.h"
+#include "main.h"
+#endif
+
 using namespace NicheGraphics;
 
 // Get or create the singleton
@@ -157,6 +162,12 @@ static void migrateOldInkHUDMessages()
 // Call this only after you have configured InkHUD
 void InkHUD::InkHUD::begin()
 {
+#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && !MESHTASTIC_EXCLUDE_ACCELEROMETER
+    if (accelerometerThread && userApplets.size() < Persistence::MAX_USERAPPLETS_GLOBAL) {
+        if (auto *sensor = accelerometerThread->getStepSensor())
+            addApplet("Steps", new StepsApplet(*accelerometerThread, *sensor));
+    }
+#endif
     persistence->loadSettings();
     messageStore.loadFromFlash(); // Load persisted messages before deriving latestMessage cache
     if (messageStore.getLiveMessages().empty())
