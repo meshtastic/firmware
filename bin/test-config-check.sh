@@ -178,8 +178,12 @@ assert "admin keys append across config.d" 0 adminkeys-append/config.yaml yaml \
 echo
 echo "command sensors:"
 assert "a list of command sensors is clean" 0 sensors.yaml check \
-	"Sensors are only read while environment measurement is enabled" \
+	"Sensors are only read while the Telemetry module setting for their Type is enabled" \
 	"Result: 0 errors, 0 warnings"
+# An air-quality Type is accepted like an environment one, and written back under its field name.
+assert "air-quality sensor types are accepted" 0 sensors.yaml yaml \
+	"Type: co2" \
+	"Type: relative_humidity"
 assert "an unknown sensor Type is refused and the valid ones named" 1 sensors-bad-type.yaml check \
 	"Sensors Type 'humidity' is not an environment metric" \
 	"relative_humidity" \

@@ -1,5 +1,5 @@
-# Two command sensors, one with a Scale and one with a Type in a different case. Clean: the only
-# finding is the info line saying they need environment measurement enabled.
+# Three command sensors: one with a Scale, one with a Type in a different case, and one air-quality
+# type. Clean: the only finding is the info line saying which Telemetry setting each needs enabled.
 Lora:
   Module: sx1262
   CS: 21
@@ -12,3 +12,5 @@ Sensors:
     Scale: 0.001
   - Type: Relative_Humidity
     Command: /usr/local/bin/read-humidity
+  - Type: CO2
+    Command: /usr/local/bin/read-co2
