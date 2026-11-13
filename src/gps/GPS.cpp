@@ -967,8 +967,9 @@ bool GPS::setup()
             // Initialize the L76K Chip, use GPS + GLONASS + BEIDOU
             _serial_gps->write("$PCAS04,7*1E\r\n");
             delay(250);
-            // only ask for RMC and GGA
-            _serial_gps->write("$PCAS03,1,0,0,0,1,0,0,0,0,0,,,0,0*02\r\n");
+            // RMC and GGA for position, plus GSA for the fix type and PDOP/VDOP. Fields are
+            // GGA,GLL,GSA,GSV,RMC,VTG..., so GSA is the third.
+            _serial_gps->write("$PCAS03,1,0,1,0,1,0,0,0,0,0,,,0,0*03\r\n");
             delay(250);
             // Switch to Vehicle Mode, since SoftRF enables Aviation < 2g
             _serial_gps->write("$PCAS11,3*1E\r\n");
