@@ -2320,6 +2320,13 @@ bool GPS::lookForTime()
  *
  * @return true if we've acquired a new location
  */
+// A TinyGPS++ datum stays valid forever once it has been set, so "usable" is validity AND age: a
+// sentence the receiver has stopped sending must read as absent rather than as whatever it last said.
+bool gpsDatumFresh(bool isValid, uint32_t age)
+{
+    return isValid && age < GPS_SOL_EXPIRY_MS;
+}
+
 bool GPS::lookForLocation()
 {
     // GGA's fix quality. The GSA 2D/3D fix type is read separately below, where the receiver sends one.
@@ -2337,7 +2344,11 @@ bool GPS::lookForLocation()
     }
 #endif
 
-    fixType = (uint8_t)reader.fixType.value(); // 0 when the receiver sends no GSA at all
+    // A receiver that sent GSA and then stopped - a config write turning the sentence off, a dropped
+    // sentence - leaves fixType valid forever with a growing age, so it has to expire. 0 is what both
+    // hasLock() and the protobuf already mean by "no GSA".
+    const bool gsaFresh = gpsDatumFresh(reader.fixType.isValid(), reader.fixType.age());
+    fixType = gsaFresh ? (uint8_t)reader.fixType.value() : 0;
 
     // check if GPS has an acceptable lock
     if (!hasLock())
@@ -2355,10 +2366,9 @@ bool GPS::lookForLocation()
     // check if a complete GPS solution set is available for reading
     //   tinyGPSDatum::age() also includes isValid() test
     // FIXME
-    // GSA's age is only required when a GSA has actually been seen: a receiver whose output mask we cannot
-    // reach sends none, and demanding a fresh one from it would reject every otherwise good solution.
-    if (!((reader.location.age() < GPS_SOL_EXPIRY_MS) &&
-          (!reader.fixType.isValid() || reader.fixType.age() < GPS_SOL_EXPIRY_MS) && (reader.time.age() < GPS_SOL_EXPIRY_MS) &&
+    // GSA is deliberately absent from this check: it expires into fixType above instead. Requiring a fresh
+    // one here rejected every otherwise good GGA/RMC solution as soon as a receiver stopped sending GSA.
+    if (!((reader.location.age() < GPS_SOL_EXPIRY_MS) && (reader.time.age() < GPS_SOL_EXPIRY_MS) &&
           (reader.date.age() < GPS_SOL_EXPIRY_MS))) {
         LOG_WARN("SOME data TOO OLD: LOC %u, TIME %u, DATE %u", reader.location.age(), reader.time.age(), reader.date.age());
         return false;
@@ -2383,8 +2393,8 @@ bool GPS::lookForLocation()
     // "not reported". The previous fallback derived PDOP as 1.41 * HDOP, which assumes VDOP == HDOP and so errs
     // in either direction (measured: VDOP 0.99 against HDOP 2.16 on one receiver, 13.52 against 6.90 on another).
     p.HDOP = reader.hdop.value();
-    p.PDOP = reader.pdop.value();
-    p.VDOP = reader.vdop.value();
+    p.PDOP = gpsDatumFresh(reader.pdop.isValid(), reader.pdop.age()) ? reader.pdop.value() : 0;
+    p.VDOP = gpsDatumFresh(reader.vdop.isValid(), reader.vdop.age()) ? reader.vdop.value() : 0;
 
     // Discard incomplete or erroneous readings
     if (reader.hdop.value() == 0) {
@@ -2417,7 +2427,7 @@ bool GPS::lookForLocation()
     // satellites USED in the solution. Prefer the real figure where the receiver sends GSV, and fall back to
     // the used count otherwise -- which is what this reported unconditionally before, and is still what
     // every default configuration here will produce, since GSV is disabled.
-    if (reader.satellitesInView.isValid()) {
+    if (gpsDatumFresh(reader.satellitesInView.isValid(), reader.satellitesInView.age())) {
         p.sats_in_view = reader.satellitesInView.value();
     } else if (reader.satellites.isUpdated()) {
         p.sats_in_view = reader.satellites.value();
