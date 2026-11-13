@@ -82,6 +82,7 @@ class InkHUD
     enum class RemoteInput : uint8_t { SHORT, LONG, EXIT_SHORT, UP, DOWN, LEFT, RIGHT };
     void queueRemoteInput(RemoteInput input);
     void drainRemoteInput();
+    bool hasRemoteInput();
 
     // Freetext handlers
     void freeText(char c);

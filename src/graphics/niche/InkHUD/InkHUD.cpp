@@ -274,12 +274,20 @@ void InkHUD::InkHUD::queueRemoteInput(RemoteInput input)
 {
     {
         concurrency::LockGuard g(&remoteInputLock);
-        if (remoteInputCount == REMOTE_INPUT_QUEUE)
-            return; // a client flooding presses loses the newest
-        remoteInputs[(remoteInputHead + remoteInputCount) % REMOTE_INPUT_QUEUE] = input;
-        remoteInputCount++;
+        // a client flooding presses loses the newest
+        if (remoteInputCount < REMOTE_INPUT_QUEUE) {
+            remoteInputs[(remoteInputHead + remoteInputCount) % REMOTE_INPUT_QUEUE] = input;
+            remoteInputCount++;
+        }
     }
     renderer->requestUpdate();
+    concurrency::mainDelay.interrupt();
+}
+
+bool InkHUD::InkHUD::hasRemoteInput()
+{
+    concurrency::LockGuard g(&remoteInputLock);
+    return remoteInputCount != 0;
 }
 
 void InkHUD::InkHUD::drainRemoteInput()

@@ -169,8 +169,15 @@ int32_t InkHUD::Renderer::runOnce()
     // otherwise, stop our thread until next update due
     if (requested)
         return 250UL;
-    else
-        return OSThread::disable();
+    // another task can queue input or a capture mid-render and lose its wake to disable()
+    if (mirrorPending || inkhud->hasRemoteInput())
+        return 0;
+#if HAS_INKHUD_MIRROR
+    // bounds that same race while a client is mirroring
+    if (graphics::screenMirror.wantsFrame())
+        return 1000UL;
+#endif
+    return OSThread::disable();
 }
 
 void InkHUD::Renderer::requestMirrorCapture()
@@ -179,6 +186,7 @@ void InkHUD::Renderer::requestMirrorCapture()
     OSThread::setIntervalFromNow(0);
     OSThread::enabled = true;
     runASAP = true;
+    concurrency::mainDelay.interrupt();
 }
 
 void InkHUD::Renderer::captureMirror()
