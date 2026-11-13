@@ -101,6 +101,9 @@ class ICM20948Sensor : public MotionSensor
 
     // Called each time our sensor gets a chance to run
     virtual int32_t runOnce() override;
+#ifdef MESHTASTIC_INCLUDE_INKHUD
+    StepSource stepSource() const override { return StepSource::Software; }
+#endif
     virtual void calibrate(uint16_t forSeconds) override;
     virtual bool providesHeading() const override { return true; }
 };

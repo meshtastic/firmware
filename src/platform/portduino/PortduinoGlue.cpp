@@ -1507,6 +1507,10 @@ bool loadConfig(const char *configPath)
             }
         }
 
+        // Only when the key is present, so a later file in config.d can turn it off again.
+        if (yamlConfig["Security"] && yamlConfig["Security"]["DMShell"])
+            portduino_config.dmshell_enabled = (yamlConfig["Security"]["DMShell"]).as<bool>(false);
+
         if (yamlConfig["Config"]) {
             portduino_config.has_config_overrides = true;
             if (yamlConfig["Config"]["DisplayMode"]) {
