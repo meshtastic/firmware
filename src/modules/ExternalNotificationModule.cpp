@@ -159,12 +159,16 @@ int32_t ExternalNotificationModule::runOnce()
 #endif
         }
 
+        // The ringtone plays once per alert; only nag_timeout asks for it to be repeated while the outputs stay on
+        const bool repeatRingtone =
+            isNagging && moduleConfig.external_notification.nag_timeout && !Throttle::deadlinePassed(nagCycleCutoff);
+
         // Play RTTTL over i2s audio interface if enabled as buzzer
 #if defined(HAS_I2S) && !MESHTASTIC_EXCLUDE_RTTTL
         if (moduleConfig.external_notification.use_i2s_as_buzzer) {
             if (audioThread->isPlaying()) {
                 // Continue playing
-            } else if (isNagging && !Throttle::deadlinePassed(nagCycleCutoff)) {
+            } else if (repeatRingtone) {
                 audioThread->beginRttl(rtttlConfig.ringtone, strlen_P(rtttlConfig.ringtone));
             }
             // we need fast updates to play the RTTTL
@@ -176,7 +180,7 @@ int32_t ExternalNotificationModule::runOnce()
         if (canBuzz() && buzzerShouldAlert) {
             if (nrf52RtttlPlayer.isPlaying()) {
                 nrf52RtttlPlayer.play();
-            } else if (isNagging && !Throttle::deadlinePassed(nagCycleCutoff)) {
+            } else if (repeatRingtone) {
                 nrf52RtttlPlayer.begin(rtttlConfig.ringtone);
             }
             delay = EXT_NOTIFICATION_FAST_THREAD_MS;
@@ -187,7 +191,7 @@ int32_t ExternalNotificationModule::runOnce()
         if (moduleConfig.external_notification.use_pwm && config.device.buzzer_gpio && canBuzz() && buzzerShouldAlert) {
             if (rtttl::isPlaying()) {
                 rtttl::play();
-            } else if (isNagging && !Throttle::deadlinePassed(nagCycleCutoff)) {
+            } else if (repeatRingtone) {
                 // start the song again if we have time left
                 rtttl::begin(config.device.buzzer_gpio, rtttlConfig.ringtone);
             }
