@@ -305,6 +305,13 @@ class GPS : private concurrency::OSThread
     int getACK(uint8_t *buffer, uint16_t size, uint8_t requestedClass, uint8_t requestedID, uint32_t waitMillis);
     GPS_RESPONSE getACK(uint8_t c, uint8_t i, uint32_t waitMillis);
     GPS_RESPONSE getACK(const char *message, uint32_t waitMillis);
+    /**
+     * As getACK(), but matches ANY of several identity strings in a single read pass, and reports which
+     * one matched. A chip answers once, so candidates cannot be tried with repeated getACK() calls: the
+     * first call consumes the reply and every later one waits out its whole timeout against an empty
+     * port.
+     */
+    GPS_RESPONSE getACKAny(const char *const *messages, size_t count, uint32_t waitMillis, const char **matched = nullptr);
 
     GPS_RESPONSE getACKCas(uint8_t class_id, uint8_t msg_id, uint32_t waitMillis);
 
