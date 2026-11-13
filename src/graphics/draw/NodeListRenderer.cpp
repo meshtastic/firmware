@@ -399,12 +399,26 @@ void drawEntryHopSignal(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
     }
 }
 
+// Width reserved for the coordinate text in the no-local-fix layout, so names
+// cannot run into the digits. Zero in every other layout.
+static int noFixCoordReserve = 0;
+
+static int buildCoordString(const meshtastic_PositionLite &pos, char *buf, size_t bufSize)
+{
+    // Magnitudes in int64_t: negating INT32_MIN in int32_t would overflow.
+    const int64_t latAbs = pos.latitude_i < 0 ? -(int64_t)pos.latitude_i : pos.latitude_i;
+    const int64_t lonAbs = pos.longitude_i < 0 ? -(int64_t)pos.longitude_i : pos.longitude_i;
+    return snprintf(buf, bufSize, "%.4f%c %.4f%c", latAbs * 1e-7, pos.latitude_i >= 0 ? 'N' : 'S', lonAbs * 1e-7,
+                    pos.longitude_i >= 0 ? 'E' : 'W');
+}
+
 void drawNodeDistance(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16_t x, int16_t y, int columnWidth)
 {
     bool isLeftCol = (x < SCREEN_WIDTH / 2);
     int nameMaxWidth =
         getNodeNameMaxWidth(columnWidth, columnWidth - ((currentResolution == ScreenResolution::High) ? (isLeftCol ? 25 : 28)
                                                                                                       : (isLeftCol ? 20 : 22)));
+    nameMaxWidth -= noFixCoordReserve;
 
     const int nameX = x + ((currentResolution == ScreenResolution::High) ? 6 : 3);
     char nodeName[96];
@@ -486,10 +500,30 @@ void drawNodeDistance(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
         }
     }
 
-    const char *distanceLabel = (strlen(distStr) > 0) ? distStr : "?";
-    int offset = (currentResolution == ScreenResolution::High)
+    char coordStr[24];
+    const char *distanceLabel;
+    if (strlen(distStr) > 0) {
+        distanceLabel = distStr;
+    } else if (graphics::isCompactPanel(display)) {
+        // The coordinate pair cannot fit a compact row; keep the placeholder.
+        distanceLabel = "?";
+    } else {
+        // No fix of our own: no distance is computable. Fall back to the
+        // node's coordinates so a GPS-less device still gets useful text.
+        meshtastic_PositionLite nodePos;
+        const bool haveNodePos = nodeDB->hasValidPosition(node) && nodeDB->copyNodePosition(node->num, nodePos);
+        distanceLabel = (haveNodePos && buildCoordString(nodePos, coordStr, sizeof(coordStr)) > 0) ? coordStr : "?";
+    }
+    int offset;
+    if (noFixCoordReserve > 0) {
+        // Coordinate fallback: match drawCompassUnknown's right margin so the
+        // two cycling views do not shift the text.
+        offset = 2;
+    } else {
+        offset = (currentResolution == ScreenResolution::High)
                      ? (isLeftCol ? 7 : 10) // Offset for Wide Screens (Left Column:Right Column)
                      : (isLeftCol ? 4 : 7); // Offset for Narrow Screens (Left Column:Right Column)
+    }
     int rightEdge = x + columnWidth - offset;
     int textWidth = display->getStringWidth(distanceLabel);
     display->drawString(rightEdge - textWidth, y, distanceLabel);
@@ -517,6 +551,7 @@ void drawEntryCompass(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
     int nameMaxWidth =
         getNodeNameMaxWidth(columnWidth, columnWidth - ((currentResolution == ScreenResolution::High) ? (isLeftCol ? 25 : 28)
                                                                                                       : (isLeftCol ? 20 : 22)));
+    nameMaxWidth -= noFixCoordReserve;
 
     const int nameX = x + ((currentResolution == ScreenResolution::High) ? 6 : 3);
     char nodeName[96];
@@ -602,13 +637,31 @@ void drawCompassUnknown(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
     if (!nodeDB->hasValidPosition(node))
         return;
 
-    bool isLeftCol = (x < SCREEN_WIDTH / 2);
-    int arrowXOffset = (currentResolution == ScreenResolution::High) ? (isLeftCol ? 22 : 24) : (isLeftCol ? 12 : 18);
-    int centerX = x + columnWidth - arrowXOffset;
+    // Coordinates are only drawn in the single-column no-local-fix layout
+    // (noFixCoordReserve > 0) and never on compact panels whose width cannot
+    // fit the string; other callers keep the previous "?" placeholder.
+    if (noFixCoordReserve <= 0 || graphics::isCompactPanel(display)) {
+        bool isLeftCol = (x < SCREEN_WIDTH / 2);
+        int arrowXOffset = (currentResolution == ScreenResolution::High) ? (isLeftCol ? 22 : 24) : (isLeftCol ? 12 : 18);
+        display->setFont(FONT_SMALL);
+        display->setTextAlignment(TEXT_ALIGN_CENTER);
+        display->drawString(x + columnWidth - arrowXOffset, y, "?");
+        return;
+    }
+
+    meshtastic_PositionLite nodePos;
+    if (!nodeDB->copyNodePosition(node->num, nodePos))
+        return;
+
+    // Without a fix of our own we cannot draw a bearing: print the node's own
+    // coordinates instead, so GPS-less devices (e.g. a paired child device)
+    // can still read where the tracker is.
+    char coords[24];
+    buildCoordString(nodePos, coords, sizeof(coords));
 
     display->setFont(FONT_SMALL);
-    display->setTextAlignment(TEXT_ALIGN_CENTER);
-    display->drawString(centerX, y, "?");
+    display->setTextAlignment(TEXT_ALIGN_RIGHT);
+    display->drawString(x + columnWidth - 2, y, coords);
 }
 
 void drawRelativeCompassArrow(OLEDDisplay *display, int16_t centerX, int16_t centerY, float relativeBearingDeg)
@@ -647,6 +700,27 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
 
     if (graphics::isCompactPanel(display)) {
         totalColumns = 1; // Too narrow to split - use the full line per entry.
+    } else if (locationScreen) {
+        const meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
+        if (!nodeDB->hasValidPosition(ourNode)) {
+            // No fix of our own: bearings are impossible, so use the full line
+            // to print each node's coordinates instead (drawCompassUnknown).
+            totalColumns = 1;
+        } else if (config.display.use_long_node_name) {
+            if (SCREEN_WIDTH <= 240) {
+                totalColumns = 1;
+            } else if (SCREEN_WIDTH > 240) {
+                totalColumns = 2;
+            }
+        } else {
+            if (SCREEN_WIDTH <= 64) {
+                totalColumns = 1;
+            } else if ((SCREEN_WIDTH > 64 && SCREEN_WIDTH <= 240) || ROUNDED_SCREEN) {
+                totalColumns = 2;
+            } else {
+                totalColumns = 3;
+            }
+        }
     } else if (config.display.use_long_node_name) {
         if (SCREEN_WIDTH <= 240) {
             totalColumns = 1;
@@ -664,6 +738,19 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
     }
 
     int columnWidth = display->getWidth() / totalColumns;
+
+    // Size the coordinate reserve from a realistic worst-case coordinate
+    // string at the current font, leaving the name at least a short stub.
+    noFixCoordReserve = 0;
+    if (locationScreen) {
+        const meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
+        if (!nodeDB->hasValidPosition(ourNode) && !graphics::isCompactPanel(display)) {
+            char sample[24];
+            snprintf(sample, sizeof(sample), "88.8888S 179.9999W");
+            display->setFont(FONT_SMALL);
+            noFixCoordReserve = std::min(display->getStringWidth(sample) + 4, columnWidth - 44);
+        }
+    }
 
     int totalEntries = nodeDB->getNumMeshNodes();
     int totalRowsAvailable = (display->getHeight() - y) / rowYOffset;
