@@ -8,6 +8,8 @@
 #include "./SystemApplet.h"
 #include "./Tile.h"
 
+#include "graphics/ScreenMirror.h"
+
 using namespace NicheGraphics;
 
 InkHUD::Renderer::Renderer() : concurrency::OSThread("Renderer")
@@ -56,6 +58,10 @@ void InkHUD::Renderer::setDisplayResilience(uint8_t fastPerFull, float stressMul
 
 void InkHUD::Renderer::begin()
 {
+#if HAS_INKHUD_MIRROR
+    static Renderer *self = this;
+    graphics::screenMirror.setCaptureKick([] { self->requestMirrorCapture(); });
+#endif
     forceUpdate(Drivers::EInk::UpdateTypes::FULL, true, false);
 }
 
@@ -146,9 +152,17 @@ uint16_t InkHUD::Renderer::height()
 // - queuing another render: while one is already is progress
 int32_t InkHUD::Renderer::runOnce()
 {
+    inkhud->drainRemoteInput();
+
     // If an applet asked to render, and hardware is able, lets try now
     if (requested && !driver->busy()) {
         render();
+    }
+
+    // A capture-only pass re-reads the image already on the panel; a render above has captured already
+    if (mirrorPending) {
+        mirrorPending = false;
+        captureMirror();
     }
 
     // If our render() call failed, try again shortly
@@ -157,6 +171,38 @@ int32_t InkHUD::Renderer::runOnce()
         return 250UL;
     else
         return OSThread::disable();
+}
+
+void InkHUD::Renderer::requestMirrorCapture()
+{
+    mirrorPending = true;
+    OSThread::setIntervalFromNow(0);
+    OSThread::enabled = true;
+    runASAP = true;
+}
+
+void InkHUD::Renderer::captureMirror()
+{
+#if HAS_INKHUD_MIRROR
+    if (imageBuffer && graphics::screenMirror.wantsFrame())
+        graphics::screenMirror.onRenderedFill(width(), height(), fillMirror, this);
+#endif
+}
+
+// Transposes the driver's rotated, row-major MSB-first buffer into unrotated MONO_VLSB; a set bit is ink, as BaseUI e-ink
+void InkHUD::Renderer::fillMirror(uint8_t *dst, uint16_t w, uint16_t h, void *ctx)
+{
+    Renderer *r = static_cast<Renderer *>(ctx);
+    memset(dst, 0, (uint32_t)w * ((h + 7) / 8));
+    for (uint16_t y = 0; y < h; y++) {
+        for (uint16_t x = 0; x < w; x++) {
+            int16_t px = x, py = y;
+            r->rotatePixelCoords(&px, &py);
+            uint8_t src = r->imageBuffer[(py * r->imageBufferWidth) + (px / 8)];
+            if (!(src & (0x80 >> (px % 8)))) // InkHUD stores BLACK as 0
+                dst[x + (y / 8) * w] |= 1 << (y % 8);
+        }
+    }
 }
 
 // Applies the system-wide rotation to pixel positions
@@ -237,6 +283,8 @@ void InkHUD::Renderer::render(bool async)
         // Tell display to begin process of drawing new image
         LOG_INFO("Updating display");
         driver->update(imageBuffer, updateType);
+        mirrorPending = false;
+        captureMirror();
 
         // If not async, wait here until the update is complete
         if (!async)
