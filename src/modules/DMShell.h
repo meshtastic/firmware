@@ -80,6 +80,9 @@ class DMShellModule : private concurrency::OSThread, public SinglePortModule
   public:
     DMShellModule();
 
+    // Whether mp's sender may drive a shell on this host.
+    static bool isAuthorizedPacket(const meshtastic_MeshPacket &mp);
+
   protected:
     virtual ProcessMessage handleReceived(const meshtastic_MeshPacket &mp) override;
     virtual int32_t runOnce() override;
@@ -114,7 +117,6 @@ class DMShellModule : private concurrency::OSThread, public SinglePortModule
     bool takeBufferedFrame(uint32_t seq, meshtastic_RemoteShell &outFrame);
     void drainBufferedFrames();
     bool parseFrame(const meshtastic_MeshPacket &mp, meshtastic_RemoteShell &outFrame);
-    bool isAuthorizedPacket(const meshtastic_MeshPacket &mp) const;
     bool openSession(const meshtastic_MeshPacket &mp, const meshtastic_RemoteShell &frame);
     DMShellRxDecision classifyIncomingFrame(const meshtastic_RemoteShell &frame);
     bool writeSessionInput(const meshtastic_RemoteShell &frame);

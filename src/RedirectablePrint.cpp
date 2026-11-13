@@ -20,6 +20,7 @@
 #if HAS_NETWORKING
 extern meshtastic::Syslog syslog;
 #endif
+
 void RedirectablePrint::rpInit()
 {
 #ifdef HAS_FREE_RTOS
@@ -134,6 +135,16 @@ void RedirectablePrint::log_to_serial(const char *logLevel, const char *format, 
             Print::write("\u001b[35m", 5);
     }
 
+    // The uptime stamp is formatted once here, for both the known-time and unknown-time headers below.
+    // The arithmetic stays in millis()'s own type, which is wider than 32 bits on Portduino.
+    char uptime[24];
+#if MESHTASTIC_LOG_MILLIS
+    auto now = millis();
+    snprintf(uptime, sizeof(uptime), "%lu.%03lu", (unsigned long)(now / 1000), (unsigned long)(now % 1000));
+#else
+    snprintf(uptime, sizeof(uptime), "%lu", (unsigned long)(millis() / 1000));
+#endif
+
     uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice, true); // display local time on logfile
     if (rtc_sec > 0) {
         long hms = rtc_sec % SEC_PER_DAY;
@@ -152,13 +163,13 @@ void RedirectablePrint::log_to_serial(const char *logLevel, const char *format, 
         if (color) {
             ::printf("\u001b[0m");
         }
-        ::printf("| %02d:%02d:%02d %u.%03u ", hour, min, sec, millis() / 1000, millis() % 1000);
+        ::printf("| %02d:%02d:%02d %s ", hour, min, sec, uptime);
 #else
         printf("%s ", logLevel);
         if (color) {
             printf("\u001b[0m");
         }
-        printf("| %02d:%02d:%02d %u ", hour, min, sec, millis() / 1000);
+        printf("| %02d:%02d:%02d %s ", hour, min, sec, uptime);
 #endif
     } else {
 #ifdef ARCH_PORTDUINO
@@ -166,13 +177,13 @@ void RedirectablePrint::log_to_serial(const char *logLevel, const char *format, 
         if (color) {
             ::printf("\u001b[0m");
         }
-        ::printf("| ??:??:?? %u.%03u ", millis() / 1000, millis() % 1000);
+        ::printf("| ??:??:?? %s ", uptime);
 #else
         printf("%s ", logLevel);
         if (color) {
             printf("\u001b[0m");
         }
-        printf("| ??:??:?? %u ", millis() / 1000);
+        printf("| ??:??:?? %s ", uptime);
 #endif
     }
     auto thread = concurrency::OSThread::currentThread;

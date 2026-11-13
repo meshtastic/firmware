@@ -862,6 +862,12 @@ static void reconcileAccelerometerThread(bool wasOn, bool nowOn, bool otherFeatu
     if (!accelerometerThread) // null unless a sensor was detected at boot
         return;
 
+#ifdef MESHTASTIC_INCLUDE_INKHUD
+    if (!wasOn && nowOn)
+        accelerometerThread->setMotionPolling(true);
+    else if (wasOn && !nowOn && !otherFeatureOn && !accelerometerThread->providesHeading())
+        accelerometerThread->setMotionPolling(false);
+#else
     if (!wasOn && nowOn && accelerometerThread->enabled == false) {
         accelerometerThread->enabled = true;
         accelerometerThread->start();
@@ -869,6 +875,7 @@ static void reconcileAccelerometerThread(bool wasOn, bool nowOn, bool otherFeatu
                !accelerometerThread->providesHeading()) {
         accelerometerThread->disable();
     }
+#endif
 }
 #endif
 

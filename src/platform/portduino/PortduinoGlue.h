@@ -311,6 +311,7 @@ extern struct portduino_config_struct {
 
     // Security
     std::vector<std::array<uint8_t, 32>> admin_keys;
+    bool dmshell_enabled = false;
 
     // config
     bool has_config_overrides = false;
@@ -726,12 +727,16 @@ extern struct portduino_config_struct {
         }
 
         // Security
-        if (!admin_keys.empty()) {
+        if (!admin_keys.empty() || dmshell_enabled) {
             out << YAML::Key << "Security" << YAML::Value << YAML::BeginMap;
-            out << YAML::Key << "AdminKeys" << YAML::Value << YAML::BeginSeq;
-            for (const auto &key : admin_keys)
-                out << adminKeyToBase64(key);
-            out << YAML::EndSeq;
+            if (!admin_keys.empty()) {
+                out << YAML::Key << "AdminKeys" << YAML::Value << YAML::BeginSeq;
+                for (const auto &key : admin_keys)
+                    out << adminKeyToBase64(key);
+                out << YAML::EndSeq;
+            }
+            if (dmshell_enabled)
+                out << YAML::Key << "DMShell" << YAML::Value << true;
             out << YAML::EndMap; // Security
         }
 
