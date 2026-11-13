@@ -673,6 +673,20 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #endif
 #endif
 
+// Display mirroring to local clients (FromRadio.display_frame).
+#if HAS_SCREEN && !(MESHTASTIC_EXCLUDE_SCREEN_MIRROR)
+#define HAS_SCREEN_MIRROR 1
+#else
+#define HAS_SCREEN_MIRROR 0
+#endif
+
+// MUI streams RGB565 dirty rects and needs a device-ui carrying DisplayMirror, so it is opt-in.
+#if HAS_SCREEN_MIRROR && HAS_TFT && defined(MESHTASTIC_MUI_MIRROR)
+#define HAS_MUI_MIRROR 1
+#else
+#define HAS_MUI_MIRROR 0
+#endif
+
 #ifndef USE_ETHERNET_DEFAULT
 #define USE_ETHERNET_DEFAULT 0
 #endif
