@@ -1,0 +1,7 @@
+# CLEAN. An explicit empty Display.spidev asks for no separate bus, so the
+# display follows the radio host instead of being reported as a fault.
+Lora:
+  Module: sim
+Display:
+  Panel: ILI9488
+  spidev: ""
