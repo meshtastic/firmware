@@ -127,7 +127,7 @@ static inline void drawMonoCompass(OLEDDisplay *display, int16_t compassX, int16
     const StandardCompassNeedlePoints points =
         computeStandardCompassNeedlePoints(compassX, compassY, static_cast<uint16_t>(compassRadius * 2), -heading, 0.0f);
 
-#ifdef USE_EINK
+#if BASEUI_EINK_LAYOUT
     display->setColor(WHITE);
     display->drawTriangle(points.northTipX, points.northTipY, points.northLeftX, points.northLeftY, points.northRightX,
                           points.northRightY);
@@ -341,7 +341,7 @@ static inline void drawStandardCompassNeedle(OLEDDisplay *display, int16_t compa
         computeStandardCompassNeedlePoints(compassX, compassY, compassDiam, headingRadian, 9.0f);
 
     display->setColor(WHITE);
-#ifdef USE_EINK
+#if BASEUI_EINK_LAYOUT
     display->drawTriangle(points.northTipX, points.northTipY, points.northLeftX, points.northLeftY, points.northRightX,
                           points.northRightY);
     display->drawTriangle(points.southTipX, points.southTipY, points.southLeftX, points.southLeftY, points.southRightX,
@@ -1302,7 +1302,7 @@ void UIRenderer::drawFavoriteNode(OLEDDisplay *display, OLEDDisplayUiState *stat
         } else {
             const int yBelowContent = (line > 0 && line <= 5) ? (getTextPositions(display)[line - 1] + FONT_HEIGHT_SMALL + 2)
                                                               : getTextPositions(display)[1];
-#if defined(USE_EINK)
+#if BASEUI_EINK_LAYOUT
             const int iconSize = (currentResolution == ScreenResolution::High) ? 16 : 8;
             const int navBarHeight = iconSize + 6;
 #else
@@ -1441,7 +1441,7 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     int chutil_bar_width = (currentResolution == ScreenResolution::High) ? 100 : 50;
     int chutil_bar_max_fill = chutil_bar_width - 2; // Account for border
     if (!config.bluetooth.enabled) {
-#if defined(USE_EINK)
+#if BASEUI_EINK_LAYOUT
         chutil_bar_width = (currentResolution == ScreenResolution::High) ? 50 : 30;
 #else
         chutil_bar_width = (currentResolution == ScreenResolution::High) ? 80 : 40;
@@ -1942,7 +1942,7 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
         if (gpsStatus->getLastFixMillis() > 0) {
             uint32_t delta = millis() - gpsStatus->getLastFixMillis();
             char uptimeStr[32];
-#if defined(USE_EINK)
+#if BASEUI_EINK_LAYOUT
             // E-Ink: skip seconds, show only days/hours/mins
             getUptimeStr(delta, "Last: ", uptimeStr, sizeof(uptimeStr), false);
 #else
@@ -1997,7 +1997,7 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
             // Portrait or square: put compass at the bottom and centered, scaled to fit available space
             // For E-Ink screens, account for navigation bar at the bottom!
             const int yBelowContent = textPos[5] + FONT_HEIGHT_SMALL + 2;
-#if defined(USE_EINK)
+#if BASEUI_EINK_LAYOUT
             const int margin = 4;
             int availableHeight = SCREEN_HEIGHT - yBelowContent - 24; // Leave extra space for nav bar on E-Ink
 #else

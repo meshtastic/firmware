@@ -379,7 +379,7 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
     const int barHeight = 6;
     const int labelX = x + BASEUI_BODY_LR_MARGIN;
     int barsOffset = (currentResolution == ScreenResolution::High) ? 24 : 0;
-#ifdef USE_EINK
+#if BASEUI_EINK_LAYOUT
 #ifndef T_DECK_PRO
     barsOffset -= 12;
 #endif

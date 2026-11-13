@@ -229,7 +229,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
 
     uint32_t now = millis();
 
-#ifndef USE_EINK
+#if !BASEUI_EINK_LAYOUT
     if (isCharging && now - lastBlinkShared > 500) {
         isBoltVisibleShared = !isBoltVisibleShared;
         lastBlinkShared = now;
@@ -289,7 +289,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
             }
             batteryX += 18; // Icon + 2 pixels
         } else {
-#ifdef USE_EINK
+#if BASEUI_EINK_LAYOUT
             batteryY += 2;
 #endif
             display->drawXbm(batteryX, batteryY, 7, 11, batteryBitmap_v);
@@ -388,7 +388,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
 
         bool showMail = false;
 
-#ifndef USE_EINK
+#if !BASEUI_EINK_LAYOUT
         if (hasUnreadMessage) {
             if (now - lastMailBlink > 500) {
                 isMailIconVisible = !isMailIconVisible;
@@ -485,7 +485,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
 #endif
         bool showMail = false;
 
-#ifndef USE_EINK
+#if !BASEUI_EINK_LAYOUT
         if (hasUnreadMessage) {
             if (now - lastMailBlink > 500) {
                 isMailIconVisible = !isMailIconVisible;

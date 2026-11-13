@@ -1472,7 +1472,7 @@ void Screen::setFrames(FrameFocus focus)
     indicatorIcons.push_back(icon_mail);
     PUSH_FRAME_TITLE("Messages");
 
-#ifndef USE_EINK
+#if !BASEUI_EINK_LAYOUT
     if (!hiddenFrames.nodelist_nodes) {
         fsi.positions.nodelist_nodes = numframes;
         normalFrames[numframes++] = graphics::NodeListRenderer::drawDynamicListScreen_Nodes;
@@ -1488,7 +1488,7 @@ void Screen::setFrames(FrameFocus focus)
 #endif
 
 // Show detailed node views only on E-Ink builds
-#ifdef USE_EINK
+#if BASEUI_EINK_LAYOUT
     if (!hiddenFrames.nodelist_lastheard) {
         fsi.positions.nodelist_lastheard = numframes;
         normalFrames[numframes++] = graphics::NodeListRenderer::drawLastHeardScreen;
@@ -1509,7 +1509,7 @@ void Screen::setFrames(FrameFocus focus)
     }
 #endif
 #if HAS_GPS
-#ifdef USE_EINK
+#if BASEUI_EINK_LAYOUT
     if (!hiddenFrames.nodelist_bearings) {
         fsi.positions.nodelist_bearings = numframes;
         normalFrames[numframes++] = graphics::NodeListRenderer::drawNodeListWithCompasses;
@@ -1700,7 +1700,7 @@ void Screen::setFrameImmediateDraw(FrameCallback *drawFrames)
 
 void Screen::toggleFrameVisibility(const std::string &frameName)
 {
-#ifndef USE_EINK
+#if !BASEUI_EINK_LAYOUT
     if (frameName == "nodelist_nodes") {
         hiddenFrames.nodelist_nodes = !hiddenFrames.nodelist_nodes;
     }
@@ -1708,7 +1708,7 @@ void Screen::toggleFrameVisibility(const std::string &frameName)
         hiddenFrames.nodelist_location = !hiddenFrames.nodelist_location;
     }
 #endif
-#ifdef USE_EINK
+#if BASEUI_EINK_LAYOUT
     if (frameName == "nodelist_lastheard") {
         hiddenFrames.nodelist_lastheard = !hiddenFrames.nodelist_lastheard;
     }
@@ -1720,7 +1720,7 @@ void Screen::toggleFrameVisibility(const std::string &frameName)
     }
 #endif
 #if HAS_GPS
-#ifdef USE_EINK
+#if BASEUI_EINK_LAYOUT
     if (frameName == "nodelist_bearings") {
         hiddenFrames.nodelist_bearings = !hiddenFrames.nodelist_bearings;
     }
@@ -1748,13 +1748,13 @@ void Screen::toggleFrameVisibility(const std::string &frameName)
 
 bool Screen::isFrameHidden(const std::string &frameName) const
 {
-#ifndef USE_EINK
+#if !BASEUI_EINK_LAYOUT
     if (frameName == "nodelist_nodes")
         return hiddenFrames.nodelist_nodes;
     if (frameName == "nodelist_location")
         return hiddenFrames.nodelist_location;
 #endif
-#ifdef USE_EINK
+#if BASEUI_EINK_LAYOUT
     if (frameName == "nodelist_lastheard")
         return hiddenFrames.nodelist_lastheard;
     if (frameName == "nodelist_hopsignal")
@@ -1763,7 +1763,7 @@ bool Screen::isFrameHidden(const std::string &frameName) const
         return hiddenFrames.nodelist_distance;
 #endif
 #if HAS_GPS
-#ifdef USE_EINK
+#if BASEUI_EINK_LAYOUT
     if (frameName == "nodelist_bearings")
         return hiddenFrames.nodelist_bearings;
 #endif
@@ -1845,17 +1845,17 @@ uint32_t Screen::packHiddenFrames() const
     setBit(mask, FVBIT_SYSTEM, hiddenFrames.system);
     setBit(mask, FVBIT_HOME, hiddenFrames.home);
     setBit(mask, FVBIT_CLOCK, hiddenFrames.clock);
-#ifndef USE_EINK
+#if !BASEUI_EINK_LAYOUT
     setBit(mask, FVBIT_NODELIST_NODES, hiddenFrames.nodelist_nodes);
     setBit(mask, FVBIT_NODELIST_LOCATION, hiddenFrames.nodelist_location);
 #endif
-#ifdef USE_EINK
+#if BASEUI_EINK_LAYOUT
     setBit(mask, FVBIT_NODELIST_LASTHEARD, hiddenFrames.nodelist_lastheard);
     setBit(mask, FVBIT_NODELIST_HOPSIGNAL, hiddenFrames.nodelist_hopsignal);
     setBit(mask, FVBIT_NODELIST_DISTANCE, hiddenFrames.nodelist_distance);
 #endif
 #if HAS_GPS
-#ifdef USE_EINK
+#if BASEUI_EINK_LAYOUT
     setBit(mask, FVBIT_NODELIST_BEARINGS, hiddenFrames.nodelist_bearings);
 #endif
     setBit(mask, FVBIT_GPS, hiddenFrames.gps);
@@ -1874,17 +1874,17 @@ void Screen::applyHiddenFramesMask(uint32_t mask)
     hiddenFrames.system = getBit(mask, FVBIT_SYSTEM);
     hiddenFrames.home = getBit(mask, FVBIT_HOME);
     hiddenFrames.clock = getBit(mask, FVBIT_CLOCK);
-#ifndef USE_EINK
+#if !BASEUI_EINK_LAYOUT
     hiddenFrames.nodelist_nodes = getBit(mask, FVBIT_NODELIST_NODES);
     hiddenFrames.nodelist_location = getBit(mask, FVBIT_NODELIST_LOCATION);
 #endif
-#ifdef USE_EINK
+#if BASEUI_EINK_LAYOUT
     hiddenFrames.nodelist_lastheard = getBit(mask, FVBIT_NODELIST_LASTHEARD);
     hiddenFrames.nodelist_hopsignal = getBit(mask, FVBIT_NODELIST_HOPSIGNAL);
     hiddenFrames.nodelist_distance = getBit(mask, FVBIT_NODELIST_DISTANCE);
 #endif
 #if HAS_GPS
-#ifdef USE_EINK
+#if BASEUI_EINK_LAYOUT
     hiddenFrames.nodelist_bearings = getBit(mask, FVBIT_NODELIST_BEARINGS);
 #endif
     hiddenFrames.gps = getBit(mask, FVBIT_GPS);

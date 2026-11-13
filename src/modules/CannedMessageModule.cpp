@@ -2118,7 +2118,7 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
             // Vertically center based on rowHeight
             int textYOffset = (rowHeight - FONT_HEIGHT_SMALL) / 2;
 
-#ifdef USE_EINK
+#if BASEUI_EINK_LAYOUT
             int nextX = x + BASEUI_BODY_LR_MARGIN + (_highlight ? 12 : 0);
             if (_highlight)
                 display->drawString(x + BASEUI_BODY_LR_MARGIN, lineY + textYOffset, ">");
@@ -2134,7 +2134,7 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
 
             if (msg && *msg)
                 drawCenteredEmoteText(display, nextX, lineY, rowHeight, msg);
-#ifndef USE_EINK
+#if !BASEUI_EINK_LAYOUT
             if (_highlight)
                 display->setColor(WHITE);
 #endif
