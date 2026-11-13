@@ -40,10 +40,12 @@ enum class TFTColorRole : uint8_t {
     Count
 };
 
+#ifndef GRAPHICS_TFT_COLORING_ENABLED // meshtasticd's Virtual panel sets it to render a color device
 #if HAS_TFT || defined(HAS_SPI_TFT) || defined(HAS_HUB75_NATIVE)
 #define GRAPHICS_TFT_COLORING_ENABLED 1
 #else
 #define GRAPHICS_TFT_COLORING_ENABLED 0
+#endif
 #endif
 
 static constexpr bool kTFTColoringEnabled = GRAPHICS_TFT_COLORING_ENABLED != 0;

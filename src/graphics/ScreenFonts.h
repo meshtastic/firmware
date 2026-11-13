@@ -1,5 +1,7 @@
 #pragma once
 
+#include "configuration.h"
+
 #ifdef OLED_PL
 #include "graphics/fonts/OLEDDisplayFontsPL.h"
 #endif
@@ -93,12 +95,12 @@
 // 24pt. Drops the ~9.6 KB ArialMT_Plain_24 table from the linked binary.
 // Set MESHTASTIC_LARGE_FONT_24PT=1 in build_flags to opt out per variant
 // (undefined or 0 keeps the optimization on).
-#if defined(ARCH_NRF52) && (!defined(MESHTASTIC_LARGE_FONT_24PT) || MESHTASTIC_LARGE_FONT_24PT == 0)
+#if BASEUI_LARGE_FONT_16PT
 #undef FONT_LARGE_LOCAL
 #define FONT_LARGE_LOCAL FONT_MEDIUM_LOCAL
 #endif
 
-#if (defined(USE_EINK) || defined(HAS_SPI_TFT)) && !defined(DISPLAY_FORCE_SMALL_FONTS)
+#if BASEUI_LARGE_FONTS
 // The screen is bigger so use bigger fonts
 #define FONT_SMALL FONT_MEDIUM_LOCAL // Height: 19
 #define FONT_MEDIUM FONT_LARGE_LOCAL // Height: 28
