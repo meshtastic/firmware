@@ -21,6 +21,8 @@ struct TFTColorRegion;
 class ScreenMirror
 {
   public:
+    /// frameReady's only value. PhoneAPI::onNotify also hears xmodem's 16-bit packetno and fromNum, which never reaches it.
+    static constexpr uint32_t FRAME_WAKE = UINT32_MAX;
     /// Fired when a new frame is ready to drain; PhoneAPI observes this.
     Observable<uint32_t> frameReady;
 
@@ -31,6 +33,8 @@ class ScreenMirror
     /// A client asks for one frame; it calls frameRequestDone() once that frame is delivered.
     void requestFrame();
     void frameRequestDone(const void *client);
+    /// Drops any per-client claim without touching the counts.
+    void releaseClient(const void *client);
 
     /// A client re-asks while its request is still pending; clears a latched capture failure and captures again.
     void retryCapture();

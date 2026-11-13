@@ -27,6 +27,7 @@
 #include "graphics/ScreenMirror.h"
 #include "main.h"
 #include "modules/NodeInfoModule.h"
+#include "modules/RoutingModule.h"
 #include "xmodem.h"
 
 #if FromRadio_size > MAX_TO_FROM_RADIO_SIZE
@@ -43,9 +44,8 @@
 #include "gps/RTC.h"
 
 #if HAS_SCREEN_MIRROR
-// Per-connection mirror subscription and drain cursors, keyed by PhoneAPI* and kept out of the class for the same
-// nRF52 USB-CDC reason as the auth slots. A slot is claimed on the first subscribe or frame request and cleared by
-// releaseMirror(); after that only its own connection touches it, so the lock guards claiming and clearing alone.
+// Per-connection mirror state, keyed by PhoneAPI* for the auth slots' nRF52 reason. close() can clear a slot from
+// another task mid-drain, so fields are only touched under the lock, through a copy.
 static constexpr size_t MAX_MIRROR_SLOTS = 6;
 struct MirrorSlot {
     const PhoneAPI *who = nullptr;
@@ -60,28 +60,55 @@ struct MirrorSlot {
 static MirrorSlot g_mirrorSlots[MAX_MIRROR_SLOTS];
 static concurrency::Lock g_mirrorSlotsLock;
 
-static MirrorSlot *mirrorSlotFor(const PhoneAPI *p, bool claim = false)
+// Caller holds g_mirrorSlotsLock.
+static MirrorSlot *findMirrorSlotLocked(const PhoneAPI *p, bool claim)
 {
-    bool full = false;
-    {
-        concurrency::LockGuard g(&g_mirrorSlotsLock);
-        MirrorSlot *empty = nullptr;
-        for (auto &slot : g_mirrorSlots) {
-            if (slot.who == p)
-                return &slot;
-            if (!slot.who && !empty)
-                empty = &slot;
-        }
-        if (claim && empty) {
-            empty->who = p;
-            return empty;
-        }
-        full = claim;
+    MirrorSlot *empty = nullptr;
+    for (auto &slot : g_mirrorSlots) {
+        if (slot.who == p)
+            return &slot;
+        if (!slot.who && !empty)
+            empty = &slot;
     }
-    // logged outside the lock: the log path can reach a PhoneAPI
-    if (full)
-        LOG_WARN("Screen mirror: every connection slot is in use");
-    return nullptr;
+    if (claim && empty)
+        empty->who = p;
+    return claim ? empty : nullptr;
+}
+
+static bool loadMirrorSlot(const PhoneAPI *p, MirrorSlot &out)
+{
+    concurrency::LockGuard g(&g_mirrorSlotsLock);
+    const MirrorSlot *m = findMirrorSlotLocked(p, false);
+    if (!m)
+        return false;
+    out = *m;
+    return true;
+}
+
+// Writes back only the drain cursors, and only while p still owns the slot. A drain that outlived its slot
+// gives back the MUI rect stream it may have just claimed.
+static void storeMirrorCursors(const PhoneAPI *p, const MirrorSlot &in)
+{
+    concurrency::LockGuard g(&g_mirrorSlotsLock);
+    MirrorSlot *m = findMirrorSlotLocked(p, false);
+    if (!m) {
+        graphics::screenMirror.releaseClient(p);
+        return;
+    }
+    m->frameId = in.frameId;
+    m->offset = in.offset;
+    m->paletteSig = in.paletteSig;
+    m->paletteOffset = in.paletteOffset;
+}
+
+static void finishMirrorFrameRequest(const PhoneAPI *p)
+{
+    concurrency::LockGuard g(&g_mirrorSlotsLock);
+    MirrorSlot *m = findMirrorSlotLocked(p, false);
+    if (m && m->framePending) {
+        m->framePending = false;
+        graphics::screenMirror.frameRequestDone(p);
+    }
 }
 #endif
 
@@ -467,7 +494,6 @@ void PhoneAPI::close()
 #endif
     }
 #if HAS_SCREEN_MIRROR
-    // outside the block above: a client can subscribe before it asks for config
     releaseMirror();
 #endif
 }
@@ -1152,22 +1178,18 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
                 fromRadioScratch.packet = replayPkt;
             }
 #if HAS_SCREEN_MIRROR
-        } else if (wantsMirror() &&
-                   graphics::screenMirror.copyPaletteChunk(mirrorSlotFor(this)->paletteSig, mirrorSlotFor(this)->paletteOffset,
-                                                           fromRadioScratch.display_palette)) {
-            // palette first, so the client can colorize the first frame it renders
-            fromRadioScratch.which_payload_variant = meshtastic_FromRadio_display_palette_tag;
-        } else if (wantsMirror() &&
-                   graphics::screenMirror.copyChunk(this, mirrorSlotFor(this)->frameId, mirrorSlotFor(this)->offset,
-                                                    fromRadioScratch.display_frame)) {
+        } else if (MirrorSlot m; wantsMirror(m)) {
             // lowest priority: mesh traffic and notifications outrank pixels
-            fromRadioScratch.which_payload_variant = meshtastic_FromRadio_display_frame_tag;
-            MirrorSlot *m = mirrorSlotFor(this);
-            if (m->framePending && m->frameId != m->requestedAt &&
-                !graphics::screenMirror.hasChunkFor(this, m->frameId, m->offset)) {
-                m->framePending = false;
-                graphics::screenMirror.frameRequestDone(this);
+            if (graphics::screenMirror.copyPaletteChunk(m.paletteSig, m.paletteOffset, fromRadioScratch.display_palette)) {
+                // palette first, so the client can colorize the first frame it renders
+                fromRadioScratch.which_payload_variant = meshtastic_FromRadio_display_palette_tag;
+            } else if (graphics::screenMirror.copyChunk(this, m.frameId, m.offset, fromRadioScratch.display_frame)) {
+                fromRadioScratch.which_payload_variant = meshtastic_FromRadio_display_frame_tag;
+                if (m.framePending && m.frameId != m.requestedAt &&
+                    !graphics::screenMirror.hasChunkFor(this, m.frameId, m.offset))
+                    finishMirrorFrameRequest(this);
             }
+            storeMirrorCursors(this, m);
 #endif
         }
         break;
@@ -1817,11 +1839,11 @@ bool PhoneAPI::available()
             return true;
 
 #if HAS_SCREEN_MIRROR
-        if (!wantsMirror())
+        MirrorSlot m;
+        if (!wantsMirror(m))
             return false;
-        const MirrorSlot *m = mirrorSlotFor(this);
-        return graphics::screenMirror.hasPaletteChunkFor(m->paletteSig, m->paletteOffset) ||
-               graphics::screenMirror.hasChunkFor(this, m->frameId, m->offset);
+        return graphics::screenMirror.hasPaletteChunkFor(m.paletteSig, m.paletteOffset) ||
+               graphics::screenMirror.hasChunkFor(this, m.frameId, m.offset);
 #else
         return false;
 #endif
@@ -1888,14 +1910,44 @@ bool PhoneAPI::handleScreenMirrorAdmin(const meshtastic_MeshPacket &p)
     meshtastic_AdminMessage admin = meshtastic_AdminMessage_init_zero;
     if (!pb_decode_from_bytes(p.decoded.payload.bytes, p.decoded.payload.size, &meshtastic_AdminMessage_msg, &admin))
         return false;
-    switch (admin.which_payload_variant) {
-    case meshtastic_AdminMessage_set_display_mirror_tag:
+    if (admin.which_payload_variant != meshtastic_AdminMessage_set_display_mirror_tag &&
+        admin.which_payload_variant != meshtastic_AdminMessage_get_display_frame_request_tag)
+        return false;
+
+    meshtastic_Routing_Error result = meshtastic_Routing_Error_NONE;
+#ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
+    if (!getAdminAuthorized())
+        result = meshtastic_Routing_Error_NOT_AUTHORIZED;
+#endif
+    // only a configured connection is ever timed out, so an earlier subscription could never be released
+    if (result == meshtastic_Routing_Error_NONE && !isConnected())
+        result = meshtastic_Routing_Error_BAD_REQUEST;
+
+    if (result != meshtastic_Routing_Error_NONE) {
+        LOG_WARN("Screen mirror: refuse variant=%d, error=%d", admin.which_payload_variant, result);
+    } else if (admin.which_payload_variant == meshtastic_AdminMessage_set_display_mirror_tag) {
         LOG_INFO("Client sets display mirror: %d", admin.set_display_mirror);
-        setMirrorSubscribed(admin.set_display_mirror);
-        return true;
-    case meshtastic_AdminMessage_get_display_frame_request_tag:
+        if (!setMirrorSubscribed(admin.set_display_mirror))
+            result = meshtastic_Routing_Error_NO_RESPONSE;
+    } else {
         LOG_INFO("Client requests display frame");
-        if (MirrorSlot *m = mirrorSlotFor(this, true)) {
+        if (!requestMirrorFrame())
+            result = meshtastic_Routing_Error_NO_RESPONSE;
+    }
+    // consumed before the Router, so nothing else answers want_ack; p.from is still client-supplied here
+    if (p.want_ack && p.id && routingModule)
+        routingModule->sendAckNak(result, nodeDB->getNodeNum(), p.id, p.channel);
+    return true;
+}
+
+// The ScreenMirror counts change under g_mirrorSlotsLock, so a concurrent releaseMirror() always sees them match the slot.
+bool PhoneAPI::requestMirrorFrame()
+{
+    bool claimed = false;
+    {
+        concurrency::LockGuard g(&g_mirrorSlotsLock);
+        if (MirrorSlot *m = findMirrorSlotLocked(this, true)) {
+            claimed = true;
             if (!m->framePending) {
                 if (!m->subscribed)
                     graphics::screenMirror.cursorAtHead(m->frameId, m->offset);
@@ -1906,44 +1958,53 @@ bool PhoneAPI::handleScreenMirrorAdmin(const meshtastic_MeshPacket &p)
                 graphics::screenMirror.retryCapture();
             }
         }
-        return true;
-    default:
-        return false;
     }
+    if (!claimed)
+        LOG_WARN("Screen mirror: every connection slot is in use");
+    return claimed;
 }
 
-void PhoneAPI::setMirrorSubscribed(bool subscribed)
+bool PhoneAPI::setMirrorSubscribed(bool subscribed)
 {
-    MirrorSlot *m = mirrorSlotFor(this, subscribed);
-    if (!m || subscribed == m->subscribed)
-        return;
-    m->subscribed = subscribed;
-    if (subscribed) {
-        graphics::screenMirror.cursorAtHead(m->frameId, m->offset);
-        graphics::screenMirror.subscribe();
-    } else {
-        graphics::screenMirror.unsubscribe(this);
+    bool claimed = false;
+    {
+        concurrency::LockGuard g(&g_mirrorSlotsLock);
+        if (MirrorSlot *m = findMirrorSlotLocked(this, subscribed)) {
+            claimed = true;
+            if (m->subscribed != subscribed) {
+                m->subscribed = subscribed;
+                if (subscribed) {
+                    graphics::screenMirror.cursorAtHead(m->frameId, m->offset);
+                    graphics::screenMirror.subscribe();
+                } else {
+                    graphics::screenMirror.unsubscribe(this);
+                }
+            }
+        }
     }
+    if (subscribed && !claimed) {
+        LOG_WARN("Screen mirror: every connection slot is in use");
+        return false;
+    }
+    return true;
 }
 
 void PhoneAPI::releaseMirror()
 {
-    MirrorSlot *m = mirrorSlotFor(this);
+    concurrency::LockGuard g(&g_mirrorSlotsLock);
+    MirrorSlot *m = findMirrorSlotLocked(this, false);
     if (!m)
         return;
-    setMirrorSubscribed(false);
-    if (m->framePending) {
-        m->framePending = false;
+    if (m->subscribed)
+        graphics::screenMirror.unsubscribe(this);
+    if (m->framePending)
         graphics::screenMirror.frameRequestDone(this);
-    }
-    concurrency::LockGuard g(&g_mirrorSlotsLock);
     *m = MirrorSlot{};
 }
 
-bool PhoneAPI::wantsMirror()
+bool PhoneAPI::wantsMirror(MirrorSlot &m)
 {
-    const MirrorSlot *m = mirrorSlotFor(this);
-    if (!m || (!m->subscribed && !m->framePending))
+    if (!loadMirrorSlot(this, m) || (!m.subscribed && !m.framePending))
         return false;
 #ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
     return getAdminAuthorized();
@@ -2098,6 +2159,16 @@ int PhoneAPI::onNotify(uint32_t newValue)
 {
     bool timeout = checkConnectionTimeout(); // a handy place to check if we've heard from the phone (since the BLE version
                                              // doesn't call this from idle)
+
+#if HAS_SCREEN_MIRROR
+    // a frame wakes only the connections draining the mirror, and never moves FromNum
+    if (newValue == graphics::ScreenMirror::FRAME_WAKE) {
+        MirrorSlot m;
+        if (state == STATE_SEND_PACKETS && wantsMirror(m))
+            onNowHasData(0);
+        return timeout ? -1 : 0;
+    }
+#endif
 
     if (state == STATE_SEND_PACKETS) {
         // Consumed by every connected client in this one notify pass, so no per-connection bookkeeping.

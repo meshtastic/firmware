@@ -149,6 +149,12 @@ void ScreenMirror::frameRequestDone(const void *client)
     releaseLocked(client);
 }
 
+void ScreenMirror::releaseClient(const void *client)
+{
+    concurrency::LockGuard g(&lock);
+    releaseLocked(client);
+}
+
 void ScreenMirror::cursorAtHead(uint32_t &clientFrameId, uint16_t &clientOffset)
 {
     concurrency::LockGuard g(&lock);
@@ -158,7 +164,6 @@ void ScreenMirror::cursorAtHead(uint32_t &clientFrameId, uint16_t &clientOffset)
 
 void ScreenMirror::onRendered(OLEDDisplay *display)
 {
-    uint32_t readyId = 0;
     {
         concurrency::LockGuard g(&lock);
         if (!armedLocked() || captureFailed)
@@ -194,22 +199,24 @@ void ScreenMirror::onRendered(OLEDDisplay *display)
             }
             memaudit::add(kMemTag, size);
             frameSize = size;
-            width = w;
-            height = h;
         }
+        // a rotation can keep the byte size, so geometry is compared on its own
+        bool geometryChanged = w != width || h != height;
+        width = w;
+        height = h;
 
         // a recolor alone is frame-worthy: clients key colors off the frame's signature
         bool paletteChanged = snapshotPaletteSig != paletteSig;
-        if (!firstFrame && !captureRequested && !paletteChanged && memcmp(display->buffer, snapshot, frameSize) == 0)
+        if (!firstFrame && !captureRequested && !paletteChanged && !geometryChanged &&
+            memcmp(display->buffer, snapshot, frameSize) == 0)
             return;
 
         memcpy(snapshot, display->buffer, frameSize);
         snapshotPaletteSig = paletteSig;
         frameId++;
         captureRequested = false;
-        readyId = frameId;
     }
-    frameReady.notifyObservers(readyId);
+    frameReady.notifyObservers(FRAME_WAKE);
 }
 
 void ScreenMirror::capturePalette(uint32_t signature, uint16_t defaultOnBe, uint16_t defaultOffBe, const TFTColorRegion *regions,
@@ -288,7 +295,7 @@ bool ScreenMirror::copyPaletteChunk(uint32_t &clientPaletteSig, uint8_t &clientR
 #if HAS_MUI_MIRROR
 void ScreenMirror::onMuiRect(int16_t x, int16_t y, uint16_t w, uint16_t h, const uint16_t *pixels, uint16_t stride)
 {
-    uint32_t readyId = 0;
+    bool wake = false;
     {
         concurrency::LockGuard g(&lock);
         if (!armedLocked() || captureFailed)
@@ -361,11 +368,10 @@ void ScreenMirror::onMuiRect(int16_t x, int16_t y, uint16_t w, uint16_t h, const
         muiPoolTail = at + bytes;
         muiCount++;
         // only empty -> non-empty needs a wakeup; available() keeps the client draining
-        if (muiCount == 1)
-            readyId = frameId;
+        wake = muiCount == 1;
     }
-    if (readyId)
-        frameReady.notifyObservers(readyId);
+    if (wake)
+        frameReady.notifyObservers(FRAME_WAKE);
 }
 
 // Fills one chunk of the oldest queued rect; pops it when fully drained.

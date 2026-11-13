@@ -37,6 +37,10 @@
  * Eventually there should be once instance of this class for each live connection (because it has a bit of state
  * for that connection)
  */
+#if HAS_SCREEN_MIRROR
+struct MirrorSlot;
+#endif
+
 class PhoneAPI
     : public Observer<uint32_t> // FIXME, we shouldn't be inheriting from Observer, instead use CallbackObserver as a member
 {
@@ -91,14 +95,13 @@ class PhoneAPI
     meshtastic_XModem xmodemPacketForPhone = meshtastic_XModem_init_zero;
 
 #if HAS_SCREEN_MIRROR
-    // The subscription and drain cursors live in a slot table in PhoneAPI.cpp, not here: per-instance
-    // members break nRF52 USB-CDC enumeration (see the auth slots).
-    // Handles the local-only mirror verbs for this connection; true when the packet was one.
+    // Mirror state lives in a slot table in PhoneAPI.cpp: per-instance members break nRF52 USB-CDC enumeration.
     bool handleScreenMirrorAdmin(const meshtastic_MeshPacket &p);
-    void setMirrorSubscribed(bool subscribed);
+    bool setMirrorSubscribed(bool subscribed);
+    bool requestMirrorFrame();
     void releaseMirror();
-    // screen pixels are operator content: same access rule as mesh packets
-    bool wantsMirror();
+    // copies this connection's slot; screen pixels follow the same access rule as mesh packets
+    bool wantsMirror(MirrorSlot &out);
 #endif
 
     // Keep QueueStatus packet just as packetForPhone
