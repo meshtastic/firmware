@@ -17,6 +17,7 @@
 #include "BMX160Sensor.h"
 #include "ICM20948Sensor.h"
 #include "ICM42607PSensor.h"
+#include "ISM330DHCXSensor.h"
 #include "LIS3DHSensor.h"
 #include "LSM6DS3Sensor.h"
 #include "MPU6050Sensor.h"
@@ -70,19 +71,77 @@ class AccelerometerThread : public concurrency::OSThread
     // disable() the thread in this case, or the compass would freeze until the next reboot.
     bool providesHeading() const { return isInitialised && sensor && sensor->providesHeading(); }
 
+#ifdef MESHTASTIC_INCLUDE_INKHUD
+    MotionSensor *getStepSensor() const
+    {
+        return isInitialised && sensor->stepSource() != MotionSensor::StepSource::None ? sensor.get() : nullptr;
+    }
+
+    void setTrackingSteps(bool tracking)
+    {
+        auto &tracker = sensor->stepTracker();
+        const bool restartPolling = tracking && !enabled;
+        if (tracking && sensor->stepSource() == MotionSensor::StepSource::Hardware) {
+            // Read queued totals before starting the session. If polling was stopped and no total
+            // is available, the next report must establish the baseline.
+            if (!sensor->syncStepCounter() && restartPolling)
+                tracker.invalidateHardwareBaseline();
+        }
+        tracker.setTracking(tracking, Time::getMillisMonotonic());
+        if (restartPolling) {
+            motionStopRequested = true;
+            enabled = true;
+            start();
+        } else if (!tracking && motionStopRequested) {
+            disable();
+        }
+    }
+
+    void resetStepSession()
+    {
+        // Apply queued hardware steps to the old session before clearing its total.
+        sensor->syncStepCounter();
+        sensor->stepTracker().reset(Time::getMillisMonotonic());
+    }
+
+    void setMotionPolling(bool requested)
+    {
+        motionStopRequested = !requested;
+        if (requested && !enabled) {
+            if (isInitialised)
+                sensor->stepTracker().invalidateHardwareBaseline();
+            enabled = true;
+            start();
+        } else if (!requested && !isTrackingSteps()) {
+            disable();
+        }
+    }
+#endif
+
   protected:
     int32_t runOnce() override
     {
         // Assume we should not keep the board awake
         canSleep = true;
 
-        if (isInitialised)
-            return sensor->runOnce();
+        if (isInitialised) {
+            const int32_t interval = sensor->runOnce();
+#ifdef MESHTASTIC_INCLUDE_INKHUD
+            if (isTrackingSteps() && sensor->stepSource() == MotionSensor::StepSource::Software &&
+                interval > MOTION_SENSOR_CHECK_INTERVAL_MS)
+                return MOTION_SENSOR_CHECK_INTERVAL_MS;
+#endif
+            return interval;
+        }
 
         return MOTION_SENSOR_CHECK_INTERVAL_MS;
     }
 
   private:
+#ifdef MESHTASTIC_INCLUDE_INKHUD
+    bool motionStopRequested = false;
+    bool isTrackingSteps() const { return isInitialised && sensor->stepTracker().isTracking(); }
+#endif
     ScanI2C::FoundDevice device;
 
     void init()
@@ -119,6 +178,11 @@ class AccelerometerThread : public concurrency::OSThread
 #if __has_include(<Adafruit_LSM6DS3TRC.h>)
         case ScanI2C::DeviceType::LSM6DS3:
             sensor.reset(new LSM6DS3Sensor(device));
+            break;
+#endif
+#if defined(MESHTASTIC_INCLUDE_INKHUD) && __has_include(<Adafruit_ISM330DHCX.h>)
+        case ScanI2C::DeviceType::ISM330DHCX:
+            sensor.reset(new ISM330DHCXSensor(device));
             break;
 #endif
 #ifdef HAS_STK8XXX
