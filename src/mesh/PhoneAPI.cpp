@@ -1750,14 +1750,16 @@ bool PhoneAPI::available()
     return false;
 }
 
-void PhoneAPI::sendNotification(meshtastic_LogRecord_Level level, uint32_t replyId, const char *message)
+void PhoneAPI::sendNotification(meshtastic_LogRecord_Level level, uint32_t replyId, const char *message,
+                                meshtastic_ClientNotification_NotificationType type)
 {
     meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
     if (!cn)
         return;
     cn->has_reply_id = true;
     cn->reply_id = replyId;
-    cn->level = meshtastic_LogRecord_Level_WARNING;
+    cn->level = level;
+    cn->type = type;
     cn->time = getValidTime(RTCQualityFromNet);
     strncpy(cn->message, message, sizeof(cn->message));
     service->sendClientNotification(cn);
@@ -1847,6 +1849,13 @@ bool PhoneAPI::handleToRadioPacket(meshtastic_MeshPacket &p)
     }
 #endif
 
+    // Transparent mode: the client runs the mesh, including retries that reuse an id, so none of the
+    // decoded-payload policy below applies to its frames.
+    if (config.lora.transparent_mode && p.which_payload_variant == meshtastic_MeshPacket_encrypted_tag) {
+        service->handleToRadio(p);
+        return true;
+    }
+
     // Coordinates aimed at the event channel go out on the position channel instead (the phone picks the
     // channel it last heard the node on, which is the event channel for everyone). Only when there is no
     // channel to move them to is the send rejected. Reject before recording duplicate or per-port cooldown
@@ -1856,7 +1865,8 @@ bool PhoneAPI::handleToRadioPacket(meshtastic_MeshPacket &p)
         LOG_DEBUG("Suppress phone coordinate send on event (everyone) channel");
         meshtastic_QueueStatus qs = router->getQueueStatus();
         service->sendQueueStatusToPhone(qs, 0, p.id);
-        sendNotification(meshtastic_LogRecord_Level_WARNING, p.id, "Location sharing is disabled on this channel");
+        sendNotification(meshtastic_LogRecord_Level_WARNING, p.id, "Location sharing is disabled on this channel",
+                         meshtastic_ClientNotification_NotificationType_POSITION_SHARING_DISABLED);
         return false;
     }
 
@@ -1872,12 +1882,14 @@ bool PhoneAPI::handleToRadioPacket(meshtastic_MeshPacket &p)
     if (p.decoded.portnum == meshtastic_PortNum_TRACEROUTE_APP && lastPortNumToRadio[p.decoded.portnum] &&
         Throttle::isWithinTimespanMs(lastPortNumToRadio[p.decoded.portnum], THIRTY_SECONDS_MS)) {
         LOG_WARN("Rate limit portnum %d", p.decoded.portnum);
-        sendNotification(meshtastic_LogRecord_Level_WARNING, p.id, "TraceRoute can only be sent once every 30 seconds");
+        sendNotification(meshtastic_LogRecord_Level_WARNING, p.id, "TraceRoute can only be sent once every 30 seconds",
+                         meshtastic_ClientNotification_NotificationType_TRACEROUTE_RATE_LIMITED);
         meshtastic_QueueStatus qs = router->getQueueStatus();
         service->sendQueueStatusToPhone(qs, 0, p.id);
         return false;
     } else if (p.decoded.portnum == meshtastic_PortNum_TRACEROUTE_APP && isBroadcast(p.to) && p.hop_limit > 0) {
-        sendNotification(meshtastic_LogRecord_Level_WARNING, p.id, "Multi-hop traceroute to broadcast address is not allowed");
+        sendNotification(meshtastic_LogRecord_Level_WARNING, p.id, "Multi-hop traceroute to broadcast address is not allowed",
+                         meshtastic_ClientNotification_NotificationType_TRACEROUTE_BROADCAST_REJECTED);
         meshtastic_QueueStatus qs = router->getQueueStatus();
         service->sendQueueStatusToPhone(qs, 0, p.id);
         return false;

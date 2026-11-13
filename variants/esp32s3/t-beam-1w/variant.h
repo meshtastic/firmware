@@ -8,7 +8,7 @@
 // GPS - Quectel L76K
 #define GPS_RX_PIN 5
 #define GPS_TX_PIN 6
-#define GPS_1PPS_PIN 7
+#define PIN_GPS_PPS 7
 #define GPS_WAKEUP_PIN 16 // GPS_EN_PIN in LilyGO code
 #define HAS_GPS 1
 #define GPS_BAUDRATE 9600

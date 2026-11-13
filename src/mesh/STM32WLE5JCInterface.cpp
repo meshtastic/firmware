@@ -45,6 +45,13 @@ bool STM32WLE5JCInterface::init()
     LOG_INFO("Bandwidth set to %f", bw);
     LOG_INFO("Power output set to %d", power);
 
+    if (res == RADIOLIB_ERR_NONE && tcxoVoltage > 0) {
+        // Standby and TX/RX fallback on STDBY_XOSC keep the TCXO powered
+        // to avoid the TCXO startup time on each TX/RX transition.
+        const int16_t xoscRes = lora.setStandbyXOSC(true);
+        LOG_DEBUG("Keep TCXO on in standby, result: %d", xoscRes);
+    }
+
     if (res == RADIOLIB_ERR_NONE) {
         applyTcxoStartupDelay(lora, tcxoVoltage);
         startReceive(); // start receiving

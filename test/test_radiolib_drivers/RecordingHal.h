@@ -7,6 +7,8 @@
 
 #include <algorithm>
 #include <cstring>
+#include <functional>
+#include <utility>
 #include <vector>
 
 class RecordingHal : public RadioLibHal
@@ -15,7 +17,8 @@ class RecordingHal : public RadioLibHal
     // A scripted answer, chosen by the leading bytes (the opcode) of what the driver sent.
     struct Reply {
         std::vector<uint8_t> prefix;
-        bool nextTransaction; // answer the transaction after the match: LRxxxx reads reply in a second one
+        uint8_t after; // answer the after-th transaction following the match, 0 = the match itself.
+                       // LRxxxx reads reply in a second transaction; prefix-less ones (IRQ status) need more
         std::vector<uint8_t> head;
         uint8_t fill; // every byte after head
     };
@@ -32,22 +35,36 @@ class RecordingHal : public RadioLibHal
         registerEcho = false;
         memset(registers, 0, sizeof(registers));
         defaultFill = fill;
-        pending = nullptr;
+        pending.clear();
+        checks.clear();
+        irqPin = RADIOLIB_NC;
         nowUs = 0;
     }
 
     std::vector<std::vector<uint8_t>> transactions;
     std::vector<Reply> replies;
 
-    // SX127x mode: no status byte, and RADIOLIB_SPI_PARANOID reads every register write back, so
-    // writes are stored and reads answered from the store.
+    // SX127x mode: no status byte, and with RADIOLIB_SPI_PARANOID RadioLib reads every register write
+    // back, so writes are stored and reads answered from the store.
     bool registerEcho = false;
     uint8_t registers[128] = {};
 
-    void reply(std::vector<uint8_t> prefix, uint8_t fill, std::vector<uint8_t> head = {}, bool nextTransaction = false)
+    void reply(std::vector<uint8_t> prefix, uint8_t fill, std::vector<uint8_t> head = {}, uint8_t after = 0)
     {
-        replies.push_back({std::move(prefix), nextTransaction, std::move(head), fill});
+        replies.push_back({std::move(prefix), after, std::move(head), fill});
     }
+
+    // Chip model: a command matching `prefix` whose bytes `accepts` refuses gets `status` in the first
+    // byte of the next transaction, where an LRxxxx reports it: paranoid SPI's status read, or else the
+    // next command's own status byte (see SENT_AFTER_REFUSAL).
+    using Accepts = std::function<bool(const std::vector<uint8_t> &)>;
+    void rejectUnless(std::vector<uint8_t> prefix, Accepts accepts, uint8_t status)
+    {
+        checks.push_back({std::move(prefix), std::move(accepts), status});
+    }
+
+    // Reads high, so RadioLib's blocking scanChannel() sees its IRQ and returns; every other pin is low.
+    uint32_t irqPin = RADIOLIB_NC;
 
     // Transactions whose leading bytes are `prefix`.
     size_t count(const std::vector<uint8_t> &prefix) const
@@ -76,7 +93,7 @@ class RecordingHal : public RadioLibHal
 
     void pinMode(uint32_t, uint32_t) override {}
     void digitalWrite(uint32_t, uint32_t) override {}
-    uint32_t digitalRead(uint32_t) override { return 0; } // BUSY low
+    uint32_t digitalRead(uint32_t pin) override { return irqPin != RADIOLIB_NC && pin == irqPin; } // BUSY low, irqPin high
     void attachInterrupt(uint32_t, void (*)(void), uint32_t) override {}
     void detachInterrupt(uint32_t) override {}
     void delay(RadioLibTime_t ms) override { nowUs += ms * 1000; }
@@ -97,23 +114,43 @@ class RecordingHal : public RadioLibHal
             echoRegisters(out, len, in);
             return;
         }
-        const Reply *r = pending;
-        pending = nullptr;
+        // A due deferred reply wins over a direct match, and the first due one wins over any other: each
+        // targets one transaction, so two due together is a test bug. Copies, so reply() cannot invalidate one.
+        Reply due{};
+        const Reply *r = nullptr;
+        for (auto it = pending.begin(); it != pending.end();) {
+            if (--it->second == 0) {
+                if (!r)
+                    due = it->first, r = &due;
+                it = pending.erase(it);
+            } else {
+                ++it;
+            }
+        }
         for (const auto &c : replies) {
             if (!startsWith(out, len, c.prefix))
                 continue;
-            if (c.nextTransaction)
-                pending = &c;
+            if (c.after)
+                pending.emplace_back(c, c.after);
             else if (!r)
                 r = &c;
         }
+        for (const auto &c : checks)
+            if (startsWith(out, len, c.prefix) && !c.accepts(transactions.back()))
+                pending.emplace_back(Reply{{}, 1, {c.status}, defaultFill}, 1);
         for (size_t i = 0; i < len; i++)
             in[i] = !r ? defaultFill : (i < r->head.size() ? r->head[i] : r->fill);
     }
 
   private:
     uint8_t defaultFill;
-    const Reply *pending = nullptr;
+    std::vector<std::pair<Reply, uint8_t>> pending; // deferred replies, transactions still to wait
+    struct Check {
+        std::vector<uint8_t> prefix;
+        Accepts accepts;
+        uint8_t status;
+    };
+    std::vector<Check> checks;
     RadioLibTime_t nowUs = 0;
 
     static bool startsWith(const uint8_t *data, size_t len, const std::vector<uint8_t> &prefix)
@@ -135,6 +172,11 @@ class RecordingHal : public RadioLibHal
         }
     }
 };
+
+// How many times an LRxxxx command following a refused one reaches the chip. Paranoid SPI reads the
+// status after every write and stops at the refusal. Without it (the shipped config) the refusal comes
+// back in the next command's own status byte, after that command has gone out.
+static constexpr uint32_t SENT_AFTER_REFUSAL = RADIOLIB_SPI_PARANOID ? 0 : 1;
 
 // Big-endian opcode bytes, for the 16-bit LRxxxx command set.
 inline std::vector<uint8_t> op16(uint16_t opcode)
