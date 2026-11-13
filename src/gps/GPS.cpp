@@ -1056,9 +1056,10 @@ bool GPS::setup()
             // Turn off GSV messages, we don't really care about which and where the sats are, maybe someday.
             _serial_gps->write("$CFGMSG,0,3,0\r\n");
             delay(250);
-            // GSA is still turned off here, but no longer because "TinyGPS++ doesn't use this message" -- it
-            // does now. Switching it on needs the Unicore message-id map established on hardware first: on a
-            // CM121, $CFGMSG,0,2,1,1 turns on GLL, not GSA. See the PR discussion.
+            // GSA is still turned off here, but no longer for the reason this used to give ("TinyGPS++
+            // doesn't use this message") -- it does now, so turning it on is worth doing in its own change,
+            // per chip, with hardware to verify each one. This branch's three-argument form is the one the
+            // UFirebirdII protocol specification documents, so it is the likely shape of that change.
             _serial_gps->write("$CFGMSG,0,2,0\r\n");
             delay(250);
             // Turn off NOTICE __TXT messages, these may provide Unicore some info but we don't care.
