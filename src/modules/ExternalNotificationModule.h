@@ -97,6 +97,7 @@ class ExternalNotificationModule : public SinglePortModule, private concurrency:
 #if !MESHTASTIC_EXCLUDE_RTTTL
     void handleGetRingtone(const meshtastic_MeshPacket &req, meshtastic_AdminMessage *response);
     void handleSetRingtone(const char *from_msg);
+    void handlePlayRingtone();
 #endif
 
   protected:
