@@ -14,6 +14,13 @@ if [[ -z "$ENV_NAME" ]]; then
   exit 2
 fi
 
+# Without this, a bad override makes seq yield nothing, the loop never runs, and the script falls
+# off the end reporting success while having installed nothing.
+if [[ ! $ATTEMPTS =~ ^[1-9][0-9]*$ ]]; then
+  echo "PIO_PKG_INSTALL_ATTEMPTS must be a positive integer, got '$ATTEMPTS'" >&2
+  exit 2
+fi
+
 for attempt in $(seq 1 "$ATTEMPTS"); do
   if pio pkg install -e "$ENV_NAME"; then
     exit 0
