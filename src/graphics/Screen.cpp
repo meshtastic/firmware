@@ -99,6 +99,7 @@ extern MessageStore messageStore;
 #endif
 
 #if ARCH_PORTDUINO
+#include "graphics/VirtualDisplay.h"
 #include "modules/StoreForwardModule.h"
 #include "platform/portduino/PortduinoGlue.h"
 #endif
@@ -612,7 +613,12 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
         LOG_ERROR("HUB75 panel requested but rpi-rgb-led-matrix not compiled in");
 #endif
     } else if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
-        if (portduino_config.displayPanel != no_screen) {
+        if (portduino_config.displayPanel == virtual_screen) {
+            uint16_t w = portduino_config.displayWidth > 0 ? portduino_config.displayWidth : 128;
+            uint16_t h = portduino_config.displayHeight > 0 ? portduino_config.displayHeight : 64;
+            LOG_DEBUG("Make VirtualDisplay %ux%u", w, h);
+            dispdev = new VirtualDisplay(w, h);
+        } else if (portduino_config.displayPanel != no_screen) {
             LOG_DEBUG("Make TFTDisplay");
             dispdev = new TFTDisplay(address.address, -1, -1, geometry,
                                      (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
