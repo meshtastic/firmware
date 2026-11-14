@@ -13,12 +13,14 @@
 #include "api/ServerAPI.h"
 #include "mesh/Throttle.h"
 #include "meshUtils.h"
+#include "modules/Telemetry/Sensor/CommandSensorFields.h"
 #include <ErriezCRC32.h>
 #include <Utility.h>
 #include <algorithm>
 #include <array>
 #include <assert.h>
 #include <cctype>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <filesystem>
@@ -33,6 +35,18 @@
 // Only the PORTDUINO_LINUX_HARDWARE block below calls ioctl() (HCIGETDEVINFO,
 // for the BlueZ-derived MAC address); Windows has no <sys/ioctl.h>.
 #include <sys/ioctl.h>
+#endif
+#if !defined(_WIN32) && !defined(ARCH_PORTDUINO_WASM)
+// execCommand(): spawn a shell with a deadline and kill its process group on timeout.
+#include <cerrno>
+#include <chrono>
+#include <csignal>
+#include <cstring>
+#include <fcntl.h>
+#include <poll.h>
+#include <spawn.h>
+#include <sys/wait.h>
+extern char **environ;
 #endif
 
 #ifdef PORTDUINO_LINUX_HARDWARE
@@ -1475,6 +1489,44 @@ bool loadConfig(const char *configPath)
             portduino_config.hostMetrics_user_command = (yamlConfig["HostMetrics"]["UserStringCommand"]).as<std::string>("");
         }
 
+        // An empty `Sensors:` is null; skip it like any other empty section.
+        if (yamlConfig["Sensors"] && !yamlConfig["Sensors"].IsNull()) {
+            const YAML::Node sensors = yamlConfig["Sensors"];
+            if (!sensors.IsSequence()) {
+                std::cout << "Sensors must be a list of entries with a Type and a Command!" << std::endl;
+                if (!configCheck)
+                    exit(EXIT_FAILURE);
+            } else {
+                // Appended, like Security.AdminKeys, so each file in config.d can add its own sensors.
+                for (const auto &entry : sensors) {
+                    if (!entry.IsMap()) {
+                        std::cout << "Sensors: each entry needs a Type and a Command!" << std::endl;
+                        if (!configCheck)
+                            exit(EXIT_FAILURE);
+                        continue;
+                    }
+                    const std::string type = entry["Type"].as<std::string>("");
+                    commandSensorConfig sensor;
+                    sensor.type = CommandSensorFields::canonicalType(type);
+                    sensor.command = entry["Command"].as<std::string>("");
+                    sensor.scale = entry["Scale"].as<float>(1.0f);
+                    if (!std::isfinite(sensor.scale))
+                        sensor.scale = 1.0f;
+                    if (sensor.type.empty() || sensor.command.empty()) {
+                        if (sensor.type.empty())
+                            std::cout << "Sensors: '" << type
+                                      << "' is not a known Type. Valid: " << CommandSensorFields::knownTypes() << std::endl;
+                        else
+                            std::cout << "Sensors: the " << sensor.type << " entry has no Command!" << std::endl;
+                        if (!configCheck)
+                            exit(EXIT_FAILURE);
+                        continue;
+                    }
+                    portduino_config.command_sensors.push_back(sensor);
+                }
+            }
+        }
+
         if (yamlConfig["Security"] && yamlConfig["Security"]["AdminKeys"]) {
             const YAML::Node keys = yamlConfig["Security"]["AdminKeys"];
             if (!keys.IsSequence()) {
@@ -1506,6 +1558,10 @@ bool loadConfig(const char *configPath)
                 }
             }
         }
+
+        // Only when the key is present, so a later file in config.d can turn it off again.
+        if (yamlConfig["Security"] && yamlConfig["Security"]["DMShell"])
+            portduino_config.dmshell_enabled = (yamlConfig["Security"]["DMShell"]).as<bool>(false);
 
         if (yamlConfig["Config"]) {
             portduino_config.has_config_overrides = true;
@@ -1673,22 +1729,125 @@ bool MAC_from_string(std::string mac_str, uint8_t *dmac)
     return true;
 }
 
-std::string exec(const char *cmd)
-{ // https://stackoverflow.com/a/478960
-#ifdef ARCH_PORTDUINO_WASM
+// Captured output beyond this is drained and dropped; nothing that reads it wants more.
+static constexpr size_t EXEC_MAX_OUTPUT = 4096;
+
+ExecResult execCommand(const char *cmd, uint32_t timeoutMs, std::string &output)
+{
+    output.clear();
+#if defined(ARCH_PORTDUINO_WASM)
     (void)cmd; // no shell/popen in the browser - shell-outs degrade to empty
-    return "";
-#endif
+    (void)timeoutMs;
+    return ExecResult::NotStarted;
+#elif defined(_WIN32)
+    // No process group to kill here, so the timeout is not enforced on Windows.
+    (void)timeoutMs;
+    FILE *pipe = popen(cmd, "r");
+    if (!pipe)
+        return ExecResult::NotStarted;
     std::array<char, 128> buffer;
-    std::string result;
-    std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(cmd, "r"), pclose);
-    if (!pipe) {
-        throw std::runtime_error("popen() failed!");
+    while (fgets(buffer.data(), static_cast<int>(buffer.size()), pipe) != nullptr)
+        if (output.size() < EXEC_MAX_OUTPUT)
+            output += buffer.data();
+    return pclose(pipe) == 0 ? ExecResult::Ok : ExecResult::Failed;
+#else
+    int fds[2];
+    if (pipe(fds) != 0)
+        return ExecResult::NotStarted;
+    fcntl(fds[0], F_SETFD, FD_CLOEXEC);
+    fcntl(fds[1], F_SETFD, FD_CLOEXEC);
+
+    posix_spawn_file_actions_t actions;
+    posix_spawn_file_actions_init(&actions);
+    posix_spawn_file_actions_addopen(&actions, STDIN_FILENO, "/dev/null", O_RDONLY, 0);
+    posix_spawn_file_actions_adddup2(&actions, fds[1], STDOUT_FILENO);
+    posix_spawnattr_t attr;
+    posix_spawnattr_init(&attr);
+    // Its own process group, so a timeout can kill the whole pipeline and not just the shell.
+    posix_spawnattr_setflags(&attr, POSIX_SPAWN_SETPGROUP);
+    posix_spawnattr_setpgroup(&attr, 0);
+
+    char shell[] = "/bin/sh";
+    char dashC[] = "-c";
+    std::string command(cmd);
+    char *argv[] = {shell, dashC, &command[0], nullptr};
+    pid_t pid;
+    const int spawnError = posix_spawn(&pid, shell, &actions, &attr, argv, environ);
+    posix_spawn_file_actions_destroy(&actions);
+    posix_spawnattr_destroy(&attr);
+    close(fds[1]);
+    if (spawnError != 0) {
+        close(fds[0]);
+        return ExecResult::NotStarted;
     }
-    while (fgets(buffer.data(), static_cast<int>(buffer.size()), pipe.get()) != nullptr) {
-        result += buffer.data();
+
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeoutMs);
+    auto remainingMs = [&deadline]() {
+        return std::chrono::duration_cast<std::chrono::milliseconds>(deadline - std::chrono::steady_clock::now()).count();
+    };
+
+    bool timedOut = false;
+    std::array<char, 256> buffer;
+    while (true) {
+        const auto remaining = remainingMs();
+        if (remaining <= 0) {
+            timedOut = true;
+            break;
+        }
+        pollfd pfd = {fds[0], POLLIN, 0};
+        const int ready = poll(&pfd, 1, static_cast<int>(remaining));
+        if (ready < 0 && errno == EINTR)
+            continue;
+        if (ready == 0) {
+            timedOut = true;
+            break;
+        }
+        if (ready < 0)
+            break;
+        const ssize_t n = read(fds[0], buffer.data(), buffer.size());
+        if (n < 0 && errno == EINTR)
+            continue;
+        if (n <= 0)
+            break; // EOF: every writer has closed stdout
+        if (output.size() < EXEC_MAX_OUTPUT)
+            output.append(buffer.data(), std::min(static_cast<size_t>(n), EXEC_MAX_OUTPUT - output.size()));
     }
-    return result;
+    close(fds[0]);
+
+    // A command can close stdout and keep running, so the deadline also bounds the wait for it to exit.
+    int status = 0;
+    pid_t waited = 0;
+    while (!timedOut) {
+        waited = waitpid(pid, &status, WNOHANG);
+        if (waited < 0 && errno == EINTR)
+            continue;
+        if (waited != 0)
+            break;
+        if (remainingMs() <= 0)
+            timedOut = true;
+        else
+            usleep(5000);
+    }
+    if (timedOut) {
+        kill(-pid, SIGKILL);
+        do {
+            waited = waitpid(pid, &status, 0);
+        } while (waited < 0 && errno == EINTR);
+        return ExecResult::TimedOut;
+    }
+    return waited == pid && WIFEXITED(status) && WEXITSTATUS(status) == 0 ? ExecResult::Ok : ExecResult::Failed;
+#endif
+}
+
+std::string exec(const char *cmd, uint32_t timeoutMs)
+{
+    std::string output;
+    const ExecResult result = execCommand(cmd, timeoutMs, output);
+    if (result == ExecResult::TimedOut)
+        LOG_WARN("Command timed out after %ums, killed: %s", static_cast<unsigned>(timeoutMs), cmd);
+    else if (result == ExecResult::NotStarted)
+        LOG_WARN("Command could not be started: %s", cmd);
+    return output;
 }
 
 #ifndef ARCH_PORTDUINO_WASM

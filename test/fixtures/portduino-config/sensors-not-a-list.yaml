@@ -1,0 +1,11 @@
+# FAULT: a single sensor written as a mapping rather than a one-item list. Nothing in it would be
+# read, so meshtasticd refuses the file. Expect an ERROR and exit 1.
+Lora:
+  Module: sx1262
+  CS: 21
+  IRQ: 16
+  Busy: 20
+  Reset: 18
+Sensors:
+  Type: temperature
+  Command: cat /sys/class/thermal/thermal_zone0/temp

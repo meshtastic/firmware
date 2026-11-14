@@ -271,6 +271,20 @@ HostMetrics:
 #  Channel: 0 # channel to send Host Metrics over. Defaults to the primary channel.
 #  UserStringCommand: cat /sys/firmware/devicetree/base/serial-number # Command to execute, to send the results as the userString
 
+# Telemetry values read by running a command. Each command must print one number, in the units of the
+# named EnvironmentMetrics field (temperature, relative_humidity, barometric_pressure, lux, ...) or
+# AirQualityMetrics field (pm25_standard, pm100_standard, co2, ...). Environment types are read only while
+# environment measurement is enabled in the Telemetry module config, air-quality types only while air
+# quality is, and each is sent at that setting's update interval. Commands are killed after 2 seconds.
+#Sensors:
+#  - Type: temperature
+#    Command: cat /sys/bus/iio/devices/iio:device0/in_temp_input
+#    Scale: 0.001 # Optional multiplier; sysfs usually reports milli-units
+#  - Type: relative_humidity
+#    Command: /usr/local/bin/read-humidity
+#  - Type: co2
+#    Command: /usr/local/bin/read-co2
+
 Security:
 # Public keys authorized to send admin messages to this node, as base64, the same text the apps and
 # the CLI show for a node's public key. Up to 16, and up to 3 of them are reflected into the node's
@@ -278,6 +292,9 @@ Security:
 # this file is the authority: a key removed from here loses access, and remote admin cannot drop it.
 #  AdminKeys:
 #    - rvzaPCZmlh1nWnqNKUFHj0dLBJJIRJhRrkZmaFLHCVY=
+# Remote shell over the mesh (DMShell, Linux only). Off by default. When on, any sender holding an
+# authorized admin key can open a shell on this host as the meshtasticd user. API clients cannot.
+#  DMShell: true
 
 Config:
 #  DisplayMode: TWOCOLOR # uncomment to force BaseUI

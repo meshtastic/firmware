@@ -21,17 +21,6 @@
 extern meshtastic::Syslog syslog;
 #endif
 
-// Log lines stamp the uptime with milliseconds as well as whole seconds. Portduino has always printed
-// them; set this to 1 in a board's build flags to get the same resolution on device, for timing work
-// that whole seconds cannot resolve.
-#ifndef MESHTASTIC_LOG_MILLIS
-#ifdef ARCH_PORTDUINO
-#define MESHTASTIC_LOG_MILLIS 1
-#else
-#define MESHTASTIC_LOG_MILLIS 0
-#endif
-#endif
-
 void RedirectablePrint::rpInit()
 {
 #ifdef HAS_FREE_RTOS

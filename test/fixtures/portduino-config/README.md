@@ -184,6 +184,23 @@ rather than the last file winning, so an operator can drop in one file per admin
 `config.yaml` is always loaded first, so the effective list is deterministic and
 `--output-yaml` can assert it by value.
 
+## Command sensors (`Sensors`)
+
+Each entry runs a shell command and puts the number it prints into the named
+`EnvironmentMetrics` field. An entry meshtasticd cannot place stops it, rather than
+booting a node that silently never reports that reading.
+
+| File                      | Expected                                                                                               |
+| ------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `sensors.yaml`            | Three sensors, one an air-quality type, two Types in mixed case. Clean apart from the info line.       |
+| `sensors-bad-type.yaml`   | `humidity` is not a field name, so the file is refused and the valid types are listed.                 |
+| `sensors-not-a-list.yaml` | One sensor written as a mapping, not a one-item list: nothing would be read, so refused.               |
+| `sensors-warnings.yaml`   | Non-numeric and `.inf` `Scale` (both read as 1), an unknown key, one Type listed twice. Four warnings. |
+| `sensors-empty.yaml`      | A bare `Sensors:` with its entries commented out is skipped like any empty section.                    |
+
+`sensors-append/` mirrors `adminkeys-append/`: sensors append across files, so one
+file per sensor in `config.d/` works, and `--output-yaml` asserts both by value.
+
 ## MAC address
 
 The MAC no longer determines NodeNum - that comes from the public key - but a MAC
@@ -270,8 +287,9 @@ appears as a surviving pin, a surviving mode row, or a `HIGH` that should be `LO
 ## Running these as a normal boot
 
 `malformed-indent.yaml`, `nonmap-section.yaml`, `module-unknown.yaml`,
-`mac-conflict.yaml`, `hub75-unknown-key.yaml`, `adminkeys-bad.yaml` and
-`adminkeys-not-a-list.yaml` are also run _without_ `--check`,
+`mac-conflict.yaml`, `hub75-unknown-key.yaml`, `adminkeys-bad.yaml`,
+`adminkeys-not-a-list.yaml`, `sensors-bad-type.yaml` and `sensors-not-a-list.yaml`
+are also run _without_ `--check`,
 where each must be rejected with a non-zero exit. That is the guard on `--check`
 mode not having quietly made the normal path permissive. No other fixture is run
 that way: a config meshtasticd accepts makes it boot a node and block.

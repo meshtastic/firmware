@@ -7,6 +7,7 @@
 #include "main.h"
 #include "mesh/Throttle.h"
 #include "mesh/api/ethServerAPI.h"
+#include "mesh/eth/ethBoundedClient.h"
 #include "target_specific.h"
 #if HAS_ETHERNET && defined(HAS_ETHERNET_OTA)
 #include "mesh/eth/ethOTA.h"
@@ -130,6 +131,7 @@ static int32_t reconnectETH()
                 LOG_ERROR("Ethernet re-initialization failed, will retry");
                 return 5000;
             }
+            ethLimitTcpRetransmission();
 
             LOG_INFO("Ethernet reinitialized - IP %u.%u.%u.%u", Ethernet.localIP()[0], Ethernet.localIP()[1],
                      Ethernet.localIP()[2], Ethernet.localIP()[3]);
@@ -310,6 +312,7 @@ bool initEthernet()
                      Ethernet.dnsServerIP()[3]);
         }
 
+        ethLimitTcpRetransmission();
         ethEvent = new Periodic("ethConnect", reconnectETH);
 
         return true;
