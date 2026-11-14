@@ -69,6 +69,15 @@ PB_BIND(meshtastic_TakTalkMessage, meshtastic_TakTalkMessage, AUTO)
 PB_BIND(meshtastic_TakTalkRoomData, meshtastic_TakTalkRoomData, AUTO)
 
 
+PB_BIND(meshtastic_VoiceProfile, meshtastic_VoiceProfile, AUTO)
+
+
+PB_BIND(meshtastic_VoiceProfileRequest, meshtastic_VoiceProfileRequest, AUTO)
+
+
+PB_BIND(meshtastic_TakTalkRoomRequest, meshtastic_TakTalkRoomRequest, AUTO)
+
+
 PB_BIND(meshtastic_Marti, meshtastic_Marti, AUTO)
 
 
