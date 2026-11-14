@@ -188,7 +188,7 @@ def _assert_isr_handlers_survived(source, target, env):
     import sys
 
     try:
-        # Resolve the ELF at build time; target[0] is the buildprog alias, not the file.
+        # Resolve the ELF at build time; target[0] is the guards alias, not the file.
         elf = env.subst("$BUILD_DIR/${PROGNAME}.elf")
         out = subprocess.check_output([_NM, elf], universal_newlines=True)
     except Exception as exc:  # tooling hiccup: warn loudly, don't wedge the build
@@ -326,8 +326,7 @@ def _assert_variant_survived(source, target, env):
     print("nrf52_lto: variant guard OK -- board variant kept out of LTO")
 
 
-# Attach to the phony "buildprog" alias, NOT the .elf file node: SCons can skip a post-action
-# on a file target during an incremental relink (observed), but the buildprog alias runs every
-# build -- so the guard fires on local incremental rebuilds and clean CI builds alike.
-env.AddPostAction("buildprog", _assert_isr_handlers_survived)
-env.AddPostAction("buildprog", _assert_variant_survived)
+# Run by extra_scripts/nrf52_postlink_guards.py on every build and before every upload.
+env.Append(
+    NRF52_POSTLINK_GUARDS=[_assert_isr_handlers_survived, _assert_variant_survived]
+)
