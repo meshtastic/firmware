@@ -1085,7 +1085,18 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                     type = BMX160;
                     logFoundDevice("BMX160", (uint8_t)addr.address);
                     break;
-                } else {
+                }
+#if defined(HAS_BMI160)
+                else if (registerValue == 0xD1) { // BMI160 chip ID at register 0x00
+                    // Must be tested before the fallback branch below: that branch probes for
+                    // a SEN5X, whose address (0x69) overlaps this one, and the probe can
+                    // mis-identify a BMI160 as a SEN5X.
+                    type = BMI160;
+                    logFoundDevice("BMI160", (uint8_t)addr.address);
+                    break;
+                }
+#endif
+                else {
                     registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x75), 1); // WHO_AM_I
                     if (registerValue == 0x60) {
                         type = ICM42607P;
