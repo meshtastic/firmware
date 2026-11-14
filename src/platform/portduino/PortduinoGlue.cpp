@@ -1312,6 +1312,7 @@ bool loadConfig(const char *configPath)
             portduino_config.displayOffsetRotate = yamlConfig["Display"]["OffsetRotate"].as<int>(1);
             portduino_config.displayInvert = yamlConfig["Display"]["Invert"].as<bool>(false);
             portduino_config.displayBusFrequency = yamlConfig["Display"]["BusFrequency"].as<int>(40000000);
+            portduino_config.displayDataBits = yamlConfig["Display"]["DataBits"].as<int>(0);
             if (yamlConfig["Display"]["spidev"]) {
                 portduino_config.display_spi_dev = "/dev/" + yamlConfig["Display"]["spidev"].as<std::string>("spidev0.1");
                 if (portduino_config.display_spi_dev.length() == 14) {
