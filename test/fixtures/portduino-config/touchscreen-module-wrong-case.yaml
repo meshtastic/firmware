@@ -1,0 +1,11 @@
+# FAULT: Module names are case-sensitive, so this runs with no touchscreen.
+Lora:
+  Module: sim
+Display:
+  Panel: ST7789
+  Width: 320
+  Height: 240
+  DC: 25
+Touchscreen:
+  Module: gt911
+  I2CAddr: 0x5D

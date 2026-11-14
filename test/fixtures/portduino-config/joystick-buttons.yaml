@@ -1,4 +1,5 @@
-# CLEAN. Several physical buttons bound to one action: an action's value may be a single
+# CLEAN apart from one machine-dependent warning (the gamepad is not attached to the test
+# host). Several physical buttons bound to one action: an action's value may be a single
 # evdev code or a list of them, so A and Y both select, B and X both cancel, and the
 # shoulder buttons work as left/right alongside the D-pad. Nothing here is a fault -- the
 # case exists so the checker cannot start rejecting the list form.

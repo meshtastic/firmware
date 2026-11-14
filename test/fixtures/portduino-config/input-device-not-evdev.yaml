@@ -1,0 +1,6 @@
+# FAULT: /dev/null is a character device but not an evdev node, so it can never deliver key
+# events. It also cannot be grabbed. Exists on every Linux host, so the finding is deterministic.
+Lora:
+  Module: sim
+Input:
+  KeyboardDevice: /dev/null
