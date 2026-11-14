@@ -54,6 +54,24 @@ const char *RtcName(RTCQuality quality);
 /// Return time since 1970 in secs.  While quality is RTCQualityNone we will be returning time based at zero
 uint32_t getTime(bool local = false);
 
+/// UTC milliseconds since 1970, with the sub-second part of the last time source kept. Same caveats as getTime().
+uint64_t getUtcMillis();
+
+/// UTC microseconds since 1970. Resolution is the platform's: µs on ESP32/RP2040, ms elsewhere (Time::getMicrosMonotonic()).
+uint64_t getUtcMicros();
+
+/// Pin the clock to read utcUs at monotonic instant monoUs (Time::getMicrosMonotonic() timebase). For a source that
+/// already holds GPS quality and corrects often, such as PPS: no quality change, no hardware RTC write.
+void disciplineRTC(uint64_t monoUs, uint64_t utcUs);
+
+/// Largest rate trim setRTCRateTrimPpb() accepts. Crystals are good to ~±50 ppm; anything past this is a measuring error.
+constexpr int32_t MAX_RATE_TRIM_PPB = 500000;
+
+/// Correct for the monotonic clock's frequency error: the clock gains ppb ns per second elapsed. Clamped to
+/// ±MAX_RATE_TRIM_PPB. Keeps the time close between corrections, e.g. while the GPS sleeps.
+void setRTCRateTrimPpb(int32_t ppb);
+int32_t getRTCRateTrimPpb();
+
 /// Return time since 1970 in secs.  If quality is RTCQualityNone return zero
 uint32_t getValidTime(RTCQuality minQuality, bool local = false);
 

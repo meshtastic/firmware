@@ -5,11 +5,14 @@
 #include "configuration.h"
 
 #include "PortduinoGlue.h"
+#include "modules/Telemetry/Sensor/CommandSensorFields.h"
 
 #include "yaml-cpp/eventhandler.h"
 
 #include <algorithm>
+#include <array>
 #include <cctype>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -36,6 +39,9 @@ constexpr int MAX_NODES_SANITY_CEILING = 16000;
 // CI runs --check over bin/config.d/**, so an omission fails the build rather than a user.
 
 const std::set<std::string> kLoraPinKeys = {"CS", "IRQ", "Busy", "Reset", "TXen", "RXen", "SX126X_ANT_SW", "GPIO_DETECT_PA"};
+
+// Action names LinuxJoystick understands; anything else leaves the button unmapped.
+const std::set<std::string> kJoystickActions = {"select", "cancel", "back", "up", "down", "left", "right", "user", "userpress"};
 
 const std::map<std::string, std::set<std::string>> &schema()
 {
@@ -74,19 +80,23 @@ const std::map<std::string, std::set<std::string>> &schema()
         {"General",
          {"MACAddress", "MACAddressSource", "MaxNodes", "MaxMessageQueue", "APIPort", "ConfigDirectory", "AvailableDirectory"}},
         {"Config", {"DisplayMode", "EnableUDP", "StatusMessage"}},
+        {"Security", {"AdminKeys", "DMShell"}},
         {"Display",
          {"Panel", "spidev", "BusFrequency", "Width", "Height", "Invert", "Rotate", "OffsetX", "OffsetY", "OffsetRotate",
           "RGBOrder", "HUB75", "DC", "CS", "Backlight", "BacklightInvert", "BacklightPWMChannel", "Reset"}},
         {"Touchscreen", {"Module", "spidev", "BusFrequency", "I2CAddr", "Rotate", "CS", "IRQ"}},
         {"Input",
-         {"KeyboardDevice", "PointerDevice", "JoystickDevice", "JoystickButtons", "TrackballDirection", "User", "TrackballUp",
-          "TrackballDown", "TrackballLeft", "TrackballRight", "TrackballPress"}},
+         {"KeyboardDevice", "PointerDevice", "JoystickDevice", "JoystickButtons", "ArcadeBonnet", "ArcadeBonnetButtons",
+          "TrackballDirection", "User", "TrackballUp", "TrackballDown", "TrackballLeft", "TrackballRight", "TrackballPress"}},
         {"GPIO", {"User", "ExtraPins"}},
         {"GPS", {"SerialPath", "GpsdHost", "GpsdPort"}},
         {"I2C", {"I2CDevice"}},
         {"Logging", {"LogLevel", "TraceFile", "JSONFile", "JSONFileRotate", "JSONFilter", "AsciiLogs"}},
         {"Webserver", {"Port", "RootPath", "SSLCert", "SSLKey"}},
+        {"Bluetooth", {"Enabled", "AdapterId"}},
         {"HostMetrics", {"ReportInterval", "Channel", "UserStringCommand"}},
+        // A list, not a mapping: these are the keys of each entry. See checkCommandSensors().
+        {"Sensors", {"Type", "Command", "Scale"}},
         // Read by packaging/menu tooling rather than by meshtasticd itself.
         {"Meta", {}},
     };
@@ -366,6 +376,109 @@ void checkPinNode(const std::string &file, const std::string &path, const YAML::
     }
 }
 
+// Keyed by action, not by button, so one action can list several codes and have every one of
+// those buttons drive it. The value is a single evdev code or a list of them.
+void checkJoystickButtons(const std::string &file, const YAML::Node &node, std::vector<Finding> &findings)
+{
+    if (!node.IsMap()) {
+        findings.push_back(
+            {kError, file, lineOf(node), "Input.JoystickButtons must be a mapping of action name to evdev button code"});
+        return;
+    }
+
+    std::map<int, std::string> owner; // code -> the action that claimed it first
+    for (const auto &entry : node) {
+        std::string action = entry.first.as<std::string>("");
+        for (auto &c : action)
+            c = tolower(c);
+        if (!kJoystickActions.count(action)) {
+            findings.push_back({kWarn, file, lineOf(entry.first),
+                                "Input.JoystickButtons: '" + action +
+                                    "' is not a recognised action, so those buttons do nothing. Valid actions are select, "
+                                    "cancel, back, up, down, left, right and user"});
+            continue;
+        }
+
+        std::vector<YAML::Node> codeNodes;
+        if (entry.second.IsSequence())
+            for (const auto &codeNode : entry.second)
+                codeNodes.push_back(codeNode);
+        else
+            codeNodes.push_back(entry.second);
+
+        for (const auto &codeNode : codeNodes) {
+            const std::string raw = codeNode.as<std::string>("");
+            int code = 0;
+            try {
+                code = std::stoi(raw, nullptr, 0);
+            } catch (const std::exception &) {
+                code = 0;
+            }
+            if (code == 0) {
+                findings.push_back({kWarn, file, lineOf(codeNode),
+                                    "Input.JoystickButtons." + action + ": '" + raw +
+                                        "' is not an evdev button code (hex like 0x121, or decimal), so it is unmapped"});
+                continue;
+            }
+            // One button cannot do two things: the later action silently replaces the earlier one.
+            const auto claimed = owner.find(code);
+            if (claimed != owner.end() && claimed->second != action)
+                findings.push_back({kWarn, file, lineOf(codeNode),
+                                    "Input.JoystickButtons: button " + raw + " is mapped to both '" + claimed->second +
+                                        "' and '" + action + "'. Only '" + action + "' takes effect"});
+            owner[code] = action;
+        }
+    }
+}
+
+// Same shape as JoystickButtons, but the values are the button names printed on the bonnet.
+void checkArcadeBonnetButtons(const std::string &file, const YAML::Node &node, std::vector<Finding> &findings)
+{
+    if (!node.IsMap()) {
+        findings.push_back(
+            {kError, file, lineOf(node), "Input.ArcadeBonnetButtons must be a mapping of action name to bonnet button (1A-1F)"});
+        return;
+    }
+
+    std::map<int, std::string> owner; // expander bit -> the action that claimed it first
+    for (const auto &entry : node) {
+        std::string action = entry.first.as<std::string>("");
+        for (auto &c : action)
+            c = tolower(c);
+        if (!kJoystickActions.count(action)) {
+            findings.push_back({kWarn, file, lineOf(entry.first),
+                                "Input.ArcadeBonnetButtons: '" + action +
+                                    "' is not a recognised action, so those buttons do nothing. Valid actions are select, "
+                                    "cancel, back, up, down, left, right and user"});
+            continue;
+        }
+
+        std::vector<YAML::Node> pinNodes;
+        if (entry.second.IsSequence())
+            for (const auto &pinNode : entry.second)
+                pinNodes.push_back(pinNode);
+        else
+            pinNodes.push_back(entry.second);
+
+        for (const auto &pinNode : pinNodes) {
+            const std::string raw = pinNode.as<std::string>("");
+            const int bit = arcadeBonnetPinBit(raw);
+            if (bit < 0) {
+                findings.push_back({kWarn, file, lineOf(pinNode),
+                                    "Input.ArcadeBonnetButtons." + action + ": '" + raw +
+                                        "' is not a bonnet button (1A-1F), so it is unmapped"});
+                continue;
+            }
+            const auto claimed = owner.find(bit);
+            if (claimed != owner.end() && claimed->second != action)
+                findings.push_back({kWarn, file, lineOf(pinNode),
+                                    "Input.ArcadeBonnetButtons: button " + raw + " is mapped to both '" + claimed->second +
+                                        "' and '" + action + "'. Only '" + action + "' takes effect"});
+            owner[bit] = action;
+        }
+    }
+}
+
 void checkRfSwitchTable(const std::string &file, const YAML::Node &table, std::vector<Finding> &findings)
 {
     if (!table.IsMap()) {
@@ -518,6 +631,7 @@ const std::map<std::string, ValueSpec> &valueSpecs()
         {"Input.KeyboardDevice", {kString, false}},
         {"Input.PointerDevice", {kString, false}},
         {"Input.JoystickDevice", {kString, false}},
+        {"Input.ArcadeBonnet", {kInt, false}},
         {"Input.TrackballDirection", {kString, false}},
         {"GPS.SerialPath", {kString, false}},
         {"GPS.GpsdHost", {kString, false}},
@@ -534,6 +648,9 @@ const std::map<std::string, ValueSpec> &valueSpecs()
         {"Webserver.RootPath", {kString, false}},
         {"Webserver.SSLCert", {kString, false}},
         {"Webserver.SSLKey", {kString, false}},
+        {"Bluetooth.Enabled", {kBool, false}},
+        {"Security.DMShell", {kBool, false}},
+        {"Bluetooth.AdapterId", {kString, false}},
         {"HostMetrics.ReportInterval", {kInt, false}},
         {"HostMetrics.Channel", {kInt, false}},
         {"HostMetrics.UserStringCommand", {kString, false}},
@@ -708,6 +825,81 @@ void checkTxGain(const std::string &file, const YAML::Node &node, std::vector<Fi
                             "Lora.TX_GAIN_LORA is not a whole number, so it is silently read as 0 and no PA gain is applied"});
 }
 
+// Each entry is read without a fallback: loadConfig() exits on anything that is not a 32-byte
+// base64 public key, so a typo here stops meshtasticd rather than dropping one admin.
+void checkAdminKeys(const std::string &file, const YAML::Node &node, std::vector<Finding> &findings)
+{
+    if (!node.IsSequence()) {
+        findings.push_back({kError, file, lineOf(node),
+                            "Security.AdminKeys must be a list of base64 public keys, so meshtasticd refuses to start on "
+                            "this file"});
+        return;
+    }
+
+    if (node.size() > PORTDUINO_MAX_ADMIN_KEYS)
+        findings.push_back({kWarn, file, lineOf(node),
+                            "Security.AdminKeys lists " + std::to_string(node.size()) + " keys but only the first " +
+                                std::to_string(PORTDUINO_MAX_ADMIN_KEYS) + " are read; the rest are dropped"});
+
+    for (const auto &entry : node) {
+        std::array<uint8_t, 32> key;
+        if (!adminKeyFromBase64(entry.as<std::string>(""), key))
+            findings.push_back({kError, file, lineOf(entry),
+                                "Security.AdminKeys entry '" + entry.as<std::string>("") +
+                                    "' is not a 32-byte base64 public key, so meshtasticd refuses to start on this file"});
+    }
+}
+
+// loadConfig() exits on an entry with no usable Type or Command, so those stop meshtasticd.
+void checkCommandSensors(const std::string &file, const YAML::Node &node, std::vector<Finding> &findings)
+{
+    if (node.IsNull())
+        return;
+    if (!node.IsSequence()) {
+        findings.push_back({kError, file, lineOf(node),
+                            "Sensors must be a list of entries with a Type and a Command, so meshtasticd refuses to start "
+                            "on this file"});
+        return;
+    }
+
+    for (const auto &entry : node) {
+        if (!entry.IsMap()) {
+            findings.push_back({kError, file, lineOf(entry),
+                                "Sensors entry is not a Type/Command mapping, so meshtasticd refuses to start on this file"});
+            continue;
+        }
+        for (const auto &field : entry) {
+            const std::string key = field.first.as<std::string>("");
+            if (!schema().at("Sensors").count(key))
+                findings.push_back(
+                    {kWarn, file, lineOf(field.first), "unknown key 'Sensors." + key + "', ignored by meshtasticd"});
+        }
+
+        const YAML::Node type = entry["Type"];
+        const std::string typeText = type ? type.as<std::string>("") : "";
+        if (typeText.empty())
+            findings.push_back({kError, file, lineOf(entry),
+                                "Sensors entry has no Type, so meshtasticd refuses to start on this file. Valid: " +
+                                    CommandSensorFields::knownTypes()});
+        else if (CommandSensorFields::canonicalType(typeText).empty())
+            findings.push_back({kError, file, lineOf(type),
+                                "Sensors Type '" + typeText +
+                                    "' is not an environment metric, so meshtasticd refuses to start on this file. Valid: " +
+                                    CommandSensorFields::knownTypes()});
+
+        const YAML::Node command = entry["Command"];
+        if (!command || command.as<std::string>("").empty())
+            findings.push_back({kError, file, lineOf(command ? command : entry),
+                                "Sensors entry has no Command, so meshtasticd refuses to start on this file"});
+
+        const YAML::Node scale = entry["Scale"];
+        if (scale && (!converts(scale, kFloat) || !std::isfinite(scale.as<float>())))
+            findings.push_back(
+                {kWarn, file, lineOf(scale),
+                 "Sensors Scale '" + scale.as<std::string>("") + "' is not a finite number, so it is silently replaced by 1"});
+    }
+}
+
 // Module names match exactly and are inconsistently cased (RF95 upper, sx1262 lower),
 // and loadConfig() exits on an unknown name without printing the valid set, so name it here.
 void checkLoraModule(const std::string &file, const YAML::Node &module, std::vector<Finding> &findings)
@@ -786,6 +978,10 @@ void checkSection(const std::string &file, const std::string &section, const YAM
     const auto &allowed = schema().at(section);
     if (kFreeFormSections.count(section))
         return;
+    if (section == "Sensors") {
+        checkCommandSensors(file, body, findings);
+        return;
+    }
     // An empty section (`Lora:` with no body) is null, not a map, and loadConfig() tests
     // before reading it. Any other non-map shape is unreadable, so do not call the file clean.
     if (body.IsNull())
@@ -836,8 +1032,34 @@ void checkSection(const std::string &file, const std::string &section, const YAM
             if (value.IsSequence())
                 for (const auto &pin : value)
                     checkPinNode(file, section + "." + key, pin, findings);
+        } else if (section == "Security" && key == "AdminKeys") {
+            checkAdminKeys(file, value, findings);
+        } else if (section == "Bluetooth" && key == "AdapterId") {
+            // LinuxBluetooth uses this verbatim as the BlueZ object path (/org/bluez/<id>), while the
+            // MAC fallback only reads the leading hciN. A value like "hci1junk" therefore looks
+            // plausible, yields a MAC, and then finds no adapter -- BLE just never comes up. Only
+            // hci<digits> is a real adapter name.
+            const std::string adapter = value.as<std::string>("");
+            const bool wellFormed = adapter.rfind("hci", 0) == 0 && adapter.size() > 3 &&
+                                    adapter.find_first_not_of("0123456789", 3) == std::string::npos;
+            if (!wellFormed)
+                findings.push_back({kWarn, file, lineOf(value),
+                                    "Bluetooth.AdapterId '" + adapter +
+                                        "' is not a BlueZ adapter name. It must be hci followed by digits (hci0, hci1); "
+                                        "anything else leaves no /org/bluez entry to attach to and Bluetooth stays off"});
         } else if (key == "JoystickButtons") {
-            // Free-form: any action name mapped to an evdev code.
+            checkJoystickButtons(file, value, findings);
+        } else if (key == "ArcadeBonnetButtons") {
+            checkArcadeBonnetButtons(file, value, findings);
+        } else if (section == "Input" && key == "ArcadeBonnet") {
+            // 0 is "not fitted"; anything else must be an address the MCP23017 can actually take.
+            int address = 0;
+            if (converts(value, kInt))
+                address = value.as<int>();
+            if (address != 0 && (address < ARCADE_BONNET_ADDR_MIN || address > ARCADE_BONNET_ADDR_MAX))
+                findings.push_back({kWarn, file, lineOf(value),
+                                    "Input.ArcadeBonnet '" + value.as<std::string>("") +
+                                        "' is not an MCP23017 address (0x20-0x27), so the bonnet is not started"});
         } else if ((section == "Lora" && kLoraPinKeys.count(key)) ||
                    (section == "Display" &&
                     (key == "DC" || key == "CS" || key == "Backlight" || key == "BacklightPWMChannel" || key == "Reset")) ||
@@ -1159,6 +1381,17 @@ void checkMergedConfig(const PathIndex &paths, std::vector<Finding> &findings)
                             "startup. Rebuild with hzeller/rpi-rgb-led-matrix installed (it provides rgbmatrix.pc)"});
 #endif
 
+#if !HAS_BLUETOOTH
+    // Same class of build-time gap as HUB75 above, but only a warning: BLE
+    // quietly stays off rather than aborting startup.
+    if (portduino_config.bluetooth_enabled)
+        findings.push_back({kWarn, merged, 0,
+                            "Bluetooth.Enabled is true but this meshtasticd "
+                            "was built without BLE support, so Bluetooth "
+                            "stays off. Rebuild with libsdbus-c++-dev "
+                            "installed (it provides sdbus-c++.pc)"});
+#endif
+
     if (portduino_config.lora_cs_pin.enabled && !portduino_config.lora_spi_dev.empty() &&
         portduino_config.lora_spi_dev != "ch341")
         findings.push_back({kInfo, merged, 0,
@@ -1166,6 +1399,20 @@ void checkMergedConfig(const PathIndex &paths, std::vector<Finding> &findings)
                                 ") and Lora.CS are set. If your device tree already assigns a chip select to that spidev "
                                 "node, meshtasticd will fail to claim the CS line at startup; if it does not, CS must be "
                                 "set here. Check with 'gpioinfo'"});
+
+    std::map<std::string, int> sensorTypes;
+    for (const auto &sensor : portduino_config.command_sensors)
+        sensorTypes[sensor.type]++;
+    for (const auto &type : sensorTypes)
+        if (type.second > 1)
+            findings.push_back({kWarn, merged, 0,
+                                "Sensors lists " + type.first + " " + std::to_string(type.second) +
+                                    " times. Every command runs, but only one value can be sent"});
+    if (!portduino_config.command_sensors.empty())
+        findings.push_back({kInfo, merged, 0,
+                            "Sensors are only read while the Telemetry module setting for their Type is enabled "
+                            "(environment measurement, or air quality for air-quality types), and are then broadcast "
+                            "at that setting's update interval"});
 }
 
 void printSummary()

@@ -23,6 +23,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "Screen.h"
 #include "NodeDB.h"
 #include "PowerMon.h"
+#include "ScreenMirror.h"
 #include "Throttle.h"
 #include "UptimeClock.h"
 #include "configuration.h"
@@ -182,6 +183,15 @@ static void drawLockdownLockScreen(OLEDDisplay *display)
 }
 #endif
 
+// Hands ScreenMirror the committed framebuffer; a no-op unless a client is armed.
+static inline void screenMirrorCapture()
+{
+#if HAS_SCREEN_MIRROR
+    if (screen)
+        screenMirror.onRendered(screen->getDisplayDevice());
+#endif
+}
+
 static inline void updateUiFrame(OLEDDisplayUi *ui)
 {
 #ifdef MESHTASTIC_LOCKDOWN
@@ -209,6 +219,7 @@ static inline void updateUiFrame(OLEDDisplayUi *ui)
             NotificationRenderer::drawBannercallback(display, ui->getUiState());
         }
         display->display();
+        screenMirrorCapture(); // the locked frame, matching the panel's redaction
         return;
     }
 #endif
@@ -216,6 +227,7 @@ static inline void updateUiFrame(OLEDDisplayUi *ui)
     prepareFrameColorRegions();
 #endif
     ui->update();
+    screenMirrorCapture();
 }
 // Global variables for alert banner - explicitly define with extern "C" linkage to prevent optimization
 
@@ -239,6 +251,7 @@ static bool heartbeat = false;
 
 #include "graphics/ScreenFonts.h"
 #include <Throttle.h>
+#include <cmath>
 
 // Usage: int stringWidth = formatDateTime(datetimeStr, sizeof(datetimeStr), rtc_sec, display);
 // End Functions to write date/time to the screen
@@ -318,7 +331,7 @@ void Screen::showSimpleBanner(const char *message, uint32_t durationMs)
 }
 
 // Called to trigger a banner with custom message and duration
-void Screen::showOverlayBanner(BannerOverlayOptions banner_overlay_options)
+void Screen::showOverlayBanner(const BannerOverlayOptions &banner_overlay_options)
 {
 #ifdef USE_EINK
     EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // Skip full refresh for all overlay menus
@@ -491,7 +504,7 @@ static void drawGamesFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
 float Screen::estimatedHeading(double lat, double lon)
 {
     static double oldLat, oldLon;
-    static float b = -1.0f;
+    static float b = NAN;
     static uint32_t lastHeadingAtMs = 0;
     const uint32_t now = Time::stampMillis();
     const uint32_t gpsUpdateIntervalSecs =
@@ -520,7 +533,7 @@ float Screen::estimatedHeading(double lat, double lon)
     if (d < 10) { // haven't moved enough, keep previous heading (invalid until first real movement)
         if (lastHeadingAtMs != 0 && (now - lastHeadingAtMs) >= headingStaleMs) {
             // Heading is stale after prolonged no-movement; force reacquire.
-            b = -1.0f;
+            b = NAN;
             oldLat = lat;
             oldLon = lon;
         }
@@ -1229,6 +1242,11 @@ int32_t Screen::runOnce()
 
     if (!screenOn) { // If we didn't just wake and the screen is still off, then
                      // stop updating until it is on again
+#ifdef MESHTASTIC_LOCKDOWN
+        // the last committed frame may predate the lock
+        if (!meshtastic_security::shouldRedactDisplay())
+#endif
+            screenMirrorCapture(); // a request while off still gets the last committed frame
         textMessageFrameShown = false;
         enabled = false;
         return 0;
@@ -2275,18 +2293,8 @@ int Screen::handleInputEvent(const InputEvent *event)
     // so long as a mesh module isn't using these events for some other purpose
     if (showingNormalScreen) {
 
-        // Ask any MeshModules if they're handling keyboard input right now
-        bool inputIntercepted = false;
-        for (MeshModule *module : moduleFrames) {
-            if (module && module->interceptingKeyboardInput())
-                inputIntercepted = true;
-        }
-#if BASEUI_HAS_GAMES
-        // The games frame isn't a moduleFrame, so check it explicitly: while a game is running it
-        // owns the D-pad (turns/pause) and we must not switch frames or open menus underneath it.
-        if (gamesModule && gamesModule->interceptingKeyboardInput())
-            inputIntercepted = true;
-#endif
+        // Ask any MeshModules (and the games frame) if they're handling keyboard input right now
+        const bool inputIntercepted = anyModuleInterceptingInput();
 
         // If no modules are using the input, move between frames
         if (!inputIntercepted) {
@@ -2447,6 +2455,47 @@ bool Screen::isTextMessageFrameShown() const
 bool Screen::isGamesFrameShown()
 {
     return framesetInfo.positions.games != 255 && ui && ui->getUiState()->currentFrame == framesetInfo.positions.games;
+}
+
+void Screen::showHomeFrame()
+{
+    if (!ui)
+        return;
+    // Home is optional -- setFrames() only adds it when !hiddenFrames.home, leaving the position
+    // 255. Bouncing to nothing would strand the caller on the frame it wanted to leave, so fall
+    // back to the messages frame, which setFrames() always adds.
+    const uint8_t target =
+        (framesetInfo.positions.home != 255) ? framesetInfo.positions.home : framesetInfo.positions.textMessage;
+    if (target != 255)
+        ui->switchToFrame(target);
+}
+
+bool Screen::anyModuleInterceptingInput()
+{
+    for (MeshModule *module : moduleFrames) {
+        if (module && module->interceptingKeyboardInput())
+            return true;
+    }
+#if BASEUI_HAS_GAMES
+    // The games frame isn't a moduleFrame, so check it explicitly: while a game is running it owns
+    // the D-pad (turns/pause) and we must not switch frames or open menus underneath it.
+    if (gamesModule && gamesModule->interceptingKeyboardInput())
+        return true;
+#endif
+    return false;
+}
+
+bool Screen::isInteractionBusy()
+{
+    // Something is holding the D-pad -- the user is mid-interaction. A modal module owns the whole
+    // screen; an intercepting one owns the keys on its own frame.
+    if (hasModalModule() || anyModuleInterceptingInput())
+        return true;
+    // An interactive overlay (picker / text entry) is open. Showing a transient banner REPLACES the
+    // active overlay, so this would silently discard whatever the user was entering. A plain
+    // text_banner is itself transient, so superseding one of those is fine.
+    const notificationTypeEnum nt = NotificationRenderer::current_notification_type;
+    return nt != notificationTypeEnum::none && nt != notificationTypeEnum::text_banner;
 }
 
 } // namespace graphics

@@ -4,6 +4,7 @@
 #include <unity.h>
 
 #include "configuration.h"
+#include "gps/RTC.h"
 #include "mesh/CryptoEngine.h"
 #include "mesh/MeshService.h"
 #include "mesh/NodeDB.h"
@@ -54,12 +55,6 @@ class MockRadioInterface : public RadioInterface
 class MockRouter : public Router
 {
   public:
-    ~MockRouter()
-    {
-        delete cryptLock;
-        cryptLock = nullptr;
-    }
-
     ErrorCode send(meshtastic_MeshPacket *p) override
     {
         sentPackets.push_back(*p);
@@ -872,6 +867,135 @@ static void test_deferredQueueOverflow_dropsGracefully()
     TEST_ASSERT_EQUAL_UINT32(burst, delivered);
 }
 
+// NeighborInfo: relays forward the payload unmodified (rewriting it breaks the sender's XEdDSA signature), so a
+// receiver attributes each copy to the node it heard it from using the packet header, not last_sent_by_id.
+class NeighborInfoModuleTestShim : public NeighborInfoModule
+{
+  public:
+    using MeshModule::alterReceived;
+    using NeighborInfoModule::collectNeighborInfo;
+    using NeighborInfoModule::updateNeighbors;
+};
+
+static constexpr NodeNum NI_NEIGHBOR = 0x33333333;
+
+static NeighborInfoModuleTestShim *makeNeighborInfoModule()
+{
+    moduleConfig.neighbor_info.enabled = true;
+    moduleConfig.neighbor_info.update_interval = 3600;
+    auto *module = new NeighborInfoModuleTestShim();
+    realNeighborInfoModule = module; // tearDown() deletes it
+    return module;
+}
+
+static meshtastic_MeshPacket makeNeighborInfoPacket(NodeNum lastSentBy, uint8_t hopStart, uint8_t hopLimit, uint8_t relayNode,
+                                                    meshtastic_NeighborInfo *ni)
+{
+    *ni = meshtastic_NeighborInfo_init_zero;
+    ni->node_id = REMOTE_NODE;
+    ni->last_sent_by_id = lastSentBy;
+    ni->node_broadcast_interval_secs = 3600;
+    ni->neighbors_count = 1;
+    ni->neighbors[0].node_id = NI_NEIGHBOR;
+    ni->neighbors[0].snr = 5.0f;
+
+    meshtastic_MeshPacket p = meshtastic_MeshPacket_init_zero;
+    p.from = REMOTE_NODE;
+    p.to = NODENUM_BROADCAST;
+    p.id = 0x0A0B0C0D;
+    p.hop_start = hopStart;
+    p.hop_limit = hopLimit;
+    p.relay_node = relayNode;
+    p.rx_snr = 7.0f;
+    p.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    p.decoded.portnum = meshtastic_PortNum_NEIGHBORINFO_APP;
+    p.decoded.payload.size =
+        pb_encode_to_bytes(p.decoded.payload.bytes, sizeof(p.decoded.payload.bytes), &meshtastic_NeighborInfo_msg, ni);
+    return p;
+}
+
+// Our recorded neighbours, as we would broadcast them.
+static meshtastic_NeighborInfo collectedNeighbors(NeighborInfoModuleTestShim *module)
+{
+    meshtastic_NeighborInfo out = meshtastic_NeighborInfo_init_zero;
+    module->collectNeighborInfo(&out);
+    return out;
+}
+
+static void test_neighborInfo_relayedPayloadIsNotModified()
+{
+    auto *module = makeNeighborInfoModule();
+    meshtastic_NeighborInfo ni;
+    meshtastic_MeshPacket p = makeNeighborInfoPacket(REMOTE_NODE, 3, 2, 0x44, &ni);
+    const meshtastic_Data_payload_t original = p.decoded.payload;
+
+    module->alterReceived(p);
+
+    TEST_ASSERT_EQUAL_UINT32(original.size, p.decoded.payload.size);
+    TEST_ASSERT_EQUAL_MEMORY(original.bytes, p.decoded.payload.bytes, original.size);
+}
+
+static void test_neighborInfo_directCopyRecordsSenderAndOursOmitsLastSentBy()
+{
+    auto *module = makeNeighborInfoModule();
+    meshtastic_NeighborInfo ni;
+    meshtastic_MeshPacket p = makeNeighborInfoPacket(0, 3, 3, 0x22, &ni);
+
+    module->updateNeighbors(p, &ni);
+
+    meshtastic_NeighborInfo out = collectedNeighbors(module);
+    TEST_ASSERT_EQUAL_UINT32(1, out.neighbors_count);
+    TEST_ASSERT_EQUAL_HEX32(REMOTE_NODE, out.neighbors[0].node_id);
+    TEST_ASSERT_EQUAL_HEX32(LOCAL_NODE, out.node_id);
+    TEST_ASSERT_EQUAL_HEX32(0, out.last_sent_by_id);
+}
+
+static void test_neighborInfo_olderRelayRewriteMatchingHeaderIsTrusted()
+{
+    auto *module = makeNeighborInfoModule();
+    const NodeNum oldRelay = 0x55555544;
+    meshtastic_NeighborInfo ni;
+    meshtastic_MeshPacket p = makeNeighborInfoPacket(oldRelay, 3, 2, 0x44, &ni);
+
+    module->updateNeighbors(p, &ni);
+
+    meshtastic_NeighborInfo out = collectedNeighbors(module);
+    TEST_ASSERT_EQUAL_UINT32(1, out.neighbors_count);
+    TEST_ASSERT_EQUAL_HEX32(oldRelay, out.neighbors[0].node_id);
+}
+
+static void test_neighborInfo_relayResolvedFromHeaderByte()
+{
+    auto *module = makeNeighborInfoModule();
+    const NodeNum relay = 0x77777766;
+    meshtastic_NodeInfoLite *node = nodeDB->getOrCreateMeshNode(relay);
+    TEST_ASSERT_NOT_NULL(node);
+    node->has_hops_away = true;
+    node->hops_away = 0;
+    node->last_heard = getTime();
+
+    // Unmodified payload from an older sender: last_sent_by_id still names the originator.
+    meshtastic_NeighborInfo ni;
+    meshtastic_MeshPacket p = makeNeighborInfoPacket(REMOTE_NODE, 3, 2, 0x66, &ni);
+
+    module->updateNeighbors(p, &ni);
+
+    meshtastic_NeighborInfo out = collectedNeighbors(module);
+    TEST_ASSERT_EQUAL_UINT32(1, out.neighbors_count);
+    TEST_ASSERT_EQUAL_HEX32(relay, out.neighbors[0].node_id);
+}
+
+static void test_neighborInfo_unresolvableRelayRecordsNothing()
+{
+    auto *module = makeNeighborInfoModule();
+    meshtastic_NeighborInfo ni;
+    meshtastic_MeshPacket p = makeNeighborInfoPacket(0, 3, 2, 0x99, &ni);
+
+    module->updateNeighbors(p, &ni);
+
+    TEST_ASSERT_EQUAL_UINT32(0, collectedNeighbors(module).neighbors_count);
+}
+
 void setup()
 {
     initializeTestEnvironment();
@@ -908,6 +1032,11 @@ void setup()
     RUN_TEST(test_nestedLocalSend_isDeferred_notReentrant);
     RUN_TEST(test_deferredChain_drainsBreadthFirst);
     RUN_TEST(test_deferredQueueOverflow_dropsGracefully);
+    RUN_TEST(test_neighborInfo_relayedPayloadIsNotModified);
+    RUN_TEST(test_neighborInfo_directCopyRecordsSenderAndOursOmitsLastSentBy);
+    RUN_TEST(test_neighborInfo_olderRelayRewriteMatchingHeaderIsTrusted);
+    RUN_TEST(test_neighborInfo_relayResolvedFromHeaderByte);
+    RUN_TEST(test_neighborInfo_unresolvableRelayRecordsNothing);
     exit(UNITY_END());
 }
 

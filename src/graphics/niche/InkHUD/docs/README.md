@@ -275,6 +275,23 @@ InkHUD's `Node Config -> Position` page now exposes the common position controls
 - Device GPS controls: GPS enable/disable, GPS polling interval
 - Position packet controls: broadcast interval, smart position toggle, smart minimum interval, smart minimum distance
 
+##### System Info Menu
+
+`Node Config -> System Info` is a read-only page. Rows are not selectable actions.
+
+- Node Name: long name, short name, BLE ID (last two MAC bytes)
+- Firmware: build environment (model), firmware version
+- Runtime: uptime since boot.
+- Memory: heap, PSRAM (ESP32), flash and SD card (when mounted) as used/total and percent (K below 1 MB, otherwise M), each with a full-width usage bar under its label. A bar row is added with `MenuItem::Usage()`.
+
+##### External Notification Menu
+
+`Node Config -> Ext. Notification` is only shown on builds that define `PIN_BUZZER`, `HAS_I2S` or `HAS_I2S_SPEAKER_NRF52`. It uses the same toggle and selector pattern as the other InkHUD config pages.
+
+- Enabled: toggles `moduleConfig.external_notification.enabled` (reboots to apply)
+- Buzzer mode: selector for `config.device.buzzer_mode` (All Enabled, All Disabled, Notifications, System Only, DMs Only)
+- Alert Message / Alert Bell: toggle `alert_message_buzzer` / `alert_bell_buzzer`
+
 #### System Applets
 
 So far, we have been talking about "user applets". We also recognize a separate category of "system applets". These handle things like the menu, and the boot screen. These often need special handling, and need to be implemented manually.
@@ -790,7 +807,7 @@ This mapping of emoji to control characters is fairly arbitrary. Selection was i
 | `0x05`     | 👋                                             |
 | `0x06`     | ☀                                              |
 | ~~`0x07`~~ | (bell char, unused)                            |
-| `0x08`     | 🌧                                             |
+| `0x08`     | 🌧                                              |
 | `0x09`     | ☁                                              |
 | ~~`0x0A`~~ | (line feed, unused)                            |
 | `0x0B`     | ♥                                              |

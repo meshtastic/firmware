@@ -9,12 +9,18 @@
 #include "ConfigCheck.h"
 #include "PortduinoGlue.h"
 #include "SHA256.h"
+#include "UptimeClock.h"
 #include "api/ServerAPI.h"
+#include "mesh/Throttle.h"
 #include "meshUtils.h"
+#include "modules/Telemetry/Sensor/CommandSensorFields.h"
 #include <ErriezCRC32.h>
 #include <Utility.h>
+#include <algorithm>
+#include <array>
 #include <assert.h>
 #include <cctype>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <filesystem>
@@ -30,11 +36,29 @@
 // for the BlueZ-derived MAC address); Windows has no <sys/ioctl.h>.
 #include <sys/ioctl.h>
 #endif
+#if !defined(_WIN32) && !defined(ARCH_PORTDUINO_WASM)
+// execCommand(): spawn a shell with a deadline and kill its process group on timeout.
+#include <cerrno>
+#include <chrono>
+#include <csignal>
+#include <cstring>
+#include <fcntl.h>
+#include <poll.h>
+#include <spawn.h>
+#include <sys/wait.h>
+extern char **environ;
+#endif
 
 #ifdef PORTDUINO_LINUX_HARDWARE
 #include "linux/gpio/LinuxGPIOPin.h"
 #include <bluetooth/bluetooth.h>
 #include <bluetooth/hci.h>
+#endif
+
+#include "LinuxBluetooth.h"
+#ifdef MESHTASTIC_LINUX_BLE
+#include "mesh/NodeDB.h"               // config.bluetooth.enabled
+extern LinuxBluetooth *linuxBluetooth; // defined in main.cpp
 #endif
 
 #ifdef PORTDUINO_LINUX_HARDWARE
@@ -149,10 +173,56 @@ const char *argp_program_version = optstr(APP_VERSION);
 
 char stdoutBuffer[512];
 
+#ifdef MESHTASTIC_LINUX_BLE
+// Long enough that a host which can never bring BLE up is not re-probing BlueZ on every PowerFSM
+// transition, short enough that a bluetoothd still starting at boot is picked up without the user
+// noticing the wait.
+static constexpr uint32_t BLE_SETUP_RETRY_INTERVAL_MS = 30 * 1000;
+#endif
+
 // FIXME - move setBluetoothEnable into a HALPlatform class
 void setBluetoothEnable(bool enable)
 {
-    // not needed
+#ifdef MESHTASTIC_LINUX_BLE
+    // Disable is not gated on the config flags: if BLE is running it must always be
+    // stoppable, even after the device config was switched off underneath it.
+    if (!enable) {
+        if (linuxBluetooth) {
+            // Stop advertising only; a live phone connection survives PowerFSM state
+            // dips.
+            linuxBluetooth->shutdown();
+        }
+        return;
+    }
+    // Opt-in twice: the config.yaml Bluetooth section must enable BLE on this
+    // host, and the regular device config (like every other platform) must have
+    // Bluetooth on.
+    if (!portduino_config.bluetooth_enabled || !config.bluetooth.enabled)
+        return;
+    static uint32_t lastSetupMs = 0; // 0 = not attempted yet; stored through stampMillis()
+    if (!linuxBluetooth) {
+        LOG_INFO("Init LinuxBluetooth (adapter %s)", portduino_config.bluetooth_adapter.c_str());
+        linuxBluetooth = new LinuxBluetooth();
+        lastSetupMs = Time::stampMillis();
+        linuxBluetooth->setup();
+    } else if (!linuxBluetooth->isEnabled()) {
+        // The backend exists but never came up -- bluetoothd was not ready, the adapter was
+        // missing, or policy refused us. resumeAdvertising() returns immediately while disabled, so
+        // without this a transient failure at boot would keep BLE off until the process restarted.
+        //
+        // Throttled because five PowerFSM state-entry handlers reach here, and each setup() opens a
+        // system bus connection, spawns an event-loop thread and enumerates every BlueZ object
+        // before giving up. On a host where BLE can never come up that cost, and the log line, would
+        // otherwise repeat on every transition for as long as the daemon runs.
+        if (lastSetupMs && !Throttle::hasElapsed(lastSetupMs, BLE_SETUP_RETRY_INTERVAL_MS))
+            return;
+        LOG_INFO("Retry LinuxBluetooth setup (adapter %s)", portduino_config.bluetooth_adapter.c_str());
+        lastSetupMs = Time::stampMillis();
+        linuxBluetooth->setup();
+    } else {
+        linuxBluetooth->resumeAdvertising();
+    }
+#endif
 }
 
 void cpuDeepSleep(uint32_t msecs)
@@ -295,9 +365,23 @@ void getMacAddr(uint8_t *dmac)
         return;
     } else {
 #ifdef PORTDUINO_LINUX_HARDWARE
+        // Cache after the first successful read. The adapter address can't change at
+        // runtime, this now gets called from BLE property getters on every bluetoothd
+        // read (not just at startup), and the socket used to leak one fd per call.
+        static uint8_t cachedMac[6];
+        static bool macCached = false;
+        if (macCached) {
+            memcpy(dmac, cachedMac, 6);
+            return;
+        }
         struct hci_dev_info di = {0};
-        di.dev_id = 0;
-        bdaddr_t bdaddr;
+        // Read the adapter configured for BLE (Bluetooth.AdapterId) so the node
+        // identity matches the advertised adapter; a name that doesn't parse as
+        // hci<N> falls back to hci0, preserving the pre-BLE behavior.
+        unsigned adapterIndex = 0;
+        if (sscanf(portduino_config.bluetooth_adapter.c_str(), "hci%u", &adapterIndex) != 1)
+            adapterIndex = 0;
+        di.dev_id = adapterIndex;
         int btsock;
         btsock = socket(AF_BLUETOOTH, SOCK_RAW, 1);
         if (btsock < 0) { // If anything fails, just return with the default value
@@ -305,8 +389,10 @@ void getMacAddr(uint8_t *dmac)
         }
 
         if (ioctl(btsock, HCIGETDEVINFO, (void *)&di)) {
+            close(btsock);
             return;
         }
+        close(btsock);
 
         dmac[0] = di.bdaddr.b[5];
         dmac[1] = di.bdaddr.b[4];
@@ -314,6 +400,8 @@ void getMacAddr(uint8_t *dmac)
         dmac[3] = di.bdaddr.b[2];
         dmac[4] = di.bdaddr.b[1];
         dmac[5] = di.bdaddr.b[0];
+        memcpy(cachedMac, dmac, 6);
+        macCached = true;
 #elif defined(__APPLE__)
         // No BlueZ on macOS, but we can fall back to the host's primary
         // network interface MAC. `en0` is Wi-Fi on every shipping Mac
@@ -350,6 +438,11 @@ void getMacAddr(uint8_t *dmac)
         (void)dmac;
 #endif
     }
+}
+
+bool getBluetoothAddr(uint8_t *addr)
+{
+    return false;
 }
 
 bool getDeviceId(uint8_t *deviceId)
@@ -1062,6 +1155,7 @@ bool loadConfig(const char *configPath)
                 // an absent key. Kept apart so --check can see it contradict TCXO_OPTIONAL.
                 portduino_config.dio3_tcxo_voltage_disabled =
                     yamlConfig["Lora"]["DIO3_TCXO_VOLTAGE"] && portduino_config.dio3_tcxo_voltage == 0;
+                portduino_config.dio3_tcxo_delay_us = yamlConfig["Lora"]["DIO3_TCXO_DELAY_US"].as<int>(0);
                 // Try both oscillators rather than requiring the user to know which is fitted.
                 portduino_config.tcxo_optional = yamlConfig["Lora"]["TCXO_OPTIONAL"].as<bool>(false);
 
@@ -1297,21 +1391,59 @@ bool loadConfig(const char *configPath)
             portduino_config.pointerDevice = (yamlConfig["Input"]["PointerDevice"]).as<std::string>("");
             portduino_config.joystickDevice = (yamlConfig["Input"]["JoystickDevice"]).as<std::string>("");
             if (yamlConfig["Input"]["JoystickButtons"]) {
-                // action name -> evdev button code (hex like 0x122 or decimal); stored inverted
-                // as code -> lowercase action name for the driver to look up per keypress.
+                // action name -> evdev button code (hex like 0x122 or decimal), or a list of codes
+                // so several physical buttons drive the same action. Stored inverted as
+                // code -> lowercase action name for the driver to look up per keypress.
                 for (const auto &button : yamlConfig["Input"]["JoystickButtons"]) {
                     std::string action = button.first.as<std::string>("");
                     for (auto &c : action)
                         c = tolower(c);
-                    int code = 0;
-                    try {
-                        // base 0 accepts hex (0x122) or decimal; a malformed value just skips this entry.
-                        code = std::stoi(button.second.as<std::string>(""), nullptr, 0);
-                    } catch (const std::exception &) {
-                        code = 0;
+                    if (action == "")
+                        continue;
+                    // A bare scalar is just a one-entry list.
+                    std::vector<YAML::Node> codeNodes;
+                    if (button.second.IsSequence())
+                        for (const auto &codeNode : button.second)
+                            codeNodes.push_back(codeNode);
+                    else
+                        codeNodes.push_back(button.second);
+                    for (const auto &codeNode : codeNodes) {
+                        int code = 0;
+                        try {
+                            // base 0 accepts hex (0x122) or decimal; a malformed value just skips this entry.
+                            code = std::stoi(codeNode.as<std::string>(""), nullptr, 0);
+                        } catch (const std::exception &) {
+                            code = 0;
+                        }
+                        if (code != 0)
+                            portduino_config.joystickButtons[code] = action;
                     }
-                    if (code != 0 && action != "")
-                        portduino_config.joystickButtons[code] = action;
+                }
+            }
+
+            // Only when present, so a later config.d file with its own Input section keeps it.
+            if (yamlConfig["Input"]["ArcadeBonnet"])
+                portduino_config.arcadeBonnetAddress = yamlConfig["Input"]["ArcadeBonnet"].as<int>(0);
+            if (yamlConfig["Input"]["ArcadeBonnetButtons"]) {
+                // action name -> bonnet button name (1A..1F) or a list of them, stored inverted as
+                // expander bit -> lowercase action, like JoystickButtons.
+                for (const auto &button : yamlConfig["Input"]["ArcadeBonnetButtons"]) {
+                    std::string action = button.first.as<std::string>("");
+                    for (auto &c : action)
+                        c = tolower(c);
+                    if (action == "")
+                        continue;
+                    std::vector<YAML::Node> pinNodes;
+                    if (button.second.IsSequence())
+                        for (const auto &pinNode : button.second)
+                            pinNodes.push_back(pinNode);
+                    else
+                        pinNodes.push_back(button.second);
+                    for (const auto &pinNode : pinNodes) {
+                        const int bit = arcadeBonnetPinBit(pinNode.as<std::string>(""));
+                        if (bit >= 0)
+                            portduino_config.arcadeBonnetButtons[bit] = action;
+                    }
                 }
             }
 
@@ -1339,11 +1471,97 @@ bool loadConfig(const char *configPath)
                 (yamlConfig["Webserver"]["SSLCert"]).as<std::string>("/etc/meshtasticd/ssl/certificate.pem");
         }
 
+        if (yamlConfig["Bluetooth"]) {
+            // Assign per key, not per section. loadConfig() runs once for every file in config.d, so
+            // reading an absent key as its default would let a later file that names only one of
+            // these silently reset the other -- `AdapterId: hci1` alone would turn Bluetooth off,
+            // and `Enabled: true` alone would drag the adapter back to hci0. Only what a file
+            // actually says should override what an earlier one set.
+            if (yamlConfig["Bluetooth"]["Enabled"])
+                portduino_config.bluetooth_enabled = (yamlConfig["Bluetooth"]["Enabled"]).as<bool>(false);
+            if (yamlConfig["Bluetooth"]["AdapterId"])
+                portduino_config.bluetooth_adapter = (yamlConfig["Bluetooth"]["AdapterId"]).as<std::string>("hci0");
+        }
+
         if (yamlConfig["HostMetrics"]) {
             portduino_config.hostMetrics_channel = (yamlConfig["HostMetrics"]["Channel"]).as<int>(0);
             portduino_config.hostMetrics_interval = (yamlConfig["HostMetrics"]["ReportInterval"]).as<int>(0);
             portduino_config.hostMetrics_user_command = (yamlConfig["HostMetrics"]["UserStringCommand"]).as<std::string>("");
         }
+
+        // An empty `Sensors:` is null; skip it like any other empty section.
+        if (yamlConfig["Sensors"] && !yamlConfig["Sensors"].IsNull()) {
+            const YAML::Node sensors = yamlConfig["Sensors"];
+            if (!sensors.IsSequence()) {
+                std::cout << "Sensors must be a list of entries with a Type and a Command!" << std::endl;
+                if (!configCheck)
+                    exit(EXIT_FAILURE);
+            } else {
+                // Appended, like Security.AdminKeys, so each file in config.d can add its own sensors.
+                for (const auto &entry : sensors) {
+                    if (!entry.IsMap()) {
+                        std::cout << "Sensors: each entry needs a Type and a Command!" << std::endl;
+                        if (!configCheck)
+                            exit(EXIT_FAILURE);
+                        continue;
+                    }
+                    const std::string type = entry["Type"].as<std::string>("");
+                    commandSensorConfig sensor;
+                    sensor.type = CommandSensorFields::canonicalType(type);
+                    sensor.command = entry["Command"].as<std::string>("");
+                    sensor.scale = entry["Scale"].as<float>(1.0f);
+                    if (!std::isfinite(sensor.scale))
+                        sensor.scale = 1.0f;
+                    if (sensor.type.empty() || sensor.command.empty()) {
+                        if (sensor.type.empty())
+                            std::cout << "Sensors: '" << type
+                                      << "' is not a known Type. Valid: " << CommandSensorFields::knownTypes() << std::endl;
+                        else
+                            std::cout << "Sensors: the " << sensor.type << " entry has no Command!" << std::endl;
+                        if (!configCheck)
+                            exit(EXIT_FAILURE);
+                        continue;
+                    }
+                    portduino_config.command_sensors.push_back(sensor);
+                }
+            }
+        }
+
+        if (yamlConfig["Security"] && yamlConfig["Security"]["AdminKeys"]) {
+            const YAML::Node keys = yamlConfig["Security"]["AdminKeys"];
+            if (!keys.IsSequence()) {
+                std::cout << "Security.AdminKeys must be a list of base64 public keys!" << std::endl;
+                if (!configCheck)
+                    exit(EXIT_FAILURE);
+            } else {
+                // Appended, not assigned: loadConfig() runs once per file in config.d, so an
+                // operator can drop in a file per admin. Duplicates are dropped, since each key
+                // costs a trial decryption in Router's admin-key fallback.
+                for (const auto &entry : keys) {
+                    const std::string text = entry.as<std::string>("");
+                    std::array<uint8_t, 32> key;
+                    if (!adminKeyFromBase64(text, key)) {
+                        std::cout << "Security.AdminKeys: '" << text << "' is not a 32-byte base64 public key!" << std::endl;
+                        if (!configCheck)
+                            exit(EXIT_FAILURE);
+                        continue;
+                    }
+                    if (std::find(portduino_config.admin_keys.begin(), portduino_config.admin_keys.end(), key) !=
+                        portduino_config.admin_keys.end())
+                        continue;
+                    if (portduino_config.admin_keys.size() >= PORTDUINO_MAX_ADMIN_KEYS) {
+                        std::cout << "Security.AdminKeys: at most " << PORTDUINO_MAX_ADMIN_KEYS
+                                  << " admin keys are supported, ignoring the rest!" << std::endl;
+                        break;
+                    }
+                    portduino_config.admin_keys.push_back(key);
+                }
+            }
+        }
+
+        // Only when the key is present, so a later file in config.d can turn it off again.
+        if (yamlConfig["Security"] && yamlConfig["Security"]["DMShell"])
+            portduino_config.dmshell_enabled = (yamlConfig["Security"]["DMShell"]).as<bool>(false);
 
         if (yamlConfig["Config"]) {
             portduino_config.has_config_overrides = true;
@@ -1420,6 +1638,67 @@ static bool ends_with(std::string_view str, std::string_view suffix)
     return str.size() >= suffix.size() && str.compare(str.size() - suffix.size(), suffix.size(), suffix) == 0;
 }
 
+static int base64Value(char c)
+{
+    if (c >= 'A' && c <= 'Z')
+        return c - 'A';
+    if (c >= 'a' && c <= 'z')
+        return c - 'a' + 26;
+    if (c >= '0' && c <= '9')
+        return c - '0' + 52;
+    if (c == '+' || c == '-') // '-' and '_' so a base64url-encoded key is accepted too
+        return 62;
+    if (c == '/' || c == '_')
+        return 63;
+    return -1;
+}
+
+// Decodes a 32-byte public key as the apps and the CLI print it. Anything that is not exactly 32
+// bytes of canonical base64 is refused rather than zero-padded: a truncated admin key would
+// silently authorize the wrong peer.
+bool adminKeyFromBase64(const std::string &text, std::array<uint8_t, 32> &out)
+{
+    uint32_t accum = 0;
+    int bits = 0;
+    size_t written = 0;
+    for (char c : text) {
+        if (isspace(static_cast<unsigned char>(c)) || c == '=')
+            continue;
+        const int value = base64Value(c);
+        if (value < 0)
+            return false;
+        accum = (accum << 6) | static_cast<uint32_t>(value);
+        bits += 6;
+        if (bits >= 8) {
+            bits -= 8;
+            if (written >= out.size())
+                return false;
+            out[written++] = static_cast<uint8_t>((accum >> bits) & 0xFF);
+        }
+    }
+    return written == out.size() && (accum & ((1u << bits) - 1)) == 0;
+}
+
+std::string adminKeyToBase64(const std::array<uint8_t, 32> &key)
+{
+    static const char alphabet[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string out;
+    out.reserve(44);
+    for (size_t i = 0; i < key.size(); i += 3) {
+        const size_t remaining = key.size() - i;
+        uint32_t chunk = static_cast<uint32_t>(key[i]) << 16;
+        if (remaining > 1)
+            chunk |= static_cast<uint32_t>(key[i + 1]) << 8;
+        if (remaining > 2)
+            chunk |= key[i + 2];
+        out += alphabet[(chunk >> 18) & 0x3F];
+        out += alphabet[(chunk >> 12) & 0x3F];
+        out += remaining > 1 ? alphabet[(chunk >> 6) & 0x3F] : '=';
+        out += remaining > 2 ? alphabet[chunk & 0x3F] : '=';
+    }
+    return out;
+}
+
 bool MAC_from_string(std::string mac_str, uint8_t *dmac)
 {
     mac_str.erase(std::remove(mac_str.begin(), mac_str.end(), ':'), mac_str.end());
@@ -1450,22 +1729,125 @@ bool MAC_from_string(std::string mac_str, uint8_t *dmac)
     return true;
 }
 
-std::string exec(const char *cmd)
-{ // https://stackoverflow.com/a/478960
-#ifdef ARCH_PORTDUINO_WASM
+// Captured output beyond this is drained and dropped; nothing that reads it wants more.
+static constexpr size_t EXEC_MAX_OUTPUT = 4096;
+
+ExecResult execCommand(const char *cmd, uint32_t timeoutMs, std::string &output)
+{
+    output.clear();
+#if defined(ARCH_PORTDUINO_WASM)
     (void)cmd; // no shell/popen in the browser - shell-outs degrade to empty
-    return "";
-#endif
+    (void)timeoutMs;
+    return ExecResult::NotStarted;
+#elif defined(_WIN32)
+    // No process group to kill here, so the timeout is not enforced on Windows.
+    (void)timeoutMs;
+    FILE *pipe = popen(cmd, "r");
+    if (!pipe)
+        return ExecResult::NotStarted;
     std::array<char, 128> buffer;
-    std::string result;
-    std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(cmd, "r"), pclose);
-    if (!pipe) {
-        throw std::runtime_error("popen() failed!");
+    while (fgets(buffer.data(), static_cast<int>(buffer.size()), pipe) != nullptr)
+        if (output.size() < EXEC_MAX_OUTPUT)
+            output += buffer.data();
+    return pclose(pipe) == 0 ? ExecResult::Ok : ExecResult::Failed;
+#else
+    int fds[2];
+    if (pipe(fds) != 0)
+        return ExecResult::NotStarted;
+    fcntl(fds[0], F_SETFD, FD_CLOEXEC);
+    fcntl(fds[1], F_SETFD, FD_CLOEXEC);
+
+    posix_spawn_file_actions_t actions;
+    posix_spawn_file_actions_init(&actions);
+    posix_spawn_file_actions_addopen(&actions, STDIN_FILENO, "/dev/null", O_RDONLY, 0);
+    posix_spawn_file_actions_adddup2(&actions, fds[1], STDOUT_FILENO);
+    posix_spawnattr_t attr;
+    posix_spawnattr_init(&attr);
+    // Its own process group, so a timeout can kill the whole pipeline and not just the shell.
+    posix_spawnattr_setflags(&attr, POSIX_SPAWN_SETPGROUP);
+    posix_spawnattr_setpgroup(&attr, 0);
+
+    char shell[] = "/bin/sh";
+    char dashC[] = "-c";
+    std::string command(cmd);
+    char *argv[] = {shell, dashC, &command[0], nullptr};
+    pid_t pid;
+    const int spawnError = posix_spawn(&pid, shell, &actions, &attr, argv, environ);
+    posix_spawn_file_actions_destroy(&actions);
+    posix_spawnattr_destroy(&attr);
+    close(fds[1]);
+    if (spawnError != 0) {
+        close(fds[0]);
+        return ExecResult::NotStarted;
     }
-    while (fgets(buffer.data(), static_cast<int>(buffer.size()), pipe.get()) != nullptr) {
-        result += buffer.data();
+
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeoutMs);
+    auto remainingMs = [&deadline]() {
+        return std::chrono::duration_cast<std::chrono::milliseconds>(deadline - std::chrono::steady_clock::now()).count();
+    };
+
+    bool timedOut = false;
+    std::array<char, 256> buffer;
+    while (true) {
+        const auto remaining = remainingMs();
+        if (remaining <= 0) {
+            timedOut = true;
+            break;
+        }
+        pollfd pfd = {fds[0], POLLIN, 0};
+        const int ready = poll(&pfd, 1, static_cast<int>(remaining));
+        if (ready < 0 && errno == EINTR)
+            continue;
+        if (ready == 0) {
+            timedOut = true;
+            break;
+        }
+        if (ready < 0)
+            break;
+        const ssize_t n = read(fds[0], buffer.data(), buffer.size());
+        if (n < 0 && errno == EINTR)
+            continue;
+        if (n <= 0)
+            break; // EOF: every writer has closed stdout
+        if (output.size() < EXEC_MAX_OUTPUT)
+            output.append(buffer.data(), std::min(static_cast<size_t>(n), EXEC_MAX_OUTPUT - output.size()));
     }
-    return result;
+    close(fds[0]);
+
+    // A command can close stdout and keep running, so the deadline also bounds the wait for it to exit.
+    int status = 0;
+    pid_t waited = 0;
+    while (!timedOut) {
+        waited = waitpid(pid, &status, WNOHANG);
+        if (waited < 0 && errno == EINTR)
+            continue;
+        if (waited != 0)
+            break;
+        if (remainingMs() <= 0)
+            timedOut = true;
+        else
+            usleep(5000);
+    }
+    if (timedOut) {
+        kill(-pid, SIGKILL);
+        do {
+            waited = waitpid(pid, &status, 0);
+        } while (waited < 0 && errno == EINTR);
+        return ExecResult::TimedOut;
+    }
+    return waited == pid && WIFEXITED(status) && WEXITSTATUS(status) == 0 ? ExecResult::Ok : ExecResult::Failed;
+#endif
+}
+
+std::string exec(const char *cmd, uint32_t timeoutMs)
+{
+    std::string output;
+    const ExecResult result = execCommand(cmd, timeoutMs, output);
+    if (result == ExecResult::TimedOut)
+        LOG_WARN("Command timed out after %ums, killed: %s", static_cast<unsigned>(timeoutMs), cmd);
+    else if (result == ExecResult::NotStarted)
+        LOG_WARN("Command could not be started: %s", cmd);
+    return output;
 }
 
 #ifndef ARCH_PORTDUINO_WASM

@@ -147,6 +147,70 @@ assert "empty sections are not a fault" 0 empty-sections.yaml check \
 assert "warnings alone do not fail the run" 0 unknown-key.yaml check \
 	"unknown key 'Lora.Frequency'" \
 	"Result: 0 errors, 1 warning"
+# On a build without BLE support the same file additionally reports the build-time
+# gap as a warning, so only the error count is asserted here.
+assert "bluetooth section parses" 0 bluetooth.yaml check \
+	"Result: 0 errors,"
+assert "bluetooth bad Enabled is silently defaulted" 0 bluetooth-bad-enabled.yaml check \
+	"Bluetooth.Enabled is not a true/false value" \
+	"Result: 0 errors, 1 warning"
+assert "bluetooth AdapterId must name a real adapter" 0 bluetooth-bad-adapter.yaml check \
+	"is not a BlueZ adapter name" \
+	"Result: 0 errors, 1 warning"
+
+echo
+echo "admin keys in the host config:"
+assert "a list of admin keys is clean" 0 adminkeys.yaml check \
+	"Result: 0 errors, 0 warnings"
+assert "a malformed admin key is refused" 1 adminkeys-bad.yaml check \
+	"is not a 32-byte base64 public key" \
+	"Result: 1 error, 0 warnings"
+assert "admin keys written as a scalar are refused" 1 adminkeys-not-a-list.yaml check \
+	"Security.AdminKeys must be a list of base64 public keys" \
+	"Result: 1 error, 0 warnings"
+# Admin keys append rather than the last file winning, so one file per admin works. config.yaml is
+# always loaded first, so the effective list is deterministic; --output-yaml is what reports it.
+assert "admin keys append across config.d" 0 adminkeys-append/config.yaml yaml \
+	"rvzaPCZmlh1nWnqNKUFHj0dLBJJIRJhRrkZmaFLHCVY=" \
+	"NGC+MSAeaf7aoO7ouZl/XHwpmf2v5ZMlPNZUr0361xQ=" \
+	"P2jeuoXA1sOGSPH9Vm3eHFlITu1EVnohWGKlGF3t8GU="
+
+echo
+echo "command sensors:"
+assert "a list of command sensors is clean" 0 sensors.yaml check \
+	"Sensors are only read while the Telemetry module setting for their Type is enabled" \
+	"Result: 0 errors, 0 warnings"
+# An air-quality Type is accepted like an environment one, and written back under its field name.
+assert "air-quality sensor types are accepted" 0 sensors.yaml yaml \
+	"Type: co2" \
+	"Type: relative_humidity"
+assert "an unknown sensor Type is refused and the valid ones named" 1 sensors-bad-type.yaml check \
+	"Sensors Type 'humidity' is not an environment metric" \
+	"relative_humidity" \
+	"Result: 1 error, 0 warnings"
+assert "sensors written as a mapping are refused" 1 sensors-not-a-list.yaml check \
+	"Sensors must be a list of entries with a Type and a Command" \
+	"Result: 1 error, 0 warnings"
+assert "bad Scale, unknown key and duplicate Type are warned" 0 sensors-warnings.yaml check \
+	"Sensors Scale 'milli' is not a finite number" \
+	"Sensors Scale '.inf' is not a finite number" \
+	"unknown key 'Sensors.Interval'" \
+	"Sensors lists temperature 2 times" \
+	"Result: 0 errors, 4 warnings"
+# A non-finite Scale falls back to 1, so it is not written back out.
+assert "a non-finite Scale is replaced by 1" 0 sensors-warnings.yaml yaml \
+	"!Scale: .inf" \
+	"!Scale: inf"
+assert "an empty Sensors section is skipped" 0 sensors-empty.yaml check \
+	"!Sensors must be a list" \
+	"Result: 0 errors, 0 warnings"
+# Like admin keys, sensors append across files so one file per sensor works. --output-yaml reports
+# the merged list, with the Type normalised to the field name.
+assert "sensors append across config.d" 0 sensors-append/config.yaml yaml \
+	"Type: temperature" \
+	"Command: echo 21.5" \
+	"Type: barometric_pressure" \
+	"Command: echo 1013.2"
 
 echo
 echo "module names are matched exactly:"
@@ -377,6 +441,30 @@ assert "pin value that resolves to -1" 1 pin-unreadable.yaml check \
 	"Result: 1 error, 0 warnings"
 
 echo
+echo "joystick buttons:"
+# Keyed by action rather than by button so that one action can list several codes.
+# The clean case is the regression guard on the list form staying accepted.
+assert "several buttons bound to one action" 0 joystick-buttons.yaml check \
+	"Result: 0 errors, 0 warnings"
+assert "joystick mappings that do nothing" 0 joystick-buttons-bad.yaml check \
+	"'fire' is not a recognised action" \
+	"'BTN_SOUTH' is not an evdev button code" \
+	"button 0x121 is mapped to both 'select' and 'cancel'" \
+	"Result: 0 errors, 3 warnings"
+
+echo
+echo "arcade bonnet buttons:"
+# Same shape as JoystickButtons, with the bonnet's printed button names instead of evdev codes.
+assert "bonnet buttons bound by name" 0 arcade-bonnet.yaml check \
+	"Result: 0 errors, 0 warnings"
+assert "bonnet mappings that do nothing" 0 arcade-bonnet-bad.yaml check \
+	"Input.ArcadeBonnet '0x120' is not an MCP23017 address (0x20-0x27)" \
+	"'fire' is not a recognised action" \
+	"'2A' is not a bonnet button (1A-1F)" \
+	"button 1B is mapped to both 'cancel' and 'back'" \
+	"Result: 0 errors, 4 warnings"
+
+echo
 echo "CH341 USB-SPI adapters:"
 # The Lora pins of a ch341 device are indexes on the adapter, driven by the usermode
 # driver: portduinoSetup() skips initGPIOPin() for all of them. Reporting them as
@@ -475,6 +563,14 @@ assert "non-mapping section is refused" 1 nonmap-section.yaml normal \
 	"as config file"
 assert "unknown module is refused" 1 module-unknown.yaml normal \
 	"Unknown Lora.Module: sx1263"
+assert "a malformed admin key is refused on a normal boot" 1 adminkeys-bad.yaml normal \
+	"is not a 32-byte base64 public key"
+assert "admin keys as a scalar are refused on a normal boot" 1 adminkeys-not-a-list.yaml normal \
+	"Security.AdminKeys must be a list of base64 public keys"
+assert "an unknown sensor Type is refused on a normal boot" 1 sensors-bad-type.yaml normal \
+	"Sensors: 'humidity' is not a known Type"
+assert "sensors as a mapping are refused on a normal boot" 1 sensors-not-a-list.yaml normal \
+	"Sensors must be a list of entries with a Type and a Command"
 assert "MACAddress conflict is refused" 1 mac-conflict.yaml normal \
 	"Cannot set both MACAddress and MACAddressSource!"
 # Only meaningful on a build without rgbmatrix. A build that supports HUB75 accepts

@@ -1,0 +1,5 @@
+# Loaded after config.yaml. These are added to its key, not substituted for it.
+Security:
+  AdminKeys:
+    - NGC+MSAeaf7aoO7ouZl/XHwpmf2v5ZMlPNZUr0361xQ=
+    - P2jeuoXA1sOGSPH9Vm3eHFlITu1EVnohWGKlGF3t8GU=

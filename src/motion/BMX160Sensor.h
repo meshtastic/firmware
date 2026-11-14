@@ -24,6 +24,9 @@ class BMX160Sensor : public MotionSensor
     explicit BMX160Sensor(ScanI2C::FoundDevice foundDevice);
     virtual bool init() override;
     virtual int32_t runOnce() override;
+#ifdef MESHTASTIC_INCLUDE_INKHUD
+    StepSource stepSource() const override { return StepSource::Software; }
+#endif
     virtual void calibrate(uint16_t forSeconds) override;
     virtual bool providesHeading() const override { return true; }
 };

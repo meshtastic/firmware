@@ -6,7 +6,11 @@
 
 #include "GPSStatus.h"
 #include "GpioLogic.h"
+#include "NmeaTimeEstimator.h"
 #include "Observer.h"
+#if GPS_PPS_DISCIPLINE
+#include "PpsDiscipline.h"
+#endif
 #include "TinyGPS++.h"
 #include "concurrency/OSThread.h"
 #include "input/RotaryEncoderInterruptImpl1.h"
@@ -30,6 +34,20 @@
 // Allow defining the polarity of an external GPS RF front-end enable. Default is active high.
 #ifndef GPS_RF_EN_ACTIVE
 #define GPS_RF_EN_ACTIVE HIGH
+#endif
+
+// Compile receiver-specific sleep support when the board exposes the required wake controls.
+#if defined(GPS_RTC_INT)
+#define HAS_AIROHA_SOFT_RTC 1
+#endif
+// Without RTC_INT, a board whose RESETB is wired can still use backup mode and reset out of it.
+#if !defined(HAS_AIROHA_SOFT_RTC) && defined(GPS_AIROHA_RESET_WAKE) && defined(PIN_GPS_RESET) && defined(GPS_SLEEP_INT) &&       \
+    defined(PIN_GPS_EN)
+#define HAS_AIROHA_RESET_WAKE 1
+#endif
+// Without RTC_INT only the GNSS engine is stopped; powering EN back up reboots the core on its own.
+#if defined(HAS_AIROHA_SOFT_RTC) || (defined(GPS_SLEEP_INT) && defined(PIN_GPS_EN))
+#define HAS_AIROHA_SLEEP 1
 #endif
 
 static constexpr uint32_t GPS_UPDATE_ALWAYS_ON_THRESHOLD_MS = 10 * 1000UL;
@@ -157,9 +175,24 @@ class GPS : private concurrency::OSThread
      * Perform any processing that should be done only while the GPS is awake and looking for a fix.
      * Override this method to check for new locations
      *
-     * @return true if we've acquired a time
+     * @return true if the GPS has reported a usable time this cycle
      */
     virtual bool lookForTime();
+
+    /// The UTC the sentence just committed names, in ms; false if implausible
+    bool readNmeaUtcMs(int64_t &utcMs);
+
+#if GPS_PPS_DISCIPLINE
+    /// Arm the PPS IRQ for a burst when one is due, pin the RTC to each edge the fix vouches for, disarm after
+    void processPps();
+    /// A fix the PPS can be trusted on: a GGA fix seen since the wake, as hasLock()'s 3D rule would keep an
+    /// indoor receiver out and a cached quality outlives the sleep that invalidated it
+    bool ppsFixUsable();
+    /// Note the fix quality a GGA just reported, which is what ppsFixUsable() goes by
+    void notePpsFixQuality(uint8_t quality);
+    /// Release the PPS IRQ; the next burst is due at nextBurstMs (monotonic ms, 0 = as soon as there is a fix)
+    void disarmPps(uint64_t nextBurstMs);
+#endif
 
     /**
      * Perform any processing that should be done only while the GPS is awake and looking for a fix.
@@ -188,6 +221,25 @@ class GPS : private concurrency::OSThread
     uint8_t currentStep = 0;
     int32_t currentDelay = 2000;
     bool gotTime = false;
+
+    NmeaTimeEstimator nmeaTime;
+    uint64_t lastDrainEndMs = 0;      // when whileActive() last saw the UART empty; 0 = unknown
+    uint32_t nmeaByteCount = 0;       // bytes read from the GPS UART, wrapping
+    uint32_t lastDollarByteCount = 0; // nmeaByteCount at the last '$'
+    uint64_t lastNmeaTimeApplyMs = 0; // monotonic ms of the last RTC step from NMEA; 0 = never
+
+#if GPS_PPS_DISCIPLINE
+    PpsDiscipline pps;
+    bool ppsArmed = false;         // the PPS IRQ is attached; only during a burst, as IRQ slots are scarce
+    uint32_t lastPpsCount = 0;     // edge count already handled
+    uint32_t ppsBurstAccepted = 0; // edges accepted in this burst
+    uint64_t ppsArmedAtMs = 0;
+    uint64_t nextPpsBurstMs = 0;   // monotonic ms; 0 = arm once there is a fix
+    uint64_t lastPpsAcceptMs = 0;  // monotonic ms of the last edge the RTC was pinned to; 0 = never
+    uint64_t lastPpsFullSetMs = 0; // last PPS set that also wrote the hardware RTC and system time
+    uint64_t lastGgaFixMs = 0;     // monotonic ms of the last GGA reporting a fix; 0 = none since the wake
+    uint8_t commasSinceDollar = 0; // fields seen in the sentence being read, which may span drains
+#endif
 
 #ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
     // (20210908) TinyGps++ can only read the GPGSA "FIX TYPE" field
@@ -222,6 +274,9 @@ class GPS : private concurrency::OSThread
     bool GPSInitStarted = false;  // Init thread finished?
 
     GPSPowerState powerState = GPS_OFF; // GPS_ACTIVE if we want a location right now
+#ifdef HAS_AIROHA_SLEEP
+    uint8_t airohaSleepMisses = 0; // consecutive sleep commands that went unacked
+#endif
 
     uint8_t numSatellites = 0;
 
@@ -250,6 +305,13 @@ class GPS : private concurrency::OSThread
     int getACK(uint8_t *buffer, uint16_t size, uint8_t requestedClass, uint8_t requestedID, uint32_t waitMillis);
     GPS_RESPONSE getACK(uint8_t c, uint8_t i, uint32_t waitMillis);
     GPS_RESPONSE getACK(const char *message, uint32_t waitMillis);
+    /**
+     * As getACK(), but matches ANY of several identity strings in a single read pass, and reports which
+     * one matched. A chip answers once, so candidates cannot be tried with repeated getACK() calls: the
+     * first call consumes the reply and every later one waits out its whole timeout against an empty
+     * port.
+     */
+    GPS_RESPONSE getACKAny(const char *const *messages, size_t count, uint32_t waitMillis, const char **matched = nullptr);
 
     GPS_RESPONSE getACKCas(uint8_t class_id, uint8_t msg_id, uint32_t waitMillis);
 
@@ -276,6 +338,10 @@ class GPS : private concurrency::OSThread
     /** Set UBLOX power, if relevant
      */
     void setPowerUBLOX(bool on, uint32_t sleepMs = 0);
+
+    /** Send an Airoha receiver its sleep command before the power cut, if relevant
+     */
+    void airohaEnterSleep();
 
     /**
      * Tell users we have new GPS readings

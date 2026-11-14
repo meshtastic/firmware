@@ -63,6 +63,9 @@ bool memfll(const uint8_t *mem, uint8_t find, size_t numbytes);
 // on an all-zero MAC so two blank devices don't collide on an all-zero id.
 bool getMacAddrDeviceId(uint8_t *deviceId);
 
+// Writes a 6-byte address, most significant byte first, as "AA:BB:CC:DD:EE:FF" (18 bytes with the NUL).
+void formatMacAddr(const uint8_t *mac, char *out, size_t outSize);
+
 bool isOneOf(int item, int count, ...);
 
 const std::string vformat(const char *const zcFormat, ...);
@@ -110,4 +113,7 @@ template <typename T> constexpr bool is_pow_of_2(T n)
     return n >= T(1) && (n & (n - T(1))) == T(0);
 }
 
-#define IS_ONE_OF(item, ...) isOneOf(item, sizeof((int[]){__VA_ARGS__}) / sizeof(int), __VA_ARGS__)
+// Declaration only: used inside sizeof so the arguments are counted without being evaluated.
+template <typename... Args> char (&isOneOfArgCount(Args &&...))[sizeof...(Args)];
+
+#define IS_ONE_OF(item, ...) isOneOf(item, (int)sizeof(isOneOfArgCount(__VA_ARGS__)), __VA_ARGS__)

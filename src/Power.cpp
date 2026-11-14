@@ -45,6 +45,9 @@
 #include "api/WiFiServerAPI.h"
 #include "input/LinuxInputImpl.h"
 #include "input/LinuxJoystick.h"
+#if HAS_HOST_POWEROFF
+#include "platform/portduino/LinuxPower.h"
+#endif
 #endif
 
 #ifdef HAS_ADS1115
@@ -325,6 +328,8 @@ static HasBatteryLevel *batteryLevel; // Default to NULL for no battery level se
 
 #ifdef BATTERY_PIN
 
+static_assert(BATTERY_PIN >= 0, "BATTERY_PIN must be a real ADC pin; leave it undefined when the board has no battery sense");
+
 void battery_adcEnable()
 {
 #ifdef ADC_CTRL // enable adc voltage divider when we need to read
@@ -580,7 +585,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
 #ifdef EXT_PWR_DETECT
         if (digitalRead(EXT_PWR_DETECT) == EXT_PWR_DETECT_VALUE)
             return true;
-#ifdef EXT_CHRG_DETECT
+#if defined(EXT_CHRG_DETECT) && !defined(EXT_CHRG_DETECT_IS_SOLAR)
         // EXT_PWR_DETECT alone may not catch active charging (e.g. a charge-complete
         // pin that only asserts once the battery is full) - CHRG being active implies
         // power is present regardless.
@@ -894,13 +899,6 @@ Power::Power() : OSThread("Power")
 
 bool Power::analogInit()
 {
-#ifdef EXT_PWR_DETECT
-    pinMode(EXT_PWR_DETECT, EXT_PWR_DETECT_MODE);
-#endif
-#ifdef EXT_CHRG_DETECT
-    pinMode(EXT_CHRG_DETECT, EXT_CHRG_DETECT_MODE);
-#endif
-
 #ifdef BATTERY_PIN
     LOG_DEBUG("Use analog input %d for battery level", BATTERY_PIN);
 
@@ -949,7 +947,14 @@ bool Power::analogInit()
     batteryLevel = &analogLevel;
     return true;
 #else
+#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+    // No ADC pin: AnalogBatteryLevel still reads a configured INA (power.device_battery_ina_address), and with
+    // none it reports no battery, so the board keeps its 101% external-power status.
+    batteryLevel = &analogLevel;
+    return true;
+#else
     return false;
+#endif
 #endif
 }
 
@@ -960,6 +965,13 @@ bool Power::analogInit()
  */
 bool Power::setup()
 {
+    // Before the gauge probes: a gauge that keeps AnalogBatteryLevel::isVbusIn() still reads these pins
+#ifdef EXT_PWR_DETECT
+    pinMode(EXT_PWR_DETECT, EXT_PWR_DETECT_MODE);
+#endif
+#ifdef EXT_CHRG_DETECT
+    pinMode(EXT_CHRG_DETECT, EXT_CHRG_DETECT_MODE);
+#endif
 #ifdef HAS_SGM41562
     // Initialize the charger early so AnalogBatteryLevel can read charging
     // state from it. The charger does not provide battery voltage / percent -
@@ -1115,6 +1127,15 @@ void Power::shutdown()
 #endif
     doDeepSleep(DELAY_FOREVER, true, true);
 #elif defined(ARCH_PORTDUINO)
+#if HAS_HOST_POWEROFF
+    // A portduino node is a process on a computer that outlives it, so exiting here only ends the
+    // daemon - and under Restart=always systemd brings it straight back. When the user asked for
+    // the host itself, hand off to logind. Everything above has already run, so the NodeDB and
+    // message store are on disk either way. Fall through to exit() if logind refuses, rather than
+    // leaving the node sitting there having said it was shutting down.
+    if (hostPowerOffRequested)
+        linuxPowerOffHost();
+#endif
     exit(EXIT_SUCCESS);
 #else
     LOG_WARN("FIXME implement shutdown for this platform");
@@ -1306,8 +1327,10 @@ void Power::logHeapUsage()
     char detail[64] = "";
     const uint32_t minFree = memGet.getMinFreeHeap();
     const uint32_t maxAlloc = memGet.getMaxAllocHeap();
-    if (minFree || maxAlloc)
+    if (minFree)
         snprintf(detail, sizeof(detail), ", min %u, largest block %u", minFree, maxAlloc);
+    else if (maxAlloc)
+        snprintf(detail, sizeof(detail), ", largest block %u", maxAlloc);
 
     const uint32_t psramTotal = memGet.getPsramSize();
     if (psramTotal)
@@ -1908,6 +1931,10 @@ bool Power::max17048Init()
 
 #if !MESHTASTIC_EXCLUDE_I2C && HAS_CW2015
 
+#ifndef CW2015_FULL_SOC
+#define CW2015_FULL_SOC 100 // gauge SOC that counts as full; boards whose charger tops out lower set their own
+#endif
+
 class CW2015BatteryLevel : public AnalogBatteryLevel
 {
   public:
@@ -1921,7 +1948,7 @@ class CW2015BatteryLevel : public AnalogBatteryLevel
         Wire.write(0x04);
         if (Wire.endTransmission() == 0) {
             if (Wire.requestFrom(CW2015_ADDR, (uint8_t)1)) {
-                data = Wire.read();
+                data = clamp(Wire.read() * 100 / CW2015_FULL_SOC, 0, 100);
             }
         }
         return data;
@@ -2121,7 +2148,7 @@ class LipoCharger : public HasBatteryLevel
     /**
      * return true if there is a battery installed in this unit
      */
-    virtual bool isBatteryConnect() override { return PPM->getBattVoltage() > 0; }
+    virtual bool isBatteryConnect() override { return getBattVoltage() > 0; }
 
     /**
      * return true if there is an external power source detected
@@ -2358,13 +2385,6 @@ SerialBatteryLevel serialBatteryLevel;
  */
 bool Power::serialBatteryInit()
 {
-#ifdef EXT_PWR_DETECT
-    pinMode(EXT_PWR_DETECT, EXT_PWR_DETECT_MODE);
-#endif
-#ifdef EXT_CHRG_DETECT
-    pinMode(EXT_CHRG_DETECT, EXT_CHRG_DETECT_MODE);
-#endif
-
     bool result = serialBatteryLevel.runOnce();
     LOG_DEBUG("Power::serialBatteryInit sensor is %s", result ? "ready" : "not ready yet");
     if (!result)
