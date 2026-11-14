@@ -2957,7 +2957,7 @@ void menuHandler::frameTogglesMenu()
     static int lastSelectedIndex = 0;
     static int optionCount = 0;
 
-#ifndef USE_EINK
+#if !BASEUI_EINK_LAYOUT
     optionsArray[options] = screen->isFrameHidden("nodelist_nodes") ? "Show Node Lists" : "Hide Node Lists";
     optionsEnumArray[options++] = nodelist_nodes;
 #else
@@ -2968,7 +2968,7 @@ void menuHandler::frameTogglesMenu()
 #endif
 
 #if HAS_GPS
-#ifndef USE_EINK
+#if !BASEUI_EINK_LAYOUT
     optionsArray[options] = screen->isFrameHidden("nodelist_location") ? "Show Position Lists" : "Hide Position Lists";
     optionsEnumArray[options++] = nodelist_location;
 #else

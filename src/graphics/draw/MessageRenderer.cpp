@@ -105,7 +105,7 @@ void nudgeScroll(int8_t direction)
 {
     if (direction == 0)
         return;
-#ifdef USE_EINK
+#if BASEUI_EINK_LAYOUT
     manualScrolling = true; // or the next e-ink redraw puts the messages back at the top
 #endif
 
@@ -749,7 +749,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     int usableScrollHeight = usableHeight;
     int scrollStop = std::max(0, totalHeight - usableScrollHeight + cachedHeights.back());
 
-#ifndef USE_EINK
+#if !BASEUI_EINK_LAYOUT
     uint32_t now = millis();
     float delta = (now - lastTime) / 400.0f;
     lastTime = now;
