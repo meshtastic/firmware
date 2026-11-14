@@ -8,6 +8,7 @@
 
 #include "main.h"
 #include "mesh/api/WiFiServerAPI.h"
+#include "mesh/eth/ethClient.h"
 #include "target_specific.h"
 #include <WiFi.h>
 
@@ -67,6 +68,7 @@ unsigned long lastrun_ntp = 0;
 
 bool needReconnect = true;   // If we create our reconnector, run it once at the beginning
 bool isReconnecting = false; // If we are currently reconnecting
+static bool wifiSuspended = false; // WiFi taken down by policy, not by config
 #if defined(USE_WS5500) || defined(USE_CH390D)
 static volatile bool ethNetworkConnectedPending = false;
 #endif
@@ -261,7 +263,7 @@ static int32_t reconnectWiFi()
     const char *wifiName = config.network.wifi_ssid;
     const char *wifiPsw = config.network.wifi_psk;
 
-    if (config.network.wifi_enabled && needReconnect) {
+    if (config.network.wifi_enabled && needReconnect && !wifiSuspended) {
 
         if (!*wifiPsw) // Treat empty password as no password
             wifiPsw = NULL;
@@ -355,12 +357,53 @@ bool isWifiAvailable()
     }
 }
 
+// Stop what onNetworkConnected() starts. Ethernet serves the same clients from the
+// same code, so an up Ethernet link keeps every service running: losing WiFi does
+// not take the node off the network.
+static void deinitWifiServices()
+{
+    if (isEthernetAvailable()) {
+        LOG_DEBUG("Ethernet up, keeping network services");
+        return;
+    }
+
+    LOG_INFO("Stop network services");
+
+    syslog.disable();
+
+#if !MESHTASTIC_EXCLUDE_SOCKETAPI
+    deInitApiServer();
+#endif
+
+#ifdef ARCH_ESP32
+#if !MESHTASTIC_EXCLUDE_WEBSERVER
+    deinitWebServer();
+#endif
+    MDNS.end();
+#endif
+
+#ifndef DISABLE_NTP
+    timeClient.end();
+#endif
+
+#if HAS_UDP_MULTICAST
+    if (udpHandler)
+        udpHandler->stop();
+#endif
+
+    // onNetworkConnected() does nothing while this is set, so the services would
+    // never come back on reconnect.
+    APStartupComplete = false;
+}
+
 // Disable WiFi
 void deinitWifi()
 {
     LOG_INFO("WiFi deinit");
 
     if (isWifiAvailable()) {
+        deinitWifiServices();
+
 #ifdef ARCH_ESP32
         WiFi.disconnect(true, false);
 #elif defined(ARCH_RP2040)
@@ -370,6 +413,37 @@ void deinitWifi()
         LOG_INFO("WiFi Turned Off");
         // WiFi.printDiag(Serial);
     }
+}
+
+// Take WiFi down while leaving config.network.wifi_enabled alone: the setting stays
+// the user's, and the reconnect timer honours the suspension until resumeWifi().
+void suspendWifi()
+{
+    if (wifiSuspended)
+        return;
+
+    wifiSuspended = true;
+    // A reconnect already in flight would call WiFi.begin() from the pending branch
+    // five seconds from now and undo this.
+    needReconnect = false;
+    isReconnecting = false;
+    wifiReconnectPending = false;
+    deinitWifi();
+}
+
+void resumeWifi()
+{
+    if (!wifiSuspended)
+        return;
+
+    wifiSuspended = false;
+    needReconnect = true;
+    initWifi();
+}
+
+bool isWifiSuspended()
+{
+    return wifiSuspended;
 }
 
 // Startup WiFi
@@ -408,27 +482,34 @@ bool initWifi()
             // Register WiFi event handler BEFORE createSSLCert() to prevent race condition:
             // Without this, WiFi can auto-reconnect during cert generation and fire GOT_IP
             // before the handler is registered, causing onNetworkConnected() to never run.
-            WiFi.onEvent(WiFiEvent);
+            // Registered once: onEvent() appends, so a second initWifi() after resumeWifi()
+            // would deliver every event one more time.
+            static bool wifiEventsRegistered = false;
+            if (!wifiEventsRegistered)
+                WiFi.onEvent(WiFiEvent);
             WiFi.setAutoReconnect(true);
             WiFi.setSleep(false);
 
             // This is needed to improve performance.
             esp_wifi_set_ps(WIFI_PS_NONE); // Disable radio power saving
 
-            WiFi.onEvent(
-                [](WiFiEvent_t event, WiFiEventInfo_t info) {
-                    LOG_WARN("WiFi lost connection. Reason: %d", info.wifi_sta_disconnected.reason);
+            if (!wifiEventsRegistered) {
+                WiFi.onEvent(
+                    [](WiFiEvent_t event, WiFiEventInfo_t info) {
+                        LOG_WARN("WiFi lost connection. Reason: %d", info.wifi_sta_disconnected.reason);
 
-                    /*
-                        If we are disconnected from the AP for some reason,
-                        save the error code.
+                        /*
+                            If we are disconnected from the AP for some reason,
+                            save the error code.
 
-                        For a reference to the codes:
-                            https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-guides/wifi.html#wi-fi-reason-code
-                    */
-                    wifiDisconnectReason = info.wifi_sta_disconnected.reason;
-                },
-                WiFiEvent_t::ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
+                            For a reference to the codes:
+                                https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-guides/wifi.html#wi-fi-reason-code
+                        */
+                        wifiDisconnectReason = info.wifi_sta_disconnected.reason;
+                    },
+                    WiFiEvent_t::ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
+                wifiEventsRegistered = true;
+            }
 #endif
 
 #ifndef ARCH_RP2040
@@ -437,7 +518,10 @@ bool initWifi()
 #endif
 #endif
             LOG_DEBUG("JOINING WIFI soon: ssid=%s", wifiName);
-            wifiReconnect = new Periodic("WifiConnect", reconnectWiFi);
+            // Kept across a suspend/resume cycle: a second Periodic would not replace the
+            // first, it would run alongside it.
+            if (!wifiReconnect)
+                wifiReconnect = new Periodic("WifiConnect", reconnectWiFi);
         }
         return true;
     } else {
@@ -506,7 +590,8 @@ static void WiFiEvent(WiFiEvent_t event)
         digitalWrite(WIFI_LED, HIGH ^ WIFI_STATE_ON);
 #endif
 #if HAS_UDP_MULTICAST
-        if (udpHandler) {
+        // An up Ethernet link still serves multicast; only WiFi went away.
+        if (udpHandler && !isEthernetAvailable()) {
             udpHandler->stop();
         }
 #endif
@@ -536,7 +621,7 @@ static void WiFiEvent(WiFiEvent_t event)
     case ARDUINO_EVENT_WIFI_STA_LOST_IP:
         LOG_INFO("Lost IP address, reset to 0");
 #if HAS_UDP_MULTICAST
-        if (udpHandler) {
+        if (udpHandler && !isEthernetAvailable()) {
             udpHandler->stop();
         }
 #endif
