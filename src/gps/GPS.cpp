@@ -52,6 +52,11 @@ static inline void feedWatchdogWhileWaiting()
 #define GPS_RESET_MODE HIGH
 #endif
 
+// A board that fits one of two receivers can wire PIN_GPS_RESET to only one of them (ThinkNode M1).
+#ifndef GPS_RESET_IN_USE
+#define GPS_RESET_IN_USE true
+#endif
+
 // Not all platforms have std::size().
 template <typename T, std::size_t N> std::size_t array_count(const T (&)[N])
 {
@@ -81,6 +86,10 @@ static GPSUpdateScheduling scheduling;
 // A board can share one pin between an L76K standby and an Airoha RTC_INT (ThinkNode M5 v1.0/v2.0).
 #if defined(PIN_GPS_STANDBY) && defined(GPS_RTC_INT) && PIN_GPS_STANDBY == GPS_RTC_INT
 #define GPS_STANDBY_IS_RTC_INT 1
+#endif
+// Leave the standby pin alone on an Airoha fit when it is that RTC_INT, or when it only reaches an L76K (ThinkNode M1).
+#if defined(GPS_STANDBY_IS_RTC_INT) || defined(GPS_STANDBY_L76K_ONLY)
+#define GPS_STANDBY_SKIP_AIROHA 1
 #endif
 
 /// Multiple GPS instances might use the same serial port (in sequence), but we can
@@ -318,13 +327,18 @@ static const char *getGPSPowerStateString(GPSPowerState state)
 // If we have a hardware switch, define a periodic watcher outside of the GPS runOnce thread, since this can be sleeping
 // indefinitely
 
+#ifndef GPS_SWITCH_ON_LEVEL
+#define GPS_SWITCH_ON_LEVEL HIGH
+#endif
+
 int lastState = LOW;
 bool firstrun = true;
 
 static int32_t gpsSwitch()
 {
     if (gps) {
-        int currentState = digitalRead(PIN_GPS_SWITCH);
+        // HIGH below means switched on, whatever level the board's switch uses for that.
+        int currentState = digitalRead(PIN_GPS_SWITCH) == GPS_SWITCH_ON_LEVEL ? HIGH : LOW;
 
         // Respect explicit NOT_PRESENT mode and do not let the hardware switch re-enable GPS.
         if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT) {
@@ -1430,8 +1444,8 @@ void GPS::writePinEN(bool on)
 void GPS::writePinStandby(bool standby)
 {
 #ifdef PIN_GPS_STANDBY // Specifically the standby pin for L76B, L76K and clones
-#ifdef GPS_STANDBY_IS_RTC_INT
-    // RTC_INT must rest low on an Airoha fit; the Airoha sleep code pulses it.
+#ifdef GPS_STANDBY_SKIP_AIROHA
+    // On an Airoha fit this pin is RTC_INT, which rests low for the Airoha sleep code to pulse, or no standby at all.
     if (IS_ONE_OF(gnssModel, GNSS_MODEL_AG3335, GNSS_MODEL_AG3352))
         return;
 #endif
@@ -1633,7 +1647,7 @@ void GPS::down()
 #else
         bool softsleepSupported = false;
 #endif
-#ifdef GPS_STANDBY_IS_RTC_INT
+#ifdef GPS_STANDBY_SKIP_AIROHA
         if (IS_ONE_OF(gnssModel, GNSS_MODEL_AG3335, GNSS_MODEL_AG3352))
             softsleepSupported = false;
 #endif
@@ -1933,24 +1947,26 @@ GnssModel_t GPS::probe(int serialSpeed)
         delay(100);
 
 #if defined(PIN_GPS_RESET) && PIN_GPS_RESET != -1
-        digitalWrite(PIN_GPS_RESET, GPS_RESET_MODE); // assert for 10ms
-        delay(10);
-        digitalWrite(PIN_GPS_RESET, !GPS_RESET_MODE);
+        if (GPS_RESET_IN_USE) {
+            digitalWrite(PIN_GPS_RESET, GPS_RESET_MODE); // assert for 10ms
+            delay(10);
+            digitalWrite(PIN_GPS_RESET, !GPS_RESET_MODE);
 #ifdef TRACKER_T1000_E
-        delay(100);
+            delay(100);
 #endif
 
-        // attempt to detect the chip based on boot messages
-        std::vector<ChipInfo> passive_detect = {
-            {"AG3335", "$PAIR021,AG3335", GNSS_MODEL_AG3335},
-            {"AG3352", "$PAIR021,AG3352", GNSS_MODEL_AG3352},
-            {"RYS3520", "$PAIR021,REYAX_RYS3520_V2", GNSS_MODEL_AG3352},
-            {"UC6580", "UC6580", GNSS_MODEL_UC6580}
-            // as L76K is sort of a last ditch effort, we won't attempt to detect it by startup messages for now.
-            /*{"L76K", "SW=URANUS", GNSS_MODEL_MTK}*/};
-        GnssModel_t detectedDriver = getProbeResponse(500, passive_detect, serialSpeed);
-        if (detectedDriver != GNSS_MODEL_UNKNOWN) {
-            return detectedDriver;
+            // attempt to detect the chip based on boot messages
+            std::vector<ChipInfo> passive_detect = {
+                {"AG3335", "$PAIR021,AG3335", GNSS_MODEL_AG3335},
+                {"AG3352", "$PAIR021,AG3352", GNSS_MODEL_AG3352},
+                {"RYS3520", "$PAIR021,REYAX_RYS3520_V2", GNSS_MODEL_AG3352},
+                {"UC6580", "UC6580", GNSS_MODEL_UC6580}
+                // as L76K is sort of a last ditch effort, we won't attempt to detect it by startup messages for now.
+                /*{"L76K", "SW=URANUS", GNSS_MODEL_MTK}*/};
+            GnssModel_t detectedDriver = getProbeResponse(500, passive_detect, serialSpeed);
+            if (detectedDriver != GNSS_MODEL_UNKNOWN) {
+                return detectedDriver;
+            }
         }
 #endif
         // Close all NMEA sentences, valid for L76K, ATGM336H (and likely other AT6558 devices)
@@ -2292,8 +2308,10 @@ std::unique_ptr<GPS> GPS::createGps()
     new_gps->up();
 
 #ifdef PIN_GPS_RESET
-    pinMode(PIN_GPS_RESET, OUTPUT);
-    digitalWrite(PIN_GPS_RESET, !GPS_RESET_MODE);
+    if (GPS_RESET_IN_USE) {
+        pinMode(PIN_GPS_RESET, OUTPUT);
+        digitalWrite(PIN_GPS_RESET, !GPS_RESET_MODE);
+    }
 #endif
 
     if (_serial_gps) {
