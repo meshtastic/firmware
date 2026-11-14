@@ -1,0 +1,11 @@
+# A bare `Sensors:` with every entry commented out is null, like an empty section. It must be
+# skipped: a normal boot used to reject it as "not a list" while --check called it clean.
+Lora:
+  Module: sx1262
+  CS: 21
+  IRQ: 16
+  Busy: 20
+  Reset: 18
+Sensors:
+#  - Type: temperature
+#    Command: cat /sys/class/thermal/thermal_zone0/temp

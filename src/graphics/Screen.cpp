@@ -23,6 +23,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "Screen.h"
 #include "NodeDB.h"
 #include "PowerMon.h"
+#include "ScreenMirror.h"
 #include "Throttle.h"
 #include "UptimeClock.h"
 #include "configuration.h"
@@ -182,6 +183,15 @@ static void drawLockdownLockScreen(OLEDDisplay *display)
 }
 #endif
 
+// Hands ScreenMirror the committed framebuffer; a no-op unless a client is armed.
+static inline void screenMirrorCapture()
+{
+#if HAS_SCREEN_MIRROR
+    if (screen)
+        screenMirror.onRendered(screen->getDisplayDevice());
+#endif
+}
+
 static inline void updateUiFrame(OLEDDisplayUi *ui)
 {
 #ifdef MESHTASTIC_LOCKDOWN
@@ -209,6 +219,7 @@ static inline void updateUiFrame(OLEDDisplayUi *ui)
             NotificationRenderer::drawBannercallback(display, ui->getUiState());
         }
         display->display();
+        screenMirrorCapture(); // the locked frame, matching the panel's redaction
         return;
     }
 #endif
@@ -216,6 +227,7 @@ static inline void updateUiFrame(OLEDDisplayUi *ui)
     prepareFrameColorRegions();
 #endif
     ui->update();
+    screenMirrorCapture();
 }
 // Global variables for alert banner - explicitly define with extern "C" linkage to prevent optimization
 
@@ -1230,6 +1242,11 @@ int32_t Screen::runOnce()
 
     if (!screenOn) { // If we didn't just wake and the screen is still off, then
                      // stop updating until it is on again
+#ifdef MESHTASTIC_LOCKDOWN
+        // the last committed frame may predate the lock
+        if (!meshtastic_security::shouldRedactDisplay())
+#endif
+            screenMirrorCapture(); // a request while off still gets the last committed frame
         textMessageFrameShown = false;
         enabled = false;
         return 0;
