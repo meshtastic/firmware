@@ -42,16 +42,19 @@ template <class R> int16_t lr11x0FlashFromBootloader(R &lora, Module &module)
         return state;
     const uint32_t start = millis();
     while (module.hal->digitalRead(module.getGpio())) {
-        if (millis() - start >= 3000)
+        if (Throttle::hasElapsed(start, 3000))
             return RADIOLIB_ERR_SPI_CMD_TIMEOUT;
         delay(1);
     }
     constexpr size_t chunkWords = 64;
     const size_t imageWords = LR11XX_FIRMWARE_IMAGE_SIZE;
     for (size_t off = 0; off < imageWords; off += chunkWords) {
-        // Per-chunk status is ignored, as in RadioLib; the version check after reset decides success.
-        LR11x0BootCmds<R>::writeFlash(lora, off * sizeof(uint32_t), &lr11xx_firmware_image[off],
-                                      std::min(chunkWords, imageWords - off));
+        // Status errors are ignored, as in RadioLib; the version check after reset decides success.
+        state = LR11x0BootCmds<R>::writeFlash(lora, off * sizeof(uint32_t), &lr11xx_firmware_image[off],
+                                              std::min(chunkWords, imageWords - off));
+        // A stuck BUSY would otherwise cost the full SPI timeout (1 s before boundBusyWait()) on every chunk.
+        if (state == RADIOLIB_ERR_SPI_CMD_TIMEOUT)
+            return state;
     }
     state = lora.reset();
     if (state != RADIOLIB_ERR_NONE)
