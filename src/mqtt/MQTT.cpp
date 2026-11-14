@@ -63,6 +63,26 @@ static bool isConnected = false;
 static uint32_t lastPositionUnavailableWarning = 0;
 static const uint32_t POSITION_UNAVAILABLE_WARNING_INTERVAL_MS = 15000; // 15 seconds
 
+// What a SENSOR with the direct telemetry uplink publishes itself: its batches, and its environment and
+// air quality readings when it does not batch. Device metrics and the rest still go by the channel uplink.
+bool isDirectlyUplinkedTelemetry(const meshtastic_Data &d)
+{
+    if (!moduleConfig.mqtt.telemetry_uplink_enabled || config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR)
+        return false;
+    // A reply to a request is not a stored reading: the requester may be listening on MQTT
+    if (d.request_id != 0)
+        return false;
+    if (d.portnum == meshtastic_PortNum_TELEMETRY_HISTORY_APP)
+        return true;
+    if (d.portnum != meshtastic_PortNum_TELEMETRY_APP)
+        return false;
+    meshtastic_Telemetry t = meshtastic_Telemetry_init_zero;
+    if (!pb_decode_from_bytes(d.payload.bytes, d.payload.size, &meshtastic_Telemetry_msg, &t))
+        return false;
+    return t.which_variant == meshtastic_Telemetry_environment_metrics_tag ||
+           t.which_variant == meshtastic_Telemetry_air_quality_metrics_tag;
+}
+
 inline bool shouldDropMqttDownlink(const meshtastic_MeshPacket &packet)
 {
     if (is_in_repeated(config.lora.ignore_incoming, packet.from)) {
@@ -770,6 +790,15 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp_encrypted, const meshtastic_Me
             return;
         }
 
+        // With the direct telemetry uplink on, our stored readings reach the broker only that way, never twice.
+        // It publishes on the primary channel when that channel uplinks, so anything else still goes by the
+        // normal uplink. Configuration, not the live connection: while offline the readings wait for it.
+        if (isFromUs(&mp_decoded) && chIndex == channels.getPrimaryIndex() && ch.settings.uplink_enabled &&
+            isDirectlyUplinkedTelemetry(mp_decoded.decoded)) {
+            LOG_DEBUG("MQTT onSend - own telemetry goes by direct uplink");
+            return;
+        }
+
         if (isConfiguredForDefaultServer && (mp_decoded.decoded.portnum == meshtastic_PortNum_RANGE_TEST_APP ||
                                              mp_decoded.decoded.portnum == meshtastic_PortNum_DETECTION_SENSOR_APP)) {
             LOG_DEBUG("MQTT onSend - Ignore range test/detection sensor msg on public mqtt");
@@ -922,4 +951,55 @@ void MQTT::perhapsReportToMap()
 
     // Update the last report time
     last_report_to_map = Time::skipZero(Time::getMillis());
+}
+
+bool MQTT::uplinksOwnPacketsOn(ChannelIndex chIndex)
+{
+    return (moduleConfig.mqtt.proxy_to_client_enabled || isConnectedDirectly()) &&
+           channels.getByIndex(chIndex).settings.uplink_enabled;
+}
+
+bool MQTT::publishOwnPacket(meshtastic_MeshPacket &mp)
+{
+    const ChannelIndex chIndex = channels.getPrimaryIndex();
+    if (!uplinksOwnPacketsOn(chIndex))
+        return false;
+    const char *channelId = channels.getGlobalId(chIndex);
+
+    // Router::send() never sees this packet, so encrypt it here the way it would on air
+    if (moduleConfig.mqtt.encryption_enabled) {
+        uint8_t scratch[sizeof(mp.encrypted.bytes)];
+        const size_t numBytes = pb_encode_to_bytes(scratch, sizeof(scratch), &meshtastic_Data_msg, &mp.decoded);
+        const int16_t hash = channels.setActiveByIndex(chIndex);
+        if (hash < 0) {
+            LOG_WARN("MQTT publishOwnPacket: no usable channel key, drop");
+            return false;
+        }
+        mp.channel = hash;
+        if (channels.isAEADEnabled(chIndex)) {
+            // Same AES-CCM as Router on an AEAD channel, or receivers reject it
+            if (numBytes + MESHTASTIC_AEAD_OVERHEAD > sizeof(mp.encrypted.bytes) ||
+                !crypto->encryptPacketCCM(channels.getKey(chIndex), mp.from, mp.to, mp.id, numBytes, scratch,
+                                          mp.encrypted.bytes)) {
+                LOG_WARN("MQTT publishOwnPacket: AEAD encryption failed, drop");
+                return false;
+            }
+            mp.encrypted.size = numBytes + MESHTASTIC_AEAD_OVERHEAD;
+        } else {
+            crypto->encryptPacket(mp.from, mp.id, numBytes, scratch);
+            memcpy(mp.encrypted.bytes, scratch, numBytes);
+            mp.encrypted.size = numBytes;
+        }
+        mp.which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
+    }
+
+    std::string nodeId = nodeDB->getNodeId();
+    const meshtastic_ServiceEnvelope env = {
+        .packet = &mp, .channel_id = const_cast<char *>(channelId), .gateway_id = const_cast<char *>(nodeId.c_str())};
+    const size_t numBytes = pb_encode_to_bytes(bytes, sizeof(bytes), &meshtastic_ServiceEnvelope_msg, &env);
+    if (topicRoot != moduleConfig.mqtt.root)
+        reinitTopics();
+    const std::string topic = cryptTopic + channelId + "/" + nodeId;
+    LOG_DEBUG("MQTT publish own packet to %s, %u bytes", topic.c_str(), (unsigned)numBytes);
+    return publish(topic.c_str(), bytes, numBytes, false);
 }

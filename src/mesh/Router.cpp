@@ -1605,8 +1605,8 @@ void Router::dispatchReceived(meshtastic_MeshPacket *p, RxSource src)
         if (shouldIgnoreNonstandardPorts && p->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
             !IS_ONE_OF(p->decoded.portnum, meshtastic_PortNum_TEXT_MESSAGE_APP, meshtastic_PortNum_TEXT_MESSAGE_COMPRESSED_APP,
                        meshtastic_PortNum_POSITION_APP, meshtastic_PortNum_NODEINFO_APP, meshtastic_PortNum_ROUTING_APP,
-                       meshtastic_PortNum_TELEMETRY_APP, meshtastic_PortNum_ADMIN_APP, meshtastic_PortNum_ALERT_APP,
-                       meshtastic_PortNum_KEY_VERIFICATION_APP, meshtastic_PortNum_WAYPOINT_APP,
+                       meshtastic_PortNum_TELEMETRY_APP, meshtastic_PortNum_TELEMETRY_HISTORY_APP, meshtastic_PortNum_ADMIN_APP,
+                       meshtastic_PortNum_ALERT_APP, meshtastic_PortNum_KEY_VERIFICATION_APP, meshtastic_PortNum_WAYPOINT_APP,
                        meshtastic_PortNum_STORE_FORWARD_APP, meshtastic_PortNum_TRACEROUTE_APP,
                        meshtastic_PortNum_STORE_FORWARD_PLUSPLUS_APP)) {
             LOG_DEBUG("Ignore packet on non-standard portnum for CORE_PORTNUMS_ONLY");

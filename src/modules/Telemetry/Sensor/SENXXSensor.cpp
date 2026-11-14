@@ -8,6 +8,7 @@
 #include "SPILock.h"
 #include "SafeFile.h"
 #include "TelemetrySensor.h"
+#include "Throttle.h"
 #include <float.h> // FLT_MAX
 #include <pb_decode.h>
 #include <pb_encode.h>
@@ -1026,6 +1027,13 @@ int32_t SENXXSensor::wakeUpTimeMs()
     return SENXX_PM_WARMUP_MS_2;
 }
 
+// getMeasurements() refuses data within SENXX_POLL_INTERVAL of the last poll, so ready is not ready before that
+uint32_t SENXXSensor::pendingPollMs(uint32_t now)
+{
+    const uint32_t sincePoll = now - lastDataPoll;
+    return lastDataPoll && sincePoll < SENXX_POLL_INTERVAL ? SENXX_POLL_INTERVAL - sincePoll : 0;
+}
+
 int32_t SENXXSensor::pendingForReadyMs()
 {
 #ifdef SENXX_I2C_CLOCK_SPEED
@@ -1048,28 +1056,38 @@ int32_t SENXXSensor::pendingForReadyMs()
             return SENXX_PM_WARMUP_MS_1 - sincePmMeasureStarted;
         }
 
-        // Get PN values to check if we are above or below threshold
-        readPNValues(true);
-        lastDataPoll = now;
+        // Get PN values to check if we are above or below threshold, once per measurement: polling again
+        // on every call would keep the next read inside SENXX_POLL_INTERVAL forever. Polled in this
+        // measurement = polled after its first warm-up; unsigned ages, so it holds however long it runs.
+        const bool pnPolled =
+            lastDataPoll && Throttle::isWithinTimespanMs(lastDataPoll, sincePmMeasureStarted - SENXX_PM_WARMUP_MS_1 + 1);
+        if (!pnPolled) {
+            if (readPNValues(true)) {
+                lastDataPoll = now;
+            } else if (sincePmMeasureStarted < SENXX_PM_WARMUP_MS_2) {
+                // Unknown concentration: retry, and never read before the full warm-up
+                return min((uint32_t)SENXX_POLL_INTERVAL, SENXX_PM_WARMUP_MS_2 - sincePmMeasureStarted);
+            }
+        }
 
         // If the reading is low (the threshold is in #/cm3) and second warmUp hasn't passed we return to come back later
         if ((senxxmeasurement.pN4p0 / 100) < SENXX_PN4P0_CONC_THD && sincePmMeasureStarted < SENXX_PM_WARMUP_MS_2) {
             state = SENXX_MEASUREMENT_2;
             // Report how many seconds are pending to cover the first warm up period
-            return SENXX_PM_WARMUP_MS_2 - sincePmMeasureStarted;
+            return max(SENXX_PM_WARMUP_MS_2 - sincePmMeasureStarted, pendingPollMs(now));
         }
         // CO2 sensor has an additional warmup time
         if (hasCO2 && sincePmMeasureStarted < SEN6X_CO2_WARMUP_MS) {
-            return SEN6X_CO2_WARMUP_MS - sincePmMeasureStarted;
+            return max(SEN6X_CO2_WARMUP_MS - sincePmMeasureStarted, pendingPollMs(now));
         }
-        return 0;
+        return pendingPollMs(now);
     }
     case SENXX_MEASUREMENT_2: {
         if (sincePmMeasureStarted < SENXX_PM_WARMUP_MS_2) {
             // Report how many seconds are pending to cover the first warm up period
             return SENXX_PM_WARMUP_MS_2 - sincePmMeasureStarted;
         }
-        return 0;
+        return pendingPollMs(now);
     }
     case SENXX_CLEANING: {
         uint32_t sinceCleaningStarted = now - cleaningStarted;

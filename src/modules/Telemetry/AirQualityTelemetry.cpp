@@ -7,13 +7,23 @@
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "AirQualityTelemetry.h"
 #include "Default.h"
+#include "FSCommon.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include "Router.h"
+#include "TelemetryPublish.h"
+#include "TelemetrySensorPower.h"
 #include "TransmitHistory.h"
 #include "UnitConversions.h"
 #include "detect/ScanI2CTwoWire.h"
+// SENSOR role keeps its readings in a file, so a batch survives reboot and deep sleep. Not on STM32: tiny flash.
+#if !defined(AIR_QUALITY_TELEMETRY_HISTORY_PATH) && defined(FSCom) && !defined(ARCH_STM32)
+#define AIR_QUALITY_TELEMETRY_HISTORY_PATH "/prefs/aq_history.bin"
+#endif
+#ifdef AIR_QUALITY_TELEMETRY_HISTORY_PATH
+#include "FileTelemetryStore.h"
+#endif
 #include "gps/RTC.h"
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
@@ -146,10 +156,7 @@ int32_t AirQualityTelemetryModule::runOnce()
         if (shouldDeferDeepSleep())
             return PREFLIGHT_SLEEP_RETRY_MS;
         sleepOnNextExecution = false;
-        uint32_t nightyNightMs = Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.air_quality_interval,
-                                                                   default_telemetry_broadcast_interval_secs);
-        LOG_DEBUG("Sleep %ims until next send", nightyNightMs);
-        doDeepSleep(nightyNightMs, true, false);
+        enterSharedDeepSleep(); // returns only when a read or publish is too close to be worth sleeping
     }
 
     uint32_t result = UINT32_MAX;
@@ -157,8 +164,11 @@ int32_t AirQualityTelemetryModule::runOnce()
     if (!(moduleConfig.telemetry.air_quality_enabled || moduleConfig.telemetry.air_quality_screen_enabled ||
           AIR_QUALITY_TELEMETRY_MODULE_ENABLE)) {
         // If this module is not enabled, and the user doesn't want the display screen don't waste any OSThread time on it
-        return disable();
+        return disableTelemetry();
     }
+
+    if (!history)
+        return disableTelemetry();
 
     if (firstTime) {
         // This is the first time the OSThread library has called this function, so
@@ -180,124 +190,209 @@ int32_t AirQualityTelemetryModule::runOnce()
             }
         }
 
+        if (restoreScheduleAfterSleep(TELEMETRY_SLEEP_SLOT_AIR_QUALITY, schedule))
+            LOG_DEBUG("AQ: schedule restored after deep sleep");
+        seedLatestFromHistory();
+
         // it's possible to have this module enabled, only for displaying values on the screen.
-        // therefore, we should only enable the sensor loop if measurement is also enabled
-        return result == UINT32_MAX ? disable() : setStartDelay();
-    } else {
-        // if we somehow got to a second run of this module with measurement disabled, then just wait forever
-        if (!moduleConfig.telemetry.air_quality_enabled && !AIR_QUALITY_TELEMETRY_MODULE_ENABLE) {
-            return disable();
-        }
+        // therefore, we should only enable the sensor loop if measurement is also enabled.
+        // A power-saving SENSOR woke up for this read, so it does not wait out the broadcast spacing.
+        if (result == UINT32_MAX)
+            return disableTelemetry();
+        measuring = true;
+        return isPowerSavingSensor() ? result : setStartDelay();
+    }
 
-        uint32_t telemetryIntervalMs = Default::getConfiguredOrDefaultMsScaled(
-            moduleConfig.telemetry.air_quality_interval, default_telemetry_broadcast_interval_secs, numOnlineNodes);
+    // if we somehow got to a second run of this module with measurement disabled, then just wait forever
+    if (!moduleConfig.telemetry.air_quality_enabled && !AIR_QUALITY_TELEMETRY_MODULE_ENABLE) {
+        measuring = false;
+        return disableTelemetry();
+    }
 
-        uint32_t lastTelemetry =
-            transmitHistory ? transmitHistory->getLastSentToMeshMillis(TX_HISTORY_KEY_AIR_QUALITY_TELEMETRY) : 0;
+    const TelemetryCadence c = cadence();
+    const bool phoneConnected = service->api_state != MeshService::STATE_DISCONNECTED && !isPowerSavingSensor();
+    uint32_t nowMs = Time::getMillis();
 
-        bool telemetryAllowed =
-            airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR) &&
-            airTime->isTxAllowedAirUtil();
+    const uint32_t msUntilRead = schedule.msUntilRead(nowMs, c, phoneConnected);
+    const uint32_t waitMs = prepareSensorsForRead(sensors, msUntilRead);
+    warmingUp = msUntilRead == 0 && waitMs > 0;
+    if (warmingUp) {
+        LOG_DEBUG("AQ: sensors warming up, %ums", (unsigned)waitMs);
+        return waitMs;
+    }
 
-        bool phoneAllowed = service->isToPhoneQueueEmpty();
+    if (msUntilRead == 0) {
+        captureReading(nowMs, c, phoneConnected);
+        nowMs = Time::getMillis();
+        sleepSensorsUntilNextRead(sensors, schedule.msUntilRead(nowMs, c, phoneConnected));
+    }
 
-        // Wake up the sensor in either one of these conditions:
-        // - We can publish the data on the mesh shortly
-        // - Or we can send it to the phone
-        // TODO: This will need to be refurbished once we implement separate intervals
-        LOG_INFO("Waking sensors");
-        for (TelemetrySensor *sensor : sensors) {
-            if (!sensor->canSleep()) {
-                LOG_DEBUG("%s: no sleep support, skip", sensor->sensorName);
-                continue;
-            }
+    const uint32_t lastMesh = lastMeshMs();
+    const bool meshAllowed = airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR) &&
+                             airTime->isTxAllowedAirUtil();
+    const bool meshDue = schedule.meshDue(nowMs, lastMesh, c) && !schedule.storedReadSoon(nowMs, c);
 
-            bool telemetryDue = (lastTelemetry == 0) ||
-                                !Throttle::isWithinTimespanMs(lastTelemetry - sensor->wakeUpTimeMs(), telemetryIntervalMs);
-
-            bool phoneDue = (lastSentToPhone == 0) ||
-                            !Throttle::isWithinTimespanMs(lastSentToPhone - sensor->wakeUpTimeMs(), sendToPhoneIntervalMs);
-
-            bool shouldWake = (telemetryDue && telemetryAllowed) || (phoneDue && phoneAllowed);
-
-            if (!shouldWake) {
-                continue;
-            }
-
-            if (!sensor->isActive()) {
-                LOG_DEBUG("Waking %s", sensor->sensorName);
-                if (awakeAheadOfTimeMs == 0)
-                    startAirQualityTelemetryCycle = millis();
-                awakeAheadOfTimeMs = max(awakeAheadOfTimeMs, sensor->wakeUpTimeMs());
-                // TODO multiple sensors with different wake up times collide
-                return sensor->wakeUp();
-            }
-
-            int32_t pending = sensor->pendingForReadyMs();
-            if (pending) {
-                LOG_DEBUG("%s pending %dms", sensor->sensorName, pending);
-                return pending;
-            }
-        }
-
-        bool telemetryDue = (lastTelemetry == 0) || !Throttle::isWithinTimespanMs(lastTelemetry, telemetryIntervalMs);
-        bool phoneDue = (lastSentToPhone == 0) || !Throttle::isWithinTimespanMs(lastSentToPhone, sendToPhoneIntervalMs);
-
-        if (telemetryDue && telemetryAllowed) {
-            if (sendTelemetry()) {
-                if (transmitHistory) {
-                    transmitHistory->setLastSentToMesh(TX_HISTORY_KEY_AIR_QUALITY_TELEMETRY);
-                }
-                // Correct the awake time, trimming to 0
-                const unsigned long elapsed = millis() - startAirQualityTelemetryCycle;
-                awakeAheadOfTimeMs = elapsed >= awakeAheadOfTimeMs ? 0 : awakeAheadOfTimeMs - elapsed;
-                // LOG_DEBUG("Time to publish. Correcting ahead of time by: %d", awakeAheadOfTimeMs);
-            } else {
-                awakeAheadOfTimeMs = 0;
-            }
-        } else if (phoneDue && phoneAllowed) {
-            // Mesh transmission isn't due yet, but we can still update the phone.
-            if (sendTelemetry(NODENUM_BROADCAST, true)) {
-                lastSentToPhone = Time::skipZero(Time::getMillis());
-                // Correct the awake time, trimming to 0
-                const unsigned long elapsed = millis() - startAirQualityTelemetryCycle;
-                awakeAheadOfTimeMs = elapsed >= awakeAheadOfTimeMs ? 0 : awakeAheadOfTimeMs - elapsed;
-                // LOG_DEBUG("Time to publish. Correcting ahead of time by: %d", awakeAheadOfTimeMs);
-            } else {
-                awakeAheadOfTimeMs = 0;
-            }
+    if (meshDue) {
+        bool sent = false;
+        if (shouldSendToMesh(history->hasUnpublishedNewest(TELEMETRY_PUBLISHED_MESH), meshDue, meshAllowed))
+            sent = c.batchReadings ? sendBufferedTelemetry() : sendTelemetry(NODENUM_BROADCAST, false);
+        if (sent) {
+            schedule.onMeshSent(nowMs);
+            noteSentToMesh();
+            if (transmitHistory)
+                transmitHistory->setLastSentToMesh(TX_HISTORY_KEY_AIR_QUALITY_TELEMETRY);
         } else {
-            // if for some reason we end up here after waking up, but not able to send, then reset
-            // the counter
-            awakeAheadOfTimeMs = 0;
-        }
-
-        // Send to sleep sensors that can be to save power
-        for (TelemetrySensor *sensor : sensors) {
-            LOG_DEBUG("Checking if %s can be sent to sleep", sensor->sensorName);
-            if (sensor->isActive() && sensor->canSleep()) {
-                if (sensor->wakeUpTimeMs() < (int32_t)telemetryIntervalMs) {
-                    LOG_DEBUG("Disabling %s until next period", sensor->sensorName);
-                    sensor->sleep();
-                } else {
-                    LOG_DEBUG("Sensor stays enabled due to warm up period");
-                }
-            }
+            LOG_DEBUG("AQ: mesh due, %s, retry later", meshAllowed ? "nothing new to send" : "airtime limit");
+            schedule.onMeshSkipped(nowMs,
+                                   meshAllowed ? schedule.meshRetryWhenEmpty(nowMs, c) : TelemetryScheduler::MESH_RETRY_MS);
         }
     }
-    if (sleepOnNextExecution) {
-        // Honor the pre-sleep grace period armed in sendTelemetry(): OSThread reschedules with
-        // this return value, which would otherwise override setIntervalFromNow() and delay or
-        // mistime the pending deep sleep
+
+    // SENSOR role: readings the broker has not had, straight to it without going on air.
+    // Unreachable broker: the readings stay pending for MQTT. Awake, that counts as an attempt so the due
+    // uplink does not spin; on reads, the next read's wake-up tries again.
+    if (schedule.mqttDue(nowMs, c)) {
+        if (telemetryMqttUplinkAvailable()) {
+            if (c.batchReadings)
+                sendTelemetryBatch(*history, allocDataPacket(), TELEMETRY_PUBLISHED_MQTT);
+            else
+                publishTelemetryReadings(*history, [this](const meshtastic_Telemetry &t) { return allocDataProtobuf(t); });
+            schedule.onMqttPublished(nowMs);
+        } else if (!c.publishOnReads) {
+            schedule.onMqttPublished(nowMs);
+        }
+    }
+
+    if (isPowerSavingSensor() && sharedSleepBudgetMs() >= TELEMETRY_MIN_DEEP_SLEEP_MS) {
+        // Grace period so the queued packet leaves before the radio is powered down
+        sleepOnNextExecution = true;
+        preflightSleepDeferrals = 0;
+        LOG_DEBUG("Start next execution in 5s, then sleep");
         return FIVE_SECONDS_MS;
     }
 
-    // Update next interval if we were ahead
-    uint32_t correctedIntervalMs = sendToPhoneIntervalMs + awakeAheadOfTimeMs;
-    awakeAheadOfTimeMs = 0;
-    startAirQualityTelemetryCycle = 0;
-    LOG_DEBUG("Corrected interval in ms: %u", correctedIntervalMs);
-    return min(correctedIntervalMs, result);
+    nowMs = Time::getMillis();
+    const uint32_t nextMs = schedule.msUntilNextAction(nowMs, c, phoneConnected, lastMeshMs(), sensorWakeLeadMs(sensors));
+    const uint32_t nextWakeMs = prepareSensorsForRead(sensors, schedule.msUntilRead(nowMs, c, phoneConnected));
+    return max((uint32_t)DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS, min(nextMs, nextWakeMs));
+}
+
+TelemetryCadence AirQualityTelemetryModule::cadence() const
+{
+    const uint32_t meshSecs = moduleConfig.telemetry.air_quality_interval;
+    TelemetryCadence c;
+    c.meshMs = Default::getConfiguredOrDefaultMsScaled(meshSecs, default_telemetry_broadcast_interval_secs, numOnlineNodes,
+                                                       TrafficType::TELEMETRY);
+    // Unset: read as often as the mesh publishes, as before the read interval existed
+    const uint32_t readSecs = moduleConfig.telemetry.air_quality_telemetry_read_interval;
+    c.readMs =
+        readSecs
+            ? Default::getConfiguredOrDefaultMs(Default::getConfiguredOrMinimumValue(readSecs, min_telemetry_read_interval_secs))
+            : Default::getConfiguredOrDefaultMs(meshSecs, default_telemetry_broadcast_interval_secs);
+    c.phoneMs = Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.air_quality_phone_interval,
+                                                  default_telemetry_phone_interval_secs);
+    // Deep sleeping, each uplink costs a Wi-Fi join: batch it like the mesh, on the read wake-ups
+    c.publishOnReads = isPowerSavingSensor();
+    c.mqttMs = config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR && moduleConfig.mqtt.telemetry_uplink_enabled
+                   ? (c.publishOnReads ? c.meshMs : c.readMs)
+                   : 0;
+    // A SENSOR batches only when it reads more often than it publishes; otherwise each reading goes out
+    // on its own as Telemetry, which every client and node already understands
+    c.batchReadings = config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR && c.readMs < c.meshMs;
+    return c;
+}
+
+uint32_t AirQualityTelemetryModule::lastMeshMs() const
+{
+    return schedule.lastMeshMs(transmitHistory ? transmitHistory->getLastSentToMeshMillis(TX_HISTORY_KEY_AIR_QUALITY_TELEMETRY)
+                                               : 0);
+}
+
+bool AirQualityTelemetryModule::shouldSendToMesh(bool haveUnsentReading, bool meshDue, bool meshAllowed)
+{
+    return meshDue && meshAllowed && haveUnsentReading;
+}
+
+uint32_t AirQualityTelemetryModule::msUntilNeededAwake()
+{
+    if (!measuring)
+        return UINT32_MAX;
+    return schedule.msUntilNextAction(Time::getMillis(), cadence(), false, lastMeshMs(), sensorWakeLeadMs(sensors));
+}
+
+bool AirQualityTelemetryModule::isTelemetryBusy()
+{
+    // Not yet initialised: it may still want a read before the node sleeps
+    return warmingUp || (firstTime && (moduleConfig.telemetry.air_quality_enabled || AIR_QUALITY_TELEMETRY_MODULE_ENABLE));
+}
+
+void AirQualityTelemetryModule::onTelemetryDeepSleep(uint32_t sleepMs)
+{
+    sleepSensorsUntilNextRead(sensors, sleepMs);
+    saveScheduleForSleep(TELEMETRY_SLEEP_SLOT_AIR_QUALITY, schedule);
+}
+
+void AirQualityTelemetryModule::openHistory()
+{
+#ifdef AIR_QUALITY_TELEMETRY_HISTORY_PATH
+    // A SENSOR batches between publishes, so its readings have to outlive a reboot or deep sleep
+    if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR) {
+        auto *persistent = makeFileTelemetryStore<meshtastic_AirQualityMetrics>(
+            AIR_QUALITY_TELEMETRY_HISTORY_PATH, AIR_QUALITY_TELEMETRY_HISTORY_SIZE, AIR_QUALITY_TELEMETRY_HISTORY_FS);
+        if (persistent && persistent->isUsable()) {
+            history.reset(persistent);
+            return;
+        }
+
+        // No card, full filesystem, whatever: measuring into RAM beats not measuring
+        delete persistent;
+        LOG_WARN("AQ history: %s unusable, keeping readings in RAM", AIR_QUALITY_TELEMETRY_HISTORY_PATH);
+    }
+#endif
+
+    history.reset(new (std::nothrow) RamTelemetryStore<meshtastic_AirQualityMetrics>(AIR_QUALITY_TELEMETRY_HISTORY_SIZE));
+    if (!history)
+        LOG_ERROR("AQ history: no memory for a store, telemetry disabled");
+}
+
+bool AirQualityTelemetryModule::storeReading(const meshtastic_AirQualityMetrics &metrics, uint32_t time, uint32_t deltaSecs)
+{
+    return storeWithRamFallback(history, AIR_QUALITY_TELEMETRY_HISTORY_SIZE, metrics, time, deltaSecs, "AQ");
+}
+
+void AirQualityTelemetryModule::seedLatestFromHistory()
+{
+    // So a request right after boot or a wake-up is answered before the first read
+    TelemetryReading<meshtastic_AirQualityMetrics> reading;
+    if (hasLatest || !history->newest(reading))
+        return;
+    latest = toTelemetry(reading);
+    hasLatest = true;
+    rememberForScreen(latest);
+}
+
+void AirQualityTelemetryModule::captureReading(uint32_t nowMs, const TelemetryCadence &cadence, bool phoneConnected)
+{
+    const bool onCadence = schedule.readIsStored(nowMs, cadence);
+    bool stored = onCadence;
+    meshtastic_Telemetry m = meshtastic_Telemetry_init_zero;
+    const bool valid = getAirQualityTelemetry(&m);
+
+    if (valid) {
+        latest = m;
+        hasLatest = true;
+        rememberForScreen(m);
+        if (stored)
+            stored = storeReading(m.variant.air_quality_metrics, m.time, schedule.deltaSecs(nowMs));
+        LOG_INFO("AQ: read %s, %u stored", stored ? "stored" : "for phone", (unsigned)history->size());
+    } else {
+        LOG_WARN("AQ read failed, keep the previous reading");
+    }
+    // A reading the store refused does not count as the previous one for deltaSecs
+    schedule.onRead(nowMs, onCadence, valid && stored, cadence.readMs, sharedReadAnchorMs(this));
+
+    if (valid && phoneConnected && service->isToPhoneQueueEmpty() && sendTelemetry(NODENUM_BROADCAST, true) && stored)
+        history->markNewestPublished(TELEMETRY_PUBLISHED_PHONE);
 }
 
 bool AirQualityTelemetryModule::wantUIFrame()
@@ -442,7 +537,8 @@ bool AirQualityTelemetryModule::getAirQualityTelemetry(meshtastic_Telemetry *m)
     // There, if any sensor fails to read - valid = false.
     bool valid = false;
     bool hasSensor = false;
-    m->time = getTime();
+    // getTime() falls back to uptime-as-epoch when unset; 0 lets the receiver use its rx time
+    m->time = getValidTime(RTCQualityDevice);
     m->which_variant = meshtastic_Telemetry_air_quality_metrics_tag;
     m->variant.air_quality_metrics = meshtastic_AirQualityMetrics_init_zero;
 
@@ -478,109 +574,130 @@ meshtastic_MeshPacket *AirQualityTelemetryModule::allocReply()
         }
         // Check for a request for air quality metrics
         if (decoded->which_variant == meshtastic_Telemetry_air_quality_metrics_tag) {
-            meshtastic_Telemetry m = meshtastic_Telemetry_init_zero;
-            if (getAirQualityTelemetry(&m)) {
-                LOG_INFO("Air quality telemetry reply to request");
-                return allocDataProtobuf(m);
-            } else {
+            // From the last read: reading here would block on I2C and return nothing useful while
+            // the sensors are asleep or warming up
+            if (!hasLatest) {
+                LOG_INFO("No air quality reading yet, no reply to request");
                 return NULL;
             }
+            LOG_INFO("Air quality telemetry reply to request");
+            return allocDataProtobuf(latest);
         }
     }
     return NULL;
 }
 
+void AirQualityTelemetryModule::logTelemetry(const meshtastic_Telemetry &m)
+{
+    const auto &a = m.variant.air_quality_metrics;
+
+    if (a.has_pm10_standard || a.has_pm25_standard || a.has_pm100_standard || a.has_pm10_environmental ||
+        a.has_pm25_environmental || a.has_pm100_environmental) {
+        LOG_INFO("Send: pm10_standard=%u, pm25_standard=%u, pm100_standard=%u", a.pm10_standard, a.pm25_standard,
+                 a.pm100_standard);
+        if (a.has_pm10_environmental)
+            LOG_INFO("pm10_environmental=%u, pm25_environmental=%u, pm100_environmental=%u", a.pm10_environmental,
+                     a.pm25_environmental, a.pm100_environmental);
+    }
+
+    if (a.has_co2 || a.has_co2_temperature || a.has_co2_humidity)
+        LOG_INFO("Send: co2=%i, co2_t=%.2f, co2_rh=%.2f", a.co2, a.co2_temperature, a.co2_humidity);
+
+    if (a.has_form_formaldehyde || a.has_form_temperature || a.has_form_humidity)
+        LOG_INFO("Send: hcho=%.2f, hcho_t=%.2f, hcho_rh=%.2f", a.form_formaldehyde, a.form_temperature, a.form_humidity);
+}
+
 bool AirQualityTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
 {
     meshtastic_Telemetry m = meshtastic_Telemetry_init_zero;
-    m.which_variant = meshtastic_Telemetry_air_quality_metrics_tag;
-    m.time = getTime();
+    if (phoneOnly) {
+        // The phone gets every read, stored or not
+        if (!hasLatest)
+            return false;
+        m = latest;
+    } else {
+        // One fetch then check the mask: on a file-backed store each read costs an open
+        TelemetryReading<meshtastic_AirQualityMetrics> reading;
+        if (!history->newest(reading) || (reading.publishedMask & TELEMETRY_PUBLISHED_MESH))
+            return false;
+        m.which_variant = meshtastic_Telemetry_air_quality_metrics_tag;
+        m.time = reading.time;
+        m.variant.air_quality_metrics = reading.metrics;
+    }
 
-    bool validTelemetry = getAirQualityTelemetry(&m);
-    if (validTelemetry) {
+    logTelemetry(m);
 
-        bool hasAnyPM =
-            m.variant.air_quality_metrics.has_pm10_standard || m.variant.air_quality_metrics.has_pm25_standard ||
-            m.variant.air_quality_metrics.has_pm100_standard || m.variant.air_quality_metrics.has_pm10_environmental ||
-            m.variant.air_quality_metrics.has_pm25_environmental || m.variant.air_quality_metrics.has_pm100_environmental;
+    meshtastic_MeshPacket *p = allocDataProtobuf(m);
+    if (!p)
+        return false;
+    p->to = dest;
+    p->decoded.want_response = false;
+    p->priority = config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR ? meshtastic_MeshPacket_Priority_RELIABLE
+                                                                                   : meshtastic_MeshPacket_Priority_BACKGROUND;
 
-        if (hasAnyPM) {
-            LOG_INFO("Send: pm10_standard=%u, pm25_standard=%u, pm100_standard=%u", m.variant.air_quality_metrics.pm10_standard,
-                     m.variant.air_quality_metrics.pm25_standard, m.variant.air_quality_metrics.pm100_standard);
-            if (m.variant.air_quality_metrics.has_pm10_environmental)
-                LOG_INFO("pm10_environmental=%u, pm25_environmental=%u, pm100_environmental=%u",
-                         m.variant.air_quality_metrics.pm10_environmental, m.variant.air_quality_metrics.pm25_environmental,
-                         m.variant.air_quality_metrics.pm100_environmental);
-        }
+    if (phoneOnly) {
+        LOG_INFO("Sending packet to phone");
+        service->sendToPhone(p);
+        return true;
+    }
 
-        bool hasAnyCO2 = m.variant.air_quality_metrics.has_co2 || m.variant.air_quality_metrics.has_co2_temperature ||
-                         m.variant.air_quality_metrics.has_co2_humidity;
+    LOG_INFO("Sending packet to mesh");
+    const ErrorCode res = service->sendToMesh(p, RX_SRC_LOCAL, true);
+    if (res != ERRNO_OK) {
+        LOG_WARN("AQ: mesh refused the reading (%d), keep it for later", res);
+        return false;
+    }
+    history->markNewestPublished(TELEMETRY_PUBLISHED_MESH);
+    // ccToPhone above hands the phone this very reading, no separate phone send needed
+    history->markNewestPublished(TELEMETRY_PUBLISHED_PHONE);
+    notifySleepAfterSend();
+    return true;
+}
 
-        if (hasAnyCO2) {
-            LOG_INFO("Send: co2=%i, co2_t=%.2f, co2_rh=%.2f", m.variant.air_quality_metrics.co2,
-                     m.variant.air_quality_metrics.co2_temperature, m.variant.air_quality_metrics.co2_humidity);
-        }
-
-        bool hasAnyHCHO = m.variant.air_quality_metrics.has_form_formaldehyde ||
-                          m.variant.air_quality_metrics.has_form_temperature || m.variant.air_quality_metrics.has_form_humidity;
-
-        if (hasAnyHCHO) {
-            LOG_INFO("Send: hcho=%.2f, hcho_t=%.2f, hcho_rh=%.2f", m.variant.air_quality_metrics.form_formaldehyde,
-                     m.variant.air_quality_metrics.form_temperature, m.variant.air_quality_metrics.form_humidity);
-        }
-
-        meshtastic_MeshPacket *p = allocDataProtobuf(m);
-        if (!p) {
-            validTelemetry = false;
-        } else {
-            p->to = dest;
+bool AirQualityTelemetryModule::sendBufferedTelemetry()
+{
+    if (sendTelemetryBatch(*history, allocDataPacket(), TELEMETRY_PUBLISHED_MESH) == 0)
+        return false;
+    // TOFIX(3.0): the newest reading also goes out alone as Telemetry, for the clients, NodeDB caches, screens
+    // and maps that only read TELEMETRY_APP. Drop it once TELEMETRY_HISTORY_APP is understood everywhere.
+    // ccToPhone also hands it to a connected client, which never gets the batch.
+    TelemetryReading<meshtastic_AirQualityMetrics> newest;
+    if (history->newest(newest)) {
+        meshtastic_MeshPacket *p = allocDataProtobuf(toTelemetry(newest));
+        if (p) {
+            p->to = NODENUM_BROADCAST;
             p->decoded.want_response = false;
-            if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR)
-                p->priority = meshtastic_MeshPacket_Priority_RELIABLE;
-            else
-                p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
-
-            // release previous packet before occupying a new spot
-            if (lastMeasurementPacket != nullptr)
-                packetPool.release(lastMeasurementPacket);
-
-            lastMeasurementPacket = packetPool.allocCopy(*p);
-            if (phoneOnly) {
-                LOG_INFO("Sending packet to phone");
-                service->sendToPhone(p);
-            } else {
-                LOG_INFO("Sending packet to mesh");
-                service->sendToMesh(p, RX_SRC_LOCAL, true);
-
-                if (isPowerSavingSensor()) {
-                    meshtastic_ClientNotification *notification = clientNotificationPool.allocZeroed();
-                    if (notification) {
-                        notification->level = meshtastic_LogRecord_Level_INFO;
-                        notification->type = meshtastic_ClientNotification_NotificationType_TELEMETRY_SENT_SLEEPING;
-                        notification->time = getValidTime(RTCQualityFromNet);
-                        sprintf(notification->message, "Sending telemetry and sleeping for %us interval in a moment",
-                                Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.air_quality_interval,
-                                                                  default_telemetry_broadcast_interval_secs) /
-                                    1000U);
-                        service->sendClientNotification(notification);
-                    }
-                }
-            }
+            p->priority = meshtastic_MeshPacket_Priority_RELIABLE;
+            if (service->sendToMesh(p, RX_SRC_LOCAL, true) == ERRNO_OK)
+                history->markNewestPublished(TELEMETRY_PUBLISHED_PHONE);
         }
     }
+    notifySleepAfterSend();
+    return true;
+}
 
-    // Arm the pre-sleep sequence even when no valid reading was available this cycle: a
-    // power-saving SENSOR node must still return to deep sleep, otherwise it stays awake
-    // until the next telemetry interval and drains its battery
-    if (!phoneOnly && isPowerSavingSensor()) {
-        if (!validTelemetry)
-            LOG_WARN("AQ telemetry unavailable, sleep without send");
-        sleepOnNextExecution = true;
-        preflightSleepDeferrals = 0;
-        LOG_DEBUG("Start next execution in 5s, then sleep");
-        setIntervalFromNow(FIVE_SECONDS_MS);
-    }
-    return validTelemetry;
+void AirQualityTelemetryModule::rememberForScreen(const meshtastic_Telemetry &m)
+{
+    meshtastic_MeshPacket *p = allocDataProtobuf(m);
+    if (!p)
+        return;
+    if (lastMeasurementPacket != nullptr)
+        packetPool.release(lastMeasurementPacket);
+    lastMeasurementPacket = p;
+}
+
+void AirQualityTelemetryModule::notifySleepAfterSend()
+{
+    if (!isPowerSavingSensor())
+        return;
+    meshtastic_ClientNotification *notification = clientNotificationPool.allocZeroed();
+    if (!notification)
+        return;
+    notification->level = meshtastic_LogRecord_Level_INFO;
+    notification->type = meshtastic_ClientNotification_NotificationType_TELEMETRY_SENT_SLEEPING;
+    notification->time = getValidTime(RTCQualityFromNet);
+    snprintf(notification->message, sizeof(notification->message), "Sending telemetry and sleeping until the next read");
+    service->sendClientNotification(notification);
 }
 
 AdminMessageHandleResult AirQualityTelemetryModule::handleAdminMessageForModule(const meshtastic_MeshPacket &mp,
