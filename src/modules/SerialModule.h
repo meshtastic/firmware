@@ -33,7 +33,7 @@ class SerialModule : public StreamAPI, private concurrency::OSThread
 
   private:
     uint32_t getBaudRate();
-    void sendTelemetry(meshtastic_Telemetry m, bool phoneOnly = false);
+    void sendTelemetry(meshtastic_Telemetry m);
     void processWXSerial();
     void processVEDirectSerial();
 };
