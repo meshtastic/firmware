@@ -4,6 +4,7 @@
 
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "INA219Sensor.h"
+#include "INA219Telemetry.h"
 #include "TelemetrySensor.h"
 #include <Adafruit_INA219.h>
 
@@ -32,12 +33,7 @@ void INA219Sensor::setup() {}
 
 bool INA219Sensor::getMetrics(meshtastic_Telemetry *measurement)
 {
-    measurement->variant.environment_metrics.has_voltage = true;
-    measurement->variant.environment_metrics.has_current = true;
-
-    measurement->variant.environment_metrics.voltage = ina219.getBusVoltage_V();
-    measurement->variant.environment_metrics.current = ina219.getCurrent_mA() * INA219_MULTIPLIER;
-    return true;
+    return readIna219Metrics(ina219, *measurement, INA219_MULTIPLIER);
 }
 
 uint16_t INA219Sensor::getBusVoltageMv()
