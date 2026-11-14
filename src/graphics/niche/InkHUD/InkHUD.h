@@ -77,6 +77,13 @@ class InkHUD
     void touchTap(uint16_t x, uint16_t y);
     void touchLongPress(uint16_t x, uint16_t y);
 
+    // Input from a client (AdminMessage.send_input_event), queued from any task and run on the Renderer thread.
+    // Directions are in the unrotated frame the client sees, so they skip the joystick's rotation.
+    enum class RemoteInput : uint8_t { SHORT, LONG, EXIT_SHORT, UP, DOWN, LEFT, RIGHT };
+    void queueRemoteInput(RemoteInput input);
+    void drainRemoteInput();
+    bool hasRemoteInput();
+
     // Freetext handlers
     void freeText(char c);
     void freeTextDone();
@@ -150,6 +157,11 @@ class InkHUD
     bool touchTimedOut = false;
     bool touchSleeping = false;
     void refreshTouchStatus(bool async = true);
+
+    static constexpr uint8_t REMOTE_INPUT_QUEUE = 8;
+    RemoteInput remoteInputs[REMOTE_INPUT_QUEUE] = {};
+    uint8_t remoteInputHead = 0;
+    uint8_t remoteInputCount = 0;
 };
 
 } // namespace NicheGraphics::InkHUD

@@ -674,7 +674,14 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #endif
 
 // Display mirroring to local clients (FromRadio.display_frame).
-#if HAS_SCREEN && !(MESHTASTIC_EXCLUDE_SCREEN_MIRROR)
+// InkHUD excludes Screen, so it is a second capture source with its own gate.
+#if defined(MESHTASTIC_INCLUDE_INKHUD) && !HAS_SCREEN && !(MESHTASTIC_EXCLUDE_SCREEN_MIRROR)
+#define HAS_INKHUD_MIRROR 1
+#else
+#define HAS_INKHUD_MIRROR 0
+#endif
+
+#if (HAS_SCREEN || HAS_INKHUD_MIRROR) && !(MESHTASTIC_EXCLUDE_SCREEN_MIRROR)
 #define HAS_SCREEN_MIRROR 1
 #else
 #define HAS_SCREEN_MIRROR 0

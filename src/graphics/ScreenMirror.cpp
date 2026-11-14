@@ -3,10 +3,12 @@
 #if HAS_SCREEN_MIRROR
 
 #include "DebugConfiguration.h"
-#include "Screen.h"
 #include "concurrency/LockGuard.h"
 #include "memory/MemAudit.h"
+#if HAS_SCREEN
+#include "Screen.h"
 #include <OLEDDisplay.h>
+#endif
 #include <cstring>
 
 #include "TFTColorRegions.h"
@@ -91,8 +93,12 @@ void ScreenMirror::kickCapture()
     if (muiRefresh)
         muiRefresh();
 #endif
+    if (captureKick)
+        captureKick();
+#if HAS_SCREEN
     if (screen)
         screen->kick();
+#endif
 }
 
 void ScreenMirror::subscribe()
@@ -162,6 +168,67 @@ void ScreenMirror::cursorAtHead(uint32_t &clientFrameId, uint16_t &clientOffset)
     clientOffset = frameSize;
 }
 
+bool ScreenMirror::wantsFrame()
+{
+    concurrency::LockGuard g(&lock);
+    return armedLocked() && !captureFailed;
+}
+
+// Sizes the snapshot for a w x h MONO_VLSB frame; false when there is nothing to capture into.
+bool ScreenMirror::prepareSnapshotLocked(uint16_t w, uint16_t h, bool &firstFrame, bool &geometryChanged)
+{
+    uint32_t fullSize = (uint32_t)w * ((h + 7) / 8);
+    if (fullSize == 0)
+        return false;
+    if (fullSize > UINT16_MAX) {
+        LOG_WARN("Screen mirror: %ux%u framebuffer too large to stream", w, h);
+        failCaptureLocked();
+        return false;
+    }
+    uint16_t size = (uint16_t)fullSize;
+
+    if (snapshot && size != frameSize) {
+        memaudit::add(kMemTag, -(int32_t)frameSize);
+        free(snapshot);
+        snapshot = nullptr;
+    }
+
+    firstFrame = !snapshot;
+    if (firstFrame) {
+        snapshot = (uint8_t *)malloc(size);
+        if (!snapshot) {
+            LOG_ERROR("Screen mirror: no memory for %u byte snapshot", size);
+            failCaptureLocked();
+            return false;
+        }
+        memaudit::add(kMemTag, size);
+        frameSize = size;
+    }
+    // a rotation can keep the byte size, so geometry is compared on its own
+    geometryChanged = w != width || h != height;
+    width = w;
+    height = h;
+    return true;
+}
+
+void ScreenMirror::onRenderedFill(uint16_t w, uint16_t h, FillFn fill, void *ctx)
+{
+    {
+        concurrency::LockGuard g(&lock);
+        if (!armedLocked() || captureFailed || !fill)
+            return;
+        bool firstFrame, geometryChanged;
+        if (!prepareSnapshotLocked(w, h, firstFrame, geometryChanged))
+            return;
+        fill(snapshot, w, h, ctx);
+        snapshotPaletteSig = paletteSig;
+        frameId++;
+        captureRequested = false;
+    }
+    frameReady.notifyObservers(FRAME_WAKE);
+}
+
+#if HAS_SCREEN
 void ScreenMirror::onRendered(OLEDDisplay *display)
 {
     {
@@ -171,39 +238,9 @@ void ScreenMirror::onRendered(OLEDDisplay *display)
         if (!display || !display->buffer)
             return;
 
-        uint16_t w = display->getWidth();
-        uint16_t h = display->getHeight();
-        uint32_t fullSize = (uint32_t)w * ((h + 7) / 8);
-        if (fullSize == 0)
+        bool firstFrame, geometryChanged;
+        if (!prepareSnapshotLocked(display->getWidth(), display->getHeight(), firstFrame, geometryChanged))
             return;
-        if (fullSize > UINT16_MAX) {
-            LOG_WARN("Screen mirror: %ux%u framebuffer too large to stream", w, h);
-            failCaptureLocked();
-            return;
-        }
-        uint16_t size = (uint16_t)fullSize;
-
-        if (snapshot && size != frameSize) {
-            memaudit::add(kMemTag, -(int32_t)frameSize);
-            free(snapshot);
-            snapshot = nullptr;
-        }
-
-        bool firstFrame = !snapshot;
-        if (firstFrame) {
-            snapshot = (uint8_t *)malloc(size);
-            if (!snapshot) {
-                LOG_ERROR("Screen mirror: no memory for %u byte snapshot", size);
-                failCaptureLocked();
-                return;
-            }
-            memaudit::add(kMemTag, size);
-            frameSize = size;
-        }
-        // a rotation can keep the byte size, so geometry is compared on its own
-        bool geometryChanged = w != width || h != height;
-        width = w;
-        height = h;
 
         // a recolor alone is frame-worthy: clients key colors off the frame's signature
         bool paletteChanged = snapshotPaletteSig != paletteSig;
@@ -218,6 +255,7 @@ void ScreenMirror::onRendered(OLEDDisplay *display)
     }
     frameReady.notifyObservers(FRAME_WAKE);
 }
+#endif
 
 void ScreenMirror::capturePalette(uint32_t signature, uint16_t defaultOnBe, uint16_t defaultOffBe, const TFTColorRegion *regions,
                                   uint8_t count)

@@ -265,6 +265,69 @@ void InkHUD::InkHUD::exitLong()
     events->onExitLong();
 }
 
+namespace
+{
+concurrency::Lock remoteInputLock;
+}
+
+void InkHUD::InkHUD::queueRemoteInput(RemoteInput input)
+{
+    {
+        concurrency::LockGuard g(&remoteInputLock);
+        // a client flooding presses loses the newest
+        if (remoteInputCount < REMOTE_INPUT_QUEUE) {
+            remoteInputs[(remoteInputHead + remoteInputCount) % REMOTE_INPUT_QUEUE] = input;
+            remoteInputCount++;
+        }
+    }
+    renderer->requestUpdate();
+    concurrency::mainDelay.interrupt();
+}
+
+bool InkHUD::InkHUD::hasRemoteInput()
+{
+    concurrency::LockGuard g(&remoteInputLock);
+    return remoteInputCount != 0;
+}
+
+void InkHUD::InkHUD::drainRemoteInput()
+{
+    while (true) {
+        RemoteInput input;
+        {
+            concurrency::LockGuard g(&remoteInputLock);
+            if (!remoteInputCount)
+                return;
+            input = remoteInputs[remoteInputHead];
+            remoteInputHead = (remoteInputHead + 1) % REMOTE_INPUT_QUEUE;
+            remoteInputCount--;
+        }
+        switch (input) {
+        case RemoteInput::SHORT:
+            events->onButtonShort();
+            break;
+        case RemoteInput::LONG:
+            events->onButtonLong();
+            break;
+        case RemoteInput::EXIT_SHORT:
+            events->onExitShort();
+            break;
+        case RemoteInput::UP:
+            events->onNavUp();
+            break;
+        case RemoteInput::DOWN:
+            events->onNavDown();
+            break;
+        case RemoteInput::LEFT:
+            events->onNavLeft();
+            break;
+        case RemoteInput::RIGHT:
+            events->onNavRight();
+            break;
+        }
+    }
+}
+
 // Call this when your joystick gets an up input
 void InkHUD::InkHUD::navUp()
 {

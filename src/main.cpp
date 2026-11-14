@@ -1412,8 +1412,20 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
         deviceMetadata.display.has_touch = muiTouch;
     } else
 #endif
-#if HAS_SCREEN_MIRROR
-        if (screen) {
+#if HAS_INKHUD_MIRROR
+    {
+        NicheGraphics::InkHUD::InkHUD *inkhud = NicheGraphics::InkHUD::InkHUD::getInstance();
+        if (inkhud->width() > 0) {
+            deviceMetadata.has_display = true;
+            deviceMetadata.display.width = inkhud->width();
+            deviceMetadata.display.height = inkhud->height();
+            deviceMetadata.display.format = meshtastic_DisplayFrame_Format_MONO_VLSB;
+            deviceMetadata.display.panel_class = meshtastic_DisplayInfo_PanelClass_EINK;
+        }
+    }
+#endif
+#if HAS_SCREEN_MIRROR && HAS_SCREEN
+    if (screen) {
         OLEDDisplay *dispdev = screen->getDisplayDevice();
         if (dispdev && dispdev->getWidth() > 0) {
             deviceMetadata.has_display = true;
