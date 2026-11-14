@@ -41,3 +41,9 @@ void RadioTxHooks::packetReleased(RadioInterface *iface, const meshtastic_MeshPa
     for (RadioTxHook *h = RadioTxHook::hookList; h; h = h->nextHook)
         h->packetReleased(iface, p);
 }
+
+void RadioTxHooks::transmitStarted(RadioInterface *iface, const meshtastic_MeshPacket *p)
+{
+    for (RadioTxHook *h = RadioTxHook::hookList; h; h = h->nextHook)
+        h->transmitStarted(iface, p);
+}
