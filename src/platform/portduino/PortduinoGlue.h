@@ -140,7 +140,23 @@ bool MAC_from_string(std::string mac_str, uint8_t *dmac);
 #ifndef ARCH_PORTDUINO_WASM
 void readGPIOFromYaml(YAML::Node sourceNode, pinMapping &destPin, int pinDefault = RADIOLIB_NC);
 #endif
-std::string exec(const char *cmd);
+// A command that outlives its limit is killed, along with anything it started, so a hung script
+// stalls the main loop for at most this long.
+constexpr uint32_t EXEC_DEFAULT_TIMEOUT_MS = 10000;
+constexpr uint32_t COMMAND_SENSOR_TIMEOUT_MS = 2000;
+// Logs a timeout or a failure to start; returns whatever the command printed, whatever its exit status.
+std::string exec(const char *cmd, uint32_t timeoutMs = EXEC_DEFAULT_TIMEOUT_MS);
+enum class ExecResult { Ok, Failed, TimedOut, NotStarted };
+// Runs cmd under /bin/sh and captures stdout. Ok only if it exited 0 within timeoutMs. Never logs, so it
+// is safe off the main thread.
+ExecResult execCommand(const char *cmd, uint32_t timeoutMs, std::string &output);
+
+// One Sensors: entry. type is an EnvironmentMetrics field name, see CommandSensorFields.h.
+struct commandSensorConfig {
+    std::string type;
+    std::string command;
+    float scale = 1.0f;
+};
 
 extern struct portduino_config_struct {
     // Lora
@@ -308,6 +324,9 @@ extern struct portduino_config_struct {
     std::string hostMetrics_user_command = "";
     int hostMetrics_interval = 0;
     int hostMetrics_channel = 0;
+
+    // Sensors
+    std::vector<commandSensorConfig> command_sensors;
 
     // Security
     std::vector<std::array<uint8_t, 32>> admin_keys;
@@ -724,6 +743,20 @@ extern struct portduino_config_struct {
             out << YAML::Key << "Channel" << YAML::Value << hostMetrics_channel;
 
             out << YAML::EndMap; // HostMetrics
+        }
+
+        // Sensors
+        if (!command_sensors.empty()) {
+            out << YAML::Key << "Sensors" << YAML::Value << YAML::BeginSeq;
+            for (const auto &sensor : command_sensors) {
+                out << YAML::BeginMap;
+                out << YAML::Key << "Type" << YAML::Value << sensor.type;
+                out << YAML::Key << "Command" << YAML::Value << sensor.command;
+                if (sensor.scale != 1.0f)
+                    out << YAML::Key << "Scale" << YAML::Value << sensor.scale;
+                out << YAML::EndMap;
+            }
+            out << YAML::EndSeq; // Sensors
         }
 
         // Security

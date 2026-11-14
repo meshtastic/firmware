@@ -428,6 +428,9 @@ class Screen : public concurrency::OSThread
         enqueueCmd(ScreenCmd{.cmd = Cmd::NOOP});
     }
 
+    /// Runs the screen thread once without touching the display; safe from any task.
+    void kick() { enqueueCmd(ScreenCmd{.cmd = Cmd::NOOP}); }
+
     /// Overrides the default utf8 character conversion, to replace empty space with question marks
     static char customFontTableLookup(const uint8_t ch)
     {
