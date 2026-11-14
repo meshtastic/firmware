@@ -1116,6 +1116,9 @@ typedef struct _meshtastic_TakTalkMessage {
  originated as push-to-talk speech-to-text. Lets receivers show a mic
  icon. Proto3 only encodes when true so empty payload cost is 0 bytes. */
     bool from_voice;
+    /* Voice profile to speak this message with on the receiver, matching
+ VoiceProfile.voice_profile_id. Empty = the receiver's default voice. */
+    pb_callback_t voice_profile_id;
 } meshtastic_TakTalkMessage;
 
 /* TAKTALK room/membership broadcast (CoT type y-).
@@ -1144,6 +1147,39 @@ typedef struct _meshtastic_TakTalkRoomData {
  which parsers split / builders join on ','. */
     pb_callback_t participants;
 } meshtastic_TakTalkRoomData;
+
+/* A synthetic speech profile, so receivers can render a sender's TAKTALK
+ messages in that sender's own voice.
+
+ Opaque model data, not audio: sent once per peer on request and cached,
+ after which only text crosses the mesh. profile_data is compact binary
+ that gains nothing from the TAK dictionary, so send it uncompressed. */
+typedef struct _meshtastic_VoiceProfile {
+    /* Stable identifier for this profile, matching
+ TakTalkMessage.voice_profile_id and GeoChat.voice_profile_id. */
+    pb_callback_t voice_profile_id;
+    /* Friendly display name for the voice (e.g. "Alpha Lead"). */
+    pb_callback_t voice_profile_name;
+    /* The profile itself, opaque to this schema. */
+    pb_callback_t profile_data;
+} meshtastic_VoiceProfile;
+
+/* Request for a peer's voice profile (CoT type y-).
+
+ Addressed with Marti; the reply is a VoiceProfile. */
+typedef struct _meshtastic_VoiceProfileRequest {
+    /* Profile wanted, matching VoiceProfile.voice_profile_id. Empty = whichever
+ profile the peer is currently using. */
+    pb_callback_t voice_profile_id;
+} meshtastic_VoiceProfileRequest;
+
+/* Request for a room's name and roster (CoT type y-).
+
+ Addressed with Marti; the reply is a TakTalkRoomData. */
+typedef struct _meshtastic_TakTalkRoomRequest {
+    /* Room UUID wanted, matching TakTalkRoomData.room_id. */
+    pb_callback_t room_id;
+} meshtastic_TakTalkRoomRequest;
 
 /* ATAK directed-routing recipient list (CoT <marti><dest callsign='X'/>…</marti>).
 
@@ -1285,6 +1321,14 @@ typedef struct _meshtastic_TAKPacketV2 {
      Resolves room UUIDs (used in TakTalkMessage.chatroom_id and
      GeoChat.room_id) to display name + roster on receivers. */
         meshtastic_TakTalkRoomData taktalk_room;
+        /* Sender's synthetic speech profile. See VoiceProfile. */
+        meshtastic_VoiceProfile voice_profile;
+        /* Request for a peer's voice profile (CoT type y-).
+     See VoiceProfileRequest. */
+        meshtastic_VoiceProfileRequest voice_profile_request;
+        /* Request for a room's name and roster (CoT type y-).
+     See TakTalkRoomRequest. */
+        meshtastic_TakTalkRoomRequest taktalk_room_request;
     } payload_variant;
     /* Low 14 bits of the event's `start` time, as epoch seconds UTC. 14 bits rather
  than a full timestamp, so the field costs 4 bytes on the wire instead of 7.
@@ -1414,6 +1458,9 @@ extern "C" {
 
 
 
+
+
+
 #define meshtastic_TAKPacketV2_cot_type_id_ENUMTYPE meshtastic_CotType
 #define meshtastic_TAKPacketV2_how_ENUMTYPE meshtastic_CotHow
 #define meshtastic_TAKPacketV2_team_ENUMTYPE meshtastic_Team
@@ -1442,8 +1489,11 @@ extern "C" {
 #define meshtastic_TaskRequest_init_default      {"", "", "", _meshtastic_TaskRequest_Priority_MIN, _meshtastic_TaskRequest_Status_MIN, ""}
 #define meshtastic_TAKEnvironment_init_default   {0, 0, 0}
 #define meshtastic_SensorFov_init_default        {_meshtastic_SensorFov_SensorType_MIN, 0, false, 0, 0, 0, 0, 0, {{NULL}, NULL}}
-#define meshtastic_TakTalkMessage_init_default   {{{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, 0}
+#define meshtastic_TakTalkMessage_init_default   {{{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, 0, {{NULL}, NULL}}
 #define meshtastic_TakTalkRoomData_init_default  {{{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}}
+#define meshtastic_VoiceProfile_init_default     {{{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}}
+#define meshtastic_VoiceProfileRequest_init_default {{{NULL}, NULL}}
+#define meshtastic_TakTalkRoomRequest_init_default {{{NULL}, NULL}}
 #define meshtastic_Marti_init_default            {{{NULL}, NULL}}
 #define meshtastic_TAKPacketV2_init_default      {_meshtastic_CotType_MIN, _meshtastic_CotHow_MIN, "", _meshtastic_Team_MIN, _meshtastic_MemberRole_MIN, 0, 0, 0, 0, 0, 0, _meshtastic_GeoPointSource_MIN, _meshtastic_GeoPointSource_MIN, "", "", 0, "", "", "", "", "", "", "", {{NULL}, NULL}, false, meshtastic_TAKEnvironment_init_default, false, meshtastic_SensorFov_init_default, false, meshtastic_Marti_init_default, 0, {meshtastic_GeoChat_init_default}, false, 0}
 #define meshtastic_TAKPacket_init_zero           {0, false, meshtastic_Contact_init_zero, false, meshtastic_Group_init_zero, false, meshtastic_Status_init_zero, 0, {meshtastic_PLI_init_zero}}
@@ -1465,8 +1515,11 @@ extern "C" {
 #define meshtastic_TaskRequest_init_zero         {"", "", "", _meshtastic_TaskRequest_Priority_MIN, _meshtastic_TaskRequest_Status_MIN, ""}
 #define meshtastic_TAKEnvironment_init_zero      {0, 0, 0}
 #define meshtastic_SensorFov_init_zero           {_meshtastic_SensorFov_SensorType_MIN, 0, false, 0, 0, 0, 0, 0, {{NULL}, NULL}}
-#define meshtastic_TakTalkMessage_init_zero      {{{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, 0}
+#define meshtastic_TakTalkMessage_init_zero      {{{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, 0, {{NULL}, NULL}}
 #define meshtastic_TakTalkRoomData_init_zero     {{{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}}
+#define meshtastic_VoiceProfile_init_zero        {{{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}}
+#define meshtastic_VoiceProfileRequest_init_zero {{{NULL}, NULL}}
+#define meshtastic_TakTalkRoomRequest_init_zero  {{{NULL}, NULL}}
 #define meshtastic_Marti_init_zero               {{{NULL}, NULL}}
 #define meshtastic_TAKPacketV2_init_zero         {_meshtastic_CotType_MIN, _meshtastic_CotHow_MIN, "", _meshtastic_Team_MIN, _meshtastic_MemberRole_MIN, 0, 0, 0, 0, 0, 0, _meshtastic_GeoPointSource_MIN, _meshtastic_GeoPointSource_MIN, "", "", 0, "", "", "", "", "", "", "", {{NULL}, NULL}, false, meshtastic_TAKEnvironment_init_zero, false, meshtastic_SensorFov_init_zero, false, meshtastic_Marti_init_zero, 0, {meshtastic_GeoChat_init_zero}, false, 0}
 
@@ -1613,10 +1666,16 @@ extern "C" {
 #define meshtastic_TakTalkMessage_chatroom_id_tag 2
 #define meshtastic_TakTalkMessage_lang_tag       3
 #define meshtastic_TakTalkMessage_from_voice_tag 4
+#define meshtastic_TakTalkMessage_voice_profile_id_tag 5
 #define meshtastic_TakTalkRoomData_sender_callsign_tag 1
 #define meshtastic_TakTalkRoomData_room_id_tag   2
 #define meshtastic_TakTalkRoomData_room_name_tag 3
 #define meshtastic_TakTalkRoomData_participants_tag 4
+#define meshtastic_VoiceProfile_voice_profile_id_tag 1
+#define meshtastic_VoiceProfile_voice_profile_name_tag 2
+#define meshtastic_VoiceProfile_profile_data_tag 3
+#define meshtastic_VoiceProfileRequest_voice_profile_id_tag 1
+#define meshtastic_TakTalkRoomRequest_room_id_tag 1
 #define meshtastic_Marti_dest_callsign_tag       1
 #define meshtastic_TAKPacketV2_cot_type_id_tag   1
 #define meshtastic_TAKPacketV2_how_tag           2
@@ -1657,6 +1716,9 @@ extern "C" {
 #define meshtastic_TAKPacketV2_task_tag          40
 #define meshtastic_TAKPacketV2_taktalk_tag       41
 #define meshtastic_TAKPacketV2_taktalk_room_tag  42
+#define meshtastic_TAKPacketV2_voice_profile_tag 44
+#define meshtastic_TAKPacketV2_voice_profile_request_tag 45
+#define meshtastic_TAKPacketV2_taktalk_room_request_tag 46
 #define meshtastic_TAKPacketV2_start_epoch_lo14_tag 43
 
 /* Struct field encoding specification for nanopb */
@@ -1887,7 +1949,8 @@ X(a, CALLBACK, SINGULAR, STRING,   model,             8)
 X(a, CALLBACK, SINGULAR, STRING,   text,              1) \
 X(a, CALLBACK, SINGULAR, STRING,   chatroom_id,       2) \
 X(a, CALLBACK, SINGULAR, STRING,   lang,              3) \
-X(a, STATIC,   SINGULAR, BOOL,     from_voice,        4)
+X(a, STATIC,   SINGULAR, BOOL,     from_voice,        4) \
+X(a, CALLBACK, SINGULAR, STRING,   voice_profile_id,   5)
 #define meshtastic_TakTalkMessage_CALLBACK pb_default_field_callback
 #define meshtastic_TakTalkMessage_DEFAULT NULL
 
@@ -1898,6 +1961,23 @@ X(a, CALLBACK, SINGULAR, STRING,   room_name,         3) \
 X(a, CALLBACK, REPEATED, STRING,   participants,      4)
 #define meshtastic_TakTalkRoomData_CALLBACK pb_default_field_callback
 #define meshtastic_TakTalkRoomData_DEFAULT NULL
+
+#define meshtastic_VoiceProfile_FIELDLIST(X, a) \
+X(a, CALLBACK, SINGULAR, STRING,   voice_profile_id,   1) \
+X(a, CALLBACK, SINGULAR, STRING,   voice_profile_name,   2) \
+X(a, CALLBACK, SINGULAR, BYTES,    profile_data,      3)
+#define meshtastic_VoiceProfile_CALLBACK pb_default_field_callback
+#define meshtastic_VoiceProfile_DEFAULT NULL
+
+#define meshtastic_VoiceProfileRequest_FIELDLIST(X, a) \
+X(a, CALLBACK, SINGULAR, STRING,   voice_profile_id,   1)
+#define meshtastic_VoiceProfileRequest_CALLBACK pb_default_field_callback
+#define meshtastic_VoiceProfileRequest_DEFAULT NULL
+
+#define meshtastic_TakTalkRoomRequest_FIELDLIST(X, a) \
+X(a, CALLBACK, SINGULAR, STRING,   room_id,           1)
+#define meshtastic_TakTalkRoomRequest_CALLBACK pb_default_field_callback
+#define meshtastic_TakTalkRoomRequest_DEFAULT NULL
 
 #define meshtastic_Marti_FIELDLIST(X, a) \
 X(a, CALLBACK, REPEATED, STRING,   dest_callsign,     1)
@@ -1944,7 +2024,10 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,emergency,payload_variant.em
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,task,payload_variant.task),  40) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,taktalk,payload_variant.taktalk),  41) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,taktalk_room,payload_variant.taktalk_room),  42) \
-X(a, STATIC,   OPTIONAL, UINT32,   start_epoch_lo14,  43)
+X(a, STATIC,   OPTIONAL, UINT32,   start_epoch_lo14,  43) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,voice_profile,payload_variant.voice_profile),  44) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,voice_profile_request,payload_variant.voice_profile_request),  45) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,taktalk_room_request,payload_variant.taktalk_room_request),  46)
 #define meshtastic_TAKPacketV2_CALLBACK pb_default_field_callback
 #define meshtastic_TAKPacketV2_DEFAULT NULL
 #define meshtastic_TAKPacketV2_environment_MSGTYPE meshtastic_TAKEnvironment
@@ -1961,6 +2044,9 @@ X(a, STATIC,   OPTIONAL, UINT32,   start_epoch_lo14,  43)
 #define meshtastic_TAKPacketV2_payload_variant_task_MSGTYPE meshtastic_TaskRequest
 #define meshtastic_TAKPacketV2_payload_variant_taktalk_MSGTYPE meshtastic_TakTalkMessage
 #define meshtastic_TAKPacketV2_payload_variant_taktalk_room_MSGTYPE meshtastic_TakTalkRoomData
+#define meshtastic_TAKPacketV2_payload_variant_voice_profile_MSGTYPE meshtastic_VoiceProfile
+#define meshtastic_TAKPacketV2_payload_variant_voice_profile_request_MSGTYPE meshtastic_VoiceProfileRequest
+#define meshtastic_TAKPacketV2_payload_variant_taktalk_room_request_MSGTYPE meshtastic_TakTalkRoomRequest
 
 extern const pb_msgdesc_t meshtastic_TAKPacket_msg;
 extern const pb_msgdesc_t meshtastic_GeoChat_msg;
@@ -1983,6 +2069,9 @@ extern const pb_msgdesc_t meshtastic_TAKEnvironment_msg;
 extern const pb_msgdesc_t meshtastic_SensorFov_msg;
 extern const pb_msgdesc_t meshtastic_TakTalkMessage_msg;
 extern const pb_msgdesc_t meshtastic_TakTalkRoomData_msg;
+extern const pb_msgdesc_t meshtastic_VoiceProfile_msg;
+extern const pb_msgdesc_t meshtastic_VoiceProfileRequest_msg;
+extern const pb_msgdesc_t meshtastic_TakTalkRoomRequest_msg;
 extern const pb_msgdesc_t meshtastic_Marti_msg;
 extern const pb_msgdesc_t meshtastic_TAKPacketV2_msg;
 
@@ -2008,6 +2097,9 @@ extern const pb_msgdesc_t meshtastic_TAKPacketV2_msg;
 #define meshtastic_SensorFov_fields &meshtastic_SensorFov_msg
 #define meshtastic_TakTalkMessage_fields &meshtastic_TakTalkMessage_msg
 #define meshtastic_TakTalkRoomData_fields &meshtastic_TakTalkRoomData_msg
+#define meshtastic_VoiceProfile_fields &meshtastic_VoiceProfile_msg
+#define meshtastic_VoiceProfileRequest_fields &meshtastic_VoiceProfileRequest_msg
+#define meshtastic_TakTalkRoomRequest_fields &meshtastic_TakTalkRoomRequest_msg
 #define meshtastic_Marti_fields &meshtastic_Marti_msg
 #define meshtastic_TAKPacketV2_fields &meshtastic_TAKPacketV2_msg
 
@@ -2020,6 +2112,9 @@ extern const pb_msgdesc_t meshtastic_TAKPacketV2_msg;
 /* meshtastic_SensorFov_size depends on runtime parameters */
 /* meshtastic_TakTalkMessage_size depends on runtime parameters */
 /* meshtastic_TakTalkRoomData_size depends on runtime parameters */
+/* meshtastic_VoiceProfile_size depends on runtime parameters */
+/* meshtastic_VoiceProfileRequest_size depends on runtime parameters */
+/* meshtastic_TakTalkRoomRequest_size depends on runtime parameters */
 /* meshtastic_Marti_size depends on runtime parameters */
 /* meshtastic_TAKPacketV2_size depends on runtime parameters */
 #define MESHTASTIC_MESHTASTIC_ATAK_PB_H_MAX_SIZE meshtastic_Route_size
