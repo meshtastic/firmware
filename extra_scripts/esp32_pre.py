@@ -2,6 +2,7 @@
 # trunk-ignore-all(ruff/F821)
 # trunk-ignore-all(flake8/F821): For SConstruct imports
 import json
+import re
 import sys
 from os import remove
 from os.path import getmtime, isfile, join
@@ -194,3 +195,44 @@ def drop_stale_sdkconfig_defaults(env):
 
 
 drop_stale_sdkconfig_defaults(env)
+
+
+# ---------------------------------------------------------------------------
+# Keep the HybridCompile pass out of the variant directory
+#
+# To build the IDF libs for custom_sdkconfig, espidf.py compiles a dummy sketch:
+# it points PROJECT_SRC_DIR at .dummy/ and empties lib_deps and BUILD_FLAGS, but
+# leaves SRC_FILTER alone. Entries that climb out of src/, such as
+# +<../variants/esp32s3/t-deck-pro>, resolve the same from .dummy/, so the
+# variant's .cpp files are compiled in that pass with no library include paths,
+# and any of them that includes configuration.h fails on nanopb's pb.h.
+#
+# SRC_FILTER is substituted when the sources are collected, which is after
+# espidf.py has set ARDUINO_LIB_COMPILE_FLAG=Build, so a callable can drop those
+# entries for that pass alone and leave the real build untouched.
+# ---------------------------------------------------------------------------
+
+
+def scope_src_filter_in_lib_pass(env):
+    src_filter = env.get("SRC_FILTER")
+    if not src_filter:
+        return
+    if isinstance(src_filter, (list, tuple)):
+        src_filter = " ".join(src_filter)
+    patterns = re.findall(r"[+-]<[^>]*>", src_filter)
+    within_src = [p for p in patterns if not p[2:].startswith("..")]
+    if len(within_src) == len(patterns):
+        return
+    lib_pass_filter = " ".join(within_src)
+
+    def project_src_filter(target, source, env, for_signature):
+        if env.get("ARDUINO_LIB_COMPILE_FLAG") == "Build":
+            return lib_pass_filter
+        return src_filter
+
+    env.Replace(
+        MESHTASTIC_SRC_FILTER=project_src_filter, SRC_FILTER="${MESHTASTIC_SRC_FILTER}"
+    )
+
+
+scope_src_filter_in_lib_pass(env)
