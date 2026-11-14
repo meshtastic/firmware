@@ -1,9 +1,12 @@
 #include "SerialModule.h"
+#include "Default.h"
 #include "GeoCoord.h"
 #include "MeshService.h"
 #include "NMEAWPL.h"
 #include "NodeDB.h"
 #include "Router.h"
+#include "UptimeClock.h"
+#include "airtime.h"
 #include "configuration.h"
 #include "gps/RTC.h"
 #include "meshUtils.h"
@@ -271,6 +274,8 @@ int32_t SerialModule::runOnce()
             else if ((moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_WS85)) {
                 processWXSerial();
 
+            } else if (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_VE_DIRECT) {
+                processVEDirectSerial();
             }
 #if defined(HELTEC_MESH_SOLAR)
             else if ((moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MS_CONFIG)) {
@@ -314,7 +319,7 @@ int32_t SerialModule::runOnce()
  *
  * @throws None
  */
-void SerialModule::sendTelemetry(meshtastic_Telemetry m)
+void SerialModule::sendTelemetry(meshtastic_Telemetry m, bool phoneOnly)
 {
     meshtastic_MeshPacket *p = router->allocForSending();
     if (!p)
@@ -324,6 +329,10 @@ void SerialModule::sendTelemetry(meshtastic_Telemetry m)
         pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), &meshtastic_Telemetry_msg, &m);
     p->to = NODENUM_BROADCAST;
     p->decoded.want_response = false;
+    if (phoneOnly) {
+        service->sendToPhone(p);
+        return;
+    }
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR) {
         p->want_ack = true;
         p->priority = meshtastic_MeshPacket_Priority_HIGH;
@@ -435,6 +444,11 @@ ProcessMessage SerialModuleRadio::handleReceived(const meshtastic_MeshPacket &mp
  */
 uint32_t SerialModule::getBaudRate()
 {
+    // VE.Direct is fixed at 19200 8N1, so make that the mode's default instead of 38400
+    if (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_VE_DIRECT &&
+        moduleConfig.serial.baud == meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_DEFAULT) {
+        return 19200;
+    }
     if (moduleConfig.serial.baud == meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_110) {
         return 110;
     } else if (moduleConfig.serial.baud == meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_300) {
@@ -712,6 +726,210 @@ void SerialModule::processWXSerial()
         dir_sum_sin = dir_sum_cos = 0;
         gust = 0;
         lull = -1;
+    }
+#endif
+    return;
+}
+
+// VE.Direct fields staged from the block in progress; committed to the published set on a good
+// checksum, merged because BMV-series devices split their fields across two consecutive blocks.
+struct VeDirectFields {
+    float battVoltage;
+    float battCurrent;
+    float panelVoltage;
+    float panelPower;
+    float loadCurrent;
+    bool hasBattVoltage;
+    bool hasBattCurrent;
+    bool hasPanelVoltage;
+    bool hasPanelPower;
+    bool hasLoadCurrent;
+};
+
+static void storeVeDirectField(VeDirectFields &f, const char *label, const char *value)
+{
+    long v = strtol(value, NULL, 10);
+    if (strcmp(label, "V") == 0) { // battery voltage, mV
+        f.battVoltage = v / 1000.0f;
+        f.hasBattVoltage = true;
+    } else if (strcmp(label, "I") == 0) { // battery current, mA (negative = discharge)
+        f.battCurrent = v / 1000.0f;
+        f.hasBattCurrent = true;
+    } else if (strcmp(label, "VPV") == 0) { // panel voltage, mV
+        f.panelVoltage = v / 1000.0f;
+        f.hasPanelVoltage = true;
+    } else if (strcmp(label, "PPV") == 0) { // panel power, W
+        f.panelPower = v;
+        f.hasPanelPower = true;
+    } else if (strcmp(label, "IL") == 0) { // load current, mA
+        f.loadCurrent = v / 1000.0f;
+        f.hasLoadCurrent = true;
+    }
+}
+
+/**
+ * Decode the VE.Direct text protocol from the serial port and publish the readings as PowerMetrics
+ * telemetry: ch1 = battery, ch2 = solar panel, ch3 = load output. Broadcast cadence follows
+ * moduleConfig.telemetry.power_update_interval; between broadcasts a connected phone gets a fresh
+ * reading once a minute.
+ */
+void SerialModule::processVEDirectSerial()
+{
+#if SERIAL_PRINT_PORT != 0 && !defined(ARCH_STM32WL) && !defined(CONFIG_IDF_TARGET_ESP32C6)
+    // Text frames are "\r\n<label>\t<value>"; a block ends with a Checksum field that brings the
+    // byte sum of the whole block to 0 mod 256. Interleaved HEX frames (':'...'\n') void the block.
+    enum VeDirectParseState : uint8_t { VE_IDLE, VE_LABEL, VE_VALUE, VE_CHECKSUM, VE_HEX };
+    static VeDirectParseState parseState = VE_IDLE;
+    static uint8_t blockSum = 0;
+    static char label[9] = "";
+    static char value[34] = "";
+    static uint8_t labelLen = 0;
+    static uint8_t valueLen = 0;
+    static VeDirectFields staged = {};
+    static VeDirectFields published = {};
+    static bool cleanBlockStart = false; // suppresses the checksum warning when we join mid-block
+    static bool haveValidBlock = false;
+    static uint32_t lastSentToMeshMsec = 0;
+    static uint32_t lastSentToPhoneMsec = 0;
+
+    while (Serial2.available()) {
+        uint8_t c = Serial2.read();
+
+        if (parseState == VE_HEX) {
+            if (c == '\n')
+                parseState = VE_IDLE;
+            continue;
+        }
+        if (c == ':' && parseState != VE_CHECKSUM) {
+            parseState = VE_HEX;
+            blockSum = 0;
+            staged = {};
+            cleanBlockStart = false;
+            continue;
+        }
+
+        blockSum += c;
+        switch (parseState) {
+        case VE_IDLE:
+            if (c == '\n') {
+                labelLen = 0;
+                parseState = VE_LABEL;
+            }
+            break;
+        case VE_LABEL:
+            if (c == '\t') {
+                label[labelLen] = '\0';
+                if (strcmp(label, "Checksum") == 0) {
+                    parseState = VE_CHECKSUM;
+                } else {
+                    valueLen = 0;
+                    parseState = VE_VALUE;
+                }
+            } else if (c == '\r' || labelLen >= sizeof(label) - 1) {
+                parseState = VE_IDLE; // not a VE.Direct field line, resync on the next newline
+            } else {
+                label[labelLen++] = c;
+            }
+            break;
+        case VE_VALUE:
+            if (c == '\r') {
+                value[valueLen] = '\0';
+                storeVeDirectField(staged, label, value);
+                parseState = VE_IDLE;
+            } else if (valueLen < sizeof(value) - 1) {
+                value[valueLen++] = c;
+            }
+            break;
+        case VE_CHECKSUM:
+            if (blockSum == 0) {
+                if (staged.hasBattVoltage) {
+                    published.battVoltage = staged.battVoltage;
+                    published.hasBattVoltage = true;
+                }
+                if (staged.hasBattCurrent) {
+                    published.battCurrent = staged.battCurrent;
+                    published.hasBattCurrent = true;
+                }
+                if (staged.hasPanelVoltage) {
+                    published.panelVoltage = staged.panelVoltage;
+                    published.hasPanelVoltage = true;
+                }
+                if (staged.hasPanelPower) {
+                    published.panelPower = staged.panelPower;
+                    published.hasPanelPower = true;
+                }
+                if (staged.hasLoadCurrent) {
+                    published.loadCurrent = staged.loadCurrent;
+                    published.hasLoadCurrent = true;
+                }
+                if (!haveValidBlock)
+                    LOG_INFO("VE.Direct: first valid block received");
+                haveValidBlock = true;
+            } else if (cleanBlockStart) {
+                LOG_WARN("VE.Direct block failed checksum");
+            }
+            blockSum = 0;
+            staged = {};
+            cleanBlockStart = true;
+            parseState = VE_IDLE;
+            break;
+        case VE_HEX:
+            break; // handled before the switch
+        }
+    }
+
+    if (!haveValidBlock)
+        return;
+
+    constexpr uint32_t sendToPhoneIntervalMs = 60 * 1000;
+    uint32_t sendToMeshIntervalMs =
+        Default::getConfiguredOrDefaultMsScaled(moduleConfig.telemetry.power_update_interval,
+                                                default_telemetry_broadcast_interval_secs, nodeDB->getNumOnlineMeshNodes(),
+                                                TrafficType::TELEMETRY);
+
+    bool meshDue = (lastSentToMeshMsec == 0) || Throttle::hasElapsed(lastSentToMeshMsec, sendToMeshIntervalMs);
+    bool phoneDue = (lastSentToPhoneMsec == 0) || Throttle::hasElapsed(lastSentToPhoneMsec, sendToPhoneIntervalMs);
+    if (!meshDue && !phoneDue)
+        return;
+
+    meshtastic_Telemetry m = meshtastic_Telemetry_init_zero;
+    m.which_variant = meshtastic_Telemetry_power_metrics_tag;
+    m.time = getTime();
+    if (published.hasBattVoltage) {
+        m.variant.power_metrics.ch1_voltage = published.battVoltage;
+        m.variant.power_metrics.has_ch1_voltage = true;
+    }
+    if (published.hasBattCurrent) {
+        m.variant.power_metrics.ch1_current = published.battCurrent;
+        m.variant.power_metrics.has_ch1_current = true;
+    }
+    if (published.hasPanelVoltage) {
+        m.variant.power_metrics.ch2_voltage = published.panelVoltage;
+        m.variant.power_metrics.has_ch2_voltage = true;
+    }
+    if (published.hasPanelPower) {
+        // MPPTs report panel power, not current; derive it so ch2 reads volts/amps like the others
+        m.variant.power_metrics.ch2_current =
+            (published.hasPanelVoltage && published.panelVoltage > 1.0f) ? published.panelPower / published.panelVoltage : 0;
+        m.variant.power_metrics.has_ch2_current = true;
+    }
+    if (published.hasLoadCurrent) {
+        if (published.hasBattVoltage) {
+            m.variant.power_metrics.ch3_voltage = published.battVoltage; // the load output runs at battery voltage
+            m.variant.power_metrics.has_ch3_voltage = true;
+        }
+        m.variant.power_metrics.ch3_current = published.loadCurrent;
+        m.variant.power_metrics.has_ch3_current = true;
+    }
+
+    if (meshDue && airTime->isTxAllowedAirUtil()) {
+        LOG_INFO("VE.Direct telemetry: batt %.2fV %.2fA, panel %.2fV %.0fW, load %.2fA", published.battVoltage,
+                 published.battCurrent, published.panelVoltage, published.panelPower, published.loadCurrent);
+        sendTelemetry(m);
+        lastSentToMeshMsec = Time::stampMillis();
+    } else if (phoneDue && service->isToPhoneQueueEmpty()) {
+        sendTelemetry(m, true);
+        lastSentToPhoneMsec = Time::stampMillis();
     }
 #endif
     return;
