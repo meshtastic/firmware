@@ -159,7 +159,7 @@ class InkHUD
     void refreshTouchStatus(bool async = true);
 
     static constexpr uint8_t REMOTE_INPUT_QUEUE = 8;
-    RemoteInput remoteInputs[REMOTE_INPUT_QUEUE];
+    RemoteInput remoteInputs[REMOTE_INPUT_QUEUE] = {};
     uint8_t remoteInputHead = 0;
     uint8_t remoteInputCount = 0;
 };
