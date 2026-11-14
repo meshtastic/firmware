@@ -665,6 +665,10 @@ void enterDfuMode()
 #ifdef NRF_USE_SERIAL_DFU
     enterSerialDfu();
 #else
+#ifdef NRF52_PROMICRO_DIY
+    // nice!nano UF2 bootloader: also leave its double-reset signature, which it honours even if GPREGRET is lost
+    *(volatile uint32_t *)0x20007F7C = 0x5A1AD5;
+#endif
     enterUf2Dfu();
 #endif
 }
