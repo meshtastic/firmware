@@ -1,6 +1,4 @@
 #pragma once
-#include "configuration.h"
-#if !MESHTASTIC_EXCLUDE_REPLYBOT
 #include "SinglePortModule.h"
 #include "mesh/generated/meshtastic/mesh.pb.h"
 
@@ -16,4 +14,3 @@ class ReplyBotModule : public SinglePortModule
     bool isCommand(const char *msg) const;
     void sendDm(const meshtastic_MeshPacket &rx, const char *text);
 };
-#endif // MESHTASTIC_EXCLUDE_REPLYBOT

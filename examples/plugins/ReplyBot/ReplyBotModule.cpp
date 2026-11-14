@@ -1,23 +1,9 @@
-#include "configuration.h"
-#if !MESHTASTIC_EXCLUDE_REPLYBOT
-/*
- * ReplyBotModule.cpp
- *
- * This module implements a simple reply bot for the Meshtastic firmware.  It listens for
- * specific text commands ("/ping", "/hello" and "/test") delivered either via a direct
- * message (DM) or a broadcast on the primary channel.  When a supported command is
- * received the bot responds with a short status message that includes the hop count
- * (minimum number of relays), RSSI and SNR of the received packet.  To avoid spamming
- * the network it enforces a per‑sender cooldown between responses.  By default the
- * module is disabled. See the official firmware documentation for guidance on adding modules.
- * To enable this module, set `#undef MESHTASTIC_EXCLUDE_REPLYBOT` in your variant.h file.
- */
-
+#include "ReplyBotModule.h"
 #include "Channels.h"
 #include "MeshService.h"
 #include "NodeDB.h"
-#include "ReplyBotModule.h"
 #include "mesh/MeshTypes.h"
+#include "mesh/ModuleRegistry.h"
 
 #include <Arduino.h>
 #include <cctype>
@@ -116,9 +102,12 @@ ProcessMessage ReplyBotModule::handleReceived(const meshtastic_MeshPacket &mp)
         return ProcessMessage::CONTINUE;
     }
 
+    // Phone/client packets use from=0; getFrom() maps that to our node num.
+    const NodeNum sender = getFrom(&mp);
+
     // Apply rate limiting per sender depending on DM/broadcast
     const uint32_t cooldownMs = isDM ? REPLYBOT_DM_COOLDOWN_MS : REPLYBOT_LF_COOLDOWN_MS;
-    if (replybotRateLimited(mp.from, cooldownMs)) {
+    if (replybotRateLimited(sender, cooldownMs)) {
         return ProcessMessage::CONTINUE;
     }
 
@@ -170,7 +159,7 @@ void ReplyBotModule::sendDm(const meshtastic_MeshPacket &rx, const char *text)
     meshtastic_MeshPacket *p = allocDataPacket();
     if (!p)
         return;
-    p->to = rx.from;
+    p->to = getFrom(&rx);
     p->channel = rx.channel;
     p->want_ack = false;
     p->decoded.want_response = false;
@@ -182,4 +171,5 @@ void ReplyBotModule::sendDm(const meshtastic_MeshPacket &rx, const char *text)
     memcpy(p->decoded.payload.bytes, text, len);
     service->sendToMesh(p);
 }
-#endif // MESHTASTIC_EXCLUDE_REPLYBOT
+
+MESHTASTIC_REGISTER_MODULE(ReplyBotModule);
