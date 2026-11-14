@@ -3286,6 +3286,13 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
     case GpsPositionBroadcastMenu:
         GPSPositionBroadcastMenu();
         break;
+#else
+    case GpsToggleMenu:
+    case GpsFormatMenu:
+    case GpsSmartPositionMenu:
+    case GpsUpdateIntervalMenu:
+    case GpsPositionBroadcastMenu:
+        break;
 #endif
     case CompassPointNorthMenu:
         compassNorthMenu();
