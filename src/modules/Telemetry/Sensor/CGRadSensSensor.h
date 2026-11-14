@@ -18,7 +18,7 @@ class CGRadSensSensor : public TelemetrySensor
 
   protected:
     void begin(TwoWire *wire = &Wire, uint8_t addr = 0x66);
-    float getStaticRadiation();
+    bool getStaticRadiation(float &microRadPerHr);
 
   public:
     CGRadSensSensor();
