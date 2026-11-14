@@ -32,37 +32,38 @@ void CGRadSensSensor::begin(TwoWire *wire, uint8_t addr)
     _wire->begin();
 }
 
-float CGRadSensSensor::getStaticRadiation()
+bool CGRadSensSensor::getStaticRadiation(float &microRadPerHr)
 {
-    // Read a register, following the same pattern as the RCWL9620Sensor
-    _wire->beginTransmission(_addr); // Transfer data to addr.
-    _wire->write(0x06);              // Radiation intensity (static period T = 500 sec)
-    if (_wire->endTransmission() == 0) {
-        if (_wire->requestFrom(_addr, (uint8_t)3)) {
-            ; // Request 3 bytes
-            uint32_t data = _wire->read();
-            data <<= 8;
-            data |= _wire->read();
-            data <<= 8;
-            data |= _wire->read();
-
-            // As per the data sheet for the RadSens
-            // Register 0x06 contains the reading in 0.1 * μR / h
-            float microRadPerHr = float(data) / 10.0;
-            return microRadPerHr;
+    // Register 0x06..0x08 is unsigned 24-bit BE dose rate in 0.1 µR/h.
+    // Slave may NACK/timeout once under clock stretch; retry before giving up.
+    for (int attempt = 0; attempt < 3; attempt++) {
+        _wire->beginTransmission(_addr);
+        _wire->write(0x06);
+        if (_wire->endTransmission() != 0) {
+            continue;
         }
+        if (_wire->requestFrom(_addr, (uint8_t)3) != 3) {
+            continue;
+        }
+        uint8_t b0 = (uint8_t)_wire->read();
+        uint8_t b1 = (uint8_t)_wire->read();
+        uint8_t b2 = (uint8_t)_wire->read();
+        uint32_t value = ((uint32_t)b0 << 16) | ((uint32_t)b1 << 8) | b2;
+        microRadPerHr = float(value) / 10.0f;
+        return true;
     }
-    return -1.0;
+    return false;
 }
 
 bool CGRadSensSensor::getMetrics(meshtastic_Telemetry *measurement)
 {
-    // Store the meansurement in the the appropriate fields of the protobuf
-    measurement->variant.environment_metrics.has_radiation = true;
-
     LOG_DEBUG("CGRADSENS getMetrics");
-    measurement->variant.environment_metrics.radiation = getStaticRadiation();
-
+    float microRadPerHr = 0.0f;
+    if (!getStaticRadiation(microRadPerHr)) {
+        return false;
+    }
+    measurement->variant.environment_metrics.has_radiation = true;
+    measurement->variant.environment_metrics.radiation = microRadPerHr;
     return true;
 }
 #endif
