@@ -18,6 +18,8 @@ DecodedServiceEnvelope::DecodedServiceEnvelope(DecodedServiceEnvelope &&other)
     std::swap(packet, other.packet);
     std::swap(channel_id, other.channel_id);
     std::swap(gateway_id, other.gateway_id);
+    std::swap(target_gateways_count, other.target_gateways_count);
+    std::swap(target_gateways, other.target_gateways);
 }
 
 DecodedServiceEnvelope::~DecodedServiceEnvelope()
