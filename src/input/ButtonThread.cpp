@@ -130,11 +130,12 @@ int32_t ButtonThread::runOnce()
     }
 
     userButton.tick();
-    canSleep &= userButton.isIdle();
+    // OneButton stays idle until its debounce accepts the press, so a raw press must keep the loop awake too
+    bool buttonCurrentlyPressed = isButtonPressed(_pinNum);
+    canSleep &= userButton.isIdle() && !buttonCurrentlyPressed;
 
     // Check if we should play lead-up sound during long press
     // Play lead-up when button has been held for BUTTON_LEADUP_MS but before long press triggers
-    bool buttonCurrentlyPressed = isButtonPressed(_pinNum);
 
     // Detect start of button press
     if (buttonCurrentlyPressed && !buttonWasPressed) {
@@ -300,11 +301,15 @@ int32_t ButtonThread::runOnce()
     }
     btnEvent = BUTTON_EVENT_NONE;
 
-    // only pull when the button is pressed, we get notified via IRQ on a new press
-    if (!userButton.isIdle() || waitingForLongPress) {
+    // The IRQ tick only arms OneButton's debounce; poll fast while held so a later tick can accept the
+    // press before release, otherwise taps shorter than the idle poll are dropped.
+    if (buttonCurrentlyPressed || !userButton.isIdle()) {
+        return 10;
+    }
+    if (waitingForLongPress) {
         return 50;
     }
-    return 100; // FIXME: Why can't we rely on interrupts and use INT32_MAX here?
+    return 100;
 }
 
 /*
