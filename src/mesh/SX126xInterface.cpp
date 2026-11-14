@@ -488,6 +488,9 @@ template <typename T> void SX126xInterface<T>::addReceiveMetadata(meshtastic_Mes
     // LOG_DEBUG("PacketStatus %x", lora.getPacketStatus());
     mp->rx_snr = lora.getSNR();
     mp->rx_rssi = lround(lora.getRSSI());
+#if HAS_LORA_FEM
+    mp->rx_rssi -= loraFEMInterface.getRxLnaGainDb();
+#endif
     mp->has_rx_rssi = true; // rx_rssi has explicit presence - a genuine reading must be marked present to survive encoding
     LOG_TRACE("Corrected frequency offset: %f", lora.getFrequencyError());
 }

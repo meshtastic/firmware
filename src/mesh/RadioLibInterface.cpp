@@ -21,6 +21,16 @@
 #include "meshUtils.h"
 #endif
 
+// The chip's RSSI includes any FEM LNA gain ahead of it; refer it to the antenna so it does not step when the LNA switches
+static int32_t rssiAtAntenna(int32_t chipRssi)
+{
+#if HAS_LORA_FEM
+    return chipRssi - loraFEMInterface.getRxLnaGainDb();
+#else
+    return chipRssi;
+#endif
+}
+
 void LockingArduinoHal::spiBeginTransaction()
 {
     spiLock->lock();
@@ -426,7 +436,8 @@ void RadioLibInterface::updateNoiseFloor()
     }
 #endif
 
-    noiseFloorSamples[currentSampleIndex] = (int32_t)rssi;
+    const int32_t sample = rssiAtAntenna(rssi);
+    noiseFloorSamples[currentSampleIndex] = sample;
     currentSampleIndex++;
 
     if (currentSampleIndex >= NOISE_FLOOR_SAMPLES) {
@@ -436,7 +447,7 @@ void RadioLibInterface::updateNoiseFloor()
 
     currentNoiseFloor = getAverageNoiseFloorInternal();
 
-    LOG_TRACE("Noise floor: %d dBm (samples: %d, latest: %d dBm)", currentNoiseFloor, getNoiseFloorSampleCountInternal(), rssi);
+    LOG_TRACE("Noise floor: %d dBm (samples: %d, latest: %d dBm)", currentNoiseFloor, getNoiseFloorSampleCountInternal(), sample);
 }
 
 uint8_t RadioLibInterface::getNoiseFloorSampleCountInternal() const
@@ -1427,7 +1438,7 @@ void RadioLibInterface::readOutFromTask()
         clearReadIrqs();
     }
     f.info.snr = iface->getSNR();
-    f.info.rssi = lround(iface->getRSSI());
+    f.info.rssi = rssiAtAntenna(lround(iface->getRSSI()));
     f.info.len = (uint16_t)len;
     // Here, not where the radio thread accounts for the frame: by then the chip has been put back in RX - after a
     // resume it never left it - and its packet status describes the frame it is receiving now, not this one.

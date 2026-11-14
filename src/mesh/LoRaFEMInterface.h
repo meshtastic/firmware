@@ -30,6 +30,8 @@ class LoRaFEMInterface
     /** Feed one paired noise reading in AUTO mode; returns true when it completed a decision window */
     bool addLnaAutoSample(int16_t rssiLnaOn, int16_t rssiLnaOff);
     int32_t getLnaAutoBenefitTenthsDb(void) { return lna_auto_selector.getLastBenefitTenthsDb(); }
+    /** Gain ahead of the radio that its RSSI includes; subtract it to refer a reading to the antenna */
+    int16_t getRxLnaGainDb(void) { return (lna_can_control && lna_enabled) ? LORA_FEM_LNA_GAIN_DB : 0; }
     int8_t powerConversion(int8_t loraOutputPower);
     bool isLnaCanControl(void) { return lna_can_control; }
     void setLnaCanControl(bool can_control) { lna_can_control = can_control; }
