@@ -112,9 +112,6 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define SX126X_DIO2_AS_RF_SWITCH
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
 
-// Testing USB detection
-#define NRF_APM
-
 #define PIN_GPS_EN (32 + 1) // P1.01
 #define PIN_GPS_PPS (2)     // P0.02 Pulse per second input from the GPS
 
