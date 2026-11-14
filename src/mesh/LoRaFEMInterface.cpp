@@ -274,9 +274,34 @@ void LoRaFEMInterface::setRxModeEnableWhenMCUSleep(void)
 #endif
 }
 
-void LoRaFEMInterface::setLNAEnable(bool enabled)
+void LoRaFEMInterface::setLnaMode(meshtastic_Config_LoRaConfig_FEM_LNA_Mode mode)
 {
-    lna_enabled = enabled;
+    if (mode != meshtastic_Config_LoRaConfig_FEM_LNA_Mode_AUTO) {
+        lna_auto = false;
+        lna_enabled = mode != meshtastic_Config_LoRaConfig_FEM_LNA_Mode_DISABLED;
+        return;
+    }
+    // Re-applying an unchanged config must not discard the measurement in progress
+    if (!lna_auto) {
+        lna_auto = true;
+        lna_auto_selector.reset(lna_enabled);
+    }
+}
+
+void LoRaFEMInterface::setRxLnaPath(bool lnaOn)
+{
+#if defined(HELTEC_V4) || defined(USE_KCT8103L_PA)
+    if (fem_type == KCT8103L_PA) {
+        digitalWrite(LORA_KCT8103L_PA_CTX, lnaOn ? LOW : HIGH);
+    }
+#endif
+}
+
+bool LoRaFEMInterface::addLnaAutoSample(int16_t rssiLnaOn, int16_t rssiLnaOff)
+{
+    const bool windowDone = lna_auto_selector.addSample(rssiLnaOn, rssiLnaOff);
+    lna_enabled = lna_auto_selector.isLnaOn();
+    return windowDone;
 }
 
 int8_t LoRaFEMInterface::powerConversion(int8_t loraOutputPower)

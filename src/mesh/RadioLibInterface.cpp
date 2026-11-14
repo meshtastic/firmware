@@ -7,6 +7,9 @@
 #include "Throttle.h"
 #include "UptimeClock.h"
 #include "configuration.h"
+#if HAS_LORA_FEM
+#include "LoRaFEMInterface.h"
+#endif
 #include "error.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
@@ -373,6 +376,10 @@ void RadioLibInterface::updateNoiseFloor()
     }
 
     int16_t rssi;
+#if HAS_LORA_FEM
+    bool lnaWindowDone = false, lnaWasOn = false;
+    int16_t rssiOther = NOISE_FLOOR_INVALID;
+#endif
     {
         // Three chip reads from the main loop, which holds no sequence of its own: unlocked, the readout task can land
         // between them and wedge BUSY for RadioLib's whole timeout, same as canSendImmediately() above.
@@ -382,11 +389,42 @@ void RadioLibInterface::updateNoiseFloor()
         }
         lastNoiseFloorUpdate = Time::getMillis();
         rssi = getCurrentRSSI();
+#if HAS_LORA_FEM
+        // Pair the reading with one on the other RX path; the lock keeps a transmit from starting while CTX is moved
+        if (loraFEMInterface.isLnaAuto()) {
+            lnaWasOn = loraFEMInterface.isLnaEnabled();
+            loraFEMInterface.setRxLnaPath(!lnaWasOn);
+            delayMicroseconds(LNA_AUTO_SETTLE_US);
+            rssiOther = getCurrentRSSI();
+            if (isValidNoiseRssi(rssi) && isValidNoiseRssi(rssiOther)) {
+                lnaWindowDone = loraFEMInterface.addLnaAutoSample(lnaWasOn ? rssi : rssiOther, lnaWasOn ? rssiOther : rssi);
+            }
+            loraFEMInterface.setRxLnaPath(loraFEMInterface.isLnaEnabled());
+        }
+#endif
     }
-    if (rssi == NOISE_FLOOR_INVALID || rssi >= 0 || rssi < NOISE_FLOOR_VALID_MIN) {
+    if (!isValidNoiseRssi(rssi)) {
         LOG_DEBUG_RADIO("Skipping invalid RSSI reading: %d", rssi);
         return;
     }
+#if HAS_LORA_FEM
+    if (loraFEMInterface.isLnaAuto()) {
+        LOG_DEBUG_RADIO("FEM LNA auto pair: %d dBm on, %d dBm bypassed", lnaWasOn ? rssi : rssiOther,
+                        lnaWasOn ? rssiOther : rssi);
+    }
+    if (lnaWindowDone) {
+        const bool lnaOn = loraFEMInterface.isLnaEnabled();
+        const float benefitDb = loraFEMInterface.getLnaAutoBenefitTenthsDb() / 10.0f;
+        if (lnaOn == lnaWasOn) {
+            LOG_DEBUG("FEM LNA auto: LNA buys %.1f dB, stays %s", benefitDb, lnaOn ? "in" : "bypassed");
+        } else {
+            LOG_INFO("FEM LNA auto: LNA buys %.1f dB, now %s", benefitDb, lnaOn ? "in" : "bypassed");
+            // The window holds readings from the old path; restart it rather than average across the switch
+            resetNoiseFloor();
+            return;
+        }
+    }
+#endif
 
     noiseFloorSamples[currentSampleIndex] = (int32_t)rssi;
     currentSampleIndex++;
