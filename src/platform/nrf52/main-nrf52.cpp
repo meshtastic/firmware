@@ -188,6 +188,8 @@ bool loopCanSleep()
 static void drainConsoleBeforeReset()
 {
     Serial.flush();
+#ifdef USE_TINYUSB
+    // wio-sdk-wm1110 unflags USE_TINYUSB for its CH340, so the tud_cdc API is absent there.
     if (__get_IPSR() != 0 || xTaskGetSchedulerState() != taskSCHEDULER_RUNNING || !tud_cdc_connected())
         return;
     for (uint32_t waitedMs = 0; waitedMs < 250 && tud_cdc_write_available() < CFG_TUD_CDC_TX_BUFSIZE; waitedMs++) {
@@ -196,6 +198,7 @@ static void drainConsoleBeforeReset()
     }
     // An empty FIFO means the last packet reached the endpoint buffer, not the host; it's collected on the next 1 ms frame
     delay(20);
+#endif
 }
 
 // What file:line can't say: the task that asserted (the log's [thread] tag is the last OSThread to run), how close
