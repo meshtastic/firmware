@@ -177,7 +177,13 @@ int32_t InkHUD::Renderer::runOnce()
     if (graphics::screenMirror.wantsFrame())
         return 1000UL;
 #endif
-    return OSThread::disable();
+    int32_t idle = OSThread::disable();
+    // a request landing between the checks above and disable() would otherwise wait for an unrelated wake
+    if (mirrorPending || inkhud->hasRemoteInput()) {
+        OSThread::enabled = true;
+        return 0;
+    }
+    return idle;
 }
 
 void InkHUD::Renderer::requestMirrorCapture()
