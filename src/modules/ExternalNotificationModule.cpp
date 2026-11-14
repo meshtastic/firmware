@@ -611,6 +611,12 @@ AdminMessageHandleResult ExternalNotificationModule::handleAdminMessageForModule
         this->handleSetRingtone(request->set_canned_message_module_messages);
         result = AdminMessageHandleResult::HANDLED;
         break;
+
+    case meshtastic_AdminMessage_play_ringtone_request_tag:
+        LOG_INFO("Client playing ringtone");
+        this->handlePlayRingtone();
+        result = AdminMessageHandleResult::HANDLED;
+        break;
 #endif
 
     default:
@@ -643,6 +649,30 @@ void ExternalNotificationModule::handleSetRingtone(const char *from_msg)
     if (changed) {
         nodeDB->saveProto(rtttlConfigFile, meshtastic_RTTTLConfig_size, &meshtastic_RTTTLConfig_msg, &rtttlConfig);
     }
+}
+
+void ExternalNotificationModule::handlePlayRingtone()
+{
+    if (!moduleConfig.external_notification.enabled || !canBuzz()) {
+        LOG_INFO("Ringtone playback skipped: external notification disabled or "
+                 "buzzer mode forbids it");
+        return;
+    }
+
+    // Restart from the beginning; runOnce() turns the outputs off again once the
+    // song has ended.
+    stopNow();
+    if (moduleConfig.external_notification.use_i2s_as_buzzer || moduleConfig.external_notification.use_pwm) {
+        buzzerShouldAlert = true;
+    } else {
+        // A plain GPIO buzzer has no melody to play, so give it a single output_ms
+        // pulse instead.
+        nagCycleCutoff = millis() + (moduleConfig.external_notification.output_ms ? moduleConfig.external_notification.output_ms
+                                                                                  : EXT_NOTIFICATION_MODULE_OUTPUT_MS);
+        isNagging = true;
+    }
+    triggerBuzzerOutput();
+    setIntervalFromNow(0);
 }
 #endif
 
