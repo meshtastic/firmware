@@ -314,6 +314,82 @@ static void dispatchTrigger(meshtastic_PortNum port, uint32_t requestId = 0)
     service->sendToMesh(packetPool.allocCopy(trigger), RX_SRC_USER);
 }
 
+// MeshService::sendRoutingErrorResponse() runs before handleToRadio() normalises `from`, so a phone
+// request that left it unset must still address the NAK back to us. Addressing node 0 means
+// isToUs() is false, sendLocal() does not deliver it, and the client gets no verdict at all while
+// the NAK goes out over LoRa instead.
+static void test_routingErrorResponse_unsetFromAddressesUs()
+{
+    meshtastic_MeshPacket request = meshtastic_MeshPacket_init_zero;
+    request.from = 0; // the client left it unset; handleToRadio has not stamped it yet
+    request.to = LOCAL_NODE;
+    request.id = 0x5EED0101;
+    request.channel = 3;
+    request.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    request.decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
+
+    service->sendRoutingErrorResponse(meshtastic_Routing_Error_RATE_LIMIT_EXCEEDED, &request);
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, mockRoutingModule->ackNaks.size(), "exactly one NAK must be generated");
+    const auto &nak = mockRoutingModule->ackNaks[0];
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(LOCAL_NODE, nak.to, "an unset from must address the NAK to us, not to node 0");
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Routing_Error_RATE_LIMIT_EXCEEDED, nak.error, "the NAK must carry the rate-limit error");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0x5EED0101, nak.requestId, "the NAK must reference the rejected request");
+    TEST_ASSERT_EQUAL_MESSAGE(3, nak.channel, "the NAK must stay on the request's channel");
+}
+
+// The other half of the contract: getFrom() only rewrites 0, so a request that already carries a
+// sender is passed through untouched.
+static void test_routingErrorResponse_setFromIsPassedThrough()
+{
+    meshtastic_MeshPacket request = meshtastic_MeshPacket_init_zero;
+    request.from = REMOTE_NODE;
+    request.to = LOCAL_NODE;
+    request.id = 0x5EED0102;
+    request.channel = 1;
+    request.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    request.decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
+
+    service->sendRoutingErrorResponse(meshtastic_Routing_Error_RATE_LIMIT_EXCEEDED, &request);
+
+    TEST_ASSERT_EQUAL_UINT32(1, mockRoutingModule->ackNaks.size());
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(REMOTE_NODE, mockRoutingModule->ackNaks[0].to,
+                                     "a sender that is already set must be left alone");
+}
+
+static void test_routingErrorResponse_nullPacketGeneratesNothing()
+{
+    service->sendRoutingErrorResponse(meshtastic_Routing_Error_RATE_LIMIT_EXCEEDED, nullptr);
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, mockRoutingModule->ackNaks.size(), "a null packet must not generate a NAK");
+}
+
+// Same request through the real RoutingModule and Router::sendLocal(): the verdict has to land in the
+// phone queue, and nothing may be handed to the radio.
+static void test_routingErrorResponse_unsetFromReachesPhoneViaRealRoutingModule()
+{
+    installRealRoutingModule();
+
+    meshtastic_MeshPacket request = meshtastic_MeshPacket_init_zero;
+    request.from = 0;
+    request.to = REMOTE_NODE;
+    request.id = 0x5EED0201;
+    request.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    request.decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
+
+    service->sendRoutingErrorResponse(meshtastic_Routing_Error_RATE_LIMIT_EXCEEDED, &request);
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, mockRouter->sentPackets.size(), "the NAK must not be sent towards the radio");
+    meshtastic_MeshPacket *toPhone = mockService->getForPhone();
+    TEST_ASSERT_NOT_NULL_MESSAGE(toPhone, "the NAK must reach the phone");
+    TEST_ASSERT_EQUAL(meshtastic_PortNum_ROUTING_APP, toPhone->decoded.portnum);
+    TEST_ASSERT_EQUAL_UINT32(0x5EED0201, toPhone->decoded.request_id);
+    meshtastic_Routing routing = meshtastic_Routing_init_zero;
+    TEST_ASSERT_TRUE(
+        pb_decode_from_bytes(toPhone->decoded.payload.bytes, toPhone->decoded.payload.size, &meshtastic_Routing_msg, &routing));
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_RATE_LIMIT_EXCEEDED, routing.error_reason);
+    mockService->releaseToPool(toPhone);
+}
+
 } // namespace
 
 void setUp(void)
@@ -1032,6 +1108,10 @@ void setup()
     RUN_TEST(test_nestedLocalSend_isDeferred_notReentrant);
     RUN_TEST(test_deferredChain_drainsBreadthFirst);
     RUN_TEST(test_deferredQueueOverflow_dropsGracefully);
+    RUN_TEST(test_routingErrorResponse_unsetFromAddressesUs);
+    RUN_TEST(test_routingErrorResponse_setFromIsPassedThrough);
+    RUN_TEST(test_routingErrorResponse_nullPacketGeneratesNothing);
+    RUN_TEST(test_routingErrorResponse_unsetFromReachesPhoneViaRealRoutingModule);
     RUN_TEST(test_neighborInfo_relayedPayloadIsNotModified);
     RUN_TEST(test_neighborInfo_directCopyRecordsSenderAndOursOmitsLastSentBy);
     RUN_TEST(test_neighborInfo_olderRelayRewriteMatchingHeaderIsTrusted);
