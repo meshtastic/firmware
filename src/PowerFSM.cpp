@@ -24,7 +24,7 @@
 #include "graphics/niche/InkHUD/InkHUD.h"
 #endif
 
-#if HAS_WIFI && !defined(ARCH_PORTDUINO) || defined(MESHTASTIC_EXCLUDE_WIFI)
+#if HAS_WIFI && !defined(ARCH_PORTDUINO)
 #include "mesh/wifi/WiFiAPClient.h"
 #endif
 
@@ -62,6 +62,24 @@ static bool isPowered()
        external power source (see `isVbusIn()` in `Power.cpp`)
     */
     return !isPowerSavingMode && powerStatus && (!powerStatus->getHasBattery() || powerStatus->getHasUSB());
+}
+
+static bool isWifiActiveForPowerFSM()
+{
+    // Configured WiFi blocks sleep even while disconnected, preventing a disconnect from triggering sleep.
+    // Builds without WiFi can still sleep when power saving is explicitly configured.
+#if HAS_WIFI && !defined(ARCH_PORTDUINO)
+    return isWifiAvailable();
+#else
+    return false;
+#endif
+}
+
+static bool hasModuleManagedSleepRole()
+{
+    return config.device.role == meshtastic_Config_DeviceConfig_Role_TRACKER ||
+           config.device.role == meshtastic_Config_DeviceConfig_Role_TAK_TRACKER ||
+           config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR;
 }
 
 #if defined(T5_S3_EPAPER_PRO)
@@ -155,8 +173,12 @@ static void lsIdle()
 
 #ifdef ARCH_ESP32
 
+    if (isWifiActiveForPowerFSM()) {
+        return;
+    }
+
     // Do we have more sleeping to do?
-    if (secsSlept < config.power.ls_secs) {
+    if (secsSlept < Default::getConfiguredOrDefault(config.power.ls_secs, default_ls_secs)) {
         // A USB host with the console open cannot survive a light sleep. No shipping chip keeps the
         // USB-serial/JTAG pad alive across one, and we surface for only 100 ms between 30 s chunks -
         // far too short for the host to re-enumerate. It gives up, and nothing on this side can ask
@@ -376,6 +398,8 @@ void PowerFSM_setup()
                          ? 1
                          : 0);
     bool hasPower = isPowered();
+    bool canUseLightSleep =
+        (isRouter || config.power.is_power_saving) && !isWifiActiveForPowerFSM() && !hasModuleManagedSleepRole();
 
     LOG_INFO("PowerFSM init, USB power=%d", hasPower ? 1 : 0);
     powerFSM.add_timed_transition(&stateBOOT, hasPower ? &statePOWER : &stateON, 3 * 1000, NULL, "boot timeout");
@@ -485,15 +509,9 @@ void PowerFSM_setup()
 // We never enter light-sleep or NB states on NRF52 (because the CPU uses so little power normally)
 #ifdef ARCH_ESP32
     // See: https://github.com/meshtastic/firmware/issues/1071
-    // Don't add power saving transitions if we are a power saving tracker or sensor or have Wifi enabled. Sleep will be initiated
-    // through the modules
+    // Don't add power saving transitions if sleep is owned by a role-specific module or Wifi is enabled.
 
-#if HAS_WIFI && !defined(MESHTASTIC_EXCLUDE_WIFI)
-    bool isTrackerOrSensor = config.device.role == meshtastic_Config_DeviceConfig_Role_TRACKER ||
-                             config.device.role == meshtastic_Config_DeviceConfig_Role_TAK_TRACKER ||
-                             config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR;
-
-    if ((isRouter || config.power.is_power_saving) && !isWifiAvailable() && !isTrackerOrSensor) {
+    if (canUseLightSleep) {
         powerFSM.add_timed_transition(&stateNB, &stateLS,
                                       Default::getConfiguredOrDefaultMs(config.power.min_wake_secs, default_min_wake_secs), NULL,
                                       "Min wake timeout");
@@ -510,7 +528,6 @@ void PowerFSM_setup()
                                       Default::getConfiguredOrDefaultMs(config.display.screen_on_secs, default_screen_on_secs),
                                       NULL, "Screen-on timeout");
     }
-#endif // HAS_WIFI || !defined(MESHTASTIC_EXCLUDE_WIFI)
 
 #else // (not) ARCH_ESP32
     // If not ESP32, light-sleep not used. Check periodically if config has drifted out of stateDark
