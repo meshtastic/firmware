@@ -1,0 +1,16 @@
+# Three command sensors: one with a Scale, one with a Type in a different case, and one air-quality
+# type. Clean: the only finding is the info line saying which Telemetry setting each needs enabled.
+Lora:
+  Module: sx1262
+  CS: 21
+  IRQ: 16
+  Busy: 20
+  Reset: 18
+Sensors:
+  - Type: temperature
+    Command: cat /sys/bus/iio/devices/iio:device0/in_temp_input
+    Scale: 0.001
+  - Type: Relative_Humidity
+    Command: /usr/local/bin/read-humidity
+  - Type: CO2
+    Command: /usr/local/bin/read-co2

@@ -176,6 +176,43 @@ assert "admin keys append across config.d" 0 adminkeys-append/config.yaml yaml \
 	"P2jeuoXA1sOGSPH9Vm3eHFlITu1EVnohWGKlGF3t8GU="
 
 echo
+echo "command sensors:"
+assert "a list of command sensors is clean" 0 sensors.yaml check \
+	"Sensors are only read while the Telemetry module setting for their Type is enabled" \
+	"Result: 0 errors, 0 warnings"
+# An air-quality Type is accepted like an environment one, and written back under its field name.
+assert "air-quality sensor types are accepted" 0 sensors.yaml yaml \
+	"Type: co2" \
+	"Type: relative_humidity"
+assert "an unknown sensor Type is refused and the valid ones named" 1 sensors-bad-type.yaml check \
+	"Sensors Type 'humidity' is not an environment metric" \
+	"relative_humidity" \
+	"Result: 1 error, 0 warnings"
+assert "sensors written as a mapping are refused" 1 sensors-not-a-list.yaml check \
+	"Sensors must be a list of entries with a Type and a Command" \
+	"Result: 1 error, 0 warnings"
+assert "bad Scale, unknown key and duplicate Type are warned" 0 sensors-warnings.yaml check \
+	"Sensors Scale 'milli' is not a finite number" \
+	"Sensors Scale '.inf' is not a finite number" \
+	"unknown key 'Sensors.Interval'" \
+	"Sensors lists temperature 2 times" \
+	"Result: 0 errors, 4 warnings"
+# A non-finite Scale falls back to 1, so it is not written back out.
+assert "a non-finite Scale is replaced by 1" 0 sensors-warnings.yaml yaml \
+	"!Scale: .inf" \
+	"!Scale: inf"
+assert "an empty Sensors section is skipped" 0 sensors-empty.yaml check \
+	"!Sensors must be a list" \
+	"Result: 0 errors, 0 warnings"
+# Like admin keys, sensors append across files so one file per sensor works. --output-yaml reports
+# the merged list, with the Type normalised to the field name.
+assert "sensors append across config.d" 0 sensors-append/config.yaml yaml \
+	"Type: temperature" \
+	"Command: echo 21.5" \
+	"Type: barometric_pressure" \
+	"Command: echo 1013.2"
+
+echo
 echo "module names are matched exactly:"
 assert "unknown module names the valid set" 1 module-unknown.yaml check \
 	"Lora.Module 'sx1263' is not a module meshtasticd knows" \
@@ -530,6 +567,10 @@ assert "a malformed admin key is refused on a normal boot" 1 adminkeys-bad.yaml 
 	"is not a 32-byte base64 public key"
 assert "admin keys as a scalar are refused on a normal boot" 1 adminkeys-not-a-list.yaml normal \
 	"Security.AdminKeys must be a list of base64 public keys"
+assert "an unknown sensor Type is refused on a normal boot" 1 sensors-bad-type.yaml normal \
+	"Sensors: 'humidity' is not a known Type"
+assert "sensors as a mapping are refused on a normal boot" 1 sensors-not-a-list.yaml normal \
+	"Sensors must be a list of entries with a Type and a Command"
 assert "MACAddress conflict is refused" 1 mac-conflict.yaml normal \
 	"Cannot set both MACAddress and MACAddressSource!"
 # Only meaningful on a build without rgbmatrix. A build that supports HUB75 accepts
