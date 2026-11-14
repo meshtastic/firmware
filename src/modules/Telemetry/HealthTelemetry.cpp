@@ -1,3 +1,4 @@
+#include "UptimeClock.h"
 #include "configuration.h"
 
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && !MESHTASTIC_EXCLUDE_HEALTH_TELEMETRY && !defined(ARCH_PORTDUINO)
@@ -90,7 +91,7 @@ int32_t HealthTelemetryModule::runOnce()
             // Just send to phone when it's not our time to send to mesh yet
             // Only send while queue is empty (phone assumed connected)
             sendTelemetry(NODENUM_BROADCAST, true);
-            lastSentToPhone = millis();
+            lastSentToPhone = Time::skipZero(Time::getMillis());
         }
     }
     if (sleepOnNextExecution) {
@@ -127,7 +128,7 @@ void HealthTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *
     const meshtastic_Data &p = lastMeasurementPacket->decoded;
     if (!pb_decode_from_bytes(p.payload.bytes, p.payload.size, &meshtastic_Telemetry_msg, &lastMeasurement)) {
         display->drawString(x, y, "Measurement Error");
-        LOG_ERROR("Unable to decode last packet");
+        LOG_ERROR("Can't decode last packet");
         return;
     }
 
@@ -223,7 +224,7 @@ meshtastic_MeshPacket *HealthTelemetryModule::allocReply()
         if (pb_decode_from_bytes(p.payload.bytes, p.payload.size, &meshtastic_Telemetry_msg, &scratch)) {
             decoded = &scratch;
         } else {
-            LOG_ERROR("Error decoding HealthTelemetry module!");
+            LOG_ERROR("Error decoding HealthTelemetry module");
             return NULL;
         }
         // Check for a request for health metrics

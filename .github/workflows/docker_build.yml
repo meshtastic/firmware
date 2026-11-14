@@ -82,12 +82,19 @@ jobs:
           plat: ${{ inputs.platform }}
         run: echo "cleaned_platform=${plat}" | sed 's/\//_/g' >> $GITHUB_OUTPUT
 
-      - name: Docker login
+      - name: DockerHub login
         if: ${{ inputs.push }}
         uses: docker/login-action@v4
         with:
           username: meshtastic
           password: ${{ secrets.DOCKER_FIRMWARE_TOKEN }}
+
+      - name: GHCR login
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Docker tag
         id: meta
@@ -97,6 +104,19 @@ jobs:
           tags: |
             GHA-${{ steps.version.outputs.long }}-${{ inputs.distro }}-${{ steps.sanitize_platform.outputs.cleaned_platform }}
           flavor: latest=false
+
+      - name: Docker setup caching
+        id: docker-cache
+        env:
+          BASE_REF: ${{ github.event.merge_group.base_ref || github.event.pull_request.base.ref || github.ref_name }}
+        run: |
+          base=$(echo "${BASE_REF#refs/heads/}" | sed 's/\//_/g')
+          ref=ghcr.io/${{ github.repository }}-cache:${base}-${{ inputs.distro }}-${{ steps.sanitize_platform.outputs.cleaned_platform }}
+          echo "cache_from=type=registry,ref=${ref}" >> $GITHUB_OUTPUT
+          case "${GITHUB_EVENT_NAME}" in
+            merge_group|pull_request) ;;
+            *) echo "cache_to=type=registry,ref=${ref},mode=max,ignore-error=true" >> $GITHUB_OUTPUT ;;
+          esac
 
       - name: Docker build and push
         uses: docker/build-push-action@v7
@@ -110,6 +130,6 @@ jobs:
           platforms: ${{ inputs.platform }}
           build-args: |
             PIO_ENV=${{ inputs.pio_env }}
-          # Disabled for now: Cache image layers in GitHub Actions cache to speed up subsequent builds.
-          # cache-from: type=gha
-          # cache-to: type=gha,mode=max
+          # Cache image layers in GitHub Container Registry to speed up subsequent builds.
+          cache-from: ${{ steps.docker-cache.outputs.cache_from }}
+          cache-to: ${{ steps.docker-cache.outputs.cache_to || '' }}

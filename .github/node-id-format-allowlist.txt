@@ -1,0 +1,15 @@
+# Exception list for bin/lint-node-id-format.sh (trunk linter: node-id-format).
+#
+# Format:  <path>[:<line>]   <reason>
+#   - "<path>"          exempts the whole file
+#   - "<path>:<line>"   exempts one call site
+#   - blank lines and # comments are ignored; the reason column is mandatory
+#
+# Intentionally empty. The known pre-existing sites - PacketHistory.cpp, NodeInfoModule.cpp
+# and PositionModule.cpp - are deliberately NOT listed, so trunk surfaces them the next time
+# someone edits those files and they get cleaned up in the change that was already touching
+# them. The rule emits "note", trunk's only non-blocking level, so this costs a notice rather
+# than a red PR.
+#
+# Add an entry only for a value the linter has misread as an ID - a CRC, a register, a hash -
+# and say which, so the next reader can tell a real exemption from a deferred cleanup.

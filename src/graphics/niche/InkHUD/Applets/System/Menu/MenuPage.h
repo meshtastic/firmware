@@ -19,6 +19,11 @@ enum MenuPage : uint8_t {
     ROOT, // Initial menu page
     SEND,
     CANNEDMESSAGE_RECIPIENT, // Select destination for a canned message
+    REMOVE_WAYPOINT_LIST,    // Pick a waypoint to delete (WaypointListApplet only)
+    GEOFENCE_WAYPOINT_LIST,
+    GEOFENCE_OPTIONS,
+    STEPS_GOAL,
+    STEPS_RESET,
     OPTIONS,
     NODE_CONFIG,
     NODE_CONFIG_LORA,
@@ -28,6 +33,9 @@ enum MenuPage : uint8_t {
     NODE_CONFIG_PRESET,
     NODE_CONFIG_DEVICE,
     NODE_CONFIG_DEVICE_ROLE,
+    NODE_CONFIG_SYSTEM_INFO,
+    NODE_CONFIG_EXT_NOTIFICATION,
+    NODE_CONFIG_EXT_NOTIFICATION_BUZZER_MODE,
     NODE_CONFIG_POWER,
     NODE_CONFIG_POWER_ADC_CAL,
     NODE_CONFIG_NETWORK,

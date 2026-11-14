@@ -26,6 +26,9 @@ bool RotaryEncoderInterruptImpl1::init()
     RotaryEncoderInterruptBase::init(pinA, pinB, pinPress, eventCw, eventCcw, eventPressed, eventPressedLong,
                                      RotaryEncoderInterruptImpl1::handleIntA, RotaryEncoderInterruptImpl1::handleIntB,
                                      RotaryEncoderInterruptImpl1::handleIntPressed);
+#if defined(INPUTDRIVER_PRESS_AND_TURN_CW) && defined(INPUTDRIVER_PRESS_AND_TURN_CCW)
+    setPressAndTurnChars(INPUTDRIVER_PRESS_AND_TURN_CW, INPUTDRIVER_PRESS_AND_TURN_CCW);
+#endif
     inputBroker->registerSource(this);
 #ifndef HAS_PHYSICAL_KEYBOARD
     osk_found = true;

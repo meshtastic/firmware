@@ -1,12 +1,40 @@
 #include "HardwareRNG.h"
 #include "configuration.h"
 #include "hardware/xosc.h"
+#include <assert.h>
 #include <cstring>
 #include <hardware/clocks.h>
 #include <hardware/pll.h>
 #include <hardware/watchdog.h>
 #include <pico/stdlib.h>
 #include <pico/unique_id.h>
+#include <tusb.h>
+
+// TinyUSB's flush only queues the next USB packet, so a reset straight after it drops the rest of the CDC FIFO.
+// Wait, bounded, for the FIFO to drain. The USB task runs from an IRQ, so skip the wait inside an exception.
+static void drainConsoleBeforeReset()
+{
+    Serial.flush();
+    if (__get_current_exception() != 0 || !tud_cdc_connected())
+        return;
+    for (uint32_t waitedMs = 0; waitedMs < 250 && tud_cdc_write_available() < CFG_TUD_CDC_TX_BUFSIZE; waitedMs++) {
+        Serial.flush();
+        busy_wait_ms(1);
+    }
+    // An empty FIFO means the last packet reached the endpoint buffer, not the host; it's collected on the next 1 ms frame
+    busy_wait_ms(20);
+}
+
+// newlib's assert() prints to stdio and parks in _exit's breakpoint loop, which the watchdog
+// cannot catch before rp2040Loop() arms it. Log and reset instead, as the nRF52 port does.
+extern "C" void __assert_func(const char *file, int line, const char *func, const char *failedexpr)
+{
+    LOG_ERROR("assert failed %s: %d, %s, test=%s", file, line, func, failedexpr);
+    drainConsoleBeforeReset();
+    watchdog_reboot(0, 0, 10);
+    while (true) {
+    }
+}
 
 #ifdef __PLAT_RP2040__
 #include <pico/sleep.h>
@@ -99,6 +127,11 @@ void getMacAddr(uint8_t *dmac)
     dmac[0] = src.id[2];
 }
 
+bool getBluetoothAddr(uint8_t *addr)
+{
+    return false;
+}
+
 bool getDeviceId(uint8_t *deviceId)
 {
     // RP2040/RP2350: 64-bit unique board id (flash serial / OTP) in bytes 0-7 (rest stay zero).
@@ -111,7 +144,7 @@ bool getDeviceId(uint8_t *deviceId)
 void rp2040Setup()
 {
     if (watchdog_caused_reboot()) {
-        LOG_WARN("Rebooted by watchdog!");
+        LOG_WARN("Rebooted by watchdog");
     }
 
     /* Sets a random seed to make sure we get different random numbers on each boot. */

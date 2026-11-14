@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cstring> // Include for strstr
 #include <vector>
 
@@ -5,10 +6,12 @@
 #if !MESHTASTIC_EXCLUDE_GPS
 #include "Default.h"
 #include "GPS.h"
+#include "GPSLog.h"
 #include "GpioLogic.h"
 #include "NodeDB.h"
 #include "PowerMon.h"
 #include "Throttle.h"
+#include "UptimeClock.h"
 #include "buzz.h"
 #include "concurrency/Periodic.h"
 #include "gps/RTC.h"
@@ -32,6 +35,19 @@
 #include <ctime>
 #endif
 
+#ifdef ARCH_RP2040
+#include <hardware/watchdog.h>
+#endif
+
+// GPS::setup() blocks the main loop for well over the RP2040 hardware watchdog window (8 s, fed only from loop()):
+// the u-blox M10 config alone is ~15 s of ACK waits and delays. Keep the watchdog fed while we wait on the module.
+static inline void feedWatchdogWhileWaiting()
+{
+#ifdef ARCH_RP2040
+    watchdog_update();
+#endif
+}
+
 #ifndef GPS_RESET_MODE
 #define GPS_RESET_MODE HIGH
 #endif
@@ -46,7 +62,9 @@ template <typename T, std::size_t N> std::size_t array_count(const T (&)[N])
 #define GPS_SERIAL_PORT Serial1
 #endif
 
-#if defined(ARCH_NRF52)
+#if defined(SENSECAP_INDICATOR)
+UARTProxy *GPS::_serial_gps = nullptr; // assigned in createGps(), see there
+#elif defined(ARCH_NRF52)
 Uart *GPS::_serial_gps = &GPS_SERIAL_PORT;
 #elif defined(ARCH_ESP32) || defined(ARCH_PORTDUINO) || defined(ARCH_STM32)
 HardwareSerial *GPS::_serial_gps = &GPS_SERIAL_PORT;
@@ -59,6 +77,11 @@ HardwareSerial *GPS::_serial_gps = nullptr;
 std::unique_ptr<GPS> gps = nullptr;
 
 static GPSUpdateScheduling scheduling;
+
+// A board can share one pin between an L76K standby and an Airoha RTC_INT (ThinkNode M5 v1.0/v2.0).
+#if defined(PIN_GPS_STANDBY) && defined(GPS_RTC_INT) && PIN_GPS_STANDBY == GPS_RTC_INT
+#define GPS_STANDBY_IS_RTC_INT 1
+#endif
 
 /// Multiple GPS instances might use the same serial port (in sequence), but we can
 /// only init that port once.
@@ -83,9 +106,45 @@ constexpr uint16_t GPS_PROBE_CACHE_VERSION = 1;
 constexpr const char *GPS_PROBE_CACHE_FILE = "/prefs/gps_probe_cache.dat";
 constexpr int MIN_PLAUSIBLE_GPS_YEAR = 2020;
 constexpr int MAX_PLAUSIBLE_GPS_YEAR = 2100;
-#ifdef TRACKER_T1000_E
-constexpr uint32_t T1000_E_AIROHA_WAKE_MS = 1000;
-constexpr uint32_t T1000_E_AIROHA_WAKE_INTERVAL_MS = 40;
+constexpr uint32_t NMEA_MAX_SENTENCE_BYTES = 120; // NMEA allows 82; longer means its '$' was lost
+#if GPS_PPS_DISCIPLINE
+constexpr uint64_t PPS_HOLDS_CLOCK_MS = 3000;              // NMEA stands aside this long after a PPS edge pins the clock
+constexpr uint64_t PPS_RECENT_MS = 30 * 60 * 1000;         // after that, NMEA may still step forward but not back
+constexpr uint32_t PPS_BURST_EDGES = 5;                    // edges accepted per burst; the rate trim carries the clock between
+constexpr uint64_t PPS_BURST_INTERVAL_MS = 10 * 60 * 1000; // between bursts while the GPS stays on
+constexpr uint64_t PPS_BURST_TIMEOUT_MS = 30 * 1000;       // give up on a burst that gets no usable edges
+constexpr uint64_t PPS_FIX_MAX_AGE_MS = 3 * 1000;          // GGA is 1 Hz, so this tolerates one lost sentence
+constexpr uint8_t GGA_FIX_QUALITY_FIELD = 6;               // commas before it, counted from the sentence's '$'
+#endif
+constexpr uint32_t AIROHA_PROBE_SETTLE_MS = 20;
+#ifdef HAS_AIROHA_SLEEP
+// The receiver may already have auto-slept and missed the first sleep command, so resend until it acks.
+#ifdef HAS_AIROHA_SOFT_RTC
+constexpr uint32_t AIROHA_SLEEP_ACK_MS = 40;
+constexpr uint32_t AIROHA_SLEEP_BUDGET_MS = 400;
+#else
+// $PAIR003 first answers ",1" (processing); the final ",0" can take longer than 40 ms.
+constexpr uint32_t AIROHA_SLEEP_ACK_MS = 100;
+// A successful $PAIR650 need not answer at all, but either command stops NMEA once it takes effect,
+// so silence for longer than one 1 Hz NMEA cycle also counts as asleep.
+constexpr uint32_t AIROHA_SLEEP_QUIET_MS = 1100;
+constexpr uint8_t AIROHA_SLEEP_ATTEMPTS = 2;
+#endif
+// Stop parking a receiver that never acks, rather than blocking for the budget every cycle forever.
+constexpr uint8_t AIROHA_SLEEP_MAX_MISSES = 3;
+#endif
+#ifdef HAS_AIROHA_SOFT_RTC
+constexpr uint32_t AIROHA_POWER_SETTLE_MS = 50;
+constexpr uint32_t AIROHA_RTC_INT_PULSE_MS = 3;
+constexpr uint32_t AIROHA_WAKE_SETTLE_MS = 50;
+#elif defined(HAS_AIROHA_SLEEP)
+constexpr uint32_t AIROHA_IDLE_INT_LEAD_MS = 50;
+// The ack can precede the transition itself, so give the receiver time before its core supply goes.
+constexpr uint32_t AIROHA_SLEEP_SETTLE_MS = 50;
+#endif
+#ifdef HAS_AIROHA_RESET_WAKE
+constexpr uint32_t AIROHA_POWER_SETTLE_MS = 50;
+constexpr uint32_t AIROHA_RESET_PULSE_MS = 10;
 #endif
 
 struct GPSProbeCacheRecord {
@@ -109,26 +168,79 @@ bool isValidProbeBaud(uint32_t baud)
     return baud >= 1200 && baud <= 921600;
 }
 
-template <typename T> void wakeAirohaForActiveProbe(T *serialGps)
+#ifdef HAS_AIROHA_SOFT_RTC
+// Airoha leaves software-RTC sleep on an RTC_INT rising edge; VCC must already be up.
+static void airohaPulseRtcInt()
 {
-#ifdef TRACKER_T1000_E
-    digitalWrite(PIN_GPS_EN, GPS_EN_ACTIVE);
+    delay(AIROHA_POWER_SETTLE_MS);
     digitalWrite(GPS_RTC_INT, HIGH);
-    delay(3);
+    delay(AIROHA_RTC_INT_PULSE_MS);
     digitalWrite(GPS_RTC_INT, LOW);
-    delay(50);
+    delay(AIROHA_WAKE_SETTLE_MS);
+}
+#elif defined(HAS_AIROHA_SLEEP)
+// idle_int rests high; the receiver only hears a command sent while it is pulled low.
+template <typename T> static void airohaWriteIdleInt(T *serialGps, const char *cmd)
+{
+    digitalWrite(GPS_SLEEP_INT, LOW);
+    delay(AIROHA_IDLE_INT_LEAD_MS);
+    serialGps->write(cmd);
+    serialGps->flush();
+    digitalWrite(GPS_SLEEP_INT, HIGH);
+}
 
-    const uint32_t start = millis();
-    do {
-        serialGps->write("$PAIR382,1*2E\r\n");
-        delay(T1000_E_AIROHA_WAKE_INTERVAL_MS);
-    } while (Throttle::isWithinTimespanMs(start, T1000_E_AIROHA_WAKE_MS));
-#elif defined(GNSS_AIROHA)
-    serialGps->write("$PAIR382,1*2E\r\n");
-    delay(20);
-#else
-    (void)serialGps;
+// True if no NMEA sentence starts for a whole NMEA cycle. Late $PAIR001 replies don't count.
+template <typename T> static bool airohaWentQuiet(T *serialGps)
+{
+    const uint32_t start = Time::getMillis();
+    int prev = 0;
+    while (Throttle::isWithinTimespanMs(start, AIROHA_SLEEP_QUIET_MS)) {
+        feedWatchdogWhileWaiting();
+        while (serialGps->available()) {
+            int c = serialGps->read();
+            if (prev == '$' && c == 'G')
+                return false;
+            prev = c;
+        }
+        delay(10);
+    }
+    return true;
+}
 #endif
+
+#ifdef HAS_AIROHA_RESET_WAKE
+// Backup mode only ends on RESETB; the core supply must already be up.
+static void airohaPulseReset()
+{
+    delay(AIROHA_POWER_SETTLE_MS);
+    pinMode(PIN_GPS_RESET, OUTPUT);
+    digitalWrite(PIN_GPS_RESET, GPS_RESET_MODE);
+    delay(AIROHA_RESET_PULSE_MS);
+    digitalWrite(PIN_GPS_RESET, !GPS_RESET_MODE);
+}
+#endif
+
+template <typename T> void sendAirohaWakeCommand(T *serialGps)
+{
+#ifdef HAS_AIROHA_SOFT_RTC
+    // The probe's own hardware reset drops the receiver back to sleep, so force the physical wake
+    // rather than relying on the command alone.
+#ifdef PIN_GPS_EN
+    digitalWrite(PIN_GPS_EN, GPS_EN_ACTIVE);
+#endif
+    airohaPulseRtcInt();
+    serialGps->write("$PAIR382,1*2E\r\n");
+    delay(AIROHA_PROBE_SETTLE_MS);
+#else
+    serialGps->write("$PAIR382,1*2E\r\n");
+    delay(AIROHA_PROBE_SETTLE_MS);
+#endif
+}
+
+template <typename T> void wakeAirohaForActiveProbe(T *serialGps, GnssModel_t model)
+{
+    if (IS_ONE_OF(model, GNSS_MODEL_AG3335, GNSS_MODEL_AG3352))
+        sendAirohaWakeCommand(serialGps);
 }
 
 bool isPlausibleNmeaTime(const struct tm &t)
@@ -335,11 +447,63 @@ uint8_t GPS::makeCASPacket(uint8_t class_id, uint8_t msg_id, uint8_t payload_siz
     }
     CASChecksum(UBXscratch, (payload_size + 10));
 
-#if defined(GPS_DEBUG) && defined(DEBUG_PORT)
+#if GPS_DEBUG && defined(DEBUG_PORT)
     LOG_DEBUG("CAS packet: ");
     DEBUG_PORT.hexDump(MESHTASTIC_LOG_LEVEL_DEBUG, UBXscratch, payload_size + 10);
 #endif
     return (payload_size + 10);
+}
+
+/**
+ * Index of the first of `messages` found in the first `len` bytes of `buf`, or -1 for none. Split out
+ * from getACKAny() so the native suite can cover the matching itself, which is the part that was wrong:
+ * a model with several identity strings could not be matched at all.
+ */
+int gpsMatchAnyIdentity(const char *buf, size_t len, const char *const *messages, size_t count)
+{
+    if (buf == nullptr || messages == nullptr)
+        return -1;
+    for (size_t i = 0; i < count; i++) {
+        if (messages[i] != nullptr && strnstr(buf, messages[i], len) != nullptr)
+            return static_cast<int>(i);
+    }
+    return -1;
+}
+
+GPS_RESPONSE GPS::getACKAny(const char *const *messages, size_t count, uint32_t waitMillis, const char **matched)
+{
+    uint8_t buffer[768] = {0};
+    uint8_t b;
+    int bytesRead = 0;
+    const uint32_t waitStartMs = Time::getMillis();
+#if GPS_DEBUG
+    std::string debugmsg = "";
+#endif
+    if (matched)
+        *matched = nullptr;
+    while (Throttle::isWithinTimespanMs(waitStartMs, waitMillis)) {
+        feedWatchdogWhileWaiting();
+        if (_serial_gps->available()) {
+            b = _serial_gps->read();
+#if GPS_DEBUG
+            debugmsg += vformat("%c", (b >= 32 && b <= 126) ? b : '.');
+#endif
+            buffer[bytesRead] = b;
+            bytesRead++;
+            if ((bytesRead == 767) || (b == '\r')) {
+                LOG_DEBUG_GPS("%s", debugmsg.c_str());
+                const int hit = gpsMatchAnyIdentity((char *)buffer, bytesRead, messages, count);
+                if (hit >= 0) {
+                    LOG_DEBUG_GPS("Found: %s", messages[hit]);
+                    if (matched)
+                        *matched = messages[hit];
+                    return GNSS_RESPONSE_OK;
+                }
+                bytesRead = 0;
+            }
+        }
+    }
+    return GNSS_RESPONSE_NONE;
 }
 
 GPS_RESPONSE GPS::getACK(const char *message, uint32_t waitMillis)
@@ -347,27 +511,26 @@ GPS_RESPONSE GPS::getACK(const char *message, uint32_t waitMillis)
     uint8_t buffer[768] = {0};
     uint8_t b;
     int bytesRead = 0;
-    uint32_t startTimeout = millis() + waitMillis;
-#ifdef GPS_DEBUG
+    // Start stamp + interval rather than a stored deadline: same wrap-safety, but the full 49.7-day
+    // range instead of 24.8 days ahead, and Time::getMillis() makes the wait injectable.
+    const uint32_t waitStartMs = Time::getMillis();
+#if GPS_DEBUG
     std::string debugmsg = "";
 #endif
-    while (millis() < startTimeout) {
+    while (Throttle::isWithinTimespanMs(waitStartMs, waitMillis)) {
+        feedWatchdogWhileWaiting();
         if (_serial_gps->available()) {
             b = _serial_gps->read();
 
-#ifdef GPS_DEBUG
+#if GPS_DEBUG
             debugmsg += vformat("%c", (b >= 32 && b <= 126) ? b : '.');
 #endif
             buffer[bytesRead] = b;
             bytesRead++;
             if ((bytesRead == 767) || (b == '\r')) {
-#ifdef GPS_DEBUG
-                LOG_DEBUG(debugmsg.c_str());
-#endif
+                LOG_DEBUG_GPS("%s", debugmsg.c_str());
                 if (strnstr((char *)buffer, message, bytesRead) != nullptr) {
-#ifdef GPS_DEBUG
-                    LOG_DEBUG("Found: %s", message); // Log the found message
-#endif
+                    LOG_DEBUG_GPS("Found: %s", message); // Log the found message
                     return GNSS_RESPONSE_OK;
                 } else {
                     bytesRead = 0;
@@ -416,17 +579,13 @@ GPS_RESPONSE GPS::getACKCas(uint8_t class_id, uint8_t msg_id, uint32_t waitMilli
 
             // Check for an ACK-ACK for the specified class and message id
             if ((msg_cls == 0x05) && (msg_msg_id == 0x01) && payload_cls == class_id && payload_msg == msg_id) {
-#ifdef GPS_DEBUG
-                LOG_INFO("Got ACK for class %02X message %02X in %dms", class_id, msg_id, millis() - startTime);
-#endif
+                LOG_DEBUG_GPS("Got ACK for class %02X msg %02X in %dms", class_id, msg_id, millis() - startTime);
                 return GNSS_RESPONSE_OK;
             }
 
             // Check for an ACK-NACK for the specified class and message id
             if ((msg_cls == 0x05) && (msg_msg_id == 0x00) && payload_cls == class_id && payload_msg == msg_id) {
-#ifdef GPS_DEBUG
-                LOG_WARN("Got NACK for class %02X message %02X in %dms", class_id, msg_id, millis() - startTime);
-#endif
+                LOG_DEBUG_GPS("Got NACK for class %02X msg %02X in %dms", class_id, msg_id, millis() - startTime);
                 return GNSS_RESPONSE_NAK;
             }
 
@@ -448,7 +607,7 @@ GPS_RESPONSE GPS::getACK(uint8_t class_id, uint8_t msg_id, uint32_t waitMillis)
     uint32_t startTime = millis();
     const char frame_errors[] = "More than 100 frame errors";
     int sCounter = 0;
-#ifdef GPS_DEBUG
+#if GPS_DEBUG
     std::string debugmsg = "";
 #endif
 
@@ -464,10 +623,9 @@ GPS_RESPONSE GPS::getACK(uint8_t class_id, uint8_t msg_id, uint32_t waitMillis)
     }
 
     while (Throttle::isWithinTimespanMs(startTime, waitMillis)) {
+        feedWatchdogWhileWaiting();
         if (ack > 9) {
-#ifdef GPS_DEBUG
-            LOG_INFO("Got ACK for class %02X message %02X in %dms", class_id, msg_id, millis() - startTime);
-#endif
+            LOG_DEBUG_GPS("Got ACK for class %02X msg %02X in %dms", class_id, msg_id, millis() - startTime);
             return GNSS_RESPONSE_OK; // ACK received
         }
         if (_serial_gps->available()) {
@@ -475,36 +633,29 @@ GPS_RESPONSE GPS::getACK(uint8_t class_id, uint8_t msg_id, uint32_t waitMillis)
             if (b == frame_errors[sCounter]) {
                 sCounter++;
                 if (sCounter == 26) {
-#ifdef GPS_DEBUG
-
-                    LOG_DEBUG(debugmsg.c_str());
-#endif
+                    LOG_DEBUG_GPS("%s", debugmsg.c_str());
                     return GNSS_RESPONSE_FRAME_ERRORS;
                 }
             } else {
                 sCounter = 0;
             }
-#ifdef GPS_DEBUG
+#if GPS_DEBUG
             debugmsg += vformat("%02X", b);
 #endif
             if (b == buf[ack]) {
                 ack++;
             } else {
                 if (ack == 3 && b == 0x00) { // UBX-ACK-NAK message
-#ifdef GPS_DEBUG
-                    LOG_DEBUG(debugmsg.c_str());
-#endif
-                    LOG_WARN("Got NAK for class %02X message %02X", class_id, msg_id);
+                    LOG_DEBUG_GPS("%s", debugmsg.c_str());
+                    LOG_WARN("Got NAK for class %02X msg %02X", class_id, msg_id);
                     return GNSS_RESPONSE_NAK; // NAK received
                 }
                 ack = 0; // Reset the acknowledgement counter
             }
         }
     }
-#ifdef GPS_DEBUG
-    LOG_DEBUG(debugmsg.c_str());
-    LOG_WARN("No response for class %02X message %02X", class_id, msg_id);
-#endif
+    LOG_DEBUG_GPS("%s", debugmsg.c_str());
+    LOG_DEBUG_GPS("No response for class %02X msg %02X", class_id, msg_id);
     return GNSS_RESPONSE_NONE; // No response received within timeout
 }
 
@@ -524,6 +675,7 @@ int GPS::getACK(uint8_t *buffer, uint16_t size, uint8_t requestedClass, uint8_t 
     uint16_t needRead = 0;
 
     while (Throttle::isWithinTimespanMs(startTime, waitMillis)) {
+        feedWatchdogWhileWaiting();
         if (_serial_gps->available()) {
             int c = _serial_gps->read();
             switch (ubxFrameCounter) {
@@ -575,9 +727,7 @@ int GPS::getACK(uint8_t *buffer, uint16_t size, uint8_t requestedClass, uint8_t 
                     ubxFrameCounter = 0;
                 } else {
                     // return payload length
-#ifdef GPS_DEBUG
-                    LOG_INFO("Got ACK for class %02X message %02X in %dms", requestedClass, requestedID, millis() - startTime);
-#endif
+                    LOG_DEBUG_GPS("Got ACK for class %02X msg %02X in %dms", requestedClass, requestedID, millis() - startTime);
                     return needRead;
                 }
                 break;
@@ -736,7 +886,7 @@ bool GPS::verifyCachedProbePresence()
     case GNSS_MODEL_AG3352:
         if (cachedProbeModel == GNSS_MODEL_AG3352)
             cachedProbeModelName = "AG3352";
-        wakeAirohaForActiveProbe(_serial_gps);
+        wakeAirohaForActiveProbe(_serial_gps, cachedProbeModel);
         _serial_gps->write("$PAIR021*39\r\n");
         present = (getACK("$PAIR021,", 900) == GNSS_RESPONSE_OK);
         break;
@@ -745,15 +895,38 @@ bool GPS::verifyCachedProbePresence()
         _serial_gps->write("$PCAS06,1*1A\r\n");
         present = (getACK("$GPTXT,01,01,02,HW=ATGM", 900) == GNSS_RESPONSE_OK);
         break;
-    case GNSS_MODEL_UC6580:
+    case GNSS_MODEL_UC6580: {
+        // $PDTINFO is written once, so the old chain of two getACK() calls could not work: the first
+        // consumed the reply, leaving the second to time out against an empty port. A UM600 therefore
+        // never verified from cache and paid 1800 ms to fail.
+        static const char *const kIds[] = {"UC6580", "UM600"};
         cachedProbeModelName = "UC6580/UM600";
         _serial_gps->write("$PDTINFO\r\n");
-        present = (getACK("UC6580", 900) == GNSS_RESPONSE_OK) || (getACK("UM600", 900) == GNSS_RESPONSE_OK);
+        const char *found = nullptr;
+        present = (getACKAny(kIds, sizeof(kIds) / sizeof(kIds[0]), 900, &found) == GNSS_RESPONSE_OK);
+        if (found)
+            cachedProbeModelName = found;
         break;
-    case GNSS_MODEL_CM121:
+    }
+    case GNSS_MODEL_CM121: {
+        // Both of these map to GNSS_MODEL_CM121 in the probe table below, and a board carrying the
+        // CC1167Q answers $PDTINFO with that name -- so matching only "CM121" failed every warm boot,
+        // burned the full 900 ms and all twelve $PDTINFO retries, and only survived because the passive
+        // sawNmeaSentenceAtBaud() fallback below caught it. Measured on a ThinkNode M9, whose GPS reports
+        // "$PDTINFO,CC1167Q,G1B1,N/A,N1000R3.52.1.3269Build15172,N/A,N/A".
+        static const char *const kIds[] = {"CM121", "CC1167Q"};
         cachedProbeModelName = "CM121";
         _serial_gps->write("$PDTINFO\r\n");
-        present = (getACK("CM121", 900) == GNSS_RESPONSE_OK);
+        const char *found = nullptr;
+        present = (getACKAny(kIds, sizeof(kIds) / sizeof(kIds[0]), 900, &found) == GNSS_RESPONSE_OK);
+        if (found) // name the chip that actually answered, not the enum's label
+            cachedProbeModelName = found;
+        break;
+    }
+    case GNSS_MODEL_LC760CA:
+        cachedProbeModelName = "LC760CA";
+        _serial_gps->write("$PDTINFO\r\n");
+        present = (getACK("CC1161W", 900) == GNSS_RESPONSE_OK);
         break;
     case GNSS_MODEL_UBLOX6:
     case GNSS_MODEL_UBLOX7:
@@ -787,7 +960,7 @@ bool GPS::verifyCachedProbePresence()
         present = sawNmeaSentenceAtBaud(_serial_gps, 3000);
     }
     if (!present) {
-        LOG_WARN("Cached GPS probe is stale (%s @ %d), clearing cache", cachedProbeModelName, cachedProbeBaud);
+        LOG_WARN("Cached GPS probe stale (%s @ %d), clearing", cachedProbeModelName, cachedProbeBaud);
         clearProbeCache();
         return false;
     }
@@ -841,7 +1014,7 @@ bool GPS::setup()
                 if (gnssModel != GNSS_MODEL_UNKNOWN) {
                     detectedBaud = rareSerialSpeeds[speedSelect];
                 } else if (currentStep == 0 && ++speedSelect == array_count(rareSerialSpeeds)) {
-                    LOG_WARN("Give up on GPS probe and set to %d", GPS_BAUDRATE);
+                    LOG_WARN("Give up GPS probe, set to %d", GPS_BAUDRATE);
                     return true;
                 }
             }
@@ -920,14 +1093,14 @@ bool GPS::setup()
             msglen = makeCASPacket(0x06, 0x07, sizeof(_message_CAS_CFG_NAVX_CONF), _message_CAS_CFG_NAVX_CONF);
             _serial_gps->write(UBXscratch, msglen);
             if (getACKCas(0x06, 0x07, 250) != GNSS_RESPONSE_OK) {
-                LOG_WARN("ATGM336H: Could not set Config");
+                LOG_WARN("ATGM336H: Can't set Config");
             }
 
             // Set the update frequency to 1Hz
             msglen = makeCASPacket(0x06, 0x04, sizeof(_message_CAS_CFG_RATE_1HZ), _message_CAS_CFG_RATE_1HZ);
             _serial_gps->write(UBXscratch, msglen);
             if (getACKCas(0x06, 0x04, 250) != GNSS_RESPONSE_OK) {
-                LOG_WARN("ATGM336H: Could not set Update Frequency");
+                LOG_WARN("ATGM336H: Can't set Update Frequency");
             }
 
             // Set the NEMA output messages
@@ -939,7 +1112,7 @@ bool GPS::setup()
                 msglen = makeCASPacket(0x06, 0x01, sizeof(cas_cfg_msg_packet), cas_cfg_msg_packet);
                 _serial_gps->write(UBXscratch, msglen);
                 if (getACKCas(0x06, 0x01, 250) != GNSS_RESPONSE_OK) {
-                    LOG_WARN("ATGM336H: Could not enable NMEA MSG: %d", fields[i]);
+                    LOG_WARN("ATGM336H: Can't enable NMEA MSG: %d", fields[i]);
                 }
             }
         } else if (gnssModel == GNSS_MODEL_UC6580) {
@@ -1007,9 +1180,9 @@ bool GPS::setup()
             msglen = makeUBXPacket(0x06, 0x09, sizeof(_message_SAVE), _message_SAVE);
             _serial_gps->write(UBXscratch, msglen);
             if (getACK(0x06, 0x09, 2000) != GNSS_RESPONSE_OK) {
-                LOG_WARN("Unable to save GNSS module config");
+                LOG_WARN("Can't save GNSS module config");
             } else {
-                LOG_INFO("GNSS module config saved!");
+                LOG_INFO("GNSS module config saved");
             }
         } else if (IS_ONE_OF(gnssModel, GNSS_MODEL_UBLOX7, GNSS_MODEL_UBLOX8, GNSS_MODEL_UBLOX9)) {
             if (gnssModel == GNSS_MODEL_UBLOX7) {
@@ -1023,7 +1196,7 @@ bool GPS::setup()
 
             if (getACK(0x06, 0x3e, 800) == GNSS_RESPONSE_NAK) {
                 // It's not critical if the module doesn't acknowledge this configuration.
-                LOG_DEBUG("reconfigure GNSS - defaults maintained. Is this module GPS-only?");
+                LOG_DEBUG("reconfigure GNSS - defaults kept. GPS-only module?");
             } else {
                 if (gnssModel == GNSS_MODEL_UBLOX7) {
                     LOG_INFO("GPS+SBAS configured");
@@ -1076,9 +1249,9 @@ bool GPS::setup()
             msglen = makeUBXPacket(0x06, 0x09, sizeof(_message_SAVE), _message_SAVE);
             _serial_gps->write(UBXscratch, msglen);
             if (getACK(0x06, 0x09, 2000) != GNSS_RESPONSE_OK) {
-                LOG_WARN("Unable to save GNSS module config");
+                LOG_WARN("Can't save GNSS module config");
             } else {
-                LOG_INFO("GNSS module configuration saved!");
+                LOG_INFO("GNSS module config saved");
             }
         } else if (gnssModel == GNSS_MODEL_UBLOX10) {
             delay(1000);
@@ -1124,11 +1297,11 @@ bool GPS::setup()
             msglen = makeUBXPacket(0x06, 0x09, sizeof(_message_SAVE_10), _message_SAVE_10);
             _serial_gps->write(UBXscratch, msglen);
             if (getACK(0x06, 0x09, 2000) != GNSS_RESPONSE_OK) {
-                LOG_WARN("Unable to save GNSS module config");
+                LOG_WARN("Can't save GNSS module config");
             } else {
-                LOG_INFO("GNSS module configuration saved!");
+                LOG_INFO("GNSS module config saved");
             }
-        } else if (gnssModel == GNSS_MODEL_CM121) {
+        } else if (IS_ONE_OF(gnssModel, GNSS_MODEL_CM121, GNSS_MODEL_LC760CA)) {
             // only ask for RMC and GGA
             // enable GGA
             _serial_gps->write("$CFGMSG,0,0,1,1*1B\r\n");
@@ -1157,7 +1330,13 @@ void GPS::setPowerState(GPSPowerState newState, uint32_t sleepTime)
     // Update the stored GPSPowerstate, and create local copies
     GPSPowerState oldState = powerState;
     powerState = newState;
-    LOG_INFO("GPS power state move from %s to %s", getGPSPowerStateString(oldState), getGPSPowerStateString(newState));
+    LOG_INFO("GPS power state %s -> %s", getGPSPowerStateString(oldState), getGPSPowerStateString(newState));
+#if GPS_PPS_DISCIPLINE
+    if (newState != GPS_ACTIVE) {
+        disarmPps(0);     // no pulses while it sleeps; burst again once it wakes with a fix
+        lastGgaFixMs = 0; // and not before a GGA reports a fix after the wake
+    }
+#endif
 
     switch (newState) {
     case GPS_ACTIVE:
@@ -1165,6 +1344,7 @@ void GPS::setPowerState(GPSPowerState newState, uint32_t sleepTime)
         if (oldState == GPS_ACTIVE)
             break;
         gotTime = false;
+        nmeaTime.reset();         // the module may have re-acquired, and our clock drifted while it slept
         if (oldState == GPS_IDLE) // If hardware already awake, no changes needed
             break;
         if (oldState != GPS_ACTIVE && oldState != GPS_IDLE) // If hardware just waking now, clear buffer
@@ -1180,40 +1360,54 @@ void GPS::setPowerState(GPSPowerState newState, uint32_t sleepTime)
 #endif
         powerMon->setState(meshtastic_PowerMon_State_GPS_Active); // Report change for power monitoring (during testing)
         writePinEN(true);                                         // Power (EN pin): on
-        setPowerPMU(true);                                        // Power (PMU): on
-        writePinStandby(false);                                   // Standby (pin): awake (not standby)
-        setPowerUBLOX(true);                                      // Standby (UBLOX): awake
+#ifdef HAS_AIROHA_SOFT_RTC
+        if (IS_ONE_OF(gnssModel, GNSS_MODEL_AG3335, GNSS_MODEL_AG3352))
+            airohaPulseRtcInt(); // Airoha: leave software-RTC sleep, now that VCC is back
+#endif
+#ifdef HAS_AIROHA_RESET_WAKE
+        if (IS_ONE_OF(gnssModel, GNSS_MODEL_AG3335, GNSS_MODEL_AG3352))
+            airohaPulseReset(); // Airoha: leave backup mode, now that the core is powered
+#endif
+        setPowerPMU(true);      // Power (PMU): on
+        writePinRFEN(true);     // External RF front-end: on
+        writePinStandby(false); // Standby (pin): awake (not standby)
+        setPowerUBLOX(true);    // Standby (UBLOX): awake
         break;
 
     case GPS_SOFTSLEEP:
         powerMon->clearState(meshtastic_PowerMon_State_GPS_Active); // Report change for power monitoring (during testing)
         writePinEN(true);                                           // Power (EN pin): on
         setPowerPMU(true);                                          // Power (PMU): on
+        writePinRFEN(false);                                        // External RF front-end: off
         writePinStandby(true);                                      // Standby (pin): asleep (not awake)
         setPowerUBLOX(false, sleepTime);                            // Standby (UBLOX): asleep, timed
         break;
 
     case GPS_HARDSLEEP:
         powerMon->clearState(meshtastic_PowerMon_State_GPS_Active); // Report change for power monitoring (during testing)
-        writePinEN(false);                                          // Power (EN pin): off
-        setPowerPMU(false);                                         // Power (PMU): off
-        writePinStandby(true);                                      // Standby (pin): asleep (not awake)
-        setPowerUBLOX(false, sleepTime);                            // Standby (UBLOX): asleep, timed
-#ifdef GNSS_AIROHA
-        digitalWrite(PIN_GPS_EN, LOW);
+#ifdef HAS_AIROHA_SLEEP
+        if (oldState != GPS_HARDSLEEP && oldState != GPS_OFF)
+            airohaEnterSleep(); // Airoha: must precede the power cut, while it can still hear us
 #endif
+        writePinRFEN(false);             // External RF front-end: off
+        writePinStandby(true);           // Standby (pin): asleep (not awake)
+        writePinEN(false);               // Power (EN pin): off
+        setPowerPMU(false);              // Power (PMU): off
+        setPowerUBLOX(false, sleepTime); // Standby (UBLOX): asleep, timed
         break;
 
     case GPS_OFF:
         assert(sleepTime == 0);                                     // This is an indefinite sleep
         powerMon->clearState(meshtastic_PowerMon_State_GPS_Active); // Report change for power monitoring (during testing)
-        writePinEN(false);                                          // Power (EN pin): off
-        setPowerPMU(false);                                         // Power (PMU): off
-        writePinStandby(true);                                      // Standby (pin): asleep
-        setPowerUBLOX(false, 0);                                    // Standby (UBLOX): asleep, indefinitely
-#ifdef GNSS_AIROHA
-        digitalWrite(PIN_GPS_EN, LOW);
+#ifdef HAS_AIROHA_SLEEP
+        if (oldState != GPS_HARDSLEEP && oldState != GPS_OFF)
+            airohaEnterSleep(); // Airoha: must precede the power cut, while it can still hear us
 #endif
+        writePinRFEN(false);     // External RF front-end: off
+        writePinStandby(true);   // Standby (pin): asleep
+        writePinEN(false);       // Power (EN pin): off
+        setPowerPMU(false);      // Power (PMU): off
+        setPowerUBLOX(false, 0); // Standby (UBLOX): asleep, indefinitely
         break;
     }
 }
@@ -1228,9 +1422,7 @@ void GPS::writePinEN(bool on)
 
     // Write and log
     enablePin->set(on);
-#ifdef GPS_DEBUG
-    LOG_DEBUG("Pin EN %s", on == HIGH ? "HI" : "LOW");
-#endif
+    LOG_DEBUG_GPS("Pin EN %s", on == HIGH ? "HI" : "LOW");
 }
 
 // Set the value of the STANDBY pin, if relevant
@@ -1238,6 +1430,11 @@ void GPS::writePinEN(bool on)
 void GPS::writePinStandby(bool standby)
 {
 #ifdef PIN_GPS_STANDBY // Specifically the standby pin for L76B, L76K and clones
+#ifdef GPS_STANDBY_IS_RTC_INT
+    // RTC_INT must rest low on an Airoha fit; the Airoha sleep code pulses it.
+    if (IS_ONE_OF(gnssModel, GNSS_MODEL_AG3335, GNSS_MODEL_AG3352))
+        return;
+#endif
     bool val;
     if (standby)
         val = GPS_STANDBY_ACTIVE;
@@ -1253,9 +1450,20 @@ void GPS::writePinStandby(bool standby)
         _serial_gps->write("$PMTK225,4*2F\r\n");
     }
 
-#ifdef GPS_DEBUG
-    LOG_DEBUG("Pin STANDBY %s", val == HIGH ? "HI" : "LOW");
+    LOG_DEBUG_GPS("Pin STANDBY %s", val == HIGH ? "HI" : "LOW");
 #endif
+}
+
+// Set the external RF front-end enable pin, if relevant
+void GPS::writePinRFEN(bool on)
+{
+#ifdef PIN_GPS_RF_EN
+    bool val = on ? GPS_RF_EN_ACTIVE : !GPS_RF_EN_ACTIVE;
+    pinMode(PIN_GPS_RF_EN, OUTPUT);
+    digitalWrite(PIN_GPS_RF_EN, val);
+    LOG_DEBUG_GPS("Pin RF EN %s", val == HIGH ? "HI" : "LOW");
+#else
+    (void)on;
 #endif
 }
 
@@ -1281,17 +1489,15 @@ void GPS::setPowerPMU(bool on)
         } else if (HW_VENDOR == meshtastic_HardwareModel_LILYGO_TBEAM_S3_CORE) {
             // t-beam-s3-core GNSS power channel
             on ? PMU->enablePowerOutput(XPOWERS_ALDO4) : PMU->disablePowerOutput(XPOWERS_ALDO4);
-        } else if (HW_VENDOR == meshtastic_HardwareModel_T_WATCH_S3) {
-            // t-watch-s3-plus GNSS power channel
+        } else if (HW_VENDOR == meshtastic_HardwareModel_T_WATCH_ULTRA || HW_VENDOR == meshtastic_HardwareModel_T_WATCH_S3) {
+            // t-watch-ultra / t-watch-s3-plus GNSS power channel
             on ? PMU->enablePowerOutput(XPOWERS_BLDO1) : PMU->disablePowerOutput(XPOWERS_BLDO1);
         }
     } else if (model == XPOWERS_AXP192) {
         // t-beam v1.1 GNSS  power channel
         on ? PMU->enablePowerOutput(XPOWERS_LDO3) : PMU->disablePowerOutput(XPOWERS_LDO3);
     }
-#ifdef GPS_DEBUG
-    LOG_DEBUG("PMU %s", on ? "on" : "off");
-#endif
+    LOG_DEBUG_GPS("PMU %s", on ? "on" : "off");
 #endif
 }
 
@@ -1337,10 +1543,53 @@ void GPS::setPowerUBLOX(bool on, uint32_t sleepMs)
 
         // Send the UBX packet
         gps->_serial_gps->write(gps->UBXscratch, msglen);
-#ifdef GPS_DEBUG
-        LOG_DEBUG("UBLOX: sleep for %dmS", sleepMs);
-#endif
+        LOG_DEBUG_GPS("UBLOX: sleep for %dmS", sleepMs);
     }
+}
+
+// With RTC_INT or a reset wake, park the receiver in backup mode so a pulse can wake it once VCC is cut;
+// without either, only stop the GNSS engine.
+void GPS::airohaEnterSleep()
+{
+#ifdef HAS_AIROHA_SLEEP
+    // Only an Airoha receiver understands PAIR commands; a probe that fell back must not be talked at.
+    if (!IS_ONE_OF(gnssModel, GNSS_MODEL_AG3335, GNSS_MODEL_AG3352) || airohaSleepMisses >= AIROHA_SLEEP_MAX_MISSES)
+        return;
+
+#if defined(HAS_AIROHA_SOFT_RTC) || defined(HAS_AIROHA_RESET_WAKE)
+    const char *sleepCmd = "$PAIR650,0*25\r\n";
+    const char *sleepAck = "$PAIR001,650,0";
+#else
+    const char *sleepCmd = "$PAIR003*39\r\n";
+    const char *sleepAck = "$PAIR001,003,0";
+#endif
+#ifdef HAS_AIROHA_SOFT_RTC
+    const uint32_t start = Time::getMillis();
+    do {
+        _serial_gps->write(sleepCmd);
+        if (getACK(sleepAck, AIROHA_SLEEP_ACK_MS) == GNSS_RESPONSE_OK) {
+            airohaSleepMisses = 0;
+            return;
+        }
+        // Only start another attempt while a whole ack window still fits inside the budget.
+    } while (Throttle::isWithinTimespanMs(start, AIROHA_SLEEP_BUDGET_MS - AIROHA_SLEEP_ACK_MS));
+#else
+    // No $PAIR382 first: it locks the CPU out of sleep, the opposite of what we want here.
+    for (uint8_t attempt = 0; attempt < AIROHA_SLEEP_ATTEMPTS; attempt++) {
+        airohaWriteIdleInt(_serial_gps, sleepCmd);
+        const bool acked = getACK(sleepAck, AIROHA_SLEEP_ACK_MS) == GNSS_RESPONSE_OK;
+        if (acked || airohaWentQuiet(_serial_gps)) {
+            LOG_DEBUG("GPS: %.8s took (%s, attempt %u)", sleepCmd, acked ? "acked" : "NMEA stopped", attempt + 1);
+            airohaSleepMisses = 0;
+            delay(AIROHA_SLEEP_SETTLE_MS);
+            return;
+        }
+    }
+#endif
+
+    airohaSleepMisses++;
+    LOG_WARN("GPS: %.8s did not take (%u/%u)", sleepCmd, airohaSleepMisses, AIROHA_SLEEP_MAX_MISSES);
+#endif
 }
 
 /// Record that we have a GPS
@@ -1362,7 +1611,7 @@ void GPS::up()
 // We've finished a GPS search cycle (lock or timeout). Enter a low power state, potentially.
 void GPS::down()
 {
-    if (hasValidLocation)
+    if (scheduling.hasValidFixSinceSearchStarted())
         scheduling.informGotLock();
     else
         scheduling.informSearchFailed();
@@ -1384,17 +1633,24 @@ void GPS::down()
 #else
         bool softsleepSupported = false;
 #endif
+#ifdef GPS_STANDBY_IS_RTC_INT
+        if (IS_ONE_OF(gnssModel, GNSS_MODEL_AG3335, GNSS_MODEL_AG3352))
+            softsleepSupported = false;
+#endif
         // U-blox is supported via PMREQ
         if (IS_ONE_OF(gnssModel, GNSS_MODEL_UBLOX6, GNSS_MODEL_UBLOX7, GNSS_MODEL_UBLOX8, GNSS_MODEL_UBLOX9, GNSS_MODEL_UBLOX10))
             softsleepSupported = true;
 
+#ifdef GPS_FORCE_SOFT_SLEEP
         if (softsleepSupported) {
-            // How long does gps_update_interval need to be, for GPS_HARDSLEEP to become more efficient than
-            // GPS_SOFTSLEEP? Heuristic equation. A compromise manually fitted to power observations from U-blox NEO-6M
-            // and M10050 https://www.desmos.com/calculator/6gvjghoumr This is not particularly accurate, but probably an
-            // improvement over a single, fixed threshold
-            uint32_t hardsleepThreshold = (2750 * pow(predictedSearchDuration / 1000, 1.22));
-            LOG_DEBUG("gps_update_interval >= %us needed to justify hardsleep", hardsleepThreshold / 1000);
+            setPowerState(GPS_SOFTSLEEP, sleepTime);
+            return;
+        }
+#endif
+
+        if (softsleepSupported) {
+            uint32_t hardsleepThreshold = gpsHardsleepThresholdMs(predictedSearchDuration / 1000);
+            LOG_DEBUG("gps_update_interval >= %us needed for hardsleep", hardsleepThreshold / 1000);
 
             // If update interval too short: softsleep (if supported by hardware)
             if (updateInterval < hardsleepThreshold) {
@@ -1418,7 +1674,7 @@ void GPS::publishUpdate()
         LOG_DEBUG("Publish pos@%x:2, hasVal=%d, Sats=%d, GPSlock=%d", p.timestamp, hasValidLocation, p.sats_in_view, hasLock());
 
         // Notify any status instances that are observing us
-        const meshtastic::GPSStatus status = meshtastic::GPSStatus(hasValidLocation, isConnected(), isPowerSaving(), p);
+        const meshtastic::GPSStatus status = meshtastic::GPSStatus(hasValidLocation, isConnected(), isPowerSaving(), p, gotTime);
         newStatus.notifyObservers(&status);
         if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
             positionModule->handleNewPosition();
@@ -1426,8 +1682,46 @@ void GPS::publishUpdate()
     }
 }
 
+/// Is a post-lock ephemeris hold currently in force? The `!= 0` is the "never armed" sentinel, which
+/// deadlinePassed() reads as passed for the first half of each wrap cycle and as ~24.8 days in the
+/// future for the second. No header: test_gps_fix_hold declares the prototypes itself.
+bool fixHoldInForce(uint32_t fixHoldEnds, uint32_t threadIntervalMs)
+{
+    return fixHoldEnds != 0 && !Throttle::deadlinePassed(fixHoldEnds + threadIntervalMs);
+}
+
+/// Did an armed hold just expire? `!= 0` guards against negating fixHoldInForce() alone, which would
+/// call an unarmed hold "expired" every cycle. No grace interval: the deadline itself is go-down time.
+bool holdJustExpired(uint32_t fixHoldEnds)
+{
+    return fixHoldEnds != 0 && !fixHoldInForce(fixHoldEnds, 0);
+}
+
+/// Should a post-lock ephemeris hold be (re-)armed this cycle? "No hold in force" fires often, since
+/// every publish clears the hold, including ones that don't put the receiver back to sleep.
+bool shouldArmFixHold(bool hasValidLocation, uint8_t prevFixQual, uint32_t fixHoldEnds, uint32_t threadIntervalMs)
+{
+    // First lock of a cycle, first lock after the receiver was off, or nothing holding right now.
+    return !hasValidLocation || prevFixQual == 0 || !fixHoldInForce(fixHoldEnds, threadIntervalMs);
+}
+
 int32_t GPS::runOnce()
 {
+#if defined(SENSECAP_INDICATOR)
+    // No model probe on the bridged fake UART (the module only streams
+    // NMEA), but the user's GPS mode setting must still be honored
+    if (!GPSInitFinished) {
+        if (!_serial_gps || config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT) {
+            LOG_INFO("GPS set to not-present. Skip probe");
+            return disable();
+        }
+        if (config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
+            return disable();
+        }
+        GPSInitFinished = true;
+        publishUpdate();
+    }
+#else
     if (!GPSInitFinished) {
         if (!_serial_gps || config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT) {
             LOG_INFO("GPS set to not-present. Skip probe");
@@ -1437,7 +1731,7 @@ int32_t GPS::runOnce()
             return currentDelay; // Setup failed, re-run in two seconds
 
         if (gnssModel == GNSS_MODEL_UNKNOWN) {
-            LOG_WARN("GPS not detected; marked not present for this boot");
+            LOG_WARN("GPS not detected; not present this boot");
             return disable();
         }
 
@@ -1448,6 +1742,7 @@ int32_t GPS::runOnce()
         GPSInitFinished = true;
         publishUpdate();
     }
+#endif
 
     // ======================== GPS_ACTIVE state ========================
     // In GPS_ACTIVE state, GPS is powered on and we're receiving NMEA messages.
@@ -1458,7 +1753,7 @@ int32_t GPS::runOnce()
     // gps_update_interval is faster than the position broadcast interval so there's a
     // fresh position ready when the device wants to broadcast one on the mesh.
     //
-    // 1. Got a time for the first time --> set the time, don't publish.
+    // 1. Got a time for the first time --> set the time, publish so the UI can show the time-only state.
     // 2. Got a lock for the first time
     //   --> If gps_update_interval is <= 10s --> publishUpdate
     //   --> Otherwise, hold for MIN(gps_update_interval - GPS_UPDATE_ALWAYS_ON_THRESHOLD_MS, 20s)
@@ -1489,15 +1784,22 @@ int32_t GPS::runOnce()
         // if gps_update_interval is <=10s, GPS never goes off, so we treat that differently
         uint32_t updateInterval = Default::getConfiguredOrDefaultMs(config.position.gps_update_interval);
 
-        // 1. Got a time for the first time this cycle
-        if (!gotTime && lookForTime()) { // Note: we count on this && short-circuiting and not resetting the RTC time
+        // 1. Got a time for the first time this cycle. lookForTime() keeps refining the RTC after that.
+        const bool hadTime = gotTime;
+        if (lookForTime() && !hadTime) {
             gotTime = true;
+            // Publish immediately (rather than via the block below, which would clear fixHoldEnds) so the
+            // time-only state reaches the UI without waiting for a location. Safe without a valid location:
+            // PositionModule::handleNewPosition ignores invalid positions.
+            shouldPublish = true;
+            publishUpdate();
         }
 
         // 2. Got a lock for the first time, or 3. Got a lock after turning back on
         bool gotLoc = lookForLocation();
         if (gotLoc) {
-#ifdef GPS_DEBUG
+            scheduling.informValidFix();
+#if GPS_DEBUG
             if (!hasValidLocation) { // declare that we have location ASAP
                 LOG_DEBUG("hasValidLocation RISING EDGE");
             }
@@ -1505,35 +1807,32 @@ int32_t GPS::runOnce()
             if (updateInterval <= GPS_UPDATE_ALWAYS_ON_THRESHOLD_MS) {
                 hasValidLocation = true;
                 shouldPublish = true;
-            } else if (!hasValidLocation || prev_fixQual == 0 || (fixHoldEnds + GPS_THREAD_INTERVAL) < millis()) {
+            } else if (shouldArmFixHold(hasValidLocation, prev_fixQual, fixHoldEnds, GPS_THREAD_INTERVAL)) {
                 hasValidLocation = true;
                 // Hold for up to 20secs after getting a lock to download ephemeris etc
                 uint32_t holdTime = updateInterval - GPS_UPDATE_ALWAYS_ON_THRESHOLD_MS;
                 if (holdTime > GPS_FIX_HOLD_MAX_MS)
                     holdTime = GPS_FIX_HOLD_MAX_MS;
-                fixHoldEnds = millis() + holdTime;
-#ifdef GPS_DEBUG
-                LOG_DEBUG("Holding for %ums after lock", holdTime);
-#endif
+                // Same clock the Throttle evaluation reads, and never the "no hold" sentinel.
+                fixHoldEnds = Time::timerEndsAtMillis(holdTime);
+                LOG_DEBUG_GPS("Holding for %ums after lock", holdTime);
             }
         }
 
         bool tooLong = scheduling.searchedTooLong();
-        if (tooLong && !gotLoc) {
-            LOG_WARN("Couldn't publish a valid location: didn't get a GPS lock in time");
+        if (tooLong && !scheduling.hasValidFixSinceSearchStarted()) {
+            LOG_WARN("Can't publish valid location: no GPS lock in time");
             // we didn't get a location during this ack window, therefore declare loss of lock
             if (hasValidLocation) {
                 p = meshtastic_Position_init_default;
                 hasValidLocation = false;
                 shouldPublish = true;
-#ifdef GPS_DEBUG
-                LOG_DEBUG("hasValidLocation FALLING EDGE");
-#endif
+                LOG_DEBUG_GPS("hasValidLocation FALLING EDGE");
             }
         }
 
         // Hold has expired , Search time has expired, we got a time only, or we never needed to hold.
-        bool holdExpired = (fixHoldEnds != 0 && millis() > fixHoldEnds);
+        bool holdExpired = holdJustExpired(fixHoldEnds);
         if (shouldPublish || tooLong || holdExpired) {
             if (gotTime && hasValidLocation) {
                 shouldPublish = true;
@@ -1548,9 +1847,9 @@ int32_t GPS::runOnce()
                 down();
             }
 
-#ifdef GPS_DEBUG
+#if GPS_DEBUG
         } else if (fixHoldEnds != 0) {
-            LOG_DEBUG("Holding for GPS data download: %d ms (numSats=%d)", fixHoldEnds - millis(), p.sats_in_view);
+            LOG_DEBUG("Holding for GPS data download: %d ms (numSats=%d)", fixHoldEnds - Time::getMillis(), p.sats_in_view);
 #endif
         }
     }
@@ -1561,7 +1860,8 @@ int32_t GPS::runOnce()
 
     // 9600bps is approx 1 byte per msec, so considering our buffer size we never need to wake more often than 200ms
     // if not awake we can run super infrequently (once every 5 secs?) to see if we need to wake.
-    return (powerState == GPS_ACTIVE) ? GPS_THREAD_INTERVAL : 5000;
+    // The spread keeps drains from locking to the GPS's 1 s bursts, so NMEA arrival bounds tighten (NmeaTimeEstimator)
+    return (powerState == GPS_ACTIVE) ? GPS_THREAD_INTERVAL + (int32_t)random(16) : 5000;
 }
 
 // clear the GPS rx/tx buffer as quickly as possible
@@ -1579,7 +1879,7 @@ void GPS::clearBuffer()
 /// Prepare the GPS for the cpu entering deep or light sleep, expect to be gone for at least 100s of msecs
 int GPS::prepareDeepSleep(void *unused)
 {
-    LOG_INFO("GPS deep sleep!");
+    LOG_INFO("GPS deep sleep");
     disable();
     return 0;
 }
@@ -1645,7 +1945,7 @@ GnssModel_t GPS::probe(int serialSpeed)
             {"AG3335", "$PAIR021,AG3335", GNSS_MODEL_AG3335},
             {"AG3352", "$PAIR021,AG3352", GNSS_MODEL_AG3352},
             {"RYS3520", "$PAIR021,REYAX_RYS3520_V2", GNSS_MODEL_AG3352},
-            {"UC6580", "UC6580", GNSS_MODEL_UC6580},
+            {"UC6580", "UC6580", GNSS_MODEL_UC6580}
             // as L76K is sort of a last ditch effort, we won't attempt to detect it by startup messages for now.
             /*{"L76K", "SW=URANUS", GNSS_MODEL_MTK}*/};
         GnssModel_t detectedDriver = getProbeResponse(500, passive_detect, serialSpeed);
@@ -1672,8 +1972,11 @@ GnssModel_t GPS::probe(int serialSpeed)
     case 1: {
 
         // Unicore UFirebirdII Series: UC6580, UM620, UM621, UM670A, UM680A, or UM681A,or CM121
-        std::vector<ChipInfo> unicore = {
-            {"UC6580", "UC6580", GNSS_MODEL_UC6580}, {"UM600", "UM600", GNSS_MODEL_UC6580}, {"CM121", "CM121", GNSS_MODEL_CM121}};
+        std::vector<ChipInfo> unicore = {{"UC6580", "UC6580", GNSS_MODEL_UC6580},
+                                         {"UM600", "UM600", GNSS_MODEL_UC6580},
+                                         {"CM121", "CM121", GNSS_MODEL_CM121},
+                                         {"CC1167Q", "CC1167Q", GNSS_MODEL_CM121},
+                                         {"LC760CA", "CC1161W", GNSS_MODEL_LC760CA}};
         PROBE_FAMILY("Unicore Family", "$PDTINFO", unicore, 500);
         currentDelay = 20;
         currentStep = 2;
@@ -1691,7 +1994,7 @@ GnssModel_t GPS::probe(int serialSpeed)
     }
     case 3: {
         /* Airoha (Mediatek) AG3335A/M/S, A3352Q, Quectel L89 2.0, SimCom SIM65M */
-        wakeAirohaForActiveProbe(_serial_gps);
+        sendAirohaWakeCommand(_serial_gps);
         _serial_gps->write("$PAIR062,2,0*3C\r\n"); // GSA OFF to reduce volume
         _serial_gps->write("$PAIR062,3,0*3D\r\n"); // GSV OFF to reduce volume
         _serial_gps->write("$PAIR513*3D\r\n");     // save configuration
@@ -1699,6 +2002,9 @@ GnssModel_t GPS::probe(int serialSpeed)
                                         {"AG3352", "$PAIR021,AG3352", GNSS_MODEL_AG3352},
                                         {"RYS3520", "$PAIR021,REYAX_RYS3520_V2", GNSS_MODEL_AG3352}};
         PROBE_FAMILY("Airoha Family", "$PAIR021*39", airoha, 1000);
+#ifdef GPS_STANDBY_IS_RTC_INT
+        writePinStandby(false); // the RTC_INT wake pulse left a shared standby pin low
+#endif
         currentDelay = 20;
         currentStep = 4;
         return GNSS_MODEL_UNKNOWN;
@@ -1775,7 +2081,6 @@ GnssModel_t GPS::probe(int serialSpeed)
                     break;
             }
 
-            LOG_DEBUG("Module Info : ");
             LOG_DEBUG("Soft version: %s", ublox_info.swVersion);
             LOG_DEBUG("Hard version: %s", ublox_info.hwVersion);
             LOG_DEBUG("Extensions:%d", ublox_info.extensionNo);
@@ -1839,6 +2144,7 @@ GnssModel_t GPS::getProbeResponse(unsigned long timeout, const std::vector<ChipI
         bufferSize = 2048;
 
     auto response = std::unique_ptr<char[]>(new char[bufferSize]); // Dynamically allocate based on baud rate
+    response[0] = '\0';
     uint16_t responseLen = 0;
     unsigned long start = millis();
     while (millis() - start < timeout) {
@@ -1855,29 +2161,45 @@ GnssModel_t GPS::getProbeResponse(unsigned long timeout, const std::vector<ChipI
                 // check if we can see our chips
                 for (const auto &chipInfo : responseMap) {
                     if (strstr(response.get(), chipInfo.detectionString.c_str()) != nullptr) {
-#ifdef GPS_DEBUG
-                        LOG_DEBUG(response.get());
-#endif
+                        LOG_DEBUG_GPS("%s", response.get());
                         LOG_INFO("%s detected", chipInfo.chipName.c_str());
                         return chipInfo.driver;
                     }
                 }
             }
             if (responseLen >= 2 && response[responseLen - 2] == '\r' && response[responseLen - 1] == '\n') {
-#ifdef GPS_DEBUG
-                LOG_DEBUG(response.get());
-#endif
+                LOG_DEBUG_GPS("%s", response.get());
                 // Reset the response buffer for the next potential message
                 responseLen = 0;
                 response[0] = '\0';
             }
         }
     }
-#ifdef GPS_DEBUG
-    LOG_DEBUG(response.get());
-#endif
+    LOG_DEBUG_GPS("%s", response.get());
     return GNSS_MODEL_UNKNOWN; // Return unknown on timeout
 }
+
+#if GPS_PPS_DISCIPLINE
+// Written only by gpsPpsIsr(): the edge's Time::isrStamp(), and an edge count
+static volatile uint32_t ppsEdgeUs32 = 0;
+static volatile uint32_t ppsEdgeCount = 0;
+
+#if defined(ARCH_ESP32)
+static void IRAM_ATTR gpsPpsIsr()
+{
+    ppsEdgeUs32 = (uint32_t)esp_timer_get_time();
+#elif defined(ARCH_RP2040)
+static void gpsPpsIsr()
+{
+    ppsEdgeUs32 = time_us_32();
+#else
+static void gpsPpsIsr()
+{
+    ppsEdgeUs32 = Time::isrStamp();
+#endif
+    ppsEdgeCount = ppsEdgeCount + 1;
+}
+#endif
 
 std::unique_ptr<GPS> GPS::createGps()
 {
@@ -1910,8 +2232,16 @@ std::unique_ptr<GPS> GPS::createGps()
     } else
         return nullptr;
 #endif
+#if defined(SENSECAP_INDICATOR)
+    // assigned at runtime, static initialization order across translation
+    // units is undefined
+    _serial_gps = uartProxy;
+    if (!_serial_gps)
+        return nullptr;
+#else
     if (!_rx_gpio || !_serial_gps) // Configured to have no GPS at all
         return nullptr;
+#endif
 
     auto new_gps = std::unique_ptr<GPS>(new GPS());
     new_gps->rx_gpio = _rx_gpio;
@@ -1972,8 +2302,12 @@ std::unique_ptr<GPS> GPS::createGps()
         _serial_gps->setRxBufferSize(SERIAL_BUFFER_SIZE); // the default is 256
 #endif
 
+#if defined(SENSECAP_INDICATOR)
+        LOG_DEBUG("Use RP2040 tunnel for GPS, no local pins");
+#else
         LOG_DEBUG("Use GPIO%d for GPS RX", new_gps->rx_gpio);
         LOG_DEBUG("Use GPIO%d for GPS TX", new_gps->tx_gpio);
+#endif
 
 //  ESP32 has a special set of parameters vs other arduino ports
 #if defined(ARCH_ESP32)
@@ -2009,43 +2343,49 @@ static int32_t toDegInt(RawDegrees d)
 }
 
 /**
- * Perform any processing that should be done only while the GPS is awake and looking for a fix.
- * Override this method to check for new locations
+ * Step the RTC to the time the GPS reports, when that improves on what the clock already holds.
  *
- * @return true if we've set a new time
+ * @return true if the GPS has reported a usable time
  */
 bool GPS::lookForTime()
 {
-    auto ti = reader.time;
-    auto d = reader.date;
-    if (ti.isValid() && d.isValid()) { // Note: we don't check for updated, because we'll only be called if needed
-        /* Convert to unix time
-The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of seconds that have elapsed since January 1,
-1970 (midnight UTC/GMT), not counting leap seconds (in ISO 8601: 1970-01-01T00:00:00Z).
-*/
-        struct tm t;
-        t.tm_sec = ti.second() + round(ti.age() / 1000);
-        t.tm_min = ti.minute();
-        t.tm_hour = ti.hour();
-        t.tm_mday = d.day();
-        t.tm_mon = d.month() - 1;
-        t.tm_year = d.year() - 1900;
-        t.tm_isdst = false;
-        if (t.tm_mon > -1) {
-            if (!isPlausibleNmeaTime(t)) {
-                return false;
-            }
-            if (perhapsSetRTC(RTCQualityGPS, t) == RTCSetResultSuccess) {
-                LOG_DEBUG("NMEA GPS time set %02d-%02d-%02d %02d:%02d:%02d age %d", d.year(), d.month(), t.tm_mday, t.tm_hour,
-                          t.tm_min, t.tm_sec, ti.age());
-                return true;
-            } else {
-                return false;
-            }
-        } else
-            return false;
-    } else
+    if (!nmeaTime.hasEstimate())
         return false;
+
+    const uint64_t nowMs = Time::getMillisMonotonic();
+#if GPS_PPS_DISCIPLINE
+    // PPS pinned the clock in the last few seconds: NMEA, which lags it, has nothing to add
+    if (lastPpsAcceptMs && nowMs - lastPpsAcceptMs < PPS_HOLDS_CLOCK_MS)
+        return true;
+    const bool ppsRecent = lastPpsAcceptMs && nowMs - lastPpsAcceptMs < PPS_RECENT_MS;
+#else
+    const bool ppsRecent = false;
+#endif
+    const uint64_t utcMs = nmeaTime.utcMillisAt(nowMs);
+    const int64_t clockAheadMs = (int64_t)(getUtcMillis() - utcMs);
+    const uint64_t msSinceApplied = lastNmeaTimeApplyMs ? nowMs - lastNmeaTimeApplyMs : UINT64_MAX;
+    if (!shouldApplyNmeaTime(getRTCQuality() == RTCQualityGPS, clockAheadMs, msSinceApplied, nmeaTime.sampleCount(), ppsRecent))
+        return true;
+
+    const RTCQuality prevQuality = getRTCQuality();
+    struct timeval tv;
+    tv.tv_sec = utcMs / 1000;
+    tv.tv_usec = (utcMs % 1000) * 1000;
+    if (perhapsSetRTC(RTCQualityGPS, &tv) != RTCSetResultSuccess)
+        return false;
+
+    lastNmeaTimeApplyMs = nowMs ? nowMs : 1;
+    const uint32_t uncertaintyUs = nmeaTime.uncertaintyUs();
+    const long windowUs = uncertaintyUs == UINT32_MAX ? -1L : (long)uncertaintyUs;
+    if (prevQuality == RTCQualityNone) { // the clock was counting from boot, so a step would mean nothing
+        LOG_DEBUG("NMEA GPS time set %lu.%03u, %lu samples, window %ld us", (unsigned long)tv.tv_sec, (unsigned)(utcMs % 1000),
+                  (unsigned long)nmeaTime.sampleCount(), windowUs);
+    } else {
+        LOG_DEBUG("NMEA GPS time set %lu.%03u, step %ld ms, %lu samples, window %ld us", (unsigned long)tv.tv_sec,
+                  (unsigned)(utcMs % 1000), (long)std::max<int64_t>(INT32_MIN, std::min<int64_t>(INT32_MAX, -clockAheadMs)),
+                  (unsigned long)nmeaTime.sampleCount(), windowUs);
+    }
+    return true;
 }
 
 /**
@@ -2064,10 +2404,10 @@ bool GPS::lookForLocation()
 #ifndef TINYGPS_OPTION_NO_STATISTICS
     if (reader.failedChecksum() > lastChecksumFailCount) {
 // In a GPS_DEBUG build we want to log all of these. In production, we only care if there are many of them.
-#ifndef GPS_DEBUG
+#if !GPS_DEBUG
         if (reader.failedChecksum() > 4)
 #endif
-            LOG_WARN("%u new GPS checksum failures, for a total of %u", reader.failedChecksum() - lastChecksumFailCount,
+            LOG_WARN("%u new GPS checksum failures, total %u", reader.failedChecksum() - lastChecksumFailCount,
                      reader.failedChecksum());
         lastChecksumFailCount = reader.failedChecksum();
     }
@@ -2081,7 +2421,7 @@ bool GPS::lookForLocation()
     if (!hasLock())
         return false;
 
-#ifdef GPS_DEBUG
+#if GPS_DEBUG
     LOG_DEBUG("AGE: LOC=%d FIX=%d DATE=%d TIME=%d", reader.location.age(),
 #ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
               gsafixtype.age(),
@@ -2103,7 +2443,7 @@ bool GPS::lookForLocation()
           (gsafixtype.age() < GPS_SOL_EXPIRY_MS) &&
 #endif
           (reader.time.age() < GPS_SOL_EXPIRY_MS) && (reader.date.age() < GPS_SOL_EXPIRY_MS))) {
-        LOG_WARN("SOME data is TOO OLD: LOC %u, TIME %u, DATE %u", reader.location.age(), reader.time.age(), reader.date.age());
+        LOG_WARN("SOME data TOO OLD: LOC %u, TIME %u, DATE %u", reader.location.age(), reader.time.age(), reader.date.age());
         return false;
     }
 
@@ -2112,15 +2452,11 @@ bool GPS::lookForLocation()
 
     // Bail out EARLY to avoid overwriting previous good data (like #857)
     if (toDegInt(loc.lat) > 900000000) {
-#ifdef GPS_DEBUG
-        LOG_DEBUG("Bail out EARLY on LAT %i", toDegInt(loc.lat));
-#endif
+        LOG_DEBUG_GPS("Bail out EARLY on LAT %i", toDegInt(loc.lat));
         return false;
     }
     if (toDegInt(loc.lng) > 1800000000) {
-#ifdef GPS_DEBUG
-        LOG_DEBUG("Bail out EARLY on LNG %i", toDegInt(loc.lng));
-#endif
+        LOG_DEBUG_GPS("Bail out EARLY on LNG %i", toDegInt(loc.lng));
         return false;
     }
 
@@ -2201,11 +2537,155 @@ bool GPS::hasLock()
     return false;
 }
 
+#if GPS_PPS_DISCIPLINE
+void GPS::notePpsFixQuality(uint8_t quality)
+{
+    // Any GGA fix: the receiver's pulse is disciplined from a 2D fix too, and indoors a 3D one may never come
+    const bool usable = quality >= 1 && quality <= 5;
+    const uint64_t nowMs = Time::getMillisMonotonic();
+    // 0 means "none since the wake", so lift the one zero tick, as Time::skipZero() does - but not with it,
+    // since it takes uint32_t and this clock is 64-bit, and the stamp is compared against the whole of it
+    lastGgaFixMs = usable ? (nowMs ? nowMs : 1) : 0;
+}
+
+bool GPS::ppsFixUsable()
+{
+    // Positive evidence, not a cached quality: TinyGPS++ keeps its last fixQ across a sleep, and a receiver
+    // that has lost its fix keeps pulsing on its own clock, which no interval check can tell from UTC
+    return lastGgaFixMs && Time::getMillisMonotonic() - lastGgaFixMs <= PPS_FIX_MAX_AGE_MS;
+}
+#endif
+
+// 8N1 framing: ten bit times per byte. 0 where the GPS "UART" has no line rate (a gpsd socket, a bridged port).
+static uint32_t gpsByteTimeUs(int32_t baud)
+{
+#if defined(ARCH_PORTDUINO) || defined(SENSECAP_INDICATOR)
+    (void)baud;
+    return 0;
+#else
+    return baud > 0 ? 10000000UL / (uint32_t)baud : 0;
+#endif
+}
+
+// Longest a received byte can wait in the UART before available() counts it, plus interrupt latency.
+static uint32_t gpsUartHoldBackUs(uint32_t byteTimeUs)
+{
+#if defined(ARCH_ESP32)
+    // arduino-esp32 picks its RX FIFO threshold at the first begin(): 1 byte up to 57600 baud, else 120
+    const uint32_t bytes = GPS_BAUDRATE > 57600 ? 122 : 3;
+#elif defined(ARCH_RP2040)
+    const uint32_t bytes = 36; // 32-byte RX FIFO and its receive timeout
+#else
+    const uint32_t bytes = 8;
+#endif
+    return bytes * byteTimeUs + 2000;
+}
+
+// The UTC an RMC sentence just committed names, centiseconds included. Reading the fields clears their updated flags.
+bool GPS::readNmeaUtcMs(int64_t &utcMs)
+{
+    struct tm t = {};
+    t.tm_year = reader.date.year() - 1900;
+    t.tm_mon = reader.date.month() - 1;
+    t.tm_mday = reader.date.day();
+    t.tm_hour = reader.time.hour();
+    t.tm_min = reader.time.minute();
+    t.tm_sec = reader.time.second();
+    const uint8_t centis = reader.time.centisecond();
+    if (t.tm_mon < 0 || !isPlausibleNmeaTime(t))
+        return false;
+    utcMs = (int64_t)gm_mktime(&t) * 1000 + centis * 10;
+    return true;
+}
+
+#if GPS_PPS_DISCIPLINE
+void GPS::disarmPps(uint64_t nextBurstMs)
+{
+    if (ppsArmed && PIN_GPS_PPS >= 0)
+        detachInterrupt(digitalPinToInterrupt(PIN_GPS_PPS));
+    ppsArmed = false;
+    pps.reset();
+    nextPpsBurstMs = nextBurstMs;
+}
+
+void GPS::processPps()
+{
+    if (PIN_GPS_PPS < 0)
+        return;
+    const uint64_t nowMs = Time::getMillisMonotonic();
+
+    if (!ppsArmed) {
+        // The clock must already name the second (NMEA sets it), and the receiver only pulses on UTC with a fix
+        if (getRTCQuality() != RTCQualityGPS || !ppsFixUsable() || (nextPpsBurstMs && nowMs < nextPpsBurstMs))
+            return;
+        lastPpsCount = ppsEdgeCount;
+#if defined(ARCH_NRF52)
+        if (attachInterrupt(digitalPinToInterrupt(PIN_GPS_PPS), gpsPpsIsr, RISING) == 0) {
+            LOG_WARN("GPS PPS: no free GPIOTE channel, keeping NMEA time");
+            nextPpsBurstMs = nowMs + PPS_BURST_INTERVAL_MS;
+            return;
+        }
+#else
+        attachInterrupt(digitalPinToInterrupt(PIN_GPS_PPS), gpsPpsIsr, RISING);
+#endif
+        ppsArmed = true;
+        ppsArmedAtMs = nowMs;
+        ppsBurstAccepted = 0;
+        return;
+    }
+
+    if (nowMs - ppsArmedAtMs >= PPS_BURST_TIMEOUT_MS) {
+        LOG_DEBUG_GPS("GPS PPS burst ended with %lu edges", (unsigned long)ppsBurstAccepted);
+        disarmPps(nowMs + (ppsBurstAccepted ? PPS_BURST_INTERVAL_MS : PPS_BURST_TIMEOUT_MS));
+        return;
+    }
+
+    noInterrupts();
+    const uint32_t count = ppsEdgeCount;
+    const uint32_t edgeUs32 = ppsEdgeUs32;
+    interrupts();
+    if (count == lastPpsCount)
+        return;
+    lastPpsCount = count;
+
+    // The edge is under a poll interval old, so its stamp extends unambiguously
+    const uint64_t nowUs = Time::getMicrosMonotonic();
+    const uint64_t edgeMonoUs = Time::stampToMicros(edgeUs32);
+    const uint64_t clockAtEdgeUs = getUtcMicros() - (nowUs - edgeMonoUs);
+    const PpsEdgeResult r = pps.onEdge(edgeMonoUs, clockAtEdgeUs, ppsFixUsable());
+    if (!r.accepted) {
+        LOG_DEBUG_GPS("GPS PPS edge not used: %s", r.reason);
+        return;
+    }
+
+    const bool fullSet =
+        r.errorUs > 100000 || r.errorUs < -100000 || !lastPpsFullSetMs || nowMs - lastPpsFullSetMs >= PPS_BURST_INTERVAL_MS;
+    if (fullSet) {
+        // Also writes the hardware RTC and system time, which only need to be close
+        const uint64_t utcNowUs = r.utcUs + (Time::getMicrosMonotonic() - edgeMonoUs);
+        struct timeval tv;
+        tv.tv_sec = utcNowUs / 1000000;
+        tv.tv_usec = utcNowUs % 1000000;
+        perhapsSetRTC(RTCQualityGPS, &tv);
+        lastPpsFullSetMs = nowMs;
+    }
+    disciplineRTC(edgeMonoUs, r.utcUs);
+    if (pps.hasRate())
+        setRTCRateTrimPpb(-pps.ratePpb());
+    lastPpsAcceptMs = nowMs ? nowMs : 1; // not skipZero(), which would narrow this 64-bit stamp to 32 bits
+
+    LOG_DEBUG("GPS PPS edge %lu: clock was %ld us off, rate %s%ld ppb", (unsigned long)(r.utcUs / 1000000), (long)r.errorUs,
+              pps.hasRate() ? "" : "unknown ", (long)pps.ratePpb());
+    if (++ppsBurstAccepted >= PPS_BURST_EDGES)
+        disarmPps(nowMs + PPS_BURST_INTERVAL_MS);
+}
+#endif
+
 bool GPS::whileActive()
 {
     unsigned int charsInBuf = 0;
     bool isValid = false;
-#ifdef GPS_DEBUG
+#if GPS_DEBUG
     std::string debugmsg = "";
 #endif
     if (powerState != GPS_ACTIVE) {
@@ -2214,30 +2694,76 @@ bool GPS::whileActive()
     }
 #ifdef SERIAL_BUFFER_SIZE
     if (_serial_gps->available() >= SERIAL_BUFFER_SIZE - 1) {
-        LOG_WARN("GPS Buffer full with %u bytes waiting. Flush to avoid corruption", _serial_gps->available());
+        LOG_WARN("GPS Buffer full (%u bytes). Flush to avoid corruption", _serial_gps->available());
         clearBuffer();
     }
 #endif
-    // First consume any chars that have piled up at the receiver
-    while (_serial_gps->available() > 0) {
-        int c = _serial_gps->read();
-        UBXscratch[charsInBuf] = c;
-#ifdef GPS_DEBUG
-        debugmsg += vformat("%c", (c >= 32 && c <= 126) ? c : '.');
+    // RMC sentences committed in this drain: where each ends, its length, and the UTC it names
+    struct PendingTime {
+        uint32_t lastIndex;
+        uint32_t length;
+        int64_t utcMs;
+    } pending[2];
+    uint8_t pendingCount = 0;
+    const uint32_t drainStartCount = nmeaByteCount;
+    uint64_t drainEndMs;
+
+    // Consume what has piled up, then stamp the time just before seeing the buffer empty: the arrival bounds need both
+    do {
+        while (_serial_gps->available() > 0) {
+            int c = _serial_gps->read();
+            UBXscratch[charsInBuf] = c;
+#if GPS_DEBUG
+            debugmsg += vformat("%c", (c >= 32 && c <= 126) ? c : '.');
 #endif
-        isValid |= reader.encode(c);
-        if (charsInBuf > sizeof(UBXscratch) - 10 || c == '\r') {
-            if (strnstr((char *)UBXscratch, "$GPTXT,01,01,02,u-blox ag - www.u-blox.com*50", charsInBuf)) {
-                rebootsSeen++;
+            if (c == '$')
+                lastDollarByteCount = nmeaByteCount;
+#if GPS_PPS_DISCIPLINE
+            if (c == '$')
+                commasSinceDollar = 0;
+            else if (c == ',' && commasSinceDollar < UINT8_MAX)
+                commasSinceDollar++;
+#endif
+            const bool committed = reader.encode(c);
+            isValid |= committed;
+#if GPS_PPS_DISCIPLINE
+            // Only a GGA carrying field 6 has just set the parser's quality; without it (a truncated
+            // "$GPGGA*56" still commits) the value is the previous sentence's, so count that as no fix
+            if (committed && reader.sentenceType() == GPS_SENTENCE_GPGGA)
+                notePpsFixQuality(commasSinceDollar >= GGA_FIX_QUALITY_FIELD ? reader.fixQuality() : 0);
+#endif
+            if (committed && reader.date.isUpdated() && reader.time.isUpdated()) {
+                int64_t utcMs;
+                if (readNmeaUtcMs(utcMs) && pendingCount < 2)
+                    pending[pendingCount++] = {nmeaByteCount - drainStartCount, nmeaByteCount - lastDollarByteCount + 1, utcMs};
             }
-            charsInBuf = 0;
-        } else {
-            charsInBuf++;
+            nmeaByteCount++;
+            if (charsInBuf > sizeof(UBXscratch) - 10 || c == '\r') {
+                if (strnstr((char *)UBXscratch, "$GPTXT,01,01,02,u-blox ag - www.u-blox.com*50", charsInBuf)) {
+                    rebootsSeen++;
+                }
+                charsInBuf = 0;
+            } else {
+                charsInBuf++;
+            }
         }
+        drainEndMs = Time::getMillisMonotonic();
+    } while (_serial_gps->available() > 0);
+
+    const uint32_t byteTimeUs = gpsByteTimeUs(detectedBaud);
+    const NmeaDrain drain = {lastDrainEndMs, drainEndMs, nmeaByteCount - drainStartCount, byteTimeUs,
+                             gpsUartHoldBackUs(byteTimeUs)};
+    for (uint8_t i = 0; i < pendingCount; i++) {
+        if (pending[i].length <= NMEA_MAX_SENTENCE_BYTES)
+            nmeaTime.addSample(pending[i].utcMs, nmeaSentenceArrival(drain, pending[i].lastIndex, pending[i].length));
     }
-#ifdef GPS_DEBUG
+    lastDrainEndMs = drainEndMs;
+#if GPS_PPS_DISCIPLINE
+    processPps();
+#endif
+#if GPS_DEBUG
     if (debugmsg != "") {
-        LOG_DEBUG(debugmsg.c_str());
+        LOG_DEBUG("%s", debugmsg.c_str());
     }
 #endif
     return isValid;
@@ -2274,12 +2800,6 @@ void GPS::toggleGpsMode()
         config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_DISABLED;
         LOG_INFO("User toggled GpsMode. Now DISABLED");
         playGPSDisableBeep();
-#ifdef GNSS_AIROHA
-        if (powerState == GPS_ACTIVE) {
-            LOG_DEBUG("User power Off GPS");
-            digitalWrite(PIN_GPS_EN, LOW);
-        }
-#endif
         disable();
     } else if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_DISABLED) {
         config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;

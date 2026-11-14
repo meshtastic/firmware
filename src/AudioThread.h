@@ -1,5 +1,6 @@
 #pragma once
 #include "PowerFSM.h"
+#include "SPILock.h"
 #include "concurrency/OSThread.h"
 #include "configuration.h"
 #include "main.h"
@@ -15,9 +16,9 @@
 // A board with an I2S amplifier opts in by defining AUDIO_AMP_ENABLE(on) in its variant.h to power the
 // amp on/off around playback (e.g. an enable pin on an I/O expander). The includes below expose the
 // expander instances (io / mcpIoExpander) those macros typically reference.
-#ifdef USE_XL9555
-#include "ExtensionIOXL9555.hpp"
-extern ExtensionIOXL9555 io;
+#ifdef USE_PCA95X5
+#include PCA95X5_INC
+extern PCA95X5_CLS io;
 #endif
 
 #ifdef USE_MCP23017
@@ -26,6 +27,10 @@ extern ExtensionIOXL9555 io;
 
 #define AUDIO_THREAD_INTERVAL_MS 100
 
+#ifndef AUDIO_OUTPUT_GAIN
+#define AUDIO_OUTPUT_GAIN 0.2f
+#endif
+
 class AudioThread : public concurrency::OSThread
 {
   public:
@@ -33,12 +38,13 @@ class AudioThread : public concurrency::OSThread
 
     void beginRttl(const void *data, uint32_t len)
     {
-#ifdef AUDIO_AMP_ENABLE
-        AUDIO_AMP_ENABLE(true);
-#endif
+        ampEnable(true);
         setCPUFast(true);
         rtttlFile = std::unique_ptr<AudioFileSourcePROGMEM>(new AudioFileSourcePROGMEM(data, len));
         i2sRtttl = std::unique_ptr<AudioGeneratorRTTTL>(new AudioGeneratorRTTTL());
+#ifdef AUDIO_RTTTL_SAMPLE_RATE
+        i2sRtttl->SetRate(AUDIO_RTTTL_SAMPLE_RATE);
+#endif
         i2sRtttl->begin(rtttlFile.get(), audioOut.get());
     }
 
@@ -61,9 +67,7 @@ class AudioThread : public concurrency::OSThread
         rtttlFile = nullptr;
 
         setCPUFast(false);
-#ifdef AUDIO_AMP_ENABLE
-        AUDIO_AMP_ENABLE(false);
-#endif
+        ampEnable(false);
     }
 
     void readAloud(const char *text)
@@ -73,15 +77,12 @@ class AudioThread : public concurrency::OSThread
             i2sRtttl = nullptr;
         }
 
-#ifdef AUDIO_AMP_ENABLE
-        AUDIO_AMP_ENABLE(true);
-#endif
+        ampEnable(true);
         auto sam = std::unique_ptr<ESP8266SAM>(new ESP8266SAM);
         sam->Say(audioOut.get(), text);
         setCPUFast(false);
-#ifdef AUDIO_AMP_ENABLE
-        AUDIO_AMP_ENABLE(false);
-#endif
+        audioOut->stop();
+        ampEnable(false);
     }
 
   protected:
@@ -96,11 +97,26 @@ class AudioThread : public concurrency::OSThread
     }
 
   private:
+    // Amps like the NS4150 need time to leave shutdown, longer when the enable is an I/O expander write.
+    // Without a variant's AUDIO_AMP_SETTLE_MS the short system tones are over before any audio gets out.
+    static void ampEnable(bool on)
+    {
+#ifdef AUDIO_AMP_ENABLE
+        AUDIO_AMP_ENABLE(on);
+#ifdef AUDIO_AMP_SETTLE_MS
+        if (on)
+            delay(AUDIO_AMP_SETTLE_MS);
+#endif
+#else
+        (void)on;
+#endif
+    }
+
     void initOutput()
     {
         audioOut = std::unique_ptr<AudioOutputI2S>(new AudioOutputI2S(1, AudioOutputI2S::EXTERNAL_I2S));
         audioOut->SetPinout(DAC_I2S_BCK, DAC_I2S_WS, DAC_I2S_DOUT, DAC_I2S_MCLK);
-        audioOut->SetGain(0.2);
+        audioOut->SetGain(AUDIO_OUTPUT_GAIN);
     };
 
     std::unique_ptr<AudioGeneratorRTTTL> i2sRtttl = nullptr;

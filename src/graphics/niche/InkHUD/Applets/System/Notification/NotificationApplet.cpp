@@ -4,7 +4,12 @@
 
 #include "./Notification.h"
 #include "MessageStore.h"
+#include "graphics/niche/InkHUD/Applets/Bases/Map/MapApplet.h"
 #include "graphics/niche/InkHUD/Persistence.h"
+#if !MESHTASTIC_EXCLUDE_WAYPOINT
+#include "modules/GeofenceModule.h"
+#include <cstring>
+#endif
 
 #include "meshUtils.h"
 #include "modules/TextMessageModule.h"
@@ -16,6 +21,27 @@ using namespace NicheGraphics;
 InkHUD::NotificationApplet::NotificationApplet()
 {
     textMessageObserver.observe(textMessageModule);
+#if !MESHTASTIC_EXCLUDE_WAYPOINT
+    if (geofenceModule)
+        geofenceObserver.observe(geofenceModule);
+#endif
+}
+
+void InkHUD::NotificationApplet::showNotification(const Notification &n)
+{
+    assert(isActive());
+
+    if (!settings->optionalFeatures.notifications)
+        return;
+
+    dismiss();
+    hasNotification = true;
+    currentNotification = n;
+    if (isApproved()) {
+        bringToForeground();
+        inkhud->forceUpdate();
+    } else
+        hasNotification = false;
 }
 
 // Collect meta-info about the text message, and ask for approval for the notification
@@ -24,11 +50,6 @@ int InkHUD::NotificationApplet::onReceiveTextMessage(const meshtastic_MeshPacket
 {
     // System applets are always active
     assert(isActive());
-
-    // Abort if feature disabled
-    // This is a bit clumsy, but avoids complicated handling when the feature is enabled / disabled
-    if (!settings->optionalFeatures.notifications)
-        return 0;
 
     // Abort if this is an outgoing message
     if (getFrom(p) == nodeDB->getNodeNum())
@@ -49,22 +70,34 @@ int InkHUD::NotificationApplet::onReceiveTextMessage(const meshtastic_MeshPacket
         n.sender = p->from;
     }
 
-    // Close an old notification, if shown
-    dismiss();
-
-    // Check if we should display the notification
-    // A foreground applet might already be displaying this info
-    hasNotification = true;
-    currentNotification = n;
-    if (isApproved()) {
-        bringToForeground();
-        inkhud->forceUpdate();
-    } else
-        hasNotification = false; // Clear the pending notification: it was rejected
+    showNotification(n);
 
     // Return zero: no issues here, carry on notifying other observers!
     return 0;
 }
+
+#if !MESHTASTIC_EXCLUDE_WAYPOINT
+int InkHUD::NotificationApplet::onGeofenceEvent(const GeofenceNotificationEvent *event)
+{
+    assert(isActive());
+
+    if (!event)
+        return 0;
+
+    Notification n;
+    n.type = Notification::Type::NOTIFICATION_GEOFENCE;
+    n.timestamp = getValidTime(RTCQuality::RTCQualityDevice, true);
+    n.geofenceWaypointId = event->waypointId;
+    strncpy(n.geofenceName, event->geofenceName, sizeof(n.geofenceName) - 1);
+    n.geofenceName[sizeof(n.geofenceName) - 1] = '\0';
+    strncpy(n.geofenceNodeName, event->nodeName, sizeof(n.geofenceNodeName) - 1);
+    n.geofenceNodeName[sizeof(n.geofenceNodeName) - 1] = '\0';
+    n.geofenceEntered = event->entered;
+
+    showNotification(n);
+    return 0;
+}
+#endif
 
 void InkHUD::NotificationApplet::onRender(bool full)
 {
@@ -145,7 +178,10 @@ void InkHUD::NotificationApplet::onBackground()
 
 void InkHUD::NotificationApplet::onButtonShortPress()
 {
-    dismiss();
+    if (currentNotification.type == Notification::Type::NOTIFICATION_GEOFENCE)
+        openGeofenceOnMap();
+    else
+        dismiss();
 }
 
 void InkHUD::NotificationApplet::onButtonLongPress()
@@ -180,6 +216,25 @@ void InkHUD::NotificationApplet::onNavLeft()
 
 void InkHUD::NotificationApplet::onNavRight()
 {
+    if (currentNotification.type == Notification::Type::NOTIFICATION_GEOFENCE)
+        openGeofenceOnMap();
+    else
+        dismiss();
+}
+
+void InkHUD::NotificationApplet::openGeofenceOnMap()
+{
+    for (uint8_t i = 0; i < inkhud->userApplets.size(); ++i) {
+        Applet *applet = inkhud->userApplets.at(i);
+        MapApplet *map = applet ? applet->asMapApplet() : nullptr;
+        if (!map || !applet->isActive() || !map->focusWaypoint(currentNotification.geofenceWaypointId))
+            continue;
+
+        dismiss();
+        inkhud->showApplet(i);
+        return;
+    }
+
     dismiss();
 }
 
@@ -265,6 +320,12 @@ std::string InkHUD::NotificationApplet::getNotificationText(uint16_t widthAvaila
             text += ": ";
             text += MessageStore::getText(*message);
         }
+    }
+
+    else if (currentNotification.type == Notification::Type::NOTIFICATION_GEOFENCE) {
+        text += currentNotification.geofenceNodeName;
+        text += currentNotification.geofenceEntered ? " IN " : " OUT ";
+        text += currentNotification.geofenceName;
     }
 
     // Parse any non-ascii characters and return

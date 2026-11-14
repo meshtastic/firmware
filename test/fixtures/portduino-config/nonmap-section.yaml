@@ -1,0 +1,4 @@
+# FAULT: a known section whose body is a scalar. loadConfig() throws when it indexes
+# into it ("operator[] call on a scalar"), so nothing in the file is read. Expect an
+# ERROR. Also run without --check, where meshtasticd must refuse to start.
+Lora: invalid

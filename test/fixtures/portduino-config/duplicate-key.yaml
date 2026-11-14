@@ -1,0 +1,8 @@
+# FAULT: Lora.CS is defined twice. YAML forbids this but yaml-cpp does not complain:
+# it keeps the FIRST occurrence and silently discards the rest, so the CS: 22 below
+# looks applied and is not. Expect an ERROR naming both lines.
+Lora:
+  Module: sx1262
+  CS: 21
+  CS: 22
+  IRQ: 16

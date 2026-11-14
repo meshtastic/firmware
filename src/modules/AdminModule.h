@@ -95,7 +95,9 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
     void handleSetChannel();
 
   public:
-    void handleSetHamMode(const meshtastic_HamParameters &req);
+    /// Applies licensed-operator settings. False if the request was rejected and nothing changed,
+    /// so the caller can answer a want_response client with an error instead of an implicit success.
+    bool handleSetHamMode(const meshtastic_HamParameters &req);
 
     /// Note an admin request leaving this node for a remote, so that remote's response is
     /// accepted. Called from the client-to-mesh path (MeshService::handleToRadio).
@@ -137,8 +139,10 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
 
     bool messageIsResponse(const meshtastic_AdminMessage *r);
     bool messageIsRequest(const meshtastic_AdminMessage *r);
-    void sendWarning(const char *format, ...) __attribute__((format(printf, 2, 3)));
-    void sendWarningAndLog(const char *format, ...) __attribute__((format(printf, 2, 3)));
+    void sendWarning(meshtastic_ClientNotification_NotificationType type, const char *format, ...)
+        __attribute__((format(printf, 3, 4)));
+    void sendWarningAndLog(meshtastic_ClientNotification_NotificationType type, const char *format, ...)
+        __attribute__((format(printf, 3, 4)));
     void warnOnLoraPresetChange(const meshtastic_Config_LoRaConfig &oldLora, const meshtastic_Config_LoRaConfig &newLora);
     void warnOnChannelSet(const meshtastic_Channel &cc);
 
@@ -147,8 +151,9 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
     // is open (begin/commit_edit_settings) the warnings accumulate and flushChannelWarnings()
     // emits one combined message at commit. Outside a transaction the caller flushes
     // immediately, so a single channel/preset edit still produces a single message.
-    void queueChannelWarning(uint8_t channelIndex, bool nameIssue, bool pskIssue, const char *format, ...)
-        __attribute__((format(printf, 5, 6)));
+    void queueChannelWarning(uint8_t channelIndex, bool nameIssue, bool pskIssue,
+                             meshtastic_ClientNotification_NotificationType type, const char *format, ...)
+        __attribute__((format(printf, 6, 7)));
     // Emit the "licensed mode activated" notice, deferring to commit during an edit transaction
     // so repeated triggers (e.g. owner + several channels) produce a single message.
     void warnLicensedMode();
@@ -160,6 +165,8 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
     bool pendingWarningNameIssue = false; // any queued warning was about a channel name
     bool pendingWarningPskIssue = false;  // any queued warning was about a PSK
     bool pendingLicenseWarning = false;   // a licensed-mode notice is queued for this transaction
+    // Notification type of the lone queued message.
+    meshtastic_ClientNotification_NotificationType pendingWarningType = meshtastic_ClientNotification_NotificationType_UNSET;
 };
 
 static constexpr const char *licensedModeMessage =

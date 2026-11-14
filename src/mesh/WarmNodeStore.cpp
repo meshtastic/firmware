@@ -13,7 +13,7 @@
 
 #if defined(NRF52840_XXAA)
 #include "flash/flash_nrf5x.h"
-#define WARM_RING_MAGIC 0x334E5257u    // "WRN3" - v3: last_heard low bits carry role + protected + signer
+#define WARM_RING_MAGIC 0x334E5257u    // "WRN3" - v3: last_heard low bits carry role + protected + xeddsa-signed
 #define WARM_RING_MAGIC_V2 0x324E5257u // "WRN2" - v2: role + protected only; bit 6 was still timestamp.
 #define WARM_RING_MAGIC_V1 0x474E5257u // "WRNG" - v1: last_heard was a plain timestamp.
 // Older pages are still read on upgrade: v1 keeps identity + key but discards last_heard,
@@ -33,10 +33,10 @@ struct WarmStoreHeader {
 };
 static_assert(sizeof(WarmStoreHeader) == 16, "header layout is part of the persistence format");
 
-#define WARM_STORE_MAGIC 0x334D5257u // "WRM3" - v3: last_heard low bits carry role + protected + signer
+#define WARM_STORE_MAGIC 0x334D5257u // "WRM3" - v3: last_heard low bits carry role + protected + xeddsa-signed
 #define WARM_STORE_MAGIC_V2                                                                                                      \
     0x324D5257u // "WRM2" - v2: role + protected only; bit 6 was still timestamp. On upgrade
-                // we clear the signer bit, then rewrite as v3.
+                // we clear the xeddsa-signed bit, then rewrite as v3.
 #define WARM_STORE_MAGIC_V1                                                                                                      \
     0x314D5257u // "WRM1" - v1: last_heard was a plain timestamp. On upgrade we keep
                 // identity + key but discard last_heard, then rewrite as v3.
@@ -136,18 +136,19 @@ WarmNodeEntry *WarmNodeStore::place(NodeNum num, uint32_t lastHeard, const uint8
     return slot;
 }
 
-bool WarmNodeStore::absorb(NodeNum num, uint32_t lastHeard, const uint8_t *key32, uint8_t role, uint8_t protectedCat, bool signer)
+bool WarmNodeStore::absorb(NodeNum num, uint32_t lastHeard, const uint8_t *key32, uint8_t role, uint8_t protectedCat,
+                           bool xeddsaSigned)
 {
-    // Pack role + protected category + signer into the low bits of last_heard. place() and
+    // Pack role + protected category + xeddsa-signed into the low bits of last_heard. place() and
     // ring replay store the raw word verbatim, so the metadata round-trips through flash.
-    const uint32_t packed = warmPackLastHeard(lastHeard, role, protectedCat, signer);
+    const uint32_t packed = warmPackLastHeard(lastHeard, role, protectedCat, xeddsaSigned);
     const WarmNodeEntry *slot = place(num, packed, key32);
     if (!slot)
         return false;
     persistEntry(*slot);
-    LOG_MIGRATION("WarmStore absorb 0x%08x key=%d last_heard=%u role=%u prot=%u signer=%u (now %u/%u)", (unsigned)num,
+    LOG_MIGRATION("WarmStore absorb 0x%08x key=%d last_heard=%u role=%u prot=%u xeddsa=%u (now %u/%u)", (unsigned)num,
                   keyIsSet(slot->public_key) ? 1 : 0, (unsigned)warmTimeOf(*slot), (unsigned)role, (unsigned)protectedCat,
-                  signer ? 1u : 0u, (unsigned)count(), (unsigned)capacity());
+                  xeddsaSigned ? 1u : 0u, (unsigned)count(), (unsigned)capacity());
     return true;
 }
 
@@ -161,10 +162,10 @@ bool WarmNodeStore::lookupMeta(NodeNum num, uint8_t &role, uint8_t &protectedCat
     return true;
 }
 
-bool WarmNodeStore::isVerifiedSigner(NodeNum num) const
+bool WarmNodeStore::hasXeddsaSigned(NodeNum num) const
 {
     const WarmNodeEntry *e = find(num);
-    return e && warmSignerOf(*e);
+    return e && warmXeddsaSignedOf(*e);
 }
 
 bool WarmNodeStore::take(NodeNum num, WarmNodeEntry &out)
@@ -263,8 +264,17 @@ bool WarmNodeStore::saveIfDirty()
 // 3 × 4 KB pages below LittleFS. Mutations append 40 B records (entry snapshot,
 // or tombstone with last_heard == 0xFFFFFFFF) via the shared flash_nrf5x page
 // cache; saveIfDirty() is the durability point. A full page reclaims the oldest
-// (stranded live entries re-appended, then erased). Flash access holds spiLock -
-// the page cache is shared with InternalFS/LittleFS.
+// (stranded live entries re-appended, then erased).
+
+// That page cache, and the SoftDevice's one flash-op semaphore, are shared with LittleFS, whose
+// writers (Bluefruit bond saves, on the callback task) hold only this mutex. spiLock first, always.
+namespace
+{
+struct WarmFsLock {
+    WarmFsLock() { FSCom._lockFS(); }
+    ~WarmFsLock() { FSCom._unlockFS(); }
+};
+} // namespace
 
 bool WarmNodeStore::ringReadHeader(uint8_t page, WarmPageHeader &h, WarmFormat *fmt) const
 {
@@ -363,6 +373,7 @@ void WarmNodeStore::ringAppend(const WarmNodeEntry &rec, int storeSlot)
 void WarmNodeStore::persistEntry(const WarmNodeEntry &e)
 {
     concurrency::LockGuard g(spiLock);
+    WarmFsLock fs;
     ringAppend(e, static_cast<int>(&e - entries));
 }
 
@@ -375,12 +386,14 @@ void WarmNodeStore::persistRemove(NodeNum num, int storeSlot)
     tomb.num = num;
     tomb.last_heard = WARM_RING_TOMBSTONE;
     concurrency::LockGuard g(spiLock);
+    WarmFsLock fs;
     ringAppend(tomb, -1);
 }
 
 void WarmNodeStore::persistClear()
 {
     concurrency::LockGuard g(spiLock);
+    WarmFsLock fs;
     flash_nrf5x_flush();
     for (uint8_t p = 0; p < WARM_FLASH_PAGES; p++)
         flash_nrf5x_erase(WARM_FLASH_PAGE_ADDR(p));
@@ -395,6 +408,7 @@ void WarmNodeStore::load()
     if (!entries)
         return;
     concurrency::LockGuard g(spiLock);
+    WarmFsLock fs;
 
     // Order valid pages by ascending seq so replay applies oldest first
     uint8_t order[WARM_FLASH_PAGES] = {};
@@ -464,7 +478,7 @@ void WarmNodeStore::load()
                     lh = 0;
                     migrated++;
                 } else if (fmt == WarmFormat::V2) {
-                    lh &= ~(WARM_SIGNER_MASK << WARM_SIGNER_SHIFT);
+                    lh &= ~(WARM_XEDDSA_SIGNED_MASK << WARM_XEDDSA_SIGNED_SHIFT);
                     migrated++;
                 }
                 const WarmNodeEntry *e = place(rec.num, lh, rec.public_key);
@@ -493,10 +507,11 @@ void WarmNodeStore::load()
 bool WarmNodeStore::save()
 {
     if (!powerHAL_isPowerLevelSafe()) {
-        LOG_ERROR("Error: trying to save WarmStore on unsafe device power level.");
+        LOG_ERROR("Trying to save WarmStore on unsafe device power level");
         return false;
     }
     concurrency::LockGuard g(spiLock);
+    WarmFsLock fs;
     flash_nrf5x_flush();
     return true;
 }
@@ -589,7 +604,7 @@ void WarmNodeStore::load()
         } else if (fmt == WarmFormat::V2) {
             for (size_t i = 0; i < WARM_NODE_COUNT; i++)
                 if (entries[i].num)
-                    entries[i].last_heard &= ~(WARM_SIGNER_MASK << WARM_SIGNER_SHIFT);
+                    entries[i].last_heard &= ~(WARM_XEDDSA_SIGNED_MASK << WARM_XEDDSA_SIGNED_SHIFT);
             dirty = true;
         }
     } else {
@@ -604,7 +619,7 @@ bool WarmNodeStore::save()
     if (!entries)
         return false;
     if (!powerHAL_isPowerLevelSafe()) {
-        LOG_ERROR("Error: trying to save WarmStore on unsafe device power level.");
+        LOG_ERROR("Trying to save WarmStore on unsafe device power level");
         return false;
     }
 

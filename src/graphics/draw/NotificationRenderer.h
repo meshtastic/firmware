@@ -38,12 +38,14 @@ class NotificationRenderer
     static uint8_t alertBannerLineCount;
     static BannerFont alertBannerLineFonts[MAX_LINES + 1];
     static void parseBannerMessageWithFonts(const char *message);
+    // Decide what text and font a banner line actually renders with: parsed (tag-stripped)
+    // line if the cache covers it, otherwise the raw line with any leading font tag stripped
+    // on the fly. Exposed for unit tests.
+    static const char *resolveBannerLine(uint16_t lineIndex, const char *rawLine, BannerFont &lineFont);
     static void resetBanner();
     static void drawBannercallback(OLEDDisplay *display, OLEDDisplayUiState *state);
     static void drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisplayUiState *state);
-    static void drawNumberPicker(OLEDDisplay *display, OLEDDisplayUiState *state);
-    static void drawHexPicker(OLEDDisplay *display, OLEDDisplayUiState *state);
-    static void drawAlphanumericPicker(OLEDDisplay *display, OLEDDisplayUiState *state);
+    static void drawCharPicker(OLEDDisplay *display, OLEDDisplayUiState *state); // number, hex and alphanumeric pickers
     static void drawNodePicker(OLEDDisplay *display, OLEDDisplayUiState *state);
     static void drawTextInput(OLEDDisplay *display, OLEDDisplayUiState *state);
     static void drawNotificationBox(OLEDDisplay *display, OLEDDisplayUiState *state, const char *lines[MAX_LINES + 1],
@@ -53,6 +55,7 @@ class NotificationRenderer
     static void drawSSLScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
     static void drawFrameFirmware(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
     static bool isOverlayBannerShowing();
+    static bool isMenuShowing();
 
     static graphics::notificationTypeEnum current_notification_type;
 };

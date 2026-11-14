@@ -4,6 +4,8 @@
 
 #include "MessageStore.h"
 #include "PowerFSM.h"
+#include "UptimeClock.h"
+#include "WaypointStore.h"
 #include "buzz.h"
 #include "gps/RTC.h"
 #include "modules/ExternalNotificationModule.h"
@@ -48,6 +50,7 @@ void InkHUD::Events::begin()
 #endif
 #ifdef ARCH_ESP32
     lightSleepObserver.observe(&notifyLightSleep);
+    lightSleepEndObserver.observe(&notifyLightSleepEnd);
 #endif
 }
 
@@ -364,7 +367,7 @@ void InkHUD::Events::onTouchTap(uint16_t x, uint16_t y, bool longPress)
     // A long-press used to open the menu can be followed by a synthetic/queued tap at release.
     // Ignore that brief follow-up window so touch-opened menus do not auto-select an item.
     if (touchEnabledBuild && !longPress && suppressTouchTapUntilMs != 0) {
-        if ((int32_t)(millis() - suppressTouchTapUntilMs) < 0) {
+        if ((int32_t)(Time::getMillis() - suppressTouchTapUntilMs) < 0) {
             noteInkHUDUserInteraction();
             return;
         }
@@ -375,6 +378,7 @@ void InkHUD::Events::onTouchTap(uint16_t x, uint16_t y, bool longPress)
     for (SystemApplet *sa : inkhud->systemApplets) {
         if (sa->handleInput && sa->onTouchPoint(x, y, longPress)) {
             noteInkHUDUserInteraction();
+            playChirp();
             return;
         }
     }
@@ -400,7 +404,7 @@ void InkHUD::Events::onTouchTap(uint16_t x, uint16_t y, bool longPress)
         // Only arm suppression if the long-press actually opened menu foreground.
         SystemApplet *menu = inkhud->getSystemApplet("Menu");
         if (touchEnabledBuild && menu && menu->isForeground()) {
-            suppressTouchTapUntilMs = millis() + TOUCH_MENU_OPEN_TAP_SUPPRESS_MS;
+            suppressTouchTapUntilMs = Time::timerEndsAtMillis(TOUCH_MENU_OPEN_TAP_SUPPRESS_MS);
         }
     } else
         onButtonShort();
@@ -468,6 +472,7 @@ int InkHUD::Events::beforeDeepSleep(void *unused)
 
     inkhud->persistence->saveSettings();
     inkhud->persistence->saveLatestMessage();
+    waypointStore.saveToFlash();
 
     // LogoApplet::onShutdown attempted to heal the display by drawing a "shutting down" screen twice,
     // then prepared a final powered-off screen for us, which shows device shortname.
@@ -516,6 +521,7 @@ int InkHUD::Events::beforeReboot(void *unused)
     } else {
         NicheGraphics::clearFlashData();
         messageStore.clearAllMessages(); // also wipe the shared message store
+        waypointStore.clearAllWaypoints();
     }
 
     // Note: no forceUpdate call here
@@ -589,8 +595,16 @@ int InkHUD::Events::onAdminMessage(AdminModule_ObserverData *data)
 // This is because some displays require active input from us to terminate the update process, and protect the panel hardware
 int InkHUD::Events::beforeLightSleep(void *unused)
 {
+    inkhud->setTouchSleeping(true, false);
     inkhud->awaitUpdate();
     return 0; // No special status to report. Ignored anyway by this Observable
+}
+
+int InkHUD::Events::afterLightSleep(esp_sleep_wakeup_cause_t cause)
+{
+    (void)cause;
+    inkhud->setTouchSleeping(false);
+    return 0;
 }
 #endif
 

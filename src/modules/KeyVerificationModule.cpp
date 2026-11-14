@@ -3,6 +3,7 @@
 #include "CryptoEngine.h"
 #include "HardwareRNG.h"
 #include "MeshService.h"
+#include "UptimeClock.h"
 #include "gps/RTC.h"
 #include "graphics/draw/MenuHandler.h"
 #include "main.h"
@@ -30,6 +31,16 @@ void copyNodeLongNameOrUnknown(char *dest, size_t destSize, const meshtastic_Nod
     const char *name = (node && nodeInfoLiteHasUser(node) && node->long_name[0]) ? node->long_name : "Unknown";
     strncpy(dest, name, destSize - 1);
     dest[destSize - 1] = '\0';
+}
+
+// Licensed (ham) operation has no PKI: a licensed node neither sends nor decrypts PKI packets, and the
+// handshake's third message must be PKI-encrypted, so a session could only time out.
+bool licensedRefusesKeyVerification()
+{
+    if (!owner.is_licensed)
+        return false;
+    LOG_WARN("Key verification is unavailable in licensed (ham) mode");
+    return true;
 }
 } // namespace
 
@@ -97,6 +108,7 @@ bool KeyVerificationModule::handleReceivedProtobuf(const meshtastic_MeshPacket &
         meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
         if (cn) {
             cn->level = meshtastic_LogRecord_Level_WARNING;
+            cn->type = meshtastic_ClientNotification_NotificationType_KEY_VERIFICATION_NUMBER_REQUEST;
             snprintf(cn->message, sizeof(cn->message), "Enter Security Number for Key Verification");
             cn->which_payload_variant = meshtastic_ClientNotification_key_verification_number_request_tag;
             cn->payload_variant.key_verification_number_request.nonce = currentNonce;
@@ -116,14 +128,14 @@ bool KeyVerificationModule::handleReceivedProtobuf(const meshtastic_MeshPacket &
             memset(message, 0, sizeof(message));
             sprintf(message, "Verification: \n");
             generateVerificationCode(message + 15);
-            LOG_INFO("Hash1 matches!");
+            LOG_INFO("Hash1 matches");
             static const char *optionsArray[] = {"Reject", "Accept"};
             // Don't try to put the array definition in the macro. Does not work with curly braces.
             IF_SCREEN(graphics::BannerOverlayOptions options; options.message = message; options.durationMs = 30000;
                       options.optionsArrayPtr = optionsArray; options.optionsCount = 2;
                       options.notificationType = graphics::notificationTypeEnum::selection_picker;
                       options.bannerCallback =
-                          [=](int selected) {
+                          [](int selected) {
                               LOG_DEBUG("User selected %d for key verification", selected);
                               if (selected == 1) {
                                   keyVerificationModule->commitVerifiedRemoteNode();
@@ -133,6 +145,7 @@ bool KeyVerificationModule::handleReceivedProtobuf(const meshtastic_MeshPacket &
             meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
             if (cn) {
                 cn->level = meshtastic_LogRecord_Level_WARNING;
+                cn->type = meshtastic_ClientNotification_NotificationType_KEY_VERIFICATION_FINAL_INCOMING;
                 snprintf(cn->message, sizeof(cn->message), "Final confirmation for incoming manual key verification %s", message);
                 cn->which_payload_variant = meshtastic_ClientNotification_key_verification_final_tag;
                 cn->payload_variant.key_verification_final.nonce = currentNonce;
@@ -154,6 +167,16 @@ bool KeyVerificationModule::handleReceivedProtobuf(const meshtastic_MeshPacket &
 bool KeyVerificationModule::sendInitialRequest(NodeNum remoteNode)
 {
     LOG_DEBUG("keyVerification start");
+    if (licensedRefusesKeyVerification()) {
+        meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
+        if (cn) {
+            cn->level = meshtastic_LogRecord_Level_WARNING;
+            cn->type = meshtastic_ClientNotification_NotificationType_KEY_VERIFICATION_LICENSED_UNAVAILABLE;
+            snprintf(cn->message, sizeof(cn->message), "Key verification is unavailable in licensed (ham) mode");
+            service->sendClientNotification(cn);
+        }
+        return false;
+    }
     // generate nonce
     updateState(false);
     if (currentState != KEY_VERIFICATION_IDLE) {
@@ -198,6 +221,10 @@ bool KeyVerificationModule::sendInitialRequest(NodeNum remoteNode)
 
 meshtastic_MeshPacket *KeyVerificationModule::allocReply()
 {
+    if (licensedRefusesKeyVerification()) {
+        ignoreRequest = true; // no NAK: the requester times out as it would against a busy node
+        return nullptr;
+    }
     SHA256 hash;
     NodeNum ourNodeNum = nodeDB->getNodeNum();
     updateState();
@@ -294,6 +321,7 @@ meshtastic_MeshPacket *KeyVerificationModule::allocReply()
     meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
     if (cn) {
         cn->level = meshtastic_LogRecord_Level_WARNING;
+        cn->type = meshtastic_ClientNotification_NotificationType_KEY_VERIFICATION_NUMBER_INFORM;
         snprintf(cn->message, sizeof(cn->message), "Incoming Key Verification.\nSecurity Number\n%03u %03u",
                  currentSecurityNumber / 1000, currentSecurityNumber % 1000);
         cn->which_payload_variant = meshtastic_ClientNotification_key_verification_number_inform_tag;
@@ -366,6 +394,7 @@ void KeyVerificationModule::processSecurityNumber(uint32_t incomingNumber)
     meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
     if (cn) {
         cn->level = meshtastic_LogRecord_Level_WARNING;
+        cn->type = meshtastic_ClientNotification_NotificationType_KEY_VERIFICATION_FINAL_OUTGOING;
         snprintf(cn->message, sizeof(cn->message), "Final confirmation for outgoing manual key verification %s", message);
         cn->which_payload_variant = meshtastic_ClientNotification_key_verification_final_tag;
         cn->payload_variant.key_verification_final.nonce = currentNonce;
@@ -400,7 +429,7 @@ void KeyVerificationModule::resetToIdle()
     memset(hash1, 0, 32);
     memset(hash2, 0, 32);
     if (sessionFromRemote)
-        lastRemoteSessionMs = millis(); // start the cooldown when the session ends, not when it opened
+        lastRemoteSessionMs = Time::skipZero(Time::getMillis()); // start the cooldown when the session ends, not when it opened
     sessionFromRemote = false;
     currentNonce = 0;
     currentNonceTimestamp = 0;
@@ -414,17 +443,30 @@ void KeyVerificationModule::resetToIdle()
 
 void KeyVerificationModule::commitVerifiedRemoteNode()
 {
-    // The remote node already has a NodeDB entry by this point (packets were exchanged during the
-    // handshake), so getMeshNode is sufficient; bail defensively if it is somehow absent.
+    // Only commit once the handshake has reached the user's final confirmation: the security
+    // number checked out (initiator) or hash1 matched (responder).
+    if (currentState != KEY_VERIFICATION_SENDER_AWAITING_USER && currentState != KEY_VERIFICATION_RECEIVER_AWAITING_USER) {
+        LOG_WARN("Key verification not awaiting confirmation, not committing");
+        return;
+    }
+    // An initiator that did not know the responder can reach this with no NodeDB entry for it: this
+    // module consumes the hash2 reply, so the routing module never sniffs it into NodeDB. The pending
+    // key that reply carried is then the only record, and the user has just confirmed it, so create the
+    // entry from it.
+    meshtastic_NodeInfoLite_public_key_t pending = {0, {0}};
+    const bool hasPending = crypto->getPendingPublicKey(currentRemoteNode, pending);
     meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(currentRemoteNode);
+    if (!node && hasPending) {
+        nodeDB->commitRemoteKey(currentRemoteNode, pending.bytes, NodeDB::KeyCommitTrust::ManuallyVerified);
+        node = nodeDB->getMeshNode(currentRemoteNode);
+    }
     if (!node) {
         LOG_WARN("Attempted to commit key, but unknown node");
         return;
     }
     // If we only held the peer's key as a pending (unverified) key during the handshake, commit it to
     // NodeDB now that the user has confirmed the verification, so future PKI traffic can use it.
-    meshtastic_NodeInfoLite_public_key_t pending = {0, {0}};
-    if (node->public_key.size != 32 && crypto->getPendingPublicKey(currentRemoteNode, pending))
+    if (node->public_key.size != 32 && hasPending)
         node->public_key = pending;
     node->bitfield |= NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK;
     // Re-commit via the bare-key primitive: writing the same bytes back is a no-op for the hot

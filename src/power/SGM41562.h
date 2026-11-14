@@ -28,6 +28,15 @@
 class SGM41562
 {
   public:
+    enum class ChipType : uint8_t {
+        Unknown = 0,
+        SGM41562,
+        SGM41562A,
+        SGM41562B,
+        SGM41562S,
+        SGM41562SA,
+    };
+
     enum class ChargeStatus : uint8_t {
         NotCharging = 0b00,
         Precharge = 0b01,
@@ -48,6 +57,8 @@ class SGM41562
     bool isInputPowerGood() const { return inputPowerGood_; }
     bool isThermalRegulation() const { return thermalReg_; }
     uint8_t faultMask() const { return faultMask_; }
+    ChipType chipType() const { return chipType_; }
+    static const char *chipTypeName(ChipType type);
 
     // Control.
     bool setChargeEnable(bool enable);
@@ -62,10 +73,16 @@ class SGM41562
     bool inputPowerGood_ = false;
     bool thermalReg_ = false;
     uint8_t faultMask_ = 0;
+    ChipType chipType_ = ChipType::Unknown;
 
     bool readReg(uint8_t reg, uint8_t &value);
     bool writeReg(uint8_t reg, uint8_t value);
     bool updateReg(uint8_t reg, uint8_t mask, uint8_t value);
+    bool resetRegisters();
+    ChipType detectChipType(uint8_t deviceId);
+    ChipType detectIdZeroChipType();
+    bool applyInitSequence();
+    bool hasExtendedRegisterMap() const;
 
     // SGM41562 register addresses
     static constexpr uint8_t REG_INPUT_SOURCE = 0x00;
@@ -80,6 +97,8 @@ class SGM41562
     static constexpr uint8_t REG_FAULT = 0x09;
     static constexpr uint8_t REG_I2C_ADDR_MISC = 0x0A;
     static constexpr uint8_t REG_DEVICE_ID = 0x0B;
+    static constexpr uint8_t REG_EXT_INPUT_CURRENT = 0x0C;
+    static constexpr uint8_t REG_EXT_CURRENT = 0x0D;
 
     // Bit positions in REG_POWER_ON_CFG.
     static constexpr uint8_t POWER_ON_CFG_CHG_DISABLE = 0x08; // bit 3: 1 = charging disabled
@@ -91,7 +110,10 @@ class SGM41562
     static constexpr uint8_t SYS_STATUS_PG = 0x02;        // bit 1: input power good
     static constexpr uint8_t SYS_STATUS_THERM_REG = 0x01; // bit 0: thermal regulation
 
-    static constexpr uint8_t DEVICE_ID_EXPECTED = 0x04;
+    static constexpr uint8_t DEVICE_ID_SGM41562_B_SA = 0x00;
+    static constexpr uint8_t DEVICE_ID_SGM41562_A = 0x02;
+    static constexpr uint8_t DEVICE_ID_SGM41562 = 0x04;
+    static constexpr uint8_t DEVICE_ID_SGM41562_S = 0x09;
 };
 
 extern SGM41562 *sgm41562;

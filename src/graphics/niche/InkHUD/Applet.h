@@ -129,6 +129,8 @@ class Applet : public GFX
     virtual bool approveNotification(Notification &n); // Allow an applet to veto a notification
 
     virtual class MapApplet *asMapApplet() { return nullptr; } // Returns non-null only for MapApplet and its subclasses
+    virtual class WaypointListApplet *asWaypointListApplet() { return nullptr; } // Returns non-null only for WaypointListApplet
+    virtual class StepsApplet *asStepsApplet() { return nullptr; }
 
     static uint16_t getHeaderHeight(); // How tall the "standard" applet header is
 

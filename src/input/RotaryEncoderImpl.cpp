@@ -3,6 +3,7 @@
 #include "RotaryEncoderImpl.h"
 #include "InputBroker.h"
 #include "RotaryEncoder.h"
+#include "mesh/Throttle.h"
 #ifdef ARCH_ESP32
 #include "sleep.h"
 #endif
@@ -66,8 +67,8 @@ void RotaryEncoderImpl::pollOnce()
 
     static uint32_t lastPressed = millis();
     if (rotary->readButton() == RotaryEncoder::ButtonState::BUTTON_PRESSED) {
-        if (lastPressed + 200 < millis()) {
-            LOG_DEBUG("Rotary event Press");
+        if (Throttle::hasElapsed(lastPressed, 200)) {
+            LOG_INPUT("Rotary event Press");
             lastPressed = millis();
             e.inputEvent = this->eventPressed;
             inputBroker->queueInputEvent(&e);
@@ -76,12 +77,12 @@ void RotaryEncoderImpl::pollOnce()
 
     switch (rotary->process()) {
     case RotaryEncoder::DIRECTION_CW:
-        LOG_DEBUG("Rotary event CW");
+        LOG_INPUT("Rotary event CW");
         e.inputEvent = this->eventCw;
         inputBroker->queueInputEvent(&e);
         break;
     case RotaryEncoder::DIRECTION_CCW:
-        LOG_DEBUG("Rotary event CCW");
+        LOG_INPUT("Rotary event CCW");
         e.inputEvent = this->eventCcw;
         inputBroker->queueInputEvent(&e);
         break;

@@ -3,12 +3,14 @@
 #include "BluetoothCommon.h"
 #include "HardwareRNG.h"
 #include "PowerFSM.h"
+#include "SPILock.h"
 #include "configuration.h"
 #include "error.h"
 #include "main.h"
 #include "mesh/PhoneAPI.h"
 #include "mesh/Throttle.h"
 #include "mesh/mesh-pb-constants.h"
+#include <InternalFileSystem.h>
 #include <bluefruit.h>
 #include <utility/bonding.h>
 static BLEService meshBleService = BLEService(BLEUuid(MESH_SERVICE_UUID_16));
@@ -21,9 +23,105 @@ static BLEDis bledis;             // DIS (Device Information Service) helper cla
 static BLEBas blebas;             // BAS (Battery Service) helper class instance
 static int lastBatteryLevel = -1; // last value written to BAS, to skip redundant writes/notifies
 #ifndef BLE_DFU_SECURE
-static BLEDfu bledfu; // DFU software update helper service
+namespace
+{
+// START_DFU is handled here rather than by the library: wait out any flash write in flight, then reset into the
+// bootloader with the OTA magic instead of the library's jump, and unlock again if it returns without resetting.
+class QuiescingBLEDfu : public BLEDfu
+{
+    struct Peek : BLECharacteristic {
+        using BLECharacteristic::_wr_authorize_cb;
+    };
+    static BLECharacteristic::write_authorize_cb_t libraryCb;
+
+    // The bootloader reads this from .noinit to reconnect to the same peer; layout and CRC match the library's.
+    struct PeerData {
+        ble_gap_addr_t addr;
+        ble_gap_irk_t irk;
+        ble_gap_enc_key_t enc_key;
+        uint8_t sys_attr[8];
+        uint16_t crc16;
+    };
+    static_assert(offsetof(PeerData, crc16) == 60, "bootloader peer data layout");
+
+    static uint16_t crc16(const uint8_t *data, uint8_t length)
+    {
+        uint16_t crc = 0xFFFF;
+        while (length--) {
+            uint8_t x = crc >> 8 ^ *data++;
+            x ^= x >> 4;
+            crc = (crc << 8) ^ (uint16_t)(x << 12) ^ (uint16_t)(x << 5) ^ (uint16_t)x;
+        }
+        return crc;
+    }
+
+    // Leaves through a reset, never the library's switch to the main stack and jump: the compiler may still pop the
+    // task's frame after the switch, from the wrong stack.
+    static void startDfu(uint16_t conn_hdl, BLECharacteristic *chr, ble_gatts_evt_write_t *request)
+    {
+        if (request->handle != chr->handles().value_handle || request->op == BLE_GATTS_OP_PREP_WRITE_REQ ||
+            request->op == BLE_GATTS_OP_EXEC_WRITE_REQ_NOW || request->op == BLE_GATTS_OP_EXEC_WRITE_REQ_CANCEL)
+            return;
+
+        BLEConnection *conn = Bluefruit.Connection(conn_hdl);
+        ble_gatts_rw_authorize_reply_params_t reply = {.type = BLE_GATTS_AUTHORIZE_TYPE_WRITE};
+        if (!chr->notifyEnabled(conn_hdl)) {
+            reply.params.write.gatt_status = BLE_GATT_STATUS_ATTERR_CPS_CCCD_CONFIG_ERROR;
+            sd_ble_gatts_rw_authorize_reply(conn_hdl, &reply);
+            return;
+        }
+        reply.params.write.gatt_status = BLE_GATT_STATUS_SUCCESS;
+        sd_ble_gatts_rw_authorize_reply(conn_hdl, &reply);
+
+        PeerData *peer = reinterpret_cast<PeerData *>(0x20007F80UL);
+        memset(peer, 0, sizeof(*peer));
+        uint16_t sysAttrLen = sizeof(peer->sys_attr);
+        sd_ble_gatts_sys_attr_get(conn_hdl, peer->sys_attr, &sysAttrLen, BLE_GATTS_SYS_ATTR_FLAG_SYS_SRVCS);
+        peer->addr = conn->getPeerAddr();
+        if (conn->secured()) {
+            bond_keys_t keys;
+            if (conn->loadBondKey(&keys)) {
+                peer->addr = keys.peer_id.id_addr_info;
+                peer->irk = keys.peer_id.id_info;
+                peer->enc_key = keys.own_enc;
+            }
+        }
+        peer->crc16 = crc16(reinterpret_cast<const uint8_t *>(peer), offsetof(PeerData, crc16));
+
+        Bluefruit.Advertising.restartOnDisconnect(false);
+        conn->disconnect();
+        enterOTADfu();
+    }
+
+    static void onControlWrite(uint16_t conn_hdl, BLECharacteristic *chr, ble_gatts_evt_write_t *request)
+    {
+        // Only START_DFU resets, and the library reads this byte without checking len, so match it exactly.
+        if (request->data[0] != 1) {
+            libraryCb(conn_hdl, chr, request);
+            return;
+        }
+        nrf52FlashQuiesce();
+        // Loading the bond keys goes through LittleFS, so it cannot run under the FS mutex; spiLock still fences
+        // every other writer until the reset.
+        InternalFS._unlockFS();
+        startDfu(conn_hdl, chr, request);
+        spiLock->unlock();
+    }
+
+  public:
+    err_t begin() override
+    {
+        err_t err = BLEDfu::begin();
+        libraryCb = _chr_control.*(&Peek::_wr_authorize_cb);
+        _chr_control.setWriteAuthorizeCallback(onControlWrite);
+        return err;
+    }
+};
+BLECharacteristic::write_authorize_cb_t QuiescingBLEDfu::libraryCb;
+} // namespace
+static QuiescingBLEDfu bledfu; // DFU software update helper service
 #else
-static BLEDfuSecure bledfusecure;                                             // DFU software update helper service
+static BLEDfuSecure bledfusecure; // DFU software update helper service
 #endif
 
 // This scratch buffer is used for various bluetooth reads/writes - but it is safe because only one bt operation can be in
@@ -240,22 +338,35 @@ void setupMeshService(void)
     logRadio.begin();
 }
 static uint32_t configuredPasskey;
+// False if Bluefruit.begin() failed: Bluefruit is then unusable, and Advertising.start() faults on a timer that
+// was never created. nrf52Bluetooth is set all the same, so PowerFSM keeps calling in here.
+static bool bleStarted = false;
 void NRF52Bluetooth::shutdown()
 {
+    if (!bleStarted)
+        return;
+
     // Shutdown bluetooth for minimum power draw
     LOG_INFO("Disable NRF52 bluetooth");
     Bluefruit.Security.setPairPasskeyCallback(NRF52Bluetooth::onUnwantedPairing); // Actively refuse (during factory reset)
-    disconnect();
+
+    // Clear the auto-restart flag before dropping the link: our DISCONNECTED event is only processed
+    // after this callback returns and would re-start advertising. startAdv()/resumeAdvertising() re-set it.
+    Bluefruit.Advertising.restartOnDisconnect(false);
     Bluefruit.Advertising.stop();
+    disconnect();
 }
 void NRF52Bluetooth::startDisabled()
 {
     // Setup Bluetooth
     nrf52Bluetooth->setup();
+    if (!bleStarted)
+        return;
+
     // Shutdown bluetooth for minimum power draw
     Bluefruit.Advertising.stop();
     Bluefruit.setTxPower(-40); // Minimum power
-    LOG_INFO("Disable NRF52 Bluetooth. (Workaround: tx power min, advertise stopped)");
+    LOG_INFO("Disable NRF52 BT (tx power min, advertise stopped)");
 }
 bool NRF52Bluetooth::isConnected()
 {
@@ -278,15 +389,17 @@ void NRF52Bluetooth::setup()
     Bluefruit.autoConnLed(false);
     Bluefruit.configPrphBandwidth(BANDWIDTH_MAX);
     if (!Bluefruit.begin()) {
-        // sd_ble_enable() rejected our RAM base: the linker RAM ORIGIN
+        // Without this check the node would silently run without BLE. The usual cause on nRF52 is
+        // sd_ble_enable() rejecting our RAM base: the linker RAM ORIGIN
         // (src/platform/nrf52/nrf52840_s140_v*.ld) is below what the SoftDevice needs for the
-        // current Bluefruit config. Without this check the node would silently run without BLE.
-        // Rebuild with -DCFG_DEBUG=1 to get "SoftDevice's RAM requires: 0x..." in the log, then
-        // raise the ORIGIN accordingly.
-        LOG_ERROR("Bluefruit.begin failed - SoftDevice RAM reservation too small for this config");
+        // current Bluefruit config. Rebuild with -DCFG_DEBUG=1 to get "SoftDevice's RAM requires: 0x..."
+        // in the log, then raise the ORIGIN accordingly. On nRF54 it can also be the RNG seed.
+        LOG_ERROR("Bluefruit.begin failed, no BLE until reboot");
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_UNSPECIFIED);
         return;
     }
+    bleStarted = true;
+
     // Clear existing data.
     Bluefruit.Advertising.stop();
     Bluefruit.Advertising.clearData();
@@ -370,6 +483,9 @@ void NRF52Bluetooth::setup()
 }
 void NRF52Bluetooth::resumeAdvertising()
 {
+    if (!bleStarted)
+        return;
+
     // shutdown() latches onUnwantedPairing to actively refuse pairing (used on the factory-reset /
     // BT-disable teardown path). The real pairing passkey callback is installed only in setup(), but a
     // shutdown()->resumeAdvertising() re-enable cycle skips setup() entirely (see setBluetoothEnable() in
@@ -399,7 +515,7 @@ void updateBatteryLevel(uint8_t level)
 }
 void NRF52Bluetooth::clearBonds()
 {
-    LOG_INFO("Clear bluetooth bonds!");
+    LOG_INFO("Clear bluetooth bonds");
     bond_print_list(BLE_GAP_ROLE_PERIPH);
     bond_print_list(BLE_GAP_ROLE_CENTRAL);
     Bluefruit.Periph.clearBonds();
@@ -446,7 +562,7 @@ bool NRF52Bluetooth::onPairingPasskey(uint16_t conn_handle, uint8_t const passke
 
     if (match_request) {
         uint32_t start_time = millis();
-        while (millis() < start_time + 30000) {
+        while (Throttle::isWithinTimespanMs(start_time, 30000)) {
             if (!Bluefruit.connected(conn_handle))
                 break;
         }
@@ -481,7 +597,7 @@ void NRF52Bluetooth::disconnect()
             delay(1);
 
         if (Bluefruit.connected())
-            LOG_WARN("BLE disconnect unconfirmed after %ums, continuing shutdown", millis() - start);
+            LOG_WARN("BLE disconnect unconfirmed after %ums, shutdown anyway", millis() - start);
         else
             LOG_INFO("Ended BLE connection");
     }
@@ -494,7 +610,7 @@ void NRF52Bluetooth::onPairingCompleted(uint16_t conn_handle, uint8_t auth_statu
         meshtastic::BluetoothStatus newConnectedStatus(meshtastic::BluetoothStatus::ConnectionState::CONNECTED);
         bluetoothStatus->updateStatus(&newConnectedStatus);
     } else {
-        LOG_INFO("BLE pair failed");
+        LOG_INFO("BLE pair failed, status 0x%02x", auth_status);
         // Notify UI (or any other interested firmware components)
         meshtastic::BluetoothStatus newDisconnectedStatus(meshtastic::BluetoothStatus::ConnectionState::DISCONNECTED);
         bluetoothStatus->updateStatus(&newDisconnectedStatus);

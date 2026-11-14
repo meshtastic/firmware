@@ -109,6 +109,11 @@ bool isOneOf(int item, int count, ...)
     return found;
 }
 
+void formatMacAddr(const uint8_t *mac, char *out, size_t outSize)
+{
+    snprintf(out, outSize, "%02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+}
+
 const std::string vformat(const char *const zcFormat, ...)
 {
     va_list vaArgs;
@@ -221,6 +226,32 @@ bool sanitizeUtf8(char *buf, size_t bufSize)
     }
 
     return replaced;
+}
+
+float parseDecimalFloat(const char *s)
+{
+    while (*s == ' ' || (*s >= '\t' && *s <= '\r'))
+        s++;
+    const bool negative = *s == '-';
+    if (*s == '-' || *s == '+')
+        s++;
+    double value = 0, scale = 1;
+    bool fraction = false, anyDigit = false;
+    for (;; s++) {
+        if (*s >= '0' && *s <= '9') {
+            value = value * 10 + (*s - '0');
+            if (fraction)
+                scale *= 10;
+            anyDigit = true;
+        } else if (*s == '.' && !fraction) {
+            fraction = true;
+        } else {
+            break;
+        }
+    }
+    if (!anyDigit)
+        return 0.0f;
+    return static_cast<float>((negative ? -value : value) / scale);
 }
 
 void clampLongName(char *longName)

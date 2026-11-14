@@ -51,6 +51,8 @@ class SerialConsole : public StreamAPI, public RedirectablePrint, private concur
 
     /// Continue retained USB CDC output before PhoneAPI advances.
     virtual bool finishPendingFrame() override;
+    /// Report a retained USB CDC frame awaiting TX space.
+    virtual bool hasRetainedFrame() override;
     /// Return whether the dedicated log buffer can be safely overwritten.
     virtual bool canEncodeLogRecord() override;
     /// Write or retain one framed USB CDC message.
@@ -60,6 +62,9 @@ class SerialConsole : public StreamAPI, public RedirectablePrint, private concur
     /// On USB CDC targets, keep console TX non-blocking unless a host is draining the
     /// port, so a dead host can't stall the main loop and trip the task watchdog.
     void setHostDraining(bool draining);
+
+    /// Write one byte of console text, restarting a latched HWCDC TX path where it can
+    size_t writeText(uint8_t c);
 
 #if defined(ARDUINO_USB_CDC_ON_BOOT) && ARDUINO_USB_CDC_ON_BOOT
     StreamFrameWriter frameWriter;

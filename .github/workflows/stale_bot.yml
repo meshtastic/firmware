@@ -13,11 +13,11 @@ jobs:
   stale_issues:
     if: github.repository == 'meshtastic/firmware'
     name: Close Stale Issues
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
 
     steps:
       - name: Stale PR+Issues
-        uses: actions/stale@v10.4.0
+        uses: actions/stale@v11
         with:
           days-before-stale: 45
           stale-issue-message: This issue has not had any comment or update in the last month. If it is still relevant, please post update comments. If no comments are made, this issue will be closed automagically in 7 days.

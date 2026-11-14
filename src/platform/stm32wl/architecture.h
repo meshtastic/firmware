@@ -33,6 +33,12 @@
     "HAS_LSE is set but STM32WL_LSE_DRIVE is not defined - set it in the variant's variant.h to one of RCC_LSEDRIVE_LOW/MEDIUMLOW/MEDIUMHIGH/HIGH"
 #endif
 
+#if HAS_LSE && !defined(HAS_CPU_SHUTDOWN)
+#define HAS_CPU_SHUTDOWN 1
+#elif HAS_CPU_SHUTDOWN && !HAS_LSE
+#error "STM32WL: HAS_CPU_SHUTDOWN requires HAS_LSE (RTC wake path)"
+#endif
+
 //
 // set HW_VENDOR
 //

@@ -8,8 +8,8 @@
 #include <cstdint>
 #include <deque>
 #include <iterator>
+#include <map>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 // NodeNum stored as raw uint32_t below; including MeshTypes.h here breaks the
@@ -37,6 +37,10 @@
  * Eventually there should be once instance of this class for each live connection (because it has a bit of state
  * for that connection)
  */
+#if HAS_SCREEN_MIRROR
+struct MirrorSlot;
+#endif
+
 class PhoneAPI
     : public Observer<uint32_t> // FIXME, we shouldn't be inheriting from Observer, instead use CallbackObserver as a member
 {
@@ -53,7 +57,8 @@ class PhoneAPI
         STATE_SEND_OTHER_NODEINFOS, // states progress in this order as the device sends to to the client
         STATE_SEND_FILEMANIFEST,    // Send file manifest
         STATE_SEND_COMPLETE_ID,
-        STATE_SEND_PACKETS // live mesh packets + any cached satellite-DB replay that trails sync completion
+        STATE_SEND_PACKETS,  // live mesh packets + any cached satellite-DB replay that trails sync completion
+        STATE_RESEND_MY_INFO // one-shot: our node num moved after the handshake, re-announce and fall back
     };
 
     // Satellite-DB replay (positions / telemetry / environment / status) used to live
@@ -73,8 +78,8 @@ class PhoneAPI
 
     uint8_t config_state = 0;
 
-    // Hashmap of timestamps for last time we received a packet on the API per portnum
-    std::unordered_map<meshtastic_PortNum, uint32_t> lastPortNumToRadio;
+    // Timestamps of the last API packet per portnum. std::map keeps the libstdc++ hashtable out of small images.
+    std::map<meshtastic_PortNum, uint32_t> lastPortNumToRadio;
     uint32_t recentToRadioPacketIds[20]; // Last 20 ToRadio MeshPacket IDs we have seen
 
     /**
@@ -88,6 +93,16 @@ class PhoneAPI
 
     // file transfer packets destined for phone. Push it to the queue then free it.
     meshtastic_XModem xmodemPacketForPhone = meshtastic_XModem_init_zero;
+
+#if HAS_SCREEN_MIRROR
+    // Mirror state lives in a slot table in PhoneAPI.cpp: per-instance members break nRF52 USB-CDC enumeration.
+    bool handleScreenMirrorAdmin(const meshtastic_MeshPacket &p);
+    bool setMirrorSubscribed(bool subscribed);
+    bool requestMirrorFrame();
+    void releaseMirror();
+    // copies this connection's slot; screen pixels follow the same access rule as mesh packets
+    bool wantsMirror(MirrorSlot &out);
+#endif
 
     // Keep QueueStatus packet just as packetForPhone
     meshtastic_QueueStatus *queueStatusPacketForPhone = NULL;
@@ -133,6 +148,9 @@ class PhoneAPI
 
     void resetReadIndex() { readIndex = 0; }
 
+    /// Load fromRadioScratch with a MyInfo for this connection and record the number it carried.
+    void fillMyInfo();
+
   public:
     PhoneAPI();
 
@@ -152,7 +170,8 @@ class PhoneAPI
     /**
      * Send a (client)notification to the phone
      */
-    virtual void sendNotification(meshtastic_LogRecord_Level level, uint32_t replyId, const char *message);
+    virtual void sendNotification(meshtastic_LogRecord_Level level, uint32_t replyId, const char *message,
+                                  meshtastic_ClientNotification_NotificationType type);
 
     /**
      * Get the next packet we want to send to the phone
@@ -284,10 +303,12 @@ class PhoneAPI
     void prefetchReplayEnvironment();
     void beginReplayStatus();
     void prefetchReplayStatus();
-    meshtastic_MeshPacket makeReplayPositionPacket(uint32_t num, const meshtastic_PositionLite &pos);
-    meshtastic_MeshPacket makeReplayTelemetryPacket(uint32_t num, const meshtastic_DeviceMetrics &metrics);
-    meshtastic_MeshPacket makeReplayEnvironmentPacket(uint32_t num, const meshtastic_EnvironmentMetrics &env);
-    meshtastic_MeshPacket makeReplayStatusPacket(uint32_t num, const meshtastic_StatusMessage &status);
+    meshtastic_MeshPacket makeReplayPositionPacket(const meshtastic_NodeInfoLite *header, const meshtastic_PositionLite &pos);
+    meshtastic_MeshPacket makeReplayTelemetryPacket(const meshtastic_NodeInfoLite *header,
+                                                    const meshtastic_DeviceMetrics &metrics);
+    meshtastic_MeshPacket makeReplayEnvironmentPacket(const meshtastic_NodeInfoLite *header,
+                                                      const meshtastic_EnvironmentMetrics &env);
+    meshtastic_MeshPacket makeReplayStatusPacket(const meshtastic_NodeInfoLite *header, const meshtastic_StatusMessage &status);
 
     // Post-sync replay drain: pop one cached packet from the active phase, advancing
     // through positions -> telemetry -> environment -> status until everything is drained.

@@ -45,6 +45,7 @@ int32_t StoreForwardModule::runOnce()
             }
         } else if (this->heartbeat && (!Throttle::isWithinTimespanMs(lastHeartbeat, heartbeatInterval * 1000)) &&
                    airTime->isTxAllowedChannelUtil(true)) {
+            // unset-sentinel-ok: the heartbeat bool gates it and the only read is elapsed math
             lastHeartbeat = millis();
             LOG_INFO("Send heartbeat");
             meshtastic_StoreAndForward sf = meshtastic_StoreAndForward_init_zero;
@@ -257,7 +258,6 @@ meshtastic_MeshPacket *StoreForwardModule::preparePayload(NodeNum dest, uint32_t
 
                 p->to = local ? this->packetHistory[i].to : dest; // PhoneAPI can handle original `to`
                 p->from = this->packetHistory[i].from;
-                p->id = this->packetHistory[i].id;
                 p->channel = this->packetHistory[i].channel;
                 p->decoded.reply_id = this->packetHistory[i].reply_id;
                 p->rx_time = this->packetHistory[i].time;
@@ -277,6 +277,7 @@ meshtastic_MeshPacket *StoreForwardModule::preparePayload(NodeNum dest, uint32_t
 
                 if (local) { // PhoneAPI gets normal TEXT_MESSAGE_APP
                     p->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
+                    p->id = this->packetHistory[i].id;
                     memcpy(p->decoded.payload.bytes, this->packetHistory[i].payload, this->packetHistory[i].payload_size);
                     p->decoded.payload.size = this->packetHistory[i].payload_size;
                 } else {
@@ -289,6 +290,7 @@ meshtastic_MeshPacket *StoreForwardModule::preparePayload(NodeNum dest, uint32_t
                     } else {
                         sf.rr = meshtastic_StoreAndForward_RequestResponse_ROUTER_TEXT_DIRECT;
                     }
+                    sf.original_id = this->packetHistory[i].id;
 
                     p->decoded.payload.size = pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes),
                                                                  &meshtastic_StoreAndForward_msg, &sf);
@@ -421,7 +423,7 @@ ProcessMessage StoreForwardModule::handleReceived(const meshtastic_MeshPacket &m
                 }
             } else {
                 storeForwardModule->historyAdd(mp);
-                LOG_INFO("S&F stored. Message history contains %u records now", this->packetHistoryTotalCount);
+                LOG_INFO("S&F stored, history has %u records", this->packetHistoryTotalCount);
             }
         } else if (!isFromUs(&mp) && mp.decoded.portnum == meshtastic_PortNum_STORE_FORWARD_APP) {
             auto &p = mp.decoded;
@@ -431,7 +433,7 @@ ProcessMessage StoreForwardModule::handleReceived(const meshtastic_MeshPacket &m
                 if (pb_decode_from_bytes(p.payload.bytes, p.payload.size, &meshtastic_StoreAndForward_msg, &scratch)) {
                     decoded = &scratch;
                 } else {
-                    LOG_ERROR("Error decoding proto module!");
+                    LOG_ERROR("Error decoding proto module");
                     // if we can't decode it, nobody can process it!
                     return ProcessMessage::STOP;
                 }
@@ -535,6 +537,7 @@ bool StoreForwardModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp,
             if (p->which_variant == meshtastic_StoreAndForward_heartbeat_tag) {
                 heartbeatInterval = p->variant.heartbeat.period;
             }
+            // unset-sentinel-ok: the heartbeat bool gates it and the only read is elapsed math
             lastHeartbeat = millis();
             LOG_INFO("StoreAndForward Heartbeat received");
         }
@@ -567,8 +570,8 @@ bool StoreForwardModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp,
             // These fields only have informational purpose on a client. Fill them to consume later.
             if (p->which_variant == meshtastic_StoreAndForward_history_tag) {
                 this->historyReturnWindow = p->variant.history.window / 60000;
-                LOG_INFO("Router Response HISTORY - Sending %d messages from last %d minutes",
-                         p->variant.history.history_messages, this->historyReturnWindow);
+                LOG_INFO("HISTORY response: %d msgs from last %d min", p->variant.history.history_messages,
+                         this->historyReturnWindow);
             }
         }
         break;

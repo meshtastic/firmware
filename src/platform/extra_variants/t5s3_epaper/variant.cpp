@@ -1,16 +1,18 @@
+#include "UptimeClock.h"
 #include "configuration.h"
 
 #ifdef T5_S3_EPAPER_PRO
 
 #include "Observer.h"
-#include "TouchDrvGT911.hpp"
 #include "Wire.h"
 #include "buzz.h"
 #include "concurrency/OSThread.h"
 #include "input/InputBroker.h"
 #include "input/TouchScreenImpl1.h"
 #include "main.h"
+#include "mesh/Throttle.h"
 #include "sleep.h"
+#include "touch/TouchDrvGT911.hpp"
 #include <cstring>
 
 #ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
@@ -100,7 +102,10 @@ volatile bool touchControllerReady = false;
 volatile bool touchLightSleepActive = false;
 volatile bool touchNeedsWake = false;
 volatile bool touchIndicatorRefreshPending = false;
-volatile uint32_t touchResumeBlockUntilMs = 0;
+// When the light-sleep resume happened, not when the block expires: an interval bounds a missed
+// 0-check by the settle time, where a stored deadline would block for up to half a wrap cycle.
+constexpr uint32_t TOUCH_RESUME_BLOCK_MS = 150;
+volatile uint32_t touchResumeAtMs = 0;
 volatile uint32_t touchStateEpoch = 1;
 volatile bool homeCapButtonEventsEnabled = false;
 #if HAS_SCREEN
@@ -184,7 +189,8 @@ class SideKeyInterruptThread : public concurrency::OSThread
     {
         const uint32_t now = millis();
 
-        if (now < touchResumeBlockUntilMs) {
+        // 0 means the device has never light-slept, so no block is armed - test it first.
+        if (touchResumeAtMs != 0 && Throttle::isWithinTimespanMs(touchResumeAtMs, TOUCH_RESUME_BLOCK_MS)) {
             resetStateAndStop();
             return OSThread::disable();
         }
@@ -279,8 +285,8 @@ class SideKeyInterruptThread : public concurrency::OSThread
         if (touchLightSleepActive) {
             return;
         }
-        const uint32_t now = millis();
-        if (now < touchResumeBlockUntilMs) {
+        // See the runOnce() guard above for why 0 must be tested separately.
+        if (touchResumeAtMs != 0 && Throttle::isWithinTimespanMs(touchResumeAtMs, TOUCH_RESUME_BLOCK_MS)) {
             return;
         }
         if (state != State::REST) {
@@ -418,6 +424,9 @@ void t5BacklightHandleUserInput()
 
 void t5TouchSetForcedByTimeout(bool forced)
 {
+#ifdef MESHTASTIC_INCLUDE_INKHUD
+    NicheGraphics::InkHUD::InkHUD::getInstance()->setTouchTimedOut(forced);
+#endif
     if (touchForcedByTimeout == forced) {
         return;
     }
@@ -550,7 +559,7 @@ struct TouchLightSleepEndObserver {
         }
 
         touchStateEpoch++;
-        touchResumeBlockUntilMs = millis() + 150;
+        touchResumeAtMs = Time::skipZero(Time::getMillis());
         touchIndicatorRefreshPending = !isTouchInputEnabled();
 #ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
         // Clear sleep-time touch overlay after wake.
@@ -569,17 +578,18 @@ struct TouchLightSleepEndObserver {
 bool readTouch(int16_t *x, int16_t *y)
 {
 #ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
-    static uint32_t suppressUntilMs = 0;
+    constexpr uint32_t TOUCH_WAKE_SUPPRESS_MS = 60;
+    static uint32_t suppressFromMs = 0; // 0 = not suppressing, same reading as touchResumeAtMs
     static uint32_t seenTouchStateEpoch = 0;
 
     // Reset transient gesture helpers whenever touch mode changes.
     if (seenTouchStateEpoch != touchStateEpoch) {
         seenTouchStateEpoch = touchStateEpoch;
-        suppressUntilMs = 0;
+        suppressFromMs = 0;
     }
 
-    // Let buses and peripherals settle briefly after light-sleep wake.
-    if (millis() < touchResumeBlockUntilMs) {
+    // Let buses and peripherals settle briefly after light-sleep wake. 0 means no wake yet.
+    if (touchResumeAtMs != 0 && Throttle::isWithinTimespanMs(touchResumeAtMs, TOUCH_RESUME_BLOCK_MS)) {
         return false;
     }
 
@@ -596,20 +606,22 @@ bool readTouch(int16_t *x, int16_t *y)
         LOG_DEBUG("touchscreen1: wakeup() on deferred resume");
         touch.wakeup();
         touchNeedsWake = false;
-        suppressUntilMs = millis() + 60;
+        suppressFromMs = Time::skipZero(Time::getMillis());
         return false;
     }
 
     // After a recovery pulse, emit a brief "released" window so gesture state can reset.
-    if (suppressUntilMs != 0 && millis() < suppressUntilMs) {
+    if (suppressFromMs != 0 && Throttle::isWithinTimespanMs(suppressFromMs, TOUCH_WAKE_SUPPRESS_MS)) {
         return false;
     }
 #endif
 
     if (!digitalRead(GT911_PIN_INT)) {
-        int16_t raw_x;
-        int16_t raw_y;
-        if (touch.getPoint(&raw_x, &raw_y)) {
+        // 0.4.x deprecates getPoint() in favour of getTouchPoints(); only the first touch is used here.
+        const TouchPoints &points = touch.getTouchPoints();
+        if (points.getPointCount()) {
+            const int16_t raw_x = static_cast<int16_t>(points.getPoint(0).x);
+            const int16_t raw_y = static_cast<int16_t>(points.getPoint(0).y);
 #ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
             // Transform raw GT911 axes to visual-frame coordinates for the current display rotation.
             // rotation=3 is the physical identity (device's default orientation).
@@ -636,7 +648,7 @@ bool readTouch(int16_t *x, int16_t *y)
             *x = raw_x;
             *y = raw_y;
 #endif
-            LOG_DEBUG("touched(%d/%d)", *x, *y);
+            LOG_INPUT("touched(%d/%d)", *x, *y);
             return true;
         }
     }
@@ -696,7 +708,7 @@ void lateInitVariant()
 #endif
     } else {
         touchControllerReady = false;
-        LOG_ERROR("Failed to find touch controller!");
+        LOG_ERROR("Failed to find touch controller");
     }
 
 #if defined(BOARD_PCA9535_ADDR) && defined(BOARD_PCA9535_BUTTON_MASK)

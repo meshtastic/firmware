@@ -128,11 +128,10 @@ int32_t DetectionSensorModule::runOnce()
 void DetectionSensorModule::sendDetectionMessage()
 {
     LOG_DEBUG("Detected event observed. Send message");
-    char *message = new char[40];
-    sprintf(message, "%s detected", moduleConfig.detection_sensor.name);
+    char message[40];
+    snprintf(message, sizeof(message), "%s detected", moduleConfig.detection_sensor.name);
     meshtastic_MeshPacket *p = allocDataPacket();
     if (!p) {
-        delete[] message;
         return;
     }
     p->want_ack = false;
@@ -147,18 +146,18 @@ void DetectionSensorModule::sendDetectionMessage()
     if (!channels.isDefaultChannel(0)) {
         LOG_INFO("Send message id=%d, dest=%x, msg=%.*s", p->id, p->to, p->decoded.payload.size, p->decoded.payload.bytes);
         service->sendToMesh(p);
-    } else
+    } else {
         LOG_ERROR("Message not allow on Public channel");
-    delete[] message;
+        packetPool.release(p);
+    }
 }
 
 void DetectionSensorModule::sendCurrentStateMessage(bool state)
 {
-    char *message = new char[40];
-    sprintf(message, "%s state: %i", moduleConfig.detection_sensor.name, state);
+    char message[40];
+    snprintf(message, sizeof(message), "%s state: %i", moduleConfig.detection_sensor.name, state);
     meshtastic_MeshPacket *p = allocDataPacket();
     if (!p) {
-        delete[] message;
         return;
     }
     p->want_ack = false;
@@ -168,9 +167,10 @@ void DetectionSensorModule::sendCurrentStateMessage(bool state)
     if (!channels.isDefaultChannel(0)) {
         LOG_INFO("Send message id=%d, dest=%x, msg=%.*s", p->id, p->to, p->decoded.payload.size, p->decoded.payload.bytes);
         service->sendToMesh(p);
-    } else
+    } else {
         LOG_ERROR("Message not allow on Public channel");
-    delete[] message;
+        packetPool.release(p);
+    }
 }
 
 bool DetectionSensorModule::hasDetectionEvent()

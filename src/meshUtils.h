@@ -63,12 +63,19 @@ bool memfll(const uint8_t *mem, uint8_t find, size_t numbytes);
 // on an all-zero MAC so two blank devices don't collide on an all-zero id.
 bool getMacAddrDeviceId(uint8_t *deviceId);
 
+// Writes a 6-byte address, most significant byte first, as "AA:BB:CC:DD:EE:FF" (18 bytes with the NUL).
+void formatMacAddr(const uint8_t *mac, char *out, size_t outSize);
+
 bool isOneOf(int item, int count, ...);
 
 const std::string vformat(const char *const zcFormat, ...);
 
 // Get actual string length for nanopb char array fields.
 size_t pb_string_length(const char *str, size_t max_len);
+
+// strtof() for plain decimals: [+-]digits[.digits] after leading whitespace, 0 when no digits. No exponent,
+// inf or nan, which keeps newlib's strtod (~4.5 KB) out of the image.
+float parseDecimalFloat(const char *s);
 
 // Sanitize a fixed-size char buffer in-place by replacing invalid UTF-8 sequences with '?'.
 // Ensures the result is null-terminated within bufSize. Returns true if any bytes were replaced.
@@ -85,6 +92,15 @@ bool sanitizeUtf8(char *buf, size_t bufSize);
 // left at the cut.
 void clampLongName(char *longName);
 
+// Is a received Waypoint still live? The clients send expire == 0 for "never expires" and expire == 1
+// to delete; now == 0 means we have no trustworthy clock, which must not expire anything.
+static inline bool waypointIsActive(uint32_t expire, uint32_t now)
+{
+    if (expire <= 1)
+        return expire == 0;
+    return now == 0 || expire > now;
+}
+
 /// Calculate 2^n without calling pow() - used for spreading factor and other calculations
 inline uint32_t pow_of_2(uint32_t n)
 {
@@ -97,4 +113,7 @@ template <typename T> constexpr bool is_pow_of_2(T n)
     return n >= T(1) && (n & (n - T(1))) == T(0);
 }
 
-#define IS_ONE_OF(item, ...) isOneOf(item, sizeof((int[]){__VA_ARGS__}) / sizeof(int), __VA_ARGS__)
+// Declaration only: used inside sizeof so the arguments are counted without being evaluated.
+template <typename... Args> char (&isOneOfArgCount(Args &&...))[sizeof...(Args)];
+
+#define IS_ONE_OF(item, ...) isOneOf(item, (int)sizeof(isOneOfArgCount(__VA_ARGS__)), __VA_ARGS__)

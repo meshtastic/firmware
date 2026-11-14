@@ -12,7 +12,7 @@
 
 #define GPS_RX_PIN 5
 #define GPS_TX_PIN 6
-#define GPS_1PPS_PIN 7
+#define PIN_GPS_PPS 7
 #define HAS_GPS 1
 #define GPS_BAUDRATE 9600
 
@@ -67,4 +67,5 @@
 
 // PMU
 #define HAS_AXP2101
-// #define PMU_IRQ 4 // Leave disabled for now
+#define PMU_IRQ 4
+#define PMU_POWER_BUTTON_IS_CANCEL // maps a short click of the power button to a cancel action (turning off the screen)

@@ -7,6 +7,7 @@
 #include "meshtastic/channel.pb.h"
 #include "meshtastic/config.pb.h"
 #include "meshtastic/device_ui.pb.h"
+#include "meshtastic/field_metadata.pb.h"
 #include "meshtastic/module_config.pb.h"
 #include "meshtastic/portnums.pb.h"
 #include "meshtastic/telemetry.pb.h"
@@ -339,6 +340,24 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_HELTEC_RC52 = 142,
     /* Heltec ESP32C6 + SX1262 */
     meshtastic_HardwareModel_HELTEC_RCC6 = 143,
+    /* Seeed Wio Tracker L1 Pro 1W, nRF52840 + SX1262 with 1 W external PA */
+    meshtastic_HardwareModel_SEEED_WIO_TRACKER_L1_PRO_1W = 144,
+    /* Meshnology W12 */
+    meshtastic_HardwareModel_MESHNOLOGY_W12 = 145,
+    /* Seeed Studio MeshPager X2 */
+    meshtastic_HardwareModel_MESHPAGER_X2 = 146,
+    /* Lilygo T-CONNECT PRO */
+    meshtastic_HardwareModel_T_CONNECT_PRO = 147,
+    /* Axiometa Axiometa Genesis Mini */
+    meshtastic_HardwareModel_AXIOMETA_GENESIS_MINI = 148,
+    /* MakerFabs Nomad Terminal */
+    meshtastic_HardwareModel_MAKERFABS_NOMAD_TERMINAL = 149,
+    /* Elecrow ThinkNode MX */
+    meshtastic_HardwareModel_THINKNODE_MX = 150,
+    /* Radioddity Nodara */
+    meshtastic_HardwareModel_NODARA = 151,
+    /* Heltec Magnetic Power Bank V2 */
+    meshtastic_HardwareModel_HELTEC_MESH_POCKET_V2 = 152,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */
@@ -414,6 +433,10 @@ typedef enum _meshtastic_FirmwareEdition {
     meshtastic_FirmwareEdition_HAMVENTION = 19,
     /* FAB, the international Fab Lab digital fabrication conference */
     meshtastic_FirmwareEdition_FAB = 20,
+    /* Dragon Con, the yearly pop culture convention in Atlanta, GA */
+    meshtastic_FirmwareEdition_DRAGON_CON = 21,
+    /* Chaos Communication Congress, the hacker conference held yearly in Germany */
+    meshtastic_FirmwareEdition_CCC = 22,
     /* Placeholder for DIY and unofficial events */
     meshtastic_FirmwareEdition_DIY_EDITION = 127
 } meshtastic_FirmwareEdition;
@@ -453,7 +476,15 @@ typedef enum _meshtastic_ExcludedModules {
     /* Bluetooth config (not technically a module, but used to indicate bluetooth capabilities) */
     meshtastic_ExcludedModules_BLUETOOTH_CONFIG = 8192,
     /* Network config (not technically a module, but used to indicate network capabilities) */
-    meshtastic_ExcludedModules_NETWORK_CONFIG = 16384
+    meshtastic_ExcludedModules_NETWORK_CONFIG = 16384,
+    /* Status Message module */
+    meshtastic_ExcludedModules_STATUSMESSAGE_CONFIG = 32768,
+    /* Traffic Management module */
+    meshtastic_ExcludedModules_TRAFFICMANAGEMENT_CONFIG = 65536,
+    /* TAK module */
+    meshtastic_ExcludedModules_TAK_CONFIG = 131072,
+    /* Mesh Beacon module */
+    meshtastic_ExcludedModules_MESHBEACON_CONFIG = 262144
 } meshtastic_ExcludedModules;
 
 /* How the location was acquired: manual, onboard GPS, external (EUD) GPS */
@@ -642,6 +673,58 @@ typedef enum _meshtastic_MeshPacket_TransportMechanism {
     meshtastic_MeshPacket_TransportMechanism_TRANSPORT_UNICAST_UDP = 8
 } meshtastic_MeshPacket_TransportMechanism;
 
+/* Outcome of checking Routing.ack_proof on a received ack or nak.
+
+ Reported, never enforced: an ack without a usable proof is acted on exactly as it was before
+ proofs existed. The value exists so a client can tell a proven delivery receipt from an
+ unproven one, and can tell "nobody proved this" from "somebody tried and failed". */
+typedef enum _meshtastic_MeshPacket_AckProofStatus {
+    /* No verdict. The default, and what every ack from firmware predating Routing.ack_proof looks
+ like, so an absent field and an absent proof read the same.
+
+ Also reported when a proof was carried but not checked: the ack came from a node other than
+ the one the packet was addressed to (a nak from an intermediate, for example), the packet was
+ no longer awaiting an ack, or the proof was malformed. A build without PKI never checks one.
+ A proof is only checked while the packet it acknowledges is still pending, so on a multi-hop
+ path an overheard relay can settle the packet first and leave a genuine receipt reading ABSENT. */
+    meshtastic_MeshPacket_AckProofStatus_ACK_PROOF_ABSENT = 0,
+    /* A proof was carried and verified against the public key of the node the acknowledged packet
+ was addressed to. The only value that means "the recipient received it".
+
+ Verifying against the key of whoever the ack claims to be from is NOT sufficient: the proof
+ only shows its author holds a pairwise secret with us, and every keyed peer holds one, so
+ any of them could otherwise mint a receipt for a packet addressed to someone else. */
+    meshtastic_MeshPacket_AckProofStatus_ACK_PROOF_VALID = 1,
+    /* A proof was carried and did not verify. Someone produced an ack for an outstanding packet
+ without holding the pairwise secret, so this is an attempted forgery rather than a quiet
+ absence, and is worth surfacing differently from ACK_PROOF_ABSENT. */
+    meshtastic_MeshPacket_AckProofStatus_ACK_PROOF_INVALID = 2,
+    /* A proof was carried but no authoritative public key was available to check it against, so
+ the ack is neither proven nor disproven. */
+    meshtastic_MeshPacket_AckProofStatus_ACK_PROOF_NO_KEY = 3
+} meshtastic_MeshPacket_AckProofStatus;
+
+/* Which slots of the CSMA backoff grid a transmission may draw from.
+
+ Never sent over the radio links. Like priority, it steers how the local node schedules the
+ packet: a module sets it on a packet it is queueing, and the radio driver reads it when it
+ draws the backoff for that packet.
+
+ A node normally draws any slot of the contention window, counted from the moment it draws.
+ A packet that asks for a parity instead has its slots counted from the end of the last frame
+ this node sent or heard, and only slots of that parity are taken, so two senders on opposite
+ parities that redraw after the same frame never land on the same slot, and so are always at
+ least a slot apart. Useful for a pair of nodes exchanging a stream, where the two ends
+ otherwise collide with each other far more often than with the rest of the mesh. */
+typedef enum _meshtastic_MeshPacket_SlotParity {
+    /* No parity asked for: the ordinary backoff draw over the whole contention window. */
+    meshtastic_MeshPacket_SlotParity_SLOT_PARITY_UNSET = 0,
+    /* Only even-numbered slots, counted from the end of the last frame on air. */
+    meshtastic_MeshPacket_SlotParity_SLOT_PARITY_EVEN = 1,
+    /* Only odd-numbered slots, counted from the end of the last frame on air. */
+    meshtastic_MeshPacket_SlotParity_SLOT_PARITY_ODD = 2
+} meshtastic_MeshPacket_SlotParity;
+
 /* Log levels, chosen to match python logging conventions. */
 typedef enum _meshtastic_LogRecord_Level {
     /* Log levels, chosen to match python logging conventions. */
@@ -659,6 +742,19 @@ typedef enum _meshtastic_LogRecord_Level {
     /* Log levels, chosen to match python logging conventions. */
     meshtastic_LogRecord_Level_TRACE = 5
 } meshtastic_LogRecord_Level;
+
+/* Pixel encodings of the framebuffer bytes. */
+typedef enum _meshtastic_DisplayFrame_Format {
+    /* Default; should not be sent. */
+    meshtastic_DisplayFrame_Format_FORMAT_UNSPECIFIED = 0,
+    /* 1 bit per pixel, vertical LSB-first pages (SSD1306/OLEDDisplay layout):
+ byte index = x + (y / 8) * width, bit index = y % 8. */
+    meshtastic_DisplayFrame_Format_MONO_VLSB = 1,
+    /* 16 bits per pixel, RGB565 in little-endian byte order, rows tightly
+ packed. Used with the partial-update rect fields: data covers only
+ the rectangle. Streamed by LVGL-based color UIs. */
+    meshtastic_DisplayFrame_Format_RGB565 = 2
+} meshtastic_DisplayFrame_Format;
 
 typedef enum _meshtastic_LockdownStatus_State {
     /* Default; should not be sent. */
@@ -685,6 +781,130 @@ typedef enum _meshtastic_LockdownStatus_State {
  which is only used during an in-progress enable flow. */
     meshtastic_LockdownStatus_State_DISABLED = 5
 } meshtastic_LockdownStatus_State;
+
+/* Identifies which firmware message a notification carries, so clients can
+ localize or act on it without parsing the message text. */
+typedef enum _meshtastic_ClientNotification_NotificationType {
+    /* Not set. Older firmware, or a message without its own type. */
+    meshtastic_ClientNotification_NotificationType_UNSET = 0,
+    /* Position packet rejected: location sharing is disabled on this channel. */
+    meshtastic_ClientNotification_NotificationType_POSITION_SHARING_DISABLED = 1,
+    /* Traceroute rejected: only one may be sent every 30 seconds. */
+    meshtastic_ClientNotification_NotificationType_TRACEROUTE_RATE_LIMITED = 2,
+    /* Traceroute rejected: multi-hop traceroute to the broadcast address is not allowed. */
+    meshtastic_ClientNotification_NotificationType_TRACEROUTE_BROADCAST_REJECTED = 3,
+    /* Send aborted: the duty cycle limit is exceeded. The message gives the minutes until sending resumes. */
+    meshtastic_ClientNotification_NotificationType_DUTY_CYCLE_LIMIT_EXCEEDED = 4,
+    /* Power-saving tracker sent its position and is about to sleep for the broadcast interval. */
+    meshtastic_ClientNotification_NotificationType_POSITION_SENT_SLEEPING = 5,
+    /* Power-saving sensor sent its telemetry and is about to sleep for the update interval. */
+    meshtastic_ClientNotification_NotificationType_TELEMETRY_SENT_SLEEPING = 6,
+    /* Incoming key verification: display the security number. Carries key_verification_number_inform. */
+    meshtastic_ClientNotification_NotificationType_KEY_VERIFICATION_NUMBER_INFORM = 7,
+    /* Outgoing key verification: enter the security number shown on the remote node. Carries key_verification_number_request. */
+    meshtastic_ClientNotification_NotificationType_KEY_VERIFICATION_NUMBER_REQUEST = 8,
+    /* Final confirmation of an incoming key verification. Carries key_verification_final. */
+    meshtastic_ClientNotification_NotificationType_KEY_VERIFICATION_FINAL_INCOMING = 9,
+    /* Final confirmation of an outgoing key verification. Carries key_verification_final. */
+    meshtastic_ClientNotification_NotificationType_KEY_VERIFICATION_FINAL_OUTGOING = 10,
+    /* Key verification is unavailable in licensed (ham) mode. */
+    meshtastic_ClientNotification_NotificationType_KEY_VERIFICATION_LICENSED_UNAVAILABLE = 11,
+    /* A remote node advertised this node's public key; the key may be compromised. */
+    meshtastic_ClientNotification_NotificationType_DUPLICATED_PUBLIC_KEY = 12,
+    /* Compromised (low-entropy) keys were detected at boot and regenerated. */
+    meshtastic_ClientNotification_NotificationType_LOW_ENTROPY_KEY_REGENERATED = 13,
+    /* A restored key is a known low-entropy key; a new key was generated and the node number changed. */
+    meshtastic_ClientNotification_NotificationType_LOW_ENTROPY_KEY_RESTORE_REJECTED = 14,
+    /* Licensed mode activated: the admin channel and encryption were removed from all channels. */
+    meshtastic_ClientNotification_NotificationType_LICENSED_MODE_ACTIVATED = 15,
+    /* Licensed signing needs an identity key; the node identity will change after key generation. */
+    meshtastic_ClientNotification_NotificationType_LICENSED_IDENTITY_WILL_CHANGE = 16,
+    /* Licensed signing generated a new identity key; the node identity changed. */
+    meshtastic_ClientNotification_NotificationType_LICENSED_IDENTITY_CHANGED = 17,
+    /* Favorite or ignore refused: the protected-node limit is reached. */
+    meshtastic_ClientNotification_NotificationType_PROTECTED_NODE_LIMIT_REACHED = 18,
+    /* Rebroadcast mode NONE is not allowed for a router role; it was set to ALL. */
+    meshtastic_ClientNotification_NotificationType_ROUTER_REBROADCAST_NONE_REJECTED = 19,
+    /* The packet signature policy is unavailable on this firmware build; it was set to COMPATIBLE. */
+    meshtastic_ClientNotification_NotificationType_PACKET_SIGNATURE_POLICY_UNAVAILABLE = 20,
+    /* Managed mode needs at least one admin public key; it was left disabled. */
+    meshtastic_ClientNotification_NotificationType_MANAGED_MODE_REQUIRES_ADMIN_KEY = 21,
+    /* Precise position is not allowed on a public channel; precision was reduced. */
+    meshtastic_ClientNotification_NotificationType_PUBLIC_CHANNEL_POSITION_PRECISION_REDUCED = 22,
+    /* A channel has a blank PSK (no encryption) instead of the default key. */
+    meshtastic_ClientNotification_NotificationType_CHANNEL_BLANK_PSK = 23,
+    /* A channel name looks like a mistyped modem preset name; the user should type it exactly. */
+    meshtastic_ClientNotification_NotificationType_CHANNEL_NAME_PRESET_MISTYPE = 24,
+    /* A channel name looks like a mistyped modem preset name; clearing it lets the preset name apply automatically. */
+    meshtastic_ClientNotification_NotificationType_CHANNEL_NAME_PRESET_MISTYPE_CLEAR_NAME = 42,
+    /* A channel resolves to or matches a modem preset but uses a non-default key. */
+    meshtastic_ClientNotification_NotificationType_CHANNEL_PRESET_NON_DEFAULT_KEY = 25,
+    /* After a modem preset change, a channel name still matches the old preset. */
+    meshtastic_ClientNotification_NotificationType_CHANNEL_NAME_MATCHES_OLD_PRESET = 26,
+    /* After a modem preset change, a channel name matches the new preset but won't auto-resolve. */
+    meshtastic_ClientNotification_NotificationType_CHANNEL_NAME_WONT_AUTO_RESOLVE = 27,
+    /* Name issues on one or more channels (several warnings combined). */
+    meshtastic_ClientNotification_NotificationType_CHANNEL_NAME_ISSUES = 28,
+    /* PSK issues on one or more channels (several warnings combined). */
+    meshtastic_ClientNotification_NotificationType_CHANNEL_PSK_ISSUES = 29,
+    /* Name and PSK issues on one or more channels (several warnings combined). */
+    meshtastic_ClientNotification_NotificationType_CHANNEL_NAME_AND_PSK_ISSUES = 30,
+    /* LoRa region code is not recognized. */
+    meshtastic_ClientNotification_NotificationType_LORA_REGION_UNRECOGNIZED = 31,
+    /* LoRa region requires licensed mode. */
+    meshtastic_ClientNotification_NotificationType_LORA_REGION_REQUIRES_LICENSE = 32,
+    /* LoRa region needs a band (2.4 GHz or sub-GHz) this radio does not support. */
+    meshtastic_ClientNotification_NotificationType_LORA_REGION_UNSUPPORTED_BY_RADIO = 33,
+    /* The selected modem preset moved the node to a sibling region. */
+    meshtastic_ClientNotification_NotificationType_LORA_PRESET_REGION_SWAP = 34,
+    /* Modem preset is invalid for the region; the region default may have been applied. */
+    meshtastic_ClientNotification_NotificationType_LORA_PRESET_INVALID_FOR_REGION = 35,
+    /* Requested bandwidth is wider than the region's span; the region default may have been applied. */
+    meshtastic_ClientNotification_NotificationType_LORA_BANDWIDTH_EXCEEDS_REGION = 36,
+    /* Channel number is out of range for the region; a valid slot may have been applied. */
+    meshtastic_ClientNotification_NotificationType_LORA_CHANNEL_NUM_INVALID = 37,
+    /* Serial config rejected: overriding the console serial port needs an output-only mode (NMEA, CalTopo or MS Config). */
+    meshtastic_ClientNotification_NotificationType_SERIAL_CONSOLE_OVERRIDE_INVALID = 38,
+    /* MQTT server could not be reached; the settings were saved anyway. */
+    meshtastic_ClientNotification_NotificationType_MQTT_SERVER_UNREACHABLE = 39,
+    /* MQTT config rejected: proxy_to_client_enabled is required on a node without a network. */
+    meshtastic_ClientNotification_NotificationType_MQTT_PROXY_TO_CLIENT_REQUIRED = 40,
+    /* MQTT config rejected: the default server address must not have a port specified. */
+    meshtastic_ClientNotification_NotificationType_MQTT_DEFAULT_SERVER_PORT_INVALID = 41,
+    /* OTA refused: the provided ota_hash is invalid. */
+    meshtastic_ClientNotification_NotificationType_OTA_INVALID_HASH = 43,
+    /* OTA refused: no OTA loader partition was found. */
+    meshtastic_ClientNotification_NotificationType_OTA_LOADER_PARTITION_MISSING = 44,
+    /* OTA refused: the OTA loader partition does not hold a valid loader. */
+    meshtastic_ClientNotification_NotificationType_OTA_LOADER_INVALID = 45,
+    /* OTA refused: the OTA loader does not support the requested mode (BLE or WiFi). */
+    meshtastic_ClientNotification_NotificationType_OTA_MODE_UNSUPPORTED = 46,
+    /* OTA accepted: rebooting into the OTA loader for the requested mode. */
+    meshtastic_ClientNotification_NotificationType_OTA_REBOOTING = 47,
+    /* OTA refused: switching to the OTA partition failed. */
+    meshtastic_ClientNotification_NotificationType_OTA_PARTITION_SWITCH_FAILED = 48,
+    /* A NodeInfo update without a valid signature tried to change a known node's name or role,
+ and packet_signature_policy (Balanced or Strict) refused it. The stored identity is kept. */
+    meshtastic_ClientNotification_NotificationType_UNSIGNED_IDENTITY_UPDATE_IGNORED = 49
+} meshtastic_ClientNotification_NotificationType;
+
+/* Physical panel technology, as a hint for client rendering and refresh
+ expectations. */
+typedef enum _meshtastic_DisplayInfo_PanelClass {
+    /* Unknown, or selected at runtime (e.g. a native build's configured panel). */
+    meshtastic_DisplayInfo_PanelClass_PANEL_CLASS_UNSPECIFIED = 0,
+    /* Monochrome OLED (SSD1306/SH1106 family). */
+    meshtastic_DisplayInfo_PanelClass_OLED = 1,
+    /* Monochrome LCD (ST7567 family). */
+    meshtastic_DisplayInfo_PanelClass_LCD = 2,
+    /* Color TFT. */
+    meshtastic_DisplayInfo_PanelClass_TFT = 3,
+    /* E-ink panel: refresh is slow and full-screen; clients should prefer
+ one-shot frame requests over continuous mirroring. */
+    meshtastic_DisplayInfo_PanelClass_EINK = 4,
+    /* LED matrix (HUB75). */
+    meshtastic_DisplayInfo_PanelClass_HUB75 = 5
+} meshtastic_DisplayInfo_PanelClass;
 
 /* Struct definitions */
 /* A GPS Position */
@@ -732,7 +952,7 @@ typedef struct _meshtastic_Position {
    multiplied with DOP to calculate positional accuracy
  Default: "'bout three meters-ish" :) */
     uint32_t gps_accuracy;
-    /* Ground speed in m/s and True North TRACK in 1/100 degrees
+    /* Ground speed in km/h and True North TRACK in 1/100 degrees
  Clarification of terms:
  - "track" is the direction of motion (measured in horizontal plane)
  - "heading" is where the fuselage points (measured in horizontal plane)
@@ -837,6 +1057,7 @@ typedef struct _meshtastic_RouteDiscovery {
     int8_t snr_back[8];
 } meshtastic_RouteDiscovery;
 
+typedef PB_BYTES_ARRAY_T(8) meshtastic_Routing_ack_proof_t;
 /* A Routing control Data packet handled by the routing module */
 typedef struct _meshtastic_Routing {
     pb_size_t which_variant;
@@ -849,6 +1070,31 @@ typedef struct _meshtastic_Routing {
      in addition to ack.fail_id to provide details on the type of failure). */
         meshtastic_Routing_Error error_reason;
     };
+    /* Optional proof that this ack/nak was produced by the node that actually received the packet
+ identified by Data.request_id, rather than by anyone holding the channel key.
+
+ Explicit acks are usually sent on the channel, and channel traffic is encrypted but not
+ authenticated, so such an ack can be forged by any listener holding the PSK. When the
+ acknowledged packet WAS PKI encrypted, the two endpoints already share a Curve25519 secret, so
+ the receiver can prove receipt cheaply rather than signing the ack:
+
+   ack_proof = HMAC-SHA256(shared_key,
+                           "ack" | LE32(from) | LE32(to) | LE32(request_id) | routing)[0..8)
+
+ where shared_key is the same SHA256(X25519(sender_private, receiver_public)) used for PKI
+ packet encryption, and `routing` is this encoded Routing message without the ack_proof field.
+
+ Each input is load-bearing. request_id stops a captured proof being replayed against a
+ different outstanding packet. The Routing bytes stop a bit-flip turning a proven success into a
+ failure: an ack and a nak for one packet otherwise share every other input, and channel
+ encryption is CTR with no integrity check. Integers are little-endian so the value is a
+ property of the protocol rather than of the host that computed it.
+
+ Unset when no pairwise key is available, including the PKI_UNKNOWN_PUBKEY and NO_CHANNEL naks,
+ which are emitted precisely because the packet could not be decrypted. Receivers that do not
+ understand this field ignore it. It does not replace xeddsa_signature, which remains the only
+ option for traffic with no pairwise key and the only proof a third party can check. */
+    meshtastic_Routing_ack_proof_t ack_proof;
 } meshtastic_Routing;
 
 typedef PB_BYTES_ARRAY_T(233) meshtastic_Data_payload_t;
@@ -1112,10 +1358,8 @@ typedef struct _meshtastic_MeshPacket {
     meshtastic_MeshPacket_Priority priority;
     /* rssi of received packet. Only sent to phone for dispay purposes.
  Explicit presence: rssi 0 is a legitimate reading on some radios (SX126x can report exactly
- 0 dBm; SX127x's formula can even go positive), so implicit-presence proto3 made an unset
- value indistinguishable from a measured one. has_rx_rssi disambiguates; a replayed packet
- built from history the device never restored an RSSI for should leave this field absent
- rather than emitting 0. */
+ 0 dBm; SX127x's formula can even go positive). has_rx_rssi disambiguates; a replayed packet
+ built from history should leave this field absent rather than emitting 0. */
     bool has_rx_rssi;
     int32_t rx_rssi;
     /* Describe if this message is delayed */
@@ -1147,6 +1391,20 @@ typedef struct _meshtastic_MeshPacket {
     meshtastic_MeshPacket_TransportMechanism transport_mechanism;
     /* Indicates whether the packet has a valid signature */
     bool xeddsa_signed;
+    /* *Never* sent over the radio links.
+ Set by the firmware on a received ack or nak, reporting whether its Routing.ack_proof proved
+ that the node we addressed is the one acknowledging. Clients are not supposed to set this, and
+ the firmware clears whatever arrives here before evaluating a packet - an inbound value is
+ attacker-controlled, since MQTT and the client API both carry whole MeshPacket protobufs.
+
+ Distinct from xeddsa_signed, which is an identity signature any holder of the sender's public
+ key can check. This is a pairwise MAC that only the original sender can check, and it attests
+ to delivery rather than to authorship. */
+    meshtastic_MeshPacket_AckProofStatus ack_proof_status;
+    /* Never sent over the radio links.
+ Which parity of the CSMA backoff slot grid this packet may be sent in; see SlotParity.
+ Set by whoever queues the packet, and read by the radio driver when it draws the backoff. */
+    meshtastic_MeshPacket_SlotParity slot_parity;
 } meshtastic_MeshPacket;
 
 /* The bluetooth to device link:
@@ -1207,6 +1465,21 @@ typedef struct _meshtastic_NodeInfo {
  Persists between NodeDB internal clean ups
  LSB 1 of the bitfield */
     bool has_xeddsa_signed;
+    /* True if we have heard this node over RF on the LoRa configuration the
+ radio is using right now. Derived on the device rather than stored: each
+ node records the frequency slot it was last heard on, and this reports
+ whether that slot matches the one the radio is currently committed to.
+ The slot covers the region, modem preset (or the custom bandwidth/spread
+ factor/coding rate when use_preset is false), override_frequency,
+ channel_num and the primary channel name.
+ Because it is derived, leaving a configuration and returning to it
+ restores the previous answers, so a client sweeping through presets to
+ listen for traffic does not disturb them.
+ Not set for nodes heard only over MQTT, which reach us over the internet
+ rather than over our own radio - see via_mqtt - nor for nodes added as a
+ shared contact, which have never been heard over RF at all.
+ Derived from LSB 11 and bits 12..23 of NodeInfoLite.bitfield. */
+    bool heard_on_current_lora;
 } meshtastic_NodeInfo;
 
 typedef PB_BYTES_ARRAY_T(16) meshtastic_MyNodeInfo_device_id_t;
@@ -1260,6 +1533,112 @@ typedef struct _meshtastic_QueueStatus {
     /* What was mesh packet id that generated this response? */
     uint32_t mesh_packet_id;
 } meshtastic_QueueStatus;
+
+typedef PB_BYTES_ARRAY_T(384) meshtastic_DisplayFrame_data_t;
+/* A chunk of the device's display framebuffer, streamed to the local client
+ over BLE/serial/TCP. Frames larger than one chunk are split by byte offset;
+ a chunk with offset + data length == total_size completes the frame.
+ This is application-level chunking of a framebuffer into several complete
+ FromRadio messages, and is unrelated to ClientApiChunkedPayload, which
+ splits ONE serialized FromRadio across a small BLE MTU. A frame cannot ride
+ that wrapper: FromRadio is statically capped at MAX_TO_FROM_RADIO_SIZE, far
+ below a full framebuffer. The two compose - a chunked-transport client
+ receives these frames through it.
+
+ Chunks of one frame arrive contiguously (no other display_frame between
+ them; display_palette messages may interleave) and in offset order, so a
+ client never has to reorder. It does have to check for loss: the queue to
+ the client drops its oldest entry when full, and a frame in flight can be
+ truncated when mirroring is disabled. A client MUST verify that offset
+ equals the number of bytes it has already accumulated for this frame_id,
+ and discard the partial frame on any gap or frame_id change. An incomplete
+ frame must never be rendered. */
+typedef struct _meshtastic_DisplayFrame {
+    /* Display width in pixels. */
+    uint16_t width;
+    /* Display height in pixels. */
+    uint16_t height;
+    /* Pixel encoding of data. */
+    meshtastic_DisplayFrame_Format format;
+    /* Frame counter, constant across the chunks of one frame, so a change
+ marks the start of a new frame. It cannot reveal loss WITHIN a frame,
+ since every chunk of that frame carries the same value; only offset
+ contiguity can. Increments per captured frame, wraps at uint32 range,
+ and restarts from 1 on device reboot, so treat any change as "a new
+ frame" rather than as an ordering guarantee. */
+    uint32_t frame_id;
+    /* Byte offset of this chunk within the full frame buffer. */
+    uint32_t offset;
+    /* Total size in bytes of the full frame buffer. */
+    uint32_t total_size;
+    /* The framebuffer bytes for this chunk. */
+    meshtastic_DisplayFrame_data_t data;
+    /* Optional partial-update rectangle (dirty-rect streaming from LVGL-based
+ color UIs, format RGB565). A zero rect_width or rect_height means the
+ full panel in that axis, so data carries the pixels of the resulting
+ rectangle and offset/total_size describe that rectangle's own buffer;
+ width/height above always remain the full display dimensions, and each
+ rectangle is an independently completed unit under its own frame_id.
+ MONO_VLSB frames never set these fields. */
+    uint16_t rect_x;
+    /* See rect_x. */
+    uint16_t rect_y;
+    /* See rect_x. */
+    uint16_t rect_width;
+    /* See rect_x. */
+    uint16_t rect_height;
+    /* Identity of the DisplayPalette that colorizes this frame, matching
+ DisplayPalette.signature. 0 when the device renders monochrome (no
+ color panel); clients without the referenced palette yet should render
+ monochrome until its chunks arrive. */
+    uint32_t palette_signature;
+} meshtastic_DisplayFrame;
+
+/* One colorized rectangle of the display. */
+typedef struct _meshtastic_DisplayPalette_ColorRegion {
+    /* Region origin and size in pixels. */
+    uint16_t x;
+    /* See x. */
+    uint16_t y;
+    /* See x. */
+    uint16_t width;
+    /* See x. */
+    uint16_t height;
+    /* RGB565 drawn for set (1) pixels inside this region. */
+    uint16_t on_color;
+    /* RGB565 drawn for clear (0) pixels inside this region. */
+    uint16_t off_color;
+} meshtastic_DisplayPalette_ColorRegion;
+
+/* Colorization palette for DisplayFrame streams from devices that paint the
+ 1bpp base UI onto a color panel. The panel applies per-region on/off
+ colors at flush time; streaming the same region table lets a client
+ render the mirror in the panel's true colors at 1bpp bandwidth.
+ Sent as FromRadio.display_palette, split by region index when the table
+ exceeds one message; re-sent only when the region layout or theme changes
+ (the signature changes with it). Regions are ordered by table index; a
+ region with a higher table index overrides lower-indexed ones where they
+ overlap, regardless of chunk boundaries. A client holding partial chunks
+ of a signature that no longer matches incoming chunks should discard
+ them. All colors are RGB565 in logical bit layout (RRRRRGGGGGGBBBBB). */
+typedef struct _meshtastic_DisplayPalette {
+    /* Identity of this palette; DisplayFrame.palette_signature references it.
+ Changes whenever the region table or theme changes. Never 0, which
+ DisplayFrame.palette_signature reserves for monochrome. */
+    uint32_t signature;
+    /* RGB565 for set pixels outside all regions. The region_offset 0 chunk is authoritative. */
+    uint32_t default_on_color;
+    /* RGB565 for clear pixels outside all regions. The region_offset 0 chunk is authoritative. */
+    uint32_t default_off_color;
+    /* Table index of the first region in this chunk. */
+    uint8_t region_offset;
+    /* Total regions in the complete palette; region_offset + regions length
+ == region_total completes it. */
+    uint8_t region_total;
+    /* The regions of this chunk, in table order. */
+    pb_size_t regions_count;
+    meshtastic_DisplayPalette_ColorRegion regions[16];
+} meshtastic_DisplayPalette;
 
 /* Lockdown state report from firmware to client (for hardened builds
  with MESHTASTIC_LOCKDOWN). Sent immediately after config_complete_id
@@ -1333,6 +1712,8 @@ typedef struct _meshtastic_ClientNotification {
     meshtastic_LogRecord_Level level;
     /* The message body of the notification */
     char message[400];
+    /* Which firmware message this notification carries. UNSET when not known. */
+    meshtastic_ClientNotification_NotificationType type;
     pb_size_t which_payload_variant;
     union {
         meshtastic_KeyVerificationNumberInform key_verification_number_inform;
@@ -1387,6 +1768,22 @@ typedef struct _meshtastic_NeighborInfo {
     meshtastic_Neighbor neighbors[10];
 } meshtastic_NeighborInfo;
 
+/* Static description of a device's display, sent inside DeviceMetadata
+ during the connection handshake. */
+typedef struct _meshtastic_DisplayInfo {
+    /* Display width in pixels. */
+    uint16_t width;
+    /* Display height in pixels. */
+    uint16_t height;
+    /* Pixel encoding that DisplayFrame streams from this device will use. */
+    meshtastic_DisplayFrame_Format format;
+    /* Physical panel technology. */
+    meshtastic_DisplayInfo_PanelClass panel_class;
+    /* True when the panel accepts touch input; clients may map taps on a
+ mirrored frame to AdminMessage.send_input_event touch coordinates. */
+    bool has_touch;
+} meshtastic_DisplayInfo;
+
 /* Device metadata response */
 typedef struct _meshtastic_DeviceMetadata {
     /* Device firmware version string */
@@ -1417,6 +1814,25 @@ typedef struct _meshtastic_DeviceMetadata {
     /* Indicates whether this firmware build includes XEdDSA packet signature verification.
  This is a read-only capability and must be false when XEdDSA is not compiled in. */
     bool has_xeddsa;
+    /* Describes the device's screen when one is present; absent on display-less
+ builds. Lets clients gate display-mirroring UI (see DisplayFrame) and
+ adapt to the panel, e.g. expect slow refresh from EINK, or offer
+ tap-to-touch when has_touch is set. */
+    bool has_display;
+    meshtastic_DisplayInfo display;
+    /* The address this node's BLE radio advertises and accepts connections on, as
+ colon-separated uppercase hex, most significant byte first ("AA:BB:CC:DD:EE:FF").
+ Read from the BLE stack, so it is the address phones and other centrals see.
+ It can differ from User.macaddr: on ESP32, Bluetooth uses its own MAC derived
+ from the base MAC. Reported while Bluetooth is disabled in config whenever the
+ hardware address is known. Empty when the device has no BLE radio or the
+ address cannot be determined. */
+    char ble_address[18];
+    /* nRF52 bootloader version, packed as major << 16 | minor << 8 | patch, as the
+ bootloader hands it to the application at boot. Meshtastic nRF52 Bootloader
+ releases before 2.6.0 report 0.9.2, the same as stock Adafruit 0.9.2. 0 means
+ not reported: a non-nRF52 device, or firmware that predates this field. */
+    uint32_t bootloader_version;
 } meshtastic_DeviceMetadata;
 
 /* A distinct set of legal modem presets shared by one or more LoRa regions.
@@ -1528,6 +1944,13 @@ typedef struct _meshtastic_FromRadio {
      illegal region+preset combination. A region that does not appear in
      any group carries no constraint info and should not be restricted. */
         meshtastic_LoRaRegionPresetMap region_presets;
+        /* One chunk of the device's display framebuffer, sent while display
+     mirroring is active (see AdminMessage.set_display_mirror and
+     AdminMessage.get_display_frame_request). */
+        meshtastic_DisplayFrame display_frame;
+        /* One chunk of the color palette referenced by display_frame's
+     palette_signature (see DisplayPalette). */
+        meshtastic_DisplayPalette display_palette;
     };
 } meshtastic_FromRadio;
 
@@ -1630,8 +2053,8 @@ extern "C" {
 #define _meshtastic_FirmwareEdition_ARRAYSIZE ((meshtastic_FirmwareEdition)(meshtastic_FirmwareEdition_DIY_EDITION+1))
 
 #define _meshtastic_ExcludedModules_MIN meshtastic_ExcludedModules_EXCLUDED_NONE
-#define _meshtastic_ExcludedModules_MAX meshtastic_ExcludedModules_NETWORK_CONFIG
-#define _meshtastic_ExcludedModules_ARRAYSIZE ((meshtastic_ExcludedModules)(meshtastic_ExcludedModules_NETWORK_CONFIG+1))
+#define _meshtastic_ExcludedModules_MAX meshtastic_ExcludedModules_MESHBEACON_CONFIG
+#define _meshtastic_ExcludedModules_ARRAYSIZE ((meshtastic_ExcludedModules)(meshtastic_ExcludedModules_MESHBEACON_CONFIG+1))
 
 #define _meshtastic_Position_LocSource_MIN meshtastic_Position_LocSource_LOC_UNSET
 #define _meshtastic_Position_LocSource_MAX meshtastic_Position_LocSource_LOC_EXTERNAL
@@ -1665,13 +2088,33 @@ extern "C" {
 #define _meshtastic_MeshPacket_TransportMechanism_MAX meshtastic_MeshPacket_TransportMechanism_TRANSPORT_UNICAST_UDP
 #define _meshtastic_MeshPacket_TransportMechanism_ARRAYSIZE ((meshtastic_MeshPacket_TransportMechanism)(meshtastic_MeshPacket_TransportMechanism_TRANSPORT_UNICAST_UDP+1))
 
+#define _meshtastic_MeshPacket_AckProofStatus_MIN meshtastic_MeshPacket_AckProofStatus_ACK_PROOF_ABSENT
+#define _meshtastic_MeshPacket_AckProofStatus_MAX meshtastic_MeshPacket_AckProofStatus_ACK_PROOF_NO_KEY
+#define _meshtastic_MeshPacket_AckProofStatus_ARRAYSIZE ((meshtastic_MeshPacket_AckProofStatus)(meshtastic_MeshPacket_AckProofStatus_ACK_PROOF_NO_KEY+1))
+
+#define _meshtastic_MeshPacket_SlotParity_MIN meshtastic_MeshPacket_SlotParity_SLOT_PARITY_UNSET
+#define _meshtastic_MeshPacket_SlotParity_MAX meshtastic_MeshPacket_SlotParity_SLOT_PARITY_ODD
+#define _meshtastic_MeshPacket_SlotParity_ARRAYSIZE ((meshtastic_MeshPacket_SlotParity)(meshtastic_MeshPacket_SlotParity_SLOT_PARITY_ODD+1))
+
 #define _meshtastic_LogRecord_Level_MIN meshtastic_LogRecord_Level_UNSET
 #define _meshtastic_LogRecord_Level_MAX meshtastic_LogRecord_Level_CRITICAL
 #define _meshtastic_LogRecord_Level_ARRAYSIZE ((meshtastic_LogRecord_Level)(meshtastic_LogRecord_Level_CRITICAL+1))
 
+#define _meshtastic_DisplayFrame_Format_MIN meshtastic_DisplayFrame_Format_FORMAT_UNSPECIFIED
+#define _meshtastic_DisplayFrame_Format_MAX meshtastic_DisplayFrame_Format_RGB565
+#define _meshtastic_DisplayFrame_Format_ARRAYSIZE ((meshtastic_DisplayFrame_Format)(meshtastic_DisplayFrame_Format_RGB565+1))
+
 #define _meshtastic_LockdownStatus_State_MIN meshtastic_LockdownStatus_State_STATE_UNSPECIFIED
 #define _meshtastic_LockdownStatus_State_MAX meshtastic_LockdownStatus_State_DISABLED
 #define _meshtastic_LockdownStatus_State_ARRAYSIZE ((meshtastic_LockdownStatus_State)(meshtastic_LockdownStatus_State_DISABLED+1))
+
+#define _meshtastic_ClientNotification_NotificationType_MIN meshtastic_ClientNotification_NotificationType_UNSET
+#define _meshtastic_ClientNotification_NotificationType_MAX meshtastic_ClientNotification_NotificationType_UNSIGNED_IDENTITY_UPDATE_IGNORED
+#define _meshtastic_ClientNotification_NotificationType_ARRAYSIZE ((meshtastic_ClientNotification_NotificationType)(meshtastic_ClientNotification_NotificationType_UNSIGNED_IDENTITY_UPDATE_IGNORED+1))
+
+#define _meshtastic_DisplayInfo_PanelClass_MIN meshtastic_DisplayInfo_PanelClass_PANEL_CLASS_UNSPECIFIED
+#define _meshtastic_DisplayInfo_PanelClass_MAX meshtastic_DisplayInfo_PanelClass_HUB75
+#define _meshtastic_DisplayInfo_PanelClass_ARRAYSIZE ((meshtastic_DisplayInfo_PanelClass)(meshtastic_DisplayInfo_PanelClass_HUB75+1))
 
 #define meshtastic_Position_location_source_ENUMTYPE meshtastic_Position_LocSource
 #define meshtastic_Position_altitude_source_ENUMTYPE meshtastic_Position_AltSource
@@ -1696,6 +2139,8 @@ extern "C" {
 #define meshtastic_MeshPacket_priority_ENUMTYPE meshtastic_MeshPacket_Priority
 #define meshtastic_MeshPacket_delayed_ENUMTYPE meshtastic_MeshPacket_Delayed
 #define meshtastic_MeshPacket_transport_mechanism_ENUMTYPE meshtastic_MeshPacket_TransportMechanism
+#define meshtastic_MeshPacket_ack_proof_status_ENUMTYPE meshtastic_MeshPacket_AckProofStatus
+#define meshtastic_MeshPacket_slot_parity_ENUMTYPE meshtastic_MeshPacket_SlotParity
 
 
 #define meshtastic_MyNodeInfo_firmware_edition_ENUMTYPE meshtastic_FirmwareEdition
@@ -1704,9 +2149,14 @@ extern "C" {
 
 
 
+#define meshtastic_DisplayFrame_format_ENUMTYPE meshtastic_DisplayFrame_Format
+
+
+
 #define meshtastic_LockdownStatus_state_ENUMTYPE meshtastic_LockdownStatus_State
 
 #define meshtastic_ClientNotification_level_ENUMTYPE meshtastic_LogRecord_Level
+#define meshtastic_ClientNotification_type_ENUMTYPE meshtastic_ClientNotification_NotificationType
 
 
 
@@ -1721,6 +2171,9 @@ extern "C" {
 
 #define meshtastic_DeviceMetadata_role_ENUMTYPE meshtastic_Config_DeviceConfig_Role
 #define meshtastic_DeviceMetadata_hw_model_ENUMTYPE meshtastic_HardwareModel
+
+#define meshtastic_DisplayInfo_format_ENUMTYPE meshtastic_DisplayFrame_Format
+#define meshtastic_DisplayInfo_panel_class_ENUMTYPE meshtastic_DisplayInfo_PanelClass
 
 #define meshtastic_LoRaPresetGroup_presets_ENUMTYPE meshtastic_Config_LoRaConfig_ModemPreset
 #define meshtastic_LoRaPresetGroup_default_preset_ENUMTYPE meshtastic_Config_LoRaConfig_ModemPreset
@@ -1738,7 +2191,7 @@ extern "C" {
 #define meshtastic_Position_init_default         {false, 0, false, 0, false, 0, 0, _meshtastic_Position_LocSource_MIN, _meshtastic_Position_AltSource_MIN, 0, 0, false, 0, false, 0, 0, 0, 0, 0, false, 0, false, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_User_init_default             {"", "", "", {0}, _meshtastic_HardwareModel_MIN, 0, _meshtastic_Config_DeviceConfig_Role_MIN, {0, {0}}, false, 0}
 #define meshtastic_RouteDiscovery_init_default   {0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}}
-#define meshtastic_Routing_init_default          {0, {meshtastic_RouteDiscovery_init_default}}
+#define meshtastic_Routing_init_default          {0, {meshtastic_RouteDiscovery_init_default}, {0, {0}}}
 #define meshtastic_Data_init_default             {_meshtastic_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0, false, 0, {0, {0}}}
 #define meshtastic_KeyVerification_init_default  {0, {0, {0}}, {0, {0}}}
 #define meshtastic_StoreForwardPlusPlus_init_default {_meshtastic_StoreForwardPlusPlus_SFPP_message_type_MIN, {0, {0}}, {0, {0}}, {0, {0}}, {0, {0}}, 0, 0, 0, 0, 0}
@@ -1747,14 +2200,17 @@ extern "C" {
 #define meshtastic_Waypoint_init_default         {0, false, 0, false, 0, 0, 0, "", "", 0, 0, false, meshtastic_BoundingBox_init_default, 0, 0, 0}
 #define meshtastic_StatusMessage_init_default    {""}
 #define meshtastic_MqttClientProxyMessage_init_default {"", 0, {{0, {0}}}, 0}
-#define meshtastic_MeshPacket_init_default       {0, 0, 0, 0, {meshtastic_Data_init_default}, 0, false, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, false, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0, {0, {0}}, 0, 0, 0, 0, _meshtastic_MeshPacket_TransportMechanism_MIN, 0}
-#define meshtastic_NodeInfo_init_default         {0, false, meshtastic_User_init_default, false, meshtastic_Position_init_default, 0, 0, false, meshtastic_DeviceMetrics_init_default, 0, 0, false, 0, 0, 0, 0, 0, 0}
+#define meshtastic_MeshPacket_init_default       {0, 0, 0, 0, {meshtastic_Data_init_default}, 0, false, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, false, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0, {0, {0}}, 0, 0, 0, 0, _meshtastic_MeshPacket_TransportMechanism_MIN, 0, _meshtastic_MeshPacket_AckProofStatus_MIN, _meshtastic_MeshPacket_SlotParity_MIN}
+#define meshtastic_NodeInfo_init_default         {0, false, meshtastic_User_init_default, false, meshtastic_Position_init_default, 0, 0, false, meshtastic_DeviceMetrics_init_default, 0, 0, false, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_MyNodeInfo_init_default       {0, 0, 0, {0, {0}}, "", _meshtastic_FirmwareEdition_MIN, 0}
 #define meshtastic_LogRecord_init_default        {"", 0, "", _meshtastic_LogRecord_Level_MIN}
 #define meshtastic_QueueStatus_init_default      {0, 0, 0, 0}
 #define meshtastic_FromRadio_init_default        {0, 0, {meshtastic_MeshPacket_init_default}}
+#define meshtastic_DisplayFrame_init_default     {0, 0, _meshtastic_DisplayFrame_Format_MIN, 0, 0, 0, {0, {0}}, 0, 0, 0, 0, 0}
+#define meshtastic_DisplayPalette_init_default   {0, 0, 0, 0, 0, 0, {meshtastic_DisplayPalette_ColorRegion_init_default, meshtastic_DisplayPalette_ColorRegion_init_default, meshtastic_DisplayPalette_ColorRegion_init_default, meshtastic_DisplayPalette_ColorRegion_init_default, meshtastic_DisplayPalette_ColorRegion_init_default, meshtastic_DisplayPalette_ColorRegion_init_default, meshtastic_DisplayPalette_ColorRegion_init_default, meshtastic_DisplayPalette_ColorRegion_init_default, meshtastic_DisplayPalette_ColorRegion_init_default, meshtastic_DisplayPalette_ColorRegion_init_default, meshtastic_DisplayPalette_ColorRegion_init_default, meshtastic_DisplayPalette_ColorRegion_init_default, meshtastic_DisplayPalette_ColorRegion_init_default, meshtastic_DisplayPalette_ColorRegion_init_default, meshtastic_DisplayPalette_ColorRegion_init_default, meshtastic_DisplayPalette_ColorRegion_init_default}}
+#define meshtastic_DisplayPalette_ColorRegion_init_default {0, 0, 0, 0, 0, 0}
 #define meshtastic_LockdownStatus_init_default   {_meshtastic_LockdownStatus_State_MIN, "", 0, 0, 0}
-#define meshtastic_ClientNotification_init_default {false, 0, 0, _meshtastic_LogRecord_Level_MIN, "", 0, {meshtastic_KeyVerificationNumberInform_init_default}}
+#define meshtastic_ClientNotification_init_default {false, 0, 0, _meshtastic_LogRecord_Level_MIN, "", _meshtastic_ClientNotification_NotificationType_MIN, 0, {meshtastic_KeyVerificationNumberInform_init_default}}
 #define meshtastic_KeyVerificationNumberInform_init_default {0, "", 0}
 #define meshtastic_KeyVerificationNumberRequest_init_default {0, ""}
 #define meshtastic_KeyVerificationFinal_init_default {0, "", 0, ""}
@@ -1765,7 +2221,8 @@ extern "C" {
 #define meshtastic_Compressed_init_default       {_meshtastic_PortNum_MIN, {0, {0}}}
 #define meshtastic_NeighborInfo_init_default     {0, 0, 0, 0, {meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default}}
 #define meshtastic_Neighbor_init_default         {0, 0, 0, 0}
-#define meshtastic_DeviceMetadata_init_default   {"", 0, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_Role_MIN, 0, _meshtastic_HardwareModel_MIN, 0, 0, 0, 0}
+#define meshtastic_DeviceMetadata_init_default   {"", 0, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_Role_MIN, 0, _meshtastic_HardwareModel_MIN, 0, 0, 0, 0, false, meshtastic_DisplayInfo_init_default, "", 0}
+#define meshtastic_DisplayInfo_init_default      {0, 0, _meshtastic_DisplayFrame_Format_MIN, _meshtastic_DisplayInfo_PanelClass_MIN, 0}
 #define meshtastic_LoRaPresetGroup_init_default  {0, {_meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN}, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, 0}
 #define meshtastic_LoRaRegionPresets_init_default {_meshtastic_Config_LoRaConfig_RegionCode_MIN, 0}
 #define meshtastic_LoRaRegionPresetMap_init_default {0, {meshtastic_LoRaPresetGroup_init_default, meshtastic_LoRaPresetGroup_init_default, meshtastic_LoRaPresetGroup_init_default, meshtastic_LoRaPresetGroup_init_default, meshtastic_LoRaPresetGroup_init_default, meshtastic_LoRaPresetGroup_init_default, meshtastic_LoRaPresetGroup_init_default, meshtastic_LoRaPresetGroup_init_default}, 0, {meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default, meshtastic_LoRaRegionPresets_init_default}}
@@ -1777,7 +2234,7 @@ extern "C" {
 #define meshtastic_Position_init_zero            {false, 0, false, 0, false, 0, 0, _meshtastic_Position_LocSource_MIN, _meshtastic_Position_AltSource_MIN, 0, 0, false, 0, false, 0, 0, 0, 0, 0, false, 0, false, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_User_init_zero                {"", "", "", {0}, _meshtastic_HardwareModel_MIN, 0, _meshtastic_Config_DeviceConfig_Role_MIN, {0, {0}}, false, 0}
 #define meshtastic_RouteDiscovery_init_zero      {0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}}
-#define meshtastic_Routing_init_zero             {0, {meshtastic_RouteDiscovery_init_zero}}
+#define meshtastic_Routing_init_zero             {0, {meshtastic_RouteDiscovery_init_zero}, {0, {0}}}
 #define meshtastic_Data_init_zero                {_meshtastic_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0, false, 0, {0, {0}}}
 #define meshtastic_KeyVerification_init_zero     {0, {0, {0}}, {0, {0}}}
 #define meshtastic_StoreForwardPlusPlus_init_zero {_meshtastic_StoreForwardPlusPlus_SFPP_message_type_MIN, {0, {0}}, {0, {0}}, {0, {0}}, {0, {0}}, 0, 0, 0, 0, 0}
@@ -1786,14 +2243,17 @@ extern "C" {
 #define meshtastic_Waypoint_init_zero            {0, false, 0, false, 0, 0, 0, "", "", 0, 0, false, meshtastic_BoundingBox_init_zero, 0, 0, 0}
 #define meshtastic_StatusMessage_init_zero       {""}
 #define meshtastic_MqttClientProxyMessage_init_zero {"", 0, {{0, {0}}}, 0}
-#define meshtastic_MeshPacket_init_zero          {0, 0, 0, 0, {meshtastic_Data_init_zero}, 0, false, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, false, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0, {0, {0}}, 0, 0, 0, 0, _meshtastic_MeshPacket_TransportMechanism_MIN, 0}
-#define meshtastic_NodeInfo_init_zero            {0, false, meshtastic_User_init_zero, false, meshtastic_Position_init_zero, 0, 0, false, meshtastic_DeviceMetrics_init_zero, 0, 0, false, 0, 0, 0, 0, 0, 0}
+#define meshtastic_MeshPacket_init_zero          {0, 0, 0, 0, {meshtastic_Data_init_zero}, 0, false, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, false, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0, {0, {0}}, 0, 0, 0, 0, _meshtastic_MeshPacket_TransportMechanism_MIN, 0, _meshtastic_MeshPacket_AckProofStatus_MIN, _meshtastic_MeshPacket_SlotParity_MIN}
+#define meshtastic_NodeInfo_init_zero            {0, false, meshtastic_User_init_zero, false, meshtastic_Position_init_zero, 0, 0, false, meshtastic_DeviceMetrics_init_zero, 0, 0, false, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_MyNodeInfo_init_zero          {0, 0, 0, {0, {0}}, "", _meshtastic_FirmwareEdition_MIN, 0}
 #define meshtastic_LogRecord_init_zero           {"", 0, "", _meshtastic_LogRecord_Level_MIN}
 #define meshtastic_QueueStatus_init_zero         {0, 0, 0, 0}
 #define meshtastic_FromRadio_init_zero           {0, 0, {meshtastic_MeshPacket_init_zero}}
+#define meshtastic_DisplayFrame_init_zero        {0, 0, _meshtastic_DisplayFrame_Format_MIN, 0, 0, 0, {0, {0}}, 0, 0, 0, 0, 0}
+#define meshtastic_DisplayPalette_init_zero      {0, 0, 0, 0, 0, 0, {meshtastic_DisplayPalette_ColorRegion_init_zero, meshtastic_DisplayPalette_ColorRegion_init_zero, meshtastic_DisplayPalette_ColorRegion_init_zero, meshtastic_DisplayPalette_ColorRegion_init_zero, meshtastic_DisplayPalette_ColorRegion_init_zero, meshtastic_DisplayPalette_ColorRegion_init_zero, meshtastic_DisplayPalette_ColorRegion_init_zero, meshtastic_DisplayPalette_ColorRegion_init_zero, meshtastic_DisplayPalette_ColorRegion_init_zero, meshtastic_DisplayPalette_ColorRegion_init_zero, meshtastic_DisplayPalette_ColorRegion_init_zero, meshtastic_DisplayPalette_ColorRegion_init_zero, meshtastic_DisplayPalette_ColorRegion_init_zero, meshtastic_DisplayPalette_ColorRegion_init_zero, meshtastic_DisplayPalette_ColorRegion_init_zero, meshtastic_DisplayPalette_ColorRegion_init_zero}}
+#define meshtastic_DisplayPalette_ColorRegion_init_zero {0, 0, 0, 0, 0, 0}
 #define meshtastic_LockdownStatus_init_zero      {_meshtastic_LockdownStatus_State_MIN, "", 0, 0, 0}
-#define meshtastic_ClientNotification_init_zero  {false, 0, 0, _meshtastic_LogRecord_Level_MIN, "", 0, {meshtastic_KeyVerificationNumberInform_init_zero}}
+#define meshtastic_ClientNotification_init_zero  {false, 0, 0, _meshtastic_LogRecord_Level_MIN, "", _meshtastic_ClientNotification_NotificationType_MIN, 0, {meshtastic_KeyVerificationNumberInform_init_zero}}
 #define meshtastic_KeyVerificationNumberInform_init_zero {0, "", 0}
 #define meshtastic_KeyVerificationNumberRequest_init_zero {0, ""}
 #define meshtastic_KeyVerificationFinal_init_zero {0, "", 0, ""}
@@ -1804,7 +2264,8 @@ extern "C" {
 #define meshtastic_Compressed_init_zero          {_meshtastic_PortNum_MIN, {0, {0}}}
 #define meshtastic_NeighborInfo_init_zero        {0, 0, 0, 0, {meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero}}
 #define meshtastic_Neighbor_init_zero            {0, 0, 0, 0}
-#define meshtastic_DeviceMetadata_init_zero      {"", 0, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_Role_MIN, 0, _meshtastic_HardwareModel_MIN, 0, 0, 0, 0}
+#define meshtastic_DeviceMetadata_init_zero      {"", 0, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_Role_MIN, 0, _meshtastic_HardwareModel_MIN, 0, 0, 0, 0, false, meshtastic_DisplayInfo_init_zero, "", 0}
+#define meshtastic_DisplayInfo_init_zero         {0, 0, _meshtastic_DisplayFrame_Format_MIN, _meshtastic_DisplayInfo_PanelClass_MIN, 0}
 #define meshtastic_LoRaPresetGroup_init_zero     {0, {_meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN}, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, 0}
 #define meshtastic_LoRaRegionPresets_init_zero   {_meshtastic_Config_LoRaConfig_RegionCode_MIN, 0}
 #define meshtastic_LoRaRegionPresetMap_init_zero {0, {meshtastic_LoRaPresetGroup_init_zero, meshtastic_LoRaPresetGroup_init_zero, meshtastic_LoRaPresetGroup_init_zero, meshtastic_LoRaPresetGroup_init_zero, meshtastic_LoRaPresetGroup_init_zero, meshtastic_LoRaPresetGroup_init_zero, meshtastic_LoRaPresetGroup_init_zero, meshtastic_LoRaPresetGroup_init_zero}, 0, {meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero, meshtastic_LoRaRegionPresets_init_zero}}
@@ -1854,6 +2315,7 @@ extern "C" {
 #define meshtastic_Routing_route_request_tag     1
 #define meshtastic_Routing_route_reply_tag       2
 #define meshtastic_Routing_error_reason_tag      3
+#define meshtastic_Routing_ack_proof_tag         4
 #define meshtastic_Data_portnum_tag              1
 #define meshtastic_Data_payload_tag              2
 #define meshtastic_Data_want_response_tag        3
@@ -1931,6 +2393,8 @@ extern "C" {
 #define meshtastic_MeshPacket_tx_after_tag       20
 #define meshtastic_MeshPacket_transport_mechanism_tag 21
 #define meshtastic_MeshPacket_xeddsa_signed_tag  22
+#define meshtastic_MeshPacket_ack_proof_status_tag 23
+#define meshtastic_MeshPacket_slot_parity_tag    24
 #define meshtastic_NodeInfo_num_tag              1
 #define meshtastic_NodeInfo_user_tag             2
 #define meshtastic_NodeInfo_position_tag         3
@@ -1945,6 +2409,7 @@ extern "C" {
 #define meshtastic_NodeInfo_is_key_manually_verified_tag 12
 #define meshtastic_NodeInfo_is_muted_tag         13
 #define meshtastic_NodeInfo_has_xeddsa_signed_tag 14
+#define meshtastic_NodeInfo_heard_on_current_lora_tag 15
 #define meshtastic_MyNodeInfo_my_node_num_tag    1
 #define meshtastic_MyNodeInfo_reboot_count_tag   8
 #define meshtastic_MyNodeInfo_min_app_version_tag 11
@@ -1960,6 +2425,30 @@ extern "C" {
 #define meshtastic_QueueStatus_free_tag          2
 #define meshtastic_QueueStatus_maxlen_tag        3
 #define meshtastic_QueueStatus_mesh_packet_id_tag 4
+#define meshtastic_DisplayFrame_width_tag        1
+#define meshtastic_DisplayFrame_height_tag       2
+#define meshtastic_DisplayFrame_format_tag       3
+#define meshtastic_DisplayFrame_frame_id_tag     4
+#define meshtastic_DisplayFrame_offset_tag       5
+#define meshtastic_DisplayFrame_total_size_tag   6
+#define meshtastic_DisplayFrame_data_tag         7
+#define meshtastic_DisplayFrame_rect_x_tag       8
+#define meshtastic_DisplayFrame_rect_y_tag       9
+#define meshtastic_DisplayFrame_rect_width_tag   10
+#define meshtastic_DisplayFrame_rect_height_tag  11
+#define meshtastic_DisplayFrame_palette_signature_tag 12
+#define meshtastic_DisplayPalette_ColorRegion_x_tag 1
+#define meshtastic_DisplayPalette_ColorRegion_y_tag 2
+#define meshtastic_DisplayPalette_ColorRegion_width_tag 3
+#define meshtastic_DisplayPalette_ColorRegion_height_tag 4
+#define meshtastic_DisplayPalette_ColorRegion_on_color_tag 5
+#define meshtastic_DisplayPalette_ColorRegion_off_color_tag 6
+#define meshtastic_DisplayPalette_signature_tag  1
+#define meshtastic_DisplayPalette_default_on_color_tag 2
+#define meshtastic_DisplayPalette_default_off_color_tag 3
+#define meshtastic_DisplayPalette_region_offset_tag 4
+#define meshtastic_DisplayPalette_region_total_tag 5
+#define meshtastic_DisplayPalette_regions_tag    6
 #define meshtastic_LockdownStatus_state_tag      1
 #define meshtastic_LockdownStatus_lock_reason_tag 2
 #define meshtastic_LockdownStatus_boots_remaining_tag 3
@@ -1978,6 +2467,7 @@ extern "C" {
 #define meshtastic_ClientNotification_time_tag   2
 #define meshtastic_ClientNotification_level_tag  3
 #define meshtastic_ClientNotification_message_tag 4
+#define meshtastic_ClientNotification_type_tag   5
 #define meshtastic_ClientNotification_key_verification_number_inform_tag 11
 #define meshtastic_ClientNotification_key_verification_number_request_tag 12
 #define meshtastic_ClientNotification_key_verification_final_tag 13
@@ -1995,6 +2485,11 @@ extern "C" {
 #define meshtastic_NeighborInfo_last_sent_by_id_tag 2
 #define meshtastic_NeighborInfo_node_broadcast_interval_secs_tag 3
 #define meshtastic_NeighborInfo_neighbors_tag    4
+#define meshtastic_DisplayInfo_width_tag         1
+#define meshtastic_DisplayInfo_height_tag        2
+#define meshtastic_DisplayInfo_format_tag        3
+#define meshtastic_DisplayInfo_panel_class_tag   4
+#define meshtastic_DisplayInfo_has_touch_tag     5
 #define meshtastic_DeviceMetadata_firmware_version_tag 1
 #define meshtastic_DeviceMetadata_device_state_version_tag 2
 #define meshtastic_DeviceMetadata_canShutdown_tag 3
@@ -2008,6 +2503,9 @@ extern "C" {
 #define meshtastic_DeviceMetadata_hasPKC_tag     11
 #define meshtastic_DeviceMetadata_excluded_modules_tag 12
 #define meshtastic_DeviceMetadata_has_xeddsa_tag 14
+#define meshtastic_DeviceMetadata_display_tag    16
+#define meshtastic_DeviceMetadata_ble_address_tag 17
+#define meshtastic_DeviceMetadata_bootloader_version_tag 19
 #define meshtastic_LoRaPresetGroup_presets_tag   1
 #define meshtastic_LoRaPresetGroup_default_preset_tag 2
 #define meshtastic_LoRaPresetGroup_licensed_only_tag 3
@@ -2034,6 +2532,8 @@ extern "C" {
 #define meshtastic_FromRadio_deviceuiConfig_tag  17
 #define meshtastic_FromRadio_lockdown_status_tag 18
 #define meshtastic_FromRadio_region_presets_tag  19
+#define meshtastic_FromRadio_display_frame_tag   21
+#define meshtastic_FromRadio_display_palette_tag 22
 #define meshtastic_Heartbeat_nonce_tag           1
 #define meshtastic_ToRadio_packet_tag            1
 #define meshtastic_ToRadio_want_config_id_tag    3
@@ -2105,7 +2605,8 @@ X(a, STATIC,   REPEATED, INT32,    snr_back,          4)
 #define meshtastic_Routing_FIELDLIST(X, a) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (variant,route_request,route_request),   1) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (variant,route_reply,route_reply),   2) \
-X(a, STATIC,   ONEOF,    UENUM,    (variant,error_reason,error_reason),   3)
+X(a, STATIC,   ONEOF,    UENUM,    (variant,error_reason,error_reason),   3) \
+X(a, STATIC,   SINGULAR, BYTES,    ack_proof,         4)
 #define meshtastic_Routing_CALLBACK NULL
 #define meshtastic_Routing_DEFAULT NULL
 #define meshtastic_Routing_variant_route_request_MSGTYPE meshtastic_RouteDiscovery
@@ -2221,7 +2722,9 @@ X(a, STATIC,   SINGULAR, UINT32,   next_hop,         18) \
 X(a, STATIC,   SINGULAR, UINT32,   relay_node,       19) \
 X(a, STATIC,   SINGULAR, UINT32,   tx_after,         20) \
 X(a, STATIC,   SINGULAR, UENUM,    transport_mechanism,  21) \
-X(a, STATIC,   SINGULAR, BOOL,     xeddsa_signed,    22)
+X(a, STATIC,   SINGULAR, BOOL,     xeddsa_signed,    22) \
+X(a, STATIC,   SINGULAR, UENUM,    ack_proof_status,  23) \
+X(a, STATIC,   SINGULAR, UENUM,    slot_parity,      24)
 #define meshtastic_MeshPacket_CALLBACK NULL
 #define meshtastic_MeshPacket_DEFAULT NULL
 #define meshtastic_MeshPacket_payload_variant_decoded_MSGTYPE meshtastic_Data
@@ -2240,7 +2743,8 @@ X(a, STATIC,   SINGULAR, BOOL,     is_favorite,      10) \
 X(a, STATIC,   SINGULAR, BOOL,     is_ignored,       11) \
 X(a, STATIC,   SINGULAR, BOOL,     is_key_manually_verified,  12) \
 X(a, STATIC,   SINGULAR, BOOL,     is_muted,         13) \
-X(a, STATIC,   SINGULAR, BOOL,     has_xeddsa_signed,  14)
+X(a, STATIC,   SINGULAR, BOOL,     has_xeddsa_signed,  14) \
+X(a, STATIC,   SINGULAR, BOOL,     heard_on_current_lora,  15)
 #define meshtastic_NodeInfo_CALLBACK NULL
 #define meshtastic_NodeInfo_DEFAULT NULL
 #define meshtastic_NodeInfo_user_MSGTYPE meshtastic_User
@@ -2293,7 +2797,9 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,fileInfo,fileInfo),  15) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,clientNotification,clientNotification),  16) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,deviceuiConfig,deviceuiConfig),  17) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,lockdown_status,lockdown_status),  18) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,region_presets,region_presets),  19)
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,region_presets,region_presets),  19) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,display_frame,display_frame),  21) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,display_palette,display_palette),  22)
 #define meshtastic_FromRadio_CALLBACK NULL
 #define meshtastic_FromRadio_DEFAULT NULL
 #define meshtastic_FromRadio_payload_variant_packet_MSGTYPE meshtastic_MeshPacket
@@ -2312,6 +2818,45 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,region_presets,region_preset
 #define meshtastic_FromRadio_payload_variant_deviceuiConfig_MSGTYPE meshtastic_DeviceUIConfig
 #define meshtastic_FromRadio_payload_variant_lockdown_status_MSGTYPE meshtastic_LockdownStatus
 #define meshtastic_FromRadio_payload_variant_region_presets_MSGTYPE meshtastic_LoRaRegionPresetMap
+#define meshtastic_FromRadio_payload_variant_display_frame_MSGTYPE meshtastic_DisplayFrame
+#define meshtastic_FromRadio_payload_variant_display_palette_MSGTYPE meshtastic_DisplayPalette
+
+#define meshtastic_DisplayFrame_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UINT32,   width,             1) \
+X(a, STATIC,   SINGULAR, UINT32,   height,            2) \
+X(a, STATIC,   SINGULAR, UENUM,    format,            3) \
+X(a, STATIC,   SINGULAR, UINT32,   frame_id,          4) \
+X(a, STATIC,   SINGULAR, UINT32,   offset,            5) \
+X(a, STATIC,   SINGULAR, UINT32,   total_size,        6) \
+X(a, STATIC,   SINGULAR, BYTES,    data,              7) \
+X(a, STATIC,   SINGULAR, UINT32,   rect_x,            8) \
+X(a, STATIC,   SINGULAR, UINT32,   rect_y,            9) \
+X(a, STATIC,   SINGULAR, UINT32,   rect_width,       10) \
+X(a, STATIC,   SINGULAR, UINT32,   rect_height,      11) \
+X(a, STATIC,   SINGULAR, UINT32,   palette_signature,  12)
+#define meshtastic_DisplayFrame_CALLBACK NULL
+#define meshtastic_DisplayFrame_DEFAULT NULL
+
+#define meshtastic_DisplayPalette_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UINT32,   signature,         1) \
+X(a, STATIC,   SINGULAR, UINT32,   default_on_color,   2) \
+X(a, STATIC,   SINGULAR, UINT32,   default_off_color,   3) \
+X(a, STATIC,   SINGULAR, UINT32,   region_offset,     4) \
+X(a, STATIC,   SINGULAR, UINT32,   region_total,      5) \
+X(a, STATIC,   REPEATED, MESSAGE,  regions,           6)
+#define meshtastic_DisplayPalette_CALLBACK NULL
+#define meshtastic_DisplayPalette_DEFAULT NULL
+#define meshtastic_DisplayPalette_regions_MSGTYPE meshtastic_DisplayPalette_ColorRegion
+
+#define meshtastic_DisplayPalette_ColorRegion_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UINT32,   x,                 1) \
+X(a, STATIC,   SINGULAR, UINT32,   y,                 2) \
+X(a, STATIC,   SINGULAR, UINT32,   width,             3) \
+X(a, STATIC,   SINGULAR, UINT32,   height,            4) \
+X(a, STATIC,   SINGULAR, UINT32,   on_color,          5) \
+X(a, STATIC,   SINGULAR, UINT32,   off_color,         6)
+#define meshtastic_DisplayPalette_ColorRegion_CALLBACK NULL
+#define meshtastic_DisplayPalette_ColorRegion_DEFAULT NULL
 
 #define meshtastic_LockdownStatus_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UENUM,    state,             1) \
@@ -2327,6 +2872,7 @@ X(a, STATIC,   OPTIONAL, UINT32,   reply_id,          1) \
 X(a, STATIC,   SINGULAR, FIXED32,  time,              2) \
 X(a, STATIC,   SINGULAR, UENUM,    level,             3) \
 X(a, STATIC,   SINGULAR, STRING,   message,           4) \
+X(a, STATIC,   SINGULAR, UENUM,    type,              5) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,key_verification_number_inform,payload_variant.key_verification_number_inform),  11) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,key_verification_number_request,payload_variant.key_verification_number_request),  12) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,key_verification_final,payload_variant.key_verification_final),  13) \
@@ -2427,9 +2973,22 @@ X(a, STATIC,   SINGULAR, UENUM,    hw_model,          9) \
 X(a, STATIC,   SINGULAR, BOOL,     hasRemoteHardware,  10) \
 X(a, STATIC,   SINGULAR, BOOL,     hasPKC,           11) \
 X(a, STATIC,   SINGULAR, UINT32,   excluded_modules,  12) \
-X(a, STATIC,   SINGULAR, BOOL,     has_xeddsa,       14)
+X(a, STATIC,   SINGULAR, BOOL,     has_xeddsa,       14) \
+X(a, STATIC,   OPTIONAL, MESSAGE,  display,          16) \
+X(a, STATIC,   SINGULAR, STRING,   ble_address,      17) \
+X(a, STATIC,   SINGULAR, UINT32,   bootloader_version,  19)
 #define meshtastic_DeviceMetadata_CALLBACK NULL
 #define meshtastic_DeviceMetadata_DEFAULT NULL
+#define meshtastic_DeviceMetadata_display_MSGTYPE meshtastic_DisplayInfo
+
+#define meshtastic_DisplayInfo_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UINT32,   width,             1) \
+X(a, STATIC,   SINGULAR, UINT32,   height,            2) \
+X(a, STATIC,   SINGULAR, UENUM,    format,            3) \
+X(a, STATIC,   SINGULAR, UENUM,    panel_class,       4) \
+X(a, STATIC,   SINGULAR, BOOL,     has_touch,         5)
+#define meshtastic_DisplayInfo_CALLBACK NULL
+#define meshtastic_DisplayInfo_DEFAULT NULL
 
 #define meshtastic_LoRaPresetGroup_FIELDLIST(X, a) \
 X(a, STATIC,   REPEATED, UENUM,    presets,           1) \
@@ -2504,6 +3063,9 @@ extern const pb_msgdesc_t meshtastic_MyNodeInfo_msg;
 extern const pb_msgdesc_t meshtastic_LogRecord_msg;
 extern const pb_msgdesc_t meshtastic_QueueStatus_msg;
 extern const pb_msgdesc_t meshtastic_FromRadio_msg;
+extern const pb_msgdesc_t meshtastic_DisplayFrame_msg;
+extern const pb_msgdesc_t meshtastic_DisplayPalette_msg;
+extern const pb_msgdesc_t meshtastic_DisplayPalette_ColorRegion_msg;
 extern const pb_msgdesc_t meshtastic_LockdownStatus_msg;
 extern const pb_msgdesc_t meshtastic_ClientNotification_msg;
 extern const pb_msgdesc_t meshtastic_KeyVerificationNumberInform_msg;
@@ -2517,6 +3079,7 @@ extern const pb_msgdesc_t meshtastic_Compressed_msg;
 extern const pb_msgdesc_t meshtastic_NeighborInfo_msg;
 extern const pb_msgdesc_t meshtastic_Neighbor_msg;
 extern const pb_msgdesc_t meshtastic_DeviceMetadata_msg;
+extern const pb_msgdesc_t meshtastic_DisplayInfo_msg;
 extern const pb_msgdesc_t meshtastic_LoRaPresetGroup_msg;
 extern const pb_msgdesc_t meshtastic_LoRaRegionPresets_msg;
 extern const pb_msgdesc_t meshtastic_LoRaRegionPresetMap_msg;
@@ -2545,6 +3108,9 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 #define meshtastic_LogRecord_fields &meshtastic_LogRecord_msg
 #define meshtastic_QueueStatus_fields &meshtastic_QueueStatus_msg
 #define meshtastic_FromRadio_fields &meshtastic_FromRadio_msg
+#define meshtastic_DisplayFrame_fields &meshtastic_DisplayFrame_msg
+#define meshtastic_DisplayPalette_fields &meshtastic_DisplayPalette_msg
+#define meshtastic_DisplayPalette_ColorRegion_fields &meshtastic_DisplayPalette_ColorRegion_msg
 #define meshtastic_LockdownStatus_fields &meshtastic_LockdownStatus_msg
 #define meshtastic_ClientNotification_fields &meshtastic_ClientNotification_msg
 #define meshtastic_KeyVerificationNumberInform_fields &meshtastic_KeyVerificationNumberInform_msg
@@ -2558,6 +3124,7 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 #define meshtastic_NeighborInfo_fields &meshtastic_NeighborInfo_msg
 #define meshtastic_Neighbor_fields &meshtastic_Neighbor_msg
 #define meshtastic_DeviceMetadata_fields &meshtastic_DeviceMetadata_msg
+#define meshtastic_DisplayInfo_fields &meshtastic_DisplayInfo_msg
 #define meshtastic_LoRaPresetGroup_fields &meshtastic_LoRaPresetGroup_msg
 #define meshtastic_LoRaRegionPresets_fields &meshtastic_LoRaRegionPresets_msg
 #define meshtastic_LoRaRegionPresetMap_fields &meshtastic_LoRaRegionPresetMap_msg
@@ -2573,10 +3140,14 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 #define MESHTASTIC_MESHTASTIC_MESH_PB_H_MAX_SIZE meshtastic_FromRadio_size
 #define meshtastic_BoundingBox_size              20
 #define meshtastic_ChunkedPayload_size           245
-#define meshtastic_ClientNotification_size       482
+#define meshtastic_ClientNotification_size       484
 #define meshtastic_Compressed_size               239
 #define meshtastic_Data_size                     335
-#define meshtastic_DeviceMetadata_size           56
+#define meshtastic_DeviceMetadata_size           100
+#define meshtastic_DisplayFrame_size             437
+#define meshtastic_DisplayInfo_size              14
+#define meshtastic_DisplayPalette_ColorRegion_size 24
+#define meshtastic_DisplayPalette_size           440
 #define meshtastic_DuplicatedPublicKey_size      0
 #define meshtastic_FileInfo_size                 236
 #define meshtastic_FromRadio_size                510
@@ -2591,18 +3162,18 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 #define meshtastic_LockdownStatus_size           53
 #define meshtastic_LogRecord_size                426
 #define meshtastic_LowEntropyKey_size            0
-#define meshtastic_MeshPacket_size               450
+#define meshtastic_MeshPacket_size               456
 #define meshtastic_MqttClientProxyMessage_size   501
 #define meshtastic_MyNodeInfo_size               83
 #define meshtastic_NeighborInfo_size             258
 #define meshtastic_Neighbor_size                 22
-#define meshtastic_NodeInfo_size                 327
+#define meshtastic_NodeInfo_size                 329
 #define meshtastic_NodeRemoteHardwarePin_size    29
 #define meshtastic_Position_size                 144
 #define meshtastic_QueueStatus_size              23
 #define meshtastic_RemoteShell_size              253
 #define meshtastic_RouteDiscovery_size           256
-#define meshtastic_Routing_size                  259
+#define meshtastic_Routing_size                  269
 #define meshtastic_StatusMessage_size            81
 #define meshtastic_StoreForwardPlusPlus_size     377
 #define meshtastic_ToRadio_size                  504

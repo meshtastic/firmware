@@ -1,4 +1,5 @@
 #include "EInkParallelDisplay.h"
+#include "UptimeClock.h"
 
 #ifdef USE_EINK_PARALLELDISPLAY
 
@@ -183,8 +184,10 @@ void EInkParallelDisplay::asyncFullUpdateTask(void *pvParameters)
     self->resetGhostPixelTracking();
 #endif
 
-    self->asyncFullRunning.store(false);
+    // Handle first: once asyncFullRunning reads false, the destructor may act on the handle, so
+    // it must already be null by then (same ordering fix as eink/Drivers/EInkParallel.cpp).
     self->asyncTaskHandle = nullptr;
+    self->asyncFullRunning.store(false);
 
     // delete this task
     vTaskDelete(nullptr);
@@ -206,7 +209,7 @@ void EInkParallelDisplay::display(void)
     const uint16_t h = this->displayHeight;
 
     // Simple rate limiting: avoid very-frequent responsive updates
-    uint32_t nowMs = millis();
+    uint32_t nowMs = Time::stampMillis();
     if (lastUpdateMs != 0 && (nowMs - lastUpdateMs) < EPD_RESPONSIVE_MIN_MS) {
         LOG_DEBUG("rate-limited, skipping update");
         return;
@@ -365,11 +368,11 @@ void EInkParallelDisplay::display(void)
         startAsyncFullUpdate(forceFull ? CLEAR_SLOW : CLEAR_FAST);
     }
 
-    lastUpdateMs = millis();
+    lastUpdateMs = Time::stampMillis();
     previousImageHash = imageHash;
 
     // Keep same behavior as before
-    lastDrawMsec = millis();
+    lastDrawMsec = Time::stampMillis();
 }
 
 #ifdef EINK_LIMIT_GHOSTING_PX
@@ -418,7 +421,7 @@ bool EInkParallelDisplay::forceDisplay(uint32_t msecLimit)
     if (!displayReady)
         return false;
 
-    uint32_t now = millis();
+    uint32_t now = Time::stampMillis();
     if (lastDrawMsec == 0 || (now - lastDrawMsec) > msecLimit) {
         display();
         return true;

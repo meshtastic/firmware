@@ -37,24 +37,26 @@ constexpr NodeNum kTargetNode = 0x33333333;
 // a fresh requester for their "served again" step to avoid the per-requester window masking them.
 constexpr NodeNum kRemoteNode2 = 0x44444444;
 
-// Telemetry hop exhaustion is gated on channel congestion (alterReceived checks
-// airTime->isTxAllowedChannelUtil/isTxAllowedAirUtil). Installs a global
-// airTime reporting 100% channel utilization for the enclosing scope.
-class ScopedBusyAirTime
-{
-  public:
-    ScopedBusyAirTime() : previous(airTime)
-    {
-        for (uint32_t i = 0; i < CHANNEL_UTILIZATION_PERIODS; i++)
-            busy.channelUtilization[i] = 10000; // 10 s of airtime per 10 s period
-        airTime = &busy;
-    }
-    ~ScopedBusyAirTime() { airTime = previous; }
-
-  private:
-    AirTime busy;
-    AirTime *previous;
-};
+// INERT - commented out, not deleted. TrafficManagementModule holds no reference to airTime:
+// the gating this described went with exhaust_hop_telemetry / exhaust_hop_position, and
+// shouldExhaustHops() is now a compare of three members nothing sets. Writing the buckets did not
+// work either - the first accessor call takes AirTime's firstTime branch and memsets them, so this
+// reported 0%, not 100%. A revived version must fill them via logAirtime(); they are private now.
+//
+// class ScopedBusyAirTime
+// {
+//   public:
+//     ScopedBusyAirTime() : previous(airTime)
+//     {
+//         busy.logAirtime(RX_ALL_LOG, CHANNEL_UTILIZATION_PERIODS * 10 * 1000); // a full window
+//         airTime = &busy;
+//     }
+//     ~ScopedBusyAirTime() { airTime = previous; }
+//
+//   private:
+//     AirTime busy;
+//     AirTime *previous;
+// };
 
 class MockNodeDB : public NodeDB
 {
@@ -107,10 +109,10 @@ class MockNodeDB : public NodeDB
         numMeshNodes = 2;
     }
 
-    // Seed a full identity (name, 32-byte key of `keyByte`, optional signer bit) into the
-    // hot-store buffer at index 1, for reconcile/seeding tests that iterate
-    // getMeshNodeByIndex().
-    void setHotNodeIdentity(NodeNum n, const char *longName, uint8_t keyByte, bool signer)
+    // Seed a full identity (name, 32-byte key of `keyByte`, optional XEdDSA-signed and/or
+    // manually-verified provenance bits) into the hot-store buffer at index 1, for
+    // reconcile/seeding tests that iterate getMeshNodeByIndex().
+    void setHotNodeIdentity(NodeNum n, const char *longName, uint8_t keyByte, bool xeddsaSigned, bool manuallyVerified = false)
     {
         setHotNode(n, 0);
         meshtastic_NodeInfoLite &info = (*meshNodes)[1];
@@ -118,8 +120,10 @@ class MockNodeDB : public NodeDB
         info.public_key.size = 32;
         memset(info.public_key.bytes, keyByte, 32);
         info.bitfield |= NODEINFO_BITFIELD_HAS_USER_MASK;
-        if (signer)
+        if (xeddsaSigned)
             info.bitfield |= NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK;
+        if (manuallyVerified)
+            info.bitfield |= NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK;
     }
 
     // Evict everything but "self" - simulates the hot DB rolling over. Logical
@@ -171,14 +175,6 @@ class MockRadioInterface : public RadioInterface
 class MockRouter : public Router
 {
   public:
-    ~MockRouter()
-    {
-        // Router allocates a global crypt lock in its constructor.
-        // Clean it up here so each test can build a fresh mock router.
-        delete cryptLock;
-        cryptLock = nullptr;
-    }
-
     ErrorCode send(meshtastic_MeshPacket *p) override
     {
         sentPackets.push_back(*p);
@@ -196,7 +192,7 @@ class TrafficManagementModuleTestShim : public TrafficManagementModule
     using TrafficManagementModule::dropNodeInfoCacheForTest;
     using TrafficManagementModule::flushCache;
     using TrafficManagementModule::handleReceived;
-    using TrafficManagementModule::markKeySignerProvenForTest;
+    using TrafficManagementModule::markKeyXeddsaSignedForTest;
     using TrafficManagementModule::nodeInfoCacheCapacityForTest;
     using TrafficManagementModule::peekCachedRole;
     using TrafficManagementModule::peekNodeInfoFlagsForTest;
@@ -207,6 +203,8 @@ class TrafficManagementModuleTestShim : public TrafficManagementModule
 
 MockNodeDB *mockNodeDB = nullptr;
 
+static void installWellKnownPrimaryChannel(); // defined below, next to the other channel fixtures
+
 static void resetTrafficConfig()
 {
     moduleConfig = meshtastic_LocalModuleConfig_init_zero;
@@ -216,7 +214,9 @@ static void resetTrafficConfig()
     config = meshtastic_LocalConfig_init_zero;
     config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
 
-    channelFile = meshtastic_ChannelFile_init_zero;
+    // A real device always has a primary channel; leaving channels_count at 0 made every router
+    // lookup log "Invalid channel index", 12k lines of it, without testing anything.
+    installWellKnownPrimaryChannel();
     owner.is_licensed = false;
 
     myNodeInfo.my_node_num = kLocalNode;
@@ -290,12 +290,6 @@ static meshtastic_MeshPacket makePositionPacketWithPrecision(NodeNum from, int32
     packet.decoded.payload.size =
         pb_encode_to_bytes(packet.decoded.payload.bytes, sizeof(packet.decoded.payload.bytes), &meshtastic_Position_msg, &pos);
     return packet;
-}
-
-static bool decodePositionPayload(const meshtastic_MeshPacket &packet, meshtastic_Position &out)
-{
-    out = meshtastic_Position_init_zero;
-    return pb_decode_from_bytes(packet.decoded.payload.bytes, packet.decoded.payload.size, &meshtastic_Position_msg, &out);
 }
 
 // Primary channel with a well-known single-byte PSK and the (empty -> preset)
@@ -644,14 +638,18 @@ static void test_tm_nodeinfo_directResponse_learnsRequestorNodeInfo(void)
 
 /**
  * A unicast NodeInfo request is never signed, so a known signer's identity claim on the
- * direct-response path is unauthenticated. It must not overwrite the stored name (spoofing
- * defense), while the direct response itself still goes out. The non-signer case
- * (test_tm_nodeinfo_directResponse_learnsRequestorNodeInfo) is the control: it still learns.
+ * direct-response path is unauthenticated. Under Balanced (and Strict) it must not overwrite the
+ * stored name (spoofing defense), while the direct response itself still goes out. The
+ * non-signer case (test_tm_nodeinfo_directResponse_learnsRequestorNodeInfo) is the control: it
+ * still learns. Compatible deliberately allows the write; see
+ * test_tm_nodeinfo_compatible_cachesUnsignedSignerNodeInfo.
  */
 static void test_tm_nodeinfo_directResponse_ignoresUnsignedSignerIdentity(void)
 {
     moduleConfig.traffic_management.nodeinfo_direct_response_max_hops = 10;
     config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
+    config.security.packet_signature_policy =
+        meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_BALANCED;
     mockNodeDB->setCachedNode(kTargetNode); // the direct-response target
     // Signed-only replay gate (default) requires the target be a known signer to be served.
     mockNodeDB->cachedNodeForTest().bitfield |= NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK;
@@ -770,8 +768,8 @@ static void test_tm_nodeinfo_directResponse_psramCacheRespondsAndPreservesBitfie
 
     ProcessMessage observedResult = module.handleReceived(observed);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(observedResult));
-    // Signed-only replay gate (default) requires signer-proven provenance to serve.
-    module.markKeySignerProvenForTest(kTargetNode);
+    // Signed-only replay gate (default) requires key-proven provenance to serve.
+    module.markKeyXeddsaSignedForTest(kTargetNode);
 
     meshtastic_MeshPacket request = makeDecodedPacket(meshtastic_PortNum_NODEINFO_APP, kRemoteNode, kTargetNode);
     request.decoded.want_response = true;
@@ -795,6 +793,53 @@ static void test_tm_nodeinfo_directResponse_psramCacheRespondsAndPreservesBitfie
     TEST_ASSERT_EQUAL_UINT32(kRemoteNode, reply.to);
     TEST_ASSERT_EQUAL_UINT8(request.channel, reply.channel);
     TEST_ASSERT_EQUAL_UINT32(request.id, reply.decoded.request_id);
+}
+
+/**
+ * A signed NodeInfo request comes from a node running Balanced or Strict, which may drop an unsigned
+ * reply - and a cached reply sent on the target's behalf can never be signed, since only the target
+ * holds its key. So the request must be forwarded to the target rather than answered and consumed
+ * here. The previous test is the control: the same request unsigned is answered from cache. If this
+ * fails, Strict requesters behind a direct-response router never get a NodeInfo reply at all.
+ */
+static void test_tm_nodeinfo_directResponse_signedRequestForwarded(void)
+{
+    moduleConfig.traffic_management.nodeinfo_direct_response_max_hops = 10;
+    config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
+    mockNodeDB->clearCachedNode();
+
+    MockRouter mockRouter;
+    mockRouter.addInterface(std::unique_ptr<RadioInterface>(new MockRadioInterface()));
+    MeshService mockService;
+    router = &mockRouter;
+    service = &mockService;
+
+    TrafficManagementModuleTestShim module;
+    module.handleReceived(makeNodeInfoPacket(kTargetNode, "target-long", "tg"));
+    module.markKeyXeddsaSignedForTest(kTargetNode); // servable, so only the signature can stop the reply
+
+    meshtastic_MeshPacket request = makeDecodedPacket(meshtastic_PortNum_NODEINFO_APP, kRemoteNode, kTargetNode);
+    request.decoded.want_response = true;
+    request.id = 0x24681358;
+    request.hop_start = 3;
+    request.hop_limit = 3;
+    request.decoded.xeddsa_signature.size = XEDDSA_SIGNATURE_SIZE;
+    memset(request.decoded.xeddsa_signature.bytes, 0x5C, XEDDSA_SIGNATURE_SIZE);
+
+    ProcessMessage result = module.handleReceived(request);
+
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(result));
+    TEST_ASSERT_FALSE(module.ignoreRequestFlag());
+    TEST_ASSERT_EQUAL_UINT32(0, module.getStats().nodeinfo_cache_hits);
+    TEST_ASSERT_EQUAL_UINT32(0, static_cast<uint32_t>(mockRouter.sentPackets.size()));
+
+    // Control, after the signed request so it cannot have throttled it: the same request unsigned is
+    // answered from cache, proving the signature alone caused the forward above.
+    meshtastic_MeshPacket unsignedRequest = request;
+    unsignedRequest.id = 0x24681359;
+    unsignedRequest.decoded.xeddsa_signature.size = 0;
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(module.handleReceived(unsignedRequest)));
+    TEST_ASSERT_EQUAL_UINT32(1, static_cast<uint32_t>(mockRouter.sentPackets.size()));
 }
 
 /**
@@ -851,8 +896,8 @@ static void test_tm_nodeinfo_directResponse_psramStaleEntryNotServed(void)
     // Learn a NodeInfo for the target into the NodeInfo cache (broadcast, so it is only cached).
     meshtastic_MeshPacket observed = makeNodeInfoPacket(kTargetNode, "target-long", "tg");
     module.handleReceived(observed);
-    // Signer-proven so staleness is the sole reason it is not served (isolates the gate under test).
-    module.markKeySignerProvenForTest(kTargetNode);
+    // Key-proven so staleness is the sole reason it is not served (isolates the gate under test).
+    module.markKeyXeddsaSignedForTest(kTargetNode);
 
     // Advance the virtual clock just past the 6 h serve window.
     // 6 h + two 3-min observation ticks: guarantees the modular obs-tick age exceeds the
@@ -893,8 +938,8 @@ static void test_tm_nodeinfo_directResponse_psramThrottlesWithinWindow(void)
 
     meshtastic_MeshPacket observed = makeNodeInfoPacket(kTargetNode, "target-long", "tg");
     module.handleReceived(observed);
-    // Signed-only replay gate (default) requires signer-proven provenance to serve.
-    module.markKeySignerProvenForTest(kTargetNode);
+    // Signed-only replay gate (default) requires key-proven provenance to serve.
+    module.markKeyXeddsaSignedForTest(kTargetNode);
 
     meshtastic_MeshPacket request = makeDecodedPacket(meshtastic_PortNum_NODEINFO_APP, kRemoteNode, kTargetNode);
     request.decoded.want_response = true;
@@ -966,8 +1011,8 @@ static void test_tm_nodeinfo_cache_rejectsMismatchedKey(void)
     module.handleReceived(makeNodeInfoPacketWithKey(kTargetNode, "genuine", 0x11));
     // Poisoning attempt with a different key (0x22...) must be rejected.
     module.handleReceived(makeNodeInfoPacketWithKey(kTargetNode, "attacker", 0x22));
-    // Signed-only replay gate (default) requires signer-proven provenance to serve the reply.
-    module.markKeySignerProvenForTest(kTargetNode);
+    // Signed-only replay gate (default) requires key-proven provenance to serve the reply.
+    module.markKeyXeddsaSignedForTest(kTargetNode);
 
     meshtastic_MeshPacket request = makeDecodedPacket(meshtastic_PortNum_NODEINFO_APP, kRemoteNode, kTargetNode);
     request.decoded.want_response = true;
@@ -1030,20 +1075,23 @@ static void test_tm_nodeinfo_cache_pinsAgainstWarmTierKey(void)
 /**
  * Unsigned-identity gate, warm tier: a verified signer evicted to the warm tier must not be
  * impersonatable. An attacker can forge an unsigned NodeInfo carrying the signer's real
- * (public!) key - it passes the key pin and would inherit warm signer provenance - so the
+ * (public!) key - it passes the key pin and would inherit warm XEdDSA-signed provenance - so the
  * gate must classify warm-tier signers, not only hot-store ones. A signature-verified frame
- * (control) is still learned.
+ * (control) is still learned. The gate applies under Balanced and Strict; Compatible
+ * deliberately accepts unsigned identity (test_tm_nodeinfo_compatible_cachesUnsignedSignerNodeInfo).
  */
 static void test_tm_nodeinfo_gate_blocksUnsignedWarmSignerForgery(void)
 {
     moduleConfig.traffic_management.nodeinfo_direct_response_max_hops = 10;
     config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
+    config.security.packet_signature_policy =
+        meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_BALANCED;
     mockNodeDB->clearCachedNode();
     mockNodeDB->rollHotStore(); // hot store misses; only the warm tier knows the signer
     uint8_t warmKey[32];
     memset(warmKey, 0x5A, 32);
     mockNodeDB->warmStore.clear();
-    mockNodeDB->warmStore.absorb(kTargetNode, 1000000, warmKey, 0, 0, /*signer=*/true);
+    mockNodeDB->warmStore.absorb(kTargetNode, 1000000, warmKey, 0, 0, /*xeddsaSigned=*/true);
 
     MockRouter mockRouter;
     mockRouter.addInterface(std::unique_ptr<RadioInterface>(new MockRadioInterface()));
@@ -1071,9 +1119,72 @@ static void test_tm_nodeinfo_gate_blocksUnsignedWarmSignerForgery(void)
     mockNodeDB->warmStore.clear();
 }
 
+// Shared body for the two cases where an unsigned NodeInfo from a known (warm-tier) signer must
+// be cached: the identity gate above does not apply, so the frame drives the cache like any other.
+static void expectUnsignedSignerNodeInfoCached()
+{
+    moduleConfig.traffic_management.nodeinfo_direct_response_max_hops = 10;
+    config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
+    mockNodeDB->clearCachedNode();
+    mockNodeDB->rollHotStore();
+    uint8_t warmKey[32];
+    memset(warmKey, 0x5A, 32);
+    mockNodeDB->warmStore.clear();
+    mockNodeDB->warmStore.absorb(kTargetNode, 1000000, warmKey, 0, 0, /*xeddsaSigned=*/true);
+
+    MockRouter mockRouter;
+    mockRouter.addInterface(std::unique_ptr<RadioInterface>(new MockRadioInterface()));
+    MeshService mockService;
+    router = &mockRouter;
+    service = &mockService;
+
+    TrafficManagementModuleTestShim module;
+    meshtastic_MeshPacket unsignedFrame = makeNodeInfoPacketWithKey(kTargetNode, "renamed", 0x5A);
+    unsignedFrame.xeddsa_signed = false;
+    module.handleReceived(unsignedFrame);
+    meshtastic_User out = meshtastic_User_init_zero;
+    TEST_ASSERT_TRUE_MESSAGE(module.copyUser(kTargetNode, out, nullptr), "unsigned NodeInfo must be cached here");
+    TEST_ASSERT_EQUAL_STRING("renamed", out.long_name);
+
+    mockNodeDB->warmStore.clear();
+}
+
+/**
+ * Compatible does not sign and does not require signatures, even from known signers: firmware
+ * before 2.8 strips signatures when relaying, so an unsigned NodeInfo from a signer is normal
+ * there and must still update its identity. If this fails, Compatible has started refusing
+ * unsigned identity again and signers' names freeze behind every older relay.
+ */
+static void test_tm_nodeinfo_compatible_cachesUnsignedSignerNodeInfo(void)
+{
+    config.security.packet_signature_policy =
+        meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_COMPATIBLE;
+    expectUnsignedSignerNodeInfoCached();
+}
+
+/**
+ * An AES-CCM channel overrides the signature policy: its packets are never signed, and the CCM
+ * tag authenticates them, so even under Balanced an unsigned NodeInfo heard there updates a known
+ * signer's identity. If this fails, a node's name freezes as soon as it talks only on a CCM channel.
+ */
+static void test_tm_nodeinfo_aeadChannel_cachesUnsignedSignerNodeInfo(void)
+{
+    config.security.packet_signature_policy =
+        meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_BALANCED;
+    channelFile.channels[0].settings.use_aead = true;
+    TEST_ASSERT_TRUE_MESSAGE(channels.isAEADEnabled(0), "fixture must leave channel 0 on AES-CCM");
+    expectUnsignedSignerNodeInfoCached();
+}
+
+// Bit positions returned by peekNodeInfoFlagsForTest().
+constexpr int kFlagObserved = 1;
+constexpr int kFlagMember = 2;
+constexpr int kFlagFullUser = 4;
+constexpr int kFlagKeyProven = 8; // keyProven() == keyXeddsaSigned | keyManuallyVerified
+
 /**
  * Reconcile seeding, serve-gate honesty: a hot-store identity is seeded into the cache by
- * the maintenance sweep (name + key + signer provenance usable via copyUser/copyPublicKey),
+ * the maintenance sweep (name + key + key provenance usable via copyUser/copyPublicKey),
  * but is NEVER served as a spoofed reply until a genuine NODEINFO frame is heard - seeding
  * and retention must not make a silent node look alive.
  */
@@ -1083,7 +1194,7 @@ static void test_tm_nodeinfo_reconcile_seedsFromHotStoreButNeverServes(void)
     config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
     mockNodeDB->clearCachedNode();
     mockNodeDB->warmStore.clear();
-    mockNodeDB->setHotNodeIdentity(kTargetNode, "hot-name", 0x77, /*signer=*/true);
+    mockNodeDB->setHotNodeIdentity(kTargetNode, "hot-name", 0x77, /*xeddsaSigned=*/true);
 
     MockRouter mockRouter;
     mockRouter.addInterface(std::unique_ptr<RadioInterface>(new MockRadioInterface()));
@@ -1099,7 +1210,7 @@ static void test_tm_nodeinfo_reconcile_seedsFromHotStoreButNeverServes(void)
     bool proven = false;
     TEST_ASSERT_TRUE(module.copyPublicKey(kTargetNode, key, &proven));
     TEST_ASSERT_EQUAL_UINT8(0x77, key[0]);
-    TEST_ASSERT_TRUE(proven); // inherited from the hot store's signer bit, key-matched
+    TEST_ASSERT_TRUE(proven); // inherited from the hot store's XEdDSA-signed bit, key-matched
     meshtastic_User seeded = meshtastic_User_init_zero;
     TEST_ASSERT_TRUE(module.copyUser(kTargetNode, seeded, nullptr));
     TEST_ASSERT_EQUAL_STRING("hot-name", seeded.long_name);
@@ -1126,8 +1237,48 @@ static void test_tm_nodeinfo_reconcile_seedsFromHotStoreButNeverServes(void)
 }
 
 /**
+ * Reconcile re-seeds manual verification: a hot-store node carrying IS_KEY_MANUALLY_VERIFIED
+ * (but NOT XEdDSA-signed) is reconciled into the cache with keyProven() set via the manual
+ * channel alone, so copyPublicKey reports it proven and the replay gate would vouch for it.
+ * Guards the second provenance channel independently of the XEdDSA path.
+ */
+static void test_tm_nodeinfo_reconcile_seedsManualVerificationFromHotStore(void)
+{
+    moduleConfig.traffic_management.nodeinfo_direct_response_max_hops = 10;
+    config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
+    mockNodeDB->clearCachedNode();
+    mockNodeDB->warmStore.clear();
+    // Manually verified but NOT XEdDSA-signed: isolates the manual provenance channel.
+    mockNodeDB->setHotNodeIdentity(kTargetNode, "hot-name", 0x5A, /*xeddsaSigned=*/false,
+                                   /*manuallyVerified=*/true);
+
+    MockRouter mockRouter;
+    mockRouter.addInterface(std::unique_ptr<RadioInterface>(new MockRadioInterface()));
+    MeshService mockService;
+    router = &mockRouter;
+    service = &mockService;
+
+    TrafficManagementModuleTestShim module;
+    module.runOnce(); // maintenance sweep -> reconcile seeds the hot identity
+
+    // keyProven() is set even though keyXeddsaSigned is false - the manual bit alone proves it.
+    const int flags = module.peekNodeInfoFlagsForTest(kTargetNode);
+    TEST_ASSERT_TRUE(flags >= 0);
+    TEST_ASSERT_TRUE(flags & kFlagKeyProven);
+
+    // The pubkey pool sees it as proven, sourced from the manual channel.
+    uint8_t key[32] = {0};
+    bool proven = false;
+    TEST_ASSERT_TRUE(module.copyPublicKey(kTargetNode, key, &proven));
+    TEST_ASSERT_EQUAL_UINT8(0x5A, key[0]);
+    TEST_ASSERT_TRUE(proven);
+
+    mockNodeDB->rollHotStore();
+}
+
+/**
  * Reconcile seeding from the warm tier yields a key-only record: usable by copyPublicKey
- * (with the warm signer bit inherited), but never by copyUser - the warm tier keeps no
+ * (with the warm XEdDSA-signed bit inherited), but never by copyUser - the warm tier keeps no
  * names, and a nameless User must not reach name-rehydration.
  */
 static void test_tm_nodeinfo_reconcile_seedsKeyOnlyFromWarmTier(void)
@@ -1139,7 +1290,7 @@ static void test_tm_nodeinfo_reconcile_seedsKeyOnlyFromWarmTier(void)
     uint8_t warmKey[32];
     memset(warmKey, 0x44, 32);
     mockNodeDB->warmStore.clear();
-    mockNodeDB->warmStore.absorb(kTargetNode, 1000000, warmKey, 0, 0, /*signer=*/true);
+    mockNodeDB->warmStore.absorb(kTargetNode, 1000000, warmKey, 0, 0, /*xeddsaSigned=*/true);
 
     MockRouter mockRouter;
     mockRouter.addInterface(std::unique_ptr<RadioInterface>(new MockRadioInterface()));
@@ -1239,7 +1390,7 @@ static void test_tm_nodeinfo_updateUserHook_writesThrough(void)
     bool proven = true;
     TEST_ASSERT_TRUE(module.copyPublicKey(kTargetNode, key, &proven));
     TEST_ASSERT_EQUAL_UINT8(0x5A, key[0]);
-    TEST_ASSERT_FALSE(proven); // committed TOFU key: no signer bit on the node yet
+    TEST_ASSERT_FALSE(proven); // committed TOFU key: no XEdDSA-signed bit on the node yet
     meshtastic_User out = meshtastic_User_init_zero;
     TEST_ASSERT_TRUE(module.copyUser(kTargetNode, out, nullptr));
     TEST_ASSERT_EQUAL_STRING("committed", out.long_name);
@@ -1314,7 +1465,7 @@ static void test_tm_nodeinfo_noTimedEviction_quietKeyedEntrySurvives(void)
 
     TrafficManagementModuleTestShim module;
     module.handleReceived(makeNodeInfoPacketWithKey(kTargetNode, "quiet", 0x21));
-    module.markKeySignerProvenForTest(kTargetNode); // isolate: staleness, not the signed gate
+    module.markKeyXeddsaSignedForTest(kTargetNode); // isolate: staleness, not the signed gate
 
     // Nine days of silence, swept every three days. The old design would have evicted the
     // entry at the 7-day retention TTL; now nothing expires by timer.
@@ -1340,7 +1491,7 @@ static void test_tm_nodeinfo_noTimedEviction_quietKeyedEntrySurvives(void)
 
 /**
  * Feature #2: a key learned from an (unsigned) NodeInfo is served by copyPublicKey() as a
- * trust-on-first-use key, so it can extend the encryption pool. signerProven must be false.
+ * trust-on-first-use key, so it can extend the encryption pool. keyProven must be false.
  */
 static void test_tm_nodeinfo_copyPublicKey_servesTofuKey(void)
 {
@@ -1367,9 +1518,9 @@ static void test_tm_nodeinfo_copyPublicKey_servesTofuKey(void)
 
 /**
  * Feature #1: a later signature-verified NodeInfo upgrades the cached key's provenance to
- * signer-proven (monotonic), while the key bytes stay pinned.
+ * XEdDSA-signed (monotonic), while the key bytes stay pinned.
  */
-static void test_tm_nodeinfo_copyPublicKey_upgradesToSignerProven(void)
+static void test_tm_nodeinfo_copyPublicKey_upgradesToXeddsaSigned(void)
 {
     moduleConfig.traffic_management.nodeinfo_direct_response_max_hops = 10;
     config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
@@ -1444,7 +1595,7 @@ static void test_tm_nodeinfo_copyUser_returnsCachedIdentity(void)
 
 #if TMM_NODEINFO_REPLAY_SIGNED_GATE
 /**
- * Replay gate (cache path): a fresh but trust-on-first-use (never signer-proven) cached entry
+ * Replay gate (cache path): a fresh but trust-on-first-use (never key-proven) cached entry
  * is withheld - the reply is suppressed though the entry is fresh.
  */
 static void test_tm_nodeinfo_directResponse_psramUnsignedNotServed(void)
@@ -1460,7 +1611,7 @@ static void test_tm_nodeinfo_directResponse_psramUnsignedNotServed(void)
     service = &mockService;
 
     TrafficManagementModuleTestShim module;
-    // Cache a fresh but unsigned (TOFU) NodeInfo and do NOT mark it signer-proven.
+    // Cache a fresh but unsigned (TOFU) NodeInfo and do NOT mark it key-proven.
     module.handleReceived(makeNodeInfoPacket(kTargetNode, "target-long", "tg"));
 
     meshtastic_MeshPacket request = makeDecodedPacket(meshtastic_PortNum_NODEINFO_APP, kRemoteNode, kTargetNode);
@@ -1474,11 +1625,6 @@ static void test_tm_nodeinfo_directResponse_psramUnsignedNotServed(void)
 }
 #endif // TMM_NODEINFO_REPLAY_SIGNED_GATE
 #endif // !MESHTASTIC_EXCLUDE_PKI
-
-// Bit positions returned by peekNodeInfoFlagsForTest().
-constexpr int kFlagObserved = 1;
-constexpr int kFlagMember = 2;
-constexpr int kFlagFullUser = 4;
 
 /**
  * Key-commit hook (ported from tmm-fix-superset): a TOFU learn lands the key in the pool
@@ -1534,7 +1680,7 @@ static void test_tm_nodeinfo_tickSaturation_sweepClearsObserved(void)
 
     TrafficManagementModuleTestShim module;
     module.handleReceived(makeNodeInfoPacket(kTargetNode, "target-long", "tg"));
-    module.markKeySignerProvenForTest(kTargetNode);
+    module.markKeyXeddsaSignedForTest(kTargetNode);
     const uint32_t stampMs = TrafficManagementModule::s_testNowMs;
     int flags = module.peekNodeInfoFlagsForTest(kTargetNode);
     TEST_ASSERT_TRUE(flags >= 0 && (flags & kFlagObserved));
@@ -1572,7 +1718,7 @@ static void test_tm_nodeinfo_reconcileMembershipMarking(void)
     config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
     mockNodeDB->clearCachedNode();
     mockNodeDB->warmStore.clear();
-    mockNodeDB->setHotNodeIdentity(kTargetNode, "seeded-name", 0x5C, /*signer=*/false);
+    mockNodeDB->setHotNodeIdentity(kTargetNode, "seeded-name", 0x5C, /*xeddsaSigned=*/false);
 
     MockRouter mockRouter;
     mockRouter.addInterface(std::unique_ptr<RadioInterface>(new MockRadioInterface()));
@@ -1765,7 +1911,7 @@ static void fillNodeInfoCacheWithTofuStrangers(TrafficManagementModuleTestShim &
 
 /**
  * Tiered LRU eviction, tier boundaries: with the cache exactly full, a new stranger's insert
- * evicts a keyless stranger - never a TOFU-keyed entry, a signer-proven entry, or a NodeDB
+ * evicts a keyless stranger - never a TOFU-keyed entry, a key-proven entry, or a NodeDB
  * member - even though those higher-tier entries are the OLDEST observations in the cache
  * (tier outranks recency).
  */
@@ -1778,7 +1924,7 @@ static void test_tm_nodeinfo_eviction_keyedTiersOutrankKeyless(void)
     constexpr NodeNum kTofu = 0x51000001, kProven = 0x51000002, kMember = 0x51000003, kNewcomer = 0x51000004;
     module.handleReceived(makeNodeInfoPacketWithKey(kTofu, "tofu", 0x11));
     module.handleReceived(makeNodeInfoPacketWithKey(kProven, "proven", 0x22));
-    module.markKeySignerProvenForTest(kProven);
+    module.markKeyXeddsaSignedForTest(kProven);
     uint8_t memberKey[32];
     memset(memberKey, 0x33, sizeof(memberKey));
     module.onNodeKeyCommitted(kMember, memberKey, false);
@@ -1801,8 +1947,8 @@ static void test_tm_nodeinfo_eviction_keyedTiersOutrankKeyless(void)
 
 /**
  * Tiered LRU eviction, keyed tiers: in a cache saturated with TOFU-keyed strangers, keyed
- * inserts displace TOFU entries while a signer-proven stranger and a NodeDB member survive
- * (keyless < TOFU < signer-proven, +membership).
+ * inserts displace TOFU entries while a key-proven stranger and a NodeDB member survive
+ * (keyless < TOFU < key-proven, +membership).
  */
 static void test_tm_nodeinfo_eviction_tofuLosesBeforeProvenAndMember(void)
 {
@@ -1816,7 +1962,7 @@ static void test_tm_nodeinfo_eviction_tofuLosesBeforeProvenAndMember(void)
     const uint16_t cap = TrafficManagementModuleTestShim::nodeInfoCacheCapacityForTest();
     fillNodeInfoCacheWithTofuStrangers(module, cap - 2u, kFillBase);
     module.handleReceived(makeNodeInfoPacketWithKey(kProven, "proven", 0x22));
-    module.markKeySignerProvenForTest(kProven);
+    module.markKeyXeddsaSignedForTest(kProven);
     uint8_t memberKey[32];
     memset(memberKey, 0x33, sizeof(memberKey));
     module.onNodeKeyCommitted(kMember, memberKey, false);
@@ -1979,7 +2125,7 @@ static void test_tm_nodeinfo_directResponse_fallbackStaleEntryNotServed(void)
 
     mockNodeDB->setCachedNode(kTargetNode);
     mockNodeDB->cachedNodeForTest().last_heard = now - (7UL * 60UL * 60UL); // 7 h ago -> stale
-    // Signer-proven so staleness is the sole reason this is not served (isolates the gate under test).
+    // Key-proven so staleness is the sole reason this is not served (isolates the gate under test).
     mockNodeDB->cachedNodeForTest().bitfield |= NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK;
 
     MockRouter mockRouter;
@@ -2043,6 +2189,46 @@ static void test_tm_nodeinfo_directResponse_fallbackFreshEntryServed(void)
 
     resetRTCStateForTests();
 }
+
+#if TMM_NODEINFO_REPLAY_SIGNED_GATE
+/**
+ * Replay gate (fallback path): a manually-verified NodeDB node - IS_KEY_MANUALLY_VERIFIED set,
+ * but NOT XEdDSA-signed - passes the broadened key-proven gate and is served, mirroring the
+ * cache path's keyProven() (XEdDSA | manual). Companion to fallbackUnsignedNotServed.
+ */
+static void test_tm_nodeinfo_directResponse_fallbackManuallyVerifiedServed(void)
+{
+    moduleConfig.traffic_management.nodeinfo_direct_response_max_hops = 10;
+    config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
+
+    setBootRelativeTimeForUnitTest(1000000);
+    const uint32_t now = getTime();
+
+    mockNodeDB->setCachedNode(kTargetNode);
+    mockNodeDB->cachedNodeForTest().last_heard = now - 60UL; // fresh, passes staleness
+    // Manually verified, NOT XEdDSA-signed: the key-proven gate must accept the manual channel.
+    mockNodeDB->cachedNodeForTest().bitfield |= NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK;
+
+    MockRouter mockRouter;
+    mockRouter.addInterface(std::unique_ptr<RadioInterface>(new MockRadioInterface()));
+    MeshService mockService;
+    router = &mockRouter;
+    service = &mockService;
+
+    TrafficManagementModuleTestShim module;
+    module.dropNodeInfoCacheForTest(); // exercise the NodeDB fallback path
+    meshtastic_MeshPacket request = makeDecodedPacket(meshtastic_PortNum_NODEINFO_APP, kRemoteNode, kTargetNode);
+    request.decoded.want_response = true;
+    request.hop_start = 3;
+    request.hop_limit = 3;
+
+    ProcessMessage result = module.handleReceived(request);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(result));
+    TEST_ASSERT_EQUAL_UINT32(1, static_cast<uint32_t>(mockRouter.sentPackets.size()));
+
+    resetRTCStateForTests();
+}
+#endif // TMM_NODEINFO_REPLAY_SIGNED_GATE
 
 /**
  * Per-target direct-response throttle on the NodeDB-fallback path (no PSRAM NodeInfo cache). The
@@ -2129,14 +2315,14 @@ static void test_tm_nodeinfo_directResponse_perRequesterAndGlobalFloor(void)
 
     TrafficManagementModuleTestShim module;
 
-    // Three distinct, freshly-observed, signer-proven targets. Using a fresh target on each step keeps
+    // Three distinct, freshly-observed, key-proven targets. Using a fresh target on each step keeps
     // the per-target axis from ever being the bound here, so the reply is gated only by the axis under
     // test: per-requester (step 2) or the global floor (step 4).
     constexpr NodeNum kTargetA = 0x33330001, kTargetB = 0x33330002, kTargetC = 0x33330003;
     constexpr NodeNum kRemoteNode3 = 0x66666666;
     for (NodeNum t : {kTargetA, kTargetB, kTargetC}) {
         module.handleReceived(makeNodeInfoPacket(t, "target-long", "tg"));
-        module.markKeySignerProvenForTest(t);
+        module.markKeyXeddsaSignedForTest(t);
     }
 
     meshtastic_MeshPacket request = makeDecodedPacket(meshtastic_PortNum_NODEINFO_APP, kRemoteNode, kTargetA);
@@ -2224,7 +2410,7 @@ static void test_tm_nodeinfo_directResponse_fallbackUnsignedNotServed(void)
  */
 static void test_tm_alterReceived_telemetryBroadcast_hopLimitUnchanged(void)
 {
-    ScopedBusyAirTime busyChannel; // congestion present but exhaust is disabled
+    // ScopedBusyAirTime busyChannel; // INERT: the module never reads airTime
     TrafficManagementModuleTestShim module;
     meshtastic_MeshPacket packet = makeDecodedPacket(meshtastic_PortNum_TELEMETRY_APP, kRemoteNode, NODENUM_BROADCAST);
     packet.hop_start = 5;
@@ -2241,8 +2427,6 @@ static void test_tm_alterReceived_telemetryBroadcast_hopLimitUnchanged(void)
 
 /**
  * Verify alterReceived does not modify unicast or local-origin packets.
- * The precision clamp (the only active alterReceived path) only fires for
- * broadcast position packets from remote nodes - these should be untouched.
  */
 static void test_tm_alterReceived_skipsLocalAndUnicast(void)
 {
@@ -2291,6 +2475,34 @@ static void test_tm_positionDedup_allowsDuplicateAfterIntervalExpires(void)
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(r2));
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(r3));
     TEST_ASSERT_EQUAL_UINT32(1, stats.position_dedup_drops);
+}
+
+/**
+ * Verify a dropped duplicate does not re-stamp the entry: re-stamping slides the window forward on
+ * every repeat, muting a node that broadcasts faster than the window instead of refreshing it.
+ */
+static void test_tm_positionDedup_continuousDuplicatesStillRefresh(void)
+{
+    constexpr uint32_t kPosTickMs = 360000; // mirrors the module's private kPosTimeTickMs
+    constexpr uint32_t kWindowTicks = 2;
+    constexpr uint32_t kTicksFed = kWindowTicks * 3; // a duplicate every tick, over whole windows
+    constexpr uint32_t kExpectedPasses = kTicksFed / kWindowTicks;
+    constexpr uint32_t kExpectedDrops = kTicksFed - kExpectedPasses;
+
+    moduleConfig.traffic_management.position_min_interval_secs = (kWindowTicks * kPosTickMs) / 1000;
+    installWellKnownPrimaryChannelWithPrecision(16);
+    TrafficManagementModuleTestShim module;
+
+    uint32_t passed = 0;
+    for (uint32_t tick = 0; tick < kTicksFed; tick++) {
+        meshtastic_MeshPacket dup = makePositionPacket(kRemoteNode, 374221234, -1220845678);
+        if (module.handleReceived(dup) == ProcessMessage::CONTINUE)
+            passed++;
+        TrafficManagementModule::s_testNowMs += kPosTickMs;
+    }
+
+    TEST_ASSERT_EQUAL_UINT32(kExpectedPasses, passed);
+    TEST_ASSERT_EQUAL_UINT32(kExpectedDrops, module.getStats().position_dedup_drops);
 }
 
 /**
@@ -2717,12 +2929,12 @@ static void test_tm_nextHop_keptAliveAcrossMaintenanceSweep(void)
 
 /**
  * Verify TRACKER role caps the dedup window at 1 hour.
- * A duplicate position that would normally be blocked for 11 h (default) must
+ * A duplicate position that would normally be blocked for 6 h (default) must
  * be forwarded once the 1-hour tracker cap expires.
  */
 static void test_tm_trackerRole_capsDedupWindowAtOneHour(void)
 {
-    // Operator interval is 11 h - longer than the tracker cap.
+    // Operator interval is 6 h - longer than the tracker cap.
     moduleConfig.traffic_management.position_min_interval_secs = default_traffic_mgmt_position_min_interval_secs;
     installWellKnownPrimaryChannelWithPrecision(16);
 
@@ -2783,11 +2995,11 @@ static void test_tm_takTrackerRole_capsDedupWindowAtOneHour(void)
  * hot and warm NodeDB stores - the TMM unified cache is the third fallback. The
  * role is cached on the entry while NodeDB still knows the node; once NodeDB
  * forgets it (getNodeRole → CLIENT), the cached role must keep the 1-hour cap
- * applied instead of reverting to the 11-hour default interval.
+ * applied instead of reverting to the 6-hour default interval.
  */
 static void test_tm_trackerRole_survivesNodeDbEvictionViaCachedRole(void)
 {
-    // Operator interval is 11 h - longer than the tracker cap.
+    // Operator interval is 6 h - longer than the tracker cap.
     moduleConfig.traffic_management.position_min_interval_secs = default_traffic_mgmt_position_min_interval_secs;
     installWellKnownPrimaryChannelWithPrecision(16);
 
@@ -2807,8 +3019,8 @@ static void test_tm_trackerRole_survivesNodeDbEvictionViaCachedRole(void)
     mockNodeDB->clearCachedNode();
 
     ProcessMessage r2 = module.handleReceived(dup); // within 1-hour cap - still drop
-    // Advance past the tracker cap (3600 s) but stay well under the 11-hour default.
-    // Without the cached-role fallback this would still be inside the 11-hour window
+    // Advance past the tracker cap (3600 s) but stay well under the 6-hour default.
+    // Without the cached-role fallback this would still be inside the 6-hour window
     // (CLIENT → no exception) and wrongly drop; with it, the 1-hour cap lets it pass.
     TrafficManagementModule::s_testNowMs += (default_traffic_mgmt_tracker_position_min_interval_secs * 1000UL) + 1;
     ProcessMessage r3 = module.handleReceived(afterCap);
@@ -2846,7 +3058,7 @@ static void test_tm_roleChange_viaNodeInfo_dropsTrackerException(void)
     meshtastic_MeshPacket info = makeNodeInfoPacketWithRole(kRemoteNode, meshtastic_Config_DeviceConfig_Role_CLIENT);
     module.handleReceived(info);
 
-    // Past the 1-hour tracker cap but within the 11-hour CLIENT interval. With the stale
+    // Past the 1-hour tracker cap but within the 6-hour CLIENT interval. With the stale
     // TRACKER role this would pass; after the demotion it must drop (full interval applies).
     TrafficManagementModule::s_testNowMs += (default_traffic_mgmt_tracker_position_min_interval_secs * 1000UL) + 1;
     meshtastic_MeshPacket afterCap = makePositionPacket(kRemoteNode, 374221234, -1220845678);
@@ -2953,12 +3165,12 @@ static void test_tm_trackerRole_doesNotLengthenShorterOperatorInterval(void)
 
 /**
  * Verify LOST_AND_FOUND role caps duplicate-position dedup at ~15 min (2 pos-ticks),
- * not the old one-tick fast-announce. A configured 11-hour interval is shortened to the
+ * not the old one-tick fast-announce. A configured 6-hour interval is shortened to the
  * 15-min cap; a duplicate one tick later still drops, but one past the 2-tick cap passes.
  */
 static void test_tm_lostAndFoundRole_capsDedupAtFifteenMinutes(void)
 {
-    // Long interval that would normally suppress duplicates for 11 h.
+    // Long interval that would normally suppress duplicates for 6 h.
     moduleConfig.traffic_management.position_min_interval_secs = default_traffic_mgmt_position_min_interval_secs;
     installWellKnownPrimaryChannelWithPrecision(16);
 
@@ -3054,36 +3266,27 @@ static void test_tm_unknownRole_noUserBit_appliesFullInterval(void)
 }
 
 /**
- * Verify a LOST_AND_FOUND origin now GETS the relayed precision clamp - the
- * anti-dox exemption was removed, so a relayed position more precise than the
- * channel setting is clamped down to the channel ceiling like any other node's.
+ * Verify a relayed position broadcast more precise than the channel setting passes through
+ * handleReceived/alterReceived unmodified. Relays must forward position payloads byte-for-byte
+ * so the sender's XEdDSA signature still verifies downstream.
  */
-static void test_tm_lostAndFoundRole_getsAlterReceivedPrecisionClamp(void)
+static void test_tm_relayedPosition_payloadUnmodified(void)
 {
-    // Set channel precision ceiling to 13 bits. Must be <= MAX_POSITION_PRECISION_PUBLIC_KEY
-    // (15) - well-known channels have a public PSK (size==1), so getPositionPrecisionForChannel
-    // clamps any value above 15 via usesPublicKey().
     installWellKnownPrimaryChannelWithPrecision(13);
-
     mockNodeDB->setCachedNode(kRemoteNode);
-    mockNodeDB->setCachedNodeRole(meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND);
 
     TrafficManagementModuleTestShim module;
 
-    // Full-precision packet - 32 bits - exceeds the channel cap.
-    const uint32_t fullPrecision = 32;
-    meshtastic_MeshPacket packet = makePositionPacketWithPrecision(kRemoteNode, 374221234, -1220845678, fullPrecision);
+    meshtastic_MeshPacket packet = makePositionPacketWithPrecision(kRemoteNode, 374221234, -1220845678, 32);
     packet.hop_start = 3;
-    packet.hop_limit = 2; // relayed (hop_limit < hop_start) so clamp logic applies
+    packet.hop_limit = 2;
+    const meshtastic_Data_payload_t original = packet.decoded.payload;
 
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(module.handleReceived(packet)));
     module.alterReceived(packet);
 
-    meshtastic_Position out;
-    TEST_ASSERT_TRUE(decodePositionPayload(packet, out));
-    // Clamped to channel ceiling (13 bits) - lost-and-found is no longer exempt.
-    // Note: precision must be <= MAX_POSITION_PRECISION_PUBLIC_KEY (15); well-known
-    // channels always have a public PSK so getPositionPrecisionForChannel caps at 15.
-    TEST_ASSERT_EQUAL_UINT32(13, out.precision_bits);
+    TEST_ASSERT_EQUAL_UINT32(original.size, packet.decoded.payload.size);
+    TEST_ASSERT_EQUAL_MEMORY(original.bytes, packet.decoded.payload.bytes, original.size);
 }
 
 // ---------------------------------------------------------------------------
@@ -3221,9 +3424,11 @@ TM_TEST_ENTRY void setup()
     RUN_TEST(test_tm_nodeinfo_directResponse_perRequesterAndGlobalFloor);
 #if TMM_NODEINFO_REPLAY_SIGNED_GATE
     RUN_TEST(test_tm_nodeinfo_directResponse_fallbackUnsignedNotServed);
+    RUN_TEST(test_tm_nodeinfo_directResponse_fallbackManuallyVerifiedServed);
 #endif
 #if TMM_HAS_NODEINFO_CACHE
     RUN_TEST(test_tm_nodeinfo_directResponse_psramCacheRespondsAndPreservesBitfield);
+    RUN_TEST(test_tm_nodeinfo_directResponse_signedRequestForwarded);
     RUN_TEST(test_tm_nodeinfo_directResponse_psramMissDoesNotFallbackToNodeDb);
     RUN_TEST(test_tm_nodeinfo_directResponse_psramStaleEntryNotServed);
     RUN_TEST(test_tm_nodeinfo_directResponse_psramThrottlesWithinWindow);
@@ -3232,7 +3437,10 @@ TM_TEST_ENTRY void setup()
 #if WARM_NODE_COUNT > 0
     RUN_TEST(test_tm_nodeinfo_cache_pinsAgainstWarmTierKey);
     RUN_TEST(test_tm_nodeinfo_gate_blocksUnsignedWarmSignerForgery);
+    RUN_TEST(test_tm_nodeinfo_compatible_cachesUnsignedSignerNodeInfo);
+    RUN_TEST(test_tm_nodeinfo_aeadChannel_cachesUnsignedSignerNodeInfo);
     RUN_TEST(test_tm_nodeinfo_reconcile_seedsFromHotStoreButNeverServes);
+    RUN_TEST(test_tm_nodeinfo_reconcile_seedsManualVerificationFromHotStore);
     RUN_TEST(test_tm_nodeinfo_reconcile_seedsKeyOnlyFromWarmTier);
     RUN_TEST(test_tm_nodeinfo_reconcile_keepsTofuKeyOnKeylessHotIdentity);
     RUN_TEST(test_tm_nodeinfo_updateUserHook_writesThrough);
@@ -3240,7 +3448,7 @@ TM_TEST_ENTRY void setup()
     RUN_TEST(test_tm_nodeinfo_noTimedEviction_quietKeyedEntrySurvives);
 #endif
     RUN_TEST(test_tm_nodeinfo_copyPublicKey_servesTofuKey);
-    RUN_TEST(test_tm_nodeinfo_copyPublicKey_upgradesToSignerProven);
+    RUN_TEST(test_tm_nodeinfo_copyPublicKey_upgradesToXeddsaSigned);
     RUN_TEST(test_tm_nodeinfo_copyPublicKey_missReturnsFalse);
     RUN_TEST(test_tm_nodeinfo_copyUser_returnsCachedIdentity);
 #if TMM_NODEINFO_REPLAY_SIGNED_GATE
@@ -3266,6 +3474,7 @@ TM_TEST_ENTRY void setup()
     RUN_TEST(test_tm_alterReceived_telemetryBroadcast_hopLimitUnchanged);
     RUN_TEST(test_tm_alterReceived_skipsLocalAndUnicast);
     RUN_TEST(test_tm_positionDedup_allowsDuplicateAfterIntervalExpires);
+    RUN_TEST(test_tm_positionDedup_continuousDuplicatesStillRefresh);
     RUN_TEST(test_tm_positionDedup_intervalZero_neverDrops);
     RUN_TEST(test_tm_positionDedup_precisionAbove32_usesDefaultPrecision);
     RUN_TEST(test_tm_positionDedup_distinctAtClampedChannelPrecision);
@@ -3293,7 +3502,7 @@ TM_TEST_ENTRY void setup()
     RUN_TEST(test_tm_specialRole_evictedLastUnderPressure);
     RUN_TEST(test_tm_trackerRole_doesNotLengthenShorterOperatorInterval);
     RUN_TEST(test_tm_lostAndFoundRole_capsDedupAtFifteenMinutes);
-    RUN_TEST(test_tm_lostAndFoundRole_getsAlterReceivedPrecisionClamp);
+    RUN_TEST(test_tm_relayedPosition_payloadUnmodified);
     RUN_TEST(test_tm_unknownRole_noDbEntry_appliesFullInterval);
     RUN_TEST(test_tm_unknownRole_noUserBit_appliesFullInterval);
     RUN_TEST(test_tm_fuzz_nodenum_blitz);

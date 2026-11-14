@@ -2,6 +2,7 @@
 
 #if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && defined(HAS_BMI270)
 
+#include "detect/ScanI2CTwoWire.h"
 #include <pgmspace.h>
 
 // BMI270 registers used
@@ -426,11 +427,9 @@ static const uint8_t bmi270_config_file[] PROGMEM = {
 BMI270Sensor::BMI270Sensor(ScanI2C::FoundDevice foundDevice) : MotionSensor::MotionSensor(foundDevice)
 {
     if (foundDevice.address.port == ScanI2C::I2CPort::WIRE1) {
-#ifdef I2C_SDA1
-        wire = &Wire1;
-#else
-        wire = &Wire;
-#endif
+        // resolved via the scanner: WIRE1 may be a bridged bus rather than
+        // the local Wire1 (e.g. SenseCAP Indicator)
+        wire = ScanI2CTwoWire::fetchI2CBus(foundDevice.address);
     } else {
         wire = &Wire;
     }
@@ -563,6 +562,9 @@ int32_t BMI270Sensor::runOnce()
     int16_t x = (int16_t)((data[1] << 8) | data[0]);
     int16_t y = (int16_t)((data[3] << 8) | data[2]);
     int16_t z = (int16_t)((data[5] << 8) | data[4]);
+#ifdef MESHTASTIC_INCLUDE_INKHUD
+    sampleSteps(x, y, z);
+#endif
 
     if (!hasBaseline) {
         prevX = x;

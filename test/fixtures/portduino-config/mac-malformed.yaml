@@ -1,0 +1,9 @@
+# FAULT: AA:BB:CC is three octets, not six. loadConfig() strips the colons and then
+# requires more than 11 characters, so this is dropped without a word and the MAC
+# comes from the Bluetooth adapter or the LoRa serial instead. NodeNum is unaffected
+# (that comes from the public key), but if no fallback yields a MAC, meshtasticd
+# exits with "Blank MAC Address not allowed!".
+General:
+  MACAddress: AA:BB:CC
+Lora:
+  Module: sx1262

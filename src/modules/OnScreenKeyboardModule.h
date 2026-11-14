@@ -7,6 +7,7 @@
 #include "graphics/VirtualKeyboard.h"
 #include <OLEDDisplay.h>
 #include <functional>
+#include <memory>
 #include <string>
 
 namespace graphics
@@ -34,7 +35,7 @@ class OnScreenKeyboardModule
     void onSubmit(const std::string &text);
     void onCancel();
 
-    VirtualKeyboard *keyboard = nullptr;
+    std::unique_ptr<VirtualKeyboard> keyboard;
     std::function<void(const std::string &)> callback;
 };
 

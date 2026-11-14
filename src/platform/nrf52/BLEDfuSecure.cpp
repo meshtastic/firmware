@@ -36,6 +36,7 @@
 
 #include "BLEDfuSecure.h"
 #include "bluefruit.h"
+#include "main.h"
 
 #define DFU_REV_APPMODE 0x0001
 
@@ -121,6 +122,7 @@ static void bledfu_control_wr_authorize_cb(uint16_t conn_hdl, BLECharacteristic 
             Bluefruit.Advertising.restartOnDisconnect(false);
             conn->disconnect();
 
+            nrf52FlashQuiesce();
             NRF_POWER->GPREGRET = 0xB1;
             NVIC_SystemReset();
         }

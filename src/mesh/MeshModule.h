@@ -138,6 +138,9 @@ class MeshModule
      */
     static const meshtastic_MeshPacket *currentRequest;
 
+    /// Where currentRequest came from. Only meaningful while currentRequest points at the packet being handled.
+    static RxSource currentRequestSource;
+
     // We keep track of the number of modules that send a periodic broadcast to schedule them spaced out over time
     static uint8_t numPeriodicModules;
 
@@ -187,7 +190,7 @@ class MeshModule
     virtual Observable<const UIFrameEvent *> *getUIFrameObservable() { return NULL; }
 
     meshtastic_MeshPacket *allocAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex,
-                                       uint8_t hopLimit = 0);
+                                       uint8_t hopLimit = 0, const meshtastic_MeshPacket *relaySource = nullptr);
 
     /// Send an error response for the specified packet.
     meshtastic_MeshPacket *allocErrorResponse(meshtastic_Routing_Error err, const meshtastic_MeshPacket *p);
@@ -219,7 +222,7 @@ class MeshModule
     bool _requestingFocus = false;
     void requestFocus() { _requestingFocus = true; }
 #else
-    void requestFocus(){}; // No-op
+    void requestFocus() {}; // No-op
 #endif
 
   private:

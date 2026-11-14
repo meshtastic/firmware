@@ -129,7 +129,7 @@ static const uint8_t SCL = PIN_WIRE_SCL;
 
 #define PIN_GPS_STANDBY D0
 
-// #define GPS_DEBUG
+// #define GPS_DEBUG 1
 //  #define GPS_EN D18 // P1.05
 #endif
 
