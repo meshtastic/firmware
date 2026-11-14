@@ -123,6 +123,9 @@ extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const c
 #ifdef T1000X_SENSOR_EN
 #include "Sensor/T1000xSensor.h"
 #endif
+#ifdef LD8001H_RX
+#include "Sensor/LD8001HSensor.h"
+#endif
 
 #if ARCH_PORTDUINO
 #include "Sensor/CommandSensor.h"
@@ -312,6 +315,11 @@ void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
     addSensor<SPA06Sensor>(i2cScanner, ScanI2C::DeviceType::SPA06);
 #endif
 #endif
+#endif
+
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && defined(LD8001H_RX)
+    // UART radar, not a real I2C device
+    addSensor<LD8001HSensor>(i2cScanner, ScanI2C::DeviceType::NONE);
 #endif
 
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR_EXTERNAL
