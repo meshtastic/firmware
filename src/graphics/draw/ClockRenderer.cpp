@@ -419,7 +419,7 @@ void drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                 // draw hour tick mark
                 display->drawLine(startX, startY, endX, endY);
 
-                static char buffer[2];
+                static char buffer[3]; // drawStringf is an unbounded vsprintf: "12" plus the terminator
 
                 uint8_t hourInt = (angle / 30);
 

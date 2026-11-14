@@ -614,9 +614,15 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
 #endif
     } else if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
         if (portduino_config.displayPanel == virtual_screen) {
-            uint16_t w = portduino_config.displayWidth > 0 ? portduino_config.displayWidth : 128;
-            uint16_t h = portduino_config.displayHeight > 0 ? portduino_config.displayHeight : 64;
-            LOG_DEBUG("Make VirtualDisplay %ux%u", w, h);
+            uint32_t w = portduino_config.displayWidth > 0 ? portduino_config.displayWidth : 128;
+            uint32_t h = portduino_config.displayHeight > 0 ? portduino_config.displayHeight : 64;
+            // BaseUI's navigation needs the 64x48 class at least, and OLEDDisplay sizes its buffer in 16 bits
+            if (w < 64 || h < 48 || w * ((h + 7) / 8) > UINT16_MAX) {
+                LOG_ERROR("Virtual display %ux%u is unsupported, using 128x64", (unsigned)w, (unsigned)h);
+                w = 128;
+                h = 64;
+            }
+            LOG_DEBUG("Make VirtualDisplay %ux%u", (unsigned)w, (unsigned)h);
             dispdev = new VirtualDisplay(w, h);
         } else if (portduino_config.displayPanel != no_screen) {
             LOG_DEBUG("Make TFTDisplay");
@@ -1000,7 +1006,8 @@ void Screen::setup()
 
 #if ARCH_PORTDUINO
     if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
-        if (portduino_config.touchscreenModule) {
+        // the touch read goes through TFTDisplay's panel, which the Virtual panel has none of
+        if (portduino_config.touchscreenModule && portduino_config.displayPanel != virtual_screen) {
             touchScreenImpl1 =
                 new TouchScreenImpl1(dispdev->getWidth(), dispdev->getHeight(), static_cast<TFTDisplay *>(dispdev)->getTouch);
             touchScreenImpl1->init();
