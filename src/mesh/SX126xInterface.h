@@ -86,7 +86,15 @@ template <class T> class SX126xInterface : public RadioLibInterface
 
     virtual void setStandby() override;
 
-    uint32_t getPacketTime(uint32_t pl, bool received) override { return computePacketTime(lora, pl, received); }
+    uint32_t getPacketTime(uint32_t pl, bool received) override
+    {
+        return isFastModem() ? gfskPacketTimeMsec(pl) : computePacketTime(lora, pl, received);
+    }
+
+    /// The GFSK presets (sub-GHz); FLRC is an SX128x modulation
+    bool supportsModulation(RadioModulation m) override { return m != MODULATION_FLRC; }
+
+    float getRxSNR() override;
 
     bool readRxHeaderInfo(uint8_t &cr, bool &hasCRC) override
     {
@@ -156,6 +164,14 @@ template <class T> class SX126xInterface : public RadioLibInterface
 
     /** Program all modem parameters into the chip; returns the first RadioLib error, or RADIOLIB_ERR_NONE */
     int16_t programModemParams();
+
+    // GFSK presets: the same frame as the SX128x ones (4-byte sync word 2D 4B D4 93, 2-byte CRC, variable length)
+    static const uint8_t GFSK_PREAMBLE_BITS = 32;
+    /** Packet type currently programmed in the chip */
+    RadioModulation activeModulation = MODULATION_LORA;
+    /** programModemParams() for the GFSK preset in fastModem: beginFSK() and the chip setup it resets */
+    int16_t programGfsk();
+    uint32_t gfskPacketTimeMsec(uint32_t pl);
 
     /** begin() and chip-side setup, shared by init() and by reconfigure()'s recovery of a chip that lost its state */
     bool reinitChip();

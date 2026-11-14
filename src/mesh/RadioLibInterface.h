@@ -113,7 +113,7 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
   protected:
     /// Used as our notification from the ISR
-    enum PendingISR { ISR_NONE = 0, ISR_RX, ISR_TX, TRANSMIT_DELAY_COMPLETED, ISR_POLL_TICK };
+    enum PendingISR { ISR_NONE = 0, ISR_RX, ISR_TX, TRANSMIT_DELAY_COMPLETED, ISR_POLL_TICK, NEXT_FRAME };
 
     /**
      * Raw ISR handler that just calls our polymorphic method
@@ -435,6 +435,12 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     /** Detach the sent packet and undo its pre-TX switch; the caller re-arms RX, then finishSentPacket(). */
     meshtastic_MeshPacket *handleTransmitInterrupt();
 
+    /** Everything that follows the last frame of a transmission: release it, listen, schedule the next one */
+    void onTransmitDone();
+
+    /** A follow-up frame failed to start: drop the packet without counting it as sent, listen, schedule the next one */
+    void onTransmitFailed();
+
     /** A frame the readout task took out of the radio, and what addReceiveMetadata() would have read with it */
     struct CapturedRxInfo {
         int32_t rssi;
@@ -496,6 +502,30 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
     /** Put radioBuffer's first numbytes on air; a subclass may launch a payload it staged during the scan */
     virtual int16_t launchTransmit(size_t numbytes);
+
+    // A radio whose frames are shorter than a packet (SX128x FLRC: 127 bytes) launches the first frame in
+    // launchTransmit() and the rest through these, and reassembles what it receives in acceptFrame().
+
+    /** On TX done: ms to wait before the next frame of the current packet, or 0 if the packet is complete */
+    virtual uint32_t nextFrameDelayMsec() { return 0; }
+
+    /** Start the next frame of the current packet; false if there is none or it failed */
+    virtual bool sendNextFrame() { return false; }
+
+    /** Idle time between the frames of the packet last sent, counted in getPacketTime() but not as transmitted airtime */
+    virtual uint32_t lastTxIdleMsec() { return 0; }
+
+    /// acceptFrame() result: a fragment was stored, the packet is not complete yet
+    static const int RX_FRAME_PARTIAL = 1;
+
+    /// acceptFrame() result: the frame fits no packet being reassembled and was discarded
+    static const int RX_FRAME_DROPPED = 2;
+
+    /** A frame read into radioBuffer: turn it into a packet in place (updating length), or return RX_FRAME_PARTIAL */
+    virtual int acceptFrame(size_t &length) { return RADIOLIB_ERR_NONE; }
+
+    /** SNR to report for the frame just read; radios whose modem reports none can derive one */
+    virtual float getRxSNR() { return iface->getSNR(); }
 
     /** The packet the running channel scan is clearing the way for, so the scan can stage it; null otherwise */
     meshtastic_MeshPacket *scanForTx = nullptr;

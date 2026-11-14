@@ -255,6 +255,8 @@ void test_back_to_back_frames_deliver_in_order()
     InputScriptedStream stream;
     FramingStreamAPIShim streamApi(&stream);
     feedStreamPath(streamApi, stream, burst);
+    TEST_ASSERT_EQUAL_UINT_MESSAGE(1, streamApi.deliveries.size(), "the stream path handles one packet per poll");
+    streamApi.runOncePart(); // the second poll takes the second frame
     TEST_ASSERT_EQUAL_UINT(2, streamApi.deliveries.size());
     assertDeliveryAt(streamApi, 0, first);
     assertDeliveryAt(streamApi, 1, second);

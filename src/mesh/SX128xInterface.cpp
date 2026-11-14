@@ -87,7 +87,7 @@ template <typename T> bool SX128xInterface<T>::reinitChip(bool fromInit)
 
     preambleLength = 12; // 12 is the default for this chip, 32 does not RX at all
 
-    int res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength);
+    int res = beginModem();
     // \todo Display actual typename of the adapter, not just `SX128x`
     LOG_INFO("SX128x init result %d", res);
     if (res == RADIOLIB_ERR_CHIP_NOT_FOUND || res == RADIOLIB_ERR_SPI_CMD_FAILED)
@@ -143,8 +143,52 @@ template <typename T> bool SX128xInterface<T>::reinitChip(bool fromInit)
     return res == RADIOLIB_ERR_NONE;
 }
 
+template <typename T> int16_t SX128xInterface<T>::beginModem()
+{
+    // Not LoRa-compatible on air: a 4-byte sync word keeps FLRC/GFSK meshes apart from other 2.4 GHz traffic.
+    // Not const: setSyncWord() takes a mutable buffer.
+    uint8_t fastSyncWord[4] = {0x2D, 0x4B, 0xD4, 0x93};
+    int16_t res;
+
+    switch (fastModem.modulation) {
+    case MODULATION_FLRC: {
+        // RadioLib FLRC coding rate codes: 2 = 1/2, 3 = 3/4, 4 = 1/1
+        uint8_t flrcCr = fastModem.crNum == fastModem.crDen ? 4 : (fastModem.crNum == 3 ? 3 : 2);
+        res = lora.beginFLRC(getFreq(), fastModem.bitrateKbps, flrcCr, power, FLRC_PREAMBLE_BITS, RADIOLIB_SHAPING_0_5);
+        break;
+    }
+    case MODULATION_GFSK:
+        // deviation = bitrate / 4 gives modulation index 0.5 (MSK-like, narrowest spectrum for the bitrate)
+        res = lora.beginGFSK(getFreq(), fastModem.bitrateKbps, fastModem.bitrateKbps / 4.0f, power, GFSK_PREAMBLE_BITS);
+        break;
+    default:
+        activeModulation = MODULATION_LORA;
+        return lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength);
+    }
+
+    if (res == RADIOLIB_ERR_NONE)
+        res = lora.setSyncWord(fastSyncWord, sizeof(fastSyncWord));
+    if (res == RADIOLIB_ERR_NONE)
+        res = lora.variablePacketLengthMode(maxFrameLen());
+    activeModulation = res == RADIOLIB_ERR_NONE ? fastModem.modulation : MODULATION_LORA;
+    LOG_INFO("SX128x %s %u kb/s, result %d", fastModem.modulation == MODULATION_FLRC ? "FLRC" : "GFSK", fastModem.bitrateKbps,
+             res);
+    return res;
+}
+
 template <typename T> int16_t SX128xInterface<T>::programModemParams()
 {
+    // FLRC/GFSK, or leaving them: the packet type changes, which takes the full begin sequence
+    if (isFastModem() || activeModulation != MODULATION_LORA) {
+        limitPower(SX128X_MAX_POWER);
+        int16_t err = beginModem();
+        if (err == RADIOLIB_ERR_NONE)
+            err = lora.setCRC(2);
+        if (err != RADIOLIB_ERR_NONE)
+            LOG_ERROR("SX128X beginModem %s%d", radioLibErr, err);
+        return err;
+    }
+
     // configure publicly accessible settings
     int16_t err = lora.setSpreadingFactor(sf);
     if (err != RADIOLIB_ERR_NONE) {
@@ -244,6 +288,8 @@ template <typename T> void SX128xInterface<T>::applyCadDetPeak()
         {19, 21, 21, 23, 24, 24, 27, 28}, // 1625 kHz
     };
     static constexpr float TABLE_BW_KHZ[4] = {203.125f, 406.25f, 812.5f, 1625.0f};
+    if (isFastModem())
+        return; // no CAD outside LoRa
     int bwIdx = -1;
     for (int i = 0; i < 4; i++) {
         if (bw > TABLE_BW_KHZ[i] - 1.0f && bw < TABLE_BW_KHZ[i] + 1.0f)
@@ -309,7 +355,7 @@ template <typename T> void SX128xInterface<T>::setStandby()
 template <typename T> void SX128xInterface<T>::addReceiveMetadata(meshtastic_MeshPacket *mp)
 {
     // LOG_DEBUG("PacketStatus %x", lora.getPacketStatus());
-    mp->rx_snr = lora.getSNR();
+    mp->rx_snr = getRxSNR();
     mp->rx_rssi = lround(lora.getRSSI());
     mp->has_rx_rssi = true; // rx_rssi has explicit presence - a genuine reading must be marked present to survive encoding
     LOG_DEBUG_RADIO("Corrected frequency offset: %f", lora.getFrequencyError());
@@ -365,14 +411,21 @@ template <typename T> void SX128xInterface<T>::startReceive()
 #endif
 #endif
 
+    RadioLibIrqFlags_t irqFlags = MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS;
+    if (isFastModem())
+        irqFlags |= (1UL << RADIOLIB_IRQ_SYNC_WORD_VALID); // what isActivelyReceiving() looks for in these modes
+
     int16_t err = trySetStandby();
+    // A transmit leaves its own length as the FLRC/GFSK max-length filter; restore the real maximum
+    if (err == RADIOLIB_ERR_NONE && isFastModem())
+        err = lora.variablePacketLengthMode(maxFrameLen());
     if (err == RADIOLIB_ERR_NONE)
-        err = lora.startReceive(RADIOLIB_SX128X_RX_TIMEOUT_INF, MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS);
+        err = lora.startReceive(RADIOLIB_SX128X_RX_TIMEOUT_INF, irqFlags);
 
     if (err != RADIOLIB_ERR_NONE) {
         LOG_ERROR("SX128X startReceive %s%d", radioLibErr, err);
         if (maybeRecoverChipStateLoss())
-            err = lora.startReceive(RADIOLIB_SX128X_RX_TIMEOUT_INF, MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS);
+            err = lora.startReceive(RADIOLIB_SX128X_RX_TIMEOUT_INF, irqFlags);
     }
 
     if (err != RADIOLIB_ERR_NONE) {
@@ -393,6 +446,25 @@ template <typename T> void SX128xInterface<T>::startReceive()
 /** Is the channel currently active? */
 template <typename T> bool SX128xInterface<T>::isChannelActive()
 {
+    if (isFastModem()) {
+        // No CAD outside LoRa: listen-before-talk on energy, plus any sync word already being received.
+        // A fixed level would sit inside the noise of the wide FLRC/GFSK filters, so nodes would keep backing
+        // off on an idle channel: busy = 10 dB over the larger of the mode's sensitivity and the noise floor.
+        if (!isReceiving) {
+            startReceive();
+            delayMicroseconds(100);
+        }
+        if (isActivelyReceiving())
+            return true;
+        int32_t threshold = max((int32_t)fastModem.sensitivityDbm, (int32_t)getNoiseFloor()) + 10;
+        int16_t rssi = getCurrentRSSI();
+        if (rssi > threshold) {
+            LOG_DEBUG("Channel busy, RSSI %d > %d dBm", rssi, threshold);
+            return true;
+        }
+        return false;
+    }
+
     // check if we can detect a LoRa preamble on the current channel.
     // symNum is the encoded SET_CAD_PARAMS value (symbol count in bits 7:5), not a raw count - pass the
     // CAD_ON_n_SYMB constant matching what getCadSymbolCount() reports, or the slot stops matching.
@@ -428,6 +500,8 @@ template <typename T> bool SX128xInterface<T>::isChannelActive()
 /** Could we send right now (i.e. either not actively receiving or transmitting)? */
 template <typename T> bool SX128xInterface<T>::isActivelyReceiving()
 {
+    if (isFastModem()) // no LoRa header or preamble flags in these modes; a valid sync word means a frame is arriving
+        return receiveDetected(lora.getIrqStatus(), RADIOLIB_SX128X_IRQ_SYNC_WORD_VALID, RADIOLIB_SX128X_IRQ_SYNC_WORD_VALID);
     return receiveDetected(lora.getIrqStatus(), RADIOLIB_SX128X_IRQ_HEADER_VALID, RADIOLIB_SX128X_IRQ_PREAMBLE_DETECTED);
 }
 
@@ -462,5 +536,142 @@ template <typename T> int16_t SX128xInterface<T>::getCurrentRSSI()
 {
     float rssi = lora.getRSSI(false);
     return (int16_t)round(rssi);
+}
+
+template <typename T> float SX128xInterface<T>::getRxSNR()
+{
+    if (!isFastModem())
+        return lora.getSNR();
+    // FLRC/GFSK report no SNR. Derive one from the margin over sensitivity so SNR-weighted
+    // rebroadcast delays keep working (far nodes, small margin, relay first).
+    return constrain(lora.getRSSI() - fastModem.sensitivityDbm - 20.0f, -20.0f, 10.0f);
+}
+
+// FLRC framing: byte 0 is 0x00 for a whole packet, else 1|index(2)|count-1(2)|tag(3) then the packet id's low byte, so
+// interleaved senders are told apart. Fragments are equal shares, so none falls under FLRC's 6-byte minimum.
+template <typename T> int16_t SX128xInterface<T>::launchTransmit(size_t numbytes)
+{
+    if (!usesFragments())
+        return RadioLibInterface::launchTransmit(numbytes);
+
+    txFragLen = numbytes;
+    txFragCount = fragmentCount(numbytes);
+    txFragNext = 0;
+    txFragTag = (txFragTag + 1) & 0x07;
+    txFragId = (uint8_t)radioBuffer.header.id;
+    return transmitFragment();
+}
+
+template <typename T> int16_t SX128xInterface<T>::transmitFragment()
+{
+    size_t per = (txFragLen + txFragCount - 1) / txFragCount;
+    size_t off = txFragNext * per;
+    size_t len = min(per, txFragLen - off);
+    size_t hdr = 1;
+
+    if (txFragCount == 1) {
+        frameBuf[0] = 0;
+    } else {
+        frameBuf[0] = 0x80 | (txFragNext << 5) | ((txFragCount - 1) << 3) | txFragTag;
+        frameBuf[1] = txFragId;
+        hdr = 2;
+    }
+    memcpy(frameBuf + hdr, ((uint8_t *)&radioBuffer) + off, len);
+    txFragNext++;
+    return lora.startTransmit(frameBuf, len + hdr);
+}
+
+template <typename T> uint32_t SX128xInterface<T>::nextFrameDelayMsec()
+{
+    return (usesFragments() && sendingPacket && txFragNext < txFragCount) ? FRAG_GAP_MSEC : 0;
+}
+
+template <typename T> bool SX128xInterface<T>::sendNextFrame()
+{
+    if (!usesFragments() || !sendingPacket || txFragNext >= txFragCount)
+        return false;
+
+    int16_t res = transmitFragment();
+    if (res != RADIOLIB_ERR_NONE) {
+        LOG_ERROR("FLRC fragment %u/%u failed, error=%d", txFragNext, txFragCount, res);
+        return false;
+    }
+    return true;
+}
+
+template <typename T> int SX128xInterface<T>::acceptFrame(size_t &length)
+{
+    if (!usesFragments())
+        return RADIOLIB_ERR_NONE;
+
+    uint8_t *frame = (uint8_t *)&radioBuffer;
+    if (length < 2 || length > FLRC_MAX_FRAME)
+        return RADIOLIB_ERR_PACKET_TOO_LONG;
+
+    uint8_t hdr = frame[0];
+    size_t len = length - 1;
+    if (!(hdr & 0x80)) {
+        memmove(frame, frame + 1, len);
+        length = len;
+        return RADIOLIB_ERR_NONE;
+    }
+
+    if (length < 3) {
+        rxFragNext = 0xFF;
+        return RX_FRAME_DROPPED;
+    }
+    len = length - 2; // fragments also carry the packet id byte
+    uint8_t idx = (hdr >> 5) & 0x03, count = ((hdr >> 3) & 0x03) + 1, tag = hdr & 0x07, id = frame[1];
+    if (idx == 0) {
+        rxFragTag = tag;
+        rxFragCount = count;
+        rxFragId = id;
+        rxFragNext = 0;
+        rxFragLen = 0;
+    }
+    if (idx != rxFragNext || tag != rxFragTag || count != rxFragCount || id != rxFragId || rxFragLen + len > sizeof(rxFrag)) {
+        LOG_DEBUG("Drop FLRC fragment %u/%u", idx, count);
+        rxFragNext = 0xFF;
+        return RX_FRAME_DROPPED;
+    }
+    memcpy(rxFrag + rxFragLen, frame + 2, len);
+    rxFragLen += len;
+    if (++rxFragNext < rxFragCount)
+        return RX_FRAME_PARTIAL;
+
+    memcpy(frame, rxFrag, rxFragLen);
+    length = rxFragLen;
+    rxFragNext = 0xFF;
+    return RADIOLIB_ERR_NONE;
+}
+
+/// Time on air from the SX1280 datasheet formulas (FLRC 7.3.4, GFSK 7.1), validated against measurements on hardware.
+/// For a received FLRC frame `pl` is the frame as read (header included); otherwise it is the whole packet.
+template <typename T> uint32_t SX128xInterface<T>::fastPacketTimeMsec(uint32_t pl, bool received)
+{
+    uint32_t us = 0;
+    if (pl == 0)
+        return 1;
+    if (fastModem.modulation == MODULATION_FLRC) {
+        auto frameUs = [this](uint32_t len) {
+            uint32_t uncoded = FLRC_PREAMBLE_BITS + 21 + 32 + 16;
+            uint32_t raw = (len + 2) * 8 + (fastModem.crNum == fastModem.crDen ? 0 : 6);
+            uint32_t coded = raw * fastModem.crDen / fastModem.crNum;
+            return (uncoded + coded) * 1000 / fastModem.bitrateKbps;
+        };
+        if (received) {
+            us = frameUs(pl);
+        } else {
+            uint8_t count = fragmentCount(pl);
+            uint32_t per = (pl + count - 1) / count;
+            for (uint8_t i = 0; i < count; i++)
+                us += frameUs(min(per, pl - i * per) + (count == 1 ? 1 : 2));
+            us += (count - 1) * FRAG_GAP_MSEC * 1000;
+        }
+    } else {
+        uint32_t bits = GFSK_PREAMBLE_BITS + 32 + 9 + 8 * pl + 16;
+        us = bits * 1000 / fastModem.bitrateKbps;
+    }
+    return max((uint32_t)1, (us + 999) / 1000);
 }
 #endif

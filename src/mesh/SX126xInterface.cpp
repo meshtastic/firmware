@@ -13,6 +13,7 @@
 
 #include "Throttle.h"
 #include "UptimeClock.h"
+#include <type_traits>
 
 // Particular boards might define a different max power based on what their hardware can do, default to max power output if not
 // specified (may be dangerous if using external PA and SX126x power config forgotten)
@@ -97,6 +98,9 @@ template <typename T> bool SX126xInterface<T>::init()
 
     if (!reinitChip())
         return false;
+    // reinitChip() leaves the chip on LoRa; a GFSK preset switches it over (reconfigure() does the same later)
+    if (isFastModem() && programGfsk() != RADIOLIB_ERR_NONE)
+        return false;
     boundBusyWait();
 
     startReceive(); // start receiving
@@ -134,6 +138,7 @@ template <typename T> bool SX126xInterface<T>::reinitChip()
     bool useRegulatorLDO = false; // Seems to depend on the connection to pin 9/DCC_SW - if an inductor DCDC?
 
     int res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage, useRegulatorLDO);
+    activeModulation = MODULATION_LORA; // programModemParams() switches to GFSK after this where a preset asks for it
     // RadioLib >= 7.5.0 retries on the XTAL inside begin() when the TCXO will not start, and zeroes its own Vref;
     // follow it so logs and later begin() calls reflect the oscillator actually in use.
     if (res == RADIOLIB_ERR_NONE && lora.tcxoVoltage == 0)
@@ -263,8 +268,91 @@ template <typename T> bool SX126xInterface<T>::reinitChip()
     return res == RADIOLIB_ERR_NONE;
 }
 
+template <typename T> int16_t SX126xInterface<T>::programGfsk()
+{
+    // Qualified: SX1262's own beginFSK(freq, br, ...) would take the bit rate as the frequency. This one resets the
+    // chip, so everything begin() was followed by is set again.
+    int16_t err = lora.SX126x::beginFSK(fastModem.bitrateKbps, fastModem.freqDevKHz, fastModem.rxBwKHz, GFSK_PREAMBLE_BITS);
+    cadParamsValid = false;
+    if (err != RADIOLIB_ERR_NONE) {
+        LOG_ERROR("SX126X beginFSK(%u kb/s, %.1f kHz, %.1f kHz) %s%d", fastModem.bitrateKbps, fastModem.freqDevKHz,
+                  fastModem.rxBwKHz, radioLibErr, err);
+        return err;
+    }
+    activeModulation = MODULATION_GFSK;
+    // The reset above skips the PA-clamping fix (datasheet 15.2) that SX1262/SX1268 begin()s apply; same register write
+    if (std::is_same<T, SX1262>::value || std::is_same<T, SX1268>::value) {
+        err = module.SPIsetRegValue(RADIOLIB_SX126X_REG_TX_CLAMP_CONFIG, 0x1E, 4, 1);
+        if (err != RADIOLIB_ERR_NONE) {
+            LOG_ERROR("SX126X GFSK PA clamping %s%d", radioLibErr, err);
+            return err;
+        }
+    }
+
+    // Not LoRa-compatible on air, and the same frame as the SX128x presets. Not const: setSyncWord() takes a mutable buffer.
+    uint8_t gfskSyncWord[4] = {0x2D, 0x4B, 0xD4, 0x93};
+    err = lora.setFrequency(getFreq());
+    if (err == RADIOLIB_ERR_NONE)
+        err = lora.setSyncWord(gfskSyncWord, sizeof(gfskSyncWord));
+    if (err == RADIOLIB_ERR_NONE)
+        err = lora.setCRC(2);
+    if (err == RADIOLIB_ERR_NONE)
+        err = lora.variablePacketLengthMode(RADIOLIB_SX126X_MAX_PACKET_LENGTH);
+    if (err == RADIOLIB_ERR_NONE)
+        err = lora.setCurrentLimit(currentLimit);
+    if (err == RADIOLIB_ERR_NONE) {
+#ifdef SX126X_DIO2_AS_RF_SWITCH
+        err = lora.setDio2AsRfSwitch(true);
+#elif defined(ARCH_PORTDUINO)
+        err = lora.setDio2AsRfSwitch(portduino_config.dio2_as_rf_switch);
+#else
+        err = lora.setDio2AsRfSwitch(false);
+#endif
+    }
+    if (err != RADIOLIB_ERR_NONE) {
+        LOG_ERROR("SX126X GFSK setup %s%d", radioLibErr, err);
+        return err;
+    }
+    if (tcxoVoltage > 0)
+        (void)lora.setStandbyXOSC(true); // as reinitChip(): keep the TCXO running in standby
+#ifdef SX126X_PA_RAMP_US
+    lora.setPaRampTime(SX126X_PA_RAMP_US);
+#endif
+#if ARCH_PORTDUINO
+    lora.setRfSwitchPins(portduino_config.lora_rxen_pin.pin, portduino_config.lora_txen_pin.pin);
+#else
+    lora.setRfSwitchPins(SX126X_RXEN, SX126X_TXEN);
+#endif
+    (void)module.SPIsetRegValue(0x8B5, 0x01, 0, 0); // the RX patch reinitChip() applies
+
+    limitPower(SX126X_MAX_POWER);
+    if (power < -9)
+        power = -9;
+#ifdef SX126X_NO_POWER_OPTIMIZATION_TABLE
+    err = lora.setOutputPower(power, false); // external PA: fixed PA config
+#else
+    err = lora.setOutputPower(power);
+#endif
+    if (err != RADIOLIB_ERR_NONE) {
+        LOG_ERROR("SX126X setOutputPower %d dBm rejected (%s%d); keep previous Tx power", power, radioLibErr, err);
+        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+    }
+    err = lora.setRxBoostedGainMode(config.lora.sx126x_rx_boosted_gain);
+    if (err != RADIOLIB_ERR_NONE)
+        LOG_WARN("SX126X setRxBoostedGainMode %s%d", radioLibErr, err);
+
+    LOG_INFO("SX126x GFSK %u kb/s, dev %.1f kHz, rx bw %.1f kHz, freq %.3f", fastModem.bitrateKbps, fastModem.freqDevKHz,
+             fastModem.rxBwKHz, getFreq());
+    return RADIOLIB_ERR_NONE;
+}
+
 template <typename T> int16_t SX126xInterface<T>::programModemParams()
 {
+    if (isFastModem())
+        return programGfsk();
+    if (activeModulation != MODULATION_LORA && !reinitChip()) // back from GFSK: the packet type takes a full begin()
+        return RADIOLIB_ERR_CHIP_NOT_FOUND;
+
     // configure publicly accessible settings
     int16_t err = lora.setSpreadingFactor(sf);
     if (err != RADIOLIB_ERR_NONE) {
@@ -486,7 +574,7 @@ template <typename T> void SX126xInterface<T>::setStandby()
 template <typename T> void SX126xInterface<T>::addReceiveMetadata(meshtastic_MeshPacket *mp)
 {
     // LOG_DEBUG("PacketStatus %x", lora.getPacketStatus());
-    mp->rx_snr = lora.getSNR();
+    mp->rx_snr = getRxSNR();
     mp->rx_rssi = lround(lora.getRSSI());
     mp->has_rx_rssi = true; // rx_rssi has explicit presence - a genuine reading must be marked present to survive encoding
     LOG_TRACE("Corrected frequency offset: %f", lora.getFrequencyError());
@@ -595,7 +683,10 @@ template <typename T> int16_t SX126xInterface<T>::startRxCommand()
                       wideLoraPreambleLengthDefault <= 2 * rxDutyCycleMinSymbols,
                   "a preamble longer than the duty cycle's wake window would really sleep, so this arm would no longer "
                   "be the continuous RX rxArmedContinuous claims");
-    return lora.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_INF, MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS);
+    RadioLibIrqFlags_t irqFlags = MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS;
+    if (isFastModem())
+        irqFlags |= (1UL << RADIOLIB_IRQ_SYNC_WORD_VALID); // what isActivelyReceiving() looks for in GFSK
+    return lora.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_INF, irqFlags);
 }
 
 #ifdef MESHTASTIC_RX_READOUT_TASK
@@ -652,6 +743,24 @@ template <typename T> bool SX126xInterface<T>::adoptReceiveArmedFromIsr()
 /** Is the channel currently active? */
 template <typename T> bool SX126xInterface<T>::isChannelActive()
 {
+    if (isFastModem()) {
+        // No CAD outside LoRa: listen-before-talk on energy, plus any sync word already being received.
+        // Busy = 10 dB over the larger of the preset's sensitivity and the noise floor.
+        if (!isReceiving) {
+            startReceive();
+            delayMicroseconds(100);
+        }
+        if (isActivelyReceiving())
+            return true;
+        int32_t threshold = max((int32_t)fastModem.sensitivityDbm, (int32_t)getNoiseFloor()) + 10;
+        int16_t rssi = getCurrentRSSI();
+        if (rssi > threshold) {
+            LOG_DEBUG("Channel busy, RSSI %d > %d dBm", rssi, threshold);
+            return true;
+        }
+        return false;
+    }
+
     // check if we can detect a LoRa preamble on the current channel.
     // NOTE: symNum is the *encoded* SET_CAD_PARAMS value, not a raw count - RADIOLIB_SX126X_CAD_ON_4_SYMB
     // (== raw 2) runs the 4-symbol scan getCadSymbolCountSubGhz() reports; keep the two in step.
@@ -976,6 +1085,8 @@ template <typename T> bool SX126xInterface<T>::isActivelyReceiving()
 {
     // The IRQ status will be cleared when we start our read operation. Check if we've started a header, but haven't yet
     // received and handled the interrupt for reading the packet/handling errors.
+    if (isFastModem()) // GFSK has no LoRa header; a valid sync word means a frame is arriving
+        return receiveDetected(lora.getIrqFlags(), RADIOLIB_SX126X_IRQ_SYNC_WORD_VALID, RADIOLIB_SX126X_IRQ_SYNC_WORD_VALID);
     return receiveDetected(lora.getIrqFlags(), RADIOLIB_SX126X_IRQ_HEADER_VALID, RADIOLIB_SX126X_IRQ_PREAMBLE_DETECTED);
 }
 
@@ -1088,6 +1199,22 @@ template <typename T> bool SX126xInterface<T>::resetAGC()
     // 7. Resume receiving
     startReceive();
     return patched; // without the patch the reset is incomplete: retried on the next maintenance tick
+}
+
+template <typename T> float SX126xInterface<T>::getRxSNR()
+{
+    if (!isFastModem())
+        return lora.getSNR();
+    // GFSK reports no SNR. Derive one from the margin over sensitivity so SNR-weighted
+    // rebroadcast delays keep working (far nodes, small margin, relay first).
+    return constrain(lora.getRSSI() - fastModem.sensitivityDbm - 20.0f, -20.0f, 10.0f);
+}
+
+/// GFSK time on air: preamble, 4-byte sync word, length byte, payload, 2-byte CRC
+template <typename T> uint32_t SX126xInterface<T>::gfskPacketTimeMsec(uint32_t pl)
+{
+    uint32_t bits = GFSK_PREAMBLE_BITS + 32 + 8 + 8 * pl + 16;
+    return max((uint32_t)1, (bits + fastModem.bitrateKbps - 1) / fastModem.bitrateKbps);
 }
 
 /** Control PA mode for GC1109 FEM - CPS pin selects full PA (txon=true) or bypass mode (txon=false) */

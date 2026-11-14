@@ -140,7 +140,9 @@ int32_t StreamAPI::readStream()
         bool recentRx = Throttle::isWithinTimespanMs(lastRxMsec, 2000);
         return recentRx ? 5 : 250;
     } else {
-        while (stream->available()) { // Currently we never want to block
+        bool handledPacket = false;
+        // One ToRadio per run: a burst from the client would otherwise hold the main loop (and the radio) for its whole length
+        while (!handledPacket && stream->available()) {
             int cInt = stream->read();
             if (cInt < 0)
                 break; // We ran out of characters (even though available said otherwise) - this can happen on rf52 adafruit
@@ -182,6 +184,7 @@ int32_t StreamAPI::readStream()
 
                         // If we didn't just fail the packet and we now have the right # of bytes, parse it
                         handleToRadio(rxBuf + HEADER_LEN, len);
+                        handledPacket = true;
                     }
             }
         }
