@@ -26,6 +26,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <map>
 #include <memory>
 #include <set>
@@ -1186,17 +1187,21 @@ bool loadConfig(const char *configPath)
 
             portduino_config.lora_spi_dev = yamlConfig["Lora"]["spidev"].as<std::string>("spidev0.0");
             if (portduino_config.lora_spi_dev != "ch341") {
-                portduino_config.lora_spi_dev = "/dev/" + portduino_config.lora_spi_dev;
-                if (portduino_config.lora_spi_dev.length() == 14) {
-                    int x = portduino_config.lora_spi_dev.at(11) - '0';
-                    int y = portduino_config.lora_spi_dev.at(13) - '0';
-                    // Pretty sure this is always true
-                    if (x >= 0 && x < 10 && y >= 0 && y < 10) {
-                        // I believe this bit of weirdness is specifically for the new GUI
-                        portduino_config.lora_spi_dev_int = x + y << 4;
-                        portduino_config.display_spi_dev_int = portduino_config.lora_spi_dev_int;
-                        portduino_config.touchscreen_spi_dev_int = portduino_config.lora_spi_dev_int;
+                if (portduino_config.lora_spi_dev.rfind("/dev/", 0) != 0)
+                    portduino_config.lora_spi_dev = "/dev/" + portduino_config.lora_spi_dev;
+                const int host = spiHostFromDevicePath(portduino_config.lora_spi_dev);
+                if (host >= 0) {
+                    portduino_config.lora_spi_dev_int = host;
+                    // Let a display/touchscreen from an earlier config file keep its own bus.
+                    // The touchscreen follows the display when it has no spidev of its own.
+                    if (portduino_config.display_spi_dev.empty()) {
+                        portduino_config.display_spi_dev_int = host;
+                        if (portduino_config.touchscreen_spi_dev.empty())
+                            portduino_config.touchscreen_spi_dev_int = host;
                     }
+                } else {
+                    LOG_WARN("Lora.spidev \"%s\" is not a usable spidev path; display and touch keep their own bus",
+                             portduino_config.lora_spi_dev.c_str());
                 }
             }
             if (yamlConfig["Lora"]["rfswitch_table"]) {
@@ -1313,13 +1318,17 @@ bool loadConfig(const char *configPath)
             portduino_config.displayInvert = yamlConfig["Display"]["Invert"].as<bool>(false);
             portduino_config.displayBusFrequency = yamlConfig["Display"]["BusFrequency"].as<int>(40000000);
             if (yamlConfig["Display"]["spidev"]) {
-                portduino_config.display_spi_dev = "/dev/" + yamlConfig["Display"]["spidev"].as<std::string>("spidev0.1");
-                if (portduino_config.display_spi_dev.length() == 14) {
-                    int x = portduino_config.display_spi_dev.at(11) - '0';
-                    int y = portduino_config.display_spi_dev.at(13) - '0';
-                    if (x >= 0 && x < 10 && y >= 0 && y < 10) {
-                        portduino_config.display_spi_dev_int = x + y << 4;
-                        portduino_config.touchscreen_spi_dev_int = portduino_config.display_spi_dev_int;
+                portduino_config.display_spi_dev = yamlConfig["Display"]["spidev"].as<std::string>("spidev0.1");
+                if (!portduino_config.display_spi_dev.empty()) {
+                    if (portduino_config.display_spi_dev.rfind("/dev/", 0) != 0)
+                        portduino_config.display_spi_dev = "/dev/" + portduino_config.display_spi_dev;
+                    const int host = spiHostFromDevicePath(portduino_config.display_spi_dev);
+                    if (host >= 0) {
+                        portduino_config.display_spi_dev_int = host;
+                        if (portduino_config.touchscreen_spi_dev.empty())
+                            portduino_config.touchscreen_spi_dev_int = host;
+                    } else {
+                        LOG_WARN("Display.spidev \"%s\" is not a usable spidev path", portduino_config.display_spi_dev.c_str());
                     }
                 }
             }
@@ -1376,13 +1385,16 @@ bool loadConfig(const char *configPath)
             portduino_config.touchscreenRotate = yamlConfig["Touchscreen"]["Rotate"].as<int>(-1);
             portduino_config.touchscreenI2CAddr = yamlConfig["Touchscreen"]["I2CAddr"].as<int>(-1);
             if (yamlConfig["Touchscreen"]["spidev"]) {
-                portduino_config.touchscreen_spi_dev = "/dev/" + yamlConfig["Touchscreen"]["spidev"].as<std::string>("");
-                if (portduino_config.touchscreen_spi_dev.length() == 14) {
-                    int x = portduino_config.touchscreen_spi_dev.at(11) - '0';
-                    int y = portduino_config.touchscreen_spi_dev.at(13) - '0';
-                    if (x >= 0 && x < 10 && y >= 0 && y < 10) {
-                        portduino_config.touchscreen_spi_dev_int = x + y << 4;
-                    }
+                portduino_config.touchscreen_spi_dev = yamlConfig["Touchscreen"]["spidev"].as<std::string>("");
+                if (!portduino_config.touchscreen_spi_dev.empty()) {
+                    if (portduino_config.touchscreen_spi_dev.rfind("/dev/", 0) != 0)
+                        portduino_config.touchscreen_spi_dev = "/dev/" + portduino_config.touchscreen_spi_dev;
+                    const int host = spiHostFromDevicePath(portduino_config.touchscreen_spi_dev);
+                    if (host >= 0)
+                        portduino_config.touchscreen_spi_dev_int = host;
+                    else
+                        LOG_WARN("Touchscreen.spidev \"%s\" is not a usable spidev path",
+                                 portduino_config.touchscreen_spi_dev.c_str());
                 }
             }
         }
@@ -1697,6 +1709,45 @@ std::string adminKeyToBase64(const std::array<uint8_t, 32> &key)
         out += remaining > 2 ? alphabet[chunk & 0x3F] : '=';
     }
     return out;
+}
+
+static bool parseSpidevNumber(const char *&cursor, unsigned &value)
+{
+    if (*cursor < '0' || *cursor > '9')
+        return false;
+    value = 0;
+    while (*cursor >= '0' && *cursor <= '9') {
+        const unsigned digit = (unsigned)(*cursor - '0');
+        if (value > (std::numeric_limits<unsigned>::max() - digit) / 10)
+            return false;
+        value = value * 10 + digit;
+        ++cursor;
+    }
+    return true;
+}
+
+int spiHostFromDevicePath(const std::string &devicePath)
+{
+    std::string name = devicePath;
+    const std::string devPrefix = "/dev/";
+    if (name.rfind(devPrefix, 0) == 0)
+        name.erase(0, devPrefix.size());
+
+    if (name.rfind("spidev", 0) != 0)
+        return -1;
+
+    // Digit-only fields: reject signs, whitespace and overflow rather than
+    // letting scanf's %u accept them.
+    const char *cursor = name.c_str() + 6;
+    unsigned bus = 0;
+    unsigned device = 0;
+    if (!parseSpidevNumber(cursor, bus) || *cursor++ != '.' || !parseSpidevNumber(cursor, device) || *cursor != '\0')
+        return -1;
+    // HardwareSPI turns the bus into one decimal character and the device into a
+    // signed high nibble, so only 0-9 and 0-7 round-trip through it.
+    if (bus > 9 || device > 7)
+        return -1;
+    return (int)(bus | (device << 4));
 }
 
 bool MAC_from_string(std::string mac_str, uint8_t *dmac)

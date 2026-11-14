@@ -137,6 +137,9 @@ std::string adminKeyToBase64(const std::array<uint8_t, 32> &key);
 static bool ends_with(std::string_view str, std::string_view suffix);
 void getMacAddr(uint8_t *dmac);
 bool MAC_from_string(std::string mac_str, uint8_t *dmac);
+// Pack /dev/spidev<bus>.<device> into HardwareSPI's host byte (low nibble bus,
+// high nibble device). Returns -1 when the path cannot be represented.
+int spiHostFromDevicePath(const std::string &devicePath);
 #ifndef ARCH_PORTDUINO_WASM
 void readGPIOFromYaml(YAML::Node sourceNode, pinMapping &destPin, int pinDefault = RADIOLIB_NC);
 #endif
@@ -510,7 +513,7 @@ extern struct portduino_config_struct {
             out << YAML::Key << "Display" << YAML::Value << YAML::BeginMap;
             for (const auto &screen_name : screen_names) {
                 if (displayPanel == screen_name.first)
-                    out << YAML::Key << "Module" << YAML::Value << screen_name.second;
+                    out << YAML::Key << "Panel" << YAML::Value << screen_name.second;
             }
             for (const auto *display_pin : all_pins) {
                 if (display_pin->config_section == "Display" && display_pin->enabled) {
@@ -521,7 +524,12 @@ extern struct portduino_config_struct {
                     out << YAML::EndMap;
                 }
             }
-            out << YAML::Key << "spidev" << YAML::Value << display_spi_dev;
+            if (!display_spi_dev.empty()) {
+                std::string displaySpiDev = display_spi_dev;
+                if (displaySpiDev.rfind("/dev/", 0) == 0)
+                    displaySpiDev.erase(0, 5);
+                out << YAML::Key << "spidev" << YAML::Value << displaySpiDev;
+            }
             out << YAML::Key << "BusFrequency" << YAML::Value << displayBusFrequency;
             if (displayWidth)
                 out << YAML::Key << "Width" << YAML::Value << displayWidth;
@@ -572,17 +580,24 @@ extern struct portduino_config_struct {
         // Touchscreen
         if (touchscreen_spi_dev != "") {
             out << YAML::Key << "Touchscreen" << YAML::Value << YAML::BeginMap;
-            out << YAML::Key << "spidev" << YAML::Value << touchscreen_spi_dev;
+            std::string touchSpiDev = touchscreen_spi_dev;
+            if (touchSpiDev.rfind("/dev/", 0) == 0)
+                touchSpiDev.erase(0, 5);
+            out << YAML::Key << "spidev" << YAML::Value << touchSpiDev;
             out << YAML::Key << "BusFrequency" << YAML::Value << touchscreenBusFrequency;
             switch (touchscreenModule) {
             case xpt2046:
                 out << YAML::Key << "Module" << YAML::Value << "XPT2046";
+                break;
             case stmpe610:
                 out << YAML::Key << "Module" << YAML::Value << "STMPE610";
+                break;
             case gt911:
                 out << YAML::Key << "Module" << YAML::Value << "GT911";
+                break;
             case ft5x06:
                 out << YAML::Key << "Module" << YAML::Value << "FT5x06";
+                break;
             }
             for (const auto *touchscreen_pin : all_pins) {
                 if (touchscreen_pin->config_section == "Touchscreen" && touchscreen_pin->enabled) {
