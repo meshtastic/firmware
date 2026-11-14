@@ -75,7 +75,7 @@ class SimRadio : public RadioInterface, protected concurrency::NotifiedWorkerThr
     void onNotify(uint32_t notification);
 
     // start an immediate transmit
-    virtual void startSend(meshtastic_MeshPacket *txp);
+    virtual bool startSend(meshtastic_MeshPacket *txp);
 
     // derive packet length
     size_t getPacketLength(meshtastic_MeshPacket *p);
