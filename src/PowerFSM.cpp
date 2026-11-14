@@ -310,13 +310,14 @@ static void serialIdle()
     if (config.display.screen_on_secs == 0)
         return;
 #endif
-    if (serialScreenTimedOut || !screen)
+    if (serialScreenTimedOut)
         return;
     if (Throttle::hasElapsed(serialScreenOnMs,
                              Default::getConfiguredOrDefaultMs(config.display.screen_on_secs, default_screen_on_secs))) {
         LOG_POWERFSM("State: serialIdle screen timeout");
         serialScreenTimedOut = true;
-        screen->setOn(false);
+        if (screen)
+            screen->setOn(false);
         screenOffForTimeout();
     }
 }
@@ -452,9 +453,7 @@ void PowerFSM_setup()
                             "Input Device"); // restarts the sleep timer
     powerFSM.add_transition(&statePOWER, &statePOWER, EVENT_INPUT, screenOnFromUserInput,
                             "Input Device"); // restarts the sleep timer
-#ifdef MESHTASTIC_INCLUDE_INKHUD
     powerFSM.add_transition(&stateSERIAL, &stateSERIAL, EVENT_INPUT, screenOnFromUserInput, "Input Device");
-#endif
 
     powerFSM.add_transition(&stateDARK, &stateON, EVENT_BLUETOOTH_PAIR, NULL, "Bluetooth pairing");
     powerFSM.add_transition(&stateON, &stateON, EVENT_BLUETOOTH_PAIR, NULL, "Bluetooth pairing");
