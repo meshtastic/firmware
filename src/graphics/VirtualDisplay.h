@@ -6,6 +6,7 @@
 #include "graphics/ScreenMirror.h"
 #include "graphics/TFTColorRegions.h"
 #include "graphics/TFTPalette.h"
+#include "mesh/generated/meshtastic/mesh.pb.h"
 #include <OLEDDisplay.h>
 
 namespace graphics
@@ -19,6 +20,16 @@ class VirtualDisplay : public OLEDDisplay
 {
   public:
     VirtualDisplay(uint16_t width, uint16_t height) { setGeometry(GEOMETRY_RAWMODE, width, height); }
+
+    /// The panel class of the devices this build's BaseUI profile renders.
+    static meshtastic_DisplayInfo_PanelClass panelClass()
+    {
+        if (BASEUI_EINK_LAYOUT)
+            return meshtastic_DisplayInfo_PanelClass_EINK;
+        if (GRAPHICS_TFT_COLORING_ENABLED)
+            return meshtastic_DisplayInfo_PanelClass_TFT;
+        return meshtastic_DisplayInfo_PanelClass_OLED;
+    }
 
     void display(void) override
     {
