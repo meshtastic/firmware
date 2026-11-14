@@ -1,0 +1,88 @@
+#define HAS_WIRE 0
+#define I2C_SDA1 45
+#define I2C_SCL1 46
+
+#define HAS_I2S
+#define DAC_I2S_BCK 22
+#define DAC_I2S_WS 21
+#define DAC_I2S_DOUT 23
+#define DAC_I2S_MCLK 0
+
+#define USE_POWERSAVE
+#define WAKE_ON_TOUCH
+#define SCREEN_TOUCH_INT 42
+#define SLEEP_TIME 180
+
+#if defined(CROWPANEL_ADV_P4_50)
+
+extern void stc8_gpio_set_level(int gpio, unsigned char level);
+#define STC8_I2C_SLAVE_DEV_ADDR 0x2F
+#define STC8_I2C_PORT 1
+#define STC8_I2C_SDA_PIN 45
+#define STC8_I2C_SCL_PIN 46
+#define STC8_I2C_FREQ_HZ 400000
+
+#define STC8_REG_ADDR_SET_GPIO 0x18
+#define STC8_REG_ADDR_SET_PWM 0x20
+
+#define STC8_GPIO_OUT_TP_RST 0
+#define STC8_GPIO_OUT_CSI_RST 1
+#define STC8_GPIO_OUT_AUDIO_SD 2
+#define STC8_GPIO_OUT_LCD_BL_POWER 3
+
+// NS4168 amp
+#define AUDIO_POWER_ENABLE LOW
+#define AUDIO_POWER_DISABLE HIGH
+#define AUDIO_AMP_ENABLE(on) stc8_gpio_set_level(STC8_GPIO_OUT_AUDIO_SD, (on) ? AUDIO_POWER_ENABLE : AUDIO_POWER_DISABLE)
+#define AUDIO_AMP_SETTLE_MS 0
+
+// use UART3-IN for GPS (UART1 can not work with lora)
+#define GPS_DEFAULT_NOT_PRESENT 1
+#define GPS_RX_PIN 28
+#define GPS_TX_PIN 27
+
+// LoRa
+#define USE_SX1262
+#define LORA_SCK 26
+#define LORA_MISO 47
+#define LORA_MOSI 48
+#define LORA_CS 30
+#define LORA_RESET 32
+
+#define SX126X_CS LORA_CS
+#define SX126X_DIO1 31
+#define SX126X_BUSY 29
+#define SX126X_RESET LORA_RESET
+#define SX126X_DIO2_AS_RF_SWITCH
+#define SX126X_DIO3_TCXO_VOLTAGE 3.3
+
+#elif defined(CROWPANEL_ADV_P4_70_90_101)
+
+// use UART1 for GPS
+#define GPS_DEFAULT_NOT_PRESENT 1
+#define GPS_RX_PIN 48
+#define GPS_TX_PIN 47
+
+// NS4168 amp
+#define AUDIO_POWER_ENABLE LOW
+#define AUDIO_POWER_DISABLE HIGH
+#define AUDIO_AMP_CTRL 30
+#define AUDIO_AMP_ENABLE(on) digitalWrite(AUDIO_AMP_CTRL, (on) ? AUDIO_POWER_ENABLE : AUDIO_POWER_DISABLE)
+#define AUDIO_AMP_SETTLE_MS 0
+
+// LoRa
+#define USE_SX1262
+#define LORA_SCK 8
+#define LORA_MISO 7
+#define LORA_MOSI 6
+#define LORA_CS 10
+#define LORA_RESET 54
+
+#define SX126X_CS LORA_CS
+#define SX126X_DIO1 53
+#define SX126X_BUSY 9
+#define SX126X_RESET LORA_RESET
+#define SX126X_DIO2_AS_RF_SWITCH
+#define SX126X_DIO3_TCXO_VOLTAGE 3.3
+
+#endif
