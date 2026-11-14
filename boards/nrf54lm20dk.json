@@ -1,0 +1,77 @@
+{
+  "build": {
+    "arduino": {
+      "ldscript": "nrf54lm20a_s145_v10_bl64k.ld"
+    },
+    "core": "nRF5",
+    "cpu": "cortex-m33",
+    "extra_flags": "-DARDUINO_NRF54LM20_DK -DNRF54LM20A_XXAA -DDEVELOP_IN_NRF54LM20B -DUSE_TINYUSB",
+    "f_cpu": "128000000L",
+    "hwids": [
+      [
+        "0x239A",
+        "0xCAFE"
+      ],
+      [
+        "0x239A",
+        "0x4AFE"
+      ],
+      [
+        "0x239A",
+        "0x4AFD"
+      ]
+    ],
+    "mcu": "nrf54lm20a",
+    "mcu_define": "NRF54LM20A_XXAA",
+    "variant": "nrf54lm20dk",
+    "bsp": {
+      "name": "adafruit"
+    },
+    "softdevice": {
+      "sd_flags": "-DS145",
+      "sd_name": "s145",
+      "sd_version": "10.0.1",
+      "sd_fwid": "0x310D",
+      "sd_family": "nrf54lm",
+      "sd_soc": "nrf54lm20"
+    },
+    "bootloader": {
+      "settings_addr": "0x1D1000"
+    }
+  },
+  "connectivity": [
+    "bluetooth"
+  ],
+  "debug": {
+    "default_tools": [
+      "jlink"
+    ],
+    "jlink_device": "nRF54LM20B_M33",
+    "onboard_tools": [
+      "jlink"
+    ]
+  },
+  "frameworks": [
+    "arduino"
+  ],
+  "name": "Nordic nRF54LM20-DK",
+  "upload": {
+    "maximum_ram_size": 243584,
+    "maximum_size": 1806336,
+    "offset_address": "0x10000",
+    "speed": 115200,
+    "protocol": "jlink",
+    "protocols": [
+      "jlink",
+      "nrfutil",
+      "pyocd"
+    ],
+    "require_upload_port": false,
+    "use_1200bps_touch": true,
+    "wait_for_upload_port": true,
+    "rramc_base": "0x5004E000",
+    "pyocd_target": "nrf54lm20a"
+  },
+  "url": "https://www.nordicsemi.com/Products/Development-hardware/nRF54LM20-DK",
+  "vendor": "Nordic"
+}
