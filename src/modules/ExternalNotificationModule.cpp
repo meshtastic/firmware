@@ -522,6 +522,9 @@ void ExternalNotificationModule::triggerBuzzerOutput()
         rtttl::begin(config.device.buzzer_gpio, rtttlConfig.ringtone);
 #endif
     } else {
+#if defined(HAS_I2S_SPEAKER_NRF52) && !MESHTASTIC_EXCLUDE_RTTTL
+        nrf52RtttlPlayer.begin(rtttlConfig.ringtone);
+#endif
         setExternalState(2, true);
     }
 }
