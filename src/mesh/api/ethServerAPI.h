@@ -27,6 +27,9 @@ class ethServerPort : public APIServerPort<ethServerAPI, EthernetServer>
     explicit ethServerPort(int port);
 };
 
-void initApiServer(int port = SERVER_API_DEFAULT_PORT);
-void deInitApiServer();
+// Named distinctly from WiFiServerAPI's initApiServer()/deInitApiServer(): boards with
+// both HAS_WIFI and HAS_ETHERNET link both files, and identically-named globals/functions
+// in each would collide at link time.
+void initEthSocketApiServer(int port = SERVER_API_DEFAULT_PORT);
+void deInitEthSocketApiServer();
 #endif
