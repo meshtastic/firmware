@@ -445,6 +445,9 @@ void Screen::showTextInput(const char *header, const char *initialText, uint32_t
                            std::function<void(const std::string &)> textCallback)
 {
     LOG_INFO("showTextInput header='%s', durationMs=%d", header ? header : "NULL", durationMs);
+#ifdef USE_EINK
+    EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // Show the keyboard at once, like the overlay menus
+#endif
 
     // Start OnScreenKeyboardModule session (non-touch variant)
     OnScreenKeyboardModule::instance().start(header, initialText, durationMs, textCallback);
@@ -2188,6 +2191,9 @@ int Screen::handleInputEvent(const InputEvent *event)
         NotificationRenderer::inEvent = *event;
         static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawBannercallback};
         ui->setOverlays(overlays, 2);
+        // E-Ink: each key press redraws the keyboard at once, with a fast refresh (no rate limit, no full refresh while
+        // typing; the next frame after it takes the full refresh)
+        EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST);
         setFastFramerate(); // Draw ASAP
         updateUiFrame(ui);
         return 0;
