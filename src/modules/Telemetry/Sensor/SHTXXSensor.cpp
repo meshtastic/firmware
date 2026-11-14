@@ -42,12 +42,26 @@ void SHTXXSensor::getSensorVariant(SHTSensor::SHTSensorType sensorType)
     }
 }
 
+/**
+ * Initialise the SHTxx sensor found by the I2C scan. A SHTC3 at 0x70 is sent the wakeup command first,
+ * since it may have been left asleep by older firmware.
+ * @return true if the sensor was initialised
+ */
 bool SHTXXSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 {
     LOG_INFO("Init sensor: %s", sensorName);
 
     _bus = bus;
     _address = dev->address.address;
+
+    // SHTC3 may be asleep (left so by older firmware) and arduino-sht never wakes it; send wakeup 0x3517 before init
+    if (_address == SHTC3_ADDR) {
+        _bus->beginTransmission(_address);
+        _bus->write((uint8_t)0x35);
+        _bus->write((uint8_t)0x17);
+        _bus->endTransmission();
+        delay(1);
+    }
 
     if (sht.init(*_bus)) {
         LOG_INFO("%s init success", sensorName);
