@@ -2110,6 +2110,7 @@ bool PhoneAPI::handleToRadioPacket(meshtastic_MeshPacket &p)
                          meshtastic_ClientNotification_NotificationType_TRACEROUTE_RATE_LIMITED);
         meshtastic_QueueStatus qs = router->getQueueStatus();
         service->sendQueueStatusToPhone(qs, 0, p.id);
+        service->sendRoutingErrorResponse(meshtastic_Routing_Error_RATE_LIMIT_EXCEEDED, &p);
         return false;
     } else if (p.decoded.portnum == meshtastic_PortNum_TRACEROUTE_APP && isBroadcast(p.to) && p.hop_limit > 0) {
         sendNotification(meshtastic_LogRecord_Level_WARNING, p.id, "Multi-hop traceroute to broadcast address is not allowed",
@@ -2125,6 +2126,7 @@ bool PhoneAPI::handleToRadioPacket(meshtastic_MeshPacket &p)
         LOG_WARN("Rate limit portnum %d", p.decoded.portnum);
         meshtastic_QueueStatus qs = router->getQueueStatus();
         service->sendQueueStatusToPhone(qs, 0, p.id);
+        service->sendRoutingErrorResponse(meshtastic_Routing_Error_RATE_LIMIT_EXCEEDED, &p);
         // FIXME: Figure out why this continues to happen
         // sendNotification(meshtastic_LogRecord_Level_WARNING, p.id, "Position can only be sent once every 5 seconds");
         return false;
