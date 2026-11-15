@@ -18,18 +18,18 @@
 #include "configuration.h"
 
 // This suite runs in two shards: once under [env:coverage-lockdown], which defines the lockdown
-// flags and where the assertions below are meaningful, and once under plain [env:coverage] as
+// flags and where the redaction assertions are meaningful, and once under plain [env:coverage] as
 // part of the general pool, where the gates - and PhoneAPI::setAdminAuthorized() itself - do not
-// exist. Compile to a single ignored case there rather than breaking that shard.
-#ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
-
+// exist. There it asserts the stock behavior instead: nothing is redacted.
 #include "FSCommon.h"
 #include "TestUtil.h"
 #include "mesh-pb-constants.h"
 #include "mesh/MeshService.h"
 #include "mesh/NodeDB.h"
 #include "mesh/PhoneAPI.h"
+#ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
 #include "security/EncryptedStorage.h"
+#endif
 #include <cstring>
 #include <unity.h>
 #include <vector>
@@ -100,7 +100,11 @@ std::vector<meshtastic_FromRadio> pumpConfig(PhoneAPI &api, bool authorized)
     uint8_t requestBytes[meshtastic_ToRadio_size];
     const size_t requestSize = pb_encode_to_bytes(requestBytes, sizeof(requestBytes), &meshtastic_ToRadio_msg, &request);
     api.handleToRadio(requestBytes, requestSize);
+#ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
     api.setAdminAuthorized(authorized);
+#else
+    (void)authorized;
+#endif
 
     std::vector<meshtastic_FromRadio> out;
     for (unsigned i = 0; i < 256; ++i) {
@@ -145,6 +149,7 @@ meshtastic_Config_BluetoothConfig savedBluetooth;
 meshtastic_Config_LoRaConfig savedLora;
 meshtastic_ModuleConfig_MQTTConfig savedMqtt;
 uint32_t savedMyNodeNum;
+meshtastic_ChannelFile savedChannelFile;
 
 } // namespace
 
@@ -158,6 +163,7 @@ void setUp(void)
     savedLora = config.lora;
     savedMqtt = moduleConfig.mqtt;
     savedMyNodeNum = myNodeInfo.my_node_num;
+    savedChannelFile = channelFile;
 }
 
 void tearDown(void)
@@ -169,7 +175,10 @@ void tearDown(void)
     config.lora = savedLora;
     moduleConfig.mqtt = savedMqtt;
     myNodeInfo.my_node_num = savedMyNodeNum;
+    channelFile = savedChannelFile;
 }
+
+#ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
 
 // The headline property: an unauthorized connection gets an empty SecurityConfig - no private
 // key, no public key, no admin keys - and an authorized one gets the real thing.
@@ -249,6 +258,11 @@ static void test_channels_redacted_until_authorized(void)
     ScopedMeshService scopedService;
     ScopedNodeDB scopedNodeDB;
     setLockdownActive(true);
+    channelFile.channels[0].has_settings = true;
+    channelFile.channels[0].role = meshtastic_Channel_Role_PRIMARY;
+    strncpy(channelFile.channels[0].settings.name, "LockdownCtl", sizeof(channelFile.channels[0].settings.name) - 1);
+    channelFile.channels[0].settings.psk.size = 16;
+    memset(channelFile.channels[0].settings.psk.bytes, 0xD4, 16);
 
     PhoneAPITestShim unauth;
     auto frames = pumpConfig(unauth, false);
@@ -265,6 +279,21 @@ static void test_channels_redacted_until_authorized(void)
     TEST_ASSERT_TRUE_MESSAGE(sawChannel, "channels must still be emitted, just emptied");
     TEST_ASSERT_TRUE_MESSAGE(sawComplete, "redaction must not stall the handshake");
     unauth.close();
+
+    // The control: an authorized client gets the seeded values, so an implementation that empties
+    // channels for everyone cannot pass.
+    PhoneAPITestShim auth;
+    bool sawSeeded = false;
+    for (const auto &f : pumpConfig(auth, true)) {
+        if (f.which_payload_variant == meshtastic_FromRadio_channel_tag && f.channel.index == 0) {
+            sawSeeded = true;
+            TEST_ASSERT_EQUAL_UINT(16, f.channel.settings.psk.size);
+            TEST_ASSERT_EQUAL_UINT8(0xD4, f.channel.settings.psk.bytes[0]);
+            TEST_ASSERT_EQUAL_STRING("LockdownCtl", f.channel.settings.name);
+        }
+    }
+    TEST_ASSERT_TRUE_MESSAGE(sawSeeded, "an authorized client must receive the seeded channel");
+    auth.close();
 }
 
 // With lockdown inactive the gates must be inert: a capable build that was never provisioned
@@ -491,19 +520,27 @@ void setup()
 
 #else // !MESHTASTIC_PHONEAPI_ACCESS_CONTROL
 
-#include "TestUtil.h"
-#include <unity.h>
-
-static void test_redaction_gates_absent_from_this_build(void)
+// Without the gates compiled in, no client is ever redacted against, so a stock build has to hand
+// the private key to a plain connection. A regression that leaks the gate into stock firmware
+// shows up here.
+static void test_stock_build_redacts_nothing(void)
 {
-    TEST_IGNORE_MESSAGE("lockdown gates are compiled out of this env; see [env:coverage-lockdown]");
+    ScopedMeshService scopedService;
+    ScopedNodeDB scopedNodeDB;
+    primeSecurityConfig();
+
+    PhoneAPITestShim api;
+    meshtastic_Config got = meshtastic_Config_init_zero;
+    TEST_ASSERT_TRUE(findConfig(pumpConfig(api, false), meshtastic_Config_security_tag, got));
+    TEST_ASSERT_EQUAL_UINT_MESSAGE(32, got.payload_variant.security.private_key.size, "a stock build must not redact anything");
+    api.close();
 }
 
 void setup()
 {
     initializeTestEnvironment();
     UNITY_BEGIN();
-    RUN_TEST(test_redaction_gates_absent_from_this_build);
+    RUN_TEST(test_stock_build_redacts_nothing);
     exit(UNITY_END());
 }
 
