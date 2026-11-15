@@ -400,11 +400,11 @@ void RadioLibInterface::updateNoiseFloor()
         lastNoiseFloorUpdate = Time::getMillis();
         rssi = getCurrentRSSI();
 #if HAS_LORA_FEM
-        // Pair the reading with one on the other RX path; the lock keeps a transmit from starting while CTX is moved
+        // Pair the reading with one on the other RX path; the lock keeps a transmit from starting while the LNA is switched
         if (loraFEMInterface.isLnaAuto()) {
             lnaWasOn = loraFEMInterface.isLnaEnabled();
             loraFEMInterface.setRxLnaPath(!lnaWasOn);
-            delayMicroseconds(LNA_AUTO_SETTLE_US);
+            delayMicroseconds(loraFEMInterface.getLnaSettleUs());
             rssiOther = getCurrentRSSI();
             if (isValidNoiseRssi(rssi) && isValidNoiseRssi(rssiOther)) {
                 lnaWindowDone = loraFEMInterface.addLnaAutoSample(lnaWasOn ? rssi : rssiOther, lnaWasOn ? rssiOther : rssi);
@@ -423,6 +423,7 @@ void RadioLibInterface::updateNoiseFloor()
                         lnaWasOn ? rssiOther : rssi);
     }
     if (lnaWindowDone) {
+        loraFEMInterface.saveLnaAutoDecision();
         const bool lnaOn = loraFEMInterface.isLnaEnabled();
         const float benefitDb = loraFEMInterface.getLnaAutoBenefitTenthsDb() / 10.0f;
         if (lnaOn == lnaWasOn) {

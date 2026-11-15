@@ -10,14 +10,18 @@
 class LnaAutoSelector
 {
   public:
-    static constexpr uint8_t WINDOW_SAMPLES = 10;
+    static constexpr uint8_t WINDOW_SAMPLES = 10; // even: the median is the mean of the middle two
     // Hysteresis band on the sensitivity the LNA buys, in dB
     static constexpr int32_t ENABLE_BENEFIT_DB = 2;
     static constexpr int32_t DISABLE_BENEFIT_DB = 1;
     // More than the LNA's noise-figure improvement can explain: its gain is compressed by a strong signal
     static constexpr int32_t MAX_PLAUSIBLE_BENEFIT_DB = 8;
 
-    explicit LnaAutoSelector(int16_t lnaGainDb) : lnaGainDb(lnaGainDb) {}
+    // The cap stays below the gain, so an LNA switch that changes nothing (benefit == gain) always bypasses
+    explicit LnaAutoSelector(int16_t lnaGainDb)
+        : lnaGainDb(lnaGainDb), maxBenefitDb(lnaGainDb > MAX_PLAUSIBLE_BENEFIT_DB ? MAX_PLAUSIBLE_BENEFIT_DB : lnaGainDb - 1)
+    {
+    }
 
     void reset(bool startLnaOn);
     /** Add one paired reading; returns true when it completes a window, which may have changed isLnaOn() */
@@ -28,8 +32,9 @@ class LnaAutoSelector
 
   private:
     int16_t lnaGainDb;
+    int32_t maxBenefitDb;
     bool lnaOn = true;
     uint8_t sampleCount = 0;
-    int32_t deltaSum = 0;
+    int16_t rises[WINDOW_SAMPLES] = {};
     int32_t lastBenefitTenthsDb = 0;
 };

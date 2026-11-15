@@ -1,31 +1,32 @@
 #include "LnaAutoSelector.h"
+#include <algorithm>
+
+static_assert(LnaAutoSelector::WINDOW_SAMPLES % 2 == 0, "median below assumes an even window");
 
 void LnaAutoSelector::reset(bool startLnaOn)
 {
     lnaOn = startLnaOn;
     sampleCount = 0;
-    deltaSum = 0;
     lastBenefitTenthsDb = 0;
 }
 
 bool LnaAutoSelector::addSample(int16_t rssiLnaOn, int16_t rssiLnaOff)
 {
-    deltaSum += rssiLnaOn - rssiLnaOff;
+    rises[sampleCount] = rssiLnaOn - rssiLnaOff;
     if (++sampleCount < WINDOW_SAMPLES)
         return false;
-
-    // Scaled by the sample count so the thresholds compare in integers
-    const int32_t n = sampleCount;
-    const int32_t benefitScaled = (int32_t)lnaGainDb * n - deltaSum;
-    lastBenefitTenthsDb = benefitScaled * 10 / n;
     sampleCount = 0;
-    deltaSum = 0;
 
-    if (benefitScaled > MAX_PLAUSIBLE_BENEFIT_DB * n)
+    // Median, not mean: a packet arriving during one reading of a pair throws that pair far off
+    std::sort(rises, rises + WINDOW_SAMPLES);
+    const int32_t riseTenthsDb = (rises[WINDOW_SAMPLES / 2 - 1] + rises[WINDOW_SAMPLES / 2]) * 5;
+    lastBenefitTenthsDb = lnaGainDb * 10 - riseTenthsDb;
+
+    if (lastBenefitTenthsDb > maxBenefitDb * 10)
         lnaOn = false;
-    else if (benefitScaled >= ENABLE_BENEFIT_DB * n)
+    else if (lastBenefitTenthsDb >= ENABLE_BENEFIT_DB * 10)
         lnaOn = true;
-    else if (benefitScaled <= DISABLE_BENEFIT_DB * n)
+    else if (lastBenefitTenthsDb <= DISABLE_BENEFIT_DB * 10)
         lnaOn = false;
     return true;
 }
