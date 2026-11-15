@@ -19,7 +19,7 @@ SE050 *se050 = nullptr;
 // which hands control to whatever else is pending - in the middle of a
 // transaction, that is exactly what must not happen. The wait is short and the
 // watchdog is fed explicitly around it.
-#define SE050_WAIT_MS(ms) busy_wait_us_32((ms)*1000u)
+#define SE050_WAIT_MS(ms) busy_wait_us_32((ms) * 1000u)
 #else
 #define SE050_FEED_WATCHDOG() ((void)0)
 #define SE050_WAIT_MS(ms) delay(ms)
