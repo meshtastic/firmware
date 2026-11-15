@@ -42,9 +42,9 @@ class AllMessageApplet : public Applet
   protected:
     void scrollBy(int direction);
 
-    uint16_t scrollY = 0;     // Pixels of the message text scrolled off the top
-    uint16_t maxScrollY = 0;  // Set by onRender: how far the text can scroll
-    uint16_t scrollStep = 0;  // Set by onRender: one line of the font in use
+    uint16_t scrollY = 0;    // Pixels of the message text scrolled off the top
+    uint16_t maxScrollY = 0; // Set by onRender: how far the text can scroll
+    uint16_t scrollStep = 0; // Set by onRender: one line of the font in use
 
     // Used to register our text message callback
     CallbackObserver<AllMessageApplet, const meshtastic_MeshPacket *> textMessageObserver =

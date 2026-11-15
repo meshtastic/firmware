@@ -18,10 +18,10 @@
  */
 
 #include "variant.h"
+#include "delay.h"
 #include "nrf.h"
 #include "wiring_constants.h"
 #include "wiring_digital.h"
-#include "delay.h"
 
 namespace
 {
