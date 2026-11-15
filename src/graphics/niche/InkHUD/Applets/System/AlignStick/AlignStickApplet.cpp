@@ -4,18 +4,18 @@
 
 using namespace NicheGraphics;
 
-InkHUD::AlignStickApplet::AlignStickApplet()
+InkHUD::AlignStickApplet::AlignStickApplet(bool openIfUnaligned)
 {
-    if (!settings->joystick.aligned)
+    if (openIfUnaligned && !settings->joystick.aligned)
         bringToForeground();
 }
 
 void InkHUD::AlignStickApplet::onRender(bool full)
 {
     setFont(fontMedium);
-    printAt(0, 0, "Align Joystick:");
+    printAt(0, 0, title);
     setFont(fontSmall);
-    std::string instructions = "Move joystick in the direction indicated";
+    std::string instructions = this->instructions;
     printWrapped(0, fontMedium.lineHeight() * 1.5, width(), instructions);
 
     // Size of the region in which the joystick graphic should fit
