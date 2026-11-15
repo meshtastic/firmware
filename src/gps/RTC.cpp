@@ -298,8 +298,8 @@ RTCSetResult readFromRTC()
                       t.tm_mon + 1, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec, printableEpoch);
         if (currentQuality == RTCQualityNone) {
             RTCQuality oldQuality = currentQuality;
-            timeStartMs64 = now;
-            zeroOffsetSecs = tv.tv_sec;
+            timeStartUs = now;
+            zeroOffsetUs = (uint64_t)tv.tv_sec * 1000000;
 #if defined(ARCH_ESP32) || defined(ARCH_RP2040)
             settimeofday(&tv, NULL);
 #endif
