@@ -7,6 +7,7 @@
 #if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && !MESHTASTIC_EXCLUDE_MAGNETOMETER
 
 #include "../concurrency/OSThread.h"
+#include "BMM150Sensor.h"
 #include "MMC5983MASensor.h"
 #include "MotionSensor.h"
 #include "QMC6309Sensor.h"
@@ -78,6 +79,11 @@ class MagnetometerThread : public concurrency::OSThread
 #if __has_include(<SensorQMC6309.hpp>)
         case ScanI2C::DeviceType::QMC6309:
             sensor.reset(new QMC6309Sensor(device));
+            break;
+#endif
+#if __has_include(<DFRobot_BMM150.h>) && !MESHTASTIC_EXCLUDE_ACCELEROMETER // keeps the driver out of plain ESP32 builds
+        case ScanI2C::DeviceType::BMM150:
+            sensor.reset(new BMM150Sensor(device));
             break;
 #endif
         default:

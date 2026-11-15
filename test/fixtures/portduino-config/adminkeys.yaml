@@ -1,0 +1,12 @@
+# CLEAN. Two admin keys in the host's own config: the first three (all the protobuf holds) are
+# mirrored into config.security at boot, and any beyond that are authorized from this list alone.
+Lora:
+  Module: sx1262
+  CS: 21
+  IRQ: 16
+  Busy: 20
+  Reset: 18
+Security:
+  AdminKeys:
+    - rvzaPCZmlh1nWnqNKUFHj0dLBJJIRJhRrkZmaFLHCVY=
+    - NGC+MSAeaf7aoO7ouZl/XHwpmf2v5ZMlPNZUr0361xQ=

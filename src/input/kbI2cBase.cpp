@@ -71,8 +71,8 @@ int32_t KbI2cBase::runOnce()
             // than the local Wire1 (e.g. SenseCAP Indicator)
             i2cBus = ScanI2CTwoWire::fetchI2CBus(cardkb_found);
 #if defined(ELECROW_ThinkNode_M9)
-            if (cardkb_found.address == TSTC8_KB_ADDR) {
-                Stc8HKeyBoard.begin(TSTC8_KB_ADDR, &Wire1);
+            if (cardkb_found.address == TSTC8_KB_V1_ADDR) {
+                Stc8HKeyBoard.begin(TSTC8_KB_V1_ADDR, &Wire1);
             }
 #endif
             if (cardkb_found.address == BBQ10_KB_ADDR) {
@@ -91,8 +91,8 @@ int32_t KbI2cBase::runOnce()
             LOG_DEBUG("Use I2C Bus 0 (the first one)");
             i2cBus = &Wire;
 #if defined(ELECROW_ThinkNode_M9)
-            if (cardkb_found.address == TSTC8_KB_ADDR) {
-                Stc8HKeyBoard.begin(TSTC8_KB_ADDR, &Wire);
+            if (cardkb_found.address == TSTC8_KB_V1_ADDR || cardkb_found.address == TSTC8_KB_V2_ADDR) {
+                Stc8HKeyBoard.begin(cardkb_found.address, &Wire);
             }
 #endif
             if (cardkb_found.address == BBQ10_KB_ADDR) {
@@ -270,13 +270,17 @@ int32_t KbI2cBase::runOnce()
                 break;
             }
             if (e.inputEvent != INPUT_BROKER_NONE) {
-                LOG_DEBUG("MP121 Notifying: %i Char: %i", e.inputEvent, e.kbchar);
+                LOG_INPUT("MP121 Notifying: %i Char: %i", e.inputEvent, e.kbchar);
                 this->notifyObservers(&e);
             }
         }
         break;
     }
     case 0x84: { // Adafruit TCA8418
+#if defined(T_DECK_PRO) && defined(MESHTASTIC_INCLUDE_INKHUD)
+        if (::digitalRead(KB_INT) == HIGH && !TCAKeyboard->hasEvent())
+            break;
+#endif
         TCAKeyboard->trigger();
         InputEvent e = {};
         while (TCAKeyboard->hasEvent()) {
@@ -338,8 +342,12 @@ int32_t KbI2cBase::runOnce()
                 e.kbchar = INPUT_BROKER_MSG_BLUETOOTH_TOGGLE;
                 break;
             case TCA8418KeyboardBase::BL_TOGGLE:
+#if defined(T_DECK_PRO) && defined(MESHTASTIC_INCLUDE_INKHUD)
+                e.inputEvent = INPUT_BROKER_ALT_PRESS;
+#else
                 e.inputEvent = INPUT_BROKER_ANYKEY;
                 e.kbchar = INPUT_BROKER_MSG_BLUETOOTH_TOGGLE;
+#endif
                 break;
             case TCA8418KeyboardBase::TAB:
                 e.inputEvent = INPUT_BROKER_ANYKEY;
@@ -398,7 +406,7 @@ int32_t KbI2cBase::runOnce()
             }
         }
         if (PrintDataBuf != 0) {
-            LOG_DEBUG("RAK14004 key 0x%x pressed", PrintDataBuf);
+            LOG_INPUT("RAK14004 key 0x%x pressed", PrintDataBuf);
             InputEvent e = {};
             e.inputEvent = INPUT_BROKER_MATRIXKEY;
             e.source = this->_originName;
@@ -663,12 +671,16 @@ int32_t KbI2cBase::runOnce()
     default:
         LOG_WARN("Unknown kb_model 0x%02x", kb_model);
     }
+#if defined(T_DECK_PRO) && defined(MESHTASTIC_INCLUDE_INKHUD)
+    return 20; // Drain the ten-event FIFO before fast typing can overflow it.
+#else
     return 300;
+#endif
 }
 
 void KbI2cBase::toggleBacklight(bool on)
 {
-#if defined(T_LORA_PAGER)
+#if defined(T_LORA_PAGER) || defined(T_DECK_PRO)
     TCAKeyboard->setBacklight(on);
 #endif
 }

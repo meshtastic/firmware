@@ -40,7 +40,11 @@ size_t fsUsedBytes()
         return 0;
     size_t blocks = 0;
     FSCom._lockFS();
+#if LFS_VERSION_MAJOR >= 2
+    int err = lfs_fs_traverse(fs, fsCountBlockCb, &blocks);
+#else
     int err = lfs_traverse(fs, fsCountBlockCb, &blocks);
+#endif
     FSCom._unlockFS();
     if (err < 0)
         return fsTotalBytes(); // report "full" so capacity checks fail safe
@@ -420,7 +424,7 @@ void fsInit()
  */
 void setupSDCard()
 {
-#if defined(HAS_SDCARD) && !defined(SDCARD_USE_SOFT_SPI) && !defined(HAS_SD_MMC)
+#if defined(HAS_SDCARD) && !defined(SDCARD_USE_SOFT_SPI) && !defined(HAS_SD_MMC) && !defined(USE_PICO_SDK)
     concurrency::LockGuard g(spiLock);
     SDHandler.begin(SPI_SCK, SPI_MISO, SPI_MOSI);
     if (!SD.begin(SDCARD_CS, SDHandler, SD_SPI_FREQUENCY)) {

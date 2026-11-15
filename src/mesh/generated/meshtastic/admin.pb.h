@@ -8,6 +8,7 @@
 #include "meshtastic/config.pb.h"
 #include "meshtastic/connection_status.pb.h"
 #include "meshtastic/device_ui.pb.h"
+#include "meshtastic/field_metadata.pb.h"
 #include "meshtastic/mesh.pb.h"
 #include "meshtastic/module_config.pb.h"
 
@@ -502,6 +503,29 @@ typedef struct _meshtastic_AdminMessage {
         uint32_t remove_ignored_node;
         /* Set specified node-num to be muted */
         uint32_t toggle_muted_node;
+        /* Request a single frame of the device's display framebuffer.
+     The frame is delivered to the local client as FromRadio.display_frame
+     chunks (see DisplayFrame in mesh.proto). There is no AdminMessage
+     response. With want_ack and a nonzero MeshPacket.id the device answers
+     with a routing ACK, or a NAK: BAD_REQUEST before want_config_id,
+     NOT_AUTHORIZED from a connection that has not passed client access
+     control, NO_RESPONSE when every connection slot is in use. A build with
+     encrypted storage drops an unauthorized request with no reply, so a
+     client must also time out. Local connection only: a node
+     receiving this over the mesh, or a build without mirroring, answers
+     NOT_AUTHORIZED. During active mirroring it forces one frame on the next
+     redraw even if the screen is unchanged. */
+        bool get_display_frame_request;
+        /* Enable (true) or disable (false) continuous mirroring of the device
+     display. Unlike most bool verbs in this oneof, false is meaningful.
+     While enabled, the device sends a DisplayFrame after each screen
+     redraw that changed the framebuffer, as FromRadio.display_frame
+     chunks; the first frame arrives immediately, except while display
+     redaction is active and the panel is asleep, when it arrives once the
+     panel wakes. Replies and the
+     local-only rule are as for get_display_frame_request. Not persisted
+     across reboot. */
+        bool set_display_mirror;
         /* Begins an edit transaction for config, module config, owner, and channel settings changes
      This will delay the standard *implicit* save to the file system and subsequent reboot behavior until committed (commit_edit_settings) */
         bool begin_edit_settings;
@@ -738,6 +762,8 @@ extern "C" {
 #define meshtastic_AdminMessage_set_ignored_node_tag 47
 #define meshtastic_AdminMessage_remove_ignored_node_tag 48
 #define meshtastic_AdminMessage_toggle_muted_node_tag 49
+#define meshtastic_AdminMessage_get_display_frame_request_tag 50
+#define meshtastic_AdminMessage_set_display_mirror_tag 51
 #define meshtastic_AdminMessage_begin_edit_settings_tag 64
 #define meshtastic_AdminMessage_commit_edit_settings_tag 65
 #define meshtastic_AdminMessage_add_contact_tag  66
@@ -800,6 +826,8 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,store_ui_config,store_ui_con
 X(a, STATIC,   ONEOF,    UINT32,   (payload_variant,set_ignored_node,set_ignored_node),  47) \
 X(a, STATIC,   ONEOF,    UINT32,   (payload_variant,remove_ignored_node,remove_ignored_node),  48) \
 X(a, STATIC,   ONEOF,    UINT32,   (payload_variant,toggle_muted_node,toggle_muted_node),  49) \
+X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,get_display_frame_request,get_display_frame_request),  50) \
+X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,set_display_mirror,set_display_mirror),  51) \
 X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,begin_edit_settings,begin_edit_settings),  64) \
 X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,commit_edit_settings,commit_edit_settings),  65) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,add_contact,add_contact),  66) \

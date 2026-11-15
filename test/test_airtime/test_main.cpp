@@ -137,6 +137,115 @@ void test_channel_utilization_decays_once_the_60s_window_passes()
     TEST_ASSERT_FLOAT_WITHIN(0.01f, 0.0f, a.channelUtilizationPercent());
 }
 
+// channelUtilizationPercent() is a 60-second window, so one reading says almost nothing about
+// load: a consumer that samples it every few minutes sees only the minute before each sample.
+// The smoothed figure folds that window into an EMA once per crossed 10 s bucket, so it advances
+// with real elapsed time rather than with how often somebody asks.
+
+void test_smoothed_channel_utilization_starts_from_the_raw_window()
+{
+    Time::setTestMillis(0);
+    AirTime a;
+
+    a.logAirtime(RX_LOG, 30000); // 30 s of a 60 s window
+
+    // Nothing has been folded yet. Reporting 0 here would read as an idle channel rather than as
+    // "no history", so the raw window stands in until the first bucket crossing.
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, a.channelUtilizationPercent(), a.smoothedChannelUtilizationPercent());
+}
+
+void test_smoothed_channel_utilization_lags_a_sudden_spike()
+{
+    Time::setTestMillis(0);
+    AirTime a;
+    a.smoothedChannelUtilizationPercent(); // seed from an idle window
+
+    Time::advanceTestMillis(10u * 1000u);
+    Time::serviceMonotonic();
+    a.logAirtime(RX_LOG, 30000);
+
+    Time::advanceTestMillis(10u * 1000u);
+    Time::serviceMonotonic();
+
+    const float raw = a.channelUtilizationPercent();
+    const float smoothed = a.smoothedChannelUtilizationPercent();
+    TEST_ASSERT_TRUE_MESSAGE(raw > 40.0f, "a 30 s burst should show up strongly in the 60 s window");
+    TEST_ASSERT_TRUE_MESSAGE(smoothed < raw, "one busy bucket must not drag the smoothed figure with it");
+}
+
+void test_smoothed_channel_utilization_converges_on_a_sustained_level()
+{
+    Time::setTestMillis(0);
+    AirTime a;
+    a.smoothedChannelUtilizationPercent();
+
+    // Hold the channel at a steady load for well past the ~21 min time constant, refilling each
+    // 10 s bucket as it is cleared, and the smoothed figure should walk up to meet the window.
+    for (uint32_t tick = 0; tick < 400; tick++) {
+        Time::advanceTestMillis(10u * 1000u);
+        Time::serviceMonotonic();
+        a.logAirtime(RX_LOG, 5000); // 5 s busy in every 10 s bucket -> 50%
+        a.smoothedChannelUtilizationPercent();
+    }
+
+    const float raw = a.channelUtilizationPercent();
+    const float smoothed = a.smoothedChannelUtilizationPercent();
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(5.0f, raw, smoothed, "sustained load should converge on the raw window");
+}
+
+// The raw window is already required to be independent of how often the scheduler runs (see
+// test_channel_utilization_is_independent_of_scheduler_rate, and the rotation-on-access contract in
+// src/airtime.h). The smoothed figure inherits that requirement: folding one reading for a whole
+// delayed sync instead of one per crossed bucket would make the EMA a function of call frequency,
+// so two identical nodes would disagree purely because one of them slept.
+void test_smoothed_channel_utilization_is_independent_of_sync_rate()
+{
+    Time::setTestMillis(0);
+    AirTime stepped;
+    AirTime delayed;
+
+    // Identical airtime history: one burst, then a full window of silence. Only the rate at which
+    // each instance is asked for the figure differs.
+    stepped.logAirtime(RX_LOG, 30000);
+    delayed.logAirtime(RX_LOG, 30000);
+
+    for (uint32_t bucket = 0; bucket < CHANNEL_UTILIZATION_PERIODS; bucket++) {
+        Time::advanceTestMillis(10u * 1000u);
+        Time::serviceMonotonic();
+        stepped.smoothedChannelUtilizationPercent(); // sampled every bucket
+    }
+
+    const float steppedPct = stepped.smoothedChannelUtilizationPercent();
+    const float delayedPct = delayed.smoothedChannelUtilizationPercent(); // asked once, at the end
+
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, steppedPct, delayedPct,
+                                     "the smoothed figure must not depend on how often it is sampled");
+}
+
+void test_smoothed_channel_utilization_decays_across_a_long_sleep()
+{
+    Time::setTestMillis(0);
+    AirTime a;
+
+    for (uint32_t tick = 0; tick < 400; tick++) {
+        Time::advanceTestMillis(10u * 1000u);
+        Time::serviceMonotonic();
+        a.logAirtime(RX_LOG, 5000);
+        a.smoothedChannelUtilizationPercent();
+    }
+    const float busy = a.smoothedChannelUtilizationPercent();
+    TEST_ASSERT_TRUE(busy > 10.0f);
+
+    // A sleep longer than the whole window clears every bucket. The fold is capped at one window
+    // of steps, so the figure drops sharply without being reset outright.
+    Time::advanceTestMillis(10u * 60u * 1000u);
+    Time::serviceMonotonic();
+
+    const float afterSleep = a.smoothedChannelUtilizationPercent();
+    TEST_ASSERT_EQUAL_FLOAT(0.0f, a.channelUtilizationPercent());
+    TEST_ASSERT_TRUE_MESSAGE(afterSleep < busy, "a long idle gap must pull the smoothed figure down");
+}
+
 void test_isTxAllowedChannelUtil_blocks_once_over_threshold()
 {
     Time::setTestMillis(0);
@@ -1211,6 +1320,11 @@ void setup()
     RUN_TEST(test_period_history_clears_when_asleep_longer_than_the_whole_log);
     RUN_TEST(test_channel_utilization_reflects_recent_airtime);
     RUN_TEST(test_channel_utilization_decays_once_the_60s_window_passes);
+    RUN_TEST(test_smoothed_channel_utilization_starts_from_the_raw_window);
+    RUN_TEST(test_smoothed_channel_utilization_lags_a_sudden_spike);
+    RUN_TEST(test_smoothed_channel_utilization_converges_on_a_sustained_level);
+    RUN_TEST(test_smoothed_channel_utilization_is_independent_of_sync_rate);
+    RUN_TEST(test_smoothed_channel_utilization_decays_across_a_long_sleep);
     RUN_TEST(test_isTxAllowedChannelUtil_blocks_once_over_threshold);
     RUN_TEST(test_tx_utilization_decays_once_the_60_minute_window_passes);
     RUN_TEST(test_syncNow_survives_millis_wrap);

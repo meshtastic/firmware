@@ -52,6 +52,11 @@ class BreakoutGame
     void moveLeft();
     void moveRight();
 
+    /** After every serve the ball rides the paddle until the player fires it. launchBall() releases
+     * it; while docked the ball tracks the paddle and no collisions or life losses occur. */
+    void launchBall();
+    bool isBallDocked() const { return ballDocked; }
+
     bool isPlaying() const { return alive; }
     uint32_t score() const { return points; }
     uint8_t lives() const { return livesLeft; }
@@ -87,7 +92,8 @@ class BreakoutGame
     uint8_t levelNum = 1;
     uint32_t rng = 1; // xorshift32 state (never 0)
     bool alive = false;
-    bool ballTick = false; // ball advances on every other step() (see step())
+    bool ballTick = false;   // ball advances on every other step() (see step())
+    bool ballDocked = false; // ball is waiting on the paddle to be launched
 };
 
 #include "configuration.h"
@@ -115,7 +121,10 @@ class Breakout : public Game
     uint32_t score() const override { return game.score(); }
     int32_t tickIntervalMs() const override;
 
-    void handleInput(input_broker_event ev) override;
+    void handleInput(const InputEvent *event) override;
+    // Claim BACK/CANCEL (the gamepad's B) while the ball waits on the paddle, so it serves instead
+    // of pausing. Released as soon as the ball is in play, so BACK pauses normally again.
+    bool wantsBackButton() const override { return game.isBallDocked(); }
 
     void drawAttract(OLEDDisplay *display, int16_t x, int16_t y) override;
     void drawPlaying(OLEDDisplay *display, int16_t x, int16_t y) override;

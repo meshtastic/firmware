@@ -84,6 +84,12 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
 #endif
 
             nodeDB->setLocalPosition(p, true);
+            // Keep `precision` current for this channel even on this early-return path -
+            // alterReceivedProtobuf() runs right after handleReceived() on this same packet
+            // (MeshModule::callModules()) and depends on it to truncate correctly, whether this
+            // packet is our own already-truncated broadcast (re-truncating is a no-op) or a
+            // phone-submitted one that still needs it applied.
+            precision = getPositionPrecisionForChannel(mp.channel);
             return false;
         } else {
             LOG_TRACE("Incoming update from MYSELF");
@@ -480,6 +486,7 @@ bool PositionModule::sendOurPosition(NodeNum dest, bool wantReplies, uint8_t cha
         meshtastic_ClientNotification *notification = clientNotificationPool.allocZeroed();
         if (notification) {
             notification->level = meshtastic_LogRecord_Level_INFO;
+            notification->type = meshtastic_ClientNotification_NotificationType_POSITION_SENT_SLEEPING;
             notification->time = getValidTime(RTCQualityFromNet);
             sprintf(notification->message, "Sending position and sleeping for %us interval in a moment",
                     Default::getConfiguredOrDefaultMs(config.position.position_broadcast_secs, default_broadcast_interval_secs) /
@@ -574,7 +581,7 @@ int32_t PositionModule::runOnce()
         return RUNONCE_INTERVAL;
     }
 
-    // Hold to the 6h floor when fixed_position (every role: pinning yourself forfeits the
+    // Hold to the stationary floor when fixed_position (every role: pinning yourself forfeits the
     // exception) or when stationary. A real move still goes out early via smart-broadcast below.
     // Not-fixed exceptions: lost-and-found broadcasts freely; trackers judge movement at their
     // own (unclamped) precision rather than the on-wire one (useConfiguredPrecision).

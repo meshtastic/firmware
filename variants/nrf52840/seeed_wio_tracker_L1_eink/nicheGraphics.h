@@ -52,9 +52,9 @@ void setupNicheGraphics()
     inkhud->setDisplayResilience(15);
 
     // Select fonts
-    InkHUD::Applet::fontLarge = FREESANS_12PT_WIN1252;
-    InkHUD::Applet::fontMedium = FREESANS_9PT_WIN1252;
-    InkHUD::Applet::fontSmall = FREESANS_6PT_WIN1252;
+    InkHUD::Applet::fontLarge = FREESANS_12PT;
+    InkHUD::Applet::fontMedium = FREESANS_9PT;
+    InkHUD::Applet::fontSmall = FREESANS_6PT;
 
     // Customize default settings
     inkhud->persistence->settings.rotation = 1; // 90 degrees clockwise
