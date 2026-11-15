@@ -23,7 +23,7 @@ permissions:
 jobs:
   membrowse:
     name: membrowse-${{ inputs.pio_env }}
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     # Informational, like firmware-size-report: a MemBrowse outage or budget alert must not fail
     # the build job that ci-gate checks, nor hold it up.
     continue-on-error: true
@@ -65,7 +65,12 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Run MemBrowse analysis
-        uses: membrowse/membrowse-action@v1
+        # Pinned to a SHA rather than @v1: on 2026-10-20 a push to their v1 tag shipped an
+        # action.yml with ${{ github.workspace }} in an input's `description:`, where the github
+        # context does not exist. The runner refuses to load the manifest, so every membrowse job
+        # failed at job setup - and because build_firmware.yml's membrowse job feeds ci-gate, that
+        # took every PR in the repo red. This SHA is the last one that ran green (membrowse 1.2.15).
+        uses: membrowse/membrowse-action@34719bdb04722be5cbe9c1d6df4a1567ae98238d
         with:
           target_name: ${{ inputs.pio_env }}
           elf: ${{ steps.files.outputs.elf }}

@@ -248,7 +248,7 @@ typedef enum _meshtastic_Config_LoRaConfig_RegionCode {
     meshtastic_Config_LoRaConfig_RegionCode_CN = 4,
     /* Japan */
     meshtastic_Config_LoRaConfig_RegionCode_JP = 5,
-    /* Australia / New Zealand */
+    /* Australia / Brazil / New Zealand (915-928MHz) */
     meshtastic_Config_LoRaConfig_RegionCode_ANZ = 6,
     /* Korea */
     meshtastic_Config_LoRaConfig_RegionCode_KR = 7,
@@ -389,7 +389,9 @@ typedef enum _meshtastic_Config_LoRaConfig_FEM_LNA_Mode {
     /* FEM_LNA is present and enabled */
     meshtastic_Config_LoRaConfig_FEM_LNA_Mode_ENABLED = 1,
     /* FEM_LNA is not present on the device */
-    meshtastic_Config_LoRaConfig_FEM_LNA_Mode_NOT_PRESENT = 2
+    meshtastic_Config_LoRaConfig_FEM_LNA_Mode_NOT_PRESENT = 2,
+    /* FEM_LNA is present; the firmware switches it in or bypasses it from the measured noise floor */
+    meshtastic_Config_LoRaConfig_FEM_LNA_Mode_AUTO = 3
 } meshtastic_Config_LoRaConfig_FEM_LNA_Mode;
 
 typedef enum _meshtastic_Config_BluetoothConfig_PairingMode {
@@ -753,7 +755,7 @@ typedef struct _meshtastic_Config_LoRaConfig {
     bool ignore_mqtt;
     /* Sets the ok_to_mqtt bit on outgoing packets */
     bool config_ok_to_mqtt;
-    /* Set where LORA FEM is enabled, disabled, or not present */
+    /* Set whether the LoRa FEM LNA is enabled, disabled, automatic, or not present */
     meshtastic_Config_LoRaConfig_FEM_LNA_Mode fem_lna_mode;
     /* Don't use radiolib to initialize the radio, instead listen for a serialHal connection */
     bool serial_hal_only;
@@ -815,8 +817,8 @@ typedef struct _meshtastic_Config_TransportConfig {
     /* The transports this node runs. A transport absent here is off, one the node
  cannot run (not in DeviceMetadata.supported_transports) is ignored.
  On first boot of firmware 2.8.3 this is derived from the fields it replaces:
- TRANSPORT_LORA when lora.region is set, TRANSPORT_MULTICAST_UDP when
- network.enabled_protocols has UDP_BROADCAST. */
+ TRANSPORT_LORA always, since an UNSET lora.region alone keeps the radio off the air,
+ and TRANSPORT_MULTICAST_UDP when network.enabled_protocols has UDP_BROADCAST. */
     pb_size_t enabled_count;
     meshtastic_Config_TransportConfig_Transport enabled[16];
 } meshtastic_Config_TransportConfig;
@@ -901,8 +903,8 @@ extern "C" {
 #define _meshtastic_Config_LoRaConfig_ModemPreset_ARRAYSIZE ((meshtastic_Config_LoRaConfig_ModemPreset)(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_TURBO+1))
 
 #define _meshtastic_Config_LoRaConfig_FEM_LNA_Mode_MIN meshtastic_Config_LoRaConfig_FEM_LNA_Mode_DISABLED
-#define _meshtastic_Config_LoRaConfig_FEM_LNA_Mode_MAX meshtastic_Config_LoRaConfig_FEM_LNA_Mode_NOT_PRESENT
-#define _meshtastic_Config_LoRaConfig_FEM_LNA_Mode_ARRAYSIZE ((meshtastic_Config_LoRaConfig_FEM_LNA_Mode)(meshtastic_Config_LoRaConfig_FEM_LNA_Mode_NOT_PRESENT+1))
+#define _meshtastic_Config_LoRaConfig_FEM_LNA_Mode_MAX meshtastic_Config_LoRaConfig_FEM_LNA_Mode_AUTO
+#define _meshtastic_Config_LoRaConfig_FEM_LNA_Mode_ARRAYSIZE ((meshtastic_Config_LoRaConfig_FEM_LNA_Mode)(meshtastic_Config_LoRaConfig_FEM_LNA_Mode_AUTO+1))
 
 #define _meshtastic_Config_BluetoothConfig_PairingMode_MIN meshtastic_Config_BluetoothConfig_PairingMode_RANDOM_PIN
 #define _meshtastic_Config_BluetoothConfig_PairingMode_MAX meshtastic_Config_BluetoothConfig_PairingMode_NO_PIN

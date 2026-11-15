@@ -178,11 +178,11 @@ inline void onReceiveProto(char *topic, byte *payload, size_t length)
         p->channel = ch.index;
 #if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
         // Already-decoded downlink skips perhapsDecode's crypto path entirely, so enforce the
-        // signature policy here: verify a carried signature and apply unsigned-downgrade
-        // protection for known signers. Without this, a peer on a plaintext broker could
-        // impersonate a signing node with unsigned broadcasts. Hold cryptLock like the RF path
-        // (perhapsDecode) does - checkXeddsaReceivePolicy -> xeddsa_verify mutates shared
-        // CryptoEngine cache state, and MQTT ingress can run on a different task.
+        // signature policy here: verify a carried signature, and in Strict drop an unsigned one.
+        // Without this, a peer on a plaintext broker could forge a signed node's packets. Hold
+        // cryptLock like the RF path (perhapsDecode) does - checkXeddsaReceivePolicy ->
+        // xeddsa_verify mutates shared CryptoEngine cache state, and MQTT ingress can run on a
+        // different task.
         if (passesRoutingAuthGate(p.get()) != RoutingAuthVerdict::ACCEPT) {
             LOG_INFO("Ignore decoded msg failing XEdDSA policy");
             return;
@@ -676,6 +676,7 @@ bool MQTT::isValidConfig(const meshtastic_ModuleConfig_MQTTConfig &config, MQTTC
                 meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
                 if (cn) {
                     cn->level = meshtastic_LogRecord_Level_WARNING;
+                    cn->type = meshtastic_ClientNotification_NotificationType_MQTT_SERVER_UNREACHABLE;
                     cn->time = getValidTime(RTCQualityFromNet);
                     strncpy(cn->message, warning, sizeof(cn->message) - 1);
                     cn->message[sizeof(cn->message) - 1] = '\0';
@@ -692,6 +693,7 @@ bool MQTT::isValidConfig(const meshtastic_ModuleConfig_MQTTConfig &config, MQTTC
         meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
         if (cn) {
             cn->level = meshtastic_LogRecord_Level_ERROR;
+            cn->type = meshtastic_ClientNotification_NotificationType_MQTT_PROXY_TO_CLIENT_REQUIRED;
             cn->time = getValidTime(RTCQualityFromNet);
             strncpy(cn->message, warning, sizeof(cn->message) - 1);
             cn->message[sizeof(cn->message) - 1] = '\0'; // Ensure null termination
@@ -710,6 +712,7 @@ bool MQTT::isValidConfig(const meshtastic_ModuleConfig_MQTTConfig &config, MQTTC
         meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
         if (cn) {
             cn->level = meshtastic_LogRecord_Level_ERROR;
+            cn->type = meshtastic_ClientNotification_NotificationType_MQTT_DEFAULT_SERVER_PORT_INVALID;
             cn->time = getValidTime(RTCQualityFromNet);
             strncpy(cn->message, warning, sizeof(cn->message) - 1);
             cn->message[sizeof(cn->message) - 1] = '\0'; // Ensure null termination

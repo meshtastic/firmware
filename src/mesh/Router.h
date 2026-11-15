@@ -131,6 +131,12 @@ class Router : protected concurrency::OSThread, protected PacketHistory
      */
     virtual ErrorCode send(meshtastic_MeshPacket *p);
 
+    /**
+     * Transparent mode: queue a client-built, already-encrypted frame on the radio exactly as given.
+     * Only the radio's payload capacity is enforced; airtime rules are the client's. Always takes ownership of p.
+     */
+    ErrorCode sendTransparent(meshtastic_MeshPacket *p);
+
     /* Statistics for the amount of duplicate received packets and the amount of times we cancel a relay because someone did it
         before us */
     uint32_t rxDupe = 0, txRelayCanceled = 0;

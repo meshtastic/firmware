@@ -753,6 +753,13 @@ class NimbleBluetoothServerCallback : public BLEServerCallbacks
 
         const uint16_t connHandle = desc->conn_handle;
 
+        // NO_PIN never bonds, so no encryption change arrives to latch the connection; do it here.
+        if (config.bluetooth.mode == meshtastic_Config_BluetoothConfig_PairingMode_NO_PIN) {
+            meshtastic::BluetoothStatus newStatus(meshtastic::BluetoothStatus::ConnectionState::CONNECTED);
+            bluetoothStatus->updateStatus(&newStatus);
+            nimbleBluetoothConnHandle = connHandle;
+        }
+
         // With Google Pixel 8 Android devices, this causes ESP32 device crash
         // when phone reconnects. Disable this to make progress on the
         // Arduino v3 migration while we investigate the Android compatibility

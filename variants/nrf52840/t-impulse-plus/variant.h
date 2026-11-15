@@ -61,6 +61,8 @@
 #define PIN_BUTTON_TOUCH D18
 #define BUTTON_TOUCH_ACTIVE_LOW true
 #define BUTTON_TOUCH_ACTIVE_PULLUP false
+#define TOUCH_SINGLEPRESS INPUT_BROKER_USER_PRESS
+#define TOUCH_LONGPRESS INPUT_BROKER_SELECT
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  Analog Pin Definitions

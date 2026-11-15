@@ -168,6 +168,22 @@ typedef struct _meshtastic_FieldMetadata {
  boards and keep them on any other or unknown board. */
     bool has_oem_fixed_gps;
     bool oem_fixed_gps;
+    /* Field holds a SECRET: a password, PIN, passphrase or key whose value grants
+ access to the node, to its network, or to the traffic it carries. Knowing a
+ public key or a username does not, so neither is marked.
+
+ Apps should mask the value by default (a password-style control with an
+ explicit reveal), keep it out of logs, crash reports, analytics and debug
+ dumps, and not include it in a shared export, QR code or screenshot without
+ the user knowingly choosing to.
+
+ Handling metadata, not protection: it changes nothing on the wire, and the
+ firmware treats the field no differently. It marks the field alone. A
+ message that merely CONTAINS a sensitive field (`Config` holding
+ `SecurityConfig.private_key`) is not marked itself, so a consumer redacting
+ a whole message should walk into its submessages. */
+    bool has_sensitive;
+    bool sensitive;
 } meshtastic_FieldMetadata;
 
 
@@ -180,8 +196,8 @@ extern "C" {
 #endif
 
 /* Initializer values for message structs */
-#define meshtastic_FieldMetadata_init_default    {false, 0, false, 0, false, 0, false, 0, {{NULL}, NULL}, false, 0, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, false, 0}
-#define meshtastic_FieldMetadata_init_zero       {false, 0, false, 0, false, 0, false, 0, {{NULL}, NULL}, false, 0, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, false, 0}
+#define meshtastic_FieldMetadata_init_default    {false, 0, false, 0, false, 0, false, 0, {{NULL}, NULL}, false, 0, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, false, 0, false, 0}
+#define meshtastic_FieldMetadata_init_zero       {false, 0, false, 0, false, 0, false, 0, {{NULL}, NULL}, false, 0, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, false, 0, false, 0}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define meshtastic_FieldMetadata_diy_only_tag    1
@@ -196,6 +212,7 @@ extern "C" {
 #define meshtastic_FieldMetadata_since_firmware_tag 10
 #define meshtastic_FieldMetadata_deprecated_since_tag 11
 #define meshtastic_FieldMetadata_oem_fixed_gps_tag 12
+#define meshtastic_FieldMetadata_sensitive_tag   13
 #define meshtastic_field_metadata_tag            51001
 #define meshtastic_enum_value_metadata_tag       51001
 
@@ -212,7 +229,8 @@ X(a, CALLBACK, OPTIONAL, STRING,   description,       8) \
 X(a, CALLBACK, OPTIONAL, STRING,   keywords,          9) \
 X(a, CALLBACK, OPTIONAL, STRING,   since_firmware,   10) \
 X(a, CALLBACK, OPTIONAL, STRING,   deprecated_since,  11) \
-X(a, STATIC,   OPTIONAL, BOOL,     oem_fixed_gps,    12)
+X(a, STATIC,   OPTIONAL, BOOL,     oem_fixed_gps,    12) \
+X(a, STATIC,   OPTIONAL, BOOL,     sensitive,        13)
 #define meshtastic_FieldMetadata_CALLBACK pb_default_field_callback
 #define meshtastic_FieldMetadata_DEFAULT NULL
 

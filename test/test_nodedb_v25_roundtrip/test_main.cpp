@@ -443,6 +443,84 @@ static void test_fullRoundTrip_headerAndSatelliteFidelity(void)
 #endif
 }
 
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTDB
+// Environment satellites are held protobuf-encoded rather than as the 304 B nanopb struct: a real sensor
+// sets a handful of EnvironmentMetrics' 38 optional fields. At the nRF52 cap of 40 entries the struct
+// form cost ~12 KB of heap and ran T114/T096 sensor nodes out of memory. Pins that a BME680-shaped
+// reading packs to a few dozen bytes, unpacks exactly, and that unset fields stay unset (has_* false)
+// rather than coming back as present zeros.
+static void test_packedEnvironment_compactAndLossless(void)
+{
+    meshtastic_EnvironmentMetrics in = meshtastic_EnvironmentMetrics_init_zero;
+    in.has_temperature = true;
+    in.temperature = 9.97f;
+    in.has_relative_humidity = true;
+    in.relative_humidity = 31.9f;
+    in.has_barometric_pressure = true;
+    in.barometric_pressure = 1019.5f;
+    in.has_gas_resistance = true;
+    in.gas_resistance = 598.2f;
+    in.has_iaq = true;
+    in.iaq = 75;
+
+    PackedEnvironmentMetrics packed;
+    TEST_ASSERT_TRUE(packed.pack(in));
+    TEST_ASSERT_LESS_OR_EQUAL_UINT32(40, packed.bytes.size());
+    TEST_ASSERT_EQUAL_UINT32(packed.bytes.size(), packed.bytes.capacity());
+
+    meshtastic_EnvironmentMetrics out;
+    TEST_ASSERT_TRUE(packed.unpack(out));
+    TEST_ASSERT_TRUE(out.has_temperature);
+    TEST_ASSERT_EQUAL_FLOAT(9.97f, out.temperature);
+    TEST_ASSERT_TRUE(out.has_relative_humidity);
+    TEST_ASSERT_EQUAL_FLOAT(31.9f, out.relative_humidity);
+    TEST_ASSERT_TRUE(out.has_barometric_pressure);
+    TEST_ASSERT_EQUAL_FLOAT(1019.5f, out.barometric_pressure);
+    TEST_ASSERT_TRUE(out.has_gas_resistance);
+    TEST_ASSERT_EQUAL_FLOAT(598.2f, out.gas_resistance);
+    TEST_ASSERT_TRUE(out.has_iaq);
+    TEST_ASSERT_EQUAL_UINT16(75, out.iaq);
+    TEST_ASSERT_FALSE(out.has_lux);
+    TEST_ASSERT_FALSE(out.has_voltage);
+    TEST_ASSERT_FALSE(out.has_one_wire_temperature_ch7);
+}
+
+// The save writes each environment entry by hand from the stored bytes instead of through
+// pb_encode_submessage. Pins that the result is still ordinary protobuf: the plain nanopb decoder
+// (decode targets disarmed, as an older firmware or a backup reader would decode it) recovers the
+// node number and every set field. A framing slip here would corrupt nodes.proto for every reader.
+static void test_packedEnvironment_savedEntryDecodesAsPlainProtobuf(void)
+{
+    const uint32_t E = 0x54000103;
+    addUserNode(E, 0x23);
+    meshtastic_Telemetry env = meshtastic_Telemetry_init_zero;
+    env.which_variant = meshtastic_Telemetry_environment_metrics_tag;
+    env.variant.environment_metrics.has_temperature = true;
+    env.variant.environment_metrics.temperature = -4.25f;
+    env.variant.environment_metrics.has_iaq = true;
+    env.variant.environment_metrics.iaq = 312;
+    nodeDB->updateTelemetry(E, env);
+    TEST_ASSERT_TRUE(db->saveDatabase());
+
+    meshtastic_NodeDatabase disk;
+    decodeNodesFile(disk);
+    const meshtastic_NodeEnvironmentEntry *found = nullptr;
+    for (const auto &entry : disk.environment) {
+        if (entry.num == E)
+            found = &entry;
+    }
+    TEST_ASSERT_NOT_NULL_MESSAGE(found, "environment entry missing from nodes.proto");
+    TEST_ASSERT_TRUE(found->has_environment_metrics);
+    TEST_ASSERT_TRUE(found->environment_metrics.has_temperature);
+    TEST_ASSERT_EQUAL_FLOAT(-4.25f, found->environment_metrics.temperature);
+    TEST_ASSERT_TRUE(found->environment_metrics.has_iaq);
+    TEST_ASSERT_EQUAL_UINT16(312, found->environment_metrics.iaq);
+    TEST_ASSERT_FALSE(found->environment_metrics.has_relative_humidity);
+
+    nodeDB->eraseNodeSatellites(E);
+}
+#endif
+
 // --- Keyless-save skip (part of the PKI-DM key-amnesia diagnosis) ---
 
 static void test_keylessDevice_skipsNodesProtoWrite(void)
@@ -727,6 +805,12 @@ NDBR_TEST_ENTRY void setup()
 
     printf("\n=== Satellite projection/rehydration ===\n");
     RUN_TEST(test_fullRoundTrip_headerAndSatelliteFidelity);
+
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTDB
+    printf("\n=== Packed environment satellites ===\n");
+    RUN_TEST(test_packedEnvironment_compactAndLossless);
+    RUN_TEST(test_packedEnvironment_savedEntryDecodesAsPlainProtobuf);
+#endif
 
     printf("\n=== Keyless-save gate ===\n");
     RUN_TEST(test_keylessDevice_skipsNodesProtoWrite);

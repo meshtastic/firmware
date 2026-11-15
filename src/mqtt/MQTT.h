@@ -14,6 +14,7 @@
 #endif
 #endif
 #if HAS_ETHERNET && !defined(USE_WS5500) && !defined(USE_CH390D)
+#include "mesh/eth/ethBoundedClient.h"
 #include <EthernetClient.h>
 #endif
 
@@ -113,6 +114,8 @@ class MQTT : private concurrency::OSThread
     using MQTTClientTLS = WiFiClientSecure;
 #define MQTT_SUPPORTS_TLS 1
 #endif
+#elif HAS_ETHERNET && !defined(USE_WS5500) && !defined(USE_CH390D)
+    using MQTTClient = BoundedEthernetClient;
 #elif HAS_ETHERNET
     using MQTTClient = EthernetClient;
 #else
@@ -171,7 +174,6 @@ class MQTT : private concurrency::OSThread
 void mqttInit();
 
 extern MQTT *mqtt;
-
 // Defined here, after MQTT and the mqtt global are complete. The `if (mqtt)` guard preserves the old
 // tap's `&& mqtt` check: an MQTTTransport can be registered (constructed with MQTT) while the mqtt
 // global is still null (MQTT constructed while mqtt.enabled was false), exactly as before.

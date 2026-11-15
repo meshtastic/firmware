@@ -21,7 +21,11 @@ namespace
 {
 bool supportsOnScreenKeyboard(const InkHUD::InkHUD *inkhud, const InkHUD::Persistence::Settings *settings)
 {
+#if HAS_PHYSICAL_KEYBOARD
+    return false;
+#else
     return !inkhud->twoWayRocker && (settings->joystick.enabled || inkhud->hasTouchEnabledProvider());
+#endif
 }
 } // namespace
 
@@ -165,6 +169,10 @@ bool InkHUD::WindowManager::selectTileAt(uint16_t x, uint16_t y)
 
         if (settings->userTiles.focused == i)
             return false;
+
+        MenuApplet *menu = (MenuApplet *)inkhud->getSystemApplet("Menu");
+        if (menu->isForeground())
+            menu->sendToBackground();
 
         settings->userTiles.focused = i;
         refocusTile();
