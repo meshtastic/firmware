@@ -270,6 +270,11 @@ void NotificationRenderer::drawBannercallback(OLEDDisplay *display, OLEDDisplayU
         return;
     }
 
+    // Back (keyboard Esc, remote control) closes a menu; outside one it means the previous frame.
+    if (inEvent.inputEvent == INPUT_BROKER_BACK) {
+        inEvent.inputEvent = INPUT_BROKER_CANCEL;
+    }
+
     // Compact panels: DOWN cancels menus instead of scrolling (covers every picker below).
     if (graphics::isCompactPanel(display) && inEvent.inputEvent == INPUT_BROKER_DOWN) {
         inEvent.inputEvent = INPUT_BROKER_CANCEL;

@@ -74,6 +74,8 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     void drawDestinationSelectionScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
     bool isFreeTextActive() const { return runState == CANNED_MESSAGE_RUN_STATE_FREETEXT; }
     String drawWithCursor(String text, int cursor);
+    // The most bytes the free text may take (the bell, when on, takes one)
+    unsigned int maxFreetextBytes() const;
 
     // === Emote Picker ===
     int handleEmotePickerInput(const InputEvent *event);

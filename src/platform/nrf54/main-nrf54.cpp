@@ -50,6 +50,20 @@ __attribute__((noinline)) void variant_nrf52LoopHook(void) {}
 static nrfx_wdt_t nrfx_wdt = NRFX_WDT_INSTANCE(NRF_WDT31);
 static nrfx_wdt_channel_id nrfx_wdt_channel_id_main;
 
+// A pause that blocks the main loop, fed in steps because the watchdog counts in sleep and only nrf52Loop()
+// feeds it. A step that never returns still trips it.
+static void delayFeedingWatchdog(uint32_t ms)
+{
+    constexpr uint32_t maxStepMs = APP_WATCHDOG_SECS * 1000 / 3;
+    nrfx_wdt_channel_feed(&nrfx_wdt, nrfx_wdt_channel_id_main);
+    while (ms > 0) {
+        const uint32_t step = ms < maxStepMs ? ms : maxStepMs;
+        delay(step);
+        nrfx_wdt_channel_feed(&nrfx_wdt, nrfx_wdt_channel_id_main);
+        ms -= step;
+    }
+}
+
 // Public so a debugger can clear it. The flash driver depends on the SoftDevice, so the
 // filesystem stops working as well.
 bool useSoftDevice = true;
@@ -268,7 +282,7 @@ extern "C" void lfs_assert(const char *reason)
         const uint32_t millis_remain =
             elapsed < MULTIPLE_CORRUPTION_DELAY_MILLIS ? MULTIPLE_CORRUPTION_DELAY_MILLIS - elapsed : 0;
         LOG_WARN("Pausing %u seconds to avoid wear on flash storage", millis_remain / 1000);
-        delay(millis_remain);
+        delayFeedingWatchdog(millis_remain);
     }
     LOG_INFO("Rebooting to format LittleFS");
     delay(500); // Give the serial port a bit of time to output that last message.
@@ -368,8 +382,8 @@ void nrf52Setup()
     // Set up nrfx watchdog. Do not enable the watchdog yet (we do that
     // the first time through the main loop), so that other threads can
     // allocate their own wdt channel to protect themselves from hangs.
-    // behaviour is a RUN_* mask, 0 pauses the watchdog in sleep and halt
-    nrfx_wdt_config_t wdt0_config = {.behaviour = 0, .reload_value = APP_WATCHDOG_SECS * 1000};
+    // Count in sleep too (a core stuck in tickless idle is the hang to catch); stay paused in HALT for debuggers.
+    nrfx_wdt_config_t wdt0_config = {.behaviour = NRF_WDT_BEHAVIOUR_RUN_SLEEP_MASK, .reload_value = APP_WATCHDOG_SECS * 1000};
     int r = nrfx_wdt_init(&nrfx_wdt, &wdt0_config, nullptr, nullptr);
     assert(r == 0);
 
@@ -416,7 +430,7 @@ void cpuDeepSleep(uint32_t msecToWake)
                    meshtastic_Config_DeviceConfig_Role_TAK_TRACKER, meshtastic_Config_DeviceConfig_Role_SENSOR) &&
          config.power.is_power_saving == true)) {
         sd_power_mode_set(NRF_POWER_MODE_LOWPWR);
-        delay(msecToWake);
+        delayFeedingWatchdog(msecToWake);
         NVIC_SystemReset();
     } else {
         // Resume on user button press; the bootloader skips DFU on this magic

@@ -388,15 +388,17 @@ static void test_lr2021_cad_rx_exit_define_rejected_returns_spi_cmd_invalid()
                             radio.startChannelScan(lr2021CadConfig(RADIOLIB_LR2021_CAD_EXIT_MODE_RX)));
 }
 
-// A CAD must not start with parameters the chip refused.
-static void test_lr2021_cad_not_started_after_rejected_params()
+// The CAD after parameters the chip refused. Paranoid SPI never starts it. Without paranoid (the shipped
+// config) it is sent and runs on the old parameters, and the -706 reaches the caller from its status
+// byte (the test above), so the interface still has an error rather than a verdict.
+static void test_lr2021_cad_after_rejected_params_sent_only_without_paranoid()
 {
     LR2021_RADIO(hal);
     lr2021SetSf(hal, radio, 9);
     lr2021ModelCadExitCheck(hal);
     (void)radio.startChannelScan(lr2021CadConfig(RADIOLIB_LR2021_CAD_EXIT_MODE_RX));
     TEST_ASSERT_EQUAL_UINT32(1, hal.count(op16(RADIOLIB_LR2021_CMD_SET_LORA_CAD_PARAMS)));
-    TEST_ASSERT_EQUAL_UINT32(0, hal.count(op16(RADIOLIB_LR2021_CMD_SET_LORA_CAD)));
+    TEST_ASSERT_EQUAL_UINT32(SENT_AFTER_REFUSAL, hal.count(op16(RADIOLIB_LR2021_CMD_SET_LORA_CAD)));
 }
 
 // The exit bytes the chip accepts start a CAD; guards the model itself, so the rejection tests
@@ -420,7 +422,27 @@ static void test_lr2021_cad_params_failed_returns_spi_cmd_failed()
     lr2021SetSf(hal, radio, 9);
     hal.reply(op16(RADIOLIB_LR2021_CMD_SET_LORA_CAD_PARAMS), 0x04, {0x01}, 1);
     TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_SPI_CMD_FAILED, radio.startChannelScan(lr2021CadConfig()));
-    TEST_ASSERT_EQUAL_UINT32(0, hal.count(op16(RADIOLIB_LR2021_CMD_SET_LORA_CAD)));
+    TEST_ASSERT_EQUAL_UINT32(SENT_AFTER_REFUSAL, hal.count(op16(RADIOLIB_LR2021_CMD_SET_LORA_CAD)));
+}
+
+// A SetTx the chip refuses. With paranoid SPI, RadioLib reads the status after it and startTransmit() fails.
+// Without it (the shipped config) startTransmit() returns OK, and only the status read that
+// RadioLibInterface::launchTransmit() makes finds the refusal; with neither, the node waits for a TX_DONE that
+// never comes.
+static void test_lr2021_refused_settx_found_by_a_status_read()
+{
+    LR2021_RADIO(hal);
+    hal.rejectUnless(op16(RADIOLIB_LR2021_CMD_SET_TX), [](const std::vector<uint8_t> &) { return false; }, 0x02);
+    uint8_t payload[8] = {};
+    const int16_t state = radio.startTransmit(payload, sizeof(payload));
+    TEST_ASSERT_EQUAL_UINT32(1, hal.count(op16(RADIOLIB_LR2021_CMD_SET_TX)));
+#if RADIOLIB_SPI_PARANOID
+    TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_SPI_CMD_INVALID, state);
+#else
+    TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_NONE, state);
+    TEST_ASSERT_NOT_NULL(mod.spiConfig.checkStatusCb);
+    TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_SPI_CMD_INVALID, mod.spiConfig.checkStatusCb(&mod));
+#endif
 }
 
 // Grows here - each needs replies scripted per opcode:
@@ -456,7 +478,8 @@ static void runLr2021Tests()
     RUN_TEST(test_lr2021_cad_wrong_modem_sends_no_cad);
     RUN_TEST(test_lr2021_cad_result_decoding);
     RUN_TEST(test_lr2021_cad_rx_exit_define_rejected_returns_spi_cmd_invalid);
-    RUN_TEST(test_lr2021_cad_not_started_after_rejected_params);
+    RUN_TEST(test_lr2021_cad_after_rejected_params_sent_only_without_paranoid);
     RUN_TEST(test_lr2021_cad_accepted_exit_bytes_start_a_cad);
     RUN_TEST(test_lr2021_cad_params_failed_returns_spi_cmd_failed);
+    RUN_TEST(test_lr2021_refused_settx_found_by_a_status_read);
 }
