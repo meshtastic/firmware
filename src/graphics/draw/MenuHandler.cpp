@@ -3136,6 +3136,7 @@ void menuHandler::LoRaFEMLNAToggleMenu()
 {
     static const LoRaFEMLNAToggleOption femToggleOptions[] = {
         {"Back", OptionsAction::Back},
+        {"Auto", OptionsAction::Select, meshtastic_Config_LoRaConfig_FEM_LNA_Mode_AUTO},
         {"Enabled", OptionsAction::Select, meshtastic_Config_LoRaConfig_FEM_LNA_Mode_ENABLED},
         {"Disabled", OptionsAction::Select, meshtastic_Config_LoRaConfig_FEM_LNA_Mode_DISABLED},
     };
@@ -3154,11 +3155,10 @@ void menuHandler::LoRaFEMLNAToggleMenu()
                 return;
             }
 
-            const bool enabled = option.value != meshtastic_Config_LoRaConfig_FEM_LNA_Mode_DISABLED;
             config.lora.fem_lna_mode = option.value;
-            loraFEMInterface.setLNAEnable(enabled);
+            loraFEMInterface.setLNAEnable(option.value != meshtastic_Config_LoRaConfig_FEM_LNA_Mode_DISABLED);
             service->reloadConfig(SEGMENT_CONFIG);
-            LOG_INFO("FEM LNA %s", enabled ? "enabled" : "disabled");
+            LOG_INFO("FEM LNA %s", option.label);
         });
 
     int initialSelection = 0;
