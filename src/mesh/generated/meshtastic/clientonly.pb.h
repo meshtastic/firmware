@@ -4,6 +4,7 @@
 #ifndef PB_MESHTASTIC_MESHTASTIC_CLIENTONLY_PB_H_INCLUDED
 #define PB_MESHTASTIC_MESHTASTIC_CLIENTONLY_PB_H_INCLUDED
 #include <pb.h>
+#include "meshtastic/field_metadata.pb.h"
 #include "meshtastic/localonly.pb.h"
 #include "meshtastic/mesh.pb.h"
 
@@ -21,7 +22,8 @@ typedef struct _meshtastic_DeviceProfile {
     /* Short name of the node */
     bool has_short_name;
     char short_name[5];
-    /* The url of the channels from our node */
+    /* The url of the channels from our node.
+ Carries every channel's PSK, so it is as secret as they are. */
     pb_callback_t channel_url;
     /* The Config of the node */
     bool has_config;
