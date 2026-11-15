@@ -10,6 +10,7 @@
 #include "modules/NodeInfoModule.h"
 #include "modules/WaypointModule.h"
 #include <Throttle.h>
+#include <algorithm>
 #include <sys/time.h>
 #include <time.h>
 
@@ -48,10 +49,11 @@ RTCQuality getRTCQuality()
 }
 
 // stuff that really should be in in the instance instead...
-// The Time::getMillisMonotonic() instant corresponding to zeroOffsetSecs. 64-bit so getTime()'s
+// The Time::getMicrosMonotonic() instant corresponding to zeroOffsetUs. 64-bit so getTime()'s
 // elapsed term cannot wrap: a 32-bit anchor walks the wall clock back 49.7 days per millis() cycle.
-static uint64_t timeStartMs64;
-static uint64_t zeroOffsetSecs; // GPS based time in secs since 1970 - only updated once on initial lock
+static uint64_t timeStartUs;
+static uint64_t zeroOffsetUs; // Wall-clock µs since 1970 at timeStartUs; keeps the sub-second part sources give us
+static int32_t rateTrimPpb;   // added to the elapsed term: the monotonic clock's measured error, negated
 
 #ifdef PIO_UNIT_TESTING
 // Test seam: unit tests can inject a fake system clock (e.g. the uptime seconds that
@@ -82,12 +84,12 @@ static struct timeval mockSystemTime = {};
 {
     struct timeval tv;
     if (readSystemTime(&tv)) {
-        const uint64_t now = Time::getMillisMonotonic();
+        const uint64_t now = Time::getMicrosMonotonic();
         uint32_t printableEpoch = tv.tv_sec; // Print lib only supports 32 bit but time_t can be 64 bit on some platforms
         if (currentQuality == RTCQualityNone) {
             LOG_DEBUG("Seed time from system clock: %lu", (unsigned long)printableEpoch);
-            timeStartMs64 = now;
-            zeroOffsetSecs = tv.tv_sec;
+            timeStartUs = now;
+            zeroOffsetUs = (uint64_t)tv.tv_sec * 1000000;
         } else {
             LOG_DEBUG("Ignore system clock fallback (%lu); RTC quality is %s", (unsigned long)printableEpoch,
                       RtcName(currentQuality));
@@ -112,7 +114,7 @@ RTCSetResult readFromRTC()
     [[maybe_unused]] struct timeval tv; /* btw settimeofday() is helpful here too*/
 #ifdef RV3028_RTC
     if (rtc_found.address == RV3028_RTC) {
-        const uint64_t now = Time::getMillisMonotonic();
+        const uint64_t now = Time::getMicrosMonotonic();
         Melopero_RV3028 rtc;
 #if WIRE_INTERFACES_COUNT == 2
         rtc.initI2C(*ScanI2CTwoWire::fetchI2CBus(rtc_found));
@@ -143,8 +145,8 @@ RTCSetResult readFromRTC()
                       t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec, printableEpoch);
         if (currentQuality == RTCQualityNone) {
             RTCQuality oldQuality = currentQuality;
-            timeStartMs64 = now;
-            zeroOffsetSecs = tv.tv_sec;
+            timeStartUs = now;
+            zeroOffsetUs = (uint64_t)tv.tv_sec * 1000000;
 #if defined(ARCH_ESP32) || defined(ARCH_RP2040)
             settimeofday(&tv, NULL);
 #endif
@@ -158,7 +160,7 @@ RTCSetResult readFromRTC()
 #elif defined(PCF8563_RTC) || defined(PCF85063_RTC)
     if (rtc_found.address == PCF_RTC_ADDRESS) {
         PCF8xRTC rtc;
-        const uint64_t now = Time::getMillisMonotonic();
+        const uint64_t now = Time::getMicrosMonotonic();
 
 #if WIRE_INTERFACES_COUNT == 2
         TwoWire &rtcBus = *ScanI2CTwoWire::fetchI2CBus(rtc_found);
@@ -193,8 +195,8 @@ RTCSetResult readFromRTC()
                       t.tm_mon + 1, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec, printableEpoch);
         if (currentQuality == RTCQualityNone) {
             RTCQuality oldQuality = currentQuality;
-            timeStartMs64 = now;
-            zeroOffsetSecs = tv.tv_sec;
+            timeStartUs = now;
+            zeroOffsetUs = (uint64_t)tv.tv_sec * 1000000;
 #if defined(ARCH_ESP32) || defined(ARCH_RP2040)
             settimeofday(&tv, NULL);
 #endif
@@ -207,7 +209,7 @@ RTCSetResult readFromRTC()
     }
 #elif defined(RX8130CE_RTC)
     if (rtc_found.address == RX8130CE_RTC) {
-        const uint64_t now = Time::getMillisMonotonic();
+        const uint64_t now = Time::getMicrosMonotonic();
 #ifdef MUZI_BASE
         ArtronShop_RX8130CE rtc(&Wire1);
 #else
@@ -232,8 +234,8 @@ RTCSetResult readFromRTC()
 #endif
             if (currentQuality == RTCQualityNone) {
                 RTCQuality oldQuality = currentQuality;
-                timeStartMs64 = now;
-                zeroOffsetSecs = tv.tv_sec;
+                timeStartUs = now;
+                zeroOffsetUs = (uint64_t)tv.tv_sec * 1000000;
 #if defined(ARCH_ESP32) || defined(ARCH_RP2040)
                 settimeofday(&tv, NULL);
 #endif
@@ -245,7 +247,7 @@ RTCSetResult readFromRTC()
     }
 #elif HAS_LSE
     if (stm32wlRtcAvailable()) {
-        const uint64_t now = Time::getMillisMonotonic();
+        const uint64_t now = Time::getMicrosMonotonic();
         tv.tv_sec = STM32RTC::getInstance().getEpoch();
         tv.tv_usec = 0;
         uint32_t printableEpoch = tv.tv_sec; // Print lib only supports 32 bit but time_t can be 64 bit on some platforms
@@ -260,8 +262,8 @@ RTCSetResult readFromRTC()
 #endif
         if (currentQuality == RTCQualityNone) {
             RTCQuality oldQuality = currentQuality;
-            timeStartMs64 = now;
-            zeroOffsetSecs = tv.tv_sec;
+            timeStartUs = now;
+            zeroOffsetUs = (uint64_t)tv.tv_sec * 1000000;
             currentQuality = RTCQualityDevice;
             onTimeSourceQualityChanged(oldQuality, currentQuality);
         }
@@ -271,6 +273,13 @@ RTCSetResult readFromRTC()
     return readFromSystemTimeFallback();
 #endif
     return RTCSetResultNotSet;
+}
+
+static uint64_t timevalToUs(const struct timeval *tv)
+{
+    // An out-of-range fraction is a caller bug; keep the whole seconds rather than trusting it.
+    const uint64_t fracUs = (tv->tv_usec >= 0 && tv->tv_usec < 1000000) ? (uint64_t)tv->tv_usec : 0;
+    return (uint64_t)tv->tv_sec * 1000000 + fracUs;
 }
 
 /**
@@ -285,8 +294,9 @@ RTCSetResult readFromRTC()
 RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpdate)
 {
     static uint32_t lastSetMsec = 0;
-    const uint64_t now64 = Time::getMillisMonotonic();
-    const uint32_t now = (uint32_t)now64; // low word == getMillis(); fine for the Throttle-checked stamps below
+    // tv is the time now, so anchor it to now: read before the logging below, which takes milliseconds on some ports
+    const uint64_t nowUs = Time::getMicrosMonotonic();
+    const uint32_t now = (uint32_t)Time::getMillisMonotonic(); // low word == getMillis(), for the Throttle stamps below
     uint32_t printableEpoch = tv->tv_sec; // Print lib only supports 32 bit but time_t can be 64 bit on some platforms
 #ifdef BUILD_EPOCH
     if (tv->tv_sec < BUILD_EPOCH) {
@@ -336,8 +346,8 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpd
         }
 
         // This delta value works on all platforms
-        timeStartMs64 = now64;
-        zeroOffsetSecs = tv->tv_sec;
+        timeStartUs = nowUs;
+        zeroOffsetUs = timevalToUs(tv);
         // If this platform has a settable RTC, set it
 #ifdef RV3028_RTC
         if (rtc_found.address == RV3028_RTC) {
@@ -452,7 +462,7 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct tm &t)
     time_t res = gm_mktime(&t);
     struct timeval tv;
     tv.tv_sec = res;
-    tv.tv_usec = 0;                      // time.centisecond() * (10 / 1000);
+    tv.tv_usec = 0;
     uint32_t printableEpoch = tv.tv_sec; // Print lib only supports 32 bit but time_t can be 64 bit on some platforms
 #ifdef BUILD_EPOCH
     if (tv.tv_sec < BUILD_EPOCH) {
@@ -508,13 +518,57 @@ int32_t getTZOffset()
  */
 uint32_t getTime(bool local)
 {
-    // Both terms are 64-bit monotonic, so the elapsed time cannot wrap - see timeStartMs64.
-    const uint64_t elapsedSecs = (Time::getMillisMonotonic() - timeStartMs64) / 1000;
-    if (local) {
-        return elapsedSecs + zeroOffsetSecs + getTZOffset();
-    } else {
-        return elapsedSecs + zeroOffsetSecs;
-    }
+    const uint32_t secs = getUtcMillis() / 1000;
+    return local ? secs + getTZOffset() : secs;
+}
+
+// Split into whole billions of microseconds and the remainder: elapsedUs * rateTrimPpb in one step
+// passes INT64_MAX after 214 days at the +-500000 ppb clamp, which a clock never re-anchored reaches.
+static int64_t rateTrimUs(uint64_t elapsedUs)
+{
+    const int64_t kiloSeconds = (int64_t)(elapsedUs / 1000000000ULL);
+    const int64_t remainderUs = (int64_t)(elapsedUs % 1000000000ULL);
+    return kiloSeconds * rateTrimPpb + remainderUs * rateTrimPpb / 1000000000;
+}
+
+// The UTC this clock names at a monotonic instant already read, so a caller re-anchoring the clock
+// at that instant cannot shift it by whatever ran between two reads of the monotonic clock.
+static uint64_t utcMicrosAt(uint64_t monoUs)
+{
+    // Both terms are 64-bit monotonic, so the elapsed time cannot wrap - see timeStartUs.
+    const uint64_t elapsedUs = monoUs - timeStartUs;
+    return zeroOffsetUs + elapsedUs + rateTrimUs(elapsedUs);
+}
+
+uint64_t getUtcMicros()
+{
+    return utcMicrosAt(Time::getMicrosMonotonic());
+}
+
+uint64_t getUtcMillis()
+{
+    return getUtcMicros() / 1000;
+}
+
+void disciplineRTC(uint64_t monoUs, uint64_t utcUs)
+{
+    timeStartUs = monoUs;
+    zeroOffsetUs = utcUs;
+    lastSetFromPhoneNtpOrGps = Time::skipZero(Time::getMillis());
+}
+
+void setRTCRateTrimPpb(int32_t ppb)
+{
+    // Re-anchor at the current reading first, so a new trim bends the clock from now instead of jumping it
+    const uint64_t nowUs = Time::getMicrosMonotonic();
+    zeroOffsetUs = utcMicrosAt(nowUs); // the instant we anchor to, so preemption between the two cannot move the clock
+    timeStartUs = nowUs;
+    rateTrimPpb = std::max<int32_t>(-MAX_RATE_TRIM_PPB, std::min<int32_t>(MAX_RATE_TRIM_PPB, ppb));
+}
+
+int32_t getRTCRateTrimPpb()
+{
+    return rateTrimPpb;
 }
 
 /**
@@ -532,8 +586,9 @@ uint32_t getValidTime(RTCQuality minQuality, bool local)
 void setBootRelativeTimeForUnitTest(uint32_t secondsSinceBoot)
 {
     currentQuality = RTCQualityNone;
-    zeroOffsetSecs = 0;
-    timeStartMs64 = Time::getMillisMonotonic() - ((uint64_t)secondsSinceBoot * 1000);
+    zeroOffsetUs = 0;
+    rateTrimPpb = 0;
+    timeStartUs = Time::getMicrosMonotonic() - ((uint64_t)secondsSinceBoot * 1000000);
     lastSetFromPhoneNtpOrGps = 0;
     lastTimeValidationWarning = 0;
 }
@@ -562,8 +617,9 @@ void setReadFromRTCUseSystemTimeForTests(bool enabled)
 void resetRTCStateForTests()
 {
     currentQuality = RTCQualityNone;
-    timeStartMs64 = 0;
-    zeroOffsetSecs = 0;
+    timeStartUs = 0;
+    zeroOffsetUs = 0;
+    rateTrimPpb = 0;
     lastSetFromPhoneNtpOrGps = 0;
     lastTimeValidationWarning = 0;
     setReadFromRTCUseSystemTimeForTests(false);

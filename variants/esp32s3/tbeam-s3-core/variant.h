@@ -74,7 +74,7 @@
 #define GPS_RX_PIN 9
 #define GPS_TX_PIN 8
 #define GPS_WAKEUP_PIN 7
-#define GPS_1PPS_PIN 6
+#define PIN_GPS_PPS 6
 
 #define HAS_SDCARD // Have SPI interface SD card slot
 #define SDCARD_USE_SPI1

@@ -22,6 +22,13 @@ bool MPU6050Sensor::init()
 
 int32_t MPU6050Sensor::runOnce()
 {
+#ifdef MESHTASTIC_INCLUDE_INKHUD
+    if (stepTracker().isTracking()) {
+        sensors_event_t accel, gyro, temperature;
+        if (sensor.getEvent(&accel, &gyro, &temperature))
+            sampleSteps(accel.acceleration.x, accel.acceleration.y, accel.acceleration.z);
+    }
+#endif
     if (sensor.getMotionInterruptStatus()) {
         wakeScreen();
     }
