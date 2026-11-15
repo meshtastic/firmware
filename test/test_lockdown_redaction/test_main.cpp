@@ -7,7 +7,7 @@
  * build does not define, so they compiled out of every test.
  *
  * [env:coverage-lockdown] turns both lockdown flags on for this suite. No nRF52 crypto is
- * needed - EncryptedStorage carries non-ARCH_NRF52 fallbacks, and isLockdownActive() is just
+ * needed - the env links the stub in this directory in place of EncryptedStorage.cpp, and isLockdownActive() is just
  * "does /prefs/.dek exist", which these tests create and remove. Per-connection authorization
  * is then driven directly through setAdminAuthorized().
  *
