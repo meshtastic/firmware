@@ -144,10 +144,13 @@ int Inputs::CardKbInput::onNotify(const InputEvent *event)
         break;
     case INPUT_BROKER_GPS_TOGGLE: // Fn+G
     case INPUT_BROKER_SEND_PING:  // Fn+Space
+    case INPUT_BROKER_SHUTDOWN:   // Fn+S
         systemCommands.handleInputEvent(event);
         break;
     case INPUT_BROKER_ANYKEY:
-        if (event->kbchar == INPUT_BROKER_MSG_MUTE_TOGGLE) // Fn+M
+        // Fn+M mute, Fn+R reboot, Fn+B Bluetooth: same shortcuts as BaseUI
+        if (event->kbchar == INPUT_BROKER_MSG_MUTE_TOGGLE || event->kbchar == INPUT_BROKER_MSG_REBOOT ||
+            event->kbchar == INPUT_BROKER_MSG_BLUETOOTH_TOGGLE)
             systemCommands.handleInputEvent(event);
         else if (typing && event->kbchar >= 0x20 && event->kbchar < 0x7F)
             hud->freeText(event->kbchar);
