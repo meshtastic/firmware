@@ -488,7 +488,7 @@ void PowerFSM_setup()
 
     // the only way to leave state serial is for the client to disconnect (or we timeout and force disconnect them)
     // when we leave, go to ON (which might not be the correct state if we have power connected, we will fix that in onEnter)
-    powerFSM.add_transition(&stateSERIAL, &stateON, EVENT_SERIAL_DISCONNECTED, NULL, "serial disconnect");
+    powerFSM.add_transition(&stateSERIAL, &stateON, EVENT_SERIAL_DISCONNECTED, screenOnFromUserInput, "serial disconnect");
 
     powerFSM.add_transition(&stateDARK, &stateDARK, EVENT_CONTACT_FROM_PHONE, NULL, "Contact from phone");
 
