@@ -89,6 +89,8 @@ class MenuApplet : public SystemApplet, public concurrency::OSThread
     // Recents menu checkbox state (derived from settings.recentlyActiveSeconds)
     static constexpr uint8_t RECENTS_COUNT = 6;
     bool recentsSelected[RECENTS_COUNT] = {};
+    static constexpr uint8_t STEP_GOAL_COUNT = 6;
+    bool stepGoalSelected[STEP_GOAL_COUNT] = {};
     static constexpr uint8_t DISPLAY_TIMEOUT_COUNT = 7;
     bool displayTimeoutSelected[DISPLAY_TIMEOUT_COUNT] = {};
     static constexpr uint8_t BUZZER_MODE_COUNT = 5;

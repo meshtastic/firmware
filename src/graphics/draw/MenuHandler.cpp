@@ -3286,6 +3286,13 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
     case GpsPositionBroadcastMenu:
         GPSPositionBroadcastMenu();
         break;
+#else
+    case GpsToggleMenu:
+    case GpsFormatMenu:
+    case GpsSmartPositionMenu:
+    case GpsUpdateIntervalMenu:
+    case GpsPositionBroadcastMenu:
+        break;
 #endif
     case CompassPointNorthMenu:
         compassNorthMenu();
@@ -3395,6 +3402,9 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
 #if GRAPHICS_TFT_COLORING_ENABLED // the Theme option only exists with TFT coloring
     case ThemeMenu:
         themeMenu();
+        break;
+#else
+    case ThemeMenu:
         break;
 #endif
     case HamModeConfirm:
