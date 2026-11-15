@@ -102,6 +102,8 @@ BLEServer *bleServer;
 
 static bool passkeyShowing;
 static std::atomic<uint16_t> nimbleBluetoothConnHandle{BLE_HS_CONN_HANDLE_NONE}; // BLE_HS_CONN_HANDLE_NONE means "no connection"
+// The pairing mode setup() configured the stack with; config.bluetooth.mode can change under a live stack.
+static bool setupIsNoPin;
 
 // Set by onDisconnect to defer (re)starting advertising to the main task. A stale-bond reconnect
 // triggers a MIC failure + NimBLE host reset; re-entering ble_gap_adv_* from the disconnect
@@ -754,7 +756,7 @@ class NimbleBluetoothServerCallback : public BLEServerCallbacks
         const uint16_t connHandle = desc->conn_handle;
 
         // NO_PIN never bonds, so no encryption change arrives to latch the connection; do it here.
-        if (config.bluetooth.mode == meshtastic_Config_BluetoothConfig_PairingMode_NO_PIN) {
+        if (setupIsNoPin) {
             meshtastic::BluetoothStatus newStatus(meshtastic::BluetoothStatus::ConnectionState::CONNECTED);
             bluetoothStatus->updateStatus(&newStatus);
             nimbleBluetoothConnHandle = connHandle;
@@ -939,6 +941,7 @@ void NimbleBluetooth::setup()
 
     // BLESecurity only forwards to static NimBLEDevice setters; a stack instance suffices.
     BLESecurity security;
+    setupIsNoPin = config.bluetooth.mode == meshtastic_Config_BluetoothConfig_PairingMode_NO_PIN;
     security.setInitEncryptionKey(ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK);
     security.setRespEncryptionKey(ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK);
     if (config.bluetooth.mode != meshtastic_Config_BluetoothConfig_PairingMode_NO_PIN) {
