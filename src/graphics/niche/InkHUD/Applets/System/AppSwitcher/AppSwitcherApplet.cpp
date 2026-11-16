@@ -2,6 +2,7 @@
 
 #include "./AppSwitcherApplet.h"
 
+#include "graphics/niche/InkHUD/Applets/User/Steps/StepsIcon.h"
 #include "graphics/niche/InkHUD/InkHUD.h"
 #include "graphics/niche/InkHUD/Tile.h"
 
@@ -24,10 +25,7 @@ static constexpr uint16_t TITLE_H_PAD = 8;
 
 static constexpr uint8_t GRID_COLS = 3;
 static constexpr uint8_t GRID_ROWS = 4;
-static constexpr uint8_t ICON_NATIVE_SIZE = 48;
-static constexpr uint8_t ICON_OUTLINE_STROKE = 1;
-
-enum class IconKind : uint8_t { GENERIC, ALL_MESSAGES, DMS, CHANNEL, POSITIONS, RECENTS, HEARD, FAVORITES };
+enum class IconKind : uint8_t { GENERIC, ALL_MESSAGES, DMS, CHANNEL, POSITIONS, RECENTS, HEARD, FAVORITES, STEPS };
 
 struct GridLayout {
     uint16_t footerH = 0;
@@ -133,9 +131,7 @@ static constexpr uint64_t icon_favorites[48] = {
     0x000000000000ULL, 0x000000000000ULL, 0x000000000000ULL, 0x000000000000ULL, 0x000000000000ULL, 0x000000000000ULL,
 };
 
-using IconBitmap = const uint64_t *;
-
-IconBitmap iconBitmapForKind(IconKind kind)
+InkHUD::IconBitmap iconBitmapForKind(IconKind kind)
 {
     switch (kind) {
     case IconKind::ALL_MESSAGES:
@@ -152,6 +148,8 @@ IconBitmap iconBitmapForKind(IconKind kind)
         return icon_heard;
     case IconKind::FAVORITES:
         return icon_favorites;
+    case IconKind::STEPS:
+        return InkHUD::STEPS_ICON;
     case IconKind::GENERIC:
     default:
         return icon_generic_apps;
@@ -213,34 +211,11 @@ IconKind iconKindForAppletName(const char *name)
         return IconKind::HEARD;
     if (lower.find("favorite") != std::string::npos)
         return IconKind::FAVORITES;
+    if (lower == "steps")
+        return IconKind::STEPS;
     return IconKind::GENERIC;
 }
 
-void drawIconBitmapScaled(InkHUD::Applet *applet, IconBitmap bmp48, int16_t left, int16_t top, uint16_t boxSize, uint16_t color)
-{
-    if (!bmp48 || boxSize == 0)
-        return;
-
-    auto srcOn = [bmp48](int16_t sx, int16_t sy) -> bool {
-        if (sx < 0 || sy < 0 || sx >= ICON_NATIVE_SIZE || sy >= ICON_NATIVE_SIZE)
-            return false;
-        const uint64_t rowBits = bmp48[sy];
-        return (rowBits & (1ULL << (47 - sx))) != 0;
-    };
-
-    for (uint16_t y = 0; y < boxSize; y++) {
-        const uint8_t srcY = (uint8_t)((y * ICON_NATIVE_SIZE) / boxSize);
-        for (uint16_t x = 0; x < boxSize; x++) {
-            const uint8_t srcX = (uint8_t)((x * ICON_NATIVE_SIZE) / boxSize);
-            if (!srcOn(srcX, srcY))
-                continue;
-
-            const uint16_t w = std::min<uint16_t>(ICON_OUTLINE_STROKE, boxSize - x);
-            const uint16_t h = std::min<uint16_t>(ICON_OUTLINE_STROKE, boxSize - y);
-            applet->fillRect(left + x, top + y, w, h, color);
-        }
-    }
-}
 } // namespace
 
 InkHUD::AppSwitcherApplet::AppSwitcherApplet()
