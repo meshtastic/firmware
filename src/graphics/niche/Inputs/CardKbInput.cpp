@@ -96,8 +96,7 @@ void Inputs::CardKbInput::navigate(void (InkHUD::InkHUD::*direction)())
         return;
     }
 
-    uint8_t &alignment = hud->persistence->settings.joystick.alignment;
-    const uint8_t joystickAlignment = alignment;
+    const uint8_t joystickAlignment = hud->persistence->settings.joystick.alignment;
     InkHUD::AlignKeyboardApplet *training = alignKeyboardApplet();
 
     struct NavigatingScope {
@@ -109,10 +108,10 @@ void Inputs::CardKbInput::navigate(void (InkHUD::InkHUD::*direction)())
     if (training)
         training->keyboardInput = true;
 
-    alignment = saved.alignment;
+    hud->persistence->settings.joystick.alignment = saved.alignment;
     (hud->*direction)(); // AlignKeyboard adjusts the alignment from within this call
-    saved.alignment = alignment;
-    alignment = joystickAlignment;
+    saved.alignment = hud->persistence->settings.joystick.alignment;
+    hud->persistence->settings.joystick.alignment = joystickAlignment;
 
     if (training)
         training->keyboardInput = false;
