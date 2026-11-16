@@ -19,6 +19,10 @@ static constexpr uint32_t LNA_AUTO_STATE_MAGIC = 0x4C4E4131; // "LNA1"
 static constexpr int16_t KCT8103L_LNA_GAIN_DB = 23;
 static constexpr uint32_t KCT8103L_LNA_SETTLE_US = 1000;
 
+// BQ35LORA900V1M discrete LNA on Station G3 (measured 11-12 dB rise at a noise-limited site)
+static constexpr int16_t STATION_G3_LNA_GAIN_DB = 12;
+static constexpr uint32_t STATION_G3_LNA_SETTLE_US = 1000;
+
 struct PersistedLnaAuto {
     uint32_t magic;
     uint32_t lnaOn;
@@ -155,9 +159,18 @@ void LoRaFEMInterface::init(void)
 #elif defined(USE_STATION_G3_FEM)
     fem_type = STATION_G3_FEM;
     LOG_INFO("Using Station G3 LoRa FEM");
-    pinMode(LORA_STATION_G3_LNA_EN, OUTPUT);
-    digitalWrite(LORA_STATION_G3_LNA_EN, LOW); // LNA enabled by default (Active LOW)
-    setLnaCanControl(true);
+#if defined(ARCH_ESP32)
+    releasePinHold(LORA_STATION_G3_LNA_EN);
+#endif
+    pinMode(LORA_STATION_G3_LNA_EN, INPUT_PULLDOWN);
+    delay(1);
+    if (digitalRead(LORA_STATION_G3_LNA_EN) == HIGH) {
+        LOG_INFO("Station G3 LNA P jumper installed; LNA hardware-disabled");
+    } else {
+        pinMode(LORA_STATION_G3_LNA_EN, OUTPUT);
+        digitalWrite(LORA_STATION_G3_LNA_EN, LOW); // LNA enabled by default (Active LOW)
+        setLnaControl(LORA_STATION_G3_LNA_EN, LOW, STATION_G3_LNA_GAIN_DB, STATION_G3_LNA_SETTLE_US);
+    }
 #endif
 }
 
@@ -191,7 +204,9 @@ void LoRaFEMInterface::setSleepModeEnable(void)
     // shutdown the PA
     digitalWrite(LORA_KCT8103L_EN, LOW);
 #elif defined(USE_STATION_G3_FEM)
-    digitalWrite(LORA_STATION_G3_LNA_EN, HIGH);
+    if (lna_can_control) {
+        digitalWrite(LORA_STATION_G3_LNA_EN, HIGH);
+    }
 #endif
 }
 
@@ -221,7 +236,9 @@ void LoRaFEMInterface::setTxModeEnable(void)
     enableFEMPower();
     digitalWrite(LORA_KCT8103L_TX_RX, HIGH);
 #elif defined(USE_STATION_G3_FEM)
-    digitalWrite(LORA_STATION_G3_LNA_EN, HIGH);
+    if (lna_can_control) {
+        digitalWrite(LORA_STATION_G3_LNA_EN, HIGH);
+    }
 #endif
 }
 
@@ -248,8 +265,6 @@ void LoRaFEMInterface::setRxModeEnable(void)
 #elif defined(USE_KCT8103L_PA_ONLY)
     enableFEMPower();
     digitalWrite(LORA_KCT8103L_TX_RX, LOW);
-#elif defined(USE_STATION_G3_FEM)
-    digitalWrite(LORA_STATION_G3_LNA_EN, lna_enabled ? LOW : HIGH);
 #endif
     setRxLnaPath(lna_enabled);
 }
@@ -296,10 +311,12 @@ void LoRaFEMInterface::setRxModeEnableWhenMCUSleep(void)
     enableFEMPower();
     digitalWrite(LORA_KCT8103L_TX_RX, LOW);
 #elif defined(USE_STATION_G3_FEM)
-    digitalWrite(LORA_STATION_G3_LNA_EN, lna_enabled ? LOW : HIGH);
+    if (lna_can_control) {
+        digitalWrite(LORA_STATION_G3_LNA_EN, lna_enabled ? LOW : HIGH);
 #if defined(ARCH_ESP32)
-    rtc_gpio_hold_en((gpio_num_t)LORA_STATION_G3_LNA_EN);
+        rtc_gpio_hold_en((gpio_num_t)LORA_STATION_G3_LNA_EN);
 #endif
+    }
 #endif
 }
 
