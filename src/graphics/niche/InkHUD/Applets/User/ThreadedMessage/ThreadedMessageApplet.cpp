@@ -5,6 +5,8 @@
 #include "gps/RTC.h"
 #include "mesh/NodeDB.h"
 
+#include <algorithm>
+
 using namespace NicheGraphics;
 
 InkHUD::ThreadedMessageApplet::ThreadedMessageApplet(uint8_t channelIndex)
@@ -56,6 +58,13 @@ void InkHUD::ThreadedMessageApplet::onRender(bool full)
     const auto &allMessages = messageStore.getLiveMessages();
     int msgIdx = (int)allMessages.size() - 1;
 
+    // Messages may have been removed since the user scrolled
+    const size_t channelMessages = countChannelMessages();
+    scrollOffset = std::min(scrollOffset, channelMessages ? channelMessages - 1 : 0);
+    size_t skipped = 0;
+    size_t drawn = 0;
+    int16_t contentTop = msgB; // Top of the oldest message drawn: above the crop means it is cut off
+
     while (msgB >= (0 - fontSmall.lineHeight()) && msgIdx >= 0) {
 
         const StoredMessage &m = allMessages.at(msgIdx);
@@ -65,6 +74,14 @@ void InkHUD::ThreadedMessageApplet::onRender(bool full)
             msgIdx--;
             continue;
         }
+
+        // Skip the newest messages, if the user has scrolled back
+        if (skipped < scrollOffset) {
+            skipped++;
+            msgIdx--;
+            continue;
+        }
+        drawn++;
 
         // Grab data for message
         bool outgoing = (m.sender == myNodeInfo.my_node_num);
@@ -141,6 +158,7 @@ void InkHUD::ThreadedMessageApplet::onRender(bool full)
 
         // Move cursor up: above info string
         msgB -= fontSmall.lineHeight();
+        contentTop = msgB;
 
         // Vertical line alongside message
         for (int16_t y = msgB; y < dotsB; y += 1)
@@ -156,6 +174,44 @@ void InkHUD::ThreadedMessageApplet::onRender(bool full)
     // Area immediately below the divider. Overdraw with sparse white lines.
     // Make text appear to pass behind the header
     hatchRegion(0, dividerY + 1, width(), fontSmall.lineHeight() / 3, 2, WHITE);
+
+    // Up: older messages above, or the oldest one drawn is cut off by the header. Down: newer messages below
+    resetCrop();
+    const bool olderBeyond = channelMessages > scrollOffset + drawn;
+    const bool cutOff = drawn > 0 && contentTop < dividerY + 2;
+    drawScrollHints((scrollOffset + 1 < channelMessages) && (olderBeyond || cutOff), scrollOffset > 0);
+}
+
+size_t InkHUD::ThreadedMessageApplet::countChannelMessages()
+{
+    size_t count = 0;
+    for (const StoredMessage &m : messageStore.getLiveMessages()) {
+        if (m.type == MessageType::BROADCAST && m.channelIndex == channelIndex)
+            count++;
+    }
+    return count;
+}
+
+void InkHUD::ThreadedMessageApplet::scrollBy(int delta)
+{
+    const size_t count = countChannelMessages();
+    const size_t limit = count ? count - 1 : 0;
+    const int next = std::clamp<int>((int)scrollOffset + delta, 0, (int)limit);
+    if ((size_t)next == scrollOffset)
+        return;
+
+    scrollOffset = (size_t)next;
+    requestUpdate(Drivers::EInk::UpdateTypes::FAST);
+}
+
+void InkHUD::ThreadedMessageApplet::onNavUp()
+{
+    scrollBy(1);
+}
+
+void InkHUD::ThreadedMessageApplet::onNavDown()
+{
+    scrollBy(-1);
 }
 
 // Code which runs when the applet begins running
@@ -164,6 +220,7 @@ void InkHUD::ThreadedMessageApplet::onActivate()
 {
     loadMessagesFromFlash();
     loopbackOk = true; // Allow us to handle messages generated on the node (canned messages)
+    setInputsSubscribed(NAV_UP | NAV_DOWN, true);
 }
 
 // Code which runs when the applet stop running
@@ -171,6 +228,7 @@ void InkHUD::ThreadedMessageApplet::onActivate()
 void InkHUD::ThreadedMessageApplet::onDeactivate()
 {
     loopbackOk = false; // Slightly reduce our impact if the applet is disabled
+    setInputsSubscribed(NAV_UP | NAV_DOWN, false);
 }
 
 // Handle new text messages
@@ -193,6 +251,9 @@ ProcessMessage InkHUD::ThreadedMessageApplet::handleReceived(const meshtastic_Me
     // Store in the global messageStore - this handles sender, timestamp, channel, text, and ack status
     if (!messageStore.tryAddFromPacket(mp))
         return ProcessMessage::CONTINUE;
+
+    // A new message should be seen, not hidden behind older ones the user scrolled back to
+    scrollOffset = 0;
 
     // If this was an incoming message, suggest that our applet becomes foreground, if permitted
     if (getFrom(&mp) != nodeDB->getNodeNum())

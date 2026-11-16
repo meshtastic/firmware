@@ -33,6 +33,7 @@ class WindowManager
     Applet *getActiveApplet();
     void openMenu();
     void openAlignStick();
+    void openAlignKeyboard();
     void openAppSwitcher();
     void openKeyboard();
     void closeKeyboard();
