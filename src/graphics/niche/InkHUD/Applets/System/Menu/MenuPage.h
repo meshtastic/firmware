@@ -22,6 +22,8 @@ enum MenuPage : uint8_t {
     REMOVE_WAYPOINT_LIST,    // Pick a waypoint to delete (WaypointListApplet only)
     GEOFENCE_WAYPOINT_LIST,
     GEOFENCE_OPTIONS,
+    STEPS_GOAL,
+    STEPS_RESET,
     OPTIONS,
     NODE_CONFIG,
     NODE_CONFIG_LORA,

@@ -41,6 +41,9 @@ static constexpr uint16_t TX_HISTORY_KEY_AIR_QUALITY_TELEMETRY = 0x8004;
 #if __has_include(<Seeed_HM330X.h>)
 #include "Sensor/HM330XSensor.h"
 #endif
+#if ARCH_PORTDUINO
+#include "Sensor/CommandSensor.h"
+#endif
 
 void AirQualityTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
 {
@@ -110,6 +113,16 @@ void AirQualityTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
     }
 
     // order by priority of metrics/values (low top, high bottom)
+#if ARCH_PORTDUINO
+    // Not an I2C device. Only added on the first scan; added first so it is read last and wins a shared field.
+    if (firstTime) {
+        auto *commandSensor = new CommandSensor(CommandSensorFields::Message::AirQuality);
+        if (commandSensor->initDevice(nullptr, nullptr))
+            sensors.push_front(commandSensor);
+        else
+            delete commandSensor;
+    }
+#endif
     addSensor<PMSA003ISensor>(i2cScanner, ScanI2C::DeviceType::PMSA003I);
     addSensor<SEN5XSensor>(i2cScanner, ScanI2C::DeviceType::SEN5X);
     addSensor<SEN6XSensor>(i2cScanner, ScanI2C::DeviceType::SEN6X);

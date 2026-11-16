@@ -152,6 +152,8 @@ enum MenuAction {
     TOGGLE_GEOFENCE_ENTER,
     TOGGLE_GEOFENCE_EXIT,
     TOGGLE_GEOFENCE_FAVORITES_ONLY,
+    RESET_STEPS,
+    SET_STEP_GOAL,
 };
 
 } // namespace NicheGraphics::InkHUD
