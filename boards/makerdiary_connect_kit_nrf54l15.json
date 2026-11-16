@@ -22,35 +22,20 @@
       "settings_addr": "0x14F000"
     }
   },
-  "connectivity": [
-    "bluetooth"
-  ],
+  "connectivity": ["bluetooth"],
   "debug": {
-    "default_tools": [
-      "jlink"
-    ],
+    "default_tools": ["jlink"],
     "jlink_device": "nRF54L15_xxAA",
-    "onboard_tools": [
-      "cmsis-dap",
-      "jlink"
-    ]
+    "onboard_tools": ["cmsis-dap", "jlink"]
   },
-  "frameworks": [
-    "arduino"
-  ],
+  "frameworks": ["arduino"],
   "name": "MakerDiary Connect Kit nRF54L15",
   "upload": {
     "maximum_ram_size": 172928,
     "maximum_size": 1371136,
     "speed": 115200,
     "protocol": "nrfutil",
-    "protocols": [
-      "jlink",
-      "nrfjprog",
-      "cmsis-dap",
-      "nrfutil",
-      "pyocd"
-    ],
+    "protocols": ["jlink", "nrfjprog", "cmsis-dap", "nrfutil", "pyocd"],
     "require_upload_port": true,
     "wait_for_upload_port": true
   },
