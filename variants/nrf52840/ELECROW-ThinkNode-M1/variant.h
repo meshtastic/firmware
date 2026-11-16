@@ -172,9 +172,8 @@ extern int m1HasAg3352;
 
 #define GPS_THREAD_INTERVAL 50
 
-// GPS开关判断. L76K boards: P1.01, HIGH = on. AG3352 boards: P0.08 (K5 to GND, or a 100K pull-up), LOW = on.
+// GPS开关判断, HIGH = on. L76K boards: P1.01. AG3352 boards: P0.08, held high by a 100K pull-up when switched on.
 #define PIN_GPS_SWITCH (m1HasAg3352 ? (0 + 8) : (32 + 1))
-#define GPS_SWITCH_ON_LEVEL (m1HasAg3352 ? LOW : HIGH)
 
 // GPS.cpp sets the pins for the fitted receiver; these are only Serial1's defaults.
 #define PIN_SERIAL1_TX (32 + 8)
