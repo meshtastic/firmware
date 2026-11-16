@@ -15,13 +15,13 @@ void InkHUD::AlignStickApplet::onRender(bool full)
     setFont(fontMedium);
     printAt(0, 0, title);
     setFont(fontSmall);
-    std::string instructions = this->instructions;
-    printWrapped(0, fontMedium.lineHeight() * 1.5, width(), instructions);
+    std::string text = instructions;
+    printWrapped(0, fontMedium.lineHeight() * 1.5, width(), text);
 
     // Size of the region in which the joystick graphic should fit
     uint16_t joyXLimit = X(0.8);
     uint16_t contentH = fontMedium.lineHeight() * 1.5 + fontSmall.lineHeight() * 1;
-    if (getTextWidth(instructions) > width())
+    if (getTextWidth(text) > width())
         contentH += fontSmall.lineHeight();
     uint16_t freeY = height() - contentH - fontSmall.lineHeight() * 1.2;
     uint16_t joyYLimit = freeY * 0.8;
