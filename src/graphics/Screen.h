@@ -687,6 +687,9 @@ class Screen : public concurrency::OSThread
     int handleInputEvent(const InputEvent *arg);
     int handleAdminMessage(AdminModule_ObserverData *arg);
 
+    /// True if the given frame opens a settings menu (blocked by DeviceUIConfig.settings_lock)
+    bool isSettingsFrame(uint8_t frame) const;
+
     /// Used to force (super slow) eink displays to draw critical frames
     void forceDisplay(bool forceUiUpdate = false);
 

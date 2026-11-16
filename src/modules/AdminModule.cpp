@@ -1902,6 +1902,8 @@ void AdminModule::handleStoreDeviceUIConfig(const meshtastic_DeviceUIConfig &uic
 {
 #if HAS_SCREEN
     nodeDB->saveProto("/prefs/uiconfig.proto", meshtastic_DeviceUIConfig_size, &meshtastic_DeviceUIConfig_msg, &uicfg);
+    // Apply immediately so e.g. settings_lock takes effect without a reboot
+    uiconfig = uicfg;
 #endif
 }
 
