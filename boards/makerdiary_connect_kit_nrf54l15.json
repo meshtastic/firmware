@@ -54,6 +54,6 @@
     "require_upload_port": true,
     "wait_for_upload_port": true
   },
-  "url": "https://www.nordicsemi.com/Products/Development-hardware/nRF54L15-DK",
+  "url": "https://makerdiary.com/products/nrf54l15-connectkit",
   "vendor": "Nordic"
 }
