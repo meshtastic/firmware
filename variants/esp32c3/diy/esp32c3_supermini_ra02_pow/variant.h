@@ -16,11 +16,16 @@
 // VCC                  3.3 V (never 5 V)
 // GND                  GND
 
-// Ra-02 is a *433 MHz* module. Constrain Meshtastic's region selection so
-// it cannot inadvertently attempt the default 868/915 MHz region. This is a
-// *hardware constraint*, not a statement that EU_433 use is legal everywhere.
-#define USERPREFS_CONFIG_LORA_REGION meshtastic_Config_LoRaConfig_RegionCode_EU_433
-#define REGULATORY_LORA_REGIONCODE meshtastic_Config_LoRaConfig_RegionCode_EU_433
+// Ai-Thinker Ra-02 uses an SX1278 433 MHz-band radio.
+//
+// No region is hardcoded here. Users must configure the
+// appropriate region through the Meshtastic app or CLI.
+//
+// The selected region determines frequency, duty-cycle,
+// and transmit-power limits.
+//
+// This hardware supports only frequencies within its
+// actual radio module and RF matching capabilities.
 
 #define HAS_SCREEN 0
 #define HAS_GPS 0
