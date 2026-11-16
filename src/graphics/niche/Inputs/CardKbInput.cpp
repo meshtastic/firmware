@@ -3,6 +3,7 @@
 #include "./CardKbInput.h"
 
 #include "configuration.h"
+#include "graphics/niche/InkHUD/Applets/System/AlignKeyboard/AlignKeyboardApplet.h"
 #include "graphics/niche/InkHUD/InkHUD.h"
 #include "graphics/niche/InkHUD/Persistence.h"
 #include "graphics/niche/InkHUD/SystemApplet.h"
@@ -38,6 +39,9 @@ void Inputs::CardKbInput::begin()
     observe(keyboard);
     LOG_INFO("CardKB attached to InkHUD");
 
+    if (InkHUD::AlignKeyboardApplet *training = alignKeyboardApplet())
+        training->onClosed = [this]() { trainingClosed(); };
+
     startTrainingIfNeeded();
 }
 
@@ -64,14 +68,21 @@ bool Inputs::CardKbInput::startTrainingIfNeeded()
     return true;
 }
 
-// AlignKeyboard leaves the foreground once the user has pressed a direction, or skipped
-void Inputs::CardKbInput::endTrainingIfDone(bool wasTraining)
+InkHUD::AlignKeyboardApplet *Inputs::CardKbInput::alignKeyboardApplet()
 {
-    if (!wasTraining || keyboardTrainingActive())
-        return;
+    return static_cast<InkHUD::AlignKeyboardApplet *>(InkHUD::InkHUD::getInstance()->getSystemApplet("AlignKeyboard"));
+}
 
+// AlignKeyboard was dismissed: a direction was pressed, or the training was skipped
+void Inputs::CardKbInput::trainingClosed()
+{
     saved.aligned = true;
-    FlashData<Saved>::save(&saved, "cardkb");
+
+    // A direction in progress still has to store the alignment it produces: see navigate()
+    if (navigating)
+        savePending = true;
+    else
+        FlashData<Saved>::save(&saved, "cardkb");
 }
 
 // Run an InkHUD joystick direction using this keyboard's alignment instead of the joystick's
@@ -87,14 +98,25 @@ void Inputs::CardKbInput::navigate(void (InkHUD::InkHUD::*direction)())
 
     uint8_t &alignment = hud->persistence->settings.joystick.alignment;
     const uint8_t joystickAlignment = alignment;
-    const bool wasTraining = keyboardTrainingActive();
+    InkHUD::AlignKeyboardApplet *training = alignKeyboardApplet();
+
+    navigating = true;
+    if (training)
+        training->keyboardInput = true;
 
     alignment = saved.alignment;
     (hud->*direction)(); // AlignKeyboard adjusts the alignment from within this call
     saved.alignment = alignment;
     alignment = joystickAlignment;
 
-    endTrainingIfDone(wasTraining);
+    if (training)
+        training->keyboardInput = false;
+    navigating = false;
+
+    if (savePending) {
+        savePending = false;
+        FlashData<Saved>::save(&saved, "cardkb");
+    }
 }
 
 int Inputs::CardKbInput::onNotify(const InputEvent *event)
@@ -131,9 +153,7 @@ int Inputs::CardKbInput::onNotify(const InputEvent *event)
     case INPUT_BROKER_BACK:
     case INPUT_BROKER_CANCEL:
         if (keyboardTrainingActive() || joystickTrainingActive()) { // No long press on a keyboard: this skips the training
-            const bool wasKeyboardTraining = keyboardTrainingActive();
             hud->exitLong();
-            endTrainingIfDone(wasKeyboardTraining);
         } else if (typing) {
             if (event->inputEvent == INPUT_BROKER_BACK)
                 hud->freeText('\b');

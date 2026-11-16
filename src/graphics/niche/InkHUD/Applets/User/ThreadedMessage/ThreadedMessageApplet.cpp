@@ -63,6 +63,7 @@ void InkHUD::ThreadedMessageApplet::onRender(bool full)
     scrollOffset = std::min(scrollOffset, channelMessages ? channelMessages - 1 : 0);
     size_t skipped = 0;
     size_t drawn = 0;
+    int16_t contentTop = msgB; // Top of the oldest message drawn: above the crop means it is cut off
 
     while (msgB >= (0 - fontSmall.lineHeight()) && msgIdx >= 0) {
 
@@ -157,6 +158,7 @@ void InkHUD::ThreadedMessageApplet::onRender(bool full)
 
         // Move cursor up: above info string
         msgB -= fontSmall.lineHeight();
+        contentTop = msgB;
 
         // Vertical line alongside message
         for (int16_t y = msgB; y < dotsB; y += 1)
@@ -173,9 +175,11 @@ void InkHUD::ThreadedMessageApplet::onRender(bool full)
     // Make text appear to pass behind the header
     hatchRegion(0, dividerY + 1, width(), fontSmall.lineHeight() / 3, 2, WHITE);
 
-    // Up: older messages above. Down: newer messages below
+    // Up: older messages above, or the oldest one drawn is cut off by the header. Down: newer messages below
     resetCrop();
-    drawScrollHints(channelMessages > scrollOffset + drawn, scrollOffset > 0);
+    const bool olderBeyond = channelMessages > scrollOffset + drawn;
+    const bool cutOff = drawn > 0 && contentTop < dividerY + 2;
+    drawScrollHints((scrollOffset + 1 < channelMessages) && (olderBeyond || cutOff), scrollOffset > 0);
 }
 
 size_t InkHUD::ThreadedMessageApplet::countChannelMessages()

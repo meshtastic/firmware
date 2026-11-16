@@ -10,7 +10,8 @@
 namespace NicheGraphics::InkHUD
 {
 class InkHUD;
-}
+class AlignKeyboardApplet;
+} // namespace NicheGraphics::InkHUD
 
 namespace NicheGraphics::Inputs
 {
@@ -46,8 +47,11 @@ class CardKbInput : public Observer<const InputEvent *>
     bool joystickTrainingActive();
     bool startTrainingIfNeeded();
     void navigate(void (InkHUD::InkHUD::*direction)());
-    void endTrainingIfDone(bool wasTraining);
+    void trainingClosed();
+    InkHUD::AlignKeyboardApplet *alignKeyboardApplet();
 
+    bool navigating = false;  // Inside navigate(): the alignment is only final once it returns
+    bool savePending = false; // Training closed during navigate(): save once the alignment is stored
     bool detected = false;
     KbI2cBase *keyboard = nullptr;
     SystemCommandsModule systemCommands;
