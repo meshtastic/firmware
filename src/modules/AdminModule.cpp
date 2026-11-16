@@ -1903,7 +1903,11 @@ void AdminModule::handleStoreDeviceUIConfig(const meshtastic_DeviceUIConfig &uic
 #if HAS_SCREEN
     nodeDB->saveProto("/prefs/uiconfig.proto", meshtastic_DeviceUIConfig_size, &meshtastic_DeviceUIConfig_msg, &uicfg);
     // Apply immediately so e.g. settings_lock takes effect without a reboot
+    const bool clockFaceChanged = uiconfig.is_clockface_analog != uicfg.is_clockface_analog;
     uiconfig = uicfg;
+    // The clock frame callback is picked in setFrames(), so rebuild the frames when the clock face changes
+    if (clockFaceChanged && screen)
+        screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
 #endif
 }
 
