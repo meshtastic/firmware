@@ -37,6 +37,7 @@ enum MenuAction {
     SET_RECENTS,
     ROTATE,
     ALIGN_JOYSTICK,
+    ALIGN_KEYBOARD,
     LAYOUT,
     TOGGLE_BATTERY_ICON,
     TOGGLE_NOTIFICATIONS,
@@ -152,6 +153,8 @@ enum MenuAction {
     TOGGLE_GEOFENCE_ENTER,
     TOGGLE_GEOFENCE_EXIT,
     TOGGLE_GEOFENCE_FAVORITES_ONLY,
+    RESET_STEPS,
+    SET_STEP_GOAL,
 };
 
 } // namespace NicheGraphics::InkHUD

@@ -19,6 +19,9 @@ class STK8XXXSensor : public MotionSensor
     explicit STK8XXXSensor(ScanI2C::FoundDevice foundDevice);
     virtual bool init() override;
     virtual int32_t runOnce() override;
+#ifdef MESHTASTIC_INCLUDE_INKHUD
+    StepSource stepSource() const override { return StepSource::Software; }
+#endif
 };
 
 #else

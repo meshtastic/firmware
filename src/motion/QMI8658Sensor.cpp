@@ -62,6 +62,9 @@ int32_t QMI8658Sensor::runOnce()
 {
     float ax, ay, az;
     if (sensor.getAccelerometer(ax, ay, az)) {
+#ifdef MESHTASTIC_INCLUDE_INKHUD
+        sampleSteps(ax, ay, az);
+#endif
         if (QMI8658_ACCEL_TO_COMPASS_ROTATION_DEG_VALUE != 0.0f) {
             static const float rotRad = QMI8658_ACCEL_TO_COMPASS_ROTATION_DEG_VALUE * DEG_TO_RAD;
             static const float cosTheta = cosf(rotRad);
