@@ -529,6 +529,32 @@ static void test_batch_nothingUnpublishedEncodesNothing()
 }
 
 // Falling back to another store keeps every readable reading, in order, with what each channel has had
+static void test_store_dropTimelessMarksOnlyReadingsWithoutTime()
+{
+    RamTelemetryStore<meshtastic_AirQualityMetrics> store(4);
+    store.push(aq(10), 1000U);
+    store.push(aq(20), 0U, 60U);
+    store.push(aq(30), 0U, 60U);
+    store.push(aq(40), 1180U);
+    store.markPublished(2, TELEMETRY_PUBLISHED_MESH);
+    store.markPublished(2, TELEMETRY_PUBLISHED_PHONE);
+    store.markPublished(2, TELEMETRY_PUBLISHED_MQTT);
+
+    // Only the timeless reading that some consumer still waited for counts
+    TEST_ASSERT_EQUAL_UINT16(1, dropTimelessTelemetryReadings(store));
+    const uint8_t all = TELEMETRY_PUBLISHED_MESH | TELEMETRY_PUBLISHED_PHONE | TELEMETRY_PUBLISHED_MQTT;
+    TelemetryReading<meshtastic_AirQualityMetrics> r;
+    TEST_ASSERT_TRUE(store.at(0, r));
+    TEST_ASSERT_EQUAL_UINT8(0, r.publishedMask);
+    TEST_ASSERT_TRUE(store.at(1, r));
+    TEST_ASSERT_EQUAL_UINT8(all, r.publishedMask);
+    TEST_ASSERT_TRUE(store.at(2, r));
+    TEST_ASSERT_EQUAL_UINT8(all, r.publishedMask);
+    TEST_ASSERT_TRUE(store.at(3, r));
+    TEST_ASSERT_EQUAL_UINT8(0, r.publishedMask);
+    TEST_ASSERT_EQUAL_UINT16(0, dropTimelessTelemetryReadings(store));
+}
+
 static void test_store_copyKeepsReadingsAndMasks()
 {
     RamTelemetryStore<meshtastic_AirQualityMetrics> from(4), to(4);
@@ -659,6 +685,7 @@ void setup()
     RUN_TEST(test_batch_shrinksToFit);
     RUN_TEST(test_batch_nothingUnpublishedEncodesNothing);
     RUN_TEST(test_store_copyKeepsReadingsAndMasks);
+    RUN_TEST(test_store_dropTimelessMarksOnlyReadingsWithoutTime);
     RUN_TEST(test_sleep_budgetIsEarliestModuleMinusBootMargin);
     RUN_TEST(test_sleep_busyModuleKeepsNodeAwake);
     RUN_TEST(test_sleep_imminentWorkGivesNoBudget);

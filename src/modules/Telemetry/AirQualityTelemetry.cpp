@@ -177,8 +177,15 @@ int32_t AirQualityTelemetryModule::runOnce()
             }
         }
 
-        if (restoreScheduleAfterSleep(TELEMETRY_SLEEP_SLOT_AIR_QUALITY, schedule))
+        if (restoreScheduleAfterSleep(TELEMETRY_SLEEP_SLOT_AIR_QUALITY, schedule)) {
             LOG_DEBUG("AQ: schedule restored after deep sleep");
+        } else if (history) {
+            const uint16_t dropped = dropTimelessTelemetryReadings(*history);
+            if (dropped)
+                LOG_INFO("AQ: dropped %u readings without time after a reboot", (unsigned)dropped);
+            if (hasLatest && latest.time == 0)
+                hasLatest = false; // seeded from one of them
+        }
 
         // it's possible to have this module enabled, only for displaying values on the screen.
         // therefore, we should only enable the sensor loop if measurement is also enabled.
