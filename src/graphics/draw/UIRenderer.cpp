@@ -13,6 +13,7 @@
 #if BASEUI_HAS_GAMES
 #include "modules/games/GamesModule.h"
 #endif
+#include "OEMBootImage.h"
 #include "UIRenderer.h"
 #include "airtime.h"
 #include "gps/GeoCoord.h"
@@ -2026,23 +2027,28 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
     graphics::drawCommonFooter(display, x, y);
 }
 
-#ifdef USERPREFS_OEM_TEXT
-
 void UIRenderer::drawOEMIconScreen(const char *upperMsg, OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
-    static const uint8_t xbm[] = USERPREFS_OEM_IMAGE_DATA;
-    if (currentResolution == ScreenResolution::High) {
-        display->drawXbm(x + (SCREEN_WIDTH - USERPREFS_OEM_IMAGE_WIDTH) / 2,
-                         y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - USERPREFS_OEM_IMAGE_HEIGHT) / 2 + 2, USERPREFS_OEM_IMAGE_WIDTH,
-                         USERPREFS_OEM_IMAGE_HEIGHT, xbm);
-    } else {
-
-        display->drawXbm(x + (SCREEN_WIDTH - USERPREFS_OEM_IMAGE_WIDTH) / 2,
-                         y + (SCREEN_HEIGHT - USERPREFS_OEM_IMAGE_HEIGHT) / 2 + 2, USERPREFS_OEM_IMAGE_WIDTH,
-                         USERPREFS_OEM_IMAGE_HEIGHT, xbm);
-    }
-
-    switch (USERPREFS_OEM_FONT_SIZE) {
+#ifdef USERPREFS_OEM_TEXT
+    static const uint8_t buildXbm[] = USERPREFS_OEM_IMAGE_DATA;
+    const uint8_t *xbm = buildXbm;
+    const int16_t imgW = USERPREFS_OEM_IMAGE_WIDTH;
+    const int16_t imgH = USERPREFS_OEM_IMAGE_HEIGHT;
+    const int fontSize = USERPREFS_OEM_FONT_SIZE;
+    const char *title = USERPREFS_OEM_TEXT;
+    const bool titleOnLowRes = false; // keep the established build-time layout
+#else
+    const OEMBootImage::Image *img = OEMBootImage::get();
+    if (!img)
+        return;
+    const uint8_t *xbm = img->xbm;
+    const int16_t imgW = img->width;
+    const int16_t imgH = img->height;
+    const int fontSize = img->fontSize;
+    const char *title = img->text;
+    const bool titleOnLowRes = true; // runtime images may carry a caption on small screens too
+#endif
+    switch (fontSize) {
     case 0:
         display->setFont(FONT_SMALL);
         break;
@@ -2054,10 +2060,18 @@ void UIRenderer::drawOEMIconScreen(const char *upperMsg, OLEDDisplay *display, O
         break;
     }
 
+    const int16_t fontH = fontSize == 0 ? FONT_HEIGHT_SMALL : (fontSize == 2 ? FONT_HEIGHT_LARGE : FONT_HEIGHT_MEDIUM);
     display->setTextAlignment(TEXT_ALIGN_LEFT);
-    const char *title = USERPREFS_OEM_TEXT;
     if (currentResolution == ScreenResolution::High) {
-        display->drawString(x + getStringCenteredX(title), y + SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM, title);
+        display->drawXbm(x + (SCREEN_WIDTH - imgW) / 2, y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - imgH) / 2 + 2, imgW, imgH, xbm);
+        if (title[0])
+            display->drawString(x + getStringCenteredX(title), y + SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM, title);
+    } else if (titleOnLowRes && title[0]) {
+        // Image centred in the space above the caption, caption on the bottom line
+        display->drawXbm(x + (SCREEN_WIDTH - imgW) / 2, y + (SCREEN_HEIGHT - fontH - imgH) / 2 + 2, imgW, imgH, xbm);
+        display->drawString(x + (SCREEN_WIDTH - display->getStringWidth(title)) / 2, y + SCREEN_HEIGHT - fontH, title);
+    } else {
+        display->drawXbm(x + (SCREEN_WIDTH - imgW) / 2, y + (SCREEN_HEIGHT - imgH) / 2 + 2, imgW, imgH, xbm);
     }
     display->setFont(FONT_SMALL);
 
@@ -2086,8 +2100,6 @@ void UIRenderer::drawOEMBootScreen(OLEDDisplay *display, OLEDDisplayUiState *sta
     const char *region = myRegion ? myRegion->name : NULL;
     drawOEMIconScreen(region, display, state, x, y);
 }
-
-#endif
 
 // Navigation bar overlay implementation
 static int16_t lastFrameIndex = -1;

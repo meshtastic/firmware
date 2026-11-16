@@ -50,6 +50,7 @@ extern NicheGraphics::BaseUIEInkDisplay *setupNicheGraphicsBaseUI();
 #include "draw/MessageRenderer.h"
 #include "draw/NodeListRenderer.h"
 #include "draw/NotificationRenderer.h"
+#include "draw/OEMBootImage.h"
 #include "draw/UIRenderer.h"
 #include "graphics/TFTColorRegions.h"
 #include "modules/CannedMessageModule.h"
@@ -936,6 +937,10 @@ void Screen::setup()
 
 #ifdef USERPREFS_OEM_TEXT
     logo_timeout *= 2; // Give more time for branded boot logos
+#else
+    // No build-time OEM screen: use a runtime one from /prefs/oemboot, if a client provided it
+    if (graphics::OEMBootImage::load())
+        logo_timeout *= 2;
 #endif
 
     // Configure alert frames (e.g., "Resuming..." or region name)
@@ -1131,11 +1136,17 @@ int32_t Screen::runOnce()
         LOG_INFO("Done with boot screen");
         stopBootScreen();
         showingBootScreen = false;
+        graphics::OEMBootImage::release();
     }
 
 #ifdef USERPREFS_OEM_TEXT
+    const bool hasOEMBootScreen = true;
+#else
+    const bool hasOEMBootScreen = graphics::OEMBootImage::get() != nullptr;
+#endif
     static bool showingOEMBootScreen = true;
-    if (showingOEMBootScreen && Throttle::hasElapsed(serialSinceMsec, logo_timeout / 2)) {
+    if (hasOEMBootScreen && showingBootScreen && showingOEMBootScreen &&
+        Throttle::hasElapsed(serialSinceMsec, logo_timeout / 2)) {
         LOG_INFO("Switch to OEM screen...");
         // Change frames.
         static FrameCallback bootOEMFrames[] = {graphics::UIRenderer::drawOEMBootScreen};
@@ -1147,7 +1158,6 @@ int32_t Screen::runOnce()
 #endif
         showingOEMBootScreen = false;
     }
-#endif
 
 #ifndef DISABLE_WELCOME_UNSET
     bool suppressRegionOnboard = false;
