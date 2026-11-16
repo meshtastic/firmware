@@ -47,6 +47,8 @@ class NodeListApplet : public Applet, public MeshModule
     NodeListApplet(const char *name);
 
     void onRender(bool full) override;
+    void onNavUp() override;
+    void onNavDown() override;
 
     bool wantPacket(const meshtastic_MeshPacket *p) override;
     ProcessMessage handleReceived(const meshtastic_MeshPacket &mp) override;
@@ -60,6 +62,11 @@ class NodeListApplet : public Applet, public MeshModule
     std::deque<CardInfo> cards; // Cards to be rendered. Derived applet fills this.
 
   private:
+    uint16_t cardsTop();         // Y of the first card, below the header
+    uint8_t maxScrollOffset();   // Furthest the list can scroll, so the last card is fully visible
+    void scrollBy(int8_t delta); // Move the list up or down by whole cards
+    uint8_t scrollOffset = 0;    // Cards scrolled off the top
+
     void drawSignalIndicator(int16_t x, int16_t y, uint16_t w, uint16_t h,
                              SignalStrength signal); // Draw a "mobile phone" style signal indicator
 
