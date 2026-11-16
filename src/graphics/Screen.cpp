@@ -1221,6 +1221,8 @@ int32_t Screen::runOnce()
             handleSetOn(true); // Ensure power-on to receive deep-sleep screensaver (PowerFSM should handle?)
 #endif
             setFrameImmediateDraw(alertFrames);
+            // The alert ended the boot screen early, so the timeout path in runOnce() won't free the OEM image
+            graphics::OEMBootImage::release();
             break;
         }
         case Cmd::START_FIRMWARE_UPDATE_SCREEN:
