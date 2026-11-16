@@ -57,6 +57,9 @@ class InkHUD
     void setTouchEnabledProvider(TouchEnabledProvider provider);
     bool hasTouchEnabledProvider() const;
     bool isTouchEnabled() const;
+    bool isTouchTimedOut() const;
+    void setTouchTimedOut(bool timedOut);
+    void setTouchSleeping(bool sleeping, bool async = true);
 
     // Handle user-button press
     // - connected to an input source, in variant nicheGraphics.h
@@ -144,6 +147,9 @@ class InkHUD
     Renderer *renderer = nullptr;           // Co-ordinate display updates
     WindowManager *windowManager = nullptr; // Multiplexing of applets
     TouchEnabledProvider touchEnabledProvider = nullptr;
+    bool touchTimedOut = false;
+    bool touchSleeping = false;
+    void refreshTouchStatus(bool async = true);
 };
 
 } // namespace NicheGraphics::InkHUD

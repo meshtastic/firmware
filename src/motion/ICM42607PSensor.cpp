@@ -73,6 +73,13 @@ int32_t ICM42607PSensor::runOnce()
         LOG_DEBUG("ICM-42607-P motion interrupt");
         wakeScreen();
     }
+#ifdef MESHTASTIC_INCLUDE_INKHUD
+    if (stepTracker().isTracking()) {
+        inv_imu_sensor_event_t event = {};
+        if (sensor->getDataFromRegisters(event) == 0)
+            sampleSteps(event.accel[0], event.accel[1], event.accel[2]);
+    }
+#endif
     return MOTION_SENSOR_CHECK_INTERVAL_MS;
 #else
     inv_imu_sensor_event_t event = {};
@@ -89,6 +96,9 @@ int32_t ICM42607PSensor::runOnce()
     float ax = static_cast<float>(event.accel[0]);
     float ay = static_cast<float>(event.accel[1]);
     const float az = static_cast<float>(event.accel[2]);
+#ifdef MESHTASTIC_INCLUDE_INKHUD
+    sampleSteps(ax, ay, az);
+#endif
 
     if (ICM42607P_ACCEL_TO_COMPASS_ROTATION_DEG_VALUE != 0.0f) {
         static const float rotRad = ICM42607P_ACCEL_TO_COMPASS_ROTATION_DEG_VALUE * DEG_TO_RAD;

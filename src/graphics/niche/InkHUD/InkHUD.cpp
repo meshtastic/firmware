@@ -13,6 +13,12 @@
 #include "MessageStore.h"
 #include "SPILock.h"
 #include "concurrency/LockGuard.h"
+#include <cstring>
+
+#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && !MESHTASTIC_EXCLUDE_ACCELEROMETER
+#include "./Applets/User/Steps/StepsApplet.h"
+#include "main.h"
+#endif
 
 using namespace NicheGraphics;
 
@@ -156,6 +162,12 @@ static void migrateOldInkHUDMessages()
 // Call this only after you have configured InkHUD
 void InkHUD::InkHUD::begin()
 {
+#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && !MESHTASTIC_EXCLUDE_ACCELEROMETER
+    if (accelerometerThread && userApplets.size() < Persistence::MAX_USERAPPLETS_GLOBAL) {
+        if (auto *sensor = accelerometerThread->getStepSensor())
+            addApplet("Steps", new StepsApplet(*accelerometerThread, *sensor));
+    }
+#endif
     persistence->loadSettings();
     messageStore.loadFromFlash(); // Load persisted messages before deriving latestMessage cache
     if (messageStore.getLiveMessages().empty())
@@ -180,10 +192,51 @@ bool InkHUD::InkHUD::hasTouchEnabledProvider() const
 
 bool InkHUD::InkHUD::isTouchEnabled() const
 {
+    if (touchTimedOut || touchSleeping)
+        return false;
     if (!touchEnabledProvider)
         return true;
 
     return touchEnabledProvider();
+}
+
+bool InkHUD::InkHUD::isTouchTimedOut() const
+{
+    return touchTimedOut;
+}
+
+void InkHUD::InkHUD::setTouchTimedOut(bool timedOut)
+{
+    if (!hasTouchEnabledProvider() || touchTimedOut == timedOut)
+        return;
+    touchTimedOut = timedOut;
+    LOG_DEBUG("InkHUD touch timeout: %s", timedOut ? "locked" : "unlocked");
+    refreshTouchStatus();
+}
+
+void InkHUD::InkHUD::setTouchSleeping(bool sleeping, bool async)
+{
+    if (!hasTouchEnabledProvider() || touchSleeping == sleeping)
+        return;
+    touchSleeping = sleeping;
+    refreshTouchStatus(async);
+}
+
+void InkHUD::InkHUD::refreshTouchStatus(bool async)
+{
+    for (SystemApplet *applet : systemApplets) {
+        if (strcmp(applet->name, "TouchStatus") != 0)
+            continue;
+        const bool enabled = isTouchEnabled();
+        if (applet->isForeground() == !enabled)
+            return;
+        if (enabled)
+            applet->sendToBackground();
+        else
+            applet->bringToForeground();
+        forceUpdate(Drivers::EInk::UpdateTypes::FAST, true, async);
+        return;
+    }
 }
 
 // Call this when your user button gets a short press

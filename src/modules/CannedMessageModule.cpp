@@ -1037,12 +1037,15 @@ int CannedMessageModule::handleEmotePickerInput(const InputEvent *event)
     if (isSelect) {
         String label = graphics::emotes[emotePickerIndex].label;
         String emoteInsert = label; // Just the text label, e.g., ":thumbsup:"
-        if (cursor == freetext.length()) {
-            freetext += emoteInsert;
-        } else {
-            freetext = freetext.substring(0, cursor) + emoteInsert + freetext.substring(cursor);
+        // Whole or not at all: the editor's limit applies, and half a label would be garbage
+        if (freetext.length() + emoteInsert.length() <= maxFreetextBytes()) {
+            if (cursor == freetext.length()) {
+                freetext += emoteInsert;
+            } else {
+                freetext = freetext.substring(0, cursor) + emoteInsert + freetext.substring(cursor);
+            }
+            cursor += emoteInsert.length();
         }
-        cursor += emoteInsert.length();
         updateState(CANNED_MESSAGE_RUN_STATE_FREETEXT, true);
         screen->forceDisplay();
         return 1;
@@ -1095,8 +1098,11 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
     // Track this packet’s request ID for matching ACKs
     this->lastRequestId = p->id;
 
-    // Copy payload
-    p->decoded.payload.size = strlen(message);
+    // Copy payload, never past its buffer
+    size_t copyLen = strlen(message);
+    if (copyLen > sizeof(p->decoded.payload.bytes))
+        copyLen = sizeof(p->decoded.payload.bytes);
+    p->decoded.payload.size = copyLen;
     memcpy(p->decoded.payload.bytes, message, p->decoded.payload.size);
 
     if (moduleConfig.canned_message.send_bell && p->decoded.payload.size + 1 < meshtastic_Constants_DATA_PAYLOAD_LEN) {
@@ -1411,7 +1417,7 @@ int32_t CannedMessageModule::runOnce()
                                          this->freetext.substring(this->cursor);
                     }
                     this->cursor++;
-                    const uint16_t maxChars = 200 - (moduleConfig.canned_message.send_bell ? 1 : 0);
+                    const unsigned int maxChars = maxFreetextBytes();
                     if (this->freetext.length() > maxChars) {
                         this->cursor = maxChars;
                         this->freetext = this->freetext.substring(0, maxChars);
@@ -1973,8 +1979,9 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
 
         // Char count right-aligned
         if (runState != CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION) {
-            uint16_t charsLeft =
-                meshtastic_Constants_DATA_PAYLOAD_LEN - this->freetext.length() - (moduleConfig.canned_message.send_bell ? 1 : 0);
+            // The limit the editor keeps to, not the whole payload: the counter showed 33 left when no more could be typed
+            const unsigned int used = this->freetext.length();
+            int charsLeft = used < maxFreetextBytes() ? (int)(maxFreetextBytes() - used) : 0;
             snprintf(buffer, sizeof(buffer), "%d left", charsLeft);
             display->drawString(x + display->getWidth() - display->getStringWidth(buffer) - BASEUI_HEADER_LR_MARGIN,
                                 y + BASEUI_HEADER_MARGIN, buffer);
@@ -2418,6 +2425,12 @@ void CannedMessageModule::handleSetCannedMessageModuleMessages(const char *from_
             moduleConfig.canned_message.enabled = true;
         }
     }
+}
+
+unsigned int CannedMessageModule::maxFreetextBytes() const
+{
+    // Below the payload size (meshtastic_Constants_DATA_PAYLOAD_LEN, 233)
+    return 200 - (moduleConfig.canned_message.send_bell ? 1 : 0);
 }
 
 String CannedMessageModule::drawWithCursor(String text, int cursor)
