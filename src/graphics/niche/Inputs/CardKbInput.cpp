@@ -100,7 +100,12 @@ void Inputs::CardKbInput::navigate(void (InkHUD::InkHUD::*direction)())
     const uint8_t joystickAlignment = alignment;
     InkHUD::AlignKeyboardApplet *training = alignKeyboardApplet();
 
-    navigating = true;
+    struct NavigatingScope {
+        bool &flag;
+        explicit NavigatingScope(bool &f) : flag(f) { flag = true; }
+        ~NavigatingScope() { flag = false; }
+    };
+    NavigatingScope scope(navigating);
     if (training)
         training->keyboardInput = true;
 
@@ -111,7 +116,6 @@ void Inputs::CardKbInput::navigate(void (InkHUD::InkHUD::*direction)())
 
     if (training)
         training->keyboardInput = false;
-    navigating = false;
 
     if (savePending) {
         savePending = false;
