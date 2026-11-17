@@ -67,6 +67,10 @@ class Channels
     /// (onConfigChanged() does that). Returns whether one was found.
     bool resolvePrimaryIndex();
 
+    /// resolvePrimaryIndex(), and if the table has no PRIMARY, makes one: the stale primaryIndex slot is promoted if it
+    /// is a SECONDARY with settings, else slot 0 gets the default channel. Returns whether a primary had to be made.
+    bool ensurePrimary();
+
     ChannelIndex getNumChannels() { return channelFile.channels_count; }
 
     /// Called by NodeDB on initial boot when the radio config settings are unset.  Set a default single channel config.

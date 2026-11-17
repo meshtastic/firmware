@@ -727,6 +727,70 @@ static void test_clampLoadedLoraConfig_legacyDefaultPrimaryGetsThePresetSlot()
     TEST_ASSERT_EQUAL_STRING("", channelFile.channels[0].settings.name);
 }
 
+// Channels::ensurePrimary() restores a PRIMARY when the saved table has none. The boot-time clamp must call it
+// before hashing: otherwise it hashes whatever name slot 0 holds and saves that slot as channel_num, which
+// stays wrong after onConfigChanged() later restores the default primary.
+static void test_clampLoadedLoraConfig_noPrimaryRestoresTheDefaultBeforeHashing()
+{
+    channels.initDefaults();
+    channels.onConfigChanged();
+    channelFile.channels[0].role = meshtastic_Channel_Role_DISABLED;
+    strncpy(channelFile.channels[0].settings.name, "A", sizeof(channelFile.channels[0].settings.name));
+    config.has_lora = true;
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    meshtastic_Config_LoRaConfig unset = config.lora;
+    const uint32_t presetSlot = RadioInterface::resolveFrequencySlot(unset, "");
+    config.lora.channel_num = 200; // more than US LongFast's 104 slots
+
+    nodeDB->clampLoadedLoraConfig();
+
+    TEST_ASSERT_EQUAL_UINT32(presetSlot, config.lora.channel_num);
+    TEST_ASSERT_EQUAL(meshtastic_Channel_Role_PRIMARY, channelFile.channels[0].role);
+    TEST_ASSERT_EQUAL_STRING("", channelFile.channels[0].settings.name);
+}
+
+// A SECONDARY at the stale primary slot is promoted with its own key, not replaced by the default:
+// replacing it would silently move the node to the public default channel.
+static void test_onConfigChanged_noPrimaryPromotesTheSecondaryWithItsKey()
+{
+    channels.initDefaults();
+    channels.onConfigChanged();
+    meshtastic_Channel &ch = channelFile.channels[0];
+    ch.role = meshtastic_Channel_Role_SECONDARY;
+    strncpy(ch.settings.name, "private", sizeof(ch.settings.name));
+    ch.settings.psk.size = 16;
+    memset(ch.settings.psk.bytes, 0x5A, ch.settings.psk.size);
+
+    channels.onConfigChanged();
+
+    TEST_ASSERT_EQUAL(0, channels.getPrimaryIndex());
+    TEST_ASSERT_EQUAL(meshtastic_Channel_Role_PRIMARY, ch.role);
+    TEST_ASSERT_EQUAL_STRING("private", ch.settings.name);
+    TEST_ASSERT_EQUAL(16, ch.settings.psk.size);
+    TEST_ASSERT_EQUAL_HEX8(0x5A, ch.settings.psk.bytes[0]);
+}
+
+// A SECONDARY with no settings must get the default, not be promoted: fixupChannel() disables a settings-less
+// slot, so promoting it would leave the table with no PRIMARY again.
+static void test_onConfigChanged_noPrimarySettingsLessSecondaryGetsTheDefault()
+{
+    channels.initDefaults();
+    channels.onConfigChanged();
+    meshtastic_Channel &ch = channelFile.channels[0];
+    ch.role = meshtastic_Channel_Role_SECONDARY;
+    ch.has_settings = false;
+
+    channels.onConfigChanged();
+
+    TEST_ASSERT_EQUAL(0, channels.getPrimaryIndex());
+    TEST_ASSERT_EQUAL(meshtastic_Channel_Role_PRIMARY, ch.role);
+    TEST_ASSERT_TRUE(ch.has_settings);
+    TEST_ASSERT_EQUAL(1, ch.settings.psk.size); // the default PSK index
+}
+
 static void test_clampConfigLora_customBwTooWideClampedToDefaultBw()
 {
     // EU_868 span is 250kHz. A 500kHz custom BW should be clamped to default preset BW.
@@ -2733,6 +2797,9 @@ void setup()
     RUN_TEST(test_clampConfigLora_invalidPresetClampedToDefault);
     RUN_TEST(test_clampConfigLora_validPresetUnchanged);
     RUN_TEST(test_clampLoadedLoraConfig_legacyDefaultPrimaryGetsThePresetSlot);
+    RUN_TEST(test_clampLoadedLoraConfig_noPrimaryRestoresTheDefaultBeforeHashing);
+    RUN_TEST(test_onConfigChanged_noPrimaryPromotesTheSecondaryWithItsKey);
+    RUN_TEST(test_onConfigChanged_noPrimarySettingsLessSecondaryGetsTheDefault);
     RUN_TEST(test_clampConfigLora_customBwTooWideClampedToDefaultBw);
     RUN_TEST(test_clampConfigLora_customBwValidLeftUnchanged);
     RUN_TEST(test_clampConfigLora_bogusPresetOnUnsetClampedToLongFast);
