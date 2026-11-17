@@ -23,6 +23,9 @@ static constexpr uint32_t WS_IDLE_TIMEOUT_MS = 15 * 60 * 1000UL;
 static constexpr uint32_t WS_WRITE_BUDGET_MS = 100;
 // A client that takes nothing for this long is dropped.
 static constexpr uint32_t WS_STALL_TIMEOUT_MS = 10 * 1000UL;
+// Private close code, the same on the Portduino route: tells a client it was replaced, so it
+// can choose not to reconnect and take the slot straight back.
+static constexpr uint16_t WS_CLOSE_REPLACED = 4001;
 
 class WebSocketPhoneAPI : public PhoneAPI
 {
@@ -67,7 +70,7 @@ MeshWebsocketHandler::MeshWebsocketHandler()
 {
     if (activeHandler) {
         LOG_INFO("WebSocket API client replaced by a new one");
-        activeHandler->shut(CLOSE_GOING_AWAY);
+        activeHandler->shut(WS_CLOSE_REPLACED);
     }
     activeHandler = this;
 
@@ -115,7 +118,8 @@ void MeshWebsocketHandler::onMessage(WebsocketInputStreambuf *input)
     if (!api || len <= 0)
         return;
     if (input->sgetc() != std::char_traits<char>::eof()) {
-        LOG_WARN("WebSocket API message over %u bytes, dropped", (unsigned)sizeof(buf));
+        LOG_WARN("WebSocket API message over %u bytes, closing", (unsigned)sizeof(buf));
+        shut(CLOSE_TOO_BIG);
         return;
     }
     if (webServerThread)
@@ -133,7 +137,7 @@ void MeshWebsocketHandler::drain()
     }
     if (api->idleTimedOut()) {
         LOG_WARN("WebSocket API client idle, closing");
-        shut(CLOSE_GOING_AWAY);
+        shut(CLOSE_NORMAL_CLOSURE);
         return;
     }
     if (canSend()) {
