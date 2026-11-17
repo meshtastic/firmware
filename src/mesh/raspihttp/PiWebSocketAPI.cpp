@@ -15,8 +15,13 @@
 #include <deque>
 #include <mutex>
 #include <string>
+#include <sys/socket.h>
 #include <ulfius.h>
 #include <vector>
+
+#ifndef MSG_NOSIGNAL
+#define MSG_NOSIGNAL 0
+#endif
 
 static constexpr uint32_t WS_IDLE_TIMEOUT_MS = 15 * 60 * 1000UL;
 // One drain slice: a longer one starves loop() during a NodeDB dump.
@@ -25,6 +30,12 @@ static constexpr int32_t WS_ATTACHED_INTERVAL_MS = 50;
 static constexpr int32_t WS_DETACHED_INTERVAL_MS = 500;
 static constexpr unsigned int WS_CLOSE_POLL_MS = 100;
 static constexpr size_t WS_MAX_INBOUND = 32;
+
+// Close codes, the same on the ESP32 route. 4001 tells a client it was replaced, so it can
+// choose not to reconnect and take the slot straight back.
+static constexpr uint16_t WS_CLOSE_NORMAL = 1000;
+static constexpr uint16_t WS_CLOSE_TOO_BIG = 1009;
+static constexpr uint16_t WS_CLOSE_REPLACED = 4001;
 
 // Ulfius runs its callbacks on its own threads. They only move bytes across this lock; the
 // PhoneAPI itself stays on the main loop.
@@ -61,6 +72,18 @@ static bool attachClient(struct _websocket_manager *manager)
     return true;
 }
 
+/// Close with a status code. Ulfius drops the payload of a close frame sent through its API,
+/// so the frame goes to its socket directly, under its own write lock.
+static void sendClose(struct _websocket_manager *manager, uint16_t code)
+{
+    const uint8_t frame[4] = {0x88, 0x02, (uint8_t)(code >> 8), (uint8_t)(code & 0xFF)};
+    if (pthread_mutex_lock(&manager->write_lock) == 0) {
+        send(manager->mhd_sock, frame, sizeof(frame), MSG_NOSIGNAL);
+        pthread_mutex_unlock(&manager->write_lock);
+    }
+    ulfius_websocket_send_close_signal(manager);
+}
+
 static void onWebSocketOpen(const struct _u_request *request, struct _websocket_manager *manager, void *userData)
 {
 #ifndef U_DISABLE_WS_MESSAGE_LIST
@@ -72,11 +95,13 @@ static void onWebSocketOpen(const struct _u_request *request, struct _websocket_
         attachClient(manager);
     }
     // Returning closes the socket, so hold it until the peer leaves or a newer client takes over.
-    while (ulfius_websocket_wait_close(manager, WS_CLOSE_POLL_MS) == U_WEBSOCKET_STATUS_OPEN) {
+    bool replaced = false;
+    while (!replaced && ulfius_websocket_wait_close(manager, WS_CLOSE_POLL_MS) == U_WEBSOCKET_STATUS_OPEN) {
         std::lock_guard<std::mutex> guard(wsLock);
-        if (wsClient != manager)
-            break;
+        replaced = wsClient != manager;
     }
+    if (replaced)
+        sendClose(manager, WS_CLOSE_REPLACED);
     std::lock_guard<std::mutex> guard(wsLock);
     if (!isDisplaced(manager))
         wsDisplaced.push_back(manager);
@@ -87,8 +112,12 @@ static void onWebSocketOpen(const struct _u_request *request, struct _websocket_
 static void onWebSocketMessage(const struct _u_request *request, struct _websocket_manager *manager,
                                const struct _websocket_message *message, void *userData)
 {
-    if (message->opcode != U_WEBSOCKET_OPCODE_BINARY || message->data_len == 0 || message->data_len > MAX_TO_FROM_RADIO_SIZE)
+    if (message->opcode != U_WEBSOCKET_OPCODE_BINARY || message->data_len == 0)
         return;
+    if (message->data_len > MAX_TO_FROM_RADIO_SIZE) {
+        sendClose(manager, WS_CLOSE_TOO_BIG);
+        return;
+    }
     std::lock_guard<std::mutex> guard(wsLock);
     // The first message can beat onWebSocketOpen to the lock.
     if (attachClient(manager) && wsInbound.size() < WS_MAX_INBOUND)
@@ -105,6 +134,11 @@ static void onWebSocketClose(const struct _u_request *request, struct _websocket
 
 static int handleAPIv1WebSocket(const struct _u_request *req, struct _u_response *res, void *userData)
 {
+    // With no protocol named, ulfius echoes whichever one the client offers. None is spoken here.
+    if (u_map_has_key_case(req->map_header, "Sec-WebSocket-Protocol")) {
+        ulfius_set_string_body_response(res, 400, "No WebSocket subprotocol is supported");
+        return U_CALLBACK_COMPLETE;
+    }
     if (ulfius_set_websocket_response(res, NULL, NULL, &onWebSocketOpen, NULL, &onWebSocketMessage, NULL, &onWebSocketClose,
                                       NULL) != U_OK)
         ulfius_set_string_body_response(res, 400, "WebSocket upgrade failed");
@@ -158,7 +192,7 @@ int32_t PiWebSocketAPI::runOnce()
         return 1;
     if (idle) {
         LOG_WARN("WebSocket API client idle, closing");
-        ulfius_websocket_send_close_signal(wsClient);
+        sendClose(wsClient, WS_CLOSE_NORMAL);
         return WS_ATTACHED_INTERVAL_MS;
     }
     while (Throttle::isWithinTimespanMs(started, WS_WRITE_BUDGET_MS)) {
