@@ -265,7 +265,7 @@ Logging:
 
 Webserver:
 #  Port: 9443 # Port for Webserver & Webservices
-#  HTTPPort: 9080 # Also serve them without TLS on this port (http:// and ws://). Off unless set
+#  HTTPPort: 9080 # Also serve them without TLS on this port, plain HTTP and WebSocket. Off unless set
 #  RootPath: /usr/share/meshtasticd/web # Root Dir of WebServer
 #  SSLKey: /etc/meshtasticd/ssl/private_key.pem # Path to SSL Key, generated if not present
 #  SSLCert: /etc/meshtasticd/ssl/certificate.pem # Path to SSL Certificate, generated if not present
