@@ -454,6 +454,58 @@ uint8_t GPS::makeCASPacket(uint8_t class_id, uint8_t msg_id, uint8_t payload_siz
     return (payload_size + 10);
 }
 
+/**
+ * Index of the first of `messages` found in the first `len` bytes of `buf`, or -1 for none. Split out
+ * from getACKAny() so the native suite can cover the matching itself, which is the part that was wrong:
+ * a model with several identity strings could not be matched at all.
+ */
+int gpsMatchAnyIdentity(const char *buf, size_t len, const char *const *messages, size_t count)
+{
+    if (buf == nullptr || messages == nullptr)
+        return -1;
+    for (size_t i = 0; i < count; i++) {
+        if (messages[i] != nullptr && strnstr(buf, messages[i], len) != nullptr)
+            return static_cast<int>(i);
+    }
+    return -1;
+}
+
+GPS_RESPONSE GPS::getACKAny(const char *const *messages, size_t count, uint32_t waitMillis, const char **matched)
+{
+    uint8_t buffer[768] = {0};
+    uint8_t b;
+    int bytesRead = 0;
+    const uint32_t waitStartMs = Time::getMillis();
+#if GPS_DEBUG
+    std::string debugmsg = "";
+#endif
+    if (matched)
+        *matched = nullptr;
+    while (Throttle::isWithinTimespanMs(waitStartMs, waitMillis)) {
+        feedWatchdogWhileWaiting();
+        if (_serial_gps->available()) {
+            b = _serial_gps->read();
+#if GPS_DEBUG
+            debugmsg += vformat("%c", (b >= 32 && b <= 126) ? b : '.');
+#endif
+            buffer[bytesRead] = b;
+            bytesRead++;
+            if ((bytesRead == 767) || (b == '\r')) {
+                LOG_DEBUG_GPS("%s", debugmsg.c_str());
+                const int hit = gpsMatchAnyIdentity((char *)buffer, bytesRead, messages, count);
+                if (hit >= 0) {
+                    LOG_DEBUG_GPS("Found: %s", messages[hit]);
+                    if (matched)
+                        *matched = messages[hit];
+                    return GNSS_RESPONSE_OK;
+                }
+                bytesRead = 0;
+            }
+        }
+    }
+    return GNSS_RESPONSE_NONE;
+}
+
 GPS_RESPONSE GPS::getACK(const char *message, uint32_t waitMillis)
 {
     uint8_t buffer[768] = {0};
@@ -843,16 +895,34 @@ bool GPS::verifyCachedProbePresence()
         _serial_gps->write("$PCAS06,1*1A\r\n");
         present = (getACK("$GPTXT,01,01,02,HW=ATGM", 900) == GNSS_RESPONSE_OK);
         break;
-    case GNSS_MODEL_UC6580:
+    case GNSS_MODEL_UC6580: {
+        // $PDTINFO is written once, so the old chain of two getACK() calls could not work: the first
+        // consumed the reply, leaving the second to time out against an empty port. A UM600 therefore
+        // never verified from cache and paid 1800 ms to fail.
+        static const char *const kIds[] = {"UC6580", "UM600"};
         cachedProbeModelName = "UC6580/UM600";
         _serial_gps->write("$PDTINFO\r\n");
-        present = (getACK("UC6580", 900) == GNSS_RESPONSE_OK) || (getACK("UM600", 900) == GNSS_RESPONSE_OK);
+        const char *found = nullptr;
+        present = (getACKAny(kIds, sizeof(kIds) / sizeof(kIds[0]), 900, &found) == GNSS_RESPONSE_OK);
+        if (found)
+            cachedProbeModelName = found;
         break;
-    case GNSS_MODEL_CM121:
+    }
+    case GNSS_MODEL_CM121: {
+        // Both of these map to GNSS_MODEL_CM121 in the probe table below, and a board carrying the
+        // CC1167Q answers $PDTINFO with that name -- so matching only "CM121" failed every warm boot,
+        // burned the full 900 ms and all twelve $PDTINFO retries, and only survived because the passive
+        // sawNmeaSentenceAtBaud() fallback below caught it. Measured on a ThinkNode M9, whose GPS reports
+        // "$PDTINFO,CC1167Q,G1B1,N/A,N1000R3.52.1.3269Build15172,N/A,N/A".
+        static const char *const kIds[] = {"CM121", "CC1167Q"};
         cachedProbeModelName = "CM121";
         _serial_gps->write("$PDTINFO\r\n");
-        present = (getACK("CM121", 900) == GNSS_RESPONSE_OK);
+        const char *found = nullptr;
+        present = (getACKAny(kIds, sizeof(kIds) / sizeof(kIds[0]), 900, &found) == GNSS_RESPONSE_OK);
+        if (found) // name the chip that actually answered, not the enum's label
+            cachedProbeModelName = found;
         break;
+    }
     case GNSS_MODEL_LC760CA:
         cachedProbeModelName = "LC760CA";
         _serial_gps->write("$PDTINFO\r\n");
