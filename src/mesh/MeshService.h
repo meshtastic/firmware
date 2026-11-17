@@ -80,6 +80,14 @@ class MeshService
     /// Updated in loop() to detect when fromNum changes
     uint32_t oldFromNum = 0;
 
+    // An admin save's reply is queued after the save, so a retune at save time sends it on the new settings,
+    // where the requester isn't listening.
+    bool radioConfigDeferred = false;
+    uint32_t radioConfigDeferredAtMs = 0;
+
+    /// Retune the radio to the current config and record the slot it is now committed to.
+    void applyRadioConfig();
+
   public:
     enum APIState {
         STATE_DISCONNECTED, // Initial state, no API is connected
@@ -186,10 +194,21 @@ class MeshService
     void injectAsReceived(meshtastic_MeshPacket &p);
 #endif
 
-    /** The radioConfig object just changed, call this to force the hw to change to the new settings
-     * @return true if client devices should be sent a new set of radio configs
+    /** The radioConfig object just changed, call this to force the hw to change to the new settings.
+     * deferRadio holds the retune until the TX queue has drained (see applyDeferredRadioConfig()); the save is immediate.
      */
-    void reloadConfig(int saveWhat = SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS);
+    void reloadConfig(int saveWhat = SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS,
+                      bool deferRadio = false);
+
+    /// A radio change saved with deferRadio that the radio hasn't been retuned to yet. Holds a pending reboot.
+    bool isRadioConfigDeferred() const { return radioConfigDeferred; }
+
+    /// Longest a deferred radio change waits for the TX queue, so a saturated channel can't hold it forever. At LONG_SLOW
+    /// a ~45-byte ack is ~3.3 s on air and a 64-slot contention window ~10 s, leaving room for one packet queued ahead.
+    static constexpr uint32_t RADIO_CONFIG_DEFER_MAX_MS = 20 * 1000;
+
+    /// Apply a deferred radio change once nothing is queued or on air, or once RADIO_CONFIG_DEFER_MAX_MS has passed.
+    void applyDeferredRadioConfig();
 
     /// The owner User record just got updated, update our node DB and broadcast the info into the mesh
     void reloadOwner(bool shouldSave = true);

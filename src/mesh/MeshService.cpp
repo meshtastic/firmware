@@ -11,6 +11,7 @@
 #include "NodeDB.h"
 #include "Power.h"
 #include "PowerFSM.h"
+#include "Throttle.h"
 #include "TypeConversions.h"
 #include "UptimeClock.h"
 #include "gps/GPSLog.h"
@@ -23,6 +24,7 @@
 #include "modules/NodeInfoModule.h"
 #include "modules/PositionModule.h"
 #include "modules/RoutingModule.h"
+#include "sleep.h"
 #include <assert.h>
 #include <string>
 
@@ -152,10 +154,36 @@ void MeshService::loop()
             identityGenerationSeen = generation;
         }
     }
+    applyDeferredRadioConfig();
+}
+
+void MeshService::applyDeferredRadioConfig()
+{
+    if (!radioConfigDeferred)
+        return;
+    // A deep-sleep preflight is the radio's own "nothing queued and nothing on air" check.
+    if (doPreflightSleep(true)) {
+        LOG_INFO("TX queue drained, apply the deferred radio change");
+    } else if (Throttle::hasElapsed(radioConfigDeferredAtMs, RADIO_CONFIG_DEFER_MAX_MS)) {
+        LOG_WARN("TX still busy after %u ms, apply the deferred radio change anyway", RADIO_CONFIG_DEFER_MAX_MS);
+    } else {
+        return;
+    }
+    applyRadioConfig();
+}
+
+void MeshService::applyRadioConfig()
+{
+    radioConfigDeferred = false;
+    configChanged.notifyObservers(NULL); // This will cause radio hardware to change freqs etc
+
+    // Nothing is swept and nothing extra persisted: each node carries the slot it was heard on, so
+    // a client rolling through presets just moves this and moves it back.
+    nodeDB->refreshCommittedLoraSlot();
 }
 
 /// The radioConfig object just changed, call this to force the hw to change to the new settings
-void MeshService::reloadConfig(int saveWhat)
+void MeshService::reloadConfig(int saveWhat, bool deferRadio)
 {
     // Only LoRa config and channels (freq/PSK/slot) affect the radio. Saves that only touch
     // module config, device state, or the node database (e.g. favoriting a node) have no reason
@@ -166,11 +194,13 @@ void MeshService::reloadConfig(int saveWhat)
         // This will also update the region as needed
         nodeDB->resetRadioConfig(); // Don't let the phone send us fatally bad settings
 
-        configChanged.notifyObservers(NULL); // This will cause radio hardware to change freqs etc
-
-        // Nothing is swept and nothing extra persisted: each node carries the slot it was heard on, so
-        // a client rolling through presets just moves this and moves it back.
-        nodeDB->refreshCommittedLoraSlot();
+        if (deferRadio) {
+            LOG_INFO("Radio change saved, retune once the TX queue drains");
+            radioConfigDeferred = true;
+            radioConfigDeferredAtMs = Time::getMillis();
+        } else {
+            applyRadioConfig();
+        }
     }
     nodeDB->saveToDisk(saveWhat);
 }

@@ -1145,8 +1145,8 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
             //  use_preset and bandwidth are coerced into valid values by the check.
         }
 
-        // All LoRa radio changes apply live via configChanged observer → reconfigure().
-        // reconfigure() puts the radio in standby, reprograms all modem parameters, and restarts receive.
+        // All LoRa radio changes apply live via configChanged → reconfigure(), once this request's reply is out
+        // (saveChanges). reconfigure() puts the radio in standby, reprograms all modem parameters, and restarts receive.
         requiresReboot = false;
 
 #if defined(ARCH_PORTDUINO)
@@ -1889,7 +1889,9 @@ void AdminModule::saveChanges(int saveWhat, bool shouldReboot)
 #endif
     if (!hasOpenEditTransaction) {
         LOG_INFO("Save changes to disk");
-        service->reloadConfig(saveWhat); // Calls saveToDisk among other things
+        // The reply to this request is queued after we return: retune only once it has gone out on the
+        // current settings, or the requester never hears it.
+        service->reloadConfig(saveWhat, true);
     } else {
         LOG_INFO("Delay disk save until open transaction commits");
         editTransactionActivityMs = millis(); // still in use, so not the abandoned kind we time out
