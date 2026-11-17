@@ -32,29 +32,28 @@ extern "C" {
 #define HELTEC_MESH_POCKET_V2
 #endif
 
-// Display (1.08" TFT, SPI1)
-// FIXME: controller and resolution are not on the schematic; ST7735 80x160 matches Heltec's other nRF52 TFT boards.
+// Display (1.08" NV3001B 128x220 TFT, SPI1)
+#define HAS_SCREEN 1
 #define HAS_SPI_TFT 1
-#define ST7735_CS (0 + 16)
-#define ST7735_RS (32 + 0) // DC
-#define ST7735_SDA (32 + 7)
-#define ST7735_SCK (32 + 1)
-#define ST7735_RESET (0 + 24)
-#define ST7735_MISO -1
-#define ST7735_BUSY -1
-#define ST7735_BL (0 + 25) // LED_K, drives an N-FET on the backlight cathode: HIGH = on
-#define VTFT_CTRL (0 + 9)  // VScreen_Ctrl, P-FET on the panel rail: LOW = powered
-#define SPI_FREQUENCY 40000000
-#define SPI_READ_FREQUENCY 16000000
+#define USE_TFTDISPLAY 1
+#define USE_ARDUINO_GFX 1
+#define TFT_NV3001B 1
+#define TFT_SCL (32 + 1)
+#define TFT_SDA (32 + 7)
+#define TFT_CS (0 + 16)
+#define TFT_RS (32 + 0)
+#define TFT_DC TFT_RS
+#define TFT_RST (0 + 24)
+#define VTFT_CTRL (0 + 9) // VScreen_Ctrl, P-FET on the panel rail
+#define TFT_EN_ON LOW
+#define TFT_EN_OFF HIGH
+#define TFT_BL (0 + 25) // LED_K, N-FET on the backlight cathode
+#define TFT_BACKLIGHT_ON HIGH
+#define TFT_BACKLIGHT_OFF LOW
+#define TFT_WIDTH 128
+#define TFT_HEIGHT 220
+#define SPI_FREQUENCY 8000000
 #define SCREEN_ROTATE
-#define TFT_HEIGHT 160
-#define TFT_WIDTH 80
-#define TFT_OFFSET_X 24
-#define TFT_OFFSET_Y 0
-#define TFT_INVERT false
-#define TFT_SLEEP_WHEN_OFF // sleep the panel on screen-off instead of driving it unlit
-#define DISPLAY_FORCE_SMALL_FONTS
-#define FORCE_LOW_RES 1 // 80px-wide panel causes artifacts with full-res UI elements
 
 // Pins
 
@@ -117,9 +116,9 @@ extern "C" {
 #define PIN_SPI_SCK (32 + 13)
 
 // SPI1 - Display (write-only)
-#define PIN_SPI1_MISO ST7735_MISO
-#define PIN_SPI1_MOSI ST7735_SDA
-#define PIN_SPI1_SCK ST7735_SCK
+#define PIN_SPI1_MISO (-1)
+#define PIN_SPI1_MOSI TFT_SDA
+#define PIN_SPI1_SCK TFT_SCL
 
 // GPS (UC6580)
 
