@@ -26,6 +26,7 @@
 #include "main.h" // for cardkb_found
 #include "mesh/generated/meshtastic/cannedmessages.pb.h"
 #include "modules/AdminModule.h"
+#include "modules/AtakPluginModule.h"
 #include "modules/ExternalNotificationModule.h" // for buzzer control
 extern MessageStore messageStore;
 #if HAS_TRACKBALL
@@ -1109,6 +1110,13 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
         p->decoded.payload.bytes[p->decoded.payload.size++] = 7;
         p->decoded.payload.bytes[p->decoded.payload.size] = '\0';
     }
+
+#if !MESHTASTIC_EXCLUDE_ATAK
+    if (AtakPluginModule::sendsTextAsGeoChat() && !AtakPluginModule::setGeoChatPayload(p, message, strlen(message))) {
+        packetPool.release(p);
+        return;
+    }
+#endif
 
     this->waitingForAck = true;
 
@@ -2429,6 +2437,11 @@ void CannedMessageModule::handleSetCannedMessageModuleMessages(const char *from_
 
 unsigned int CannedMessageModule::maxFreetextBytes() const
 {
+#if !MESHTASTIC_EXCLUDE_ATAK
+    // GeoChat leaves less room than a plain text payload
+    if (AtakPluginModule::sendsTextAsGeoChat())
+        return AtakPluginModule::maxGeoChatBytes(dest);
+#endif
     // Below the payload size (meshtastic_Constants_DATA_PAYLOAD_LEN, 233)
     return 200 - (moduleConfig.canned_message.send_bell ? 1 : 0);
 }

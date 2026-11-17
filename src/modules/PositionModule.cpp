@@ -17,7 +17,7 @@
 #include "gps/RTC.h"
 #include "main.h"
 #include "meshUtils.h"
-#include "meshtastic/atak.pb.h"
+#include "modules/AtakPluginModule.h"
 #include "sleep.h"
 #include "target_specific.h"
 #include <Throttle.h>
@@ -331,23 +331,10 @@ meshtastic_MeshPacket *PositionModule::allocAtakPli()
     meshtastic_MeshPacket *mp = allocDataPacket();
     if (!mp)
         return nullptr;
-    mp->decoded.portnum = meshtastic_PortNum_ATAK_PLUGIN_V2;
 
     meshtastic_TAKPacketV2 takPacket = meshtastic_TAKPacketV2_init_zero;
     takPacket.cot_type_id = meshtastic_CotType_CotType_a_f_G_U_C;
-
-    // Use TAK config for team/role if configured, otherwise use defaults (Cyan/TeamMember)
-    if (moduleConfig.has_tak && moduleConfig.tak.team != meshtastic_Team_Unspecifed_Color) {
-        takPacket.team = moduleConfig.tak.team;
-    } else {
-        takPacket.team = meshtastic_Team_Cyan;
-    }
-
-    if (moduleConfig.has_tak && moduleConfig.tak.role != meshtastic_MemberRole_Unspecifed) {
-        takPacket.role = moduleConfig.tak.role;
-    } else {
-        takPacket.role = meshtastic_MemberRole_TeamMember;
-    }
+    AtakPluginModule::fillSender(takPacket);
     takPacket.latitude_i = localPosition.latitude_i;
     takPacket.longitude_i = localPosition.longitude_i;
     takPacket.altitude = localPosition.altitude_hae;
@@ -372,35 +359,19 @@ meshtastic_MeshPacket *PositionModule::allocAtakPli()
         takPacket.alt_src = meshtastic_GeoPointSource_GeoPointSource_GPS;
     }
 
-    // Callsign - stored as plain string (no compression, apps handle that)
-    strncpy(takPacket.callsign, owner.long_name, sizeof(takPacket.callsign) - 1);
-    takPacket.callsign[sizeof(takPacket.callsign) - 1] = '\0';
     strncpy(takPacket.device_callsign, owner.long_name, sizeof(takPacket.device_callsign) - 1);
     takPacket.device_callsign[sizeof(takPacket.device_callsign) - 1] = '\0';
 
     // CoT uid - ATAK drops PLI entities with empty uid; derive stable "!<nodenum>" id.
     snprintf(takPacket.uid, sizeof(takPacket.uid), "!%08x", nodeDB->getNodeNum());
 
-    // Encode TAKPacketV2 protobuf, leaving room for flags byte prefix
-    uint8_t protobuf_bytes[sizeof(mp->decoded.payload.bytes) - 1];
-    size_t proto_size = pb_encode_to_bytes(protobuf_bytes, sizeof(protobuf_bytes), &meshtastic_TAKPacketV2_msg, &takPacket);
-
-    if (proto_size == 0) {
+    if (!AtakPluginModule::setPayload(mp, takPacket)) {
         LOG_ERROR("TAK V2 PLI packet encode failed");
         packetPool.release(mp);
         return nullptr;
     }
 
-    // Wire format: [flags byte][protobuf bytes]
-    // Flags byte 0xFF is a reserved sentinel meaning the remainder is an
-    // uncompressed raw protobuf payload (that is, no zstd dictionary ID is
-    // encoded in the flags byte). Decoders must check for this sentinel before
-    // applying any dictionary-ID masking/interpretation.
-    mp->decoded.payload.bytes[0] = 0xFF;
-    memcpy(mp->decoded.payload.bytes + 1, protobuf_bytes, proto_size);
-    mp->decoded.payload.size = proto_size + 1;
-
-    LOG_TRACE("TAK V2 PLI payload: %zu bytes (1 flags + %zu protobuf)", mp->decoded.payload.size, proto_size);
+    LOG_TRACE("TAK V2 PLI payload: %u bytes", mp->decoded.payload.size);
     return mp;
 }
 

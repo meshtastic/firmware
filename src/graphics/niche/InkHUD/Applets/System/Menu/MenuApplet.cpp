@@ -25,6 +25,7 @@
 #include "graphics/niche/Utils/FlashData.h"
 #include "main.h"
 #include "mesh/generated/meshtastic/deviceonly.pb.h"
+#include "modules/AtakPluginModule.h"
 #include "modules/GeofenceModule.h"
 #include "modules/WaypointModule.h"
 #include <RadioLibInterface.h>
@@ -3005,6 +3006,13 @@ void InkHUD::MenuApplet::sendText(NodeNum dest, ChannelIndex channel, const char
     }
 
     LOG_INFO("Send message id=%d, dest=%x, msg=%.*s", p->id, p->to, p->decoded.payload.size, p->decoded.payload.bytes);
+
+#if !MESHTASTIC_EXCLUDE_ATAK
+    if (AtakPluginModule::sendsTextAsGeoChat() && !AtakPluginModule::setGeoChatPayload(p, message, strlen(message))) {
+        packetPool.release(p);
+        return;
+    }
+#endif
 
     service->sendToMesh(p, RX_SRC_LOCAL, true); // Send to mesh, cc to phone
 }

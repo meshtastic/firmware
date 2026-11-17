@@ -8,7 +8,9 @@
 #include "MeshService.h"
 #include "PowerFSM.h"
 #include "RadioInterface.h"
+#include "Router.h"
 #include "api/PacketAPI.h"
+#include "modules/AtakPluginModule.h"
 #include "modules/NodeInfoModule.h"
 
 #ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
@@ -73,6 +75,16 @@ bool PacketAPI::receivePacket(void)
             meshtastic_MeshPacket *mp = &mr->packet;
             mp->transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_API;
             printPacket("PACKET FROM QUEUE", mp);
+#if !MESHTASTIC_EXCLUDE_ATAK
+            // Text typed on the device-ui goes out as GeoChat on TAK roles
+            if (AtakPluginModule::sendsTextAsGeoChat() && mp->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
+                mp->decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP) {
+                if (mp->id == 0)
+                    mp->id = generatePacketId(); // The GeoChat message id is derived from it
+                if (!AtakPluginModule::setGeoChatPayload(mp, (const char *)mp->decoded.payload.bytes, mp->decoded.payload.size))
+                    break;
+            }
+#endif
             service->handleToRadio(*mp);
             break;
         }
