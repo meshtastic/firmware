@@ -119,7 +119,7 @@ template <typename T> class RamTelemetryStore : public TelemetryStore<T>
 /// Copy every readable reading, oldest first, with what each channel has had, so switching stores loses nothing
 /// still readable. @return readings copied
 /// After a reboot the delta chain is broken, so readings without a time can't be placed any more: mark them taken
-/// by every consumer so they are never sent. Returns how many still had a consumer waiting.
+/// by every consumer so they are never sent. Returns how many the mesh had not had yet.
 template <typename T> uint16_t dropTimelessTelemetryReadings(TelemetryStore<T> &store)
 {
     uint16_t dropped = 0;
@@ -127,15 +127,12 @@ template <typename T> uint16_t dropTimelessTelemetryReadings(TelemetryStore<T> &
     for (uint16_t i = 0; i < store.size(); i++) {
         if (!store.at(i, r) || r.time != 0)
             continue;
-        bool pending = false;
-        for (TelemetryPublishChannel ch : {TELEMETRY_PUBLISHED_MESH, TELEMETRY_PUBLISHED_PHONE, TELEMETRY_PUBLISHED_MQTT}) {
-            if (!(r.publishedMask & ch)) {
-                store.markPublished(i, ch);
-                pending = true;
-            }
-        }
-        if (pending)
+        if (!(r.publishedMask & TELEMETRY_PUBLISHED_MESH))
             dropped++;
+        for (TelemetryPublishChannel ch : {TELEMETRY_PUBLISHED_MESH, TELEMETRY_PUBLISHED_PHONE, TELEMETRY_PUBLISHED_MQTT}) {
+            if (!(r.publishedMask & ch))
+                store.markPublished(i, ch);
+        }
     }
     return dropped;
 }

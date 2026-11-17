@@ -537,10 +537,8 @@ static void test_store_dropTimelessMarksOnlyReadingsWithoutTime()
     store.push(aq(30), 0U, 60U);
     store.push(aq(40), 1180U);
     store.markPublished(2, TELEMETRY_PUBLISHED_MESH);
-    store.markPublished(2, TELEMETRY_PUBLISHED_PHONE);
-    store.markPublished(2, TELEMETRY_PUBLISHED_MQTT);
 
-    // Only the timeless reading that some consumer still waited for counts
+    // Only the timeless reading the mesh had not had counts; both end up taken by every consumer
     TEST_ASSERT_EQUAL_UINT16(1, dropTimelessTelemetryReadings(store));
     const uint8_t all = TELEMETRY_PUBLISHED_MESH | TELEMETRY_PUBLISHED_PHONE | TELEMETRY_PUBLISHED_MQTT;
     TelemetryReading<meshtastic_AirQualityMetrics> r;
