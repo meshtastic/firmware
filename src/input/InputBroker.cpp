@@ -351,7 +351,18 @@ void InputBroker::Init()
         concurrency::mainDelay.interruptFromISR(&higherWake);
     };
     downConfig.singlePress = INPUT_BROKER_DOWN;
+#if defined(PTT_VIA_DOWN_BUTTON) && defined(HAS_AUDIO_CODEC2) && !MESHTASTIC_EXCLUDE_AUDIO
+    // Boards with no spare GPIO key up on this button instead of scrolling with
+    // it. Both edges, so the hold behaves like a real PTT bar.
+    downConfig.longPress = INPUT_BROKER_PTT_DOWN;
+    downConfig.longPressRelease = INPUT_BROKER_PTT_UP;
+    // Holding this button is normal operation here, not a step towards the
+    // shutdown gesture, so it must not play the lead-up warning notes.
+    downConfig.suppressLeadUpSound = true;
+    downConfig.shortLong = INPUT_BROKER_PTT_CYCLE; // tap then hold: pick who to talk to
+#else
     downConfig.longPress = INPUT_BROKER_DOWN_LONG;
+#endif
     downConfig.longPressTime = 500;
     DownButtonThread->initButton(downConfig);
 #endif

@@ -18,6 +18,8 @@ struct ButtonConfig {
     bool suppressLeadUpSound = false;
     input_broker_event singlePress = INPUT_BROKER_NONE;
     input_broker_event longPress = INPUT_BROKER_NONE;
+    // Fires when a long press ends, for holds that need both edges such as PTT.
+    input_broker_event longPressRelease = INPUT_BROKER_NONE;
     uint16_t longPressTime = 500;
     input_broker_event doublePress = INPUT_BROKER_NONE;
     input_broker_event longLongPress = INPUT_BROKER_NONE;
@@ -90,6 +92,7 @@ class ButtonThread : public Observable<const InputEvent *>, public concurrency::
   private:
     input_broker_event _singlePress = INPUT_BROKER_NONE;
     input_broker_event _longPress = INPUT_BROKER_NONE;
+    input_broker_event _longPressRelease = INPUT_BROKER_NONE;
     input_broker_event _longLongPress = INPUT_BROKER_NONE;
 
     input_broker_event _doublePress = INPUT_BROKER_NONE;

@@ -57,6 +57,7 @@ bool ButtonThread::initButton(const ButtonConfig &config)
         this);
 
     _longPress = config.longPress;
+    _longPressRelease = config.longPressRelease;
     userButton.attachLongPressStart(
         [](void *callerThread) -> void {
             ButtonThread *thread = (ButtonThread *)callerThread;
@@ -279,6 +280,10 @@ int32_t ButtonThread::runOnce()
         case BUTTON_EVENT_LONG_RELEASED: {
 
             LOG_INPUT("LONG PRESS RELEASE AFTER %u MILLIS", millis() - buttonPressStartTime);
+            if (_longPressRelease != INPUT_BROKER_NONE) {
+                evt.inputEvent = _longPressRelease;
+                this->notifyObservers(&evt);
+            }
             // Require press started after boot holdoff to avoid phantom shutdown from floating pins
             if (millis() > 30000 && buttonPressStartTime > 30000 && _longLongPress != INPUT_BROKER_NONE &&
                 (millis() - buttonPressStartTime) >= _longLongPressTime && leadUpPlayed) {

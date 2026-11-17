@@ -6,7 +6,9 @@
 #if defined(HAS_AUDIO_CODEC2) && !MESHTASTIC_EXCLUDE_AUDIO
 
 // Codec2 is float throughout; software float runs ~3.5x slower than real time.
-#if !defined(__FPU_PRESENT) && !defined(__XTENSA__) && !defined(ESP_PLATFORM)
+// __ARM_FP is a compiler predefined, unlike CMSIS __FPU_PRESENT which only
+// appears once the device header is included. Cortex-M0+ (RP2040) has neither.
+#if !defined(__ARM_FP) && !defined(__FPU_PRESENT) && !defined(__XTENSA__) && !defined(ESP_PLATFORM)
 #error "HAS_AUDIO_CODEC2 requires a hardware FPU"
 #endif
 
@@ -15,15 +17,19 @@
 #include "AudioStream.h"
 #include "ButterworthFilter.h"
 #include "NodeDB.h"
+#include "input/InputBroker.h"
 #include <Arduino.h>
 #include <OLEDDisplay.h>
 #include <OLEDDisplayUi.h>
 #include <codec2.h>
 
-enum RadioState { standby, rx, tx };
+enum RadioState { rx, tx };
 
+// 0 means no dedicated PTT line on this board. moduleConfig.audio.ptt_pin
+// overrides either way; with neither set the module receives but cannot talk,
+// which beats polling an arbitrary pin and keying up on noise.
 #ifndef PTT_PIN
-#define PTT_PIN 39
+#define PTT_PIN 0
 #endif
 
 // Time-out timer, as commercial and amateur PTT radios have. 60 s of speech
@@ -43,6 +49,7 @@ class AudioModule : public SinglePortModule, public Observable<const UIFrameEven
     AudioModule();
 
     bool shouldDraw();
+    int handleInputEvent(const InputEvent *event);
 
   protected:
     virtual int32_t runOnce() override;
@@ -60,6 +67,8 @@ class AudioModule : public SinglePortModule, public Observable<const UIFrameEven
   private:
     bool onPttDown();
     void onPttUp();
+    void setAudioPower(bool capture, bool playback);
+    void serviceBrokerPtt();
     void captureAndEncode();
     void sendPacket(bool last);
     void servicePlayout();
@@ -67,19 +76,17 @@ class AudioModule : public SinglePortModule, public Observable<const UIFrameEven
     bool audioAllowed();
     const AudioModeInfo *pickMode();
     bool setTxMode(const AudioModeInfo *m);
+    bool ensureCodec(int c2mode);
     const char *destinationLabel();
     const char *talkerLabel();
     static void emitDecoded(void *ctx, const uint8_t *frames, size_t len, uint8_t mode, bool conceal);
-    void decodeAndPlay(const uint8_t *frames, size_t len, uint8_t mode);
+    void decodeAndPlay(const uint8_t *frames, size_t len, uint8_t mode, bool conceal);
 
-    // Separate instances: we may transmit degraded while a peer transmits at
-    // its own rate, and codec2 state is per mode.
+    // PTT is half duplex, so one instance serves both directions: a codec2
+    // handle encodes and decodes. Two would not fit, each costs about 20 KB.
     struct CODEC2 *codec2 = nullptr;
+    int8_t codecMode = AUDIO_C2_NONE; // libcodec2 mode the handle holds
     const AudioModeInfo *mode = nullptr;
-    struct CODEC2 *rxCodec = nullptr;
-    int8_t rxCodecMode = AUDIO_C2_NONE;
-    int rxFrameSamples = 0;
-    int rxBytesPerFrame = 0;
 
     uint8_t txPacket[meshtastic_Constants_DATA_PAYLOAD_LEN] = {};
     uint16_t txLen = AUDIO_HEADER_LEN;
@@ -95,12 +102,28 @@ class AudioModule : public SinglePortModule, public Observable<const UIFrameEven
     int bytesPerFrame = 0;
     int framesPerPacket = 0;
 
+    // Set by decodeAndPlay so servicePlayout can tell a silent tick from a
+    // starved one; EasyDMA replays its last buffer when it is not fed.
+    bool playedThisTick = false;
+
     // handleReceived runs on the Router thread, runOnce on ours.
     AudioStreamAssembler stream;
     concurrency::Lock streamLock;
 
+    CallbackObserver<AudioModule, const InputEvent *> inputObserver =
+        CallbackObserver<AudioModule, const InputEvent *>(this, &AudioModule::handleInputEvent);
+
     RadioState radio_state = RadioState::rx;
     bool firstTime = true;
+    bool micPowered = false;
+    bool ampPowered = false;
+    bool txDegraded = false; // current transmission is below the configured rate
+    bool brokerPtt = false;  // PTT arrived from the input broker, not a pin
+
+    // Written by the button thread, drained by ours.
+    enum class PttRequest : uint8_t { none, down, up };
+    volatile PttRequest pendingPtt = PttRequest::none;
+    volatile bool pendingCycle = false;
     bool pttLatched = false; // held down but refused, ignore until released
     bool pttHeld = false;
     uint32_t pttDownMs = 0;

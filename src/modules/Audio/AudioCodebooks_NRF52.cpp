@@ -58,13 +58,15 @@ const char *audioCodebooksBind()
     nrfx_qspi_config_t cfg =
         NRFX_QSPI_DEFAULT_CONFIG(PIN_QSPI_SCK, PIN_QSPI_CS, PIN_QSPI_IO0, PIN_QSPI_IO1, PIN_QSPI_IO2, PIN_QSPI_IO3);
 
-    // The default is DIV16, about 250 KB/s single-line, and the VQ search wants
-    // roughly 1.25 MB/s. 32 MHz gives 4 MB/s; every chip these boards carry is
-    // rated well above that for the 0x0B fast read.
+    // The default is DIV16, about 250 KB/s. 32 MHz is the ceiling the part and
+    // these boards support for the 0x0B fast read.
     cfg.phy_if.sck_freq = NRF_QSPI_FREQ_DIV1;
 
     // Single-line FASTREAD, so no vendor-specific quad-enable sequence and the
-    // same code works on every chip.
+    // same code works on every chip. Quad would cut the 700C codebook sweep from
+    // 16 ms to about 4 ms, but enabling it here boot looped the board twice and
+    // wants proving in tools/nrf52_bench first.
+    cfg.prot_if.readoc = NRF_QSPI_READOC_FASTREAD;
     nrfx_err_t err = nrfx_qspi_init(&cfg, NULL, NULL);
     if (err != NRFX_SUCCESS && err != NRFX_ERROR_INVALID_STATE) // already up is fine
         return "QSPI init failed";
@@ -82,6 +84,21 @@ const char *audioCodebooksBind()
     for (int i = 0; i < CODEBOOK_BLOB_TABLES; i++)
         if (hdr.length[i] != EXPECTED_LEN[i])
             return "codebook blob table size mismatch";
+
+#ifdef AUDIO_CODEBOOK_CHECK
+    // The checks above only read the header. Corrupt table bytes pass every one
+    // of them and then quietly wreck the VQ, so hash what is actually there.
+    for (int t = 0; t < CODEBOOK_BLOB_TABLES; t++) {
+        uint32_t h = 2166136261u;
+        const uint8_t *p = base + hdr.offset[t];
+        for (uint32_t i = 0; i < hdr.length[t]; i++) {
+            h ^= p[i];
+            h *= 16777619u;
+        }
+        LOG_WARN("Audio: cb table %d off 0x%06lx len %lu fnv1a %08lx first %02x %02x %02x %02x", t, (unsigned long)hdr.offset[t],
+                 (unsigned long)hdr.length[t], (unsigned long)h, p[0], p[1], p[2], p[3]);
+    }
+#endif
 
     if (codec2_set_external_codebooks((const int8_t *)(base + hdr.offset[0]), (const int8_t *)(base + hdr.offset[1]),
                                       (const int8_t *)(base + hdr.offset[2])) != 0)

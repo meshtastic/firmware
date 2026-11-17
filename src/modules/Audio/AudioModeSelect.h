@@ -64,6 +64,18 @@ inline float audioOccupancy(const AudioModeInfo &m, uint32_t packetAirtimeMs)
 
 // Resolves DEFAULT and the removed 700/700B to 700C, and any rate this build
 // does not carry to the nearest one it does. Null only for an out-of-enum value.
+// Look a mode up by its libcodec2 number, for the receive side: the wire header
+// carries the sender's mode, which need not be ours.
+inline const AudioModeInfo *audioModeFromCodec2(int8_t codec2Mode)
+{
+    if (codec2Mode == AUDIO_C2_NONE)
+        return nullptr;
+    for (size_t i = 0; i < AUDIO_MODE_COUNT; i++)
+        if (AUDIO_MODES[i].codec2Mode == codec2Mode)
+            return &AUDIO_MODES[i];
+    return nullptr;
+}
+
 inline const AudioModeInfo *audioModeFromConfig(meshtastic_ModuleConfig_AudioConfig_Audio_Baud cfg)
 {
     switch (cfg) {

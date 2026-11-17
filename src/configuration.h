@@ -585,8 +585,17 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define MESHTASTIC_EXCLUDE_PKT_HISTORY_HASH 1
 #endif
 
+// Codec2 voice needs a microphone and an amplifier wired to specific pins, so it
+// is off everywhere unless a variant declares that hardware and opts in with
+// -DMESHTASTIC_EXCLUDE_AUDIO=0. Placed before the block below so an explicit 0
+// from a variant survives, and so MESHTASTIC_EXCLUDE_MODULES can still force it.
+#ifndef MESHTASTIC_EXCLUDE_AUDIO
+#define MESHTASTIC_EXCLUDE_AUDIO 1
+#endif
+
 // Turn off all optional modules
 #ifdef MESHTASTIC_EXCLUDE_MODULES
+#undef MESHTASTIC_EXCLUDE_AUDIO
 #define MESHTASTIC_EXCLUDE_AUDIO 1
 #define MESHTASTIC_EXCLUDE_DETECTIONSENSOR 1
 #define MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR 1

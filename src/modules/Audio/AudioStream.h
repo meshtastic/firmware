@@ -1,6 +1,7 @@
 #pragma once
 
 #include "AudioModeSelect.h"
+#include "DebugConfiguration.h"
 #include "mesh/MeshTypes.h"
 #include <stddef.h>
 #include <stdint.h>
@@ -64,6 +65,9 @@ class AudioStreamAssembler
 
     bool isActive() const { return active; }
 
+    /// codec2 mode of the stream being played, or AUDIO_C2_NONE when idle.
+    int8_t streamMode() const { return active ? (int8_t)lastPayloadMode : (int8_t)AUDIO_C2_NONE; }
+
     /// @return false if the packet was not ours to take
     bool accept(NodeNum from, uint8_t channel, bool isDm, const uint8_t *payload, size_t len, uint32_t nowMs)
     {
@@ -94,7 +98,6 @@ class AudioStreamAssembler
             streamChannel = channel;
             streamIsDm = isDm;
             streamSession = h.session;
-            streamMode = h.mode;
             playoutSeq = h.seq; // the opening packet is the likeliest loss
         }
 
@@ -115,7 +118,7 @@ class AudioStreamAssembler
 
         int slot = freeSlot();
         if (slot < 0) {
-            playOldest(nowMs); // gap at the head must not deadlock a full ring
+            playOldest(); // gap at the head must not deadlock a full ring
             slot = freeSlot();
             if (slot < 0)
                 return true;
@@ -136,7 +139,7 @@ class AudioStreamAssembler
             return;
 
         if (expired(nowMs)) {
-            drain(nowMs);
+            drain();
             endStream();
             return;
         }
@@ -152,7 +155,7 @@ class AudioStreamAssembler
 
         int slot = findSeq(playoutSeq);
         if (slot >= 0) {
-            play(slot, false);
+            play(slot);
         } else if (filled() > 0 || sawLast) {
             conceal(); // codec2 has no PLC; repeating beats stalling
         } else {
@@ -214,6 +217,8 @@ class AudioStreamAssembler
             queue.session = session;
         }
         if (queue.used + 2 + len > AUDIO_QUEUE_BYTES) {
+            if (!queue.truncated)
+                LOG_WARN("Audio: queued transmission from 0x%08x cut off at %u bytes", (unsigned)from, (unsigned)queue.used);
             queue.truncated = true;
             return;
         }
@@ -280,10 +285,10 @@ class AudioStreamAssembler
         return n;
     }
 
-    void play(int slot, bool concealed)
+    void play(int slot)
     {
         if (emit)
-            emit(emitCtx, ring[slot].bytes, ring[slot].len, ring[slot].mode, concealed);
+            emit(emitCtx, ring[slot].bytes, ring[slot].len, ring[slot].mode, false);
         memcpy(lastPayload, ring[slot].bytes, ring[slot].len);
         lastPayloadLen = ring[slot].len;
         lastPayloadMode = ring[slot].mode;
@@ -297,31 +302,28 @@ class AudioStreamAssembler
             emit(emitCtx, lastPayload, lastPayloadLen, lastPayloadMode, true);
     }
 
-    void playOldest(uint32_t nowMs)
+    int oldestSlot() const
     {
-        (void)nowMs;
         int oldest = -1;
         for (int i = 0; i < AUDIO_RING_SLOTS; i++)
             if (ring[i].used && (oldest < 0 || seqBefore(ring[i].seq, ring[oldest].seq)))
                 oldest = i;
+        return oldest;
+    }
+
+    void playOldest()
+    {
+        const int oldest = oldestSlot();
         if (oldest >= 0) {
             playoutSeq = (uint16_t)(ring[oldest].seq + 1);
-            play(oldest, false);
+            play(oldest);
         }
     }
 
-    void drain(uint32_t nowMs)
+    void drain()
     {
-        (void)nowMs;
-        for (;;) {
-            int oldest = -1;
-            for (int i = 0; i < AUDIO_RING_SLOTS; i++)
-                if (ring[i].used && (oldest < 0 || seqBefore(ring[i].seq, ring[oldest].seq)))
-                    oldest = i;
-            if (oldest < 0)
-                return;
-            play(oldest, false);
-        }
+        for (int oldest; (oldest = oldestSlot()) >= 0;)
+            play(oldest);
     }
 
     EmitFn emit = nullptr;
@@ -336,7 +338,6 @@ class AudioStreamAssembler
     uint8_t streamChannel = 0;
     bool streamIsDm = false;
     uint8_t streamSession = 0;
-    uint8_t streamMode = 0;
     uint16_t playoutSeq = 0;
     uint32_t lastRxMs = 0;
     uint32_t primeStartMs = 0;

@@ -24,6 +24,10 @@ enum input_broker_event {
     INPUT_BROKER_GPS_TOGGLE = 0x9e,
     INPUT_BROKER_PRIVACY_TOGGLE = 0x9f, // GPS and buzzer off together, and back on together
     INPUT_BROKER_SEND_PING = 0xaf,
+    // Push to talk needs both edges, so it is the one pair with a release event.
+    INPUT_BROKER_PTT_DOWN = 0xb0,
+    INPUT_BROKER_PTT_UP = 0xb1,
+    INPUT_BROKER_PTT_CYCLE = 0xb2,
     INPUT_BROKER_FN_F1 = 0xf1,
     INPUT_BROKER_FN_F2 = 0xf2,
     INPUT_BROKER_FN_F3 = 0xf3,

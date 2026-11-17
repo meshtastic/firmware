@@ -12,6 +12,12 @@
 // board whose mic or amp is not I2S, an I2C-configured I2S codec, or PDM does
 // not set HAS_AUDIO_CODEC2.
 
+// Only reached with HAS_AUDIO_CODEC2 set; without a backend the build would
+// otherwise fail at link with an undefined audioIOBegin.
+#if !defined(ARCH_ESP32) && !defined(ARCH_NRF52) && !defined(__PLAT_RP2350__)
+#error "HAS_AUDIO_CODEC2: no audio backend for this architecture"
+#endif
+
 // Largest codec2 frame we carry: 40 ms at 8 kHz.
 #define AUDIO_FRAME_SAMPLES_MAX 320
 
@@ -22,9 +28,23 @@
 #define AUDIO_I2S_SLOT_BITS 16
 #endif
 
+// Boards wire capture and playback to separate I2S buses as often as to one.
+// A variant defining AUDIO_MIC_* and AUDIO_SPK_* gets two ports; otherwise the
+// pins come from moduleConfig.audio as a single shared bus.
+#if defined(AUDIO_MIC_BCLK) && defined(AUDIO_SPK_BCLK)
+#define AUDIO_SPLIT_BUS 1
+#endif
+
 bool audioIOBegin(uint32_t sampleRateHz, size_t frameSamples);
 void audioIOEnd();
+
+// Power the mic and the amplifier where the board has enable lines. Half duplex
+// means only one is ever wanted, and an idle amplifier still draws current.
+void audioIOEnable(bool capture, bool playback);
 
 // Both return samples actually transferred, which may be short of the request.
 size_t audioIORead(int16_t *dst, size_t samples, uint32_t timeoutMs);
 size_t audioIOWrite(const int16_t *src, size_t samples, uint32_t timeoutMs);
+
+// Capture halves lost because the caller did not drain in time. Diagnostic.
+extern uint32_t audioPdmOverruns;

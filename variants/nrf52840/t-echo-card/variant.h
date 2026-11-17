@@ -200,8 +200,14 @@ static const uint8_t A0 = PIN_A0;
 // and the VQ codebooks in the ZD25WQ32CEIGR rather than internal flash, which
 // is 92% full with them in the image.
 #define HAS_AUDIO_CODEC2
-#define CODEC2_EXTERNAL_CODEBOOKS
-#define PTT_PIN PIN_BUTTON1
+// CODEC2_EXTERNAL_CODEBOOKS lives in platformio.ini: the codec2 library is
+// built from build_flags and never sees this header, so defining it here too
+// lets the two disagree.
+// PIN_BUTTON1 is BUTTON_PIN on nRF52 (platform/nrf52/architecture.h), so polling
+// it here would key up and drive the UI at once. Key up on a long press of the
+// secondary button instead, which baseUI leaves free; double press picks the
+// destination. moduleConfig.audio.ptt_pin still overrides for a wired PTT.
+#define PTT_VIA_DOWN_BUTTON
 
 #define SERIAL_PRINT_PORT 0
 

@@ -57,15 +57,19 @@ AudioModule::AudioModule() : SinglePortModule("Audio", meshtastic_PortNum_AUDIO_
         return;
     }
 
-    const AudioModeInfo *want = mode;
-    mode = nullptr; // setTxMode compares against this
-    if (!setTxMode(want)) {
-        LOG_ERROR("Audio disabled: codec2 mode %d not built into this firmware", want->codec2Mode);
+    // setTxMode has already said which mode and why.
+    if (!setTxMode(mode)) {
         disable();
         return;
     }
 
+#ifdef AUDIO_CAPTURE_DUMP
+    LOG_WARN("Audio: CAPTURE DUMP build, hold PTT and samples print to serial");
+#endif
+
     stream.begin(emitDecoded, this);
+    if (inputBroker)
+        inputObserver.observe(inputBroker);
 
     LOG_INFO("Audio: %u bit/s, %d frames of %d bytes per packet, %u ms of speech", mode->bitrate, framesPerPacket, bytesPerFrame,
              (unsigned)audioMsPerPacket(*mode));
@@ -92,7 +96,9 @@ void AudioModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int
     }
 
     char who[32];
-    if (sending)
+    if (sending && txDegraded && mode)
+        snprintf(who, sizeof(who), ">%s %u", destinationLabel(), (unsigned)mode->bitrate);
+    else if (sending)
         snprintf(who, sizeof(who), ">%s", destinationLabel());
     else if (receiving)
         snprintf(who, sizeof(who), "<%s", talkerLabel());
@@ -226,27 +232,98 @@ const AudioModeInfo *AudioModule::pickMode()
     return chooseAudioMode(moduleConfig.audio.bitrate, airMs, util);
 }
 
-bool AudioModule::setTxMode(const AudioModeInfo *m)
+// Loads a libcodec2 mode into the shared handle. The old instance goes first:
+// holding two while the new one allocates needs about 40 KB, which a node that
+// has filled its database does not have.
+bool AudioModule::ensureCodec(int c2mode)
 {
-    if (m == mode && codec2)
+    if (codec2 && codecMode == c2mode)
         return true;
 
-    struct CODEC2 *c = codec2_create(m->codec2Mode);
-    if (!c) {
-        LOG_ERROR("Audio: codec2 mode %d not built in", m->codec2Mode);
+    if (codec2) {
+        codec2_destroy(codec2);
+        codec2 = nullptr;
+        codecMode = AUDIO_C2_NONE;
+    }
+    codec2 = codec2_create(c2mode);
+    if (!codec2)
+        return false;
+
+    codec2_set_lpc_post_filter(codec2, 1, 0, 0.8, 0.2);
+    codecMode = (int8_t)c2mode;
+    return true;
+}
+
+bool AudioModule::setTxMode(const AudioModeInfo *m)
+{
+    // codecMode, not mode: receiving at another rate leaves the handle loaded
+    // with the peer's mode while ours is unchanged.
+    if (!ensureCodec(m->codec2Mode)) {
+        LOG_ERROR("Audio: no codec2 for mode %d, not built in or out of memory", m->codec2Mode);
         return false;
     }
-    codec2_set_lpc_post_filter(c, 1, 0, 0.8, 0.2);
-    if (codec2)
-        codec2_destroy(codec2);
 
-    codec2 = c;
     mode = m;
-    frameSamples = codec2_samples_per_frame(c);
-    bytesPerFrame = codec2_bytes_per_frame(c);
+    frameSamples = codec2_samples_per_frame(codec2);
+    bytesPerFrame = codec2_bytes_per_frame(codec2);
     framesPerPacket = audioFramesPerPacket(*m);
     stream.setPacketMs(audioMsPerPacket(*m));
     return true;
+}
+
+// pinMode on every frame would be wasteful, so only touch the lines on a change.
+void AudioModule::setAudioPower(bool capture, bool playback)
+{
+    if (capture == micPowered && playback == ampPowered)
+        return;
+
+    micPowered = capture;
+    ampPowered = playback;
+    audioIOEnable(capture, playback);
+}
+
+// Runs on the button thread. Only records the request: acting on it here would
+// re-create the codec2 state while our own thread is encoding with it.
+int AudioModule::handleInputEvent(const InputEvent *event)
+{
+    switch (event->inputEvent) {
+    case INPUT_BROKER_PTT_DOWN:
+        pendingPtt = PttRequest::down;
+        break;
+    case INPUT_BROKER_PTT_UP:
+        pendingPtt = PttRequest::up;
+        break;
+    case INPUT_BROKER_PTT_CYCLE:
+        pendingCycle = true;
+        break;
+    default:
+        return 0;
+    }
+    setIntervalFromNow(0); // key up now, not at the next idle tick
+    return 1;
+}
+
+// Drains what handleInputEvent recorded, on our own thread.
+void AudioModule::serviceBrokerPtt()
+{
+    if (pendingCycle) {
+        pendingCycle = false;
+        cycleDestination();
+        playClick();
+        requestFocus();
+        UIFrameEvent e;
+        e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
+        notifyObservers(&e);
+    }
+
+    const PttRequest req = pendingPtt;
+    pendingPtt = PttRequest::none;
+    if (req == PttRequest::down && radio_state == RadioState::rx && !brokerPtt) {
+        brokerPtt = onPttDown();
+    } else if (req == PttRequest::up && brokerPtt) {
+        brokerPtt = false;
+        onPttUp();
+    }
 }
 
 bool AudioModule::onPttDown()
@@ -266,16 +343,17 @@ bool AudioModule::onPttDown()
         playLongBeep();
         return false;
     }
-    const bool degraded = want->bitrate < audioModeFromConfig(moduleConfig.audio.bitrate)->bitrate;
+    txDegraded = want->bitrate < audioModeFromConfig(moduleConfig.audio.bitrate)->bitrate;
     if (!setTxMode(want)) {
         playLongBeep();
         return false;
     }
-    if (degraded) {
+    if (txDegraded) {
         LOG_INFO("Audio degraded to %u bit/s", want->bitrate);
         play4ClickDown();
     }
 
+    setAudioPower(true, false);
     radio_state = RadioState::tx;
     pttStartMs = millis();
     txLen = AUDIO_HEADER_LEN;
@@ -283,6 +361,9 @@ bool AudioModule::onPttDown()
     txSeq = 0;
     txSession = (uint8_t)random(256);
 
+    // REGENERATE_FRAMESET only rebuilds the set; without requestFocus() the
+    // screen stays on whatever frame it was already showing.
+    requestFocus();
     UIFrameEvent e;
     e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
     notifyObservers(&e);
@@ -296,6 +377,7 @@ void AudioModule::onPttUp()
     // and mark it so the receiver can stop rather than wait out the timeout.
     sendPacket(true);
     radio_state = RadioState::rx;
+    setAudioPower(false, false);
 
     UIFrameEvent e;
     e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
@@ -310,10 +392,70 @@ void AudioModule::captureAndEncode()
         return;
     micIndex = 0;
 
+#ifdef AUDIO_PCM_STREAM
+    // Every frame, raw little-endian int16 between markers. USB CDC ignores the
+    // nominal baud, so the limit was Serial.print formatting decimals, not the
+    // link: writing bytes keeps up with 8 kHz and gives continuous audio.
+    Serial.write("PCM<", 4);
+    Serial.write((const uint8_t *)micBuf, (size_t)frameSamples * sizeof(int16_t));
+    Serial.write(">PCM", 4);
+    return;
+#endif
+
+#ifdef AUDIO_CAPTURE_DUMP
+    // One 40 ms frame per second, straight out of micBuf. A RAM buffer is not
+    // an option: free heap is a few KB and stealing it boot loops the board.
+    // The speaker stays silent, so nothing feeds back into the microphone.
+    static uint32_t dumpFrames = 0;
+    if (++dumpFrames >= 25) {
+        dumpFrames = 0;
+        Serial.print("CAPDUMP-BEGIN ");
+        Serial.println(frameSamples);
+        for (int i = 0; i < frameSamples; i++) {
+            Serial.print(micBuf[i]);
+            Serial.print(',');
+            if ((i & 15) == 15)
+                Serial.println();
+        }
+        Serial.println();
+        Serial.println("CAPDUMP-END");
+        // Clipping is what a too-hot gain looks like; peak alone hides it.
+        int clipped = 0, peak = 0;
+        for (int i = 0; i < frameSamples; i++) {
+            const int a = micBuf[i] < 0 ? -micBuf[i] : micBuf[i];
+            if (a > peak)
+                peak = a;
+            if (a >= 32000)
+                clipped++;
+        }
+        LOG_WARN("Audio: mic peak %d clipped %d/%d", peak, clipped, frameSamples);
+        Serial.flush();
+    }
+    return;
+#endif
+
     for (int i = 0; i < frameSamples; i++)
         speech[i] = (int16_t)hpFilter.Update((float)micBuf[i]);
 
+#ifdef AUDIO_C2_DUMP
+    const uint32_t encStart = millis();
+#endif
     codec2_encode(codec2, txPacket + txLen, speech);
+#ifdef AUDIO_C2_DUMP
+    // PDM is unserviced while this runs, and the double buffer holds 16 ms.
+    static uint32_t encMax = 0, encFrames = 0;
+    const uint32_t took = millis() - encStart;
+    if (took > encMax)
+        encMax = took;
+    if (++encFrames >= 25) {
+        // The PDM double buffer holds 2 x 8 ms and goes unserviced while the
+        // encoder runs, so overruns here mean the encoder is eating the mic.
+        LOG_WARN("Audio: encode max %lu ms / 25 frames, PDM overruns %lu (headroom 16 ms)", (unsigned long)encMax,
+                 (unsigned long)audioPdmOverruns);
+        encFrames = 0;
+        encMax = 0;
+    }
+#endif
     txLen += bytesPerFrame;
 
     if (txLen >= AUDIO_HEADER_LEN + framesPerPacket * bytesPerFrame)
@@ -339,11 +481,29 @@ void AudioModule::sendPacket(bool last)
     p->decoded.want_response = false;
     p->want_ack = false; // shoot and forget, an ACK would arrive far too late
     p->priority = meshtastic_MeshPacket_Priority_MAX;
-    // One relay, not the mesh-wide hop limit: a voice stream at 25% occupancy
-    // reflooded three hops out would swamp the network.
-    p->hop_limit = 1;
+    // No relay at all. One hop was meant to extend range without reflooding,
+    // but measured on air it costs a second transmission of every packet and
+    // the backoff puts it 1 to 2 s late, colliding with the packets that
+    // follow. A voice packet that late is past its playout slot and the
+    // assembler discards it, so the relay only ever took airtime from the
+    // stream it was carrying.
+    p->hop_limit = 0;
     p->decoded.payload.size = txLen;
     memcpy(p->decoded.payload.bytes, txPacket, txLen);
+#ifdef AUDIO_C2_DUMP
+    Serial.print("TXC2 ");
+    Serial.print(h.seq);
+    Serial.print(' ');
+    Serial.print((unsigned)(txLen - AUDIO_HEADER_LEN));
+    Serial.print(' ');
+    for (uint16_t i = AUDIO_HEADER_LEN; i < txLen; i++) {
+        if (txPacket[i] < 16)
+            Serial.print('0');
+        Serial.print(txPacket[i], HEX);
+    }
+    Serial.println();
+    Serial.flush();
+#endif
     service->sendToMesh(p);
 
     txLen = AUDIO_HEADER_LEN;
@@ -351,36 +511,62 @@ void AudioModule::sendPacket(bool last)
 
 void AudioModule::emitDecoded(void *ctx, const uint8_t *frames, size_t len, uint8_t mode, bool conceal)
 {
-    (void)conceal;
-    ((AudioModule *)ctx)->decodeAndPlay(frames, len, mode);
+#ifdef AUDIO_C2_DUMP
+    Serial.print("RXC2 ");
+    Serial.print(conceal ? 'C' : 'F');
+    Serial.print(' ');
+    Serial.print((unsigned)len);
+    Serial.print(' ');
+    for (size_t i = 0; i < len; i++) {
+        if (frames[i] < 16)
+            Serial.print('0');
+        Serial.print(frames[i], HEX);
+    }
+    Serial.println();
+    Serial.flush();
+#endif
+    ((AudioModule *)ctx)->decodeAndPlay(frames, len, mode, conceal);
 }
 
-void AudioModule::decodeAndPlay(const uint8_t *frames, size_t len, uint8_t packetMode)
+void AudioModule::decodeAndPlay(const uint8_t *frames, size_t len, uint8_t packetMode, bool conceal)
 {
     // Peers degrade independently, so the incoming rate is whatever the sender
-    // chose. Keep a decoder for it rather than dropping the packet.
-    if ((int8_t)packetMode != rxCodecMode) {
-        if (rxCodec)
-            codec2_destroy(rxCodec);
-        rxCodec = codec2_create(packetMode);
-        if (!rxCodec) {
-            LOG_WARN("Audio: cannot decode codec2 mode %u, not built in", packetMode);
-            rxCodecMode = AUDIO_C2_NONE;
+    // chose. Load it rather than dropping the packet; the next PTT press puts
+    // our own mode back.
+    if (!codec2 || codecMode != (int8_t)packetMode) {
+        if (!ensureCodec(packetMode)) {
+            LOG_WARN("Audio: no codec2 for mode %u, not built in or out of memory", packetMode);
             return;
         }
-        codec2_set_lpc_post_filter(rxCodec, 1, 0, 0.8, 0.2);
-        rxCodecMode = (int8_t)packetMode;
-        rxFrameSamples = codec2_samples_per_frame(rxCodec);
-        rxBytesPerFrame = codec2_bytes_per_frame(rxCodec);
         LOG_INFO("Audio: receiving codec2 mode %u", packetMode);
     }
-    if (!rxCodec)
+
+    // Read off the handle: a stale cached length would run this loop forever.
+    const int nSamp = codec2_samples_per_frame(codec2);
+    const size_t nBytes = (size_t)codec2_bytes_per_frame(codec2);
+    if (!nBytes)
         return;
 
-    for (size_t i = 0; i + rxBytesPerFrame <= len; i += rxBytesPerFrame) {
-        codec2_decode(rxCodec, playBuf, frames + i);
-        audioIOWrite(playBuf, rxFrameSamples, 500);
+    // A packet is over a second of speech, so replaying one is not concealment,
+    // it is a stuck buffer. codec2 has no PLC; silence for the gap is the least
+    // objectionable thing at this granularity.
+    if (conceal) {
+        memset(playBuf, 0, sizeof(playBuf));
+        for (size_t i = 0; i + nBytes <= len; i += nBytes)
+            audioIOWrite(playBuf, nSamp, 500);
+        playedThisTick = true;
+        LOG_DEBUG("Audio: concealed %u frames as silence", (unsigned)(len / nBytes));
+        return;
     }
+
+    size_t played = 0;
+    for (size_t i = 0; i + nBytes <= len; i += nBytes) {
+        codec2_decode(codec2, playBuf, frames + i);
+        played += audioIOWrite(playBuf, nSamp, 500);
+    }
+    playedThisTick = true;
+    LOG_DEBUG("Audio: played %u of %u frames, mode %u%s", (unsigned)(played / nSamp), (unsigned)(len / nBytes), packetMode,
+              conceal ? " (concealed)" : "");
 }
 
 void AudioModule::servicePlayout()
@@ -389,28 +575,71 @@ void AudioModule::servicePlayout()
     const bool due = !Throttle::isWithinTimespanMs(nextPlayoutMs, 0);
 
     concurrency::LockGuard g(&streamLock);
+    // Ahead of tick(), so the amplifier is awake before the first frame lands.
+    setAudioPower(false, stream.isReceiving());
+    playedThisTick = false;
     stream.tick(now, due);
-    if (due)
-        nextPlayoutMs = now + audioMsPerPacket(*mode);
+    if (due) {
+        // Starved but still receiving: hand the peripheral a frame of silence.
+        // Left unfed, EasyDMA repeats whatever it played last, so a dropped
+        // packet turns into the final 40 ms looping until the stream times out.
+        if (!playedThisTick && stream.isReceiving()) {
+            memset(playBuf, 0, sizeof(playBuf));
+            // TXPTRUPD comes once per buffer, which is 40 ms of audio, so a
+            // shorter wait than that usually writes nothing and leaves the
+            // peripheral repeating its last buffer.
+            audioIOWrite(playBuf, frameSamples, 60);
+            LOG_DEBUG("Audio: playout starved, sending silence");
+        }
+        // Pace on the mode that arrived, not the one we transmit. A peer at
+        // 1400 packs far less speech per packet than our own 700C, and pacing
+        // on ours releases the next packet early: playback runs ahead of the
+        // audio it is playing.
+        const AudioModeInfo *heard = audioModeFromCodec2(stream.streamMode());
+        nextPlayoutMs = now + audioMsPerPacket(heard ? *heard : *mode);
+    }
 }
 
 int32_t AudioModule::runOnce()
 {
-    if (!audioAllowed())
+    if (!audioAllowed()) {
+        if (!firstTime) {
+            audioIOEnd();
+            micPowered = ampPowered = false;
+            // Per mode, and re-created on the way back in.
+            if (codec2) {
+                codec2_destroy(codec2);
+                codec2 = nullptr;
+                codecMode = AUDIO_C2_NONE;
+            }
+            firstTime = true; // re-init if the region or the config lets audio back
+        }
         return disable();
+    }
 
     if (firstTime) {
+        if (!mode || !setTxMode(mode)) {
+            LOG_ERROR("Audio disabled: no usable codec2 mode");
+            return disable();
+        }
         if (!audioIOBegin(8000, frameSamples)) {
             LOG_ERROR("Audio disabled: could not start the audio interface");
             return disable();
         }
-        pinMode(pttPin(), INPUT);
+        if (pttPin())
+            pinMode(pttPin(), INPUT);
+#if !defined(PTT_VIA_DOWN_BUTTON)
+        else
+            LOG_WARN("Audio: no PTT pin, receive only. Set moduleConfig.audio.ptt_pin to transmit.");
+#endif
         radio_state = RadioState::rx;
         firstTime = false;
         return AUDIO_IDLE_INTERVAL_MS;
     }
 
-    const bool pressed = digitalRead(pttPin()) == HIGH;
+    serviceBrokerPtt();
+
+    const bool pressed = pttPin() && digitalRead(pttPin()) == HIGH;
 
     if (pressed && !pttHeld) {
         pttHeld = true;
@@ -422,6 +651,7 @@ int32_t AudioModule::runOnce()
         if (radio_state != RadioState::tx && !pttLatched) {
             cycleDestination();
             playClick();
+            requestFocus();
             UIFrameEvent e;
             e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
             notifyObservers(&e);
@@ -434,12 +664,13 @@ int32_t AudioModule::runOnce()
     if (armed && radio_state == RadioState::rx && !pttLatched) {
         if (!onPttDown())
             pttLatched = true; // refused; wait for a release before asking again
-    } else if (!pressed && radio_state == RadioState::tx) {
+    } else if (!pressed && !brokerPtt && radio_state == RadioState::tx) {
         onPttUp();
     } else if (radio_state == RadioState::tx && !Throttle::isWithinTimespanMs(pttStartMs, AUDIO_MAX_PTT_MS)) {
         LOG_INFO("PTT time-out after %u ms", (unsigned)AUDIO_MAX_PTT_MS);
         onPttUp();
         playLongBeep();
+        brokerPtt = false;
         pttLatched = true; // no restart until the button is let go
     }
 
