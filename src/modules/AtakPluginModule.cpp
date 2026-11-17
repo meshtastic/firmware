@@ -1,6 +1,7 @@
 #include "AtakPluginModule.h"
 #include "MeshTypes.h"
 #include "NodeDB.h"
+#include "RadioInterface.h"
 #include "mesh-pb-constants.h"
 #include <algorithm>
 
@@ -84,6 +85,12 @@ static void fillGeoChat(meshtastic_TAKPacketV2 &takPacket, NodeNum dest, PacketI
     snprintf(takPacket.device_callsign, sizeof(takPacket.device_callsign), "%s|%08x", sender, id);
 }
 
+// Payload a GeoChat can fill and still make it on air: the frame, less the radio header, the PKC or
+// channel AEAD overhead, and the Data wrapper the router encodes around it (portnum 2, payload tag
+// and length 3, dest 5, bitfield 2)
+static constexpr size_t kGeoChatPayloadMax =
+    MAX_LORA_PAYLOAD_LEN - MESHTASTIC_HEADER_LENGTH - std::max(MESHTASTIC_PKC_OVERHEAD, MESHTASTIC_AEAD_OVERHEAD) - 12;
+
 // Message bytes that fit beside an envelope from fillGeoChat
 static size_t geoChatRoom(const meshtastic_TAKPacketV2 &takPacket)
 {
@@ -93,9 +100,9 @@ static size_t geoChatRoom(const meshtastic_TAKPacketV2 &takPacket)
     // Flags byte, then the text's tag and up to 2 length bytes, plus a second byte for the chat's
     // own length once it passes 127
     const size_t overhead = envelope + 4 + 1;
-    if (overhead >= meshtastic_Constants_DATA_PAYLOAD_LEN)
+    if (overhead >= kGeoChatPayloadMax)
         return 0;
-    return std::min(meshtastic_Constants_DATA_PAYLOAD_LEN - overhead, sizeof(takPacket.payload_variant.chat.message) - 1);
+    return std::min(kGeoChatPayloadMax - overhead, sizeof(takPacket.payload_variant.chat.message) - 1);
 }
 
 // A TAKPacketV2 is ~2 KB, too much for the loop stack these run on (the composer's counter calls in

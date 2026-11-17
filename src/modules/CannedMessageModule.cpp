@@ -1076,9 +1076,6 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
     p->want_ack = true;
     p->decoded.dest = dest; // Mirror picker: NODENUM_BROADCAST or node->num
 
-    this->lastSentNode = dest;
-    this->incoming = dest;
-
     // Manually find the node by number to check PKI capability
     meshtastic_NodeInfoLite *node = nullptr;
     size_t numMeshNodes = nodeDB->getNumMeshNodes();
@@ -1122,7 +1119,10 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
         }
     }
 
-    // Track this packet’s request ID for matching ACKs
+    // Track this packet’s request ID for matching ACKs. Only now: a failed build above must leave
+    // the previous packet's ACK context whole.
+    this->lastSentNode = dest;
+    this->incoming = dest;
     this->lastRequestId = p->id;
 
     this->waitingForAck = true;

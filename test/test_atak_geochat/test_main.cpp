@@ -8,6 +8,7 @@
 #include <unity.h>
 
 #include "mesh/NodeDB.h"
+#include "mesh/RadioInterface.h"
 #include "mesh/mesh-pb-constants.h"
 #include "meshUtils.h"
 #include "modules/AtakPluginModule.h"
@@ -30,6 +31,20 @@ static meshtastic_MeshPacket makeTextPacket(NodeNum to)
     p.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
     p.decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
     return p;
+}
+
+// Bytes the packet takes on air once the router has wrapped and encrypted it, as the router builds
+// it for a packet we originate: the Data wrapper with bitfield and dest set, the radio header, and
+// PKC overhead (a DM; AEAD channel overhead is the same size)
+static size_t frameBytes(const meshtastic_MeshPacket &p)
+{
+    meshtastic_Data d = p.decoded;
+    d.dest = p.to;
+    d.has_bitfield = true;
+    d.bitfield = 0x03; // OK_TO_MQTT | WANT_RESPONSE, both bits a sender can set
+    size_t dataBytes = 0;
+    TEST_ASSERT_TRUE(pb_get_encoded_size(&dataBytes, &meshtastic_Data_msg, &d));
+    return dataBytes + MESHTASTIC_HEADER_LENGTH + MESHTASTIC_PKC_OVERHEAD;
 }
 
 // Strip the flags byte and decode, as a receiver does. Heap, because the struct is ~2 KB.
@@ -99,8 +114,9 @@ void test_unset_team_and_role_use_pli_defaults(void)
     TEST_ASSERT_EQUAL(meshtastic_MemberRole_TeamMember, tak->role);
 }
 
-// The limit the composer shows must be exactly what fits: not a byte cut, and not far under the
-// payload. Checked with the longest callsign we send, for both chatroom shapes.
+// The limit the composer shows must be exactly what fits: nothing cut, and the encrypted frame
+// within the LoRa maximum but not far under it. Checked with the longest callsign we send, for both
+// chatroom shapes.
 static void checkTextAtLimitFits(NodeNum to)
 {
     memset(owner.long_name, 'W', MAX_LONG_NAME_BYTES);
@@ -112,9 +128,9 @@ static void checkTextAtLimitFits(NodeNum to)
 
     meshtastic_MeshPacket p = makeTextPacket(to);
     TEST_ASSERT_TRUE(AtakPluginModule::setGeoChatPayload(&p, text.c_str(), text.size()));
-    TEST_ASSERT_TRUE(p.decoded.payload.size <= meshtastic_Constants_DATA_PAYLOAD_LEN);
+    TEST_ASSERT_LESS_OR_EQUAL_size_t(MAX_LORA_PAYLOAD_LEN, frameBytes(p));
     // Slack is at most the 2 length bytes the budget reserves for text that ended up shorter
-    TEST_ASSERT_TRUE(p.decoded.payload.size + 2 >= meshtastic_Constants_DATA_PAYLOAD_LEN);
+    TEST_ASSERT_GREATER_OR_EQUAL_size_t(MAX_LORA_PAYLOAD_LEN - 2, frameBytes(p));
 
     auto tak = decodeGeoChat(p);
     TEST_ASSERT_EQUAL_size_t(limit, strlen(tak->payload_variant.chat.message));
@@ -138,7 +154,7 @@ void test_long_text_is_cut_to_limit(void)
     meshtastic_MeshPacket p = makeTextPacket(NODENUM_BROADCAST);
     size_t carried = 0;
     TEST_ASSERT_TRUE(AtakPluginModule::setGeoChatPayload(&p, text.c_str(), text.size(), &carried));
-    TEST_ASSERT_TRUE(p.decoded.payload.size <= meshtastic_Constants_DATA_PAYLOAD_LEN);
+    TEST_ASSERT_LESS_OR_EQUAL_size_t(MAX_LORA_PAYLOAD_LEN, frameBytes(p));
 
     auto tak = decodeGeoChat(p);
     TEST_ASSERT_EQUAL_size_t(limit, strlen(tak->payload_variant.chat.message));
