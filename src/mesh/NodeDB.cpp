@@ -2665,7 +2665,8 @@ void NodeDB::clampLoadedLoraConfig()
     // Coerce LoRa config fields derived from presets while bootstrapping.
     // Some clients/UI components display bandwidth/spread_factor directly from config even in preset mode.
     if (config.has_lora && config.lora.use_preset) {
-        channels.resolvePrimaryIndex();
+        // A table with no PRIMARY would hash whatever slot 0 holds, and the slot it picks is saved
+        channels.ensurePrimary();
         // Rename a legacy "Default" primary to "" first, or the slot is hashed from "Default" instead of the preset name
         channels.fixupChannel(channels.getPrimaryIndex());
         RadioInterface::clampConfigLora(config.lora);
