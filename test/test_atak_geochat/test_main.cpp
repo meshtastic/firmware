@@ -136,11 +136,13 @@ void test_long_text_is_cut_to_limit(void)
     const std::string text(meshtastic_Constants_DATA_PAYLOAD_LEN, 'a');
 
     meshtastic_MeshPacket p = makeTextPacket(NODENUM_BROADCAST);
-    TEST_ASSERT_TRUE(AtakPluginModule::setGeoChatPayload(&p, text.c_str(), text.size()));
+    size_t carried = 0;
+    TEST_ASSERT_TRUE(AtakPluginModule::setGeoChatPayload(&p, text.c_str(), text.size(), &carried));
     TEST_ASSERT_TRUE(p.decoded.payload.size <= meshtastic_Constants_DATA_PAYLOAD_LEN);
 
     auto tak = decodeGeoChat(p);
     TEST_ASSERT_EQUAL_size_t(limit, strlen(tak->payload_variant.chat.message));
+    TEST_ASSERT_EQUAL_size_t_MESSAGE(limit, carried, "carried must report what was sent, so history matches it");
 }
 
 // Two-byte characters at an odd limit would leave a dangling lead byte if cut naively
@@ -155,10 +157,12 @@ void test_cut_never_splits_utf8(void)
         memset(owner.long_name, 'W', nameLen);
 
         meshtastic_MeshPacket p = makeTextPacket(NODENUM_BROADCAST);
-        TEST_ASSERT_TRUE(AtakPluginModule::setGeoChatPayload(&p, text.c_str(), text.size()));
+        size_t carried = 0;
+        TEST_ASSERT_TRUE(AtakPluginModule::setGeoChatPayload(&p, text.c_str(), text.size(), &carried));
 
         auto tak = decodeGeoChat(p);
         const size_t len = strlen(tak->payload_variant.chat.message);
+        TEST_ASSERT_EQUAL_size_t(len, carried);
         TEST_ASSERT_TRUE(len > 0);
         TEST_ASSERT_EQUAL_size_t(0, len % 2);
         TEST_ASSERT_FALSE(sanitizeUtf8(tak->payload_variant.chat.message, sizeof(tak->payload_variant.chat.message)));

@@ -116,7 +116,7 @@ size_t AtakPluginModule::maxGeoChatBytes(NodeNum dest)
     return room;
 }
 
-bool AtakPluginModule::setGeoChatPayload(meshtastic_MeshPacket *p, const char *message, size_t len)
+bool AtakPluginModule::setGeoChatPayload(meshtastic_MeshPacket *p, const char *message, size_t len, size_t *carried)
 {
     meshtastic_TAKPacketV2 *takPacket = allocTakPacket();
     if (!takPacket) {
@@ -144,5 +144,7 @@ bool AtakPluginModule::setGeoChatPayload(meshtastic_MeshPacket *p, const char *m
         return false;
     }
     LOG_INFO("Send GeoChat id=0x%08x to=0x%08x, %u bytes of text", p->id, p->to, (unsigned)len);
+    if (carried)
+        *carried = len;
     return true;
 }

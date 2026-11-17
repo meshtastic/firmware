@@ -27,8 +27,9 @@ class AtakPluginModule : public SinglePortModule
     /// Set p's port and payload to [flags byte][uncompressed TAKPacketV2]. False if it doesn't fit.
     static bool setPayload(meshtastic_MeshPacket *p, const meshtastic_TAKPacketV2 &takPacket);
 
-    /// Replace p's payload with a GeoChat carrying message to p->to, cutting text that doesn't fit
-    static bool setGeoChatPayload(meshtastic_MeshPacket *p, const char *message, size_t len);
+    /// Replace p's payload with a GeoChat carrying message to p->to, cutting text that doesn't fit.
+    /// carried, if given, gets the number of text bytes that went in.
+    static bool setGeoChatPayload(meshtastic_MeshPacket *p, const char *message, size_t len, size_t *carried = nullptr);
 
     /// Longest message (bytes) setGeoChatPayload can carry to dest without cutting it
     static size_t maxGeoChatBytes(NodeNum dest);
