@@ -50,6 +50,9 @@ class PiWebServerThread
     // struct _u_map mime_types;
     std::string webrootpath;
     HttpAPI webAPI;
+    bool plainInstanceReady = false;
+
+    void addEndpoints(struct _u_instance *instance);
 
   public:
     PiWebServerThread();
@@ -58,6 +61,8 @@ class PiWebServerThread
     int CheckSSLandLoad();
     uint32_t requestRestart = 0;
     struct _u_instance instanceWeb;
+    /// The same endpoints without TLS, only when Webserver.HTTPPort is set.
+    struct _u_instance instanceWebPlain;
 };
 
 extern PiWebServerThread *piwebServerThread;

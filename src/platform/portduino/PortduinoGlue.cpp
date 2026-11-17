@@ -1463,6 +1463,7 @@ bool loadConfig(const char *configPath)
 
         if (yamlConfig["Webserver"]) {
             portduino_config.webserverport = (yamlConfig["Webserver"]["Port"]).as<int>(-1);
+            portduino_config.webserver_http_port = (yamlConfig["Webserver"]["HTTPPort"]).as<int>(-1);
             portduino_config.webserver_root_path =
                 (yamlConfig["Webserver"]["RootPath"]).as<std::string>("/usr/share/meshtasticd/web");
             portduino_config.webserver_ssl_key_path =
