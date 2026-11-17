@@ -358,6 +358,8 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_NODARA = 151,
     /* Heltec Magnetic Power Bank V2 */
     meshtastic_HardwareModel_HELTEC_MESH_POCKET_V2 = 152,
+    /* A virtual node: a phone or desktop app acting as a mesh node of its own, with no radio hardware of its own */
+    meshtastic_HardwareModel_VIRTUAL_NODE = 254,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */
@@ -1129,7 +1131,11 @@ typedef struct _meshtastic_Data {
     /* Defaults to false. If true, then what is in the payload should be treated as an emoji like giving
  a message a heart or poop emoji. */
     uint32_t emoji;
-    /* Bitfield for extra flags. First use is to indicate that user approves the packet being uploaded to MQTT. */
+    /* Bitfield for extra flags. First use is to indicate that user approves the packet being uploaded to MQTT.
+ Bit 0 (LSB): ok_to_mqtt.
+ Bit 1: mirrors want_response.
+ Bit 2: is_automation, the packet was sent by automation (a bot or scripted tool) rather than typed
+ by a person. Set per packet by the client; self-reported, so treat it as advisory. */
     bool has_bitfield;
     uint8_t bitfield;
     /* XEdDSA signature for the payload */
