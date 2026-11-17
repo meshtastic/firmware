@@ -1082,7 +1082,7 @@ void setup()
 #ifdef ARCH_PORTDUINO
     // FIXME: portduino does not ever call onNetworkConnected so call it here because I don't know what happen if I call
     // onNetworkConnected there
-    if (config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST) {
+    if (udpHandler->isEnabled()) {
         udpHandler->start();
     }
 #endif
@@ -1441,6 +1441,15 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
 #endif
         }
     }
+#endif
+
+    // Every transport this build can run, whether or not config.transport enables it.
+    deviceMetadata.supported_transports_count = 0;
+    deviceMetadata.supported_transports[deviceMetadata.supported_transports_count++] =
+        meshtastic_Config_TransportConfig_Transport_TRANSPORT_LORA;
+#if HAS_UDP_MULTICAST
+    deviceMetadata.supported_transports[deviceMetadata.supported_transports_count++] =
+        meshtastic_Config_TransportConfig_Transport_TRANSPORT_MULTICAST_UDP;
 #endif
     return deviceMetadata;
 }

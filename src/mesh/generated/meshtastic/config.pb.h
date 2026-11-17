@@ -248,7 +248,7 @@ typedef enum _meshtastic_Config_LoRaConfig_RegionCode {
     meshtastic_Config_LoRaConfig_RegionCode_CN = 4,
     /* Japan */
     meshtastic_Config_LoRaConfig_RegionCode_JP = 5,
-    /* Australia / New Zealand */
+    /* Australia / Brazil / New Zealand (915-928MHz) */
     meshtastic_Config_LoRaConfig_RegionCode_ANZ = 6,
     /* Korea */
     meshtastic_Config_LoRaConfig_RegionCode_KR = 7,
@@ -436,6 +436,52 @@ typedef enum _meshtastic_Config_SecurityConfig_PacketSignaturePolicy {
     meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_STRICT = 2
 } meshtastic_Config_SecurityConfig_PacketSignaturePolicy;
 
+/* A transport, numbered the same as MeshPacket.TransportMechanism, which stamps
+ the transport a packet arrived over. The two are one enum split in two files
+ because config.proto cannot import mesh.proto. Values that only ever stamp a
+ packet (TRANSPORT_INTERNAL, TRANSPORT_API, TRANSPORT_UNICAST_UDP) are listed so
+ the numbers stay aligned; they are not enabled. */
+typedef enum _meshtastic_Config_TransportConfig_Transport {
+    /* The node itself. Never enabled; a packet it generates is stamped with it. */
+    meshtastic_Config_TransportConfig_Transport_TRANSPORT_INTERNAL = 0,
+    /* The primary LoRa radio. lora.region is still required for it to transmit,
+ and lora.tx_enabled still gates transmit on its own. */
+    meshtastic_Config_TransportConfig_Transport_TRANSPORT_LORA = 1,
+    /* A secondary LoRa radio */
+    meshtastic_Config_TransportConfig_Transport_TRANSPORT_LORA_ALT1 = 2,
+    /* A tertiary LoRa radio */
+    meshtastic_Config_TransportConfig_Transport_TRANSPORT_LORA_ALT2 = 3,
+    /* A quaternary LoRa radio */
+    meshtastic_Config_TransportConfig_Transport_TRANSPORT_LORA_ALT3 = 4,
+    /* An MQTT connection. Still switched by MQTTConfig.enabled; listed so the
+ numbers stay aligned. */
+    meshtastic_Config_TransportConfig_Transport_TRANSPORT_MQTT = 5,
+    /* UDP over the local network, multicast and unicast both. The one UDP entry a
+ node enables; TRANSPORT_UNICAST_UDP only stamps a packet. */
+    meshtastic_Config_TransportConfig_Transport_TRANSPORT_MULTICAST_UDP = 6,
+    /* The phone API. Never enabled; a packet from a connected client is stamped with it. */
+    meshtastic_Config_TransportConfig_Transport_TRANSPORT_API = 7,
+    /* Unicast UDP, stamped on a packet that arrived that way. Enabled through
+ TRANSPORT_MULTICAST_UDP. */
+    meshtastic_Config_TransportConfig_Transport_TRANSPORT_UNICAST_UDP = 8,
+    /* Connectionless BLE 5 extended advertisements */
+    meshtastic_Config_TransportConfig_Transport_TRANSPORT_BLE_ADV = 9,
+    /* The BLE GATT mesh-peer service, in either GATT role: a node serves it to peers
+ that connect, and a node that can act as a central connects outward to peers
+ serving it. Separate from bluetooth.enabled, which gates the phone-API service
+ on the same controller: that one is a client configuring one node, this is mesh
+ traffic between nodes. On firmware it runs only while the node's Bluetooth is
+ up, so it is inert when bluetooth.enabled is false, and on an ESP32 while Wi-Fi
+ is in use. */
+    meshtastic_Config_TransportConfig_Transport_TRANSPORT_BLE_GATT = 10,
+    /* Sound, over a speaker and the microphones in earshot of it */
+    meshtastic_Config_TransportConfig_Transport_TRANSPORT_AUDIO = 11,
+    /* QR frames on a screen, read by a camera */
+    meshtastic_Config_TransportConfig_Transport_TRANSPORT_VIDEO = 12,
+    /* Wi-Fi Aware, a NAN data path to a nearby device */
+    meshtastic_Config_TransportConfig_Transport_TRANSPORT_WIFI_AWARE = 13
+} meshtastic_Config_TransportConfig_Transport;
+
 /* Struct definitions */
 /* Configuration */
 typedef struct _meshtastic_Config_DeviceConfig {
@@ -574,7 +620,10 @@ typedef struct _meshtastic_Config_NetworkConfig {
     meshtastic_Config_NetworkConfig_IpV4Config ipv4_config;
     /* rsyslog Server and Port */
     char rsyslog_server[33];
-    /* Flags for enabling/disabling network protocols */
+    /* Flags for enabling/disabling network protocols.
+ Superseded by Config.TransportConfig.enabled, which names every transport by one key.
+ Firmware 2.8.3 carries UDP_BROADCAST into TRANSPORT_MULTICAST_UDP on first boot and
+ reads only the new field from then on. */
     uint32_t enabled_protocols;
     /* Enable/Disable ipv6 support */
     bool ipv6_enabled;
@@ -758,6 +807,22 @@ typedef struct _meshtastic_Config_SessionkeyConfig {
     char dummy_field;
 } meshtastic_Config_SessionkeyConfig;
 
+/* Which transports this node carries mesh packets over.
+
+ Every transport is named by one key, Transport, whether it is a radio on
+ firmware or a bearer an app node runs. Each transport's own settings stay in
+ its own section (LoRaConfig, NetworkConfig, MQTTConfig); this section only
+ says which run. A node lists what it can run in DeviceMetadata.supported_transports. */
+typedef struct _meshtastic_Config_TransportConfig {
+    /* The transports this node runs. A transport absent here is off, one the node
+ cannot run (not in DeviceMetadata.supported_transports) is ignored.
+ On first boot of firmware 2.8.3 this is derived from the fields it replaces:
+ TRANSPORT_LORA always, since an UNSET lora.region alone keeps the radio off the air,
+ and TRANSPORT_MULTICAST_UDP when network.enabled_protocols has UDP_BROADCAST. */
+    pb_size_t enabled_count;
+    meshtastic_Config_TransportConfig_Transport enabled[16];
+} meshtastic_Config_TransportConfig;
+
 typedef struct _meshtastic_Config {
     pb_size_t which_payload_variant;
     union {
@@ -771,6 +836,7 @@ typedef struct _meshtastic_Config {
         meshtastic_Config_SecurityConfig security;
         meshtastic_Config_SessionkeyConfig sessionkey;
         meshtastic_DeviceUIConfig device_ui;
+        meshtastic_Config_TransportConfig transport;
     } payload_variant;
 } meshtastic_Config;
 
@@ -848,6 +914,10 @@ extern "C" {
 #define _meshtastic_Config_SecurityConfig_PacketSignaturePolicy_MAX meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_STRICT
 #define _meshtastic_Config_SecurityConfig_PacketSignaturePolicy_ARRAYSIZE ((meshtastic_Config_SecurityConfig_PacketSignaturePolicy)(meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_STRICT+1))
 
+#define _meshtastic_Config_TransportConfig_Transport_MIN meshtastic_Config_TransportConfig_Transport_TRANSPORT_INTERNAL
+#define _meshtastic_Config_TransportConfig_Transport_MAX meshtastic_Config_TransportConfig_Transport_TRANSPORT_WIFI_AWARE
+#define _meshtastic_Config_TransportConfig_Transport_ARRAYSIZE ((meshtastic_Config_TransportConfig_Transport)(meshtastic_Config_TransportConfig_Transport_TRANSPORT_WIFI_AWARE+1))
+
 
 #define meshtastic_Config_DeviceConfig_role_ENUMTYPE meshtastic_Config_DeviceConfig_Role
 #define meshtastic_Config_DeviceConfig_rebroadcast_mode_ENUMTYPE meshtastic_Config_DeviceConfig_RebroadcastMode
@@ -874,6 +944,8 @@ extern "C" {
 #define meshtastic_Config_SecurityConfig_packet_signature_policy_ENUMTYPE meshtastic_Config_SecurityConfig_PacketSignaturePolicy
 
 
+#define meshtastic_Config_TransportConfig_enabled_ENUMTYPE meshtastic_Config_TransportConfig_Transport
+
 
 /* Initializer values for message structs */
 #define meshtastic_Config_init_default           {0, {meshtastic_Config_DeviceConfig_init_default}}
@@ -887,6 +959,7 @@ extern "C" {
 #define meshtastic_Config_BluetoothConfig_init_default {0, _meshtastic_Config_BluetoothConfig_PairingMode_MIN, 0}
 #define meshtastic_Config_SecurityConfig_init_default {{0, {0}}, {0, {0}}, 0, {{0, {0}}, {0, {0}}, {0, {0}}}, 0, 0, 0, 0, _meshtastic_Config_SecurityConfig_PacketSignaturePolicy_MIN}
 #define meshtastic_Config_SessionkeyConfig_init_default {0}
+#define meshtastic_Config_TransportConfig_init_default {0, {_meshtastic_Config_TransportConfig_Transport_MIN, _meshtastic_Config_TransportConfig_Transport_MIN, _meshtastic_Config_TransportConfig_Transport_MIN, _meshtastic_Config_TransportConfig_Transport_MIN, _meshtastic_Config_TransportConfig_Transport_MIN, _meshtastic_Config_TransportConfig_Transport_MIN, _meshtastic_Config_TransportConfig_Transport_MIN, _meshtastic_Config_TransportConfig_Transport_MIN, _meshtastic_Config_TransportConfig_Transport_MIN, _meshtastic_Config_TransportConfig_Transport_MIN, _meshtastic_Config_TransportConfig_Transport_MIN, _meshtastic_Config_TransportConfig_Transport_MIN, _meshtastic_Config_TransportConfig_Transport_MIN, _meshtastic_Config_TransportConfig_Transport_MIN, _meshtastic_Config_TransportConfig_Transport_MIN, _meshtastic_Config_TransportConfig_Transport_MIN}}
 #define meshtastic_Config_init_zero              {0, {meshtastic_Config_DeviceConfig_init_zero}}
 #define meshtastic_Config_DeviceConfig_init_zero {_meshtastic_Config_DeviceConfig_Role_MIN, 0, 0, 0, _meshtastic_Config_DeviceConfig_RebroadcastMode_MIN, 0, 0, 0, 0, "", 0, _meshtastic_Config_DeviceConfig_BuzzerMode_MIN}
 #define meshtastic_Config_PositionConfig_init_zero {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _meshtastic_Config_PositionConfig_GpsMode_MIN}
@@ -898,6 +971,7 @@ extern "C" {
 #define meshtastic_Config_BluetoothConfig_init_zero {0, _meshtastic_Config_BluetoothConfig_PairingMode_MIN, 0}
 #define meshtastic_Config_SecurityConfig_init_zero {{0, {0}}, {0, {0}}, 0, {{0, {0}}, {0, {0}}, {0, {0}}}, 0, 0, 0, 0, _meshtastic_Config_SecurityConfig_PacketSignaturePolicy_MIN}
 #define meshtastic_Config_SessionkeyConfig_init_zero {0}
+#define meshtastic_Config_TransportConfig_init_zero {0, {_meshtastic_Config_TransportConfig_Transport_MIN, _meshtastic_Config_TransportConfig_Transport_MIN, _meshtastic_Config_TransportConfig_Transport_MIN, _meshtastic_Config_TransportConfig_Transport_MIN, _meshtastic_Config_TransportConfig_Transport_MIN, _meshtastic_Config_TransportConfig_Transport_MIN, _meshtastic_Config_TransportConfig_Transport_MIN, _meshtastic_Config_TransportConfig_Transport_MIN, _meshtastic_Config_TransportConfig_Transport_MIN, _meshtastic_Config_TransportConfig_Transport_MIN, _meshtastic_Config_TransportConfig_Transport_MIN, _meshtastic_Config_TransportConfig_Transport_MIN, _meshtastic_Config_TransportConfig_Transport_MIN, _meshtastic_Config_TransportConfig_Transport_MIN, _meshtastic_Config_TransportConfig_Transport_MIN, _meshtastic_Config_TransportConfig_Transport_MIN}}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define meshtastic_Config_DeviceConfig_role_tag  1
@@ -994,6 +1068,7 @@ extern "C" {
 #define meshtastic_Config_SecurityConfig_debug_log_api_enabled_tag 6
 #define meshtastic_Config_SecurityConfig_admin_channel_enabled_tag 8
 #define meshtastic_Config_SecurityConfig_packet_signature_policy_tag 9
+#define meshtastic_Config_TransportConfig_enabled_tag 1
 #define meshtastic_Config_device_tag             1
 #define meshtastic_Config_position_tag           2
 #define meshtastic_Config_power_tag              3
@@ -1004,6 +1079,7 @@ extern "C" {
 #define meshtastic_Config_security_tag           8
 #define meshtastic_Config_sessionkey_tag         9
 #define meshtastic_Config_device_ui_tag          10
+#define meshtastic_Config_transport_tag          11
 
 /* Struct field encoding specification for nanopb */
 #define meshtastic_Config_FIELDLIST(X, a) \
@@ -1016,7 +1092,8 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,lora,payload_variant.lora), 
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,bluetooth,payload_variant.bluetooth),   7) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,security,payload_variant.security),   8) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,sessionkey,payload_variant.sessionkey),   9) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,device_ui,payload_variant.device_ui),  10)
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,device_ui,payload_variant.device_ui),  10) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,transport,payload_variant.transport),  11)
 #define meshtastic_Config_CALLBACK NULL
 #define meshtastic_Config_DEFAULT NULL
 #define meshtastic_Config_payload_variant_device_MSGTYPE meshtastic_Config_DeviceConfig
@@ -1029,6 +1106,7 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,device_ui,payload_variant.de
 #define meshtastic_Config_payload_variant_security_MSGTYPE meshtastic_Config_SecurityConfig
 #define meshtastic_Config_payload_variant_sessionkey_MSGTYPE meshtastic_Config_SessionkeyConfig
 #define meshtastic_Config_payload_variant_device_ui_MSGTYPE meshtastic_DeviceUIConfig
+#define meshtastic_Config_payload_variant_transport_MSGTYPE meshtastic_Config_TransportConfig
 
 #define meshtastic_Config_DeviceConfig_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UENUM,    role,              1) \
@@ -1166,6 +1244,11 @@ X(a, STATIC,   SINGULAR, UENUM,    packet_signature_policy,   9)
 #define meshtastic_Config_SessionkeyConfig_CALLBACK NULL
 #define meshtastic_Config_SessionkeyConfig_DEFAULT NULL
 
+#define meshtastic_Config_TransportConfig_FIELDLIST(X, a) \
+X(a, STATIC,   REPEATED, UENUM,    enabled,           1)
+#define meshtastic_Config_TransportConfig_CALLBACK NULL
+#define meshtastic_Config_TransportConfig_DEFAULT NULL
+
 extern const pb_msgdesc_t meshtastic_Config_msg;
 extern const pb_msgdesc_t meshtastic_Config_DeviceConfig_msg;
 extern const pb_msgdesc_t meshtastic_Config_PositionConfig_msg;
@@ -1177,6 +1260,7 @@ extern const pb_msgdesc_t meshtastic_Config_LoRaConfig_msg;
 extern const pb_msgdesc_t meshtastic_Config_BluetoothConfig_msg;
 extern const pb_msgdesc_t meshtastic_Config_SecurityConfig_msg;
 extern const pb_msgdesc_t meshtastic_Config_SessionkeyConfig_msg;
+extern const pb_msgdesc_t meshtastic_Config_TransportConfig_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
 #define meshtastic_Config_fields &meshtastic_Config_msg
@@ -1190,6 +1274,7 @@ extern const pb_msgdesc_t meshtastic_Config_SessionkeyConfig_msg;
 #define meshtastic_Config_BluetoothConfig_fields &meshtastic_Config_BluetoothConfig_msg
 #define meshtastic_Config_SecurityConfig_fields &meshtastic_Config_SecurityConfig_msg
 #define meshtastic_Config_SessionkeyConfig_fields &meshtastic_Config_SessionkeyConfig_msg
+#define meshtastic_Config_TransportConfig_fields &meshtastic_Config_TransportConfig_msg
 
 /* Maximum encoded size of messages (where known) */
 #define MESHTASTIC_MESHTASTIC_CONFIG_PB_H_MAX_SIZE meshtastic_Config_size
@@ -1203,6 +1288,7 @@ extern const pb_msgdesc_t meshtastic_Config_SessionkeyConfig_msg;
 #define meshtastic_Config_PowerConfig_size       52
 #define meshtastic_Config_SecurityConfig_size    180
 #define meshtastic_Config_SessionkeyConfig_size  0
+#define meshtastic_Config_TransportConfig_size   32
 #define meshtastic_Config_size                   207
 
 #ifdef __cplusplus
