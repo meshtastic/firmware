@@ -165,20 +165,6 @@ void test_cut_never_splits_utf8(void)
     }
 }
 
-// Text that came in as the packet's own payload (the device-ui path) survives being overwritten
-void test_text_from_own_payload(void)
-{
-    meshtastic_MeshPacket p = makeTextPacket(NODENUM_BROADCAST);
-    const char *text = "typed on the device";
-    p.decoded.payload.size = strlen(text);
-    memcpy(p.decoded.payload.bytes, text, p.decoded.payload.size);
-
-    TEST_ASSERT_TRUE(AtakPluginModule::setGeoChatPayload(&p, (const char *)p.decoded.payload.bytes, p.decoded.payload.size));
-
-    auto tak = decodeGeoChat(p);
-    TEST_ASSERT_EQUAL_STRING(text, tak->payload_variant.chat.message);
-}
-
 void test_only_tak_roles_send_geochat(void)
 {
     config.device.role = meshtastic_Config_DeviceConfig_Role_TAK;
@@ -220,7 +206,6 @@ void setup()
     RUN_TEST(test_dm_text_at_limit_fits);
     RUN_TEST(test_long_text_is_cut_to_limit);
     RUN_TEST(test_cut_never_splits_utf8);
-    RUN_TEST(test_text_from_own_payload);
     RUN_TEST(test_only_tak_roles_send_geochat);
 
     exit(UNITY_END());

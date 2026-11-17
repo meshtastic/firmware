@@ -133,7 +133,6 @@ bool AtakPluginModule::setGeoChatPayload(meshtastic_MeshPacket *p, const char *m
         while (len > 0 && (message[len] & 0xC0) == 0x80)
             len--;
     }
-    // message may be p's own payload, so it's copied out before setPayload overwrites it
     meshtastic_GeoChat &chat = takPacket->payload_variant.chat;
     memcpy(chat.message, message, len);
     chat.message[len] = '\0';
