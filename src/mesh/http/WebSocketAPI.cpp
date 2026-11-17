@@ -49,6 +49,8 @@ class MeshWebsocketHandler : public WebsocketHandler
   public:
     MeshWebsocketHandler();
     ~MeshWebsocketHandler() override;
+    MeshWebsocketHandler(const MeshWebsocketHandler &) = delete;
+    MeshWebsocketHandler &operator=(const MeshWebsocketHandler &) = delete;
 
     void onMessage(WebsocketInputStreambuf *input) override;
 
