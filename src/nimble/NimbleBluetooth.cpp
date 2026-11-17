@@ -940,7 +940,8 @@ void NimbleBluetooth::setup()
         // Set the passkey
         if (config.bluetooth.mode == meshtastic_Config_BluetoothConfig_PairingMode_RANDOM_PIN) {
             LOG_INFO("Use random passkey");
-            security.setPassKey(false); // generate a random passkey
+            security.setPassKey(false);           // generate a random passkey
+            security.regenPassKeyOnConnect(true); // and a new one for every pairing, not one per boot
         } else {
             LOG_INFO("Use fixed passkey");
             security.setPassKey(true, config.bluetooth.fixed_pin);
