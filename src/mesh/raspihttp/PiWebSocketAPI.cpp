@@ -29,6 +29,7 @@ static constexpr uint32_t WS_WRITE_BUDGET_MS = 100;
 static constexpr int32_t WS_ATTACHED_INTERVAL_MS = 50;
 static constexpr int32_t WS_DETACHED_INTERVAL_MS = 500;
 static constexpr unsigned int WS_CLOSE_POLL_MS = 100;
+static constexpr unsigned int WS_CLOSE_GRACE_MS = 2000;
 static constexpr size_t WS_MAX_INBOUND = 32;
 
 // Close codes, the same on the ESP32 route. 4001 tells a client it was replaced, so it can
@@ -96,12 +97,17 @@ static void onWebSocketOpen(const struct _u_request *request, struct _websocket_
     }
     // Returning closes the socket, so hold it until the peer leaves or a newer client takes over.
     bool replaced = false;
-    while (!replaced && ulfius_websocket_wait_close(manager, WS_CLOSE_POLL_MS) == U_WEBSOCKET_STATUS_OPEN) {
+    while (!replaced && !manager->close_flag &&
+           ulfius_websocket_wait_close(manager, WS_CLOSE_POLL_MS) == U_WEBSOCKET_STATUS_OPEN) {
         std::lock_guard<std::mutex> guard(wsLock);
         replaced = wsClient != manager;
     }
     if (replaced)
         sendClose(manager, WS_CLOSE_REPLACED);
+    // Ulfius's reader waits out an unfinished frame and the close signal does not interrupt it,
+    // so a peer that stops mid-frame would keep its thread and socket for good.
+    if (ulfius_websocket_wait_close(manager, WS_CLOSE_GRACE_MS) == U_WEBSOCKET_STATUS_OPEN)
+        manager->connected = 0;
     std::lock_guard<std::mutex> guard(wsLock);
     if (!isDisplaced(manager))
         wsDisplaced.push_back(manager);
