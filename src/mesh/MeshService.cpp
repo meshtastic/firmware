@@ -157,15 +157,23 @@ void MeshService::loop()
     applyDeferredRadioConfig();
 }
 
+void MeshService::awaitAckBeforeRadioConfig(PacketId id)
+{
+    if (radioConfigDeferred)
+        radioConfigAwaitsAckOf = id;
+}
+
 void MeshService::applyDeferredRadioConfig()
 {
     if (!radioConfigDeferred)
         return;
     // A deep-sleep preflight is the radio's own "nothing queued and nothing on air" check.
-    if (doPreflightSleep(true)) {
-        LOG_INFO("TX queue drained, apply the deferred radio change");
+    const bool replyPending =
+        radioConfigAwaitsAckOf && router && router->isRetransmissionPending(nodeDB->getNodeNum(), radioConfigAwaitsAckOf);
+    if (!replyPending && doPreflightSleep(true)) {
+        LOG_INFO("Reply delivered and TX queue drained, apply the deferred radio change");
     } else if (Throttle::hasElapsed(radioConfigDeferredAtMs, RADIO_CONFIG_DEFER_MAX_MS)) {
-        LOG_WARN("TX still busy after %u ms, apply the deferred radio change anyway", RADIO_CONFIG_DEFER_MAX_MS);
+        LOG_WARN("Reply or TX still pending after %u ms, apply the deferred radio change anyway", RADIO_CONFIG_DEFER_MAX_MS);
     } else {
         return;
     }
@@ -175,6 +183,7 @@ void MeshService::applyDeferredRadioConfig()
 void MeshService::applyRadioConfig()
 {
     radioConfigDeferred = false;
+    radioConfigAwaitsAckOf = 0;
     configChanged.notifyObservers(NULL); // This will cause radio hardware to change freqs etc
 
     // Nothing is swept and nothing extra persisted: each node carries the slot it was heard on, so
@@ -195,7 +204,7 @@ void MeshService::reloadConfig(int saveWhat, bool deferRadio)
         nodeDB->resetRadioConfig(); // Don't let the phone send us fatally bad settings
 
         if (deferRadio) {
-            LOG_INFO("Radio change saved, retune once the TX queue drains");
+            LOG_INFO("Radio change saved, retune once the reply is out and the TX queue drains");
             radioConfigDeferred = true;
             radioConfigDeferredAtMs = Time::getMillis();
         } else {

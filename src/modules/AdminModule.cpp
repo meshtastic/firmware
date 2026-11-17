@@ -732,6 +732,9 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     if (mp.pki_encrypted && myReply && myReply->decoded.portnum != meshtastic_PortNum_ROUTING_APP) {
         myReply->pki_encrypted = true;
     }
+    // A reliable reply is retransmitted until acked; keep the radio where the requester can hear those retries.
+    if (myReply && mp.want_ack && mp.from != 0)
+        service->awaitAckBeforeRadioConfig(myReply->id);
     return handled;
 }
 

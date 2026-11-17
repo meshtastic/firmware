@@ -84,6 +84,7 @@ class MeshService
     // where the requester isn't listening.
     bool radioConfigDeferred = false;
     uint32_t radioConfigDeferredAtMs = 0;
+    PacketId radioConfigAwaitsAckOf = 0; // our reply that must be acked (or given up) before the retune; 0 = none
 
     /// Retune the radio to the current config and record the slot it is now committed to.
     void applyRadioConfig();
@@ -203,12 +204,21 @@ class MeshService
     /// A radio change saved with deferRadio that the radio hasn't been retuned to yet. Holds a pending reboot.
     bool isRadioConfigDeferred() const { return radioConfigDeferred; }
 
-    /// Longest a deferred radio change waits for the TX queue, so a saturated channel can't hold it forever. At LONG_SLOW
-    /// a ~45-byte ack is ~3.3 s on air and a 64-slot contention window ~10 s, leaving room for one packet queued ahead.
+    /// Also hold the deferred retune until our packet `id` (the admin reply) is acked or its retransmissions give up,
+    /// so a lost first transmission is retried where the requester is still listening.
+    void awaitAckBeforeRadioConfig(PacketId id);
+
+    /// Longest a deferred radio change waits, so a saturated channel can't hold it forever. At LONG_SLOW a ~45-byte
+    /// ack is ~3.3 s on air and a 64-slot contention window ~10 s, leaving room for one packet queued ahead.
     static constexpr uint32_t RADIO_CONFIG_DEFER_MAX_MS = 20 * 1000;
 
-    /// Apply a deferred radio change once nothing is queued or on air, or once RADIO_CONFIG_DEFER_MAX_MS has passed.
+    /// Apply a deferred radio change once nothing is queued or on air and the awaited reply is acked, or once
+    /// RADIO_CONFIG_DEFER_MAX_MS has passed.
     void applyDeferredRadioConfig();
+#ifdef PIO_UNIT_TESTING
+    /// Make the pending deferral look ms older, so a test reaches the cap without moving the shared clock.
+    void ageRadioConfigDeferralForTest(uint32_t ms) { radioConfigDeferredAtMs -= ms; }
+#endif
 
     /// The owner User record just got updated, update our node DB and broadcast the info into the mesh
     void reloadOwner(bool shouldSave = true);

@@ -16,12 +16,14 @@
  *     text, so a path that drops it sends UNSET and the client falls back to text matching.
  *  8. When an admin save retunes the radio: AdminModule::saveChanges() saves through
  *     MeshService::reloadConfig(saveWhat, true), and the retune waits in
- *     MeshService::applyDeferredRadioConfig() until the TX queue has drained (or
- *     RADIO_CONFIG_DEFER_MAX_MS has passed); Power::rebootIsDue() holds a commit's reboot meanwhile.
+ *     MeshService::applyDeferredRadioConfig() until the TX queue has drained and the reply
+ *     registered through awaitAckBeforeRadioConfig() is acked (or RADIO_CONFIG_DEFER_MAX_MS has
+ *     passed); Power::rebootIsDue() holds a commit's reboot meanwhile.
  *     The admin's reply is queued only after the handler returns, so it must leave on the settings
  *     the requester is still listening on. Retuning at save time sends that reply on the new
  *     preset/slot, where the requester never hears it, and the client reports a change that applied
- *     as failed (MAX_RETRANSMIT). Rebooting before the queue drains cuts the reply off the same way.
+ *     as failed (MAX_RETRANSMIT). Rebooting before the queue drains cuts the reply off the same way,
+ *     and retuning before the reply is acked strands its retransmissions on the new settings.
  */
 
 #include "Channels.h"
@@ -1077,8 +1079,6 @@ static void restoreAdminRadioGlobals()
     dropRestoreCryptoStub();
     detachTxQueueStandIn();
     rebootAtMsec = savedRebootAtMsec;
-    Time::useRealClock();
-    Time::resetMonotonicForTests(); // stepping back to the real clock would otherwise count as a wrap
     nodeInfoModule = savedNodeInfoModule;
     nodeDB = savedNodeDB;
     router = savedRouter;
@@ -2547,16 +2547,21 @@ static void detachTxQueueStandIn()
     txQueueStandIn.busy = false;
 }
 
-// The admin's reply sits in the TX queue. begin_edit stamps its 60 s idle window with the real millis(),
-// which the frozen virtual clock must stay ahead of without leaving that window: start it 30 s ahead.
+// The admin's reply sits in the TX queue. Time is moved by aging the deferral and the reboot deadline
+// rather than the shared clock: stepping that back afterwards leaks into later cases' NodeDB state.
 static void primeDeferredRetuneTest()
 {
     usePresetLongFast();
     config.lora.channel_num = 20;
     rebootAtMsec = 0;
-    Time::setTestMillis(millis() + 30 * 1000);
     txQueueStandIn.busy = true;
     txQueueStandIn.observe(&preflightSleep);
+}
+
+// The reboot commit_edit_settings scheduled, brought to its deadline.
+static void expireRebootDeadline()
+{
+    rebootAtMsec = Time::skipZero(Time::getMillis() - 1);
 }
 
 // The LoRa set a client sends to move the node to another slot.
@@ -2604,7 +2609,7 @@ static void test_commitEditSettings_rebootWaitsForTxQueue()
 
     TEST_ASSERT_EQUAL_INT_MESSAGE(0, counter.count, "commit retuned while its reply was still queued");
     TEST_ASSERT_NOT_EQUAL_UINT32(0, rebootAtMsec);
-    Time::advanceTestMillis(DEFAULT_REBOOT_SECONDS * 1000 + 1);
+    expireRebootDeadline();
     TEST_ASSERT_FALSE_MESSAGE(Power::rebootIsDue(), "reboot fired while the reply was still queued");
 
     txQueueStandIn.busy = false;
@@ -2625,15 +2630,46 @@ static void test_commitEditSettings_capReleasesRetuneAndReboot()
     sendSetLoraChannelNum(21);
     sendCommitEdit();
 
-    Time::advanceTestMillis(MeshService::RADIO_CONFIG_DEFER_MAX_MS - 1);
+    expireRebootDeadline();
+    service->ageRadioConfigDeferralForTest(MeshService::RADIO_CONFIG_DEFER_MAX_MS - 1000);
     service->applyDeferredRadioConfig();
     TEST_ASSERT_EQUAL_INT(0, counter.count);
     TEST_ASSERT_FALSE(Power::rebootIsDue());
 
-    Time::advanceTestMillis(1);
+    service->ageRadioConfigDeferralForTest(1000);
     service->applyDeferredRadioConfig();
     TEST_ASSERT_EQUAL_INT(1, counter.count);
     TEST_ASSERT_TRUE(Power::rebootIsDue());
+}
+
+// Stands in for NextHopRouter's pending-retransmission table.
+class PendingReplyRouter : public Router
+{
+  public:
+    bool pending = true;
+    bool isRetransmissionPending(NodeNum from, PacketId id) override { return pending; }
+};
+
+// An empty TX queue only means the reply's first transmission is out. Retuning then strands its
+// retransmissions (and the requester's ack of it) on the old settings: wait until it is acked.
+static void test_deferredRetune_waitsForReplyAck()
+{
+    primeDeferredRetuneTest();
+    txQueueStandIn.busy = false;
+    auto *pendingReply = new PendingReplyRouter();
+    hamMockRouter = pendingReply; // restoreAdminRadioGlobals() deletes it
+    router = pendingReply;
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    service->reloadConfig(SEGMENT_CONFIG, true);
+    service->awaitAckBeforeRadioConfig(0x1234);
+    service->applyDeferredRadioConfig();
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, counter.count, "retuned before the reply was acked");
+
+    pendingReply->pending = false;
+    service->applyDeferredRadioConfig();
+    TEST_ASSERT_EQUAL_INT(1, counter.count);
 }
 
 // -----------------------------------------------------------------------
@@ -2956,11 +2992,6 @@ void setup()
     RUN_TEST(test_setIgnoredNode_skipsRadioReload_butPersists);
     RUN_TEST(test_toggleMutedNode_skipsRadioReload_butPersists);
 
-    // Radio-changing admin saves wait for the reply to leave
-    RUN_TEST(test_setConfigLora_retunesLiveOnceTxQueueDrains);
-    RUN_TEST(test_commitEditSettings_rebootWaitsForTxQueue);
-    RUN_TEST(test_commitEditSettings_capReleasesRetuneAndReboot);
-
 #if HAS_SCREEN
     // Node menu mute toggle
     RUN_TEST(test_toggleNodeMuted_flipsBitAndSkipsRadioReload);
@@ -2978,6 +3009,13 @@ void setup()
     RUN_TEST(test_presetForRegionSelection_respectsAPresetAlreadyChosen);
     RUN_TEST(test_presetForRegionSelection_ignoresNodesOnRawModemSettings);
 #endif
+
+    // Radio-changing admin saves wait for the reply to leave. Last: their real saves persist a NodeDB
+    // the node-menu mute cases above would otherwise reload with a node already muted.
+    RUN_TEST(test_setConfigLora_retunesLiveOnceTxQueueDrains);
+    RUN_TEST(test_commitEditSettings_rebootWaitsForTxQueue);
+    RUN_TEST(test_commitEditSettings_capReleasesRetuneAndReboot);
+    RUN_TEST(test_deferredRetune_waitsForReplyAck);
 
     exit(UNITY_END());
 }
