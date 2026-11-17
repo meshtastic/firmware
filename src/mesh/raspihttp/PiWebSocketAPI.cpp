@@ -11,10 +11,12 @@
 #include "Throttle.h"
 #include "UptimeClock.h"
 #include "concurrency/OSThread.h"
+#include <algorithm>
 #include <deque>
 #include <mutex>
 #include <string>
 #include <ulfius.h>
+#include <vector>
 
 static constexpr uint32_t WS_IDLE_TIMEOUT_MS = 15 * 60 * 1000UL;
 // One drain slice: a longer one starves loop() during a NodeDB dump.
@@ -28,26 +30,43 @@ static constexpr size_t WS_MAX_INBOUND = 32;
 // PhoneAPI itself stays on the main loop.
 static std::mutex wsLock;
 static struct _websocket_manager *wsClient;
-static struct _websocket_manager *wsRetired;
+// Connections on their way out. One stays listed until its close callback, the last ulfius runs for it.
+static std::vector<struct _websocket_manager *> wsDisplaced;
 static std::deque<std::string> wsInbound;
-static bool wsClientChanged;
+// Moves whenever wsClient does, so the main loop can tell one client's session from the next.
+static uint32_t wsGeneration;
+
+static bool isDisplaced(const struct _websocket_manager *manager)
+{
+    return std::find(wsDisplaced.begin(), wsDisplaced.end(), manager) != wsDisplaced.end();
+}
+
+static void setClient(struct _websocket_manager *manager)
+{
+    wsClient = manager;
+    wsInbound.clear();
+    wsGeneration++;
+}
 
 /// Make manager the one attached client. A newer client takes the slot, as a new TCP client does.
 static bool attachClient(struct _websocket_manager *manager)
 {
     if (wsClient == manager)
         return true;
-    if (wsRetired == manager)
+    if (isDisplaced(manager))
         return false;
-    wsRetired = wsClient;
-    wsClient = manager;
-    wsInbound.clear();
-    wsClientChanged = true;
+    if (wsClient)
+        wsDisplaced.push_back(wsClient);
+    setClient(manager);
     return true;
 }
 
 static void onWebSocketOpen(const struct _u_request *request, struct _websocket_manager *manager, void *userData)
 {
+#ifndef U_DISABLE_WS_MESSAGE_LIST
+    // Ulfius otherwise keeps every message of the connection in memory.
+    manager->keep_messages = U_WEBSOCKET_KEEP_NONE;
+#endif
     {
         std::lock_guard<std::mutex> guard(wsLock);
         attachClient(manager);
@@ -59,13 +78,10 @@ static void onWebSocketOpen(const struct _u_request *request, struct _websocket_
             break;
     }
     std::lock_guard<std::mutex> guard(wsLock);
-    if (wsRetired == manager)
-        wsRetired = nullptr;
-    if (wsClient == manager) {
-        wsClient = nullptr;
-        wsInbound.clear();
-        wsClientChanged = true;
-    }
+    if (!isDisplaced(manager))
+        wsDisplaced.push_back(manager);
+    if (wsClient == manager)
+        setClient(nullptr);
 }
 
 static void onWebSocketMessage(const struct _u_request *request, struct _websocket_manager *manager,
@@ -79,9 +95,18 @@ static void onWebSocketMessage(const struct _u_request *request, struct _websock
         wsInbound.emplace_back(message->data, message->data_len);
 }
 
+static void onWebSocketClose(const struct _u_request *request, struct _websocket_manager *manager, void *userData)
+{
+    std::lock_guard<std::mutex> guard(wsLock);
+    wsDisplaced.erase(std::remove(wsDisplaced.begin(), wsDisplaced.end(), manager), wsDisplaced.end());
+    if (wsClient == manager)
+        setClient(nullptr);
+}
+
 static int handleAPIv1WebSocket(const struct _u_request *req, struct _u_response *res, void *userData)
 {
-    if (ulfius_set_websocket_response(res, NULL, NULL, &onWebSocketOpen, NULL, &onWebSocketMessage, NULL, NULL, NULL) != U_OK)
+    if (ulfius_set_websocket_response(res, NULL, NULL, &onWebSocketOpen, NULL, &onWebSocketMessage, NULL, &onWebSocketClose,
+                                      NULL) != U_OK)
         ulfius_set_string_body_response(res, 400, "WebSocket upgrade failed");
     return U_CALLBACK_COMPLETE;
 }
@@ -97,39 +122,46 @@ class PiWebSocketAPI : public PhoneAPI, private concurrency::OSThread
     void onNowHasData(uint32_t fromRadioNum) override { setIntervalFromNow(0); }
 
     int32_t runOnce() override;
+
+  private:
+    uint32_t servedGeneration = 0;
 };
 
 int32_t PiWebSocketAPI::runOnce()
 {
     std::deque<std::string> inbound;
-    bool changed, attached;
+    uint32_t generation;
+    bool attached;
     {
         std::lock_guard<std::mutex> guard(wsLock);
         inbound.swap(wsInbound);
-        changed = wsClientChanged;
-        wsClientChanged = false;
+        generation = wsGeneration;
         attached = wsClient != nullptr;
     }
-    if (changed) {
+    if (generation != servedGeneration) {
         LOG_INFO("WebSocket API client %s", attached ? "connected" : "disconnected");
+        servedGeneration = generation;
         close();
-        lastContactMsec = 0;
+        lastContactMsec = Time::skipZero(Time::getMillis());
     }
     for (const std::string &message : inbound)
         handleToRadio((const uint8_t *)message.data(), message.size());
     if (!attached)
         return WS_DETACHED_INTERVAL_MS;
 
-    const bool idle = lastContactMsec > 0 && Throttle::hasElapsed(lastContactMsec, WS_IDLE_TIMEOUT_MS);
+    const bool idle = Throttle::hasElapsed(lastContactMsec, WS_IDLE_TIMEOUT_MS);
     uint8_t buf[MAX_TO_FROM_RADIO_SIZE];
     const uint32_t started = Time::getMillis();
     std::lock_guard<std::mutex> guard(wsLock);
-    if (idle && wsClient) {
+    // The state above belongs to the client seen at the snapshot. A different one gets nothing from it.
+    if (wsGeneration != generation || !wsClient)
+        return 1;
+    if (idle) {
         LOG_WARN("WebSocket API client idle, closing");
         ulfius_websocket_send_close_signal(wsClient);
         return WS_ATTACHED_INTERVAL_MS;
     }
-    while (wsClient && Throttle::isWithinTimespanMs(started, WS_WRITE_BUDGET_MS)) {
+    while (Throttle::isWithinTimespanMs(started, WS_WRITE_BUDGET_MS)) {
         const size_t len = getFromRadio(buf);
         if (len == 0)
             return WS_ATTACHED_INTERVAL_MS;
