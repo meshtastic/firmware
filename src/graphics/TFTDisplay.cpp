@@ -1954,7 +1954,7 @@ void TFTDisplay::sendCommand(uint8_t com)
 #elif defined(USE_ARDUINO_GFX)
         tft->displayOn();
 #elif !defined(RAK14014) && !defined(M5STACK) && !defined(UNPHONE) && !defined(HELTEC_MESH_NODE_T096) &&                         \
-    !defined(HELTEC_MESH_NODE_T1) && !defined(HELTEC_MESH_POCKET_V2)
+    !defined(HELTEC_MESH_NODE_T1)
 #ifdef TFT_BLANK_ON_DISPLAY_OFF
         {
             concurrency::LockGuard g(spiLock);
@@ -2005,7 +2005,7 @@ void TFTDisplay::sendCommand(uint8_t com)
 #ifdef UNPHONE
         unphone.backlight(true); // using unPhone library
 #endif
-#if defined(RAK14014) || defined(HELTEC_MESH_NODE_T096) || defined(HELTEC_MESH_NODE_T1) || defined(HELTEC_MESH_POCKET_V2)
+#if defined(RAK14014) || defined(HELTEC_MESH_NODE_T096) || defined(HELTEC_MESH_NODE_T1)
 #elif !defined(M5STACK) && !defined(ST7789_CS) && !defined(TFT_NV3031B) &&                                                       \
     !defined(USE_ARDUINO_GFX) // T-Deck gets brightness set in Screen.cpp in the handleSetOn function
         tft->setBrightness(172);
@@ -2026,7 +2026,7 @@ void TFTDisplay::sendCommand(uint8_t com)
 #elif defined(USE_ARDUINO_GFX)
         tft->displayOff();
 #elif !defined(RAK14014) && !defined(M5STACK) && !defined(UNPHONE) && !defined(HELTEC_MESH_NODE_T096) &&                         \
-    !defined(HELTEC_MESH_NODE_T1) && !defined(HELTEC_MESH_POCKET_V2)
+    !defined(HELTEC_MESH_NODE_T1)
 #ifdef TFT_BLANK_ON_DISPLAY_OFF
         {
             concurrency::LockGuard g(spiLock);
@@ -2062,7 +2062,7 @@ void TFTDisplay::sendCommand(uint8_t com)
 #ifdef UNPHONE
         unphone.backlight(false); // using unPhone library
 #endif
-#if defined(RAK14014) || defined(HELTEC_MESH_NODE_T096) || defined(HELTEC_MESH_NODE_T1) || defined(HELTEC_MESH_POCKET_V2)
+#if defined(RAK14014) || defined(HELTEC_MESH_NODE_T096) || defined(HELTEC_MESH_NODE_T1)
 #elif !defined(M5STACK) && !defined(USE_ARDUINO_GFX)
         tft->setBrightness(0);
 #endif
@@ -2077,7 +2077,7 @@ void TFTDisplay::sendCommand(uint8_t com)
 
 void TFTDisplay::setDisplayBrightness(uint8_t _brightness)
 {
-#if defined(RAK14014) || defined(HELTEC_MESH_NODE_T096) || defined(HELTEC_MESH_NODE_T1) || defined(HELTEC_MESH_POCKET_V2)
+#if defined(RAK14014) || defined(HELTEC_MESH_NODE_T096) || defined(HELTEC_MESH_NODE_T1)
     // todo
 #elif !defined(USE_ARDUINO_GFX)
     tft->setBrightness(_brightness);
@@ -2097,8 +2097,7 @@ bool TFTDisplay::hasTouch(void)
 {
 #ifdef RAK14014
     return true;
-#elif !defined(M5STACK) && !defined(USE_ARDUINO_GFX) && !defined(HELTEC_MESH_NODE_T096) && !defined(HELTEC_MESH_NODE_T1) &&      \
-    !defined(HELTEC_MESH_POCKET_V2)
+#elif !defined(M5STACK) && !defined(USE_ARDUINO_GFX) && !defined(HELTEC_MESH_NODE_T096) && !defined(HELTEC_MESH_NODE_T1)
     return tft->touch() != nullptr;
 #else
     return false;
@@ -2117,8 +2116,7 @@ bool TFTDisplay::getTouch(int16_t *x, int16_t *y)
     } else {
         return false;
     }
-#elif !defined(M5STACK) && !defined(USE_ARDUINO_GFX) && !defined(HELTEC_MESH_NODE_T096) && !defined(HELTEC_MESH_NODE_T1) &&      \
-    !defined(HELTEC_MESH_POCKET_V2)
+#elif !defined(M5STACK) && !defined(USE_ARDUINO_GFX) && !defined(HELTEC_MESH_NODE_T096) && !defined(HELTEC_MESH_NODE_T1)
     return tft->getTouch(x, y);
 #else
     return false;
@@ -2138,7 +2136,7 @@ bool TFTDisplay::connect()
     // connect() re-runs on every display wake on variants whose handleSetOn() re-inits
     // the UI (see the gates in Screen::handleSetOn); construct the driver exactly once.
     if (!tft) {
-#if defined(RAK14014) || defined(HELTEC_MESH_NODE_T096) || defined(HELTEC_MESH_NODE_T1) || defined(HELTEC_MESH_POCKET_V2)
+#if defined(RAK14014) || defined(HELTEC_MESH_NODE_T096) || defined(HELTEC_MESH_NODE_T1)
         tft = new TFT_eSPI;
 #elif defined(HACKADAY_COMMUNICATOR)
         Arduino_DataBus *bus =
@@ -2148,7 +2146,7 @@ bool TFTDisplay::connect()
                                  nv3007_279_init_operations, sizeof(nv3007_279_init_operations));
 #elif defined(TFT_NV3001B)
         // The Heltec RC panels all use the same controller and differ only in how the bus is wired.
-#if defined(HELTEC_RC52)
+#if defined(ARCH_NRF52)
         // nRF52840: the panel sits on SPI1, clear of the LoRa radio on SPI0.
         Arduino_DataBus *bus = new Arduino_HWSPI(TFT_RS, TFT_CS, &SPI1, true /* is_shared_interface */);
 #elif defined(HELTEC_RCC6)

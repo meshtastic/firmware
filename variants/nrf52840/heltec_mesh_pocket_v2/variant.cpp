@@ -38,12 +38,12 @@ void initVariant()
 
 void variant_shutdown()
 {
-    nrf_gpio_cfg_default(ST7735_CS);
-    nrf_gpio_cfg_default(ST7735_RS);
-    nrf_gpio_cfg_default(ST7735_SDA);
-    nrf_gpio_cfg_default(ST7735_SCK);
-    nrf_gpio_cfg_default(ST7735_RESET);
-    nrf_gpio_cfg_default(ST7735_BL); // R10 pulls the backlight gate low
+    nrf_gpio_cfg_default(TFT_CS);
+    nrf_gpio_cfg_default(TFT_RS);
+    nrf_gpio_cfg_default(TFT_SDA);
+    nrf_gpio_cfg_default(TFT_SCL);
+    nrf_gpio_cfg_default(TFT_RST);
+    nrf_gpio_cfg_default(TFT_BL);    // R10 pulls the backlight gate low
     nrf_gpio_cfg_default(VTFT_CTRL); // R1 pulls the rail switch off
 
     nrf_gpio_cfg_default(PIN_WIRE_SDA);
