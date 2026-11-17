@@ -178,6 +178,7 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     uint32_t lastNoiseFloorUpdate = 0;
     static const uint32_t NOISE_FLOOR_UPDATE_INTERVAL_MS = 5000;
     int32_t currentNoiseFloor = NOISE_FLOOR_DEFAULT;
+    static bool isValidNoiseRssi(int16_t rssi) { return rssi < 0 && rssi >= NOISE_FLOOR_VALID_MIN; }
 
     /**
      * Pure virtual hook for derived radio interfaces to provide instantaneous RSSI.

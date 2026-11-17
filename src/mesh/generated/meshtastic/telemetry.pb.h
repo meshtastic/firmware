@@ -127,7 +127,9 @@ typedef enum _meshtastic_TelemetrySensorType {
     /* Sensirion SEN6X PM/RHT/VOC/NOx/CO2/HCHO sensor family (SEN62, SEN63C, SEN65, SEN66, SEN68, SEN69C) */
     meshtastic_TelemetrySensorType_SEN6X = 56,
     /* AS3935 Franklin lightning sensor */
-    meshtastic_TelemetrySensorType_AS3935 = 57
+    meshtastic_TelemetrySensorType_AS3935 = 57,
+    /* TI INA228 20-bit current, voltage and power monitor */
+    meshtastic_TelemetrySensorType_INA228 = 58
 } meshtastic_TelemetrySensorType;
 
 /* Struct definitions */
@@ -646,8 +648,8 @@ extern "C" {
 
 /* Helper constants for enums */
 #define _meshtastic_TelemetrySensorType_MIN meshtastic_TelemetrySensorType_SENSOR_UNSET
-#define _meshtastic_TelemetrySensorType_MAX meshtastic_TelemetrySensorType_AS3935
-#define _meshtastic_TelemetrySensorType_ARRAYSIZE ((meshtastic_TelemetrySensorType)(meshtastic_TelemetrySensorType_AS3935+1))
+#define _meshtastic_TelemetrySensorType_MAX meshtastic_TelemetrySensorType_INA228
+#define _meshtastic_TelemetrySensorType_ARRAYSIZE ((meshtastic_TelemetrySensorType)(meshtastic_TelemetrySensorType_INA228+1))
 
 
 
