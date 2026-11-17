@@ -1,6 +1,7 @@
 #include "LR20x0Band.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
+#include "NodeDB.h"
 #include "RadioInterface.h"
 #include "RadioLibInterface.h"
 #include "TestUtil.h"
@@ -792,6 +793,83 @@ static void test_clearReadIrqs_retiresTheDeadFramesHeaderAndPreamble()
     delete radioIf;
 }
 
+// shouldRebroadcastEarlyLikeRouter(): CLIENT_BASE relays a favorite's packet early only when it heard the favorite directly
+static constexpr NodeNum EARLY_FAVORITE = 0xb1ac0074;
+static constexpr NodeNum EARLY_STRANGER = 0x12345678;
+
+class EarlyRelayNodeDB : public NodeDB
+{
+  public:
+    meshtastic_NodeInfoLite *getMeshNode(NodeNum n) override
+    {
+        if (n == EARLY_FAVORITE)
+            return &favorite;
+        if (n == EARLY_STRANGER)
+            return &stranger;
+        return nullptr;
+    }
+    meshtastic_NodeInfoLite favorite = makeNode(EARLY_FAVORITE, true);
+    meshtastic_NodeInfoLite stranger = makeNode(EARLY_STRANGER, false);
+
+  private:
+    static meshtastic_NodeInfoLite makeNode(NodeNum num, bool favorite)
+    {
+        meshtastic_NodeInfoLite n = meshtastic_NodeInfoLite_init_zero;
+        n.num = num;
+        if (favorite)
+            n.bitfield |= NODEINFO_BITFIELD_IS_FAVORITE_MASK;
+        return n;
+    }
+};
+
+// The copy we queue to relay: hop_start - hop_limit == 1 means we heard the sender directly
+static bool earlyRelayFor(meshtastic_Config_DeviceConfig_Role role, NodeNum from, uint8_t hopStart, uint8_t hopLimit)
+{
+    EarlyRelayNodeDB db;
+    NodeDB *savedNodeDB = nodeDB;
+    const meshtastic_Config_DeviceConfig_Role savedRole = config.device.role;
+    nodeDB = &db;
+    config.device.role = role;
+
+    meshtastic_MeshPacket p = meshtastic_MeshPacket_init_zero;
+    p.from = from;
+    p.to = NODENUM_BROADCAST;
+    p.hop_start = hopStart;
+    p.hop_limit = hopLimit;
+    const bool early = testRadio->shouldRebroadcastEarlyLikeRouter(&p);
+
+    config.device.role = savedRole;
+    nodeDB = savedNodeDB;
+    return early;
+}
+
+static void test_earlyRelay_clientBaseDirectFavorite()
+{
+    TEST_ASSERT_TRUE(earlyRelayFor(meshtastic_Config_DeviceConfig_Role_CLIENT_BASE, EARLY_FAVORITE, 7, 6));
+}
+
+static void test_earlyRelay_clientBaseFavoriteViaRelayIsLate()
+{
+    TEST_ASSERT_FALSE(earlyRelayFor(meshtastic_Config_DeviceConfig_Role_CLIENT_BASE, EARLY_FAVORITE, 7, 5));
+}
+
+static void test_earlyRelay_clientBaseDirectStrangerIsLate()
+{
+    TEST_ASSERT_FALSE(earlyRelayFor(meshtastic_Config_DeviceConfig_Role_CLIENT_BASE, EARLY_STRANGER, 7, 6));
+}
+
+static void test_earlyRelay_clientBaseLegacyNoHopStartIsLate()
+{
+    TEST_ASSERT_FALSE(earlyRelayFor(meshtastic_Config_DeviceConfig_Role_CLIENT_BASE, EARLY_FAVORITE, 0, 2));
+}
+
+static void test_earlyRelay_otherRolesUnchanged()
+{
+    TEST_ASSERT_FALSE(earlyRelayFor(meshtastic_Config_DeviceConfig_Role_CLIENT, EARLY_FAVORITE, 7, 6));
+    TEST_ASSERT_FALSE(earlyRelayFor(meshtastic_Config_DeviceConfig_Role_ROUTER_LATE, EARLY_FAVORITE, 7, 6));
+    TEST_ASSERT_TRUE(earlyRelayFor(meshtastic_Config_DeviceConfig_Role_ROUTER, EARLY_STRANGER, 7, 4));
+}
+
 void setUp(void)
 {
     mockMeshService = new MockMeshService();
@@ -1231,6 +1309,11 @@ void setup()
 
     UNITY_BEGIN();
     RUN_TEST(test_lr20x0BandClassification);
+    RUN_TEST(test_earlyRelay_clientBaseDirectFavorite);
+    RUN_TEST(test_earlyRelay_clientBaseFavoriteViaRelayIsLate);
+    RUN_TEST(test_earlyRelay_clientBaseDirectStrangerIsLate);
+    RUN_TEST(test_earlyRelay_clientBaseLegacyNoHopStartIsLate);
+    RUN_TEST(test_earlyRelay_otherRolesUnchanged);
     RUN_TEST(test_lr20x0CustomLfPaBandCoversOnly500To1000MHz);
     RUN_TEST(test_lr20x0BandHopDetection);
     RUN_TEST(test_lr20x0ReconfigurePathSelection);
