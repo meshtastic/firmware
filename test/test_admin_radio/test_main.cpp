@@ -15,7 +15,7 @@
  *     Clients key off the type to localize or act on a notification instead of matching its
  *     text, so a path that drops it sends UNSET and the client falls back to text matching.
  *  8. When an admin save retunes the radio: AdminModule::saveChanges() saves through
- *     MeshService::reloadConfig(saveWhat, true), and the retune waits in
+ *     MeshService::reloadConfig(saveWhat, true), and the channel re-hash and retune wait in
  *     MeshService::applyDeferredRadioConfig() until the TX queue has drained and the reply
  *     registered through awaitAckBeforeRadioConfig() is acked (or RADIO_CONFIG_DEFER_MAX_MS has
  *     passed); Power::rebootIsDue() holds a commit's reboot meanwhile.
@@ -23,7 +23,9 @@
  *     the requester is still listening on. Retuning at save time sends that reply on the new
  *     preset/slot, where the requester never hears it, and the client reports a change that applied
  *     as failed (MAX_RETRANSMIT). Rebooting before the queue drains cuts the reply off the same way,
- *     and retuning before the reply is acked strands its retransmissions on the new settings.
+ *     and retuning before the reply is acked strands its retransmissions on the new settings. An
+ *     unnamed primary hashes the preset name, so re-hashing early stamps the reply with a hash the
+ *     requester, still on the old preset, has no channel for.
  */
 
 #include "Channels.h"
@@ -1045,10 +1047,10 @@ static meshtastic_DeviceState savedDeviceState;
 static meshtastic_User savedOwner;
 static meshtastic_LocalConfig savedConfig;
 static meshtastic_ChannelFile savedChannelFile;
-// Only the ham dispatcher test installs a router (allocErrorResponse() allocates through it).
+// A test that needs a router (allocErrorResponse() allocates through it) installs one here.
 // Saved/torn down for every test so a failed assertion's longjmp cannot leave one dangling.
 static Router *savedRouter;
-static Router *hamMockRouter;
+static Router *testRouter;
 static uint32_t savedRebootAtMsec;
 
 // Called from setUp/tearDown for every test, not opted into by a handful. A shared NodeDB plus
@@ -1082,8 +1084,8 @@ static void restoreAdminRadioGlobals()
     nodeInfoModule = savedNodeInfoModule;
     nodeDB = savedNodeDB;
     router = savedRouter;
-    delete hamMockRouter;
-    hamMockRouter = nullptr;
+    delete testRouter;
+    testRouter = nullptr;
     delete replacementNodeDB;
     replacementNodeDB = nullptr;
     devicestate = savedDeviceState;
@@ -1299,8 +1301,8 @@ static bool decodeRoutingError(meshtastic_MeshPacket *reply, meshtastic_Routing_
 static void test_handleSetHamMode_blankCallSignRepliesBadRequest()
 {
     primeHamModeTest();
-    hamMockRouter = new HamModeMockRouter();
-    router = hamMockRouter;
+    testRouter = new HamModeMockRouter();
+    router = testRouter;
 
     meshtastic_AdminMessage m = meshtastic_AdminMessage_init_zero;
     m.which_payload_variant = meshtastic_AdminMessage_set_ham_mode_tag;
@@ -1325,8 +1327,8 @@ static void test_handleSetHamMode_blankCallSignRepliesBadRequest()
 static void test_handleSetHamMode_acceptedRequestAcksSuccess()
 {
     primeHamModeTest();
-    hamMockRouter = new HamModeMockRouter();
-    router = hamMockRouter;
+    testRouter = new HamModeMockRouter();
+    router = testRouter;
 
     meshtastic_AdminMessage m = meshtastic_AdminMessage_init_zero;
     m.which_payload_variant = meshtastic_AdminMessage_set_ham_mode_tag;
@@ -2642,12 +2644,13 @@ static void test_commitEditSettings_capReleasesRetuneAndReboot()
     TEST_ASSERT_TRUE(Power::rebootIsDue());
 }
 
-// Stands in for NextHopRouter's pending-retransmission table.
+// Stands in for NextHopRouter's pending-retransmission table: our packet `id` is pending until acked.
 class PendingReplyRouter : public Router
 {
   public:
-    bool pending = true;
-    bool isRetransmissionPending(NodeNum from, PacketId id) override { return pending; }
+    PacketId id = 0;
+    bool acked = false;
+    bool isRetransmissionPending(NodeNum from, PacketId p) override { return !acked && from == nodeDB->getNodeNum() && p == id; }
 };
 
 // An empty TX queue only means the reply's first transmission is out. Retuning then strands its
@@ -2657,7 +2660,8 @@ static void test_deferredRetune_waitsForReplyAck()
     primeDeferredRetuneTest();
     txQueueStandIn.busy = false;
     auto *pendingReply = new PendingReplyRouter();
-    hamMockRouter = pendingReply; // restoreAdminRadioGlobals() deletes it
+    pendingReply->id = 0x1234;
+    testRouter = pendingReply;
     router = pendingReply;
     ConfigChangedCounter counter;
     counter.observe(&service->configChanged);
@@ -2667,9 +2671,34 @@ static void test_deferredRetune_waitsForReplyAck()
     service->applyDeferredRadioConfig();
     TEST_ASSERT_EQUAL_INT_MESSAGE(0, counter.count, "retuned before the reply was acked");
 
-    pendingReply->pending = false;
+    pendingReply->acked = true;
     service->applyDeferredRadioConfig();
     TEST_ASSERT_EQUAL_INT(1, counter.count);
+}
+
+// An unnamed primary channel hashes the preset's name. Re-hashing at save time stamps the reply with the
+// new preset's hash while it still goes out on the old preset, where the requester has no channel with
+// that hash and drops it: a preset change (the common LongFast <-> MediumSlow move) loses its ack anyway.
+static void test_presetChange_keepsChannelHashUntilRetune()
+{
+    primeDeferredRetuneTest();
+    channels.initDefaults(); // primary unnamed, default key
+    channels.onConfigChanged();
+    const int16_t longFastHash = channels.getHash(0);
+
+    meshtastic_AdminMessage m = meshtastic_AdminMessage_init_zero;
+    m.which_payload_variant = meshtastic_AdminMessage_set_config_tag;
+    m.set_config.which_payload_variant = meshtastic_Config_lora_tag;
+    m.set_config.payload_variant.lora = config.lora;
+    m.set_config.payload_variant.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW;
+    sendAdmin(m);
+
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW, config.lora.modem_preset);
+    TEST_ASSERT_EQUAL_INT16_MESSAGE(longFastHash, channels.getHash(0), "re-hashed while the reply was still queued");
+
+    txQueueStandIn.busy = false;
+    service->applyDeferredRadioConfig();
+    TEST_ASSERT_NOT_EQUAL_MESSAGE(longFastHash, channels.getHash(0), "never re-hashed for the new preset");
 }
 
 // -----------------------------------------------------------------------
@@ -3016,6 +3045,7 @@ void setup()
     RUN_TEST(test_commitEditSettings_rebootWaitsForTxQueue);
     RUN_TEST(test_commitEditSettings_capReleasesRetuneAndReboot);
     RUN_TEST(test_deferredRetune_waitsForReplyAck);
+    RUN_TEST(test_presetChange_keepsChannelHashUntilRetune);
 
     exit(UNITY_END());
 }

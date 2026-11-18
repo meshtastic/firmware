@@ -184,6 +184,10 @@ void MeshService::applyRadioConfig()
 {
     radioConfigDeferred = false;
     radioConfigAwaitsAckOf = 0;
+
+    // This will also update the region as needed
+    nodeDB->resetRadioConfig(); // Don't let the phone send us fatally bad settings
+
     configChanged.notifyObservers(NULL); // This will cause radio hardware to change freqs etc
 
     // Nothing is swept and nothing extra persisted: each node carries the slot it was heard on, so
@@ -198,12 +202,9 @@ void MeshService::reloadConfig(int saveWhat, bool deferRadio)
     // module config, device state, or the node database (e.g. favoriting a node) have no reason
     // to re-init the LoRa chip - skip it there to avoid an unnecessary and risky SPI reconfigure.
     if (saveWhat & (SEGMENT_CONFIG | SEGMENT_CHANNELS)) {
-        // If we can successfully set this radio to these settings, save them to disk
-
-        // This will also update the region as needed
-        nodeDB->resetRadioConfig(); // Don't let the phone send us fatally bad settings
-
         if (deferRadio) {
+            // The channel re-hash waits too: an unnamed primary hashes the preset name, and a reply hashed
+            // for the new preset is undecodable on the old one. Boot re-runs the same fixups on what is saved.
             LOG_INFO("Radio change saved, retune once the reply is out and the TX queue drains");
             radioConfigDeferred = true;
             radioConfigDeferredAtMs = Time::getMillis();

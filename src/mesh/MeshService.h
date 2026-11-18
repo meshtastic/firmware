@@ -196,7 +196,7 @@ class MeshService
 #endif
 
     /** The radioConfig object just changed, call this to force the hw to change to the new settings.
-     * deferRadio holds the retune until the TX queue has drained (see applyDeferredRadioConfig()); the save is immediate.
+     * deferRadio saves now and leaves channel re-hash and retune to applyDeferredRadioConfig().
      */
     void reloadConfig(int saveWhat = SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS,
                       bool deferRadio = false);

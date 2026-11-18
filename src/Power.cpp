@@ -1020,7 +1020,7 @@ bool Power::setup()
 bool Power::rebootIsDue()
 {
     // 0 means "not scheduled", and reads as long expired - test it first. A deferred radio change is still
-    // waiting for the TX queue (an admin reply, typically) to drain, and the reboot would cut that off.
+    // waiting for an admin reply to go out and be acked, and the reboot would cut that off.
     return rebootAtMsec && Throttle::deadlinePassed(rebootAtMsec) && !(service && service->isRadioConfigDeferred());
 }
 
