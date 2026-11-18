@@ -19,6 +19,7 @@
 */
 
 #include "variant.h"
+#include "Throttle.h"
 #include "configuration.h"
 #include "nrf.h"
 #include "wiring_constants.h"
@@ -32,12 +33,44 @@ const uint32_t g_ADigitalPinMap[] = {
     32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47};
 
 int m1HasAg3352 = 0;
+// The L76K's wiring; earlyInitVariant() works out the AG3352's.
+uint8_t m1GpsTxPin = 32 + 8;
+uint8_t m1GpsRxPin = 32 + 9;
+static uint16_t m1UartEdges[2]; // falling edges seen on P1.08 and P1.09, for the boot log
+static bool m1UartFound;
 
 void initVariant()
 {
     // pinMode(PIN_LED1, OUTPUT);
     // ledOff(PIN_LED1);
 }
+
+#if !MESHTASTIC_EXCLUDE_GPS
+// Elecrow's notes cross the AG3352 UART the other way from the L76K's, which no board has confirmed yet.
+// Out of reset the receiver starts talking, and only its TX line toggles. No pulls: the lines may run at 1.8 V.
+static void m1FindAg3352Uart()
+{
+    constexpr uint8_t pins[2] = {8, 9}; // P1.08, P1.09
+    constexpr uint16_t enough = 50;     // a few characters
+    constexpr uint32_t timeoutMs = 1500;
+    for (uint8_t pin : pins)
+        pinMode(32 + pin, INPUT);
+    uint32_t last = NRF_P1->IN;
+    const uint32_t start = millis();
+    while (Throttle::isWithinTimespanMs(start, timeoutMs) && m1UartEdges[0] < enough && m1UartEdges[1] < enough) {
+        const uint32_t now = NRF_P1->IN;
+        const uint32_t fell = last & ~now;
+        for (uint8_t i = 0; i < 2; i++)
+            m1UartEdges[i] += (fell >> pins[i]) & 1;
+        last = now;
+    }
+    // Only a clear answer overrides the notes: one line busy, the other still.
+    const bool rxOnP109 = m1UartEdges[1] >= enough && m1UartEdges[0] <= 2;
+    m1UartFound = rxOnP109 || (m1UartEdges[0] >= enough && m1UartEdges[1] <= 2);
+    m1GpsRxPin = rxOnP109 ? 32 + 9 : 32 + 8;
+    m1GpsTxPin = rxOnP109 ? 32 + 8 : 32 + 9;
+}
+#endif
 
 // Here rather than initVariant(), whose delay() would run before the scheduler. No LOG_* yet.
 void earlyInitVariant()
@@ -63,6 +96,7 @@ void earlyInitVariant()
         digitalWrite(PIN_GPS_RESET, HIGH); // asserts RESETB through Q16
         delay(10);
         digitalWrite(PIN_GPS_RESET, LOW);
+        m1FindAg3352Uart();
     }
 #endif
 }
@@ -70,6 +104,11 @@ void earlyInitVariant()
 void lateInitVariant()
 {
     LOG_INFO("ThinkNode M1 GPS %s", m1HasAg3352 ? "AG3352" : "L76K");
+#if !MESHTASTIC_EXCLUDE_GPS
+    if (m1HasAg3352)
+        LOG_INFO("AG3352 UART: MCU RX on P1.%02u, %s (falling edges P1.08 %u, P1.09 %u)", m1GpsRxPin - 32,
+                 m1UartFound ? "found" : "not seen, assumed", m1UartEdges[0], m1UartEdges[1]);
+#endif
 }
 
 void variant_shutdown()
