@@ -37,8 +37,11 @@
 
 // GPS: v1.0 has an L76K, v2.0 an AG3352. variant.cpp reads the revision from expander IO7 at boot.
 #define HAS_GPS 1
-#define PCA_PIN_GPS_VERSION 7 // strap: HIGH = v2.0 (AG3352), LOW = v1.0 (L76K)
+#define PCA_PIN_GPS_VERSION 7 // GPS_HIGHT, AG3352 GPIO2: HIGH = v2.0 (AG3352), LOW = v1.0 (L76K)
 extern int m5HasAg3352;
+
+// v1.0: L76K REINIT, low resets. v2.0: AG3352 RESETB through Q16, high resets. Isolated in deep sleep on v2.0.
+#define PIN_GPS_REINIT 13
 
 // v2.0: AG3352 0.8V core rail enable. v1.0: must stay an input.
 #define PIN_GPS_0V8_EN 10
