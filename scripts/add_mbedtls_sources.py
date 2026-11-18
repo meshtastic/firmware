@@ -19,7 +19,7 @@ import os
 
 framework_dir = env.PioPlatform().get_package_dir("framework-arduinopico")
 if not framework_dir:
-    print("[add_mbedtls_sources] framework-arduinopico package not found - skipping")
+    print("k[add_mbedtls_sources] framework-arduinopico package not found - skipping")
     Return()
 
 mbedtls_root = os.path.join(framework_dir, "pico-sdk", "lib", "mbedtls")
