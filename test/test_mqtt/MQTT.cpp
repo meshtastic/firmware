@@ -845,10 +845,11 @@ static meshtastic_MeshPacket makeDecodedBroadcast()
 }
 
 // Decoded (plaintext-broker) downlink skips perhapsDecode's crypto path, so MQTT applies
-// checkXeddsaReceivePolicy at ingress. An unsigned broadcast claiming to come from a node that
-// previously signed must be dropped - without this, a rogue broker peer could impersonate any
-// signing node (audit F3).
-void test_receiveDropsUnsignedBroadcastFromSigner(void)
+// checkXeddsaReceivePolicy at ingress. Balanced accepts an unsigned broadcast even from a node
+// that previously signed - only Strict drops a packet for being unsigned - but it must arrive
+// unmarked, so clients never show a broker peer's forgery as signed. A drop here means the old
+// Balanced downgrade rule is back; xeddsa_signed set means an unverified packet is vouched for.
+void test_receiveBalancedAcceptsUnsignedBroadcastFromSigner(void)
 {
     config.security.packet_signature_policy =
         meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_BALANCED;
@@ -857,7 +858,29 @@ void test_receiveDropsUnsignedBroadcastFromSigner(void)
     const meshtastic_MeshPacket p = makeDecodedBroadcast();
     unitTest->publish(&p);
 
-    TEST_ASSERT_TRUE(mockRouter->packets_.empty());
+    TEST_ASSERT_EQUAL(1, mockRouter->packets_.size());
+    TEST_ASSERT_FALSE(mockRouter->packets_.front().xeddsa_signed);
+}
+
+// An AES-CCM channel overrides the signature policy, and turning MQTT encryption off trusts the
+// broker like a channel member. So Strict accepts unsigned plaintext downlink on a CCM channel,
+// where AES-CCM traffic is never signed. A drop here would cut every CCM channel off a decoded
+// MQTT bridge under Strict.
+void test_receiveStrictAcceptsUnsignedDownlinkOnAeadChannel(void)
+{
+    config.security.packet_signature_policy =
+        meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_STRICT;
+    channelFile.channels[0].settings.psk.size = 1;
+    channelFile.channels[0].settings.psk.bytes[0] = 1;
+    channelFile.channels[0].settings.use_aead = true;
+    channels.onConfigChanged();
+    TEST_ASSERT_TRUE_MESSAGE(channels.isAEADEnabled(0), "fixture must leave channel 0 on AES-CCM");
+
+    const meshtastic_MeshPacket p = makeDecodedBroadcast();
+    unitTest->publish(&p);
+
+    TEST_ASSERT_EQUAL(1, mockRouter->packets_.size());
+    TEST_ASSERT_FALSE(mockRouter->packets_.front().xeddsa_signed);
 }
 
 // The same unsigned broadcast from a node never seen signing is accepted.
@@ -1587,7 +1610,8 @@ void setup()
     RUN_TEST(test_receiveIgnoresDecodedWhenEncryptionEnabled);
     RUN_TEST(test_receiveIgnoresDecodedAdminApp);
 #if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
-    RUN_TEST(test_receiveDropsUnsignedBroadcastFromSigner);
+    RUN_TEST(test_receiveBalancedAcceptsUnsignedBroadcastFromSigner);
+    RUN_TEST(test_receiveStrictAcceptsUnsignedDownlinkOnAeadChannel);
     RUN_TEST(test_receiveAcceptsUnsignedBroadcastFromNonSigner);
     RUN_TEST(test_receiveVerifiesSignedDecodedDownlink);
     RUN_TEST(test_receiveDropsBadSignatureOnDecodedDownlink);

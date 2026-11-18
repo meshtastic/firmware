@@ -41,6 +41,8 @@ class ThreadedMessageApplet : public Applet, public SinglePortModule
     void onActivate() override;
     void onDeactivate() override;
     void onShutdown() override;
+    void onNavUp() override;   // Older messages
+    void onNavDown() override; // Newer messages
     ProcessMessage handleReceived(const meshtastic_MeshPacket &mp) override;
 
     bool approveNotification(Notification &n) override; // Which notifications to suppress
@@ -49,6 +51,12 @@ class ThreadedMessageApplet : public Applet, public SinglePortModule
     void loadMessagesFromFlash();
 
     uint8_t channelIndex = 0;
+
+  private:
+    size_t countChannelMessages();
+    void scrollBy(int delta);
+
+    size_t scrollOffset = 0; // Newest messages of this channel skipped, to show older ones
 };
 
 } // namespace NicheGraphics::InkHUD

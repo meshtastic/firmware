@@ -63,6 +63,7 @@ bool serialConfigIsValid(const meshtastic_ModuleConfig_SerialConfig &config)
         meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
         if (cn) {
             cn->level = meshtastic_LogRecord_Level_ERROR;
+            cn->type = meshtastic_ClientNotification_NotificationType_SERIAL_CONSOLE_OVERRIDE_INVALID;
             cn->time = getValidTime(RTCQualityFromNet);
             snprintf(cn->message, sizeof(cn->message), "%s", warning);
             service->sendClientNotification(cn);

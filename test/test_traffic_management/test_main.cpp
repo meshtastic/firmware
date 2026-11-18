@@ -638,14 +638,18 @@ static void test_tm_nodeinfo_directResponse_learnsRequestorNodeInfo(void)
 
 /**
  * A unicast NodeInfo request is never signed, so a known signer's identity claim on the
- * direct-response path is unauthenticated. It must not overwrite the stored name (spoofing
- * defense), while the direct response itself still goes out. The non-signer case
- * (test_tm_nodeinfo_directResponse_learnsRequestorNodeInfo) is the control: it still learns.
+ * direct-response path is unauthenticated. Under Balanced (and Strict) it must not overwrite the
+ * stored name (spoofing defense), while the direct response itself still goes out. The
+ * non-signer case (test_tm_nodeinfo_directResponse_learnsRequestorNodeInfo) is the control: it
+ * still learns. Compatible deliberately allows the write; see
+ * test_tm_nodeinfo_compatible_cachesUnsignedSignerNodeInfo.
  */
 static void test_tm_nodeinfo_directResponse_ignoresUnsignedSignerIdentity(void)
 {
     moduleConfig.traffic_management.nodeinfo_direct_response_max_hops = 10;
     config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
+    config.security.packet_signature_policy =
+        meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_BALANCED;
     mockNodeDB->setCachedNode(kTargetNode); // the direct-response target
     // Signed-only replay gate (default) requires the target be a known signer to be served.
     mockNodeDB->cachedNodeForTest().bitfield |= NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK;
@@ -789,6 +793,53 @@ static void test_tm_nodeinfo_directResponse_psramCacheRespondsAndPreservesBitfie
     TEST_ASSERT_EQUAL_UINT32(kRemoteNode, reply.to);
     TEST_ASSERT_EQUAL_UINT8(request.channel, reply.channel);
     TEST_ASSERT_EQUAL_UINT32(request.id, reply.decoded.request_id);
+}
+
+/**
+ * A signed NodeInfo request comes from a node running Balanced or Strict, which may drop an unsigned
+ * reply - and a cached reply sent on the target's behalf can never be signed, since only the target
+ * holds its key. So the request must be forwarded to the target rather than answered and consumed
+ * here. The previous test is the control: the same request unsigned is answered from cache. If this
+ * fails, Strict requesters behind a direct-response router never get a NodeInfo reply at all.
+ */
+static void test_tm_nodeinfo_directResponse_signedRequestForwarded(void)
+{
+    moduleConfig.traffic_management.nodeinfo_direct_response_max_hops = 10;
+    config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
+    mockNodeDB->clearCachedNode();
+
+    MockRouter mockRouter;
+    mockRouter.addInterface(std::unique_ptr<RadioInterface>(new MockRadioInterface()));
+    MeshService mockService;
+    router = &mockRouter;
+    service = &mockService;
+
+    TrafficManagementModuleTestShim module;
+    module.handleReceived(makeNodeInfoPacket(kTargetNode, "target-long", "tg"));
+    module.markKeyXeddsaSignedForTest(kTargetNode); // servable, so only the signature can stop the reply
+
+    meshtastic_MeshPacket request = makeDecodedPacket(meshtastic_PortNum_NODEINFO_APP, kRemoteNode, kTargetNode);
+    request.decoded.want_response = true;
+    request.id = 0x24681358;
+    request.hop_start = 3;
+    request.hop_limit = 3;
+    request.decoded.xeddsa_signature.size = XEDDSA_SIGNATURE_SIZE;
+    memset(request.decoded.xeddsa_signature.bytes, 0x5C, XEDDSA_SIGNATURE_SIZE);
+
+    ProcessMessage result = module.handleReceived(request);
+
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(result));
+    TEST_ASSERT_FALSE(module.ignoreRequestFlag());
+    TEST_ASSERT_EQUAL_UINT32(0, module.getStats().nodeinfo_cache_hits);
+    TEST_ASSERT_EQUAL_UINT32(0, static_cast<uint32_t>(mockRouter.sentPackets.size()));
+
+    // Control, after the signed request so it cannot have throttled it: the same request unsigned is
+    // answered from cache, proving the signature alone caused the forward above.
+    meshtastic_MeshPacket unsignedRequest = request;
+    unsignedRequest.id = 0x24681359;
+    unsignedRequest.decoded.xeddsa_signature.size = 0;
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(module.handleReceived(unsignedRequest)));
+    TEST_ASSERT_EQUAL_UINT32(1, static_cast<uint32_t>(mockRouter.sentPackets.size()));
 }
 
 /**
@@ -1026,12 +1077,15 @@ static void test_tm_nodeinfo_cache_pinsAgainstWarmTierKey(void)
  * impersonatable. An attacker can forge an unsigned NodeInfo carrying the signer's real
  * (public!) key - it passes the key pin and would inherit warm XEdDSA-signed provenance - so the
  * gate must classify warm-tier signers, not only hot-store ones. A signature-verified frame
- * (control) is still learned.
+ * (control) is still learned. The gate applies under Balanced and Strict; Compatible
+ * deliberately accepts unsigned identity (test_tm_nodeinfo_compatible_cachesUnsignedSignerNodeInfo).
  */
 static void test_tm_nodeinfo_gate_blocksUnsignedWarmSignerForgery(void)
 {
     moduleConfig.traffic_management.nodeinfo_direct_response_max_hops = 10;
     config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
+    config.security.packet_signature_policy =
+        meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_BALANCED;
     mockNodeDB->clearCachedNode();
     mockNodeDB->rollHotStore(); // hot store misses; only the warm tier knows the signer
     uint8_t warmKey[32];
@@ -1063,6 +1117,63 @@ static void test_tm_nodeinfo_gate_blocksUnsignedWarmSignerForgery(void)
     TEST_ASSERT_EQUAL_STRING("genuine", out.long_name);
 
     mockNodeDB->warmStore.clear();
+}
+
+// Shared body for the two cases where an unsigned NodeInfo from a known (warm-tier) signer must
+// be cached: the identity gate above does not apply, so the frame drives the cache like any other.
+static void expectUnsignedSignerNodeInfoCached()
+{
+    moduleConfig.traffic_management.nodeinfo_direct_response_max_hops = 10;
+    config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
+    mockNodeDB->clearCachedNode();
+    mockNodeDB->rollHotStore();
+    uint8_t warmKey[32];
+    memset(warmKey, 0x5A, 32);
+    mockNodeDB->warmStore.clear();
+    mockNodeDB->warmStore.absorb(kTargetNode, 1000000, warmKey, 0, 0, /*xeddsaSigned=*/true);
+
+    MockRouter mockRouter;
+    mockRouter.addInterface(std::unique_ptr<RadioInterface>(new MockRadioInterface()));
+    MeshService mockService;
+    router = &mockRouter;
+    service = &mockService;
+
+    TrafficManagementModuleTestShim module;
+    meshtastic_MeshPacket unsignedFrame = makeNodeInfoPacketWithKey(kTargetNode, "renamed", 0x5A);
+    unsignedFrame.xeddsa_signed = false;
+    module.handleReceived(unsignedFrame);
+    meshtastic_User out = meshtastic_User_init_zero;
+    TEST_ASSERT_TRUE_MESSAGE(module.copyUser(kTargetNode, out, nullptr), "unsigned NodeInfo must be cached here");
+    TEST_ASSERT_EQUAL_STRING("renamed", out.long_name);
+
+    mockNodeDB->warmStore.clear();
+}
+
+/**
+ * Compatible does not sign and does not require signatures, even from known signers: firmware
+ * before 2.8 strips signatures when relaying, so an unsigned NodeInfo from a signer is normal
+ * there and must still update its identity. If this fails, Compatible has started refusing
+ * unsigned identity again and signers' names freeze behind every older relay.
+ */
+static void test_tm_nodeinfo_compatible_cachesUnsignedSignerNodeInfo(void)
+{
+    config.security.packet_signature_policy =
+        meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_COMPATIBLE;
+    expectUnsignedSignerNodeInfoCached();
+}
+
+/**
+ * An AES-CCM channel overrides the signature policy: its packets are never signed, and the CCM
+ * tag authenticates them, so even under Balanced an unsigned NodeInfo heard there updates a known
+ * signer's identity. If this fails, a node's name freezes as soon as it talks only on a CCM channel.
+ */
+static void test_tm_nodeinfo_aeadChannel_cachesUnsignedSignerNodeInfo(void)
+{
+    config.security.packet_signature_policy =
+        meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_BALANCED;
+    channelFile.channels[0].settings.use_aead = true;
+    TEST_ASSERT_TRUE_MESSAGE(channels.isAEADEnabled(0), "fixture must leave channel 0 on AES-CCM");
+    expectUnsignedSignerNodeInfoCached();
 }
 
 // Bit positions returned by peekNodeInfoFlagsForTest().
@@ -3317,6 +3428,7 @@ TM_TEST_ENTRY void setup()
 #endif
 #if TMM_HAS_NODEINFO_CACHE
     RUN_TEST(test_tm_nodeinfo_directResponse_psramCacheRespondsAndPreservesBitfield);
+    RUN_TEST(test_tm_nodeinfo_directResponse_signedRequestForwarded);
     RUN_TEST(test_tm_nodeinfo_directResponse_psramMissDoesNotFallbackToNodeDb);
     RUN_TEST(test_tm_nodeinfo_directResponse_psramStaleEntryNotServed);
     RUN_TEST(test_tm_nodeinfo_directResponse_psramThrottlesWithinWindow);
@@ -3325,6 +3437,8 @@ TM_TEST_ENTRY void setup()
 #if WARM_NODE_COUNT > 0
     RUN_TEST(test_tm_nodeinfo_cache_pinsAgainstWarmTierKey);
     RUN_TEST(test_tm_nodeinfo_gate_blocksUnsignedWarmSignerForgery);
+    RUN_TEST(test_tm_nodeinfo_compatible_cachesUnsignedSignerNodeInfo);
+    RUN_TEST(test_tm_nodeinfo_aeadChannel_cachesUnsignedSignerNodeInfo);
     RUN_TEST(test_tm_nodeinfo_reconcile_seedsFromHotStoreButNeverServes);
     RUN_TEST(test_tm_nodeinfo_reconcile_seedsManualVerificationFromHotStore);
     RUN_TEST(test_tm_nodeinfo_reconcile_seedsKeyOnlyFromWarmTier);
