@@ -1593,8 +1593,10 @@ void GPS::airohaEnterSleep()
     if (!isAiroha(gnssModel) || airohaSleepMisses >= AIROHA_SLEEP_MAX_MISSES)
         return;
     // Not probed yet, so the UART may be partway through the baud sweep.
-    if (gnssModel == GNSS_MODEL_UNKNOWN)
+    if (gnssModel == GNSS_MODEL_UNKNOWN) {
         restartSerial(_serial_gps, GPS_BAUDRATE);
+        currentStep = 0; // so the next probe call reopens the UART at its own speed
+    }
 
 #if defined(HAS_AIROHA_SOFT_RTC) || defined(HAS_AIROHA_RESET_WAKE)
     const char *sleepCmd = "$PAIR650,0*25\r\n";
