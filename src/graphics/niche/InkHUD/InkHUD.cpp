@@ -449,6 +449,12 @@ void InkHUD::InkHUD::openAlignStick()
     windowManager->openAlignStick();
 }
 
+// Bring AlignKeyboard applet to the foreground
+void InkHUD::InkHUD::openAlignKeyboard()
+{
+    windowManager->openAlignKeyboard();
+}
+
 // Open the on-screen keyboard
 void InkHUD::InkHUD::openKeyboard()
 {

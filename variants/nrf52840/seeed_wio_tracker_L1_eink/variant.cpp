@@ -18,6 +18,7 @@
  */
 
 #include "variant.h"
+#include "delay.h"
 #include "nrf.h"
 #include "wiring_constants.h"
 #include "wiring_digital.h"
@@ -97,8 +98,35 @@ const uint32_t g_ADigitalPinMap[] = {
 };
 }
 
+// A reset in the middle of a transfer can leave an I2C device (the CardKB) holding SDA low,
+// which makes the first Wire access at boot wait forever. Clock it out, then send a STOP
+static void clearI2cBus()
+{
+    pinMode(PIN_WIRE_SCL, INPUT_PULLUP);
+    pinMode(PIN_WIRE_SDA, INPUT_PULLUP);
+    delayMicroseconds(10);
+
+    for (uint8_t i = 0; i < 9 && digitalRead(PIN_WIRE_SDA) == LOW; i++) {
+        pinMode(PIN_WIRE_SCL, OUTPUT);
+        digitalWrite(PIN_WIRE_SCL, LOW);
+        delayMicroseconds(5);
+        pinMode(PIN_WIRE_SCL, INPUT_PULLUP);
+        delayMicroseconds(5);
+    }
+
+    pinMode(PIN_WIRE_SDA, OUTPUT);
+    digitalWrite(PIN_WIRE_SDA, LOW);
+    delayMicroseconds(5);
+    pinMode(PIN_WIRE_SCL, INPUT_PULLUP);
+    delayMicroseconds(5);
+    pinMode(PIN_WIRE_SDA, INPUT_PULLUP);
+    delayMicroseconds(5);
+}
+
 void initVariant()
 {
+    clearI2cBus();
+
     pinMode(PIN_QSPI_CS, OUTPUT);
     digitalWrite(PIN_QSPI_CS, HIGH);
     // This setup is crucial for ensuring low power consumption and proper initialization of the hardware components.

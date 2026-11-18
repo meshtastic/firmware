@@ -542,6 +542,10 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         inkhud->openAlignStick();
         break;
 
+    case ALIGN_KEYBOARD:
+        inkhud->openAlignKeyboard();
+        break;
+
     case LAYOUT:
         // Todo: smarter incrementing of tile count
         settings->userTiles.count++;
@@ -1422,6 +1426,8 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         items.push_back(MenuItem("Rotate", MenuAction::ROTATE, MenuPage::OPTIONS));
         if (settings->joystick.enabled && !inkhud->twoWayRocker)
             items.push_back(MenuItem("Align Joystick", MenuAction::ALIGN_JOYSTICK, MenuPage::EXIT));
+        if (inkhud->physicalKeyboard)
+            items.push_back(MenuItem("Align Keyboard", MenuAction::ALIGN_KEYBOARD, MenuPage::EXIT));
         items.push_back(MenuItem("Notifications", MenuAction::TOGGLE_NOTIFICATIONS, MenuPage::OPTIONS,
                                  &settings->optionalFeatures.notifications));
         items.push_back(MenuItem("Battery Icon", MenuAction::TOGGLE_BATTERY_ICON, MenuPage::OPTIONS,
