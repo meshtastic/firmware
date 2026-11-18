@@ -520,52 +520,50 @@ extern GeoCoord geoCoord;
 // Threshold values for the GPS lock accuracy bar display
 extern uint32_t dopThresholds[5];
 
-// Resolve the position source used by the GPS-related display helpers.
-static bool getDisplayPosition(const meshtastic::GPSStatus *gps, meshtastic_Position &position)
+// A phone position older than this is treated as stale and not labelled "Phone GPS".
+static constexpr uint32_t PHONE_POSITION_MAX_AGE_SECS = 30 * 60;
+
+// Age in seconds of the current localPosition, or UINT32_MAX if it has no usable time
+// (no RTC time yet, no position time, or a position time in the future).
+static uint32_t localPositionAgeSecs()
 {
-    if (config.position.fixed_position) {
-        position = localPosition;
-        return true;
-    }
-
-    if (gps && gps->getHasLock() && (gps->getLatitude() != 0 || gps->getLongitude() != 0)) {
-        position.latitude_i = gps->getLatitude();
-        position.longitude_i = gps->getLongitude();
-        position.altitude = gps->getAltitude();
-        return true;
-    }
-
-    const bool onboardGpsUnavailable = !gps || !gps->getIsConnected() || !gps->getHasLock() ||
-                                       config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED;
-    // Only a position the phone sent this boot counts. A position restored from the saved
-    // node DB after a reboot also sets hasLocalPositionSinceBoot(), so it is not enough here.
-    if (onboardGpsUnavailable && lastLocalPositionUpdateMs != 0 &&
-        (localPosition.latitude_i != 0 || localPosition.longitude_i != 0)) {
-        position = localPosition;
-        return true;
-    }
-
-    return false;
+    const uint32_t now = getValidTime(RTCQualityFromNet);
+    if (now == 0 || localPosition.time == 0 || localPosition.time > now)
+        return UINT32_MAX;
+    return now - localPosition.time;
 }
 
-static void formatAgeField(char *out, size_t outSize, const char *prefix, uint32_t stampMs)
+// True when the position to show came from the phone (or another client) and is recent:
+// - no fixed position and no onboard GPS lock,
+// - localPosition has coordinates that weren't produced by the onboard GPS (LOC_INTERNAL),
+// - its timestamp is recent. A position restored from flash after a reboot keeps its old time,
+//   so it ages out here instead of being shown as a live phone position.
+static bool usingPhonePosition(const meshtastic::GPSStatus *gps)
 {
-    if (stampMs == 0) {
-        snprintf(out, outSize, "%s?", prefix);
-        return;
-    }
-    getUptimeStr(millis() - stampMs, prefix, out, outSize, false);
+    return !config.position.fixed_position && !(gps && gps->getHasLock()) &&
+           (localPosition.latitude_i != 0 || localPosition.longitude_i != 0) &&
+           localPosition.location_source != meshtastic_Position_LocSource_LOC_INTERNAL &&
+           localPositionAgeSecs() <= PHONE_POSITION_MAX_AGE_SECS;
 }
 
+// Feed geoCoord from whichever source is active (phone position or onboard/fixed GPS).
+static void updateGeoCoordFromSource(const meshtastic::GPSStatus *gps)
+{
+    if (usingPhonePosition(gps))
+        geoCoord.updateCoords(localPosition.latitude_i, localPosition.longitude_i, localPosition.altitude);
+    else if (gps)
+        geoCoord.updateCoords(int32_t(gps->getLatitude()), int32_t(gps->getLongitude()), int32_t(gps->getAltitude()));
+}
+
+// Draw GPS status summary (satellite icon + status text).
+// Handles all GPS states: disabled / not present / fixed position / phone / no lock / sat count.
 void UIRenderer::drawGps(OLEDDisplay *display, int16_t x, int16_t y, const meshtastic::GPSStatus *gps, bool center)
 {
     char textString[12];
-    meshtastic_Position displayPosition = meshtastic_Position_init_default;
-    const bool hasDisplayPosition = getDisplayPosition(gps, displayPosition);
     if (config.position.fixed_position) {
         // Fixed position overrides live GPS state, regardless of gps_mode
         snprintf(textString, sizeof(textString), "Fixed GPS");
-    } else if (hasDisplayPosition && (!gps || !gps->getHasLock())) {
+    } else if (usingPhonePosition(gps)) {
         snprintf(textString, sizeof(textString), "Phone GPS");
     } else if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT) {
         snprintf(textString, sizeof(textString), "No GPS");
@@ -600,12 +598,15 @@ void UIRenderer::drawGps(OLEDDisplay *display, int16_t x, int16_t y, const mesht
 void UIRenderer::drawGpsAltitude(OLEDDisplay *display, int16_t x, int16_t y, const meshtastic::GPSStatus *gps)
 {
     char displayLine[32];
-    meshtastic_Position displayPosition = meshtastic_Position_init_default;
-    if (!getDisplayPosition(gps, displayPosition)) {
+    const bool phone = usingPhonePosition(gps);
+    if (!gps->getIsConnected() && !config.position.fixed_position && !phone) {
         // displayLine = "No GPS Module";
         // display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
+    } else if (!gps->getHasLock() && !config.position.fixed_position && !phone) {
+        // displayLine = "No GPS Lock";
+        // display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
     } else {
-        geoCoord.updateCoords(displayPosition.latitude_i, displayPosition.longitude_i, displayPosition.altitude);
+        updateGeoCoordFromSource(gps);
         if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL)
             snprintf(displayLine, sizeof(displayLine), "Altitude: %.0fft", geoCoord.getAltitude() * METERS_TO_FEET);
         else
@@ -620,19 +621,21 @@ void UIRenderer::drawGpsCoordinates(OLEDDisplay *display, int16_t x, int16_t y, 
 {
     auto gpsFormat = uiconfig.gps_format;
     char displayLine[32];
-    meshtastic_Position displayPosition = meshtastic_Position_init_default;
+    const bool phone = usingPhonePosition(gps);
 
-    if (!getDisplayPosition(gps, displayPosition)) {
+    if (!gps->getIsConnected() && !config.position.fixed_position && !phone) {
         if (strcmp(mode, "line1") == 0) {
-            if (!gps || !gps->getIsConnected())
-                strcpy(displayLine, "No GPS present");
-            else
-                strcpy(displayLine, gps->getHasTime() ? "GPS Time Only" : "No GPS Lock");
+            strcpy(displayLine, "No GPS present");
+            display->drawString(x + BASEUI_BODY_LR_MARGIN, y, displayLine);
+        }
+    } else if (!gps->getHasLock() && !config.position.fixed_position && !phone) {
+        if (strcmp(mode, "line1") == 0) {
+            strcpy(displayLine, gps->getHasTime() ? "GPS Time Only" : "No GPS Lock");
             display->drawString(x + BASEUI_BODY_LR_MARGIN, y, displayLine);
         }
     } else {
 
-        geoCoord.updateCoords(displayPosition.latitude_i, displayPosition.longitude_i, displayPosition.altitude);
+        updateGeoCoordFromSource(gps);
 
         if (gpsFormat != meshtastic_DeviceUIConfig_GpsCoordinateFormat_DMS) {
             char coordinateLine_1[22];
@@ -1876,33 +1879,30 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
 #if HAS_GPS
     bool origBold = config.display.heading_bold;
     config.display.heading_bold = false;
-    meshtastic_Position displayPosition = meshtastic_Position_init_default;
-    const bool hasDisplayPosition = getDisplayPosition(gpsStatus, displayPosition);
 
     UIRenderer::drawGps(display, x + BASEUI_BODY_LR_MARGIN, textPos[line++] + y, gpsStatus, compactPanel);
 
     config.display.heading_bold = origBold;
 
     // === Update GeoCoord ===
-    if (hasDisplayPosition)
-        geoCoord.updateCoords(displayPosition.latitude_i, displayPosition.longitude_i, displayPosition.altitude);
+    const bool phonePosition = usingPhonePosition(gpsStatus);
+    updateGeoCoordFromSource(gpsStatus);
 
     const meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
     const bool hasOwnPositionFix = (ourNode && nodeDB->hasValidPosition(ourNode));
-    const bool hasDisplayFix = hasDisplayPosition;
-    const bool hasCurrentGpsFix =
-        gpsStatus && gpsStatus->getHasLock() && (gpsStatus->getLatitude() != 0 || gpsStatus->getLongitude() != 0);
+    const bool hasLiveGpsFix =
+        (gpsStatus && gpsStatus->getHasLock() && (gpsStatus->getLatitude() != 0 || gpsStatus->getLongitude() != 0));
     const bool hasSensorHeading = screen->hasHeading();
     float heading = 0.0f;
     bool validHeading = false;
     const char *statusLine1 = nullptr;
     const char *statusLine2 = nullptr;
-    if (hasSensorHeading || hasDisplayFix || hasOwnPositionFix) {
+    if (hasSensorHeading || hasLiveGpsFix || hasOwnPositionFix) {
         double headingLat = 0.0;
         double headingLon = 0.0;
-        if (hasDisplayFix) {
-            headingLat = DegD(displayPosition.latitude_i);
-            headingLon = DegD(displayPosition.longitude_i);
+        if (hasLiveGpsFix) {
+            headingLat = DegD(gpsStatus->getLatitude());
+            headingLon = DegD(gpsStatus->getLongitude());
         } else if (hasOwnPositionFix) {
             meshtastic_PositionLite ownPos;
             if (nodeDB->copyNodePosition(ourNode->num, ownPos)) {
@@ -1914,7 +1914,7 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
     }
 
     if (!validHeading) {
-        if (hasSensorHeading || hasDisplayFix || hasOwnPositionFix) {
+        if (hasSensorHeading || hasLiveGpsFix || hasOwnPositionFix) {
             statusLine1 = "No";
             statusLine2 = "Heading";
         } else {
@@ -1924,8 +1924,8 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
     }
 
     // GPS data (coordinates/altitude) is available whenever GPS is enabled or a fixed position is set.
-    const bool hasGpsData = hasDisplayPosition || config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED ||
-                            config.position.fixed_position;
+    const bool hasGpsData = config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED ||
+                            config.position.fixed_position || phonePosition;
 
     // Compact panels: GPS status row above is shared; scroll down for coordinates+elevation.
 #if defined(OLED_COMPACT_UI)
@@ -1963,19 +1963,6 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
             display->drawString((SCREEN_WIDTH - textWidth) / 2, textPos[line], displayLine);
         }
 
-        if (positionViewIndex != 0 && !hasCurrentGpsFix) {
-            char updateAge[20];
-            char transmitAge[20];
-            char positionAgeRow[44];
-            char clippedAgeRow[44];
-            formatAgeField(updateAge, sizeof(updateAge), "Upd:", lastLocalPositionUpdateMs);
-            formatAgeField(transmitAge, sizeof(transmitAge), "Tx:", lastPositionTxMs);
-            snprintf(positionAgeRow, sizeof(positionAgeRow), "%s %s", updateAge, transmitAge);
-            UIRenderer::truncateStringWithEmotes(display, positionAgeRow, clippedAgeRow, sizeof(clippedAgeRow),
-                                                 SCREEN_WIDTH - (BASEUI_BODY_LR_MARGIN * 2));
-            display->drawString(x + BASEUI_BODY_LR_MARGIN, textPos[line++] + y, clippedAgeRow);
-        }
-
         // Two-page indicator, matching NodeListRenderer::drawScrollbar's thumb style.
         const int scrollbarX = SCREEN_WIDTH - 2;
         const int thumbHeight = SCREEN_HEIGHT / 2;
@@ -1992,8 +1979,17 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
     // If GPS is off or not present (and position isn't fixed), no need to display these parts
     if (hasGpsData) {
         // === Second Row: Last GPS Fix ===
-        if (hasCurrentGpsFix && gpsStatus->getLastFixMillis() > 0) {
-            uint32_t delta = millis() - gpsStatus->getLastFixMillis();
+        // When showing the phone's position, "Last:" is the age of the last phone update instead.
+        uint32_t delta = 0;
+        bool haveLast = false;
+        if (phonePosition) {
+            delta = localPositionAgeSecs() * 1000; // usingPhonePosition() guarantees a valid, bounded age
+            haveLast = true;
+        } else if (gpsStatus->getLastFixMillis() > 0) {
+            delta = millis() - gpsStatus->getLastFixMillis();
+            haveLast = true;
+        }
+        if (haveLast) {
             char uptimeStr[32];
 #if defined(USE_EINK)
             // E-Ink: skip seconds, show only days/hours/mins
@@ -2005,13 +2001,7 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
 
             display->drawString(x + BASEUI_BODY_LR_MARGIN, textPos[line++] + y, uptimeStr);
         } else {
-            char updateAge[20];
-            char transmitAge[20];
-            char positionAgeRow[44];
-            formatAgeField(updateAge, sizeof(updateAge), "Upd:", lastLocalPositionUpdateMs);
-            formatAgeField(transmitAge, sizeof(transmitAge), "Tx:", lastPositionTxMs);
-            snprintf(positionAgeRow, sizeof(positionAgeRow), "%s %s", updateAge, transmitAge);
-            display->drawString(x + BASEUI_BODY_LR_MARGIN, textPos[line++] + y, positionAgeRow);
+            display->drawString(x + BASEUI_BODY_LR_MARGIN, textPos[line++] + y, "Last: ?");
         }
 
         // === Third Row: Line 1 GPS Info ===
