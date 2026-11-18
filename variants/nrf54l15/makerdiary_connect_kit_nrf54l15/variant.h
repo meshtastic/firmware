@@ -11,8 +11,7 @@
 #include "WVariant.h"
 
 #ifdef __cplusplus
-extern "C"
-{
+extern "C" {
 #endif
 
 #define PINS_COUNT (96)
@@ -49,13 +48,13 @@ extern "C"
 #define SPI_INTERFACES_COUNT 2
 
 // --- SPI for Core1121-HF ---
-#define PIN_SPI_MISO 68           // P2.04
-#define PIN_SPI_MOSI 66           // P2.02
-#define PIN_SPI_SCK 65            // P2.01
-    static const uint8_t SS = 69; // P2.05 = radio CS/NSS
-    static const uint8_t MOSI = PIN_SPI_MOSI;
-    static const uint8_t MISO = PIN_SPI_MISO;
-    static const uint8_t SCK = PIN_SPI_SCK;
+#define PIN_SPI_MISO 68       // P2.04
+#define PIN_SPI_MOSI 66       // P2.02
+#define PIN_SPI_SCK 65        // P2.01
+static const uint8_t SS = 69; // P2.05 = radio CS/NSS
+static const uint8_t MOSI = PIN_SPI_MOSI;
+static const uint8_t MISO = PIN_SPI_MISO;
+static const uint8_t SCK = PIN_SPI_SCK;
 
 // --- SPI for E-Ink ---
 #define PIN_SPI1_MISO -1 // Not used
