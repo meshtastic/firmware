@@ -461,7 +461,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     const int textIndent = showBubbles ? (BUBBLE_PAD_X + BUBBLE_TEXT_INDENT) : LEFT_MARGIN;
     // Bubbles carry their own padding, so the rounded-screen inset has to come from here
     const int contentLeft = x + (showBubbles ? BASEUI_BODY_LR_MARGIN : 0);
-    
+
     // Derived widths: the span between where lines are drawn and where they must end, for both sides
     const int textRight = SCREEN_WIDTH - SCROLLBAR_WIDTH - RIGHT_MARGIN - (showBubbles ? textIndent : 0);
     const int leftTextWidth = textRight - (contentLeft - x) - textIndent; // x slides the frame, not the span
