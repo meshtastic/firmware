@@ -143,11 +143,14 @@ External serial flash WP25R1635FZUIL0
 #define GPS_L76K
 
 // Older boards have an L76K, newer ones (V2.0) an AG3352. variant.cpp reads the strap on P1.02 at boot.
-// AG3352 boards pull it down (100K); on L76K boards it is the L76K's STANDBY input, which floats high.
-#define PIN_GPS_VERSION (32 + 2) // strap: LOW = AG3352, HIGH = L76K
+// AG3352 boards pull it down (100K). On L76K boards it is the L76K's STANDBY input: high while the L76K is
+// powered, but low when the GPS switch has it off, so a LOW strap is only taken as AG3352 if it then talks.
+#define PIN_GPS_VERSION (32 + 2) // strap: LOW = AG3352 or unpowered L76K, HIGH = L76K
 extern int m1HasAg3352;
 
+// Decided at boot, after the probe's speed tables are built, so sweep the common speeds rather than fix one.
 #define GPS_BAUDRATE (m1HasAg3352 ? 115200 : 9600)
+#define GPS_BAUDRATE_FIXED 0
 
 // L76K: standby, low means allow sleep, high means force wake. AG3352: the strap, so GPS.cpp leaves it alone.
 #define PIN_GPS_STANDBY (32 + 2)
@@ -160,7 +163,8 @@ extern int m1HasAg3352;
 #define GPS_RESET_IN_USE (m1HasAg3352)
 
 // AG3352 only: P1.01 enables the 0.8 V core supply; the 1.8 V rail is always on. L76K boards have no EN (0 = none).
-#define PIN_GPS_EN (m1HasAg3352 ? (32 + 1) : 0)
+#define GPS_EN_AG3352 (32 + 1)
+#define PIN_GPS_EN (m1HasAg3352 ? GPS_EN_AG3352 : 0)
 
 // AG3352 only. idle_int: rests HIGH, pulled LOW while sending the sleep command.
 #define GPS_SLEEP_INT (0 + 11)
