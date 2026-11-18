@@ -523,14 +523,18 @@ extern uint32_t dopThresholds[5];
 // A phone position older than this is treated as stale and not labelled "Phone GPS".
 static constexpr uint32_t PHONE_POSITION_MAX_AGE_SECS = 30 * 60;
 
+// The phone's clock can run a little ahead of the node's, so a fresh phone position may carry a time
+// slightly in the future. Without this allowance the label flickered to "No GPS" until the node's clock caught up.
+static constexpr uint32_t PHONE_CLOCK_SKEW_SECS = 5 * 60;
+
 // Age in seconds of the current localPosition, or UINT32_MAX if it has no usable time
-// (no RTC time yet, no position time, or a position time in the future).
+// (no RTC time yet, no position time, or a position time more than PHONE_CLOCK_SKEW_SECS in the future).
 static uint32_t localPositionAgeSecs()
 {
     const uint32_t now = getValidTime(RTCQualityFromNet);
-    if (now == 0 || localPosition.time == 0 || localPosition.time > now)
+    if (now == 0 || localPosition.time == 0 || localPosition.time > now + PHONE_CLOCK_SKEW_SECS)
         return UINT32_MAX;
-    return now - localPosition.time;
+    return localPosition.time > now ? 0 : now - localPosition.time;
 }
 
 // True when the position to show came from the phone (or another client) and is recent:
