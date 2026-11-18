@@ -348,18 +348,22 @@ bool Channels::resolvePrimaryIndex()
 
 bool Channels::ensurePrimary()
 {
-    if (resolvePrimaryIndex())
+    // An empty table is filled later by initDefaults(): writing slot 0 now would write getByIndex()'s
+    // shared dummy channel, giving every out-of-range channel index a key
+    if (resolvePrimaryIndex() || channelFile.channels_count == 0)
         return false;
 
     // Enforce the invariant that primaryIndex references a PRIMARY channel: a malformed config can
     // demote every slot, which would leave all getPrimaryIndex() readers on a stale non-primary slot
-    meshtastic_Channel &stale = getByIndex(primaryIndex);
-    if (stale.has_settings && stale.role == meshtastic_Channel_Role_SECONDARY) {
-        stale.role = meshtastic_Channel_Role_PRIMARY; // keep the slot's key material
+    if (primaryIndex < channelFile.channels_count && channelFile.channels[primaryIndex].has_settings &&
+        channelFile.channels[primaryIndex].role == meshtastic_Channel_Role_SECONDARY) {
+        channelFile.channels[primaryIndex].role = meshtastic_Channel_Role_PRIMARY; // keep the slot's key material
     } else {
         // Promoting a DISABLED or settings-less slot would make a plaintext primary; restore the default
         primaryIndex = 0;
         initDefaultChannel(0);
+        // initDefaultChannel() leaves use_aead alone, and the default channel is not an AEAD one
+        channelFile.channels[0].settings.use_aead = false;
     }
     LOG_WARN("Config has no PRIMARY channel, restored one at slot %u", primaryIndex);
     return true;
