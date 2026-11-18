@@ -212,8 +212,8 @@ class MeshService
     /// ack is ~3.3 s on air and a 64-slot contention window ~10 s, leaving room for one packet queued ahead.
     static constexpr uint32_t RADIO_CONFIG_DEFER_MAX_MS = 20 * 1000;
 
-    /// Apply a deferred radio change once nothing is queued or on air and the awaited reply is acked, or once
-    /// RADIO_CONFIG_DEFER_MAX_MS has passed.
+    /// Apply a deferred radio change once the awaited reply is acked (with none, once nothing is queued or on air),
+    /// or once RADIO_CONFIG_DEFER_MAX_MS has passed.
     void applyDeferredRadioConfig();
 #ifdef PIO_UNIT_TESTING
     /// Make the pending deferral look ms older, so a test reaches the cap without moving the shared clock.

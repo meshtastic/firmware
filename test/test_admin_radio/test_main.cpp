@@ -16,9 +16,9 @@
  *     text, so a path that drops it sends UNSET and the client falls back to text matching.
  *  8. When an admin save retunes the radio: AdminModule::saveChanges() saves through
  *     MeshService::reloadConfig(saveWhat, true), and the channel re-hash and retune wait in
- *     MeshService::applyDeferredRadioConfig() until the TX queue has drained and the reply
- *     registered through awaitAckBeforeRadioConfig() is acked (or RADIO_CONFIG_DEFER_MAX_MS has
- *     passed); Power::rebootIsDue() holds a commit's reboot meanwhile.
+ *     MeshService::applyDeferredRadioConfig() until the reply registered through
+ *     awaitAckBeforeRadioConfig() is acked (with none registered, until the TX queue has drained), or
+ *     RADIO_CONFIG_DEFER_MAX_MS has passed; Power::rebootIsDue() holds a commit's reboot meanwhile.
  *     The admin's reply is queued only after the handler returns, so it must leave on the settings
  *     the requester is still listening on. Retuning at save time sends that reply on the new
  *     preset/slot, where the requester never hears it, and the client reports a change that applied
@@ -2654,7 +2654,8 @@ class PendingReplyRouter : public Router
 };
 
 // An empty TX queue only means the reply's first transmission is out. Retuning then strands its
-// retransmissions (and the requester's ack of it) on the old settings: wait until it is acked.
+// retransmissions (and the requester's ack of it) on the old settings: wait until it is acked. Once it
+// is, other traffic still queued (rebroadcasts on a busy mesh) must not hold the retune to the cap.
 static void test_deferredRetune_waitsForReplyAck()
 {
     primeDeferredRetuneTest();
@@ -2671,9 +2672,10 @@ static void test_deferredRetune_waitsForReplyAck()
     service->applyDeferredRadioConfig();
     TEST_ASSERT_EQUAL_INT_MESSAGE(0, counter.count, "retuned before the reply was acked");
 
+    txQueueStandIn.busy = true;
     pendingReply->acked = true;
     service->applyDeferredRadioConfig();
-    TEST_ASSERT_EQUAL_INT(1, counter.count);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, counter.count, "an acked reply waited on unrelated queued traffic");
 }
 
 // An unnamed primary channel hashes the preset's name. Re-hashing at save time stamps the reply with the

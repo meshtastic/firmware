@@ -167,13 +167,15 @@ void MeshService::applyDeferredRadioConfig()
 {
     if (!radioConfigDeferred)
         return;
-    // A deep-sleep preflight is the radio's own "nothing queued and nothing on air" check.
-    const bool replyPending =
-        radioConfigAwaitsAckOf && router && router->isRetransmissionPending(nodeDB->getNodeNum(), radioConfigAwaitsAckOf);
-    if (!replyPending && doPreflightSleep(true)) {
-        LOG_INFO("Reply delivered and TX queue drained, apply the deferred radio change");
+    // An awaited reply sits in the pending table from its send until its ack, so its ack alone is enough: other
+    // traffic in the TX queue (rebroadcasts on a busy mesh) needn't hold the retune. Without one, wait for the queue.
+    const bool ready = radioConfigAwaitsAckOf
+                           ? !(router && router->isRetransmissionPending(nodeDB->getNodeNum(), radioConfigAwaitsAckOf))
+                           : doPreflightSleep(true); // the radio's own "nothing queued and nothing on air" check
+    if (ready) {
+        LOG_INFO("Admin reply delivered, apply the deferred radio change");
     } else if (Throttle::hasElapsed(radioConfigDeferredAtMs, RADIO_CONFIG_DEFER_MAX_MS)) {
-        LOG_WARN("Reply or TX still pending after %u ms, apply the deferred radio change anyway", RADIO_CONFIG_DEFER_MAX_MS);
+        LOG_WARN("Admin reply still pending after %u ms, apply the deferred radio change anyway", RADIO_CONFIG_DEFER_MAX_MS);
     } else {
         return;
     }
