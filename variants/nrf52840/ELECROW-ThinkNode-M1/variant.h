@@ -152,6 +152,7 @@ extern int m1HasAg3352;
 // L76K: standby, low means allow sleep, high means force wake. AG3352: the strap, so GPS.cpp leaves it alone.
 #define PIN_GPS_STANDBY (32 + 2)
 #define GPS_STANDBY_L76K_ONLY
+#define GPS_AIROHA_FITTED (m1HasAg3352) // park and wake it as an Airoha even before the probe has named it
 
 // L76K: REINIT, left untouched as before. AG3352: RESET, inverted by Q16 (high asserts RESETB).
 // The AG3352 is reset at boot (variant.cpp) and to wake it from backup mode.
@@ -166,9 +167,10 @@ extern int m1HasAg3352;
 #define GPS_AIROHA_RESET_WAKE // sleep in backup mode ($PAIR650) with EN low; EN high then a RESETB pulse wakes it
 #define PIN_GPS_PPS (32 + 0)  // AG3352 1PPS output, configured as an input by GPS.cpp
 
-// The two receivers' UARTs are wired the opposite way round: the L76K transmits on P1.09, the AG3352 on P1.08.
-#define GPS_TX_PIN (m1HasAg3352 ? (32 + 9) : (32 + 8)) // This is for bits going TOWARDS the GPS
-#define GPS_RX_PIN (m1HasAg3352 ? (32 + 8) : (32 + 9)) // This is for bits going TOWARDS the CPU
+// The L76K transmits on P1.09. The AG3352 is documented as transmitting on P1.08; variant.cpp checks which line it uses.
+extern uint8_t m1GpsTxPin, m1GpsRxPin;
+#define GPS_TX_PIN m1GpsTxPin // This is for bits going TOWARDS the GPS
+#define GPS_RX_PIN m1GpsRxPin // This is for bits going TOWARDS the CPU
 
 #define GPS_THREAD_INTERVAL 50
 
