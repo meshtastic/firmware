@@ -38,6 +38,7 @@ uint8_t m1GpsTxPin = 32 + 8;
 uint8_t m1GpsRxPin = 32 + 9;
 static uint16_t m1UartEdges[2]; // falling edges seen on P1.08 and P1.09, for the boot log
 static bool m1UartFound;
+static bool m1StrapLow;
 
 void initVariant()
 {
@@ -46,13 +47,14 @@ void initVariant()
 }
 
 #if !MESHTASTIC_EXCLUDE_GPS
+// Out of reset the AG3352 starts talking, and only its TX line toggles; an unpowered L76K stays silent.
 // Elecrow's notes cross the AG3352 UART the other way from the L76K's, which no board has confirmed yet.
-// Out of reset the receiver starts talking, and only its TX line toggles. No pulls: the lines may run at 1.8 V.
-static void m1FindAg3352Uart()
+// No pulls: the lines may run at 1.8 V. Returns whether anything talked.
+static bool m1FindAg3352Uart()
 {
     constexpr uint8_t pins[2] = {8, 9}; // P1.08, P1.09
     constexpr uint16_t enough = 50;     // a few characters
-    constexpr uint32_t timeoutMs = 1500;
+    constexpr uint32_t timeoutMs = 2000;
     for (uint8_t pin : pins)
         pinMode(32 + pin, INPUT);
     uint32_t last = NRF_P1->IN;
@@ -64,11 +66,14 @@ static void m1FindAg3352Uart()
             m1UartEdges[i] += (fell >> pins[i]) & 1;
         last = now;
     }
+    if (m1UartEdges[0] < enough && m1UartEdges[1] < enough)
+        return false; // leave the L76K's pins
     // Only a clear answer overrides the notes: one line busy, the other still.
     const bool rxOnP109 = m1UartEdges[1] >= enough && m1UartEdges[0] <= 2;
     m1UartFound = rxOnP109 || (m1UartEdges[0] >= enough && m1UartEdges[1] <= 2);
     m1GpsRxPin = rxOnP109 ? 32 + 9 : 32 + 8;
     m1GpsTxPin = rxOnP109 ? 32 + 8 : 32 + 9;
+    return true;
 }
 #endif
 
@@ -81,23 +86,33 @@ void earlyInitVariant()
     uint8_t high = 0;
     for (uint8_t i = 0; i < 10; i++)
         high += digitalRead(PIN_GPS_VERSION) == HIGH;
-    m1HasAg3352 = high < 3;
+    m1StrapLow = high < 3;
 
 #if !MESHTASTIC_EXCLUDE_GPS
-    if (m1HasAg3352) {
-        pinMode(GPS_SLEEP_INT, OUTPUT);
-        digitalWrite(GPS_SLEEP_INT, HIGH);
-        // The core supply must be up before the reset, or the GPS boots and then stalls without it.
-        pinMode(PIN_GPS_EN, OUTPUT);
-        digitalWrite(PIN_GPS_EN, HIGH);
+    if (m1StrapLow) {
+        // The core supply must be up before the reset, or the GPS boots and then stalls without it. A pull-up beats
+        // the EN pin's 100K pull-down, and is harmless if this is an L76K board, where P1.01 senses the GPS switch.
+        pinMode(GPS_EN_AG3352, INPUT_PULLUP);
         delay(50);
         // The AG3352 stays powered across an MCU reset and may still be in backup mode; only RESETB ends that.
         pinMode(PIN_GPS_RESET, OUTPUT);
         digitalWrite(PIN_GPS_RESET, HIGH); // asserts RESETB through Q16
         delay(10);
         digitalWrite(PIN_GPS_RESET, LOW);
-        m1FindAg3352Uart();
+        m1HasAg3352 = m1FindAg3352Uart();
+        if (m1HasAg3352) {
+            pinMode(GPS_EN_AG3352, OUTPUT);
+            digitalWrite(GPS_EN_AG3352, HIGH);
+            pinMode(GPS_SLEEP_INT, OUTPUT);
+            digitalWrite(GPS_SLEEP_INT, HIGH);
+        } else {
+            // An L76K board: hand back the switch sense, and REINIT, which held low would keep the L76K in reset.
+            pinMode(GPS_EN_AG3352, INPUT);
+            pinMode(PIN_GPS_RESET, INPUT);
+        }
     }
+#else
+    m1HasAg3352 = m1StrapLow;
 #endif
 }
 
@@ -105,6 +120,8 @@ void lateInitVariant()
 {
     LOG_INFO("ThinkNode M1 GPS %s", m1HasAg3352 ? "AG3352" : "L76K");
 #if !MESHTASTIC_EXCLUDE_GPS
+    if (m1StrapLow && !m1HasAg3352)
+        LOG_INFO("GPS strap low but no UART traffic: L76K with the GPS switch off (or a silent AG3352)");
     if (m1HasAg3352)
         LOG_INFO("AG3352 UART: MCU RX on P1.%02u, %s (falling edges P1.08 %u, P1.09 %u)", m1GpsRxPin - 32,
                  m1UartFound ? "found" : "not seen, assumed", m1UartEdges[0], m1UartEdges[1]);
