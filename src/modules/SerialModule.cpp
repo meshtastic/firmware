@@ -42,8 +42,8 @@
     KNOWN PROBLEMS
         * Until the module is initialized by the startup sequence, the TX pin is in a floating
           state. Device connected to that pin may see this as "noise".
-        * On Linux (meshtasticd) the port is SerialModule.Path in config.yaml, not rxd/txd pins, and WS85 is
-          not supported.
+        * On meshtasticd the port is SerialModule.Path in config.yaml, not rxd/txd pins: a tty, or
+          pty:<link> for a PTY meshtasticd creates. WS85 is not supported there.
 
 
 */
@@ -79,6 +79,7 @@ bool serialConfigIsValid(const meshtastic_ModuleConfig_SerialConfig &config)
 #if HAS_SERIAL_MODULE
 
 #ifdef ARCH_PORTDUINO
+#include "HostSerialStream.h"
 #include "PortduinoGlue.h"
 #endif
 
@@ -95,7 +96,7 @@ SerialModuleRadio *serialModuleRadio;
 
 #ifdef ARCH_PORTDUINO
 // Serial1 belongs to GPS.SerialPath, so the module gets its own host tty.
-static LinuxSerial serialModulePort;
+static HostSerialStream serialModulePort;
 #define SERIAL_PRINT_OBJECT serialModulePort
 #else
 #ifndef SERIAL_PRINT_PORT
@@ -185,12 +186,8 @@ int32_t SerialModule::runOnce()
             uint32_t baud = getBaudRate();
 
 #ifdef ARCH_PORTDUINO
-            serialModulePort.setPath(portduino_config.serial_module_path);
-            serialModulePort.begin(baud);
-            if (!serialModulePort) {
-                LOG_ERROR("Serial module: cannot open %s", portduino_config.serial_module_path.c_str());
+            if (!serialModulePort.begin(portduino_config.serial_module_path, baud))
                 return disable();
-            }
 #else
             if (moduleConfig.serial.override_console_serial_port) {
 #ifdef RP2040_SLOW_CLOCK
@@ -339,8 +336,8 @@ int32_t SerialModule::runOnce()
 }
 
 #ifdef ARCH_PORTDUINO
-// LinuxSerial::read() returns 0 rather than -1 on an empty port, so Stream::readBytes() would pad
-// every payload with NULs. Read only what is buffered and send once the line idles or the payload fills.
+// Never blocks the main loop as Stream::readBytes() would: take what is buffered and send once the
+// line idles for serial.timeout or the payload fills.
 void SerialModule::readHostSerial()
 {
     while (serialModulePort.available() > 0 && serialPayloadSize < meshtastic_Constants_DATA_PAYLOAD_LEN) {

@@ -122,10 +122,11 @@ GPS:
 #    - 22
 
 ### Serial module: the host tty it reads and writes, in place of rxd/txd pins.
-### A socat PTY pair gives a virtual port: socat pty,raw,echo=0,link=/tmp/mesh pty,raw,echo=0,link=/tmp/app
+### pty:<link> creates a virtual port and links it at <link> for another program to open.
 
 #SerialModule:
 #  Path: /dev/ttyUSB1
+#  Path: pty:/tmp/meshserial
 
 ### Specify I2C device, or leave blank for none
 
