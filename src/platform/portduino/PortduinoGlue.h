@@ -1,5 +1,6 @@
 #pragma once
 #include <array>
+#include <cctype>
 #include <fstream>
 #include <map>
 #include <memory>
@@ -28,6 +29,24 @@ extern struct portduino_status_struct {
 // Product strings for auto-configuration
 // {"PRODUCT_STRING", "CONFIG.YAML"}
 // YAML paths are relative to `meshtastic/available.d`
+// The Arcade Bonnet's MCP23017 address straps put it somewhere in 0x20-0x27.
+#define ARCADE_BONNET_ADDR_MIN 0x20
+#define ARCADE_BONNET_ADDR_MAX 0x27
+
+// Arcade Bonnet button names as printed on the board ("1A".."1F") <-> MCP23017 bit 0-5.
+// Returns -1 for anything else; case-insensitive.
+inline int arcadeBonnetPinBit(const std::string &name)
+{
+    if (name.size() != 2 || name[0] != '1')
+        return -1;
+    const char letter = (char)toupper((unsigned char)name[1]);
+    return (letter >= 'A' && letter <= 'F') ? letter - 'A' : -1;
+}
+inline std::string arcadeBonnetPinName(int bit)
+{
+    return std::string("1") + (char)('A' + bit);
+}
+
 inline const std::unordered_map<std::string, std::string> configProducts = {
     {"MESHTOAD", "lora-usb-meshtoad-e22.yaml"},
     {"MESHSTICK", "lora-meshstick-1262.yaml"},
@@ -121,7 +140,23 @@ bool MAC_from_string(std::string mac_str, uint8_t *dmac);
 #ifndef ARCH_PORTDUINO_WASM
 void readGPIOFromYaml(YAML::Node sourceNode, pinMapping &destPin, int pinDefault = RADIOLIB_NC);
 #endif
-std::string exec(const char *cmd);
+// A command that outlives its limit is killed, along with anything it started, so a hung script
+// stalls the main loop for at most this long.
+constexpr uint32_t EXEC_DEFAULT_TIMEOUT_MS = 10000;
+constexpr uint32_t COMMAND_SENSOR_TIMEOUT_MS = 2000;
+// Logs a timeout or a failure to start; returns whatever the command printed, whatever its exit status.
+std::string exec(const char *cmd, uint32_t timeoutMs = EXEC_DEFAULT_TIMEOUT_MS);
+enum class ExecResult { Ok, Failed, TimedOut, NotStarted };
+// Runs cmd under /bin/sh and captures stdout. Ok only if it exited 0 within timeoutMs. Never logs, so it
+// is safe off the main thread.
+ExecResult execCommand(const char *cmd, uint32_t timeoutMs, std::string &output);
+
+// One Sensors: entry. type is an EnvironmentMetrics field name, see CommandSensorFields.h.
+struct commandSensorConfig {
+    std::string type;
+    std::string command;
+    float scale = 1.0f;
+};
 
 extern struct portduino_config_struct {
     // Lora
@@ -163,6 +198,8 @@ extern struct portduino_config_struct {
     // DIO3_TCXO_VOLTAGE was written out as false or 0 rather than left absent. Diagnostic only,
     // and so not serialized - the key it came from round-trips as absent either way.
     bool dio3_tcxo_voltage_disabled = false;
+    // TCXO start-up delay in us; 0 keeps the build's TCXO_STARTUP_DELAY_US
+    int dio3_tcxo_delay_us = 0;
     // Probe for a TCXO and fall back to the XTAL; runtime twin of the TCXO_OPTIONAL define.
     bool tcxo_optional = false;
     int lora_usb_pid = 0x5512;
@@ -250,6 +287,10 @@ extern struct portduino_config_struct {
     // ("select", "cancel", "back", "up", "down", "left", "right", "user").
     // Empty means the LinuxJoystick driver uses its built-in defaults.
     std::map<int, std::string> joystickButtons;
+    // Adafruit Arcade Bonnet: MCP23017 I2C address (0 = not fitted) and its button map, keyed by
+    // expander bit 0-5 (buttons 1A-1F) -> lowercase action name. Empty means the driver's defaults.
+    int arcadeBonnetAddress = 0;
+    std::map<int, std::string> arcadeBonnetButtons;
     int tbDirection;
     pinMapping userButtonPin = {"Input", "User"};
     pinMapping tbUpPin = {"Input", "TrackballUp"};
@@ -284,8 +325,12 @@ extern struct portduino_config_struct {
     int hostMetrics_interval = 0;
     int hostMetrics_channel = 0;
 
+    // Sensors
+    std::vector<commandSensorConfig> command_sensors;
+
     // Security
     std::vector<std::array<uint8_t, 32>> admin_keys;
+    bool dmshell_enabled = false;
 
     // config
     bool has_config_overrides = false;
@@ -378,6 +423,8 @@ extern struct portduino_config_struct {
             out << YAML::Key << "DIO2_AS_RF_SWITCH" << YAML::Value << dio2_as_rf_switch;
         if (dio3_tcxo_voltage != 0)
             out << YAML::Key << "DIO3_TCXO_VOLTAGE" << YAML::Value << YAML::Precision(3) << (float)dio3_tcxo_voltage / 1000;
+        if (dio3_tcxo_delay_us != 0)
+            out << YAML::Key << "DIO3_TCXO_DELAY_US" << YAML::Value << dio3_tcxo_delay_us;
         if (tcxo_optional)
             out << YAML::Key << "TCXO_OPTIONAL" << YAML::Value << tcxo_optional;
         if (lora_usb_pid != 0x5512)
@@ -582,6 +629,28 @@ extern struct portduino_config_struct {
             out << YAML::EndMap;
         }
 
+        if (arcadeBonnetAddress != 0) {
+            out << YAML::Key << "ArcadeBonnet" << YAML::Value << YAML::Hex << arcadeBonnetAddress << YAML::Dec;
+            if (!arcadeBonnetButtons.empty()) {
+                std::map<std::string, std::vector<std::string>> pinsByAction;
+                for (const auto &button : arcadeBonnetButtons)
+                    pinsByAction[button.second].push_back(arcadeBonnetPinName(button.first));
+                out << YAML::Key << "ArcadeBonnetButtons" << YAML::Value << YAML::BeginMap;
+                for (const auto &action : pinsByAction) {
+                    out << YAML::Key << action.first << YAML::Value;
+                    if (action.second.size() == 1) {
+                        out << action.second.front();
+                    } else {
+                        out << YAML::Flow << YAML::BeginSeq;
+                        for (const auto &pin : action.second)
+                            out << pin;
+                        out << YAML::EndSeq;
+                    }
+                }
+                out << YAML::EndMap;
+            }
+        }
+
         for (const auto *input_pin : all_pins) {
             if (input_pin->config_section == "Input" && input_pin->enabled) {
                 out << YAML::Key << input_pin->config_name << YAML::Value << YAML::BeginMap;
@@ -676,13 +745,31 @@ extern struct portduino_config_struct {
             out << YAML::EndMap; // HostMetrics
         }
 
+        // Sensors
+        if (!command_sensors.empty()) {
+            out << YAML::Key << "Sensors" << YAML::Value << YAML::BeginSeq;
+            for (const auto &sensor : command_sensors) {
+                out << YAML::BeginMap;
+                out << YAML::Key << "Type" << YAML::Value << sensor.type;
+                out << YAML::Key << "Command" << YAML::Value << sensor.command;
+                if (sensor.scale != 1.0f)
+                    out << YAML::Key << "Scale" << YAML::Value << sensor.scale;
+                out << YAML::EndMap;
+            }
+            out << YAML::EndSeq; // Sensors
+        }
+
         // Security
-        if (!admin_keys.empty()) {
+        if (!admin_keys.empty() || dmshell_enabled) {
             out << YAML::Key << "Security" << YAML::Value << YAML::BeginMap;
-            out << YAML::Key << "AdminKeys" << YAML::Value << YAML::BeginSeq;
-            for (const auto &key : admin_keys)
-                out << adminKeyToBase64(key);
-            out << YAML::EndSeq;
+            if (!admin_keys.empty()) {
+                out << YAML::Key << "AdminKeys" << YAML::Value << YAML::BeginSeq;
+                for (const auto &key : admin_keys)
+                    out << adminKeyToBase64(key);
+                out << YAML::EndSeq;
+            }
+            if (dmshell_enabled)
+                out << YAML::Key << "DMShell" << YAML::Value << true;
             out << YAML::EndMap; // Security
         }
 

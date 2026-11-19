@@ -11,6 +11,7 @@
 std::vector<MeshModule *> *MeshModule::modules;
 
 const meshtastic_MeshPacket *MeshModule::currentRequest;
+RxSource MeshModule::currentRequestSource = RX_SRC_RADIO;
 uint8_t MeshModule::numPeriodicModules = 0;
 
 /**
@@ -133,6 +134,7 @@ void MeshModule::callModules(meshtastic_MeshPacket &mp, RxSource src)
         auto &pi = **i;
 
         pi.currentRequest = &mp;
+        pi.currentRequestSource = src;
         pi.ignoreRequest = false;
 
         /// We only call modules that are interested in the packet (and the message is destined to us or we are promiscious)

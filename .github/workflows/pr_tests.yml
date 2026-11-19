@@ -32,7 +32,7 @@ jobs:
 
   test-summary:
     name: 📊 Test Results
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     needs: [native-tests]
     if: always()
     permissions:

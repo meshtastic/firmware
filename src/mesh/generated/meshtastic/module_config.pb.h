@@ -168,9 +168,11 @@ typedef struct _meshtastic_ModuleConfig_MQTTConfig {
  If using the default server, this will only be honoured if set, otherwise the device will use the default password */
     char password[32];
     /* Whether to send encrypted or decrypted packets to MQTT.
- This parameter is only honoured if you also set server
- (the default official mqtt.meshtastic.org server can handle encrypted packets)
- Decrypted packets may be useful for external systems that want to consume meshtastic packets */
+ When false, packets on channels with uplink enabled are published decrypted, and decrypted packets
+ from the broker are accepted on channels with downlink enabled without channel authentication,
+ including on AES-CCM channels. This trusts the broker, and anyone who can publish to it, as much
+ as the channel's own members.
+ Decrypted packets may be useful for external systems that want to consume meshtastic packets. */
     bool encryption_enabled;
     /* Deprecated: JSON packet support on MQTT was removed, and this field is ignored. */
     bool json_enabled;
@@ -265,7 +267,7 @@ typedef struct _meshtastic_ModuleConfig_PaxcounterConfig {
 typedef struct _meshtastic_ModuleConfig_TrafficManagementConfig {
     /* Minimum interval in seconds between position updates from the same node.
  A non-zero value implicitly enables the suppression window; 0 disables it.
- Firmware default: 21600 (6 hours), installed when this config is first created. */
+ Firmware default: 18000 (5 hours), installed when this config is first created. */
     uint32_t position_min_interval_secs;
     /* Maximum hop distance from the requestor at which direct NodeInfo responses
  are served from the local cache. A non-zero value implicitly enables direct
@@ -277,7 +279,7 @@ typedef struct _meshtastic_ModuleConfig_TrafficManagementConfig {
     /* Maximum packets allowed per node within the rate limit window.
  A non-zero value implicitly enables rate limiting; 0 disables it. */
     uint32_t rate_limit_max_packets;
-    /* Maximum unknown/undecryptable packets per rate window before the source
+    /* Maximum unknown/undecryptable packets per 5 minutes before the source
  is dropped. A non-zero value implicitly enables unknown-packet filtering;
  0 disables it. */
     uint32_t unknown_packet_threshold;

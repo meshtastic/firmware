@@ -63,6 +63,9 @@ class SerialConsole : public StreamAPI, public RedirectablePrint, private concur
     /// port, so a dead host can't stall the main loop and trip the task watchdog.
     void setHostDraining(bool draining);
 
+    /// Write one byte of console text, restarting a latched HWCDC TX path where it can
+    size_t writeText(uint8_t c);
+
 #if defined(ARDUINO_USB_CDC_ON_BOOT) && ARDUINO_USB_CDC_ON_BOOT
     StreamFrameWriter frameWriter;
 #endif

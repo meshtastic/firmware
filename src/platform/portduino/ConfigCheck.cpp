@@ -5,12 +5,14 @@
 #include "configuration.h"
 
 #include "PortduinoGlue.h"
+#include "modules/Telemetry/Sensor/CommandSensorFields.h"
 
 #include "yaml-cpp/eventhandler.h"
 
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -78,14 +80,14 @@ const std::map<std::string, std::set<std::string>> &schema()
         {"General",
          {"MACAddress", "MACAddressSource", "MaxNodes", "MaxMessageQueue", "APIPort", "ConfigDirectory", "AvailableDirectory"}},
         {"Config", {"DisplayMode", "EnableUDP", "StatusMessage"}},
-        {"Security", {"AdminKeys"}},
+        {"Security", {"AdminKeys", "DMShell"}},
         {"Display",
          {"Panel", "spidev", "BusFrequency", "Width", "Height", "Invert", "Rotate", "OffsetX", "OffsetY", "OffsetRotate",
           "RGBOrder", "HUB75", "DC", "CS", "Backlight", "BacklightInvert", "BacklightPWMChannel", "Reset"}},
         {"Touchscreen", {"Module", "spidev", "BusFrequency", "I2CAddr", "Rotate", "CS", "IRQ"}},
         {"Input",
-         {"KeyboardDevice", "PointerDevice", "JoystickDevice", "JoystickButtons", "TrackballDirection", "User", "TrackballUp",
-          "TrackballDown", "TrackballLeft", "TrackballRight", "TrackballPress"}},
+         {"KeyboardDevice", "PointerDevice", "JoystickDevice", "JoystickButtons", "ArcadeBonnet", "ArcadeBonnetButtons",
+          "TrackballDirection", "User", "TrackballUp", "TrackballDown", "TrackballLeft", "TrackballRight", "TrackballPress"}},
         {"GPIO", {"User", "ExtraPins"}},
         {"GPS", {"SerialPath", "GpsdHost", "GpsdPort"}},
         {"I2C", {"I2CDevice"}},
@@ -93,6 +95,8 @@ const std::map<std::string, std::set<std::string>> &schema()
         {"Webserver", {"Port", "RootPath", "SSLCert", "SSLKey"}},
         {"Bluetooth", {"Enabled", "AdapterId"}},
         {"HostMetrics", {"ReportInterval", "Channel", "UserStringCommand"}},
+        // A list, not a mapping: these are the keys of each entry. See checkCommandSensors().
+        {"Sensors", {"Type", "Command", "Scale"}},
         // Read by packaging/menu tooling rather than by meshtasticd itself.
         {"Meta", {}},
     };
@@ -427,6 +431,54 @@ void checkJoystickButtons(const std::string &file, const YAML::Node &node, std::
     }
 }
 
+// Same shape as JoystickButtons, but the values are the button names printed on the bonnet.
+void checkArcadeBonnetButtons(const std::string &file, const YAML::Node &node, std::vector<Finding> &findings)
+{
+    if (!node.IsMap()) {
+        findings.push_back(
+            {kError, file, lineOf(node), "Input.ArcadeBonnetButtons must be a mapping of action name to bonnet button (1A-1F)"});
+        return;
+    }
+
+    std::map<int, std::string> owner; // expander bit -> the action that claimed it first
+    for (const auto &entry : node) {
+        std::string action = entry.first.as<std::string>("");
+        for (auto &c : action)
+            c = tolower(c);
+        if (!kJoystickActions.count(action)) {
+            findings.push_back({kWarn, file, lineOf(entry.first),
+                                "Input.ArcadeBonnetButtons: '" + action +
+                                    "' is not a recognised action, so those buttons do nothing. Valid actions are select, "
+                                    "cancel, back, up, down, left, right and user"});
+            continue;
+        }
+
+        std::vector<YAML::Node> pinNodes;
+        if (entry.second.IsSequence())
+            for (const auto &pinNode : entry.second)
+                pinNodes.push_back(pinNode);
+        else
+            pinNodes.push_back(entry.second);
+
+        for (const auto &pinNode : pinNodes) {
+            const std::string raw = pinNode.as<std::string>("");
+            const int bit = arcadeBonnetPinBit(raw);
+            if (bit < 0) {
+                findings.push_back({kWarn, file, lineOf(pinNode),
+                                    "Input.ArcadeBonnetButtons." + action + ": '" + raw +
+                                        "' is not a bonnet button (1A-1F), so it is unmapped"});
+                continue;
+            }
+            const auto claimed = owner.find(bit);
+            if (claimed != owner.end() && claimed->second != action)
+                findings.push_back({kWarn, file, lineOf(pinNode),
+                                    "Input.ArcadeBonnetButtons: button " + raw + " is mapped to both '" + claimed->second +
+                                        "' and '" + action + "'. Only '" + action + "' takes effect"});
+            owner[bit] = action;
+        }
+    }
+}
+
 void checkRfSwitchTable(const std::string &file, const YAML::Node &table, std::vector<Finding> &findings)
 {
     if (!table.IsMap()) {
@@ -579,6 +631,7 @@ const std::map<std::string, ValueSpec> &valueSpecs()
         {"Input.KeyboardDevice", {kString, false}},
         {"Input.PointerDevice", {kString, false}},
         {"Input.JoystickDevice", {kString, false}},
+        {"Input.ArcadeBonnet", {kInt, false}},
         {"Input.TrackballDirection", {kString, false}},
         {"GPS.SerialPath", {kString, false}},
         {"GPS.GpsdHost", {kString, false}},
@@ -596,6 +649,7 @@ const std::map<std::string, ValueSpec> &valueSpecs()
         {"Webserver.SSLCert", {kString, false}},
         {"Webserver.SSLKey", {kString, false}},
         {"Bluetooth.Enabled", {kBool, false}},
+        {"Security.DMShell", {kBool, false}},
         {"Bluetooth.AdapterId", {kString, false}},
         {"HostMetrics.ReportInterval", {kInt, false}},
         {"HostMetrics.Channel", {kInt, false}},
@@ -796,6 +850,56 @@ void checkAdminKeys(const std::string &file, const YAML::Node &node, std::vector
     }
 }
 
+// loadConfig() exits on an entry with no usable Type or Command, so those stop meshtasticd.
+void checkCommandSensors(const std::string &file, const YAML::Node &node, std::vector<Finding> &findings)
+{
+    if (node.IsNull())
+        return;
+    if (!node.IsSequence()) {
+        findings.push_back({kError, file, lineOf(node),
+                            "Sensors must be a list of entries with a Type and a Command, so meshtasticd refuses to start "
+                            "on this file"});
+        return;
+    }
+
+    for (const auto &entry : node) {
+        if (!entry.IsMap()) {
+            findings.push_back({kError, file, lineOf(entry),
+                                "Sensors entry is not a Type/Command mapping, so meshtasticd refuses to start on this file"});
+            continue;
+        }
+        for (const auto &field : entry) {
+            const std::string key = field.first.as<std::string>("");
+            if (!schema().at("Sensors").count(key))
+                findings.push_back(
+                    {kWarn, file, lineOf(field.first), "unknown key 'Sensors." + key + "', ignored by meshtasticd"});
+        }
+
+        const YAML::Node type = entry["Type"];
+        const std::string typeText = type ? type.as<std::string>("") : "";
+        if (typeText.empty())
+            findings.push_back({kError, file, lineOf(entry),
+                                "Sensors entry has no Type, so meshtasticd refuses to start on this file. Valid: " +
+                                    CommandSensorFields::knownTypes()});
+        else if (CommandSensorFields::canonicalType(typeText).empty())
+            findings.push_back({kError, file, lineOf(type),
+                                "Sensors Type '" + typeText +
+                                    "' is not an environment metric, so meshtasticd refuses to start on this file. Valid: " +
+                                    CommandSensorFields::knownTypes()});
+
+        const YAML::Node command = entry["Command"];
+        if (!command || command.as<std::string>("").empty())
+            findings.push_back({kError, file, lineOf(command ? command : entry),
+                                "Sensors entry has no Command, so meshtasticd refuses to start on this file"});
+
+        const YAML::Node scale = entry["Scale"];
+        if (scale && (!converts(scale, kFloat) || !std::isfinite(scale.as<float>())))
+            findings.push_back(
+                {kWarn, file, lineOf(scale),
+                 "Sensors Scale '" + scale.as<std::string>("") + "' is not a finite number, so it is silently replaced by 1"});
+    }
+}
+
 // Module names match exactly and are inconsistently cased (RF95 upper, sx1262 lower),
 // and loadConfig() exits on an unknown name without printing the valid set, so name it here.
 void checkLoraModule(const std::string &file, const YAML::Node &module, std::vector<Finding> &findings)
@@ -874,6 +978,10 @@ void checkSection(const std::string &file, const std::string &section, const YAM
     const auto &allowed = schema().at(section);
     if (kFreeFormSections.count(section))
         return;
+    if (section == "Sensors") {
+        checkCommandSensors(file, body, findings);
+        return;
+    }
     // An empty section (`Lora:` with no body) is null, not a map, and loadConfig() tests
     // before reading it. Any other non-map shape is unreadable, so do not call the file clean.
     if (body.IsNull())
@@ -941,6 +1049,17 @@ void checkSection(const std::string &file, const std::string &section, const YAM
                                         "anything else leaves no /org/bluez entry to attach to and Bluetooth stays off"});
         } else if (key == "JoystickButtons") {
             checkJoystickButtons(file, value, findings);
+        } else if (key == "ArcadeBonnetButtons") {
+            checkArcadeBonnetButtons(file, value, findings);
+        } else if (section == "Input" && key == "ArcadeBonnet") {
+            // 0 is "not fitted"; anything else must be an address the MCP23017 can actually take.
+            int address = 0;
+            if (converts(value, kInt))
+                address = value.as<int>();
+            if (address != 0 && (address < ARCADE_BONNET_ADDR_MIN || address > ARCADE_BONNET_ADDR_MAX))
+                findings.push_back({kWarn, file, lineOf(value),
+                                    "Input.ArcadeBonnet '" + value.as<std::string>("") +
+                                        "' is not an MCP23017 address (0x20-0x27), so the bonnet is not started"});
         } else if ((section == "Lora" && kLoraPinKeys.count(key)) ||
                    (section == "Display" &&
                     (key == "DC" || key == "CS" || key == "Backlight" || key == "BacklightPWMChannel" || key == "Reset")) ||
@@ -1280,6 +1399,20 @@ void checkMergedConfig(const PathIndex &paths, std::vector<Finding> &findings)
                                 ") and Lora.CS are set. If your device tree already assigns a chip select to that spidev "
                                 "node, meshtasticd will fail to claim the CS line at startup; if it does not, CS must be "
                                 "set here. Check with 'gpioinfo'"});
+
+    std::map<std::string, int> sensorTypes;
+    for (const auto &sensor : portduino_config.command_sensors)
+        sensorTypes[sensor.type]++;
+    for (const auto &type : sensorTypes)
+        if (type.second > 1)
+            findings.push_back({kWarn, merged, 0,
+                                "Sensors lists " + type.first + " " + std::to_string(type.second) +
+                                    " times. Every command runs, but only one value can be sent"});
+    if (!portduino_config.command_sensors.empty())
+        findings.push_back({kInfo, merged, 0,
+                            "Sensors are only read while the Telemetry module setting for their Type is enabled "
+                            "(environment measurement, or air quality for air-quality types), and are then broadcast "
+                            "at that setting's update interval"});
 }
 
 void printSummary()
