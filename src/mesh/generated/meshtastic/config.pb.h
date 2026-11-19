@@ -248,7 +248,7 @@ typedef enum _meshtastic_Config_LoRaConfig_RegionCode {
     meshtastic_Config_LoRaConfig_RegionCode_CN = 4,
     /* Japan */
     meshtastic_Config_LoRaConfig_RegionCode_JP = 5,
-    /* Australia / New Zealand */
+    /* Australia / Brazil / New Zealand (915-928MHz) */
     meshtastic_Config_LoRaConfig_RegionCode_ANZ = 6,
     /* Korea */
     meshtastic_Config_LoRaConfig_RegionCode_KR = 7,
@@ -327,7 +327,7 @@ typedef enum _meshtastic_Config_LoRaConfig_ModemPreset {
  Deprecated in 2.7: Unpopular slow preset. */
     meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW = 1,
     /* Very Long Range - Slow
- Deprecated in 2.5: Works only with txco and is unusably slow */
+ Deprecated: works only with a TCXO and is unusably slow. */
     meshtastic_Config_LoRaConfig_ModemPreset_VERY_LONG_SLOW = 2,
     /* Medium Range - Slow */
     meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW = 3,
@@ -389,7 +389,9 @@ typedef enum _meshtastic_Config_LoRaConfig_FEM_LNA_Mode {
     /* FEM_LNA is present and enabled */
     meshtastic_Config_LoRaConfig_FEM_LNA_Mode_ENABLED = 1,
     /* FEM_LNA is not present on the device */
-    meshtastic_Config_LoRaConfig_FEM_LNA_Mode_NOT_PRESENT = 2
+    meshtastic_Config_LoRaConfig_FEM_LNA_Mode_NOT_PRESENT = 2,
+    /* FEM_LNA is present; the firmware switches it in or bypasses it from the measured noise floor */
+    meshtastic_Config_LoRaConfig_FEM_LNA_Mode_AUTO = 3
 } meshtastic_Config_LoRaConfig_FEM_LNA_Mode;
 
 typedef enum _meshtastic_Config_BluetoothConfig_PairingMode {
@@ -704,7 +706,7 @@ typedef struct _meshtastic_Config_LoRaConfig {
     bool ignore_mqtt;
     /* Sets the ok_to_mqtt bit on outgoing packets */
     bool config_ok_to_mqtt;
-    /* Set where LORA FEM is enabled, disabled, or not present */
+    /* Set whether the LoRa FEM LNA is enabled, disabled, automatic, or not present */
     meshtastic_Config_LoRaConfig_FEM_LNA_Mode fem_lna_mode;
     /* Don't use radiolib to initialize the radio, instead listen for a serialHal connection */
     bool serial_hal_only;
@@ -835,8 +837,8 @@ extern "C" {
 #define _meshtastic_Config_LoRaConfig_ModemPreset_ARRAYSIZE ((meshtastic_Config_LoRaConfig_ModemPreset)(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_TURBO+1))
 
 #define _meshtastic_Config_LoRaConfig_FEM_LNA_Mode_MIN meshtastic_Config_LoRaConfig_FEM_LNA_Mode_DISABLED
-#define _meshtastic_Config_LoRaConfig_FEM_LNA_Mode_MAX meshtastic_Config_LoRaConfig_FEM_LNA_Mode_NOT_PRESENT
-#define _meshtastic_Config_LoRaConfig_FEM_LNA_Mode_ARRAYSIZE ((meshtastic_Config_LoRaConfig_FEM_LNA_Mode)(meshtastic_Config_LoRaConfig_FEM_LNA_Mode_NOT_PRESENT+1))
+#define _meshtastic_Config_LoRaConfig_FEM_LNA_Mode_MAX meshtastic_Config_LoRaConfig_FEM_LNA_Mode_AUTO
+#define _meshtastic_Config_LoRaConfig_FEM_LNA_Mode_ARRAYSIZE ((meshtastic_Config_LoRaConfig_FEM_LNA_Mode)(meshtastic_Config_LoRaConfig_FEM_LNA_Mode_AUTO+1))
 
 #define _meshtastic_Config_BluetoothConfig_PairingMode_MIN meshtastic_Config_BluetoothConfig_PairingMode_RANDOM_PIN
 #define _meshtastic_Config_BluetoothConfig_PairingMode_MAX meshtastic_Config_BluetoothConfig_PairingMode_NO_PIN

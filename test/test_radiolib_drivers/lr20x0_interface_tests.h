@@ -57,6 +57,7 @@ class TestLr2021Interface : public LR2021Interface
     }
 
     using LR20x0Interface<LR2021>::isChannelActive;
+    using LR20x0Interface<LR2021>::launchTransmit;
 
     // init() would set the SF via begin(); RadioLib's default det_peak lookup needs one (see lr2021SetSf).
     void setSpreadingFactor(uint8_t sf) { TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_NONE, lora.setSpreadingFactor(sf)); }
@@ -119,6 +120,17 @@ static void test_lr20x0_isChannelActive_reports_cad_done_free()
     TEST_ASSERT_FALSE(iface.isChannelActive());
 }
 
+// A SetTx the chip refuses must fail the launch, so startSend() takes its error path at once instead of
+// waiting for a TX_DONE that never comes. Without paranoid SPI, only launchTransmit()'s status read finds it.
+static void test_lr20x0_launchTransmit_reports_a_refused_settx()
+{
+    RecordingHal &hal = freshHal();
+    auto &iface = lr20x0Interface(hal);
+    hal.rejectUnless(op16(RADIOLIB_LR2021_CMD_SET_TX), [](const std::vector<uint8_t> &) { return false; }, 0x02);
+    TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_SPI_CMD_INVALID, iface.launchTransmit(8));
+    TEST_ASSERT_EQUAL_UINT32(1, hal.count(op16(RADIOLIB_LR2021_CMD_SET_TX)));
+}
+
 // Grows here:
 //   a scan that returns an error (-706, -707, -705) must not read as a free channel. Today every
 //   driver's isChannelActive() returns false on it; which verdict replaces that is undecided.
@@ -128,4 +140,5 @@ static void runLr20x0InterfaceTests()
     RUN_TEST(test_lr20x0_isChannelActive_starts_a_cad_the_chip_accepts);
     RUN_TEST(test_lr20x0_isChannelActive_reports_a_detected_preamble_busy);
     RUN_TEST(test_lr20x0_isChannelActive_reports_cad_done_free);
+    RUN_TEST(test_lr20x0_launchTransmit_reports_a_refused_settx);
 }

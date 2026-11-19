@@ -486,6 +486,7 @@ bool PositionModule::sendOurPosition(NodeNum dest, bool wantReplies, uint8_t cha
         meshtastic_ClientNotification *notification = clientNotificationPool.allocZeroed();
         if (notification) {
             notification->level = meshtastic_LogRecord_Level_INFO;
+            notification->type = meshtastic_ClientNotification_NotificationType_POSITION_SENT_SLEEPING;
             notification->time = getValidTime(RTCQualityFromNet);
             sprintf(notification->message, "Sending position and sleeping for %us interval in a moment",
                     Default::getConfiguredOrDefaultMs(config.position.position_broadcast_secs, default_broadcast_interval_secs) /

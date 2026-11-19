@@ -585,7 +585,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
 #ifdef EXT_PWR_DETECT
         if (digitalRead(EXT_PWR_DETECT) == EXT_PWR_DETECT_VALUE)
             return true;
-#ifdef EXT_CHRG_DETECT
+#if defined(EXT_CHRG_DETECT) && !defined(EXT_CHRG_DETECT_IS_SOLAR)
         // EXT_PWR_DETECT alone may not catch active charging (e.g. a charge-complete
         // pin that only asserts once the battery is full) - CHRG being active implies
         // power is present regardless.
@@ -1327,8 +1327,10 @@ void Power::logHeapUsage()
     char detail[64] = "";
     const uint32_t minFree = memGet.getMinFreeHeap();
     const uint32_t maxAlloc = memGet.getMaxAllocHeap();
-    if (minFree || maxAlloc)
+    if (minFree)
         snprintf(detail, sizeof(detail), ", min %u, largest block %u", minFree, maxAlloc);
+    else if (maxAlloc)
+        snprintf(detail, sizeof(detail), ", largest block %u", maxAlloc);
 
     const uint32_t psramTotal = memGet.getPsramSize();
     if (psramTotal)
@@ -2146,7 +2148,7 @@ class LipoCharger : public HasBatteryLevel
     /**
      * return true if there is a battery installed in this unit
      */
-    virtual bool isBatteryConnect() override { return PPM->getBattVoltage() > 0; }
+    virtual bool isBatteryConnect() override { return getBattVoltage() > 0; }
 
     /**
      * return true if there is an external power source detected
