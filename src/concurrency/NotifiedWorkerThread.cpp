@@ -1,4 +1,5 @@
 #include "NotifiedWorkerThread.h"
+#include "UptimeClock.h"
 #include "configuration.h"
 #include "main.h"
 
@@ -72,6 +73,19 @@ bool NotifiedWorkerThread::notifyLater(uint32_t delay, uint32_t v, bool overwrit
     }
 
     return didIt;
+}
+
+bool NotifiedWorkerThread::notifyLaterOrShorten(uint32_t delay, uint32_t v, bool overwrite)
+{
+    if (!overwrite && enabled && notification.load() == v && delay < tillRun(Time::getMillis())) {
+        uint32_t expected = v;
+        if (notification.compare_exchange_strong(expected, v)) {
+            setIntervalFromNow(delay);
+            mainDelay.interrupt();
+            return true;
+        }
+    }
+    return notifyLater(delay, v, overwrite);
 }
 
 void NotifiedWorkerThread::checkNotification()

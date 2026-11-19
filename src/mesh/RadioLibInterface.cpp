@@ -719,18 +719,12 @@ void RadioLibInterface::setTransmitDelay()
     // So we want to make sure the other side has had a chance to reconfigure its radio.
 
     if (p->tx_after) {
-        unsigned long add_delay = p->rx_rssi ? getTxDelayMsecWeighted(p) : getTxDelayMsec();
-        unsigned long now = Time::getMillis();
-        // skipZero, not timerEndsAtMillis: this is a clamp of three candidates rather than a plain
-        // now + delay, and `if (p->tx_after)` above is the read that takes 0 as "no delay wanted" -
-        // so a recomputation landing on 0 drops the CSMA backoff and the packet goes out at once.
-        //
-        // Narrow to uint32_t BEFORE skipZero, not after: add_delay is unsigned long, 64-bit on the
-        // portduino host, so the clamp can exceed UINT32_MAX there. skipZero on the wide value would
-        // pass 0x100000000 through as non-zero and the store to this uint32_t field would truncate it
-        // back to the 0 being avoided.
-        p->tx_after = Time::skipZero(
-            (uint32_t)min(max(p->tx_after + add_delay, now + add_delay), now + 2 * getTxDelayMsecWeightedWorst(p->rx_snr)));
+        uint32_t now = Time::getMillis();
+        if (Throttle::deadlinePassedAt(now, p->tx_after)) {
+            // The initial late rebroadcast window has elapsed; use normal CSMA backoff for channel contention
+            // while keeping tx_after non-zero so normal packets retain queue and eviction priority.
+            p->tx_after = Time::timerEndsAtMillis(getTxDelayMsec());
+        }
         scheduleTransmitDelayCompleted(p->tx_after - now);
     } else if (p->rx_snr == 0 && p->rx_rssi == 0) {
         /* We assume if rx_snr = 0 and rx_rssi = 0, the packet was generated locally.
@@ -772,7 +766,7 @@ void RadioLibInterface::scheduleTransmitDelayCompleted(uint32_t delay)
         txStageDueMs = Time::timerEndsAtMillis(delay);
         delay = 1;
     }
-    notifyLater(delay, TRANSMIT_DELAY_COMPLETED, txTimerOverwrite);
+    notifyLaterOrShorten(delay, TRANSMIT_DELAY_COMPLETED, txTimerOverwrite);
 }
 
 /**
