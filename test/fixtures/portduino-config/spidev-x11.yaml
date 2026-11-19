@@ -1,0 +1,5 @@
+# CLEAN. X11 is not an SPI panel, so --check must not report a display spidev.
+Lora:
+  Module: sim
+Display:
+  Panel: X11

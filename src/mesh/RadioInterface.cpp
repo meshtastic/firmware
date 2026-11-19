@@ -429,7 +429,24 @@ std::unique_ptr<RadioInterface> initLoRa()
             delete RadioLibHAL;
             RadioLibHAL = nullptr;
         }
+#if defined(ARCH_PORTDUINO_WASM)
+        // The WASM framework has no per-host registry; the browser node has no
+        // host spidev to select.
         RadioLibHAL = new LockingArduinoHal(SPI, loraSpiSettings);
+#else
+        const int loraHost = portduino_config.lora_spi_dev_int;
+        if (loraHost < 0) {
+            // Path outside the host packing range. Its own instance keeps it off host 0,
+            // which the display may already have opened for a different device.
+            static HardwareSPI byNameSpi;
+            byNameSpi.begin(portduino_config.lora_spi_dev.c_str());
+            RadioLibHAL = new LockingArduinoHal(byNameSpi, loraSpiSettings);
+        } else {
+            HardwareSPI *loraSpi = HardwareSPI::getInstance((int8_t)loraHost);
+            loraSpi->begin(portduino_config.lora_spi_dev.c_str());
+            RadioLibHAL = new LockingArduinoHal(*loraSpi, loraSpiSettings);
+        }
+#endif
     }
     rIf =
         loraModuleInterface((LockingArduinoHal *)RadioLibHAL, portduino_config.lora_cs_pin.pin, portduino_config.lora_irq_pin.pin,
