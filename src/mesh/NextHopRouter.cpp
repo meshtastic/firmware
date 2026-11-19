@@ -470,7 +470,11 @@ int32_t NextHopRouter::doRetransmissions()
         // Judged against the snapshot above, so one pass sees one instant and the 49.7 day wrap
         // can't stall retransmission.
         if (Throttle::deadlinePassedAt(now, p.nextTxMsec)) {
-            if (p.numRetransmissions == 0) {
+            if (iface && iface->findInTxQueue(getFrom(p.packet), p.packet->id)) {
+                // Previous attempt is still waiting in the radio TX queue; defer retry timer
+                // without enqueuing a duplicate copy, burning a retry attempt, or penalizing route health.
+                setNextTx(&p);
+            } else if (p.numRetransmissions == 0) {
                 if (isFromUs(p.packet)) {
                     LOG_DEBUG("Reliable send failed, return nak fr=0x%08x,to=0x%08x,id=0x%08x", p.packet->from, p.packet->to,
                               p.packet->id);
