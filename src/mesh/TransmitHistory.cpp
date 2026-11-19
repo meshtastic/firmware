@@ -1,7 +1,8 @@
 #include "TransmitHistory.h"
 #include "FSCommon.h"
-#include "RTC.h"
 #include "SPILock.h"
+#include "UptimeClock.h"
+#include "gps/RTC.h"
 #include <Throttle.h>
 
 #ifdef FSCom
@@ -81,20 +82,20 @@ void TransmitHistory::loadFromDisk()
 
 void TransmitHistory::setLastSentToMesh(uint16_t key)
 {
-    lastMillis[key] = millis();
+    lastMillis[key] = Time::skipZero(Time::getMillis());
     uint32_t now = getTime();
     if (now >= 2) {
         const uint8_t flags = (getRTCQuality() == RTCQualityNone) ? ENTRY_FLAG_BOOT_RELATIVE : ENTRY_FLAG_NONE;
         history[key] = makeStoredTimestamp(now, flags);
         dirty = true;
-        // Don't flush to disk on every transmit — flash has limited write endurance.
+        // Don't flush to disk on every transmit - flash has limited write endurance.
         // The in-memory lastMillis map handles throttle during normal operation.
         // Disk is flushed: before deep sleep (sleep.cpp) and periodically here,
         // throttled to at most once per 5 minutes. Always save the first time
         // after boot so a crash-reboot loop can't avoid persisting.
         if (lastDiskSave == 0 || !Throttle::isWithinTimespanMs(lastDiskSave, SAVE_INTERVAL_MS)) {
             if (saveToDisk()) {
-                lastDiskSave = millis();
+                lastDiskSave = Time::skipZero(Time::getMillis());
             }
         }
     }
@@ -151,7 +152,7 @@ uint32_t TransmitHistory::getLastSentAbsoluteMillis(uint32_t storedEpoch) const
         return 0;
     }
 
-    return millis() - msAgo;
+    return Time::skipZero(Time::getMillis() - msAgo);
 }
 
 uint32_t TransmitHistory::getLastSentBootRelativeMillis(uint32_t storedSeconds) const
@@ -167,7 +168,7 @@ uint32_t TransmitHistory::getLastSentBootRelativeMillis(uint32_t storedSeconds) 
         if (secondsAgo > BOOT_RELATIVE_RECOVERY_WINDOW_SEC) {
             return 0;
         }
-        return millis() - (secondsAgo * 1000);
+        return Time::skipZero(Time::getMillis() - (secondsAgo * 1000));
     }
 
     uint32_t secondsAhead = storedSeconds - now;
@@ -175,7 +176,7 @@ uint32_t TransmitHistory::getLastSentBootRelativeMillis(uint32_t storedSeconds) 
         return 0;
     }
 
-    return millis();
+    return Time::skipZero(Time::getMillis());
 }
 
 uint32_t TransmitHistory::getLastSentToMeshMillis(uint16_t key) const
@@ -189,7 +190,7 @@ uint32_t TransmitHistory::getLastSentToMeshMillis(uint16_t key) const
     // Fall back to epoch conversion (loaded from disk after reboot)
     auto it = history.find(key);
     if (it == history.end() || it->second.seconds == 0) {
-        return 0; // No stored time — module has never sent
+        return 0; // No stored time - module has never sent
     }
 
     // Convert to a millis()-relative timestamp: millis() - msAgo.
@@ -271,7 +272,7 @@ void TransmitHistory::clear()
 }
 
 #else
-// No filesystem available — provide stub with in-memory tracking
+// No filesystem available - provide stub with in-memory tracking
 TransmitHistory *transmitHistory = nullptr;
 
 TransmitHistory *TransmitHistory::getInstance()
@@ -286,7 +287,7 @@ void TransmitHistory::loadFromDisk() {}
 
 void TransmitHistory::setLastSentToMesh(uint16_t key)
 {
-    lastMillis[key] = millis();
+    lastMillis[key] = Time::skipZero(Time::getMillis());
 }
 
 uint32_t TransmitHistory::getLastSentToMeshEpoch(uint16_t key) const

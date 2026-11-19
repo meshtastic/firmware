@@ -1,0 +1,25 @@
+// Let the unprivileged meshtasticd service user halt the machine, so the node's
+// "Power Off Host" action can take the computer down rather than only ending its own
+// process (which, under Restart=always, systemd would immediately undo).
+//
+// logind's own policy defaults this to auth_admin_keep for anything without an active
+// local session. meshtasticd is a system daemon with no session at all, so without a
+// rule the call comes back NotAuthorized and the menu entry silently does nothing.
+//
+// Scope is deliberately narrow: one user, and only the power-off actions. In particular
+// it does NOT grant power-off-ignore-inhibit, so a running inhibitor (a package upgrade,
+// a user-held lock) still blocks the halt the way it would for anyone else. Reboot,
+// suspend and hibernate are not granted either -- the node has no UI for them.
+//
+// power-off-multiple-sessions is included because logind escalates to that action when
+// anyone else is logged in, which on a node someone has SSH'd into is the normal case,
+// not the exception.
+polkit.addRule(function (action, subject) {
+    if (subject.user !== "meshtasticd") {
+        return;
+    }
+    if (action.id === "org.freedesktop.login1.power-off" ||
+        action.id === "org.freedesktop.login1.power-off-multiple-sessions") {
+        return polkit.Result.YES;
+    }
+});

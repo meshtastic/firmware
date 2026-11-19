@@ -29,17 +29,22 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #if __has_include("Melopero_RV3028.h")
 #include "Melopero_RV3028.h"
 #endif
-#if __has_include("SensorRtcHelper.hpp")
-#include "SensorRtcHelper.hpp"
-// SensorLib defines isBitSet as a macro; undefine it here to avoid conflicts
-// with the SparkFun MMC5983MA library, which has a class method of the same name.
-#ifdef isBitSet
-#undef isBitSet
-#endif
+#if __has_include(<PCF8xRTC.h>)
+#include <PCF8xRTC.h>
 #endif
 
 /* Offer chance for variant-specific defines */
 #include "variant.h"
+
+// Both PCF parts answer at the same address and differ only in register layout, so a variant
+// picks one by defining PCF8563_RTC or PCF85063_RTC to it.
+#if defined(PCF8563_RTC)
+#define PCF_RTC_ADDRESS PCF8563_RTC
+#define PCF_RTC_CHIP PCF8xRTC::PCF8563
+#elif defined(PCF85063_RTC)
+#define PCF_RTC_ADDRESS PCF85063_RTC
+#define PCF_RTC_CHIP PCF8xRTC::PCF85063
+#endif
 
 // -----------------------------------------------------------------------------
 // Display feature overrides
@@ -86,6 +91,20 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // Pre-hop drop handling (compile-time flag).
 #ifndef MESHTASTIC_PREHOP_DROP
 #define MESHTASTIC_PREHOP_DROP 1
+#endif
+
+// Use polynomial approximations for trigonometric functions to save flash.
+// Override with -D MESHTASTIC_TRIG_APPROX=0 for exact trig for special use cases e.g. close to Earth's poles.
+#ifndef MESHTASTIC_TRIG_APPROX
+#define MESHTASTIC_TRIG_APPROX 1
+#endif
+
+// Debug/test only: let a wired client (serial/TCP) inject frames into the RX pipeline as if they had
+// arrived over LoRa - a SIMULATOR_APP ToRadio packet is delivered through the real receive path on real
+// hardware (see MeshService::injectAsReceived). This forges over-the-air traffic, so it MUST stay 0 in
+// any shipping build; enable per-build with -D MESHTASTIC_ENABLE_FRAME_INJECTION=1.
+#ifndef MESHTASTIC_ENABLE_FRAME_INJECTION
+#define MESHTASTIC_ENABLE_FRAME_INJECTION 0
 #endif
 
 /// Convert a preprocessor name into a quoted string
@@ -191,6 +210,13 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define TX_GAIN_LORA 7, 8, 8, 8, 8, 8, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 8
 #endif
 
+#ifdef SEEED_WIO_TRACKER_L1_PRO_1W
+// Indexed by SX1262 output power in dBm, matching RadioInterface::limitPower().
+// TODO: verify against measured output.
+#define NUM_PA_POINTS 22
+#define TX_GAIN_LORA 10, 10, 10, 10, 10, 10, 10, 10, 10, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 10, 10
+#endif
+
 // Default system gain to 0 if not defined
 #ifndef NUM_PA_POINTS
 #define NUM_PA_POINTS 1
@@ -220,7 +246,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define SSD1306_ADDRESS_L 0x3C // Addr = 0
 #define SSD1306_ADDRESS_H 0x3D // Addr = 1
 
-#if defined(SEEED_WIO_TRACKER_L1) && !defined(SEEED_WIO_TRACKER_L1_EINK)
+#if (defined(SEEED_WIO_TRACKER_L1) || defined(SEEED_WIO_TRACKER_L1_PRO_1W)) && !defined(SEEED_WIO_TRACKER_L1_EINK)
 #define SSD1306_ADDRESS SSD1306_ADDRESS_H
 #define USE_SH1106
 #endif
@@ -239,6 +265,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define BBQ10_KB_ADDR 0x1F
 #define MPR121_KB_ADDR 0x5A
 #define TCA8418_KB_ADDR 0x34
+#define TSTC8_KB_V1_ADDR 0x6C // STC8H companion-MCU keypad on the ThinkNode-M9 V1
+#define TSTC8_KB_V2_ADDR 0x6D // STC8H companion-MCU keypad on the ThinkNode-M9 V2
 
 // -----------------------------------------------------------------------------
 // SENSOR
@@ -256,6 +284,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define QMC5883L_ADDR 0x0D
 #define HMC5883L_ADDR 0x1E
 #define MMC5983MA_ADDR 0x30
+#define QMC6309_ADDR 0x7C
 #define SHTC3_ADDR 0x70
 #define LPS22HB_ADDR 0x5C
 #define LPS22HB_ADDR_ALT 0x5D
@@ -286,7 +315,24 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define BQ25896_ADDR 0x6B
 #define LTR553ALS_ADDR 0x23
 #define SEN5X_ADDR 0x69
+#define SEN6X_ADDR 0x6B // same as QMI8658_ADDR and BQ25896_ADDR
 #define SCD30_ADDR 0x61
+#define ADS1X15_ADDR 0x48
+#define ADS1X15_ADDR_ALT1 0x49
+#define ADS1X15_ADDR_ALT2 0x4A
+#define ADS1X15_ADDR_ALT3 0x4B
+#define DS248X_ADDR 0x18      // same as MCP9808_ADDR, STK8BXX_ADDR and LIS3DH_ADDR
+#define DS248X_ADDR_ALT1 0x19 // same as LIS3DH_ADDR_ALT and BMA423_ADDR
+#define DS248X_ADDR_ALT2 0x1A // same as CST328_ADDR
+#define DS248X_ADDR_ALT3 0x1B
+#define DS248X_ADDR_ALT4 0x1C // same as QMC6310U_ADDR
+#define DS248X_ADDR_ALT5 0x1D // same as DFROBOT_RAIN_ADDR
+#define DS248X_ADDR_ALT6 0x1E // same as HMC5883L_ADDR
+#define DS248X_ADDR_ALT7 0x1F // same as BBQ10_KB_ADDR
+#define HM330X_ADDR 0x40
+#define AS3935_ADDR 0x03 // both address pins tied high, the common breakout-board default
+#define AS3935_ADDR_ALT 0x01
+#define AS3935_ADDR_ALT2 0x02
 
 // -----------------------------------------------------------------------------
 // ACCELEROMETER
@@ -313,6 +359,15 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // -----------------------------------------------------------------------------
 #define NCP5623_ADDR 0x38
 #define LP5562_ADDR 0x30
+#define LP5814_ADDR 0x2C
+
+// -----------------------------------------------------------------------------
+// Audio Codec
+// -----------------------------------------------------------------------------
+#if not __has_include("Codecs/es8311/ES8311.h")
+#define ES8311_ADDR 0x18 // same address as MCP9808_ADDR / STK8BXX_ADDR / LIS3DH_ADDR
+#endif
+#define ES7243E_ADDR 0x14
 
 // -----------------------------------------------------------------------------
 // Security
@@ -327,10 +382,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // -----------------------------------------------------------------------------
 // Touchscreen
 // -----------------------------------------------------------------------------
-#define FT6336U_ADDR 0x48
-#define CST328_ADDR 0x1A // same address as CST226SE
+#define FT6336U_ADDR 0x48 // same address as ADS1115
+#define CST328_ADDR 0x1A  // same address as CST226SE
 #define CHSC6X_ADDR 0x2E
 #define CST226SE_ADDR_ALT 0x5A
+#define GT911_ADDR 0x5D // same address as SFA30_ADDR / LPS22HB_ADDR_ALT
 
 // -----------------------------------------------------------------------------
 // RAK12035VB Soil Monitor (using RAK12023 up to 3 RAK12035 monitors can be connected)
@@ -395,7 +451,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #ifndef WIRE_INTERFACES_COUNT
 // Officially an NRF52 macro
 // Repurposed cross-platform to identify devices using Wire1
-#if defined(I2C_SDA1) || defined(PIN_WIRE1_SDA)
+// The SenseCAP Indicator has a second bus bridged to the RP2040 (I2CProxy)
+#if defined(I2C_SDA1) || defined(PIN_WIRE1_SDA) || defined(SENSECAP_INDICATOR)
 #define WIRE_INTERFACES_COUNT 2
 #elif HAS_WIRE
 #define WIRE_INTERFACES_COUNT 1
@@ -410,11 +467,19 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #ifndef HAS_ETHERNET
 #define HAS_ETHERNET 0
 #endif
+#if (defined(USE_WS5500) || defined(USE_CH390D)) && !HAS_ETHERNET
+#error "USE_WS5500 and USE_CH390D require HAS_ETHERNET"
+#endif
 #ifndef HAS_SCREEN
 #define HAS_SCREEN 0
 #endif
 #ifndef HAS_TFT
 #define HAS_TFT 0
+#endif
+// Opt-in: build the BaseUI games frame (Snake). Off by default; enable per build/variant with
+// -DBASEUI_HAS_GAMES=1 (requires HAS_SCREEN and a non-color BaseUI display).
+#ifndef BASEUI_HAS_GAMES
+#define BASEUI_HAS_GAMES 0
 #endif
 #ifndef HAS_WIRE
 #define HAS_WIRE 0
@@ -546,7 +611,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define MESHTASTIC_EXCLUDE_ADMIN 1
 #endif
 
-// // Turn off wifi even if HW supports wifi (webserver relies on wifi and is also disabled)
+// Store & Forward is implemented only for ESP32 and Portduino
+#if !defined(ARCH_ESP32) && !defined(ARCH_PORTDUINO) && !defined(MESHTASTIC_EXCLUDE_STOREFORWARD)
+#define MESHTASTIC_EXCLUDE_STOREFORWARD 1
+#endif
+
+// Turn off wifi even if HW supports wifi (webserver relies on wifi and is also disabled)
 #ifdef MESHTASTIC_EXCLUDE_WIFI
 #define MESHTASTIC_EXCLUDE_WEBSERVER 1
 #undef HAS_WIFI
@@ -576,20 +646,61 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define HAS_SCREEN 0
 #endif
 
+// -----------------------------------------------------------------------------
+// Motion sensor wake
+// -----------------------------------------------------------------------------
+
+/* The motion driver that owns this pin attaches the ISR. sleep.cpp reuses it as a
+   light-sleep wake source and PowerFSM attributes the resulting GPIO wake to motion.
+   Must stay below the exclusion cascade: MESHTASTIC_MINIMIZE_BUILD derives
+   MESHTASTIC_EXCLUDE_I2C above, and no motion driver is built when it is set. */
+#if !MESHTASTIC_EXCLUDE_I2C
+#if defined(BMA4XX_INT) && defined(HAS_BMA423)
+#define MOTION_WAKE_INT_PIN BMA4XX_INT
+#define MOTION_WAKE_INT_ACTIVE_HIGH 1
+#elif defined(BHI260AP_INT) && defined(HAS_BHI260AP)
+#define MOTION_WAKE_INT_PIN BHI260AP_INT
+#define MOTION_WAKE_INT_ACTIVE_HIGH 1
+#elif defined(STK8XXX_INT) && defined(HAS_STK8XXX)
+#define MOTION_WAKE_INT_PIN STK8XXX_INT
+#define MOTION_WAKE_INT_ACTIVE_HIGH 1
+#elif defined(ICM_20948_INT_PIN) && defined(HAS_ICM20948)
+#define MOTION_WAKE_INT_PIN ICM_20948_INT_PIN
+#define MOTION_WAKE_INT_ACTIVE_HIGH 0
+#elif defined(QMA_6100P_INT_PIN) && defined(HAS_QMA6100P)
+#define MOTION_WAKE_INT_PIN QMA_6100P_INT_PIN
+#define MOTION_WAKE_INT_ACTIVE_HIGH 0
+#endif
+#endif
+
+// Display mirroring to local clients (FromRadio.display_frame).
+#if HAS_SCREEN && !(MESHTASTIC_EXCLUDE_SCREEN_MIRROR)
+#define HAS_SCREEN_MIRROR 1
+#else
+#define HAS_SCREEN_MIRROR 0
+#endif
+
+// MUI streams RGB565 dirty rects and needs a device-ui carrying DisplayMirror, so it is opt-in.
+#if HAS_SCREEN_MIRROR && HAS_TFT && defined(MESHTASTIC_MUI_MIRROR)
+#define HAS_MUI_MIRROR 1
+#else
+#define HAS_MUI_MIRROR 0
+#endif
+
 #ifndef USE_ETHERNET_DEFAULT
 #define USE_ETHERNET_DEFAULT 0
 #endif
 
 // -----------------------------------------------------------------------------
-// MESHTASTIC_LOCKDOWN — runtime, client-toggleable hardening (nRF52 only)
+// MESHTASTIC_LOCKDOWN - runtime, client-toggleable hardening (nRF52 only)
 //
 // Lockdown/protect support is opt-in at build time. Builds that need it pass
 // -DMESHTASTIC_ENABLE_LOCKDOWN=1. When enabled on nRF52 (CC310 hardware
 // crypto), whether it is ACTIVE is decided entirely at runtime by
 // EncryptedStorage::isLockdownActive()
 // (== a passphrase has been provisioned, i.e. /prefs/.dek exists). A device
-// that has never been provisioned — or that the operator disabled from the
-// client app — behaves exactly like stock firmware: plaintext storage, no
+// that has never been provisioned - or that the operator disabled from the
+// client app - behaves exactly like stock firmware: plaintext storage, no
 // redaction, normal logging, normal display.
 //
 // The operator toggles lockdown from the client app:
@@ -597,7 +708,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //               firmware generates a DEK, encrypts the stored config, and
 //               authorizes the connection.
 //   on -> off : AdminMessage.lockdown_auth { disable=true } with the
-//               passphrase — decrypts storage back to plaintext and removes
+//               passphrase - decrypts storage back to plaintext and removes
 //               the DEK / token / monotonic-counter / backoff files, then
 //               reboots into normal mode. APPROTECT is the one thing that
 //               does NOT revert (see below).
@@ -607,20 +718,20 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // that genuinely cannot afford the ~tens-of-KB of crypto + access-control code
 // may also opt out with -DMESHTASTIC_EXCLUDE_LOCKDOWN=1.
 //
-//   MESHTASTIC_PHONEAPI_ACCESS_CONTROL — per-connection auth + redaction,
+//   MESHTASTIC_PHONEAPI_ACCESS_CONTROL - per-connection auth + redaction,
 //                                        gated at runtime on isLockdownActive()
-//   MESHTASTIC_ENCRYPTED_STORAGE       — AES-128-CTR + HMAC-SHA256 at-rest
-//   MESHTASTIC_ENABLE_APPROTECT        — UICR APPROTECT capability. The actual
+//   MESHTASTIC_ENCRYPTED_STORAGE       - AES-128-CTR + HMAC-SHA256 at-rest
+//   MESHTASTIC_ENABLE_APPROTECT        - UICR APPROTECT capability. The actual
 //                                        one-way burn happens at runtime, only
 //                                        once provisioned, only on non-vulnerable
 //                                        silicon, and is STICKY: disabling
 //                                        lockdown does NOT (cannot) reverse it.
 //
-// DEBUG_MUTE is intentionally NOT coupled to lockdown — a capable-but-off
+// DEBUG_MUTE is intentionally NOT coupled to lockdown - a capable-but-off
 // device must log normally. Define DEBUG_MUTE separately for a silent build.
 //
 // -DMESHTASTIC_LOCKDOWN_DEBUG=1 keeps the irreversible APPROTECT burn disabled
-// even when provisioned — for development so dev boards never lose SWD.
+// even when provisioned - for development so dev boards never lose SWD.
 // -----------------------------------------------------------------------------
 #if defined(ARCH_NRF52)
 #ifndef MESHTASTIC_ENABLE_LOCKDOWN
@@ -658,7 +769,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 // Override at build time. Suggested:
 //   carry device:        3600  (1h sessions, periodic re-auth from phone)
-//   tower / infra node:  0     (default — relies on token TTLs only)
+//   tower / infra node:  0     (default - relies on token TTLs only)
 //
 // A future LockdownAuth.max_session_seconds proto field will let the
 // client set this per-token; until that lands the build-time value is

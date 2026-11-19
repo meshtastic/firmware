@@ -112,6 +112,8 @@ static const uint8_t SCL = PIN_WIRE_SCL;
 #define ADC_MULTIPLIER 2.0
 #define BATTERY_PIN PIN_VBAT // PIN_A7
 #define AREF_VOLTAGE 3.6
+// We rely on the nrf52840 USB controller to tell us if we are hooked to a power supply
+#define NRF_APM
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  GPS L76KB
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -127,7 +129,7 @@ static const uint8_t SCL = PIN_WIRE_SCL;
 
 #define PIN_GPS_STANDBY D0
 
-// #define GPS_DEBUG
+// #define GPS_DEBUG 1
 //  #define GPS_EN D18 // P1.05
 #endif
 

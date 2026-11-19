@@ -1,5 +1,5 @@
 #include "configuration.h"
-#include <core_cm4.h>
+#include <nrf.h>
 
 #ifdef MESHTASTIC_ENCRYPTED_STORAGE
 #include "security/EncryptedStorage.h"
@@ -58,7 +58,7 @@ extern "C" void HardFault_Impl(uint32_t stack[])
     // RAM contents, zero the DEK / KEK / ephemeralKEK so they aren't sitting
     // in BSS for a fault dump to pick up. This is called from the asm naked
     // HardFault_Handler entry above, so we're effectively in the chip's
-    // exception context — keep this strictly to in-RAM scrubbing, no flash
+    // exception context - keep this strictly to in-RAM scrubbing, no flash
     // I/O, no logging.
 #ifdef MESHTASTIC_ENCRYPTED_STORAGE
     EncryptedStorage::secureWipeKeys();

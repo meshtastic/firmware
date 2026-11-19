@@ -7,9 +7,9 @@ MCU=""
 # Constants
 RESET_BAUD=1200
 FIRMWARE_OFFSET=0x00
-# Default littlefs* offset.
-OFFSET=0x300000
-# Default OTA Offset
+# Fallback offsets, used only when firmware metadata carries no partition table.
+# These track partition-table.csv; boards with their own table override them below.
+SPIFFS_OFFSET=0x300000
 OTA_OFFSET=0x260000
 
 # Determine the correct esptool command to use
@@ -122,8 +122,15 @@ if [[ -f "$FILENAME" && "$FILENAME" == *.factory.bin ]]; then
         jq . "$METAFILE"
         # Extract relevant fields from metadata
         if [[ $(jq -r '.part' "$METAFILE") != "null" ]]; then
-            OTA_OFFSET=$(jq -r '.part[] | select(.subtype == "ota_1") | .offset' "$METAFILE")
-            SPIFFS_OFFSET=$(jq -r '.part[] | select(.subtype == "spiffs") | .offset' "$METAFILE")
+            META_OTA_OFFSET=$(jq -r '.part[] | select(.subtype == "ota_1") | .offset' "$METAFILE")
+            META_SPIFFS_OFFSET=$(jq -r '.part[] | select(.subtype == "spiffs") | .offset' "$METAFILE")
+            # A partition table may omit either entry; keep the built-in default then.
+            if [[ -n "$META_OTA_OFFSET" && "$META_OTA_OFFSET" != "null" ]]; then
+                OTA_OFFSET="$META_OTA_OFFSET"
+            fi
+            if [[ -n "$META_SPIFFS_OFFSET" && "$META_SPIFFS_OFFSET" != "null" ]]; then
+                SPIFFS_OFFSET="$META_SPIFFS_OFFSET"
+            fi
         fi
         MCU=$(jq -r '.mcu' "$METAFILE")
     else
@@ -154,9 +161,9 @@ if [[ -f "$FILENAME" && "$FILENAME" == *.factory.bin ]]; then
     $ESPTOOL_CMD ${ESPTOOL_ERASE_FLASH}
     $ESPTOOL_CMD ${ESPTOOL_WRITE_FLASH} $FIRMWARE_OFFSET "${FILENAME}"
     echo "Trying to flash ${OTAFILE} at offset ${OTA_OFFSET}"
-    $ESPTOOL_CMD ${ESPTOOL_WRITE_FLASH} $OTA_OFFSET "${OTAFILE}"
-    echo "Trying to flash ${SPIFFSFILE}, at offset ${OFFSET}"
-    $ESPTOOL_CMD ${ESPTOOL_WRITE_FLASH} $OFFSET "${SPIFFSFILE}"
+    $ESPTOOL_CMD ${ESPTOOL_WRITE_FLASH} "$OTA_OFFSET" "${OTAFILE}"
+    echo "Trying to flash ${SPIFFSFILE}, at offset ${SPIFFS_OFFSET}"
+    $ESPTOOL_CMD ${ESPTOOL_WRITE_FLASH} "$SPIFFS_OFFSET" "${SPIFFSFILE}"
 
 else
     show_help

@@ -1,5 +1,10 @@
 #include "TouchScreenBase.h"
 #include "main.h"
+#include "mesh/Throttle.h"
+
+#if defined(T_DECK_PRO) && defined(MESHTASTIC_INCLUDE_INKHUD)
+void tDeckProTouchFeedback();
+#endif
 
 #if defined(RAK14014) && !defined(MESHTASTIC_EXCLUDE_CANNEDMESSAGES)
 #include "modules/CannedMessageModule.h"
@@ -8,6 +13,12 @@
 #ifndef TIME_LONG_PRESS
 #define TIME_LONG_PRESS 400
 #endif
+
+// The deferred-tap window is `TIME_LONG_PRESS - 50`, unsigned: below 50 it underflows to ~49.7 days.
+static_assert(TIME_LONG_PRESS >= 50, "TIME_LONG_PRESS must be at least 50ms: see the deferred-tap window below");
+
+// How long a held finger stays suppressed after a LONG_PRESS is reported.
+#define LONG_PRESS_REPEAT_SUPPRESS_MS 30000
 
 // Touch sampling cadence (milliseconds).
 // Can be overridden by board variants for faster touch panels.
@@ -32,12 +43,6 @@
 #define TOUCH_POLL_INTERVAL_RELEASE_FAST TOUCH_POLL_INTERVAL_RELEASE
 #endif
 
-// Ignore very short "finger lifted" glitches from noisy touch controllers.
-// A release is only accepted once we've seen no-touch for at least this duration.
-#ifndef TOUCH_RELEASE_GRACE_MS
-#define TOUCH_RELEASE_GRACE_MS 35
-#endif
-
 // move a minimum distance over the screen to detect a "swipe"
 #ifndef TOUCH_THRESHOLD_X
 #define TOUCH_THRESHOLD_X 30
@@ -49,7 +54,8 @@
 
 TouchScreenBase::TouchScreenBase(const char *name, uint16_t width, uint16_t height)
     : concurrency::OSThread(name), _display_width(width), _display_height(height), _first_x(0), _last_x(0), _first_y(0),
-      _last_y(0), _start(0), _lastTouchSeenMs(0), _tapped(false), _originName(name)
+      _last_y(0), _pressStartMs(0), _longPressSuppressed(false), _longPressSuppressUntilMs(0), _lastTouchSeenMs(0),
+      _tapped(false), _originName(name)
 {
 }
 
@@ -62,6 +68,15 @@ void TouchScreenBase::init(bool hasTouch)
         disable();
         this->setInterval(UINT_MAX);
     }
+}
+
+void TouchScreenBase::resetTouchState()
+{
+    _state = TOUCH_EVENT_CLEARED;
+    _action = TOUCH_ACTION_NONE;
+    _touchedOld = false;
+    _tapped = false;
+    _longPressSuppressed = false;
 }
 
 int32_t TouchScreenBase::runOnce()
@@ -95,12 +110,13 @@ int32_t TouchScreenBase::runOnce()
         if (touched) {
             hapticFeedback();
             _state = TOUCH_EVENT_OCCURRED;
-            _start = millis();
+            _pressStartMs = nowMs;
+            _longPressSuppressed = false;
             _first_x = x;
             _first_y = y;
         } else {
             _state = TOUCH_EVENT_CLEARED;
-            time_t duration = millis() - _start;
+            uint32_t duration = nowMs - _pressStartMs;
             x = _last_x;
             y = _last_y;
             this->setInterval(fastTapMode ? TOUCH_POLL_INTERVAL_RELEASE_FAST : TOUCH_POLL_INTERVAL_RELEASE);
@@ -115,20 +131,20 @@ int32_t TouchScreenBase::runOnce()
             if (adx > ady && adx > TOUCH_THRESHOLD_X) {
                 if (0 > dx) { // swipe right to left
                     e.touchEvent = static_cast<char>(TOUCH_ACTION_LEFT);
-                    LOG_DEBUG("action SWIPE: right to left");
+                    LOG_INPUT("action SWIPE: right to left");
                 } else { // swipe left to right
                     e.touchEvent = static_cast<char>(TOUCH_ACTION_RIGHT);
-                    LOG_DEBUG("action SWIPE: left to right");
+                    LOG_INPUT("action SWIPE: left to right");
                 }
             }
             // swipe vertical
             else if (ady > adx && ady > TOUCH_THRESHOLD_Y) {
                 if (0 > dy) { // swipe bottom to top
                     e.touchEvent = static_cast<char>(TOUCH_ACTION_UP);
-                    LOG_DEBUG("action SWIPE: bottom to top");
+                    LOG_INPUT("action SWIPE: bottom to top");
                 } else { // swipe top to bottom
                     e.touchEvent = static_cast<char>(TOUCH_ACTION_DOWN);
-                    LOG_DEBUG("action SWIPE: top to bottom");
+                    LOG_INPUT("action SWIPE: top to bottom");
                 }
             }
             // tap
@@ -154,13 +170,13 @@ int32_t TouchScreenBase::runOnce()
         if (_tapped) {
             _tapped = false;
             e.touchEvent = static_cast<char>(TOUCH_ACTION_TAP);
-            LOG_DEBUG("action TAP(%d/%d)", _last_x, _last_y);
+            LOG_INPUT("action TAP(%d/%d)", _last_x, _last_y);
         }
     } else {
-        if (_tapped && (time_t(millis()) - _start) > TIME_LONG_PRESS - 50) {
+        if (_tapped && Throttle::hasElapsed(_pressStartMs, TIME_LONG_PRESS - 50)) {
             _tapped = false;
             e.touchEvent = static_cast<char>(TOUCH_ACTION_TAP);
-            LOG_DEBUG("action TAP(%d/%d)", _last_x, _last_y);
+            LOG_INPUT("action TAP(%d/%d)", _last_x, _last_y);
         }
     }
 #else
@@ -168,16 +184,20 @@ int32_t TouchScreenBase::runOnce()
     if (_tapped) {
         _tapped = false;
         e.touchEvent = static_cast<char>(TOUCH_ACTION_TAP);
-        LOG_DEBUG("action TAP(%d/%d)", _last_x, _last_y);
+        LOG_INPUT("action TAP(%d/%d)", _last_x, _last_y);
     }
 #endif
 
     // fire LONG_PRESS event without the need for release
-    if (allowLongPress && touched && (time_t(millis()) - _start) > TIME_LONG_PRESS) {
-        // tricky: prevent reoccurring events and another touch event when releasing
-        _start = millis() + 30000;
+    // Armed and expired are asked separately; folding the deadline into the press stamp repeated
+    // LONG_PRESS every poll across the wrap on 64-bit time_t hosts.
+    const bool longPressSuppressed = _longPressSuppressed && !Throttle::deadlinePassed(_longPressSuppressUntilMs);
+    if (allowLongPress && touched && !longPressSuppressed && Throttle::hasElapsed(_pressStartMs, TIME_LONG_PRESS)) {
+        // A finger held past the window re-reports LONG_PRESS once per window, as before.
+        _longPressSuppressed = true;
+        _longPressSuppressUntilMs = nowMs + LONG_PRESS_REPEAT_SUPPRESS_MS;
         e.touchEvent = static_cast<char>(TOUCH_ACTION_LONG_PRESS);
-        LOG_DEBUG("action LONG PRESS(%d/%d)", _last_x, _last_y);
+        LOG_INPUT("action LONG PRESS(%d/%d)", _last_x, _last_y);
     }
 
     if (e.touchEvent != TOUCH_ACTION_NONE) {
@@ -192,10 +212,12 @@ int32_t TouchScreenBase::runOnce()
 
 void TouchScreenBase::hapticFeedback()
 {
-#ifdef T_WATCH_S3
+#if defined(T_WATCH_S3) || defined(T_WATCH_ULTRA)
     drv.setWaveform(0, 75);
     drv.setWaveform(1, 0); // end waveform
     drv.go();
+#elif defined(T_DECK_PRO) && defined(MESHTASTIC_INCLUDE_INKHUD)
+    tDeckProTouchFeedback();
 #endif
 }
 

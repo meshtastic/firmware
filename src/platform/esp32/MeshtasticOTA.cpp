@@ -1,5 +1,8 @@
-#include "MeshtasticOTA.h"
+// First, in its own block so the include sorter keeps it there: configuration.h supplies the
+// variant defines mesh-pb-constants.h needs (portduino resolves MAX_NUM_NODES at runtime).
 #include "configuration.h"
+
+#include "MeshtasticOTA.h"
 #ifdef ESP_PLATFORM
 #include <Preferences.h>
 #include <esp_ota_ops.h>
@@ -99,14 +102,14 @@ bool trySwitchToOTA()
     const esp_partition_t *part = getAppPartition();
 
     if (part == NULL) {
-        LOG_WARN("Unable to get app partition in preparation of OTA reboot");
+        LOG_WARN("Can't get app partition in preparation of OTA reboot");
         return false;
     }
 
     uint8_t result = esp_ota_set_boot_partition(part);
     // Partition and app checks should now be done in the AdminModule before this is called
     if (result != ESP_OK) {
-        LOG_WARN("Unable to switch to OTA partiton.  (Reason %d)", result);
+        LOG_WARN("Can't switch to OTA partition (reason %d)", result);
         return false;
     }
 

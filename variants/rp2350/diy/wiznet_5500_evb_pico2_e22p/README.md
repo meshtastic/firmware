@@ -1,4 +1,4 @@
-# WIZnet W5500-EVB-Pico2 + E22P-868M30S — Meshtastic Variant
+# WIZnet W5500-EVB-Pico2 + E22P-868M30S - Meshtastic Variant
 
 Meshtastic support for the **WIZnet W5500-EVB-Pico2**, a Raspberry Pi Pico 2 development board with an **integrated W5500 Ethernet PHY** on SPI0, paired with an external **EBYTE E22P-868M30S** LoRa module on SPI1.
 
@@ -11,7 +11,7 @@ This variant is hardware-twin of [`pico2_w5500_e22`](../diy/pico2_w5500_e22/) (s
 
 > ⚠️ Flashing a W5500-EVB-Pico2 with the `pico2_w5500_e22` env builds for a 4 MB flash target and can silently overflow the 2 MB available on the WIZnet PCB. Use this variant for the WIZnet board.
 
-The LoRa wiring and `variant.h` are shared with `diy/pico2_w5500_e22` via `-I variants/rp2350/diy/pico2_w5500_e22` — there is no duplicated pinout file.
+The LoRa wiring and `variant.h` are shared with `diy/pico2_w5500_e22` via `-I variants/rp2350/diy/pico2_w5500_e22` - there is no duplicated pinout file.
 
 ---
 
@@ -32,9 +32,9 @@ The W5500-EVB-Pico2 carries a smaller Q-SPI flash (2 MB) than a stock Pi Pico 2 
 
 | GPIO | Function                                |
 | ---- | --------------------------------------- |
-| GP24 | VBUS sense — HIGH when USB is connected |
+| GP24 | VBUS sense - HIGH when USB is connected |
 | GP25 | User LED (heartbeat)                    |
-| GP29 | ADC3 — VSYS/3, measures supply voltage  |
+| GP29 | ADC3 - VSYS/3, measures supply voltage  |
 
 ### W5500 Ethernet (SPI0, on-board)
 
@@ -49,7 +49,7 @@ The W5500-EVB-Pico2 carries a smaller Q-SPI flash (2 MB) than a stock Pi Pico 2 
 | VCC          | 3.3V        |
 | GND          | GND         |
 
-> All Ethernet pins are wired by the PCB — nothing to solder. SPI0 is reserved for the W5500.
+> All Ethernet pins are wired by the PCB - nothing to solder. SPI0 is reserved for the W5500.
 
 ### E22P-868M30S LoRa (SPI1, external)
 
@@ -62,19 +62,19 @@ The W5500-EVB-Pico2 carries a smaller Q-SPI flash (2 MB) than a stock Pi Pico 2 
 | RESET       | GP15        | Active LOW reset                                  |
 | DIO1        | GP14        | IRQ interrupt                                     |
 | BUSY        | GP2         | Module busy indicator                             |
-| RFEN        | GP3         | Combined LNA + PA enable — held HIGH at all times |
+| RFEN        | GP3         | Combined LNA + PA enable - held HIGH at all times |
 | TXEN        | ← DIO2      | Bridge on the module (see below)                  |
 | VCC         | 3.3V        | Add a 100 µF capacitor close to the module        |
-| GND         | GND         | —                                                 |
+| GND         | GND         | -                                                 |
 
 ---
 
-## E22**P** vs E22 — what changed
+## E22**P** vs E22 - what changed
 
 The E22**P**-868M30**S** is the newer revision of EBYTE's 30 dBm 868 MHz module. The pinout is interchangeable with the E22-900M30S but the RF switch control differs:
 
 - On the older E22-900M30S, **RXEN** enables the LNA and **TXEN** enables the PA (two separate pins).
-- On the E22**P**-868M30**S**, both functions are merged into a single **RFEN** pin acting as a global RF enable. RFEN must be held HIGH whenever the radio is active — both during RX and TX.
+- On the E22**P**-868M30**S**, both functions are merged into a single **RFEN** pin acting as a global RF enable. RFEN must be held HIGH whenever the radio is active - both during RX and TX.
 
 The firmware drives this with `SX126X_ANT_SW 3`, which sets GP3 (RFEN) HIGH once at boot and leaves it there. TXEN switching during transmit is still handled by the on-module DIO2 → TXEN bridge (see below).
 
@@ -102,10 +102,10 @@ With this bridge in place, `SX126X_DIO2_AS_RF_SWITCH` causes the SX1262 to drive
 pio run -e wiznet_5500_evb_pico2_e22p
 ```
 
-### Flash — BOOTSEL mode
+### Flash - BOOTSEL mode
 
 1. Hold the **BOOTSEL** button on the W5500-EVB-Pico2.
-2. Connect USB to the PC — it appears as a `RPI-RP2` storage drive.
+2. Connect USB to the PC - it appears as a `RPI-RP2` storage drive.
 3. Copy the `.uf2` file:
 
 ```text
@@ -140,7 +140,7 @@ Services available once connected:
 
 ## Technical notes
 
-### LoRa — RF control
+### LoRa - RF control
 
 | Define                         | Effect                                                      |
 | ------------------------------ | ----------------------------------------------------------- |
@@ -157,4 +157,4 @@ Services available once connected:
 
 ### HW_VENDOR
 
-Mapped to `meshtastic_HardwareModel_PRIVATE_HW` — no dedicated model exists in the Meshtastic protobuf for this hardware combination.
+Mapped to `meshtastic_HardwareModel_PRIVATE_HW` - no dedicated model exists in the Meshtastic protobuf for this hardware combination.

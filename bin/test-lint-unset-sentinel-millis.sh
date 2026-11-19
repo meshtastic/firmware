@@ -1,0 +1,481 @@
+#!/usr/bin/env bash
+# test-lint-unset-sentinel-millis.sh - self-test for bin/lint-unset-sentinel-millis.sh.
+#
+# The scanner has to tell an arming write apart from a read, a disarm, a shadowing local, a quoted
+# string and an already-fixed site. Each case below is a fixture: a snippet, the lines that must be
+# reported, and nothing else. Run it after any change to the rule.
+#
+# Exit 0 = all cases pass, 1 = at least one case failed.
+
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+LINT="$ROOT_DIR/bin/lint-unset-sentinel-millis.sh"
+
+WORK=$(mktemp -d)
+trap 'rm -rf "$WORK"' EXIT
+
+FAILURES=0
+
+# run_case <name> <expected lines, newline-separated or empty> <source>
+run_case() {
+	local name="$1" expect="$2" body="$3"
+	# The rule only looks at src/, and reports paths relative to $PWD, so the fixture has to live
+	# under a src/ directory that is also the working directory's child.
+	local dir="$WORK/case"
+	rm -rf "$dir"
+	mkdir -p "$dir/src"
+	printf '%s\n' "$body" >"$dir/src/fixture.cpp"
+
+	local got
+	got=$(cd "$dir" && "$LINT" src/fixture.cpp | awk -F: '{print $2}' | paste -sd, -)
+	local want
+	want=$(printf '%s' "$expect" | paste -sd, -)
+
+	if [[ $got == "$want" ]]; then
+		echo "PASS  $name"
+	else
+		echo "FAIL  $name: expected lines [$want], got [$got]"
+		FAILURES=$((FAILURES + 1))
+	fi
+}
+
+# run_case_h <name> <expected lines> <source> - same, but the fixture is a HEADER, so class-scope
+# cases can be pinned. A typed declaration means opposite things in a class body and a function body.
+run_case_h() {
+	local name="$1" expect="$2" body="$3"
+	local dir="$WORK/case_h"
+	rm -rf "$dir"
+	mkdir -p "$dir/src"
+	printf '%s\n' "$body" >"$dir/src/fixture.h"
+
+	local got want
+	got=$(cd "$dir" && "$LINT" src/fixture.h | awk -F: '{print $2}' | paste -sd, -)
+	want=$(printf '%s' "$expect" | paste -sd, -)
+
+	if [[ $got == "$want" ]]; then
+		echo "PASS  $name"
+	else
+		echo "FAIL  $name: expected lines [$want], got [$got]"
+		FAILURES=$((FAILURES + 1))
+	fi
+}
+
+# --- must be reported ---------------------------------------------------------
+
+run_case "bare millis() sum" "2" 'void f() {
+    rebootAtMsec = millis() + 5000;
+}'
+
+run_case "bare millis() stamp" "2" 'void f() {
+    shutdownAtMsec = millis();
+}'
+
+run_case "Time::getMillis() sum" "2" 'void f() {
+    enterDfuAtMsec = Time::getMillis() + 25;
+}'
+
+run_case "qualified and arrow targets" "2
+3" 'void f(MeshPacket *txp) {
+    NotificationRenderer::alertBannerUntil = millis() + durationMs;
+    txp->tx_after = millis() + delay;
+}'
+
+run_case "statement split across lines" "2" 'void f() {
+    ntp_renew =
+        millis() + 43200 * 1000;
+}'
+
+run_case "parenthesised sum" "2" 'void f() {
+    rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
+}'
+
+run_case "two writes on one line" "2
+2" 'void f() {
+    rebootAtMsec = millis() + 5; shutdownAtMsec = millis();
+}'
+
+run_case "code after a block comment on the same line" "2" 'void f() {
+    /* arm it */ pulseOffAt = millis() + durationMs;
+}'
+
+# --- must NOT be reported ----------------------------------------------------
+
+run_case "already fixed - timerEndsAtMillis" "" 'void f() {
+    rebootAtMsec = Time::timerEndsAtMillis(5000);
+}'
+
+run_case "already fixed - skipZero stamp" "" 'void f() {
+    shutdownAtMsec = Time::skipZero(Time::getMillis());
+}'
+
+run_case "already fixed - ternary keeping the 0 arm" "" 'void f() {
+    NotificationRenderer::alertBannerUntil = (durationMs == 0) ? 0 : Time::timerEndsAtMillis(durationMs);
+}'
+
+run_case "disarm" "" 'void f() {
+    rebootAtMsec = 0;
+    shutdownAtMsec = 0;
+}'
+
+run_case "reads and comparisons" "" 'void f() {
+    if (rebootAtMsec && Throttle::deadlinePassed(rebootAtMsec)) {}
+    if (shutdownAtMsec == 0 && millis() > 5) {}
+    if (tx_after != 0) {}
+}'
+
+run_case "shadowing local declaration" "" 'void f() {
+    uint32_t tx_after = millis() + 100;
+    unsigned long rxTimeMsec = millis();
+}'
+
+run_case "longer identifier containing a sentinel name" "" 'void f() {
+    myRebootAtMsec = millis() + 5000;
+    lastRxTimeMsec = millis();
+}'
+
+run_case "inside a line comment" "" 'void f() {
+    // rebootAtMsec = millis() + 5000;
+}'
+
+run_case "inside a block comment" "" 'void f() {
+/*
+    rebootAtMsec = millis() + 5000;
+*/
+}'
+
+run_case "inside a string literal" "" 'void f() {
+    LOG_DEBUG("rebootAtMsec = millis() + 5000");
+}'
+
+run_case "copy from another variable" "" 'void f() {
+    rebootAtMsec = otherDeadline;
+}'
+
+run_case "compound assignment" "" 'void f() {
+    rebootAtMsec += millis();
+}'
+
+# A field that is simply not on the list, and a local that never persists. nagCycleCutoff is NOT
+# used as the example here: it is off the list because its exemption was rejected, not because 0 is
+# safe for it, so pinning it as a negative fixture would encode the opposite of what the header says.
+run_case "unlisted field and a local deadline" "" 'void f() {
+    someUnrelatedDeadline = millis() + durationMs;
+    const uint32_t deadline = millis() + BODY_TIMEOUT_MS;
+}'
+
+# --- opt-out comments --------------------------------------------------------
+
+run_case "opt-out on the same line" "" 'void f() {
+    lastSort = millis(); // unset-sentinel-ok: sortingIsPaused gates it, 0 is legal
+}'
+
+run_case "opt-out on the line above" "" 'void f() {
+    // unset-sentinel-ok: busyTx carries the armed state
+    tx_after = millis() + d;
+}'
+
+run_case "opt-out above, separated by more comment lines" "" 'void f() {
+    // unset-sentinel-ok: a separate flag carries the armed state
+    // and here is some more explanation spilling onto another line
+    // and another
+    tx_after = millis() + d;
+}'
+
+run_case "opt-out in a block comment" "" 'void f() {
+    /* unset-sentinel-ok: a separate flag carries the armed state */
+    tx_after = millis() + d;
+}'
+
+run_case "opt-out in a multi-line block comment" "" 'void f() {
+    /*
+     * unset-sentinel-ok: a separate flag carries the armed state
+     */
+    tx_after = millis() + d;
+}'
+
+# A bare marker is reported rather than honoured, so nothing can be muted silently.
+run_case "bare opt-out with no reason" "2" 'void f() {
+    rebootAtMsec = millis() + 5000; // unset-sentinel-ok
+}'
+
+run_case "bare opt-out with a colon but nothing after it" "2" 'void f() {
+    rebootAtMsec = millis() + 5000; // unset-sentinel-ok:
+}'
+
+# Must not be mutable from data. A marker inside a string literal is not a comment.
+run_case "marker inside a string literal does not mute" "3" 'void f() {
+    LOG_DEBUG("unset-sentinel-ok: pretend this counts");
+    rebootAtMsec = millis() + 5000;
+}'
+
+run_case "marker in a trailing string on the same line does not mute" "2" 'void f() {
+    rebootAtMsec = millis() + 5000; LOG_DEBUG("unset-sentinel-ok: nope");
+}'
+
+# The opt-out is consumed by the statement it was written for and must not leak onward.
+run_case "opt-out does not leak to the next write" "3" 'void f() {
+    lastSort = millis(); // unset-sentinel-ok: legal here
+    rebootAtMsec = millis() + 5000;
+}'
+
+run_case "opt-out attached to an unrelated statement does not leak" "3" 'void f() {
+    int x = 1; // unset-sentinel-ok: nothing to do with the line below
+    rebootAtMsec = millis() + 5000;
+}'
+
+run_case "opt-out covers both writes on its own line only" "3" 'void f() {
+    tx_after = millis() + 1; lastSort = millis(); // unset-sentinel-ok: both legal
+    rebootAtMsec = millis() + 5000;
+}'
+
+# --- clock held in a local ---------------------------------------------------
+#
+# The commonest shape in the tree: one `now = millis()` at the top of a runOnce(), then several
+# writes from it. Without these the rule is blind to every such field and listing one buys nothing.
+
+run_case "stamp copied from a tainted local" "3" 'void f() {
+    unsigned long now = millis();
+    rebootAtMsec = now;
+}'
+
+run_case "deadline built from a tainted local" "3" 'void f() {
+    uint32_t now = Time::getMillis();
+    tx_after = now + delay;
+}'
+
+run_case "several writes from one tainted local" "3
+4
+5" 'void f() {
+    unsigned long now = millis();
+    pulseOffAt = now;
+    rebootAtMsec = now + 5000;
+    lastSort = now;
+}'
+
+run_case "taint carried one hop through another local" "4" 'void f() {
+    uint32_t now = millis();
+    uint32_t alsoNow = now;
+    lastSort = alsoNow;
+}'
+
+run_case "tainted local still fixable via the helpers" "" 'void f() {
+    unsigned long now = millis();
+    rebootAtMsec = Time::skipZero(now);
+}'
+
+run_case "tainted local with an opt-out" "" 'void f() {
+    unsigned long now = millis();
+    // unset-sentinel-ok: heldX carries the armed state
+    nextRepeatX = now + JOY_REPEAT_INTERVAL_MS;
+}'
+
+# --- the taint must NOT spread further than one function, one name -----------
+
+run_case "untainted local is not flagged" "" 'void f() {
+    uint32_t now = packet->rx_time;
+    rebootAtMsec = now;
+}'
+
+run_case "similarly named local is not tainted" "" 'void f() {
+    uint32_t now = millis();
+    rebootAtMsec = nowMs;
+}'
+
+run_case "taint dropped when the local is reassigned from something else" "" 'void f() {
+    uint32_t now = millis();
+    now = packet->rx_time;
+    rebootAtMsec = now;
+}'
+
+run_case "taint does not cross a function boundary" "" 'void f() {
+    uint32_t now = millis();
+}
+void g() {
+    rebootAtMsec = now;
+}'
+
+run_case "taint from a comparison is not recorded" "" 'void f() {
+    if (now == millis()) {}
+    rebootAtMsec = now;
+}'
+
+run_case "compound assignment does not taint" "" 'void f() {
+    now += millis();
+    rebootAtMsec = now;
+}'
+
+# --- one write must not be judged by its neighbour on the same line ----------
+#
+# rhs used to run to the end of the accumulated statement, so a neighbour decided this write.
+
+run_case "raw write is not excused by a helper call later on the line" "2" 'void f() {
+    rebootAtMsec = millis() + 5; shutdownAtMsec = Time::timerEndsAtMillis(10);
+}'
+
+run_case "safe copy is not blamed for a raw write later on the line" "2" 'void f() {
+    rebootAtMsec = otherDeadline; shutdownAtMsec = millis();
+}'
+
+run_case "helper call is not blamed for a raw write later on the line" "2" 'void f() {
+    rebootAtMsec = Time::skipZero(Time::getMillis()); shutdownAtMsec = millis();
+}'
+
+run_case "two raw writes on one line are both reported" "2
+2" 'void f() {
+    rebootAtMsec = millis() + 5; shutdownAtMsec = millis();
+}'
+
+run_case "two helper writes on one line are both quiet" "" 'void f() {
+    rebootAtMsec = Time::timerEndsAtMillis(5); shutdownAtMsec = Time::skipZero(Time::getMillis());
+}'
+
+run_case "multi-line statement still sees its whole right-hand side" "2" 'void f() {
+    ntp_renew =
+        millis() + 43200 * 1000;
+}'
+
+# --- stampMillis() is the read-side dodge, not a raw clock -------------------
+#
+# Its name ends in millis, so the clock-read test matches it. It must still count as safe, or every
+# site that normalises at the read and then stores the local gets flagged.
+
+run_case "storing a dodged local straight through is safe" "" 'void f() {
+    uint32_t now = Time::stampMillis();
+    lastSort = now;
+}'
+
+# A dodged value is safe to store or copy, NOT to do arithmetic on: stampMillis() guarantees only its
+# own result, and 0xFFFFEC78 + 5000 is exactly 0. That sum is what timerEndsAtMillis() is for.
+run_case "arithmetic on a dodged local can wrap back onto 0" "3" 'void f() {
+    uint32_t now = Time::stampMillis();
+    rebootAtMsec = now + 5000;
+}'
+
+run_case "arithmetic on a direct helper call is reported too" "2" 'void f() {
+    rebootAtMsec = Time::stampMillis() + 5000;
+}'
+
+run_case "an operator INSIDE the helper call is fine" "" 'void f() {
+    lastSort = Time::skipZero(Time::getMillis() - msAgo);
+}'
+
+run_case "copying a dodged local one more hop stays safe" "" 'void f() {
+    uint32_t now = Time::stampMillis();
+    uint32_t alsoNow = now;
+    lastSort = alsoNow;
+}'
+
+run_case "stampMillis directly in the write is safe" "" 'void f() {
+    lastSort = Time::stampMillis();
+}'
+
+run_case "a raw read after a safe one re-taints the local" "5" 'void f() {
+    uint32_t now = Time::stampMillis();
+    lastSort = now;
+    now = millis();
+    rebootAtMsec = now;
+}'
+
+# --- class scope versus function scope ---------------------------------------
+#
+# A typed declaration is a shadowing local inside a function, but AT CLASS SCOPE it is the field
+# itself, with an initializer that can read the clock - src/modules/SerialModule.h does that today.
+# Excusing the second as a local silently skipped a real arm site.
+
+run_case_h "class member initialised from the clock is reported" "2" 'class Foo {
+    uint32_t lastSort = millis();
+};'
+
+run_case_h "local inside an inline method is still excused" "6" 'class Foo {
+    void tick()
+    {
+        uint32_t lastSort = millis();
+    }
+    uint32_t lastDrawMsec = millis();
+};'
+
+run_case_h "member already routed through the helpers is quiet" "" 'class Foo {
+    uint32_t lastSort = Time::stampMillis();
+};'
+
+run_case_h "forward declaration does not open a class body" "3" 'class Foo;
+void f() {
+    lastSort = millis();
+}'
+
+# --- class scope must not swallow ordinary function bodies --------------------
+#
+# The keyword appears mid-line in shapes that are not class bodies, and a body opened on the same
+# line puts the statement inside a function. All three reported every typed local in the body.
+
+run_case "template <class T> on a function is not a class body" "" 'template <class T> void f(T x) {
+    uint32_t lastSort = millis();
+}'
+
+run_case "struct in a parameter list is not a class body" "" 'void g(struct Bar *b) {
+    uint32_t lastSort = millis();
+}'
+
+run_case_h "one-line inline method is a function body" "" 'class Foo {
+    void tick() { uint32_t lastSort = millis(); }
+};'
+
+run_case_h "class with a multi-line method: member yes, local no" "6" 'class Foo {
+    void tick()
+    {
+        uint32_t lastSort = millis();
+    }
+    uint32_t lastDrawMsec = millis();
+};'
+
+# note_taint gets the same per-write cut the judging path has.
+run_case "taint is not learned from a neighbour on the same line" "" 'void f() {
+    uint32_t a = 0; uint32_t now = packet->rx_time;
+    rebootAtMsec = now;
+}'
+
+# --- a class body that opens and closes on one line ---------------------------
+#
+# The trailing semicolon cannot be used to rule out a class header, because the whole body fits on
+# the line; and that line\'s own brace is the CLASS brace, not a function body.
+
+run_case_h "one-line class body reports its member initialiser" "1" 'class Foo { uint32_t lastSort = millis(); };'
+
+run_case_h "one-line class with a one-line method excuses the local" "" 'class Foo { void tick() { uint32_t lastSort = millis(); } };'
+
+run_case_h "forward declaration opens nothing" "3" 'class Foo;
+void f() {
+    lastSort = millis();
+}'
+
+# --- scope -------------------------------------------------------------------
+
+# test/ builds raw wrap values on purpose, so the rule must not reach into it.
+mkdir -p "$WORK/scope/test"
+printf 'void f() { rebootAtMsec = millis() + 5000; }\n' >"$WORK/scope/test/test_main.cpp"
+if [[ -z $(cd "$WORK/scope" && "$LINT" test/test_main.cpp) ]]; then
+	echo "PASS  test/ is out of scope"
+else
+	echo "FAIL  test/ is out of scope: expected no findings"
+	FAILURES=$((FAILURES + 1))
+fi
+
+# The helpers' own header must not report itself.
+mkdir -p "$WORK/self/src"
+printf 'void f() { rebootAtMsec = millis() + 5000; }\n' >"$WORK/self/src/UptimeClock.h"
+if [[ -z $(cd "$WORK/self" && "$LINT" src/UptimeClock.h) ]]; then
+	echo "PASS  src/UptimeClock.h is exempt"
+else
+	echo "FAIL  src/UptimeClock.h is exempt: expected no findings"
+	FAILURES=$((FAILURES + 1))
+fi
+
+echo
+if [[ $FAILURES -eq 0 ]]; then
+	echo "RESULT: PASS"
+	exit 0
+fi
+echo "RESULT: FAIL ($FAILURES case(s))"
+exit 1

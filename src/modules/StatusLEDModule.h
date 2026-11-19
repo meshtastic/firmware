@@ -17,7 +17,7 @@
 //   NEOPIXEL_STATUS_POWER_PIN   (required to enable the power/charge pixel)
 //   NEOPIXEL_STATUS_POWER_COLOR (optional, default red 0xFF0000)
 //   NEOPIXEL_STATUS_PAIRING_PIN / _COLOR  (default blue 0x0000FF)
-// Each pixel is a standalone 1-LED strand on its own GPIO — this mirrors how
+// Each pixel is a standalone 1-LED strand on its own GPIO - this mirrors how
 // boards like the LilyGo T-Echo-Card expose three independent WS2812s.
 #if defined(NEOPIXEL_STATUS_POWER_PIN) || defined(NEOPIXEL_STATUS_PAIRING_PIN)
 #include <Adafruit_NeoPixel.h>

@@ -8,7 +8,7 @@ BMX160Sensor::BMX160Sensor(ScanI2C::FoundDevice foundDevice) : MotionSensor::Mot
 #if !defined(MESHTASTIC_EXCLUDE_SCREEN)
 
 // screen is defined in main.cpp
-extern graphics::Screen *screen;
+extern std::unique_ptr<graphics::Screen> screen;
 #endif
 
 bool BMX160Sensor::init()
@@ -26,6 +26,13 @@ bool BMX160Sensor::init()
 
 int32_t BMX160Sensor::runOnce()
 {
+#ifdef MESHTASTIC_INCLUDE_INKHUD
+    if (stepTracker().isTracking()) {
+        sBmx160SensorData_t acceleration{};
+        sensor.getAllData(nullptr, nullptr, &acceleration);
+        sampleSteps(acceleration.x, acceleration.y, acceleration.z);
+    }
+#endif
 #if !defined(MESHTASTIC_EXCLUDE_SCREEN)
     sBmx160SensorData_t magAccel;
     sBmx160SensorData_t gAccel;
@@ -53,11 +60,11 @@ int32_t BMX160Sensor::runOnce()
 
     // If we're set to one of the inverted positions
     if (config.display.compass_orientation > meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_270) {
-        ma = FusionAxesSwap(ma, FusionAxesAlignmentNXNYPZ);
-        ga = FusionAxesSwap(ga, FusionAxesAlignmentNXNYPZ);
+        ma = FusionRemap(ma, FusionRemapAlignmentNXNYPZ);
+        ga = FusionRemap(ga, FusionRemapAlignmentNXNYPZ);
     }
 
-    float heading = FusionCompassCalculateHeading(FusionConventionNed, ga, ma);
+    float heading = FusionCompass(ga, ma, FusionConventionNed);
 
     heading = applyCompassOrientation(heading);
     if (screen)

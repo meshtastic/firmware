@@ -360,7 +360,10 @@ Panel_sdl::Panel_sdl(void) : Panel_FrameBufferBase()
 
 bool Panel_sdl::init(bool use_reset)
 {
-    initFrameBuffer(_cfg.panel_width * 4, _cfg.panel_height);
+    // Bail before registering the monitor: continuing with a failed framebuffer allocation
+    // would leave sdl_update() reading garbage line pointers.
+    if (!initFrameBuffer(_cfg.panel_width * 4, _cfg.panel_height))
+        return false;
     bool res = Panel_FrameBufferBase::init(use_reset);
 
     _list_monitor.push_back(&monitor);
@@ -647,6 +650,10 @@ bool Panel_sdl::initFrameBuffer(size_t width, size_t height)
     }
 
     _texturebuf = (rgb888_t *)heap_alloc_dma(width * height * sizeof(rgb888_t));
+    if (nullptr == _texturebuf) {
+        heap_free(lineArray);
+        return false;
+    }
 
     /// 8byte alignment;
     width = (width + 7) & ~7u;
@@ -655,6 +662,15 @@ bool Panel_sdl::initFrameBuffer(size_t width, size_t height)
     memset(lineArray, 0, height * sizeof(uint8_t *));
 
     uint8_t *framebuffer = (uint8_t *)heap_alloc_dma(width * height + 16);
+    if (nullptr == framebuffer) {
+        // Returning true here would leave _lines_buffer full of null+offset garbage pointers
+        // and turn the failure into a wild write on the next redraw.
+        heap_free(_texturebuf);
+        _texturebuf = nullptr;
+        heap_free(lineArray);
+        _lines_buffer = nullptr;
+        return false;
+    }
 
     auto fb = framebuffer;
     {

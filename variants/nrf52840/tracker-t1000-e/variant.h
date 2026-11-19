@@ -105,7 +105,6 @@ extern "C" {
 #define LR11X0_DIO_AS_RF_SWITCH
 
 #define HAS_GPS 1
-#define GNSS_AIROHA
 #define GPS_RX_PIN PIN_SERIAL1_RX
 #define GPS_TX_PIN PIN_SERIAL1_TX
 
@@ -153,15 +152,6 @@ extern "C" {
 #define T1000X_LUX_PIN (0 + 29)      // P0.29/AIN5
 
 #define HAS_SCREEN 0
-
-// Enable Traffic Management Module for testing on T1000-E
-// NRF52840 has 256KB RAM - 1024 entries uses ~10KB
-#ifndef HAS_TRAFFIC_MANAGEMENT
-#define HAS_TRAFFIC_MANAGEMENT 1
-#endif
-#ifndef TRAFFIC_MANAGEMENT_CACHE_SIZE
-#define TRAFFIC_MANAGEMENT_CACHE_SIZE 1024
-#endif
 
 #ifdef __cplusplus
 }

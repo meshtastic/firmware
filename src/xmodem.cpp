@@ -50,12 +50,34 @@
 
 #include "xmodem.h"
 #include "SPILock.h"
+#include <cstring>
 
 #ifdef FSCom
 
 XModemAdapter xModem;
 
 XModemAdapter::XModemAdapter() {}
+
+bool XModemAdapter::isValidFilename(const char *name)
+{
+    if (!name || name[0] == '\0')
+        return false;
+    const bool driveLetter = (name[0] >= 'A' && name[0] <= 'Z') || (name[0] >= 'a' && name[0] <= 'z');
+    if (driveLetter && name[1] == ':')
+        return false;
+    // Reject any ".." path component. Absolute paths and subdirectories are fine; they stay within
+    // the filesystem root, so only traversal out of it needs blocking.
+    for (const char *seg = name; *seg;) {
+        const char *slash = strpbrk(seg, "/\\");
+        const size_t len = slash ? (size_t)(slash - seg) : strlen(seg);
+        if (len == 2 && seg[0] == '.' && seg[1] == '.')
+            return false;
+        if (!slash)
+            break;
+        seg = slash + 1;
+    }
+    return true;
+}
 
 /**
  * Calculates the CRC-16 CCITT checksum of the given buffer.
@@ -102,7 +124,7 @@ void XModemAdapter::sendControl(meshtastic_XModem_Control c)
     packetReady.notifyObservers(packetno);
 }
 
-meshtastic_XModem XModemAdapter::getForPhone()
+const meshtastic_XModem &XModemAdapter::getForPhone() const
 {
     return xmodemStore;
 }
@@ -117,13 +139,47 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
     switch (xmodemPacket.control) {
     case meshtastic_XModem_Control_SOH:
     case meshtastic_XModem_Control_STX:
+        if (xmodemPacket.seq == 0 && isReceiving && packetno != 0 && !acceptedWrappedSeq0) {
+            // A new transfer while one is in progress: the old one was interrupted (its client is gone). Abandon it,
+            // or every new transfer would be refused until a reboot. (Packet 0 is data only when the 16-bit packet
+            // number has wrapped, after 8 MB: packetno is then 0, or 1 for a retry of that packet.)
+            // A start the next step would refuse leaves the transfer in progress alone
+            char next[sizeof(filename)];
+            strncpy(next, (const char *)xmodemPacket.buffer.bytes, sizeof(next) - 1);
+            next[sizeof(next) - 1] = '\0';
+            if (!isValidFilename(next)) {
+                LOG_WARN("XModem: rejecting unsafe filename");
+                sendControl(meshtastic_XModem_Control_NAK);
+                break;
+            }
+            LOG_WARN("XModem: abandon the interrupted transfer of %s", filename);
+            spiLock->lock();
+            file.close();
+            bool removed = FSCom.remove(filename);
+            spiLock->unlock();
+            isReceiving = false;
+            if (!removed) {
+                // The partial file stays: the new transfer is refused, and the client can try again
+                LOG_ERROR("XModem: can't remove the partial file %s", filename);
+                sendControl(meshtastic_XModem_Control_NAK);
+                break;
+            }
+        }
         if ((xmodemPacket.seq == 0) && !isReceiving && !isTransmitting) {
             // NULL packet has the destination filename
             strncpy(filename, (const char *)xmodemPacket.buffer.bytes, sizeof(filename) - 1);
             filename[sizeof(filename) - 1] = '\0';
 
+            // The filename is attacker-controlled; refuse a ".." that could write/read/delete
+            // outside the filesystem root (real host paths on the posix daemon).
+            if (!isValidFilename(filename)) {
+                LOG_WARN("XModem: rejecting unsafe filename");
+                sendControl(meshtastic_XModem_Control_NAK);
+                break;
+            }
+
             if (xmodemPacket.control == meshtastic_XModem_Control_SOH) { // Receive this file and put to Flash
-                // FILE_O_WRITE on Adafruit_LittleFS is append, not truncate — remove first.
+                // FILE_O_WRITE on Adafruit_LittleFS is append, not truncate - remove first.
                 spiLock->lock();
                 if (FSCom.exists(filename))
                     FSCom.remove(filename);
@@ -134,6 +190,7 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
                     sendControl(meshtastic_XModem_Control_ACK);
                     isReceiving = true;
                     packetno = 1;
+                    acceptedWrappedSeq0 = false;
                     break;
                 }
                 LOG_WARN("XModem: open(%s, WRITE) failed", filename);
@@ -181,6 +238,7 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
                                  (int)xmodemPacket.seq, (int)xmodemPacket.buffer.size, (int)written);
                     }
                     sendControl(meshtastic_XModem_Control_ACK);
+                    acceptedWrappedSeq0 = (xmodemPacket.seq == 0);
                     packetno++;
                     break;
                 }
@@ -190,6 +248,9 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
             } else if (isTransmitting) {
                 // just received something weird.
                 sendControl(meshtastic_XModem_Control_CAN);
+                spiLock->lock();
+                file.close();
+                spiLock->unlock();
                 isTransmitting = false;
                 break;
             }

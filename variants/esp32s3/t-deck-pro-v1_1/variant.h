@@ -4,7 +4,7 @@
 #define PIN_EINK_DC 35
 #define PIN_EINK_RES 16
 #define PIN_EINK_SCLK 36
-#define PIN_EINK_MOSI 47
+#define PIN_EINK_MOSI 33
 #define TFT_BL 45 // option , default not backlight
 
 #define I2C_SDA SDA
@@ -35,7 +35,9 @@
 
 // Have SPI interface SD card slot
 #define HAS_SDCARD
+#ifndef MESHTASTIC_INCLUDE_INKHUD
 #define SDCARD_USE_SPI1
+#endif
 #define SPI_MOSI (33)
 #define SPI_SCK (36)
 #define SPI_MISO (47)
@@ -45,19 +47,30 @@
 
 // TCA8418 keyboard
 #define KB_BL_PIN 42
+#ifdef MESHTASTIC_INCLUDE_INKHUD
+#define KB_INT 15
+#define WAKE_ON_TOUCH
+#define SCREEN_TOUCH_INT CST328_PIN_INT
+#endif
 #define CANNED_MESSAGE_MODULE_ENABLE 1
 
-// microphone PCM5102A
-#define PCM5102A_SCK 47
-#define PCM5102A_DIN 17
-#define PCM5102A_LRCK 18
+// Optional PCM5102A audio board shares these pins with the 4G module.
+#ifdef T_DECK_PRO_AUDIO
+#define HAS_I2S
+#define DAC_I2S_BCK 7
+#define DAC_I2S_WS 9
+#define DAC_I2S_DOUT 8
+// The audio library stores MCLK as uint8_t; use unused modem RX instead of -1.
+#define DAC_I2S_MCLK 10
+#define AUDIO_RTTTL_SAMPLE_RATE 44100
+// ESP8266Audio's uint8_t gain wraps at 4.0.
+#define AUDIO_OUTPUT_GAIN 3.9f
+#define AUDIO_AMP_ENABLE(on) digitalWrite(MODEM_POWER_EN, (on) ? HIGH : LOW)
+#define AUDIO_AMP_SETTLE_MS 50
+#endif
 
 // LTR_553ALS light sensor
 #define HAS_LTR553ALS
-
-// gyroscope BHI260AP
-// #define BOARD_1V8_EN 38 //Deck-Pro remove 1.8v en pin
-#define HAS_BHI260AP
 
 // battery charger BQ25896
 #define HAS_PPM 1

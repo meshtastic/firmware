@@ -5,6 +5,10 @@
 #include "mesh-pb-constants.h"
 #include <Arduino.h>
 
+#if USERPREFS_BLOCK_POSITION_ON_EVENT_CHANNEL && !defined(USERPREFS_CHANNEL_0_PSK)
+#error "USERPREFS_BLOCK_POSITION_ON_EVENT_CHANNEL requires USERPREFS_CHANNEL_0_PSK"
+#endif
+
 /** A channel number (index into the channel table)
  */
 typedef uint8_t ChannelIndex;
@@ -59,6 +63,10 @@ class Channels
     /** The index of the primary channel */
     ChannelIndex getPrimaryIndex() const { return primaryIndex; }
 
+    /// Points primaryIndex at the PRIMARY channel, if there is one, without fixing anything up
+    /// (onConfigChanged() does that). Returns whether one was found.
+    bool resolvePrimaryIndex();
+
     ChannelIndex getNumChannels() { return channelFile.channels_count; }
 
     /// Called by NodeDB on initial boot when the radio config settings are unset.  Set a default single channel config.
@@ -95,6 +103,9 @@ class Channels
     // matches the current preset's name and PSK byte 1.
     bool isWellKnownChannel(ChannelIndex chIndex);
 
+    // Returns true if this channel's effective key matches USERPREFS_CHANNEL_0_PSK.
+    bool isEventChannel(ChannelIndex chIndex);
+
     // Returns true if we can be reached via a channel with the default settings given a region and modem preset
     bool hasDefaultChannel();
 
@@ -111,6 +122,18 @@ class Channels
     meshtastic_Channel &fixupChannel(ChannelIndex chIndex);
 
     int16_t getHash(ChannelIndex i) { return hashes[i]; }
+
+    /** The hash a channel would carry under another name, e.g. a blank-named one on another preset. -1 if invalid. */
+    int16_t hashFor(ChannelIndex chIndex, const char *name);
+
+    /** Return true if the channel has AEAD (authenticated encryption) enabled */
+    bool isAEADEnabled(ChannelIndex chIndex);
+
+    /**
+     * Return the key used for encrypting this channel (if channel is secondary and no key provided, use the primary channel's
+     * PSK)
+     */
+    CryptoKey getKey(ChannelIndex chIndex);
 
   private:
     /** Given a channel index, change to use the crypto key specified by that index
@@ -138,12 +161,6 @@ class Channels
      * Write default channels defined in UserPrefs
      */
     void initDefaultChannel(ChannelIndex chIndex);
-
-    /**
-     * Return the key used for encrypting this channel (if channel is secondary and no key provided, use the primary channel's
-     * PSK)
-     */
-    CryptoKey getKey(ChannelIndex chIndex);
 };
 
 /// Singleton channel table
@@ -153,8 +170,18 @@ extern Channels channels;
 static const uint8_t defaultpsk[] = {0xd4, 0xf1, 0xbb, 0x3a, 0x20, 0x29, 0x07, 0x59,
                                      0xf0, 0xbc, 0xff, 0xab, 0xcf, 0x4e, 0x69, 0x01};
 
+/// True if the user muted the source of this packet: the sender for a DM addressed to us,
+/// otherwise the channel it arrived on.
+bool isMutedForPacket(const meshtastic_MeshPacket &mp);
+
 /// True if a getKey()-resolved key offers no privacy: length 0 (off) or the public defaultpsk family. Pure; for tests.
 bool cryptoKeyIsPublic(const CryptoKey &key);
+
+/// True if channel `chIndex` in a raw ChannelFile is publicly decryptable (open / single-byte well-known
+/// index / defaultpsk family). Pure equivalent of Channels::usesPublicKey that operates on the on-disk
+/// struct directly, so it is callable before the `channels` singleton is initialized (e.g. during the
+/// NodeDB boot migration). Resolves a PSK-less SECONDARY against the PRIMARY channel's key. For tests.
+bool channelFileUsesPublicKey(const meshtastic_ChannelFile &cf, ChannelIndex chIndex);
 
 static const uint8_t eventpsk[] = {0x38, 0x4b, 0xbc, 0xc0, 0x1d, 0xc0, 0x22, 0xd1, 0x81, 0xbf, 0x36,
                                    0xb8, 0x61, 0x21, 0xe1, 0xfb, 0x96, 0xb7, 0x2e, 0x55, 0xbf, 0x74,

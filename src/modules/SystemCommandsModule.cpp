@@ -12,6 +12,7 @@
 #include "MeshService.h"
 #include "Module.h"
 #include "NodeDB.h"
+#include "UptimeClock.h"
 #include "main.h"
 #include "modules/AdminModule.h"
 #include "modules/ExternalNotificationModule.h"
@@ -59,10 +60,10 @@ int SystemCommandsModule::handleInputEvent(const InputEvent *event)
         if (!config.bluetooth.enabled) {
             disableBluetooth();
             IF_SCREEN(screen->showSimpleBanner("Bluetooth OFF\nRebooting", 3000));
-            rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 2000;
+            rebootAtMsec = Time::timerEndsAtMillis(DEFAULT_REBOOT_SECONDS * 2000);
         } else {
             IF_SCREEN(screen->showSimpleBanner("Bluetooth ON\nRebooting", 3000));
-            rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
+            rebootAtMsec = Time::timerEndsAtMillis(DEFAULT_REBOOT_SECONDS * 1000);
         }
 #else
         if (!config.bluetooth.enabled) {
@@ -70,7 +71,7 @@ int SystemCommandsModule::handleInputEvent(const InputEvent *event)
             IF_SCREEN(screen->showSimpleBanner("Bluetooth OFF", 3000));
         } else {
             IF_SCREEN(screen->showSimpleBanner("Bluetooth ON\nRebooting", 3000));
-            rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
+            rebootAtMsec = Time::timerEndsAtMillis(DEFAULT_REBOOT_SECONDS * 1000);
         }
 #endif
         return 0;
@@ -80,24 +81,36 @@ int SystemCommandsModule::handleInputEvent(const InputEvent *event)
 #if HAS_SCREEN
         messageStore.saveToFlash();
 #endif
-        rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
+        rebootAtMsec = Time::timerEndsAtMillis(DEFAULT_REBOOT_SECONDS * 1000);
         // runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
         return true;
     }
 
     switch (event->inputEvent) {
-        // GPS
+        // GPS, on its own or together with the buzzer
     case INPUT_BROKER_GPS_TOGGLE:
+    case INPUT_BROKER_PRIVACY_TOGGLE:
 #if !MESHTASTIC_EXCLUDE_GPS
         if (gps) {
-            if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED &&
-                config.position.fixed_position == false) {
+            const bool wasEnabled = config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED;
+            // toggleGpsMode() only moves between ENABLED and DISABLED, so leave the buzzer alone otherwise.
+            const bool withBuzzer = event->inputEvent == INPUT_BROKER_PRIVACY_TOGGLE &&
+                                    (wasEnabled || config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_DISABLED);
+            if (wasEnabled && config.position.fixed_position == false) {
                 nodeDB->clearLocalPosition();
                 nodeDB->saveToDisk();
             }
+            if (withBuzzer) // unmute first, so the confirmation beep is audible in both directions
+                config.device.buzzer_mode = meshtastic_Config_DeviceConfig_BuzzerMode_ALL_ENABLED;
             gps->toggleGpsMode();
-            const char *msg =
-                (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED) ? "GPS Enabled" : "GPS Disabled";
+            const bool nowEnabled = config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED;
+            if (withBuzzer) {
+                config.device.buzzer_mode = nowEnabled ? meshtastic_Config_DeviceConfig_BuzzerMode_ALL_ENABLED
+                                                       : meshtastic_Config_DeviceConfig_BuzzerMode_DISABLED;
+                nodeDB->saveToDisk(SEGMENT_CONFIG);
+            }
+            const char *msg = withBuzzer ? (nowEnabled ? "GPS + Buzzer\nEnabled" : "GPS + Buzzer\nDisabled")
+                                         : (nowEnabled ? "GPS Enabled" : "GPS Disabled");
             IF_SCREEN(screen->forceDisplay(); screen->showSimpleBanner(msg, 3000);)
         }
 #endif
@@ -113,18 +126,18 @@ int SystemCommandsModule::handleInputEvent(const InputEvent *event)
         return true;
     // Power control
     case INPUT_BROKER_SHUTDOWN:
-        shutdownAtMsec = millis();
+        shutdownAtMsec = Time::skipZero(Time::getMillis());
         return true;
     // factory reset
     case INPUT_BROKER_FACTORY_RST:
-        disableBluetooth();
         LOG_INFO("Initiate full factory reset");
         nodeDB->factoryReset(true);
+        disableBluetooth();
         // reboot(DEFAULT_REBOOT_SECONDS);
         LOG_INFO("Reboot in %d seconds", DEFAULT_REBOOT_SECONDS);
         if (screen)
             screen->showSimpleBanner("Rebooting...", 0); // stays on screen
-        rebootAtMsec = (DEFAULT_REBOOT_SECONDS < 0) ? 0 : (millis() + DEFAULT_REBOOT_SECONDS * 1000);
+        rebootAtMsec = (DEFAULT_REBOOT_SECONDS < 0) ? 0 : Time::timerEndsAtMillis(DEFAULT_REBOOT_SECONDS * 1000);
         return true;
 
     default:

@@ -17,10 +17,8 @@
 #define EXT_PWR_DETECT 12
 #define BATTERY_PIN 8
 #define ADC_CHANNEL ADC_CHANNEL_7
-
 #define ADC_MULTIPLIER 2.0
-
-#define OCV_ARRAY 4100, 4050, 3990, 3890, 3800, 3720, 3630, 3530, 3420, 3300, 3100
+#define OCV_ARRAY 4200, 4050, 3990, 3890, 3800, 3720, 3630, 3530, 3420, 3300, 3100
 
 #define PIN_BUZZER 9
 
@@ -37,17 +35,22 @@
 // PCF8563 RTC Module
 #define PCF8563_RTC 0x51
 
-// GPS pins
-#define GPS_SWITH 10
+// GPS: v1.0 has an L76K, v2.0 an AG3352. variant.cpp reads the revision from expander IO7 at boot.
 #define HAS_GPS 1
-#define GPS_L76K
-#define PIN_GPS_REINIT 13 // An output to reset L76K GPS. As per datasheet, low for > 100ms will reset the L76K
+#define PCA_PIN_GPS_VERSION 7 // strap: HIGH = v2.0 (AG3352), LOW = v1.0 (L76K)
+extern int m5HasAg3352;
 
-#define PIN_GPS_STANDBY 11 // An output to wake GPS, low means allow sleep, high means force wake
+// v2.0: AG3352 0.8V core rail enable. v1.0: must stay an input.
+#define PIN_GPS_0V8_EN 10
 
-#define GPS_TX_PIN 20 // This is for bits going TOWARDS the CPU
-#define GPS_RX_PIN 19 // This is for bits going TOWARDS the GPS
+// v1.0: L76K standby, low means allow sleep. v2.0: AG3352 RTC_INT, rests low, rising edge wakes from RTC mode.
+#define PIN_GPS_STANDBY 11
+#define GPS_RTC_INT 11
 
+// The GPS UART is crossed the other way on v1.0.
+#define GPS_TX_PIN (m5HasAg3352 ? 19 : 20)     // This is for bits going TOWARDS the GPS
+#define GPS_RX_PIN (m5HasAg3352 ? 20 : 19)     // This is for bits going TOWARDS the CPU
+#define PIN_GPS_SWITCH (m5HasAg3352 ? 18 : 10) // v1.0 senses the GPS switch on GPIO10
 #define GPS_THREAD_INTERVAL 50
 
 #define PIN_SERIAL1_RX GPS_TX_PIN
@@ -70,7 +73,8 @@
 
 #define USE_EINK
 // Note: this is really just backlight power
-#define PCA_PIN_EINK_EN 5 // This is the pin number on the GPIO expander
+#define PCA_PIN_EINK_EN 5         // This is the pin number on the GPIO expander
+#define GPIO_BACKLIGHT_DEFAULT_ON // matches the previous screen_brightness > 0 wake behaviour
 #define PIN_EINK_CS 39
 #define PIN_EINK_BUSY 42
 #define PIN_EINK_DC 40
@@ -79,7 +83,6 @@
 #define PIN_EINK_MOSI 45 // also called SDI
 
 // Controls power for all peripherals (eink + GPS + LoRa + Sensor)
-#define PIN_POWER_EN -1
 #define PCA_PIN_POWER_EN 4 // This is the pin number on the GPIO expander
 
 #define PIN_SPI_MISO 7
@@ -89,6 +92,7 @@
 #define BUTTON_PIN PIN_BUTTON1
 #define BUTTON_PIN_ALT PIN_BUTTON2
 #define ALT_BUTTON_WAKE
+#define BUTTON_NEED_PULLUP
 
 #define SERIAL_PRINT_PORT 0
 #endif

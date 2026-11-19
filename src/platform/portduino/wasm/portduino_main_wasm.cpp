@@ -1,6 +1,6 @@
 // WASM replacement for framework-portduino's cores/portduino/main.cpp.
 // The original uses argp (CLI parse), ftw/nftw (FS walk) and an internal
-// while(1){ loop(); usleep(loopDelay); } pump — none of which fit the browser.
+// while(1){ loop(); usleep(loopDelay); } pump - none of which fit the browser.
 //
 // Here: run the firmware setup() once from main(), then RETURN. JavaScript
 // drives the cooperative scheduler by calling wasm_loop_once() on a timer,
@@ -26,8 +26,8 @@ extern void portduinoSetup();
 extern void wasm_fs_mount(); // points portduinoVFS at /meshdata (portduino_glue_wasm.cpp)
 
 // Re-entrancy guard (defined in portduino_glue_wasm.cpp). True while the firmware
-// is executing setup()/loop() — including while it is Asyncify-suspended inside a
-// WebUSB transfer — so the wasm_* API/region entry points reject a mid-tick
+// is executing setup()/loop() - including while it is Asyncify-suspended inside a
+// WebUSB transfer - so the wasm_* API/region entry points reject a mid-tick
 // re-entry from JS instead of corrupting state or aborting Asyncify. The host is
 // expected to call them only between ticks; this is the safety net.
 extern "C" volatile bool g_wasm_in_firmware;
@@ -48,7 +48,7 @@ extern "C" EMSCRIPTEN_KEEPALIVE void wasm_setup()
 //
 // If you want the exact next-delay, expose it: have a small in-tree change make
 // loop() stash mainController.runOrDelay() in a global, or just poll fast (e.g.
-// JS setTimeout(_, 5)) — RX latency is bounded by pollMissedIrqs() each tick.
+// JS setTimeout(_, 5)) - RX latency is bounded by pollMissedIrqs() each tick.
 extern "C" EMSCRIPTEN_KEEPALIVE int wasm_loop_once()
 {
     g_wasm_in_firmware = true;
@@ -62,6 +62,6 @@ extern "C" EMSCRIPTEN_KEEPALIVE int wasm_loop_once()
 int main()
 {
     // INVOKE_RUN=0: the page calls wasm_setup() after wiring up Module.ch341.
-    printf("[meshnode] wasm loaded — set Module.ch341, then call wasm_setup()\n");
+    printf("[meshnode] wasm loaded - set Module.ch341, then call wasm_setup()\n");
     return 0;
 }

@@ -6,13 +6,13 @@
 #include "GPS.h"
 #endif
 #include "MeshService.h"
+#include "Power.h"
 #include "RadioLibInterface.h"
 #include "buzz.h"
 #include "input/InputBroker.h"
 #include "main.h"
 #include "modules/CannedMessageModule.h"
 #include "modules/ExternalNotificationModule.h"
-#include "power.h"
 #include "sleep.h"
 #ifdef ARCH_PORTDUINO
 #include "platform/portduino/PortduinoGlue.h"
@@ -102,7 +102,9 @@ bool ButtonThread::initButton(const ButtonConfig &config)
 #endif
     userButton.setPressMs(_longPressTime);
 
-    if (screen) {
+    // The 20ms window a screen normally gets closes before a second click can land, so boards
+    // binding double or multi click need the full one.
+    if (screen && _doublePress == INPUT_BROKER_NONE && _triplePress == INPUT_BROKER_NONE) {
         userButton.setClickMs(20);
     } else {
         userButton.setClickMs(BUTTON_CLICK_MS);
@@ -143,10 +145,8 @@ int32_t ButtonThread::runOnce()
         leadUpSequenceActive = false;
         resetLeadUpSequence();
     }
-#ifdef INPUT_DEBUG
     if (buttonCurrentlyPressed)
-        LOG_WARN("Button held for %u ms", millis() - buttonPressStartTime);
-#endif
+        LOG_INPUT("Button held for %u ms", millis() - buttonPressStartTime);
 
     // Progressive lead-up sound system
     if (!_suppressLeadUp && buttonCurrentlyPressed && (millis() - buttonPressStartTime) >= BUTTON_LEADUP_MS) {
@@ -225,9 +225,8 @@ int32_t ButtonThread::runOnce()
             break;
         }
 
-        case BUTTON_EVENT_DOUBLE_PRESSED: { // not wired in if screen detected
-            LOG_INFO("Double press!");
-
+        case BUTTON_EVENT_DOUBLE_PRESSED: { // only on boards binding ButtonConfig::doublePress
+            LOG_INPUT("Double press");
             // Reset combination tracking
             waitingForLongPress = false;
 
@@ -240,7 +239,7 @@ int32_t ButtonThread::runOnce()
         }
 
         case BUTTON_EVENT_MULTI_PRESSED: { // not wired in when screen is present
-            LOG_INFO("Mulitipress! %hux", multipressClickCount);
+            LOG_INPUT("Multipress! %hux", multipressClickCount);
 
             // Reset combination tracking
             waitingForLongPress = false;
@@ -279,7 +278,7 @@ int32_t ButtonThread::runOnce()
         // may wake the board immediately.
         case BUTTON_EVENT_LONG_RELEASED: {
 
-            LOG_INFO("LONG PRESS RELEASE AFTER %u MILLIS", millis() - buttonPressStartTime);
+            LOG_INPUT("LONG PRESS RELEASE AFTER %u MILLIS", millis() - buttonPressStartTime);
             // Require press started after boot holdoff to avoid phantom shutdown from floating pins
             if (millis() > 30000 && buttonPressStartTime > 30000 && _longLongPress != INPUT_BROKER_NONE &&
                 (millis() - buttonPressStartTime) >= _longLongPressTime && leadUpPlayed) {

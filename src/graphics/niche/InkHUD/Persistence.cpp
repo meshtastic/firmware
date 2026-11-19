@@ -1,12 +1,14 @@
 #ifdef MESHTASTIC_INCLUDE_INKHUD
 
 #include "./Persistence.h"
+#include <algorithm>
 
 using namespace NicheGraphics;
 
 // Load settings and latestMessage data
 void InkHUD::Persistence::loadSettings()
 {
+    const uint8_t maxTileCount = settings.userTiles.maxCount;
     // Load the InkHUD settings from flash, and check version number
     // We should only consider the version number if the InkHUD flashdata component reports that we *did* actually load flash data
     Settings loadedSettings;
@@ -15,6 +17,8 @@ void InkHUD::Persistence::loadSettings()
         settings = loadedSettings; // Version matched, replace the defaults with the loaded values
     else
         LOG_WARN("Settings version changed. Using defaults");
+    settings.userTiles.maxCount = maxTileCount;
+    settings.userTiles.count = std::clamp<uint8_t>(settings.userTiles.count, 1, maxTileCount);
 }
 
 // Rebuild the latestMessage cache from the global messageStore.
@@ -26,6 +30,10 @@ void InkHUD::Persistence::loadLatestMessage()
 
     int lastBroadcastPos = -1, lastDMPos = -1, pos = 0;
     for (const StoredMessage &m : messageStore.getLiveMessages()) {
+        if (!messageStore.isMessageVisible(m)) {
+            pos++;
+            continue;
+        }
         if (m.type == MessageType::BROADCAST) {
             latestMessage.broadcast = m;
             lastBroadcastPos = pos;

@@ -1,3 +1,9 @@
+// Deliberately does NOT include TestUtil.h. This suite is pure-function - no NodeDB, no router, no
+// sockets, no PKC - so the harness-wide guards there (no listening sockets, force_simradio clear)
+// would assert conditions it cannot reach, and initializeTestEnvironment()'s RTC and OSThread setup
+// would add portduino globals it otherwise never touches. Suite-level state cleanliness is still
+// checked from outside by bin/pio-test-isolate.sh, which wraps every suite regardless.
+#include "WaypointUtils.h"
 #include "meshUtils.h"
 #include <cstring>
 #include <unity.h>
@@ -16,7 +22,7 @@ void test_ascii_unchanged()
 
 void test_valid_2byte_unchanged()
 {
-    // "café" — é is C3 A9
+    // "café" - é is C3 A9
     char buf[16] = "caf\xC3\xA9";
     TEST_ASSERT_FALSE(sanitizeUtf8(buf, sizeof(buf)));
     TEST_ASSERT_EQUAL_STRING("caf\xC3\xA9", buf);
@@ -40,7 +46,7 @@ void test_valid_4byte_emoji_unchanged()
 
 void test_valid_mixed_unchanged()
 {
-    // "Hi 🌙!" — mix of ASCII and 4-byte
+    // "Hi 🌙!" - mix of ASCII and 4-byte
     char buf[16] = "Hi \xF0\x9F\x8C\x99!";
     TEST_ASSERT_FALSE(sanitizeUtf8(buf, sizeof(buf)));
     TEST_ASSERT_EQUAL_STRING("Hi \xF0\x9F\x8C\x99!", buf);
@@ -98,7 +104,7 @@ void test_overlong_2byte()
 
 void test_surrogate_half()
 {
-    // ED A0 80 encodes U+D800 (surrogate half — invalid in UTF-8)
+    // ED A0 80 encodes U+D800 (surrogate half - invalid in UTF-8)
     char buf[8] = "\xED\xA0\x80";
     TEST_ASSERT_TRUE(sanitizeUtf8(buf, sizeof(buf)));
     TEST_ASSERT_EQUAL_STRING("???", buf);
@@ -106,7 +112,7 @@ void test_surrogate_half()
 
 void test_5byte_sequence_rejected()
 {
-    // F8 80 80 80 80 — 5-byte sequence, not valid UTF-8
+    // F8 80 80 80 80 - 5-byte sequence, not valid UTF-8
     char buf[8] = "\xF8\x80\x80\x80\x80";
     TEST_ASSERT_TRUE(sanitizeUtf8(buf, sizeof(buf)));
     // F8 is invalid lead (>= 0xF8), each 0x80 is bare continuation
@@ -161,6 +167,19 @@ void test_above_max_codepoint()
     // U+110000 = F4 90 80 80 (just above maximum valid Unicode)
     char buf[8] = "\xF4\x90\x80\x80";
     TEST_ASSERT_TRUE(sanitizeUtf8(buf, sizeof(buf)));
+}
+
+void test_waypoint_codepoint_encoding()
+{
+    TEST_ASSERT_EQUAL_STRING("A", WaypointUtils::utf8FromCodepoint('A').c_str());
+    TEST_ASSERT_EQUAL_STRING("\xF0\x9F\x93\x8D", WaypointUtils::utf8FromCodepoint(0x1F4CD).c_str());
+}
+
+void test_waypoint_codepoint_rejects_invalid_scalars()
+{
+    TEST_ASSERT_TRUE(WaypointUtils::utf8FromCodepoint(0).empty());
+    TEST_ASSERT_TRUE(WaypointUtils::utf8FromCodepoint(0xD800).empty());
+    TEST_ASSERT_TRUE(WaypointUtils::utf8FromCodepoint(0x110000).empty());
 }
 
 // --- clampLongName: local 24-byte cap over wider wire buffers ---
@@ -231,6 +250,8 @@ void setup()
     RUN_TEST(test_zero_size);
     RUN_TEST(test_valid_max_codepoint);
     RUN_TEST(test_above_max_codepoint);
+    RUN_TEST(test_waypoint_codepoint_encoding);
+    RUN_TEST(test_waypoint_codepoint_rejects_invalid_scalars);
 
     // clampLongName
     RUN_TEST(test_clamp_long_name_short_unchanged);

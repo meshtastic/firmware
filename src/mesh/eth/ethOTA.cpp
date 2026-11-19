@@ -1,7 +1,9 @@
+#include "UptimeClock.h"
 #include "configuration.h"
 
 #if HAS_ETHERNET && defined(HAS_ETHERNET_OTA)
 
+#include "ethBoundedClient.h"
 #include "ethOTA.h"
 #include <ErriezCRC32.h>
 #include <SHA256.h>
@@ -39,7 +41,7 @@ static const uint32_t OTA_AUTH_COOLDOWN_MS = 5000; // 5s cooldown after failed a
 static const size_t OTA_NONCE_SIZE = 32;
 static const size_t OTA_HASH_SIZE = 32;
 
-// OTA PSK — override via USERPREFS_OTA_PSK in userPrefs.jsonc
+// OTA PSK - override via USERPREFS_OTA_PSK in userPrefs.jsonc
 // USERPREFS_OTA_PSK is stringified by PlatformIO (wrapped in quotes), so we
 // use a char[] and sizeof-1 to exclude the trailing NUL byte from the hash.
 #ifdef USERPREFS_OTA_PSK
@@ -96,10 +98,10 @@ static void computeAuthHash(const uint8_t *nonce, size_t nonceLen, const uint8_t
 /// Challenge-response authentication. Returns true if client is authenticated.
 static bool authenticateClient(EthernetClient &client)
 {
-    // Rate-limit after failed auth — close silently so the error byte is not
+    // Rate-limit after failed auth - close silently so the error byte is not
     // misinterpreted as part of the nonce by a re-trying client.
     if (lastAuthFailure != 0 && (millis() - lastAuthFailure) < OTA_AUTH_COOLDOWN_MS) {
-        LOG_WARN("ETH OTA: Auth cooldown active, rejecting connection");
+        LOG_WARN("ETH OTA: Auth cooldown, reject connection");
         client.stop();
         return false;
     }
@@ -119,7 +121,7 @@ static bool authenticateClient(EthernetClient &client)
     uint8_t clientHash[OTA_HASH_SIZE];
     if (!readExact(client, clientHash, OTA_HASH_SIZE)) {
         LOG_WARN("ETH OTA: Timeout reading auth response");
-        lastAuthFailure = millis();
+        lastAuthFailure = Time::skipZero(Time::getMillis());
         return false;
     }
 
@@ -136,11 +138,11 @@ static bool authenticateClient(EthernetClient &client)
     if (diff != 0) {
         LOG_WARN("ETH OTA: Authentication failed");
         client.write(OTA_ERR_AUTH);
-        lastAuthFailure = millis();
+        lastAuthFailure = Time::skipZero(Time::getMillis());
         return false;
     }
 
-    // Auth success — send ACK
+    // Auth success - send ACK
     client.write(OTA_ACK);
     LOG_INFO("ETH OTA: Authentication successful");
     return true;
@@ -179,14 +181,14 @@ static void handleOTAClient(EthernetClient &client)
         return;
     }
 
-    // Begin the update — this opens firmware.bin on LittleFS
+    // Begin the update - this opens firmware.bin on LittleFS
     if (!Update.begin(hdr.firmwareSize)) {
         LOG_ERROR("ETH OTA: Update.begin() failed, error=%u", Update.getError());
         client.write(OTA_ERR_BEGIN);
         return;
     }
 
-    // ACK the header — client can start sending firmware data
+    // ACK the header - client can start sending firmware data
     client.write(OTA_ACK);
 
     // Receive firmware in chunks
@@ -252,7 +254,7 @@ static void handleOTAClient(EthernetClient &client)
         return;
     }
 
-    // Finalize — this calls picoOTA.commit() which stages the update for the
+    // Finalize - this calls picoOTA.commit() which stages the update for the
     // bootloader
     if (!Update.end(true)) {
         LOG_ERROR("ETH OTA: Update.end() failed, error=%u", Update.getError());
@@ -260,12 +262,12 @@ static void handleOTAClient(EthernetClient &client)
         return;
     }
 
-    LOG_INFO("ETH OTA: Update staged successfully (%u bytes). Rebooting...", hdr.firmwareSize);
+    LOG_INFO("ETH OTA: Update staged (%u bytes). Rebooting", hdr.firmwareSize);
     client.write(OTA_OK);
-    client.flush();
+    ethFlush(client);
     delay(500);
 
-    // Reboot — the built-in bootloader will apply the update from LittleFS
+    // Reboot - the built-in bootloader will apply the update from LittleFS
     rp2040.reboot();
 }
 

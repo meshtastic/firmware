@@ -10,6 +10,12 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight, bool skipSaveNodeDb), 
 #include "esp_sleep.h"
 esp_sleep_wakeup_cause_t doLightSleep(uint64_t msecToWake);
 
+/// True while a USB host has the hardware USB-serial/JTAG console open. Light sleep powers the USJ
+/// pad down for its duration, so sleeping under a host costs the port until the board is power
+/// cycled - see lsIdle(). Always false on a target with no USJ console, or when the PHY is routed
+/// to TinyUSB instead.
+bool usbConsoleHostAttached();
+
 extern esp_sleep_source_t wakeCause;
 #endif
 
@@ -23,8 +29,18 @@ void initDeepSleep();
 
 void setCPUFast(bool on);
 
-/** return true if sleep is allowed right now */
-bool doPreflightSleep();
+/** return true if sleep is allowed right now
+ * @param deepSleep true when the hardware (radio) is about to be powered down (deep sleep or
+ * shutdown), false for a light sleep where the radio keeps running. Observers may veto more
+ * aggressively for deep sleep, e.g. while a LoRa transmission is still in flight.
+ */
+bool doPreflightSleep(bool deepSleep = false);
+
+/// When a power-saving module wants to deep sleep but doPreflightSleep() vetoes it (e.g. the
+/// radio is still transmitting), re-check this often, and give up waiting after this many
+/// attempts so a busy mesh can't keep the node awake forever
+static constexpr uint32_t PREFLIGHT_SLEEP_RETRY_MS = 1000;
+static constexpr uint32_t MAX_PREFLIGHT_SLEEP_DEFERRALS = 30;
 
 extern int bootCount;
 

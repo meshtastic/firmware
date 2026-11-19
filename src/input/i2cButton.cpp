@@ -5,13 +5,13 @@
 #if defined(M5STACK_UNITC6L)
 
 #include "MeshService.h"
+#include "Power.h"
 #include "RadioLibInterface.h"
 #include "buzz.h"
 #include "input/InputBroker.h"
 #include "main.h"
 #include "modules/CannedMessageModule.h"
 #include "modules/ExternalNotificationModule.h"
-#include "power.h"
 #include "sleep.h"
 #ifdef ARCH_PORTDUINO
 #include "platform/portduino/PortduinoGlue.h"
@@ -26,7 +26,7 @@ extern void i2c_read_byte(uint8_t addr, uint8_t reg, uint8_t *value);
 extern void i2c_write_byte(uint8_t addr, uint8_t reg, uint8_t value);
 
 #define PI4IO_M_ADDR 0x43
-#define getbit(x, y) ((x) >> (y)&0x01)
+#define getbit(x, y) ((x) >> (y) & 0x01)
 #define PI4IO_REG_IRQ_STA 0x13
 #define PI4IO_REG_IN_STA 0x0F
 #define PI4IO_REG_CHIP_RESET 0x01

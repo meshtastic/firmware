@@ -17,10 +17,12 @@
 #include "graphics/niche/InkHUD/Applets/User/Positions/PositionsApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/RecentsList/RecentsListApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/ThreadedMessage/ThreadedMessageApplet.h"
+#include "graphics/niche/InkHUD/Applets/User/Waypoints/WaypointListApplet.h"
 
 // Shared NicheGraphics components
 // --------------------------------
 #include "graphics/niche/Drivers/EInk/ZJY122250_0213BAAMFGN.h"
+#include "graphics/niche/Inputs/CardKbInput.h"
 #include "graphics/niche/Inputs/TwoButtonExtended.h"
 
 void setupNicheGraphics()
@@ -48,12 +50,13 @@ void setupNicheGraphics()
     inkhud->setDriver(driver);
 
     // Set how many FAST updates per FULL update
-    inkhud->setDisplayResilience(15);
+    // This panel does not ghost, so FULL refreshes are rare; no extra debt once over the limit
+    inkhud->setDisplayResilience(50, 1.0);
 
     // Select fonts
-    InkHUD::Applet::fontLarge = FREESANS_12PT_WIN1252;
-    InkHUD::Applet::fontMedium = FREESANS_9PT_WIN1252;
-    InkHUD::Applet::fontSmall = FREESANS_6PT_WIN1252;
+    InkHUD::Applet::fontLarge = FREESANS_12PT;
+    InkHUD::Applet::fontMedium = FREESANS_9PT;
+    InkHUD::Applet::fontSmall = FREESANS_6PT;
 
     // Customize default settings
     inkhud->persistence->settings.rotation = 1; // 90 degrees clockwise
@@ -74,10 +77,14 @@ void setupNicheGraphics()
     inkhud->addApplet("Channel 0", new InkHUD::ThreadedMessageApplet(0));        // -
     inkhud->addApplet("Channel 1", new InkHUD::ThreadedMessageApplet(1));        // -
     inkhud->addApplet("Positions", new InkHUD::PositionsApplet, true);           // Activated
+    inkhud->addApplet("Waypoints", new InkHUD::WaypointListApplet);              // -
     inkhud->addApplet("Recents List", new InkHUD::RecentsListApplet);            // -
     inkhud->addApplet("Heard", new InkHUD::HeardApplet, true, false, 0);         // Activated, no autoshow, default on tile 0
 
     inkhud->addApplet("Favorites Map", new InkHUD::FavoritesMapApplet, false, false); // -
+    // M5 CardKB on the Grove I2C port (if found at boot): before begin(), so its alignment screen is created
+    Inputs::CardKbInput::getInstance()->detect();
+
     //  Start running InkHUD
     inkhud->begin();
 
@@ -114,6 +121,8 @@ void setupNicheGraphics()
 
     // Begin handling button events
     buttons->start();
+
+    Inputs::CardKbInput::getInstance()->begin();
 }
 
 #endif

@@ -1,4 +1,4 @@
-// User-provided mbedTLS config — pulled in AFTER the default mbedtls_config.h
+// User-provided mbedTLS config - pulled in AFTER the default mbedtls_config.h
 // via -DMBEDTLS_USER_CONFIG_FILE in the variant's platformio.ini.
 //
 // We compile mbedtls source files straight out of pico-sdk on bare metal, so
@@ -7,13 +7,13 @@
 // abort with #error or #include <sys/socket.h>.
 //
 // Code paths that touch these symbols are gated by the same MBEDTLS_* macros,
-// so the linker simply drops the unreachable branches — no manual file
+// so the linker simply drops the unreachable branches - no manual file
 // exclusion in the build script.
 
 #pragma once
 
 // Entropy: entropy_poll.c does a hard `#error` on non-POSIX/non-Windows
-// platforms. Tell it to skip the platform-specific entropy plumbing — our
+// platforms. Tell it to skip the platform-specific entropy plumbing - our
 // cert module passes a custom f_rng (picoRand → get_rand_64) directly into
 // every mbedtls call that needs randomness, so we never invoke entropy_poll.
 #define MBEDTLS_NO_PLATFORM_ENTROPY
@@ -45,7 +45,7 @@
 // Chrome's ClientHello carries TLS 1.3 extensions (post-quantum key
 // shares, Encrypted ClientHello, etc.) that mbedtls tries to *parse*
 // during the initial ClientHello processing before deciding to
-// downgrade — and that parse crashes the board (no handshake state log
+// downgrade - and that parse crashes the board (no handshake state log
 // ever fires, the crash is inside the first mbedtls_ssl_handshake()
 // call). Removing the 1.3 code from the build sidesteps the parsers
 // entirely; mbedtls will tell Chrome "TLS 1.2 only" via the

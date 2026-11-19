@@ -35,7 +35,7 @@ bool shouldRedactDisplay()
 {
 #ifdef MESHTASTIC_ENCRYPTED_STORAGE
     // Lockdown not active (capable build, never provisioned or disabled):
-    // never redact the display — behave like stock firmware.
+    // never redact the display - behave like stock firmware.
     if (!EncryptedStorage::isLockdownActive())
         return false;
     if (!EncryptedStorage::isUnlocked())

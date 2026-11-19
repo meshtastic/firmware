@@ -18,8 +18,8 @@ void earlyInitVariant()
 
     // Program GT911 touch controller to I2C address 0x14 (GT911_SLAVE_ADDRESS_H) before
     // the I2C bus scan runs.  GPIO3 (INT) defaults LOW on ESP32-S3 cold boot, which would
-    // leave the GT911 at 0x5D (GT911_SLAVE_ADDRESS_L) — the same address as the SFA30
-    // air quality sensor — causing a false-positive SFA30 detection during the I2C scan.
+    // leave the GT911 at 0x5D (GT911_SLAVE_ADDRESS_L) - the same address as the SFA30
+    // air quality sensor - causing a false-positive SFA30 detection during the I2C scan.
     //
     // GT911 datasheet §4.3 "Address Selection":
     //   Pull INT HIGH before releasing RST → device latches address 0x14 (SLAVE_ADDRESS_H)

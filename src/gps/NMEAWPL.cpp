@@ -1,8 +1,27 @@
 #if !MESHTASTIC_EXCLUDE_GPS
 #include "NMEAWPL.h"
 #include "GeoCoord.h"
-#include "RTC.h"
+#include "gps/RTC.h"
+#include <string.h>
 #include <time.h>
+
+static uint32_t nmeaClamp(uint32_t len, size_t bufsz)
+{
+    if (len >= bufsz)
+        return bufsz > 0 ? (uint32_t)(bufsz - 1) : 0;
+    return len;
+}
+
+static uint32_t nmeaChecksum(const char *buf)
+{
+    uint32_t chk = 0;
+    const char *c = strchr(buf, '$');
+    if (c) {
+        for (c++; *c && *c != '*'; c++)
+            chk ^= (uint8_t)*c;
+    }
+    return chk;
+}
 
 /* -------------------------------------------
  *        1       2 3        4 5    6
@@ -21,33 +40,35 @@
 
 uint32_t printWPL(char *buf, size_t bufsz, const meshtastic_PositionLite &pos, const char *name, bool isCaltopoMode)
 {
+    if (bufsz == 0)
+        return 0;
+
     GeoCoord geoCoord(pos.latitude_i, pos.longitude_i, pos.altitude);
     char type = isCaltopoMode ? 'P' : 'N';
     uint32_t len = snprintf(buf, bufsz, "\r\n$G%cWPL,%02d%07.4f,%c,%03d%07.4f,%c,%s", type, geoCoord.getDMSLatDeg(),
                             (abs(geoCoord.getLatitude()) - geoCoord.getDMSLatDeg() * 1e+7) * 6e-6, geoCoord.getDMSLatCP(),
                             geoCoord.getDMSLonDeg(), (abs(geoCoord.getLongitude()) - geoCoord.getDMSLonDeg() * 1e+7) * 6e-6,
                             geoCoord.getDMSLonCP(), name);
-    uint32_t chk = 0;
-    for (uint32_t i = 1; i < len; i++) {
-        chk ^= buf[i];
-    }
-    len += snprintf(buf + len, bufsz - len, "*%02X\r\n", chk);
+    len = nmeaClamp(len, bufsz);
+    uint32_t chk = nmeaChecksum(buf);
+    len = nmeaClamp(len + snprintf(buf + len, bufsz - len, "*%02X\r\n", chk), bufsz);
     return len;
 }
 
 uint32_t printWPL(char *buf, size_t bufsz, const meshtastic_Position &pos, const char *name, bool isCaltopoMode)
 {
+    if (bufsz == 0)
+        return 0;
+
     GeoCoord geoCoord(pos.latitude_i, pos.longitude_i, pos.altitude);
     char type = isCaltopoMode ? 'P' : 'N';
     uint32_t len = snprintf(buf, bufsz, "$G%cWPL,%02d%07.4f,%c,%03d%07.4f,%c,%s", type, geoCoord.getDMSLatDeg(),
                             (abs(geoCoord.getLatitude()) - geoCoord.getDMSLatDeg() * 1e+7) * 6e-6, geoCoord.getDMSLatCP(),
                             geoCoord.getDMSLonDeg(), (abs(geoCoord.getLongitude()) - geoCoord.getDMSLonDeg() * 1e+7) * 6e-6,
                             geoCoord.getDMSLonCP(), name);
-    uint32_t chk = 0;
-    for (uint32_t i = 1; i < len; i++) {
-        chk ^= buf[i];
-    }
-    len += snprintf(buf + len, bufsz - len, "*%02X\r\n", chk);
+    len = nmeaClamp(len, bufsz);
+    uint32_t chk = nmeaChecksum(buf);
+    len = nmeaClamp(len + snprintf(buf + len, bufsz - len, "*%02X\r\n", chk), bufsz);
     return len;
 }
 /* -------------------------------------------
@@ -74,6 +95,9 @@ uint32_t printWPL(char *buf, size_t bufsz, const meshtastic_Position &pos, const
 
 uint32_t printGGA(char *buf, size_t bufsz, const meshtastic_Position &pos)
 {
+    if (bufsz == 0)
+        return 0;
+
     GeoCoord geoCoord(pos.latitude_i, pos.longitude_i, pos.altitude);
     time_t timestamp = pos.timestamp;
 
@@ -91,11 +115,9 @@ uint32_t printGGA(char *buf, size_t bufsz, const meshtastic_Position &pos)
         (abs(geoCoord.getLongitude()) - geoCoord.getDMSLonDeg() * 1e+7) * 6e-6, geoCoord.getDMSLonCP(), pos.fix_quality,
         pos.sats_in_view, pos.HDOP, geoCoord.getAltitude(), 'M', pos.altitude_geoidal_separation, 'M', 0, 0);
 
-    uint32_t chk = 0;
-    for (uint32_t i = 1; i < len; i++) {
-        chk ^= buf[i];
-    }
-    len += snprintf(buf + len, bufsz - len, "*%02X\r\n", chk);
+    len = nmeaClamp(len, bufsz);
+    uint32_t chk = nmeaChecksum(buf);
+    len = nmeaClamp(len + snprintf(buf + len, bufsz - len, "*%02X\r\n", chk), bufsz);
     return len;
 }
 
