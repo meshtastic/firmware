@@ -1705,13 +1705,13 @@ bool shouldArmFixHold(bool hasValidLocation, uint8_t prevFixQual, uint32_t fixHo
     return !hasValidLocation || prevFixQual == 0 || !fixHoldInForce(fixHoldEnds, threadIntervalMs);
 }
 
-/// TinyGPS++ commits a GGA field only when the sentence carried it, so a missing altitude stays absent instead of
-/// reading as 0 m. No header: test_gps_altitude declares the prototype itself.
-void setGgaAltitude(meshtastic_Position &p, TinyGPSAltitude &altitude, TinyGPSAltitude &geoid)
+/// TinyGPS++ commits a GGA field only when the sentence carried it and keeps the last one after that, so a field is
+/// present only while its last commit is younger than maxAgeMs. No header: test_gps_altitude declares the prototype.
+void setGgaAltitude(meshtastic_Position &p, TinyGPSAltitude &altitude, TinyGPSAltitude &geoid, uint32_t maxAgeMs)
 {
-    p.has_altitude = altitude.isValid();
-    p.has_altitude_hae = altitude.isValid();
-    p.has_altitude_geoidal_separation = geoid.isValid();
+    p.has_altitude = altitude.age() < maxAgeMs;
+    p.has_altitude_hae = p.has_altitude;
+    p.has_altitude_geoidal_separation = geoid.age() < maxAgeMs;
     p.altitude_geoidal_separation = geoid.meters();
     p.altitude_hae = altitude.meters() + p.altitude_geoidal_separation;
     p.altitude = altitude.meters();
@@ -2494,7 +2494,7 @@ bool GPS::lookForLocation()
     p.latitude_i = toDegInt(loc.lat);
     p.longitude_i = toDegInt(loc.lng);
 
-    setGgaAltitude(p, reader.altitude, reader.geoidHeight);
+    setGgaAltitude(p, reader.altitude, reader.geoidHeight, GPS_SOL_EXPIRY_MS);
 
     p.fix_quality = fixQual;
 #ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
