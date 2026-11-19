@@ -1,7 +1,7 @@
 #define PIN_BUZZER 11
 #define BATTERY_PIN 3
 #define ADC_MULTIPLIER 1.2
-#define ADC_CHANNEL ADC1_GPIO3_CHANNEL
+#define ADC_CHANNEL ADC_CHANNEL_2 // GPIO3 is ADC1 channel 2 on the ESP32-S3
 #define I2C_SCL 42
 #define I2C_SDA 2
 
