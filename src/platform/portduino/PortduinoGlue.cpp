@@ -1276,6 +1276,9 @@ bool loadConfig(const char *configPath)
                 }
             }
         }
+        if (yamlConfig["SerialModule"]) {
+            portduino_config.serial_module_path = yamlConfig["SerialModule"]["Path"].as<std::string>("");
+        }
         if (yamlConfig["GPIO"]["ExtraPins"]) {
             for (auto extra_pin : yamlConfig["GPIO"]["ExtraPins"]) {
                 portduino_config.extra_pins.push_back(pinMapping());

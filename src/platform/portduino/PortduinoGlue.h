@@ -223,6 +223,9 @@ extern struct portduino_config_struct {
     std::string gpsd_host = "";
     int gpsd_port = 2947;
 
+    // Serial module host tty
+    std::string serial_module_path = "";
+
     // I2C
     std::string i2cdev = "";
 
@@ -497,6 +500,12 @@ extern struct portduino_config_struct {
                 out << YAML::Key << "SerialPath" << YAML::Value << gps_serial_path;
             }
             out << YAML::EndMap; // GPS
+        }
+
+        if (!serial_module_path.empty()) {
+            out << YAML::Key << "SerialModule" << YAML::Value << YAML::BeginMap;
+            out << YAML::Key << "Path" << YAML::Value << serial_module_path;
+            out << YAML::EndMap; // SerialModule
         }
 
         if (i2cdev != "") {

@@ -121,6 +121,12 @@ GPS:
 #  ExtraPins:
 #    - 22
 
+### Serial module: the host tty it reads and writes, in place of rxd/txd pins.
+### A socat PTY pair gives a virtual port: socat pty,raw,echo=0,link=/tmp/mesh pty,raw,echo=0,link=/tmp/app
+
+#SerialModule:
+#  Path: /dev/ttyUSB1
+
 ### Specify I2C device, or leave blank for none
 
 I2C:
