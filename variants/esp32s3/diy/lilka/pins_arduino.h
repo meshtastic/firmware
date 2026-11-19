@@ -12,7 +12,9 @@ static const uint8_t MOSI = 21;
 static const uint8_t MISO = 47;
 static const uint8_t SCK = 14;
 
-static const uint8_t SCL = I2C_SCL;
-static const uint8_t SDA = I2C_SDA;
+static const uint8_t SCL = 42;
+static const uint8_t SDA = 2;
+
+static const uint8_t BAT_ADC_PIN = 3;
 
 #endif
