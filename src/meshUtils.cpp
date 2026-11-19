@@ -1,7 +1,6 @@
 #include "meshUtils.h"
 #include "configuration.h"
 #include "target_specific.h"
-#include <RadioLib.h>
 #include <string.h>
 
 /*
@@ -262,8 +261,12 @@ void clampLongName(char *longName)
     sanitizeUtf8(longName, MAX_LONG_NAME_BYTES + 1);
 }
 
+#ifndef RADIOLIB_NC
+#define RADIOLIB_NC (0xFFFFFFFF) // token-identical to RadioLib's, so a later include does not conflict
+#endif
+
 // Radio pins the variant wires up; reassigning one from config (e.g. as a UART) cuts off the radio.
-// int64_t fits -1 and RADIOLIB_NC; trailing -1 keeps it non-empty. No LORA_DIO2/3: radio-side pins, not MCU GPIOs.
+// int64_t fits -1 and RADIOLIB_NC; trailing -1 keeps it non-empty. No LORA_DIO2/3: often empty, never driven by us.
 static const int64_t radioPins[] = {
 #ifdef LORA_SCK
     LORA_SCK,
@@ -333,6 +336,135 @@ static const int64_t radioPins[] = {
 #endif
 #ifdef SX128X_TXEN
     SX128X_TXEN,
+#endif
+// Chip-specific names some variants use instead of LORA_*; gated like the radio factory, since an unused set may not expand.
+#if defined(USE_LR1110)
+#ifdef LR1110_SPI_SCK_PIN
+    LR1110_SPI_SCK_PIN,
+#endif
+#ifdef LR1110_SPI_MISO_PIN
+    LR1110_SPI_MISO_PIN,
+#endif
+#ifdef LR1110_SPI_MOSI_PIN
+    LR1110_SPI_MOSI_PIN,
+#endif
+#ifdef LR1110_SPI_NSS_PIN
+    LR1110_SPI_NSS_PIN,
+#endif
+#ifdef LR1110_IRQ_PIN
+    LR1110_IRQ_PIN,
+#endif
+#ifdef LR1110_NRESET_PIN
+    LR1110_NRESET_PIN,
+#endif
+#ifdef LR1110_BUSY_PIN
+    LR1110_BUSY_PIN,
+#endif
+#endif
+#if defined(USE_LR1120)
+#ifdef LR1120_SPI_SCK_PIN
+    LR1120_SPI_SCK_PIN,
+#endif
+#ifdef LR1120_SPI_MISO_PIN
+    LR1120_SPI_MISO_PIN,
+#endif
+#ifdef LR1120_SPI_MOSI_PIN
+    LR1120_SPI_MOSI_PIN,
+#endif
+#ifdef LR1120_SPI_NSS_PIN
+    LR1120_SPI_NSS_PIN,
+#endif
+#ifdef LR1120_IRQ_PIN
+    LR1120_IRQ_PIN,
+#endif
+#ifdef LR1120_NRESET_PIN
+    LR1120_NRESET_PIN,
+#endif
+#ifdef LR1120_BUSY_PIN
+    LR1120_BUSY_PIN,
+#endif
+#endif
+#if defined(USE_LR1121)
+#ifdef LR1121_SPI_SCK_PIN
+    LR1121_SPI_SCK_PIN,
+#endif
+#ifdef LR1121_SPI_MISO_PIN
+    LR1121_SPI_MISO_PIN,
+#endif
+#ifdef LR1121_SPI_MOSI_PIN
+    LR1121_SPI_MOSI_PIN,
+#endif
+#ifdef LR1121_SPI_NSS_PIN
+    LR1121_SPI_NSS_PIN,
+#endif
+#ifdef LR1121_IRQ_PIN
+    LR1121_IRQ_PIN,
+#endif
+#ifdef LR1121_NRESET_PIN
+    LR1121_NRESET_PIN,
+#endif
+#ifdef LR1121_BUSY_PIN
+    LR1121_BUSY_PIN,
+#endif
+#endif
+#if defined(USE_LR2021)
+#ifdef LR2021_SPI_SCK_PIN
+    LR2021_SPI_SCK_PIN,
+#endif
+#ifdef LR2021_SPI_MISO_PIN
+    LR2021_SPI_MISO_PIN,
+#endif
+#ifdef LR2021_SPI_MOSI_PIN
+    LR2021_SPI_MOSI_PIN,
+#endif
+#ifdef LR2021_SPI_NSS_PIN
+    LR2021_SPI_NSS_PIN,
+#endif
+#ifdef LR2021_IRQ_PIN
+    LR2021_IRQ_PIN,
+#endif
+#ifdef LR2021_NRESET_PIN
+    LR2021_NRESET_PIN,
+#endif
+#ifdef LR2021_BUSY_PIN
+    LR2021_BUSY_PIN,
+#endif
+#ifdef LR2021_POWER_EN
+    LR2021_POWER_EN,
+#endif
+#endif
+#ifdef RF95_RESET
+    RF95_RESET,
+#endif
+#ifdef RF95_DIO1
+    RF95_DIO1,
+#endif
+#ifdef RF95_RXEN
+    RF95_RXEN,
+#endif
+#ifdef RF95_TXEN
+    RF95_TXEN,
+#endif
+#ifdef SX126X_ANT_SW
+    SX126X_ANT_SW,
+#endif
+#ifdef LORA_PA_POWER
+    LORA_PA_POWER,
+#endif
+#ifdef LORA_KCT8103L_PA_CSD
+    LORA_KCT8103L_PA_CSD,
+#endif
+#ifdef LORA_KCT8103L_PA_CTX
+    LORA_KCT8103L_PA_CTX,
+#endif
+#ifdef LORA_GC1109_PA_EN
+    LORA_GC1109_PA_EN,
+#endif
+#ifdef LORA_GC1109_PA_TX_EN
+    LORA_GC1109_PA_TX_EN,
+#endif
+#ifdef PIO_UNIT_TESTING
+    UNIT_TEST_RADIO_PIN,
 #endif
     -1};
 

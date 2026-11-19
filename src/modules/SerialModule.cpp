@@ -174,6 +174,14 @@ int32_t SerialModule::runOnce()
     if (!moduleConfig.serial.enabled)
         return disable();
 
+    // A config saved before the pin check existed would take the radio's pins and boot-loop the node
+    if ((moduleConfig.serial.rxd && isRadioPin(moduleConfig.serial.rxd)) ||
+        (moduleConfig.serial.txd && isRadioPin(moduleConfig.serial.txd))) {
+        LOG_ERROR("Serial module not started: RX/TX pin %u/%u overlaps the LoRa radio", (unsigned)moduleConfig.serial.rxd,
+                  (unsigned)moduleConfig.serial.txd);
+        return disable();
+    }
+
     if (moduleConfig.serial.override_console_serial_port || (moduleConfig.serial.rxd && moduleConfig.serial.txd)) {
         if (firstTime) {
             // Interface with the serial peripheral from in here.

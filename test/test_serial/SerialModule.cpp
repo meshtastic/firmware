@@ -10,6 +10,7 @@ void tearDown(void) {}
 #ifdef ARCH_PORTDUINO
 #include "configuration.h"
 
+#include "meshUtils.h"
 #include "modules/SerialModule.h"
 
 // Test that empty configuration is valid.
@@ -122,6 +123,33 @@ void test_serialConfigVariousModesWithoutOverrideAreValid(void)
     TEST_ASSERT_TRUE(serialConfigIsValid(config));
 }
 
+// An enabled module whose RX or TX is a radio pin would take the pin off the radio, so it is rejected.
+void test_serialConfigRadioPinIsInvalidWhenEnabled(void)
+{
+    meshtastic_ModuleConfig_SerialConfig config = {.enabled = true, .rxd = UNIT_TEST_RADIO_PIN, .txd = 2};
+    TEST_ASSERT_FALSE(serialConfigIsValid(config));
+
+    config.rxd = 2;
+    config.txd = UNIT_TEST_RADIO_PIN;
+    TEST_ASSERT_FALSE(serialConfigIsValid(config));
+}
+
+// A disabled module never opens the UART, so the same pins must still save; that is how a user backs out.
+void test_serialConfigRadioPinIsValidWhenDisabled(void)
+{
+    meshtastic_ModuleConfig_SerialConfig config = {.enabled = false, .rxd = UNIT_TEST_RADIO_PIN, .txd = UNIT_TEST_RADIO_PIN};
+    TEST_ASSERT_TRUE(serialConfigIsValid(config));
+}
+
+// Pin 0 means "use the default pins", not GPIO 0, so it never counts as a radio pin.
+void test_serialConfigNonRadioPinsAreValid(void)
+{
+    meshtastic_ModuleConfig_SerialConfig config = {.enabled = true, .rxd = 2, .txd = 3};
+    TEST_ASSERT_TRUE(serialConfigIsValid(config));
+    TEST_ASSERT_FALSE(isRadioPin(0));
+    TEST_ASSERT_TRUE(isRadioPin(UNIT_TEST_RADIO_PIN));
+}
+
 void setup()
 {
     initializeTestEnvironment();
@@ -137,6 +165,9 @@ void setup()
     RUN_TEST(test_serialConfigWithOverrideConsoleTextMsgModeIsInvalid);
     RUN_TEST(test_serialConfigWithOverrideConsoleProtoModeIsInvalid);
     RUN_TEST(test_serialConfigVariousModesWithoutOverrideAreValid);
+    RUN_TEST(test_serialConfigRadioPinIsInvalidWhenEnabled);
+    RUN_TEST(test_serialConfigRadioPinIsValidWhenDisabled);
+    RUN_TEST(test_serialConfigNonRadioPinsAreValid);
     exit(UNITY_END());
 }
 #else
