@@ -675,6 +675,7 @@ bool MQTT::isValidConfig(const meshtastic_ModuleConfig_MQTTConfig &config, MQTTC
                 meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
                 if (cn) {
                     cn->level = meshtastic_LogRecord_Level_WARNING;
+                    cn->type = meshtastic_ClientNotification_NotificationType_MQTT_SERVER_UNREACHABLE;
                     cn->time = getValidTime(RTCQualityFromNet);
                     strncpy(cn->message, warning, sizeof(cn->message) - 1);
                     cn->message[sizeof(cn->message) - 1] = '\0';
@@ -691,6 +692,7 @@ bool MQTT::isValidConfig(const meshtastic_ModuleConfig_MQTTConfig &config, MQTTC
         meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
         if (cn) {
             cn->level = meshtastic_LogRecord_Level_ERROR;
+            cn->type = meshtastic_ClientNotification_NotificationType_MQTT_PROXY_TO_CLIENT_REQUIRED;
             cn->time = getValidTime(RTCQualityFromNet);
             strncpy(cn->message, warning, sizeof(cn->message) - 1);
             cn->message[sizeof(cn->message) - 1] = '\0'; // Ensure null termination
@@ -709,6 +711,7 @@ bool MQTT::isValidConfig(const meshtastic_ModuleConfig_MQTTConfig &config, MQTTC
         meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
         if (cn) {
             cn->level = meshtastic_LogRecord_Level_ERROR;
+            cn->type = meshtastic_ClientNotification_NotificationType_MQTT_DEFAULT_SERVER_PORT_INVALID;
             cn->time = getValidTime(RTCQualityFromNet);
             strncpy(cn->message, warning, sizeof(cn->message) - 1);
             cn->message[sizeof(cn->message) - 1] = '\0'; // Ensure null termination

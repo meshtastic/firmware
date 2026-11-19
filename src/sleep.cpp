@@ -37,7 +37,7 @@ esp_sleep_source_t wakeCause; // the reason we booted this time
 extern PCA95X5_CLS io;
 #endif
 
-#ifdef HAS_PPM
+#if defined(HAS_PPM) && !defined(T_DECK_PRO)
 #include <XPowersLib.h>
 extern XPowersPPM *PPM;
 #endif
@@ -338,7 +338,8 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false, bool skipSaveN
 #endif
 #endif
 
-#ifdef HAS_PPM
+// Keep T-Deck Pro battery power connected so BOOT can wake either revision from deep sleep.
+#if defined(HAS_PPM) && !defined(T_DECK_PRO)
     if (PPM) {
         // BQ25896 PMIC shutdown is a hard power-off state.
         // Only use it for "sleep forever" / explicit shutdown, because timed deep sleep
