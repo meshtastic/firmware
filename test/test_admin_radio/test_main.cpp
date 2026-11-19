@@ -723,8 +723,11 @@ static void test_clampLoadedLoraConfig_legacyDefaultPrimaryGetsThePresetSlot()
 
     nodeDB->clampLoadedLoraConfig();
 
-    TEST_ASSERT_EQUAL_UINT32(presetSlot, config.lora.channel_num);
+    // The bad pin is cleared, and the renamed primary resolves to the preset's slot, not hash("Default")
+    TEST_ASSERT_EQUAL_UINT32(0, config.lora.channel_num);
     TEST_ASSERT_EQUAL_STRING("", channelFile.channels[0].settings.name);
+    TEST_ASSERT_EQUAL_UINT32(presetSlot,
+                             RadioInterface::resolveFrequencySlot(config.lora, channelFile.channels[0].settings.name));
 }
 
 static void test_clampConfigLora_customBwTooWideClampedToDefaultBw()
