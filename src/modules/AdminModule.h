@@ -45,6 +45,7 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
     static constexpr uint32_t EDIT_TRANSACTION_IDLE_MS = 60 * 1000;
     uint32_t editTransactionActivityMs = 0; // millis() of the last save this transaction deferred
     int deferredEditSegments = 0;           // segments that transaction has touched but not yet saved
+    bool requestSavedRadioChange = false;   // the request being handled deferred a radio change; its reply gates it
     /// Retire an open edit transaction whose client stopped talking, persisting what it applied.
     void expireStaleEditTransaction();
 #ifdef PIO_UNIT_TESTING

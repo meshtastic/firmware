@@ -17,8 +17,9 @@
  *  8. When an admin save retunes the radio: AdminModule::saveChanges() saves through
  *     MeshService::reloadConfig(saveWhat, true), and the channel re-hash and retune wait in
  *     MeshService::applyDeferredRadioConfig() until the reply registered through
- *     awaitAckBeforeRadioConfig() is acked (with none registered, until the TX queue has drained), or
- *     RADIO_CONFIG_DEFER_MAX_MS has passed; Power::rebootIsDue() holds a commit's reboot meanwhile.
+ *     awaitAckBeforeRadioConfig() is acked (with none registered, or one that never entered the
+ *     retransmission table, until the TX queue has drained), or RADIO_CONFIG_DEFER_MAX_MS after the
+ *     first save has passed; Power::rebootIsDue() holds a commit's reboot meanwhile.
  *     The admin's reply is queued only after the handler returns, so it must leave on the settings
  *     the requester is still listening on. Retuning at save time sends that reply on the new
  *     preset/slot, where the requester never hears it, and the client reports a change that applied
@@ -1074,12 +1075,12 @@ static void replaceAdminRadioGlobals()
 // longjmped out of the test body before it could.
 static void dropRestoreCryptoStub();
 // Defined with the deferred-retune tests; same longjmp argument as the crypto stub.
-static void detachTxQueueStandIn();
+static void detachDeferredRetuneFixtures();
 
 static void restoreAdminRadioGlobals()
 {
     dropRestoreCryptoStub();
-    detachTxQueueStandIn();
+    detachDeferredRetuneFixtures();
     rebootAtMsec = savedRebootAtMsec;
     nodeInfoModule = savedNodeInfoModule;
     nodeDB = savedNodeDB;
@@ -2542,11 +2543,17 @@ class TxQueueStandIn : public Observer<void *>
     int onNotify(void *arg) override { return busy ? 1 : 0; }
 };
 static TxQueueStandIn txQueueStandIn;
+// Counts retunes. File-scope for the same reason: a stack counter skipped by longjmp would stay on the
+// service's observer list and be read after its frame is gone when tearDown deletes the service.
+static ConfigChangedCounter retuneCounter;
 
-static void detachTxQueueStandIn()
+static void detachDeferredRetuneFixtures()
 {
     txQueueStandIn.unobserve(&preflightSleep);
     txQueueStandIn.busy = false;
+    if (service)
+        retuneCounter.unobserve(&service->configChanged);
+    retuneCounter.count = 0;
 }
 
 // The admin's reply sits in the TX queue. Time is moved by aging the deferral and the reboot deadline
@@ -2558,6 +2565,7 @@ static void primeDeferredRetuneTest()
     rebootAtMsec = 0;
     txQueueStandIn.busy = true;
     txQueueStandIn.observe(&preflightSleep);
+    retuneCounter.observe(&service->configChanged);
 }
 
 // The reboot commit_edit_settings scheduled, brought to its deadline.
@@ -2581,19 +2589,17 @@ static void sendSetLoraChannelNum(uint32_t channelNum)
 static void test_setConfigLora_retunesLiveOnceTxQueueDrains()
 {
     primeDeferredRetuneTest();
-    ConfigChangedCounter counter;
-    counter.observe(&service->configChanged);
 
     sendSetLoraChannelNum(21);
 
     TEST_ASSERT_EQUAL_UINT32(21, config.lora.channel_num);
-    TEST_ASSERT_EQUAL_INT_MESSAGE(0, counter.count, "retuned while the reply was still queued");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, retuneCounter.count, "retuned while the reply was still queued");
     service->applyDeferredRadioConfig();
-    TEST_ASSERT_EQUAL_INT_MESSAGE(0, counter.count, "retuned while the reply was still queued");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, retuneCounter.count, "retuned while the reply was still queued");
 
     txQueueStandIn.busy = false;
     service->applyDeferredRadioConfig();
-    TEST_ASSERT_EQUAL_INT_MESSAGE(1, counter.count, "never retuned after the TX queue drained");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, retuneCounter.count, "never retuned after the TX queue drained");
     TEST_ASSERT_FALSE(service->isRadioConfigDeferred());
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, rebootAtMsec, "a standalone LoRa set applies live, without a reboot");
 }
@@ -2602,21 +2608,19 @@ static void test_setConfigLora_retunesLiveOnceTxQueueDrains()
 static void test_commitEditSettings_rebootWaitsForTxQueue()
 {
     primeDeferredRetuneTest();
-    ConfigChangedCounter counter;
-    counter.observe(&service->configChanged);
 
     sendBeginEdit();
     sendSetLoraChannelNum(21);
     sendCommitEdit();
 
-    TEST_ASSERT_EQUAL_INT_MESSAGE(0, counter.count, "commit retuned while its reply was still queued");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, retuneCounter.count, "commit retuned while its reply was still queued");
     TEST_ASSERT_NOT_EQUAL_UINT32(0, rebootAtMsec);
     expireRebootDeadline();
     TEST_ASSERT_FALSE_MESSAGE(Power::rebootIsDue(), "reboot fired while the reply was still queued");
 
     txQueueStandIn.busy = false;
     service->applyDeferredRadioConfig();
-    TEST_ASSERT_EQUAL_INT(1, counter.count);
+    TEST_ASSERT_EQUAL_INT(1, retuneCounter.count);
     TEST_ASSERT_TRUE(Power::rebootIsDue());
 }
 
@@ -2625,8 +2629,6 @@ static void test_commitEditSettings_rebootWaitsForTxQueue()
 static void test_commitEditSettings_capReleasesRetuneAndReboot()
 {
     primeDeferredRetuneTest();
-    ConfigChangedCounter counter;
-    counter.observe(&service->configChanged);
 
     sendBeginEdit();
     sendSetLoraChannelNum(21);
@@ -2635,13 +2637,27 @@ static void test_commitEditSettings_capReleasesRetuneAndReboot()
     expireRebootDeadline();
     service->ageRadioConfigDeferralForTest(MeshService::RADIO_CONFIG_DEFER_MAX_MS - 1000);
     service->applyDeferredRadioConfig();
-    TEST_ASSERT_EQUAL_INT(0, counter.count);
+    TEST_ASSERT_EQUAL_INT(0, retuneCounter.count);
     TEST_ASSERT_FALSE(Power::rebootIsDue());
 
     service->ageRadioConfigDeferralForTest(1000);
     service->applyDeferredRadioConfig();
-    TEST_ASSERT_EQUAL_INT(1, counter.count);
+    TEST_ASSERT_EQUAL_INT(1, retuneCounter.count);
     TEST_ASSERT_TRUE(Power::rebootIsDue());
+}
+
+// A save while a deferral is active joins it. Restarting the cap's clock instead would let a client that
+// keeps saving before the queue drains hold the retune, and a commit's reboot, indefinitely.
+static void test_deferredRetune_repeatedSaveKeepsCapStart()
+{
+    primeDeferredRetuneTest();
+    service->reloadConfig(SEGMENT_CONFIG, true);
+    service->ageRadioConfigDeferralForTest(MeshService::RADIO_CONFIG_DEFER_MAX_MS - 1000);
+    service->reloadConfig(SEGMENT_CONFIG, true); // second save, queue still busy
+
+    service->ageRadioConfigDeferralForTest(1000);
+    service->applyDeferredRadioConfig();
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, retuneCounter.count, "a second save restarted the cap");
 }
 
 // Stands in for NextHopRouter's pending-retransmission table: our packet `id` is pending until acked.
@@ -2664,18 +2680,36 @@ static void test_deferredRetune_waitsForReplyAck()
     pendingReply->id = 0x1234;
     testRouter = pendingReply;
     router = pendingReply;
-    ConfigChangedCounter counter;
-    counter.observe(&service->configChanged);
 
     service->reloadConfig(SEGMENT_CONFIG, true);
     service->awaitAckBeforeRadioConfig(0x1234);
     service->applyDeferredRadioConfig();
-    TEST_ASSERT_EQUAL_INT_MESSAGE(0, counter.count, "retuned before the reply was acked");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, retuneCounter.count, "retuned before the reply was acked");
 
     txQueueStandIn.busy = true;
     pendingReply->acked = true;
     service->applyDeferredRadioConfig();
-    TEST_ASSERT_EQUAL_INT_MESSAGE(1, counter.count, "an acked reply waited on unrelated queued traffic");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, retuneCounter.count, "an acked reply waited on unrelated queued traffic");
+}
+
+// A reliable reply that never entered the pending table (no copy for retransmission when the packet pool
+// is exhausted) is only in the TX queue. Its absence from the table is not an ack: wait for the queue.
+static void test_deferredRetune_untrackedReplyWaitsForQueue()
+{
+    primeDeferredRetuneTest();
+    auto *noPending = new PendingReplyRouter();
+    noPending->acked = true; // never reports the reply pending
+    testRouter = noPending;
+    router = noPending;
+
+    service->reloadConfig(SEGMENT_CONFIG, true);
+    service->awaitAckBeforeRadioConfig(0x1234);
+    service->applyDeferredRadioConfig();
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, retuneCounter.count, "an untracked reply was taken as acked while still queued");
+
+    txQueueStandIn.busy = false;
+    service->applyDeferredRadioConfig();
+    TEST_ASSERT_EQUAL_INT(1, retuneCounter.count);
 }
 
 // An unnamed primary channel hashes the preset's name. Re-hashing at save time stamps the reply with the
@@ -3047,6 +3081,8 @@ void setup()
     RUN_TEST(test_commitEditSettings_rebootWaitsForTxQueue);
     RUN_TEST(test_commitEditSettings_capReleasesRetuneAndReboot);
     RUN_TEST(test_deferredRetune_waitsForReplyAck);
+    RUN_TEST(test_deferredRetune_repeatedSaveKeepsCapStart);
+    RUN_TEST(test_deferredRetune_untrackedReplyWaitsForQueue);
     RUN_TEST(test_presetChange_keepsChannelHashUntilRetune);
 
     exit(UNITY_END());

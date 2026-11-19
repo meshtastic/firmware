@@ -10,6 +10,7 @@
 #include "MeshRadio.h"
 #include "MeshTypes.h"
 #include "Observer.h"
+#include "UptimeClock.h"
 #ifdef ARCH_PORTDUINO
 #include "PointerQueue.h"
 #else
@@ -84,7 +85,8 @@ class MeshService
     // where the requester isn't listening.
     bool radioConfigDeferred = false;
     uint32_t radioConfigDeferredAtMs = 0;
-    PacketId radioConfigAwaitsAckOf = 0; // our reply that must be acked (or given up) before the retune; 0 = none
+    PacketId radioConfigAwaitsAckOf = 0;      // our reply that must be acked (or given up) before the retune; 0 = none
+    bool radioConfigAwaitedReplySeen = false; // that reply has been in the router's pending-retransmission table
 
     /// Retune the radio to the current config and record the slot it is now committed to.
     void applyRadioConfig();
@@ -218,6 +220,13 @@ class MeshService
 #ifdef PIO_UNIT_TESTING
     /// Make the pending deferral look ms older, so a test reaches the cap without moving the shared clock.
     void ageRadioConfigDeferralForTest(uint32_t ms) { radioConfigDeferredAtMs -= ms; }
+    /// Hold a radio change without saving one, for suites that must not write config.proto.
+    void deferRadioConfigForTest()
+    {
+        radioConfigDeferred = true;
+        radioConfigDeferredAtMs = Time::getMillis();
+    }
+    PacketId awaitedReplyForTest() const { return radioConfigAwaitsAckOf; }
 #endif
 
     /// The owner User record just got updated, update our node DB and broadcast the info into the mesh

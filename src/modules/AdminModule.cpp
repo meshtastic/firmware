@@ -111,6 +111,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
 {
     // if handled == false, then let others look at this message also if they want
     bool handled = false;
+    requestSavedRadioChange = false;
     assert(r);
 
 #ifdef MESHTASTIC_ENCRYPTED_STORAGE
@@ -732,8 +733,9 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     if (mp.pki_encrypted && myReply && myReply->decoded.portnum != meshtastic_PortNum_ROUTING_APP) {
         myReply->pki_encrypted = true;
     }
-    // A reliable reply is retransmitted until acked; keep the radio where the requester can hear those retries.
-    if (myReply && mp.want_ack && mp.from != 0)
+    // A reliable reply is retransmitted until acked; keep the radio where the requester can hear those retries. Only the
+    // reply to the save that deferred the change: a later read's ack says nothing about the save's reply.
+    if (myReply && mp.want_ack && mp.from != 0 && requestSavedRadioChange)
         service->awaitAckBeforeRadioConfig(myReply->id);
     return handled;
 }
@@ -1895,6 +1897,7 @@ void AdminModule::saveChanges(int saveWhat, bool shouldReboot)
         // The reply to this request is queued after we return: retune only once it has gone out on the
         // current settings, or the requester never hears it.
         service->reloadConfig(saveWhat, true);
+        requestSavedRadioChange |= (saveWhat & (SEGMENT_CONFIG | SEGMENT_CHANNELS)) != 0; // what reloadConfig defers
     } else {
         LOG_INFO("Delay disk save until open transaction commits");
         editTransactionActivityMs = millis(); // still in use, so not the abandoned kind we time out

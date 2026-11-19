@@ -159,19 +159,26 @@ void MeshService::loop()
 
 void MeshService::awaitAckBeforeRadioConfig(PacketId id)
 {
-    if (radioConfigDeferred)
-        radioConfigAwaitsAckOf = id;
+    if (!radioConfigDeferred)
+        return;
+    radioConfigAwaitsAckOf = id;
+    radioConfigAwaitedReplySeen = false;
 }
 
 void MeshService::applyDeferredRadioConfig()
 {
     if (!radioConfigDeferred)
         return;
-    // An awaited reply sits in the pending table from its send until its ack, so its ack alone is enough: other
-    // traffic in the TX queue (rebroadcasts on a busy mesh) needn't hold the retune. Without one, wait for the queue.
-    const bool ready = radioConfigAwaitsAckOf
-                           ? !(router && router->isRetransmissionPending(nodeDB->getNodeNum(), radioConfigAwaitsAckOf))
-                           : doPreflightSleep(true); // the radio's own "nothing queued and nothing on air" check
+    bool ready;
+    if (radioConfigAwaitsAckOf) {
+        // The pending table holds a reliable reply from its send until its ack, so leaving it means acked (or given up)
+        // and other queued traffic needn't hold the retune. Never in it (no retransmission copy): it is only queued.
+        const bool pending = router && router->isRetransmissionPending(nodeDB->getNodeNum(), radioConfigAwaitsAckOf);
+        radioConfigAwaitedReplySeen |= pending;
+        ready = !pending && (radioConfigAwaitedReplySeen || doPreflightSleep(true));
+    } else {
+        ready = doPreflightSleep(true); // the radio's own "nothing queued and nothing on air" check
+    }
     if (ready) {
         LOG_INFO("Admin reply delivered, apply the deferred radio change");
     } else if (Throttle::hasElapsed(radioConfigDeferredAtMs, RADIO_CONFIG_DEFER_MAX_MS)) {
@@ -208,8 +215,10 @@ void MeshService::reloadConfig(int saveWhat, bool deferRadio)
             // The channel re-hash waits too: an unnamed primary hashes the preset name, and a reply hashed
             // for the new preset is undecodable on the old one. Boot re-runs the same fixups on what is saved.
             LOG_INFO("Radio change saved, retune once the reply is out and the TX queue drains");
+            // A save during an active deferral joins it; restarting the clock would let repeated saves outrun the cap.
+            if (!radioConfigDeferred)
+                radioConfigDeferredAtMs = Time::getMillis();
             radioConfigDeferred = true;
-            radioConfigDeferredAtMs = Time::getMillis();
         } else {
             applyRadioConfig();
         }

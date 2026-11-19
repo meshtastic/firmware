@@ -50,6 +50,8 @@ class AdminModuleTestShim : public AdminModule
         editTransactionActivityMs = millis();
     }
     int savedSegments() const { return lastSaveWhatForTest; }
+    // Undo deferSaves(): setters save through reloadConfig() again (and defer a radio retune).
+    void saveNow() { hasOpenEditTransaction = false; }
 
     bool editTransactionOpen() const { return hasOpenEditTransaction; }
     // Backdate past the idle window so a test sees an abandoned transaction without waiting it out.
