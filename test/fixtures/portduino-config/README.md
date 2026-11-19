@@ -161,6 +161,13 @@ non-BLE build. The assertions only test what holds either way.
 | `bluetooth-bad-enabled.yaml` | `Enabled: maybe` is read with a fallback: silently replaced by `false`, so BLE never turns on.   |
 | `bluetooth-bad-adapter.yaml` | `hci1junk` passes the MAC fallback but is not a BlueZ object path, so BLE silently never starts. |
 
+## Serial module (`SerialModule`)
+
+| File                             | Expected                                                                                   |
+| -------------------------------- | ------------------------------------------------------------------------------------------ |
+| `serial-module.yaml`             | A `pty:` path is clean, `--output-yaml` writes it back, and that output loads clean again. |
+| `serial-module-unknown-key.yaml` | `Baud` is a module setting, not a host one, so it is ignored. One warning.                 |
+
 ## Admin keys (`Security.AdminKeys`)
 
 The host's config is the authority on who may administer the node: it is root-owned,

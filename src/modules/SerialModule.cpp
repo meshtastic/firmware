@@ -44,6 +44,8 @@
           state. Device connected to that pin may see this as "noise".
         * On meshtasticd the port is SerialModule.Path in config.yaml, not rxd/txd pins: a tty, or
           pty:<link> for a PTY meshtasticd creates. WS85 is not supported there.
+        * On meshtasticd a tty is opened once at startup: if it goes away (a USB adapter
+          unplugged) nothing reopens it until meshtasticd restarts.
 
 
 */
@@ -297,7 +299,7 @@ int32_t SerialModule::runOnce()
             }
 #endif
 
-#if SERIAL_PRINT_PORT != 0
+#if !defined(ARCH_PORTDUINO) && SERIAL_PRINT_PORT != 0
             else if ((moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_WS85)) {
                 processWXSerial();
 
@@ -582,7 +584,7 @@ ParsedLine parseLine(const char *line)
  */
 void SerialModule::processWXSerial()
 {
-#if SERIAL_PRINT_PORT != 0 && !defined(ARCH_STM32WL) && !defined(CONFIG_IDF_TARGET_ESP32C6)
+#if !defined(ARCH_PORTDUINO) && SERIAL_PRINT_PORT != 0 && !defined(ARCH_STM32WL) && !defined(CONFIG_IDF_TARGET_ESP32C6)
 
     static unsigned int lastAveraged = 0;
     static unsigned int averageIntervalMillis = 300000; // 5 minutes hard coded.
