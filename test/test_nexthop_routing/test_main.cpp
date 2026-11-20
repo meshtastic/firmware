@@ -9,6 +9,7 @@
 
 #include "MeshTypes.h" // before TestUtil.h: provides NodeNum etc.
 #include "TestUtil.h"
+#include "UptimeClock.h"
 #include <unity.h>
 
 #include "airtime.h"
@@ -1001,9 +1002,11 @@ void test_retransmission_deferred_while_previous_copy_still_in_tx_queue(void)
     TEST_ASSERT_NOT_NULL(pendingEntry);
     const uint8_t initialRetries = pendingEntry->numRetransmissions;
 
+    const uint32_t beforeMs = Time::getMillis();
     shim->fireNextRetryForTest(p.from, p.id);
     TEST_ASSERT_EQUAL_INT(0, mockIface->sendCount);
     TEST_ASSERT_EQUAL_UINT8(initialRetries, pendingEntry->numRetransmissions);
+    TEST_ASSERT_GREATER_THAN_UINT32(beforeMs, pendingEntry->nextTxMsec);
 
     // Once the previous copy leaves txQueue, the next retry fires normally.
     mockIface->inTxQueue = false;

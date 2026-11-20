@@ -197,8 +197,8 @@ bool MeshPacketQueue::replaceLowerPriorityPacket(meshtastic_MeshPacket *p)
         return true;
     }
 
-    // 2. Next, if the back packet is a non-overdue late packet with lower priority than the incoming
-    // packet, evict it before touching any un-relayed normal packet.
+    // 2. Next, if the back packet is a late packet with lower priority than the incoming packet,
+    // evict it before touching any un-relayed normal packet.
     if (backPacket->tx_after && backPacket->priority < p->priority) {
         LOG_WARN("Dropping late packet 0x%08x to make room in the TX queue for higher-priority packet 0x%08x", backPacket->id,
                  p->id);
