@@ -50,7 +50,8 @@ extern "C" {
 
 // USB_CHECK
 #define EXT_PWR_DETECT (32 + 3)
-#define ADC_V (0 + 8)
+// The battery sense, read as a digital input for isBatteryConnect(). V1 also ties P0.08 to it, through R43.
+#define ADC_V (0 + 4)
 
 // #define LED_BLUE PIN_LED1
 #define LED_STATE_ON 1 // State when LED is lit  // LED灯亮时的状态
@@ -142,10 +143,8 @@ External serial flash WP25R1635FZUIL0
 // #define HAS_GPS 1
 #define GPS_L76K
 
-// Older boards have an L76K, newer ones (V2.0) an AG3352. variant.cpp reads the strap on P1.02 at boot.
-// AG3352 boards pull it down (100K). On L76K boards it is the L76K's STANDBY input: high while the L76K is
-// powered, but low when the GPS switch has it off, so a LOW strap is only taken as AG3352 if it then talks.
-#define PIN_GPS_VERSION (32 + 2) // strap: LOW = AG3352 or unpowered L76K, HIGH = L76K
+// Older boards (V1) have an L76K, newer ones (V2.0) an AG3352. variant.cpp tells them apart at boot: V1 ties P0.08 to
+// the battery sense through R43, where V2 only wires it to the GPS switch.
 extern int m1HasAg3352;
 
 // Decided at boot, after the probe's speed tables are built, so sweep the common speeds rather than fix one.
@@ -155,7 +154,7 @@ extern int m1HasAg3352;
 // L76K: standby, low means allow sleep, high means force wake. AG3352: the strap, so GPS.cpp leaves it alone.
 #define PIN_GPS_STANDBY (32 + 2)
 #define GPS_STANDBY_L76K_ONLY
-#define GPS_AIROHA_FITTED (m1HasAg3352) // park and wake it as an Airoha even before the probe has named it
+#define GPS_AIROHA_FITTED (m1HasAg3352) // park and wake it as an Airoha until the probe has named a model
 
 // L76K: REINIT, left untouched as before. AG3352: RESET, inverted by Q16 (high asserts RESETB).
 // The AG3352 is reset at boot (variant.cpp) and to wake it from backup mode.
@@ -179,7 +178,8 @@ extern uint8_t m1GpsTxPin, m1GpsRxPin;
 #define GPS_THREAD_INTERVAL 50
 
 // GPS开关判断, HIGH = on. L76K boards: P1.01. AG3352 boards: P0.08, held high by a 100K pull-up when switched on.
-#define PIN_GPS_SWITCH (m1HasAg3352 ? (0 + 8) : (32 + 1))
+#define GPS_SWITCH_AG3352 (0 + 8)
+#define PIN_GPS_SWITCH (m1HasAg3352 ? GPS_SWITCH_AG3352 : (32 + 1))
 
 // GPS.cpp sets the pins for the fitted receiver; these are only Serial1's defaults.
 #define PIN_SERIAL1_TX (32 + 8)
