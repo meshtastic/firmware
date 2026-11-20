@@ -55,6 +55,10 @@
 #define HAS_CUSTOM_CRYPTO_ENGINE 1
 #endif
 
+#ifndef NRF_APM
+#define NRF_APM
+#endif
+
 //
 // set HW_VENDOR
 //

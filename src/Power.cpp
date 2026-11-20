@@ -54,11 +54,6 @@
 #include <Adafruit_ADS1X15.h>
 #endif
 
-// Working USB detection for powered/charging states on the RAK platform
-#ifdef NRF_APM
-#include "nrfx_power.h"
-#endif
-
 #if defined(ARCH_NRF52)
 #include "Nrf52SaadcLock.h"
 #include "concurrency/LockGuard.h"
@@ -594,18 +589,28 @@ class AnalogBatteryLevel : public HasBatteryLevel
         return false;
 #endif
 
-// technically speaking this should work for all(?) NRF52 boards
-// but needs testing across multiple devices. NRF52 USB would not even work if
-// VBUS was not properly connected and detected by the CPU
-#elif defined(MUZI_BASE) || defined(PROMICRO_DIY_TCXO) || defined(ELECROW_ThinkNode_M8)
-        return powerHAL_isVBUSConnected();
 #elif defined(USB_HOST_PWR_DETECT)
         // No VBUS sense pin, so ask the native USB port instead. This watches for start-of-frame
         // packets, which means it sees a USB *host*: a wall charger or power bank supplies VBUS but
         // sends no SOF and reads as unplugged. Boards that must spot dumb chargers need a real
         // EXT_PWR_DETECT pin.
+        
+        // above is not always true - as USB D+/- pins are differential you can absolutely have USB host
+        // talking to device but not charge it (by just cutting VBUS and or GND wires).
+        // Will CDC subsystem also detect a host which do not have CDC drivers?
+        
+        // MCUs like NRF52840 absolutely can detect dumb chargers. Method HWCDC::isPlugged is nice to have
+        // here but we can't trust it blindly //@phaseloop 10.2026
+        
         return HWCDC::isPlugged();
-#endif
+#endif 
+
+        // powerHAL implements platform specific USB detections so if it says we good, we good
+        // if not implemented for a platform, it will return false so don't trust the false result
+        if (powerHAL_isVBUSConnected())
+            return true;
+
+
         return getBattVoltage() > chargingVolt;
     }
 
@@ -998,6 +1003,7 @@ bool Power::setup()
     } else if (analogInit()) {
         found = true;
     } else {
+// NRF_APM is a last resort power management which can only detect if USB VBUS is connected
 #ifdef NRF_APM
         found = true;
 #endif
@@ -1170,10 +1176,10 @@ void Power::readPowerStatus()
 
     if (batteryLevel) {
         hasBattery = batteryLevel->isBatteryConnect() ? OptTrue : OptFalse;
-#ifndef NRF_APM
+
         usbPowered = batteryLevel->isVbusIn() ? OptTrue : OptFalse;
         isChargingNow = batteryLevel->isCharging() ? OptTrue : OptFalse;
-#endif
+
         if (hasBattery) {
             batteryVoltageMv = batteryLevel->getBattVoltage();
             // If the AXP192 returns a valid battery percentage, use it
@@ -1189,26 +1195,18 @@ void Power::readPowerStatus()
                                              0, 100);
             }
         }
-    }
-
-// FIXME: IMO we shouldn't be littering our code with all these ifdefs.  Way
-// better instead to make a Nrf52IsUsbPowered subclass (which shares a
-// superclass with the BatteryLevel stuff) that just provides a few methods. But
-// in the interest of fixing this bug I'm going to follow current practice.
-#ifdef NRF_APM // Section of code detects USB power on the RAK4631 and updates
-               // the power states.  Takes 20 seconds or so to detect changes.
-
-    nrfx_power_usb_state_t nrf_usb_state = nrfx_power_usbstatus_get();
-    // LOG_DEBUG("NRF Power %d", nrf_usb_state);
-
-    // If changed to DISCONNECTED
-    if (nrf_usb_state == NRFX_POWER_USB_STATE_DISCONNECTED)
-        isChargingNow = usbPowered = OptFalse;
-    // If changed to CONNECTED / READY
-    else
-        isChargingNow = usbPowered = OptTrue;
-
+    } else { // no batteryLevel implementation active - as a last resort try to detect VBUS using PowerHAL
+        if (powerHAL_isVBUSConnected()) {
+            usbPowered = isChargingNow = OptTrue;
+        } else {
+// PowerHAL is supported so far only on NRF52 so if it returns
+// false we know for sure VBUS is not connected. For other platforms
+// it will return false as a placeholder
+#ifdef NRF_APM
+            usbPowered = isChargingNow = OptFalse;
 #endif
+        }
+    }
 
     // Notify any status instances that are observing us
     const PowerStatus powerStatus2 = PowerStatus(hasBattery, usbPowered, isChargingNow, batteryVoltageMv, batteryChargePercent);
