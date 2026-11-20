@@ -77,10 +77,15 @@ bool NotifiedWorkerThread::notifyLater(uint32_t delay, uint32_t v, bool overwrit
 
 bool NotifiedWorkerThread::notifyLaterOrShorten(uint32_t delay, uint32_t v, bool overwrite)
 {
-    if (!overwrite && enabled && notification.load() == v && delay < tillRun(Time::getMillis())) {
+    const long remaining = tillRun(Time::getMillis());
+    if (!overwrite && enabled && notification.load() == v && remaining > 0 && static_cast<unsigned long>(remaining) > delay) {
         uint32_t expected = v;
         if (notification.compare_exchange_strong(expected, v)) {
             setIntervalFromNow(delay);
+            if (notification.load() != v) {
+                // An ISR replaced notification while updating the interval; restore immediate wake-up.
+                setIntervalFromNow(0);
+            }
             mainDelay.interrupt();
             return true;
         }
