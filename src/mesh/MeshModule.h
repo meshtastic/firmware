@@ -83,6 +83,10 @@ class MeshModule
     static AdminMessageHandleResult handleAdminMessageForAllModules(const meshtastic_MeshPacket &mp,
                                                                     meshtastic_AdminMessage *request,
                                                                     meshtastic_AdminMessage *response);
+
+    /** For use only by createRegisteredModules(). */
+    static void runSetup(MeshModule *module);
+
 #if HAS_SCREEN
     virtual void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) { return; }
     virtual bool isRequestingFocus();                          // Checked by screen, when regenerating frameset
