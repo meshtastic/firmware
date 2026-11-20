@@ -261,8 +261,11 @@ bool NextHopRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
     if (p->to == NODENUM_BROADCAST_NO_LORA)
         return false;
 
+    bool decrementHopLimit = shouldDecrementHopLimit(p);
+
     // Allow rebroadcast if hop_limit > 0 OR if we're exhausting hops (which sets hop_limit = 0 but still needs one relay)
-    if (!isToUs(p) && !isFromUs(p) && (p->hop_limit > 0 || exhaustHops)) {
+    // OR if the packet is zero-hop eligible
+    if (!isToUs(p) && !isFromUs(p) && (p->hop_limit > 0 || exhaustHops || !decrementHopLimit)) {
         if (p->id != 0) {
             if (isRebroadcaster()) {
                 // NOTE: this is a self-identity match (is the addressed next_hop OUR last byte?), so it
@@ -280,7 +283,7 @@ bool NextHopRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
                     if (exhaustHops) {
                         tosend->hop_limit = 0;
                         LOG_INFO("Traffic management: exhaust hops for 0x%08x, hop_limit=0", getFrom(p));
-                    } else if (shouldDecrementHopLimit(p)) {
+                    } else if (decrementHopLimit) {
                         // Use shared logic to determine if hop_limit should be decremented
                         tosend->hop_limit--; // bump down the hop count
                     } else {
