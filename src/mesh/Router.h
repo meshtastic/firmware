@@ -108,7 +108,8 @@ class Router : protected concurrency::OSThread, protected PacketHistory
      */
     [[nodiscard]] meshtastic_MeshPacket *allocForSending();
 
-    /** Remember that (from, id) was answered with a refusal NAK, so a retransmitted duplicate gets the same answer. */
+    /** Remember that (from, id) was answered with a refusal NAK, so a retransmitted duplicate gets the same answer.
+     * Routing_Error_NONE forgets the entry: the latest processing of (from, id) was accepted. */
     void rememberRefusal(NodeNum from, PacketId id, meshtastic_Routing_Error err);
 
     /** The refusal sent for (from, id) still within REFUSAL_TTL_MSEC, or Routing_Error_NONE when there is none. */

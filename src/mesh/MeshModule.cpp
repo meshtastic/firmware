@@ -217,6 +217,10 @@ void MeshModule::callModules(meshtastic_MeshPacket &mp, RxSource src)
         pi.currentRequest = NULL;
     }
 
+    // callModules never sees a filtered duplicate, so this is a fresh processing: the cache keeps its latest answer
+    if (isDecoded && mp.want_ack && isToUs(&mp))
+        router->rememberRefusal(getFrom(&mp), mp.id, meshtastic_Routing_Error_NONE);
+
     if (isDecoded && mp.decoded.want_response && toUs) {
         if (currentReply) {
             printPacket("Send response", currentReply);

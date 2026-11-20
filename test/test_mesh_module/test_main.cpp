@@ -114,12 +114,15 @@ class RefusingModule : public MeshModule
   public:
     RefusingModule() : MeshModule("admin-shaped", meshtastic_PortNum_ADMIN_APP) {}
 
+    bool refuse = true; // false models the module accepting the request, as after an admin key is added
+
   protected:
     bool wantPacket(const meshtastic_MeshPacket *p) override { return p->decoded.portnum == ourPortNum; }
 
     ProcessMessage handleReceived(const meshtastic_MeshPacket &mp) override
     {
-        myReply = allocErrorResponse(meshtastic_Routing_Error_ADMIN_PUBLIC_KEY_UNAUTHORIZED, &mp);
+        if (refuse)
+            myReply = allocErrorResponse(meshtastic_Routing_Error_ADMIN_PUBLIC_KEY_UNAUTHORIZED, &mp);
         return ProcessMessage::CONTINUE;
     }
 };
@@ -644,6 +647,32 @@ static void test_refusedWrite_duplicateIsNakedWithOriginalError()
     TEST_ASSERT_EQUAL_HEX32(request.id, mockRoutingModule->ackNaks[0].requestId);
 }
 
+// The packet history can evict an id before the refusal ages out, so the retransmission is processed afresh and may be
+// accepted. Its duplicate must get the ACK for that acceptance, not the stale refusal.
+static void test_refusedThenAcceptedWrite_duplicateIsAcked()
+{
+    dupeRouter = new DupeRouter();
+    dupeRouter->addInterface(std::unique_ptr<RadioInterface>(new MockRadioInterface()));
+    router = dupeRouter;
+    auto *module = new RefusingModule();
+    registerDispatchModule(module);
+    meshtastic_MeshPacket request = makeDirectAckedWrite();
+
+    TEST_ASSERT_FALSE(dupeRouter->filterForTest(&request));
+    MeshModule::callModules(request); // refused
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_ADMIN_PUBLIC_KEY_UNAUTHORIZED, dupeRouter->refusalFor(REMOTE_NODE, request.id));
+
+    module->refuse = false;
+    meshtastic_MeshPacket resent = makeDirectAckedWrite();
+    MeshModule::callModules(resent); // evicted from history, so it reaches the modules again and is accepted
+
+    meshtastic_MeshPacket duplicate = makeDirectAckedWrite();
+    TEST_ASSERT_TRUE(dupeRouter->filterForTest(&duplicate));
+
+    TEST_ASSERT_EQUAL_UINT32(1, mockRoutingModule->ackNaks.size());
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_NONE, mockRoutingModule->ackNaks[0].error);
+}
+
 // An accepted write leaves no refusal behind, so its duplicate still gets the plain ACK.
 static void test_acceptedWrite_duplicateStillAcked()
 {
@@ -1156,6 +1185,7 @@ void setup()
     RUN_TEST(test_dispatch_refusalWithoutWantResponse_sendsNak);
     RUN_TEST(test_dispatch_refusalWithoutWantAck_isDiscarded);
     RUN_TEST(test_refusedWrite_duplicateIsNakedWithOriginalError);
+    RUN_TEST(test_refusedThenAcceptedWrite_duplicateIsAcked);
     RUN_TEST(test_acceptedWrite_duplicateStillAcked);
     RUN_TEST(test_phoneErrorResponse_ignoresForgedFrom);
     RUN_TEST(test_dispatch_ignoreRequestIsClearedPerPacket);

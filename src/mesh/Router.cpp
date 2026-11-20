@@ -388,15 +388,21 @@ meshtastic_MeshPacket *Router::allocForSending()
 
 void Router::rememberRefusal(NodeNum from, PacketId id, meshtastic_Routing_Error err)
 {
-    if (err == meshtastic_Routing_Error_NONE || id == 0)
+    if (id == 0)
         return;
     uint8_t slot = nextRefusalSlot;
     for (uint8_t i = 0; i < REFUSAL_CACHE_SIZE; i++) {
         if (refusals[i].error != 0 && refusals[i].from == from && refusals[i].id == id) {
+            if (err == meshtastic_Routing_Error_NONE) {
+                refusals[i].error = 0; // the latest processing accepted it, so a duplicate must not replay the old refusal
+                return;
+            }
             slot = i; // same request refused again: overwrite in place
             break;
         }
     }
+    if (err == meshtastic_Routing_Error_NONE)
+        return;
     if (slot == nextRefusalSlot)
         nextRefusalSlot = (nextRefusalSlot + 1) % REFUSAL_CACHE_SIZE;
     refusals[slot] = {from, id, Time::skipZero(Time::getMillis()), (uint8_t)err};
