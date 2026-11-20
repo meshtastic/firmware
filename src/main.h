@@ -13,8 +13,8 @@
 #include <map>
 #include <memory>
 #if defined(ARCH_ESP32) && !defined(CONFIG_IDF_TARGET_ESP32S2) && !MESHTASTIC_EXCLUDE_BLUETOOTH
-#include "nimble/NimbleBluetooth.h"
-extern NimbleBluetooth *nimbleBluetooth;
+#include "BluetoothCommon.h"
+extern BluetoothApi *bluetoothApi;
 #endif
 #ifdef ARCH_NRF52
 #include "NRF52Bluetooth.h"
