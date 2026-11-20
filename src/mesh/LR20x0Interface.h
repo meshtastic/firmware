@@ -2,6 +2,14 @@
 #if RADIOLIB_EXCLUDE_LR2021 != 1
 #include "RadioLibInterface.h"
 
+// The pre-TX CAD exits straight to TX when the channel is clear (CAD exit mode LBT), with the payload written before
+// it, instead of a verdict read and a separate SetTx. The chip keys up with no host call; LR2021 boards switch TX/RX
+// from the chip's DIOs or have no switch to drive. A busy scan leaves the chip in standby, with no CAD->RX handoff;
+// the caller restarts RX.
+#ifndef LR2021_CAD_LBT
+#define LR2021_CAD_LBT 1
+#endif
+
 // After TX_DONE the LR2021 waits in standby for the radio thread to restart RX, which a main-loop hold can stretch. With the
 // readout task, the TX_DONE interrupt has the task restart it instead.
 //
@@ -58,6 +66,17 @@ template <class T> class LR20x0Interface : public RadioLibInterface
     /** can we detect a LoRa preamble on the current channel? */
     virtual bool isChannelActive() override;
 
+#if LR2021_CAD_LBT
+    /** Id and length of the packet a clear LBT scan put on air, or 0 */
+    uint32_t lbtSentId = 0;
+    size_t lbtSentLen = 0;
+    /** The LBT scan: true if the channel is busy; a clear one has put scanForTx on air unless the scan failed */
+    bool scanThenTransmit(ChannelScanConfig_t &cfg);
+    /** writeTxBuffer(), stageMode(TX) and startChannelScan(cfg) for the LBT scan, as raw commands; the chip must be in
+     * standby */
+    int16_t startLbtScan(const ChannelScanConfig_t &cfg, size_t numbytes);
+#endif
+
     /** are we actively receiving a packet (only called during receiving state) */
     virtual bool isActivelyReceiving() override;
 
@@ -97,7 +116,8 @@ template <class T> class LR20x0Interface : public RadioLibInterface
     uint8_t getCadSymbolCountSubGhz() const override { return 4; }
     uint8_t getCadSymbolCountWideLora() const override { return 8; }
 
-    /** Empty the TX FIFO of anything an earlier TX left behind, then hand the packet to RadioLib */
+    /** Empty the TX FIFO of anything an earlier TX left behind, then hand the packet to RadioLib; no SetTx for the packet
+     * a clear LBT scan has already put on air */
     int16_t launchTransmit(size_t numbytes) override;
 
     /** Empty the RX FIFO of a frame nothing read out: RadioLib empties it only at the end of readData() */
