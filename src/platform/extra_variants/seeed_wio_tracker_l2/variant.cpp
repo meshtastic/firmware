@@ -7,6 +7,7 @@
 #include "SPILock.h"
 #include "WakeKey.h"
 #include "driver/gpio.h"
+#include "gnssRail.h"
 #include "input/InputBroker.h"
 
 #include PCA95X5_INC
@@ -90,6 +91,8 @@ void lateInitVariant()
         LOG_ERROR("PCA9555 initialization failed");
         return;
     }
+
+    l2GnssRailInit();
 
     // wake button initialization
     WakeKeyInterruptThread::instance()->begin();
