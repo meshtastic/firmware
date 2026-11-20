@@ -85,16 +85,18 @@ static bool isSwappableEuRegion(meshtastic_Config_LoRaConfig_RegionCode code)
 }
 
 // Region profiles: bundle preset list + regulatory parameters shared across regions
-// presets, spacing, padding, audio, licensed, text throttle, position throttle, telemetry throttle
-const RegionProfile PROFILE_STD = {PRESETS_STD, 0, 0, true, false, 0, 1, 1};
-const RegionProfile PROFILE_EU868 = {PRESETS_EU_868, 0, 0, false, false, 0, 1, 1};
-const RegionProfile PROFILE_UNDEF = {PRESETS_UNDEF, 0, 0, true, false, 0, 1, 1};
-const RegionProfile PROFILE_LITE = {PRESETS_LITE, 0.4, 0.0375f, false, false, 0, 10, 10};
-const RegionProfile PROFILE_NARROW = {PRESETS_NARROW, 0, 0.0104f, true, false, 0, 1, 1};
+// presets, spacing, padding, unitChannelMHz, audio, licensed, text throttle, position throttle, telemetry throttle
+const RegionProfile PROFILE_STD = {PRESETS_STD, 0, 0, 0, true, false, 0, 1, 1};
+// ARIB STD-T108: 200 kHz unit-channel raster (preset list narrowed in #11566)
+const RegionProfile PROFILE_JP = {PRESETS_STD, 0, 0, 0.2f, true, false, 0, 1, 1};
+const RegionProfile PROFILE_EU868 = {PRESETS_EU_868, 0, 0, 0, false, false, 0, 1, 1};
+const RegionProfile PROFILE_UNDEF = {PRESETS_UNDEF, 0, 0, 0, true, false, 0, 1, 1};
+const RegionProfile PROFILE_LITE = {PRESETS_LITE, 0.4, 0.0375f, 0, false, false, 0, 10, 10};
+const RegionProfile PROFILE_NARROW = {PRESETS_NARROW, 0, 0.0104f, 0, true, false, 0, 1, 1};
 // Ham '20kHz' profile. 15.6kHz bandwidth coerced to 20kHz via padding.
-const RegionProfile PROFILE_HAM_20KHZ = {PRESETS_TINY, 0, 0.0022f, false, true, 0, 2, 2};
+const RegionProfile PROFILE_HAM_20KHZ = {PRESETS_TINY, 0, 0.0022f, 0, false, true, 0, 2, 2};
 // Ham '100kHz' profile. 62.5kHz bandwidth coerced to 100kHz via padding.
-const RegionProfile PROFILE_HAM_100KHZ = {PRESETS_NARROW, 0, 0.01875f, false, true, 0, 1, 1};
+const RegionProfile PROFILE_HAM_100KHZ = {PRESETS_NARROW, 0, 0.01875f, 0, false, true, 0, 1, 1};
 
 Observable<uint32_t> RadioInterface::loraRxPacketObservable;
 
@@ -162,7 +164,7 @@ const RegionInfo regions[] = {
         https://www.arib.or.jp/english/html/overview/doc/5-STD-T108v1_5-E1.pdf
         https://qiita.com/ammo0613/items/d952154f1195b64dc29f
      */
-    RDEF(JP, 920.5f, 923.5f, 100, 13, false, false, PROFILE_STD, PRESET(LONG_FAST), 0),
+    RDEF(JP, 920.5f, 923.5f, 100, 13, false, false, PROFILE_JP, PRESET(LONG_FAST), 0),
 
     /*
         https://www.iot.org.au/wp/wp-content/uploads/2016/12/IoTSpectrumFactSheet.pdf
@@ -1204,16 +1206,10 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
         check_bw = clampBandwidthKHz(bwCodeToKHz(loraConfig.bandwidth));
     }
 
-    // Calculate width of slots (aka channels) based on bandwidth and any spacing or padding required by the region:
-    // spacing = gap between slots (0 for continuous spectrum) and at the beginning of the band
-    // padding = gap at the beginning and end of the slots (0 for no padding)
-    float spacing = newRegion->getSpacing(check_bw);
-    float padding = newRegion->getPadding(check_bw);
-    float freqSlotWidth = spacing + (padding * 2) + (check_bw / 1000.0f); // in MHz
-    uint32_t numFreqSlots = (uint32_t)((newRegion->freqEnd - newRegion->freqStart + spacing + 0.001f) / freqSlotWidth);
+    uint32_t numFreqSlots = newRegion->getSlotPlan(check_bw).count;
 
     // Check if the region supports the requested bandwidth
-    if ((newRegion->freqEnd - newRegion->freqStart) < freqSlotWidth) {
+    if (numFreqSlots == 0) {
         const float regionSpanKHz = (newRegion->freqEnd - newRegion->freqStart) * 1000.0f;
         snprintf(err_string, sizeof(err_string), "%s span %.0fkHz < requested %.0fkHz", newRegion->name, regionSpanKHz, check_bw);
         LOG_ERROR("%s", err_string);
@@ -1224,11 +1220,8 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
             loraConfig.bandwidth = bwKHzToCode(modemPresetToBwKHz(newRegion->getDefaultPreset(), newRegion->wideLora));
             check_bw = bwCodeToKHz(loraConfig.bandwidth);
 
-            // Recompute slot width and number of slots based on the new bandwidth
-            spacing = newRegion->getSpacing(check_bw);
-            padding = newRegion->getPadding(check_bw);
-            freqSlotWidth = spacing + (padding * 2) + (check_bw / 1000.0f); // in MHz
-            numFreqSlots = (uint32_t)((newRegion->freqEnd - newRegion->freqStart + spacing + 0.001f) / freqSlotWidth);
+            // Recompute slot count based on the new bandwidth
+            numFreqSlots = newRegion->getSlotPlan(check_bw).count;
         } else {
             return false;
         }
@@ -1311,12 +1304,13 @@ uint32_t RadioInterface::frequencySlotCount(const meshtastic_Config_LoRaConfig &
         return 0;
     float bwKHz = loraConfig.use_preset ? modemPresetToBwKHz(loraConfig.modem_preset, region->wideLora)
                                         : clampBandwidthKHz(bwCodeToKHz(loraConfig.bandwidth));
-    const float edges = region->profile->spacing + (region->profile->padding * 2); // in MHz
+    RegionInfo::SlotPlan plan = region->getSlotPlan(bwKHz);
     // A custom bandwidth wider than the region runs at the region default, as checkOrClampConfigLora() clamps it
-    if (!loraConfig.use_preset && (region->freqEnd - region->freqStart) < edges + (bwKHz / 1000))
+    if (!loraConfig.use_preset && plan.count == 0) {
         bwKHz = bwCodeToKHz(bwKHzToCode(modemPresetToBwKHz(region->getDefaultPreset(), region->wideLora)));
-    // Same arithmetic as applyModemConfig(), so a slot checked here is a slot the radio can tune
-    return round((region->freqEnd - region->freqStart + region->profile->spacing) / (edges + (bwKHz / 1000)));
+        plan = region->getSlotPlan(bwKHz);
+    }
+    return plan.count;
 }
 
 uint32_t RadioInterface::resolveFrequencySlot(const meshtastic_Config_LoRaConfig &loraConfig, const char *channelName)
@@ -1397,13 +1391,8 @@ void RadioInterface::applyModemConfig()
     uint32_t channel_num;
     float freq;
 
-    // Calculate number of frequency slots (aka Channels):
-    // spacing = gap between channels (0 for continuous spectrum) and at the beginning of the band
-    // padding = gap at the beginning and end of the channel (0 for no padding)
-    float spacing = newRegion->getSpacing(bw);
-    float padding = newRegion->getPadding(bw);
-    float freqSlotWidth = spacing + (padding * 2) + (bw / 1000.0f); // in MHz
-    uint32_t numFreqSlots = (uint32_t)((newRegion->freqEnd - newRegion->freqStart + spacing + 0.001f) / freqSlotWidth);
+    const RegionInfo::SlotPlan slotPlan = newRegion->getSlotPlan(bw);
+    const uint32_t numFreqSlots = slotPlan.count;
 
     // Calculate hash of channel name and preset name to pick a default frequency slot if user has not specified one.
     // Note that channel_num is actually (channel_num - 1), i.e. zero-based, since modulus (%) returns values from 0 to
@@ -1442,9 +1431,7 @@ void RadioInterface::applyModemConfig()
             channel_num = loraConfig.channel_num - 1;
         }
 
-        // Calculate frequency: freqStart is band edge, add half bandwidth (plus optional padding) to get middle of first channel
-        // subsequent channels are spaced by freqSlotWidth
-        freq = newRegion->freqStart + (bw / 2000.0f) + padding + (channel_num * freqSlotWidth); // in MHz
+        freq = slotPlan.firstCenter + (channel_num * slotPlan.width); // in MHz
     }
 
     saveChannelNum(channel_num);

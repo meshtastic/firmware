@@ -273,6 +273,63 @@ static void test_applyModemConfig_mediumTurbo()
     TEST_ASSERT_FLOAT_WITHIN(0.01f, 500.0f, testRadio->getBw());
 }
 
+// RadioInterface::applyModemConfig() on JP must align center frequencies to the ARIB STD-T108
+// 200 kHz unit-channel grid via RegionInfo::getSlotPlan() rather than band-edge-abutted slots.
+static void test_applyModemConfig_JP_aribUnitChannelGrid()
+{
+    channelFile.channels[0].settings.name[0] = '\0';
+
+    // LONG_FAST (250 kHz): 7 slots, slot 1 = 920.7 MHz, default slot 6 = 922.7 MHz, slot 7 = 923.1 MHz.
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_JP;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    config.lora.channel_num = 1;
+    testRadio->reconfigure();
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 920.700f, testRadio->getFreq());
+
+    config.lora.channel_num = 7;
+    testRadio->reconfigure();
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 923.100f, testRadio->getFreq());
+
+    config.lora.channel_num = 0; // default hash("LongFast") % 7 + 1 == 6
+    testRadio->reconfigure();
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 922.700f, testRadio->getFreq());
+
+    // SHORT_TURBO (500 kHz): 5 slots, slot 1 = 920.8 MHz, slot 5 = 923.2 MHz.
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO;
+    config.lora.channel_num = 1;
+    testRadio->reconfigure();
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 920.800f, testRadio->getFreq());
+
+    config.lora.channel_num = 5;
+    testRadio->reconfigure();
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 923.200f, testRadio->getFreq());
+}
+
+// Custom bandwidths on JP (125 kHz and 62.5 kHz) must center on ARIB unit channel 24 (920.6 MHz)
+// through channel 38 (923.4 MHz) rather than 920.5625 / 920.53125 MHz.
+static void test_applyModemConfig_JP_customBandwidthGrid()
+{
+    channelFile.channels[0].settings.name[0] = '\0';
+
+    for (uint16_t bwCode : {uint16_t(125), uint16_t(62)}) {
+        config.lora = meshtastic_Config_LoRaConfig_init_zero;
+        config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_JP;
+        config.lora.use_preset = false;
+        config.lora.bandwidth = bwCode;
+        config.lora.spread_factor = 9;
+        config.lora.coding_rate = 5;
+        config.lora.channel_num = 1;
+        testRadio->reconfigure();
+        TEST_ASSERT_FLOAT_WITHIN(0.001f, 920.600f, testRadio->getFreq());
+
+        config.lora.channel_num = 15;
+        testRadio->reconfigure();
+        TEST_ASSERT_FLOAT_WITHIN(0.001f, 923.400f, testRadio->getFreq());
+    }
+}
+
 // MEDIUM_TURBO is a 500 kHz preset, so it is invalid for EU_868 and must clamp to the region default.
 static void test_clampConfigLora_mediumTurboInvalidForEU868()
 {
@@ -1248,6 +1305,8 @@ void setup()
     RUN_TEST(test_applyModemConfig_customCodingRateHigherThanPreset);
     RUN_TEST(test_applyModemConfig_customCodingRateLowerThanPreset);
     RUN_TEST(test_applyModemConfig_mediumTurbo);
+    RUN_TEST(test_applyModemConfig_JP_aribUnitChannelGrid);
+    RUN_TEST(test_applyModemConfig_JP_customBandwidthGrid);
     RUN_TEST(test_clampConfigLora_mediumTurboInvalidForEU868);
     RUN_TEST(test_clampConfigLora_mediumTurboValidForUS);
     RUN_TEST(test_regionPresetMap_coversAllRegionsWithinBounds);

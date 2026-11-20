@@ -25,6 +25,7 @@ struct RegionProfile {
     const meshtastic_Config_LoRaConfig_ModemPreset *presets; // sentinel-terminated
     float spacing;                                           // gaps between radio channels
     float padding;                                           // padding at each side of the "operating channel"
+    float unitChannelMHz;                                    // unit-channel raster (MHz); when > 0, overrides padding
     bool audioPermitted;
     bool licensedOnly;        // a region profile for licensed operators only
     int8_t textThrottle;      // throttle for text - future expansion
@@ -45,6 +46,7 @@ extern float getEffectiveDutyCycle();
 extern bool isKnownModemPreset(meshtastic_Config_LoRaConfig_ModemPreset preset);
 
 extern const RegionProfile PROFILE_STD;
+extern const RegionProfile PROFILE_JP;
 extern const RegionProfile PROFILE_EU868;
 extern const RegionProfile PROFILE_UNDEF;
 extern const RegionProfile PROFILE_LITE;
@@ -93,22 +95,36 @@ struct RegionInfo {
             n++;
         return n;
     }
-    float getSpacing(float bwKHz = 0) const
+    struct SlotPlan {
+        float width;       // MHz between consecutive slot centers
+        uint32_t count;    // number of full slots fitting within [freqStart, freqEnd]
+        float firstCenter; // MHz center frequency of slot 0 (1-based channel_num == 1)
+    };
+
+    SlotPlan getSlotPlan(float bwKHz) const
     {
-        if (code == meshtastic_Config_LoRaConfig_RegionCode_JP)
-            return 0.0f;
-        return profile ? profile->spacing : 0.0f;
-    }
-    float getPadding(float bwKHz = 0) const
-    {
-        if (code == meshtastic_Config_LoRaConfig_RegionCode_JP) {
-            // ARIB STD-T108: 200 kHz unit channel grid. Center LoRa BW symmetrically within ceil(bw/200kHz) unit channels.
-            const float bw = (bwKHz > 0.0f ? bwKHz : 250.0f);
-            const int numUnits = ((int)(bw + 0.5f) + 199) / 200;
-            const float slotWidth = numUnits * 0.200f;
-            return (slotWidth - (bw / 1000.0f)) * 0.5f;
+        if (!profile || bwKHz <= 0.0f || freqEnd <= freqStart)
+            return {0.0f, 0, 0.0f};
+
+        const float bwMHz = bwKHz / 1000.0f;
+        const float spacing = profile->spacing;
+        float padding = profile->padding;
+        if (profile->unitChannelMHz > 0.0f) {
+            // Bond ceil(bw / unitChannel) contiguous unit channels, centering bw symmetrically.
+            const uint32_t numUnits = static_cast<uint32_t>((bwMHz / profile->unitChannelMHz) * (1.0f - 1e-6f)) + 1;
+            const float slotSpan = numUnits * profile->unitChannelMHz;
+            padding = slotSpan > bwMHz ? (slotSpan - bwMHz) * 0.5f : 0.0f;
         }
-        return profile ? profile->padding : 0.0f;
+
+        const float width = spacing + (padding * 2.0f) + bwMHz;
+        const float firstCenter = freqStart + (bwMHz * 0.5f) + padding;
+        const float span = freqEnd - freqStart;
+        if (width <= 0.0f || (span + spacing) <= 0.0f)
+            return {width, 0, firstCenter};
+
+        // Relative tolerance absorbs IEEE-754 rounding on exact multiples without inflating narrow slots.
+        const uint32_t count = static_cast<uint32_t>(((span + spacing) / width) * (1.0f + 1e-6f));
+        return {width, count, firstCenter};
     }
 };
 
