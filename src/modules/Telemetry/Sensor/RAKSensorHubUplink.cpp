@@ -5,6 +5,7 @@
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && defined(HAS_RAKHUB)
 
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
+#include "RAKSensorHub.h"
 #include "UptimeClock.h"
 #include <onewire_master_api.h>
 
@@ -40,6 +41,7 @@ struct HubPower {
 struct EnvCache {
     // IPSO IDs from RAK-OneWireSerial (CayenneLPP-style offset from 3200).
     ScalarReading temperature;             // 0x67 TEMP_SENSOR
+    ScalarReading soil_temperature;        // 0x67 from a soil probe
     ScalarReading humidity;                // 0x68 HUMIDITY_SENSOR
     ScalarReading pressure;                // 0x73 BAROMETER
     ScalarReading distance;                // 0x82 custom AIC distance (not IPSO DISTANCE)
@@ -78,7 +80,6 @@ static HubPower power;
 static EnvCache env;
 
 // Per-PID IPSO signature so 0x70 is air RH (weather) or soil moisture, never both.
-static constexpr int kMaxProbeSigs = 8;
 static constexpr uint16_t SIG_PRESS = 1u << 0;
 static constexpr uint16_t SIG_WIND = 1u << 1;
 static constexpr uint16_t SIG_WIND_DIR = 1u << 2;
@@ -87,13 +88,7 @@ static constexpr uint16_t SIG_MOISTURE = 1u << 4;
 static constexpr uint16_t SIG_SOIL_GE = 1u << 5;
 static constexpr uint16_t SIG_NPK = 1u << 6;
 
-struct ProbeSig {
-    uint8_t pid = 0;
-    bool used = false;
-    uint16_t mask = 0;
-};
-
-static ProbeSig probeSigs[kMaxProbeSigs];
+static uint16_t probeSigs[UINT8_MAX + 1];
 static uint8_t hpHumidityPid = 0;
 static bool hpHumidityPidValid = false;
 
@@ -123,34 +118,12 @@ static uint16_t ipsoToSigBit(uint8_t ipso)
 
 static void noteProbeMask(uint8_t pid, uint16_t bits)
 {
-    if (bits == 0)
-        return;
-    for (int i = 0; i < kMaxProbeSigs; i++) {
-        if (probeSigs[i].used && probeSigs[i].pid == pid) {
-            probeSigs[i].mask = (uint16_t)(probeSigs[i].mask | bits);
-            return;
-        }
-    }
-    for (int i = 0; i < kMaxProbeSigs; i++) {
-        if (!probeSigs[i].used) {
-            probeSigs[i].used = true;
-            probeSigs[i].pid = pid;
-            probeSigs[i].mask = bits;
-            return;
-        }
-    }
-    probeSigs[0].used = true;
-    probeSigs[0].pid = pid;
-    probeSigs[0].mask = bits;
+    probeSigs[pid] = (uint16_t)(probeSigs[pid] | bits);
 }
 
 static uint16_t probeMask(uint8_t pid)
 {
-    for (int i = 0; i < kMaxProbeSigs; i++) {
-        if (probeSigs[i].used && probeSigs[i].pid == pid)
-            return probeSigs[i].mask;
-    }
-    return 0;
+    return probeSigs[pid];
 }
 
 /** Write a scalar sensor reading: update value, valid flag and last update time
@@ -169,7 +142,7 @@ static void setHpHumidity(float v, uint32_t nowMs, uint8_t pid)
     hpHumidityPidValid = true;
 }
 
-static bool hpHumidityIsSoil(uint8_t pid)
+static bool probeIsSoil(uint8_t pid)
 {
     const uint16_t m = probeMask(pid);
     const bool weather = (m & (SIG_PRESS | SIG_WIND | SIG_WIND_DIR)) != 0;
@@ -247,12 +220,8 @@ static inline bool powerFieldFresh(uint32_t lastMs, uint32_t nowMs, uint32_t max
     return lastMs != 0 && (nowMs - lastMs) <= maxAgeMs;
 }
 
-#if defined(RAK_SENSORHUB_EXTENDED_ENV_METRICS) && RAK_SENSORHUB_EXTENDED_ENV_METRICS
-
-/** Optional on-air export of soil/water chemistry + solar irradiance.
- * Still targets legacy EnvironmentMetrics tags; retarget to SoilWaterMetrics after
- * firmware protobuf sync (protobufs#1071). Off by default: parsed into EnvCache only. */
-static bool fillExtendedEnvironmentMetrics(meshtastic_EnvironmentMetrics *m, uint32_t now, uint32_t maxAgeMs)
+/** Soil/water chemistry and solar irradiance. */
+static bool fillSoilWaterMetrics(meshtastic_SoilWaterMetrics *m, uint32_t now, uint32_t maxAgeMs)
 {
     bool any = false;
     // Proto soil_ph/ph map IPSO 0xC1/0xC2 (high/low precision), not soil vs water.
@@ -339,8 +308,6 @@ static bool fillExtendedEnvironmentMetrics(meshtastic_EnvironmentMetrics *m, uin
     return any;
 }
 
-#endif // RAK_SENSORHUB_EXTENDED_ENV_METRICS
-
 static inline bool isAllZero(const uint8_t *p, uint16_t n)
 {
     if (p == nullptr)
@@ -419,7 +386,8 @@ static bool parseConfiguredModbusReading(uint8_t pid, uint8_t taskId, uint8_t *m
         int16_t signedRaw = (int16_t)raw;
         float temperature = signedRaw / 10.0f;
         if (temperature >= -50.0f && temperature <= 130.0f) {
-            setScalar(env.temperature, temperature, now);
+            noteProbeMask(pid, SIG_SOIL_GE);
+            setScalar(env.soil_temperature, temperature, now);
             LOG_INFO("GE temperature(task=2): raw=%d, %.1f C", (int)signedRaw, temperature);
             return true;
         }
@@ -508,8 +476,8 @@ static bool parseIpsoEvent(const char *via, uint8_t pid, uint8_t sid, uint8_t *m
             LOG_INFO("Ignore temperature value out of range: %.2f C", temperature);
             return false;
         }
-        setScalar(env.temperature, temperature, now);
-        LOG_INFO("Temperature: %.2f C", temperature);
+        setScalar(probeIsSoil(pid) ? env.soil_temperature : env.temperature, temperature, now);
+        LOG_INFO("%s: %.2f C", probeIsSoil(pid) ? "Soil temperature" : "Temperature", temperature);
         return true;
     }
     case RAK_IPSO_HUMIDITY_SENSOR: {
@@ -870,6 +838,15 @@ static bool parseIpsoEvent(const char *via, uint8_t pid, uint8_t sid, uint8_t *m
     }
 }
 
+/** Replace a PID's signature with its provisioned sensor list, so the first frame is classified. */
+void setProbeSensors(uint8_t pid, const uint8_t *ipso, uint16_t n)
+{
+    uint16_t bits = 0;
+    for (uint16_t i = 0; i < n; i++)
+        bits = (uint16_t)(bits | ipsoToSigBit(ipso[i]));
+    probeSigs[pid] = bits;
+}
+
 bool handleIpsoEvent(const char *via, uint8_t pid, uint8_t sid, uint8_t *msg, uint16_t len)
 {
     logIpsoEventPrefix(via, pid, msg[0]);
@@ -880,16 +857,13 @@ bool handleIpsoEvent(const char *via, uint8_t pid, uint8_t sid, uint8_t *msg, ui
     return ok;
 }
 
-/** Fill measurement variant from EnvCache. air_quality_metrics: CO2 only (IPSO 0x7D).
- * environment_metrics: standard fields always; chemistry/irradiance only when
- * RAK_SENSORHUB_EXTENDED_ENV_METRICS is on (retarget to soil_water_metrics later). */
+/** Fill measurement variant from EnvCache: air_quality_metrics (CO2), soil_water_metrics
+ * (chemistry, irradiance) or environment_metrics (everything else). */
 bool getMetrics(meshtastic_Telemetry *measurement)
 {
     bool any = false;
     const uint32_t now = Time::stampMillis();
-    // Allow cached readings to be reused for a while because 1-Wire frames can be
-    // missed under BLE/app load. Five minutes keeps outdoor use stable.
-    const uint32_t maxAgeMs = 5 * 60 * 1000;
+    const uint32_t maxAgeMs = RAKHUB_MAX_READING_AGE_MS;
 
     // CO2 is reported in AirQualityMetrics, not EnvironmentMetrics
     if (measurement->which_variant == meshtastic_Telemetry_air_quality_metrics_tag) {
@@ -901,6 +875,8 @@ bool getMetrics(meshtastic_Telemetry *measurement)
         }
         return false;
     }
+    if (measurement->which_variant == meshtastic_Telemetry_soil_water_metrics_tag)
+        return fillSoilWaterMetrics(&measurement->variant.soil_water_metrics, now, maxAgeMs);
 
     if (powerFieldFresh(power.volMs, now, maxAgeMs) && power.volMv > 0) {
         measurement->variant.environment_metrics.has_voltage = true; // Voltage in V (IPSO 0xBA).
@@ -917,6 +893,11 @@ bool getMetrics(meshtastic_Telemetry *measurement)
         measurement->variant.environment_metrics.has_temperature = true;
         measurement->variant.environment_metrics.temperature = env.temperature.value; // Temperature in °C from RAK environmental
                                                                                       // sensor (IPSO 0x67 TEMPERATURE).
+        any = true;
+    }
+    if (scalarFresh(env.soil_temperature, now, maxAgeMs)) {
+        measurement->variant.environment_metrics.has_soil_temperature = true;
+        measurement->variant.environment_metrics.soil_temperature = env.soil_temperature.value;
         any = true;
     }
     if (scalarFresh(env.humidity, now, maxAgeMs)) {
@@ -962,7 +943,7 @@ bool getMetrics(meshtastic_Telemetry *measurement)
         // IPSO 0x70 is air RH on weather probes and water content on soil probes.
         float v = env.high_precision_humidity.value;
         const uint8_t pid = hpHumidityPidValid ? hpHumidityPid : 0;
-        if (hpHumidityIsSoil(pid)) {
+        if (probeIsSoil(pid)) {
             if (!measurement->variant.environment_metrics.has_soil_moisture) {
                 measurement->variant.environment_metrics.has_soil_moisture = true;
                 measurement->variant.environment_metrics.soil_moisture = (uint8_t)(v < 0 ? 0 : (v > 100 ? 100 : (uint32_t)v));
@@ -979,18 +960,13 @@ bool getMetrics(meshtastic_Telemetry *measurement)
         any = true;
     }
 
-#if defined(RAK_SENSORHUB_EXTENDED_ENV_METRICS) && RAK_SENSORHUB_EXTENDED_ENV_METRICS
-    if (fillExtendedEnvironmentMetrics(&measurement->variant.environment_metrics, now, maxAgeMs))
-        any = true;
-#endif
-
     return any;
 }
 
 /** Bus voltage in mV from RAK power module (IPSO 0xBA DC_VOLTAGE). */
 uint16_t getBusVoltageMv()
 {
-    const uint32_t maxAgeMs = 5 * 60 * 1000;
+    const uint32_t maxAgeMs = RAKHUB_MAX_READING_AGE_MS;
     const uint32_t now = Time::stampMillis();
     return (powerFieldFresh(power.volMs, now, maxAgeMs) && power.volMv > 0) ? power.volMv : 0;
 }
@@ -998,21 +974,21 @@ uint16_t getBusVoltageMv()
 /** Bus current in mA from RAK power module (IPSO 0xB9 DC_CURRENT). */
 int16_t getCurrentMa()
 {
-    const uint32_t maxAgeMs = 5 * 60 * 1000;
+    const uint32_t maxAgeMs = RAKHUB_MAX_READING_AGE_MS;
     return powerFieldFresh(power.curMs, Time::stampMillis(), maxAgeMs) ? power.curMa : 0;
 }
 
 /** Battery capacity 0..100 % from RAK power module (IPSO 0xB8 CAPACITY). */
 int getBusBatteryPercent()
 {
-    const uint32_t maxAgeMs = 5 * 60 * 1000;
+    const uint32_t maxAgeMs = RAKHUB_MAX_READING_AGE_MS;
     return powerFieldFresh(power.percentMs, Time::stampMillis(), maxAgeMs) ? (int)power.percent : -1;
 }
 
 /** True if current > 0 (charging). */
 bool isCharging()
 {
-    const uint32_t maxAgeMs = 5 * 60 * 1000;
+    const uint32_t maxAgeMs = RAKHUB_MAX_READING_AGE_MS;
     return powerFieldFresh(power.curMs, Time::stampMillis(), maxAgeMs) && (power.curMa > 0);
 }
 

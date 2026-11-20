@@ -5,19 +5,25 @@
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "RAKSensorHub.h"
 #include "TelemetrySensor.h"
+#include "UptimeClock.h"
 #include "concurrency/LockGuard.h"
 #include "concurrency/Periodic.h"
 #include <RAK-OneWireSerial.h>
+#include <Throttle.h>
 #include <onewire_master_protocol.h> // for DELIMTER/WAKEUPBYTE and frame layout
 
+#include <algorithm>
+#include <array>
 #include <cstdint>
 #include <cstring>
+#include <map>
 #include <set>
 
 // Uplink module (RAKSensorHubUplink.cpp): IPSO parse + metrics cache.
 namespace RAKSensorHubUplink
 {
 bool handleIpsoEvent(const char *via, uint8_t pid, uint8_t sid, uint8_t *msg, uint16_t len);
+void setProbeSensors(uint8_t pid, const uint8_t *ipso, uint16_t n);
 bool getMetrics(meshtastic_Telemetry *measurement);
 uint16_t getBusVoltageMv();
 int16_t getCurrentMa();
@@ -36,163 +42,433 @@ RAKSensorHub rakSensorHub;
 static Periodic *onewireRxPeriodic;
 static Periodic *onewirePollPeriodic;
 
-static SoftwareHalfSerial mySerial(HALF_UART_PIN); // Wire pin  P0.15
+// Half-duplex on UARTE (RXD = TXD = HALF_UART_PIN); pin is an output only while sending.
+static Uart &hubSerial = Serial1;
 static Lock onewireLock;
 
 static uint8_t buff[0x200];
 static uint16_t bufflen = 0;
 
+// ----- Link timing -----
+static constexpr uint32_t RSP_TIMEOUT_MS = 2000;                 // give up on an outstanding poll
+static constexpr uint32_t DISCOVERY_RSP_TIMEOUT_MS = 1200;       // probes answer in ~600 ms
+static constexpr uint32_t DISCOVERY_INTERVAL_MS = 2000;          // PID sweep step while empty
+static constexpr uint32_t BOOT_RESCAN_EMPTY_MS = 60 * 1000;      // BOOT while no probe known
+static constexpr uint32_t BOOT_RESCAN_KNOWN_MS = 15 * 60 * 1000; // BOOT for late probes
+static constexpr uint32_t SENSOR_INTV_DEFAULT_MS = 60 * 1000;    // until get.param answers
+static constexpr uint32_t LOST_PID_POLL_MS = 60 * 1000;          // get.data to dropped PIDs
+static constexpr uint8_t MAX_MISSED_POLLS = 3;                   // then forget and rediscover
+static constexpr uint32_t TX_SETTLE_MS = 2;                      // last stop bit + echo after ENDTX
+
+// RAK probe ID range
+static constexpr uint8_t PROBE_PID_MIN = 1;
+static constexpr uint8_t PROBE_PID_MAX = 250;
+
+// Frame offsets in buff (starts at 0x7E, no wakeup byte); checksum at [5 + length]
+static constexpr uint16_t FRM_TYPE = 3, FRM_FLAG = 4, FRM_DEST = 5, FRM_SRC = 6, FRM_HUBTYPE = 8, FRM_PLDTYPE = 10;
+static constexpr uint16_t FRM_RUI3_PAYLOAD = 5;
+// SNHub_Api_Provision_t fields, from [11]
+static constexpr uint16_t PROV_SN = 15, PROV_SN_LEN = 18, PROV_ID = 33, PROV_MODEL = 41, PROV_MODEL_LEN = 20;
+static constexpr uint16_t PROV_SNSR_NUM = 65, PROV_SNSR = 66;
+
 // ----- Probe and polling state -----
-static std::set<uint8_t> provision_list; // Set of registered probe PIDs (from
-                                         // ADD_PID / capability hot-plug)
-static uint32_t pid_delta = 0;           // Last time we advanced poll PID (for 1500 ms interval)
+struct ProbeState {
+    uint32_t lastPollMs = 0;
+    bool polled = false;                // false: poll on next tick
+    uint8_t missed = 0;                 // consecutive unanswered polls
+    uint32_t retryMs = 0;               // retry delay after a miss, 0 = regular interval
+    std::map<uint8_t, uint8_t> sidIpso; // SID -> IPSO, from provisioning or first data
+    std::set<uint8_t> paramPending;     // SIDs to query interval/rule
+    std::set<uint8_t> paramRetried;     // SIDs whose query timed out once
+    uint32_t joinMs = 0;                // zero readings are dropped for one sensor interval after this
+    // SID -> sensor interval; SENSOR_INTV_DEFAULT_MS if unknown
+    std::map<uint8_t, uint32_t> sensorIntervalMs;
+};
+static std::map<uint8_t, ProbeState> probes;                      // active probes by PID
+static std::map<uint8_t, std::array<uint8_t, PROV_SN_LEN>> pidSn; // assigned PIDs by serial
 
-// ----- Timestamps (RX/TX pacing, timeouts, idle detection) -----
-static uint32_t last_poll_time = 0;       // Last time we sent get.data poll
-static uint32_t last_tx_time = 0;         // Last byte sent (half-duplex: must not overlap RX)
-static uint32_t last_rx_time = 0;         // Last byte received
-static uint32_t last_byte_time = 0;       // Last byte written to buff (for idle discard)
-static uint32_t last_err_time = 0;        // Last checksum/sequence error (briefly stop TX after error)
-static uint32_t last_capability_time = 0; // Last time we saw a capability/provision-like frame (used to quiet TX
-                                          // during join)
+static uint32_t last_tx_time = 0;        // Last frame sent
+static uint32_t last_rx_time = 0;        // Last byte received
+static uint32_t last_err_time = 0;       // Last checksum/sequence error
+static uint32_t last_discovery_time = 0; // Last PID sweep request
+static uint32_t last_boot_time = 0;      // Last provision BOOT broadcast
+static uint8_t discovery_pid = PROBE_PID_MIN;
+static uint8_t lost_pid = 0;
+static uint32_t last_lost_poll_time = 0;
 
-// ----- Request/response state (half-duplex: only one outstanding request)
-// -----
-static bool awaiting_rsp = false;        // Waiting for probe response
-static uint32_t awaiting_rsp_since = 0;  // Time request was sent; give up after 2 s and advance PID
-static bool data_poll_pid_valid = false; // Current poll PID is valid
-static uint8_t data_poll_pid = 0;        // PID currently being polled
+// ----- Request/response state (half-duplex: only one outstanding request) -----
+static bool awaiting_rsp = false;
+static uint32_t awaiting_rsp_since = 0;
+static uint32_t awaiting_rsp_timeout = RSP_TIMEOUT_MS;
 static bool last_sent_pid_valid = false;
 static uint8_t last_sent_pid = 0;
+static bool last_sent_poll = false; // only unanswered get.data counts as a miss
+static uint8_t last_sent_param_sid = 0;
 
-// ----- Frame parse state (safe resync on checksum/seq error, avoid underflow)
-// -----
-static bool processing_frame = false;           // Inside process()
-static bool frame_error_during_process = false; // CHKSUM/SEQ error occurred during process
+// ----- Frame parse state (safe resync on checksum/seq error) -----
+static bool processing_frame = false;
+static bool frame_error_during_process = false;
+static bool frame_ipso_desync = false; // rest of the current frame cannot be decoded
 
-static uint32_t status_delta = 0; // Last time we logged status (about every 5 s)
-
-// Hot-plug: periodic listen window (no TX) so new probes can send capability
-// without OVF/collision
-static const uint32_t LISTEN_WINDOW_INTERVAL_MS = 60000; // every 60 s
-static const uint32_t LISTEN_WINDOW_DURATION_MS = 3000;  // 3 s no TX
-static uint32_t last_listen_schedule = 0;
-static uint32_t listen_window_until = 0;
+static uint32_t status_delta = 0; // Last time we logged status
 
 // ProbeIO core-1.2.27: DI sensor slot base (snsr_id = 15 + ch - 1 for IOC_DI
 // ch>=1).
 static constexpr uint8_t RAKHUB_PROBE_DI_SNSR_BASE = 15;
 
-/** Get first PID from provision list (poll start or reset when no current PID).
- */
-static bool getFirstProvisionPid(uint8_t &pid)
+static void hubSerialBegin()
 {
-    if (provision_list.empty()) {
-        return false;
-    }
-    pid = *provision_list.begin();
-    return true;
+    pinMode(HALF_UART_PIN, INPUT_PULLUP);
+    hubSerial.setPins(HALF_UART_PIN, HALF_UART_PIN);
+    hubSerial.begin(9600);
 }
 
-/** Get next PID after current in provision list (round-robin over probes). */
-static bool getNextProvisionPid(uint8_t current, uint8_t &next)
+/** Drive the shared pin only for the duration of the frame, then drop our own echo. */
+static void hubSerialWrite(const uint8_t *msg, uint16_t len)
 {
-    auto it = provision_list.upper_bound(current);
-    if (it == provision_list.end()) {
-        return false;
-    }
-    next = *it;
-    return true;
+    NRF_GPIO_Type *port = digitalPinToPort(HALF_UART_PIN);
+    const uint32_t mask = digitalPinToBitMask(HALF_UART_PIN);
+    port->DIRSET = mask;
+    hubSerial.write(msg, len);
+    hubSerial.flush(); // waits on ENDTX semaphore, other tasks run
+    delay(TX_SETTLE_MS);
+    port->DIRCLR = mask;
+    while (hubSerial.available())
+        hubSerial.read();
+    last_tx_time = millis();
 }
 
-/** Advance poll PID to next provisioned probe; wrap to first if at end
- * (round-robin). */
-static void advanceDataPollPid()
+static void logDiscard(const char *why)
 {
-    if (provision_list.empty()) {
-        data_poll_pid_valid = false;
+    char hex[3 * 16 + 1];
+    const uint16_t n = bufflen < 16 ? bufflen : 16;
+    for (uint16_t i = 0; i < n; i++)
+        snprintf(&hex[i * 3], 4, "%02x ", buff[i]);
+    hex[n * 3] = 0;
+    LOG_DEBUG("RAKSensorHub: drop %u bytes (%s): %s", (unsigned)bufflen, why, hex);
+}
+
+static inline bool isProbePid(uint8_t pid)
+{
+    return pid >= PROBE_PID_MIN && pid <= PROBE_PID_MAX;
+}
+
+static ProbeState *addProbe(uint8_t pid, const char *how)
+{
+    if (!isProbePid(pid))
+        return nullptr;
+    auto it = probes.find(pid);
+    if (it != probes.end())
+        return &it->second;
+    LOG_INFO("RAKSensorHub: probe PID[%02x] added (%s)", pid, how);
+    if (!pidSn.count(pid))
+        pidSn[pid].fill(0); // reserve until it provisions
+    ProbeState &st = probes[pid];
+    st.joinMs = Time::skipZero(millis());
+    return &st;
+}
+
+static void noteSid(ProbeState &st, uint8_t sid, uint8_t ipso)
+{
+    if (st.sidIpso.emplace(sid, ipso).second)
+        st.paramPending.insert(sid);
+}
+
+/** IPSO types the RAK library can size; any other type desynchronises the rest of its frame. */
+static bool libraryKnowsIpso(uint8_t ipso)
+{
+    switch (ipso) {
+    case RAK_IPSO_DIGITAL_INPUT:
+    case RAK_IPSO_DIGITAL_OUTPUT:
+    case RAK_IPSO_ANALOG_INPUT:
+    case RAK_IPSO_ANALOG_OUT:
+    case RAK_IPSO_NITROGEN:
+    case RAK_IPSO_PHOSPHORUS:
+    case RAK_IPSO_POTASSIUM:
+    case RAK_IPSO_SALINITY:
+    case RAK_IPSO_DISS_OXYGEN:
+    case RAK_IPSO_ORP:
+    case RAK_IPSO_COD:
+    case RAK_IPSO_TURBIDITY:
+    case RAK_IPSO_NO3:
+    case RAK_IPSO_NH4PLUS:
+    case RAK_IPSO_BOD:
+    case RAK_IPSO_ILLUM_SENSOR:
+    case RAK_IPSO_PRESENCE_SENSOR:
+    case RAK_IPSO_TEMP_SENSOR:
+    case RAK_IPSO_HUMIDITY_SENSOR:
+    case RAK_IPSO_GAS:
+    case RAK_IPSO_HP_HUMIDITY:
+    case RAK_IPSO_ACCELEROMETER:
+    case RAK_IPSO_BAROMETER:
+    case RAK_IPSO_BATTERVALUE:
+    case RAK_IPSO_PRECIPITATION:
+    case RAK_IPSO_GASPERCENTAGE:
+    case RAK_IPSO_CO2:
+    case RAK_IPSO_SSN:
+    case RAK_IPSO_HP_EC:
+    case RAK_IPSO_DISTANCE:
+    case RAK_IPSO_GYROMETER:
+    case RAK_IPSO_GPS_LOCAL:
+    case RAK_IPSO_GNSS_ENHANCED:
+    case RAK_IPSO_VOC:
+    case RAK_IPSO_GUSTWINDSPEED:
+    case RAK_IPSO_STRIKES:
+    case RAK_IPSO_CAPACITY:
+    case RAK_IPSO_DC_CURRENT:
+    case RAK_IPSO_DC_VOLTAGE:
+    case RAK_IPSO_MOISTURE:
+    case RAK_IPSO_WIND:
+    case RAK_IPSO_WIND_DIR:
+    case RAK_IPSO_EC:
+    case RAK_IPSO_HP_PH:
+    case RAK_IPSO_PH:
+    case RAK_IPSO_PYRANOMETER:
+    case RAK_IPSO_PM10:
+    case RAK_IPSO_PM25:
+    case RAK_IPSO_XYORIENTATION:
+    case RAK_IPSO_NOISE:
+    case RAK_IPSO_MODBUS:
+    case RAK_IPSO_SDI12:
+    case RAK_IPSO_BINARY2BYTE:
+    case RAK_IPSO_BINARY4BYTE:
+    case RAK_IPSO_FLOAT_IEEE754:
+    case RAK_IPSO_INTEGER32:
+    case RAK_IPSO_UINTEGER32:
+    case RAK_IPSO_BINARYTLV:
+        return true;
+    default:
+        return false;
+    }
+}
+
+static void sendRequest(uint8_t pid, uint32_t now, uint32_t timeoutMs, bool poll)
+{
+    last_sent_poll = poll;
+    last_sent_pid = pid;
+    last_sent_pid_valid = true;
+    awaiting_rsp = true;
+    awaiting_rsp_since = now;
+    awaiting_rsp_timeout = timeoutMs;
+}
+
+/** Unanswered request: count a miss against a known probe, forget it after MAX_MISSED_POLLS. */
+static void onRequestTimeout(uint32_t now)
+{
+    awaiting_rsp = false;
+    last_err_time = now;
+    if (!last_sent_pid_valid)
+        return;
+    auto it = probes.find(last_sent_pid);
+    if (it == probes.end())
+        return;
+    if (!last_sent_poll) {
+        if (it->second.paramRetried.insert(last_sent_param_sid).second)
+            it->second.paramPending.insert(last_sent_param_sid);
         return;
     }
-
-    if (!data_poll_pid_valid || provision_list.count(data_poll_pid) == 0) {
-        data_poll_pid_valid = getFirstProvisionPid(data_poll_pid);
-        return;
-    }
-
-    uint8_t nextPid = 0;
-    if (getNextProvisionPid(data_poll_pid, nextPid)) {
-        data_poll_pid = nextPid;
-        data_poll_pid_valid = true;
+    if (++it->second.missed >= MAX_MISSED_POLLS) {
+        LOG_WARN("RAKSensorHub: probe PID[%02x] silent for %u polls, rediscovering", last_sent_pid, (unsigned)MAX_MISSED_POLLS);
+        probes.erase(it);
+        last_boot_time = 0; // re-broadcast BOOT right away
     } else {
-        data_poll_pid_valid = getFirstProvisionPid(data_poll_pid);
+        it->second.retryMs = it->second.missed == 1 ? 3000 : 8000; // probes can stall for several seconds
     }
 }
 
-/**
- * 1-Wire protocol event callback: invoked by RakSNHub_Protocl_API.process()
- * after parsing a frame. Handles REQ/RSP, ADD_PID/ADD_SID, QSEND (actual UART
- * TX), SDATA_REQ/REPORT (IPSO parse -> env), checksum/seq errors.
- */
+/** RUI3 checksum: popcount of type, flag and payload. */
+static uint8_t frameChecksum(const uint8_t *frm, uint16_t payloadLen)
+{
+    uint8_t sum = __builtin_popcount(frm[FRM_TYPE]) + __builtin_popcount(frm[FRM_FLAG]);
+    for (uint16_t i = 0; i < payloadLen; i++)
+        sum += __builtin_popcount(frm[FRM_RUI3_PAYLOAD + i]);
+    return sum;
+}
+
+/** Known serial keeps its PID, else the requested PID if free, else the lowest free. */
+/** True if a serial-unknown PID can be this joining probe: dropped, or its seen SID/IPSO pairs match the declared list. */
+static bool sameSensors(uint8_t pid, const uint8_t *snsr, uint8_t count)
+{
+    auto it = probes.find(pid);
+    if (it == probes.end())
+        return true;
+    if (it->second.sidIpso.empty())
+        return false;
+    for (const auto &[sid, ipso] : it->second.sidIpso) {
+        bool found = false;
+        for (uint8_t i = 0; i < count && !found; i++)
+            found = snsr[4 * i] == sid && snsr[4 * i + 1] == ipso;
+        if (!found)
+            return false;
+    }
+    return true;
+}
+
+static uint8_t assignPid(const uint8_t *sn, uint8_t requested, const uint8_t *snsr, uint8_t count)
+{
+    for (const auto &[pid, known] : pidSn)
+        if (memcmp(known.data(), sn, PROV_SN_LEN) == 0)
+            return pid;
+    static const std::array<uint8_t, PROV_SN_LEN> unknownSn{};
+    uint8_t pid = 0;
+    // PID seen on the bus before provisioning (serial unknown) goes to whoever asks for it
+    if (isProbePid(requested) && (!pidSn.count(requested) || pidSn[requested] == unknownSn)) {
+        pid = requested;
+    } else {
+        // Reclaim a serial-unknown PID first (a probe that answered before joining), then the lowest free one
+        for (uint8_t p = PROBE_PID_MIN; p <= PROBE_PID_MAX && pid == 0; p++)
+            if (pidSn.count(p) && pidSn[p] == unknownSn && sameSensors(p, snsr, count))
+                pid = p;
+        for (uint8_t p = PROBE_PID_MIN; p <= PROBE_PID_MAX && pid == 0; p++)
+            if (!pidSn.count(p))
+                pid = p;
+    }
+    if (pid != 0)
+        memcpy(pidSn[pid].data(), sn, PROV_SN_LEN);
+    return pid;
+}
+
+/** Answer a probe provision request here; the RAK library handles only one probe (REC_NUM=1). */
+static bool handleProvisionRequest(uint16_t total, uint16_t payloadLen)
+{
+    if (buff[FRM_TYPE] != RUI3API_TYPE_SENSORHUB || buff[FRM_FLAG] != RUI3API_FLG_REQ ||
+        buff[FRM_HUBTYPE] != SNHUB_TYPE_PROVISION)
+        return false;
+    if (buff[FRM_PLDTYPE] != PLD_PROVI_TYPE_VER3 || total <= PROV_SNSR) {
+        LOG_WARN("RAKSensorHub: unsupported provision request (type %u, len %u)", (unsigned)buff[FRM_PLDTYPE], (unsigned)total);
+        return true;
+    }
+    if (frameChecksum(buff, payloadLen) != buff[FRM_RUI3_PAYLOAD + payloadLen]) {
+        LOG_INFO("+ERR:CHKSUM (provision)");
+        last_err_time = millis();
+        return true;
+    }
+
+    const uint8_t requested = buff[PROV_ID];
+    uint8_t sensors = buff[PROV_SNSR_NUM];
+    while (sensors > 0 && PROV_SNSR + 4u * sensors - 1 >= (uint32_t)FRM_RUI3_PAYLOAD + payloadLen)
+        sensors--; // entries must end before the checksum
+    const uint8_t pid = assignPid(&buff[PROV_SN], requested, &buff[PROV_SNSR], sensors);
+    if (pid == 0) {
+        LOG_WARN("RAKSensorHub: no free probe PID, ignoring provision request");
+        return true;
+    }
+
+    static uint8_t tx[sizeof(buff) + 1];
+    tx[0] = WAKEUPBYTE;
+    memcpy(&tx[1], buff, total);
+    uint8_t *rsp = &tx[1];
+    rsp[FRM_FLAG] = RUI3API_FLG_RSP;
+    rsp[FRM_DEST] = buff[FRM_SRC];
+    rsp[FRM_SRC] = buff[FRM_DEST];
+    rsp[PROV_ID] = pid;
+    rsp[FRM_RUI3_PAYLOAD + payloadLen] = frameChecksum(rsp, payloadLen);
+    hubSerialWrite(tx, total + 1);
+
+    char model[PROV_MODEL_LEN + 1];
+    for (uint16_t i = 0; i < PROV_MODEL_LEN; i++) {
+        const char c = (char)buff[PROV_MODEL + i];
+        model[i] = (c >= 0x20 && c < 0x7F) ? c : 0;
+    }
+    model[PROV_MODEL_LEN] = 0;
+    LOG_INFO("RAKSensorHub: provision '%s' fw %u.%u.%u sn %02x%02x%02x%02x.. asked PID[%02x] -> PID[%02x], %u sensors", model,
+             (unsigned)buff[12], (unsigned)buff[13], (unsigned)buff[14], buff[PROV_SN], buff[PROV_SN + 1], buff[PROV_SN + 2],
+             buff[PROV_SN + 3], (unsigned)requested, (unsigned)pid, (unsigned)sensors);
+
+    ProbeState *st = addProbe(pid, "provision");
+    if (st) {
+        st->sidIpso.clear();
+        st->paramPending.clear();
+        st->paramRetried.clear();
+        st->sensorIntervalMs.clear();
+    }
+    uint8_t ipsoList[UINT8_MAX];
+    for (uint16_t i = 0; i < sensors; i++) {
+        const uint8_t *s = &buff[PROV_SNSR + 4 * i];
+        ipsoList[i] = s[1];
+        LOG_INFO("RAKSensorHub: PID[%02x] SID[%02x] IPSO[%02x] rule=0x%04x%s", (unsigned)pid, (unsigned)s[0], (unsigned)s[1],
+                 (unsigned)(s[2] | (s[3] << 8)), s[0] == RAKHUB_PROBE_DI_SNSR_BASE ? " (ProbeIO DI slot)" : "");
+        if (st) {
+            noteSid(*st, s[0], s[1]);
+            st->paramPending.insert(s[0]); // sensor probes stall ~5 s about 30 s after a join without it
+        }
+    }
+    RAKSensorHubUplink::setProbeSensors(pid, ipsoList, sensors);
+    if (st) {
+        st->polled = false; // first data right after joining
+        st->joinMs = Time::skipZero(millis());
+        st->missed = 0;
+        st->retryMs = 0;
+    }
+    return true;
+}
+
+/** RAK protocol event callback. */
 static void onewire_evt(const uint8_t pid, const uint8_t sid, const SNHUBAPI_EVT_E eid, uint8_t *msg, uint16_t len)
 {
     switch (eid) {
     case SNHUBAPI_EVT_RECV_REQ:
+        // Probe-initiated REPORT: adopt unknown PIDs
         LOG_DEBUG("+EVT:PID[%02x],REQ", pid);
+        addProbe(pid, "unsolicited report");
         break;
-    case SNHUBAPI_EVT_RECV_RSP:
+    case SNHUBAPI_EVT_RECV_RSP: {
         LOG_DEBUG("+EVT:PID[%02x],RSP", pid);
-        if (last_sent_pid_valid && pid == last_sent_pid && pid != PID_MASTER && provision_list.count(pid) == 0) {
-            provision_list.insert(pid);
-            data_poll_pid = pid;
-            data_poll_pid_valid = true;
-            LOG_INFO("+ADD:PID:[%02x] from discovery response", pid);
+        ProbeState *st = addProbe(pid, (last_sent_pid_valid && pid == last_sent_pid) ? "discovery response" : "response");
+        if (st) {
+            st->missed = 0;
+            st->retryMs = 0;
         }
-        awaiting_rsp = false;
-        advanceDataPollPid();
+        if (last_sent_pid_valid && pid == last_sent_pid)
+            awaiting_rsp = false;
         break;
+    }
 
     case SNHUBAPI_EVT_QSEND:
-        mySerial.write(msg, len);
-        last_tx_time = millis();
-        // Broadcast join RSP (PID 0xff) is not an IOC request; waiting for it
-        // blocks APPLY ~12s.
-        if (pid != 0xff) {
-            awaiting_rsp = true;
-            awaiting_rsp_since = last_tx_time;
-        }
+        hubSerialWrite(msg, len);
         LOG_DEBUG("RAKSensorHub: TX %u bytes (PID=0x%02x)", (unsigned)len, pid);
         break;
 
     case SNHUBAPI_EVT_ADD_SID:
-        if (len > 0 && msg[0] == RAKHUB_PROBE_DI_SNSR_BASE) {
-            LOG_INFO("+ADD:SID:[%02x] (ProbeIO DI snsr slot %u - edge IPSO[00] after "
-                     "PB13 toggle)",
-                     (unsigned)msg[0], (unsigned)RAKHUB_PROBE_DI_SNSR_BASE);
-        } else {
-            LOG_INFO("+ADD:SID:[%02x]", len > 0 ? msg[0] : 0);
-        }
-        (void)sid;
-        break;
-
-    case SNHUBAPI_EVT_ADD_PID: {
-        const uint8_t new_pid = msg[0];
-        LOG_INFO("+ADD:PID:[%02x]", new_pid);
-        provision_list.insert(new_pid);
-        data_poll_pid = new_pid;
-        data_poll_pid_valid = true;
-        break;
-    }
+    case SNHUBAPI_EVT_ADD_PID:
+        break; // handled in handleProvisionRequest()
 
     case SNHUBAPI_EVT_GET_INTV:
+        if (len >= 4) {
+            const uint32_t intv =
+                (uint32_t)msg[0] | ((uint32_t)msg[1] << 8) | ((uint32_t)msg[2] << 16) | ((uint32_t)msg[3] << 24);
+            LOG_INFO("RAKSensorHub: PID[%02x] SID[%02x] sensor interval %lu s", pid, sid, (unsigned long)intv);
+            auto it = probes.find(pid);
+            if (it != probes.end() && intv > 0 && intv <= 3600)
+                it->second.sensorIntervalMs[sid] = intv * 1000;
+        }
         break;
 
     case SNHUBAPI_EVT_GET_ENABLE:
-        LOG_INFO("+EVT:PID[%02x],ENABLE[%02x]", pid, msg[0]);
+        LOG_INFO("RAKSensorHub: PID[%02x] SID[%02x] periodic rule %s", pid, sid, msg[0] ? "on" : "off");
         break;
 
     case SNHUBAPI_EVT_SDATA_REQ:
     case SNHUBAPI_EVT_REPORT: {
         const char *via = (eid == SNHUBAPI_EVT_SDATA_REQ) ? "SDATA" : "REPORT";
+        if (frame_ipso_desync || len == 0)
+            break;
+        ProbeState *st = addProbe(pid, via);
+        if (!libraryKnowsIpso(msg[0]) || (st && st->sidIpso.count(sid) && st->sidIpso[sid] != msg[0])) {
+            LOG_WARN("RAKSensorHub: PID[%02x] SID[%02x] IPSO[%02x] not decodable, rest of frame skipped", pid, sid, msg[0]);
+            frame_ipso_desync = true;
+            break;
+        }
+        if (st)
+            noteSid(*st, sid, msg[0]);
+        // Probes answer with zeros until their first measurement after power-up or a join; digital low is a real state
+        if (st && len > 1 && msg[0] != RAK_IPSO_DIGITAL_INPUT && msg[0] != RAK_IPSO_DIGITAL_OUTPUT &&
+            Throttle::isWithinTimespanMs(st->joinMs,
+                                         st->sensorIntervalMs.count(sid) ? st->sensorIntervalMs[sid] : SENSOR_INTV_DEFAULT_MS) &&
+            std::all_of(msg + 1, msg + len, [](uint8_t b) { return b == 0; })) {
+            LOG_DEBUG("RAKSensorHub: PID[%02x] SID[%02x] zero reading before first measurement, skipped", pid, sid);
+            break;
+        }
         if (RAKSensorHubUplink::handleIpsoEvent(via, pid, sid, msg, len))
             rakSensorHub.setLastRead(millis());
         break;
@@ -207,16 +483,14 @@ static void onewire_evt(const uint8_t pid, const uint8_t sid, const SNHUBAPI_EVT
             frame_error_during_process = true;
         }
         last_err_time = millis();
-        awaiting_rsp = false;
         break;
 
     case SNHUBAPI_EVT_SEQ_ERR:
-        LOG_INFO("+ERR:SEQUCE (often IOC burst + get.data overlap)");
+        LOG_INFO("+ERR:SEQUCE");
         if (processing_frame) {
             frame_error_during_process = true;
         }
         last_err_time = millis();
-        awaiting_rsp = false;
         break;
 
     default:
@@ -224,39 +498,21 @@ static void onewire_evt(const uint8_t pid, const uint8_t sid, const SNHUBAPI_EVT
     }
 }
 
-/**
- * 1-Wire RX task (called periodically by Periodic): read bytes from half-duplex
- * UART, frame by 0x7E delimiter, call protocol process and onewire_evt.
- * Includes overflow recovery and capability-frame hot-plug PID parse. Returns
- * suggested next call interval (ms): 5 ms when active, 40 ms when idle.
- */
+/** Drain the UART and hand complete frames to the protocol. */
 static int32_t onewireRxHandle()
 {
     const uint32_t now = millis();
     concurrency::LockGuard guard(&onewireLock);
 
-    // Drain UART as fast as possible into our larger buffer
-    while (mySerial.available()) {
-        const uint8_t a = (uint8_t)mySerial.read();
+    while (hubSerial.available()) {
+        const uint8_t a = (uint8_t)hubSerial.read();
         if (bufflen < sizeof(buff)) {
             buff[bufflen++] = a;
         } else {
-            bufflen = 0; // overflow -> resync
+            logDiscard("overflow");
+            bufflen = 0;
         }
-        last_byte_time = millis();
-        last_rx_time = last_byte_time;
-    }
-
-    // If the underlying SoftwareHalfSerial ring overflowed, bytes were dropped.
-    // Any partially assembled frame is now invalid -> hard resync.
-    if (mySerial.overflow()) {
-        LOG_INFO("+ERR:OVF");
-        bufflen = 0;
-        last_err_time = now;
-        // After an overflow, briefly suppress TX (reuse listen window) so we only
-        // receive.
-        listen_window_until = now + 300;
-        return 5; // run again soon to drain and avoid repeated overflow
+        last_rx_time = millis();
     }
 
     // Assemble complete frames using the declared payload length.
@@ -269,7 +525,8 @@ static int32_t onewireRxHandle()
 
         if (delim_idx >= bufflen) {
             // No delimiter yet; if we have been idle too long, drop noise.
-            if ((now - last_byte_time) > 50) {
+            if (!Throttle::isWithinTimespanMs(last_rx_time, 50)) {
+                logDiscard("no delimiter");
                 bufflen = 0;
             }
             break;
@@ -299,45 +556,14 @@ static int32_t onewireRxHandle()
         }
 
         if (bufflen < total_needed) {
-            // Wait for the rest of the frame (do NOT process partial)
+            // Wait for the rest; a stalled frame is truncated
+            if (!Throttle::isWithinTimespanMs(last_rx_time, 50)) {
+                logDiscard("truncated frame");
+                bufflen = 0;
+            }
             break;
         }
 
-        // Fallback: Parse capability frame (0x45/0x4D). Protocol lib may not emit
-        // ADD_PID (hot-plug). Frame format (per RAK docs): start(0xFF), lenL, lenH,
-        // type(0x45/0x4D), flag(0x02), ... PID at buff[34]; some probes use
-        // buff[33]=0xFF. 0xFF = broadcast -> assign next free PID.
-        if (total_needed >= 36 && (buff[3] == 0x45 || buff[3] == 0x4D)) {
-            last_capability_time = now;
-            uint8_t pid = buff[34];
-            if (pid == 0 || pid == 0xFF)
-                pid = buff[33];
-            if (pid == 0xFF) {
-                if (provision_list.count(0x01) == 0)
-                    pid = 0x01;
-                else {
-                    pid = 0;
-                    for (uint8_t q = 0x02; q < 0xFE; q++)
-                        if (provision_list.count(q) == 0) {
-                            pid = q;
-                            break;
-                        }
-                }
-            }
-            if (pid != 0 && provision_list.count(pid) == 0) {
-                provision_list.insert(pid);
-                LOG_INFO("+BOOT:PID[%02x] from capability (len=%u) hot-plug", pid, (unsigned)payload_len);
-            }
-            // Quiet TX briefly after capability traffic to reduce chance of colliding
-            // with probe join/provision handshake.
-            if (listen_window_until < now + 800) {
-                listen_window_until = now + 800;
-            }
-        }
-
-        // Lightweight frame prefix log (first 8 bytes) for field diagnosis.
-        // Keep at DEBUG to avoid impacting 1-Wire timing (serial logging can cause
-        // RX overflow / join instability).
         if (total_needed >= 8) {
             LOG_DEBUG("+RX:len=%u %02x %02x %02x %02x %02x %02x %02x %02x", (unsigned)total_needed, (unsigned)buff[0],
                       (unsigned)buff[1], (unsigned)buff[2], (unsigned)buff[3], (unsigned)buff[4], (unsigned)buff[5],
@@ -348,7 +574,9 @@ static int32_t onewireRxHandle()
         const uint16_t prev_len = bufflen;
         processing_frame = true;
         frame_error_during_process = false;
-        RakSNHub_Protocl_API.process(buff, (uint16_t)total_needed);
+        frame_ipso_desync = false;
+        if (!handleProvisionRequest((uint16_t)total_needed, payload_len))
+            RakSNHub_Protocl_API.process(buff, (uint16_t)total_needed);
         processing_frame = false;
 
         if (frame_error_during_process) {
@@ -374,142 +602,137 @@ static int32_t onewireRxHandle()
         bufflen = remaining;
     }
 
-    // At 9600 baud ~1 byte/ms. 0x45 (75B) and 0x4D (83B) frames need RX every
-    // ~5ms to avoid OVF, but we can sleep longer when fully idle.
-    const uint32_t idle_ms = 40;
-    const uint32_t active_ms = 5;
-    if ((now - last_byte_time) < 200)
-        return (int32_t)active_ms;
-    return (int32_t)idle_ms;
+    // Fast while a frame arrives; 40 ms idle stays within the 64-byte ring
+    return Throttle::isWithinTimespanMs(last_rx_time, 200) ? 5 : 40;
 }
 
-/**
- * 1-Wire poll task (called periodically): send get.data(pid) when link is idle.
- * Includes hot-plug listen window (3 s no TX every 60 s), discovery
- * get.data(0x01..0x04), and round-robin poll (~1.5 s per PID). Returns
- * suggested next call interval (ms).
- */
+/** Next PID assigned earlier whose probe has since dropped, 0 if none. */
+static uint8_t nextLostPid()
+{
+    auto it = pidSn.upper_bound(lost_pid);
+    for (size_t n = 0; n < pidSn.size(); n++, it++) {
+        if (it == pidSn.end())
+            it = pidSn.begin();
+        if (!probes.count(it->first))
+            return lost_pid = it->first;
+    }
+    return 0;
+}
+
+/** Next PID for the discovery sweep, skipping PIDs that are already active. */
+static uint8_t nextDiscoveryPid()
+{
+    for (uint16_t n = 0; n < PROBE_PID_MAX; n++) {
+        const uint8_t pid = discovery_pid;
+        discovery_pid = (discovery_pid >= PROBE_PID_MAX) ? PROBE_PID_MIN : (uint8_t)(discovery_pid + 1);
+        if (!probes.count(pid))
+            return pid;
+    }
+    return 0;
+}
+
+/** One request at a time: BOOT rescan, PID sweep while empty, sensor params once, then data polls. */
 static int32_t onewirePollHandle()
 {
     const uint32_t now = millis();
     concurrency::LockGuard guard(&onewireLock);
 
-    // Additional information: If a buffer contains data and no new bytes are
-    // added for an extended period of time, the buffer is discarded (to prevent
-    // residual frames from blocking the buffer).
-    if (bufflen > 0 && (now - last_byte_time) > 50) {
-        bufflen = 0;
-    }
-
-    // Hot-plug: every 60s open a 3s listen window (no TX) so new probes can send
-    // capability frames
-    if (now - last_listen_schedule >= LISTEN_WINDOW_INTERVAL_MS) {
-        last_listen_schedule = now;
-        listen_window_until = now + LISTEN_WINDOW_DURATION_MS;
-        LOG_INFO("RAKSensorHub: listen window 3s (hot-plug)");
-    }
-    if (now < listen_window_until) {
-        return 150; // no poll/TX; let onewireRxHandle receive unsolicited
-                    // capability
-    }
-    // If we are seeing capability/provision traffic but haven't provisioned a PID
-    // yet, stay quiet for a short time. This helps avoid repeated
-    // "register/provision" loops under heavy system load (e.g. when App is
-    // connected).
-    if (provision_list.empty() && last_capability_time != 0 && (now - last_capability_time) < 1500) {
-        return 150;
-    }
-
-    // Avoid transmitting while bytes are still arriving. At 9600bps one byte is
-    // ~1ms, so a 10ms quiet gap is a reasonable "RX is done" heuristic. After TX,
-    // wait 40ms so probe can send 0x0D response on half-duplex line
-    const bool link_idle = bufflen == 0 && (now - last_rx_time) > 10 && (now - last_tx_time) > 40;
-
-    // Only allow one outstanding request at a time; otherwise TX/RX overlap on
-    // half-duplex can corrupt frames and trigger checksum errors.
     if (awaiting_rsp) {
-        const uint32_t rsp_timeout_ms = 2000u;
-        if ((now - awaiting_rsp_since) > rsp_timeout_ms) {
-            awaiting_rsp = false;
-            last_err_time = now;
-            advanceDataPollPid();
-        } else {
+        if (Throttle::isWithinTimespanMs(awaiting_rsp_since, awaiting_rsp_timeout))
             return 50;
-        }
+        onRequestTimeout(now);
     }
 
-    if (now - status_delta >= 5000) {
+    if (!Throttle::isWithinTimespanMs(status_delta, 60 * 1000)) {
         status_delta = now;
-        LOG_DEBUG("RAKSensorHub Status: last_tx: %lums ago, last_rx: %lums ago, "
-                  "provision=%u",
-                  (unsigned long)(now - last_tx_time), (unsigned long)(now - last_rx_time), (unsigned)provision_list.size());
+        LOG_DEBUG("RAKSensorHub Status: last_tx: %lums ago, last_rx: %lums ago, probes=%u", (unsigned long)(now - last_tx_time),
+                  (unsigned long)(now - last_rx_time), (unsigned)probes.size());
     }
 
-    // Discovery: only while no provisioned PID (avoid periodic get.data on an
-    // active probe).
-    static uint32_t last_discovery_time = 0;
-    static uint8_t discovery_pid = 0x01;
-    const bool run_discovery = provision_list.empty() && (now - last_discovery_time) >= 5000;
-    if (run_discovery && link_idle && (now - last_err_time) > 500) {
-        last_discovery_time = now;
-        RakSNHub_Protocl_API.get.data(discovery_pid);
-        last_sent_pid = discovery_pid;
-        last_sent_pid_valid = true;
-        awaiting_rsp = true;
-        awaiting_rsp_since = now;
-        discovery_pid = (discovery_pid >= 0x04) ? 0x01 : (discovery_pid + 1);
-        return 100;
+    // Half-duplex: no TX while receiving or right after an error
+    const bool link_idle = bufflen == 0 && !Throttle::isWithinTimespanMs(last_rx_time, 10) &&
+                           !Throttle::isWithinTimespanMs(last_tx_time, 40) && !Throttle::isWithinTimespanMs(last_err_time, 300);
+    if (!link_idle)
+        return 50;
+
+    const uint32_t bootInterval = probes.empty() ? BOOT_RESCAN_EMPTY_MS : BOOT_RESCAN_KNOWN_MS;
+    if (last_boot_time == 0 || !Throttle::isWithinTimespanMs(last_boot_time, bootInterval)) {
+        last_boot_time = Time::skipZero(now);
+        last_discovery_time = now; // let probes answer the BOOT first
+        LOG_INFO("RAKSensorHub: broadcast provision BOOT (%u probes known)", (unsigned)probes.size());
+        RakSNHub_Protocl_API.reboot();
+        return 500;
     }
 
-    // Regular sensor polling (temperature/humidity priority): one PID per tick.
-    if (link_idle && provision_list.size() && (now - last_err_time) > 300 && now - pid_delta >= 1500) {
-        pid_delta = now;
-        if (!data_poll_pid_valid || provision_list.count(data_poll_pid) == 0) {
-            data_poll_pid_valid = getFirstProvisionPid(data_poll_pid);
+    if (probes.empty()) {
+        if (!Throttle::isWithinTimespanMs(last_discovery_time, DISCOVERY_INTERVAL_MS)) {
+            last_discovery_time = now;
+            const uint8_t pid = nextDiscoveryPid();
+            if (pid != 0) {
+                sendRequest(pid, now, DISCOVERY_RSP_TIMEOUT_MS, true);
+                RakSNHub_Protocl_API.get.data(pid);
+                return 100;
+            }
         }
-        if (data_poll_pid_valid) {
-            LOG_DEBUG("RAKSensorHub: poll get.data(PID=0x%02x)", data_poll_pid);
-            RakSNHub_Protocl_API.get.data(data_poll_pid);
-            last_sent_pid = data_poll_pid;
-            last_sent_pid_valid = true;
-            awaiting_rsp = true;
-            awaiting_rsp_since = now;
+        return 200;
+    }
+
+    if (!Throttle::isWithinTimespanMs(last_lost_poll_time, LOST_PID_POLL_MS)) {
+        last_lost_poll_time = now;
+        const uint8_t pid = nextLostPid();
+        if (pid != 0) {
+            LOG_DEBUG("RAKSensorHub: dropped PID[%02x], get.data", pid);
+            sendRequest(pid, now, DISCOVERY_RSP_TIMEOUT_MS, true);
+            RakSNHub_Protocl_API.get.data(pid);
             return 100;
         }
     }
 
-    if (link_idle && provision_list.size() && (now - last_err_time) > 300 && now - last_poll_time >= 5000) {
-        if (!data_poll_pid_valid || provision_list.count(data_poll_pid) == 0) {
-            data_poll_pid_valid = getFirstProvisionPid(data_poll_pid);
-        }
-        if (data_poll_pid_valid) {
-            RakSNHub_Protocl_API.get.data(data_poll_pid);
-            last_sent_pid = data_poll_pid;
-            last_sent_pid_valid = true;
-            awaiting_rsp = true;
-            awaiting_rsp_since = now;
-        }
-        last_poll_time = now;
+    for (auto &[pid, st] : probes) {
+        if (st.paramPending.empty())
+            continue;
+        const uint8_t sid = *st.paramPending.begin();
+        st.paramPending.erase(st.paramPending.begin());
+        sendRequest(pid, now, RSP_TIMEOUT_MS, false);
+        last_sent_param_sid = sid;
+        RakSNHub_Protocl_API.get.param(pid, sid);
         return 100;
     }
 
-    return 150; // slower loop for command pacing
+    uint32_t next_due_ms = RAKHUB_POLL_INTERVAL_MS;
+    for (auto &[pid, st] : probes) {
+        const uint32_t interval = st.retryMs ? st.retryMs : RAKHUB_POLL_INTERVAL_MS;
+        if (!st.polled || !Throttle::isWithinTimespanMs(st.lastPollMs, interval)) {
+            st.polled = true;
+            st.lastPollMs = now;
+            LOG_DEBUG("RAKSensorHub: poll get.data(PID=0x%02x)", pid);
+            sendRequest(pid, now, RSP_TIMEOUT_MS, true);
+            RakSNHub_Protocl_API.get.data(pid);
+            return 100;
+        }
+        const uint32_t remaining = Throttle::remainingMs(st.lastPollMs, interval);
+        if (remaining < next_due_ms)
+            next_due_ms = remaining;
+    }
+    return (int32_t)(next_due_ms < 1000 ? next_due_ms + 1 : 1000);
 }
 
 /** On first call: init 1-Wire UART, protocol, and RX/Poll Periodics; then just
  * return default read interval. */
 int32_t RAKSensorHub::runOnce()
 {
-    LOG_INFO("RAKSensorHub: runOnce...");
     if (!rakSensorHub.isInitialized()) {
         LOG_INFO("RAKSensorHub: Initializing OneWire sensor hub...");
 
+        hubSerialBegin();
+
+        // init() sends the first BOOT
+        RakSNHub_Protocl_API.init(onewire_evt);
+        last_boot_time = Time::skipZero(millis());
+        last_discovery_time = last_boot_time;
+
         onewireRxPeriodic = new Periodic("onewireRxHandle", onewireRxHandle);
         onewirePollPeriodic = new Periodic("onewirePollHandle", onewirePollHandle);
-
-        mySerial.begin(9600);
-
-        RakSNHub_Protocl_API.init(onewire_evt);
 
         status = true;
         initialized = true;
