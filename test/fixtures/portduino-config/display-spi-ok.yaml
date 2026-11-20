@@ -1,0 +1,15 @@
+# CLEAN, and a regression guard. A complete SPI panel. Display.Rotate is a boolean and
+# Touchscreen.Rotate an integer; an earlier --check had the two types the wrong way round.
+Lora:
+  Module: sim
+Display:
+  Panel: ST7789
+  Width: 320
+  Height: 240
+  DC: 25
+  Rotate: true
+  OffsetRotate: 1
+  Invert: true
+Touchscreen:
+  Module: XPT2046
+  Rotate: 1

@@ -1,0 +1,11 @@
+# FAULT: an I2C controller with no I2CAddr is configured as an SPI device, and a lower-case
+# module name would match nothing at all.
+Lora:
+  Module: sim
+Display:
+  Panel: ST7789
+  Width: 320
+  Height: 240
+  DC: 25
+Touchscreen:
+  Module: GT911
