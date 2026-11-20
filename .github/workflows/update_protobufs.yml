@@ -88,6 +88,12 @@ jobs:
           tar xzf "${TARBALL}"
           mv "nanopb-${NANOPB_VERSION}-linux-x86" nanopb-0.4.9
 
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: protobufs/tools/protoc-gen-fieldmeta/go.mod
+          cache: false
+
       - name: Re-generate protocol buffers
         run: |
           ./bin/regen-protos.sh
