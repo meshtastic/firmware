@@ -390,6 +390,9 @@ void LoRaFEMInterface::setLnaControl(uint8_t pin, uint8_t onLevel, int16_t gainD
 void LoRaFEMInterface::setRxLnaPath(bool lnaOn)
 {
     if (lna_can_control) {
+#if defined(ARCH_ESP32)
+        releasePinHold(lna_pin);
+#endif
         digitalWrite(lna_pin, lnaOn ? lna_on_level : !lna_on_level);
     }
 }
