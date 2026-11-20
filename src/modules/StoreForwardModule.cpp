@@ -203,6 +203,11 @@ void StoreForwardModule::historyAdd(const meshtastic_MeshPacket &mp)
     this->packetHistory[this->packetHistoryTotalCount].id = mp.id;
     this->packetHistory[this->packetHistoryTotalCount].reply_id = p.reply_id;
     this->packetHistory[this->packetHistoryTotalCount].emoji = (bool)p.emoji;
+    // Captured at receipt time by Router::perhapsDecode's checkXeddsaReceivePolicy - preserve the
+    // verdict so getForPhone()'s local replay doesn't silently present a signed message as
+    // unsigned. Not meaningful for the non-local (StoreAndForward-protobuf-wrapped, relayed to
+    // another S&F client node) branch below, so only restored there - see preparePayload().
+    this->packetHistory[this->packetHistoryTotalCount].xeddsa_signed = mp.xeddsa_signed;
     this->packetHistory[this->packetHistoryTotalCount].payload_size = p.payload.size;
     this->packetHistory[this->packetHistoryTotalCount].rx_rssi = mp.rx_rssi;
     this->packetHistory[this->packetHistoryTotalCount].has_rx_rssi = mp.has_rx_rssi;
@@ -280,6 +285,13 @@ meshtastic_MeshPacket *StoreForwardModule::preparePayload(NodeNum dest, uint32_t
                     p->id = this->packetHistory[i].id;
                     memcpy(p->decoded.payload.bytes, this->packetHistory[i].payload, this->packetHistory[i].payload_size);
                     p->decoded.payload.size = this->packetHistory[i].payload_size;
+                    // Restore the signature verdict this node already computed when the message
+                    // first arrived - this packet goes straight to our own attached phone
+                    // (getForPhone()), never back through Router::perhapsDecode, so nothing else
+                    // would set it. Not done in the non-local branch below: that one wraps the
+                    // payload in a meshtastic_StoreAndForward protobuf for another S&F client
+                    // node, a different wire format with no top-level signed flag to carry.
+                    p->xeddsa_signed = this->packetHistory[i].xeddsa_signed;
                 } else {
                     meshtastic_StoreAndForward sf = meshtastic_StoreAndForward_init_zero;
                     sf.which_variant = meshtastic_StoreAndForward_text_tag;
