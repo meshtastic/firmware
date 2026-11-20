@@ -515,6 +515,19 @@ static void test_adminRequest_keepsTheSixtySecondGate(void)
     clearAdminKeys();
 }
 
+// An interactive send the 60 s gate refuses must not leave the interactive flag set: the ordinary
+// request that follows is still inside the 30 minute floor and has to be refused.
+static void test_interactiveSend_refusedAtAllocLeavesNoFlagBehind(void)
+{
+    transmitHistory->setLastSentToMesh(meshtastic_PortNum_NODEINFO_APP);
+    Time::advanceTestMillis(30 * 1000);
+    TEST_ASSERT_FALSE_MESSAGE(mod->sendOurNodeInfo(NODENUM_BROADCAST, false, 0, true), "30 s is inside the 60 s gate");
+
+    Time::advanceTestMillis(4 * 60 * 1000 + 30 * 1000);
+    TEST_ASSERT_FALSE_MESSAGE(answers(makeNodeInfoRequest(kOtherNode, false)),
+                              "5 min is inside the routine floor for an ordinary request");
+}
+
 static void test_adminRequest_routineOnceTheKeyIsUnlisted(void)
 {
     listAdminKey(kAdminNode);
@@ -546,6 +559,7 @@ NI_TEST_ENTRY void setup()
     RUN_TEST(test_adminRequest_bypassesPerRequesterSuppression);
     RUN_TEST(test_adminRequest_keepsTheSixtySecondGate);
     RUN_TEST(test_adminRequest_routineOnceTheKeyIsUnlisted);
+    RUN_TEST(test_interactiveSend_refusedAtAllocLeavesNoFlagBehind);
     exit(UNITY_END());
 }
 NI_TEST_ENTRY void loop() {}

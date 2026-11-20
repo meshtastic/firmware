@@ -103,6 +103,7 @@ bool NodeInfoModule::sendOurNodeInfo(NodeNum dest, bool wantReplies, uint8_t cha
     meshtastic_MeshPacket *p = allocReply();
     DEBUG_HEAP_AFTER("NodeInfoModule::sendOurNodeInfo", p);
     deferHistoryStamp = false;
+    shorterTimeout = false; // consumed by allocReply(); a refused send must not leave the next request on the interactive gate
 
     if (p) { // Check whether we didn't ignore it
         p->to = dest;
@@ -123,7 +124,6 @@ bool NodeInfoModule::sendOurNodeInfo(NodeNum dest, bool wantReplies, uint8_t cha
         prevPacketId = p->id;
 
         const ErrorCode res = service->sendToMesh(p);
-        shorterTimeout = false;
         // A rejected send never reached the air, so it neither defers the routine broadcast nor
         // consumes a pending channel change. sendToMesh() has already released the packet.
         if (res != ERRNO_OK && res != ERRNO_SHOULD_RELEASE) {
