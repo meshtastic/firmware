@@ -135,11 +135,12 @@ extern "C" {
 #define GPS_VRTC_EN (32 + 13)  // P1.13, always high
 #define GPS_SLEEP_INT (0 + 30) // P0.30, always high
 #define GPS_RTC_INT (0 + 29)   // P0.29, normal is LOW, wake by HIGH
+#define PIN_GPS_PPS (0 + 4)    // P0.04, 1PPS from the GNSS
 
 #define BATTERY_PIN 2 // P0.02/AIN0, BAT_ADC
 #define BATTERY_IMMUTABLE
 #define ADC_MULTIPLIER (2.0F)
-// P0.04/AIN2 is VCC_ADC, P0.05/AIN3 is CHARGER_DET, P1.03 is CHARGE_STA, P1.04 is CHARGE_DONE
+// P0.05/AIN3 is CHARGER_DET, P1.03 is CHARGE_STA, P1.04 is CHARGE_DONE
 
 #define EXT_CHRG_DETECT (32 + 3) // P1.03
 #define EXT_CHRG_DETECT_VALUE LOW

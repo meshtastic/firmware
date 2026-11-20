@@ -8,6 +8,7 @@
 #include "meshtastic/config.pb.h"
 #include "meshtastic/connection_status.pb.h"
 #include "meshtastic/device_ui.pb.h"
+#include "meshtastic/field_metadata.pb.h"
 #include "meshtastic/mesh.pb.h"
 #include "meshtastic/module_config.pb.h"
 
@@ -154,7 +155,23 @@ typedef struct _meshtastic_LockdownAuth {
     /* Optional override of the boot-count token TTL granted on success.
  0 = use firmware default (TOKEN_DEFAULT_BOOTS).
  On reboot the firmware decrements this; when it reaches 0 the
- device boots fully locked and requires a fresh passphrase. */
+ device boots fully locked and requires a fresh passphrase.
+
+ SECURITY: a non-zero count is what makes the device able to unlock
+ itself after a reboot, and it pays for that with a stored key. The
+ unlock token holds the data-encryption key wrapped under a key the
+ firmware derives from device identifiers alone - no passphrase. So
+ for as long as a token exists, anyone who can read the flash can
+ recover the DEK without knowing the passphrase, and at-rest
+ encryption protects the data only against a casual dump.
+
+ This bounds exposure by reboot count; it does not eliminate it. 0 is
+ the sentinel for TOKEN_DEFAULT_BOOTS, not a request for zero boots,
+ so it selects a lenient default rather than the strictest setting;
+ 1 is the lowest, granting a single unlocked boot. No value of this
+ field requires a passphrase on every boot. Clients offering a
+ default should send an explicit count and present it as a
+ convenience trade-off. */
     uint32_t boots_remaining;
     /* Optional wall-clock expiry for the unlock token, as absolute
  Unix-epoch seconds. 0 = no time limit (only the boot-count TTL
@@ -505,17 +522,25 @@ typedef struct _meshtastic_AdminMessage {
         /* Request a single frame of the device's display framebuffer.
      The frame is delivered to the local client as FromRadio.display_frame
      chunks (see DisplayFrame in mesh.proto). There is no AdminMessage
-     response. Local connection only: a node receiving this over the mesh,
-     or a build without a display, ignores it. During active mirroring it
-     forces one frame on the next redraw even if the screen is unchanged. */
+     response. With want_ack and a nonzero MeshPacket.id the device answers
+     with a routing ACK, or a NAK: BAD_REQUEST before want_config_id,
+     NOT_AUTHORIZED from a connection that has not passed client access
+     control, NO_RESPONSE when every connection slot is in use. A build with
+     encrypted storage drops an unauthorized request with no reply, so a
+     client must also time out. Local connection only: a node
+     receiving this over the mesh, or a build without mirroring, answers
+     NOT_AUTHORIZED. During active mirroring it forces one frame on the next
+     redraw even if the screen is unchanged. */
         bool get_display_frame_request;
         /* Enable (true) or disable (false) continuous mirroring of the device
      display. Unlike most bool verbs in this oneof, false is meaningful.
      While enabled, the device sends a DisplayFrame after each screen
      redraw that changed the framebuffer, as FromRadio.display_frame
-     chunks; the first frame arrives immediately and acts as the
-     acknowledgement. Local connection only (see get_display_frame_request)
-     and not persisted across reboot. */
+     chunks; the first frame arrives immediately, except while display
+     redaction is active and the panel is asleep, when it arrives once the
+     panel wakes. Replies and the
+     local-only rule are as for get_display_frame_request. Not persisted
+     across reboot. */
         bool set_display_mirror;
         /* Begins an edit transaction for config, module config, owner, and channel settings changes
      This will delay the standard *implicit* save to the file system and subsequent reboot behavior until committed (commit_edit_settings) */
@@ -557,6 +582,10 @@ typedef struct _meshtastic_AdminMessage {
      Replaces the earlier scheme that repurposed SecurityConfig.private_key
      to carry passphrase bytes; that hack is retired. */
         meshtastic_LockdownAuth lockdown_auth;
+        /* Play the ringtone currently configured for ExternalNotification
+     once, so a client can preview a newly set ringtone or let the user
+     locate the node. Ignored on builds without RTTTL support. */
+        bool play_ringtone_request;
     };
     /* The node generates this key and sends it with any get_x_response packets.
  The client MUST include the same key with any set_x commands. Key expires after 300 seconds.
@@ -769,6 +798,7 @@ extern "C" {
 #define meshtastic_AdminMessage_ota_request_tag  102
 #define meshtastic_AdminMessage_sensor_config_tag 103
 #define meshtastic_AdminMessage_lockdown_auth_tag 104
+#define meshtastic_AdminMessage_play_ringtone_request_tag 105
 #define meshtastic_AdminMessage_session_passkey_tag 101
 
 /* Struct field encoding specification for nanopb */
@@ -833,7 +863,8 @@ X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,nodedb_reset,nodedb_reset), 
 X(a, STATIC,   SINGULAR, BYTES,    session_passkey, 101) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,ota_request,ota_request), 102) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,sensor_config,sensor_config), 103) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,lockdown_auth,lockdown_auth), 104)
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,lockdown_auth,lockdown_auth), 104) \
+X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,play_ringtone_request,play_ringtone_request), 105)
 #define meshtastic_AdminMessage_CALLBACK NULL
 #define meshtastic_AdminMessage_DEFAULT NULL
 #define meshtastic_AdminMessage_payload_variant_get_channel_response_MSGTYPE meshtastic_Channel

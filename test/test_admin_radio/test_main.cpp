@@ -705,6 +705,28 @@ static void test_clampConfigLora_validPresetUnchanged()
     TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST, cfg.modem_preset);
 }
 
+// NodeDB::clampLoadedLoraConfig() runs at boot, before onConfigChanged() renames a legacy "Default"
+// primary to "". If it hashed "Default" as a custom channel name, an out-of-range channel_num would be
+// clamped to that hash's slot instead of the preset's default slot, moving the node off its mesh.
+static void test_clampLoadedLoraConfig_legacyDefaultPrimaryGetsThePresetSlot()
+{
+    channels.initDefaults();
+    strncpy(channelFile.channels[0].settings.name, "Default", sizeof(channelFile.channels[0].settings.name));
+    config.has_lora = true;
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    meshtastic_Config_LoRaConfig unset = config.lora;
+    const uint32_t presetSlot = RadioInterface::resolveFrequencySlot(unset, "");
+    config.lora.channel_num = 200; // more than US LongFast's 104 slots
+
+    nodeDB->clampLoadedLoraConfig();
+
+    TEST_ASSERT_EQUAL_UINT32(presetSlot, config.lora.channel_num);
+    TEST_ASSERT_EQUAL_STRING("", channelFile.channels[0].settings.name);
+}
+
 static void test_clampConfigLora_customBwTooWideClampedToDefaultBw()
 {
     // EU_868 span is 250kHz. A 500kHz custom BW should be clamped to default preset BW.
@@ -2734,6 +2756,7 @@ void setup()
     // clampConfigLora()
     RUN_TEST(test_clampConfigLora_invalidPresetClampedToDefault);
     RUN_TEST(test_clampConfigLora_validPresetUnchanged);
+    RUN_TEST(test_clampLoadedLoraConfig_legacyDefaultPrimaryGetsThePresetSlot);
     RUN_TEST(test_clampConfigLora_customBwTooWideClampedToDefaultBw);
     RUN_TEST(test_clampConfigLora_customBwValidLeftUnchanged);
     RUN_TEST(test_clampConfigLora_bogusPresetOnUnsetClampedToLongFast);

@@ -358,6 +358,8 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_NODARA = 151,
     /* Heltec Magnetic Power Bank V2 */
     meshtastic_HardwareModel_HELTEC_MESH_POCKET_V2 = 152,
+    /* A virtual node: a phone or desktop app acting as a mesh node of its own, with no radio hardware of its own */
+    meshtastic_HardwareModel_VIRTUAL_NODE = 254,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */
@@ -1129,7 +1131,11 @@ typedef struct _meshtastic_Data {
     /* Defaults to false. If true, then what is in the payload should be treated as an emoji like giving
  a message a heart or poop emoji. */
     uint32_t emoji;
-    /* Bitfield for extra flags. First use is to indicate that user approves the packet being uploaded to MQTT. */
+    /* Bitfield for extra flags. First use is to indicate that user approves the packet being uploaded to MQTT.
+ Bit 0 (LSB): ok_to_mqtt.
+ Bit 1: mirrors want_response.
+ Bit 2: is_automation, the packet was sent by automation (a bot or scripted tool) rather than typed
+ by a person. Set per packet by the client; self-reported, so treat it as advisory. */
     bool has_bitfield;
     uint8_t bitfield;
     /* XEdDSA signature for the payload */
@@ -1828,6 +1834,11 @@ typedef struct _meshtastic_DeviceMetadata {
  hardware address is known. Empty when the device has no BLE radio or the
  address cannot be determined. */
     char ble_address[18];
+    /* nRF52 bootloader version, packed as major << 16 | minor << 8 | patch, as the
+ bootloader hands it to the application at boot. Meshtastic nRF52 Bootloader
+ releases before 2.6.0 report 0.9.2, the same as stock Adafruit 0.9.2. 0 means
+ not reported: a non-nRF52 device, or firmware that predates this field. */
+    uint32_t bootloader_version;
 } meshtastic_DeviceMetadata;
 
 /* A distinct set of legal modem presets shared by one or more LoRa regions.
@@ -2216,7 +2227,7 @@ extern "C" {
 #define meshtastic_Compressed_init_default       {_meshtastic_PortNum_MIN, {0, {0}}}
 #define meshtastic_NeighborInfo_init_default     {0, 0, 0, 0, {meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default}}
 #define meshtastic_Neighbor_init_default         {0, 0, 0, 0}
-#define meshtastic_DeviceMetadata_init_default   {"", 0, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_Role_MIN, 0, _meshtastic_HardwareModel_MIN, 0, 0, 0, 0, false, meshtastic_DisplayInfo_init_default, ""}
+#define meshtastic_DeviceMetadata_init_default   {"", 0, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_Role_MIN, 0, _meshtastic_HardwareModel_MIN, 0, 0, 0, 0, false, meshtastic_DisplayInfo_init_default, "", 0}
 #define meshtastic_DisplayInfo_init_default      {0, 0, _meshtastic_DisplayFrame_Format_MIN, _meshtastic_DisplayInfo_PanelClass_MIN, 0}
 #define meshtastic_LoRaPresetGroup_init_default  {0, {_meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN}, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, 0}
 #define meshtastic_LoRaRegionPresets_init_default {_meshtastic_Config_LoRaConfig_RegionCode_MIN, 0}
@@ -2259,7 +2270,7 @@ extern "C" {
 #define meshtastic_Compressed_init_zero          {_meshtastic_PortNum_MIN, {0, {0}}}
 #define meshtastic_NeighborInfo_init_zero        {0, 0, 0, 0, {meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero}}
 #define meshtastic_Neighbor_init_zero            {0, 0, 0, 0}
-#define meshtastic_DeviceMetadata_init_zero      {"", 0, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_Role_MIN, 0, _meshtastic_HardwareModel_MIN, 0, 0, 0, 0, false, meshtastic_DisplayInfo_init_zero, ""}
+#define meshtastic_DeviceMetadata_init_zero      {"", 0, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_Role_MIN, 0, _meshtastic_HardwareModel_MIN, 0, 0, 0, 0, false, meshtastic_DisplayInfo_init_zero, "", 0}
 #define meshtastic_DisplayInfo_init_zero         {0, 0, _meshtastic_DisplayFrame_Format_MIN, _meshtastic_DisplayInfo_PanelClass_MIN, 0}
 #define meshtastic_LoRaPresetGroup_init_zero     {0, {_meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN}, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, 0}
 #define meshtastic_LoRaRegionPresets_init_zero   {_meshtastic_Config_LoRaConfig_RegionCode_MIN, 0}
@@ -2500,6 +2511,7 @@ extern "C" {
 #define meshtastic_DeviceMetadata_has_xeddsa_tag 14
 #define meshtastic_DeviceMetadata_display_tag    16
 #define meshtastic_DeviceMetadata_ble_address_tag 17
+#define meshtastic_DeviceMetadata_bootloader_version_tag 19
 #define meshtastic_LoRaPresetGroup_presets_tag   1
 #define meshtastic_LoRaPresetGroup_default_preset_tag 2
 #define meshtastic_LoRaPresetGroup_licensed_only_tag 3
@@ -2969,7 +2981,8 @@ X(a, STATIC,   SINGULAR, BOOL,     hasPKC,           11) \
 X(a, STATIC,   SINGULAR, UINT32,   excluded_modules,  12) \
 X(a, STATIC,   SINGULAR, BOOL,     has_xeddsa,       14) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  display,          16) \
-X(a, STATIC,   SINGULAR, STRING,   ble_address,      17)
+X(a, STATIC,   SINGULAR, STRING,   ble_address,      17) \
+X(a, STATIC,   SINGULAR, UINT32,   bootloader_version,  19)
 #define meshtastic_DeviceMetadata_CALLBACK NULL
 #define meshtastic_DeviceMetadata_DEFAULT NULL
 #define meshtastic_DeviceMetadata_display_MSGTYPE meshtastic_DisplayInfo
@@ -3136,7 +3149,7 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 #define meshtastic_ClientNotification_size       484
 #define meshtastic_Compressed_size               239
 #define meshtastic_Data_size                     335
-#define meshtastic_DeviceMetadata_size           93
+#define meshtastic_DeviceMetadata_size           100
 #define meshtastic_DisplayFrame_size             437
 #define meshtastic_DisplayInfo_size              14
 #define meshtastic_DisplayPalette_ColorRegion_size 24

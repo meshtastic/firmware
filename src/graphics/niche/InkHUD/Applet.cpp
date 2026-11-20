@@ -789,6 +789,27 @@ void InkHUD::Applet::drawHeader(const std::string &text)
     }
 }
 
+// Draw a small up and / or down arrow at the right edge, to show the content scrolls in that direction
+// Each sits on a white backing, so it stays legible over text
+void InkHUD::Applet::drawScrollHints(bool canScrollUp, bool canScrollDown)
+{
+    const int16_t size = std::max<int16_t>(fontSmall.lineHeight() / 2, 5);
+    const int16_t left = width() - size - 3;
+    const int16_t backing = size + 2;
+
+    if (canScrollUp) {
+        const int16_t top = getHeaderHeight() + 2;
+        fillRect(left - 1, top - 1, backing + 1, backing, WHITE);
+        fillTriangle(left + size / 2, top, left, top + size - 1, left + size - 1, top + size - 1, BLACK);
+    }
+
+    if (canScrollDown) {
+        const int16_t bottom = height() - 3;
+        fillRect(left - 1, bottom - size, backing + 1, backing, WHITE);
+        fillTriangle(left, bottom - size + 1, left + size - 1, bottom - size + 1, left + size / 2, bottom, BLACK);
+    }
+}
+
 // Get the height of the standard applet header
 // This will vary, depending on font
 // Applets use this value to avoid drawing overtop the header

@@ -14,6 +14,42 @@ InkHUD::NodeListApplet::NodeListApplet(const char *name) : MeshModule(name)
     // We only need to be promiscuous in order to hear NodeInfo, apparently. See NodeInfoModule
     // For all other packets, we manually act as if isPromiscuous=false, in wantPacket
     MeshModule::isPromiscuous = true;
+
+    // Up / down scroll the list, for cards which don't fit on the tile
+    setInputsSubscribed(NAV_UP | NAV_DOWN, true);
+}
+
+uint16_t InkHUD::NodeListApplet::cardsTop()
+{
+    constexpr uint16_t padDivH = 2;
+    return (getHeaderHeight() - 1) + padDivH;
+}
+
+uint8_t InkHUD::NodeListApplet::maxScrollOffset()
+{
+    const uint16_t top = cardsTop();
+    const uint16_t fitting = (height() > top) ? std::max<uint16_t>((height() - top) / cardH, 1) : 1;
+    return cards.size() > fitting ? (uint8_t)(cards.size() - fitting) : 0;
+}
+
+void InkHUD::NodeListApplet::scrollBy(int8_t delta)
+{
+    const int next = std::clamp<int>((int)scrollOffset + delta, 0, maxScrollOffset());
+    if (next == scrollOffset)
+        return;
+
+    scrollOffset = (uint8_t)next;
+    requestUpdate(Drivers::EInk::UpdateTypes::FAST);
+}
+
+void InkHUD::NodeListApplet::onNavUp()
+{
+    scrollBy(-1);
+}
+
+void InkHUD::NodeListApplet::onNavDown()
+{
+    scrollBy(1);
 }
 
 // Do we want to process this packet with handleReceived()?
@@ -151,8 +187,11 @@ void InkHUD::NodeListApplet::onRender(bool full)
         std::remove_if(cards.begin(), cards.end(), [](const CardInfo &c) { return nodeDB->getMeshNode(c.nodeNum) == nullptr; }),
         cards.end());
 
+    // Cards scrolled off the top are skipped. List may have shrunk since the user scrolled
+    scrollOffset = std::min<uint8_t>(scrollOffset, maxScrollOffset());
+
     // -- Each node in list --
-    for (auto card = cards.begin(); card != cards.end(); ++card) {
+    for (auto card = cards.begin() + scrollOffset; card != cards.end(); ++card) {
 
         // Gather info
         // ========================================
@@ -254,6 +293,8 @@ void InkHUD::NodeListApplet::onRender(bool full)
         if (cardTopY > height())
             break;
     }
+
+    drawScrollHints(scrollOffset > 0, scrollOffset < maxScrollOffset());
 }
 
 // Draw element: a "mobile phone" style signal indicator

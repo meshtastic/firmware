@@ -92,6 +92,7 @@ class InkHUD
     void openMenu();
     void openAppSwitcher();
     void openAlignStick();
+    void openAlignKeyboard();
     void openKeyboard();
     void closeKeyboard();
     void nextTile();
@@ -107,6 +108,9 @@ class InkHUD
 
     // Input mode hint for devices that use a left/right rocker plus center button
     bool twoWayRocker = false;
+
+    // Set by an input source that detected a physical keyboard at runtime: the on-screen keyboard is never shown
+    bool physicalKeyboard = false;
 
     // Updating the display
     // - called by various InkHUD components
