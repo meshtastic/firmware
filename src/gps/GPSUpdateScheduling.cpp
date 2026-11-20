@@ -92,7 +92,9 @@ uint32_t GPSUpdateScheduling::msUntilNextSearch()
     // so wake at most once per broadcast interval rather than once per gps_update_interval.
     // Capped at 1 hour so a user-configured very-long broadcast interval still retries
     // periodically (in case conditions change). Reset on any successful lock.
-    if (consecutiveFailures > 0) {
+    // Not when always on: GPS_IDLE keeps the receiver powered, so a backoff saves nothing and
+    // only discards its NMEA until the next search.
+    if (consecutiveFailures > 0 && updateInterval > GPS_UPDATE_ALWAYS_ON_THRESHOLD_MS) {
         constexpr uint32_t failureRetryCapMs = 60UL * 60UL * 1000UL; // 1 hour cap
         uint32_t failureSleepMs =
             Default::getConfiguredOrDefaultMs(config.position.position_broadcast_secs, default_broadcast_interval_secs);

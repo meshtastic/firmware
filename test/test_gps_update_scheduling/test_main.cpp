@@ -1,4 +1,5 @@
 #include "Arduino.h"
+#include "NodeDB.h"
 #include "TestUtil.h"
 #include "UptimeClock.h"
 #include "gps/GPSUpdateScheduling.h"
@@ -13,6 +14,8 @@ void setUp(void)
 void tearDown(void)
 {
     Time::useRealClock();
+    config.position.gps_update_interval = 0;
+    config.position.position_broadcast_secs = 0;
 }
 
 // Confirms gpsHardsleepThresholdMs()'s pow()-free lookup table tracks the original
@@ -167,6 +170,38 @@ static void test_reset_clears_the_search_state(void)
     TEST_ASSERT_EQUAL_UINT32(0, s.elapsedSearchMs());
 }
 
+// One search that ends without a fix, starting at t = 10 s and lasting 15 minutes.
+static void failOneSearch(GPSUpdateScheduling &s)
+{
+    Time::setTestMillis(10 * 1000);
+    s.informSearching();
+    Time::advanceTestMillis(15 * 60 * 1000);
+    s.informSearchFailed();
+}
+
+// A receiver that sleeps between searches (gps_update_interval 120 s) backs off to the broadcast
+// interval after a failed search, capped at an hour: the indoor-battery case the backoff exists for.
+static void test_failed_search_backs_off_when_the_receiver_sleeps(void)
+{
+    config.position.gps_update_interval = 120;
+    config.position.position_broadcast_secs = 3600;
+    GPSUpdateScheduling s;
+    failOneSearch(s);
+    TEST_ASSERT_EQUAL_UINT32(3600 * 1000, s.msUntilNextSearch());
+}
+
+// At gps_update_interval <= 10 s, GPS::down() keeps the receiver powered (GPS_IDLE), so a backoff saves no
+// power; it only made whileActive() discard every sentence for up to an hour. The next search stays one
+// update interval out.
+static void test_failed_search_does_not_back_off_when_always_on(void)
+{
+    config.position.gps_update_interval = 5;
+    config.position.position_broadcast_secs = 3600;
+    GPSUpdateScheduling s;
+    failOneSearch(s);
+    TEST_ASSERT_EQUAL_UINT32(5 * 1000, s.msUntilNextSearch());
+}
+
 void setup()
 {
     delay(10);
@@ -185,6 +220,8 @@ void setup()
     RUN_TEST(test_search_ending_after_the_wrap_reads_as_idle);
     RUN_TEST(test_search_starting_after_the_wrap_reads_as_searching);
     RUN_TEST(test_reset_clears_the_search_state);
+    RUN_TEST(test_failed_search_backs_off_when_the_receiver_sleeps);
+    RUN_TEST(test_failed_search_does_not_back_off_when_always_on);
     exit(UNITY_END());
 }
 
