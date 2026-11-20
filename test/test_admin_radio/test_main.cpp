@@ -1177,6 +1177,34 @@ static void test_clampConfigLora_JP_slotBounds()
     TEST_ASSERT_EQUAL_UINT32(6, cfg.channel_num);
 }
 
+static void test_clampConfigLora_JP_customModeSlotBounds()
+{
+    // With use_preset=false and an unnamed primary channel, both channelName and presetNameDisplay
+    // resolve to "Custom" so uses_custom_channel_name is false. Clamping an out-of-range slot (>7 on
+    // JP 250 kHz) must clear channel_num to 0 so a subsequent validateConfigLora() accepts it, while
+    // leaving an in-range custom pin (<=7) intact.
+    channelFile.channels[0].settings.name[0] = '\0';
+    config.lora.use_preset = false;
+
+    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
+    cfg.region = meshtastic_Config_LoRaConfig_RegionCode_JP;
+    cfg.use_preset = false;
+    cfg.bandwidth = 250;
+    cfg.spread_factor = 11;
+    cfg.coding_rate = 5;
+    cfg.channel_num = 7;
+
+    TEST_ASSERT_TRUE(RadioInterface::validateConfigLora(cfg));
+    RadioInterface::clampConfigLora(cfg);
+    TEST_ASSERT_EQUAL_UINT32(7, cfg.channel_num);
+
+    cfg.channel_num = 8;
+    TEST_ASSERT_FALSE(RadioInterface::validateConfigLora(cfg));
+    RadioInterface::clampConfigLora(cfg);
+    TEST_ASSERT_EQUAL_UINT32(0, cfg.channel_num);
+    TEST_ASSERT_TRUE(RadioInterface::validateConfigLora(cfg));
+}
+
 // Placeholder: when protobuf region definitions include non-zero padding/spacing,
 // add tests here to verify the channel count and frequency calculations.
 static void test_channelSpacingCalculation_placeholder()
@@ -2946,6 +2974,7 @@ void setup()
     RUN_TEST(test_slotPlan_spacedAndPaddedRegions);
     RUN_TEST(test_slotPlan_allRegionsPresetsStayInBand);
     RUN_TEST(test_clampConfigLora_JP_slotBounds);
+    RUN_TEST(test_clampConfigLora_JP_customModeSlotBounds);
     RUN_TEST(test_channelSpacingCalculation_placeholder);
 
     // handleSetConfig fromOthers dispatch

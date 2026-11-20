@@ -1272,8 +1272,9 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
                     loraConfig.channel_num = presetNameHashSlot + 1; // channel_num is 1-based, but hash slot is 0-based, so add 1
                     uses_default_frequency_slot = true;
                 } else { // if not using preset, and no custom channel name, just clamp to default anyway
+                    loraConfig.channel_num = 0;
                     uses_default_frequency_slot = true;
-                };
+                }
             } else {
                 return false;
             }
