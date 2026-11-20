@@ -7,7 +7,7 @@
 
 static std::unique_ptr<ethServerPort> apiPort;
 
-void initApiServer(int port)
+void initEthSocketApiServer(int port)
 {
     // Start API server on port 4403
     if (!apiPort) {
@@ -17,7 +17,7 @@ void initApiServer(int port)
     }
 }
 
-void deInitApiServer()
+void deInitEthSocketApiServer()
 {
     if (apiPort) {
         LOG_INFO("Deinit API server");
