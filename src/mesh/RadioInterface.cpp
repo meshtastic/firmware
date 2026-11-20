@@ -1215,7 +1215,7 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
         }
     }
 
-    // NodeDB::loadFromDisk() clamps before channels.proto loads: an empty table's primary resolves as a blank one does.
+    // Without a usable channel file the boot clamp runs before initDefaults() fills the table: resolve a blank primary.
     const char *channelName =
         channels.getNumChannels()
             ? channels.getName(channels.getPrimaryIndex())
