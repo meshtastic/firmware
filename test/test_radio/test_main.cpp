@@ -355,6 +355,60 @@ static void test_applyModemConfig_JP_customBandwidthGrid()
     }
 }
 
+// applyModemConfig() must clamp out-of-range channel_num in preset mode (e.g., InkHUD's
+// applyLoRaPreset() switching from custom/narrow slot 8 to a wider preset without clearing
+// channel_num) without clobbering a valid non-default preset back to the region default.
+static void test_applyModemConfig_JP_clampsOobPresetSlot()
+{
+    channelFile.channels[0].settings.name[0] = '\0';
+
+    // LONG_FAST (250 kHz, 7 slots) with stale slot 8 -> clamps to default slot 6 (922.9 MHz), never 923.7 MHz.
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_JP;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    config.lora.channel_num = 8;
+    testRadio->reconfigure();
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, config.lora.modem_preset);
+    TEST_ASSERT_EQUAL_UINT32(6, config.lora.channel_num);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 922.900f, testRadio->getFreq());
+
+    // Valid non-default preset MEDIUM_FAST (250 kHz, 7 slots) with stale slot 10 -> keeps MEDIUM_FAST, clamps slot.
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST;
+    config.lora.channel_num = 10;
+    testRadio->reconfigure();
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST, config.lora.modem_preset);
+    TEST_ASSERT_EQUAL_UINT32(6, config.lora.channel_num);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 922.900f, testRadio->getFreq());
+
+    // Valid non-default preset SHORT_TURBO (500 kHz, 5 slots) with stale slot 7 -> keeps SHORT_TURBO, clamps to slot 1.
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO;
+    config.lora.channel_num = 7;
+    testRadio->reconfigure();
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO, config.lora.modem_preset);
+    TEST_ASSERT_EQUAL_UINT32(1, config.lora.channel_num);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 920.800f, testRadio->getFreq());
+
+    // Invalid preset + OOB slot on EU_868 -> clamps both preset (LONG_FAST) and slot (1 = 869.525 MHz).
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO;
+    config.lora.channel_num = 8;
+    testRadio->reconfigure();
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, config.lora.modem_preset);
+    TEST_ASSERT_EQUAL_UINT32(1, config.lora.channel_num);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 869.525f, testRadio->getFreq());
+
+    // EU sibling preset + OOB slot -> swaps EU_868 to EU_866, refreshes newRegion/myRegion, clamps slot to 2 (866.3 MHz).
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LITE_FAST;
+    config.lora.channel_num = 8;
+    testRadio->reconfigure();
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_EU_866, config.lora.region);
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LITE_FAST, config.lora.modem_preset);
+    TEST_ASSERT_EQUAL_UINT32(2, config.lora.channel_num);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 866.300f, testRadio->getFreq());
+}
+
 // MEDIUM_TURBO is a 500 kHz preset, so it is invalid for EU_868 and must clamp to the region default.
 static void test_clampConfigLora_mediumTurboInvalidForEU868()
 {
@@ -1332,6 +1386,7 @@ void setup()
     RUN_TEST(test_applyModemConfig_mediumTurbo);
     RUN_TEST(test_applyModemConfig_JP_aribUnitChannelGrid);
     RUN_TEST(test_applyModemConfig_JP_customBandwidthGrid);
+    RUN_TEST(test_applyModemConfig_JP_clampsOobPresetSlot);
     RUN_TEST(test_clampConfigLora_mediumTurboInvalidForEU868);
     RUN_TEST(test_clampConfigLora_mediumTurboValidForUS);
     RUN_TEST(test_regionPresetMap_coversAllRegionsWithinBounds);

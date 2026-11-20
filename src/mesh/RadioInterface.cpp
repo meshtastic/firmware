@@ -1350,13 +1350,12 @@ void RadioInterface::applyModemConfig()
     // Set up default configuration
     // No Sync Words in LORA mode
     meshtastic_Config_LoRaConfig &loraConfig = config.lora;
+    // Clamp preset, custom bandwidth, and channel_num in place before reading region/slot geometry
+    clampConfigLora(loraConfig);
     const RegionInfo *newRegion = getRegion(loraConfig.region);
     myRegion = newRegion;
 
     if (loraConfig.use_preset) {
-        if (!validateConfigLora(loraConfig)) {
-            loraConfig.modem_preset = newRegion->getDefaultPreset();
-        }
         uint8_t newcr;
         modemPresetToParams(loraConfig.modem_preset, newRegion->wideLora, bw, sf, newcr);
         // If custom CR is being used already, check if the new preset is higher
@@ -1373,11 +1372,6 @@ void RadioInterface::applyModemConfig()
         }
 
     } else { // if not using preset, then just use the custom settings
-        if (validateConfigLora(loraConfig)) {
-        } else {
-            LOG_WARN("Invalid LoRa config, can't apply modem config - fall back to %s defaults", newRegion->name);
-            clampConfigLora(loraConfig);
-        }
         // Clamp at the source so numFreqSlots below can never be 0 (a bandwidth-0 config may already be persisted)
         bw = clampBandwidthKHz(bwCodeToKHz(loraConfig.bandwidth));
         sf = loraConfig.spread_factor;
