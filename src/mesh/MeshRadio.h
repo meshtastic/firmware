@@ -68,6 +68,7 @@ struct RegionInfo {
     int16_t overrideSlot; // per-region override slot for frequency selection
                           // Magic values: 0 = use channel name hash, -1 = use preset name hash, >0 = explicit slot
     const char *name;     // EU433 etc
+    float bandSplitMHz;   // optional sub-band boundary (MHz); slots never straddle it (0 = unsplit)
 
     // Preset accessors (delegate through profile)
     meshtastic_Config_LoRaConfig_ModemPreset getDefaultPreset() const { return defaultPreset; }
@@ -96,15 +97,24 @@ struct RegionInfo {
         return n;
     }
     struct SlotPlan {
-        float width;       // MHz between consecutive slot centers
-        uint32_t count;    // number of full slots fitting within [freqStart, freqEnd]
-        float firstCenter; // MHz center frequency of slot 0 (1-based channel_num == 1)
+        float width;            // MHz between consecutive slot centers within a sub-band
+        uint32_t count;         // total number of full slots fitting within [freqStart, freqEnd]
+        float firstCenter;      // MHz center frequency of slot 0 (1-based channel_num == 1)
+        uint32_t lowerCount;    // slots in the lower sub-band (equals count when unsplit)
+        float upperFirstCenter; // MHz center frequency of slot lowerCount when split
+
+        float centerFreq(uint32_t slotIndex) const
+        {
+            if (lowerCount < count && slotIndex >= lowerCount)
+                return upperFirstCenter + (slotIndex - lowerCount) * width;
+            return firstCenter + slotIndex * width;
+        }
     };
 
     SlotPlan getSlotPlan(float bwKHz) const
     {
         if (!profile || bwKHz <= 0.0f || freqEnd <= freqStart)
-            return {0.0f, 0, 0.0f};
+            return {0.0f, 0, 0.0f, 0, 0.0f};
 
         const float bwMHz = bwKHz / 1000.0f;
         const float spacing = profile->spacing;
@@ -117,14 +127,33 @@ struct RegionInfo {
         }
 
         const float width = spacing + (padding * 2.0f) + bwMHz;
-        const float firstCenter = freqStart + (bwMHz * 0.5f) + padding;
-        const float span = freqEnd - freqStart;
-        if (width <= 0.0f || (span + spacing) <= 0.0f)
-            return {width, 0, firstCenter};
+        const float centerOffset = (bwMHz * 0.5f) + padding;
+        const float lowerFirst = freqStart + centerOffset;
+        if (width <= 0.0f)
+            return {width, 0, lowerFirst, 0, lowerFirst};
 
-        // Relative tolerance absorbs IEEE-754 rounding on exact multiples without inflating narrow slots.
-        const uint32_t count = static_cast<uint32_t>(((span + spacing) / width) * (1.0f + 1e-6f));
-        return {width, count, firstCenter};
+        auto countSubBand = [&](float subStart, float subEnd) -> uint32_t {
+            const float span = subEnd - subStart;
+            if ((span + spacing) <= 0.0f)
+                return 0;
+            // Absorb ~1 ULP of float32 endpoint cancellation (e.g. 922.3f - 920.5f) without inflating narrow slots.
+            const float endpointEps = subEnd * 1.5e-7f;
+            const float maxEps = width * 0.25f;
+            const float tol = endpointEps < maxEps ? endpointEps : maxEps;
+            return static_cast<uint32_t>((((span + spacing) + tol) / width) * (1.0f + 1e-6f));
+        };
+
+        if (bandSplitMHz > freqStart && bandSplitMHz < freqEnd) {
+            const uint32_t lowerCount = countSubBand(freqStart, bandSplitMHz);
+            const uint32_t upperCount = countSubBand(bandSplitMHz, freqEnd);
+            const uint32_t total = lowerCount + upperCount;
+            const float upperFirst = bandSplitMHz + centerOffset;
+            const float firstCenter = (lowerCount > 0 || upperCount == 0) ? lowerFirst : upperFirst;
+            return {width, total, firstCenter, lowerCount, upperFirst};
+        }
+
+        const uint32_t count = countSubBand(freqStart, freqEnd);
+        return {width, count, lowerFirst, count, lowerFirst};
     }
 };
 

@@ -258,24 +258,25 @@ static const RegionInfo TEST_REGION_PRESET_HASH = {
     meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST,
     OVERRIDE_SLOT_PRESET_HASH,
     "TEST_PRESET_HASH",
+    0.0f,
 };
 
 static const RegionInfo testRegions[] = {
     // A wide US-like region with spacing + padding
     {meshtastic_Config_LoRaConfig_RegionCode_US, 902.0f, 928.0f, 100, 30, false, false, &TEST_PROFILE_SPACED,
-     meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, 0, "TEST_US_SPACED"},
+     meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, 0, "TEST_US_SPACED", 0.0f},
 
     // A narrow band simulating tight EU regulation
     {meshtastic_Config_LoRaConfig_RegionCode_EU_868, 869.4f, 869.65f, 10, 14, false, false, &TEST_PROFILE_LICENSED,
-     meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW, 3, "TEST_EU_LICENSED"},
+     meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW, 3, "TEST_EU_LICENSED", 0.0f},
 
     // A wide-LoRa region with turbo-only presets
     {meshtastic_Config_LoRaConfig_RegionCode_LORA_24, 2400.0f, 2483.5f, 100, 10, false, true, &TEST_PROFILE_TURBO,
-     meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO, 0, "TEST_LORA24_TURBO"},
+     meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO, 0, "TEST_LORA24_TURBO", 0.0f},
 
     // Sentinel - must be last
     {meshtastic_Config_LoRaConfig_RegionCode_UNSET, 902.0f, 928.0f, 100, 30, false, false, &TEST_PROFILE_SPACED,
-     meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, 0, "TEST_UNSET"},
+     meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, 0, "TEST_UNSET", 0.0f},
 };
 
 static const RegionInfo *getTestRegion(meshtastic_Config_LoRaConfig_RegionCode code)
@@ -1002,75 +1003,137 @@ static void test_channelSpacingCalculation_EU868_LONG_FAST()
 
 static void test_slotPlan_JP_250kHz_longFast()
 {
-    // ARIB STD-T108 Table 3-2: 250 kHz bonds 2x200 kHz unit channels -> 7 slots, first center 920.700 MHz.
+    // ARIB STD-T108 Part 2 §3.2.3 & Table 3-12: 250 kHz bonds 2x200 kHz unit channels without
+    // crossing 922.3 MHz (ch 32/33 bonding is prohibited). Lower sub-band [920.5, 922.3] holds
+    // 4 slots (ch 24-31; ch 32 unbonded) and upper [922.3, 923.5] holds 3 slots (ch 33-38).
     const RegionInfo *jp = getRegion(meshtastic_Config_LoRaConfig_RegionCode_JP);
     const float bw = modemPresetToBwKHz(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, jp->wideLora);
     const RegionInfo::SlotPlan plan = jp->getSlotPlan(bw);
 
     TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.200f, jp->profile->unitChannelMHz);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 922.300f, jp->bandSplitMHz);
     TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.400f, plan.width);
     TEST_ASSERT_EQUAL_UINT32(7, plan.count);
-    TEST_ASSERT_FLOAT_WITHIN(0.001f, 920.700f, plan.firstCenter);
-    TEST_ASSERT_FLOAT_WITHIN(0.001f, 921.100f, plan.firstCenter + plan.width);
-    TEST_ASSERT_FLOAT_WITHIN(0.001f, 923.100f, plan.firstCenter + 6 * plan.width);
+    TEST_ASSERT_EQUAL_UINT32(4, plan.lowerCount);
+
+    const float expected[7] = {920.700f, 921.100f, 921.500f, 921.900f, 922.500f, 922.900f, 923.300f};
+    for (uint32_t s = 0; s < 7; s++) {
+        TEST_ASSERT_FLOAT_WITHIN(0.001f, expected[s], plan.centerFreq(s));
+    }
 }
 
 static void test_slotPlan_JP_500kHz_shortTurbo()
 {
-    // ARIB STD-T108 Table 3-3: 500 kHz bonds 3x200 kHz unit channels -> 5 slots, first center 920.800 MHz.
+    // ARIB STD-T108 Part 2 Table 3-13: 500 kHz bonds 3x200 kHz unit channels -> 3 lower + 2 upper = 5 slots.
     const RegionInfo *jp = getRegion(meshtastic_Config_LoRaConfig_RegionCode_JP);
     const float bw = modemPresetToBwKHz(meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO, jp->wideLora);
     const RegionInfo::SlotPlan plan = jp->getSlotPlan(bw);
 
     TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.600f, plan.width);
     TEST_ASSERT_EQUAL_UINT32(5, plan.count);
-    TEST_ASSERT_FLOAT_WITHIN(0.001f, 920.800f, plan.firstCenter);
-    TEST_ASSERT_FLOAT_WITHIN(0.001f, 923.200f, plan.firstCenter + 4 * plan.width);
+    TEST_ASSERT_EQUAL_UINT32(3, plan.lowerCount);
+
+    const float expected[5] = {920.800f, 921.400f, 922.000f, 922.600f, 923.200f};
+    for (uint32_t s = 0; s < 5; s++) {
+        TEST_ASSERT_FLOAT_WITHIN(0.001f, expected[s], plan.centerFreq(s));
+    }
 }
 
 static void test_slotPlan_JP_125kHz_and_62_5kHz()
 {
-    // ARIB STD-T108 Table 3-1: <=200 kHz occupies 1 unit channel -> 15 slots, 920.600..923.400 MHz.
+    // ARIB STD-T108 Part 2 Table 3-11: <=200 kHz occupies 1 unit channel -> 9 lower (ch 24-32) +
+    // 6 upper (ch 33-38) = 15 slots. Pins ch 32 (922.2) and ch 33 (922.4) against float32 cancellation
+    // in (922.3f - 920.5f).
     const RegionInfo *jp = getRegion(meshtastic_Config_LoRaConfig_RegionCode_JP);
     for (float bw : {125.0f, 62.5f}) {
         const RegionInfo::SlotPlan plan = jp->getSlotPlan(bw);
         TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.200f, plan.width);
         TEST_ASSERT_EQUAL_UINT32(15, plan.count);
-        TEST_ASSERT_FLOAT_WITHIN(0.001f, 920.600f, plan.firstCenter);
-        TEST_ASSERT_FLOAT_WITHIN(0.001f, 923.400f, plan.firstCenter + 14 * plan.width);
+        TEST_ASSERT_EQUAL_UINT32(9, plan.lowerCount);
+        TEST_ASSERT_FLOAT_WITHIN(0.001f, 920.600f, plan.centerFreq(0));
+        TEST_ASSERT_FLOAT_WITHIN(0.001f, 922.200f, plan.centerFreq(8));
+        TEST_ASSERT_FLOAT_WITHIN(0.001f, 922.400f, plan.centerFreq(9));
+        TEST_ASSERT_FLOAT_WITHIN(0.001f, 923.400f, plan.centerFreq(14));
     }
 }
 
 static void test_slotPlan_JP_exactAndOverUnitMultiples()
 {
-    // Guards the unit-channel ceiling boundary: exact multiples stay in n units; fractional LoRa BWs
-    // slightly above a multiple (bwCode 200 -> 203.125 kHz, bwCode 400 -> 406.25 kHz) must bond n+1 units.
+    // Guards the unit-channel ceiling boundary and ARIB Tables 3-14/3-15 wider custom BWs:
+    // exact multiples stay in n units, fractional LoRa BWs (203.125 / 406.25 kHz) bond n+1 units,
+    // 800/1000 kHz stay legal on either side of 922.3 MHz, and 2000 kHz exceeds both sub-bands.
     const RegionInfo *jp = getRegion(meshtastic_Config_LoRaConfig_RegionCode_JP);
 
     const RegionInfo::SlotPlan p200 = jp->getSlotPlan(200.0f);
     TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.200f, p200.width);
     TEST_ASSERT_EQUAL_UINT32(15, p200.count);
-    TEST_ASSERT_FLOAT_WITHIN(0.001f, 920.600f, p200.firstCenter);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 920.600f, p200.centerFreq(0));
 
     const RegionInfo::SlotPlan p203 = jp->getSlotPlan(bwCodeToKHz(200));
     TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.400f, p203.width);
     TEST_ASSERT_EQUAL_UINT32(7, p203.count);
-    TEST_ASSERT_FLOAT_WITHIN(0.001f, 920.700f, p203.firstCenter);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 920.700f, p203.centerFreq(0));
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 922.500f, p203.centerFreq(4));
 
     const RegionInfo::SlotPlan p400 = jp->getSlotPlan(400.0f);
     TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.400f, p400.width);
     TEST_ASSERT_EQUAL_UINT32(7, p400.count);
-    TEST_ASSERT_FLOAT_WITHIN(0.001f, 920.700f, p400.firstCenter);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 920.700f, p400.centerFreq(0));
 
     const RegionInfo::SlotPlan p406 = jp->getSlotPlan(bwCodeToKHz(400));
     TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.600f, p406.width);
     TEST_ASSERT_EQUAL_UINT32(5, p406.count);
-    TEST_ASSERT_FLOAT_WITHIN(0.001f, 920.800f, p406.firstCenter);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 920.800f, p406.centerFreq(0));
 
     const RegionInfo::SlotPlan p600 = jp->getSlotPlan(600.0f);
     TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.600f, p600.width);
     TEST_ASSERT_EQUAL_UINT32(5, p600.count);
-    TEST_ASSERT_FLOAT_WITHIN(0.001f, 920.800f, p600.firstCenter);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 920.800f, p600.centerFreq(0));
+
+    // Table 3-14 (4 units / 800 kHz): ch 24-27 (920.9), ch 28-31 (921.7) | ch 33-36 (922.7)
+    const RegionInfo::SlotPlan p800 = jp->getSlotPlan(800.0f);
+    TEST_ASSERT_EQUAL_UINT32(3, p800.count);
+    TEST_ASSERT_EQUAL_UINT32(2, p800.lowerCount);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 920.900f, p800.centerFreq(0));
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 921.700f, p800.centerFreq(1));
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 922.700f, p800.centerFreq(2));
+
+    // Table 3-15 (5 units / 1000 kHz): ch 24-28 (921.0) | ch 33-37 (922.8)
+    const RegionInfo::SlotPlan p1000 = jp->getSlotPlan(1000.0f);
+    TEST_ASSERT_EQUAL_UINT32(2, p1000.count);
+    TEST_ASSERT_EQUAL_UINT32(1, p1000.lowerCount);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 921.000f, p1000.centerFreq(0));
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 922.800f, p1000.centerFreq(1));
+
+    // 2000 kHz exceeds both the 1800 kHz lower and 1200 kHz upper sub-bands.
+    TEST_ASSERT_EQUAL_UINT32(0, jp->getSlotPlan(2000.0f).count);
+}
+
+static void test_slotPlan_bandSplitLowerEmptyUsesUpper()
+{
+    // When a split region's lower sub-band is too narrow for the requested BW while the upper sub-band
+    // still fits slots (lowerCount == 0, upperCount > 0), slot 0 and firstCenter must land in the upper
+    // sub-band rather than pointing at the unusable lower sub-band.
+    const RegionInfo asymmetricSplit = {
+        meshtastic_Config_LoRaConfig_RegionCode_US,
+        920.5f,
+        923.5f,
+        100,
+        13,
+        false,
+        false,
+        &PROFILE_STD,
+        meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST,
+        0,
+        "TEST_ASYM_SPLIT",
+        920.9f, // lower span 0.4 MHz < 0.5 MHz BW; upper span 2.6 MHz -> 5 slots
+    };
+    const RegionInfo::SlotPlan plan = asymmetricSplit.getSlotPlan(500.0f);
+    TEST_ASSERT_EQUAL_UINT32(5, plan.count);
+    TEST_ASSERT_EQUAL_UINT32(0, plan.lowerCount);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 921.150f, plan.firstCenter);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 921.150f, plan.centerFreq(0));
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 923.150f, plan.centerFreq(4));
 }
 
 static void test_slotPlan_nonPositiveBwReturnsEmpty()
@@ -1117,29 +1180,47 @@ static void test_slotPlan_spacedAndPaddedRegions()
 
 static void test_slotPlan_allRegionsPresetsStayInBand()
 {
-    // Universal band-edge invariant behind switching round() -> floor(): for every region and every
-    // preset in its profile, all slots must lie within [freqStart, freqEnd] and agree with
-    // RadioInterface::frequencySlotCount().
+    // Universal band-edge and sub-band-split invariant: for every region and every preset in its
+    // profile, every slot must lie strictly within [freqStart, freqEnd], never overlap its neighbor,
+    // never straddle bandSplitMHz when configured, and agree with RadioInterface::frequencySlotCount().
     const RegionInfo *r = regions;
     while (true) {
         const meshtastic_Config_LoRaConfig_ModemPreset *presets = r->getAvailablePresets();
+        const bool hasSplit = (r->bandSplitMHz > r->freqStart && r->bandSplitMHz < r->freqEnd);
         for (size_t i = 0; presets[i] != MODEM_PRESET_END; i++) {
             const float bwKHz = modemPresetToBwKHz(presets[i], r->wideLora);
             const float halfBwMHz = bwKHz / 2000.0f;
             const RegionInfo::SlotPlan plan = r->getSlotPlan(bwKHz);
 
-            char msg[128];
+            char msg[160];
             snprintf(msg, sizeof(msg), "Region %s preset %d: count must be >= 1", r->name, (int)presets[i]);
             TEST_ASSERT_GREATER_OR_EQUAL_UINT32_MESSAGE(1, plan.count, msg);
 
-            const float lowerEdge = plan.firstCenter - halfBwMHz;
-            const float upperEdge = plan.firstCenter + (plan.count - 1) * plan.width + halfBwMHz;
-            snprintf(msg, sizeof(msg), "Region %s preset %d: lower %.4f < freqStart %.4f", r->name, (int)presets[i], lowerEdge,
-                     r->freqStart);
-            TEST_ASSERT_TRUE_MESSAGE(lowerEdge >= r->freqStart - 1e-4f, msg);
-            snprintf(msg, sizeof(msg), "Region %s preset %d: upper %.4f > freqEnd %.4f (count=%u)", r->name, (int)presets[i],
-                     upperEdge, r->freqEnd, (unsigned)plan.count);
-            TEST_ASSERT_TRUE_MESSAGE(upperEdge <= r->freqEnd + 1e-4f, msg);
+            float prevUpper = 0.0f;
+            for (uint32_t s = 0; s < plan.count; s++) {
+                const float center = plan.centerFreq(s);
+                const float lowerEdge = center - halfBwMHz;
+                const float upperEdge = center + halfBwMHz;
+                snprintf(msg, sizeof(msg), "Region %s preset %d slot %u: lower %.4f < freqStart %.4f", r->name, (int)presets[i],
+                         (unsigned)(s + 1), lowerEdge, r->freqStart);
+                TEST_ASSERT_TRUE_MESSAGE(lowerEdge >= r->freqStart - 1e-4f, msg);
+                snprintf(msg, sizeof(msg), "Region %s preset %d slot %u: upper %.4f > freqEnd %.4f", r->name, (int)presets[i],
+                         (unsigned)(s + 1), upperEdge, r->freqEnd);
+                TEST_ASSERT_TRUE_MESSAGE(upperEdge <= r->freqEnd + 1e-4f, msg);
+                if (s > 0) {
+                    snprintf(msg, sizeof(msg), "Region %s preset %d slot %u: overlaps previous slot (%.4f < %.4f)", r->name,
+                             (int)presets[i], (unsigned)(s + 1), lowerEdge, prevUpper);
+                    TEST_ASSERT_TRUE_MESSAGE(lowerEdge >= prevUpper - 1e-4f, msg);
+                }
+                if (hasSplit) {
+                    const bool belowSplit = upperEdge <= r->bandSplitMHz + 1e-4f;
+                    const bool aboveSplit = lowerEdge >= r->bandSplitMHz - 1e-4f;
+                    snprintf(msg, sizeof(msg), "Region %s preset %d slot %u: [%.4f, %.4f] straddles split %.4f", r->name,
+                             (int)presets[i], (unsigned)(s + 1), lowerEdge, upperEdge, r->bandSplitMHz);
+                    TEST_ASSERT_TRUE_MESSAGE(belowSplit || aboveSplit, msg);
+                }
+                prevUpper = upperEdge;
+            }
 
             if (r->code != meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
                 meshtastic_Config_LoRaConfig probe = meshtastic_Config_LoRaConfig_init_zero;
@@ -1160,8 +1241,9 @@ static void test_slotPlan_allRegionsPresetsStayInBand()
 
 static void test_clampConfigLora_JP_slotBounds()
 {
-    // JP LongFast has 7 slots on the 200 kHz grid (was 12). Slot 7 is valid; old slot 8+ must be
-    // rejected by validateConfigLora() and clamped to the default hashed slot (6 = 922.7 MHz).
+    // JP LongFast has 7 slots on the ARIB 200 kHz split grid (was 12). Slot 7 is valid; old slot 8+
+    // must be rejected by validateConfigLora() and clamped to the default hashed slot (6 = 922.9 MHz).
+    channels.initDefaults();
     meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
     cfg.region = meshtastic_Config_LoRaConfig_RegionCode_JP;
     cfg.use_preset = true;
@@ -1183,7 +1265,7 @@ static void test_clampConfigLora_JP_customModeSlotBounds()
     // resolve to "Custom" so uses_custom_channel_name is false. Clamping an out-of-range slot (>7 on
     // JP 250 kHz) must clear channel_num to 0 so a subsequent validateConfigLora() accepts it, while
     // leaving an in-range custom pin (<=7) intact.
-    channelFile.channels[0].settings.name[0] = '\0';
+    channels.initDefaults();
     config.lora.use_preset = false;
 
     meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
@@ -1203,6 +1285,41 @@ static void test_clampConfigLora_JP_customModeSlotBounds()
     RadioInterface::clampConfigLora(cfg);
     TEST_ASSERT_EQUAL_UINT32(0, cfg.channel_num);
     TEST_ASSERT_TRUE(RadioInterface::validateConfigLora(cfg));
+}
+
+static void test_clampConfigLora_JP_pendingPresetSwitch()
+{
+    // AdminModule::handleSetConfig() validates/clamps the pending loraConfig before updating global
+    // config.lora. With an unnamed primary channel, checkOrClampConfigLora() must resolve the default
+    // channel name from the pending loraConfig rather than stale global config.lora; otherwise:
+    //  1. Switching preset->custom falsely sets uses_custom_channel_name=true and clamps to hash(oldPreset),
+    //  2. Switching presetA->presetB falsely clamps to hash(presetA) instead of hash(presetB).
+    channels.initDefaults();
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_JP;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST; // hash("ShortFast") % 7 + 1 == 2
+
+    // Case 1: pending switches from preset (SHORT_FAST) to custom (use_preset=false) with OOB channel_num=8.
+    meshtastic_Config_LoRaConfig toCustom = meshtastic_Config_LoRaConfig_init_zero;
+    toCustom.region = meshtastic_Config_LoRaConfig_RegionCode_JP;
+    toCustom.use_preset = false;
+    toCustom.bandwidth = 250;
+    toCustom.spread_factor = 11;
+    toCustom.coding_rate = 5;
+    toCustom.channel_num = 8;
+    RadioInterface::clampConfigLora(toCustom);
+    TEST_ASSERT_EQUAL_UINT32(0, toCustom.channel_num);
+    TEST_ASSERT_TRUE(RadioInterface::validateConfigLora(toCustom));
+
+    // Case 2: pending switches from SHORT_FAST (slot 2) to LONG_FAST (slot 6) with OOB channel_num=8.
+    meshtastic_Config_LoRaConfig toLongFast = meshtastic_Config_LoRaConfig_init_zero;
+    toLongFast.region = meshtastic_Config_LoRaConfig_RegionCode_JP;
+    toLongFast.use_preset = true;
+    toLongFast.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    toLongFast.channel_num = 8;
+    RadioInterface::clampConfigLora(toLongFast);
+    TEST_ASSERT_EQUAL_UINT32(6, toLongFast.channel_num);
 }
 
 // Placeholder: when protobuf region definitions include non-zero padding/spacing,
@@ -1701,6 +1818,38 @@ static void test_handleSetConfig_fromOthers_invalidChannelNumFullyRejected()
     TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_US, config.lora.region);
     TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, config.lora.modem_preset);
     TEST_ASSERT_EQUAL_UINT32(0, config.lora.channel_num);
+}
+
+static void test_handleSetConfig_JP_presetToCustomClamp()
+{
+    // End-to-end admin path: node starts on JP LongFast (unnamed primary), receives a local
+    // set_config switching to custom JP 250 kHz. Out-of-range slot 8 must clamp to 0 (not hash of
+    // stale "LongFast" -> 6), while an in-range custom slot 7 must be preserved.
+    channels.initDefaults();
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_JP;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    initRegion();
+
+    meshtastic_Config c =
+        makeLoraSetConfig(meshtastic_Config_LoRaConfig_RegionCode_JP, false, meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST);
+    c.payload_variant.lora.bandwidth = 250;
+    c.payload_variant.lora.spread_factor = 11;
+    c.payload_variant.lora.coding_rate = 5;
+    c.payload_variant.lora.channel_num = 8;
+
+    testAdmin->handleSetConfig(c, false); // fromOthers = false (local admin clamps)
+    TEST_ASSERT_FALSE(config.lora.use_preset);
+    TEST_ASSERT_EQUAL_UINT32(0, config.lora.channel_num);
+
+    // Reset to preset mode and confirm in-range slot 7 is preserved across the transition.
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    c.payload_variant.lora.channel_num = 7;
+    testAdmin->handleSetConfig(c, false);
+    TEST_ASSERT_FALSE(config.lora.use_preset);
+    TEST_ASSERT_EQUAL_UINT32(7, config.lora.channel_num);
 }
 
 // clampBandwidthCode: an unset (0) bandwidth code maps to the default; any other code is left as-is.
@@ -2969,12 +3118,14 @@ void setup()
     RUN_TEST(test_slotPlan_JP_500kHz_shortTurbo);
     RUN_TEST(test_slotPlan_JP_125kHz_and_62_5kHz);
     RUN_TEST(test_slotPlan_JP_exactAndOverUnitMultiples);
+    RUN_TEST(test_slotPlan_bandSplitLowerEmptyUsesUpper);
     RUN_TEST(test_slotPlan_nonPositiveBwReturnsEmpty);
     RUN_TEST(test_slotPlan_narrowSlotRelativeEpsilon);
     RUN_TEST(test_slotPlan_spacedAndPaddedRegions);
     RUN_TEST(test_slotPlan_allRegionsPresetsStayInBand);
     RUN_TEST(test_clampConfigLora_JP_slotBounds);
     RUN_TEST(test_clampConfigLora_JP_customModeSlotBounds);
+    RUN_TEST(test_clampConfigLora_JP_pendingPresetSwitch);
     RUN_TEST(test_channelSpacingCalculation_placeholder);
 
     // handleSetConfig fromOthers dispatch
@@ -2982,6 +3133,7 @@ void setup()
     RUN_TEST(test_handleSetConfig_fromLocal_invalidPresetClamped);
     RUN_TEST(test_handleSetConfig_fromOthers_validPresetAccepted);
     RUN_TEST(test_handleSetConfig_fromOthers_invalidChannelNumFullyRejected);
+    RUN_TEST(test_handleSetConfig_JP_presetToCustomClamp);
     RUN_TEST(test_clampBandwidthCode_zeroMapsToDefaultOthersUnchanged);
     RUN_TEST(test_handleSetConfig_fromLocal_customBandwidthZeroClampedToDefault);
     RUN_TEST(test_handleSetConfig_fromOthers_customBandwidthZeroClampedToDefault);

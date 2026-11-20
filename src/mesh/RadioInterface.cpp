@@ -100,8 +100,8 @@ const RegionProfile PROFILE_HAM_100KHZ = {PRESETS_NARROW, 0, 0.01875f, 0, false,
 
 Observable<uint32_t> RadioInterface::loraRxPacketObservable;
 
-#define RDEF(name, freq_start, freq_end, duty_cycle, power_limit, frequency_switching, wide_lora, profile_ptr, default_preset,   \
-             override_slot)                                                                                                      \
+#define RDEF_SPLIT(name, freq_start, freq_end, duty_cycle, power_limit, frequency_switching, wide_lora, profile_ptr,             \
+                   default_preset, override_slot, band_split)                                                                    \
     {meshtastic_Config_LoRaConfig_RegionCode_##name,                                                                             \
      freq_start,                                                                                                                 \
      freq_end,                                                                                                                   \
@@ -112,7 +112,13 @@ Observable<uint32_t> RadioInterface::loraRxPacketObservable;
      &profile_ptr,                                                                                                               \
      default_preset,                                                                                                             \
      override_slot,                                                                                                              \
-     #name}
+     #name,                                                                                                                      \
+     band_split}
+
+#define RDEF(name, freq_start, freq_end, duty_cycle, power_limit, frequency_switching, wide_lora, profile_ptr, default_preset,   \
+             override_slot)                                                                                                      \
+    RDEF_SPLIT(name, freq_start, freq_end, duty_cycle, power_limit, frequency_switching, wide_lora, profile_ptr, default_preset, \
+               override_slot, 0.0f)
 
 const RegionInfo regions[] = {
     /*
@@ -164,7 +170,8 @@ const RegionInfo regions[] = {
         https://www.arib.or.jp/english/html/overview/doc/5-STD-T108v1_5-E1.pdf
         https://qiita.com/ammo0613/items/d952154f1195b64dc29f
      */
-    RDEF(JP, 920.5f, 923.5f, 100, 13, false, false, PROFILE_JP, PRESET(LONG_FAST), 0),
+    // ARIB STD-T108 §3.2.3 prohibits bonding ch 24-32 (<=922.2 MHz) with ch 33+ (>=922.4 MHz) across 922.3 MHz
+    RDEF_SPLIT(JP, 920.5f, 923.5f, 100, 13, false, false, PROFILE_JP, PRESET(LONG_FAST), 0, 922.3f),
 
     /*
         https://www.iot.org.au/wp/wp-content/uploads/2016/12/IoTSpectrumFactSheet.pdf
@@ -1227,9 +1234,10 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
         }
     }
 
-    const char *channelName = channels.getName(channels.getPrimaryIndex());
     const char *presetNameDisplay =
         DisplayFormatters::getModemPresetDisplayName(loraConfig.modem_preset, false, loraConfig.use_preset);
+    const char *storedPrimaryName = channels.getByIndex(channels.getPrimaryIndex()).settings.name;
+    const char *channelName = *storedPrimaryName ? storedPrimaryName : presetNameDisplay;
     // numFreqSlots can still be 0 for an UNSET/degenerate region, and % 0 is a SIGFPE
     uint32_t channelNameHashSlot = numFreqSlots ? (hash(channelName) % numFreqSlots) : 0;
     uint32_t presetNameHashSlot = numFreqSlots ? (hash(presetNameDisplay) % numFreqSlots) : 0;
@@ -1432,7 +1440,7 @@ void RadioInterface::applyModemConfig()
             channel_num = loraConfig.channel_num - 1;
         }
 
-        freq = slotPlan.firstCenter + (channel_num * slotPlan.width); // in MHz
+        freq = slotPlan.centerFreq(channel_num); // in MHz
     }
 
     saveChannelNum(channel_num);

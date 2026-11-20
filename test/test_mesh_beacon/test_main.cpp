@@ -1875,7 +1875,7 @@ static void test_frequencySlotCount_JP_aribUnitChannelGrid(void)
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(7, RadioInterface::resolveFrequencySlot(loraProbe(jp, longFast, 7), "LongFast"),
                                      "in-range JP slot 7 must win");
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(6, RadioInterface::resolveFrequencySlot(loraProbe(jp, longFast, 0), "LongFast"),
-                                     "unpinned JP LongFast derives to slot 6 (922.7 MHz)");
+                                     "unpinned JP LongFast derives to slot 6 (922.9 MHz)");
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(6, RadioInterface::resolveFrequencySlot(loraProbe(jp, longFast, 8), "LongFast"),
                                      "old JP slot 8 is past the 7-slot grid and must derive");
 }

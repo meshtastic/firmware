@@ -274,12 +274,13 @@ static void test_applyModemConfig_mediumTurbo()
 }
 
 // RadioInterface::applyModemConfig() on JP must align center frequencies to the ARIB STD-T108
-// 200 kHz unit-channel grid via RegionInfo::getSlotPlan() rather than band-edge-abutted slots.
+// 200 kHz unit-channel grid via RegionInfo::getSlotPlan() and never bond ch 32+33 across 922.3 MHz.
 static void test_applyModemConfig_JP_aribUnitChannelGrid()
 {
     channelFile.channels[0].settings.name[0] = '\0';
 
-    // LONG_FAST (250 kHz): 7 slots, slot 1 = 920.7 MHz, default slot 6 = 922.7 MHz, slot 7 = 923.1 MHz.
+    // LONG_FAST (250 kHz): 4 lower slots (920.7..921.9) + 3 upper slots (922.5, 922.9, 923.3).
+    // Slot 5 skips prohibited ch 32,33 (922.3) and lands on ch 33,34 (922.5); default slot 6 = 922.9.
     config.lora = meshtastic_Config_LoRaConfig_init_zero;
     config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_JP;
     config.lora.use_preset = true;
@@ -288,19 +289,35 @@ static void test_applyModemConfig_JP_aribUnitChannelGrid()
     testRadio->reconfigure();
     TEST_ASSERT_FLOAT_WITHIN(0.001f, 920.700f, testRadio->getFreq());
 
+    config.lora.channel_num = 4;
+    testRadio->reconfigure();
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 921.900f, testRadio->getFreq());
+
+    config.lora.channel_num = 5;
+    testRadio->reconfigure();
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 922.500f, testRadio->getFreq());
+
     config.lora.channel_num = 7;
     testRadio->reconfigure();
-    TEST_ASSERT_FLOAT_WITHIN(0.001f, 923.100f, testRadio->getFreq());
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 923.300f, testRadio->getFreq());
 
-    config.lora.channel_num = 0; // default hash("LongFast") % 7 + 1 == 6
+    config.lora.channel_num = 0; // default hash("LongFast") % 7 + 1 == 6 (ch 35,36)
     testRadio->reconfigure();
-    TEST_ASSERT_FLOAT_WITHIN(0.001f, 922.700f, testRadio->getFreq());
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 922.900f, testRadio->getFreq());
 
-    // SHORT_TURBO (500 kHz): 5 slots, slot 1 = 920.8 MHz, slot 5 = 923.2 MHz.
+    // SHORT_TURBO (500 kHz): 3 lower slots (920.8, 921.4, 922.0) + 2 upper slots (922.6, 923.2).
     config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO;
     config.lora.channel_num = 1;
     testRadio->reconfigure();
     TEST_ASSERT_FLOAT_WITHIN(0.001f, 920.800f, testRadio->getFreq());
+
+    config.lora.channel_num = 3;
+    testRadio->reconfigure();
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 922.000f, testRadio->getFreq());
+
+    config.lora.channel_num = 4;
+    testRadio->reconfigure();
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 922.600f, testRadio->getFreq());
 
     config.lora.channel_num = 5;
     testRadio->reconfigure();
@@ -308,7 +325,7 @@ static void test_applyModemConfig_JP_aribUnitChannelGrid()
 }
 
 // Custom bandwidths on JP (125 kHz and 62.5 kHz) must center on ARIB unit channel 24 (920.6 MHz)
-// through channel 38 (923.4 MHz) rather than 920.5625 / 920.53125 MHz.
+// through channel 38 (923.4 MHz), including ch 32 (922.2) and ch 33 (922.4) across the 922.3 split.
 static void test_applyModemConfig_JP_customBandwidthGrid()
 {
     channelFile.channels[0].settings.name[0] = '\0';
@@ -323,6 +340,14 @@ static void test_applyModemConfig_JP_customBandwidthGrid()
         config.lora.channel_num = 1;
         testRadio->reconfigure();
         TEST_ASSERT_FLOAT_WITHIN(0.001f, 920.600f, testRadio->getFreq());
+
+        config.lora.channel_num = 9;
+        testRadio->reconfigure();
+        TEST_ASSERT_FLOAT_WITHIN(0.001f, 922.200f, testRadio->getFreq());
+
+        config.lora.channel_num = 10;
+        testRadio->reconfigure();
+        TEST_ASSERT_FLOAT_WITHIN(0.001f, 922.400f, testRadio->getFreq());
 
         config.lora.channel_num = 15;
         testRadio->reconfigure();
