@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Arduino.h>
+#include <algorithm>
 #include <list>
 
 template <class T> class Observable;
@@ -58,6 +59,8 @@ template <class T> class Observable
     std::list<Observer<T> *> observers;
 
   public:
+    ~Observable();
+
     /**
      * Tell all observers about a change, observers can process arg as they wish
      *
@@ -81,6 +84,7 @@ template <class T> class Observable
     // Not called directly, instead call observer.observe
     void addObserver(Observer<T> *o) { observers.push_back(o); }
 
+    // cppcheck-suppress constParameterPointer ; std::list::remove() needs a non-const pointer
     void removeObserver(Observer<T> *o) { observers.remove(o); }
 };
 
@@ -95,6 +99,11 @@ template <class T> Observer<T>::~Observer()
 
 template <class T> void Observer<T>::unobserve(Observable<T> *o)
 {
+    // Membership before any read through `o`: ~Observable has already dropped a destroyed
+    // observable from this list, so an unobserve() that runs after it is a no-op, not a use-after-free.
+    if (std::find(observables.begin(), observables.end(), o) == observables.end())
+        return;
+
     o->removeObserver(this);
     observables.remove(o);
 }
@@ -103,4 +112,15 @@ template <class T> void Observer<T>::observe(Observable<T> *o)
 {
     observables.push_back(o);
     o->addObserver(this);
+}
+
+// Symmetric to ~Observer: an observable destroyed while it still has watchers must drop itself from
+// their lists, or their later unobserve() / ~Observer reads through the freed object.
+template <class T> Observable<T>::~Observable()
+{
+    for (typename std::list<Observer<T> *>::const_iterator iterator = observers.begin(); iterator != observers.end();
+         ++iterator) {
+        (*iterator)->observables.remove(this);
+    }
+    observers.clear();
 }

@@ -63,6 +63,10 @@ class Channels
     /** The index of the primary channel */
     ChannelIndex getPrimaryIndex() const { return primaryIndex; }
 
+    /// Points primaryIndex at the PRIMARY channel, if there is one, without fixing anything up
+    /// (onConfigChanged() does that). Returns whether one was found.
+    bool resolvePrimaryIndex();
+
     ChannelIndex getNumChannels() { return channelFile.channels_count; }
 
     /// Called by NodeDB on initial boot when the radio config settings are unset.  Set a default single channel config.
@@ -119,6 +123,18 @@ class Channels
 
     int16_t getHash(ChannelIndex i) { return hashes[i]; }
 
+    /** The hash a channel would carry under another name, e.g. a blank-named one on another preset. -1 if invalid. */
+    int16_t hashFor(ChannelIndex chIndex, const char *name);
+
+    /** Return true if the channel has AEAD (authenticated encryption) enabled */
+    bool isAEADEnabled(ChannelIndex chIndex);
+
+    /**
+     * Return the key used for encrypting this channel (if channel is secondary and no key provided, use the primary channel's
+     * PSK)
+     */
+    CryptoKey getKey(ChannelIndex chIndex);
+
   private:
     /** Given a channel index, change to use the crypto key specified by that index
      *
@@ -145,12 +161,6 @@ class Channels
      * Write default channels defined in UserPrefs
      */
     void initDefaultChannel(ChannelIndex chIndex);
-
-    /**
-     * Return the key used for encrypting this channel (if channel is secondary and no key provided, use the primary channel's
-     * PSK)
-     */
-    CryptoKey getKey(ChannelIndex chIndex);
 };
 
 /// Singleton channel table

@@ -1,7 +1,9 @@
+#include "UptimeClock.h"
 #include "configuration.h"
 
 #if HAS_ETHERNET && defined(HAS_ETHERNET_OTA)
 
+#include "ethBoundedClient.h"
 #include "ethOTA.h"
 #include <ErriezCRC32.h>
 #include <SHA256.h>
@@ -119,7 +121,7 @@ static bool authenticateClient(EthernetClient &client)
     uint8_t clientHash[OTA_HASH_SIZE];
     if (!readExact(client, clientHash, OTA_HASH_SIZE)) {
         LOG_WARN("ETH OTA: Timeout reading auth response");
-        lastAuthFailure = millis();
+        lastAuthFailure = Time::skipZero(Time::getMillis());
         return false;
     }
 
@@ -136,7 +138,7 @@ static bool authenticateClient(EthernetClient &client)
     if (diff != 0) {
         LOG_WARN("ETH OTA: Authentication failed");
         client.write(OTA_ERR_AUTH);
-        lastAuthFailure = millis();
+        lastAuthFailure = Time::skipZero(Time::getMillis());
         return false;
     }
 
@@ -262,7 +264,7 @@ static void handleOTAClient(EthernetClient &client)
 
     LOG_INFO("ETH OTA: Update staged (%u bytes). Rebooting", hdr.firmwareSize);
     client.write(OTA_OK);
-    client.flush();
+    ethFlush(client);
     delay(500);
 
     // Reboot - the built-in bootloader will apply the update from LittleFS

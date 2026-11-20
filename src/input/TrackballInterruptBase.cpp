@@ -102,11 +102,9 @@ int32_t TrackballInterruptBase::runOnce()
         down_counter = 0;
         lastInterruptTime = 0;
     }
-#ifdef INPUT_DEBUG
     if (left_counter > 0 || right_counter > 0 || up_counter > 0 || down_counter > 0) {
-        LOG_DEBUG("L %u R %u U %u D %u, time %u", left_counter, right_counter, up_counter, down_counter, millis());
+        LOG_INPUT("L %u R %u U %u D %u, time %u", left_counter, right_counter, up_counter, down_counter, millis());
     }
-#endif
 #endif
 
     bool pressLatched = false;
@@ -177,24 +175,16 @@ int32_t TrackballInterruptBase::runOnce()
     // emitted this poll (a release classified on a later poll) must not be overwritten either.
     if (!pressLatched && e.inputEvent == INPUT_BROKER_NONE) {
         if (up_counter >= TB_THRESHOLD) {
-#ifdef INPUT_DEBUG
-            LOG_DEBUG("Trackball event UP %u", millis());
-#endif
+            LOG_INPUT("Trackball event UP %u", millis());
             e.inputEvent = this->_eventUp;
         } else if (down_counter >= TB_THRESHOLD) {
-#ifdef INPUT_DEBUG
-            LOG_DEBUG("Trackball event DOWN %u", millis());
-#endif
+            LOG_INPUT("Trackball event DOWN %u", millis());
             e.inputEvent = this->_eventDown;
         } else if (left_counter >= TB_THRESHOLD) {
-#ifdef INPUT_DEBUG
-            LOG_DEBUG("Trackball event LEFT %u", millis());
-#endif
+            LOG_INPUT("Trackball event LEFT %u", millis());
             e.inputEvent = this->_eventLeft;
         } else if (right_counter >= TB_THRESHOLD) {
-#ifdef INPUT_DEBUG
-            LOG_DEBUG("Trackball event RIGHT %u", millis());
-#endif
+            LOG_INPUT("Trackball event RIGHT %u", millis());
             e.inputEvent = this->_eventRight;
         }
     }
@@ -203,20 +193,20 @@ int32_t TrackballInterruptBase::runOnce()
     if (e.inputEvent == INPUT_BROKER_NONE) {
         if (this->action == TB_ACTION_UP && !digitalRead(_pinUp) && !directionDetected) {
             directionDetected = true;
-            directionStartTime = millis();
+            directionStartTime = Time::skipZero(Time::getMillis());
             e.inputEvent = this->_eventUp;
             // send event first,will automatically trigger every 50ms * 3 after 500ms
         } else if (this->action == TB_ACTION_DOWN && !digitalRead(_pinDown) && !directionDetected) {
             directionDetected = true;
-            directionStartTime = millis();
+            directionStartTime = Time::skipZero(Time::getMillis());
             e.inputEvent = this->_eventDown;
         } else if (this->action == TB_ACTION_LEFT && !digitalRead(_pinLeft) && !directionDetected) {
             directionDetected = true;
-            directionStartTime = millis();
+            directionStartTime = Time::skipZero(Time::getMillis());
             e.inputEvent = this->_eventLeft;
         } else if (this->action == TB_ACTION_RIGHT && !digitalRead(_pinRight) && !directionDetected) {
             directionDetected = true;
-            directionStartTime = millis();
+            directionStartTime = Time::skipZero(Time::getMillis());
             e.inputEvent = this->_eventRight;
         }
     }
@@ -260,7 +250,7 @@ void TrackballInterruptBase::intDownHandler()
 {
     if (TB_THRESHOLD || !Throttle::isWithinTimespanMs(lastInterruptTime, 10))
         this->action = TB_ACTION_DOWN;
-    lastInterruptTime = millis();
+    lastInterruptTime = Time::skipZero(Time::getMillis());
 
 #if TB_THRESHOLD
     down_counter++;
@@ -271,7 +261,7 @@ void TrackballInterruptBase::intUpHandler()
 {
     if (TB_THRESHOLD || !Throttle::isWithinTimespanMs(lastInterruptTime, 10))
         this->action = TB_ACTION_UP;
-    lastInterruptTime = millis();
+    lastInterruptTime = Time::skipZero(Time::getMillis());
 
 #if TB_THRESHOLD
     up_counter++;
@@ -282,7 +272,7 @@ void TrackballInterruptBase::intLeftHandler()
 {
     if (TB_THRESHOLD || !Throttle::isWithinTimespanMs(lastInterruptTime, 10))
         this->action = TB_ACTION_LEFT;
-    lastInterruptTime = millis();
+    lastInterruptTime = Time::skipZero(Time::getMillis());
 #if TB_THRESHOLD
     left_counter++;
 #endif
@@ -292,7 +282,7 @@ void TrackballInterruptBase::intRightHandler()
 {
     if (TB_THRESHOLD || !Throttle::isWithinTimespanMs(lastInterruptTime, 10))
         this->action = TB_ACTION_RIGHT;
-    lastInterruptTime = millis();
+    lastInterruptTime = Time::skipZero(Time::getMillis());
 #if TB_THRESHOLD
     right_counter++;
 #endif

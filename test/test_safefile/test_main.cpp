@@ -117,8 +117,6 @@ void test_write_open_truncates_on_this_host(void)
 void setup()
 {
     initializeTestEnvironment();
-    // SafeFile takes spiLock on every open; main.cpp does this, and nothing in the test harness does.
-    initSPI();
     UNITY_BEGIN();
 #ifdef FSCom
     RUN_TEST(test_stale_tmp_is_not_appended_to);

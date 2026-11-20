@@ -635,7 +635,7 @@ std::string InkHUD::Applet::getTimeString(uint32_t epochSeconds)
         // Format the clock string, either 12 hour or 24 hour
         char clockStr[11];
         if (config.display.use_12h_clock)
-            sprintf(clockStr, "%u:%02u %s", (hour % 12 == 0 ? 12 : hour % 12), min, hour > 11 ? "PM" : "AM");
+            sprintf(clockStr, "%u:%02u %s", (hour % 12 == 0 ? 12u : hour % 12), min, hour > 11 ? "PM" : "AM");
         else
             sprintf(clockStr, "%02u:%02u", hour, min);
 
@@ -786,6 +786,27 @@ void InkHUD::Applet::drawHeader(const std::string &text)
         const uint16_t batteryTileTop = batteryTile->getTop();
         const uint16_t batteryTileHeight = batteryTile->getHeight();
         hatchRegion(batteryTileLeft - ditherSizePx, batteryTileTop, ditherSizePx, batteryTileHeight, 2, WHITE);
+    }
+}
+
+// Draw a small up and / or down arrow at the right edge, to show the content scrolls in that direction
+// Each sits on a white backing, so it stays legible over text
+void InkHUD::Applet::drawScrollHints(bool canScrollUp, bool canScrollDown)
+{
+    const int16_t size = std::max<int16_t>(fontSmall.lineHeight() / 2, 5);
+    const int16_t left = width() - size - 3;
+    const int16_t backing = size + 2;
+
+    if (canScrollUp) {
+        const int16_t top = getHeaderHeight() + 2;
+        fillRect(left - 1, top - 1, backing + 1, backing, WHITE);
+        fillTriangle(left + size / 2, top, left, top + size - 1, left + size - 1, top + size - 1, BLACK);
+    }
+
+    if (canScrollDown) {
+        const int16_t bottom = height() - 3;
+        fillRect(left - 1, bottom - size, backing + 1, backing, WHITE);
+        fillTriangle(left, bottom - size + 1, left + size - 1, bottom - size + 1, left + size / 2, bottom, BLACK);
     }
 }
 

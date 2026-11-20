@@ -105,6 +105,9 @@ void nudgeScroll(int8_t direction)
 {
     if (direction == 0)
         return;
+#ifdef USE_EINK
+    manualScrolling = true; // or the next e-ink redraw puts the messages back at the top
+#endif
 
     if (cachedHeights.empty()) {
         scrollY = 0.0f;
@@ -777,8 +780,9 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         scrollY = 0;
     }
 #else
-    // E-Ink: disable autoscroll
-    scrollY = 0.0f;
+    // E-Ink: no autoscroll (it would refresh the panel continuously), but keep where UP/DOWN scrolled to
+    if (!manualScrolling)
+        scrollY = 0.0f;
     waitingToReset = false;
     scrollStarted = false;
     lastTime = millis();
@@ -1215,9 +1219,14 @@ void handleNewMessage(OLEDDisplay *display, const StoredMessage &sm, const mesht
             screen->setOn(true);
         }
 
-        if (!suppressBanner && !menuShowing && !screen->hasModalModule()) {
+        // Don't let the banner interrupt whatever the user is in the middle of -- it would cover an
+        // active module/game, and worse, a transient banner replaces any interactive overlay, so it
+        // would discard a half-entered picker / text entry (e.g. high-score initials). The message
+        // is still stored, its thread still selected below, and the unread indicator set, so nothing
+        // is lost -- the user just sees it once they're done. (isInteractionBusy() subsumes the
+        // modal-module check this guard used to make.)
+        if (!screen->isInteractionBusy() && !menuShowing && !suppressBanner)
             screen->showSimpleBanner(banner, inThread ? 1000 : 3000);
-        }
     }
 
     // Always focus into the correct conversation thread when a message with real text arrives

@@ -35,6 +35,7 @@ PositionModule::PositionModule()
     if (transmitHistory) {
         uint32_t restored = transmitHistory->getLastSentToMeshMillis(meshtastic_PortNum_POSITION_APP);
         if (restored != 0) {
+            // unset-sentinel-ok: the enclosing restored != 0 already rules out the unset value
             lastGpsSend = restored;
             LOG_INFO("Position: restored lastGpsSend from transmit history");
         }
@@ -83,6 +84,12 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
 #endif
 
             nodeDB->setLocalPosition(p, true);
+            // Keep `precision` current for this channel even on this early-return path -
+            // alterReceivedProtobuf() runs right after handleReceived() on this same packet
+            // (MeshModule::callModules()) and depends on it to truncate correctly, whether this
+            // packet is our own already-truncated broadcast (re-truncating is a no-op) or a
+            // phone-submitted one that still needs it applied.
+            precision = getPositionPrecisionForChannel(mp.channel);
             return false;
         } else {
             LOG_TRACE("Incoming update from MYSELF");
@@ -292,7 +299,7 @@ meshtastic_MeshPacket *PositionModule::allocReply()
 
     meshtastic_MeshPacket *reply = allocPositionPacket(precision);
     if (reply) {
-        lastSentReply = Time::getMillis(); // Track when we sent this reply
+        lastSentReply = Time::skipZero(Time::getMillis()); // Track when we sent this reply
     }
     return reply;
 }
@@ -479,6 +486,7 @@ bool PositionModule::sendOurPosition(NodeNum dest, bool wantReplies, uint8_t cha
         meshtastic_ClientNotification *notification = clientNotificationPool.allocZeroed();
         if (notification) {
             notification->level = meshtastic_LogRecord_Level_INFO;
+            notification->type = meshtastic_ClientNotification_NotificationType_POSITION_SENT_SLEEPING;
             notification->time = getValidTime(RTCQualityFromNet);
             sprintf(notification->message, "Sending position and sleeping for %us interval in a moment",
                     Default::getConfiguredOrDefaultMs(config.position.position_broadcast_secs, default_broadcast_interval_secs) /
@@ -550,7 +558,7 @@ int32_t PositionModule::runOnce()
     if (node == nullptr)
         return RUNONCE_INTERVAL;
 
-    uint32_t now = Time::getMillis();
+    uint32_t now = Time::stampMillis();
 
     // Local-only delivery, so it runs regardless of mesh opt-in state or channel utilization.
     // Only send while the queue is empty (phone assumed connected), like telemetry. The cadence
@@ -573,7 +581,7 @@ int32_t PositionModule::runOnce()
         return RUNONCE_INTERVAL;
     }
 
-    // Hold to the 6h floor when fixed_position (every role: pinning yourself forfeits the
+    // Hold to the stationary floor when fixed_position (every role: pinning yourself forfeits the
     // exception) or when stationary. A real move still goes out early via smart-broadcast below.
     // Not-fixed exceptions: lost-and-found broadcasts freely; trackers judge movement at their
     // own (unclamped) precision rather than the on-wire one (useConfiguredPrecision).
@@ -709,7 +717,7 @@ void PositionModule::trySmartBroadcast(const meshtastic_PositionLite &selfPos, u
     if (!sendOurPosition())
         return;
 
-    lastGpsSend = nowMs;
+    lastGpsSend = Time::skipZero(nowMs); // nowMs is a parameter, so guard at the store as well
     if (transmitHistory)
         transmitHistory->setLastSentToMesh(meshtastic_PortNum_POSITION_APP);
     LOG_DEBUG("Sent smart pos@%x:6 to mesh (distanceTraveled=%fm, minDistanceThreshold=%im, timeElapsed=%ims, "
@@ -729,7 +737,7 @@ void PositionModule::handleNewPosition()
         meshtastic_PositionLite selfPos;
         if (!nodeDB->copyNodePosition(node->num, selfPos))
             return;
-        trySmartBroadcast(selfPos, Time::getMillis());
+        trySmartBroadcast(selfPos, Time::stampMillis());
     }
 }
 

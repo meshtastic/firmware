@@ -1,0 +1,20 @@
+# The main config is always read before ConfigDirectory, so this sets a valid DIO9 and the
+# file in config.d/ then supplies an out-of-range one. The rejected value must take the radio
+# back to its own default, not leave DIO9 standing behind a warning that promises the default.
+Lora:
+  Module: lr2021
+  spidev: spidev0.0
+  CS: 21
+  IRQ: 16
+  Busy: 20
+  Reset: 18
+  IRQ_DIO_NUM: 9
+  rfswitch_table:
+    pins: [DIO6, DIO7, DIO8]
+    MODE_STBY: [LOW, LOW, LOW]
+    MODE_RX: [HIGH, LOW, HIGH]
+    MODE_TX: [HIGH, HIGH, HIGH]
+    MODE_RX_HF: [LOW, LOW, LOW]
+    MODE_TX_HF: [LOW, LOW, LOW]
+General:
+  ConfigDirectory: config.d/

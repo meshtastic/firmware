@@ -24,6 +24,13 @@ bool LSM6DS3Sensor::init()
 
 int32_t LSM6DS3Sensor::runOnce()
 {
+#ifdef MESHTASTIC_INCLUDE_INKHUD
+    if (stepTracker().isTracking()) {
+        float x, y, z;
+        if (sensor.readAcceleration(x, y, z))
+            sampleSteps(x, y, z);
+    }
+#endif
     if (sensor.shake()) {
         wakeScreen();
         return 500;

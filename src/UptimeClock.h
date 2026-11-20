@@ -44,6 +44,37 @@ void setMonotonicPublishHookForTests(MonotonicPublishHook hook);
 /// which is wrap-correct with no carry state at all.
 uint32_t getMillis();
 
+/// Step a millis value past 0. Stored stamps and deadlines conventionally use 0 for "unset", so the
+/// one tick per ~49.7-day wrap that lands on 0 would read as never-set; 1 is a 1 ms error instead.
+constexpr uint32_t skipZero(uint32_t ms)
+{
+    return ms ? ms : 1;
+}
+
+/// Start a countdown to delayMs from now, never 0. The sum is what has to dodge 0 - a non-zero
+/// read plus a delay lands there once per wrap - so this is not skipZero(getMillis()) + delayMs.
+inline uint32_t timerEndsAtMillis(uint32_t delayMs)
+{
+    return skipZero(getMillis() + delayMs);
+}
+
+/// getMillis() for 0-means-unset stamps, with the 0 tick called 1. Use at the read when the value
+/// is both stored and compared against stamps: skipZero() only at the store makes `now - stamp` wrap.
+inline uint32_t stampMillis()
+{
+    return skipZero(getMillis());
+}
+
+// skipZero() is the whole 0-means-unset contract in one expression, and it is constexpr, so pin it
+// here rather than only in test_uptime_clock: a build that breaks it stops at this header instead of
+// shipping a deadline that reads as never-set. The two obvious "simplifications" are what these
+// catch - `ms | 1` perturbs every even value, and `ms + 1` turns the last tick of the wrap into the
+// 0 the function exists to avoid. Both compile and both pass a test that only checks skipZero(0).
+static_assert(skipZero(0) == 1, "skipZero must lift the one 0 tick to 1");
+static_assert(skipZero(1) == 1, "skipZero must leave 1 alone");
+static_assert(skipZero(2) == 2, "skipZero must pass even values through untouched (ms | 1 would not)");
+static_assert(skipZero(UINT32_MAX) == UINT32_MAX, "skipZero must not wrap the last tick to 0 (ms + 1 would)");
+
 /// Milliseconds since boot as a monotonic 64-bit count.
 ///
 /// A pure read: it derives its answer from a complete snapshot published by serviceMonotonic()
@@ -54,6 +85,25 @@ uint32_t getMillis();
 /// Not intended for ISR call sites because lock-free std::atomic operations are not guaranteed by
 /// every supported toolchain. ISRs use getMillis(); the publication protocol itself never waits.
 uint64_t getMillisMonotonic();
+
+/// Microseconds since boot, 64-bit, on the same timebase as getMillisMonotonic(). ESP32 and RP2040 read their
+/// hardware microsecond timer, which is what their millis() divides down; nRF52 reads RTC2 (30.5 µs ticks) once
+/// startMicrosClock() has run; elsewhere this is getMillisMonotonic() * 1000. Same not-from-ISR caveat.
+uint64_t getMicrosMonotonic();
+
+/// Start the hardware behind getMicrosMonotonic() where it needs starting (nRF52 RTC2). Call once, early in setup.
+void startMicrosClock();
+
+/// An ISR-safe instant: raw RTC2 counter on nRF52, the low 32 bits of getMicrosMonotonic() elsewhere.
+uint32_t isrStamp();
+
+/// The getMicrosMonotonic() value of an isrStamp() under 256 s old. Not from an ISR.
+uint64_t stampToMicros(uint32_t stamp);
+
+#if defined(ARDUINO_NRF52_ADAFRUIT)
+/// RTC2 counter + the ms clock read at the same moment -> µs. Exposed for stampToMicros().
+uint64_t nrf52MicrosFromCounter(uint32_t counter, uint64_t refMs);
+#endif
 
 /// Whole seconds since boot, derived from getMillisMonotonic() (~136 years of range). This is
 /// the unit to store when an instant must be dated before the wall clock is trustworthy.

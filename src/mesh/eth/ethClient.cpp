@@ -1,11 +1,13 @@
 #include "mesh/eth/ethClient.h"
 #include "NodeDB.h"
+#include "UptimeClock.h"
 #include "concurrency/Periodic.h"
 #include "configuration.h"
 #include "gps/RTC.h"
 #include "main.h"
 #include "mesh/Throttle.h"
 #include "mesh/api/ethServerAPI.h"
+#include "mesh/eth/ethBoundedClient.h"
 #include "target_specific.h"
 #if HAS_ETHERNET && defined(HAS_ETHERNET_OTA)
 #include "mesh/eth/ethOTA.h"
@@ -129,6 +131,7 @@ static int32_t reconnectETH()
                 LOG_ERROR("Ethernet re-initialization failed, will retry");
                 return 5000;
             }
+            ethLimitTcpRetransmission();
 
             LOG_INFO("Ethernet reinitialized - IP %u.%u.%u.%u", Ethernet.localIP()[0], Ethernet.localIP()[1],
                      Ethernet.localIP()[2], Ethernet.localIP()[3]);
@@ -211,10 +214,10 @@ static int32_t reconnectETH()
 
             perhapsSetRTC(RTCQualityNTP, &tv);
 
-            ntp_renew = millis() + 43200 * 1000; // success, refresh every 12 hours
+            ntp_renew = Time::timerEndsAtMillis(43200 * 1000); // success, refresh every 12 hours
         } else {
             LOG_ERROR("NTP Update failed");
-            ntp_renew = millis() + 300 * 1000; // failure, retry every 5 minutes
+            ntp_renew = Time::timerEndsAtMillis(300 * 1000); // failure, retry every 5 minutes
         }
         timeClient.end(); // W5100S: release UDP socket for other services
     }
@@ -309,6 +312,7 @@ bool initEthernet()
                      Ethernet.dnsServerIP()[3]);
         }
 
+        ethLimitTcpRetransmission();
         ethEvent = new Periodic("ethConnect", reconnectETH);
 
         return true;

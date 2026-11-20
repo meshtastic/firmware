@@ -61,6 +61,8 @@
 #define PIN_BUTTON_TOUCH D18
 #define BUTTON_TOUCH_ACTIVE_LOW true
 #define BUTTON_TOUCH_ACTIVE_PULLUP false
+#define TOUCH_SINGLEPRESS INPUT_BROKER_USER_PRESS
+#define TOUCH_LONGPRESS INPUT_BROKER_SELECT
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  Analog Pin Definitions
@@ -157,6 +159,8 @@ static const uint8_t SCL = PIN_WIRE_SCL;
 //  IMU (ICM20948 on Wire1)
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #define HAS_ICM20948
+// D27, not (0 + 7): pinMode/attachInterrupt index g_ADigitalPinMap, where 7 is P1.13 (RF_VC1).
+#define ICM_20948_INT_PIN D27
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  Charger (SGM41562 on Wire1 @ 0x03)

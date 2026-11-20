@@ -2,6 +2,7 @@
 
 #if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && __has_include(<ICM_20948.h>)
 #include "detect/ScanI2CTwoWire.h"
+#include "mesh/Throttle.h"
 #if !defined(MESHTASTIC_EXCLUDE_SCREEN)
 
 // screen is defined in main.cpp
@@ -34,23 +35,15 @@ bool ICM20948Sensor::init()
     return wakeOnMotionOk;
 }
 
-#ifdef ICM_20948_INT_PIN
-
 int32_t ICM20948Sensor::runOnce()
 {
-    // Wake on motion using hardware interrupts - this is the most efficient way to check for motion
-    if (ICM20948_IRQ) {
-        ICM20948_IRQ = false;
-        sensor->clearInterrupts();
-        wakeScreen();
+#ifdef MESHTASTIC_INCLUDE_INKHUD
+    if (stepTracker().isTracking() && sensor->dataReady()) {
+        sensor->getAGMT();
+        if (sensor->status == ICM_20948_Stat_Ok)
+            sampleSteps(sensor->agmt.acc.axes.x, sensor->agmt.acc.axes.y, sensor->agmt.acc.axes.z);
     }
-    return MOTION_SENSOR_CHECK_INTERVAL_MS;
-}
-
-#else
-
-int32_t ICM20948Sensor::runOnce()
-{
+#endif
 #if !defined(MESHTASTIC_EXCLUDE_SCREEN) && HAS_SCREEN
     if (screen && !doCalibration && !screen->isScreenOn() && !config.display.wake_on_tap_or_motion &&
         !config.device.double_tap_as_button_press) {
@@ -105,7 +98,21 @@ int32_t ICM20948Sensor::runOnce()
         screen->setHeading(heading);
 #endif
 
-    // Wake on motion using polling  - this is not as efficient as using hardware interrupt pin (see above)
+#ifdef ICM_20948_INT_PIN
+    if (ICM20948_IRQ) {
+        ICM20948_IRQ = false;
+        intPinProven = true;
+        sensor->clearInterrupts();
+        wakeScreen();
+        return MOTION_SENSOR_CHECK_INTERVAL_MS;
+    }
+    // Back off to the keepalive only once the pin has actually fired. No vendor firmware
+    // uses this line, so an unproven one keeps full-rate polling instead of costing latency.
+    if (intPinProven && !Throttle::hasElapsed(lastWomPollMs, MOTION_SENSOR_IRQ_KEEPALIVE_MS))
+        return MOTION_SENSOR_CHECK_INTERVAL_MS;
+    lastWomPollMs = millis();
+#endif
+
     auto status = sensor->setBank(0);
     if (sensor->status != ICM_20948_Stat_Ok) {
         LOG_DEBUG("ICM20948 isWakeOnMotion failed to set bank - %s", sensor->statusString());
@@ -125,8 +132,6 @@ int32_t ICM20948Sensor::runOnce()
     }
     return MOTION_SENSOR_CHECK_INTERVAL_MS;
 }
-
-#endif
 
 void ICM20948Sensor::calibrate(uint16_t forSeconds)
 {

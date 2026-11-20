@@ -215,6 +215,10 @@
 #define HW_VENDOR meshtastic_HardwareModel_M5STACK_CARDPUTER_ADV
 #elif defined(MESHNOLOGY_W10)
 #define HW_VENDOR meshtastic_HardwareModel_MESHNOLOGY_W10
+#elif defined(MESHNOLOGY_W12)
+#define HW_VENDOR meshtastic_HardwareModel_MESHNOLOGY_W12
+#elif defined(T5_S3_EPAPER_PRO)
+#define HW_VENDOR meshtastic_HardwareModel_T5_S3_EPAPER_PRO
 #elif defined(ELECROW_ThinkNode_M9)
 #define HW_VENDOR meshtastic_HardwareModel_THINKNODE_M9
 #elif defined(HELTEC_V4_R8)
@@ -229,6 +233,10 @@
 #define HW_VENDOR meshtastic_HardwareModel_SEEED_WIO_TRACKER_L2
 #elif defined(T_CONNECT_PRO)
 #define HW_VENDOR meshtastic_HardwareModel_T_CONNECT_PRO
+#elif defined(AXIOMETA_GENESIS_MINI)
+#define HW_VENDOR meshtastic_HardwareModel_AXIOMETA_GENESIS_MINI
+#elif defined(MAKERFABS_NOMAD_TERMINAL)
+#define HW_VENDOR meshtastic_HardwareModel_MAKERFABS_NOMAD_TERMINAL
 #else
 #define HW_VENDOR meshtastic_HardwareModel_PRIVATE_HW
 #endif

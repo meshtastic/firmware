@@ -115,6 +115,27 @@ meshtastic_StatusMessage makeStatus(const char *text)
     return st;
 }
 
+/// A header row as a saved nodes.proto carries it. HAS_USER matters: cleanupMeshDB
+/// purges a userless row on load and erases its satellites with it.
+meshtastic_NodeInfoLite craftedOwner(NodeNum num, uint32_t lastHeard)
+{
+    meshtastic_NodeInfoLite n = meshtastic_NodeInfoLite_init_zero;
+    n.num = num;
+    n.last_heard = lastHeard;
+    n.bitfield |= NODEINFO_BITFIELD_HAS_USER_MASK;
+    return n;
+}
+
+meshtastic_NodePositionEntry craftedPosition(NodeNum num, int32_t lat)
+{
+    meshtastic_NodePositionEntry e = meshtastic_NodePositionEntry_init_zero;
+    e.num = num;
+    e.has_position = true;
+    e.position.latitude_i = lat;
+    e.position.time = 1000 + (uint32_t)lat;
+    return e;
+}
+
 bool readFileBytes(const char *path, std::vector<uint8_t> &out)
 {
     auto f = FSCom.open(path, FILE_O_READ);
@@ -422,6 +443,84 @@ static void test_fullRoundTrip_headerAndSatelliteFidelity(void)
 #endif
 }
 
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTDB
+// Environment satellites are held protobuf-encoded rather than as the 304 B nanopb struct: a real sensor
+// sets a handful of EnvironmentMetrics' 38 optional fields. At the nRF52 cap of 40 entries the struct
+// form cost ~12 KB of heap and ran T114/T096 sensor nodes out of memory. Pins that a BME680-shaped
+// reading packs to a few dozen bytes, unpacks exactly, and that unset fields stay unset (has_* false)
+// rather than coming back as present zeros.
+static void test_packedEnvironment_compactAndLossless(void)
+{
+    meshtastic_EnvironmentMetrics in = meshtastic_EnvironmentMetrics_init_zero;
+    in.has_temperature = true;
+    in.temperature = 9.97f;
+    in.has_relative_humidity = true;
+    in.relative_humidity = 31.9f;
+    in.has_barometric_pressure = true;
+    in.barometric_pressure = 1019.5f;
+    in.has_gas_resistance = true;
+    in.gas_resistance = 598.2f;
+    in.has_iaq = true;
+    in.iaq = 75;
+
+    PackedEnvironmentMetrics packed;
+    TEST_ASSERT_TRUE(packed.pack(in));
+    TEST_ASSERT_LESS_OR_EQUAL_UINT32(40, packed.bytes.size());
+    TEST_ASSERT_EQUAL_UINT32(packed.bytes.size(), packed.bytes.capacity());
+
+    meshtastic_EnvironmentMetrics out;
+    TEST_ASSERT_TRUE(packed.unpack(out));
+    TEST_ASSERT_TRUE(out.has_temperature);
+    TEST_ASSERT_EQUAL_FLOAT(9.97f, out.temperature);
+    TEST_ASSERT_TRUE(out.has_relative_humidity);
+    TEST_ASSERT_EQUAL_FLOAT(31.9f, out.relative_humidity);
+    TEST_ASSERT_TRUE(out.has_barometric_pressure);
+    TEST_ASSERT_EQUAL_FLOAT(1019.5f, out.barometric_pressure);
+    TEST_ASSERT_TRUE(out.has_gas_resistance);
+    TEST_ASSERT_EQUAL_FLOAT(598.2f, out.gas_resistance);
+    TEST_ASSERT_TRUE(out.has_iaq);
+    TEST_ASSERT_EQUAL_UINT16(75, out.iaq);
+    TEST_ASSERT_FALSE(out.has_lux);
+    TEST_ASSERT_FALSE(out.has_voltage);
+    TEST_ASSERT_FALSE(out.has_one_wire_temperature_ch7);
+}
+
+// The save writes each environment entry by hand from the stored bytes instead of through
+// pb_encode_submessage. Pins that the result is still ordinary protobuf: the plain nanopb decoder
+// (decode targets disarmed, as an older firmware or a backup reader would decode it) recovers the
+// node number and every set field. A framing slip here would corrupt nodes.proto for every reader.
+static void test_packedEnvironment_savedEntryDecodesAsPlainProtobuf(void)
+{
+    const uint32_t E = 0x54000103;
+    addUserNode(E, 0x23);
+    meshtastic_Telemetry env = meshtastic_Telemetry_init_zero;
+    env.which_variant = meshtastic_Telemetry_environment_metrics_tag;
+    env.variant.environment_metrics.has_temperature = true;
+    env.variant.environment_metrics.temperature = -4.25f;
+    env.variant.environment_metrics.has_iaq = true;
+    env.variant.environment_metrics.iaq = 312;
+    nodeDB->updateTelemetry(E, env);
+    TEST_ASSERT_TRUE(db->saveDatabase());
+
+    meshtastic_NodeDatabase disk;
+    decodeNodesFile(disk);
+    const meshtastic_NodeEnvironmentEntry *found = nullptr;
+    for (const auto &entry : disk.environment) {
+        if (entry.num == E)
+            found = &entry;
+    }
+    TEST_ASSERT_NOT_NULL_MESSAGE(found, "environment entry missing from nodes.proto");
+    TEST_ASSERT_TRUE(found->has_environment_metrics);
+    TEST_ASSERT_TRUE(found->environment_metrics.has_temperature);
+    TEST_ASSERT_EQUAL_FLOAT(-4.25f, found->environment_metrics.temperature);
+    TEST_ASSERT_TRUE(found->environment_metrics.has_iaq);
+    TEST_ASSERT_EQUAL_UINT16(312, found->environment_metrics.iaq);
+    TEST_ASSERT_FALSE(found->environment_metrics.has_relative_humidity);
+
+    nodeDB->eraseNodeSatellites(E);
+}
+#endif
+
 // --- Keyless-save skip (part of the PKI-DM key-amnesia diagnosis) ---
 
 static void test_keylessDevice_skipsNodesProtoWrite(void)
@@ -522,16 +621,14 @@ static void test_bootTrim_overCapSatellitesHealedOnDisk(void)
     const NodeNum base = 0x70000000u;
 
     // Craft a v25 nodes.proto whose position store exceeds this build's cap, as a
-    // larger-cap build (or a peer backup) would leave behind.
+    // larger-cap build (or a peer backup) would leave behind. Every entry has a hot
+    // owner, so the boot orphan sweep keeps all of them and only the cap trims.
     meshtastic_NodeDatabase crafted{};
     crafted.version = DEVICESTATE_CUR_VER;
     for (size_t i = 0; i < (size_t)MAX_SATELLITE_NODES + overBy; i++) {
-        meshtastic_NodePositionEntry e = meshtastic_NodePositionEntry_init_zero;
-        e.num = base + (uint32_t)i;
-        e.has_position = true;
-        e.position.latitude_i = (int32_t)(1000 + i);
-        e.position.time = 1000 + (uint32_t)i;
-        crafted.positions.push_back(e);
+        const NodeNum num = base + (uint32_t)i;
+        crafted.nodes.push_back(craftedOwner(num, 1000 + (uint32_t)i));
+        crafted.positions.push_back(craftedPosition(num, (int32_t)(1000 + i)));
     }
     size_t craftedSize = 0;
     TEST_ASSERT_TRUE(pb_get_encoded_size(&craftedSize, meshtastic_NodeDatabase_fields, &crafted));
@@ -539,8 +636,7 @@ static void test_bootTrim_overCapSatellitesHealedOnDisk(void)
 
     coldBoot();
 
-    // Trimmed in RAM to exactly the cap; all entries were orphans, so the
-    // lowest-recency victims (here: the lowest-numbered) went first.
+    // Trimmed in RAM to exactly the cap, stalest owner first.
     TEST_ASSERT_EQUAL_UINT((unsigned)MAX_SATELLITE_NODES, (unsigned)nodeDB->snapshotPositionNodeNums(0).size());
     TEST_ASSERT_TRUE(db->hasNodePosition(base + (uint32_t)MAX_SATELLITE_NODES + (uint32_t)overBy - 1));
     TEST_ASSERT_FALSE(db->hasNodePosition(base));
@@ -554,6 +650,59 @@ static void test_bootTrim_overCapSatellitesHealedOnDisk(void)
             persisted++;
     TEST_ASSERT_EQUAL_UINT_MESSAGE((unsigned)MAX_SATELLITE_NODES, (unsigned)persisted,
                                    "boot must rewrite the over-cap store trimmed");
+}
+#endif // !MESHTASTIC_EXCLUDE_POSITIONDB
+
+// --- Boot-time heal of a nodes.proto carrying unowned satellite entries ---
+
+#if !MESHTASTIC_EXCLUDE_POSITIONDB
+// Guards #11798: satellite entries whose key names no hot node are dropped on boot and the
+// healed store is rewritten once; keys that cannot name a node (0, NODENUM_BROADCAST) are
+// refused at decode.
+static void test_bootHeal_unownedSatellitesDropped(void)
+{
+    const NodeNum ownedBase = 0x72000000u;
+    const NodeNum orphanBase = 0x73000000u;
+    const size_t owned = 5;
+    const size_t orphans = 6;
+
+    meshtastic_NodeDatabase crafted{};
+    crafted.version = DEVICESTATE_CUR_VER;
+    for (size_t i = 0; i < owned; i++) {
+        const NodeNum num = ownedBase + (uint32_t)i;
+        crafted.nodes.push_back(craftedOwner(num, 1000 + (uint32_t)i));
+        crafted.positions.push_back(craftedPosition(num, (int32_t)(100 + i)));
+    }
+    for (size_t i = 0; i < orphans; i++)
+        crafted.positions.push_back(craftedPosition(orphanBase + (uint32_t)i, (int32_t)(200 + i)));
+    // Keys no NodeNum derivation can produce; these must never reach the map.
+    crafted.positions.push_back(craftedPosition(0, 300));
+    crafted.positions.push_back(craftedPosition(NODENUM_BROADCAST, 301));
+
+    size_t craftedSize = 0;
+    TEST_ASSERT_TRUE(pb_get_encoded_size(&craftedSize, meshtastic_NodeDatabase_fields, &crafted));
+    TEST_ASSERT_TRUE(db->saveProto(nodeDatabaseFileName, craftedSize, &meshtastic_NodeDatabase_msg, &crafted, false));
+
+    coldBoot();
+
+    // In RAM: every owned entry kept, every unowned one gone.
+    for (size_t i = 0; i < owned; i++)
+        TEST_ASSERT_TRUE_MESSAGE(db->hasNodePosition(ownedBase + (uint32_t)i), "hot-owned entry must survive the sweep");
+    for (size_t i = 0; i < orphans; i++)
+        TEST_ASSERT_FALSE_MESSAGE(db->hasNodePosition(orphanBase + (uint32_t)i), "orphan must be swept on boot");
+    TEST_ASSERT_FALSE_MESSAGE(db->hasNodePosition(0), "key 0 must be refused at decode");
+    TEST_ASSERT_FALSE_MESSAGE(db->hasNodePosition(NODENUM_BROADCAST), "broadcast key must be refused at decode");
+    // And healed on disk: nodeDBSelfCare rewrote the store once during the boot.
+    meshtastic_NodeDatabase reloaded{};
+    decodeNodesFile(reloaded);
+    size_t persisted = 0;
+    for (const auto &e : reloaded.positions) {
+        if (!e.has_position)
+            continue;
+        TEST_ASSERT_TRUE_MESSAGE(e.num >= ownedBase && e.num < ownedBase + owned, "healed store must contain only owned entries");
+        persisted++;
+    }
+    TEST_ASSERT_EQUAL_UINT_MESSAGE((unsigned)owned, (unsigned)persisted, "boot must rewrite the store without the orphans");
 }
 #endif // !MESHTASTIC_EXCLUDE_POSITIONDB
 
@@ -657,6 +806,12 @@ NDBR_TEST_ENTRY void setup()
     printf("\n=== Satellite projection/rehydration ===\n");
     RUN_TEST(test_fullRoundTrip_headerAndSatelliteFidelity);
 
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTDB
+    printf("\n=== Packed environment satellites ===\n");
+    RUN_TEST(test_packedEnvironment_compactAndLossless);
+    RUN_TEST(test_packedEnvironment_savedEntryDecodesAsPlainProtobuf);
+#endif
+
     printf("\n=== Keyless-save gate ===\n");
     RUN_TEST(test_keylessDevice_skipsNodesProtoWrite);
 
@@ -666,6 +821,7 @@ NDBR_TEST_ENTRY void setup()
 #endif
 #if !MESHTASTIC_EXCLUDE_POSITIONDB
     RUN_TEST(test_bootTrim_overCapSatellitesHealedOnDisk);
+    RUN_TEST(test_bootHeal_unownedSatellitesDropped);
 #endif
 
     printf("\n=== resetNodes ghost rows ===\n");

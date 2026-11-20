@@ -86,6 +86,7 @@ void BME680Sensor::captureSample()
     lastPressureHPa = bme680->pressure / 100.0F;
     lastGasOhms = (float)bme680->gas_resistance;
     haveSample = true;
+    // unset-sentinel-ok: haveSample carries the armed state, so 0 is a legal stamp
     lastSampleMs = Time::getMillis();
 
     uint16_t iaq;

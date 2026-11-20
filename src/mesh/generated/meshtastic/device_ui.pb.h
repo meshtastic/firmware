@@ -4,6 +4,7 @@
 #ifndef PB_MESHTASTIC_MESHTASTIC_DEVICE_UI_PB_H_INCLUDED
 #define PB_MESHTASTIC_MESHTASTIC_DEVICE_UI_PB_H_INCLUDED
 #include <pb.h>
+#include "meshtastic/field_metadata.pb.h"
 
 #if PB_PROTO_HEADER_VERSION != 40
 #error Regenerate this file with the current version of nanopb generator.
@@ -70,6 +71,10 @@ typedef enum _meshtastic_Language {
     meshtastic_Language_CZECH = 18,
     /* Danish */
     meshtastic_Language_DANISH = 19,
+    /* Hungarian */
+    meshtastic_Language_HUNGARIAN = 20,
+    /* Azerbaijani */
+    meshtastic_Language_AZERBAIJANI = 21,
     /* Simplified Chinese (experimental) */
     meshtastic_Language_SIMPLIFIED_CHINESE = 30,
     /* Traditional Chinese (experimental) */

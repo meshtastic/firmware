@@ -3,6 +3,8 @@
 #define _MOTION_SENSOR_H_
 
 #define MOTION_SENSOR_CHECK_INTERVAL_MS 50
+// Safety-net drain for the interrupt-driven drivers: a dead INT pin degrades to polling.
+#define MOTION_SENSOR_IRQ_KEEPALIVE_MS 1000
 #define MOTION_SENSOR_CLICK_THRESHOLD 40
 
 #include "../configuration.h"
@@ -15,13 +17,17 @@
 #include "../graphics/Screen.h"
 #include "../graphics/ScreenFonts.h"
 #include "Wire.h"
+#ifdef MESHTASTIC_INCLUDE_INKHUD
+#include "StepTracker.h"
+#include "UptimeClock.h"
+#endif
 
 // Base class for motion processing
 class MotionSensor
 {
   public:
     explicit MotionSensor(ScanI2C::FoundDevice foundDevice);
-    virtual ~MotionSensor(){};
+    virtual ~MotionSensor() {};
 
     // Get the device type
     ScanI2C::DeviceType deviceType();
@@ -40,7 +46,15 @@ class MotionSensor
     // Refer to /src/concurrency/OSThread.h for more information
     inline virtual int32_t runOnce() { return MOTION_SENSOR_CHECK_INTERVAL_MS; };
 
-    virtual void calibrate(uint16_t forSeconds){};
+    virtual void calibrate(uint16_t forSeconds) {};
+
+#ifdef MESHTASTIC_INCLUDE_INKHUD
+    enum class StepSource { None, Software, Hardware };
+    virtual StepSource stepSource() const { return StepSource::None; }
+    // Process queued step reports and return whether a fresh hardware total was received.
+    virtual bool syncStepCounter() { return false; }
+    StepTracker &stepTracker() { return tracker; }
+#endif
 
     // Latest samples published by the compass-fusion drivers (accel from the IMU, mag from the magnetometer).
     // Public so an optional on-screen sensor debug readout can read them. Return false if nothing published yet.
@@ -54,6 +68,13 @@ class MotionSensor
     inline virtual bool providesHeading() const { return false; };
 
   protected:
+#ifdef MESHTASTIC_INCLUDE_INKHUD
+    void sampleSteps(float x, float y, float z)
+    {
+        if (tracker.isTracking())
+            tracker.sample(x, y, z, Time::getMillisMonotonic());
+    }
+#endif
     // Turn on the screen when a tap or motion is detected
     virtual void wakeScreen();
 
@@ -86,6 +107,11 @@ class MotionSensor
     // Do calibration if true
     bool doCalibration = false;
     uint32_t endCalibrationAt = 0;
+
+#ifdef MESHTASTIC_INCLUDE_INKHUD
+  private:
+    StepTracker tracker;
+#endif
 };
 
 #endif

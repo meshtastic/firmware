@@ -49,6 +49,17 @@ reviews:
         Helpers and fixtures inside a suite do follow the normal src/ conventions.
         Authoritative rule, which this entry mirrors: the "Test naming" section of
         .github/copilot-instructions.md.
+
+        Comment length is a second deliberate exception. The one-or-two-line comment limit
+        does NOT apply to a test's header comment. The header states what is under test by
+        symbol and file, why that behavior is required, and the regression that returns if
+        the assertions are deleted or relaxed; that routinely runs past two lines and is
+        correct at whatever length it needs. Do NOT ask for a test header to be shortened,
+        condensed, or moved to the commit message, and do NOT flag it as a multi-paragraph
+        block comment. Still DO flag narrative that carries no contract - debugging journey,
+        changelog prose, restating what the assertions do - and per-case comments that
+        merely repeat the test name. Authoritative rule, which this entry mirrors: the
+        "Test comments" section of .github/copilot-instructions.md.
     - path: "**/*.md"
       instructions: >
         Documentation does not live in this repo; it lives in

@@ -22,9 +22,12 @@
 #include "Router.h"
 #include "SPILock.h"
 #include "TypeConversions.h"
+#include "UptimeClock.h"
 #include "concurrency/LockGuard.h"
+#include "graphics/ScreenMirror.h"
 #include "main.h"
 #include "modules/NodeInfoModule.h"
+#include "modules/RoutingModule.h"
 #include "xmodem.h"
 
 #if FromRadio_size > MAX_TO_FROM_RADIO_SIZE
@@ -39,6 +42,75 @@
 #endif
 #include "Throttle.h"
 #include "gps/RTC.h"
+
+#if HAS_SCREEN_MIRROR
+// Per-connection mirror state, keyed by PhoneAPI* for the auth slots' nRF52 reason. close() can clear a slot from
+// another task mid-drain, so fields are only touched under the lock, through a copy.
+static constexpr size_t MAX_MIRROR_SLOTS = 6;
+struct MirrorSlot {
+    const PhoneAPI *who = nullptr;
+    bool subscribed = false;
+    bool framePending = false;
+    uint32_t requestedAt = 0; // frame id at the time of a one-shot request
+    uint32_t frameId = 0;
+    uint16_t offset = 0;
+    uint32_t paletteSig = 0;
+    uint8_t paletteOffset = 0;
+};
+static MirrorSlot g_mirrorSlots[MAX_MIRROR_SLOTS];
+static concurrency::Lock g_mirrorSlotsLock;
+
+// Caller holds g_mirrorSlotsLock.
+static MirrorSlot *findMirrorSlotLocked(const PhoneAPI *p, bool claim)
+{
+    MirrorSlot *empty = nullptr;
+    for (auto &slot : g_mirrorSlots) {
+        if (slot.who == p)
+            return &slot;
+        if (!slot.who && !empty)
+            empty = &slot;
+    }
+    if (claim && empty)
+        empty->who = p;
+    return claim ? empty : nullptr;
+}
+
+static bool loadMirrorSlot(const PhoneAPI *p, MirrorSlot &out)
+{
+    concurrency::LockGuard g(&g_mirrorSlotsLock);
+    const MirrorSlot *m = findMirrorSlotLocked(p, false);
+    if (!m)
+        return false;
+    out = *m;
+    return true;
+}
+
+// Writes back only the drain cursors, and only while p still owns the slot. A drain that outlived its slot
+// gives back the MUI rect stream it may have just claimed.
+static void storeMirrorCursors(const PhoneAPI *p, const MirrorSlot &in)
+{
+    concurrency::LockGuard g(&g_mirrorSlotsLock);
+    MirrorSlot *m = findMirrorSlotLocked(p, false);
+    if (!m) {
+        graphics::screenMirror.releaseClient(p);
+        return;
+    }
+    m->frameId = in.frameId;
+    m->offset = in.offset;
+    m->paletteSig = in.paletteSig;
+    m->paletteOffset = in.paletteOffset;
+}
+
+static void finishMirrorFrameRequest(const PhoneAPI *p)
+{
+    concurrency::LockGuard g(&g_mirrorSlotsLock);
+    MirrorSlot *m = findMirrorSlotLocked(p, false);
+    if (m && m->framePending) {
+        m->framePending = false;
+        graphics::screenMirror.frameRequestDone(p);
+    }
+}
+#endif
 
 namespace
 {
@@ -244,7 +316,7 @@ static void clearAuthSlot_LH(const PhoneAPI *p)
 
 PhoneAPI::PhoneAPI()
 {
-    lastContactMsec = millis();
+    lastContactMsec = Time::skipZero(Time::getMillis());
     std::fill(std::begin(recentToRadioPacketIds), std::end(recentToRadioPacketIds), 0);
 }
 
@@ -272,6 +344,9 @@ void PhoneAPI::handleStartConfig()
         observe(&service->fromNumChanged);
 #ifdef FSCom
         observe(&xModem.packetReady);
+#endif
+#if HAS_SCREEN_MIRROR
+        observe(&graphics::screenMirror.frameReady);
 #endif
 #ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
         // New physical connection: clear this PhoneAPI's auth slot so the new
@@ -377,6 +452,9 @@ void PhoneAPI::close()
 #ifdef FSCom
         unobserve(&xModem.packetReady);
 #endif
+#if HAS_SCREEN_MIRROR
+        unobserve(&graphics::screenMirror.frameReady);
+#endif
         releasePhonePacket(); // Don't leak phone packets on shutdown
         releaseQueueStatusPhonePacket();
         releaseMqttClientProxyPhonePacket();
@@ -415,6 +493,9 @@ void PhoneAPI::close()
         }
 #endif
     }
+#if HAS_SCREEN_MIRROR
+    releaseMirror();
+#endif
 }
 
 bool PhoneAPI::checkConnectionTimeout()
@@ -436,7 +517,7 @@ bool PhoneAPI::checkConnectionTimeout()
 bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
 {
     powerFSM.trigger(EVENT_CONTACT_FROM_PHONE); // As long as the phone keeps talking to us, don't let the radio go to sleep
-    lastContactMsec = millis();
+    lastContactMsec = Time::skipZero(Time::getMillis());
 
     memset(&toRadioScratch, 0, sizeof(toRadioScratch));
     if (pb_decode_from_bytes(buf, bufLength, &meshtastic_ToRadio_msg, &toRadioScratch)) {
@@ -549,6 +630,27 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
     STATE_SEND_PACKETS // send packets or debug strings
  */
 
+void PhoneAPI::fillMyInfo()
+{
+    fromRadioScratch.which_payload_variant = meshtastic_FromRadio_my_info_tag;
+    strncpy(myNodeInfo.pio_env, optstr(APP_ENV), sizeof(myNodeInfo.pio_env));
+    // strncpy does not terminate when the source fills the buffer; a 40+ char
+    // APP_ENV would make nanopb reject the MyInfo encode ("unterminated string").
+    myNodeInfo.pio_env[sizeof(myNodeInfo.pio_env) - 1] = '\0';
+    myNodeInfo.nodedb_count = static_cast<uint16_t>(nodeDB->getNumMeshNodes());
+    fromRadioScratch.my_info = myNodeInfo;
+#ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
+    if (!getAdminAuthorized()) {
+        // device_id fingerprints the hardware and pio_env/min_app_version name the exact build to pick a
+        // known CVE for. my_node_num is broadcast on the mesh anyway, and nodedb_count is not secret.
+        fromRadioScratch.my_info.device_id.size = 0;
+        memset(fromRadioScratch.my_info.device_id.bytes, 0, sizeof(fromRadioScratch.my_info.device_id.bytes));
+        memset(fromRadioScratch.my_info.pio_env, 0, sizeof(fromRadioScratch.my_info.pio_env));
+        fromRadioScratch.my_info.min_app_version = 0;
+    }
+#endif
+}
+
 size_t PhoneAPI::getFromRadio(uint8_t *buf)
 {
     // Respond to heartbeat by sending queue status
@@ -575,30 +677,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         break;
     case STATE_SEND_MY_INFO:
         LOG_DEBUG("FromRadio=STATE_SEND_MY_INFO");
-        // If the user has specified they don't want our node to share its location, make sure to tell the phone
-        // app not to send locations on our behalf.
-        fromRadioScratch.which_payload_variant = meshtastic_FromRadio_my_info_tag;
-        strncpy(myNodeInfo.pio_env, optstr(APP_ENV), sizeof(myNodeInfo.pio_env));
-        // strncpy does not terminate when the source fills the buffer; a 40+ char
-        // APP_ENV would make nanopb reject the MyInfo encode ("unterminated string").
-        myNodeInfo.pio_env[sizeof(myNodeInfo.pio_env) - 1] = '\0';
-        myNodeInfo.nodedb_count = static_cast<uint16_t>(nodeDB->getNumMeshNodes());
-        fromRadioScratch.my_info = myNodeInfo;
-#ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
-        if (!getAdminAuthorized()) {
-            // device_id is a stable hardware identifier - useful for an attacker
-            // to fingerprint / correlate the device across observations. Strip it
-            // for unauthenticated clients. my_node_num is kept (it's broadcast
-            // on the mesh anyway). pio_env / min_app_version reveal the exact
-            // build flavour, useful only for picking which known-CVE to try.
-            // nodedb_count stays - clients need it to decide whether to pull
-            // the node DB after unlocking.
-            fromRadioScratch.my_info.device_id.size = 0;
-            memset(fromRadioScratch.my_info.device_id.bytes, 0, sizeof(fromRadioScratch.my_info.device_id.bytes));
-            memset(fromRadioScratch.my_info.pio_env, 0, sizeof(fromRadioScratch.my_info.pio_env));
-            fromRadioScratch.my_info.min_app_version = 0;
-        }
-#endif
+        fillMyInfo();
         state = STATE_SEND_UIDATA;
 
         service->refreshLocalMeshNode(); // Update my NodeInfo because the client will be asking for it soon.
@@ -722,7 +801,11 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             LOG_DEBUG("Send config: power");
             fromRadioScratch.config.which_payload_variant = meshtastic_Config_power_tag;
             fromRadioScratch.config.payload_variant.power = config.power;
-            fromRadioScratch.config.payload_variant.power.ls_secs = default_ls_secs;
+            // The app is sent the effective value, so 0 ("use the default") still reads back as the default - see the
+            // note at the end of this state. A configured value has to survive the round trip, though: a client that
+            // writes this config back as it read it would otherwise store the default over it.
+            fromRadioScratch.config.payload_variant.power.ls_secs =
+                Default::getConfiguredOrDefault(config.power.ls_secs, default_ls_secs);
             break;
         case meshtastic_Config_network_tag:
             LOG_DEBUG("Send config: network");
@@ -1094,7 +1177,29 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
                 fromRadioScratch.which_payload_variant = meshtastic_FromRadio_packet_tag;
                 fromRadioScratch.packet = replayPkt;
             }
+#if HAS_SCREEN_MIRROR
+        } else if (MirrorSlot m; wantsMirror(m)) {
+            // lowest priority: mesh traffic and notifications outrank pixels
+            if (graphics::screenMirror.copyPaletteChunk(m.paletteSig, m.paletteOffset, fromRadioScratch.display_palette)) {
+                // palette first, so the client can colorize the first frame it renders
+                fromRadioScratch.which_payload_variant = meshtastic_FromRadio_display_palette_tag;
+            } else if (graphics::screenMirror.copyChunk(this, m.frameId, m.offset, fromRadioScratch.display_frame)) {
+                fromRadioScratch.which_payload_variant = meshtastic_FromRadio_display_frame_tag;
+                if (m.framePending && m.frameId != m.requestedAt &&
+                    !graphics::screenMirror.hasChunkFor(this, m.frameId, m.offset))
+                    finishMirrorFrameRequest(this);
+            }
+            storeMirrorCursors(this, m);
+#endif
         }
+        break;
+
+    case STATE_RESEND_MY_INFO:
+        // Our node num moved after this client's handshake, so it is addressing a number we no
+        // longer answer to. Re-announce, then carry on with live traffic.
+        LOG_INFO("FromRadio=STATE_RESEND_MY_INFO, node num now 0x%08x", nodeDB->getNodeNum());
+        fillMyInfo();
+        state = STATE_SEND_PACKETS;
         break;
 
     default:
@@ -1172,6 +1277,9 @@ void PhoneAPI::sendConfigComplete()
     onConfigComplete();
 
     pauseBluetoothLogging = false;
+
+    // Re-arm polling for anything queued while live-packet notifications were suppressed during sync.
+    service->nudgeFromNum();
 }
 
 void PhoneAPI::releasePhonePacket()
@@ -1275,26 +1383,26 @@ bool lastHeardIsWallClock(const meshtastic_NodeInfoLite *header)
 // Previously these packets carried a bare 0, which a client renders as a real reading.
 // Note the asymmetry with rx_snr below: that field is still proto3 singular, so "unknown" and
 //  "0 dB" remain indistinguishable there.
-meshtastic_MeshPacket PhoneAPI::makeReplayPositionPacket(NodeNum num, const meshtastic_PositionLite &pos)
+meshtastic_MeshPacket PhoneAPI::makeReplayPositionPacket(const meshtastic_NodeInfoLite *header,
+                                                         const meshtastic_PositionLite &pos)
 {
     // Shape this exactly like a fresh live broadcast Position from the peer so the
     // phone runs it through its normal "live position broadcast" handler path.
     // to=ourNum would read as a DM-from-peer and never lands in node detail UI.
     meshtastic_MeshPacket pkt = meshtastic_MeshPacket_init_default;
-    const meshtastic_NodeInfoLite *header = nodeDB->getMeshNode(num);
-    pkt.from = num;
+    pkt.from = header->num;
     pkt.to = NODENUM_BROADCAST;
     // rx_time means "when *we* received this" - use last_heard, not the position's own GPS
     // fix time (which is often 0 and, when present, already round-trips inside the payload
     // via ConvertToPosition).
-    pkt.rx_time = header ? header->last_heard : 0;
+    pkt.rx_time = header->last_heard;
     // Present only when last_heard is a genuine epoch - see lastHeardIsWallClock().
     pkt.has_rx_time = lastHeardIsWallClock(header);
     // Stable per-node/per-fix id: replaying the same unchanged history on every
     // reconnect must not look like a brand new packet to the phone's history/dedup.
-    pkt.id = makeReplayPacketId(num, pkt.rx_time, meshtastic_PortNum_POSITION_APP);
-    pkt.channel = header ? header->channel : 0;
-    pkt.rx_snr = header ? header->snr : 0;
+    pkt.id = makeReplayPacketId(header->num, pkt.rx_time, meshtastic_PortNum_POSITION_APP);
+    pkt.channel = header->channel;
+    pkt.rx_snr = header->snr;
     pkt.via_mqtt = nodeInfoLiteViaMqtt(header);
     setReplayHopFields(pkt, header);
     pkt.priority = meshtastic_MeshPacket_Priority_BACKGROUND;
@@ -1309,19 +1417,19 @@ meshtastic_MeshPacket PhoneAPI::makeReplayPositionPacket(NodeNum num, const mesh
     return pkt;
 }
 
-meshtastic_MeshPacket PhoneAPI::makeReplayTelemetryPacket(NodeNum num, const meshtastic_DeviceMetrics &metrics)
+meshtastic_MeshPacket PhoneAPI::makeReplayTelemetryPacket(const meshtastic_NodeInfoLite *header,
+                                                          const meshtastic_DeviceMetrics &metrics)
 {
     meshtastic_MeshPacket pkt = meshtastic_MeshPacket_init_default;
-    pkt.from = num;
+    pkt.from = header->num;
     pkt.to = NODENUM_BROADCAST;
     // No native timestamp on telemetry packets here; use last_heard.
-    const meshtastic_NodeInfoLite *header = nodeDB->getMeshNode(num);
-    pkt.rx_time = header ? header->last_heard : 0;
+    pkt.rx_time = header->last_heard;
     // Present only when last_heard is a genuine epoch - see lastHeardIsWallClock().
     pkt.has_rx_time = lastHeardIsWallClock(header);
-    pkt.id = makeReplayPacketId(num, pkt.rx_time, meshtastic_Telemetry_device_metrics_tag);
-    pkt.channel = header ? header->channel : 0;
-    pkt.rx_snr = header ? header->snr : 0;
+    pkt.id = makeReplayPacketId(header->num, pkt.rx_time, meshtastic_Telemetry_device_metrics_tag);
+    pkt.channel = header->channel;
+    pkt.rx_snr = header->snr;
     pkt.via_mqtt = nodeInfoLiteViaMqtt(header);
     setReplayHopFields(pkt, header);
     pkt.priority = meshtastic_MeshPacket_Priority_BACKGROUND;
@@ -1370,10 +1478,13 @@ void PhoneAPI::prefetchReplayPositions()
         wasEmpty = replayQueue.empty();
         while (replayQueue.size() < kReplayPrefetchDepth && replayPositionIndex < replayPositionOrder.size()) {
             NodeNum num = replayPositionOrder[replayPositionIndex++];
+            const meshtastic_NodeInfoLite *header = nodeDB->getMeshNode(num);
             meshtastic_PositionLite pos;
-            if (!nodeDB->copyNodePosition(num, pos))
-                continue; // entry was evicted between snapshot and now
-            replayQueue.push_back(makeReplayPositionPacket(num, pos));
+            // No header means an orphan the phone cannot attribute; a failed copy means
+            // the entry was evicted between snapshot and now.
+            if (!header || !nodeDB->copyNodePosition(num, pos))
+                continue;
+            replayQueue.push_back(makeReplayPositionPacket(header, pos));
             added = true;
         }
     }
@@ -1406,10 +1517,11 @@ void PhoneAPI::prefetchReplayTelemetry()
         wasEmpty = replayQueue.empty();
         while (replayQueue.size() < kReplayPrefetchDepth && replayTelemetryIndex < replayTelemetryOrder.size()) {
             NodeNum num = replayTelemetryOrder[replayTelemetryIndex++];
+            const meshtastic_NodeInfoLite *header = nodeDB->getMeshNode(num);
             meshtastic_DeviceMetrics dm;
-            if (!nodeDB->copyNodeTelemetry(num, dm))
+            if (!header || !nodeDB->copyNodeTelemetry(num, dm))
                 continue;
-            replayQueue.push_back(makeReplayTelemetryPacket(num, dm));
+            replayQueue.push_back(makeReplayTelemetryPacket(header, dm));
             added = true;
         }
     }
@@ -1418,18 +1530,18 @@ void PhoneAPI::prefetchReplayTelemetry()
 #endif
 }
 
-meshtastic_MeshPacket PhoneAPI::makeReplayEnvironmentPacket(uint32_t num, const meshtastic_EnvironmentMetrics &env)
+meshtastic_MeshPacket PhoneAPI::makeReplayEnvironmentPacket(const meshtastic_NodeInfoLite *header,
+                                                            const meshtastic_EnvironmentMetrics &env)
 {
     meshtastic_MeshPacket pkt = meshtastic_MeshPacket_init_default;
-    pkt.from = num;
+    pkt.from = header->num;
     pkt.to = NODENUM_BROADCAST;
-    const meshtastic_NodeInfoLite *header = nodeDB->getMeshNode(num);
-    pkt.rx_time = header ? header->last_heard : 0;
+    pkt.rx_time = header->last_heard;
     // Present only when last_heard is a genuine epoch - see lastHeardIsWallClock().
     pkt.has_rx_time = lastHeardIsWallClock(header);
-    pkt.id = makeReplayPacketId(num, pkt.rx_time, meshtastic_Telemetry_environment_metrics_tag);
-    pkt.channel = header ? header->channel : 0;
-    pkt.rx_snr = header ? header->snr : 0;
+    pkt.id = makeReplayPacketId(header->num, pkt.rx_time, meshtastic_Telemetry_environment_metrics_tag);
+    pkt.channel = header->channel;
+    pkt.rx_snr = header->snr;
     pkt.via_mqtt = nodeInfoLiteViaMqtt(header);
     setReplayHopFields(pkt, header);
     pkt.priority = meshtastic_MeshPacket_Priority_BACKGROUND;
@@ -1472,10 +1584,11 @@ void PhoneAPI::prefetchReplayEnvironment()
         wasEmpty = replayQueue.empty();
         while (replayQueue.size() < kReplayPrefetchDepth && replayEnvironmentIndex < replayEnvironmentOrder.size()) {
             NodeNum num = replayEnvironmentOrder[replayEnvironmentIndex++];
+            const meshtastic_NodeInfoLite *header = nodeDB->getMeshNode(num);
             meshtastic_EnvironmentMetrics env;
-            if (!nodeDB->copyNodeEnvironment(num, env))
+            if (!header || !nodeDB->copyNodeEnvironment(num, env))
                 continue;
-            replayQueue.push_back(makeReplayEnvironmentPacket(num, env));
+            replayQueue.push_back(makeReplayEnvironmentPacket(header, env));
             added = true;
         }
     }
@@ -1484,19 +1597,19 @@ void PhoneAPI::prefetchReplayEnvironment()
 #endif
 }
 
-meshtastic_MeshPacket PhoneAPI::makeReplayStatusPacket(uint32_t num, const meshtastic_StatusMessage &status)
+meshtastic_MeshPacket PhoneAPI::makeReplayStatusPacket(const meshtastic_NodeInfoLite *header,
+                                                       const meshtastic_StatusMessage &status)
 {
     meshtastic_MeshPacket pkt = meshtastic_MeshPacket_init_default;
-    pkt.from = num;
+    pkt.from = header->num;
     pkt.to = NODENUM_BROADCAST;
     // StatusMessage has no native timestamp; use last_heard.
-    const meshtastic_NodeInfoLite *header = nodeDB->getMeshNode(num);
-    pkt.rx_time = header ? header->last_heard : 0;
+    pkt.rx_time = header->last_heard;
     // Present only when last_heard is a genuine epoch - see lastHeardIsWallClock().
     pkt.has_rx_time = lastHeardIsWallClock(header);
-    pkt.id = makeReplayPacketId(num, pkt.rx_time, meshtastic_PortNum_NODE_STATUS_APP);
-    pkt.channel = header ? header->channel : 0;
-    pkt.rx_snr = header ? header->snr : 0;
+    pkt.id = makeReplayPacketId(header->num, pkt.rx_time, meshtastic_PortNum_NODE_STATUS_APP);
+    pkt.channel = header->channel;
+    pkt.rx_snr = header->snr;
     pkt.via_mqtt = nodeInfoLiteViaMqtt(header);
     setReplayHopFields(pkt, header);
     pkt.priority = meshtastic_MeshPacket_Priority_BACKGROUND;
@@ -1534,10 +1647,11 @@ void PhoneAPI::prefetchReplayStatus()
         wasEmpty = replayQueue.empty();
         while (replayQueue.size() < kReplayPrefetchDepth && replayStatusIndex < replayStatusOrder.size()) {
             NodeNum num = replayStatusOrder[replayStatusIndex++];
+            const meshtastic_NodeInfoLite *header = nodeDB->getMeshNode(num);
             meshtastic_StatusMessage status;
-            if (!nodeDB->copyNodeStatus(num, status) || status.status[0] == '\0')
+            if (!header || !nodeDB->copyNodeStatus(num, status) || status.status[0] == '\0')
                 continue;
-            replayQueue.push_back(makeReplayStatusPacket(num, status));
+            replayQueue.push_back(makeReplayStatusPacket(header, status));
             added = true;
         }
     }
@@ -1668,6 +1782,7 @@ bool PhoneAPI::available()
     case STATE_SEND_OWN_NODEINFO:
     case STATE_SEND_FILEMANIFEST:
     case STATE_SEND_COMPLETE_ID:
+    case STATE_RESEND_MY_INFO:
         return true;
 
     case STATE_SEND_OTHER_NODEINFOS: {
@@ -1720,7 +1835,18 @@ bool PhoneAPI::available()
             return true;
         // Trailing replay drain - feeds cached satellite-DB packets alongside
         // (lower priority than) live traffic.
-        return replayPending();
+        if (replayPending())
+            return true;
+
+#if HAS_SCREEN_MIRROR
+        MirrorSlot m;
+        if (!wantsMirror(m))
+            return false;
+        return graphics::screenMirror.hasPaletteChunkFor(m.paletteSig, m.paletteOffset) ||
+               graphics::screenMirror.hasChunkFor(this, m.frameId, m.offset);
+#else
+        return false;
+#endif
     }
     default:
         LOG_ERROR("PhoneAPI::available unexpected state %d", state);
@@ -1729,14 +1855,16 @@ bool PhoneAPI::available()
     return false;
 }
 
-void PhoneAPI::sendNotification(meshtastic_LogRecord_Level level, uint32_t replyId, const char *message)
+void PhoneAPI::sendNotification(meshtastic_LogRecord_Level level, uint32_t replyId, const char *message,
+                                meshtastic_ClientNotification_NotificationType type)
 {
     meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
     if (!cn)
         return;
     cn->has_reply_id = true;
     cn->reply_id = replyId;
-    cn->level = meshtastic_LogRecord_Level_WARNING;
+    cn->level = level;
+    cn->type = type;
     cn->time = getValidTime(RTCQualityFromNet);
     strncpy(cn->message, message, sizeof(cn->message));
     service->sendClientNotification(cn);
@@ -1771,6 +1899,120 @@ PhoneAPI::LocalAdminGate PhoneAPI::classifyLocalAdminPacket(const meshtastic_Mes
         return LocalAdminGate::LockdownAuth; // the passphrase itself; authenticate regardless of prior state
     return adminAuthorized ? LocalAdminGate::AuthorizedPassThrough : LocalAdminGate::DropUnauthorized;
 }
+
+#if HAS_SCREEN_MIRROR
+// Handled here rather than in AdminModule: the subscription belongs to this connection, which the router task cannot see.
+bool PhoneAPI::handleScreenMirrorAdmin(const meshtastic_MeshPacket &p)
+{
+    if (p.which_payload_variant != meshtastic_MeshPacket_decoded_tag || p.decoded.portnum != meshtastic_PortNum_ADMIN_APP ||
+        p.to != nodeDB->getNodeNum())
+        return false;
+    meshtastic_AdminMessage admin = meshtastic_AdminMessage_init_zero;
+    if (!pb_decode_from_bytes(p.decoded.payload.bytes, p.decoded.payload.size, &meshtastic_AdminMessage_msg, &admin))
+        return false;
+    if (admin.which_payload_variant != meshtastic_AdminMessage_set_display_mirror_tag &&
+        admin.which_payload_variant != meshtastic_AdminMessage_get_display_frame_request_tag)
+        return false;
+
+    meshtastic_Routing_Error result = meshtastic_Routing_Error_NONE;
+#ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
+    if (!getAdminAuthorized())
+        result = meshtastic_Routing_Error_NOT_AUTHORIZED;
+#endif
+    // only a configured connection is ever timed out, so an earlier subscription could never be released
+    if (result == meshtastic_Routing_Error_NONE && !isConnected())
+        result = meshtastic_Routing_Error_BAD_REQUEST;
+
+    if (result != meshtastic_Routing_Error_NONE) {
+        LOG_WARN("Screen mirror: refuse variant=%d, error=%d", admin.which_payload_variant, result);
+    } else if (admin.which_payload_variant == meshtastic_AdminMessage_set_display_mirror_tag) {
+        LOG_INFO("Client sets display mirror: %d", admin.set_display_mirror);
+        if (!setMirrorSubscribed(admin.set_display_mirror))
+            result = meshtastic_Routing_Error_NO_RESPONSE;
+    } else {
+        LOG_INFO("Client requests display frame");
+        if (!requestMirrorFrame())
+            result = meshtastic_Routing_Error_NO_RESPONSE;
+    }
+    // consumed before the Router, so nothing else answers want_ack; p.from is still client-supplied here
+    if (p.want_ack && p.id && routingModule)
+        routingModule->sendAckNak(result, nodeDB->getNodeNum(), p.id, p.channel);
+    return true;
+}
+
+// The ScreenMirror counts change under g_mirrorSlotsLock, so a concurrent releaseMirror() always sees them match the slot.
+bool PhoneAPI::requestMirrorFrame()
+{
+    bool claimed = false;
+    {
+        concurrency::LockGuard g(&g_mirrorSlotsLock);
+        if (MirrorSlot *m = findMirrorSlotLocked(this, true)) {
+            claimed = true;
+            if (!m->framePending) {
+                if (!m->subscribed)
+                    graphics::screenMirror.cursorAtHead(m->frameId, m->offset);
+                m->requestedAt = m->frameId;
+                m->framePending = true;
+                graphics::screenMirror.requestFrame();
+            } else {
+                graphics::screenMirror.retryCapture();
+            }
+        }
+    }
+    if (!claimed)
+        LOG_WARN("Screen mirror: every connection slot is in use");
+    return claimed;
+}
+
+bool PhoneAPI::setMirrorSubscribed(bool subscribed)
+{
+    bool claimed = false;
+    {
+        concurrency::LockGuard g(&g_mirrorSlotsLock);
+        if (MirrorSlot *m = findMirrorSlotLocked(this, subscribed)) {
+            claimed = true;
+            if (m->subscribed != subscribed) {
+                m->subscribed = subscribed;
+                if (subscribed) {
+                    graphics::screenMirror.cursorAtHead(m->frameId, m->offset);
+                    graphics::screenMirror.subscribe();
+                } else {
+                    graphics::screenMirror.unsubscribe(this);
+                }
+            }
+        }
+    }
+    if (subscribed && !claimed) {
+        LOG_WARN("Screen mirror: every connection slot is in use");
+        return false;
+    }
+    return true;
+}
+
+void PhoneAPI::releaseMirror()
+{
+    concurrency::LockGuard g(&g_mirrorSlotsLock);
+    MirrorSlot *m = findMirrorSlotLocked(this, false);
+    if (!m)
+        return;
+    if (m->subscribed)
+        graphics::screenMirror.unsubscribe(this);
+    if (m->framePending)
+        graphics::screenMirror.frameRequestDone(this);
+    *m = MirrorSlot{};
+}
+
+bool PhoneAPI::wantsMirror(MirrorSlot &m)
+{
+    if (!loadMirrorSlot(this, m) || (!m.subscribed && !m.framePending))
+        return false;
+#ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
+    return getAdminAuthorized();
+#else
+    return true;
+#endif
+}
+#endif
 
 /**
  * Handle a packet that the phone wants us to send.  It is our responsibility to free the packet to the pool
@@ -1826,6 +2068,18 @@ bool PhoneAPI::handleToRadioPacket(meshtastic_MeshPacket &p)
     }
 #endif
 
+#if HAS_SCREEN_MIRROR
+    if (handleScreenMirrorAdmin(p))
+        return true;
+#endif
+
+    // Transparent mode: the client runs the mesh, including retries that reuse an id, so none of the
+    // decoded-payload policy below applies to its frames.
+    if (config.lora.transparent_mode && p.which_payload_variant == meshtastic_MeshPacket_encrypted_tag) {
+        service->handleToRadio(p);
+        return true;
+    }
+
     // Coordinates aimed at the event channel go out on the position channel instead (the phone picks the
     // channel it last heard the node on, which is the event channel for everyone). Only when there is no
     // channel to move them to is the send rejected. Reject before recording duplicate or per-port cooldown
@@ -1835,7 +2089,8 @@ bool PhoneAPI::handleToRadioPacket(meshtastic_MeshPacket &p)
         LOG_DEBUG("Suppress phone coordinate send on event (everyone) channel");
         meshtastic_QueueStatus qs = router->getQueueStatus();
         service->sendQueueStatusToPhone(qs, 0, p.id);
-        sendNotification(meshtastic_LogRecord_Level_WARNING, p.id, "Location sharing is disabled on this channel");
+        sendNotification(meshtastic_LogRecord_Level_WARNING, p.id, "Location sharing is disabled on this channel",
+                         meshtastic_ClientNotification_NotificationType_POSITION_SHARING_DISABLED);
         return false;
     }
 
@@ -1851,12 +2106,14 @@ bool PhoneAPI::handleToRadioPacket(meshtastic_MeshPacket &p)
     if (p.decoded.portnum == meshtastic_PortNum_TRACEROUTE_APP && lastPortNumToRadio[p.decoded.portnum] &&
         Throttle::isWithinTimespanMs(lastPortNumToRadio[p.decoded.portnum], THIRTY_SECONDS_MS)) {
         LOG_WARN("Rate limit portnum %d", p.decoded.portnum);
-        sendNotification(meshtastic_LogRecord_Level_WARNING, p.id, "TraceRoute can only be sent once every 30 seconds");
+        sendNotification(meshtastic_LogRecord_Level_WARNING, p.id, "TraceRoute can only be sent once every 30 seconds",
+                         meshtastic_ClientNotification_NotificationType_TRACEROUTE_RATE_LIMITED);
         meshtastic_QueueStatus qs = router->getQueueStatus();
         service->sendQueueStatusToPhone(qs, 0, p.id);
         return false;
     } else if (p.decoded.portnum == meshtastic_PortNum_TRACEROUTE_APP && isBroadcast(p.to) && p.hop_limit > 0) {
-        sendNotification(meshtastic_LogRecord_Level_WARNING, p.id, "Multi-hop traceroute to broadcast address is not allowed");
+        sendNotification(meshtastic_LogRecord_Level_WARNING, p.id, "Multi-hop traceroute to broadcast address is not allowed",
+                         meshtastic_ClientNotification_NotificationType_TRACEROUTE_BROADCAST_REJECTED);
         meshtastic_QueueStatus qs = router->getQueueStatus();
         service->sendQueueStatusToPhone(qs, 0, p.id);
         return false;
@@ -1903,8 +2160,27 @@ int PhoneAPI::onNotify(uint32_t newValue)
     bool timeout = checkConnectionTimeout(); // a handy place to check if we've heard from the phone (since the BLE version
                                              // doesn't call this from idle)
 
+#if HAS_SCREEN_MIRROR
+    // a frame wakes only the connections draining the mirror, and never moves FromNum
+    if (newValue == graphics::ScreenMirror::FRAME_WAKE) {
+        MirrorSlot m;
+        if (state == STATE_SEND_PACKETS && wantsMirror(m))
+            onNowHasData(0);
+        return timeout ? -1 : 0;
+    }
+#endif
+
     if (state == STATE_SEND_PACKETS) {
+        // Consumed by every connected client in this one notify pass, so no per-connection bookkeeping.
+        if (service->identityMovePending())
+            state = STATE_RESEND_MY_INFO;
         LOG_INFO("Tell client new packets %u", newValue);
+        onNowHasData(newValue);
+    } else if (service->identityMovePending() && state != STATE_SEND_NOTHING && state != STATE_SEND_MY_INFO) {
+        // Mid-sync, so this dump is already carrying the old number in its my_info, its self record or
+        // both, and has no steady state to fall back from. Restart it on the new one.
+        LOG_INFO("Node num moved mid-sync, restart client config");
+        handleStartConfig();
         onNowHasData(newValue);
     } else {
         LOG_DEBUG("Client not yet interested in packets (state=%d)", state);
@@ -2080,7 +2356,7 @@ bool PhoneAPI::handleLockdownAuthInline(const meshtastic_LockdownAuth &la)
         revokeAllAuth();
         queueLockdownStatus(meshtastic_LockdownStatus_State_LOCKED, "", 0, 0, 0);
         zeroPassphrase();
-        rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
+        rebootAtMsec = Time::timerEndsAtMillis(DEFAULT_REBOOT_SECONDS * 1000);
         return true;
     }
 

@@ -49,7 +49,7 @@ class XModemAdapter
     XModemAdapter();
 
     void handlePacket(meshtastic_XModem xmodemPacket);
-    meshtastic_XModem getForPhone();
+    const meshtastic_XModem &getForPhone() const;
     void resetForPhone();
 
     // True while a file transfer is in flight; lets callers avoid racing our `file` handle.
@@ -68,6 +68,10 @@ class XModemAdapter
     int retrans = MAXRETRANS;
 
     uint16_t packetno = 0;
+
+    // True right after a data packet with seq 0 (the 16-bit packet number wrapped) was accepted: its retry, after a
+    // lost ACK, is a duplicate, not a new start
+    bool acceptedWrappedSeq0 = false;
 
     File file;
 
