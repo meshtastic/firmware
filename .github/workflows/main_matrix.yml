@@ -576,8 +576,8 @@ jobs:
           path: firmware-${{ needs.version.outputs.long }}.json
 
       - name: Add sources to GitHub Release
-        # Only run when targeting the default branch with workflow_dispatch
-        if: github.ref_name == github.event.repository.default_branch
+        # Only upload on manual (workflow_dispatch) release runs, from any branch
+        if: github.event_name == 'workflow_dispatch'
         run: |
           gh release upload v${{ needs.version.outputs.long }} ./firmware-${{ needs.version.outputs.long }}.json
           gh release upload v${{ needs.version.outputs.long }} ./output/meshtasticd-${{ needs.version.outputs.deb }}-src.zip
@@ -643,8 +643,8 @@ jobs:
         run: ls -lR
 
       - name: Add bins and debug elfs to GitHub Release
-        # Only run when targeting the default branch with workflow_dispatch
-        if: github.ref_name == github.event.repository.default_branch
+        # Only upload on manual (workflow_dispatch) release runs, from any branch
+        if: github.event_name == 'workflow_dispatch'
         run: |
           gh release upload v${{ needs.version.outputs.long }} ./firmware-${{matrix.arch}}-${{ needs.version.outputs.long }}.zip
           gh release upload v${{ needs.version.outputs.long }} ./debug-elfs-${{matrix.arch}}-${{ needs.version.outputs.long }}.zip

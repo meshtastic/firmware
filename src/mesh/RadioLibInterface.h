@@ -36,6 +36,23 @@
 #define AGC_FORCED_RESET_MS (24 * 60 * 60 * 1000UL)
 #endif
 
+// 1 = send each radio command as one buffered SPI transfer, instead of RadioLib's one
+// SPI.transfer() call per byte. On nRF52 and ESP32 that per-byte call is its own DMA transfer, which
+// put a 200-byte payload write about 1.9 ms past the end of a SHORT_TURBO channel scan; buffered, it
+// finishes inside the scan. On every other architecture there is no buffered call to use.
+// This guards a virtual override, so it must hold the same value in every translation unit: set it
+// here rather than per-env, or the vtable disagrees across the build.
+#ifndef RADIO_SPI_BULK
+#if ARCH_PORTDUINO || defined(ARDUINO_NRF52_ADAFRUIT) || defined(ARDUINO_ARCH_ESP32)
+#define RADIO_SPI_BULK 1
+#else
+#define RADIO_SPI_BULK 0
+#endif
+#endif
+#if RADIO_SPI_BULK && !(ARCH_PORTDUINO || defined(ARDUINO_NRF52_ADAFRUIT) || defined(ARDUINO_ARCH_ESP32))
+#error "RADIO_SPI_BULK: no buffered SPI call on this architecture"
+#endif
+
 /**
  * We need to override the RadioLib ArduinoHal class to add mutex protection for SPI bus access
  */
@@ -46,7 +63,7 @@ class LockingArduinoHal : public ArduinoHal
 
     void spiBeginTransaction() override;
     void spiEndTransaction() override;
-#if ARCH_PORTDUINO
+#if RADIO_SPI_BULK
     void spiTransfer(uint8_t *out, size_t len, uint8_t *in) override;
 
 #endif
@@ -161,6 +178,7 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     uint32_t lastNoiseFloorUpdate = 0;
     static const uint32_t NOISE_FLOOR_UPDATE_INTERVAL_MS = 5000;
     int32_t currentNoiseFloor = NOISE_FLOOR_DEFAULT;
+    static bool isValidNoiseRssi(int16_t rssi) { return rssi < 0 && rssi >= NOISE_FLOOR_VALID_MIN; }
 
     /**
      * Pure virtual hook for derived radio interfaces to provide instantaneous RSSI.

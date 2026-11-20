@@ -297,6 +297,15 @@ struct LoraSlotSnapshot {
 /// Normalises to the modem fields actually in force, so editing a dormant one is not a slot change.
 LoraSlotSnapshot loraSlotSnapshotFrom(const meshtastic_Config_LoRaConfig &lora, const char *primaryChannelName);
 
+/// An EnvironmentMetrics held protobuf-encoded. A real sensor sets a handful of its 38 optional fields, so this is
+/// ~15-40 B where the decoded struct is 304 B. The bytes are exactly what nodes.proto stores for the submessage.
+struct PackedEnvironmentMetrics {
+    std::vector<uint8_t> bytes;
+
+    bool pack(const meshtastic_EnvironmentMetrics &metrics);
+    bool unpack(meshtastic_EnvironmentMetrics &out) const;
+};
+
 class NodeDB
 {
     // NodeNum provisionalNodeNum; // if we are trying to find a node num this is our current attempt
@@ -322,7 +331,7 @@ class NodeDB
     std::map<NodeNum, meshtastic_DeviceMetrics> nodeTelemetry;
 #endif
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTDB
-    std::map<NodeNum, meshtastic_EnvironmentMetrics> nodeEnvironment;
+    std::map<NodeNum, PackedEnvironmentMetrics> nodeEnvironment;
 #endif
 #if !MESHTASTIC_EXCLUDE_STATUSDB
     std::map<NodeNum, meshtastic_StatusMessage> nodeStatus;
@@ -579,11 +588,7 @@ class NodeDB
         meshtastic_DeviceMetrics scratch;
         return copyNodeTelemetry(n, scratch);
     }
-    bool hasNodeEnvironment(NodeNum n) const
-    {
-        meshtastic_EnvironmentMetrics scratch;
-        return copyNodeEnvironment(n, scratch);
-    }
+    bool hasNodeEnvironment(NodeNum n) const;
     bool hasNodeStatus(NodeNum n) const
     {
         meshtastic_StatusMessage scratch;
@@ -659,6 +664,10 @@ class NodeDB
     /// Mint the identity keypair outside the boot path and re-seat my_node_num == crc32(public_key).
     /// @return true if my_node_num moved; the caller must then also persist SEGMENT_DEVICESTATE | SEGMENT_NODEDATABASE.
     bool ensurePkiIdentity();
+
+    /// Boot-time clamp of the preset-derived LoRa fields, run once the channels are loaded: the
+    /// frequency slot check hashes the primary channel's name.
+    void clampLoadedLoraConfig();
 
     bool backupPreferences(meshtastic_AdminMessage_BackupLocation location);
     bool restorePreferences(meshtastic_AdminMessage_BackupLocation location,
@@ -823,6 +832,8 @@ class NodeDB
     // temp vectors. Must be paired - disarm before any other NodeDatabase decode.
     void armNodeDatabaseDecodeTargets();
     void disarmNodeDatabaseDecodeTargets();
+    void armNodeDatabaseEncodeSources();
+    void disarmNodeDatabaseEncodeSources();
 };
 
 extern NodeDB *nodeDB;

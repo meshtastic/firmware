@@ -292,6 +292,17 @@ void MeshService::injectAsReceived(meshtastic_MeshPacket &p)
  */
 void MeshService::handleToRadio(meshtastic_MeshPacket &p)
 {
+    // Transparent mode: encrypted frames go to the radio as built. Decoded packets are only for this node (admin).
+    if (config.lora.transparent_mode) {
+        if (p.which_payload_variant == meshtastic_MeshPacket_encrypted_tag) {
+            handleTransparentToRadio(p);
+            return;
+        }
+        if (!isToUs(&p)) {
+            (void)sendQueueStatusToPhone(router->getQueueStatus(), ERRNO_DISABLED, p.id);
+            return;
+        }
+    }
 #if defined(ARCH_PORTDUINO)
     if (SimRadio::instance && p.decoded.portnum == meshtastic_PortNum_SIMULATOR_APP) {
         // Simulates device received a packet via the LoRa chip
@@ -351,6 +362,33 @@ void MeshService::handleToRadio(meshtastic_MeshPacket &p)
     }
 }
 
+void MeshService::handleTransparentToRadio(const meshtastic_MeshPacket &p)
+{
+    ErrorCode res;
+    // Refusals are reported only in the QueueStatus below. No sender: receivers drop it and the radio buffer
+    // encoder asserts on it. Hop fields have 3 header bits each; refuse rather than let the encoder rewrite them.
+    if (p.from == 0 || p.hop_limit > HOP_MAX || p.hop_start > HOP_MAX) {
+        res = meshtastic_Routing_Error_BAD_REQUEST;
+    } else if (meshtastic_MeshPacket *a = packetPool.allocCopy(p)) {
+        // Header and payload stay as given; clear the local scheduling hints a client could use to stall the TX queue.
+        a->tx_after = 0;
+        a->rx_snr = 0;
+        a->rx_rssi = 0;
+        a->has_rx_rssi = false;
+        res = router->sendTransparent(a);
+    } else {
+        res = ERRNO_UNKNOWN;
+    }
+    (void)sendQueueStatusToPhone(router->getQueueStatus(), res, p.id);
+}
+
+void MeshService::handleTransparentFromRadio(meshtastic_MeshPacket *p)
+{
+    powerFSM.trigger(EVENT_PACKET_FOR_PHONE); // wake the client link, as handleFromRadio() does
+    stampRxTime(p);
+    sendToPhone(p);
+}
+
 /** Attempt to cancel a previously sent packet from this _local_ node.  Returns true if a packet was found we could cancel */
 bool MeshService::cancelSending(PacketId id)
 {
@@ -399,11 +437,14 @@ ErrorCode MeshService::sendToMesh(meshtastic_MeshPacket *p, RxSource src, bool c
 
     /* NOTE(pboldin): Prepare and send QueueStatus message to the phone as a
      * high-priority message. */
-    meshtastic_QueueStatus qs = router->getQueueStatus();
-    // SHOULD_RELEASE means "caller frees", not a send failure, so don't report it as one.
-    ErrorCode r = sendQueueStatusToPhone(qs, (res == ERRNO_SHOULD_RELEASE && localDelivery) ? ERRNO_OK : res, mesh_packet_id);
-    if (r != ERRNO_OK) {
-        LOG_DEBUG("Can't send status to phone");
+    // In transparent mode the client only tracks its own sends; on-device ones never go out.
+    if (!config.lora.transparent_mode || src == RX_SRC_USER) {
+        meshtastic_QueueStatus qs = router->getQueueStatus();
+        // SHOULD_RELEASE means "caller frees", not a send failure, so don't report it as one.
+        ErrorCode r = sendQueueStatusToPhone(qs, (res == ERRNO_SHOULD_RELEASE && localDelivery) ? ERRNO_OK : res, mesh_packet_id);
+        if (r != ERRNO_OK) {
+            LOG_DEBUG("Can't send status to phone");
+        }
     }
 
     if ((res == ERRNO_OK || res == ERRNO_SHOULD_RELEASE) && ccToPhone) { // Check if p is not released in case it couldn't be sent
@@ -486,7 +527,8 @@ bool MeshService::phonePayloadIsDecodable(const meshtastic_Data &d)
 
 void MeshService::sendToPhone(meshtastic_MeshPacket *p)
 {
-    perhapsDecode(p);
+    if (!config.lora.transparent_mode)
+        perhapsDecode(p);
     coerceNodeInfoUserId(*p);
 
     // Withhold decoded nested payloads a strict phone decoder would reject; still-encrypted packets
@@ -501,6 +543,7 @@ void MeshService::sendToPhone(meshtastic_MeshPacket *p)
 #ifdef ARCH_ESP32
 #if !MESHTASTIC_EXCLUDE_STOREFORWARD
     if (moduleConfig.store_forward.enabled && storeForwardModule && storeForwardModule->isServer() &&
+        p->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
         p->decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP) {
         releaseToPool(p); // Copy is already stored in StoreForward history
         fromNum++;        // Notify observers for packet from radio
