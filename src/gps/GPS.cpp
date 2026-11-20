@@ -57,7 +57,7 @@ static inline void feedWatchdogWhileWaiting()
 #define GPS_RESET_IN_USE true
 #endif
 
-// A board that knows it has an Airoha fitted can say so, so it is parked and woken as one before the probe names it.
+// A board that knows it has an Airoha fitted can say so, so it is parked and woken as one until the probe names a model.
 #ifndef GPS_AIROHA_FITTED
 #define GPS_AIROHA_FITTED false
 #endif
@@ -70,7 +70,7 @@ template <typename T, std::size_t N> std::size_t array_count(const T (&)[N])
 
 static inline bool isAiroha(GnssModel_t model)
 {
-    return IS_ONE_OF(model, GNSS_MODEL_AG3335, GNSS_MODEL_AG3352) || GPS_AIROHA_FITTED;
+    return IS_ONE_OF(model, GNSS_MODEL_AG3335, GNSS_MODEL_AG3352) || (model == GNSS_MODEL_UNKNOWN && GPS_AIROHA_FITTED);
 }
 
 // Reopen the GPS UART at a new speed, keeping the pins it was given.
@@ -876,19 +876,7 @@ bool GPS::verifyCachedProbePresence()
         return false;
     }
 
-#if defined(ARCH_NRF52) || defined(ARCH_PORTDUINO) || defined(ARCH_STM32)
-    _serial_gps->end();
-    _serial_gps->begin(cachedProbeBaud);
-#elif defined(ARCH_RP2040)
-    _serial_gps->end();
-    _serial_gps->setFIFOSize(256);
-    _serial_gps->begin(cachedProbeBaud);
-#else
-    if (_serial_gps->baudRate() != cachedProbeBaud) {
-        LOG_DEBUG("Set GPS Baud to %i (cached verify)", cachedProbeBaud);
-        _serial_gps->updateBaudRate(cachedProbeBaud);
-    }
-#endif
+    restartSerial(_serial_gps, cachedProbeBaud);
 
     // Before trusting cached model/baud, require either active model-specific
     // response or passive NMEA flow.
@@ -1052,6 +1040,9 @@ bool GPS::setup()
                     detectedBaud = rareSerialSpeeds[speedSelect];
                 } else if (currentStep == 0 && ++speedSelect == array_count(rareSerialSpeeds)) {
                     LOG_WARN("Give up GPS probe, set to %d", GPS_BAUDRATE);
+                    // Sweep afresh if the GPS is enabled again, rather than index past the end of the table.
+                    speedSelect = 0;
+                    probeTries = 0;
                     return true;
                 }
             }
@@ -1061,6 +1052,10 @@ bool GPS::setup()
         if (gnssModel != GNSS_MODEL_UNKNOWN) {
             setConnected();
             (void)saveProbeCache();
+#ifdef HAS_AIROHA_SLEEP
+            // Sleep misses while unidentified (e.g. knob off) must not lock out the identified receiver.
+            airohaSleepMisses = 0;
+#endif
         } else {
             return false;
         }
