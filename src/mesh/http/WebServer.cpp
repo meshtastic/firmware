@@ -354,4 +354,26 @@ void initWebServer()
         LOG_ERROR("Web Servers Failed! ;-( ");
     }
 }
+
+void deinitWebServer()
+{
+    LOG_DEBUG("Deinit Web Server");
+    // Cleared before the servers go away: handleWebResponse() reads it from the
+    // WebServerThread and must not touch a deleted server.
+    isWebServerReady = false;
+
+    if (secureServer) {
+        secureServer->stop();
+        delete secureServer;
+        secureServer = nullptr;
+    }
+
+    if (insecureServer) {
+        insecureServer->stop();
+        delete insecureServer;
+        insecureServer = nullptr;
+    }
+
+    LOG_INFO("Web Servers Stopped");
+}
 #endif
