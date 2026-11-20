@@ -6,6 +6,7 @@
 // leader never makes it the daemon's controlling terminal (which would SIGHUP it on hangup).
 #include "Arduino.h"
 #include "TestUtil.h"
+#include "mesh/StreamFrameWriter.h"
 #include "platform/portduino/HostSerialStream.h"
 #include <climits>
 #include <cstdlib>
@@ -184,6 +185,77 @@ void test_missing_tty_fails_to_open()
     TEST_ASSERT_FALSE(stream.isOpen());
 }
 
+// Writes until the kernel buffer between stream and client is full; returns the bytes it took.
+static size_t fillUntilShortWrite(HostSerialStream &stream)
+{
+    uint8_t chunk[1024];
+    memset(chunk, 'f', sizeof(chunk));
+    size_t total = 0;
+    for (int i = 0; i < 10000; i++) {
+        size_t n = stream.write(chunk, sizeof(chunk));
+        total += n;
+        if (n < sizeof(chunk))
+            return total;
+    }
+    return total;
+}
+
+static void drainClient(int client, std::string &out, size_t want)
+{
+    char buf[4096];
+    for (int i = 0; i < 500 && out.size() < want; i++) {
+        ssize_t n = ::read(client, buf, sizeof(buf));
+        if (n > 0)
+            out.append(buf, n);
+        else
+            usleep(2000);
+    }
+}
+
+void test_full_port_reports_no_write_space()
+{
+    HostSerialStream stream;
+    std::string link = scratchPath("mesh");
+    TEST_ASSERT_TRUE(stream.begin("pty:" + link, 38400));
+    TEST_ASSERT_TRUE(stream.availableForWrite() > 0);
+    fillUntilShortWrite(stream);
+    TEST_ASSERT_EQUAL(0, stream.availableForWrite());
+}
+
+// What PROTO mode depends on: a frame the far end is not draining is kept, not truncated, and
+// arrives whole and in order once the far end reads again.
+void test_frame_writer_keeps_a_frame_until_the_far_end_drains()
+{
+    HostSerialStream stream;
+    std::string link = scratchPath("mesh");
+    TEST_ASSERT_TRUE(stream.begin("pty:" + link, 38400));
+    int client = open(link.c_str(), O_RDWR | O_NOCTTY | O_NONBLOCK);
+    TEST_ASSERT_TRUE(client >= 0);
+
+    size_t filled = fillUntilShortWrite(stream);
+    static uint8_t frame[3000];
+    for (size_t i = 0; i < sizeof(frame); i++)
+        frame[i] = (uint8_t)(i * 7 + 3);
+
+    StreamFrameWriter writer;
+    TEST_ASSERT_FALSE(writer.writeFrame(stream, frame, sizeof(frame), false));
+    TEST_ASSERT_FALSE(writer.isIdle());
+
+    std::string got;
+    bool done = false;
+    for (int i = 0; i < 2000 && !done; i++) {
+        drainClient(client, got, got.size() + 1);
+        done = writer.finishPendingFrame(stream);
+    }
+    TEST_ASSERT_TRUE(done);
+    TEST_ASSERT_TRUE(writer.isIdle());
+    drainClient(client, got, filled + sizeof(frame));
+
+    TEST_ASSERT_EQUAL(filled + sizeof(frame), got.size());
+    TEST_ASSERT_EQUAL_MEMORY(frame, got.data() + filled, sizeof(frame));
+    close(client);
+}
+
 // A session leader with no controlling terminal acquires the first tty it opens without O_NOCTTY.
 // meshtasticd under systemd is one, so a hangup on that tty would SIGHUP the daemon.
 static int childOpensWithoutAcquiringCtty(bool ptyMode, const std::string &arg)
@@ -241,6 +313,8 @@ void setup()
     RUN_TEST(test_end_removes_the_link);
     RUN_TEST(test_tty_mode_reads_a_device_path);
     RUN_TEST(test_missing_tty_fails_to_open);
+    RUN_TEST(test_full_port_reports_no_write_space);
+    RUN_TEST(test_frame_writer_keeps_a_frame_until_the_far_end_drains);
     RUN_TEST(test_tty_mode_never_becomes_the_controlling_terminal);
     RUN_TEST(test_pty_mode_never_becomes_the_controlling_terminal);
     exit(UNITY_END());

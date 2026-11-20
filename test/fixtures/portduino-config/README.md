@@ -163,10 +163,11 @@ non-BLE build. The assertions only test what holds either way.
 
 ## Serial module (`SerialModule`)
 
-| File                             | Expected                                                                                   |
-| -------------------------------- | ------------------------------------------------------------------------------------------ |
-| `serial-module.yaml`             | A `pty:` path is clean, `--output-yaml` writes it back, and that output loads clean again. |
-| `serial-module-unknown-key.yaml` | `Baud` is a module setting, not a host one, so it is ignored. One warning.                 |
+| File                             | Expected                                                                                         |
+| -------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `serial-module.yaml`             | A `pty:` path is clean, `--output-yaml` writes it back, and that output loads clean again.       |
+| `serial-module-append/`          | A `config.d` file with a `SerialModule` section but no `Path` keeps the path from `config.yaml`. |
+| `serial-module-unknown-key.yaml` | `Baud` is a module setting, not a host one, so it is ignored. One warning.                       |
 
 ## Admin keys (`Security.AdminKeys`)
 

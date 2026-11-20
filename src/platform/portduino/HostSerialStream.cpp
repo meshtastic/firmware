@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <fcntl.h>
+#include <poll.h>
 #include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <termios.h>
@@ -95,8 +96,13 @@ bool HostSerialStream::openPty(const std::string &link)
     fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK);
 
     ptySlaveFd = open(slaveName, O_RDWR | O_NOCTTY);
+    if (ptySlaveFd < 0) {
+        LOG_ERROR("Serial: cannot open pty slave %s: %s", slaveName, strerror(errno));
+        end();
+        return false;
+    }
     struct termios tty;
-    if (ptySlaveFd >= 0 && tcgetattr(ptySlaveFd, &tty) == 0) {
+    if (tcgetattr(ptySlaveFd, &tty) == 0) {
         cfmakeraw(&tty);
         tcsetattr(ptySlaveFd, TCSANOW, &tty);
     }
@@ -174,7 +180,21 @@ size_t HostSerialStream::write(uint8_t c)
     return write(&c, 1);
 }
 
-// Non-blocking: with no reader on the far end the kernel buffer fills and the rest is dropped.
+int HostSerialStream::availableForWrite()
+{
+    if (fd < 0)
+        return 0;
+    struct pollfd p = {fd, POLLOUT, 0};
+    if (poll(&p, 1, 0) != 1 || !(p.revents & POLLOUT))
+        return 0;
+    int queued = 0;
+    if (ioctl(fd, TIOCOUTQ, &queued) == -1 || queued < 0)
+        queued = 0;
+    // The kernel does not report its tty buffer size; 4096 is the Linux N_TTY default.
+    return queued < 4096 ? 4096 - queued : 0;
+}
+
+// Non-blocking: with no reader on the far end the kernel buffer fills and the write comes up short.
 size_t HostSerialStream::write(const uint8_t *buffer, size_t size)
 {
     if (fd < 0)

@@ -7,6 +7,9 @@
 #include "configuration.h"
 #include <Arduino.h>
 #include <functional>
+#ifdef ARCH_PORTDUINO
+#include "mesh/StreamFrameWriter.h"
+#endif
 
 // Is this serial config one we will accept? Outside the architecture guard below because it touches
 // no serial hardware, and AdminModule must run it on every platform - including those where
@@ -36,12 +39,22 @@ class SerialModule : public StreamAPI, private concurrency::OSThread
     /// Check the current underlying physical link to see if the client is currently connected
     virtual bool checkIsConnected() override;
 
+#ifdef ARCH_PORTDUINO
+    // The host port never blocks, so a PROTO frame the far end has not drained is kept and finished
+    // before PhoneAPI advances.
+    virtual bool finishPendingFrame() override;
+    virtual bool hasRetainedFrame() override;
+    virtual bool canEncodeLogRecord() override;
+    virtual bool writeFrame(uint8_t *buf, size_t len, bool bestEffort) override;
+#endif
+
   private:
     uint32_t getBaudRate();
     void sendTelemetry(meshtastic_Telemetry m);
     void processWXSerial();
 #ifdef ARCH_PORTDUINO
     uint32_t lastHostRxMs = 0;
+    StreamFrameWriter frameWriter;
     void readHostSerial();
 #endif
 };

@@ -23,6 +23,8 @@ class HostSerialStream : public Stream
     int peek() override;
     size_t write(uint8_t c) override;
     size_t write(const uint8_t *buffer, size_t size) override;
+    // Free space in the kernel's output queue; 0 while the far end is not draining.
+    int availableForWrite() override;
     using Print::write;
 
   private:

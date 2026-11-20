@@ -168,10 +168,13 @@ assert "a serial module path is written back" 0 serial-module.yaml yaml \
 	"SerialModule:" \
 	"Path: pty:/tmp/meshserial"
 # Only the document is reloaded: --output-yaml may print startup lines before it.
-"$BIN" --output-yaml --config "$FIXTURES/serial-module.yaml" -d "$WORKDIR/fs" 2>/dev/null |
+timeout 60 "$BIN" --output-yaml --config "$FIXTURES/serial-module.yaml" -d "$WORKDIR/fs" 2>/dev/null |
 	sed -n '/^[A-Za-z][A-Za-z0-9]*:/,$p' >"$WORKDIR/serial-module-emitted.yaml"
 assert "the written-back serial module path loads clean" 0 "$WORKDIR/serial-module-emitted.yaml" check \
 	"Result: 0 errors, 0 warnings"
+# A config.d file with a SerialModule section but no Path keeps the path config.yaml set.
+assert "a serial module path survives a later file without Path" 0 serial-module-append/config.yaml yaml \
+	"Path: /dev/ttyUSB1"
 assert "an unknown serial module key is warned" 0 serial-module-unknown-key.yaml check \
 	"unknown key 'SerialModule.Baud'" \
 	"Result: 0 errors, 1 warning"

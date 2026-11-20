@@ -83,6 +83,7 @@ bool serialConfigIsValid(const meshtastic_ModuleConfig_SerialConfig &config)
 #ifdef ARCH_PORTDUINO
 #include "HostSerialStream.h"
 #include "PortduinoGlue.h"
+#include "concurrency/LockGuard.h"
 #endif
 
 #define RX_BUFFER 256
@@ -343,7 +344,10 @@ int32_t SerialModule::runOnce()
 void SerialModule::readHostSerial()
 {
     while (serialModulePort.available() > 0 && serialPayloadSize < meshtastic_Constants_DATA_PAYLOAD_LEN) {
-        serialBytes[serialPayloadSize++] = (char)serialModulePort.read();
+        int c = serialModulePort.read();
+        if (c < 0)
+            break;
+        serialBytes[serialPayloadSize++] = (char)c;
         lastHostRxMs = millis();
     }
     const uint32_t idleMs = moduleConfig.serial.timeout > 0 ? moduleConfig.serial.timeout : TIMEOUT;
@@ -352,6 +356,34 @@ void SerialModule::readHostSerial()
         serialModuleRadio->sendPayload();
         serialPayloadSize = 0;
     }
+}
+
+bool SerialModule::finishPendingFrame()
+{
+    concurrency::LockGuard guard(&streamLock);
+    return frameWriter.finishPendingFrame(serialModulePort);
+}
+
+bool SerialModule::hasRetainedFrame()
+{
+    concurrency::LockGuard guard(&streamLock);
+    return !frameWriter.isIdle();
+}
+
+// A retained log frame still points into the log buffer, so it must not be re-encoded under it.
+bool SerialModule::canEncodeLogRecord()
+{
+    concurrency::LockGuard guard(&streamLock);
+    return frameWriter.isIdle();
+}
+
+bool SerialModule::writeFrame(uint8_t *buf, size_t len, bool bestEffort)
+{
+    if (len == 0 || !canWrite)
+        return false;
+    const size_t totalLen = buildFrameHeader(buf, len);
+    concurrency::LockGuard guard(&streamLock);
+    return frameWriter.writeFrame(serialModulePort, buf, totalLen, bestEffort);
 }
 #endif
 
