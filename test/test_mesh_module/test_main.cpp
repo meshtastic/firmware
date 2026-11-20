@@ -9,6 +9,7 @@
 #include "mesh/MeshService.h"
 #include "mesh/NodeDB.h"
 #include "mesh/RadioInterface.h"
+#include "mesh/ReliableRouter.h"
 #include "mesh/Router.h"
 #include "modules/NeighborInfoModule.h"
 #include "modules/RoutingModule.h"
@@ -63,6 +64,19 @@ class MockRouter : public Router
     }
 
     std::vector<meshtastic_MeshPacket> sentPackets;
+};
+
+// The real dupe-handling router, with the NAK/ACK a duplicate is answered with captured by the routing module mock.
+class DupeRouter : public ReliableRouter
+{
+  public:
+    ErrorCode send(meshtastic_MeshPacket *p) override
+    {
+        packetPool.release(p);
+        return ERRNO_OK;
+    }
+
+    bool filterForTest(const meshtastic_MeshPacket *p) { return ReliableRouter::shouldFilterReceived(p); }
 };
 
 struct AckNak {
@@ -275,6 +289,7 @@ static meshtastic_MeshPacket testPacket;
 static MockNodeDB *mockNodeDB;
 static MockMeshService *mockService;
 static MockRouter *mockRouter;
+static DupeRouter *dupeRouter;
 static MockRoutingModule *mockRoutingModule;
 static NeighborInfoModule *realNeighborInfoModule;
 static RoutingModule *realRoutingModule;
@@ -391,6 +406,9 @@ void tearDown(void)
     delete mockService;
     mockService = nullptr;
     service = nullptr;
+
+    delete dupeRouter;
+    dupeRouter = nullptr;
 
     delete mockRouter;
     mockRouter = nullptr;
@@ -589,6 +607,60 @@ static void test_dispatch_refusalWithoutWantResponse_sendsNak()
     TEST_ASSERT_EQUAL_HEX32(request.id, nak.decoded.request_id);
     TEST_ASSERT_FALSE(nak.want_ack);
     TEST_ASSERT_EQUAL_UINT32(0, mockRoutingModule->ackNaks.size());
+}
+
+static meshtastic_MeshPacket makeDirectAckedWrite()
+{
+    meshtastic_MeshPacket request = makeRequest(meshtastic_PortNum_ADMIN_APP);
+    request.decoded.want_response = false;
+    request.want_ack = true;
+    request.hop_start = 3;
+    request.hop_limit = 3; // heard directly
+    request.relay_node = 0x22;
+    request.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA;
+    return request;
+}
+
+// The sender never heard our NAK and retransmits. The duplicate must be answered with the same refusal,
+// or the client reads the ACK as "applied" for a write we refused.
+static void test_refusedWrite_duplicateIsNakedWithOriginalError()
+{
+    dupeRouter = new DupeRouter();
+    dupeRouter->addInterface(std::unique_ptr<RadioInterface>(new MockRadioInterface()));
+    router = dupeRouter;
+    registerDispatchModule(new RefusingModule());
+    meshtastic_MeshPacket request = makeDirectAckedWrite();
+
+    TEST_ASSERT_FALSE(dupeRouter->filterForTest(&request)); // first delivery
+    MeshModule::callModules(request);                       // refused; its NAK is lost on the air
+    TEST_ASSERT_EQUAL_UINT32(0, mockRoutingModule->ackNaks.size());
+
+    meshtastic_MeshPacket duplicate = makeDirectAckedWrite();
+    TEST_ASSERT_TRUE(dupeRouter->filterForTest(&duplicate)); // the retransmission
+
+    TEST_ASSERT_EQUAL_UINT32(1, mockRoutingModule->ackNaks.size());
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_ADMIN_PUBLIC_KEY_UNAUTHORIZED, mockRoutingModule->ackNaks[0].error);
+    TEST_ASSERT_EQUAL_HEX32(REMOTE_NODE, mockRoutingModule->ackNaks[0].to);
+    TEST_ASSERT_EQUAL_HEX32(request.id, mockRoutingModule->ackNaks[0].requestId);
+}
+
+// An accepted write leaves no refusal behind, so its duplicate still gets the plain ACK.
+static void test_acceptedWrite_duplicateStillAcked()
+{
+    dupeRouter = new DupeRouter();
+    dupeRouter->addInterface(std::unique_ptr<RadioInterface>(new MockRadioInterface()));
+    router = dupeRouter;
+    meshtastic_MeshPacket request = makeDirectAckedWrite();
+
+    TEST_ASSERT_FALSE(dupeRouter->filterForTest(&request));
+    MeshModule::callModules(request); // no module refuses
+
+    meshtastic_MeshPacket duplicate = makeDirectAckedWrite();
+    TEST_ASSERT_TRUE(dupeRouter->filterForTest(&duplicate));
+
+    TEST_ASSERT_EQUAL_UINT32(1, mockRoutingModule->ackNaks.size());
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_NONE, mockRoutingModule->ackNaks[0].error);
+    TEST_ASSERT_EQUAL_HEX32(request.id, mockRoutingModule->ackNaks[0].requestId);
 }
 
 // Without want_ack the sender expects no answer at all, so the refusal is still discarded.
@@ -1083,6 +1155,8 @@ void setup()
     RUN_TEST(test_dispatch_noResponderSendsNak);
     RUN_TEST(test_dispatch_refusalWithoutWantResponse_sendsNak);
     RUN_TEST(test_dispatch_refusalWithoutWantAck_isDiscarded);
+    RUN_TEST(test_refusedWrite_duplicateIsNakedWithOriginalError);
+    RUN_TEST(test_acceptedWrite_duplicateStillAcked);
     RUN_TEST(test_phoneErrorResponse_ignoresForgedFrom);
     RUN_TEST(test_dispatch_ignoreRequestIsClearedPerPacket);
     RUN_TEST(test_dispatch_realNeighborInfoCannotShadowTelemetryOwner);

@@ -237,6 +237,12 @@ void MeshModule::callModules(meshtastic_MeshPacket &mp, RxSource src)
         }
     } else if (currentReply && toUs) {
         printPacket("Send refusal", currentReply);
+        meshtastic_Routing refusal = meshtastic_Routing_init_default;
+        if (currentReply->decoded.portnum == meshtastic_PortNum_ROUTING_APP &&
+            pb_decode_from_bytes(currentReply->decoded.payload.bytes, currentReply->decoded.payload.size,
+                                 meshtastic_Routing_fields, &refusal) &&
+            refusal.which_variant == meshtastic_Routing_error_reason_tag)
+            router->rememberRefusal(getFrom(&mp), mp.id, refusal.error_reason); // so a retransmitted duplicate is NAKed too
         service->sendToMesh(currentReply);
         currentReply = NULL;
     }

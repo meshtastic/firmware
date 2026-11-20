@@ -29,8 +29,8 @@
 #include "mqtt/MQTT.h"
 #endif
 #include "Default.h"
-#if ARCH_PORTDUINO
 #include "Throttle.h"
+#if ARCH_PORTDUINO
 #include "platform/portduino/PortduinoGlue.h"
 #include "serialization/MeshPacketSerializer.h"
 #endif
@@ -384,6 +384,31 @@ meshtastic_MeshPacket *Router::allocForSending()
     stampRxTime(p);
 
     return p;
+}
+
+void Router::rememberRefusal(NodeNum from, PacketId id, meshtastic_Routing_Error err)
+{
+    if (err == meshtastic_Routing_Error_NONE || id == 0)
+        return;
+    uint8_t slot = nextRefusalSlot;
+    for (uint8_t i = 0; i < REFUSAL_CACHE_SIZE; i++) {
+        if (refusals[i].error != 0 && refusals[i].from == from && refusals[i].id == id) {
+            slot = i; // same request refused again: overwrite in place
+            break;
+        }
+    }
+    if (slot == nextRefusalSlot)
+        nextRefusalSlot = (nextRefusalSlot + 1) % REFUSAL_CACHE_SIZE;
+    refusals[slot] = {from, id, Time::skipZero(Time::getMillis()), (uint8_t)err};
+}
+
+meshtastic_Routing_Error Router::refusalFor(NodeNum from, PacketId id) const
+{
+    for (const RefusalRecord &r : refusals) {
+        if (r.error != 0 && r.from == from && r.id == id && Throttle::isWithinTimespanMs(r.atMsec, REFUSAL_TTL_MSEC))
+            return (meshtastic_Routing_Error)r.error;
+    }
+    return meshtastic_Routing_Error_NONE;
 }
 
 /**
