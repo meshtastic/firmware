@@ -61,6 +61,10 @@ bool HostSerialStream::openTty(const std::string &path, uint32_t baud)
     if (tcgetattr(fd, &tty) == 0) {
         cfmakeraw(&tty);
         tty.c_cflag |= CLOCAL | CREAD;
+#ifdef CRTSCTS
+        // cfmakeraw() keeps flow control another program left on; with CTS unwired the port never sends.
+        tty.c_cflag &= ~CRTSCTS;
+#endif
         speed_t speed;
         if (baudToSpeed(baud, speed)) {
             cfsetispeed(&tty, speed);

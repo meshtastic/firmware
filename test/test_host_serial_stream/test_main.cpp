@@ -15,6 +15,7 @@
 #include <string>
 #include <sys/stat.h>
 #include <sys/wait.h>
+#include <termios.h>
 #include <unistd.h>
 #include <unity.h>
 
@@ -178,6 +179,34 @@ void test_tty_mode_reads_a_device_path()
     close(master);
 }
 
+// A tty another program left with RTS/CTS on would never transmit over a three-wire cable.
+void test_tty_mode_turns_off_hardware_flow_control()
+{
+    int master = posix_openpt(O_RDWR | O_NOCTTY);
+    TEST_ASSERT_TRUE(master >= 0);
+    TEST_ASSERT_EQUAL(0, grantpt(master));
+    TEST_ASSERT_EQUAL(0, unlockpt(master));
+    std::string slave = ptsname(master);
+
+    int other = open(slave.c_str(), O_RDWR | O_NOCTTY);
+    TEST_ASSERT_TRUE(other >= 0);
+    struct termios tty;
+    TEST_ASSERT_EQUAL(0, tcgetattr(other, &tty));
+    tty.c_cflag |= CRTSCTS;
+    TEST_ASSERT_EQUAL(0, tcsetattr(other, TCSANOW, &tty));
+    TEST_ASSERT_EQUAL(0, tcgetattr(other, &tty));
+    TEST_ASSERT_TRUE_MESSAGE(tty.c_cflag & CRTSCTS, "this tty does not keep CRTSCTS, so the test proves nothing");
+
+    HostSerialStream stream;
+    TEST_ASSERT_TRUE(stream.begin(slave, 38400));
+    TEST_ASSERT_EQUAL(0, tcgetattr(other, &tty));
+    TEST_ASSERT_FALSE(tty.c_cflag & CRTSCTS);
+
+    stream.end();
+    close(other);
+    close(master);
+}
+
 void test_missing_tty_fails_to_open()
 {
     HostSerialStream stream;
@@ -186,16 +215,23 @@ void test_missing_tty_fails_to_open()
 }
 
 // Writes until the kernel buffer between stream and client is full; returns the bytes it took.
+// The pty moves data between its buffers in the background and frees room after the first short
+// write, so it only counts as full once writes take nothing three times in a row.
 static size_t fillUntilShortWrite(HostSerialStream &stream)
 {
     uint8_t chunk[1024];
     memset(chunk, 'f', sizeof(chunk));
     size_t total = 0;
-    for (int i = 0; i < 10000; i++) {
+    int emptyWrites = 0;
+    for (int i = 0; i < 10000 && emptyWrites < 3; i++) {
         size_t n = stream.write(chunk, sizeof(chunk));
         total += n;
-        if (n < sizeof(chunk))
-            return total;
+        if (n == 0) {
+            emptyWrites++;
+            usleep(10000);
+        } else {
+            emptyWrites = 0;
+        }
     }
     return total;
 }
@@ -312,6 +348,7 @@ void setup()
     RUN_TEST(test_pty_mode_refuses_to_replace_a_regular_file);
     RUN_TEST(test_end_removes_the_link);
     RUN_TEST(test_tty_mode_reads_a_device_path);
+    RUN_TEST(test_tty_mode_turns_off_hardware_flow_control);
     RUN_TEST(test_missing_tty_fails_to_open);
     RUN_TEST(test_full_port_reports_no_write_space);
     RUN_TEST(test_frame_writer_keeps_a_frame_until_the_far_end_drains);
