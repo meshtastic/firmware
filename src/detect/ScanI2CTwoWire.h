@@ -1,12 +1,15 @@
 #pragma once
 
 #include "configuration.h"
+#include <stdint.h>
+
+bool isFocalTechTouchId(uint8_t vendor, uint8_t chip);
+
 #if !MESHTASTIC_EXCLUDE_I2C
 
 #include <map>
 #include <memory>
 #include <stddef.h>
-#include <stdint.h>
 
 #include <Wire.h>
 
