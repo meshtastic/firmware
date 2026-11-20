@@ -20,6 +20,7 @@
 #include "ISM330DHCXSensor.h"
 #include "LIS3DHSensor.h"
 #include "LSM6DS3Sensor.h"
+#include "LSM6DSOXSensor.h"
 #include "MPU6050Sensor.h"
 #include "MotionSensor.h"
 #include "QMI8658Sensor.h"
@@ -179,6 +180,10 @@ class AccelerometerThread : public concurrency::OSThread
         case ScanI2C::DeviceType::LSM6DS3:
             sensor.reset(new LSM6DS3Sensor(device));
             break;
+#endif
+#if __has_include(<Adafruit_LSM6DSOX.h>)
+        case ScanI2C::DeviceType::LSM6DSOX:
+            sensor.reset(new LSM6DSOXSensor(device));
 #endif
 #if defined(MESHTASTIC_INCLUDE_INKHUD) && __has_include(<Adafruit_ISM330DHCX.h>)
         case ScanI2C::DeviceType::ISM330DHCX:

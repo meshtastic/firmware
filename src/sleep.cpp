@@ -46,6 +46,8 @@ extern XPowersPPM *PPM;
 #define INCLUDE_vTaskSuspend 0
 #endif
 
+void (*variantPowerOff)() = nullptr;
+
 /// Called to ask any observers if they want to veto sleep. Return 1 to veto or 0 to allow sleep to happen
 Observable<void *> preflightSleep;
 
@@ -241,6 +243,17 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false, bool skipSaveN
     if (nimbleBluetooth)
         nimbleBluetooth->deinit();
 #endif
+
+    // Before the observers: they park peripherals (and pin holds) that a board kept alive by USB cannot recover.
+    if (msecToWake == portMAX_DELAY && variantPowerOff) {
+        if (!skipSaveNodeDb)
+            nodeDB->saveToDisk();
+        if (transmitHistory)
+            transmitHistory->saveToDisk();
+        console->flush();
+        variantPowerOff();
+        skipSaveNodeDb = true;
+    }
 
 #ifdef ARCH_ESP32
     if (!shouldLoraWake(msecToWake))
@@ -537,7 +550,11 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
 #endif
 #ifdef BUTTON_PIN
     gpio_num_t pin = (gpio_num_t)(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN);
+#ifdef BUTTON_WAKE_ACTIVE_HIGH
+    gpio_wakeup_enable(pin, GPIO_INTR_HIGH_LEVEL);
+#else
     gpio_wakeup_enable(pin, GPIO_INTR_LOW_LEVEL);
+#endif
 #endif
 #if defined(INPUTDRIVER_TWO_WAY_ROCKER_BTN) || defined(INPUTDRIVER_ENCODER_BTN)
 #if defined(INPUTDRIVER_TWO_WAY_ROCKER_BTN)
@@ -622,6 +639,8 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
 #ifdef BUTTON_PIN
     // Disable wake-on-button interrupt. Re-attach normal button-interrupts
     gpio_wakeup_disable(pin);
+    // The level type would outlive the sleep and storm once any pinMode() re-enables the pin's interrupt.
+    gpio_set_intr_type(pin, GPIO_INTR_DISABLE);
 #endif
 #ifdef PMU_IRQ
     // Undo the arming above. PMU_IRQ was the only light-sleep wake pin left armed after the sleep, so

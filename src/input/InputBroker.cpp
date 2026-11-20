@@ -18,6 +18,7 @@
 
 #if !MESHTASTIC_EXCLUDE_INPUTBROKER
 #include "input/ExpressLRSFiveWay.h"
+#include "input/KeypadInput.h"
 #include "input/QuadratureEncoder.h"
 #include "input/RotaryEncoderImpl.h"
 #include "input/RotaryEncoderInterruptImpl1.h"
@@ -356,7 +357,7 @@ void InputBroker::Init()
     DownButtonThread->initButton(downConfig);
 #endif
 
-#if defined(BUTTON_PIN)
+#if defined(BUTTON_PIN) && !defined(X2_POWER_KEY_UI)
 #if defined(USERPREFS_BUTTON_PIN)
     int _pinNum = config.device.button_gpio ? config.device.button_gpio : USERPREFS_BUTTON_PIN;
 #else
@@ -499,6 +500,14 @@ void InputBroker::Init()
         aLinuxJoystick->init();
 #endif
     }
+#endif
+#if !MESHTASTIC_EXCLUDE_INPUTBROKER && defined(INPUTBROKER_KEYPAD_READ_CALLBACK)
+    auto *keypadInput = new KeypadInput(INPUTBROKER_KEYPAD_READ_CALLBACK);
+    if (!keypadInput->init()) {
+        LOG_WARN("Keypad input initialization failed");
+        delete keypadInput;
+    } else
+        osk_found = true;
 #endif
 #if !MESHTASTIC_EXCLUDE_INPUTBROKER && HAS_TRACKBALL
     if (screen && config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {

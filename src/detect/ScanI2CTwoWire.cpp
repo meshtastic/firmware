@@ -11,6 +11,9 @@
 #if defined(SENSECAP_INDICATOR)
 #include "mesh/comms/I2CProxy.h"
 #endif
+#ifdef YSN8900E_RTC
+#include <YSN8900ERTC.h>
+#endif
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32)
 #include "meshUtils.h" // vformat
 
@@ -415,6 +418,19 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
 #ifdef RX8130CE_RTC
                 SCAN_SIMPLE_CASE(RX8130CE_RTC, RTC_RX8130CE, "RX8130CE", (uint8_t)addr.address)
 #endif
+#ifdef YSN8900E_RTC
+            case YSN8900E_RTC: {
+                YSN8900ERTC ysn;
+                if (ysn.begin(*i2cBus, (uint8_t)addr.address)) {
+                    type = RTC_YSN8900E;
+                    logFoundDevice("YSN8900E", (uint8_t)addr.address);
+                    // Vendor firmware leaves a periodic timer pulsing /INT.
+                    if (!ysn.disableInterrupts())
+                        LOG_WARN("YSN8900E: failed to disable interrupts");
+                }
+                break;
+            }
+#endif
 
 #ifdef PCF85063_RTC
                 SCAN_SIMPLE_CASE(PCF85063_RTC, RTC_PCF85063, "PCF85063", (uint8_t)addr.address)
@@ -475,6 +491,19 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
 #ifdef HAS_ES7243E
                 SCAN_SIMPLE_CASE(ES7243E_ADDR, ES7243E, "ES7243E", (uint8_t)addr.address);
 #endif
+            case BMM350_ADDR: {
+                i2cBus->beginTransmission(addr.address);
+                i2cBus->write((uint8_t)0x00);
+                if (i2cBus->endTransmission() == 0 && i2cBus->requestFrom((int)addr.address, 3) == 3) {
+                    i2cBus->read();
+                    i2cBus->read();
+                    if (i2cBus->read() == 0x33) {
+                        logFoundDevice("BMM350", (uint8_t)addr.address);
+                        type = BMM350;
+                    }
+                }
+                break;
+            }
             case XPOWERS_AXP192_AXP2101_ADDRESS:
 #ifndef SEEED_WIO_TRACKER_L2 // false positive on Wio Tracker L2
                 // Do we have the axp2101/192 or the TCA8418
@@ -888,7 +917,26 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
 
                 break;
 
-                SCAN_SIMPLE_CASE(LSM6DS3_ADDR, LSM6DS3, "LSM6DS3", (uint8_t)addr.address);
+            case LSM6DS3_ADDR: {
+#ifdef SEEED_MESHPAGER_X2
+                uint8_t imuId = 0;
+                if (!readByteRegister(i2cBus, addr.address, 0x0F, imuId)) {
+                    LOG_WARN("Failed to read IMU WHO_AM_I at 0x%x", (uint8_t)addr.address);
+                } else if (imuId == 0x6C) {
+                    type = LSM6DSOX;
+                    logFoundDevice("LSM6DSOX", (uint8_t)addr.address);
+                } else if (imuId == 0x6A) {
+                    type = LSM6DS3;
+                    logFoundDevice("LSM6DS3", (uint8_t)addr.address);
+                } else {
+                    LOG_WARN("Unsupported IMU WHO_AM_I 0x%x at 0x%x", imuId, (uint8_t)addr.address);
+                }
+#else
+                type = LSM6DS3;
+                logFoundDevice("LSM6DS3", (uint8_t)addr.address);
+#endif
+                break;
+            }
             case VEML7700_ADDR: { // same as BMM150 with CSB and SDO low
                 // VEML7700 ID (0x07) low byte is 0x81. A BMM150 chip ID (0x40) reads 0x32, but only once the power bit
                 // (0x4B bit 0) has taken it out of suspend
