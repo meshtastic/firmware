@@ -1623,8 +1623,7 @@ void loop()
         }
     }
 #if HAS_TFT && HAS_SCREEN
-    if (screen && portduino_config.displayPanel == x11 &&
-        config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
+    if (screen && config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
         auto dispdev = screen->getDisplayDevice();
         if (dispdev)
             static_cast<TFTDisplay *>(dispdev)->sdlLoop();
