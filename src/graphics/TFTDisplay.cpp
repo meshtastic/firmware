@@ -2146,7 +2146,7 @@ bool TFTDisplay::connect()
                                  nv3007_279_init_operations, sizeof(nv3007_279_init_operations));
 #elif defined(TFT_NV3001B)
         // The Heltec RC panels all use the same controller and differ only in how the bus is wired.
-#if defined(HELTEC_RC52)
+#if defined(ARCH_NRF52)
         // nRF52840: the panel sits on SPI1, clear of the LoRa radio on SPI0.
         Arduino_DataBus *bus = new Arduino_HWSPI(TFT_RS, TFT_CS, &SPI1, true /* is_shared_interface */);
 #elif defined(HELTEC_RCC6)
