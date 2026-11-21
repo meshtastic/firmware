@@ -1226,7 +1226,8 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
         snprintf(err_string, sizeof(err_string), "%s span %.0fkHz < requested %.0fkHz", newRegion->name, regionSpanKHz, check_bw);
         LOG_ERROR("%s", err_string);
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
-        sendErrorNotification(err_string, meshtastic_ClientNotification_NotificationType_LORA_BANDWIDTH_EXCEEDS_REGION);
+        sendErrorNotification(err_string, meshtastic_ClientNotification_NotificationType_LORA_BANDWIDTH_EXCEEDS_REGION,
+                              meshtastic_LogRecord_Level_INFO);
 
         if (clamp) {
             loraConfig.bandwidth = bwKHzToCode(modemPresetToBwKHz(newRegion->getDefaultPreset(), newRegion->wideLora));
@@ -1270,12 +1271,14 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
                      newRegion->name, numFreqSlots);
             if (causedByPresetMigration) {
                 LOG_INFO("%s", err_string);
-                sendErrorNotification(err_string, meshtastic_ClientNotification_NotificationType_LORA_CHANNEL_NUM_INVALID,
-                                      meshtastic_LogRecord_Level_INFO);
+                sendErrorNotification(
+                    err_string, meshtastic_ClientNotification_NotificationType_LORA_CHANNEL_NUM_INVALID,
+                    meshtastic_LogRecord_Level_INFO); // This has to be done anyways, so stay notify stay low: INFO
             } else {
                 LOG_ERROR("%s", err_string);
                 RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
-                sendErrorNotification(err_string, meshtastic_ClientNotification_NotificationType_LORA_CHANNEL_NUM_INVALID);
+                sendErrorNotification(err_string, meshtastic_ClientNotification_NotificationType_LORA_CHANNEL_NUM_INVALID,
+                                      meshtastic_LogRecord_Level_ERROR); // This is real issue, notify as ERROR
             }
 
             if (clamp) {
