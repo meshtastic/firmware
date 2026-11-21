@@ -1,3 +1,9 @@
+// MeshModule dispatch, wantPacket and handleReceived ordering.
+//
+// Why: every module rides this framework; a dispatch regression disables a whole portnum.
+// Regression guarded: a module not being consulted, or a STOP result not stopping later
+// modules.
+
 #include "MeshModule.h"
 #include "MeshTypes.h"
 #include "TestUtil.h"

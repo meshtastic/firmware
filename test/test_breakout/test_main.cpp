@@ -1,3 +1,9 @@
+// BreakoutGame paddle, ball and brick state.
+//
+// Why: the game runs on the device UI with no other test; a collision or step regression is
+// only visible on hardware.
+// Regression guarded: a missed wall/brick collision or a ball that leaves the board.
+
 #include "TestUtil.h"
 #include "modules/games/Breakout.h"
 #include <unity.h>

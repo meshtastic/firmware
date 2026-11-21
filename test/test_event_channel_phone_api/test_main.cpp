@@ -1,3 +1,10 @@
+// PhoneAPI's view of the event-channel position policy.
+//
+// Why: the phone caches the config it reads; a policy read that disagrees with the router
+// makes clients write back the wrong channels.
+// Regression guarded: event-channel state leaking into the phone dump or the wrong channel
+// being reported.
+
 #include "Channels.h"
 #include "MeshModule.h"
 #include "MeshService.h"

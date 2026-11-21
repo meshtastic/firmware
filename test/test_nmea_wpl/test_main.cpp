@@ -1,3 +1,8 @@
+// NMEA WPL (waypoint) sentence parsing.
+//
+// Why: a malformed sentence must not produce a waypoint at a bogus coordinate.
+// Regression guarded: a short or malformed WPL accepted, or a valid one rejected.
+
 #include "GeoCoord.h"
 #include "NMEAWPL.h"
 #include "TestUtil.h"

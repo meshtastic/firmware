@@ -1,3 +1,9 @@
+// TrafficManagementModule dedup, rate limits, hop trimming and NodeInfo replies.
+//
+// Why: these gates decide which traffic is seen and answered when the mesh is busy.
+// Regression guarded: a rate/dedup window that never expires, a hop trim applied to a
+// unicast, or a NodeInfo reply outside the role's hop ceiling.
+
 #include "MeshTypes.h" // Include BEFORE TestUtil.h - provides HAS_TRAFFIC_MANAGEMENT (via mesh-pb-constants.h)
 #include "TestUtil.h"
 #include <cstdlib>

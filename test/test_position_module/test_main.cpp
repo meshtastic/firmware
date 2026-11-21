@@ -1,3 +1,10 @@
+// PositionModule receive, rewrite and local-position publication.
+//
+// Why: position is the most visible on-wire payload; a bad rewrite changes what every
+// receiver sees.
+// Regression guarded: a received position not reaching the NodeDB, or a local one not being
+// published.
+
 #include "TestUtil.h"
 #include "modules/PositionModule.h"
 #include <unity.h>

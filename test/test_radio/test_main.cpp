@@ -1,3 +1,10 @@
+// RadioInterface/RadioLibInterface configuration and receive-state helpers.
+//
+// Why: modem parameters, slot selection and stale-IRQ handling decide whether the radio
+// hears and transmits on the right channel.
+// Regression guarded: a preset clamp, a slot formula, or a stale RX flag re-arming a frame
+// too early.
+
 #include "LR20x0Band.h"
 #include "MeshRadio.h"
 #include "MeshService.h"

@@ -1,3 +1,10 @@
+// ChirpyRunnerGame jump, gravity and obstacle collision.
+//
+// Why: pure game logic with no hardware dependency, and the only coverage of the runner
+// state machine.
+// Regression guarded: a second jump re-launching mid-air, and obstacle collision not ending
+// the run.
+
 #include "TestUtil.h"
 #include "modules/games/ChirpyRunner.h"
 #include <unity.h>

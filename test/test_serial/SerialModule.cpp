@@ -1,3 +1,10 @@
+// SerialModule configuration validation.
+//
+// Why: an invalid serial config can take the console UART or a radio pin and make the node
+// unreachable.
+// Regression guarded: an override console mode accepted on a write-capable mode, or a radio
+// pin accepted for an enabled module.
+
 #include "DebugConfiguration.h"
 #include "TestUtil.h"
 #include <unity.h>
