@@ -503,12 +503,18 @@ int32_t getTZOffset()
 #if MESHTASTIC_EXCLUDE_TZ
     return 0;
 #else
-    time_t now = getTime(false);
-    struct tm *gmt;
-    gmt = gmtime(&now);
-    gmt->tm_isdst = -1;
-    return (int32_t)difftime(now, mktime(gmt));
+    return getTZOffsetAt(getTime(false));
 #endif
+}
+
+int32_t getTZOffsetAt(time_t utc)
+{
+    // localtime_r() is unavailable on the native-windows (MinGW) build
+    struct tm *local = localtime(&utc);
+    if (!local)
+        return 0;
+    // Treat the local wall-clock fields as UTC; the difference to the real epoch is the TZ offset incl. DST.
+    return (int32_t)difftime(gm_mktime(local), utc);
 }
 
 /**
