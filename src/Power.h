@@ -52,6 +52,13 @@ extern INA226Sensor ina226Sensor;
 extern NullSensor ina226Sensor;
 #endif
 
+#if __has_include(<INA228.h>)
+#include "modules/Telemetry/Sensor/INA228Sensor.h"
+extern INA228Sensor ina228Sensor;
+#else
+extern NullSensor ina228Sensor;
+#endif
+
 #if __has_include(<Adafruit_INA260.h>)
 #include "modules/Telemetry/Sensor/INA260Sensor.h"
 extern INA260Sensor ina260Sensor;
