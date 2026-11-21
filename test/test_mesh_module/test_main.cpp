@@ -1,6 +1,7 @@
 #include "MeshModule.h"
 #include "MeshTypes.h"
 #include "TestUtil.h"
+#include "UptimeClock.h"
 #include <unity.h>
 
 #include "configuration.h"
@@ -383,6 +384,7 @@ void setUp(void)
 
 void tearDown(void)
 {
+    Time::useRealClock();
     TestModule::currentRequest = NULL;
 
     for (auto it = dispatchModules.rbegin(); it != dispatchModules.rend(); ++it)
@@ -671,6 +673,65 @@ static void test_refusedThenAcceptedWrite_duplicateIsAcked()
 
     TEST_ASSERT_EQUAL_UINT32(1, mockRoutingModule->ackNaks.size());
     TEST_ASSERT_EQUAL(meshtastic_Routing_Error_NONE, mockRoutingModule->ackNaks[0].error);
+}
+
+static void expectRefusalExpiresAfterTtl(uint32_t recordedAtMsec)
+{
+    Time::setTestMillis(recordedAtMsec);
+    mockRouter->rememberRefusal(REMOTE_NODE, 0x77, meshtastic_Routing_Error_NOT_AUTHORIZED);
+
+    Time::setTestMillis(recordedAtMsec + Router::REFUSAL_TTL_MSEC - 1); // wraps past 2^32 for the late start
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_NOT_AUTHORIZED, mockRouter->refusalFor(REMOTE_NODE, 0x77));
+
+    Time::setTestMillis(recordedAtMsec + Router::REFUSAL_TTL_MSEC);
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_NONE, mockRouter->refusalFor(REMOTE_NODE, 0x77));
+}
+
+// A refusal is replayed until REFUSAL_TTL_MSEC has passed, then the duplicate is plainly ACKed again.
+static void test_refusal_expiresAfterTtl()
+{
+    expectRefusalExpiresAfterTtl(1000);
+}
+
+static void test_refusal_expiresAfterTtlAcrossMillisWrap()
+{
+    expectRefusalExpiresAfterTtl(0xFFFFFF00u);
+}
+
+// The ninth distinct refusal evicts the oldest one; the newest eight still answer their own error.
+static void test_refusalCache_evictsOldestWhenFull()
+{
+    Time::setTestMillis(5000);
+    const uint32_t n = Router::REFUSAL_CACHE_SIZE + 1;
+    for (uint32_t i = 0; i < n; i++)
+        mockRouter->rememberRefusal(REMOTE_NODE, 0x100 + i, (meshtastic_Routing_Error)(1 + i));
+
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_NONE, mockRouter->refusalFor(REMOTE_NODE, 0x100));
+    for (uint32_t i = 1; i < n; i++)
+        TEST_ASSERT_EQUAL((meshtastic_Routing_Error)(1 + i), mockRouter->refusalFor(REMOTE_NODE, 0x100 + i));
+}
+
+// Refusing the same request again replaces its entry; it must not take a second slot or evict another entry.
+static void test_refusalCache_reRecordOverwritesInPlace()
+{
+    Time::setTestMillis(5000);
+    const uint32_t n = Router::REFUSAL_CACHE_SIZE;
+    for (uint32_t i = 0; i < n; i++)
+        mockRouter->rememberRefusal(REMOTE_NODE, 0x100 + i, (meshtastic_Routing_Error)(1 + i));
+
+    mockRouter->rememberRefusal(REMOTE_NODE, 0x103, meshtastic_Routing_Error_BAD_REQUEST);
+
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_BAD_REQUEST, mockRouter->refusalFor(REMOTE_NODE, 0x103));
+    for (uint32_t i = 0; i < n; i++) {
+        if (i != 3)
+            TEST_ASSERT_EQUAL((meshtastic_Routing_Error)(1 + i), mockRouter->refusalFor(REMOTE_NODE, 0x100 + i));
+    }
+
+    // The next new refusal still evicts the oldest entry, not the one just rewritten.
+    mockRouter->rememberRefusal(REMOTE_NODE, 0x200, meshtastic_Routing_Error_NOT_AUTHORIZED);
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_NONE, mockRouter->refusalFor(REMOTE_NODE, 0x100));
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_BAD_REQUEST, mockRouter->refusalFor(REMOTE_NODE, 0x103));
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_NOT_AUTHORIZED, mockRouter->refusalFor(REMOTE_NODE, 0x200));
 }
 
 // An accepted write leaves no refusal behind, so its duplicate still gets the plain ACK.
@@ -1187,6 +1248,10 @@ void setup()
     RUN_TEST(test_refusedWrite_duplicateIsNakedWithOriginalError);
     RUN_TEST(test_refusedThenAcceptedWrite_duplicateIsAcked);
     RUN_TEST(test_acceptedWrite_duplicateStillAcked);
+    RUN_TEST(test_refusal_expiresAfterTtl);
+    RUN_TEST(test_refusal_expiresAfterTtlAcrossMillisWrap);
+    RUN_TEST(test_refusalCache_evictsOldestWhenFull);
+    RUN_TEST(test_refusalCache_reRecordOverwritesInPlace);
     RUN_TEST(test_phoneErrorResponse_ignoresForgedFrom);
     RUN_TEST(test_dispatch_ignoreRequestIsClearedPerPacket);
     RUN_TEST(test_dispatch_realNeighborInfoCannotShadowTelemetryOwner);

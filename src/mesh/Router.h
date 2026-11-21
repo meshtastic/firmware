@@ -41,15 +41,17 @@ void stampRxTime(meshtastic_MeshPacket *p);
  */
 class Router : protected concurrency::OSThread, protected PacketHistory
 {
+  public:
+    // Refusal NAKs we sent for want_ack requests. Small and fixed: refusals are rare and an entry only has to
+    // outlive the sender's few retransmissions. When one is evicted the duplicate gets the plain ACK as before.
+    static constexpr uint8_t REFUSAL_CACHE_SIZE = 8; // 8 x 16 B = 128 B, no heap
+    static constexpr uint32_t REFUSAL_TTL_MSEC = 5 * 60 * 1000;
+
   private:
     /// Packets which have just arrived from the radio, ready to be processed by this service and possibly
     /// forwarded to the phone.
     PointerQueue<meshtastic_MeshPacket> fromRadioQueue;
 
-    // Refusal NAKs we sent for want_ack requests. Small and fixed: refusals are rare and an entry only has to
-    // outlive the sender's few retransmissions. When one is evicted the duplicate gets the plain ACK as before.
-    static constexpr uint8_t REFUSAL_CACHE_SIZE = 8; // 8 x 16 B = 128 B, no heap
-    static constexpr uint32_t REFUSAL_TTL_MSEC = 5 * 60 * 1000;
     struct RefusalRecord {
         NodeNum from;
         PacketId id;
