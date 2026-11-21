@@ -226,11 +226,8 @@ static bool initAdcCalibration()
 #endif
 
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
-#if __has_include(<Adafruit_INA219.h>)
-INA219Sensor ina219Sensor;
-#else
-NullSensor ina219Sensor;
-#endif
+static const float ina219ShuntR[3] = {0.1f, 0.1f, 0.1f};
+INAFamilySensor ina219Sensor(meshtastic_TelemetrySensorType_INA219, "INA219", INA219_CHIP, ina219ShuntR, 0, 0);
 
 static const float ina226ShuntR[3] = {INA226_SHUNT_R, INA226_SHUNT_R, INA226_SHUNT_R};
 INAFamilySensor ina226Sensor(meshtastic_TelemetrySensorType_INA226, "INA226", INA226_CHIP, ina226ShuntR, 0, 0);

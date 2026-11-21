@@ -37,15 +37,9 @@ static constexpr uint8_t LOW_VOLTAGE_READINGS_BEFORE_SHUTDOWN = 10;
 bool updateLowVoltageCounter(uint8_t &counter, bool hasBattery, bool hasUsb, uint16_t battMv, uint16_t cutoffMv);
 
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
-#include "modules/Telemetry/Sensor/nullSensor.h"
-#if __has_include(<Adafruit_INA219.h>)
-#include "modules/Telemetry/Sensor/INA219Sensor.h"
-extern INA219Sensor ina219Sensor;
-#else
-extern NullSensor ina219Sensor;
-#endif
-
 #include "modules/Telemetry/Sensor/INAFamilySensor.h"
+#include "modules/Telemetry/Sensor/nullSensor.h"
+extern INAFamilySensor ina219Sensor;
 extern INAFamilySensor ina226Sensor;
 
 #if __has_include(<Adafruit_INA260.h>)
