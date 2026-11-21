@@ -15,10 +15,7 @@ class INA228Sensor : public TelemetrySensor, VoltageSensor, CurrentSensor
     TwoWire *_wire = &Wire;
     INA228 ina228 = INA228(_addr, _wire);
 
-    bool getEnvironmentMetrics(meshtastic_Telemetry *measurement);
-    bool getPowerMetrics(meshtastic_Telemetry *measurement);
-    bool readMetrics(bool &hasVoltage, float &voltage, bool &hasCurrent, float &current);
-    bool calibrate();
+    float readCurrentMa();
 
   protected:
     virtual void setup() override;

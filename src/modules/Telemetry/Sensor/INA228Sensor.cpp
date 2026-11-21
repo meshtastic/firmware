@@ -7,21 +7,10 @@
 #include "INA228Sensor.h"
 #include "TelemetrySensor.h"
 
-// Shunt resistor in Ohms and the largest current to measure, in Amperes. The default suits the common
-// INA228 breakouts (Adafruit 5832 and the generic "R015" boards). Override per variant with -D.
+// Shunt resistor in Ohms. The default suits the Adafruit 5832 and generic "R015" breakouts; override with -D
 #ifndef INA228_SHUNT_R
 #define INA228_SHUNT_R 0.015f
 #endif
-#ifndef INA228_MAX_CURRENT
-#define INA228_MAX_CURRENT 10.0f
-#endif
-
-// Full scale of the narrow shunt range (ADCRANGE=1): +-40.96 mV, four times the resolution of the
-// +-163.84 mV default
-static constexpr float INA228_NARROW_RANGE_V = 0.04096f;
-
-// Tries at writing the calibration before the open fails
-static constexpr unsigned INA228_CALIBRATION_ATTEMPTS = 3;
 
 INA228Sensor::INA228Sensor() : TelemetrySensor(meshtastic_TelemetrySensorType_INA228, "INA228") {}
 
@@ -33,10 +22,8 @@ int32_t INA228Sensor::runOnce()
     }
 
     if (!status) {
-        // Only on first open: a fresh INA228 object has no calibration, and getCurrent() scales by it.
-        // A failed calibration fails the open, as a failed begin() does: the current would be mis-scaled
         begin(nodeTelemetrySensorsMap[sensorType].second, nodeTelemetrySensorsMap[sensorType].first);
-        status = ina228.begin() && calibrate();
+        status = ina228.begin();
     }
     return initI2CSensor();
 }
@@ -51,82 +38,37 @@ void INA228Sensor::begin(TwoWire *wire, uint8_t addr)
     _wire->begin();
 }
 
-bool INA228Sensor::calibrate()
+// Current is shunt voltage over the shunt: no SHUNT_CAL write, so nothing to calibrate or fail
+float INA228Sensor::readCurrentMa()
 {
-    // Take the narrow range whenever the full-scale shunt voltage fits in it. The range goes first:
-    // the SHUNT_CAL value setMaxCurrentShunt() writes depends on it.
-    const bool narrow = INA228_MAX_CURRENT * INA228_SHUNT_R <= INA228_NARROW_RANGE_V;
-    // A NACK on a shared bus can be transient, so a failed write gets another try
-    for (unsigned attempt = 1; attempt <= INA228_CALIBRATION_ATTEMPTS; attempt++) {
-        ina228.getLastError(); // clear it: a failed register write sets it, a successful one leaves it alone
-        ina228.setADCRange(narrow);
-        if (ina228.setMaxCurrentShunt(INA228_MAX_CURRENT, INA228_SHUNT_R) != 0) {
-            LOG_WARN("INA228: invalid shunt %.4f Ohm / max current %.2f A", INA228_SHUNT_R, INA228_MAX_CURRENT);
-            return false;
-        }
-        // setMaxCurrentShunt() returns 0 even when the SHUNT_CAL write is NACKed: only the error records it
-        if (ina228.getLastError() == 0) {
-            LOG_DEBUG("INA228: shunt %.4f Ohm, max %.2f A, %s range", INA228_SHUNT_R, INA228_MAX_CURRENT,
-                      narrow ? "40.96 mV" : "163.84 mV");
-            return true;
-        }
-        LOG_WARN("INA228: calibration write failed (attempt %u of %u)", attempt, INA228_CALIBRATION_ATTEMPTS);
-    }
-    return false;
+    return ina228.getShuntVoltage() * (1000.0f / INA228_SHUNT_R);
 }
 
 bool INA228Sensor::getMetrics(meshtastic_Telemetry *measurement)
 {
-    switch (measurement->which_variant) {
-    case meshtastic_Telemetry_environment_metrics_tag:
-        return getEnvironmentMetrics(measurement);
+    if (measurement->which_variant != meshtastic_Telemetry_power_metrics_tag)
+        return false;
 
-    case meshtastic_Telemetry_power_metrics_tag:
-        return getPowerMetrics(measurement);
-    }
-
-    // unsupported metric
-    return false;
-}
-
-bool INA228Sensor::readMetrics(bool &hasVoltage, float &voltage, bool &hasCurrent, float &current)
-{
-    // A failed register read comes back as 0, and only getLastError() tells it from a real 0. Each read
-    // clears the error the one before left, so every read is checked straight after it. Both fields are
-    // the INA228's, as they were when it overwrote them unchecked: a failed read clears its field rather
-    // than leave another sensor's value next to this one's
-    voltage = ina228.getBusVoltage();
-    hasVoltage = ina228.getLastError() == 0;
-    current = ina228.getMilliAmpere();
-    hasCurrent = ina228.getLastError() == 0;
-
-    if (!hasVoltage)
-        LOG_WARN("INA228: bus voltage read failed");
-    if (!hasCurrent)
-        LOG_WARN("INA228: current read failed");
-    return hasVoltage || hasCurrent;
-}
-
-bool INA228Sensor::getEnvironmentMetrics(meshtastic_Telemetry *measurement)
-{
-    auto &metrics = measurement->variant.environment_metrics;
-    return readMetrics(metrics.has_voltage, metrics.voltage, metrics.has_current, metrics.current);
-}
-
-bool INA228Sensor::getPowerMetrics(meshtastic_Telemetry *measurement)
-{
+    // A failed register read returns 0; only getLastError(), cleared by each read, tells it apart
     auto &metrics = measurement->variant.power_metrics;
-    return readMetrics(metrics.has_ch1_voltage, metrics.ch1_voltage, metrics.has_ch1_current, metrics.ch1_current);
+    metrics.ch1_voltage = ina228.getBusVoltage();
+    metrics.has_ch1_voltage = ina228.getLastError() == 0;
+    metrics.ch1_current = readCurrentMa();
+    metrics.has_ch1_current = ina228.getLastError() == 0;
+
+    if (!metrics.has_ch1_voltage || !metrics.has_ch1_current)
+        LOG_WARN("INA228: read failed");
+    return metrics.has_ch1_voltage || metrics.has_ch1_current;
 }
 
 uint16_t INA228Sensor::getBusVoltageMv()
 {
-    return lround(ina228.getBusMilliVolt());
+    return lroundf(ina228.getBusMilliVolt());
 }
 
 int16_t INA228Sensor::getCurrentMa()
 {
-    return lround(ina228.getMilliAmpere());
+    return lroundf(readCurrentMa());
 }
 
 #endif
