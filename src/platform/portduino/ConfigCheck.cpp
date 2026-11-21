@@ -82,8 +82,8 @@ const std::map<std::string, std::set<std::string>> &schema()
         {"Config", {"DisplayMode", "EnableUDP", "StatusMessage"}},
         {"Security", {"AdminKeys", "DMShell"}},
         {"Display",
-         {"Panel", "spidev", "BusFrequency", "Width", "Height", "Invert", "Rotate", "OffsetX", "OffsetY", "OffsetRotate",
-          "RGBOrder", "HUB75", "DC", "CS", "Backlight", "BacklightInvert", "BacklightPWMChannel", "Reset"}},
+         {"Panel", "spidev", "BusFrequency", "DataBits", "Width", "Height", "Invert", "Rotate", "OffsetX", "OffsetY",
+          "OffsetRotate", "RGBOrder", "HUB75", "DC", "CS", "Backlight", "BacklightInvert", "BacklightPWMChannel", "Reset"}},
         {"Touchscreen", {"Module", "spidev", "BusFrequency", "I2CAddr", "Rotate", "CS", "IRQ"}},
         {"Input",
          {"KeyboardDevice", "PointerDevice", "JoystickDevice", "JoystickButtons", "ArcadeBonnet", "ArcadeBonnetButtons",
@@ -614,6 +614,7 @@ const std::map<std::string, ValueSpec> &valueSpecs()
         {"Display.Panel", {kString, false}},
         {"Display.spidev", {kString, false}},
         {"Display.BusFrequency", {kInt, false}},
+        {"Display.DataBits", {kInt, false}},
         {"Display.Width", {kInt, false}},
         {"Display.Height", {kInt, false}},
         {"Display.Invert", {kBool, false}},
@@ -1018,6 +1019,14 @@ void checkSection(const std::string &file, const std::string &section, const YAM
                 findings.push_back({kWarn, file, lineOf(entry.first),
                                     "Lora.LR2021_IRQ_DIO_NUM is the older spelling of Lora.IRQ_DIO_NUM and is only read "
                                     "when that key is absent, so this line does nothing"});
+        } else if (section == "Display" && key == "DataBits") {
+            if (converts(value, kInt)) {
+                const int bits = value.as<int>();
+                if (bits != 16 && bits != 18)
+                    findings.push_back({kWarn, file, lineOf(value),
+                                        "Display.DataBits is " + std::to_string(bits) +
+                                            ", but only 16 or 18 is used; the panel default is kept"});
+            }
         } else if (section == "Display" && key == "HUB75") {
             if (value.IsMap())
                 for (const auto &hub : value) {

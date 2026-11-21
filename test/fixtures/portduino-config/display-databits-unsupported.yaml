@@ -1,0 +1,7 @@
+# FAULT. Only 16 and 18 are meaningful for Display.DataBits; anything else
+# keeps the panel default and warns.
+Lora:
+  Module: sim
+Display:
+  Panel: ILI9488
+  DataBits: 17
