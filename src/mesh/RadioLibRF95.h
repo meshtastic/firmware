@@ -2,12 +2,19 @@
 #if RADIOLIB_EXCLUDE_SX127X != 1
 #include <RadioLib.h>
 
+#if !defined(USE_SX1278) && !defined(USE_SX1272)
+#define USE_SX1278
+#endif
 /*!
   \class RFM95
 
   \brief Derived class for %RFM95 modules. Overrides some methods from SX1278 due to different parameter ranges.
 */
+#if defined(USE_SX1278)
 class RadioLibRF95 : public SX1278
+#elif defined(USE_SX1272)
+class RadioLibRF95 : public SX1272
+#endif
 {
   public:
     // constructor
