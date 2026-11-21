@@ -48,11 +48,11 @@ The [meshtastic-mcp](https://github.com/meshtastic/meshtastic-mcp) server expose
 - **Discovery**: `list_devices`, `list_boards`, `get_board`
 - **Build & flash**: `build`, `clean`, `pio_flash`, `erase_and_flash` (ESP32 factory), `update_flash` (ESP32 OTA), `touch_1200bps`
 - **Serial sessions**: `serial_open`, `serial_read`, `serial_list`, `serial_close`
-- **Device reads**: `device_info`, `list_nodes`
-- **Device writes** (require `confirm=True`): `set_owner`, `get_config`, `set_config`, `get_channel_url`, `set_channel_url`, `send_text`, `reboot`, `shutdown`, `factory_reset`, `set_debug_log_api`
+- **Device reads**: `inspect(what=...)` - summary, config sections, channels, channel URL, node DB
+- **Device writes**: `configure(changes={...})` (owner, config, `security.debug_log_api_enabled`; snapshots first and reads back), `set_channel_url`, `send`; `admin(action=..., confirm=True)` for `reboot`, `shutdown`, `factory_reset`
 - **Frame injection**: `inject_frame` - deliver a crafted frame into a board's real RX pipeline as if received off LoRa (reaches `from != 0` / decrypt / remote-admin paths the `toRadio` API can't). Needs firmware built with `-D MESHTASTIC_ENABLE_FRAME_INJECTION=1` (`MeshService::injectAsReceived`); sim nodes always. See the copilot-instructions **Frame injection** section.
 - **userPrefs admin**: `userprefs_get`, `userprefs_set`, `userprefs_reset`, `userprefs_manifest`, `userprefs_testing_profile`
-- **Vendor escape hatches**: `esptool_*`, `nrfutil_*`, `picotool_*`
+- **Vendor escape hatches**: `esptool_*`, `nrfutil_dfu`, `picotool_*`, and `vendor(tool=..., args=[...])` for raw esptool, nrfutil or picotool
 
 Setup: nothing to build - `.mcp.json` runs the server via `uvx --from git+https://github.com/meshtastic/meshtastic-mcp meshtastic-mcp`, so Claude Code picks it up automatically. To run the pytest hardware harness, clone [meshtastic-mcp](https://github.com/meshtastic/meshtastic-mcp) and set `MESHTASTIC_FIRMWARE_ROOT` to this firmware checkout.
 
@@ -73,7 +73,7 @@ Key rotation to never trigger casually: only the **full** factory reset (`factor
 
 ## House rules
 
-- **No destructive device operations without operator approval.** `factory_reset`, `erase_and_flash`, `reboot`, `shutdown`, history-rewriting git ops - describe the action and stop. Operator authorizes.
+- **No destructive device operations without operator approval.** `admin(action="factory_reset")`, `erase_and_flash`, `admin(action="reboot")`, `admin(action="shutdown")`, history-rewriting git ops - describe the action and stop. Operator authorizes.
 - **One MCP call per serial port at a time.** The port lock is exclusive; concurrent calls deadlock. Sequence: open → read/mutate → close, then next device.
 - **`userPrefs.jsonc` is session state during tests.** The `_session_userprefs` fixture snapshots + restores it; never edit it from inside a test.
 - **Don't speculate about firmware root causes.** When evidence doesn't support a classification, say "unknown" and list what would disambiguate.
@@ -107,9 +107,9 @@ Key rotation to never trigger casually: only the **full** factory reset (`factor
 
 ### Inspecting live node state
 
-1. `device_info(port=...)` - short summary (node num, firmware version, region, peer count)
-2. `list_nodes(port=...)` - full peer table (SNR, RSSI, pubkey presence, last_heard)
-3. `get_config(section="lora", port=...)` - LoRa settings for cross-device comparison
+1. `inspect(node=...)` - short summary (node num, firmware version, region, peer count)
+2. `inspect(node=..., what="nodes")` - full peer table (SNR, RSSI, pubkey presence, last_heard)
+3. `inspect(node=..., what="lora")` - LoRa settings for cross-device comparison
 
 Sequence these; don't parallelize on the same port.
 
