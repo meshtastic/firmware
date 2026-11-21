@@ -19,6 +19,7 @@
 */
 
 #include "variant.h"
+#include "Throttle.h"
 #include "configuration.h"
 #include "nrf.h"
 #include "wiring_constants.h"
@@ -32,6 +33,11 @@ const uint32_t g_ADigitalPinMap[] = {
     32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47};
 
 int m1HasAg3352 = 0;
+// The L76K's wiring; earlyInitVariant() works out the AG3352's.
+uint8_t m1GpsTxPin = 32 + 8;
+uint8_t m1GpsRxPin = 32 + 9;
+static uint16_t m1UartEdges[2]; // falling edges seen on P1.08 and P1.09, for the boot log
+static bool m1UartFound;
 
 void initVariant()
 {
@@ -39,30 +45,67 @@ void initVariant()
     // ledOff(PIN_LED1);
 }
 
+// V1 ties P0.08 to the battery sense P0.04 through R43; on V2 it only reaches the GPS switch, pulled up through 100K.
+static bool m1IsV1Board()
+{
+    pinMode(BATTERY_PIN, OUTPUT);
+    digitalWrite(BATTERY_PIN, HIGH);
+    pinMode(GPS_SWITCH_AG3352, INPUT_PULLDOWN); // outweighs the 100K, so a V2 board reads low whichever way it is switched
+    delay(2);
+    const bool tied = digitalRead(GPS_SWITCH_AG3352) == HIGH;
+    nrf_gpio_cfg_default(BATTERY_PIN);
+    nrf_gpio_cfg_default(GPS_SWITCH_AG3352);
+    return tied;
+}
+
+#if !MESHTASTIC_EXCLUDE_GPS
+// Out of reset the AG3352 starts talking, and only its TX line toggles. Elecrow's notes cross its UART relative to the
+// L76K's but their own firmware does not, so the line that talks decides; silence keeps the L76K's.
+static void m1FindAg3352Uart()
+{
+    constexpr uint8_t pins[2] = {8, 9}; // P1.08, P1.09
+    constexpr uint16_t enough = 50;     // a few characters
+    constexpr uint32_t timeoutMs = 2000;
+    for (uint8_t pin : pins)
+        pinMode(32 + pin, INPUT);
+    uint32_t last = NRF_P1->IN;
+    const uint32_t start = millis();
+    while (Throttle::isWithinTimespanMs(start, timeoutMs) && m1UartEdges[0] < enough && m1UartEdges[1] < enough) {
+        const uint32_t now = NRF_P1->IN;
+        const uint32_t fell = last & ~now;
+        for (uint8_t i = 0; i < 2; i++)
+            m1UartEdges[i] += (fell >> pins[i]) & 1;
+        last = now;
+    }
+    if (m1UartEdges[0] < enough && m1UartEdges[1] < enough)
+        return;
+    // Only a clear answer overrides the notes: one line busy, the other still.
+    const bool rxOnP109 = m1UartEdges[1] >= enough && m1UartEdges[0] <= 2;
+    m1UartFound = rxOnP109 || (m1UartEdges[0] >= enough && m1UartEdges[1] <= 2);
+    m1GpsRxPin = rxOnP109 ? 32 + 9 : 32 + 8;
+    m1GpsTxPin = rxOnP109 ? 32 + 8 : 32 + 9;
+}
+#endif
+
 // Here rather than initVariant(), whose delay() would run before the scheduler. No LOG_* yet.
 void earlyInitVariant()
 {
-    // No internal pull: either one would swamp the AG3352 board's 100K pull-down or the L76K's weak pull-up.
-    pinMode(PIN_GPS_VERSION, INPUT);
-    delay(2);
-    uint8_t high = 0;
-    for (uint8_t i = 0; i < 10; i++)
-        high += digitalRead(PIN_GPS_VERSION) == HIGH;
-    m1HasAg3352 = high < 3;
+    m1HasAg3352 = !m1IsV1Board();
 
 #if !MESHTASTIC_EXCLUDE_GPS
     if (m1HasAg3352) {
-        pinMode(GPS_SLEEP_INT, OUTPUT);
-        digitalWrite(GPS_SLEEP_INT, HIGH);
         // The core supply must be up before the reset, or the GPS boots and then stalls without it.
-        pinMode(PIN_GPS_EN, OUTPUT);
-        digitalWrite(PIN_GPS_EN, HIGH);
+        pinMode(GPS_EN_AG3352, OUTPUT);
+        digitalWrite(GPS_EN_AG3352, HIGH);
         delay(50);
         // The AG3352 stays powered across an MCU reset and may still be in backup mode; only RESETB ends that.
         pinMode(PIN_GPS_RESET, OUTPUT);
         digitalWrite(PIN_GPS_RESET, HIGH); // asserts RESETB through Q16
         delay(10);
         digitalWrite(PIN_GPS_RESET, LOW);
+        m1FindAg3352Uart();
+        pinMode(GPS_SLEEP_INT, OUTPUT);
+        digitalWrite(GPS_SLEEP_INT, HIGH);
     }
 #endif
 }
@@ -70,6 +113,11 @@ void earlyInitVariant()
 void lateInitVariant()
 {
     LOG_INFO("ThinkNode M1 GPS %s", m1HasAg3352 ? "AG3352" : "L76K");
+#if !MESHTASTIC_EXCLUDE_GPS
+    if (m1HasAg3352)
+        LOG_INFO("AG3352 UART: MCU RX on P1.%02u, %s (falling edges P1.08 %u, P1.09 %u)", m1GpsRxPin - 32,
+                 m1UartFound ? "found" : "not seen, assumed", m1UartEdges[0], m1UartEdges[1]);
+#endif
 }
 
 void variant_shutdown()
@@ -77,8 +125,9 @@ void variant_shutdown()
 #if !MESHTASTIC_EXCLUDE_GPS
     if (m1HasAg3352) {
         pinMode(PIN_GPS_EN, OUTPUT);
-        digitalWrite(PIN_GPS_EN, LOW);     // core supply off; the 1.8 V rail keeps the GPS in backup mode
-        digitalWrite(GPS_SLEEP_INT, HIGH); // idle_int must stay high through System OFF or the GPS never idles
+        digitalWrite(PIN_GPS_EN, LOW); // core supply off; the 1.8 V rail keeps the GPS in backup mode
+        // Floats like the UART lines, without a pulse: in backup mode a driven pad can back-power the GPS I/O rail.
+        nrf_gpio_cfg_default(GPS_SLEEP_INT);
         pinMode(PIN_GPS_RESET, OUTPUT);
         digitalWrite(PIN_GPS_RESET, LOW); // releases RESETB through Q16; a floating base could hold it asserted
     }

@@ -50,7 +50,8 @@ extern "C" {
 
 // USB_CHECK
 #define EXT_PWR_DETECT (32 + 3)
-#define ADC_V (0 + 8)
+// The battery sense, read as a digital input for isBatteryConnect(). V1 also ties P0.08 to it, through R43.
+#define ADC_V (0 + 4)
 
 // #define LED_BLUE PIN_LED1
 #define LED_STATE_ON 1 // State when LED is lit  // LED灯亮时的状态
@@ -142,16 +143,18 @@ External serial flash WP25R1635FZUIL0
 // #define HAS_GPS 1
 #define GPS_L76K
 
-// Older boards have an L76K, newer ones (V2.0) an AG3352. variant.cpp reads the strap on P1.02 at boot.
-// AG3352 boards pull it down (100K); on L76K boards it is the L76K's STANDBY input, which floats high.
-#define PIN_GPS_VERSION (32 + 2) // strap: LOW = AG3352, HIGH = L76K
+// Older boards (V1) have an L76K, newer ones (V2.0) an AG3352. variant.cpp tells them apart at boot: V1 ties P0.08 to
+// the battery sense through R43, where V2 only wires it to the GPS switch.
 extern int m1HasAg3352;
 
+// Decided at boot, after the probe's speed tables are built, so sweep the common speeds rather than fix one.
 #define GPS_BAUDRATE (m1HasAg3352 ? 115200 : 9600)
+#define GPS_BAUDRATE_FIXED 0
 
 // L76K: standby, low means allow sleep, high means force wake. AG3352: the strap, so GPS.cpp leaves it alone.
 #define PIN_GPS_STANDBY (32 + 2)
 #define GPS_STANDBY_L76K_ONLY
+#define GPS_AIROHA_FITTED (m1HasAg3352) // park and wake it as an Airoha until the probe has named a model
 
 // L76K: REINIT, left untouched as before. AG3352: RESET, inverted by Q16 (high asserts RESETB).
 // The AG3352 is reset at boot (variant.cpp) and to wake it from backup mode.
@@ -159,21 +162,24 @@ extern int m1HasAg3352;
 #define GPS_RESET_IN_USE (m1HasAg3352)
 
 // AG3352 only: P1.01 enables the 0.8 V core supply; the 1.8 V rail is always on. L76K boards have no EN (0 = none).
-#define PIN_GPS_EN (m1HasAg3352 ? (32 + 1) : 0)
+#define GPS_EN_AG3352 (32 + 1)
+#define PIN_GPS_EN (m1HasAg3352 ? GPS_EN_AG3352 : 0)
 
 // AG3352 only. idle_int: rests HIGH, pulled LOW while sending the sleep command.
 #define GPS_SLEEP_INT (0 + 11)
 #define GPS_AIROHA_RESET_WAKE // sleep in backup mode ($PAIR650) with EN low; EN high then a RESETB pulse wakes it
 #define PIN_GPS_PPS (32 + 0)  // AG3352 1PPS output, configured as an input by GPS.cpp
 
-// The two receivers' UARTs are wired the opposite way round: the L76K transmits on P1.09, the AG3352 on P1.08.
-#define GPS_TX_PIN (m1HasAg3352 ? (32 + 9) : (32 + 8)) // This is for bits going TOWARDS the GPS
-#define GPS_RX_PIN (m1HasAg3352 ? (32 + 8) : (32 + 9)) // This is for bits going TOWARDS the CPU
+// The L76K transmits on P1.09. The AG3352 is documented as transmitting on P1.08; variant.cpp checks which line it uses.
+extern uint8_t m1GpsTxPin, m1GpsRxPin;
+#define GPS_TX_PIN m1GpsTxPin // This is for bits going TOWARDS the GPS
+#define GPS_RX_PIN m1GpsRxPin // This is for bits going TOWARDS the CPU
 
 #define GPS_THREAD_INTERVAL 50
 
 // GPS开关判断, HIGH = on. L76K boards: P1.01. AG3352 boards: P0.08, held high by a 100K pull-up when switched on.
-#define PIN_GPS_SWITCH (m1HasAg3352 ? (0 + 8) : (32 + 1))
+#define GPS_SWITCH_AG3352 (0 + 8)
+#define PIN_GPS_SWITCH (m1HasAg3352 ? GPS_SWITCH_AG3352 : (32 + 1))
 
 // GPS.cpp sets the pins for the fitted receiver; these are only Serial1's defaults.
 #define PIN_SERIAL1_TX (32 + 8)
@@ -203,7 +209,8 @@ extern int m1HasAg3352;
 #undef AREF_VOLTAGE
 #define AREF_VOLTAGE 3.0
 #define VBAT_AR_INTERNAL AR_INTERNAL_3_0
-#define ADC_MULTIPLIER (2.02F)
+#define ADC_MULTIPLIER (2.015F)
+#define OCV_ARRAY 4200, 4077, 4028, 3946, 3873, 3807, 3734, 3652, 3562, 3464, 3300
 
 // #define HAS_SCREEN 0
 
