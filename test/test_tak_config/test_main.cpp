@@ -22,6 +22,7 @@ static constexpr NodeNum ADMIN_NODE = 0x0B0B0B0B;
 
 static MockMeshService *mockService = nullptr;
 static AdminModuleTestShim *admin = nullptr;
+static NodeDB *testNodeDB = nullptr;
 
 // A set_module_config payload carrying the tak submessage, as the phone app sends it.
 static meshtastic_ModuleConfig makeTakModuleConfig(meshtastic_Team team, meshtastic_MemberRole role)
@@ -78,17 +79,24 @@ void test_clearingToUnspecifiedIsStored(void)
     TEST_ASSERT_EQUAL(meshtastic_MemberRole_Unspecifed, moduleConfig.tak.role);
 }
 
-// The reported symptom end to end: values set, saved, reloaded (as a reboot would), and read back.
+// The reported symptom end to end: values set, written to flash, cold-booted, and read back.
+// The store's own SEGMENT_MODULECONFIG path is what must carry the submessage; an in-memory
+// nanopb round-trip cannot see a missing segment write.
 void test_valuesSurviveSaveLoad(void)
 {
+    testNodeDB = new NodeDB();
+    nodeDB = testNodeDB;
+
     admin->handleSetModuleConfig(makeTakModuleConfig(meshtastic_Team_Magenta, meshtastic_MemberRole_Sniper));
+    TEST_ASSERT_TRUE(testNodeDB->saveToDisk(SEGMENT_MODULECONFIG));
 
-    uint8_t buf[meshtastic_LocalModuleConfig_size];
-    size_t len = pb_encode_to_bytes(buf, sizeof(buf), &meshtastic_LocalModuleConfig_msg, &moduleConfig);
-
+    delete testNodeDB;
+    testNodeDB = nullptr;
+    nodeDB = nullptr;
     moduleConfig = meshtastic_LocalModuleConfig_init_zero;
-    TEST_ASSERT_TRUE(pb_decode_from_bytes(buf, len, &meshtastic_LocalModuleConfig_msg, &moduleConfig));
 
+    testNodeDB = new NodeDB(); // cold boot: constructor loads moduleConfig from disk
+    nodeDB = testNodeDB;
     TEST_ASSERT_TRUE(moduleConfig.has_tak);
     TEST_ASSERT_EQUAL(meshtastic_Team_Magenta, moduleConfig.tak.team);
     TEST_ASSERT_EQUAL(meshtastic_MemberRole_Sniper, moduleConfig.tak.role);
@@ -128,6 +136,11 @@ void setUp(void)
 
 void tearDown(void)
 {
+    if (testNodeDB) {
+        delete testNodeDB;
+        testNodeDB = nullptr;
+        nodeDB = nullptr;
+    }
     admin->drainReply();
     delete admin;
     admin = nullptr;
