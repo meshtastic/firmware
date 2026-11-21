@@ -137,6 +137,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_SEEED_SOLAR_NODE
 #elif defined(HELTEC_MESH_POCKET)
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_MESH_POCKET
+#elif defined(HELTEC_MESH_POCKET_V2)
+#define HW_VENDOR meshtastic_HardwareModel_HELTEC_MESH_POCKET_V2
 #elif defined(SEEED_WIO_TRACKER_L1_EINK)
 #define HW_VENDOR meshtastic_HardwareModel_SEEED_WIO_TRACKER_L1_EINK
 #elif defined(SEEED_WIO_TRACKER_L1_PRO_1W)
