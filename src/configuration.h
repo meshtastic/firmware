@@ -69,6 +69,15 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #undef USE_EINK
 #endif
 
+// What BaseUI draws for an e-ink panel, apart from how the panel is driven; meshtasticd sets it to render an e-ink device.
+#ifndef BASEUI_EINK_LAYOUT
+#ifdef USE_EINK
+#define BASEUI_EINK_LAYOUT 1
+#else
+#define BASEUI_EINK_LAYOUT 0
+#endif
+#endif
+
 // -----------------------------------------------------------------------------
 // Version
 // -----------------------------------------------------------------------------
@@ -685,6 +694,24 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define HAS_MUI_MIRROR 1
 #else
 #define HAS_MUI_MIRROR 0
+#endif
+
+// BaseUI's font tier, derived from the panel type; meshtasticd sets it directly to render another device's UI.
+#ifndef BASEUI_LARGE_FONTS
+#if (BASEUI_EINK_LAYOUT || defined(HAS_SPI_TFT)) && !defined(DISPLAY_FORCE_SMALL_FONTS)
+#define BASEUI_LARGE_FONTS 1
+#else
+#define BASEUI_LARGE_FONTS 0
+#endif
+#endif
+
+// nRF52 draws its large font at 16pt to save flash; overridable for the same reason.
+#ifndef BASEUI_LARGE_FONT_16PT
+#if defined(ARCH_NRF52) && (!defined(MESHTASTIC_LARGE_FONT_24PT) || MESHTASTIC_LARGE_FONT_24PT == 0)
+#define BASEUI_LARGE_FONT_16PT 1
+#else
+#define BASEUI_LARGE_FONT_16PT 0
+#endif
 #endif
 
 #ifndef USE_ETHERNET_DEFAULT

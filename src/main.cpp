@@ -115,6 +115,9 @@ LinuxBluetooth *linuxBluetooth = nullptr;
 #include "platform/portduino/NativeDiscovery.h"
 #endif
 #include "platform/portduino/PortduinoGlue.h"
+#if HAS_SCREEN
+#include "graphics/VirtualDisplay.h"
+#endif
 #ifdef _WIN32
 #include "platform/portduino/windows/WindowsService.h"
 #endif
@@ -1421,8 +1424,10 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
             deviceMetadata.display.height = dispdev->getHeight();
             deviceMetadata.display.format = meshtastic_DisplayFrame_Format_MONO_VLSB;
 #if defined(ARCH_PORTDUINO)
-            // The native panel is selected at runtime; UNSPECIFIED is honest until derived from portduino_config.
-            deviceMetadata.display.panel_class = meshtastic_DisplayInfo_PanelClass_PANEL_CLASS_UNSPECIFIED;
+            // The native panel is selected at runtime; only the Virtual panel knows the device class it renders as.
+            deviceMetadata.display.panel_class = portduino_config.displayPanel == virtual_screen
+                                                     ? graphics::VirtualDisplay::panelClass()
+                                                     : meshtastic_DisplayInfo_PanelClass_PANEL_CLASS_UNSPECIFIED;
 #elif defined(USE_EINK)
             deviceMetadata.display.panel_class = meshtastic_DisplayInfo_PanelClass_EINK;
 #elif defined(USE_HUB75) || defined(HAS_HUB75_NATIVE)

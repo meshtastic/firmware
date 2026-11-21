@@ -164,6 +164,12 @@ Display:
 ### You can also specify the spi device for the display to use
 # spidev: spidev0.0
 
+### Virtual panel: no hardware, seen only through the screen mirror (capture_display, the app's mirror).
+### BaseUI draws as it would on a device of this size; the native-baseui-* envs pick the device class.
+#  Panel: Virtual
+#  Width: 128
+#  Height: 64
+
 ### HUB75 RGB LED matrix panel (Raspberry Pi only, via hzeller/rpi-rgb-led-matrix).
 ### Requires the librgbmatrix library to be installed (so `pkg-config rgbmatrix` resolves) and
 ### the firmware built with it present. meshtasticd must run as root (or with /dev/gpiomem

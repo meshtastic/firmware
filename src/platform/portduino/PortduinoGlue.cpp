@@ -297,6 +297,7 @@ static void checkSpidevBufsiz()
     case x11:
     case fb:
     case hub75:
+    case virtual_screen:
         return; // not driven over spidev
     default:
         break;
