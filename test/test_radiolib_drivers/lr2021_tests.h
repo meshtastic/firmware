@@ -7,17 +7,6 @@
 #include "TestUtil.h"
 #include <modules/LR2021/LR2021_registers.h>
 
-#include <type_traits>
-#include <utility>
-
-// jgromes/RadioLib#1864 added the DC-DC workaround together with a public setRegulatorDCDC(), so that
-// method marks a RadioLib the DC-DC tests apply to. Earlier pins (7.7.1 and before) have neither.
-template <typename T, typename = void> struct HasDcdcWorkaround : std::false_type {
-};
-template <typename T>
-struct HasDcdcWorkaround<T, std::void_t<decltype(std::declval<T &>().setRegulatorDCDC())>> : std::true_type {
-};
-
 // begin() sets a frequency before anything else; without one the DC-DC workaround's closing
 // setFrequency(freqMHz) fails with INVALID_FREQUENCY. The log starts after it.
 static void lr2021Tune(RecordingHal &hal, LR2021 &radio)
@@ -144,7 +133,7 @@ static void test_lr2021_packet_setters_send_packet_params()
     LR2021_RADIO(hal);
     TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_NONE, radio.setPreambleLength(16));
     TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_NONE, radio.setCRC(2));
-    TEST_ASSERT_TRUE(hal.count(op16(RADIOLIB_LR2021_CMD_SET_LORA_PACKET_PARAMS)) >= 2);
+    TEST_ASSERT_EQUAL_UINT32(2, hal.count(op16(RADIOLIB_LR2021_CMD_SET_LORA_PACKET_PARAMS)));
 }
 
 static void test_lr2021_other_setters_and_modes_succeed()
@@ -155,9 +144,9 @@ static void test_lr2021_other_setters_and_modes_succeed()
     TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_NONE, radio.standby());
     TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_NONE, radio.startReceive());
     TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_NONE, radio.sleep());
-    TEST_ASSERT_TRUE(hal.count(op16(RADIOLIB_LR2021_CMD_SET_LORA_SYNCWORD)) >= 1);
-    TEST_ASSERT_TRUE(hal.count(op16(RADIOLIB_LR2021_CMD_SET_TX_PARAMS)) >= 1);
-    TEST_ASSERT_TRUE(hal.count(op16(RADIOLIB_LR2021_CMD_SET_RX)) >= 1);
+    TEST_ASSERT_EQUAL_UINT32(1, hal.count(op16(RADIOLIB_LR2021_CMD_SET_LORA_SYNCWORD)));
+    TEST_ASSERT_EQUAL_UINT32(1, hal.count(op16(RADIOLIB_LR2021_CMD_SET_TX_PARAMS)));
+    TEST_ASSERT_EQUAL_UINT32(1, hal.count(op16(RADIOLIB_LR2021_CMD_SET_RX)));
 }
 
 // --- CAD: LR20x0Interface::isChannelActive() -> startChannelScan(cfg) -> startCad() ---
@@ -470,9 +459,8 @@ static void test_lr2021_refused_settx_found_by_a_status_read()
 #endif
 }
 
-// jgromes/RadioLib#1882 adds SetLoraCadParams' own exit defines; earlier pins have only the
-// SetCadParams ones. These are the values the bench LR2021 accepted (DS 2.2 Table 6-18).
-#ifdef RADIOLIB_LR2021_LORA_CAD_EXIT_MODE_RX
+// SetLoraCadParams' own exit defines (jgromes/RadioLib#1882): the values the bench LR2021 accepted
+// (DS 2.2 Table 6-18).
 static void test_lr2021_lora_cad_exit_defines_match_datasheet()
 {
     TEST_ASSERT_EQUAL_UINT8(0x00, RADIOLIB_LR2021_LORA_CAD_EXIT_MODE_FALLBACK);
@@ -494,10 +482,9 @@ static void test_lr2021_lora_cad_exit_defines_start_a_cad()
         TEST_ASSERT_EQUAL_UINT32(1, hal.count(op16(RADIOLIB_LR2021_CMD_SET_LORA_CAD)));
     }
 }
-#endif
 
-// From 7.8.0 (jgromes/RadioLib@f1af229) RadioLib parses the status of a command with no payload as
-// well, so a refusal in the first byte of SetLoraCad fails the scan; before, the scan started.
+// RadioLib parses the status of a command with no payload too (jgromes/RadioLib@f1af229), so a
+// refusal in the first byte of SetLoraCad fails the scan instead of starting it.
 static void test_lr2021_cad_refused_start_returns_spi_cmd_invalid()
 {
     LR2021_RADIO(hal);
@@ -516,13 +503,11 @@ static void test_lr2021_cad_refused_start_returns_spi_cmd_invalid()
 
 static void runLr2021Tests()
 {
-    if constexpr (HasDcdcWorkaround<LR2021>::value) {
-        RUN_TEST(test_lr2021_setRxPath_runs_the_dcdc_workaround);
-        RUN_TEST(test_lr2021_dcdc_adc_ctrl_read_asks_for_one_word);
-        RUN_TEST(test_lr2021_dcdc_freq_lf_write_sends_one_word);
-        RUN_TEST(test_lr2021_dcdc_workaround_retunes_to_the_set_frequency);
-        RUN_TEST(test_lr2021_dcdc_refused_register_write_fails_the_setter);
-    }
+    RUN_TEST(test_lr2021_setRxPath_runs_the_dcdc_workaround);
+    RUN_TEST(test_lr2021_dcdc_adc_ctrl_read_asks_for_one_word);
+    RUN_TEST(test_lr2021_dcdc_freq_lf_write_sends_one_word);
+    RUN_TEST(test_lr2021_dcdc_workaround_retunes_to_the_set_frequency);
+    RUN_TEST(test_lr2021_dcdc_refused_register_write_fails_the_setter);
     RUN_TEST(test_lr2021_setFrequency_sends_hertz);
     RUN_TEST(test_lr2021_lora_modulation_setters_send_modulation_params);
     RUN_TEST(test_lr2021_coding_rate_long_interleaves_except_4_7);
@@ -545,10 +530,7 @@ static void runLr2021Tests()
     RUN_TEST(test_lr2021_cad_accepted_exit_bytes_start_a_cad);
     RUN_TEST(test_lr2021_cad_params_failed_returns_spi_cmd_failed);
     RUN_TEST(test_lr2021_refused_settx_found_by_a_status_read);
-#ifdef RADIOLIB_LR2021_LORA_CAD_EXIT_MODE_RX
     RUN_TEST(test_lr2021_lora_cad_exit_defines_match_datasheet);
     RUN_TEST(test_lr2021_lora_cad_exit_defines_start_a_cad);
-#endif
-    if constexpr (RADIOLIB_AT_LEAST(7, 8, 0))
-        RUN_TEST(test_lr2021_cad_refused_start_returns_spi_cmd_invalid);
+    RUN_TEST(test_lr2021_cad_refused_start_returns_spi_cmd_invalid);
 }

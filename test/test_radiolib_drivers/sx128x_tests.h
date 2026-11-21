@@ -68,7 +68,7 @@ static void test_sx128x_packet_setters_send_packet_params()
     SX128X_RADIO(hal);
     TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_NONE, radio.setPreambleLength(16));
     TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_NONE, radio.setCRC(2));
-    TEST_ASSERT_TRUE(hal.count({RADIOLIB_SX128X_CMD_SET_PACKET_PARAMS}) >= 2);
+    TEST_ASSERT_EQUAL_UINT32(2, hal.count({RADIOLIB_SX128X_CMD_SET_PACKET_PARAMS}));
 }
 
 static void test_sx128x_other_setters_and_modes_succeed()
@@ -79,14 +79,13 @@ static void test_sx128x_other_setters_and_modes_succeed()
     TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_NONE, radio.standby());
     TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_NONE, radio.startReceive());
     TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_NONE, radio.sleep());
-    TEST_ASSERT_TRUE(hal.count({RADIOLIB_SX128X_CMD_SET_TX_PARAMS}) >= 1);
-    TEST_ASSERT_TRUE(hal.count({RADIOLIB_SX128X_CMD_SET_RX}) >= 1);
+    TEST_ASSERT_EQUAL_UINT32(1, hal.count({RADIOLIB_SX128X_CMD_SET_TX_PARAMS}));
+    TEST_ASSERT_EQUAL_UINT32(1, hal.count({RADIOLIB_SX128X_CMD_SET_RX}));
 }
 
-// From 7.8.0 (jgromes/RadioLib#1872) the SX128x status is the first byte of every exchange, not the
-// second. These run begin(), the call SX128xInterface::init() makes, so they see RadioLib's own
-// framing rather than sx128xFraming()'s copy. begin() first reads the version string: opcode,
-// address(2) and a status byte, then the string.
+// The SX128x status is the first byte of every exchange, not the second (jgromes/RadioLib#1872). These run begin(), the call
+// SX128xInterface::init() makes, so they see RadioLib's own framing rather than sx128xFraming()'s copy. begin() first reads the
+// version string: opcode, address(2) and a status byte, then the string.
 #define SX128X_BEGIN_RADIO(hal)                                                                                                  \
     RecordingHal &hal = freshHal();                                                                                              \
     hal.reply({RADIOLIB_SX128X_CMD_GET_PACKET_TYPE}, RADIOLIB_SX128X_PACKET_TYPE_LORA);                                          \
@@ -131,8 +130,6 @@ static void runSx128xTests()
     RUN_TEST(test_sx128x_coding_rate_long_interleaves_except_4_7);
     RUN_TEST(test_sx128x_packet_setters_send_packet_params);
     RUN_TEST(test_sx128x_other_setters_and_modes_succeed);
-    if constexpr (RADIOLIB_AT_LEAST(7, 8, 0)) {
-        RUN_TEST(test_sx128x_begin_reads_status_from_the_first_byte);
-        RUN_TEST(test_sx128x_status_error_in_first_byte_fails_begin);
-    }
+    RUN_TEST(test_sx128x_begin_reads_status_from_the_first_byte);
+    RUN_TEST(test_sx128x_status_error_in_first_byte_fails_begin);
 }

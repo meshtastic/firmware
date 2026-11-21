@@ -131,9 +131,16 @@ static void test_lr20x0_launchTransmit_reports_a_refused_settx()
     TEST_ASSERT_EQUAL_UINT32(1, hal.count(op16(RADIOLIB_LR2021_CMD_SET_TX)));
 }
 
-// Grows here:
-//   a scan that returns an error (-706, -707, -705) must not read as a free channel. Today every
-//   driver's isChannelActive() returns false on it; which verdict replaces that is undecided.
+// develop's verdict on a failed scan: a CAD the chip refuses (-706) reads as a free channel, after one
+// attempt. #12038 replaces this with ChannelScan::Failed; update this test there.
+static void test_lr20x0_isChannelActive_reports_a_refused_cad_free()
+{
+    RecordingHal &hal = freshHal();
+    auto &iface = lr20x0Interface(hal);
+    hal.rejectUnless(op16(RADIOLIB_LR2021_CMD_SET_LORA_CAD), [](const std::vector<uint8_t> &) { return false; }, 0x02);
+    TEST_ASSERT_FALSE(iface.isChannelActive());
+    TEST_ASSERT_EQUAL_UINT32(1, hal.count(op16(RADIOLIB_LR2021_CMD_SET_LORA_CAD)));
+}
 
 static void runLr20x0InterfaceTests()
 {
@@ -141,4 +148,5 @@ static void runLr20x0InterfaceTests()
     RUN_TEST(test_lr20x0_isChannelActive_reports_a_detected_preamble_busy);
     RUN_TEST(test_lr20x0_isChannelActive_reports_cad_done_free);
     RUN_TEST(test_lr20x0_launchTransmit_reports_a_refused_settx);
+    RUN_TEST(test_lr20x0_isChannelActive_reports_a_refused_cad_free);
 }
