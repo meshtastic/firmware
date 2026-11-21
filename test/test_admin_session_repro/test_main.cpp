@@ -1,7 +1,15 @@
 // Deterministic reproduction of the admin session-key behavior discussed on PR #10669
 // (ndoo's "Admin message without session_key!" report), plus the remote-vs-local redaction of
 // secret material in admin GET responses, plus the request/response pairing that decides which
-// admin responses are accepted at all, plus the origin check on local (from == 0) admin.
+// admin responses are accepted at all, plus the origin check on local (from == 0) admin, plus the
+// licensed-mode handling of fields the protobufs mark sensitive.
+//
+// Licensed (ham) admin crosses the air unencrypted, so AdminModule blanks every sensitive field in a
+// reply to a licensed remote, refuses a licensed remote setter that sets one (a blank one keeps the
+// stored value, so a read-modify-write through a redacted response does not erase it), and
+// AdminModule::mayTransmit stops a local client's licensed admin packet that carries one from leaving
+// the node. Without these, a wifi password, MQTT password or channel key goes out in the clear in the
+// reply, or a remote overwrites one with a value it just broadcast to every listener.
 //
 // Drives the REAL incoming-admin path (AdminModule::handleReceivedProtobuf) with a remote
 // (from != 0) PKC-authorized set_owner, exercising the exact checkPassKey/setPassKey gate.
@@ -301,6 +309,162 @@ void test_licensed_setter_unsigned_is_rejected(void)
     admin->drainReply();
 
     TEST_ASSERT_EQUAL_STRING("Original", owner.long_name);
+}
+
+// A directed, Router-verified licensed admin packet from the allowlisted ADMIN_NODE carrying `m`,
+// which gets a live session passkey so a setter passes the session gate.
+static meshtastic_MeshPacket makeLicensedRemote(meshtastic_AdminMessage &m, bool wantResponse)
+{
+    meshtastic_AdminMessage session = meshtastic_AdminMessage_init_zero;
+    admin->setPassKey(&session);
+    m.session_passkey = session.session_passkey;
+
+    meshtastic_MeshPacket mp = meshtastic_MeshPacket_init_zero;
+    mp.from = ADMIN_NODE;
+    mp.to = LOCAL_NODE;
+    mp.channel = 0;
+    mp.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    mp.decoded.portnum = meshtastic_PortNum_ADMIN_APP;
+    mp.decoded.want_response = wantResponse;
+    mp.xeddsa_signed = true;
+    mp.public_key.size = 32;
+    memcpy(mp.public_key.bytes, ADMIN_KEY, 32);
+    return mp;
+}
+
+static meshtastic_AdminMessage makeSetNetwork(const char *ssid, const char *psk)
+{
+    meshtastic_AdminMessage m = meshtastic_AdminMessage_init_zero;
+    m.which_payload_variant = meshtastic_AdminMessage_set_config_tag;
+    m.set_config.which_payload_variant = meshtastic_Config_network_tag;
+    m.set_config.payload_variant.network = config.network;
+    strncpy(m.set_config.payload_variant.network.wifi_ssid, ssid, sizeof(m.set_config.payload_variant.network.wifi_ssid) - 1);
+    strncpy(m.set_config.payload_variant.network.wifi_psk, psk, sizeof(m.set_config.payload_variant.network.wifi_psk) - 1);
+    return m;
+}
+
+static bool decodeNetworkFromReply(meshtastic_MeshPacket *reply, meshtastic_Config_NetworkConfig &out);
+
+// The reply goes out unencrypted, so not even the "sekrit" placeholder a PKC remote gets survives.
+void test_licensed_remote_get_network_config_blanks_wifi_psk(void)
+{
+    owner.is_licensed = true;
+    strcpy(config.network.wifi_ssid, "HomeNet");
+    strcpy(config.network.wifi_psk, "hunter2hunter2");
+
+    meshtastic_AdminMessage m = meshtastic_AdminMessage_init_zero;
+    m.which_payload_variant = meshtastic_AdminMessage_get_config_request_tag;
+    m.get_config_request = meshtastic_AdminMessage_ConfigType_NETWORK_CONFIG;
+    meshtastic_MeshPacket mp = makeLicensedRemote(m, true);
+    admin->handleReceivedProtobuf(mp, &m);
+
+    meshtastic_Config_NetworkConfig net;
+    TEST_ASSERT_TRUE(decodeNetworkFromReply(admin->reply(), net));
+    TEST_ASSERT_EQUAL_STRING("", net.wifi_psk);
+    TEST_ASSERT_EQUAL_STRING("HomeNet", net.wifi_ssid);
+    admin->drainReply();
+}
+
+// The psk sits one submessage down (Channel.settings), so this pins that redaction is not top-level only.
+void test_licensed_remote_get_channel_blanks_psk(void)
+{
+    owner.is_licensed = true;
+    TEST_ASSERT_GREATER_THAN(0, channels.getByIndex(0).settings.psk.size); // fixture: the default key
+
+    meshtastic_AdminMessage m = meshtastic_AdminMessage_init_zero;
+    m.which_payload_variant = meshtastic_AdminMessage_get_channel_request_tag;
+    m.get_channel_request = 1; // 1-based
+    meshtastic_MeshPacket mp = makeLicensedRemote(m, true);
+    admin->handleReceivedProtobuf(mp, &m);
+
+    meshtastic_AdminMessage am = meshtastic_AdminMessage_init_zero;
+    meshtastic_MeshPacket *reply = admin->reply();
+    TEST_ASSERT_NOT_NULL(reply);
+    TEST_ASSERT_EQUAL(meshtastic_PortNum_ADMIN_APP, reply->decoded.portnum);
+    TEST_ASSERT_TRUE(
+        pb_decode_from_bytes(reply->decoded.payload.bytes, reply->decoded.payload.size, &meshtastic_AdminMessage_msg, &am));
+    TEST_ASSERT_EQUAL(meshtastic_AdminMessage_get_channel_response_tag, am.which_payload_variant);
+    TEST_ASSERT_EQUAL(0, am.get_channel_response.settings.psk.size);
+    admin->drainReply();
+}
+
+void test_licensed_remote_setting_a_sensitive_field_is_refused(void)
+{
+    owner.is_licensed = true;
+    strcpy(config.network.wifi_ssid, "HomeNet");
+    strcpy(config.network.wifi_psk, "hunter2hunter2");
+
+    meshtastic_AdminMessage m = makeSetNetwork("EvilNet", "attacker");
+    meshtastic_MeshPacket mp = makeLicensedRemote(m, true);
+    admin->handleReceivedProtobuf(mp, &m);
+
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_NOT_AUTHORIZED, replyRoutingError(admin->reply()));
+    admin->drainReply();
+    TEST_ASSERT_EQUAL_STRING("HomeNet", config.network.wifi_ssid);
+    TEST_ASSERT_EQUAL_STRING("hunter2hunter2", config.network.wifi_psk);
+}
+
+// What a client writes back after a licensed GET: the psk blank. The edit applies and the stored psk stays.
+void test_licensed_remote_blank_sensitive_field_keeps_the_stored_value(void)
+{
+    owner.is_licensed = true;
+    strcpy(config.network.wifi_ssid, "HomeNet");
+    strcpy(config.network.wifi_psk, "hunter2hunter2");
+
+    meshtastic_AdminMessage m = makeSetNetwork("NewNet", "");
+    meshtastic_MeshPacket mp = makeLicensedRemote(m, false);
+    admin->handleReceivedProtobuf(mp, &m);
+
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_NONE, replyRoutingError(admin->reply()));
+    admin->drainReply();
+    TEST_ASSERT_EQUAL_STRING("NewNet", config.network.wifi_ssid);
+    TEST_ASSERT_EQUAL_STRING("hunter2hunter2", config.network.wifi_psk);
+}
+
+// Control: a PKC remote still sets the psk, so the refusal above is licensed-specific.
+void test_pkc_remote_still_sets_a_sensitive_field(void)
+{
+    strcpy(config.network.wifi_psk, "hunter2hunter2");
+
+    meshtastic_AdminMessage m = makeSetNetwork("HomeNet", "rotated-psk");
+    meshtastic_MeshPacket mp = makeLicensedRemote(m, false);
+    mp.xeddsa_signed = false;
+    mp.pki_encrypted = true;
+    admin->handleReceivedProtobuf(mp, &m);
+    admin->drainReply();
+
+    TEST_ASSERT_EQUAL_STRING("rotated-psk", config.network.wifi_psk);
+}
+
+static meshtastic_MeshPacket makeOutgoingAdmin(NodeNum to, const meshtastic_AdminMessage &m)
+{
+    meshtastic_MeshPacket p = meshtastic_MeshPacket_init_zero;
+    p.to = to;
+    p.id = REQUEST_ID;
+    p.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    p.decoded.portnum = meshtastic_PortNum_ADMIN_APP;
+    p.decoded.payload.size =
+        pb_encode_to_bytes(p.decoded.payload.bytes, sizeof(p.decoded.payload.bytes), &meshtastic_AdminMessage_msg, &m);
+    return p;
+}
+
+// A licensed node must not put a client's secret on the air, even if the remote would refuse it.
+void test_licensed_client_admin_carrying_a_secret_is_not_transmitted(void)
+{
+    owner.is_licensed = true;
+    TEST_ASSERT_FALSE(AdminModule::mayTransmit(makeOutgoingAdmin(QUERIED_NODE, makeSetNetwork("NewNet", "hunter2"))));
+    TEST_ASSERT_FALSE(AdminModule::mayTransmit(makeOutgoingAdmin(NODENUM_BROADCAST, makeSetNetwork("NewNet", "hunter2"))));
+}
+
+// Controls: a blank secret, a secret addressed to this node (never transmitted), and non-licensed
+// operation (PKC-encrypted) all go through.
+void test_client_admin_that_is_blank_local_or_unlicensed_is_transmitted(void)
+{
+    owner.is_licensed = true;
+    TEST_ASSERT_TRUE(AdminModule::mayTransmit(makeOutgoingAdmin(QUERIED_NODE, makeSetNetwork("NewNet", ""))));
+    TEST_ASSERT_TRUE(AdminModule::mayTransmit(makeOutgoingAdmin(LOCAL_NODE, makeSetNetwork("NewNet", "hunter2"))));
+    owner.is_licensed = false;
+    TEST_ASSERT_TRUE(AdminModule::mayTransmit(makeOutgoingAdmin(QUERIED_NODE, makeSetNetwork("NewNet", "hunter2"))));
 }
 
 // The node's session key is minted only by setPassKey (which runs when it answers an admin GET),
@@ -869,6 +1033,13 @@ void setup()
     RUN_TEST(test_licensed_signed_setter_unauthorized_signer_is_rejected);
     RUN_TEST(test_licensed_signed_setter_broadcast_is_rejected);
     RUN_TEST(test_licensed_setter_unsigned_is_rejected);
+    RUN_TEST(test_licensed_remote_get_network_config_blanks_wifi_psk);
+    RUN_TEST(test_licensed_remote_get_channel_blanks_psk);
+    RUN_TEST(test_licensed_remote_setting_a_sensitive_field_is_refused);
+    RUN_TEST(test_licensed_remote_blank_sensitive_field_keeps_the_stored_value);
+    RUN_TEST(test_pkc_remote_still_sets_a_sensitive_field);
+    RUN_TEST(test_licensed_client_admin_carrying_a_secret_is_not_transmitted);
+    RUN_TEST(test_client_admin_that_is_blank_local_or_unlicensed_is_transmitted);
     RUN_TEST(test_expected_session_key_is_zero_before_any_get);
     RUN_TEST(test_session_gate_accepts_key_from_a_get_response);
     RUN_TEST(test_remote_security_config_omits_private_key);
