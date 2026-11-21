@@ -1259,7 +1259,9 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
                              "Custom LoRa config airtime %ums exceeds 4s limit for %s, clamped to %s", maxAirtimeMs,
                              newRegion->name, defaultName);
                     LOG_INFO("%s", err_string);
-                    sendErrorNotification(err_string, meshtastic_LogRecord_Level_INFO);
+                    sendErrorNotification(err_string,
+                                          meshtastic_ClientNotification_NotificationType_LORA_PRESET_INVALID_FOR_REGION,
+                                          meshtastic_LogRecord_Level_INFO);
                     loraConfig.use_preset = true;
                     loraConfig.modem_preset = newRegion->getDefaultPreset();
                     check_bw = modemPresetToBwKHz(loraConfig.modem_preset, newRegion->wideLora);
