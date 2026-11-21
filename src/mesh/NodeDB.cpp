@@ -1939,10 +1939,34 @@ void NodeDB::initModuleConfigIntervals()
     moduleConfig.telemetry.environment_screen_enabled = USERPREFS_CONFIG_ENV_SCREEN_SCREEN_ENABLED;
 #endif
 
+#ifdef USERPREFS_CONFIG_ENV_TELEM_READ_INTERVAL
+    moduleConfig.telemetry.environment_telemetry_read_interval = USERPREFS_CONFIG_ENV_TELEM_READ_INTERVAL;
+#else
+    moduleConfig.telemetry.environment_telemetry_read_interval = 0;
+#endif
+
+#ifdef USERPREFS_CONFIG_ENV_TELEM_PHONE_INTERVAL
+    moduleConfig.telemetry.environment_phone_interval = USERPREFS_CONFIG_ENV_TELEM_PHONE_INTERVAL;
+#else
+    moduleConfig.telemetry.environment_phone_interval = 0;
+#endif
+
 #ifdef USERPREFS_CONFIG_AQ_TELEM_UPDATE_INTERVAL
     moduleConfig.telemetry.air_quality_interval = USERPREFS_CONFIG_AQ_TELEM_UPDATE_INTERVAL;
 #else
     moduleConfig.telemetry.air_quality_interval = 0;
+#endif
+
+#ifdef USERPREFS_CONFIG_AQ_TELEM_READ_INTERVAL
+    moduleConfig.telemetry.air_quality_telemetry_read_interval = USERPREFS_CONFIG_AQ_TELEM_READ_INTERVAL;
+#else
+    moduleConfig.telemetry.air_quality_telemetry_read_interval = 0;
+#endif
+
+#ifdef USERPREFS_CONFIG_AQ_TELEM_PHONE_INTERVAL
+    moduleConfig.telemetry.air_quality_phone_interval = USERPREFS_CONFIG_AQ_TELEM_PHONE_INTERVAL;
+#else
+    moduleConfig.telemetry.air_quality_phone_interval = 0;
 #endif
 
 #ifdef USERPREFS_CONFIG_AQ_MEASUREMENT_ENABLED

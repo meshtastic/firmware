@@ -8,6 +8,7 @@
 #include "mesh/MeshService.h"
 #include "mesh/NodeDB.h"
 #include "mesh/Router.h"
+#include "mesh/generated/meshtastic/telemetry.pb.h"
 #include "modules/RoutingModule.h"
 #include "mqtt/MQTT.h"
 #include "mqtt/ServiceEnvelope.h"
@@ -471,6 +472,46 @@ void test_sendDirectlyConnectedEncrypted(void)
     TEST_ASSERT_EQUAL_STRING("msh/2/e/test/!12345678", topic.c_str());
     TEST_ASSERT_TRUE(env.validDecode);
     TEST_ASSERT_EQUAL(encrypted.id, env.packet->id);
+}
+
+// Own environment telemetry on a SENSOR with the direct telemetry uplink: the normal uplink skips it, so each
+// reading reaches the broker once.
+static meshtastic_MeshPacket makeOwnEnvironmentTelemetry(uint32_t requestId)
+{
+    meshtastic_Telemetry t = meshtastic_Telemetry_init_zero;
+    t.which_variant = meshtastic_Telemetry_environment_metrics_tag;
+    t.variant.environment_metrics.has_temperature = true;
+    t.variant.environment_metrics.temperature = 21.5f;
+    meshtastic_MeshPacket packet = decoded;
+    packet.from = 0; // from us
+    packet.to = NODENUM_BROADCAST;
+    packet.decoded.portnum = meshtastic_PortNum_TELEMETRY_APP;
+    packet.decoded.request_id = requestId;
+    packet.decoded.payload.size =
+        pb_encode_to_bytes(packet.decoded.payload.bytes, sizeof(packet.decoded.payload.bytes), &meshtastic_Telemetry_msg, &t);
+    return packet;
+}
+
+void test_directTelemetryUplinkSkipsOwnReadingOnChannelUplink(void)
+{
+    config.device.role = meshtastic_Config_DeviceConfig_Role_SENSOR;
+    moduleConfig.mqtt.telemetry_uplink_enabled = true;
+
+    mqtt->onSend(encrypted, makeOwnEnvironmentTelemetry(0), 0);
+
+    TEST_ASSERT_TRUE(pubsub->published_.empty());
+}
+
+// A reply to a telemetry request carries request_id and is not one of the directly uplinked readings, so a
+// requester on MQTT still gets it.
+void test_directTelemetryUplinkKeepsRequestReplyOnChannelUplink(void)
+{
+    config.device.role = meshtastic_Config_DeviceConfig_Role_SENSOR;
+    moduleConfig.mqtt.telemetry_uplink_enabled = true;
+
+    mqtt->onSend(encrypted, makeOwnEnvironmentTelemetry(42), 0);
+
+    TEST_ASSERT_EQUAL(1, pubsub->published_.size());
 }
 
 void test_eventPositionPublicationFollowsCompileTimePolicy(void)
@@ -1585,6 +1626,8 @@ void setup()
     UNITY_BEGIN();
     RUN_TEST(test_sendDirectlyConnectedDecoded);
     RUN_TEST(test_sendDirectlyConnectedEncrypted);
+    RUN_TEST(test_directTelemetryUplinkSkipsOwnReadingOnChannelUplink);
+    RUN_TEST(test_directTelemetryUplinkKeepsRequestReplyOnChannelUplink);
     RUN_TEST(test_eventPositionPublicationFollowsCompileTimePolicy);
     RUN_TEST(test_privatePositionStillPublishesWithEventPolicy);
     RUN_TEST(test_explicitPkiPositionStillPublishesWithEventPolicy);
