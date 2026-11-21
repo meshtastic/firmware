@@ -20,6 +20,9 @@
 // +-163.84 mV default
 static constexpr float INA228_NARROW_RANGE_V = 0.04096f;
 
+// Tries at writing the calibration before the open fails
+static constexpr unsigned INA228_CALIBRATION_ATTEMPTS = 3;
+
 INA228Sensor::INA228Sensor() : TelemetrySensor(meshtastic_TelemetrySensorType_INA228, "INA228") {}
 
 int32_t INA228Sensor::runOnce()
@@ -30,11 +33,10 @@ int32_t INA228Sensor::runOnce()
     }
 
     if (!status) {
-        // Only on first open: a fresh INA228 object has no calibration, and getCurrent() scales by it
+        // Only on first open: a fresh INA228 object has no calibration, and getCurrent() scales by it.
+        // A failed calibration fails the open, as a failed begin() does: the current would be mis-scaled
         begin(nodeTelemetrySensorsMap[sensorType].second, nodeTelemetrySensorsMap[sensorType].first);
-        status = ina228.begin();
-        if (status)
-            calibrate();
+        status = ina228.begin() && calibrate();
     }
     return initI2CSensor();
 }
@@ -49,17 +51,28 @@ void INA228Sensor::begin(TwoWire *wire, uint8_t addr)
     _wire->begin();
 }
 
-void INA228Sensor::calibrate()
+bool INA228Sensor::calibrate()
 {
     // Take the narrow range whenever the full-scale shunt voltage fits in it. The range goes first:
     // the SHUNT_CAL value setMaxCurrentShunt() writes depends on it.
     const bool narrow = INA228_MAX_CURRENT * INA228_SHUNT_R <= INA228_NARROW_RANGE_V;
-    ina228.setADCRange(narrow);
-    if (ina228.setMaxCurrentShunt(INA228_MAX_CURRENT, INA228_SHUNT_R) != 0)
-        LOG_WARN("INA228: invalid shunt %.4f Ohm / max current %.2f A", INA228_SHUNT_R, INA228_MAX_CURRENT);
-    else
-        LOG_DEBUG("INA228: shunt %.4f Ohm, max %.2f A, %s range", INA228_SHUNT_R, INA228_MAX_CURRENT,
-                  narrow ? "40.96 mV" : "163.84 mV");
+    // A NACK on a shared bus can be transient, so a failed write gets another try
+    for (unsigned attempt = 1; attempt <= INA228_CALIBRATION_ATTEMPTS; attempt++) {
+        ina228.getLastError(); // clear it: a failed register write sets it, a successful one leaves it alone
+        ina228.setADCRange(narrow);
+        if (ina228.setMaxCurrentShunt(INA228_MAX_CURRENT, INA228_SHUNT_R) != 0) {
+            LOG_WARN("INA228: invalid shunt %.4f Ohm / max current %.2f A", INA228_SHUNT_R, INA228_MAX_CURRENT);
+            return false;
+        }
+        // setMaxCurrentShunt() returns 0 even when the SHUNT_CAL write is NACKed: only the error records it
+        if (ina228.getLastError() == 0) {
+            LOG_DEBUG("INA228: shunt %.4f Ohm, max %.2f A, %s range", INA228_SHUNT_R, INA228_MAX_CURRENT,
+                      narrow ? "40.96 mV" : "163.84 mV");
+            return true;
+        }
+        LOG_WARN("INA228: calibration write failed (attempt %u of %u)", attempt, INA228_CALIBRATION_ATTEMPTS);
+    }
+    return false;
 }
 
 bool INA228Sensor::getMetrics(meshtastic_Telemetry *measurement)

@@ -224,7 +224,7 @@ bool PowerTelemetryModule::getPowerTelemetry(meshtastic_Telemetry *m)
         valid = ina219Sensor.getMetrics(m);
     if (ina226Sensor.hasSensor())
         valid = ina226Sensor.getMetrics(m);
-    if (ina228Sensor.hasSensor())
+    if (ina228Sensor.hasSensor() && ina228Sensor.isInitialized())
         valid = ina228Sensor.getMetrics(m);
     if (ina260Sensor.hasSensor())
         valid = ina260Sensor.getMetrics(m);
