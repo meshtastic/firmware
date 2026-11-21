@@ -35,6 +35,9 @@ class RadioTxHook
     /// True while p needs the radio left on its own config, so the driver must not listen instead.
     virtual bool holdsRadio(const meshtastic_MeshPacket *p) { return false; }
 
+    /// The driver completed transmitting p.
+    virtual void postTransmit(RadioInterface *iface, const meshtastic_MeshPacket *p) {}
+
     /// The driver is done with p - sent, cancelled or dropped. Release anything held for it.
     virtual void packetReleased(RadioInterface *iface, const meshtastic_MeshPacket *p) {}
 };
@@ -46,5 +49,6 @@ class RadioTxHooks
     /// The first hook not returning PRETX_SEND decides, and the rest are not consulted.
     static RadioTxHook::PreTxAction beforeTransmit(RadioInterface *iface, meshtastic_MeshPacket *p);
     static bool holdsRadio(const meshtastic_MeshPacket *p);
+    static void postTransmit(RadioInterface *iface, const meshtastic_MeshPacket *p);
     static void packetReleased(RadioInterface *iface, const meshtastic_MeshPacket *p);
 };
