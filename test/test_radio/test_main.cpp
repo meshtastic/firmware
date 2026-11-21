@@ -1,3 +1,4 @@
+#include "Channels.h"
 #include "LR20x0Band.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
@@ -273,11 +274,18 @@ static void test_applyModemConfig_mediumTurbo()
     TEST_ASSERT_FLOAT_WITHIN(0.01f, 500.0f, testRadio->getBw());
 }
 
+static void resetUnnamedPrimaryChannel()
+{
+    channels.initDefaults();
+    channels.resolvePrimaryIndex();
+    channels.getByIndex(channels.getPrimaryIndex()).settings.name[0] = '\0';
+}
+
 // RadioInterface::applyModemConfig() on JP must align center frequencies to the ARIB STD-T108
 // 200 kHz unit-channel grid via RegionInfo::getSlotPlan() and never bond ch 32+33 across 922.3 MHz.
 static void test_applyModemConfig_JP_aribUnitChannelGrid()
 {
-    channelFile.channels[0].settings.name[0] = '\0';
+    resetUnnamedPrimaryChannel();
 
     // LONG_FAST (250 kHz): 4 lower slots (920.7..921.9) + 3 upper slots (922.5, 922.9, 923.3).
     // Slot 5 skips prohibited ch 32,33 (922.3) and lands on ch 33,34 (922.5); default slot 6 = 922.9.
@@ -328,7 +336,7 @@ static void test_applyModemConfig_JP_aribUnitChannelGrid()
 // through channel 38 (923.4 MHz), including ch 32 (922.2) and ch 33 (922.4) across the 922.3 split.
 static void test_applyModemConfig_JP_customBandwidthGrid()
 {
-    channelFile.channels[0].settings.name[0] = '\0';
+    resetUnnamedPrimaryChannel();
 
     for (uint16_t bwCode : {uint16_t(125), uint16_t(62)}) {
         config.lora = meshtastic_Config_LoRaConfig_init_zero;
@@ -360,7 +368,7 @@ static void test_applyModemConfig_JP_customBandwidthGrid()
 // channel_num) without clobbering a valid non-default preset back to the region default.
 static void test_applyModemConfig_JP_clampsOobPresetSlot()
 {
-    channelFile.channels[0].settings.name[0] = '\0';
+    resetUnnamedPrimaryChannel();
 
     // LONG_FAST (250 kHz, 7 slots) with stale slot 8 -> clamps to default slot 6 (922.9 MHz), never 923.7 MHz.
     config.lora = meshtastic_Config_LoRaConfig_init_zero;

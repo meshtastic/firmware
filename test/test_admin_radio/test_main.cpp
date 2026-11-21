@@ -1239,11 +1239,18 @@ static void test_slotPlan_allRegionsPresetsStayInBand()
     }
 }
 
+static void resetUnnamedPrimaryChannel()
+{
+    channels.initDefaults();
+    channels.resolvePrimaryIndex();
+    channels.getByIndex(channels.getPrimaryIndex()).settings.name[0] = '\0';
+}
+
 static void test_clampConfigLora_JP_slotBounds()
 {
     // JP LongFast has 7 slots on the ARIB 200 kHz split grid (was 12). Slot 7 is valid; old slot 8+
     // must be rejected by validateConfigLora() and clamped to the default hashed slot (6 = 922.9 MHz).
-    channels.initDefaults();
+    resetUnnamedPrimaryChannel();
     meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
     cfg.region = meshtastic_Config_LoRaConfig_RegionCode_JP;
     cfg.use_preset = true;
@@ -1265,7 +1272,7 @@ static void test_clampConfigLora_JP_customModeSlotBounds()
     // resolve to "Custom" so uses_custom_channel_name is false. Clamping an out-of-range slot (>7 on
     // JP 250 kHz) must clear channel_num to 0 so a subsequent validateConfigLora() accepts it, while
     // leaving an in-range custom pin (<=7) intact.
-    channels.initDefaults();
+    resetUnnamedPrimaryChannel();
     config.lora.use_preset = false;
 
     meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
@@ -1294,7 +1301,7 @@ static void test_clampConfigLora_JP_pendingPresetSwitch()
     // channel name from the pending loraConfig rather than stale global config.lora; otherwise:
     //  1. Switching preset->custom falsely sets uses_custom_channel_name=true and clamps to hash(oldPreset),
     //  2. Switching presetA->presetB falsely clamps to hash(presetA) instead of hash(presetB).
-    channels.initDefaults();
+    resetUnnamedPrimaryChannel();
     config.lora = meshtastic_Config_LoRaConfig_init_zero;
     config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_JP;
     config.lora.use_preset = true;
@@ -1825,7 +1832,7 @@ static void test_handleSetConfig_JP_presetToCustomClamp()
     // End-to-end admin path: node starts on JP LongFast (unnamed primary), receives a local
     // set_config switching to custom JP 250 kHz. Out-of-range slot 8 must clamp to 0 (not hash of
     // stale "LongFast" -> 6), while an in-range custom slot 7 must be preserved.
-    channels.initDefaults();
+    resetUnnamedPrimaryChannel();
     config.lora = meshtastic_Config_LoRaConfig_init_zero;
     config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_JP;
     config.lora.use_preset = true;
