@@ -87,15 +87,6 @@ void INAFamilySensor::clearEnvironmentMetrics(meshtastic_Telemetry *measurement)
     measurement->variant.environment_metrics.current = 0;
 }
 
-void INAFamilySensor::clearPowerMetrics(meshtastic_Telemetry *measurement)
-{
-    auto &p = measurement->variant.power_metrics;
-    p.has_ch1_voltage = p.has_ch2_voltage = p.has_ch3_voltage = false;
-    p.has_ch1_current = p.has_ch2_current = p.has_ch3_current = false;
-    p.ch1_voltage = p.ch2_voltage = p.ch3_voltage = 0;
-    p.ch1_current = p.ch2_current = p.ch3_current = 0;
-}
-
 bool INAFamilySensor::getEnvironmentMetrics(meshtastic_Telemetry *measurement)
 {
     if (!chip.environment)

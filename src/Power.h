@@ -41,9 +41,8 @@ bool updateLowVoltageCounter(uint8_t &counter, bool hasBattery, bool hasUsb, uin
 #include "modules/Telemetry/Sensor/nullSensor.h"
 extern INAFamilySensor ina219Sensor;
 extern INAFamilySensor ina226Sensor;
-
+extern INAFamilySensor ina228Sensor;
 extern INAFamilySensor ina260Sensor;
-
 extern INAFamilySensor ina3221Sensor;
 
 #endif

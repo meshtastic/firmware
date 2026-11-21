@@ -5,15 +5,22 @@
 #ifndef INA219_MULTIPLIER
 #define INA219_MULTIPLIER 1.0f
 #endif
+// Adafruit 904 / GY-219, and Adafruit_INA219 1.2.3's setCalibration_* all assume 0.1 ohm.
+#ifndef INA219_SHUNT_R
+#define INA219_SHUNT_R 0.1f
+#endif
 
+// Generic CJMCU-226 / GY-INA226 (R100), matching develop's setMaxCurrentShunt(0.8, 0.100).
 #ifndef INA226_SHUNT_R
 #define INA226_SHUNT_R 0.1f
 #endif
 
+// Adafruit 5832 / SparkFun Qwiic INA228 (15 mOhm), matching RobTillaart INA228 0.4.1.
 #ifndef INA228_SHUNT_R
 #define INA228_SHUNT_R 0.015f
 #endif
 
+// Generic INA3221 boards (100 mOhm), matching RobTillaart INA3221_RT 0.4.2.
 #ifndef INA3221_SHUNT_R_CH1
 #define INA3221_SHUNT_R_CH1 0.1f
 #endif
@@ -80,6 +87,7 @@ inline float inaScaleCurrent(const InaChip &chip, float currentMa)
 // clang-format off
 inline constexpr InaChip INA219_CHIP  = {0x02, 0x01, 2, 3, 0, false, 0.004f, 10e-6f, INA219_MULTIPLIER, 1, true};
 inline constexpr InaChip INA226_CHIP  = {0x02, 0x01, 2, 0, 0, false, 0.00125f, 2.5e-6f, 1.0f, 1, false};
+// INA260 has an internal 2 mOhm shunt; reg 0x01 is current in mA, so there is no shunt setting.
 inline constexpr InaChip INA260_CHIP  = {0x02, 0x01, 2, 0, 0, true, 0.00125f, 0.00125f, 1.0f, 1, true};
 inline constexpr InaChip INA228_CHIP  = {0x05, 0x04, 3, 4, 4, false, 195.3125e-6f, 312.5e-9f, 1.0f, 1, false};
 inline constexpr InaChip INA3221_CHIP = {0x02, 0x01, 2, 3, 3, false, 0.008f, 40e-6f, 1.0f, 3, true};

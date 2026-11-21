@@ -115,6 +115,7 @@ class ScanI2C
         LP5814,
         ES8311,
         ES7243E,
+        INA228,
     } DeviceType;
 
     // typedef uint8_t DeviceAddress;

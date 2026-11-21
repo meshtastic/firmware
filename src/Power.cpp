@@ -226,11 +226,14 @@ static bool initAdcCalibration()
 #endif
 
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
-static const float ina219ShuntR[3] = {0.1f, 0.1f, 0.1f};
+static const float ina219ShuntR[3] = {INA219_SHUNT_R, INA219_SHUNT_R, INA219_SHUNT_R};
 INAFamilySensor ina219Sensor(meshtastic_TelemetrySensorType_INA219, "INA219", INA219_CHIP, ina219ShuntR, 0, 0);
 
 static const float ina226ShuntR[3] = {INA226_SHUNT_R, INA226_SHUNT_R, INA226_SHUNT_R};
 INAFamilySensor ina226Sensor(meshtastic_TelemetrySensorType_INA226, "INA226", INA226_CHIP, ina226ShuntR, 0, 0);
+
+static const float ina228ShuntR[3] = {INA228_SHUNT_R, INA228_SHUNT_R, INA228_SHUNT_R};
+INAFamilySensor ina228Sensor(meshtastic_TelemetrySensorType_INA228, "INA228", INA228_CHIP, ina228ShuntR, 0, 0);
 
 static const float ina260ShuntR[3] = {1.0f, 1.0f, 1.0f};
 INAFamilySensor ina260Sensor(meshtastic_TelemetrySensorType_INA260, "INA260", INA260_CHIP, ina260ShuntR, 0, 0);
@@ -690,6 +693,9 @@ class AnalogBatteryLevel : public HasBatteryLevel
         } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA226].first ==
                    config.power.device_battery_ina_address) {
             return ina226Sensor.getBusVoltageMv();
+        } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA228].first ==
+                   config.power.device_battery_ina_address) {
+            return ina228Sensor.getBusVoltageMv();
         } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA260].first ==
                    config.power.device_battery_ina_address) {
             return ina260Sensor.getBusVoltageMv();
@@ -707,6 +713,9 @@ class AnalogBatteryLevel : public HasBatteryLevel
         } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA226].first ==
                    config.power.device_battery_ina_address) {
             return ina226Sensor.getCurrentMa();
+        } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA228].first ==
+                   config.power.device_battery_ina_address) {
+            return ina228Sensor.getCurrentMa();
         } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA260].first ==
                    config.power.device_battery_ina_address) {
             return ina260Sensor.getCurrentMa();
@@ -736,6 +745,8 @@ class AnalogBatteryLevel : public HasBatteryLevel
             return sensorReady(ina219Sensor);
         } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA226].first == inaAddress) {
             return sensorReady(ina226Sensor);
+        } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA228].first == inaAddress) {
+            return sensorReady(ina228Sensor);
         } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA260].first == inaAddress) {
             return sensorReady(ina260Sensor);
         } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA3221].first == inaAddress) {

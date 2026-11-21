@@ -30,9 +30,6 @@ class INAFamilySensor : public TelemetrySensor, VoltageSensor, CurrentSensor
     uint16_t getBusVoltageMv() override;
     int16_t getCurrentMa() override;
 
-  protected:
-    void setup() override {}
-
   private:
     bool reset();
     bool readReg(uint8_t reg, uint8_t bytes, uint32_t &out);
@@ -41,7 +38,6 @@ class INAFamilySensor : public TelemetrySensor, VoltageSensor, CurrentSensor
     bool getEnvironmentMetrics(meshtastic_Telemetry *measurement);
     bool getPowerMetrics(meshtastic_Telemetry *measurement);
     void clearEnvironmentMetrics(meshtastic_Telemetry *measurement);
-    void clearPowerMetrics(meshtastic_Telemetry *measurement);
 
     const InaChip &chip;
     float shuntR[3];

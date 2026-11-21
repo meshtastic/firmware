@@ -83,6 +83,12 @@ void test_ina228_positive_current()
     assertNear(1333.3333f, r.currentMa, 0.1f);
 }
 
+void test_ina228_negative_current()
+{
+    InaReading r = inaConvert(INA228_CHIP, 61440u << 4, 0xF06000u, INA228_SHUNT_R);
+    assertNear(-1333.3333f, r.currentMa, 0.1f);
+}
+
 void test_ina228_sign_extension_at_20_bits()
 {
     InaReading pos = inaConvert(INA228_CHIP, 0, 0x7FFFFu << 4, INA228_SHUNT_R);
@@ -134,6 +140,7 @@ void setup()
     RUN_TEST(test_ina260_current_register_is_direct);
     RUN_TEST(test_ina260_negative_current);
     RUN_TEST(test_ina228_positive_current);
+    RUN_TEST(test_ina228_negative_current);
     RUN_TEST(test_ina228_sign_extension_at_20_bits);
     RUN_TEST(test_ina3221_all_three_channels);
     RUN_TEST(test_ina219_multiplier_applies_to_environment_current);
