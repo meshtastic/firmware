@@ -34,10 +34,18 @@ class DMApplet : public Applet
     void onActivate() override;
     void onDeactivate() override;
     int onReceiveTextMessage(const meshtastic_MeshPacket *p);
+    void onNavUp() override;   // Scroll a long message up
+    void onNavDown() override; // Scroll a long message down
 
     bool approveNotification(Notification &n) override; // Which notifications to suppress
 
   protected:
+    void scrollBy(int direction);
+
+    uint16_t scrollY = 0;    // Pixels of the message text scrolled off the top
+    uint16_t maxScrollY = 0; // Set by onRender: how far the text can scroll
+    uint16_t scrollStep = 0; // Set by onRender: one line of the font in use
+
     // Used to register our text message callback
     CallbackObserver<DMApplet, const meshtastic_MeshPacket *> textMessageObserver =
         CallbackObserver<DMApplet, const meshtastic_MeshPacket *>(this, &DMApplet::onReceiveTextMessage);
