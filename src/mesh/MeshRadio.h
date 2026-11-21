@@ -45,6 +45,7 @@ extern float getEffectiveDutyCycle();
 extern bool isKnownModemPreset(meshtastic_Config_LoRaConfig_ModemPreset preset);
 
 extern const RegionProfile PROFILE_STD;
+extern const RegionProfile PROFILE_JP;
 extern const RegionProfile PROFILE_EU868;
 extern const RegionProfile PROFILE_UNDEF;
 extern const RegionProfile PROFILE_LITE;
