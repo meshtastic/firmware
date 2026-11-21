@@ -32,6 +32,9 @@ template <class T> class SX128xInterface : public RadioLibInterface
 
     bool isIRQPending() override { return lora.getIrqFlags() != 0; }
 
+    /// DS rev 3.3 16.2: a header error leaves RX wedged with no RX_DONE or timeout, so only a re-arm clears it
+    bool headerErrWedgesRx() const override { return true; }
+
   protected:
     /**
      * Specific module instance

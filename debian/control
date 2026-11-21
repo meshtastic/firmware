@@ -25,6 +25,7 @@ Build-Depends: debhelper-compat (= 13),
                libssl-dev,
                libulfius-dev,
                liborcania-dev,
+               libavahi-client-dev,
                libx11-dev,
                libinput-dev,
                libxkbcommon-x11-dev,
@@ -41,7 +42,8 @@ Architecture: any
 Depends: adduser,
          ${misc:Depends},
          ${shlibs:Depends}
-Recommends: bluez
+Recommends: avahi-daemon,
+            bluez
 Description: Meshtastic daemon for communicating with Meshtastic devices
  Meshtastic is an off-grid text communication platform that uses inexpensive 
  LoRa radios.

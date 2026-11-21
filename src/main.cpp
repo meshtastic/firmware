@@ -44,6 +44,7 @@
 #endif
 #include "detect/einkScan.h"
 #include "graphics/Screen.h"
+#include "graphics/ScreenMirror.h"
 #include "main.h"
 #include "memory/MemAudit.h"
 #include "mesh/generated/meshtastic/config.pb.h"
@@ -111,6 +112,7 @@ LinuxBluetooth *linuxBluetooth = nullptr;
 #include "linux/LinuxHardwareI2C.h"
 #ifndef ARCH_PORTDUINO_WASM // raspi HTTP server (ulfius/zlib/openssl) excluded in the browser/wasm build
 #include "mesh/raspihttp/PiWebServer.h"
+#include "platform/portduino/NativeDiscovery.h"
 #endif
 #include "platform/portduino/PortduinoGlue.h"
 #ifdef _WIN32
@@ -814,6 +816,10 @@ void setup()
 #endif
 #if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_MAGNETOMETER
     auto mag_info = i2cScanner->firstMagnetometer();
+#if !MESHTASTIC_EXCLUDE_ACCELEROMETER
+    if (mag_info.type == acc_info.type) // a BMM150 with no accelerometer beside it is already the accelerometer thread's
+        mag_info = ScanI2C::DEVICE_NONE;
+#endif
     magnetometer_found = mag_info.type != ScanI2C::DeviceType::NONE ? mag_info.address : magnetometer_found;
     LOG_DEBUG("mag_info = %i", mag_info.type);
 #endif
@@ -1118,6 +1124,7 @@ void setup()
         meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
         if (cn) {
             cn->level = meshtastic_LogRecord_Level_WARNING;
+            cn->type = meshtastic_ClientNotification_NotificationType_LOW_ENTROPY_KEY_REGENERATED;
             cn->time = getValidTime(RTCQualityFromNet);
             sprintf(cn->message, LOW_ENTROPY_WARNING);
             service->sendClientNotification(cn);
@@ -1226,6 +1233,9 @@ void setup()
     }
 #endif
     initApiServer(TCPPort);
+#ifndef ARCH_PORTDUINO_WASM
+    startNativeDiscovery(TCPPort);
+#endif
 #endif
 
     // Start airtime logger thread.
@@ -1313,6 +1323,13 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
     deviceMetadata.canShutdown = pmu_found || HAS_CPU_SHUTDOWN;
 #endif
     deviceMetadata.hasBluetooth = HAS_BLUETOOTH;
+    uint8_t bleAddr[6];
+    if (deviceMetadata.hasBluetooth && getBluetoothAddr(bleAddr))
+        formatMacAddr(bleAddr, deviceMetadata.ble_address, sizeof(deviceMetadata.ble_address));
+#if defined(ARCH_NRF52) && !defined(ARCH_NRF54L)
+    // Read from NRF_TIMER2->CC[0] by the Adafruit core at startup, where the bootloader leaves it
+    deviceMetadata.bootloader_version = bootloaderVersion;
+#endif
     deviceMetadata.hasWifi = HAS_WIFI;
     deviceMetadata.hasEthernet = HAS_ETHERNET;
     deviceMetadata.role = config.device.role;
@@ -1380,6 +1397,50 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
 #endif
 #if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
     deviceMetadata.has_xeddsa = true;
+#endif
+
+#if HAS_MUI_MIRROR
+    // MUI owns the panel and leaves `screen` null, so ask LVGL instead.
+    uint16_t muiW = 0, muiH = 0;
+    bool muiTouch = false;
+    if (graphics::muiDisplayInfo(muiW, muiH, muiTouch)) {
+        deviceMetadata.has_display = true;
+        deviceMetadata.display.width = muiW;
+        deviceMetadata.display.height = muiH;
+        deviceMetadata.display.format = meshtastic_DisplayFrame_Format_RGB565;
+        deviceMetadata.display.panel_class = meshtastic_DisplayInfo_PanelClass_TFT;
+        deviceMetadata.display.has_touch = muiTouch;
+    } else
+#endif
+#if HAS_SCREEN_MIRROR
+        if (screen) {
+        OLEDDisplay *dispdev = screen->getDisplayDevice();
+        if (dispdev && dispdev->getWidth() > 0) {
+            deviceMetadata.has_display = true;
+            deviceMetadata.display.width = dispdev->getWidth();
+            deviceMetadata.display.height = dispdev->getHeight();
+            deviceMetadata.display.format = meshtastic_DisplayFrame_Format_MONO_VLSB;
+#if defined(ARCH_PORTDUINO)
+            // The native panel is selected at runtime; UNSPECIFIED is honest until derived from portduino_config.
+            deviceMetadata.display.panel_class = meshtastic_DisplayInfo_PanelClass_PANEL_CLASS_UNSPECIFIED;
+#elif defined(USE_EINK)
+            deviceMetadata.display.panel_class = meshtastic_DisplayInfo_PanelClass_EINK;
+#elif defined(USE_HUB75) || defined(HAS_HUB75_NATIVE)
+            deviceMetadata.display.panel_class = meshtastic_DisplayInfo_PanelClass_HUB75;
+// value-tested: configuration.h always defines USE_TFTDISPLAY, defaulting it to 0
+#elif USE_TFTDISPLAY || defined(HAS_SPI_TFT) || defined(USE_ST7789) || defined(USE_ST7796) || defined(ILI9341_DRIVER) ||         \
+    defined(ILI9342_DRIVER)
+            deviceMetadata.display.panel_class = meshtastic_DisplayInfo_PanelClass_TFT;
+#elif defined(USE_ST7567)
+            deviceMetadata.display.panel_class = meshtastic_DisplayInfo_PanelClass_LCD;
+#else
+            deviceMetadata.display.panel_class = meshtastic_DisplayInfo_PanelClass_OLED;
+#endif
+#if HAS_TOUCHSCREEN
+            deviceMetadata.display.has_touch = true;
+#endif
+        }
+    }
 #endif
     return deviceMetadata;
 }
@@ -1526,6 +1587,9 @@ void loop()
         inputBroker->processInputEventQueue();
 #endif
 #if ARCH_PORTDUINO
+#ifndef ARCH_PORTDUINO_WASM
+    serviceNativeDiscovery();
+#endif
     if (portduino_config.lora_spi_dev == "ch341" && ch341Hal != nullptr) {
         ch341Hal->checkError();
     }
