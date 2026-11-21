@@ -1,5 +1,6 @@
 #include "TestUtil.h"
 #include "TransmitHistory.h"
+#include "UptimeClock.h"
 #include "gps/RTC.h"
 #include <Throttle.h>
 #include <unity.h>
@@ -19,7 +20,10 @@ void setUp(void)
     resetTransmitHistory();
 }
 
-void tearDown(void) {}
+void tearDown(void)
+{
+    Time::useRealClock(); // only test_throttle_allows_after_interval drives the test clock
+}
 
 static void test_setLastSentToMesh_stores_millis()
 {
@@ -61,13 +65,16 @@ static void test_throttle_blocks_within_interval()
 
 static void test_throttle_allows_after_interval()
 {
-    // Unknown key returns 0 - throttle should NOT block
+    // Drive the injectable clock: a stamp taken at t must stop throttling once the interval elapses.
+    Time::setTestMillis(1000);
+    transmitHistory->setLastSentToMesh(meshtastic_PortNum_NODEINFO_APP);
     uint32_t lastMs = transmitHistory->getLastSentToMeshMillis(meshtastic_PortNum_NODEINFO_APP);
-    TEST_ASSERT_EQUAL_UINT32(0, lastMs);
+    TEST_ASSERT_EQUAL_UINT32(1000, lastMs);
+    TEST_ASSERT_TRUE(Throttle::isWithinTimespanMs(lastMs, 10 * 60 * 1000));
 
-    // When lastMs == 0, the module check `lastMs == 0 || !isWithinTimespan` allows sending
-    bool shouldSend = (lastMs == 0) || !Throttle::isWithinTimespanMs(lastMs, 10 * 60 * 1000);
-    TEST_ASSERT_TRUE(shouldSend);
+    Time::advanceTestMillis(10 * 60 * 1000);
+    lastMs = transmitHistory->getLastSentToMeshMillis(meshtastic_PortNum_NODEINFO_APP);
+    TEST_ASSERT_FALSE(Throttle::isWithinTimespanMs(lastMs, 10 * 60 * 1000));
 }
 
 static void test_throttle_blocks_after_set_then_zero_does_not()

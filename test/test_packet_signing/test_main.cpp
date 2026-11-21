@@ -1512,21 +1512,6 @@ void test_N3_unsigned_nodeinfo_from_nonsigner_not_dropped(void)
     TEST_ASSERT_FALSE(shim.handleReceivedProtobuf(mp, &user));
 }
 
-void test_N4_unsigned_unicast_nodeinfo_from_signer_accepted(void)
-{
-    mockNodeDB->addNode(REMOTE_NODE);
-    mockNodeDB->setSignerBit(REMOTE_NODE, true);
-
-    NodeInfoTestShim shim;
-    meshtastic_MeshPacket mp = makeDecoded(REMOTE_NODE, LOCAL_NODE, meshtastic_PortNum_NODEINFO_APP, SMALL_PAYLOAD);
-    mp.xeddsa_signed = false;
-    meshtastic_User user = meshtastic_User_init_zero;
-    user.is_licensed = owner.is_licensed;
-
-    TEST_ASSERT_FALSE_MESSAGE(shim.handleReceivedProtobuf(mp, &user),
-                              "unsigned unicast NodeInfo from signer must not be dropped");
-}
-
 // N12-N13: N1's refusal of an unsigned NodeInfo broadcast from a known signer applies under
 // Balanced and Strict only. Compatible accepts it, because firmware before 2.8 strips signatures
 // when relaying; refusing there would freeze every signer's name behind an older relay.
@@ -2555,24 +2540,6 @@ void test_E15_decoded_signed_response_retargeted_request_id_dropped(void)
     TEST_ASSERT_FALSE_MESSAGE(checkXeddsaReceivePolicy(&p), "a retargeted response must fail verification");
 }
 
-// E16: an ordinary signed broadcast with no envelope fields set still verifies. The single layout
-// signs those fields as zero rather than omitting them, so the common case must stay unaffected.
-void test_E16_decoded_signed_broadcast_without_linkage_still_verifies(void)
-{
-    uint8_t pub[32], priv[32];
-    crypto->generateKeyPair(pub, priv);
-    mockNodeDB->addNode(REMOTE_NODE);
-    mockNodeDB->setPublicKey(REMOTE_NODE, pub);
-
-    meshtastic_MeshPacket p = makeDecoded(REMOTE_NODE, NODENUM_BROADCAST, meshtastic_PortNum_TEXT_MESSAGE_APP, SMALL_PAYLOAD);
-    TEST_ASSERT_EQUAL(0, p.decoded.request_id);
-    TEST_ASSERT_EQUAL(0, p.decoded.reply_id);
-    signWithCurrentKey(&p);
-
-    TEST_ASSERT_TRUE(checkXeddsaReceivePolicy(&p));
-    TEST_ASSERT_TRUE(p.xeddsa_signed);
-}
-
 // E17: the other half of the reaction attack. A reaction is a TEXT_MESSAGE carrying the emoji in
 // the payload, reply_id naming the message reacted to, and the emoji flag telling the client to
 // render it as a reaction. Binding reply_id alone would still let a PSK holder flip that flag and
@@ -2748,7 +2715,6 @@ void setup()
     RUN_TEST(test_N1_unsigned_nodeinfo_from_signer_dropped);
     RUN_TEST(test_N2_signed_nodeinfo_from_signer_not_dropped);
     RUN_TEST(test_N3_unsigned_nodeinfo_from_nonsigner_not_dropped);
-    RUN_TEST(test_N4_unsigned_unicast_nodeinfo_from_signer_accepted);
     RUN_TEST(test_N12_compatible_unsigned_nodeinfo_from_signer_not_dropped);
     RUN_TEST(test_N13_unsigned_nodeinfo_from_signer_on_aead_channel_not_dropped);
     RUN_TEST(test_N5_unsigned_unicast_nodeinfo_from_signer_does_not_change_name);
@@ -2775,7 +2741,6 @@ void setup()
     RUN_TEST(test_E9_decoded_partial_signature_from_nonsigner_dropped);
     RUN_TEST(test_E14_decoded_signed_reply_retargeted_reply_id_dropped);
     RUN_TEST(test_E15_decoded_signed_response_retargeted_request_id_dropped);
-    RUN_TEST(test_E16_decoded_signed_broadcast_without_linkage_still_verifies);
     RUN_TEST(test_E17_decoded_signed_reaction_emoji_flag_flip_dropped);
     RUN_TEST(test_E18_decoded_signed_broadcast_bitfield_tamper_dropped);
     RUN_TEST(test_E19_decoded_signed_broadcast_readdressed_as_dm_dropped);

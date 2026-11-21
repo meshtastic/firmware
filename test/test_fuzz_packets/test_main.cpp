@@ -158,9 +158,10 @@ void test_E1_perhaps_decode_fuzz(void)
         rngFill(p.encrypted.bytes, p.encrypted.size);
 
         DecodeState st = perhapsDecode(&p);
-        // Any verdict is fine; the contract is that arbitrary ciphertext never crashes the pipeline.
-        TEST_ASSERT_TRUE(st == DECODE_SUCCESS || st == DECODE_FAILURE || st == DECODE_OPAQUE || st == DECODE_FATAL ||
-                         st == DECODE_POLICY_REJECT);
+        // Any verdict is fine; the contract is that arbitrary ciphertext never crashes the pipeline
+        // (caught by ASan in env:coverage). A claimed success must have actually produced a decoded packet.
+        if (st == DECODE_SUCCESS)
+            TEST_ASSERT_EQUAL(meshtastic_MeshPacket_decoded_tag, p.which_payload_variant);
     }
 }
 
