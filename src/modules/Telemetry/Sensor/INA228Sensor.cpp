@@ -23,7 +23,9 @@ int32_t INA228Sensor::runOnce()
 
     if (!status) {
         begin(nodeTelemetrySensorsMap[sensorType].second, nodeTelemetrySensorsMap[sensorType].first);
-        status = ina228.begin();
+        // begin() reads ADCRANGE back for getShuntVoltage() to scale by. A failed read leaves it at the
+        // default range, so the current would be four times off on a chip left in the narrow one
+        status = ina228.begin() && ina228.getLastError() == 0;
     }
     return initI2CSensor();
 }
