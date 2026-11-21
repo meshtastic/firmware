@@ -525,28 +525,14 @@ void menuHandler::FrequencySlotPicker()
     optionsArray[options] = "Slot 0 (Auto)";
     optionsEnumArray[options++] = 0;
 
-    // Calculate number of channels (copied from RadioInterface::applyModemConfig())
-
-    meshtastic_Config_LoRaConfig &loraConfig = config.lora;
-    double bw = loraConfig.use_preset ? modemPresetToBwKHz(loraConfig.modem_preset, myRegion->wideLora)
-                                      : bwCodeToKHz(loraConfig.bandwidth);
-
-    uint32_t numChannels = 0;
-    if (myRegion) {
-        // Match RadioInterface::applyModemConfig(): include padding, add spacing in numerator, and use round()
-        const double spacing = myRegion->profile->spacing;
-        const double padding = myRegion->profile->padding;
-        const double channelBandwidthMHz = bw / 1000.0;
-        const double numerator = (myRegion->freqEnd - myRegion->freqStart) + spacing;
-        const double denominator = spacing + (padding * 2) + channelBandwidthMHz;
-        if (denominator > 0.0) {
-            numChannels = static_cast<uint32_t>(round(numerator / denominator));
-        } else {
-            LOG_WARN("Invalid region config: non-positive channel spacing/width");
-        }
-    } else {
+    if (!myRegion) {
         LOG_WARN("Region not set, can't calc channel count");
         return;
+    }
+
+    uint32_t numChannels = RadioInterface::frequencySlotCount(config.lora);
+    if (numChannels == 0 && config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
+        LOG_WARN("Invalid region config: no valid frequency slots");
     }
 
     if (numChannels > (uint32_t)(MAX_CHANNEL_OPTIONS - 2))

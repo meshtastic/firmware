@@ -1,3 +1,4 @@
+#include "Channels.h"
 #include "LR20x0Band.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
@@ -271,6 +272,149 @@ static void test_applyModemConfig_mediumTurbo()
     TEST_ASSERT_EQUAL_UINT8(5, testRadio->getCr());
     TEST_ASSERT_EQUAL_UINT8(9, testRadio->getSf());
     TEST_ASSERT_FLOAT_WITHIN(0.01f, 500.0f, testRadio->getBw());
+}
+
+static void resetUnnamedPrimaryChannel()
+{
+    channels.initDefaults();
+    channels.resolvePrimaryIndex();
+    channels.getByIndex(channels.getPrimaryIndex()).settings.name[0] = '\0';
+}
+
+// RadioInterface::applyModemConfig() on JP must align center frequencies to the ARIB STD-T108
+// 200 kHz unit-channel grid via RegionInfo::getSlotPlan() and never bond ch 32+33 across 922.3 MHz.
+static void test_applyModemConfig_JP_aribUnitChannelGrid()
+{
+    resetUnnamedPrimaryChannel();
+
+    // LONG_FAST (250 kHz): 4 lower slots (920.7..921.9) + 3 upper slots (922.5, 922.9, 923.3).
+    // Slot 5 skips prohibited ch 32,33 (922.3) and lands on ch 33,34 (922.5); default slot 6 = 922.9.
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_JP;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    config.lora.channel_num = 1;
+    testRadio->reconfigure();
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 920.700f, testRadio->getFreq());
+
+    config.lora.channel_num = 4;
+    testRadio->reconfigure();
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 921.900f, testRadio->getFreq());
+
+    config.lora.channel_num = 5;
+    testRadio->reconfigure();
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 922.500f, testRadio->getFreq());
+
+    config.lora.channel_num = 7;
+    testRadio->reconfigure();
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 923.300f, testRadio->getFreq());
+
+    config.lora.channel_num = 0; // default hash("LongFast") % 7 + 1 == 6 (ch 35,36)
+    testRadio->reconfigure();
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 922.900f, testRadio->getFreq());
+
+    // SHORT_TURBO (500 kHz): 3 lower slots (920.8, 921.4, 922.0) + 2 upper slots (922.6, 923.2).
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO;
+    config.lora.channel_num = 1;
+    testRadio->reconfigure();
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 920.800f, testRadio->getFreq());
+
+    config.lora.channel_num = 3;
+    testRadio->reconfigure();
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 922.000f, testRadio->getFreq());
+
+    config.lora.channel_num = 4;
+    testRadio->reconfigure();
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 922.600f, testRadio->getFreq());
+
+    config.lora.channel_num = 5;
+    testRadio->reconfigure();
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 923.200f, testRadio->getFreq());
+}
+
+// Custom bandwidths on JP (125 kHz and 62.5 kHz) must center on ARIB unit channel 24 (920.6 MHz)
+// through channel 38 (923.4 MHz), including ch 32 (922.2) and ch 33 (922.4) across the 922.3 split.
+static void test_applyModemConfig_JP_customBandwidthGrid()
+{
+    resetUnnamedPrimaryChannel();
+
+    for (uint16_t bwCode : {uint16_t(125), uint16_t(62)}) {
+        config.lora = meshtastic_Config_LoRaConfig_init_zero;
+        config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_JP;
+        config.lora.use_preset = false;
+        config.lora.bandwidth = bwCode;
+        config.lora.spread_factor = 9;
+        config.lora.coding_rate = 5;
+        config.lora.channel_num = 1;
+        testRadio->reconfigure();
+        TEST_ASSERT_FLOAT_WITHIN(0.001f, 920.600f, testRadio->getFreq());
+
+        config.lora.channel_num = 9;
+        testRadio->reconfigure();
+        TEST_ASSERT_FLOAT_WITHIN(0.001f, 922.200f, testRadio->getFreq());
+
+        config.lora.channel_num = 10;
+        testRadio->reconfigure();
+        TEST_ASSERT_FLOAT_WITHIN(0.001f, 922.400f, testRadio->getFreq());
+
+        config.lora.channel_num = 15;
+        testRadio->reconfigure();
+        TEST_ASSERT_FLOAT_WITHIN(0.001f, 923.400f, testRadio->getFreq());
+    }
+}
+
+// applyModemConfig() must clamp out-of-range channel_num in preset mode (e.g., InkHUD's
+// applyLoRaPreset() switching from custom/narrow slot 8 to a wider preset without clearing
+// channel_num) without clobbering a valid non-default preset back to the region default.
+static void test_applyModemConfig_JP_clampsOobPresetSlot()
+{
+    resetUnnamedPrimaryChannel();
+
+    // LONG_FAST (250 kHz, 7 slots) with stale slot 8 -> clamps to default slot 6 (922.9 MHz), never 923.7 MHz.
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_JP;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    config.lora.channel_num = 8;
+    testRadio->reconfigure();
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, config.lora.modem_preset);
+    TEST_ASSERT_EQUAL_UINT32(6, config.lora.channel_num);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 922.900f, testRadio->getFreq());
+
+    // Valid non-default preset MEDIUM_FAST (250 kHz, 7 slots) with stale slot 10 -> keeps MEDIUM_FAST, clamps slot.
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST;
+    config.lora.channel_num = 10;
+    testRadio->reconfigure();
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST, config.lora.modem_preset);
+    TEST_ASSERT_EQUAL_UINT32(6, config.lora.channel_num);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 922.900f, testRadio->getFreq());
+
+    // Valid non-default preset SHORT_TURBO (500 kHz, 5 slots) with stale slot 7 -> keeps SHORT_TURBO, clamps to slot 1.
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO;
+    config.lora.channel_num = 7;
+    testRadio->reconfigure();
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO, config.lora.modem_preset);
+    TEST_ASSERT_EQUAL_UINT32(1, config.lora.channel_num);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 920.800f, testRadio->getFreq());
+
+    // Invalid preset + OOB slot on EU_868 -> clamps both preset (LONG_FAST) and slot (1 = 869.525 MHz).
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO;
+    config.lora.channel_num = 8;
+    testRadio->reconfigure();
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, config.lora.modem_preset);
+    TEST_ASSERT_EQUAL_UINT32(1, config.lora.channel_num);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 869.525f, testRadio->getFreq());
+
+    // EU sibling preset + OOB slot -> swaps EU_868 to EU_866, refreshes newRegion/myRegion, clamps slot to 2 (866.3 MHz).
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LITE_FAST;
+    config.lora.channel_num = 8;
+    testRadio->reconfigure();
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_EU_866, config.lora.region);
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LITE_FAST, config.lora.modem_preset);
+    TEST_ASSERT_EQUAL_UINT32(2, config.lora.channel_num);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 866.300f, testRadio->getFreq());
 }
 
 // MEDIUM_TURBO is a 500 kHz preset, so it is invalid for EU_868 and must clamp to the region default.
@@ -1248,6 +1392,9 @@ void setup()
     RUN_TEST(test_applyModemConfig_customCodingRateHigherThanPreset);
     RUN_TEST(test_applyModemConfig_customCodingRateLowerThanPreset);
     RUN_TEST(test_applyModemConfig_mediumTurbo);
+    RUN_TEST(test_applyModemConfig_JP_aribUnitChannelGrid);
+    RUN_TEST(test_applyModemConfig_JP_customBandwidthGrid);
+    RUN_TEST(test_applyModemConfig_JP_clampsOobPresetSlot);
     RUN_TEST(test_clampConfigLora_mediumTurboInvalidForEU868);
     RUN_TEST(test_clampConfigLora_mediumTurboValidForUS);
     RUN_TEST(test_regionPresetMap_coversAllRegionsWithinBounds);

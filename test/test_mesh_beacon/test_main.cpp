@@ -1859,6 +1859,28 @@ static void test_resolveFrequencySlot_overrideSlotPastCount_derives(void)
 }
 
 /**
+ * RadioInterface::frequencySlotCount() and resolveFrequencySlot() must share RegionInfo::getSlotPlan() with the
+ * radio. On JP's ARIB 200 kHz unit-channel grid LongFast holds 7 slots (not 12) and ShortTurbo holds 5 (not 6);
+ * stale slots 8..12 must be treated as out of range so beacons never accept or hash onto non-existent slots.
+ */
+static void test_frequencySlotCount_JP_aribUnitChannelGrid(void)
+{
+    resetConfigUS();
+    const auto jp = meshtastic_Config_LoRaConfig_RegionCode_JP;
+    const auto longFast = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    const auto shortTurbo = meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO;
+
+    TEST_ASSERT_EQUAL_UINT32(7, RadioInterface::frequencySlotCount(loraProbe(jp, longFast, 0)));
+    TEST_ASSERT_EQUAL_UINT32(5, RadioInterface::frequencySlotCount(loraProbe(jp, shortTurbo, 0)));
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(7, RadioInterface::resolveFrequencySlot(loraProbe(jp, longFast, 7), "LongFast"),
+                                     "in-range JP slot 7 must win");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(6, RadioInterface::resolveFrequencySlot(loraProbe(jp, longFast, 0), "LongFast"),
+                                     "unpinned JP LongFast derives to slot 6 (922.9 MHz)");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(6, RadioInterface::resolveFrequencySlot(loraProbe(jp, longFast, 8), "LongFast"),
+                                     "old JP slot 8 is past the 7-slot grid and must derive");
+}
+
+/**
  * The switch must give back a custom bandwidth that applyModemConfig() clamped for a narrower target region. It
  * writes the clamp into config.lora.bandwidth, and without a restore the node kept the target's bandwidth after one
  * beacon, and the next save wrote it to flash.
@@ -2549,6 +2571,7 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_frequencySlotCount_unsetRegionHoldsNone);
     RUN_TEST(test_frequencySlotCount_overWideCustomBandwidth_countsRegionDefault);
     RUN_TEST(test_resolveFrequencySlot_overrideSlotPastCount_derives);
+    RUN_TEST(test_frequencySlotCount_JP_aribUnitChannelGrid);
     RUN_TEST(test_beaconSwitch_restoresClampedCustomBandwidth);
     RUN_TEST(test_broadcaster_customParamsNode_runsNamedTargetPreset);
     RUN_TEST(test_broadcaster_pinnedTargetSlot_armsThatSlot);
