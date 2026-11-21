@@ -89,26 +89,40 @@ bool INA228Sensor::getMetrics(meshtastic_Telemetry *measurement)
     return false;
 }
 
+bool INA228Sensor::readMetrics(bool &hasVoltage, float &voltage, bool &hasCurrent, float &current)
+{
+    // A failed register read comes back as 0, and only getLastError() tells it from a real 0. Each read
+    // clears the error the one before left, so every read is checked straight after it
+    const float busVoltage = ina228.getBusVoltage();
+    const bool voltageRead = ina228.getLastError() == 0;
+    const float milliAmpere = ina228.getMilliAmpere();
+    const bool currentRead = ina228.getLastError() == 0;
+
+    if (voltageRead) {
+        hasVoltage = true;
+        voltage = busVoltage;
+    } else {
+        LOG_WARN("INA228: bus voltage read failed");
+    }
+    if (currentRead) {
+        hasCurrent = true;
+        current = milliAmpere;
+    } else {
+        LOG_WARN("INA228: current read failed");
+    }
+    return voltageRead || currentRead;
+}
+
 bool INA228Sensor::getEnvironmentMetrics(meshtastic_Telemetry *measurement)
 {
-    measurement->variant.environment_metrics.has_voltage = true;
-    measurement->variant.environment_metrics.has_current = true;
-
-    measurement->variant.environment_metrics.voltage = ina228.getBusVoltage();
-    measurement->variant.environment_metrics.current = ina228.getMilliAmpere();
-
-    return true;
+    auto &metrics = measurement->variant.environment_metrics;
+    return readMetrics(metrics.has_voltage, metrics.voltage, metrics.has_current, metrics.current);
 }
 
 bool INA228Sensor::getPowerMetrics(meshtastic_Telemetry *measurement)
 {
-    measurement->variant.power_metrics.has_ch1_voltage = true;
-    measurement->variant.power_metrics.has_ch1_current = true;
-
-    measurement->variant.power_metrics.ch1_voltage = ina228.getBusVoltage();
-    measurement->variant.power_metrics.ch1_current = ina228.getMilliAmpere();
-
-    return true;
+    auto &metrics = measurement->variant.power_metrics;
+    return readMetrics(metrics.has_ch1_voltage, metrics.ch1_voltage, metrics.has_ch1_current, metrics.ch1_current);
 }
 
 uint16_t INA228Sensor::getBusVoltageMv()

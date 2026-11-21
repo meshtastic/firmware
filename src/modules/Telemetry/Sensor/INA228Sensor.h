@@ -17,6 +17,7 @@ class INA228Sensor : public TelemetrySensor, VoltageSensor, CurrentSensor
 
     bool getEnvironmentMetrics(meshtastic_Telemetry *measurement);
     bool getPowerMetrics(meshtastic_Telemetry *measurement);
+    bool readMetrics(bool &hasVoltage, float &voltage, bool &hasCurrent, float &current);
     bool calibrate();
 
   protected:
