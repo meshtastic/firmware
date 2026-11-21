@@ -138,6 +138,8 @@ static void test_lr20x0_isChannelActive_reports_a_refused_cad_free()
     RecordingHal &hal = freshHal();
     auto &iface = lr20x0Interface(hal);
     hal.rejectUnless(op16(RADIOLIB_LR2021_CMD_SET_LORA_CAD), [](const std::vector<uint8_t> &) { return false; }, 0x02);
+    // A preamble on the air: if the refusal were ignored, the scan would report busy and fail this.
+    lr2021AnswerIrq(hal, RADIOLIB_LR2021_IRQ_CAD_DETECTED | RADIOLIB_LR2021_IRQ_CAD_DONE);
     TEST_ASSERT_FALSE(iface.isChannelActive());
     TEST_ASSERT_EQUAL_UINT32(1, hal.count(op16(RADIOLIB_LR2021_CMD_SET_LORA_CAD)));
 }
