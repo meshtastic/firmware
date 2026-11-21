@@ -7,6 +7,7 @@
 #include "configuration.h"
 #include "gps/RTC.h"
 #include "meshUtils.h"
+#include "modules/Telemetry/VeDirectSource.h"
 #include <Arduino.h>
 #include <Throttle.h>
 
@@ -272,6 +273,11 @@ int32_t SerialModule::runOnce()
                 processWXSerial();
 
             }
+#if HAS_VEDIRECT_TELEMETRY
+            else if (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_VE_DIRECT) {
+                processVEDirectSerial();
+            }
+#endif
 #if defined(HELTEC_MESH_SOLAR)
             else if ((moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MS_CONFIG)) {
                 serialPayloadSize = Serial.readBytes(serialBytes, sizeof(serialBytes) - 1);
@@ -435,6 +441,11 @@ ProcessMessage SerialModuleRadio::handleReceived(const meshtastic_MeshPacket &mp
  */
 uint32_t SerialModule::getBaudRate()
 {
+    // VE.Direct is fixed at 19200 8N1, so make that the mode's default instead of 38400
+    if (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_VE_DIRECT &&
+        moduleConfig.serial.baud == meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_DEFAULT) {
+        return 19200;
+    }
     if (moduleConfig.serial.baud == meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_110) {
         return 110;
     } else if (moduleConfig.serial.baud == meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_300) {
@@ -716,4 +727,36 @@ void SerialModule::processWXSerial()
 #endif
     return;
 }
+
+/**
+ * Feed the VE.Direct text stream to the decoder. PowerTelemetryModule publishes the readings, so this
+ * only moves bytes and reports the state of the link.
+ */
+void SerialModule::processVEDirectSerial()
+{
+#if HAS_VEDIRECT_TELEMETRY && SERIAL_PRINT_PORT != 0
+#if defined(CONFIG_IDF_TARGET_ESP32C6) || defined(RAK3172)
+    Stream &port = Serial1;
+#else
+    Stream &port = Serial2;
+#endif
+    static bool linkUp = false;
+
+    veDirectSource.setActive();
+    while (port.available()) {
+        if (veDirectSource.feed(port.read()) == VeDirectSource::FeedResult::BLOCK_CORRUPT)
+            LOG_WARN("VE.Direct block failed checksum");
+    }
+
+    bool fresh = veDirectSource.isFresh();
+    if (fresh != linkUp) {
+        linkUp = fresh;
+        if (fresh)
+            LOG_INFO("VE.Direct: receiving valid blocks");
+        else
+            LOG_WARN("VE.Direct: no valid block for %us, readings withheld", (unsigned)(VeDirectSource::STALE_AFTER_MS / 1000));
+    }
+#endif
+}
+
 #endif

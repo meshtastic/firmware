@@ -12,6 +12,7 @@
 #include "PowerTelemetry.h"
 #include "Router.h"
 #include "TransmitHistory.h"
+#include "VeDirectSource.h"
 #include "gps/RTC.h"
 #include "graphics/SharedUIDisplay.h"
 #include "main.h"
@@ -30,6 +31,15 @@ namespace graphics
 {
 extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *titleStr, bool force_no_invert,
                              bool show_date);
+}
+
+bool PowerTelemetryModule::measurementEnabled() const
+{
+#if HAS_VEDIRECT_TELEMETRY
+    if (veDirectSource.isActive())
+        return true;
+#endif
+    return moduleConfig.telemetry.power_measurement_enabled;
 }
 
 int32_t PowerTelemetryModule::runOnce()
@@ -53,7 +63,7 @@ int32_t PowerTelemetryModule::runOnce()
     // moduleConfig.telemetry.power_screen_enabled = 1;
     // moduleConfig.telemetry.power_update_interval = 45;
 
-    if (!(moduleConfig.telemetry.power_measurement_enabled)) {
+    if (!measurementEnabled()) {
         // If this module is not enabled, and the user doesn't want the display screen don't waste any OSThread time on it
         return disable();
     }
@@ -83,6 +93,11 @@ int32_t PowerTelemetryModule::runOnce()
             if (max17048Sensor.hasSensor())
                 result = max17048Sensor.isInitialized() ? 0 : max17048Sensor.runOnce();
         }
+#if HAS_VEDIRECT_TELEMETRY
+        // VE.Direct readings arrive through the serial module; there is no I2C sensor to bring up
+        if (veDirectSource.isActive())
+            result = 0;
+#endif
 
         // it's possible to have this module enabled, only for displaying values on the screen.
         // therefore, we should only enable the sensor loop if measurement is also enabled
@@ -92,7 +107,7 @@ int32_t PowerTelemetryModule::runOnce()
 #endif
     } else {
         // if we somehow got to a second run of this module with measurement disabled, then just wait forever
-        if (!moduleConfig.telemetry.power_measurement_enabled)
+        if (!measurementEnabled())
             return disable();
 
         uint32_t lastTelemetry = transmitHistory ? transmitHistory->getLastSentToMeshMillis(TX_HISTORY_KEY_POWER_TELEMETRY) : 0;
@@ -217,6 +232,11 @@ bool PowerTelemetryModule::getPowerTelemetry(meshtastic_Telemetry *m)
     m->which_variant = meshtastic_Telemetry_power_metrics_tag;
 
     m->variant.power_metrics = meshtastic_PowerMetrics_init_zero;
+#if HAS_VEDIRECT_TELEMETRY
+    // A VE.Direct device is the node's one source of power metrics; I2C power sensors are not mixed in
+    if (veDirectSource.isActive())
+        return veDirectSource.getMetrics(m);
+#endif
 #if HAS_TELEMETRY
     if (ina219Sensor.hasSensor())
         valid = ina219Sensor.getMetrics(m);

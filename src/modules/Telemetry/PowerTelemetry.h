@@ -51,6 +51,8 @@ class PowerTelemetryModule : private concurrency::OSThread,
     bool sendTelemetry(NodeNum dest = NODENUM_BROADCAST, bool wantReplies = false);
 
   private:
+    /// Enabled in config, or implied by the serial module decoding a VE.Direct device
+    bool measurementEnabled() const;
     bool firstTime = 1;
     meshtastic_MeshPacket *lastMeasurementPacket;
     uint32_t sendToPhoneIntervalMs = SECONDS_IN_MINUTE * 1000; // Send to phone every minute
