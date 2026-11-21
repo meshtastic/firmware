@@ -386,6 +386,21 @@ PendingPacket *NextHopRouter::findPendingPacket(GlobalPacketId key)
         return NULL;
 }
 
+void NextHopRouter::noteWireForm(const meshtastic_MeshPacket *p)
+{
+    // Only a PKI payload is bound to the exact bytes: a relay that holds the channel key re-encodes what it
+    // forwards (traceroute rewrites it, an older firmware drops fields it does not know), so those keep the
+    // header-only ACK. The pending copy stays decoded, so a retry re-encodes and re-records here.
+    if (p->which_payload_variant != meshtastic_MeshPacket_encrypted_tag || !p->pki_encrypted)
+        return;
+    // p->from for origin safety: by here Router::send() has replaced a phone-originated 0 with our own
+    // node number, so this is an address we set, not one a client chose. Before that line, use getFrom().
+    PendingPacket *rec = findPendingPacket(p->from, p->id);
+    if (!rec)
+        return;
+    rec->wire.assign(p->encrypted.bytes, p->encrypted.bytes + p->encrypted.size);
+}
+
 /**
  * Stop any retransmissions we are doing of the specified node/packet ID pair
  */
