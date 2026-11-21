@@ -26,6 +26,7 @@
 #include "main.h" // for cardkb_found
 #include "mesh/generated/meshtastic/cannedmessages.pb.h"
 #include "modules/AdminModule.h"
+#include "modules/AtakPluginModule.h"
 #include "modules/ExternalNotificationModule.h" // for buzzer control
 extern MessageStore messageStore;
 #if HAS_TRACKBALL
@@ -1075,9 +1076,6 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
     p->want_ack = true;
     p->decoded.dest = dest; // Mirror picker: NODENUM_BROADCAST or node->num
 
-    this->lastSentNode = dest;
-    this->incoming = dest;
-
     // Manually find the node by number to check PKI capability
     meshtastic_NodeInfoLite *node = nullptr;
     size_t numMeshNodes = nodeDB->getNumMeshNodes();
@@ -1095,20 +1093,37 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
         p->channel = 0; // force PKI
     }
 
-    // Track this packet’s request ID for matching ACKs
-    this->lastRequestId = p->id;
+    // What history records: all of the text, unless GeoChat had to cut it
+    size_t textLen = strlen(message);
 
-    // Copy payload, never past its buffer
-    size_t copyLen = strlen(message);
-    if (copyLen > sizeof(p->decoded.payload.bytes))
-        copyLen = sizeof(p->decoded.payload.bytes);
-    p->decoded.payload.size = copyLen;
-    memcpy(p->decoded.payload.bytes, message, p->decoded.payload.size);
+#if !MESHTASTIC_EXCLUDE_ATAK
+    // GeoChat carries the text alone, so send_bell doesn't apply to it
+    if (AtakPluginModule::sendsTextAsGeoChat()) {
+        if (!AtakPluginModule::setGeoChatPayload(p, message, textLen, &textLen)) {
+            packetPool.release(p);
+            return;
+        }
+    } else
+#endif
+    {
+        // Copy payload, never past its buffer
+        size_t copyLen = textLen;
+        if (copyLen > sizeof(p->decoded.payload.bytes))
+            copyLen = sizeof(p->decoded.payload.bytes);
+        p->decoded.payload.size = copyLen;
+        memcpy(p->decoded.payload.bytes, message, p->decoded.payload.size);
 
-    if (moduleConfig.canned_message.send_bell && p->decoded.payload.size + 1 < meshtastic_Constants_DATA_PAYLOAD_LEN) {
-        p->decoded.payload.bytes[p->decoded.payload.size++] = 7;
-        p->decoded.payload.bytes[p->decoded.payload.size] = '\0';
+        if (moduleConfig.canned_message.send_bell && p->decoded.payload.size + 1 < meshtastic_Constants_DATA_PAYLOAD_LEN) {
+            p->decoded.payload.bytes[p->decoded.payload.size++] = 7;
+            p->decoded.payload.bytes[p->decoded.payload.size] = '\0';
+        }
     }
+
+    // Track this packet’s request ID for matching ACKs. Only now: a failed build above must leave
+    // the previous packet's ACK context whole.
+    this->lastSentNode = dest;
+    this->incoming = dest;
+    this->lastRequestId = p->id;
 
     this->waitingForAck = true;
 
@@ -1133,7 +1148,7 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
 
     sm.sender = nodeDB->getNodeNum(); // us
     sm.channelIndex = channel;
-    size_t len = strnlen(message, MAX_MESSAGE_SIZE - 1);
+    size_t len = std::min(textLen, (size_t)(MAX_MESSAGE_SIZE - 1));
     sm.textOffset = MessageStore::storeText(message, len);
     sm.textLength = len;
 
@@ -2429,6 +2444,14 @@ void CannedMessageModule::handleSetCannedMessageModuleMessages(const char *from_
 
 unsigned int CannedMessageModule::maxFreetextBytes() const
 {
+#if !MESHTASTIC_EXCLUDE_ATAK
+    // GeoChat leaves less room than a plain text payload. If the lookup fails (0), keep the plain
+    // limit rather than wipe the draft; the send cuts the text to fit.
+    if (AtakPluginModule::sendsTextAsGeoChat()) {
+        if (const size_t limit = AtakPluginModule::maxGeoChatBytes(dest))
+            return limit;
+    }
+#endif
     // Below the payload size (meshtastic_Constants_DATA_PAYLOAD_LEN, 233)
     return 200 - (moduleConfig.canned_message.send_bell ? 1 : 0);
 }
