@@ -30,18 +30,22 @@ void test_jump_liftsChirpy()
 
 void test_jump_ignoredWhileAirborne()
 {
+    // A second jump mid-air must not re-launch. Step an identical control game that never presses
+    // jump again: if the mid-air press were honoured, the two arcs would part on the next step.
     ChirpyRunnerGame game;
+    ChirpyRunnerGame control;
     game.reset(kSeed);
+    control.reset(kSeed);
     game.jump();
+    control.jump();
     game.step();
-    const int16_t yAfterFirst = game.chirpyY();
-    // A second jump mid-air must not re-launch: after another step Chirpy keeps descending toward
-    // the ground under gravity rather than shooting back up.
-    game.jump();
-    game.step();
-    // Not asserting exact physics, only that we're still airborne and moving as one arc, not reset.
+    control.step();
     TEST_ASSERT_FALSE(game.onGround());
-    (void)yAfterFirst;
+
+    game.jump();
+    game.step();
+    control.step();
+    TEST_ASSERT_EQUAL_INT16(control.chirpyY(), game.chirpyY());
 }
 
 void test_obstacleSpawnsAndCollisionEndsGame()
