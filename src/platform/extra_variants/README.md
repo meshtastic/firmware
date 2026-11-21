@@ -9,9 +9,7 @@ So we are borrowing the initVariant() ideas here (by using weak gcc references).
 
 **Important:** earlyInitVariant() runs _before_ consoleInit(), so the logging subsystem isn't set up yet. Calling a `LOG_*` macro there **crashes the device** - it is not a silent no-op. Never use `LOG_*` in earlyInitVariant(); defer any logging to lateInitVariant() or later.
 
-If you'd like a board specific variant to be run, add the variant.cpp file to an appropriately named
-subdirectory and check for \_VARIANT_boardname in the cpp file (so that your code is only built for your board).
-You'll need to define \_VARIANT_boardname in your corresponding variant.h file.
-See existing boards for examples.
+Board specific code belongs in the board's own variant directory (`variants/<arch>/<board>/variant.cpp`), with that directory added to the env's `build_src_filter` (`+<../variants/<arch>/<board>>`).
+Code shared by more than one variant directory can live here instead. Guard it with a define from the boards' variant.h so it is only built for those boards.
 
 This approach has no added runtime cost.
