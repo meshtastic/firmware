@@ -116,12 +116,12 @@ namespace
 {
 constexpr uint8_t FILES_MANIFEST_LEVELS = 3;
 constexpr size_t FILES_MANIFEST_MAX_COUNT = 64;
+} // namespace
 
 void releaseFilesManifest(std::vector<meshtastic_FileInfo> &filesManifest)
 {
     std::vector<meshtastic_FileInfo>().swap(filesManifest);
 }
-} // namespace
 
 // Flag to indicate a heartbeat was received and we should send queue status
 bool heartbeatReceived = false;
