@@ -44,12 +44,7 @@ extern INAFamilySensor ina226Sensor;
 
 extern INAFamilySensor ina260Sensor;
 
-#if __has_include(<INA3221.h>)
-#include "modules/Telemetry/Sensor/INA3221Sensor.h"
-extern INA3221Sensor ina3221Sensor;
-#else
-extern NullSensor ina3221Sensor;
-#endif
+extern INAFamilySensor ina3221Sensor;
 
 #endif
 

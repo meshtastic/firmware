@@ -235,11 +235,9 @@ INAFamilySensor ina226Sensor(meshtastic_TelemetrySensorType_INA226, "INA226", IN
 static const float ina260ShuntR[3] = {1.0f, 1.0f, 1.0f};
 INAFamilySensor ina260Sensor(meshtastic_TelemetrySensorType_INA260, "INA260", INA260_CHIP, ina260ShuntR, 0, 0);
 
-#if __has_include(<INA3221.h>)
-INA3221Sensor ina3221Sensor;
-#else
-NullSensor ina3221Sensor;
-#endif
+static const float ina3221ShuntR[3] = {INA3221_SHUNT_R_CH1, INA3221_SHUNT_R_CH2, INA3221_SHUNT_R_CH3};
+INAFamilySensor ina3221Sensor(meshtastic_TelemetrySensorType_INA3221, "INA3221", INA3221_CHIP, ina3221ShuntR, INA3221_ENV_CH,
+                              INA3221_BAT_CH);
 
 #endif
 
