@@ -29,7 +29,7 @@ static void lr2021Tune(RecordingHal &hal, LR2021 &radio)
 // As LR11x0: the packet type comes back in the data byte of the next transaction. 0x00 is LoRa.
 #define LR2021_RADIO(hal)                                                                                                        \
     RecordingHal &hal = freshHal();                                                                                              \
-    hal.reply(op16(RADIOLIB_LR2021_CMD_GET_PACKET_TYPE), 0x04, {0x04, RADIOLIB_LR2021_PACKET_TYPE_LORA}, true);                  \
+    hal.reply(op16(RADIOLIB_LR2021_CMD_GET_PACKET_TYPE), 0x04, {0x04, RADIOLIB_LR2021_PACKET_TYPE_LORA}, 1);                     \
     Module mod(&hal, 1, RADIOLIB_NC, RADIOLIB_NC, 2);                                                                            \
     LR2021 radio(&mod);                                                                                                          \
     lr2021Tune(hal, radio)
@@ -168,8 +168,9 @@ static void test_lr2021_other_setters_and_modes_succeed()
 // Exit mode for this command is CAD_ONLY 0x00, CAD_RX 0x01, CAD_LBT 0x10 (Table 6-18). RadioLib's
 // RADIOLIB_LR2021_CAD_EXIT_MODE_* hold the SetCadParams (0x021B) values instead, so its _RX is 0x02.
 // On hardware the chip rejects 0x02 with CMD_PERR, scanChannel() returns -706, and
-// LR20x0Interface::isChannelActive() reads that as a free channel: the node transmits over live
-// frames (16/16 trials on the bench). develop sends the default, 0x00, and is not affected.
+// LR20x0Interface::isChannelActive() reads that as a free channel, so a node sending it would transmit over
+// live frames (16/16 trials on the bench). develop does not: it sends 0x01 from its own local
+// CAD_EXIT_MODE_RX, which is what these tests keep it doing.
 //
 // Never call scanChannel() here: it spins on digitalRead(irq), which RecordingHal holds at 0.
 
@@ -329,7 +330,8 @@ static void test_lr2021_cad_command_sequence()
     TEST_ASSERT_EQUAL_UINT32(0, hal.count(op16(RADIOLIB_LR2021_CMD_SET_CAD)));
 }
 
-// CAD_DONE and CAD_DETECTED routed to DIO5 (irqDioNum), the line the interface's ISR watches.
+// CAD_DONE and CAD_DETECTED routed to DIO5, which is LR2021::irqDioNum's default in RadioLib. The firmware
+// sets irqDioNum per variant (LR20x0Interface::init()), so this pins RadioLib's default, not that line.
 static void test_lr2021_cad_irq_routed_to_dio()
 {
     LR2021_RADIO(hal);
@@ -411,15 +413,17 @@ static void test_lr2021_cad_rx_exit_define_rejected_returns_spi_cmd_invalid()
                             radio.startChannelScan(lr2021CadConfig(RADIOLIB_LR2021_CAD_EXIT_MODE_RX)));
 }
 
-// A CAD must not start with parameters the chip refused.
-static void test_lr2021_cad_not_started_after_rejected_params()
+// The CAD after parameters the chip refused. Paranoid SPI never starts it. Without paranoid (the shipped
+// config) it is sent and runs on the old parameters, and the -706 reaches the caller from its status
+// byte (the test above), so the interface still has an error rather than a verdict.
+static void test_lr2021_cad_after_rejected_params_sent_only_without_paranoid()
 {
     LR2021_RADIO(hal);
     lr2021SetSf(hal, radio, 9);
     lr2021ModelCadExitCheck(hal);
     (void)radio.startChannelScan(lr2021CadConfig(RADIOLIB_LR2021_CAD_EXIT_MODE_RX));
     TEST_ASSERT_EQUAL_UINT32(1, hal.count(op16(RADIOLIB_LR2021_CMD_SET_LORA_CAD_PARAMS)));
-    TEST_ASSERT_EQUAL_UINT32(0, hal.count(op16(RADIOLIB_LR2021_CMD_SET_LORA_CAD)));
+    TEST_ASSERT_EQUAL_UINT32(SENT_AFTER_REFUSAL, hal.count(op16(RADIOLIB_LR2021_CMD_SET_LORA_CAD)));
 }
 
 // The exit bytes the chip accepts start a CAD; guards the model itself, so the rejection tests
@@ -443,7 +447,27 @@ static void test_lr2021_cad_params_failed_returns_spi_cmd_failed()
     lr2021SetSf(hal, radio, 9);
     hal.reply(op16(RADIOLIB_LR2021_CMD_SET_LORA_CAD_PARAMS), 0x04, {0x01}, 1);
     TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_SPI_CMD_FAILED, radio.startChannelScan(lr2021CadConfig()));
-    TEST_ASSERT_EQUAL_UINT32(0, hal.count(op16(RADIOLIB_LR2021_CMD_SET_LORA_CAD)));
+    TEST_ASSERT_EQUAL_UINT32(SENT_AFTER_REFUSAL, hal.count(op16(RADIOLIB_LR2021_CMD_SET_LORA_CAD)));
+}
+
+// A SetTx the chip refuses. With paranoid SPI, RadioLib reads the status after it and startTransmit() fails.
+// Without it (the shipped config) startTransmit() returns OK, and only the status read that
+// RadioLibInterface::launchTransmit() makes finds the refusal; with neither, the node waits for a TX_DONE that
+// never comes.
+static void test_lr2021_refused_settx_found_by_a_status_read()
+{
+    LR2021_RADIO(hal);
+    hal.rejectUnless(op16(RADIOLIB_LR2021_CMD_SET_TX), [](const std::vector<uint8_t> &) { return false; }, 0x02);
+    uint8_t payload[8] = {};
+    const int16_t state = radio.startTransmit(payload, sizeof(payload));
+    TEST_ASSERT_EQUAL_UINT32(1, hal.count(op16(RADIOLIB_LR2021_CMD_SET_TX)));
+#if RADIOLIB_SPI_PARANOID
+    TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_SPI_CMD_INVALID, state);
+#else
+    TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_NONE, state);
+    TEST_ASSERT_NOT_NULL(mod.spiConfig.checkStatusCb);
+    TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_SPI_CMD_INVALID, mod.spiConfig.checkStatusCb(&mod));
+#endif
 }
 
 // jgromes/RadioLib#1882 adds SetLoraCadParams' own exit defines; earlier pins have only the
@@ -517,9 +541,10 @@ static void runLr2021Tests()
     RUN_TEST(test_lr2021_cad_wrong_modem_sends_no_cad);
     RUN_TEST(test_lr2021_cad_result_decoding);
     RUN_TEST(test_lr2021_cad_rx_exit_define_rejected_returns_spi_cmd_invalid);
-    RUN_TEST(test_lr2021_cad_not_started_after_rejected_params);
+    RUN_TEST(test_lr2021_cad_after_rejected_params_sent_only_without_paranoid);
     RUN_TEST(test_lr2021_cad_accepted_exit_bytes_start_a_cad);
     RUN_TEST(test_lr2021_cad_params_failed_returns_spi_cmd_failed);
+    RUN_TEST(test_lr2021_refused_settx_found_by_a_status_read);
 #ifdef RADIOLIB_LR2021_LORA_CAD_EXIT_MODE_RX
     RUN_TEST(test_lr2021_lora_cad_exit_defines_match_datasheet);
     RUN_TEST(test_lr2021_lora_cad_exit_defines_start_a_cad);

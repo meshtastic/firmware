@@ -58,6 +58,25 @@ extern MemGet memGet;
 #endif
 #endif
 
+// Log lines stamp the uptime with milliseconds as well as whole seconds. Portduino has always printed
+// them; set this to 1 in a board's build flags to get the same resolution on device, for timing work
+// that whole seconds cannot resolve.
+#ifndef MESHTASTIC_LOG_MILLIS
+#ifdef ARCH_PORTDUINO
+#define MESHTASTIC_LOG_MILLIS 1
+#else
+#define MESHTASTIC_LOG_MILLIS 0
+#endif
+#endif
+
+// GPS PPS discipline (tens of µs, src/gps/GPS.cpp) is timing work too, so it comes with the millisecond stamps.
+// Without it the clock is set from NMEA alone, to a few ms.
+#if defined(PIN_GPS_PPS) && MESHTASTIC_LOG_MILLIS
+#define GPS_PPS_DISCIPLINE 1
+#else
+#define GPS_PPS_DISCIPLINE 0
+#endif
+
 // USE_SEGGER no longer maps LOG_* to SEGGER_RTT_printf(): it has no float
 // support, and a skipped %f leaves its argument on the va_list, so a later %s
 // dereferences garbage and HardFaults (e.g. PacketHistory's
@@ -81,6 +100,31 @@ extern MemGet memGet;
 #define LOG_ERROR(...)
 #define LOG_CRIT(...)
 #define LOG_TRACE(...)
+#endif
+
+// RADIO_DEBUG=1 enables verbose LoRa radio diagnostics: chip bring-up detail (TCXO/RF-switch probing,
+// pin and current-limit lines) and per-event driver chatter (standby, sleep, AGC reset, per-RX
+// frequency-offset reads, Tx delay). Costs no flash when off, which keeps console I/O off the radio
+// path on platforms where a log line is expensive. Packet lines and LOG_WARN/LOG_ERROR stay on.
+#ifndef RADIO_DEBUG
+#define RADIO_DEBUG 0
+#endif
+#if RADIO_DEBUG
+#define LOG_DEBUG_RADIO(...) LOG_DEBUG(__VA_ARGS__)
+#else
+#define LOG_DEBUG_RADIO(...) ((void)0)
+#endif
+
+// INPUT_DEBUG=1 logs every input event: button presses and holds, rotary and trackball motion,
+// touch taps and swipes, keypad keys, and the events the screen and modules receive. Off by default
+// because it floods the console and puts typed keystrokes in the log.
+#ifndef INPUT_DEBUG
+#define INPUT_DEBUG 0
+#endif
+#if INPUT_DEBUG
+#define LOG_INPUT(...) LOG_DEBUG(__VA_ARGS__)
+#else
+#define LOG_INPUT(...) ((void)0)
 #endif
 
 #if defined(DEBUG_HEAP)

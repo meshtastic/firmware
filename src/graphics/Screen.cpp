@@ -23,6 +23,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "Screen.h"
 #include "NodeDB.h"
 #include "PowerMon.h"
+#include "ScreenMirror.h"
 #include "Throttle.h"
 #include "UptimeClock.h"
 #include "configuration.h"
@@ -182,6 +183,15 @@ static void drawLockdownLockScreen(OLEDDisplay *display)
 }
 #endif
 
+// Hands ScreenMirror the committed framebuffer; a no-op unless a client is armed.
+static inline void screenMirrorCapture()
+{
+#if HAS_SCREEN_MIRROR
+    if (screen)
+        screenMirror.onRendered(screen->getDisplayDevice());
+#endif
+}
+
 static inline void updateUiFrame(OLEDDisplayUi *ui)
 {
 #ifdef MESHTASTIC_LOCKDOWN
@@ -209,6 +219,7 @@ static inline void updateUiFrame(OLEDDisplayUi *ui)
             NotificationRenderer::drawBannercallback(display, ui->getUiState());
         }
         display->display();
+        screenMirrorCapture(); // the locked frame, matching the panel's redaction
         return;
     }
 #endif
@@ -216,6 +227,7 @@ static inline void updateUiFrame(OLEDDisplayUi *ui)
     prepareFrameColorRegions();
 #endif
     ui->update();
+    screenMirrorCapture();
 }
 // Global variables for alert banner - explicitly define with extern "C" linkage to prevent optimization
 
@@ -239,6 +251,7 @@ static bool heartbeat = false;
 
 #include "graphics/ScreenFonts.h"
 #include <Throttle.h>
+#include <cmath>
 
 // Usage: int stringWidth = formatDateTime(datetimeStr, sizeof(datetimeStr), rtc_sec, display);
 // End Functions to write date/time to the screen
@@ -432,6 +445,9 @@ void Screen::showTextInput(const char *header, const char *initialText, uint32_t
                            std::function<void(const std::string &)> textCallback)
 {
     LOG_INFO("showTextInput header='%s', durationMs=%d", header ? header : "NULL", durationMs);
+#ifdef USE_EINK
+    EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // Show the keyboard at once, like the overlay menus
+#endif
 
     // Start OnScreenKeyboardModule session (non-touch variant)
     OnScreenKeyboardModule::instance().start(header, initialText, durationMs, textCallback);
@@ -491,7 +507,7 @@ static void drawGamesFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
 float Screen::estimatedHeading(double lat, double lon)
 {
     static double oldLat, oldLon;
-    static float b = -1.0f;
+    static float b = NAN;
     static uint32_t lastHeadingAtMs = 0;
     const uint32_t now = Time::stampMillis();
     const uint32_t gpsUpdateIntervalSecs =
@@ -520,7 +536,7 @@ float Screen::estimatedHeading(double lat, double lon)
     if (d < 10) { // haven't moved enough, keep previous heading (invalid until first real movement)
         if (lastHeadingAtMs != 0 && (now - lastHeadingAtMs) >= headingStaleMs) {
             // Heading is stale after prolonged no-movement; force reacquire.
-            b = -1.0f;
+            b = NAN;
             oldLat = lat;
             oldLon = lon;
         }
@@ -1229,6 +1245,11 @@ int32_t Screen::runOnce()
 
     if (!screenOn) { // If we didn't just wake and the screen is still off, then
                      // stop updating until it is on again
+#ifdef MESHTASTIC_LOCKDOWN
+        // the last committed frame may predate the lock
+        if (!meshtastic_security::shouldRedactDisplay())
+#endif
+            screenMirrorCapture(); // a request while off still gets the last committed frame
         textMessageFrameShown = false;
         enabled = false;
         return 0;
@@ -2170,6 +2191,9 @@ int Screen::handleInputEvent(const InputEvent *event)
         NotificationRenderer::inEvent = *event;
         static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawBannercallback};
         ui->setOverlays(overlays, 2);
+        // E-Ink: each key press redraws the keyboard at once, with a fast refresh (no rate limit, no full refresh while
+        // typing; the next frame after it takes the full refresh)
+        EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST);
         setFastFramerate(); // Draw ASAP
         updateUiFrame(ui);
         return 0;

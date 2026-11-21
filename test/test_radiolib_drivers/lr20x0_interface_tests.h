@@ -3,9 +3,10 @@
 // LR20x0Interface::isChannelActive() in src/mesh/LR20x0Interface.cpp, run against the modelled LR2021
 // in lr2021_tests.h. The tests there pin what RadioLib sends for a given config; these pin the config
 // the firmware builds. A detected preamble must be reported busy, and that needs a CAD the chip
-// accepts: an interface that passes RADIOLIB_LR2021_CAD_EXIT_MODE_RX (0x02) has its scan refused
-// (-706), reads the error as a free channel, and transmits over live frames (16/16 on the bench, and
-// 539 scans without a busy verdict on a Mesh-Tracker X1). These fail on that change.
+// accepts. develop sends exit byte 0x01 from its own local CAD_EXIT_MODE_RX and is fine; an interface
+// that sent RadioLib's RADIOLIB_LR2021_CAD_EXIT_MODE_RX (0x02) instead would have its scan refused
+// (-706), read the error as a free channel, and transmit over live frames - 16/16 on the bench, and
+// 539 scans without a busy verdict on a Mesh-Tracker X1. These tests fail on that change.
 
 #include "RecordingHal.h"
 #include "TestUtil.h"
@@ -56,14 +57,15 @@ class TestLr2021Interface : public LR2021Interface
     }
 
     using LR20x0Interface<LR2021>::isChannelActive;
+    using LR20x0Interface<LR2021>::launchTransmit;
 
-    // init() would set these via begin(): the default det_peak lookup needs an SF (see lr2021SetSf), and
-    // from 7.8.0 the SF change runs the DC-DC workaround, which retunes to the set frequency.
-    void setSpreadingFactor(uint8_t sf)
-    {
-        TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_NONE, lora.setFrequency(915.0));
-        TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_NONE, lora.setSpreadingFactor(sf));
-    }
+    // init() would set the SF via begin(); RadioLib's default det_peak lookup needs one (see lr2021SetSf).
+    void setSpreadingFactor(uint8_t sf) { TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_NONE, lora.setSpreadingFactor(sf)); }
+
+    // begin() also tunes before it writes the SF, and that ordering is load-bearing: the SF write ends
+    // in the DC-DC workaround's closing setFrequency(freqMHz), so without a frequency it fails with
+    // INVALID_FREQUENCY (see lr2021Tune).
+    void tune(RecordingHal &hal) { lr2021Tune(hal, lora); }
 };
 
 // One interface for the whole suite, never destroyed: the constructor registers a worker thread and
@@ -82,6 +84,7 @@ static TestLr2021Interface &lr20x0Interface(RecordingHal &hal)
     hal.reply(op16(RADIOLIB_LR2021_CMD_GET_PACKET_TYPE), 0x04, {0x04, RADIOLIB_LR2021_PACKET_TYPE_LORA}, 1);
     lr2021ModelCadExitCheck(hal);
     hal.irqPin = LR20X0_TEST_IRQ_PIN;
+    iface->tune(hal);
     iface->setSpreadingFactor(9);
     hal.transactions.clear();
     return *iface;
@@ -117,6 +120,17 @@ static void test_lr20x0_isChannelActive_reports_cad_done_free()
     TEST_ASSERT_FALSE(iface.isChannelActive());
 }
 
+// A SetTx the chip refuses must fail the launch, so startSend() takes its error path at once instead of
+// waiting for a TX_DONE that never comes. Without paranoid SPI, only launchTransmit()'s status read finds it.
+static void test_lr20x0_launchTransmit_reports_a_refused_settx()
+{
+    RecordingHal &hal = freshHal();
+    auto &iface = lr20x0Interface(hal);
+    hal.rejectUnless(op16(RADIOLIB_LR2021_CMD_SET_TX), [](const std::vector<uint8_t> &) { return false; }, 0x02);
+    TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_SPI_CMD_INVALID, iface.launchTransmit(8));
+    TEST_ASSERT_EQUAL_UINT32(1, hal.count(op16(RADIOLIB_LR2021_CMD_SET_TX)));
+}
+
 // Grows here:
 //   a scan that returns an error (-706, -707, -705) must not read as a free channel. Today every
 //   driver's isChannelActive() returns false on it; which verdict replaces that is undecided.
@@ -126,4 +140,5 @@ static void runLr20x0InterfaceTests()
     RUN_TEST(test_lr20x0_isChannelActive_starts_a_cad_the_chip_accepts);
     RUN_TEST(test_lr20x0_isChannelActive_reports_a_detected_preamble_busy);
     RUN_TEST(test_lr20x0_isChannelActive_reports_cad_done_free);
+    RUN_TEST(test_lr20x0_launchTransmit_reports_a_refused_settx);
 }

@@ -21,7 +21,8 @@
 // bytes, and that a command the chip refuses comes back as an error, never CHANNEL_FREE. The LR2021
 // refuses SetLoraCadParams exit mode 0x02, the value of RadioLib's RADIOLIB_LR2021_CAD_EXIT_MODE_RX
 // (a SetCadParams value; jgromes/RadioLib#1882 adds the LoRa ones), and LR20x0Interface reads the
-// error as a free channel, so a node passing that define transmits over live frames. lr2021_tests.h
+// error as a free channel, so a node sending that define would transmit over live frames. develop
+// sends 0x01 from a local constant and does not, which is what is pinned here. lr2021_tests.h
 // models that refusal; lr20x0_interface_tests.h runs LR20x0Interface::isChannelActive() against it,
 // so a firmware change that sends a refused exit byte fails here.
 //

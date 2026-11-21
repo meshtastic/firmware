@@ -131,6 +131,12 @@ class Router : protected concurrency::OSThread, protected PacketHistory
      */
     virtual ErrorCode send(meshtastic_MeshPacket *p);
 
+    /**
+     * Transparent mode: queue a client-built, already-encrypted frame on the radio exactly as given.
+     * Only the radio's payload capacity is enforced; airtime rules are the client's. Always takes ownership of p.
+     */
+    ErrorCode sendTransparent(meshtastic_MeshPacket *p);
+
     /* Statistics for the amount of duplicate received packets and the amount of times we cancel a relay because someone did it
         before us */
     uint32_t rxDupe = 0, txRelayCanceled = 0;
@@ -206,6 +212,22 @@ class Router : protected concurrency::OSThread, protected PacketHistory
      * the drain (and without touching handleDepth) - keeping the stack flat.
      */
     void dispatchReceived(meshtastic_MeshPacket *p, RxSource src);
+
+    /**
+     * Publish a PKI DM between two other nodes to MQTT. Opaque to us, it never reaches the publish in
+     * dispatchReceived(). Marks p pki_encrypted so MQTT files it under the PKI topic.
+     */
+    void perhapsUplinkOpaquePki(meshtastic_MeshPacket *p);
+
+    /// (from, id) of recent opaque PKI uplinks, so the copy heard from each relay is published once.
+    /// Separate from PacketHistory: opaque frames must not touch routing state.
+    struct OpaqueUplink {
+        NodeNum from;
+        PacketId id;
+    };
+    static constexpr uint8_t opaqueUplinkCapacity = 8;
+    OpaqueUplink opaqueUplinkSeen[opaqueUplinkCapacity] = {};
+    uint8_t opaqueUplinkNext = 0;
 
     /**
      * Route a packet addressed to us (or a local broadcast we loop back) into handleReceived().

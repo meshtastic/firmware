@@ -28,6 +28,10 @@
 //
 // The window probes step an injected clock (Time::setTestMillis) rather than sleeping;
 // TransmitHistory, which is where allocReply() reads "last sent" from, reads the same clock.
+//
+// Also covered here: a relayed NodeInfo payload leaves the module byte-for-byte as received, so the
+// sender's XEdDSA signature still verifies downstream, and coerceNodeInfoUserId() - which applies the
+// user.id fix to local copies instead - rewrites only a mismatched id.
 #include "MeshTypes.h" // BEFORE TestUtil.h
 #include "TestUtil.h"
 #include <unity.h>
@@ -46,6 +50,7 @@
 #include "mesh/RadioInterface.h"
 #include "mesh/Router.h"
 #include "mesh/TransmitHistory.h"
+#include "mesh/mesh-pb-constants.h"
 #include "modules/NodeInfoModule.h"
 #include "support/MockMeshService.h"
 #include <memory>
@@ -57,6 +62,7 @@
 class NodeInfoModuleTestShim : public NodeInfoModule
 {
   public:
+    using MeshModule::alterReceived;
     using NodeInfoModule::runOnce;
 };
 
@@ -81,14 +87,6 @@ class MockRouter : public Router
 {
   public:
     MockRouter() { addInterface(std::unique_ptr<RadioInterface>(new StubRadioInterface())); }
-
-    // Router's constructor asserts cryptLock is null before allocating it, so a per-test router can
-    // only be rebuilt if the previous one hands the global back.
-    ~MockRouter()
-    {
-        delete cryptLock;
-        cryptLock = nullptr;
-    }
 
     ErrorCode send(meshtastic_MeshPacket *p) override
     {
@@ -359,6 +357,52 @@ static void test_presetChange_isConsumedOnlyByASendThatGoesOut(void)
                               "a settled generation must not keep asking for replies");
 }
 
+static meshtastic_MeshPacket makeNodeInfoPacket(NodeNum from, const char *id)
+{
+    meshtastic_MeshPacket p = meshtastic_MeshPacket_init_zero;
+    p.from = from;
+    p.to = NODENUM_BROADCAST;
+    p.id = 0x1234;
+    p.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    p.decoded.portnum = meshtastic_PortNum_NODEINFO_APP;
+    meshtastic_User user = meshtastic_User_init_zero;
+    strncpy(user.id, id, sizeof(user.id) - 1);
+    strncpy(user.long_name, "remote", sizeof(user.long_name) - 1);
+    strncpy(user.short_name, "rm", sizeof(user.short_name) - 1);
+    p.decoded.payload.size =
+        pb_encode_to_bytes(p.decoded.payload.bytes, sizeof(p.decoded.payload.bytes), &meshtastic_User_msg, &user);
+    return p;
+}
+
+static void test_relay_userPayloadUnmodified(void)
+{
+    // A user.id that does not match `from` is the case the old relay-side coercion rewrote.
+    meshtastic_MeshPacket p = makeNodeInfoPacket(0x11223344, "!deadbeef");
+    const meshtastic_Data_payload_t original = p.decoded.payload;
+
+    mod->alterReceived(p);
+
+    TEST_ASSERT_EQUAL_UINT32(original.size, p.decoded.payload.size);
+    TEST_ASSERT_EQUAL_MEMORY(original.bytes, p.decoded.payload.bytes, original.size);
+}
+
+static void test_coerceUserId_rewritesOnlyAMismatchedId(void)
+{
+    meshtastic_MeshPacket ok = makeNodeInfoPacket(0x11223344, "!11223344");
+    const meshtastic_Data_payload_t original = ok.decoded.payload;
+    TEST_ASSERT_FALSE(coerceNodeInfoUserId(ok));
+    TEST_ASSERT_EQUAL_UINT32(original.size, ok.decoded.payload.size);
+    TEST_ASSERT_EQUAL_MEMORY(original.bytes, ok.decoded.payload.bytes, original.size);
+
+    meshtastic_MeshPacket spoofed = makeNodeInfoPacket(0x11223344, "!deadbeef");
+    TEST_ASSERT_TRUE(coerceNodeInfoUserId(spoofed));
+    meshtastic_User user = meshtastic_User_init_zero;
+    TEST_ASSERT_TRUE(
+        pb_decode_from_bytes(spoofed.decoded.payload.bytes, spoofed.decoded.payload.size, &meshtastic_User_msg, &user));
+    TEST_ASSERT_EQUAL_STRING("!11223344", user.id);
+    TEST_ASSERT_EQUAL_STRING("remote", user.long_name);
+}
+
 NI_TEST_ENTRY void setup()
 {
     initializeTestEnvironment();
@@ -375,6 +419,8 @@ NI_TEST_ENTRY void setup()
     RUN_TEST(test_sendWindow_aRejectedSendDoesNotStartTheWindow);
     RUN_TEST(test_sendWindow_aLicensedStationKeepsItsCallSignInterval);
     RUN_TEST(test_presetChange_isConsumedOnlyByASendThatGoesOut);
+    RUN_TEST(test_relay_userPayloadUnmodified);
+    RUN_TEST(test_coerceUserId_rewritesOnlyAMismatchedId);
     exit(UNITY_END());
 }
 NI_TEST_ENTRY void loop() {}
