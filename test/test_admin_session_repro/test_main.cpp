@@ -109,6 +109,18 @@ static meshtastic_MeshPacket makeLicensedRemoteSetOwner(const char *newLongName,
     return mp;
 }
 
+// The Routing error carried by the NAK a handler queued in myReply, or NONE when there is none.
+static meshtastic_Routing_Error replyRoutingError(const meshtastic_MeshPacket *reply)
+{
+    meshtastic_Routing routing = meshtastic_Routing_init_zero;
+    if (!reply || reply->which_payload_variant != meshtastic_MeshPacket_decoded_tag ||
+        reply->decoded.portnum != meshtastic_PortNum_ROUTING_APP ||
+        !pb_decode_from_bytes(reply->decoded.payload.bytes, reply->decoded.payload.size, &meshtastic_Routing_msg, &routing) ||
+        routing.which_variant != meshtastic_Routing_error_reason_tag)
+        return meshtastic_Routing_Error_NONE;
+    return routing.error_reason;
+}
+
 // A get_module_config_response carrying a remote_hardware pin list, as a remote would answer.
 // This is the class of message that short-circuited auth: no session passkey, sender need not
 // hold an admin key. handleGetModuleConfigResponse() stamps mp.from into the pin table.
@@ -247,7 +259,7 @@ void test_licensed_signed_setter_unauthorized_signer_is_rejected(void)
 
     admin->handleReceivedProtobuf(mp, &m);
     TEST_ASSERT_NOT_NULL(admin->reply());
-    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_ADMIN_PUBLIC_KEY_UNAUTHORIZED, admin->reply()->decoded.routing.error_reason);
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_ADMIN_PUBLIC_KEY_UNAUTHORIZED, replyRoutingError(admin->reply()));
     admin->drainReply();
 
     TEST_ASSERT_EQUAL_STRING("Original", owner.long_name);
@@ -266,7 +278,7 @@ void test_licensed_signed_setter_broadcast_is_rejected(void)
 
     admin->handleReceivedProtobuf(mp, &m);
     TEST_ASSERT_NOT_NULL(admin->reply());
-    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_NOT_AUTHORIZED, admin->reply()->decoded.routing.error_reason);
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_NOT_AUTHORIZED, replyRoutingError(admin->reply()));
     admin->drainReply();
 
     TEST_ASSERT_EQUAL_STRING("Original", owner.long_name);
@@ -285,7 +297,7 @@ void test_licensed_setter_unsigned_is_rejected(void)
 
     admin->handleReceivedProtobuf(mp, &m);
     TEST_ASSERT_NOT_NULL(admin->reply());
-    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_NOT_AUTHORIZED, admin->reply()->decoded.routing.error_reason);
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_NOT_AUTHORIZED, replyRoutingError(admin->reply()));
     admin->drainReply();
 
     TEST_ASSERT_EQUAL_STRING("Original", owner.long_name);
