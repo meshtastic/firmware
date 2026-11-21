@@ -42,12 +42,7 @@ bool updateLowVoltageCounter(uint8_t &counter, bool hasBattery, bool hasUsb, uin
 extern INAFamilySensor ina219Sensor;
 extern INAFamilySensor ina226Sensor;
 
-#if __has_include(<Adafruit_INA260.h>)
-#include "modules/Telemetry/Sensor/INA260Sensor.h"
-extern INA260Sensor ina260Sensor;
-#else
-extern NullSensor ina260Sensor;
-#endif
+extern INAFamilySensor ina260Sensor;
 
 #if __has_include(<INA3221.h>)
 #include "modules/Telemetry/Sensor/INA3221Sensor.h"
