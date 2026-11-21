@@ -519,6 +519,11 @@ int32_t KbI2cBase::runOnce()
                 e.kbchar = 0;
                 break;
             case 0xc: // Modifier key: 0xc is alt+c (Other options could be: 0xea = shift+mic button or 0x4 shift+$(speaker))
+#ifdef MESHTASTIC_INCLUDE_INKHUD
+                      // InkHUD has no modifier indicator, and a hidden sym state would swallow the next q/t/m/o/i/g/space
+                e.inputEvent = INPUT_BROKER_NONE;
+                break;
+#endif
                 // toggle modifiers button.
                 is_sym = !is_sym;
                 e.inputEvent = INPUT_BROKER_ANYKEY;
@@ -673,6 +678,8 @@ int32_t KbI2cBase::runOnce()
     }
 #if defined(T_DECK_PRO) && defined(MESHTASTIC_INCLUDE_INKHUD)
     return 20; // Drain the ten-event FIFO before fast typing can overflow it.
+#elif defined(MESHTASTIC_INCLUDE_INKHUD)
+    return 100; // CardKB hands out one key per read, so 300 ms makes typing crawl
 #else
     return 300;
 #endif

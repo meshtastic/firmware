@@ -67,8 +67,10 @@
 #include "modules/DMShellTestModule.h"
 #endif
 #if ARCH_PORTDUINO
+#include "PortduinoGlue.h"
 #include "modules/DMShell.h"
 #include "modules/Telemetry/HostMetrics.h"
+#include "modules/Telemetry/Sensor/CommandSensorFields.h"
 #if !MESHTASTIC_EXCLUDE_STOREFORWARD
 #include "modules/StoreForwardModule.h"
 #endif
@@ -126,6 +128,29 @@
 #if defined(HAS_HARDWARE_WATCHDOG)
 #include "watchdog/watchdogThread.h"
 #endif
+#if ARCH_PORTDUINO && HAS_TELEMETRY && HAS_SENSOR && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+// A Sensors: entry is read only by the telemetry module its Type belongs to; say so when that module is off.
+static void warnUnreadCommandSensors()
+{
+    unsigned environment = 0;
+    unsigned airQuality = 0;
+    for (const auto &sensor : portduino_config.command_sensors) {
+        if (CommandSensorFields::messageFor(sensor.type) == CommandSensorFields::Message::AirQuality)
+            airQuality++;
+        else
+            environment++;
+    }
+    if (environment && !(moduleConfig.telemetry.environment_measurement_enabled || ENVIRONMENTAL_TELEMETRY_MODULE_ENABLE))
+        LOG_WARN("config.yaml lists %u environment Sensors, but environment measurement is disabled, so they are not read",
+                 environment);
+#if !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR
+    if (airQuality && !(moduleConfig.telemetry.air_quality_enabled || AIR_QUALITY_TELEMETRY_MODULE_ENABLE))
+        LOG_WARN("config.yaml lists %u air quality Sensors, but air quality telemetry is disabled, so they are not read",
+                 airQuality);
+#endif
+}
+#endif
+
 /**
  * Create module instances here.  If you are adding a new module, you must 'new' it here (or somewhere else)
  */
@@ -229,7 +254,11 @@ void setupModules()
 #if ARCH_PORTDUINO
     new HostMetricsModule();
 #if defined(MESHTASTIC_HAS_DMSHELL)
-    dmShellModule = new DMShellModule();
+    // A shell on the host is a bigger grant than control of the node, so the operator opts in.
+    if (portduino_config.dmshell_enabled)
+        dmShellModule = new DMShellModule();
+    else
+        LOG_INFO("DMShell disabled, set Security.DMShell: true in config.yaml to enable");
 #endif
 #endif
 #ifdef DMSHELL_TEST_PEER
@@ -248,6 +277,9 @@ void setupModules()
         (moduleConfig.telemetry.air_quality_enabled || moduleConfig.telemetry.air_quality_screen_enabled)) {
         new AirQualityTelemetryModule();
     }
+#endif
+#if ARCH_PORTDUINO
+    warnUnreadCommandSensors();
 #endif
 #if !MESHTASTIC_EXCLUDE_HEALTH_TELEMETRY
     if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_MAX30102].first > 0 ||

@@ -179,6 +179,122 @@ static void test_gps_reapply_always_accepted(void)
     TEST_ASSERT_EQUAL_UINT32((uint32_t)firstEpoch + 123, getTime());
 }
 
+// The sub-second part of a time source must survive into the running clock: perhapsSetRTC() used to keep whole
+// seconds and anchor them at the call, so the clock's seconds rolled over at an arbitrary phase of the true second,
+// up to a second late. The second boundary must now fall exactly where the source put it.
+static void test_subsecond_fraction_is_kept(void)
+{
+    beginFakeClock(60 * 1000);
+    const time_t epoch = makeValidEpoch();
+    struct timeval tv = makeTv(epoch);
+    tv.tv_usec = 750 * 1000;
+    TEST_ASSERT_EQUAL_INT(RTCSetResultSuccess, perhapsSetRTC(RTCQualityGPS, &tv));
+    TEST_ASSERT_EQUAL_UINT64((uint64_t)epoch * 1000 + 750, getUtcMillis());
+    TEST_ASSERT_EQUAL_UINT32((uint32_t)epoch, getTime());
+
+    advanceFakeClock(249);
+    TEST_ASSERT_EQUAL_UINT32((uint32_t)epoch, getTime());
+    advanceFakeClock(1);
+    TEST_ASSERT_EQUAL_UINT32((uint32_t)epoch + 1, getTime());
+    TEST_ASSERT_EQUAL_UINT64((uint64_t)epoch * 1000 + 1000, getUtcMillis());
+}
+
+// A malformed tv_usec is a caller bug; the whole seconds still apply rather than a fraction past a second boundary.
+static void test_out_of_range_usec_is_dropped(void)
+{
+    beginFakeClock(60 * 1000);
+    const time_t epoch = makeValidEpoch();
+    struct timeval tv = makeTv(epoch);
+    tv.tv_usec = 1500 * 1000;
+    TEST_ASSERT_EQUAL_INT(RTCSetResultSuccess, perhapsSetRTC(RTCQualityGPS, &tv));
+    TEST_ASSERT_EQUAL_UINT64((uint64_t)epoch * 1000, getUtcMillis());
+}
+
+// getUtcMicros() keeps the whole fraction a source gives, so a PPS-set clock is not truncated to the millisecond.
+static void test_utc_micros_keeps_the_fraction(void)
+{
+    beginFakeClock(60 * 1000);
+    const time_t epoch = makeValidEpoch();
+    struct timeval tv = makeTv(epoch);
+    tv.tv_usec = 123456;
+    TEST_ASSERT_EQUAL_INT(RTCSetResultSuccess, perhapsSetRTC(RTCQualityGPS, &tv));
+    TEST_ASSERT_EQUAL_UINT64((uint64_t)epoch * 1000000 + 123456, getUtcMicros());
+    TEST_ASSERT_EQUAL_UINT64((uint64_t)epoch * 1000 + 123, getUtcMillis());
+}
+
+// disciplineRTC() pins the clock at a past instant (the PPS edge), so the time read now includes what has elapsed
+// since the edge; it must not change quality.
+static void test_discipline_pins_the_clock_at_the_edge(void)
+{
+    beginFakeClock(60 * 1000);
+    const time_t epoch = makeValidEpoch();
+    struct timeval tv = makeTv(epoch);
+    TEST_ASSERT_EQUAL_INT(RTCSetResultSuccess, perhapsSetRTC(RTCQualityGPS, &tv));
+    const uint64_t edgeMonoUs = Time::getMicrosMonotonic() - 250000;
+    const uint64_t secondUs = (uint64_t)(epoch + 7) * 1000000;
+    disciplineRTC(edgeMonoUs, secondUs);
+    TEST_ASSERT_EQUAL_UINT64(secondUs + 250000, getUtcMicros());
+    TEST_ASSERT_EQUAL_INT(RTCQualityGPS, getRTCQuality());
+}
+
+// The rate trim cancels a monotonic clock that runs fast: -30 ppm takes 3 ms off 100 s. Setting it must not jump
+// the time already read, and it is clamped to MAX_RATE_TRIM_PPB.
+static void test_rate_trim_bends_the_clock_without_a_jump(void)
+{
+    beginFakeClock(60 * 1000);
+    const time_t epoch = makeValidEpoch();
+    struct timeval tv = makeTv(epoch);
+    TEST_ASSERT_EQUAL_INT(RTCSetResultSuccess, perhapsSetRTC(RTCQualityGPS, &tv));
+    advanceFakeClock(5000);
+    const uint64_t before = getUtcMicros();
+    setRTCRateTrimPpb(-30000);
+    TEST_ASSERT_EQUAL_UINT64(before, getUtcMicros());
+    advanceFakeClock(100 * 1000);
+    TEST_ASSERT_EQUAL_UINT64(before + 100 * 1000000ULL - 3000, getUtcMicros());
+
+    setRTCRateTrimPpb(MAX_RATE_TRIM_PPB * 2);
+    TEST_ASSERT_EQUAL_INT32(MAX_RATE_TRIM_PPB, getRTCRateTrimPpb());
+}
+
+// A clock left on the rate trim for months must not overflow the trim product. At the +-500000 ppb clamp,
+// elapsedUs * rateTrimPpb passes INT64_MAX after 214 days, which a node that keeps running without a new
+// PPS edge or NMEA fix reaches. The expected trim is computed independently of the implementation here.
+static void test_rate_trim_survives_months_without_reanchoring(void)
+{
+    beginFakeClock(60 * 1000);
+    const time_t epoch = makeValidEpoch();
+    struct timeval tv = makeTv(epoch);
+    TEST_ASSERT_EQUAL_INT(RTCSetResultSuccess, perhapsSetRTC(RTCQualityGPS, &tv));
+    const uint64_t before = getUtcMicros();
+    setRTCRateTrimPpb(MAX_RATE_TRIM_PPB);
+
+    // 240 days, past the 214 where the single-step product overflows, plus a tail so the elapsed
+    // time is not a whole number of billions of microseconds and the remainder term is exercised
+    const uint32_t thirtyDaysMs = 30u * 24 * 60 * 60 * 1000;
+    const uint32_t tailMs = 1234567;
+    for (int i = 0; i < 8; i++)
+        advanceFakeClock(thirtyDaysMs);
+    advanceFakeClock(tailMs);
+
+    const uint64_t elapsedUs = ((uint64_t)thirtyDaysMs * 8 + tailMs) * 1000;
+    TEST_ASSERT_TRUE(elapsedUs % 1000000000ULL != 0); // the remainder term carries the sub-1000 s part
+    const long double expectedTrimUs = (long double)elapsedUs * MAX_RATE_TRIM_PPB / 1000000000.0L;
+    const uint64_t read = getUtcMicros();
+    TEST_ASSERT_TRUE_MESSAGE(read > before, "the trimmed clock ran backwards: the trim product overflowed");
+    TEST_ASSERT_UINT64_WITHIN(2, before + elapsedUs + (uint64_t)expectedTrimUs, read);
+
+    // The same span with the trim negative: re-anchoring keeps the time read, then it falls behind
+    const uint64_t afterReanchor = getUtcMicros();
+    setRTCRateTrimPpb(-MAX_RATE_TRIM_PPB);
+    TEST_ASSERT_EQUAL_UINT64(afterReanchor, getUtcMicros());
+    for (int i = 0; i < 8; i++)
+        advanceFakeClock(thirtyDaysMs);
+    advanceFakeClock(tailMs);
+    const uint64_t slowRead = getUtcMicros();
+    TEST_ASSERT_TRUE_MESSAGE(slowRead > afterReanchor, "the negatively trimmed clock ran backwards");
+    TEST_ASSERT_UINT64_WITHIN(2, afterReanchor + elapsedUs - (uint64_t)expectedTrimUs, slowRead);
+}
+
 // Equal-quality NTP reapplies only after the 30-minute drift-correction throttle.
 static void test_ntp_drift_throttle(void)
 {
@@ -434,6 +550,12 @@ void setup()
     RUN_TEST(test_downgrade_rejected_state_untouched);
     RUN_TEST(test_equal_quality_fromnet_is_not_reapplied);
     RUN_TEST(test_gps_reapply_always_accepted);
+    RUN_TEST(test_subsecond_fraction_is_kept);
+    RUN_TEST(test_out_of_range_usec_is_dropped);
+    RUN_TEST(test_utc_micros_keeps_the_fraction);
+    RUN_TEST(test_discipline_pins_the_clock_at_the_edge);
+    RUN_TEST(test_rate_trim_bends_the_clock_without_a_jump);
+    RUN_TEST(test_rate_trim_survives_months_without_reanchoring);
     RUN_TEST(test_ntp_drift_throttle);
     RUN_TEST(test_force_update_overrides_downgrade);
     RUN_TEST(test_build_epoch_bounds_rejected);

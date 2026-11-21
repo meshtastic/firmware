@@ -76,20 +76,11 @@ template <typename T> class FlashData
             // We read here first, so we can verify the checksum, without committing to overwriting the *data object
             // Allows us to retain any defaults that might be set after we declared *data, but before loading settings,
             // in case the flash values are corrupt
-            T flashData;
-
-            // Read the actual data
-            f.readBytes((char *)&flashData, sizeof(T));
-
-            // Read the hash
+            T flashData{};
             uint32_t savedHash = 0;
-            f.readBytes((char *)&savedHash, sizeof(savedHash));
-
-            // Calculate hash of the loaded data, then compare with the saved hash
-            // If hash looks good, copy the values to the main data object
-            uint32_t calculatedHash = getHash(&flashData);
-            if (savedHash != calculatedHash) {
-                LOG_WARN("'%s' is corrupt (hash mismatch). Using default values", filename.c_str());
+            if (f.readBytes((char *)&flashData, sizeof(T)) != sizeof(T) ||
+                f.readBytes((char *)&savedHash, sizeof(savedHash)) != sizeof(savedHash) || savedHash != getHash(&flashData)) {
+                LOG_WARN("'%s' is incomplete or corrupt. Using default values", filename.c_str());
                 okay = false;
             } else
                 *data = flashData;
