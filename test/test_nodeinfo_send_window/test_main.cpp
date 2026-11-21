@@ -145,6 +145,8 @@ bool sendAllowedAfterMs(uint32_t elapsedMs, bool shorterTimeout = false)
 
 } // namespace
 
+static void resetAdminState();
+
 void setUp(void)
 {
     Time::resetMonotonicForTests();
@@ -176,6 +178,7 @@ void setUp(void)
     config.device.node_info_broadcast_secs = 0; // 0 selects the default, 3 hours
 
     owner.is_licensed = false;
+    resetAdminState();
     strncpy(owner.long_name, "send window", sizeof(owner.long_name) - 1);
     strncpy(owner.short_name, "sw", sizeof(owner.short_name) - 1);
 
@@ -454,6 +457,19 @@ static void clearAdminKeys()
     config.security.admin_key_count = 0;
 }
 
+// nodeDB outlives every test and Unity aborts a failed test by long jump, so a test's admin list
+// and stored node keys are reset here, before the next test, not at the end of the one that set them.
+static void resetAdminState()
+{
+    clearAdminKeys();
+    for (NodeNum n : {kAdminNode, kOtherNode}) {
+        if (meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(n)) {
+            node->public_key.size = 0;
+            memset(node->public_key.bytes, 0, sizeof(node->public_key.bytes));
+        }
+    }
+}
+
 // A unicast NodeInfo request to us, as the router hands it over: xeddsa_signed is the router's
 // verdict on the signature, never a field the sender controls. The payload carries the sender's
 // key, as a real request must or NodeDB drops it as a key mismatch.
@@ -502,7 +518,6 @@ static void test_adminRequest_answeredInsideTheFloor(void)
     TEST_ASSERT_FALSE_MESSAGE(answers(makeNodeInfoRequest(kAdminNode, false)),
                               "an unsigned request cannot prove it came from the admin node");
     TEST_ASSERT_TRUE_MESSAGE(answers(makeNodeInfoRequest(kAdminNode, true)), "the admin's signed request is answered");
-    clearAdminKeys();
 }
 
 static void test_adminRequest_bypassesPerRequesterSuppression(void)
@@ -516,7 +531,6 @@ static void test_adminRequest_bypassesPerRequesterSuppression(void)
     Time::advanceTestMillis(2 * 60 * 1000);
     TEST_ASSERT_FALSE_MESSAGE(answers(makeNodeInfoRequest(kOtherNode, true)), "a repeat requester is suppressed for 12 h");
     TEST_ASSERT_TRUE_MESSAGE(answers(makeNodeInfoRequest(kAdminNode, true)), "the admin is not");
-    clearAdminKeys();
 }
 
 static void test_adminRequest_keepsTheSixtySecondGate(void)
@@ -526,7 +540,6 @@ static void test_adminRequest_keepsTheSixtySecondGate(void)
     Time::advanceTestMillis(30 * 1000);
 
     TEST_ASSERT_FALSE(answers(makeNodeInfoRequest(kAdminNode, true)));
-    clearAdminKeys();
 }
 
 // An interactive send the 60 s gate refuses must not leave the interactive flag set: the ordinary
