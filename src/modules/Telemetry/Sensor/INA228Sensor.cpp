@@ -92,25 +92,19 @@ bool INA228Sensor::getMetrics(meshtastic_Telemetry *measurement)
 bool INA228Sensor::readMetrics(bool &hasVoltage, float &voltage, bool &hasCurrent, float &current)
 {
     // A failed register read comes back as 0, and only getLastError() tells it from a real 0. Each read
-    // clears the error the one before left, so every read is checked straight after it
-    const float busVoltage = ina228.getBusVoltage();
-    const bool voltageRead = ina228.getLastError() == 0;
-    const float milliAmpere = ina228.getMilliAmpere();
-    const bool currentRead = ina228.getLastError() == 0;
+    // clears the error the one before left, so every read is checked straight after it. Both fields are
+    // the INA228's, as they were when it overwrote them unchecked: a failed read clears its field rather
+    // than leave another sensor's value next to this one's
+    voltage = ina228.getBusVoltage();
+    hasVoltage = ina228.getLastError() == 0;
+    current = ina228.getMilliAmpere();
+    hasCurrent = ina228.getLastError() == 0;
 
-    if (voltageRead) {
-        hasVoltage = true;
-        voltage = busVoltage;
-    } else {
+    if (!hasVoltage)
         LOG_WARN("INA228: bus voltage read failed");
-    }
-    if (currentRead) {
-        hasCurrent = true;
-        current = milliAmpere;
-    } else {
+    if (!hasCurrent)
         LOG_WARN("INA228: current read failed");
-    }
-    return voltageRead || currentRead;
+    return hasVoltage || hasCurrent;
 }
 
 bool INA228Sensor::getEnvironmentMetrics(meshtastic_Telemetry *measurement)
