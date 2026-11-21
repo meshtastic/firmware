@@ -1037,8 +1037,9 @@ bool GPS::setup()
             // Initialize the L76K Chip, use GPS + GLONASS + BEIDOU
             _serial_gps->write("$PCAS04,7*1E\r\n");
             delay(250);
-            // only ask for RMC and GGA
-            _serial_gps->write("$PCAS03,1,0,0,0,1,0,0,0,0,0,,,0,0*02\r\n");
+            // RMC and GGA for position, plus GSA for the fix type and PDOP/VDOP. Fields are
+            // GGA,GLL,GSA,GSV,RMC,VTG..., so GSA is the third.
+            _serial_gps->write("$PCAS03,1,0,1,0,1,0,0,0,0,0,,,0,0*03\r\n");
             delay(250);
             // Switch to Vehicle Mode, since SoftRF enables Aviation < 2g
             _serial_gps->write("$PCAS11,3*1E\r\n");
@@ -1103,16 +1104,19 @@ bool GPS::setup()
                 LOG_WARN("ATGM336H: Can't set Update Frequency");
             }
 
-            // Set the NEMA output messages
-            // Ask for only RMC and GGA
-            uint8_t fields[] = {CAS_NEMA_RMC, CAS_NEMA_GGA};
-            for (unsigned int i = 0; i < sizeof(fields); i++) {
+            // RMC and GGA for position, GSA for the fix type and PDOP/VDOP. VTG, which nothing reads, is
+            // switched off: on an AT6558 the GSA enable ACKs but emits nothing until a slot is freed.
+            struct {
+                uint8_t field;
+                uint8_t rate;
+            } nmeaRates[] = {{CAS_NEMA_RMC, 1}, {CAS_NEMA_GGA, 1}, {CAS_NEMA_GSA, 1}, {CAS_NEMA_VTG, 0}};
+            for (unsigned int i = 0; i < sizeof(nmeaRates) / sizeof(nmeaRates[0]); i++) {
                 // Construct a CAS-CFG-MSG packet
-                uint8_t cas_cfg_msg_packet[] = {0x4e, fields[i], 0x01, 0x00};
+                uint8_t cas_cfg_msg_packet[] = {0x4e, nmeaRates[i].field, nmeaRates[i].rate, 0x00};
                 msglen = makeCASPacket(0x06, 0x01, sizeof(cas_cfg_msg_packet), cas_cfg_msg_packet);
                 _serial_gps->write(UBXscratch, msglen);
                 if (getACKCas(0x06, 0x01, 250) != GNSS_RESPONSE_OK) {
-                    LOG_WARN("ATGM336H: Can't enable NMEA MSG: %d", fields[i]);
+                    LOG_WARN("ATGM336H: Can't set NMEA MSG %d to rate %d", nmeaRates[i].field, nmeaRates[i].rate);
                 }
             }
         } else if (gnssModel == GNSS_MODEL_UC6580) {
@@ -1126,8 +1130,9 @@ bool GPS::setup()
             // Turn off GSV messages, we don't really care about which and where the sats are, maybe someday.
             _serial_gps->write("$CFGMSG,0,3,0\r\n");
             delay(250);
-            // Turn off GSA messages, TinyGPS++ doesn't use this message.
-            _serial_gps->write("$CFGMSG,0,2,0\r\n");
+            // GSA on, for the 2D/3D fix type and PDOP/VDOP. Three-argument bare form, per the UFirebirdII
+            // protocol specification.
+            _serial_gps->write("$CFGMSG,0,2,1\r\n");
             delay(250);
             // Turn off NOTICE __TXT messages, these may provide Unicore some info but we don't care.
             _serial_gps->write("$CFGMSG,6,0,0\r\n");
@@ -1149,7 +1154,7 @@ bool GPS::setup()
             // Configure NMEA (sentences will output once per fix)
             _serial_gps->write("$PAIR062,0,1*3F\r\n"); // GGA ON
             _serial_gps->write("$PAIR062,1,0*3F\r\n"); // GLL OFF
-            _serial_gps->write("$PAIR062,2,0*3C\r\n"); // GSA OFF
+            _serial_gps->write("$PAIR062,2,1*3D\r\n"); // GSA ON
             _serial_gps->write("$PAIR062,3,0*3D\r\n"); // GSV OFF
             _serial_gps->write("$PAIR062,4,1*3B\r\n"); // RMC ON
             _serial_gps->write("$PAIR062,5,0*3B\r\n"); // VTG OFF
@@ -2279,15 +2284,6 @@ std::unique_ptr<GPS> GPS::createGps()
     gpsPeriodic = std::unique_ptr<concurrency::Periodic>(new concurrency::Periodic("GPSSwitch", gpsSwitch));
 #endif
 
-// Currently disabled per issue #525 (TinyGPS++ crash bug)
-// when fixed upstream, can be un-disabled to enable 3D FixType and PDOP
-#ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
-    // see NMEAGPS.h
-    gsafixtype.begin(reader, NMEA_MSG_GXGSA, 2);
-    gsapdop.begin(reader, NMEA_MSG_GXGSA, 15);
-    LOG_DEBUG("Use " NMEA_MSG_GXGSA " for 3DFIX and PDOP");
-#endif
-
     // Make sure the GPS is awake before performing any init.
     new_gps->up();
 
@@ -2394,11 +2390,16 @@ bool GPS::lookForTime()
  *
  * @return true if we've acquired a new location
  */
+// A TinyGPS++ datum stays valid forever once it has been set, so "usable" is validity AND age: a
+// sentence the receiver has stopped sending must read as absent rather than as whatever it last said.
+bool gpsDatumFresh(bool isValid, uint32_t age)
+{
+    return isValid && age < GPS_SOL_EXPIRY_MS;
+}
+
 bool GPS::lookForLocation()
 {
-    // By default, TinyGPS++ does not parse GPGSA lines, which give us
-    //   the 2D/3D fixType (see NMEAGPS.h)
-    // At a minimum, use the fixQuality indicator in GPGGA (FIXME?)
+    // GGA's fix quality. The GSA 2D/3D fix type is read separately below, where the receiver sends one.
     fixQual = reader.fixQuality();
 
 #ifndef TINYGPS_OPTION_NO_STATISTICS
@@ -2413,22 +2414,19 @@ bool GPS::lookForLocation()
     }
 #endif
 
-#ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
-    fixType = atoi(gsafixtype.value()); // will set to zero if no data
-#endif
+    // A receiver that sent GSA and then stopped - a config write turning the sentence off, a dropped
+    // sentence - leaves fixType valid forever with a growing age, so it has to expire. 0 is what both
+    // hasLock() and the protobuf already mean by "no GSA".
+    const bool gsaFresh = gpsDatumFresh(reader.fixType.isValid(), reader.fixType.age());
+    fixType = gsaFresh ? (uint8_t)reader.fixType.value() : 0;
 
     // check if GPS has an acceptable lock
     if (!hasLock())
         return false;
 
 #if GPS_DEBUG
-    LOG_DEBUG("AGE: LOC=%d FIX=%d DATE=%d TIME=%d", reader.location.age(),
-#ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
-              gsafixtype.age(),
-#else
-              0,
-#endif
-              reader.date.age(), reader.time.age());
+    LOG_DEBUG("AGE: LOC=%d FIX=%d DATE=%d TIME=%d", reader.location.age(), reader.fixType.age(), reader.date.age(),
+              reader.time.age());
 #endif // GPS_DEBUG
 
     // Is this a new point or are we re-reading the previous one?
@@ -2438,11 +2436,10 @@ bool GPS::lookForLocation()
     // check if a complete GPS solution set is available for reading
     //   tinyGPSDatum::age() also includes isValid() test
     // FIXME
-    if (!((reader.location.age() < GPS_SOL_EXPIRY_MS) &&
-#ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
-          (gsafixtype.age() < GPS_SOL_EXPIRY_MS) &&
-#endif
-          (reader.time.age() < GPS_SOL_EXPIRY_MS) && (reader.date.age() < GPS_SOL_EXPIRY_MS))) {
+    // GSA is deliberately absent from this check: it expires into fixType above instead. Requiring a fresh
+    // one here rejected every otherwise good GGA/RMC solution as soon as a receiver stopped sending GSA.
+    if (!((reader.location.age() < GPS_SOL_EXPIRY_MS) && (reader.time.age() < GPS_SOL_EXPIRY_MS) &&
+          (reader.date.age() < GPS_SOL_EXPIRY_MS))) {
         LOG_WARN("SOME data TOO OLD: LOC %u, TIME %u, DATE %u", reader.location.age(), reader.time.age(), reader.date.age());
         return false;
     }
@@ -2462,16 +2459,12 @@ bool GPS::lookForLocation()
 
     p.location_source = meshtastic_Position_LocSource_LOC_INTERNAL;
 
-    // Dilution of precision (an accuracy metric) is reported in 10^2 units, so we need to scale down when we use it
-#ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
+    // HDOP comes from GGA, PDOP and VDOP from GSA; where a receiver sends no GSA these stay 0, the protobuf's
+    // "not reported". The previous fallback derived PDOP as 1.41 * HDOP, which assumes VDOP == HDOP and so errs
+    // in either direction (measured: VDOP 0.99 against HDOP 2.16 on one receiver, 13.52 against 6.90 on another).
     p.HDOP = reader.hdop.value();
-    p.PDOP = TinyGPSPlus::parseDecimal(gsapdop.value());
-#else
-    // FIXME! naive PDOP emulation (assumes VDOP==HDOP)
-    // correct formula is PDOP = SQRT(HDOP^2 + VDOP^2)
-    p.HDOP = reader.hdop.value();
-    p.PDOP = 1.41 * reader.hdop.value();
-#endif
+    p.PDOP = gpsDatumFresh(reader.pdop.isValid(), reader.pdop.age()) ? reader.pdop.value() : 0;
+    p.VDOP = gpsDatumFresh(reader.vdop.isValid(), reader.vdop.age()) ? reader.vdop.value() : 0;
 
     // Discard incomplete or erroneous readings
     if (reader.hdop.value() == 0) {
@@ -2487,9 +2480,7 @@ bool GPS::lookForLocation()
     p.altitude = reader.altitude.meters();
 
     p.fix_quality = fixQual;
-#ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
     p.fix_type = fixType;
-#endif
 
     // positional timestamp
     struct tm t;
@@ -2502,8 +2493,13 @@ bool GPS::lookForLocation()
     t.tm_isdst = false;
     p.timestamp = gm_mktime(&t);
 
-    // Nice to have, if available
-    if (reader.satellites.isUpdated()) {
+    // Nice to have, if available. The field is sats_IN_VIEW and GSV is what carries that; GGA's count is
+    // satellites USED in the solution. Prefer the real figure where the receiver sends GSV, and fall back to
+    // the used count otherwise -- which is what this reported unconditionally before, and is still what
+    // every default configuration here will produce, since GSV is disabled.
+    if (gpsDatumFresh(reader.satellitesInView.isValid(), reader.satellitesInView.age())) {
+        p.sats_in_view = reader.satellitesInView.value();
+    } else if (reader.satellites.isUpdated()) {
         p.sats_in_view = reader.satellites.value();
     }
 
@@ -2527,10 +2523,8 @@ bool GPS::hasLock()
 {
     // Using GPGGA fix quality indicator
     if (fixQual >= 1 && fixQual <= 5) {
-#ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
-        // Use GPGSA fix type 2D/3D (better) if available
-        if (fixType == 3 || fixType == 0) // zero means "no data received"
-#endif
+        // Use the GSA 2D/3D fix type (better) when the receiver sends one; 0 means no GSA was seen
+        if (fixType == 3 || fixType == 0)
             return true;
     }
 
