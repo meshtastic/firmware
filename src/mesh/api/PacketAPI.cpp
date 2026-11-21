@@ -103,10 +103,20 @@ bool PacketAPI::receivePacket(void)
 bool PacketAPI::sendPacket(void)
 {
     if (server->available()) {
+        static uint32_t id = 0;
+        if (uiConfigChanged && isSendingPackets()) {
+            memset(&fromRadioScratch, 0, sizeof(fromRadioScratch));
+            fromRadioScratch.id = ++id;
+            fromRadioScratch.which_payload_variant = meshtastic_FromRadio_deviceuiConfig_tag;
+            fromRadioScratch.deviceuiConfig = uiconfig;
+            const bool sent = server->sendPacket(DataPacket<meshtastic_FromRadio>(id, fromRadioScratch));
+            if (sent)
+                uiConfigChanged = false;
+            return sent;
+        }
         // fill dummy buffer; we don't use it, we directly send the fromRadio structure
         uint32_t len = getFromRadio(txBuf);
         if (len != 0) {
-            static uint32_t id = 0;
             fromRadioScratch.id = ++id;
             bool result = server->sendPacket(DataPacket<meshtastic_FromRadio>(id, fromRadioScratch));
             if (!result) {
