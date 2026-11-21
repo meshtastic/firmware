@@ -1156,16 +1156,15 @@ void setup()
     // SPI/e-ink panels don't depend on the I2C scan, so set them up even with I2C excluded
     if (screen)
         screen->setup();
-#elif !MESHTASTIC_EXCLUDE_I2C
-#if defined(ARCH_PORTDUINO)
+#elif defined(ARCH_PORTDUINO)
+    // Portduino panels may be selected at runtime (displayPanel), independent of the I2C scan
     if ((screen_found.port != ScanI2C::I2CPort::NO_I2C || portduino_config.displayPanel) &&
         config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
         screen->setup();
     }
-#else
+#elif !MESHTASTIC_EXCLUDE_I2C
     if (screen_found.port != ScanI2C::I2CPort::NO_I2C && screen)
         screen->setup();
-#endif
 #endif
 
 #if defined(SENSECAP_INDICATOR)
