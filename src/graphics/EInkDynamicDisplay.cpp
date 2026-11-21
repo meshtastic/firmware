@@ -128,7 +128,7 @@ void EInkDynamicDisplay::endOrDetach()
     else if (previousRefresh == FAST)
         EInkDisplay::endUpdate(); // Still block while updating, but EInkDisplay needs us to call endUpdate() ourselves.
 
-        // Fallback - If using an unmodified version of GxEPD2 for some reason
+    // Fallback - If using an unmodified version of GxEPD2 for some reason
 #else
     if (previousRefresh == FULL || previousRefresh == FAST) { // If refresh wasn't skipped (on unspecified..)
         LOG_WARN(
@@ -376,12 +376,15 @@ void EInkDynamicDisplay::resetRateLimiting()
 // Generate a hash of this frame, to compare against previous update
 void EInkDynamicDisplay::hashImage()
 {
-    imageHash = 0;
-
-    // Sum all bytes of the image buffer together
-    for (uint16_t b = 0; b < (displayWidth / 8) * displayHeight; b++) {
-        imageHash ^= buffer[b] << b;
+    // FNV-1a over every byte of the image buffer. (XOR-ing `buffer[b] << b` shifted by 32 or more from byte 32 on: undefined,
+    // and 0 on ARM, so only the first 32 bytes counted and a change below them, such as scrolling the messages, left
+    // the hash unchanged and the update was skipped)
+    uint32_t hash = 2166136261u;
+    for (uint32_t b = 0; b < displayBufferSize; b++) {
+        hash ^= buffer[b];
+        hash *= 16777619u;
     }
+    imageHash = hash;
 }
 
 // Store the results of determineMode() for future use, and reset for next call

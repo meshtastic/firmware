@@ -39,7 +39,8 @@ struct BannerOverlayOptions {
     const char **optionsArrayPtr = nullptr;
     const int *optionsEnumPtr = nullptr;
     uint8_t optionsCount = 0;
-    std::function<void(int)> bannerCallback = nullptr;
+    // Plain function pointer (captureless lambdas convert); only one banner is live, so keep any state in statics.
+    void (*bannerCallback)(int) = nullptr;
     int8_t InitialSelected = 0;
     notificationTypeEnum notificationType = notificationTypeEnum::text_banner;
 };
@@ -83,7 +84,7 @@ class Screen
     bool hasModalModule() const { return false; }
     bool isShowingModuleFrame(const MeshModule *) const { return false; }
     void showSimpleBanner(const char *message, uint32_t durationMs = 0) {}
-    void showOverlayBanner(BannerOverlayOptions) {}
+    void showOverlayBanner(const BannerOverlayOptions &) {}
     void setFrames(FrameFocus focus) {}
     void endAlert() {}
     bool getIsI2cScreen() const { return false; }
@@ -260,7 +261,7 @@ class Screen : public concurrency::OSThread
 
     std::vector<const uint8_t *> indicatorIcons; // Per-frame custom icon pointers
 #if defined(OLED_COMPACT_UI)
-    std::vector<const char *> frameTitles;       // Per-frame short labels, parallel to indicatorIcons
+    std::vector<const char *> frameTitles; // Per-frame short labels, parallel to indicatorIcons
 #endif
     Screen(const Screen &) = delete;
     Screen &operator=(const Screen &) = delete;
@@ -293,6 +294,17 @@ class Screen : public concurrency::OSThread
     // True if the always-present games frame is the one currently on screen. Lets the games module
     // ignore D-pad input when the player has navigated to a different frame.
     bool isGamesFrameShown();
+
+    // Jump straight to the home (device-focused) frame. Used to bounce back to a clearly "this is a
+    // Meshtastic node" screen after a game is left idle. Home is optional, so when it is hidden this
+    // falls back to the messages frame rather than staying put.
+    void showHomeFrame();
+
+    // True when the user is in the middle of something that must not be interrupted: a module (or
+    // game) is holding the D-pad, or an interactive overlay (picker / text entry) is open. Callers
+    // that would pop a transient banner should check this first -- a banner both covers the screen
+    // and REPLACES any interactive overlay, discarding a half-finished entry.
+    bool isInteractionBusy();
 
     bool isScreenOn() { return screenOn; }
 
@@ -366,7 +378,7 @@ class Screen : public concurrency::OSThread
     bool isShowingModuleFrame(const MeshModule *m) const;
 
     void showSimpleBanner(const char *message, uint32_t durationMs = 0);
-    void showOverlayBanner(BannerOverlayOptions);
+    void showOverlayBanner(const BannerOverlayOptions &banner_overlay_options);
 
     void showNodePicker(const char *message, uint32_t durationMs, std::function<void(uint32_t)> bannerCallback);
     void showNumberPicker(const char *message, uint32_t durationMs, uint8_t digits, bool useBase16,
@@ -416,6 +428,9 @@ class Screen : public concurrency::OSThread
         enqueueCmd(ScreenCmd{.cmd = Cmd::NOOP});
     }
 
+    /// Runs the screen thread once without touching the display; safe from any task.
+    void kick() { enqueueCmd(ScreenCmd{.cmd = Cmd::NOOP}); }
+
     /// Overrides the default utf8 character conversion, to replace empty space with question marks
     static char customFontTableLookup(const uint8_t ch)
     {
@@ -436,12 +451,21 @@ class Screen : public concurrency::OSThread
         switch (last) {
         case 0xC2: {
             SKIPREST = false;
+#if defined(OLED_GR)
+            // The GR font holds Greek glyphs in the slots of ¡ ¢ ª ¸ ¹ º ¼ ¾, so show ¿ instead
+            if (ch == 0xA1 || ch == 0xA2 || ch == 0xAA || ch == 0xB8 || ch == 0xB9 || ch == 0xBA || ch == 0xBC || ch == 0xBE)
+                break;
+#endif
             return (uint8_t)ch;
         }
 
         case 0xC3: {
             SKIPREST = false;
+#if defined(OLED_GR)
+            break; // The GR font holds Greek glyphs in 0xC0-0xFF, so U+00C0-U+00FF show ¿ instead
+#else
             return (uint8_t)(ch | 0xC0);
+#endif
         }
         }
 
@@ -622,36 +646,50 @@ class Screen : public concurrency::OSThread
 
 #if defined(OLED_GR)
 
+        // Map UTF-8 Greek (U+0384-U+03CE) to the CP-1253 slots of ArialMT_Plain_*_GR
         switch (last) {
-        case 0xC3: {
+        case 0xCD: {
             SKIPREST = false;
-            return (uint8_t)(ch | 0xC0);
+            if (ch == 0xBE)
+                return (uint8_t)';'; // U+037E Greek question mark
+            break;
         }
-        // Map UTF-8 Greek chars to Windows-1253 (CP-1253) ASCII codes
         case 0xCE: {
             SKIPREST = false;
-            // Uppercase Greek: Α-Ρ (U+0391-U+03A1) -> CP-1253 193-209
-            if (ch >= 145 && ch <= 161)
-                return (uint8_t)(ch + 48);
-            // Uppercase Greek: Σ-Ω (U+03A3-U+03A9) -> CP-1253 211-217
-            else if (ch >= 163 && ch <= 169)
-                return (uint8_t)(ch + 48);
-            // Lowercase Greek: α-ρ (U+03B1-U+03C1) -> CP-1253 225-241
-            else if (ch >= 177 && ch <= 193)
-                return (uint8_t)(ch + 48);
+            switch (ch) {
+            case 0x84:
+                return (uint8_t)0xB4; // ΄
+            case 0x85:
+                return (uint8_t)0xA1; // ΅
+            case 0x86:
+                return (uint8_t)0xA2; // Ά
+            case 0x87:
+                return (uint8_t)0xB7; // ·
+            case 0x88:
+            case 0x89:
+            case 0x8A:
+                return (uint8_t)(ch + 0x30); // Έ Ή Ί
+            case 0x8C:
+                return (uint8_t)0xBC; // Ό
+            case 0x8E:
+                return (uint8_t)0xBE; // Ύ
+            case 0x8F:
+                return (uint8_t)0xAA; // Ώ: 0xBF is kept for the ¿ fallback
+            }
+            if (ch >= 0x90 && ch <= 0xBF && ch != 0xA2)
+                return (uint8_t)(ch + 48); // ΐ Α-Ω Ϊ Ϋ ά έ ή ί ΰ α-ο
             break;
         }
         case 0xCF: {
             SKIPREST = false;
-            // Lowercase Greek: ς-ω (U+03C2-U+03C9) -> CP-1253 242-249
-            if (ch >= 130 && ch <= 137)
-                return (uint8_t)(ch + 112);
+            if (ch <= 0x8E)
+                return (uint8_t)(ch + 112); // π-ω ϊ ϋ ό ύ ώ
             break;
         }
         }
 
         // We want to strip out prefix chars for two-byte Greek char formats
-        if (ch == 0xC2 || ch == 0xC3 || ch == 0xCE || ch == 0xCF)
+        if (ch == 0xC2 || ch == 0xC3 || ch == 0xCD || ch == 0xCE || ch == 0xCF)
             return (uint8_t)0;
 
 #endif
@@ -850,6 +888,10 @@ class Screen : public concurrency::OSThread
 #endif
 
     /// UI helper for rendering to frames and switching between them
+    // True if any module frame -- or the games frame, which is not a moduleFrame -- is currently
+    // holding the D-pad. Shared by the input router and isInteractionBusy().
+    bool anyModuleInterceptingInput();
+
     OLEDDisplayUi *ui;
 };
 

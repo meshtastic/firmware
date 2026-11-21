@@ -100,10 +100,17 @@ Observable<uint32_t> RadioInterface::loraRxPacketObservable;
 
 #define RDEF(name, freq_start, freq_end, duty_cycle, power_limit, frequency_switching, wide_lora, profile_ptr, default_preset,   \
              override_slot)                                                                                                      \
-    {                                                                                                                            \
-        meshtastic_Config_LoRaConfig_RegionCode_##name, freq_start, freq_end, duty_cycle, power_limit, frequency_switching,      \
-            wide_lora, &profile_ptr, default_preset, override_slot, #name                                                        \
-    }
+    {meshtastic_Config_LoRaConfig_RegionCode_##name,                                                                             \
+     freq_start,                                                                                                                 \
+     freq_end,                                                                                                                   \
+     duty_cycle,                                                                                                                 \
+     power_limit,                                                                                                                \
+     frequency_switching,                                                                                                        \
+     wide_lora,                                                                                                                  \
+     &profile_ptr,                                                                                                               \
+     default_preset,                                                                                                             \
+     override_slot,                                                                                                              \
+     #name}
 
 const RegionInfo regions[] = {
     /*
@@ -416,6 +423,7 @@ std::unique_ptr<RadioInterface> initLoRa()
               portduino_config.lora_spi_dev.c_str());
     if (portduino_config.lora_spi_dev == "ch341") {
         RadioLibHAL = ch341Hal.get(); // non-owning: the ch341 HAL stays owned by the global unique_ptr
+        ch341Hal->setRadioPins(portduino_config.lora_cs_pin.pin, portduino_config.lora_busy_pin.pin);
     } else {
         if (RadioLibHAL != nullptr) {
             delete RadioLibHAL;
@@ -484,6 +492,11 @@ std::unique_ptr<RadioInterface> initLoRa()
 #endif
         if (!sxIf->init()) {
             LOG_WARN("No SX1262 radio");
+#if (defined(USE_LR1121) || defined(USE_LR2021)) && defined(SX126X_RXEN) && (SX126X_RXEN != RADIOLIB_NC)
+            // A begin() that succeeded before a later setup call failed leaves RXEN an output, and the
+            // LR2021 module drives the same pin itself; on the LR1121 module it is the radio's IRQ
+            pinMode(SX126X_RXEN, INPUT);
+#endif
             rIf = nullptr;
         } else {
             LOG_INFO("SX1262 init success");
@@ -503,7 +516,7 @@ std::unique_ptr<RadioInterface> initLoRa()
             LOG_WARN("No SX1262 radio with TCXO, Vref %fV", SX126X_DIO3_TCXO_VOLTAGE);
             rIf = nullptr;
         } else {
-            LOG_INFO("SX1262 init success, TCXO, Vref %fV", SX126X_DIO3_TCXO_VOLTAGE);
+            LOG_INFO("SX1262 init success, %s, Vref %.1fV", sxIf->getTCXOVoltage() > 0 ? "TCXO" : "XTAL", sxIf->getTCXOVoltage());
             rIf = std::move(sxIf);
             radioType = SX1262_RADIO;
         }
@@ -533,7 +546,7 @@ std::unique_ptr<RadioInterface> initLoRa()
             LOG_WARN("No SX1268 radio with TCXO, Vref %fV", SX126X_DIO3_TCXO_VOLTAGE);
             rIf = nullptr;
         } else {
-            LOG_INFO("SX1268 init success, TCXO, Vref %fV", SX126X_DIO3_TCXO_VOLTAGE);
+            LOG_INFO("SX1268 init success, %s, Vref %.1fV", sxIf->getTCXOVoltage() > 0 ? "TCXO" : "XTAL", sxIf->getTCXOVoltage());
             rIf = std::move(sxIf);
             radioType = SX1268_RADIO;
         }
@@ -866,11 +879,11 @@ uint32_t RadioInterface::getTxDelayMsecWeighted(meshtastic_MeshPacket *p)
     // LOG_DEBUG("rx_snr of %f so setting CWsize to:%d", snr, CWsize);
     if (shouldRebroadcastEarlyLikeRouter(p)) {
         delay = random(0, 2 * CWsize) * slotTimeMsec;
-        LOG_DEBUG("rx_snr in packet. Router: tx delay:%d", delay);
+        LOG_DEBUG_RADIO("rx_snr in packet. Router: tx delay:%d", delay);
     } else {
         // offset the maximum delay for routers: (2 * CWmax * slotTimeMsec)
         delay = (2 * CWmax * slotTimeMsec) + random(0, pow_of_2(CWsize)) * slotTimeMsec;
-        LOG_DEBUG("rx_snr in packet. Tx delay:%d", delay);
+        LOG_DEBUG_RADIO("rx_snr in packet. Tx delay:%d", delay);
     }
 
     return delay;
@@ -1020,7 +1033,8 @@ uint32_t RadioInterface::getChannelNum()
 /**
  * Send a client notification (error level unless specified). Safe to call when service is null (e.g. in tests).
  */
-static void sendErrorNotification(const char *msg, meshtastic_LogRecord_Level level = meshtastic_LogRecord_Level_ERROR)
+static void sendErrorNotification(const char *msg, meshtastic_ClientNotification_NotificationType type,
+                                  meshtastic_LogRecord_Level level = meshtastic_LogRecord_Level_ERROR)
 {
     if (!service)
         return;
@@ -1028,6 +1042,7 @@ static void sendErrorNotification(const char *msg, meshtastic_LogRecord_Level le
     if (!cn)
         return;
     cn->level = level;
+    cn->type = type;
     snprintf(cn->message, sizeof(cn->message), "%s", msg);
     service->sendClientNotification(cn);
 }
@@ -1054,12 +1069,12 @@ const RegionInfo *RadioInterface::regionSwapForPreset(meshtastic_Config_LoRaConf
 
 /**
  * Checks if a region is valid for the current settings, with no side effects.
- * Safe to call speculatively (e.g. from UI pickers). When errBuf is given, it
- * receives the human-readable failure reason.
+ * Safe to call speculatively (e.g. from UI pickers). When errBuf/errType are given,
+ * they receive the human-readable failure reason and its notification type.
  * Returns false if not compatible.
  */
 bool RadioInterface::checkConfigRegion(const meshtastic_Config_LoRaConfig &loraConfig, char *errBuf, size_t errLen,
-                                       bool prospectiveLicensedOwner)
+                                       bool prospectiveLicensedOwner, meshtastic_ClientNotification_NotificationType *errType)
 {
     const RegionInfo *newRegion = getRegion(loraConfig.region);
 
@@ -1067,6 +1082,8 @@ bool RadioInterface::checkConfigRegion(const meshtastic_Config_LoRaConfig &loraC
     if (newRegion->code != loraConfig.region) {
         if (errBuf)
             snprintf(errBuf, errLen, "Region code %d is not recognized", loraConfig.region);
+        if (errType)
+            *errType = meshtastic_ClientNotification_NotificationType_LORA_REGION_UNRECOGNIZED;
         return false;
     }
 
@@ -1074,6 +1091,8 @@ bool RadioInterface::checkConfigRegion(const meshtastic_Config_LoRaConfig &loraC
     if (newRegion->profile->licensedOnly && !devicestate.owner.is_licensed && !prospectiveLicensedOwner) {
         if (errBuf)
             snprintf(errBuf, errLen, "Region %s requires licensed mode", newRegion->name);
+        if (errType)
+            *errType = meshtastic_ClientNotification_NotificationType_LORA_REGION_REQUIRES_LICENSE;
         return false;
     }
 
@@ -1090,6 +1109,8 @@ bool RadioInterface::checkConfigRegion(const meshtastic_Config_LoRaConfig &loraC
         if (unsupported) {
             if (errBuf)
                 snprintf(errBuf, errLen, "Region %s needs %s, which this radio does not support", newRegion->name, unsupported);
+            if (errType)
+                *errType = meshtastic_ClientNotification_NotificationType_LORA_REGION_UNSUPPORTED_BY_RADIO;
             return false;
         }
     }
@@ -1105,12 +1126,13 @@ bool RadioInterface::checkConfigRegion(const meshtastic_Config_LoRaConfig &loraC
 bool RadioInterface::validateConfigRegion(const meshtastic_Config_LoRaConfig &loraConfig)
 {
     char err_string[160];
-    if (checkConfigRegion(loraConfig, err_string, sizeof(err_string)))
+    meshtastic_ClientNotification_NotificationType errType = meshtastic_ClientNotification_NotificationType_UNSET;
+    if (checkConfigRegion(loraConfig, err_string, sizeof(err_string), false, &errType))
         return true;
 
     LOG_ERROR("%s", err_string);
     RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
-    sendErrorNotification(err_string);
+    sendErrorNotification(err_string, errType);
     return false;
 }
 
@@ -1149,7 +1171,8 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
                 snprintf(err_string, sizeof(err_string), "Preset %s swaps region %s to %s", presetName, newRegion->name,
                          swapRegion->name);
                 LOG_INFO("%s", err_string);
-                sendErrorNotification(err_string, meshtastic_LogRecord_Level_INFO);
+                sendErrorNotification(err_string, meshtastic_ClientNotification_NotificationType_LORA_PRESET_REGION_SWAP,
+                                      meshtastic_LogRecord_Level_INFO);
 
                 loraConfig.region = swapRegion->code;
                 newRegion = swapRegion;
@@ -1167,7 +1190,7 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
             }
             LOG_ERROR("%s", err_string);
             RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
-            sendErrorNotification(err_string);
+            sendErrorNotification(err_string, meshtastic_ClientNotification_NotificationType_LORA_PRESET_INVALID_FOR_REGION);
 
             if (clamp) {
                 loraConfig.modem_preset = newRegion->getDefaultPreset();
@@ -1193,7 +1216,7 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
         snprintf(err_string, sizeof(err_string), "%s span %.0fkHz < requested %.0fkHz", newRegion->name, regionSpanKHz, check_bw);
         LOG_ERROR("%s", err_string);
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
-        sendErrorNotification(err_string);
+        sendErrorNotification(err_string, meshtastic_ClientNotification_NotificationType_LORA_BANDWIDTH_EXCEEDS_REGION);
 
         if (clamp) {
             loraConfig.bandwidth = bwKHzToCode(modemPresetToBwKHz(newRegion->getDefaultPreset(), newRegion->wideLora));
@@ -1235,7 +1258,7 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
                      newRegion->name, numFreqSlots);
             LOG_ERROR("%s", err_string);
             RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
-            sendErrorNotification(err_string);
+            sendErrorNotification(err_string, meshtastic_ClientNotification_NotificationType_LORA_CHANNEL_NUM_INVALID);
 
             if (clamp) {
                 if (uses_custom_channel_name) { // clamp to channel name hash
@@ -1274,6 +1297,41 @@ bool RadioInterface::validateConfigLora(const meshtastic_Config_LoRaConfig &lora
 void RadioInterface::clampConfigLora(meshtastic_Config_LoRaConfig &loraConfig)
 {
     checkOrClampConfigLora(loraConfig, true);
+}
+
+uint32_t RadioInterface::frequencySlotCount(const meshtastic_Config_LoRaConfig &loraConfig)
+{
+    const RegionInfo *region = getRegion(loraConfig.region);
+    // UNSET is no band: its table span is a placeholder, and unknown codes resolve to it too
+    if (region->code == meshtastic_Config_LoRaConfig_RegionCode_UNSET)
+        return 0;
+    float bwKHz = loraConfig.use_preset ? modemPresetToBwKHz(loraConfig.modem_preset, region->wideLora)
+                                        : clampBandwidthKHz(bwCodeToKHz(loraConfig.bandwidth));
+    const float edges = region->profile->spacing + (region->profile->padding * 2); // in MHz
+    // A custom bandwidth wider than the region runs at the region default, as checkOrClampConfigLora() clamps it
+    if (!loraConfig.use_preset && (region->freqEnd - region->freqStart) < edges + (bwKHz / 1000))
+        bwKHz = bwCodeToKHz(bwKHzToCode(modemPresetToBwKHz(region->getDefaultPreset(), region->wideLora)));
+    // Same arithmetic as applyModemConfig(), so a slot checked here is a slot the radio can tune
+    return round((region->freqEnd - region->freqStart + region->profile->spacing) / (edges + (bwKHz / 1000)));
+}
+
+uint32_t RadioInterface::resolveFrequencySlot(const meshtastic_Config_LoRaConfig &loraConfig, const char *channelName)
+{
+    const RegionInfo *region = getRegion(loraConfig.region);
+    const uint32_t numFreqSlots = frequencySlotCount(loraConfig);
+    if (loraConfig.channel_num > 0 && loraConfig.channel_num <= numFreqSlots)
+        return loraConfig.channel_num;
+    if (region->overrideSlot > 0 && (uint32_t)region->overrideSlot <= numFreqSlots)
+        return region->overrideSlot;
+    if (!numFreqSlots) // UNSET/degenerate region, and % 0 is a SIGFPE
+        return 1;
+
+    // A blank name is the default channel, which Channels::getName() spells as the preset name
+    const char *presetName = DisplayFormatters::getModemPresetDisplayName(loraConfig.modem_preset, false, loraConfig.use_preset);
+    if (!channelName || !*channelName)
+        channelName = presetName;
+    const char *hashOf = (region->overrideSlot == OVERRIDE_SLOT_PRESET_HASH) ? presetName : channelName;
+    return (hash(hashOf) % numFreqSlots) + 1; // hash slots are 0-based, channel_num is 1-based
 }
 
 /**
@@ -1417,17 +1475,25 @@ void RadioInterface::applyModemConfig()
   - roundtrip air propagation time (assuming max. 30km between nodes);
   - Tx/Rx turnaround time (maximum of SX126x and SX127x);
   - MAC processing time (measured on T-beam) */
+uint8_t RadioInterface::getCadSymbolCount() const
+{
+    return myRegion->wideLora ? getCadSymbolCountWideLora() : getCadSymbolCountSubGhz();
+}
+
 uint32_t RadioInterface::computeSlotTimeMsec()
 {
     float sumPropagationTurnaroundMACTime = 0.2 + 0.4 + 7; // in milliseconds
     float symbolTime = pow_of_2(sf) / bw;                  // in milliseconds
 
     if (myRegion->wideLora) {
-        // CAD duration derived from AN1200.22 of SX1280
-        return (NUM_SYM_CAD_24GHZ + (2 * sf + 3) / 32) * symbolTime + sumPropagationTurnaroundMACTime;
+        // SX1280 datasheet rev 3.3: CAD duration = (cadSymbolNum + (2*SF + 3) / 32) * Ts, the trailing
+        // term being the post-scan processing window. Float division: as ints it truncates to 0 for
+        // every legal SF. SX1280, LR1120 and LR2021 all run here, so take the count from the driver.
+        return (getCadSymbolCount() + (2.0f * sf + 3) / 32) * symbolTime + sumPropagationTurnaroundMACTime;
     } else {
-        // CAD duration for SX127x is max. 2.25 symbols, for SX126x it is number of symbols + 0.5 symbol
-        return max(2.25, NUM_SYM_CAD + 0.5) * symbolTime + sumPropagationTurnaroundMACTime;
+        // CAD duration for SX127x is max. 2.25 symbols, for SX126x it is number of symbols + 0.5 symbol.
+        // getCadSymbolCount() reports the symbols the scan really runs.
+        return max(2.25, getCadSymbolCount() + 0.5) * symbolTime + sumPropagationTurnaroundMACTime;
     }
 }
 
@@ -1501,7 +1567,13 @@ void RadioInterface::deliverToReceiver(meshtastic_MeshPacket *p)
 size_t RadioInterface::beginSending(meshtastic_MeshPacket *p)
 {
     assert(!sendingPacket);
+    const size_t numbytes = encodeRadioBuffer(p);
+    sendingPacket = p;
+    return numbytes;
+}
 
+size_t RadioInterface::encodeRadioBuffer(meshtastic_MeshPacket *p)
+{
     // LOG_DEBUG("Send queued packet on mesh (txGood=%d,rxGood=%d,rxBad=%d)", rf95.txGood(), rf95.rxGood(), rf95.rxBad());
     assert(p->which_payload_variant == meshtastic_MeshPacket_encrypted_tag); // It should have already been encoded by now
 
@@ -1532,6 +1604,5 @@ size_t RadioInterface::beginSending(meshtastic_MeshPacket *p)
 
     memcpy(radioBuffer.payload, p->encrypted.bytes, payloadLen);
 
-    sendingPacket = p;
     return payloadLen + sizeof(PacketHeader);
 }

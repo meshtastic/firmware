@@ -89,7 +89,10 @@ static const uint8_t SDA = PIN_WIRE_SDA;
 static const uint8_t SCL = PIN_WIRE_SCL;
 
 #define HAS_SCREEN 1
-#define USE_SSD1306 1
+
+#define SCREEN_BRIGHTNESS_LEVEL_MEDIUM 100
+#define SCREEN_BRIGHTNESS_LEVEL_HIGH 160
+#define SCREEN_BRIGHTNESS_LEVEL_VERY_HIGH 255
 
 // SPI Configuration (SX1262)
 #define SPI_INTERFACES_COUNT 1
@@ -124,6 +127,7 @@ static const uint8_t SCL = PIN_WIRE_SCL;
 #define ADC_MULTIPLIER 2.0
 #define BATTERY_PIN PIN_VBAT
 #define AREF_VOLTAGE 3.6
+#define OCV_ARRAY 4200, 4050, 3990, 3890, 3800, 3720, 3630, 3530, 3420, 3300, 3100
 // We rely on the nrf52840 USB controller to tell us if we are hooked to a power supply
 #define NRF_APM
 

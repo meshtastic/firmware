@@ -50,7 +50,7 @@ jobs:
 
   publish-release-notes:
     if: github.event.action == 'published'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - name: Get release version
         id: version
@@ -82,7 +82,7 @@ jobs:
   # Create a PR to bump version when a release is Published
   bump-version:
     if: github.event.action == 'published'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     permissions:
       pull-requests: write
       contents: write
@@ -97,7 +97,7 @@ jobs:
           ref: ${{ github.event.repository.default_branch }}
 
       - name: Setup Python
-        uses: actions/setup-python@v7.0.0
+        uses: actions/setup-python@v7
         with:
           python-version: 3.x
 

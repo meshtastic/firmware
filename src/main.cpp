@@ -44,6 +44,7 @@
 #endif
 #include "detect/einkScan.h"
 #include "graphics/Screen.h"
+#include "graphics/ScreenMirror.h"
 #include "main.h"
 #include "memory/MemAudit.h"
 #include "mesh/generated/meshtastic/config.pb.h"
@@ -74,6 +75,10 @@ NimbleBluetooth *nimbleBluetooth = nullptr;
 #ifdef ARCH_NRF52
 #include "NRF52Bluetooth.h"
 NRF52Bluetooth *nrf52Bluetooth = nullptr;
+#endif
+
+#ifdef MESHTASTIC_LINUX_BLE
+LinuxBluetooth *linuxBluetooth = nullptr;
 #endif
 
 #ifdef MESHTASTIC_ENABLE_APPROTECT
@@ -107,6 +112,7 @@ NRF52Bluetooth *nrf52Bluetooth = nullptr;
 #include "linux/LinuxHardwareI2C.h"
 #ifndef ARCH_PORTDUINO_WASM // raspi HTTP server (ulfius/zlib/openssl) excluded in the browser/wasm build
 #include "mesh/raspihttp/PiWebServer.h"
+#include "platform/portduino/NativeDiscovery.h"
 #endif
 #include "platform/portduino/PortduinoGlue.h"
 #ifdef _WIN32
@@ -279,7 +285,7 @@ const char *firmware_version = optstr(APP_VERSION_SHORT);
 
 const char *getDeviceName()
 {
-    uint8_t dmac[6];
+    uint8_t dmac[6] = {0};
 
     getMacAddr(dmac);
 
@@ -446,6 +452,9 @@ void setup()
     // RTCQualityDevice rather than claim NTP quality we have not verified.
     std::string timeCommandResult = exec("timedatectl status | grep synchronized | grep yes -c");
     if (timeCommandResult[0] == '1') {
+        ourQuality = RTCQualityNTP;
+    } else if (access("/var/state/dnsmasqsec", F_OK) == 0) {
+        // OpenWrt marks the system time as valid after successful NTP synchronization.
         ourQuality = RTCQualityNTP;
     }
 #endif
@@ -807,6 +816,10 @@ void setup()
 #endif
 #if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_MAGNETOMETER
     auto mag_info = i2cScanner->firstMagnetometer();
+#if !MESHTASTIC_EXCLUDE_ACCELEROMETER
+    if (mag_info.type == acc_info.type) // a BMM150 with no accelerometer beside it is already the accelerometer thread's
+        mag_info = ScanI2C::DEVICE_NONE;
+#endif
     magnetometer_found = mag_info.type != ScanI2C::DeviceType::NONE ? mag_info.address : magnetometer_found;
     LOG_DEBUG("mag_info = %i", mag_info.type);
 #endif
@@ -1083,6 +1096,13 @@ void setup()
     osk_found = true;
 #endif
 #endif
+#if ARCH_PORTDUINO && defined(__linux__)
+    // Same idea for a gamepad: it can drive the on-screen keyboard but cannot type, so without a
+    // configured keyboard device it is the only way to compose freetext on this host.
+    if (portduino_config.joystickDevice != "" && portduino_config.keyboardDevice == "") {
+        osk_found = true;
+    }
+#endif
 
     // Now that the mesh service is created, create any modules
     setupModules();
@@ -1104,6 +1124,7 @@ void setup()
         meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
         if (cn) {
             cn->level = meshtastic_LogRecord_Level_WARNING;
+            cn->type = meshtastic_ClientNotification_NotificationType_LOW_ENTROPY_KEY_REGENERATED;
             cn->time = getValidTime(RTCQualityFromNet);
             sprintf(cn->message, LOW_ENTROPY_WARNING);
             service->sendClientNotification(cn);
@@ -1188,7 +1209,7 @@ void setup()
 
 #ifndef ARCH_PORTDUINO
 
-        // Initialize Wifi
+    // Initialize Wifi
 #if HAS_WIFI
     initWifi();
 #endif
@@ -1212,6 +1233,9 @@ void setup()
     }
 #endif
     initApiServer(TCPPort);
+#ifndef ARCH_PORTDUINO_WASM
+    startNativeDiscovery(TCPPort);
+#endif
 #endif
 
     // Start airtime logger thread.
@@ -1299,6 +1323,13 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
     deviceMetadata.canShutdown = pmu_found || HAS_CPU_SHUTDOWN;
 #endif
     deviceMetadata.hasBluetooth = HAS_BLUETOOTH;
+    uint8_t bleAddr[6];
+    if (deviceMetadata.hasBluetooth && getBluetoothAddr(bleAddr))
+        formatMacAddr(bleAddr, deviceMetadata.ble_address, sizeof(deviceMetadata.ble_address));
+#if defined(ARCH_NRF52) && !defined(ARCH_NRF54L)
+    // Read from NRF_TIMER2->CC[0] by the Adafruit core at startup, where the bootloader leaves it
+    deviceMetadata.bootloader_version = bootloaderVersion;
+#endif
     deviceMetadata.hasWifi = HAS_WIFI;
     deviceMetadata.hasEthernet = HAS_ETHERNET;
     deviceMetadata.role = config.device.role;
@@ -1351,8 +1382,9 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
 
 // No bluetooth on these targets (yet):
 // Pico W / 2W may get it at some point
-// Portduino and ESP32-C6 are excluded because we don't have a working bluetooth stacks integrated yet.
-#if defined(ARCH_RP2040) || defined(ARCH_PORTDUINO) || defined(ARCH_STM32) || defined(CONFIG_IDF_TARGET_ESP32C6) || !HAS_BLUETOOTH
+// ESP32-C6 is excluded because we don't have a working bluetooth stack integrated yet.
+// Portduino only has BLE when built against BlueZ/sdbus-c++, so it falls out via !HAS_BLUETOOTH.
+#if defined(ARCH_RP2040) || defined(ARCH_STM32) || defined(CONFIG_IDF_TARGET_ESP32C6) || !HAS_BLUETOOTH
     deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_BLUETOOTH_CONFIG;
 #endif
 
@@ -1365,6 +1397,50 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
 #endif
 #if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
     deviceMetadata.has_xeddsa = true;
+#endif
+
+#if HAS_MUI_MIRROR
+    // MUI owns the panel and leaves `screen` null, so ask LVGL instead.
+    uint16_t muiW = 0, muiH = 0;
+    bool muiTouch = false;
+    if (graphics::muiDisplayInfo(muiW, muiH, muiTouch)) {
+        deviceMetadata.has_display = true;
+        deviceMetadata.display.width = muiW;
+        deviceMetadata.display.height = muiH;
+        deviceMetadata.display.format = meshtastic_DisplayFrame_Format_RGB565;
+        deviceMetadata.display.panel_class = meshtastic_DisplayInfo_PanelClass_TFT;
+        deviceMetadata.display.has_touch = muiTouch;
+    } else
+#endif
+#if HAS_SCREEN_MIRROR
+        if (screen) {
+        OLEDDisplay *dispdev = screen->getDisplayDevice();
+        if (dispdev && dispdev->getWidth() > 0) {
+            deviceMetadata.has_display = true;
+            deviceMetadata.display.width = dispdev->getWidth();
+            deviceMetadata.display.height = dispdev->getHeight();
+            deviceMetadata.display.format = meshtastic_DisplayFrame_Format_MONO_VLSB;
+#if defined(ARCH_PORTDUINO)
+            // The native panel is selected at runtime; UNSPECIFIED is honest until derived from portduino_config.
+            deviceMetadata.display.panel_class = meshtastic_DisplayInfo_PanelClass_PANEL_CLASS_UNSPECIFIED;
+#elif defined(USE_EINK)
+            deviceMetadata.display.panel_class = meshtastic_DisplayInfo_PanelClass_EINK;
+#elif defined(USE_HUB75) || defined(HAS_HUB75_NATIVE)
+            deviceMetadata.display.panel_class = meshtastic_DisplayInfo_PanelClass_HUB75;
+// value-tested: configuration.h always defines USE_TFTDISPLAY, defaulting it to 0
+#elif USE_TFTDISPLAY || defined(HAS_SPI_TFT) || defined(USE_ST7789) || defined(USE_ST7796) || defined(ILI9341_DRIVER) ||         \
+    defined(ILI9342_DRIVER)
+            deviceMetadata.display.panel_class = meshtastic_DisplayInfo_PanelClass_TFT;
+#elif defined(USE_ST7567)
+            deviceMetadata.display.panel_class = meshtastic_DisplayInfo_PanelClass_LCD;
+#else
+            deviceMetadata.display.panel_class = meshtastic_DisplayInfo_PanelClass_OLED;
+#endif
+#if HAS_TOUCHSCREEN
+            deviceMetadata.display.has_touch = true;
+#endif
+        }
+    }
 #endif
     return deviceMetadata;
 }
@@ -1478,6 +1554,7 @@ void loop()
     rp2040Loop();
 #endif
     power->powerCommandsCheck();
+    nodeDB->saveNodeDatabaseIfDirty();
 
     if (RadioLibInterface::instance != nullptr) {
         static uint32_t lastRadioMissedIrqPoll;
@@ -1486,7 +1563,7 @@ void loop()
             RadioLibInterface::instance->pollMissedIrqs();
         }
 
-        // Periodic radio upkeep - re-arms RX if it was left off, else AGC reset (stuck-gain prevention)
+        // Periodic radio upkeep - re-arms RX if it was left off, else an AGC reset when one is due (stuck-gain prevention)
         static uint32_t lastAgcReset;
         if (!Throttle::isWithinTimespanMs(lastAgcReset, AGC_RESET_INTERVAL_MS)) {
             lastAgcReset = millis();
@@ -1510,6 +1587,9 @@ void loop()
         inputBroker->processInputEventQueue();
 #endif
 #if ARCH_PORTDUINO
+#ifndef ARCH_PORTDUINO_WASM
+    serviceNativeDiscovery();
+#endif
     if (portduino_config.lora_spi_dev == "ch341" && ch341Hal != nullptr) {
         ch341Hal->checkError();
     }
