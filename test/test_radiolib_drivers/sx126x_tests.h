@@ -91,7 +91,8 @@ static void test_sx126x_mode_commands_reach_the_chip()
     TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_NONE, radio.standby());
     TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_NONE, radio.startReceive());
     TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_NONE, radio.sleep());
-    TEST_ASSERT_EQUAL_UINT32(1, hal.count({RADIOLIB_SX126X_CMD_SET_STANDBY}));
+    // startReceive() stages RX through standby() as well, so the explicit call makes two.
+    TEST_ASSERT_EQUAL_UINT32(2, hal.count({RADIOLIB_SX126X_CMD_SET_STANDBY}));
     TEST_ASSERT_EQUAL_UINT32(1, hal.count({RADIOLIB_SX126X_CMD_SET_RX}));
     TEST_ASSERT_EQUAL_UINT32(1, hal.count({RADIOLIB_SX126X_CMD_SET_SLEEP}));
 }
