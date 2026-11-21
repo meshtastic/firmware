@@ -1150,6 +1150,7 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
 {
     char err_string[160];
     float check_bw;
+    uint32_t preMigrationSlots = 0; // non-zero only when clamp migrated a known unsupported preset
 
     const RegionInfo *newRegion = getRegion(loraConfig.region);
 
@@ -1188,6 +1189,14 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
         if (!preset_valid) {
             const char *defaultName = DisplayFormatters::getModemPresetDisplayName(newRegion->getDefaultPreset(), false, true);
             if (clamp) {
+                // Capture the outgoing preset's slot count so slots invalidated solely by bandwidth widening repair at INFO.
+                if (isKnownModemPreset(loraConfig.modem_preset)) {
+                    float oldSlotWidth = newRegion->profile->spacing + (newRegion->profile->padding * 2) + (check_bw / 1000);
+                    if (oldSlotWidth > 0.0f && (newRegion->freqEnd - newRegion->freqStart) >= oldSlotWidth) {
+                        preMigrationSlots =
+                            round((newRegion->freqEnd - newRegion->freqStart + newRegion->profile->spacing) / oldSlotWidth);
+                    }
+                }
                 snprintf(err_string, sizeof(err_string), "Preset %s invalid for %s, using %s", presetName, newRegion->name,
                          defaultName);
                 LOG_INFO("%s", err_string);
@@ -1231,9 +1240,10 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
         }
     }
 
-    const char *channelName = channels.getName(channels.getPrimaryIndex());
     const char *presetNameDisplay =
         DisplayFormatters::getModemPresetDisplayName(loraConfig.modem_preset, false, loraConfig.use_preset);
+    const char *storedPrimaryName = channels.getByIndex(channels.getPrimaryIndex()).settings.name;
+    const char *channelName = *storedPrimaryName ? storedPrimaryName : presetNameDisplay;
     // numFreqSlots can still be 0 for an UNSET/degenerate region, and % 0 is a SIGFPE
     uint32_t channelNameHashSlot = numFreqSlots ? (hash(channelName) % numFreqSlots) : 0;
     uint32_t presetNameHashSlot = numFreqSlots ? (hash(presetNameDisplay) % numFreqSlots) : 0;
@@ -1255,11 +1265,18 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
         uses_custom_channel_name = (strcmp(channelName, presetNameDisplay) != 0);
 
         if (loraConfig.channel_num > numFreqSlots) {
+            const bool causedByPresetMigration = clamp && preMigrationSlots > 0 && loraConfig.channel_num <= preMigrationSlots;
             snprintf(err_string, sizeof(err_string), "Channel number %u invalid for %s, max is %u", loraConfig.channel_num,
                      newRegion->name, numFreqSlots);
-            LOG_ERROR("%s", err_string);
-            RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
-            sendErrorNotification(err_string, meshtastic_ClientNotification_NotificationType_LORA_CHANNEL_NUM_INVALID);
+            if (causedByPresetMigration) {
+                LOG_INFO("%s", err_string);
+                sendErrorNotification(err_string, meshtastic_ClientNotification_NotificationType_LORA_CHANNEL_NUM_INVALID,
+                                      meshtastic_LogRecord_Level_INFO);
+            } else {
+                LOG_ERROR("%s", err_string);
+                RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+                sendErrorNotification(err_string, meshtastic_ClientNotification_NotificationType_LORA_CHANNEL_NUM_INVALID);
+            }
 
             if (clamp) {
                 if (uses_custom_channel_name) { // clamp to channel name hash
