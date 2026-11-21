@@ -45,6 +45,17 @@ class ScreenMirror
     /// Called by Screen after each frame commit; snapshots the framebuffer when it changed.
     void onRendered(OLEDDisplay *display);
 
+    /// True while a client wants frames and capture has not failed; a source with a costly conversion checks this first.
+    bool wantsFrame();
+
+    /// Fills a w x h MONO_VLSB frame straight into the snapshot under the lock. Every call is a new frame.
+    using FillFn = void (*)(uint8_t *dst, uint16_t w, uint16_t h, void *ctx);
+    void onRenderedFill(uint16_t w, uint16_t h, FillFn fill, void *ctx);
+
+    /// For a source with no Screen thread: asks it to capture its current image on its own thread.
+    using CaptureKickFn = void (*)();
+    void setCaptureKick(CaptureKickFn fn) { captureKick = fn; }
+
     /// True while this client has undelivered bytes of the current frame.
     bool hasChunkFor(const void *client, uint32_t clientFrameId, uint16_t clientOffset);
 
@@ -79,6 +90,9 @@ class ScreenMirror
     void freeIfIdleLocked();
     void failCaptureLocked();
     void freeSnapshotLocked();
+    bool prepareSnapshotLocked(uint16_t w, uint16_t h, bool &firstFrame, bool &geometryChanged);
+
+    CaptureKickFn captureKick = nullptr;
 
     concurrency::Lock lock;
     uint8_t subscribers = 0;

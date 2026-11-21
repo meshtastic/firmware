@@ -52,6 +52,9 @@ class Renderer : protected concurrency::OSThread
     uint16_t width();
     uint16_t height();
 
+    // Display mirror asks for the current image, from any task; captured on this thread
+    void requestMirrorCapture();
+
   private:
     // Make attempts to render / update, once triggered by requestUpdate or forceUpdate
     int32_t runOnce() override;
@@ -73,6 +76,9 @@ class Renderer : protected concurrency::OSThread
     void renderSystemApplets();
     void renderPlaceholders();
 
+    void captureMirror();
+    static void fillMirror(uint8_t *dst, uint16_t w, uint16_t h, void *ctx);
+
     Drivers::EInk *driver = nullptr; // Interacts with your variants display hardware
     DisplayHealth displayHealth;     // Manages display health by controlling type of update
 
@@ -87,6 +93,7 @@ class Renderer : protected concurrency::OSThread
     bool requested = false;
     bool forced = false;
     bool renderAll = false;
+    volatile bool mirrorPending = false;
 
     // For convenience
     InkHUD *inkhud = nullptr;

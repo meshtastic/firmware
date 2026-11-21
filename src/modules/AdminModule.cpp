@@ -12,6 +12,9 @@
 #include "gps/RTC.h"
 #include "graphics/ScreenMirror.h"
 #include "input/InputBroker.h"
+#ifdef MESHTASTIC_INCLUDE_INKHUD
+#include "graphics/niche/InkHUD/InkHUD.h"
+#endif
 #include "meshUtils.h"
 #include <ErriezCRC32.h>
 #include <FSCommon.h>
@@ -2195,6 +2198,39 @@ void AdminModule::handleSendInputEvent(const meshtastic_AdminMessage_InputEvent 
     // displaymode is COLOR), so remote input reaches the LVGL UI directly.
     if (graphics::muiInjectInputEvent(inputEvent.event_code, inputEvent.kb_char, inputEvent.touch_x, inputEvent.touch_y))
         return;
+#endif
+
+#ifdef MESHTASTIC_INCLUDE_INKHUD
+    // InkHUD builds have no InputBroker; touch and kb_char have no InkHUD equivalent, and CANCEL stays unmapped.
+    using RemoteInput = NicheGraphics::InkHUD::InkHUD::RemoteInput;
+    NicheGraphics::InkHUD::InkHUD *inkhud = NicheGraphics::InkHUD::InkHUD::getInstance();
+    switch (event.inputEvent) {
+    case INPUT_BROKER_UP:
+        inkhud->queueRemoteInput(RemoteInput::UP);
+        break;
+    case INPUT_BROKER_DOWN:
+        inkhud->queueRemoteInput(RemoteInput::DOWN);
+        break;
+    case INPUT_BROKER_LEFT:
+        inkhud->queueRemoteInput(RemoteInput::LEFT);
+        break;
+    case INPUT_BROKER_RIGHT:
+        inkhud->queueRemoteInput(RemoteInput::RIGHT);
+        break;
+    case INPUT_BROKER_SELECT:
+        inkhud->queueRemoteInput(RemoteInput::SHORT);
+        break;
+    case INPUT_BROKER_SELECT_LONG:
+        inkhud->queueRemoteInput(RemoteInput::LONG);
+        break;
+    case INPUT_BROKER_BACK:
+        inkhud->queueRemoteInput(RemoteInput::EXIT_SHORT);
+        break;
+    default:
+        LOG_DEBUG("InkHUD ignores input event %u", event.inputEvent);
+        break;
+    }
+    return;
 #endif
 
 #if !defined(MESHTASTIC_EXCLUDE_INPUTBROKER)
