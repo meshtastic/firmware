@@ -646,6 +646,14 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define HAS_SCREEN 0
 #endif
 
+// Motion sensors are I2C-only (no SPI drivers) and unsupported on STM32WL
+#if MESHTASTIC_EXCLUDE_I2C || defined(ARCH_STM32WL)
+#undef MESHTASTIC_EXCLUDE_ACCELEROMETER
+#define MESHTASTIC_EXCLUDE_ACCELEROMETER 1
+#undef MESHTASTIC_EXCLUDE_MAGNETOMETER
+#define MESHTASTIC_EXCLUDE_MAGNETOMETER 1
+#endif
+
 // -----------------------------------------------------------------------------
 // Motion sensor wake
 // -----------------------------------------------------------------------------
