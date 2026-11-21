@@ -11,6 +11,7 @@
 #include "NodeDB.h"
 #include "Power.h"
 #include "PowerFSM.h"
+#include "Throttle.h"
 #include "TypeConversions.h"
 #include "UptimeClock.h"
 #include "gps/GPSLog.h"
@@ -23,6 +24,7 @@
 #include "modules/NodeInfoModule.h"
 #include "modules/PositionModule.h"
 #include "modules/RoutingModule.h"
+#include "sleep.h"
 #include <assert.h>
 #include <string>
 
@@ -152,25 +154,74 @@ void MeshService::loop()
             identityGenerationSeen = generation;
         }
     }
+    applyDeferredRadioConfig();
+}
+
+void MeshService::awaitAckBeforeRadioConfig(PacketId id)
+{
+    if (!radioConfigDeferred)
+        return;
+    radioConfigAwaitsAckOf = id;
+    radioConfigAwaitedReplySeen = false;
+}
+
+void MeshService::applyDeferredRadioConfig()
+{
+    if (!radioConfigDeferred)
+        return;
+    bool ready;
+    if (radioConfigAwaitsAckOf) {
+        // The pending table holds a reliable reply from its send until its ack, so leaving it means acked (or given up)
+        // and other queued traffic needn't hold the retune. Never in it (no retransmission copy): it is only queued.
+        const bool pending = router && router->isRetransmissionPending(nodeDB->getNodeNum(), radioConfigAwaitsAckOf);
+        radioConfigAwaitedReplySeen |= pending;
+        ready = !pending && (radioConfigAwaitedReplySeen || doPreflightSleep(true));
+    } else {
+        ready = doPreflightSleep(true); // the radio's own "nothing queued and nothing on air" check
+    }
+    if (ready) {
+        LOG_INFO("Admin reply delivered, apply the deferred radio change");
+    } else if (Throttle::hasElapsed(radioConfigDeferredAtMs, RADIO_CONFIG_DEFER_MAX_MS)) {
+        LOG_WARN("Admin reply still pending after %u ms, apply the deferred radio change anyway", RADIO_CONFIG_DEFER_MAX_MS);
+    } else {
+        return;
+    }
+    applyRadioConfig();
+}
+
+void MeshService::applyRadioConfig()
+{
+    radioConfigDeferred = false;
+    radioConfigAwaitsAckOf = 0;
+
+    // This will also update the region as needed
+    nodeDB->resetRadioConfig(); // Don't let the phone send us fatally bad settings
+
+    configChanged.notifyObservers(NULL); // This will cause radio hardware to change freqs etc
+
+    // Nothing is swept and nothing extra persisted: each node carries the slot it was heard on, so
+    // a client rolling through presets just moves this and moves it back.
+    nodeDB->refreshCommittedLoraSlot();
 }
 
 /// The radioConfig object just changed, call this to force the hw to change to the new settings
-void MeshService::reloadConfig(int saveWhat)
+void MeshService::reloadConfig(int saveWhat, bool deferRadio)
 {
     // Only LoRa config and channels (freq/PSK/slot) affect the radio. Saves that only touch
     // module config, device state, or the node database (e.g. favoriting a node) have no reason
     // to re-init the LoRa chip - skip it there to avoid an unnecessary and risky SPI reconfigure.
     if (saveWhat & (SEGMENT_CONFIG | SEGMENT_CHANNELS)) {
-        // If we can successfully set this radio to these settings, save them to disk
-
-        // This will also update the region as needed
-        nodeDB->resetRadioConfig(); // Don't let the phone send us fatally bad settings
-
-        configChanged.notifyObservers(NULL); // This will cause radio hardware to change freqs etc
-
-        // Nothing is swept and nothing extra persisted: each node carries the slot it was heard on, so
-        // a client rolling through presets just moves this and moves it back.
-        nodeDB->refreshCommittedLoraSlot();
+        if (deferRadio) {
+            // The channel re-hash waits too: an unnamed primary hashes the preset name, and a reply hashed
+            // for the new preset is undecodable on the old one. Boot re-runs the same fixups on what is saved.
+            LOG_INFO("Radio change saved, retune once the reply is out and the TX queue drains");
+            // A save during an active deferral joins it; restarting the clock would let repeated saves outrun the cap.
+            if (!radioConfigDeferred)
+                radioConfigDeferredAtMs = Time::getMillis();
+            radioConfigDeferred = true;
+        } else {
+            applyRadioConfig();
+        }
     }
     nodeDB->saveToDisk(saveWhat);
 }

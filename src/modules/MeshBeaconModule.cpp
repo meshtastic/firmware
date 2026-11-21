@@ -1,6 +1,7 @@
 #include "MeshBeaconModule.h"
 #include "Default.h"
 #include "DisplayFormatters.h"
+#include "MeshService.h"
 #include "NodeDB.h"
 #include "RadioInterface.h"
 #include "Router.h"
@@ -527,9 +528,15 @@ RadioTxHook::PreTxAction MeshBeaconTxHook::beforeTransmit(RadioInterface *iface,
         LOG_DEBUG("Beacon: invalid TX radio config, drop packet 0x%08x", p->id);
         return PRETX_DROP;
     }
+    const MeshBeaconModule_TargetRadioSettings *s = MeshBeaconModule::getTargetRadioSettings(p);
+    // config.lora already holds a deferred admin change: the switch would snapshot it as home and the restore would
+    // retune onto it before the admin reply is acked. A periodic beacon can skip one turn.
+    if (s && service && service->isRadioConfigDeferred()) {
+        LOG_INFO("Beacon: admin radio change pending, drop packet 0x%08x", p->id);
+        return PRETX_DROP;
+    }
     // perhapsEncode() hashed a blank-named channel under the running preset's name; the header byte is
     // written after this hook, so put the target preset's hash there.
-    const MeshBeaconModule_TargetRadioSettings *s = MeshBeaconModule::getTargetRadioSettings(p);
     if (s && s->channelHash >= 0)
         p->channel = (uint8_t)s->channelHash;
     // A switch leaves the radio on a channel we have not scanned yet, so the driver owes us a

@@ -94,6 +94,8 @@ class NextHopRouter : public FloodingRouter
      */
     virtual ErrorCode send(meshtastic_MeshPacket *p) override;
 
+    bool isRetransmissionPending(NodeNum from, PacketId id) override { return findPendingPacket(from, id) != nullptr; }
+
     /** Do our retransmission handling */
     virtual int32_t runOnce() override
     {

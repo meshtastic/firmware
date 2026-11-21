@@ -4177,10 +4177,11 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
             nodeInfoLiteSetBit(info, NODEINFO_BITFIELD_HAS_SNR_MASK, true);
         }
 
+        const bool radioBehindConfig = service && service->isRadioConfigDeferred(); // until a deferred admin retune runs
         // RF-origin only (a via_mqtt rebroadcast proves the gateway is in earshot, not the node); not
         // has_rx_rssi-gated, as SimRadio omits it. Live slot, so a beacon-preset hear fails to match home.
         if (mp.transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA && !mp.via_mqtt)
-            nodeInfoLiteSetHeardSlot(info, currentLoraSlot().fingerprint());
+            nodeInfoLiteSetHeardSlot(info, radioBehindConfig ? committedSlot : currentLoraSlot().fingerprint());
 
         nodeInfoLiteSetBit(info, NODEINFO_BITFIELD_VIA_MQTT_MASK,
                            mp.via_mqtt); // Store if we received this packet via MQTT

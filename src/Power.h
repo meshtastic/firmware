@@ -98,6 +98,8 @@ class Power : public concurrency::OSThread
     Power();
 
     void powerCommandsCheck();
+    /// A scheduled reboot whose time has come and that no deferred radio change is holding back.
+    static bool rebootIsDue();
     void readPowerStatus();
     void logHeapUsage();
     virtual bool setup();

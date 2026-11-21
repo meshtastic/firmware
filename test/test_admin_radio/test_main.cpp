@@ -14,6 +14,19 @@
  *     RadioInterface::checkConfigRegion(), which hands its failure type to validateConfigRegion().
  *     Clients key off the type to localize or act on a notification instead of matching its
  *     text, so a path that drops it sends UNSET and the client falls back to text matching.
+ *  8. When an admin save retunes the radio: AdminModule::saveChanges() saves through
+ *     MeshService::reloadConfig(saveWhat, true), and the channel re-hash and retune wait in
+ *     MeshService::applyDeferredRadioConfig() until the reply registered through
+ *     awaitAckBeforeRadioConfig() is acked (with none registered, or one that never entered the
+ *     retransmission table, until the TX queue has drained), or RADIO_CONFIG_DEFER_MAX_MS after the
+ *     first save has passed; Power::rebootIsDue() holds a commit's reboot meanwhile.
+ *     The admin's reply is queued only after the handler returns, so it must leave on the settings
+ *     the requester is still listening on. Retuning at save time sends that reply on the new
+ *     preset/slot, where the requester never hears it, and the client reports a change that applied
+ *     as failed (MAX_RETRANSMIT). Rebooting before the queue drains cuts the reply off the same way,
+ *     and retuning before the reply is acked strands its retransmissions on the new settings. An
+ *     unnamed primary hashes the preset name, so re-hashing early stamps the reply with a hash the
+ *     requester, still on the old preset, has no channel for.
  */
 
 #include "Channels.h"
@@ -22,14 +35,18 @@
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "NodeDB.h"
+#include "Power.h" // Power::rebootIsDue()
 #include "RadioInterface.h"
 #include "TestUtil.h"
+#include "UptimeClock.h"
 #include "graphics/draw/MenuHandler.h"
+#include "main.h" // rebootAtMsec
 #include "mesh/Channels.h"
 #include "mesh/CryptoEngine.h" // crypto global: the tests swap in a stub engine to drive key derivation
 #include "mesh/Router.h"       // router global: allocErrorResponse() allocates the reply through it
 #include "modules/AdminModule.h"
 #include "modules/NodeInfoModule.h"
+#include "sleep.h"       // preflightSleep: the radio's "nothing queued or on air" veto
 #include <ErriezCRC32.h> // crc32Buffer(), for the my_node_num == crc32(public_key) invariant
 #include <pb_decode.h>
 #include <pb_encode.h>
@@ -1031,10 +1048,11 @@ static meshtastic_DeviceState savedDeviceState;
 static meshtastic_User savedOwner;
 static meshtastic_LocalConfig savedConfig;
 static meshtastic_ChannelFile savedChannelFile;
-// Only the ham dispatcher test installs a router (allocErrorResponse() allocates through it).
+// A test that needs a router (allocErrorResponse() allocates through it) installs one here.
 // Saved/torn down for every test so a failed assertion's longjmp cannot leave one dangling.
 static Router *savedRouter;
-static Router *hamMockRouter;
+static Router *testRouter;
+static uint32_t savedRebootAtMsec;
 
 // Called from setUp/tearDown for every test, not opted into by a handful. A shared NodeDB plus
 // unrestored config/owner/devicestate/channelFile means each test inherits whatever its
@@ -1048,6 +1066,7 @@ static void replaceAdminRadioGlobals()
     savedOwner = owner;
     savedConfig = config;
     savedChannelFile = channelFile;
+    savedRebootAtMsec = rebootAtMsec;
     replacementNodeDB = new NodeDB();
     nodeDB = replacementNodeDB;
 }
@@ -1055,15 +1074,19 @@ static void replaceAdminRadioGlobals()
 // Defined with the crypto stub below; tearDown must undo an install even when a failed assertion
 // longjmped out of the test body before it could.
 static void dropRestoreCryptoStub();
+// Defined with the deferred-retune tests; same longjmp argument as the crypto stub.
+static void detachDeferredRetuneFixtures();
 
 static void restoreAdminRadioGlobals()
 {
     dropRestoreCryptoStub();
+    detachDeferredRetuneFixtures();
+    rebootAtMsec = savedRebootAtMsec;
     nodeInfoModule = savedNodeInfoModule;
     nodeDB = savedNodeDB;
     router = savedRouter;
-    delete hamMockRouter;
-    hamMockRouter = nullptr;
+    delete testRouter;
+    testRouter = nullptr;
     delete replacementNodeDB;
     replacementNodeDB = nullptr;
     devicestate = savedDeviceState;
@@ -1279,8 +1302,8 @@ static bool decodeRoutingError(meshtastic_MeshPacket *reply, meshtastic_Routing_
 static void test_handleSetHamMode_blankCallSignRepliesBadRequest()
 {
     primeHamModeTest();
-    hamMockRouter = new HamModeMockRouter();
-    router = hamMockRouter;
+    testRouter = new HamModeMockRouter();
+    router = testRouter;
 
     meshtastic_AdminMessage m = meshtastic_AdminMessage_init_zero;
     m.which_payload_variant = meshtastic_AdminMessage_set_ham_mode_tag;
@@ -1305,8 +1328,8 @@ static void test_handleSetHamMode_blankCallSignRepliesBadRequest()
 static void test_handleSetHamMode_acceptedRequestAcksSuccess()
 {
     primeHamModeTest();
-    hamMockRouter = new HamModeMockRouter();
-    router = hamMockRouter;
+    testRouter = new HamModeMockRouter();
+    router = testRouter;
 
     meshtastic_AdminMessage m = meshtastic_AdminMessage_init_zero;
     m.which_payload_variant = meshtastic_AdminMessage_set_ham_mode_tag;
@@ -2506,6 +2529,215 @@ static void test_toggleMutedNode_skipsRadioReload_butPersists()
 }
 
 // -----------------------------------------------------------------------
+// Radio-changing admin saves retune only after the reply has left (target 8 in the header)
+// -----------------------------------------------------------------------
+
+// Stands in for RadioInterface::preflightSleepCb, which vetoes a deep-sleep preflight while a packet
+// is queued or on air. File-scope so tearDown detaches it even after a failed assertion longjmps out.
+class TxQueueStandIn : public Observer<void *>
+{
+  public:
+    bool busy = false;
+
+  protected:
+    int onNotify(void *arg) override { return busy ? 1 : 0; }
+};
+static TxQueueStandIn txQueueStandIn;
+// Counts retunes. File-scope for the same reason: a stack counter skipped by longjmp would stay on the
+// service's observer list and be read after its frame is gone when tearDown deletes the service.
+static ConfigChangedCounter retuneCounter;
+
+static void detachDeferredRetuneFixtures()
+{
+    txQueueStandIn.unobserve(&preflightSleep);
+    txQueueStandIn.busy = false;
+    if (service)
+        retuneCounter.unobserve(&service->configChanged);
+    retuneCounter.count = 0;
+}
+
+// The admin's reply sits in the TX queue. Time is moved by aging the deferral and the reboot deadline
+// rather than the shared clock: stepping that back afterwards leaks into later cases' NodeDB state.
+static void primeDeferredRetuneTest()
+{
+    usePresetLongFast();
+    config.lora.channel_num = 20;
+    rebootAtMsec = 0;
+    txQueueStandIn.busy = true;
+    txQueueStandIn.observe(&preflightSleep);
+    retuneCounter.observe(&service->configChanged);
+}
+
+// The reboot commit_edit_settings scheduled, brought to its deadline.
+static void expireRebootDeadline()
+{
+    rebootAtMsec = Time::skipZero(Time::getMillis() - 1);
+}
+
+// The LoRa set a client sends to move the node to another slot.
+static void sendSetLoraChannelNum(uint32_t channelNum)
+{
+    meshtastic_AdminMessage m = meshtastic_AdminMessage_init_zero;
+    m.which_payload_variant = meshtastic_AdminMessage_set_config_tag;
+    m.set_config.which_payload_variant = meshtastic_Config_lora_tag;
+    m.set_config.payload_variant.lora = config.lora;
+    m.set_config.payload_variant.lora.channel_num = channelNum;
+    sendAdmin(m);
+}
+
+// A standalone LoRa set never reboots, so the deferred retune is its only route onto the new slot.
+static void test_setConfigLora_retunesLiveOnceTxQueueDrains()
+{
+    primeDeferredRetuneTest();
+
+    sendSetLoraChannelNum(21);
+
+    TEST_ASSERT_EQUAL_UINT32(21, config.lora.channel_num);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, retuneCounter.count, "retuned while the reply was still queued");
+    service->applyDeferredRadioConfig();
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, retuneCounter.count, "retuned while the reply was still queued");
+
+    txQueueStandIn.busy = false;
+    service->applyDeferredRadioConfig();
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, retuneCounter.count, "never retuned after the TX queue drained");
+    TEST_ASSERT_FALSE(service->isRadioConfigDeferred());
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, rebootAtMsec, "a standalone LoRa set applies live, without a reboot");
+}
+
+// commit_edit_settings is the one radio save that also reboots: the reboot has to wait for the queue too.
+static void test_commitEditSettings_rebootWaitsForTxQueue()
+{
+    primeDeferredRetuneTest();
+
+    sendBeginEdit();
+    sendSetLoraChannelNum(21);
+    sendCommitEdit();
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, retuneCounter.count, "commit retuned while its reply was still queued");
+    TEST_ASSERT_NOT_EQUAL_UINT32(0, rebootAtMsec);
+    expireRebootDeadline();
+    TEST_ASSERT_FALSE_MESSAGE(Power::rebootIsDue(), "reboot fired while the reply was still queued");
+
+    txQueueStandIn.busy = false;
+    service->applyDeferredRadioConfig();
+    TEST_ASSERT_EQUAL_INT(1, retuneCounter.count);
+    TEST_ASSERT_TRUE(Power::rebootIsDue());
+}
+
+// A TX queue that never drains (saturated channel, duty-cycle hold) must not strand the node between
+// its saved settings and the radio's: at the cap the radio retunes and the held reboot goes ahead.
+static void test_commitEditSettings_capReleasesRetuneAndReboot()
+{
+    primeDeferredRetuneTest();
+
+    sendBeginEdit();
+    sendSetLoraChannelNum(21);
+    sendCommitEdit();
+
+    expireRebootDeadline();
+    service->ageRadioConfigDeferralForTest(MeshService::RADIO_CONFIG_DEFER_MAX_MS - 1000);
+    service->applyDeferredRadioConfig();
+    TEST_ASSERT_EQUAL_INT(0, retuneCounter.count);
+    TEST_ASSERT_FALSE(Power::rebootIsDue());
+
+    service->ageRadioConfigDeferralForTest(1000);
+    service->applyDeferredRadioConfig();
+    TEST_ASSERT_EQUAL_INT(1, retuneCounter.count);
+    TEST_ASSERT_TRUE(Power::rebootIsDue());
+}
+
+// A save while a deferral is active joins it. Restarting the cap's clock instead would let a client that
+// keeps saving before the queue drains hold the retune, and a commit's reboot, indefinitely.
+static void test_deferredRetune_repeatedSaveKeepsCapStart()
+{
+    primeDeferredRetuneTest();
+    service->reloadConfig(SEGMENT_CONFIG, true);
+    service->ageRadioConfigDeferralForTest(MeshService::RADIO_CONFIG_DEFER_MAX_MS - 1000);
+    service->reloadConfig(SEGMENT_CONFIG, true); // second save, queue still busy
+
+    service->ageRadioConfigDeferralForTest(1000);
+    service->applyDeferredRadioConfig();
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, retuneCounter.count, "a second save restarted the cap");
+}
+
+// Stands in for NextHopRouter's pending-retransmission table: our packet `id` is pending until acked.
+class PendingReplyRouter : public Router
+{
+  public:
+    PacketId id = 0;
+    bool acked = false;
+    bool isRetransmissionPending(NodeNum from, PacketId p) override { return !acked && from == nodeDB->getNodeNum() && p == id; }
+};
+
+// An empty TX queue only means the reply's first transmission is out. Retuning then strands its
+// retransmissions (and the requester's ack of it) on the old settings: wait until it is acked. Once it
+// is, other traffic still queued (rebroadcasts on a busy mesh) must not hold the retune to the cap.
+static void test_deferredRetune_waitsForReplyAck()
+{
+    primeDeferredRetuneTest();
+    txQueueStandIn.busy = false;
+    auto *pendingReply = new PendingReplyRouter();
+    pendingReply->id = 0x1234;
+    testRouter = pendingReply;
+    router = pendingReply;
+
+    service->reloadConfig(SEGMENT_CONFIG, true);
+    service->awaitAckBeforeRadioConfig(0x1234);
+    service->applyDeferredRadioConfig();
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, retuneCounter.count, "retuned before the reply was acked");
+
+    txQueueStandIn.busy = true;
+    pendingReply->acked = true;
+    service->applyDeferredRadioConfig();
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, retuneCounter.count, "an acked reply waited on unrelated queued traffic");
+}
+
+// A reliable reply that never entered the pending table (no copy for retransmission when the packet pool
+// is exhausted) is only in the TX queue. Its absence from the table is not an ack: wait for the queue.
+static void test_deferredRetune_untrackedReplyWaitsForQueue()
+{
+    primeDeferredRetuneTest();
+    auto *noPending = new PendingReplyRouter();
+    noPending->acked = true; // never reports the reply pending
+    testRouter = noPending;
+    router = noPending;
+
+    service->reloadConfig(SEGMENT_CONFIG, true);
+    service->awaitAckBeforeRadioConfig(0x1234);
+    service->applyDeferredRadioConfig();
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, retuneCounter.count, "an untracked reply was taken as acked while still queued");
+
+    txQueueStandIn.busy = false;
+    service->applyDeferredRadioConfig();
+    TEST_ASSERT_EQUAL_INT(1, retuneCounter.count);
+}
+
+// An unnamed primary channel hashes the preset's name. Re-hashing at save time stamps the reply with the
+// new preset's hash while it still goes out on the old preset, where the requester has no channel with
+// that hash and drops it: a preset change (the common LongFast <-> MediumSlow move) loses its ack anyway.
+static void test_presetChange_keepsChannelHashUntilRetune()
+{
+    primeDeferredRetuneTest();
+    channels.initDefaults(); // primary unnamed, default key
+    channels.onConfigChanged();
+    const int16_t longFastHash = channels.getHash(0);
+
+    meshtastic_AdminMessage m = meshtastic_AdminMessage_init_zero;
+    m.which_payload_variant = meshtastic_AdminMessage_set_config_tag;
+    m.set_config.which_payload_variant = meshtastic_Config_lora_tag;
+    m.set_config.payload_variant.lora = config.lora;
+    m.set_config.payload_variant.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW;
+    sendAdmin(m);
+
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW, config.lora.modem_preset);
+    TEST_ASSERT_EQUAL_INT16_MESSAGE(longFastHash, channels.getHash(0), "re-hashed while the reply was still queued");
+
+    txQueueStandIn.busy = false;
+    service->applyDeferredRadioConfig();
+    TEST_ASSERT_NOT_EQUAL_MESSAGE(longFastHash, channels.getHash(0), "never re-hashed for the new preset");
+}
+
+// -----------------------------------------------------------------------
 // Node menu mute toggle (graphics::menuHandler::toggleNodeMuted)
 // -----------------------------------------------------------------------
 //
@@ -2842,6 +3074,16 @@ void setup()
     RUN_TEST(test_presetForRegionSelection_respectsAPresetAlreadyChosen);
     RUN_TEST(test_presetForRegionSelection_ignoresNodesOnRawModemSettings);
 #endif
+
+    // Radio-changing admin saves wait for the reply to leave. Last: their real saves persist a NodeDB
+    // the node-menu mute cases above would otherwise reload with a node already muted.
+    RUN_TEST(test_setConfigLora_retunesLiveOnceTxQueueDrains);
+    RUN_TEST(test_commitEditSettings_rebootWaitsForTxQueue);
+    RUN_TEST(test_commitEditSettings_capReleasesRetuneAndReboot);
+    RUN_TEST(test_deferredRetune_waitsForReplyAck);
+    RUN_TEST(test_deferredRetune_repeatedSaveKeepsCapStart);
+    RUN_TEST(test_deferredRetune_untrackedReplyWaitsForQueue);
+    RUN_TEST(test_presetChange_keepsChannelHashUntilRetune);
 
     exit(UNITY_END());
 }

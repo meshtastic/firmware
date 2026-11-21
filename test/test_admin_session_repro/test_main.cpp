@@ -13,6 +13,13 @@
 // this gate keeps a forged one from becoming unauthenticated remote admin if a path ever misses
 // that drop (the external from == 0 report). Relaxing it to a bare `mp.from == 0` check brings
 // back that report's scenario: any setter, up to factory_reset, accepted without credentials.
+//
+// The ack AdminModule::handleReceivedProtobuf() answers a remote PKC setter with is a ROUTING
+// packet, which perhapsEncode() (src/mesh/Router.cpp) never sends over PKC. Flagged pki_encrypted
+// like the admin replies that carry data, it fails to encode with PKI_FAILED and is dropped: the
+// requester then hears an ack only by retransmitting the request, and never for a commit that
+// retunes the radio before the retransmission lands. Of the replies to a remote request, only the
+// save's gates a deferred retune (MeshService::awaitAckBeforeRadioConfig).
 
 #include "MeshTypes.h" // include BEFORE TestUtil.h
 #include "TestUtil.h"
@@ -22,6 +29,7 @@
 
 #include "mesh/Channels.h"
 #include "mesh/NodeDB.h"
+#include "mesh/Router.h" // perhapsEncode(); router global: allocErrorResponse() allocates the ack through it
 #include "mesh/mesh-pb-constants.h"
 #include "modules/AdminModule.h"
 #include "support/AdminModuleTestShim.h"
@@ -73,6 +81,19 @@ class MockNodeDB : public NodeDB
 static MockMeshService *mockService = nullptr;
 static AdminModuleTestShim *admin = nullptr;
 static MockNodeDB *mockNodeDB = nullptr;
+static Router *savedRouter = nullptr;
+
+// The ack is built through the router; nothing here sends it.
+class ReplyAllocRouter : public Router
+{
+  public:
+    ErrorCode send(meshtastic_MeshPacket *p) override
+    {
+        packetPool.release(p);
+        return ERRNO_OK;
+    }
+};
+static ReplyAllocRouter *replyAllocRouter = nullptr;
 
 // A remote, PKC-authorized set_owner. `session` (if non-empty) is the session_passkey the client presents.
 static meshtastic_MeshPacket makeRemoteSetOwner(const char *newLongName, const uint8_t *session, size_t sessionLen,
@@ -163,6 +184,7 @@ void setUp(void)
     mockNodeDB->clearTestNodes();
     nodeDB = mockNodeDB;
     myNodeInfo.my_node_num = LOCAL_NODE;
+    savedRouter = router;
 
     config = meshtastic_LocalConfig_init_zero;
     // A real device always holds a private key; without one perhapsEncode never picks PKC.
@@ -186,6 +208,9 @@ void tearDown(void)
     mockService = nullptr;
     delete admin;
     admin = nullptr;
+    router = savedRouter;
+    delete replyAllocRouter;
+    replyAllocRouter = nullptr;
 }
 
 // ndoo's report: a setter from a remote node with NO valid session is rejected, and the node's
@@ -240,6 +265,91 @@ void test_session_gate_accepts_key_from_a_get_response(void)
     uint8_t stale[8] = {0x29, 0x04, 0xb4, 0x78, 0xd8, 0x68, 0xa7, 0xff};
     memcpy(bad.session_passkey.bytes, stale, 8);
     TEST_ASSERT_FALSE(admin->checkPassKey(&bad));
+}
+
+// A reliable admin request from ADMIN_NODE over PKC, as handleReceivedProtobuf() sees it.
+static meshtastic_MeshPacket makeRemotePkcAdmin(uint32_t id)
+{
+    meshtastic_MeshPacket mp = meshtastic_MeshPacket_init_zero;
+    mp.from = ADMIN_NODE;
+    mp.to = LOCAL_NODE;
+    mp.id = id;
+    mp.channel = 0;
+    mp.want_ack = true;
+    mp.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    mp.decoded.portnum = meshtastic_PortNum_ADMIN_APP;
+    mp.decoded.want_response = true;
+    mp.pki_encrypted = true; // arrived over PKC
+    mp.public_key.size = 32;
+    memcpy(mp.public_key.bytes, ADMIN_KEY, 32);
+    return mp;
+}
+
+// An unchanged display config: a SEGMENT_CONFIG save that neither reboots nor rejects.
+static meshtastic_AdminMessage makeDisplaySet(const meshtastic_AdminMessage &session)
+{
+    meshtastic_AdminMessage m = meshtastic_AdminMessage_init_zero;
+    m.which_payload_variant = meshtastic_AdminMessage_set_config_tag;
+    m.set_config.which_payload_variant = meshtastic_Config_display_tag;
+    m.set_config.payload_variant.display = config.display;
+    m.session_passkey = session.session_passkey;
+    return m;
+}
+
+void test_remote_pkc_setter_ack_is_encodable(void)
+{
+    replyAllocRouter = new ReplyAllocRouter();
+    router = replyAllocRouter;
+    meshtastic_AdminMessage getResponse = meshtastic_AdminMessage_init_zero;
+    admin->setPassKey(&getResponse); // the session a client fetches with a read before writing
+
+    meshtastic_AdminMessage m = makeDisplaySet(getResponse);
+    meshtastic_MeshPacket mp = makeRemotePkcAdmin(REQUEST_ID);
+    admin->handleReceivedProtobuf(mp, &m);
+
+    meshtastic_MeshPacket *ack = admin->reply();
+    TEST_ASSERT_NOT_NULL_MESSAGE(ack, "a want_response setter must be answered");
+    TEST_ASSERT_EQUAL(meshtastic_PortNum_ROUTING_APP, ack->decoded.portnum);
+    TEST_ASSERT_EQUAL_HEX32(REQUEST_ID, ack->decoded.request_id);
+    meshtastic_Routing routing = meshtastic_Routing_init_zero;
+    TEST_ASSERT_TRUE(
+        pb_decode_from_bytes(ack->decoded.payload.bytes, ack->decoded.payload.size, &meshtastic_Routing_msg, &routing));
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Routing_Error_NONE, routing.error_reason, "the setter was rejected, not acked");
+
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Routing_Error_NONE, perhapsEncode(ack), "the ack can't be encoded, so it is dropped");
+    TEST_ASSERT_EQUAL(meshtastic_MeshPacket_encrypted_tag, ack->which_payload_variant);
+    admin->drainReply();
+}
+
+// AdminModule::handleReceivedProtobuf() hands MeshService the reply whose ack gates a deferred radio
+// retune (awaitAckBeforeRadioConfig). Only the reply to the save that deferred it may: if a later read's
+// reply replaced it, that read's ack would release the retune while the save's reply is still being
+// retried, and the retries would go out on settings the requester isn't on.
+void test_deferred_retune_awaits_only_the_saves_reply(void)
+{
+    replyAllocRouter = new ReplyAllocRouter();
+    router = replyAllocRouter;
+    admin->saveNow();
+    meshtastic_AdminMessage session = meshtastic_AdminMessage_init_zero;
+    admin->setPassKey(&session);
+
+    meshtastic_AdminMessage set = makeDisplaySet(session);
+    meshtastic_MeshPacket setPacket = makeRemotePkcAdmin(REQUEST_ID);
+    admin->handleReceivedProtobuf(setPacket, &set);
+    TEST_ASSERT_NOT_NULL(admin->reply());
+    const PacketId saveReply = admin->reply()->id;
+    admin->drainReply();
+    TEST_ASSERT_TRUE_MESSAGE(service->isRadioConfigDeferred(), "a SEGMENT_CONFIG save must defer the retune");
+    TEST_ASSERT_EQUAL_HEX32_MESSAGE(saveReply, service->awaitedReplyForTest(), "the save's reply must gate the retune");
+
+    meshtastic_AdminMessage get = meshtastic_AdminMessage_init_zero;
+    get.which_payload_variant = meshtastic_AdminMessage_get_owner_request_tag;
+    get.get_owner_request = true;
+    meshtastic_MeshPacket getPacket = makeRemotePkcAdmin(REQUEST_ID + 1);
+    admin->handleReceivedProtobuf(getPacket, &get);
+    TEST_ASSERT_NOT_NULL(admin->reply());
+    admin->drainReply();
+    TEST_ASSERT_EQUAL_HEX32_MESSAGE(saveReply, service->awaitedReplyForTest(), "a read's reply replaced the save's");
 }
 
 // Decode the SecurityConfig out of the get_config response a handler queued in myReply.
@@ -766,6 +876,8 @@ void setup()
     RUN_TEST(test_remote_setter_without_session_is_rejected);
     RUN_TEST(test_expected_session_key_is_zero_before_any_get);
     RUN_TEST(test_session_gate_accepts_key_from_a_get_response);
+    RUN_TEST(test_remote_pkc_setter_ack_is_encodable);
+    RUN_TEST(test_deferred_retune_awaits_only_the_saves_reply);
     RUN_TEST(test_remote_security_config_omits_private_key);
     RUN_TEST(test_local_security_config_keeps_private_key);
     RUN_TEST(test_local_security_config_applies_packet_signature_policy);

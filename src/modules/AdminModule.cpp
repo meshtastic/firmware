@@ -111,6 +111,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
 {
     // if handled == false, then let others look at this message also if they want
     bool handled = false;
+    requestSavedRadioChange = false;
     assert(r);
 
 #ifdef MESHTASTIC_ENCRYPTED_STORAGE
@@ -727,9 +728,15 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     if (mp.decoded.want_response && !myReply) {
         myReply = allocErrorResponse(meshtastic_Routing_Error_NONE, &mp);
     }
-    if (mp.pki_encrypted && myReply) {
+    // perhapsEncode never sends a ROUTING packet over PKC, so flagging this ack fails it with PKI_FAILED and
+    // drops it. It goes out like ReliableRouter's acks, on the request's channel.
+    if (mp.pki_encrypted && myReply && myReply->decoded.portnum != meshtastic_PortNum_ROUTING_APP) {
         myReply->pki_encrypted = true;
     }
+    // A reliable reply is retransmitted until acked; keep the radio where the requester can hear those retries. Only the
+    // reply to the save that deferred the change: a later read's ack says nothing about the save's reply.
+    if (myReply && mp.want_ack && mp.from != 0 && requestSavedRadioChange)
+        service->awaitAckBeforeRadioConfig(myReply->id);
     return handled;
 }
 
@@ -1143,8 +1150,8 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
             //  use_preset and bandwidth are coerced into valid values by the check.
         }
 
-        // All LoRa radio changes apply live via configChanged observer → reconfigure().
-        // reconfigure() puts the radio in standby, reprograms all modem parameters, and restarts receive.
+        // All LoRa radio changes apply live via configChanged → reconfigure(), once this request's reply is out
+        // (saveChanges). reconfigure() puts the radio in standby, reprograms all modem parameters, and restarts receive.
         requiresReboot = false;
 
 #if defined(ARCH_PORTDUINO)
@@ -1887,7 +1894,10 @@ void AdminModule::saveChanges(int saveWhat, bool shouldReboot)
 #endif
     if (!hasOpenEditTransaction) {
         LOG_INFO("Save changes to disk");
-        service->reloadConfig(saveWhat); // Calls saveToDisk among other things
+        // The reply to this request is queued after we return: retune only once it has gone out on the
+        // current settings, or the requester never hears it.
+        service->reloadConfig(saveWhat, true);
+        requestSavedRadioChange |= (saveWhat & (SEGMENT_CONFIG | SEGMENT_CHANNELS)) != 0; // what reloadConfig defers
     } else {
         LOG_INFO("Delay disk save until open transaction commits");
         editTransactionActivityMs = millis(); // still in use, so not the abandoned kind we time out
