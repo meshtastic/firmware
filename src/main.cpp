@@ -978,9 +978,7 @@ void setup()
     SPI.begin(false);
 #endif // HW_SPI1_DEVICE
 #elif ARCH_PORTDUINO
-    if (portduino_config.lora_spi_dev != "ch341") {
-        SPI.begin();
-    }
+    // initLoRa() opens the radio's own per-host SPI instance; the display opens its own too.
 #elif !defined(ARCH_ESP32) // ARCH_RP2040
 #if defined(RAK3401) || defined(RAK13302)
     pinMode(WB_IO2, OUTPUT);
