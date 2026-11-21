@@ -226,6 +226,7 @@ static bool initAdcCalibration()
 #endif
 
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+#if !MESHTASTIC_EXCLUDE_INA_SENSORS
 static const float ina219ShuntR[3] = {INA219_SHUNT_R, INA219_SHUNT_R, INA219_SHUNT_R};
 INAFamilySensor ina219Sensor(meshtastic_TelemetrySensorType_INA219, "INA219", INA219_CHIP, ina219ShuntR, 0, 0);
 
@@ -241,6 +242,13 @@ INAFamilySensor ina260Sensor(meshtastic_TelemetrySensorType_INA260, "INA260", IN
 static const float ina3221ShuntR[3] = {INA3221_SHUNT_R_CH1, INA3221_SHUNT_R_CH2, INA3221_SHUNT_R_CH3};
 INAFamilySensor ina3221Sensor(meshtastic_TelemetrySensorType_INA3221, "INA3221", INA3221_CHIP, ina3221ShuntR, INA3221_ENV_CH,
                               INA3221_BAT_CH);
+#else
+NullSensor ina219Sensor;
+NullSensor ina226Sensor;
+NullSensor ina228Sensor;
+NullSensor ina260Sensor;
+NullSensor ina3221Sensor;
+#endif
 
 #endif
 

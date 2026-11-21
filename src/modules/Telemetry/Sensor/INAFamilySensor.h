@@ -8,7 +8,7 @@
 
 #include "configuration.h"
 
-#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && !MESHTASTIC_EXCLUDE_INA_SENSORS
 
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "CurrentSensor.h"

@@ -1,6 +1,6 @@
 #include "configuration.h"
 
-#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && !MESHTASTIC_EXCLUDE_INA_SENSORS
 
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "INAFamilySensor.h"
@@ -31,7 +31,7 @@ int32_t INAFamilySensor::runOnce()
         wire->begin();
         status = reset();
         if (status)
-            delay(chip.channels == 3 ? 10 : 2);
+            delay(chip.channels == 3 ? 10 : 5); // first conversion: up to 3.2 ms (INA228), 6.6 ms (INA3221)
     }
     return initI2CSensor();
 }
