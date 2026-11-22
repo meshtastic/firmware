@@ -54,7 +54,9 @@ static constexpr uint32_t RSP_TIMEOUT_MS = 2000;                 // give up on a
 static constexpr uint32_t DISCOVERY_RSP_TIMEOUT_MS = 1200;       // probes answer in ~600 ms
 static constexpr uint32_t DISCOVERY_INTERVAL_MS = 2000;          // PID sweep step while empty
 static constexpr uint32_t BOOT_RESCAN_EMPTY_MS = 60 * 1000;      // BOOT while no probe known
-static constexpr uint32_t BOOT_RESCAN_KNOWN_MS = 15 * 60 * 1000; // BOOT for late probes
+static constexpr uint32_t BOOT_RESCAN_BARE_MS = 15 * 60 * 1000;  // BOOT while a probe lists no sensor
+static constexpr uint32_t BOOT_RESCAN_IDLE_MS = 6 * 3600 * 1000; // BOOT resets every probe
+static constexpr uint32_t BOOT_SWEEP_MS = 60 * 1000;             // PID sweep after BOOT: some probes keep their PID
 static constexpr uint32_t SENSOR_INTV_DEFAULT_MS = 60 * 1000;    // until get.param answers
 static constexpr uint32_t LOST_PID_POLL_MS = 60 * 1000;          // get.data to dropped PIDs
 static constexpr uint8_t MAX_MISSED_POLLS = 3;                   // then forget and rediscover
@@ -62,7 +64,7 @@ static constexpr uint32_t TX_SETTLE_MS = 2;                      // last stop bi
 
 // RAK probe ID range
 static constexpr uint8_t PROBE_PID_MIN = 1;
-static constexpr uint8_t PROBE_PID_MAX = 250;
+static constexpr uint8_t PROBE_PID_MAX = 239; // 0xF0 and up are reserved
 
 // Frame offsets in buff (starts at 0x7E, no wakeup byte); checksum at [5 + length]
 static constexpr uint16_t FRM_TYPE = 3, FRM_FLAG = 4, FRM_DEST = 5, FRM_SRC = 6, FRM_HUBTYPE = 8, FRM_PLDTYPE = 10;
@@ -269,8 +271,7 @@ static void onRequestTimeout(uint32_t now)
     }
     if (++it->second.missed >= MAX_MISSED_POLLS) {
         LOG_WARN("RAKSensorHub: probe PID[%02x] silent for %u polls, rediscovering", last_sent_pid, (unsigned)MAX_MISSED_POLLS);
-        probes.erase(it);
-        last_boot_time = 0; // re-broadcast BOOT right away
+        probes.erase(it); // polled at its PID; a power-cycled probe asks for provisioning itself
     } else {
         it->second.retryMs = it->second.missed == 1 ? 3000 : 8000; // probes can stall for several seconds
     }
@@ -606,6 +607,16 @@ static int32_t onewireRxHandle()
     return Throttle::isWithinTimespanMs(last_rx_time, 200) ? 5 : 40;
 }
 
+/** True if a known probe lists no analog sensor: a Probe IO registers its sensors only at reset. */
+static bool probeWithoutSensors()
+{
+    for (const auto &[pid, st] : probes)
+        if (std::none_of(st.sidIpso.begin(), st.sidIpso.end(),
+                         [](const auto &p) { return p.second != RAK_IPSO_DIGITAL_INPUT && p.second != RAK_IPSO_DIGITAL_OUTPUT; }))
+            return true;
+    return false;
+}
+
 /** Next PID assigned earlier whose probe has since dropped, 0 if none. */
 static uint8_t nextLostPid()
 {
@@ -631,7 +642,7 @@ static uint8_t nextDiscoveryPid()
     return 0;
 }
 
-/** One request at a time: BOOT rescan, PID sweep while empty, sensor params once, then data polls. */
+/** One request at a time: BOOT rescan, PID sweep while empty or after BOOT, sensor params once, then data polls. */
 static int32_t onewirePollHandle()
 {
     const uint32_t now = millis();
@@ -655,27 +666,30 @@ static int32_t onewirePollHandle()
     if (!link_idle)
         return 50;
 
-    const uint32_t bootInterval = probes.empty() ? BOOT_RESCAN_EMPTY_MS : BOOT_RESCAN_KNOWN_MS;
+    const uint32_t bootInterval = probes.empty()          ? BOOT_RESCAN_EMPTY_MS
+                                  : probeWithoutSensors() ? BOOT_RESCAN_BARE_MS
+                                                          : BOOT_RESCAN_IDLE_MS;
     if (last_boot_time == 0 || !Throttle::isWithinTimespanMs(last_boot_time, bootInterval)) {
         last_boot_time = Time::skipZero(now);
         last_discovery_time = now; // let probes answer the BOOT first
+        discovery_pid = PROBE_PID_MIN;
         LOG_INFO("RAKSensorHub: broadcast provision BOOT (%u probes known)", (unsigned)probes.size());
         RakSNHub_Protocl_API.reboot();
         return 500;
     }
 
-    if (probes.empty()) {
-        if (!Throttle::isWithinTimespanMs(last_discovery_time, DISCOVERY_INTERVAL_MS)) {
-            last_discovery_time = now;
-            const uint8_t pid = nextDiscoveryPid();
-            if (pid != 0) {
-                sendRequest(pid, now, DISCOVERY_RSP_TIMEOUT_MS, true);
-                RakSNHub_Protocl_API.get.data(pid);
-                return 100;
-            }
+    const bool sweep = probes.empty() || Throttle::isWithinTimespanMs(last_boot_time, BOOT_SWEEP_MS);
+    if (sweep && !Throttle::isWithinTimespanMs(last_discovery_time, DISCOVERY_INTERVAL_MS)) {
+        last_discovery_time = now;
+        const uint8_t pid = nextDiscoveryPid();
+        if (pid != 0) {
+            sendRequest(pid, now, DISCOVERY_RSP_TIMEOUT_MS, true);
+            RakSNHub_Protocl_API.get.data(pid);
+            return 100;
         }
-        return 200;
     }
+    if (probes.empty())
+        return 200;
 
     if (!Throttle::isWithinTimespanMs(last_lost_poll_time, LOST_PID_POLL_MS)) {
         last_lost_poll_time = now;
