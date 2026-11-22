@@ -110,14 +110,13 @@ bool INAFamilySensor::getEnvironmentMetrics(meshtastic_Telemetry *measurement)
 bool INAFamilySensor::getPowerMetrics(meshtastic_Telemetry *measurement)
 {
     auto &p = measurement->variant.power_metrics;
-    uint8_t channels = chip.channels;
     float *voltages[] = {&p.ch1_voltage, &p.ch2_voltage, &p.ch3_voltage};
     float *currents[] = {&p.ch1_current, &p.ch2_current, &p.ch3_current};
     bool *hasVoltages[] = {&p.has_ch1_voltage, &p.has_ch2_voltage, &p.has_ch3_voltage};
     bool *hasCurrents[] = {&p.has_ch1_current, &p.has_ch2_current, &p.has_ch3_current};
 
     bool valid = false;
-    for (uint8_t i = 0; i < channels; i++) {
+    for (uint8_t i = 0; i < chip.channels; i++) {
         InaReading reading;
         bool got = readChannel(i, reading);
         *hasVoltages[i] = got;
@@ -126,7 +125,7 @@ bool INAFamilySensor::getPowerMetrics(meshtastic_Telemetry *measurement)
         *currents[i] = got ? inaScaleCurrent(chip, reading.currentMa) : 0;
         valid = valid || got;
     }
-    for (uint8_t i = channels; i < 3; i++) {
+    for (uint8_t i = chip.channels; i < 3; i++) {
         *hasVoltages[i] = false;
         *hasCurrents[i] = false;
         *voltages[i] = 0;
