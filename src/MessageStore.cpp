@@ -112,7 +112,7 @@ template <typename T> static inline void pushWithLimit(std::deque<T> &queue, T &
 
 MessageStore::MessageStore(const std::string &label)
 {
-    filename = "/Messages_" + label + ".msgs";
+    filename = "/Messages_" + label + "_v2.msgs";
     resetMessagePool(); // initialize text pool on boot
 }
 
