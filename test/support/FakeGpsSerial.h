@@ -15,11 +15,7 @@ class FakeGpsSerial : public HardwareSerial
     int peek() override { return available() ? bytes[pos] : -1; }
     int read() override { return available() ? bytes[pos++] : -1; }
     void flush() override {}
-    size_t write(uint8_t b) override
-    {
-        bytes.push_back(b);
-        return 1;
-    }
+    size_t write(uint8_t) override { return 1; } // commands are discarded, never parsed back
     operator bool() override { return true; }
 
     void feed(const std::vector<uint8_t> &frame)

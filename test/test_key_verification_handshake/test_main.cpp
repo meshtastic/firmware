@@ -263,13 +263,15 @@ void test_handshake_wrong_number_does_not_verify(void)
 
 void test_handshake_timeout_returns_to_idle(void)
 {
+    Time::setTestMillis(100000); // pin the domain sessionStartedMs uses before starting
     startHandshake();
-    const uint32_t started = Time::getMillis();
-
-    Time::advanceTestMillis(61000);
-    TEST_ASSERT_TRUE(Time::getMillis() > started);
 
     switchTo(NODE_A, ownerA);
+    TEST_ASSERT_FALSE_MESSAGE(moduleA->sendInitialRequest(NODE_B), "a live session must refuse a second request");
+
+    // The hard cap is millis()-based; 61 s only exercises the RTC-seconds path, which native getTime()
+    // does not necessarily follow.
+    Time::advanceTestMillis(180000 + 1000);
     TEST_ASSERT_TRUE_MESSAGE(moduleA->sendInitialRequest(NODE_B), "an expired session must return to IDLE and allow a new one");
 }
 

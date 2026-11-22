@@ -153,11 +153,7 @@ void loop() {}
 #else
 
 void setUp(void) {}
-void tearDown(void)
-{
-    delete gpsShim;
-    gpsShim = nullptr;
-}
+void tearDown(void) {}
 void setup()
 {
     initializeTestEnvironment();
