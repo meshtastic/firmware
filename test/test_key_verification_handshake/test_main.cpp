@@ -39,17 +39,25 @@ class CaptureRadio : public RadioInterface
     uint32_t getPacketTime(uint32_t, bool = false) override { return 0; }
 };
 
-// Capture before the router releases it, so the test carries the decoded packet by hand.
+// Capture the packet so the test carries it by hand. Like the real TX queue, keep it alive until
+// tearDown: sendToMesh() still reads it after sendLocal() returns, to copy it to the phone.
 class CaptureRouter : public Router
 {
   public:
     ErrorCode send(meshtastic_MeshPacket *p) override
     {
         packets.push_back(*p);
-        packetPool.release(p);
+        held.push_back(p);
         return ERRNO_OK;
     }
+    void releaseHeld()
+    {
+        for (auto *p : held)
+            packetPool.release(p);
+        held.clear();
+    }
     std::vector<meshtastic_MeshPacket> packets;
+    std::vector<meshtastic_MeshPacket *> held;
 };
 
 class CaptureService : public MockMeshService
@@ -208,10 +216,13 @@ void tearDown(void)
     delete moduleA;
     delete moduleB;
     moduleA = moduleB = nullptr;
+    while (auto *toPhone = serviceMock->getForPhone()) // sendToMesh's copies for the phone
+        serviceMock->releaseToPool(toPhone);
     service = nullptr;
     delete serviceMock;
     serviceMock = nullptr;
     router = nullptr;
+    testRouter->releaseHeld();
     delete testRouter;
     testRouter = nullptr;
     nodeDB = nullptr;
