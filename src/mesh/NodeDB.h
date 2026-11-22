@@ -665,6 +665,10 @@ class NodeDB
     /// @return true if my_node_num moved; the caller must then also persist SEGMENT_DEVICESTATE | SEGMENT_NODEDATABASE.
     bool ensurePkiIdentity();
 
+    /// Boot-time clamp of the preset-derived LoRa fields, run once the channels are loaded: the
+    /// frequency slot check hashes the primary channel's name.
+    void clampLoadedLoraConfig();
+
     bool backupPreferences(meshtastic_AdminMessage_BackupLocation location);
     bool restorePreferences(meshtastic_AdminMessage_BackupLocation location,
                             int restoreWhat = SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS);
