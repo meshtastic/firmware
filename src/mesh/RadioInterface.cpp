@@ -35,6 +35,10 @@
 #include "platform/esp32/MCP23017LockingArduinoHal.h"
 #endif
 
+#if defined(ARCH_ESP32) && defined(USE_XL9535)
+#include "platform/esp32/XL9535LockingArduinoHal.h"
+#endif
+
 #ifdef ARCH_STM32WL
 #include "STM32WLE5JCInterface.h"
 #endif
@@ -449,6 +453,20 @@ std::unique_ptr<RadioInterface> initLoRa()
 #elif defined(ARCH_ESP32) && defined(USE_MCP23017)
     // Radio control lines (RESET/DIO1/BUSY) are virtual pins on an MCP23017 I2C expander
     LockingArduinoHal *loraHal = new MCP23017LockingArduinoHal(SPI, loraSpiSettings, mcpIoExpander);
+    RadioLibHAL = loraHal;
+#elif defined(ARCH_ESP32) && defined(USE_XL9535)
+    // Radio RESET/DIO1 are virtual pins on an XL9535 I2C expander, which also drives the antenna switch
+    bool xl9535RadioOk = xl9535IoExpander.isReady();
+#ifdef XL9535_LORA_REQUIRED_HIGH_PIN
+    // Re-assert the antenna switch with verified writes: latch first, then direction
+    xl9535RadioOk = xl9535RadioOk && xl9535IoExpander.digitalWrite(XL9535_LORA_REQUIRED_HIGH_PIN, HIGH) &&
+                    xl9535IoExpander.pinMode(XL9535_LORA_REQUIRED_HIGH_PIN, OUTPUT);
+#endif
+    if (!xl9535RadioOk) {
+        LOG_ERROR("XL9535 not responding or antenna switch not driven: LoRa disabled");
+        return rIf; // still nullptr: setup() records NO_RADIO, UI and GPS keep running
+    }
+    LockingArduinoHal *loraHal = new XL9535LockingArduinoHal(SPI, loraSpiSettings, xl9535IoExpander);
     RadioLibHAL = loraHal;
 #else // HW_SPI1_DEVICE
     LockingArduinoHal *loraHal = new LockingArduinoHal(SPI, loraSpiSettings);

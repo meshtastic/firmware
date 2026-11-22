@@ -4,8 +4,12 @@
 #include "esp_task_wdt.h"
 #include "main.h"
 
-#if !defined(CONFIG_IDF_TARGET_ESP32S2) && !MESHTASTIC_EXCLUDE_BLUETOOTH
+#if !MESHTASTIC_EXCLUDE_BLUETOOTH
+#if defined(CONFIG_IDF_TARGET_ESP32P4)
+#include "bluetooth/HostedBluetooth.h"
+#elif !defined(CONFIG_IDF_TARGET_ESP32S2)
 #include "nimble/NimbleBluetooth.h"
+#endif
 #endif
 
 #if !defined(CONFIG_IDF_TARGET_ESP32S2) && !MESHTASTIC_EXCLUDE_BLUETOOTH && __has_include(<esp_bt.h>)
@@ -65,6 +69,9 @@ bool usbConsoleHostAttached()
 // May be redefined by variant files.
 void variant_shutdown() __attribute__((weak));
 void variant_shutdown() {}
+
+// msecToWake of the last cpuDeepSleep() call, for variant_shutdown() overrides that must not deep sleep.
+uint32_t espDeepSleepRequestMs = portMAX_DELAY;
 
 #if !defined(CONFIG_IDF_TARGET_ESP32S2) && !MESHTASTIC_EXCLUDE_BLUETOOTH
 static bool bluetoothMemoryReleased;
@@ -138,16 +145,30 @@ void setBluetoothEnable(bool enable)
     if (config.bluetooth.enabled == true)
 #endif
     {
-        if (!nimbleBluetooth) {
-            nimbleBluetooth = new NimbleBluetooth();
+#if defined(CONFIG_IDF_TARGET_ESP32P4)
+        if (!enable) {
+            if (bluetoothApi && bluetoothApi->isActive()) {
+                bluetoothApi->shutdown();
+                powerMon->clearState(meshtastic_PowerMon_State_BT_On);
+            }
+            return;
         }
-        if (enable && !nimbleBluetooth->isActive()) {
+#endif
+
+        if (!bluetoothApi) {
+#if defined(CONFIG_IDF_TARGET_ESP32P4)
+            bluetoothApi = new HostedBluetooth();
+#else
+            bluetoothApi = new NimbleBluetooth();
+#endif
+        }
+        if (enable && !bluetoothApi->isActive()) {
             powerMon->setState(meshtastic_PowerMon_State_BT_On);
-            nimbleBluetooth->setup();
+            bluetoothApi->setup();
         }
         // For ESP32, no way to recover from bluetooth shutdown without reboot
         // BLE advertising automatically stops when MCU enters light-sleep(?)
-        // For deep-sleep, shutdown hardware with nimbleBluetooth->deinit(). Requires reboot to reverse
+        // For deep-sleep, shutdown hardware with bluetoothApi->deinit(). Requires reboot to reverse
     }
 }
 #else
@@ -384,6 +405,8 @@ static uint64_t filterExt1WakeMask(uint64_t gpioMask)
 
 void cpuDeepSleep(uint32_t msecToWake)
 {
+    espDeepSleepRequestMs = msecToWake;
+
     /*
     Some ESP32 IOs have internal pullups or pulldowns, which are enabled by default.
     If an external circuit drives this pin in deep sleep mode, current consumption may

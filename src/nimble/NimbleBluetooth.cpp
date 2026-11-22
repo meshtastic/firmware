@@ -1,5 +1,5 @@
 #include "configuration.h"
-#if !MESHTASTIC_EXCLUDE_BLUETOOTH
+#if !MESHTASTIC_EXCLUDE_BLUETOOTH && !defined(CONFIG_IDF_TARGET_ESP32P4)
 #include "BluetoothCommon.h"
 #include "NimbleBluetooth.h"
 #include "PowerFSM.h"
@@ -31,6 +31,9 @@
 
 namespace
 {
+// Maintainer note: this backend intentionally diverges from HostedBluetooth in a few platform-specific areas.
+// If you change shared BLE flow here (PhoneAPI queue/sync, security/pairing, mesh GATT/advertising,
+// connect/disconnect handling), review and update HostedBluetooth.cpp as needed.
 constexpr uint16_t kPreferredBleMtu = 517;
 constexpr uint16_t kPreferredBleTxOctets = 251;
 constexpr uint16_t kPreferredBleTxTimeUs = (kPreferredBleTxOctets + 14) * 8;
@@ -227,8 +230,8 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
                 pendingStartAdvertising = false; // a new physical connection beat us to it; nothing to do
             } else if (ble_hs_synced()) {
                 pendingStartAdvertising = false;
-                if (nimbleBluetooth) {
-                    nimbleBluetooth->startAdvertising();
+                if (bluetoothApi) {
+                    bluetoothApi->startAdvertising();
                 }
             } else {
                 return 200; // host still re-syncing after a reset; retry shortly
@@ -1058,7 +1061,7 @@ void updateBatteryLevel(uint8_t level)
 
     // Cache the value so a READ works without a subscriber; notify only when connected.
     BatteryCharacteristic->setValue(&level, 1);
-    if (nimbleBluetooth && nimbleBluetooth->isConnected())
+    if (bluetoothApi && bluetoothApi->isConnected())
         BatteryCharacteristic->notify();
 }
 
