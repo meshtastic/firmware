@@ -88,6 +88,7 @@ class MockNodeDB : public NodeDB
 class NextHopRouterTestShim : public NextHopRouter
 {
   public:
+    using FloodingRouter::perhapsCancelDupe;
     using NextHopRouter::clearRouteHealth;
     using NextHopRouter::findRouteHealth;
     using NextHopRouter::getNextHop;
@@ -96,7 +97,6 @@ class NextHopRouterTestShim : public NextHopRouter
     using NextHopRouter::noteRouteFailure;
     using NextHopRouter::noteRouteLearned;
     using NextHopRouter::noteRouteSuccess;
-    using FloodingRouter::perhapsCancelDupe;
     using NextHopRouter::perhapsRebroadcast;
     using NextHopRouter::relayOpaquePacket;
     using Router::shouldDecrementHopLimit; // protected in Router
