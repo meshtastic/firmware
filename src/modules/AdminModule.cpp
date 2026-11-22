@@ -2002,15 +2002,18 @@ void AdminModule::setPassKey(meshtastic_AdminMessage *res)
     }
     memcpy(res->session_passkey.bytes, session_passkey, 8);
     res->session_passkey.size = 8;
-    printBytes("Set admin key to ", res->session_passkey.bytes, 8);
+    LOG_TRACE("Set session passkey %02x%02x%02x%02x%02x%02x%02x%02x", session_passkey[0], session_passkey[1], session_passkey[2],
+              session_passkey[3], session_passkey[4], session_passkey[5], session_passkey[6], session_passkey[7]);
     // if halfway to session_expire, regenerate session_passkey, reset the timeout
     // set the key in the packet
 }
 
 bool AdminModule::checkPassKey(meshtastic_AdminMessage *res)
 { // check that the key in the packet is still valid
-    printBytes("Incoming session key: ", res->session_passkey.bytes, 8);
-    printBytes("Expected session key: ", session_passkey, 8);
+    [[maybe_unused]] const uint8_t *in = res->session_passkey.bytes;
+    LOG_TRACE("Session passkey in %02x%02x%02x%02x%02x%02x%02x%02x, expected %02x%02x%02x%02x%02x%02x%02x%02x", in[0], in[1],
+              in[2], in[3], in[4], in[5], in[6], in[7], session_passkey[0], session_passkey[1], session_passkey[2],
+              session_passkey[3], session_passkey[4], session_passkey[5], session_passkey[6], session_passkey[7]);
     // Key is valid for 300s from issue; sessionPasskeyValid guards an unissued session.
     return (sessionPasskeyValid && Throttle::isWithinTimespanMs(session_time, 300 * 1000UL) && res->session_passkey.size == 8 &&
             memcmp(res->session_passkey.bytes, session_passkey, 8) == 0);

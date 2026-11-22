@@ -462,9 +462,10 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     // Bubbles carry their own padding, so the rounded-screen inset has to come from here
     const int contentLeft = x + (showBubbles ? BASEUI_BODY_LR_MARGIN : 0);
 
-    // Derived widths
-    const int leftTextWidth = SCREEN_WIDTH - LEFT_MARGIN - RIGHT_MARGIN - (showBubbles ? (BUBBLE_PAD_X * 2) : 0);
-    const int rightTextWidth = SCREEN_WIDTH - LEFT_MARGIN - RIGHT_MARGIN - SCROLLBAR_WIDTH;
+    // Right edge for own (right-aligned) lines; other nodes' lines start at contentLeft + textIndent.
+    const int textRight = SCREEN_WIDTH - SCROLLBAR_WIDTH - RIGHT_MARGIN - (showBubbles ? textIndent : 0);
+    // Same span for both sides. Excludes the frame offset x so wrapping is stable during slide transitions.
+    const int textWidth = textRight - (contentLeft - x) - textIndent;
 
     // Title string depending on mode
     char titleStr[48];
@@ -636,9 +637,8 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         }
 
         // Shrink Sender name if needed; compact panels put it on its own line, so no sharing with timeBuf/chanType.
-        int availWidth = compactPanel ? (mine ? rightTextWidth : leftTextWidth)
-                                      : (mine ? rightTextWidth : leftTextWidth) - display->getStringWidth(timeBuf) -
-                                            display->getStringWidth(chanType);
+        int availWidth =
+            compactPanel ? textWidth : textWidth - display->getStringWidth(timeBuf) - display->getStringWidth(chanType);
         // Compact panels hard-cut (no "...") so drop its width reservation too.
         availWidth -= graphics::UIRenderer::measureStringWithEmotes(display, compactPanel ? "*@" : "  *@...");
         if (availWidth < 0)
@@ -712,8 +712,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 
         const char *msgText = MessageStore::getText(m);
 
-        int wrapWidth = mine ? rightTextWidth : leftTextWidth;
-        std::vector<std::string> wrapped = generateLines(display, "", msgText, wrapWidth);
+        std::vector<std::string> wrapped = generateLines(display, "", msgText, textWidth);
         // Per-message wrap-line limit: even if wrapping produces many lines, cap them to prevent
         // a single long message from consuming most or all of the cache.
         constexpr size_t MAX_WRAPPED_LINES_PER_MSG = 20U;
@@ -958,7 +957,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                 int headerX;
                 if (isMine[i]) {
                     // push header left to avoid overlap with scrollbar
-                    headerX = (SCREEN_WIDTH - SCROLLBAR_WIDTH - RIGHT_MARGIN) - w - (showBubbles ? textIndent : 0);
+                    headerX = textRight - w;
                     if (headerX < LEFT_MARGIN)
                         headerX = LEFT_MARGIN;
                 } else {
@@ -1005,7 +1004,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                 if (isMine[i]) {
                     // Calculate actual rendered width including emotes
                     int renderedWidth = getRenderedLineWidth(display, cachedLines[i], emotes, numEmotes);
-                    int rightX = (SCREEN_WIDTH - SCROLLBAR_WIDTH - RIGHT_MARGIN) - renderedWidth - (showBubbles ? textIndent : 0);
+                    int rightX = textRight - renderedWidth;
                     if (rightX < LEFT_MARGIN)
                         rightX = LEFT_MARGIN;
 
@@ -1036,41 +1035,61 @@ std::vector<std::string> generateLines(OLEDDisplay *display, const char *headerS
         lines.push_back(std::string(headerStr));
     }
 
+    // Trailing spaces at a break are invisible but still measured, which would shift right-aligned lines
+    auto pushLine = [&lines](std::string &line) {
+        while (!line.empty() && line.back() == ' ')
+            line.pop_back();
+        if (!line.empty())
+            lines.push_back(line);
+        line.clear();
+    };
+
+    const size_t len = strlen(messageBuf);
     std::string line, word;
-    for (int i = 0; messageBuf[i]; ++i) {
-        char ch = messageBuf[i];
-        if ((unsigned char)messageBuf[i] == 0xE2 && (unsigned char)messageBuf[i + 1] == 0x80 &&
-            (unsigned char)messageBuf[i + 2] == 0x99) {
-            ch = '\''; // plain apostrophe
-            i += 2;    // skip over the extra UTF-8 bytes
-        }
-        if (ch == '\n') {
-            if (!word.empty())
-                line += word;
-            if (!line.empty())
-                lines.push_back(line);
-            line.clear();
-            word.clear();
-        } else if (ch == ' ') {
-            line += word + ' ';
-            word.clear();
+    size_t pos = 0;
+    while (pos < len) {
+        // Advance one whole unit (emote or UTF-8 char) so a break never lands inside one
+        size_t unitLen = 0;
+        if ((unsigned char)messageBuf[pos] == 0xE2 && (unsigned char)messageBuf[pos + 1] == 0x80 &&
+            (unsigned char)messageBuf[pos + 2] == 0x99) {
+            word += '\''; // U+2019 right single quote -> plain apostrophe
+            pos += 3;
+            unitLen = 1;
         } else {
-            word += ch;
-            std::string test = line + word;
-            uint16_t strWidth = graphics::UIRenderer::measureStringWithEmotes(display, test.c_str());
-            if (strWidth > textWidth) {
-                if (!line.empty())
-                    lines.push_back(line);
-                line = word;
+            const char ch = messageBuf[pos];
+            if (ch == '\n') {
+                line += word;
+                pushLine(line);
                 word.clear();
+                ++pos;
+                continue;
             }
+            if (ch == ' ') {
+                line += word + ' ';
+                word.clear();
+                ++pos;
+                continue;
+            }
+            if (!graphics::EmoteRenderer::findEmoteAt(messageBuf, len, pos, unitLen))
+                unitLen = std::min(graphics::EmoteRenderer::utf8CharLen((uint8_t)ch), len - pos);
+            word.append(messageBuf + pos, unitLen);
+            pos += unitLen;
+        }
+
+        if (graphics::UIRenderer::measureStringWithEmotes(display, line + word) <= textWidth)
+            continue;
+        // Overflow: move the word to a fresh line
+        if (!line.empty())
+            pushLine(line);
+        // Word too long for a line by itself: break it before the unit that overflowed
+        if (word.size() > unitLen && graphics::UIRenderer::measureStringWithEmotes(display, word) > textWidth) {
+            lines.push_back(word.substr(0, word.size() - unitLen));
+            word.erase(0, word.size() - unitLen);
         }
     }
 
-    if (!word.empty())
-        line += word;
-    if (!line.empty())
-        lines.push_back(line);
+    line += word;
+    pushLine(line);
 
     return lines;
 }
