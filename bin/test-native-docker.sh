@@ -26,8 +26,8 @@ for arg in "$@"; do
 done
 
 if $REBUILD || ! docker image inspect "$IMAGE_NAME" >/dev/null 2>&1; then
-    echo "Building test image (first run may take a few minutes)..."
-    docker build -t "$IMAGE_NAME" -f "$ROOT_DIR/Dockerfile.test" "$ROOT_DIR"
+    echo "Building test image (first run may take a few minutes)..." >&2
+    docker build -t "$IMAGE_NAME" -f "$ROOT_DIR/Dockerfile.test" "$ROOT_DIR" >&2
 fi
 
 # Disable BUILD_EPOCH to avoid full rebuilds between test runs (matches CI)
