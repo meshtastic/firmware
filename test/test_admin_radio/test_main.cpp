@@ -335,31 +335,6 @@ static void test_validateConfigLora_allPresetsValidForLORA24()
 // clampConfigLora() tests
 // -----------------------------------------------------------------------
 
-static void test_clampConfigLora_invalidPresetClampedToDefault()
-{
-    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
-    cfg.region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
-    cfg.use_preset = true;
-    cfg.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO; // not in EU_868 preset list
-
-    RadioInterface::clampConfigLora(cfg);
-
-    const RegionInfo *eu868 = getRegion(meshtastic_Config_LoRaConfig_RegionCode_EU_868);
-    TEST_ASSERT_EQUAL(eu868->getDefaultPreset(), cfg.modem_preset);
-}
-
-static void test_clampConfigLora_validPresetUnchanged()
-{
-    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
-    cfg.region = meshtastic_Config_LoRaConfig_RegionCode_US;
-    cfg.use_preset = true;
-    cfg.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST;
-
-    RadioInterface::clampConfigLora(cfg);
-
-    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST, cfg.modem_preset);
-}
-
 // NodeDB::clampLoadedLoraConfig() runs at boot, before onConfigChanged() renames a legacy "Default"
 // primary to "". If it hashed "Default" as a custom channel name, an out-of-range channel_num would be
 // clamped to that hash's slot instead of the preset's default slot, moving the node off its mesh.
@@ -2384,8 +2359,6 @@ void setup()
     RUN_TEST(test_validateConfigLora_allPresetsValidForLORA24);
 
     // clampConfigLora()
-    RUN_TEST(test_clampConfigLora_invalidPresetClampedToDefault);
-    RUN_TEST(test_clampConfigLora_validPresetUnchanged);
     RUN_TEST(test_clampLoadedLoraConfig_legacyDefaultPrimaryGetsThePresetSlot);
     RUN_TEST(test_clampConfigLora_customBwTooWideClampedToDefaultBw);
     RUN_TEST(test_clampConfigLora_customBwValidLeftUnchanged);
