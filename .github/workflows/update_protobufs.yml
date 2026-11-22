@@ -11,6 +11,16 @@ on:
           - same-as-this-branch
           - master
           - develop
+      nanopb_dl_src:
+        description: Download source for nanopb
+        required: false
+        type: choice
+        # 'jpa.kapsi.fi' is the original nanopb download source
+        # default to GitHub for better availability
+        default: github
+        options:
+          - jpa.kapsi.fi
+          - github
 
 permissions: read-all
 
@@ -60,15 +70,29 @@ jobs:
 
       - name: Download nanopb
         env:
-          NANOPB_VERSION: 0.4.9.1
-          NANOPB_SHA256: 951a9ab2385424a4cdf245d0c84f4c88c6ccbc65a0dade4b246d50c068f24128
+          NANOPB_DL_SRC: ${{ inputs.nanopb_dl_src }}
+          NANOPB_VERSION: 0.4.9.3
+          NANOPB_SHA256: 2f5271feae60f0445ff92a3b7ffe8812114329af9b4bd1ca02fde4510a1217f0
         run: |
           set -euo pipefail
           TARBALL="nanopb-${NANOPB_VERSION}-linux-x86.tar.gz"
-          wget -q "https://github.com/nanopb/nanopb/releases/download/nanopb-${NANOPB_VERSION}/${TARBALL}"
+          case "$NANOPB_DL_SRC" in
+            jpa.kapsi.fi) wget -q "https://jpa.kapsi.fi/nanopb/download/${TARBALL}" ;;
+            github) wget -q "https://github.com/nanopb/nanopb/releases/download/nanopb-${NANOPB_VERSION}/${TARBALL}" ;;
+            *)
+              echo "::error::Unknown nanopb_dl_src '$NANOPB_DL_SRC'"
+              exit 1
+              ;;
+          esac
           echo "${NANOPB_SHA256}  ${TARBALL}" | sha256sum -c -
           tar xzf "${TARBALL}"
           mv "nanopb-${NANOPB_VERSION}-linux-x86" nanopb-0.4.9
+
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: protobufs/tools/protoc-gen-fieldmeta/go.mod
+          cache: false
 
       - name: Re-generate protocol buffers
         run: |
