@@ -721,9 +721,9 @@ void RadioLibInterface::setTransmitDelay()
     if (p->tx_after) {
         uint32_t now = Time::getMillis();
         if (Throttle::deadlinePassedAt(now, p->tx_after)) {
-            // The initial late rebroadcast window has elapsed; use normal CSMA backoff for channel contention
+            // The initial late rebroadcast window has elapsed; use SNR-weighted rebroadcast backoff
             // while keeping tx_after non-zero so normal packets retain queue and eviction priority.
-            p->tx_after = Time::timerEndsAtMillis(getTxDelayMsec());
+            p->tx_after = Time::timerEndsAtMillis(getTxDelayMsecWeighted(p));
         }
         scheduleTransmitDelayCompleted(p->tx_after - now);
     } else if (p->rx_snr == 0 && p->rx_rssi == 0) {
