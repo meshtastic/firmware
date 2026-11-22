@@ -857,35 +857,34 @@ The repo registers the server via `.mcp.json` at the repo root - Claude Code / C
 
 | Goal                                              | Tool                                                                                                |
 | ------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| Find a connected device                           | `mcp__meshtastic__list_devices`                                                                     |
+| Find a connected device                           | `mcp__meshtastic__devices`                                                                          |
 | Read a live node's config/state                   | `mcp__meshtastic__inspect` (`what="summary"`, `"nodes"`, `"lora"`, ...)                             |
 | Mutate a device (owner, region, channels, reboot) | `configure`, `set_channel_url`, `admin(action="reboot"\|"shutdown"\|"factory_reset", confirm=True)` |
-| Flash firmware to a variant                       | `pio_flash` (any arch) or `erase_and_flash` (ESP32 factory install)                                 |
-| Stream serial logs while debugging                | `serial_open` → `serial_read` loop → `serial_close`                                                 |
+| Flash firmware to a variant                       | `install(port=..., source={"env": ...})` (any arch; `erase=True` for an ESP32 factory install)      |
+| Stream serial logs while debugging                | `serial_open` → `query` over the `logs` view → `serial_close`                                       |
 | Administer `userPrefs.jsonc` build-time constants | `userprefs_get`, `userprefs_set`, `userprefs_reset`, `userprefs_manifest`                           |
-| Run the regression suite                          | `./run-tests.sh` from a meshtastic-mcp checkout (or `/test` slash command)                          |
-| Diagnose a specific device                        | `/diagnose [role]` slash command (read-only)                                                        |
-| Triage a flaky test                               | `/repro <node-id> [count]` slash command                                                            |
+| Run the regression suite                          | `./run-tests.sh` from a meshtastic-mcp checkout                                                     |
+| Diagnose a device or run a device-to-app loop     | the `meshtastic-device-ops` and `meshtastic-e2e` skills from the meshtastic-mcp repo                |
 
 **One MCP call per port at a time.** `SerialInterface` holds an exclusive OS-level lock on the serial port for its lifetime. If a `serial_*` session is open on `/dev/cu.usbmodem101`, calling `inspect` on the same port will fail fast pointing at the active session. Sequence calls: open → read/mutate → close, then next device. Never parallelize tool calls on the same port.
 
-### MCP tool surface (44 tools)
+### MCP tool surface
 
 Grouped by purpose. Full argument shapes in the meshtastic-mcp repo's README; a few high-value signatures are called out here.
 
-- **Discovery & metadata**: `list_devices`, `list_boards`, `get_board`
-- **Build & flash**: `build`, `clean`, `pio_flash`, `erase_and_flash` (ESP32 only), `update_flash` (ESP32 OTA), `touch_1200bps`
-- **Serial sessions** (long-running, 10k-line ring buffer): `serial_open`, `serial_read`, `serial_list`, `serial_close`
+- **Discovery & metadata**: `devices`, `list_boards`, `get_board`
+- **Build & flash**: `build`, `clean`, `install(port=..., source={"env": ...})` (ESP32 OTA, nRF52 and RP2040 upload; `erase=True` for an ESP32 factory flash), `touch_1200bps`; follow a long run with `job(job_id, wait_s=...)`. `build`, `clean`, boards and userPrefs are in the firmware group, which needs `MESHTASTIC_MCP_TOOLSETS=all`
+- **Serial sessions** (long-running): `serial_open`, `serial_close`; the output lands in the recorder, read it with `query`
 - **Device reads**: `inspect` (summary, config sections, channels, channel URL, node DB, network)
 - **Device writes**: `configure` (owner and config, with snapshot and read-back, including `security.debug_log_api_enabled`), `set_channel_url`, `send` (text, position, waypoint, traceroute, telemetry), `send_input_event` (inject a button/key press via the firmware's InputBroker), `inject_frame` (inject an over-the-air-style frame into the RX pipeline - see below); destructive/power-state writes go through `admin(action=..., confirm=True)`: `reboot`, `shutdown`, `factory_reset`
 - **userPrefs admin** (build-time constants, not runtime config): `userprefs_get`, `userprefs_set`, `userprefs_reset`, `userprefs_manifest`, `userprefs_testing_profile`
-- **Vendor escape hatches**: `esptool_chip_info`, `esptool_erase_flash`, `nrfutil_dfu`, `picotool_info`, `picotool_load`, and `vendor(tool="esptool"|"nrfutil"|"picotool", args=[...])` for raw invocations
+- **Vendor escape hatches**: `vendor(tool="esptool"|"nrfutil"|"picotool", args=[...])` for raw invocations
 - **USB power control** (via `uhubctl`, per-port PPPS toggle): `uhubctl_list` (read-only), `uhubctl_power(action='on'|'off', confirm=True)`, `uhubctl_cycle(delay_s, confirm=True)`. Target by raw `(location, port)` or by `role` (`"nrf52"`, `"esp32s3"`); role lookup checks `MESHTASTIC_UHUBCTL_LOCATION_<ROLE>` + `_PORT_<ROLE>` env vars first, falls back to VID auto-detection.
 - **Observability** (UI tier + operator ad-hoc): `capture_screen(role, ocr=True)` - grabs a USB-webcam frame of the device OLED and optionally OCRs it. Requires `meshtastic-mcp[ui]` extras (`opencv-python-headless`, `easyocr`) and `MESHTASTIC_UI_CAMERA_DEVICE_<ROLE>` env var; falls through to a 1×1 black PNG `NullBackend` when unconfigured.
 
-`confirm=True` is a tool-level gate on top of whatever permission prompt your MCP host shows. **Don't bypass it** by asking the host to auto-approve - it exists specifically because MCP hosts sometimes remember "always allow this tool" and that's dangerous for `factory_reset`, `erase_and_flash`, `uhubctl_power(action='off')`, and `uhubctl_cycle`.
+`confirm=True` is a tool-level gate on top of whatever permission prompt your MCP host shows. **Don't bypass it** by asking the host to auto-approve - it exists specifically because MCP hosts sometimes remember "always allow this tool" and that's dangerous for `admin(action="factory_reset")`, `install(..., erase=True)`, `uhubctl_power(action='off')`, and `uhubctl_cycle`.
 
-**TCP / native-host nodes.** Setting `MESHTASTIC_MCP_TCP_HOST=<host[:port]>` makes `list_devices` surface a `meshtasticd` daemon (e.g. the `native-macos` build) as a synthetic `tcp://host:port` entry, and `connect()` routes through `meshtastic.tcp_interface.TCPInterface` instead of `SerialInterface`. Every read/write/admin tool that flows through `connect()` works against the daemon transparently. USB-only tools (`pio_flash`, `erase_and_flash`, `update_flash`, `touch_1200bps`, `serial_open`, `esptool_*`, `nrfutil_*`, `picotool_*`) raise a clear `ConnectionError` when handed a `tcp://` port; `pio_flash` against a `native*` env raises a `FlashError` (no upload step - use `build` and run the binary directly). The pytest harness still assumes USB-attached devices per role; TCP-aware fixtures are deferred. See the meshtastic-mcp repo's README § "TCP / native-host nodes".
+**TCP / native-host nodes.** Setting `MESHTASTIC_MCP_TCP_HOST=<host[:port]>` makes `devices` list a `meshtasticd` daemon (e.g. the `native-macos` build) as a synthetic `tcp://host:port` entry, and `connect()` routes through `meshtastic.tcp_interface.TCPInterface` instead of `SerialInterface`. Every read/write/admin tool that flows through `connect()` works against the daemon transparently. USB-only tools (`install`, `touch_1200bps`, `serial_open`, `vendor`) raise a clear error when handed a `tcp://` port; `install` against a `native*` env has no upload step - use `build` and run the binary directly. The pytest harness still assumes USB-attached devices per role; TCP-aware fixtures are deferred. See the meshtastic-mcp repo's README § "TCP / native-host nodes".
 
 ### Frame injection: testing the off-air receive path
 
@@ -959,18 +958,13 @@ Launch:
 
 The plain CLI stays primary; the TUI is for operators who want a live dashboard. Both consume the same `run-tests.sh`.
 
-### Slash commands (Claude Code + Copilot)
+### Agent skills
 
-Three AI-assisted workflows wrap the test harness. Claude Code operators get `/test`, `/diagnose`, `/repro`; Copilot operators get `/mcp-test`, `/mcp-diagnose`, `/mcp-repro`. Bodies:
+The meshtastic-mcp repo ships the `meshtastic-device-ops` and `meshtastic-e2e` skills for device work and device-to-app testing. Run them from a checkout of that repo with `MESHTASTIC_FIRMWARE_ROOT` pointed here.
 
-- `.claude/commands/{test,diagnose,repro}.md`
-- `.github/prompts/mcp-{test,diagnose,repro}.prompt.md`
+House rules for agents running these skills:
 
-`.claude/commands/README.md` is the index.
-
-House rules for agents running these prompts:
-
-- **Interpret failures, don't just echo them.** Pull firmware log tails from `report.html` and classify each failure as transient / environmental / regression. Use the exact format in `.claude/commands/test.md`.
+- **Interpret failures, don't just echo them.** Pull firmware log tails from `report.html` and classify each failure as transient / environmental / regression.
 - **No destructive writes without operator approval.** Any skill that could reflash, factory-reset, or reboot a device must describe the action and stop. The operator authorizes.
 - **Sequential MCP calls per port.** See above.
 - **"Unknown" is a valid classification.** If evidence doesn't support a root cause, say so and list what would disambiguate. Do not invent.
@@ -997,25 +991,25 @@ If you're modifying `StreamAPI`, `PhoneAPI`, `NodeInfoModule`, or `userPrefs` fl
 
 ### Recovery playbooks
 
-| Symptom                                                                           | First check                                                 | Fix                                                                                                                                                                                                                              |
-| --------------------------------------------------------------------------------- | ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `userPrefs.jsonc` dirty after test run                                            | `git status --porcelain userPrefs.jsonc`                    | If non-empty, re-run `./run-tests.sh` (from a meshtastic-mcp checkout) once - the pre-flight self-heal restores from sidecar. If still dirty, `git checkout userPrefs.jsonc`.                                                    |
-| Port busy / wedged CP2102 on macOS                                                | `lsof /dev/cu.usbserial-0001`                               | Kill the holder. USB replug if the kernel still reports busy. Often a stale `pio device monitor` or zombie `meshtastic_mcp` process.                                                                                             |
-| nRF52 appears unresponsive                                                        | `list_devices` shows VID `0x239A` but `inspect` times out   | `touch_1200bps(port=...)` drops it into the DFU bootloader → `pio_flash` re-installs.                                                                                                                                            |
-| Device fully wedged (Guru Meditation, frozen CDC, no DFU)                         | `list_devices` shows the VID but every admin call times out | `uhubctl_cycle(role="nrf52", confirm=True)` hard-power-cycles the port via USB hub PPPS. `baked_single`'s auto-recovery hook does this once automatically if uhubctl is installed. Falls back to physical replug if no PPPS hub. |
-| Multiple MCP server processes                                                     | `ps aux \| grep meshtastic_mcp` shows >1                    | Kill all but the one your MCP host spawned. Zombies hold ports and break tests.                                                                                                                                                  |
-| Mesh formation fails, one side sees peer but other doesn't                        | `/diagnose` (or `inspect(what="nodes")` on both sides)      | Asymmetric NodeInfo. `test_direct_with_ack` has a heal path; `/repro` it a few times. If persistent, both devices' clocks may be out of sync with their NodeInfo cooldown.                                                       |
-| "role not present on hub" in skip reasons                                         | `list_devices`                                              | Expected if a device is unplugged. Reconnect before re-running the tier.                                                                                                                                                         |
-| Entire `tests/recovery/` tier skipped                                             | `command -v uhubctl`                                        | Expected if `uhubctl` isn't on PATH. Install via `brew install uhubctl` (macOS) or `apt install uhubctl` (Debian/Ubuntu). Also skips if no hub advertises PPPS.                                                                  |
-| Entire `tests/ui/` tier skipped ("firmware not baked with USERPREFS_UI_TEST_LOG") | reportlog.jsonl for the skip reason                         | Re-run with `--force-bake` so the UI-log macro gets compiled into the fresh firmware. First run after the Round-3 landing always re-bakes.                                                                                       |
-| `tests/ui/` runs but captures are all 1×1 black PNGs                              | `MESHTASTIC_UI_CAMERA_DEVICE_ESP32S3`                       | Env var not set → `NullBackend`. Point a USB webcam at the heltec-v3 OLED and set the device index; `.venv/bin/python -c "import cv2; [print(i, cv2.VideoCapture(i).read()[0]) for i in range(5)]"` discovers it.                |
-| Tests fail only on first attempt then pass on rerun                               | -                                                           | State leak from a prior session. Run with `--force-bake` to reset to a known state.                                                                                                                                              |
+| Symptom                                                                           | First check                                            | Fix                                                                                                                                                                                                                              |
+| --------------------------------------------------------------------------------- | ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `userPrefs.jsonc` dirty after test run                                            | `git status --porcelain userPrefs.jsonc`               | If non-empty, re-run `./run-tests.sh` (from a meshtastic-mcp checkout) once - the pre-flight self-heal restores from sidecar. If still dirty, `git checkout userPrefs.jsonc`.                                                    |
+| Port busy / wedged CP2102 on macOS                                                | `lsof /dev/cu.usbserial-0001`                          | Kill the holder. USB replug if the kernel still reports busy. Often a stale `pio device monitor` or zombie `meshtastic_mcp` process.                                                                                             |
+| nRF52 appears unresponsive                                                        | `devices` shows VID `0x239A` but `inspect` times out   | `touch_1200bps(port=...)` drops it into the DFU bootloader → `install` re-installs.                                                                                                                                              |
+| Device fully wedged (Guru Meditation, frozen CDC, no DFU)                         | `devices` shows the VID but every admin call times out | `uhubctl_cycle(role="nrf52", confirm=True)` hard-power-cycles the port via USB hub PPPS. `baked_single`'s auto-recovery hook does this once automatically if uhubctl is installed. Falls back to physical replug if no PPPS hub. |
+| Multiple MCP server processes                                                     | `ps aux \| grep meshtastic_mcp` shows >1               | Kill all but the one your MCP host spawned. Zombies hold ports and break tests.                                                                                                                                                  |
+| Mesh formation fails, one side sees peer but other doesn't                        | `inspect(what="nodes")` on both sides                  | Asymmetric NodeInfo. `test_direct_with_ack` has a heal path; re-run it a few times. If persistent, both devices' clocks may be out of sync with their NodeInfo cooldown.                                                         |
+| "role not present on hub" in skip reasons                                         | `devices`                                              | Expected if a device is unplugged. Reconnect before re-running the tier.                                                                                                                                                         |
+| Entire `tests/recovery/` tier skipped                                             | `command -v uhubctl`                                   | Expected if `uhubctl` isn't on PATH. Install via `brew install uhubctl` (macOS) or `apt install uhubctl` (Debian/Ubuntu). Also skips if no hub advertises PPPS.                                                                  |
+| Entire `tests/ui/` tier skipped ("firmware not baked with USERPREFS_UI_TEST_LOG") | reportlog.jsonl for the skip reason                    | Re-run with `--force-bake` so the UI-log macro gets compiled into the fresh firmware. First run after the Round-3 landing always re-bakes.                                                                                       |
+| `tests/ui/` runs but captures are all 1×1 black PNGs                              | `MESHTASTIC_UI_CAMERA_DEVICE_ESP32S3`                  | Env var not set → `NullBackend`. Point a USB webcam at the heltec-v3 OLED and set the device index; `.venv/bin/python -c "import cv2; [print(i, cv2.VideoCapture(i).read()[0]) for i in range(5)]"` discovers it.                |
+| Tests fail only on first attempt then pass on rerun                               | -                                                      | State leak from a prior session. Run with `--force-bake` to reset to a known state.                                                                                                                                              |
 
 ### Never do these without asking
 
 - `admin(action="factory_reset")` - wipes node identity; regenerates PKI keypair. Mesh peers will reject old DMs until re-exchange. Legitimate only when the operator explicitly wants it.
-- `erase_and_flash` - full chip erase; destroys all on-device state.
-- `esptool_erase_flash` / `vendor(tool="esptool")` write/erase - bypasses pio's safety chain.
+- `install(..., erase=True)` - full chip erase; destroys all on-device state.
+- `vendor(tool="esptool")` write/erase - bypasses pio's safety chain.
 - `configure` on `lora.region` - changes regulatory domain; requires physical-location context the operator has and the agent doesn't.
 - `admin(action="reboot")` / `admin(action="shutdown")` mid-test - breaks fixture invariants.
 - `push -f`, `rebase -i`, `reset --hard`, or any history-rewriting git operation.

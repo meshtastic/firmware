@@ -23,7 +23,7 @@
 
 **Read `.github/copilot-instructions.md` first.** That file is the canonical agent-facing document for this repo. It covers project layout, coding conventions, the build system, CI/CD, the native C++ test suite, and the MCP Server & Hardware Test Harness. Read it top-to-bottom before starting any non-trivial change.
 
-This file (`CLAUDE.md`) is a short pointer for Claude Code sessions. Slash commands live in `.claude/commands/`.
+This file (`CLAUDE.md`) is a short pointer for Claude Code sessions. The device and end-to-end workflows are the `meshtastic-device-ops` and `meshtastic-e2e` skills from the meshtastic-mcp repo.
 
 ## House rule: documentation does not live in this repo
 
