@@ -1,5 +1,10 @@
 #pragma once
-#if __has_include("sqlite3.h")
+// Compiled into every Linux meshtasticd build: missing sqlite3 is a build error, never a silent omission.
+#if ARCH_PORTDUINO && !ARCH_PORTDUINO_WASM && !MESHTASTIC_EXCLUDE_SFPP
+#if !__has_include("sqlite3.h")
+#error                                                                                                                           \
+    "SF++ needs the sqlite3 headers: install libsqlite3-dev (Debian), sqlite-devel (Fedora) or sqlite-dev (Alpine), or build with -DMESHTASTIC_EXCLUDE_SFPP=1"
+#endif
 #define SFPP_ENABLED 1
 #include "Channels.h"
 #include "ProtobufModule.h"

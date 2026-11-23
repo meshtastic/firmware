@@ -50,7 +50,7 @@ USER root
 
 RUN apk --no-cache add \
         shadow libstdc++ libbsd libgpiod yaml-cpp jsoncpp libusb avahi-libs \
-        libcurl i2c-tools libuv libx11 libinput libxkbcommon sdl2 libnotify \
+        libcurl i2c-tools libuv libx11 libinput libxkbcommon sdl2 libnotify sqlite-libs \
     && rm -rf /var/cache/apk/* \
     && mkdir -p /var/lib/meshtasticd \
     && mkdir -p /etc/meshtasticd/config.d \

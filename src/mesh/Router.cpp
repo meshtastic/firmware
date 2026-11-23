@@ -604,8 +604,7 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
             abortSendAndNak(encodeResult, p);
             return encodeResult; // FIXME - this isn't a valid ErrorCode
         }
-// SFPP_ENABLED tracks StoreForwardPlusPlus.h's own __has_include("sqlite3.h") guard: without
-// sqlite3 headers the module is not declared, so ARCH_PORTDUINO alone is not enough here.
+// SFPP_ENABLED comes from StoreForwardPlusPlus.h: off for WASM and MESHTASTIC_EXCLUDE_SFPP builds.
 #if ARCH_PORTDUINO && SFPP_ENABLED
         if (p_decoded->decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP &&
             (p->from == 0 || p->from == nodeDB->getNodeNum()) && storeForwardPlusPlusModule && portduino_config.sfpp_enabled) {

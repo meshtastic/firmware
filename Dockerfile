@@ -56,7 +56,7 @@ USER root
 RUN apt-get update && apt-get --no-install-recommends -y install \
         libc-bin libc6 libgpiod3 libyaml-cpp0.8 libjsoncpp26 libsdbus-c++2 libi2c0 libuv1t64 libusb-1.0-0-dev \
         libcurl4t64 liborcania2.3 libulfius2.7t64 libssl3t64 libavahi-client3 \
-        libx11-6 libinput10 libxkbcommon-x11-0 libsdl2-2.0-0 libnotify4 \
+        libx11-6 libinput10 libxkbcommon-x11-0 libsdl2-2.0-0 libnotify4 libsqlite3-0 \
     && apt-get clean && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /var/lib/meshtasticd \
     && mkdir -p /etc/meshtasticd/config.d \
