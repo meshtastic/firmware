@@ -118,6 +118,10 @@ class ExternalNotificationModule : public SinglePortModule, private concurrency:
 
     bool isNagging = false;
 
+    /// Plain GPIO buzzer pulse for a ringtone preview, kept apart from the nag cycle so outputs 0 and 1 stay off.
+    bool buzzerPulseArmed = false;
+    uint32_t buzzerPulseEnd = 0;
+
     bool isSilenced = false;
     bool buzzerShouldAlert = false;
 
