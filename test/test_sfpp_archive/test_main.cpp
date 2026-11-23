@@ -78,17 +78,20 @@ class TestRadio : public RadioInterface
 };
 
 // Router::send is the seam every non-local SF++ packet crosses, so it is where replies are observed.
+// Like a real interface it takes ownership rather than releasing the packet: MeshService::sendToMesh
+// still reads it after sendLocal() to make the phone copy.
 class CapturingRouter : public Router
 {
   public:
     ErrorCode send(meshtastic_MeshPacket *p) override
     {
         sent.push_back(*p);
-        packetPool.release(p);
+        owned.push_back(p);
         return ERRNO_OK;
     }
 
     std::vector<meshtastic_MeshPacket> sent;
+    std::vector<meshtastic_MeshPacket *> owned;
 };
 
 class TestRoutingModule : public RoutingModule
@@ -361,6 +364,14 @@ void tearDown(void)
     delete testRoutingModule;
     testRoutingModule = nullptr;
     routingModule = nullptr;
+
+    // Broadcast sends are copied to the phone queue; both pools must be drained before teardown.
+    drainPhoneQueue();
+    while (meshtastic_QueueStatus *q = testService->getQueueStatusForPhone())
+        testService->releaseQueueStatusToPool(q);
+    for (meshtastic_MeshPacket *p : testRouter->owned)
+        packetPool.release(p);
+    testRouter->owned.clear();
 
     delete testRouter;
     testRouter = nullptr;
