@@ -11,7 +11,7 @@
 
 #define BATTERY_PIN 8
 #define ADC_CHANNEL ADC_CHANNEL_7
-#define ADC_MULTIPLIER 2.0f
+#define ADC_MULTIPLIER 2.0f // Factory battery divider scaling
 
 #define HAS_NEOPIXEL
 #define NEOPIXEL_COUNT 1
@@ -29,7 +29,7 @@
 #define LR2021_SPI_NSS_PIN LORA_CS
 #define LR2021_IRQ_PIN LORA_DIO1
 #define LR2021_NRESET_PIN 38
-#define LR2021_BUSY_PIN 17
+#define LR2021_BUSY_PIN 17 // Internal AM36 signal, unavailable for expansion I2C
 #define LR2021_IRQ_DIO_NUM 7
 #define LR2021_DIO_AS_RF_SWITCH
 #define LR2021_MAX_POWER 22

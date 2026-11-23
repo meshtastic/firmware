@@ -1,4 +1,4 @@
-// Omit the Arduino RGB LED aliases to keep digitalWrite() independent of the RMT HAL.
+// Meshtastic drives the onboard NeoPixel directly on GPIO48.
 #ifndef Pins_Arduino_h
 #define Pins_Arduino_h
 
