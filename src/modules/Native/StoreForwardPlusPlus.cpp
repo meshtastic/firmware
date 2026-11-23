@@ -11,6 +11,8 @@
 #include "MeshService.h"
 #include "RTC.h"
 #include "SHA256.h"
+#include "concurrency/LockGuard.h"
+#include "mesh/CryptoEngine.h"
 #include "meshUtils.h"
 #include "modules/RoutingModule.h"
 #if !MESHTASTIC_EXCLUDE_STOREFORWARD
@@ -35,6 +37,35 @@ static int readSchemaVersion(sqlite3 *db, bool &hasTables)
         hasTables = sqlite3_step(st) == SQLITE_ROW;
     sqlite3_finalize(st);
     return version;
+}
+
+// A follower's chain rows carry the ciphertext but not the plaintext. Decrypt the primary channel's
+// copy and accept it only when it decodes as a text Data.
+static bool decodeStoredText(const uint8_t *encrypted, size_t encryptedLen, uint32_t from, uint32_t id, std::string &out)
+{
+    if (encrypted == nullptr || encryptedLen == 0 || encryptedLen > MAX_BLOCKSIZE)
+        return false;
+
+    CryptoKey key = channels.getKey(0);
+    if (key.length <= 0)
+        return false;
+
+    uint8_t plain[MAX_BLOCKSIZE];
+    memcpy(plain, encrypted, encryptedLen);
+    {
+        concurrency::LockGuard g(cryptLock);
+        crypto->setKey(key);
+        crypto->decrypt(from, id, encryptedLen, plain);
+    }
+
+    meshtastic_Data data;
+    if (!pb_decode_from_bytes(plain, encryptedLen, &meshtastic_Data_msg, &data))
+        return false;
+    if (data.portnum != meshtastic_PortNum_TEXT_MESSAGE_APP || data.payload.size == 0)
+        return false;
+
+    out.assign((const char *)data.payload.bytes, data.payload.size);
+    return true;
 }
 
 // The shim speaks the legacy StoreAndForward protobuf, which is not this module's template type,
@@ -258,9 +289,9 @@ StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
     sqlite3_prepare_v2(ppDb, "update channel_messages set short_id=?, checksum=? where message_hash=?;", -1, &setLinkSetIndexStmt,
                        NULL);
 
-    // Legacy CLIENT_HISTORY reads the stored plaintext, newest window only, in arrival order.
-    sqlite3_prepare_v2(ppDb, "select sender, packet_id, destination, rx_time, payload from channel_messages \
-        where substr(root_hash,1,?)=? and rx_time>=? and payload is not null and length(payload)>0 and sender!=? \
+    // Legacy CLIENT_HISTORY reads the stored plaintext, or the ciphertext a follower holds instead.
+    sqlite3_prepare_v2(ppDb, "select sender, packet_id, destination, rx_time, payload, encrypted_bytes from channel_messages \
+        where substr(root_hash,1,?)=? and rx_time>=? and sender!=? \
         and (destination=? or destination=?) order by rx_time asc limit ?;",
                        -1, &legacyHistoryStmt, NULL);
 
@@ -1158,7 +1189,14 @@ void StoreForwardPlusPlusModule::handleLegacyClientHistory(const meshtastic_Mesh
             uint32_t destination = (uint32_t)sqlite3_column_int64(legacyHistoryStmt, 2);
             item.rx_time = (uint32_t)sqlite3_column_int64(legacyHistoryStmt, 3);
             const unsigned char *text = sqlite3_column_text(legacyHistoryStmt, 4);
-            item.payload.assign((const char *)text, sqlite3_column_bytes(legacyHistoryStmt, 4));
+            if (text)
+                item.payload.assign((const char *)text, sqlite3_column_bytes(legacyHistoryStmt, 4));
+            if (item.payload.empty()) {
+                const uint8_t *encrypted = (const uint8_t *)sqlite3_column_blob(legacyHistoryStmt, 5);
+                const int encryptedLen = sqlite3_column_bytes(legacyHistoryStmt, 5);
+                if (!decodeStoredText(encrypted, (size_t)encryptedLen, item.from, item.id, item.payload))
+                    continue;
+            }
             item.to = requester;
             item.broadcast = destination == NODENUM_BROADCAST;
             legacyHistory.push_back(std::move(item));

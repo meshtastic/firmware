@@ -25,6 +25,7 @@
 #include "TestUtil.h"
 #include "gps/RTC.h"
 #include "mesh/Channels.h"
+#include "mesh/CryptoEngine.h"
 #include "mesh/MeshService.h"
 #include "mesh/NodeDB.h"
 #include "mesh/RadioInterface.h"
@@ -174,15 +175,19 @@ meshtastic_MeshPacket makeText(NodeNum from, PacketId id, const char *text, uint
 
 meshtastic_MeshPacket makeEncryptedCopy(const meshtastic_MeshPacket &mp)
 {
+    uint8_t plain[256];
+    const size_t len = pb_encode_to_bytes(plain, sizeof(plain), &meshtastic_Data_msg, &mp.decoded);
+    crypto->setKey(channels.getKey(0));
+    crypto->encryptPacket(mp.from, mp.id, len, plain);
+
     meshtastic_MeshPacket enc = meshtastic_MeshPacket_init_zero;
     enc.from = mp.from;
     enc.to = mp.to;
     enc.id = mp.id;
     enc.channel = channels.getHash(0);
     enc.which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
-    enc.encrypted.size = 32;
-    for (size_t i = 0; i < enc.encrypted.size; i++)
-        enc.encrypted.bytes[i] = (uint8_t)(0x40 + i + (mp.id & 0x0f));
+    enc.encrypted.size = len;
+    memcpy(enc.encrypted.bytes, plain, len);
     return enc;
 }
 
@@ -305,6 +310,45 @@ void setStoredRxTime(PacketId id, uint32_t rxTime)
     sqlite3_close(db);
 }
 
+void updateStoredPayload(PacketId id, const char *payload)
+{
+    sqlite3 *db = nullptr;
+    if (sqlite3_open(dbFile().c_str(), &db) != SQLITE_OK) {
+        if (db)
+            sqlite3_close(db);
+        return;
+    }
+    sqlite3_stmt *stmt = nullptr;
+    if (sqlite3_prepare_v2(db, "update channel_messages set payload=? where packet_id=?;", -1, &stmt, nullptr) == SQLITE_OK) {
+        sqlite3_bind_text(stmt, 1, payload, -1, NULL);
+        sqlite3_bind_int64(stmt, 2, id);
+        sqlite3_step(stmt);
+    }
+    if (stmt)
+        sqlite3_finalize(stmt);
+    sqlite3_close(db);
+}
+
+void updateStoredEncrypted(PacketId id, const uint8_t *data, size_t len)
+{
+    sqlite3 *db = nullptr;
+    if (sqlite3_open(dbFile().c_str(), &db) != SQLITE_OK) {
+        if (db)
+            sqlite3_close(db);
+        return;
+    }
+    sqlite3_stmt *stmt = nullptr;
+    if (sqlite3_prepare_v2(db, "update channel_messages set encrypted_bytes=? where packet_id=?;", -1, &stmt, nullptr) ==
+        SQLITE_OK) {
+        sqlite3_bind_blob(stmt, 1, data, (int)len, NULL);
+        sqlite3_bind_int64(stmt, 2, id);
+        sqlite3_step(stmt);
+    }
+    if (stmt)
+        sqlite3_finalize(stmt);
+    sqlite3_close(db);
+}
+
 bool ingestOneText(const char *text)
 {
     meshtastic_MeshPacket mp = makeText(REMOTE_NODE, TEXT_ID, text, getValidTime(RTCQualityNTP, true));
@@ -401,7 +445,7 @@ void test_ingestStoresTextWithPayloadAndHashes()
     TEST_ASSERT_EQUAL_STRING("hello archive", row.payload.c_str());
     TEST_ASSERT_EQUAL_UINT(SFPP_HASH_SIZE, row.root.size());
     TEST_ASSERT_EQUAL_UINT(SFPP_HASH_SIZE, row.commit.size());
-    TEST_ASSERT_EQUAL_UINT(32, row.encrypted.size());
+    TEST_ASSERT_TRUE(row.encrypted.size() > 0);
 }
 
 // runOnce() in stratum-0 mode must announce the stored tip: CANON_ANNOUNCE with the full root, the
@@ -520,6 +564,61 @@ void test_legacyHistoryExcludesTextsOlderThanRetention()
     setStoredRxTime(TEXT_ID, getValidTime(RTCQualityNTP, true) - LEGACY_RETENTION_S - 60);
 
     meshtastic_MeshPacket request = makeHistoryRequest(0, LOCAL_NODE, 0x0D0D0D0D, 0);
+    TEST_ASSERT_EQUAL(ProcessMessage::STOP, testSfpp->dispatch(request));
+
+    std::vector<meshtastic_MeshPacket> phone = drainPhoneQueue();
+    TEST_ASSERT_EQUAL_UINT(1, phone.size());
+    meshtastic_StoreAndForward reply;
+    TEST_ASSERT_TRUE(decodeStoreForward(phone[0], reply));
+    TEST_ASSERT_EQUAL_UINT32(0, reply.variant.history.history_messages);
+}
+
+// A follower stores the chain's ciphertext but not its plaintext. The shim must decrypt the primary
+// channel copy and require a text Data, rather than serving nothing for those rows.
+void test_legacyHistoryDecryptsEmptyPayloadRow()
+{
+    TEST_ASSERT_TRUE(ingestOneText("follower text"));
+    updateStoredPayload(TEXT_ID, "");
+
+    meshtastic_MeshPacket request = makeHistoryRequest(0, LOCAL_NODE, 0x0F0F0F0F, 0);
+    TEST_ASSERT_EQUAL(ProcessMessage::STOP, testSfpp->dispatch(request));
+
+    std::vector<meshtastic_MeshPacket> phone = drainPhoneQueue();
+    TEST_ASSERT_EQUAL_UINT(1, phone.size());
+    meshtastic_StoreAndForward reply;
+    TEST_ASSERT_TRUE(decodeStoreForward(phone[0], reply));
+    TEST_ASSERT_EQUAL_UINT32(1, reply.variant.history.history_messages);
+
+    testSfpp->runOnce();
+    phone = drainPhoneQueue();
+    TEST_ASSERT_EQUAL_UINT(1, phone.size());
+    meshtastic_StoreAndForward text;
+    TEST_ASSERT_TRUE(decodeStoreForward(phone[0], text));
+    TEST_ASSERT_EQUAL(meshtastic_StoreAndForward_RequestResponse_ROUTER_TEXT_BROADCAST, text.rr);
+    TEST_ASSERT_EQUAL_UINT32(TEXT_ID, text.original_id);
+    TEST_ASSERT_EQUAL_UINT(strlen("follower text"), text.variant.text.size);
+    TEST_ASSERT_EQUAL_MEMORY("follower text", text.variant.text.bytes, text.variant.text.size);
+}
+
+// The fallback decrypt is only a history source for text: another portnum must be skipped rather
+// than queued as if it were a message.
+void test_legacyHistorySkipsNonTextCiphertext()
+{
+    TEST_ASSERT_TRUE(ingestOneText("not a text"));
+
+    meshtastic_Data position = meshtastic_Data_init_zero;
+    position.portnum = meshtastic_PortNum_POSITION_APP;
+    position.payload.size = 4;
+    memset(position.payload.bytes, 0x5A, position.payload.size);
+
+    uint8_t plain[128];
+    const size_t len = pb_encode_to_bytes(plain, sizeof(plain), &meshtastic_Data_msg, &position);
+    crypto->setKey(channels.getKey(0));
+    crypto->encryptPacket(REMOTE_NODE, TEXT_ID, len, plain);
+    updateStoredEncrypted(TEXT_ID, plain, len);
+    updateStoredPayload(TEXT_ID, "");
+
+    meshtastic_MeshPacket request = makeHistoryRequest(0, LOCAL_NODE, 0x1A1A1A1A, 0);
     TEST_ASSERT_EQUAL(ProcessMessage::STOP, testSfpp->dispatch(request));
 
     std::vector<meshtastic_MeshPacket> phone = drainPhoneQueue();
@@ -694,6 +793,8 @@ void setup()
     RUN_TEST(test_legacyHistoryAnswersInLegacyFormat);
     RUN_TEST(test_legacyHistoryUsesLegacyRequestWindow);
     RUN_TEST(test_legacyHistoryExcludesTextsOlderThanRetention);
+    RUN_TEST(test_legacyHistoryDecryptsEmptyPayloadRow);
+    RUN_TEST(test_legacyHistorySkipsNonTextCiphertext);
     RUN_TEST(test_shimPassesNonHistoryPort65ToLaterModules);
     RUN_TEST(test_shimClaimsPort65WithNoLegacyServer);
     RUN_TEST(test_shimYieldsPort65ToLegacyServer);
