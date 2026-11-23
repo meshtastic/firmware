@@ -289,8 +289,12 @@ void setupModules()
 #endif
 #endif
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_POWER_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
-    if (moduleConfig.has_telemetry &&
-        (moduleConfig.telemetry.power_measurement_enabled || moduleConfig.telemetry.power_screen_enabled)) {
+    // A VE.Direct device on the serial module publishes its readings through the power telemetry module
+    bool veDirectConfigured = moduleConfig.has_serial && moduleConfig.serial.enabled &&
+                              moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_VE_DIRECT;
+    if ((moduleConfig.has_telemetry &&
+         (moduleConfig.telemetry.power_measurement_enabled || moduleConfig.telemetry.power_screen_enabled)) ||
+        veDirectConfigured) {
         new PowerTelemetryModule();
     }
 #endif
