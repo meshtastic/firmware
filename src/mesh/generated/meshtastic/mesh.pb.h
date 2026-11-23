@@ -590,7 +590,16 @@ typedef enum _meshtastic_StoreForwardPlusPlus_SFPP_message_type {
     meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_PROVIDE = 11,
     /* Signed retention checkpoint: everything below this bucket is gone, so
  stop asking for it. */
-    meshtastic_StoreForwardPlusPlus_SFPP_message_type_GONE = 12
+    meshtastic_StoreForwardPlusPlus_SFPP_message_type_GONE = 12,
+    /* One message frame, or a whole message when it fits in one frame. The
+ frame position lives in `frame`; frames are keyed by message hash so
+ different archives complete each other's sets. */
+    meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_FRAME = 13,
+    /* A client asking for a window, or for specific messages. */
+    meshtastic_StoreForwardPlusPlus_SFPP_message_type_CLIENT_REQUEST = 14,
+    /* The archive's answer to a CLIENT_REQUEST: served and remaining counts,
+ plus a retry delay when it is busy. */
+    meshtastic_StoreForwardPlusPlus_SFPP_message_type_REQUEST_DONE = 15
 } meshtastic_StoreForwardPlusPlus_SFPP_message_type;
 
 /* Frame op code for PTY session control and stream transport.
@@ -1237,6 +1246,18 @@ typedef struct _meshtastic_StoreForwardPlusPlus {
  means "stop asking", so an unsigned one denies service against a bucket
  that still exists. */
     meshtastic_StoreForwardPlusPlus_sr_signature_t sr_signature;
+    /* Seconds since the archive first heard the message. Relative, so a
+ clockless client can still place it. */
+    uint32_t heard_ago_s;
+    /* Frame position for a message that did not fit one frame: low byte is the
+ index, next byte is the total; 0 means not framed. Kept separate from
+ sr_frame so the sketch-side reverse guard still holds. */
+    uint32_t frame;
+    /* The archive verified the original sender's XEdDSA signature at capture.
+ Attested by the archive's own frame signature. */
+    bool origin_verified;
+    /* Ties replies to a client request. */
+    uint32_t request_id;
 } meshtastic_StoreForwardPlusPlus;
 
 typedef PB_BYTES_ARRAY_T(200) meshtastic_RemoteShell_payload_t;
@@ -2131,8 +2152,8 @@ extern "C" {
 #define _meshtastic_Routing_Error_ARRAYSIZE ((meshtastic_Routing_Error)(meshtastic_Routing_Error_PKI_SEND_FAIL_PUBLIC_KEY+1))
 
 #define _meshtastic_StoreForwardPlusPlus_SFPP_message_type_MIN meshtastic_StoreForwardPlusPlus_SFPP_message_type_CANON_ANNOUNCE
-#define _meshtastic_StoreForwardPlusPlus_SFPP_message_type_MAX meshtastic_StoreForwardPlusPlus_SFPP_message_type_GONE
-#define _meshtastic_StoreForwardPlusPlus_SFPP_message_type_ARRAYSIZE ((meshtastic_StoreForwardPlusPlus_SFPP_message_type)(meshtastic_StoreForwardPlusPlus_SFPP_message_type_GONE+1))
+#define _meshtastic_StoreForwardPlusPlus_SFPP_message_type_MAX meshtastic_StoreForwardPlusPlus_SFPP_message_type_REQUEST_DONE
+#define _meshtastic_StoreForwardPlusPlus_SFPP_message_type_ARRAYSIZE ((meshtastic_StoreForwardPlusPlus_SFPP_message_type)(meshtastic_StoreForwardPlusPlus_SFPP_message_type_REQUEST_DONE+1))
 
 #define _meshtastic_RemoteShell_OpCode_MIN meshtastic_RemoteShell_OpCode_OP_UNSET
 #define _meshtastic_RemoteShell_OpCode_MAX meshtastic_RemoteShell_OpCode_PONG
@@ -2256,7 +2277,7 @@ extern "C" {
 #define meshtastic_Routing_init_default          {0, {meshtastic_RouteDiscovery_init_default}, {0, {0}}}
 #define meshtastic_Data_init_default             {_meshtastic_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0, false, 0, {0, {0}}}
 #define meshtastic_KeyVerification_init_default  {0, {0, {0}}, {0, {0}}}
-#define meshtastic_StoreForwardPlusPlus_init_default {_meshtastic_StoreForwardPlusPlus_SFPP_message_type_MIN, {0, {0}}, {0, {0}}, {0, {0}}, {0, {0}}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, {0}}}
+#define meshtastic_StoreForwardPlusPlus_init_default {_meshtastic_StoreForwardPlusPlus_SFPP_message_type_MIN, {0, {0}}, {0, {0}}, {0, {0}}, {0, {0}}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, {0}}, 0, 0, 0, 0}
 #define meshtastic_RemoteShell_init_default      {_meshtastic_RemoteShell_OpCode_MIN, 0, 0, 0, {0, {0}}, 0, 0, 0, 0, 0}
 #define meshtastic_BoundingBox_init_default      {0, 0, 0, 0}
 #define meshtastic_Waypoint_init_default         {0, false, 0, false, 0, 0, 0, "", "", 0, 0, false, meshtastic_BoundingBox_init_default, 0, 0, 0}
@@ -2299,7 +2320,7 @@ extern "C" {
 #define meshtastic_Routing_init_zero             {0, {meshtastic_RouteDiscovery_init_zero}, {0, {0}}}
 #define meshtastic_Data_init_zero                {_meshtastic_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0, false, 0, {0, {0}}}
 #define meshtastic_KeyVerification_init_zero     {0, {0, {0}}, {0, {0}}}
-#define meshtastic_StoreForwardPlusPlus_init_zero {_meshtastic_StoreForwardPlusPlus_SFPP_message_type_MIN, {0, {0}}, {0, {0}}, {0, {0}}, {0, {0}}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, {0}}}
+#define meshtastic_StoreForwardPlusPlus_init_zero {_meshtastic_StoreForwardPlusPlus_SFPP_message_type_MIN, {0, {0}}, {0, {0}}, {0, {0}}, {0, {0}}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, {0}}, 0, 0, 0, 0}
 #define meshtastic_RemoteShell_init_zero         {_meshtastic_RemoteShell_OpCode_MIN, 0, 0, 0, {0, {0}}, 0, 0, 0, 0, 0}
 #define meshtastic_BoundingBox_init_zero         {0, 0, 0, 0}
 #define meshtastic_Waypoint_init_zero            {0, false, 0, false, 0, 0, 0, "", "", 0, 0, false, meshtastic_BoundingBox_init_zero, 0, 0, 0}
@@ -2407,6 +2428,10 @@ extern "C" {
 #define meshtastic_StoreForwardPlusPlus_sr_checksum_tag 14
 #define meshtastic_StoreForwardPlusPlus_sr_short_ids_tag 15
 #define meshtastic_StoreForwardPlusPlus_sr_signature_tag 16
+#define meshtastic_StoreForwardPlusPlus_heard_ago_s_tag 17
+#define meshtastic_StoreForwardPlusPlus_frame_tag 18
+#define meshtastic_StoreForwardPlusPlus_origin_verified_tag 19
+#define meshtastic_StoreForwardPlusPlus_request_id_tag 20
 #define meshtastic_RemoteShell_op_tag            1
 #define meshtastic_RemoteShell_session_id_tag    2
 #define meshtastic_RemoteShell_seq_tag           3
@@ -2717,7 +2742,11 @@ X(a, STATIC,   SINGULAR, UINT32,   sr_count,         12) \
 X(a, STATIC,   SINGULAR, UINT32,   sr_frame,         13) \
 X(a, STATIC,   SINGULAR, FIXED64,  sr_checksum,      14) \
 X(a, STATIC,   REPEATED, FIXED32,  sr_short_ids,     15) \
-X(a, STATIC,   SINGULAR, BYTES,    sr_signature,     16)
+X(a, STATIC,   SINGULAR, BYTES,    sr_signature,     16) \
+X(a, STATIC,   SINGULAR, UINT32,   heard_ago_s,      17) \
+X(a, STATIC,   SINGULAR, UINT32,   frame,            18) \
+X(a, STATIC,   SINGULAR, BOOL,     origin_verified,  19) \
+X(a, STATIC,   SINGULAR, UINT32,   request_id,       20)
 #define meshtastic_StoreForwardPlusPlus_CALLBACK NULL
 #define meshtastic_StoreForwardPlusPlus_DEFAULT NULL
 
@@ -3249,7 +3278,7 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 #define meshtastic_RouteDiscovery_size           256
 #define meshtastic_Routing_size                  269
 #define meshtastic_StatusMessage_size            81
-#define meshtastic_StoreForwardPlusPlus_size     671
+#define meshtastic_StoreForwardPlusPlus_size     695
 #define meshtastic_ToRadio_size                  504
 #define meshtastic_User_size                     115
 #define meshtastic_Waypoint_size                 199
