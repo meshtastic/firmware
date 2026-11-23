@@ -3,8 +3,19 @@
 #define USE_SSD1306 // SSD1315 is SSD1306-compatible
 #define I2C_SDA 5
 #define I2C_SCL 4
+#define VEXT_ENABLE 45 // Active-low OLED supply
+#define PERIPHERAL_WARMUP_MS 100
 
 #define BUTTON_PIN 0
+
+#define BATTERY_PIN 8
+#define ADC_CHANNEL ADC_CHANNEL_7
+#define ADC_MULTIPLIER 2.0f
+
+#define HAS_NEOPIXEL
+#define NEOPIXEL_COUNT 1
+#define NEOPIXEL_DATA 48
+#define NEOPIXEL_TYPE (NEO_GRB + NEO_KHZ800)
 
 // The AM36 module routes LR2021 DIO7 to ESP32-S3 GPIO21.
 #define USE_LR2021
