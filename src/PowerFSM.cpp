@@ -310,8 +310,16 @@ static void serialIdle()
     if (config.display.screen_on_secs == 0)
         return;
 #endif
-    if (serialScreenTimedOut)
+    if (serialScreenTimedOut) {
+#if HAS_SCREEN
+        // Woken by something other than input (e.g. an incoming message): restart the timeout
+        if (screen && screen->isScreenOn()) {
+            serialScreenOnMs = millis();
+            serialScreenTimedOut = false;
+        }
+#endif
         return;
+    }
     if (Throttle::hasElapsed(serialScreenOnMs,
                              Default::getConfiguredOrDefaultMs(config.display.screen_on_secs, default_screen_on_secs))) {
         LOG_POWERFSM("State: serialIdle screen timeout");
