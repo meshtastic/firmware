@@ -625,10 +625,13 @@ ProcessMessage StoreForwardPlusPlusModule::handleReceived(const meshtastic_MeshP
     if (mp.which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
         mp.decoded.portnum == meshtastic_PortNum_STORE_FORWARD_APP && !legacyStoreForwardServes()) {
         meshtastic_StoreAndForward req;
-        if (pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, &meshtastic_StoreAndForward_msg, &req)) {
+        if (pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, &meshtastic_StoreAndForward_msg, &req) &&
+            req.rr == meshtastic_StoreAndForward_RequestResponse_CLIENT_HISTORY) {
             handleLegacyClientHistory(mp, &req);
+            return ProcessMessage::STOP;
         }
-        return ProcessMessage::STOP;
+        // Heartbeats and another server's ROUTER_TEXT_* belong to the legacy client module.
+        return ProcessMessage::CONTINUE;
     }
 
     if (mp.from == nodeDB->getNodeNum() || mp.from == 0) {

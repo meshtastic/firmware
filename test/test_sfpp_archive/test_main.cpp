@@ -530,6 +530,30 @@ void test_legacyHistoryExcludesTextsOlderThanRetention()
 
 // --- Coexistence with the legacy module ---
 
+// A portnum-65 packet that is not a CLIENT_HISTORY belongs to the legacy client module (heartbeats,
+// another server's ROUTER_TEXT_*). The shim owns the port but must pass these on, not consume them.
+void test_shimPassesNonHistoryPort65ToLaterModules()
+{
+    meshtastic_StoreAndForward heartbeat = meshtastic_StoreAndForward_init_zero;
+    heartbeat.rr = meshtastic_StoreAndForward_RequestResponse_ROUTER_HEARTBEAT;
+    heartbeat.which_variant = meshtastic_StoreAndForward_heartbeat_tag;
+    heartbeat.variant.heartbeat.period = 900;
+
+    meshtastic_MeshPacket mp = meshtastic_MeshPacket_init_zero;
+    mp.from = REMOTE_NODE;
+    mp.to = LOCAL_NODE;
+    mp.id = 0x0E0E0E0E;
+    mp.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_API;
+    mp.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    mp.decoded.portnum = meshtastic_PortNum_STORE_FORWARD_APP;
+    mp.decoded.payload.size = pb_encode_to_bytes(mp.decoded.payload.bytes, sizeof(mp.decoded.payload.bytes),
+                                                 &meshtastic_StoreAndForward_msg, &heartbeat);
+
+    TEST_ASSERT_EQUAL(ProcessMessage::CONTINUE, testSfpp->dispatch(mp));
+    TEST_ASSERT_EQUAL_UINT(0, testRouter->sent.size());
+    TEST_ASSERT_EQUAL_UINT(0, drainPhoneQueue().size());
+}
+
 // With no legacy server the shim must claim portnum 65; otherwise the shim can never run.
 void test_shimClaimsPort65WithNoLegacyServer()
 {
@@ -599,6 +623,7 @@ void setup()
     RUN_TEST(test_legacyHistoryAnswersInLegacyFormat);
     RUN_TEST(test_legacyHistoryUsesLegacyRequestWindow);
     RUN_TEST(test_legacyHistoryExcludesTextsOlderThanRetention);
+    RUN_TEST(test_shimPassesNonHistoryPort65ToLaterModules);
     RUN_TEST(test_shimClaimsPort65WithNoLegacyServer);
     RUN_TEST(test_shimYieldsPort65ToLegacyServer);
     RUN_TEST(test_shimClaimsPort65WithLegacyClientOnly);
