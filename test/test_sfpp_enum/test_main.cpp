@@ -56,6 +56,7 @@ namespace
 {
 constexpr NodeNum AUTHORITY_NODE = 0x11112222;
 constexpr NodeNum FOLLOWER_NODE = 0x33334444;
+constexpr NodeNum FOLLOWER2_NODE = 0x44445555;
 constexpr NodeNum SENDER_NODE = 0x55556666;
 constexpr PacketId BASE_ID = 0x1000;
 
@@ -85,6 +86,12 @@ class CapturingRouter : public Router
   public:
     ErrorCode send(meshtastic_MeshPacket *p) override
     {
+        if (rejectNext > 0) {
+            rejectNext--;
+            rejected++;
+            packetPool.release(p);
+            return ERRNO_NO_INTERFACES;
+        }
         sent.push_back(*p);
         owned.push_back(p);
         return ERRNO_OK;
@@ -92,6 +99,8 @@ class CapturingRouter : public Router
 
     std::vector<meshtastic_MeshPacket> sent;
     std::vector<meshtastic_MeshPacket *> owned;
+    int rejectNext = 0;
+    uint32_t rejected = 0;
 };
 
 class TestRoutingModule : public RoutingModule
@@ -139,8 +148,10 @@ MockMeshService *testService;
 TestRoutingModule *testRoutingModule;
 TestSfppModule *authority;
 TestSfppModule *follower;
+TestSfppModule *follower2;
 std::string dirA;
 std::string dirB;
+std::string dirC;
 
 std::string dbFile(const std::string &dir)
 {
@@ -466,6 +477,14 @@ void buildFollowerFromCopy()
     follower = new TestSfppModule();
 }
 
+void buildSecondFollowerFromCopy()
+{
+    TEST_ASSERT_TRUE(copyDb(dirA, dirC));
+    portduino_config.sfpp_db_path = dirC + "/";
+    portduino_config.sfpp_stratum0 = false;
+    follower2 = new TestSfppModule();
+}
+
 bool deliver(TestSfppModule *target, NodeNum targetNode, bool stratum0, const meshtastic_MeshPacket &p)
 {
     myNodeInfo.my_node_num = targetNode;
@@ -567,6 +586,36 @@ void assertConverged()
     TEST_ASSERT_EQUAL_UINT64(a.checksum, b.checksum);
 }
 
+// Runs the exchange up to (and including) the authority accepting an ITEM_REQUEST, which queues
+// the item frames without sending them.
+void driveToItemRequest(TestSfppModule *requester, NodeNum requesterNode)
+{
+    meshtastic_MeshPacket advert = runAuthorityOnce();
+    TEST_ASSERT_TRUE(deliver(requester, requesterNode, false, advert));
+    std::vector<meshtastic_MeshPacket> requests = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, requests.size());
+    TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, true, requests[0]));
+
+    std::vector<meshtastic_MeshPacket> provides = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, provides.size());
+    TEST_ASSERT_TRUE(deliver(requester, requesterNode, false, provides[0]));
+
+    std::vector<meshtastic_MeshPacket> wanted = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, wanted.size());
+    TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, true, wanted[0]));
+    TEST_ASSERT_EQUAL_UINT(0, takeSent().size()); // queued, not sent in one burst
+}
+
+std::vector<meshtastic_MeshPacket> drainAuthorityOne(uint32_t advanceMs)
+{
+    Time::setTestMillis(Time::getMillis() + advanceMs);
+    myNodeInfo.my_node_num = AUTHORITY_NODE;
+    portduino_config.sfpp_stratum0 = true;
+    testRouter->sent.clear();
+    authority->runOnce();
+    return takeSent();
+}
+
 } // namespace
 
 void setUp(void)
@@ -595,10 +644,13 @@ void setUp(void)
 
     char tmplA[] = "/tmp/meshtastic-sfpp-enum-a-XXXXXX";
     char tmplB[] = "/tmp/meshtastic-sfpp-enum-b-XXXXXX";
+    char tmplC[] = "/tmp/meshtastic-sfpp-enum-c-XXXXXX";
     char *a = mkdtemp(tmplA);
     char *b = mkdtemp(tmplB);
+    char *c = mkdtemp(tmplC);
     dirA = a ? a : "/tmp";
     dirB = b ? b : "/tmp";
+    dirC = c ? c : "/tmp";
 
     portduino_config.sfpp_enabled = true;
     portduino_config.sfpp_stratum0 = true;
@@ -614,16 +666,19 @@ void setUp(void)
 
     authority = new TestSfppModule();
     follower = nullptr;
+    follower2 = nullptr;
 }
 
 void tearDown(void)
 {
+    delete follower2;
+    follower2 = nullptr;
     delete follower;
     follower = nullptr;
     delete authority;
     authority = nullptr;
 
-    for (const std::string &dir : {dirA, dirB}) {
+    for (const std::string &dir : {dirA, dirB, dirC}) {
         if (dir.empty() || dir == "/tmp")
             continue;
         std::remove(dbFile(dir).c_str());
@@ -880,6 +935,141 @@ void test_unknownShortIdRequestServesNothing()
     TEST_ASSERT_EQUAL_UINT(0, takeSent().size());
 }
 
+// --- Stage 8a robustness ---
+
+// G14: the advert carries only the 4-byte root prefix.
+void test_advertUsesFourByteRootPrefix()
+{
+    ingestAuthority(4);
+    buildFollowerFromCopy();
+
+    meshtastic_MeshPacket advert = runAuthorityOnce();
+    TEST_ASSERT_EQUAL_UINT(4, decodeSfpp(advert).root_hash.size);
+}
+
+// G21: a queued frame goes on the next drain tick without waiting out a full interval.
+void test_firstItemFrameGoesWithoutWaiting()
+{
+    ingestAuthority(2);
+    buildFollowerFromCopy();
+    TEST_ASSERT_TRUE(deleteCounter(dirB, 2));
+    driveToItemRequest(follower, FOLLOWER_NODE);
+
+    std::vector<meshtastic_MeshPacket> sent = drainAuthorityOne(0);
+    TEST_ASSERT_EQUAL_UINT(1, sent.size());
+    TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_FRAME, decodeSfpp(sent[0]).sfpp_message_type);
+}
+
+// G12: a rejected send leaves the frame queued and the next drain sends it.
+void test_rejectedItemFrameIsRequeued()
+{
+    ingestAuthority(2);
+    buildFollowerFromCopy();
+    TEST_ASSERT_TRUE(deleteCounter(dirB, 2));
+    driveToItemRequest(follower, FOLLOWER_NODE);
+
+    testRouter->rejectNext = 1;
+    std::vector<meshtastic_MeshPacket> rejected = drainAuthorityOne(2000);
+    TEST_ASSERT_EQUAL_UINT(1, testRouter->rejected);
+    TEST_ASSERT_EQUAL_UINT(0, rejected.size());
+
+    std::vector<meshtastic_MeshPacket> retry = drainAuthorityOne(2000);
+    TEST_ASSERT_EQUAL_UINT(1, retry.size());
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, retry[0]));
+    assertConverged();
+}
+
+// G10: a lost ITEM_FRAME is recovered by the bounded item retry.
+void test_lostItemFrameIsRetried()
+{
+    ingestAuthority(2);
+    buildFollowerFromCopy();
+    TEST_ASSERT_TRUE(deleteCounter(dirB, 2));
+    driveToItemRequest(follower, FOLLOWER_NODE);
+
+    std::vector<meshtastic_MeshPacket> lost = drainAuthorityOne(2000);
+    TEST_ASSERT_EQUAL_UINT(1, lost.size());
+    // Do not deliver it; the follower still wants the object.
+
+    Time::setTestMillis(Time::getMillis() + 31000); // past the retry interval
+    myNodeInfo.my_node_num = FOLLOWER_NODE;
+    portduino_config.sfpp_stratum0 = false;
+    testRouter->sent.clear();
+    follower->runOnce();
+    std::vector<meshtastic_MeshPacket> retries = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, retries.size());
+    TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_REQUEST, decodeSfpp(retries[0]).sfpp_message_type);
+
+    TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, true, retries[0]));
+    std::vector<meshtastic_MeshPacket> frame = drainAuthorityOne(2000);
+    TEST_ASSERT_EQUAL_UINT(1, frame.size());
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, frame[0]));
+    assertConverged();
+}
+
+// G11: two requesters each get their frames; the per-requester queues are served round-robin.
+void test_twoRequestersBothComplete()
+{
+    ingestAuthority(4);
+    buildFollowerFromCopy();
+    buildSecondFollowerFromCopy();
+    TEST_ASSERT_TRUE(deleteCounter(dirB, 3));
+    TEST_ASSERT_TRUE(deleteCounter(dirC, 4));
+
+    meshtastic_MeshPacket advert = runAuthorityOnce();
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
+    std::vector<meshtastic_MeshPacket> bRequest = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, bRequest.size());
+    TEST_ASSERT_TRUE(deliver(follower2, FOLLOWER2_NODE, false, advert));
+    std::vector<meshtastic_MeshPacket> cRequest = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, cRequest.size());
+
+    TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, true, bRequest[0]));
+    std::vector<meshtastic_MeshPacket> bProvide = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, bProvide.size());
+    TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, true, cRequest[0]));
+    std::vector<meshtastic_MeshPacket> cProvide = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, cProvide.size());
+
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, bProvide[0]));
+    std::vector<meshtastic_MeshPacket> bItem = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, bItem.size());
+    TEST_ASSERT_TRUE(deliver(follower2, FOLLOWER2_NODE, false, cProvide[0]));
+    std::vector<meshtastic_MeshPacket> cItem = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, cItem.size());
+
+    TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, true, bItem[0]));
+    TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, true, cItem[0]));
+    TEST_ASSERT_EQUAL_UINT(0, takeSent().size());
+
+    uint32_t bFrames = 0;
+    uint32_t cFrames = 0;
+    for (uint32_t guard = 0; guard < 8 && (bFrames == 0 || cFrames == 0); guard++) {
+        std::vector<meshtastic_MeshPacket> sent = drainAuthorityOne(2000);
+        for (const auto &frame : sent) {
+            if (decodeSfpp(frame).sfpp_message_type != meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_FRAME)
+                continue; // the advert that follows the drained queues
+            if (frame.to == FOLLOWER_NODE) {
+                TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, frame));
+                bFrames++;
+            } else if (frame.to == FOLLOWER2_NODE) {
+                TEST_ASSERT_TRUE(deliver(follower2, FOLLOWER2_NODE, false, frame));
+                cFrames++;
+            }
+        }
+    }
+    TEST_ASSERT_EQUAL_UINT(1, bFrames);
+    TEST_ASSERT_EQUAL_UINT(1, cFrames);
+
+    const BucketView a = readBucket(dirA, 1, sfppsr::kBucketObjects);
+    const BucketView b = readBucket(dirB, 1, sfppsr::kBucketObjects);
+    const BucketView c = readBucket(dirC, 1, sfppsr::kBucketObjects);
+    TEST_ASSERT_EQUAL_UINT32(a.count, b.count);
+    TEST_ASSERT_EQUAL_UINT64(a.checksum, b.checksum);
+    TEST_ASSERT_EQUAL_UINT32(a.count, c.count);
+    TEST_ASSERT_EQUAL_UINT64(a.checksum, c.checksum);
+}
+
 void loop() {}
 
 void setup()
@@ -898,6 +1088,11 @@ void setup()
     RUN_TEST(test_unknownScopeAdvertIsDropped);
     RUN_TEST(test_oversizedItemRequestIsRefused);
     RUN_TEST(test_unknownShortIdRequestServesNothing);
+    RUN_TEST(test_advertUsesFourByteRootPrefix);
+    RUN_TEST(test_firstItemFrameGoesWithoutWaiting);
+    RUN_TEST(test_rejectedItemFrameIsRequeued);
+    RUN_TEST(test_lostItemFrameIsRetried);
+    RUN_TEST(test_twoRequestersBothComplete);
     UNITY_END();
 }
 

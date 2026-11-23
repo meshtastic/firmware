@@ -53,6 +53,8 @@ static constexpr uint32_t kEnumProbeIdleMs = 30 * 1000;
 // One item frame per drain keeps the radio's 16-entry TX queue from overflowing on a large request.
 static constexpr uint32_t kEnumDrainMinMs = 100;
 static constexpr size_t kEnumTxQueueMax = 256;
+static constexpr size_t kEnumMaxRequesters = 16;
+static constexpr uint32_t kEnumRetryMs = 30 * 1000;
 
 static uint32_t enumDrainIntervalMs()
 {
@@ -683,8 +685,9 @@ int32_t StoreForwardPlusPlusModule::runOnce()
 
     // Enumeration mode: the chain announce, scratch push and re-injection are off. The authority
     // advertises one bucket per tick; the next advert is the retry for any unfinished exchange.
-    if (portduino_config.sfpp_repair == SFPP_REPAIR_ENUM) {
+    if (portduino_config.sfpp_repair != SFPP_REPAIR_CHAIN) {
         expireEnumExchange();
+        pumpEnumRetries();
         if (drainOneEnumFrame())
             return enumDrainIntervalMs(); // serving a request takes priority over the advert cadence
         if (portduino_config.sfpp_stratum0)
@@ -883,7 +886,7 @@ ProcessMessage StoreForwardPlusPlusModule::handleReceived(const meshtastic_MeshP
 
 bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_StoreForwardPlusPlus *t)
 {
-    if (portduino_config.sfpp_repair == SFPP_REPAIR_ENUM) {
+    if (portduino_config.sfpp_repair != SFPP_REPAIR_CHAIN) {
         expireEnumExchange();
         // ITEM_FRAME (13) is newer than the ADVERT..GONE helper range, so it is named explicitly.
         const bool srType = sfppsr::isSetReconciliationType(t->sfpp_message_type) ||
@@ -2653,7 +2656,7 @@ void StoreForwardPlusPlusModule::logEnum(const char *dir, const char *type, cons
                  (unsigned)payloadBytes, peer);
 }
 
-void StoreForwardPlusPlusModule::sendEnumMessage(meshtastic_StoreForwardPlusPlus &msg, NodeNum to, const char *type,
+bool StoreForwardPlusPlusModule::sendEnumMessage(const meshtastic_StoreForwardPlusPlus &msg, NodeNum to, const char *type,
                                                  size_t sketchBytes, const sfppsr::Scope *scopeOverride)
 {
     sfppsr::Scope scope;
@@ -2683,8 +2686,10 @@ void StoreForwardPlusPlusModule::sendEnumMessage(meshtastic_StoreForwardPlusPlus
     }
 
     meshtastic_MeshPacket *p = allocDataProtobuf(msg);
-    if (!p)
-        return;
+    if (!p) {
+        LOG_WARN("StoreForwardpp cannot allocate an enumeration packet");
+        return false;
+    }
     p->to = to;
     p->decoded.want_response = false;
     p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
@@ -2692,12 +2697,19 @@ void StoreForwardPlusPlusModule::sendEnumMessage(meshtastic_StoreForwardPlusPlus
     p->hop_limit = portduino_config.sfpp_hops;
     p->hop_start = portduino_config.sfpp_hops;
 
+    const ErrorCode res = service->sendToMesh(p, RX_SRC_LOCAL, true);
+    if (res != ERRNO_OK && res != ERRNO_SHOULD_RELEASE) {
+        LOG_WARN("StoreForwardpp enumeration send failed (%d), will retry", (int)res);
+        return false;
+    }
+
     logEnum("tx", type, scope, p->decoded.payload.size, to, ids, frameIndex, frameTotal, sketchBytes);
     if (enumExchangeActive) {
         enumTx++;
         enumTxBytes += p->decoded.payload.size;
+        enumExchangeStartedMs = Time::getMillis();
     }
-    service->sendToMesh(p, RX_SRC_LOCAL, true);
+    return true;
 }
 
 void StoreForwardPlusPlusModule::beginEnumExchange(const uint8_t *root_hash, uint32_t bucket, NodeNum peer, uint32_t peerCount,
@@ -2716,6 +2728,12 @@ void StoreForwardPlusPlusModule::beginEnumExchange(const uint8_t *root_hash, uin
     enumPeerChecksum = peerChecksum;
     enumCollisionProbe = false;
     enumLastItemMs = enumExchangeStartedMs;
+    enumAwaitingList = true;
+    enumListRetries = 0;
+    enumItemRetries = 0;
+    enumRequestSentMs = enumExchangeStartedMs;
+    // The thread only checks the deadline when runOnce() runs; schedule it now.
+    setIntervalFromNow(5 * 1000);
 
     char rootHex[9];
     formatRootHex(root_hash, SFPP_HASH_SIZE, rootHex);
@@ -2735,6 +2753,9 @@ void StoreForwardPlusPlusModule::endEnumExchange()
     enumExchangeActive = false;
     enumProvideActive = false;
     enumCollisionProbe = false;
+    enumAwaitingList = false;
+    enumListRetries = 0;
+    enumItemRetries = 0;
     enumWanted.clear();
     enumWantedRemaining = 0;
 }
@@ -2820,7 +2841,9 @@ void StoreForwardPlusPlusModule::advertiseOneBucket(uint8_t *root_hash, size_t r
             continue;
 
         sfppsr::Scope scope;
-        copyScopeRoot(root_hash, root_hash_len, scope, bucket, true);
+        // A 4-byte prefix is all the advert needs; a follower must already hold the root (the
+        // bench's chain-era store does). Root acquisition for a blank archive is P4 work.
+        copyScopeRoot(root_hash, root_hash_len, scope, bucket, false);
         meshtastic_StoreForwardPlusPlus msg;
         if (!sfppsr::buildAdvert(scope, summary, msg))
             continue;
@@ -2841,8 +2864,8 @@ void StoreForwardPlusPlusModule::handleEnumAdvert(const meshtastic_MeshPacket &m
     uint8_t root[SFPP_HASH_SIZE] = {0};
     bool known = lookUpFullRootHash(advert.scope.rootPrefix, advert.scope.rootPrefixLen, root);
     if (!known) {
-        // A fresh follower has no root until it adopts the authority's. The advert carries the full
-        // root so it can; a bare prefix cannot be adopted.
+        // The advert carries a 4-byte prefix, which cannot be adopted; the follower needs the root
+        // from its store. A full-root advert variant is the future root-acquisition path.
         if (advert.scope.rootPrefixLen != SFPP_HASH_SIZE)
             return;
         uint8_t existing[SFPP_HASH_SIZE] = {0};
@@ -2885,6 +2908,9 @@ void StoreForwardPlusPlusModule::requestEnumList(const uint8_t *root_hash, uint3
     meshtastic_StoreForwardPlusPlus msg;
     if (!sfppsr::buildEnumRequest(scope, msg))
         return;
+    enumAwaitingList = true;
+    enumListRetries = 0;
+    enumRequestSentMs = Time::getMillis();
     sendEnumMessage(msg, peer, "enum_req");
 }
 
@@ -2943,6 +2969,9 @@ void StoreForwardPlusPlusModule::handleEnumProvide(const meshtastic_MeshPacket &
             list.frameTotal);
     enumRx++;
     enumRxBytes += mp.decoded.payload.size;
+    enumExchangeStartedMs = Time::getMillis();
+    enumRequestSentMs = enumExchangeStartedMs;
+    enumAwaitingList = false;
 
     if (list.frameTotal == 0 || list.frameTotal > (uint8_t)(sizeof(enumProvideSeen)))
         return;
@@ -3011,6 +3040,9 @@ void StoreForwardPlusPlusModule::requestMissingItems(const uint8_t *root_hash, u
 
     enumWanted = ids;
     enumWantedRemaining = ids.size();
+    enumAwaitingList = false;
+    enumItemRetries = 0;
+    enumRequestSentMs = Time::getMillis();
     sendEnumMessage(msg, peer, "item_req");
 }
 
@@ -3069,49 +3101,143 @@ void StoreForwardPlusPlusModule::handleItemRequest(const meshtastic_MeshPacket &
             LOG_WARN("StoreForwardpp item request for an unknown short ID 0x%08x", wanted);
     }
 
-    if (!enumTxQueue.empty())
-        setIntervalFromNow(enumDrainIntervalMs());
+    if (anyEnumQueuePending())
+        setIntervalFromNow(10); // G21: the first frame goes on the next tick, not after a full drain interval
+}
+
+bool StoreForwardPlusPlusModule::anyEnumQueuePending() const
+{
+    for (const auto &requester : enumTxQueues) {
+        if (!requester.queue.empty())
+            return true;
+    }
+    return false;
 }
 
 void StoreForwardPlusPlusModule::queueItemFrames(const std::vector<meshtastic_StoreForwardPlusPlus> &frames, NodeNum to,
                                                  const sfppsr::Scope &scope)
 {
-    const bool wasEmpty = enumTxQueue.empty();
-    for (const auto &frame : frames) {
-        if (enumTxQueue.size() >= kEnumTxQueueMax) {
-            LOG_WARN("StoreForwardpp item frame queue full, dropping the rest of the request");
+    EnumRequester *requester = nullptr;
+    for (auto &entry : enumTxQueues) {
+        if (entry.to == to) {
+            requester = &entry;
+            break;
+        }
+    }
+    if (requester == nullptr) {
+        if (enumTxQueues.size() >= kEnumMaxRequesters) {
+            LOG_WARN("StoreForwardpp enumeration queue limit reached, dropping the request");
             return;
+        }
+        enumTxQueues.push_back(EnumRequester());
+        requester = &enumTxQueues.back();
+        requester->to = to;
+    }
+
+    const bool wasEmpty = requester->queue.empty();
+    for (const auto &frame : frames) {
+        if (requester->queue.size() >= kEnumTxQueueMax) {
+            LOG_WARN("StoreForwardpp item frame queue full, dropping the rest of the request");
+            break;
         }
         EnumOutgoing out;
         out.msg = frame;
         out.to = to;
         out.scope = scope;
-        enumTxQueue.push_back(out);
+        requester->queue.push_back(out);
     }
-    if (wasEmpty && !enumTxQueue.empty())
-        enumLastDrainMs = 0; // the first frame of a request goes out on the next tick, not after a wait
+    // G21: the first frame of a request goes out on the next drain step, not after a full interval.
+    if (wasEmpty && !requester->queue.empty())
+        enumLastDrainMs = 0;
 }
 
 bool StoreForwardPlusPlusModule::drainOneEnumFrame()
 {
-    if (enumTxQueue.empty())
+    if (!anyEnumQueuePending())
         return false;
 
     // Still inside the pacing interval: keep the short timer running without sending.
     if (enumLastDrainMs != 0 && !Throttle::hasElapsed(enumLastDrainMs, enumDrainIntervalMs()))
         return true;
 
-    EnumOutgoing out = enumTxQueue.front();
-    enumTxQueue.pop_front();
-    sendEnumMessage(out.msg, out.to, "item_frame", 0, &out.scope);
-    enumLastDrainMs = Time::getMillis();
-    return true;
+    // Round-robin across requesters so one cannot starve another. One attempt per step; a failed
+    // send leaves its frame queued for the next turn.
+    for (size_t i = 0; i < enumTxQueues.size(); i++) {
+        const size_t idx = (enumQueueCursor + i) % enumTxQueues.size();
+        auto &requester = enumTxQueues[idx];
+        if (requester.queue.empty())
+            continue;
+
+        const EnumOutgoing &out = requester.queue.front();
+        if (sendEnumMessage(out.msg, out.to, "item_frame", 0, &out.scope))
+            requester.queue.pop_front();
+        enumQueueCursor = (idx + 1) % enumTxQueues.size();
+        enumLastDrainMs = Time::getMillis();
+        return true;
+    }
+    return false;
+}
+
+void StoreForwardPlusPlusModule::resendEnumList()
+{
+    sfppsr::Scope scope;
+    copyScopeRoot(enumExchangeRoot, SFPP_HASH_SIZE, scope, enumExchangeBucket, false);
+    meshtastic_StoreForwardPlusPlus msg;
+    if (sfppsr::buildEnumRequest(scope, msg))
+        sendEnumMessage(msg, enumExchangePeer, "enum_req");
+    enumRequestSentMs = Time::getMillis();
+}
+
+void StoreForwardPlusPlusModule::resendItemRequest()
+{
+    if (enumWanted.empty())
+        return;
+    sfppsr::Scope scope;
+    copyScopeRoot(enumExchangeRoot, SFPP_HASH_SIZE, scope, enumExchangeBucket, false);
+    meshtastic_StoreForwardPlusPlus msg;
+    if (sfppsr::buildItemRequest(scope, enumWanted, msg))
+        sendEnumMessage(msg, enumExchangePeer, "item_req");
+    enumRequestSentMs = Time::getMillis();
+}
+
+void StoreForwardPlusPlusModule::pumpEnumRetries()
+{
+    if (!enumExchangeActive)
+        return;
+
+    // Bounded retries: one more list request, or up to two more item requests, before the exchange
+    // ends and the next advert starts it again.
+    if (enumAwaitingList) {
+        if (!Throttle::hasElapsed(enumRequestSentMs, kEnumRetryMs))
+            return;
+        if (enumListRetries < 1) {
+            enumListRetries++;
+            resendEnumList();
+        } else {
+            endEnumExchange();
+        }
+        return;
+    }
+
+    if (!enumWanted.empty()) {
+        if (!Throttle::hasElapsed(enumRequestSentMs, kEnumRetryMs))
+            return;
+        if (enumItemRetries < 2) {
+            enumItemRetries++;
+            resendItemRequest();
+        } else {
+            endEnumExchange();
+        }
+    }
 }
 
 void StoreForwardPlusPlusModule::handleItemFrame(const meshtastic_MeshPacket &mp, meshtastic_StoreForwardPlusPlus *t)
 {
     if (!enumExchangeActive || mp.from != enumExchangePeer)
         return;
+
+    enumExchangeStartedMs = Time::getMillis();
+    enumRequestSentMs = enumExchangeStartedMs;
 
     sfppsr::Scope scope;
     copyScopeRoot(enumExchangeRoot, SFPP_HASH_SIZE, scope, enumExchangeBucket, false);

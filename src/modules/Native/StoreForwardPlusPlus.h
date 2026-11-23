@@ -197,7 +197,7 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
 
     void advertiseOneBucket(uint8_t *root_hash, size_t root_hash_len);
     void expireEnumExchange();
-    void sendEnumMessage(meshtastic_StoreForwardPlusPlus &msg, NodeNum to, const char *type, size_t sketchBytes = 0,
+    bool sendEnumMessage(const meshtastic_StoreForwardPlusPlus &msg, NodeNum to, const char *type, size_t sketchBytes = 0,
                          const sfppsr::Scope *scopeOverride = nullptr);
     void logEnum(const char *dir, const char *type, const sfppsr::Scope &scope, size_t payloadBytes, NodeNum peer, int ids,
                  int frameIndex, int frameTotal, size_t sketchBytes = 0);
@@ -216,15 +216,23 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     void requestMissingItems(const uint8_t *root_hash, uint32_t bucket, NodeNum peer, const std::vector<pinsketch::Element> &ids);
     bool storeRecoveredObject(const sfppframe::Replay &replay, const uint8_t *root_hash, uint32_t bucket);
 
-    // Item frames are queued and drained from runOnce() so a 32-object request cannot overflow the
-    // radio's 16-entry TX queue.
+    // Item frames are queued per requester and drained from runOnce() round-robin, so a 32-object
+    // request cannot overflow the radio's 16-entry TX queue and one requester cannot starve another.
     struct EnumOutgoing {
         meshtastic_StoreForwardPlusPlus msg;
         NodeNum to;
         sfppsr::Scope scope;
     };
+    struct EnumRequester {
+        NodeNum to = 0;
+        std::deque<EnumOutgoing> queue;
+    };
     void queueItemFrames(const std::vector<meshtastic_StoreForwardPlusPlus> &frames, NodeNum to, const sfppsr::Scope &scope);
     bool drainOneEnumFrame();
+    void pumpEnumRetries();
+    void resendEnumList();
+    void resendItemRequest();
+    bool anyEnumQueuePending() const;
 
     // For a given Meshtastic ChannelHash, fills the root_hash buffer with a 32-byte root hash
     // returns true if the root hash was found
@@ -438,8 +446,14 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     };
     std::vector<EnumSuppression> enumSuppressed;
 
-    std::deque<EnumOutgoing> enumTxQueue;
+    std::vector<EnumRequester> enumTxQueues;
+    size_t enumQueueCursor = 0;
     uint32_t enumLastDrainMs = 0;
+
+    bool enumAwaitingList = false;
+    uint8_t enumListRetries = 0;
+    uint8_t enumItemRetries = 0;
+    uint32_t enumRequestSentMs = 0;
 };
 
 extern StoreForwardPlusPlusModule *storeForwardPlusPlusModule;
