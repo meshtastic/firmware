@@ -307,6 +307,7 @@ StoreAndForward:
 #  Repair: chain # Repair path: chain (default), enum (short-ID enumeration) or sketch
 #  EnumInterval: 60 # Minutes between enumeration advert ticks (enum only, minimum 1)
 #  EnumDrainMs: 20000 # Milliseconds between queued enumeration item frames (enum only, minimum 100)
+#  ScratchSweep: 5 # Minutes between writer-missed scratch sweeps (enum only, minimum 1)
 
 Config:
 #  DisplayMode: TWOCOLOR # uncomment to force BaseUI

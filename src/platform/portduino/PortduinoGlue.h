@@ -355,6 +355,7 @@ extern struct portduino_config_struct {
     sfpp_repair_mode sfpp_repair = SFPP_REPAIR_CHAIN;
     uint32_t sfpp_enum_interval = 60;    // minutes between advert ticks, enum only
     uint32_t sfpp_enum_drain_ms = 20000; // milliseconds between queued item frames, enum only
+    uint32_t sfpp_scratch_sweep = 5;     // minutes between writer-missed scratch sweeps, enum only
     // allowed root hashes
     // upstream node
     // Are we allowing unknown channel hashes? Does this even make sense?
@@ -846,6 +847,7 @@ extern struct portduino_config_struct {
                                                       : "chain");
             out << YAML::Key << "EnumInterval" << YAML::Value << sfpp_enum_interval;
             out << YAML::Key << "EnumDrainMs" << YAML::Value << sfpp_enum_drain_ms;
+            out << YAML::Key << "ScratchSweep" << YAML::Value << sfpp_scratch_sweep;
             out << YAML::EndMap; // StoreAndForward
         }
 

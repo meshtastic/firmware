@@ -58,6 +58,7 @@ constexpr NodeNum AUTHORITY_NODE = 0x11112222;
 constexpr NodeNum FOLLOWER_NODE = 0x33334444;
 constexpr NodeNum FOLLOWER2_NODE = 0x44445555;
 constexpr NodeNum SENDER_NODE = 0x55556666;
+constexpr NodeNum UNKNOWN_NODE = 0x88889999;
 constexpr PacketId BASE_ID = 0x1000;
 
 class TestNodeDB : public NodeDB
@@ -725,6 +726,7 @@ void setUp(void)
     portduino_config.sfpp_repair = SFPP_REPAIR_ENUM;
     portduino_config.sfpp_enum_interval = 1;
     portduino_config.sfpp_enum_drain_ms = 2000;
+    portduino_config.sfpp_scratch_sweep = 5;
     portduino_config.sfpp_db_path = dirA + "/";
 
     Time::setTestMillis(1000);
@@ -1311,6 +1313,32 @@ void test_blankFollowerAdoptsFullRootAdvert()
     assertConverged();
 }
 
+// F3.6: an unknown pusher is accepted on the root, bounded to a few rows per sweep window.
+void test_unknownPusherIsBudgeted()
+{
+    ingestAuthority(1);
+
+    for (uint32_t i = 0; i < 9; i++) {
+        uint8_t cipher[8] = {1, 2, 3, 4, 5, 6, 7, 8};
+        cipher[0] = (uint8_t)i;
+        std::vector<meshtastic_StoreForwardPlusPlus> frames;
+        TEST_ASSERT_TRUE(sfppframe::split(cipher, sizeof(cipher), NODENUM_BROADCAST, UNKNOWN_NODE, 0x7000 + i, 0, false, frames));
+        for (const auto &frame : frames) {
+            meshtastic_MeshPacket mp = meshtastic_MeshPacket_init_zero;
+            mp.from = UNKNOWN_NODE;
+            mp.to = AUTHORITY_NODE;
+            mp.channel = 0;
+            mp.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+            mp.decoded.portnum = meshtastic_PortNum_STORE_FORWARD_PLUSPLUS_APP;
+            mp.decoded.payload.size = pb_encode_to_bytes(mp.decoded.payload.bytes, sizeof(mp.decoded.payload.bytes),
+                                                         &meshtastic_StoreForwardPlusPlus_msg, &frame);
+            TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, true, mp));
+        }
+    }
+    // One existing row plus eight accepted; the ninth is over the per-window budget.
+    TEST_ASSERT_EQUAL_UINT32(9, readBucket(dirA, 1, sfppsr::kBucketObjects).count);
+}
+
 // --- Stage 8: sketch mode ---
 
 void runSketchCase(uint32_t total, uint32_t missing)
@@ -1495,6 +1523,7 @@ void setup()
     RUN_TEST(test_twoRequestersBothComplete);
     RUN_TEST(test_sendFreesPacketSafely);
     RUN_TEST(test_blankFollowerAdoptsFullRootAdvert);
+    RUN_TEST(test_unknownPusherIsBudgeted);
     RUN_TEST(test_sketchResolvesOne);
     RUN_TEST(test_sketchResolvesFour);
     RUN_TEST(test_sketchFallsBackAtSixteen);

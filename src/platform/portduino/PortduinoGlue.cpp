@@ -1613,6 +1613,9 @@ bool loadConfig(const char *configPath)
             portduino_config.sfpp_enum_drain_ms = (yamlConfig["StoreAndForward"]["EnumDrainMs"]).as<uint32_t>(20000);
             if (portduino_config.sfpp_enum_drain_ms < 100)
                 portduino_config.sfpp_enum_drain_ms = 100;
+            portduino_config.sfpp_scratch_sweep = (yamlConfig["StoreAndForward"]["ScratchSweep"]).as<uint32_t>(5);
+            if (portduino_config.sfpp_scratch_sweep < 1)
+                portduino_config.sfpp_scratch_sweep = 1;
         }
         if (yamlConfig["Routing"]) {
             if (yamlConfig["Routing"]["WhitelistPorts"]) {

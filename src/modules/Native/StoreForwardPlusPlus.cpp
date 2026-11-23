@@ -65,6 +65,14 @@ static constexpr uint32_t kScratchReofferMs = 60 * 60 * 1000;
 static constexpr size_t kEnumPushOfferedMax = 64;
 static constexpr size_t kEnumMaxKnownPeers = 16;
 static constexpr size_t kScratchPushPerSweep = 8;
+static constexpr size_t kEnumMaxPushSenders = 16;
+static constexpr uint32_t kPushBudgetRows = 8;
+
+static uint32_t scratchSweepMs()
+{
+    const uint32_t minutes = portduino_config.sfpp_scratch_sweep < 1 ? 1 : portduino_config.sfpp_scratch_sweep;
+    return minutes * 60 * 1000;
+}
 
 static uint32_t enumDrainIntervalMs()
 {
@@ -698,14 +706,20 @@ int32_t StoreForwardPlusPlusModule::runOnce()
     if (portduino_config.sfpp_repair != SFPP_REPAIR_CHAIN) {
         expireEnumExchange();
         pumpEnumRetries();
-        if (!portduino_config.sfpp_stratum0)
+        // F3.5: the writer-missed sweep has its own timer, independent of the advert cadence.
+        if (!portduino_config.sfpp_stratum0 &&
+            (enumLastScratchSweepMs == 0 || Throttle::hasElapsed(enumLastScratchSweepMs, scratchSweepMs()))) {
+            enumLastScratchSweepMs = Time::getMillis();
             pushScratchRows();
+        }
         if (drainOneEnumFrame())
             return enumDrainIntervalMs(); // serving a request takes priority over the advert cadence
         if (portduino_config.sfpp_stratum0)
             advertiseOneBucket(root_hash_bytes, SFPP_HASH_SIZE);
         if (enumExchangeActive)
             return 5 * 1000; // pump the probe idle and overall timeout while an exchange is in flight
+        if (!portduino_config.sfpp_stratum0)
+            return (int32_t)scratchSweepMs(); // wake for the next scratch sweep
         return (int32_t)portduino_config.sfpp_enum_interval * 60 * 1000;
     }
 
@@ -2883,8 +2897,6 @@ void StoreForwardPlusPlusModule::handleEnumAdvert(const meshtastic_MeshPacket &m
     if (!sfppsr::parseAdvert(*t, advert))
         return;
 
-    enumAuthorityNode = mp.from; // the only node that advertises is the counter authority
-
     uint8_t root[SFPP_HASH_SIZE] = {0};
     bool known = lookUpFullRootHash(advert.scope.rootPrefix, advert.scope.rootPrefixLen, root);
     if (!known) {
@@ -2904,6 +2916,8 @@ void StoreForwardPlusPlusModule::handleEnumAdvert(const meshtastic_MeshPacket &m
         }
     }
 
+    // F3.2: only a parsed advert whose root resolves (known, or adopted here) names the authority.
+    enumAuthorityNode = mp.from;
     logEnum("rx", "advert", advert.scope, mp.decoded.payload.size, mp.from, -1, 0, 1, t->message.size);
 
     if (enumExchangeActive)
@@ -3257,6 +3271,14 @@ void StoreForwardPlusPlusModule::queueEnumFrames(const std::vector<meshtastic_St
 
 bool StoreForwardPlusPlusModule::drainOneEnumFrame()
 {
+    // F3.7/N11: a requester's TTL is refreshed only by its own traffic, never by the drain. Drop
+    // its queue once it goes quiet.
+    for (auto it = enumTxQueues.begin(); it != enumTxQueues.end();) {
+        if (it->queue.empty() || Throttle::hasElapsed(it->lastUsedMs, kEnumRequesterTtlMs))
+            it = enumTxQueues.erase(it);
+        else
+            ++it;
+    }
     if (!anyEnumQueuePending())
         return false;
 
@@ -3275,9 +3297,8 @@ bool StoreForwardPlusPlusModule::drainOneEnumFrame()
         const EnumOutgoing &out = requester.queue.front();
         if (sendEnumMessage(out.msg, out.to, out.type, 0, &out.scope))
             requester.queue.pop_front();
-        requester.lastUsedMs = Time::getMillis();
         enumQueueCursor = (idx + 1) % enumTxQueues.size();
-        enumLastDrainMs = requester.lastUsedMs;
+        enumLastDrainMs = Time::getMillis();
         return true;
     }
     return false;
@@ -3370,6 +3391,27 @@ void StoreForwardPlusPlusModule::noteEnumPeer(NodeNum node, const uint8_t *root_
     enumKnownPeers.push_back(peer);
 }
 
+bool StoreForwardPlusPlusModule::consumePushBudget(NodeNum node)
+{
+    const uint32_t now = Time::getMillis();
+    for (auto &sender : enumPushSenders) {
+        if (sender.node != node)
+            continue;
+        if (Throttle::hasElapsed(sender.windowStartMs, scratchSweepMs())) {
+            sender.windowStartMs = now;
+            sender.accepted = 0;
+        }
+        if (sender.accepted >= kPushBudgetRows)
+            return false;
+        sender.accepted++;
+        return true;
+    }
+    if (enumPushSenders.size() >= kEnumMaxPushSenders)
+        enumPushSenders.erase(enumPushSenders.begin());
+    enumPushSenders.push_back({node, now, 1});
+    return true;
+}
+
 bool StoreForwardPlusPlusModule::enumAlreadyOffered(const uint8_t *hash) const
 {
     for (const auto &entry : enumPushOffered) {
@@ -3454,6 +3496,12 @@ bool StoreForwardPlusPlusModule::acceptPushedItemFrame(const meshtastic_MeshPack
     if (!getRootFromChannelHash(channels.getHash(0), root))
         return false;
 
+    // F3.6: trust a known peer on this root; an unknown pusher gets a small budget per window.
+    if (!isEnumKnownPeer(mp.from, root) && !consumePushBudget(mp.from)) {
+        LOG_WARN("StoreForwardpp push from 0x%08x is over budget, dropping", mp.from);
+        return false;
+    }
+
     link_object lo;
     if (replay.ciphertext.size() > sizeof(lo.encrypted_bytes))
         return false;
@@ -3481,13 +3529,12 @@ bool StoreForwardPlusPlusModule::acceptPushedItemFrame(const meshtastic_MeshPack
 void StoreForwardPlusPlusModule::handleItemFrame(const meshtastic_MeshPacket &mp, meshtastic_StoreForwardPlusPlus *t)
 {
     if (!enumExchangeActive || mp.from != enumExchangePeer) {
-        // A writer-missed offer from a known archive peer on this channel's root, addressed to us.
-        uint8_t root[SFPP_HASH_SIZE] = {0};
-        if (mp.to == nodeDB->getNodeNum() && getRootFromChannelHash(channels.getHash(0), root) && isEnumKnownPeer(mp.from, root))
+        // F3.6: an offer addressed to us; a known peer on this root is trusted, an unknown pusher
+        // is accepted only within a small per-window budget.
+        if (mp.to == nodeDB->getNodeNum())
             acceptPushedItemFrame(mp, t);
         return;
     }
-
     enumExchangeStartedMs = Time::getMillis();
     enumRequestSentMs = enumExchangeStartedMs;
 
