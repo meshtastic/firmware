@@ -1605,7 +1605,7 @@ bool loadConfig(const char *configPath)
             portduino_config.sfpp_enum_interval = (yamlConfig["StoreAndForward"]["EnumInterval"]).as<uint32_t>(60);
             if (portduino_config.sfpp_enum_interval < 1)
                 portduino_config.sfpp_enum_interval = 1;
-            portduino_config.sfpp_enum_drain_ms = (yamlConfig["StoreAndForward"]["EnumDrainMs"]).as<uint32_t>(10000);
+            portduino_config.sfpp_enum_drain_ms = (yamlConfig["StoreAndForward"]["EnumDrainMs"]).as<uint32_t>(20000);
             if (portduino_config.sfpp_enum_drain_ms < 100)
                 portduino_config.sfpp_enum_drain_ms = 100;
         }
