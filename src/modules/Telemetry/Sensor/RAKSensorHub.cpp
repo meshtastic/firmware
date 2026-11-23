@@ -56,7 +56,6 @@ static constexpr uint32_t DISCOVERY_INTERVAL_MS = 2000;          // PID sweep st
 static constexpr uint32_t BOOT_RESCAN_EMPTY_MS = 60 * 1000;      // BOOT while no probe known
 static constexpr uint32_t BOOT_RESCAN_BARE_MS = 15 * 60 * 1000;  // BOOT while a probe lists no sensor
 static constexpr uint32_t BOOT_RESCAN_IDLE_MS = 6 * 3600 * 1000; // BOOT resets every probe
-static constexpr uint32_t BOOT_SWEEP_MS = 60 * 1000;             // PID sweep after BOOT: some probes keep their PID
 static constexpr uint32_t SENSOR_INTV_DEFAULT_MS = 60 * 1000;    // until get.param answers
 static constexpr uint32_t LOST_PID_POLL_MS = 60 * 1000;          // get.data to dropped PIDs
 static constexpr uint8_t MAX_MISSED_POLLS = 3;                   // then forget and rediscover
@@ -95,6 +94,7 @@ static uint32_t last_err_time = 0;       // Last checksum/sequence error
 static uint32_t last_discovery_time = 0; // Last PID sweep request
 static uint32_t last_boot_time = 0;      // Last provision BOOT broadcast
 static uint8_t discovery_pid = PROBE_PID_MIN;
+static uint8_t sweep_left = PROBE_PID_MAX; // one full sweep after each BOOT: some probes keep their PID
 static uint8_t lost_pid = 0;
 static uint32_t last_lost_poll_time = 0;
 
@@ -674,15 +674,17 @@ static int32_t onewirePollHandle()
         last_discovery_time = now; // let probes answer the BOOT first
         if (!probes.empty())
             discovery_pid = PROBE_PID_MIN; // while empty the sweep carries on across BOOTs
+        sweep_left = PROBE_PID_MAX;
         LOG_INFO("RAKSensorHub: broadcast provision BOOT (%u probes known)", (unsigned)probes.size());
         RakSNHub_Protocl_API.reboot();
         return 500;
     }
 
-    const bool sweep = probes.empty() || Throttle::isWithinTimespanMs(last_boot_time, BOOT_SWEEP_MS);
+    const bool sweep = probes.empty() || sweep_left > 0;
     if (sweep && !Throttle::isWithinTimespanMs(last_discovery_time, DISCOVERY_INTERVAL_MS)) {
         last_discovery_time = now;
         const uint8_t pid = nextDiscoveryPid();
+        sweep_left = pid != 0 && sweep_left > 0 ? sweep_left - 1 : 0;
         if (pid != 0) {
             sendRequest(pid, now, DISCOVERY_RSP_TIMEOUT_MS, true);
             RakSNHub_Protocl_API.get.data(pid);
