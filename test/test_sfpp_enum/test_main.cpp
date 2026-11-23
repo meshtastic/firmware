@@ -502,6 +502,7 @@ struct Exchange {
     uint32_t enumRequests = 0;
     uint32_t itemRequests = 0;
     uint32_t itemFrames = 0;
+    uint32_t maxFramesPerDrain = 0;
 };
 
 Exchange runExchange()
@@ -532,11 +533,28 @@ Exchange runExchange()
     TEST_ASSERT_EQUAL_UINT(1, result.itemRequests);
 
     TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, true, requests[0]));
-    std::vector<meshtastic_MeshPacket> frames = takeSent();
-    for (const auto &frame : frames) {
-        TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_FRAME, decodeSfpp(frame).sfpp_message_type);
-        TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, frame));
-        result.itemFrames++;
+    // The authority queues the item frames and answers runOnce one frame at a time, so a large
+    // request never fills the radio's 16-entry TX queue.
+    TEST_ASSERT_EQUAL_UINT(0, takeSent().size());
+
+    for (uint32_t guard = 0; guard < 512; guard++) {
+        Time::setTestMillis(Time::getMillis() + 2000); // one drain interval
+        myNodeInfo.my_node_num = AUTHORITY_NODE;
+        portduino_config.sfpp_stratum0 = true;
+        testRouter->sent.clear();
+        authority->runOnce();
+        std::vector<meshtastic_MeshPacket> sent = takeSent();
+        if (sent.empty())
+            continue;
+        if (decodeSfpp(sent[0]).sfpp_message_type != meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_FRAME)
+            break; // the queue drained and the advert cadence resumed
+        if (sent.size() > result.maxFramesPerDrain)
+            result.maxFramesPerDrain = (uint32_t)sent.size();
+        for (const auto &frame : sent) {
+            TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_FRAME, decodeSfpp(frame).sfpp_message_type);
+            TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, frame));
+            result.itemFrames++;
+        }
     }
     return result;
 }
@@ -660,6 +678,9 @@ void runTailCase(uint32_t total, uint32_t missing)
     TEST_ASSERT_EQUAL_UINT(1, exchange.enumRequests);
     TEST_ASSERT_EQUAL_UINT(1, exchange.itemRequests);
     TEST_ASSERT_EQUAL_UINT(missing, exchange.itemFrames);
+    // Pacing: a request for many objects is answered one frame per drain, never in one burst that
+    // would overflow the 16-entry TX queue.
+    TEST_ASSERT_TRUE(exchange.maxFramesPerDrain <= 1);
     assertConverged();
 
     // A second identical advert is a no-op once converged.

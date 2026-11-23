@@ -50,6 +50,10 @@ static constexpr uint32_t kEnumExchangeTimeoutMs = 15 * 60 * 1000;
 // After a short-ID-collision probe, silence this long means the peer has served all it has.
 static constexpr uint32_t kEnumProbeIdleMs = 30 * 1000;
 
+// One item frame per drain keeps the radio's 16-entry TX queue from overflowing on a large request.
+static constexpr uint32_t kEnumDrainIntervalMs = 2 * 1000;
+static constexpr size_t kEnumTxQueueMax = 256;
+
 namespace
 {
 void formatRootHex(const uint8_t *root, size_t len, char out[9])
@@ -675,6 +679,8 @@ int32_t StoreForwardPlusPlusModule::runOnce()
     // advertises one bucket per tick; the next advert is the retry for any unfinished exchange.
     if (portduino_config.sfpp_repair == SFPP_REPAIR_ENUM) {
         expireEnumExchange();
+        if (drainOneEnumFrame())
+            return kEnumDrainIntervalMs; // serving a request takes priority over the advert cadence
         if (portduino_config.sfpp_stratum0)
             advertiseOneBucket(root_hash_bytes, SFPP_HASH_SIZE);
         if (enumExchangeActive)
@@ -3049,14 +3055,51 @@ void StoreForwardPlusPlusModule::handleItemRequest(const meshtastic_MeshPacket &
 
             sfppsr::Scope scope;
             copyScopeRoot(root, SFPP_HASH_SIZE, scope, list.scope.bucket, false);
-            for (auto &frame : frames)
-                sendEnumMessage(frame, mp.from, "item_frame", 0, &scope);
+            queueItemFrames(frames, mp.from, scope);
         }
         sqlite3_reset(getLinkByShortIdStmt);
 
         if (!served)
             LOG_WARN("StoreForwardpp item request for an unknown short ID 0x%08x", wanted);
     }
+
+    if (!enumTxQueue.empty())
+        setIntervalFromNow(kEnumDrainIntervalMs);
+}
+
+void StoreForwardPlusPlusModule::queueItemFrames(const std::vector<meshtastic_StoreForwardPlusPlus> &frames, NodeNum to,
+                                                 const sfppsr::Scope &scope)
+{
+    const bool wasEmpty = enumTxQueue.empty();
+    for (const auto &frame : frames) {
+        if (enumTxQueue.size() >= kEnumTxQueueMax) {
+            LOG_WARN("StoreForwardpp item frame queue full, dropping the rest of the request");
+            return;
+        }
+        EnumOutgoing out;
+        out.msg = frame;
+        out.to = to;
+        out.scope = scope;
+        enumTxQueue.push_back(out);
+    }
+    if (wasEmpty && !enumTxQueue.empty())
+        enumLastDrainMs = 0; // the first frame of a request goes out on the next tick, not after a wait
+}
+
+bool StoreForwardPlusPlusModule::drainOneEnumFrame()
+{
+    if (enumTxQueue.empty())
+        return false;
+
+    // Still inside the pacing interval: keep the short timer running without sending.
+    if (enumLastDrainMs != 0 && !Throttle::hasElapsed(enumLastDrainMs, kEnumDrainIntervalMs))
+        return true;
+
+    EnumOutgoing out = enumTxQueue.front();
+    enumTxQueue.pop_front();
+    sendEnumMessage(out.msg, out.to, "item_frame", 0, &out.scope);
+    enumLastDrainMs = Time::getMillis();
+    return true;
 }
 
 void StoreForwardPlusPlusModule::handleItemFrame(const meshtastic_MeshPacket &mp, meshtastic_StoreForwardPlusPlus *t)

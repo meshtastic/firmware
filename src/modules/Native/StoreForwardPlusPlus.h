@@ -212,10 +212,19 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     void handleEnumProvide(const meshtastic_MeshPacket &mp, meshtastic_StoreForwardPlusPlus *t);
     void handleItemRequest(const meshtastic_MeshPacket &mp, meshtastic_StoreForwardPlusPlus *t);
     void handleItemFrame(const meshtastic_MeshPacket &mp, meshtastic_StoreForwardPlusPlus *t);
-
     void requestEnumList(const uint8_t *root_hash, uint32_t bucket, NodeNum peer);
     void requestMissingItems(const uint8_t *root_hash, uint32_t bucket, NodeNum peer, const std::vector<pinsketch::Element> &ids);
     bool storeRecoveredObject(const sfppframe::Replay &replay, const uint8_t *root_hash, uint32_t bucket);
+
+    // Item frames are queued and drained from runOnce() so a 32-object request cannot overflow the
+    // radio's 16-entry TX queue.
+    struct EnumOutgoing {
+        meshtastic_StoreForwardPlusPlus msg;
+        NodeNum to;
+        sfppsr::Scope scope;
+    };
+    void queueItemFrames(const std::vector<meshtastic_StoreForwardPlusPlus> &frames, NodeNum to, const sfppsr::Scope &scope);
+    bool drainOneEnumFrame();
 
     // For a given Meshtastic ChannelHash, fills the root_hash buffer with a 32-byte root hash
     // returns true if the root hash was found
@@ -428,6 +437,9 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
         uint64_t checksum;
     };
     std::vector<EnumSuppression> enumSuppressed;
+
+    std::deque<EnumOutgoing> enumTxQueue;
+    uint32_t enumLastDrainMs = 0;
 };
 
 extern StoreForwardPlusPlusModule *storeForwardPlusPlusModule;
