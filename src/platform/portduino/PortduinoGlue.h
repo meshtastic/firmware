@@ -343,7 +343,7 @@ extern struct portduino_config_struct {
     // Store and Forward++
     std::string sfpp_db_path = "/var/lib/meshtasticd/";
     bool sfpp_stratum0 = false;
-    bool sfpp_enabled = true;
+    bool sfpp_enabled = false;
     bool sfpp_steal_port = false;
     int sfpp_initial_sync = 10;
     int sfpp_hops = 3;

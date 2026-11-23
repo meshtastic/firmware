@@ -297,7 +297,7 @@ Security:
 #  DMShell: true
 
 StoreAndForward:
-#  Enabled: true # Enable Store and Forward++, true by default
+#  Enabled: true # Enable Store and Forward++, false by default
 #  DBPath: /var/lib/meshtasticd/ # Path to the S&F++ Sqlite DB
 #  Stratum0: false # Specify if this node is a Stratum 0 node, the controller node.
 #  InitialSync: 10 # Number of messages to
