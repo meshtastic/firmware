@@ -13,9 +13,25 @@
 #include "SHA256.h"
 #include "meshUtils.h"
 #include "modules/RoutingModule.h"
+#if !MESHTASTIC_EXCLUDE_STOREFORWARD
+#include "modules/StoreForwardModule.h"
+#endif
 
 #include <utility>
 #include <vector>
+
+// The shim speaks the legacy StoreAndForward protobuf, which is not this module's template type,
+// so its packets are built by hand rather than with allocDataProtobuf().
+static meshtastic_MeshPacket *allocStoreForwardPacket(const meshtastic_StoreAndForward &payload)
+{
+    meshtastic_MeshPacket *p = router->allocForSending();
+    if (!p)
+        return nullptr;
+    p->decoded.portnum = meshtastic_PortNum_STORE_FORWARD_APP;
+    p->decoded.payload.size =
+        pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), &meshtastic_StoreAndForward_msg, &payload);
+    return p;
+}
 
 StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
     : ProtobufModule("StoreForwardpp",
@@ -206,6 +222,12 @@ StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
     sqlite3_prepare_v2(ppDb, "update channel_messages set short_id=?, checksum=? where message_hash=?;", -1, &setLinkSetIndexStmt,
                        NULL);
 
+    // Legacy CLIENT_HISTORY reads the stored plaintext, newest window only, in arrival order.
+    sqlite3_prepare_v2(ppDb, "select sender, packet_id, destination, rx_time, payload from channel_messages \
+        where substr(root_hash,1,?)=? and rx_time>=? and payload is not null and length(payload)>0 and sender!=? \
+        and (destination=? or destination=?) order by rx_time asc limit ?;",
+                       -1, &legacyHistoryStmt, NULL);
+
     sqlite3_prepare_v2(ppDb, "INSERT INTO local_messages (destination, sender, packet_id, root_hash, \
         encrypted_bytes, message_hash, rx_time, payload) VALUES(?, ?, ?, ?, ?, ?, ?, ?);",
                        -1, &scratch_insert_stmt, NULL);
@@ -320,6 +342,54 @@ StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
     this->setInterval(15 * 1000);
 }
 
+StoreForwardPlusPlusModule::~StoreForwardPlusPlusModule()
+{
+    sqlite3_stmt *statements[] = {
+        chain_insert_stmt,
+        scratch_insert_stmt,
+        checkDupMessageHash,
+        checkDupCommitHash,
+        checkScratch,
+        removeScratch,
+        updatePayloadStmt,
+        fromScratchStmt,
+        fromScratchByHashStmt,
+        getNextHashStmt,
+        getChainEndStmt,
+        getLinkStmt,
+        getLinkFromMessageHashStmt,
+        getHashFromRootStmt,
+        addRootToMappingsStmt,
+        getRootFromChannelHashStmt,
+        getFullRootHashStmt,
+        setChainCountStmt,
+        getChainCountStmt,
+        getScratchCountStmt,
+        getRootCanonScratchCountStmt,
+        pruneScratchQueueStmt,
+        trimOldestLinkStmt,
+        maybeAddPeerStmt,
+        getPeerStmt,
+        updatePeerStmt,
+        clearChainStmt,
+        canon_scratch_insert_stmt,
+        getCanonScratchCountStmt,
+        getCanonScratchStmt,
+        removeCanonScratch,
+        clearCanonScratchStmt,
+        bucketSummaryStmt,
+        unindexedLinksStmt,
+        setLinkSetIndexStmt,
+        legacyHistoryStmt,
+    };
+    for (sqlite3_stmt *stmt : statements) {
+        if (stmt)
+            sqlite3_finalize(stmt);
+    }
+    if (ppDb)
+        sqlite3_close(ppDb);
+}
+
 void StoreForwardPlusPlusModule::backfillSetIndex()
 {
     uint32_t indexed = 0;
@@ -389,6 +459,10 @@ bool StoreForwardPlusPlusModule::buildBucketSummary(uint8_t *root_hash, size_t r
 
 int32_t StoreForwardPlusPlusModule::runOnce()
 {
+    if (legacyHistoryBusy) {
+        sendNextLegacyHistory();
+        return legacyHistoryBusy ? 5 * 1000 : portduino_config.sfpp_announce_interval * 60 * 1000;
+    }
     if (pendingRun) {
         pendingRun = false;
         setIntervalFromNow(portduino_config.sfpp_announce_interval * 60 * 1000 - 30 * 1000);
@@ -544,6 +618,17 @@ ProcessMessage StoreForwardPlusPlusModule::handleReceived(const meshtastic_MeshP
     // To avoid terrible time problems, require NTP or GPS time
     if (getRTCQuality() < RTCQualityNTP) {
         return ProcessMessage::CONTINUE;
+    }
+
+    // A legacy CLIENT_HISTORY from a phone connected to this archive. Checked before the from==0
+    // guard below, because the phone sends the request as the local node.
+    if (mp.which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
+        mp.decoded.portnum == meshtastic_PortNum_STORE_FORWARD_APP && !legacyStoreForwardServes()) {
+        meshtastic_StoreAndForward req;
+        if (pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, &meshtastic_StoreAndForward_msg, &req)) {
+            handleLegacyClientHistory(mp, &req);
+        }
+        return ProcessMessage::STOP;
     }
 
     if (mp.from == nodeDB->getNodeNum() || mp.from == 0) {
@@ -962,6 +1047,136 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
         }
     }
 
+    return true;
+}
+
+bool StoreForwardPlusPlusModule::legacyStoreForwardServes()
+{
+#if !MESHTASTIC_EXCLUDE_STOREFORWARD
+    return storeForwardModule && storeForwardModule->isServer();
+#else
+    return false;
+#endif
+}
+
+void StoreForwardPlusPlusModule::sendLegacyReply(NodeNum to, const meshtastic_StoreAndForward &payload)
+{
+    meshtastic_MeshPacket *p = allocStoreForwardPacket(payload);
+    if (!p)
+        return;
+
+    p->to = to;
+    p->channel = 0;
+    p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
+    p->want_ack = false;
+    p->decoded.want_response = false;
+    service->sendToMesh(p, RX_SRC_LOCAL, true);
+}
+
+void StoreForwardPlusPlusModule::handleLegacyClientHistory(const meshtastic_MeshPacket &mp, meshtastic_StoreAndForward *req)
+{
+    constexpr uint32_t retentionS = 48 * 60 * 60; // D7
+    constexpr uint32_t pageMax = 50;
+
+    if (req->rr != meshtastic_StoreAndForward_RequestResponse_CLIENT_HISTORY)
+        return;
+
+    NodeNum requester = getFrom(&mp);
+
+    if (legacyHistoryBusy) {
+        meshtastic_StoreAndForward busy = meshtastic_StoreAndForward_init_zero;
+        busy.rr = meshtastic_StoreAndForward_RequestResponse_ROUTER_BUSY;
+        sendLegacyReply(requester, busy);
+        return;
+    }
+
+    uint32_t windowS = retentionS;
+    if (req->which_variant == meshtastic_StoreAndForward_history_tag && req->variant.history.window > 0) {
+        uint32_t requested = req->variant.history.window * 60; // the legacy request carries minutes
+        if (requested < windowS)
+            windowS = requested;
+    }
+
+    uint32_t now = getValidTime(RTCQualityNTP, true);
+    uint32_t since = now > windowS ? now - windowS : 0;
+    uint32_t count = 0;
+
+    uint8_t root_hash[SFPP_HASH_SIZE] = {0};
+    if (getRootFromChannelHash(channels.getHash(0), root_hash)) {
+        sqlite3_reset(legacyHistoryStmt);
+        sqlite3_bind_int(legacyHistoryStmt, 1, SFPP_HASH_SIZE);
+        sqlite3_bind_blob(legacyHistoryStmt, 2, root_hash, SFPP_HASH_SIZE, NULL);
+        sqlite3_bind_int64(legacyHistoryStmt, 3, (sqlite3_int64)since);
+        sqlite3_bind_int(legacyHistoryStmt, 4, (int)requester);
+        sqlite3_bind_int(legacyHistoryStmt, 5, (int)NODENUM_BROADCAST);
+        sqlite3_bind_int(legacyHistoryStmt, 6, (int)requester);
+        sqlite3_bind_int(legacyHistoryStmt, 7, pageMax);
+
+        while (sqlite3_step(legacyHistoryStmt) == SQLITE_ROW) {
+            legacy_history_item item;
+            item.from = (NodeNum)sqlite3_column_int64(legacyHistoryStmt, 0);
+            item.id = (PacketId)sqlite3_column_int64(legacyHistoryStmt, 1);
+            uint32_t destination = (uint32_t)sqlite3_column_int64(legacyHistoryStmt, 2);
+            item.rx_time = (uint32_t)sqlite3_column_int64(legacyHistoryStmt, 3);
+            const unsigned char *text = sqlite3_column_text(legacyHistoryStmt, 4);
+            item.payload.assign((const char *)text, sqlite3_column_bytes(legacyHistoryStmt, 4));
+            item.to = requester;
+            item.broadcast = destination == NODENUM_BROADCAST;
+            legacyHistory.push_back(std::move(item));
+            count++;
+        }
+        sqlite3_reset(legacyHistoryStmt);
+    }
+
+    meshtastic_StoreAndForward response = meshtastic_StoreAndForward_init_zero;
+    response.rr = meshtastic_StoreAndForward_RequestResponse_ROUTER_HISTORY;
+    response.which_variant = meshtastic_StoreAndForward_history_tag;
+    response.variant.history.history_messages = count;
+    response.variant.history.window = windowS * 1000;
+    response.variant.history.last_request = 0;
+    sendLegacyReply(requester, response);
+
+    if (count > 0) {
+        legacyHistoryBusy = true;
+        setIntervalFromNow(5 * 1000);
+    }
+}
+
+bool StoreForwardPlusPlusModule::sendNextLegacyHistory()
+{
+    if (legacyHistory.empty()) {
+        legacyHistoryBusy = false;
+        return false;
+    }
+
+    legacy_history_item item = std::move(legacyHistory.front());
+    legacyHistory.pop_front();
+
+    meshtastic_StoreAndForward sf = meshtastic_StoreAndForward_init_zero;
+    sf.rr = item.broadcast ? meshtastic_StoreAndForward_RequestResponse_ROUTER_TEXT_BROADCAST
+                           : meshtastic_StoreAndForward_RequestResponse_ROUTER_TEXT_DIRECT;
+    sf.which_variant = meshtastic_StoreAndForward_text_tag;
+    sf.original_id = item.id;
+    size_t len = item.payload.size();
+    if (len > sizeof(sf.variant.text.bytes))
+        len = sizeof(sf.variant.text.bytes);
+    memcpy(sf.variant.text.bytes, item.payload.data(), len);
+    sf.variant.text.size = len;
+
+    meshtastic_MeshPacket *p = allocStoreForwardPacket(sf);
+    if (p) {
+        p->to = item.to;
+        p->from = item.from;
+        p->channel = 0;
+        p->rx_time = item.rx_time;
+        p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
+        p->want_ack = false;
+        p->decoded.want_response = false;
+        service->sendToMesh(p, RX_SRC_LOCAL, true);
+    }
+
+    if (legacyHistory.empty())
+        legacyHistoryBusy = false;
     return true;
 }
 

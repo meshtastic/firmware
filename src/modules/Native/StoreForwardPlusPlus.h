@@ -11,7 +11,11 @@
 #include "Router.h"
 #include "SinglePortModule.h"
 #include "SketchIndex.h"
+#include "mesh/generated/meshtastic/storeforward.pb.h"
 #include "sqlite3.h"
+
+#include <deque>
+#include <string>
 
 #define SFPP_HASH_SIZE 16
 #define SFPP_SHORT_HASH_SIZE 8
@@ -78,6 +82,7 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
      *
      */
     StoreForwardPlusPlusModule();
+    ~StoreForwardPlusPlusModule();
 
     /*
       -Override the wantPacket method.
@@ -88,9 +93,11 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
             p->decoded.portnum == (portduino_config.sfpp_steal_port ? meshtastic_PortNum_TEXT_MESSAGE_COMPRESSED_APP
                                                                     : meshtastic_PortNum_STORE_FORWARD_PLUSPLUS_APP)) {
             return true;
-        } else {
-            return false;
         }
+        // The legacy Store & Forward module owns portnum 65 whenever it is acting as a server.
+        if (p->decoded.portnum == meshtastic_PortNum_STORE_FORWARD_APP)
+            return !legacyStoreForwardServes();
+        return false;
     }
 
     void handleEncrypted(const meshtastic_MeshPacket *, const meshtastic_MeshPacket *);
@@ -143,6 +150,30 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     sqlite3_stmt *bucketSummaryStmt;
     sqlite3_stmt *unindexedLinksStmt;
     sqlite3_stmt *setLinkSetIndexStmt;
+    sqlite3_stmt *legacyHistoryStmt;
+
+    // Answers a legacy CLIENT_HISTORY from the stored texts. One text per runOnce() keeps the
+    // archive inside the legacy module's pacing, which clients already expect.
+    struct legacy_history_item {
+        NodeNum to;
+        NodeNum from;
+        PacketId id;
+        uint32_t rx_time;
+        bool broadcast;
+        std::string payload;
+    };
+    std::deque<legacy_history_item> legacyHistory;
+    bool legacyHistoryBusy = false;
+
+    // Portnum 65 belongs to the legacy module whenever it is a server; otherwise the shim serves it.
+    bool legacyStoreForwardServes();
+
+    void handleLegacyClientHistory(const meshtastic_MeshPacket &mp, meshtastic_StoreAndForward *req);
+
+    // Sends one queued legacy history text; returns false when the queue is empty.
+    bool sendNextLegacyHistory();
+
+    void sendLegacyReply(NodeNum to, const meshtastic_StoreAndForward &payload);
 
     // Derives the short ID and checksum contribution for any chain row that predates those columns.
     // Bounded by the chain length, and a no-op on every run after the first.
