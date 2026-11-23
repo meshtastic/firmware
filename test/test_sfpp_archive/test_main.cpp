@@ -1,0 +1,597 @@
+/*
+ * Native coverage for the StoreForwardPlusPlusModule archive path in
+ * src/modules/Native/StoreForwardPlusPlus.cpp: the first automated test that runs SF++ module code.
+ *
+ * The module is normally only constructed by meshtasticd's module setup, which a test binary never
+ * runs, and the native runner passes -s, which turns SF++ off. These cases therefore construct the
+ * module directly against a throwaway sqlite store and drive its handlers.
+ *
+ * What is pinned:
+ *   - a text message is ingested into channel_messages with its plaintext payload and wire hashes;
+ *   - runOnce() announces the tip of that stored chain, and a LINK_REQUEST for the first link reads
+ *     the stored ciphertext back out;
+ *   - a legacy CLIENT_HISTORY (portnum 65) is answered from the store in the legacy response format,
+ *     with the D7 48 h retention;
+ *   - portnum 65 is not claimed while the legacy StoreForwardModule is a server, so the two modules
+ *     cannot answer the same request twice.
+ *
+ * The regression guarded: without this suite nothing executes the module at all, so a change that
+ * made ingest, announce, read-back or the legacy shim silently stop working would pass every other
+ * native test.
+ */
+
+#include "configuration.h" // first: the portduino runner links setup()/loop()
+
+#include "TestUtil.h"
+#include "gps/RTC.h"
+#include "mesh/Channels.h"
+#include "mesh/MeshService.h"
+#include "mesh/NodeDB.h"
+#include "mesh/RadioInterface.h"
+#include "mesh/Router.h"
+#include "modules/Native/StoreForwardPlusPlus.h"
+#include "modules/RoutingModule.h"
+#include "support/MockMeshService.h"
+
+#if !MESHTASTIC_EXCLUDE_STOREFORWARD
+#include "modules/StoreForwardModule.h"
+#endif
+
+#include <cstdio>
+#include <cstring>
+#include <memory>
+#include <sqlite3.h>
+#include <string>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <unity.h>
+#include <vector>
+
+#if ARCH_PORTDUINO && !ARCH_PORTDUINO_WASM && !MESHTASTIC_EXCLUDE_SFPP
+
+namespace
+{
+constexpr NodeNum LOCAL_NODE = 0x11112222;
+constexpr NodeNum REMOTE_NODE = 0x33334444;
+constexpr PacketId TEXT_ID = 0x01020304;
+constexpr uint32_t LEGACY_RETENTION_S = 48 * 60 * 60;
+
+class TestNodeDB : public NodeDB
+{
+};
+
+class TestRadio : public RadioInterface
+{
+  public:
+    ErrorCode send(meshtastic_MeshPacket *p) override
+    {
+        packetPool.release(p);
+        return ERRNO_OK;
+    }
+
+    uint32_t getPacketTime(uint32_t totalPacketLen, bool received = false) override
+    {
+        (void)totalPacketLen;
+        (void)received;
+        return 0;
+    }
+};
+
+// Router::send is the seam every non-local SF++ packet crosses, so it is where replies are observed.
+class CapturingRouter : public Router
+{
+  public:
+    ErrorCode send(meshtastic_MeshPacket *p) override
+    {
+        sent.push_back(*p);
+        packetPool.release(p);
+        return ERRNO_OK;
+    }
+
+    std::vector<meshtastic_MeshPacket> sent;
+};
+
+class TestRoutingModule : public RoutingModule
+{
+  public:
+    void sendAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex, uint8_t hopLimit = 0,
+                    bool ackWantsAck = false, const meshtastic_MeshPacket *relaySource = nullptr) override
+    {
+        (void)err;
+        (void)to;
+        (void)idFrom;
+        (void)chIndex;
+        (void)hopLimit;
+        (void)ackWantsAck;
+        (void)relaySource;
+    }
+
+  protected:
+    bool wantPacket(const meshtastic_MeshPacket *p) override
+    {
+        (void)p;
+        return false;
+    }
+};
+
+// Exposes the protected handlers and supplies the encrypted copy MeshModule::callModules() would.
+class TestSfppModule : public StoreForwardPlusPlusModule
+{
+  public:
+    using StoreForwardPlusPlusModule::handleReceived;
+    using StoreForwardPlusPlusModule::handleReceivedProtobuf;
+    using StoreForwardPlusPlusModule::runOnce;
+
+    ProcessMessage ingest(const meshtastic_MeshPacket &mp, const meshtastic_MeshPacket *encrypted)
+    {
+        currentEncrypted = encrypted;
+        ProcessMessage result = handleReceived(mp);
+        currentEncrypted = nullptr;
+        return result;
+    }
+
+    ProcessMessage dispatch(const meshtastic_MeshPacket &mp)
+    {
+        currentEncrypted = nullptr;
+        return handleReceived(mp);
+    }
+};
+
+TestNodeDB *testNodeDB;
+CapturingRouter *testRouter;
+MockMeshService *testService;
+TestRoutingModule *testRoutingModule;
+TestSfppModule *testSfpp;
+std::string dbDir;
+
+std::string dbFile()
+{
+    return dbDir + "/storeforwardpp.db";
+}
+
+meshtastic_MeshPacket makeText(NodeNum from, PacketId id, const char *text, uint32_t rxTime)
+{
+    meshtastic_MeshPacket mp = meshtastic_MeshPacket_init_zero;
+    mp.from = from;
+    mp.to = NODENUM_BROADCAST;
+    mp.id = id;
+    mp.channel = 0;
+    mp.rx_time = rxTime;
+    mp.hop_limit = 3;
+    mp.hop_start = 3;
+    mp.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA;
+    mp.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    mp.decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
+    size_t len = strlen(text);
+    memcpy(mp.decoded.payload.bytes, text, len);
+    mp.decoded.payload.size = len;
+    return mp;
+}
+
+meshtastic_MeshPacket makeEncryptedCopy(const meshtastic_MeshPacket &mp)
+{
+    meshtastic_MeshPacket enc = meshtastic_MeshPacket_init_zero;
+    enc.from = mp.from;
+    enc.to = mp.to;
+    enc.id = mp.id;
+    enc.channel = channels.getHash(0);
+    enc.which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
+    enc.encrypted.size = 32;
+    for (size_t i = 0; i < enc.encrypted.size; i++)
+        enc.encrypted.bytes[i] = (uint8_t)(0x40 + i + (mp.id & 0x0f));
+    return enc;
+}
+
+meshtastic_MeshPacket makeHistoryRequest(NodeNum from, NodeNum to, PacketId id, uint32_t windowMinutes)
+{
+    meshtastic_StoreAndForward request = meshtastic_StoreAndForward_init_zero;
+    request.rr = meshtastic_StoreAndForward_RequestResponse_CLIENT_HISTORY;
+    if (windowMinutes > 0) {
+        request.which_variant = meshtastic_StoreAndForward_history_tag;
+        request.variant.history.window = windowMinutes;
+    }
+
+    meshtastic_MeshPacket mp = meshtastic_MeshPacket_init_zero;
+    mp.from = from;
+    mp.to = to;
+    mp.id = id;
+    mp.channel = 0;
+    mp.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_API;
+    mp.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    mp.decoded.portnum = meshtastic_PortNum_STORE_FORWARD_APP;
+    mp.decoded.payload.size =
+        pb_encode_to_bytes(mp.decoded.payload.bytes, sizeof(mp.decoded.payload.bytes), &meshtastic_StoreAndForward_msg, &request);
+    return mp;
+}
+
+// Pulls every MeshPacket the archive queued for its own attached phone.
+std::vector<meshtastic_MeshPacket> drainPhoneQueue()
+{
+    std::vector<meshtastic_MeshPacket> out;
+    while (meshtastic_MeshPacket *p = testService->getForPhone()) {
+        out.push_back(*p);
+        testService->releaseToPool(p);
+    }
+    return out;
+}
+
+const meshtastic_MeshPacket *findPort(const std::vector<meshtastic_MeshPacket> &packets, meshtastic_PortNum port)
+{
+    for (const auto &p : packets) {
+        if (p.which_payload_variant == meshtastic_MeshPacket_decoded_tag && p.decoded.portnum == port)
+            return &p;
+    }
+    return nullptr;
+}
+
+bool decodeSfpp(const meshtastic_MeshPacket &p, meshtastic_StoreForwardPlusPlus &out)
+{
+    return p.which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
+           pb_decode_from_bytes(p.decoded.payload.bytes, p.decoded.payload.size, &meshtastic_StoreForwardPlusPlus_msg, &out);
+}
+
+bool decodeStoreForward(const meshtastic_MeshPacket &p, meshtastic_StoreAndForward &out)
+{
+    return p.which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
+           pb_decode_from_bytes(p.decoded.payload.bytes, p.decoded.payload.size, &meshtastic_StoreAndForward_msg, &out);
+}
+
+struct StoredRow {
+    std::vector<uint8_t> root;
+    std::vector<uint8_t> commit;
+    std::vector<uint8_t> encrypted;
+    std::string payload;
+    uint32_t rxTime = 0;
+};
+
+bool readStoredRow(PacketId id, StoredRow &row)
+{
+    sqlite3 *db = nullptr;
+    if (sqlite3_open(dbFile().c_str(), &db) != SQLITE_OK) {
+        if (db)
+            sqlite3_close(db);
+        return false;
+    }
+
+    sqlite3_stmt *stmt = nullptr;
+    bool found = false;
+    if (sqlite3_prepare_v2(db,
+                           "select root_hash, commit_hash, encrypted_bytes, payload, rx_time from channel_messages "
+                           "where packet_id=? limit 1;",
+                           -1, &stmt, nullptr) == SQLITE_OK) {
+        sqlite3_bind_int64(stmt, 1, id);
+        if (sqlite3_step(stmt) == SQLITE_ROW) {
+            const uint8_t *root = (const uint8_t *)sqlite3_column_blob(stmt, 0);
+            int rootLen = sqlite3_column_bytes(stmt, 0);
+            row.root.assign(root, root + rootLen);
+            const uint8_t *commit = (const uint8_t *)sqlite3_column_blob(stmt, 1);
+            int commitLen = sqlite3_column_bytes(stmt, 1);
+            row.commit.assign(commit, commit + commitLen);
+            const uint8_t *enc = (const uint8_t *)sqlite3_column_blob(stmt, 2);
+            int encLen = sqlite3_column_bytes(stmt, 2);
+            row.encrypted.assign(enc, enc + encLen);
+            const unsigned char *text = sqlite3_column_text(stmt, 3);
+            row.payload.assign((const char *)text, sqlite3_column_bytes(stmt, 3));
+            row.rxTime = (uint32_t)sqlite3_column_int64(stmt, 4);
+            found = true;
+        }
+    }
+    if (stmt)
+        sqlite3_finalize(stmt);
+    sqlite3_close(db);
+    return found;
+}
+
+void setStoredRxTime(PacketId id, uint32_t rxTime)
+{
+    sqlite3 *db = nullptr;
+    if (sqlite3_open(dbFile().c_str(), &db) != SQLITE_OK) {
+        if (db)
+            sqlite3_close(db);
+        return;
+    }
+    sqlite3_stmt *stmt = nullptr;
+    if (sqlite3_prepare_v2(db, "update channel_messages set rx_time=? where packet_id=?;", -1, &stmt, nullptr) == SQLITE_OK) {
+        sqlite3_bind_int64(stmt, 1, rxTime);
+        sqlite3_bind_int64(stmt, 2, id);
+        sqlite3_step(stmt);
+    }
+    if (stmt)
+        sqlite3_finalize(stmt);
+    sqlite3_close(db);
+}
+
+bool ingestOneText(const char *text)
+{
+    meshtastic_MeshPacket mp = makeText(REMOTE_NODE, TEXT_ID, text, getValidTime(RTCQualityNTP, true));
+    meshtastic_MeshPacket enc = makeEncryptedCopy(mp);
+    return testSfpp->ingest(mp, &enc) == ProcessMessage::CONTINUE;
+}
+
+} // namespace
+
+void setUp(void)
+{
+    config = meshtastic_LocalConfig_init_zero;
+    moduleConfig = meshtastic_LocalModuleConfig_init_zero;
+    channelFile = meshtastic_ChannelFile_init_zero;
+    owner = meshtastic_User_init_zero;
+
+    testNodeDB = new TestNodeDB();
+    nodeDB = testNodeDB;
+    myNodeInfo.my_node_num = LOCAL_NODE;
+
+    channels.initDefaults();
+    channels.onConfigChanged();
+
+    testService = new MockMeshService();
+    service = testService;
+
+    testRouter = new CapturingRouter();
+    testRouter->addInterface(std::unique_ptr<RadioInterface>(new TestRadio()));
+    router = testRouter;
+
+    testRoutingModule = new TestRoutingModule();
+    routingModule = testRoutingModule;
+
+    char tmpl[] = "/tmp/meshtastic-sfpp-XXXXXX";
+    char *dir = mkdtemp(tmpl);
+    dbDir = dir ? dir : "/tmp";
+    portduino_config.sfpp_db_path = dbDir + "/";
+    portduino_config.sfpp_stratum0 = true;
+    portduino_config.sfpp_enabled = true;
+    portduino_config.sfpp_hops = 3;
+    portduino_config.sfpp_announce_interval = 5;
+    portduino_config.sfpp_steal_port = false;
+
+    testSfpp = new TestSfppModule();
+}
+
+void tearDown(void)
+{
+    delete testSfpp;
+    testSfpp = nullptr;
+
+    if (!dbDir.empty() && dbDir != "/tmp") {
+        std::remove(dbFile().c_str());
+        std::remove((dbFile() + "-journal").c_str());
+        rmdir(dbDir.c_str());
+    }
+
+    delete testRoutingModule;
+    testRoutingModule = nullptr;
+    routingModule = nullptr;
+
+    delete testRouter;
+    testRouter = nullptr;
+    router = nullptr;
+
+    delete testService;
+    testService = nullptr;
+    service = nullptr;
+
+    delete testNodeDB;
+    testNodeDB = nullptr;
+    nodeDB = nullptr;
+}
+
+// --- Archive store, announce and read-back ---
+
+// Proves handleReceived() ingests a broadcast text into channel_messages with the plaintext payload
+// and the hashes LINK_PROVIDE/ADVERT depend on. Without it a regression could leave the store empty
+// while every other suite still passed.
+void test_ingestStoresTextWithPayloadAndHashes()
+{
+    TEST_ASSERT_TRUE(ingestOneText("hello archive"));
+
+    StoredRow row;
+    TEST_ASSERT_TRUE(readStoredRow(TEXT_ID, row));
+    TEST_ASSERT_EQUAL_STRING("hello archive", row.payload.c_str());
+    TEST_ASSERT_EQUAL_UINT(SFPP_HASH_SIZE, row.root.size());
+    TEST_ASSERT_EQUAL_UINT(SFPP_HASH_SIZE, row.commit.size());
+    TEST_ASSERT_EQUAL_UINT(32, row.encrypted.size());
+}
+
+// runOnce() in stratum-0 mode must announce the stored tip: CANON_ANNOUNCE with the full root, the
+// short message and commit hashes and a non-zero chain count. A quiet module here means a peer can
+// never learn the archive has anything.
+void test_announceCarriesTheStoredTip()
+{
+    TEST_ASSERT_TRUE(ingestOneText("announce me"));
+
+    StoredRow row;
+    TEST_ASSERT_TRUE(readStoredRow(TEXT_ID, row));
+
+    testRouter->sent.clear();
+    TEST_ASSERT_GREATER_THAN(0, testSfpp->runOnce());
+
+    TEST_ASSERT_EQUAL_UINT(1, testRouter->sent.size());
+    meshtastic_StoreForwardPlusPlus announce;
+    TEST_ASSERT_TRUE(decodeSfpp(testRouter->sent[0], announce));
+    TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_CANON_ANNOUNCE, announce.sfpp_message_type);
+    TEST_ASSERT_EQUAL_UINT(SFPP_HASH_SIZE, announce.root_hash.size);
+    TEST_ASSERT_EQUAL_MEMORY(row.root.data(), announce.root_hash.bytes, SFPP_HASH_SIZE);
+    TEST_ASSERT_EQUAL_UINT(SFPP_SHORT_HASH_SIZE, announce.message_hash.size);
+    TEST_ASSERT_EQUAL_UINT(SFPP_SHORT_HASH_SIZE, announce.commit_hash.size);
+    TEST_ASSERT_EQUAL_UINT32(1, announce.chain_count);
+}
+
+// A LINK_REQUEST with an empty commit hash asks for the first link. The answer must carry the
+// original ciphertext and sender/id back, i.e. the archive can serve what it stored.
+void test_linkRequestReadsTheStoredTextBack()
+{
+    TEST_ASSERT_TRUE(ingestOneText("read me back"));
+
+    StoredRow row;
+    TEST_ASSERT_TRUE(readStoredRow(TEXT_ID, row));
+
+    meshtastic_StoreForwardPlusPlus request = meshtastic_StoreForwardPlusPlus_init_zero;
+    request.sfpp_message_type = meshtastic_StoreForwardPlusPlus_SFPP_message_type_LINK_REQUEST;
+    request.root_hash.size = row.root.size();
+    memcpy(request.root_hash.bytes, row.root.data(), row.root.size());
+
+    meshtastic_MeshPacket mp = meshtastic_MeshPacket_init_zero;
+    mp.from = REMOTE_NODE;
+    mp.to = NODENUM_BROADCAST;
+    mp.id = 0x0A0B0C0D;
+    mp.channel = 0;
+
+    testRouter->sent.clear();
+    TEST_ASSERT_TRUE(testSfpp->handleReceivedProtobuf(mp, &request));
+
+    TEST_ASSERT_EQUAL_UINT(1, testRouter->sent.size());
+    meshtastic_StoreForwardPlusPlus provide;
+    TEST_ASSERT_TRUE(decodeSfpp(testRouter->sent[0], provide));
+    TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_LINK_PROVIDE, provide.sfpp_message_type);
+    TEST_ASSERT_EQUAL_UINT(row.encrypted.size(), provide.message.size);
+    TEST_ASSERT_EQUAL_MEMORY(row.encrypted.data(), provide.message.bytes, row.encrypted.size());
+    TEST_ASSERT_EQUAL_UINT32(REMOTE_NODE, provide.encapsulated_from);
+    TEST_ASSERT_EQUAL_UINT32(TEXT_ID, provide.encapsulated_id);
+}
+
+// --- Legacy CLIENT_HISTORY shim ---
+
+// A phone connected to the archive sends CLIENT_HISTORY to the node itself. The archive must answer
+// ROUTER_HISTORY and then the stored text as ROUTER_TEXT_BROADCAST, which is what an unchanged
+// Android/Apple client already understands.
+void test_legacyHistoryAnswersInLegacyFormat()
+{
+    TEST_ASSERT_TRUE(ingestOneText("history text"));
+
+    meshtastic_MeshPacket request = makeHistoryRequest(0, LOCAL_NODE, 0x0B0B0B0B, 0);
+    TEST_ASSERT_EQUAL(ProcessMessage::STOP, testSfpp->dispatch(request));
+
+    std::vector<meshtastic_MeshPacket> phone = drainPhoneQueue();
+    TEST_ASSERT_EQUAL_UINT(1, phone.size());
+    meshtastic_StoreAndForward reply;
+    TEST_ASSERT_TRUE(decodeStoreForward(phone[0], reply));
+    TEST_ASSERT_EQUAL(meshtastic_StoreAndForward_RequestResponse_ROUTER_HISTORY, reply.rr);
+    TEST_ASSERT_EQUAL(meshtastic_StoreAndForward_history_tag, reply.which_variant);
+    TEST_ASSERT_EQUAL_UINT32(1, reply.variant.history.history_messages);
+    TEST_ASSERT_EQUAL_UINT32(LEGACY_RETENTION_S * 1000, reply.variant.history.window);
+
+    testSfpp->runOnce();
+    phone = drainPhoneQueue();
+    TEST_ASSERT_EQUAL_UINT(1, phone.size());
+    meshtastic_StoreAndForward text;
+    TEST_ASSERT_TRUE(decodeStoreForward(phone[0], text));
+    TEST_ASSERT_EQUAL(meshtastic_StoreAndForward_RequestResponse_ROUTER_TEXT_BROADCAST, text.rr);
+    TEST_ASSERT_EQUAL(meshtastic_StoreAndForward_text_tag, text.which_variant);
+    TEST_ASSERT_EQUAL_UINT32(TEXT_ID, text.original_id);
+    TEST_ASSERT_EQUAL_UINT(REMOTE_NODE, phone[0].from);
+    TEST_ASSERT_EQUAL_UINT(strlen("history text"), text.variant.text.size);
+    TEST_ASSERT_EQUAL_MEMORY("history text", text.variant.text.bytes, text.variant.text.size);
+}
+
+// A client-supplied window is honoured (the legacy request carries minutes) and may shorten the
+// default retention but never extend past it.
+void test_legacyHistoryUsesLegacyRequestWindow()
+{
+    TEST_ASSERT_TRUE(ingestOneText("window text"));
+
+    meshtastic_MeshPacket request = makeHistoryRequest(0, LOCAL_NODE, 0x0C0C0C0C, 60);
+    TEST_ASSERT_EQUAL(ProcessMessage::STOP, testSfpp->dispatch(request));
+
+    std::vector<meshtastic_MeshPacket> phone = drainPhoneQueue();
+    TEST_ASSERT_EQUAL_UINT(1, phone.size());
+    meshtastic_StoreAndForward reply;
+    TEST_ASSERT_TRUE(decodeStoreForward(phone[0], reply));
+    TEST_ASSERT_EQUAL_UINT32(60 * 60 * 1000, reply.variant.history.window);
+    TEST_ASSERT_EQUAL_UINT32(1, reply.variant.history.history_messages);
+}
+
+// D7's 48 h default is the ceiling: a text older than that must not be returned even by an
+// unspecified-window request. This keeps the archive from becoming an unbounded history oracle.
+void test_legacyHistoryExcludesTextsOlderThanRetention()
+{
+    TEST_ASSERT_TRUE(ingestOneText("ancient text"));
+    setStoredRxTime(TEXT_ID, getValidTime(RTCQualityNTP, true) - LEGACY_RETENTION_S - 60);
+
+    meshtastic_MeshPacket request = makeHistoryRequest(0, LOCAL_NODE, 0x0D0D0D0D, 0);
+    TEST_ASSERT_EQUAL(ProcessMessage::STOP, testSfpp->dispatch(request));
+
+    std::vector<meshtastic_MeshPacket> phone = drainPhoneQueue();
+    TEST_ASSERT_EQUAL_UINT(1, phone.size());
+    meshtastic_StoreAndForward reply;
+    TEST_ASSERT_TRUE(decodeStoreForward(phone[0], reply));
+    TEST_ASSERT_EQUAL_UINT32(0, reply.variant.history.history_messages);
+}
+
+// --- Coexistence with the legacy module ---
+
+// With no legacy server the shim must claim portnum 65; otherwise the shim can never run.
+void test_shimClaimsPort65WithNoLegacyServer()
+{
+    meshtastic_MeshPacket sf = meshtastic_MeshPacket_init_zero;
+    sf.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    sf.decoded.portnum = meshtastic_PortNum_STORE_FORWARD_APP;
+
+    TEST_ASSERT_NULL(storeForwardModule);
+    TEST_ASSERT_TRUE(testSfpp->wantPacket(&sf));
+}
+
+// When the legacy module is a server it owns portnum 65; SF++ must stand down so a phone receives
+// exactly one history answer.
+void test_shimYieldsPort65ToLegacyServer()
+{
+#if !MESHTASTIC_EXCLUDE_STOREFORWARD
+    moduleConfig.store_forward.enabled = true;
+    config.device.role = meshtastic_Config_DeviceConfig_Role_ROUTER;
+
+    storeForwardModule = new StoreForwardModule();
+    TEST_ASSERT_TRUE(storeForwardModule->isServer());
+
+    meshtastic_MeshPacket sf = meshtastic_MeshPacket_init_zero;
+    sf.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    sf.decoded.portnum = meshtastic_PortNum_STORE_FORWARD_APP;
+    TEST_ASSERT_FALSE(testSfpp->wantPacket(&sf));
+
+    delete storeForwardModule;
+    storeForwardModule = nullptr;
+#else
+    TEST_IGNORE_MESSAGE("legacy Store & Forward module is not compiled in");
+#endif
+}
+
+// A legacy module that is present but not a server never answers portnum 65, so the shim must still
+// claim it. This is the common meshtasticd case where store_forward is off but SF++ is on.
+void test_shimClaimsPort65WithLegacyClientOnly()
+{
+#if !MESHTASTIC_EXCLUDE_STOREFORWARD
+    moduleConfig.store_forward.enabled = false;
+
+    storeForwardModule = new StoreForwardModule();
+    TEST_ASSERT_FALSE(storeForwardModule->isServer());
+
+    meshtastic_MeshPacket sf = meshtastic_MeshPacket_init_zero;
+    sf.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    sf.decoded.portnum = meshtastic_PortNum_STORE_FORWARD_APP;
+    TEST_ASSERT_TRUE(testSfpp->wantPacket(&sf));
+
+    delete storeForwardModule;
+    storeForwardModule = nullptr;
+#else
+    TEST_IGNORE_MESSAGE("legacy Store & Forward module is not compiled in");
+#endif
+}
+
+void loop() {}
+
+void setup()
+{
+    initializeTestEnvironment();
+
+    UNITY_BEGIN();
+    RUN_TEST(test_ingestStoresTextWithPayloadAndHashes);
+    RUN_TEST(test_announceCarriesTheStoredTip);
+    RUN_TEST(test_linkRequestReadsTheStoredTextBack);
+    RUN_TEST(test_legacyHistoryAnswersInLegacyFormat);
+    RUN_TEST(test_legacyHistoryUsesLegacyRequestWindow);
+    RUN_TEST(test_legacyHistoryExcludesTextsOlderThanRetention);
+    RUN_TEST(test_shimClaimsPort65WithNoLegacyServer);
+    RUN_TEST(test_shimYieldsPort65ToLegacyServer);
+    RUN_TEST(test_shimClaimsPort65WithLegacyClientOnly);
+    UNITY_END();
+}
+
+#endif // ARCH_PORTDUINO && !ARCH_PORTDUINO_WASM && !MESHTASTIC_EXCLUDE_SFPP
