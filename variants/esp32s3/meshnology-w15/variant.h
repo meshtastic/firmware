@@ -1,6 +1,7 @@
 #pragma once
 
 #define USE_SSD1306 // SSD1315 is SSD1306-compatible
+#define DISPLAY_FLIP_SCREEN
 #define I2C_SDA 5
 #define I2C_SCL 4
 #define VEXT_ENABLE 45 // Active-low OLED supply
