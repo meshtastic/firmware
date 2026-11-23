@@ -3,6 +3,7 @@
 #include "gps/RTC.h"
 #include <cstdio>
 #include <cstdlib>
+#include <string>
 #include <sys/time.h>
 #include <time.h>
 #include <unity.h>
@@ -545,7 +546,9 @@ static void test_gm_mktime_leap_rule_sweep(void)
 // and one positive-offset zone, with the expected offsets taken from the POSIX TZ rules themselves.
 static void test_tz_offset_uses_local_dst_boundaries(void)
 {
-    const char *savedTz = getenv("TZ");
+    const char *prevTz = getenv("TZ");
+    const bool hadTz = prevTz != nullptr;
+    const std::string savedTz = hadTz ? prevTz : "";
     setenv("TZ", "EST5EDT,M3.2.0,M11.1.0", 1);
     tzset();
     TEST_ASSERT_EQUAL_INT32(-5 * 3600, getTZOffsetAt(1741494300)); // 2025-03-08 23:25 EST (the #9863 report)
@@ -560,8 +563,8 @@ static void test_tz_offset_uses_local_dst_boundaries(void)
     TEST_ASSERT_EQUAL_INT32(2 * 3600, getTZOffsetAt(1751371200)); // 2025-07-01 14:00 CEST
     TEST_ASSERT_EQUAL_INT32(1 * 3600, getTZOffsetAt(1741503600)); // 2025-03-09 08:00 CET
 
-    if (savedTz)
-        setenv("TZ", savedTz, 1);
+    if (hadTz)
+        setenv("TZ", savedTz.c_str(), 1);
     else
         unsetenv("TZ");
     tzset();

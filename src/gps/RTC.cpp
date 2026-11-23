@@ -509,12 +509,16 @@ int32_t getTZOffset()
 
 int32_t getTZOffsetAt(time_t utc)
 {
-    // localtime_r() is unavailable on the native-windows (MinGW) build
-    struct tm *local = localtime(&utc);
-    if (!local)
+    struct tm local;
+#ifdef _WIN32
+    if (localtime_s(&local, &utc) != 0)
         return 0;
+#else
+    if (!localtime_r(&utc, &local))
+        return 0;
+#endif
     // Treat the local wall-clock fields as UTC; the difference to the real epoch is the TZ offset incl. DST.
-    return (int32_t)difftime(gm_mktime(local), utc);
+    return (int32_t)difftime(gm_mktime(&local), utc);
 }
 
 /**
