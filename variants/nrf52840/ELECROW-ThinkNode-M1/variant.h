@@ -86,6 +86,9 @@ static const uint8_t A0 = PIN_A0;
 #define PIN_WIRE_SDA (26)
 #define PIN_WIRE_SCL (27)
 
+// PCF8563 RTC Module
+#define PCF8563_RTC 0x51
+
 /* touch sensor, active high */
 
 #define TP_SER_IO (0 + 11)
