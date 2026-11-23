@@ -64,7 +64,10 @@ bool NextHopRouter::relayOpaquePacket(const meshtastic_MeshPacket *p)
     meshtastic_MeshPacket *relay = packetPool.allocCopy(*p);
     if (!relay)
         return false;
-    relay->hop_limit--;
+
+    if (shouldDecrementHopLimit(p)) {
+        relay->hop_limit--;
+    }
 #if USERPREFS_EVENT_MODE
     capEventRelayHops(relay);
 #endif
