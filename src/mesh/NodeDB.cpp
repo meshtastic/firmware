@@ -247,31 +247,31 @@ bool nv3001bPanelPresent(uint8_t cs, uint8_t sck, uint8_t mosi, uint8_t dc, uint
 namespace
 {
 #if !MESHTASTIC_EXCLUDE_POSITIONDB
-std::map<NodeNum, meshtastic_PositionLite> *s_decodePositionsTarget = nullptr;
+SatelliteMap<meshtastic_PositionLite> *s_decodePositionsTarget = nullptr;
 #endif
 #if !MESHTASTIC_EXCLUDE_TELEMETRYDB
-std::map<NodeNum, meshtastic_DeviceMetrics> *s_decodeTelemetryTarget = nullptr;
+SatelliteMap<meshtastic_DeviceMetrics> *s_decodeTelemetryTarget = nullptr;
 #endif
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTDB
-std::map<NodeNum, PackedEnvironmentMetrics> *s_decodeEnvironmentTarget = nullptr;
+SatelliteMap<PackedEnvironmentMetrics> *s_decodeEnvironmentTarget = nullptr;
 #endif
 #if !MESHTASTIC_EXCLUDE_STATUSDB
-std::map<NodeNum, meshtastic_StatusMessage> *s_decodeStatusTarget = nullptr;
+SatelliteMap<meshtastic_StatusMessage> *s_decodeStatusTarget = nullptr;
 #endif
 
 // When armed by saveNodeDatabaseToDisk, the encode callback reads satellite entries straight from these maps, so a
 // save never builds a second, contiguous copy of them. Nullptr = encode from the vectors.
 #if !MESHTASTIC_EXCLUDE_POSITIONDB
-const std::map<NodeNum, meshtastic_PositionLite> *s_encodePositionsSource = nullptr;
+const SatelliteMap<meshtastic_PositionLite> *s_encodePositionsSource = nullptr;
 #endif
 #if !MESHTASTIC_EXCLUDE_TELEMETRYDB
-const std::map<NodeNum, meshtastic_DeviceMetrics> *s_encodeTelemetrySource = nullptr;
+const SatelliteMap<meshtastic_DeviceMetrics> *s_encodeTelemetrySource = nullptr;
 #endif
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTDB
-const std::map<NodeNum, PackedEnvironmentMetrics> *s_encodeEnvironmentSource = nullptr;
+const SatelliteMap<PackedEnvironmentMetrics> *s_encodeEnvironmentSource = nullptr;
 #endif
 #if !MESHTASTIC_EXCLUDE_STATUSDB
-const std::map<NodeNum, meshtastic_StatusMessage> *s_encodeStatusSource = nullptr;
+const SatelliteMap<meshtastic_StatusMessage> *s_encodeStatusSource = nullptr;
 #endif
 
 // Keys that can never name a real node.
@@ -283,7 +283,7 @@ const std::map<NodeNum, meshtastic_StatusMessage> *s_encodeStatusSource = nullpt
 // Encode a satellite map as repeated entries, building one entry at a time on the stack.
 template <typename Entry, typename Value, typename Fill>
 [[maybe_unused]] bool encodeSatelliteMap(pb_ostream_t *ostream, const pb_field_iter_t *iter, const pb_msgdesc_t *fields,
-                                         const std::map<NodeNum, Value> &source, Fill fill)
+                                         const SatelliteMap<Value> &source, Fill fill)
 {
     for (const auto &kv : source) {
         Entry entry = {};
@@ -2114,7 +2114,7 @@ bool PackedEnvironmentMetrics::pack(const meshtastic_EnvironmentMetrics &metrics
         bytes.clear();
         return false;
     }
-    std::vector<uint8_t>(buf, buf + stream.bytes_written).swap(bytes); // exact capacity, no growth slack
+    decltype(bytes)(buf, buf + stream.bytes_written).swap(bytes); // exact capacity, no growth slack
     return true;
 }
 

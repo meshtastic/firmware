@@ -15,6 +15,7 @@
 #include "WarmNodeStore.h"
 #include "concurrency/Lock.h"
 #include "configuration.h"
+#include "memory/PsramAllocator.h"
 #include "mesh-pb-constants.h"
 #include "mesh/generated/meshtastic/mesh.pb.h" // For CriticalErrorCode
 
@@ -300,11 +301,14 @@ LoraSlotSnapshot loraSlotSnapshotFrom(const meshtastic_Config_LoRaConfig &lora, 
 /// An EnvironmentMetrics held protobuf-encoded. A real sensor sets a handful of its 38 optional fields, so this is
 /// ~15-40 B where the decoded struct is 304 B. The bytes are exactly what nodes.proto stores for the submessage.
 struct PackedEnvironmentMetrics {
-    std::vector<uint8_t> bytes;
+    std::vector<uint8_t, PsramAllocator<uint8_t>> bytes;
 
     bool pack(const meshtastic_EnvironmentMetrics &metrics);
     bool unpack(meshtastic_EnvironmentMetrics &out) const;
 };
+
+/// Satellite per-NodeNum store, PSRAM-backed on boards that have it so MAX_SATELLITE_NODES can follow the memory class.
+template <typename V> using SatelliteMap = std::map<NodeNum, V, std::less<NodeNum>, PsramAllocator<std::pair<const NodeNum, V>>>;
 
 class NodeDB
 {
@@ -325,16 +329,16 @@ class NodeDB
     // Satellite per-NodeNum maps. std::map avoids unordered_map's bucket-array
     // preallocation; O(log N) lookup is fine at these sizes.
 #if !MESHTASTIC_EXCLUDE_POSITIONDB
-    std::map<NodeNum, meshtastic_PositionLite> nodePositions;
+    SatelliteMap<meshtastic_PositionLite> nodePositions;
 #endif
 #if !MESHTASTIC_EXCLUDE_TELEMETRYDB
-    std::map<NodeNum, meshtastic_DeviceMetrics> nodeTelemetry;
+    SatelliteMap<meshtastic_DeviceMetrics> nodeTelemetry;
 #endif
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTDB
-    std::map<NodeNum, PackedEnvironmentMetrics> nodeEnvironment;
+    SatelliteMap<PackedEnvironmentMetrics> nodeEnvironment;
 #endif
 #if !MESHTASTIC_EXCLUDE_STATUSDB
-    std::map<NodeNum, meshtastic_StatusMessage> nodeStatus;
+    SatelliteMap<meshtastic_StatusMessage> nodeStatus;
 #endif
 
     bool keyIsLowEntropy = false;

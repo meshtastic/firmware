@@ -138,14 +138,14 @@ static inline int get_max_num_nodes()
 
 /// Per-map cap (position/telemetry/environment/status): only the freshest
 /// MAX_SATELLITE_NODES nodes keep satellite payloads, the rest just the
-/// NodeInfoLite header. RAM-bound (the maps are internal-SRAM, not PSRAM).
-/// ESP32-S3 keeps the constrained cap even with PSRAM because its per-entry map
-/// allocations stay internal; other large-memory hosts retain satellites for every hot node.
+/// NodeInfoLite header. MEM_CLASS_LARGE holds the maps in PSRAM (SatelliteMap's
+/// PsramAllocator) or host RAM, so it keeps satellites for every hot node; smaller
+/// classes hold them in internal SRAM and stay at 40.
 #ifndef MAX_SATELLITE_NODES
-#if MESHTASTIC_MEM_CLASS >= MEM_CLASS_LARGE && !defined(CONFIG_IDF_TARGET_ESP32S3)
+#if MESHTASTIC_MEM_CLASS >= MEM_CLASS_LARGE
 #define MAX_SATELLITE_NODES 250
 #else
-#define MAX_SATELLITE_NODES 40
+#define MAX_SATELLITE_NODES 40 // nRF52840, generic ESP32, and ESP32-S3 without PSRAM
 #endif                         // platform
 #endif                         // MAX_SATELLITE_NODES
 
