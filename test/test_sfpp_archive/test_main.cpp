@@ -191,6 +191,22 @@ meshtastic_MeshPacket makeEncryptedCopy(const meshtastic_MeshPacket &mp)
     return enc;
 }
 
+meshtastic_MeshPacket makeEncryptedCopyCCM(const meshtastic_MeshPacket &mp)
+{
+    uint8_t plain[256];
+    const size_t len = pb_encode_to_bytes(plain, sizeof(plain), &meshtastic_Data_msg, &mp.decoded);
+
+    meshtastic_MeshPacket enc = meshtastic_MeshPacket_init_zero;
+    enc.from = mp.from;
+    enc.to = mp.to;
+    enc.id = mp.id;
+    enc.channel = channels.getHash(0);
+    enc.which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
+    TEST_ASSERT_TRUE(crypto->encryptPacketCCM(channels.getKey(0), mp.from, mp.to, mp.id, len, plain, enc.encrypted.bytes));
+    enc.encrypted.size = len + CryptoEngine::AEAD_TAG_SIZE;
+    return enc;
+}
+
 meshtastic_MeshPacket makeHistoryRequest(NodeNum from, NodeNum to, PacketId id, uint32_t windowMinutes)
 {
     meshtastic_StoreAndForward request = meshtastic_StoreAndForward_init_zero;
@@ -628,6 +644,35 @@ void test_legacyHistorySkipsNonTextCiphertext()
     TEST_ASSERT_EQUAL_UINT32(0, reply.variant.history.history_messages);
 }
 
+// An AEAD primary stores CCM rows; the fallback must use the CCM path, not CTR, or the row is
+// silently dropped.
+void test_legacyHistoryDecryptsAeadPrimary()
+{
+    channels.getByIndex(0).settings.use_aead = true;
+
+    meshtastic_MeshPacket mp = makeText(REMOTE_NODE, TEXT_ID, "aead text", getValidTime(RTCQualityNTP, true));
+    meshtastic_MeshPacket enc = makeEncryptedCopyCCM(mp);
+    TEST_ASSERT_EQUAL(ProcessMessage::CONTINUE, testSfpp->ingest(mp, &enc));
+    updateStoredPayload(TEXT_ID, "");
+
+    meshtastic_MeshPacket request = makeHistoryRequest(0, LOCAL_NODE, 0x1B1B1B1B, 0);
+    TEST_ASSERT_EQUAL(ProcessMessage::STOP, testSfpp->dispatch(request));
+
+    std::vector<meshtastic_MeshPacket> phone = drainPhoneQueue();
+    TEST_ASSERT_EQUAL_UINT(1, phone.size());
+    meshtastic_StoreAndForward reply;
+    TEST_ASSERT_TRUE(decodeStoreForward(phone[0], reply));
+    TEST_ASSERT_EQUAL_UINT32(1, reply.variant.history.history_messages);
+
+    testSfpp->runOnce();
+    phone = drainPhoneQueue();
+    TEST_ASSERT_EQUAL_UINT(1, phone.size());
+    meshtastic_StoreAndForward text;
+    TEST_ASSERT_TRUE(decodeStoreForward(phone[0], text));
+    TEST_ASSERT_EQUAL_UINT32(TEXT_ID, text.original_id);
+    TEST_ASSERT_EQUAL_MEMORY("aead text", text.variant.text.bytes, text.variant.text.size);
+}
+
 // --- Coexistence with the legacy module ---
 
 // A portnum-65 packet that is not a CLIENT_HISTORY belongs to the legacy client module (heartbeats,
@@ -795,6 +840,7 @@ void setup()
     RUN_TEST(test_legacyHistoryExcludesTextsOlderThanRetention);
     RUN_TEST(test_legacyHistoryDecryptsEmptyPayloadRow);
     RUN_TEST(test_legacyHistorySkipsNonTextCiphertext);
+    RUN_TEST(test_legacyHistoryDecryptsAeadPrimary);
     RUN_TEST(test_shimPassesNonHistoryPort65ToLaterModules);
     RUN_TEST(test_shimClaimsPort65WithNoLegacyServer);
     RUN_TEST(test_shimYieldsPort65ToLegacyServer);
