@@ -56,6 +56,14 @@ static constexpr size_t kEnumTxQueueMax = 256;
 static constexpr size_t kEnumMaxRequesters = 16;
 static constexpr uint32_t kEnumRetryMs = 30 * 1000;
 
+// Stage 9: offer a scratch row once it is old enough that the authority would have announced it if
+// it had heard it; re-offer at most hourly, and bound a sweep.
+static constexpr uint32_t kScratchPushMinAgeS = 300;
+static constexpr uint32_t kScratchReofferMs = 60 * 60 * 1000;
+static constexpr size_t kEnumPushOfferedMax = 64;
+static constexpr size_t kEnumMaxKnownPeers = 16;
+static constexpr size_t kScratchPushPerSweep = 8;
+
 static uint32_t enumDrainIntervalMs()
 {
     const uint32_t configured = portduino_config.sfpp_enum_drain_ms;
@@ -688,6 +696,8 @@ int32_t StoreForwardPlusPlusModule::runOnce()
     if (portduino_config.sfpp_repair != SFPP_REPAIR_CHAIN) {
         expireEnumExchange();
         pumpEnumRetries();
+        if (!portduino_config.sfpp_stratum0)
+            pushScratchRows();
         if (drainOneEnumFrame())
             return enumDrainIntervalMs(); // serving a request takes priority over the advert cadence
         if (portduino_config.sfpp_stratum0)
@@ -2865,6 +2875,8 @@ void StoreForwardPlusPlusModule::handleEnumAdvert(const meshtastic_MeshPacket &m
     if (!sfppsr::parseAdvert(*t, advert))
         return;
 
+    enumAuthorityNode = mp.from; // the only node that advertises is the counter authority
+
     uint8_t root[SFPP_HASH_SIZE] = {0};
     bool known = lookUpFullRootHash(advert.scope.rootPrefix, advert.scope.rootPrefixLen, root);
     if (!known) {
@@ -2988,6 +3000,7 @@ void StoreForwardPlusPlusModule::handleEnumRequest(const meshtastic_MeshPacket &
     if (!lookUpFullRootHash(scope.rootPrefix, scope.rootPrefixLen, root))
         return;
 
+    noteEnumPeer(mp.from);
     logEnum("rx", "enum_req", scope, mp.decoded.payload.size, mp.from, -1, 0, 1);
 
     std::vector<pinsketch::Element> ids;
@@ -3120,6 +3133,7 @@ void StoreForwardPlusPlusModule::handleItemRequest(const meshtastic_MeshPacket &
     if (!lookUpFullRootHash(list.scope.rootPrefix, list.scope.rootPrefixLen, root))
         return;
 
+    noteEnumPeer(mp.from);
     logEnum("rx", "item_req", list.scope, mp.decoded.payload.size, mp.from, (int)list.ids.size(), 0, 1);
 
     const uint32_t first = list.scope.bucket * sfppsr::kBucketObjects + 1;
@@ -3299,10 +3313,140 @@ void StoreForwardPlusPlusModule::pumpEnumRetries()
     }
 }
 
+bool StoreForwardPlusPlusModule::isEnumKnownPeer(NodeNum node) const
+{
+    for (NodeNum peer : enumKnownPeers) {
+        if (peer == node)
+            return true;
+    }
+    return false;
+}
+
+void StoreForwardPlusPlusModule::noteEnumPeer(NodeNum node)
+{
+    if (node == 0 || node == NODENUM_BROADCAST || isEnumKnownPeer(node))
+        return;
+    if (enumKnownPeers.size() >= kEnumMaxKnownPeers)
+        enumKnownPeers.erase(enumKnownPeers.begin());
+    enumKnownPeers.push_back(node);
+}
+
+bool StoreForwardPlusPlusModule::enumAlreadyOffered(const uint8_t *hash) const
+{
+    for (const auto &entry : enumPushOffered) {
+        if (memcmp(entry.prefix, hash, sizeof(entry.prefix)) == 0)
+            return true;
+    }
+    return false;
+}
+
+void StoreForwardPlusPlusModule::noteEnumOffered(const uint8_t *hash)
+{
+    EnumPushed entry;
+    memcpy(entry.prefix, hash, sizeof(entry.prefix));
+    entry.offeredMs = Time::getMillis();
+    enumPushOffered.push_back(entry);
+    while (enumPushOffered.size() > kEnumPushOfferedMax)
+        enumPushOffered.pop_front();
+}
+
+void StoreForwardPlusPlusModule::pushScratchRows()
+{
+    if (portduino_config.sfpp_stratum0 || enumAuthorityNode == 0)
+        return;
+
+    uint8_t root[SFPP_HASH_SIZE] = {0};
+    if (!getRootFromChannelHash(channels.getHash(0), root))
+        return;
+
+    // An offer older than the reoffer window may be tried again if the row is still in scratch.
+    for (auto it = enumPushOffered.begin(); it != enumPushOffered.end();) {
+        if (Throttle::hasElapsed(it->offeredMs, kScratchReofferMs))
+            it = enumPushOffered.erase(it);
+        else
+            ++it;
+    }
+
+    const uint32_t now = getValidTime(RTCQuality::RTCQualityNTP, true);
+    sfppsr::Scope scope;
+    copyScopeRoot(root, SFPP_HASH_SIZE, scope, 0, false);
+
+    sqlite3_reset(fromScratchStmt);
+    sqlite3_bind_blob(fromScratchStmt, 1, root, SFPP_HASH_SIZE, NULL);
+
+    size_t queued = 0;
+    while (queued < kScratchPushPerSweep && sqlite3_step(fromScratchStmt) == SQLITE_ROW) {
+        const uint32_t to = (uint32_t)sqlite3_column_int64(fromScratchStmt, 0);
+        const uint32_t from = (uint32_t)sqlite3_column_int64(fromScratchStmt, 1);
+        const uint32_t id = (uint32_t)sqlite3_column_int64(fromScratchStmt, 2);
+        const uint8_t *cipher = (const uint8_t *)sqlite3_column_blob(fromScratchStmt, 3);
+        const int cipherLen = sqlite3_column_bytes(fromScratchStmt, 3);
+        const uint8_t *hash = (const uint8_t *)sqlite3_column_blob(fromScratchStmt, 4);
+        const uint32_t rxTime = (uint32_t)sqlite3_column_int64(fromScratchStmt, 5);
+
+        if (cipher == nullptr || cipherLen <= 0 || hash == nullptr)
+            continue;
+        if (rxTime > now || now - rxTime < kScratchPushMinAgeS)
+            continue; // too young: the authority may still hear it live and announce it
+        if (enumAlreadyOffered(hash))
+            continue;
+
+        const uint32_t heardAgo = now - rxTime;
+        std::vector<meshtastic_StoreForwardPlusPlus> frames;
+        if (!sfppframe::split(cipher, (size_t)cipherLen, to, from, id, heardAgo, false, frames))
+            continue;
+        queueItemFrames(frames, enumAuthorityNode, scope);
+        noteEnumOffered(hash);
+        queued++;
+    }
+    sqlite3_reset(fromScratchStmt);
+
+    if (queued > 0)
+        setIntervalFromNow(10); // the first offered frame drains on the next tick
+}
+
+bool StoreForwardPlusPlusModule::acceptPushedItemFrame(const meshtastic_MeshPacket &mp, meshtastic_StoreForwardPlusPlus *t)
+{
+    sfppframe::Replay replay;
+    if (!enumPushReassembler.offer(*t, Time::getMillis(), replay))
+        return false;
+
+    uint8_t root[SFPP_HASH_SIZE] = {0};
+    if (!getRootFromChannelHash(channels.getHash(0), root))
+        return false;
+
+    link_object lo;
+    if (replay.ciphertext.size() > sizeof(lo.encrypted_bytes))
+        return false;
+
+    lo.to = replay.to;
+    lo.from = replay.from;
+    lo.id = replay.id;
+    const uint32_t now = getValidTime(RTCQuality::RTCQualityNTP, true);
+    lo.rx_time = replay.heardAgoS <= now ? now - replay.heardAgoS : now;
+    memcpy(lo.root_hash, root, SFPP_HASH_SIZE);
+    lo.root_hash_len = SFPP_HASH_SIZE;
+    lo.channel_hash = channels.getHash(0);
+    lo.encrypted_len = replay.ciphertext.size();
+    memcpy(lo.encrypted_bytes, replay.ciphertext.data(), replay.ciphertext.size());
+    sfppframe::messageHash(lo.encrypted_bytes, lo.encrypted_len, lo.to, lo.from, lo.id, lo.message_hash);
+    lo.message_hash_len = SFPP_HASH_SIZE;
+    lo.counter = 0; // 0 tells addToChain to append at the tip
+
+    if (isInDB(lo.message_hash, lo.message_hash_len))
+        return true; // already committed, maybe by another follower's push
+    LOG_INFO("StoreForwardpp committing a writer-missed text from 0x%08x", mp.from);
+    return addToChain(lo);
+}
+
 void StoreForwardPlusPlusModule::handleItemFrame(const meshtastic_MeshPacket &mp, meshtastic_StoreForwardPlusPlus *t)
 {
-    if (!enumExchangeActive || mp.from != enumExchangePeer)
+    if (!enumExchangeActive || mp.from != enumExchangePeer) {
+        // A writer-missed offer from a known archive peer, addressed to this authority.
+        if (mp.to == nodeDB->getNodeNum() && isEnumKnownPeer(mp.from))
+            acceptPushedItemFrame(mp, t);
         return;
+    }
 
     enumExchangeStartedMs = Time::getMillis();
     enumRequestSentMs = enumExchangeStartedMs;
@@ -3397,6 +3541,8 @@ bool StoreForwardPlusPlusModule::storeRecoveredObject(const sfppframe::Replay &r
         LOG_ERROR("StoreForwardpp cannot store a recovered object: %s", sqlite3_errmsg(ppDb));
         return false;
     }
+    // The object is canonical now, so a scratch copy (a writer-missed offer) is no longer needed.
+    removeFromScratch(hash, SFPP_HASH_SIZE);
     return true;
 }
 

@@ -237,6 +237,14 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     void resendItemRequest();
     bool anyEnumQueuePending() const;
 
+    // Stage 9: a follower offers scratch rows to the authority, which is the only counter authority.
+    void pushScratchRows();
+    bool acceptPushedItemFrame(const meshtastic_MeshPacket &mp, meshtastic_StoreForwardPlusPlus *t);
+    bool isEnumKnownPeer(NodeNum node) const;
+    void noteEnumPeer(NodeNum node);
+    bool enumAlreadyOffered(const uint8_t *hash) const;
+    void noteEnumOffered(const uint8_t *hash);
+
     // For a given Meshtastic ChannelHash, fills the root_hash buffer with a 32-byte root hash
     // returns true if the root hash was found
     bool getRootFromChannelHash(ChannelHash, uint8_t *);
@@ -459,6 +467,16 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     uint8_t enumListRetries = 0;
     uint8_t enumItemRetries = 0;
     uint32_t enumRequestSentMs = 0;
+
+    // Stage 9: writer-missed pushes.
+    NodeNum enumAuthorityNode = 0;
+    std::vector<NodeNum> enumKnownPeers;
+    sfppframe::Reassembler enumPushReassembler;
+    struct EnumPushed {
+        uint8_t prefix[8];
+        uint32_t offeredMs;
+    };
+    std::deque<EnumPushed> enumPushOffered;
 };
 
 extern StoreForwardPlusPlusModule *storeForwardPlusPlusModule;

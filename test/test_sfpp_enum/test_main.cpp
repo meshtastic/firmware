@@ -574,12 +574,12 @@ struct Exchange {
     uint32_t maxFramesPerDrain = 0;
 };
 
-Exchange runExchange()
+Exchange runExchangeFor(TestSfppModule *requester, NodeNum node)
 {
     Exchange result;
     meshtastic_MeshPacket advert = runAuthorityOnce();
 
-    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
+    TEST_ASSERT_TRUE(deliver(requester, node, false, advert));
     result.followerSends = takeSent();
     if (result.followerSends.empty())
         return result; // in sync, nothing to pull
@@ -594,7 +594,7 @@ Exchange runExchange()
     TEST_ASSERT_EQUAL_UINT(1, provides.size());
     TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_PROVIDE, decodeSfpp(provides[0]).sfpp_message_type);
 
-    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, provides[0]));
+    TEST_ASSERT_TRUE(deliver(requester, node, false, provides[0]));
     std::vector<meshtastic_MeshPacket> requests = takeSent();
     for (const auto &request : requests)
         if (decodeSfpp(request).sfpp_message_type == meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_REQUEST)
@@ -621,11 +621,16 @@ Exchange runExchange()
             result.maxFramesPerDrain = (uint32_t)sent.size();
         for (const auto &frame : sent) {
             TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_FRAME, decodeSfpp(frame).sfpp_message_type);
-            TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, frame));
+            TEST_ASSERT_TRUE(deliver(requester, node, false, frame));
             result.itemFrames++;
         }
     }
     return result;
+}
+
+Exchange runExchange()
+{
+    return runExchangeFor(follower, FOLLOWER_NODE);
 }
 
 void assertConverged()
@@ -1316,6 +1321,78 @@ void test_sketchWrongChecksumFallsBack()
     TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_REQUEST, decodeSfpp(fallback[0]).sfpp_message_type);
 }
 
+// --- Stage 9: writer-missed recovery ---
+
+void ingestScratchText(TestSfppModule *module, NodeNum node, NodeNum from, PacketId id, const char *text, uint32_t ageS)
+{
+    meshtastic_MeshPacket mp = makeText(from, id, text, getValidTime(RTCQualityNTP, true) - ageS);
+    meshtastic_MeshPacket enc = makeEncryptedCopy(mp);
+    myNodeInfo.my_node_num = node;
+    portduino_config.sfpp_stratum0 = false;
+    TEST_ASSERT_EQUAL(ProcessMessage::CONTINUE, module->ingest(mp, &enc));
+}
+
+void test_writerMissedIsPushedAndSecondFollowerConverges()
+{
+    ingestAuthority(1); // the authority has one text and a root
+
+    // The follower is a copy missing that text; a normal exchange makes it a known peer and gives
+    // it the root.
+    TEST_ASSERT_TRUE(copyDb(dirA, dirB));
+    TEST_ASSERT_TRUE(deleteCounter(dirB, 1));
+    portduino_config.sfpp_db_path = dirB + "/";
+    portduino_config.sfpp_stratum0 = false;
+    follower = new TestSfppModule();
+    Exchange first = runExchange();
+    TEST_ASSERT_EQUAL_UINT(1, first.itemFrames);
+
+    // A second follower taken before the writer-missed texts.
+    TEST_ASSERT_TRUE(copyDb(dirA, dirC));
+    portduino_config.sfpp_db_path = dirC + "/";
+    portduino_config.sfpp_stratum0 = false;
+    follower2 = new TestSfppModule();
+
+    // The follower hears five texts the authority did not.
+    for (uint32_t i = 0; i < 5; i++) {
+        char text[24];
+        snprintf(text, sizeof(text), "writer missed %u", i);
+        ingestScratchText(follower, FOLLOWER_NODE, SENDER_NODE, 0x6000 + i, text, 301);
+    }
+
+    // An advert teaches the follower the authority's node; it is in sync, so it does not pull.
+    meshtastic_MeshPacket advert = runAuthorityOnce();
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
+    TEST_ASSERT_EQUAL_UINT(0, takeSent().size());
+
+    uint32_t pushed = 0;
+    for (uint32_t guard = 0; guard < 64 && pushed < 5; guard++) {
+        Time::setTestMillis(Time::getMillis() + 2000);
+        myNodeInfo.my_node_num = FOLLOWER_NODE;
+        portduino_config.sfpp_stratum0 = false;
+        testRouter->sent.clear();
+        follower->runOnce();
+        std::vector<meshtastic_MeshPacket> sent = takeSent();
+        for (const auto &frame : sent) {
+            if (decodeSfpp(frame).sfpp_message_type != meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_FRAME)
+                continue;
+            TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, true, frame));
+            pushed++;
+        }
+    }
+    TEST_ASSERT_EQUAL_UINT(5, pushed);
+    TEST_ASSERT_EQUAL_UINT32(6, readBucket(dirA, 1, sfppsr::kBucketObjects).count); // 1 live + 5 pushed
+
+    // The second follower now converges through the ordinary exchange.
+    Exchange second = runExchangeFor(follower2, FOLLOWER2_NODE);
+    TEST_ASSERT_EQUAL_UINT(1, second.itemRequests);
+    TEST_ASSERT_EQUAL_UINT(5, second.itemFrames);
+
+    const BucketView a = readBucket(dirA, 1, sfppsr::kBucketObjects);
+    const BucketView c = readBucket(dirC, 1, sfppsr::kBucketObjects);
+    TEST_ASSERT_EQUAL_UINT32(a.count, c.count);
+    TEST_ASSERT_EQUAL_UINT64(a.checksum, c.checksum);
+}
+
 void loop() {}
 
 void setup()
@@ -1345,6 +1422,7 @@ void setup()
     RUN_TEST(test_sketchWrongDecodeFallsBackAfterRetries);
     RUN_TEST(test_sketchCountMismatchFallsBackImmediately);
     RUN_TEST(test_sketchWrongChecksumFallsBack);
+    RUN_TEST(test_writerMissedIsPushedAndSecondFollowerConverges);
     UNITY_END();
 }
 
