@@ -93,6 +93,11 @@ class CapturingRouter : public Router
             return ERRNO_NO_INTERFACES;
         }
         sent.push_back(*p);
+        if (freeOnSend) {
+            // A real radio takes ownership and may free the packet during send.
+            packetPool.release(p);
+            return ERRNO_OK;
+        }
         owned.push_back(p);
         return ERRNO_OK;
     }
@@ -101,6 +106,7 @@ class CapturingRouter : public Router
     std::vector<meshtastic_MeshPacket *> owned;
     int rejectNext = 0;
     uint32_t rejected = 0;
+    bool freeOnSend = false;
 };
 
 class TestRoutingModule : public RoutingModule
@@ -432,7 +438,8 @@ BucketView readBucket(const std::string &dir, uint32_t first, uint32_t last)
 
 // Builds an advert from a directory's stored bucket, optionally with a corrupted checksum, so a
 // test can force the sketch decode to be contradicted.
-bool buildAdvertFromDir(const std::string &dir, uint32_t bucket, bool corruptChecksum, meshtastic_MeshPacket &out)
+bool buildAdvertFromDir(const std::string &dir, uint32_t bucket, bool corruptChecksum, meshtastic_MeshPacket &out,
+                        bool fullRoot = false)
 {
     uint8_t root[SFPP_HASH_SIZE];
     if (!readRoot(dir, root))
@@ -459,8 +466,8 @@ bool buildAdvertFromDir(const std::string &dir, uint32_t bucket, bool corruptChe
     sqlite3_close(db);
 
     sfppsr::Scope scope;
-    scope.rootPrefixLen = 4;
-    memcpy(scope.rootPrefix, root, 4);
+    scope.rootPrefixLen = fullRoot ? SFPP_HASH_SIZE : 4;
+    memcpy(scope.rootPrefix, root, scope.rootPrefixLen);
     scope.bucket = bucket;
 
     meshtastic_StoreForwardPlusPlus msg;
@@ -574,6 +581,8 @@ struct Exchange {
     uint32_t maxFramesPerDrain = 0;
 };
 
+std::vector<meshtastic_MeshPacket> drainAuthorityOne(uint32_t advanceMs);
+
 Exchange runExchangeFor(TestSfppModule *requester, NodeNum node)
 {
     Exchange result;
@@ -590,7 +599,7 @@ Exchange runExchangeFor(TestSfppModule *requester, NodeNum node)
     result.enumRequests = (uint32_t)result.followerSends.size();
 
     TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, true, result.followerSends[0]));
-    std::vector<meshtastic_MeshPacket> provides = takeSent();
+    std::vector<meshtastic_MeshPacket> provides = drainAuthorityOne(2000); // N6: the provide is queued too
     TEST_ASSERT_EQUAL_UINT(1, provides.size());
     TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_PROVIDE, decodeSfpp(provides[0]).sfpp_message_type);
 
@@ -651,8 +660,9 @@ void driveToItemRequest(TestSfppModule *requester, NodeNum requesterNode)
     TEST_ASSERT_EQUAL_UINT(1, requests.size());
     TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, true, requests[0]));
 
-    std::vector<meshtastic_MeshPacket> provides = takeSent();
+    std::vector<meshtastic_MeshPacket> provides = drainAuthorityOne(2000); // N6: the provide is queued
     TEST_ASSERT_EQUAL_UINT(1, provides.size());
+    TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_PROVIDE, decodeSfpp(provides[0]).sfpp_message_type);
     TEST_ASSERT_TRUE(deliver(requester, requesterNode, false, provides[0]));
 
     std::vector<meshtastic_MeshPacket> wanted = takeSent();
@@ -1003,14 +1013,16 @@ void test_advertUsesFourByteRootPrefix()
 }
 
 // G21: a queued frame goes on the next drain tick without waiting out a full interval.
-void test_firstItemFrameGoesWithoutWaiting()
+// G21 + N7: the first item frame goes on the next paced drain step, sharing the one last-send
+// timestamp with the provide that was just served.
+void test_firstItemFrameDrainsOnNextStep()
 {
     ingestAuthority(2);
     buildFollowerFromCopy();
     TEST_ASSERT_TRUE(deleteCounter(dirB, 2));
     driveToItemRequest(follower, FOLLOWER_NODE);
 
-    std::vector<meshtastic_MeshPacket> sent = drainAuthorityOne(0);
+    std::vector<meshtastic_MeshPacket> sent = drainAuthorityOne(2000);
     TEST_ASSERT_EQUAL_UINT(1, sent.size());
     TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_FRAME, decodeSfpp(sent[0]).sfpp_message_type);
 }
@@ -1080,11 +1092,16 @@ void test_twoRequestersBothComplete()
     TEST_ASSERT_EQUAL_UINT(1, cRequest.size());
 
     TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, true, bRequest[0]));
-    std::vector<meshtastic_MeshPacket> bProvide = takeSent();
-    TEST_ASSERT_EQUAL_UINT(1, bProvide.size());
     TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, true, cRequest[0]));
-    std::vector<meshtastic_MeshPacket> cProvide = takeSent();
+    // N6: both provides are queued and drained round-robin, one per step.
+    std::vector<meshtastic_MeshPacket> bProvide = drainAuthorityOne(2000);
+    TEST_ASSERT_EQUAL_UINT(1, bProvide.size());
+    TEST_ASSERT_EQUAL(FOLLOWER_NODE, bProvide[0].to);
+    TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_PROVIDE, decodeSfpp(bProvide[0]).sfpp_message_type);
+    std::vector<meshtastic_MeshPacket> cProvide = drainAuthorityOne(2000);
     TEST_ASSERT_EQUAL_UINT(1, cProvide.size());
+    TEST_ASSERT_EQUAL(FOLLOWER2_NODE, cProvide[0].to);
+    TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_PROVIDE, decodeSfpp(cProvide[0]).sfpp_message_type);
 
     TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, bProvide[0]));
     std::vector<meshtastic_MeshPacket> bItem = takeSent();
@@ -1232,6 +1249,66 @@ void test_sketchCountMismatchFallsBackImmediately()
     std::vector<meshtastic_MeshPacket> sent = takeSent();
     TEST_ASSERT_EQUAL_UINT(1, sent.size());
     TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_REQUEST, decodeSfpp(sent[0]).sfpp_message_type);
+}
+
+// --- Stage 8c robustness ---
+
+// N1: sendToMesh may free the packet during send; the module must not touch it afterwards. Run
+// this under -e coverage (ASan) to catch a use-after-free.
+void test_sendFreesPacketSafely()
+{
+    ingestAuthority(2);
+    buildFollowerFromCopy();
+    TEST_ASSERT_TRUE(deleteCounter(dirB, 2));
+    testRouter->freeOnSend = true; // every send frees the packet, as a real radio may
+
+    Exchange exchange = runExchange();
+    TEST_ASSERT_EQUAL_UINT(1, exchange.itemFrames);
+    assertConverged();
+}
+
+// N3: a blank follower (no root) joins from a full-root advert, then pulls normally.
+void test_blankFollowerAdoptsFullRootAdvert()
+{
+    ingestAuthority(3);
+
+    // A fresh store: no rows and no root.
+    portduino_config.sfpp_db_path = dirB + "/";
+    portduino_config.sfpp_stratum0 = false;
+    follower = new TestSfppModule();
+
+    meshtastic_MeshPacket advert;
+    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, 0, false, advert, true));
+    TEST_ASSERT_EQUAL_UINT(SFPP_HASH_SIZE, decodeSfpp(advert).root_hash.size);
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
+
+    std::vector<meshtastic_MeshPacket> requests = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, requests.size());
+    TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_REQUEST, decodeSfpp(requests[0]).sfpp_message_type);
+    TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, true, requests[0]));
+
+    std::vector<meshtastic_MeshPacket> provides = drainAuthorityOne(2000);
+    TEST_ASSERT_EQUAL_UINT(1, provides.size());
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, provides[0]));
+
+    std::vector<meshtastic_MeshPacket> items = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, items.size());
+    TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, true, items[0]));
+
+    uint32_t frames = 0;
+    for (uint32_t guard = 0; guard < 32; guard++) {
+        std::vector<meshtastic_MeshPacket> out = drainAuthorityOne(2000);
+        if (out.empty())
+            continue;
+        if (decodeSfpp(out[0]).sfpp_message_type != meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_FRAME)
+            break;
+        for (const auto &frame : out) {
+            TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, frame));
+            frames++;
+        }
+    }
+    TEST_ASSERT_EQUAL_UINT(3, frames);
+    assertConverged();
 }
 
 // --- Stage 8: sketch mode ---
@@ -1412,10 +1489,12 @@ void setup()
     RUN_TEST(test_oversizedItemRequestIsRefused);
     RUN_TEST(test_unknownShortIdRequestServesNothing);
     RUN_TEST(test_advertUsesFourByteRootPrefix);
-    RUN_TEST(test_firstItemFrameGoesWithoutWaiting);
+    RUN_TEST(test_firstItemFrameDrainsOnNextStep);
     RUN_TEST(test_rejectedItemFrameIsRequeued);
     RUN_TEST(test_lostItemFrameIsRetried);
     RUN_TEST(test_twoRequestersBothComplete);
+    RUN_TEST(test_sendFreesPacketSafely);
+    RUN_TEST(test_blankFollowerAdoptsFullRootAdvert);
     RUN_TEST(test_sketchResolvesOne);
     RUN_TEST(test_sketchResolvesFour);
     RUN_TEST(test_sketchFallsBackAtSixteen);
