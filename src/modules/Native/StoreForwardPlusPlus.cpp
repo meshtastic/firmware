@@ -873,7 +873,10 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
 {
     if (portduino_config.sfpp_repair == SFPP_REPAIR_ENUM) {
         expireEnumExchange();
-        if (sfppsr::isSetReconciliationType(t->sfpp_message_type)) {
+        // ITEM_FRAME (13) is newer than the ADVERT..GONE helper range, so it is named explicitly.
+        const bool srType = sfppsr::isSetReconciliationType(t->sfpp_message_type) ||
+                            t->sfpp_message_type == meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_FRAME;
+        if (srType) {
             switch (t->sfpp_message_type) {
             case meshtastic_StoreForwardPlusPlus_SFPP_message_type_ADVERT:
                 handleEnumAdvert(mp, t);
@@ -900,7 +903,8 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
 
     // Set-reconciliation traffic is inert while the chain is the repair path, and a chain message
     // carrying its fields is the overloading the wire format refuses.
-    if (sfppsr::isSetReconciliationType(t->sfpp_message_type))
+    if (sfppsr::isSetReconciliationType(t->sfpp_message_type) ||
+        t->sfpp_message_type == meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_FRAME)
         return true;
     if (sfppsr::hasSetReconciliationFields(*t)) {
         LOG_WARN("StoreForwardpp chain message carries set-reconciliation fields, dropping");
