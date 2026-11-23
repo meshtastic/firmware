@@ -31,7 +31,10 @@
 #endif
 
 /// Consecutive below-cutoff readings needed before the low-battery deep sleep fires.
-static constexpr uint8_t LOW_VOLTAGE_READINGS_BEFORE_SHUTDOWN = 10;
+#ifndef LOW_VOLTAGE_SHUTDOWN_READINGS
+#define LOW_VOLTAGE_SHUTDOWN_READINGS 10
+#endif
+static constexpr uint8_t LOW_VOLTAGE_READINGS_BEFORE_SHUTDOWN = LOW_VOLTAGE_SHUTDOWN_READINGS;
 
 /// Advance the low-battery shutdown counter by one reading; true once the device should deep sleep.
 bool updateLowVoltageCounter(uint8_t &counter, bool hasBattery, bool hasUsb, uint16_t battMv, uint16_t cutoffMv);
