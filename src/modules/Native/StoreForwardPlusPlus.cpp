@@ -2727,6 +2727,8 @@ void StoreForwardPlusPlusModule::beginEnumExchange(const uint8_t *root_hash, uin
     enumPeerCount = peerCount;
     enumPeerChecksum = peerChecksum;
     enumCollisionProbe = false;
+    enumSketchAttempt = false;
+    enumSketchIds = 0;
     enumLastItemMs = enumExchangeStartedMs;
     enumAwaitingList = true;
     enumListRetries = 0;
@@ -2753,6 +2755,8 @@ void StoreForwardPlusPlusModule::endEnumExchange()
     enumExchangeActive = false;
     enumProvideActive = false;
     enumCollisionProbe = false;
+    enumSketchAttempt = false;
+    enumSketchIds = 0;
     enumAwaitingList = false;
     enumListRetries = 0;
     enumItemRetries = 0;
@@ -2898,7 +2902,55 @@ void StoreForwardPlusPlusModule::handleEnumAdvert(const meshtastic_MeshPacket &m
         return;
 
     beginEnumExchange(root, advert.scope.bucket, mp.from, advert.count, advert.checksum);
+    if (portduino_config.sfpp_repair == SFPP_REPAIR_SKETCH &&
+        trySketchExchange(advert, local, root, advert.scope.bucket, mp.from))
+        return;
     requestEnumList(root, advert.scope.bucket, mp.from);
+}
+
+bool StoreForwardPlusPlusModule::trySketchExchange(const sfppsr::Advert &advert, sfppsr::BucketSummary &local,
+                                                   const uint8_t *root_hash, uint32_t bucket, NodeNum peer)
+{
+    char rootHex[9];
+    formatRootHex(root_hash, SFPP_HASH_SIZE, rootHex);
+
+    std::vector<pinsketch::Element> difference;
+    if (!local.difference(advert.sketch, difference)) {
+        LOG_INFO("SFPP-ENUM type=sketch_decode result=fail root=%s bucket=%u peer=0x%08x ids=0", rootHex, bucket, peer);
+        return false;
+    }
+
+    std::vector<pinsketch::Element> own;
+    collectBucketIds(root_hash, SFPP_HASH_SIZE, bucket, own);
+    std::sort(own.begin(), own.end());
+    own.erase(std::unique(own.begin(), own.end()), own.end());
+
+    // The decoded set is the symmetric difference; what we lack is what to fetch.
+    std::vector<pinsketch::Element> missing;
+    std::set_difference(difference.begin(), difference.end(), own.begin(), own.end(), std::back_inserter(missing));
+    if (missing.empty()) {
+        LOG_INFO("SFPP-ENUM type=sketch_decode result=bad_checksum root=%s bucket=%u peer=0x%08x ids=0", rootHex, bucket, peer);
+        return false;
+    }
+
+    enumSketchAttempt = true;
+    enumSketchIds = (uint32_t)missing.size();
+    LOG_INFO("SFPP-ENUM type=sketch_decode result=ok root=%s bucket=%u peer=0x%08x ids=%u", rootHex, bucket, peer, enumSketchIds);
+    requestMissingItems(root_hash, bucket, peer, missing);
+    return true;
+}
+
+void StoreForwardPlusPlusModule::fallbackToEnumList()
+{
+    enumSketchAttempt = false;
+    enumSketchIds = 0;
+    enumWanted.clear();
+    enumWantedRemaining = 0;
+    enumProvideActive = false;
+    enumCollisionProbe = false;
+    enumListRetries = 0;
+    enumItemRetries = 0;
+    requestEnumList(enumExchangeRoot, enumExchangeBucket, enumExchangePeer);
 }
 
 void StoreForwardPlusPlusModule::requestEnumList(const uint8_t *root_hash, uint32_t bucket, NodeNum peer)
@@ -3277,8 +3329,23 @@ void StoreForwardPlusPlusModule::handleItemFrame(const meshtastic_MeshPacket &mp
 
     enumWanted.erase(it);
     enumWantedRemaining = enumWanted.size();
-    if (enumWanted.empty())
-        endEnumExchange();
+    if (!enumWanted.empty())
+        return;
+
+    if (enumSketchAttempt) {
+        enumSketchAttempt = false;
+        if (bucketMatchesPeer(enumExchangeRoot, enumExchangeBucket)) {
+            endEnumExchange();
+        } else {
+            char rootHex[9];
+            formatRootHex(enumExchangeRoot, SFPP_HASH_SIZE, rootHex);
+            LOG_INFO("SFPP-ENUM type=sketch_decode result=bad_checksum root=%s bucket=%u peer=0x%08x ids=%u", rootHex,
+                     enumExchangeBucket, enumExchangePeer, enumSketchIds);
+            fallbackToEnumList();
+        }
+        return;
+    }
+    endEnumExchange();
 }
 
 bool StoreForwardPlusPlusModule::storeRecoveredObject(const sfppframe::Replay &replay, const uint8_t *root_hash, uint32_t bucket)

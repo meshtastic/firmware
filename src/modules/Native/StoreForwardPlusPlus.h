@@ -208,6 +208,9 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     void suppressEnumBucket(const uint8_t *root_hash, uint32_t bucket, uint32_t count, uint64_t checksum);
 
     void handleEnumAdvert(const meshtastic_MeshPacket &mp, meshtastic_StoreForwardPlusPlus *t);
+    bool trySketchExchange(const sfppsr::Advert &advert, sfppsr::BucketSummary &local, const uint8_t *root_hash, uint32_t bucket,
+                           NodeNum peer);
+    void fallbackToEnumList();
     void handleEnumRequest(const meshtastic_MeshPacket &mp, meshtastic_StoreForwardPlusPlus *t);
     void handleEnumProvide(const meshtastic_MeshPacket &mp, meshtastic_StoreForwardPlusPlus *t);
     void handleItemRequest(const meshtastic_MeshPacket &mp, meshtastic_StoreForwardPlusPlus *t);
@@ -434,6 +437,8 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     uint32_t enumPeerCount = 0;
     uint64_t enumPeerChecksum = 0;
     bool enumCollisionProbe = false;
+    bool enumSketchAttempt = false;
+    uint32_t enumSketchIds = 0;
     uint32_t enumLastItemMs = 0;
 
     // A bucket whose short-ID lists match but whose checksum never does is not pulled again until

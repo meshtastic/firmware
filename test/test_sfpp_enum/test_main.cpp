@@ -430,6 +430,56 @@ BucketView readBucket(const std::string &dir, uint32_t first, uint32_t last)
     return view;
 }
 
+// Builds an advert from a directory's stored bucket, optionally with a corrupted checksum, so a
+// test can force the sketch decode to be contradicted.
+bool buildAdvertFromDir(const std::string &dir, uint32_t bucket, bool corruptChecksum, meshtastic_MeshPacket &out)
+{
+    uint8_t root[SFPP_HASH_SIZE];
+    if (!readRoot(dir, root))
+        return false;
+
+    sfppsr::BucketSummary summary(4);
+    sqlite3 *db = nullptr;
+    if (!openDb(dir, &db))
+        return false;
+    sqlite3_stmt *stmt = nullptr;
+    const uint32_t first = bucket * sfppsr::kBucketObjects + 1;
+    const uint32_t last = first + sfppsr::kBucketObjects - 1;
+    if (sqlite3_prepare_v2(db,
+                           "select short_id, checksum from channel_messages where counter>=? and counter<=? and short_id is not "
+                           "null;",
+                           -1, &stmt, nullptr) == SQLITE_OK) {
+        sqlite3_bind_int(stmt, 1, (int)first);
+        sqlite3_bind_int(stmt, 2, (int)last);
+        while (sqlite3_step(stmt) == SQLITE_ROW)
+            summary.add((pinsketch::Element)sqlite3_column_int64(stmt, 0), (uint64_t)sqlite3_column_int64(stmt, 1));
+    }
+    if (stmt)
+        sqlite3_finalize(stmt);
+    sqlite3_close(db);
+
+    sfppsr::Scope scope;
+    scope.rootPrefixLen = 4;
+    memcpy(scope.rootPrefix, root, 4);
+    scope.bucket = bucket;
+
+    meshtastic_StoreForwardPlusPlus msg;
+    if (!sfppsr::buildAdvert(scope, summary, msg))
+        return false;
+    if (corruptChecksum)
+        msg.sr_checksum ^= 1;
+
+    out = meshtastic_MeshPacket_init_zero;
+    out.from = AUTHORITY_NODE;
+    out.to = NODENUM_BROADCAST;
+    out.channel = 0;
+    out.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    out.decoded.portnum = meshtastic_PortNum_STORE_FORWARD_PLUSPLUS_APP;
+    out.decoded.payload.size = pb_encode_to_bytes(out.decoded.payload.bytes, sizeof(out.decoded.payload.bytes),
+                                                  &meshtastic_StoreForwardPlusPlus_msg, &msg);
+    return out.decoded.payload.size > 0;
+}
+
 uint32_t countRows(const std::string &dir, PacketId id)
 {
     sqlite3 *db = nullptr;
@@ -1070,6 +1120,93 @@ void test_twoRequestersBothComplete()
     TEST_ASSERT_EQUAL_UINT64(a.checksum, c.checksum);
 }
 
+// --- Stage 8: sketch mode ---
+
+void runSketchCase(uint32_t total, uint32_t missing)
+{
+    portduino_config.sfpp_repair = SFPP_REPAIR_SKETCH;
+    ingestAuthority(total);
+    buildFollowerFromCopy();
+    TEST_ASSERT_TRUE(deleteCounterRange(dirB, total - missing + 1, total));
+
+    meshtastic_MeshPacket advert = runAuthorityOnce();
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
+    std::vector<meshtastic_MeshPacket> sent = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, sent.size());
+    TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_REQUEST, decodeSfpp(sent[0]).sfpp_message_type);
+    TEST_ASSERT_EQUAL_UINT(missing, (uint32_t)decodeSfpp(sent[0]).sr_short_ids_count);
+
+    TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, true, sent[0]));
+    TEST_ASSERT_EQUAL_UINT(0, takeSent().size());
+
+    uint32_t frames = 0;
+    for (uint32_t guard = 0; guard < 64; guard++) {
+        std::vector<meshtastic_MeshPacket> out = drainAuthorityOne(2000);
+        if (out.empty())
+            continue;
+        if (decodeSfpp(out[0]).sfpp_message_type != meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_FRAME)
+            break; // the advert that follows the drained queue
+        for (const auto &frame : out) {
+            TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, frame));
+            frames++;
+        }
+    }
+    TEST_ASSERT_EQUAL_UINT(missing, frames);
+    assertConverged();
+}
+
+// A small difference resolves from the capacity-4 sketch with no list exchange.
+void test_sketchResolvesOne()
+{
+    runSketchCase(20, 1);
+}
+
+void test_sketchResolvesFour()
+{
+    runSketchCase(20, 4);
+}
+
+// More than four differences cannot decode, so the list exchange takes over.
+void test_sketchFallsBackAtSixteen()
+{
+    portduino_config.sfpp_repair = SFPP_REPAIR_SKETCH;
+    ingestAuthority(20);
+    buildFollowerFromCopy();
+    TEST_ASSERT_TRUE(deleteCounterRange(dirB, 5, 20));
+
+    Exchange exchange = runExchange();
+    TEST_ASSERT_EQUAL_UINT(1, exchange.enumRequests);
+    TEST_ASSERT_EQUAL_UINT(1, exchange.itemRequests);
+    TEST_ASSERT_EQUAL_UINT(16, exchange.itemFrames);
+    assertConverged();
+}
+
+// A sketch that decodes to the right IDs but whose advert checksum lies is caught after the fetch
+// and falls back to the list exchange.
+void test_sketchWrongChecksumFallsBack()
+{
+    portduino_config.sfpp_repair = SFPP_REPAIR_SKETCH;
+    ingestAuthority(8);
+    buildFollowerFromCopy();
+    TEST_ASSERT_TRUE(deleteCounter(dirB, 8));
+
+    meshtastic_MeshPacket advert;
+    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, 0, true, advert));
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
+    std::vector<meshtastic_MeshPacket> sent = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, sent.size());
+    TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_REQUEST, decodeSfpp(sent[0]).sfpp_message_type);
+
+    TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, true, sent[0]));
+    std::vector<meshtastic_MeshPacket> frame = drainAuthorityOne(2000);
+    TEST_ASSERT_EQUAL_UINT(1, frame.size());
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, frame[0]));
+
+    std::vector<meshtastic_MeshPacket> fallback = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, fallback.size());
+    TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_REQUEST, decodeSfpp(fallback[0]).sfpp_message_type);
+}
+
 void loop() {}
 
 void setup()
@@ -1093,6 +1230,10 @@ void setup()
     RUN_TEST(test_rejectedItemFrameIsRequeued);
     RUN_TEST(test_lostItemFrameIsRetried);
     RUN_TEST(test_twoRequestersBothComplete);
+    RUN_TEST(test_sketchResolvesOne);
+    RUN_TEST(test_sketchResolvesFour);
+    RUN_TEST(test_sketchFallsBackAtSixteen);
+    RUN_TEST(test_sketchWrongChecksumFallsBack);
     UNITY_END();
 }
 

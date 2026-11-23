@@ -59,7 +59,7 @@ inline const std::unordered_map<std::string, std::string> configProducts = {
 enum screen_modules { no_screen, x11, fb, st7789, st7735, st7735s, st7796, ili9341, ili9342, ili9486, ili9488, hx8357d, hub75 };
 enum touchscreen_modules { no_touchscreen, xpt2046, stmpe610, gt911, ft5x06 };
 // SF++ repair path. chain keeps today's behaviour; enum is the arm C measurement baseline.
-enum sfpp_repair_mode { SFPP_REPAIR_CHAIN, SFPP_REPAIR_ENUM };
+enum sfpp_repair_mode { SFPP_REPAIR_CHAIN, SFPP_REPAIR_ENUM, SFPP_REPAIR_SKETCH };
 enum portduino_log_level { level_error, level_warn, level_info, level_debug, level_trace };
 enum lora_module_enum {
     use_simradio,
@@ -840,7 +840,10 @@ extern struct portduino_config_struct {
             out << YAML::Key << "BacklogLimit" << YAML::Value << sfpp_backlog_limit;
             out << YAML::Key << "MaxChainLength" << YAML::Value << sfpp_max_chain;
             out << YAML::Key << "StealPort" << YAML::Value << sfpp_steal_port;
-            out << YAML::Key << "Repair" << YAML::Value << (sfpp_repair == SFPP_REPAIR_ENUM ? "enum" : "chain");
+            out << YAML::Key << "Repair" << YAML::Value
+                << (sfpp_repair == SFPP_REPAIR_SKETCH ? "sketch"
+                    : sfpp_repair == SFPP_REPAIR_ENUM ? "enum"
+                                                      : "chain");
             out << YAML::Key << "EnumInterval" << YAML::Value << sfpp_enum_interval;
             out << YAML::Key << "EnumDrainMs" << YAML::Value << sfpp_enum_drain_ms;
             out << YAML::EndMap; // StoreAndForward
