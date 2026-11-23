@@ -353,8 +353,8 @@ extern struct portduino_config_struct {
     uint32_t sfpp_max_chain = 1000;
     uint32_t sfpp_backlog_limit = 100;
     sfpp_repair_mode sfpp_repair = SFPP_REPAIR_CHAIN;
-    uint32_t sfpp_enum_interval = 60;   // minutes between advert ticks, enum only
-    uint32_t sfpp_enum_drain_ms = 2000; // milliseconds between queued item frames, enum only
+    uint32_t sfpp_enum_interval = 60;    // minutes between advert ticks, enum only
+    uint32_t sfpp_enum_drain_ms = 10000; // milliseconds between queued item frames, enum only
     // allowed root hashes
     // upstream node
     // Are we allowing unknown channel hashes? Does this even make sense?
