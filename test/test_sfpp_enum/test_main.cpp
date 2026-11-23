@@ -1,0 +1,894 @@
+/*
+ * Native coverage for arm C, the detector + short-ID enumeration repair path in
+ * src/modules/Native/StoreForwardPlusPlus.cpp and the exchange helpers in SketchWire/SfppFrame.
+ *
+ * Two in-process archives share one sqlite root and counter space: the authority is stratum-0 and
+ * ingests texts; the follower is built from a copy of the authority's store with rows removed, so
+ * the surviving counters match. The test routes the captured packets between the two module
+ * instances, which is the on-air exchange without a radio.
+ *
+ * What is pinned:
+ *   - a matching advert sends nothing (d = 0);
+ *   - a follower missing d = 1, 4, 16, a whole bucket or three middle rows converges through
+ *     ENUM_REQUEST -> ENUM_PROVIDE -> ITEM_REQUEST -> ITEM_FRAME, with the exact message counts;
+ *   - a short-ID collision (two objects, one short ID) is resolved by requesting the shared IDs and
+ *     serving every stored row for them;
+ *   - a collision that cannot resolve is probed once, logged, and suppressed until the advert
+ *     changes, instead of re-running forever.
+ *
+ * The regression guarded: with the walk off, enumeration is the only repair path. If the advert,
+ * the list exchange, the by-short-ID object lookup or the in-bucket placement stops working, an
+ * archive silently never catches up while every other suite still passes.
+ */
+
+#include "configuration.h" // first: the portduino runner links setup()/loop()
+
+#include "TestUtil.h"
+#include "UptimeClock.h"
+#include "gps/RTC.h"
+#include "mesh/Channels.h"
+#include "mesh/CryptoEngine.h"
+#include "mesh/MeshService.h"
+#include "mesh/NodeDB.h"
+#include "mesh/RadioInterface.h"
+#include "mesh/Router.h"
+#include "modules/Native/SfppFrame.h"
+#include "modules/Native/SketchIndex.h"
+#include "modules/Native/SketchWire.h"
+#include "modules/Native/StoreForwardPlusPlus.h"
+#include "modules/RoutingModule.h"
+#include "support/MockMeshService.h"
+
+#include <algorithm>
+#include <cstdio>
+#include <cstring>
+#include <memory>
+#include <sqlite3.h>
+#include <string>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <unity.h>
+#include <vector>
+
+#if ARCH_PORTDUINO && !ARCH_PORTDUINO_WASM && !MESHTASTIC_EXCLUDE_SFPP
+
+namespace
+{
+constexpr NodeNum AUTHORITY_NODE = 0x11112222;
+constexpr NodeNum FOLLOWER_NODE = 0x33334444;
+constexpr NodeNum SENDER_NODE = 0x55556666;
+constexpr PacketId BASE_ID = 0x1000;
+
+class TestNodeDB : public NodeDB
+{
+};
+
+class TestRadio : public RadioInterface
+{
+  public:
+    ErrorCode send(meshtastic_MeshPacket *p) override
+    {
+        packetPool.release(p);
+        return ERRNO_OK;
+    }
+
+    uint32_t getPacketTime(uint32_t totalPacketLen, bool received = false) override
+    {
+        (void)totalPacketLen;
+        (void)received;
+        return 0;
+    }
+};
+
+class CapturingRouter : public Router
+{
+  public:
+    ErrorCode send(meshtastic_MeshPacket *p) override
+    {
+        sent.push_back(*p);
+        owned.push_back(p);
+        return ERRNO_OK;
+    }
+
+    std::vector<meshtastic_MeshPacket> sent;
+    std::vector<meshtastic_MeshPacket *> owned;
+};
+
+class TestRoutingModule : public RoutingModule
+{
+  public:
+    void sendAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex, uint8_t hopLimit = 0,
+                    bool ackWantsAck = false, const meshtastic_MeshPacket *relaySource = nullptr) override
+    {
+        (void)err;
+        (void)to;
+        (void)idFrom;
+        (void)chIndex;
+        (void)hopLimit;
+        (void)ackWantsAck;
+        (void)relaySource;
+    }
+
+  protected:
+    bool wantPacket(const meshtastic_MeshPacket *p) override
+    {
+        (void)p;
+        return false;
+    }
+};
+
+class TestSfppModule : public StoreForwardPlusPlusModule
+{
+  public:
+    using StoreForwardPlusPlusModule::handleReceived;
+    using StoreForwardPlusPlusModule::handleReceivedProtobuf;
+    using StoreForwardPlusPlusModule::runOnce;
+
+    ProcessMessage ingest(const meshtastic_MeshPacket &mp, const meshtastic_MeshPacket *encrypted)
+    {
+        currentEncrypted = encrypted;
+        ProcessMessage result = handleReceived(mp);
+        currentEncrypted = nullptr;
+        return result;
+    }
+};
+
+TestNodeDB *testNodeDB;
+CapturingRouter *testRouter;
+MockMeshService *testService;
+TestRoutingModule *testRoutingModule;
+TestSfppModule *authority;
+TestSfppModule *follower;
+std::string dirA;
+std::string dirB;
+
+std::string dbFile(const std::string &dir)
+{
+    return dir + "/storeforwardpp.db";
+}
+
+meshtastic_MeshPacket makeText(NodeNum from, PacketId id, const char *text, uint32_t rxTime)
+{
+    meshtastic_MeshPacket mp = meshtastic_MeshPacket_init_zero;
+    mp.from = from;
+    mp.to = NODENUM_BROADCAST;
+    mp.id = id;
+    mp.channel = 0;
+    mp.rx_time = rxTime;
+    mp.hop_limit = 3;
+    mp.hop_start = 3;
+    mp.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA;
+    mp.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    mp.decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
+    size_t len = strlen(text);
+    memcpy(mp.decoded.payload.bytes, text, len);
+    mp.decoded.payload.size = len;
+    return mp;
+}
+
+meshtastic_MeshPacket makeEncryptedCopy(const meshtastic_MeshPacket &mp)
+{
+    uint8_t plain[256];
+    const size_t len = pb_encode_to_bytes(plain, sizeof(plain), &meshtastic_Data_msg, &mp.decoded);
+    crypto->setKey(channels.getKey(0));
+    crypto->encryptPacket(mp.from, mp.id, len, plain);
+
+    meshtastic_MeshPacket enc = meshtastic_MeshPacket_init_zero;
+    enc.from = mp.from;
+    enc.to = mp.to;
+    enc.id = mp.id;
+    enc.channel = channels.getHash(0);
+    enc.which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
+    enc.encrypted.size = len;
+    memcpy(enc.encrypted.bytes, plain, len);
+    return enc;
+}
+
+meshtastic_MeshPacket ingestText(TestSfppModule *module, NodeNum from, PacketId id, const char *text)
+{
+    meshtastic_MeshPacket mp = makeText(from, id, text, getValidTime(RTCQualityNTP, true));
+    meshtastic_MeshPacket enc = makeEncryptedCopy(mp);
+    myNodeInfo.my_node_num = AUTHORITY_NODE;
+    TEST_ASSERT_EQUAL(ProcessMessage::CONTINUE, module->ingest(mp, &enc));
+    return mp;
+}
+
+bool openDb(const std::string &dir, sqlite3 **db)
+{
+    return sqlite3_open(dbFile(dir).c_str(), db) == SQLITE_OK;
+}
+
+bool copyDb(const std::string &fromDir, const std::string &toDir)
+{
+    sqlite3 *src = nullptr;
+    sqlite3 *dst = nullptr;
+    bool ok = openDb(fromDir, &src) && openDb(toDir, &dst);
+    if (ok) {
+        sqlite3_backup *backup = sqlite3_backup_init(dst, "main", src, "main");
+        ok = backup && sqlite3_backup_step(backup, -1) == SQLITE_DONE;
+        if (backup)
+            sqlite3_backup_finish(backup);
+    }
+    if (dst)
+        sqlite3_close(dst);
+    if (src)
+        sqlite3_close(src);
+    return ok;
+}
+
+bool execSql(const std::string &dir, const char *sql)
+{
+    sqlite3 *db = nullptr;
+    if (!openDb(dir, &db))
+        return false;
+    const bool ok = sqlite3_exec(db, sql, nullptr, nullptr, nullptr) == SQLITE_OK;
+    sqlite3_close(db);
+    return ok;
+}
+
+bool deleteCounter(const std::string &dir, uint32_t counter)
+{
+    sqlite3 *db = nullptr;
+    if (!openDb(dir, &db))
+        return false;
+    sqlite3_stmt *stmt = nullptr;
+    bool ok = sqlite3_prepare_v2(db, "delete from channel_messages where counter=?;", -1, &stmt, nullptr) == SQLITE_OK;
+    if (ok) {
+        sqlite3_bind_int(stmt, 1, (int)counter);
+        ok = sqlite3_step(stmt) == SQLITE_DONE;
+    }
+    if (stmt)
+        sqlite3_finalize(stmt);
+    sqlite3_close(db);
+    return ok;
+}
+
+bool deleteCounterRange(const std::string &dir, uint32_t first, uint32_t last)
+{
+    sqlite3 *db = nullptr;
+    if (!openDb(dir, &db))
+        return false;
+    sqlite3_stmt *stmt = nullptr;
+    bool ok =
+        sqlite3_prepare_v2(db, "delete from channel_messages where counter>=? and counter<=?;", -1, &stmt, nullptr) == SQLITE_OK;
+    if (ok) {
+        sqlite3_bind_int(stmt, 1, (int)first);
+        sqlite3_bind_int(stmt, 2, (int)last);
+        ok = sqlite3_step(stmt) == SQLITE_DONE;
+    }
+    if (stmt)
+        sqlite3_finalize(stmt);
+    sqlite3_close(db);
+    return ok;
+}
+
+bool readRoot(const std::string &dir, uint8_t out[SFPP_HASH_SIZE]);
+
+struct CollisionCandidate {
+    uint8_t cipher[16] = {0};
+    uint8_t hash[SFPP_HASH_SIZE] = {0};
+    uint32_t shortId = 0;
+    uint32_t id = 0;
+};
+
+void makeCandidate(const uint8_t cipher[16], uint32_t id, CollisionCandidate &out)
+{
+    memcpy(out.cipher, cipher, sizeof(out.cipher));
+    out.id = id;
+    sfppframe::messageHash(out.cipher, sizeof(out.cipher), NODENUM_BROADCAST, SENDER_NODE, out.id, out.hash);
+    out.shortId = sfppsr::shortId(out.hash, sizeof(out.hash));
+}
+
+// A real pair sharing a truncated short ID, computed once offline and checked in: the reassembler
+// recomputes the short ID from the ciphertext, so a forced column could not survive the trip.
+// Both hash to shortId 0x0985bdf3.
+const uint8_t kCollisionACipher[16] = {0xc0, 0x5f, 0x32, 0x33, 0xc4, 0x5b, 0x36, 0x37,
+                                       0xc8, 0x57, 0x3a, 0x3b, 0xcc, 0x53, 0x3e, 0x3f};
+const uint8_t kCollisionBCipher[16] = {0x01, 0x49, 0x32, 0x33, 0x05, 0x4d, 0x36, 0x37,
+                                       0x09, 0x41, 0x3a, 0x3b, 0x0d, 0x45, 0x3e, 0x3f};
+constexpr uint32_t kCollisionAId = 0x0000bef0;
+constexpr uint32_t kCollisionBId = 0x0000c831;
+
+bool insertCandidateRow(const std::string &dir, uint32_t counter, const CollisionCandidate &candidate)
+{
+    uint8_t root[SFPP_HASH_SIZE];
+    if (!readRoot(dir, root))
+        return false;
+
+    sqlite3 *db = nullptr;
+    if (!openDb(dir, &db))
+        return false;
+    sqlite3_stmt *stmt = nullptr;
+    bool ok = sqlite3_prepare_v2(db,
+                                 "insert into channel_messages (destination, sender, packet_id, root_hash, encrypted_bytes, "
+                                 "message_hash, commit_hash, payload, rx_time, counter, short_id, checksum) "
+                                 "values (?,?,?,?,?,?,?,?,?,?,?,?);",
+                                 -1, &stmt, nullptr) == SQLITE_OK;
+    if (ok) {
+        sqlite3_bind_int64(stmt, 1, (sqlite3_int64)NODENUM_BROADCAST);
+        sqlite3_bind_int64(stmt, 2, (sqlite3_int64)SENDER_NODE);
+        sqlite3_bind_int64(stmt, 3, (sqlite3_int64)candidate.id);
+        sqlite3_bind_blob(stmt, 4, root, SFPP_HASH_SIZE, SQLITE_STATIC);
+        sqlite3_bind_blob(stmt, 5, candidate.cipher, sizeof(candidate.cipher), SQLITE_STATIC);
+        sqlite3_bind_blob(stmt, 6, candidate.hash, SFPP_HASH_SIZE, SQLITE_STATIC);
+        sqlite3_bind_blob(stmt, 7, candidate.hash, SFPP_HASH_SIZE, SQLITE_STATIC);
+        sqlite3_bind_text(stmt, 8, "", 0, SQLITE_STATIC);
+        sqlite3_bind_int64(stmt, 9, (sqlite3_int64)getValidTime(RTCQualityNTP, true));
+        sqlite3_bind_int(stmt, 10, (int)counter);
+        sqlite3_bind_int64(stmt, 11, (sqlite3_int64)candidate.shortId);
+        sqlite3_bind_int64(stmt, 12, (sqlite3_int64)sfppsr::checksumContribution(candidate.hash, sizeof(candidate.hash)));
+        ok = sqlite3_step(stmt) == SQLITE_DONE;
+    }
+    if (stmt)
+        sqlite3_finalize(stmt);
+    sqlite3_close(db);
+    return ok;
+}
+
+bool readRoot(const std::string &dir, uint8_t out[SFPP_HASH_SIZE])
+{
+    sqlite3 *db = nullptr;
+    if (!openDb(dir, &db))
+        return false;
+    sqlite3_stmt *stmt = nullptr;
+    bool ok = false;
+    if (sqlite3_prepare_v2(db, "select root_hash from channel_messages limit 1;", -1, &stmt, nullptr) == SQLITE_OK &&
+        sqlite3_step(stmt) == SQLITE_ROW) {
+        const uint8_t *root = (const uint8_t *)sqlite3_column_blob(stmt, 0);
+        const int len = sqlite3_column_bytes(stmt, 0);
+        if (root && len == (int)SFPP_HASH_SIZE) {
+            memcpy(out, root, SFPP_HASH_SIZE);
+            ok = true;
+        }
+    }
+    if (stmt)
+        sqlite3_finalize(stmt);
+    sqlite3_close(db);
+    return ok;
+}
+
+// A fabricated extra row in the bucket with a chosen short ID, used to prove an unrecoverable
+// collision is detected rather than retried forever.
+bool insertExtraRow(const std::string &dir, uint32_t counter, uint32_t shortId)
+{
+    uint8_t root[SFPP_HASH_SIZE];
+    if (!readRoot(dir, root))
+        return false;
+
+    uint8_t hash[SFPP_HASH_SIZE];
+    for (size_t i = 0; i < sizeof(hash); i++)
+        hash[i] = (uint8_t)(0xE0 + i);
+    const uint8_t cipher[4] = {0xDE, 0xAD, 0xBE, 0xEF};
+
+    sqlite3 *db = nullptr;
+    if (!openDb(dir, &db))
+        return false;
+    sqlite3_stmt *stmt = nullptr;
+    bool ok = sqlite3_prepare_v2(db,
+                                 "insert into channel_messages (destination, sender, packet_id, root_hash, encrypted_bytes, "
+                                 "message_hash, commit_hash, payload, rx_time, counter, short_id, checksum) "
+                                 "values (?,?,?,?,?,?,?,?,?,?,?,?);",
+                                 -1, &stmt, nullptr) == SQLITE_OK;
+    if (ok) {
+        sqlite3_bind_int64(stmt, 1, (sqlite3_int64)NODENUM_BROADCAST);
+        sqlite3_bind_int64(stmt, 2, (sqlite3_int64)SENDER_NODE);
+        sqlite3_bind_int64(stmt, 3, 0x7777);
+        sqlite3_bind_blob(stmt, 4, root, SFPP_HASH_SIZE, SQLITE_STATIC);
+        sqlite3_bind_blob(stmt, 5, cipher, sizeof(cipher), SQLITE_STATIC);
+        sqlite3_bind_blob(stmt, 6, hash, SFPP_HASH_SIZE, SQLITE_STATIC);
+        sqlite3_bind_blob(stmt, 7, hash, SFPP_HASH_SIZE, SQLITE_STATIC);
+        sqlite3_bind_text(stmt, 8, "", 0, SQLITE_STATIC);
+        sqlite3_bind_int64(stmt, 9, (sqlite3_int64)getValidTime(RTCQualityNTP, true));
+        sqlite3_bind_int(stmt, 10, (int)counter);
+        sqlite3_bind_int64(stmt, 11, (sqlite3_int64)shortId);
+        sqlite3_bind_int64(stmt, 12, (sqlite3_int64)sfppsr::checksumContribution(hash, sizeof(hash)));
+        ok = sqlite3_step(stmt) == SQLITE_DONE;
+    }
+    if (stmt)
+        sqlite3_finalize(stmt);
+    sqlite3_close(db);
+    return ok;
+}
+
+struct BucketView {
+    uint32_t count = 0;
+    uint64_t checksum = 0;
+};
+
+BucketView readBucket(const std::string &dir, uint32_t first, uint32_t last)
+{
+    BucketView view;
+    sqlite3 *db = nullptr;
+    if (!openDb(dir, &db))
+        return view;
+    sqlite3_stmt *stmt = nullptr;
+    if (sqlite3_prepare_v2(db,
+                           "select short_id, checksum from channel_messages where counter>=? and counter<=? and short_id is not "
+                           "null;",
+                           -1, &stmt, nullptr) == SQLITE_OK) {
+        sqlite3_bind_int(stmt, 1, (int)first);
+        sqlite3_bind_int(stmt, 2, (int)last);
+        while (sqlite3_step(stmt) == SQLITE_ROW) {
+            view.count++;
+            view.checksum ^= (uint64_t)sqlite3_column_int64(stmt, 1);
+        }
+    }
+    if (stmt)
+        sqlite3_finalize(stmt);
+    sqlite3_close(db);
+    return view;
+}
+
+uint32_t countRows(const std::string &dir, PacketId id)
+{
+    sqlite3 *db = nullptr;
+    if (!openDb(dir, &db))
+        return 0;
+    sqlite3_stmt *stmt = nullptr;
+    uint32_t count = 0;
+    if (sqlite3_prepare_v2(db, "select count(*) from channel_messages where packet_id=?;", -1, &stmt, nullptr) == SQLITE_OK) {
+        sqlite3_bind_int64(stmt, 1, (sqlite3_int64)id);
+        if (sqlite3_step(stmt) == SQLITE_ROW)
+            count = (uint32_t)sqlite3_column_int64(stmt, 0);
+    }
+    if (stmt)
+        sqlite3_finalize(stmt);
+    sqlite3_close(db);
+    return count;
+}
+
+std::vector<meshtastic_MeshPacket> takeSent()
+{
+    std::vector<meshtastic_MeshPacket> out = testRouter->sent;
+    testRouter->sent.clear();
+    for (meshtastic_MeshPacket *p : testRouter->owned)
+        packetPool.release(p);
+    testRouter->owned.clear();
+    return out;
+}
+
+void ingestAuthority(uint32_t count)
+{
+    myNodeInfo.my_node_num = AUTHORITY_NODE;
+    portduino_config.sfpp_stratum0 = true;
+    for (uint32_t i = 0; i < count; i++) {
+        char text[16];
+        snprintf(text, sizeof(text), "msg %u", i + 1);
+        ingestText(authority, SENDER_NODE, BASE_ID + i, text);
+    }
+}
+
+void buildFollowerFromCopy()
+{
+    TEST_ASSERT_TRUE(copyDb(dirA, dirB));
+    portduino_config.sfpp_db_path = dirB + "/";
+    portduino_config.sfpp_stratum0 = false;
+    follower = new TestSfppModule();
+}
+
+bool deliver(TestSfppModule *target, NodeNum targetNode, bool stratum0, const meshtastic_MeshPacket &p)
+{
+    myNodeInfo.my_node_num = targetNode;
+    portduino_config.sfpp_stratum0 = stratum0;
+    meshtastic_StoreForwardPlusPlus msg;
+    if (!pb_decode_from_bytes(p.decoded.payload.bytes, p.decoded.payload.size, &meshtastic_StoreForwardPlusPlus_msg, &msg))
+        return false;
+    return target->handleReceivedProtobuf(p, &msg);
+}
+
+meshtastic_StoreForwardPlusPlus decodeSfpp(const meshtastic_MeshPacket &p)
+{
+    meshtastic_StoreForwardPlusPlus msg = meshtastic_StoreForwardPlusPlus_init_zero;
+    pb_decode_from_bytes(p.decoded.payload.bytes, p.decoded.payload.size, &meshtastic_StoreForwardPlusPlus_msg, &msg);
+    return msg;
+}
+
+meshtastic_MeshPacket runAuthorityOnce()
+{
+    myNodeInfo.my_node_num = AUTHORITY_NODE;
+    portduino_config.sfpp_stratum0 = true;
+    testRouter->sent.clear();
+    TEST_ASSERT_GREATER_THAN(0, authority->runOnce());
+    std::vector<meshtastic_MeshPacket> sent = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, sent.size());
+    TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ADVERT, decodeSfpp(sent[0]).sfpp_message_type);
+    return sent[0];
+}
+
+// Runs one full pull from the advert to the last item frame. Returns the number of item frames the
+// authority sent and leaves the follower's sends in the returned vectors for count assertions.
+struct Exchange {
+    std::vector<meshtastic_MeshPacket> followerSends;
+    uint32_t enumRequests = 0;
+    uint32_t itemRequests = 0;
+    uint32_t itemFrames = 0;
+};
+
+Exchange runExchange()
+{
+    Exchange result;
+    meshtastic_MeshPacket advert = runAuthorityOnce();
+
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
+    result.followerSends = takeSent();
+    if (result.followerSends.empty())
+        return result; // in sync, nothing to pull
+
+    TEST_ASSERT_EQUAL_UINT(1, result.followerSends.size());
+    TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_REQUEST,
+                      decodeSfpp(result.followerSends[0]).sfpp_message_type);
+    result.enumRequests = (uint32_t)result.followerSends.size();
+
+    TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, true, result.followerSends[0]));
+    std::vector<meshtastic_MeshPacket> provides = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, provides.size());
+    TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_PROVIDE, decodeSfpp(provides[0]).sfpp_message_type);
+
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, provides[0]));
+    std::vector<meshtastic_MeshPacket> requests = takeSent();
+    for (const auto &request : requests)
+        if (decodeSfpp(request).sfpp_message_type == meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_REQUEST)
+            result.itemRequests++;
+    TEST_ASSERT_EQUAL_UINT(1, result.itemRequests);
+
+    TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, true, requests[0]));
+    std::vector<meshtastic_MeshPacket> frames = takeSent();
+    for (const auto &frame : frames) {
+        TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_FRAME, decodeSfpp(frame).sfpp_message_type);
+        TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, frame));
+        result.itemFrames++;
+    }
+    return result;
+}
+
+void assertConverged()
+{
+    const BucketView a = readBucket(dirA, 1, sfppsr::kBucketObjects);
+    const BucketView b = readBucket(dirB, 1, sfppsr::kBucketObjects);
+    TEST_ASSERT_EQUAL_UINT32(a.count, b.count);
+    TEST_ASSERT_EQUAL_UINT64(a.checksum, b.checksum);
+}
+
+} // namespace
+
+void setUp(void)
+{
+    config = meshtastic_LocalConfig_init_zero;
+    moduleConfig = meshtastic_LocalModuleConfig_init_zero;
+    channelFile = meshtastic_ChannelFile_init_zero;
+    owner = meshtastic_User_init_zero;
+
+    testNodeDB = new TestNodeDB();
+    nodeDB = testNodeDB;
+    myNodeInfo.my_node_num = AUTHORITY_NODE;
+
+    channels.initDefaults();
+    channels.onConfigChanged();
+
+    testService = new MockMeshService();
+    service = testService;
+
+    testRouter = new CapturingRouter();
+    testRouter->addInterface(std::unique_ptr<RadioInterface>(new TestRadio()));
+    router = testRouter;
+
+    testRoutingModule = new TestRoutingModule();
+    routingModule = testRoutingModule;
+
+    char tmplA[] = "/tmp/meshtastic-sfpp-enum-a-XXXXXX";
+    char tmplB[] = "/tmp/meshtastic-sfpp-enum-b-XXXXXX";
+    char *a = mkdtemp(tmplA);
+    char *b = mkdtemp(tmplB);
+    dirA = a ? a : "/tmp";
+    dirB = b ? b : "/tmp";
+
+    portduino_config.sfpp_enabled = true;
+    portduino_config.sfpp_stratum0 = true;
+    portduino_config.sfpp_hops = 3;
+    portduino_config.sfpp_steal_port = false;
+    portduino_config.sfpp_announce_interval = 5;
+    portduino_config.sfpp_repair = SFPP_REPAIR_ENUM;
+    portduino_config.sfpp_enum_interval = 1;
+    portduino_config.sfpp_db_path = dirA + "/";
+
+    Time::setTestMillis(1000);
+
+    authority = new TestSfppModule();
+    follower = nullptr;
+}
+
+void tearDown(void)
+{
+    delete follower;
+    follower = nullptr;
+    delete authority;
+    authority = nullptr;
+
+    for (const std::string &dir : {dirA, dirB}) {
+        if (dir.empty() || dir == "/tmp")
+            continue;
+        std::remove(dbFile(dir).c_str());
+        std::remove((dbFile(dir) + "-journal").c_str());
+        rmdir(dir.c_str());
+    }
+
+    delete testRoutingModule;
+    testRoutingModule = nullptr;
+    routingModule = nullptr;
+
+    while (meshtastic_MeshPacket *p = testService->getForPhone())
+        testService->releaseToPool(p);
+    while (meshtastic_QueueStatus *q = testService->getQueueStatusForPhone())
+        testService->releaseQueueStatusToPool(q);
+    for (meshtastic_MeshPacket *p : testRouter->owned)
+        packetPool.release(p);
+    testRouter->owned.clear();
+
+    delete testRouter;
+    testRouter = nullptr;
+    router = nullptr;
+
+    delete testService;
+    testService = nullptr;
+    service = nullptr;
+
+    delete testNodeDB;
+    testNodeDB = nullptr;
+    nodeDB = nullptr;
+
+    Time::useRealClock();
+}
+
+// d = 0: the follower already agrees, so the advert triggers no exchange at all.
+void test_matchingAdvertSendsNothing()
+{
+    ingestAuthority(20);
+    buildFollowerFromCopy();
+
+    meshtastic_MeshPacket advert = runAuthorityOnce();
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
+    TEST_ASSERT_EQUAL_UINT(0, takeSent().size());
+}
+
+void runTailCase(uint32_t total, uint32_t missing)
+{
+    ingestAuthority(total);
+    buildFollowerFromCopy();
+    TEST_ASSERT_TRUE(deleteCounterRange(dirB, total - missing + 1, total));
+
+    Exchange exchange = runExchange();
+    TEST_ASSERT_EQUAL_UINT(1, exchange.enumRequests);
+    TEST_ASSERT_EQUAL_UINT(1, exchange.itemRequests);
+    TEST_ASSERT_EQUAL_UINT(missing, exchange.itemFrames);
+    assertConverged();
+
+    // A second identical advert is a no-op once converged.
+    meshtastic_MeshPacket advert = runAuthorityOnce();
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
+    TEST_ASSERT_EQUAL_UINT(0, takeSent().size());
+}
+
+// A missing tail of 1, 4 and 16 rows converges, with the exact one-request-per-kind exchange.
+void test_missingTail1Converges()
+{
+    runTailCase(20, 1);
+}
+
+void test_missingTail4Converges()
+{
+    runTailCase(20, 4);
+}
+
+void test_missingTail16Converges()
+{
+    runTailCase(20, 16);
+}
+
+// The follower was away while the authority filled a whole new bucket: its local bucket is empty,
+// which must classify as count 0 / checksum 0 and pull rather than be skipped.
+void test_wholeBucketMissingConverges()
+{
+    ingestAuthority(8);
+    buildFollowerFromCopy();
+    TEST_ASSERT_TRUE(deleteCounterRange(dirB, 1, 8));
+
+    Exchange exchange = runExchange();
+    TEST_ASSERT_EQUAL_UINT(8, exchange.itemFrames);
+    assertConverged();
+}
+
+// A gap in the middle, not just the tail: rows 5, 9 and 17 missing. Recovered rows land in the
+// bucket by range even though their exact counter differs from the authority's.
+void test_middleGapConverges()
+{
+    ingestAuthority(20);
+    buildFollowerFromCopy();
+    TEST_ASSERT_TRUE(deleteCounter(dirB, 5));
+    TEST_ASSERT_TRUE(deleteCounter(dirB, 9));
+    TEST_ASSERT_TRUE(deleteCounter(dirB, 17));
+
+    Exchange exchange = runExchange();
+    TEST_ASSERT_EQUAL_UINT(3, exchange.itemFrames);
+    assertConverged();
+}
+
+// Two messages really share a truncated short ID. The follower holds one and lacks the other, so
+// the short-ID lists match but the checksum differs. The probe requests the shared IDs, the
+// authority serves every row for them, and the unknown hash is stored.
+void test_shortIdCollisionConverges()
+{
+    ingestAuthority(1); // establishes the root and a non-colliding filler row
+    CollisionCandidate held;
+    CollisionCandidate missingObject;
+    makeCandidate(kCollisionACipher, kCollisionAId, held);
+    makeCandidate(kCollisionBCipher, kCollisionBId, missingObject);
+    TEST_ASSERT_EQUAL_UINT32(held.shortId, missingObject.shortId);
+    TEST_ASSERT_TRUE(memcmp(held.hash, missingObject.hash, SFPP_HASH_SIZE) != 0);
+    TEST_ASSERT_TRUE(insertCandidateRow(dirA, 2, held));
+    TEST_ASSERT_TRUE(insertCandidateRow(dirA, 3, missingObject));
+    buildFollowerFromCopy();
+    TEST_ASSERT_TRUE(deleteCounter(dirB, 3)); // the follower holds counter 2, not counter 3
+
+    Exchange exchange = runExchange();
+    TEST_ASSERT_EQUAL_UINT(1, exchange.enumRequests);
+    TEST_ASSERT_EQUAL_UINT(1, exchange.itemRequests);             // the probe, not a normal missing request
+    TEST_ASSERT_EQUAL_UINT(1, countRows(dirB, missingObject.id)); // the collided object arrived
+    assertConverged();
+}
+
+// The follower holds an extra object under the same short ID that the authority does not have.
+// The probe cannot make the checksums agree, so it must stop after one attempt and add no traffic
+// for the unchanged advert.
+void test_unresolvableCollisionIsSuppressed()
+{
+    ingestAuthority(1);
+    CollisionCandidate held;
+    CollisionCandidate missingObject;
+    makeCandidate(kCollisionACipher, kCollisionAId, held);
+    makeCandidate(kCollisionBCipher, kCollisionBId, missingObject);
+    TEST_ASSERT_EQUAL_UINT32(held.shortId, missingObject.shortId);
+    TEST_ASSERT_TRUE(insertCandidateRow(dirA, 2, held));
+    TEST_ASSERT_TRUE(insertCandidateRow(dirA, 3, missingObject));
+    buildFollowerFromCopy();
+    TEST_ASSERT_TRUE(deleteCounter(dirB, 3)); // follower lacks counter 3
+    // ... and holds an extra row whose short ID is the same, keeping the lists equal while the
+    // checksums cannot converge.
+    TEST_ASSERT_TRUE(insertExtraRow(dirB, 4, held.shortId));
+
+    Exchange exchange = runExchange();
+    TEST_ASSERT_EQUAL_UINT(1, exchange.itemRequests);             // one probe
+    TEST_ASSERT_EQUAL_UINT(1, countRows(dirB, missingObject.id)); // the collided object arrived
+    TEST_ASSERT_EQUAL_UINT(1, countRows(dirB, 0x7777));           // the extra row is still there
+    TEST_ASSERT_TRUE(readBucket(dirB, 1, sfppsr::kBucketObjects).count != readBucket(dirA, 1, sfppsr::kBucketObjects).count);
+
+    // Let the probe's idle timer expire, then present the unchanged advert again.
+    Time::setTestMillis(Time::getMillis() + 31000);
+    meshtastic_MeshPacket advert = runAuthorityOnce();
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
+    TEST_ASSERT_EQUAL_UINT(0, takeSent().size());
+}
+
+// An advert whose scope is not a root this node knows must be dropped without a reply.
+void test_unknownScopeAdvertIsDropped()
+{
+    ingestAuthority(8);
+    buildFollowerFromCopy();
+
+    meshtastic_StoreForwardPlusPlus msg = meshtastic_StoreForwardPlusPlus_init_default;
+    msg.sfpp_message_type = meshtastic_StoreForwardPlusPlus_SFPP_message_type_ADVERT;
+    msg.sr_version = sfppsr::kDerivationVersion;
+    msg.root_hash.size = SFPP_HASH_SIZE;
+    memset(msg.root_hash.bytes, 0x42, SFPP_HASH_SIZE);
+    msg.chain_count = 0;
+    msg.sr_count = 4;
+    msg.sr_checksum = 0x1234;
+    msg.message.size = 16; // a capacity-4 sketch of zeros still parses
+
+    meshtastic_MeshPacket mp = meshtastic_MeshPacket_init_zero;
+    mp.from = AUTHORITY_NODE;
+    mp.to = NODENUM_BROADCAST;
+    mp.decoded.portnum = meshtastic_PortNum_STORE_FORWARD_PLUSPLUS_APP;
+    mp.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    mp.decoded.payload.size = pb_encode_to_bytes(mp.decoded.payload.bytes, sizeof(mp.decoded.payload.bytes),
+                                                 &meshtastic_StoreForwardPlusPlus_msg, &msg);
+
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, mp));
+    TEST_ASSERT_EQUAL_UINT(0, takeSent().size());
+}
+
+// An oversized short-ID list is refused at the wire boundary, so nothing is emitted for it. The
+// struct is handed to the handler directly, because encoding a 41-entry list would read past the
+// generated 40-entry array; the parser refuses on the count before touching the array.
+void test_oversizedItemRequestIsRefused()
+{
+    ingestAuthority(8);
+    buildFollowerFromCopy();
+
+    meshtastic_StoreForwardPlusPlus msg = meshtastic_StoreForwardPlusPlus_init_default;
+    msg.sfpp_message_type = meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_REQUEST;
+    msg.sr_version = sfppsr::kDerivationVersion;
+    msg.root_hash.size = 4;
+    uint8_t root[SFPP_HASH_SIZE];
+    TEST_ASSERT_TRUE(readRoot(dirA, root));
+    memcpy(msg.root_hash.bytes, root, 4);
+    msg.chain_count = 0;
+    for (pb_size_t i = 0; i < sfppsr::kMaxShortIds; i++)
+        msg.sr_short_ids[i] = 0x1000 + i;
+    msg.sr_short_ids_count = sfppsr::kMaxShortIds + 1;
+
+    meshtastic_MeshPacket mp = meshtastic_MeshPacket_init_zero;
+    mp.from = FOLLOWER_NODE;
+    mp.to = AUTHORITY_NODE;
+    mp.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    mp.decoded.portnum = meshtastic_PortNum_STORE_FORWARD_PLUSPLUS_APP;
+    mp.decoded.payload.size = 0;
+
+    myNodeInfo.my_node_num = AUTHORITY_NODE;
+    portduino_config.sfpp_stratum0 = true;
+    TEST_ASSERT_TRUE(authority->handleReceivedProtobuf(mp, &msg));
+    TEST_ASSERT_EQUAL_UINT(0, takeSent().size());
+}
+
+// An object request for a short ID that the bucket does not hold serves nothing and stores nothing.
+void test_unknownShortIdRequestServesNothing()
+{
+    ingestAuthority(8);
+    buildFollowerFromCopy();
+
+    meshtastic_StoreForwardPlusPlus msg = meshtastic_StoreForwardPlusPlus_init_default;
+    msg.sfpp_message_type = meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_REQUEST;
+    msg.sr_version = sfppsr::kDerivationVersion;
+    msg.root_hash.size = 4;
+    uint8_t root[SFPP_HASH_SIZE];
+    TEST_ASSERT_TRUE(readRoot(dirA, root));
+    memcpy(msg.root_hash.bytes, root, 4);
+    msg.chain_count = 0;
+    msg.sr_short_ids[0] = 0xDEADBEEF;
+    msg.sr_short_ids_count = 1;
+
+    meshtastic_MeshPacket mp = meshtastic_MeshPacket_init_zero;
+    mp.from = FOLLOWER_NODE;
+    mp.to = AUTHORITY_NODE;
+    mp.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    mp.decoded.portnum = meshtastic_PortNum_STORE_FORWARD_PLUSPLUS_APP;
+    mp.decoded.payload.size = pb_encode_to_bytes(mp.decoded.payload.bytes, sizeof(mp.decoded.payload.bytes),
+                                                 &meshtastic_StoreForwardPlusPlus_msg, &msg);
+
+    TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, true, mp));
+    TEST_ASSERT_EQUAL_UINT(0, takeSent().size());
+}
+
+void loop() {}
+
+void setup()
+{
+    initializeTestEnvironment();
+
+    UNITY_BEGIN();
+    RUN_TEST(test_matchingAdvertSendsNothing);
+    RUN_TEST(test_missingTail1Converges);
+    RUN_TEST(test_missingTail4Converges);
+    RUN_TEST(test_missingTail16Converges);
+    RUN_TEST(test_wholeBucketMissingConverges);
+    RUN_TEST(test_middleGapConverges);
+    RUN_TEST(test_shortIdCollisionConverges);
+    RUN_TEST(test_unresolvableCollisionIsSuppressed);
+    RUN_TEST(test_unknownScopeAdvertIsDropped);
+    RUN_TEST(test_oversizedItemRequestIsRefused);
+    RUN_TEST(test_unknownShortIdRequestServesNothing);
+    UNITY_END();
+}
+
+#else
+
+void setUp(void) {}
+void tearDown(void) {}
+void loop() {}
+void setup()
+{
+    initializeTestEnvironment();
+    UNITY_BEGIN();
+    UNITY_END();
+}
+
+#endif
