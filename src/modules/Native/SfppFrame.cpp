@@ -195,10 +195,16 @@ Reassembler::Slot *Reassembler::allocate(const uint8_t key[kFrameKeyBytes], uint
         }
     }
     if (chosen == nullptr) {
+        // Largest unsigned age, not smallest timestamp: the subtraction makes the choice correct
+        // across the millis() wrap.
         chosen = &slots[0];
+        uint32_t oldestAge = nowMs - chosen->lastUsed;
         for (auto &slot : slots) {
-            if (slot.lastUsed < chosen->lastUsed)
+            const uint32_t age = nowMs - slot.lastUsed;
+            if (age > oldestAge) {
+                oldestAge = age;
                 chosen = &slot;
+            }
         }
     }
 

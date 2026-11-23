@@ -234,8 +234,26 @@ void test_lruEvictsLeastRecentlyUsed()
     TEST_ASSERT_TRUE(reassembler.hasSlot(keyOf(c[0])));
 }
 
-// --- Size bound ---
+// The same eviction choice across the millis() wrap: the timestamp comparison would invert here.
+void test_lruIsWrapSafeNearUint32Max()
+{
+    const auto a = split(cipher(220, 0xA1));
+    const auto b = split(cipher(220, 0xB2));
+    const auto c = split(cipher(220, 0xC3));
 
+    const uint32_t base = 0xFFFFFFF0u;
+    Reassembler reassembler(2);
+    Replay replay;
+    TEST_ASSERT_FALSE(reassembler.offer(a[0], base, replay));      // oldest
+    TEST_ASSERT_FALSE(reassembler.offer(b[0], base + 8, replay));  // newer
+    TEST_ASSERT_FALSE(reassembler.offer(c[0], base + 20, replay)); // wraps to 4
+
+    TEST_ASSERT_FALSE(reassembler.hasSlot(keyOf(a[0])));
+    TEST_ASSERT_TRUE(reassembler.hasSlot(keyOf(b[0])));
+    TEST_ASSERT_TRUE(reassembler.hasSlot(keyOf(c[0])));
+}
+
+// --- Size bound ---
 void test_everyFrameBodyStaysWithin168Bytes()
 {
     for (size_t len : {40u, 220u, 500u}) {
@@ -272,6 +290,7 @@ void setup()
     RUN_TEST(test_emptyFrameIsRefused);
     RUN_TEST(test_expiryDropsPartialSet);
     RUN_TEST(test_lruEvictsLeastRecentlyUsed);
+    RUN_TEST(test_lruIsWrapSafeNearUint32Max);
 
     RUN_TEST(test_everyFrameBodyStaysWithin168Bytes);
     RUN_TEST(test_oversizedMessageIsRefused);
