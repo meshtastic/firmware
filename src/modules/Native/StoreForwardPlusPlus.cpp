@@ -51,8 +51,14 @@ static constexpr uint32_t kEnumExchangeTimeoutMs = 15 * 60 * 1000;
 static constexpr uint32_t kEnumProbeIdleMs = 30 * 1000;
 
 // One item frame per drain keeps the radio's 16-entry TX queue from overflowing on a large request.
-static constexpr uint32_t kEnumDrainIntervalMs = 2 * 1000;
+static constexpr uint32_t kEnumDrainMinMs = 100;
 static constexpr size_t kEnumTxQueueMax = 256;
+
+static uint32_t enumDrainIntervalMs()
+{
+    const uint32_t configured = portduino_config.sfpp_enum_drain_ms;
+    return configured < kEnumDrainMinMs ? kEnumDrainMinMs : configured;
+}
 
 namespace
 {
@@ -680,7 +686,7 @@ int32_t StoreForwardPlusPlusModule::runOnce()
     if (portduino_config.sfpp_repair == SFPP_REPAIR_ENUM) {
         expireEnumExchange();
         if (drainOneEnumFrame())
-            return kEnumDrainIntervalMs; // serving a request takes priority over the advert cadence
+            return enumDrainIntervalMs(); // serving a request takes priority over the advert cadence
         if (portduino_config.sfpp_stratum0)
             advertiseOneBucket(root_hash_bytes, SFPP_HASH_SIZE);
         if (enumExchangeActive)
@@ -3064,7 +3070,7 @@ void StoreForwardPlusPlusModule::handleItemRequest(const meshtastic_MeshPacket &
     }
 
     if (!enumTxQueue.empty())
-        setIntervalFromNow(kEnumDrainIntervalMs);
+        setIntervalFromNow(enumDrainIntervalMs());
 }
 
 void StoreForwardPlusPlusModule::queueItemFrames(const std::vector<meshtastic_StoreForwardPlusPlus> &frames, NodeNum to,
@@ -3092,7 +3098,7 @@ bool StoreForwardPlusPlusModule::drainOneEnumFrame()
         return false;
 
     // Still inside the pacing interval: keep the short timer running without sending.
-    if (enumLastDrainMs != 0 && !Throttle::hasElapsed(enumLastDrainMs, kEnumDrainIntervalMs))
+    if (enumLastDrainMs != 0 && !Throttle::hasElapsed(enumLastDrainMs, enumDrainIntervalMs()))
         return true;
 
     EnumOutgoing out = enumTxQueue.front();

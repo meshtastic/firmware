@@ -607,6 +607,7 @@ void setUp(void)
     portduino_config.sfpp_announce_interval = 5;
     portduino_config.sfpp_repair = SFPP_REPAIR_ENUM;
     portduino_config.sfpp_enum_interval = 1;
+    portduino_config.sfpp_enum_drain_ms = 2000;
     portduino_config.sfpp_db_path = dirA + "/";
 
     Time::setTestMillis(1000);
