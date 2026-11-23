@@ -465,9 +465,24 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
                 }
                 display->drawXbm(iconX, iconY, mail_width, mail_height, mail);
             }
+            break;
+        case HeaderStatusIcon::KeypadLock: {
+            int iconX = iconRightEdge - key_symbol_width;
+            int iconY = textY + (FONT_HEIGHT_SMALL - key_symbol_height) / 2;
+
+            if (useInvertedHeaderStyle) {
+                display->setColor(WHITE);
+                display->fillRect(iconX - 1, iconY - 1, key_symbol_width + 2, key_symbol_height + 2);
+                display->setColor(BLACK);
+            } else {
+                display->setColor(BLACK);
+                display->fillRect(iconX - 1, iconY - 1, key_symbol_width + 2, key_symbol_height + 2);
+                display->setColor(WHITE);
+            }
+            display->drawXbm(iconX, iconY, key_symbol_width, key_symbol_height, key_symbol);
+            break;
         }
-        else if (externalNotificationModule && externalNotificationModule->getMute())
-        {
+        case HeaderStatusIcon::Mute:
             if (currentResolution == ScreenResolution::High) {
                 int iconX = iconRightEdge - mute_symbol_big_width;
                 int iconY = textY + (FONT_HEIGHT_SMALL - mute_symbol_big_height) / 2;
