@@ -672,8 +672,8 @@ static int32_t onewirePollHandle()
     if (last_boot_time == 0 || !Throttle::isWithinTimespanMs(last_boot_time, bootInterval)) {
         last_boot_time = Time::skipZero(now);
         last_discovery_time = now; // let probes answer the BOOT first
-        if (!probes.empty())
-            discovery_pid = PROBE_PID_MIN; // while empty the sweep carries on across BOOTs
+        if (!probes.empty() && sweep_left == 0)
+            discovery_pid = PROBE_PID_MIN; // an unfinished sweep carries on across BOOTs
         sweep_left = PROBE_PID_MAX;
         LOG_INFO("RAKSensorHub: broadcast provision BOOT (%u probes known)", (unsigned)probes.size());
         RakSNHub_Protocl_API.reboot();
