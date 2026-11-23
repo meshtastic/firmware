@@ -37,32 +37,19 @@ static constexpr uint8_t LOW_VOLTAGE_READINGS_BEFORE_SHUTDOWN = 10;
 bool updateLowVoltageCounter(uint8_t &counter, bool hasBattery, bool hasUsb, uint16_t battMv, uint16_t cutoffMv);
 
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+#include "modules/Telemetry/Sensor/INAFamilySensor.h"
 #include "modules/Telemetry/Sensor/nullSensor.h"
-#if __has_include(<Adafruit_INA219.h>)
-#include "modules/Telemetry/Sensor/INA219Sensor.h"
-extern INA219Sensor ina219Sensor;
+#if !MESHTASTIC_EXCLUDE_INA_SENSORS
+extern INAFamilySensor ina219Sensor;
+extern INAFamilySensor ina226Sensor;
+extern INAFamilySensor ina228Sensor;
+extern INAFamilySensor ina260Sensor;
+extern INAFamilySensor ina3221Sensor;
 #else
 extern NullSensor ina219Sensor;
-#endif
-
-#if __has_include(<INA226.h>)
-#include "modules/Telemetry/Sensor/INA226Sensor.h"
-extern INA226Sensor ina226Sensor;
-#else
 extern NullSensor ina226Sensor;
-#endif
-
-#if __has_include(<Adafruit_INA260.h>)
-#include "modules/Telemetry/Sensor/INA260Sensor.h"
-extern INA260Sensor ina260Sensor;
-#else
+extern NullSensor ina228Sensor;
 extern NullSensor ina260Sensor;
-#endif
-
-#if __has_include(<INA3221.h>)
-#include "modules/Telemetry/Sensor/INA3221Sensor.h"
-extern INA3221Sensor ina3221Sensor;
-#else
 extern NullSensor ina3221Sensor;
 #endif
 
