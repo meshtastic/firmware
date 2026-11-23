@@ -12,15 +12,19 @@
 #include "RTC.h"
 #include "SHA256.h"
 #include "SfppFrame.h"
+#include "UptimeClock.h"
 #include "concurrency/LockGuard.h"
 #include "mesh/CryptoEngine.h"
+#include "mesh/Throttle.h"
 #include "meshUtils.h"
 #include "modules/RoutingModule.h"
 #if !MESHTASTIC_EXCLUDE_STOREFORWARD
 #include "modules/StoreForwardModule.h"
 #endif
 
+#include <algorithm>
 #include <cstdio>
+#include <iterator>
 #include <utility>
 #include <vector>
 
@@ -39,6 +43,36 @@ static int readSchemaVersion(sqlite3 *db, bool &hasTables)
     sqlite3_finalize(st);
     return version;
 }
+
+// One enumeration exchange is retried by the next advert tick; this is how long it may stay in flight.
+static constexpr uint32_t kEnumExchangeTimeoutMs = 15 * 60 * 1000;
+
+// After a short-ID-collision probe, silence this long means the peer has served all it has.
+static constexpr uint32_t kEnumProbeIdleMs = 30 * 1000;
+
+namespace
+{
+void formatRootHex(const uint8_t *root, size_t len, char out[9])
+{
+    const size_t n = len < 4 ? len : 4;
+    for (size_t i = 0; i < n; i++)
+        snprintf(out + 2 * i, 3, "%02x", (unsigned)root[i]);
+    out[2 * n] = '\0';
+}
+
+void copyScopeRoot(const uint8_t *root, size_t rootLen, sfppsr::Scope &scope, uint32_t bucket, bool fullRoot)
+{
+    scope = sfppsr::Scope();
+    size_t n = fullRoot ? rootLen : sfppsr::kRootPrefixBytes;
+    if (n > sizeof(scope.rootPrefix))
+        n = sizeof(scope.rootPrefix);
+    if (n > rootLen)
+        n = rootLen;
+    scope.rootPrefixLen = n;
+    memcpy(scope.rootPrefix, root, n);
+    scope.bucket = bucket;
+}
+} // namespace
 
 // A follower's chain rows carry the ciphertext but not the plaintext. Decrypt the primary channel's
 // copy and accept it only when it decodes as a text Data.
@@ -306,6 +340,14 @@ StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
     sqlite3_prepare_v2(ppDb, "update channel_messages set short_id=?, checksum=? where message_hash=?;", -1, &setLinkSetIndexStmt,
                        NULL);
 
+    sqlite3_prepare_v2(ppDb, "select short_id from channel_messages \
+        where substr(root_hash,1,?)=? and counter>=? and counter<=? and short_id is not null order by counter;",
+                       -1, &bucketIdsStmt, NULL);
+
+    sqlite3_prepare_v2(ppDb, "select destination, sender, packet_id, encrypted_bytes, message_hash, rx_time, counter \
+        from channel_messages where substr(root_hash,1,?)=? and counter>=? and counter<=? and short_id=?;",
+                       -1, &getLinkByShortIdStmt, NULL);
+
     // Legacy CLIENT_HISTORY reads the stored plaintext, or the ciphertext a follower holds instead.
     sqlite3_prepare_v2(ppDb, "select sender, packet_id, destination, rx_time, payload, encrypted_bytes from channel_messages \
         where substr(root_hash,1,?)=? and rx_time>=? and sender!=? \
@@ -462,6 +504,8 @@ StoreForwardPlusPlusModule::~StoreForwardPlusPlusModule()
         removeCanonScratch,
         clearCanonScratchStmt,
         bucketSummaryStmt,
+        bucketIdsStmt,
+        getLinkByShortIdStmt,
         unindexedLinksStmt,
         setLinkSetIndexStmt,
         legacyHistoryStmt,
@@ -517,7 +561,7 @@ void StoreForwardPlusPlusModule::backfillSetIndex()
         LOG_INFO("StoreForwardpp indexed %u existing links for set reconciliation", indexed);
 }
 
-bool StoreForwardPlusPlusModule::buildBucketSummary(uint8_t *root_hash, size_t root_hash_len, uint32_t bucket,
+bool StoreForwardPlusPlusModule::buildBucketSummary(const uint8_t *root_hash, size_t root_hash_len, uint32_t bucket,
                                                     sfppsr::BucketSummary &out)
 {
     out.clear();
@@ -541,6 +585,26 @@ bool StoreForwardPlusPlusModule::buildBucketSummary(uint8_t *root_hash, size_t r
     return out.count() > 0;
 }
 
+bool StoreForwardPlusPlusModule::collectBucketIds(const uint8_t *root_hash, size_t root_hash_len, uint32_t bucket,
+                                                  std::vector<pinsketch::Element> &out)
+{
+    out.clear();
+    const uint32_t first = bucket * sfppsr::kBucketObjects + 1;
+    const uint32_t last = first + sfppsr::kBucketObjects - 1;
+
+    sqlite3_reset(bucketIdsStmt);
+    sqlite3_bind_int(bucketIdsStmt, 1, root_hash_len);
+    sqlite3_bind_blob(bucketIdsStmt, 2, root_hash, root_hash_len, NULL);
+    sqlite3_bind_int(bucketIdsStmt, 3, first);
+    sqlite3_bind_int(bucketIdsStmt, 4, last);
+
+    while (sqlite3_step(bucketIdsStmt) == SQLITE_ROW)
+        out.push_back((pinsketch::Element)sqlite3_column_int64(bucketIdsStmt, 0));
+    sqlite3_reset(bucketIdsStmt);
+
+    return !out.empty();
+}
+
 int32_t StoreForwardPlusPlusModule::runOnce()
 {
     if (legacyHistoryBusy) {
@@ -549,7 +613,8 @@ int32_t StoreForwardPlusPlusModule::runOnce()
     }
     if (pendingRun) {
         pendingRun = false;
-        setIntervalFromNow(portduino_config.sfpp_announce_interval * 60 * 1000 - 30 * 1000);
+        if (portduino_config.sfpp_repair == SFPP_REPAIR_CHAIN)
+            setIntervalFromNow(portduino_config.sfpp_announce_interval * 60 * 1000 - 30 * 1000);
     }
     if (getRTCQuality() < RTCQualityNTP) {
         RTCQuality ourQuality = RTCQualityDevice;
@@ -604,6 +669,17 @@ int32_t StoreForwardPlusPlusModule::runOnce()
     if (memfll(root_hash_bytes, '\0', SFPP_HASH_SIZE)) {
         LOG_WARN("No root hash found, not sending");
         return portduino_config.sfpp_announce_interval * 60 * 1000;
+    }
+
+    // Enumeration mode: the chain announce, scratch push and re-injection are off. The authority
+    // advertises one bucket per tick; the next advert is the retry for any unfinished exchange.
+    if (portduino_config.sfpp_repair == SFPP_REPAIR_ENUM) {
+        expireEnumExchange();
+        if (portduino_config.sfpp_stratum0)
+            advertiseOneBucket(root_hash_bytes, SFPP_HASH_SIZE);
+        if (enumExchangeActive)
+            return 5 * 1000; // pump the probe idle and overall timeout while an exchange is in flight
+        return (int32_t)portduino_config.sfpp_enum_interval * 60 * 1000;
     }
 
     if (doing_split_send) {
@@ -795,6 +871,42 @@ ProcessMessage StoreForwardPlusPlusModule::handleReceived(const meshtastic_MeshP
 
 bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_StoreForwardPlusPlus *t)
 {
+    if (portduino_config.sfpp_repair == SFPP_REPAIR_ENUM) {
+        expireEnumExchange();
+        if (sfppsr::isSetReconciliationType(t->sfpp_message_type)) {
+            switch (t->sfpp_message_type) {
+            case meshtastic_StoreForwardPlusPlus_SFPP_message_type_ADVERT:
+                handleEnumAdvert(mp, t);
+                break;
+            case meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_REQUEST:
+                handleEnumRequest(mp, t);
+                break;
+            case meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_PROVIDE:
+                handleEnumProvide(mp, t);
+                break;
+            case meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_REQUEST:
+                handleItemRequest(mp, t);
+                break;
+            case meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_FRAME:
+                handleItemFrame(mp, t);
+                break;
+            default:
+                break; // ITEM_PROVIDE and GONE are unused by arm C
+            }
+        }
+        // Chain types are off in enum mode: enumeration is the only repair path.
+        return true;
+    }
+
+    // Set-reconciliation traffic is inert while the chain is the repair path, and a chain message
+    // carrying its fields is the overloading the wire format refuses.
+    if (sfppsr::isSetReconciliationType(t->sfpp_message_type))
+        return true;
+    if (sfppsr::hasSetReconciliationFields(*t)) {
+        LOG_WARN("StoreForwardpp chain message carries set-reconciliation fields, dropping");
+        return true;
+    }
+
     LOG_DEBUG("StoreForwardpp node %u sent us sf++ packet", mp.from);
     printBytes("StoreForwardpp commit_hash ", t->commit_hash.bytes, t->commit_hash.size);
     printBytes("StoreForwardpp root_hash ", t->root_hash.bytes, t->root_hash.size);
@@ -2505,5 +2617,525 @@ void StoreForwardPlusPlusModule::logLinkObject(link_object &lo)
 }
 
 StoreForwardPlusPlusModule *storeForwardPlusPlusModule;
+
+// --- Arm C: detector + short-ID enumeration ---
+
+void StoreForwardPlusPlusModule::logEnum(const char *dir, const char *type, const sfppsr::Scope &scope, size_t payloadBytes,
+                                         NodeNum peer, int ids, int frameIndex, int frameTotal, size_t sketchBytes)
+{
+    char rootHex[9];
+    formatRootHex(scope.rootPrefix, scope.rootPrefixLen, rootHex);
+
+    if (sketchBytes > 0)
+        LOG_INFO("SFPP-ENUM dir=%s type=%s root=%s bucket=%u payload=%u peer=0x%08x ids=%d frame=%d/%d sketch=%u", dir, type,
+                 rootHex, scope.bucket, (unsigned)payloadBytes, peer, ids, frameIndex, frameTotal, (unsigned)sketchBytes);
+    else if (ids >= 0)
+        LOG_INFO("SFPP-ENUM dir=%s type=%s root=%s bucket=%u payload=%u peer=0x%08x ids=%d frame=%d/%d", dir, type, rootHex,
+                 scope.bucket, (unsigned)payloadBytes, peer, ids, frameIndex, frameTotal);
+    else
+        LOG_INFO("SFPP-ENUM dir=%s type=%s root=%s bucket=%u payload=%u peer=0x%08x", dir, type, rootHex, scope.bucket,
+                 (unsigned)payloadBytes, peer);
+}
+
+void StoreForwardPlusPlusModule::sendEnumMessage(meshtastic_StoreForwardPlusPlus &msg, NodeNum to, const char *type,
+                                                 size_t sketchBytes, const sfppsr::Scope *scopeOverride)
+{
+    sfppsr::Scope scope;
+    if (scopeOverride) {
+        scope = *scopeOverride;
+    } else {
+        scope.rootPrefixLen = msg.root_hash.size;
+        memcpy(scope.rootPrefix, msg.root_hash.bytes, msg.root_hash.size);
+        scope.bucket = msg.chain_count;
+    }
+
+    int ids = -1;
+    if (msg.sfpp_message_type == meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_PROVIDE ||
+        msg.sfpp_message_type == meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_REQUEST)
+        ids = msg.sr_short_ids_count;
+
+    int frameIndex = 0;
+    int frameTotal = 1;
+    if (msg.sfpp_message_type == meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_FRAME) {
+        if (msg.frame != 0) {
+            frameIndex = msg.frame & 0xFF;
+            frameTotal = msg.frame >> 8 & 0xFF;
+        }
+    } else if (msg.sr_frame != 0) {
+        frameIndex = msg.sr_frame & 0xFF;
+        frameTotal = msg.sr_frame >> 8 & 0xFF;
+    }
+
+    meshtastic_MeshPacket *p = allocDataProtobuf(msg);
+    if (!p)
+        return;
+    p->to = to;
+    p->decoded.want_response = false;
+    p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
+    p->channel = 0;
+    p->hop_limit = portduino_config.sfpp_hops;
+    p->hop_start = portduino_config.sfpp_hops;
+
+    logEnum("tx", type, scope, p->decoded.payload.size, to, ids, frameIndex, frameTotal, sketchBytes);
+    if (enumExchangeActive) {
+        enumTx++;
+        enumTxBytes += p->decoded.payload.size;
+    }
+    service->sendToMesh(p, RX_SRC_LOCAL, true);
+}
+
+void StoreForwardPlusPlusModule::beginEnumExchange(const uint8_t *root_hash, uint32_t bucket, NodeNum peer, uint32_t peerCount,
+                                                   uint64_t peerChecksum)
+{
+    enumExchangeActive = true;
+    memcpy(enumExchangeRoot, root_hash, SFPP_HASH_SIZE);
+    enumExchangeBucket = bucket;
+    enumExchangePeer = peer;
+    enumExchangeStartedMs = Time::getMillis();
+    enumRecovered = enumTx = enumRx = enumTxBytes = enumRxBytes = 0;
+    enumWanted.clear();
+    enumWantedRemaining = 0;
+    enumProvideActive = false;
+    enumPeerCount = peerCount;
+    enumPeerChecksum = peerChecksum;
+    enumCollisionProbe = false;
+    enumLastItemMs = enumExchangeStartedMs;
+
+    char rootHex[9];
+    formatRootHex(root_hash, SFPP_HASH_SIZE, rootHex);
+    LOG_INFO("SFPP-ENUM exchange begin role=puller root=%s bucket=%u peer=0x%08x", rootHex, bucket, peer);
+}
+
+void StoreForwardPlusPlusModule::endEnumExchange()
+{
+    if (!enumExchangeActive)
+        return;
+
+    char rootHex[9];
+    formatRootHex(enumExchangeRoot, SFPP_HASH_SIZE, rootHex);
+    LOG_INFO("SFPP-ENUM exchange end role=puller root=%s bucket=%u recovered=%u tx=%u rx=%u tx_bytes=%u rx_bytes=%u", rootHex,
+             enumExchangeBucket, enumRecovered, enumTx, enumRx, enumTxBytes, enumRxBytes);
+
+    enumExchangeActive = false;
+    enumProvideActive = false;
+    enumCollisionProbe = false;
+    enumWanted.clear();
+    enumWantedRemaining = 0;
+}
+
+void StoreForwardPlusPlusModule::expireEnumExchange()
+{
+    if (!enumExchangeActive)
+        return;
+
+    if (Throttle::hasElapsed(enumExchangeStartedMs, kEnumExchangeTimeoutMs)) {
+        endEnumExchange();
+        return;
+    }
+
+    // A collision probe has no named end: the peer serves every row for the shared IDs and then
+    // stops. Silence is the only completion signal, so finalise after an idle gap.
+    if (enumCollisionProbe && Throttle::hasElapsed(enumLastItemMs, kEnumProbeIdleMs)) {
+        if (!bucketMatchesPeer(enumExchangeRoot, enumExchangeBucket)) {
+            char rootHex[9];
+            formatRootHex(enumExchangeRoot, SFPP_HASH_SIZE, rootHex);
+            LOG_INFO("SFPP-ENUM collision_suspected root=%s bucket=%u", rootHex, enumExchangeBucket);
+            suppressEnumBucket(enumExchangeRoot, enumExchangeBucket, enumPeerCount, enumPeerChecksum);
+        }
+        endEnumExchange();
+    }
+}
+
+bool StoreForwardPlusPlusModule::bucketMatchesPeer(const uint8_t *root_hash, uint32_t bucket)
+{
+    sfppsr::BucketSummary local(4);
+    buildBucketSummary(root_hash, SFPP_HASH_SIZE, bucket, local);
+    return local.count() == enumPeerCount && local.checksum() == enumPeerChecksum;
+}
+
+bool StoreForwardPlusPlusModule::enumBucketSuppressed(const uint8_t *root_hash, uint32_t bucket, uint32_t count,
+                                                      uint64_t checksum) const
+{
+    for (const auto &entry : enumSuppressed) {
+        if (entry.bucket == bucket && entry.count == count && entry.checksum == checksum &&
+            memcmp(entry.root, root_hash, SFPP_HASH_SIZE) == 0)
+            return true;
+    }
+    return false;
+}
+
+void StoreForwardPlusPlusModule::suppressEnumBucket(const uint8_t *root_hash, uint32_t bucket, uint32_t count, uint64_t checksum)
+{
+    for (auto &entry : enumSuppressed) {
+        if (entry.bucket == bucket && memcmp(entry.root, root_hash, SFPP_HASH_SIZE) == 0) {
+            entry.count = count;
+            entry.checksum = checksum;
+            return;
+        }
+    }
+    EnumSuppression entry;
+    memcpy(entry.root, root_hash, SFPP_HASH_SIZE);
+    entry.bucket = bucket;
+    entry.count = count;
+    entry.checksum = checksum;
+    enumSuppressed.push_back(entry);
+}
+
+void StoreForwardPlusPlusModule::advertiseOneBucket(uint8_t *root_hash, size_t root_hash_len)
+{
+    if (getChainCount(root_hash, root_hash_len) == 0)
+        return;
+
+    link_object tip = getLinkFromPositionFromTip(0, root_hash, root_hash_len);
+    if (tip.counter == 0)
+        return;
+    const uint32_t maxBucket = (tip.counter - 1) / sfppsr::kBucketObjects;
+
+    // One bucket per tick, round-robin, skipping empty buckets on the advertising side.
+    for (uint32_t attempts = 0; attempts <= maxBucket; attempts++) {
+        if (enumBucketCursor > maxBucket)
+            enumBucketCursor = 0;
+        const uint32_t bucket = enumBucketCursor;
+        enumBucketCursor = (enumBucketCursor + 1) % (maxBucket + 1);
+
+        sfppsr::BucketSummary summary(4);
+        buildBucketSummary(root_hash, root_hash_len, bucket, summary);
+        if (summary.count() == 0)
+            continue;
+
+        sfppsr::Scope scope;
+        copyScopeRoot(root_hash, root_hash_len, scope, bucket, true);
+        meshtastic_StoreForwardPlusPlus msg;
+        if (!sfppsr::buildAdvert(scope, summary, msg))
+            continue;
+        sendEnumMessage(msg, NODENUM_BROADCAST, "advert", msg.message.size);
+        return;
+    }
+}
+
+void StoreForwardPlusPlusModule::handleEnumAdvert(const meshtastic_MeshPacket &mp, meshtastic_StoreForwardPlusPlus *t)
+{
+    if (portduino_config.sfpp_stratum0)
+        return; // the authority is the reference and never pulls
+
+    sfppsr::Advert advert;
+    if (!sfppsr::parseAdvert(*t, advert))
+        return;
+
+    uint8_t root[SFPP_HASH_SIZE] = {0};
+    bool known = lookUpFullRootHash(advert.scope.rootPrefix, advert.scope.rootPrefixLen, root);
+    if (!known) {
+        // A fresh follower has no root until it adopts the authority's. The advert carries the full
+        // root so it can; a bare prefix cannot be adopted.
+        if (advert.scope.rootPrefixLen != SFPP_HASH_SIZE)
+            return;
+        uint8_t existing[SFPP_HASH_SIZE] = {0};
+        if (getRootFromChannelHash(channels.getHash(0), existing)) {
+            if (memcmp(existing, advert.scope.rootPrefix, SFPP_HASH_SIZE) != 0)
+                return; // a different scope on our channel
+            memcpy(root, existing, SFPP_HASH_SIZE);
+        } else {
+            memcpy(root, advert.scope.rootPrefix, SFPP_HASH_SIZE);
+            addRootToMappings(channels.getHash(0), root);
+            LOG_INFO("StoreForwardpp adopted a root hash from an enumeration advert");
+        }
+    }
+
+    logEnum("rx", "advert", advert.scope, mp.decoded.payload.size, mp.from, -1, 0, 1, t->message.size);
+
+    if (enumExchangeActive)
+        return; // one exchange at a time; the next advert tick retries
+
+    // The receiver of a mismatching advert always pulls. An empty local bucket is count 0 and
+    // checksum 0, so it mismatches a non-empty peer and pulls too.
+    sfppsr::BucketSummary local(4);
+    buildBucketSummary(root, SFPP_HASH_SIZE, advert.scope.bucket, local);
+    if (local.count() == advert.count && local.checksum() == advert.checksum)
+        return;
+
+    // A bucket that could not be repaired from this advertised summary is not pulled again until
+    // the authority advertises a different one for it.
+    if (enumBucketSuppressed(root, advert.scope.bucket, advert.count, advert.checksum))
+        return;
+
+    beginEnumExchange(root, advert.scope.bucket, mp.from, advert.count, advert.checksum);
+    requestEnumList(root, advert.scope.bucket, mp.from);
+}
+
+void StoreForwardPlusPlusModule::requestEnumList(const uint8_t *root_hash, uint32_t bucket, NodeNum peer)
+{
+    sfppsr::Scope scope;
+    copyScopeRoot(root_hash, SFPP_HASH_SIZE, scope, bucket, false);
+    meshtastic_StoreForwardPlusPlus msg;
+    if (!sfppsr::buildEnumRequest(scope, msg))
+        return;
+    sendEnumMessage(msg, peer, "enum_req");
+}
+
+void StoreForwardPlusPlusModule::handleEnumRequest(const meshtastic_MeshPacket &mp, meshtastic_StoreForwardPlusPlus *t)
+{
+    if (mp.to != nodeDB->getNodeNum())
+        return;
+
+    sfppsr::Scope scope;
+    if (!sfppsr::parseScope(*t, scope))
+        return;
+
+    uint8_t root[SFPP_HASH_SIZE] = {0};
+    if (!lookUpFullRootHash(scope.rootPrefix, scope.rootPrefixLen, root))
+        return;
+
+    logEnum("rx", "enum_req", scope, mp.decoded.payload.size, mp.from, -1, 0, 1);
+
+    std::vector<pinsketch::Element> ids;
+    if (!collectBucketIds(root, SFPP_HASH_SIZE, scope.bucket, ids))
+        return;
+    std::sort(ids.begin(), ids.end());
+    ids.erase(std::unique(ids.begin(), ids.end()), ids.end());
+
+    const size_t total = (ids.size() + sfppsr::kMaxShortIds - 1) / sfppsr::kMaxShortIds;
+    if (total == 0 || total > 255)
+        return;
+
+    for (size_t i = 0; i < total; i++) {
+        const size_t begin = i * sfppsr::kMaxShortIds;
+        const size_t end = std::min(begin + sfppsr::kMaxShortIds, ids.size());
+        std::vector<pinsketch::Element> slice(ids.begin() + begin, ids.begin() + end);
+        meshtastic_StoreForwardPlusPlus msg;
+        if (!sfppsr::buildEnumProvide(scope, slice, (uint8_t)i, (uint8_t)total, msg))
+            continue;
+        sendEnumMessage(msg, mp.from, "enum_prov");
+    }
+}
+
+void StoreForwardPlusPlusModule::handleEnumProvide(const meshtastic_MeshPacket &mp, meshtastic_StoreForwardPlusPlus *t)
+{
+    if (!enumExchangeActive || mp.from != enumExchangePeer)
+        return;
+
+    sfppsr::ShortIdList list;
+    if (!sfppsr::parseShortIds(*t, list))
+        return;
+
+    uint8_t root[SFPP_HASH_SIZE] = {0};
+    if (!lookUpFullRootHash(list.scope.rootPrefix, list.scope.rootPrefixLen, root))
+        return;
+    if (list.scope.bucket != enumExchangeBucket || memcmp(root, enumExchangeRoot, SFPP_HASH_SIZE) != 0)
+        return;
+
+    logEnum("rx", "enum_prov", list.scope, mp.decoded.payload.size, mp.from, (int)list.ids.size(), list.frameIndex,
+            list.frameTotal);
+    enumRx++;
+    enumRxBytes += mp.decoded.payload.size;
+
+    if (list.frameTotal == 0 || list.frameTotal > (uint8_t)(sizeof(enumProvideSeen)))
+        return;
+
+    if (!enumProvideActive) {
+        enumProvideActive = true;
+        enumProvideTotal = list.frameTotal;
+        enumProvideSeenCount = 0;
+        memset(enumProvideSeen, 0, sizeof(enumProvideSeen));
+        enumProvideIds.clear();
+        enumProvideBucket = list.scope.bucket;
+        enumProvidePeer = mp.from;
+    }
+    if (list.frameTotal != enumProvideTotal)
+        return;
+    if (list.frameIndex >= enumProvideTotal || enumProvideSeen[list.frameIndex])
+        return;
+
+    enumProvideSeen[list.frameIndex] = true;
+    enumProvideSeenCount++;
+    enumProvideIds.insert(enumProvideIds.end(), list.ids.begin(), list.ids.end());
+    if (enumProvideSeenCount < enumProvideTotal)
+        return;
+
+    // Complete list: everything the peer holds that we do not is what we fetch.
+    std::vector<pinsketch::Element> own;
+    collectBucketIds(root, SFPP_HASH_SIZE, enumProvideBucket, own);
+    std::sort(enumProvideIds.begin(), enumProvideIds.end());
+    enumProvideIds.erase(std::unique(enumProvideIds.begin(), enumProvideIds.end()), enumProvideIds.end());
+    std::sort(own.begin(), own.end());
+    own.erase(std::unique(own.begin(), own.end()), own.end());
+
+    std::vector<pinsketch::Element> missing;
+    std::set_difference(enumProvideIds.begin(), enumProvideIds.end(), own.begin(), own.end(), std::back_inserter(missing));
+
+    enumProvideActive = false;
+    if (!missing.empty()) {
+        enumCollisionProbe = false;
+        requestMissingItems(root, enumProvideBucket, enumProvidePeer, missing);
+        return;
+    }
+
+    if (bucketMatchesPeer(root, enumProvideBucket)) {
+        endEnumExchange();
+        return;
+    }
+
+    // The lists match by short ID but the checksums differ: a truncated-ID collision may hide an
+    // object. Ask for every object the shared IDs name; the probe ends on convergence or idle.
+    enumCollisionProbe = true;
+    enumLastItemMs = Time::getMillis();
+    requestMissingItems(root, enumProvideBucket, enumProvidePeer, enumProvideIds);
+}
+
+void StoreForwardPlusPlusModule::requestMissingItems(const uint8_t *root_hash, uint32_t bucket, NodeNum peer,
+                                                     const std::vector<pinsketch::Element> &ids)
+{
+    if (ids.empty() || ids.size() > sfppsr::kMaxShortIds)
+        return;
+
+    sfppsr::Scope scope;
+    copyScopeRoot(root_hash, SFPP_HASH_SIZE, scope, bucket, false);
+    meshtastic_StoreForwardPlusPlus msg;
+    if (!sfppsr::buildItemRequest(scope, ids, msg))
+        return;
+
+    enumWanted = ids;
+    enumWantedRemaining = ids.size();
+    sendEnumMessage(msg, peer, "item_req");
+}
+
+void StoreForwardPlusPlusModule::handleItemRequest(const meshtastic_MeshPacket &mp, meshtastic_StoreForwardPlusPlus *t)
+{
+    if (mp.to != nodeDB->getNodeNum())
+        return;
+
+    sfppsr::ShortIdList list;
+    if (!sfppsr::parseShortIds(*t, list))
+        return;
+
+    uint8_t root[SFPP_HASH_SIZE] = {0};
+    if (!lookUpFullRootHash(list.scope.rootPrefix, list.scope.rootPrefixLen, root))
+        return;
+
+    logEnum("rx", "item_req", list.scope, mp.decoded.payload.size, mp.from, (int)list.ids.size(), 0, 1);
+
+    const uint32_t first = list.scope.bucket * sfppsr::kBucketObjects + 1;
+    const uint32_t last = first + sfppsr::kBucketObjects - 1;
+    const uint32_t now = getValidTime(RTCQuality::RTCQualityNTP, true);
+
+    for (pinsketch::Element wanted : list.ids) {
+        sqlite3_reset(getLinkByShortIdStmt);
+        sqlite3_bind_int(getLinkByShortIdStmt, 1, SFPP_HASH_SIZE);
+        sqlite3_bind_blob(getLinkByShortIdStmt, 2, root, SFPP_HASH_SIZE, NULL);
+        sqlite3_bind_int(getLinkByShortIdStmt, 3, first);
+        sqlite3_bind_int(getLinkByShortIdStmt, 4, last);
+        sqlite3_bind_int64(getLinkByShortIdStmt, 5, (sqlite3_int64)wanted);
+
+        // A short ID can name more than one stored object; serve every one so a collided pair
+        // cannot hide behind a single row.
+        bool served = false;
+        while (sqlite3_step(getLinkByShortIdStmt) == SQLITE_ROW) {
+            served = true;
+            const uint32_t to = (uint32_t)sqlite3_column_int64(getLinkByShortIdStmt, 0);
+            const uint32_t from = (uint32_t)sqlite3_column_int64(getLinkByShortIdStmt, 1);
+            const uint32_t id = (uint32_t)sqlite3_column_int64(getLinkByShortIdStmt, 2);
+            const uint8_t *enc = (const uint8_t *)sqlite3_column_blob(getLinkByShortIdStmt, 3);
+            const int encLen = sqlite3_column_bytes(getLinkByShortIdStmt, 3);
+            const uint32_t rxTime = (uint32_t)sqlite3_column_int64(getLinkByShortIdStmt, 5);
+            std::vector<uint8_t> cipher(enc, enc + encLen);
+
+            const uint32_t heardAgo = rxTime < now ? now - rxTime : 0;
+            std::vector<meshtastic_StoreForwardPlusPlus> frames;
+            if (!sfppframe::split(cipher.data(), cipher.size(), to, from, id, heardAgo, false, frames))
+                continue;
+
+            sfppsr::Scope scope;
+            copyScopeRoot(root, SFPP_HASH_SIZE, scope, list.scope.bucket, false);
+            for (auto &frame : frames)
+                sendEnumMessage(frame, mp.from, "item_frame", 0, &scope);
+        }
+        sqlite3_reset(getLinkByShortIdStmt);
+
+        if (!served)
+            LOG_WARN("StoreForwardpp item request for an unknown short ID 0x%08x", wanted);
+    }
+}
+
+void StoreForwardPlusPlusModule::handleItemFrame(const meshtastic_MeshPacket &mp, meshtastic_StoreForwardPlusPlus *t)
+{
+    if (!enumExchangeActive || mp.from != enumExchangePeer)
+        return;
+
+    sfppsr::Scope scope;
+    copyScopeRoot(enumExchangeRoot, SFPP_HASH_SIZE, scope, enumExchangeBucket, false);
+    int frameIndex = t->frame != 0 ? (t->frame & 0xFF) : 0;
+    int frameTotal = t->frame != 0 ? (t->frame >> 8 & 0xFF) : 1;
+    logEnum("rx", "item_frame", scope, mp.decoded.payload.size, mp.from, -1, frameIndex, frameTotal);
+    enumRx++;
+    enumRxBytes += mp.decoded.payload.size;
+
+    sfppframe::Replay replay;
+    if (!enumReassembler.offer(*t, Time::getMillis(), replay))
+        return;
+
+    uint8_t hash[SFPP_HASH_SIZE];
+    sfppframe::messageHash(replay.ciphertext.data(), replay.ciphertext.size(), replay.to, replay.from, replay.id, hash);
+    const pinsketch::Element shortId = sfppsr::shortId(hash, sizeof(hash));
+
+    auto it = std::find(enumWanted.begin(), enumWanted.end(), shortId);
+    if (it == enumWanted.end()) {
+        LOG_WARN("StoreForwardpp recovered an object that was never requested");
+        return;
+    }
+
+    const bool isNew = !isInDB(hash, sizeof(hash));
+    if (!storeRecoveredObject(replay, enumExchangeRoot, enumExchangeBucket))
+        return;
+    enumLastItemMs = Time::getMillis();
+    if (isNew)
+        enumRecovered++;
+
+    if (enumCollisionProbe) {
+        // A probe keeps accepting rows for the shared IDs until the bucket agrees or it idles out.
+        if (bucketMatchesPeer(enumExchangeRoot, enumExchangeBucket))
+            endEnumExchange();
+        return;
+    }
+
+    enumWanted.erase(it);
+    enumWantedRemaining = enumWanted.size();
+    if (enumWanted.empty())
+        endEnumExchange();
+}
+
+bool StoreForwardPlusPlusModule::storeRecoveredObject(const sfppframe::Replay &replay, const uint8_t *root_hash, uint32_t bucket)
+{
+    uint8_t hash[SFPP_HASH_SIZE];
+    sfppframe::messageHash(replay.ciphertext.data(), replay.ciphertext.size(), replay.to, replay.from, replay.id, hash);
+    if (isInDB(hash, sizeof(hash)))
+        return true;
+
+    const uint32_t now = getValidTime(RTCQuality::RTCQualityNTP, true);
+    const uint32_t rxTime = replay.heardAgoS <= now ? now - replay.heardAgoS : now;
+    // Bucket membership is a counter range, so any in-range counter stores the row in the right bucket.
+    const uint32_t counter = bucket * sfppsr::kBucketObjects + 1;
+
+    sqlite3_reset(chain_insert_stmt);
+    sqlite3_bind_int64(chain_insert_stmt, 1, (sqlite3_int64)replay.to);
+    sqlite3_bind_int64(chain_insert_stmt, 2, (sqlite3_int64)replay.from);
+    sqlite3_bind_int64(chain_insert_stmt, 3, (sqlite3_int64)replay.id);
+    sqlite3_bind_blob(chain_insert_stmt, 4, root_hash, SFPP_HASH_SIZE, SQLITE_STATIC);
+    sqlite3_bind_blob(chain_insert_stmt, 5, replay.ciphertext.data(), (int)replay.ciphertext.size(), SQLITE_STATIC);
+    sqlite3_bind_blob(chain_insert_stmt, 6, hash, SFPP_HASH_SIZE, SQLITE_STATIC);
+    sqlite3_bind_int64(chain_insert_stmt, 7, (sqlite3_int64)rxTime);
+    // A unique non-zero commit hash keeps trimOldestLink deleting one row rather than every zero row.
+    sqlite3_bind_blob(chain_insert_stmt, 8, hash, SFPP_HASH_SIZE, SQLITE_STATIC);
+    sqlite3_bind_text(chain_insert_stmt, 9, "", 0, SQLITE_STATIC);
+    sqlite3_bind_int64(chain_insert_stmt, 10, (sqlite3_int64)counter);
+    sqlite3_bind_int64(chain_insert_stmt, 11, (sqlite3_int64)sfppsr::shortId(hash, sizeof(hash)));
+    sqlite3_bind_int64(chain_insert_stmt, 12, (sqlite3_int64)sfppsr::checksumContribution(hash, sizeof(hash)));
+
+    const int res = sqlite3_step(chain_insert_stmt);
+    sqlite3_reset(chain_insert_stmt);
+    if (res != SQLITE_OK && res != SQLITE_DONE) {
+        LOG_ERROR("StoreForwardpp cannot store a recovered object: %s", sqlite3_errmsg(ppDb));
+        return false;
+    }
+    return true;
+}
 
 #endif // has include sqlite3

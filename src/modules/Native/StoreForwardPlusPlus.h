@@ -9,8 +9,10 @@
 #include "Channels.h"
 #include "ProtobufModule.h"
 #include "Router.h"
+#include "SfppFrame.h"
 #include "SinglePortModule.h"
 #include "SketchIndex.h"
+#include "SketchWire.h"
 #include "mesh/generated/meshtastic/storeforward.pb.h"
 #include "sqlite3.h"
 
@@ -151,6 +153,8 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     sqlite3_stmt *removeCanonScratch;
     sqlite3_stmt *clearCanonScratchStmt;
     sqlite3_stmt *bucketSummaryStmt;
+    sqlite3_stmt *bucketIdsStmt;
+    sqlite3_stmt *getLinkByShortIdStmt;
     sqlite3_stmt *unindexedLinksStmt;
     sqlite3_stmt *setLinkSetIndexStmt;
     sqlite3_stmt *legacyHistoryStmt;
@@ -184,7 +188,34 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
 
     // Summarises one bucket of a chain: its members' short IDs, their XOR checksum and their count.
     // Returns false when the bucket holds nothing, which is not the same as an empty sketch.
-    bool buildBucketSummary(uint8_t *root_hash, size_t root_hash_len, uint32_t bucket, sfppsr::BucketSummary &out);
+    bool buildBucketSummary(const uint8_t *root_hash, size_t root_hash_len, uint32_t bucket, sfppsr::BucketSummary &out);
+
+    // The short IDs stored in one bucket, for the enumeration list and for a windowed object lookup.
+    bool collectBucketIds(const uint8_t *root_hash, size_t root_hash_len, uint32_t bucket, std::vector<pinsketch::Element> &out);
+
+    // --- Arm C: detector + short-ID enumeration (StoreAndForward.Repair = enum) ---
+
+    void advertiseOneBucket(uint8_t *root_hash, size_t root_hash_len);
+    void expireEnumExchange();
+    void sendEnumMessage(meshtastic_StoreForwardPlusPlus &msg, NodeNum to, const char *type, size_t sketchBytes = 0,
+                         const sfppsr::Scope *scopeOverride = nullptr);
+    void logEnum(const char *dir, const char *type, const sfppsr::Scope &scope, size_t payloadBytes, NodeNum peer, int ids,
+                 int frameIndex, int frameTotal, size_t sketchBytes = 0);
+    void beginEnumExchange(const uint8_t *root_hash, uint32_t bucket, NodeNum peer, uint32_t peerCount, uint64_t peerChecksum);
+    void endEnumExchange();
+    bool bucketMatchesPeer(const uint8_t *root_hash, uint32_t bucket);
+    bool enumBucketSuppressed(const uint8_t *root_hash, uint32_t bucket, uint32_t count, uint64_t checksum) const;
+    void suppressEnumBucket(const uint8_t *root_hash, uint32_t bucket, uint32_t count, uint64_t checksum);
+
+    void handleEnumAdvert(const meshtastic_MeshPacket &mp, meshtastic_StoreForwardPlusPlus *t);
+    void handleEnumRequest(const meshtastic_MeshPacket &mp, meshtastic_StoreForwardPlusPlus *t);
+    void handleEnumProvide(const meshtastic_MeshPacket &mp, meshtastic_StoreForwardPlusPlus *t);
+    void handleItemRequest(const meshtastic_MeshPacket &mp, meshtastic_StoreForwardPlusPlus *t);
+    void handleItemFrame(const meshtastic_MeshPacket &mp, meshtastic_StoreForwardPlusPlus *t);
+
+    void requestEnumList(const uint8_t *root_hash, uint32_t bucket, NodeNum peer);
+    void requestMissingItems(const uint8_t *root_hash, uint32_t bucket, NodeNum peer, const std::vector<pinsketch::Element> &ids);
+    bool storeRecoveredObject(const sfppframe::Replay &replay, const uint8_t *root_hash, uint32_t bucket);
 
     // For a given Meshtastic ChannelHash, fills the root_hash buffer with a 32-byte root hash
     // returns true if the root hash was found
@@ -355,6 +386,48 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     uint32_t scratch_timed_out = 0;
     uint32_t sent_from_scratch = 0;
     uint32_t received_from_scratch = 0;
+
+    // Enumeration (arm C) state. One exchange is in flight at a time; the next advert tick retries.
+    sfppframe::Reassembler enumReassembler;
+    uint32_t enumBucketCursor = 0;
+
+    bool enumExchangeActive = false;
+    uint8_t enumExchangeRoot[SFPP_HASH_SIZE] = {0};
+    uint32_t enumExchangeBucket = 0;
+    NodeNum enumExchangePeer = 0;
+    uint32_t enumExchangeStartedMs = 0;
+    uint32_t enumRecovered = 0;
+    uint32_t enumTx = 0;
+    uint32_t enumRx = 0;
+    uint32_t enumTxBytes = 0;
+    uint32_t enumRxBytes = 0;
+
+    bool enumProvideActive = false;
+    uint32_t enumProvideBucket = 0;
+    NodeNum enumProvidePeer = 0;
+    uint8_t enumProvideTotal = 0;
+    uint8_t enumProvideSeenCount = 0;
+    bool enumProvideSeen[8] = {};
+    std::vector<pinsketch::Element> enumProvideIds;
+
+    std::vector<pinsketch::Element> enumWanted;
+    size_t enumWantedRemaining = 0;
+
+    // The peer summary this exchange is trying to reach, and the short-ID-collision probe state.
+    uint32_t enumPeerCount = 0;
+    uint64_t enumPeerChecksum = 0;
+    bool enumCollisionProbe = false;
+    uint32_t enumLastItemMs = 0;
+
+    // A bucket whose short-ID lists match but whose checksum never does is not pulled again until
+    // the authority changes what it advertises for it.
+    struct EnumSuppression {
+        uint8_t root[SFPP_HASH_SIZE];
+        uint32_t bucket;
+        uint32_t count;
+        uint64_t checksum;
+    };
+    std::vector<EnumSuppression> enumSuppressed;
 };
 
 extern StoreForwardPlusPlusModule *storeForwardPlusPlusModule;
