@@ -78,6 +78,9 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     };
 
   public:
+    // Stamped into PRAGMA user_version. A store with any other value is moved aside, never migrated.
+    static constexpr int kSchemaVersion = 1;
+
     /** Constructor
      *
      */

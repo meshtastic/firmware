@@ -17,8 +17,25 @@
 #include "modules/StoreForwardModule.h"
 #endif
 
+#include <cstdio>
 #include <utility>
 #include <vector>
+
+// Reads PRAGMA user_version, and whether the store holds any table at all (a new file holds none).
+static int readSchemaVersion(sqlite3 *db, bool &hasTables)
+{
+    int version = 0;
+    sqlite3_stmt *st = nullptr;
+    if (sqlite3_prepare_v2(db, "PRAGMA user_version;", -1, &st, NULL) == SQLITE_OK && sqlite3_step(st) == SQLITE_ROW)
+        version = sqlite3_column_int(st, 0);
+    sqlite3_finalize(st);
+    st = nullptr;
+    hasTables = false;
+    if (sqlite3_prepare_v2(db, "SELECT 1 FROM sqlite_master WHERE type='table' LIMIT 1;", -1, &st, NULL) == SQLITE_OK)
+        hasTables = sqlite3_step(st) == SQLITE_ROW;
+    sqlite3_finalize(st);
+    return version;
+}
 
 // The shim speaks the legacy StoreAndForward protobuf, which is not this module's template type,
 // so its packets are built by hand rather than with allocDataProtobuf().
@@ -58,6 +75,28 @@ StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
         ppDb = nullptr;
         exit(EXIT_FAILURE);
     }
+
+    bool hasTables = false;
+    const int foundVersion = readSchemaVersion(ppDb, hasTables);
+    if (hasTables && foundVersion != kSchemaVersion) {
+        const std::string aside = db_path + ".v" + std::to_string(foundVersion) + "-" + std::to_string(getTime());
+        LOG_WARN("StoreForwardpp DB schema %d, expected %d: moving it to %s and starting empty", foundVersion, kSchemaVersion,
+                 aside.c_str());
+        sqlite3_close(ppDb);
+        ppDb = nullptr;
+        if (std::rename(db_path.c_str(), aside.c_str()) != 0) {
+            LOG_ERROR("Cannot move the old StoreForwardpp DB aside");
+            exit(EXIT_FAILURE);
+        }
+        std::rename((db_path + "-journal").c_str(), (aside + "-journal").c_str());
+        res = sqlite3_open(db_path.c_str(), &ppDb);
+        if (res != SQLITE_OK) {
+            LOG_ERROR("Cannot open database: %s", sqlite3_errmsg(ppDb));
+            sqlite3_close(ppDb);
+            ppDb = nullptr;
+            exit(EXIT_FAILURE);
+        }
+    }
     char *err = nullptr;
 
     res = sqlite3_exec(ppDb, "         \
@@ -73,6 +112,8 @@ StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
         commit_hash BLOB NOT NULL,     \
         payload TEXT,                  \
         counter INT DEFAULT 0,         \
+        short_id INT,                  \
+        checksum INT,                  \
         PRIMARY KEY (message_hash)     \
         );",
                        NULL, NULL, &err);
@@ -82,11 +123,6 @@ StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
     if (err != nullptr)
         LOG_ERROR("%s", err);
     sqlite3_free(err);
-
-    // The set-reconciliation columns arrived after the table, so an existing store gets them here.
-    // A duplicate-column error is the expected result on every run after the first.
-    sqlite3_exec(ppDb, "ALTER TABLE channel_messages ADD COLUMN short_id INT;", NULL, NULL, NULL);
-    sqlite3_exec(ppDb, "ALTER TABLE channel_messages ADD COLUMN checksum INT;", NULL, NULL, NULL);
 
     res = sqlite3_exec(ppDb, "         \
         CREATE TABLE IF NOT EXISTS     \
@@ -202,7 +238,7 @@ StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
         LOG_ERROR("%s", err);
     sqlite3_free(err);
 
-    // store schema version somewhere
+    sqlite3_exec(ppDb, ("PRAGMA user_version = " + std::to_string(kSchemaVersion) + ";").c_str(), NULL, NULL, NULL);
 
     // prepared statements *should* make this faster.
     sqlite3_prepare_v2(ppDb, "INSERT INTO channel_messages (destination, sender, packet_id, root_hash, \

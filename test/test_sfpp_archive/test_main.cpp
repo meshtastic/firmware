@@ -39,6 +39,7 @@
 
 #include <cstdio>
 #include <cstring>
+#include <dirent.h>
 #include <memory>
 #include <sqlite3.h>
 #include <string>
@@ -610,6 +611,76 @@ void test_shimClaimsPort65WithLegacyClientOnly()
 #endif
 }
 
+int storedSchemaVersion()
+{
+    sqlite3 *db = nullptr;
+    int version = -1;
+    if (sqlite3_open(dbFile().c_str(), &db) == SQLITE_OK) {
+        sqlite3_stmt *stmt = nullptr;
+        if (sqlite3_prepare_v2(db, "PRAGMA user_version;", -1, &stmt, nullptr) == SQLITE_OK && sqlite3_step(stmt) == SQLITE_ROW)
+            version = sqlite3_column_int(stmt, 0);
+        sqlite3_finalize(stmt);
+    }
+    sqlite3_close(db);
+    return version;
+}
+
+// Every file in the test's DB directory other than the live store and its journal.
+std::vector<std::string> filesMovedAside()
+{
+    std::vector<std::string> out;
+    if (DIR *d = opendir(dbDir.c_str())) {
+        while (dirent *e = readdir(d)) {
+            const std::string name = e->d_name;
+            if (name != "." && name != ".." && name != "storeforwardpp.db" && name != "storeforwardpp.db-journal")
+                out.push_back(dbDir + "/" + name);
+        }
+        closedir(d);
+    }
+    return out;
+}
+
+// A new store is stamped with the current schema, and a restart keeps what it holds.
+void test_storeIsStampedAndKeptAcrossRestart()
+{
+    TEST_ASSERT_EQUAL_INT(StoreForwardPlusPlusModule::kSchemaVersion, storedSchemaVersion());
+    TEST_ASSERT_TRUE(ingestOneText("kept across restart"));
+
+    delete testSfpp;
+    testSfpp = new TestSfppModule();
+
+    StoredRow row;
+    TEST_ASSERT_TRUE(readStoredRow(TEXT_ID, row));
+    TEST_ASSERT_EQUAL_STRING("kept across restart", row.payload.c_str());
+    TEST_ASSERT_EQUAL_UINT(0, filesMovedAside().size());
+}
+
+// A store from before the stamp (user_version 0) is moved aside whole and replaced by an empty one,
+// so a schema change never meets old rows.
+void test_unstampedStoreIsMovedAsideAndStartsEmpty()
+{
+    TEST_ASSERT_TRUE(ingestOneText("from the old schema"));
+    delete testSfpp;
+    testSfpp = nullptr;
+
+    sqlite3 *db = nullptr;
+    TEST_ASSERT_EQUAL_INT(SQLITE_OK, sqlite3_open(dbFile().c_str(), &db));
+    TEST_ASSERT_EQUAL_INT(SQLITE_OK, sqlite3_exec(db, "PRAGMA user_version = 0;", nullptr, nullptr, nullptr));
+    sqlite3_close(db);
+
+    testSfpp = new TestSfppModule();
+
+    StoredRow row;
+    TEST_ASSERT_FALSE(readStoredRow(TEXT_ID, row));
+    TEST_ASSERT_EQUAL_INT(StoreForwardPlusPlusModule::kSchemaVersion, storedSchemaVersion());
+
+    const std::vector<std::string> aside = filesMovedAside();
+    TEST_ASSERT_EQUAL_UINT(1, aside.size());
+    TEST_ASSERT_NOT_NULL(strstr(aside[0].c_str(), "storeforwardpp.db.v0-"));
+    for (const std::string &f : aside)
+        std::remove(f.c_str());
+}
+
 void loop() {}
 
 void setup()
@@ -627,6 +698,8 @@ void setup()
     RUN_TEST(test_shimClaimsPort65WithNoLegacyServer);
     RUN_TEST(test_shimYieldsPort65ToLegacyServer);
     RUN_TEST(test_shimClaimsPort65WithLegacyClientOnly);
+    RUN_TEST(test_storeIsStampedAndKeptAcrossRestart);
+    RUN_TEST(test_unstampedStoreIsMovedAsideAndStartsEmpty);
     UNITY_END();
 }
 
