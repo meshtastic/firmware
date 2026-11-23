@@ -30,6 +30,7 @@
 #include "mesh/NodeDB.h"
 #include "mesh/RadioInterface.h"
 #include "mesh/Router.h"
+#include "modules/Native/SfppFrame.h"
 #include "modules/Native/StoreForwardPlusPlus.h"
 #include "modules/RoutingModule.h"
 #include "support/MockMeshService.h"
@@ -265,6 +266,7 @@ struct StoredRow {
     std::vector<uint8_t> root;
     std::vector<uint8_t> commit;
     std::vector<uint8_t> encrypted;
+    std::vector<uint8_t> messageHash;
     std::string payload;
     uint32_t rxTime = 0;
 };
@@ -281,7 +283,7 @@ bool readStoredRow(PacketId id, StoredRow &row)
     sqlite3_stmt *stmt = nullptr;
     bool found = false;
     if (sqlite3_prepare_v2(db,
-                           "select root_hash, commit_hash, encrypted_bytes, payload, rx_time from channel_messages "
+                           "select root_hash, commit_hash, encrypted_bytes, payload, rx_time, message_hash from channel_messages "
                            "where packet_id=? limit 1;",
                            -1, &stmt, nullptr) == SQLITE_OK) {
         sqlite3_bind_int64(stmt, 1, id);
@@ -298,6 +300,9 @@ bool readStoredRow(PacketId id, StoredRow &row)
             const unsigned char *text = sqlite3_column_text(stmt, 3);
             row.payload.assign((const char *)text, sqlite3_column_bytes(stmt, 3));
             row.rxTime = (uint32_t)sqlite3_column_int64(stmt, 4);
+            const uint8_t *hash = (const uint8_t *)sqlite3_column_blob(stmt, 5);
+            int hashLen = sqlite3_column_bytes(stmt, 5);
+            row.messageHash.assign(hash, hash + hashLen);
             found = true;
         }
     }
@@ -462,6 +467,21 @@ void test_ingestStoresTextWithPayloadAndHashes()
     TEST_ASSERT_EQUAL_UINT(SFPP_HASH_SIZE, row.root.size());
     TEST_ASSERT_EQUAL_UINT(SFPP_HASH_SIZE, row.commit.size());
     TEST_ASSERT_TRUE(row.encrypted.size() > 0);
+}
+
+// The store and the frame splitter must hash a message identically; if they drift, a frame's key
+// stops matching the row it came from and no replay can ever verify.
+void test_storedMessageHashMatchesTheFrameHash()
+{
+    TEST_ASSERT_TRUE(ingestOneText("hash me"));
+
+    StoredRow row;
+    TEST_ASSERT_TRUE(readStoredRow(TEXT_ID, row));
+
+    uint8_t expected[sfppframe::kMessageHashBytes];
+    sfppframe::messageHash(row.encrypted.data(), row.encrypted.size(), NODENUM_BROADCAST, REMOTE_NODE, TEXT_ID, expected);
+    TEST_ASSERT_EQUAL_UINT32(sfppframe::kMessageHashBytes, (uint32_t)row.messageHash.size());
+    TEST_ASSERT_EQUAL_MEMORY(expected, row.messageHash.data(), sfppframe::kMessageHashBytes);
 }
 
 // runOnce() in stratum-0 mode must announce the stored tip: CANON_ANNOUNCE with the full root, the
@@ -833,6 +853,7 @@ void setup()
 
     UNITY_BEGIN();
     RUN_TEST(test_ingestStoresTextWithPayloadAndHashes);
+    RUN_TEST(test_storedMessageHashMatchesTheFrameHash);
     RUN_TEST(test_announceCarriesTheStoredTip);
     RUN_TEST(test_linkRequestReadsTheStoredTextBack);
     RUN_TEST(test_legacyHistoryAnswersInLegacyFormat);
