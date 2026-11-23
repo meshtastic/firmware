@@ -1120,6 +1120,115 @@ void test_twoRequestersBothComplete()
     TEST_ASSERT_EQUAL_UINT64(a.checksum, c.checksum);
 }
 
+// --- Stage 8b: wrong sketch decode ---
+
+// Builds an advert whose sketch is the local bucket XOR a few fake IDs, so it decodes to IDs the
+// real authority does not hold. `addCountMismatch` makes the advertised count inconsistent.
+bool buildCraftedAdvertFromDir(const std::string &dir, uint32_t bucket, uint32_t fakeCount, bool addCountMismatch,
+                               meshtastic_MeshPacket &out)
+{
+    uint8_t root[SFPP_HASH_SIZE];
+    if (!readRoot(dir, root))
+        return false;
+
+    sfppsr::BucketSummary summary(4);
+    sqlite3 *db = nullptr;
+    if (!openDb(dir, &db))
+        return false;
+    sqlite3_stmt *stmt = nullptr;
+    const uint32_t first = bucket * sfppsr::kBucketObjects + 1;
+    const uint32_t last = first + sfppsr::kBucketObjects - 1;
+    if (sqlite3_prepare_v2(db,
+                           "select short_id, checksum from channel_messages where counter>=? and counter<=? and short_id is not "
+                           "null;",
+                           -1, &stmt, nullptr) == SQLITE_OK) {
+        sqlite3_bind_int(stmt, 1, (int)first);
+        sqlite3_bind_int(stmt, 2, (int)last);
+        while (sqlite3_step(stmt) == SQLITE_ROW)
+            summary.add((pinsketch::Element)sqlite3_column_int64(stmt, 0), (uint64_t)sqlite3_column_int64(stmt, 1));
+    }
+    if (stmt)
+        sqlite3_finalize(stmt);
+    sqlite3_close(db);
+
+    for (uint32_t i = 0; i < fakeCount; i++) {
+        uint8_t fake[SFPP_HASH_SIZE];
+        memset(fake, 0xA0 + (int)i, sizeof(fake));
+        summary.add((pinsketch::Element)(0x0BAD0000u + i), sfppsr::checksumContribution(fake, sizeof(fake)));
+    }
+
+    sfppsr::Scope scope;
+    scope.rootPrefixLen = 4;
+    memcpy(scope.rootPrefix, root, 4);
+    scope.bucket = bucket;
+
+    meshtastic_StoreForwardPlusPlus msg;
+    if (!sfppsr::buildAdvert(scope, summary, msg))
+        return false;
+    if (addCountMismatch)
+        msg.sr_count += 1;
+
+    out = meshtastic_MeshPacket_init_zero;
+    out.from = AUTHORITY_NODE;
+    out.to = NODENUM_BROADCAST;
+    out.channel = 0;
+    out.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    out.decoded.portnum = meshtastic_PortNum_STORE_FORWARD_PLUSPLUS_APP;
+    out.decoded.payload.size = pb_encode_to_bytes(out.decoded.payload.bytes, sizeof(out.decoded.payload.bytes),
+                                                  &meshtastic_StoreForwardPlusPlus_msg, &msg);
+    return out.decoded.payload.size > 0;
+}
+
+// A decode that names IDs the authority does not hold serves nothing; after the item retries run
+// out the exchange must fall back to the list rather than ending and repeating forever.
+void test_sketchWrongDecodeFallsBackAfterRetries()
+{
+    portduino_config.sfpp_repair = SFPP_REPAIR_SKETCH;
+    ingestAuthority(8);
+    buildFollowerFromCopy();
+    TEST_ASSERT_TRUE(deleteCounter(dirB, 8));
+
+    meshtastic_MeshPacket advert;
+    TEST_ASSERT_TRUE(buildCraftedAdvertFromDir(dirB, 0, 2, false, advert));
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
+    std::vector<meshtastic_MeshPacket> sent = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, sent.size());
+    TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_REQUEST, decodeSfpp(sent[0]).sfpp_message_type);
+
+    TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, true, sent[0])); // the authority holds none of them
+    TEST_ASSERT_EQUAL_UINT(0, takeSent().size());
+
+    meshtastic_MeshPacket last = meshtastic_MeshPacket_init_zero;
+    for (uint32_t i = 0; i < 3; i++) {
+        Time::setTestMillis(Time::getMillis() + 31000);
+        myNodeInfo.my_node_num = FOLLOWER_NODE;
+        portduino_config.sfpp_stratum0 = false;
+        testRouter->sent.clear();
+        follower->runOnce();
+        std::vector<meshtastic_MeshPacket> out = takeSent();
+        if (!out.empty())
+            last = out[0];
+    }
+    TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_REQUEST, decodeSfpp(last).sfpp_message_type);
+}
+
+// The cardinality pre-check rejects a decode whose own-only and missing counts do not reconstruct
+// the advertised count.
+void test_sketchCountMismatchFallsBackImmediately()
+{
+    portduino_config.sfpp_repair = SFPP_REPAIR_SKETCH;
+    ingestAuthority(8);
+    buildFollowerFromCopy();
+    TEST_ASSERT_TRUE(deleteCounter(dirB, 8));
+
+    meshtastic_MeshPacket advert;
+    TEST_ASSERT_TRUE(buildCraftedAdvertFromDir(dirB, 0, 2, true, advert));
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
+    std::vector<meshtastic_MeshPacket> sent = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, sent.size());
+    TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_REQUEST, decodeSfpp(sent[0]).sfpp_message_type);
+}
+
 // --- Stage 8: sketch mode ---
 
 void runSketchCase(uint32_t total, uint32_t missing)
@@ -1233,6 +1342,8 @@ void setup()
     RUN_TEST(test_sketchResolvesOne);
     RUN_TEST(test_sketchResolvesFour);
     RUN_TEST(test_sketchFallsBackAtSixteen);
+    RUN_TEST(test_sketchWrongDecodeFallsBackAfterRetries);
+    RUN_TEST(test_sketchCountMismatchFallsBackImmediately);
     RUN_TEST(test_sketchWrongChecksumFallsBack);
     UNITY_END();
 }

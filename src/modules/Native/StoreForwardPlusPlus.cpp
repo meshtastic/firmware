@@ -2933,6 +2933,15 @@ bool StoreForwardPlusPlusModule::trySketchExchange(const sfppsr::Advert &advert,
         return false;
     }
 
+    // Cheap cardinality check: a wrong over-capacity decode names IDs the peer does not hold, and
+    // its own-only and missing counts will not reconstruct the advertised count.
+    const size_t ownOnly = difference.size() - missing.size();
+    if (ownOnly > local.count() || advert.count != local.count() - (uint32_t)ownOnly + (uint32_t)missing.size()) {
+        LOG_INFO("SFPP-ENUM type=sketch_decode result=bad_checksum root=%s bucket=%u peer=0x%08x ids=%u", rootHex, bucket, peer,
+                 (unsigned)missing.size());
+        return false;
+    }
+
     enumSketchAttempt = true;
     enumSketchIds = (uint32_t)missing.size();
     LOG_INFO("SFPP-ENUM type=sketch_decode result=ok root=%s bucket=%u peer=0x%08x ids=%u", rootHex, bucket, peer, enumSketchIds);
@@ -3277,6 +3286,13 @@ void StoreForwardPlusPlusModule::pumpEnumRetries()
         if (enumItemRetries < 2) {
             enumItemRetries++;
             resendItemRequest();
+        } else if (enumSketchAttempt) {
+            // The sketch named IDs the peer did not serve; the list exchange is the only way out.
+            char rootHex[9];
+            formatRootHex(enumExchangeRoot, SFPP_HASH_SIZE, rootHex);
+            LOG_INFO("SFPP-ENUM type=sketch_decode result=bad_checksum root=%s bucket=%u peer=0x%08x ids=%u", rootHex,
+                     enumExchangeBucket, enumExchangePeer, enumSketchIds);
+            fallbackToEnumList();
         } else {
             endEnumExchange();
         }
