@@ -304,6 +304,8 @@ StoreAndForward:
 #  Hops: 3 # Number of hops to use for SF++ messages
 #  AnnounceInterval: 5 # Interval in minutes between announcing tip of chain hash
 #  MaxChainLength: 1000 # Maximum number of messages to store in a chain
+#  Repair: chain # Repair path: chain (default) or enum (short-ID enumeration)
+#  EnumInterval: 60 # Minutes between enumeration advert ticks (enum only, minimum 1)
 
 Config:
 #  DisplayMode: TWOCOLOR # uncomment to force BaseUI
