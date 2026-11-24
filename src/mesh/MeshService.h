@@ -89,6 +89,7 @@ class MeshService
     bool radioConfigAwaitedReplySeen = false; // that reply has been in the router's pending-retransmission table
     uint32_t radioConfigAwaitedRetryMsec = 0; // its retransmission interval: how long its first retry's ack may take
     uint32_t radioConfigRetrySentAtMs = 0;    // when its first retry was seen sent; 0 = not yet
+    bool radioConfigRetryQueuedSeen = false;  // a retry of it has been seen in the TX queue
 
     /// Retune the radio to the current config and record the slot it is now committed to.
     void applyRadioConfig();

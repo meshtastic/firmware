@@ -2834,6 +2834,37 @@ static void test_deferredRetune_capWaitsForReplyRetry()
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, retuneCounter.count, "a reply never acked held the retune past its retry");
 }
 
+// NextHopRouter counts a retry when it is due, even if the packet pool had no copy for it, so nothing was
+// queued. That retry never went out: starting the ack window on it lets the cap retune before the next retry,
+// which other traffic can hold back, is sent. Only a retry seen in the TX queue and then gone counts as sent.
+static void test_deferredRetune_unqueuedRetryIsNotSent()
+{
+    primeDeferredRetuneTest();
+    auto *pendingReply = new PendingReplyRouter();
+    pendingReply->id = 0x1234;
+    testRouter = pendingReply;
+    router = pendingReply;
+    const uint32_t retryMsec = 15 * 1000;
+
+    service->reloadConfig(SEGMENT_CONFIG, true);
+    service->awaitAckBeforeRadioConfig(0x1234, retryMsec);
+    pendingReply->retries = 1; // first retry due, allocation failed: never queued
+    service->applyDeferredRadioConfig();
+    service->ageRadioConfigDeferralForTest(4 * retryMsec); // other traffic holds the next retry back
+    service->ageAwaitedRetryForTest(4 * retryMsec);
+    service->applyDeferredRadioConfig();
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, retuneCounter.count, "a retry that was never queued counted as sent");
+
+    pendingReply->retries = 2; // the next retry is queued, then sent
+    pendingReply->retryQueued = true;
+    service->applyDeferredRadioConfig();
+    pendingReply->retryQueued = false;
+    service->applyDeferredRadioConfig();
+    service->ageAwaitedRetryForTest(retryMsec);
+    service->applyDeferredRadioConfig();
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, retuneCounter.count, "a sent retry never acked held the retune past its interval");
+}
+
 // A local client's (BLE/USB/TCP) reply never goes over LoRa, so its save has nothing to wait for: deferring
 // it holds the change, and a commit's reboot, behind unrelated mesh traffic for up to the cap.
 static void test_setConfigLora_localClientRetunesAtOnce()
@@ -3253,6 +3284,7 @@ void setup()
     RUN_TEST(test_deferredRetune_repeatedSaveKeepsCapStart);
     RUN_TEST(test_deferredRetune_untrackedReplyWaitsForQueue);
     RUN_TEST(test_deferredRetune_capWaitsForReplyRetry);
+    RUN_TEST(test_deferredRetune_unqueuedRetryIsNotSent);
     RUN_TEST(test_setConfigLora_localClientRetunesAtOnce);
     RUN_TEST(test_commitEditSettings_localClientRebootNotHeld);
     RUN_TEST(test_localSave_joinsActiveDeferral);
