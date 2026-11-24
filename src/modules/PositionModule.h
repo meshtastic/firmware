@@ -61,6 +61,8 @@ class PositionModule : public ProtobufModule<meshtastic_Position>, private concu
     // Copy the altitude fields position_flags selects, keeping the source's presence so an altitude
     // nobody supplied is not broadcast as 0 m.
     static void copyAltitudeFields(meshtastic_Position &to, const meshtastic_Position &from, uint32_t flags);
+    // Position.ground_speed is km/h; TAKPacketV2.speed is cm/s. Rounds to nearest, saturates at UINT32_MAX.
+    static uint32_t groundSpeedKmhToCmPerSec(uint32_t kmh);
 
   protected:
     /** Called to handle a particular incoming message
@@ -77,6 +79,8 @@ class PositionModule : public ProtobufModule<meshtastic_Position>, private concu
 
     /** Does our periodic broadcast */
     virtual int32_t runOnce() override;
+
+    meshtastic_MeshPacket *allocAtakPli();
 
   private:
     meshtastic_MeshPacket *allocPositionPacket(uint32_t atPrecision);
@@ -97,7 +101,6 @@ class PositionModule : public ProtobufModule<meshtastic_Position>, private concu
     // gauges movement at our own configured (unclamped) precision rather than the on-wire
     // (public-clamped) precision - trackers report finer movement.
     bool positionUnchangedSinceLastSend(const meshtastic_PositionLite &selfPos, bool useConfiguredPrecision);
-    meshtastic_MeshPacket *allocAtakPli();
     void trySetRtc(meshtastic_Position p, bool isLocal, bool forceUpdate = false);
     uint32_t precision;
     void sendLostAndFoundText();
