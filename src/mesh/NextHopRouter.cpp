@@ -166,7 +166,8 @@ bool NextHopRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
                 if (!findInTxQueue(p->from, p->id)) {
                     if (reprocessPacket(p) && !isBlockedEventCoordinatePacket(p) && !perhapsRebroadcast(p) && isToUs(p) &&
                         p->want_ack) {
-                        sendAckNak(meshtastic_Routing_Error_NONE, getFrom(p), p->id, p->channel, 0);
+                        // A duplicate gets the answer the original got: the NAK if we refused it, else the ACK
+                        sendAckNak(refusalFor(getFrom(p), p->id), getFrom(p), p->id, p->channel, 0);
                     }
                 }
             } else if (!weWereNextHop) {

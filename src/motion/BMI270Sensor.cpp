@@ -562,6 +562,9 @@ int32_t BMI270Sensor::runOnce()
     int16_t x = (int16_t)((data[1] << 8) | data[0]);
     int16_t y = (int16_t)((data[3] << 8) | data[2]);
     int16_t z = (int16_t)((data[5] << 8) | data[4]);
+#ifdef MESHTASTIC_INCLUDE_INKHUD
+    sampleSteps(x, y, z);
+#endif
 
     if (!hasBaseline) {
         prevX = x;

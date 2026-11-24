@@ -9,6 +9,11 @@
  *  4. RadioInterface::clampConfigLora()
  *  5. RegionInfo preset lists (PRESETS_STD, PRESETS_EU_868, PRESETS_UNDEF)
  *  6. Channel spacing calculation (placeholder for future protobuf changes)
+ *  7. ClientNotification.type on the paths that do not set it as a literal at the send site:
+ *     AdminModule's channel-warning queue (queueChannelWarning()/flushChannelWarnings()) and
+ *     RadioInterface::checkConfigRegion(), which hands its failure type to validateConfigRegion().
+ *     Clients key off the type to localize or act on a notification instead of matching its
+ *     text, so a path that drops it sends UNSET and the client falls back to text matching.
  */
 
 #include "Channels.h"
@@ -43,6 +48,7 @@ extern uint32_t hash(const char *str);
 // set of messages produced by a sequence of admin messages. This shadows test/support/MockMeshService.h's
 // release-only stub because these tests need to inspect the captured message text, not just avoid leaks.
 static std::vector<std::string> capturedWarnings;
+static std::vector<meshtastic_ClientNotification_NotificationType> capturedTypes; // parallel to capturedWarnings
 
 class MockMeshService : public MeshService
 {
@@ -50,6 +56,7 @@ class MockMeshService : public MeshService
     void sendClientNotification(meshtastic_ClientNotification *n) override
     {
         capturedWarnings.push_back(n->message);
+        capturedTypes.push_back(n->type);
         releaseClientNotificationToPool(n);
     }
 };
@@ -698,6 +705,28 @@ static void test_clampConfigLora_validPresetUnchanged()
     TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST, cfg.modem_preset);
 }
 
+// NodeDB::clampLoadedLoraConfig() runs at boot, before onConfigChanged() renames a legacy "Default"
+// primary to "". If it hashed "Default" as a custom channel name, an out-of-range channel_num would be
+// clamped to that hash's slot instead of the preset's default slot, moving the node off its mesh.
+static void test_clampLoadedLoraConfig_legacyDefaultPrimaryGetsThePresetSlot()
+{
+    channels.initDefaults();
+    strncpy(channelFile.channels[0].settings.name, "Default", sizeof(channelFile.channels[0].settings.name));
+    config.has_lora = true;
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    meshtastic_Config_LoRaConfig unset = config.lora;
+    const uint32_t presetSlot = RadioInterface::resolveFrequencySlot(unset, "");
+    config.lora.channel_num = 200; // more than US LongFast's 104 slots
+
+    nodeDB->clampLoadedLoraConfig();
+
+    TEST_ASSERT_EQUAL_UINT32(presetSlot, config.lora.channel_num);
+    TEST_ASSERT_EQUAL_STRING("", channelFile.channels[0].settings.name);
+}
+
 static void test_clampConfigLora_customBwTooWideClampedToDefaultBw()
 {
     // EU_868 span is 250kHz. A 500kHz custom BW should be clamped to default preset BW.
@@ -1296,6 +1325,61 @@ static void test_handleSetHamMode_acceptedRequestAcksSuccess()
     TEST_ASSERT_EQUAL_STRING("KD2ABC//Attic Heltec", owner.long_name);
     TEST_ASSERT_TRUE(owner.is_licensed);
     testAdmin->drainReply();
+}
+
+// A PKC admin request with want_ack and no want_response is answered by the module's ROUTING reply in place
+// of the ACK. That reply must still encode: PKC never wraps a ROUTING packet, so a reply left marked
+// pki_encrypted fails perhapsEncode and the sender hears nothing.
+static void expectPkcAdminRoutingReplyEncodes(meshtastic_AdminMessage &m)
+{
+    static constexpr NodeNum REMOTE_ADMIN = 0x0B0B0B0B;
+    myNodeInfo.my_node_num = 0x0A0A0A0A;
+    channels.initDefaults();
+    channels.onConfigChanged();
+    config.security.admin_key_count = 1;
+    config.security.admin_key[0].size = 32;
+    memset(config.security.admin_key[0].bytes, 0xAA, 32);
+
+    meshtastic_MeshPacket mp = meshtastic_MeshPacket_init_zero;
+    mp.from = REMOTE_ADMIN;
+    mp.to = myNodeInfo.my_node_num;
+    mp.id = 0x5151;
+    mp.channel = 0; // a PKC packet arrives with channel hash 0, which resolves to the primary channel
+    mp.want_ack = true;
+    mp.pki_encrypted = true;
+    mp.public_key.size = 32;
+    memset(mp.public_key.bytes, 0xAA, 32);
+    mp.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    mp.decoded.want_response = false;
+    meshtastic_AdminMessage session = meshtastic_AdminMessage_init_zero;
+    testAdmin->setPassKey(&session); // a state-changing request must carry a live session key
+    m.session_passkey = session.session_passkey;
+    testAdmin->handleReceivedProtobuf(mp, &m);
+
+    meshtastic_MeshPacket *reply = testAdmin->reply();
+    TEST_ASSERT_NOT_NULL_MESSAGE(reply, "the request must queue a routing reply");
+    TEST_ASSERT_EQUAL(meshtastic_PortNum_ROUTING_APP, reply->decoded.portnum);
+    meshtastic_Routing_Error err = meshtastic_Routing_Error_NONE;
+    TEST_ASSERT_TRUE(decodeRoutingError(reply, err));
+    TEST_ASSERT_NOT_EQUAL_MESSAGE(meshtastic_Routing_Error_ADMIN_BAD_SESSION_KEY, err, "the request must pass the session gate");
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Routing_Error_NONE, perhapsEncode(reply), "the routing reply was dropped at encode");
+    testAdmin->drainReply();
+}
+
+static void test_pkcAdminBadRequest_replyEncodes()
+{
+    meshtastic_AdminMessage m = meshtastic_AdminMessage_init_zero;
+    m.which_payload_variant = meshtastic_AdminMessage_get_channel_request_tag;
+    m.get_channel_request = MAX_NUM_CHANNELS + 2; // out of range, so the handler answers BAD_REQUEST
+    expectPkcAdminRoutingReplyEncodes(m);
+}
+
+static void test_pkcAdminBackupPreferencesReply_encodes()
+{
+    meshtastic_AdminMessage m = meshtastic_AdminMessage_init_zero;
+    m.which_payload_variant = meshtastic_AdminMessage_backup_preferences_tag;
+    m.backup_preferences = meshtastic_AdminMessage_BackupLocation_FLASH;
+    expectPkcAdminRoutingReplyEncodes(m);
 }
 
 static void test_bootDefense_sanitizesStaleLicensedChannelsOnce()
@@ -2288,6 +2372,120 @@ static void test_warn_license_transaction_coalescedToSingleMessage()
 }
 
 // -----------------------------------------------------------------------
+// ClientNotification.type tests
+//
+// A lone queued channel warning must keep the type it was queued with, including when it is
+// held across an edit transaction; several warnings coalesced into one catch-all message must
+// carry the matching CHANNEL_*_ISSUES type instead. Losing either sends the client UNSET, or a
+// type that names the wrong fix.
+// -----------------------------------------------------------------------
+
+static void test_notificationType_loneChannelWarning_keepsItsType()
+{
+    usePresetLongFast();
+    sendSetChannel(makeChannel(0, meshtastic_Channel_Role_PRIMARY, "long fast", DEFAULT_KEY, 1));
+    TEST_ASSERT_EQUAL_INT(1, (int)capturedTypes.size());
+    TEST_ASSERT_EQUAL(meshtastic_ClientNotification_NotificationType_CHANNEL_NAME_PRESET_MISTYPE_CLEAR_NAME, capturedTypes[0]);
+}
+
+static void test_notificationType_transaction_loneChannelWarning_keepsItsType()
+{
+    usePresetLongFast();
+    sendBeginEdit();
+    sendSetChannel(makeChannel(0, meshtastic_Channel_Role_PRIMARY, "long fast", DEFAULT_KEY, 1));
+    sendCommitEdit();
+    TEST_ASSERT_EQUAL_INT(1, (int)capturedTypes.size());
+    TEST_ASSERT_EQUAL(meshtastic_ClientNotification_NotificationType_CHANNEL_NAME_PRESET_MISTYPE_CLEAR_NAME, capturedTypes[0]);
+}
+
+static void test_notificationType_transaction_coalescedWarnings_useCatchAllType()
+{
+    usePresetLongFast();
+    sendBeginEdit();
+    sendSetChannel(makeChannel(0, meshtastic_Channel_Role_PRIMARY, "long fast", DEFAULT_KEY, 1));
+    sendSetChannel(makeChannel(1, meshtastic_Channel_Role_SECONDARY, "long fast", DEFAULT_KEY, 1));
+    sendCommitEdit();
+    TEST_ASSERT_EQUAL_INT(1, (int)capturedTypes.size());
+    TEST_ASSERT_EQUAL(meshtastic_ClientNotification_NotificationType_CHANNEL_NAME_ISSUES, capturedTypes[0]);
+}
+
+static void test_notificationType_transaction_coalescedPskWarnings_usePskCatchAllType()
+{
+    usePresetLongFast();
+    sendBeginEdit();
+    // Blank names resolve to the preset; a non-default key on each is a PSK issue only.
+    sendSetChannel(makeChannel(0, meshtastic_Channel_Role_PRIMARY, "", CUSTOM_KEY, 2));
+    sendSetChannel(makeChannel(1, meshtastic_Channel_Role_SECONDARY, "", CUSTOM_KEY, 2));
+    sendCommitEdit();
+    TEST_ASSERT_EQUAL_INT(1, (int)capturedTypes.size());
+    TEST_ASSERT_EQUAL(meshtastic_ClientNotification_NotificationType_CHANNEL_PSK_ISSUES, capturedTypes[0]);
+}
+
+static void test_notificationType_transaction_mixedWarnings_useNameAndPskCatchAllType()
+{
+    usePresetLongFast();
+    sendBeginEdit();
+    sendSetChannel(makeChannel(0, meshtastic_Channel_Role_PRIMARY, "long fast", DEFAULT_KEY, 1)); // name issue
+    sendSetChannel(makeChannel(1, meshtastic_Channel_Role_SECONDARY, "", CUSTOM_KEY, 2));         // PSK issue
+    sendCommitEdit();
+    TEST_ASSERT_EQUAL_INT(1, (int)capturedTypes.size());
+    TEST_ASSERT_EQUAL(meshtastic_ClientNotification_NotificationType_CHANNEL_NAME_AND_PSK_ISSUES, capturedTypes[0]);
+}
+
+static void test_notificationType_licensedMode_deferredNoticeKeepsItsType()
+{
+    usePresetLongFast();
+    owner.is_licensed = true;
+    sendBeginEdit();
+    sendSetChannel(makeChannel(0, meshtastic_Channel_Role_PRIMARY, "", CUSTOM_KEY, 2));
+    sendCommitEdit();
+    TEST_ASSERT_EQUAL_INT(1, (int)capturedTypes.size());
+    TEST_ASSERT_EQUAL(meshtastic_ClientNotification_NotificationType_LICENSED_MODE_ACTIVATED, capturedTypes[0]);
+}
+
+// checkConfigRegion() is the only place that knows why a region failed; validateConfigRegion()
+// sends whatever type it reports, so a missing assignment there reaches the client as UNSET.
+static void test_notificationType_checkConfigRegion_reportsFailureType()
+{
+    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
+    devicestate.owner.is_licensed = false;
+    meshtastic_ClientNotification_NotificationType type = meshtastic_ClientNotification_NotificationType_UNSET;
+
+    cfg.region = (meshtastic_Config_LoRaConfig_RegionCode)254;
+    TEST_ASSERT_FALSE(RadioInterface::checkConfigRegion(cfg, nullptr, 0, false, &type));
+    TEST_ASSERT_EQUAL(meshtastic_ClientNotification_NotificationType_LORA_REGION_UNRECOGNIZED, type);
+
+    cfg.region = meshtastic_Config_LoRaConfig_RegionCode_ITU1_2M;
+    TEST_ASSERT_FALSE(RadioInterface::checkConfigRegion(cfg, nullptr, 0, false, &type));
+    TEST_ASSERT_EQUAL(meshtastic_ClientNotification_NotificationType_LORA_REGION_REQUIRES_LICENSE, type);
+}
+
+static void test_notificationType_validateConfigRegion_sendsFailureType()
+{
+    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
+    cfg.region = meshtastic_Config_LoRaConfig_RegionCode_ITU1_2M;
+    devicestate.owner.is_licensed = false;
+
+    TEST_ASSERT_FALSE(RadioInterface::validateConfigRegion(cfg));
+    TEST_ASSERT_EQUAL_INT(1, (int)capturedTypes.size());
+    TEST_ASSERT_EQUAL(meshtastic_ClientNotification_NotificationType_LORA_REGION_REQUIRES_LICENSE, capturedTypes[0]);
+}
+
+static void test_notificationType_clampConfigLora_channelNumOutOfRange()
+{
+    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
+    cfg.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    cfg.use_preset = true;
+    cfg.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    cfg.channel_num = 5000; // far beyond the US slot count
+
+    RadioInterface::clampConfigLora(cfg);
+
+    TEST_ASSERT_EQUAL_INT(1, (int)capturedTypes.size());
+    TEST_ASSERT_EQUAL(meshtastic_ClientNotification_NotificationType_LORA_CHANNEL_NUM_INVALID, capturedTypes[0]);
+}
+
+// -----------------------------------------------------------------------
 // Node-DB admin metadata: favorite / ignore / mute
 // -----------------------------------------------------------------------
 //
@@ -2514,6 +2712,7 @@ void setUp(void)
     service = mockMeshService;
     testAdmin = new AdminModuleTestShim();
     capturedWarnings.clear();
+    capturedTypes.clear();
     // Every test gets its own NodeDB and its own copy of the globals the admin handlers write.
     replaceAdminRadioGlobals();
 }
@@ -2546,6 +2745,8 @@ void setup()
     RUN_TEST(test_handleSetHamMode_blankCallSignIsRejected);
     RUN_TEST(test_handleSetHamMode_blankCallSignRepliesBadRequest);
     RUN_TEST(test_handleSetHamMode_acceptedRequestAcksSuccess);
+    RUN_TEST(test_pkcAdminBadRequest_replyEncodes);
+    RUN_TEST(test_pkcAdminBackupPreferencesReply_encodes);
     RUN_TEST(test_handleSetConfig_persistsLicensedFirstRegionIdentity);
     RUN_TEST(test_handleSetConfig_persistsUnlicensedFirstRegionIdentity);
     RUN_TEST(test_bootDefense_sanitizesStaleLicensedChannelsOnce);
@@ -2588,6 +2789,7 @@ void setup()
     // clampConfigLora()
     RUN_TEST(test_clampConfigLora_invalidPresetClampedToDefault);
     RUN_TEST(test_clampConfigLora_validPresetUnchanged);
+    RUN_TEST(test_clampLoadedLoraConfig_legacyDefaultPrimaryGetsThePresetSlot);
     RUN_TEST(test_clampConfigLora_customBwTooWideClampedToDefaultBw);
     RUN_TEST(test_clampConfigLora_customBwValidLeftUnchanged);
     RUN_TEST(test_clampConfigLora_bogusPresetOnUnsetClampedToLongFast);
@@ -2663,6 +2865,17 @@ void setup()
     RUN_TEST(test_editTransaction_active_isNotRetired);
     RUN_TEST(test_warn_license_noTransaction_emittedImmediately);
     RUN_TEST(test_warn_license_transaction_coalescedToSingleMessage);
+
+    // ClientNotification.type
+    RUN_TEST(test_notificationType_loneChannelWarning_keepsItsType);
+    RUN_TEST(test_notificationType_transaction_loneChannelWarning_keepsItsType);
+    RUN_TEST(test_notificationType_transaction_coalescedWarnings_useCatchAllType);
+    RUN_TEST(test_notificationType_transaction_coalescedPskWarnings_usePskCatchAllType);
+    RUN_TEST(test_notificationType_transaction_mixedWarnings_useNameAndPskCatchAllType);
+    RUN_TEST(test_notificationType_licensedMode_deferredNoticeKeepsItsType);
+    RUN_TEST(test_notificationType_checkConfigRegion_reportsFailureType);
+    RUN_TEST(test_notificationType_validateConfigRegion_sendsFailureType);
+    RUN_TEST(test_notificationType_clampConfigLora_channelNumOutOfRange);
 
     // Node-DB metadata saves must not reconfigure the radio
     RUN_TEST(test_setFavoriteNode_skipsRadioReload_butPersists);

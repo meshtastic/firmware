@@ -1,0 +1,12 @@
+# FAULT: "humidity" is not an EnvironmentMetrics field (it is relative_humidity). loadConfig()
+# refuses an entry it cannot place rather than dropping it, so this is an ERROR and exit 1, and the
+# message lists the valid types.
+Lora:
+  Module: sx1262
+  CS: 21
+  IRQ: 16
+  Busy: 20
+  Reset: 18
+Sensors:
+  - Type: humidity
+    Command: /usr/local/bin/read-humidity
