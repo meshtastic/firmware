@@ -684,6 +684,8 @@ std::vector<meshtastic_MeshPacket> drainAuthorityOne(uint32_t advanceMs)
 
 } // namespace
 
+void ingestScratchText(TestSfppModule *module, NodeNum node, NodeNum from, PacketId id, const char *text, uint32_t ageS);
+
 void setUp(void)
 {
     config = meshtastic_LocalConfig_init_zero;
@@ -727,6 +729,8 @@ void setUp(void)
     portduino_config.sfpp_enum_interval = 1;
     portduino_config.sfpp_enum_drain_ms = 2000;
     portduino_config.sfpp_scratch_sweep = 5;
+    portduino_config.sfpp_item_transport = SFPP_ITEM_DIRECT; // existing cases drive direct exchanges
+    portduino_config.sfpp_enum_listen_only = false;
     portduino_config.sfpp_db_path = dirA + "/";
 
     Time::setTestMillis(1000);
@@ -1339,6 +1343,190 @@ void test_unknownPusherIsBudgeted()
     TEST_ASSERT_EQUAL_UINT32(9, readBucket(dirA, 1, sfppsr::kBucketObjects).count);
 }
 
+// Stage 8e: at production pacing (20 s) with two requesters, a follower missing 20 converges,
+// receiving exactly its 20 frames and no duplicates from retries it should not have made.
+void test_pacedDeliveryConverges()
+{
+    portduino_config.sfpp_enum_drain_ms = 20000;
+    ingestAuthority(20);
+    buildFollowerFromCopy();
+    buildSecondFollowerFromCopy();
+    TEST_ASSERT_TRUE(deleteCounterRange(dirB, 1, 20));  // empty
+    TEST_ASSERT_TRUE(deleteCounterRange(dirC, 17, 20)); // missing 4
+
+    meshtastic_MeshPacket advert = runAuthorityOnce();
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
+    std::vector<meshtastic_MeshPacket> bRequest = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, bRequest.size());
+    TEST_ASSERT_TRUE(deliver(follower2, FOLLOWER2_NODE, false, advert));
+    std::vector<meshtastic_MeshPacket> cRequest = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, cRequest.size());
+
+    TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, true, bRequest[0]));
+    TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, true, cRequest[0]));
+
+    // Two provides, one per requester. Take each requester's reply before the next drain clears it.
+    std::vector<meshtastic_MeshPacket> bItem;
+    std::vector<meshtastic_MeshPacket> cItem;
+    for (uint32_t i = 0; i < 2; i++) {
+        std::vector<meshtastic_MeshPacket> provide = drainAuthorityOne(20000);
+        TEST_ASSERT_EQUAL_UINT(1, provide.size());
+        TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_PROVIDE,
+                          decodeSfpp(provide[0]).sfpp_message_type);
+        if (provide[0].to == FOLLOWER_NODE) {
+            TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, provide[0]));
+            bItem = takeSent();
+        } else {
+            TEST_ASSERT_TRUE(deliver(follower2, FOLLOWER2_NODE, false, provide[0]));
+            cItem = takeSent();
+        }
+    }
+    TEST_ASSERT_EQUAL_UINT(1, bItem.size());
+    TEST_ASSERT_EQUAL_UINT(1, cItem.size());
+    TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_REQUEST, decodeSfpp(bItem[0]).sfpp_message_type);
+    TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_REQUEST, decodeSfpp(cItem[0]).sfpp_message_type);
+    TEST_ASSERT_EQUAL_UINT(20, (uint32_t)decodeSfpp(bItem[0]).sr_short_ids_count);
+    TEST_ASSERT_EQUAL_UINT(4, (uint32_t)decodeSfpp(cItem[0]).sr_short_ids_count);
+    TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, true, bItem[0]));
+    TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, true, cItem[0]));
+
+    uint32_t bFrames = 0;
+    uint32_t cFrames = 0;
+    for (uint32_t guard = 0; guard < 96; guard++) {
+        std::vector<meshtastic_MeshPacket> out = drainAuthorityOne(20000);
+        if (out.empty())
+            continue;
+        if (decodeSfpp(out[0]).sfpp_message_type != meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_FRAME)
+            break; // the advert after the queues drained
+        for (const auto &frame : out) {
+            if (frame.to == FOLLOWER_NODE) {
+                TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, frame));
+                bFrames++;
+            } else if (frame.to == FOLLOWER2_NODE) {
+                TEST_ASSERT_TRUE(deliver(follower2, FOLLOWER2_NODE, false, frame));
+                cFrames++;
+            }
+        }
+    }
+    TEST_ASSERT_EQUAL_UINT(20, bFrames); // no retry-induced duplicates
+    TEST_ASSERT_EQUAL_UINT(4, cFrames);
+
+    const BucketView a = readBucket(dirA, 1, sfppsr::kBucketObjects);
+    const BucketView b = readBucket(dirB, 1, sfppsr::kBucketObjects);
+    const BucketView c = readBucket(dirC, 1, sfppsr::kBucketObjects);
+    TEST_ASSERT_EQUAL_UINT32(a.count, b.count);
+    TEST_ASSERT_EQUAL_UINT64(a.checksum, b.checksum);
+    TEST_ASSERT_EQUAL_UINT32(a.count, c.count);
+    TEST_ASSERT_EQUAL_UINT64(a.checksum, c.checksum);
+}
+
+// Stage 8e items 5, 8, 9: broadcast item frames serve a listener that never requests; a
+// listen-only archive converges from another follower's exchange and sends nothing.
+void test_broadcastServesListenOnlyFollower()
+{
+    portduino_config.sfpp_item_transport = SFPP_ITEM_BROADCAST;
+    ingestAuthority(20);
+    buildFollowerFromCopy();
+    buildSecondFollowerFromCopy();
+    TEST_ASSERT_TRUE(deleteCounterRange(dirB, 1, 20));
+    TEST_ASSERT_TRUE(deleteCounterRange(dirC, 1, 20));
+
+    meshtastic_MeshPacket advert = runAuthorityOnce();
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
+    std::vector<meshtastic_MeshPacket> bRequest = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, bRequest.size());
+
+    portduino_config.sfpp_enum_listen_only = true;
+    TEST_ASSERT_TRUE(deliver(follower2, FOLLOWER2_NODE, false, advert));
+    TEST_ASSERT_EQUAL_UINT(0, takeSent().size()); // listen-only: learns the authority, sends nothing
+    portduino_config.sfpp_enum_listen_only = false;
+
+    TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, true, bRequest[0]));
+    std::vector<meshtastic_MeshPacket> provide = drainAuthorityOne(2000);
+    TEST_ASSERT_EQUAL_UINT(1, provide.size());
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, provide[0]));
+    std::vector<meshtastic_MeshPacket> itemRequest = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, itemRequest.size());
+    TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, true, itemRequest[0]));
+
+    uint32_t frames = 0;
+    for (uint32_t guard = 0; guard < 64; guard++) {
+        std::vector<meshtastic_MeshPacket> out = drainAuthorityOne(2000);
+        if (out.empty())
+            continue;
+        if (decodeSfpp(out[0]).sfpp_message_type != meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_FRAME)
+            break;
+        for (const auto &frame : out) {
+            TEST_ASSERT_EQUAL_UINT32(NODENUM_BROADCAST, frame.to);
+            TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, frame));
+            portduino_config.sfpp_enum_listen_only = true;
+            TEST_ASSERT_TRUE(deliver(follower2, FOLLOWER2_NODE, false, frame));
+            TEST_ASSERT_EQUAL_UINT(0, takeSent().size()); // still sends nothing
+            portduino_config.sfpp_enum_listen_only = false;
+            frames++;
+        }
+    }
+    TEST_ASSERT_EQUAL_UINT(20, frames);
+
+    const BucketView a = readBucket(dirA, 1, sfppsr::kBucketObjects);
+    const BucketView b = readBucket(dirB, 1, sfppsr::kBucketObjects);
+    const BucketView c = readBucket(dirC, 1, sfppsr::kBucketObjects);
+    TEST_ASSERT_EQUAL_UINT32(a.count, b.count);
+    TEST_ASSERT_EQUAL_UINT32(a.count, c.count);
+    TEST_ASSERT_EQUAL_UINT64(a.checksum, c.checksum);
+}
+
+// Stage 8e item 8: an object from a non-authority sender is not accepted.
+void test_objectFromNonAuthorityIsIgnored()
+{
+    ingestAuthority(3);
+    buildFollowerFromCopy();
+
+    meshtastic_MeshPacket advert = runAuthorityOnce();
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert)); // learns the authority
+    TEST_ASSERT_EQUAL_UINT(0, takeSent().size());
+
+    uint8_t cipher[8] = {9, 8, 7, 6, 5, 4, 3, 2};
+    std::vector<meshtastic_StoreForwardPlusPlus> frames;
+    TEST_ASSERT_TRUE(sfppframe::split(cipher, sizeof(cipher), NODENUM_BROADCAST, UNKNOWN_NODE, 0x7100, 0, false, frames));
+    TEST_ASSERT_EQUAL_UINT(1, frames.size());
+    frames[0].chain_count = 0;
+
+    meshtastic_MeshPacket mp = meshtastic_MeshPacket_init_zero;
+    mp.from = UNKNOWN_NODE;
+    mp.to = NODENUM_BROADCAST;
+    mp.channel = 0;
+    mp.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    mp.decoded.portnum = meshtastic_PortNum_STORE_FORWARD_PLUSPLUS_APP;
+    mp.decoded.payload.size = pb_encode_to_bytes(mp.decoded.payload.bytes, sizeof(mp.decoded.payload.bytes),
+                                                 &meshtastic_StoreForwardPlusPlus_msg, &frames[0]);
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, mp));
+
+    TEST_ASSERT_EQUAL_UINT32(3, readBucket(dirB, 1, sfppsr::kBucketObjects).count);
+}
+
+// Stage 8e item 10: texts heard live sit in scratch; promote them instead of re-fetching.
+void test_heardLiveObjectsArePromoted()
+{
+    ingestAuthority(20);
+    TEST_ASSERT_TRUE(copyDb(dirA, dirB));
+    TEST_ASSERT_TRUE(deleteCounterRange(dirB, 1, 20)); // canon empty, root retained
+    portduino_config.sfpp_db_path = dirB + "/";
+    portduino_config.sfpp_stratum0 = false;
+    follower = new TestSfppModule();
+
+    for (uint32_t i = 0; i < 15; i++) {
+        char text[16];
+        snprintf(text, sizeof(text), "msg %u", i + 1);
+        ingestScratchText(follower, FOLLOWER_NODE, SENDER_NODE, BASE_ID + i, text, 0);
+    }
+
+    Exchange exchange = runExchange();
+    TEST_ASSERT_EQUAL_UINT(1, exchange.itemRequests);
+    TEST_ASSERT_EQUAL_UINT(5, exchange.itemFrames); // the 15 scratch rows are not re-fetched
+    assertConverged();
+}
+
 // --- Stage 8: sketch mode ---
 
 void runSketchCase(uint32_t total, uint32_t missing)
@@ -1524,6 +1712,10 @@ void setup()
     RUN_TEST(test_sendFreesPacketSafely);
     RUN_TEST(test_blankFollowerAdoptsFullRootAdvert);
     RUN_TEST(test_unknownPusherIsBudgeted);
+    RUN_TEST(test_pacedDeliveryConverges);
+    RUN_TEST(test_broadcastServesListenOnlyFollower);
+    RUN_TEST(test_objectFromNonAuthorityIsIgnored);
+    RUN_TEST(test_heardLiveObjectsArePromoted);
     RUN_TEST(test_sketchResolvesOne);
     RUN_TEST(test_sketchResolvesFour);
     RUN_TEST(test_sketchFallsBackAtSixteen);

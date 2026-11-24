@@ -226,20 +226,33 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
         NodeNum to;
         sfppsr::Scope scope;
         const char *type;
+        pinsketch::Element id = 0;
     };
     struct EnumRequester {
         NodeNum to = 0;
         uint32_t lastUsedMs = 0;
         std::deque<EnumOutgoing> queue;
     };
-    void queueEnumFrames(const std::vector<meshtastic_StoreForwardPlusPlus> &frames, NodeNum to, const sfppsr::Scope &scope,
-                         const char *type);
-    void queueItemFrames(const std::vector<meshtastic_StoreForwardPlusPlus> &frames, NodeNum to, const sfppsr::Scope &scope);
+    void queueEnumFrames(const std::vector<meshtastic_StoreForwardPlusPlus> &frames, NodeNum requester, NodeNum dest,
+                         const sfppsr::Scope &scope, const char *type, pinsketch::Element id = 0);
+    void queueItemFrames(const std::vector<meshtastic_StoreForwardPlusPlus> &frames, NodeNum requester, NodeNum dest,
+                         const sfppsr::Scope &scope, pinsketch::Element id = 0);
+    bool enumRequesterHasQueued(NodeNum to, pinsketch::Element id) const;
+    void noteRequesterActivity(NodeNum to);
     bool drainOneEnumFrame();
     void pumpEnumRetries();
     void resendEnumList();
     void resendItemRequest();
     bool anyEnumQueuePending() const;
+    void beginEnumLateAccept();
+    void expireEnumLate();
+
+    // A canonical row, shared by recovered objects and promoted scratch rows.
+    bool insertCanonObject(uint32_t to, uint32_t from, uint32_t packetId, const uint8_t *cipher, size_t cipherLen,
+                           const uint8_t *hash, uint32_t rxTime, const uint8_t *root_hash, uint32_t bucket);
+    // Stage 8e/10: a scratch row whose short ID the peer also holds is already "held"; move it into
+    // the bucket and drop it from the fetch list instead of re-fetching it.
+    void promoteScratchMatches(const uint8_t *root_hash, uint32_t bucket, std::vector<pinsketch::Element> &ids);
 
     // Stage 9: a follower offers scratch rows to the authority, which is the only counter authority.
     void pushScratchRows();
@@ -298,7 +311,7 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     void canonAnnounce(link_object &);
 
     // checks if the message hash is present in the canonical chain database
-    bool isInDB(uint8_t *, size_t);
+    bool isInDB(const uint8_t *, size_t);
 
     // checks if the commit hash is present in the canonical chain database
     bool isCommitInDB(uint8_t *, size_t);
@@ -310,7 +323,7 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     link_object getFromScratch(uint8_t *, size_t);
 
     // removes a link object from the scratch database
-    void removeFromScratch(uint8_t *, size_t);
+    void removeFromScratch(const uint8_t *, size_t);
 
     // iterate through our scratch database, and see if we can speculate a chain up to the given commit hash
     bool speculateScratchChain(uint8_t *, size_t, uint8_t *, uint8_t *);
@@ -421,7 +434,7 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     uint32_t received_from_scratch = 0;
 
     // Enumeration (arm C) state. One exchange is in flight at a time; the next advert tick retries.
-    sfppframe::Reassembler enumReassembler;
+    sfppframe::Reassembler enumReassembler{16};
     uint32_t enumBucketCursor = 0;
 
     bool enumExchangeActive = false;
@@ -489,6 +502,14 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     };
     std::vector<EnumPushSender> enumPushSenders;
     sfppframe::Reassembler enumPushReassembler{16};
+
+    // Stage 8e: frames still in flight after an item exchange gave up.
+    bool enumLateActive = false;
+    uint8_t enumLateRoot[SFPP_HASH_SIZE] = {0};
+    uint32_t enumLateBucket = 0;
+    NodeNum enumLatePeer = 0;
+    std::vector<pinsketch::Element> enumLateWanted;
+    uint32_t enumLateStartedMs = 0;
     struct EnumPushed {
         uint8_t prefix[8];
         uint32_t offeredMs;

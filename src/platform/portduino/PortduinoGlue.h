@@ -60,6 +60,7 @@ enum screen_modules { no_screen, x11, fb, st7789, st7735, st7735s, st7796, ili93
 enum touchscreen_modules { no_touchscreen, xpt2046, stmpe610, gt911, ft5x06 };
 // SF++ repair path. chain keeps today's behaviour; enum is the arm C measurement baseline.
 enum sfpp_repair_mode { SFPP_REPAIR_CHAIN, SFPP_REPAIR_ENUM, SFPP_REPAIR_SKETCH };
+enum sfpp_item_transport { SFPP_ITEM_BROADCAST, SFPP_ITEM_DIRECT };
 enum portduino_log_level { level_error, level_warn, level_info, level_debug, level_trace };
 enum lora_module_enum {
     use_simradio,
@@ -356,6 +357,8 @@ extern struct portduino_config_struct {
     uint32_t sfpp_enum_interval = 60;    // minutes between advert ticks, enum only
     uint32_t sfpp_enum_drain_ms = 20000; // milliseconds between queued item frames, enum only
     uint32_t sfpp_scratch_sweep = 5;     // minutes between writer-missed scratch sweeps, enum only
+    sfpp_item_transport sfpp_item_transport = SFPP_ITEM_BROADCAST;
+    bool sfpp_enum_listen_only = false;
     // allowed root hashes
     // upstream node
     // Are we allowing unknown channel hashes? Does this even make sense?
@@ -848,6 +851,9 @@ extern struct portduino_config_struct {
             out << YAML::Key << "EnumInterval" << YAML::Value << sfpp_enum_interval;
             out << YAML::Key << "EnumDrainMs" << YAML::Value << sfpp_enum_drain_ms;
             out << YAML::Key << "ScratchSweep" << YAML::Value << sfpp_scratch_sweep;
+            out << YAML::Key << "EnumItemTransport" << YAML::Value
+                << (sfpp_item_transport == SFPP_ITEM_DIRECT ? "direct" : "broadcast");
+            out << YAML::Key << "EnumListenOnly" << YAML::Value << sfpp_enum_listen_only;
             out << YAML::EndMap; // StoreAndForward
         }
 

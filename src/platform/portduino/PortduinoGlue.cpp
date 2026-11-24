@@ -1616,6 +1616,9 @@ bool loadConfig(const char *configPath)
             portduino_config.sfpp_scratch_sweep = (yamlConfig["StoreAndForward"]["ScratchSweep"]).as<uint32_t>(5);
             if (portduino_config.sfpp_scratch_sweep < 1)
                 portduino_config.sfpp_scratch_sweep = 1;
+            std::string itemTransport = (yamlConfig["StoreAndForward"]["EnumItemTransport"]).as<std::string>("broadcast");
+            portduino_config.sfpp_item_transport = (itemTransport == "direct") ? SFPP_ITEM_DIRECT : SFPP_ITEM_BROADCAST;
+            portduino_config.sfpp_enum_listen_only = (yamlConfig["StoreAndForward"]["EnumListenOnly"]).as<bool>(false);
         }
         if (yamlConfig["Routing"]) {
             if (yamlConfig["Routing"]["WhitelistPorts"]) {

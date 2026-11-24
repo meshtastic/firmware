@@ -308,6 +308,8 @@ StoreAndForward:
 #  EnumInterval: 60 # Minutes between enumeration advert ticks (enum only, minimum 1)
 #  EnumDrainMs: 20000 # Milliseconds between queued enumeration item frames (enum only, minimum 100)
 #  ScratchSweep: 5 # Minutes between writer-missed scratch sweeps (enum only, minimum 1)
+#  EnumItemTransport: broadcast # Item frames: broadcast (default) or direct
+#  EnumListenOnly: false # Accept overheard adverts/objects, never send anything
 
 Config:
 #  DisplayMode: TWOCOLOR # uncomment to force BaseUI
