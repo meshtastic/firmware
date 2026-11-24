@@ -10,6 +10,7 @@
 #include "ulfius.h"
 #include <Arduino.h>
 #include <functional>
+#include <netinet/in.h>
 
 #define STATIC_FILE_CHUNK 256
 
@@ -63,6 +64,8 @@ class PiWebServerThread
     struct _u_instance instanceWeb;
     /// The same endpoints without TLS, only when Webserver.HTTPPort is set.
     struct _u_instance instanceWebPlain;
+    /// ulfius keeps this pointer, so it must outlive instanceWebPlain.
+    struct sockaddr_in plainBindAddress;
 };
 
 extern PiWebServerThread *piwebServerThread;

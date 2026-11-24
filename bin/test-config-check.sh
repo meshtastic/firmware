@@ -430,6 +430,14 @@ assert "ports outside their usable range" 1 port-out-of-range.yaml check \
 	"General.APIPort 80 is outside 1024-65535" \
 	"Webserver.Port 99999 is not a usable TCP port" \
 	"Result: 1 error, 1 warning"
+assert "Webserver.HTTPPort outside its usable range" 1 webserver-http-port.yaml check \
+	"Webserver.HTTPPort 70000 is not a usable TCP port" \
+	"!unknown key" \
+	"Result: 1 error, 0 warnings"
+assert "Webserver.HTTPPort without Port never listens" 0 webserver-http-port-alone.yaml check \
+	"Webserver.HTTPPort is set but Webserver.Port is not" \
+	"!unknown key" \
+	"Result: 0 errors, 1 warning"
 assert "StatusMessage longer than its buffer" 0 statusmessage-long.yaml check \
 	"is truncated to 79 when it is stored" \
 	"Result: 0 errors, 1 warning"

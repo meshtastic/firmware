@@ -555,13 +555,19 @@ PiWebServerThread::PiWebServerThread()
             LOG_ERROR("Web Server framework start failed, err: %d", retssl);
         }
 
-        // Unencrypted and unauthenticated, so only when the config asks for it.
+        // Unencrypted and unauthenticated, so only when the config asks for it, and loopback unless HTTPBindAll.
         const int plainPort = portduino_config.webserver_http_port;
-        if (plainPort > 0 && ulfius_init_instance(&instanceWebPlain, plainPort, NULL, DEFAULT_REALM) == U_OK) {
+        const bool bindAll = portduino_config.webserver_http_bind_all;
+        memset(&plainBindAddress, 0, sizeof(plainBindAddress));
+        plainBindAddress.sin_family = AF_INET;
+        plainBindAddress.sin_port = htons(plainPort);
+        plainBindAddress.sin_addr.s_addr = htonl(bindAll ? INADDR_ANY : INADDR_LOOPBACK);
+        if (plainPort > 0 && ulfius_init_instance(&instanceWebPlain, plainPort, &plainBindAddress, DEFAULT_REALM) == U_OK) {
             plainInstanceReady = true;
             addEndpoints(&instanceWebPlain);
             if (ulfius_start_framework(&instanceWebPlain) == U_OK)
-                LOG_INFO("Web Server framework started without TLS on port: %i ", plainPort);
+                LOG_INFO("Web Server framework started without TLS on %s port: %i ", bindAll ? "all interfaces" : "loopback",
+                         plainPort);
             else
                 LOG_ERROR("Web Server framework start without TLS failed on port: %i ", plainPort);
         } else if (plainPort > 0) {
