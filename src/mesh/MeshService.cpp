@@ -25,6 +25,7 @@
 #include "modules/PositionModule.h"
 #include "modules/RoutingModule.h"
 #include "sleep.h"
+#include <algorithm>
 #include <assert.h>
 #include <string>
 
@@ -157,12 +158,14 @@ void MeshService::loop()
     applyDeferredRadioConfig();
 }
 
-void MeshService::awaitAckBeforeRadioConfig(PacketId id)
+void MeshService::awaitAckBeforeRadioConfig(PacketId id, uint32_t retryMsec)
 {
     if (!radioConfigDeferred)
         return;
     radioConfigAwaitsAckOf = id;
     radioConfigAwaitedReplySeen = false;
+    // The reply's first retry is due retryMsec after its send; a second interval covers that retry and its ack.
+    radioConfigDeferMaxMs = std::max(radioConfigDeferMaxMs, 2 * retryMsec);
 }
 
 void MeshService::applyDeferredRadioConfig()
@@ -181,8 +184,8 @@ void MeshService::applyDeferredRadioConfig()
     }
     if (ready) {
         LOG_INFO("Admin reply delivered, apply the deferred radio change");
-    } else if (Throttle::hasElapsed(radioConfigDeferredAtMs, RADIO_CONFIG_DEFER_MAX_MS)) {
-        LOG_WARN("Admin reply still pending after %u ms, apply the deferred radio change anyway", RADIO_CONFIG_DEFER_MAX_MS);
+    } else if (Throttle::hasElapsed(radioConfigDeferredAtMs, radioConfigDeferMaxMs)) {
+        LOG_WARN("Admin reply still pending after %u ms, apply the deferred radio change anyway", radioConfigDeferMaxMs);
     } else {
         return;
     }
@@ -193,6 +196,7 @@ void MeshService::applyRadioConfig()
 {
     radioConfigDeferred = false;
     radioConfigAwaitsAckOf = 0;
+    radioConfigDeferMaxMs = RADIO_CONFIG_DEFER_MAX_MS;
 
     // This will also update the region as needed
     nodeDB->resetRadioConfig(); // Don't let the phone send us fatally bad settings
@@ -211,11 +215,12 @@ void MeshService::reloadConfig(int saveWhat, bool deferRadio)
     // module config, device state, or the node database (e.g. favoriting a node) have no reason
     // to re-init the LoRa chip - skip it there to avoid an unnecessary and risky SPI reconfigure.
     if (saveWhat & (SEGMENT_CONFIG | SEGMENT_CHANNELS)) {
-        if (deferRadio) {
+        // A save during an active deferral joins it, a local one too: retuning now would strand the awaited reply.
+        if (deferRadio || radioConfigDeferred) {
             // The channel re-hash waits too: an unnamed primary hashes the preset name, and a reply hashed
             // for the new preset is undecodable on the old one. Boot re-runs the same fixups on what is saved.
             LOG_INFO("Radio change saved, retune once the reply is out and the TX queue drains");
-            // A save during an active deferral joins it; restarting the clock would let repeated saves outrun the cap.
+            // Joining keeps the clock; restarting it would let repeated saves outrun the cap.
             if (!radioConfigDeferred)
                 radioConfigDeferredAtMs = Time::getMillis();
             radioConfigDeferred = true;

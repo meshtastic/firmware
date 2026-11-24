@@ -14,12 +14,14 @@
  *     RadioInterface::checkConfigRegion(), which hands its failure type to validateConfigRegion().
  *     Clients key off the type to localize or act on a notification instead of matching its
  *     text, so a path that drops it sends UNSET and the client falls back to text matching.
- *  8. When an admin save retunes the radio: AdminModule::saveChanges() saves through
+ *  8. When a remote admin save retunes the radio: AdminModule::saveChanges() saves through
  *     MeshService::reloadConfig(saveWhat, true), and the channel re-hash and retune wait in
  *     MeshService::applyDeferredRadioConfig() until the reply registered through
  *     awaitAckBeforeRadioConfig() is acked (with none registered, or one that never entered the
- *     retransmission table, until the TX queue has drained), or RADIO_CONFIG_DEFER_MAX_MS after the
- *     first save has passed; Power::rebootIsDue() holds a commit's reboot meanwhile.
+ *     retransmission table, until the TX queue has drained), or the cap after the first save has
+ *     passed: RADIO_CONFIG_DEFER_MAX_MS, raised to two of the awaited reply's retransmission
+ *     intervals; Power::rebootIsDue() holds a commit's reboot meanwhile. A local client's save
+ *     retunes at once, unless it lands while a remote save's retune is deferred, which it joins.
  *     The admin's reply is queued only after the handler returns, so it must leave on the settings
  *     the requester is still listening on. Retuning at save time sends that reply on the new
  *     preset/slot, where the requester never hears it, and the client reports a change that applied
@@ -2157,14 +2159,31 @@ static meshtastic_Channel makeChannel(int8_t index, meshtastic_Channel_Role role
     return ch;
 }
 
+// Set by tests that need a remote request (a node over LoRa, PKC-authorized) instead of a local client.
+static bool sendAdminAsRemote = false;
+static const NodeNum REMOTE_ADMIN_NODE = 0x0BADCAFE;
+
 // Dispatch one admin message as if it arrived from a local (from==0) client, which bypasses
-// the passkey/authorization gates so the switch body runs.
+// the passkey/authorization gates so the switch body runs. With sendAdminAsRemote, it arrives from
+// REMOTE_ADMIN_NODE over PKC with an authorized admin key and a valid session passkey instead.
 static void sendAdmin(meshtastic_AdminMessage &m)
 {
     meshtastic_MeshPacket mp = meshtastic_MeshPacket_init_zero;
     mp.from = 0;
     mp.which_payload_variant = meshtastic_MeshPacket_decoded_tag; // required: handler drops non-decoded packets
-    testAdmin->handleReceivedProtobuf(mp, &m);
+    if (!sendAdminAsRemote) {
+        testAdmin->handleReceivedProtobuf(mp, &m);
+        return;
+    }
+    mp.from = REMOTE_ADMIN_NODE;
+    mp.pki_encrypted = true;
+    mp.public_key.size = 32;
+    memset(mp.public_key.bytes, 0x5A, 32);
+    config.security.admin_key_count = 1;
+    config.security.admin_key[0].size = 32;
+    memset(config.security.admin_key[0].bytes, 0x5A, 32);
+    testAdmin->setPassKey(&m);
+    testAdmin->handleReceivedProtobuf(mp, &m, RX_SRC_RADIO);
 }
 
 static void sendSetChannel(const meshtastic_Channel &ch)
@@ -2554,9 +2573,10 @@ static void detachDeferredRetuneFixtures()
     if (service)
         retuneCounter.unobserve(&service->configChanged);
     retuneCounter.count = 0;
+    sendAdminAsRemote = false;
 }
 
-// The admin's reply sits in the TX queue. Time is moved by aging the deferral and the reboot deadline
+// A remote admin's reply sits in the TX queue. Time is moved by aging the deferral and the reboot deadline
 // rather than the shared clock: stepping that back afterwards leaks into later cases' NodeDB state.
 static void primeDeferredRetuneTest()
 {
@@ -2566,6 +2586,7 @@ static void primeDeferredRetuneTest()
     txQueueStandIn.busy = true;
     txQueueStandIn.observe(&preflightSleep);
     retuneCounter.observe(&service->configChanged);
+    sendAdminAsRemote = true;
 }
 
 // The reboot commit_edit_settings scheduled, brought to its deadline.
@@ -2682,7 +2703,7 @@ static void test_deferredRetune_waitsForReplyAck()
     router = pendingReply;
 
     service->reloadConfig(SEGMENT_CONFIG, true);
-    service->awaitAckBeforeRadioConfig(0x1234);
+    service->awaitAckBeforeRadioConfig(0x1234, 0);
     service->applyDeferredRadioConfig();
     TEST_ASSERT_EQUAL_INT_MESSAGE(0, retuneCounter.count, "retuned before the reply was acked");
 
@@ -2703,13 +2724,81 @@ static void test_deferredRetune_untrackedReplyWaitsForQueue()
     router = noPending;
 
     service->reloadConfig(SEGMENT_CONFIG, true);
-    service->awaitAckBeforeRadioConfig(0x1234);
+    service->awaitAckBeforeRadioConfig(0x1234, 0);
     service->applyDeferredRadioConfig();
     TEST_ASSERT_EQUAL_INT_MESSAGE(0, retuneCounter.count, "an untracked reply was taken as acked while still queued");
 
     txQueueStandIn.busy = false;
     service->applyDeferredRadioConfig();
     TEST_ASSERT_EQUAL_INT(1, retuneCounter.count);
+}
+
+// The reply's first retry is due one retransmission interval after its send; at LONG_SLOW that interval is
+// ~15 s idle and ~24 s busy, so a fixed 20 s cap retunes before a lost first reply is retried, and the retry
+// goes out on settings the requester isn't on. The cap covers the first send plus one retry.
+static void test_deferredRetune_capCoversReplyRetry()
+{
+    primeDeferredRetuneTest();
+    auto *pendingReply = new PendingReplyRouter();
+    pendingReply->id = 0x1234;
+    testRouter = pendingReply;
+    router = pendingReply;
+    const uint32_t retryMsec = 15 * 1000;
+
+    service->reloadConfig(SEGMENT_CONFIG, true);
+    service->awaitAckBeforeRadioConfig(0x1234, retryMsec);
+    service->ageRadioConfigDeferralForTest(2 * retryMsec - 1000);
+    service->applyDeferredRadioConfig();
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, retuneCounter.count, "the cap fired before the reply's retry was out and acked");
+
+    service->ageRadioConfigDeferralForTest(1000);
+    service->applyDeferredRadioConfig();
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, retuneCounter.count, "a reply never acked held the retune past its retry");
+}
+
+// A local client's (BLE/USB/TCP) reply never goes over LoRa, so its save has nothing to wait for: deferring
+// it holds the change, and a commit's reboot, behind unrelated mesh traffic for up to the cap.
+static void test_setConfigLora_localClientRetunesAtOnce()
+{
+    primeDeferredRetuneTest();
+    sendAdminAsRemote = false;
+
+    sendSetLoraChannelNum(21);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, retuneCounter.count, "a local save waited on the TX queue");
+    TEST_ASSERT_FALSE(service->isRadioConfigDeferred());
+}
+
+static void test_commitEditSettings_localClientRebootNotHeld()
+{
+    primeDeferredRetuneTest();
+    sendAdminAsRemote = false;
+
+    sendBeginEdit();
+    sendSetLoraChannelNum(21);
+    sendCommitEdit();
+
+    TEST_ASSERT_EQUAL_INT(1, retuneCounter.count);
+    expireRebootDeadline();
+    TEST_ASSERT_TRUE_MESSAGE(Power::rebootIsDue(), "a local commit's reboot waited on the TX queue");
+}
+
+// A local save while a remote save's retune is deferred joins it: retuning at once would strand the remote
+// requester's reply on settings it isn't on.
+static void test_localSave_joinsActiveDeferral()
+{
+    primeDeferredRetuneTest();
+    sendSetLoraChannelNum(21);
+    TEST_ASSERT_TRUE(service->isRadioConfigDeferred());
+
+    sendAdminAsRemote = false;
+    sendSetLoraChannelNum(22);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, retuneCounter.count, "a local save retuned under a remote save's pending reply");
+
+    txQueueStandIn.busy = false;
+    service->applyDeferredRadioConfig();
+    TEST_ASSERT_EQUAL_INT(1, retuneCounter.count);
+    TEST_ASSERT_EQUAL_UINT32(22, config.lora.channel_num);
 }
 
 // An unnamed primary channel hashes the preset's name. Re-hashing at save time stamps the reply with the
@@ -3083,6 +3172,10 @@ void setup()
     RUN_TEST(test_deferredRetune_waitsForReplyAck);
     RUN_TEST(test_deferredRetune_repeatedSaveKeepsCapStart);
     RUN_TEST(test_deferredRetune_untrackedReplyWaitsForQueue);
+    RUN_TEST(test_deferredRetune_capCoversReplyRetry);
+    RUN_TEST(test_setConfigLora_localClientRetunesAtOnce);
+    RUN_TEST(test_commitEditSettings_localClientRebootNotHeld);
+    RUN_TEST(test_localSave_joinsActiveDeferral);
     RUN_TEST(test_presetChange_keepsChannelHashUntilRetune);
 
     exit(UNITY_END());

@@ -85,6 +85,7 @@ class MeshService
     // where the requester isn't listening.
     bool radioConfigDeferred = false;
     uint32_t radioConfigDeferredAtMs = 0;
+    uint32_t radioConfigDeferMaxMs = RADIO_CONFIG_DEFER_MAX_MS; // this deferral's cap, raised to cover the reply's retry
     PacketId radioConfigAwaitsAckOf = 0;      // our reply that must be acked (or given up) before the retune; 0 = none
     bool radioConfigAwaitedReplySeen = false; // that reply has been in the router's pending-retransmission table
 
@@ -207,15 +208,16 @@ class MeshService
     bool isRadioConfigDeferred() const { return radioConfigDeferred; }
 
     /// Also hold the deferred retune until our packet `id` (the admin reply) is acked or its retransmissions give up,
-    /// so a lost first transmission is retried where the requester is still listening.
-    void awaitAckBeforeRadioConfig(PacketId id);
+    /// so a lost first transmission is retried where the requester is still listening. retryMsec is the reply's
+    /// RadioInterface::getRetransmissionMsec(); the cap is raised to two of them, the first send plus one retry.
+    void awaitAckBeforeRadioConfig(PacketId id, uint32_t retryMsec);
 
-    /// Longest a deferred radio change waits, so a saturated channel can't hold it forever. At LONG_SLOW a ~45-byte
-    /// ack is ~3.3 s on air and a 64-slot contention window ~10 s, leaving room for one packet queued ahead.
+    /// Shortest cap on a deferred radio change, so a saturated channel can't hold it forever. Covers one reply at
+    /// LONG_SLOW (~3.3 s on air, a 64-slot contention window ~10 s); an awaited reply's retry can raise it.
     static constexpr uint32_t RADIO_CONFIG_DEFER_MAX_MS = 20 * 1000;
 
     /// Apply a deferred radio change once the awaited reply is acked (with none, once nothing is queued or on air),
-    /// or once RADIO_CONFIG_DEFER_MAX_MS has passed.
+    /// or once this deferral's cap has passed.
     void applyDeferredRadioConfig();
 #ifdef PIO_UNIT_TESTING
     /// Make the pending deferral look ms older, so a test reaches the cap without moving the shared clock.

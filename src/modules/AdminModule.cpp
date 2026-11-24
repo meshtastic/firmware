@@ -735,8 +735,10 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     }
     // A reliable reply is retransmitted until acked; keep the radio where the requester can hear those retries. Only the
     // reply to the save that deferred the change: a later read's ack says nothing about the save's reply.
-    if (myReply && mp.want_ack && mp.from != 0 && requestSavedRadioChange)
-        service->awaitAckBeforeRadioConfig(myReply->id);
+    if (myReply && mp.want_ack && mp.from != 0 && requestSavedRadioChange) {
+        RadioInterface *iface = router->getRadioIface();
+        service->awaitAckBeforeRadioConfig(myReply->id, iface ? iface->getRetransmissionMsec(myReply) : 0);
+    }
     return handled;
 }
 
@@ -1894,10 +1896,11 @@ void AdminModule::saveChanges(int saveWhat, bool shouldReboot)
 #endif
     if (!hasOpenEditTransaction) {
         LOG_INFO("Save changes to disk");
-        // The reply to this request is queued after we return: retune only once it has gone out on the
-        // current settings, or the requester never hears it.
-        service->reloadConfig(saveWhat, true);
-        requestSavedRadioChange |= (saveWhat & (SEGMENT_CONFIG | SEGMENT_CHANNELS)) != 0; // what reloadConfig defers
+        // A remote request's reply is queued after we return and goes over LoRa: retune only once it has gone out on
+        // the current settings, or the requester never hears it. A local client's reply never touches the radio.
+        const bool remoteRequest = currentRequest && currentRequest->from != 0;
+        service->reloadConfig(saveWhat, remoteRequest);
+        requestSavedRadioChange |= remoteRequest && (saveWhat & (SEGMENT_CONFIG | SEGMENT_CHANNELS)); // what reloadConfig defers
     } else {
         LOG_INFO("Delay disk save until open transaction commits");
         editTransactionActivityMs = millis(); // still in use, so not the abandoned kind we time out
