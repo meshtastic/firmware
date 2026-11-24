@@ -314,11 +314,6 @@ size_t Reassembler::activeSlots() const
     return count;
 }
 
-size_t Reassembler::openSlots() const
-{
-    return slots.size() - activeSlots();
-}
-
 bool Reassembler::hasSlot(const uint8_t key[kFrameKeyBytes]) const
 {
     for (const auto &slot : slots) {

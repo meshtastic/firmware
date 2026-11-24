@@ -73,7 +73,6 @@ class Reassembler
     void expire(uint32_t nowMs);
 
     size_t activeSlots() const;
-    size_t openSlots() const;
     bool hasSlot(const uint8_t key[kFrameKeyBytes]) const;
 
   private:
