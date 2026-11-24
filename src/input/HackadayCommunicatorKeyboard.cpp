@@ -141,7 +141,7 @@ void HackadayCommunicatorKeyboard::pressed(uint8_t key)
     if (state == Init || state == Busy) {
         return;
     }
-    LOG_DEBUG("Key pressed: %u", key);
+    LOG_INPUT("Key pressed: %u", key);
 
     if (modifierFlag && (millis() - last_modifier_time > _TCA8418_MULTI_TAP_THRESHOLD)) {
         modifierFlag = 0;

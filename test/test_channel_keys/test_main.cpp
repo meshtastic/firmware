@@ -590,10 +590,6 @@ void tearDown(void)
 CK_TEST_ENTRY void setup()
 {
     initializeTestEnvironment();
-    // perhapsDecode() takes cryptLock; normally Router's ctor allocates it, but this
-    // suite never constructs a Router (nor a NodeDB - it must stay disk-write free).
-    if (!cryptLock)
-        cryptLock = new concurrency::Lock();
     UNITY_BEGIN();
 
     printf("\n=== generateHash golden values ===\n");

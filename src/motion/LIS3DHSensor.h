@@ -12,11 +12,17 @@ class LIS3DHSensor : public MotionSensor
 {
   private:
     Adafruit_LIS3DH sensor;
+#ifdef MESHTASTIC_INCLUDE_INKHUD
+    uint32_t lastButtonPress = 0;
+#endif
 
   public:
     explicit LIS3DHSensor(ScanI2C::FoundDevice foundDevice);
     virtual bool init() override;
     virtual int32_t runOnce() override;
+#ifdef MESHTASTIC_INCLUDE_INKHUD
+    StepSource stepSource() const override { return StepSource::Software; }
+#endif
 };
 
 #endif

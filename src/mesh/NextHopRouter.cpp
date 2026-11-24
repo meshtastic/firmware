@@ -28,8 +28,8 @@ NextHopRouter::NextHopRouter() {}
 
 bool NextHopRouter::relayOpaquePacket(const meshtastic_MeshPacket *p)
 {
-    // Opaque traffic is never admitted to PacketHistory, NodeDB, modules, phone, MQTT, or ACK
-    // handling. Relay only from the immutable outer routing header and let hop exhaustion bound it.
+    // Opaque traffic never reaches PacketHistory, NodeDB, modules, phone, or ACK handling (a PKI DM still
+    // goes to MQTT). Relay only from the immutable outer routing header and let hop exhaustion bound it.
     const auto mode = config.device.rebroadcast_mode;
     if (!iface || isToUs(p) || isFromUs(p) || p->id == 0 || p->hop_limit == 0 || !isRebroadcaster() || owner.is_licensed ||
         !IS_ONE_OF(mode, meshtastic_Config_DeviceConfig_RebroadcastMode_ALL,
@@ -166,7 +166,8 @@ bool NextHopRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
                 if (!findInTxQueue(p->from, p->id)) {
                     if (reprocessPacket(p) && !isBlockedEventCoordinatePacket(p) && !perhapsRebroadcast(p) && isToUs(p) &&
                         p->want_ack) {
-                        sendAckNak(meshtastic_Routing_Error_NONE, getFrom(p), p->id, p->channel, 0);
+                        // A duplicate gets the answer the original got: the NAK if we refused it, else the ACK
+                        sendAckNak(refusalFor(getFrom(p), p->id), getFrom(p), p->id, p->channel, 0);
                     }
                 }
             } else if (!weWereNextHop) {

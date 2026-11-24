@@ -177,6 +177,9 @@ class MeshService
      */
     void handleToRadio(meshtastic_MeshPacket &p);
 
+    /// Transparent mode: hand a raw LoRa frame to the client without decrypting it. Takes ownership of p.
+    void handleTransparentFromRadio(meshtastic_MeshPacket *p);
+
 #if MESHTASTIC_ENABLE_FRAME_INJECTION
     /// Test/debug seam (build-flag gated, off by default): deliver a client-supplied frame into the
     /// receive pipeline as if it had arrived off the LoRa chip. See the definition for the wire format.
@@ -236,6 +239,9 @@ class MeshService
     /// Handle a packet that just arrived from the radio.  This method does _not_ free the provided packet.  If it
     /// needs to keep the packet around it makes a copy
     int handleFromRadio(const meshtastic_MeshPacket *p);
+
+    /// Transparent mode: queue a client frame on the radio verbatim and report the result to the client.
+    void handleTransparentToRadio(const meshtastic_MeshPacket &p);
     friend class RoutingModule;
 #ifdef PIO_UNIT_TESTING
     friend class MeshServicePhoneDeliveryTest;
