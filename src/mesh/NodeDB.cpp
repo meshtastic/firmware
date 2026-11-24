@@ -86,6 +86,14 @@
 
 NodeDB *nodeDB = nullptr;
 
+// Node numbers 0-9 are reserved (0 is no sender, 1 NODENUM_BROADCAST_NO_LORA, the rest for future use)
+#define NUM_RESERVED 10
+
+static bool isReservedNodeNum(NodeNum num)
+{
+    return num < NUM_RESERVED || num == NODENUM_BROADCAST;
+}
+
 // we have plenty of ram so statically alloc this tempbuf (for now)
 EXT_RAM_BSS_ATTR meshtastic_DeviceState devicestate;
 meshtastic_MyNodeInfo &myNodeInfo = devicestate.my_node;
@@ -654,8 +662,12 @@ NodeDB::NodeDB()
         owner.public_key.size = config.security.public_key.size;
         memcpy(owner.public_key.bytes, config.security.public_key.bytes, config.security.public_key.size);
         crypto->setDHPrivateKey(config.security.private_key.bytes);
-        // Set my node num uint32 value to bytes from the new public key
-        myNodeInfo.my_node_num = crc32Buffer(config.security.public_key.bytes, config.security.public_key.size);
+        // Set my node num uint32 value to bytes from the new public key; this build can't mint a replacement key
+        const NodeNum keyNodeNum = crc32Buffer(config.security.public_key.bytes, config.security.public_key.size);
+        if (isReservedNodeNum(keyNodeNum))
+            LOG_ERROR("Public key maps to reserved node number 0x%08x, keeping 0x%08x", keyNodeNum, myNodeInfo.my_node_num);
+        else
+            myNodeInfo.my_node_num = keyNodeNum;
     }
 #endif
     // Identity is now established, so run the self-care pass on the store
@@ -2402,9 +2414,6 @@ void NodeDB::installDefaultDeviceState()
 #endif
 }
 
-// We reserve a few nodenums for future use
-#define NUM_RESERVED 4
-
 /**
  * get our starting (provisional) nodenum from flash.
  */
@@ -2428,8 +2437,7 @@ void NodeDB::pickNewNodeNum()
     };
 
     meshtastic_NodeInfoLite *found;
-    while (((found = getMeshNode(nodeNum)) && !isOurOwnEntry(found)) ||
-           (nodeNum == NODENUM_BROADCAST || nodeNum < NUM_RESERVED)) {
+    while (((found = getMeshNode(nodeNum)) && !isOurOwnEntry(found)) || isReservedNodeNum(nodeNum)) {
         NodeNum candidate = random(NUM_RESERVED, LONG_MAX); // try a new random choice
         if (found)
             LOG_WARN("NOTE! Desired nodenum 0x%08x invalid or in use, picking 0x%08x", nodeNum, candidate);
@@ -4878,13 +4886,25 @@ bool NodeDB::checkLowEntropyPublicKey(const meshtastic_Config_SecurityConfig_pub
 // a known-weak identity: only a broken entropy source can land here, and retrying would not fix that.
 bool NodeDB::generateBlacklistCheckedKeyPair()
 {
-    crypto->generateKeyPair(config.security.public_key.bytes, config.security.private_key.bytes);
-    if (!checkLowEntropyPublicKey(config.security.public_key))
-        return true;
-    LOG_ERROR("PKI keygen produced a known low-entropy key; entropy source is broken");
+    // my_node_num must equal crc32(public_key), so a key landing on a reserved number is redrawn; that one is chance.
+    for (uint8_t attempt = 0; attempt < 4; attempt++) {
+        crypto->generateKeyPair(config.security.public_key.bytes, config.security.private_key.bytes);
+        if (checkLowEntropyPublicKey(config.security.public_key)) {
+            LOG_ERROR("PKI keygen produced a known low-entropy key; entropy source is broken");
+            break;
+        }
+        if (!keyYieldsReservedNodeNum(config.security.public_key))
+            return true;
+        LOG_WARN("PKI keygen produced a key for a reserved node number; generating another");
+    }
     config.security.public_key.size = 0;
     config.security.private_key.size = 0;
     return false;
+}
+
+bool NodeDB::keyYieldsReservedNodeNum(const meshtastic_Config_SecurityConfig_public_key_t &key)
+{
+    return isReservedNodeNum(crc32Buffer(key.bytes, key.size));
 }
 
 // Derive the public key from the stored private key and vet it. The entry check cannot see a weak key
@@ -4898,11 +4918,17 @@ bool NodeDB::derivePublicKeyFromPrivate()
         config.security.private_key.size = 0;
         return false;
     }
-    if (!checkLowEntropyPublicKey(config.security.public_key))
-        return true;
-    keyIsLowEntropy = true;
-    LOG_WARN("Private key derives a known low-entropy public key; generating a new keypair");
-    return generateBlacklistCheckedKeyPair();
+    if (checkLowEntropyPublicKey(config.security.public_key)) {
+        keyIsLowEntropy = true;
+        LOG_WARN("Private key derives a known low-entropy public key; generating a new keypair");
+        return generateBlacklistCheckedKeyPair();
+    }
+    // Also how a node already stuck on a reserved number (0 crash-loops on its first send) recovers at boot
+    if (keyYieldsReservedNodeNum(config.security.public_key)) {
+        LOG_WARN("Private key derives a public key for a reserved node number; generating a new keypair");
+        return generateBlacklistCheckedKeyPair();
+    }
+    return true;
 }
 #endif
 
@@ -5036,6 +5062,12 @@ bool NodeDB::ensurePkiIdentity()
     // A failed or declined keygen leaves the existing key, and so the existing node num, untouched.
     if (!crypto || !crypto->ensurePkiKeys(config.security, owner))
         return false;
+    if (keyYieldsReservedNodeNum(config.security.public_key)) {
+        LOG_WARN("PKI key maps to a reserved node number; generating another");
+        if (!generateBlacklistCheckedKeyPair())
+            return false;
+        memcpy(owner.public_key.bytes, config.security.public_key.bytes, 32);
+    }
 
     // ensurePkiKeys() writes key material only, so my_node_num is still the stale MAC-derived value.
     // createNewIdentity() early-returns when the key, and so the node num, did not actually change.
