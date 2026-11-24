@@ -156,6 +156,7 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     sqlite3_stmt *maxCounterStmt;
     sqlite3_stmt *bucketIdsStmt;
     sqlite3_stmt *getLinkByShortIdStmt;
+    sqlite3_stmt *deleteCanonStmt;
     sqlite3_stmt *unindexedLinksStmt;
     sqlite3_stmt *setLinkSetIndexStmt;
     sqlite3_stmt *legacyHistoryStmt;
@@ -253,8 +254,10 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     bool anyEnumQueuePending() const;
     void beginEnumLateAccept();
     void markEnumProgress();
-    void addPendingBucket(uint32_t bucket, uint32_t count, uint64_t checksum, uint32_t tip);
+    void addPendingBucket(const uint8_t *root_hash, NodeNum authority, uint32_t bucket, uint32_t count, uint64_t checksum,
+                          uint32_t tip);
     void startPendingPull();
+    void repairPromotions();
     void expireEnumLate();
 
     // A canonical row, shared by recovered objects and promoted scratch rows.
@@ -499,8 +502,18 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
         uint32_t count;
         uint64_t checksum;
         uint32_t tip;
+        uint8_t root[SFPP_HASH_SIZE];
+        NodeNum authority;
     };
     std::vector<EnumPendingBucket> enumPending;
+    struct EnumPromoted {
+        pinsketch::Element id;
+        uint8_t hash[SFPP_HASH_SIZE];
+    };
+    std::vector<EnumPromoted> enumPromoted;
+    uint8_t enumTipRoot[SFPP_HASH_SIZE] = {0};
+    NodeNum enumTipAuthority = 0;
+    uint8_t enumSeenRoot[SFPP_HASH_SIZE] = {0};
     struct EnumBucketSeen {
         uint32_t bucket;
         uint32_t count;

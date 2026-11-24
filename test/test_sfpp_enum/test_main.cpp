@@ -1580,6 +1580,81 @@ void test_heardLiveObjectsArePromoted()
     assertConverged();
 }
 
+// --- Stage 8h ---
+
+// A burst of adverts with rising tips starts at most one pull (one exchange, one pacer slot).
+void test_risingTipsProduceOnePull()
+{
+    ingestAuthority(40);
+    buildFollowerFromCopy();
+    TEST_ASSERT_TRUE(deleteCounterRange(dirB, 39, 40));
+
+    for (uint32_t tip = 40; tip < 45; tip++) {
+        meshtastic_MeshPacket advert;
+        TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, 0, false, advert, false, tip));
+        TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
+        myNodeInfo.my_node_num = FOLLOWER_NODE;
+        portduino_config.sfpp_stratum0 = false;
+        follower->runOnce();
+    }
+    std::vector<meshtastic_MeshPacket> requests = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, requests.size());
+    TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_REQUEST, decodeSfpp(requests[0]).sfpp_message_type);
+}
+
+// The confirmed tip is per (root, authority): a new authority with a lower tip still gets its tail
+// pulled instead of being suppressed by the old high-water mark.
+void test_newAuthorityLowerTipPullsTail()
+{
+    ingestAuthority(40);
+    buildFollowerFromCopy();
+    TEST_ASSERT_TRUE(deleteCounterRange(dirB, 39, 40));
+    Exchange first = runExchange(); // converge; known tip becomes 40
+    TEST_ASSERT_EQUAL_UINT(2, first.itemFrames);
+
+    Time::setTestMillis(Time::getMillis() + 2000); // clear any pacer slot
+
+    meshtastic_MeshPacket advert;
+    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, 0, false, advert, false, 39));
+    advert.from = UNKNOWN_NODE;
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
+    myNodeInfo.my_node_num = FOLLOWER_NODE;
+    portduino_config.sfpp_stratum0 = false;
+    follower->runOnce();
+
+    std::vector<meshtastic_MeshPacket> request = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, request.size());
+    TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_REQUEST, decodeSfpp(request[0]).sfpp_message_type);
+    TEST_ASSERT_EQUAL_UINT32(1, decodeSfpp(request[0]).chain_count);
+}
+
+// Two valid objects with the same 32-bit short ID: the scratch copy must not stand in for the
+// peer's object. The unconfirmed promotion is undone and the peer's object is fetched.
+void test_genuineShortIdCollisionIsFetched()
+{
+    ingestAuthority(1);
+    CollisionCandidate held;
+    CollisionCandidate missingObject;
+    makeCandidate(kCollisionACipher, kCollisionAId, held);
+    makeCandidate(kCollisionBCipher, kCollisionBId, missingObject);
+    TEST_ASSERT_EQUAL_UINT32(held.shortId, missingObject.shortId);
+    TEST_ASSERT_TRUE(insertCandidateRow(dirA, 2, missingObject));
+
+    TEST_ASSERT_TRUE(copyDb(dirA, dirB));
+    TEST_ASSERT_TRUE(deleteCounter(dirB, 2));
+    portduino_config.sfpp_db_path = dirB + "/";
+    portduino_config.sfpp_stratum0 = false;
+    follower = new TestSfppModule();
+    TEST_ASSERT_TRUE(
+        insertScratchRow(dirB, NODENUM_BROADCAST, SENDER_NODE, held.id, held.cipher, sizeof(held.cipher), held.hash));
+
+    Exchange exchange = runExchange();
+    TEST_ASSERT_EQUAL_UINT(1, exchange.itemFrames);
+    TEST_ASSERT_EQUAL_UINT(0, countRows(dirB, held.id));          // unconfirmed promotion removed
+    TEST_ASSERT_EQUAL_UINT(1, countRows(dirB, missingObject.id)); // peer's object fetched
+    assertConverged();
+}
+
 // --- Stage 8g ---
 
 // EnumListenOnly must be silent on every path, including the legacy CLIENT_HISTORY shim, because
@@ -1794,7 +1869,12 @@ void test_onDemandPullsNewestBucketAndCapsPacing()
     meshtastic_MeshPacket advert;
     TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, 0, false, advert, false, 40)); // names bucket 0, tip 40
     TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
+    TEST_ASSERT_EQUAL_UINT(0, takeSent().size()); // queued for the pacer, not sent inline
 
+    // startPendingPull (from runOnce) sends the newest bucket on demand.
+    myNodeInfo.my_node_num = FOLLOWER_NODE;
+    portduino_config.sfpp_stratum0 = false;
+    follower->runOnce();
     std::vector<meshtastic_MeshPacket> request = takeSent();
     TEST_ASSERT_EQUAL_UINT(1, request.size());
     TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_REQUEST, decodeSfpp(request[0]).sfpp_message_type);
@@ -2021,6 +2101,9 @@ void setup()
     RUN_TEST(test_broadcastServesListenOnlyFollower);
     RUN_TEST(test_objectFromNonAuthorityIsIgnored);
     RUN_TEST(test_heardLiveObjectsArePromoted);
+    RUN_TEST(test_risingTipsProduceOnePull);
+    RUN_TEST(test_newAuthorityLowerTipPullsTail);
+    RUN_TEST(test_genuineShortIdCollisionIsFetched);
     RUN_TEST(test_listenOnlyBlocksLegacyShim);
     RUN_TEST(test_corruptScratchRowIsNotPromoted);
     RUN_TEST(test_midExchangeAdvertIsPulledAfter);

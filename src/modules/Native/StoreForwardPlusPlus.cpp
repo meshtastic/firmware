@@ -392,6 +392,8 @@ StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
         from channel_messages where substr(root_hash,1,?)=? and counter>=? and counter<=? and short_id=?;",
                        -1, &getLinkByShortIdStmt, NULL);
 
+    sqlite3_prepare_v2(ppDb, "delete from channel_messages where message_hash=?;", -1, &deleteCanonStmt, NULL);
+
     // Legacy CLIENT_HISTORY reads the stored plaintext, or the ciphertext a follower holds instead.
     sqlite3_prepare_v2(ppDb, "select sender, packet_id, destination, rx_time, payload, encrypted_bytes from channel_messages \
         where substr(root_hash,1,?)=? and rx_time>=? and sender!=? \
@@ -551,6 +553,7 @@ StoreForwardPlusPlusModule::~StoreForwardPlusPlusModule()
         maxCounterStmt,
         bucketIdsStmt,
         getLinkByShortIdStmt,
+        deleteCanonStmt,
         unindexedLinksStmt,
         setLinkSetIndexStmt,
         legacyHistoryStmt,
@@ -749,6 +752,8 @@ int32_t StoreForwardPlusPlusModule::runOnce()
         startPendingPull();
         if (enumExchangeActive)
             return 5 * 1000; // pump the probe idle and overall timeout while an exchange is in flight
+        if (!enumPending.empty())
+            return enumDrainIntervalMs(); // a paced pending pull is waiting
         if (enumLateActive)
             return 5 * 1000; // tighten the late-frame window expiry
         if (!portduino_config.sfpp_stratum0)
@@ -2817,6 +2822,7 @@ void StoreForwardPlusPlusModule::beginEnumExchange(const uint8_t *root_hash, uin
     enumRequestSentMs = enumExchangeStartedMs;
     enumLateActive = false;
     enumLateWanted.clear();
+    enumPromoted.clear();
     enumOnDemand = false;
     // The thread only checks the deadline when runOnce() runs; schedule it now.
     setIntervalFromNow(5 * 1000);
@@ -2843,6 +2849,7 @@ void StoreForwardPlusPlusModule::endEnumExchange()
     enumSketchIds = 0;
     enumOnDemand = false;
     enumAwaitingList = false;
+    enumPromoted.clear();
     enumListRetries = 0;
     enumItemRetries = 0;
     enumWanted.clear();
@@ -2897,10 +2904,11 @@ void StoreForwardPlusPlusModule::markEnumProgress()
         enumKnownTip = reached;
 }
 
-void StoreForwardPlusPlusModule::addPendingBucket(uint32_t bucket, uint32_t count, uint64_t checksum, uint32_t tip)
+void StoreForwardPlusPlusModule::addPendingBucket(const uint8_t *root_hash, NodeNum authority, uint32_t bucket, uint32_t count,
+                                                  uint64_t checksum, uint32_t tip)
 {
     for (auto &entry : enumPending) {
-        if (entry.bucket == bucket) {
+        if (entry.bucket == bucket && entry.authority == authority && memcmp(entry.root, root_hash, SFPP_HASH_SIZE) == 0) {
             entry.count = count;
             entry.checksum = checksum;
             entry.tip = tip;
@@ -2915,14 +2923,39 @@ void StoreForwardPlusPlusModule::addPendingBucket(uint32_t bucket, uint32_t coun
         }
         enumPending.erase(enumPending.begin() + lowest);
     }
-    enumPending.push_back({bucket, count, checksum, tip});
+    EnumPendingBucket entry;
+    entry.bucket = bucket;
+    entry.count = count;
+    entry.checksum = checksum;
+    entry.tip = tip;
+    memcpy(entry.root, root_hash, SFPP_HASH_SIZE);
+    entry.authority = authority;
+    enumPending.push_back(entry);
 }
 
 void StoreForwardPlusPlusModule::startPendingPull()
 {
     if (portduino_config.sfpp_stratum0 || portduino_config.sfpp_enum_listen_only)
         return;
-    if (enumExchangeActive || enumPending.empty())
+    if (enumExchangeActive || enumPending.empty() || enumAuthorityNode == 0)
+        return;
+
+    uint8_t root[SFPP_HASH_SIZE] = {0};
+    if (!getRootFromChannelHash(channels.getHash(0), root))
+        return;
+
+    // Key by (root, authority): drop anything remembered for another scope before touching a slot.
+    enumPending.erase(std::remove_if(enumPending.begin(), enumPending.end(),
+                                     [&](const EnumPendingBucket &entry) {
+                                         return entry.authority != enumAuthorityNode ||
+                                                memcmp(entry.root, root, SFPP_HASH_SIZE) != 0;
+                                     }),
+                      enumPending.end());
+    if (enumPending.empty())
+        return;
+
+    // One pull per pacer slot (D11/G3), shared with the item drain on this node.
+    if (enumLastDrainMs != 0 && !Throttle::hasElapsed(enumLastDrainMs, enumDrainIntervalMs()))
         return;
 
     size_t best = 0;
@@ -2931,21 +2964,54 @@ void StoreForwardPlusPlusModule::startPendingPull()
             best = i;
     }
     const EnumPendingBucket entry = enumPending[best];
+
+    // A named bucket that could not be repaired from the same advertised summary is skipped.
+    if (!(entry.count == 0 && entry.checksum == 0) && enumBucketSuppressed(root, entry.bucket, entry.count, entry.checksum)) {
+        enumPending.erase(enumPending.begin() + best);
+        return;
+    }
     enumPending.erase(enumPending.begin() + best);
 
-    uint8_t root[SFPP_HASH_SIZE] = {0};
-    if (!getRootFromChannelHash(channels.getHash(0), root) || enumAuthorityNode == 0)
-        return;
-
     if (entry.count == 0 && entry.checksum == 0) {
-        beginEnumExchange(root, entry.bucket, enumAuthorityNode, entry.tip, 0);
+        beginEnumExchange(root, entry.bucket, entry.authority, entry.tip, 0);
         enumPeerTip = entry.tip;
         enumOnDemand = true;
     } else {
-        beginEnumExchange(root, entry.bucket, enumAuthorityNode, entry.count, entry.checksum);
+        beginEnumExchange(root, entry.bucket, entry.authority, entry.count, entry.checksum);
         enumPeerTip = entry.tip;
     }
-    requestEnumList(root, entry.bucket, enumAuthorityNode);
+    requestEnumList(root, entry.bucket, entry.authority);
+    enumLastDrainMs = Time::getMillis(); // consume the pacer slot
+}
+
+void StoreForwardPlusPlusModule::repairPromotions()
+{
+    if (enumPromoted.empty()) {
+        endEnumExchange();
+        return;
+    }
+
+    std::vector<pinsketch::Element> ids;
+    for (const auto &promoted : enumPromoted) {
+        if (isInDB(promoted.hash, SFPP_HASH_SIZE)) {
+            sqlite3_reset(deleteCanonStmt);
+            sqlite3_bind_blob(deleteCanonStmt, 1, promoted.hash, SFPP_HASH_SIZE, SQLITE_STATIC);
+            sqlite3_step(deleteCanonStmt);
+            sqlite3_reset(deleteCanonStmt);
+        }
+        ids.push_back(promoted.id);
+    }
+    enumPromoted.clear();
+    enumSketchAttempt = false;
+    enumCollisionProbe = false;
+    enumItemRetries = 0;
+    enumWanted.clear();
+    enumWantedRemaining = 0;
+
+    if (!ids.empty())
+        requestMissingItems(enumExchangeRoot, enumExchangeBucket, enumExchangePeer, ids);
+    else
+        endEnumExchange();
 }
 
 void StoreForwardPlusPlusModule::expireEnumLate()
@@ -2995,6 +3061,10 @@ void StoreForwardPlusPlusModule::suppressEnumBucket(const uint8_t *root_hash, ui
 
 void StoreForwardPlusPlusModule::advertiseOneBucket(uint8_t *root_hash, size_t root_hash_len)
 {
+    if (memcmp(enumSeenRoot, root_hash, SFPP_HASH_SIZE) != 0) {
+        memcpy(enumSeenRoot, root_hash, SFPP_HASH_SIZE);
+        enumAdvertSeen.clear();
+    }
     if (getChainCount(root_hash, root_hash_len) == 0)
         return;
 
@@ -3107,6 +3177,13 @@ void StoreForwardPlusPlusModule::handleEnumAdvert(const meshtastic_MeshPacket &m
 
     // F3.2: only a parsed advert whose root resolves (known, or adopted here) names the authority.
     enumAuthorityNode = mp.from;
+    // Stage 8h: the tip and advert bookkeeping belong to (root, authority); reset on a change.
+    if (memcmp(enumTipRoot, root, SFPP_HASH_SIZE) != 0 || enumTipAuthority != mp.from) {
+        memcpy(enumTipRoot, root, SFPP_HASH_SIZE);
+        enumTipAuthority = mp.from;
+        enumKnownTip = 0;
+        enumPending.clear();
+    }
     logEnum("rx", "advert", advert.scope, mp.decoded.payload.size, mp.from, -1, 0, 1, t->message.size);
     if (portduino_config.sfpp_enum_listen_only)
         return; // learn the authority, never request
@@ -3130,9 +3207,17 @@ void StoreForwardPlusPlusModule::handleEnumAdvert(const meshtastic_MeshPacket &m
         // Stage 8g: a behind bucket seen while busy is remembered (bounded, newest first) and
         // pulled when this exchange ends.
         if (namedMismatch && advert.scope.bucket != enumExchangeBucket)
-            addPendingBucket(advert.scope.bucket, advert.count, advert.checksum, advertTip);
+            addPendingBucket(root, mp.from, advert.scope.bucket, advert.count, advert.checksum, advertTip);
         if (tailBehind && tipBucket != enumExchangeBucket)
-            addPendingBucket(tipBucket, 0, 0, advertTip);
+            addPendingBucket(root, mp.from, tipBucket, 0, 0, advertTip);
+        return;
+    }
+
+    // Stage 8h: prefer the newest tail over an older named bucket.
+    if (tailBehind && namedMismatch && advert.scope.bucket != tipBucket) {
+        addPendingBucket(root, mp.from, advert.scope.bucket, advert.count, advert.checksum, advertTip);
+        addPendingBucket(root, mp.from, tipBucket, 0, 0, advertTip);
+        setIntervalFromNow(10);
         return;
     }
 
@@ -3151,14 +3236,10 @@ void StoreForwardPlusPlusModule::handleEnumAdvert(const meshtastic_MeshPacket &m
         return;
     }
 
-    // Stage 8f: the named bucket agrees but the sender's tip is ahead, so the newest bucket is
-    // missing rows. Pull it now instead of waiting for its turn in the rotation.
-    if (enumBucketSuppressed(root, tipBucket, advertTip, 0))
-        return;
-    beginEnumExchange(root, tipBucket, mp.from, advertTip, 0);
-    enumPeerTip = advertTip;
-    enumOnDemand = true;
-    requestEnumList(root, tipBucket, mp.from);
+    // The named bucket agrees but the sender's tip is ahead: queue the newest bucket; startPendingPull
+    // paces it with the one server pacer.
+    addPendingBucket(root, mp.from, tipBucket, 0, 0, advertTip);
+    setIntervalFromNow(10);
 }
 
 bool StoreForwardPlusPlusModule::trySketchExchange(const sfppsr::Advert &advert, sfppsr::BucketSummary &local,
@@ -3334,6 +3415,11 @@ void StoreForwardPlusPlusModule::handleEnumProvide(const meshtastic_MeshPacket &
     enumProvideIds.erase(std::unique(enumProvideIds.begin(), enumProvideIds.end()), enumProvideIds.end());
     std::sort(own.begin(), own.end());
     own.erase(std::unique(own.begin(), own.end()), own.end());
+    if (enumOnDemand) {
+        // The bucket's own count (from the peer's list), not the advert tip.
+        enumPeerCount = (uint32_t)enumProvideIds.size();
+        enumPeerChecksum = 0;
+    }
 
     std::vector<pinsketch::Element> missing;
     std::set_difference(enumProvideIds.begin(), enumProvideIds.end(), own.begin(), own.end(), std::back_inserter(missing));
@@ -3350,6 +3436,13 @@ void StoreForwardPlusPlusModule::handleEnumProvide(const meshtastic_MeshPacket &
     if (enumOnDemand) {
         markEnumProgress();
         endEnumExchange(); // no advertised count/checksum to confirm against; the list was the check
+        return;
+    }
+
+    // Stage 8h: a promotion that the peer's checksum does not confirm is a collision; undo it and
+    // fetch the peer's objects instead.
+    if (!enumPromoted.empty() && !bucketMatchesPeer(root, enumProvideBucket)) {
+        repairPromotions();
         return;
     }
 
@@ -3879,6 +3972,9 @@ void StoreForwardPlusPlusModule::handleItemFrame(const meshtastic_MeshPacket &mp
                 if (bucketMatchesPeer(enumExchangeRoot, enumExchangeBucket)) {
                     markEnumProgress();
                     endEnumExchange();
+                } else if (!enumPromoted.empty()) {
+                    repairPromotions();
+                    return;
                 } else {
                     char rootHex[9];
                     formatRootHex(enumExchangeRoot, SFPP_HASH_SIZE, rootHex);
@@ -3886,6 +3982,10 @@ void StoreForwardPlusPlusModule::handleItemFrame(const meshtastic_MeshPacket &mp
                              enumExchangeBucket, enumExchangePeer, enumSketchIds);
                     fallbackToEnumList();
                 }
+                return;
+            }
+            if (!enumOnDemand && !enumPromoted.empty() && !bucketMatchesPeer(enumExchangeRoot, enumExchangeBucket)) {
+                repairPromotions();
                 return;
             }
             markEnumProgress();
@@ -4046,6 +4146,8 @@ void StoreForwardPlusPlusModule::promoteScratchMatches(const uint8_t *root_hash,
                           bucket);
         removeFromScratch(row.hash, SFPP_HASH_SIZE);
         const pinsketch::Element sid = sfppsr::shortId(row.hash, SFPP_HASH_SIZE);
+        enumPromoted.push_back({sid, {}});
+        memcpy(enumPromoted.back().hash, row.hash, SFPP_HASH_SIZE);
         ids.erase(std::remove(ids.begin(), ids.end(), sid), ids.end());
     }
 }
