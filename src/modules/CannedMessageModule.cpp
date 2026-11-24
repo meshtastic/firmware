@@ -240,6 +240,13 @@ void CannedMessageModule::LaunchFreetextWithDestination(NodeNum newDest, uint8_t
     LOG_TRACE("[CannedMessage] LaunchFreetextWithDestination dest=0x%08x ch=%d", dest, channel);
 }
 
+// Whether sendText PKC-encrypts a message to dest
+static bool sendsAsPki(NodeNum dest)
+{
+    const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(dest);
+    return node && node->num != nodeDB->getNodeNum() && nodeInfoLiteHasUser(node) && node->public_key.size == 32;
+}
+
 static bool returnToCannedList = false;
 bool hasKeyForNode(const meshtastic_NodeInfoLite *node)
 {
@@ -1111,19 +1118,7 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
     p->want_ack = true;
     p->decoded.dest = dest; // Mirror picker: NODENUM_BROADCAST or node->num
 
-    // Manually find the node by number to check PKI capability
-    meshtastic_NodeInfoLite *node = nullptr;
-    size_t numMeshNodes = nodeDB->getNumMeshNodes();
-    for (size_t i = 0; i < numMeshNodes; ++i) {
-        meshtastic_NodeInfoLite *n = nodeDB->getMeshNodeByIndex(i);
-        if (n && n->num == dest) {
-            node = n;
-            break;
-        }
-    }
-
-    NodeNum myNodeNum = nodeDB->getNodeNum();
-    if (node && node->num != myNodeNum && nodeInfoLiteHasUser(node) && node->public_key.size == 32) {
+    if (sendsAsPki(dest)) {
         p->pki_encrypted = true;
         p->channel = 0; // force PKI
     }
@@ -2489,7 +2484,8 @@ unsigned int CannedMessageModule::maxFreetextBytes() const
     // GeoChat leaves less room than a plain text payload. If the lookup fails (0), keep the plain
     // limit rather than wipe the draft; the send cuts the text to fit.
     if (AtakPluginModule::sendsTextAsGeoChat()) {
-        if (const size_t limit = AtakPluginModule::maxGeoChatBytes(dest))
+        const bool pki = sendsAsPki(dest);
+        if (const size_t limit = AtakPluginModule::maxGeoChatBytes(dest, pki ? 0 : channel, pki))
             return limit;
     }
 #endif

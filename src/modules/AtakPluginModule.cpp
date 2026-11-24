@@ -1,4 +1,6 @@
 #include "AtakPluginModule.h"
+#include "Channels.h"
+#include "CryptoEngine.h"
 #include "MeshTypes.h"
 #include "NodeDB.h"
 #include "RadioInterface.h"
@@ -85,24 +87,38 @@ static void fillGeoChat(meshtastic_TAKPacketV2 &takPacket, NodeNum dest, PacketI
     snprintf(takPacket.device_callsign, sizeof(takPacket.device_callsign), "%s|%08x", sender, id);
 }
 
-// Payload a GeoChat can fill and still make it on air: the frame, less the radio header, the PKC or
-// channel AEAD overhead, and the Data wrapper the router encodes around it (portnum 2, payload tag
-// and length 3, dest 5, bitfield 2)
-static constexpr size_t kGeoChatPayloadMax =
-    MAX_LORA_PAYLOAD_LEN - MESHTASTIC_HEADER_LENGTH - std::max(MESHTASTIC_PKC_OVERHEAD, MESHTASTIC_AEAD_OVERHEAD) - 12;
+// Room for the Data message on air: the frame, less the radio header and whichever of PKC, channel
+// AEAD or an XEdDSA signature (64 bytes, tag and length) the router's perhapsEncode() will add
+static size_t geoChatDataMax(NodeNum dest, ChannelIndex channel, bool pki)
+{
+    size_t overhead = MESHTASTIC_HEADER_LENGTH;
+    if (pki) {
+        overhead += MESHTASTIC_PKC_OVERHEAD;
+    } else if (channels.isAEADEnabled(channel)) {
+        overhead += MESHTASTIC_AEAD_OVERHEAD;
+    }
+#if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
+    else if (config.security.packet_signature_policy !=
+                 meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_COMPATIBLE &&
+             (owner.is_licensed || isBroadcast(dest))) {
+        overhead += XEDDSA_SIGNATURE_SIZE + 2;
+    }
+#endif
+    return MAX_LORA_PAYLOAD_LEN - overhead;
+}
 
 // Message bytes that fit beside an envelope from fillGeoChat
-static size_t geoChatRoom(const meshtastic_TAKPacketV2 &takPacket)
+static size_t geoChatRoom(const meshtastic_TAKPacketV2 &takPacket, size_t dataMax)
 {
     size_t envelope;
     if (!pb_get_encoded_size(&envelope, &meshtastic_TAKPacketV2_msg, &takPacket))
         return 0;
-    // Flags byte, then the text's tag and up to 2 length bytes, plus a second byte for the chat's
-    // own length once it passes 127
-    const size_t overhead = envelope + 4 + 1;
-    if (overhead >= kGeoChatPayloadMax)
+    // The Data wrapper (portnum 2, payload tag and length 3, dest 5, bitfield 2), the flags byte, then
+    // the text's tag and up to 2 length bytes, plus a second byte for the chat's own length past 127
+    const size_t overhead = 12 + envelope + 4 + 1;
+    if (overhead >= dataMax)
         return 0;
-    return std::min(kGeoChatPayloadMax - overhead, sizeof(takPacket.payload_variant.chat.message) - 1);
+    return std::min(dataMax - overhead, sizeof(takPacket.payload_variant.chat.message) - 1);
 }
 
 // A TAKPacketV2 is ~2 KB, too much for the loop stack these run on (the composer's counter calls in
@@ -112,15 +128,41 @@ static meshtastic_TAKPacketV2 *allocTakPacket()
     return static_cast<meshtastic_TAKPacketV2 *>(calloc(1, sizeof(meshtastic_TAKPacketV2)));
 }
 
-size_t AtakPluginModule::maxGeoChatBytes(NodeNum dest)
+size_t AtakPluginModule::maxGeoChatBytes(NodeNum dest, ChannelIndex channel, bool pki)
 {
+    // The composer asks on every redraw: rebuild the envelope only when something it depends on changes
+    struct Inputs {
+        NodeNum dest;
+        size_t dataMax;
+        bool hasTak;
+        meshtastic_Team team;
+        meshtastic_MemberRole role;
+        char callsign[sizeof(owner.long_name)];
+    };
+    static Inputs cachedInputs;
+    static size_t cachedRoom = 0;
+    static bool cacheValid = false;
+
+    Inputs inputs;
+    memset(&inputs, 0, sizeof(inputs)); // zeroed padding, so memcmp compares only the fields
+    inputs.dest = dest;
+    inputs.dataMax = geoChatDataMax(dest, channel, pki);
+    inputs.hasTak = moduleConfig.has_tak;
+    inputs.team = moduleConfig.tak.team;
+    inputs.role = moduleConfig.tak.role;
+    strncpy(inputs.callsign, owner.long_name, sizeof(inputs.callsign) - 1);
+    if (cacheValid && memcmp(&inputs, &cachedInputs, sizeof(inputs)) == 0)
+        return cachedRoom;
+
     meshtastic_TAKPacketV2 *takPacket = allocTakPacket();
     if (!takPacket)
         return 0;
     fillGeoChat(*takPacket, dest, 0);
-    const size_t room = geoChatRoom(*takPacket);
+    cachedRoom = geoChatRoom(*takPacket, inputs.dataMax);
     free(takPacket);
-    return room;
+    cachedInputs = inputs;
+    cacheValid = true;
+    return cachedRoom;
 }
 
 bool AtakPluginModule::setGeoChatPayload(meshtastic_MeshPacket *p, const char *message, size_t len, size_t *carried)
@@ -132,7 +174,7 @@ bool AtakPluginModule::setGeoChatPayload(meshtastic_MeshPacket *p, const char *m
     }
     fillGeoChat(*takPacket, p->to, p->id);
 
-    const size_t room = geoChatRoom(*takPacket);
+    const size_t room = geoChatRoom(*takPacket, geoChatDataMax(p->to, p->channel, p->pki_encrypted));
     if (len > room) {
         LOG_WARN("GeoChat text cut from %u to %u bytes", (unsigned)len, (unsigned)room);
         len = room;

@@ -7,6 +7,8 @@
 #include "TestUtil.h"
 #include <unity.h>
 
+#include "mesh/Channels.h"
+#include "mesh/CryptoEngine.h"
 #include "mesh/NodeDB.h"
 #include "mesh/RadioInterface.h"
 #include "mesh/mesh-pb-constants.h"
@@ -33,18 +35,38 @@ static meshtastic_MeshPacket makeTextPacket(NodeNum to)
     return p;
 }
 
-// Bytes the packet takes on air once the router has wrapped and encrypted it, as the router builds
-// it for a packet we originate: the Data wrapper with bitfield and dest set, the radio header, and
-// PKC overhead (a DM; AEAD channel overhead is the same size)
-static size_t frameBytes(const meshtastic_MeshPacket &p)
+static void setSigningPolicy(meshtastic_Config_SecurityConfig_PacketSignaturePolicy policy)
+{
+    config.has_security = true;
+    config.security.packet_signature_policy = policy;
+}
+
+// Switch the primary channel to AES-CCM, as use_aead on a real channel does
+static void useAeadPrimaryChannel()
+{
+    channels.getByIndex(0).settings.use_aead = true;
+    channels.onConfigChanged();
+    TEST_ASSERT_TRUE_MESSAGE(channels.isAEADEnabled(0), "fixture must leave channel 0 on AES-CCM");
+}
+
+// Bytes the packet takes on air once the router has wrapped, signed and encrypted it, as the router
+// builds it for a packet we originate: the Data wrapper with bitfield and dest set, a signature when
+// signed, the radio header, and the PKC or AEAD overhead when either applies
+static size_t frameBytes(const meshtastic_MeshPacket &p, bool isSigned)
 {
     meshtastic_Data d = p.decoded;
     d.dest = p.to;
     d.has_bitfield = true;
     d.bitfield = 0x03; // OK_TO_MQTT | WANT_RESPONSE, both bits a sender can set
+    d.xeddsa_signature.size = isSigned ? XEDDSA_SIGNATURE_SIZE : 0;
     size_t dataBytes = 0;
     TEST_ASSERT_TRUE(pb_get_encoded_size(&dataBytes, &meshtastic_Data_msg, &d));
-    return dataBytes + MESHTASTIC_HEADER_LENGTH + MESHTASTIC_PKC_OVERHEAD;
+    size_t frame = dataBytes + MESHTASTIC_HEADER_LENGTH;
+    if (p.pki_encrypted)
+        frame += MESHTASTIC_PKC_OVERHEAD;
+    else if (channels.isAEADEnabled(p.channel))
+        frame += MESHTASTIC_AEAD_OVERHEAD;
+    return frame;
 }
 
 // Strip the flags byte and decode, as a receiver does. Heap, because the struct is ~2 KB.
@@ -114,47 +136,80 @@ void test_unset_team_and_role_use_pli_defaults(void)
     TEST_ASSERT_EQUAL(meshtastic_MemberRole_TeamMember, tak->role);
 }
 
-// The limit the composer shows must be exactly what fits: nothing cut, and the encrypted frame
-// within the LoRa maximum but not far under it. Checked with the longest callsign we send, for both
-// chatroom shapes.
-static void checkTextAtLimitFits(NodeNum to)
+// The limit the composer shows must be exactly what fits: nothing cut, and the frame within the LoRa
+// maximum but not far under it once the router adds what this packet gets (a signature, PKC or AEAD).
+// Checked with the longest callsign we send.
+static void checkTextAtLimitFits(NodeNum to, bool pki, bool isSigned)
 {
     memset(owner.long_name, 'W', MAX_LONG_NAME_BYTES);
     owner.long_name[MAX_LONG_NAME_BYTES] = '\0';
 
-    const size_t limit = AtakPluginModule::maxGeoChatBytes(to);
+    const size_t limit = AtakPluginModule::maxGeoChatBytes(to, 0, pki);
     TEST_ASSERT_TRUE(limit > 0);
     const std::string text(limit, 'a');
 
     meshtastic_MeshPacket p = makeTextPacket(to);
+    p.pki_encrypted = pki;
     TEST_ASSERT_TRUE(AtakPluginModule::setGeoChatPayload(&p, text.c_str(), text.size()));
-    TEST_ASSERT_LESS_OR_EQUAL_size_t(MAX_LORA_PAYLOAD_LEN, frameBytes(p));
+    TEST_ASSERT_LESS_OR_EQUAL_size_t(MAX_LORA_PAYLOAD_LEN, frameBytes(p, isSigned));
     // Slack is at most the 2 length bytes the budget reserves for text that ended up shorter
-    TEST_ASSERT_GREATER_OR_EQUAL_size_t(MAX_LORA_PAYLOAD_LEN - 2, frameBytes(p));
+    TEST_ASSERT_GREATER_OR_EQUAL_size_t(MAX_LORA_PAYLOAD_LEN - 2, frameBytes(p, isSigned));
 
     auto tak = decodeGeoChat(p);
     TEST_ASSERT_EQUAL_size_t(limit, strlen(tak->payload_variant.chat.message));
 }
 
-void test_broadcast_text_at_limit_fits(void)
+// Compatible never signs, and a plain channel adds nothing to the frame
+void test_unsigned_broadcast_text_at_limit_fits(void)
 {
-    checkTextAtLimitFits(NODENUM_BROADCAST);
+    checkTextAtLimitFits(NODENUM_BROADCAST, false, false);
 }
 
-void test_dm_text_at_limit_fits(void)
+// Regression: the budget used to leave no room for the signature the router adds to a broadcast under
+// Balanced or Strict, so the router sent a long GeoChat unsigned and Strict receivers dropped it
+void test_signed_broadcast_text_at_limit_fits(void)
 {
-    checkTextAtLimitFits(kPeer);
+    setSigningPolicy(meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_STRICT);
+    checkTextAtLimitFits(NODENUM_BROADCAST, false, true);
+}
+
+// AES-CCM's tag authenticates the packet, so the router doesn't sign on an AEAD channel
+void test_aead_broadcast_text_at_limit_fits(void)
+{
+    setSigningPolicy(meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_STRICT);
+    useAeadPrimaryChannel();
+    checkTextAtLimitFits(NODENUM_BROADCAST, false, false);
+}
+
+// PKC authenticates a DM, so it isn't signed either
+void test_pki_dm_text_at_limit_fits(void)
+{
+    setSigningPolicy(meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_STRICT);
+    checkTextAtLimitFits(kPeer, true, false);
+}
+
+// The limit is cached for the composer's redraws, so it must follow the callsign and signing policy
+void test_limit_follows_callsign_and_policy(void)
+{
+    const size_t base = AtakPluginModule::maxGeoChatBytes(NODENUM_BROADCAST, 0, false);
+
+    strcpy(owner.long_name, "Test Operator 2");
+    TEST_ASSERT_EQUAL_size_t(base - 2, AtakPluginModule::maxGeoChatBytes(NODENUM_BROADCAST, 0, false));
+
+    setSigningPolicy(meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_BALANCED);
+    TEST_ASSERT_EQUAL_size_t(base - 2 - (XEDDSA_SIGNATURE_SIZE + 2),
+                             AtakPluginModule::maxGeoChatBytes(NODENUM_BROADCAST, 0, false));
 }
 
 void test_long_text_is_cut_to_limit(void)
 {
-    const size_t limit = AtakPluginModule::maxGeoChatBytes(NODENUM_BROADCAST);
+    const size_t limit = AtakPluginModule::maxGeoChatBytes(NODENUM_BROADCAST, 0, false);
     const std::string text(meshtastic_Constants_DATA_PAYLOAD_LEN, 'a');
 
     meshtastic_MeshPacket p = makeTextPacket(NODENUM_BROADCAST);
     size_t carried = 0;
     TEST_ASSERT_TRUE(AtakPluginModule::setGeoChatPayload(&p, text.c_str(), text.size(), &carried));
-    TEST_ASSERT_LESS_OR_EQUAL_size_t(MAX_LORA_PAYLOAD_LEN, frameBytes(p));
+    TEST_ASSERT_LESS_OR_EQUAL_size_t(MAX_LORA_PAYLOAD_LEN, frameBytes(p, false));
 
     auto tak = decodeGeoChat(p);
     TEST_ASSERT_EQUAL_size_t(limit, strlen(tak->payload_variant.chat.message));
@@ -208,6 +263,8 @@ void setUp(void)
     strcpy(owner.long_name, "Test Operator");
     myNodeInfo.my_node_num = kLocalNode;
     nodeDB = testNodeDB;
+    channels.initDefaults();
+    channels.onConfigChanged();
 }
 
 void tearDown(void) {}
@@ -222,8 +279,11 @@ void setup()
     RUN_TEST(test_dm_names_recipient_as_chatroom);
     RUN_TEST(test_team_and_role_come_from_tak_config);
     RUN_TEST(test_unset_team_and_role_use_pli_defaults);
-    RUN_TEST(test_broadcast_text_at_limit_fits);
-    RUN_TEST(test_dm_text_at_limit_fits);
+    RUN_TEST(test_unsigned_broadcast_text_at_limit_fits);
+    RUN_TEST(test_signed_broadcast_text_at_limit_fits);
+    RUN_TEST(test_aead_broadcast_text_at_limit_fits);
+    RUN_TEST(test_pki_dm_text_at_limit_fits);
+    RUN_TEST(test_limit_follows_callsign_and_policy);
     RUN_TEST(test_long_text_is_cut_to_limit);
     RUN_TEST(test_cut_never_splits_utf8);
     RUN_TEST(test_only_tak_roles_send_geochat);
