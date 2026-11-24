@@ -89,8 +89,8 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     /** Attempt to find a packet in the TxQueue. Returns true if the packet was found. */
     bool findInTxQueue(NodeNum from, PacketId id);
 
-    /** Whether a packet we sent with want_ack is still awaiting its ack (and may be retransmitted). */
-    virtual bool isRetransmissionPending(NodeNum from, PacketId id) { return false; }
+    /** For a packet we sent with want_ack still awaiting its ack: how many retransmissions have gone out. -1 if not pending. */
+    virtual int retransmissionsSent(NodeNum from, PacketId id) { return -1; }
 
     /** Allocate and return a meshpacket which defaults as send to broadcast from the current node.
      * The returned packet is guaranteed to have a unique packet ID already assigned

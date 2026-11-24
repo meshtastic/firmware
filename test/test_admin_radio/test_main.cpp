@@ -18,9 +18,9 @@
  *     MeshService::reloadConfig(saveWhat, true), and the channel re-hash and retune wait in
  *     MeshService::applyDeferredRadioConfig() until the reply registered through
  *     awaitAckBeforeRadioConfig() is acked (with none registered, or one that never entered the
- *     retransmission table, until the TX queue has drained), or the cap after the first save has
- *     passed: RADIO_CONFIG_DEFER_MAX_MS, raised to two of the awaited reply's retransmission
- *     intervals; Power::rebootIsDue() holds a commit's reboot meanwhile. A local client's save
+ *     retransmission table, until the TX queue has drained), or RADIO_CONFIG_DEFER_MAX_MS after the
+ *     first save has passed; a still-pending awaited reply extends that until its first retry has gone
+ *     out and had one retransmission interval; Power::rebootIsDue() holds a commit's reboot meanwhile. A local client's save
  *     retunes at once, unless it lands while a remote save's retune is deferred, which it joins.
  *     The admin's reply is queued only after the handler returns, so it must leave on the settings
  *     the requester is still listening on. Retuning at save time sends that reply on the new
@@ -2687,7 +2687,11 @@ class PendingReplyRouter : public Router
   public:
     PacketId id = 0;
     bool acked = false;
-    bool isRetransmissionPending(NodeNum from, PacketId p) override { return !acked && from == nodeDB->getNodeNum() && p == id; }
+    int retries = 0;
+    int retransmissionsSent(NodeNum from, PacketId p) override
+    {
+        return !acked && from == nodeDB->getNodeNum() && p == id ? retries : -1;
+    }
 };
 
 // An empty TX queue only means the reply's first transmission is out. Retuning then strands its
@@ -2733,10 +2737,11 @@ static void test_deferredRetune_untrackedReplyWaitsForQueue()
     TEST_ASSERT_EQUAL_INT(1, retuneCounter.count);
 }
 
-// The reply's first retry is due one retransmission interval after its send; at LONG_SLOW that interval is
-// ~15 s idle and ~24 s busy, so a fixed 20 s cap retunes before a lost first reply is retried, and the retry
-// goes out on settings the requester isn't on. The cap covers the first send plus one retry.
-static void test_deferredRetune_capCoversReplyRetry()
+// The reply's first retry is due one retransmission interval after its send, ~15 s idle and ~24 s busy at
+// LONG_SLOW, and every packet sent meanwhile pushes it back by that packet's airtime. A cap that predicts
+// when the retry goes out retunes first on a busy channel, and the retry goes out on settings the requester
+// isn't on. The cap waits for the router to report the first retry sent, then one interval for its ack.
+static void test_deferredRetune_capWaitsForReplyRetry()
 {
     primeDeferredRetuneTest();
     auto *pendingReply = new PendingReplyRouter();
@@ -2747,11 +2752,17 @@ static void test_deferredRetune_capCoversReplyRetry()
 
     service->reloadConfig(SEGMENT_CONFIG, true);
     service->awaitAckBeforeRadioConfig(0x1234, retryMsec);
-    service->ageRadioConfigDeferralForTest(2 * retryMsec - 1000);
+    service->ageRadioConfigDeferralForTest(4 * retryMsec); // intervening traffic held the first retry back
     service->applyDeferredRadioConfig();
-    TEST_ASSERT_EQUAL_INT_MESSAGE(0, retuneCounter.count, "the cap fired before the reply's retry was out and acked");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, retuneCounter.count, "the cap fired before the reply's first retry went out");
 
-    service->ageRadioConfigDeferralForTest(1000);
+    pendingReply->retries = 1;
+    service->applyDeferredRadioConfig();
+    service->ageAwaitedRetryForTest(retryMsec - 1000);
+    service->applyDeferredRadioConfig();
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, retuneCounter.count, "the cap fired before the retry could be acked");
+
+    service->ageAwaitedRetryForTest(1000);
     service->applyDeferredRadioConfig();
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, retuneCounter.count, "a reply never acked held the retune past its retry");
 }
@@ -3172,7 +3183,7 @@ void setup()
     RUN_TEST(test_deferredRetune_waitsForReplyAck);
     RUN_TEST(test_deferredRetune_repeatedSaveKeepsCapStart);
     RUN_TEST(test_deferredRetune_untrackedReplyWaitsForQueue);
-    RUN_TEST(test_deferredRetune_capCoversReplyRetry);
+    RUN_TEST(test_deferredRetune_capWaitsForReplyRetry);
     RUN_TEST(test_setConfigLora_localClientRetunesAtOnce);
     RUN_TEST(test_commitEditSettings_localClientRebootNotHeld);
     RUN_TEST(test_localSave_joinsActiveDeferral);

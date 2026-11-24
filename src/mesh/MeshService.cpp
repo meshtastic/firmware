@@ -25,7 +25,6 @@
 #include "modules/PositionModule.h"
 #include "modules/RoutingModule.h"
 #include "sleep.h"
-#include <algorithm>
 #include <assert.h>
 #include <string>
 
@@ -164,8 +163,8 @@ void MeshService::awaitAckBeforeRadioConfig(PacketId id, uint32_t retryMsec)
         return;
     radioConfigAwaitsAckOf = id;
     radioConfigAwaitedReplySeen = false;
-    // The reply's first retry is due retryMsec after its send; a second interval covers that retry and its ack.
-    radioConfigDeferMaxMs = std::max(radioConfigDeferMaxMs, 2 * retryMsec);
+    radioConfigAwaitedRetryMsec = retryMsec;
+    radioConfigRetrySentAtMs = 0;
 }
 
 void MeshService::applyDeferredRadioConfig()
@@ -173,19 +172,26 @@ void MeshService::applyDeferredRadioConfig()
     if (!radioConfigDeferred)
         return;
     bool ready;
+    bool holdForRetry = false;
     if (radioConfigAwaitsAckOf) {
         // The pending table holds a reliable reply from its send until its ack, so leaving it means acked (or given up)
         // and other queued traffic needn't hold the retune. Never in it (no retransmission copy): it is only queued.
-        const bool pending = router && router->isRetransmissionPending(nodeDB->getNodeNum(), radioConfigAwaitsAckOf);
+        const int retries = router ? router->retransmissionsSent(nodeDB->getNodeNum(), radioConfigAwaitsAckOf) : -1;
+        const bool pending = retries >= 0;
         radioConfigAwaitedReplySeen |= pending;
         ready = !pending && (radioConfigAwaitedReplySeen || doPreflightSleep(true));
+        // Other traffic pushes the retry's deadline back, so follow the router rather than predict it.
+        if (pending && retries > 0 && !radioConfigRetrySentAtMs)
+            radioConfigRetrySentAtMs = Time::skipZero(Time::getMillis());
+        holdForRetry = pending && (!radioConfigRetrySentAtMs ||
+                                   Throttle::isWithinTimespanMs(radioConfigRetrySentAtMs, radioConfigAwaitedRetryMsec));
     } else {
         ready = doPreflightSleep(true); // the radio's own "nothing queued and nothing on air" check
     }
     if (ready) {
         LOG_INFO("Admin reply delivered, apply the deferred radio change");
-    } else if (Throttle::hasElapsed(radioConfigDeferredAtMs, radioConfigDeferMaxMs)) {
-        LOG_WARN("Admin reply still pending after %u ms, apply the deferred radio change anyway", radioConfigDeferMaxMs);
+    } else if (!holdForRetry && Throttle::hasElapsed(radioConfigDeferredAtMs, RADIO_CONFIG_DEFER_MAX_MS)) {
+        LOG_WARN("Admin reply still pending, apply the deferred radio change anyway");
     } else {
         return;
     }
@@ -196,7 +202,7 @@ void MeshService::applyRadioConfig()
 {
     radioConfigDeferred = false;
     radioConfigAwaitsAckOf = 0;
-    radioConfigDeferMaxMs = RADIO_CONFIG_DEFER_MAX_MS;
+    radioConfigRetrySentAtMs = 0;
 
     // This will also update the region as needed
     nodeDB->resetRadioConfig(); // Don't let the phone send us fatally bad settings
