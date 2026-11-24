@@ -70,7 +70,17 @@ static inline const uint8_t *findGlyph(uint32_t cp)
     return nullptr;
 }
 
+static constexpr uint32_t GETA = 0x3013;             // 〓, the usual Japanese mark for a missing glyph
+static constexpr uint32_t GETA_RANGE_START = 0x2E80; // CJK, kana, Hangul, full-width forms, emoji and beyond
+
+// Variation selectors, skin tones and tags modify the character before them and draw nothing.
+static inline bool isInvisibleModifier(uint32_t cp)
+{
+    return (cp >= 0xFE00 && cp <= 0xFE0F) || (cp >= 0x1F3FB && cp <= 0x1F3FF) || (cp >= 0xE0000 && cp <= 0xE01EF);
+}
+
 // Glyph for the character at s[pos]; sets charLen to its byte length and advance to its width when found.
+// Characters from U+2E80 up that the table lacks get 〓, so each one draws and measures as one cell.
 static inline const uint8_t *findGlyphAt(const char *s, size_t pos, size_t len, size_t &charLen, int &advance)
 {
     uint32_t cp;
@@ -78,6 +88,10 @@ static inline const uint8_t *findGlyphAt(const char *s, size_t pos, size_t len, 
     if (n < 2)
         return nullptr;
     const uint8_t *g = findGlyph(cp);
+    if (!g && cp >= GETA_RANGE_START && !isInvisibleModifier(cp)) {
+        g = findGlyph(GETA);
+        cp = GETA;
+    }
     if (g) {
         charLen = n;
         advance = advanceOf(cp);

@@ -6,7 +6,8 @@
 // table must stay sorted for the binary search, cover kana, JIS level 1 kanji and half-width
 // katakana, and keep half-width glyphs inside the left half of the cell, since they advance by
 // only 4 px. The lookup decodes UTF-8 straight out of message payloads, which are opaque bytes, so
-// truncated or malformed sequences must miss rather than read past the buffer.
+// truncated or malformed sequences must miss rather than read past the buffer. CJK and emoji the
+// table lacks draw as one 〓 each, so width and drawing agree.
 //
 // The table and headers are included directly with OLED_JA defined: the native test build compiles
 // src/ without it, so these definitions exist only in this suite.
@@ -69,7 +70,7 @@ void test_covers_kana_kanji_and_half_width_katakana()
         TEST_ASSERT_NOT_NULL(KanjiFont::findGlyph(cp));
 }
 
-void test_leaves_latin_quotes_and_level_2_kanji_to_the_default_font()
+void test_table_excludes_latin_quotes_and_level_2_kanji()
 {
     TEST_ASSERT_NULL(KanjiFont::findGlyph('A'));
     TEST_ASSERT_NULL(KanjiFont::findGlyph(0x00E9));  // é
@@ -127,9 +128,28 @@ void test_find_glyph_at_misses_on_malformed_or_truncated_input()
     TEST_ASSERT_NULL(KanjiFont::findGlyphAt("\xE6\xBC", 0, 2, charLen, advance));         // truncated 漢
     TEST_ASSERT_NULL(KanjiFont::findGlyphAt("\xE6\x41\xA2", 0, 3, charLen, advance));     // bad continuation
     TEST_ASSERT_NULL(KanjiFont::findGlyphAt("\xA2", 0, 1, charLen, advance));             // stray continuation
-    TEST_ASSERT_NULL(KanjiFont::findGlyphAt("\xF0\x9F\x98\x80", 0, 4, charLen, advance)); // 😀
+    TEST_ASSERT_NULL(KanjiFont::findGlyphAt("\xEF\xB8\x8F", 0, 3, charLen, advance));     // U+FE0F variation selector
+    TEST_ASSERT_NULL(KanjiFont::findGlyphAt("\xF0\x9F\x8F\xBB", 0, 4, charLen, advance)); // skin tone modifier
+    TEST_ASSERT_NULL(KanjiFont::findGlyphAt("\xE2\x80\x9C", 0, 3, charLen, advance));     // U+201C stays on the default path
     TEST_ASSERT_EQUAL_UINT32(99, charLen);                                                // untouched on a miss
     TEST_ASSERT_EQUAL_INT(99, advance);
+}
+
+// Unknown CJK or emoji used to fall through to the default font, which draws one ¿ for a whole run but
+// measures every byte as '?', leaving a wide gap; each such character must now be one 〓 cell instead.
+void test_unknown_cjk_and_emoji_draw_as_one_geta_each()
+{
+    const uint8_t *geta = KanjiFont::findGlyph(0x3013);
+    TEST_ASSERT_NOT_NULL(geta);
+    size_t charLen = 0;
+    int advance = 0;
+    TEST_ASSERT_EQUAL_PTR(geta, KanjiFont::findGlyphAt("\xE5\xBC\x8C", 0, 3, charLen, advance)); // 弌, JIS level 2
+    TEST_ASSERT_EQUAL_UINT32(3, charLen);
+    TEST_ASSERT_EQUAL_INT(8, advance);
+    TEST_ASSERT_EQUAL_PTR(geta, KanjiFont::findGlyphAt("\xF0\x9F\x91\xBD", 0, 4, charLen, advance)); // 👽
+    TEST_ASSERT_EQUAL_UINT32(4, charLen);
+    TEST_ASSERT_EQUAL_INT(8, advance);
+    TEST_ASSERT_EQUAL_PTR(geta, KanjiFont::findGlyphAt("\xEA\xB0\x80", 0, 3, charLen, advance)); // 가, Hangul
 }
 
 static bool canBreak(const char *cur, const char *next)
@@ -172,11 +192,12 @@ void setup()
     RUN_TEST(test_codes_are_strictly_ascending);
     RUN_TEST(test_every_code_finds_its_own_bitmap);
     RUN_TEST(test_covers_kana_kanji_and_half_width_katakana);
-    RUN_TEST(test_leaves_latin_quotes_and_level_2_kanji_to_the_default_font);
+    RUN_TEST(test_table_excludes_latin_quotes_and_level_2_kanji);
     RUN_TEST(test_half_width_katakana_fit_the_left_half_and_advance_4);
     RUN_TEST(test_every_glyph_has_ink);
     RUN_TEST(test_find_glyph_at_decodes_utf8_and_reports_width);
     RUN_TEST(test_find_glyph_at_misses_on_malformed_or_truncated_input);
+    RUN_TEST(test_unknown_cjk_and_emoji_draw_as_one_geta_each);
     RUN_TEST(test_kinsoku_rules);
     RUN_TEST(test_peek_code_point_rejects_malformed_bytes);
     exit(UNITY_END());
