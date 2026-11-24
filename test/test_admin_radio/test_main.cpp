@@ -705,6 +705,28 @@ static void test_clampConfigLora_validPresetUnchanged()
     TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST, cfg.modem_preset);
 }
 
+// NodeDB::clampLoadedLoraConfig() runs at boot, before onConfigChanged() renames a legacy "Default"
+// primary to "". If it hashed "Default" as a custom channel name, an out-of-range channel_num would be
+// clamped to that hash's slot instead of the preset's default slot, moving the node off its mesh.
+static void test_clampLoadedLoraConfig_legacyDefaultPrimaryGetsThePresetSlot()
+{
+    channels.initDefaults();
+    strncpy(channelFile.channels[0].settings.name, "Default", sizeof(channelFile.channels[0].settings.name));
+    config.has_lora = true;
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    meshtastic_Config_LoRaConfig unset = config.lora;
+    const uint32_t presetSlot = RadioInterface::resolveFrequencySlot(unset, "");
+    config.lora.channel_num = 200; // more than US LongFast's 104 slots
+
+    nodeDB->clampLoadedLoraConfig();
+
+    TEST_ASSERT_EQUAL_UINT32(presetSlot, config.lora.channel_num);
+    TEST_ASSERT_EQUAL_STRING("", channelFile.channels[0].settings.name);
+}
+
 static void test_clampConfigLora_customBwTooWideClampedToDefaultBw()
 {
     // EU_868 span is 250kHz. A 500kHz custom BW should be clamped to default preset BW.
@@ -1303,6 +1325,61 @@ static void test_handleSetHamMode_acceptedRequestAcksSuccess()
     TEST_ASSERT_EQUAL_STRING("KD2ABC//Attic Heltec", owner.long_name);
     TEST_ASSERT_TRUE(owner.is_licensed);
     testAdmin->drainReply();
+}
+
+// A PKC admin request with want_ack and no want_response is answered by the module's ROUTING reply in place
+// of the ACK. That reply must still encode: PKC never wraps a ROUTING packet, so a reply left marked
+// pki_encrypted fails perhapsEncode and the sender hears nothing.
+static void expectPkcAdminRoutingReplyEncodes(meshtastic_AdminMessage &m)
+{
+    static constexpr NodeNum REMOTE_ADMIN = 0x0B0B0B0B;
+    myNodeInfo.my_node_num = 0x0A0A0A0A;
+    channels.initDefaults();
+    channels.onConfigChanged();
+    config.security.admin_key_count = 1;
+    config.security.admin_key[0].size = 32;
+    memset(config.security.admin_key[0].bytes, 0xAA, 32);
+
+    meshtastic_MeshPacket mp = meshtastic_MeshPacket_init_zero;
+    mp.from = REMOTE_ADMIN;
+    mp.to = myNodeInfo.my_node_num;
+    mp.id = 0x5151;
+    mp.channel = 0; // a PKC packet arrives with channel hash 0, which resolves to the primary channel
+    mp.want_ack = true;
+    mp.pki_encrypted = true;
+    mp.public_key.size = 32;
+    memset(mp.public_key.bytes, 0xAA, 32);
+    mp.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    mp.decoded.want_response = false;
+    meshtastic_AdminMessage session = meshtastic_AdminMessage_init_zero;
+    testAdmin->setPassKey(&session); // a state-changing request must carry a live session key
+    m.session_passkey = session.session_passkey;
+    testAdmin->handleReceivedProtobuf(mp, &m);
+
+    meshtastic_MeshPacket *reply = testAdmin->reply();
+    TEST_ASSERT_NOT_NULL_MESSAGE(reply, "the request must queue a routing reply");
+    TEST_ASSERT_EQUAL(meshtastic_PortNum_ROUTING_APP, reply->decoded.portnum);
+    meshtastic_Routing_Error err = meshtastic_Routing_Error_NONE;
+    TEST_ASSERT_TRUE(decodeRoutingError(reply, err));
+    TEST_ASSERT_NOT_EQUAL_MESSAGE(meshtastic_Routing_Error_ADMIN_BAD_SESSION_KEY, err, "the request must pass the session gate");
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Routing_Error_NONE, perhapsEncode(reply), "the routing reply was dropped at encode");
+    testAdmin->drainReply();
+}
+
+static void test_pkcAdminBadRequest_replyEncodes()
+{
+    meshtastic_AdminMessage m = meshtastic_AdminMessage_init_zero;
+    m.which_payload_variant = meshtastic_AdminMessage_get_channel_request_tag;
+    m.get_channel_request = MAX_NUM_CHANNELS + 2; // out of range, so the handler answers BAD_REQUEST
+    expectPkcAdminRoutingReplyEncodes(m);
+}
+
+static void test_pkcAdminBackupPreferencesReply_encodes()
+{
+    meshtastic_AdminMessage m = meshtastic_AdminMessage_init_zero;
+    m.which_payload_variant = meshtastic_AdminMessage_backup_preferences_tag;
+    m.backup_preferences = meshtastic_AdminMessage_BackupLocation_FLASH;
+    expectPkcAdminRoutingReplyEncodes(m);
 }
 
 static void test_bootDefense_sanitizesStaleLicensedChannelsOnce()
@@ -2668,6 +2745,8 @@ void setup()
     RUN_TEST(test_handleSetHamMode_blankCallSignIsRejected);
     RUN_TEST(test_handleSetHamMode_blankCallSignRepliesBadRequest);
     RUN_TEST(test_handleSetHamMode_acceptedRequestAcksSuccess);
+    RUN_TEST(test_pkcAdminBadRequest_replyEncodes);
+    RUN_TEST(test_pkcAdminBackupPreferencesReply_encodes);
     RUN_TEST(test_handleSetConfig_persistsLicensedFirstRegionIdentity);
     RUN_TEST(test_handleSetConfig_persistsUnlicensedFirstRegionIdentity);
     RUN_TEST(test_bootDefense_sanitizesStaleLicensedChannelsOnce);
@@ -2710,6 +2789,7 @@ void setup()
     // clampConfigLora()
     RUN_TEST(test_clampConfigLora_invalidPresetClampedToDefault);
     RUN_TEST(test_clampConfigLora_validPresetUnchanged);
+    RUN_TEST(test_clampLoadedLoraConfig_legacyDefaultPrimaryGetsThePresetSlot);
     RUN_TEST(test_clampConfigLora_customBwTooWideClampedToDefaultBw);
     RUN_TEST(test_clampConfigLora_customBwValidLeftUnchanged);
     RUN_TEST(test_clampConfigLora_bogusPresetOnUnsetClampedToLongFast);

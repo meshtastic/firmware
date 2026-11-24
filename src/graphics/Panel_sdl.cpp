@@ -211,7 +211,7 @@ static int detectDebugger(bool *running)
         if (ms - prev_ms > 64) {
             _in_step_exec = _msec_step_exec;
         } else if (_in_step_exec) {
-            --_in_step_exec;
+            _in_step_exec = _in_step_exec - 1;
         }
         prev_ms = ms;
     } while (*running);

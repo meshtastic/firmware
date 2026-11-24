@@ -10,6 +10,7 @@
 #include "SPILock.h"
 #include "UptimeClock.h"
 #include "gps/RTC.h"
+#include "graphics/ScreenMirror.h"
 #include "input/InputBroker.h"
 #include "meshUtils.h"
 #include <ErriezCRC32.h>
@@ -702,6 +703,11 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         handleSendInputEvent(r->send_input_event);
         break;
     }
+    // Local connections handle these in PhoneAPI; frames never cross the mesh, so a remote request is refused.
+    case meshtastic_AdminMessage_get_display_frame_request_tag:
+    case meshtastic_AdminMessage_set_display_mirror_tag:
+        myReply = allocErrorResponse(meshtastic_Routing_Error_NOT_AUTHORIZED, &mp);
+        break;
 #ifdef ARCH_PORTDUINO
     case meshtastic_AdminMessage_exit_simulator_tag:
         LOG_INFO("Exiting simulator");
@@ -721,7 +727,8 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     if (mp.decoded.want_response && !myReply) {
         myReply = allocErrorResponse(meshtastic_Routing_Error_NONE, &mp);
     }
-    if (mp.pki_encrypted && myReply) {
+    // A ROUTING reply is never PKC-wrapped, so perhapsEncode fails one marked pki_encrypted and the sender gets no answer
+    if (mp.pki_encrypted && myReply && myReply->decoded.portnum != meshtastic_PortNum_ROUTING_APP) {
         myReply->pki_encrypted = true;
     }
     return handled;
@@ -1161,7 +1168,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
         // Apply FEM LNA mode from config (only meaningful on hardware that supports it)
         // Note that a rejected lora config will revert this as well.
         if (loraFEMInterface.isLnaCanControl()) {
-            loraFEMInterface.setLNAEnable(validatedLora.fem_lna_mode != meshtastic_Config_LoRaConfig_FEM_LNA_Mode_DISABLED);
+            loraFEMInterface.setLnaMode(validatedLora.fem_lna_mode);
         } else if (validatedLora.fem_lna_mode != meshtastic_Config_LoRaConfig_FEM_LNA_Mode_NOT_PRESENT) {
             // Hardware FEM does not support LNA control; normalize stored config to match actual capability
             LOG_WARN("FEM LNA mode set but FEM lacks LNA control; normalizing to NOT_PRESENT");
@@ -1996,15 +2003,18 @@ void AdminModule::setPassKey(meshtastic_AdminMessage *res)
     }
     memcpy(res->session_passkey.bytes, session_passkey, 8);
     res->session_passkey.size = 8;
-    printBytes("Set admin key to ", res->session_passkey.bytes, 8);
+    LOG_TRACE("Set session passkey %02x%02x%02x%02x%02x%02x%02x%02x", session_passkey[0], session_passkey[1], session_passkey[2],
+              session_passkey[3], session_passkey[4], session_passkey[5], session_passkey[6], session_passkey[7]);
     // if halfway to session_expire, regenerate session_passkey, reset the timeout
     // set the key in the packet
 }
 
 bool AdminModule::checkPassKey(meshtastic_AdminMessage *res)
 { // check that the key in the packet is still valid
-    printBytes("Incoming session key: ", res->session_passkey.bytes, 8);
-    printBytes("Expected session key: ", session_passkey, 8);
+    [[maybe_unused]] const uint8_t *in = res->session_passkey.bytes;
+    LOG_TRACE("Session passkey in %02x%02x%02x%02x%02x%02x%02x%02x, expected %02x%02x%02x%02x%02x%02x%02x%02x", in[0], in[1],
+              in[2], in[3], in[4], in[5], in[6], in[7], session_passkey[0], session_passkey[1], session_passkey[2],
+              session_passkey[3], session_passkey[4], session_passkey[5], session_passkey[6], session_passkey[7]);
     // Key is valid for 300s from issue; sessionPasskeyValid guards an unissued session.
     return (sessionPasskeyValid && Throttle::isWithinTimespanMs(session_time, 300 * 1000UL) && res->session_passkey.size == 8 &&
             memcmp(res->session_passkey.bytes, session_passkey, 8) == 0);
@@ -2183,6 +2193,14 @@ void AdminModule::handleSendInputEvent(const meshtastic_AdminMessage_InputEvent 
 
     // Wake the device if asleep
     powerFSM.trigger(EVENT_INPUT);
+
+#if HAS_MUI_MIRROR
+    // MUI builds never construct an InputBroker (Modules.cpp skips it when
+    // displaymode is COLOR), so remote input reaches the LVGL UI directly.
+    if (graphics::muiInjectInputEvent(inputEvent.event_code, inputEvent.kb_char, inputEvent.touch_x, inputEvent.touch_y))
+        return;
+#endif
+
 #if !defined(MESHTASTIC_EXCLUDE_INPUTBROKER)
     // Inject the event through InputBroker
     if (inputBroker) {
