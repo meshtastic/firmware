@@ -304,6 +304,33 @@ static void test_scheduler_retainedAcrossDeepSleep()
     TEST_ASSERT_FALSE(again.restoreAfterSleep(r, bootNow, 300000U));
 }
 
+// The caller's stamp (TransmitHistory) is taken once at a cold boot and then ages across the deep sleeps. Read again
+// on each wake, a boot-relative stamp looks like "just sent" every time on a node without a clock: the mesh never
+// came due. After a restore, a never-sent mesh is due rather than falling back to that stamp.
+static void test_scheduler_meshStampOwnedAfterColdBootAndRestore()
+{
+    TelemetryScheduler s;
+    s.adoptLastMeshMs(15000U); // "sent just now" at 15 s uptime
+    TelemetryScheduler::Retained r = {};
+    s.saveForSleep(r, 20000U, 0U);
+    TelemetryScheduler after;
+    TEST_ASSERT_TRUE(after.restoreAfterSleep(r, 15000U, MESH_MS));
+    TEST_ASSERT_TRUE(after.meshDue(15000U, after.lastMeshMs(15000U), cadence()));
+
+    // Restored with no mesh send yet (a soft reset that looks like a wake): due now, whatever the caller says
+    TelemetryScheduler never;
+    TelemetryScheduler::Retained rn = {};
+    never.saveForSleep(rn, 20000U, 0U);
+    TelemetryScheduler woken;
+    TEST_ASSERT_TRUE(woken.restoreAfterSleep(rn, 15000U, READ_MS));
+    TEST_ASSERT_EQUAL_UINT32(0U, woken.lastMeshMs(15000U));
+    TEST_ASSERT_TRUE(woken.meshDue(15000U, woken.lastMeshMs(15000U), cadence()));
+
+    // Without either, the caller's stamp still counts
+    TelemetryScheduler cold;
+    TEST_ASSERT_EQUAL_UINT32(15000U, cold.lastMeshMs(15000U));
+}
+
 static void test_scheduler_retainedNeverStaysNever()
 {
     TelemetryScheduler before;
@@ -671,6 +698,7 @@ void setup()
     RUN_TEST(test_scheduler_slackDoesNotShortenRetry);
     RUN_TEST(test_scheduler_retainedAcrossDeepSleep);
     RUN_TEST(test_scheduler_retainedNeverStaysNever);
+    RUN_TEST(test_scheduler_meshStampOwnedAfterColdBootAndRestore);
     RUN_TEST(test_sensors_wokenOnlyWithinTheirLead);
     RUN_TEST(test_sensors_readWaitsForSlowest);
     RUN_TEST(test_sensors_lateWakeWaitsFullWarmUp);

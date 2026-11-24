@@ -26,6 +26,7 @@ class TelemetryScheduler
     uint32_t lastReadMs = 0;   // last read of any kind
     uint32_t lastMqttMs = 0;
     uint32_t lastMeshSentMs = 0;    // kept here too: TransmitHistory's stamp is boot-relative until the clock is set
+    bool ownsMeshStamp = false;     // lastMeshSentMs is the whole story (0 = never), the caller's stamp no longer counts
     uint32_t lastMeshAttemptMs = 0; // last time the mesh was due but nothing went out
     uint32_t meshRetryMs = 0;       // how long that skip holds the mesh back
 
@@ -131,7 +132,16 @@ class TelemetryScheduler
     }
 
     /// Our own stamp when there is one (it survives deep sleep), else the caller's (it survives reboot)
-    uint32_t lastMeshMs(uint32_t fallbackMs) const { return lastMeshSentMs ? lastMeshSentMs : fallbackMs; }
+    uint32_t lastMeshMs(uint32_t fallbackMs) const { return lastMeshSentMs || ownsMeshStamp ? lastMeshSentMs : fallbackMs; }
+
+    /// Cold boot: take the caller's stamp once, so it ages across the deep sleeps that follow. Read again on each wake,
+    /// a boot-relative stamp looks recent every time on a node without a clock, and the mesh never comes due.
+    void adoptLastMeshMs(uint32_t fallbackMs)
+    {
+        if (!lastMeshSentMs)
+            lastMeshSentMs = fallbackMs;
+        ownsMeshStamp = true;
+    }
 
     bool mqttDue(uint32_t nowMs, const TelemetryCadence &c) const
     {
@@ -209,6 +219,7 @@ class TelemetryScheduler
                 *v = (UINT32_MAX - *v > msSinceSave) ? *v + msSinceSave : UINT32_MAX - 1;
         }
         restoreAges(nowMs, a);
+        ownsMeshStamp = true; // a stamp of 0 now means never sent since the cold boot
         r.magic = 0;
         return true;
     }

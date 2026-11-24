@@ -449,6 +449,7 @@ int32_t EnvironmentTelemetryModule::runOnce()
         if (restoreScheduleAfterSleep(TELEMETRY_SLEEP_SLOT_ENVIRONMENT, schedule)) {
             LOG_DEBUG("Env: schedule restored after deep sleep");
         } else if (history) {
+            schedule.adoptLastMeshMs(lastMeshMs());
             const uint16_t dropped = dropTimelessTelemetryReadings(*history);
             if (dropped)
                 LOG_INFO("Env: dropped %u readings without time after a reboot", (unsigned)dropped);

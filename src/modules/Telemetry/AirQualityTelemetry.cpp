@@ -180,6 +180,7 @@ int32_t AirQualityTelemetryModule::runOnce()
         if (restoreScheduleAfterSleep(TELEMETRY_SLEEP_SLOT_AIR_QUALITY, schedule)) {
             LOG_DEBUG("AQ: schedule restored after deep sleep");
         } else if (history) {
+            schedule.adoptLastMeshMs(lastMeshMs());
             const uint16_t dropped = dropTimelessTelemetryReadings(*history);
             if (dropped)
                 LOG_INFO("AQ: dropped %u readings without time after a reboot", (unsigned)dropped);
