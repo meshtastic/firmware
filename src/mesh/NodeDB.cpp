@@ -631,7 +631,11 @@ NodeDB::NodeDB()
 #else
     myNodeInfo.firmware_edition = meshtastic_FirmwareEdition_VANILLA;
 #endif
+    const NodeNum savedNodeNum = myNodeInfo.my_node_num;
     pickNewNodeNum();
+    // Leaving a reserved number strands our saved self row under it; drop it before it becomes a phantom node.
+    if (isReservedNodeNum(savedNodeNum) && savedNodeNum != myNodeInfo.my_node_num && getMeshNode(savedNodeNum))
+        removeNodeByNum(savedNodeNum);
 
     // Set our board type so we can share it with others
     owner.hw_model = HW_VENDOR;
@@ -5025,8 +5029,6 @@ bool NodeDB::createNewIdentity()
     // ignored (the previous behavior) left a keyless ghost of ourselves that survived cleanup/eviction, was
     // still streamed to clients, and made any DM/admin aimed at it fail forever with PKI_SEND_FAIL_PUBLIC_KEY.
     // removeNodeByNum() drops the lite entry, its satellite stores, and the warm-tier copy.
-    // Index 0 is self by invariant; read it before a removal compacts another node into that slot.
-    const NodeNum savedSelfNum = numMeshNodes > 0 ? meshNodes->at(0).num : oldNodeNum;
     if (getMeshNode(oldNodeNum) != NULL) {
         LOG_DEBUG("Old node num 0x%08x now 0x%08x, remove stale identity", oldNodeNum, newNodeNum);
         removeNodeByNum(oldNodeNum);
@@ -5034,10 +5036,6 @@ bool NodeDB::createNewIdentity()
         // Lite entry already absent: drop any orphaned satellite-store entries directly.
         eraseNodeSatellites(oldNodeNum);
     }
-    // A node leaving a reserved number had a provisional one picked at boot, so its saved self row
-    // still sits under the reserved number and would linger as a phantom node.
-    if (isReservedNodeNum(savedSelfNum) && savedSelfNum != oldNodeNum)
-        removeNodeByNum(savedSelfNum);
 
     myNodeInfo.my_node_num = newNodeNum;
 
