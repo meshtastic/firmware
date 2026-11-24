@@ -1616,10 +1616,7 @@ bool loadConfig(const char *configPath)
                 std::getline(infile, portduino_config.mac_address);
             }
 
-            // https://stackoverflow.com/a/20326454
-            portduino_config.mac_address.erase(
-                std::remove(portduino_config.mac_address.begin(), portduino_config.mac_address.end(), ':'),
-                portduino_config.mac_address.end());
+            std::erase(portduino_config.mac_address, ':');
         }
     } catch (YAML::Exception &e) {
         // The check report repeats this against the file it came from, so printing it
@@ -1701,7 +1698,7 @@ std::string adminKeyToBase64(const std::array<uint8_t, 32> &key)
 
 bool MAC_from_string(std::string mac_str, uint8_t *dmac)
 {
-    mac_str.erase(std::remove(mac_str.begin(), mac_str.end(), ':'), mac_str.end());
+    std::erase(mac_str, ':');
     if (mac_str.length() != 12) {
         return false;
     }
