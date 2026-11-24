@@ -2169,6 +2169,33 @@ static void test_generateCryptoKeyPair_recoveryDropsSelfRowUnderReservedNumber()
     TEST_ASSERT_EQUAL_HEX32(nodeDB->getNodeNum(), nodeDB->meshNodes->at(0).num);
 }
 
+// The cleanup above must key on our own row, not on whatever sits at index 0 afterwards: removing our old
+// row compacts the next one into slot 0, and a remote node numbered 9 (legal before this change) is not ours.
+static void test_generateCryptoKeyPair_ordinaryRotationKeepsRemoteNodeNine()
+{
+    installRestoreCrypto();
+    config.security = meshtastic_Config_SecurityConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    initRegion();
+
+    const NodeNum oldSelf = 0x0A0B0C0D;
+    meshtastic_NodeInfoLite self = meshtastic_NodeInfoLite_init_zero;
+    self.num = oldSelf;
+    meshtastic_NodeInfoLite remoteNine = meshtastic_NodeInfoLite_init_zero;
+    remoteNine.num = 9;
+    nodeDB->meshNodes->insert(nodeDB->meshNodes->begin(), remoteNine);
+    nodeDB->meshNodes->insert(nodeDB->meshNodes->begin(), self); // [self, remote 9, ...]
+    nodeDB->meshNodes->resize(nodeDB->meshNodes->size() - 2);
+    nodeDB->numMeshNodes += 2;
+    myNodeInfo.my_node_num = oldSelf;
+
+    TEST_ASSERT_TRUE(nodeDB->generateCryptoKeyPair()); // mints the clean 0x5E key: an ordinary rotation
+
+    TEST_ASSERT_NULL(nodeDB->getMeshNode(oldSelf));
+    TEST_ASSERT_NOT_NULL(nodeDB->getMeshNode(9));
+    assertUsableIdentity();
+}
+
 // The first-region path mints through CryptoEngine::ensurePkiKeys(), not NodeDB's checked keygen, and
 // switches number without a reboot - the route the issue traced to the node-0 crash.
 static void test_ensurePkiIdentity_mintedKeyForNodeZeroIsRedrawn()
@@ -3044,6 +3071,7 @@ void setup()
     RUN_TEST(test_generateCryptoKeyPair_mintedKeyForNodeTenIsKept);
     RUN_TEST(test_generateCryptoKeyPair_onlyReservedMintsLeaveNoKey);
     RUN_TEST(test_generateCryptoKeyPair_recoveryDropsSelfRowUnderReservedNumber);
+    RUN_TEST(test_generateCryptoKeyPair_ordinaryRotationKeepsRemoteNodeNine);
     RUN_TEST(test_ensurePkiIdentity_mintedKeyForNodeZeroIsRedrawn);
     RUN_TEST(test_handleSetConfig_security_staleLowEntropyFlagDoesNotWarn);
     RUN_TEST(test_handleSetConfig_security_failedDerivationClearsKeySizes);
