@@ -153,6 +153,7 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     sqlite3_stmt *removeCanonScratch;
     sqlite3_stmt *clearCanonScratchStmt;
     sqlite3_stmt *bucketSummaryStmt;
+    sqlite3_stmt *maxCounterStmt;
     sqlite3_stmt *bucketIdsStmt;
     sqlite3_stmt *getLinkByShortIdStmt;
     sqlite3_stmt *unindexedLinksStmt;
@@ -189,6 +190,9 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     // Summarises one bucket of a chain: its members' short IDs, their XOR checksum and their count.
     // Returns false when the bucket holds nothing, which is not the same as an empty sketch.
     bool buildBucketSummary(const uint8_t *root_hash, size_t root_hash_len, uint32_t bucket, sfppsr::BucketSummary &out);
+
+    // The highest chain counter stored for a root (0 if empty). Used to detect a tail gap from an advert.
+    uint32_t highestCounter(const uint8_t *root_hash, size_t root_hash_len);
 
     // The short IDs stored in one bucket, for the enumeration list and for a windowed object lookup.
     bool collectBucketIds(const uint8_t *root_hash, size_t root_hash_len, uint32_t bucket, std::vector<pinsketch::Element> &out);
@@ -245,6 +249,7 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     void resendItemRequest();
     bool anyEnumQueuePending() const;
     void beginEnumLateAccept();
+    void markEnumProgress();
     void expireEnumLate();
 
     // A canonical row, shared by recovered objects and promoted scratch rows.
@@ -480,6 +485,16 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     std::vector<EnumRequester> enumTxQueues;
     size_t enumQueueCursor = 0;
     uint32_t enumLastDrainMs = 0;
+
+    bool enumOnDemand = false;
+    uint32_t enumPeerTip = 0;
+    uint32_t enumKnownTip = 0;
+    struct EnumBucketSeen {
+        uint32_t bucket;
+        uint32_t count;
+        uint64_t checksum;
+    };
+    std::vector<EnumBucketSeen> enumAdvertSeen;
 
     bool enumAwaitingList = false;
     uint8_t enumListRetries = 0;

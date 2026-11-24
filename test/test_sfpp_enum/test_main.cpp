@@ -440,7 +440,7 @@ BucketView readBucket(const std::string &dir, uint32_t first, uint32_t last)
 // Builds an advert from a directory's stored bucket, optionally with a corrupted checksum, so a
 // test can force the sketch decode to be contradicted.
 bool buildAdvertFromDir(const std::string &dir, uint32_t bucket, bool corruptChecksum, meshtastic_MeshPacket &out,
-                        bool fullRoot = false)
+                        bool fullRoot = false, uint32_t tip = 0)
 {
     uint8_t root[SFPP_HASH_SIZE];
     if (!readRoot(dir, root))
@@ -476,6 +476,7 @@ bool buildAdvertFromDir(const std::string &dir, uint32_t bucket, bool corruptChe
         return false;
     if (corruptChecksum)
         msg.sr_checksum ^= 1;
+    msg.encapsulated_rxtime = tip; // Stage 8f: the sender's tip counter
 
     out = meshtastic_MeshPacket_init_zero;
     out.from = AUTHORITY_NODE;
@@ -521,6 +522,17 @@ void ingestAuthority(uint32_t count)
     myNodeInfo.my_node_num = AUTHORITY_NODE;
     portduino_config.sfpp_stratum0 = true;
     for (uint32_t i = 0; i < count; i++) {
+        char text[16];
+        snprintf(text, sizeof(text), "msg %u", i + 1);
+        ingestText(authority, SENDER_NODE, BASE_ID + i, text);
+    }
+}
+
+void ingestAuthorityMore(uint32_t start, uint32_t count)
+{
+    myNodeInfo.my_node_num = AUTHORITY_NODE;
+    portduino_config.sfpp_stratum0 = true;
+    for (uint32_t i = start; i < start + count; i++) {
         char text[16];
         snprintf(text, sizeof(text), "msg %u", i + 1);
         ingestText(authority, SENDER_NODE, BASE_ID + i, text);
@@ -1527,6 +1539,106 @@ void test_heardLiveObjectsArePromoted()
     assertConverged();
 }
 
+// --- Stage 8f: advert rotation ---
+
+// A bucket that gained rows since its last advert goes ahead of the round-robin, so a follower
+// behind in the last bucket catches up on the next advert, not buckets x interval later.
+void test_rotationServesChangedBucketFirst()
+{
+    ingestAuthority(40); // buckets 0 (32 rows) and 1 (8)
+    runAuthorityOnce();  // mark bucket 1 seen
+    runAuthorityOnce();  // mark bucket 0 seen
+
+    buildFollowerFromCopy();    // B has 40
+    ingestAuthorityMore(40, 2); // A's bucket 1 gains two rows (now 10)
+
+    meshtastic_MeshPacket advert = runAuthorityOnce();
+    TEST_ASSERT_EQUAL_UINT32(1, decodeSfpp(advert).chain_count); // changed bucket first
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
+
+    std::vector<meshtastic_MeshPacket> request = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, request.size());
+    TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_REQUEST, decodeSfpp(request[0]).sfpp_message_type);
+    TEST_ASSERT_EQUAL_UINT32(1, decodeSfpp(request[0]).chain_count);
+
+    TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, true, request[0]));
+    std::vector<meshtastic_MeshPacket> provide = drainAuthorityOne(2000);
+    TEST_ASSERT_EQUAL_UINT(1, provide.size());
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, provide[0]));
+    std::vector<meshtastic_MeshPacket> item = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, item.size());
+
+    TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, true, item[0]));
+    uint32_t frames = 0;
+    for (uint32_t guard = 0; guard < 16; guard++) {
+        std::vector<meshtastic_MeshPacket> out = drainAuthorityOne(2000);
+        if (out.empty())
+            continue;
+        if (decodeSfpp(out[0]).sfpp_message_type != meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_FRAME)
+            break;
+        for (const auto &frame : out) {
+            TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, frame));
+            frames++;
+        }
+    }
+    TEST_ASSERT_EQUAL_UINT(2, frames);
+
+    const BucketView a = readBucket(dirA, 33, 64);
+    const BucketView b = readBucket(dirB, 33, 64);
+    TEST_ASSERT_EQUAL_UINT32(10, a.count);
+    TEST_ASSERT_EQUAL_UINT32(a.count, b.count);
+    TEST_ASSERT_EQUAL_UINT64(a.checksum, b.checksum);
+}
+
+// A follower that learns from any advert that the sender's tip is ahead pulls the newest bucket at
+// once, even if the advert named another bucket; at most one exchange is open.
+void test_onDemandPullsNewestBucketAndCapsPacing()
+{
+    ingestAuthority(40);
+    buildFollowerFromCopy();
+    TEST_ASSERT_TRUE(deleteCounterRange(dirB, 39, 40)); // B tip 38, missing the last two
+
+    meshtastic_MeshPacket advert;
+    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, 0, false, advert, false, 40)); // names bucket 0, tip 40
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
+
+    std::vector<meshtastic_MeshPacket> request = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, request.size());
+    TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_REQUEST, decodeSfpp(request[0]).sfpp_message_type);
+    TEST_ASSERT_EQUAL_UINT32(1, decodeSfpp(request[0]).chain_count); // newest bucket on demand
+
+    // The one-exchange cap: a second advert while active starts nothing.
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
+    TEST_ASSERT_EQUAL_UINT(0, takeSent().size());
+
+    TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, true, request[0]));
+    std::vector<meshtastic_MeshPacket> provide = drainAuthorityOne(2000);
+    TEST_ASSERT_EQUAL_UINT(1, provide.size());
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, provide[0]));
+    std::vector<meshtastic_MeshPacket> item = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, item.size());
+    TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, true, item[0]));
+
+    uint32_t frames = 0;
+    for (uint32_t guard = 0; guard < 16; guard++) {
+        std::vector<meshtastic_MeshPacket> out = drainAuthorityOne(2000);
+        if (out.empty())
+            continue;
+        if (decodeSfpp(out[0]).sfpp_message_type != meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_FRAME)
+            break;
+        for (const auto &frame : out) {
+            TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, frame));
+            frames++;
+        }
+    }
+    TEST_ASSERT_EQUAL_UINT(2, frames);
+
+    const BucketView a = readBucket(dirA, 33, 64);
+    const BucketView b = readBucket(dirB, 33, 64);
+    TEST_ASSERT_EQUAL_UINT32(a.count, b.count);
+    TEST_ASSERT_EQUAL_UINT64(a.checksum, b.checksum);
+}
+
 // --- Stage 8: sketch mode ---
 
 void runSketchCase(uint32_t total, uint32_t missing)
@@ -1716,6 +1828,8 @@ void setup()
     RUN_TEST(test_broadcastServesListenOnlyFollower);
     RUN_TEST(test_objectFromNonAuthorityIsIgnored);
     RUN_TEST(test_heardLiveObjectsArePromoted);
+    RUN_TEST(test_rotationServesChangedBucketFirst);
+    RUN_TEST(test_onDemandPullsNewestBucketAndCapsPacing);
     RUN_TEST(test_sketchResolvesOne);
     RUN_TEST(test_sketchResolvesFour);
     RUN_TEST(test_sketchFallsBackAtSixteen);

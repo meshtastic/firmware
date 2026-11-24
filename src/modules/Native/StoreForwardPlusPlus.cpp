@@ -374,6 +374,9 @@ StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
         where substr(root_hash,1,?)=? and counter>=? and counter<=? and short_id is not null;",
                        -1, &bucketSummaryStmt, NULL);
 
+    sqlite3_prepare_v2(ppDb, "select max(counter) from channel_messages where substr(root_hash,1,?)=?;", -1, &maxCounterStmt,
+                       NULL);
+
     sqlite3_prepare_v2(ppDb, "select message_hash from channel_messages where short_id is null limit 128;", -1,
                        &unindexedLinksStmt, NULL);
 
@@ -544,6 +547,7 @@ StoreForwardPlusPlusModule::~StoreForwardPlusPlusModule()
         removeCanonScratch,
         clearCanonScratchStmt,
         bucketSummaryStmt,
+        maxCounterStmt,
         bucketIdsStmt,
         getLinkByShortIdStmt,
         unindexedLinksStmt,
@@ -623,6 +627,18 @@ bool StoreForwardPlusPlusModule::buildBucketSummary(const uint8_t *root_hash, si
     sqlite3_reset(bucketSummaryStmt);
 
     return out.count() > 0;
+}
+
+uint32_t StoreForwardPlusPlusModule::highestCounter(const uint8_t *root_hash, size_t root_hash_len)
+{
+    sqlite3_reset(maxCounterStmt);
+    sqlite3_bind_int(maxCounterStmt, 1, root_hash_len);
+    sqlite3_bind_blob(maxCounterStmt, 2, root_hash, root_hash_len, NULL);
+    uint32_t highest = 0;
+    if (sqlite3_step(maxCounterStmt) == SQLITE_ROW && sqlite3_column_type(maxCounterStmt, 0) != SQLITE_NULL)
+        highest = (uint32_t)sqlite3_column_int64(maxCounterStmt, 0);
+    sqlite3_reset(maxCounterStmt);
+    return highest;
 }
 
 bool StoreForwardPlusPlusModule::collectBucketIds(const uint8_t *root_hash, size_t root_hash_len, uint32_t bucket,
@@ -2783,6 +2799,7 @@ void StoreForwardPlusPlusModule::beginEnumExchange(const uint8_t *root_hash, uin
     enumRequestSentMs = enumExchangeStartedMs;
     enumLateActive = false;
     enumLateWanted.clear();
+    enumOnDemand = false;
     // The thread only checks the deadline when runOnce() runs; schedule it now.
     setIntervalFromNow(5 * 1000);
 
@@ -2806,6 +2823,7 @@ void StoreForwardPlusPlusModule::endEnumExchange()
     enumCollisionProbe = false;
     enumSketchAttempt = false;
     enumSketchIds = 0;
+    enumOnDemand = false;
     enumAwaitingList = false;
     enumListRetries = 0;
     enumItemRetries = 0;
@@ -2848,6 +2866,17 @@ void StoreForwardPlusPlusModule::beginEnumLateAccept()
     enumLatePeer = enumExchangePeer;
     enumLateWanted = enumWanted;
     enumLateStartedMs = Time::getMillis();
+}
+
+void StoreForwardPlusPlusModule::markEnumProgress()
+{
+    if (enumPeerTip == 0)
+        return;
+    // We have confirmed our store up to the end of this bucket, but no further than the peer tip.
+    const uint32_t bucketEnd = (enumExchangeBucket + 1) * sfppsr::kBucketObjects;
+    const uint32_t reached = enumPeerTip < bucketEnd ? enumPeerTip : bucketEnd;
+    if (reached > enumKnownTip)
+        enumKnownTip = reached;
 }
 
 void StoreForwardPlusPlusModule::expireEnumLate()
@@ -2903,31 +2932,80 @@ void StoreForwardPlusPlusModule::advertiseOneBucket(uint8_t *root_hash, size_t r
     link_object tip = getLinkFromPositionFromTip(0, root_hash, root_hash_len);
     if (tip.counter == 0)
         return;
-    const uint32_t maxBucket = (tip.counter - 1) / sfppsr::kBucketObjects;
+    const uint32_t tipCounter = tip.counter;
+    const uint32_t maxBucket = (tipCounter - 1) / sfppsr::kBucketObjects;
 
-    // One bucket per tick, round-robin, skipping empty buckets on the advertising side.
-    for (uint32_t attempts = 0; attempts <= maxBucket; attempts++) {
-        if (enumBucketCursor > maxBucket)
-            enumBucketCursor = 0;
-        const uint32_t bucket = enumBucketCursor;
-        enumBucketCursor = (enumBucketCursor + 1) % (maxBucket + 1);
-
+    // Stage 8f: newest-changed first. A bucket whose summary differs from the one last advertised
+    // (or that was never advertised) goes ahead of the round-robin.
+    int64_t chosen = -1;
+    for (int64_t b = (int64_t)maxBucket; b >= 0; b--) {
         sfppsr::BucketSummary summary(4);
-        buildBucketSummary(root_hash, root_hash_len, bucket, summary);
-        if (summary.count() == 0)
+        if (!buildBucketSummary(root_hash, root_hash_len, (uint32_t)b, summary) || summary.count() == 0)
             continue;
-
-        sfppsr::Scope scope;
-        // Every tenth advert carries the full root so a blank follower can join; the rest use the
-        // 4-byte prefix to keep the standing cost down.
-        const bool fullRoot = (enumAdvertTick++ % kEnumFullRootEvery) == (kEnumFullRootEvery - 1);
-        copyScopeRoot(root_hash, root_hash_len, scope, bucket, fullRoot);
-        meshtastic_StoreForwardPlusPlus msg;
-        if (!sfppsr::buildAdvert(scope, summary, msg))
-            continue;
-        sendEnumMessage(msg, NODENUM_BROADCAST, "advert", msg.message.size);
-        return;
+        bool changed = true;
+        for (const auto &seen : enumAdvertSeen) {
+            if (seen.bucket == (uint32_t)b) {
+                changed = (seen.count != summary.count() || seen.checksum != summary.checksum());
+                break;
+            }
+        }
+        if (changed) {
+            chosen = b;
+            break;
+        }
     }
+
+    uint32_t bucket = 0;
+    if (chosen >= 0) {
+        bucket = (uint32_t)chosen;
+        enumBucketCursor = (bucket + 1) % (maxBucket + 1);
+    } else {
+        // No change: one bucket per tick, round-robin, skipping empty buckets.
+        bool found = false;
+        for (uint32_t attempts = 0; attempts <= maxBucket; attempts++) {
+            if (enumBucketCursor > maxBucket)
+                enumBucketCursor = 0;
+            const uint32_t candidate = enumBucketCursor;
+            enumBucketCursor = (enumBucketCursor + 1) % (maxBucket + 1);
+            sfppsr::BucketSummary summary(4);
+            if (buildBucketSummary(root_hash, root_hash_len, candidate, summary) && summary.count() > 0) {
+                bucket = candidate;
+                found = true;
+                break;
+            }
+        }
+        if (!found)
+            return;
+    }
+
+    sfppsr::BucketSummary summary(4);
+    if (!buildBucketSummary(root_hash, root_hash_len, bucket, summary) || summary.count() == 0)
+        return;
+
+    sfppsr::Scope scope;
+    // Every tenth advert carries the full root so a blank follower can join; the rest use the
+    // 4-byte prefix to keep the standing cost down.
+    const bool fullRoot = (enumAdvertTick++ % kEnumFullRootEvery) == (kEnumFullRootEvery - 1);
+    copyScopeRoot(root_hash, root_hash_len, scope, bucket, fullRoot);
+    meshtastic_StoreForwardPlusPlus msg;
+    if (!sfppsr::buildAdvert(scope, summary, msg))
+        return;
+    // Stage 8f: the advert names this bucket; encapsulated_rxtime carries the sender's tip counter.
+    msg.encapsulated_rxtime = tipCounter;
+    if (!sendEnumMessage(msg, NODENUM_BROADCAST, "advert", msg.message.size))
+        return;
+
+    bool stored = false;
+    for (auto &seen : enumAdvertSeen) {
+        if (seen.bucket == bucket) {
+            seen.count = summary.count();
+            seen.checksum = summary.checksum();
+            stored = true;
+            break;
+        }
+    }
+    if (!stored)
+        enumAdvertSeen.push_back({bucket, summary.count(), summary.checksum()});
 }
 
 void StoreForwardPlusPlusModule::handleEnumAdvert(const meshtastic_MeshPacket &mp, meshtastic_StoreForwardPlusPlus *t)
@@ -2964,26 +3042,46 @@ void StoreForwardPlusPlusModule::handleEnumAdvert(const meshtastic_MeshPacket &m
     if (portduino_config.sfpp_enum_listen_only)
         return; // learn the authority, never request
 
-    if (enumExchangeActive)
-        return; // one exchange at a time; the next advert tick retries
+    const uint32_t advertTip = t->encapsulated_rxtime; // Stage 8f: the sender's highest counter
+    const uint32_t ownTip = highestCounter(root, SFPP_HASH_SIZE);
 
     // The receiver of a mismatching advert always pulls. An empty local bucket is count 0 and
     // checksum 0, so it mismatches a non-empty peer and pulls too.
     sfppsr::BucketSummary local(4);
     buildBucketSummary(root, SFPP_HASH_SIZE, advert.scope.bucket, local);
-    if (local.count() == advert.count && local.checksum() == advert.checksum)
+    const bool namedMismatch = !(local.count() == advert.count && local.checksum() == advert.checksum);
+    const uint32_t knownTip = ownTip > enumKnownTip ? ownTip : enumKnownTip;
+    const bool tailBehind = advertTip > knownTip;
+    if (!namedMismatch && !tailBehind)
         return;
 
-    // A bucket that could not be repaired from this advertised summary is not pulled again until
-    // the authority advertises a different one for it.
-    if (enumBucketSuppressed(root, advert.scope.bucket, advert.count, advert.checksum))
-        return;
+    if (enumExchangeActive)
+        return; // one exchange at a time; the next advert tick retries
 
-    beginEnumExchange(root, advert.scope.bucket, mp.from, advert.count, advert.checksum);
-    if (portduino_config.sfpp_repair == SFPP_REPAIR_SKETCH &&
-        trySketchExchange(advert, local, root, advert.scope.bucket, mp.from))
+    if (namedMismatch) {
+        // A bucket that could not be repaired from this advertised summary is not pulled again until
+        // the authority advertises a different one for it.
+        if (enumBucketSuppressed(root, advert.scope.bucket, advert.count, advert.checksum))
+            return;
+
+        beginEnumExchange(root, advert.scope.bucket, mp.from, advert.count, advert.checksum);
+        enumPeerTip = advertTip;
+        if (portduino_config.sfpp_repair == SFPP_REPAIR_SKETCH &&
+            trySketchExchange(advert, local, root, advert.scope.bucket, mp.from))
+            return;
+        requestEnumList(root, advert.scope.bucket, mp.from);
         return;
-    requestEnumList(root, advert.scope.bucket, mp.from);
+    }
+
+    // Stage 8f: the named bucket agrees but the sender's tip is ahead, so the newest bucket is
+    // missing rows. Pull it now instead of waiting for its turn in the rotation.
+    const uint32_t tipBucket = (advertTip - 1) / sfppsr::kBucketObjects;
+    if (enumBucketSuppressed(root, tipBucket, advertTip, 0))
+        return;
+    beginEnumExchange(root, tipBucket, mp.from, advertTip, 0);
+    enumPeerTip = advertTip;
+    enumOnDemand = true;
+    requestEnumList(root, tipBucket, mp.from);
 }
 
 bool StoreForwardPlusPlusModule::trySketchExchange(const sfppsr::Advert &advert, sfppsr::BucketSummary &local,
@@ -3172,7 +3270,14 @@ void StoreForwardPlusPlusModule::handleEnumProvide(const meshtastic_MeshPacket &
         return;
     }
 
+    if (enumOnDemand) {
+        markEnumProgress();
+        endEnumExchange(); // no advertised count/checksum to confirm against; the list was the check
+        return;
+    }
+
     if (bucketMatchesPeer(root, enumProvideBucket)) {
+        markEnumProgress();
         endEnumExchange();
         return;
     }
@@ -3453,6 +3558,8 @@ void StoreForwardPlusPlusModule::pumpEnumRetries()
                      enumExchangeBucket, enumExchangePeer, enumSketchIds);
             fallbackToEnumList();
         } else {
+            if (enumOnDemand)
+                suppressEnumBucket(enumExchangeRoot, enumExchangeBucket, enumPeerCount, enumPeerChecksum);
             // Paced frames may still be in flight; keep accepting them for a while (Stage 8e).
             beginEnumLateAccept();
             endEnumExchange();
@@ -3678,8 +3785,10 @@ void StoreForwardPlusPlusModule::handleItemFrame(const meshtastic_MeshPacket &mp
                 enumRecovered++;
 
             if (enumCollisionProbe) {
-                if (bucketMatchesPeer(enumExchangeRoot, enumExchangeBucket))
+                if (bucketMatchesPeer(enumExchangeRoot, enumExchangeBucket)) {
+                    markEnumProgress();
                     endEnumExchange();
+                }
                 return;
             }
 
@@ -3691,6 +3800,7 @@ void StoreForwardPlusPlusModule::handleItemFrame(const meshtastic_MeshPacket &mp
             if (enumSketchAttempt) {
                 enumSketchAttempt = false;
                 if (bucketMatchesPeer(enumExchangeRoot, enumExchangeBucket)) {
+                    markEnumProgress();
                     endEnumExchange();
                 } else {
                     char rootHex[9];
@@ -3701,6 +3811,7 @@ void StoreForwardPlusPlusModule::handleItemFrame(const meshtastic_MeshPacket &mp
                 }
                 return;
             }
+            markEnumProgress();
             endEnumExchange();
             return;
         }
