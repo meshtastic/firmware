@@ -331,6 +331,23 @@ static void test_scheduler_meshStampOwnedAfterColdBootAndRestore()
     TEST_ASSERT_EQUAL_UINT32(15000U, cold.lastMeshMs(15000U));
 }
 
+// Autofit only ever lengthens the read interval; at one reading per packet the batch is a single reading
+static void test_scheduler_autofitLengthensReadInterval()
+{
+    TelemetryCadence c = cadence();
+    c.batchReadings = true;
+    applyTelemetryAutofit(c, 0U);
+    TEST_ASSERT_EQUAL_UINT32(READ_MS, c.readMs);
+    applyTelemetryAutofit(c, 300000U);
+    TEST_ASSERT_EQUAL_UINT32(READ_MS, c.readMs);
+    applyTelemetryAutofit(c, 600000U);
+    TEST_ASSERT_EQUAL_UINT32(600000U, c.readMs);
+    TEST_ASSERT_TRUE(c.batchReadings);
+    applyTelemetryAutofit(c, MESH_MS);
+    TEST_ASSERT_EQUAL_UINT32(MESH_MS, c.readMs);
+    TEST_ASSERT_FALSE(c.batchReadings);
+}
+
 static void test_scheduler_retainedNeverStaysNever()
 {
     TelemetryScheduler before;
@@ -555,7 +572,43 @@ static void test_batch_nothingUnpublishedEncodesNothing()
     TEST_ASSERT_EQUAL_UINT16(0, encodeTelemetryBatch(store, TELEMETRY_PUBLISHED_MESH, 10, buf, sizeof(buf), size, idx));
 }
 
-// Falling back to another store keeps every readable reading, in order, with what each channel has had
+// What one reading adds to a batch is exactly what a one-reading batch encodes to
+static void test_batch_recordBytesMatchEncoding()
+{
+    RamTelemetryStore<meshtastic_AirQualityMetrics> store(4);
+    store.push(aq(1234), 1700000000, 0);
+    store.push(aq(5), 0, 360);
+    uint8_t buf[meshtastic_Constants_DATA_PAYLOAD_LEN];
+    uint16_t idx[TELEMETRY_MAX_READINGS_PER_BATCH];
+    size_t size = 0;
+    TelemetryReading<meshtastic_AirQualityMetrics> r;
+    TEST_ASSERT_TRUE(store.at(0, r));
+    TEST_ASSERT_EQUAL_UINT16(1, encodeTelemetryBatch(store, TELEMETRY_PUBLISHED_MESH, 1, buf, sizeof(buf), size, idx));
+    TEST_ASSERT_EQUAL(size, telemetryRecordBytes(r));
+    TEST_ASSERT_EQUAL(size, largestRecentTelemetryRecordBytes(store, 2));
+}
+
+// 10% size margin, at most a mesh packet's cap and one short of the store; a larger record lengthens the read interval to whole
+// seconds
+static void test_batch_autofitReadInterval()
+{
+    TEST_ASSERT_EQUAL_UINT16(5, telemetryReadingsThatFit(37, 229)); // PMSA003I-class
+    TEST_ASSERT_EQUAL_UINT16(3, telemetryReadingsThatFit(63, 229)); // SEN5X with PN
+    TEST_ASSERT_EQUAL_UINT16(10, telemetryReadingsThatFit(14, 229));
+    TEST_ASSERT_EQUAL_UINT16(0, telemetryReadingsThatFit(0, 229));
+    // A store of 8 (nRF52) keeps one slot spare: 8 would fit the packet, 7 go per interval
+    TEST_ASSERT_EQUAL_UINT16(7, telemetryReadingsThatFit(25, 229, 8));
+    TEST_ASSERT_EQUAL_UINT16(5, telemetryReadingsThatFit(37, 229, 64));
+
+    TEST_ASSERT_EQUAL_UINT32(360000U, telemetryAutofitReadMs(360000U, 1800000U, 5));
+    TEST_ASSERT_EQUAL_UINT32(600000U, telemetryAutofitReadMs(360000U, 1800000U, 3));
+    TEST_ASSERT_EQUAL_UINT32(400000U, telemetryAutofitReadMs(360000U, 3600000U, 9));
+    TEST_ASSERT_EQUAL_UINT32(258000U, telemetryAutofitReadMs(200000U, 1800000U, 7));
+    TEST_ASSERT_EQUAL_UINT32(360000U, telemetryAutofitReadMs(360000U, 1800000U, 0));
+    TEST_ASSERT_EQUAL_UINT32(1800000U, telemetryAutofitReadMs(1800000U, 1800000U, 1));
+}
+
+// After a reboot, readings without a time can't be placed: dropped for every consumer
 static void test_store_dropTimelessMarksOnlyReadingsWithoutTime()
 {
     RamTelemetryStore<meshtastic_AirQualityMetrics> store(4);
@@ -580,6 +633,7 @@ static void test_store_dropTimelessMarksOnlyReadingsWithoutTime()
     TEST_ASSERT_EQUAL_UINT16(0, dropTimelessTelemetryReadings(store));
 }
 
+// Falling back to another store keeps every readable reading, in order, with what each channel has had
 static void test_store_copyKeepsReadingsAndMasks()
 {
     RamTelemetryStore<meshtastic_AirQualityMetrics> from(4), to(4);
@@ -698,6 +752,7 @@ void setup()
     RUN_TEST(test_scheduler_slackDoesNotShortenRetry);
     RUN_TEST(test_scheduler_retainedAcrossDeepSleep);
     RUN_TEST(test_scheduler_retainedNeverStaysNever);
+    RUN_TEST(test_scheduler_autofitLengthensReadInterval);
     RUN_TEST(test_scheduler_meshStampOwnedAfterColdBootAndRestore);
     RUN_TEST(test_sensors_wokenOnlyWithinTheirLead);
     RUN_TEST(test_sensors_readWaitsForSlowest);
@@ -710,6 +765,8 @@ void setup()
     RUN_TEST(test_batch_capsAtMaxReadings);
     RUN_TEST(test_batch_shrinksToFit);
     RUN_TEST(test_batch_nothingUnpublishedEncodesNothing);
+    RUN_TEST(test_batch_recordBytesMatchEncoding);
+    RUN_TEST(test_batch_autofitReadInterval);
     RUN_TEST(test_store_copyKeepsReadingsAndMasks);
     RUN_TEST(test_store_dropTimelessMarksOnlyReadingsWithoutTime);
     RUN_TEST(test_sleep_budgetIsEarliestModuleMinusBootMargin);

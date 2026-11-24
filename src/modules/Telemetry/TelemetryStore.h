@@ -116,8 +116,6 @@ template <typename T> class RamTelemetryStore : public TelemetryStore<T>
     }
 };
 
-/// Copy every readable reading, oldest first, with what each channel has had, so switching stores loses nothing
-/// still readable. @return readings copied
 /// After a reboot the delta chain is broken, so readings without a time can't be placed any more: mark them taken
 /// by every consumer so they are never sent. Returns how many the mesh had not had yet.
 template <typename T> uint16_t dropTimelessTelemetryReadings(TelemetryStore<T> &store)
@@ -137,6 +135,8 @@ template <typename T> uint16_t dropTimelessTelemetryReadings(TelemetryStore<T> &
     return dropped;
 }
 
+/// Copy every readable reading, oldest first, with what each channel has had, so switching stores loses nothing
+/// still readable. @return readings copied
 template <typename T> uint16_t copyTelemetryReadings(TelemetryStore<T> &from, TelemetryStore<T> &to)
 {
     uint16_t copied = 0;

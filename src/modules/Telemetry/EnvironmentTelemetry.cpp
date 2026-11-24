@@ -483,6 +483,8 @@ int32_t EnvironmentTelemetryModule::runOnce()
             if (hasLatest && latest.time == 0)
                 hasLatest = false; // seeded from one of them
         }
+        if (history)
+            updateAutofit();
         refreshDisplayedMeasurement();
 
         // it's possible to have this module enabled, only for displaying values on the screen.
@@ -592,6 +594,27 @@ int32_t EnvironmentTelemetryModule::runOnce()
 
 TelemetryCadence EnvironmentTelemetryModule::cadence() const
 {
+    TelemetryCadence c = configuredCadence();
+    applyTelemetryAutofit(c, fitReadMs);
+    return c;
+}
+
+void EnvironmentTelemetryModule::updateAutofit()
+{
+    const TelemetryCadence c = configuredCadence();
+    const uint32_t fitted = autofitTelemetryReadMs(*history, c);
+    if (fitted == fitReadMs)
+        return;
+    if (fitted)
+        LOG_WARN("Env: a %us mesh packet can't carry readings every %us, read every %us", (unsigned)(c.meshMs / 1000),
+                 (unsigned)(c.readMs / 1000), (unsigned)(fitted / 1000));
+    else
+        LOG_INFO("Env: readings fit the mesh packet again, read every %us", (unsigned)(c.readMs / 1000));
+    fitReadMs = fitted;
+}
+
+TelemetryCadence EnvironmentTelemetryModule::configuredCadence() const
+{
     const uint32_t meshSecs = moduleConfig.telemetry.environment_update_interval;
     TelemetryCadence c;
     c.meshMs = Default::getConfiguredOrDefaultMsScaled(meshSecs, default_telemetry_broadcast_interval_secs, numOnlineNodes,
@@ -693,6 +716,8 @@ void EnvironmentTelemetryModule::captureReading(uint32_t nowMs, const TelemetryC
         refreshDisplayedMeasurement();
         if (stored)
             stored = storeReading(m.variant.environment_metrics, m.time, schedule.deltaSecs(nowMs));
+        if (stored)
+            updateAutofit();
         LOG_INFO("Env: read %s, %u stored", stored ? "stored" : "for phone", (unsigned)history->size());
     } else {
         LOG_WARN("Env read failed, keep the previous reading");

@@ -70,6 +70,56 @@ template <typename T> void fillTelemetryRecord(meshtastic_TelemetryRecord &r, co
     r.delta_secs = r.has_delta_secs ? reading.deltaSecs : 0;
 }
 
+/// Bytes one reading adds to a batch: its record and the field header in front of it
+template <typename T> size_t telemetryRecordBytes(const TelemetryReading<T> &reading)
+{
+    meshtastic_TelemetryRecord r = meshtastic_TelemetryRecord_init_zero;
+    fillTelemetryRecord(r, reading);
+    size_t size = 0;
+    if (!pb_get_encoded_size(&size, &meshtastic_TelemetryRecord_msg, &r))
+        return 0;
+    return size + 1 + (size < 128 ? 1 : 2); // tag, length
+}
+
+/// Largest record among the newest n readings, 0 if there are none
+template <typename T> size_t largestRecentTelemetryRecordBytes(TelemetryStore<T> &store, uint16_t n)
+{
+    size_t largest = 0;
+    TelemetryReading<T> reading;
+    for (uint16_t i = store.size(); i > 0 && n > 0; i--, n--) {
+        if (!store.at(i - 1, reading))
+            continue;
+        const size_t bytes = telemetryRecordBytes(reading);
+        if (bytes > largest)
+            largest = bytes;
+    }
+    return largest;
+}
+
+/// Readings of recordBytes that fit one mesh batch, with a 10% margin for values that encode longer, and one slot
+/// short of a store of storeSlots so a reading is not evicted before its batch goes (0 = no store limit)
+inline uint16_t telemetryReadingsThatFit(size_t recordBytes, size_t budget, uint16_t storeSlots = 0)
+{
+    if (recordBytes == 0)
+        return 0;
+    size_t fit = budget * 9 / 10 / recordBytes;
+    if (fit > TELEMETRY_MAX_READINGS_PER_MESH_PACKET)
+        fit = TELEMETRY_MAX_READINGS_PER_MESH_PACKET;
+    if (storeSlots > 1 && fit > storeSlots - 1u)
+        fit = storeSlots - 1u;
+    return fit;
+}
+
+/// Read interval so the readings of one mesh interval fit one batch of `fit`: readMs when they already do,
+/// else the shortest whole-second interval that does
+inline uint32_t telemetryAutofitReadMs(uint32_t readMs, uint32_t meshMs, uint16_t fit)
+{
+    if (fit == 0 || readMs == 0 || meshMs <= readMs || (meshMs + readMs - 1) / readMs <= fit)
+        return readMs;
+    const uint32_t fittedSecs = ((meshMs + fit - 1) / fit + 999) / 1000;
+    return fittedSecs * 1000;
+}
+
 /// Encode the oldest readings ch has not taken, up to maxReadings, dropping the newest of them until
 /// the batch fits buf. Their store indices go to indices[], which holds TELEMETRY_MAX_READINGS_PER_BATCH.
 /// @return readings encoded, 0 if there were none or nothing fits

@@ -130,7 +130,11 @@ class EnvironmentTelemetryModule : private concurrency::OSThread,
     bool sendBufferedTelemetry();
     void logTelemetry(const meshtastic_Telemetry &m);
     void notifySleepAfterSend();
+    /// The configured cadence, then with the read interval autofit to the mesh packet
+    TelemetryCadence configuredCadence() const;
     TelemetryCadence cadence() const;
+    /// Recompute fitReadMs from the newest stored readings
+    void updateAutofit();
     uint32_t lastMeshMs() const;
     void clearMeasurementPacket();
     bool refreshLocalMeasurementPacket();
@@ -150,6 +154,7 @@ class EnvironmentTelemetryModule : private concurrency::OSThread,
     // once openHistory() has run.
     std::unique_ptr<TelemetryStore<meshtastic_EnvironmentMetrics>> history;
     TelemetryScheduler schedule;
+    uint32_t fitReadMs = 0;                                       // autofit read interval, 0 = the configured one fits
     meshtastic_Telemetry latest = meshtastic_Telemetry_init_zero; // newest valid read, stored or not
     bool hasLatest = false;
     bool warmingUp = false;

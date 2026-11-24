@@ -200,6 +200,8 @@ int32_t AirQualityTelemetryModule::runOnce()
             if (hasLatest && latest.time == 0)
                 hasLatest = false; // seeded from one of them
         }
+        if (history)
+            updateAutofit();
 
         // it's possible to have this module enabled, only for displaying values on the screen.
         // therefore, we should only enable the sensor loop if measurement is also enabled.
@@ -285,6 +287,27 @@ int32_t AirQualityTelemetryModule::runOnce()
 }
 
 TelemetryCadence AirQualityTelemetryModule::cadence() const
+{
+    TelemetryCadence c = configuredCadence();
+    applyTelemetryAutofit(c, fitReadMs);
+    return c;
+}
+
+void AirQualityTelemetryModule::updateAutofit()
+{
+    const TelemetryCadence c = configuredCadence();
+    const uint32_t fitted = autofitTelemetryReadMs(*history, c);
+    if (fitted == fitReadMs)
+        return;
+    if (fitted)
+        LOG_WARN("AQ: a %us mesh packet can't carry readings every %us, read every %us", (unsigned)(c.meshMs / 1000),
+                 (unsigned)(c.readMs / 1000), (unsigned)(fitted / 1000));
+    else
+        LOG_INFO("AQ: readings fit the mesh packet again, read every %us", (unsigned)(c.readMs / 1000));
+    fitReadMs = fitted;
+}
+
+TelemetryCadence AirQualityTelemetryModule::configuredCadence() const
 {
     const uint32_t meshSecs = moduleConfig.telemetry.air_quality_interval;
     TelemetryCadence c;
@@ -391,6 +414,8 @@ void AirQualityTelemetryModule::captureReading(uint32_t nowMs, const TelemetryCa
         rememberForScreen(m);
         if (stored)
             stored = storeReading(m.variant.air_quality_metrics, m.time, schedule.deltaSecs(nowMs));
+        if (stored)
+            updateAutofit();
         LOG_INFO("AQ: read %s, %u stored", stored ? "stored" : "for phone", (unsigned)history->size());
     } else {
         LOG_WARN("AQ read failed, keep the previous reading");

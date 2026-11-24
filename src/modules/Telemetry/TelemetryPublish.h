@@ -3,6 +3,7 @@
 #include "MeshService.h"
 #include "RadioInterface.h"
 #include "TelemetryBatch.h"
+#include "TelemetryScheduler.h"
 #include "mesh/Channels.h"
 #if !MESHTASTIC_EXCLUDE_MQTT
 #include "mqtt/MQTT.h"
@@ -14,6 +15,16 @@ inline bool telemetryMqttUplinkAvailable()
 #if !MESHTASTIC_EXCLUDE_MQTT
     return moduleConfig.mqtt.enabled && moduleConfig.mqtt.telemetry_uplink_enabled && mqtt &&
            mqtt->uplinksOwnPacketsOn(channels.getPrimaryIndex());
+#else
+    return false;
+#endif
+}
+
+/// The readings also leave by the node's own MQTT uplink, whether or not the broker is reachable right now
+inline bool telemetryMqttUplinkConfigured()
+{
+#if !MESHTASTIC_EXCLUDE_MQTT
+    return moduleConfig.mqtt.enabled && moduleConfig.mqtt.telemetry_uplink_enabled;
 #else
     return false;
 #endif
@@ -79,6 +90,18 @@ uint16_t sendTelemetryBatch(TelemetryStore<T> &store, meshtastic_MeshPacket *p, 
     for (uint16_t i = 0; i < taken; i++)
         store.markPublished(indices[i], target);
     return taken;
+}
+
+/// Read interval for a SENSOR batching for the mesh alone, so one mesh interval's readings fit one packet (and the
+/// store), judged on the largest of the newest readings; 0 = the configured cadence already fits or nothing to judge by
+template <typename T> uint32_t autofitTelemetryReadMs(TelemetryStore<T> &store, const TelemetryCadence &configured)
+{
+    if (!configured.batchReadings || telemetryMqttUplinkConfigured())
+        return 0;
+    const size_t bytes = largestRecentTelemetryRecordBytes(store, TELEMETRY_MAX_READINGS_PER_MESH_PACKET);
+    const uint16_t fit = telemetryReadingsThatFit(bytes, telemetryBatchBudget(), store.capacity());
+    const uint32_t readMs = telemetryAutofitReadMs(configured.readMs, configured.meshMs, fit);
+    return readMs > configured.readMs ? readMs : 0;
 }
 
 /// Publish the readings the broker has not had yet one by one as Telemetry, oldest first, the way a

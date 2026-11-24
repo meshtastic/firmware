@@ -16,6 +16,16 @@ struct TelemetryCadence {
     bool batchReadings = false;
 };
 
+/// A SENSOR that batches for the mesh alone reads no more often than one packet per mesh interval can carry:
+/// fitReadMs is that interval (TelemetryBatch.h), 0 = no limit
+inline void applyTelemetryAutofit(TelemetryCadence &c, uint32_t fitReadMs)
+{
+    if (fitReadMs <= c.readMs)
+        return;
+    c.readMs = fitReadMs;
+    c.batchReadings = c.batchReadings && c.readMs < c.meshMs;
+}
+
 /// When a telemetry module reads its sensors and publishes. Pure: every input is passed in, so the
 /// policy is testable without hardware. Stamps are millis() values, 0 = never.
 class TelemetryScheduler
