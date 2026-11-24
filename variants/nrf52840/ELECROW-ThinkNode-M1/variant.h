@@ -216,8 +216,6 @@ extern uint8_t m1GpsTxPin, m1GpsRxPin;
 #define OCV_ARRAY 4200, 4077, 4028, 3946, 3873, 3807, 3734, 3652, 3562, 3464, 3300
 // Sleep on the second reading below 3.3 V (20-40 s) rather than the eleventh (about 4 minutes).
 #define LOW_VOLTAGE_SHUTDOWN_READINGS 1
-// A button press below 3.3 V boots, then sleeps again on the first reading.
-#define LOW_VOLTAGE_SLEEP_AT_BOOT
 
 // #define HAS_SCREEN 0
 
