@@ -20,6 +20,10 @@
 #include "sleep.h"
 #include "target_specific.h"
 
+#ifdef MESHTASTIC_INCLUDE_INKHUD
+#include "graphics/niche/InkHUD/InkHUD.h"
+#endif
+
 #if HAS_WIFI && !defined(ARCH_PORTDUINO) || defined(MESHTASTIC_EXCLUDE_WIFI)
 #include "mesh/wifi/WiFiAPClient.h"
 #endif
@@ -71,23 +75,38 @@ static void t5BacklightWakeFromSleep()
     t5BacklightSetForcedBySleep(false);
 }
 
-static void t5BacklightOffForTimeout()
-{
-    t5BacklightSetForcedByTimeout(true);
-    t5TouchSetForcedByTimeout(true);
-}
-
-static void t5BacklightOnFromUserInput()
-{
-    t5BacklightHandleUserInput();
-    t5TouchHandleUserInput();
-}
 #else
 static void t5BacklightOffForSleep() {}
 static void t5BacklightWakeFromSleep() {}
-static void t5BacklightOffForTimeout() {}
-static void t5BacklightOnFromUserInput() {}
 #endif
+
+static void screenOffForTimeout()
+{
+#ifdef T5_S3_EPAPER_PRO
+    t5BacklightSetForcedByTimeout(true);
+    t5TouchSetForcedByTimeout(true);
+#endif
+#ifdef MESHTASTIC_INCLUDE_INKHUD
+    NicheGraphics::InkHUD::InkHUD::getInstance()->setTouchTimedOut(true);
+#ifdef T_DECK_PRO
+    tDeckProUpdateBacklights();
+#endif
+#endif
+}
+
+static void screenOnFromUserInput()
+{
+#ifdef T5_S3_EPAPER_PRO
+    t5BacklightHandleUserInput();
+    t5TouchHandleUserInput();
+#endif
+#ifdef MESHTASTIC_INCLUDE_INKHUD
+    NicheGraphics::InkHUD::InkHUD::getInstance()->setTouchTimedOut(false);
+#ifdef T_DECK_PRO
+    tDeckProUpdateBacklights();
+#endif
+#endif
+}
 
 static void sdsEnter()
 {
@@ -262,7 +281,7 @@ static void darkEnter()
     if (screen)
         screen->setOn(false);
     // Screen timeout enters DARK; ensure backlight also turns off.
-    t5BacklightOffForTimeout();
+    screenOffForTimeout();
 }
 
 static void serialEnter()
@@ -376,13 +395,13 @@ void PowerFSM_setup()
     powerFSM.add_transition(&stateNB, &stateNB, EVENT_PACKET_FOR_PHONE, NULL, "Received packet, resetting win wake");
 
     // Handle press events - note: we ignore button presses when in API mode
-    powerFSM.add_transition(&stateLS, &stateON, EVENT_PRESS, t5BacklightOnFromUserInput, "Press");
-    powerFSM.add_transition(&stateNB, &stateON, EVENT_PRESS, t5BacklightOnFromUserInput, "Press");
-    powerFSM.add_transition(&stateDARK, isPowered() ? &statePOWER : &stateON, EVENT_PRESS, t5BacklightOnFromUserInput, "Press");
-    powerFSM.add_transition(&statePOWER, &statePOWER, EVENT_PRESS, t5BacklightOnFromUserInput, "Press");
-    powerFSM.add_transition(&stateON, &stateON, EVENT_PRESS, t5BacklightOnFromUserInput,
+    powerFSM.add_transition(&stateLS, &stateON, EVENT_PRESS, screenOnFromUserInput, "Press");
+    powerFSM.add_transition(&stateNB, &stateON, EVENT_PRESS, screenOnFromUserInput, "Press");
+    powerFSM.add_transition(&stateDARK, isPowered() ? &statePOWER : &stateON, EVENT_PRESS, screenOnFromUserInput, "Press");
+    powerFSM.add_transition(&statePOWER, &statePOWER, EVENT_PRESS, screenOnFromUserInput, "Press");
+    powerFSM.add_transition(&stateON, &stateON, EVENT_PRESS, screenOnFromUserInput,
                             "Press"); // reenter On to restart our timers
-    powerFSM.add_transition(&stateSERIAL, &stateSERIAL, EVENT_PRESS, t5BacklightOnFromUserInput,
+    powerFSM.add_transition(&stateSERIAL, &stateSERIAL, EVENT_PRESS, screenOnFromUserInput,
                             "Press"); // Allow button to work while in serial API
 
     // Handle critically low power battery by forcing deep sleep
@@ -402,13 +421,16 @@ void PowerFSM_setup()
     powerFSM.add_transition(&stateSERIAL, &stateSHUTDOWN, EVENT_SHUTDOWN, NULL, "Shutdown");
 
     // Inputbroker
-    powerFSM.add_transition(&stateLS, &stateON, EVENT_INPUT, t5BacklightOnFromUserInput, "Input Device");
-    powerFSM.add_transition(&stateNB, &stateON, EVENT_INPUT, t5BacklightOnFromUserInput, "Input Device");
-    powerFSM.add_transition(&stateDARK, &stateON, EVENT_INPUT, t5BacklightOnFromUserInput, "Input Device");
-    powerFSM.add_transition(&stateON, &stateON, EVENT_INPUT, t5BacklightOnFromUserInput,
+    powerFSM.add_transition(&stateLS, &stateON, EVENT_INPUT, screenOnFromUserInput, "Input Device");
+    powerFSM.add_transition(&stateNB, &stateON, EVENT_INPUT, screenOnFromUserInput, "Input Device");
+    powerFSM.add_transition(&stateDARK, &stateON, EVENT_INPUT, screenOnFromUserInput, "Input Device");
+    powerFSM.add_transition(&stateON, &stateON, EVENT_INPUT, screenOnFromUserInput,
                             "Input Device"); // restarts the sleep timer
-    powerFSM.add_transition(&statePOWER, &statePOWER, EVENT_INPUT, t5BacklightOnFromUserInput,
+    powerFSM.add_transition(&statePOWER, &statePOWER, EVENT_INPUT, screenOnFromUserInput,
                             "Input Device"); // restarts the sleep timer
+#ifdef MESHTASTIC_INCLUDE_INKHUD
+    powerFSM.add_transition(&stateSERIAL, &stateSERIAL, EVENT_INPUT, screenOnFromUserInput, "Input Device");
+#endif
 
     powerFSM.add_transition(&stateDARK, &stateON, EVENT_BLUETOOTH_PAIR, NULL, "Bluetooth pairing");
     powerFSM.add_transition(&stateON, &stateON, EVENT_BLUETOOTH_PAIR, NULL, "Bluetooth pairing");

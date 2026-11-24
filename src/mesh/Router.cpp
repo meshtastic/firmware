@@ -436,6 +436,10 @@ ErrorCode Router::sendLocal(meshtastic_MeshPacket *p, RxSource src)
         abortSendAndNak(meshtastic_Routing_Error_NO_INTERFACE, p);
 
         return ERRNO_NO_INTERFACES;
+    } else if (config.lora.transparent_mode) {
+        // Ahead of the loopback and the reliable/next-hop bookkeeping: none of it applies when nothing goes out.
+        packetPool.release(p);
+        return ERRNO_DISABLED;
     } else {
         // Coordinates never go out on the event channel: any local originator (phone, module, UI) that aimed
         // one there is moved onto the position channel instead. Before the loopback below so the local copy
@@ -481,6 +485,12 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
         return meshtastic_Routing_Error_BAD_REQUEST;
     } // should have already been handled by sendLocal
 
+    // In transparent mode the client owns the air: nothing generated on-device goes out.
+    if (config.lora.transparent_mode) {
+        packetPool.release(p);
+        return ERRNO_DISABLED;
+    }
+
     // Abort sending if we are violating the duty cycle
     float effectiveDutyCycle = getEffectiveDutyCycle();
     if (!config.lora.override_duty_cycle && effectiveDutyCycle < 100) {
@@ -495,6 +505,7 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
                 cn->has_reply_id = true;
                 cn->reply_id = p->id;
                 cn->level = meshtastic_LogRecord_Level_WARNING;
+                cn->type = meshtastic_ClientNotification_NotificationType_DUTY_CYCLE_LIMIT_EXCEEDED;
                 cn->time = getValidTime(RTCQualityFromNet);
                 snprintf(cn->message, sizeof(cn->message), "Duty cycle limit exceeded. You can send again in %d mins",
                          silentMinutes);
@@ -618,6 +629,27 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
 
     assert(iface); // This should have been detected already in sendLocal (or we just received a packet from outside)
     return iface->send(p);
+}
+
+ErrorCode Router::sendTransparent(meshtastic_MeshPacket *p)
+{
+    if (!iface) {
+        packetPool.release(p);
+        return ERRNO_NO_INTERFACES;
+    }
+    // No duty-cycle or channel-utilization check: airtime rules are the client's in this mode.
+    if (p->encrypted.size > MAX_RADIO_PAYLOAD_LEN) {
+        packetPool.release(p);
+        return meshtastic_Routing_Error_TOO_LARGE;
+    }
+
+    fixPriority(p); // queue ordering only; nothing on the air changes
+    ErrorCode res = iface->send(p);
+    if (res == ERRNO_SHOULD_RELEASE) { // the radio declined a no-LoRa destination without taking ownership
+        packetPool.release(p);
+        res = meshtastic_Routing_Error_BAD_REQUEST;
+    }
+    return res;
 }
 
 /** Attempt to cancel a previously sent packet.  Returns true if a packet was found we could cancel */
@@ -1683,6 +1715,17 @@ void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
         LOG_TRACE("%s", MeshPacketSerializer::JsonSerializeEncrypted(p).c_str());
     }
 #endif
+    // Transparent mode: hand every LoRa frame to the client untouched - no filtering, decryption, history,
+    // modules or relay. Non-LoRa ingress (MQTT, UDP) has no client to go to in this mode.
+    if (config.lora.transparent_mode) {
+        if (p->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA && service) {
+            service->handleTransparentFromRadio(p);
+        } else {
+            packetPool.release(p);
+        }
+        return;
+    }
+
     // assert(radioConfig.has_preferences);
     if (is_in_repeated(config.lora.ignore_incoming, p->from)) {
         clearRoutingAuthCache();
@@ -1744,6 +1787,15 @@ void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
     if (shouldFilterReceived(p)) {
         clearRoutingAuthCache();
         LOG_DEBUG("Incoming msg filtered from 0x%08x", p->from);
+        packetPool.release(p);
+        return;
+    }
+
+    // Echoes of packets we sent are in PacketHistory, so the filter above consumed them (implicit ACK,
+    // dupe). Our number on anything else is not new inbound traffic: keep it from modules and the phone.
+    if (isFromUs(p)) {
+        clearRoutingAuthCache();
+        LOG_DEBUG("Drop received packet 0x%08x with our own node number", p->id);
         packetPool.release(p);
         return;
     }

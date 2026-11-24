@@ -61,7 +61,7 @@ template <typename T> bool SX126xInterface<T>::init()
     loraFEMInterface.init();
     // Apply saved FEM LNA mode from config
     if (loraFEMInterface.isLnaCanControl()) {
-        loraFEMInterface.setLNAEnable(config.lora.fem_lna_mode != meshtastic_Config_LoRaConfig_FEM_LNA_Mode_DISABLED);
+        loraFEMInterface.setLnaMode(config.lora.fem_lna_mode);
     }
 #endif
 
@@ -205,8 +205,8 @@ template <typename T> bool SX126xInterface<T>::reinitChip()
     }
 
     if (res == RADIOLIB_ERR_NONE && tcxoVoltage > 0) {
-        // Standby and TX/RX fallback on STDBY_XOSC keep the TCXO powered: from STDBY_RC every SetRx and SetTx
-        // first waits out the TCXO start-up delay (5 ms by RadioLib's default).
+        // Standby and TX/RX fallback on STDBY_XOSC keep the TCXO powered
+        // to avoid the TCXO startup time on each TX/RX transition.
         const int16_t xoscRes = lora.setStandbyXOSC(true);
         LOG_DEBUG("Keep TCXO on in standby, result: %d", xoscRes);
     }
@@ -488,6 +488,9 @@ template <typename T> void SX126xInterface<T>::addReceiveMetadata(meshtastic_Mes
     // LOG_DEBUG("PacketStatus %x", lora.getPacketStatus());
     mp->rx_snr = lora.getSNR();
     mp->rx_rssi = lround(lora.getRSSI());
+#if HAS_LORA_FEM
+    mp->rx_rssi -= loraFEMInterface.getRxLnaGainDb();
+#endif
     mp->has_rx_rssi = true; // rx_rssi has explicit presence - a genuine reading must be marked present to survive encoding
     LOG_TRACE("Corrected frequency offset: %f", lora.getFrequencyError());
 }

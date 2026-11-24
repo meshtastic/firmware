@@ -130,6 +130,7 @@ class Applet : public GFX
 
     virtual class MapApplet *asMapApplet() { return nullptr; } // Returns non-null only for MapApplet and its subclasses
     virtual class WaypointListApplet *asWaypointListApplet() { return nullptr; } // Returns non-null only for WaypointListApplet
+    virtual class StepsApplet *asStepsApplet() { return nullptr; }
 
     static uint16_t getHeaderHeight(); // How tall the "standard" applet header is
 
@@ -170,7 +171,8 @@ class Applet : public GFX
     void printWrapped(int16_t left, int16_t top, uint16_t width, const std::string &text); // Per-word line wrapping
 
     void hatchRegion(int16_t x, int16_t y, uint16_t w, uint16_t h, uint8_t spacing, Color color); // Fill with sparse lines
-    void drawHeader(const std::string &text); // Draw the standard applet header
+    void drawHeader(const std::string &text);                   // Draw the standard applet header
+    void drawScrollHints(bool canScrollUp, bool canScrollDown); // Small arrows at the right edge, if there is more to see
 
     // Meshtastic Logo
 

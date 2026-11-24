@@ -2,6 +2,7 @@
 
 #include "configuration.h"
 #include <PCA9557.h>
+#include <driver/rtc_io.h>
 
 PCA9557 io(0x18, &Wire1);
 
@@ -39,9 +40,17 @@ static void powerUpAg3352()
 }
 #endif
 
+static constexpr gpio_num_t M5_GPS_RTC_PADS[] = {(gpio_num_t)PIN_GPS_0V8_EN, (gpio_num_t)GPS_RTC_INT, (gpio_num_t)PIN_GPS_REINIT,
+                                                 GPIO_NUM_19, GPIO_NUM_20};
+
 // No LOG_* here: runs before consoleInit().
 void earlyInitVariant()
 {
+    // Undo variant_shutdown()'s isolation now: initDeepSleep() only releases holds after this runs.
+    for (gpio_num_t pin : M5_GPS_RTC_PADS) {
+        rtc_gpio_hold_dis(pin);
+        rtc_gpio_deinit(pin);
+    }
     Wire1.begin(48, 47);
     io.pinMode(PCA_PIN_EINK_EN, OUTPUT);
     io.pinMode(PCA_PIN_POWER_EN, OUTPUT);
@@ -90,6 +99,11 @@ void variant_shutdown()
     if (m5HasAg3352) {
         digitalWrite(GPS_RTC_INT, LOW);
         digitalWrite(PIN_GPS_0V8_EN, LOW);
+        // RTC pads stay powered in deep sleep; a driven line back-powers the GPS VIO and wedges the AG3352.
+        for (gpio_num_t pin : M5_GPS_RTC_PADS)
+            if (pin != (gpio_num_t)PIN_GPS_0V8_EN)
+                rtc_gpio_isolate(pin);
+        rtc_gpio_hold_en((gpio_num_t)PIN_GPS_0V8_EN);
     }
 #endif
     io.digitalWrite(PCA_PIN_POWER_EN, LOW);
