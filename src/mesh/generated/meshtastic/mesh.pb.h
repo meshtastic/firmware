@@ -360,6 +360,8 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_HELTEC_MESH_POCKET_V2 = 152,
     /* Meshnology W15 */
     meshtastic_HardwareModel_MESHNOLOGY_W15 = 153,
+    /* M5Stack SolarNode */
+    meshtastic_HardwareModel_M5STACK_SOLAR_NODE = 154,
     /* A virtual node: a phone or desktop app acting as a mesh node of its own, with no radio hardware of its own */
     meshtastic_HardwareModel_VIRTUAL_NODE = 254,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
