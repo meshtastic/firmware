@@ -24,6 +24,14 @@ class SerialConsole : public StreamAPI, public RedirectablePrint, private concur
      */
     virtual bool handleToRadio(const uint8_t *buf, size_t len) override;
 
+#if HAS_SERIAL_HAL_DEVICE
+    /// A SerialHal frame is host traffic too: arm the TX path (canWrite + host-draining)
+    /// before dispatching. canWrite is otherwise only ever set true by handleToRadio(),
+    /// so a pure serial-hal host (which never sends a ToRadio frame) would have every
+    /// emitSerialHalResponse() dropped and only ever see a timeout.
+    virtual void handleSerialHalCommand(const uint8_t *buf, size_t len) override;
+#endif
+
     /// Write a raw console byte unless the stream is in protobuf mode.
     virtual size_t write(uint8_t c) override;
 

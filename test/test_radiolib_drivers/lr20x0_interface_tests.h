@@ -14,6 +14,7 @@
 #include "mesh/LR2021Interface.h"
 #include "mesh/MeshRadio.h"
 #include "mesh/NodeDB.h"
+#include "platform/portduino/PortduinoGlue.h"
 
 // A LockingArduinoHal, as the interface requires, that forwards everything to the suite's RecordingHal.
 // spiBeginTransaction() skips the base class, which takes spiLock: nothing here shares the bus.
@@ -131,6 +132,38 @@ static void test_lr20x0_launchTransmit_reports_a_refused_settx()
     TEST_ASSERT_EQUAL_UINT32(1, hal.count(op16(RADIOLIB_LR2021_CMD_SET_TX)));
 }
 
+// RadioLibInterface::randomBytes() (src/mesh/RadioLibInterface.cpp) behind the serial HAL (Lora.spidev:
+// serial). Each byte is four GetRandomNumber commands, and behind the HAL each command is several serial
+// round trips, so PKI key generation on a fresh host stalled for minutes. randomBytes() must decline
+// without touching the chip; HardwareRNG::fill() has already filled the buffer from the host OS RNG.
+// The control keeps that zero meaningful: on any other spidev the same call does reach the modem.
+static void test_randomBytes_declines_behind_the_serial_hal()
+{
+    RecordingHal &hal = freshHal();
+    auto &iface = lr20x0Interface(hal);
+    const std::string savedSpiDev = portduino_config.lora_spi_dev;
+    portduino_config.lora_spi_dev = "serial";
+    uint8_t buf[32] = {};
+    const bool produced = iface.randomBytes(buf, sizeof(buf));
+    const size_t randomCommands = hal.count(op16(RADIOLIB_LR2021_CMD_GET_RANDOM_NUMBER));
+    portduino_config.lora_spi_dev = savedSpiDev; // before asserting: a failure longjmps past this line
+    TEST_ASSERT_FALSE_MESSAGE(produced, "randomBytes() reported modem entropy behind the serial HAL");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, randomCommands, "randomBytes() queried the chip behind the serial HAL");
+}
+
+static void test_randomBytes_reads_the_modem_on_other_spidevs()
+{
+    RecordingHal &hal = freshHal();
+    auto &iface = lr20x0Interface(hal);
+    const std::string savedSpiDev = portduino_config.lora_spi_dev;
+    portduino_config.lora_spi_dev = "/dev/spidev0.0";
+    uint8_t buf[1] = {};
+    (void)iface.randomBytes(buf, sizeof(buf));
+    const size_t randomCommands = hal.count(op16(RADIOLIB_LR2021_CMD_GET_RANDOM_NUMBER));
+    portduino_config.lora_spi_dev = savedSpiDev;
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(4, randomCommands, "one random byte is four GetRandomNumber commands");
+}
+
 // Grows here:
 //   a scan that returns an error (-706, -707, -705) must not read as a free channel. Today every
 //   driver's isChannelActive() returns false on it; which verdict replaces that is undecided.
@@ -141,4 +174,6 @@ static void runLr20x0InterfaceTests()
     RUN_TEST(test_lr20x0_isChannelActive_reports_a_detected_preamble_busy);
     RUN_TEST(test_lr20x0_isChannelActive_reports_cad_done_free);
     RUN_TEST(test_lr20x0_launchTransmit_reports_a_refused_settx);
+    RUN_TEST(test_randomBytes_declines_behind_the_serial_hal);
+    RUN_TEST(test_randomBytes_reads_the_modem_on_other_spidevs);
 }
