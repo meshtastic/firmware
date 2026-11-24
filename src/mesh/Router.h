@@ -170,7 +170,8 @@ class Router : protected concurrency::OSThread, protected PacketHistory
      * Returns false (preserve hop_limit) only if all conditions are met:
      * - It's NOT the first hop (first hop must always decrement)
      * - Local device is a ROUTER, ROUTER_LATE, or CLIENT_BASE
-     * - Previous relay is a favorite ROUTER, ROUTER_LATE, or CLIENT_BASE
+     * - At least one favorite ROUTER, ROUTER_LATE, or CLIENT_BASE has relay_node as its last byte
+     * - No other node with that last byte has been heard directly within NEXTHOP_NEIGHBOR_FRESH_SECS
      *
      * @param p The packet being relayed
      * @return true if hop_limit should be decremented, false to preserve it

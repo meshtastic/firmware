@@ -252,6 +252,13 @@ Router::Router() : concurrency::OSThread("Router"), fromRadioQueue(MAX_RX_FROMRA
     routingAuthCache.policy = meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_BALANCED;
 }
 
+static bool isFavoriteRouter(const meshtastic_NodeInfoLite *node)
+{
+    return nodeInfoLiteIsFavorite(node) && nodeInfoLiteHasUser(node) &&
+           IS_ONE_OF(node->role, meshtastic_Config_DeviceConfig_Role_ROUTER, meshtastic_Config_DeviceConfig_Role_ROUTER_LATE,
+                     meshtastic_Config_DeviceConfig_Role_CLIENT_BASE);
+}
+
 bool Router::shouldDecrementHopLimit(const meshtastic_MeshPacket *p)
 {
     // First hop MUST always decrement to prevent retry issues
@@ -276,25 +283,21 @@ bool Router::shouldDecrementHopLimit(const meshtastic_MeshPacket *p)
     //         moduleConfig.traffic_management.router_preserve_hops && ...) { ... }
     // #endif
 
-    // For subsequent hops, preserve hop_limit only when the previous relay is UNAMBIGUOUSLY a favorite
-    // router. The relay_node byte is just the last byte of a 32-bit node number, so on a dense mesh it
-    // collides; the old "first matching node wins" scan could preserve hops for the wrong node
-    // (non-deterministic, depends on NodeDB order). resolveLastByte() reports a collision instead, and
-    // we re-check the favorite/router predicate on the single resolved node. On ambiguity/none we
-    // decrement (the safe default).
-    NodeNum resolved = 0;
-    if (nodeDB->resolveUniqueLastByte(p->relay_node, /*requireDirectNeighbor=*/false, &resolved)) {
-        const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(resolved);
-        if (node && nodeInfoLiteIsFavorite(node) && nodeInfoLiteHasUser(node) &&
-            IS_ONE_OF(node->role, meshtastic_Config_DeviceConfig_Role_ROUTER, meshtastic_Config_DeviceConfig_Role_ROUTER_LATE,
-                      meshtastic_Config_DeviceConfig_Role_CLIENT_BASE)) {
-            LOG_DEBUG("Unique favorite relay router 0x%08x from last byte 0x%x", resolved, p->relay_node);
-            return false; // Don't decrement hop_limit
-        }
+    // relay_node is one byte, so it can name several nodes. Preserve only if every node it could name
+    // is a favorite router; other nodes count only if heard directly within NEXTHOP_NEIGHBOR_FRESH_SECS.
+    const NodeNum self = nodeDB->getNodeNum();
+    bool sawFavoriteRouter = false;
+    for (size_t i = 0; i < nodeDB->getNumMeshNodes(); i++) {
+        const meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(i);
+        if (node->num == self || node->num == 0 || node->num == NODENUM_BROADCAST || nodeInfoLiteIsIgnored(node) ||
+            nodeDB->getLastByteOfNodeNum(node->num) != p->relay_node)
+            continue;
+        if (isFavoriteRouter(node))
+            sawFavoriteRouter = true;
+        else if (node->has_hops_away && node->hops_away == 0 && sinceLastSeen(node) < NEXTHOP_NEIGHBOR_FRESH_SECS)
+            return true;
     }
-
-    // No unambiguous favorite router match found, decrement hop_limit
-    return true;
+    return !sawFavoriteRouter;
 }
 
 /**

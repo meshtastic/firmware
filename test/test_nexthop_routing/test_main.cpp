@@ -3,6 +3,23 @@
 //   M2 - NextHopRouter::getNextHop strict-neighbor gate + Router::shouldDecrementHopLimit favorite check
 //   M3 - NextHopRouter route-health freshness / failure decay
 //
+// Router::shouldDecrementHopLimit (src/mesh/Router.cpp) - the free hop between favorite routers.
+// relay_node is only the last byte of the previous relay's node number, so it can name several
+// NodeDB entries. The contract: preserve hop_limit only when at least one favorite router carries
+// the byte AND no other node carrying it could have been the relay. A node "could have been the
+// relay" only if it was heard directly (hops_away == 0) within NEXTHOP_NEIGHBOR_FRESH_SECS - the
+// relay is by definition a node we just heard over the air. Favorite routers themselves count at
+// any distance or age, because a marginal link flips their hops_away between 0 and 1.
+// Regressions guarded:
+//   - two favorite routers sharing a byte must not cancel each other's free hop (the outcome is
+//     the same whichever relayed, so ambiguity between them is harmless);
+//   - a far-away router, a far-away favorite client, or a neighbor not heard for hours sharing the
+//     byte must not cancel the free hop (they cannot be the relay; on a large mesh such collisions
+//     are common and silently disabled the feature);
+//   - a fresh direct non-favorite neighbor sharing the byte MUST still force a decrement - it may
+//     really be the relay, and granting it a free hop would let any client extend floods for free;
+//   - the result must not depend on NodeDB order (each collision case is checked in both orders).
+//
 // Time handling: the route-health helpers take `now` as a parameter so the 30-minute TTL logic is
 // pure and testable without a clock mock. getNextHop()/sinceLastSeen() use the real native clock;
 // we back-date timestamps relative to it, and the unsigned-subtraction age math is rollover-safe.
@@ -709,15 +726,113 @@ void test_hoplimit_preserve_unique_favorite_router(void)
     TEST_ASSERT_FALSE(shim->shouldDecrementHopLimit(&p)); // preserve
 }
 
-void test_hoplimit_decrement_on_colliding_favorites(void)
+void test_hoplimit_preserve_on_colliding_favorites(void)
 {
-    // Headline regression: two favorite routers share the relay byte -> ambiguous -> decrement
-    // (the old "first NodeDB match wins" scan would non-deterministically preserve).
+    // Both candidates earn the free hop, so preserving is correct whichever one relayed.
     config.device.role = meshtastic_Config_DeviceConfig_Role_ROUTER;
     mockNodeDB->addNode(0x000007AB, 0, true, 60, meshtastic_Config_DeviceConfig_Role_ROUTER, /*favorite=*/true);
-    mockNodeDB->addNode(0x000008AB, 0, true, 60, meshtastic_Config_DeviceConfig_Role_ROUTER, /*favorite=*/true);
+    mockNodeDB->addNode(0x000008AB, 0, true, 60, meshtastic_Config_DeviceConfig_Role_CLIENT_BASE, /*favorite=*/true);
     meshtastic_MeshPacket p = makeRelayedPacket(0xAB, 1);
-    TEST_ASSERT_TRUE(shim->shouldDecrementHopLimit(&p)); // decrement
+    TEST_ASSERT_FALSE(shim->shouldDecrementHopLimit(&p)); // preserve
+}
+
+// Adds the favorite router 0x000007AB and a colliding node 0x000008AB, in either NodeDB order.
+static void addFavoriteRouterAndCollider(bool colliderFirst, uint8_t hopsAway, bool hasHops, uint32_t ageSecs,
+                                         meshtastic_Config_DeviceConfig_Role role, bool favorite = false, bool ignored = false)
+{
+    if (!colliderFirst)
+        mockNodeDB->addNode(0x000007AB, 0, true, 60, meshtastic_Config_DeviceConfig_Role_ROUTER, /*favorite=*/true);
+    mockNodeDB->addNode(0x000008AB, hopsAway, hasHops, ageSecs, role, favorite, ignored);
+    if (colliderFirst)
+        mockNodeDB->addNode(0x000007AB, 0, true, 60, meshtastic_Config_DeviceConfig_Role_ROUTER, /*favorite=*/true);
+}
+
+static void assertHopLimitWithCollider(bool expectDecrement, uint8_t hopsAway, bool hasHops, uint32_t ageSecs,
+                                       meshtastic_Config_DeviceConfig_Role role, bool favorite = false, bool ignored = false)
+{
+    config.device.role = meshtastic_Config_DeviceConfig_Role_ROUTER;
+    for (bool colliderFirst : {false, true}) {
+        mockNodeDB->clearTestNodes();
+        addFavoriteRouterAndCollider(colliderFirst, hopsAway, hasHops, ageSecs, role, favorite, ignored);
+        meshtastic_MeshPacket p = makeRelayedPacket(0xAB, 1);
+        TEST_ASSERT_EQUAL_MESSAGE(expectDecrement, shim->shouldDecrementHopLimit(&p),
+                                  colliderFirst ? "collider before favorite in NodeDB" : "favorite before collider in NodeDB");
+    }
+}
+
+void test_hoplimit_preserve_when_collider_is_distant_router(void)
+{
+    // A non-favorite router 3 hops away cannot be the node we just heard.
+    assertHopLimitWithCollider(false, 3, true, 60, meshtastic_Config_DeviceConfig_Role_ROUTER);
+}
+
+void test_hoplimit_preserve_when_collider_is_distant_favorite_client(void)
+{
+    // Favorite but not a router role: it would not earn the free hop, and at 2 hops it cannot be the relay.
+    assertHopLimitWithCollider(false, 2, true, 60, meshtastic_Config_DeviceConfig_Role_CLIENT, /*favorite=*/true);
+}
+
+void test_hoplimit_preserve_when_collider_is_stale_neighbor(void)
+{
+    // Heard directly, but 3 h ago - past NEXTHOP_NEIGHBOR_FRESH_SECS (2 h).
+    assertHopLimitWithCollider(false, 0, true, 3 * 60 * 60, meshtastic_Config_DeviceConfig_Role_CLIENT);
+}
+
+void test_hoplimit_preserve_when_collider_has_unknown_distance(void)
+{
+    // No hops_away recorded: nothing says it is in radio range, so it is not a candidate.
+    assertHopLimitWithCollider(false, 0, false, 60, meshtastic_Config_DeviceConfig_Role_CLIENT);
+}
+
+void test_hoplimit_preserve_when_collider_is_ignored(void)
+{
+    assertHopLimitWithCollider(false, 0, true, 60, meshtastic_Config_DeviceConfig_Role_CLIENT, false, /*ignored=*/true);
+}
+
+void test_hoplimit_decrement_when_collider_is_fresh_neighbor(void)
+{
+    // A client heard directly 1 min ago may really be the relay: no free hop.
+    assertHopLimitWithCollider(true, 0, true, 60, meshtastic_Config_DeviceConfig_Role_CLIENT);
+}
+
+void test_hoplimit_decrement_when_collider_is_fresh_nonfavorite_router(void)
+{
+    // Router role alone does not qualify; it must also be a favorite.
+    assertHopLimitWithCollider(true, 0, true, 60, meshtastic_Config_DeviceConfig_Role_ROUTER);
+}
+
+void test_hoplimit_decrement_when_fresh_neighbor_boundary(void)
+{
+    // Just inside the freshness window still counts as a possible relay.
+    assertHopLimitWithCollider(true, 0, true, NEXTHOP_NEIGHBOR_FRESH_SECS - 60, meshtastic_Config_DeviceConfig_Role_CLIENT);
+}
+
+void test_hoplimit_preserve_distant_favorite_router(void)
+{
+    // The favorite router itself counts at any recorded distance (hops_away flips on marginal links).
+    config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT_BASE;
+    mockNodeDB->addNode(0x000007AB, 2, true, 60, meshtastic_Config_DeviceConfig_Role_ROUTER_LATE, /*favorite=*/true);
+    meshtastic_MeshPacket p = makeRelayedPacket(0xAB, 1);
+    TEST_ASSERT_FALSE(shim->shouldDecrementHopLimit(&p));
+}
+
+void test_hoplimit_decrement_when_no_node_matches(void)
+{
+    config.device.role = meshtastic_Config_DeviceConfig_Role_ROUTER;
+    mockNodeDB->addNode(0x000007AB, 0, true, 60, meshtastic_Config_DeviceConfig_Role_ROUTER, /*favorite=*/true);
+    meshtastic_MeshPacket p = makeRelayedPacket(0xCD, 1);
+    TEST_ASSERT_TRUE(shim->shouldDecrementHopLimit(&p));
+}
+
+void test_hoplimit_decrement_on_first_hop_and_for_non_router(void)
+{
+    mockNodeDB->addNode(0x000007AB, 0, true, 60, meshtastic_Config_DeviceConfig_Role_ROUTER, /*favorite=*/true);
+    config.device.role = meshtastic_Config_DeviceConfig_Role_ROUTER;
+    meshtastic_MeshPacket first = makeRelayedPacket(0xAB, 0);
+    TEST_ASSERT_TRUE(shim->shouldDecrementHopLimit(&first)); // first hop always decrements
+    config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
+    meshtastic_MeshPacket later = makeRelayedPacket(0xAB, 1);
+    TEST_ASSERT_TRUE(shim->shouldDecrementHopLimit(&later)); // local node is not a router
 }
 
 void test_hoplimit_decrement_when_resolved_not_favorite(void)
@@ -1123,8 +1238,19 @@ void setup()
 
     printf("\n=== shouldDecrementHopLimit (M2 site 4) ===\n");
     RUN_TEST(test_hoplimit_preserve_unique_favorite_router);
-    RUN_TEST(test_hoplimit_decrement_on_colliding_favorites);
+    RUN_TEST(test_hoplimit_preserve_on_colliding_favorites);
     RUN_TEST(test_hoplimit_decrement_when_resolved_not_favorite);
+    RUN_TEST(test_hoplimit_preserve_when_collider_is_distant_router);
+    RUN_TEST(test_hoplimit_preserve_when_collider_is_distant_favorite_client);
+    RUN_TEST(test_hoplimit_preserve_when_collider_is_stale_neighbor);
+    RUN_TEST(test_hoplimit_preserve_when_collider_has_unknown_distance);
+    RUN_TEST(test_hoplimit_preserve_when_collider_is_ignored);
+    RUN_TEST(test_hoplimit_decrement_when_collider_is_fresh_neighbor);
+    RUN_TEST(test_hoplimit_decrement_when_collider_is_fresh_nonfavorite_router);
+    RUN_TEST(test_hoplimit_decrement_when_fresh_neighbor_boundary);
+    RUN_TEST(test_hoplimit_preserve_distant_favorite_router);
+    RUN_TEST(test_hoplimit_decrement_when_no_node_matches);
+    RUN_TEST(test_hoplimit_decrement_on_first_hop_and_for_non_router);
 
     printf("\n=== event-coordinate routing behavior ===\n");
     RUN_TEST(test_eventPolicy_reliableOriginSendSuppressesTxAndPending);
