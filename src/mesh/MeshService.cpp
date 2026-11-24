@@ -165,6 +165,7 @@ void MeshService::awaitAckBeforeRadioConfig(PacketId id, uint32_t retryMsec)
     radioConfigAwaitedReplySeen = false;
     radioConfigAwaitedRetryMsec = retryMsec;
     radioConfigRetrySentAtMs = 0;
+    radioConfigReplyLeftQueue = false;
     radioConfigRetryQueuedSeen = false;
 }
 
@@ -182,12 +183,16 @@ void MeshService::applyDeferredRadioConfig()
         radioConfigAwaitedReplySeen |= pending;
         ready = !pending && (radioConfigAwaitedReplySeen || doPreflightSleep(true));
         // Other traffic pushes the retry's deadline back, so follow the router rather than predict it. The count drops
-        // when a retry is due, queued or not (allocation can fail): a retry is out once seen in the TX queue and gone.
-        if (pending && retries > 0 && !radioConfigRetrySentAtMs) {
-            if (router->findInTxQueue(nodeDB->getNodeNum(), radioConfigAwaitsAckOf))
+        // when a retry is due, queued or not (allocation can fail), and a retry shares the original's id in the TX
+        // queue: a retry is out once seen queued after the original left, and gone again.
+        if (pending && !radioConfigRetrySentAtMs) {
+            if (!router->findInTxQueue(nodeDB->getNodeNum(), radioConfigAwaitsAckOf)) {
+                if (radioConfigRetryQueuedSeen)
+                    radioConfigRetrySentAtMs = Time::skipZero(Time::getMillis());
+                radioConfigReplyLeftQueue = true;
+            } else if (radioConfigReplyLeftQueue && retries > 0) {
                 radioConfigRetryQueuedSeen = true;
-            else if (radioConfigRetryQueuedSeen)
-                radioConfigRetrySentAtMs = Time::skipZero(Time::getMillis());
+            }
         }
         holdForRetry = pending && (!radioConfigRetrySentAtMs ||
                                    Throttle::isWithinTimespanMs(radioConfigRetrySentAtMs, radioConfigAwaitedRetryMsec));
@@ -209,6 +214,7 @@ void MeshService::applyRadioConfig()
     radioConfigDeferred = false;
     radioConfigAwaitsAckOf = 0;
     radioConfigRetrySentAtMs = 0;
+    radioConfigReplyLeftQueue = false;
     radioConfigRetryQueuedSeen = false;
 
     // This will also update the region as needed
