@@ -981,6 +981,10 @@ bool Power::setup()
     bool found = false;
     if (axpChipInit()) {
         found = true;
+#if !MESHTASTIC_EXCLUDE_I2C && HAS_CW2217
+    } else if (cw2217Init()) {
+        found = true;
+#endif
     } else if (cw2015Init()) {
         found = true;
     } else if (max17048Init()) {
@@ -2013,6 +2017,159 @@ bool Power::cw2015Init()
     return false;
 }
 #endif
+
+#if !MESHTASTIC_EXCLUDE_I2C && HAS_CW2217
+
+class CW2217BatteryLevel : public AnalogBatteryLevel
+{
+  public:
+    bool init()
+    {
+        if (readRegister(cw2217Address, chipIdRegister) == 0xa0)
+            return true;
+#if HAS_IP5356
+        return readRegister(ip5356Address, systemStateRegister) >= 0;
+#else
+        return false;
+#endif
+    }
+
+    int getBatteryPercent() override
+    {
+        updateSample();
+        return batteryPercent >= 0 ? batteryPercent : AnalogBatteryLevel::getBatteryPercent();
+    }
+
+    uint16_t getBattVoltage() override
+    {
+        updateSample();
+        return batteryMillivolts;
+    }
+
+    bool isBatteryConnect() override { return getBattVoltage() != 0; }
+
+#if HAS_IP5356
+    bool isVbusIn() override
+    {
+        updateSample();
+        return externalPower;
+    }
+
+    bool isCharging() override
+    {
+        updateSample();
+        return charging;
+    }
+#endif
+
+  private:
+    static constexpr uint8_t cw2217Address = 0x64;
+    static constexpr uint8_t chipIdRegister = 0x00;
+    static constexpr uint8_t cellVoltageRegister = 0x02;
+    static constexpr uint8_t stateRegister = 0xa7;
+    static constexpr uint16_t maximumCellMillivolts = 4500;
+    static constexpr uint32_t sampleIntervalMillis = 5000;
+#if HAS_IP5356
+    static constexpr uint8_t ip5356Address = 0x75;
+    static constexpr uint8_t systemStateRegister = 0xc4;
+    bool externalPower = false;
+    bool charging = false;
+#endif
+    bool sampled = false;
+    uint32_t lastSampleMillis = 0;
+    uint16_t batteryMillivolts = 0;
+    int batteryPercent = -1;
+
+    void updateSample()
+    {
+        if (sampled && Throttle::isWithinTimespanMs(lastSampleMillis, sampleIntervalMillis))
+            return;
+        sampled = true;
+        lastSampleMillis = Time::getMillis();
+        batteryMillivolts = 0;
+        batteryPercent = -1;
+
+        uint8_t cell[3];
+        if (readRegisters(cw2217Address, cellVoltageRegister, cell, sizeof(cell))) {
+            // The 14-bit cell-voltage reading has 312.5 µV resolution.
+            const uint16_t raw = ((cell[0] & 0x3f) << 8) | cell[1];
+            const uint16_t millivolts = (raw * 5 + 8) / 16;
+            if (millivolts >= 2000 && millivolts <= maximumCellMillivolts) {
+                batteryMillivolts = millivolts;
+                const int state = readRegister(cw2217Address, stateRegister);
+                if (state >= 0 && (state & 0x0c) == 0x0c && cell[2] <= 100)
+                    batteryPercent = cell[2];
+            }
+        }
+
+#if HAS_IP5356
+        updateChargerSample();
+#endif
+        if (!batteryMillivolts) {
+            const uint16_t millivolts = AnalogBatteryLevel::getBattVoltage();
+            if (millivolts >= 2000 && millivolts <= maximumCellMillivolts)
+                batteryMillivolts = millivolts;
+        }
+    }
+
+#if HAS_IP5356
+    void updateChargerSample()
+    {
+        externalPower = false;
+        charging = false;
+        const int state = readRegister(ip5356Address, systemStateRegister);
+        if (state < 0)
+            return;
+
+        externalPower = (state & 0x80) != 0;
+        if (!externalPower && (state & 0x10) != 0) {
+            const int status = readRegister(ip5356Address, 0xd0);
+            externalPower = status >= 0 && (status & 0x80) != 0;
+        }
+        const int chargeStatus = readRegister(ip5356Address, 0xe9);
+        charging = chargeStatus >= 0 && (chargeStatus & 0x08) != 0;
+
+        if (!batteryMillivolts) {
+            const int low = readRegister(ip5356Address, 0x50);
+            const int high = low < 0 ? -1 : readRegister(ip5356Address, 0x51);
+            if (high >= 0) {
+                // The sleeping charger may report a false low voltage.
+                const int millivolts = (((high << 8) | low) * 26855 + 50000) / 100000;
+                if (millivolts >= 2500 && millivolts <= maximumCellMillivolts)
+                    batteryMillivolts = millivolts;
+            }
+        }
+    }
+#endif
+
+    static bool readRegisters(uint8_t address, uint8_t reg, uint8_t *buffer, size_t len)
+    {
+        Wire.beginTransmission(address);
+        Wire.write(reg);
+        if (Wire.endTransmission(false) != 0 || Wire.requestFrom(address, len) != len)
+            return false;
+        return Wire.readBytes(buffer, len) == len;
+    }
+
+    static int readRegister(uint8_t address, uint8_t reg)
+    {
+        uint8_t value;
+        return readRegisters(address, reg, &value, sizeof(value)) ? value : -1;
+    }
+};
+
+bool Power::cw2217Init()
+{
+    static CW2217BatteryLevel gauge;
+    if (!gauge.init())
+        return false;
+
+    batteryLevel = &gauge;
+    LOG_INFO("CW2217/IP5356 battery monitoring enabled");
+    return true;
+}
+
+#endif // HAS_CW2217
 
 #if defined(HAS_PPM) && HAS_PPM
 

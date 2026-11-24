@@ -5,6 +5,10 @@
 #include "GxEPD2_BW.h"
 #include <OLEDDisplay.h>
 
+#ifdef MESHNOLOGY_W20
+#include "W20EInkPanel.h"
+#endif
+
 #ifdef GXEPD2_DRIVER_0 // If variant has multiple possible display models
 #include "GxEPD2Multi.h"
 #endif

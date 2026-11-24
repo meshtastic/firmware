@@ -257,6 +257,16 @@ bool EInkDisplay::connect()
         adafruitDisplay->setRotation(0);
         adafruitDisplay->setPartialWindow(0, 0, EINK_WIDTH, EINK_HEIGHT);
     }
+#elif defined(MESHNOLOGY_W20)
+    static SPIClass displaySpi(HSPI);
+    displaySpi.begin(PIN_EINK_SCLK, -1, PIN_EINK_MOSI, PIN_EINK_CS);
+    adafruitDisplay = new GxEPD2_BW<EINK_DISPLAY_MODEL, EINK_DISPLAY_MODEL::HEIGHT>(
+        EINK_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY));
+    adafruitDisplay->init(0, true, 40, false, displaySpi, SPISettings(4000000, MSBFIRST, SPI_MODE0));
+    // A rotated horizontal mirror flips only the panel's Y axis, matching the touch coordinates.
+    adafruitDisplay->setRotation(2);
+    adafruitDisplay->mirror(true);
+    adafruitDisplay->setFullWindow();
 #elif defined(M5_COREINK) || defined(T_DECK_PRO)
     // GxEPD2_BW stores a copy of the driver, so pass a temporary instead of leaking a heap object
     adafruitDisplay = new GxEPD2_BW<EINK_DISPLAY_MODEL, EINK_DISPLAY_MODEL::HEIGHT>(

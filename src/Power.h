@@ -123,6 +123,9 @@ class Power : public concurrency::OSThread
     bool analogInit();
     /// Setup cw2015 battery level sensor
     bool cw2015Init();
+#if !MESHTASTIC_EXCLUDE_I2C && HAS_CW2217
+    bool cw2217Init();
+#endif
     /// Setup a 17048 battery level sensor
     bool max17048Init();
     /// Setup a Lipo charger
