@@ -132,6 +132,8 @@ constexpr uint8_t AIROHA_SLEEP_ATTEMPTS = 2;
 #endif
 // Stop parking a receiver that never acks, rather than blocking for the budget every cycle forever.
 constexpr uint8_t AIROHA_SLEEP_MAX_MISSES = 3;
+// The ack can precede the transition itself, so give the receiver time before its core supply goes.
+constexpr uint32_t AIROHA_SLEEP_SETTLE_MS = 50;
 #endif
 #ifdef HAS_AIROHA_SOFT_RTC
 constexpr uint32_t AIROHA_POWER_SETTLE_MS = 50;
@@ -139,8 +141,6 @@ constexpr uint32_t AIROHA_RTC_INT_PULSE_MS = 3;
 constexpr uint32_t AIROHA_WAKE_SETTLE_MS = 50;
 #elif defined(HAS_AIROHA_SLEEP)
 constexpr uint32_t AIROHA_IDLE_INT_LEAD_MS = 50;
-// The ack can precede the transition itself, so give the receiver time before its core supply goes.
-constexpr uint32_t AIROHA_SLEEP_SETTLE_MS = 50;
 #endif
 #ifdef HAS_AIROHA_RESET_WAKE
 constexpr uint32_t AIROHA_POWER_SETTLE_MS = 50;
@@ -1569,6 +1569,7 @@ void GPS::airohaEnterSleep()
         _serial_gps->write(sleepCmd);
         if (getACK(sleepAck, AIROHA_SLEEP_ACK_MS) == GNSS_RESPONSE_OK) {
             airohaSleepMisses = 0;
+            delay(AIROHA_SLEEP_SETTLE_MS);
             return;
         }
         // Only start another attempt while a whole ack window still fits inside the budget.
@@ -1703,6 +1704,18 @@ bool shouldArmFixHold(bool hasValidLocation, uint8_t prevFixQual, uint32_t fixHo
 {
     // First lock of a cycle, first lock after the receiver was off, or nothing holding right now.
     return !hasValidLocation || prevFixQual == 0 || !fixHoldInForce(fixHoldEnds, threadIntervalMs);
+}
+
+/// TinyGPS++ commits a GGA field only when the sentence carried it and keeps the last one after that, so a field is
+/// present only while its last commit is younger than maxAgeMs. No header: test_gps_altitude declares the prototype.
+void setGgaAltitude(meshtastic_Position &p, TinyGPSAltitude &altitude, TinyGPSAltitude &geoid, uint32_t maxAgeMs)
+{
+    p.has_altitude = altitude.age() < maxAgeMs;
+    p.has_altitude_hae = p.has_altitude;
+    p.has_altitude_geoidal_separation = geoid.age() < maxAgeMs;
+    p.altitude_geoidal_separation = geoid.meters();
+    p.altitude_hae = altitude.meters() + p.altitude_geoidal_separation;
+    p.altitude = altitude.meters();
 }
 
 int32_t GPS::runOnce()
@@ -2482,9 +2495,7 @@ bool GPS::lookForLocation()
     p.latitude_i = toDegInt(loc.lat);
     p.longitude_i = toDegInt(loc.lng);
 
-    p.altitude_geoidal_separation = reader.geoidHeight.meters();
-    p.altitude_hae = reader.altitude.meters() + p.altitude_geoidal_separation;
-    p.altitude = reader.altitude.meters();
+    setGgaAltitude(p, reader.altitude, reader.geoidHeight, GPS_SOL_EXPIRY_MS);
 
     p.fix_quality = fixQual;
 #ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS

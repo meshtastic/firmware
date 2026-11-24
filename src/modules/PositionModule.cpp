@@ -235,20 +235,7 @@ meshtastic_MeshPacket *PositionModule::allocPositionPacket(uint32_t atPrecision)
         p.location_source = localPosition.location_source;
     }
 
-    if (pos_flags & meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE) {
-        if (pos_flags & meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE_MSL) {
-            p.altitude = localPosition.altitude;
-            p.has_altitude = true;
-        } else {
-            p.altitude_hae = localPosition.altitude_hae;
-            p.has_altitude_hae = true;
-        }
-
-        if (pos_flags & meshtastic_Config_PositionConfig_PositionFlags_GEOIDAL_SEPARATION) {
-            p.altitude_geoidal_separation = localPosition.altitude_geoidal_separation;
-            p.has_altitude_geoidal_separation = true;
-        }
-    }
+    copyAltitudeFields(p, localPosition, pos_flags);
 
     if (pos_flags & meshtastic_Config_PositionConfig_PositionFlags_DOP) {
         if (pos_flags & meshtastic_Config_PositionConfig_PositionFlags_HVDOP) {
@@ -519,6 +506,23 @@ bool PositionModule::positionUnchangedSinceLastSend(const meshtastic_PositionLit
     }
 
     return positionWithinPrecisionCell(selfPos.latitude_i, selfPos.longitude_i, lastGpsLatitude, lastGpsLongitude, precisionBits);
+}
+
+void PositionModule::copyAltitudeFields(meshtastic_Position &to, const meshtastic_Position &from, uint32_t flags)
+{
+    if (!(flags & meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE))
+        return;
+    if (flags & meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE_MSL) {
+        to.altitude = from.altitude;
+        to.has_altitude = from.has_altitude;
+    } else {
+        to.altitude_hae = from.altitude_hae;
+        to.has_altitude_hae = from.has_altitude_hae;
+    }
+    if (flags & meshtastic_Config_PositionConfig_PositionFlags_GEOIDAL_SEPARATION) {
+        to.altitude_geoidal_separation = from.altitude_geoidal_separation;
+        to.has_altitude_geoidal_separation = from.has_altitude_geoidal_separation;
+    }
 }
 
 bool PositionModule::positionWithinPrecisionCell(int32_t aLat, int32_t aLon, int32_t bLat, int32_t bLon, uint32_t precision)
