@@ -1,7 +1,6 @@
 #include "NRF52Bluetooth.h"
 #include "BLEDfuSecure.h"
 #include "BluetoothCommon.h"
-#include "HardwareRNG.h"
 #include "PowerFSM.h"
 #include "SPILock.h"
 #include "configuration.h"
@@ -337,7 +336,6 @@ void setupMeshService(void)
     logRadio.write32(0);
     logRadio.begin();
 }
-static uint32_t configuredPasskey;
 // False if Bluefruit.begin() failed: Bluefruit is then unusable, and Advertising.start() faults on a timer that
 // was never created. nrf52Bluetooth is set all the same, so PowerFSM keeps calling in here.
 static bool bleStarted = false;
@@ -409,15 +407,16 @@ void NRF52Bluetooth::setup()
 #endif
     if (config.bluetooth.mode != meshtastic_Config_BluetoothConfig_PairingMode_NO_PIN) {
         if (config.bluetooth.mode == meshtastic_Config_BluetoothConfig_PairingMode_FIXED_PIN) {
-            configuredPasskey = config.bluetooth.fixed_pin;
+            // setPIN() rejects anything but exactly 6 digits, so a PIN like 012345 needs its leading zero.
+            char pinString[12];
+            snprintf(pinString, sizeof(pinString), "%06lu", (unsigned long)config.bluetooth.fixed_pin);
+            LOG_INFO("Bluetooth pin set to '%s'", pinString);
+            Bluefruit.Security.setPIN(pinString);
         } else {
-            uint32_t hwrand = 0;
-            HardwareRNG::fill(reinterpret_cast<uint8_t *>(&hwrand), sizeof(hwrand));
-            configuredPasskey = hwrand % 900000u + 100000u;
+            // No static passkey: the SoftDevice generates a fresh one for each pairing, which also lets it
+            // negotiate LE Secure Connections.
+            LOG_INFO("Use random passkey per pairing");
         }
-        auto pinString = std::to_string(configuredPasskey);
-        LOG_INFO("Bluetooth pin set to '%i'", configuredPasskey);
-        Bluefruit.Security.setPIN(pinString.c_str());
         Bluefruit.Security.setIOCaps(true, false, false);
         Bluefruit.Security.setPairPasskeyCallback(NRF52Bluetooth::onPairingPasskey);
         Bluefruit.Security.setPairCompleteCallback(NRF52Bluetooth::onPairingCompleted);
@@ -544,9 +543,7 @@ bool NRF52Bluetooth::onPairingPasskey(uint16_t conn_handle, uint8_t const passke
 
 #if HAS_SCREEN && !defined(MESHTASTIC_EXCLUDE_SCREEN)
     if (screen) {
-        std::string configuredPasskeyText = std::to_string(configuredPasskey);
-        std::string ble_message =
-            "Bluetooth\nPIN\n[M]" + configuredPasskeyText.substr(0, 3) + " " + configuredPasskeyText.substr(3, 6);
+        std::string ble_message = "Bluetooth\nPIN\n[M]" + textkey.substr(0, 3) + " " + textkey.substr(3, 3);
         // Use the pairing_pin notification type so the lockdown UI short-
         // circuit (Screen.cpp updateUiFrame) allows the overlay through
         // even on a locked device - see H13 audit fix. The banner content
