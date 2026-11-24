@@ -183,9 +183,7 @@ void InkHUD::NodeListApplet::onRender(bool full)
     uint16_t cardTopY = headerDivY + padDivH;
 
     // Clean up deleted nodes before drawing
-    cards.erase(
-        std::remove_if(cards.begin(), cards.end(), [](const CardInfo &c) { return nodeDB->getMeshNode(c.nodeNum) == nullptr; }),
-        cards.end());
+    std::erase_if(cards, [](const CardInfo &c) { return nodeDB->getMeshNode(c.nodeNum) == nullptr; });
 
     // Cards scrolled off the top are skipped. List may have shrunk since the user scrolled
     scrollOffset = std::min<uint8_t>(scrollOffset, maxScrollOffset());
