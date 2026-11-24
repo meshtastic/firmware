@@ -55,12 +55,8 @@ void messageHash(const uint8_t *ciphertext, size_t len, uint32_t to, uint32_t fr
 bool split(const uint8_t *ciphertext, size_t len, uint32_t to, uint32_t from, uint32_t id, uint32_t heardAgoS,
            bool originVerified, std::vector<meshtastic_StoreForwardPlusPlus> &out);
 
-/**
- * A fixed pool of reassembly slots, least-recently-used on eviction.
- *
- * deadlineMs is 120 s by default, or four advertised pacings. The caller supplies nowMs so the
- * behaviour is testable without a clock.
- */
+// Fixed pool of reassembly slots, least-recently-used on eviction. The caller supplies nowMs so it needs no clock.
+// The deadline defaults to 120 s (four advertised pacings).
 class Reassembler
 {
   public:
