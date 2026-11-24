@@ -86,8 +86,27 @@ CannedMessageModule::CannedMessageModule()
     }
 }
 
+// TAK_TRACKER sends channel broadcasts only
+static bool allowsDirectMessages()
+{
+    return config.device.role != meshtastic_Config_DeviceConfig_Role_TAK_TRACKER;
+}
+
+static bool refuseDirectMessage(NodeNum dest)
+{
+    if (isBroadcast(dest) || allowsDirectMessages())
+        return false;
+    LOG_WARN("No DMs in TAK Tracker mode, not sending to 0x%08x", dest);
+    if (screen)
+        screen->showSimpleBanner("No DMs in TAK Tracker mode", 2000);
+    return true;
+}
+
 void CannedMessageModule::LaunchWithDestination(NodeNum newDest, uint8_t newChannel)
 {
+    if (refuseDirectMessage(newDest == 0 ? NODENUM_BROADCAST : newDest))
+        return;
+
     // Do NOT override explicit broadcast replies
 
     if (newDest == 0) {
@@ -177,6 +196,9 @@ bool CannedMessageModule::showOnScreenKeyboard()
 
 void CannedMessageModule::LaunchFreetextWithDestination(NodeNum newDest, uint8_t newChannel)
 {
+    if (refuseDirectMessage(newDest == 0 ? NODENUM_BROADCAST : newDest))
+        return;
+
     // Do NOT override explicit broadcast replies
 
     if (newDest == 0) {
@@ -336,7 +358,7 @@ void CannedMessageModule::updateDestinationSelectionList()
     // Preallocate space to reduce reallocation
     this->filteredNodes.reserve(numMeshNodes);
 
-    for (size_t i = 0; i < numMeshNodes; ++i) {
+    for (size_t i = 0; allowsDirectMessages() && i < numMeshNodes; ++i) {
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(i);
         if (!node || node->num == myNodeNum || !nodeInfoLiteHasUser(node) || node->public_key.size != 32)
             continue;
@@ -1064,6 +1086,9 @@ int CannedMessageModule::handleEmotePickerInput(const InputEvent *event)
 
 void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const char *message, bool wantReplies)
 {
+    if (refuseDirectMessage(dest))
+        return;
+
     lastDest = dest;
     lastChannel = channel;
     lastDestSet = true;
