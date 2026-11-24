@@ -505,6 +505,12 @@ bool RadioLibInterface::randomBytes(uint8_t *buffer, size_t length)
     if (!buffer || length == 0 || !iface) {
         return false;
     }
+#if ARCH_PORTDUINO
+    // Behind the serial HAL each byte costs several serial round trips, so a 32-byte key took minutes;
+    // HardwareRNG::fill() has already filled the buffer from the host OS RNG.
+    if (portduino_config.lora_spi_dev == "serial")
+        return false;
+#endif
 
     // Older RadioLib versions only expose random(min, max), so fill the buffer byte-by-byte.
     for (size_t i = 0; i < length; ++i) {

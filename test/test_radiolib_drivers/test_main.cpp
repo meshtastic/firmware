@@ -26,6 +26,10 @@
 // models that refusal; lr20x0_interface_tests.h runs LR20x0Interface::isChannelActive() against it,
 // so a firmware change that sends a refused exit byte fails here.
 //
+// RadioLibInterface::randomBytes() is pinned on the same LR2021 interface: behind the serial HAL
+// (Lora.spidev: serial) it must decline without a chip command, because each random byte costs four
+// commands and each command several serial round trips, which stalled PKI key generation for minutes.
+//
 // Anything that decodes a chip reply (begin(), readData(), getRSSI(), updateFirmware()) needs replies
 // scripted per opcode; each family's header lists those under "Grows here".
 #include "TestUtil.h"
