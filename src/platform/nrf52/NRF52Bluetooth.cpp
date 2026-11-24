@@ -407,9 +407,11 @@ void NRF52Bluetooth::setup()
 #endif
     if (config.bluetooth.mode != meshtastic_Config_BluetoothConfig_PairingMode_NO_PIN) {
         if (config.bluetooth.mode == meshtastic_Config_BluetoothConfig_PairingMode_FIXED_PIN) {
-            auto pinString = std::to_string(config.bluetooth.fixed_pin);
-            LOG_INFO("Bluetooth pin set to '%s'", pinString.c_str());
-            Bluefruit.Security.setPIN(pinString.c_str());
+            // setPIN() rejects anything but exactly 6 digits, so a PIN like 012345 needs its leading zero.
+            char pinString[12];
+            snprintf(pinString, sizeof(pinString), "%06lu", (unsigned long)config.bluetooth.fixed_pin);
+            LOG_INFO("Bluetooth pin set to '%s'", pinString);
+            Bluefruit.Security.setPIN(pinString);
         } else {
             // No static passkey: the SoftDevice generates a fresh one for each pairing, which also lets it
             // negotiate LE Secure Connections.
