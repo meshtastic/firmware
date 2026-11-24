@@ -338,6 +338,12 @@ void MeshService::handleToRadio(meshtastic_MeshPacket &p)
                   if (const StoredMessage *sm = messageStore.tryAddFromPacket(p))
                       graphics::MessageRenderer::handleNewMessage(nullptr, *sm, p); // notify UI
               })
+    if (!AdminModule::mayTransmit(p)) {
+        LOG_WARN("Refuse to send licensed admin packet 0x%08x: it carries a sensitive field", p.id);
+        if (routingModule)
+            routingModule->sendAckNak(meshtastic_Routing_Error_NOT_AUTHORIZED, getFrom(&p), p.id, p.channel);
+        return;
+    }
 #if !MESHTASTIC_EXCLUDE_ADMIN
     // Note admin requests on their way out: AdminModule only accepts a response from a remote we
     // actually asked. Runs before encryption, while the payload is still readable.

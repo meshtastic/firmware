@@ -103,6 +103,10 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
     /// accepted. Called from the client-to-mesh path (MeshService::handleToRadio).
     void noteOutgoingAdminRequest(const meshtastic_MeshPacket &p);
 
+    /// Whether a client's admin packet may leave this node. Licensed admin goes out unencrypted, so it
+    /// must not carry a sensitive field. Called from the client-to-mesh path (MeshService::handleToRadio).
+    NOINLINE static bool mayTransmit(const meshtastic_MeshPacket &p);
+
   private:
     // An admin response has no session passkey and its sender need not hold an admin key, so a
     // request we sent is the only thing vouching for it. Track each request independently (its own

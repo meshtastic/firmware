@@ -38,6 +38,7 @@
 #include "TypeConversions.h"
 #include "mesh/AdminKeys.h"
 #include "mesh/RadioLibInterface.h"
+#include "mesh/SensitiveFields.h"
 #ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
 #include "mesh/PhoneAPI.h"
 #endif
@@ -100,6 +101,51 @@ static void writeSecret(char *buf, size_t bufsz, const char *currentVal)
     }
 }
 
+// Licensed admin crosses the air unencrypted, so a remote may not set a sensitive field. A blank one, which is
+// what a licensed get response hands back, keeps the stored value instead of erasing it.
+static bool admitLicensedSensitiveFields(meshtastic_AdminMessage *r)
+{
+    if (SensitiveFields::anySet(&meshtastic_AdminMessage_msg, r))
+        return false;
+    switch (r->which_payload_variant) {
+    case meshtastic_AdminMessage_set_config_tag:
+        SensitiveFields::restoreSection(&meshtastic_Config_msg, &r->set_config, &meshtastic_LocalConfig_msg, &config);
+        break;
+    case meshtastic_AdminMessage_set_module_config_tag:
+        SensitiveFields::restoreSection(&meshtastic_ModuleConfig_msg, &r->set_module_config, &meshtastic_LocalModuleConfig_msg,
+                                        &moduleConfig);
+        break;
+    case meshtastic_AdminMessage_set_channel_tag:
+        if (r->set_channel.index >= 0 && r->set_channel.index < (int)MAX_NUM_CHANNELS)
+            SensitiveFields::restore(&meshtastic_Channel_msg, &r->set_channel,
+                                     &channels.getByIndex((ChannelIndex)r->set_channel.index));
+        break;
+    case meshtastic_AdminMessage_store_ui_config_tag:
+        SensitiveFields::restore(&meshtastic_DeviceUIConfig_msg, &r->store_ui_config, &uiconfig);
+        break;
+    default:
+        break;
+    }
+    return true;
+}
+
+// Licensed admin replies go out unencrypted, so blank every sensitive field in the one queued in p.
+// False if the reply could not be checked and must not be sent.
+static NOINLINE bool redactLicensedReply(meshtastic_MeshPacket &p)
+{
+    if (p.which_payload_variant != meshtastic_MeshPacket_decoded_tag || p.decoded.portnum != meshtastic_PortNum_ADMIN_APP)
+        return true;
+    meshtastic_AdminMessage res = meshtastic_AdminMessage_init_zero;
+    if (!pb_decode_from_bytes(p.decoded.payload.bytes, p.decoded.payload.size, &meshtastic_AdminMessage_msg, &res))
+        return false;
+    if (!SensitiveFields::redact(&meshtastic_AdminMessage_msg, &res))
+        return true;
+    LOG_INFO("Blank sensitive fields in licensed admin reply %i", res.which_payload_variant);
+    p.decoded.payload.size =
+        pb_encode_to_bytes(p.decoded.payload.bytes, sizeof(p.decoded.payload.bytes), &meshtastic_AdminMessage_msg, &res);
+    return p.decoded.payload.size > 0;
+}
+
 /**
  * @brief Handle received protobuf message
  *
@@ -155,6 +201,25 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     }
 #endif
     meshtastic_Channel *ch = &channels.getByIndex(mp.channel);
+    const bool licensedRemote = owner.is_licensed && mp.from != 0;
+    bool authorizedLicensedSigner = false;
+    // Could tighten responses further by tracking the last public key queried.
+    if (licensedRemote) {
+        const bool directedAdmin = nodeDB && mp.to == nodeDB->getNodeNum() && !isBroadcast(mp.to) &&
+                                   mp.decoded.portnum == meshtastic_PortNum_ADMIN_APP && !mp.pki_encrypted;
+        if (!directedAdmin || !mp.xeddsa_signed || mp.public_key.size != 32) {
+            LOG_INFO("Ignore licensed admin payload without a directed Router-verified signature");
+            myReply = allocErrorResponse(meshtastic_Routing_Error_NOT_AUTHORIZED, &mp);
+            return handled;
+        }
+        authorizedLicensedSigner = AdminKeys::isAuthorized(mp.public_key.bytes);
+        if (!messageIsResponse(r) && !authorizedLicensedSigner) {
+            LOG_INFO("Received signed licensed admin payload from a non-allowlisted key");
+            myReply = allocErrorResponse(meshtastic_Routing_Error_ADMIN_PUBLIC_KEY_UNAUTHORIZED, &mp);
+            return handled;
+        }
+        LOG_INFO("Signed licensed admin payload with Router-verified sender");
+    }
     if (messageIsResponse(r)) {
         // Only accept a response from a remote we sent the matching request to. from == 0 is a
         // local client, which PhoneAPI has already gated.
@@ -188,6 +253,8 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
             return handled;
         }
 #endif
+    } else if (authorizedLicensedSigner) {
+        // Router verified a plaintext licensed-mode signer against the admin allowlist above.
     } else if (strcasecmp(ch->settings.name, Channels::adminChannel) == 0) {
         if (!config.security.admin_channel_enabled) {
             LOG_INFO("Ignore admin channel, legacy admin disabled");
@@ -210,7 +277,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
             // that pointer is unrelated, so the path was unsafe.)
 
             // Automatically favorite the node that is using the admin key
-            auto remoteNode = nodeDB->getMeshNode(mp.from);
+            auto remoteNode = nodeDB ? nodeDB->getMeshNode(mp.from) : nullptr;
             if (remoteNode && !nodeInfoLiteIsFavorite(remoteNode)) {
                 if (config.device.role == meshtastic_Config_DeviceConfig_Role_CLIENT_BASE) {
                     // Special case for CLIENT_BASE: is_favorite has special meaning, and we don't want to automatically set it
@@ -245,6 +312,11 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
             myReply = allocErrorResponse(meshtastic_Routing_Error_ADMIN_BAD_SESSION_KEY, &mp);
             return handled;
         }
+    }
+    if (licensedRemote && !messageIsResponse(r) && !admitLicensedSensitiveFields(r)) {
+        LOG_WARN("Refuse licensed admin payload %i: it sets a sensitive field", r->which_payload_variant);
+        myReply = allocErrorResponse(meshtastic_Routing_Error_NOT_AUTHORIZED, &mp);
+        return handled;
     }
     // Before the switch, so every case below sees consistent transaction state.
     expireStaleEditTransaction();
@@ -726,6 +798,11 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     // If asked for a response and it is not yet set, generate an 'ACK' response
     if (mp.decoded.want_response && !myReply) {
         myReply = allocErrorResponse(meshtastic_Routing_Error_NONE, &mp);
+    }
+    if (licensedRemote && myReply && !redactLicensedReply(*myReply)) {
+        LOG_WARN("Drop licensed admin reply that could not be checked for sensitive fields");
+        packetPool.release(myReply);
+        myReply = allocErrorResponse(meshtastic_Routing_Error_NOT_AUTHORIZED, &mp);
     }
     if (mp.pki_encrypted && myReply) {
         myReply->pki_encrypted = true;
@@ -2119,6 +2196,17 @@ void AdminModule::noteOutgoingAdminRequest(const meshtastic_MeshPacket &p)
     else
         memset(slot->key, 0, 32);
     LOG_DEBUG("Admin request sent to 0x%08x, expect response", p.to);
+}
+
+bool AdminModule::mayTransmit(const meshtastic_MeshPacket &p)
+{
+    if (!owner.is_licensed || p.which_payload_variant != meshtastic_MeshPacket_decoded_tag ||
+        p.decoded.portnum != meshtastic_PortNum_ADMIN_APP || p.to == 0 || isToUs(&p))
+        return true;
+    // Fail closed: a payload we cannot decode is one we cannot vouch for.
+    meshtastic_AdminMessage admin = meshtastic_AdminMessage_init_zero;
+    return pb_decode_from_bytes(p.decoded.payload.bytes, p.decoded.payload.size, &meshtastic_AdminMessage_msg, &admin) &&
+           !SensitiveFields::anySet(&meshtastic_AdminMessage_msg, &admin);
 }
 
 bool AdminModule::responseIsSolicited(const meshtastic_MeshPacket &mp, pb_size_t responseVariant, pb_size_t moduleConfigTag)
