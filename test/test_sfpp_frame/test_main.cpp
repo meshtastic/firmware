@@ -1,3 +1,13 @@
+/*
+ * Framed replay: the message hash key, split at the 168-byte signable body bound, and all-or-nothing
+ * reassembly. Hash-keyed frames let two archives complete one set and make duplicates harmless;
+ * the body bound is what keeps a broadcast frame inside an XEdDSA signature.
+ *
+ * The regression guarded: a change to the hash field order, the frame cap, the corrupt-slice or
+ * expiry rejection, or the unsigned LRU age would silently break recovery while the other suites
+ * stayed green, because no other suite exercises the splitter and the slot pool together.
+ */
+
 #include "configuration.h" // for the extern "C" setup()/loop() the portduino runner links against
 #include "modules/Native/SfppFrame.h"
 
