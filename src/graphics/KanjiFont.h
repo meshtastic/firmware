@@ -47,6 +47,10 @@ static inline size_t decodeUtf8(const char *s, size_t pos, size_t len, uint32_t 
             return 0;
         cp = (cp << 6) | (cc & 0x3F);
     }
+    // Reject overlong forms, UTF-16 surrogates and values past U+10FFFF
+    static constexpr uint32_t MIN_CP[] = {0, 0, 0x80, 0x800, 0x10000};
+    if (cp < MIN_CP[n] || cp > 0x10FFFF || (cp >= 0xD800 && cp <= 0xDFFF))
+        return 0;
     return n;
 }
 

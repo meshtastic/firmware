@@ -1,6 +1,7 @@
 #pragma once
 #ifdef OLED_JA
 // Japanese line-break rules (kinsoku) for message wrapping: whether a break may fall between two characters.
+#include "graphics/KanjiFont.h"
 #include <stddef.h>
 #include <stdint.h>
 
@@ -9,33 +10,11 @@ namespace graphics
 namespace JapaneseLineBreak
 {
 
-// Code point of the UTF-8 character at s; 0 at the end of the string or on a malformed sequence.
-static inline uint32_t peekCodePoint(const char *s)
+// Code point of the UTF-8 character at s[0..len); 0 at the end of the text or on a malformed sequence.
+static inline uint32_t peekCodePoint(const char *s, size_t len)
 {
-    const uint8_t c = static_cast<uint8_t>(s[0]);
-    size_t n;
-    uint32_t cp;
-    if (c < 0x80)
-        return c;
-    if ((c & 0xE0) == 0xC0) {
-        cp = c & 0x1F;
-        n = 2;
-    } else if ((c & 0xF0) == 0xE0) {
-        cp = c & 0x0F;
-        n = 3;
-    } else if ((c & 0xF8) == 0xF0) {
-        cp = c & 0x07;
-        n = 4;
-    } else {
-        return 0;
-    }
-    for (size_t i = 1; i < n; i++) {
-        const uint8_t cc = static_cast<uint8_t>(s[i]);
-        if ((cc & 0xC0) != 0x80)
-            return 0;
-        cp = (cp << 6) | (cc & 0x3F);
-    }
-    return cp;
+    uint32_t cp = 0;
+    return (len > 0 && KanjiFont::decodeUtf8(s, 0, len, cp) > 0) ? cp : 0;
 }
 
 static inline bool isInList(uint32_t cp, const uint16_t *list, size_t count)
@@ -77,12 +56,14 @@ static inline bool isFullWidthAlnum(uint32_t cp)
     return (cp >= 0xFF10 && cp <= 0xFF19) || (cp >= 0xFF21 && cp <= 0xFF3A) || (cp >= 0xFF41 && cp <= 0xFF5A);
 }
 
-// True when a line may break between the character `cur` and the one starting at `next`.
-static inline bool canBreakBetween(uint32_t cur, const char *next)
+// True when a line may break between the character `cur` and the one starting at next[0..nextLen).
+static inline bool canBreakBetween(uint32_t cur, const char *next, size_t nextLen)
 {
-    const uint32_t nextCp = peekCodePoint(next);
+    const uint32_t nextCp = peekCodePoint(next, nextLen);
     if (nextCp == 0)
         return true;
+    if (KanjiFont::isInvisibleModifier(nextCp)) // variation selectors and skin tones stay with the character before them
+        return false;
     if (isNoBreakAfter(cur) || isNoBreakBefore(nextCp))
         return false;
     return !(isFullWidthAlnum(cur) && isFullWidthAlnum(nextCp));

@@ -154,7 +154,7 @@ void test_unknown_cjk_and_emoji_draw_as_one_geta_each()
 
 static bool canBreak(const char *cur, const char *next)
 {
-    return JapaneseLineBreak::canBreakBetween(JapaneseLineBreak::peekCodePoint(cur), next);
+    return JapaneseLineBreak::canBreakBetween(JapaneseLineBreak::peekCodePoint(cur, strlen(cur)), next, strlen(next));
 }
 
 void test_kinsoku_rules()
@@ -175,13 +175,42 @@ void test_kinsoku_rules()
     TEST_ASSERT_FALSE(canBreak("２", "３"));
     TEST_ASSERT_FALSE(canBreak("３", "℃"));
     TEST_ASSERT_TRUE(canBreak("３", "で"));
+    TEST_ASSERT_TRUE(canBreak("℃", "で"));
+    TEST_ASSERT_FALSE(canBreak("い", "\xEF\xB8\x8F。"));   // never before U+FE0F
+    TEST_ASSERT_FALSE(canBreak("👍", "\xF0\x9F\x8F\xBB")); // nor before a skin tone
 }
 
 void test_peek_code_point_rejects_malformed_bytes()
 {
-    TEST_ASSERT_EQUAL_UINT32(0x6F22, JapaneseLineBreak::peekCodePoint("\xE6\xBC\xA2"));
-    TEST_ASSERT_EQUAL_UINT32(0, JapaneseLineBreak::peekCodePoint("\xE6\x41\xA2"));
-    TEST_ASSERT_EQUAL_UINT32(0, JapaneseLineBreak::peekCodePoint("\xE6"));
+    TEST_ASSERT_EQUAL_UINT32(0x6F22, JapaneseLineBreak::peekCodePoint("\xE6\xBC\xA2", 3));
+    TEST_ASSERT_EQUAL_UINT32(0, JapaneseLineBreak::peekCodePoint("\xE6\x41\xA2", 3));
+    TEST_ASSERT_EQUAL_UINT32(0, JapaneseLineBreak::peekCodePoint("\xE6", 1));
+    TEST_ASSERT_EQUAL_UINT32(0, JapaneseLineBreak::peekCodePoint("\xE6\xBC\xA2", 2));     // length bound
+    TEST_ASSERT_EQUAL_UINT32(0, JapaneseLineBreak::peekCodePoint("\xF0\x80\x80\x80", 4)); // overlong
+}
+
+void test_decode_rejects_overlong_surrogates_and_out_of_range()
+{
+    const char *bad[] = {
+        "\xC0\xAF",         // overlong '/'
+        "\xE0\x80\xAF",     // overlong '/'
+        "\xE0\x81\xBC",     // overlong U+007C
+        "\xF0\x83\x80\x80", // overlong U+3000
+        "\xED\xA0\x80",     // surrogate U+D800
+        "\xF4\x90\x80\x80", // U+110000
+    };
+    for (const char *s : bad) {
+        uint32_t cp = 0;
+        TEST_ASSERT_EQUAL_UINT32(0, KanjiFont::decodeUtf8(s, 0, strlen(s), cp));
+        size_t charLen = 0;
+        int advance = 0;
+        TEST_ASSERT_NULL(KanjiFont::findGlyphAt(s, 0, strlen(s), charLen, advance));
+    }
+    uint32_t cp = 0;
+    TEST_ASSERT_EQUAL_UINT32(3, KanjiFont::decodeUtf8("\xE6\xBC\xA2", 0, 3, cp));
+    TEST_ASSERT_EQUAL_UINT32(0x6F22, cp);
+    TEST_ASSERT_EQUAL_UINT32(4, KanjiFont::decodeUtf8("\xF4\x8F\xBF\xBF", 0, 4, cp)); // U+10FFFF
+    TEST_ASSERT_EQUAL_UINT32(0x10FFFF, cp);
 }
 
 void setup()
@@ -200,6 +229,7 @@ void setup()
     RUN_TEST(test_unknown_cjk_and_emoji_draw_as_one_geta_each);
     RUN_TEST(test_kinsoku_rules);
     RUN_TEST(test_peek_code_point_rejects_malformed_bytes);
+    RUN_TEST(test_decode_rejects_overlong_surrogates_and_out_of_range);
     exit(UNITY_END());
 }
 

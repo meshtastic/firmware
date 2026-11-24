@@ -1052,9 +1052,13 @@ std::vector<std::string> generateLines(OLEDDisplay *display, const char *headerS
     const size_t len = strlen(messageBuf);
     std::string line, word;
     size_t pos = 0;
+#ifdef OLED_JA
+    uint32_t jaBase = 0; // last visible character drawn from the Japanese table, 0 if the last one was not
+#endif
     while (pos < len) {
         // Advance one whole unit (emote or UTF-8 char) so a break never lands inside one
         size_t unitLen = 0;
+        bool isEmote = false;
         if ((unsigned char)messageBuf[pos] == 0xE2 && (unsigned char)messageBuf[pos + 1] == 0x80 &&
             (unsigned char)messageBuf[pos + 2] == 0x99) {
             word += '\''; // U+2019 right single quote -> plain apostrophe
@@ -1075,7 +1079,8 @@ std::vector<std::string> generateLines(OLEDDisplay *display, const char *headerS
                 ++pos;
                 continue;
             }
-            if (!graphics::EmoteRenderer::findEmoteAt(messageBuf, len, pos, unitLen))
+            isEmote = graphics::EmoteRenderer::findEmoteAt(messageBuf, len, pos, unitLen);
+            if (!isEmote)
                 unitLen = std::min(graphics::EmoteRenderer::utf8CharLen((uint8_t)ch), len - pos);
             word.append(messageBuf + pos, unitLen);
             pos += unitLen;
@@ -1092,11 +1097,17 @@ std::vector<std::string> generateLines(OLEDDisplay *display, const char *headerS
             }
         }
 #ifdef OLED_JA
-        // Japanese has no spaces: allow a break after each Japanese character unless kinsoku rules forbid it
-        const unsigned char lead = (unsigned char)messageBuf[pos - unitLen];
-        if (unitLen == 3 && lead >= 0xE3 && lead <= 0xEF &&
-            graphics::JapaneseLineBreak::canBreakBetween(graphics::JapaneseLineBreak::peekCodePoint(messageBuf + pos - unitLen),
-                                                         messageBuf + pos)) {
+        // Japanese has no spaces: allow a break after each character drawn from the Japanese table unless kinsoku
+        // rules forbid it. Emotes stay atomic, and invisible modifiers defer the decision to the character they follow.
+        const size_t unitPos = pos - unitLen;
+        uint32_t cp = 0;
+        size_t glyphLen = 0;
+        int glyphAdvance = 0;
+        if (isEmote || graphics::KanjiFont::decodeUtf8(messageBuf, unitPos, len, cp) != unitLen)
+            jaBase = 0;
+        else if (!graphics::KanjiFont::isInvisibleModifier(cp))
+            jaBase = graphics::KanjiFont::findGlyphAt(messageBuf, unitPos, len, glyphLen, glyphAdvance) ? cp : 0;
+        if (jaBase && graphics::JapaneseLineBreak::canBreakBetween(jaBase, messageBuf + pos, len - pos)) {
             line += word;
             word.clear();
         }
