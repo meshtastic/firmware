@@ -18,6 +18,7 @@
 #include "mqtt/MQTT.h"
 #endif
 #include "graphics/niche/InkHUD/Applets/Bases/Map/MapApplet.h"
+#include "graphics/niche/InkHUD/Applets/System/Menu/BluetoothPairMode.h"
 #include "graphics/niche/InkHUD/Applets/User/Waypoints/WaypointListApplet.h"
 #if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && !MESHTASTIC_EXCLUDE_ACCELEROMETER
 #include "graphics/niche/InkHUD/Applets/User/Steps/StepsApplet.h"
@@ -837,7 +838,7 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         break;
 
     case TOGGLE_BLUETOOTH_PAIR_MODE:
-        config.bluetooth.fixed_pin = !config.bluetooth.fixed_pin;
+        config.bluetooth.mode = nextBluetoothPairMode(config.bluetooth.mode);
         nodeDB->saveToDisk(SEGMENT_CONFIG);
         break;
 
@@ -1860,7 +1861,7 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         const char *btLabel = config.bluetooth.enabled ? "Bluetooth: On" : "Bluetooth: Off";
         items.push_back(MenuItem(btLabel, MenuAction::TOGGLE_BLUETOOTH, MenuPage::EXIT));
 
-        const char *pairLabel = config.bluetooth.fixed_pin ? "Pair Mode: Fixed" : "Pair Mode: Random";
+        const char *pairLabel = bluetoothPairModeLabel(config.bluetooth.mode);
         items.push_back(MenuItem(pairLabel, MenuAction::TOGGLE_BLUETOOTH_PAIR_MODE, MenuPage::NODE_CONFIG_BLUETOOTH));
 
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
