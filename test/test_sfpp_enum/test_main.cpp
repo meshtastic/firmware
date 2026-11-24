@@ -367,6 +367,37 @@ bool readRoot(const std::string &dir, uint8_t out[SFPP_HASH_SIZE])
 
 // A fabricated extra row in the bucket with a chosen short ID, used to prove an unrecoverable
 // collision is detected rather than retried forever.
+bool insertScratchRow(const std::string &dir, uint32_t to, uint32_t from, uint32_t id, const uint8_t *cipher, size_t len,
+                      const uint8_t *hash)
+{
+    uint8_t root[SFPP_HASH_SIZE];
+    if (!readRoot(dir, root))
+        return false;
+    sqlite3 *db = nullptr;
+    if (!openDb(dir, &db))
+        return false;
+    sqlite3_stmt *stmt = nullptr;
+    bool ok = sqlite3_prepare_v2(db,
+                                 "insert into local_messages (destination, sender, packet_id, root_hash, encrypted_bytes, "
+                                 "message_hash, payload, rx_time) values (?,?,?,?,?,?,?,?);",
+                                 -1, &stmt, nullptr) == SQLITE_OK;
+    if (ok) {
+        sqlite3_bind_int64(stmt, 1, (sqlite3_int64)to);
+        sqlite3_bind_int64(stmt, 2, (sqlite3_int64)from);
+        sqlite3_bind_int64(stmt, 3, (sqlite3_int64)id);
+        sqlite3_bind_blob(stmt, 4, root, SFPP_HASH_SIZE, SQLITE_STATIC);
+        sqlite3_bind_blob(stmt, 5, cipher, (int)len, SQLITE_STATIC);
+        sqlite3_bind_blob(stmt, 6, hash, SFPP_HASH_SIZE, SQLITE_STATIC);
+        sqlite3_bind_text(stmt, 7, "", 0, SQLITE_STATIC);
+        sqlite3_bind_int64(stmt, 8, (sqlite3_int64)getValidTime(RTCQualityNTP, true));
+        ok = sqlite3_step(stmt) == SQLITE_DONE;
+    }
+    if (stmt)
+        sqlite3_finalize(stmt);
+    sqlite3_close(db);
+    return ok;
+}
+
 bool insertExtraRow(const std::string &dir, uint32_t counter, uint32_t shortId)
 {
     uint8_t root[SFPP_HASH_SIZE];
@@ -515,6 +546,16 @@ std::vector<meshtastic_MeshPacket> takeSent()
         packetPool.release(p);
     testRouter->owned.clear();
     return out;
+}
+
+uint32_t drainPhoneQueueCount()
+{
+    uint32_t count = 0;
+    while (meshtastic_MeshPacket *p = testService->getForPhone()) {
+        testService->releaseToPool(p);
+        count++;
+    }
+    return count;
 }
 
 void ingestAuthority(uint32_t count)
@@ -1539,6 +1580,158 @@ void test_heardLiveObjectsArePromoted()
     assertConverged();
 }
 
+// --- Stage 8g ---
+
+// EnumListenOnly must be silent on every path, including the legacy CLIENT_HISTORY shim, because
+// the guard is at the module's send boundary.
+void test_listenOnlyBlocksLegacyShim()
+{
+    ingestAuthority(1);
+    portduino_config.sfpp_enum_listen_only = true;
+
+    meshtastic_StoreAndForward request = meshtastic_StoreAndForward_init_zero;
+    request.rr = meshtastic_StoreAndForward_RequestResponse_CLIENT_HISTORY;
+    request.which_variant = meshtastic_StoreAndForward_history_tag;
+    request.variant.history.window = 60;
+
+    meshtastic_MeshPacket mp = meshtastic_MeshPacket_init_zero;
+    mp.from = 0;
+    mp.to = AUTHORITY_NODE;
+    mp.channel = 0;
+    mp.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_API;
+    mp.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    mp.decoded.portnum = meshtastic_PortNum_STORE_FORWARD_APP;
+    mp.decoded.payload.size =
+        pb_encode_to_bytes(mp.decoded.payload.bytes, sizeof(mp.decoded.payload.bytes), &meshtastic_StoreAndForward_msg, &request);
+
+    myNodeInfo.my_node_num = AUTHORITY_NODE;
+    portduino_config.sfpp_stratum0 = true;
+    TEST_ASSERT_EQUAL(ProcessMessage::STOP, authority->handleReceived(mp));
+    TEST_ASSERT_EQUAL_UINT(0, takeSent().size());
+
+    testRouter->sent.clear();
+    authority->runOnce(); // the shim tries to answer; the send boundary drops it
+    TEST_ASSERT_EQUAL_UINT(0, takeSent().size());
+    TEST_ASSERT_EQUAL_UINT(0, drainPhoneQueueCount());
+    portduino_config.sfpp_enum_listen_only = false;
+}
+
+// A scratch row whose stored hash does not match its own object must not be promoted, even when
+// its truncated short ID collides with a real peer object.
+void test_corruptScratchRowIsNotPromoted()
+{
+    ingestAuthority(1);
+    CollisionCandidate held;
+    CollisionCandidate missingObject;
+    makeCandidate(kCollisionACipher, kCollisionAId, held);
+    makeCandidate(kCollisionBCipher, kCollisionBId, missingObject);
+    TEST_ASSERT_EQUAL_UINT32(held.shortId, missingObject.shortId);
+    TEST_ASSERT_TRUE(insertCandidateRow(dirA, 2, missingObject));
+
+    TEST_ASSERT_TRUE(copyDb(dirA, dirB));
+    TEST_ASSERT_TRUE(deleteCounter(dirB, 2));
+    portduino_config.sfpp_db_path = dirB + "/";
+    portduino_config.sfpp_stratum0 = false;
+    follower = new TestSfppModule();
+
+    // `held`'s ciphertext filed under `missingObject`'s hash: same short ID, different object.
+    TEST_ASSERT_TRUE(
+        insertScratchRow(dirB, NODENUM_BROADCAST, SENDER_NODE, held.id, held.cipher, sizeof(held.cipher), missingObject.hash));
+
+    Exchange exchange = runExchange();
+    TEST_ASSERT_EQUAL_UINT(1, exchange.itemFrames); // only the real object is fetched
+    TEST_ASSERT_EQUAL_UINT(1, countRows(dirB, missingObject.id));
+    TEST_ASSERT_EQUAL_UINT(0, countRows(dirB, held.id)); // the corrupt row was not promoted
+    assertConverged();
+}
+
+// A behind-bucket advert that arrives mid-exchange is remembered and pulled when the exchange ends,
+// not dropped until its next rotation turn.
+void test_midExchangeAdvertIsPulledAfter()
+{
+    ingestAuthority(40);
+    buildFollowerFromCopy();
+    TEST_ASSERT_TRUE(deleteCounter(dirB, 31));
+    TEST_ASSERT_TRUE(deleteCounter(dirB, 32)); // bucket 0 short 2
+    TEST_ASSERT_TRUE(deleteCounter(dirB, 39));
+    TEST_ASSERT_TRUE(deleteCounter(dirB, 40)); // bucket 1 short 2
+
+    meshtastic_MeshPacket advert1;
+    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, 1, false, advert1, false, 40));
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert1));
+    std::vector<meshtastic_MeshPacket> req1 = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, req1.size());
+    TEST_ASSERT_EQUAL_UINT32(1, decodeSfpp(req1[0]).chain_count);
+
+    // Bucket 0's advert arrives mid-exchange; it must be remembered, not dropped.
+    meshtastic_MeshPacket advert0;
+    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, 0, false, advert0, false, 40));
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert0));
+    TEST_ASSERT_EQUAL_UINT(0, takeSent().size());
+
+    // Complete bucket 1.
+    TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, true, req1[0]));
+    std::vector<meshtastic_MeshPacket> prov1 = drainAuthorityOne(2000);
+    TEST_ASSERT_EQUAL_UINT(1, prov1.size());
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, prov1[0]));
+    std::vector<meshtastic_MeshPacket> item1 = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, item1.size());
+    TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, true, item1[0]));
+    uint32_t frames1 = 0;
+    for (uint32_t guard = 0; guard < 16; guard++) {
+        std::vector<meshtastic_MeshPacket> out = drainAuthorityOne(2000);
+        if (out.empty())
+            continue;
+        if (decodeSfpp(out[0]).sfpp_message_type != meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_FRAME)
+            break;
+        for (const auto &frame : out) {
+            TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, frame));
+            frames1++;
+        }
+    }
+    TEST_ASSERT_EQUAL_UINT(2, frames1);
+
+    // The exchange ended; the remembered bucket is pulled on the next run.
+    myNodeInfo.my_node_num = FOLLOWER_NODE;
+    portduino_config.sfpp_stratum0 = false;
+    testRouter->sent.clear();
+    follower->runOnce();
+    std::vector<meshtastic_MeshPacket> req0 = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, req0.size());
+    TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_REQUEST, decodeSfpp(req0[0]).sfpp_message_type);
+    TEST_ASSERT_EQUAL_UINT32(0, decodeSfpp(req0[0]).chain_count);
+
+    TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, true, req0[0]));
+    std::vector<meshtastic_MeshPacket> prov0 = drainAuthorityOne(2000);
+    TEST_ASSERT_EQUAL_UINT(1, prov0.size());
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, prov0[0]));
+    std::vector<meshtastic_MeshPacket> item0 = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, item0.size());
+    TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, true, item0[0]));
+    uint32_t frames0 = 0;
+    for (uint32_t guard = 0; guard < 16; guard++) {
+        std::vector<meshtastic_MeshPacket> out = drainAuthorityOne(2000);
+        if (out.empty())
+            continue;
+        if (decodeSfpp(out[0]).sfpp_message_type != meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_FRAME)
+            break;
+        for (const auto &frame : out) {
+            TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, frame));
+            frames0++;
+        }
+    }
+    TEST_ASSERT_EQUAL_UINT(2, frames0);
+
+    const BucketView a0 = readBucket(dirA, 1, 32);
+    const BucketView b0 = readBucket(dirB, 1, 32);
+    const BucketView a1 = readBucket(dirA, 33, 64);
+    const BucketView b1 = readBucket(dirB, 33, 64);
+    TEST_ASSERT_EQUAL_UINT32(a0.count, b0.count);
+    TEST_ASSERT_EQUAL_UINT64(a0.checksum, b0.checksum);
+    TEST_ASSERT_EQUAL_UINT32(a1.count, b1.count);
+    TEST_ASSERT_EQUAL_UINT64(a1.checksum, b1.checksum);
+}
+
 // --- Stage 8f: advert rotation ---
 
 // A bucket that gained rows since its last advert goes ahead of the round-robin, so a follower
@@ -1828,6 +2021,9 @@ void setup()
     RUN_TEST(test_broadcastServesListenOnlyFollower);
     RUN_TEST(test_objectFromNonAuthorityIsIgnored);
     RUN_TEST(test_heardLiveObjectsArePromoted);
+    RUN_TEST(test_listenOnlyBlocksLegacyShim);
+    RUN_TEST(test_corruptScratchRowIsNotPromoted);
+    RUN_TEST(test_midExchangeAdvertIsPulledAfter);
     RUN_TEST(test_rotationServesChangedBucketFirst);
     RUN_TEST(test_onDemandPullsNewestBucketAndCapsPacing);
     RUN_TEST(test_sketchResolvesOne);

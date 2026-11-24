@@ -57,6 +57,7 @@ static constexpr size_t kEnumMaxRequesters = 16;
 static constexpr uint32_t kEnumRetryMs = 30 * 1000;
 static constexpr uint32_t kEnumRequesterTtlMs = 2 * kEnumExchangeTimeoutMs;
 static constexpr uint32_t kEnumFullRootEvery = 10;
+static constexpr size_t kEnumPendingMax = 8;
 static constexpr uint32_t kEnumLateAcceptMs = 5 * 60 * 1000;
 
 // Stage 8e: the item retry must outlast a full round-robin delivery at the current pacing.
@@ -745,8 +746,11 @@ int32_t StoreForwardPlusPlusModule::runOnce()
             return enumDrainIntervalMs(); // serving a request takes priority over the advert cadence
         if (portduino_config.sfpp_stratum0)
             advertiseOneBucket(root_hash_bytes, SFPP_HASH_SIZE);
+        startPendingPull();
         if (enumExchangeActive)
             return 5 * 1000; // pump the probe idle and overall timeout while an exchange is in flight
+        if (enumLateActive)
+            return 5 * 1000; // tighten the late-frame window expiry
         if (!portduino_config.sfpp_stratum0)
             return (int32_t)scratchSweepMs(); // wake for the next scratch sweep
         return (int32_t)portduino_config.sfpp_enum_interval * 60 * 1000;
@@ -793,7 +797,7 @@ int32_t StoreForwardPlusPlusModule::runOnce()
         p->hop_limit = portduino_config.sfpp_hops;
         p->hop_start = portduino_config.sfpp_hops;
         LOG_INFO("Send packet to mesh payload size %u", p->decoded.payload.size);
-        service->sendToMesh(p, RX_SRC_LOCAL, true);
+        sendSfppPacket(p, RX_SRC_LOCAL, true);
 
         did_announce_last = true;
         return portduino_config.sfpp_announce_interval * 60 * 1000;
@@ -943,6 +947,7 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
 {
     if (portduino_config.sfpp_repair != SFPP_REPAIR_CHAIN) {
         expireEnumExchange();
+        expireEnumLate();
         // ITEM_FRAME (13) is newer than the ADVERT..GONE helper range, so it is named explicitly.
         const bool srType = sfppsr::isSetReconciliationType(t->sfpp_message_type) ||
                             t->sfpp_message_type == meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_FRAME;
@@ -1332,6 +1337,16 @@ bool StoreForwardPlusPlusModule::legacyStoreForwardServes()
 #endif
 }
 
+ErrorCode StoreForwardPlusPlusModule::sendSfppPacket(meshtastic_MeshPacket *p, RxSource src, bool ccToPhone)
+{
+    if (portduino_config.sfpp_enum_listen_only) {
+        if (p)
+            packetPool.release(p);
+        return ERRNO_DISABLED;
+    }
+    return service->sendToMesh(p, src, ccToPhone);
+}
+
 void StoreForwardPlusPlusModule::sendLegacyReply(NodeNum to, const meshtastic_StoreAndForward &payload)
 {
     meshtastic_MeshPacket *p = allocStoreForwardPacket(payload);
@@ -1343,7 +1358,7 @@ void StoreForwardPlusPlusModule::sendLegacyReply(NodeNum to, const meshtastic_St
     p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
     p->want_ack = false;
     p->decoded.want_response = false;
-    service->sendToMesh(p, RX_SRC_LOCAL, true);
+    sendSfppPacket(p, RX_SRC_LOCAL, true);
 }
 
 void StoreForwardPlusPlusModule::handleLegacyClientHistory(const meshtastic_MeshPacket &mp, meshtastic_StoreAndForward *req)
@@ -1452,7 +1467,7 @@ bool StoreForwardPlusPlusModule::sendNextLegacyHistory()
         p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
         p->want_ack = false;
         p->decoded.want_response = false;
-        service->sendToMesh(p, RX_SRC_LOCAL, true);
+        sendSfppPacket(p, RX_SRC_LOCAL, true);
     }
 
     if (legacyHistory.empty())
@@ -1546,7 +1561,7 @@ void StoreForwardPlusPlusModule::requestNextMessage(uint8_t *_root_hash, size_t 
     p->channel = 0;
     p->hop_limit = portduino_config.sfpp_hops;
     p->hop_start = portduino_config.sfpp_hops;
-    service->sendToMesh(p, RX_SRC_LOCAL, true);
+    sendSfppPacket(p, RX_SRC_LOCAL, true);
 }
 
 void StoreForwardPlusPlusModule::requestMessageCount(uint8_t *_root_hash, size_t _root_hash_len, uint32_t count)
@@ -1571,7 +1586,7 @@ void StoreForwardPlusPlusModule::requestMessageCount(uint8_t *_root_hash, size_t
     p->channel = 0;
     p->hop_limit = portduino_config.sfpp_hops;
     p->hop_start = portduino_config.sfpp_hops;
-    service->sendToMesh(p, RX_SRC_LOCAL, true);
+    sendSfppPacket(p, RX_SRC_LOCAL, true);
 }
 
 bool StoreForwardPlusPlusModule::getNextHash(uint8_t *_root_hash, size_t _root_hash_len, uint8_t *_commit_hash,
@@ -1719,7 +1734,7 @@ void StoreForwardPlusPlusModule::broadcastLink(link_object &lo, bool full_commit
     p->hop_limit = portduino_config.sfpp_hops;
     p->hop_start = portduino_config.sfpp_hops;
     LOG_INFO("StoreForwardpp Send link to mesh");
-    service->sendToMesh(p, RX_SRC_LOCAL, true);
+    sendSfppPacket(p, RX_SRC_LOCAL, true);
 }
 
 //
@@ -1969,7 +1984,7 @@ void StoreForwardPlusPlusModule::canonAnnounce(link_object &lo)
     p->hop_start = portduino_config.sfpp_hops;
     LOG_INFO("StoreForwardpp Send packet to mesh payload size %u", p->decoded.payload.size);
     canon_announces++;
-    service->sendToMesh(p, RX_SRC_LOCAL, true);
+    sendSfppPacket(p, RX_SRC_LOCAL, true);
 }
 
 bool StoreForwardPlusPlusModule::isInDB(const uint8_t *message_hash_bytes, size_t message_hash_len)
@@ -2245,7 +2260,7 @@ void StoreForwardPlusPlusModule::rebroadcastLinkObject(link_object &lo)
     memcpy(p->encrypted.bytes, lo.encrypted_bytes, lo.encrypted_len);
     p->transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA; // only a tiny white lie
     // Send to mesh, but don't cc the phone, to avoid a double message.
-    service->sendToMesh(p, RX_SRC_RADIO, false);
+    sendSfppPacket(p, RX_SRC_RADIO, false);
 }
 
 bool StoreForwardPlusPlusModule::checkCommitHash(StoreForwardPlusPlusModule::link_object &lo, uint8_t *commit_hash_bytes,
@@ -2758,7 +2773,7 @@ bool StoreForwardPlusPlusModule::sendEnumMessage(const meshtastic_StoreForwardPl
     // sendToMesh takes ownership and may free the packet; capture everything first. Enumeration
     // frames are protocol traffic, so no phone copy (which would read the packet after the send).
     const size_t payloadBytes = p->decoded.payload.size;
-    const ErrorCode res = service->sendToMesh(p, RX_SRC_LOCAL, false);
+    const ErrorCode res = sendSfppPacket(p, RX_SRC_LOCAL, false);
     if (res == ERRNO_SHOULD_RELEASE)
         return true; // handled locally, not an on-air send
     if (res != ERRNO_OK) {
@@ -2782,6 +2797,9 @@ void StoreForwardPlusPlusModule::beginEnumExchange(const uint8_t *root_hash, uin
     memcpy(enumExchangeRoot, root_hash, SFPP_HASH_SIZE);
     enumExchangeBucket = bucket;
     enumExchangePeer = peer;
+    enumPending.erase(std::remove_if(enumPending.begin(), enumPending.end(),
+                                     [&](const EnumPendingBucket &entry) { return entry.bucket == bucket; }),
+                      enumPending.end());
     enumExchangeStartedMs = Time::getMillis();
     enumRecovered = enumTx = enumRx = enumTxBytes = enumRxBytes = 0;
     enumWanted.clear();
@@ -2877,6 +2895,57 @@ void StoreForwardPlusPlusModule::markEnumProgress()
     const uint32_t reached = enumPeerTip < bucketEnd ? enumPeerTip : bucketEnd;
     if (reached > enumKnownTip)
         enumKnownTip = reached;
+}
+
+void StoreForwardPlusPlusModule::addPendingBucket(uint32_t bucket, uint32_t count, uint64_t checksum, uint32_t tip)
+{
+    for (auto &entry : enumPending) {
+        if (entry.bucket == bucket) {
+            entry.count = count;
+            entry.checksum = checksum;
+            entry.tip = tip;
+            return;
+        }
+    }
+    if (enumPending.size() >= kEnumPendingMax) {
+        size_t lowest = 0;
+        for (size_t i = 1; i < enumPending.size(); i++) {
+            if (enumPending[i].bucket < enumPending[lowest].bucket)
+                lowest = i;
+        }
+        enumPending.erase(enumPending.begin() + lowest);
+    }
+    enumPending.push_back({bucket, count, checksum, tip});
+}
+
+void StoreForwardPlusPlusModule::startPendingPull()
+{
+    if (portduino_config.sfpp_stratum0 || portduino_config.sfpp_enum_listen_only)
+        return;
+    if (enumExchangeActive || enumPending.empty())
+        return;
+
+    size_t best = 0;
+    for (size_t i = 1; i < enumPending.size(); i++) {
+        if (enumPending[i].bucket > enumPending[best].bucket)
+            best = i;
+    }
+    const EnumPendingBucket entry = enumPending[best];
+    enumPending.erase(enumPending.begin() + best);
+
+    uint8_t root[SFPP_HASH_SIZE] = {0};
+    if (!getRootFromChannelHash(channels.getHash(0), root) || enumAuthorityNode == 0)
+        return;
+
+    if (entry.count == 0 && entry.checksum == 0) {
+        beginEnumExchange(root, entry.bucket, enumAuthorityNode, entry.tip, 0);
+        enumPeerTip = entry.tip;
+        enumOnDemand = true;
+    } else {
+        beginEnumExchange(root, entry.bucket, enumAuthorityNode, entry.count, entry.checksum);
+        enumPeerTip = entry.tip;
+    }
+    requestEnumList(root, entry.bucket, enumAuthorityNode);
 }
 
 void StoreForwardPlusPlusModule::expireEnumLate()
@@ -3055,8 +3124,17 @@ void StoreForwardPlusPlusModule::handleEnumAdvert(const meshtastic_MeshPacket &m
     if (!namedMismatch && !tailBehind)
         return;
 
-    if (enumExchangeActive)
-        return; // one exchange at a time; the next advert tick retries
+    const uint32_t tipBucket = advertTip > 0 ? (advertTip - 1) / sfppsr::kBucketObjects : 0;
+
+    if (enumExchangeActive) {
+        // Stage 8g: a behind bucket seen while busy is remembered (bounded, newest first) and
+        // pulled when this exchange ends.
+        if (namedMismatch && advert.scope.bucket != enumExchangeBucket)
+            addPendingBucket(advert.scope.bucket, advert.count, advert.checksum, advertTip);
+        if (tailBehind && tipBucket != enumExchangeBucket)
+            addPendingBucket(tipBucket, 0, 0, advertTip);
+        return;
+    }
 
     if (namedMismatch) {
         // A bucket that could not be repaired from this advertised summary is not pulled again until
@@ -3075,7 +3153,6 @@ void StoreForwardPlusPlusModule::handleEnumAdvert(const meshtastic_MeshPacket &m
 
     // Stage 8f: the named bucket agrees but the sender's tip is ahead, so the newest bucket is
     // missing rows. Pull it now instead of waiting for its turn in the rotation.
-    const uint32_t tipBucket = (advertTip - 1) / sfppsr::kBucketObjects;
     if (enumBucketSuppressed(root, tipBucket, advertTip, 0))
         return;
     beginEnumExchange(root, tipBucket, mp.from, advertTip, 0);
@@ -3921,32 +3998,48 @@ void StoreForwardPlusPlusModule::promoteScratchMatches(const uint8_t *root_hash,
         uint8_t hash[SFPP_HASH_SIZE];
     };
     std::vector<ScratchRow> matches;
+    std::vector<std::vector<uint8_t>> corrupt;
 
     sqlite3_reset(fromScratchStmt);
     sqlite3_bind_blob(fromScratchStmt, 1, root_hash, SFPP_HASH_SIZE, NULL);
     while (sqlite3_step(fromScratchStmt) == SQLITE_ROW) {
-        const uint8_t *hash = (const uint8_t *)sqlite3_column_blob(fromScratchStmt, 4);
-        if (hash == nullptr)
+        const uint8_t *stored = (const uint8_t *)sqlite3_column_blob(fromScratchStmt, 4);
+        if (stored == nullptr)
             continue;
-        const pinsketch::Element sid = sfppsr::shortId(hash, SFPP_HASH_SIZE);
-        if (std::find(ids.begin(), ids.end(), sid) == ids.end())
-            continue;
-
         const uint8_t *cipher = (const uint8_t *)sqlite3_column_blob(fromScratchStmt, 3);
         const int cipherLen = sqlite3_column_bytes(fromScratchStmt, 3);
         if (cipher == nullptr || cipherLen <= 0)
             continue;
 
+        const uint32_t to = (uint32_t)sqlite3_column_int64(fromScratchStmt, 0);
+        const uint32_t from = (uint32_t)sqlite3_column_int64(fromScratchStmt, 1);
+        const uint32_t id = (uint32_t)sqlite3_column_int64(fromScratchStmt, 2);
+
+        // The stored hash is only an index; recompute it from the object and refuse a mismatch.
+        uint8_t computed[SFPP_HASH_SIZE];
+        sfppframe::messageHash(cipher, (size_t)cipherLen, to, from, id, computed);
+        if (memcmp(computed, stored, SFPP_HASH_SIZE) != 0) {
+            corrupt.emplace_back(stored, stored + SFPP_HASH_SIZE);
+            continue;
+        }
+
+        const pinsketch::Element sid = sfppsr::shortId(computed, SFPP_HASH_SIZE);
+        if (std::find(ids.begin(), ids.end(), sid) == ids.end())
+            continue;
+
         ScratchRow row;
-        row.to = (uint32_t)sqlite3_column_int64(fromScratchStmt, 0);
-        row.from = (uint32_t)sqlite3_column_int64(fromScratchStmt, 1);
-        row.id = (uint32_t)sqlite3_column_int64(fromScratchStmt, 2);
+        row.to = to;
+        row.from = from;
+        row.id = id;
         row.cipher.assign(cipher, cipher + cipherLen);
-        memcpy(row.hash, hash, SFPP_HASH_SIZE);
+        memcpy(row.hash, computed, SFPP_HASH_SIZE);
         row.rxTime = (uint32_t)sqlite3_column_int64(fromScratchStmt, 5);
         matches.push_back(row);
     }
     sqlite3_reset(fromScratchStmt);
+
+    for (const auto &bad : corrupt)
+        removeFromScratch(bad.data(), SFPP_HASH_SIZE);
 
     for (const auto &row : matches) {
         insertCanonObject(row.to, row.from, row.id, row.cipher.data(), row.cipher.size(), row.hash, row.rxTime, root_hash,

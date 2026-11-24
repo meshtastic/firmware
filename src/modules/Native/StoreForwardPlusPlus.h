@@ -183,6 +183,9 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
 
     void sendLegacyReply(NodeNum to, const meshtastic_StoreAndForward &payload);
 
+    // The module's single send boundary; EnumListenOnly drops every packet here.
+    ErrorCode sendSfppPacket(meshtastic_MeshPacket *p, RxSource src, bool ccToPhone);
+
     // Derives the short ID and checksum contribution for any chain row that predates those columns.
     // Bounded by the chain length, and a no-op on every run after the first.
     void backfillSetIndex();
@@ -250,6 +253,8 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     bool anyEnumQueuePending() const;
     void beginEnumLateAccept();
     void markEnumProgress();
+    void addPendingBucket(uint32_t bucket, uint32_t count, uint64_t checksum, uint32_t tip);
+    void startPendingPull();
     void expireEnumLate();
 
     // A canonical row, shared by recovered objects and promoted scratch rows.
@@ -489,6 +494,13 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     bool enumOnDemand = false;
     uint32_t enumPeerTip = 0;
     uint32_t enumKnownTip = 0;
+    struct EnumPendingBucket {
+        uint32_t bucket;
+        uint32_t count;
+        uint64_t checksum;
+        uint32_t tip;
+    };
+    std::vector<EnumPendingBucket> enumPending;
     struct EnumBucketSeen {
         uint32_t bucket;
         uint32_t count;
