@@ -1276,6 +1276,10 @@ bool loadConfig(const char *configPath)
                 }
             }
         }
+        // Only a file that names Path changes it, so a later config.d file cannot clear it by omission.
+        if (yamlConfig["SerialModule"] && yamlConfig["SerialModule"]["Path"]) {
+            portduino_config.serial_module_path = yamlConfig["SerialModule"]["Path"].as<std::string>("");
+        }
         if (yamlConfig["GPIO"]["ExtraPins"]) {
             for (auto extra_pin : yamlConfig["GPIO"]["ExtraPins"]) {
                 portduino_config.extra_pins.push_back(pinMapping());

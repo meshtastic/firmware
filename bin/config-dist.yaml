@@ -121,6 +121,13 @@ GPS:
 #  ExtraPins:
 #    - 22
 
+### Serial module: the host tty it reads and writes, in place of rxd/txd pins.
+### pty:<link> creates a virtual port and links it at <link> for another program to open.
+
+#SerialModule:
+#  Path: /dev/ttyUSB1
+#  Path: pty:/tmp/meshserial
+
 ### Specify I2C device, or leave blank for none
 
 I2C:
