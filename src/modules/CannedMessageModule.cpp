@@ -92,20 +92,24 @@ static bool allowsDirectMessages()
     return config.device.role != meshtastic_Config_DeviceConfig_Role_TAK_TRACKER;
 }
 
-static bool refuseDirectMessage(NodeNum dest)
+static const char *const NO_DMS_BANNER = "No DMs in TAK Tracker mode";
+
+static bool refusesDirectMessage(NodeNum dest)
 {
     if (isBroadcast(dest) || allowsDirectMessages())
         return false;
     LOG_WARN("No DMs in TAK Tracker mode, not sending to 0x%08x", dest);
-    if (screen)
-        screen->showSimpleBanner("No DMs in TAK Tracker mode", 2000);
     return true;
 }
 
 void CannedMessageModule::LaunchWithDestination(NodeNum newDest, uint8_t newChannel)
 {
-    if (refuseDirectMessage(newDest == 0 ? NODENUM_BROADCAST : newDest))
+    if (refusesDirectMessage(newDest == 0 ? NODENUM_BROADCAST : newDest)) {
+        // Shown from runOnce(): a menu banner callback clears any banner raised now
+        pendingDmRefusal = true;
+        setIntervalFromNow(0);
         return;
+    }
 
     // Do NOT override explicit broadcast replies
 
@@ -196,8 +200,11 @@ bool CannedMessageModule::showOnScreenKeyboard()
 
 void CannedMessageModule::LaunchFreetextWithDestination(NodeNum newDest, uint8_t newChannel)
 {
-    if (refuseDirectMessage(newDest == 0 ? NODENUM_BROADCAST : newDest))
+    if (refusesDirectMessage(newDest == 0 ? NODENUM_BROADCAST : newDest)) {
+        pendingDmRefusal = true;
+        setIntervalFromNow(0);
         return;
+    }
 
     // Do NOT override explicit broadcast replies
 
@@ -1086,8 +1093,11 @@ int CannedMessageModule::handleEmotePickerInput(const InputEvent *event)
 
 void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const char *message, bool wantReplies)
 {
-    if (refuseDirectMessage(dest))
+    if (refusesDirectMessage(dest)) {
+        if (screen)
+            screen->showSimpleBanner(NO_DMS_BANNER, 2000);
         return;
+    }
 
     lastDest = dest;
     lastChannel = channel;
@@ -1218,6 +1228,12 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
 
 int32_t CannedMessageModule::runOnce()
 {
+    if (this->pendingDmRefusal) {
+        this->pendingDmRefusal = false;
+        if (screen)
+            screen->showSimpleBanner(NO_DMS_BANNER, 2000);
+    }
+
     // A menu asked to compose freetext on the on-screen keyboard; the menu banner is gone
     // by now, so it is safe to bring the keyboard up.
     if (this->pendingOskLaunch) {
