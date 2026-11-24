@@ -417,6 +417,27 @@ static void test_reservedSavedNodeNum_selfRowDroppedAtBootBeforeRegionSet(void)
     TEST_ASSERT_TRUE(nodeDB->saveToDisk()); // leave the healthy keyed state on disk
 }
 
+// The same cleanup must only take our own row. If our row is missing, a remote node holding that
+// reserved number (1-9 were legal before) has a different key and stays.
+static void test_reservedSavedNodeNum_remoteRowWithOtherKeyIsKept(void)
+{
+    TEST_MESSAGE("=== Saved node 9, row 9 carries another key: kept ===");
+    meshtastic_NodeInfoLite *self = nodeDB->getMeshNode(nodeDB->getNodeNum());
+    TEST_ASSERT_NOT_NULL(self);
+    TEST_ASSERT_EQUAL(32, self->public_key.size);
+    self->num = 9;
+    self->public_key.bytes[0] ^= 0xFF; // no longer our key: a remote node 9, and no self row saved
+    myNodeInfo.my_node_num = 9;
+    TEST_ASSERT_TRUE(nodeDB->saveToDisk(SEGMENT_DEVICESTATE | SEGMENT_NODEDATABASE));
+
+    rebootNodeDB();
+
+    TEST_ASSERT_NOT_NULL(nodeDB->getMeshNode(9));
+    assertIdentityMatchesBaseline();
+
+    nodeDB->removeNodeByNum(9); // leave the healthy keyed state on disk
+}
+
 NBR_TEST_ENTRY void setup()
 {
     initializeTestEnvironment();
@@ -446,6 +467,7 @@ NBR_TEST_ENTRY void setup()
 
     printf("\n=== Leaving a reserved node number ===\n");
     RUN_TEST(test_reservedSavedNodeNum_selfRowDroppedAtBootBeforeRegionSet);
+    RUN_TEST(test_reservedSavedNodeNum_remoteRowWithOtherKeyIsKept);
 
     exit(UNITY_END());
 }

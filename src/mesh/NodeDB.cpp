@@ -634,7 +634,11 @@ NodeDB::NodeDB()
     const NodeNum savedNodeNum = myNodeInfo.my_node_num;
     pickNewNodeNum();
     // Leaving a reserved number strands our saved self row under it; drop it before it becomes a phantom node.
-    if (isReservedNodeNum(savedNodeNum) && savedNodeNum != myNodeInfo.my_node_num && getMeshNode(savedNodeNum))
+    const meshtastic_NodeInfoLite *strandedSelf =
+        isReservedNodeNum(savedNodeNum) && savedNodeNum != myNodeInfo.my_node_num ? getMeshNode(savedNodeNum) : nullptr;
+    // A different key under that number is a remote node (1-9 were legal before), not our old row.
+    if (strandedSelf && !(strandedSelf->public_key.size == 32 && owner.public_key.size == 32 &&
+                          memcmp(strandedSelf->public_key.bytes, owner.public_key.bytes, 32) != 0))
         removeNodeByNum(savedNodeNum);
 
     // Set our board type so we can share it with others
