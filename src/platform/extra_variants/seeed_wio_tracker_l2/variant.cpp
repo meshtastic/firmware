@@ -23,8 +23,11 @@ class GnssRail : public GpioPin
     void set(bool on) override
     {
         concurrency::LockGuard guard(spiLock);
-        if (!io.digitalWrite(EXPANDS_GNSS_PWR_EN, on ? HIGH : LOW))
-            LOG_WARN("GNSS rail write failed");
+        // The virtual pin never resends a level, so retry here; a failed transfer resets the bus first.
+        for (int attempt = 0; attempt < 3; attempt++)
+            if (io.digitalWrite(EXPANDS_GNSS_PWR_EN, on ? HIGH : LOW))
+                return;
+        LOG_ERROR("GNSS rail write failed, rail stays %s", on ? "off" : "on");
     }
 };
 static GnssRail gnssRail;
