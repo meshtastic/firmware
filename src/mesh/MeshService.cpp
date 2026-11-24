@@ -176,12 +176,14 @@ void MeshService::applyDeferredRadioConfig()
     if (radioConfigAwaitsAckOf) {
         // The pending table holds a reliable reply from its send until its ack, so leaving it means acked (or given up)
         // and other queued traffic needn't hold the retune. Never in it (no retransmission copy): it is only queued.
-        const int retries = router ? router->retransmissionsSent(nodeDB->getNodeNum(), radioConfigAwaitsAckOf) : -1;
+        const int retries = router ? router->retransmissionsQueued(nodeDB->getNodeNum(), radioConfigAwaitsAckOf) : -1;
         const bool pending = retries >= 0;
         radioConfigAwaitedReplySeen |= pending;
         ready = !pending && (radioConfigAwaitedReplySeen || doPreflightSleep(true));
-        // Other traffic pushes the retry's deadline back, so follow the router rather than predict it.
-        if (pending && retries > 0 && !radioConfigRetrySentAtMs)
+        // Other traffic pushes the retry's deadline back, so follow the router rather than predict it. The count drops
+        // when the retry is queued; it is out once it has left the TX queue.
+        if (pending && retries > 0 && !radioConfigRetrySentAtMs &&
+            !router->findInTxQueue(nodeDB->getNodeNum(), radioConfigAwaitsAckOf))
             radioConfigRetrySentAtMs = Time::skipZero(Time::getMillis());
         holdForRetry = pending && (!radioConfigRetrySentAtMs ||
                                    Throttle::isWithinTimespanMs(radioConfigRetrySentAtMs, radioConfigAwaitedRetryMsec));

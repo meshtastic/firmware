@@ -2681,17 +2681,20 @@ static void test_deferredRetune_repeatedSaveKeepsCapStart()
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, retuneCounter.count, "a second save restarted the cap");
 }
 
-// Stands in for NextHopRouter's pending-retransmission table: our packet `id` is pending until acked.
+// Stands in for NextHopRouter's pending-retransmission table (our packet `id` is pending until acked) and
+// for the radio's TX queue, which a queued retry of it sits in until it is transmitted.
 class PendingReplyRouter : public Router
 {
   public:
     PacketId id = 0;
     bool acked = false;
     int retries = 0;
-    int retransmissionsSent(NodeNum from, PacketId p) override
+    bool retryQueued = false;
+    int retransmissionsQueued(NodeNum from, PacketId p) override
     {
         return !acked && from == nodeDB->getNodeNum() && p == id ? retries : -1;
     }
+    bool findInTxQueue(NodeNum from, PacketId p) override { return retryQueued && from == nodeDB->getNodeNum() && p == id; }
 };
 
 // An empty TX queue only means the reply's first transmission is out. Retuning then strands its
@@ -2738,9 +2741,10 @@ static void test_deferredRetune_untrackedReplyWaitsForQueue()
 }
 
 // The reply's first retry is due one retransmission interval after its send, ~15 s idle and ~24 s busy at
-// LONG_SLOW, and every packet sent meanwhile pushes it back by that packet's airtime. A cap that predicts
-// when the retry goes out retunes first on a busy channel, and the retry goes out on settings the requester
-// isn't on. The cap waits for the router to report the first retry sent, then one interval for its ack.
+// LONG_SLOW, and every packet sent meanwhile pushes it back by that packet's airtime; once due it is only
+// queued, and a busy TX queue holds it longer still. A cap that predicts when the retry goes out retunes
+// first on a busy channel, and the retry goes out on settings the requester isn't on. The cap waits for the
+// retry to leave the TX queue, then one interval for its ack.
 static void test_deferredRetune_capWaitsForReplyRetry()
 {
     primeDeferredRetuneTest();
@@ -2754,9 +2758,17 @@ static void test_deferredRetune_capWaitsForReplyRetry()
     service->awaitAckBeforeRadioConfig(0x1234, retryMsec);
     service->ageRadioConfigDeferralForTest(4 * retryMsec); // intervening traffic held the first retry back
     service->applyDeferredRadioConfig();
-    TEST_ASSERT_EQUAL_INT_MESSAGE(0, retuneCounter.count, "the cap fired before the reply's first retry went out");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, retuneCounter.count, "the cap fired before the reply's first retry was due");
 
     pendingReply->retries = 1;
+    pendingReply->retryQueued = true;
+    service->applyDeferredRadioConfig();
+    service->ageRadioConfigDeferralForTest(4 * retryMsec); // the retry sat in a busy TX queue
+    service->ageAwaitedRetryForTest(4 * retryMsec);
+    service->applyDeferredRadioConfig();
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, retuneCounter.count, "the cap fired while the retry was still in the TX queue");
+
+    pendingReply->retryQueued = false;
     service->applyDeferredRadioConfig();
     service->ageAwaitedRetryForTest(retryMsec - 1000);
     service->applyDeferredRadioConfig();

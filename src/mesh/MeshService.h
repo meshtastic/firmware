@@ -224,8 +224,12 @@ class MeshService
 #ifdef PIO_UNIT_TESTING
     /// Make the pending deferral look ms older, so a test reaches the cap without moving the shared clock.
     void ageRadioConfigDeferralForTest(uint32_t ms) { radioConfigDeferredAtMs -= ms; }
-    /// Same for the awaited reply's first retry, once one has been seen sent.
-    void ageAwaitedRetryForTest(uint32_t ms) { radioConfigRetrySentAtMs -= ms; }
+    /// Same for the awaited reply's first retry, once one has been seen sent (no-op before).
+    void ageAwaitedRetryForTest(uint32_t ms)
+    {
+        if (radioConfigRetrySentAtMs)
+            radioConfigRetrySentAtMs -= ms;
+    }
     /// Hold a radio change without saving one, for suites that must not write config.proto.
     void deferRadioConfigForTest()
     {
