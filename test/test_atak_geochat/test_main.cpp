@@ -264,6 +264,7 @@ void setUp(void)
     myNodeInfo.my_node_num = kLocalNode;
     nodeDB = testNodeDB;
     channels.initDefaults();
+    channels.getByIndex(0).settings.use_aead = false; // initDefaults() leaves it, so AEAD would leak between tests
     channels.onConfigChanged();
 }
 
