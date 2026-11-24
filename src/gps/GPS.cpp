@@ -57,10 +57,38 @@ static inline void feedWatchdogWhileWaiting()
 #define GPS_RESET_IN_USE true
 #endif
 
+// A board that knows it has an Airoha fitted can say so, so it is parked and woken as one until the probe names a model.
+#ifndef GPS_AIROHA_FITTED
+#define GPS_AIROHA_FITTED false
+#endif
+
 // Not all platforms have std::size().
 template <typename T, std::size_t N> std::size_t array_count(const T (&)[N])
 {
     return N;
+}
+
+static inline bool isAiroha(GnssModel_t model)
+{
+    return IS_ONE_OF(model, GNSS_MODEL_AG3335, GNSS_MODEL_AG3352) || (model == GNSS_MODEL_UNKNOWN && GPS_AIROHA_FITTED);
+}
+
+// Reopen the GPS UART at a new speed, keeping the pins it was given.
+template <typename T> static void restartSerial(T *serialGps, int serialSpeed)
+{
+#if defined(ARCH_NRF52) || defined(ARCH_PORTDUINO) || defined(ARCH_STM32)
+    serialGps->end();
+    serialGps->begin(serialSpeed);
+#elif defined(ARCH_RP2040)
+    serialGps->end();
+    serialGps->setFIFOSize(256);
+    serialGps->begin(serialSpeed);
+#else
+    if (serialGps->baudRate() != serialSpeed) {
+        LOG_DEBUG("Set GPS Baud to %i", serialSpeed);
+        serialGps->updateBaudRate(serialSpeed);
+    }
+#endif
 }
 
 #ifndef GPS_SERIAL_PORT
@@ -848,19 +876,7 @@ bool GPS::verifyCachedProbePresence()
         return false;
     }
 
-#if defined(ARCH_NRF52) || defined(ARCH_PORTDUINO) || defined(ARCH_STM32)
-    _serial_gps->end();
-    _serial_gps->begin(cachedProbeBaud);
-#elif defined(ARCH_RP2040)
-    _serial_gps->end();
-    _serial_gps->setFIFOSize(256);
-    _serial_gps->begin(cachedProbeBaud);
-#else
-    if (_serial_gps->baudRate() != cachedProbeBaud) {
-        LOG_DEBUG("Set GPS Baud to %i (cached verify)", cachedProbeBaud);
-        _serial_gps->updateBaudRate(cachedProbeBaud);
-    }
-#endif
+    restartSerial(_serial_gps, cachedProbeBaud);
 
     // Before trusting cached model/baud, require either active model-specific
     // response or passive NMEA flow.
@@ -1024,6 +1040,9 @@ bool GPS::setup()
                     detectedBaud = rareSerialSpeeds[speedSelect];
                 } else if (currentStep == 0 && ++speedSelect == array_count(rareSerialSpeeds)) {
                     LOG_WARN("Give up GPS probe, set to %d", GPS_BAUDRATE);
+                    // Sweep afresh if the GPS is enabled again, rather than index past the end of the table.
+                    speedSelect = 0;
+                    probeTries = 0;
                     return true;
                 }
             }
@@ -1033,6 +1052,10 @@ bool GPS::setup()
         if (gnssModel != GNSS_MODEL_UNKNOWN) {
             setConnected();
             (void)saveProbeCache();
+#ifdef HAS_AIROHA_SLEEP
+            // Sleep misses while unidentified (e.g. knob off) must not lock out the identified receiver.
+            airohaSleepMisses = 0;
+#endif
         } else {
             return false;
         }
@@ -1374,7 +1397,7 @@ void GPS::setPowerState(GPSPowerState newState, uint32_t sleepTime)
             airohaPulseRtcInt(); // Airoha: leave software-RTC sleep, now that VCC is back
 #endif
 #ifdef HAS_AIROHA_RESET_WAKE
-        if (IS_ONE_OF(gnssModel, GNSS_MODEL_AG3335, GNSS_MODEL_AG3352))
+        if (isAiroha(gnssModel))
             airohaPulseReset(); // Airoha: leave backup mode, now that the core is powered
 #endif
         setPowerPMU(true);      // Power (PMU): on
@@ -1441,7 +1464,7 @@ void GPS::writePinStandby(bool standby)
 #ifdef PIN_GPS_STANDBY // Specifically the standby pin for L76B, L76K and clones
 #ifdef GPS_STANDBY_SKIP_AIROHA
     // On an Airoha fit this pin is RTC_INT, which rests low for the Airoha sleep code to pulse, or no standby at all.
-    if (IS_ONE_OF(gnssModel, GNSS_MODEL_AG3335, GNSS_MODEL_AG3352))
+    if (isAiroha(gnssModel))
         return;
 #endif
     bool val;
@@ -1562,8 +1585,13 @@ void GPS::airohaEnterSleep()
 {
 #ifdef HAS_AIROHA_SLEEP
     // Only an Airoha receiver understands PAIR commands; a probe that fell back must not be talked at.
-    if (!IS_ONE_OF(gnssModel, GNSS_MODEL_AG3335, GNSS_MODEL_AG3352) || airohaSleepMisses >= AIROHA_SLEEP_MAX_MISSES)
+    if (!isAiroha(gnssModel) || airohaSleepMisses >= AIROHA_SLEEP_MAX_MISSES)
         return;
+    // Not probed yet, so the UART may be partway through the baud sweep.
+    if (gnssModel == GNSS_MODEL_UNKNOWN) {
+        restartSerial(_serial_gps, GPS_BAUDRATE);
+        currentStep = 0; // so the next probe call reopens the UART at its own speed
+    }
 
 #if defined(HAS_AIROHA_SOFT_RTC) || defined(HAS_AIROHA_RESET_WAKE)
     const char *sleepCmd = "$PAIR650,0*25\r\n";
@@ -1644,7 +1672,7 @@ void GPS::down()
         bool softsleepSupported = false;
 #endif
 #ifdef GPS_STANDBY_SKIP_AIROHA
-        if (IS_ONE_OF(gnssModel, GNSS_MODEL_AG3335, GNSS_MODEL_AG3352))
+        if (isAiroha(gnssModel))
             softsleepSupported = false;
 #endif
         // U-blox is supported via PMREQ
@@ -1937,19 +1965,7 @@ GnssModel_t GPS::probe(int serialSpeed)
 
     switch (currentStep) {
     case 0: {
-#if defined(ARCH_NRF52) || defined(ARCH_PORTDUINO) || defined(ARCH_STM32)
-        _serial_gps->end();
-        _serial_gps->begin(serialSpeed);
-#elif defined(ARCH_RP2040)
-        _serial_gps->end();
-        _serial_gps->setFIFOSize(256);
-        _serial_gps->begin(serialSpeed);
-#else
-        if (_serial_gps->baudRate() != serialSpeed) {
-            LOG_DEBUG("Set GPS Baud to %i", serialSpeed);
-            _serial_gps->updateBaudRate(serialSpeed);
-        }
-#endif
+        restartSerial(_serial_gps, serialSpeed);
 
         memset(&ublox_info, 0, sizeof(ublox_info));
         delay(100);
