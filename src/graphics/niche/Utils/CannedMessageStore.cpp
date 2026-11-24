@@ -51,9 +51,17 @@ void CannedMessageStore::load()
     // In case we're reloading
     messages.clear();
 
+#ifdef FSCom
+    {
+        concurrency::LockGuard guard(spiLock);
+        if (!FSCom.exists(cannedMessagesConfigFile))
+            return;
+    }
+#endif
+
     // Attempt to load the bulk canned message data from flash
     meshtastic_CannedMessageModuleConfig cannedMessageModuleConfig;
-    LoadFileResult result = nodeDB->loadProto("/prefs/cannedConf.proto", meshtastic_CannedMessageModuleConfig_size,
+    LoadFileResult result = nodeDB->loadProto(cannedMessagesConfigFile, meshtastic_CannedMessageModuleConfig_size,
                                               sizeof(meshtastic_CannedMessageModuleConfig),
                                               &meshtastic_CannedMessageModuleConfig_msg, &cannedMessageModuleConfig);
 

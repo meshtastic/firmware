@@ -224,8 +224,16 @@ jobs:
         # exit_simulator admin path regresses again) the job must fail fast,
         # not run to GitHub's 6-hour limit.
         timeout-minutes: 5
+        env:
+          # The coverage env links ASan/LSan. Leak detection is off for the same reason as in
+          # bin/test-config-check.sh: exit_simulator exit()s with the node's globals still
+          # reachable, so LSan would report them on every run. Everything else stays at the ASan
+          # default, which prints a report and leaves a non-zero exit status for the gate below.
+          ASAN_OPTIONS: detect_leaks=0
         run: |
-          .pio/build/coverage/meshtasticd -s &
+          # Output goes to a file, echoed once the simulator is gone: the gate below reads the
+          # sanitizer's own reports back out of it.
+          .pio/build/coverage/meshtasticd -s >simulator.log 2>&1 &
           PID=$!
           trap 'kill "$PID" 2>/dev/null || true' EXIT
           timeout 20 bash -c "until ls -al /proc/$PID/fd | grep socket; do sleep 1; done"
@@ -244,9 +252,20 @@ jobs:
             echo "::error title=Simulator did not exit::meshtasticd ignored exit_simulator and is still running after the integration test. The exit_simulator admin path is broken (see AdminModule::handleReceivedProtobuf, ARCH_PORTDUINO bypass). Killing it to avoid a 6-hour CI overrun."
             kill -9 "$PID" 2>/dev/null || true
             wait "$PID" 2>/dev/null || true
+            cat simulator.log
             exit 1
           fi
-          wait "$PID" 2>/dev/null || true
+          # exit_simulator is exit(0), so any other status is a real failure - an AddressSanitizer
+          # report among them. Nothing below `wait` may be `|| true`: swallowing the status is how
+          # a heap-use-after-free on the exit path sat in a green log unnoticed.
+          rc=0
+          wait "$PID" || rc=$?
+          cat simulator.log
+          ./bin/check-sanitizer-log.sh simulator.log "the native simulator"
+          if [ "$rc" -ne 0 ]; then
+            echo "::error title=Simulator exited $rc::meshtasticd exited non-zero after the integration test; exit_simulator is an exit(0), so something failed on the way out. See the simulator output in this step's log."
+            exit 1
+          fi
 
       - name: Capture coverage information
         if: always() # run this step even if previous step failed
@@ -266,6 +285,17 @@ jobs:
           name: lcov-coverage-info-native-simulator-test-${{ steps.version.outputs.long }}
           overwrite: true
           path: ./coverage_*.info
+
+      - name: Save simulator output
+        # The sanitizer report lives here, and a fault on the exit path prints after the last
+        # test has passed - keep it for the run that failed on it, not only in the step log.
+        uses: actions/upload-artifact@v7
+        if: always() # run this step even if previous step failed
+        with:
+          name: simulator-log-native-simulator-test-${{ steps.version.outputs.long }}
+          overwrite: true
+          path: ./simulator.log
+          if-no-files-found: warn
 
   # bin/test-shards.py derives the matrix from test/, so adding a suite needs no CI change.
   # Cheap by design: a checkout and a python run, sitting on every shard critical path.

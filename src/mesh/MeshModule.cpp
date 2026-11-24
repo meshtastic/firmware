@@ -11,6 +11,7 @@
 std::vector<MeshModule *> *MeshModule::modules;
 
 const meshtastic_MeshPacket *MeshModule::currentRequest;
+RxSource MeshModule::currentRequestSource = RX_SRC_RADIO;
 uint8_t MeshModule::numPeriodicModules = 0;
 
 /**
@@ -133,6 +134,7 @@ void MeshModule::callModules(meshtastic_MeshPacket &mp, RxSource src)
         auto &pi = **i;
 
         pi.currentRequest = &mp;
+        pi.currentRequestSource = src;
         pi.ignoreRequest = false;
 
         /// We only call modules that are interested in the packet (and the message is destined to us or we are promiscious)
@@ -193,8 +195,15 @@ void MeshModule::callModules(meshtastic_MeshPacket &mp, RxSource src)
 
                 // If the requester didn't ask for a response we might need to discard unused replies to prevent memory leaks
                 if (pi.myReply) {
-                    LOG_DEBUG("Discard an unneeded response");
-                    packetPool.release(pi.myReply);
+                    if (pi.myReply->decoded.portnum == meshtastic_PortNum_ROUTING_APP && !currentReply && isDecoded &&
+                        !mp.decoded.want_response && mp.want_ack && isToUs(&mp)) {
+                        // A refusal NAK takes the place of the plain ACK ReliableRouter would otherwise send
+                        currentReply = pi.myReply;
+                        currentReply->want_ack = false;
+                    } else {
+                        LOG_DEBUG("Discard an unneeded response");
+                        packetPool.release(pi.myReply);
+                    }
                     pi.myReply = NULL;
                 }
 
@@ -207,6 +216,10 @@ void MeshModule::callModules(meshtastic_MeshPacket &mp, RxSource src)
 
         pi.currentRequest = NULL;
     }
+
+    // callModules never sees a filtered duplicate, so this is a fresh processing: the cache keeps its latest answer
+    if (isDecoded && mp.want_ack && isToUs(&mp))
+        router->rememberRefusal(getFrom(&mp), mp.id, meshtastic_Routing_Error_NONE);
 
     if (isDecoded && mp.decoded.want_response && toUs) {
         if (currentReply) {
@@ -226,6 +239,16 @@ void MeshModule::callModules(meshtastic_MeshPacket &mp, RxSource src)
             routingModule->sendAckNak(meshtastic_Routing_Error_NO_RESPONSE, getFrom(&mp), mp.id, mp.channel,
                                       routingModule->getHopLimitForResponse(mp));
         }
+    } else if (currentReply && toUs) {
+        printPacket("Send refusal", currentReply);
+        meshtastic_Routing refusal = meshtastic_Routing_init_default;
+        if (currentReply->decoded.portnum == meshtastic_PortNum_ROUTING_APP &&
+            pb_decode_from_bytes(currentReply->decoded.payload.bytes, currentReply->decoded.payload.size,
+                                 meshtastic_Routing_fields, &refusal) &&
+            refusal.which_variant == meshtastic_Routing_error_reason_tag)
+            router->rememberRefusal(getFrom(&mp), mp.id, refusal.error_reason); // so a retransmitted duplicate is NAKed too
+        service->sendToMesh(currentReply);
+        currentReply = NULL;
     }
 
     if (!moduleFound && isDecoded) {
