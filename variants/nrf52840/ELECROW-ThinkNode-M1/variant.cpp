@@ -39,6 +39,8 @@ uint8_t m1GpsRxPin = 32 + 9;
 static uint16_t m1UartEdges[2]; // falling edges seen on P1.08 and P1.09, for the boot log
 static bool m1UartFound;
 
+void variant_shutdown();
+
 void initVariant()
 {
     // pinMode(PIN_LED1, OUTPUT);
@@ -56,6 +58,23 @@ static bool m1IsV1Board()
     nrf_gpio_cfg_default(BATTERY_PIN);
     nrf_gpio_cfg_default(GPS_SWITCH_AG3352);
     return tied;
+}
+
+// Without USB, below the low-battery cutoff. Same reading as AnalogBatteryLevel, minus the config override.
+static bool m1BatteryBelowCutoff()
+{
+    pinMode(EXT_PWR_DETECT, INPUT);
+    if (digitalRead(EXT_PWR_DETECT) == HIGH)
+        return false;
+    analogReference(VBAT_AR_INTERNAL);
+    analogReadResolution(BATTERY_SENSE_RESOLUTION_BITS);
+    uint32_t raw = 0;
+    for (uint8_t i = 0; i < BATTERY_SENSE_SAMPLES; i++)
+        raw += analogRead(BATTERY_PIN);
+    raw /= BATTERY_SENSE_SAMPLES;
+    const float mv = ADC_MULTIPLIER * (1000 * AREF_VOLTAGE) / BATTERY_SENSE_RESOLUTION * raw;
+    constexpr uint16_t ocv[] = {OCV_ARRAY};
+    return mv < ocv[sizeof(ocv) / sizeof(ocv[0]) - 1];
 }
 
 #if !MESHTASTIC_EXCLUDE_GPS
@@ -90,7 +109,19 @@ static void m1FindAg3352Uart()
 // Here rather than initVariant(), whose delay() would run before the scheduler. No LOG_* yet.
 void earlyInitVariant()
 {
+    // Before m1IsV1Board(), which drives the battery sense pin.
+    const bool batteryFlat = m1BatteryBelowCutoff();
     m1HasAg3352 = !m1IsV1Board();
+
+    // Woken by a button below the cutoff: straight back to System OFF, before the screen, radio or GPS start.
+    // The SoftDevice is not enabled yet, so POWER is ours to write.
+    if (batteryFlat) {
+        variant_shutdown();
+        NRF_POWER->GPREGRET = 0x6d; // DFU_MAGIC_SKIP, as cpuDeepSleep() sets: the bootloader skips its DFU wait on wake
+        NRF_POWER->SYSTEMOFF = 1;
+        while (true)
+            ;
+    }
 
 #if !MESHTASTIC_EXCLUDE_GPS
     if (m1HasAg3352) {

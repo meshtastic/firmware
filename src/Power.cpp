@@ -1290,15 +1290,9 @@ void Power::readPowerStatus()
 
     if (batteryLevel) {
         // getBattVoltage() reports pack voltage; the OCV table is per cell.
-        bool shutdownNow = updateLowVoltageCounter(low_voltage_counter, powerStatus2.getHasBattery(), powerStatus2.getHasUSB(),
-                                                   batteryLevel->getBattVoltage(), OCV[NUM_OCV_POINTS - 1] * NUM_CELLS);
-#ifdef LOW_VOLTAGE_SLEEP_AT_BOOT
-        // Woken (or powered on) below the cutoff: go straight back to sleep rather than wait out the count.
-        static bool firstReading = true;
-        if (firstReading && low_voltage_counter)
-            shutdownNow = true;
-        firstReading = false;
-#endif
+        const bool shutdownNow =
+            updateLowVoltageCounter(low_voltage_counter, powerStatus2.getHasBattery(), powerStatus2.getHasUSB(),
+                                    batteryLevel->getBattVoltage(), OCV[NUM_OCV_POINTS - 1] * NUM_CELLS);
         if (low_voltage_counter)
             LOG_DEBUG("Low voltage counter: %d/%d", low_voltage_counter, LOW_VOLTAGE_READINGS_BEFORE_SHUTDOWN);
         if (shutdownNow) {
