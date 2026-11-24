@@ -76,7 +76,8 @@ class Reassembler
     bool hasSlot(const uint8_t key[kFrameKeyBytes]) const;
 
   private:
-    static constexpr size_t kMaxCiphertextBytes = kMaxFrames * 240;
+    // One frame's ciphertext is bounded by the generated wire field (PB_BYTES_ARRAY_T(240), mesh.pb.h).
+    static constexpr size_t kMaxCiphertextBytes = kMaxFrames * sizeof(meshtastic_StoreForwardPlusPlus_message_t{}.bytes);
 
     struct Slot {
         uint8_t key[kFrameKeyBytes] = {0};
