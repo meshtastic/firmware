@@ -106,6 +106,72 @@ static void test_sendToPhone_sentAtTimeZeroStillHoldsCadence()
     TEST_ASSERT_TRUE(PositionModule::shouldSendPositionToPhone(true, true, true, 60000U, 0U, 60000U));
 }
 
+// copyAltitudeFields() carries each altitude field's presence from localPosition into the broadcast.
+// A phone that sends a fix without an altitude, or a GGA with an empty altitude field, leaves the
+// field absent; forcing presence on broadcast that as a reading of 0 m.
+static constexpr uint32_t kAltMsl = meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE |
+                                    meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE_MSL |
+                                    meshtastic_Config_PositionConfig_PositionFlags_GEOIDAL_SEPARATION;
+static constexpr uint32_t kAltHae =
+    meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE | meshtastic_Config_PositionConfig_PositionFlags_GEOIDAL_SEPARATION;
+
+static void test_copyAltitude_absentStaysAbsent()
+{
+    const meshtastic_Position from = meshtastic_Position_init_default;
+    meshtastic_Position msl = meshtastic_Position_init_default;
+    meshtastic_Position hae = meshtastic_Position_init_default;
+    PositionModule::copyAltitudeFields(msl, from, kAltMsl);
+    PositionModule::copyAltitudeFields(hae, from, kAltHae);
+    TEST_ASSERT_FALSE(msl.has_altitude);
+    TEST_ASSERT_FALSE(msl.has_altitude_geoidal_separation);
+    TEST_ASSERT_FALSE(hae.has_altitude_hae);
+}
+
+// 0 m is a reading: presence, not the value, decides whether it goes out.
+static void test_copyAltitude_presentZeroStaysPresent()
+{
+    meshtastic_Position from = meshtastic_Position_init_default;
+    from.has_altitude = true;
+    meshtastic_Position to = meshtastic_Position_init_default;
+    PositionModule::copyAltitudeFields(to, from, kAltMsl);
+    TEST_ASSERT_TRUE(to.has_altitude);
+    TEST_ASSERT_EQUAL_INT32(0, to.altitude);
+}
+
+static void test_copyAltitude_flagsPickMslOrHae()
+{
+    meshtastic_Position from = meshtastic_Position_init_default;
+    from.has_altitude = true;
+    from.altitude = 545;
+    from.has_altitude_hae = true;
+    from.altitude_hae = 591;
+    from.has_altitude_geoidal_separation = true;
+    from.altitude_geoidal_separation = 46;
+
+    meshtastic_Position msl = meshtastic_Position_init_default;
+    PositionModule::copyAltitudeFields(msl, from, kAltMsl);
+    TEST_ASSERT_TRUE(msl.has_altitude);
+    TEST_ASSERT_EQUAL_INT32(545, msl.altitude);
+    TEST_ASSERT_FALSE(msl.has_altitude_hae);
+    TEST_ASSERT_EQUAL_INT32(46, msl.altitude_geoidal_separation);
+
+    meshtastic_Position hae = meshtastic_Position_init_default;
+    PositionModule::copyAltitudeFields(hae, from, kAltHae);
+    TEST_ASSERT_FALSE(hae.has_altitude);
+    TEST_ASSERT_TRUE(hae.has_altitude_hae);
+    TEST_ASSERT_EQUAL_INT32(591, hae.altitude_hae);
+}
+
+static void test_copyAltitude_noAltitudeFlagCopiesNothing()
+{
+    meshtastic_Position from = meshtastic_Position_init_default;
+    from.has_altitude = true;
+    from.altitude = 545;
+    meshtastic_Position to = meshtastic_Position_init_default;
+    PositionModule::copyAltitudeFields(to, from, meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE_MSL);
+    TEST_ASSERT_FALSE(to.has_altitude);
+}
+
 void setUp(void) {}
 
 void tearDown(void) {}
@@ -131,6 +197,10 @@ void setup()
     RUN_TEST(test_sendToPhone_requiresIdlePhoneQueue);
     RUN_TEST(test_sendToPhone_survivesMillisRollover);
     RUN_TEST(test_sendToPhone_sentAtTimeZeroStillHoldsCadence);
+    RUN_TEST(test_copyAltitude_absentStaysAbsent);
+    RUN_TEST(test_copyAltitude_presentZeroStaysPresent);
+    RUN_TEST(test_copyAltitude_flagsPickMslOrHae);
+    RUN_TEST(test_copyAltitude_noAltitudeFlagCopiesNothing);
     exit(UNITY_END());
 }
 
