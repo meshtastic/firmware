@@ -1,8 +1,8 @@
 // On-device text sent as an ATAK GeoChat (TAKPacketV2 on ATAK_PLUGIN_V2) by the TAK roles -
 // src/modules/AtakPluginModule.cpp. The envelope must match what the Meshtastic apps put on air
 // for an ATAK b-t-f event, because that is what every receiver (Android's TAKPacketV2Conversion,
-// the TAKPacket-SDK's CotXmlBuilder) parses: uid GeoChat.<sender>.<chatroom>.<message id>,
-// device_callsign <sender>|<message id>, and chat.to unset for All Chat Rooms.
+// the TAKPacket-SDK's CotXmlBuilder) parses: uid GeoChat.<sender>.<chatroom>.<message id>, and
+// chat.to unset for All Chat Rooms. device_callsign stays empty: ATAK chats carry no <uid Droid>.
 #include "MeshTypes.h" // Include BEFORE TestUtil.h (provides NodeNum, isBroadcast)
 #include "TestUtil.h"
 #include <unity.h>
@@ -94,7 +94,7 @@ void test_broadcast_matches_app_envelope(void)
     TEST_ASSERT_EQUAL(meshtastic_CotHow_CotHow_h_g_i_g_o, tak->how);
     // !<nodenum> is the uid our PLI carries, so ATAK files the chat under the same contact
     TEST_ASSERT_EQUAL_STRING("GeoChat.!0a0a0a0a.All Chat Rooms.12345678", tak->uid);
-    TEST_ASSERT_EQUAL_STRING("!0a0a0a0a|12345678", tak->device_callsign);
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("", tak->device_callsign, "20 bytes of text nothing reads");
     TEST_ASSERT_EQUAL_STRING("Test Operator", tak->callsign);
     TEST_ASSERT_FALSE_MESSAGE(tak->payload_variant.chat.has_to, "All Chat Rooms is signalled by leaving chat.to unset");
     TEST_ASSERT_EQUAL_STRING(text, tak->payload_variant.chat.message);

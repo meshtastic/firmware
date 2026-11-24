@@ -63,8 +63,8 @@ bool AtakPluginModule::setPayload(meshtastic_MeshPacket *p, const meshtastic_TAK
 }
 
 // GeoChat envelope as the Meshtastic apps build it from an ATAK b-t-f event: uid
-// GeoChat.<sender>.<chatroom>.<message id>, device_callsign <sender>|<message id>, and chat.to
-// unset for All Chat Rooms. Our sender uid is the !nodenum our PLI carries.
+// GeoChat.<sender>.<chatroom>.<message id>, and chat.to unset for All Chat Rooms. Our sender uid is
+// the !nodenum our PLI carries.
 static void fillGeoChat(meshtastic_TAKPacketV2 &takPacket, NodeNum dest, PacketId id)
 {
     takPacket.cot_type_id = meshtastic_CotType_CotType_b_t_f;
@@ -84,7 +84,6 @@ static void fillGeoChat(meshtastic_TAKPacketV2 &takPacket, NodeNum dest, PacketI
     }
 
     snprintf(takPacket.uid, sizeof(takPacket.uid), "GeoChat.%s.%s.%08x", sender, chatroom, id);
-    snprintf(takPacket.device_callsign, sizeof(takPacket.device_callsign), "%s|%08x", sender, id);
 }
 
 // Room for the Data message on air: the frame, less the radio header and whichever of PKC, channel
