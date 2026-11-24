@@ -2000,6 +2000,10 @@ static void test_generateCryptoKeyPair_failedDerivationFromStoredPrivateClearsKe
 
 // --- Key-derived node numbers in the reserved range (#12439) ---
 //
+// Under test, in src/mesh/NodeDB.cpp: NodeDB::keyYieldsReservedNodeNum(), NodeDB::generateCryptoKeyPair()
+// (through generateBlacklistCheckedKeyPair() and derivePublicKeyFromPrivate()), NodeDB::ensurePkiIdentity()
+// and NodeDB::createNewIdentity().
+//
 // my_node_num is crc32(public_key), and nothing checked that against the reserved numbers 0-9 and
 // broadcast (0xFFFFFFFF). Number 0 is the one that hurts: the first send asserts on from == 0, and
 // every reboot re-derives the same key and number, so the node crash-loops until it gets a new key.
@@ -2123,7 +2127,7 @@ static void test_generateCryptoKeyPair_mintedKeyForNodeTenIsKept()
     TEST_ASSERT_EQUAL_HEX32(10, nodeDB->getNodeNum());
 }
 
-// The draw is bounded: if every attempt is reserved, no key is kept rather than a reserved one.
+// The draw is bounded at four: if every attempt is reserved, no key is kept rather than a reserved one.
 static void test_generateCryptoKeyPair_onlyReservedMintsLeaveNoKey()
 {
     installRestoreCrypto()->mintQueue = {KEY_CRC_0, KEY_CRC_0, KEY_CRC_0, KEY_CRC_0, KEY_CRC_0, KEY_CRC_0};
@@ -2133,8 +2137,36 @@ static void test_generateCryptoKeyPair_onlyReservedMintsLeaveNoKey()
 
     TEST_ASSERT_FALSE(nodeDB->generateCryptoKeyPair());
 
+    TEST_ASSERT_EQUAL_UINT(2, restoreCrypto->mintQueue.size()); // exactly four of the six drawn
     TEST_ASSERT_EQUAL_UINT(0, config.security.private_key.size);
     TEST_ASSERT_EQUAL_UINT(0, config.security.public_key.size);
+}
+
+// A node stuck on 0 saved its self row as number 0; at boot pickNewNodeNum() treats 0 as unset and picks a
+// provisional number, so the identity move must also drop that row or it lingers as a phantom node 0.
+static void test_generateCryptoKeyPair_recoveryDropsSelfRowUnderReservedNumber()
+{
+    installRestoreCrypto()->derivedKey = KEY_CRC_0;
+    config.security = meshtastic_Config_SecurityConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    initRegion();
+    config.security.private_key.size = 32;
+    memset(config.security.private_key.bytes, 0x11, 32);
+    config.security.public_key.size = 32;
+    memcpy(config.security.public_key.bytes, KEY_CRC_0, 32);
+
+    meshtastic_NodeInfoLite stuckSelf = meshtastic_NodeInfoLite_init_zero;
+    stuckSelf.num = 0;
+    nodeDB->meshNodes->insert(nodeDB->meshNodes->begin(), stuckSelf);
+    nodeDB->meshNodes->pop_back(); // keep the store at its fixed size; the dropped tail slot is unused
+    nodeDB->numMeshNodes++;
+    myNodeInfo.my_node_num = 0x0A0B0C0D; // the provisional number pickNewNodeNum() chose
+
+    TEST_ASSERT_TRUE(nodeDB->generateCryptoKeyPair());
+
+    TEST_ASSERT_NULL(nodeDB->getMeshNode(0));
+    assertUsableIdentity();
+    TEST_ASSERT_EQUAL_HEX32(nodeDB->getNodeNum(), nodeDB->meshNodes->at(0).num);
 }
 
 // The first-region path mints through CryptoEngine::ensurePkiKeys(), not NodeDB's checked keygen, and
@@ -3011,6 +3043,7 @@ void setup()
     RUN_TEST(test_generateCryptoKeyPair_everyReservedMintIsRedrawn);
     RUN_TEST(test_generateCryptoKeyPair_mintedKeyForNodeTenIsKept);
     RUN_TEST(test_generateCryptoKeyPair_onlyReservedMintsLeaveNoKey);
+    RUN_TEST(test_generateCryptoKeyPair_recoveryDropsSelfRowUnderReservedNumber);
     RUN_TEST(test_ensurePkiIdentity_mintedKeyForNodeZeroIsRedrawn);
     RUN_TEST(test_handleSetConfig_security_staleLowEntropyFlagDoesNotWarn);
     RUN_TEST(test_handleSetConfig_security_failedDerivationClearsKeySizes);

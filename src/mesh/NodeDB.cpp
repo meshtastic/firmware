@@ -5032,6 +5032,10 @@ bool NodeDB::createNewIdentity()
         // Lite entry already absent: drop any orphaned satellite-store entries directly.
         eraseNodeSatellites(oldNodeNum);
     }
+    // A node leaving a reserved number had a provisional one picked at boot, so its saved self row (index 0)
+    // still sits under the reserved number and would linger as a phantom node.
+    if (numMeshNodes > 0 && isReservedNodeNum(meshNodes->at(0).num) && meshNodes->at(0).num != oldNodeNum)
+        removeNodeByNum(meshNodes->at(0).num);
 
     myNodeInfo.my_node_num = newNodeNum;
 
