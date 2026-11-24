@@ -242,7 +242,7 @@ void TrackballInterruptBase::intPressHandler()
         return;
     lastPressInterruptTime = Time::getMillis();
     pressIrqTime = lastPressInterruptTime;
-    pressIrqSeq++;
+    pressIrqSeq = pressIrqSeq + 1;
     this->action = TB_ACTION_PRESSED;
 }
 
@@ -253,7 +253,7 @@ void TrackballInterruptBase::intDownHandler()
     lastInterruptTime = Time::skipZero(Time::getMillis());
 
 #if TB_THRESHOLD
-    down_counter++;
+    down_counter = down_counter + 1;
 #endif
 }
 
@@ -264,7 +264,7 @@ void TrackballInterruptBase::intUpHandler()
     lastInterruptTime = Time::skipZero(Time::getMillis());
 
 #if TB_THRESHOLD
-    up_counter++;
+    up_counter = up_counter + 1;
 #endif
 }
 
@@ -274,7 +274,7 @@ void TrackballInterruptBase::intLeftHandler()
         this->action = TB_ACTION_LEFT;
     lastInterruptTime = Time::skipZero(Time::getMillis());
 #if TB_THRESHOLD
-    left_counter++;
+    left_counter = left_counter + 1;
 #endif
 }
 
@@ -284,6 +284,6 @@ void TrackballInterruptBase::intRightHandler()
         this->action = TB_ACTION_RIGHT;
     lastInterruptTime = Time::skipZero(Time::getMillis());
 #if TB_THRESHOLD
-    right_counter++;
+    right_counter = right_counter + 1;
 #endif
 }
