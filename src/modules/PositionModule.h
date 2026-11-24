@@ -58,6 +58,9 @@ class PositionModule : public ProtobufModule<meshtastic_Position>, private concu
     // still honors the cadence.
     static bool shouldSendPositionToPhone(bool hasValidPosition, bool phoneQueueEmpty, bool everSentToPhone, uint32_t nowMs,
                                           uint32_t lastSentMs, uint32_t intervalMs);
+    // Copy the altitude fields position_flags selects, keeping the source's presence so an altitude
+    // nobody supplied is not broadcast as 0 m.
+    static void copyAltitudeFields(meshtastic_Position &to, const meshtastic_Position &from, uint32_t flags);
 
   protected:
     /** Called to handle a particular incoming message

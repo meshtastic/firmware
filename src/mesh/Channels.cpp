@@ -38,11 +38,15 @@ uint8_t xorHash(const uint8_t *p, size_t len)
  */
 int16_t Channels::generateHash(ChannelIndex channelNum)
 {
+    return hashFor(channelNum, getName(channelNum));
+}
+
+int16_t Channels::hashFor(ChannelIndex channelNum, const char *name)
+{
     auto k = getKey(channelNum);
     if (k.length < 0)
         return -1; // invalid
     else {
-        const char *name = getName(channelNum);
         uint8_t h = xorHash((const uint8_t *)name, strlen(name));
 
         h ^= xorHash(k.bytes, k.length);
@@ -328,10 +332,8 @@ void Channels::initDefaults()
 #endif
 }
 
-void Channels::onConfigChanged()
+bool Channels::resolvePrimaryIndex()
 {
-    // Make sure the phone hasn't mucked anything up. Settle the primary first: fixupChannel()
-    // hashes through getKey(), which follows a keyless secondary to primaryIndex.
     bool hasPrimary = false;
     for (int i = 0; i < channelFile.channels_count; i++) {
         const meshtastic_Channel &ch = getByIndex(i);
@@ -341,6 +343,14 @@ void Channels::onConfigChanged()
             hasPrimary = true;
         }
     }
+    return hasPrimary;
+}
+
+void Channels::onConfigChanged()
+{
+    // Make sure the phone hasn't mucked anything up. Settle the primary first: fixupChannel()
+    // hashes through getKey(), which follows a keyless secondary to primaryIndex.
+    bool hasPrimary = resolvePrimaryIndex();
 
     for (int i = 0; i < channelFile.channels_count; i++)
         fixupChannel(i);
@@ -596,6 +606,9 @@ bool Channels::setDefaultPresetCryptoForHash(ChannelHash channelHash)
 
 bool Channels::isAEADEnabled(ChannelIndex chIndex)
 {
+    // Receive paths pass a packet's channel index unchecked; an out-of-range one is simply not AEAD.
+    if (chIndex >= getNumChannels())
+        return false;
     auto &ch = getByIndex(chIndex);
     return ch.has_settings && ch.settings.use_aead;
 }

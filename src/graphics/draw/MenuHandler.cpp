@@ -1748,8 +1748,11 @@ void menuHandler::manageNodeMenu()
     optionsArray[options] = "Trace Route";
     optionsEnumArray[options++] = TraceRoute;
 
-    optionsArray[options] = "Key Verification";
-    optionsEnumArray[options++] = KeyVerification;
+    // Key verification needs PKI, which licensed (ham) operation does not use.
+    if (!owner.is_licensed) {
+        optionsArray[options] = "Key Verification";
+        optionsEnumArray[options++] = KeyVerification;
+    }
 
     if (nodeInfoLiteIsIgnored(node)) {
         optionsArray[options] = "Unignore Node";
@@ -2438,6 +2441,11 @@ void menuHandler::rebootMenu()
 
 void menuHandler::shutdownMenu()
 {
+#ifdef POWER_BUTTON_SHUTDOWN_HINT
+    // The power button owns power on this board: a software shutdown would leave the board powered
+    screen->showSimpleBanner(POWER_BUTTON_SHUTDOWN_HINT, 3000);
+    return;
+#endif
     static const char *optionsArray[] = {"Back", "Confirm"};
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Shutdown Device?";
@@ -3128,30 +3136,30 @@ void menuHandler::LoRaFEMLNAToggleMenu()
 {
     static const LoRaFEMLNAToggleOption femToggleOptions[] = {
         {"Back", OptionsAction::Back},
+        {"Auto", OptionsAction::Select, meshtastic_Config_LoRaConfig_FEM_LNA_Mode_AUTO},
         {"Enabled", OptionsAction::Select, meshtastic_Config_LoRaConfig_FEM_LNA_Mode_ENABLED},
         {"Disabled", OptionsAction::Select, meshtastic_Config_LoRaConfig_FEM_LNA_Mode_DISABLED},
     };
     constexpr size_t toggleCount = sizeof(femToggleOptions) / sizeof(femToggleOptions[0]);
     static std::array<const char *, toggleCount> toggleLabels{};
 
-    auto bannerOptions = createStaticBannerOptions(
-        "FEM LNA", femToggleOptions, toggleLabels, [](const LoRaFEMLNAToggleOption &option, int) -> void {
-            if (option.action == OptionsAction::Back) {
-                menuQueue = LoraMenu;
-                screen->runNow();
-                return;
-            }
+    auto bannerOptions = createStaticBannerOptions("FEM LNA", femToggleOptions, toggleLabels,
+                                                   [](const LoRaFEMLNAToggleOption &option, int) -> void {
+                                                       if (option.action == OptionsAction::Back) {
+                                                           menuQueue = LoraMenu;
+                                                           screen->runNow();
+                                                           return;
+                                                       }
 
-            if (!option.hasValue || config.lora.fem_lna_mode == option.value) {
-                return;
-            }
+                                                       if (!option.hasValue || config.lora.fem_lna_mode == option.value) {
+                                                           return;
+                                                       }
 
-            const bool enabled = option.value != meshtastic_Config_LoRaConfig_FEM_LNA_Mode_DISABLED;
-            config.lora.fem_lna_mode = option.value;
-            loraFEMInterface.setLNAEnable(enabled);
-            service->reloadConfig(SEGMENT_CONFIG);
-            LOG_INFO("FEM LNA %s", enabled ? "enabled" : "disabled");
-        });
+                                                       config.lora.fem_lna_mode = option.value;
+                                                       loraFEMInterface.setLnaMode(option.value);
+                                                       service->reloadConfig(SEGMENT_CONFIG);
+                                                       LOG_INFO("FEM LNA mode %s", option.label);
+                                                   });
 
     int initialSelection = 0;
     for (size_t i = 0; i < toggleCount; ++i) {
@@ -3278,6 +3286,13 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
     case GpsPositionBroadcastMenu:
         GPSPositionBroadcastMenu();
         break;
+#else
+    case GpsToggleMenu:
+    case GpsFormatMenu:
+    case GpsSmartPositionMenu:
+    case GpsUpdateIntervalMenu:
+    case GpsPositionBroadcastMenu:
+        break;
 #endif
     case CompassPointNorthMenu:
         compassNorthMenu();
@@ -3387,6 +3402,9 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
 #if GRAPHICS_TFT_COLORING_ENABLED // the Theme option only exists with TFT coloring
     case ThemeMenu:
         themeMenu();
+        break;
+#else
+    case ThemeMenu:
         break;
 #endif
     case HamModeConfirm:

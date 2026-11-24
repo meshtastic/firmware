@@ -125,7 +125,7 @@ static void putLE32(uint8_t *out, uint32_t v)
  *  - to: without it a signed broadcast can be re-addressed as a direct message and still verify,
  *    delivering a public statement as an apparent private one. Relays rewrite hop_limit, next_hop
  *    and relay_node, never `to`, so it is stable end to end.
- *  - request_id: only reachable in ham mode, where licensed nodes sign unicasts too, but free.
+ *  - request_id: carried by signed replies - NodeInfo and position replies, and replies in ham mode.
  *
  * Deliberately NOT covered: dest and source (one write in the tree, no readers), channel (the wire
  * carries a hash where the decoded packet carries an index), and the hop fields, which relays
@@ -193,7 +193,7 @@ bool CryptoEngine::xeddsa_sign(uint32_t fromNode, uint32_t packetId, uint32_t to
     // safe against nonce reuse (defense-in-depth only), so we never fail signing over it.
     if (!HardwareRNG::fill(signature, 32))
         CryptRNG.rand(signature, 32);
-    XEdDSA::sign(signature, xeddsa_private_key, xeddsa_public_key, sigBuf, sigLen);
+    XEdDSA::sign(signature, xeddsa_private_key, xeddsa_public_key, sigBuf, sigLen, ed25519BaseMulThunk, this);
     return true;
 }
 
@@ -536,6 +536,16 @@ bool CryptoEngine::x25519(uint8_t *out, const uint8_t *scalar, const uint8_t *po
 bool CryptoEngine::ed25519Verify(const uint8_t *signature, const uint8_t *edPubKey, const uint8_t *msg, size_t msgLen)
 {
     return XEdDSA::verify(signature, edPubKey, msg, msgLen);
+}
+
+bool CryptoEngine::ed25519BaseMul(uint8_t *, const uint8_t *)
+{
+    return false;
+}
+
+bool CryptoEngine::ed25519BaseMulThunk(void *engine, uint8_t point[32], const uint8_t scalar[32])
+{
+    return static_cast<CryptoEngine *>(engine)->ed25519BaseMul(point, scalar);
 }
 #endif
 
