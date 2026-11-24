@@ -4,6 +4,9 @@
 #include "graphics/EmoteRenderer.h"
 #include <algorithm>
 #include <cstring>
+#ifdef OLED_JA
+#include "graphics/KanjiFont.h"
+#endif
 
 namespace graphics
 {
@@ -39,6 +42,30 @@ static inline int getStringWidth(OLEDDisplay *display, const char *text, size_t 
     return display->getStringWidth(safe, len, false);
 #endif
 }
+
+// Japanese glyph for the character at s[pos] under OLED_JA, drawn as a bitmap like an emote; sets its byte length and width.
+static inline const uint8_t *japaneseGlyphAt(const char *s, size_t pos, size_t len, size_t &charLen, int &advance)
+{
+#ifdef OLED_JA
+    if (static_cast<uint8_t>(s[pos]) >= 0xE2)
+        return KanjiFont::findGlyphAt(s, pos, len, charLen, advance);
+#else
+    (void)s;
+    (void)pos;
+    (void)len;
+    (void)charLen;
+    (void)advance;
+#endif
+    return nullptr;
+}
+
+#ifdef OLED_JA
+static constexpr int JAPANESE_GLYPH_WIDTH = KanjiFont::GLYPH_WIDTH;
+static constexpr int JAPANESE_GLYPH_HEIGHT = KanjiFont::GLYPH_HEIGHT;
+#else
+static constexpr int JAPANESE_GLYPH_WIDTH = 0;
+static constexpr int JAPANESE_GLYPH_HEIGHT = 0;
+#endif
 
 size_t utf8CharLen(uint8_t c)
 {
@@ -231,6 +258,15 @@ static LineMetrics analyzeLineInternal(OLEDDisplay *display, const char *line, s
             continue;
         }
 
+        size_t glyphLen = 0;
+        int glyphAdvance = 0;
+        if (japaneseGlyphAt(line, i, lineLen, glyphLen, glyphAdvance)) {
+            if (display)
+                metrics.width += glyphAdvance;
+            i += glyphLen;
+            continue;
+        }
+
         const size_t skipLen = ignorableModifierLenAt(line, i, lineLen);
         if (skipLen) {
             i += skipLen;
@@ -348,6 +384,9 @@ size_t truncateToWidth(OLEDDisplay *display, const char *line, char *out, size_t
             }
         }
 
+        if (advance == 0)
+            japaneseGlyphAt(line, i, lineLen, advance, tokenWidth); // leaves both at 0 when not Japanese
+
         if (advance == 0) {
             const size_t skipLen = ignorableModifierLenAt(line, i, lineLen);
             if (skipLen) {
@@ -432,6 +471,18 @@ void drawStringWithEmotes(OLEDDisplay *display, int x, int y, const char *line, 
             continue;
         }
 
+        size_t glyphLen = 0;
+        int glyphAdvance = 0;
+        const uint8_t *glyph = japaneseGlyphAt(line, i, lineLen, glyphLen, glyphAdvance);
+        if (glyph) {
+            if (fauxBold && inBold)
+                display->drawXbm(cursorX + 1, fontY, JAPANESE_GLYPH_WIDTH, JAPANESE_GLYPH_HEIGHT, glyph);
+            display->drawXbm(cursorX, fontY, JAPANESE_GLYPH_WIDTH, JAPANESE_GLYPH_HEIGHT, glyph);
+            cursorX += glyphAdvance;
+            i += glyphLen;
+            continue;
+        }
+
         size_t next = i;
         while (next < lineLen) {
             // Stop the text run before the next emote or bold marker.
@@ -443,6 +494,11 @@ void drawStringWithEmotes(OLEDDisplay *display, int x, int y, const char *line, 
 
             size_t nextMatchLen = 0;
             if (findEmoteAt(line, lineLen, next, nextMatchLen, emoteSet, emoteCount) != nullptr)
+                break;
+
+            size_t glyphLen = 0;
+            int glyphAdvance = 0;
+            if (japaneseGlyphAt(line, next, lineLen, glyphLen, glyphAdvance))
                 break;
 
             next += utf8CharLenClamped(line, next, lineLen);
