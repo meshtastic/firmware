@@ -1035,6 +1035,10 @@ meshtastic_MeshPacket *EnvironmentTelemetryModule::allocReply()
         // Check for a request for environment metrics
         if (decoded->which_variant == meshtastic_Telemetry_environment_metrics_tag) {
             // From the last read, like the screen: no extra read on request
+            if (!moduleConfig.telemetry.environment_measurement_enabled && !ENVIRONMENTAL_TELEMETRY_MODULE_ENABLE) {
+                LOG_INFO("Environment measurement disabled, no reply to request"); // the reading seeded from history stays unused
+                return NULL;
+            }
             if (!hasLatest) {
                 LOG_INFO("No environment reading yet, no reply to request");
                 return NULL;

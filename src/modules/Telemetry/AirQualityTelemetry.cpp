@@ -608,6 +608,10 @@ meshtastic_MeshPacket *AirQualityTelemetryModule::allocReply()
         if (decoded->which_variant == meshtastic_Telemetry_air_quality_metrics_tag) {
             // From the last read: reading here would block on I2C and return nothing useful while
             // the sensors are asleep or warming up
+            if (!moduleConfig.telemetry.air_quality_enabled && !AIR_QUALITY_TELEMETRY_MODULE_ENABLE) {
+                LOG_INFO("Air quality measurement disabled, no reply to request"); // the reading seeded from history stays unused
+                return NULL;
+            }
             if (!hasLatest) {
                 LOG_INFO("No air quality reading yet, no reply to request");
                 return NULL;
