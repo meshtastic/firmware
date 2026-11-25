@@ -877,6 +877,7 @@ void setUp(void)
     portduino_config.sfpp_scratch_sweep = 5;
     portduino_config.sfpp_item_transport = SFPP_ITEM_DIRECT; // existing cases drive direct exchanges
     portduino_config.sfpp_enum_listen_only = false;
+    portduino_config.sfpp_pull_retry = false;
     portduino_config.sfpp_db_path = dirA + "/";
 
     Time::setTestMillis(1000);
