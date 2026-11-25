@@ -2454,27 +2454,6 @@ void test_revivalRestartsServiceWindow()
 
 // --- Q9 gap fixes ---
 
-// G4: a stalled exchange must end at the idle gap, not linger until the 15 min timeout.
-void test_noProgressExchangeEndsAtProbeIdle()
-{
-    ingestAuthority(40);
-    buildFollowerFromCopy();
-    TEST_ASSERT_TRUE(deleteCounterRange(dirB, 39, 40));
-
-    meshtastic_MeshPacket advert;
-    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, 0, false, advert, false, 40));
-    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
-    myNodeInfo.my_node_num = FOLLOWER_NODE;
-    portduino_config.sfpp_stratum0 = false;
-    follower->runOnce();
-    std::vector<meshtastic_MeshPacket> initial = takeSent();
-    TEST_ASSERT_EQUAL_UINT(1, initial.size());
-
-    Time::setTestMillis(Time::getMillis() + 31000);
-    follower->runOnce();
-    TEST_ASSERT_EQUAL_UINT(0, takeSent().size()); // no list resend; the exchange ended
-}
-
 // G3: the one pacer has a 30-frame/10-min window across all sends, not just drain spacing.
 void test_windowBudgetCapsServedFrames()
 {
@@ -2964,7 +2943,6 @@ void setup()
     RUN_TEST(test_rotationServesChangedBucketFirst);
     RUN_TEST(test_onDemandPullsNewestBucketAndCapsPacing);
     RUN_TEST(test_secondAdvertInsideDrainIntervalSendsNoRequest);
-    RUN_TEST(test_noProgressExchangeEndsAtProbeIdle);
     RUN_TEST(test_windowBudgetCapsServedFrames);
     RUN_TEST(test_oneRequesterCannotHoldThePacer);
     RUN_TEST(test_knownPeerTableIsLeastRecentlyUsed);

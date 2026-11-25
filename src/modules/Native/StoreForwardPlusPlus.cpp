@@ -2988,10 +2988,10 @@ void StoreForwardPlusPlusModule::expireEnumExchange()
         return;
     }
 
-    // Silence is the only completion signal: a probe or a stalled list ends after an idle gap,
-    // not after the 15 min overall timeout.
-    if (Throttle::hasElapsed(enumLastItemMs, kEnumProbeIdleMs)) {
-        if (enumCollisionProbe && !bucketMatchesPeer(enumExchangeRoot, enumExchangeBucket)) {
+    // A collision probe has no named end: the peer serves every row for the shared IDs and then
+    // stops. Silence is the only completion signal, so finalise after an idle gap.
+    if (enumCollisionProbe && Throttle::hasElapsed(enumLastItemMs, kEnumProbeIdleMs)) {
+        if (!bucketMatchesPeer(enumExchangeRoot, enumExchangeBucket)) {
             char rootHex[9];
             formatRootHex(enumExchangeRoot, SFPP_HASH_SIZE, rootHex);
             LOG_INFO("SFPP-ENUM collision_suspected root=%s bucket=%u", rootHex, enumExchangeBucket);
