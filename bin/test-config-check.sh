@@ -211,6 +211,10 @@ assert "two entries sharing a low byte are warned" 0 ignore-relay-nodes-duplicat
 assert "an entry ending in 00 is warned as 0xff" 0 ignore-relay-nodes-zero-byte.yaml check \
 	"ends in 00, which is sent as relay byte 0xff" \
 	"Result: 0 errors, 1 warning"
+assert "an entry ending in 00 collides with one ending in ff" 0 ignore-relay-nodes-zero-ff.yaml check \
+	"ends in 00, which is sent as relay byte 0xff" \
+	"share low byte 0xff" \
+	"Result: 0 errors, 2 warnings"
 assert "relay node lists accumulate across files" 0 ignore-relay-nodes-append/config.yaml check \
 	"'Lora.IgnoreRelayNodes' is set in 2 files" \
 	"The lists accumulate; to remove an entry, edit the file that adds it" \
