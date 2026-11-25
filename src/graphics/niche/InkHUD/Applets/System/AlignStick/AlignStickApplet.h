@@ -21,7 +21,7 @@ namespace NicheGraphics::InkHUD
 class AlignStickApplet : public SystemApplet
 {
   public:
-    AlignStickApplet();
+    explicit AlignStickApplet(bool openIfUnaligned = true);
 
     void onRender(bool full) override;
     void onForeground() override;
@@ -34,6 +34,9 @@ class AlignStickApplet : public SystemApplet
     void onNavRight() override;
 
   protected:
+    const char *title = "Align Joystick:";
+    const char *instructions = "Move joystick in the direction indicated";
+
     enum Direction {
         UP,
         DOWN,

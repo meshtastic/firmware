@@ -5,6 +5,10 @@
 #include "mesh/NodeDB.h"
 #include "time.h"
 
+#ifndef TOUCH_RELEASE_GRACE_MS
+#define TOUCH_RELEASE_GRACE_MS 35
+#endif
+
 typedef struct _TouchEvent {
     const char *source;
     char touchEvent;
@@ -37,6 +41,7 @@ class TouchScreenBase : public Observable<const InputEvent *>, public concurrenc
     virtual void onEvent(const TouchEvent &event) = 0;
     virtual bool fastTapModeEnabled() const;
     virtual bool longPressEnabled() const;
+    void resetTouchState();
 
     volatile TouchScreenBaseStateType _state = TOUCH_EVENT_CLEARED;
     volatile TouchScreenBaseEventType _action = TOUCH_ACTION_NONE;

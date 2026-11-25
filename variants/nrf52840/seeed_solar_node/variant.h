@@ -102,11 +102,18 @@ static const uint8_t SCL = PIN_WIRE_SCL;
 #define BAT_READ                                                                                                                 \
     D19 // P0_14 = 14  Reads battery voltage from divider on signal board. (PIN_VBAT is reading voltage divider on XIAO and is
         // program pin 32 / or P0.31)
+// Battery is built into the Solar Node; do not infer presence from the OCV cutoff.
+#define BATTERY_IMMUTABLE
 #define BATTERY_SENSE_RESOLUTION_BITS 12
 #define ADC_MULTIPLIER 3.3
 #define BATTERY_PIN PIN_VBAT // PIN_A7
 #define AREF_VOLTAGE 3.3
-#define OCV_ARRAY 4200, 3986, 3922, 3812, 3734, 3645, 3527, 3420, 3281, 3087, 2786
+#define OCV_ARRAY 4200, 3986, 3922, 3812, 3734, 3645, 3527, 3420, 3281, 3150, 2986
+#define NRF_APM
+
+// The divided battery voltage is on AIN7; wake from System OFF as it recharges.
+#define BATTERY_LPCOMP_INPUT NRF_LPCOMP_INPUT_7
+#define BATTERY_LPCOMP_THRESHOLD NRF_LPCOMP_REF_SUPPLY_3_8
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  GPS L76KB
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

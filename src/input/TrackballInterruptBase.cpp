@@ -102,11 +102,9 @@ int32_t TrackballInterruptBase::runOnce()
         down_counter = 0;
         lastInterruptTime = 0;
     }
-#ifdef INPUT_DEBUG
     if (left_counter > 0 || right_counter > 0 || up_counter > 0 || down_counter > 0) {
-        LOG_DEBUG("L %u R %u U %u D %u, time %u", left_counter, right_counter, up_counter, down_counter, millis());
+        LOG_INPUT("L %u R %u U %u D %u, time %u", left_counter, right_counter, up_counter, down_counter, millis());
     }
-#endif
 #endif
 
     bool pressLatched = false;
@@ -177,24 +175,16 @@ int32_t TrackballInterruptBase::runOnce()
     // emitted this poll (a release classified on a later poll) must not be overwritten either.
     if (!pressLatched && e.inputEvent == INPUT_BROKER_NONE) {
         if (up_counter >= TB_THRESHOLD) {
-#ifdef INPUT_DEBUG
-            LOG_DEBUG("Trackball event UP %u", millis());
-#endif
+            LOG_INPUT("Trackball event UP %u", millis());
             e.inputEvent = this->_eventUp;
         } else if (down_counter >= TB_THRESHOLD) {
-#ifdef INPUT_DEBUG
-            LOG_DEBUG("Trackball event DOWN %u", millis());
-#endif
+            LOG_INPUT("Trackball event DOWN %u", millis());
             e.inputEvent = this->_eventDown;
         } else if (left_counter >= TB_THRESHOLD) {
-#ifdef INPUT_DEBUG
-            LOG_DEBUG("Trackball event LEFT %u", millis());
-#endif
+            LOG_INPUT("Trackball event LEFT %u", millis());
             e.inputEvent = this->_eventLeft;
         } else if (right_counter >= TB_THRESHOLD) {
-#ifdef INPUT_DEBUG
-            LOG_DEBUG("Trackball event RIGHT %u", millis());
-#endif
+            LOG_INPUT("Trackball event RIGHT %u", millis());
             e.inputEvent = this->_eventRight;
         }
     }
@@ -252,7 +242,7 @@ void TrackballInterruptBase::intPressHandler()
         return;
     lastPressInterruptTime = Time::getMillis();
     pressIrqTime = lastPressInterruptTime;
-    pressIrqSeq++;
+    pressIrqSeq = pressIrqSeq + 1;
     this->action = TB_ACTION_PRESSED;
 }
 
@@ -263,7 +253,7 @@ void TrackballInterruptBase::intDownHandler()
     lastInterruptTime = Time::skipZero(Time::getMillis());
 
 #if TB_THRESHOLD
-    down_counter++;
+    down_counter = down_counter + 1;
 #endif
 }
 
@@ -274,7 +264,7 @@ void TrackballInterruptBase::intUpHandler()
     lastInterruptTime = Time::skipZero(Time::getMillis());
 
 #if TB_THRESHOLD
-    up_counter++;
+    up_counter = up_counter + 1;
 #endif
 }
 
@@ -284,7 +274,7 @@ void TrackballInterruptBase::intLeftHandler()
         this->action = TB_ACTION_LEFT;
     lastInterruptTime = Time::skipZero(Time::getMillis());
 #if TB_THRESHOLD
-    left_counter++;
+    left_counter = left_counter + 1;
 #endif
 }
 
@@ -294,6 +284,6 @@ void TrackballInterruptBase::intRightHandler()
         this->action = TB_ACTION_RIGHT;
     lastInterruptTime = Time::skipZero(Time::getMillis());
 #if TB_THRESHOLD
-    right_counter++;
+    right_counter = right_counter + 1;
 #endif
 }
