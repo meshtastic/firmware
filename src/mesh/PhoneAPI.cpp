@@ -123,6 +123,7 @@ constexpr uint16_t CHUNKED_FROMRADIO_FIRST_BYTES = 12;
 constexpr uint16_t CHUNKED_FROMRADIO_NEXT_BYTES = 15;
 constexpr uint32_t CHUNKED_TORADIO_TIMEOUT_MS = 30000;
 static_assert(MAX_TO_FROM_RADIO_SIZE <= 0x3fff, "chunk payload size must fit in two protobuf varint bytes");
+static_assert(meshtastic_FromRadio_size <= MAX_TO_FROM_RADIO_SIZE, "an encoded FromRadio must fit the outbound slot");
 
 struct ChunkedClient {
     PhoneAPI *who;
@@ -178,7 +179,6 @@ static void clearChunkedClient(PhoneAPI *api)
 
 static bool handleChunkedToRadio(PhoneAPI *api, bool isBle, const meshtastic_ClientApiChunkedPayload &chunk)
 {
-    uint8_t reassembled[MAX_TO_FROM_RADIO_SIZE];
     uint16_t reassembledSize = 0;
     ChunkedClient *dispatchSlot = nullptr;
 
@@ -231,14 +231,15 @@ static bool handleChunkedToRadio(PhoneAPI *api, bool isBle, const meshtastic_Cli
         }
 
         reassembledSize = slot->inUsed;
-        memcpy(reassembled, slot->in, reassembledSize);
         slot->inTotal = slot->inUsed = 0;
         slot->enabled = true;
-        slot->dispatchBytes = reassembled;
+        // Dispatch straight from the slot: while pinned, further chunks are rejected and close() defers the free,
+        // so slot->in is stable and a nested chunked ToRadio costs one frame, not another 512-byte buffer.
+        slot->dispatchBytes = slot->in;
         dispatchSlot = slot;
     }
 
-    const bool result = api->handleToRadio(reassembled, reassembledSize);
+    const bool result = api->handleToRadio(dispatchSlot->in, reassembledSize);
     {
         concurrency::LockGuard guard(&g_chunkedMutex);
         dispatchSlot->dispatchBytes = nullptr;
@@ -303,10 +304,6 @@ static size_t maybeEncodeChunkedFromRadio(PhoneAPI *api, uint8_t *buf, const uin
     auto *slot = findChunkedClient_LH(api);
     if (!slot || !slot->enabled) {
         return fromRadioSize;
-    }
-
-    if (fromRadioSize > sizeof(slot->out)) {
-        return 0;
     }
 
     memcpy(slot->out, fromRadioBytes, fromRadioSize);

@@ -25,7 +25,7 @@ class PhoneAPITestShim : public PhoneAPI
     unsigned dispatches = 0;
     Bytes lastDispatch;
     std::function<void()> duringDispatch;
-    static constexpr int nonBleTypes[] = {TYPE_NONE, TYPE_SERIAL, TYPE_WIFI, TYPE_HTTP};
+    static constexpr int nonBleTypes[] = {TYPE_NONE, TYPE_SERIAL, TYPE_WIFI, TYPE_HTTP, TYPE_ETH, TYPE_PACKET};
     explicit PhoneAPITestShim(int type = TYPE_BLE) { api_type = APIType(type); }
     bool handleToRadio(const uint8_t *bytes, size_t size) override
     {
