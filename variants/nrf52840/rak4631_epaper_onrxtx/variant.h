@@ -83,9 +83,6 @@ static const uint8_t AREF = PIN_AREF;
 #define PIN_SERIAL2_RX (-1)
 #define PIN_SERIAL2_TX (-1)
 
-// Testing USB detection
-#define NRF_APM
-
 /*
  * SPI Interfaces
  */
