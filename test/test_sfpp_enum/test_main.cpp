@@ -2544,6 +2544,59 @@ void test_oneRequesterCannotHoldThePacer()
     TEST_ASSERT_LESS_OR_EQUAL_UINT32(8, frames);
 }
 
+// F3.4: a re-noted peer is most-recently-used, so a flood of other requesters cannot evict it.
+void test_knownPeerTableIsLeastRecentlyUsed()
+{
+    ingestAuthority(1);
+    uint8_t root[SFPP_HASH_SIZE];
+    TEST_ASSERT_TRUE(readRoot(dirA, root));
+
+    auto requestFrom = [&](NodeNum node) {
+        meshtastic_StoreForwardPlusPlus msg = meshtastic_StoreForwardPlusPlus_init_default;
+        msg.sfpp_message_type = meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_REQUEST;
+        msg.sr_version = sfppsr::kDerivationVersion;
+        msg.root_hash.size = 4;
+        memcpy(msg.root_hash.bytes, root, 4);
+        msg.chain_count = 0;
+        msg.sr_short_ids[0] = 0xDEADBEEF;
+        msg.sr_short_ids_count = 1;
+        meshtastic_MeshPacket mp = meshtastic_MeshPacket_init_zero;
+        mp.from = node;
+        mp.to = AUTHORITY_NODE;
+        mp.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+        mp.decoded.portnum = meshtastic_PortNum_STORE_FORWARD_PLUSPLUS_APP;
+        myNodeInfo.my_node_num = AUTHORITY_NODE;
+        portduino_config.sfpp_stratum0 = true;
+        TEST_ASSERT_TRUE(authority->handleReceivedProtobuf(mp, &msg));
+        takeSent();
+    };
+
+    constexpr NodeNum firstPeer = 0x90000000;
+    for (uint32_t i = 0; i < 16; i++)
+        requestFrom(firstPeer + i);
+    requestFrom(firstPeer);      // refresh the oldest entry
+    requestFrom(firstPeer + 16); // one more peer; the refreshed one must survive
+
+    for (uint32_t i = 0; i < 9; i++) {
+        uint8_t cipher[8] = {1, 2, 3, 4, 5, 6, 7, 8};
+        cipher[0] = (uint8_t)i;
+        std::vector<meshtastic_StoreForwardPlusPlus> frames;
+        TEST_ASSERT_TRUE(sfppframe::split(cipher, sizeof(cipher), NODENUM_BROADCAST, firstPeer, 0x8000 + i, 0, false, frames));
+        for (const auto &frame : frames) {
+            meshtastic_MeshPacket mp = meshtastic_MeshPacket_init_zero;
+            mp.from = firstPeer;
+            mp.to = AUTHORITY_NODE;
+            mp.channel = 0;
+            mp.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+            mp.decoded.portnum = meshtastic_PortNum_STORE_FORWARD_PLUSPLUS_APP;
+            mp.decoded.payload.size = pb_encode_to_bytes(mp.decoded.payload.bytes, sizeof(mp.decoded.payload.bytes),
+                                                         &meshtastic_StoreForwardPlusPlus_msg, &frame);
+            TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, true, mp));
+        }
+    }
+    TEST_ASSERT_EQUAL_UINT32(10, readBucket(dirA, 1, sfppsr::kBucketObjects).count);
+}
+
 // --- Stage 8: sketch mode ---
 
 void runSketchCase(uint32_t total, uint32_t missing)
@@ -2906,6 +2959,7 @@ void setup()
     RUN_TEST(test_noProgressExchangeEndsAtProbeIdle);
     RUN_TEST(test_windowBudgetCapsServedFrames);
     RUN_TEST(test_oneRequesterCannotHoldThePacer);
+    RUN_TEST(test_knownPeerTableIsLeastRecentlyUsed);
     RUN_TEST(test_lostEnumProvideRetriesWithinBackoff);
     RUN_TEST(test_failedPullStopsPastServiceWindow);
     RUN_TEST(test_failedPullBackoffDoublesAcrossFailures);

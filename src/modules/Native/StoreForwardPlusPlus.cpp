@@ -3962,14 +3962,25 @@ void StoreForwardPlusPlusModule::noteEnumPeer(NodeNum node, const uint8_t *root_
 {
     if (node == 0 || node == NODENUM_BROADCAST)
         return;
-    for (auto &peer : enumKnownPeers) {
-        if (peer.node == node) {
+    for (size_t i = 0; i < enumKnownPeers.size(); i++) {
+        if (enumKnownPeers[i].node == node) {
+            EnumPeer peer = enumKnownPeers[i];
             memcpy(peer.rootPrefix, root_prefix, sfppsr::kRootPrefixBytes);
+            enumKnownPeers.erase(enumKnownPeers.begin() + i); // re-noted peer becomes most recent
+            enumKnownPeers.push_back(peer);
             return;
         }
     }
-    if (enumKnownPeers.size() >= kEnumMaxKnownPeers)
-        enumKnownPeers.erase(enumKnownPeers.begin());
+    if (enumKnownPeers.size() >= kEnumMaxKnownPeers) {
+        size_t victim = 0;
+        for (size_t i = 0; i < enumKnownPeers.size(); i++) {
+            if (enumKnownPeers[i].node != enumExchangePeer) { // never evict a peer in an active exchange
+                victim = i;
+                break;
+            }
+        }
+        enumKnownPeers.erase(enumKnownPeers.begin() + victim);
+    }
     EnumPeer peer;
     peer.node = node;
     memcpy(peer.rootPrefix, root_prefix, sfppsr::kRootPrefixBytes);
