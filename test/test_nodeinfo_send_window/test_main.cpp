@@ -29,9 +29,8 @@
 // The window probes step an injected clock (Time::setTestMillis) rather than sleeping;
 // TransmitHistory, which is where allocReply() reads "last sent" from, reads the same clock.
 //
-// Also covered here: a relayed NodeInfo payload leaves the module byte-for-byte as received, so the
-// sender's XEdDSA signature still verifies downstream, and coerceNodeInfoUserId() - which applies the
-// user.id fix to local copies instead - rewrites only a mismatched id.
+// Also covered here: coerceNodeInfoUserId(), which applies the user.id fix to local copies (relays forward
+// the payload as received), rewrites only a mismatched id.
 #include "MeshTypes.h" // BEFORE TestUtil.h
 #include "TestUtil.h"
 #include <unity.h>
@@ -62,7 +61,6 @@
 class NodeInfoModuleTestShim : public NodeInfoModule
 {
   public:
-    using MeshModule::alterReceived;
     using NodeInfoModule::runOnce;
 };
 
@@ -374,18 +372,6 @@ static meshtastic_MeshPacket makeNodeInfoPacket(NodeNum from, const char *id)
     return p;
 }
 
-static void test_relay_userPayloadUnmodified(void)
-{
-    // A user.id that does not match `from` is the case the old relay-side coercion rewrote.
-    meshtastic_MeshPacket p = makeNodeInfoPacket(0x11223344, "!deadbeef");
-    const meshtastic_Data_payload_t original = p.decoded.payload;
-
-    mod->alterReceived(p);
-
-    TEST_ASSERT_EQUAL_UINT32(original.size, p.decoded.payload.size);
-    TEST_ASSERT_EQUAL_MEMORY(original.bytes, p.decoded.payload.bytes, original.size);
-}
-
 static void test_coerceUserId_rewritesOnlyAMismatchedId(void)
 {
     meshtastic_MeshPacket ok = makeNodeInfoPacket(0x11223344, "!11223344");
@@ -419,7 +405,6 @@ NI_TEST_ENTRY void setup()
     RUN_TEST(test_sendWindow_aRejectedSendDoesNotStartTheWindow);
     RUN_TEST(test_sendWindow_aLicensedStationKeepsItsCallSignInterval);
     RUN_TEST(test_presetChange_isConsumedOnlyByASendThatGoesOut);
-    RUN_TEST(test_relay_userPayloadUnmodified);
     RUN_TEST(test_coerceUserId_rewritesOnlyAMismatchedId);
     exit(UNITY_END());
 }

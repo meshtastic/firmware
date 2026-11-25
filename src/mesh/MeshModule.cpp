@@ -86,6 +86,9 @@ meshtastic_MeshPacket *MeshModule::allocAckNak(meshtastic_Routing_Error err, Nod
         p->has_rx_rssi = relaySource->has_rx_rssi;
         p->rx_rssi = relaySource->rx_rssi;
         p->rx_snr = relaySource->rx_snr;
+        // The transport the copy was heard on decides in ReliableRouter::sniffReceived() whether the ack
+        // ends the LoRa retries.
+        p->transport_mechanism = relaySource->transport_mechanism;
     }
 #if !(MESHTASTIC_EXCLUDE_PKI)
     // Prove to the original sender that this ack came from the node holding their pairwise key.
@@ -114,7 +117,7 @@ meshtastic_MeshPacket *MeshModule::allocErrorResponse(meshtastic_Routing_Error e
     return r;
 }
 
-void MeshModule::callModules(meshtastic_MeshPacket &mp, RxSource src)
+void MeshModule::callModules(const meshtastic_MeshPacket &mp, RxSource src)
 {
     // LOG_DEBUG("In call modules");
     bool moduleFound = false;
@@ -173,8 +176,6 @@ void MeshModule::callModules(meshtastic_MeshPacket &mp, RxSource src)
             } else {
                 ProcessMessage handled = pi.handleReceived(mp);
 
-                pi.alterReceived(mp);
-
                 // Possibly send replies (but only if the message was directed to us specifically, i.e. not for promiscious
                 // sniffing) also: we only let the one module send a reply, once that happens, remaining modules are not
                 // considered
@@ -195,8 +196,15 @@ void MeshModule::callModules(meshtastic_MeshPacket &mp, RxSource src)
 
                 // If the requester didn't ask for a response we might need to discard unused replies to prevent memory leaks
                 if (pi.myReply) {
-                    LOG_DEBUG("Discard an unneeded response");
-                    packetPool.release(pi.myReply);
+                    if (pi.myReply->decoded.portnum == meshtastic_PortNum_ROUTING_APP && !currentReply && isDecoded &&
+                        !mp.decoded.want_response && mp.want_ack && isToUs(&mp)) {
+                        // A refusal NAK takes the place of the plain ACK ReliableRouter would otherwise send
+                        currentReply = pi.myReply;
+                        currentReply->want_ack = false;
+                    } else {
+                        LOG_DEBUG("Discard an unneeded response");
+                        packetPool.release(pi.myReply);
+                    }
                     pi.myReply = NULL;
                 }
 
@@ -209,6 +217,10 @@ void MeshModule::callModules(meshtastic_MeshPacket &mp, RxSource src)
 
         pi.currentRequest = NULL;
     }
+
+    // callModules never sees a filtered duplicate, so this is a fresh processing: the cache keeps its latest answer
+    if (isDecoded && mp.want_ack && isToUs(&mp))
+        router->rememberRefusal(getFrom(&mp), mp.id, meshtastic_Routing_Error_NONE);
 
     if (isDecoded && mp.decoded.want_response && toUs) {
         if (currentReply) {
@@ -228,6 +240,16 @@ void MeshModule::callModules(meshtastic_MeshPacket &mp, RxSource src)
             routingModule->sendAckNak(meshtastic_Routing_Error_NO_RESPONSE, getFrom(&mp), mp.id, mp.channel,
                                       routingModule->getHopLimitForResponse(mp));
         }
+    } else if (currentReply && toUs) {
+        printPacket("Send refusal", currentReply);
+        meshtastic_Routing refusal = meshtastic_Routing_init_default;
+        if (currentReply->decoded.portnum == meshtastic_PortNum_ROUTING_APP &&
+            pb_decode_from_bytes(currentReply->decoded.payload.bytes, currentReply->decoded.payload.size,
+                                 meshtastic_Routing_fields, &refusal) &&
+            refusal.which_variant == meshtastic_Routing_error_reason_tag)
+            router->rememberRefusal(getFrom(&mp), mp.id, refusal.error_reason); // so a retransmitted duplicate is NAKed too
+        service->sendToMesh(currentReply);
+        currentReply = NULL;
     }
 
     if (!moduleFound && isDecoded) {

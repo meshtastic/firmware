@@ -50,6 +50,7 @@ void InkHUD::Events::begin()
 #endif
 #ifdef ARCH_ESP32
     lightSleepObserver.observe(&notifyLightSleep);
+    lightSleepEndObserver.observe(&notifyLightSleepEnd);
 #endif
 }
 
@@ -377,6 +378,7 @@ void InkHUD::Events::onTouchTap(uint16_t x, uint16_t y, bool longPress)
     for (SystemApplet *sa : inkhud->systemApplets) {
         if (sa->handleInput && sa->onTouchPoint(x, y, longPress)) {
             noteInkHUDUserInteraction();
+            playChirp();
             return;
         }
     }
@@ -593,8 +595,16 @@ int InkHUD::Events::onAdminMessage(AdminModule_ObserverData *data)
 // This is because some displays require active input from us to terminate the update process, and protect the panel hardware
 int InkHUD::Events::beforeLightSleep(void *unused)
 {
+    inkhud->setTouchSleeping(true, false);
     inkhud->awaitUpdate();
     return 0; // No special status to report. Ignored anyway by this Observable
+}
+
+int InkHUD::Events::afterLightSleep(esp_sleep_wakeup_cause_t cause)
+{
+    (void)cause;
+    inkhud->setTouchSleeping(false);
+    return 0;
 }
 #endif
 
