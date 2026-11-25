@@ -1,0 +1,9 @@
+# FAULT: an entry ending in 00 can never match, because relay_node 0 means no relay was recorded.
+# Expect a WARNING and exit 0.
+Lora:
+  Module: sx1262
+  CS: 21
+  IRQ: 16
+  Busy: 20
+  Reset: 18
+  IgnoreRelayNodes: [0xA28E1400]

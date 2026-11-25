@@ -10,6 +10,10 @@ Lora:
   # This will be overridden by configs from config.d
   Module: auto
 
+  # Testing only: drop received LoRa frames transmitted by these nodes, matched by the packet's relay
+  # byte (the last byte of a node number). Full node numbers: 0xea618fb4, !a28e145b, or decimal.
+  # IgnoreRelayNodes: [!a28e145b, 0xea618fb4]
+
 #  # Uncomment to enable Simulation mode, or use --sim
 #  Module: sim
 

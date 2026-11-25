@@ -34,6 +34,7 @@
 #include "platform/portduino/PortduinoGlue.h"
 #include "serialization/MeshPacketSerializer.h"
 #endif
+#include <algorithm>
 
 // The size checks below budget for the tag that encryptPacketCCM actually appends, so the
 // two constants must not drift apart.
@@ -1756,6 +1757,22 @@ void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
         }
         return;
     }
+
+#if ARCH_PORTDUINO
+    // Testing knob: drop frames transmitted by a listed relay byte before dedup, so the same packet
+    // relayed by another node still arrives.
+    if (p->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA && p->relay_node != NO_RELAY_NODE &&
+        !portduino_config.ignore_relay_nodes.empty()) {
+        const auto lowByteMatches = [&](uint32_t num) { return static_cast<uint8_t>(num) == p->relay_node; };
+        if (std::find_if(portduino_config.ignore_relay_nodes.begin(), portduino_config.ignore_relay_nodes.end(),
+                         lowByteMatches) != portduino_config.ignore_relay_nodes.end()) {
+            clearRoutingAuthCache();
+            LOG_DEBUG("Ignore relay, frame from 0x%08x relayed by 0x%x", p->from, p->relay_node);
+            packetPool.release(p);
+            return;
+        }
+    }
+#endif
 
     // assert(radioConfig.has_preferences);
     if (is_in_repeated(config.lora.ignore_incoming, p->from)) {

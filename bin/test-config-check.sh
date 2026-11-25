@@ -197,6 +197,27 @@ assert "admin keys append across config.d" 0 adminkeys-append/config.yaml yaml \
 	"P2jeuoXA1sOGSPH9Vm3eHFlITu1EVnohWGKlGF3t8GU="
 
 echo
+echo "ignore relay nodes:"
+assert "a list of relay node numbers is clean" 0 ignore-relay-nodes.yaml check \
+	"Result: 0 errors, 0 warnings"
+assert "an entry that is not a node number is refused" 1 ignore-relay-nodes-bad.yaml check \
+	"is not a node number" \
+	"Result: 1 error, 0 warnings"
+assert "a bad relay node number is refused on a normal boot" 1 ignore-relay-nodes-bad.yaml normal \
+	"is not a node number"
+assert "two entries sharing a low byte are warned" 0 ignore-relay-nodes-duplicate-byte.yaml check \
+	"share low byte 0x44" \
+	"Result: 0 errors, 1 warning"
+assert "a low byte of 0 is warned and never matches" 0 ignore-relay-nodes-zero-byte.yaml check \
+	"low byte of 0" \
+	"Result: 0 errors, 1 warning"
+assert "relay nodes written as a scalar are refused" 1 ignore-relay-nodes-not-a-list.yaml check \
+	"must be a list of node numbers" \
+	"Result: 1 error, 0 warnings"
+assert "relay nodes as a scalar are refused on a normal boot" 1 ignore-relay-nodes-not-a-list.yaml normal \
+	"must be a list of node numbers"
+
+echo
 echo "command sensors:"
 assert "a list of command sensors is clean" 0 sensors.yaml check \
 	"Sensors are only read while the Telemetry module setting for their Type is enabled" \
