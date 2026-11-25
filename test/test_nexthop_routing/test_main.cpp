@@ -833,6 +833,34 @@ void test_clientBase_dupe_relayed_by_favorite_cancels(void)
     TEST_ASSERT_EQUAL_UINT32(0, radio->clampCount);
 }
 
+// One favorite relaying the packet says nothing about the other, so the base must still fill in.
+// Both NodeDB orders, so the outcome cannot depend on which favorite the scan meets first.
+static constexpr NodeNum kSecondFavoriteNeighbor = 0x000066DD; // last byte 0xDD
+
+static void expectFillInWhenOneOfTwoFavoritesRelayed(NodeNum firstAdded, NodeNum secondAdded)
+{
+    config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT_BASE;
+    mockNodeDB->addNode(firstAdded, 0, true, 60, meshtastic_Config_DeviceConfig_Role_CLIENT, /*favorite=*/true);
+    mockNodeDB->addNode(secondAdded, 0, true, 60, meshtastic_Config_DeviceConfig_Role_CLIENT, /*favorite=*/true);
+    DupeQueueRadioInterface *radio = installDupeQueueIface();
+
+    meshtastic_MeshPacket dupe = makeDupeHeardFrom(0xCC); // relayed by kFavoriteNeighbor only
+    shim->perhapsCancelDupe(&dupe);
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, radio->cancelCount, "the other favorite may still lack the packet");
+    TEST_ASSERT_EQUAL_UINT32(1, radio->clampCount);
+}
+
+void test_clientBase_one_of_two_favorites_relayed_fills_in(void)
+{
+    expectFillInWhenOneOfTwoFavoritesRelayed(kFavoriteNeighbor, kSecondFavoriteNeighbor);
+}
+
+void test_clientBase_one_of_two_favorites_relayed_fills_in_reversed(void)
+{
+    expectFillInWhenOneOfTwoFavoritesRelayed(kSecondFavoriteNeighbor, kFavoriteNeighbor);
+}
+
 void test_clientBase_ambiguous_favorite_byte_fills_in(void)
 {
     // A non-favorite neighbor shares 0xCC, so the duplicate does not prove the favorite has the packet.
@@ -1435,6 +1463,8 @@ void setup()
     printf("\n=== CLIENT_BASE favorite fill-in (M4) ===\n");
     RUN_TEST(test_clientBase_outdoor_dupe_fills_in_for_favorite_neighbor);
     RUN_TEST(test_clientBase_dupe_relayed_by_favorite_cancels);
+    RUN_TEST(test_clientBase_one_of_two_favorites_relayed_fills_in);
+    RUN_TEST(test_clientBase_one_of_two_favorites_relayed_fills_in_reversed);
     RUN_TEST(test_clientBase_ambiguous_favorite_byte_fills_in);
     RUN_TEST(test_clientBase_distant_favorite_keeps_cancel);
     RUN_TEST(test_clientBase_self_favorite_keeps_cancel);
