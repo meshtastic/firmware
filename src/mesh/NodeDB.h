@@ -654,6 +654,8 @@ class NodeDB
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
     bool generateBlacklistCheckedKeyPair();
     bool derivePublicKeyFromPrivate();
+    /// True when crc32(key), the node number it would give us, is reserved (0-9) or broadcast.
+    static bool keyYieldsReservedNodeNum(const meshtastic_Config_SecurityConfig_public_key_t &key);
 #endif
 
     /// Consolidate crypto key generation logic used across multiple modules

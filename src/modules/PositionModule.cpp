@@ -84,11 +84,8 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
 #endif
 
             nodeDB->setLocalPosition(p, true);
-            // Keep `precision` current for this channel even on this early-return path -
-            // alterReceivedProtobuf() runs right after handleReceived() on this same packet
-            // (MeshModule::callModules()) and depends on it to truncate correctly, whether this
-            // packet is our own already-truncated broadcast (re-truncating is a no-op) or a
-            // phone-submitted one that still needs it applied.
+            // Keep `precision` current for this channel on this early-return path too, as allocReply() reads it.
+            // The on-wire truncation of our own positions is applied in Router::send().
             precision = getPositionPrecisionForChannel(mp.channel);
             return false;
         } else {
@@ -126,20 +123,6 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
 #endif
 
     return false; // Let others look at this message also if they want
-}
-
-void PositionModule::alterReceivedProtobuf(meshtastic_MeshPacket &mp, meshtastic_Position *p)
-{
-    // Phone position packets need to be truncated to the channel precision
-    if (isFromUs(&mp)) {
-        if (precision == 0)
-            LOG_DEBUG("Strip phone position: channel precision 0");
-        else if (precision < 32)
-            LOG_DEBUG("Truncate phone position to channel precision %i", precision);
-        applyPositionPrecision(*p, precision);
-        mp.decoded.payload.size =
-            pb_encode_to_bytes(mp.decoded.payload.bytes, sizeof(mp.decoded.payload.bytes), &meshtastic_Position_msg, p);
-    }
 }
 
 void PositionModule::trySetRtc(meshtastic_Position p, bool isLocal, bool forceUpdate)
