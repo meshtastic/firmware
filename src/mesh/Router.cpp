@@ -1763,7 +1763,7 @@ void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
     // relayed by another node still arrives.
     if (p->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA && p->relay_node != NO_RELAY_NODE &&
         !portduino_config.ignore_relay_nodes.empty()) {
-        const auto lowByteMatches = [&](uint32_t num) { return static_cast<uint8_t>(num) == p->relay_node; };
+        const auto lowByteMatches = [&](uint32_t num) { return nodeDB->getLastByteOfNodeNum(num) == p->relay_node; };
         if (std::find_if(portduino_config.ignore_relay_nodes.begin(), portduino_config.ignore_relay_nodes.end(),
                          lowByteMatches) != portduino_config.ignore_relay_nodes.end()) {
             clearRoutingAuthCache();

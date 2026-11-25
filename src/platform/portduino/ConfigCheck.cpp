@@ -263,6 +263,13 @@ int lineOf(const YAML::Node &node)
     return mark.is_null() ? 0 : mark.line + 1;
 }
 
+// The relay byte a transmitter writes for a node number; a 0x00 low byte is sent as 0xff.
+uint8_t relayByteForNodeNumber(uint32_t number)
+{
+    const uint8_t low = static_cast<uint8_t>(number);
+    return low == 0 ? 0xff : low;
+}
+
 // ---------------------------------------------------------------------------
 // Duplicate key detection
 // ---------------------------------------------------------------------------
@@ -1210,6 +1217,13 @@ void checkCrossFileOverlap(const PathIndex &paths, const std::map<std::string, s
         if (coveredByAncestor)
             continue;
 
+        if (entry.first == "Lora.IgnoreRelayNodes") {
+            findings.push_back({kInfo, across, 0,
+                                "'Lora.IgnoreRelayNodes' is set in " + std::to_string(entry.second.size()) + " files (" +
+                                    describeOwners(entry.second) +
+                                    "). The lists accumulate; to remove an entry, edit the file that adds it"});
+            continue;
+        }
         findings.push_back({kInfo, across, 0,
                             "'" + entry.first + "' is set in " + std::to_string(entry.second.size()) + " files (" +
                                 describeOwners(entry.second) + "). The file loaded last wins"});
@@ -1284,11 +1298,12 @@ void checkMergedConfig(const PathIndex &paths, std::vector<Finding> &findings)
 
         std::map<uint8_t, uint32_t> firstWithByte;
         for (uint32_t number : portduino_config.ignore_relay_nodes) {
-            const uint8_t lowByte = static_cast<uint8_t>(number);
-            if (lowByte == 0)
+            const uint8_t lowByte = relayByteForNodeNumber(number);
+            if (static_cast<uint8_t>(number) == 0)
                 findings.push_back({kWarn, merged, 0,
                                     "Lora.IgnoreRelayNodes entry " + hexNode(number) +
-                                        " has a low byte of 0 and never matches: relay_node 0 means no relay"});
+                                        " ends in 00, which is sent as relay byte 0xff; it also drops frames from any node "
+                                        "ending in ff"});
             const auto seen = firstWithByte.emplace(lowByte, number);
             if (!seen.second && seen.first->second != number)
                 findings.push_back({kWarn, merged, 0,

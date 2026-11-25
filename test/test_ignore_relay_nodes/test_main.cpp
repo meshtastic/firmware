@@ -11,6 +11,7 @@
 //   - Move the check after shouldFilterReceived() and the relayed copy is dropped as a duplicate, so
 //     the second case below loses the packet and the link cut becomes a node cut.
 //   - Match the full node number instead of its low byte and nothing is ever dropped.
+//   - Compare the raw low byte instead of getLastByteOfNodeNum() and a ...00 node is never dropped.
 //   - Drop the NO_RELAY_NODE guard and an entry ending in 00 discards every direct packet.
 //   - Drop the TRANSPORT_LORA guard and the same list also drops MQTT/UDP/API ingress.
 
@@ -35,6 +36,7 @@ static constexpr PacketId RELAYED_ID = 0x1E1A0002;
 static constexpr PacketId MQTT_ID = 0x1E1A0003;
 static constexpr PacketId EMPTY_ID = 0x1E1A0004;
 static constexpr PacketId ZERO_BYTE_ID = 0x1E1A0005;
+static constexpr PacketId ZERO_LISTED_ID = 0x1E1A0006;
 
 void setUp(void)
 {
@@ -108,11 +110,22 @@ void test_empty_relay_list_changes_nothing(void)
 
 void test_no_relay_node_zero_never_matches(void)
 {
-    setIgnoreRelayNodes({0xA28E1400u}); // low byte 0
+    setIgnoreRelayNodes({0xA28E1400u});
     runPipelineIngress(makeRelayedLoraFrame(REMOTE_NODE, LOCAL_NODE, ZERO_BYTE_ID, NO_RELAY_NODE));
 
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, pipelineModule->calls, "relay_node 0 means no relay and must never match");
     TEST_ASSERT_EQUAL_MESSAGE(1, drainPhoneQueue(), "relay_node 0 means no relay and must never match");
+}
+
+// A node number ending in 00 is transmitted as relay byte 0xff, so listing it must drop 0xff; the
+// no-relay value 0 stays unmatched.
+void test_listed_zero_byte_node_drops_0xff(void)
+{
+    setIgnoreRelayNodes({0xA28E1400u});
+    runPipelineIngress(makeRelayedLoraFrame(REMOTE_NODE, LOCAL_NODE, ZERO_LISTED_ID, 0xFF));
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, pipelineModule->calls, "a listed ...00 node transmits as 0xff");
+    TEST_ASSERT_EQUAL_MESSAGE(0, drainPhoneQueue(), "a listed ...00 node transmits as 0xff");
 }
 
 void setup()
@@ -124,6 +137,7 @@ void setup()
     RUN_TEST(test_non_lora_transport_is_not_affected);
     RUN_TEST(test_empty_relay_list_changes_nothing);
     RUN_TEST(test_no_relay_node_zero_never_matches);
+    RUN_TEST(test_listed_zero_byte_node_drops_0xff);
     const int result = UNITY_END();
     pipelineHarnessDestroy();
     exit(result);

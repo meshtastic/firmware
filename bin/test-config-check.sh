@@ -208,9 +208,13 @@ assert "a bad relay node number is refused on a normal boot" 1 ignore-relay-node
 assert "two entries sharing a low byte are warned" 0 ignore-relay-nodes-duplicate-byte.yaml check \
 	"share low byte 0x44" \
 	"Result: 0 errors, 1 warning"
-assert "a low byte of 0 is warned and never matches" 0 ignore-relay-nodes-zero-byte.yaml check \
-	"low byte of 0" \
+assert "an entry ending in 00 is warned as 0xff" 0 ignore-relay-nodes-zero-byte.yaml check \
+	"ends in 00, which is sent as relay byte 0xff" \
 	"Result: 0 errors, 1 warning"
+assert "relay node lists accumulate across files" 0 ignore-relay-nodes-append/config.yaml check \
+	"'Lora.IgnoreRelayNodes' is set in 2 files" \
+	"The lists accumulate; to remove an entry, edit the file that adds it" \
+	"Result: 0 errors,"
 assert "relay nodes written as a scalar are refused" 1 ignore-relay-nodes-not-a-list.yaml check \
 	"must be a list of node numbers" \
 	"Result: 1 error, 0 warnings"

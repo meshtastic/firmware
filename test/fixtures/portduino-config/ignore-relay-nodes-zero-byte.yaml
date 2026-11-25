@@ -1,4 +1,4 @@
-# FAULT: an entry ending in 00 can never match, because relay_node 0 means no relay was recorded.
+# FAULT: an entry ending in 00 is sent as relay byte 0xff, so it also drops any node ending in ff.
 # Expect a WARNING and exit 0.
 Lora:
   Module: sx1262
