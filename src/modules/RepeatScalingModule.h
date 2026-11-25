@@ -4,15 +4,18 @@
 #include "mesh/mesh-pb-constants.h"
 
 /**
- * RepeatScalingModule owns the "how many duplicate rebroadcasts of a packet we ourselves have
- * queued to rebroadcast should we tolerate before giving up" decision (see
- * FloodingRouter::perhapsCancelDupe, its sole caller).
+ * Decides how many duplicates of a packet we have queued to rebroadcast must be heard before
+ * FloodingRouter::perhapsCancelDupe cancels our copy. The default is 1: cancel on the first.
  *
- * The historical behavior is to cancel our own queued rebroadcast as soon as we hear the very
- * first duplicate from another node. This module allows some packet types (see
- * getDupeCancelThreshold in RepeatScalingModule.cpp) to instead tolerate a configurable number of
- * heard duplicates first, trading a little extra airtime for better delivery odds - unless the
- * mesh is already busy/dense, in which case it always falls back to the historical behavior.
+ * - Text messages (plain and compressed) tolerate one heard duplicate (threshold 2): chat has no
+ *   broadcast ACK/retry.
+ * - A packet we cannot decode is judged from its plaintext header: a DM-shaped flood (to a single
+ *   node, NO_NEXT_HOP_PREFERENCE) gets threshold 2; broadcasts and routed DMs get 1. noteScheduled()
+ *   caches the portnum when we queue a rebroadcast, so its later encrypted duplicates use the table.
+ * - On a busy mesh (channel or TX airtime above the BUSY_* limits, or too many direct neighbours)
+ *   every threshold is 1, today's behaviour.
+ *
+ * Thresholds are compile-time. Counts live in a small RAM ring, keyed by (sender, id).
  */
 class RepeatScalingModule
 {
