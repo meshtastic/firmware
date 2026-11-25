@@ -58,6 +58,8 @@ class TransparentRadio : public RadioInterface, protected concurrency::OSThread
     static constexpr uint32_t REFUSED_RETRY_MS = 5 * 60 * 1000;      // each push rewrites the device's flash
     static constexpr uint32_t HEARTBEAT_INTERVAL_MS = 5 * 60 * 1000; // the device drops an API client silent for 15 minutes
     static constexpr size_t FRAME_HEADER_LEN = 4;
+    static constexpr uint32_t BOOT_TEXT_BYTES = 64;      // plain text on a Ready link: the device rebooted
+    static constexpr uint32_t BOOT_TEXT_QUIET_MS = 2000; // let a `rebooted` frame that follows the text win
 
     void setState(State next);
     void startHandshake();
@@ -106,6 +108,8 @@ class TransparentRadio : public RadioInterface, protected concurrency::OSThread
 
     uint8_t rxBuf[FRAME_HEADER_LEN + MAX_TO_FROM_RADIO_SIZE];
     size_t rxPtr = 0;
+    uint32_t bootTextBytes = 0; // bytes outside any frame since the last decoded one, while Ready
+    uint32_t bootTextAtMs = 0;  // when the last of them arrived
     uint8_t txFrame[FRAME_HEADER_LEN + MAX_TO_FROM_RADIO_SIZE];
     meshtastic_FromRadio fromRadio = meshtastic_FromRadio_init_zero;
     meshtastic_ToRadio toRadio = meshtastic_ToRadio_init_zero;

@@ -843,6 +843,57 @@ void test_device_reboot_restarts_the_handshake(void)
     TEST_ASSERT_EQUAL(meshtastic_ToRadio_want_config_id_tag, sent[0].which_payload_variant);
 }
 
+// A device whose USB-UART bridge stays enumerated through a reset may never get its `rebooted` frame to us, but it
+// prints its boot log, which an API client never otherwise sees. After a quiet spell the radio handshakes again.
+static void deviceSendsText(const char *text)
+{
+    fakeLink->incoming.insert(fakeLink->incoming.end(), text, text + strlen(text));
+}
+
+static constexpr char BOOT_LOG[] = "ESP-ROM:esp32s3-20210327\r\nrst:0x1 (POWERON),boot:0x8 (SPI_FAST_FLASH_BOOT)\r\n"
+                                   "entry 0x403c98d4\r\n";
+
+void test_boot_log_on_a_ready_link_restarts_the_handshake(void)
+{
+    bringReady();
+    deviceSendsText(BOOT_LOG);
+    radio->runOnce();
+    TEST_ASSERT_EQUAL_MESSAGE(0, takeToRadio().size(), "wait for the line to go quiet first");
+    Time::setTestMillis(Time::getMillis() + 2000);
+    radio->runOnce();
+    TEST_ASSERT_EQUAL((int)TransparentRadio::State::Configuring, (int)radio->getState());
+    std::vector<meshtastic_ToRadio> sent = takeToRadio();
+    TEST_ASSERT_EQUAL(1, sent.size());
+    TEST_ASSERT_EQUAL(meshtastic_ToRadio_want_config_id_tag, sent[0].which_payload_variant);
+}
+
+// A `rebooted` frame after the boot log handshakes once, through the existing path, not twice.
+void test_boot_log_then_rebooted_handshakes_once(void)
+{
+    bringReady();
+    deviceSendsText(BOOT_LOG);
+    meshtastic_FromRadio rebooted = meshtastic_FromRadio_init_zero;
+    rebooted.which_payload_variant = meshtastic_FromRadio_rebooted_tag;
+    rebooted.rebooted = true;
+    deviceSends(rebooted);
+    radio->runOnce();
+    Time::setTestMillis(Time::getMillis() + 2000);
+    radio->runOnce();
+    TEST_ASSERT_EQUAL(1, takeToRadio().size());
+}
+
+// A few stray bytes of line noise are not a boot log.
+void test_a_few_stray_bytes_leave_the_link_ready(void)
+{
+    bringReady();
+    deviceSendsText("\r\nok\r\n");
+    radio->runOnce();
+    Time::setTestMillis(Time::getMillis() + 2000);
+    radio->runOnce();
+    TEST_ASSERT_EQUAL((int)TransparentRadio::State::Ready, (int)radio->getState());
+    TEST_ASSERT_EQUAL(0, takeToRadio().size());
+}
+
 // This node's LoRa config can change at runtime (admin, the app). The device must follow.
 void test_lora_config_change_is_pushed_to_the_device(void)
 {
@@ -900,6 +951,9 @@ void setup()
     RUN_TEST(test_only_encrypted_frames_after_ready_reach_the_router);
     RUN_TEST(test_link_loss_drops_due_frames_then_reconnects_and_handshakes_again);
     RUN_TEST(test_device_reboot_restarts_the_handshake);
+    RUN_TEST(test_boot_log_on_a_ready_link_restarts_the_handshake);
+    RUN_TEST(test_boot_log_then_rebooted_handshakes_once);
+    RUN_TEST(test_a_few_stray_bytes_leave_the_link_ready);
     RUN_TEST(test_lora_config_change_is_pushed_to_the_device);
     RUN_TEST(test_endpoint_parsing);
     exit(UNITY_END());

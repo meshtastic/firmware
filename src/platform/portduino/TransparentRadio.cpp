@@ -195,6 +195,12 @@ int32_t TransparentRadio::runOnce()
         startHandshake();
     } else if (state == State::Refused && Throttle::hasElapsed(stateSinceMs, REFUSED_RETRY_MS)) {
         startHandshake();
+    } else if (state == State::Ready && bootTextBytes >= BOOT_TEXT_BYTES &&
+               Throttle::hasElapsed(bootTextAtMs, BOOT_TEXT_QUIET_MS)) {
+        // An API client only ever gets frames, so plain text means the device restarted and is printing its boot log.
+        LOG_INFO("Transparent radio: %s printed %u bytes of plain text; handshaking again", link->describe().c_str(),
+                 (unsigned)bootTextBytes);
+        startHandshake();
     }
 
     if (link->isOpen() && Throttle::hasElapsed(lastWriteMs, HEARTBEAT_INTERVAL_MS))
@@ -207,6 +213,7 @@ int32_t TransparentRadio::runOnce()
 void TransparentRadio::setState(State next)
 {
     state = next;
+    bootTextBytes = 0;
     stateSinceMs = Time::getMillis();
 }
 
@@ -262,8 +269,13 @@ void TransparentRadio::parseByte(uint8_t c)
     const size_t ptr = rxPtr++;
     rxBuf[ptr] = c;
     if (ptr == 0) {
-        if (c != FRAME_START1)
+        if (c != FRAME_START1) {
             rxPtr = 0;
+            if (state == State::Ready) {
+                bootTextBytes++;
+                bootTextAtMs = Time::getMillis();
+            }
+        }
     } else if (ptr == 1) {
         if (c != FRAME_START2)
             rxPtr = (c == FRAME_START1) ? 1 : 0;
@@ -286,6 +298,7 @@ void TransparentRadio::parseByte(uint8_t c)
 
 void TransparentRadio::handleFromRadio()
 {
+    bootTextBytes = 0; // the device is talking frames, so any text before this was not a reboot
     switch (fromRadio.which_payload_variant) {
     case meshtastic_FromRadio_my_info_tag:
         deviceNodeNum = fromRadio.my_info.my_node_num;
