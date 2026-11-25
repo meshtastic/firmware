@@ -121,6 +121,13 @@ GPS:
 #  ExtraPins:
 #    - 22
 
+### Serial module: the host tty it reads and writes, in place of rxd/txd pins.
+### pty:<link> creates a virtual port and links it at <link> for another program to open.
+
+#SerialModule:
+#  Path: /dev/ttyUSB1
+#  Path: pty:/tmp/meshserial
+
 ### Specify I2C device, or leave blank for none
 
 I2C:
@@ -258,6 +265,8 @@ Logging:
 
 Webserver:
 #  Port: 9443 # Port for Webserver & Webservices
+#  HTTPPort: 9080 # Also serve them without TLS on this port, plain HTTP and WebSocket. Off unless set; needs Port
+#  HTTPBindAll: false # HTTPPort listens on loopback only; true opens it, unencrypted, to every interface
 #  RootPath: /usr/share/meshtasticd/web # Root Dir of WebServer
 #  SSLKey: /etc/meshtasticd/ssl/private_key.pem # Path to SSL Key, generated if not present
 #  SSLCert: /etc/meshtasticd/ssl/certificate.pem # Path to SSL Certificate, generated if not present

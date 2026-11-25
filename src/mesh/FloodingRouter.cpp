@@ -116,10 +116,8 @@ bool FloodingRouter::reprocessPacket(const meshtastic_MeshPacket *p)
         nodeDB->updateFrom(*p);
 
 #if !MESHTASTIC_EXCLUDE_TRACEROUTE
-    if (traceRouteModule && p->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
-        p->decoded.portnum == meshtastic_PortNum_TRACEROUTE_APP) {
-        traceRouteModule->processUpgradedPacket(*p);
-    }
+    if (traceRouteModule)
+        traceRouteModule->updateRoute(*const_cast<meshtastic_MeshPacket *>(p));
 #endif
     return true;
 }
@@ -146,9 +144,12 @@ bool FloodingRouter::roleAllowsCancelingDupe(const meshtastic_MeshPacket *p)
 
 void FloodingRouter::perhapsCancelDupe(const meshtastic_MeshPacket *p)
 {
-    if (p->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA && roleAllowsCancelingDupe(p)) {
+    // Only LoRa duplicates mean another node has already rebroadcast this packet over RF.
+    if (p->transport_mechanism != meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA)
+        return;
+
+    if (roleAllowsCancelingDupe(p)) {
         // cancel rebroadcast of this message *if* there was already one, unless we're a router!
-        // But only LoRa packets should be able to trigger this.
         if (Router::cancelSending(p->from, p->id))
             txRelayCanceled++;
     }

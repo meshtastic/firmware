@@ -223,6 +223,9 @@ extern struct portduino_config_struct {
     std::string gpsd_host = "";
     int gpsd_port = 2947;
 
+    // Serial module host tty
+    std::string serial_module_path = "";
+
     // I2C
     std::string i2cdev = "";
 
@@ -314,6 +317,8 @@ extern struct portduino_config_struct {
     std::string webserver_ssl_key_path = "/etc/meshtasticd/ssl/private_key.pem";
     std::string webserver_ssl_cert_path = "/etc/meshtasticd/ssl/certificate.pem";
     int webserverport = -1;
+    int webserver_http_port = -1;
+    bool webserver_http_bind_all = false;
 
     // Bluetooth (BLE peripheral via BlueZ; Linux only, and only when built with
     // sdbus-c++)
@@ -497,6 +502,12 @@ extern struct portduino_config_struct {
                 out << YAML::Key << "SerialPath" << YAML::Value << gps_serial_path;
             }
             out << YAML::EndMap; // GPS
+        }
+
+        if (!serial_module_path.empty()) {
+            out << YAML::Key << "SerialModule" << YAML::Value << YAML::BeginMap;
+            out << YAML::Key << "Path" << YAML::Value << serial_module_path;
+            out << YAML::EndMap; // SerialModule
         }
 
         if (i2cdev != "") {
@@ -724,6 +735,10 @@ extern struct portduino_config_struct {
             out << YAML::Key << "SSLKey" << YAML::Value << webserver_ssl_key_path;
             out << YAML::Key << "SSLCert" << YAML::Value << webserver_ssl_cert_path;
             out << YAML::Key << "Port" << YAML::Value << webserverport;
+            if (webserver_http_port > 0)
+                out << YAML::Key << "HTTPPort" << YAML::Value << webserver_http_port;
+            if (webserver_http_bind_all)
+                out << YAML::Key << "HTTPBindAll" << YAML::Value << true;
             out << YAML::EndMap; // Webserver
         }
 

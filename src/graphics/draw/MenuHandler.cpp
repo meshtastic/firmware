@@ -19,6 +19,7 @@
 #include "graphics/SharedUIDisplay.h"
 #include "graphics/TFTColorRegions.h"
 #include "graphics/draw/MessageRenderer.h"
+#include "graphics/draw/RadarRenderer.h"
 #include "graphics/draw/UIRenderer.h"
 #include "input/RotaryEncoderInterruptImpl1.h"
 #include "input/UpDownInterruptImpl1.h"
@@ -710,6 +711,57 @@ void menuHandler::showConfirmationBanner(const char *message, std::function<void
         }
     };
     screen->showOverlayBanner(confirmBanner);
+}
+
+// Where trackingViewPicker should return when the user picks "Back".  Set by
+// the calling menu (nodeListMenu or radarBearingsMenu) just before queueing
+// the picker, so back behaves like the Clock Face → Clock Menu flow.
+static menuHandler::screenMenus s_trackingViewPickerReturn = menuHandler::MenuNone;
+
+void menuHandler::setTrackingViewPickerReturn(screenMenus target)
+{
+    s_trackingViewPickerReturn = target;
+}
+
+void menuHandler::trackingViewPicker()
+{
+    // Mirrors clockFacePicker: pick which view the bearings/distance frame
+    // shows.  Stored in config.display.bearings_view_radar (false=Bearings
+    // list, true=Radar overlay).
+    static const ClockFaceOption trackingOptions[] = {
+        {"Back", OptionsAction::Back},
+        {"Bearings", OptionsAction::Select, false},
+        {"Radar", OptionsAction::Select, true},
+    };
+
+    constexpr size_t trackingCount = sizeof(trackingOptions) / sizeof(trackingOptions[0]);
+    static std::array<const char *, trackingCount> trackingLabels{};
+
+    auto bannerOptions = createStaticBannerOptions("Tracking View?", trackingOptions, trackingLabels,
+                                                   [](const ClockFaceOption &option, int) -> void {
+                                                       if (option.action == OptionsAction::Back) {
+                                                           menuHandler::menuQueue = s_trackingViewPickerReturn;
+                                                           if (s_trackingViewPickerReturn != MenuNone)
+                                                               screen->runNow();
+                                                           return;
+                                                       }
+
+                                                       if (!option.hasValue) {
+                                                           return;
+                                                       }
+
+                                                       if (config.display.bearings_view_radar == option.value) {
+                                                           return;
+                                                       }
+
+                                                       config.display.bearings_view_radar = option.value;
+                                                       service->reloadConfig(SEGMENT_CONFIG);
+                                                       screen->setFrames(Screen::FOCUS_PRESERVE);
+                                                       screen->runNow();
+                                                   });
+
+    bannerOptions.InitialSelected = config.display.bearings_view_radar ? 2 : 1;
+    screen->showOverlayBanner(bannerOptions);
 }
 
 void menuHandler::clockFacePicker()
@@ -1493,7 +1545,7 @@ void menuHandler::positionBaseMenu()
         CompassCalibrate,
         GPSSmartPosition,
         GPSUpdateInterval,
-        GPSPositionBroadcast
+        GPSPositionBroadcast,
     };
 
     static const PositionMenuOption baseOptions[] = {
@@ -1553,7 +1605,7 @@ void menuHandler::positionBaseMenu()
                 accelerometerThread->calibrate(30);
             }
 #endif
-#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && !MESHTASTIC_EXCLUDE_MAGNETOMETER
+#if !MESHTASTIC_EXCLUDE_MAGNETOMETER
             if (magnetometerThread) {
                 magnetometerThread->calibrate(30);
             }
@@ -1585,6 +1637,57 @@ void menuHandler::positionBaseMenu()
     bannerOptions = createStaticBannerOptions("GPS Action", baseOptions, baseLabels, onSelection);
 #endif
 
+    screen->showOverlayBanner(bannerOptions);
+}
+
+void menuHandler::radarBearingsMenu()
+{
+    enum optionsNumbers { Back, TrackingView, ToggleHeading, ToggleFavorites, ZoomIn, ZoomOut };
+    static const char *optionsArray[] = {
+        "Back",    "Tracking View",
+        nullptr, // ToggleHeading - filled dynamically below
+        nullptr, // ToggleFavorites - filled dynamically below
+        "Zoom In", "Zoom Out",
+    };
+    static int optionsEnumArray[] = {Back, TrackingView, ToggleHeading, ToggleFavorites, ZoomIn, ZoomOut};
+
+    optionsArray[ToggleHeading] = graphics::RadarRenderer::isNorthUp() ? "Switch to HDG-UP" : "Switch to N-UP";
+    optionsArray[ToggleFavorites] = config.display.radar_favorites_only ? "Show: All Nodes" : "Show: Favorites Only";
+
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Radar Options";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = sizeof(optionsEnumArray) / sizeof(optionsEnumArray[0]);
+    bannerOptions.optionsEnumPtr = optionsEnumArray;
+
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == Back) {
+            screen->setFrames(Screen::FOCUS_PRESERVE);
+        } else if (selected == TrackingView) {
+            // Radar bearings menu has no enum value (invoked directly from input
+            // handler), so back from the picker just dismisses to the screen.
+            setTrackingViewPickerReturn(MenuNone);
+            menuQueue = TrackingViewPicker;
+            screen->runNow();
+        } else if (selected == ToggleHeading) {
+            graphics::RadarRenderer::toggleNorthUp();
+            screen->setFrames(Screen::FOCUS_PRESERVE);
+            screen->runNow();
+        } else if (selected == ToggleFavorites) {
+            config.display.radar_favorites_only = !config.display.radar_favorites_only;
+            service->reloadConfig(SEGMENT_CONFIG);
+            screen->setFrames(Screen::FOCUS_PRESERVE);
+            screen->runNow();
+        } else if (selected == ZoomIn) {
+            graphics::RadarRenderer::zoomIn();
+            screen->setFrames(Screen::FOCUS_PRESERVE);
+            screen->runNow();
+        } else if (selected == ZoomOut) {
+            graphics::RadarRenderer::zoomOut();
+            screen->setFrames(Screen::FOCUS_PRESERVE);
+            screen->runNow();
+        }
+    };
     screen->showOverlayBanner(bannerOptions);
 }
 
@@ -1660,7 +1763,7 @@ void menuHandler::environmentTelemetrySourceMenu()
 
 void menuHandler::nodeListMenu()
 {
-    enum optionsNumbers { Back, NodePicker, TraceRoute, Verify, Reset, NodeNameLength, enumEnd };
+    enum optionsNumbers { Back, NodePicker, TrackingView, TraceRoute, Verify, Reset, NodeNameLength, enumEnd };
     static const char *optionsArray[enumEnd] = {"Back"};
     static int optionsEnumArray[enumEnd] = {Back};
     int options = 1;
@@ -1671,6 +1774,11 @@ void menuHandler::nodeListMenu()
     optionsArray[options] = "Node Actions / Settings";
 #endif
     optionsEnumArray[options++] = NodePicker;
+
+#if HAS_GPS
+    optionsArray[options] = "Tracking View";
+    optionsEnumArray[options++] = TrackingView;
+#endif
 
     if (currentResolution != ScreenResolution::UltraLow) {
         optionsArray[options] = "Show Long/Short Name";
@@ -1687,6 +1795,10 @@ void menuHandler::nodeListMenu()
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == NodePicker) {
             menuQueue = NodePickerMenu;
+            screen->runNow();
+        } else if (selected == TrackingView) {
+            setTrackingViewPickerReturn(NodeBaseMenu);
+            menuQueue = TrackingViewPicker;
             screen->runNow();
         } else if (selected == Reset) {
             menuQueue = ResetNodeDbMenu;
@@ -3136,30 +3248,30 @@ void menuHandler::LoRaFEMLNAToggleMenu()
 {
     static const LoRaFEMLNAToggleOption femToggleOptions[] = {
         {"Back", OptionsAction::Back},
+        {"Auto", OptionsAction::Select, meshtastic_Config_LoRaConfig_FEM_LNA_Mode_AUTO},
         {"Enabled", OptionsAction::Select, meshtastic_Config_LoRaConfig_FEM_LNA_Mode_ENABLED},
         {"Disabled", OptionsAction::Select, meshtastic_Config_LoRaConfig_FEM_LNA_Mode_DISABLED},
     };
     constexpr size_t toggleCount = sizeof(femToggleOptions) / sizeof(femToggleOptions[0]);
     static std::array<const char *, toggleCount> toggleLabels{};
 
-    auto bannerOptions = createStaticBannerOptions(
-        "FEM LNA", femToggleOptions, toggleLabels, [](const LoRaFEMLNAToggleOption &option, int) -> void {
-            if (option.action == OptionsAction::Back) {
-                menuQueue = LoraMenu;
-                screen->runNow();
-                return;
-            }
+    auto bannerOptions = createStaticBannerOptions("FEM LNA", femToggleOptions, toggleLabels,
+                                                   [](const LoRaFEMLNAToggleOption &option, int) -> void {
+                                                       if (option.action == OptionsAction::Back) {
+                                                           menuQueue = LoraMenu;
+                                                           screen->runNow();
+                                                           return;
+                                                       }
 
-            if (!option.hasValue || config.lora.fem_lna_mode == option.value) {
-                return;
-            }
+                                                       if (!option.hasValue || config.lora.fem_lna_mode == option.value) {
+                                                           return;
+                                                       }
 
-            const bool enabled = option.value != meshtastic_Config_LoRaConfig_FEM_LNA_Mode_DISABLED;
-            config.lora.fem_lna_mode = option.value;
-            loraFEMInterface.setLNAEnable(enabled);
-            service->reloadConfig(SEGMENT_CONFIG);
-            LOG_INFO("FEM LNA %s", enabled ? "enabled" : "disabled");
-        });
+                                                       config.lora.fem_lna_mode = option.value;
+                                                       loraFEMInterface.setLnaMode(option.value);
+                                                       service->reloadConfig(SEGMENT_CONFIG);
+                                                       LOG_INFO("FEM LNA mode %s", option.label);
+                                                   });
 
     int initialSelection = 0;
     for (size_t i = 0; i < toggleCount; ++i) {
@@ -3260,6 +3372,9 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         break;
     case ClockMenu:
         clockMenu();
+        break;
+    case TrackingViewPicker:
+        trackingViewPicker();
         break;
     case SystemBaseMenu:
         systemBaseMenu();

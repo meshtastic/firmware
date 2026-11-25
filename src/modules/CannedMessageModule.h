@@ -197,6 +197,7 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     bool showOnScreenKeyboard();
     // Set when a menu requested on-screen-keyboard compose; serviced by runOnce().
     bool pendingOskLaunch = false;
+    bool pendingDmRefusal = false;
 
 #if defined(USE_VIRTUAL_KEYBOARD)
     Letter keyboard[2][4][10] = {{{{"Q", 20, 0, 0, 0, 0},

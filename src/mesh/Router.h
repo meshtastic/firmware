@@ -41,10 +41,26 @@ void stampRxTime(meshtastic_MeshPacket *p);
  */
 class Router : protected concurrency::OSThread, protected PacketHistory
 {
+  public:
+    // Refusal NAKs we sent for want_ack requests. Small and fixed: refusals are rare and an entry only has to
+    // outlive the sender's few retransmissions. When one is evicted the duplicate gets the plain ACK as before.
+    static constexpr uint8_t REFUSAL_CACHE_SIZE = 8; // 8 x 16 B = 128 B, no heap
+    static constexpr uint32_t REFUSAL_TTL_MSEC = 5 * 60 * 1000;
+
   private:
     /// Packets which have just arrived from the radio, ready to be processed by this service and possibly
     /// forwarded to the phone.
     PointerQueue<meshtastic_MeshPacket> fromRadioQueue;
+
+    struct RefusalRecord {
+        NodeNum from;
+        PacketId id;
+        uint32_t atMsec;
+        uint8_t error; // meshtastic_Routing_Error, never NONE; 0 marks an empty slot
+    };
+    RefusalRecord refusals[REFUSAL_CACHE_SIZE] = {};
+    uint8_t nextRefusalSlot = 0;
+    static_assert(sizeof(RefusalRecord) == 16, "refusal cache is budgeted at 16 B per entry");
 
   protected:
     std::unique_ptr<RadioInterface> iface = nullptr;
@@ -93,6 +109,13 @@ class Router : protected concurrency::OSThread, protected PacketHistory
      * The returned packet is guaranteed to have a unique packet ID already assigned
      */
     [[nodiscard]] meshtastic_MeshPacket *allocForSending();
+
+    /** Remember that (from, id) was answered with a refusal NAK, so a retransmitted duplicate gets the same answer.
+     * Routing_Error_NONE forgets the entry: the latest processing of (from, id) was accepted. */
+    void rememberRefusal(NodeNum from, PacketId id, meshtastic_Routing_Error err);
+
+    /** The refusal sent for (from, id) still within REFUSAL_TTL_MSEC, or Routing_Error_NONE when there is none. */
+    [[nodiscard]] meshtastic_Routing_Error refusalFor(NodeNum from, PacketId id) const;
 
     /** Return Underlying interface's TX queue status */
     [[nodiscard]] meshtastic_QueueStatus getQueueStatus();

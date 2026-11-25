@@ -1276,6 +1276,10 @@ bool loadConfig(const char *configPath)
                 }
             }
         }
+        // Only a file that names Path changes it, so a later config.d file cannot clear it by omission.
+        if (yamlConfig["SerialModule"] && yamlConfig["SerialModule"]["Path"]) {
+            portduino_config.serial_module_path = yamlConfig["SerialModule"]["Path"].as<std::string>("");
+        }
         if (yamlConfig["GPIO"]["ExtraPins"]) {
             for (auto extra_pin : yamlConfig["GPIO"]["ExtraPins"]) {
                 portduino_config.extra_pins.push_back(pinMapping());
@@ -1463,6 +1467,8 @@ bool loadConfig(const char *configPath)
 
         if (yamlConfig["Webserver"]) {
             portduino_config.webserverport = (yamlConfig["Webserver"]["Port"]).as<int>(-1);
+            portduino_config.webserver_http_port = (yamlConfig["Webserver"]["HTTPPort"]).as<int>(-1);
+            portduino_config.webserver_http_bind_all = (yamlConfig["Webserver"]["HTTPBindAll"]).as<bool>(false);
             portduino_config.webserver_root_path =
                 (yamlConfig["Webserver"]["RootPath"]).as<std::string>("/usr/share/meshtasticd/web");
             portduino_config.webserver_ssl_key_path =
@@ -1616,10 +1622,7 @@ bool loadConfig(const char *configPath)
                 std::getline(infile, portduino_config.mac_address);
             }
 
-            // https://stackoverflow.com/a/20326454
-            portduino_config.mac_address.erase(
-                std::remove(portduino_config.mac_address.begin(), portduino_config.mac_address.end(), ':'),
-                portduino_config.mac_address.end());
+            std::erase(portduino_config.mac_address, ':');
         }
     } catch (YAML::Exception &e) {
         // The check report repeats this against the file it came from, so printing it
@@ -1701,7 +1704,7 @@ std::string adminKeyToBase64(const std::array<uint8_t, 32> &key)
 
 bool MAC_from_string(std::string mac_str, uint8_t *dmac)
 {
-    mac_str.erase(std::remove(mac_str.begin(), mac_str.end(), ':'), mac_str.end());
+    std::erase(mac_str, ':');
     if (mac_str.length() != 12) {
         return false;
     }

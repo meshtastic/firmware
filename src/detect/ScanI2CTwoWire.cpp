@@ -1,5 +1,6 @@
 #include "ScanI2CTwoWire.h"
 #include "configuration.h"
+#include "detect/INA219Detection.h"
 #include "detect/ScanI2C.h"
 
 #if !MESHTASTIC_EXCLUDE_I2C
@@ -611,6 +612,12 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                         type = INA226;
                         break;
                     }
+                    // TI INA3221 strapped to 0x40/0x41 instead of its usual 0x42
+                    else if (mfg == 0x5449 && die == 0x3220) {
+                        logFoundDevice("INA3221", (uint8_t)addr.address);
+                        type = INA3221;
+                        break;
+                    }
                     // TI INA260
                     else if (mfg == 0x5449) {
                         logFoundDevice("INA260", (uint8_t)addr.address);
@@ -633,9 +640,8 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                     break;
                 }
 #endif
-                // Get INA219 configuration register 0x00 expecting 0x399F after power-on reset
                 uint16_t registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x00), 2);
-                if (registerValue == 0x399F) {
+                if (matchesIna219ConfigurationSignature(registerValue)) {
                     logFoundDevice("INA219", (uint8_t)addr.address);
                     type = INA219;
                     break;

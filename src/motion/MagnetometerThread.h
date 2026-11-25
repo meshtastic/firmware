@@ -4,7 +4,7 @@
 
 #include "configuration.h"
 
-#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && !MESHTASTIC_EXCLUDE_MAGNETOMETER
+#if !MESHTASTIC_EXCLUDE_MAGNETOMETER
 
 #include "../concurrency/OSThread.h"
 #include "BMM150Sensor.h"

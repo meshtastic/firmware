@@ -1,0 +1,7 @@
+# FAULT: baud is a module setting (serial.baud), not a host one, so SerialModule.Baud is
+# ignored and the port runs at the module's rate. Expect a WARNING and exit 0.
+Lora:
+  Module: sim
+SerialModule:
+  Path: /dev/ttyUSB1
+  Baud: 9600
