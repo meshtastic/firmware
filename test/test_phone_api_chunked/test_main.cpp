@@ -95,6 +95,7 @@ Bytes configRequest()
     return encode(message);
 }
 
+// Sends bytes as a client would: 12-byte pieces, each a ToRadio chunk frame of at most 20 bytes.
 void sendFragments(PhoneAPITestShim &api, const Bytes &bytes)
 {
     for (size_t offset = 0; offset < bytes.size();) {
@@ -114,6 +115,7 @@ Bytes readRaw(PhoneAPITestShim &api)
     return bytes;
 }
 
+// Reads frames until one whole FromRadio is reassembled; a small unchunked reply is returned as is.
 Bytes readReassembled(PhoneAPITestShim &api)
 {
     Bytes result;
@@ -142,6 +144,7 @@ Bytes readReassembled(PhoneAPITestShim &api)
     return result;
 }
 
+// A chunked client receives the same config dump, byte for byte, as a plain client.
 void test_legacy_and_negotiated_config_are_identical()
 {
     clients[0]->receive(configRequest());
@@ -187,6 +190,7 @@ void test_fragmented_initial_handshake_and_invalid_frames()
     TEST_ASSERT_EQUAL_UINT(2, api.dispatches);
 }
 
+// A partial message expires after 30 s, including across a millisecond counter wrap.
 void test_timeout_exact_boundary_and_wrap()
 {
     const Bytes request = configRequest();
@@ -266,6 +270,7 @@ void test_non_ble_client_never_allocates_or_chunks()
     }
 }
 
+// A reassembled message that is itself chunked is rejected, and the client can carry on afterwards.
 void test_nested_chunk_is_rejected_and_guard_recovers()
 {
     Bytes nested = configRequest();
@@ -279,6 +284,7 @@ void test_nested_chunk_is_rejected_and_guard_recovers()
     TEST_ASSERT_TRUE(clients[0]->isConnected());
 }
 
+// close() and new chunks from inside the handler must not free or overwrite the buffer being dispatched.
 void test_dispatch_pins_slot_through_close_without_blocking_other_client()
 {
     clients[0]->duringDispatch = [] {
@@ -363,6 +369,7 @@ void test_encoder_boundaries_match_nanopb()
     }
 }
 
+// The older mesh ChunkedPayload message keeps its four fields and wire encoding.
 void test_legacy_chunked_payload_vector_is_unchanged()
 {
     const uint8_t vector[] = {0x08, 0x01, 0x10, 0x02, 0x18, 0x03, 0x22, 0x01, 0x04};
@@ -446,6 +453,7 @@ void test_plain_handshake_resets_opt_in_and_pending_output()
     }
 }
 
+// A chunked heartbeat is handled, and available() reports a partly sent chunked reply.
 void test_chunked_heartbeat_and_pending_output_available()
 {
     sendFragments(*clients[0], Bytes{0x3a, 0});

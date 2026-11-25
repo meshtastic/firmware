@@ -1,9 +1,12 @@
 # Chunked PhoneAPI regression tests
 
-The native suite exercises ordered client API transport independently of the
-legacy mesh `ChunkedPayload` protocol. It compares negotiated config replies with
-ordinary replies and compares the small-frame encoder with nanopb at the size
-boundaries. A test-only encoder adapter exists solely to supply exact byte totals.
+Garmin's public Connect IQ BLE API limits a write to 20 bytes, so such clients
+split each ToRadio into `ClientApiChunkedPayload` frames and receive large
+FromRadio replies split the same way. The native suite exercises this ordered
+client API transport independently of the legacy mesh `ChunkedPayload` protocol.
+It compares negotiated config replies with ordinary replies and compares the
+small-frame encoder with nanopb at the size boundaries. A test-only encoder
+adapter exists solely to supply exact byte totals.
 
 Only BLE needs chunking and the firmware allows one BLE connection, so there is a
 single file-scope slot. A `TYPE_BLE` client allocates it on its first valid chunk
@@ -15,10 +18,12 @@ feature compiles out on builds without Bluetooth or with
 
 Slot ownership lasts until `close()` or destruction, including before the config
 handshake establishes `isConnected()`. A completed input pins the slot while the
-normal virtual `handleToRadio()` path runs. Same-client nested chunks are rejected;
-other clients' plain requests still dispatch. Closing during dispatch clears
-buffers and opt-in immediately but defers freeing the slot until that dispatch
-returns. Tests cover both re-entrant and cross-thread close/dispatch interleavings.
+normal virtual `handleToRadio()` path runs. The message is dispatched straight
+from the slot's buffer, so there is no 512-byte stack copy, and a reassembled
+message that is itself chunked is rejected rather than recursing; other clients'
+plain requests still dispatch. Closing during dispatch clears buffers and opt-in
+immediately but defers freeing the slot until that dispatch returns. Tests cover
+both re-entrant and cross-thread close/dispatch interleavings.
 
 The BLE receive callbacks share a tested duplicate predicate: repeated chunk
 envelopes are not suppressed, while legacy duplicate writes retain their existing
