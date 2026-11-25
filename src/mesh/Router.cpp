@@ -14,6 +14,9 @@
 #include "mesh-pb-constants.h"
 #include "meshUtils.h"
 #include "modules/RoutingModule.h"
+#if !MESHTASTIC_EXCLUDE_TRACEROUTE
+#include "modules/TraceRouteModule.h"
+#endif
 #include <ErriezCRC32.h>
 #include <pb_decode.h>
 #include <pb_encode.h>
@@ -29,11 +32,12 @@
 #include "mqtt/MQTT.h"
 #endif
 #include "Default.h"
-#if ARCH_PORTDUINO
 #include "Throttle.h"
+#if ARCH_PORTDUINO
 #include "platform/portduino/PortduinoGlue.h"
 #include "serialization/MeshPacketSerializer.h"
 #endif
+#include <algorithm>
 
 // The size checks below budget for the tag that encryptPacketCCM actually appends, so the
 // two constants must not drift apart.
@@ -297,6 +301,42 @@ bool Router::shouldDecrementHopLimit(const meshtastic_MeshPacket *p)
     return true;
 }
 
+Router::ReceivedFrameScope::ReceivedFrameScope(Router &r, const meshtastic_MeshPacket *frame, bool copy)
+    : scopedRouter(r), previous(r.receivedFrame)
+{
+    if (frame && frame->which_payload_variant != meshtastic_MeshPacket_encrypted_tag)
+        frame = nullptr; // Arrived decoded (phone, MQTT downlink): there is no ciphertext to forward
+    if (frame && copy) {
+        owned = packetPool.allocCopy(*frame);
+        frame = owned;
+    }
+    scopedRouter.receivedFrame = frame;
+}
+
+Router::ReceivedFrameScope::~ReceivedFrameScope()
+{
+    scopedRouter.receivedFrame = previous;
+    packetPool.release(owned); // release() handles nullptr
+}
+
+void Router::useReceivedPayload(meshtastic_MeshPacket *relay) const
+{
+    const meshtastic_MeshPacket *frame = receivedFrame;
+    if (!frame || relay->which_payload_variant != meshtastic_MeshPacket_decoded_tag || frame->from != relay->from ||
+        frame->id != relay->id || frame->to != relay->to)
+        return;
+#if !MESHTASTIC_EXCLUDE_TRACEROUTE
+    // The route was updated in the decoded payload, so the received ciphertext no longer matches it
+    if (relay->decoded.portnum == meshtastic_PortNum_TRACEROUTE_APP)
+        return;
+#endif
+    fixPriority(relay); // Priority is derived from the decoded payload, which is about to be replaced
+    relay->which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
+    relay->encrypted = frame->encrypted;
+    relay->channel = frame->channel; // The channel hash as received, not the local index decoding resolved
+    relay->pki_encrypted = frame->pki_encrypted;
+}
+
 /**
  * do idle processing
  * Mostly looking in our incoming rxPacket queue and calling handleReceived.
@@ -386,6 +426,37 @@ meshtastic_MeshPacket *Router::allocForSending()
     return p;
 }
 
+void Router::rememberRefusal(NodeNum from, PacketId id, meshtastic_Routing_Error err)
+{
+    if (id == 0)
+        return;
+    uint8_t slot = nextRefusalSlot;
+    for (uint8_t i = 0; i < REFUSAL_CACHE_SIZE; i++) {
+        if (refusals[i].error != 0 && refusals[i].from == from && refusals[i].id == id) {
+            if (err == meshtastic_Routing_Error_NONE) {
+                refusals[i].error = 0; // the latest processing accepted it, so a duplicate must not replay the old refusal
+                return;
+            }
+            slot = i; // same request refused again: overwrite in place
+            break;
+        }
+    }
+    if (err == meshtastic_Routing_Error_NONE)
+        return;
+    if (slot == nextRefusalSlot)
+        nextRefusalSlot = (nextRefusalSlot + 1) % REFUSAL_CACHE_SIZE;
+    refusals[slot] = {from, id, Time::skipZero(Time::getMillis()), (uint8_t)err};
+}
+
+meshtastic_Routing_Error Router::refusalFor(NodeNum from, PacketId id) const
+{
+    for (const RefusalRecord &r : refusals) {
+        if (r.error != 0 && r.from == from && r.id == id && Throttle::isWithinTimespanMs(r.atMsec, REFUSAL_TTL_MSEC))
+            return (meshtastic_Routing_Error)r.error;
+    }
+    return meshtastic_Routing_Error_NONE;
+}
+
 /**
  * Send an ack or a nak packet back towards whoever sent idFrom
  */
@@ -436,6 +507,10 @@ ErrorCode Router::sendLocal(meshtastic_MeshPacket *p, RxSource src)
         abortSendAndNak(meshtastic_Routing_Error_NO_INTERFACE, p);
 
         return ERRNO_NO_INTERFACES;
+    } else if (config.lora.transparent_mode) {
+        // Ahead of the loopback and the reliable/next-hop bookkeeping: none of it applies when nothing goes out.
+        packetPool.release(p);
+        return ERRNO_DISABLED;
     } else {
         // Coordinates never go out on the event channel: any local originator (phone, module, UI) that aimed
         // one there is moved onto the position channel instead. Before the loopback below so the local copy
@@ -481,6 +556,12 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
         return meshtastic_Routing_Error_BAD_REQUEST;
     } // should have already been handled by sendLocal
 
+    // In transparent mode the client owns the air: nothing generated on-device goes out.
+    if (config.lora.transparent_mode) {
+        packetPool.release(p);
+        return ERRNO_DISABLED;
+    }
+
     // Abort sending if we are violating the duty cycle
     float effectiveDutyCycle = getEffectiveDutyCycle();
     if (!config.lora.override_duty_cycle && effectiveDutyCycle < 100) {
@@ -495,6 +576,7 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
                 cn->has_reply_id = true;
                 cn->reply_id = p->id;
                 cn->level = meshtastic_LogRecord_Level_WARNING;
+                cn->type = meshtastic_ClientNotification_NotificationType_DUTY_CYCLE_LIMIT_EXCEEDED;
                 cn->time = getValidTime(RTCQualityFromNet);
                 snprintf(cn->message, sizeof(cn->message), "Duty cycle limit exceeded. You can send again in %d mins",
                          silentMinutes);
@@ -618,6 +700,27 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
 
     assert(iface); // This should have been detected already in sendLocal (or we just received a packet from outside)
     return iface->send(p);
+}
+
+ErrorCode Router::sendTransparent(meshtastic_MeshPacket *p)
+{
+    if (!iface) {
+        packetPool.release(p);
+        return ERRNO_NO_INTERFACES;
+    }
+    // No duty-cycle or channel-utilization check: airtime rules are the client's in this mode.
+    if (p->encrypted.size > MAX_RADIO_PAYLOAD_LEN) {
+        packetPool.release(p);
+        return meshtastic_Routing_Error_TOO_LARGE;
+    }
+
+    fixPriority(p); // queue ordering only; nothing on the air changes
+    ErrorCode res = iface->send(p);
+    if (res == ERRNO_SHOULD_RELEASE) { // the radio declined a no-LoRa destination without taking ownership
+        packetPool.release(p);
+        res = meshtastic_Routing_Error_BAD_REQUEST;
+    }
+    return res;
 }
 
 /** Attempt to cancel a previously sent packet.  Returns true if a packet was found we could cancel */
@@ -1608,7 +1711,17 @@ void Router::dispatchReceived(meshtastic_MeshPacket *p, RxSource src)
     // call modules here
     // If this could be a spoofed packet, don't let the modules see it.
     if (!skipHandle) {
-        MeshModule::callModules(*p, src);
+#if !MESHTASTIC_EXCLUDE_TRACEROUTE
+        // Modules get the packet read-only; traceroute is the one payload a relay rewrites, so the hop is added here
+        // first. Our own loopback is left alone, as callModules() never showed it to the module.
+        if (traceRouteModule && src != RX_SRC_LOCAL)
+            traceRouteModule->updateRoute(*p);
+#endif
+        {
+            // RoutingModule queues the relay from here; it forwards p_encrypted's payload rather than re-encoding p
+            ReceivedFrameScope frame(*this, p_encrypted);
+            MeshModule::callModules(*p, src);
+        }
 
 #if !MESHTASTIC_EXCLUDE_MQTT
         if (p_encrypted == nullptr) {
@@ -1683,6 +1796,33 @@ void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
         LOG_TRACE("%s", MeshPacketSerializer::JsonSerializeEncrypted(p).c_str());
     }
 #endif
+    // Transparent mode: hand every LoRa frame to the client untouched - no filtering, decryption, history,
+    // modules or relay. Non-LoRa ingress (MQTT, UDP) has no client to go to in this mode.
+    if (config.lora.transparent_mode) {
+        if (p->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA && service) {
+            service->handleTransparentFromRadio(p);
+        } else {
+            packetPool.release(p);
+        }
+        return;
+    }
+
+#if ARCH_PORTDUINO
+    // Testing knob: drop frames transmitted by a listed relay byte before dedup, so the same packet
+    // relayed by another node still arrives.
+    if (p->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA && p->relay_node != NO_RELAY_NODE &&
+        !portduino_config.ignore_relay_nodes.empty()) {
+        const auto lowByteMatches = [&](uint32_t num) { return nodeDB->getLastByteOfNodeNum(num) == p->relay_node; };
+        if (std::find_if(portduino_config.ignore_relay_nodes.begin(), portduino_config.ignore_relay_nodes.end(),
+                         lowByteMatches) != portduino_config.ignore_relay_nodes.end()) {
+            clearRoutingAuthCache();
+            LOG_DEBUG("Ignore relay, frame from 0x%08x relayed by 0x%x", p->from, p->relay_node);
+            packetPool.release(p);
+            return;
+        }
+    }
+#endif
+
     // assert(radioConfig.has_preferences);
     if (is_in_repeated(config.lora.ignore_incoming, p->from)) {
         clearRoutingAuthCache();
@@ -1744,6 +1884,15 @@ void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
     if (shouldFilterReceived(p)) {
         clearRoutingAuthCache();
         LOG_DEBUG("Incoming msg filtered from 0x%08x", p->from);
+        packetPool.release(p);
+        return;
+    }
+
+    // Echoes of packets we sent are in PacketHistory, so the filter above consumed them (implicit ACK,
+    // dupe). Our number on anything else is not new inbound traffic: keep it from modules and the phone.
+    if (isFromUs(p)) {
+        clearRoutingAuthCache();
+        LOG_DEBUG("Drop received packet 0x%08x with our own node number", p->id);
         packetPool.release(p);
         return;
     }

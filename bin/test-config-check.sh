@@ -61,7 +61,7 @@ FAIL=0
 # assert <description> <expected-exit> <fixture> <mode> [expected-substring...]
 #   mode:    "check" adds --check, "yaml" adds --output-yaml, "check-yaml" adds both
 #            (to assert that --check wins), "normal" runs with neither.
-#   fixture: a bare name runs from a scratch directory. A name containing a slash
+#   fixture: a bare name runs from a scratch directory, as does an absolute path. A relative name containing a slash
 #            (configd-conflict/config.yaml) runs from that fixture's own directory,
 #            so a relative ConfigDirectory in it resolves the way it would in situ.
 #   Each expected substring must appear in the output. One prefixed with '!' must not:
@@ -71,7 +71,9 @@ assert() {
 	shift 4
 
 	local cwd="$WORKDIR" config="$FIXTURES/$fixture"
-	if [[ $fixture == */* ]]; then
+	if [[ $fixture == /* ]]; then
+		config="$fixture"
+	elif [[ $fixture == */* ]]; then
 		cwd="$FIXTURES/$(dirname "$fixture")"
 		config="$(basename "$fixture")"
 	fi
@@ -159,6 +161,25 @@ assert "bluetooth AdapterId must name a real adapter" 0 bluetooth-bad-adapter.ya
 	"Result: 0 errors, 1 warning"
 
 echo
+echo "serial module:"
+assert "a serial module path is clean" 0 serial-module.yaml check \
+	"Result: 0 errors, 0 warnings"
+assert "a serial module path is written back" 0 serial-module.yaml yaml \
+	"SerialModule:" \
+	"Path: pty:/tmp/meshserial"
+# Only the document is reloaded: --output-yaml may print startup lines before it.
+timeout 60 "$BIN" --output-yaml --config "$FIXTURES/serial-module.yaml" -d "$WORKDIR/fs" 2>/dev/null |
+	sed -n '/^[A-Za-z][A-Za-z0-9]*:/,$p' >"$WORKDIR/serial-module-emitted.yaml"
+assert "the written-back serial module path loads clean" 0 "$WORKDIR/serial-module-emitted.yaml" check \
+	"Result: 0 errors, 0 warnings"
+# A config.d file with a SerialModule section but no Path keeps the path config.yaml set.
+assert "a serial module path survives a later file without Path" 0 serial-module-append/config.yaml yaml \
+	"Path: /dev/ttyUSB1"
+assert "an unknown serial module key is warned" 0 serial-module-unknown-key.yaml check \
+	"unknown key 'SerialModule.Baud'" \
+	"Result: 0 errors, 1 warning"
+
+echo
 echo "admin keys in the host config:"
 assert "a list of admin keys is clean" 0 adminkeys.yaml check \
 	"Result: 0 errors, 0 warnings"
@@ -174,6 +195,72 @@ assert "admin keys append across config.d" 0 adminkeys-append/config.yaml yaml \
 	"rvzaPCZmlh1nWnqNKUFHj0dLBJJIRJhRrkZmaFLHCVY=" \
 	"NGC+MSAeaf7aoO7ouZl/XHwpmf2v5ZMlPNZUr0361xQ=" \
 	"P2jeuoXA1sOGSPH9Vm3eHFlITu1EVnohWGKlGF3t8GU="
+
+echo
+echo "ignore relay nodes:"
+assert "a list of relay node numbers is clean" 0 ignore-relay-nodes.yaml check \
+	"Result: 0 errors, 0 warnings"
+assert "an entry that is not a node number is refused" 1 ignore-relay-nodes-bad.yaml check \
+	"is not a node number" \
+	"Result: 1 error, 0 warnings"
+assert "a bad relay node number is refused on a normal boot" 1 ignore-relay-nodes-bad.yaml normal \
+	"is not a node number"
+assert "two entries sharing a low byte are warned" 0 ignore-relay-nodes-duplicate-byte.yaml check \
+	"share low byte 0x44" \
+	"Result: 0 errors, 1 warning"
+assert "an entry ending in 00 is warned as 0xff" 0 ignore-relay-nodes-zero-byte.yaml check \
+	"ends in 00, which is sent as relay byte 0xff" \
+	"Result: 0 errors, 1 warning"
+assert "an entry ending in 00 collides with one ending in ff" 0 ignore-relay-nodes-zero-ff.yaml check \
+	"ends in 00, which is sent as relay byte 0xff" \
+	"share low byte 0xff" \
+	"Result: 0 errors, 2 warnings"
+assert "relay node lists accumulate across files" 0 ignore-relay-nodes-append/config.yaml check \
+	"'Lora.IgnoreRelayNodes' is set in 2 files" \
+	"The lists accumulate; to remove an entry, edit the file that adds it" \
+	"Result: 0 errors,"
+assert "relay nodes written as a scalar are refused" 1 ignore-relay-nodes-not-a-list.yaml check \
+	"must be a list of node numbers" \
+	"Result: 1 error, 0 warnings"
+assert "relay nodes as a scalar are refused on a normal boot" 1 ignore-relay-nodes-not-a-list.yaml normal \
+	"must be a list of node numbers"
+
+echo
+echo "command sensors:"
+assert "a list of command sensors is clean" 0 sensors.yaml check \
+	"Sensors are only read while the Telemetry module setting for their Type is enabled" \
+	"Result: 0 errors, 0 warnings"
+# An air-quality Type is accepted like an environment one, and written back under its field name.
+assert "air-quality sensor types are accepted" 0 sensors.yaml yaml \
+	"Type: co2" \
+	"Type: relative_humidity"
+assert "an unknown sensor Type is refused and the valid ones named" 1 sensors-bad-type.yaml check \
+	"Sensors Type 'humidity' is not an environment metric" \
+	"relative_humidity" \
+	"Result: 1 error, 0 warnings"
+assert "sensors written as a mapping are refused" 1 sensors-not-a-list.yaml check \
+	"Sensors must be a list of entries with a Type and a Command" \
+	"Result: 1 error, 0 warnings"
+assert "bad Scale, unknown key and duplicate Type are warned" 0 sensors-warnings.yaml check \
+	"Sensors Scale 'milli' is not a finite number" \
+	"Sensors Scale '.inf' is not a finite number" \
+	"unknown key 'Sensors.Interval'" \
+	"Sensors lists temperature 2 times" \
+	"Result: 0 errors, 4 warnings"
+# A non-finite Scale falls back to 1, so it is not written back out.
+assert "a non-finite Scale is replaced by 1" 0 sensors-warnings.yaml yaml \
+	"!Scale: .inf" \
+	"!Scale: inf"
+assert "an empty Sensors section is skipped" 0 sensors-empty.yaml check \
+	"!Sensors must be a list" \
+	"Result: 0 errors, 0 warnings"
+# Like admin keys, sensors append across files so one file per sensor works. --output-yaml reports
+# the merged list, with the Type normalised to the field name.
+assert "sensors append across config.d" 0 sensors-append/config.yaml yaml \
+	"Type: temperature" \
+	"Command: echo 21.5" \
+	"Type: barometric_pressure" \
+	"Command: echo 1013.2"
 
 echo
 echo "module names are matched exactly:"
@@ -372,6 +459,14 @@ assert "ports outside their usable range" 1 port-out-of-range.yaml check \
 	"General.APIPort 80 is outside 1024-65535" \
 	"Webserver.Port 99999 is not a usable TCP port" \
 	"Result: 1 error, 1 warning"
+assert "Webserver.HTTPPort outside its usable range" 1 webserver-http-port.yaml check \
+	"Webserver.HTTPPort 70000 is not a usable TCP port" \
+	"!unknown key" \
+	"Result: 1 error, 0 warnings"
+assert "Webserver.HTTPPort without Port never listens" 0 webserver-http-port-alone.yaml check \
+	"Webserver.HTTPPort is set but Webserver.Port is not" \
+	"!unknown key" \
+	"Result: 0 errors, 1 warning"
 assert "StatusMessage longer than its buffer" 0 statusmessage-long.yaml check \
 	"is truncated to 79 when it is stored" \
 	"Result: 0 errors, 1 warning"
@@ -530,6 +625,10 @@ assert "a malformed admin key is refused on a normal boot" 1 adminkeys-bad.yaml 
 	"is not a 32-byte base64 public key"
 assert "admin keys as a scalar are refused on a normal boot" 1 adminkeys-not-a-list.yaml normal \
 	"Security.AdminKeys must be a list of base64 public keys"
+assert "an unknown sensor Type is refused on a normal boot" 1 sensors-bad-type.yaml normal \
+	"Sensors: 'humidity' is not a known Type"
+assert "sensors as a mapping are refused on a normal boot" 1 sensors-not-a-list.yaml normal \
+	"Sensors must be a list of entries with a Type and a Command"
 assert "MACAddress conflict is refused" 1 mac-conflict.yaml normal \
 	"Cannot set both MACAddress and MACAddressSource!"
 # Only meaningful on a build without rgbmatrix. A build that supports HUB75 accepts

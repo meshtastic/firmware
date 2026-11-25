@@ -1,4 +1,5 @@
 #include "InputBroker.h"
+#include "ButtonHelper.h"
 #include "PowerFSM.h" // needed for event trigger
 #include "configuration.h"
 #include "graphics/Screen.h"
@@ -43,13 +44,19 @@
 
 #if defined(BUTTON_PIN_TOUCH)
 ButtonThread *TouchButtonThread = nullptr;
+#ifndef TOUCH_SINGLEPRESS
+#define TOUCH_SINGLEPRESS INPUT_BROKER_NONE
+#endif
+#ifndef TOUCH_LONGPRESS
+#define TOUCH_LONGPRESS INPUT_BROKER_BACK
+#endif
 #if HAS_BACKLIGHT
 static bool touchBacklightWasOn = false;
 static bool touchBacklightActive = false;
 #endif
 #endif
 
-#if defined(BUTTON_PIN) || defined(ARCH_PORTDUINO) || defined(MUZI_BASE)
+#if defined(BUTTON_PIN) || HAS_BUTTON || defined(ARCH_PORTDUINO) || defined(MUZI_BASE)
 ButtonThread *UserButtonThread = nullptr;
 #endif
 
@@ -173,26 +180,28 @@ void InputBroker::pollSoonWorker(void *p)
 void InputBroker::Init()
 {
 
-#ifdef BUTTON_PIN
+#if defined(BUTTON_PIN) || HAS_BUTTON
 #ifdef ARCH_ESP32
-
+    uint32_t btnPin = getResolvedButtonPin();
+    if (btnPin != 0xFF) {
 #if ESP_ARDUINO_VERSION_MAJOR >= 3
 #ifdef BUTTON_NEED_PULLUP
-    pinMode(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN, INPUT_PULLUP);
+        pinMode(btnPin, INPUT_PULLUP);
 #else
-    pinMode(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN, INPUT); // default to BUTTON_PIN
+        pinMode(btnPin, INPUT); // default
 #endif
 #else
-    pinMode(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN, INPUT); // default to BUTTON_PIN
+        pinMode(btnPin, INPUT); // default
 #ifdef BUTTON_NEED_PULLUP
-    gpio_pullup_en((gpio_num_t)(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN));
-    delay(10);
+        gpio_pullup_en((gpio_num_t)btnPin);
+        delay(10);
 #endif
 #ifdef BUTTON_NEED_PULLUP2
-    gpio_pullup_en((gpio_num_t)BUTTON_NEED_PULLUP2);
-    delay(10);
+        gpio_pullup_en((gpio_num_t)BUTTON_NEED_PULLUP2);
+        delay(10);
 #endif
 #endif
+    }
 #endif
 #endif
 
@@ -247,8 +256,8 @@ void InputBroker::Init()
         BaseType_t higherWake = 0;
         concurrency::mainDelay.interruptFromISR(&higherWake);
     };
-    touchConfig.singlePress = INPUT_BROKER_NONE;
-    touchConfig.longPress = INPUT_BROKER_BACK;
+    touchConfig.singlePress = TOUCH_SINGLEPRESS;
+    touchConfig.longPress = TOUCH_LONGPRESS;
 #if HAS_BACKLIGHT
     // Touch pad drives the backlight on devices that have one
     touchConfig.longPress = INPUT_BROKER_NONE;
@@ -350,12 +359,10 @@ void InputBroker::Init()
     DownButtonThread->initButton(downConfig);
 #endif
 
-#if defined(BUTTON_PIN)
-#if defined(USERPREFS_BUTTON_PIN)
-    int _pinNum = config.device.button_gpio ? config.device.button_gpio : USERPREFS_BUTTON_PIN;
-#else
-    int _pinNum = config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN;
-#endif
+#if (defined(BUTTON_PIN) || HAS_BUTTON) && !defined(ARCH_PORTDUINO)
+    int _pinNum = getResolvedButtonPin();
+    if (_pinNum != 0xFF) {
+
 #ifndef BUTTON_ACTIVE_LOW
 #define BUTTON_ACTIVE_LOW true
 #endif
@@ -363,56 +370,57 @@ void InputBroker::Init()
 #define BUTTON_ACTIVE_PULLUP true
 #endif
 
-    // Buttons. Moved here cause we need NodeDB to be initialized
-    // If your variant.h has a BUTTON_PIN defined, go ahead and define BUTTON_ACTIVE_LOW and BUTTON_ACTIVE_PULLUP
-    UserButtonThread = new ButtonThread("UserButton");
+        // Buttons. Moved here cause we need NodeDB to be initialized
+        // If your variant.h has a BUTTON_PIN defined, go ahead and define BUTTON_ACTIVE_LOW and BUTTON_ACTIVE_PULLUP
+        UserButtonThread = new ButtonThread("UserButton");
 #if !MESHTASTIC_EXCLUDE_SCREEN
-    if (screen) {
-        ButtonConfig userConfig;
-        userConfig.pinNumber = (uint8_t)_pinNum;
-        userConfig.activeLow = BUTTON_ACTIVE_LOW;
-        userConfig.activePullup = BUTTON_ACTIVE_PULLUP;
-        userConfig.pullupSense = pullup_sense;
-        userConfig.intRoutine = []() {
-            UserButtonThread->userButton.tick();
-            UserButtonThread->setIntervalFromNow(0);
-            runASAP = true;
-            BaseType_t higherWake = 0;
-            concurrency::mainDelay.interruptFromISR(&higherWake);
-        };
-        userConfig.singlePress = INPUT_BROKER_USER_PRESS;
-        userConfig.longPress = INPUT_BROKER_SELECT;
-        userConfig.longPressTime = 500;
-        userConfig.longLongPress = INPUT_BROKER_SHUTDOWN;
-        UserButtonThread->initButton(userConfig);
-    } else
+        if (screen) {
+            ButtonConfig userConfig;
+            userConfig.pinNumber = (uint8_t)_pinNum;
+            userConfig.activeLow = BUTTON_ACTIVE_LOW;
+            userConfig.activePullup = BUTTON_ACTIVE_PULLUP;
+            userConfig.pullupSense = pullup_sense;
+            userConfig.intRoutine = []() {
+                UserButtonThread->userButton.tick();
+                UserButtonThread->setIntervalFromNow(0);
+                runASAP = true;
+                BaseType_t higherWake = 0;
+                concurrency::mainDelay.interruptFromISR(&higherWake);
+            };
+            userConfig.singlePress = INPUT_BROKER_USER_PRESS;
+            userConfig.longPress = INPUT_BROKER_SELECT;
+            userConfig.longPressTime = 500;
+            userConfig.longLongPress = INPUT_BROKER_SHUTDOWN;
+            UserButtonThread->initButton(userConfig);
+        } else
 #endif
-    {
-        ButtonConfig userConfigNoScreen;
-        userConfigNoScreen.pinNumber = (uint8_t)_pinNum;
-        userConfigNoScreen.activeLow = BUTTON_ACTIVE_LOW;
-        userConfigNoScreen.activePullup = BUTTON_ACTIVE_PULLUP;
-        userConfigNoScreen.pullupSense = pullup_sense;
-        userConfigNoScreen.intRoutine = []() {
-            UserButtonThread->userButton.tick();
-            UserButtonThread->setIntervalFromNow(0);
-            runASAP = true;
-            BaseType_t higherWake = 0;
-            concurrency::mainDelay.interruptFromISR(&higherWake);
-        };
+        {
+            ButtonConfig userConfigNoScreen;
+            userConfigNoScreen.pinNumber = (uint8_t)_pinNum;
+            userConfigNoScreen.activeLow = BUTTON_ACTIVE_LOW;
+            userConfigNoScreen.activePullup = BUTTON_ACTIVE_PULLUP;
+            userConfigNoScreen.pullupSense = pullup_sense;
+            userConfigNoScreen.intRoutine = []() {
+                UserButtonThread->userButton.tick();
+                UserButtonThread->setIntervalFromNow(0);
+                runASAP = true;
+                BaseType_t higherWake = 0;
+                concurrency::mainDelay.interruptFromISR(&higherWake);
+            };
 #if defined(ELECROW_ThinkNode_M7)
-        userConfigNoScreen.longLongPressTime = 15 * 1000;
-        userConfigNoScreen.longLongPress = INPUT_BROKER_FACTORY_RST;
+            userConfigNoScreen.longLongPressTime = 15 * 1000;
+            userConfigNoScreen.longLongPress = INPUT_BROKER_FACTORY_RST;
 #else
-        userConfigNoScreen.longLongPress = INPUT_BROKER_SHUTDOWN;
+            userConfigNoScreen.longLongPress = INPUT_BROKER_SHUTDOWN;
 #endif
-        userConfigNoScreen.singlePress = INPUT_BROKER_USER_PRESS;
-        userConfigNoScreen.longPress = INPUT_BROKER_NONE;
-        userConfigNoScreen.longPressTime = 500;
-        userConfigNoScreen.longLongPress = INPUT_BROKER_SHUTDOWN;
-        userConfigNoScreen.doublePress = INPUT_BROKER_SEND_PING;
-        userConfigNoScreen.triplePress = INPUT_BROKER_GPS_TOGGLE;
-        UserButtonThread->initButton(userConfigNoScreen);
+            userConfigNoScreen.singlePress = INPUT_BROKER_USER_PRESS;
+            userConfigNoScreen.longPress = INPUT_BROKER_NONE;
+            userConfigNoScreen.longPressTime = 500;
+            userConfigNoScreen.longLongPress = INPUT_BROKER_SHUTDOWN;
+            userConfigNoScreen.doublePress = INPUT_BROKER_SEND_PING;
+            userConfigNoScreen.triplePress = INPUT_BROKER_GPS_TOGGLE;
+            UserButtonThread->initButton(userConfigNoScreen);
+        }
     }
 #endif // BUTTON_PIN
 #endif // HAS_BUTTON
@@ -446,8 +454,10 @@ void InputBroker::Init()
             rotaryEncoderInterruptImpl1 = nullptr;
         }
 #endif
+#if !MESHTASTIC_EXCLUDE_I2C
         cardKbI2cImpl = new CardKbI2cImpl();
         cardKbI2cImpl->init();
+#endif
 #if defined(M5STACK_UNITC6L)
         i2cButton = new i2cButtonThread("i2cButtonThread");
 #endif
@@ -501,7 +511,7 @@ void InputBroker::Init()
     }
 #endif
 #if MUZI_BASE
-    if (!screen) {
+    if (!screen && !UserButtonThread) {
         UserButtonThread = new ButtonThread("UserButton");
         ButtonConfig userConfigNoScreen;
         userConfigNoScreen.pinNumber = (uint8_t)TB_PRESS;

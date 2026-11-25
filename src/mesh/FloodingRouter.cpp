@@ -52,6 +52,7 @@ bool FloodingRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
             LOG_DEBUG("Repeated reliable tx");
             // Check if it's still in the Tx queue, if not, we have to relay it again
             if (!findInTxQueue(p->from, p->id)) {
+                ReceivedFrameScope frame(*this, p, true); // reprocessPacket() decodes p in place
                 if (reprocessPacket(p))
                     perhapsRebroadcast(p);
             }
@@ -67,6 +68,11 @@ bool FloodingRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
 
 bool FloodingRouter::perhapsHandleUpgradedPacket(const meshtastic_MeshPacket *p)
 {
+    // We never relay our own packets: consume an upgraded copy with our number without touching the TX
+    // queue, rather than let it fall through to the dupe handling (perhapsCancelDupe) as well.
+    if (isFromUs(p))
+        return true;
+
     // isRebroadcaster() is duplicated in perhapsRebroadcast(), but this avoids confusing log messages
     if (isRebroadcaster() && iface && p->hop_limit > 0) {
         // Verify the replacement before deleting the valid lower-hop copy waiting in the TX queue.
@@ -82,6 +88,7 @@ bool FloodingRouter::perhapsHandleUpgradedPacket(const meshtastic_MeshPacket *p)
             LOG_DEBUG("Processing upgraded packet 0x%08x for rebroadcast with hop limit %d (dropping queued < %d)", p->id,
                       p->hop_limit, dropThreshold);
 
+            ReceivedFrameScope frame(*this, p, true); // reprocessPacket() decodes p in place
             if (!reprocessPacket(p))
                 return true;
             perhapsRebroadcast(p);
@@ -97,6 +104,11 @@ bool FloodingRouter::perhapsHandleUpgradedPacket(const meshtastic_MeshPacket *p)
 
 bool FloodingRouter::reprocessPacket(const meshtastic_MeshPacket *p)
 {
+    // Reprocessing a dupe is for relaying it; our own packets are never relayed, and their implicit ACK
+    // is generated in ReliableRouter::shouldFilterReceived before any dupe handling.
+    if (isFromUs(p))
+        return false;
+
     if (p->which_payload_variant != meshtastic_MeshPacket_decoded_tag) {
         auto decodedState = perhapsDecode(const_cast<meshtastic_MeshPacket *>(p));
         if (decodedState != DecodeState::DECODE_SUCCESS && decodedState != DecodeState::DECODE_OPAQUE)
@@ -107,10 +119,8 @@ bool FloodingRouter::reprocessPacket(const meshtastic_MeshPacket *p)
         nodeDB->updateFrom(*p);
 
 #if !MESHTASTIC_EXCLUDE_TRACEROUTE
-    if (traceRouteModule && p->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
-        p->decoded.portnum == meshtastic_PortNum_TRACEROUTE_APP) {
-        traceRouteModule->processUpgradedPacket(*p);
-    }
+    if (traceRouteModule)
+        traceRouteModule->updateRoute(*const_cast<meshtastic_MeshPacket *>(p));
 #endif
     return true;
 }
@@ -137,14 +147,17 @@ bool FloodingRouter::roleAllowsCancelingDupe(const meshtastic_MeshPacket *p)
 
 void FloodingRouter::perhapsCancelDupe(const meshtastic_MeshPacket *p)
 {
-    if (p->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA && roleAllowsCancelingDupe(p)) {
+    // Only LoRa duplicates mean another node has already rebroadcast this packet over RF.
+    if (p->transport_mechanism != meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA)
+        return;
+
+    if (roleAllowsCancelingDupe(p)) {
         // RepeatScalingModule owns the "how many duplicates should we tolerate before giving up"
         // decision (and its bookkeeping/logging) - see RepeatScalingModule::shouldCancelDupe. When
         // the module is compiled out (MESHTASTIC_EXCLUDE_REPEATSCALING), fall back to the historical
         // behavior of cancelling on the first duplicate rather than never cancelling at all.
         if (!repeatScalingModule || repeatScalingModule->shouldCancelDupe(p)) {
             // cancel rebroadcast of this message *if* there was already one, unless we're a router!
-            // But only LoRa packets should be able to trigger this.
             if (Router::cancelSending(p->from, p->id))
                 txRelayCanceled++;
         }

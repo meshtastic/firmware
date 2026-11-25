@@ -1,7 +1,6 @@
 #include "NRF52Bluetooth.h"
 #include "BLEDfuSecure.h"
 #include "BluetoothCommon.h"
-#include "HardwareRNG.h"
 #include "PowerFSM.h"
 #include "SPILock.h"
 #include "configuration.h"
@@ -337,9 +336,14 @@ void setupMeshService(void)
     logRadio.write32(0);
     logRadio.begin();
 }
-static uint32_t configuredPasskey;
+// False if Bluefruit.begin() failed: Bluefruit is then unusable, and Advertising.start() faults on a timer that
+// was never created. nrf52Bluetooth is set all the same, so PowerFSM keeps calling in here.
+static bool bleStarted = false;
 void NRF52Bluetooth::shutdown()
 {
+    if (!bleStarted)
+        return;
+
     // Shutdown bluetooth for minimum power draw
     LOG_INFO("Disable NRF52 bluetooth");
     Bluefruit.Security.setPairPasskeyCallback(NRF52Bluetooth::onUnwantedPairing); // Actively refuse (during factory reset)
@@ -354,6 +358,9 @@ void NRF52Bluetooth::startDisabled()
 {
     // Setup Bluetooth
     nrf52Bluetooth->setup();
+    if (!bleStarted)
+        return;
+
     // Shutdown bluetooth for minimum power draw
     Bluefruit.Advertising.stop();
     Bluefruit.setTxPower(-40); // Minimum power
@@ -380,15 +387,17 @@ void NRF52Bluetooth::setup()
     Bluefruit.autoConnLed(false);
     Bluefruit.configPrphBandwidth(BANDWIDTH_MAX);
     if (!Bluefruit.begin()) {
-        // sd_ble_enable() rejected our RAM base: the linker RAM ORIGIN
+        // Without this check the node would silently run without BLE. The usual cause on nRF52 is
+        // sd_ble_enable() rejecting our RAM base: the linker RAM ORIGIN
         // (src/platform/nrf52/nrf52840_s140_v*.ld) is below what the SoftDevice needs for the
-        // current Bluefruit config. Without this check the node would silently run without BLE.
-        // Rebuild with -DCFG_DEBUG=1 to get "SoftDevice's RAM requires: 0x..." in the log, then
-        // raise the ORIGIN accordingly.
-        LOG_ERROR("Bluefruit.begin failed: SoftDevice RAM too small");
+        // current Bluefruit config. Rebuild with -DCFG_DEBUG=1 to get "SoftDevice's RAM requires: 0x..."
+        // in the log, then raise the ORIGIN accordingly. On nRF54 it can also be the RNG seed.
+        LOG_ERROR("Bluefruit.begin failed, no BLE until reboot");
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_UNSPECIFIED);
         return;
     }
+    bleStarted = true;
+
     // Clear existing data.
     Bluefruit.Advertising.stop();
     Bluefruit.Advertising.clearData();
@@ -398,15 +407,16 @@ void NRF52Bluetooth::setup()
 #endif
     if (config.bluetooth.mode != meshtastic_Config_BluetoothConfig_PairingMode_NO_PIN) {
         if (config.bluetooth.mode == meshtastic_Config_BluetoothConfig_PairingMode_FIXED_PIN) {
-            configuredPasskey = config.bluetooth.fixed_pin;
+            // setPIN() rejects anything but exactly 6 digits, so a PIN like 012345 needs its leading zero.
+            char pinString[12];
+            snprintf(pinString, sizeof(pinString), "%06lu", (unsigned long)config.bluetooth.fixed_pin);
+            LOG_INFO("Bluetooth pin set to '%s'", pinString);
+            Bluefruit.Security.setPIN(pinString);
         } else {
-            uint32_t hwrand = 0;
-            HardwareRNG::fill(reinterpret_cast<uint8_t *>(&hwrand), sizeof(hwrand));
-            configuredPasskey = hwrand % 900000u + 100000u;
+            // No static passkey: the SoftDevice generates a fresh one for each pairing, which also lets it
+            // negotiate LE Secure Connections.
+            LOG_INFO("Use random passkey per pairing");
         }
-        auto pinString = std::to_string(configuredPasskey);
-        LOG_INFO("Bluetooth pin set to '%i'", configuredPasskey);
-        Bluefruit.Security.setPIN(pinString.c_str());
         Bluefruit.Security.setIOCaps(true, false, false);
         Bluefruit.Security.setPairPasskeyCallback(NRF52Bluetooth::onPairingPasskey);
         Bluefruit.Security.setPairCompleteCallback(NRF52Bluetooth::onPairingCompleted);
@@ -472,6 +482,9 @@ void NRF52Bluetooth::setup()
 }
 void NRF52Bluetooth::resumeAdvertising()
 {
+    if (!bleStarted)
+        return;
+
     // shutdown() latches onUnwantedPairing to actively refuse pairing (used on the factory-reset /
     // BT-disable teardown path). The real pairing passkey callback is installed only in setup(), but a
     // shutdown()->resumeAdvertising() re-enable cycle skips setup() entirely (see setBluetoothEnable() in
@@ -530,9 +543,7 @@ bool NRF52Bluetooth::onPairingPasskey(uint16_t conn_handle, uint8_t const passke
 
 #if HAS_SCREEN && !defined(MESHTASTIC_EXCLUDE_SCREEN)
     if (screen) {
-        std::string configuredPasskeyText = std::to_string(configuredPasskey);
-        std::string ble_message =
-            "Bluetooth\nPIN\n[M]" + configuredPasskeyText.substr(0, 3) + " " + configuredPasskeyText.substr(3, 6);
+        std::string ble_message = "Bluetooth\nPIN\n[M]" + textkey.substr(0, 3) + " " + textkey.substr(3, 3);
         // Use the pairing_pin notification type so the lockdown UI short-
         // circuit (Screen.cpp updateUiFrame) allows the overlay through
         // even on a locked device - see H13 audit fix. The banner content
