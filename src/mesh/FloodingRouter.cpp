@@ -151,7 +151,8 @@ void FloodingRouter::perhapsCancelDupe(const meshtastic_MeshPacket *p)
     if (p->transport_mechanism != meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA)
         return;
 
-    if (roleAllowsCancelingDupe(p)) {
+    // Only a duplicate of a packet we still have queued can cancel anything, or take a tracker slot
+    if (roleAllowsCancelingDupe(p) && iface && findInTxQueue(p->from, p->id)) {
         // Without the module, cancel on the first duplicate
         if (!repeatScalingModule || repeatScalingModule->shouldCancelDupe(p)) {
             // cancel rebroadcast of this message *if* there was already one, unless we're a router!

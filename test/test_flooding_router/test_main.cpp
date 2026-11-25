@@ -1,12 +1,14 @@
-// FloodingRouter::perhapsCancelDupe role-gating and its call into RepeatScalingModule. With no radio,
-// cancelSending() is a no-op, so these observe only whether the module was consulted.
+// FloodingRouter::perhapsCancelDupe role-gating and its call into RepeatScalingModule; a stub radio
+// says whether our copy is still queued.
 
 #include "MeshTypes.h" // before TestUtil.h: provides NodeNum etc.
 #include "TestUtil.h"
 #include <unity.h>
 
+#include "MeshRadio.h"
 #include "configuration.h"
 #include "mesh/FloodingRouter.h"
+#include "mesh/RadioInterface.h"
 #include "modules/RepeatScalingModule.h"
 
 static constexpr NodeNum kSender1 = 0x000005AB;
@@ -43,7 +45,22 @@ class CountingRepeatScalingModule : public RepeatScalingModule
     }
 };
 
+// Reports whether our copy of the duplicate's packet is still in the TX queue.
+class QueueStubRadio : public RadioInterface
+{
+  public:
+    bool queued = true;
+    ErrorCode send(meshtastic_MeshPacket *p) override
+    {
+        packetPool.release(p);
+        return ERRNO_OK;
+    }
+    uint32_t getPacketTime(uint32_t, bool) override { return 0; }
+    bool findInTxQueue(NodeNum, PacketId) override { return queued; }
+};
+
 static FloodingRouterTestShim *shim = nullptr;
+static QueueStubRadio *radio = nullptr;
 static CountingRepeatScalingModule *counting = nullptr;
 
 static meshtastic_MeshPacket makeDupePacket(NodeNum from, PacketId id)
@@ -62,6 +79,7 @@ void setUp(void)
     counting->callCount = 0;
     counting->decision = false;
     repeatScalingModule = counting;
+    radio->queued = true;
 }
 
 void tearDown(void) {}
@@ -102,8 +120,7 @@ void test_perhapsCancelDupe_non_lora_transport_never_consults_repeatScalingModul
 
 void test_perhapsCancelDupe_does_not_crash_when_repeatScalingModule_says_cancel(void)
 {
-    // With no RadioInterface, Router::cancelSending() is a safe no-op - this just confirms the
-    // true-branch (attempting the cancel) doesn't crash and still only consults the module once.
+    // The cancel branch runs against the stub radio and still consults the module once.
     counting->decision = true;
     meshtastic_MeshPacket p = makeDupePacket(kSender1, kId1);
 
@@ -112,14 +129,27 @@ void test_perhapsCancelDupe_does_not_crash_when_repeatScalingModule_says_cancel(
     TEST_ASSERT_EQUAL_INT(1, counting->callCount);
 }
 
-// ===========================================================================
+// A duplicate of a packet we have not queued (or already sent) has nothing to cancel, so it must not
+// reach the module and take one of its tracker slots.
+void test_perhapsCancelDupe_skips_repeatScalingModule_when_nothing_is_queued(void)
+{
+    radio->queued = false;
+    meshtastic_MeshPacket p = makeDupePacket(kSender1, kId1);
+
+    shim->perhapsCancelDupe(&p);
+
+    TEST_ASSERT_EQUAL_INT(0, counting->callCount);
+}
 
 void setup()
 {
     initializeTestEnvironment();
     UNITY_BEGIN();
 
+    initRegion(); // a RadioInterface reads myRegion when it is constructed
     shim = new FloodingRouterTestShim();
+    radio = new QueueStubRadio();
+    shim->addInterface(std::unique_ptr<RadioInterface>(radio));
     counting = new CountingRepeatScalingModule();
 
     printf("\n=== perhapsCancelDupe (role-gating + delegation) ===\n");
@@ -127,6 +157,7 @@ void setup()
     RUN_TEST(test_perhapsCancelDupe_router_role_never_consults_repeatScalingModule);
     RUN_TEST(test_perhapsCancelDupe_non_lora_transport_never_consults_repeatScalingModule);
     RUN_TEST(test_perhapsCancelDupe_does_not_crash_when_repeatScalingModule_says_cancel);
+    RUN_TEST(test_perhapsCancelDupe_skips_repeatScalingModule_when_nothing_is_queued);
 
     exit(UNITY_END());
 }
