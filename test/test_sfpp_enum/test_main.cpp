@@ -2471,6 +2471,12 @@ void test_windowBudgetCapsServedFrames()
     std::vector<meshtastic_MeshPacket> initial = takeSent();
     TEST_ASSERT_EQUAL_UINT(1, initial.size());
     TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, true, initial[0]));
+    std::vector<meshtastic_MeshPacket> provide = drainAuthorityOne(100);
+    TEST_ASSERT_EQUAL_UINT(1, provide.size());
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, provide[0]));
+    std::vector<meshtastic_MeshPacket> wanted = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, wanted.size());
+    TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, true, wanted[0]));
 
     uint32_t served = 0;
     for (uint32_t i = 0; i < 64; i++) {
