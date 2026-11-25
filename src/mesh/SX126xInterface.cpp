@@ -217,6 +217,7 @@ bool SX126xInterface::reinitChip()
         LOG_DEBUG_RADIO("Use MCU pin %i as RXEN, pin %i as TXEN for RF switching", portduino_config.lora_rxen_pin.pin,
                         portduino_config.lora_txen_pin.pin);
         lora.setRfSwitchPins(portduino_config.lora_rxen_pin.pin, portduino_config.lora_txen_pin.pin);
+        noteRfSwitchPins(portduino_config.lora_rxen_pin.pin, portduino_config.lora_txen_pin.pin);
     }
 #else
 #ifndef SX126X_RXEN
@@ -230,6 +231,7 @@ bool SX126xInterface::reinitChip()
     if (res == RADIOLIB_ERR_NONE) {
         LOG_DEBUG_RADIO("Use MCU pin %i as RXEN, pin %i as TXEN for RF switching", SX126X_RXEN, SX126X_TXEN);
         lora.setRfSwitchPins(SX126X_RXEN, SX126X_TXEN);
+        noteRfSwitchPins(SX126X_RXEN, SX126X_TXEN);
     }
 #endif
     if (config.lora.sx126x_rx_boosted_gain) {

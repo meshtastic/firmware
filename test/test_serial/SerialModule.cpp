@@ -10,8 +10,24 @@ void tearDown(void) {}
 #ifdef ARCH_PORTDUINO
 #include "configuration.h"
 
-#include "meshUtils.h"
+#include "MeshRadio.h"
+#include "MeshTypes.h"
+#include "mesh/RadioInterface.h"
 #include "modules/SerialModule.h"
+
+// The native build has no LoRa radio, so this stands in for one whose driver claims kRadioPin.
+static constexpr uint32_t kRadioPin = 47;
+class PinRadio : public RadioInterface
+{
+  public:
+    ErrorCode send(meshtastic_MeshPacket *p) override
+    {
+        packetPool.release(p);
+        return ERRNO_OK;
+    }
+    uint32_t getPacketTime(uint32_t, bool) override { return 0; }
+    bool usesPin(uint32_t pin) const override { return pin == kRadioPin; }
+};
 
 // Test that empty configuration is valid.
 void test_serialConfigEmptyIsValid(void)
@@ -126,33 +142,63 @@ void test_serialConfigVariousModesWithoutOverrideAreValid(void)
 // An enabled module whose RX or TX is a radio pin would take the pin off the radio, so it is rejected.
 void test_serialConfigRadioPinIsInvalidWhenEnabled(void)
 {
-    meshtastic_ModuleConfig_SerialConfig config = {.enabled = true, .rxd = UNIT_TEST_RADIO_PIN, .txd = 2};
+    PinRadio radio;
+    meshtastic_ModuleConfig_SerialConfig config = {.enabled = true, .rxd = kRadioPin, .txd = 2};
     TEST_ASSERT_FALSE(serialConfigIsValid(config));
 
     config.rxd = 2;
-    config.txd = UNIT_TEST_RADIO_PIN;
+    config.txd = kRadioPin;
     TEST_ASSERT_FALSE(serialConfigIsValid(config));
 }
 
 // A disabled module never opens the UART, so the same pins must still save; that is how a user backs out.
 void test_serialConfigRadioPinIsValidWhenDisabled(void)
 {
-    meshtastic_ModuleConfig_SerialConfig config = {.enabled = false, .rxd = UNIT_TEST_RADIO_PIN, .txd = UNIT_TEST_RADIO_PIN};
+    PinRadio radio;
+    meshtastic_ModuleConfig_SerialConfig config = {.enabled = false, .rxd = kRadioPin, .txd = kRadioPin};
     TEST_ASSERT_TRUE(serialConfigIsValid(config));
 }
 
 // Pin 0 means "use the default pins", not GPIO 0, so it never counts as a radio pin.
 void test_serialConfigNonRadioPinsAreValid(void)
 {
+    PinRadio radio;
     meshtastic_ModuleConfig_SerialConfig config = {.enabled = true, .rxd = 2, .txd = 3};
     TEST_ASSERT_TRUE(serialConfigIsValid(config));
     TEST_ASSERT_FALSE(isRadioPin(0));
-    TEST_ASSERT_TRUE(isRadioPin(UNIT_TEST_RADIO_PIN));
+    TEST_ASSERT_TRUE(isRadioPin(kRadioPin));
+}
+
+// The check asks the live radio, so a destroyed one (a failed probe in initLoRa) no longer claims its pins.
+void test_radioPinsFollowTheLiveRadio(void)
+{
+    TEST_ASSERT_FALSE(isRadioPin(kRadioPin));
+    {
+        PinRadio failedProbe;
+        TEST_ASSERT_TRUE(isRadioPin(kRadioPin));
+    }
+    TEST_ASSERT_FALSE(isRadioPin(kRadioPin));
+}
+
+// UART pins are 8-bit, so a value above 255 would wrap onto another pin (303 lands on 47, the radio pin here).
+void test_serialConfigPinAbove255IsInvalidWhenEnabled(void)
+{
+    PinRadio radio;
+    meshtastic_ModuleConfig_SerialConfig config = {.enabled = true, .rxd = 2, .txd = kRadioPin + 256};
+    TEST_ASSERT_FALSE(serialConfigIsValid(config));
+
+    config.rxd = 256;
+    config.txd = 3;
+    TEST_ASSERT_FALSE(serialConfigIsValid(config));
+
+    config.enabled = false;
+    TEST_ASSERT_TRUE(serialConfigIsValid(config));
 }
 
 void setup()
 {
     initializeTestEnvironment();
+    initRegion(); // a RadioInterface reads myRegion when it is constructed
 
     UNITY_BEGIN();
     RUN_TEST(test_serialConfigEmptyIsValid);
@@ -168,6 +214,8 @@ void setup()
     RUN_TEST(test_serialConfigRadioPinIsInvalidWhenEnabled);
     RUN_TEST(test_serialConfigRadioPinIsValidWhenDisabled);
     RUN_TEST(test_serialConfigNonRadioPinsAreValid);
+    RUN_TEST(test_radioPinsFollowTheLiveRadio);
+    RUN_TEST(test_serialConfigPinAbove255IsInvalidWhenEnabled);
     exit(UNITY_END());
 }
 #else
