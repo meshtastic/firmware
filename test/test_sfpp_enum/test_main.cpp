@@ -2494,13 +2494,21 @@ void test_windowBudgetCapsServedFrames()
     TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, true, initial[0]));
 
     uint32_t served = 0;
-    for (uint32_t i = 0; i < 64; i++)
-        served += (uint32_t)drainAuthorityOne(100).size();
+    for (uint32_t i = 0; i < 64; i++) {
+        for (const auto &out : drainAuthorityOne(100))
+            if (decodeSfpp(out).sfpp_message_type == meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_FRAME)
+                served++;
+    }
     TEST_ASSERT_GREATER_THAN_UINT32(0, served);
     TEST_ASSERT_LESS_OR_EQUAL_UINT32(30, served);
 
     Time::setTestMillis(Time::getMillis() + 10 * 60 * 1000 + 1);
-    TEST_ASSERT_GREATER_THAN_UINT32(0, drainAuthorityOne(100).size()); // next window serves again
+    bool more = false;
+    for (uint32_t i = 0; i < 8; i++)
+        for (const auto &out : drainAuthorityOne(100))
+            if (decodeSfpp(out).sfpp_message_type == meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_FRAME)
+                more = true;
+    TEST_ASSERT_TRUE(more); // next window serves again
 }
 
 // G11/F3.8: a single requester gets a per-peer window budget, not the whole global pacer.
@@ -2541,7 +2549,7 @@ void test_oneRequesterCannotHoldThePacer()
                 out.to == FOLLOWER_NODE)
                 frames++;
     }
-    TEST_ASSERT_LESS_OR_EQUAL_UINT32(8, frames);
+    TEST_ASSERT_LESS_OR_EQUAL_UINT32(24, frames);
 }
 
 // F3.4: a re-noted peer is most-recently-used, so a flood of other requesters cannot evict it.

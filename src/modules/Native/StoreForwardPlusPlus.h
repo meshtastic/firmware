@@ -250,6 +250,7 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     bool enumRequesterHasQueued(NodeNum to, pinsketch::Element id) const;
     void noteRequesterActivity(NodeNum to);
     bool drainOneEnumFrame();
+    bool consumeServeBudget();
     void pumpEnumRetries();
     void resendEnumList();
     void resendItemRequest();

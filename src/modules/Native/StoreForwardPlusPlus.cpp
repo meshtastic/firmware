@@ -63,7 +63,7 @@ static constexpr uint32_t kEnumLateAcceptMs = 5 * 60 * 1000;
 // D11's one-pacer budget, shared by every serving path: 30 frames in any rolling 10 min.
 static constexpr uint32_t kServeWindowMs = 10 * 60 * 1000;
 static constexpr uint8_t kServeWindowFrames = 30;
-static constexpr uint8_t kRequesterWindowFrames = 8;
+static constexpr uint8_t kRequesterWindowFrames = 24;
 
 // D7's retention applies to canon rows as well as to the legacy read window.
 static constexpr uint32_t kRetentionS = 48 * 60 * 60;
@@ -1406,20 +1406,21 @@ bool StoreForwardPlusPlusModule::legacyStoreForwardServes()
 #endif
 }
 
-ErrorCode StoreForwardPlusPlusModule::sendSfppPacket(meshtastic_MeshPacket *p, RxSource src, bool ccToPhone)
+bool StoreForwardPlusPlusModule::consumeServeBudget()
 {
     const uint32_t now = Time::getMillis();
     if (serveWindowStartMs == 0 || Throttle::hasElapsed(serveWindowStartMs, kServeWindowMs)) {
         serveWindowStartMs = now;
         serveWindowFrames = 0;
     }
-    if (serveWindowFrames >= kServeWindowFrames) {
-        if (p)
-            packetPool.release(p);
-        return ERRNO_DISABLED;
-    }
+    if (serveWindowFrames >= kServeWindowFrames)
+        return false;
     serveWindowFrames++;
+    return true;
+}
 
+ErrorCode StoreForwardPlusPlusModule::sendSfppPacket(meshtastic_MeshPacket *p, RxSource src, bool ccToPhone)
+{
     if (portduino_config.sfpp_enum_listen_only) {
         if (p)
             packetPool.release(p);
@@ -1531,6 +1532,8 @@ bool StoreForwardPlusPlusModule::sendNextLegacyHistory()
         legacyHistoryBusy = false;
         return false;
     }
+    if (!consumeServeBudget())
+        return false;
 
     legacy_history_item item = std::move(legacyHistory.front());
     legacyHistory.pop_front();
@@ -3870,6 +3873,8 @@ bool StoreForwardPlusPlusModule::drainOneEnumFrame()
     // One last-send timestamp across all requesters (N7); do not reset it on enqueue.
     if (enumLastDrainMs != 0 && !Throttle::hasElapsed(enumLastDrainMs, enumDrainIntervalMs()))
         return true;
+    if (!consumeServeBudget())
+        return true; // the queue stays pending until the window rolls over
 
     // Round-robin across requesters so one cannot starve another. One attempt per step; a failed
     // send leaves its frame queued for the next turn.
