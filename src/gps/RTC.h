@@ -87,6 +87,9 @@ void setReadFromRTCUseSystemTimeForTests(bool enabled);
 
 time_t gm_mktime(const struct tm *tm);
 
+/// Offset of the configured TZ (incl. DST) from UTC in seconds, evaluated at the given UTC instant.
+int32_t getTZOffsetAt(time_t utc);
+
 #define SEC_PER_DAY 86400
 #define SEC_PER_HOUR 3600
 #define SEC_PER_MIN 60

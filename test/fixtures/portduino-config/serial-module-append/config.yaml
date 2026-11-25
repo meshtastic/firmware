@@ -1,0 +1,8 @@
+# config.yaml sets the serial module's path; config.d/ adds a SerialModule section without Path.
+# The path must survive: --output-yaml still writes it.
+General:
+  ConfigDirectory: config.d/
+Lora:
+  Module: sim
+SerialModule:
+  Path: /dev/ttyUSB1

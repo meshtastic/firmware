@@ -36,6 +36,13 @@ class NotifiedWorkerThread : public OSThread
      */
     bool notifyLater(uint32_t delay, uint32_t v, bool overwrite);
 
+    /**
+     * Schedule a notification to fire in delay msecs, or shorten an already-pending
+     * notification of the same type `v` if the new delay fires earlier (without
+     * overwriting a different pending notification such as an ISR event).
+     */
+    bool notifyLaterOrShorten(uint32_t delay, uint32_t v, bool overwrite);
+
   protected:
     virtual void onNotify(uint32_t notification) = 0;
 

@@ -9,6 +9,7 @@
 
 #include "MeshTypes.h" // before TestUtil.h: provides NodeNum etc.
 #include "TestUtil.h"
+#include "UptimeClock.h"
 #include <unity.h>
 
 #include "airtime.h"
@@ -87,6 +88,7 @@ class MockNodeDB : public NodeDB
 class NextHopRouterTestShim : public NextHopRouter
 {
   public:
+    using FloodingRouter::perhapsCancelDupe;
     using NextHopRouter::clearRouteHealth;
     using NextHopRouter::findRouteHealth;
     using NextHopRouter::getNextHop;
@@ -184,8 +186,14 @@ class MockRadioInterface : public RadioInterface
         return true;
     }
 
+    void clampToLateRebroadcastWindow(NodeNum, PacketId) override { clampCount++; }
+
+    bool findInTxQueue(NodeNum, PacketId) override { return inTxQueue; }
+
     int sendCount = 0;
     uint32_t cancelCount = 0;
+    uint32_t clampCount = 0;
+    bool inTxQueue = false;
     bool declineAll = false;
     uint8_t lastHopLimit = 0;
     uint8_t lastHopStart = 0;
@@ -217,6 +225,13 @@ class CaptureRadioInterface : public RadioInterface
         return false;
     }
 
+    void clampToLateRebroadcastWindow(NodeNum from, PacketId id) override
+    {
+        (void)from;
+        (void)id;
+        clampCount++;
+    }
+
     uint32_t getPacketTime(uint32_t totalPacketLen, bool received = false) override
     {
         (void)totalPacketLen;
@@ -228,10 +243,12 @@ class CaptureRadioInterface : public RadioInterface
     {
         sentPackets.clear();
         cancelCount = 0;
+        clampCount = 0;
     }
 
     std::vector<meshtastic_MeshPacket> sentPackets;
     uint32_t cancelCount = 0;
+    uint32_t clampCount = 0;
 };
 
 class ReliableRouterTestShim : public ReliableRouter
@@ -971,6 +988,34 @@ void test_early_flood_preserves_fresh_verified_route(void)
     TEST_ASSERT_TRUE(shim->stopForTest(p.from, p.id));
 }
 
+// When the radio TX queue is backed up (e.g. behind a ROUTER_LATE window) and a tracked packet's
+// retry timer expires before the previous copy has actually been transmitted over LoRa,
+// doRetransmissions() must defer the retry rather than enqueuing a duplicate copy or burning a retry.
+void test_retransmission_deferred_while_previous_copy_still_in_tx_queue(void)
+{
+    MockRadioInterface *mockIface = installMockIface();
+    mockIface->inTxQueue = true;
+
+    meshtastic_MeshPacket p = makeRebroadcastCandidate(0x33333333);
+    p.id = 0x51530006;
+    auto *pendingEntry = shim->trackForTest(p, 2);
+    TEST_ASSERT_NOT_NULL(pendingEntry);
+    const uint8_t initialRetries = pendingEntry->numRetransmissions;
+
+    const uint32_t beforeMs = Time::getMillis();
+    shim->fireNextRetryForTest(p.from, p.id);
+    TEST_ASSERT_EQUAL_INT(0, mockIface->sendCount);
+    TEST_ASSERT_EQUAL_UINT8(initialRetries, pendingEntry->numRetransmissions);
+    TEST_ASSERT_GREATER_THAN_UINT32(beforeMs, pendingEntry->nextTxMsec);
+
+    // Once the previous copy leaves txQueue, the next retry fires normally.
+    mockIface->inTxQueue = false;
+    shim->fireNextRetryForTest(p.from, p.id);
+    TEST_ASSERT_EQUAL_INT(1, mockIface->sendCount);
+    TEST_ASSERT_EQUAL_UINT8(initialRetries - 1, pendingEntry->numRetransmissions);
+    TEST_ASSERT_TRUE(shim->stopForTest(p.from, p.id));
+}
+
 // Control: proves the NO_LORA case below turns on the `to` field alone.
 void test_rebroadcast_normal_broadcast_is_relayed(void)
 {
@@ -1060,6 +1105,76 @@ void test_event_mode_hop_behavior(void)
 #endif
 
 // ===========================================================================
+// Group 6 - perhapsCancelDupe transport gating for ROUTER_LATE and CLIENT_BASE
+//
+// Pins that non-LoRa duplicate copies (UDP multicast, MQTT, etc.) never clamp
+// a queued LoRa relay into the late rebroadcast window. Regression guard for
+// UDP broadcast LAN echoes clamping freshly enqueued LoRa packets ~25ms after
+// enqueueing even though no peer has rebroadcast them over RF yet.
+// ===========================================================================
+void test_router_late_clamps_on_lora_dupe(void)
+{
+    MockRadioInterface *mockIface = installMockIface();
+    config.device.role = meshtastic_Config_DeviceConfig_Role_ROUTER_LATE;
+
+    meshtastic_MeshPacket p = makeRebroadcastCandidate(NODENUM_BROADCAST);
+    p.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA;
+    shim->perhapsCancelDupe(&p);
+
+    TEST_ASSERT_EQUAL_UINT32(0, mockIface->cancelCount);
+    TEST_ASSERT_EQUAL_UINT32(1, mockIface->clampCount);
+}
+
+void test_router_late_ignores_non_lora_dupes(void)
+{
+    MockRadioInterface *mockIface = installMockIface();
+    config.device.role = meshtastic_Config_DeviceConfig_Role_ROUTER_LATE;
+
+    meshtastic_MeshPacket p = makeRebroadcastCandidate(NODENUM_BROADCAST);
+    p.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MULTICAST_UDP;
+    shim->perhapsCancelDupe(&p);
+
+    p.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MQTT;
+    shim->perhapsCancelDupe(&p);
+
+    TEST_ASSERT_EQUAL_UINT32(0, mockIface->cancelCount);
+    TEST_ASSERT_EQUAL_UINT32(0, mockIface->clampCount);
+}
+
+void test_client_base_favorite_clamps_on_lora_dupe(void)
+{
+    MockRadioInterface *mockIface = installMockIface();
+    config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT_BASE;
+    mockNodeDB->addNode(kRemoteNode, 0, true, 60, meshtastic_Config_DeviceConfig_Role_CLIENT, /*favorite=*/true);
+
+    meshtastic_MeshPacket p = makeRebroadcastCandidate(NODENUM_BROADCAST);
+    p.from = kRemoteNode;
+    p.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA;
+    shim->perhapsCancelDupe(&p);
+
+    TEST_ASSERT_EQUAL_UINT32(0, mockIface->cancelCount);
+    TEST_ASSERT_EQUAL_UINT32(1, mockIface->clampCount);
+}
+
+void test_client_base_favorite_ignores_non_lora_dupes(void)
+{
+    MockRadioInterface *mockIface = installMockIface();
+    config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT_BASE;
+    mockNodeDB->addNode(kRemoteNode, 0, true, 60, meshtastic_Config_DeviceConfig_Role_CLIENT, /*favorite=*/true);
+
+    meshtastic_MeshPacket p = makeRebroadcastCandidate(NODENUM_BROADCAST);
+    p.from = kRemoteNode;
+    p.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MULTICAST_UDP;
+    shim->perhapsCancelDupe(&p);
+
+    p.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MQTT;
+    shim->perhapsCancelDupe(&p);
+
+    TEST_ASSERT_EQUAL_UINT32(0, mockIface->cancelCount);
+    TEST_ASSERT_EQUAL_UINT32(0, mockIface->clampCount);
+}
+
+// ===========================================================================
 
 void setup()
 {
@@ -1143,6 +1258,7 @@ void setup()
     RUN_TEST(test_directed_hop_tracks_three_total_attempts);
     RUN_TEST(test_intermediate_three_attempts_preserve_record_and_flood_last);
     RUN_TEST(test_early_flood_preserves_fresh_verified_route);
+    RUN_TEST(test_retransmission_deferred_while_previous_copy_still_in_tx_queue);
 
     printf("\n=== rebroadcast of NODENUM_BROADCAST_NO_LORA ===\n");
     RUN_TEST(test_rebroadcast_normal_broadcast_is_relayed);
@@ -1152,6 +1268,12 @@ void setup()
 #if USERPREFS_EVENT_MODE
     RUN_TEST(test_event_mode_hop_behavior);
 #endif
+
+    printf("\n=== perhapsCancelDupe transport gating ===\n");
+    RUN_TEST(test_router_late_clamps_on_lora_dupe);
+    RUN_TEST(test_router_late_ignores_non_lora_dupes);
+    RUN_TEST(test_client_base_favorite_clamps_on_lora_dupe);
+    RUN_TEST(test_client_base_favorite_ignores_non_lora_dupes);
 
     int result = UNITY_END();
     airTimeFixture.reset();
