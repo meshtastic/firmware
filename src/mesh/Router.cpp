@@ -14,6 +14,9 @@
 #include "mesh-pb-constants.h"
 #include "meshUtils.h"
 #include "modules/RoutingModule.h"
+#if !MESHTASTIC_EXCLUDE_TRACEROUTE
+#include "modules/TraceRouteModule.h"
+#endif
 #include <ErriezCRC32.h>
 #include <pb_decode.h>
 #include <pb_encode.h>
@@ -29,8 +32,8 @@
 #include "mqtt/MQTT.h"
 #endif
 #include "Default.h"
-#if ARCH_PORTDUINO
 #include "Throttle.h"
+#if ARCH_PORTDUINO
 #include "platform/portduino/PortduinoGlue.h"
 #include "serialization/MeshPacketSerializer.h"
 #endif
@@ -384,6 +387,37 @@ meshtastic_MeshPacket *Router::allocForSending()
     stampRxTime(p);
 
     return p;
+}
+
+void Router::rememberRefusal(NodeNum from, PacketId id, meshtastic_Routing_Error err)
+{
+    if (id == 0)
+        return;
+    uint8_t slot = nextRefusalSlot;
+    for (uint8_t i = 0; i < REFUSAL_CACHE_SIZE; i++) {
+        if (refusals[i].error != 0 && refusals[i].from == from && refusals[i].id == id) {
+            if (err == meshtastic_Routing_Error_NONE) {
+                refusals[i].error = 0; // the latest processing accepted it, so a duplicate must not replay the old refusal
+                return;
+            }
+            slot = i; // same request refused again: overwrite in place
+            break;
+        }
+    }
+    if (err == meshtastic_Routing_Error_NONE)
+        return;
+    if (slot == nextRefusalSlot)
+        nextRefusalSlot = (nextRefusalSlot + 1) % REFUSAL_CACHE_SIZE;
+    refusals[slot] = {from, id, Time::skipZero(Time::getMillis()), (uint8_t)err};
+}
+
+meshtastic_Routing_Error Router::refusalFor(NodeNum from, PacketId id) const
+{
+    for (const RefusalRecord &r : refusals) {
+        if (r.error != 0 && r.from == from && r.id == id && Throttle::isWithinTimespanMs(r.atMsec, REFUSAL_TTL_MSEC))
+            return (meshtastic_Routing_Error)r.error;
+    }
+    return meshtastic_Routing_Error_NONE;
 }
 
 /**
@@ -1640,6 +1674,12 @@ void Router::dispatchReceived(meshtastic_MeshPacket *p, RxSource src)
     // call modules here
     // If this could be a spoofed packet, don't let the modules see it.
     if (!skipHandle) {
+#if !MESHTASTIC_EXCLUDE_TRACEROUTE
+        // Modules get the packet read-only; traceroute is the one payload a relay rewrites, so the hop is added here
+        // first. Our own loopback is left alone, as callModules() never showed it to the module.
+        if (traceRouteModule && src != RX_SRC_LOCAL)
+            traceRouteModule->updateRoute(*p);
+#endif
         MeshModule::callModules(*p, src);
 
 #if !MESHTASTIC_EXCLUDE_MQTT

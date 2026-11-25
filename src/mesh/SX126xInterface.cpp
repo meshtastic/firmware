@@ -61,7 +61,7 @@ template <typename T> bool SX126xInterface<T>::init()
     loraFEMInterface.init();
     // Apply saved FEM LNA mode from config
     if (loraFEMInterface.isLnaCanControl()) {
-        loraFEMInterface.setLNAEnable(config.lora.fem_lna_mode != meshtastic_Config_LoRaConfig_FEM_LNA_Mode_DISABLED);
+        loraFEMInterface.setLnaMode(config.lora.fem_lna_mode);
     }
 #endif
 
@@ -488,6 +488,9 @@ template <typename T> void SX126xInterface<T>::addReceiveMetadata(meshtastic_Mes
     // LOG_DEBUG("PacketStatus %x", lora.getPacketStatus());
     mp->rx_snr = lora.getSNR();
     mp->rx_rssi = lround(lora.getRSSI());
+#if HAS_LORA_FEM
+    mp->rx_rssi -= loraFEMInterface.getRxLnaGainDb();
+#endif
     mp->has_rx_rssi = true; // rx_rssi has explicit presence - a genuine reading must be marked present to survive encoding
     LOG_TRACE("Corrected frequency offset: %f", lora.getFrequencyError());
 }

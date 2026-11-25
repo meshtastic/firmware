@@ -212,13 +212,9 @@ void NodeInfoModule::pruneLastNodeInfoCache()
 
     // Drop entries for nodes we no longer know, and any stamp already past the suppression window:
     // it can only decide "don't suppress", so keeping it buys nothing.
-    for (auto it = lastNodeInfoSeen.begin(); it != lastNodeInfoSeen.end();) {
-        if (!nodeDB->getMeshNode(it->first) || (uint32_t)(nowSecs - it->second) >= NodeInfoReplySuppressSeconds) {
-            it = lastNodeInfoSeen.erase(it);
-        } else {
-            ++it;
-        }
-    }
+    std::erase_if(lastNodeInfoSeen, [nowSecs](const auto &entry) {
+        return !nodeDB->getMeshNode(entry.first) || (uint32_t)(nowSecs - entry.second) >= NodeInfoReplySuppressSeconds;
+    });
 
     // Evict by largest elapsed time rather than smallest stamp, so the victim is still the oldest
     // entry if the uptime counter ever wraps underneath us.

@@ -263,6 +263,9 @@ MAX17048Sensor max17048Sensor;
 NullSensor max17048Sensor;
 #endif
 #endif
+#elif HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+// MAX17048 is I2C-only; keep the symbol declared in Power.h defined as a stub
+NullSensor max17048Sensor;
 #endif
 
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && HAS_RAKPROT
@@ -585,7 +588,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
 #ifdef EXT_PWR_DETECT
         if (digitalRead(EXT_PWR_DETECT) == EXT_PWR_DETECT_VALUE)
             return true;
-#ifdef EXT_CHRG_DETECT
+#if defined(EXT_CHRG_DETECT) && !defined(EXT_CHRG_DETECT_IS_SOLAR)
         // EXT_PWR_DETECT alone may not catch active charging (e.g. a charge-complete
         // pin that only asserts once the battery is full) - CHRG being active implies
         // power is present regardless.

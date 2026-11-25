@@ -19,6 +19,9 @@
 #endif
 #include "graphics/niche/InkHUD/Applets/Bases/Map/MapApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/Waypoints/WaypointListApplet.h"
+#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && !MESHTASTIC_EXCLUDE_ACCELEROMETER
+#include "graphics/niche/InkHUD/Applets/User/Steps/StepsApplet.h"
+#endif
 #include "graphics/niche/Utils/FlashData.h"
 #include "main.h"
 #include "mesh/generated/meshtastic/deviceonly.pb.h"
@@ -539,6 +542,10 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         inkhud->openAlignStick();
         break;
 
+    case ALIGN_KEYBOARD:
+        inkhud->openAlignKeyboard();
+        break;
+
     case LAYOUT:
         // Todo: smarter incrementing of tile count
         settings->userTiles.count++;
@@ -749,7 +756,11 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         }
 
         // Target voltage considered 100% by UI
+#ifdef ELECROW_ThinkNode_M5
+        constexpr float TARGET_VOLTAGE = 4.20f;
+#else
         constexpr float TARGET_VOLTAGE = 4.19f;
+#endif
 
         // Calculate new multiplier
         float newMult = baseMult * (TARGET_VOLTAGE / measuredV);
@@ -1207,6 +1218,22 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         break;
     }
 
+#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && !MESHTASTIC_EXCLUDE_ACCELEROMETER
+    case RESET_STEPS:
+        if (auto *steps = borrowedTileOwner ? borrowedTileOwner->asStepsApplet() : nullptr)
+            steps->resetSession();
+        break;
+
+    case SET_STEP_GOAL: {
+        const size_t index = cursor - 1; // Back precedes the presets.
+        if (auto *steps = borrowedTileOwner ? borrowedTileOwner->asStepsApplet() : nullptr) {
+            if (index < std::size(StepsApplet::GOALS))
+                steps->setGoal(StepsApplet::GOALS[index]);
+        }
+        break;
+    }
+#endif
+
     case REMOVE_WAYPOINT: {
         // cursor - 2 because index 0 is "Back" and index 1 is the "Select to Remove" header
         const size_t index = cursor - 2;
@@ -1291,6 +1318,12 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
             }
         }
 
+#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && !MESHTASTIC_EXCLUDE_ACCELEROMETER
+        if (borrowedTileOwner && borrowedTileOwner->asStepsApplet()) {
+            items.emplace_back("Step Goal", MenuPage::STEPS_GOAL);
+            items.emplace_back("Reset Count", MenuPage::STEPS_RESET);
+        }
+#endif
         items.push_back(MenuItem("Options", MenuPage::OPTIONS));
         // items.push_back(MenuItem("Display Off", MenuPage::EXIT)); // TODO
         items.push_back(MenuItem("Node Config", MenuPage::NODE_CONFIG));
@@ -1302,6 +1335,30 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         populateSendPage();
         previousPage = MenuPage::ROOT;
         break;
+
+#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && !MESHTASTIC_EXCLUDE_ACCELEROMETER
+    case STEPS_GOAL:
+        previousPage = MenuPage::ROOT;
+        items.emplace_back("Back", previousPage);
+        if (auto *steps = borrowedTileOwner ? borrowedTileOwner->asStepsApplet() : nullptr) {
+            static_assert(std::size(StepsApplet::GOALS) == STEP_GOAL_COUNT);
+            for (size_t i = 0; i < std::size(StepsApplet::GOALS); ++i) {
+                const auto goal = StepsApplet::GOALS[i];
+                const auto label = to_string(goal) + " steps";
+                stepGoalSelected[i] = (steps->getGoal() == goal);
+                items.emplace_back(label.c_str(), MenuAction::SET_STEP_GOAL, previousPage, &stepGoalSelected[i]);
+            }
+        }
+        items.emplace_back("Exit", MenuPage::EXIT);
+        break;
+
+    case STEPS_RESET:
+        previousPage = MenuPage::ROOT;
+        items.emplace_back("Cancel", previousPage);
+        items.push_back(MenuItem::Header("Reset Steps and Time?"));
+        items.emplace_back("Reset Session", MenuAction::RESET_STEPS, MenuPage::EXIT);
+        break;
+#endif
 
     case CANNEDMESSAGE_RECIPIENT:
         populateRecipientPage();
@@ -1369,6 +1426,8 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         items.push_back(MenuItem("Rotate", MenuAction::ROTATE, MenuPage::OPTIONS));
         if (settings->joystick.enabled && !inkhud->twoWayRocker)
             items.push_back(MenuItem("Align Joystick", MenuAction::ALIGN_JOYSTICK, MenuPage::EXIT));
+        if (inkhud->physicalKeyboard)
+            items.push_back(MenuItem("Align Keyboard", MenuAction::ALIGN_KEYBOARD, MenuPage::EXIT));
         items.push_back(MenuItem("Notifications", MenuAction::TOGGLE_NOTIFICATIONS, MenuPage::OPTIONS,
                                  &settings->optionalFeatures.notifications));
         items.push_back(MenuItem("Battery Icon", MenuAction::TOGGLE_BATTERY_ICON, MenuPage::OPTIONS,

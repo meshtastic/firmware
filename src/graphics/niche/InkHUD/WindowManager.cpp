@@ -2,6 +2,7 @@
 
 #include "./WindowManager.h"
 
+#include "./Applets/System/AlignKeyboard/AlignKeyboardApplet.h"
 #include "./Applets/System/AlignStick/AlignStickApplet.h"
 #include "./Applets/System/AppSwitcher/AppSwitcherApplet.h"
 #include "./Applets/System/BatteryIcon/BatteryIconApplet.h"
@@ -211,9 +212,17 @@ void InkHUD::WindowManager::openAlignStick()
     }
 }
 
+// Bring the AlignKeyboard applet to the foreground
+void InkHUD::WindowManager::openAlignKeyboard()
+{
+    SystemApplet *alignKeyboard = inkhud->getSystemApplet("AlignKeyboard");
+    if (alignKeyboard)
+        alignKeyboard->bringToForeground();
+}
+
 void InkHUD::WindowManager::openKeyboard()
 {
-    if (!supportsOnScreenKeyboard(inkhud, settings))
+    if (inkhud->physicalKeyboard || !supportsOnScreenKeyboard(inkhud, settings))
         return;
 
     KeyboardApplet *keyboard = (KeyboardApplet *)inkhud->getSystemApplet("Keyboard");
@@ -227,7 +236,7 @@ void InkHUD::WindowManager::openKeyboard()
 
 void InkHUD::WindowManager::closeKeyboard()
 {
-    if (!supportsOnScreenKeyboard(inkhud, settings))
+    if (inkhud->physicalKeyboard || !supportsOnScreenKeyboard(inkhud, settings))
         return;
 
     KeyboardApplet *keyboard = (KeyboardApplet *)inkhud->getSystemApplet("Keyboard");
@@ -583,6 +592,9 @@ void InkHUD::WindowManager::createSystemApplets()
     if (settings->joystick.enabled && !inkhud->twoWayRocker) {
         addSystemApplet("AlignStick", new AlignStickApplet, new Tile);
     }
+    if (inkhud->physicalKeyboard) {
+        addSystemApplet("AlignKeyboard", new AlignKeyboardApplet, new Tile);
+    }
     if (supportsOnScreenKeyboard(inkhud, settings)) {
         addSystemApplet("Keyboard", new KeyboardApplet, new Tile);
     }
@@ -615,6 +627,9 @@ void InkHUD::WindowManager::placeSystemTiles()
     inkhud->getSystemApplet("Tips")->getTile()->setRegion(0, 0, inkhud->width(), inkhud->height());
     if (settings->joystick.enabled && !inkhud->twoWayRocker) {
         inkhud->getSystemApplet("AlignStick")->getTile()->setRegion(0, 0, inkhud->width(), inkhud->height());
+    }
+    if (inkhud->physicalKeyboard) {
+        inkhud->getSystemApplet("AlignKeyboard")->getTile()->setRegion(0, 0, inkhud->width(), inkhud->height());
     }
     if (supportsOnScreenKeyboard(inkhud, settings)) {
         const uint16_t keyboardHeight = KeyboardApplet::getKeyboardHeight();
