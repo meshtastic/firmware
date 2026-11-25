@@ -910,6 +910,34 @@ void test_lora_config_change_is_pushed_to_the_device(void)
     TEST_ASSERT_EQUAL((int)TransparentRadio::State::Pushing, (int)radio->getState());
 }
 
+// A change and its revert, both before the first push is read back. deviceLora is still the config before
+// the first push, which matches the revert, so a shortcut to Ready would skip writing it and ignore the
+// first push's read-back: the device would stay on MEDIUM_FAST while meshtasticd sent as LONG_FAST.
+void test_reverting_a_config_while_it_is_being_pushed_writes_it_again(void)
+{
+    bringReady();
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST;
+    TEST_ASSERT_TRUE(radio->reconfigure());
+    TEST_ASSERT_EQUAL(2, takeToRadio().size());
+
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    TEST_ASSERT_TRUE(radio->reconfigure());
+    std::vector<meshtastic_ToRadio> sent = takeToRadio();
+    TEST_ASSERT_EQUAL_MESSAGE(2, sent.size(), "the device may already be on MEDIUM_FAST, so LONG_FAST is written again");
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST,
+                      adminIn(sent[0]).set_config.payload_variant.lora.modem_preset);
+    TEST_ASSERT_EQUAL((int)TransparentRadio::State::Pushing, (int)radio->getState());
+}
+
+// Time on air per Semtech AN1200.13: payload symbols are ceil(bits / (4 * (SF - 2*DE))) * CR, rounding the
+// 4-bit blocks before multiplying by the coding rate. Rounding after it (as SimRadio's copy did) undercounts:
+// a 40-byte frame on LONG_FAST (SF11, 250 kHz, 4/5, 16-symbol preamble) is 48 symbols, 559 ms, not 45 and
+// 534 ms. This radio's airtime feeds the duty-cycle log and spaces its transmissions, so short is wrong.
+void test_airtime_rounds_payload_blocks_before_the_coding_rate(void)
+{
+    TEST_ASSERT_EQUAL_UINT32(559, radio->getPacketTime((uint32_t)40));
+}
+
 // The endpoint string picks the transport, and nonsense is refused rather than guessed at.
 void test_endpoint_parsing(void)
 {
@@ -955,6 +983,8 @@ void setup()
     RUN_TEST(test_boot_log_then_rebooted_handshakes_once);
     RUN_TEST(test_a_few_stray_bytes_leave_the_link_ready);
     RUN_TEST(test_lora_config_change_is_pushed_to_the_device);
+    RUN_TEST(test_reverting_a_config_while_it_is_being_pushed_writes_it_again);
+    RUN_TEST(test_airtime_rounds_payload_blocks_before_the_coding_rate);
     RUN_TEST(test_endpoint_parsing);
     exit(UNITY_END());
 }

@@ -422,7 +422,8 @@ void TransparentRadio::pushConfig()
     }
 
     const meshtastic_Config_LoRaConfig want = desiredLoraConfig();
-    if (deviceLora.transparent_mode && !firstRfDifference(want, deviceLora, true)) {
+    // While Pushing, deviceLora is the config before that push, which the device may no longer be on.
+    if (state != State::Pushing && deviceLora.transparent_mode && !firstRfDifference(want, deviceLora, true)) {
         setState(State::Ready);
         LOG_INFO("Transparent radio: %s ready", link->describe().c_str());
         return;

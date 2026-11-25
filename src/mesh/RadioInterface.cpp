@@ -843,8 +843,9 @@ uint32_t RadioInterface::computeTimeOnAirMsec(uint32_t pl) const
     bool lowDataOptEn = tSym > 16e-3 ? true : false; // Needed if symbol time is >16ms
 
     float tPreamble = (preambleLength + 4.25f) * tSym;
+    // Semtech AN1200.13: whole 4-bit blocks first, then cr (the 4/cr denominator) coded symbols per block.
     float numPayloadSym =
-        8 + std::max(ceilf(((8.0f * pl - 4 * sf + 28 + 16 - 20 * headDisable) / (4 * (sf - 2 * lowDataOptEn))) * cr), 0.0f);
+        8 + std::max(ceilf((8.0f * pl - 4 * sf + 28 + 16 - 20 * headDisable) / (4 * (sf - 2 * lowDataOptEn))) * cr, 0.0f);
     float tPayload = numPayloadSym * tSym;
     float tPacket = tPreamble + tPayload;
 
