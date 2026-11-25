@@ -1065,8 +1065,8 @@ void NodeDB::stampRfHear(meshtastic_NodeInfoLite *info, const meshtastic_MeshPac
     if (nodeInfoLiteHeardOnSlot(info, slot))
         return;
     nodeInfoLiteSetHeardSlot(info, slot);
-    // Anonymous peers are dropped at boot unless they acquire user info.
-    if (nodeInfoLiteHasUser(info))
+    // Same rule as cleanupMeshDB(): only nodes kept across a reboot are worth a save.
+    if (nodeInfoLiteHasUser(info) || nodeInfoLiteIsIgnored(info))
         nodeDatabaseDirty = true;
 }
 
