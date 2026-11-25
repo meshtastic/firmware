@@ -25,6 +25,8 @@
 // never written and the peer was gone after the next restart (#11928). The contract pinned: a pending
 // change survives the throttle and is written once the minute passes, and a reboot writes it at once.
 // The regression guarded: a dirty node database that is never saved.
+// NodeDB::updateFrom() in src/mesh/NodeDB.cpp must also schedule a save when a known peer's RF slot
+// changes. Otherwise a restart can restore stale LoRa evidence even though the radio heard that peer.
 #include "MeshTypes.h" // Include BEFORE TestUtil.h
 #include "TestUtil.h"
 #include <unity.h>
@@ -46,6 +48,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <optional>
 #include <string>
 #include <unistd.h>
 #include <vector>
@@ -126,20 +129,17 @@ void bumpConfig()
     config.device.node_info_broadcast_secs += 1;
 }
 
-// Read nodes.proto back from flash and report whether it holds this node, and under which name.
-bool persistedNodeName(NodeNum num, std::string &longName)
+std::optional<meshtastic_NodeInfoLite> persistedNode(NodeNum num)
 {
     meshtastic_NodeDatabase reloaded{};
     if (nodeDB->loadProto(nodeDatabaseFileName, nodeDB->getMaxNodesAllocatedSize(), sizeof(meshtastic_NodeDatabase),
                           &meshtastic_NodeDatabase_msg, &reloaded) != LoadFileResult::LOAD_SUCCESS)
-        return false;
+        return std::nullopt;
     for (const auto &n : reloaded.nodes) {
-        if (n.num == num) {
-            longName = n.long_name;
-            return true;
-        }
+        if (n.num == num)
+            return n;
     }
-    return false;
+    return std::nullopt;
 }
 
 // A peer heard for the first time, with a key so updateUser() takes the normal path.
@@ -314,14 +314,14 @@ static void test_updateUser_deferredPeer_isPersistedAfterThrottle(void)
     meshtastic_User u = makePeer("Bob");
     TEST_ASSERT_TRUE(nodeDB->updateUser(kPeer, u));
 
-    std::string name;
-    TEST_ASSERT_FALSE(persistedNodeName(kPeer, name)); // deferred: not on flash yet
+    TEST_ASSERT_FALSE(persistedNode(kPeer).has_value()); // deferred: not on flash yet
 
     Time::advanceTestMillis(60 * 1000);
     nodeDB->saveNodeDatabaseIfDirty();
 
-    TEST_ASSERT_TRUE(persistedNodeName(kPeer, name));
-    TEST_ASSERT_EQUAL_STRING("Bob", name.c_str());
+    const auto saved = persistedNode(kPeer);
+    TEST_ASSERT_TRUE(saved.has_value());
+    TEST_ASSERT_EQUAL_STRING("Bob", saved->long_name);
 }
 
 // A reboot inside the throttle window must not lose a peer heard just before it.
@@ -335,13 +335,66 @@ static void test_updateUser_deferredPeer_isPersistedOnReboot(void)
     meshtastic_User u = makePeer("Carol");
     TEST_ASSERT_TRUE(nodeDB->updateUser(kPeer, u));
 
-    std::string name;
-    TEST_ASSERT_FALSE(persistedNodeName(kPeer, name));
+    TEST_ASSERT_FALSE(persistedNode(kPeer).has_value());
 
     notifyReboot.notifyObservers(NULL);
 
-    TEST_ASSERT_TRUE(persistedNodeName(kPeer, name));
-    TEST_ASSERT_EQUAL_STRING("Carol", name.c_str());
+    const auto saved = persistedNode(kPeer);
+    TEST_ASSERT_TRUE(saved.has_value());
+    TEST_ASSERT_EQUAL_STRING("Carol", saved->long_name);
+}
+
+static void test_updateFrom_rfSlotChanges_arePersisted(void)
+{
+    constexpr NodeNum kPeer = 0xE1000103;
+    constexpr NodeNum kAnonymous = 0xE1000104;
+    Time::setTestMillis(50 * 60 * 1000);
+    meshtastic_User user = makePeer("Drew");
+    TEST_ASSERT_TRUE(nodeDB->updateUser(kPeer, user));
+    NodeDBTestShim::markSaved(nodeDB, Time::getMillis());
+
+    auto saved = persistedNode(kPeer);
+    TEST_ASSERT_TRUE(saved.has_value());
+    TEST_ASSERT_FALSE(nodeInfoLiteHasRfHear(&*saved));
+
+    meshtastic_MeshPacket packet = meshtastic_MeshPacket_init_zero;
+    packet.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    packet.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA;
+    packet.from = kAnonymous;
+    nodeDB->updateFrom(packet);
+    TEST_ASSERT_FALSE(NodeDBTestShim::dirty(nodeDB));
+
+    packet.from = kPeer;
+    nodeDB->updateFrom(packet);
+    const uint16_t homeSlot = nodeDB->committedLoraSlot();
+    TEST_ASSERT_TRUE(nodeInfoLiteHeardOnSlot(nodeDB->getMeshNode(kPeer), homeSlot));
+    nodeDB->saveNodeDatabaseIfDirty();
+    saved = persistedNode(kPeer);
+    TEST_ASSERT_TRUE(saved.has_value());
+    TEST_ASSERT_FALSE(nodeInfoLiteHasRfHear(&*saved));
+
+    Time::advanceTestMillis(60 * 1000);
+    nodeDB->saveNodeDatabaseIfDirty();
+    saved = persistedNode(kPeer);
+    TEST_ASSERT_TRUE(saved.has_value());
+    TEST_ASSERT_TRUE(nodeInfoLiteHeardOnSlot(&*saved, homeSlot));
+
+    nodeDB->updateFrom(packet);
+    TEST_ASSERT_FALSE(NodeDBTestShim::dirty(nodeDB));
+
+    const float homeFrequency = config.lora.override_frequency;
+    config.lora.override_frequency = homeFrequency == 915.0f ? 916.0f : 915.0f;
+    nodeDB->refreshCommittedLoraSlot();
+    const uint16_t otherSlot = nodeDB->committedLoraSlot();
+    nodeDB->updateFrom(packet);
+    config.lora.override_frequency = homeFrequency;
+    nodeDB->refreshCommittedLoraSlot();
+    TEST_ASSERT_NOT_EQUAL_UINT16(homeSlot, otherSlot);
+
+    notifyReboot.notifyObservers(nullptr);
+    saved = persistedNode(kPeer);
+    TEST_ASSERT_TRUE(saved.has_value());
+    TEST_ASSERT_TRUE(nodeInfoLiteHeardOnSlot(&*saved, otherSlot));
 }
 
 void setUp(void)
@@ -377,6 +430,7 @@ NSR_TEST_ENTRY void setup()
     RUN_TEST(test_rebootObserver_savesDirtyNodeDatabase);
     RUN_TEST(test_updateUser_deferredPeer_isPersistedAfterThrottle);
     RUN_TEST(test_updateUser_deferredPeer_isPersistedOnReboot);
+    RUN_TEST(test_updateFrom_rfSlotChanges_arePersisted);
 
     exit(UNITY_END());
 }

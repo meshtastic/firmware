@@ -10,7 +10,7 @@
 
 STM32WLE5JCInterface::STM32WLE5JCInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq,
                                            RADIOLIB_PIN_TYPE rst, RADIOLIB_PIN_TYPE busy)
-    : SX126xInterface(hal, cs, irq, rst, busy)
+    : SX126xInterface(hal, cs, irq, rst, busy, chip), chip(&module)
 {
 }
 
@@ -27,14 +27,14 @@ bool STM32WLE5JCInterface::init()
 
     limitPower(STM32WLx_MAX_POWER);
 
-    int res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage);
+    int res = chip.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage);
 
 #if defined(TCXO_OPTIONAL)
     // If a TCXO was requested but isn't actually populated (e.g. non-T RAK3172), retry on XTAL
     if (res != RADIOLIB_ERR_NONE && res != RADIOLIB_ERR_CHIP_NOT_FOUND && tcxoVoltage > 0) {
         LOG_WARN("STM32WLx init failed with TCXO Vref %fV (err %d), retrying without TCXO", tcxoVoltage, res);
         setTCXOVoltage(0);
-        res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage);
+        res = chip.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage);
         if (res == RADIOLIB_ERR_NONE)
             LOG_INFO("STM32WLx init success without TCXO (XTAL mode)");
     }

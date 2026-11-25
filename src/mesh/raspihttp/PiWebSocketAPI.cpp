@@ -215,8 +215,10 @@ int32_t PiWebSocketAPI::runOnce()
 
 void initPiWebSocketAPI(struct _u_instance *instance)
 {
-    // Lives for the process: ulfius callbacks may still run while the framework stops.
-    new PiWebSocketAPI();
+    // One for the process, shared by every listener: ulfius callbacks may still run while a framework stops.
+    static PiWebSocketAPI *api;
+    if (!api)
+        api = new PiWebSocketAPI();
     ulfius_add_endpoint_by_val(instance, "GET", "", "/api/v1/ws", 1, &handleAPIv1WebSocket, NULL);
 }
 
