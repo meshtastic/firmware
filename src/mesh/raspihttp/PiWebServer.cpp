@@ -58,6 +58,7 @@ mail:   marchammermann@googlemail.com
 #include "NodeDB.h"
 #include "PhoneAPI.h"
 #include "PiWebServer.h"
+#include "PiWebSocketAPI.h"
 #include "PowerFSM.h"
 #include "RadioLibInterface.h"
 #include "airtime.h"
@@ -546,6 +547,9 @@ PiWebServerThread::PiWebServerThread()
         ulfius_add_endpoint_by_val(&instanceWeb, "OPTIONS", PREFIX, "/api/v1/fromradio/*", 1, &handleAPIv1FromRadio, &webAPI);
         ulfius_add_endpoint_by_val(&instanceWeb, "PUT", PREFIX, "/api/v1/toradio/*", 1, &handleAPIv1ToRadio, &webAPI);
         ulfius_add_endpoint_by_val(&instanceWeb, "OPTIONS", PREFIX, "/api/v1/toradio/*", 1, &handleAPIv1ToRadio, &webAPI);
+#ifdef HAS_PI_WEBSOCKET_API
+        initPiWebSocketAPI(&instanceWeb);
+#endif
 
         // Add callback function to all endpoints for the Web Server
         ulfius_add_endpoint_by_val(&instanceWeb, "GET", NULL, "/*", 2, &callback_static_file, &configWeb);

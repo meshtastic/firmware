@@ -263,6 +263,9 @@ MAX17048Sensor max17048Sensor;
 NullSensor max17048Sensor;
 #endif
 #endif
+#elif HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+// MAX17048 is I2C-only; keep the symbol declared in Power.h defined as a stub
+NullSensor max17048Sensor;
 #endif
 
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && HAS_RAKPROT

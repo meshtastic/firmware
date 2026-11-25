@@ -217,6 +217,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_MESHNOLOGY_W10
 #elif defined(MESHNOLOGY_W12)
 #define HW_VENDOR meshtastic_HardwareModel_MESHNOLOGY_W12
+#elif defined(MESHNOLOGY_W15)
+#define HW_VENDOR meshtastic_HardwareModel_MESHNOLOGY_W15
 #elif defined(T5_S3_EPAPER_PRO)
 #define HW_VENDOR meshtastic_HardwareModel_T5_S3_EPAPER_PRO
 #elif defined(ELECROW_ThinkNode_M9)
