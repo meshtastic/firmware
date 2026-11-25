@@ -1,43 +1,32 @@
-/*
-
-E-Ink display driver
-    - GDEQ031T10
-    - Manufacturer: Good Display
-    - Size: 3.1 inch
-    - Resolution: 240px x 320px
-    - Controller IC: SSD1677 (SSD16XX-family, larger memory range)
-
-    Used by: t-deck-pro.
-
-*/
-
 #pragma once
 
 #ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
 
-#include "configuration.h"
-
-#include "./SSD16XX.h"
+#include "./UC8175.h"
 
 namespace NicheGraphics::Drivers
 {
-class GDEQ031T10 : public SSD16XX
-{
-  private:
-    static constexpr uint32_t width = 240;
-    static constexpr uint32_t height = 320;
-    static constexpr UpdateTypes supported = (UpdateTypes)(FULL | FAST);
 
+// UC8253 uses the UC81xx image commands and an active-low BUSY signal.
+class GDEQ031T10 : public UC8175
+{
   public:
-    GDEQ031T10() : SSD16XX(width, height, supported) {}
+    GDEQ031T10() : UC8175(240, 320, static_cast<UpdateTypes>(FULL | FAST)) {}
+    void begin(SPIClass *spi, uint8_t pin_dc, uint8_t pin_cs, uint8_t pin_busy, uint8_t pin_rst = -1) override;
 
   protected:
-    void configScanning() override;
-    void configWaveform() override;
-    void configUpdateSequence() override;
-    void detachFromUpdate() override;
+    void reset() override;
+    void configCommon() override;
+    void configFull() override;
+    void configFast() override;
+    void writeImage(uint8_t command, const uint8_t *image) override;
+    void writeNewImage() override;
+    void finalizeUpdate() override;
+
+  private:
+    void setWindow();
 };
 
 } // namespace NicheGraphics::Drivers
 
-#endif // MESHTASTIC_INCLUDE_NICHE_GRAPHICS
+#endif
