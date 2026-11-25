@@ -2451,6 +2451,34 @@ void test_noProgressExchangeEndsAtProbeIdle()
     TEST_ASSERT_EQUAL_UINT(0, takeSent().size()); // no list resend; the exchange ended
 }
 
+// G3: the one pacer has a 30-frame/10-min window across all sends, not just drain spacing.
+void test_windowBudgetCapsServedFrames()
+{
+    portduino_config.sfpp_enum_drain_ms = 100;
+    ingestAuthority(40);
+    buildFollowerFromCopy();
+    TEST_ASSERT_TRUE(deleteCounterRange(dirB, 1, 40));
+
+    meshtastic_MeshPacket advert;
+    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, 0, false, advert, false, 40));
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
+    myNodeInfo.my_node_num = FOLLOWER_NODE;
+    portduino_config.sfpp_stratum0 = false;
+    follower->runOnce();
+    std::vector<meshtastic_MeshPacket> initial = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, initial.size());
+    TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, true, initial[0]));
+
+    uint32_t served = 0;
+    for (uint32_t i = 0; i < 64; i++)
+        served += (uint32_t)drainAuthorityOne(100).size();
+    TEST_ASSERT_GREATER_THAN_UINT32(0, served);
+    TEST_ASSERT_LESS_OR_EQUAL_UINT32(30, served);
+
+    Time::setTestMillis(Time::getMillis() + 10 * 60 * 1000 + 1);
+    TEST_ASSERT_GREATER_THAN_UINT32(0, drainAuthorityOne(100).size()); // next window serves again
+}
+
 // --- Stage 8: sketch mode ---
 
 void runSketchCase(uint32_t total, uint32_t missing)
@@ -2811,6 +2839,7 @@ void setup()
     RUN_TEST(test_onDemandPullsNewestBucketAndCapsPacing);
     RUN_TEST(test_secondAdvertInsideDrainIntervalSendsNoRequest);
     RUN_TEST(test_noProgressExchangeEndsAtProbeIdle);
+    RUN_TEST(test_windowBudgetCapsServedFrames);
     RUN_TEST(test_lostEnumProvideRetriesWithinBackoff);
     RUN_TEST(test_failedPullStopsPastServiceWindow);
     RUN_TEST(test_failedPullBackoffDoublesAcrossFailures);

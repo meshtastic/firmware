@@ -60,6 +60,10 @@ static constexpr uint32_t kEnumFullRootEvery = 10;
 static constexpr size_t kEnumPendingMax = 8;
 static constexpr uint32_t kEnumLateAcceptMs = 5 * 60 * 1000;
 
+// D11's one-pacer budget, shared by every serving path: 30 frames in any rolling 10 min.
+static constexpr uint32_t kServeWindowMs = 10 * 60 * 1000;
+static constexpr uint8_t kServeWindowFrames = 30;
+
 // D19 proposes W = 24 h as the service window; unconfirmed, so holes past it are accepted as lost.
 static constexpr uint32_t kServiceWindowMs = 24 * 60 * 60 * 1000;
 // Failed pulls back off, and the backoff and attempt count cap a busy advert stream's retry cost.
@@ -1385,6 +1389,18 @@ bool StoreForwardPlusPlusModule::legacyStoreForwardServes()
 
 ErrorCode StoreForwardPlusPlusModule::sendSfppPacket(meshtastic_MeshPacket *p, RxSource src, bool ccToPhone)
 {
+    const uint32_t now = Time::getMillis();
+    if (serveWindowStartMs == 0 || Throttle::hasElapsed(serveWindowStartMs, kServeWindowMs)) {
+        serveWindowStartMs = now;
+        serveWindowFrames = 0;
+    }
+    if (serveWindowFrames >= kServeWindowFrames) {
+        if (p)
+            packetPool.release(p);
+        return ERRNO_DISABLED;
+    }
+    serveWindowFrames++;
+
     if (portduino_config.sfpp_enum_listen_only) {
         if (p)
             packetPool.release(p);
