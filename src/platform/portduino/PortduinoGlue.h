@@ -317,6 +317,8 @@ extern struct portduino_config_struct {
     std::string webserver_ssl_key_path = "/etc/meshtasticd/ssl/private_key.pem";
     std::string webserver_ssl_cert_path = "/etc/meshtasticd/ssl/certificate.pem";
     int webserverport = -1;
+    int webserver_http_port = -1;
+    bool webserver_http_bind_all = false;
 
     // Bluetooth (BLE peripheral via BlueZ; Linux only, and only when built with
     // sdbus-c++)
@@ -733,6 +735,10 @@ extern struct portduino_config_struct {
             out << YAML::Key << "SSLKey" << YAML::Value << webserver_ssl_key_path;
             out << YAML::Key << "SSLCert" << YAML::Value << webserver_ssl_cert_path;
             out << YAML::Key << "Port" << YAML::Value << webserverport;
+            if (webserver_http_port > 0)
+                out << YAML::Key << "HTTPPort" << YAML::Value << webserver_http_port;
+            if (webserver_http_bind_all)
+                out << YAML::Key << "HTTPBindAll" << YAML::Value << true;
             out << YAML::EndMap; // Webserver
         }
 

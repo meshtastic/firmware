@@ -93,7 +93,7 @@ const std::map<std::string, std::set<std::string>> &schema()
         {"SerialModule", {"Path"}},
         {"I2C", {"I2CDevice"}},
         {"Logging", {"LogLevel", "TraceFile", "JSONFile", "JSONFileRotate", "JSONFilter", "AsciiLogs"}},
-        {"Webserver", {"Port", "RootPath", "SSLCert", "SSLKey"}},
+        {"Webserver", {"Port", "HTTPPort", "HTTPBindAll", "RootPath", "SSLCert", "SSLKey"}},
         {"Bluetooth", {"Enabled", "AdapterId"}},
         {"HostMetrics", {"ReportInterval", "Channel", "UserStringCommand"}},
         // A list, not a mapping: these are the keys of each entry. See checkCommandSensors().
@@ -647,6 +647,8 @@ const std::map<std::string, ValueSpec> &valueSpecs()
         {"Logging.JSONFilter", {kIntOrString, false}},
         {"Logging.AsciiLogs", {kBool, true}},
         {"Webserver.Port", {kInt, false}},
+        {"Webserver.HTTPPort", {kInt, false}},
+        {"Webserver.HTTPBindAll", {kBool, false}},
         {"Webserver.RootPath", {kString, false}},
         {"Webserver.SSLCert", {kString, false}},
         {"Webserver.SSLKey", {kString, false}},
@@ -1361,6 +1363,17 @@ void checkMergedConfig(const PathIndex &paths, std::vector<Finding> &findings)
     if (portduino_config.webserverport != -1 && (portduino_config.webserverport <= 0 || portduino_config.webserverport >= 65536))
         findings.push_back({kError, merged, 0,
                             "Webserver.Port " + std::to_string(portduino_config.webserverport) + " is not a usable TCP port"});
+
+    if (portduino_config.webserver_http_port != -1 &&
+        (portduino_config.webserver_http_port <= 0 || portduino_config.webserver_http_port >= 65536))
+        findings.push_back(
+            {kError, merged, 0,
+             "Webserver.HTTPPort " + std::to_string(portduino_config.webserver_http_port) + " is not a usable TCP port"});
+    // The plain listener lives inside the TLS web server thread, which only starts when Port is set.
+    else if (portduino_config.webserver_http_port != -1 && portduino_config.webserverport == -1)
+        findings.push_back({kWarn, merged, 0,
+                            "Webserver.HTTPPort is set but Webserver.Port is not, so the web server never starts and "
+                            "nothing listens on HTTPPort"});
 
     if (portduino_config.MaxNodes <= 0)
         findings.push_back({kError, merged, 0,
