@@ -2319,6 +2319,110 @@ void test_pullRetryDisabledByDefault()
     TEST_ASSERT_EQUAL_UINT(0, takeSent().size()); // the failed hole is not re-aired
 }
 
+// --- Retry semantics still open (work plan, "Re-check of the final Q6 fix", items 1, 2 and 4) ---
+// These pin today's behaviour, not a decision. Whichever way Tom settles each item, the matching
+// assertion is meant to change, so the change is deliberate and visible.
+
+// Sets up a hole (39-40) inside bucket 1 while the follower holds the tip, so only an advert that
+// names bucket 1 shows the mismatch: the named-mismatch path, not the tail path.
+void failNamedBucketPull(meshtastic_MeshPacket &advert)
+{
+    ingestAuthority(64);
+    buildFollowerFromCopy();
+    TEST_ASSERT_TRUE(deleteCounterRange(dirB, 39, 40));
+    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, 1, false, advert, false, 64));
+    failPendingPull(advert);
+}
+
+// Item 1: with PullRetry off, the failed hole's record is dropped, but the next advert naming the
+// same mismatching bucket starts a new exchange at once. "Off" stops the timer, not the re-pull.
+void test_pullRetryOffNamedAdvertRePullsAtOnce()
+{
+    meshtastic_MeshPacket advert;
+    failNamedBucketPull(advert);
+
+    Time::setTestMillis(Time::getMillis() + 2000); // one drain interval, well inside a 30 s backoff
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
+    follower->runOnce();
+    std::vector<meshtastic_MeshPacket> again = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, again.size());
+    TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_REQUEST, decodeSfpp(again[0]).sfpp_message_type);
+    TEST_ASSERT_EQUAL_UINT32(1, decodeSfpp(again[0]).chain_count);
+}
+
+// Item 4: with PullRetry on, a named-mismatch advert also bypasses the backoff; the backoff only
+// paces the remembered entry's own timer and tail pulls.
+void test_pullRetryOnNamedAdvertBypassesBackoff()
+{
+    enablePullRetry();
+    meshtastic_MeshPacket advert;
+    failNamedBucketPull(advert);
+
+    Time::setTestMillis(Time::getMillis() + 2000);
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
+    follower->runOnce();
+    std::vector<meshtastic_MeshPacket> again = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, again.size());
+    TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_REQUEST, decodeSfpp(again[0]).sfpp_message_type);
+}
+
+// Item 2, first half: a parked tail hole is revived by any new write, because a tail entry's only
+// summary is the tip. A hole no peer can serve is therefore re-parked and revived once per write.
+void test_parkedTailHoleRevivesOnEveryWrite()
+{
+    enablePullRetry();
+    ingestAuthority(40);
+    buildFollowerFromCopy();
+    deleteCounterRange(dirB, 39, 40);
+
+    uint32_t tip = 40;
+    for (uint8_t round = 0; round < 2; round++) {
+        meshtastic_MeshPacket advert;
+        TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, 0, false, advert, false, tip));
+        for (uint8_t i = 0; i < 9; i++) {
+            if (i > 0)
+                Time::setTestMillis(Time::getMillis() + 6 * 60 * 1000); // past the 5 min backoff cap
+            failPendingPull(advert);
+        }
+        Time::setTestMillis(Time::getMillis() + 10 * 60 * 1000);
+        follower->runOnce();
+        TEST_ASSERT_EQUAL_UINT(0, takeSent().size()); // parked
+
+        ingestAuthorityMore(tip, 1); // one new write moves the tip, and nothing else the hole needs
+        tip++;
+    }
+    meshtastic_MeshPacket advert;
+    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, 0, false, advert, false, tip));
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
+    follower->runOnce();
+    TEST_ASSERT_EQUAL_UINT(1, takeSent().size()); // revived a second time
+}
+
+// Item 2, second half: a revival resets firstFailedMs, so W counts from the last revival, not from
+// the hole's first failure. A hole in a bucket that keeps changing is never given up.
+void test_revivalRestartsServiceWindow()
+{
+    enablePullRetry();
+    ingestAuthority(40);
+    buildFollowerFromCopy();
+    deleteCounterRange(dirB, 39, 40);
+
+    meshtastic_MeshPacket advert;
+    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, 0, false, advert, false, 40));
+    failPendingPull(advert); // first failure: W starts here
+    const uint32_t firstFailure = Time::getMillis();
+
+    Time::setTestMillis(firstFailure + 23ULL * 60 * 60 * 1000); // inside W
+    ingestAuthorityMore(40, 1);
+    meshtastic_MeshPacket changed;
+    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, 0, false, changed, false, 41));
+    failPendingPull(changed); // revived, then failed again
+
+    Time::setTestMillis(firstFailure + 24ULL * 60 * 60 * 1000 + 1000); // past W from the first failure
+    follower->runOnce();
+    TEST_ASSERT_EQUAL_UINT(1, takeSent().size()); // still retried: W restarted at the revival
+}
+
 // --- Stage 8: sketch mode ---
 
 void runSketchCase(uint32_t total, uint32_t missing)
@@ -2685,6 +2789,10 @@ void setup()
     RUN_TEST(test_failedPullCapParksUntilSummaryChanges);
     RUN_TEST(test_failedPullServiceWindowAfterLaunchAndRevival);
     RUN_TEST(test_pullRetryDisabledByDefault);
+    RUN_TEST(test_pullRetryOffNamedAdvertRePullsAtOnce);
+    RUN_TEST(test_pullRetryOnNamedAdvertBypassesBackoff);
+    RUN_TEST(test_parkedTailHoleRevivesOnEveryWrite);
+    RUN_TEST(test_revivalRestartsServiceWindow);
     RUN_TEST(test_sketchResolvesOne);
     RUN_TEST(test_sketchResolvesFour);
     RUN_TEST(test_sketchFallsBackAtSixteen);
