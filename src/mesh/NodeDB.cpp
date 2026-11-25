@@ -2241,15 +2241,9 @@ bool NodeDB::enforceSatelliteCaps()
         const size_t before = map.size();
         // Orphans (key with no hot-table owner) only ever arrive from disk, and the
         // cap paths never reclaim them because they fire above the cap, not at it.
-        size_t orphans = 0;
-        for (auto it = map.begin(); it != map.end();) {
-            if (it->first != self && !std::binary_search(hotNums.begin(), hotNums.end(), it->first)) {
-                it = map.erase(it);
-                orphans++;
-            } else {
-                ++it;
-            }
-        }
+        const size_t orphans = std::erase_if(map, [&hotNums, self](const auto &entry) {
+            return entry.first != self && !std::binary_search(hotNums.begin(), hotNums.end(), entry.first);
+        });
         while (map.size() > MAX_SATELLITE_NODES) {
             if (!evictStalestSatellite(*this, map))
                 break;
@@ -3767,8 +3761,6 @@ int8_t getHopsAway(const meshtastic_MeshPacket &p, int8_t defaultIfUnknown)
 
     return p.hop_start - p.hop_limit;
 }
-
-#define NUM_ONLINE_SECS (60 * 60 * 2) // 2 hrs to consider someone offline
 
 size_t NodeDB::getNumOnlineMeshNodes(bool localOnly)
 {

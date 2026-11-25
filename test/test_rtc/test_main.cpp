@@ -2,6 +2,8 @@
 #include "UptimeClock.h"
 #include "gps/RTC.h"
 #include <cstdio>
+#include <cstdlib>
+#include <string>
 #include <sys/time.h>
 #include <time.h>
 #include <unity.h>
@@ -537,6 +539,37 @@ static void test_gm_mktime_leap_rule_sweep(void)
     }
 }
 
+// getTZOffsetAt() must decide DST from the *local* wall clock, not from the UTC fields (#9863).
+// The previous getTZOffset() fed gmtime() fields to mktime(tm_isdst=-1), so for EST5EDT the switch to
+// EDT was applied as soon as UTC passed 02:00 on the transition day - five hours early, which is the
+// "already EDT on Saturday evening" the issue reports. These instants straddle both 2025 US transitions
+// and one positive-offset zone, with the expected offsets taken from the POSIX TZ rules themselves.
+static void test_tz_offset_uses_local_dst_boundaries(void)
+{
+    const char *prevTz = getenv("TZ");
+    const bool hadTz = prevTz != nullptr;
+    const std::string savedTz = hadTz ? prevTz : "";
+    setenv("TZ", "EST5EDT,M3.2.0,M11.1.0", 1);
+    tzset();
+    TEST_ASSERT_EQUAL_INT32(-5 * 3600, getTZOffsetAt(1741494300)); // 2025-03-08 23:25 EST (the #9863 report)
+    TEST_ASSERT_EQUAL_INT32(-5 * 3600, getTZOffsetAt(1741503540)); // 2025-03-09 01:59 EST
+    TEST_ASSERT_EQUAL_INT32(-4 * 3600, getTZOffsetAt(1741503600)); // 2025-03-09 03:00 EDT
+    TEST_ASSERT_EQUAL_INT32(-4 * 3600, getTZOffsetAt(1751371200)); // 2025-07-01 08:00 EDT
+    TEST_ASSERT_EQUAL_INT32(-4 * 3600, getTZOffsetAt(1762063140)); // 2025-11-02 01:59 EDT
+    TEST_ASSERT_EQUAL_INT32(-5 * 3600, getTZOffsetAt(1762063200)); // 2025-11-02 01:00 EST
+
+    setenv("TZ", "CET-1CEST,M3.5.0,M10.5.0/3", 1);
+    tzset();
+    TEST_ASSERT_EQUAL_INT32(2 * 3600, getTZOffsetAt(1751371200)); // 2025-07-01 14:00 CEST
+    TEST_ASSERT_EQUAL_INT32(1 * 3600, getTZOffsetAt(1741503600)); // 2025-03-09 08:00 CET
+
+    if (hadTz)
+        setenv("TZ", savedTz.c_str(), 1);
+    else
+        unsetenv("TZ");
+    tzset();
+}
+
 void setup()
 {
     delay(10);
@@ -571,6 +604,9 @@ void setup()
     printf("\n=== gm_mktime known answers ===\n");
     RUN_TEST(test_gm_mktime_known_epochs);
     RUN_TEST(test_gm_mktime_leap_rule_sweep);
+
+    printf("\n=== TZ offset / DST ===\n");
+    RUN_TEST(test_tz_offset_uses_local_dst_boundaries);
 
     exit(UNITY_END());
 }
