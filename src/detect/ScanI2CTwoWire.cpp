@@ -582,6 +582,12 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                         type = INA226;
                         break;
                     }
+                    // TI INA3221 strapped to 0x40/0x41 instead of its usual 0x42
+                    else if (mfg == 0x5449 && die == 0x3220) {
+                        logFoundDevice("INA3221", (uint8_t)addr.address);
+                        type = INA3221;
+                        break;
+                    }
                     // TI INA260
                     else if (mfg == 0x5449) {
                         logFoundDevice("INA260", (uint8_t)addr.address);

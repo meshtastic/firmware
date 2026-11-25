@@ -1173,6 +1173,9 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     config.has_lora = true;
     config.has_position = true;
     config.has_power = true;
+#ifdef DEFAULT_BATTERY_INA_ADDRESS
+    config.power.device_battery_ina_address = DEFAULT_BATTERY_INA_ADDRESS;
+#endif
     config.has_network = true;
     config.has_bluetooth = (HAS_BLUETOOTH ? true : false);
     config.has_security = true;
