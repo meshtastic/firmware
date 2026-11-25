@@ -82,7 +82,7 @@ bool serialConfigIsValid(const meshtastic_ModuleConfig_SerialConfig &config)
 
     // Only an enabled module opens the UART, so a disabled config with stale pins must still save (the way out).
     // UART pin arguments are 8-bit (nRF52 setPins, ESP32 begin), so 303 would wrap onto pin 47.
-    if (config.enabled && (config.rxd > UINT8_MAX || config.txd > UINT8_MAX)) {
+    if (config.enabled && !config.override_console_serial_port && (config.rxd > UINT8_MAX || config.txd > UINT8_MAX)) {
         char warning[96];
         snprintf(warning, sizeof(warning), "Invalid Serial config: RX/TX pin %u is out of range.",
                  (unsigned)(config.rxd > UINT8_MAX ? config.rxd : config.txd));
@@ -197,7 +197,8 @@ int32_t SerialModule::runOnce()
         return disable();
 
     // A config saved before the pin check existed would take the radio's pins and boot-loop the node
-    if (moduleConfig.serial.rxd > UINT8_MAX || moduleConfig.serial.txd > UINT8_MAX ||
+    const bool pinsUsed = !moduleConfig.serial.override_console_serial_port; // the console port ignores rxd/txd
+    if ((pinsUsed && (moduleConfig.serial.rxd > UINT8_MAX || moduleConfig.serial.txd > UINT8_MAX)) ||
         (moduleConfig.serial.rxd && isRadioPin(moduleConfig.serial.rxd)) ||
         (moduleConfig.serial.txd && isRadioPin(moduleConfig.serial.txd))) {
         LOG_ERROR("Serial module not started: RX/TX pin %u/%u is out of range or overlaps the LoRa radio",

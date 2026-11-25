@@ -3,9 +3,7 @@
 #include <unity.h>
 
 // Required by Unity: PlatformIO's weak defaults do not link on MinGW (PE-COFF weak externals).
-// Outside the guard below so both the portduino and the stub setup() get them.
 void setUp(void) {}
-void tearDown(void) {}
 
 #ifdef ARCH_PORTDUINO
 #include "configuration.h"
@@ -17,6 +15,12 @@ void tearDown(void) {}
 
 // The native build has no LoRa radio, so this stands in for one whose driver claims kRadioPin.
 static constexpr uint32_t kRadioPin = 47;
+// A failed assertion longjmps past a stack PinRadio's destructor; don't let the next test see it.
+void tearDown(void)
+{
+    RadioInterface::active = nullptr;
+}
+
 class PinRadio : public RadioInterface
 {
   public:
@@ -193,6 +197,14 @@ void test_serialConfigPinAbove255IsInvalidWhenEnabled(void)
 
     config.enabled = false;
     TEST_ASSERT_TRUE(serialConfigIsValid(config));
+
+    // The console port ignores rxd/txd, so stale pins there are no reason to refuse the config.
+    config = {.enabled = true,
+              .rxd = 303,
+              .txd = 303,
+              .mode = meshtastic_ModuleConfig_SerialConfig_Serial_Mode_NMEA,
+              .override_console_serial_port = true};
+    TEST_ASSERT_TRUE(serialConfigIsValid(config));
 }
 
 void setup()
@@ -219,6 +231,8 @@ void setup()
     exit(UNITY_END());
 }
 #else
+void tearDown(void) {}
+
 void setup()
 {
     initializeTestEnvironment();

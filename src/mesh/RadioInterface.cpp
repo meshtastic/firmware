@@ -967,8 +967,8 @@ static const int64_t radioBusAndFrontEndPins[] = {
 #ifdef LORA_MOSI
     LORA_MOSI,
 #endif
-#elif defined(PIN_SPI_SCK)
-    // No LORA_SCK: main.cpp starts the radio on the core's default SPI bus
+#elif defined(PIN_SPI_SCK) && !defined(ARCH_STM32WL)
+    // No LORA_SCK: the radio is on the core's default SPI bus (STM32WL's radio is internal)
     PIN_SPI_SCK, PIN_SPI_MISO, PIN_SPI_MOSI,
 #endif
 #if defined(USE_LR1110) // gated like the radio factory: an unused chip's names may not expand
