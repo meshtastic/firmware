@@ -378,13 +378,19 @@ void test_readable_frame_is_relayed_with_its_received_ciphertext(void)
 void test_upgraded_copy_is_relayed_with_its_received_ciphertext(void)
 {
     config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_ALL;
-    meshtastic_MeshPacket upgraded = makeChannelFrameWithUnknownField(REMOTE_NODE, NODENUM_BROADCAST, 0xADAF0002);
-    const meshtastic_MeshPacket received = upgraded; // handleUpgrade() decodes `upgraded` in place
+    const meshtastic_MeshPacket upgraded = makeChannelFrameWithUnknownField(REMOTE_NODE, NODENUM_BROADCAST, 0xADAF0002);
 
-    TEST_ASSERT_TRUE_MESSAGE(pipelineRouter->handleUpgrade(&upgraded), "the upgraded copy is taken for relay");
-    TEST_ASSERT_EQUAL_MESSAGE(1, pipelineRadio->removeCalls, "the queued lower-hop copy is replaced");
+    // The lower-hop copy we heard first, its relay still waiting in the TX queue
+    meshtastic_MeshPacket lower = upgraded;
+    lower.hop_limit = upgraded.hop_limit - 1;
+    pipelineRouter->remember(&lower);
+    pipelineRadio->holdInTxQueue(REMOTE_NODE, upgraded.id);
+
+    runPipelineIngress(upgraded);
+    drainPhoneQueue();
+    TEST_ASSERT_FALSE_MESSAGE(pipelineRadio->txQueueHolds(REMOTE_NODE, upgraded.id), "the queued lower-hop relay is replaced");
     TEST_ASSERT_EQUAL_MESSAGE(1, pipelineRadio->sendCalls, "the upgraded copy is relayed");
-    assertRelayedAsReceived(received, pipelineRadio->lastSent());
+    assertRelayedAsReceived(upgraded, pipelineRadio->lastSent());
 }
 
 void setup()
