@@ -136,13 +136,14 @@ static const uint8_t SCL = PIN_WIRE_SCL;
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  On-board QSPI Flash
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// On-board QSPI Flash
-#define PIN_QSPI_SCK (21)
-#define PIN_QSPI_CS (22)
-#define PIN_QSPI_IO0 (23)
-#define PIN_QSPI_IO1 (24)
-#define PIN_QSPI_IO2 (25)
-#define PIN_QSPI_IO3 (26)
+// On-board QSPI Flash: Arduino pins D19 to D24 (P0.21 SCK, P0.25 CS, P0.20 IO0, P0.24 IO1, P0.22 IO2, P0.23 IO3, as
+// in variant.cpp and on the XIAO nRF52840)
+#define PIN_QSPI_SCK (19)
+#define PIN_QSPI_CS (20)
+#define PIN_QSPI_IO0 (21)
+#define PIN_QSPI_IO1 (22)
+#define PIN_QSPI_IO2 (23)
+#define PIN_QSPI_IO3 (24)
 
 #define EXTERNAL_FLASH_DEVICES P25Q16H
 #define EXTERNAL_FLASH_USE_QSPI
