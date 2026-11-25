@@ -860,7 +860,7 @@ void test_shimServesAdoptedBroadcastText()
     TEST_ASSERT_TRUE(ingestOneText("adopted broadcast"));
 
     sqlite3 *db = nullptr;
-    TEST_ASSERT_TRUE(openDb(dirA, &db));
+    TEST_ASSERT_EQUAL_INT(SQLITE_OK, sqlite3_open(dbFile().c_str(), &db));
     sqlite3_stmt *stmt = nullptr;
     TEST_ASSERT_EQUAL_INT(SQLITE_OK,
                           sqlite3_prepare_v2(db, "select destination from channel_messages limit 1;", -1, &stmt, nullptr));
