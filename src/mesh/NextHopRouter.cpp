@@ -156,6 +156,7 @@ bool NextHopRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
             LOG_INFO("Fallback to flooding from relay_node=0x%x", p->relay_node);
             // Check if it's still in the Tx queue, if not, we have to relay it again
             if (!findInTxQueue(p->from, p->id)) {
+                ReceivedFrameScope frame(*this, p, true); // reprocessPacket() decodes p in place
                 if (reprocessPacket(p))
                     perhapsRebroadcast(p);
             }
@@ -164,6 +165,7 @@ bool NextHopRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
             // If repeated and not in Tx queue anymore, try relaying again, or if we are the destination, send the ACK again
             if (isRepeated) {
                 if (!findInTxQueue(p->from, p->id)) {
+                    ReceivedFrameScope frame(*this, p, true); // reprocessPacket() decodes p in place
                     if (reprocessPacket(p) && !isBlockedEventCoordinatePacket(p) && !perhapsRebroadcast(p) && isToUs(p) &&
                         p->want_ack) {
                         // A duplicate gets the answer the original got: the NAK if we refused it, else the ACK
@@ -275,6 +277,7 @@ bool NextHopRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
                     meshtastic_MeshPacket *tosend = packetPool.allocCopy(*p); // keep a copy because we will be sending it
                     if (!tosend)
                         return true;
+                    useReceivedPayload(tosend); // forward the ciphertext as received, without re-encoding it
                     LOG_INFO("Rebroadcast msg from %x", p->relay_node);
 
                     // If exhausting hops, force hop_limit = 0 regardless of other logic

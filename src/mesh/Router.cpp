@@ -301,6 +301,42 @@ bool Router::shouldDecrementHopLimit(const meshtastic_MeshPacket *p)
     return true;
 }
 
+Router::ReceivedFrameScope::ReceivedFrameScope(Router &r, const meshtastic_MeshPacket *frame, bool copy)
+    : scopedRouter(r), previous(r.receivedFrame)
+{
+    if (frame && frame->which_payload_variant != meshtastic_MeshPacket_encrypted_tag)
+        frame = nullptr; // Arrived decoded (phone, MQTT downlink): there is no ciphertext to forward
+    if (frame && copy) {
+        owned = packetPool.allocCopy(*frame);
+        frame = owned;
+    }
+    scopedRouter.receivedFrame = frame;
+}
+
+Router::ReceivedFrameScope::~ReceivedFrameScope()
+{
+    scopedRouter.receivedFrame = previous;
+    packetPool.release(owned); // release() handles nullptr
+}
+
+void Router::useReceivedPayload(meshtastic_MeshPacket *relay) const
+{
+    const meshtastic_MeshPacket *frame = receivedFrame;
+    if (!frame || relay->which_payload_variant != meshtastic_MeshPacket_decoded_tag || frame->from != relay->from ||
+        frame->id != relay->id || frame->to != relay->to)
+        return;
+#if !MESHTASTIC_EXCLUDE_TRACEROUTE
+    // The route was updated in the decoded payload, so the received ciphertext no longer matches it
+    if (relay->decoded.portnum == meshtastic_PortNum_TRACEROUTE_APP)
+        return;
+#endif
+    fixPriority(relay); // Priority is derived from the decoded payload, which is about to be replaced
+    relay->which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
+    relay->encrypted = frame->encrypted;
+    relay->channel = frame->channel; // The channel hash as received, not the local index decoding resolved
+    relay->pki_encrypted = frame->pki_encrypted;
+}
+
 /**
  * do idle processing
  * Mostly looking in our incoming rxPacket queue and calling handleReceived.
@@ -1681,7 +1717,11 @@ void Router::dispatchReceived(meshtastic_MeshPacket *p, RxSource src)
         if (traceRouteModule && src != RX_SRC_LOCAL)
             traceRouteModule->updateRoute(*p);
 #endif
-        MeshModule::callModules(*p, src);
+        {
+            // RoutingModule queues the relay from here; it forwards p_encrypted's payload rather than re-encoding p
+            ReceivedFrameScope frame(*this, p_encrypted);
+            MeshModule::callModules(*p, src);
+        }
 
 #if !MESHTASTIC_EXCLUDE_MQTT
         if (p_encrypted == nullptr) {
