@@ -488,6 +488,47 @@ void test_chunked_heartbeat_and_pending_output_available()
     }
 }
 
+// Replays the Garmin watch session: a chunked heartbeat probe, a chunked want_config, then later a chunked
+// node-info request, each split as the watch splits them (13 then 16 bytes). Every frame the client reads must
+// fit in 20 bytes and both dumps must reach config_complete_id.
+void sendWatchStyle(PhoneAPITestShim &api, const Bytes &bytes)
+{
+    for (size_t offset = 0; offset < bytes.size();) {
+        const size_t count = std::min<size_t>(offset ? 16 : 13, bytes.size() - offset);
+        Bytes frame = chunk(Bytes(bytes.begin() + offset, bytes.begin() + offset + count), offset ? 0 : bytes.size());
+        TEST_ASSERT_LESS_OR_EQUAL_UINT(20, frame.size());
+        api.receive(frame);
+        offset += count;
+    }
+}
+
+void drainWatchDump(PhoneAPITestShim &api, uint32_t nonce)
+{
+    for (unsigned i = 0; i < 400; ++i) {
+        Bytes bytes = readReassembled(api);
+        meshtastic_FromRadio message = meshtastic_FromRadio_init_zero;
+        TEST_ASSERT_TRUE(pb_decode_from_bytes(bytes.data(), bytes.size(), &meshtastic_FromRadio_msg, &message));
+        if (message.which_payload_variant == meshtastic_FromRadio_config_complete_id_tag) {
+            TEST_ASSERT_EQUAL_UINT32(nonce, message.config_complete_id);
+            return;
+        }
+    }
+    TEST_FAIL_MESSAGE("config dump did not complete");
+}
+
+void test_garmin_watch_session_end_to_end()
+{
+    auto &watch = *clients[0];
+    sendWatchStyle(watch, Bytes{0x3a, 0x00}); // heartbeat probe
+    for (uint32_t nonce : {69420u, 69421u}) {
+        meshtastic_ToRadio message = meshtastic_ToRadio_init_zero;
+        message.which_payload_variant = meshtastic_ToRadio_want_config_id_tag;
+        message.want_config_id = nonce;
+        sendWatchStyle(watch, encode(message));
+        drainWatchDump(watch, nonce);
+    }
+}
+
 } // namespace
 
 void setUp()
@@ -545,6 +586,7 @@ void setup()
     RUN_TEST(test_ble_filters_preserve_identical_continuations_and_legacy_dedup);
     RUN_TEST(test_plain_handshake_resets_opt_in_and_pending_output);
     RUN_TEST(test_chunked_heartbeat_and_pending_output_available);
+    RUN_TEST(test_garmin_watch_session_end_to_end);
     exit(UNITY_END());
 }
 
