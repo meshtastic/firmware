@@ -2181,6 +2181,28 @@ void test_C21_overheard_nodeinfo_reply_marks_sender_heard(void)
                              "a sender heard over our radio must read as heard on the current LoRa settings");
 }
 
+// C22: a packet the router decodes but then keeps from the modules still records the hear. NeighborInfo with the
+// module disabled is skipped in Router::dispatchReceived() before callModules(); if noteRfHear() ran only for packets
+// the modules saw, a known node whose only traffic on this slot is such a packet would read as not heard.
+void test_C22_skipped_neighborinfo_still_marks_sender_heard(void)
+{
+    setPolicy(meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_COMPATIBLE);
+    mockNodeDB->refreshCommittedLoraSlot();
+    mockNodeDB->addNode(REMOTE_NODE);
+    TEST_ASSERT_FALSE(nodeInfoLiteHasRfHear(mockNodeDB->getMeshNode(REMOTE_NODE)));
+    TEST_ASSERT_FALSE_MESSAGE(moduleConfig.has_neighbor_info, "fixture must leave NeighborInfo disabled");
+
+    meshtastic_MeshPacket p = makeDecoded(REMOTE_NODE, NODENUM_BROADCAST, meshtastic_PortNum_NEIGHBORINFO_APP, SMALL_PAYLOAD);
+    p.id = 0xC2200001;
+    p.hop_limit = 2;
+    p.hop_start = 3;
+    p.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA;
+    runPipelineIngress(channelEncode(p));
+
+    TEST_ASSERT_TRUE_MESSAGE(nodeInfoLiteHeardOnSlot(mockNodeDB->getMeshNode(REMOTE_NODE), mockNodeDB->committedLoraSlot()),
+                             "a decoded packet heard over our radio marks its sender heard, modules or not");
+}
+
 // C5: the packet survives (C4) but the identity claim inside it must not land - the pubkey guard
 // can't tell a signer from an impersonator replaying its (public) key. Only the write is refused.
 void test_N5_unsigned_unicast_nodeinfo_from_signer_does_not_change_name(void)
@@ -2777,6 +2799,7 @@ void setup()
     RUN_TEST(test_C19_proven_ack_reaches_phone_as_valid);
     RUN_TEST(test_C20_opaque_pki_dm_is_uplinked_to_mqtt_once);
     RUN_TEST(test_C21_overheard_nodeinfo_reply_marks_sender_heard);
+    RUN_TEST(test_C22_skipped_neighborinfo_still_marks_sender_heard);
     printf("\n=== Group N: NodeInfoModule authentication ===\n");
     RUN_TEST(test_N1_unsigned_nodeinfo_from_signer_dropped);
     RUN_TEST(test_N2_signed_nodeinfo_from_signer_not_dropped);
