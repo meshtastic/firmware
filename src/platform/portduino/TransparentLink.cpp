@@ -97,7 +97,7 @@ class SerialLink : public FdLink
     bool open() override
     {
         close();
-        int f = ::open(description.c_str(), O_RDWR | O_NOCTTY | O_NONBLOCK);
+        int f = ::open(description.c_str(), O_RDWR | O_NOCTTY | O_NONBLOCK | O_CLOEXEC);
         if (f < 0)
             return false;
         struct termios tio;
@@ -175,6 +175,7 @@ class TcpLink : public FdLink
             int f = ::socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
             if (f < 0)
                 continue;
+            ::fcntl(f, F_SETFD, FD_CLOEXEC); // meshtasticd re-execs itself to reboot; don't leak the link into it
             ::fcntl(f, F_SETFL, O_NONBLOCK);
             if (connectWithTimeout(f, rp->ai_addr, rp->ai_addrlen, std::min(CONNECT_TIMEOUT_MS, msLeft(budget)))) {
                 int one = 1;
