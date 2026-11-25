@@ -2316,7 +2316,12 @@ void test_pullRetryDisabledByDefault()
 
     Time::setTestMillis(Time::getMillis() + 30000);
     follower->runOnce();
-    TEST_ASSERT_EQUAL_UINT(0, takeSent().size()); // the failed hole is not re-aired
+    // Leaderless: the follower may advertise its own buckets, but it must not ask for the hole again.
+    for (const auto &p : takeSent()) {
+        const auto type = decodeSfpp(p).sfpp_message_type;
+        TEST_ASSERT_NOT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_REQUEST, type);
+        TEST_ASSERT_NOT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_REQUEST, type);
+    }
 }
 
 // --- Retry semantics still open (work plan, "Re-check of the final Q6 fix", items 1, 2 and 4) ---
