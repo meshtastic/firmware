@@ -1180,6 +1180,28 @@ bool loadConfig(const char *configPath)
             }
 
             portduino_config.spiSpeed = yamlConfig["Lora"]["spiSpeed"].as<int>(2000000);
+            if (yamlConfig["Lora"]["IgnoreRelayNodes"]) {
+                const YAML::Node relayNodes = yamlConfig["Lora"]["IgnoreRelayNodes"];
+                if (!relayNodes.IsSequence()) {
+                    std::cout << "Lora.IgnoreRelayNodes must be a list of node numbers!" << std::endl;
+                    if (!configCheck)
+                        exit(EXIT_FAILURE);
+                } else {
+                    for (const auto &entry : relayNodes) {
+                        uint32_t node = 0;
+                        if (!nodeNumberFromYaml(entry, node)) {
+                            const std::string written = entry.Scalar().empty() ? entry.Tag() : entry.Scalar();
+                            std::cout << "Lora.IgnoreRelayNodes: '" << written << "' is not a node number!" << std::endl;
+                            if (!configCheck)
+                                exit(EXIT_FAILURE);
+                            continue;
+                        }
+                        if (std::find(portduino_config.ignore_relay_nodes.begin(), portduino_config.ignore_relay_nodes.end(),
+                                      node) == portduino_config.ignore_relay_nodes.end())
+                            portduino_config.ignore_relay_nodes.push_back(node);
+                    }
+                }
+            }
             portduino_config.lora_usb_serial_num = yamlConfig["Lora"]["USB_Serialnum"].as<std::string>("");
             portduino_config.lora_usb_pid = yamlConfig["Lora"]["USB_PID"].as<int>(0x5512);
             portduino_config.lora_usb_vid = yamlConfig["Lora"]["USB_VID"].as<int>(0x1A86);
@@ -1629,6 +1651,51 @@ bool loadConfig(const char *configPath)
             std::cout << "*** Exception " << e.what() << std::endl;
         return false;
     }
+    return true;
+}
+#endif // !ARCH_PORTDUINO_WASM
+
+// Accepts `0xea618fb4` (yaml-cpp reads this as a number), `!a28e145b` (a local YAML tag on an empty
+// scalar), or decimal. Node number 0 is refused: its low byte would collide with NO_RELAY_NODE.
+#ifndef ARCH_PORTDUINO_WASM
+bool nodeNumberFromYaml(const YAML::Node &node, uint32_t &out)
+{
+    if (!node.IsScalar())
+        return false;
+
+    std::string text = node.Scalar();
+    bool hex = false;
+    // An unquoted `!xxxxxxxx` arrives as a tag with an empty scalar; a quoted one as a string.
+    if (text.empty() && node.Tag().size() > 1 && node.Tag()[0] == '!') {
+        text = node.Tag().substr(1);
+        hex = true;
+    } else if (!text.empty() && text[0] == '!') {
+        text = text.substr(1);
+        hex = true;
+    }
+    if (text.size() > 2 && text[0] == '0' && (text[1] == 'x' || text[1] == 'X')) {
+        text = text.substr(2);
+        hex = true;
+    }
+    if (text.empty() || text.size() > (hex ? 8 : 10))
+        return false;
+
+    uint64_t value = 0;
+    for (char c : text) {
+        int digit;
+        if (c >= '0' && c <= '9')
+            digit = c - '0';
+        else if (hex && c >= 'a' && c <= 'f')
+            digit = c - 'a' + 10;
+        else if (hex && c >= 'A' && c <= 'F')
+            digit = c - 'A' + 10;
+        else
+            return false;
+        value = value * (hex ? 16 : 10) + static_cast<uint64_t>(digit);
+    }
+    if (value == 0 || value > UINT32_MAX)
+        return false;
+    out = static_cast<uint32_t>(value);
     return true;
 }
 #endif // !ARCH_PORTDUINO_WASM
