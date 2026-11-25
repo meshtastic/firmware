@@ -52,6 +52,7 @@ void earlyInitVariant()
 
 #if !MESHTASTIC_EXCLUDE_GPS
 #include "GpioLogic.h"
+#include "NodeDB.h"
 #include "gps/GPS.h"
 
 // The GNSS LDO enable is an M5IOE1 output, so GPS hardsleep and GPS_OFF reach it through gps->enablePin
@@ -64,18 +65,26 @@ class GnssRail : public GpioPin
         ioeSetOutputs(on ? (ioeOut | bit) : (ioeOut & ~bit));
     }
 };
+#endif
 
 void lateInitVariant()
 {
-    if (!gps)
+#if !MESHTASTIC_EXCLUDE_GPS
+    if (gps) {
+        // A user-set gps_en_gpio already owns enablePin's only transformer; the rail then stays up
+        if (config.position.gps_en_gpio)
+            return;
+        auto *rail = new GnssRail();
+        new GpioUnaryTransformer(gps->enablePin, rail);
+        // The GPS may already have set its power state (e.g. disabled while the region is unset)
+        if (gps->enablePin->get() != GpioVirtPin::PinState::Unset)
+            rail->set(gps->enablePin->get() == GpioVirtPin::PinState::On);
         return;
-    auto *rail = new GnssRail();
-    new GpioUnaryTransformer(gps->enablePin, rail);
-    // The GPS may already have set its power state (e.g. disabled while the region is unset)
-    if (gps->enablePin->get() != GpioVirtPin::PinState::Unset)
-        rail->set(gps->enablePin->get() == GpioVirtPin::PinState::On);
-}
+    }
 #endif
+    // No GPS driver (gps_mode NOT_PRESENT or GPS excluded), so nothing else would switch the rail off
+    ioeSetOutputs(ioeOut & ~(1 << IOE_GNSS_PWR_EN));
+}
 
 // Runs before every deep sleep; the M5IOE1 stays powered, so drop the GNSS and RF switch rails. Keep the LoRa
 // rail: LORA_CS is held high through sleep and would back-power an unpowered SX1262.
