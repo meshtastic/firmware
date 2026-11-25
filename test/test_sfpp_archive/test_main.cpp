@@ -209,13 +209,14 @@ meshtastic_MeshPacket makeEncryptedCopyCCM(const meshtastic_MeshPacket &mp)
     return enc;
 }
 
-meshtastic_MeshPacket makeHistoryRequest(NodeNum from, NodeNum to, PacketId id, uint32_t windowMinutes)
+meshtastic_MeshPacket makeHistoryRequest(NodeNum from, NodeNum to, PacketId id, uint32_t windowMinutes, uint32_t cursor = 0)
 {
     meshtastic_StoreAndForward request = meshtastic_StoreAndForward_init_zero;
     request.rr = meshtastic_StoreAndForward_RequestResponse_CLIENT_HISTORY;
-    if (windowMinutes > 0) {
+    if (windowMinutes > 0 || cursor > 0) {
         request.which_variant = meshtastic_StoreAndForward_history_tag;
         request.variant.history.window = windowMinutes;
+        request.variant.history.last_request = cursor;
     }
 
     meshtastic_MeshPacket mp = meshtastic_MeshPacket_init_zero;
@@ -376,6 +377,18 @@ bool ingestOneText(const char *text)
     meshtastic_MeshPacket mp = makeText(REMOTE_NODE, TEXT_ID, text, getValidTime(RTCQualityNTP, true));
     meshtastic_MeshPacket enc = makeEncryptedCopy(mp);
     return testSfpp->ingest(mp, &enc) == ProcessMessage::CONTINUE;
+}
+
+bool ingestNumberedTexts(uint32_t count)
+{
+    const uint32_t now = getValidTime(RTCQualityNTP, true);
+    for (uint32_t i = 0; i < count; i++) {
+        meshtastic_MeshPacket mp = makeText(REMOTE_NODE, TEXT_ID + i, "paged text", now - (count - i));
+        meshtastic_MeshPacket enc = makeEncryptedCopy(mp);
+        if (testSfpp->ingest(mp, &enc) != ProcessMessage::CONTINUE)
+            return false;
+    }
+    return true;
 }
 
 // The root this store maps the primary channel to, or empty when it has no mapping yet.
@@ -795,6 +808,34 @@ void test_legacyHistoryDecryptsAeadPrimary()
     TEST_ASSERT_EQUAL_MEMORY("aead text", text.variant.text.bytes, text.variant.text.size);
 }
 
+// G16: the legacy shim pages from the last served rx_time, so a second request gets the next page.
+void test_legacyHistoryPagesByCursor()
+{
+    TEST_ASSERT_TRUE(ingestNumberedTexts(60));
+
+    meshtastic_MeshPacket first = makeHistoryRequest(0, LOCAL_NODE, 0x0E0E0E0E, 60);
+    TEST_ASSERT_EQUAL(ProcessMessage::STOP, testSfpp->dispatch(first));
+    std::vector<meshtastic_MeshPacket> phone = drainPhoneQueue();
+    TEST_ASSERT_EQUAL_UINT(1, phone.size());
+    meshtastic_StoreAndForward reply;
+    TEST_ASSERT_TRUE(decodeStoreForward(phone[0], reply));
+    TEST_ASSERT_EQUAL_UINT32(50, reply.variant.history.history_messages);
+    const uint32_t cursor = reply.variant.history.last_request;
+    TEST_ASSERT_GREATER_THAN_UINT32(0, cursor);
+
+    for (uint32_t i = 0; i < 50; i++)
+        testSfpp->runOnce();
+    drainPhoneQueue();
+
+    meshtastic_MeshPacket second = makeHistoryRequest(0, LOCAL_NODE, 0x0F0F0F0F, 60, cursor);
+    TEST_ASSERT_EQUAL(ProcessMessage::STOP, testSfpp->dispatch(second));
+    phone = drainPhoneQueue();
+    TEST_ASSERT_EQUAL_UINT(1, phone.size());
+    meshtastic_StoreAndForward next;
+    TEST_ASSERT_TRUE(decodeStoreForward(phone[0], next));
+    TEST_ASSERT_EQUAL_UINT32(10, next.variant.history.history_messages);
+}
+
 // --- Coexistence with the legacy module ---
 
 // A portnum-65 packet that is not a CLIENT_HISTORY belongs to the legacy client module (heartbeats,
@@ -1113,6 +1154,7 @@ void setup()
     RUN_TEST(test_legacyHistoryAnswersInLegacyFormat);
     RUN_TEST(test_legacyHistoryUsesLegacyRequestWindow);
     RUN_TEST(test_legacyHistoryExcludesTextsOlderThanRetention);
+    RUN_TEST(test_legacyHistoryPagesByCursor);
     RUN_TEST(test_legacyHistoryDecryptsEmptyPayloadRow);
     RUN_TEST(test_legacyHistorySkipsNonTextCiphertext);
     RUN_TEST(test_legacyHistoryDecryptsAeadPrimary);

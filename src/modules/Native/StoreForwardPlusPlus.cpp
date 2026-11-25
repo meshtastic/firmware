@@ -452,7 +452,7 @@ StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
 
     // Legacy CLIENT_HISTORY reads the stored plaintext, or the ciphertext a follower holds instead.
     sqlite3_prepare_v2(ppDb, "select sender, packet_id, destination, rx_time, payload, encrypted_bytes from channel_messages \
-        where substr(root_hash,1,?)=? and rx_time>=? and sender!=? \
+        where substr(root_hash,1,?)=? and rx_time>=? and rx_time>? and sender!=? \
         and (destination=? or destination=?) order by rx_time asc limit ?;",
                        -1, &legacyHistoryStmt, NULL);
 
@@ -1450,6 +1450,10 @@ void StoreForwardPlusPlusModule::handleLegacyClientHistory(const meshtastic_Mesh
 
     uint32_t now = getValidTime(RTCQualityNTP, true);
     uint32_t since = now > windowS ? now - windowS : 0;
+    uint32_t cursor = 0;
+    if (req->which_variant == meshtastic_StoreAndForward_history_tag)
+        cursor = req->variant.history.last_request;
+    uint32_t lastServedRxTime = cursor;
     uint32_t count = 0;
 
     uint8_t root_hash[SFPP_HASH_SIZE] = {0};
@@ -1458,10 +1462,11 @@ void StoreForwardPlusPlusModule::handleLegacyClientHistory(const meshtastic_Mesh
         sqlite3_bind_int(legacyHistoryStmt, 1, SFPP_HASH_SIZE);
         sqlite3_bind_blob(legacyHistoryStmt, 2, root_hash, SFPP_HASH_SIZE, NULL);
         sqlite3_bind_int64(legacyHistoryStmt, 3, (sqlite3_int64)since);
-        sqlite3_bind_int(legacyHistoryStmt, 4, (int)requester);
-        sqlite3_bind_int(legacyHistoryStmt, 5, (int)NODENUM_BROADCAST);
-        sqlite3_bind_int(legacyHistoryStmt, 6, (int)requester);
-        sqlite3_bind_int(legacyHistoryStmt, 7, pageMax);
+        sqlite3_bind_int64(legacyHistoryStmt, 4, (sqlite3_int64)cursor);
+        sqlite3_bind_int(legacyHistoryStmt, 5, (int)requester);
+        sqlite3_bind_int(legacyHistoryStmt, 6, (int)NODENUM_BROADCAST);
+        sqlite3_bind_int(legacyHistoryStmt, 7, (int)requester);
+        sqlite3_bind_int(legacyHistoryStmt, 8, pageMax);
 
         while (sqlite3_step(legacyHistoryStmt) == SQLITE_ROW) {
             legacy_history_item item;
@@ -1469,6 +1474,8 @@ void StoreForwardPlusPlusModule::handleLegacyClientHistory(const meshtastic_Mesh
             item.id = (PacketId)sqlite3_column_int64(legacyHistoryStmt, 1);
             uint32_t destination = (uint32_t)sqlite3_column_int64(legacyHistoryStmt, 2);
             item.rx_time = (uint32_t)sqlite3_column_int64(legacyHistoryStmt, 3);
+            if (item.rx_time > lastServedRxTime)
+                lastServedRxTime = item.rx_time;
             const unsigned char *text = sqlite3_column_text(legacyHistoryStmt, 4);
             if (text)
                 item.payload.assign((const char *)text, sqlite3_column_bytes(legacyHistoryStmt, 4));
@@ -1491,7 +1498,7 @@ void StoreForwardPlusPlusModule::handleLegacyClientHistory(const meshtastic_Mesh
     response.which_variant = meshtastic_StoreAndForward_history_tag;
     response.variant.history.history_messages = count;
     response.variant.history.window = windowS * 1000;
-    response.variant.history.last_request = 0;
+    response.variant.history.last_request = lastServedRxTime;
     sendLegacyReply(requester, response);
 
     if (count > 0) {
