@@ -114,7 +114,8 @@ int32_t TouchScreenBase::runOnce()
             // The time the finger came down, when the interrupt saw it (this run may be late). A down time from before
             // the last release belongs to the previous press: this one's interrupt hasn't run yet
             uint32_t downMs, upMs;
-            if (touchEdgeTimes(downMs, upMs) && (int32_t)(downMs - upMs) > 0 && nowMs - downMs < TIME_LONG_PRESS)
+            _pressDownTimed = touchEdgeTimes(downMs, upMs) && (int32_t)(downMs - upMs) > 0 && nowMs - downMs < TIME_LONG_PRESS;
+            if (_pressDownTimed)
                 _pressStartMs = downMs;
             _longPressSuppressed = false;
             _first_x = x;
@@ -122,10 +123,12 @@ int32_t TouchScreenBase::runOnce()
         } else {
             _state = TOUCH_EVENT_CLEARED;
             uint32_t duration = nowMs - _pressStartMs;
-            // The time the finger lifted, when the interrupt saw it: a tap during a slow redraw stays a tap
+            // The time the finger lifted, when the interrupt saw it: a tap during a slow redraw stays a tap. Only while
+            // the latest down edge is still this touch's: a later touch overwrites the release we'd want
             uint32_t downMs, upMs;
-            const bool releaseTimed =
-                touchEdgeTimes(downMs, upMs) && (int32_t)(upMs - _pressStartMs) >= 0 && (int32_t)(nowMs - upMs) >= 0;
+            const bool releaseTimed = _pressDownTimed && touchEdgeTimes(downMs, upMs) && downMs == _pressStartMs &&
+                                      (int32_t)(upMs - downMs) >= 0 && (int32_t)(nowMs - upMs) >= 0;
+            _pressDownTimed = false;
             if (releaseTimed)
                 duration = upMs - _pressStartMs;
             LOG_INPUT("release after %u ms%s", (unsigned)duration, releaseTimed ? " (interrupt)" : "");

@@ -56,10 +56,11 @@ class TouchScreenBase : public Observable<const InputEvent *>, public concurrenc
     uint16_t _display_height;
 
   private:
-    bool _touchedOld = false;  // previous touch state
-    int16_t _first_x, _last_x; // horizontal swipe direction
-    int16_t _first_y, _last_y; // vertical swipe direction
-    uint32_t _pressStartMs;    // when the current touch began; read via Throttle::hasElapsed()
+    bool _touchedOld = false;     // previous touch state
+    int16_t _first_x, _last_x;    // horizontal swipe direction
+    int16_t _first_y, _last_y;    // vertical swipe direction
+    uint32_t _pressStartMs;       // when the current touch began; read via Throttle::hasElapsed()
+    bool _pressDownTimed = false; // _pressStartMs is the interrupt's down time, so a release can be matched to it
 
     // LONG_PRESS repeat suppression while one touch is held: the bool is the armed flag, the
     // deadline is read only while it is set. No value of the deadline can mean "unarmed".
