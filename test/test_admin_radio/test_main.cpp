@@ -2156,10 +2156,10 @@ static void test_generateCryptoKeyPair_ordinaryRotationKeepsRemoteNodeNine()
     self.num = oldSelf;
     meshtastic_NodeInfoLite remoteNine = meshtastic_NodeInfoLite_init_zero;
     remoteNine.num = 9;
-    nodeDB->meshNodes->insert(nodeDB->meshNodes->begin(), remoteNine);
-    nodeDB->meshNodes->insert(nodeDB->meshNodes->begin(), self); // [self, remote 9, ...]
-    nodeDB->meshNodes->resize(nodeDB->meshNodes->size() - 2);
-    nodeDB->numMeshNodes += 2;
+    // Earlier tests can leave the table full, so lay out exactly [self, remote 9] rather than inserting.
+    nodeDB->meshNodes->at(0) = self;
+    nodeDB->meshNodes->at(1) = remoteNine;
+    nodeDB->numMeshNodes = 2;
     myNodeInfo.my_node_num = oldSelf;
 
     TEST_ASSERT_TRUE(nodeDB->generateCryptoKeyPair()); // mints the clean 0x5E key: an ordinary rotation
