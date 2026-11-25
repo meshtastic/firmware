@@ -36,6 +36,9 @@ class TransparentLink
     virtual bool write(const uint8_t *buf, size_t len) = 0;
 
     virtual const std::string &describe() const = 0;
+
+    /// True for a serial port: a device reset can cut a frame on it while the link stays open.
+    virtual bool isSerial() const { return false; }
 };
 
 /// A path ("/dev/ttyACM0") opens a serial port; anything else is "host" or "host:port" over TCP (port 4403 by default).

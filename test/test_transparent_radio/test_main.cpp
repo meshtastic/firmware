@@ -42,6 +42,7 @@
 #include "mesh/NodeDB.h"
 #include "mesh/Router.h"
 #include "support/MockMeshService.h"
+#include <algorithm>
 #include <cstring>
 #include <deque>
 #include <pb_decode.h>
@@ -88,8 +89,10 @@ class FakeLink : public TransparentLink
         return true;
     }
     const std::string &describe() const override { return name; }
+    bool isSerial() const override { return serial; }
 
     bool openOk = true;
+    bool serial = true;
     bool isOpenFlag = false;
     bool readFails = false;
     int opens = 0;
@@ -163,17 +166,22 @@ static std::vector<meshtastic_ToRadio> takeToRadio()
     return out;
 }
 
-/// Queue one framed FromRadio for the radio to read on its next runOnce().
-static void deviceSends(const meshtastic_FromRadio &fr)
+/// One FromRadio as the device frames it on the link.
+static std::vector<uint8_t> frameBytes(const meshtastic_FromRadio &fr)
 {
     uint8_t buf[MAX_TO_FROM_RADIO_SIZE];
     const size_t len = pb_encode_to_bytes(buf, sizeof(buf), &meshtastic_FromRadio_msg, &fr);
     TEST_ASSERT_GREATER_THAN(0, len);
-    fakeLink->incoming.push_back(0x94);
-    fakeLink->incoming.push_back(0xc3);
-    fakeLink->incoming.push_back((len >> 8) & 0xff);
-    fakeLink->incoming.push_back(len & 0xff);
-    fakeLink->incoming.insert(fakeLink->incoming.end(), buf, buf + len);
+    std::vector<uint8_t> out = {0x94, 0xc3, (uint8_t)((len >> 8) & 0xff), (uint8_t)(len & 0xff)};
+    out.insert(out.end(), buf, buf + len);
+    return out;
+}
+
+/// Queue one framed FromRadio for the radio to read on its next runOnce().
+static void deviceSends(const meshtastic_FromRadio &fr)
+{
+    const std::vector<uint8_t> f = frameBytes(fr);
+    fakeLink->incoming.insert(fakeLink->incoming.end(), f.begin(), f.end());
 }
 
 static void deviceSendsLora(const meshtastic_Config_LoRaConfig &lora)
@@ -185,12 +193,14 @@ static void deviceSendsLora(const meshtastic_Config_LoRaConfig &lora)
     deviceSends(fr);
 }
 
-/// The device's answer to want_config: its node number, its LoRa config, then config_complete_id.
-static void deviceSendsConfigDump(const meshtastic_Config_LoRaConfig &lora, const char *firmwareVersion = "2.8.3.abcdef0")
+/// The device's answer to want_config: its node number and reboot count, its LoRa config, then config_complete_id.
+static void deviceSendsConfigDump(const meshtastic_Config_LoRaConfig &lora, const char *firmwareVersion = "2.8.3.abcdef0",
+                                  uint32_t rebootCount = 0, NodeNum nodeNum = DEVICE_NODE)
 {
     meshtastic_FromRadio fr = meshtastic_FromRadio_init_zero;
     fr.which_payload_variant = meshtastic_FromRadio_my_info_tag;
-    fr.my_info.my_node_num = DEVICE_NODE;
+    fr.my_info.my_node_num = nodeNum;
+    fr.my_info.reboot_count = rebootCount;
     deviceSends(fr);
     fr = meshtastic_FromRadio_init_zero;
     fr.which_payload_variant = meshtastic_FromRadio_metadata_tag;
@@ -845,6 +855,14 @@ void test_device_reboot_restarts_the_handshake(void)
 
 // A device whose USB-UART bridge stays enumerated through a reset may never get its `rebooted` frame to us, but it
 // prints its boot log, which an API client never otherwise sees. After a quiet spell the radio handshakes again.
+static void deviceSendsRebooted()
+{
+    meshtastic_FromRadio rebooted = meshtastic_FromRadio_init_zero;
+    rebooted.which_payload_variant = meshtastic_FromRadio_rebooted_tag;
+    rebooted.rebooted = true;
+    deviceSends(rebooted);
+}
+
 static void deviceSendsText(const char *text)
 {
     fakeLink->incoming.insert(fakeLink->incoming.end(), text, text + strlen(text));
@@ -861,6 +879,24 @@ void test_boot_log_on_a_ready_link_restarts_the_handshake(void)
     TEST_ASSERT_EQUAL_MESSAGE(0, takeToRadio().size(), "wait for the line to go quiet first");
     Time::setTestMillis(Time::getMillis() + 2000);
     radio->runOnce();
+    TEST_ASSERT_EQUAL((int)TransparentRadio::State::Configuring, (int)radio->getState());
+    std::vector<meshtastic_ToRadio> sent = takeToRadio();
+    TEST_ASSERT_EQUAL(1, sent.size());
+    TEST_ASSERT_EQUAL(meshtastic_ToRadio_want_config_id_tag, sent[0].which_payload_variant);
+}
+
+// What an ESP32-S3 prints on its UART at a reset, before the firmware runs.
+static constexpr char BOOT_ROM_TEXT[] = "ESP-ROM:esp32s3-20210327\r\nBuild:Mar 27 2021\r\n"
+                                        "rst:0x1 (POWERON),boot:0x8 (SPI_FAST_FLASH_BOOT)\r\n";
+
+// A reset prints boot text on the same UART before the `rebooted` frame; the frame must still be found.
+void test_boot_text_before_rebooted_still_restarts_the_handshake(void)
+{
+    bringReady();
+    deviceSendsText(BOOT_ROM_TEXT);
+    deviceSendsRebooted();
+    radio->runOnce();
+
     TEST_ASSERT_EQUAL((int)TransparentRadio::State::Configuring, (int)radio->getState());
     std::vector<meshtastic_ToRadio> sent = takeToRadio();
     TEST_ASSERT_EQUAL(1, sent.size());
@@ -892,6 +928,222 @@ void test_a_few_stray_bytes_leave_the_link_ready(void)
     radio->runOnce();
     TEST_ASSERT_EQUAL((int)TransparentRadio::State::Ready, (int)radio->getState());
     TEST_ASSERT_EQUAL(0, takeToRadio().size());
+}
+
+// A reset can cut a frame the device was sending. The bytes after it (boot text, then `rebooted`) belong to the
+// rebooted device, not to the cut frame's remaining length.
+void test_reset_in_the_middle_of_a_frame_still_restarts_the_handshake(void)
+{
+    bringReady();
+    const uint8_t cut[] = {0x94, 0xc3, 0x00, 0xc8, 0x12, 0x34, 0x56}; // a 200-byte frame, 3 bytes of it sent
+    fakeLink->incoming.insert(fakeLink->incoming.end(), cut, cut + sizeof(cut));
+    radio->runOnce();
+    Time::advanceTestMillis(300); // the reset: the line stays quiet
+    radio->runOnce();
+    deviceSendsText(BOOT_ROM_TEXT);
+    deviceSendsRebooted();
+    radio->runOnce();
+
+    TEST_ASSERT_EQUAL((int)TransparentRadio::State::Configuring, (int)radio->getState());
+    std::vector<meshtastic_ToRadio> sent = takeToRadio();
+    TEST_ASSERT_EQUAL(1, sent.size());
+    TEST_ASSERT_EQUAL(meshtastic_ToRadio_want_config_id_tag, sent[0].which_payload_variant);
+}
+
+static constexpr uint32_t CONFIG_CHECK_MS = 60 * 1000;
+static constexpr NodeNum SWAPPED_NODE = 0x0E0E0E0E;
+
+/// Ready, then the interval passes: the radio asks for the device's config again and stays Ready meanwhile.
+static void configCheckGoesOut()
+{
+    bringReady();
+    Time::advanceTestMillis(CONFIG_CHECK_MS - 1);
+    radio->runOnce();
+    TEST_ASSERT_EQUAL_MESSAGE(0, takeToRadio().size(), "no config check before the interval");
+    Time::advanceTestMillis(1);
+    radio->runOnce();
+    std::vector<meshtastic_ToRadio> sent = takeToRadio();
+    TEST_ASSERT_EQUAL(1, sent.size());
+    TEST_ASSERT_EQUAL(meshtastic_ToRadio_want_config_id_tag, sent[0].which_payload_variant);
+    TEST_ASSERT_EQUAL_UINT32(SPECIAL_NONCE_ONLY_CONFIG, sent[0].want_config_id);
+    TEST_ASSERT_EQUAL((int)TransparentRadio::State::Ready, (int)radio->getState());
+}
+
+/// The device came back without our settings: the radio must push them again.
+static meshtastic_Config_LoRaConfig loraAfterAReset()
+{
+    meshtastic_Config_LoRaConfig lora = expectedDeviceLora();
+    lora.transparent_mode = false;
+    return lora;
+}
+
+// A reset with the link open can come without any `rebooted` frame or text. The periodic config check finds it by
+// the reboot count and handshakes again.
+void test_a_silent_reboot_is_found_by_the_config_check_and_handshaked_again(void)
+{
+    configCheckGoesOut();
+    deviceSendsConfigDump(loraAfterAReset(), "2.8.3.abcdef0", 1);
+    radio->runOnce();
+
+    std::vector<meshtastic_ToRadio> sent = takeToRadio();
+    TEST_ASSERT_EQUAL(2, sent.size());
+    const meshtastic_AdminMessage set = adminIn(sent[0]);
+    TEST_ASSERT_EQUAL(meshtastic_AdminMessage_set_config_tag, set.which_payload_variant);
+    TEST_ASSERT_TRUE(set.set_config.payload_variant.lora.transparent_mode);
+    TEST_ASSERT_EQUAL((int)TransparentRadio::State::Pushing, (int)radio->getState());
+}
+
+// Another device on the same port is found the same way, and our settings go to its node number.
+void test_a_swapped_device_is_found_by_the_config_check_and_handshaked_again(void)
+{
+    configCheckGoesOut();
+    deviceSendsConfigDump(loraAfterAReset(), "2.8.3.abcdef0", 0, SWAPPED_NODE);
+    radio->runOnce();
+
+    std::vector<meshtastic_ToRadio> sent = takeToRadio();
+    TEST_ASSERT_EQUAL(2, sent.size());
+    TEST_ASSERT_EQUAL(meshtastic_ToRadio_packet_tag, sent[0].which_payload_variant);
+    TEST_ASSERT_EQUAL_HEX32(SWAPPED_NODE, sent[0].packet.to);
+    TEST_ASSERT_EQUAL((int)TransparentRadio::State::Pushing, (int)radio->getState());
+}
+
+// The same device, not rebooted: nothing is pushed, the radio stays Ready and checks again after the interval.
+void test_a_config_check_of_the_same_device_stays_ready_and_repeats(void)
+{
+    configCheckGoesOut();
+    deviceSendsConfigDump(expectedDeviceLora());
+    radio->runOnce();
+    TEST_ASSERT_EQUAL((int)TransparentRadio::State::Ready, (int)radio->getState());
+    TEST_ASSERT_EQUAL_MESSAGE(0, takeToRadio().size(), "the same device is not written to");
+
+    Time::advanceTestMillis(CONFIG_CHECK_MS - 1);
+    radio->runOnce();
+    TEST_ASSERT_EQUAL(0, takeToRadio().size());
+    Time::advanceTestMillis(1);
+    radio->runOnce();
+    std::vector<meshtastic_ToRadio> sent = takeToRadio();
+    TEST_ASSERT_EQUAL(1, sent.size());
+    TEST_ASSERT_EQUAL(meshtastic_ToRadio_want_config_id_tag, sent[0].which_payload_variant);
+}
+
+// A config check that gets no answer within the handshake timeout starts the handshake again.
+void test_an_unanswered_config_check_restarts_the_handshake(void)
+{
+    configCheckGoesOut();
+    Time::advanceTestMillis(15000 - 1);
+    radio->runOnce();
+    TEST_ASSERT_EQUAL(0, takeToRadio().size());
+    TEST_ASSERT_EQUAL((int)TransparentRadio::State::Ready, (int)radio->getState());
+    Time::advanceTestMillis(1);
+    radio->runOnce();
+
+    TEST_ASSERT_EQUAL((int)TransparentRadio::State::Configuring, (int)radio->getState());
+    std::vector<meshtastic_ToRadio> sent = takeToRadio();
+    TEST_ASSERT_EQUAL(1, sent.size());
+    TEST_ASSERT_EQUAL(meshtastic_ToRadio_want_config_id_tag, sent[0].which_payload_variant);
+}
+
+/// A frame the device heard on air, as large as a LoRa frame gets.
+static std::vector<uint8_t> largeHeardFrame()
+{
+    meshtastic_FromRadio heard = meshtastic_FromRadio_init_zero;
+    heard.which_payload_variant = meshtastic_FromRadio_packet_tag;
+    heard.packet.from = REMOTE_NODE;
+    heard.packet.to = NODENUM_BROADCAST;
+    heard.packet.id = 0x7000;
+    heard.packet.channel = 0x42;
+    heard.packet.which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
+    heard.packet.encrypted.size = sizeof(heard.packet.encrypted.bytes);
+    memset(heard.packet.encrypted.bytes, 0x5A, heard.packet.encrypted.size);
+    return frameBytes(heard);
+}
+
+static void linkReceives(const std::vector<uint8_t> &f, size_t from, size_t to)
+{
+    fakeLink->incoming.insert(fakeLink->incoming.end(), f.begin() + from, f.begin() + to);
+}
+
+static void assertHeardFrameDelivered()
+{
+    TEST_ASSERT_EQUAL_MESSAGE(1, captureRouter->received.size(), "the frame reaches the router once");
+    TEST_ASSERT_EQUAL_HEX32(0x7000, captureRouter->received[0].id);
+    TEST_ASSERT_EQUAL(sizeof(captureRouter->received[0].encrypted.bytes), captureRouter->received[0].encrypted.size);
+    TEST_ASSERT_EQUAL((int)TransparentRadio::State::Ready, (int)radio->getState());
+}
+
+// A healthy frame that arrives in pieces with short quiet gaps (under the timeout) is not cut.
+void test_a_frame_with_short_quiet_gaps_is_not_cut(void)
+{
+    bringReady();
+    const std::vector<uint8_t> f = largeHeardFrame();
+    const size_t step = f.size() / 5 + 1;
+    for (size_t at = 0; at < f.size(); at += step) {
+        linkReceives(f, at, std::min(at + step, f.size()));
+        radio->runOnce();
+        Time::advanceTestMillis(150);
+        radio->runOnce(); // the link is empty here
+    }
+    assertHeardFrameDelivered();
+}
+
+// A stalled main loop reads the rest of a frame late, but the bytes were waiting: the frame is not cut.
+void test_a_host_stall_never_cuts_a_frame(void)
+{
+    bringReady();
+    const std::vector<uint8_t> f = largeHeardFrame();
+    linkReceives(f, 0, f.size() / 2);
+    radio->runOnce();
+    Time::advanceTestMillis(300); // no poll meanwhile
+    linkReceives(f, f.size() / 2, f.size());
+    radio->runOnce();
+    assertHeardFrameDelivered();
+}
+
+// Quiet is judged when the link is found empty: an empty poll early in a frame, then a stall, does not cut it.
+void test_an_empty_poll_then_a_host_stall_never_cuts_a_frame(void)
+{
+    bringReady();
+    const std::vector<uint8_t> f = largeHeardFrame();
+    linkReceives(f, 0, f.size() / 2);
+    radio->runOnce();
+    Time::advanceTestMillis(10);
+    radio->runOnce();             // empty, well inside the timeout
+    Time::advanceTestMillis(300); // no poll meanwhile, the rest arrives
+    linkReceives(f, f.size() / 2, f.size());
+    radio->runOnce();
+    assertHeardFrameDelivered();
+}
+
+// On TCP a device that resets closes the connection; Wi-Fi may pause inside a frame. The parser waits there.
+void test_a_tcp_link_never_cuts_a_frame_on_a_pause(void)
+{
+    fakeLink->serial = false;
+    bringReady();
+    const std::vector<uint8_t> f = largeHeardFrame();
+    linkReceives(f, 0, f.size() / 2);
+    radio->runOnce();
+    Time::advanceTestMillis(300);
+    radio->runOnce(); // empty: a Wi-Fi pause
+    linkReceives(f, f.size() / 2, f.size());
+    radio->runOnce();
+    assertHeardFrameDelivered();
+}
+
+// The quiet time is a difference of millis(): a frame across the 32-bit wrap is not cut.
+void test_a_frame_across_the_clock_wrap_is_not_cut(void)
+{
+    bringReady();
+    Time::setTestMillis(UINT32_MAX - 20);
+    radio->runOnce();
+    takeToRadio(); // the clock jump made a heartbeat due
+    const std::vector<uint8_t> f = largeHeardFrame();
+    linkReceives(f, 0, f.size() / 2);
+    radio->runOnce();
+    Time::advanceTestMillis(30); // past the wrap
+    radio->runOnce();
+    linkReceives(f, f.size() / 2, f.size());
+    radio->runOnce();
+    assertHeardFrameDelivered();
 }
 
 // This node's LoRa config can change at runtime (admin, the app). The device must follow.
@@ -982,6 +1234,17 @@ void setup()
     RUN_TEST(test_boot_log_on_a_ready_link_restarts_the_handshake);
     RUN_TEST(test_boot_log_then_rebooted_handshakes_once);
     RUN_TEST(test_a_few_stray_bytes_leave_the_link_ready);
+    RUN_TEST(test_boot_text_before_rebooted_still_restarts_the_handshake);
+    RUN_TEST(test_reset_in_the_middle_of_a_frame_still_restarts_the_handshake);
+    RUN_TEST(test_a_silent_reboot_is_found_by_the_config_check_and_handshaked_again);
+    RUN_TEST(test_a_swapped_device_is_found_by_the_config_check_and_handshaked_again);
+    RUN_TEST(test_a_config_check_of_the_same_device_stays_ready_and_repeats);
+    RUN_TEST(test_an_unanswered_config_check_restarts_the_handshake);
+    RUN_TEST(test_a_frame_with_short_quiet_gaps_is_not_cut);
+    RUN_TEST(test_a_host_stall_never_cuts_a_frame);
+    RUN_TEST(test_an_empty_poll_then_a_host_stall_never_cuts_a_frame);
+    RUN_TEST(test_a_tcp_link_never_cuts_a_frame_on_a_pause);
+    RUN_TEST(test_a_frame_across_the_clock_wrap_is_not_cut);
     RUN_TEST(test_lora_config_change_is_pushed_to_the_device);
     RUN_TEST(test_reverting_a_config_while_it_is_being_pushed_writes_it_again);
     RUN_TEST(test_airtime_rounds_payload_blocks_before_the_coding_rate);

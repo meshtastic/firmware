@@ -94,6 +94,8 @@ class SerialLink : public FdLink
   public:
     explicit SerialLink(const std::string &path) : FdLink(path) {}
 
+    bool isSerial() const override { return true; }
+
     bool open() override
     {
         close();

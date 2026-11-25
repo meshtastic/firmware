@@ -201,6 +201,11 @@ int32_t TransparentRadio::runOnce()
         LOG_INFO("Transparent radio: %s printed %u bytes of plain text; handshaking again", link->describe().c_str(),
                  (unsigned)bootTextBytes);
         startHandshake();
+    } else if (state == State::Ready && revalidating && Throttle::hasElapsed(stateSinceMs, HANDSHAKE_TIMEOUT_MS)) {
+        LOG_WARN("Transparent radio: %s did not answer its config check, handshaking again", link->describe().c_str());
+        startHandshake();
+    } else if (state == State::Ready && !revalidating && Throttle::hasElapsed(stateSinceMs, REVALIDATE_INTERVAL_MS)) {
+        revalidate();
     }
 
     if (link->isOpen() && Throttle::hasElapsed(lastWriteMs, HEARTBEAT_INTERVAL_MS))
@@ -214,10 +219,19 @@ void TransparentRadio::setState(State next)
 {
     state = next;
     bootTextBytes = 0;
+    if (next != State::Ready)
+        revalidating = false;
     stateSinceMs = Time::getMillis();
 }
 
 void TransparentRadio::startHandshake()
+{
+    beginHandshake();
+    askForConfig();
+}
+
+/// Forget what the device told us; the next config dump decides again.
+void TransparentRadio::beginHandshake()
 {
     rxPtr = 0;
     deviceNodeNum = 0;
@@ -227,7 +241,10 @@ void TransparentRadio::startHandshake()
     verifyRequestId = 0;
     deviceQueueFree = -1;
     setState(State::Configuring);
+}
 
+void TransparentRadio::askForConfig()
+{
     memset(txFrame, FRAME_START2, WAKE_BYTES);
     if (!link->write(txFrame, WAKE_BYTES)) {
         linkLost();
@@ -237,6 +254,16 @@ void TransparentRadio::startHandshake()
     toRadio.which_payload_variant = meshtastic_ToRadio_want_config_id_tag;
     toRadio.want_config_id = SPECIAL_NONCE_ONLY_CONFIG; // our config only, no node database
     writeToRadio();
+}
+
+// A device that resets with the link open may never say so (its `rebooted` frame is sent once at boot, into a console
+// nobody reads yet), and then no longer serves us. Asking for its config again, while staying Ready, also reattaches us
+// as its API client; its my_info then shows whether it is the same device, not rebooted since the handshake.
+void TransparentRadio::revalidate()
+{
+    revalidating = true;
+    setState(State::Ready); // times the answer
+    askForConfig();
 }
 
 void TransparentRadio::linkLost()
@@ -255,8 +282,19 @@ bool TransparentRadio::pumpRx()
         const int n = link->read(buf, sizeof(buf));
         if (n < 0)
             return false;
-        if (n == 0)
+        if (n == 0) {
+            // A device reset can cut a frame it was sending. Once the line has been quiet for the timeout, drop the cut
+            // frame, or the rebooted device's bytes (boot text, `rebooted`) are read as the rest of it. Checked only
+            // when the link is found empty, so a stalled main loop never cuts a frame still waiting to be read. Serial
+            // only: a device on TCP that resets closes the connection, and Wi-Fi can pause inside one frame.
+            if (rxPtr && link->isSerial() && Throttle::hasElapsed(lastRxMs, PARTIAL_FRAME_TIMEOUT_MS)) {
+                LOG_WARN("Transparent radio: %s cut a frame off after %u bytes; dropped", link->describe().c_str(),
+                         (unsigned)rxPtr);
+                rxPtr = 0;
+            }
             break;
+        }
+        lastRxMs = Time::getMillis();
         for (int i = 0; i < n && link->isOpen(); i++)
             parseByte(buf[i]);
     }
@@ -301,7 +339,14 @@ void TransparentRadio::handleFromRadio()
     bootTextBytes = 0; // the device is talking frames, so any text before this was not a reboot
     switch (fromRadio.which_payload_variant) {
     case meshtastic_FromRadio_my_info_tag:
+        if (revalidating &&
+            (fromRadio.my_info.my_node_num != deviceNodeNum || fromRadio.my_info.reboot_count != deviceRebootCount)) {
+            LOG_INFO("Transparent radio: %s rebooted or was swapped without saying so; handshaking again",
+                     link->describe().c_str());
+            beginHandshake(); // the rest of this dump is the new device's and completes the handshake
+        }
         deviceNodeNum = fromRadio.my_info.my_node_num;
+        deviceRebootCount = fromRadio.my_info.reboot_count;
         break;
     case meshtastic_FromRadio_metadata_tag:
         deviceFirmwareTooOld = !firmwareSupportsTransparentMode(fromRadio.metadata.firmware_version);
@@ -322,6 +367,10 @@ void TransparentRadio::handleFromRadio()
     case meshtastic_FromRadio_config_complete_id_tag:
         if (state == State::Configuring && fromRadio.config_complete_id == SPECIAL_NONCE_ONLY_CONFIG)
             pushConfig();
+        else if (revalidating && fromRadio.config_complete_id == SPECIAL_NONCE_ONLY_CONFIG) {
+            revalidating = false; // the same device: check again after the interval
+            setState(State::Ready);
+        }
         break;
     case meshtastic_FromRadio_queueStatus_tag:
         deviceQueueFree = fromRadio.queueStatus.free;
