@@ -1,4 +1,5 @@
 #include "TouchScreenBase.h"
+#include "UptimeClock.h"
 #include "main.h"
 #include "mesh/Throttle.h"
 
@@ -81,7 +82,7 @@ void TouchScreenBase::resetTouchState()
 
 int32_t TouchScreenBase::runOnce()
 {
-    uint32_t nowMs = millis();
+    uint32_t nowMs = Time::getMillis();
     if (nowMs - _lastRun < 20) { // suppress too fast consecutive runOnce() executions
         return 20;
     }
@@ -98,11 +99,11 @@ int32_t TouchScreenBase::runOnce()
     if (x < 0 || y < 0) // T-deck can emit phantom touch events with a negative value when turning off the screen
         touched = false;
     if (touched) {
-        _lastTouchSeenMs = millis();
+        _lastTouchSeenMs = nowMs;
         this->setInterval(fastTapMode ? TOUCH_POLL_INTERVAL_ACTIVE_FAST : TOUCH_POLL_INTERVAL_ACTIVE);
         _last_x = x;
         _last_y = y;
-    } else if (_touchedOld && ((uint32_t)millis() - _lastTouchSeenMs) < TOUCH_RELEASE_GRACE_MS) {
+    } else if (_touchedOld && (nowMs - _lastTouchSeenMs) < TOUCH_RELEASE_GRACE_MS) {
         // Treat brief no-touch samples as continuous touch to preserve long-press detection.
         touched = true;
     }
@@ -114,7 +115,7 @@ int32_t TouchScreenBase::runOnce()
             // The time the finger came down, when the interrupt saw it (this run may be late). A down time from before
             // the last release belongs to the previous press: this one's interrupt hasn't run yet
             uint32_t downMs, upMs;
-            _pressDownTimed = touchEdgeTimes(downMs, upMs) && (int32_t)(downMs - upMs) > 0 && nowMs - downMs < TIME_LONG_PRESS;
+            _pressDownTimed = touchEdgeTimes(downMs, upMs) && (int32_t)(downMs - upMs) > 0 && (int32_t)(nowMs - downMs) >= 0;
             if (_pressDownTimed)
                 _pressStartMs = downMs;
             _longPressSuppressed = false;
@@ -123,11 +124,9 @@ int32_t TouchScreenBase::runOnce()
         } else {
             _state = TOUCH_EVENT_CLEARED;
             uint32_t duration = nowMs - _pressStartMs;
-            // The time the finger lifted, when the interrupt saw it: a tap during a slow redraw stays a tap. Only while
-            // the latest down edge is still this touch's: a later touch overwrites the release we'd want
-            uint32_t downMs, upMs;
-            const bool releaseTimed = _pressDownTimed && touchEdgeTimes(downMs, upMs) && downMs == _pressStartMs &&
-                                      (int32_t)(upMs - downMs) >= 0 && (int32_t)(nowMs - upMs) >= 0;
+            // The time the finger lifted, when the interrupt saw it: a tap during a slow redraw stays a tap
+            uint32_t upMs;
+            const bool releaseTimed = timedRelease(nowMs, upMs);
             _pressDownTimed = false;
             if (releaseTimed)
                 duration = upMs - _pressStartMs;
@@ -212,7 +211,10 @@ int32_t TouchScreenBase::runOnce()
     // Armed and expired are asked separately; folding the deadline into the press stamp repeated
     // LONG_PRESS every poll across the wrap on 64-bit time_t hosts.
     const bool longPressSuppressed = _longPressSuppressed && !Throttle::deadlinePassed(_longPressSuppressUntilMs);
-    if (allowLongPress && touched && !longPressSuppressed && Throttle::hasElapsed(_pressStartMs, TIME_LONG_PRESS)) {
+    uint32_t releasedMs;
+    // A release edge means the finger is up, though the grace window still counts it as held: the release decides
+    if (allowLongPress && touched && !longPressSuppressed && Throttle::hasElapsed(_pressStartMs, TIME_LONG_PRESS) &&
+        !timedRelease(nowMs, releasedMs)) {
         // A finger held past the window re-reports LONG_PRESS once per window, as before.
         _longPressSuppressed = true;
         _longPressSuppressUntilMs = nowMs + LONG_PRESS_REPEAT_SUPPRESS_MS;
@@ -239,6 +241,14 @@ void TouchScreenBase::hapticFeedback()
 #elif defined(T_DECK_PRO) && defined(MESHTASTIC_INCLUDE_INKHUD)
     tDeckProTouchFeedback();
 #endif
+}
+
+bool TouchScreenBase::timedRelease(uint32_t nowMs, uint32_t &upMs)
+{
+    // Only while the latest down edge is still this touch's: a later touch overwrites the release we'd want
+    uint32_t downMs;
+    return _pressDownTimed && touchEdgeTimes(downMs, upMs) && downMs == _pressStartMs && (int32_t)(upMs - downMs) >= 0 &&
+           (int32_t)(nowMs - upMs) >= 0;
 }
 
 bool TouchScreenBase::fastTapModeEnabled() const
