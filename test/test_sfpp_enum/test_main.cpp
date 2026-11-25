@@ -2173,6 +2173,57 @@ void test_full_root_advert_with_a_foreign_root_is_ignored()
 }
 
 // A follower with no stratum 0 advertises its own bucket; the flag no longer gates advertising.
+// A non-stratum-0 archive accepts a hash-verified writer-missed push for its own root, and refuses
+// one from a peer known to advertise a different root.
+void test_follower_accepts_push_but_refuses_a_foreign_root_pusher()
+{
+    constexpr NodeNum PUSHER_A = 0x66667777;
+    constexpr NodeNum PUSHER_B = 0x77778888;
+    constexpr PacketId FOREIGN_PUSH_ID = 0x1E1A1001;
+    constexpr PacketId OK_PUSH_ID = 0x1E1A1002;
+
+    portduino_config.sfpp_db_path = dirB + "/";
+    portduino_config.sfpp_stratum0 = false;
+    portduino_config.sfpp_repair = SFPP_REPAIR_ENUM;
+    follower = new TestSfppModule();
+    myNodeInfo.my_node_num = FOLLOWER_NODE;
+    follower->runOnce(); // derive the root
+    takeSent();
+
+    uint8_t foreign[SFPP_HASH_SIZE];
+    memset(foreign, 0xAB, sizeof(foreign));
+    meshtastic_MeshPacket advert;
+    TEST_ASSERT_TRUE(buildAdvertWithRoot(foreign, 0, 1, advert));
+    advert.from = PUSHER_A;
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert)); // records A on a foreign root
+    TEST_ASSERT_EQUAL_UINT(0, takeSent().size());
+
+    auto push = [&](NodeNum pusher, PacketId id) {
+        uint8_t cipher[32];
+        memset(cipher, 0x5A, sizeof(cipher));
+        std::vector<meshtastic_StoreForwardPlusPlus> frames;
+        TEST_ASSERT_TRUE(sfppframe::split(cipher, sizeof(cipher), FOLLOWER_NODE, SENDER_NODE, id, 100, false, frames));
+        for (const auto &frame : frames) {
+            meshtastic_MeshPacket mp = meshtastic_MeshPacket_init_zero;
+            mp.from = pusher;
+            mp.to = FOLLOWER_NODE;
+            mp.channel = 0;
+            mp.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+            mp.decoded.portnum = meshtastic_PortNum_STORE_FORWARD_PLUSPLUS_APP;
+            mp.decoded.payload.size = pb_encode_to_bytes(mp.decoded.payload.bytes, sizeof(mp.decoded.payload.bytes),
+                                                         &meshtastic_StoreForwardPlusPlus_msg, &frame);
+            TEST_ASSERT_TRUE(mp.decoded.payload.size > 0);
+            TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, mp));
+        }
+    };
+
+    push(PUSHER_A, FOREIGN_PUSH_ID);
+    TEST_ASSERT_EQUAL_UINT(0, countRows(dirB, FOREIGN_PUSH_ID));
+
+    push(PUSHER_B, OK_PUSH_ID);
+    TEST_ASSERT_EQUAL_UINT(1, countRows(dirB, OK_PUSH_ID));
+}
+
 void test_follower_advertises_without_stratum0()
 {
     ingestAuthority(2);
@@ -2283,6 +2334,7 @@ void setup()
     RUN_TEST(test_full_root_advert_with_our_root_is_pulled);
     RUN_TEST(test_follower_advertises_without_stratum0);
     RUN_TEST(test_stratum0_node_pulls_from_an_advert);
+    RUN_TEST(test_follower_accepts_push_but_refuses_a_foreign_root_pusher);
     UNITY_END();
 }
 

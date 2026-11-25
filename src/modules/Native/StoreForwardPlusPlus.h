@@ -135,7 +135,6 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     sqlite3_stmt *getLinkFromMessageHashStmt;
     sqlite3_stmt *getHashFromRootStmt;
     sqlite3_stmt *addRootToMappingsStmt;
-    sqlite3_stmt *getRootFromChannelHashStmt;
     sqlite3_stmt *getFullRootHashStmt;
     sqlite3_stmt *setChainCountStmt;
     sqlite3_stmt *getChainCountStmt;
@@ -271,14 +270,11 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     void pushScratchRows();
     bool acceptPushedItemFrame(const meshtastic_MeshPacket &mp, meshtastic_StoreForwardPlusPlus *t);
     bool isEnumKnownPeer(NodeNum node, const uint8_t *root_prefix) const;
+    bool isEnumKnownPeerOnAnotherRoot(NodeNum node, const uint8_t *root_prefix) const;
     void noteEnumPeer(NodeNum node, const uint8_t *root_prefix);
     bool consumePushBudget(NodeNum node);
     bool enumAlreadyOffered(const uint8_t *hash) const;
     void noteEnumOffered(const uint8_t *hash);
-
-    // For a given Meshtastic ChannelHash, fills the root_hash buffer with a 32-byte root hash
-    // returns true if the root hash was found
-    bool getRootFromChannelHash(ChannelHash, uint8_t *);
 
     // Derives the channel's root from its name and key; no node number or clock is involved.
     bool deriveRootFromChannel(ChannelHash, uint8_t *);

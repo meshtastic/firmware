@@ -495,8 +495,6 @@ StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
     sqlite3_prepare_v2(ppDb, "INSERT OR REPLACE INTO mappings (chain_type, identifier, root_hash) VALUES(?, ?, ?);", -1,
                        &addRootToMappingsStmt, NULL);
 
-    sqlite3_prepare_v2(ppDb, "select root_hash from mappings where identifier=?;", -1, &getRootFromChannelHashStmt, NULL);
-
     sqlite3_prepare_v2(ppDb, "select root_hash from mappings where substr(root_hash,1,?)=?;", -1, &getFullRootHashStmt, NULL);
 
     sqlite3_prepare_v2(ppDb, "UPDATE mappings SET count=? WHERE substr(root_hash,1,?)=?;", -1, &setChainCountStmt, NULL);
@@ -576,7 +574,6 @@ StoreForwardPlusPlusModule::~StoreForwardPlusPlusModule()
         getLinkFromMessageHashStmt,
         getHashFromRootStmt,
         addRootToMappingsStmt,
-        getRootFromChannelHashStmt,
         getFullRootHashStmt,
         setChainCountStmt,
         getChainCountStmt,
@@ -1515,20 +1512,6 @@ bool StoreForwardPlusPlusModule::sendNextLegacyHistory()
     if (legacyHistory.empty())
         legacyHistoryBusy = false;
     return true;
-}
-
-bool StoreForwardPlusPlusModule::getRootFromChannelHash(ChannelHash _ch_hash, uint8_t *_root_hash)
-{
-    bool found = false;
-    sqlite3_bind_int(getRootFromChannelHashStmt, 1, _ch_hash);
-    sqlite3_step(getRootFromChannelHashStmt);
-    uint8_t *tmp_root_hash = (uint8_t *)sqlite3_column_blob(getRootFromChannelHashStmt, 0);
-    if (tmp_root_hash) {
-        memcpy(_root_hash, tmp_root_hash, SFPP_HASH_SIZE);
-        found = true;
-    }
-    sqlite3_reset(getRootFromChannelHashStmt);
-    return found;
 }
 
 ChannelHash StoreForwardPlusPlusModule::getChannelHashFromRoot(uint8_t *_root_hash, size_t _root_hash_len)
@@ -3234,6 +3217,7 @@ void StoreForwardPlusPlusModule::handleEnumAdvert(const meshtastic_MeshPacket &m
     uint8_t root[SFPP_HASH_SIZE] = {0};
     bool known = lookUpFullRootHash(advert.scope.rootPrefix, advert.scope.rootPrefixLen, root);
     if (known && memcmp(root, derived, SFPP_HASH_SIZE) != 0) {
+        noteEnumPeer(mp.from, advert.scope.rootPrefix);
         if (mp.from != enumForeignRootLoggedPeer) {
             char rootHex[9];
             formatRootHex(root, SFPP_HASH_SIZE, rootHex);
@@ -3247,6 +3231,7 @@ void StoreForwardPlusPlusModule::handleEnumAdvert(const meshtastic_MeshPacket &m
         if (advert.scope.rootPrefixLen != SFPP_HASH_SIZE)
             return;
         if (memcmp(advert.scope.rootPrefix, derived, SFPP_HASH_SIZE) != 0) {
+            noteEnumPeer(mp.from, advert.scope.rootPrefix);
             if (mp.from != enumForeignRootLoggedPeer) {
                 char rootHex[9];
                 formatRootHex(advert.scope.rootPrefix, SFPP_HASH_SIZE, rootHex);
@@ -3830,6 +3815,15 @@ bool StoreForwardPlusPlusModule::isEnumKnownPeer(NodeNum node, const uint8_t *ro
     return false;
 }
 
+bool StoreForwardPlusPlusModule::isEnumKnownPeerOnAnotherRoot(NodeNum node, const uint8_t *root_prefix) const
+{
+    for (const auto &peer : enumKnownPeers) {
+        if (peer.node == node && memcmp(peer.rootPrefix, root_prefix, sfppsr::kRootPrefixBytes) != 0)
+            return true;
+    }
+    return false;
+}
+
 void StoreForwardPlusPlusModule::noteEnumPeer(NodeNum node, const uint8_t *root_prefix)
 {
     if (node == 0 || node == NODENUM_BROADCAST)
@@ -3953,6 +3947,11 @@ bool StoreForwardPlusPlusModule::acceptPushedItemFrame(const meshtastic_MeshPack
     if (getOrDeriveRootFromChannel(channels.getHash(0), root) == 0)
         return false;
 
+    if (isEnumKnownPeerOnAnotherRoot(mp.from, root)) {
+        LOG_INFO("StoreForwardpp refusing a push from 0x%08x on a foreign root", mp.from);
+        return false;
+    }
+
     // F3.6: trust a known peer on this root; an unknown pusher gets a small budget per window.
     if (!isEnumKnownPeer(mp.from, root) && !consumePushBudget(mp.from)) {
         LOG_WARN("StoreForwardpp push from 0x%08x is over budget, dropping", mp.from);
@@ -3989,9 +3988,11 @@ void StoreForwardPlusPlusModule::handleItemFrame(const meshtastic_MeshPacket &mp
     if (!addressed)
         return;
 
-    if (portduino_config.sfpp_stratum0) {
-        if (mp.to == nodeDB->getNodeNum())
-            acceptPushedItemFrame(mp, t); // Stage 9: a follower's writer-missed offer
+    // A writer-missed push is unicast to this archive. Any archive accepts one for its own root;
+    // frames belonging to the exchange (or its late window) go to the paths below.
+    if (mp.to == nodeDB->getNodeNum() && !(enumExchangeActive && mp.from == enumExchangePeer) &&
+        !(enumLateActive && mp.from == enumLatePeer)) {
+        acceptPushedItemFrame(mp, t);
         return;
     }
 
