@@ -63,7 +63,6 @@ static constexpr uint32_t kEnumLateAcceptMs = 5 * 60 * 1000;
 // D11's one-pacer budget, shared by every serving path: 30 frames in any rolling 10 min.
 static constexpr uint32_t kServeWindowMs = 10 * 60 * 1000;
 static constexpr uint8_t kServeWindowFrames = 30;
-static constexpr uint8_t kRequesterWindowFrames = 24;
 
 // D7's retention applies to canon rows as well as to the legacy read window.
 static constexpr uint32_t kRetentionS = 48 * 60 * 60;
@@ -435,8 +434,10 @@ StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
                                       "UPDATE canon_scratch SET destination=destination+4294967296 WHERE destination<0;"
                                       "UPDATE canon_scratch SET sender=sender+4294967296 WHERE sender<0;"
                                       "UPDATE canon_scratch SET packet_id=packet_id+4294967296 WHERE packet_id<0;"
+                                      "DELETE FROM peers WHERE nodenum<0 AND nodenum+4294967296 IN (SELECT nodenum FROM peers);"
                                       "UPDATE peers SET nodenum=nodenum+4294967296 WHERE nodenum<0;";
-    sqlite3_exec(ppDb, repairSigned, NULL, NULL, NULL);
+    if (sqlite3_exec(ppDb, repairSigned, NULL, NULL, NULL) != SQLITE_OK)
+        LOG_WARN("StoreForwardpp signed-row repair failed: %s", sqlite3_errmsg(ppDb));
 
     // prepared statements *should* make this faster.
     sqlite3_prepare_v2(ppDb, "INSERT INTO channel_messages (destination, sender, packet_id, root_hash, \
@@ -1425,13 +1426,11 @@ bool StoreForwardPlusPlusModule::legacyStoreForwardServes()
 bool StoreForwardPlusPlusModule::consumeServeBudget()
 {
     const uint32_t now = Time::getMillis();
-    if (serveWindowStartMs == 0 || Throttle::hasElapsed(serveWindowStartMs, kServeWindowMs)) {
-        serveWindowStartMs = now;
-        serveWindowFrames = 0;
-    }
-    if (serveWindowFrames >= kServeWindowFrames)
+    while (!serveWindowSends.empty() && Throttle::hasElapsed(serveWindowSends.front(), kServeWindowMs))
+        serveWindowSends.pop_front();
+    if (serveWindowSends.size() >= kServeWindowFrames)
         return false;
-    serveWindowFrames++;
+    serveWindowSends.push_back(now);
     return true;
 }
 
@@ -3005,8 +3004,10 @@ void StoreForwardPlusPlusModule::expireEnumExchange()
     }
 
     // A collision probe has no named end: the peer serves every row for the shared IDs and then
-    // stops. Silence is the only completion signal, so finalise after an idle gap.
-    if (enumCollisionProbe && Throttle::hasElapsed(enumLastItemMs, kEnumProbeIdleMs)) {
+    // stops. Silence is the only completion signal, so finalise a probe or a half-received provide
+    // after an idle gap rather than waiting for the 15 min overall timeout.
+    const bool partialProvide = enumProvideActive && enumProvideSeenCount < enumProvideTotal;
+    if ((enumCollisionProbe || partialProvide) && Throttle::hasElapsed(enumLastItemMs, kEnumProbeIdleMs)) {
         if (!bucketMatchesPeer(enumExchangeRoot, enumExchangeBucket)) {
             char rootHex[9];
             formatRootHex(enumExchangeRoot, SFPP_HASH_SIZE, rootHex);
@@ -3616,6 +3617,7 @@ void StoreForwardPlusPlusModule::handleEnumProvide(const meshtastic_MeshPacket &
     enumRxBytes += mp.decoded.payload.size;
     enumExchangeStartedMs = Time::getMillis();
     enumRequestSentMs = enumExchangeStartedMs;
+    enumLastItemMs = enumExchangeStartedMs; // a received provide frame is progress
     enumAwaitingList = false;
 
     if (list.frameTotal == 0 || list.frameTotal > (uint8_t)(sizeof(enumProvideSeen)))
@@ -3895,6 +3897,11 @@ bool StoreForwardPlusPlusModule::drainOneEnumFrame()
     // Round-robin across requesters so one cannot starve another. One attempt per step; a failed
     // send leaves its frame queued for the next turn.
     const uint32_t nowMs = Time::getMillis();
+    size_t active = 0;
+    for (const auto &entry : enumTxQueues)
+        if (!entry.queue.empty())
+            active++;
+    const uint8_t fairShare = active == 0 ? kServeWindowFrames : (uint8_t)(kServeWindowFrames / active);
     bool deferred = false;
     for (size_t i = 0; i < enumTxQueues.size(); i++) {
         const size_t idx = (enumQueueCursor + i) % enumTxQueues.size();
@@ -3905,7 +3912,7 @@ bool StoreForwardPlusPlusModule::drainOneEnumFrame()
             requester.windowStartMs = nowMs;
             requester.sentInWindow = 0;
         }
-        if (requester.sentInWindow >= kRequesterWindowFrames) {
+        if (requester.sentInWindow >= (fairShare == 0 ? 1 : fairShare)) {
             deferred = true;
             continue;
         }
@@ -4020,7 +4027,13 @@ void StoreForwardPlusPlusModule::noteEnumPeer(NodeNum node, const uint8_t *root_
     if (enumKnownPeers.size() >= kEnumMaxKnownPeers) {
         size_t victim = 0;
         for (size_t i = 0; i < enumKnownPeers.size(); i++) {
-            if (enumKnownPeers[i].node != enumExchangePeer) { // never evict a peer in an active exchange
+            const NodeNum candidate = enumKnownPeers[i].node;
+            bool served = false;
+            for (const auto &requester : enumTxQueues)
+                if (requester.to == candidate && !requester.queue.empty())
+                    served = true;
+            // Never evict the pull peer or a peer whose frames are queued to be served.
+            if (candidate != enumExchangePeer && !served) {
                 victim = i;
                 break;
             }

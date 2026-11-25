@@ -573,7 +573,7 @@ bool buildAdvertWithRoot(const uint8_t root[SFPP_HASH_SIZE], uint32_t bucket, ui
 
 // A one-frame provide built straight from the store: the authority's paced drain advances the
 // clock, which would hide a pacer regression when the same advert is delivered twice.
-meshtastic_MeshPacket buildProvideFromDir(const std::string &dir, uint32_t bucket)
+meshtastic_MeshPacket buildProvideFromDir(const std::string &dir, uint32_t bucket, uint8_t frameIndex = 0, uint8_t frameTotal = 1)
 {
     uint8_t root[SFPP_HASH_SIZE];
     TEST_ASSERT_TRUE(readRoot(dir, root));
@@ -600,7 +600,7 @@ meshtastic_MeshPacket buildProvideFromDir(const std::string &dir, uint32_t bucke
     memcpy(scope.rootPrefix, root, scope.rootPrefixLen);
     scope.bucket = bucket;
     meshtastic_StoreForwardPlusPlus msg;
-    TEST_ASSERT_TRUE(sfppsr::buildEnumProvide(scope, ids, 0, 1, msg));
+    TEST_ASSERT_TRUE(sfppsr::buildEnumProvide(scope, ids, frameIndex, frameTotal, msg));
 
     meshtastic_MeshPacket out = meshtastic_MeshPacket_init_zero;
     out.from = AUTHORITY_NODE;
@@ -2486,47 +2486,70 @@ void test_windowBudgetCapsServedFrames()
     }
     TEST_ASSERT_GREATER_THAN_UINT32(0, served);
     TEST_ASSERT_LESS_OR_EQUAL_UINT32(30, served);
+
+    // Rolling boundary: still inside 10 min of the first send, so no 31st frame.
+    Time::setTestMillis(Time::getMillis() + 9 * 60 * 1000);
+    uint32_t blocked = 0;
+    for (uint32_t i = 0; i < 3; i++)
+        for (const auto &out : drainAuthorityOne(100))
+            if (decodeSfpp(out).sfpp_message_type == meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_FRAME)
+                blocked++;
+    TEST_ASSERT_EQUAL_UINT32(0, blocked);
+
+    Time::setTestMillis(Time::getMillis() + 2 * 60 * 1000);
+    uint32_t resumed = 0;
+    for (uint32_t i = 0; i < 5; i++)
+        for (const auto &out : drainAuthorityOne(100))
+            if (decodeSfpp(out).sfpp_message_type == meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_FRAME)
+                resumed++;
+    TEST_ASSERT_GREATER_THAN_UINT32(0, resumed);
 }
 
 // G11/F3.8: a single requester gets a per-peer window budget, not the whole global pacer.
-void test_oneRequesterCannotHoldThePacer()
+void test_fourRequestersShareTheServingWindow()
 {
     portduino_config.sfpp_enum_drain_ms = 100;
     ingestAuthority(40);
     std::vector<pinsketch::Element> ids;
     TEST_ASSERT_TRUE(readShortIds(dirA, 0, ids));
     TEST_ASSERT_EQUAL_UINT(sfppsr::kBucketObjects, ids.size());
-
-    meshtastic_StoreForwardPlusPlus msg = meshtastic_StoreForwardPlusPlus_init_default;
-    msg.sfpp_message_type = meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_REQUEST;
-    msg.sr_version = sfppsr::kDerivationVersion;
     uint8_t root[SFPP_HASH_SIZE];
     TEST_ASSERT_TRUE(readRoot(dirA, root));
-    msg.root_hash.size = 4;
-    memcpy(msg.root_hash.bytes, root, 4);
-    msg.chain_count = 0;
-    for (pb_size_t i = 0; i < ids.size(); i++)
-        msg.sr_short_ids[i] = ids[i];
-    msg.sr_short_ids_count = (pb_size_t)ids.size();
 
-    meshtastic_MeshPacket request = meshtastic_MeshPacket_init_zero;
-    request.from = FOLLOWER_NODE;
-    request.to = AUTHORITY_NODE;
-    request.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
-    request.decoded.portnum = meshtastic_PortNum_STORE_FORWARD_PLUSPLUS_APP;
-    myNodeInfo.my_node_num = AUTHORITY_NODE;
-    portduino_config.sfpp_stratum0 = true;
-    TEST_ASSERT_TRUE(authority->handleReceivedProtobuf(request, &msg));
-    TEST_ASSERT_EQUAL_UINT(0, takeSent().size()); // paced, not sent inline
-
-    uint32_t frames = 0;
-    for (uint32_t i = 0; i < 40; i++) {
-        for (const auto &out : drainAuthorityOne(100))
-            if (decodeSfpp(out).sfpp_message_type == meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_FRAME &&
-                out.to == FOLLOWER_NODE)
-                frames++;
+    constexpr NodeNum peers[4] = {0xA0000001, 0xA0000002, 0xA0000003, 0xA0000004};
+    for (uint32_t p = 0; p < 4; p++) {
+        meshtastic_StoreForwardPlusPlus msg = meshtastic_StoreForwardPlusPlus_init_default;
+        msg.sfpp_message_type = meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_REQUEST;
+        msg.sr_version = sfppsr::kDerivationVersion;
+        msg.root_hash.size = 4;
+        memcpy(msg.root_hash.bytes, root, 4);
+        msg.chain_count = 0;
+        for (pb_size_t i = 0; i < 8; i++)
+            msg.sr_short_ids[i] = ids[p * 8 + i];
+        msg.sr_short_ids_count = 8;
+        meshtastic_MeshPacket request = meshtastic_MeshPacket_init_zero;
+        request.from = peers[p];
+        request.to = AUTHORITY_NODE;
+        request.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+        request.decoded.portnum = meshtastic_PortNum_STORE_FORWARD_PLUSPLUS_APP;
+        myNodeInfo.my_node_num = AUTHORITY_NODE;
+        portduino_config.sfpp_stratum0 = true;
+        TEST_ASSERT_TRUE(authority->handleReceivedProtobuf(request, &msg));
     }
-    TEST_ASSERT_LESS_OR_EQUAL_UINT32(24, frames);
+    TEST_ASSERT_EQUAL_UINT(0, takeSent().size());
+
+    uint32_t frames[4] = {0, 0, 0, 0};
+    for (uint32_t i = 0; i < 30; i++) {
+        for (const auto &out : drainAuthorityOne(100)) {
+            if (decodeSfpp(out).sfpp_message_type != meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_FRAME)
+                continue;
+            for (uint32_t p = 0; p < 4; p++)
+                if (out.to == peers[p])
+                    frames[p]++;
+        }
+    }
+    for (uint32_t p = 0; p < 4; p++)
+        TEST_ASSERT_LESS_OR_EQUAL_UINT32(7, frames[p]); // 30 / 4 active requesters
 }
 
 // F3.4: a re-noted peer is most-recently-used, so a flood of other requesters cannot evict it.
@@ -2570,6 +2593,94 @@ void test_knownPeerTableIsLeastRecentlyUsed()
         for (const auto &frame : frames) {
             meshtastic_MeshPacket mp = meshtastic_MeshPacket_init_zero;
             mp.from = firstPeer;
+            mp.to = AUTHORITY_NODE;
+            mp.channel = 0;
+            mp.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+            mp.decoded.portnum = meshtastic_PortNum_STORE_FORWARD_PLUSPLUS_APP;
+            mp.decoded.payload.size = pb_encode_to_bytes(mp.decoded.payload.bytes, sizeof(mp.decoded.payload.bytes),
+                                                         &meshtastic_StoreForwardPlusPlus_msg, &frame);
+            TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, true, mp));
+        }
+    }
+    TEST_ASSERT_EQUAL_UINT32(10, readBucket(dirA, 1, sfppsr::kBucketObjects).count);
+}
+
+// G4: a half-received provide ends at the idle gap, so a later advert can start a fresh pull.
+void test_lostProvideFrameEndsAtIdle()
+{
+    ingestAuthority(40);
+    buildFollowerFromCopy();
+    TEST_ASSERT_TRUE(deleteCounterRange(dirB, 39, 40));
+
+    meshtastic_MeshPacket advert;
+    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, 0, false, advert, false, 40));
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
+    myNodeInfo.my_node_num = FOLLOWER_NODE;
+    portduino_config.sfpp_stratum0 = false;
+    follower->runOnce();
+    std::vector<meshtastic_MeshPacket> request = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, request.size());
+
+    // Only frame 0 of 2 arrives; the idle gap must end the exchange.
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, buildProvideFromDir(dirA, 1, 0, 2)));
+    Time::setTestMillis(Time::getMillis() + 31000);
+    follower->runOnce();
+
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
+    follower->runOnce();
+    std::vector<meshtastic_MeshPacket> fresh = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, fresh.size());
+    TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_REQUEST, decodeSfpp(fresh[0]).sfpp_message_type);
+}
+
+// F3.4: a requester with frames queued is not evicted by a flood of new request senders.
+void test_servedRequesterSurvivesPeerTableFlood()
+{
+    ingestAuthority(1);
+    uint8_t root[SFPP_HASH_SIZE];
+    TEST_ASSERT_TRUE(readRoot(dirA, root));
+    std::vector<pinsketch::Element> ids;
+    TEST_ASSERT_TRUE(readShortIds(dirA, 0, ids));
+    TEST_ASSERT_TRUE(!ids.empty());
+
+    constexpr NodeNum served = 0xB0000001;
+    auto requestFrom = [&](NodeNum node, bool withId) {
+        meshtastic_StoreForwardPlusPlus msg = meshtastic_StoreForwardPlusPlus_init_default;
+        msg.sfpp_message_type = meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_REQUEST;
+        msg.sr_version = sfppsr::kDerivationVersion;
+        msg.root_hash.size = 4;
+        memcpy(msg.root_hash.bytes, root, 4);
+        msg.chain_count = 0;
+        if (withId) {
+            msg.sr_short_ids[0] = ids[0];
+            msg.sr_short_ids_count = 1;
+        } else {
+            msg.sr_short_ids[0] = 0xDEADBEEF;
+            msg.sr_short_ids_count = 1;
+        }
+        meshtastic_MeshPacket mp = meshtastic_MeshPacket_init_zero;
+        mp.from = node;
+        mp.to = AUTHORITY_NODE;
+        mp.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+        mp.decoded.portnum = meshtastic_PortNum_STORE_FORWARD_PLUSPLUS_APP;
+        myNodeInfo.my_node_num = AUTHORITY_NODE;
+        portduino_config.sfpp_stratum0 = true;
+        TEST_ASSERT_TRUE(authority->handleReceivedProtobuf(mp, &msg));
+    };
+
+    requestFrom(served, true); // leaves a frame queued for this peer
+    for (uint32_t i = 0; i < 15; i++)
+        requestFrom(0xB0000100 + i, false);
+    requestFrom(0xB0000200, false); // eviction pressure; the served peer must stay
+
+    for (uint32_t i = 0; i < 9; i++) {
+        uint8_t cipher[8] = {1, 2, 3, 4, 5, 6, 7, 8};
+        cipher[0] = (uint8_t)i;
+        std::vector<meshtastic_StoreForwardPlusPlus> frames;
+        TEST_ASSERT_TRUE(sfppframe::split(cipher, sizeof(cipher), NODENUM_BROADCAST, served, 0x9000 + i, 0, false, frames));
+        for (const auto &frame : frames) {
+            meshtastic_MeshPacket mp = meshtastic_MeshPacket_init_zero;
+            mp.from = served;
             mp.to = AUTHORITY_NODE;
             mp.channel = 0;
             mp.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
@@ -2942,8 +3053,10 @@ void setup()
     RUN_TEST(test_onDemandPullsNewestBucketAndCapsPacing);
     RUN_TEST(test_secondAdvertInsideDrainIntervalSendsNoRequest);
     RUN_TEST(test_windowBudgetCapsServedFrames);
-    RUN_TEST(test_oneRequesterCannotHoldThePacer);
+    RUN_TEST(test_lostProvideFrameEndsAtIdle);
+    RUN_TEST(test_fourRequestersShareTheServingWindow);
     RUN_TEST(test_knownPeerTableIsLeastRecentlyUsed);
+    RUN_TEST(test_servedRequesterSurvivesPeerTableFlood);
     RUN_TEST(test_lostEnumProvideRetriesWithinBackoff);
     RUN_TEST(test_failedPullStopsPastServiceWindow);
     RUN_TEST(test_failedPullBackoffDoublesAcrossFailures);

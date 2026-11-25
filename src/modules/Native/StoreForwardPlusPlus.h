@@ -496,8 +496,7 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     std::vector<EnumRequester> enumTxQueues;
     size_t enumQueueCursor = 0;
     uint32_t enumLastDrainMs = 0;
-    uint32_t serveWindowStartMs = 0;
-    uint8_t serveWindowFrames = 0;
+    std::deque<uint32_t> serveWindowSends; // rolling 10 min of served-frame timestamps
 
     bool enumOnDemand = false;
     uint32_t enumPeerTip = 0;
