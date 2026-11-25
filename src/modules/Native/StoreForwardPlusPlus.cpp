@@ -3113,6 +3113,10 @@ void StoreForwardPlusPlusModule::startPendingPull()
     // Keep the entry: endEnumExchange() removes it on success, rememberFailedPull() advances its
     // attempt and first-failure state on failure.
 
+    char rootHex[9];
+    formatRootHex(root, SFPP_HASH_SIZE, rootHex);
+    LOG_INFO("SFPP-ENUM sketch_decode result=skipped reason=pending_pull root=%s bucket=%u peer=0x%08x", rootHex, entry.bucket,
+             entry.authority);
     if (entry.onDemand) {
         beginEnumExchange(root, entry.bucket, entry.authority, entry.tip, 0);
         enumPeerTip = entry.tip;
@@ -3409,10 +3413,14 @@ bool StoreForwardPlusPlusModule::trySketchExchange(const sfppsr::Advert &advert,
 {
     char rootHex[9];
     formatRootHex(root_hash, SFPP_HASH_SIZE, rootHex);
+    auto logDecode = [&](const char *result, size_t decoded, size_t promoted, size_t missing) {
+        LOG_INFO("SFPP-ENUM sketch_decode result=%s root=%s bucket=%u capacity=%u decoded=%u promoted=%u missing=%u", result,
+                 rootHex, bucket, (unsigned)advert.sketch.capacity(), (unsigned)decoded, (unsigned)promoted, (unsigned)missing);
+    };
 
     std::vector<pinsketch::Element> difference;
     if (!local.difference(advert.sketch, difference)) {
-        LOG_INFO("SFPP-ENUM type=sketch_decode result=fail root=%s bucket=%u peer=0x%08x ids=0", rootHex, bucket, peer);
+        logDecode("fail", 0, 0, 0);
         return false;
     }
 
@@ -3425,7 +3433,7 @@ bool StoreForwardPlusPlusModule::trySketchExchange(const sfppsr::Advert &advert,
     std::vector<pinsketch::Element> missing;
     std::set_difference(difference.begin(), difference.end(), own.begin(), own.end(), std::back_inserter(missing));
     if (missing.empty()) {
-        LOG_INFO("SFPP-ENUM type=sketch_decode result=bad_checksum root=%s bucket=%u peer=0x%08x ids=0", rootHex, bucket, peer);
+        logDecode("bad_checksum", difference.size(), 0, 0);
         return false;
     }
 
@@ -3433,26 +3441,28 @@ bool StoreForwardPlusPlusModule::trySketchExchange(const sfppsr::Advert &advert,
     // its own-only and missing counts will not reconstruct the advertised count.
     const size_t ownOnly = difference.size() - missing.size();
     if (ownOnly > local.count() || advert.count != local.count() - (uint32_t)ownOnly + (uint32_t)missing.size()) {
-        LOG_INFO("SFPP-ENUM type=sketch_decode result=bad_checksum root=%s bucket=%u peer=0x%08x ids=%u", rootHex, bucket, peer,
-                 (unsigned)missing.size());
+        logDecode("bad_checksum", difference.size(), 0, missing.size());
         return false;
     }
 
     // Item 10: a peer ID we already hold in scratch needs no fetch; promote it into the bucket.
+    const size_t missingBefore = missing.size();
     promoteScratchMatches(root_hash, bucket, missing);
+    const size_t promoted = missingBefore - missing.size();
     if (missing.empty()) {
         if (bucketMatchesPeer(root_hash, bucket)) {
+            logDecode("ok", difference.size(), promoted, 0);
             enumExchangeSucceeded = true;
             endEnumExchange();
             return true;
         }
-        LOG_INFO("SFPP-ENUM type=sketch_decode result=bad_checksum root=%s bucket=%u peer=0x%08x ids=0", rootHex, bucket, peer);
+        logDecode("bad_checksum", difference.size(), promoted, 0);
         return false;
     }
 
     enumSketchAttempt = true;
     enumSketchIds = (uint32_t)missing.size();
-    LOG_INFO("SFPP-ENUM type=sketch_decode result=ok root=%s bucket=%u peer=0x%08x ids=%u", rootHex, bucket, peer, enumSketchIds);
+    logDecode("ok", difference.size(), promoted, missing.size());
     requestMissingItems(root_hash, bucket, peer, missing);
     return true;
 }
