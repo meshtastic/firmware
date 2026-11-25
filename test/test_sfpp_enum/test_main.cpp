@@ -2495,6 +2495,16 @@ void test_windowBudgetCapsServedFrames()
             if (decodeSfpp(out).sfpp_message_type == meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_FRAME)
                 blocked++;
     TEST_ASSERT_EQUAL_UINT32(0, blocked);
+
+    // Past 10 min from the first send the window rolls, so a fresh request is served again.
+    Time::setTestMillis(Time::getMillis() + 2 * 60 * 1000);
+    TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, true, wanted[0]));
+    uint32_t resumed = 0;
+    for (uint32_t i = 0; i < 3; i++)
+        for (const auto &out : drainAuthorityOne(100))
+            if (decodeSfpp(out).sfpp_message_type == meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_FRAME)
+                resumed++;
+    TEST_ASSERT_GREATER_THAN_UINT32(0, resumed);
 }
 
 // G11/F3.8: a single requester gets a per-peer window budget, not the whole global pacer.
@@ -2613,8 +2623,8 @@ void test_lostProvideFrameEndsAtIdle()
     std::vector<meshtastic_MeshPacket> request = takeSent();
     TEST_ASSERT_EQUAL_UINT(1, request.size());
 
-    // Only frame 0 of 2 arrives; the idle gap must end the exchange.
-    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, buildProvideFromDir(dirA, 1, 0, 2)));
+    // Only frame 0 of 2 arrives for bucket 0; the idle gap must end the exchange.
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, buildProvideFromDir(dirA, 0, 0, 2)));
     Time::setTestMillis(Time::getMillis() + 31000);
     follower->runOnce();
 

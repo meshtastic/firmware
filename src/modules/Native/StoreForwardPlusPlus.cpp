@@ -2990,7 +2990,9 @@ void StoreForwardPlusPlusModule::expireEnumExchange()
     // after an idle gap rather than waiting for the 15 min overall timeout.
     const bool partialProvide = enumProvideActive && enumProvideSeenCount < enumProvideTotal;
     if ((enumCollisionProbe || partialProvide) && Throttle::hasElapsed(enumLastItemMs, kEnumProbeIdleMs)) {
-        if (!bucketMatchesPeer(enumExchangeRoot, enumExchangeBucket)) {
+        // A lost provide frame is not a collision; only a real probe may suppress the bucket, or a
+        // later advert with the same summary could never restart the exchange.
+        if (enumCollisionProbe && !bucketMatchesPeer(enumExchangeRoot, enumExchangeBucket)) {
             char rootHex[9];
             formatRootHex(enumExchangeRoot, SFPP_HASH_SIZE, rootHex);
             LOG_INFO("SFPP-ENUM collision_suspected root=%s bucket=%u", rootHex, enumExchangeBucket);
