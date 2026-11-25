@@ -2286,8 +2286,16 @@ void test_failedPullServiceWindowAfterLaunchAndRevival()
     std::vector<meshtastic_MeshPacket> revived = takeSent();
     TEST_ASSERT_EQUAL_UINT(1, revived.size());
 
-    Time::setTestMillis(Time::getMillis() + 2000);
-    failPendingPull(changed); // the revived hole now fails once from the new first-failure time
+    // Lose the revived provide and let that exchange fail, so firstFailedMs starts at the revival.
+    TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, true, revived[0]));
+    TEST_ASSERT_EQUAL_UINT(1, drainAuthorityOne(2000).size());
+    for (uint32_t i = 0; i < 2; i++) {
+        Time::setTestMillis(Time::getMillis() + 31000);
+        myNodeInfo.my_node_num = FOLLOWER_NODE;
+        portduino_config.sfpp_stratum0 = false;
+        follower->runOnce();
+        takeSent();
+    }
     Time::setTestMillis(Time::getMillis() + 24ULL * 60 * 60 * 1000 + 1000);
     follower->runOnce();
     TEST_ASSERT_EQUAL_UINT(0, takeSent().size());

@@ -3020,9 +3020,17 @@ void StoreForwardPlusPlusModule::addPendingBucket(const uint8_t *root_hash, Node
 
 void StoreForwardPlusPlusModule::rememberFailedPull()
 {
-    // Opt-in: the sim shows this raises airtime without closing the rotation hole.
-    if (!portduino_config.sfpp_pull_retry)
+    // Opt-in: the sim shows this raises airtime without closing the rotation hole. Drop the
+    // launching entry too, or the next advert would re-air the same hole without a retry state.
+    if (!portduino_config.sfpp_pull_retry) {
+        enumPending.erase(std::remove_if(enumPending.begin(), enumPending.end(),
+                                         [&](const EnumPendingBucket &entry) {
+                                             return entry.bucket == enumExchangeBucket && entry.authority == enumExchangePeer &&
+                                                    memcmp(entry.root, enumExchangeRoot, SFPP_HASH_SIZE) == 0;
+                                         }),
+                          enumPending.end());
         return;
+    }
     uint8_t root[SFPP_HASH_SIZE] = {0};
     if (!getRootFromChannelHash(channels.getHash(0), root))
         return;
