@@ -370,6 +370,10 @@ class NodeDB
     /// we updateGUI and updateGUIforNode if we think our this change is big enough for a redraw
     void updateFrom(const meshtastic_MeshPacket &p);
 
+    /// Record that a node already in the database was heard over our radio. Runs for every decoded radio
+    /// packet, so it covers the ones updateFrom() never sees; admits no node.
+    void noteRfHear(const meshtastic_MeshPacket &mp);
+
     /// Re-read which slot this radio is committed to. Cheap, touches no node and writes nothing, so
     /// it is safe on every config write - a client hopping presets just moves it and moves it back.
     void refreshCommittedLoraSlot();
@@ -743,6 +747,7 @@ class NodeDB
     uint32_t lastSort = 0;           // When last sorted the nodeDB
 
     bool nodeDatabaseDirty = false; // nodes.proto is behind the in-memory db
+    void stampRfHear(meshtastic_NodeInfoLite *info, const meshtastic_MeshPacket &mp);
     int onReboot(void *unused);
     CallbackObserver<NodeDB, void *> rebootObserver = CallbackObserver<NodeDB, void *>(this, &NodeDB::onReboot);
 

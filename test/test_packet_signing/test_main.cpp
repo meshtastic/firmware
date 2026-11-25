@@ -2149,6 +2149,38 @@ void test_C20_opaque_pki_dm_is_uplinked_to_mqtt_once(void)
     TEST_ASSERT_EQUAL(0, pipelineMqtt->queueSize());
 }
 
+// C21: a NodeInfo reply overheard over LoRa, addressed to a third node, from a node we had never heard.
+// NodeInfoModule admits the sender while RoutingModule delivers nothing, so the hear must still be
+// recorded; otherwise clients read the node as not heard on the current LoRa settings.
+void test_C21_overheard_nodeinfo_reply_marks_sender_heard(void)
+{
+    static constexpr NodeNum THIRD_NODE = 0x0C0C0C0C;
+    setPolicy(meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_COMPATIBLE);
+    mockNodeDB->refreshCommittedLoraSlot();
+    TEST_ASSERT_NULL(mockNodeDB->getMeshNode(REMOTE_NODE));
+    NodeInfoTestShim nodeInfo;
+
+    meshtastic_User user = meshtastic_User_init_zero;
+    snprintf(user.id, sizeof(user.id), "!%08x", REMOTE_NODE);
+    strncpy(user.long_name, "Overheard", sizeof(user.long_name) - 1);
+    strncpy(user.short_name, "OVR", sizeof(user.short_name) - 1);
+    meshtastic_MeshPacket reply = makeDecoded(REMOTE_NODE, THIRD_NODE, meshtastic_PortNum_NODEINFO_APP, 0);
+    reply.decoded.payload.size =
+        pb_encode_to_bytes(reply.decoded.payload.bytes, sizeof(reply.decoded.payload.bytes), &meshtastic_User_msg, &user);
+    TEST_ASSERT_GREATER_THAN(0, reply.decoded.payload.size);
+    reply.id = 0xC2100001;
+    reply.hop_limit = 2;
+    reply.hop_start = 3;
+    reply.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA;
+    runPipelineIngress(channelEncode(reply));
+
+    const meshtastic_NodeInfoLite *node = mockNodeDB->getMeshNode(REMOTE_NODE);
+    TEST_ASSERT_NOT_NULL_MESSAGE(node, "NodeInfoModule should admit the overheard sender");
+    TEST_ASSERT_TRUE_MESSAGE(nodeInfoLiteHasUser(node), "the overheard NodeInfo should land");
+    TEST_ASSERT_TRUE_MESSAGE(nodeInfoLiteHeardOnSlot(node, mockNodeDB->committedLoraSlot()),
+                             "a sender heard over our radio must read as heard on the current LoRa settings");
+}
+
 // C5: the packet survives (C4) but the identity claim inside it must not land - the pubkey guard
 // can't tell a signer from an impersonator replaying its (public) key. Only the write is refused.
 void test_N5_unsigned_unicast_nodeinfo_from_signer_does_not_change_name(void)
@@ -2744,6 +2776,7 @@ void setup()
     RUN_TEST(test_C18_inbound_ack_proof_status_is_cleared_before_modules_and_phone);
     RUN_TEST(test_C19_proven_ack_reaches_phone_as_valid);
     RUN_TEST(test_C20_opaque_pki_dm_is_uplinked_to_mqtt_once);
+    RUN_TEST(test_C21_overheard_nodeinfo_reply_marks_sender_heard);
     printf("\n=== Group N: NodeInfoModule authentication ===\n");
     RUN_TEST(test_N1_unsigned_nodeinfo_from_signer_dropped);
     RUN_TEST(test_N2_signed_nodeinfo_from_signer_not_dropped);

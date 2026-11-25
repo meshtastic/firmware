@@ -1681,6 +1681,10 @@ void Router::dispatchReceived(meshtastic_MeshPacket *p, RxSource src)
             traceRouteModule->updateRoute(*p);
 #endif
         MeshModule::callModules(*p, src);
+        // After the modules, which may have just admitted the sender; RoutingModule only records the hear
+        // for packets it delivers, and never sees one an earlier module stopped.
+        if (src == RX_SRC_RADIO && nodeDB)
+            nodeDB->noteRfHear(*p);
 
 #if !MESHTASTIC_EXCLUDE_MQTT
         if (p_encrypted == nullptr) {
