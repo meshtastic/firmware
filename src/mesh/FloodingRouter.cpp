@@ -152,10 +152,7 @@ void FloodingRouter::perhapsCancelDupe(const meshtastic_MeshPacket *p)
         return;
 
     if (roleAllowsCancelingDupe(p)) {
-        // RepeatScalingModule owns the "how many duplicates should we tolerate before giving up"
-        // decision (and its bookkeeping/logging) - see RepeatScalingModule::shouldCancelDupe. When
-        // the module is compiled out (MESHTASTIC_EXCLUDE_REPEATSCALING), fall back to the historical
-        // behavior of cancelling on the first duplicate rather than never cancelling at all.
+        // Without the module, cancel on the first duplicate
         if (!repeatScalingModule || repeatScalingModule->shouldCancelDupe(p)) {
             // cancel rebroadcast of this message *if* there was already one, unless we're a router!
             if (Router::cancelSending(p->from, p->id))

@@ -281,10 +281,7 @@ bool NextHopRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
                     useReceivedPayload(tosend); // forward the ciphertext as received, without re-encoding it
                     LOG_INFO("Rebroadcast msg from %x", p->relay_node);
 
-                    // Cache this packet's portnum against (p->from, p->id) so that when a duplicate of
-                    // it arrives from the air later - still encrypted to us, since only this decoded
-                    // copy ever gets decoded - RepeatScalingModule::getDupeCancelThreshold has a
-                    // per-portnum signal to act on instead of always seeing an undecodable packet.
+                    // Duplicates arrive encrypted; keep the portnum for them
                     if (repeatScalingModule)
                         repeatScalingModule->noteScheduled(
                             p->from, p->id,

@@ -21,6 +21,7 @@ class RepeatScalingModuleTestShim : public RepeatScalingModule
 {
   public:
     using RepeatScalingModule::clearDupeCount;
+    using RepeatScalingModule::lookupNotedPortnum;
     using RepeatScalingModule::registerDupeHeard;
 
     uint8_t testThreshold = 1;
@@ -70,9 +71,7 @@ class ScopedChannelUtil
     AirTime *previous;
 };
 
-// No ScopedAirUtilTx counterpart: TX_LOG is the only report type that reaches utilizationTX[], and
-// it sums into channelUtilization[] as well, so 4% of an hour reads as 240% of the 60s channel
-// window and trips the channel arm first. That arm is covered by meshTooBusy() directly instead.
+// No ScopedAirUtilTx: TX_LOG also feeds channel util, which trips first; meshTooBusy() covers that arm.
 
 #if HAS_VARIABLE_HOPS
 class ScopedDirectActiveNodes
@@ -115,9 +114,7 @@ void setUp(void)
 
 void tearDown(void) {}
 
-// ===========================================================================
 // Group 1 - registerDupeHeard / clearDupeCount (the ring buffer)
-// ===========================================================================
 
 void test_registerDupeHeard_starts_at_one(void)
 {
@@ -169,9 +166,41 @@ void test_registerDupeHeard_ring_eviction_does_not_crash(void)
     }
 }
 
-// ===========================================================================
+// Eight queued rebroadcasts fill the ring; freeing one must not cost any of the other seven their portnum.
+void test_claim_reuses_a_cleared_slot_before_evicting_a_live_one(void)
+{
+    RepeatScalingModuleTestShim ring;
+    for (uint32_t i = 0; i < 8; i++)
+        ring.noteScheduled(kSender1, 0x20000 + i, meshtastic_PortNum_TEXT_MESSAGE_APP);
+    ring.clearDupeCount(kSender1, 0x20003);
+
+    ring.noteScheduled(kSender2, kId2, meshtastic_PortNum_TEXT_MESSAGE_APP);
+
+    for (uint32_t i = 0; i < 8; i++) {
+        if (i != 3)
+            TEST_ASSERT_EQUAL_INT32(meshtastic_PortNum_TEXT_MESSAGE_APP, ring.lookupNotedPortnum(kSender1, 0x20000 + i));
+    }
+    TEST_ASSERT_EQUAL_INT32(meshtastic_PortNum_TEXT_MESSAGE_APP, ring.lookupNotedPortnum(kSender2, kId2));
+}
+
+// A threshold-1 duplicate cancels at once, so a burst of them must not evict the queued text packets' entries.
+void test_threshold_one_duplicates_do_not_claim_ring_slots(void)
+{
+    RepeatScalingModuleTestShim ring;
+    for (uint32_t i = 0; i < 8; i++)
+        ring.noteScheduled(kSender1, 0x30000 + i, meshtastic_PortNum_TEXT_MESSAGE_APP);
+
+    ring.testThreshold = 1;
+    for (uint32_t i = 0; i < 20; i++) {
+        meshtastic_MeshPacket other = makeDupePacket(kSender2, 0x40000 + i);
+        TEST_ASSERT_TRUE(ring.shouldCancelDupe(&other));
+    }
+
+    for (uint32_t i = 0; i < 8; i++)
+        TEST_ASSERT_EQUAL_INT32(meshtastic_PortNum_TEXT_MESSAGE_APP, ring.lookupNotedPortnum(kSender1, 0x30000 + i));
+}
+
 // Group 2 - getDupeCancelThreshold (compile-time per-portnum default)
-// ===========================================================================
 
 void test_default_threshold_is_one_for_undecoded_directed_packet(void)
 {
@@ -222,10 +251,7 @@ void test_text_message_threshold_applies_regardless_of_addressing(void)
     TEST_ASSERT_EQUAL_UINT8(2, plainShim->getDupeCancelThreshold(&dm));
 }
 
-// ===========================================================================
-// Group 2b - next_hop gate for undecodable packets (e.g. a relayed PKI DM not addressed to us).
-// next_hop is a plaintext header field, so it's visible even when portnum isn't.
-// ===========================================================================
+// Group 2b - undecodable packets, judged from the plaintext to/next_hop header
 
 // A route-less DM (specific node, NO_NEXT_HOP_PREFERENCE) - the shape of a relayed PKI DM we can't
 // decrypt, carrying the same next_hop as any broadcast.
@@ -239,8 +265,8 @@ static meshtastic_MeshPacket makeUndecodableFloodedDm(NodeNum from, PacketId id)
 
 void test_undecodable_flooded_packet_gets_text_message_tolerance(void)
 {
-    // NO_NEXT_HOP_PREFERENCE means this packet is being flood-relayed (every broadcast, or a DM
-    // with no directed route known yet) - treated the same as a decoded text message.
+    // An opaque DM flooded with NO_NEXT_HOP_PREFERENCE (no directed route known yet) - treated the
+    // same as a decoded text message.
     meshtastic_MeshPacket p = makeUndecodableFloodedDm(kSender1, kId1);
     TEST_ASSERT_EQUAL_UINT8(2, plainShim->getDupeCancelThreshold(&p));
 }
@@ -251,6 +277,16 @@ void test_undecodable_directed_packet_keeps_default_threshold(void)
     // the sender's end-to-end ACK/retry, so no extra tolerance.
     meshtastic_MeshPacket p = makeDupePacket(kSender1, kId1);
     p.next_hop = 0x42;
+    TEST_ASSERT_EQUAL_UINT8(1, plainShim->getDupeCancelThreshold(&p));
+}
+
+void test_undecodable_flooded_broadcast_keeps_default_threshold(void)
+{
+    // A broadcast we can't decode (e.g. another channel's position or telemetry) is not a DM, so no
+    // extra tolerance even though it floods with NO_NEXT_HOP_PREFERENCE.
+    meshtastic_MeshPacket p = makeDupePacket(kSender1, kId1);
+    p.to = NODENUM_BROADCAST;
+    p.next_hop = NO_NEXT_HOP_PREFERENCE;
     TEST_ASSERT_EQUAL_UINT8(1, plainShim->getDupeCancelThreshold(&p));
 }
 
@@ -294,9 +330,7 @@ void test_next_hop_gate_tolerated_when_direct_node_count_low(void)
 }
 #endif
 
-// ===========================================================================
 // Group 3 - meshTooBusyForExtraRepeats gate (channel/air util, direct-neighbor density)
-// ===========================================================================
 
 void test_busy_channel_util_suppresses_text_message_threshold(void)
 {
@@ -392,9 +426,7 @@ void test_busy_mesh_does_not_affect_already_unextended_portnums(void)
     TEST_ASSERT_EQUAL_UINT8(1, plainShim->getDupeCancelThreshold(&p));
 }
 
-// ===========================================================================
 // Group 4 - shouldCancelDupe (integration: threshold gates the cancel + clears tracking)
-// ===========================================================================
 
 void test_shouldCancelDupe_clears_tracking_once_threshold_reached(void)
 {
@@ -425,11 +457,7 @@ void test_shouldCancelDupe_waits_for_configured_repeats(void)
     TEST_ASSERT_EQUAL_UINT8(1, shim->registerDupeHeard(kSender1, kId1));
 }
 
-// ===========================================================================
-// Group 5 - noteScheduled + encrypted duplicates (as heard for real over the air).
-// Unlike Group 2 (which builds already-decoded packets), these start from an encrypted packet and
-// rely solely on noteScheduled() for portnum visibility - the real production path.
-// ===========================================================================
+// Group 5 - encrypted duplicates classified only through noteScheduled(), as on air
 
 void test_encrypted_dupe_uses_portnum_noted_when_we_scheduled_our_own_rebroadcast(void)
 {
@@ -557,6 +585,8 @@ void setup()
     RUN_TEST(test_clearDupeCount_resets_tracking);
     RUN_TEST(test_clearDupeCount_of_untracked_packet_is_noop);
     RUN_TEST(test_registerDupeHeard_ring_eviction_does_not_crash);
+    RUN_TEST(test_claim_reuses_a_cleared_slot_before_evicting_a_live_one);
+    RUN_TEST(test_threshold_one_duplicates_do_not_claim_ring_slots);
 
     printf("\n=== getDupeCancelThreshold (compile-time default) ===\n");
     RUN_TEST(test_default_threshold_is_one_for_undecoded_directed_packet);
@@ -568,6 +598,7 @@ void setup()
     printf("\n=== next_hop gate (undecodable packets, e.g. a relayed PKI DM) ===\n");
     RUN_TEST(test_undecodable_flooded_packet_gets_text_message_tolerance);
     RUN_TEST(test_undecodable_directed_packet_keeps_default_threshold);
+    RUN_TEST(test_undecodable_flooded_broadcast_keeps_default_threshold);
     RUN_TEST(test_next_hop_gate_is_overridden_by_a_cached_portnum);
     RUN_TEST(test_next_hop_gate_suppressed_by_busy_channel_util);
     RUN_TEST(test_next_hop_gate_tolerated_when_channel_util_low);

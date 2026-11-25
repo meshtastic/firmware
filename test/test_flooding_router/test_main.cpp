@@ -1,11 +1,5 @@
-// Unit tests for FloodingRouter::perhapsCancelDupe's role-gating and its delegation to
-// RepeatScalingModule (the "how many duplicates should we tolerate before giving up" decision
-// and its bookkeeping/logging now lives there - see test/test_repeat_scaling_module).
-//
-// perhapsCancelDupe() is safe to call directly here even with no RadioInterface: Router::
-// cancelSending() is iface-null-safe (just returns false), so the queue-cancellation side effect
-// is a no-op - what we can and do observe is whether/how many times RepeatScalingModule was
-// consulted at all.
+// FloodingRouter::perhapsCancelDupe role-gating and its call into RepeatScalingModule. With no radio,
+// cancelSending() is a no-op, so these observe only whether the module was consulted.
 
 #include "MeshTypes.h" // before TestUtil.h: provides NodeNum etc.
 #include "TestUtil.h"
@@ -18,11 +12,7 @@
 static constexpr NodeNum kSender1 = 0x000005AB;
 static constexpr PacketId kId1 = 0x1001;
 
-// ---------------------------------------------------------------------------
-// Test shim - re-exposes the protected perhapsCancelDupe. Nulls cryptLock before it's rebuilt so
-// the Router base can be (re)constructed (same pattern as test_nexthop_routing's
-// NextHopRouterTestShim / test_mqtt's MockRouter).
-// ---------------------------------------------------------------------------
+// Re-exposes perhapsCancelDupe; nulls cryptLock so the Router base can be rebuilt.
 class FloodingRouterTestShim : public FloodingRouter
 {
   public:
@@ -76,9 +66,7 @@ void setUp(void)
 
 void tearDown(void) {}
 
-// ===========================================================================
 // perhapsCancelDupe: role-gating and delegation to RepeatScalingModule
-// ===========================================================================
 
 void test_perhapsCancelDupe_consults_repeatScalingModule_for_client_role(void)
 {

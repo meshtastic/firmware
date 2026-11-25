@@ -70,9 +70,7 @@ class FloodingRouter : public Router
     // the same packet
     bool roleAllowsCancelingDupe(const meshtastic_MeshPacket *p);
 
-    /* Call when receiving a duplicate packet to check whether we should cancel a packet in the Tx queue.
-     * The "how many duplicates should we tolerate before giving up" decision (and its bookkeeping/
-     * logging) is delegated to RepeatScalingModule - see perhapsCancelDupe's implementation. */
+    /* Call when receiving a duplicate packet to check whether we should cancel a packet in the Tx queue */
     void perhapsCancelDupe(const meshtastic_MeshPacket *p);
 
     // Return true if we are a rebroadcaster

@@ -183,7 +183,6 @@ void setupModules()
 
 #if !MESHTASTIC_EXCLUDE_REPEATSCALING
     repeatScalingModule = new RepeatScalingModule();
-    repeatScalingTxHook = new RepeatScalingTxHook(); // registers itself with the radio driver's TX hooks
 #endif
 
 #if !MESHTASTIC_EXCLUDE_ADMIN

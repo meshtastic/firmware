@@ -1,7 +1,6 @@
 #pragma once
 
 #include "MeshTypes.h"
-#include "RadioTxHook.h"
 #include "mesh/mesh-pb-constants.h"
 
 /**
@@ -21,44 +20,33 @@ class RepeatScalingModule
     RepeatScalingModule() = default;
     virtual ~RepeatScalingModule() = default;
 
-    // Note a heard duplicate for (p->from, p->id); returns true (and clears tracking) once the
-    // per-portnum threshold is reached, meaning the caller should cancel its own rebroadcast.
-    // Virtual so FloodingRouter role-gating tests can substitute a double.
+    // True once enough duplicates are heard to cancel ours. Virtual for test doubles.
     virtual bool shouldCancelDupe(const meshtastic_MeshPacket *p);
 
-    // Cache the portnum of a rebroadcast we've scheduled, so later encrypted duplicates of it can
-    // still be classified by getDupeCancelThreshold(). Pass -1 if it couldn't be decoded.
+    // Portnum of a rebroadcast we queued (-1 if undecoded), for its later encrypted duplicates.
     void noteScheduled(NodeNum sender, PacketId id, int32_t portnum);
 
-    // Duplicates heard (and tolerated) so far for (sender, id), or 0. For logging at TX time.
-    uint8_t getToleratedDupeCount(NodeNum sender, PacketId id) const;
-
-    // Thresholds above which the mesh is busy/dense enough that extra repeats aren't worth the
-    // airtime. Public so tests assert against the policy rather than restating the numbers.
+    // Above any of these the mesh is too busy for extra repeats.
     static constexpr float BUSY_CHANNEL_UTIL_PERCENT = 10.0f;
     static constexpr float BUSY_AIR_UTIL_TX_PERCENT = 4.0f;
     static constexpr uint16_t BUSY_DIRECT_ACTIVE_NODES = 10;
 
-    // The busy/dense policy itself, taking its inputs rather than reading globals: AirTime's
-    // buckets are private, so a test can only reach this arm of the decision by calling it here.
+    // Takes its inputs so tests can reach it; AirTime's buckets are private.
     static bool meshTooBusy(float channelUtilPercent, float airUtilTxPercent, uint16_t directActiveNodes);
 
   protected:
-    // Duplicates to tolerate before cancelling our own rebroadcast. Virtual so tests can inject a
-    // threshold without relying on a real portnum case.
+    // Duplicates to hear before cancelling ours. Virtual for tests.
     virtual uint8_t getDupeCancelThreshold(const meshtastic_MeshPacket *p);
 
-    // Reads airTime/hopScalingModule and applies meshTooBusy(). Virtual so tests can set the
-    // condition without driving the globals.
+    // meshTooBusy() on the live globals. Virtual for tests.
     virtual bool meshTooBusyForExtraRepeats();
 
-    // Ephemeral ring buffer of per-(sender, id) heard-duplicate counts (not persistent state).
     uint8_t registerDupeHeard(NodeNum sender, PacketId id);
     void clearDupeCount(NodeNum sender, PacketId id);
     int32_t lookupNotedPortnum(NodeNum sender, PacketId id) const;
 
   private:
-    // Decoded portnum if available, else the one cached by noteScheduled() (or -1).
+    // Decoded portnum, else the one noteScheduled() cached, else -1.
     int32_t resolvePortnum(const meshtastic_MeshPacket *p) const;
 
     static constexpr uint8_t DUPE_COUNT_TRACKER_SIZE = 8;
@@ -70,17 +58,11 @@ class RepeatScalingModule
     };
     DupeCountEntry dupeCounts[DUPE_COUNT_TRACKER_SIZE];
     uint8_t dupeCountsNextSlot = 0;
-};
 
-/**
- * Reports at TX time how many duplicates a rebroadcast tolerated before going out, so the radio
- * driver holds no repeat-scaling code. One instance is created with the module and registers itself.
- */
-class RepeatScalingTxHook : public RadioTxHook
-{
-  public:
-    void transmitStarted(RadioInterface *iface, const meshtastic_MeshPacket *p) override;
+    const DupeCountEntry *findEntry(NodeNum sender, PacketId id) const;
+    DupeCountEntry *findEntry(NodeNum sender, PacketId id);
+    // A cleared slot if any, else the oldest.
+    DupeCountEntry &claimEntry(NodeNum sender, PacketId id);
 };
 
 extern RepeatScalingModule *repeatScalingModule;
-extern RepeatScalingTxHook *repeatScalingTxHook;

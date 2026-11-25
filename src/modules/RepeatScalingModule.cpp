@@ -5,45 +5,12 @@
 #include "modules/HopScalingModule.h"
 
 RepeatScalingModule *repeatScalingModule;
-RepeatScalingTxHook *repeatScalingTxHook;
-
-// The packet is on the air: say so if it only got there because we tolerated heard duplicates.
-void RepeatScalingTxHook::transmitStarted(RadioInterface *, const meshtastic_MeshPacket *p)
-{
-    if (!repeatScalingModule)
-        return;
-    const uint8_t dupesTolerated = repeatScalingModule->getToleratedDupeCount(p->from, p->id);
-    if (dupesTolerated > 0)
-        LOG_DEBUG("[REPEATSCALE] tx 0x%08x after %u dupes", p->id, dupesTolerated);
-}
-
-// Design notes for getDupeCancelThreshold()'s policy (kept here rather than inline):
-//
-// Historically we cancel our own queued rebroadcast the instant we hear one duplicate from another
-// node. This module lets selected packet types instead tolerate a few heard duplicates first,
-// trading a little extra airtime for better delivery odds. Thresholds live in a compile-time
-// per-portnum switch (not runtime config) because the right values aren't yet settled.
-//
-// The switch applies uniformly to broadcasts and DMs - NextHopRouter routes duplicates through the
-// same FloodingRouter::perhapsCancelDupe -> shouldCancelDupe path - so a DM of a listed portnum
-// gets the same tolerance as a broadcast of it, and only ever for a *decodable* DM (a DM not
-// addressed to us can't be decoded by us).
-//
-// When the portnum can't be determined (packet still encrypted, no noteScheduled() cache hit), we
-// fall back to a next_hop gate: NO_NEXT_HOP_PREFERENCE (flood-relayed) gets text-message tolerance
-// since it has the same uncertain single-path shape; a specific next_hop does not, as delivery
-// there is already backed by the sender's end-to-end ACK/retry.
-//
-// Either way, meshTooBusyForExtraRepeats() forces the threshold back to 1 on a busy/dense mesh.
-
 static bool busy(const char *which)
 {
     LOG_DEBUG("[REPEATSCALE] mesh busy: %s", which);
     return true;
 }
 
-// True if channel/air utilization or direct-neighbor density says the mesh is too busy for extra
-// repeats. Logs which condition tripped.
 bool RepeatScalingModule::meshTooBusy(float channelUtilPercent, float airUtilTxPercent, uint16_t directActiveNodes)
 {
     if (channelUtilPercent > BUSY_CHANNEL_UTIL_PERCENT) {
@@ -53,7 +20,7 @@ bool RepeatScalingModule::meshTooBusy(float channelUtilPercent, float airUtilTxP
         return busy("airUtilTX");
     }
 #if HAS_VARIABLE_HOPS
-    // perHop[0] is HopScalingModule's estimate of active direct (hop_away == 0) neighbors.
+    // perHop[0]: active direct neighbours
     if (directActiveNodes > BUSY_DIRECT_ACTIVE_NODES) {
         return busy("directActiveNodes");
     }
@@ -63,7 +30,6 @@ bool RepeatScalingModule::meshTooBusy(float channelUtilPercent, float airUtilTxP
     return false;
 }
 
-// Gathers what the policy needs from the globals; the decision itself lives in meshTooBusy().
 bool RepeatScalingModule::meshTooBusyForExtraRepeats()
 {
     const float channelUtilPercent = airTime ? airTime->channelUtilizationPercent() : 0.0f;
@@ -76,7 +42,6 @@ bool RepeatScalingModule::meshTooBusyForExtraRepeats()
     return meshTooBusy(channelUtilPercent, airUtilTxPercent, directActiveNodes);
 }
 
-// Per-portnum duplicate-tolerance threshold; see the design notes above for the full rationale.
 uint8_t RepeatScalingModule::getDupeCancelThreshold(const meshtastic_MeshPacket *p)
 {
     const int32_t portnum = resolvePortnum(p);
@@ -86,7 +51,7 @@ uint8_t RepeatScalingModule::getDupeCancelThreshold(const meshtastic_MeshPacket 
         switch (portnum) {
         case meshtastic_PortNum_TEXT_MESSAGE_APP:
         case meshtastic_PortNum_TEXT_MESSAGE_COMPRESSED_APP:
-            // User-visible chat: no broadcast ACK/retry safety net, so tolerate one heard repeat.
+            // Chat has no broadcast ACK/retry
             threshold = 2;
             break;
         default:
@@ -94,11 +59,10 @@ uint8_t RepeatScalingModule::getDupeCancelThreshold(const meshtastic_MeshPacket 
             break;
         }
     } else {
-        // Portnum unknowable (undecodable packet): fall back to the plaintext next_hop header.
-        threshold = (p->next_hop == NO_NEXT_HOP_PREFERENCE) ? 2 : 1;
+        // Undecodable: only a flooded DM, judged from the plaintext header
+        threshold = (!isBroadcast(p->to) && p->next_hop == NO_NEXT_HOP_PREFERENCE) ? 2 : 1;
     }
 
-    // A busy/dense mesh overrides any extra tolerance decided above.
     if (threshold > 1 && meshTooBusyForExtraRepeats()) {
         return 1;
     }
@@ -106,63 +70,59 @@ uint8_t RepeatScalingModule::getDupeCancelThreshold(const meshtastic_MeshPacket 
     return threshold;
 }
 
+const RepeatScalingModule::DupeCountEntry *RepeatScalingModule::findEntry(NodeNum sender, PacketId id) const
+{
+    for (const auto &entry : dupeCounts) {
+        if (entry.id == id && entry.sender == sender)
+            return &entry;
+    }
+    return nullptr;
+}
+
+RepeatScalingModule::DupeCountEntry *RepeatScalingModule::findEntry(NodeNum sender, PacketId id)
+{
+    return const_cast<DupeCountEntry *>(static_cast<const RepeatScalingModule *>(this)->findEntry(sender, id));
+}
+
+RepeatScalingModule::DupeCountEntry &RepeatScalingModule::claimEntry(NodeNum sender, PacketId id)
+{
+    DupeCountEntry *slot = findEntry(0, 0);
+    if (!slot) {
+        slot = &dupeCounts[dupeCountsNextSlot];
+        dupeCountsNextSlot = (dupeCountsNextSlot + 1) % DUPE_COUNT_TRACKER_SIZE;
+    }
+    *slot = DupeCountEntry{sender, id, 0, -1};
+    return *slot;
+}
+
 uint8_t RepeatScalingModule::registerDupeHeard(NodeNum sender, PacketId id)
 {
-    for (auto &entry : dupeCounts) {
-        if (entry.id == id && entry.sender == sender) {
-            if (entry.count < UINT8_MAX)
-                entry.count++;
-            return entry.count;
-        }
-    }
-    // Not tracked yet: claim the next ring slot, evicting whatever was there.
-    DupeCountEntry &slot = dupeCounts[dupeCountsNextSlot];
-    dupeCountsNextSlot = (dupeCountsNextSlot + 1) % DUPE_COUNT_TRACKER_SIZE;
-    slot.sender = sender;
-    slot.id = id;
-    slot.count = 1;
-    slot.portnum = -1; // no noteScheduled() preceded this
-    return slot.count;
+    DupeCountEntry *entry = findEntry(sender, id);
+    if (!entry)
+        entry = &claimEntry(sender, id);
+    if (entry->count < UINT8_MAX)
+        entry->count++;
+    return entry->count;
 }
 
 void RepeatScalingModule::clearDupeCount(NodeNum sender, PacketId id)
 {
-    for (auto &entry : dupeCounts) {
-        if (entry.id == id && entry.sender == sender) {
-            entry.sender = 0;
-            entry.id = 0;
-            entry.count = 0;
-            entry.portnum = -1;
-            return;
-        }
-    }
+    if (DupeCountEntry *entry = findEntry(sender, id))
+        *entry = DupeCountEntry{};
 }
 
 void RepeatScalingModule::noteScheduled(NodeNum sender, PacketId id, int32_t portnum)
 {
-    for (auto &entry : dupeCounts) {
-        if (entry.id == id && entry.sender == sender) {
-            entry.portnum = portnum;
-            return;
-        }
-    }
-    // Not tracked yet: claim the next ring slot. count starts at 0 (not 1) since scheduling our
-    // own rebroadcast is not itself a heard duplicate.
-    DupeCountEntry &slot = dupeCounts[dupeCountsNextSlot];
-    dupeCountsNextSlot = (dupeCountsNextSlot + 1) % DUPE_COUNT_TRACKER_SIZE;
-    slot.sender = sender;
-    slot.id = id;
-    slot.count = 0;
-    slot.portnum = portnum;
+    DupeCountEntry *entry = findEntry(sender, id);
+    if (!entry)
+        entry = &claimEntry(sender, id);
+    entry->portnum = portnum;
 }
 
 int32_t RepeatScalingModule::lookupNotedPortnum(NodeNum sender, PacketId id) const
 {
-    for (const auto &entry : dupeCounts) {
-        if (entry.id == id && entry.sender == sender)
-            return entry.portnum;
-    }
-    return -1;
+    const DupeCountEntry *entry = findEntry(sender, id);
+    return entry ? entry->portnum : -1;
 }
 
 int32_t RepeatScalingModule::resolvePortnum(const meshtastic_MeshPacket *p) const
@@ -171,20 +131,12 @@ int32_t RepeatScalingModule::resolvePortnum(const meshtastic_MeshPacket *p) cons
                                                                            : lookupNotedPortnum(p->from, p->id);
 }
 
-uint8_t RepeatScalingModule::getToleratedDupeCount(NodeNum sender, PacketId id) const
-{
-    for (const auto &entry : dupeCounts) {
-        if (entry.id == id && entry.sender == sender)
-            return entry.count;
-    }
-    return 0;
-}
-
 bool RepeatScalingModule::shouldCancelDupe(const meshtastic_MeshPacket *p)
 {
     const uint8_t threshold = getDupeCancelThreshold(p);
-    const uint8_t dupesHeard = registerDupeHeard(p->from, p->id);
-    const int32_t portnum = resolvePortnum(p); // for logging only
+    // Threshold 1 needs no slot
+    const uint8_t dupesHeard = threshold <= 1 ? 1 : registerDupeHeard(p->from, p->id);
+    const int32_t portnum = resolvePortnum(p);
 
     if (dupesHeard >= threshold) {
         LOG_INFO("[REPEATSCALE] drop own rebroadcast of 0x%08x port=%d: %u/%u dupes", p->id, portnum, dupesHeard, threshold);
