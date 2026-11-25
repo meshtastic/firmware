@@ -20,11 +20,13 @@ inline bool telemetryMqttUplinkAvailable()
 #endif
 }
 
-/// The readings also leave by the node's own MQTT uplink, whether or not the broker is reachable right now
+/// The readings also leave by the node's own MQTT uplink, whether or not the broker is reachable right now.
+/// The direct uplink publishes only with uplink on the primary channel (MQTT::publishOwnPacket).
 inline bool telemetryMqttUplinkConfigured()
 {
 #if !MESHTASTIC_EXCLUDE_MQTT
-    return moduleConfig.mqtt.enabled && moduleConfig.mqtt.telemetry_uplink_enabled;
+    return moduleConfig.mqtt.enabled && moduleConfig.mqtt.telemetry_uplink_enabled &&
+           channels.getByIndex(channels.getPrimaryIndex()).settings.uplink_enabled;
 #else
     return false;
 #endif
