@@ -111,9 +111,10 @@ int32_t TouchScreenBase::runOnce()
             hapticFeedback();
             _state = TOUCH_EVENT_OCCURRED;
             _pressStartMs = nowMs;
-            // The time the finger came down, when the interrupt saw it (this run may be late)
+            // The time the finger came down, when the interrupt saw it (this run may be late). A down time from before
+            // the last release belongs to the previous press: this one's interrupt hasn't run yet
             uint32_t downMs, upMs;
-            if (touchEdgeTimes(downMs, upMs) && nowMs - downMs < TIME_LONG_PRESS)
+            if (touchEdgeTimes(downMs, upMs) && (int32_t)(downMs - upMs) > 0 && nowMs - downMs < TIME_LONG_PRESS)
                 _pressStartMs = downMs;
             _longPressSuppressed = false;
             _first_x = x;

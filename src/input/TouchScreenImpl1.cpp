@@ -161,8 +161,11 @@ bool TouchScreenImpl1::touchEdgeTimes(uint32_t &downMs, uint32_t &upMs)
 #if defined(SCREEN_TOUCH_INT) && defined(ENABLE_TOUCH_INT) && defined(TOUCH_INT_LEVEL)
     if (!touchEdgesSeen)
         return false;
-    downMs = touchDownMs;
-    upMs = touchUpMs;
+    // Both from the same edges: read again if the interrupt ran in between
+    do {
+        downMs = touchDownMs;
+        upMs = touchUpMs;
+    } while (downMs != touchDownMs || upMs != touchUpMs);
     return true;
 #else
     (void)downMs;
