@@ -198,13 +198,13 @@ void test_serialConfigPinAbove255IsInvalidWhenEnabled(void)
     config.enabled = false;
     TEST_ASSERT_TRUE(serialConfigIsValid(config));
 
-    // The console port ignores rxd/txd, so stale pins there are no reason to refuse the config.
+    // The console override still opens the UART on rxd/txd, so it gets no exemption.
     config = {.enabled = true,
-              .rxd = 303,
+              .rxd = 2,
               .txd = 303,
               .mode = meshtastic_ModuleConfig_SerialConfig_Serial_Mode_NMEA,
               .override_console_serial_port = true};
-    TEST_ASSERT_TRUE(serialConfigIsValid(config));
+    TEST_ASSERT_FALSE(serialConfigIsValid(config));
 }
 
 void setup()
