@@ -63,6 +63,7 @@ static constexpr uint32_t kEnumLateAcceptMs = 5 * 60 * 1000;
 // D11's one-pacer budget, shared by every serving path: 30 frames in any rolling 10 min.
 static constexpr uint32_t kServeWindowMs = 10 * 60 * 1000;
 static constexpr uint8_t kServeWindowFrames = 30;
+static constexpr uint8_t kRequesterWindowFrames = 8;
 
 // D19 proposes W = 24 h as the service window; unconfirmed, so holes past it are accepted as lost.
 static constexpr uint32_t kServiceWindowMs = 24 * 60 * 60 * 1000;
@@ -3847,20 +3848,32 @@ bool StoreForwardPlusPlusModule::drainOneEnumFrame()
 
     // Round-robin across requesters so one cannot starve another. One attempt per step; a failed
     // send leaves its frame queued for the next turn.
+    const uint32_t nowMs = Time::getMillis();
+    bool deferred = false;
     for (size_t i = 0; i < enumTxQueues.size(); i++) {
         const size_t idx = (enumQueueCursor + i) % enumTxQueues.size();
         auto &requester = enumTxQueues[idx];
         if (requester.queue.empty())
             continue;
+        if (requester.windowStartMs == 0 || Throttle::hasElapsed(requester.windowStartMs, kServeWindowMs)) {
+            requester.windowStartMs = nowMs;
+            requester.sentInWindow = 0;
+        }
+        if (requester.sentInWindow >= kRequesterWindowFrames) {
+            deferred = true;
+            continue;
+        }
 
         const EnumOutgoing &out = requester.queue.front();
-        if (sendEnumMessage(out.msg, out.to, out.type, 0, &out.scope))
+        if (sendEnumMessage(out.msg, out.to, out.type, 0, &out.scope)) {
             requester.queue.pop_front();
+            requester.sentInWindow++;
+        }
         enumQueueCursor = (idx + 1) % enumTxQueues.size();
-        enumLastDrainMs = Time::getMillis();
+        enumLastDrainMs = nowMs;
         return true;
     }
-    return false;
+    return deferred;
 }
 
 void StoreForwardPlusPlusModule::resendEnumList()

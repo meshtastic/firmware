@@ -613,6 +613,30 @@ meshtastic_MeshPacket buildProvideFromDir(const std::string &dir, uint32_t bucke
     return out;
 }
 
+bool readShortIds(const std::string &dir, uint32_t bucket, std::vector<pinsketch::Element> &out)
+{
+    sqlite3 *db = nullptr;
+    if (!openDb(dir, &db))
+        return false;
+    sqlite3_stmt *stmt = nullptr;
+    const uint32_t first = bucket * sfppsr::kBucketObjects + 1;
+    const uint32_t last = first + sfppsr::kBucketObjects - 1;
+    bool ok = sqlite3_prepare_v2(db,
+                                 "select short_id from channel_messages where counter>=? and counter<=? and short_id is not "
+                                 "null order by counter;",
+                                 -1, &stmt, nullptr) == SQLITE_OK;
+    if (ok) {
+        sqlite3_bind_int(stmt, 1, (int)first);
+        sqlite3_bind_int(stmt, 2, (int)last);
+        while (sqlite3_step(stmt) == SQLITE_ROW)
+            out.push_back((pinsketch::Element)sqlite3_column_int64(stmt, 0));
+    }
+    if (stmt)
+        sqlite3_finalize(stmt);
+    sqlite3_close(db);
+    return ok;
+}
+
 uint32_t countRows(const std::string &dir, PacketId id)
 {
     sqlite3 *db = nullptr;
@@ -2479,6 +2503,47 @@ void test_windowBudgetCapsServedFrames()
     TEST_ASSERT_GREATER_THAN_UINT32(0, drainAuthorityOne(100).size()); // next window serves again
 }
 
+// G11/F3.8: a single requester gets a per-peer window budget, not the whole global pacer.
+void test_oneRequesterCannotHoldThePacer()
+{
+    portduino_config.sfpp_enum_drain_ms = 100;
+    ingestAuthority(40);
+    std::vector<pinsketch::Element> ids;
+    TEST_ASSERT_TRUE(readShortIds(dirA, 0, ids));
+    TEST_ASSERT_EQUAL_UINT(sfppsr::kBucketObjects, ids.size());
+
+    meshtastic_StoreForwardPlusPlus msg = meshtastic_StoreForwardPlusPlus_init_default;
+    msg.sfpp_message_type = meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_REQUEST;
+    msg.sr_version = sfppsr::kDerivationVersion;
+    uint8_t root[SFPP_HASH_SIZE];
+    TEST_ASSERT_TRUE(readRoot(dirA, root));
+    msg.root_hash.size = 4;
+    memcpy(msg.root_hash.bytes, root, 4);
+    msg.chain_count = 0;
+    for (pb_size_t i = 0; i < ids.size(); i++)
+        msg.sr_short_ids[i] = ids[i];
+    msg.sr_short_ids_count = (pb_size_t)ids.size();
+
+    meshtastic_MeshPacket request = meshtastic_MeshPacket_init_zero;
+    request.from = FOLLOWER_NODE;
+    request.to = AUTHORITY_NODE;
+    request.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    request.decoded.portnum = meshtastic_PortNum_STORE_FORWARD_PLUSPLUS_APP;
+    myNodeInfo.my_node_num = AUTHORITY_NODE;
+    portduino_config.sfpp_stratum0 = true;
+    TEST_ASSERT_TRUE(authority->handleReceivedProtobuf(request, &msg));
+    TEST_ASSERT_EQUAL_UINT(0, takeSent().size()); // paced, not sent inline
+
+    uint32_t frames = 0;
+    for (uint32_t i = 0; i < 40; i++) {
+        for (const auto &out : drainAuthorityOne(100))
+            if (decodeSfpp(out).sfpp_message_type == meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_FRAME &&
+                out.to == FOLLOWER_NODE)
+                frames++;
+    }
+    TEST_ASSERT_LESS_OR_EQUAL_UINT32(8, frames);
+}
+
 // --- Stage 8: sketch mode ---
 
 void runSketchCase(uint32_t total, uint32_t missing)
@@ -2840,6 +2905,7 @@ void setup()
     RUN_TEST(test_secondAdvertInsideDrainIntervalSendsNoRequest);
     RUN_TEST(test_noProgressExchangeEndsAtProbeIdle);
     RUN_TEST(test_windowBudgetCapsServedFrames);
+    RUN_TEST(test_oneRequesterCannotHoldThePacer);
     RUN_TEST(test_lostEnumProvideRetriesWithinBackoff);
     RUN_TEST(test_failedPullStopsPastServiceWindow);
     RUN_TEST(test_failedPullBackoffDoublesAcrossFailures);
