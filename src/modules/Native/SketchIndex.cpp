@@ -81,18 +81,23 @@ void BucketSummary::remove(const uint8_t *objectId, size_t len)
 
 void BucketSummary::add(pinsketch::Element id, uint64_t contribution)
 {
-    if (!members.add(id))
-        return;
+    if (multiplicity[id]++ == 0)
+        members.add(id);
     checksumAccumulator ^= contribution;
     objects++;
 }
 
 void BucketSummary::remove(pinsketch::Element id, uint64_t contribution)
 {
-    if (objects == 0 || !members.add(id))
+    auto it = multiplicity.find(id);
+    if (it == multiplicity.end() || it->second == 0)
         return;
     checksumAccumulator ^= contribution;
     objects--;
+    if (--it->second == 0) {
+        multiplicity.erase(it);
+        members.add(id); // toggle the last holder out of the sketch
+    }
 }
 
 bool BucketSummary::difference(const pinsketch::Sketch &peer, std::vector<pinsketch::Element> &out) const
@@ -108,6 +113,7 @@ void BucketSummary::clear()
     members.clear();
     checksumAccumulator = 0;
     objects = 0;
+    multiplicity.clear();
 }
 
 } // namespace sfppsr

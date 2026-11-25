@@ -4,6 +4,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <unordered_map>
 #include <vector>
 
 /**
@@ -75,6 +76,7 @@ class BucketSummary
     pinsketch::Sketch members;
     uint64_t checksumAccumulator = 0;
     uint32_t objects = 0;
+    std::unordered_map<pinsketch::Element, uint32_t> multiplicity;
 };
 
 } // namespace sfppsr

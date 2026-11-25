@@ -295,6 +295,22 @@ void test_theSketchIgnoresAnObjectWithNoIdentifier()
     TEST_ASSERT_TRUE(s.checksum() == 0);
 }
 
+// G22: removing an object the bucket never held must not toggle its short ID into the sketch.
+void test_removingAnUnheldObjectLeavesTheSummaryAlone()
+{
+    BucketSummary summary = summaryOf(0, 1);
+    const ObjectId absent = nthObject(60);
+    const uint64_t checksum = summary.checksum();
+    summary.remove(absent.bytes, sizeof(absent.bytes));
+
+    TEST_ASSERT_EQUAL_UINT32(1, summary.count());
+    TEST_ASSERT_EQUAL_UINT64(checksum, summary.checksum());
+    const BucketSummary peer = summaryOf(0, 1);
+    std::vector<Element> difference;
+    TEST_ASSERT_TRUE(summary.difference(peer.sketch(), difference));
+    TEST_ASSERT_EQUAL_UINT(0, difference.size());
+}
+
 void setup()
 {
     UNITY_BEGIN();
@@ -315,6 +331,7 @@ void setup()
     RUN_TEST(test_countAndChecksumTrackMembership);
     RUN_TEST(test_theChecksumDoesNotDependOnIngestOrder);
     RUN_TEST(test_removingEverythingLeavesAnEmptyBucket);
+    RUN_TEST(test_removingAnUnheldObjectLeavesTheSummaryAlone);
     RUN_TEST(test_reloadingFromStoredIdentifiersMatchesIngest);
 
     // Reconciliation
