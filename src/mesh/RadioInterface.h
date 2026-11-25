@@ -124,6 +124,9 @@ class RadioInterface
 
     uint32_t computeSlotTimeMsec();
 
+    /** Time on air for totalPacketLen bytes at the current modem settings, for radios that can't ask RadioLib. */
+    [[nodiscard]] uint32_t computeTimeOnAirMsec(uint32_t totalPacketLen) const;
+
     // Symbols this part scans, declared per band: a part that works in both need not scan the same
     // length in each, and the parts sharing a band do not all agree. Each driver states its own, and
     // must pass a matching symNum - these are what size the CW slot, so a mismatch mis-scales backoff.
