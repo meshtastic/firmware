@@ -4,6 +4,7 @@
 #include "NodeDB.h"
 #include "RadioInterface.h"
 #include "RadioLibInterface.h"
+#include "Router.h"
 #include "TestUtil.h"
 #include "UptimeClock.h"
 #include "memory/MemAudit.h"
@@ -822,22 +823,49 @@ class EarlyRelayNodeDB : public NodeDB
     }
 };
 
-// The copy we queue to relay: hop_start - hop_limit == 1 means we heard the sender directly
-static bool earlyRelayFor(meshtastic_Config_DeviceConfig_Role role, NodeNum from, uint8_t hopStart, uint8_t hopLimit)
+// Records the copies we heard in the packet history, the way FloodingRouter::shouldFilterReceived does
+class EarlyRelayRouter : public Router
+{
+  public:
+    void hear(NodeNum from, PacketId id, uint8_t hopStart, uint8_t hopLimit)
+    {
+        meshtastic_MeshPacket p = meshtastic_MeshPacket_init_zero;
+        p.from = from;
+        p.to = NODENUM_BROADCAST;
+        p.id = id;
+        p.hop_start = hopStart;
+        p.hop_limit = hopLimit;
+        wasSeenRecently(&p);
+    }
+};
+
+static constexpr PacketId EARLY_PACKET_ID = 0x1234;
+
+// heard: the hop_limit of each copy that reached us, in order. queuedHopLimit: our relay copy's hop_limit.
+static bool earlyRelayFor(meshtastic_Config_DeviceConfig_Role role, NodeNum from, uint8_t hopStart,
+                          std::initializer_list<uint8_t> heard, uint8_t queuedHopLimit)
 {
     EarlyRelayNodeDB db;
     NodeDB *savedNodeDB = nodeDB;
+    Router *savedRouter = router;
     const meshtastic_Config_DeviceConfig_Role savedRole = config.device.role;
     nodeDB = &db;
     config.device.role = role;
 
+    EarlyRelayRouter history;
+    for (uint8_t hopLimit : heard)
+        history.hear(from, EARLY_PACKET_ID, hopStart, hopLimit);
+    router = &history;
+
     meshtastic_MeshPacket p = meshtastic_MeshPacket_init_zero;
     p.from = from;
     p.to = NODENUM_BROADCAST;
+    p.id = EARLY_PACKET_ID;
     p.hop_start = hopStart;
-    p.hop_limit = hopLimit;
+    p.hop_limit = queuedHopLimit;
     const bool early = testRadio->shouldRebroadcastEarlyLikeRouter(&p);
 
+    router = savedRouter;
     config.device.role = savedRole;
     nodeDB = savedNodeDB;
     return early;
@@ -845,29 +873,45 @@ static bool earlyRelayFor(meshtastic_Config_DeviceConfig_Role role, NodeNum from
 
 static void test_earlyRelay_clientBaseDirectFavorite()
 {
-    TEST_ASSERT_TRUE(earlyRelayFor(meshtastic_Config_DeviceConfig_Role_CLIENT_BASE, EARLY_FAVORITE, 7, 6));
+    TEST_ASSERT_TRUE(earlyRelayFor(meshtastic_Config_DeviceConfig_Role_CLIENT_BASE, EARLY_FAVORITE, 7, {7}, 6));
 }
 
 static void test_earlyRelay_clientBaseFavoriteViaRelayIsLate()
 {
-    TEST_ASSERT_FALSE(earlyRelayFor(meshtastic_Config_DeviceConfig_Role_CLIENT_BASE, EARLY_FAVORITE, 7, 5));
+    TEST_ASSERT_FALSE(earlyRelayFor(meshtastic_Config_DeviceConfig_Role_CLIENT_BASE, EARLY_FAVORITE, 7, {6}, 5));
+}
+
+// A favorite router's relay keeps its hop_limit, so our copy has one hop used up, as if heard directly
+static void test_earlyRelay_clientBaseFavoriteViaFavoriteRouterIsLate()
+{
+    TEST_ASSERT_FALSE(earlyRelayFor(meshtastic_Config_DeviceConfig_Role_CLIENT_BASE, EARLY_FAVORITE, 7, {6}, 6));
+}
+
+static void test_earlyRelay_clientBaseFavoriteHeardDirectlyAfterRelayIsEarly()
+{
+    TEST_ASSERT_TRUE(earlyRelayFor(meshtastic_Config_DeviceConfig_Role_CLIENT_BASE, EARLY_FAVORITE, 7, {6, 7}, 5));
+}
+
+static void test_earlyRelay_clientBaseNotInHistoryIsLate()
+{
+    TEST_ASSERT_FALSE(earlyRelayFor(meshtastic_Config_DeviceConfig_Role_CLIENT_BASE, EARLY_FAVORITE, 7, {}, 6));
 }
 
 static void test_earlyRelay_clientBaseDirectStrangerIsLate()
 {
-    TEST_ASSERT_FALSE(earlyRelayFor(meshtastic_Config_DeviceConfig_Role_CLIENT_BASE, EARLY_STRANGER, 7, 6));
+    TEST_ASSERT_FALSE(earlyRelayFor(meshtastic_Config_DeviceConfig_Role_CLIENT_BASE, EARLY_STRANGER, 7, {7}, 6));
 }
 
 static void test_earlyRelay_clientBaseLegacyNoHopStartIsLate()
 {
-    TEST_ASSERT_FALSE(earlyRelayFor(meshtastic_Config_DeviceConfig_Role_CLIENT_BASE, EARLY_FAVORITE, 0, 2));
+    TEST_ASSERT_FALSE(earlyRelayFor(meshtastic_Config_DeviceConfig_Role_CLIENT_BASE, EARLY_FAVORITE, 0, {3}, 2));
 }
 
 static void test_earlyRelay_otherRolesUnchanged()
 {
-    TEST_ASSERT_FALSE(earlyRelayFor(meshtastic_Config_DeviceConfig_Role_CLIENT, EARLY_FAVORITE, 7, 6));
-    TEST_ASSERT_FALSE(earlyRelayFor(meshtastic_Config_DeviceConfig_Role_ROUTER_LATE, EARLY_FAVORITE, 7, 6));
-    TEST_ASSERT_TRUE(earlyRelayFor(meshtastic_Config_DeviceConfig_Role_ROUTER, EARLY_STRANGER, 7, 4));
+    TEST_ASSERT_FALSE(earlyRelayFor(meshtastic_Config_DeviceConfig_Role_CLIENT, EARLY_FAVORITE, 7, {7}, 6));
+    TEST_ASSERT_FALSE(earlyRelayFor(meshtastic_Config_DeviceConfig_Role_ROUTER_LATE, EARLY_FAVORITE, 7, {7}, 6));
+    TEST_ASSERT_TRUE(earlyRelayFor(meshtastic_Config_DeviceConfig_Role_ROUTER, EARLY_STRANGER, 7, {5}, 4));
 }
 
 void setUp(void)
@@ -1311,6 +1355,9 @@ void setup()
     RUN_TEST(test_lr20x0BandClassification);
     RUN_TEST(test_earlyRelay_clientBaseDirectFavorite);
     RUN_TEST(test_earlyRelay_clientBaseFavoriteViaRelayIsLate);
+    RUN_TEST(test_earlyRelay_clientBaseFavoriteViaFavoriteRouterIsLate);
+    RUN_TEST(test_earlyRelay_clientBaseFavoriteHeardDirectlyAfterRelayIsEarly);
+    RUN_TEST(test_earlyRelay_clientBaseNotInHistoryIsLate);
     RUN_TEST(test_earlyRelay_clientBaseDirectStrangerIsLate);
     RUN_TEST(test_earlyRelay_clientBaseLegacyNoHopStartIsLate);
     RUN_TEST(test_earlyRelay_otherRolesUnchanged);

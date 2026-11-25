@@ -96,6 +96,11 @@ class PacketHistory
     void checkRelayers(uint8_t relayer1, uint8_t relayer2, uint32_t id, NodeNum sender, bool *r1Result, bool *r2Result,
                        bool *r2WasSole = nullptr);
 
+    /* Check if a copy of a packet in the history arrived with at least the given hop_limit.
+     * A copy with hop_limit == hop_start came straight from its sender, since every relayer uses up a hop.
+     * @return false if the packet is not in the history */
+    bool wasSeenWithHopLimit(const uint32_t id, const NodeNum sender, const uint8_t hopLimit);
+
     // Remove a relayer from the list of relayers of a packet in the history given an ID and sender
     void removeRelayer(const uint8_t relayer, const uint32_t id, const NodeNum sender);
 

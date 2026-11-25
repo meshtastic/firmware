@@ -456,6 +456,17 @@ void PacketHistory::insert(const PacketRecord &r)
 
 /* Check if a certain node was a relayer of a packet in the history given an ID and sender
  * @return true if node was indeed a relayer, false if not */
+bool PacketHistory::wasSeenWithHopLimit(const uint32_t id, const NodeNum sender, const uint8_t hopLimit)
+{
+    if (!initOk()) {
+        LOG_ERROR("PacketHistory - wasSeenWithHopLimit: NOT INITIALIZED");
+        return false;
+    }
+
+    const PacketRecord *found = find(sender, id);
+    return found != NULL && getHighestHopLimit(*found) >= hopLimit;
+}
+
 bool PacketHistory::wasRelayer(const uint8_t relayer, const uint32_t id, const NodeNum sender, bool *wasSole)
 {
     if (!initOk()) {

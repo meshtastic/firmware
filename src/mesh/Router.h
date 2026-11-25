@@ -66,6 +66,9 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     std::unique_ptr<RadioInterface> iface = nullptr;
 
   public:
+    using PacketHistory::wasSeenWithHopLimit;
+
+  public:
     /**
      * Constructor
      *
