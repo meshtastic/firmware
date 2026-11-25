@@ -111,12 +111,23 @@ int32_t TouchScreenBase::runOnce()
             hapticFeedback();
             _state = TOUCH_EVENT_OCCURRED;
             _pressStartMs = nowMs;
+            // The time the finger came down, when the interrupt saw it (this run may be late)
+            uint32_t downMs, upMs;
+            if (touchEdgeTimes(downMs, upMs) && nowMs - downMs < TIME_LONG_PRESS)
+                _pressStartMs = downMs;
             _longPressSuppressed = false;
             _first_x = x;
             _first_y = y;
         } else {
             _state = TOUCH_EVENT_CLEARED;
             uint32_t duration = nowMs - _pressStartMs;
+            // The time the finger lifted, when the interrupt saw it: a tap during a slow redraw stays a tap
+            uint32_t downMs, upMs;
+            const bool releaseTimed =
+                touchEdgeTimes(downMs, upMs) && (int32_t)(upMs - _pressStartMs) >= 0 && (int32_t)(nowMs - upMs) >= 0;
+            if (releaseTimed)
+                duration = upMs - _pressStartMs;
+            LOG_INPUT("release after %u ms%s", (unsigned)duration, releaseTimed ? " (interrupt)" : "");
             x = _last_x;
             y = _last_y;
             this->setInterval(fastTapMode ? TOUCH_POLL_INTERVAL_RELEASE_FAST : TOUCH_POLL_INTERVAL_RELEASE);
@@ -157,6 +168,11 @@ int32_t TouchScreenBase::runOnce()
                     }
                 } else {
                     _tapped = false;
+                    // Held long enough, but this thread wasn't running to see it while the finger was down
+                    if (releaseTimed && allowLongPress && !_longPressSuppressed) {
+                        e.touchEvent = static_cast<char>(TOUCH_ACTION_LONG_PRESS);
+                        LOG_INPUT("action LONG PRESS(%d/%d), seen at release", _last_x, _last_y);
+                    }
                 }
             }
         }

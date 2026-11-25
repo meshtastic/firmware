@@ -41,6 +41,10 @@ class TouchScreenBase : public Observable<const InputEvent *>, public concurrenc
     virtual void onEvent(const TouchEvent &event) = 0;
     virtual bool fastTapModeEnabled() const;
     virtual bool longPressEnabled() const;
+    // When the latest touch began and ended, as the touch interrupt saw them, for boards whose interrupt line stays
+    // low while a finger is down (TOUCH_INT_LEVEL). This thread can run hundreds of ms late (a slow screen redraw), and
+    // a release seen that late would turn a tap into a long press. False when the board doesn't record them
+    virtual bool touchEdgeTimes(uint32_t &downMs, uint32_t &upMs) { return false; }
     void resetTouchState();
 
     volatile TouchScreenBaseStateType _state = TOUCH_EVENT_CLEARED;
