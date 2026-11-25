@@ -493,7 +493,7 @@ class NimbleBluetoothToRadioCallback : public BLECharacteristicCallbacks
         BLEValue val;
         val.setValue(pCharacteristic->getData(), pCharacteristic->getLength());
 
-        if (memcmp(lastToRadio, val.getData(), val.getLength()) != 0) {
+        if (PhoneAPI::shouldProcessToRadio(val.getData(), val.getLength(), lastToRadio)) {
             if (bluetoothPhoneAPI->fromPhoneQueueSize < NIMBLE_BLUETOOTH_FROM_PHONE_QUEUE_SIZE) {
                 // Note: the comparison above is safe without a mutex because we are the only method that *increases*
                 // fromPhoneQueueSize. (It's okay if fromPhoneQueueSize *decreases* in the main task meanwhile.)

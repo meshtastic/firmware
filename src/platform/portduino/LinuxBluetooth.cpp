@@ -379,7 +379,7 @@ struct LinuxBluetooth::Impl final : public PhoneAPI, public concurrency::OSThrea
         if (value.empty() || value.size() > MAX_TO_FROM_RADIO_SIZE)
             throw sdbuscompat::dbusError("org.bluez.Error.InvalidValueLength", "bad ToRadio length");
 
-        if (value.size() == lastToRadioLen && memcmp(lastToRadio, value.data(), value.size()) == 0) {
+        if (value.size() == lastToRadioLen && !PhoneAPI::shouldProcessToRadio(value.data(), value.size(), lastToRadio)) {
             LOG_DEBUG("BLE drop duplicate ToRadio packet (%u bytes)", (unsigned)value.size());
             return;
         }

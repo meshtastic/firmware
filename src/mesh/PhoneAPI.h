@@ -167,6 +167,9 @@ class PhoneAPI
      */
     virtual bool handleToRadio(const uint8_t *buf, size_t len);
 
+    /// BLE duplicate suppression must not discard identical ordered chunk continuations.
+    static bool shouldProcessToRadio(const uint8_t *data, size_t len, const uint8_t *previous);
+
     /**
      * Send a (client)notification to the phone
      */
