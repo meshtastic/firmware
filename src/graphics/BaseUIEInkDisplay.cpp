@@ -8,8 +8,11 @@
 
 using namespace NicheGraphics;
 
-BaseUIEInkDisplay::BaseUIEInkDisplay(Drivers::EInk *driver, uint8_t rotation) : driver(driver), rotation(rotation & 0x3)
+BaseUIEInkDisplay::BaseUIEInkDisplay(Drivers::EInk *driver, uint8_t rotation)
+    : concurrency::OSThread("BaseUIEInk"), driver(driver), rotation(rotation & 0x3)
 {
+    OSThread::disable();
+
     this->geometry = GEOMETRY_RAWMODE;
 
     // BaseUI draws in UI orientation. Physical panel dimensions are swapped for 90°/270°.
@@ -53,6 +56,12 @@ void BaseUIEInkDisplay::joinAsyncRefresh()
 {
     if (driver->busy())
         driver->await();
+    if (framePending) {
+        framePending = false;
+        OSThread::disable();
+        if (commit(pendingType, true))
+            lastDrawMsec = Time::stampMillis();
+    }
 }
 
 // OLEDDisplayUi tick path. Honours rate-limit unless flags demand otherwise.
@@ -78,13 +87,25 @@ bool BaseUIEInkDisplay::forceDisplay(uint32_t msecLimit)
     if (lastDrawMsec != 0 && (now - lastDrawMsec) < msecLimit)
         return false;
 
-    const bool blocking = frameFlags & BLOCKING;
     Drivers::EInk::UpdateTypes type = decide();
+    // BLOCKING only holds for a FULL refresh (the deep-sleep screen), as it did in EInkDynamicDisplay
+    const bool blocking = (frameFlags & BLOCKING) && type == Drivers::EInk::UpdateTypes::FULL;
 
-    // Don't pile frames on top of a running update - wait it out.
+    // Mid-refresh, keep only the newest frame rather than waiting: runOnce() draws it when the panel is free
+    if (driver->busy() && !blocking) {
+        pendingType = (framePending && pendingType == Drivers::EInk::UpdateTypes::FULL) ? pendingType : type;
+        framePending = true;
+        OSThread::setIntervalFromNow(FLUSH_POLL_MS);
+        OSThread::enabled = true;
+        frameFlags = BACKGROUND;
+        return false;
+    }
     if (driver->busy())
         driver->await();
 
+    // This frame supersedes any queued one, and nothing is queued behind it
+    framePending = false;
+    OSThread::disable();
     const bool pushed = commit(type, blocking);
     if (pushed)
         lastDrawMsec = now;
@@ -112,6 +133,19 @@ bool BaseUIEInkDisplay::commit(Drivers::EInk::UpdateTypes type, bool blocking)
     if (blocking)
         driver->await();
     return true;
+}
+
+int32_t BaseUIEInkDisplay::runOnce()
+{
+    if (!framePending)
+        return disable();
+    if (driver->busy())
+        return FLUSH_POLL_MS;
+
+    framePending = false;
+    if (commit(pendingType, false))
+        lastDrawMsec = Time::stampMillis();
+    return disable();
 }
 
 Drivers::EInk::UpdateTypes BaseUIEInkDisplay::decide()
@@ -152,10 +186,27 @@ Drivers::EInk::UpdateTypes BaseUIEInkDisplay::decide()
 
 uint32_t BaseUIEInkDisplay::repack()
 {
-    memset(panelBuffer, 0xFF, panelBufferSize); // start all-white
-
     const uint16_t pw = driver->width;
     const uint16_t ph = driver->height;
+
+    // Unrotated, byte-aligned: convert 8x8 blocks, one OLED page of 8 columns into 8 panel row bytes
+    if (rotation == 0 && displayWidth == pw && displayHeight == ph && pw % 8 == 0 && ph % 8 == 0) {
+        for (uint16_t page = 0; page < ph / 8; page++) {
+            const uint8_t *col = &buffer[page * displayWidth];
+            uint8_t *row = &panelBuffer[page * 8 * panelRowBytes];
+            for (uint16_t xb = 0; xb < pw / 8; xb++, col += 8) {
+                for (uint8_t bit = 0; bit < 8; bit++) {
+                    uint8_t out = 0;
+                    for (uint8_t i = 0; i < 8; i++)
+                        out |= ((col[i] >> bit) & 1) << (7 - i);
+                    row[bit * panelRowBytes + xb] = ~out; // OLED 1 = black, panel 1 = white
+                }
+            }
+        }
+        return hashPanelBuffer();
+    }
+
+    memset(panelBuffer, 0xFF, panelBufferSize); // start all-white
 
     // OLEDDisplay buffer: byte = buffer[x + (y/8) * displayWidth]; bit = 1 << (y & 7); 1 = black
     // Niche buffer:       byte = (y * panelRowBytes) + (x/8);      bit = 1 << (7 - x%8); 1 = white
@@ -197,6 +248,11 @@ uint32_t BaseUIEInkDisplay::repack()
         }
     }
 
+    return hashPanelBuffer();
+}
+
+uint32_t BaseUIEInkDisplay::hashPanelBuffer() const
+{
     // FNV-1a
     uint32_t h = 2166136261u;
     for (uint32_t i = 0; i < panelBufferSize; i++) {

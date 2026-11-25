@@ -15,6 +15,7 @@ Replaces the per-board branching in EInkDisplay2 / EInkDynamicDisplay / EInkPara
 
 #include "configuration.h"
 
+#include "concurrency/OSThread.h"
 #include "graphics/eink/Drivers/EInk.h"
 
 #include <OLEDDisplay.h>
@@ -22,7 +23,7 @@ Replaces the per-board branching in EInkDisplay2 / EInkDynamicDisplay / EInkPara
 namespace NicheGraphics
 {
 
-class BaseUIEInkDisplay : public OLEDDisplay
+class BaseUIEInkDisplay : public OLEDDisplay, private concurrency::OSThread
 {
   public:
     // Flags Screen.cpp sets via EINK_ADD_FRAMEFLAG before triggering a draw.
@@ -65,9 +66,13 @@ class BaseUIEInkDisplay : public OLEDDisplay
     // Convert OLEDDisplay's column-major buffer into the panel's row-major MSB-left buffer.
     // Applies rotation. Returns the hash of the panel buffer for frame-skip comparison.
     uint32_t repack();
+    uint32_t hashPanelBuffer() const;
 
     // Decide FULL vs FAST based on current frame flags + accumulated debt.
     Drivers::EInk::UpdateTypes decide();
+
+    // Pushes the frame held back while the panel was busy, once it is free
+    int32_t runOnce() override;
 
     Drivers::EInk *driver = nullptr;
     uint8_t rotation = 0; // 0=0°, 1=90°CW, 2=180°, 3=270°CW
@@ -76,7 +81,10 @@ class BaseUIEInkDisplay : public OLEDDisplay
     uint16_t panelRowBytes = 0;
 
     frameFlagTypes frameFlags = BACKGROUND;
+    bool framePending = false; // A frame arrived mid-refresh; runOnce() draws the buffer as it is then
+    Drivers::EInk::UpdateTypes pendingType = Drivers::EInk::UpdateTypes::UNSPECIFIED; // FULL if any held frame was
     uint32_t lastDrawMsec = 0;
+    static constexpr uint32_t FLUSH_POLL_MS = 20;
     uint32_t lastHash = 0;
 
     // DisplayHealth-style debt tracking
