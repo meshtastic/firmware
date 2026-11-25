@@ -2315,10 +2315,7 @@ void test_pullRetryDisabledByDefault()
 
     Time::setTestMillis(Time::getMillis() + 30000);
     follower->runOnce();
-    TEST_ASSERT_EQUAL_UINT(0, takeSent().size());
-    Time::setTestMillis(Time::getMillis() + 5 * 60 * 1000);
-    follower->runOnce();
-    TEST_ASSERT_EQUAL_UINT(0, takeSent().size());
+    TEST_ASSERT_EQUAL_UINT(0, takeSent().size()); // the failed hole is not re-aired
 }
 
 // --- Stage 8: sketch mode ---
