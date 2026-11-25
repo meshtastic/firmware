@@ -597,7 +597,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
 // technically speaking this should work for all(?) NRF52 boards
 // but needs testing across multiple devices. NRF52 USB would not even work if
 // VBUS was not properly connected and detected by the CPU
-#elif defined(MUZI_BASE) || defined(PROMICRO_DIY_TCXO) || defined(ELECROW_ThinkNode_M8)
+#elif defined(MUZI_BASE) || defined(PROMICRO_DIY_TCXO) || defined(ELECROW_ThinkNode_M8) || defined(M5STACK_SOLAR_NODE)
         return powerHAL_isVBUSConnected();
 #elif defined(USB_HOST_PWR_DETECT)
         // No VBUS sense pin, so ask the native USB port instead. This watches for start-of-frame
