@@ -60,6 +60,13 @@ static constexpr uint32_t kEnumFullRootEvery = 10;
 static constexpr size_t kEnumPendingMax = 8;
 static constexpr uint32_t kEnumLateAcceptMs = 5 * 60 * 1000;
 
+// D19 proposes W = 24 h as the service window; unconfirmed, so holes past it are accepted as lost.
+static constexpr uint32_t kServiceWindowMs = 24 * 60 * 60 * 1000;
+// Failed pulls back off, and the backoff and attempt count cap a busy advert stream's retry cost.
+static constexpr uint32_t kFailedPullBackoffMs = 30 * 1000;
+static constexpr uint32_t kFailedPullBackoffMaxMs = 5 * 60 * 1000;
+static constexpr uint8_t kFailedPullMaxAttempts = 8;
+
 // Stage 8e: the item retry must outlast a full round-robin delivery at the current pacing.
 static uint32_t enumDrainIntervalMs();
 
@@ -2856,6 +2863,7 @@ void StoreForwardPlusPlusModule::beginEnumExchange(const uint8_t *root_hash, uin
                                                    uint64_t peerChecksum)
 {
     enumExchangeActive = true;
+    enumExchangeSucceeded = false;
     memcpy(enumExchangeRoot, root_hash, SFPP_HASH_SIZE);
     enumExchangeBucket = bucket;
     enumExchangePeer = peer;
@@ -2921,6 +2929,8 @@ void StoreForwardPlusPlusModule::expireEnumExchange()
     if (Throttle::hasElapsed(enumExchangeStartedMs, kEnumExchangeTimeoutMs)) {
         if (!enumWanted.empty() && !enumCollisionProbe)
             beginEnumLateAccept(); // paced frames may still arrive
+        if (!enumExchangeSucceeded)
+            rememberFailedPull();
         endEnumExchange();
         return;
     }
@@ -2934,6 +2944,8 @@ void StoreForwardPlusPlusModule::expireEnumExchange()
             LOG_INFO("SFPP-ENUM collision_suspected root=%s bucket=%u", rootHex, enumExchangeBucket);
             suppressEnumBucket(enumExchangeRoot, enumExchangeBucket, enumPeerCount, enumPeerChecksum);
         }
+        if (!enumExchangeSucceeded)
+            rememberFailedPull();
         endEnumExchange();
     }
 }
@@ -2980,7 +2992,7 @@ void StoreForwardPlusPlusModule::addPendingBucket(const uint8_t *root_hash, Node
         }
         enumPending.erase(enumPending.begin() + lowest);
     }
-    EnumPendingBucket entry;
+    EnumPendingBucket entry = {};
     entry.bucket = bucket;
     entry.count = count;
     entry.checksum = checksum;
@@ -2988,6 +3000,42 @@ void StoreForwardPlusPlusModule::addPendingBucket(const uint8_t *root_hash, Node
     memcpy(entry.root, root_hash, SFPP_HASH_SIZE);
     entry.authority = authority;
     enumPending.push_back(entry);
+}
+
+void StoreForwardPlusPlusModule::rememberFailedPull()
+{
+    uint8_t root[SFPP_HASH_SIZE] = {0};
+    if (!getRootFromChannelHash(channels.getHash(0), root))
+        return;
+    const uint32_t nowMs = Time::getMillis();
+
+    for (const auto &entry : enumPending) {
+        if (entry.bucket == enumExchangeBucket && entry.authority == enumExchangePeer &&
+            memcmp(entry.root, root, SFPP_HASH_SIZE) == 0) {
+            if (entry.firstFailedMs != 0 && Throttle::hasElapsed(entry.firstFailedMs, kServiceWindowMs))
+                return; // past the proposed service window: accept the hole as lost
+            break;
+        }
+    }
+
+    addPendingBucket(root, enumExchangePeer, enumExchangeBucket, enumPeerCount, enumPeerChecksum, enumPeerTip);
+    for (auto &entry : enumPending) {
+        if (entry.bucket != enumExchangeBucket || entry.authority != enumExchangePeer ||
+            memcmp(entry.root, root, SFPP_HASH_SIZE) != 0)
+            continue;
+        entry.attempts = entry.attempts < kFailedPullMaxAttempts ? entry.attempts + 1 : kFailedPullMaxAttempts;
+        uint32_t delay = kFailedPullBackoffMs;
+        for (uint8_t i = 1; i < entry.attempts && delay < kFailedPullBackoffMaxMs; i++)
+            delay = delay < kFailedPullBackoffMaxMs / 2 ? delay * 2 : kFailedPullBackoffMaxMs;
+        entry.retryAfterMs = nowMs + (delay > kFailedPullBackoffMaxMs ? kFailedPullBackoffMaxMs : delay);
+        if (entry.firstFailedMs == 0)
+            entry.firstFailedMs = nowMs;
+        char rootHex[9];
+        formatRootHex(root, SFPP_HASH_SIZE, rootHex);
+        LOG_INFO("SFPP-ENUM failed pull root=%s bucket=%u peer=0x%08x attempts=%u", rootHex, entry.bucket, entry.authority,
+                 entry.attempts);
+        return;
+    }
 }
 
 void StoreForwardPlusPlusModule::startPendingPull()
@@ -3000,14 +3048,16 @@ void StoreForwardPlusPlusModule::startPendingPull()
     uint8_t root[SFPP_HASH_SIZE] = {0};
     if (getOrDeriveRootFromChannel(channels.getHash(0), root) == 0)
         return;
+    const uint32_t nowMs = Time::getMillis();
 
-    // Key by (root, authority): drop anything remembered for another scope before touching a slot.
-    enumPending.erase(std::remove_if(enumPending.begin(), enumPending.end(),
-                                     [&](const EnumPendingBucket &entry) {
-                                         return entry.authority != enumAuthorityNode ||
-                                                memcmp(entry.root, root, SFPP_HASH_SIZE) != 0;
-                                     }),
-                      enumPending.end());
+    // Key by (root, authority); a hole older than the proposed service window is no longer chased.
+    enumPending.erase(
+        std::remove_if(enumPending.begin(), enumPending.end(),
+                       [&](const EnumPendingBucket &entry) {
+                           return entry.authority != enumAuthorityNode || memcmp(entry.root, root, SFPP_HASH_SIZE) != 0 ||
+                                  (entry.firstFailedMs != 0 && Throttle::hasElapsed(entry.firstFailedMs, kServiceWindowMs));
+                       }),
+        enumPending.end());
     if (enumPending.empty())
         return;
 
@@ -3015,11 +3065,16 @@ void StoreForwardPlusPlusModule::startPendingPull()
     if (enumLastDrainMs != 0 && !Throttle::hasElapsed(enumLastDrainMs, enumDrainIntervalMs()))
         return;
 
-    size_t best = 0;
-    for (size_t i = 1; i < enumPending.size(); i++) {
-        if (enumPending[i].bucket > enumPending[best].bucket)
+    auto retryReady = [&](const EnumPendingBucket &entry) {
+        return entry.retryAfterMs == 0 || Throttle::deadlinePassedAt(nowMs, entry.retryAfterMs);
+    };
+    size_t best = enumPending.size();
+    for (size_t i = 0; i < enumPending.size(); i++) {
+        if (retryReady(enumPending[i]) && (best == enumPending.size() || enumPending[i].bucket > enumPending[best].bucket))
             best = i;
     }
+    if (best == enumPending.size())
+        return;
     const EnumPendingBucket entry = enumPending[best];
 
     // A named bucket that could not be repaired from the same advertised summary is skipped.
@@ -3038,7 +3093,7 @@ void StoreForwardPlusPlusModule::startPendingPull()
         enumPeerTip = entry.tip;
     }
     requestEnumList(root, entry.bucket, entry.authority);
-    enumLastDrainMs = Time::getMillis(); // consume the pacer slot
+    enumLastDrainMs = nowMs; // consume the pacer slot
 }
 
 void StoreForwardPlusPlusModule::repairPromotions()
@@ -3257,6 +3312,15 @@ void StoreForwardPlusPlusModule::handleEnumAdvert(const meshtastic_MeshPacket &m
     if (portduino_config.sfpp_enum_listen_only)
         return; // learn the authority, never request
 
+    // A failed pull is retried on the next advert from that peer, whichever bucket it names.
+    for (const auto &entry : enumPending) {
+        if (entry.authority == mp.from && entry.retryAfterMs != 0 && memcmp(entry.root, root, SFPP_HASH_SIZE) == 0 &&
+            Throttle::deadlinePassedAt(Time::getMillis(), entry.retryAfterMs)) {
+            setIntervalFromNow(10);
+            break;
+        }
+    }
+
     const uint32_t advertTip = t->encapsulated_rxtime; // Stage 8f: the sender's highest counter
     const uint32_t ownTip = highestCounter(root, SFPP_HASH_SIZE);
 
@@ -3349,6 +3413,7 @@ bool StoreForwardPlusPlusModule::trySketchExchange(const sfppsr::Advert &advert,
     promoteScratchMatches(root_hash, bucket, missing);
     if (missing.empty()) {
         if (bucketMatchesPeer(root_hash, bucket)) {
+            enumExchangeSucceeded = true;
             endEnumExchange();
             return true;
         }
@@ -3504,6 +3569,7 @@ void StoreForwardPlusPlusModule::handleEnumProvide(const meshtastic_MeshPacket &
 
     if (enumOnDemand) {
         markEnumProgress();
+        enumExchangeSucceeded = true;
         endEnumExchange(); // no advertised count/checksum to confirm against; the list was the check
         return;
     }
@@ -3517,6 +3583,7 @@ void StoreForwardPlusPlusModule::handleEnumProvide(const meshtastic_MeshPacket &
 
     if (bucketMatchesPeer(root, enumProvideBucket)) {
         markEnumProgress();
+        enumExchangeSucceeded = true;
         endEnumExchange();
         return;
     }
@@ -3778,6 +3845,7 @@ void StoreForwardPlusPlusModule::pumpEnumRetries()
             enumListRetries++;
             resendEnumList();
         } else {
+            rememberFailedPull();
             endEnumExchange();
         }
         return;
@@ -3797,8 +3865,7 @@ void StoreForwardPlusPlusModule::pumpEnumRetries()
                      enumExchangeBucket, enumExchangePeer, enumSketchIds);
             fallbackToEnumList();
         } else {
-            if (enumOnDemand)
-                suppressEnumBucket(enumExchangeRoot, enumExchangeBucket, enumPeerCount, enumPeerChecksum);
+            rememberFailedPull();
             // Paced frames may still be in flight; keep accepting them for a while (Stage 8e).
             beginEnumLateAccept();
             endEnumExchange();
@@ -4042,6 +4109,7 @@ void StoreForwardPlusPlusModule::handleItemFrame(const meshtastic_MeshPacket &mp
             if (enumCollisionProbe) {
                 if (bucketMatchesPeer(enumExchangeRoot, enumExchangeBucket)) {
                     markEnumProgress();
+                    enumExchangeSucceeded = true;
                     endEnumExchange();
                 }
                 return;
@@ -4056,6 +4124,7 @@ void StoreForwardPlusPlusModule::handleItemFrame(const meshtastic_MeshPacket &mp
                 enumSketchAttempt = false;
                 if (bucketMatchesPeer(enumExchangeRoot, enumExchangeBucket)) {
                     markEnumProgress();
+                    enumExchangeSucceeded = true;
                     endEnumExchange();
                 } else if (!enumPromoted.empty()) {
                     repairPromotions();
@@ -4074,6 +4143,7 @@ void StoreForwardPlusPlusModule::handleItemFrame(const meshtastic_MeshPacket &mp
                 return;
             }
             markEnumProgress();
+            enumExchangeSucceeded = true;
             endEnumExchange();
             return;
         }
@@ -4112,8 +4182,10 @@ void StoreForwardPlusPlusModule::handleItemFrame(const meshtastic_MeshPacket &mp
         if (enumLateWanted.empty())
             enumLateActive = false;
     }
-    if (enumExchangeActive && enumWanted.empty())
+    if (enumExchangeActive && enumWanted.empty()) {
+        enumExchangeSucceeded = true;
         endEnumExchange();
+    }
 }
 
 bool StoreForwardPlusPlusModule::insertCanonObject(uint32_t to, uint32_t from, uint32_t packetId, const uint8_t *cipher,

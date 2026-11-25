@@ -256,6 +256,7 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     void addPendingBucket(const uint8_t *root_hash, NodeNum authority, uint32_t bucket, uint32_t count, uint64_t checksum,
                           uint32_t tip);
     void startPendingPull();
+    void rememberFailedPull();
     void repairPromotions();
     void expireEnumLate();
 
@@ -448,6 +449,7 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     uint32_t enumBucketCursor = 0;
 
     bool enumExchangeActive = false;
+    bool enumExchangeSucceeded = false;
     uint8_t enumExchangeRoot[SFPP_HASH_SIZE] = {0};
     uint32_t enumExchangeBucket = 0;
     NodeNum enumExchangePeer = 0;
@@ -501,6 +503,9 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
         uint32_t tip;
         uint8_t root[SFPP_HASH_SIZE];
         NodeNum authority;
+        uint32_t retryAfterMs = 0;
+        uint32_t firstFailedMs = 0;
+        uint8_t attempts = 0;
     };
     std::vector<EnumPendingBucket> enumPending;
     struct EnumPromoted {

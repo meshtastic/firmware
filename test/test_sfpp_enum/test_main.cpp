@@ -571,6 +571,48 @@ bool buildAdvertWithRoot(const uint8_t root[SFPP_HASH_SIZE], uint32_t bucket, ui
     return out.decoded.payload.size > 0;
 }
 
+// A one-frame provide built straight from the store: the authority's paced drain advances the
+// clock, which would hide a pacer regression when the same advert is delivered twice.
+meshtastic_MeshPacket buildProvideFromDir(const std::string &dir, uint32_t bucket)
+{
+    uint8_t root[SFPP_HASH_SIZE];
+    TEST_ASSERT_TRUE(readRoot(dir, root));
+
+    std::vector<pinsketch::Element> ids;
+    sqlite3 *db = nullptr;
+    TEST_ASSERT_TRUE(openDb(dir, &db));
+    sqlite3_stmt *stmt = nullptr;
+    const uint32_t first = bucket * sfppsr::kBucketObjects + 1;
+    const uint32_t last = first + sfppsr::kBucketObjects - 1;
+    TEST_ASSERT_TRUE(sqlite3_prepare_v2(db,
+                                        "select short_id from channel_messages where counter>=? and counter<=? and short_id is "
+                                        "not null order by short_id;",
+                                        -1, &stmt, nullptr) == SQLITE_OK);
+    sqlite3_bind_int(stmt, 1, (int)first);
+    sqlite3_bind_int(stmt, 2, (int)last);
+    while (sqlite3_step(stmt) == SQLITE_ROW)
+        ids.push_back((pinsketch::Element)sqlite3_column_int64(stmt, 0));
+    sqlite3_finalize(stmt);
+    sqlite3_close(db);
+
+    sfppsr::Scope scope;
+    scope.rootPrefixLen = 4;
+    memcpy(scope.rootPrefix, root, scope.rootPrefixLen);
+    scope.bucket = bucket;
+    meshtastic_StoreForwardPlusPlus msg;
+    TEST_ASSERT_TRUE(sfppsr::buildEnumProvide(scope, ids, 0, 1, msg));
+
+    meshtastic_MeshPacket out = meshtastic_MeshPacket_init_zero;
+    out.from = AUTHORITY_NODE;
+    out.to = FOLLOWER_NODE;
+    out.channel = 0;
+    out.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    out.decoded.portnum = meshtastic_PortNum_STORE_FORWARD_PLUSPLUS_APP;
+    out.decoded.payload.size = pb_encode_to_bytes(out.decoded.payload.bytes, sizeof(out.decoded.payload.bytes),
+                                                  &meshtastic_StoreForwardPlusPlus_msg, &msg);
+    return out;
+}
+
 uint32_t countRows(const std::string &dir, PacketId id)
 {
     sqlite3 *db = nullptr;
@@ -1964,6 +2006,147 @@ void test_onDemandPullsNewestBucketAndCapsPacing()
     TEST_ASSERT_EQUAL_UINT64(a.checksum, b.checksum);
 }
 
+// --- Q6 groundwork: failed-pull retry and the shared pacer ---
+
+// The 8f on-demand tail must obey the same drain pacer as everything else. The parent started it
+// inline, so a second advert inside the interval sent a request and this assertion failed there.
+void test_secondAdvertInsideDrainIntervalSendsNoRequest()
+{
+    ingestAuthority(40);
+    buildFollowerFromCopy();
+    deleteCounter(dirB, 40);
+    ingestScratchText(follower, FOLLOWER_NODE, SENDER_NODE, BASE_ID + 39, "msg 40", 100); // too young to push
+
+    meshtastic_MeshPacket advert;
+    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, 0, false, advert, false, 40));
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
+    myNodeInfo.my_node_num = FOLLOWER_NODE;
+    portduino_config.sfpp_stratum0 = false;
+    follower->runOnce();
+    std::vector<meshtastic_MeshPacket> first = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, first.size());
+    TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_REQUEST, decodeSfpp(first[0]).sfpp_message_type);
+
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, buildProvideFromDir(dirA, 1)));
+    TEST_ASSERT_EQUAL_UINT(0, takeSent().size()); // the scratch row filled the only hole
+
+    ingestAuthorityMore(40, 1);
+    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, 0, false, advert, false, 41));
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
+    follower->runOnce();
+    TEST_ASSERT_EQUAL_UINT(0, takeSent().size()); // inside the 2 s drain interval set in setUp()
+
+    Time::setTestMillis(Time::getMillis() + 2000); // one enumDrainIntervalMs()
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
+    follower->runOnce();
+    std::vector<meshtastic_MeshPacket> second = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, second.size());
+    TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_REQUEST, decodeSfpp(second[0]).sfpp_message_type);
+}
+
+// A lost provide is remembered and retried on a later advert that names a different bucket, after
+// the backoff and before a full rotation; a burst of adverts inside the backoff sends nothing.
+void test_lostEnumProvideRetriesWithinBackoff()
+{
+    ingestAuthority(40);
+    buildFollowerFromCopy();
+    deleteCounterRange(dirB, 39, 40);
+
+    meshtastic_MeshPacket advert;
+    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, 0, false, advert, false, 40));
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
+    myNodeInfo.my_node_num = FOLLOWER_NODE;
+    portduino_config.sfpp_stratum0 = false;
+    follower->runOnce();
+    std::vector<meshtastic_MeshPacket> first = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, first.size());
+
+    TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, true, first[0]));
+    TEST_ASSERT_EQUAL_UINT(1, drainAuthorityOne(2000).size()); // the provide is lost
+
+    for (uint32_t i = 0; i < 2; i++) { // one list resend, then the exchange fails
+        Time::setTestMillis(Time::getMillis() + 31000);
+        myNodeInfo.my_node_num = FOLLOWER_NODE;
+        portduino_config.sfpp_stratum0 = false;
+        follower->runOnce();
+        takeSent();
+    }
+
+    for (uint32_t i = 0; i < 6; i++) { // no retry storm inside the 30 s backoff
+        TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
+        follower->runOnce();
+        TEST_ASSERT_EQUAL_UINT(0, takeSent().size());
+    }
+    Time::setTestMillis(Time::getMillis() + 29000);
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
+    follower->runOnce();
+    TEST_ASSERT_EQUAL_UINT(0, takeSent().size());
+
+    Time::setTestMillis(Time::getMillis() + 1000); // 30 s after the failure, under a 60 s rotation
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
+    follower->runOnce();
+    std::vector<meshtastic_MeshPacket> retry = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, retry.size());
+    TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_REQUEST, decodeSfpp(retry[0]).sfpp_message_type);
+    TEST_ASSERT_EQUAL_UINT32(1, decodeSfpp(retry[0]).chain_count); // the hole's bucket, not the advert's
+
+    TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, true, retry[0]));
+    std::vector<meshtastic_MeshPacket> provide = drainAuthorityOne(2000);
+    TEST_ASSERT_EQUAL_UINT(1, provide.size());
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, provide[0]));
+    std::vector<meshtastic_MeshPacket> item = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, item.size());
+    TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, true, item[0]));
+
+    uint32_t frames = 0;
+    for (uint32_t guard = 0; guard < 16; guard++) {
+        std::vector<meshtastic_MeshPacket> out = drainAuthorityOne(2000);
+        if (out.empty())
+            continue;
+        if (decodeSfpp(out[0]).sfpp_message_type != meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_FRAME)
+            break;
+        for (const auto &frame : out) {
+            TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, frame));
+            frames++;
+        }
+    }
+    TEST_ASSERT_EQUAL_UINT(2, frames);
+    assertConverged();
+}
+
+// W is D19's proposed 24 h service window; a hole older than it is accepted as lost instead of
+// being chased by every advert from the peer.
+void test_failedPullStopsPastServiceWindow()
+{
+    ingestAuthority(40);
+    buildFollowerFromCopy();
+    deleteCounterRange(dirB, 39, 40);
+
+    meshtastic_MeshPacket advert;
+    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, 0, false, advert, false, 40));
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
+    myNodeInfo.my_node_num = FOLLOWER_NODE;
+    portduino_config.sfpp_stratum0 = false;
+    follower->runOnce();
+    std::vector<meshtastic_MeshPacket> first = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, first.size());
+
+    TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, true, first[0]));
+    TEST_ASSERT_EQUAL_UINT(1, drainAuthorityOne(2000).size());
+    for (uint32_t i = 0; i < 2; i++) {
+        Time::setTestMillis(Time::getMillis() + 31000);
+        myNodeInfo.my_node_num = FOLLOWER_NODE;
+        portduino_config.sfpp_stratum0 = false;
+        follower->runOnce();
+        takeSent();
+    }
+
+    Time::setTestMillis(Time::getMillis() + 24ULL * 60 * 60 * 1000 + 1000);
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
+    follower->runOnce();
+    TEST_ASSERT_EQUAL_UINT(0, takeSent().size());
+}
+
 // --- Stage 8: sketch mode ---
 
 void runSketchCase(uint32_t total, uint32_t missing)
@@ -2322,6 +2505,9 @@ void setup()
     RUN_TEST(test_midExchangeAdvertIsPulledAfter);
     RUN_TEST(test_rotationServesChangedBucketFirst);
     RUN_TEST(test_onDemandPullsNewestBucketAndCapsPacing);
+    RUN_TEST(test_secondAdvertInsideDrainIntervalSendsNoRequest);
+    RUN_TEST(test_lostEnumProvideRetriesWithinBackoff);
+    RUN_TEST(test_failedPullStopsPastServiceWindow);
     RUN_TEST(test_sketchResolvesOne);
     RUN_TEST(test_sketchResolvesFour);
     RUN_TEST(test_sketchFallsBackAtSixteen);
