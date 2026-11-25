@@ -13,6 +13,7 @@
 #include <array>
 #include <cctype>
 #include <cmath>
+#include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -69,6 +70,7 @@ const std::map<std::string, std::set<std::string>> &schema()
           "USB_PID",
           "USB_VID",
           "USB_Serialnum",
+          "IgnoreRelayNodes",
           "CS",
           "IRQ",
           "Busy",
@@ -259,6 +261,13 @@ int lineOf(const YAML::Node &node)
 {
     const YAML::Mark mark = node.Mark();
     return mark.is_null() ? 0 : mark.line + 1;
+}
+
+// The relay byte a transmitter writes for a node number; a 0x00 low byte is sent as 0xff.
+uint8_t relayByteForNodeNumber(uint32_t number)
+{
+    const uint8_t low = static_cast<uint8_t>(number);
+    return low == 0 ? 0xff : low;
 }
 
 // ---------------------------------------------------------------------------
@@ -854,6 +863,29 @@ void checkAdminKeys(const std::string &file, const YAML::Node &node, std::vector
     }
 }
 
+// Each entry is read without a fallback in normal operation, so a typo stops meshtasticd rather
+// than silently ignoring one relay. The forms are the ones nodeNumberFromYaml() accepts.
+void checkIgnoreRelayNodes(const std::string &file, const YAML::Node &node, std::vector<Finding> &findings)
+{
+    if (!node.IsSequence()) {
+        findings.push_back({kError, file, lineOf(node),
+                            "Lora.IgnoreRelayNodes must be a list of node numbers, so meshtasticd refuses to start on "
+                            "this file"});
+        return;
+    }
+
+    for (const auto &entry : node) {
+        uint32_t number = 0;
+        if (nodeNumberFromYaml(entry, number))
+            continue;
+        const std::string written = entry.Scalar().empty() ? entry.Tag() : entry.Scalar();
+        findings.push_back({kError, file, lineOf(entry),
+                            "Lora.IgnoreRelayNodes entry '" + written +
+                                "' is not a node number (write 0xea618fb4, !a28e145b, or decimal), so meshtasticd "
+                                "refuses to start on this file"});
+    }
+}
+
 // loadConfig() exits on an entry with no usable Type or Command, so those stop meshtasticd.
 void checkCommandSensors(const std::string &file, const YAML::Node &node, std::vector<Finding> &findings)
 {
@@ -1038,6 +1070,8 @@ void checkSection(const std::string &file, const std::string &section, const YAM
                     checkPinNode(file, section + "." + key, pin, findings);
         } else if (section == "Security" && key == "AdminKeys") {
             checkAdminKeys(file, value, findings);
+        } else if (section == "Lora" && key == "IgnoreRelayNodes") {
+            checkIgnoreRelayNodes(file, value, findings);
         } else if (section == "Bluetooth" && key == "AdapterId") {
             // LinuxBluetooth uses this verbatim as the BlueZ object path (/org/bluez/<id>), while the
             // MAC fallback only reads the leading hciN. A value like "hci1junk" therefore looks
@@ -1185,6 +1219,13 @@ void checkCrossFileOverlap(const PathIndex &paths, const std::map<std::string, s
         if (coveredByAncestor)
             continue;
 
+        if (entry.first == "Lora.IgnoreRelayNodes") {
+            findings.push_back({kInfo, across, 0,
+                                "'Lora.IgnoreRelayNodes' is set in " + std::to_string(entry.second.size()) + " files (" +
+                                    describeOwners(entry.second) +
+                                    "). The lists accumulate; to remove an entry, edit the file that adds it"});
+            continue;
+        }
         findings.push_back({kInfo, across, 0,
                             "'" + entry.first + "' is set in " + std::to_string(entry.second.size()) + " files (" +
                                 describeOwners(entry.second) + "). The file loaded last wins"});
@@ -1242,6 +1283,37 @@ void checkMergedConfig(const PathIndex &paths, std::vector<Finding> &findings)
     const std::string merged = "(merged configuration)";
 
     checkPinValues(findings);
+
+    // relay_node carries only the last byte, so two listed nodes that share one are indistinguishable
+    // on receive, and a zero byte can never match because 0 means no relay.
+    if (!portduino_config.ignore_relay_nodes.empty()) {
+        auto hexNode = [](uint32_t number) {
+            char text[11];
+            snprintf(text, sizeof(text), "0x%08x", number);
+            return std::string(text);
+        };
+        auto hexByte = [](uint8_t byte) {
+            char text[5];
+            snprintf(text, sizeof(text), "0x%02x", byte);
+            return std::string(text);
+        };
+
+        std::map<uint8_t, uint32_t> firstWithByte;
+        for (uint32_t number : portduino_config.ignore_relay_nodes) {
+            const uint8_t lowByte = relayByteForNodeNumber(number);
+            if (static_cast<uint8_t>(number) == 0)
+                findings.push_back({kWarn, merged, 0,
+                                    "Lora.IgnoreRelayNodes entry " + hexNode(number) +
+                                        " ends in 00, which is sent as relay byte 0xff; it also drops frames from any node "
+                                        "ending in ff"});
+            const auto seen = firstWithByte.emplace(lowByte, number);
+            if (!seen.second && seen.first->second != number)
+                findings.push_back({kWarn, merged, 0,
+                                    "Lora.IgnoreRelayNodes entries " + hexNode(seen.first->second) + " and " + hexNode(number) +
+                                        " share low byte " + hexByte(lowByte) +
+                                        ", so frames from any node with that byte are dropped"});
+        }
+    }
 
     // portduinoSetup() skips initGPIOPin() for every Lora pin when spidev is ch341, so a
     // gpiochip or line mapping written next to one is read, stored, and never used.
