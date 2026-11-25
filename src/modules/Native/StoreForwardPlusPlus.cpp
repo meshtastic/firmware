@@ -422,6 +422,22 @@ StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
 
     sqlite3_exec(ppDb, ("PRAGMA user_version = " + std::to_string(kSchemaVersion) + ";").c_str(), NULL, NULL, NULL);
 
+    // Old int binds stored node/ID values >= 2^31 as negatives; repair them in place (idempotent).
+    static const char *repairSigned = "UPDATE channel_messages SET destination=destination+4294967296 WHERE destination<0;"
+                                      "UPDATE channel_messages SET sender=sender+4294967296 WHERE sender<0;"
+                                      "UPDATE channel_messages SET packet_id=packet_id+4294967296 WHERE packet_id<0;"
+                                      "UPDATE local_messages SET destination=destination+4294967296 WHERE destination<0;"
+                                      "UPDATE local_messages SET sender=sender+4294967296 WHERE sender<0;"
+                                      "UPDATE local_messages SET packet_id=packet_id+4294967296 WHERE packet_id<0;"
+                                      "UPDATE direct_messages SET destination=destination+4294967296 WHERE destination<0;"
+                                      "UPDATE direct_messages SET sender=sender+4294967296 WHERE sender<0;"
+                                      "UPDATE direct_messages SET packet_id=packet_id+4294967296 WHERE packet_id<0;"
+                                      "UPDATE canon_scratch SET destination=destination+4294967296 WHERE destination<0;"
+                                      "UPDATE canon_scratch SET sender=sender+4294967296 WHERE sender<0;"
+                                      "UPDATE canon_scratch SET packet_id=packet_id+4294967296 WHERE packet_id<0;"
+                                      "UPDATE peers SET nodenum=nodenum+4294967296 WHERE nodenum<0;";
+    sqlite3_exec(ppDb, repairSigned, NULL, NULL, NULL);
+
     // prepared statements *should* make this faster.
     sqlite3_prepare_v2(ppDb, "INSERT INTO channel_messages (destination, sender, packet_id, root_hash, \
         encrypted_bytes, message_hash, rx_time, commit_hash, payload, counter, short_id, checksum) \
@@ -1482,9 +1498,9 @@ void StoreForwardPlusPlusModule::handleLegacyClientHistory(const meshtastic_Mesh
         sqlite3_bind_blob(legacyHistoryStmt, 2, root_hash, SFPP_HASH_SIZE, NULL);
         sqlite3_bind_int64(legacyHistoryStmt, 3, (sqlite3_int64)since);
         sqlite3_bind_int64(legacyHistoryStmt, 4, (sqlite3_int64)cursor);
-        sqlite3_bind_int(legacyHistoryStmt, 5, (int)requester);
-        sqlite3_bind_int(legacyHistoryStmt, 6, (int)NODENUM_BROADCAST);
-        sqlite3_bind_int(legacyHistoryStmt, 7, (int)requester);
+        sqlite3_bind_int64(legacyHistoryStmt, 5, (sqlite3_int64)requester);
+        sqlite3_bind_int64(legacyHistoryStmt, 6, (sqlite3_int64)NODENUM_BROADCAST);
+        sqlite3_bind_int64(legacyHistoryStmt, 7, (sqlite3_int64)requester);
         sqlite3_bind_int(legacyHistoryStmt, 8, pageMax);
 
         while (sqlite3_step(legacyHistoryStmt) == SQLITE_ROW) {
@@ -1993,11 +2009,11 @@ bool StoreForwardPlusPlusModule::addToChain(link_object &lo)
 
     // push a message into the local chain DB
     // destination
-    sqlite3_bind_int(chain_insert_stmt, 1, lo.to);
+    sqlite3_bind_int64(chain_insert_stmt, 1, (sqlite3_int64)lo.to);
     // sender
-    sqlite3_bind_int(chain_insert_stmt, 2, lo.from);
+    sqlite3_bind_int64(chain_insert_stmt, 2, (sqlite3_int64)lo.from);
     // packet_id
-    sqlite3_bind_int(chain_insert_stmt, 3, lo.id);
+    sqlite3_bind_int64(chain_insert_stmt, 3, (sqlite3_int64)lo.id);
     // root_hash
     sqlite3_bind_blob(chain_insert_stmt, 4, lo.root_hash, SFPP_HASH_SIZE, NULL);
     // encrypted_bytes
@@ -2030,11 +2046,11 @@ bool StoreForwardPlusPlusModule::addToScratch(link_object &lo)
 {
     // push a message into the local chain DB
     // destination
-    sqlite3_bind_int(scratch_insert_stmt, 1, lo.to);
+    sqlite3_bind_int64(scratch_insert_stmt, 1, (sqlite3_int64)lo.to);
     // sender
-    sqlite3_bind_int(scratch_insert_stmt, 2, lo.from);
+    sqlite3_bind_int64(scratch_insert_stmt, 2, (sqlite3_int64)lo.from);
     // packet_id
-    sqlite3_bind_int(scratch_insert_stmt, 3, lo.id);
+    sqlite3_bind_int64(scratch_insert_stmt, 3, (sqlite3_int64)lo.id);
     // root_hash
     sqlite3_bind_blob(scratch_insert_stmt, 4, lo.root_hash, SFPP_HASH_SIZE, NULL);
     // encrypted_bytes
@@ -2596,7 +2612,7 @@ bool StoreForwardPlusPlusModule::recalculateHash(StoreForwardPlusPlusModule::lin
 void StoreForwardPlusPlusModule::updatePeers(const meshtastic_MeshPacket &mp,
                                              meshtastic_StoreForwardPlusPlus_SFPP_message_type type)
 {
-    sqlite3_bind_int(getPeerStmt, 1, mp.from);
+    sqlite3_bind_int64(getPeerStmt, 1, (sqlite3_int64)mp.from);
     int res = sqlite3_step(getPeerStmt);
     if (res == SQLITE_ROW) {
         auto announce_count = sqlite3_column_int(getPeerStmt, 0);
@@ -2630,7 +2646,7 @@ void StoreForwardPlusPlusModule::updatePeers(const meshtastic_MeshPacket &mp,
         sqlite3_bind_int(updatePeerStmt, 5, split_count);
         sqlite3_bind_int(updatePeerStmt, 6, total_count);
         sqlite3_bind_double(updatePeerStmt, 7, average_hops);
-        sqlite3_bind_int(updatePeerStmt, 8, mp.from);
+        sqlite3_bind_int64(updatePeerStmt, 8, (sqlite3_int64)mp.from);
         res = sqlite3_step(updatePeerStmt);
         if (res != SQLITE_OK && res != SQLITE_DONE) {
             LOG_ERROR("StoreForwardpp Update Peer sqlite error %u, %s", res, sqlite3_errmsg(ppDb));
@@ -2639,7 +2655,7 @@ void StoreForwardPlusPlusModule::updatePeers(const meshtastic_MeshPacket &mp,
 
     } else {
 
-        sqlite3_bind_int(maybeAddPeerStmt, 1, mp.from);
+        sqlite3_bind_int64(maybeAddPeerStmt, 1, (sqlite3_int64)mp.from);
         sqlite3_bind_int(maybeAddPeerStmt, 2, 1);
         sqlite3_bind_int(maybeAddPeerStmt, 3, mp.hop_start - mp.hop_limit);
         res = sqlite3_step(maybeAddPeerStmt);
@@ -2698,11 +2714,11 @@ void StoreForwardPlusPlusModule::addToCanonScratch(link_object &lo)
 
     // push a message into the local chain DB
     // destination
-    sqlite3_bind_int(canon_scratch_insert_stmt, 1, lo.to);
+    sqlite3_bind_int64(canon_scratch_insert_stmt, 1, (sqlite3_int64)lo.to);
     // sender
-    sqlite3_bind_int(canon_scratch_insert_stmt, 2, lo.from);
+    sqlite3_bind_int64(canon_scratch_insert_stmt, 2, (sqlite3_int64)lo.from);
     // packet_id
-    sqlite3_bind_int(canon_scratch_insert_stmt, 3, lo.id);
+    sqlite3_bind_int64(canon_scratch_insert_stmt, 3, (sqlite3_int64)lo.id);
     // root_hash
     sqlite3_bind_blob(canon_scratch_insert_stmt, 4, lo.root_hash, lo.root_hash_len, NULL);
     // encrypted_bytes
