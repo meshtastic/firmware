@@ -887,6 +887,9 @@ void test_shimServesAdoptedBroadcastText()
 
 // Item 8 repair: a negative destination from an old store is converted and served on restart;
 // a peers collision is resolved rather than left half-converted.
+int storedSchemaVersion();
+std::vector<std::string> filesMovedAside();
+
 void test_oldVersionStoreIsSetAsideAndNewRowsAreUnsigned()
 {
     // Simulate an old store: the v2 layout with a negative broadcast destination.
