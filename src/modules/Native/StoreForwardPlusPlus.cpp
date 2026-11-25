@@ -2986,6 +2986,12 @@ void StoreForwardPlusPlusModule::addPendingBucket(const uint8_t *root_hash, Node
 {
     for (auto &entry : enumPending) {
         if (entry.bucket == bucket && entry.authority == authority && memcmp(entry.root, root_hash, SFPP_HASH_SIZE) == 0) {
+            // A changed advertised summary revives a capped or parked hole with a fresh bound.
+            if (entry.count != count || entry.checksum != checksum || entry.tip != tip) {
+                entry.attempts = 0;
+                entry.firstFailedMs = 0;
+                entry.retryAfterMs = 0;
+            }
             entry.count = count;
             entry.checksum = checksum;
             entry.tip = tip;
@@ -3014,6 +3020,9 @@ void StoreForwardPlusPlusModule::addPendingBucket(const uint8_t *root_hash, Node
 
 void StoreForwardPlusPlusModule::rememberFailedPull()
 {
+    // Opt-in: the sim shows this raises airtime without closing the rotation hole.
+    if (!portduino_config.sfpp_pull_retry)
+        return;
     uint8_t root[SFPP_HASH_SIZE] = {0};
     if (!getRootFromChannelHash(channels.getHash(0), root))
         return;
@@ -3089,14 +3098,14 @@ void StoreForwardPlusPlusModule::startPendingPull()
     const EnumPendingBucket entry = enumPending[best];
 
     // A named bucket that could not be repaired from the same advertised summary is skipped.
-    if (!(entry.count == 0 && entry.checksum == 0) && enumBucketSuppressed(root, entry.bucket, entry.count, entry.checksum)) {
+    if (!entry.onDemand && enumBucketSuppressed(root, entry.bucket, entry.count, entry.checksum)) {
         enumPending.erase(enumPending.begin() + best);
         return;
     }
     // Keep the entry: endEnumExchange() removes it on success, rememberFailedPull() advances its
     // attempt and first-failure state on failure.
 
-    if (entry.count == 0 && entry.checksum == 0) {
+    if (entry.onDemand) {
         beginEnumExchange(root, entry.bucket, entry.authority, entry.tip, 0);
         enumPeerTip = entry.tip;
         enumOnDemand = true;

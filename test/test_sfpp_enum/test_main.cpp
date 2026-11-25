@@ -2006,6 +2006,11 @@ void test_onDemandPullsNewestBucketAndCapsPacing()
     TEST_ASSERT_EQUAL_UINT64(a.checksum, b.checksum);
 }
 
+void enablePullRetry()
+{
+    portduino_config.sfpp_pull_retry = true;
+}
+
 // Drives a paced pull to a failed exchange with the provide dropped, leaving a remembered hole.
 void failPendingPull(const meshtastic_MeshPacket &advert)
 {
@@ -2068,6 +2073,7 @@ void test_secondAdvertInsideDrainIntervalSendsNoRequest()
 // the backoff and before a full rotation; a burst of adverts inside the backoff sends nothing.
 void test_lostEnumProvideRetriesWithinBackoff()
 {
+    enablePullRetry();
     ingestAuthority(40);
     buildFollowerFromCopy();
     deleteCounterRange(dirB, 39, 40);
@@ -2138,6 +2144,7 @@ void test_lostEnumProvideRetriesWithinBackoff()
 // being chased by every advert from the peer.
 void test_failedPullStopsPastServiceWindow()
 {
+    enablePullRetry();
     ingestAuthority(40);
     buildFollowerFromCopy();
     deleteCounterRange(dirB, 39, 40);
@@ -2171,6 +2178,7 @@ void test_failedPullStopsPastServiceWindow()
 // On 28900150 the entry is erased at launch, so the parent retries at +30 s and this fails.
 void test_failedPullBackoffDoublesAcrossFailures()
 {
+    enablePullRetry();
     ingestAuthority(40);
     buildFollowerFromCopy();
     deleteCounterRange(dirB, 39, 40);
@@ -2200,6 +2208,7 @@ void test_failedPullBackoffDoublesAcrossFailures()
 // as (tip, 0), takes the checksum path and falls into a collision probe instead.
 void test_failedTailPullRetriesAsTail()
 {
+    enablePullRetry();
     ingestAuthority(40);
     buildFollowerFromCopy();
     deleteCounter(dirB, 40);
@@ -2223,6 +2232,85 @@ void test_failedTailPullRetriesAsTail()
     TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, provide[0]));
     TEST_ASSERT_EQUAL_UINT(0, takeSent().size()); // the promoted scratch row completed the list
     assertConverged();
+}
+
+// Eight retries (nine failures) park the hole; a changed advertised summary revives it.
+// On 3cd7de9e7 the parked entry's attempt state survives the new summary, so the revival fails.
+void test_failedPullCapParksUntilSummaryChanges()
+{
+    enablePullRetry();
+    ingestAuthority(40);
+    buildFollowerFromCopy();
+    deleteCounterRange(dirB, 39, 40);
+
+    meshtastic_MeshPacket advert;
+    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, 0, false, advert, false, 40));
+    for (uint8_t i = 0; i < 9; i++) {
+        if (i > 0)
+            Time::setTestMillis(Time::getMillis() + 6 * 60 * 1000); // past the 5 min backoff cap
+        failPendingPull(advert);
+    }
+    Time::setTestMillis(Time::getMillis() + 10 * 60 * 1000);
+    follower->runOnce();
+    TEST_ASSERT_EQUAL_UINT(0, takeSent().size()); // parked after the eighth retry
+
+    ingestAuthorityMore(40, 1);
+    meshtastic_MeshPacket changed;
+    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, 0, false, changed, false, 41));
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, changed));
+    follower->runOnce();
+    std::vector<meshtastic_MeshPacket> request = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, request.size());
+    TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_REQUEST, decodeSfpp(request[0]).sfpp_message_type);
+}
+
+// The service window must start at the first launch-and-fail, and a revived hole restarts it.
+// On 3cd7de9e7 the changed summary cannot revive inside the backoff, so this fails before W.
+void test_failedPullServiceWindowAfterLaunchAndRevival()
+{
+    enablePullRetry();
+    ingestAuthority(40);
+    buildFollowerFromCopy();
+    deleteCounterRange(dirB, 39, 40);
+
+    meshtastic_MeshPacket advert;
+    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, 0, false, advert, false, 40));
+    failPendingPull(advert);
+
+    ingestAuthorityMore(40, 1);
+    meshtastic_MeshPacket changed;
+    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, 0, false, changed, false, 41));
+    Time::setTestMillis(Time::getMillis() + 5000); // past the pacer, inside the old 30 s backoff
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, changed));
+    follower->runOnce();
+    std::vector<meshtastic_MeshPacket> revived = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, revived.size());
+
+    Time::setTestMillis(Time::getMillis() + 2000);
+    failPendingPull(changed); // the revived hole now fails once from the new first-failure time
+    Time::setTestMillis(Time::getMillis() + 24ULL * 60 * 60 * 1000 + 1000);
+    follower->runOnce();
+    TEST_ASSERT_EQUAL_UINT(0, takeSent().size());
+}
+
+// The retry is opt-in; the default must not re-air a hole after a failed exchange.
+// On 3cd7de9e7 there is no setting, so the remembered hole retries at +30 s and this fails.
+void test_pullRetryDisabledByDefault()
+{
+    ingestAuthority(40);
+    buildFollowerFromCopy();
+    deleteCounterRange(dirB, 39, 40);
+
+    meshtastic_MeshPacket advert;
+    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, 0, false, advert, false, 40));
+    failPendingPull(advert);
+
+    Time::setTestMillis(Time::getMillis() + 30000);
+    follower->runOnce();
+    TEST_ASSERT_EQUAL_UINT(0, takeSent().size());
+    Time::setTestMillis(Time::getMillis() + 5 * 60 * 1000);
+    follower->runOnce();
+    TEST_ASSERT_EQUAL_UINT(0, takeSent().size());
 }
 
 // --- Stage 8: sketch mode ---
@@ -2588,6 +2676,9 @@ void setup()
     RUN_TEST(test_failedPullStopsPastServiceWindow);
     RUN_TEST(test_failedPullBackoffDoublesAcrossFailures);
     RUN_TEST(test_failedTailPullRetriesAsTail);
+    RUN_TEST(test_failedPullCapParksUntilSummaryChanges);
+    RUN_TEST(test_failedPullServiceWindowAfterLaunchAndRevival);
+    RUN_TEST(test_pullRetryDisabledByDefault);
     RUN_TEST(test_sketchResolvesOne);
     RUN_TEST(test_sketchResolvesFour);
     RUN_TEST(test_sketchFallsBackAtSixteen);

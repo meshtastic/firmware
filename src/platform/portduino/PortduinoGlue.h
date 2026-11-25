@@ -359,6 +359,7 @@ extern struct portduino_config_struct {
     uint32_t sfpp_scratch_sweep = 5;     // minutes between writer-missed scratch sweeps, enum only
     sfpp_item_transport sfpp_item_transport = SFPP_ITEM_BROADCAST;
     bool sfpp_enum_listen_only = false;
+    bool sfpp_pull_retry = false;
     // allowed root hashes
     // upstream node
     // Are we allowing unknown channel hashes? Does this even make sense?
@@ -854,6 +855,7 @@ extern struct portduino_config_struct {
             out << YAML::Key << "EnumItemTransport" << YAML::Value
                 << (sfpp_item_transport == SFPP_ITEM_DIRECT ? "direct" : "broadcast");
             out << YAML::Key << "EnumListenOnly" << YAML::Value << sfpp_enum_listen_only;
+            out << YAML::Key << "PullRetry" << YAML::Value << sfpp_pull_retry;
             out << YAML::EndMap; // StoreAndForward
         }
 
