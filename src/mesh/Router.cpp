@@ -737,7 +737,7 @@ bool Router::cancelSending(NodeNum from, PacketId id)
 /** Attempt to find a packet in the TxQueue. Returns true if the packet was found. */
 bool Router::findInTxQueue(NodeNum from, PacketId id)
 {
-    return iface->findInTxQueue(from, id);
+    return iface && iface->findInTxQueue(from, id);
 }
 
 /**

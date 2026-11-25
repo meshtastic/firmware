@@ -12,8 +12,8 @@
  * - A packet we cannot decode is judged from its plaintext header: a DM-shaped flood (to a single
  *   node, NO_NEXT_HOP_PREFERENCE) gets threshold 2; broadcasts and routed DMs get 1. noteScheduled()
  *   caches the portnum when we queue a rebroadcast, so its later encrypted duplicates use the table.
- * - On a busy mesh (channel or TX airtime above the BUSY_* limits, or too many direct neighbours)
- *   every threshold is 1, today's behaviour.
+ * - On a busy mesh (channel or TX airtime above the BUSY_* limits, or, on HAS_VARIABLE_HOPS builds, too
+ *   many direct neighbours) every threshold is 1, today's behaviour.
  *
  * Thresholds are compile-time. Counts live in a small RAM ring, keyed by (sender, id).
  */
@@ -58,9 +58,10 @@ class RepeatScalingModule
         PacketId id = 0;
         uint8_t count = 0;
         int32_t portnum = -1;
+        uint32_t claimedSeq = 0; // claim order, so the oldest claim is the one evicted
     };
     DupeCountEntry dupeCounts[DUPE_COUNT_TRACKER_SIZE];
-    uint8_t dupeCountsNextSlot = 0;
+    uint32_t claimSeq = 0;
 
     const DupeCountEntry *findEntry(NodeNum sender, PacketId id) const;
     DupeCountEntry *findEntry(NodeNum sender, PacketId id);

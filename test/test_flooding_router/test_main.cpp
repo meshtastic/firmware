@@ -141,6 +141,16 @@ void test_perhapsCancelDupe_skips_repeatScalingModule_when_nothing_is_queued(voi
     TEST_ASSERT_EQUAL_INT(0, counting->callCount);
 }
 
+// Router::findInTxQueue must be safe with no radio attached, as cancelSending already is.
+void test_findInTxQueue_without_a_radio_is_false(void)
+{
+    shim->addInterface(nullptr); // frees the stub radio
+    TEST_ASSERT_FALSE(shim->findInTxQueue(kSender1, kId1));
+
+    radio = new QueueStubRadio();
+    shim->addInterface(std::unique_ptr<RadioInterface>(radio));
+}
+
 void setup()
 {
     initializeTestEnvironment();
@@ -158,6 +168,7 @@ void setup()
     RUN_TEST(test_perhapsCancelDupe_non_lora_transport_never_consults_repeatScalingModule);
     RUN_TEST(test_perhapsCancelDupe_does_not_crash_when_repeatScalingModule_says_cancel);
     RUN_TEST(test_perhapsCancelDupe_skips_repeatScalingModule_when_nothing_is_queued);
+    RUN_TEST(test_findInTxQueue_without_a_radio_is_false);
 
     exit(UNITY_END());
 }

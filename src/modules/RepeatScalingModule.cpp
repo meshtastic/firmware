@@ -86,12 +86,15 @@ RepeatScalingModule::DupeCountEntry *RepeatScalingModule::findEntry(NodeNum send
 
 RepeatScalingModule::DupeCountEntry &RepeatScalingModule::claimEntry(NodeNum sender, PacketId id)
 {
-    DupeCountEntry *slot = findEntry(0, 0);
+    DupeCountEntry *slot = findEntry(0, 0); // ids are never 0, so (0, 0) only marks a free slot
     if (!slot) {
-        slot = &dupeCounts[dupeCountsNextSlot];
-        dupeCountsNextSlot = (dupeCountsNextSlot + 1) % DUPE_COUNT_TRACKER_SIZE;
+        slot = &dupeCounts[0];
+        for (auto &entry : dupeCounts) {
+            if (entry.claimedSeq < slot->claimedSeq)
+                slot = &entry;
+        }
     }
-    *slot = DupeCountEntry{sender, id, 0, -1};
+    *slot = DupeCountEntry{sender, id, 0, -1, ++claimSeq};
     return *slot;
 }
 

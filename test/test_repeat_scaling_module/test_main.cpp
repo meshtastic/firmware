@@ -183,6 +183,25 @@ void test_claim_reuses_a_cleared_slot_before_evicting_a_live_one(void)
     TEST_ASSERT_EQUAL_INT32(meshtastic_PortNum_TEXT_MESSAGE_APP, ring.lookupNotedPortnum(kSender2, kId2));
 }
 
+// A reused slot is a new claim: three later claims on a full ring must evict old entries, not it.
+void test_full_ring_evicts_the_oldest_claim_after_reuse(void)
+{
+    RepeatScalingModuleTestShim ring;
+    for (uint32_t i = 0; i < 8; i++)
+        ring.noteScheduled(kSender1, 0x50000 + i, meshtastic_PortNum_TEXT_MESSAGE_APP);
+    ring.clearDupeCount(kSender1, 0x50002);
+    ring.noteScheduled(kSender2, 0x60000, meshtastic_PortNum_TEXT_MESSAGE_APP); // reuses the cleared slot
+
+    for (uint32_t i = 1; i <= 3; i++) // ring full: these evict the three oldest claims
+        ring.noteScheduled(kSender2, 0x60000 + i, meshtastic_PortNum_TEXT_MESSAGE_APP);
+
+    TEST_ASSERT_EQUAL_INT32(meshtastic_PortNum_TEXT_MESSAGE_APP, ring.lookupNotedPortnum(kSender2, 0x60000));
+    TEST_ASSERT_EQUAL_INT32(-1, ring.lookupNotedPortnum(kSender1, 0x50000));
+    TEST_ASSERT_EQUAL_INT32(-1, ring.lookupNotedPortnum(kSender1, 0x50001));
+    TEST_ASSERT_EQUAL_INT32(-1, ring.lookupNotedPortnum(kSender1, 0x50003));
+    TEST_ASSERT_EQUAL_INT32(meshtastic_PortNum_TEXT_MESSAGE_APP, ring.lookupNotedPortnum(kSender1, 0x50004));
+}
+
 // A threshold-1 duplicate cancels at once, so a burst of them must not evict the queued text packets' entries.
 void test_threshold_one_duplicates_do_not_claim_ring_slots(void)
 {
@@ -433,11 +452,12 @@ void test_shouldCancelDupe_clears_tracking_once_threshold_reached(void)
     shim->testThreshold = 1; // historical behavior: give up (and clear) on the very first duplicate
     meshtastic_MeshPacket p = makeDupePacket(kSender1, kId1);
 
+    shim->noteScheduled(kSender1, kId1, meshtastic_PortNum_TEXT_MESSAGE_APP); // an entry for the cancel to free
+
     TEST_ASSERT_TRUE(shim->shouldCancelDupe(&p));
 
-    // Threshold (1) was reached on the first call, so tracking was cleared - the next duplicate
-    // heard for this packet starts a fresh count, rather than continuing to accumulate.
-    TEST_ASSERT_EQUAL_UINT8(1, shim->registerDupeHeard(kSender1, kId1));
+    // Threshold 1 cancels at once and frees the packet's entry, cached portnum included.
+    TEST_ASSERT_EQUAL_INT32(-1, shim->lookupNotedPortnum(kSender1, kId1));
 }
 
 void test_shouldCancelDupe_waits_for_configured_repeats(void)
@@ -587,6 +607,7 @@ void setup()
     RUN_TEST(test_registerDupeHeard_ring_eviction_does_not_crash);
     RUN_TEST(test_claim_reuses_a_cleared_slot_before_evicting_a_live_one);
     RUN_TEST(test_threshold_one_duplicates_do_not_claim_ring_slots);
+    RUN_TEST(test_full_ring_evicts_the_oldest_claim_after_reuse);
 
     printf("\n=== getDupeCancelThreshold (compile-time default) ===\n");
     RUN_TEST(test_default_threshold_is_one_for_undecoded_directed_packet);
