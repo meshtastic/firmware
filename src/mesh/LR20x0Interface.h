@@ -78,15 +78,6 @@ template <class T> class LR20x0Interface : public RadioLibInterface
 
     virtual void setStandby() override;
 
-    /**
-     * Apply the Semtech DCDC sensitivity workaround (opt-in, godmode-only). Must be called after the LoRa
-     * modulation parameters have been set - i.e. after lora.begin() in init(), or after the
-     * setSpreadingFactor/setBandwidth/setCodingRate calls in reconfigure(), all of which re-run
-     * setLoRaModulationParams() and thereby reset the DCDC configure state. No-op unless built with
-     * -DLR2021_DCDC_WORKAROUND (and RADIOLIB_GODMODE). Logs success/failure; never fatal.
-     */
-    void applyDcdcWorkaround();
-
     // GetLoraPacketStatus's coding rate accumulates the bitwise OR of every received header's rate since reset,
     // so one frame at another rate corrupts it for the session - it even reports values DS Table 9-4 does not define.
     // The frame was already decoded on its own header's rate, so time received frames on the configured one.
@@ -109,6 +100,9 @@ template <class T> class LR20x0Interface : public RadioLibInterface
 
     /** Chip-side re-init shared by the band-hop and recovery paths: front-end GPIOs, begin(), CRC, RF switch, RX gain */
     bool fullBegin(float freq);
+
+    /** DC-DC regulator after every begin(), LDO if the variant defines LR2021_REGULATOR_LDO. Warn-only. */
+    void applyRegulator();
 
     /** Board LF PA table after begin(); HF keeps RadioLib default. Warn-only on setOutputPower miss. */
     void applyCustomLfPaTable(float freq);
