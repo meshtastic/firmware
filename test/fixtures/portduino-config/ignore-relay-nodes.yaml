@@ -1,0 +1,9 @@
+# CLEAN. Testing knob: full node numbers whose low byte is compared with the packet's relay byte,
+# so a listed node's own LoRa frames are dropped while another node's relay of them still arrives.
+Lora:
+  Module: sx1262
+  CS: 21
+  IRQ: 16
+  Busy: 20
+  Reset: 18
+  IgnoreRelayNodes: [!a28e145b, 0xea618fb4]

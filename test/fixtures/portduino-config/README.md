@@ -140,14 +140,16 @@ is `uint16_t[22]`, so extra points are dropped and out-of-range values wrap.
 
 ## Value types, ranges and units
 
-| File                      | Expected                                                                                                                                                |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `value-type-fatal.yaml`   | `Logging.AsciiLogs` is the other no-fallback read: a bad value stops meshtasticd starting.                                                              |
-| `value-type-silent.yaml`  | Wrong-typed values where the read has a default: silently replaced, so the setting does nothing.                                                        |
-| `tcxo-millivolts.yaml`    | `DIO3_TCXO_VOLTAGE` is in VOLTS and multiplied by 1000, so `1800` silently asks for 1800V. Write `1.8`.                                                 |
-| `port-out-of-range.yaml`  | `APIPort` outside 1024-65535 is silently ignored; `Webserver.Port` has no guard at all.                                                                 |
-| `statusmessage-long.yaml` | Copied into a `char[80]`, so it is safe but silently shortened to 79 characters.                                                                        |
-| `configdir-missing.yaml`  | **Crash regression guard** - an unreadable `ConfigDirectory` used to abort meshtasticd (and `--check`) with SIGABRT via an uncaught `filesystem_error`. |
+| File                             | Expected                                                                                                                                                |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `value-type-fatal.yaml`          | `Logging.AsciiLogs` is the other no-fallback read: a bad value stops meshtasticd starting.                                                              |
+| `value-type-silent.yaml`         | Wrong-typed values where the read has a default: silently replaced, so the setting does nothing.                                                        |
+| `tcxo-millivolts.yaml`           | `DIO3_TCXO_VOLTAGE` is in VOLTS and multiplied by 1000, so `1800` silently asks for 1800V. Write `1.8`.                                                 |
+| `port-out-of-range.yaml`         | `APIPort` outside 1024-65535 is silently ignored; `Webserver.Port` has no guard at all.                                                                 |
+| `webserver-http-port.yaml`       | `Webserver.HTTPPort` out of range is an error; `HTTPBindAll` is a known key.                                                                            |
+| `webserver-http-port-alone.yaml` | `HTTPPort` without `Port` is a warning: the web server never starts, so nothing listens.                                                                |
+| `statusmessage-long.yaml`        | Copied into a `char[80]`, so it is safe but silently shortened to 79 characters.                                                                        |
+| `configdir-missing.yaml`         | **Crash regression guard** - an unreadable `ConfigDirectory` used to abort meshtasticd (and `--check`) with SIGABRT via an uncaught `filesystem_error`. |
 
 ## Bluetooth
 

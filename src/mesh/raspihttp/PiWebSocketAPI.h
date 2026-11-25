@@ -9,7 +9,7 @@
 struct _u_instance;
 
 /// Serve the PhoneAPI at /api/v1/ws: one ToRadio or FromRadio protobuf per binary message.
-/// Call before the framework starts.
+/// Call before the framework starts, once per listener.
 void initPiWebSocketAPI(struct _u_instance *instance);
 
 #endif

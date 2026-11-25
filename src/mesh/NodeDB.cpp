@@ -1173,6 +1173,9 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     config.has_lora = true;
     config.has_position = true;
     config.has_power = true;
+#ifdef DEFAULT_BATTERY_INA_ADDRESS
+    config.power.device_battery_ina_address = DEFAULT_BATTERY_INA_ADDRESS;
+#endif
     config.has_network = true;
     config.has_bluetooth = (HAS_BLUETOOTH ? true : false);
     config.has_security = true;
@@ -4187,8 +4190,15 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
 
         // RF-origin only (a via_mqtt rebroadcast proves the gateway is in earshot, not the node); not
         // has_rx_rssi-gated, as SimRadio omits it. Live slot, so a beacon-preset hear fails to match home.
-        if (mp.transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA && !mp.via_mqtt)
-            nodeInfoLiteSetHeardSlot(info, currentLoraSlot().fingerprint());
+        if (mp.transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA && !mp.via_mqtt) {
+            const uint16_t slot = currentLoraSlot().fingerprint();
+            if (!nodeInfoLiteHeardOnSlot(info, slot)) {
+                nodeInfoLiteSetHeardSlot(info, slot);
+                // Anonymous peers are dropped at boot unless they acquire user info.
+                if (nodeInfoLiteHasUser(info))
+                    nodeDatabaseDirty = true;
+            }
+        }
 
         nodeInfoLiteSetBit(info, NODEINFO_BITFIELD_VIA_MQTT_MASK,
                            mp.via_mqtt); // Store if we received this packet via MQTT

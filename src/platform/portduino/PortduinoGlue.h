@@ -140,6 +140,8 @@ void getMacAddr(uint8_t *dmac);
 bool MAC_from_string(std::string mac_str, uint8_t *dmac);
 #ifndef ARCH_PORTDUINO_WASM
 void readGPIOFromYaml(YAML::Node sourceNode, pinMapping &destPin, int pinDefault = RADIOLIB_NC);
+// A node number written as `0xea618fb4`, `!a28e145b`, or decimal. Shared by loadConfig and --check.
+bool nodeNumberFromYaml(const YAML::Node &node, uint32_t &out);
 #endif
 // A command that outlives its limit is killed, along with anything it started, so a hung script
 // stalls the main loop for at most this long.
@@ -207,6 +209,8 @@ extern struct portduino_config_struct {
     int lora_usb_pid = 0x5512;
     int lora_usb_vid = 0x1A86;
     int spiSpeed = 2000000;
+    // Full node numbers whose LoRa frames are dropped on receive by their low byte (testing only).
+    std::vector<uint32_t> ignore_relay_nodes;
     int num_pa_points = 1; // default to 1 point, with 0 gain
     uint16_t tx_gain_lora[22] = {0};
     pinMapping lora_cs_pin = {"Lora", "CS"};
@@ -319,6 +323,8 @@ extern struct portduino_config_struct {
     std::string webserver_ssl_key_path = "/etc/meshtasticd/ssl/private_key.pem";
     std::string webserver_ssl_cert_path = "/etc/meshtasticd/ssl/certificate.pem";
     int webserverport = -1;
+    int webserver_http_port = -1;
+    bool webserver_http_bind_all = false;
 
     // Bluetooth (BLE peripheral via BlueZ; Linux only, and only when built with
     // sdbus-c++)
@@ -449,6 +455,12 @@ extern struct portduino_config_struct {
             out << YAML::Key << "spiSpeed" << YAML::Value << spiSpeed;
         if (irq_dio_num >= 0)
             out << YAML::Key << "IRQ_DIO_NUM" << YAML::Value << irq_dio_num;
+        if (!ignore_relay_nodes.empty()) {
+            out << YAML::Key << "IgnoreRelayNodes" << YAML::Value << YAML::Flow << YAML::BeginSeq;
+            for (uint32_t node : ignore_relay_nodes)
+                out << YAML::Hex << node;
+            out << YAML::EndSeq << YAML::Dec;
+        }
         if (has_rfswitch_table) {
             out << YAML::Key << "rfswitch_table" << YAML::Value << YAML::BeginMap;
 
@@ -737,6 +749,10 @@ extern struct portduino_config_struct {
             out << YAML::Key << "SSLKey" << YAML::Value << webserver_ssl_key_path;
             out << YAML::Key << "SSLCert" << YAML::Value << webserver_ssl_cert_path;
             out << YAML::Key << "Port" << YAML::Value << webserverport;
+            if (webserver_http_port > 0)
+                out << YAML::Key << "HTTPPort" << YAML::Value << webserver_http_port;
+            if (webserver_http_bind_all)
+                out << YAML::Key << "HTTPBindAll" << YAML::Value << true;
             out << YAML::EndMap; // Webserver
         }
 
