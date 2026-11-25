@@ -15,9 +15,11 @@
  */
 #include "ExternalNotificationModule.h"
 #include "Channels.h"
+#include "FSCommon.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "Router.h"
+#include "SPILock.h"
 #include "buzz/buzz.h"
 #include "configuration.h"
 #include "gps/RTC.h"
@@ -231,8 +233,12 @@ void ExternalNotificationModule::setExternalState(uint8_t index, bool on)
 #ifdef UNPHONE
         unphone.vibe(on); // the unPhone's vibration motor is on a i2c GPIO expander
 #endif
+#ifdef EXT_NOTIFY_VIBRA_WRITE
+        EXT_NOTIFY_VIBRA_WRITE(moduleConfig.external_notification.output_vibra, on);
+#else
         if (moduleConfig.external_notification.output_vibra)
             digitalWrite(moduleConfig.external_notification.output_vibra, on);
+#endif
         break;
     case 2:
         // Only control buzzer pin digitally if not using PWM mode
@@ -366,8 +372,15 @@ ExternalNotificationModule::ExternalNotificationModule()
             inputObserver.observe(inputBroker);
 #endif
 #if !MESHTASTIC_EXCLUDE_RTTTL
-        if (nodeDB->loadProto(rtttlConfigFile, meshtastic_RTTTLConfig_size, sizeof(meshtastic_RTTTLConfig),
-                              &meshtastic_RTTTLConfig_msg, &rtttlConfig) != LoadFileResult::LOAD_SUCCESS) {
+        bool hasSavedRingtone = false;
+#ifdef FSCom
+        {
+            concurrency::LockGuard guard(spiLock);
+            hasSavedRingtone = FSCom.exists(rtttlConfigFile);
+        }
+#endif
+        if (!hasSavedRingtone || nodeDB->loadProto(rtttlConfigFile, meshtastic_RTTTLConfig_size, sizeof(meshtastic_RTTTLConfig),
+                                                   &meshtastic_RTTTLConfig_msg, &rtttlConfig) != LoadFileResult::LOAD_SUCCESS) {
             memset(rtttlConfig.ringtone, 0, sizeof(rtttlConfig.ringtone));
             // The default ringtone is always loaded from userPrefs.jsonc
             strncpy(rtttlConfig.ringtone, USERPREFS_RINGTONE_RTTTL, sizeof(rtttlConfig.ringtone));

@@ -413,7 +413,7 @@ void MessageStore::clearAllMessages()
 #endif
 }
 
-// Internal helpers for targeted erasure.
+// Internal helper for targeted erasure.
 template <typename Predicate> static bool eraseFirstMatch(std::deque<StoredMessage> &deque, Predicate pred)
 {
     for (auto it = deque.begin(); it != deque.end(); ++it) {
@@ -425,22 +425,9 @@ template <typename Predicate> static bool eraseFirstMatch(std::deque<StoredMessa
     return false;
 }
 
-template <typename Predicate> static void eraseAllMatches(std::deque<StoredMessage> &deque, Predicate pred)
-{
-    for (auto it = deque.begin(); it != deque.end();) {
-        if (pred(*it)) {
-            it = deque.erase(it);
-        } else {
-            ++it;
-        }
-    }
-}
-
 bool MessageStore::pruneHiddenMessages()
 {
-    const size_t before = liveMessages.size();
-    eraseAllMatches(liveMessages, [&](const StoredMessage &m) { return !isMessageVisible(m); });
-    return liveMessages.size() != before;
+    return std::erase_if(liveMessages, [&](const StoredMessage &m) { return !isMessageVisible(m); }) > 0;
 }
 
 // Delete oldest message (RAM + persisted queue)
@@ -463,7 +450,7 @@ void MessageStore::deleteOldestMessageInChannel(uint8_t channel)
 void MessageStore::deleteAllMessagesInChannel(uint8_t channel)
 {
     auto pred = [channel](const StoredMessage &m) { return m.type == MessageType::BROADCAST && m.channelIndex == channel; };
-    eraseAllMatches(liveMessages, pred);
+    std::erase_if(liveMessages, pred);
     saveToFlash();
 }
 
@@ -476,7 +463,7 @@ void MessageStore::deleteAllMessagesWithPeer(uint32_t peer)
         uint32_t other = (m.sender == local) ? m.dest : m.sender;
         return other == peer;
     };
-    eraseAllMatches(liveMessages, pred);
+    std::erase_if(liveMessages, pred);
     saveToFlash();
 }
 
@@ -490,7 +477,7 @@ void MessageStore::deleteAllMessagesFromNode(uint32_t nodeNum)
             return false;
         return m.sender == local ? m.dest == nodeNum : m.sender == nodeNum;
     };
-    eraseAllMatches(liveMessages, pred);
+    std::erase_if(liveMessages, pred);
     saveToFlash();
 }
 
