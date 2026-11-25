@@ -3031,9 +3031,8 @@ void StoreForwardPlusPlusModule::rememberFailedPull()
                           enumPending.end());
         return;
     }
-    uint8_t root[SFPP_HASH_SIZE] = {0};
-    if (!getRootFromChannelHash(channels.getHash(0), root))
-        return;
+    uint8_t root[SFPP_HASH_SIZE];
+    memcpy(root, enumExchangeRoot, SFPP_HASH_SIZE); // the failed exchange's own root
     const uint32_t nowMs = Time::getMillis();
 
     // A failed tail pull stays a tail pull; only a named exchange has a checksum to compare.
