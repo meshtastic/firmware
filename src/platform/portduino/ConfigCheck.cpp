@@ -5,8 +5,8 @@
 #include "configuration.h"
 
 #include "PortduinoGlue.h"
-#include "modules/Telemetry/Sensor/CommandSensorFields.h"
 #include "TransparentLink.h"
+#include "modules/Telemetry/Sensor/CommandSensorFields.h"
 
 #include "yaml-cpp/eventhandler.h"
 
