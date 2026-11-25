@@ -688,6 +688,14 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define HAS_SCREEN_MIRROR 0
 #endif
 
+// Chunked PhoneAPI transport for small-MTU BLE clients (ToRadio/FromRadio.chunked_payload).
+// Portduino keeps it without HAS_BLUETOOTH: its BLE backend is optional and native tests exercise it.
+#if (HAS_BLUETOOTH || defined(ARCH_PORTDUINO)) && !(MESHTASTIC_EXCLUDE_CHUNKED_PHONEAPI)
+#define HAS_CHUNKED_PHONEAPI 1
+#else
+#define HAS_CHUNKED_PHONEAPI 0
+#endif
+
 // MUI streams RGB565 dirty rects and needs a device-ui carrying DisplayMirror, so it is opt-in.
 #if HAS_SCREEN_MIRROR && HAS_TFT && defined(MESHTASTIC_MUI_MIRROR)
 #define HAS_MUI_MIRROR 1

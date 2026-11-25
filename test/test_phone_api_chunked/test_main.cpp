@@ -8,15 +8,13 @@
 #include "Router.h"
 #include "UptimeClock.h"
 #include <functional>
-#include <condition_variable>
-#include <chrono>
-#include <mutex>
 #include <thread>
 #include <vector>
 #include <unity.h>
 
 extern bool heartbeatReceived;
 extern size_t encodePhoneApiChunkForTest(const uint8_t *, uint16_t, uint16_t &, uint8_t *);
+extern bool phoneApiChunkSlotAllocatedForTest(const PhoneAPI *);
 
 namespace
 {
@@ -26,15 +24,16 @@ class PhoneAPITestShim : public PhoneAPI
   public:
     unsigned dispatches = 0;
     Bytes lastDispatch;
-    bool dispatchOnly = false;
     std::function<void()> duringDispatch;
+    static constexpr int nonBleTypes[] = {TYPE_NONE, TYPE_SERIAL, TYPE_WIFI, TYPE_HTTP};
+    explicit PhoneAPITestShim(int type = TYPE_BLE) { api_type = APIType(type); }
     bool handleToRadio(const uint8_t *bytes, size_t size) override
     {
         ++dispatches;
         lastDispatch.assign(bytes, bytes + size);
         if (duringDispatch)
             duringDispatch();
-        return dispatchOnly ? false : PhoneAPI::handleToRadio(bytes, size);
+        return PhoneAPI::handleToRadio(bytes, size);
     }
     bool receive(const Bytes &bytes) { return PhoneAPI::handleToRadio(bytes.data(), bytes.size()); }
 
@@ -204,27 +203,67 @@ void test_timeout_exact_boundary_and_wrap()
     }
 }
 
-void test_two_slots_close_and_destructor_cleanup()
+void test_single_slot_allocated_on_first_write_and_freed_on_close()
 {
-    for (auto *client : clients)
-        sendFragments(*client, configRequest());
+    TEST_ASSERT_FALSE(phoneApiChunkSlotAllocatedForTest(nullptr));
+    const Bytes request = configRequest();
+    // A continuation without a start never allocates.
+    clients[0]->receive(chunk(Bytes(request.begin(), request.begin() + 1), 0));
+    TEST_ASSERT_FALSE(phoneApiChunkSlotAllocatedForTest(nullptr));
+    clients[0]->receive(chunk(Bytes(request.begin(), request.begin() + 1), request.size()));
+    TEST_ASSERT_TRUE(phoneApiChunkSlotAllocatedForTest(clients[0]));
+    clients[0]->receive(chunk(Bytes(request.begin() + 1, request.end()), 0));
     TEST_ASSERT_EQUAL_UINT(1, clients[0]->dispatches);
-    TEST_ASSERT_EQUAL_UINT(1, clients[1]->dispatches);
-    TEST_ASSERT_EQUAL_UINT(0, clients[2]->dispatches);
-    clients[0]->close();
-    sendFragments(*clients[2], configRequest());
-    TEST_ASSERT_EQUAL_UINT(1, clients[2]->dispatches);
-    delete clients[1];
-    clients[1] = new PhoneAPITestShim();
-    sendFragments(*clients[1], configRequest());
-    TEST_ASSERT_EQUAL_UINT(1, clients[1]->dispatches);
+
+    // One slot: a second BLE client cannot take it while the first owns it.
+    sendFragments(*clients[1], request);
+    TEST_ASSERT_EQUAL_UINT(0, clients[1]->dispatches);
+    TEST_ASSERT_TRUE(phoneApiChunkSlotAllocatedForTest(clients[0]));
+
+    // Repeated connect/close cycles reuse a single allocation and leave nothing behind (LSan checks the frees).
+    for (unsigned i = 0; i < 3; ++i) {
+        clients[0]->close();
+        TEST_ASSERT_FALSE(phoneApiChunkSlotAllocatedForTest(nullptr));
+        sendFragments(*clients[1], request);
+        TEST_ASSERT_TRUE(phoneApiChunkSlotAllocatedForTest(clients[1]));
+        clients[1]->close();
+        sendFragments(*clients[0], request);
+    }
+    TEST_ASSERT_EQUAL_UINT(3, clients[1]->dispatches);
+    TEST_ASSERT_EQUAL_UINT(4, clients[0]->dispatches);
+
+    // The destructor frees the slot too.
+    delete clients[0];
+    clients[0] = new PhoneAPITestShim();
+    TEST_ASSERT_FALSE(phoneApiChunkSlotAllocatedForTest(nullptr));
+
     // Closing drops pending outbound fragments and opt-in, not only the input buffer.
+    sendFragments(*clients[2], request);
     clients[2]->close();
-    clients[2]->receive(configRequest());
+    clients[2]->receive(request);
     bool sawLarge = false;
     for (unsigned i = 0; i < 8; ++i)
         sawLarge |= readRaw(*clients[2]).size() > 20;
     TEST_ASSERT_TRUE(sawLarge);
+}
+
+void test_non_ble_client_never_allocates_or_chunks()
+{
+    for (int type : PhoneAPITestShim::nonBleTypes) {
+        PhoneAPITestShim serial(type);
+        const Bytes request = configRequest();
+        sendFragments(serial, request);
+        TEST_ASSERT_EQUAL_UINT(0, serial.dispatches);
+        TEST_ASSERT_FALSE(phoneApiChunkSlotAllocatedForTest(nullptr));
+        TEST_ASSERT_FALSE(serial.isConnected());
+        // Its plain config dump is never chunked.
+        serial.receive(request);
+        bool sawLarge = false;
+        for (unsigned i = 0; i < 8; ++i)
+            sawLarge |= readRaw(serial).size() > 20;
+        TEST_ASSERT_TRUE(sawLarge);
+        TEST_ASSERT_FALSE(phoneApiChunkSlotAllocatedForTest(nullptr));
+    }
 }
 
 void test_nested_chunk_is_rejected_and_guard_recovers()
@@ -251,8 +290,10 @@ void test_dispatch_pins_slot_through_close_without_blocking_other_client()
     sendFragments(*clients[0], configRequest());
     clients[0]->duringDispatch = nullptr;
     TEST_ASSERT_EQUAL_UINT(1, clients[0]->dispatches);
-    TEST_ASSERT_EQUAL_UINT(1, clients[1]->dispatches);
+    // The single slot stays pinned until the dispatch returns, then close() takes effect.
+    TEST_ASSERT_EQUAL_UINT(0, clients[1]->dispatches);
     TEST_ASSERT_EQUAL_UINT(0, clients[2]->dispatches);
+    TEST_ASSERT_FALSE(phoneApiChunkSlotAllocatedForTest(nullptr));
     sendFragments(*clients[2], configRequest());
     TEST_ASSERT_EQUAL_UINT(1, clients[2]->dispatches);
 }
@@ -262,10 +303,9 @@ void test_reassembled_disconnect_releases_slot()
     Bytes disconnect{0x20, 0x01};
     sendFragments(*clients[0], disconnect);
     TEST_ASSERT_FALSE(clients[0]->isConnected());
+    TEST_ASSERT_FALSE(phoneApiChunkSlotAllocatedForTest(nullptr));
     sendFragments(*clients[1], configRequest());
-    sendFragments(*clients[2], configRequest());
     TEST_ASSERT_EQUAL_UINT(1, clients[1]->dispatches);
-    TEST_ASSERT_EQUAL_UINT(1, clients[2]->dispatches);
 }
 
 void test_concurrent_close_and_other_client_during_dispatch()
@@ -278,12 +318,15 @@ void test_concurrent_close_and_other_client_during_dispatch()
             sendFragments(*clients[2], configRequest());
         });
         transport.join();
+        clients[1]->receive(configRequest()); // a plain request from another client is not blocked by the pin
     };
     sendFragments(*clients[0], configRequest());
     clients[0]->duringDispatch = nullptr;
     TEST_ASSERT_EQUAL_UINT(1, clients[0]->dispatches);
-    TEST_ASSERT_EQUAL_UINT(1, clients[1]->dispatches);
+    TEST_ASSERT_EQUAL_UINT(0, clients[1]->dispatches);
+    TEST_ASSERT_TRUE(clients[1]->isConnected());
     TEST_ASSERT_EQUAL_UINT(0, clients[2]->dispatches);
+    TEST_ASSERT_FALSE(phoneApiChunkSlotAllocatedForTest(nullptr));
     sendFragments(*clients[2], configRequest());
     TEST_ASSERT_EQUAL_UINT(1, clients[2]->dispatches);
 }
@@ -382,6 +425,7 @@ void test_plain_handshake_resets_opt_in_and_pending_output()
     TEST_ASSERT_TRUE(clients[0]->available());
 
     clients[0]->receive(configRequest());
+    TEST_ASSERT_FALSE(phoneApiChunkSlotAllocatedForTest(nullptr));
     clients[1]->receive(configRequest());
     bool sawLarge = false;
     for (unsigned i = 0; i < 8; ++i) {
@@ -436,66 +480,6 @@ void test_chunked_heartbeat_and_pending_output_available()
     }
 }
 
-void test_two_dispatches_overlap_and_pin_both_slots()
-{
-    std::mutex mutex;
-    std::condition_variable cv;
-    unsigned entered = 0;
-    bool release[2] = {false, false};
-    Bytes frame = chunk(configRequest(), configRequest().size());
-    for (unsigned i = 0; i < 2; ++i) {
-        clients[i]->dispatchOnly = true;
-        clients[i]->duringDispatch = [&, i] {
-            std::unique_lock<std::mutex> lock(mutex);
-            ++entered;
-            cv.notify_all();
-            cv.wait(lock, [&] { return release[i]; });
-        };
-    }
-    std::thread first([&] { clients[0]->receive(frame); });
-    std::thread second([&] { clients[1]->receive(frame); });
-    bool overlapped;
-    {
-        std::unique_lock<std::mutex> lock(mutex);
-        overlapped = cv.wait_for(lock, std::chrono::seconds(5), [&] { return entered == 2; });
-        if (!overlapped) {
-            release[0] = release[1] = true;
-            cv.notify_all();
-        }
-    }
-    if (!overlapped) {
-        first.join();
-        second.join();
-        for (unsigned i = 0; i < 2; ++i)
-            clients[i]->duringDispatch = nullptr;
-        TEST_FAIL_MESSAGE("independent clients could not dispatch concurrently");
-    }
-    clients[0]->close();
-    clients[1]->close();
-    clients[0]->receive(frame);
-    clients[2]->receive(frame);
-    unsigned beforeRelease = clients[2]->dispatches;
-    {
-        std::lock_guard<std::mutex> lock(mutex);
-        release[0] = true;
-        cv.notify_all();
-    }
-    first.join();
-    clients[2]->receive(frame);
-    unsigned afterOneRelease = clients[2]->dispatches;
-    {
-        std::lock_guard<std::mutex> lock(mutex);
-        release[1] = true;
-        cv.notify_all();
-    }
-    second.join();
-    for (unsigned i = 0; i < 2; ++i)
-        clients[i]->duringDispatch = nullptr;
-    TEST_ASSERT_EQUAL_UINT(0, beforeRelease);
-    TEST_ASSERT_EQUAL_UINT(1, afterOneRelease);
-    TEST_ASSERT_EQUAL_UINT(1, clients[0]->dispatches);
-    TEST_ASSERT_EQUAL_UINT(1, clients[1]->dispatches);
-}
 } // namespace
 
 void setUp()
@@ -542,7 +526,8 @@ void setup()
     RUN_TEST(test_legacy_and_negotiated_config_are_identical);
     RUN_TEST(test_fragmented_initial_handshake_and_invalid_frames);
     RUN_TEST(test_timeout_exact_boundary_and_wrap);
-    RUN_TEST(test_two_slots_close_and_destructor_cleanup);
+    RUN_TEST(test_single_slot_allocated_on_first_write_and_freed_on_close);
+    RUN_TEST(test_non_ble_client_never_allocates_or_chunks);
     RUN_TEST(test_nested_chunk_is_rejected_and_guard_recovers);
     RUN_TEST(test_dispatch_pins_slot_through_close_without_blocking_other_client);
     RUN_TEST(test_reassembled_disconnect_releases_slot);
@@ -552,7 +537,6 @@ void setup()
     RUN_TEST(test_ble_filters_preserve_identical_continuations_and_legacy_dedup);
     RUN_TEST(test_plain_handshake_resets_opt_in_and_pending_output);
     RUN_TEST(test_chunked_heartbeat_and_pending_output_available);
-    RUN_TEST(test_two_dispatches_overlap_and_pin_both_slots);
     exit(UNITY_END());
 }
 
