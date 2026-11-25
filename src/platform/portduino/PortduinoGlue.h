@@ -139,8 +139,26 @@ void getMacAddr(uint8_t *dmac);
 bool MAC_from_string(std::string mac_str, uint8_t *dmac);
 #ifndef ARCH_PORTDUINO_WASM
 void readGPIOFromYaml(YAML::Node sourceNode, pinMapping &destPin, int pinDefault = RADIOLIB_NC);
+// A node number written as `0xea618fb4`, `!a28e145b`, or decimal. Shared by loadConfig and --check.
+bool nodeNumberFromYaml(const YAML::Node &node, uint32_t &out);
 #endif
-std::string exec(const char *cmd);
+// A command that outlives its limit is killed, along with anything it started, so a hung script
+// stalls the main loop for at most this long.
+constexpr uint32_t EXEC_DEFAULT_TIMEOUT_MS = 10000;
+constexpr uint32_t COMMAND_SENSOR_TIMEOUT_MS = 2000;
+// Logs a timeout or a failure to start; returns whatever the command printed, whatever its exit status.
+std::string exec(const char *cmd, uint32_t timeoutMs = EXEC_DEFAULT_TIMEOUT_MS);
+enum class ExecResult { Ok, Failed, TimedOut, NotStarted };
+// Runs cmd under /bin/sh and captures stdout. Ok only if it exited 0 within timeoutMs. Never logs, so it
+// is safe off the main thread.
+ExecResult execCommand(const char *cmd, uint32_t timeoutMs, std::string &output);
+
+// One Sensors: entry. type is an EnvironmentMetrics field name, see CommandSensorFields.h.
+struct commandSensorConfig {
+    std::string type;
+    std::string command;
+    float scale = 1.0f;
+};
 
 extern struct portduino_config_struct {
     // Lora
@@ -189,6 +207,8 @@ extern struct portduino_config_struct {
     int lora_usb_pid = 0x5512;
     int lora_usb_vid = 0x1A86;
     int spiSpeed = 2000000;
+    // Full node numbers whose LoRa frames are dropped on receive by their low byte (testing only).
+    std::vector<uint32_t> ignore_relay_nodes;
     int num_pa_points = 1; // default to 1 point, with 0 gain
     uint16_t tx_gain_lora[22] = {0};
     pinMapping lora_cs_pin = {"Lora", "CS"};
@@ -206,6 +226,9 @@ extern struct portduino_config_struct {
     std::string gps_serial_path = "";
     std::string gpsd_host = "";
     int gpsd_port = 2947;
+
+    // Serial module host tty
+    std::string serial_module_path = "";
 
     // I2C
     std::string i2cdev = "";
@@ -298,6 +321,8 @@ extern struct portduino_config_struct {
     std::string webserver_ssl_key_path = "/etc/meshtasticd/ssl/private_key.pem";
     std::string webserver_ssl_cert_path = "/etc/meshtasticd/ssl/certificate.pem";
     int webserverport = -1;
+    int webserver_http_port = -1;
+    bool webserver_http_bind_all = false;
 
     // Bluetooth (BLE peripheral via BlueZ; Linux only, and only when built with
     // sdbus-c++)
@@ -309,8 +334,12 @@ extern struct portduino_config_struct {
     int hostMetrics_interval = 0;
     int hostMetrics_channel = 0;
 
+    // Sensors
+    std::vector<commandSensorConfig> command_sensors;
+
     // Security
     std::vector<std::array<uint8_t, 32>> admin_keys;
+    bool dmshell_enabled = false;
 
     // config
     bool has_config_overrides = false;
@@ -422,6 +451,12 @@ extern struct portduino_config_struct {
             out << YAML::Key << "spiSpeed" << YAML::Value << spiSpeed;
         if (irq_dio_num >= 0)
             out << YAML::Key << "IRQ_DIO_NUM" << YAML::Value << irq_dio_num;
+        if (!ignore_relay_nodes.empty()) {
+            out << YAML::Key << "IgnoreRelayNodes" << YAML::Value << YAML::Flow << YAML::BeginSeq;
+            for (uint32_t node : ignore_relay_nodes)
+                out << YAML::Hex << node;
+            out << YAML::EndSeq << YAML::Dec;
+        }
         if (has_rfswitch_table) {
             out << YAML::Key << "rfswitch_table" << YAML::Value << YAML::BeginMap;
 
@@ -477,6 +512,12 @@ extern struct portduino_config_struct {
                 out << YAML::Key << "SerialPath" << YAML::Value << gps_serial_path;
             }
             out << YAML::EndMap; // GPS
+        }
+
+        if (!serial_module_path.empty()) {
+            out << YAML::Key << "SerialModule" << YAML::Value << YAML::BeginMap;
+            out << YAML::Key << "Path" << YAML::Value << serial_module_path;
+            out << YAML::EndMap; // SerialModule
         }
 
         if (i2cdev != "") {
@@ -704,6 +745,10 @@ extern struct portduino_config_struct {
             out << YAML::Key << "SSLKey" << YAML::Value << webserver_ssl_key_path;
             out << YAML::Key << "SSLCert" << YAML::Value << webserver_ssl_cert_path;
             out << YAML::Key << "Port" << YAML::Value << webserverport;
+            if (webserver_http_port > 0)
+                out << YAML::Key << "HTTPPort" << YAML::Value << webserver_http_port;
+            if (webserver_http_bind_all)
+                out << YAML::Key << "HTTPBindAll" << YAML::Value << true;
             out << YAML::EndMap; // Webserver
         }
 
@@ -725,13 +770,31 @@ extern struct portduino_config_struct {
             out << YAML::EndMap; // HostMetrics
         }
 
+        // Sensors
+        if (!command_sensors.empty()) {
+            out << YAML::Key << "Sensors" << YAML::Value << YAML::BeginSeq;
+            for (const auto &sensor : command_sensors) {
+                out << YAML::BeginMap;
+                out << YAML::Key << "Type" << YAML::Value << sensor.type;
+                out << YAML::Key << "Command" << YAML::Value << sensor.command;
+                if (sensor.scale != 1.0f)
+                    out << YAML::Key << "Scale" << YAML::Value << sensor.scale;
+                out << YAML::EndMap;
+            }
+            out << YAML::EndSeq; // Sensors
+        }
+
         // Security
-        if (!admin_keys.empty()) {
+        if (!admin_keys.empty() || dmshell_enabled) {
             out << YAML::Key << "Security" << YAML::Value << YAML::BeginMap;
-            out << YAML::Key << "AdminKeys" << YAML::Value << YAML::BeginSeq;
-            for (const auto &key : admin_keys)
-                out << adminKeyToBase64(key);
-            out << YAML::EndSeq;
+            if (!admin_keys.empty()) {
+                out << YAML::Key << "AdminKeys" << YAML::Value << YAML::BeginSeq;
+                for (const auto &key : admin_keys)
+                    out << adminKeyToBase64(key);
+                out << YAML::EndSeq;
+            }
+            if (dmshell_enabled)
+                out << YAML::Key << "DMShell" << YAML::Value << true;
             out << YAML::EndMap; // Security
         }
 
