@@ -54,8 +54,8 @@ void tDeckProToggleBacklights();
 
 // TCA8418 keyboard
 #define KB_BL_PIN 42
+#define KB_INT 15 // TCA8418 INT: low while key events are queued; wakes the keyboard thread and light sleep
 #ifdef MESHTASTIC_INCLUDE_INKHUD
-#define KB_INT 15
 #define WAKE_ON_TOUCH
 #define SCREEN_TOUCH_INT CST328_PIN_INT
 #endif
