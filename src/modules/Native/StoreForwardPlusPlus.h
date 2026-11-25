@@ -81,7 +81,7 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
 
   public:
     // Stamped into PRAGMA user_version. A store with any other value is moved aside, never migrated.
-    static constexpr int kSchemaVersion = 1;
+    static constexpr int kSchemaVersion = 2;
 
     /** Constructor
      *
@@ -280,6 +280,12 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     // returns true if the root hash was found
     bool getRootFromChannelHash(ChannelHash, uint8_t *);
 
+    // Derives the channel's root from its name and key; no node number or clock is involved.
+    bool deriveRootFromChannel(ChannelHash, uint8_t *);
+
+    // Returns the derived root, replacing a stale mapping from an earlier root rule or channel.
+    size_t getOrDeriveRootFromChannel(ChannelHash, uint8_t *);
+
     // For a given root hash, returns the ChannelHash
     // can handle partial root hashes
     ChannelHash getChannelHashFromRoot(uint8_t *_root_hash, size_t);
@@ -288,11 +294,6 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     // can handle partial root and commit hashes, always fills the buffer with 32 bytes
     // returns true if a next hash was found
     bool getNextHash(uint8_t *, size_t, uint8_t *, size_t, uint8_t *);
-
-    // For a given Meshtastic ChannelHash, fills the root_hash buffer with a 32-byte root hash
-    // but this function will add the root hash if it is not already present
-    // returns hash size or 0 if not found/added
-    size_t getOrAddRootFromChannelHash(ChannelHash, uint8_t *);
 
     // adds the ChannelHash and root_hash to the mappings table
     void addRootToMappings(ChannelHash, uint8_t *);
@@ -528,6 +529,8 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
 
     // Stage 9: writer-missed pushes.
     NodeNum enumAuthorityNode = 0;
+    // Log a foreign full-root advert once per peer, not once per advert.
+    NodeNum enumForeignRootLoggedPeer = 0;
     uint32_t enumAdvertTick = 0;
     uint32_t enumLastScratchSweepMs = 0;
     struct EnumPeer {

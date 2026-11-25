@@ -220,6 +220,49 @@ StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
             exit(EXIT_FAILURE);
         }
     }
+
+    // A v2 store belongs to the channel root it was built under. If it has channel mappings and none
+    // is our derived root, the channel name or key changed: move it aside and start a fresh store.
+    {
+        uint8_t derived[SFPP_HASH_SIZE] = {0};
+        const bool haveDerived = deriveRootFromChannel(channels.getHash(0), derived);
+        bool hasChannelMapping = false;
+        bool matchesDerived = false;
+        if (haveDerived) {
+            sqlite3_stmt *stmt = nullptr;
+            // A fresh file has no mappings table yet, so this simply finds nothing.
+            if (sqlite3_prepare_v2(ppDb, "select root_hash from mappings where chain_type=?;", -1, &stmt, nullptr) == SQLITE_OK) {
+                sqlite3_bind_int(stmt, 1, chain_types::channel_chain);
+                while (sqlite3_step(stmt) == SQLITE_ROW) {
+                    hasChannelMapping = true;
+                    const uint8_t *root = (const uint8_t *)sqlite3_column_blob(stmt, 0);
+                    const int len = sqlite3_column_bytes(stmt, 0);
+                    if (root && len == (int)SFPP_HASH_SIZE && memcmp(root, derived, SFPP_HASH_SIZE) == 0)
+                        matchesDerived = true;
+                }
+            }
+            if (stmt)
+                sqlite3_finalize(stmt);
+        }
+        if (haveDerived && hasChannelMapping && !matchesDerived) {
+            const std::string aside = db_path + ".root-" + std::to_string(getTime());
+            LOG_WARN("StoreForwardpp channel root changed: moving %s aside and starting empty", aside.c_str());
+            sqlite3_close(ppDb);
+            ppDb = nullptr;
+            if (std::rename(db_path.c_str(), aside.c_str()) != 0) {
+                LOG_ERROR("Cannot move the old StoreForwardpp DB aside");
+                exit(EXIT_FAILURE);
+            }
+            std::rename((db_path + "-journal").c_str(), (aside + "-journal").c_str());
+            res = sqlite3_open(db_path.c_str(), &ppDb);
+            if (res != SQLITE_OK) {
+                LOG_ERROR("Cannot open database: %s", sqlite3_errmsg(ppDb));
+                sqlite3_close(ppDb);
+                ppDb = nullptr;
+                exit(EXIT_FAILURE);
+            }
+        }
+    }
     char *err = nullptr;
 
     res = sqlite3_exec(ppDb, "         \
@@ -319,7 +362,8 @@ StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
         LOG_ERROR("%s", err);
     sqlite3_free(err);
 
-    // mappings table -- connects the root hashes to channel hashes and DM identifiers
+    // mappings table -- connects the root hashes to channel hashes and DM identifiers. Keyed by the
+    // root, not the 1-byte identifier, so two channels that share a hash keep separate stores.
     res = sqlite3_exec(ppDb, "         \
         CREATE TABLE IF NOT EXISTS     \
         mappings(                      \
@@ -327,7 +371,7 @@ StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
         identifier INT NOT NULL,       \
         root_hash BLOB NOT NULL,       \
         count INT DEFAULT 0,           \
-        PRIMARY KEY (identifier)       \
+        PRIMARY KEY (root_hash)        \
         );",
                        NULL, NULL, &err);
 
@@ -448,7 +492,7 @@ StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
 
     sqlite3_prepare_v2(ppDb, "select identifier from mappings where substr(root_hash,1,?)=?;", -1, &getHashFromRootStmt, NULL);
 
-    sqlite3_prepare_v2(ppDb, "INSERT INTO mappings (chain_type, identifier, root_hash) VALUES(?, ?, ?);", -1,
+    sqlite3_prepare_v2(ppDb, "INSERT OR REPLACE INTO mappings (chain_type, identifier, root_hash) VALUES(?, ?, ?);", -1,
                        &addRootToMappingsStmt, NULL);
 
     sqlite3_prepare_v2(ppDb, "select root_hash from mappings where identifier=?;", -1, &getRootFromChannelHashStmt, NULL);
@@ -696,7 +740,7 @@ int32_t StoreForwardPlusPlusModule::runOnce()
     uint8_t root_hash_bytes[SFPP_HASH_SIZE] = {0};
     ChannelHash hash = channels.getHash(0);
 
-    if (getOrAddRootFromChannelHash(hash, root_hash_bytes) == 0) {
+    if (getOrDeriveRootFromChannel(hash, root_hash_bytes) == 0) {
         LOG_WARN("No root hash found, not sending");
         return portduino_config.sfpp_announce_interval * 60 * 1000;
     }
@@ -740,14 +784,14 @@ int32_t StoreForwardPlusPlusModule::runOnce()
             return (int32_t)portduino_config.sfpp_enum_interval * 60 * 1000;
         pumpEnumRetries();
         // F3.5: the writer-missed sweep has its own timer, independent of the advert cadence.
-        if (!portduino_config.sfpp_stratum0 &&
-            (enumLastScratchSweepMs == 0 || Throttle::hasElapsed(enumLastScratchSweepMs, scratchSweepMs()))) {
+        if (enumLastScratchSweepMs == 0 || Throttle::hasElapsed(enumLastScratchSweepMs, scratchSweepMs())) {
             enumLastScratchSweepMs = Time::getMillis();
             pushScratchRows();
         }
         if (drainOneEnumFrame())
             return enumDrainIntervalMs(); // serving a request takes priority over the advert cadence
-        if (portduino_config.sfpp_stratum0)
+        // Every archive advertises, but not in the middle of an exchange or with a pull queued.
+        if (!enumExchangeActive && enumPending.empty() && !enumLateActive)
             advertiseOneBucket(root_hash_bytes, SFPP_HASH_SIZE);
         startPendingPull();
         if (enumExchangeActive)
@@ -756,9 +800,9 @@ int32_t StoreForwardPlusPlusModule::runOnce()
             return enumDrainIntervalMs(); // a paced pending pull is waiting
         if (enumLateActive)
             return 5 * 1000; // tighten the late-frame window expiry
-        if (!portduino_config.sfpp_stratum0)
-            return (int32_t)scratchSweepMs(); // wake for the next scratch sweep
-        return (int32_t)portduino_config.sfpp_enum_interval * 60 * 1000;
+        // Every archive advertises; the scratch sweep keeps its own, shorter cadence.
+        const uint32_t advertMs = (uint32_t)portduino_config.sfpp_enum_interval * 60 * 1000;
+        return (int32_t)(scratchSweepMs() < advertMs ? scratchSweepMs() : advertMs);
     }
 
     if (doing_split_send) {
@@ -1028,19 +1072,12 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
             LOG_WARN("StoreForwardpp CANON_ANNOUNCE without encrypted packet, dropping");
             return true;
         }
-        if (getRootFromChannelHash(currentEncrypted->channel, tmp_root_hash_bytes)) {
-            // we found the hash, check if it's the right one
-            if (memcmp(tmp_root_hash_bytes, t->root_hash.bytes, t->root_hash.size) != 0) {
-                LOG_INFO("StoreForwardpp Root hash does not match. Possibly two stratum0 nodes on the mesh?");
-                return true;
-            }
-        } else if (t->root_hash.size == SFPP_HASH_SIZE) {
-            addRootToMappings(currentEncrypted->channel, t->root_hash.bytes);
-            LOG_DEBUG("StoreForwardpp Adding root hash to mappings");
-        } else {
-            LOG_WARN("No root hash and unable to add");
+        if (!deriveRootFromChannel(currentEncrypted->channel, tmp_root_hash_bytes) || t->root_hash.size == 0 ||
+            t->root_hash.size > SFPP_HASH_SIZE || memcmp(tmp_root_hash_bytes, t->root_hash.bytes, t->root_hash.size) != 0) {
+            LOG_INFO("StoreForwardpp Root hash does not match the channel, dropping");
             return true;
         }
+        addRootToMappings(currentEncrypted->channel, tmp_root_hash_bytes);
 
         if (t->encapsulated_rxtime == 0) {
             LOG_DEBUG("StoreForwardpp No encapsulated time, conclude the chain is empty");
@@ -1395,7 +1432,7 @@ void StoreForwardPlusPlusModule::handleLegacyClientHistory(const meshtastic_Mesh
     uint32_t count = 0;
 
     uint8_t root_hash[SFPP_HASH_SIZE] = {0};
-    if (getRootFromChannelHash(channels.getHash(0), root_hash)) {
+    if (getOrDeriveRootFromChannel(channels.getHash(0), root_hash) != 0) {
         sqlite3_reset(legacyHistoryStmt);
         sqlite3_bind_int(legacyHistoryStmt, 1, SFPP_HASH_SIZE);
         sqlite3_bind_blob(legacyHistoryStmt, 2, root_hash, SFPP_HASH_SIZE, NULL);
@@ -1504,29 +1541,66 @@ ChannelHash StoreForwardPlusPlusModule::getChannelHashFromRoot(uint8_t *_root_ha
     return tmp_hash;
 }
 
-// return code indicates bytes in root hash, or 0 if not found/added
-size_t StoreForwardPlusPlusModule::getOrAddRootFromChannelHash(ChannelHash _ch_hash, uint8_t *_root_hash)
+// A root every archive on a channel derives identically: channel name and key, no node number and no
+// clock. The version tag makes a future rule change a clean break.
+bool StoreForwardPlusPlusModule::deriveRootFromChannel(ChannelHash _ch_hash, uint8_t *_root_hash)
 {
-    bool wasFound = getRootFromChannelHash(_ch_hash, _root_hash);
+    // The module is channel-0 only; a packet on another channel must not resolve to this root.
+    const int16_t primaryHash = channels.getHash(0);
+    if (primaryHash < 0 || static_cast<uint8_t>(primaryHash) != _ch_hash)
+        return false;
 
-    if (!wasFound) {
-        if (portduino_config.sfpp_stratum0) {
-            LOG_INFO("StoreForwardpp Generating Root hash!");
-            SHA256 root_hash;
-            root_hash.update(&_ch_hash, sizeof(_ch_hash));
-            NodeNum ourNode = nodeDB->getNodeNum();
-            root_hash.update(&ourNode, sizeof(ourNode));
-            uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice, true);
-            root_hash.update(&rtc_sec, sizeof(rtc_sec));
-            root_hash.finalize(_root_hash, SFPP_HASH_SIZE);
-            addRootToMappings(_ch_hash, _root_hash);
-            wasFound = true;
-        }
-    }
-    if (wasFound)
-        return SFPP_HASH_SIZE;
-    else
+    CryptoKey key = channels.getKey(0);
+    if (key.length < 0)
+        return false;
+
+    const char *name = channels.getName(0);
+    const std::string channelName = name ? name : "";
+    const uint32_t keyLength = static_cast<uint32_t>(key.length);
+
+    static constexpr char kRootDomain[] = "msh-sfpp-root-v1";
+    SHA256 root;
+    root.update(kRootDomain, sizeof(kRootDomain) - 1);
+
+    const uint8_t hashByte = static_cast<uint8_t>(_ch_hash);
+    root.update(&hashByte, sizeof(hashByte));
+
+    uint8_t lengthBytes[4];
+    auto updateLength = [&](uint32_t length) {
+        lengthBytes[0] = length & 0xff;
+        lengthBytes[1] = (length >> 8) & 0xff;
+        lengthBytes[2] = (length >> 16) & 0xff;
+        lengthBytes[3] = (length >> 24) & 0xff;
+        root.update(lengthBytes, sizeof(lengthBytes));
+    };
+
+    updateLength(static_cast<uint32_t>(channelName.size()));
+    if (!channelName.empty())
+        root.update(channelName.data(), channelName.size());
+    updateLength(keyLength);
+    if (keyLength > 0)
+        root.update(key.bytes, keyLength);
+
+    root.finalize(_root_hash, SFPP_HASH_SIZE);
+    return true;
+}
+
+// Returns the derived root, adding it on first use. The mapping is keyed by the root, so a second
+// channel that happens to share the 1-byte hash keeps its own row instead of replacing this one.
+size_t StoreForwardPlusPlusModule::getOrDeriveRootFromChannel(ChannelHash _ch_hash, uint8_t *_root_hash)
+{
+    uint8_t derived[SFPP_HASH_SIZE] = {0};
+    if (!deriveRootFromChannel(_ch_hash, derived))
         return 0;
+
+    uint8_t mapped[SFPP_HASH_SIZE] = {0};
+    if (!lookUpFullRootHash(derived, SFPP_HASH_SIZE, mapped)) {
+        LOG_INFO("StoreForwardpp Deriving root hash from the channel");
+        addRootToMappings(_ch_hash, derived);
+    }
+
+    memcpy(_root_hash, derived, SFPP_HASH_SIZE);
+    return SFPP_HASH_SIZE;
 }
 
 void StoreForwardPlusPlusModule::addRootToMappings(ChannelHash _ch_hash, uint8_t *_root_hash)
@@ -2213,7 +2287,7 @@ StoreForwardPlusPlusModule::ingestTextPacket(const meshtastic_MeshPacket &mp, co
                            lo.message_hash);
     lo.message_hash_len = SFPP_HASH_SIZE;
 
-    lo.root_hash_len = getOrAddRootFromChannelHash(encrypted_meshpacket->channel, lo.root_hash);
+    lo.root_hash_len = getOrDeriveRootFromChannel(encrypted_meshpacket->channel, lo.root_hash);
     return lo;
 }
 
@@ -2935,13 +3009,13 @@ void StoreForwardPlusPlusModule::addPendingBucket(const uint8_t *root_hash, Node
 
 void StoreForwardPlusPlusModule::startPendingPull()
 {
-    if (portduino_config.sfpp_stratum0 || portduino_config.sfpp_enum_listen_only)
+    if (portduino_config.sfpp_enum_listen_only)
         return;
     if (enumExchangeActive || enumPending.empty() || enumAuthorityNode == 0)
         return;
 
     uint8_t root[SFPP_HASH_SIZE] = {0};
-    if (!getRootFromChannelHash(channels.getHash(0), root))
+    if (getOrDeriveRootFromChannel(channels.getHash(0), root) == 0)
         return;
 
     // Key by (root, authority): drop anything remembered for another scope before touching a slot.
@@ -3149,33 +3223,43 @@ void StoreForwardPlusPlusModule::advertiseOneBucket(uint8_t *root_hash, size_t r
 
 void StoreForwardPlusPlusModule::handleEnumAdvert(const meshtastic_MeshPacket &mp, meshtastic_StoreForwardPlusPlus *t)
 {
-    if (portduino_config.sfpp_stratum0)
-        return; // the authority is the reference and never pulls
-
     sfppsr::Advert advert;
     if (!sfppsr::parseAdvert(*t, advert))
         return;
 
+    uint8_t derived[SFPP_HASH_SIZE] = {0};
+    if (getOrDeriveRootFromChannel(channels.getHash(0), derived) == 0)
+        return;
+
     uint8_t root[SFPP_HASH_SIZE] = {0};
     bool known = lookUpFullRootHash(advert.scope.rootPrefix, advert.scope.rootPrefixLen, root);
+    if (known && memcmp(root, derived, SFPP_HASH_SIZE) != 0) {
+        if (mp.from != enumForeignRootLoggedPeer) {
+            char rootHex[9];
+            formatRootHex(root, SFPP_HASH_SIZE, rootHex);
+            LOG_INFO("SFPP-ENUM ignoring advert from 0x%08x: foreign root %s", mp.from, rootHex);
+            enumForeignRootLoggedPeer = mp.from;
+        }
+        return;
+    }
     if (!known) {
-        // The advert carries a 4-byte prefix, which cannot be adopted; the follower needs the root
-        // from its store. A full-root advert variant is the future root-acquisition path.
+        // A 4-byte prefix cannot be checked; only a full root can join us.
         if (advert.scope.rootPrefixLen != SFPP_HASH_SIZE)
             return;
-        uint8_t existing[SFPP_HASH_SIZE] = {0};
-        if (getRootFromChannelHash(channels.getHash(0), existing)) {
-            if (memcmp(existing, advert.scope.rootPrefix, SFPP_HASH_SIZE) != 0)
-                return; // a different scope on our channel
-            memcpy(root, existing, SFPP_HASH_SIZE);
-        } else {
-            memcpy(root, advert.scope.rootPrefix, SFPP_HASH_SIZE);
-            addRootToMappings(channels.getHash(0), root);
-            LOG_INFO("StoreForwardpp adopted a root hash from an enumeration advert");
+        if (memcmp(advert.scope.rootPrefix, derived, SFPP_HASH_SIZE) != 0) {
+            if (mp.from != enumForeignRootLoggedPeer) {
+                char rootHex[9];
+                formatRootHex(advert.scope.rootPrefix, SFPP_HASH_SIZE, rootHex);
+                LOG_INFO("SFPP-ENUM ignoring advert from 0x%08x: foreign root %s", mp.from, rootHex);
+                enumForeignRootLoggedPeer = mp.from;
+            }
+            return;
         }
+        memcpy(root, derived, SFPP_HASH_SIZE);
     }
+    enumForeignRootLoggedPeer = 0;
 
-    // F3.2: only a parsed advert whose root resolves (known, or adopted here) names the authority.
+    // F3.2: only a parsed advert whose root is ours names the authority.
     enumAuthorityNode = mp.from;
     // Stage 8h: the tip and advert bookkeeping belong to (root, authority); reset on a change.
     if (memcmp(enumTipRoot, root, SFPP_HASH_SIZE) != 0 || enumTipAuthority != mp.from) {
@@ -3806,11 +3890,11 @@ void StoreForwardPlusPlusModule::noteEnumOffered(const uint8_t *hash)
 
 void StoreForwardPlusPlusModule::pushScratchRows()
 {
-    if (portduino_config.sfpp_enum_listen_only || portduino_config.sfpp_stratum0 || enumAuthorityNode == 0)
+    if (portduino_config.sfpp_enum_listen_only || enumAuthorityNode == 0)
         return;
 
     uint8_t root[SFPP_HASH_SIZE] = {0};
-    if (!getRootFromChannelHash(channels.getHash(0), root))
+    if (getOrDeriveRootFromChannel(channels.getHash(0), root) == 0)
         return;
 
     // An offer older than the reoffer window may be tried again if the row is still in scratch.
@@ -3866,7 +3950,7 @@ bool StoreForwardPlusPlusModule::acceptPushedItemFrame(const meshtastic_MeshPack
         return false;
 
     uint8_t root[SFPP_HASH_SIZE] = {0};
-    if (!getRootFromChannelHash(channels.getHash(0), root))
+    if (getOrDeriveRootFromChannel(channels.getHash(0), root) == 0)
         return false;
 
     // F3.6: trust a known peer on this root; an unknown pusher gets a small budget per window.
@@ -4012,7 +4096,7 @@ void StoreForwardPlusPlusModule::handleItemFrame(const meshtastic_MeshPacket &mp
     if (hint >= 0x100000)
         return;
     uint8_t root[SFPP_HASH_SIZE] = {0};
-    if (!getRootFromChannelHash(channels.getHash(0), root))
+    if (getOrDeriveRootFromChannel(channels.getHash(0), root) == 0)
         return;
     if (isInDB(hash, sizeof(hash)))
         return;

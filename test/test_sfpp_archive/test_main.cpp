@@ -23,6 +23,7 @@
 #include "configuration.h" // first: the portduino runner links setup()/loop()
 
 #include "TestUtil.h"
+#include "UptimeClock.h"
 #include "gps/RTC.h"
 #include "mesh/Channels.h"
 #include "mesh/CryptoEngine.h"
@@ -375,6 +376,107 @@ bool ingestOneText(const char *text)
     meshtastic_MeshPacket mp = makeText(REMOTE_NODE, TEXT_ID, text, getValidTime(RTCQualityNTP, true));
     meshtastic_MeshPacket enc = makeEncryptedCopy(mp);
     return testSfpp->ingest(mp, &enc) == ProcessMessage::CONTINUE;
+}
+
+// The root this store maps the primary channel to, or empty when it has no mapping yet.
+std::vector<uint8_t> mappingRoot()
+{
+    std::vector<uint8_t> out;
+    sqlite3 *db = nullptr;
+    if (sqlite3_open(dbFile().c_str(), &db) != SQLITE_OK) {
+        if (db)
+            sqlite3_close(db);
+        return out;
+    }
+    sqlite3_stmt *stmt = nullptr;
+    if (sqlite3_prepare_v2(db, "select root_hash from mappings limit 1;", -1, &stmt, nullptr) == SQLITE_OK &&
+        sqlite3_step(stmt) == SQLITE_ROW) {
+        const uint8_t *root = (const uint8_t *)sqlite3_column_blob(stmt, 0);
+        const int len = sqlite3_column_bytes(stmt, 0);
+        if (root && len == (int)SFPP_HASH_SIZE)
+            out.assign(root, root + SFPP_HASH_SIZE);
+    }
+    if (stmt)
+        sqlite3_finalize(stmt);
+    sqlite3_close(db);
+    return out;
+}
+
+std::vector<std::vector<uint8_t>> mappingRoots()
+{
+    std::vector<std::vector<uint8_t>> out;
+    sqlite3 *db = nullptr;
+    if (sqlite3_open(dbFile().c_str(), &db) != SQLITE_OK) {
+        if (db)
+            sqlite3_close(db);
+        return out;
+    }
+    sqlite3_stmt *stmt = nullptr;
+    if (sqlite3_prepare_v2(db, "select root_hash from mappings order by rowid;", -1, &stmt, nullptr) == SQLITE_OK) {
+        while (sqlite3_step(stmt) == SQLITE_ROW) {
+            const uint8_t *root = (const uint8_t *)sqlite3_column_blob(stmt, 0);
+            const int len = sqlite3_column_bytes(stmt, 0);
+            if (root && len == (int)SFPP_HASH_SIZE)
+                out.emplace_back(root, root + SFPP_HASH_SIZE);
+        }
+    }
+    if (stmt)
+        sqlite3_finalize(stmt);
+    sqlite3_close(db);
+    return out;
+}
+
+bool writeMappingRoot(const uint8_t *root)
+{
+    sqlite3 *db = nullptr;
+    if (sqlite3_open(dbFile().c_str(), &db) != SQLITE_OK) {
+        if (db)
+            sqlite3_close(db);
+        return false;
+    }
+    // A store built by the old rule has only the stale channel mapping, so drop the new one first.
+    sqlite3_exec(db, "delete from mappings;", nullptr, nullptr, nullptr);
+    sqlite3_stmt *stmt = nullptr;
+    bool ok = false;
+    if (sqlite3_prepare_v2(db, "insert into mappings (chain_type, identifier, root_hash) values(0, ?, ?);", -1, &stmt, nullptr) ==
+        SQLITE_OK) {
+        sqlite3_bind_int(stmt, 1, channels.getHash(0));
+        sqlite3_bind_blob(stmt, 2, root, SFPP_HASH_SIZE, NULL);
+        ok = sqlite3_step(stmt) == SQLITE_DONE;
+    }
+    if (stmt)
+        sqlite3_finalize(stmt);
+    sqlite3_close(db);
+    return ok;
+}
+
+// A fresh empty store for the channel, run once with the given node identity and clock, returning the
+// root it mapped. Used to show the root depends on neither.
+std::vector<uint8_t> freshDerivedRoot(NodeNum node, uint32_t nowMs)
+{
+    delete testSfpp;
+    testSfpp = nullptr;
+    std::remove(dbFile().c_str());
+    std::remove((dbFile() + "-journal").c_str());
+
+    myNodeInfo.my_node_num = node;
+    Time::setTestMillis(nowMs);
+    portduino_config.sfpp_stratum0 = false;
+    portduino_config.sfpp_repair = SFPP_REPAIR_ENUM;
+    testSfpp = new TestSfppModule();
+    testSfpp->runOnce();
+    return mappingRoot();
+}
+
+void setPrimaryChannel(const char *name, const uint8_t *psk, size_t pskLen)
+{
+    meshtastic_Channel &channel = channelFile.channels[0];
+    memset(channel.settings.name, 0, sizeof(channel.settings.name));
+    strncpy(channel.settings.name, name, sizeof(channel.settings.name) - 1);
+    channel.settings.psk.size = pskLen;
+    if (pskLen > 0)
+        memcpy(channel.settings.psk.bytes, psk, pskLen);
+    channels.onConfigChanged();
 }
 
 } // namespace
@@ -845,6 +947,158 @@ void test_unstampedStoreIsMovedAsideAndStartsEmpty()
         std::remove(f.c_str());
 }
 
+// The root is derived from the channel, so a follower with no stratum 0 gets one on its first run.
+// Two archives with different node numbers and clocks derive the same root, which is what makes
+// the stores comparable without an authority.
+void test_root_is_derived_on_two_archives_without_stratum0()
+{
+    const std::vector<uint8_t> rootA = freshDerivedRoot(LOCAL_NODE, 1000);
+    const std::vector<uint8_t> rootB = freshDerivedRoot(REMOTE_NODE, 123456789);
+
+    TEST_ASSERT_EQUAL_UINT(SFPP_HASH_SIZE, rootA.size());
+    TEST_ASSERT_EQUAL_UINT(SFPP_HASH_SIZE, rootB.size());
+    TEST_ASSERT_EQUAL_MEMORY(rootA.data(), rootB.data(), SFPP_HASH_SIZE);
+}
+
+// A different name or key is a different channel and must not share a store.
+void test_root_changes_when_the_channel_identity_changes()
+{
+    const std::vector<uint8_t> base = freshDerivedRoot(LOCAL_NODE, 1000);
+    TEST_ASSERT_EQUAL_UINT(SFPP_HASH_SIZE, base.size());
+
+    const std::string name = channels.getName(0);
+    CryptoKey key = channels.getKey(0);
+    setPrimaryChannel("sfpp-other", key.bytes, key.length);
+    const std::vector<uint8_t> renamed = freshDerivedRoot(LOCAL_NODE, 1000);
+    TEST_ASSERT_EQUAL_UINT(SFPP_HASH_SIZE, renamed.size());
+    TEST_ASSERT_TRUE(memcmp(base.data(), renamed.data(), SFPP_HASH_SIZE) != 0);
+
+    uint8_t otherKey[16];
+    memset(otherKey, 0xA5, sizeof(otherKey));
+    setPrimaryChannel(name.c_str(), otherKey, sizeof(otherKey));
+    const std::vector<uint8_t> rekeyed = freshDerivedRoot(LOCAL_NODE, 1000);
+    TEST_ASSERT_EQUAL_UINT(SFPP_HASH_SIZE, rekeyed.size());
+    TEST_ASSERT_TRUE(memcmp(base.data(), rekeyed.data(), SFPP_HASH_SIZE) != 0);
+}
+
+// A mapping left by the old generated-root rule is not used: a v2 store whose channel mapping does
+// not match the derived root is moved aside and a fresh store is created under the derived root.
+void test_stale_mapping_moves_the_store_aside()
+{
+    portduino_config.sfpp_stratum0 = true;
+    portduino_config.sfpp_repair = SFPP_REPAIR_ENUM;
+    testSfpp->runOnce();
+    const std::vector<uint8_t> derived = mappingRoot();
+    TEST_ASSERT_EQUAL_UINT(SFPP_HASH_SIZE, derived.size());
+
+    delete testSfpp;
+    testSfpp = nullptr;
+    uint8_t stale[SFPP_HASH_SIZE];
+    memset(stale, 0x5C, sizeof(stale));
+    TEST_ASSERT_TRUE(writeMappingRoot(stale));
+
+    portduino_config.sfpp_stratum0 = false;
+    testSfpp = new TestSfppModule(); // the ctor sees the stale channel mapping and moves the file
+    testSfpp->runOnce();
+
+    const std::vector<uint8_t> after = mappingRoot();
+    TEST_ASSERT_EQUAL_UINT(SFPP_HASH_SIZE, after.size());
+    TEST_ASSERT_EQUAL_MEMORY(derived.data(), after.data(), SFPP_HASH_SIZE);
+    TEST_ASSERT_TRUE(memcmp(after.data(), stale, SFPP_HASH_SIZE) != 0);
+
+    const std::vector<std::string> aside = filesMovedAside();
+    TEST_ASSERT_EQUAL_UINT(1, aside.size());
+    TEST_ASSERT_NOT_NULL(strstr(aside[0].c_str(), "storeforwardpp.db.root-"));
+    for (const std::string &f : aside)
+        std::remove(f.c_str());
+}
+
+// A later v2 PSK/name change is not a schema change: the old store is moved aside and the archive
+// starts empty under the new channel root. The old rows are not served.
+void test_channel_change_moves_the_v2_store_aside()
+{
+    portduino_config.sfpp_stratum0 = true;
+    portduino_config.sfpp_repair = SFPP_REPAIR_ENUM;
+    TEST_ASSERT_TRUE(ingestOneText("served under the old channel"));
+    const std::vector<uint8_t> oldRoot = mappingRoot();
+    TEST_ASSERT_EQUAL_UINT(SFPP_HASH_SIZE, oldRoot.size());
+    delete testSfpp;
+    testSfpp = nullptr;
+
+    uint8_t otherKey[16];
+    memset(otherKey, 0xA5, sizeof(otherKey));
+    setPrimaryChannel("sfpp-new-key", otherKey, sizeof(otherKey));
+
+    testSfpp = new TestSfppModule(); // the ctor sees a channel mapping for another root
+    testSfpp->runOnce();
+    const std::vector<uint8_t> newRoot = mappingRoot();
+    TEST_ASSERT_EQUAL_UINT(SFPP_HASH_SIZE, newRoot.size());
+    TEST_ASSERT_TRUE(memcmp(oldRoot.data(), newRoot.data(), SFPP_HASH_SIZE) != 0);
+
+    StoredRow row;
+    TEST_ASSERT_FALSE(readStoredRow(TEXT_ID, row));
+    const std::vector<std::string> aside = filesMovedAside();
+    TEST_ASSERT_EQUAL_UINT(1, aside.size());
+    TEST_ASSERT_NOT_NULL(strstr(aside[0].c_str(), "storeforwardpp.db.root-"));
+    for (const std::string &f : aside)
+        std::remove(f.c_str());
+}
+
+// Two channels that share the 1-byte hash must keep separate mapping rows in one store; keying the
+// mapping by the hash would replace the first with the second.
+void test_two_channels_sharing_a_hash_keep_two_mappings()
+{
+    portduino_config.sfpp_stratum0 = true;
+    portduino_config.sfpp_repair = SFPP_REPAIR_ENUM;
+    testSfpp->runOnce();
+    const std::vector<uint8_t> rootA = mappingRoot();
+    TEST_ASSERT_EQUAL_UINT(SFPP_HASH_SIZE, rootA.size());
+
+    std::string name = channels.getName(0);
+    TEST_ASSERT_GREATER_OR_EQUAL(2, name.size());
+    std::swap(name[0], name[1]); // XOR hash is position-independent
+    CryptoKey key = channels.getKey(0);
+    TEST_ASSERT_EQUAL_INT(channels.getHash(0), channels.hashFor(0, name.c_str()));
+    setPrimaryChannel(name.c_str(), key.bytes, key.length);
+
+    testSfpp->runOnce();
+    const std::vector<std::vector<uint8_t>> roots = mappingRoots();
+    TEST_ASSERT_EQUAL_UINT(2, roots.size());
+    bool sawA = false, sawB = false;
+    for (const auto &root : roots) {
+        sawA = sawA || memcmp(root.data(), rootA.data(), SFPP_HASH_SIZE) == 0;
+        sawB = sawB || memcmp(root.data(), rootA.data(), SFPP_HASH_SIZE) != 0;
+    }
+    TEST_ASSERT_TRUE(sawA);
+    TEST_ASSERT_TRUE(sawB);
+}
+
+// The root rule changes the store's identity, so the schema stamp moves to 2 and a v1 store is
+// moved aside whole rather than served under the new root.
+void test_versionOneStoreIsMovedAside()
+{
+    TEST_ASSERT_TRUE(ingestOneText("from version one"));
+    delete testSfpp;
+    testSfpp = nullptr;
+
+    sqlite3 *db = nullptr;
+    TEST_ASSERT_EQUAL_INT(SQLITE_OK, sqlite3_open(dbFile().c_str(), &db));
+    TEST_ASSERT_EQUAL_INT(SQLITE_OK, sqlite3_exec(db, "PRAGMA user_version = 1;", nullptr, nullptr, nullptr));
+    sqlite3_close(db);
+
+    testSfpp = new TestSfppModule();
+
+    StoredRow row;
+    TEST_ASSERT_FALSE(readStoredRow(TEXT_ID, row));
+    TEST_ASSERT_EQUAL_INT(StoreForwardPlusPlusModule::kSchemaVersion, storedSchemaVersion());
+
+    const std::vector<std::string> aside = filesMovedAside();
+    TEST_ASSERT_EQUAL_UINT(1, aside.size());
+    TEST_ASSERT_NOT_NULL(strstr(aside[0].c_str(), "storeforwardpp.db.v1-"));
+    for (const std::string &f : aside)
+        std::remove(f.c_str());
+}
+
 void loop() {}
 
 void setup()
@@ -868,6 +1122,12 @@ void setup()
     RUN_TEST(test_shimClaimsPort65WithLegacyClientOnly);
     RUN_TEST(test_storeIsStampedAndKeptAcrossRestart);
     RUN_TEST(test_unstampedStoreIsMovedAsideAndStartsEmpty);
+    RUN_TEST(test_root_is_derived_on_two_archives_without_stratum0);
+    RUN_TEST(test_root_changes_when_the_channel_identity_changes);
+    RUN_TEST(test_stale_mapping_moves_the_store_aside);
+    RUN_TEST(test_channel_change_moves_the_v2_store_aside);
+    RUN_TEST(test_two_channels_sharing_a_hash_keep_two_mappings);
+    RUN_TEST(test_versionOneStoreIsMovedAside);
     UNITY_END();
 }
 

@@ -365,6 +365,29 @@ bool readRoot(const std::string &dir, uint8_t out[SFPP_HASH_SIZE])
     return ok;
 }
 
+// The root mapped to the primary channel, whether or not the store holds any rows yet.
+bool readMappingRoot(const std::string &dir, uint8_t out[SFPP_HASH_SIZE])
+{
+    sqlite3 *db = nullptr;
+    if (!openDb(dir, &db))
+        return false;
+    sqlite3_stmt *stmt = nullptr;
+    bool ok = false;
+    if (sqlite3_prepare_v2(db, "select root_hash from mappings limit 1;", -1, &stmt, nullptr) == SQLITE_OK &&
+        sqlite3_step(stmt) == SQLITE_ROW) {
+        const uint8_t *root = (const uint8_t *)sqlite3_column_blob(stmt, 0);
+        const int len = sqlite3_column_bytes(stmt, 0);
+        if (root && len == (int)SFPP_HASH_SIZE) {
+            memcpy(out, root, SFPP_HASH_SIZE);
+            ok = true;
+        }
+    }
+    if (stmt)
+        sqlite3_finalize(stmt);
+    sqlite3_close(db);
+    return ok;
+}
+
 // A fabricated extra row in the bucket with a chosen short ID, used to prove an unrecoverable
 // collision is detected rather than retried forever.
 bool insertScratchRow(const std::string &dir, uint32_t to, uint32_t from, uint32_t id, const uint8_t *cipher, size_t len,
@@ -508,6 +531,34 @@ bool buildAdvertFromDir(const std::string &dir, uint32_t bucket, bool corruptChe
     if (corruptChecksum)
         msg.sr_checksum ^= 1;
     msg.encapsulated_rxtime = tip; // Stage 8f: the sender's tip counter
+
+    out = meshtastic_MeshPacket_init_zero;
+    out.from = AUTHORITY_NODE;
+    out.to = NODENUM_BROADCAST;
+    out.channel = 0;
+    out.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    out.decoded.portnum = meshtastic_PortNum_STORE_FORWARD_PLUSPLUS_APP;
+    out.decoded.payload.size = pb_encode_to_bytes(out.decoded.payload.bytes, sizeof(out.decoded.payload.bytes),
+                                                  &meshtastic_StoreForwardPlusPlus_msg, &msg);
+    return out.decoded.payload.size > 0;
+}
+
+// A full-root advert naming an arbitrary root and a non-empty bucket, used to prove a foreign root
+// is ignored and our own is accepted.
+bool buildAdvertWithRoot(const uint8_t root[SFPP_HASH_SIZE], uint32_t bucket, uint32_t tip, meshtastic_MeshPacket &out)
+{
+    sfppsr::BucketSummary summary(4);
+    summary.add(0x1234, 0x5678);
+
+    sfppsr::Scope scope;
+    scope.rootPrefixLen = SFPP_HASH_SIZE;
+    memcpy(scope.rootPrefix, root, SFPP_HASH_SIZE);
+    scope.bucket = bucket;
+
+    meshtastic_StoreForwardPlusPlus msg;
+    if (!sfppsr::buildAdvert(scope, summary, msg))
+        return false;
+    msg.encapsulated_rxtime = tip;
 
     out = meshtastic_MeshPacket_init_zero;
     out.from = AUTHORITY_NODE;
@@ -1326,8 +1377,9 @@ void test_sendFreesPacketSafely()
     assertConverged();
 }
 
-// N3: a blank follower (no root) joins from a full-root advert, then pulls normally.
-void test_blankFollowerAdoptsFullRootAdvert()
+// N3: a blank follower now derives the channel root itself, so a full-root advert naming that same
+// root lets it join and pull normally.
+void test_blankFollowerPullsFromFullRootAdvert()
 {
     ingestAuthority(3);
 
@@ -2071,6 +2123,116 @@ void test_writerMissedIsPushedAndSecondFollowerConverges()
     TEST_ASSERT_EQUAL_UINT64(a.checksum, c.checksum);
 }
 
+void test_two_archives_derive_the_same_root_without_stratum0()
+{
+    portduino_config.sfpp_db_path = dirB + "/";
+    portduino_config.sfpp_stratum0 = false;
+    portduino_config.sfpp_repair = SFPP_REPAIR_ENUM;
+    follower = new TestSfppModule();
+    myNodeInfo.my_node_num = FOLLOWER_NODE;
+    Time::setTestMillis(1000);
+    follower->runOnce();
+
+    uint8_t rootB[SFPP_HASH_SIZE] = {0};
+    TEST_ASSERT_TRUE_MESSAGE(readMappingRoot(dirB, rootB), "a follower with no stratum 0 must derive a root");
+
+    portduino_config.sfpp_db_path = dirC + "/";
+    follower2 = new TestSfppModule();
+    myNodeInfo.my_node_num = FOLLOWER2_NODE;
+    Time::setTestMillis(987654321);
+    follower2->runOnce();
+
+    uint8_t rootC[SFPP_HASH_SIZE] = {0};
+    TEST_ASSERT_TRUE_MESSAGE(readMappingRoot(dirC, rootC), "a second follower must derive a root too");
+    TEST_ASSERT_EQUAL_MEMORY(rootB, rootC, SFPP_HASH_SIZE);
+}
+
+// A full-root advert naming a root we did not derive is a different scope: ignore it, do not adopt it,
+// and do not pull from it.
+void test_full_root_advert_with_a_foreign_root_is_ignored()
+{
+    portduino_config.sfpp_db_path = dirB + "/";
+    portduino_config.sfpp_stratum0 = false;
+    portduino_config.sfpp_repair = SFPP_REPAIR_ENUM;
+    follower = new TestSfppModule();
+    myNodeInfo.my_node_num = FOLLOWER_NODE;
+
+    uint8_t foreign[SFPP_HASH_SIZE];
+    memset(foreign, 0xAB, sizeof(foreign));
+    meshtastic_MeshPacket advert;
+    TEST_ASSERT_TRUE(buildAdvertWithRoot(foreign, 0, 1, advert));
+
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
+    follower->runOnce();
+
+    TEST_ASSERT_EQUAL_UINT_MESSAGE(0, takeSent().size(), "a foreign full-root advert must not start a pull");
+
+    uint8_t mapped[SFPP_HASH_SIZE] = {0};
+    if (readMappingRoot(dirB, mapped))
+        TEST_ASSERT_TRUE_MESSAGE(memcmp(mapped, foreign, SFPP_HASH_SIZE) != 0, "the foreign root must not be adopted");
+}
+
+// A follower with no stratum 0 advertises its own bucket; the flag no longer gates advertising.
+void test_follower_advertises_without_stratum0()
+{
+    ingestAuthority(2);
+    buildFollowerFromCopy();
+    myNodeInfo.my_node_num = FOLLOWER_NODE;
+    takeSent();
+
+    follower->runOnce();
+
+    std::vector<meshtastic_MeshPacket> sent = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, sent.size());
+    TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ADVERT, decodeSfpp(sent[0]).sfpp_message_type);
+}
+
+// A stratum-0 labelled node pulls from an advert like any other; the flag no longer gates pulling.
+void test_stratum0_node_pulls_from_an_advert()
+{
+    portduino_config.sfpp_db_path = dirB + "/";
+    portduino_config.sfpp_stratum0 = true;
+    portduino_config.sfpp_repair = SFPP_REPAIR_ENUM;
+    follower = new TestSfppModule();
+    myNodeInfo.my_node_num = FOLLOWER_NODE;
+    follower->runOnce(); // derive the root
+    takeSent();
+
+    uint8_t ours[SFPP_HASH_SIZE] = {0};
+    TEST_ASSERT_TRUE(readMappingRoot(dirB, ours));
+    meshtastic_MeshPacket advert;
+    TEST_ASSERT_TRUE(buildAdvertWithRoot(ours, 0, 1, advert));
+
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, true, advert));
+    std::vector<meshtastic_MeshPacket> sent = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, sent.size());
+    TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_REQUEST, decodeSfpp(sent[0]).sfpp_message_type);
+}
+
+// A full-root advert naming our own derived root is the same scope: accept it and pull.
+void test_full_root_advert_with_our_root_is_pulled()
+{
+    portduino_config.sfpp_db_path = dirB + "/";
+    portduino_config.sfpp_stratum0 = false;
+    portduino_config.sfpp_repair = SFPP_REPAIR_ENUM;
+    follower = new TestSfppModule();
+    myNodeInfo.my_node_num = FOLLOWER_NODE;
+    follower->runOnce();
+
+    uint8_t ours[SFPP_HASH_SIZE] = {0};
+    TEST_ASSERT_TRUE_MESSAGE(readMappingRoot(dirB, ours), "the follower must have derived a root");
+
+    meshtastic_MeshPacket advert;
+    TEST_ASSERT_TRUE(buildAdvertWithRoot(ours, 0, 1, advert));
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
+    follower->runOnce();
+
+    std::vector<meshtastic_MeshPacket> sent = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, sent.size());
+    TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_REQUEST, decodeSfpp(sent[0]).sfpp_message_type);
+    TEST_ASSERT_EQUAL_UINT32(0, decodeSfpp(sent[0]).chain_count);
+}
+
 void loop() {}
 
 void setup()
@@ -2095,7 +2257,7 @@ void setup()
     RUN_TEST(test_lostItemFrameIsRetried);
     RUN_TEST(test_twoRequestersBothComplete);
     RUN_TEST(test_sendFreesPacketSafely);
-    RUN_TEST(test_blankFollowerAdoptsFullRootAdvert);
+    RUN_TEST(test_blankFollowerPullsFromFullRootAdvert);
     RUN_TEST(test_unknownPusherIsBudgeted);
     RUN_TEST(test_pacedDeliveryConverges);
     RUN_TEST(test_broadcastServesListenOnlyFollower);
@@ -2116,6 +2278,11 @@ void setup()
     RUN_TEST(test_sketchCountMismatchFallsBackImmediately);
     RUN_TEST(test_sketchWrongChecksumFallsBack);
     RUN_TEST(test_writerMissedIsPushedAndSecondFollowerConverges);
+    RUN_TEST(test_two_archives_derive_the_same_root_without_stratum0);
+    RUN_TEST(test_full_root_advert_with_a_foreign_root_is_ignored);
+    RUN_TEST(test_full_root_advert_with_our_root_is_pulled);
+    RUN_TEST(test_follower_advertises_without_stratum0);
+    RUN_TEST(test_stratum0_node_pulls_from_an_advert);
     UNITY_END();
 }
 
