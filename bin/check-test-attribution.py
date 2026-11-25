@@ -50,8 +50,22 @@ def owns(suite, source_file):
     return f"/{suite}/" in normalized
 
 
+def is_crash_placeholder(testsuite_name, case):
+    """PlatformIO's stand-in for a suite whose program died before Unity reported a case.
+
+    It names the case after the suite itself, marks it ERRORED with an <error> child, and has no
+    file. The run step has already failed on it, so it is not an attribution question.
+    """
+    return (
+        case.get("name") == testsuite_name
+        and case.get("status") == "ERRORED"
+        and case.get("file") is None
+        and case.find("error") is not None
+    )
+
+
 def collect(paths):
-    """Map suite -> list of (case name, source file or None), merged across reports."""
+    """Map suite -> list of (case name, source file or None, crashed), merged across reports."""
     cases = {}
     for path in paths:
         try:
@@ -74,7 +88,8 @@ def collect(paths):
                 continue
             entries = cases.setdefault(suite, [])
             for case in node.iter("testcase"):
-                entries.append((case.get("name", "?"), case.get("file")))
+                crashed = is_crash_placeholder(node.get("name", ""), case)
+                entries.append((case.get("name", "?"), case.get("file"), crashed))
     return cases
 
 
@@ -100,9 +115,12 @@ def main():
 
     misattributed = []  # (suite, case name, source file)
     unsourced = []  # (suite, case name)
+    crashed = []  # suite
     for suite, entries in sorted(cases.items()):
-        for name, source in entries:
-            if source is None:
+        for name, source, is_crash in entries:
+            if is_crash:
+                crashed.append(suite)
+            elif source is None:
                 unsourced.append((suite, name))
             elif not owns(suite, source):
                 misattributed.append((suite, name, source))
@@ -115,6 +133,13 @@ def main():
         f"test attribution{label}: {len(paths)} report(s), "
         f"{len([s for s, v in cases.items() if v])} suite(s) with cases, {total} case(s)"
     )
+    if crashed:
+        print("")
+        print("CRASHED - these suites died before reporting a case (not an attribution finding;")
+        print("the run step has failed on them, and its log carries the sanitizer report or signal):")
+        for suite in crashed:
+            print(f"    {suite}")
+
     if unsourced:
         print("")
         print("UNSOURCED - these cases carry no source file, so ownership cannot be proved:")

@@ -1327,6 +1327,61 @@ static void test_handleSetHamMode_acceptedRequestAcksSuccess()
     testAdmin->drainReply();
 }
 
+// A PKC admin request with want_ack and no want_response is answered by the module's ROUTING reply in place
+// of the ACK. That reply must still encode: PKC never wraps a ROUTING packet, so a reply left marked
+// pki_encrypted fails perhapsEncode and the sender hears nothing.
+static void expectPkcAdminRoutingReplyEncodes(meshtastic_AdminMessage &m)
+{
+    static constexpr NodeNum REMOTE_ADMIN = 0x0B0B0B0B;
+    myNodeInfo.my_node_num = 0x0A0A0A0A;
+    channels.initDefaults();
+    channels.onConfigChanged();
+    config.security.admin_key_count = 1;
+    config.security.admin_key[0].size = 32;
+    memset(config.security.admin_key[0].bytes, 0xAA, 32);
+
+    meshtastic_MeshPacket mp = meshtastic_MeshPacket_init_zero;
+    mp.from = REMOTE_ADMIN;
+    mp.to = myNodeInfo.my_node_num;
+    mp.id = 0x5151;
+    mp.channel = 0; // a PKC packet arrives with channel hash 0, which resolves to the primary channel
+    mp.want_ack = true;
+    mp.pki_encrypted = true;
+    mp.public_key.size = 32;
+    memset(mp.public_key.bytes, 0xAA, 32);
+    mp.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    mp.decoded.want_response = false;
+    meshtastic_AdminMessage session = meshtastic_AdminMessage_init_zero;
+    testAdmin->setPassKey(&session); // a state-changing request must carry a live session key
+    m.session_passkey = session.session_passkey;
+    testAdmin->handleReceivedProtobuf(mp, &m);
+
+    meshtastic_MeshPacket *reply = testAdmin->reply();
+    TEST_ASSERT_NOT_NULL_MESSAGE(reply, "the request must queue a routing reply");
+    TEST_ASSERT_EQUAL(meshtastic_PortNum_ROUTING_APP, reply->decoded.portnum);
+    meshtastic_Routing_Error err = meshtastic_Routing_Error_NONE;
+    TEST_ASSERT_TRUE(decodeRoutingError(reply, err));
+    TEST_ASSERT_NOT_EQUAL_MESSAGE(meshtastic_Routing_Error_ADMIN_BAD_SESSION_KEY, err, "the request must pass the session gate");
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Routing_Error_NONE, perhapsEncode(reply), "the routing reply was dropped at encode");
+    testAdmin->drainReply();
+}
+
+static void test_pkcAdminBadRequest_replyEncodes()
+{
+    meshtastic_AdminMessage m = meshtastic_AdminMessage_init_zero;
+    m.which_payload_variant = meshtastic_AdminMessage_get_channel_request_tag;
+    m.get_channel_request = MAX_NUM_CHANNELS + 2; // out of range, so the handler answers BAD_REQUEST
+    expectPkcAdminRoutingReplyEncodes(m);
+}
+
+static void test_pkcAdminBackupPreferencesReply_encodes()
+{
+    meshtastic_AdminMessage m = meshtastic_AdminMessage_init_zero;
+    m.which_payload_variant = meshtastic_AdminMessage_backup_preferences_tag;
+    m.backup_preferences = meshtastic_AdminMessage_BackupLocation_FLASH;
+    expectPkcAdminRoutingReplyEncodes(m);
+}
+
 static void test_bootDefense_sanitizesStaleLicensedChannelsOnce()
 {
     owner = meshtastic_User_init_zero;
@@ -1747,20 +1802,27 @@ class RestoreDerivingCryptoEngine : public CryptoEngine
   public:
     bool regenerateSucceeds = true;
     bool derivesLowEntropy = true;
+    const uint8_t *derivedKey = nullptr; // when set, regeneratePublicKey() yields exactly this key
     bool regeneratePublicKey(uint8_t *pubKey, uint8_t *privKey) override
     {
         if (!regenerateSucceeds)
             return false;
-        if (derivesLowEntropy)
+        if (derivedKey)
+            memcpy(pubKey, derivedKey, 32);
+        else if (derivesLowEntropy)
             memcpy(pubKey, COMPROMISED_PUBLIC_KEY, 32);
         else
             memset(pubKey, 0x7C, 32);
         return true;
     }
     bool mintsLowEntropy = false;
+    std::vector<const uint8_t *> mintQueue; // keys generateKeyPair() hands out first, in order
     void generateKeyPair(uint8_t *pubKey, uint8_t *privKey) override
     {
-        if (mintsLowEntropy)
+        if (!mintQueue.empty()) {
+            memcpy(pubKey, mintQueue.front(), 32);
+            mintQueue.erase(mintQueue.begin());
+        } else if (mintsLowEntropy)
             memcpy(pubKey, COMPROMISED_PUBLIC_KEY, 32);
         else
             memset(pubKey, 0x5E, 32);
@@ -1934,6 +1996,192 @@ static void test_generateCryptoKeyPair_failedDerivationFromStoredPrivateClearsKe
 
     TEST_ASSERT_EQUAL_UINT(0, config.security.private_key.size);
     TEST_ASSERT_EQUAL_UINT(0, config.security.public_key.size);
+}
+
+// --- Key-derived node numbers in the reserved range (#12439) ---
+//
+// Under test, in src/mesh/NodeDB.cpp: NodeDB::keyYieldsReservedNodeNum(), NodeDB::generateCryptoKeyPair()
+// (through generateBlacklistCheckedKeyPair() and derivePublicKeyFromPrivate()), NodeDB::ensurePkiIdentity()
+// and NodeDB::createNewIdentity().
+//
+// my_node_num is crc32(public_key), and nothing checked that against the reserved numbers 0-9 and
+// broadcast (0xFFFFFFFF). Number 0 is the one that hurts: the first send asserts on from == 0, and
+// every reboot re-derives the same key and number, so the node crash-loops until it gets a new key.
+// Number 1 collides with NODENUM_BROADCAST_NO_LORA. The number can't be rerolled - it must equal the
+// key's CRC - so these pin that such a key is redrawn when minted and replaced when derived (the
+// recovery path for a node already stuck), on boot, on admin keygen, and on the first-region path.
+//
+// The keys are 28 bytes of 0xA5 plus a 4-byte suffix solved to force the CRC32 (CRC32 is affine over
+// GF(2)), since a real key landing there takes ~2^32/5 draws.
+static const uint8_t KEY_CRC_0[32] = {0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5,
+                                      0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5,
+                                      0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0x98, 0xb5, 0x42, 0xed};
+static const uint8_t KEY_CRC_1[32] = {0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5,
+                                      0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5,
+                                      0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xd9, 0xb3, 0x33, 0x36};
+static const uint8_t KEY_CRC_9[32] = {0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5,
+                                      0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5,
+                                      0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0x94, 0x9e, 0x0e, 0x5b};
+static const uint8_t KEY_CRC_10[32] = {0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5,
+                                       0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5,
+                                       0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0x16, 0x92, 0xec, 0xed};
+static const uint8_t KEY_CRC_BROADCAST[32] = {0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5,
+                                              0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5,
+                                              0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xfa, 0x40, 0x64, 0x7f};
+
+static meshtastic_Config_SecurityConfig_public_key_t publicKeyOf(const uint8_t *bytes)
+{
+    meshtastic_Config_SecurityConfig_public_key_t key = {};
+    key.size = 32;
+    memcpy(key.bytes, bytes, 32);
+    return key;
+}
+
+// Our own number must be a usable one and must match the key it came from.
+static void assertUsableIdentity()
+{
+    TEST_ASSERT_EQUAL_UINT(32, config.security.public_key.size);
+    TEST_ASSERT_FALSE(NodeDB::keyYieldsReservedNodeNum(config.security.public_key));
+    TEST_ASSERT_EQUAL_HEX32(crc32Buffer(config.security.public_key.bytes, 32), nodeDB->getNodeNum());
+    TEST_ASSERT_TRUE(nodeDB->getNodeNum() >= 10 && nodeDB->getNodeNum() != NODENUM_BROADCAST);
+}
+
+// The vectors themselves, and both edges: 0, 1, 9 and broadcast are reserved; 10 and an ordinary CRC are not.
+static void test_keyYieldsReservedNodeNum_matchesTheReservedRange()
+{
+    TEST_ASSERT_EQUAL_HEX32(0x00000000, crc32Buffer(KEY_CRC_0, 32));
+    TEST_ASSERT_EQUAL_HEX32(0x00000001, crc32Buffer(KEY_CRC_1, 32));
+    TEST_ASSERT_EQUAL_HEX32(0x00000009, crc32Buffer(KEY_CRC_9, 32));
+    TEST_ASSERT_EQUAL_HEX32(0x0000000A, crc32Buffer(KEY_CRC_10, 32));
+    TEST_ASSERT_EQUAL_HEX32(0xFFFFFFFF, crc32Buffer(KEY_CRC_BROADCAST, 32));
+    TEST_ASSERT_TRUE(NodeDB::keyYieldsReservedNodeNum(publicKeyOf(KEY_CRC_0)));
+    TEST_ASSERT_TRUE(NodeDB::keyYieldsReservedNodeNum(publicKeyOf(KEY_CRC_1)));
+    TEST_ASSERT_TRUE(NodeDB::keyYieldsReservedNodeNum(publicKeyOf(KEY_CRC_9)));
+    TEST_ASSERT_TRUE(NodeDB::keyYieldsReservedNodeNum(publicKeyOf(KEY_CRC_BROADCAST)));
+    TEST_ASSERT_FALSE(NodeDB::keyYieldsReservedNodeNum(publicKeyOf(KEY_CRC_10)));
+    uint8_t ordinary[32];
+    memset(ordinary, 0xA5, 32); // CRC 0x775F2F85
+    TEST_ASSERT_FALSE(NodeDB::keyYieldsReservedNodeNum(publicKeyOf(ordinary)));
+}
+
+// A freshly minted key whose CRC is 0 is drawn again rather than adopted as node 0.
+static void test_generateCryptoKeyPair_mintedKeyForNodeZeroIsRedrawn()
+{
+    installRestoreCrypto()->mintQueue = {KEY_CRC_0};
+    config.security = meshtastic_Config_SecurityConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    initRegion();
+
+    TEST_ASSERT_TRUE(nodeDB->generateCryptoKeyPair());
+
+    TEST_ASSERT_TRUE(memcmp(KEY_CRC_0, config.security.public_key.bytes, 32) != 0);
+    assertUsableIdentity();
+}
+
+// The crash-loop recovery: a stored private key deriving node 0 is replaced at boot, not re-adopted.
+static void test_generateCryptoKeyPair_storedKeyForNodeZeroIsReplacedAtBoot()
+{
+    installRestoreCrypto()->derivedKey = KEY_CRC_0;
+    config.security = meshtastic_Config_SecurityConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    initRegion();
+    config.security.private_key.size = 32;
+    memset(config.security.private_key.bytes, 0x11, 32);
+    config.security.public_key.size = 32;
+    memcpy(config.security.public_key.bytes, KEY_CRC_0, 32); // as a stuck node has it saved
+
+    TEST_ASSERT_TRUE(nodeDB->generateCryptoKeyPair());
+
+    uint8_t storedPriv[32];
+    memset(storedPriv, 0x11, 32);
+    TEST_ASSERT_TRUE(memcmp(storedPriv, config.security.private_key.bytes, 32) != 0);
+    assertUsableIdentity();
+}
+
+// Every reserved number is refused, not just 0: 1 is NODENUM_BROADCAST_NO_LORA, 9 the top of the
+// range, 0xFFFFFFFF broadcast. Each is minted in turn ahead of a clean key.
+static void test_generateCryptoKeyPair_everyReservedMintIsRedrawn()
+{
+    installRestoreCrypto()->mintQueue = {KEY_CRC_1, KEY_CRC_9, KEY_CRC_BROADCAST};
+    config.security = meshtastic_Config_SecurityConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    initRegion();
+
+    TEST_ASSERT_TRUE(nodeDB->generateCryptoKeyPair());
+
+    TEST_ASSERT_TRUE(restoreCrypto->mintQueue.empty());
+    assertUsableIdentity();
+}
+
+// The range ends at 9: a minted key for node 10, the first usable number, is kept on the first draw.
+static void test_generateCryptoKeyPair_mintedKeyForNodeTenIsKept()
+{
+    installRestoreCrypto()->mintQueue = {KEY_CRC_10};
+    config.security = meshtastic_Config_SecurityConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    initRegion();
+
+    TEST_ASSERT_TRUE(nodeDB->generateCryptoKeyPair());
+
+    TEST_ASSERT_EQUAL_MEMORY(KEY_CRC_10, config.security.public_key.bytes, 32);
+    TEST_ASSERT_EQUAL_HEX32(10, nodeDB->getNodeNum());
+}
+
+// The draw is bounded at four: if every attempt is reserved, no key is kept rather than a reserved one.
+static void test_generateCryptoKeyPair_onlyReservedMintsLeaveNoKey()
+{
+    installRestoreCrypto()->mintQueue = {KEY_CRC_0, KEY_CRC_0, KEY_CRC_0, KEY_CRC_0, KEY_CRC_0, KEY_CRC_0};
+    config.security = meshtastic_Config_SecurityConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    initRegion();
+
+    TEST_ASSERT_FALSE(nodeDB->generateCryptoKeyPair());
+
+    TEST_ASSERT_EQUAL_UINT(2, restoreCrypto->mintQueue.size()); // exactly four of the six drawn
+    TEST_ASSERT_EQUAL_UINT(0, config.security.private_key.size);
+    TEST_ASSERT_EQUAL_UINT(0, config.security.public_key.size);
+}
+
+// Leaving our old number must remove only our own row: the removal compacts the next row into slot 0, and
+// a remote node numbered 9 (legal before reserved numbers grew to 0-9) is not ours.
+static void test_generateCryptoKeyPair_ordinaryRotationKeepsRemoteNodeNine()
+{
+    installRestoreCrypto();
+    config.security = meshtastic_Config_SecurityConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    initRegion();
+
+    const NodeNum oldSelf = 0x0A0B0C0D;
+    meshtastic_NodeInfoLite self = meshtastic_NodeInfoLite_init_zero;
+    self.num = oldSelf;
+    meshtastic_NodeInfoLite remoteNine = meshtastic_NodeInfoLite_init_zero;
+    remoteNine.num = 9;
+    // Earlier tests can leave the table full, so lay out exactly [self, remote 9] rather than inserting.
+    nodeDB->meshNodes->at(0) = self;
+    nodeDB->meshNodes->at(1) = remoteNine;
+    nodeDB->numMeshNodes = 2;
+    myNodeInfo.my_node_num = oldSelf;
+
+    TEST_ASSERT_TRUE(nodeDB->generateCryptoKeyPair()); // mints the clean 0x5E key: an ordinary rotation
+
+    TEST_ASSERT_NULL(nodeDB->getMeshNode(oldSelf));
+    TEST_ASSERT_NOT_NULL(nodeDB->getMeshNode(9));
+    assertUsableIdentity();
+}
+
+// The first-region path mints through CryptoEngine::ensurePkiKeys(), not NodeDB's checked keygen, and
+// switches number without a reboot - the route the issue traced to the node-0 crash.
+static void test_ensurePkiIdentity_mintedKeyForNodeZeroIsRedrawn()
+{
+    installRestoreCrypto()->mintQueue = {KEY_CRC_0};
+    config.security = meshtastic_Config_SecurityConfig_init_zero;
+    owner.is_licensed = false;
+
+    nodeDB->ensurePkiIdentity();
+
+    TEST_ASSERT_TRUE(memcmp(KEY_CRC_0, config.security.public_key.bytes, 32) != 0);
+    TEST_ASSERT_EQUAL_MEMORY(config.security.public_key.bytes, owner.public_key.bytes, 32);
+    assertUsableIdentity();
 }
 
 // keyIsLowEntropy survives from a boot-time regeneration, and generateCryptoKeyPair returns early on
@@ -2690,6 +2938,8 @@ void setup()
     RUN_TEST(test_handleSetHamMode_blankCallSignIsRejected);
     RUN_TEST(test_handleSetHamMode_blankCallSignRepliesBadRequest);
     RUN_TEST(test_handleSetHamMode_acceptedRequestAcksSuccess);
+    RUN_TEST(test_pkcAdminBadRequest_replyEncodes);
+    RUN_TEST(test_pkcAdminBackupPreferencesReply_encodes);
     RUN_TEST(test_handleSetConfig_persistsLicensedFirstRegionIdentity);
     RUN_TEST(test_handleSetConfig_persistsUnlicensedFirstRegionIdentity);
     RUN_TEST(test_bootDefense_sanitizesStaleLicensedChannelsOnce);
@@ -2787,6 +3037,14 @@ void setup()
     RUN_TEST(test_handleSetConfig_security_blacklistedMintLeavesNoKey);
     RUN_TEST(test_generateCryptoKeyPair_derivedFromStoredPrivateIsChecked);
     RUN_TEST(test_generateCryptoKeyPair_failedDerivationFromStoredPrivateClearsKeySizes);
+    RUN_TEST(test_keyYieldsReservedNodeNum_matchesTheReservedRange);
+    RUN_TEST(test_generateCryptoKeyPair_mintedKeyForNodeZeroIsRedrawn);
+    RUN_TEST(test_generateCryptoKeyPair_storedKeyForNodeZeroIsReplacedAtBoot);
+    RUN_TEST(test_generateCryptoKeyPair_everyReservedMintIsRedrawn);
+    RUN_TEST(test_generateCryptoKeyPair_mintedKeyForNodeTenIsKept);
+    RUN_TEST(test_generateCryptoKeyPair_onlyReservedMintsLeaveNoKey);
+    RUN_TEST(test_generateCryptoKeyPair_ordinaryRotationKeepsRemoteNodeNine);
+    RUN_TEST(test_ensurePkiIdentity_mintedKeyForNodeZeroIsRedrawn);
     RUN_TEST(test_handleSetConfig_security_staleLowEntropyFlagDoesNotWarn);
     RUN_TEST(test_handleSetConfig_security_failedDerivationClearsKeySizes);
     RUN_TEST(test_regionInfo_supportsPreset);
