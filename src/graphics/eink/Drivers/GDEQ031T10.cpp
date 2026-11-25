@@ -58,6 +58,15 @@ void GDEQ031T10::writeNewImage()
     powerOn();
 }
 
+void GDEQ031T10::detachFromUpdate()
+{
+    // First poll just before the panel's measured refresh time (FAST ~645 ms, FULL ~1010 ms), not UC8175's 400/2000
+    if (updateType == FAST)
+        beginPolling(50, 600);
+    else
+        beginPolling(50, 950);
+}
+
 void GDEQ031T10::setWindow()
 {
     const uint8_t window[] = {0, 239, 0, 0, 1, 63, 1};

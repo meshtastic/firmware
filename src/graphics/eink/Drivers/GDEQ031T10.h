@@ -21,6 +21,7 @@ class GDEQ031T10 : public UC8175
     void configFast() override;
     void writeImage(uint8_t command, const uint8_t *image) override;
     void writeNewImage() override;
+    void detachFromUpdate() override;
     void finalizeUpdate() override;
 
   private:
