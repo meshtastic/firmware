@@ -2006,6 +2006,26 @@ void test_onDemandPullsNewestBucketAndCapsPacing()
     TEST_ASSERT_EQUAL_UINT64(a.checksum, b.checksum);
 }
 
+// Drives a paced pull to a failed exchange with the provide dropped, leaving a remembered hole.
+void failPendingPull(const meshtastic_MeshPacket &advert)
+{
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
+    myNodeInfo.my_node_num = FOLLOWER_NODE;
+    portduino_config.sfpp_stratum0 = false;
+    follower->runOnce();
+    std::vector<meshtastic_MeshPacket> request = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, request.size());
+    TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, true, request[0]));
+    TEST_ASSERT_EQUAL_UINT(1, drainAuthorityOne(2000).size()); // the provide is lost
+    for (uint32_t i = 0; i < 2; i++) {                         // one list resend, then failure
+        Time::setTestMillis(Time::getMillis() + 31000);
+        myNodeInfo.my_node_num = FOLLOWER_NODE;
+        portduino_config.sfpp_stratum0 = false;
+        follower->runOnce();
+        takeSent();
+    }
+}
+
 // --- Q6 groundwork: failed-pull retry and the shared pacer ---
 
 // The 8f on-demand tail must obey the same drain pacer as everything else. The parent started it
@@ -2145,6 +2165,64 @@ void test_failedPullStopsPastServiceWindow()
     TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
     follower->runOnce();
     TEST_ASSERT_EQUAL_UINT(0, takeSent().size());
+}
+
+// The attempt count must survive the exchange: the second failure waits 60 s, not another 30 s.
+// On 28900150 the entry is erased at launch, so the parent retries at +30 s and this fails.
+void test_failedPullBackoffDoublesAcrossFailures()
+{
+    ingestAuthority(40);
+    buildFollowerFromCopy();
+    deleteCounterRange(dirB, 39, 40);
+
+    meshtastic_MeshPacket advert;
+    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, 0, false, advert, false, 40));
+    failPendingPull(advert); // first failure: 30 s backoff
+
+    Time::setTestMillis(Time::getMillis() + 30000);
+    failPendingPull(advert); // second failure: 60 s backoff
+
+    Time::setTestMillis(Time::getMillis() + 30000);
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
+    follower->runOnce();
+    TEST_ASSERT_EQUAL_UINT(0, takeSent().size());
+
+    Time::setTestMillis(Time::getMillis() + 31000);
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
+    follower->runOnce();
+    std::vector<meshtastic_MeshPacket> retry = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, retry.size());
+    TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_REQUEST, decodeSfpp(retry[0]).sfpp_message_type);
+}
+
+// A failed tail pull must stay a tail pull: the retried list is the completion check, so a hole
+// filled in the meantime ends the exchange with no item request. On 28900150 the retry is stored
+// as (tip, 0), takes the checksum path and falls into a collision probe instead.
+void test_failedTailPullRetriesAsTail()
+{
+    ingestAuthority(40);
+    buildFollowerFromCopy();
+    deleteCounter(dirB, 40);
+    ingestScratchText(follower, FOLLOWER_NODE, SENDER_NODE, BASE_ID + 39, "msg 40", 100); // too young to push
+
+    meshtastic_MeshPacket advert;
+    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, 0, false, advert, false, 40));
+    failPendingPull(advert);
+
+    // No new advert: the remembered entry itself must retain its tail-pull type. A fresh advert
+    // would overwrite the summary and mask the parent's (tip, 0) misclassification.
+    Time::setTestMillis(Time::getMillis() + 30000);
+    follower->runOnce();
+    std::vector<meshtastic_MeshPacket> retry = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, retry.size());
+    TEST_ASSERT_EQUAL_UINT32(1, decodeSfpp(retry[0]).chain_count); // the tail bucket
+
+    TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, true, retry[0]));
+    std::vector<meshtastic_MeshPacket> provide = drainAuthorityOne(2000);
+    TEST_ASSERT_EQUAL_UINT(1, provide.size());
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, provide[0]));
+    TEST_ASSERT_EQUAL_UINT(0, takeSent().size()); // the promoted scratch row completed the list
+    assertConverged();
 }
 
 // --- Stage 8: sketch mode ---
@@ -2508,6 +2586,8 @@ void setup()
     RUN_TEST(test_secondAdvertInsideDrainIntervalSendsNoRequest);
     RUN_TEST(test_lostEnumProvideRetriesWithinBackoff);
     RUN_TEST(test_failedPullStopsPastServiceWindow);
+    RUN_TEST(test_failedPullBackoffDoublesAcrossFailures);
+    RUN_TEST(test_failedTailPullRetriesAsTail);
     RUN_TEST(test_sketchResolvesOne);
     RUN_TEST(test_sketchResolvesFour);
     RUN_TEST(test_sketchFallsBackAtSixteen);

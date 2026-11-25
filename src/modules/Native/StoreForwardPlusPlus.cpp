@@ -2867,9 +2867,8 @@ void StoreForwardPlusPlusModule::beginEnumExchange(const uint8_t *root_hash, uin
     memcpy(enumExchangeRoot, root_hash, SFPP_HASH_SIZE);
     enumExchangeBucket = bucket;
     enumExchangePeer = peer;
-    enumPending.erase(std::remove_if(enumPending.begin(), enumPending.end(),
-                                     [&](const EnumPendingBucket &entry) { return entry.bucket == bucket; }),
-                      enumPending.end());
+    // The pending entry survives the exchange so its attempt count and first-failure time carry
+    // across retries; a successful exchange removes it in endEnumExchange().
     enumExchangeStartedMs = Time::getMillis();
     enumRecovered = enumTx = enumRx = enumTxBytes = enumRxBytes = 0;
     enumWanted.clear();
@@ -2906,6 +2905,15 @@ void StoreForwardPlusPlusModule::endEnumExchange()
     formatRootHex(enumExchangeRoot, SFPP_HASH_SIZE, rootHex);
     LOG_INFO("SFPP-ENUM exchange end role=puller root=%s bucket=%u recovered=%u tx=%u rx=%u tx_bytes=%u rx_bytes=%u", rootHex,
              enumExchangeBucket, enumRecovered, enumTx, enumRx, enumTxBytes, enumRxBytes);
+
+    if (enumExchangeSucceeded) {
+        enumPending.erase(std::remove_if(enumPending.begin(), enumPending.end(),
+                                         [&](const EnumPendingBucket &entry) {
+                                             return entry.bucket == enumExchangeBucket && entry.authority == enumExchangePeer &&
+                                                    memcmp(entry.root, enumExchangeRoot, SFPP_HASH_SIZE) == 0;
+                                         }),
+                          enumPending.end());
+    }
 
     enumExchangeActive = false;
     enumProvideActive = false;
@@ -2981,6 +2989,7 @@ void StoreForwardPlusPlusModule::addPendingBucket(const uint8_t *root_hash, Node
             entry.count = count;
             entry.checksum = checksum;
             entry.tip = tip;
+            entry.onDemand = count == 0 && checksum == 0;
             return;
         }
     }
@@ -2999,6 +3008,7 @@ void StoreForwardPlusPlusModule::addPendingBucket(const uint8_t *root_hash, Node
     entry.tip = tip;
     memcpy(entry.root, root_hash, SFPP_HASH_SIZE);
     entry.authority = authority;
+    entry.onDemand = count == 0 && checksum == 0;
     enumPending.push_back(entry);
 }
 
@@ -3009,21 +3019,22 @@ void StoreForwardPlusPlusModule::rememberFailedPull()
         return;
     const uint32_t nowMs = Time::getMillis();
 
-    for (const auto &entry : enumPending) {
-        if (entry.bucket == enumExchangeBucket && entry.authority == enumExchangePeer &&
-            memcmp(entry.root, root, SFPP_HASH_SIZE) == 0) {
-            if (entry.firstFailedMs != 0 && Throttle::hasElapsed(entry.firstFailedMs, kServiceWindowMs))
-                return; // past the proposed service window: accept the hole as lost
-            break;
-        }
-    }
-
-    addPendingBucket(root, enumExchangePeer, enumExchangeBucket, enumPeerCount, enumPeerChecksum, enumPeerTip);
+    // A failed tail pull stays a tail pull; only a named exchange has a checksum to compare.
+    const uint32_t count = enumOnDemand ? 0 : enumPeerCount;
+    const uint64_t checksum = enumOnDemand ? 0 : enumPeerChecksum;
+    addPendingBucket(root, enumExchangePeer, enumExchangeBucket, count, checksum, enumPeerTip);
     for (auto &entry : enumPending) {
         if (entry.bucket != enumExchangeBucket || entry.authority != enumExchangePeer ||
             memcmp(entry.root, root, SFPP_HASH_SIZE) != 0)
             continue;
-        entry.attempts = entry.attempts < kFailedPullMaxAttempts ? entry.attempts + 1 : kFailedPullMaxAttempts;
+        if (entry.firstFailedMs != 0 && Throttle::hasElapsed(entry.firstFailedMs, kServiceWindowMs))
+            return; // past the proposed service window: accept the hole as lost
+        if (entry.attempts >= kFailedPullMaxAttempts) {
+            // Park it: only a different advertised summary for this bucket should revive the hole.
+            entry.retryAfterMs = nowMs + kServiceWindowMs;
+            return;
+        }
+        entry.attempts++;
         uint32_t delay = kFailedPullBackoffMs;
         for (uint8_t i = 1; i < entry.attempts && delay < kFailedPullBackoffMaxMs; i++)
             delay = delay < kFailedPullBackoffMaxMs / 2 ? delay * 2 : kFailedPullBackoffMaxMs;
@@ -3082,7 +3093,8 @@ void StoreForwardPlusPlusModule::startPendingPull()
         enumPending.erase(enumPending.begin() + best);
         return;
     }
-    enumPending.erase(enumPending.begin() + best);
+    // Keep the entry: endEnumExchange() removes it on success, rememberFailedPull() advances its
+    // attempt and first-failure state on failure.
 
     if (entry.count == 0 && entry.checksum == 0) {
         beginEnumExchange(root, entry.bucket, entry.authority, entry.tip, 0);

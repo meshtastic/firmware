@@ -506,6 +506,7 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
         uint32_t retryAfterMs = 0;
         uint32_t firstFailedMs = 0;
         uint8_t attempts = 0;
+        bool onDemand = false;
     };
     std::vector<EnumPendingBucket> enumPending;
     struct EnumPromoted {
