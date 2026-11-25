@@ -197,6 +197,35 @@ assert "admin keys append across config.d" 0 adminkeys-append/config.yaml yaml \
 	"P2jeuoXA1sOGSPH9Vm3eHFlITu1EVnohWGKlGF3t8GU="
 
 echo
+echo "ignore relay nodes:"
+assert "a list of relay node numbers is clean" 0 ignore-relay-nodes.yaml check \
+	"Result: 0 errors, 0 warnings"
+assert "an entry that is not a node number is refused" 1 ignore-relay-nodes-bad.yaml check \
+	"is not a node number" \
+	"Result: 1 error, 0 warnings"
+assert "a bad relay node number is refused on a normal boot" 1 ignore-relay-nodes-bad.yaml normal \
+	"is not a node number"
+assert "two entries sharing a low byte are warned" 0 ignore-relay-nodes-duplicate-byte.yaml check \
+	"share low byte 0x44" \
+	"Result: 0 errors, 1 warning"
+assert "an entry ending in 00 is warned as 0xff" 0 ignore-relay-nodes-zero-byte.yaml check \
+	"ends in 00, which is sent as relay byte 0xff" \
+	"Result: 0 errors, 1 warning"
+assert "an entry ending in 00 collides with one ending in ff" 0 ignore-relay-nodes-zero-ff.yaml check \
+	"ends in 00, which is sent as relay byte 0xff" \
+	"share low byte 0xff" \
+	"Result: 0 errors, 2 warnings"
+assert "relay node lists accumulate across files" 0 ignore-relay-nodes-append/config.yaml check \
+	"'Lora.IgnoreRelayNodes' is set in 2 files" \
+	"The lists accumulate; to remove an entry, edit the file that adds it" \
+	"Result: 0 errors,"
+assert "relay nodes written as a scalar are refused" 1 ignore-relay-nodes-not-a-list.yaml check \
+	"must be a list of node numbers" \
+	"Result: 1 error, 0 warnings"
+assert "relay nodes as a scalar are refused on a normal boot" 1 ignore-relay-nodes-not-a-list.yaml normal \
+	"must be a list of node numbers"
+
+echo
 echo "command sensors:"
 assert "a list of command sensors is clean" 0 sensors.yaml check \
 	"Sensors are only read while the Telemetry module setting for their Type is enabled" \
@@ -430,6 +459,14 @@ assert "ports outside their usable range" 1 port-out-of-range.yaml check \
 	"General.APIPort 80 is outside 1024-65535" \
 	"Webserver.Port 99999 is not a usable TCP port" \
 	"Result: 1 error, 1 warning"
+assert "Webserver.HTTPPort outside its usable range" 1 webserver-http-port.yaml check \
+	"Webserver.HTTPPort 70000 is not a usable TCP port" \
+	"!unknown key" \
+	"Result: 1 error, 0 warnings"
+assert "Webserver.HTTPPort without Port never listens" 0 webserver-http-port-alone.yaml check \
+	"Webserver.HTTPPort is set but Webserver.Port is not" \
+	"!unknown key" \
+	"Result: 0 errors, 1 warning"
 assert "StatusMessage longer than its buffer" 0 statusmessage-long.yaml check \
 	"is truncated to 79 when it is stored" \
 	"Result: 0 errors, 1 warning"
