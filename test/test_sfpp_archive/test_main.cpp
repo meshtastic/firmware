@@ -887,21 +887,26 @@ void test_shimServesAdoptedBroadcastText()
 
 // Item 8 repair: a negative destination from an old store is converted and served on restart;
 // a peers collision is resolved rather than left half-converted.
-void test_signedRowsAreRepairedOnBoot()
+void test_oldVersionStoreIsSetAsideAndNewRowsAreUnsigned()
 {
-    TEST_ASSERT_TRUE(ingestOneText("old signed row"));
+    // Simulate an old store: the v2 layout with a negative broadcast destination.
+    TEST_ASSERT_TRUE(ingestOneText("old version row"));
     sqlite3 *db = nullptr;
     TEST_ASSERT_EQUAL_INT(SQLITE_OK, sqlite3_open(dbFile().c_str(), &db));
-    TEST_ASSERT_EQUAL_INT(SQLITE_OK, sqlite3_exec(db, "update channel_messages set destination=-1 where packet_id=0x1000;",
+    TEST_ASSERT_EQUAL_INT(SQLITE_OK, sqlite3_exec(db, "update channel_messages set destination=-1; pragma user_version=2;",
                                                   nullptr, nullptr, nullptr));
-    TEST_ASSERT_EQUAL_INT(SQLITE_OK, sqlite3_exec(db, "insert into peers(nodenum) values(-1);", nullptr, nullptr, nullptr));
-    TEST_ASSERT_EQUAL_INT(SQLITE_OK,
-                          sqlite3_exec(db, "insert into peers(nodenum) values(4294967295);", nullptr, nullptr, nullptr));
     sqlite3_close(db);
 
     delete testSfpp;
-    testSfpp = new TestSfppModule(); // constructor runs the repair
+    testSfpp = new TestSfppModule(); // the version check moves the old store aside
 
+    StoredRow oldRow;
+    TEST_ASSERT_FALSE(readStoredRow(TEXT_ID, oldRow));
+    TEST_ASSERT_EQUAL_INT(StoreForwardPlusPlusModule::kSchemaVersion, storedSchemaVersion());
+    TEST_ASSERT_EQUAL_UINT(1, filesMovedAside().size());
+
+    // A new broadcast row is stored unsigned and served by the shim.
+    TEST_ASSERT_TRUE(ingestOneText("new broadcast row"));
     db = nullptr;
     TEST_ASSERT_EQUAL_INT(SQLITE_OK, sqlite3_open(dbFile().c_str(), &db));
     sqlite3_stmt *stmt = nullptr;
@@ -909,10 +914,6 @@ void test_signedRowsAreRepairedOnBoot()
                           sqlite3_prepare_v2(db, "select destination from channel_messages limit 1;", -1, &stmt, nullptr));
     TEST_ASSERT_EQUAL_INT(SQLITE_ROW, sqlite3_step(stmt));
     TEST_ASSERT_EQUAL_INT64((sqlite3_int64)NODENUM_BROADCAST, sqlite3_column_int64(stmt, 0));
-    sqlite3_finalize(stmt);
-    TEST_ASSERT_EQUAL_INT(SQLITE_OK, sqlite3_prepare_v2(db, "select count(*) from peers;", -1, &stmt, nullptr));
-    TEST_ASSERT_EQUAL_INT(SQLITE_ROW, sqlite3_step(stmt));
-    TEST_ASSERT_EQUAL_INT(1, sqlite3_column_int(stmt, 0));
     sqlite3_finalize(stmt);
     sqlite3_close(db);
 
@@ -1246,7 +1247,7 @@ void setup()
     RUN_TEST(test_legacyHistoryPagesByCursor);
     RUN_TEST(test_canonIsTrimmedByRetention);
     RUN_TEST(test_shimServesAdoptedBroadcastText);
-    RUN_TEST(test_signedRowsAreRepairedOnBoot);
+    RUN_TEST(test_oldVersionStoreIsSetAsideAndNewRowsAreUnsigned);
     RUN_TEST(test_legacyHistoryDecryptsEmptyPayloadRow);
     RUN_TEST(test_legacyHistorySkipsNonTextCiphertext);
     RUN_TEST(test_legacyHistoryDecryptsAeadPrimary);

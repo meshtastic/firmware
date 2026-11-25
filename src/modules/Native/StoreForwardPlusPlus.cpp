@@ -421,24 +421,6 @@ StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
 
     sqlite3_exec(ppDb, ("PRAGMA user_version = " + std::to_string(kSchemaVersion) + ";").c_str(), NULL, NULL, NULL);
 
-    // Old int binds stored node/ID values >= 2^31 as negatives; repair them in place (idempotent).
-    static const char *repairSigned = "UPDATE channel_messages SET destination=destination+4294967296 WHERE destination<0;"
-                                      "UPDATE channel_messages SET sender=sender+4294967296 WHERE sender<0;"
-                                      "UPDATE channel_messages SET packet_id=packet_id+4294967296 WHERE packet_id<0;"
-                                      "UPDATE local_messages SET destination=destination+4294967296 WHERE destination<0;"
-                                      "UPDATE local_messages SET sender=sender+4294967296 WHERE sender<0;"
-                                      "UPDATE local_messages SET packet_id=packet_id+4294967296 WHERE packet_id<0;"
-                                      "UPDATE direct_messages SET destination=destination+4294967296 WHERE destination<0;"
-                                      "UPDATE direct_messages SET sender=sender+4294967296 WHERE sender<0;"
-                                      "UPDATE direct_messages SET packet_id=packet_id+4294967296 WHERE packet_id<0;"
-                                      "UPDATE canon_scratch SET destination=destination+4294967296 WHERE destination<0;"
-                                      "UPDATE canon_scratch SET sender=sender+4294967296 WHERE sender<0;"
-                                      "UPDATE canon_scratch SET packet_id=packet_id+4294967296 WHERE packet_id<0;"
-                                      "DELETE FROM peers WHERE nodenum<0 AND nodenum+4294967296 IN (SELECT nodenum FROM peers);"
-                                      "UPDATE peers SET nodenum=nodenum+4294967296 WHERE nodenum<0;";
-    if (sqlite3_exec(ppDb, repairSigned, NULL, NULL, NULL) != SQLITE_OK)
-        LOG_WARN("StoreForwardpp signed-row repair failed: %s", sqlite3_errmsg(ppDb));
-
     // prepared statements *should* make this faster.
     sqlite3_prepare_v2(ppDb, "INSERT INTO channel_messages (destination, sender, packet_id, root_hash, \
         encrypted_bytes, message_hash, rx_time, commit_hash, payload, counter, short_id, checksum) \
