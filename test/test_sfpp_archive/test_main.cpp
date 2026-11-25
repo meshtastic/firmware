@@ -823,8 +823,12 @@ void test_legacyHistoryPagesByCursor()
     const uint32_t cursor = reply.variant.history.last_request;
     TEST_ASSERT_GREATER_THAN_UINT32(0, cursor);
 
-    for (uint32_t i = 0; i < 50; i++)
+    // The serving window caps 30 frames, so let it roll over before draining the rest of the page.
+    for (uint32_t i = 0; i < 100; i++) {
+        if (i > 0 && i % 35 == 0)
+            Time::setTestMillis(Time::getMillis() + 10 * 60 * 1000 + 1);
         testSfpp->runOnce();
+    }
     drainPhoneQueue();
 
     meshtastic_MeshPacket second = makeHistoryRequest(0, LOCAL_NODE, 0x0F0F0F0F, 60, cursor);

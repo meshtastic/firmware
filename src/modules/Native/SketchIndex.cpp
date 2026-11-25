@@ -81,6 +81,8 @@ void BucketSummary::remove(const uint8_t *objectId, size_t len)
 
 void BucketSummary::add(pinsketch::Element id, uint64_t contribution)
 {
+    if (id == 0)
+        return;
     if (multiplicity[id]++ == 0)
         members.add(id);
     checksumAccumulator ^= contribution;
