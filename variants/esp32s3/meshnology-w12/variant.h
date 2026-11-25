@@ -56,6 +56,8 @@
 #define LR2021_POWER_EN 4
 #define LORA_PA_EN_G 3 // held low by earlyInitVariant()
 #define LR2021_DIO_AS_RF_SWITCH
+// SIMO inductor on LXA/LXB not confirmed; drop this to run DC-DC once it is.
+#define LR2021_REGULATOR_LDO
 
 // GC1109 net gain after the pi pad: about +11 dB at low drive, compressing toward its +30 dBm
 // saturation. Same front end and curve as the Heltec V4.2 (USE_GC1109_PA). The default

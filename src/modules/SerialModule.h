@@ -7,14 +7,22 @@
 #include "configuration.h"
 #include <Arduino.h>
 #include <functional>
+#ifdef ARCH_PORTDUINO
+#include "mesh/StreamFrameWriter.h"
+#endif
 
 // Is this serial config one we will accept? Outside the architecture guard below because it touches
 // no serial hardware, and AdminModule must run it on every platform - including those where
 // SerialModule itself does not exist. Logs and notifies the client on rejection.
 bool serialConfigIsValid(const meshtastic_ModuleConfig_SerialConfig &config);
 
-#if (defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_RP2040) || defined(ARCH_STM32WL)) &&                             \
-    !defined(CONFIG_IDF_TARGET_ESP32S2) && !defined(CONFIG_IDF_TARGET_ESP32C3)
+#if ((defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_RP2040) || defined(ARCH_STM32WL)) &&                            \
+     !defined(CONFIG_IDF_TARGET_ESP32S2) && !defined(CONFIG_IDF_TARGET_ESP32C3)) ||                                              \
+    (defined(ARCH_PORTDUINO) && !defined(_WIN32) && !MESHTASTIC_EXCLUDE_SERIAL)
+#define HAS_SERIAL_MODULE 1
+#endif
+
+#if HAS_SERIAL_MODULE
 
 class SerialModule : public StreamAPI, private concurrency::OSThread
 {
@@ -31,10 +39,24 @@ class SerialModule : public StreamAPI, private concurrency::OSThread
     /// Check the current underlying physical link to see if the client is currently connected
     virtual bool checkIsConnected() override;
 
+#ifdef ARCH_PORTDUINO
+    // The host port never blocks, so a PROTO frame the far end has not drained is kept and finished
+    // before PhoneAPI advances.
+    virtual bool finishPendingFrame() override;
+    virtual bool hasRetainedFrame() override;
+    virtual bool canEncodeLogRecord() override;
+    virtual bool writeFrame(uint8_t *buf, size_t len, bool bestEffort) override;
+#endif
+
   private:
     uint32_t getBaudRate();
     void sendTelemetry(meshtastic_Telemetry m);
     void processWXSerial();
+#ifdef ARCH_PORTDUINO
+    uint32_t lastHostRxMs = 0;
+    StreamFrameWriter frameWriter;
+    void readHostSerial();
+#endif
 };
 
 extern SerialModule *serialModule;

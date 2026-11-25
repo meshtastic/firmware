@@ -20,7 +20,52 @@
 // Note: RadioLib ships lr1110_transceiver_0308.h but has no selector for it in LR11x0_firmware.h.
 #error "LR11X0_UPDATE_FIRMWARE_TO must be one of 0x0307, 0x0401, 0x0402"
 #endif
+#include <algorithm>
 #include <modules/LR11x0/LR11x0_firmware.h>
+
+namespace
+{
+// RadioLib keeps the bootloader commands protected; naming them through a derived type is the standard way to reach them.
+template <class R> struct LR11x0BootCmds : R {
+    static int16_t eraseFlash(R &r) { return (r.*&LR11x0BootCmds::bootEraseFlash)(); }
+    static int16_t writeFlash(R &r, uint32_t offset, const uint32_t *data, size_t len)
+    {
+        return (r.*&LR11x0BootCmds::bootWriteFlashEncrypted)(offset, data, len, true);
+    }
+};
+
+// LR11x0::updateFirmware() minus its opening normal-mode REBOOT, which a radio already in its bootloader rejects (-706).
+template <class R> int16_t lr11x0FlashFromBootloader(R &lora, Module &module)
+{
+    int16_t state = LR11x0BootCmds<R>::eraseFlash(lora);
+    if (state != RADIOLIB_ERR_NONE)
+        return state;
+    const uint32_t start = millis();
+    while (module.hal->digitalRead(module.getGpio())) {
+        if (Throttle::hasElapsed(start, 3000))
+            return RADIOLIB_ERR_SPI_CMD_TIMEOUT;
+        delay(1);
+    }
+    constexpr size_t chunkWords = 64;
+    const size_t imageWords = LR11XX_FIRMWARE_IMAGE_SIZE;
+    for (size_t off = 0; off < imageWords; off += chunkWords) {
+        // Status errors are ignored, as in RadioLib; the version check after reset decides success.
+        state = LR11x0BootCmds<R>::writeFlash(lora, off * sizeof(uint32_t), &lr11xx_firmware_image[off],
+                                              std::min(chunkWords, imageWords - off));
+        // A stuck BUSY would otherwise cost the full SPI timeout (1 s before boundBusyWait()) on every chunk.
+        if (state == RADIOLIB_ERR_SPI_CMD_TIMEOUT)
+            return state;
+    }
+    state = lora.reset();
+    if (state != RADIOLIB_ERR_NONE)
+        return state;
+    LR11x0VersionInfo_t info = {};
+    state = lora.getVersionInfo(&info);
+    if (state == RADIOLIB_ERR_NONE && info.device == RADIOLIB_LR11X0_DEVICE_BOOT)
+        return RADIOLIB_ERR_CHIP_NOT_FOUND;
+    return state;
+}
+} // namespace
 #endif
 
 #ifdef LR11X0_DIO_AS_RF_SWITCH
@@ -203,14 +248,14 @@ template <typename T> bool LR11x0Interface<T>::init()
             lora.getVersionInfo(&boot);
         if (boot.device == RADIOLIB_LR11X0_DEVICE_BOOT) {
             LOG_WARN("LR11x0 in bootloader mode (init result %d); retrying the interrupted firmware update", res);
-            const int16_t upd = lora.updateFirmware(lr11xx_firmware_image, LR11XX_FIRMWARE_IMAGE_SIZE, true);
+            const int16_t upd = lr11x0FlashFromBootloader(lora, module);
             if (upd == RADIOLIB_ERR_NONE) {
                 LOG_INFO("LR1110 firmware recovery OK, re-init radio");
                 res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage);
                 if (res == RADIOLIB_ERR_NONE)
                     resolvedTcxoVoltage = tcxoVoltage;
             } else {
-                LOG_ERROR("LR1110 firmware recovery FAILED %s%d - power-cycle to retry", radioLibErr, upd);
+                LOG_ERROR("LR1110 firmware recovery FAILED %s%d - reboot to retry", radioLibErr, upd);
             }
             if (res != RADIOLIB_ERR_NONE)
                 return false;

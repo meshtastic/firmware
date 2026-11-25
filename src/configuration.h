@@ -427,7 +427,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #ifndef GPS_BAUDRATE
 #define GPS_BAUDRATE 9600
 #define GPS_BAUDRATE_FIXED 0
-#else
+#elif !defined(GPS_BAUDRATE_FIXED)
 #define GPS_BAUDRATE_FIXED 1
 #endif
 
@@ -649,6 +649,14 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define HAS_SCREEN 0
 #endif
 
+// Motion sensors are I2C-only (no SPI drivers) and unsupported on STM32WL
+#if MESHTASTIC_EXCLUDE_I2C || defined(ARCH_STM32WL)
+#undef MESHTASTIC_EXCLUDE_ACCELEROMETER
+#define MESHTASTIC_EXCLUDE_ACCELEROMETER 1
+#undef MESHTASTIC_EXCLUDE_MAGNETOMETER
+#define MESHTASTIC_EXCLUDE_MAGNETOMETER 1
+#endif
+
 // -----------------------------------------------------------------------------
 // Motion sensor wake
 // -----------------------------------------------------------------------------
@@ -674,6 +682,20 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define MOTION_WAKE_INT_PIN QMA_6100P_INT_PIN
 #define MOTION_WAKE_INT_ACTIVE_HIGH 0
 #endif
+#endif
+
+// Display mirroring to local clients (FromRadio.display_frame).
+#if HAS_SCREEN && !(MESHTASTIC_EXCLUDE_SCREEN_MIRROR)
+#define HAS_SCREEN_MIRROR 1
+#else
+#define HAS_SCREEN_MIRROR 0
+#endif
+
+// MUI streams RGB565 dirty rects and needs a device-ui carrying DisplayMirror, so it is opt-in.
+#if HAS_SCREEN_MIRROR && HAS_TFT && defined(MESHTASTIC_MUI_MIRROR)
+#define HAS_MUI_MIRROR 1
+#else
+#define HAS_MUI_MIRROR 0
 #endif
 
 #ifndef USE_ETHERNET_DEFAULT

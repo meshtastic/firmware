@@ -44,6 +44,7 @@
 #endif
 #include "detect/einkScan.h"
 #include "graphics/Screen.h"
+#include "graphics/ScreenMirror.h"
 #include "main.h"
 #include "memory/MemAudit.h"
 #include "mesh/generated/meshtastic/config.pb.h"
@@ -163,11 +164,11 @@ void printPartitionTable()
 #include "AmbientLightingThread.h"
 #include "PowerFSMThread.h"
 
-#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && !MESHTASTIC_EXCLUDE_ACCELEROMETER
+#if !MESHTASTIC_EXCLUDE_ACCELEROMETER
 #include "motion/AccelerometerThread.h"
 AccelerometerThread *accelerometerThread = nullptr;
 #endif
-#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && !MESHTASTIC_EXCLUDE_MAGNETOMETER
+#if !MESHTASTIC_EXCLUDE_MAGNETOMETER
 #include "motion/MagnetometerThread.h"
 MagnetometerThread *magnetometerThread = nullptr;
 #endif
@@ -273,8 +274,9 @@ bool pauseBluetoothLogging = false;
 
 bool pmu_found;
 
-#if !MESHTASTIC_EXCLUDE_I2C
-// Array map of sensor types with i2c address and wire as we'll find in the i2c scan
+#if !MESHTASTIC_EXCLUDE_I2C || !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR || !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR
+// Array map of sensor types with i2c address and wire as we'll find in the i2c scan.
+// Telemetry sensors (TelemetrySensor.h) read it, so keep it (empty) when only I2C is excluded.
 std::pair<uint8_t, TwoWire *> nodeTelemetrySensorsMap[_meshtastic_TelemetrySensorType_MAX + 1] = {};
 #endif
 
@@ -808,12 +810,12 @@ void setup()
     }
 #endif
 
-#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ACCELEROMETER
+#if !MESHTASTIC_EXCLUDE_ACCELEROMETER
     auto acc_info = i2cScanner->firstAccelerometer();
     accelerometer_found = acc_info.type != ScanI2C::DeviceType::NONE ? acc_info.address : accelerometer_found;
     LOG_DEBUG("acc_info = %i", acc_info.type);
 #endif
-#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_MAGNETOMETER
+#if !MESHTASTIC_EXCLUDE_MAGNETOMETER
     auto mag_info = i2cScanner->firstMagnetometer();
 #if !MESHTASTIC_EXCLUDE_ACCELEROMETER
     if (mag_info.type == acc_info.type) // a BMM150 with no accelerometer beside it is already the accelerometer thread's
@@ -918,12 +920,12 @@ void setup()
 #endif
 
 #if !MESHTASTIC_EXCLUDE_I2C
-#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ACCELEROMETER
+#if !MESHTASTIC_EXCLUDE_ACCELEROMETER
     if (acc_info.type != ScanI2C::DeviceType::NONE) {
         accelerometerThread = new AccelerometerThread(acc_info.type);
     }
 #endif
-#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_MAGNETOMETER
+#if !MESHTASTIC_EXCLUDE_MAGNETOMETER
     if (mag_info.type != ScanI2C::DeviceType::NONE) {
         magnetometerThread = new MagnetometerThread(mag_info.type);
     }
@@ -1148,21 +1150,21 @@ void setup()
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_NO_AXP192); // Record a hardware fault for missing hardware
 #endif
 
-#if !MESHTASTIC_EXCLUDE_I2C
 // Don't call screen setup until after nodedb is setup (because we need
 // the current region name)
 #if defined(HAS_SPI_TFT) || defined(USE_EINK) || defined(USE_SPISSD1306)
+    // SPI/e-ink panels don't depend on the I2C scan, so set them up even with I2C excluded
     if (screen)
         screen->setup();
 #elif defined(ARCH_PORTDUINO)
+    // Portduino panels may be selected at runtime (displayPanel), independent of the I2C scan
     if ((screen_found.port != ScanI2C::I2CPort::NO_I2C || portduino_config.displayPanel) &&
         config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
         screen->setup();
     }
-#else
+#elif !MESHTASTIC_EXCLUDE_I2C
     if (screen_found.port != ScanI2C::I2CPort::NO_I2C && screen)
         screen->setup();
-#endif
 #endif
 
 #if defined(SENSECAP_INDICATOR)
@@ -1396,6 +1398,50 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
 #endif
 #if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
     deviceMetadata.has_xeddsa = true;
+#endif
+
+#if HAS_MUI_MIRROR
+    // MUI owns the panel and leaves `screen` null, so ask LVGL instead.
+    uint16_t muiW = 0, muiH = 0;
+    bool muiTouch = false;
+    if (graphics::muiDisplayInfo(muiW, muiH, muiTouch)) {
+        deviceMetadata.has_display = true;
+        deviceMetadata.display.width = muiW;
+        deviceMetadata.display.height = muiH;
+        deviceMetadata.display.format = meshtastic_DisplayFrame_Format_RGB565;
+        deviceMetadata.display.panel_class = meshtastic_DisplayInfo_PanelClass_TFT;
+        deviceMetadata.display.has_touch = muiTouch;
+    } else
+#endif
+#if HAS_SCREEN_MIRROR
+        if (screen) {
+        OLEDDisplay *dispdev = screen->getDisplayDevice();
+        if (dispdev && dispdev->getWidth() > 0) {
+            deviceMetadata.has_display = true;
+            deviceMetadata.display.width = dispdev->getWidth();
+            deviceMetadata.display.height = dispdev->getHeight();
+            deviceMetadata.display.format = meshtastic_DisplayFrame_Format_MONO_VLSB;
+#if defined(ARCH_PORTDUINO)
+            // The native panel is selected at runtime; UNSPECIFIED is honest until derived from portduino_config.
+            deviceMetadata.display.panel_class = meshtastic_DisplayInfo_PanelClass_PANEL_CLASS_UNSPECIFIED;
+#elif defined(USE_EINK)
+            deviceMetadata.display.panel_class = meshtastic_DisplayInfo_PanelClass_EINK;
+#elif defined(USE_HUB75) || defined(HAS_HUB75_NATIVE)
+            deviceMetadata.display.panel_class = meshtastic_DisplayInfo_PanelClass_HUB75;
+// value-tested: configuration.h always defines USE_TFTDISPLAY, defaulting it to 0
+#elif USE_TFTDISPLAY || defined(HAS_SPI_TFT) || defined(USE_ST7789) || defined(USE_ST7796) || defined(ILI9341_DRIVER) ||         \
+    defined(ILI9342_DRIVER)
+            deviceMetadata.display.panel_class = meshtastic_DisplayInfo_PanelClass_TFT;
+#elif defined(USE_ST7567)
+            deviceMetadata.display.panel_class = meshtastic_DisplayInfo_PanelClass_LCD;
+#else
+            deviceMetadata.display.panel_class = meshtastic_DisplayInfo_PanelClass_OLED;
+#endif
+#if HAS_TOUCHSCREEN
+            deviceMetadata.display.has_touch = true;
+#endif
+        }
+    }
 #endif
     return deviceMetadata;
 }
