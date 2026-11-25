@@ -836,6 +836,20 @@ void test_legacyHistoryPagesByCursor()
     TEST_ASSERT_EQUAL_UINT32(10, next.variant.history.history_messages);
 }
 
+// G5: canon rows outside D7's 48 h window go even when the 1,000-row cap is not reached.
+void test_canonIsTrimmedByRetention()
+{
+    TEST_ASSERT_TRUE(ingestOneText("old canon row"));
+    setStoredRxTime(TEXT_ID, getValidTime(RTCQualityNTP, true) - LEGACY_RETENTION_S - 60);
+
+    myNodeInfo.my_node_num = LOCAL_NODE;
+    portduino_config.sfpp_stratum0 = true;
+    testSfpp->runOnce();
+
+    StoredRow row;
+    TEST_ASSERT_FALSE(readStoredRow(TEXT_ID, row));
+}
+
 // --- Coexistence with the legacy module ---
 
 // A portnum-65 packet that is not a CLIENT_HISTORY belongs to the legacy client module (heartbeats,
@@ -1155,6 +1169,7 @@ void setup()
     RUN_TEST(test_legacyHistoryUsesLegacyRequestWindow);
     RUN_TEST(test_legacyHistoryExcludesTextsOlderThanRetention);
     RUN_TEST(test_legacyHistoryPagesByCursor);
+    RUN_TEST(test_canonIsTrimmedByRetention);
     RUN_TEST(test_legacyHistoryDecryptsEmptyPayloadRow);
     RUN_TEST(test_legacyHistorySkipsNonTextCiphertext);
     RUN_TEST(test_legacyHistoryDecryptsAeadPrimary);

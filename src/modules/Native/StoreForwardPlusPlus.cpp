@@ -65,6 +65,9 @@ static constexpr uint32_t kServeWindowMs = 10 * 60 * 1000;
 static constexpr uint8_t kServeWindowFrames = 30;
 static constexpr uint8_t kRequesterWindowFrames = 8;
 
+// D7's retention applies to canon rows as well as to the legacy read window.
+static constexpr uint32_t kRetentionS = 48 * 60 * 60;
+
 // D19 proposes W = 24 h as the service window; unconfirmed, so holes past it are accepted as lost.
 static constexpr uint32_t kServiceWindowMs = 24 * 60 * 60 * 1000;
 // Failed pulls back off, and the backoff and attempt count cap a busy advert stream's retry cost.
@@ -527,6 +530,9 @@ StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
                        "substr(root_hash,1,?)=? ORDER BY rowid ASC LIMIT 1);",
                        -1, &trimOldestLinkStmt, NULL);
 
+    sqlite3_prepare_v2(ppDb, "DELETE FROM channel_messages WHERE substr(root_hash,1,?)=? AND rx_time < ?;", -1,
+                       &trimOldByTimeStmt, NULL);
+
     sqlite3_prepare_v2(ppDb,
                        "INSERT INTO peers (nodenum, total_count, average_hops) VALUES(?, ?, ?) ON CONFLICT(nodenum) DO NOTHING;",
                        -1, &maybeAddPeerStmt, NULL);
@@ -593,6 +599,7 @@ StoreForwardPlusPlusModule::~StoreForwardPlusPlusModule()
         getRootCanonScratchCountStmt,
         pruneScratchQueueStmt,
         trimOldestLinkStmt,
+        trimOldByTimeStmt,
         maybeAddPeerStmt,
         getPeerStmt,
         updatePeerStmt,
@@ -775,6 +782,17 @@ int32_t StoreForwardPlusPlusModule::runOnce()
         LOG_DEBUG("Chain length %u exceeds max %u, evicting oldest", chain_count, portduino_config.sfpp_max_chain);
         trimOldestLink(root_hash_bytes, SFPP_HASH_SIZE);
         chain_count--;
+    }
+
+    // D7: canon rows outside the service window are gone even when the row cap is not reached.
+    const uint32_t nowS = getValidTime(RTCQuality::RTCQualityNTP, true);
+    if (nowS > kRetentionS) {
+        sqlite3_reset(trimOldByTimeStmt);
+        sqlite3_bind_int(trimOldByTimeStmt, 1, SFPP_HASH_SIZE);
+        sqlite3_bind_blob(trimOldByTimeStmt, 2, root_hash_bytes, SFPP_HASH_SIZE, SQLITE_STATIC);
+        sqlite3_bind_int64(trimOldByTimeStmt, 3, (sqlite3_int64)(nowS - kRetentionS));
+        sqlite3_step(trimOldByTimeStmt);
+        sqlite3_reset(trimOldByTimeStmt);
     }
     // evict old messages from scratch
     pruneScratchQueue();

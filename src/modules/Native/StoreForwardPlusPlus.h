@@ -142,6 +142,7 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     sqlite3_stmt *getRootCanonScratchCountStmt;
     sqlite3_stmt *pruneScratchQueueStmt;
     sqlite3_stmt *trimOldestLinkStmt;
+    sqlite3_stmt *trimOldByTimeStmt;
     sqlite3_stmt *maybeAddPeerStmt;
     sqlite3_stmt *getPeerStmt;
     sqlite3_stmt *updatePeerStmt;
