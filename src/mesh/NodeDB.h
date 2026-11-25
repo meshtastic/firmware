@@ -179,6 +179,9 @@ inline bool isRadioProfileFile(const char *filename)
            strcmp(filename, backupFileName) == 0;
 }
 
+/// How many seconds since we last heard from a node before it is considered offline (2 hrs)
+#define NUM_ONLINE_SECS (60 * 60 * 2)
+
 /// "No trustworthy arrival time", as distinct from "zero seconds ago". Deliberately huge so the
 /// display formatters fall into their existing unknown-age branches ("unknown age" / "?").
 inline constexpr uint32_t SINCE_UNKNOWN = UINT32_MAX;
@@ -651,6 +654,8 @@ class NodeDB
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
     bool generateBlacklistCheckedKeyPair();
     bool derivePublicKeyFromPrivate();
+    /// True when crc32(key), the node number it would give us, is reserved (0-9) or broadcast.
+    static bool keyYieldsReservedNodeNum(const meshtastic_Config_SecurityConfig_public_key_t &key);
 #endif
 
     /// Consolidate crypto key generation logic used across multiple modules
@@ -664,6 +669,10 @@ class NodeDB
     /// Mint the identity keypair outside the boot path and re-seat my_node_num == crc32(public_key).
     /// @return true if my_node_num moved; the caller must then also persist SEGMENT_DEVICESTATE | SEGMENT_NODEDATABASE.
     bool ensurePkiIdentity();
+
+    /// Boot-time clamp of the preset-derived LoRa fields, run once the channels are loaded: the
+    /// frequency slot check hashes the primary channel's name.
+    void clampLoadedLoraConfig();
 
     bool backupPreferences(meshtastic_AdminMessage_BackupLocation location);
     bool restorePreferences(meshtastic_AdminMessage_BackupLocation location,

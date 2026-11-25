@@ -432,7 +432,7 @@ void t5TouchSetForcedByTimeout(bool forced)
     }
 
     touchForcedByTimeout = forced;
-    touchStateEpoch++;
+    touchStateEpoch = touchStateEpoch + 1;
     touchIndicatorRefreshPending = true;
 
     if (forced) {
@@ -480,7 +480,7 @@ void setTouchInputEnabled(bool enabled, bool showIndicator)
 
     LOG_DEBUG("touchscreen1: setTouchInputEnabled %d -> %d (showIndicator=%d)", touchInputEnabled, enabled, showIndicator);
     touchInputEnabled = enabled;
-    touchStateEpoch++;
+    touchStateEpoch = touchStateEpoch + 1;
 
     if (enabled) {
         touchNeedsWake = touchControllerReady;
@@ -558,7 +558,7 @@ struct TouchLightSleepEndObserver {
             touchNeedsWake = false;
         }
 
-        touchStateEpoch++;
+        touchStateEpoch = touchStateEpoch + 1;
         touchResumeAtMs = Time::skipZero(Time::getMillis());
         touchIndicatorRefreshPending = !isTouchInputEnabled();
 #ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
@@ -695,7 +695,7 @@ void lateInitVariant()
         touchInputEnabled = true;
         touchForcedByTimeout = false;
         touchLightSleepActive = false;
-        touchStateEpoch++;
+        touchStateEpoch = touchStateEpoch + 1;
         touchDeepSleepObserver.observer.observe(&notifyDeepSleep);
 #ifdef ARCH_ESP32
         touchLightSleepObserver.observer.observe(&notifyLightSleep);
