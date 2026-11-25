@@ -197,6 +197,12 @@ void lateInitVariant()
     LOG_INFO("ThinkNode M6 GPS %s: %u falling edges on P0.%02u in %lu ms after AG3352 power-up (first at %ld ms)",
              m6HasAg3352 ? "AG3352" : "L76K", m6RxEdges, GPS_RX_PIN, m6DetectMs, m6RxFirstEdgeMs);
 #if !MESHTASTIC_EXCLUDE_GPS
+    if (m6HasAg3352 && !gps) {
+        // Detection powered the core, but no GPS instance will manage it in NOT_PRESENT mode.
+        pinMode(GPS_EN_AG3352, OUTPUT);
+        digitalWrite(GPS_EN_AG3352, LOW);
+        nrf_gpio_cfg_default(GPS_SLEEP_INT);
+    }
     // A config saved before the AG3352 fit was known names P0.06, which reaches nothing on it: drive ours as well.
     if (gps && config.position.gps_en_gpio && config.position.gps_en_gpio != PIN_GPS_EN) {
         LOG_INFO("GPS EN: config names pin %u, also driving pin %u", (unsigned)config.position.gps_en_gpio, (unsigned)PIN_GPS_EN);
