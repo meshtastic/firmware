@@ -176,6 +176,16 @@ void initDeepSleep()
     LOG_INFO("Booted, wake cause %d (boot count %d), reset_reason=%s", wakeCause, bootCount, reason);
 #endif
 
+    // esp_restart(), which every panic ends in, keeps the GPIO registers, and light sleep leaves its wake pins as level
+    // interrupts. One still asserted fires nonstop from the first attachInterrupt(), trips the interrupt watchdog and so
+    // loops through every reboot. Nothing has attached an interrupt yet, so clear them all.
+    for (uint8_t i = 0; i < GPIO_NUM_MAX; i++) {
+        if (!GPIO_IS_VALID_GPIO((gpio_num_t)i))
+            continue;
+        gpio_intr_disable((gpio_num_t)i);
+        gpio_set_intr_type((gpio_num_t)i, GPIO_INTR_DISABLE);
+    }
+
 #if SOC_RTCIO_HOLD_SUPPORTED
     // If waking from sleep, release any and all RTC GPIOs
     if (wakeCause != ESP_SLEEP_WAKEUP_UNDEFINED) {
