@@ -5,7 +5,8 @@
 #if HAS_POWERBANK
 #include <stdint.h>
 
-// Battery and input state reported by a power-bank controller, in the terms Power needs.
+// Battery and input state reported by a power-bank controller, in the terms Power needs. On a board
+// with EXT_CHRG_DETECT, Power reads charging and external power from that pin instead.
 struct PowerBankStatus {
     uint16_t batteryMv = 0;
     int8_t batteryPercent = -1;
