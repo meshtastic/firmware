@@ -45,11 +45,11 @@ class MockNodeDB : public NodeDB
     std::vector<meshtastic_NodeInfoLite> testNodes;
 };
 
-// alterReceivedProtobuf is the real entry point; updateNextHops is private behind it.
+// updateRoute is the real entry point; updateNextHops is private behind it.
 class TraceRouteModuleTestShim : public TraceRouteModule
 {
   public:
-    using TraceRouteModule::alterReceivedProtobuf;
+    using TraceRouteModule::updateRoute;
 };
 
 static MockNodeDB *mockNodeDB = nullptr;
@@ -111,7 +111,7 @@ void test_nexthop_learned_when_route_matches_relay(void)
     meshtastic_RouteDiscovery r;
     meshtastic_MeshPacket p = makeResponse(nodeDB->getLastByteOfNodeNum(RELAY_B), &r);
 
-    shim->alterReceivedProtobuf(p, &r);
+    shim->updateRoute(p, &r);
 
     const uint8_t expected = nodeDB->getLastByteOfNodeNum(RELAY_B);
     TEST_ASSERT_EQUAL_MESSAGE(expected, mockNodeDB->nextHopOf(RELAY_B), "next hop for the relay itself");
@@ -126,7 +126,7 @@ void test_nexthop_ignored_when_route_contradicts_relay(void)
     meshtastic_RouteDiscovery r;
     meshtastic_MeshPacket p = makeResponse(ATTACKER_RELAY_BYTE, &r);
 
-    shim->alterReceivedProtobuf(p, &r);
+    shim->updateRoute(p, &r);
 
     TEST_ASSERT_EQUAL_MESSAGE(0, mockNodeDB->nextHopOf(RELAY_B), "forged route must not set a next hop");
     TEST_ASSERT_EQUAL_MESSAGE(0, mockNodeDB->nextHopOf(NODE_C), "forged route must not set a next hop");
@@ -139,7 +139,7 @@ void test_nexthop_ignored_without_a_relay(void)
     meshtastic_RouteDiscovery r;
     meshtastic_MeshPacket p = makeResponse(NO_RELAY_NODE, &r);
 
-    shim->alterReceivedProtobuf(p, &r);
+    shim->updateRoute(p, &r);
 
     TEST_ASSERT_EQUAL_MESSAGE(0, mockNodeDB->nextHopOf(RELAY_B), "no relay means no corroboration");
     TEST_ASSERT_EQUAL_MESSAGE(0, mockNodeDB->nextHopOf(NODE_C), "no relay means no corroboration");

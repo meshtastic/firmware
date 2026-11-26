@@ -11,13 +11,7 @@
 
 static bool isV11()
 {
-#ifdef MESHTASTIC_INCLUDE_INKHUD
     return tDeckProIsV11();
-#elif defined(T_DECK_PRO_V1_0)
-    return false;
-#else
-    return true;
-#endif
 }
 
 static CSE_CST328 &touchPanel()

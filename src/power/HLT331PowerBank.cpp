@@ -50,7 +50,7 @@ constexpr uint32_t HEARTBEAT_MS = 10 * 1000;
 volatile uint32_t io1Pulses = 0;
 void io1Isr()
 {
-    io1Pulses++;
+    io1Pulses = io1Pulses + 1;
 }
 #endif
 

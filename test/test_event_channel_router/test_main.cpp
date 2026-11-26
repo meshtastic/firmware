@@ -1,3 +1,10 @@
+// Router/module handling of the event-channel position policy.
+//
+// Why: positions on the event channel must not be retransmitted or delivered when the
+// policy blocks them; this is the mesh-side half of the contract.
+// Regression guarded: a coordinate packet crossing the event channel after the gate, or a
+// permitted one being dropped.
+
 #include "MeshTypes.h"
 #include "TestUtil.h"
 #include <unity.h>

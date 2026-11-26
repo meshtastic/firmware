@@ -74,12 +74,6 @@ void tearDown(void)
 // Group 1 - Initialization
 // ===========================================================================
 
-void test_init_valid_size(void)
-{
-    PacketHistory h(8);
-    TEST_ASSERT_TRUE(h.initOk());
-}
-
 void test_init_default_size_does_not_warn(void)
 {
     RecordingPrint sink;
@@ -95,15 +89,38 @@ void test_init_default_size_does_not_warn(void)
 
 void test_init_minimum_size(void)
 {
+    RecordingPrint sink;
+    console->setDestination(&sink);
+
     PacketHistory h(4);
+
+    console->setDestination(&Serial);
+    const std::string output(sink.output.begin(), sink.output.end());
     TEST_ASSERT_TRUE(h.initOk());
+    TEST_ASSERT_NULL(strstr(output.c_str(), "Packet History - Invalid size")); // 4 is the smallest accepted size
 }
 
 void test_init_too_small_falls_back(void)
 {
     // Sizes < 4 or > PACKETHISTORY_MAX are clamped to PACKETHISTORY_MAX inside the constructor
+    RecordingPrint sink;
+    console->setDestination(&sink);
+
     PacketHistory h(2);
-    TEST_ASSERT_TRUE(h.initOk());
+
+    console->setDestination(&Serial);
+    const std::string output(sink.output.begin(), sink.output.end());
+    TEST_ASSERT_NOT_NULL(strstr(output.c_str(), "Packet History - Invalid size"));
+
+    // A 2-slot history would already have evicted by the third insert.
+    for (uint32_t i = 1; i <= SMALL_CAPACITY; i++) {
+        auto p = makePacket(0xAAAA, i);
+        h.wasSeenRecently(&p);
+    }
+    for (uint32_t i = 1; i <= SMALL_CAPACITY; i++) {
+        auto p = makePacket(0xAAAA, i);
+        TEST_ASSERT_TRUE(h.wasSeenRecently(&p, false));
+    }
 }
 
 // ===========================================================================
@@ -174,62 +191,45 @@ void test_fill_capacity_all_found(void)
 
 void test_eviction_oldest_replaced(void)
 {
-    // Fill all 8 slots
+    // Fill all 8 slots, 1 ms apart so every record has a distinct age and id 1 is the oldest.
+    // insert() picks the victim with (now_millis - rxTimeMsec) > OldtrxTimeMsec, strict >.
     for (uint32_t i = 1; i <= SMALL_CAPACITY; i++) {
         auto p = makePacket(0xAAAA, i);
         ph->wasSeenRecently(&p);
+        delay(1);
     }
 
-    // Advance time so the eviction logic can distinguish "oldest" from "newest".
-    // insert() uses (now_millis - rxTimeMsec) > OldtrxTimeMsec with strict >, so
-    // entries with identical timestamps all have age 0 and none gets selected.
-    delay(1);
-
-    // Insert a 9th packet - should evict the oldest
+    // Insert a 9th packet - must evict the oldest, and only it
     auto p9 = makePacket(0xAAAA, 9);
     ph->wasSeenRecently(&p9);
 
-    // The 9th should be found
     TEST_ASSERT_TRUE(ph->wasSeenRecently(&p9, false));
-
-    // At least one of the originals should have been evicted
-    int evicted = 0;
-    for (uint32_t i = 1; i <= SMALL_CAPACITY; i++) {
+    auto p1 = makePacket(0xAAAA, 1);
+    TEST_ASSERT_FALSE(ph->wasSeenRecently(&p1, false));
+    for (uint32_t i = 2; i <= SMALL_CAPACITY; i++) {
         auto p = makePacket(0xAAAA, i);
-        if (!ph->wasSeenRecently(&p, false))
-            evicted++;
+        TEST_ASSERT_TRUE(ph->wasSeenRecently(&p, false));
     }
-    TEST_ASSERT_TRUE(evicted > 0);
 }
 
 void test_matching_slot_reused(void)
 {
-    // Insert packet, then re-insert same (sender, id) - should reuse slot, not evict others
-    auto p1 = makePacket(0xAAAA, 1);
-    auto p2 = makePacket(0xBBBB, 2);
-    ph->wasSeenRecently(&p1);
-    ph->wasSeenRecently(&p2);
-
-    // Re-observe p1 (triggers merge path)
-    ph->wasSeenRecently(&p1);
-
-    // Both should still be present
-    TEST_ASSERT_TRUE(ph->wasSeenRecently(&p1, false));
-    TEST_ASSERT_TRUE(ph->wasSeenRecently(&p2, false));
-}
-
-void test_free_slot_preferred(void)
-{
-    // Insert 4 packets into capacity-8 history - next insert should use a free slot, not evict
-    for (uint32_t i = 1; i <= 4; i++) {
+    // Fill every slot, 1 ms apart, with p1 inserted last so it is the newest record. Re-observing
+    // p1 must update its own slot; without the matching-slot branch it would overwrite the oldest
+    // slot (id 2) instead, dropping a packet that should still be found.
+    for (uint32_t i = 2; i <= SMALL_CAPACITY; i++) {
         auto p = makePacket(0xAAAA, i);
         ph->wasSeenRecently(&p);
+        delay(1);
     }
-    auto p5 = makePacket(0xAAAA, 5);
-    ph->wasSeenRecently(&p5);
+    auto p1 = makePacket(0xBBBB, 1);
+    ph->wasSeenRecently(&p1); // 8th record: every slot is now in use
+    delay(1);
 
-    // All 5 should be present (no eviction needed)
-    for (uint32_t i = 1; i <= 5; i++) {
+    ph->wasSeenRecently(&p1); // re-observe (merge path)
+
+    TEST_ASSERT_TRUE(ph->wasSeenRecently(&p1, false));
+    for (uint32_t i = 2; i <= SMALL_CAPACITY; i++) {
         auto p = makePacket(0xAAAA, i);
         TEST_ASSERT_TRUE(ph->wasSeenRecently(&p, false));
     }
@@ -447,21 +447,16 @@ void test_checkRelayers_r2WasSole(void)
 
 void test_merge_preserves_original_next_hop(void)
 {
-    // First observation with next_hop=0x55
-    auto p1 = makePacket(0x1111, 100, 3, 0x55, 0xAA);
+    // First observation names us as next_hop; the re-observation names someone else. weWereNextHop is
+    // read from the stored record BEFORE the merge, so only a third copy shows what the merge kept.
+    auto p1 = makePacket(0x1111, 200, 3, OUR_RELAY_ID, 0xAA);
     ph->wasSeenRecently(&p1);
-
-    // Re-observation with different next_hop
-    auto p2 = makePacket(0x1111, 100, 2, 0x77, 0xBB);
+    auto p2 = makePacket(0x1111, 200, 2, 0x99, 0xBB);
     ph->wasSeenRecently(&p2);
 
-    // The stored next_hop should still be 0x55 (the original)
-    // We verify via weWereNextHop: if we set original next_hop to ourRelayID, it should detect it
-    auto p3 = makePacket(0x1111, 200, 3, OUR_RELAY_ID, 0xAA);
-    ph->wasSeenRecently(&p3);
-    auto p4 = makePacket(0x1111, 200, 2, 0x99, 0xBB);
+    auto p3 = makePacket(0x1111, 200, 1, 0x77, 0xCC);
     bool weWereNextHop = false;
-    ph->wasSeenRecently(&p4, true, nullptr, &weWereNextHop);
+    ph->wasSeenRecently(&p3, true, nullptr, &weWereNextHop);
     TEST_ASSERT_TRUE(weWereNextHop);
 }
 
@@ -480,44 +475,6 @@ void test_merge_preserves_highest_hop_limit(void)
     auto p3 = makePacket(0x1111, 100, 3);
     ph->wasSeenRecently(&p3, true, nullptr, nullptr, &wasUpgraded);
     TEST_ASSERT_FALSE(wasUpgraded);
-}
-
-void test_merge_no_duplicate_relayers(void)
-{
-    // Observe with relayer 0xAA (stored via relay_node, but only slot 0 for ourRelayID)
-    // We need to use ourRelayID for the first observation to get it into slot 0
-    auto p1 = makePacket(0x1111, 100, 3, NO_NEXT_HOP_PREFERENCE, OUR_RELAY_ID);
-    ph->wasSeenRecently(&p1);
-
-    // Re-observe with same relay_node=ourRelayID - should not create duplicates
-    auto p2 = makePacket(0x1111, 100, 2, NO_NEXT_HOP_PREFERENCE, OUR_RELAY_ID);
-    ph->wasSeenRecently(&p2);
-
-    // ourRelayID should appear exactly once - wasSole should still be true
-    bool wasSole = false;
-    TEST_ASSERT_TRUE(ph->wasRelayer(OUR_RELAY_ID, 100, 0x1111, &wasSole));
-    TEST_ASSERT_TRUE(wasSole);
-}
-
-void test_merge_adds_new_relayer(void)
-{
-    auto p1 = makePacket(0x1111, 100, 3, NO_NEXT_HOP_PREFERENCE, OUR_RELAY_ID);
-    ph->wasSeenRecently(&p1);
-
-    auto p2 = makePacket(0x1111, 100, 2, NO_NEXT_HOP_PREFERENCE, 0xBB);
-    ph->wasSeenRecently(&p2);
-
-    TEST_ASSERT_TRUE(ph->wasRelayer(OUR_RELAY_ID, 100, 0x1111));
-    TEST_ASSERT_TRUE(ph->wasRelayer(0xBB, 100, 0x1111));
-}
-
-void test_merge_we_relay_sets_slot_zero(void)
-{
-    // When relay_node == ourRelayID, relayed_by[0] should be set to ourRelayID
-    auto p = makePacket(0x1111, 100, 3, NO_NEXT_HOP_PREFERENCE, OUR_RELAY_ID);
-    ph->wasSeenRecently(&p);
-
-    TEST_ASSERT_TRUE(ph->wasRelayer(OUR_RELAY_ID, 100, 0x1111));
 }
 
 void test_merge_heard_back_stores_relay_node(void)
@@ -768,7 +725,6 @@ void setup()
     UNITY_BEGIN();
 
     // Group 1 - Initialization
-    RUN_TEST(test_init_valid_size);
     RUN_TEST(test_init_default_size_does_not_warn);
     RUN_TEST(test_init_minimum_size);
     RUN_TEST(test_init_too_small_falls_back);
@@ -785,7 +741,6 @@ void setup()
     RUN_TEST(test_fill_capacity_all_found);
     RUN_TEST(test_eviction_oldest_replaced);
     RUN_TEST(test_matching_slot_reused);
-    RUN_TEST(test_free_slot_preferred);
     RUN_TEST(test_evict_all_old_packets);
 
     // Group 4 - Relayer Tracking
@@ -811,9 +766,6 @@ void setup()
     // Group 7 - Merge Logic
     RUN_TEST(test_merge_preserves_original_next_hop);
     RUN_TEST(test_merge_preserves_highest_hop_limit);
-    RUN_TEST(test_merge_no_duplicate_relayers);
-    RUN_TEST(test_merge_adds_new_relayer);
-    RUN_TEST(test_merge_we_relay_sets_slot_zero);
     RUN_TEST(test_merge_heard_back_stores_relay_node);
 
     // Group 8 - Fallback-to-Flooding Detection

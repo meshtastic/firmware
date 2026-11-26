@@ -55,6 +55,9 @@
 #if HAS_VARIABLE_HOPS
 #include "modules/HopScalingModule.h"
 #endif
+#if !MESHTASTIC_EXCLUDE_REPEATSCALING
+#include "modules/RepeatScalingModule.h"
+#endif
 #include "modules/TextMessageModule.h"
 #if !MESHTASTIC_EXCLUDE_TRACEROUTE
 #include "modules/TraceRouteModule.h"
@@ -178,6 +181,10 @@ void setupModules()
     hopScalingModule = new HopScalingModule();
 #endif
 
+#if !MESHTASTIC_EXCLUDE_REPEATSCALING
+    repeatScalingModule = new RepeatScalingModule();
+#endif
+
 #if !MESHTASTIC_EXCLUDE_ADMIN
     adminModule = new AdminModule();
 #endif
@@ -294,14 +301,11 @@ void setupModules()
         new PowerTelemetryModule();
     }
 #endif
-#if (defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_RP2040) || defined(ARCH_STM32WL)) &&                             \
-    !defined(CONFIG_IDF_TARGET_ESP32S2) && !defined(CONFIG_IDF_TARGET_ESP32C3)
-#if !MESHTASTIC_EXCLUDE_SERIAL
+#if HAS_SERIAL_MODULE && !MESHTASTIC_EXCLUDE_SERIAL
     if (moduleConfig.has_serial && moduleConfig.serial.enabled &&
         config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
         new SerialModule();
     }
-#endif
 #endif
 #ifdef ARCH_ESP32
     // Only run on an esp32 based device.

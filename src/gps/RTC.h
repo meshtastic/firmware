@@ -7,6 +7,9 @@
 #ifdef RX8130CE_RTC
 #include <ArtronShop_RX8130CE.h>
 #endif
+#ifdef YSN8900E_RTC
+#include <YSN8900ERTC.h>
+#endif
 
 #if HAS_LSE
 // True once the STM32WL LSE crystal has locked and the hardware RTC is running (see stm32wlSetup()).
@@ -86,6 +89,9 @@ void setReadFromRTCUseSystemTimeForTests(bool enabled);
 #endif
 
 time_t gm_mktime(const struct tm *tm);
+
+/// Offset of the configured TZ (incl. DST) from UTC in seconds, evaluated at the given UTC instant.
+int32_t getTZOffsetAt(time_t utc);
 
 #define SEC_PER_DAY 86400
 #define SEC_PER_HOUR 3600

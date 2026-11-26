@@ -168,6 +168,7 @@ bool RF95Interface::init()
     digitalWrite(RF95_RXEN, 1);
 #endif
 #if ARCH_PORTDUINO
+    noteRfSwitchPins(portduino_config.lora_rxen_pin.pin, portduino_config.lora_txen_pin.pin);
     if (portduino_config.lora_txen_pin.pin != RADIOLIB_NC) {
         pinMode(portduino_config.lora_txen_pin.pin, OUTPUT);
         digitalWrite(portduino_config.lora_txen_pin.pin, 0);
@@ -198,6 +199,11 @@ bool RF95Interface::reinitChip()
     // Clamp here, not just in programModemParams(): applyModemConfig() resets `power` to the raw
     // config value, and the recovery path reaches begin() without passing through the params clamp
     limitPower(RF95_MAX_POWER);
+#ifndef USE_RF95_RFO
+    // PA_BOOST takes 2-17 dBm or exactly 20 dBm: RadioLib rejects 18 and 19 (CN's limit is 19)
+    if (power > 17 && power < 20)
+        power = 17;
+#endif
 
     int res = lora->begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength);
     LOG_INFO("RF95 init result %d", res);
@@ -267,6 +273,11 @@ int16_t RF95Interface::programModemParams()
     }
 
     limitPower(RF95_MAX_POWER);
+#ifndef USE_RF95_RFO
+    // PA_BOOST takes 2-17 dBm or exactly 20 dBm: RadioLib rejects 18 and 19 (CN's limit is 19)
+    if (power > 17 && power < 20)
+        power = 17;
+#endif
 
 #ifdef USE_RF95_RFO
     err = lora->setOutputPower(power, true);

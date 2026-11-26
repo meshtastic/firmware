@@ -52,10 +52,43 @@ static inline void feedWatchdogWhileWaiting()
 #define GPS_RESET_MODE HIGH
 #endif
 
+// A board that fits one of two receivers can wire PIN_GPS_RESET to only one of them (ThinkNode M1).
+#ifndef GPS_RESET_IN_USE
+#define GPS_RESET_IN_USE true
+#endif
+
+// A board that knows it has an Airoha fitted can say so, so it is parked and woken as one until the probe names a model.
+#ifndef GPS_AIROHA_FITTED
+#define GPS_AIROHA_FITTED false
+#endif
+
 // Not all platforms have std::size().
 template <typename T, std::size_t N> std::size_t array_count(const T (&)[N])
 {
     return N;
+}
+
+static inline bool isAiroha(GnssModel_t model)
+{
+    return IS_ONE_OF(model, GNSS_MODEL_AG3335, GNSS_MODEL_AG3352) || (model == GNSS_MODEL_UNKNOWN && GPS_AIROHA_FITTED);
+}
+
+// Reopen the GPS UART at a new speed, keeping the pins it was given.
+template <typename T> static void restartSerial(T *serialGps, int serialSpeed)
+{
+#if defined(ARCH_NRF52) || defined(ARCH_PORTDUINO) || defined(ARCH_STM32)
+    serialGps->end();
+    serialGps->begin(serialSpeed);
+#elif defined(ARCH_RP2040)
+    serialGps->end();
+    serialGps->setFIFOSize(256);
+    serialGps->begin(serialSpeed);
+#else
+    if (serialGps->baudRate() != serialSpeed) {
+        LOG_DEBUG("Set GPS Baud to %i", serialSpeed);
+        serialGps->updateBaudRate(serialSpeed);
+    }
+#endif
 }
 
 #ifndef GPS_SERIAL_PORT
@@ -81,6 +114,10 @@ static GPSUpdateScheduling scheduling;
 // A board can share one pin between an L76K standby and an Airoha RTC_INT (ThinkNode M5 v1.0/v2.0).
 #if defined(PIN_GPS_STANDBY) && defined(GPS_RTC_INT) && PIN_GPS_STANDBY == GPS_RTC_INT
 #define GPS_STANDBY_IS_RTC_INT 1
+#endif
+// Leave the standby pin alone on an Airoha fit when it is that RTC_INT, or when it only reaches an L76K (ThinkNode M1).
+#if defined(GPS_STANDBY_IS_RTC_INT) || defined(GPS_STANDBY_L76K_ONLY)
+#define GPS_STANDBY_SKIP_AIROHA 1
 #endif
 
 /// Multiple GPS instances might use the same serial port (in sequence), but we can
@@ -132,6 +169,8 @@ constexpr uint8_t AIROHA_SLEEP_ATTEMPTS = 2;
 #endif
 // Stop parking a receiver that never acks, rather than blocking for the budget every cycle forever.
 constexpr uint8_t AIROHA_SLEEP_MAX_MISSES = 3;
+// The ack can precede the transition itself, so give the receiver time before its core supply goes.
+constexpr uint32_t AIROHA_SLEEP_SETTLE_MS = 50;
 #endif
 #ifdef HAS_AIROHA_SOFT_RTC
 constexpr uint32_t AIROHA_POWER_SETTLE_MS = 50;
@@ -139,8 +178,6 @@ constexpr uint32_t AIROHA_RTC_INT_PULSE_MS = 3;
 constexpr uint32_t AIROHA_WAKE_SETTLE_MS = 50;
 #elif defined(HAS_AIROHA_SLEEP)
 constexpr uint32_t AIROHA_IDLE_INT_LEAD_MS = 50;
-// The ack can precede the transition itself, so give the receiver time before its core supply goes.
-constexpr uint32_t AIROHA_SLEEP_SETTLE_MS = 50;
 #endif
 #ifdef HAS_AIROHA_RESET_WAKE
 constexpr uint32_t AIROHA_POWER_SETTLE_MS = 50;
@@ -839,19 +876,7 @@ bool GPS::verifyCachedProbePresence()
         return false;
     }
 
-#if defined(ARCH_NRF52) || defined(ARCH_PORTDUINO) || defined(ARCH_STM32)
-    _serial_gps->end();
-    _serial_gps->begin(cachedProbeBaud);
-#elif defined(ARCH_RP2040)
-    _serial_gps->end();
-    _serial_gps->setFIFOSize(256);
-    _serial_gps->begin(cachedProbeBaud);
-#else
-    if (_serial_gps->baudRate() != cachedProbeBaud) {
-        LOG_DEBUG("Set GPS Baud to %i (cached verify)", cachedProbeBaud);
-        _serial_gps->updateBaudRate(cachedProbeBaud);
-    }
-#endif
+    restartSerial(_serial_gps, cachedProbeBaud);
 
     // Before trusting cached model/baud, require either active model-specific
     // response or passive NMEA flow.
@@ -869,6 +894,7 @@ bool GPS::verifyCachedProbePresence()
         break;
     case GNSS_MODEL_MTK_L76B:
         cachedProbeModelName = "L76B";
+        [[fallthrough]];
     case GNSS_MODEL_MTK_PA1010D:
         if (cachedProbeModel == GNSS_MODEL_MTK_PA1010D)
             cachedProbeModelName = "PA1010D";
@@ -1015,6 +1041,9 @@ bool GPS::setup()
                     detectedBaud = rareSerialSpeeds[speedSelect];
                 } else if (currentStep == 0 && ++speedSelect == array_count(rareSerialSpeeds)) {
                     LOG_WARN("Give up GPS probe, set to %d", GPS_BAUDRATE);
+                    // Sweep afresh if the GPS is enabled again, rather than index past the end of the table.
+                    speedSelect = 0;
+                    probeTries = 0;
                     return true;
                 }
             }
@@ -1024,6 +1053,10 @@ bool GPS::setup()
         if (gnssModel != GNSS_MODEL_UNKNOWN) {
             setConnected();
             (void)saveProbeCache();
+#ifdef HAS_AIROHA_SLEEP
+            // Sleep misses while unidentified (e.g. knob off) must not lock out the identified receiver.
+            airohaSleepMisses = 0;
+#endif
         } else {
             return false;
         }
@@ -1365,7 +1398,7 @@ void GPS::setPowerState(GPSPowerState newState, uint32_t sleepTime)
             airohaPulseRtcInt(); // Airoha: leave software-RTC sleep, now that VCC is back
 #endif
 #ifdef HAS_AIROHA_RESET_WAKE
-        if (IS_ONE_OF(gnssModel, GNSS_MODEL_AG3335, GNSS_MODEL_AG3352))
+        if (isAiroha(gnssModel))
             airohaPulseReset(); // Airoha: leave backup mode, now that the core is powered
 #endif
         setPowerPMU(true);      // Power (PMU): on
@@ -1430,9 +1463,9 @@ void GPS::writePinEN(bool on)
 void GPS::writePinStandby(bool standby)
 {
 #ifdef PIN_GPS_STANDBY // Specifically the standby pin for L76B, L76K and clones
-#ifdef GPS_STANDBY_IS_RTC_INT
-    // RTC_INT must rest low on an Airoha fit; the Airoha sleep code pulses it.
-    if (IS_ONE_OF(gnssModel, GNSS_MODEL_AG3335, GNSS_MODEL_AG3352))
+#ifdef GPS_STANDBY_SKIP_AIROHA
+    // On an Airoha fit this pin is RTC_INT, which rests low for the Airoha sleep code to pulse, or no standby at all.
+    if (isAiroha(gnssModel))
         return;
 #endif
     bool val;
@@ -1553,8 +1586,13 @@ void GPS::airohaEnterSleep()
 {
 #ifdef HAS_AIROHA_SLEEP
     // Only an Airoha receiver understands PAIR commands; a probe that fell back must not be talked at.
-    if (!IS_ONE_OF(gnssModel, GNSS_MODEL_AG3335, GNSS_MODEL_AG3352) || airohaSleepMisses >= AIROHA_SLEEP_MAX_MISSES)
+    if (!isAiroha(gnssModel) || airohaSleepMisses >= AIROHA_SLEEP_MAX_MISSES)
         return;
+    // Not probed yet, so the UART may be partway through the baud sweep.
+    if (gnssModel == GNSS_MODEL_UNKNOWN) {
+        restartSerial(_serial_gps, GPS_BAUDRATE);
+        currentStep = 0; // so the next probe call reopens the UART at its own speed
+    }
 
 #if defined(HAS_AIROHA_SOFT_RTC) || defined(HAS_AIROHA_RESET_WAKE)
     const char *sleepCmd = "$PAIR650,0*25\r\n";
@@ -1569,6 +1607,7 @@ void GPS::airohaEnterSleep()
         _serial_gps->write(sleepCmd);
         if (getACK(sleepAck, AIROHA_SLEEP_ACK_MS) == GNSS_RESPONSE_OK) {
             airohaSleepMisses = 0;
+            delay(AIROHA_SLEEP_SETTLE_MS);
             return;
         }
         // Only start another attempt while a whole ack window still fits inside the budget.
@@ -1633,8 +1672,8 @@ void GPS::down()
 #else
         bool softsleepSupported = false;
 #endif
-#ifdef GPS_STANDBY_IS_RTC_INT
-        if (IS_ONE_OF(gnssModel, GNSS_MODEL_AG3335, GNSS_MODEL_AG3352))
+#ifdef GPS_STANDBY_SKIP_AIROHA
+        if (isAiroha(gnssModel))
             softsleepSupported = false;
 #endif
         // U-blox is supported via PMREQ
@@ -1703,6 +1742,18 @@ bool shouldArmFixHold(bool hasValidLocation, uint8_t prevFixQual, uint32_t fixHo
 {
     // First lock of a cycle, first lock after the receiver was off, or nothing holding right now.
     return !hasValidLocation || prevFixQual == 0 || !fixHoldInForce(fixHoldEnds, threadIntervalMs);
+}
+
+/// TinyGPS++ commits a GGA field only when the sentence carried it and keeps the last one after that, so a field is
+/// present only while its last commit is younger than maxAgeMs. No header: test_gps_altitude declares the prototype.
+void setGgaAltitude(meshtastic_Position &p, TinyGPSAltitude &altitude, TinyGPSAltitude &geoid, uint32_t maxAgeMs)
+{
+    p.has_altitude = altitude.age() < maxAgeMs;
+    p.has_altitude_hae = p.has_altitude;
+    p.has_altitude_geoidal_separation = geoid.age() < maxAgeMs;
+    p.altitude_geoidal_separation = geoid.meters();
+    p.altitude_hae = altitude.meters() + p.altitude_geoidal_separation;
+    p.altitude = altitude.meters();
 }
 
 int32_t GPS::runOnce()
@@ -1915,42 +1966,32 @@ GnssModel_t GPS::probe(int serialSpeed)
 
     switch (currentStep) {
     case 0: {
-#if defined(ARCH_NRF52) || defined(ARCH_PORTDUINO) || defined(ARCH_STM32)
-        _serial_gps->end();
-        _serial_gps->begin(serialSpeed);
-#elif defined(ARCH_RP2040)
-        _serial_gps->end();
-        _serial_gps->setFIFOSize(256);
-        _serial_gps->begin(serialSpeed);
-#else
-        if (_serial_gps->baudRate() != serialSpeed) {
-            LOG_DEBUG("Set GPS Baud to %i", serialSpeed);
-            _serial_gps->updateBaudRate(serialSpeed);
-        }
-#endif
+        restartSerial(_serial_gps, serialSpeed);
 
         memset(&ublox_info, 0, sizeof(ublox_info));
         delay(100);
 
 #if defined(PIN_GPS_RESET) && PIN_GPS_RESET != -1
-        digitalWrite(PIN_GPS_RESET, GPS_RESET_MODE); // assert for 10ms
-        delay(10);
-        digitalWrite(PIN_GPS_RESET, !GPS_RESET_MODE);
+        if (GPS_RESET_IN_USE) {
+            digitalWrite(PIN_GPS_RESET, GPS_RESET_MODE); // assert for 10ms
+            delay(10);
+            digitalWrite(PIN_GPS_RESET, !GPS_RESET_MODE);
 #ifdef TRACKER_T1000_E
-        delay(100);
+            delay(100);
 #endif
 
-        // attempt to detect the chip based on boot messages
-        std::vector<ChipInfo> passive_detect = {
-            {"AG3335", "$PAIR021,AG3335", GNSS_MODEL_AG3335},
-            {"AG3352", "$PAIR021,AG3352", GNSS_MODEL_AG3352},
-            {"RYS3520", "$PAIR021,REYAX_RYS3520_V2", GNSS_MODEL_AG3352},
-            {"UC6580", "UC6580", GNSS_MODEL_UC6580}
-            // as L76K is sort of a last ditch effort, we won't attempt to detect it by startup messages for now.
-            /*{"L76K", "SW=URANUS", GNSS_MODEL_MTK}*/};
-        GnssModel_t detectedDriver = getProbeResponse(500, passive_detect, serialSpeed);
-        if (detectedDriver != GNSS_MODEL_UNKNOWN) {
-            return detectedDriver;
+            // attempt to detect the chip based on boot messages
+            std::vector<ChipInfo> passive_detect = {
+                {"AG3335", "$PAIR021,AG3335", GNSS_MODEL_AG3335},
+                {"AG3352", "$PAIR021,AG3352", GNSS_MODEL_AG3352},
+                {"RYS3520", "$PAIR021,REYAX_RYS3520_V2", GNSS_MODEL_AG3352},
+                {"UC6580", "UC6580", GNSS_MODEL_UC6580}
+                // as L76K is sort of a last ditch effort, we won't attempt to detect it by startup messages for now.
+                /*{"L76K", "SW=URANUS", GNSS_MODEL_MTK}*/};
+            GnssModel_t detectedDriver = getProbeResponse(500, passive_detect, serialSpeed);
+            if (detectedDriver != GNSS_MODEL_UNKNOWN) {
+                return detectedDriver;
+            }
         }
 #endif
         // Close all NMEA sentences, valid for L76K, ATGM336H (and likely other AT6558 devices)
@@ -2292,8 +2333,10 @@ std::unique_ptr<GPS> GPS::createGps()
     new_gps->up();
 
 #ifdef PIN_GPS_RESET
-    pinMode(PIN_GPS_RESET, OUTPUT);
-    digitalWrite(PIN_GPS_RESET, !GPS_RESET_MODE);
+    if (GPS_RESET_IN_USE) {
+        pinMode(PIN_GPS_RESET, OUTPUT);
+        digitalWrite(PIN_GPS_RESET, !GPS_RESET_MODE);
+    }
 #endif
 
     if (_serial_gps) {
@@ -2482,9 +2525,7 @@ bool GPS::lookForLocation()
     p.latitude_i = toDegInt(loc.lat);
     p.longitude_i = toDegInt(loc.lng);
 
-    p.altitude_geoidal_separation = reader.geoidHeight.meters();
-    p.altitude_hae = reader.altitude.meters() + p.altitude_geoidal_separation;
-    p.altitude = reader.altitude.meters();
+    setGgaAltitude(p, reader.altitude, reader.geoidHeight, GPS_SOL_EXPIRY_MS);
 
     p.fix_quality = fixQual;
 #ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
