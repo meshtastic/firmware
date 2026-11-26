@@ -104,30 +104,6 @@ void test_anAbsentObjectIdYieldsNoIdentifier()
 
 // --- Buckets ---
 
-void test_anObjectOffTheChainHasNoBucket()
-{
-    uint32_t bucket = 0xFFFFFFFF;
-    TEST_ASSERT_FALSE(sfppsr::bucketOf(0, bucket));
-    TEST_ASSERT_EQUAL_UINT32(0xFFFFFFFF, bucket);
-}
-
-void test_bucketsCloseEveryFixedNumberOfObjects()
-{
-    const uint32_t n = sfppsr::kBucketObjects;
-    uint32_t bucket = 0;
-
-    TEST_ASSERT_TRUE(sfppsr::bucketOf(1, bucket));
-    TEST_ASSERT_EQUAL_UINT32(0, bucket);
-    TEST_ASSERT_TRUE(sfppsr::bucketOf(n, bucket));
-    TEST_ASSERT_EQUAL_UINT32(0, bucket);
-    TEST_ASSERT_TRUE(sfppsr::bucketOf(n + 1, bucket));
-    TEST_ASSERT_EQUAL_UINT32(1, bucket);
-    TEST_ASSERT_TRUE(sfppsr::bucketOf(2 * n, bucket));
-    TEST_ASSERT_EQUAL_UINT32(1, bucket);
-    TEST_ASSERT_TRUE(sfppsr::bucketOf(2 * n + 1, bucket));
-    TEST_ASSERT_EQUAL_UINT32(2, bucket);
-}
-
 // The content bucket is the first byte of the object hash, so every archive files an object the
 // same way with no counter, clock or coordinator.
 void test_contentBucketIsTheFirstHashByte()
@@ -334,8 +310,6 @@ void setup()
     RUN_TEST(test_anAbsentObjectIdYieldsNoIdentifier);
 
     // Buckets
-    RUN_TEST(test_anObjectOffTheChainHasNoBucket);
-    RUN_TEST(test_bucketsCloseEveryFixedNumberOfObjects);
     RUN_TEST(test_contentBucketIsTheFirstHashByte);
     RUN_TEST(test_aFullBucketSketchFitsOneFrame);
 

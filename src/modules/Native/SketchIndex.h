@@ -11,7 +11,7 @@
  * The set layer between stored objects and a PinSketch: what a node summarises, and what two nodes
  * compare.
  *
- * An object is identified on the chain by its 16-byte message hash. A sketch costs four bytes per
+ * An object is identified by its 16-byte message hash. A sketch costs four bytes per
  * unit of capacity, so members are the 32-bit short ID instead - a truncated hash of that object
  * hash, computed identically by every node with no shared key, no negotiation and no session. That
  * is what lets one broadcast summary be compared by everyone who hears it.
@@ -24,9 +24,8 @@
  * under a second. It also covers the honest case - PinSketch decodes an over-capacity difference to
  * a wrong set at a rate near 1/c!, which no re-encoding detects.
  *
- * Buckets keep the difference small enough to resolve in one frame. They close on the chain
- * counter, not on time: a count-based boundary is one both sides derive from the data itself, and it
- * bounds members per bucket on any mesh rather than depending on a guessed message rate.
+ * Buckets keep the difference small enough to resolve in one frame. They are derived from the
+ * object hash, so every node files an object the same way with no counter, clock or coordinator.
  */
 namespace sfppsr
 {
@@ -41,9 +40,6 @@ uint64_t checksumContribution(const uint8_t *objectId, size_t len);
 
 // A full bucket's sketch is 128 bytes, which leaves room for the advert envelope in one frame.
 constexpr uint32_t kBucketObjects = 32;
-
-// Chain counters are 1-based; counter 0 means the object is not on the chain yet and has no bucket.
-bool bucketOf(uint32_t chainCounter, uint32_t &bucketOut);
 
 // The content-derived bucket: the first byte of the object hash, so every archive files an object
 // the same way with no counter, clock or coordinator.

@@ -60,15 +60,6 @@ uint64_t checksumContribution(const uint8_t *objectId, size_t len)
     return bigEndian64(digest);
 }
 
-bool bucketOf(uint32_t chainCounter, uint32_t &bucketOut)
-{
-    if (chainCounter == 0)
-        return false;
-
-    bucketOut = (chainCounter - 1) / kBucketObjects;
-    return true;
-}
-
 uint32_t contentBucket(const uint8_t *objectId, size_t len)
 {
     return len > 0 ? objectId[0] : 0;
