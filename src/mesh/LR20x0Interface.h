@@ -56,7 +56,7 @@ template <class T> class LR20x0Interface : public RadioLibInterface
     virtual void setRadioIsr(void (*callback)()) override { lora.setIrqAction(callback); }
 
     /** can we detect a LoRa preamble on the current channel? */
-    virtual bool isChannelActive() override;
+    virtual ChannelScan checkChannel() override;
 
     /** are we actively receiving a packet (only called during receiving state) */
     virtual bool isActivelyReceiving() override;
@@ -111,7 +111,7 @@ template <class T> class LR20x0Interface : public RadioLibInterface
     void selectLfPaTable(float freq);
 
     /** setStandby()'s body, returning the standby error instead of asserting - for callers that can recover */
-    int16_t trySetStandby();
+    int16_t trySetStandby() override;
 
 #ifdef MESHTASTIC_RX_READOUT_TASK
     bool rearmReceiveFromIsr() override;

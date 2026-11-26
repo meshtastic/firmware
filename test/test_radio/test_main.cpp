@@ -765,6 +765,20 @@ class TestableRadioLibInterface : public RadioLibInterface
 
     static bool isRadioLibTimeErrorPublic(RadioLibTime_t usec) { return isRadioLibTimeError(usec); }
 
+    size_t beginSendingPublic(meshtastic_MeshPacket *p) { return beginSending(p); }
+    void abandonSendingPublic() { abandonSending(); }
+    ChannelScan scanVerdictPublic(int16_t result) { return scanVerdict(result); }
+    ScanFailAction noteScanFailedPublic(uint32_t now) { return noteScanFailed(now); }
+    void noteScanSucceededPublic() { noteScanSucceeded(); }
+    void noteScanRecoveryAttemptedPublic() { noteScanRecoveryAttempted(); }
+    void setRxOffline(bool offline) { rxOffline = offline; }
+    int16_t getScanFailLastError() const { return scanFailLastError; }
+    uint32_t getScanFailCount() const { return scanFailCount; }
+    meshtastic_MeshPacket *getSendingPacket() const { return sendingPacket; }
+    uint32_t getTxGood() const { return txGood; }
+    uint32_t getTxRelay() const { return txRelay; }
+    uint16_t getTxDrop() const { return txDrop; }
+
     uint32_t maxRxFrameMsecPublic() { return maxRxFrameMsec(); }
     bool preambleHoldActivePublic() { return preambleHoldActive(); }
     bool preambleHoldPeekablePublic() { return preambleHoldPeekable(); }
@@ -783,7 +797,8 @@ class TestableRadioLibInterface : public RadioLibInterface
     // Chip-specific hooks this test never reaches
     uint32_t getPacketTime(uint32_t, bool) override { return packetTimeMs; }
     int16_t getCurrentRSSI() override { return 0; }
-    bool isChannelActive() override { return false; }
+    ChannelScan checkChannel() override { return ChannelScan::Free; }
+    int16_t trySetStandby() override { return RADIOLIB_ERR_NONE; }
     bool isActivelyReceiving() override { return false; }
     void addReceiveMetadata(meshtastic_MeshPacket *) override {}
     void setRadioIsr(void (*)()) override {}
@@ -857,6 +872,156 @@ static void test_computePacketTime_rxUsesHeaderInfoAndIsGuarded()
 
     radio.calculatedTimeOnAir = (RadioLibTime_t)RADIOLIB_ERR_WRONG_MODEM;
     TEST_ASSERT_EQUAL_UINT32(0, radioIf->computePacketTimePublic(radio, 32, true));
+
+    delete radioIf;
+}
+
+// Only the two CAD outcomes are verdicts; every error is Failed, never Free. All five drivers used to
+// report any scan error except WRONG_MODEM as a free channel, so an LR2021 whose CAD params the chip
+// refused (-706) transmitted over live frames. If this table changes, onNotify() sends on errors again.
+static void test_classifyScan_onlyCadOutcomesAreVerdicts()
+{
+    using Scan = RadioLibInterface::ChannelScan;
+    TEST_ASSERT_TRUE(RadioLibInterface::classifyScan(RADIOLIB_CHANNEL_FREE) == Scan::Free);
+    TEST_ASSERT_TRUE(RadioLibInterface::classifyScan(RADIOLIB_LORA_DETECTED) == Scan::Busy);
+    TEST_ASSERT_TRUE(RadioLibInterface::classifyScan(RADIOLIB_PREAMBLE_DETECTED) == Scan::Busy); // SX127x
+    TEST_ASSERT_TRUE_MESSAGE(RadioLibInterface::classifyScan(RADIOLIB_ERR_NONE) == Scan::Failed,
+                             "a scan that reports no CAD outcome must not read as a verdict");
+    const int16_t errors[] = {RADIOLIB_ERR_UNKNOWN,         RADIOLIB_ERR_WRONG_MODEM,    RADIOLIB_ERR_SPI_CMD_TIMEOUT,
+                              RADIOLIB_ERR_SPI_CMD_INVALID, RADIOLIB_ERR_SPI_CMD_FAILED, RADIOLIB_ERR_CHIP_NOT_FOUND,
+                              RADIOLIB_ERR_RX_TIMEOUT};
+    for (int16_t err : errors)
+        TEST_ASSERT_TRUE_MESSAGE(RadioLibInterface::classifyScan(err) == Scan::Failed, "a scan error must not read as a verdict");
+}
+
+// startSend() takes this path when startTransmit() fails: nothing went on air, so the packet is
+// released and counted as dropped, never as sent.
+// A Failed scan keeps its error for the once-per-run log; a verdict never overwrites it.
+static void test_scanVerdict_keepsTheFailedScansError()
+{
+    using Scan = RadioLibInterface::ChannelScan;
+    auto *radioIf = makeTestableRadioLibInterface();
+    TEST_ASSERT_TRUE(radioIf->scanVerdictPublic(RADIOLIB_ERR_SPI_CMD_INVALID) == Scan::Failed);
+    TEST_ASSERT_TRUE(radioIf->scanVerdictPublic(RADIOLIB_CHANNEL_FREE) == Scan::Free);
+    TEST_ASSERT_TRUE(radioIf->scanVerdictPublic(RADIOLIB_LORA_DETECTED) == Scan::Busy);
+    TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_SPI_CMD_INVALID, radioIf->getScanFailLastError());
+    delete radioIf;
+}
+
+// Until a chip re-init has been tried in this run of failures, every Failed scan asks for one; the
+// throttled recovery decides whether it really runs.
+static void test_scanFailure_asksForRecoveryUntilOneIsAttempted()
+{
+    using Action = RadioLibInterface::ScanFailAction;
+    auto *radioIf = makeTestableRadioLibInterface();
+    TEST_ASSERT_TRUE(radioIf->noteScanFailedPublic(1000) == Action::Recover);
+    TEST_ASSERT_TRUE(radioIf->noteScanFailedPublic(1500) == Action::Recover);
+    radioIf->noteScanRecoveryAttemptedPublic();
+    TEST_ASSERT_TRUE(radioIf->noteScanFailedPublic(2000) == Action::Retry);
+    TEST_ASSERT_EQUAL_UINT32(3, radioIf->getScanFailCount());
+    delete radioIf;
+}
+
+// Failures that outlive a re-init by SCAN_FAIL_UNSCANNED_AFTER_MS, with RX online, send without the scan,
+// no more often than SCAN_FAIL_UNSCANNED_MIN_GAP_MS. Before that the packet is held, as a busy channel would.
+static void test_scanFailure_sendsUnscannedOnlyAfterTheRunOutlivesARecovery()
+{
+    using Action = RadioLibInterface::ScanFailAction;
+    auto *radioIf = makeTestableRadioLibInterface();
+    const uint32_t after = RadioLibInterface::SCAN_FAIL_UNSCANNED_AFTER_MS;
+    const uint32_t gap = RadioLibInterface::SCAN_FAIL_UNSCANNED_MIN_GAP_MS;
+    // Half the fallback delay before the 32-bit wrap: every check from start + after on reads a wrapped millis(),
+    // so a plain `start + after <= now` compare would fail here
+    const uint32_t start = UINT32_MAX - after / 2;
+    TEST_ASSERT_TRUE(start + after < start);
+    TEST_ASSERT_TRUE(radioIf->noteScanFailedPublic(start) == Action::Recover);
+    radioIf->noteScanRecoveryAttemptedPublic();
+
+    // Before the wrap the deadline has already wrapped to a small value, so a plain compare would send here
+    TEST_ASSERT_TRUE(radioIf->noteScanFailedPublic(start + 1) == Action::Retry);
+    TEST_ASSERT_TRUE(radioIf->noteScanFailedPublic(start + after - 1) == Action::Retry);
+    TEST_ASSERT_TRUE(radioIf->noteScanFailedPublic(start + after) == Action::SendUnscanned);
+    TEST_ASSERT_TRUE_MESSAGE(radioIf->noteScanFailedPublic(start + after + 1) == Action::Retry,
+                             "unscanned transmits must be rate-limited");
+    TEST_ASSERT_TRUE(radioIf->noteScanFailedPublic(start + after + gap - 1) == Action::Retry);
+    TEST_ASSERT_TRUE(radioIf->noteScanFailedPublic(start + after + gap) == Action::SendUnscanned);
+    delete radioIf;
+}
+
+// The gap between unscanned transmits measured across the wrap: the first send lands before it, the gap ends after it.
+static void test_scanFailure_unscannedGapHoldsAcrossTheClockWrap()
+{
+    using Action = RadioLibInterface::ScanFailAction;
+    auto *radioIf = makeTestableRadioLibInterface();
+    const uint32_t after = RadioLibInterface::SCAN_FAIL_UNSCANNED_AFTER_MS;
+    const uint32_t gap = RadioLibInterface::SCAN_FAIL_UNSCANNED_MIN_GAP_MS;
+    const uint32_t start = UINT32_MAX - after - gap / 2;
+    const uint32_t firstSend = start + after;
+    TEST_ASSERT_TRUE(firstSend > start);           // the fallback deadline itself does not wrap
+    TEST_ASSERT_TRUE(firstSend + gap < firstSend); // the gap does
+    TEST_ASSERT_TRUE(radioIf->noteScanFailedPublic(start) == Action::Recover);
+    radioIf->noteScanRecoveryAttemptedPublic();
+
+    TEST_ASSERT_TRUE(radioIf->noteScanFailedPublic(firstSend) == Action::SendUnscanned);
+    TEST_ASSERT_TRUE(radioIf->noteScanFailedPublic(firstSend + 1) == Action::Retry);
+    TEST_ASSERT_TRUE(radioIf->noteScanFailedPublic(firstSend + gap - 1) == Action::Retry);
+    TEST_ASSERT_TRUE(radioIf->noteScanFailedPublic(firstSend + gap) == Action::SendUnscanned);
+    delete radioIf;
+}
+
+// With RX offline the chip cannot be trusted to transmit, however long the run.
+static void test_scanFailure_neverSendsUnscannedWithRxOffline()
+{
+    using Action = RadioLibInterface::ScanFailAction;
+    auto *radioIf = makeTestableRadioLibInterface();
+    TEST_ASSERT_TRUE(radioIf->noteScanFailedPublic(1000) == Action::Recover);
+    radioIf->noteScanRecoveryAttemptedPublic();
+    radioIf->setRxOffline(true);
+    TEST_ASSERT_TRUE(radioIf->noteScanFailedPublic(1000 + 10 * RadioLibInterface::SCAN_FAIL_UNSCANNED_AFTER_MS) == Action::Retry);
+    radioIf->setRxOffline(false);
+    delete radioIf;
+}
+
+// A Free or Busy verdict ends the run: the next failure starts a fresh one that must re-earn the fallback.
+static void test_scanFailure_aWorkingScanEndsTheRun()
+{
+    using Action = RadioLibInterface::ScanFailAction;
+    auto *radioIf = makeTestableRadioLibInterface();
+    const uint32_t after = RadioLibInterface::SCAN_FAIL_UNSCANNED_AFTER_MS;
+    TEST_ASSERT_TRUE(radioIf->noteScanFailedPublic(1000) == Action::Recover);
+    radioIf->noteScanRecoveryAttemptedPublic();
+    TEST_ASSERT_TRUE(radioIf->noteScanFailedPublic(1000 + after) == Action::SendUnscanned);
+
+    radioIf->noteScanSucceededPublic();
+    TEST_ASSERT_EQUAL_UINT32(0, radioIf->getScanFailCount());
+    TEST_ASSERT_TRUE_MESSAGE(radioIf->noteScanFailedPublic(2000 + after) == Action::Recover,
+                             "a new run must not inherit the old run's recovery or age");
+    delete radioIf;
+}
+
+static void test_abandonSending_releasesAndCountsDropNotSend()
+{
+    auto *radioIf = makeTestableRadioLibInterface();
+    const int32_t liveBefore = packetPoolLiveBytes();
+
+    meshtastic_MeshPacket *p = packetPool.allocZeroed();
+    TEST_ASSERT_NOT_NULL(p);
+    TEST_ASSERT_GREATER_THAN_INT32(liveBefore, packetPoolLiveBytes());
+    p->from = 0x12345678;
+    p->to = 0x87654321;
+    p->id = 0x10203042;
+    p->which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
+    p->encrypted.size = 16;
+    TEST_ASSERT_EQUAL_UINT(16 + sizeof(PacketHeader), radioIf->beginSendingPublic(p));
+    TEST_ASSERT_EQUAL_PTR(p, radioIf->getSendingPacket());
+
+    radioIf->abandonSendingPublic();
+
+    TEST_ASSERT_NULL_MESSAGE(radioIf->getSendingPacket(), "the abandoned packet must not stay in flight");
+    TEST_ASSERT_EQUAL_INT32_MESSAGE(liveBefore, packetPoolLiveBytes(), "the abandoned packet must go back to the pool");
+    TEST_ASSERT_EQUAL_UINT16(1, radioIf->getTxDrop());
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, radioIf->getTxGood(), "a failed transmit start must not count as sent");
+    TEST_ASSERT_EQUAL_UINT32(0, radioIf->getTxRelay());
 
     delete radioIf;
 }
@@ -1575,6 +1740,14 @@ void setup()
     RUN_TEST(test_computePacketTime_rxUsesHeaderInfoAndIsGuarded);
     RUN_TEST(test_computePacketTime_rxWithoutHeaderInfoUsesConfiguredModem);
     RUN_TEST(test_isRadioLibTimeError_separatesCodesFromDurations);
+    RUN_TEST(test_classifyScan_onlyCadOutcomesAreVerdicts);
+    RUN_TEST(test_abandonSending_releasesAndCountsDropNotSend);
+    RUN_TEST(test_scanVerdict_keepsTheFailedScansError);
+    RUN_TEST(test_scanFailure_asksForRecoveryUntilOneIsAttempted);
+    RUN_TEST(test_scanFailure_sendsUnscannedOnlyAfterTheRunOutlivesARecovery);
+    RUN_TEST(test_scanFailure_unscannedGapHoldsAcrossTheClockWrap);
+    RUN_TEST(test_scanFailure_neverSendsUnscannedWithRxOffline);
+    RUN_TEST(test_scanFailure_aWorkingScanEndsTheRun);
     RUN_TEST(test_clearReadIrqs_alsoDiscardsTheUnreadFrame);
     RUN_TEST(test_clearReadIrqs_retiresTheDeadFramesHeaderAndPreamble);
     RUN_TEST(test_staleRxFlagAction_keepsFlagsInsideTheWindow);

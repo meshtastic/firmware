@@ -70,7 +70,7 @@ static void test_lr11x0_other_setters_and_modes_succeed()
     TEST_ASSERT_EQUAL_UINT32(1, hal.count(op16(RADIOLIB_LR11X0_CMD_SET_RX)));
 }
 
-// --- CAD: LR11x0Interface::isChannelActive() -> startChannelScan(cfg) -> startCad() ---
+// --- CAD: LR11x0Interface::checkChannel() -> startChannelScan(cfg) -> startCad() ---
 //
 // SetCadParams (0x020D), 9 bytes: [0-1] opcode [2] symNum [3] detPeak [4] detMin [5] exit mode
 // [6-8] timeout, 24-bit big-endian. Unlike the LR2021 (lr2021_tests.h), RadioLib's LR11x0 exit
@@ -136,7 +136,7 @@ static void test_lr11x0_cad_rx_exit_byte_sent()
 }
 
 // A refused SetCadParams (CMD_PERR) returns -706, the same contract as the LR2021:
-// LR11x0Interface::isChannelActive() also reads any error but WRONG_MODEM as a free channel. Only paranoid
+// LR11x0Interface::checkChannel() reads it as a failed scan, never a free channel. Only paranoid
 // SPI stops the SetCad that follows; without it the CAD runs on the old parameters (SENT_AFTER_REFUSAL).
 static void test_lr11x0_cad_params_rejected_returns_spi_cmd_invalid()
 {

@@ -54,7 +54,7 @@ template <class T> class SX128xInterface : public RadioLibInterface
     virtual void setRadioIsr(void (*callback)()) override { lora.setDio1Action(callback); }
 
     /** can we detect a LoRa preamble on the current channel? */
-    virtual bool isChannelActive() override;
+    virtual ChannelScan checkChannel() override;
 
     /** are we actively receiving a packet (only called during receiving state) */
     virtual bool isActivelyReceiving() override;
@@ -83,7 +83,7 @@ template <class T> class SX128xInterface : public RadioLibInterface
         return lora.getLoRaRxHeaderInfo(&cr, &hasCRC) == RADIOLIB_ERR_NONE;
     }
 
-    // 2.4 GHz only. isChannelActive() passes CAD_ON_8_SYMB; keep the two in step.
+    // 2.4 GHz only. checkChannel() passes CAD_ON_8_SYMB; keep the two in step.
     uint8_t getCadSymbolCountWideLora() const override { return 8; }
 
     /** Set the CAD peak-to-noise threshold for the current sf/bw. Call after either changes. */
@@ -99,7 +99,7 @@ template <class T> class SX128xInterface : public RadioLibInterface
     bool reinitChip(bool fromInit = false);
 
     /** setStandby()'s body, returning the standby error instead of asserting - for callers that can recover */
-    int16_t trySetStandby();
+    int16_t trySetStandby() override;
 
     /** Recover a chip that lost its runtime state: hardware-reset via begin() and reprogram */
     bool recoverChipStateLoss() override

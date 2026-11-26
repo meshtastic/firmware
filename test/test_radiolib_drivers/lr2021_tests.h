@@ -149,7 +149,7 @@ static void test_lr2021_other_setters_and_modes_succeed()
     TEST_ASSERT_EQUAL_UINT32(1, hal.count(op16(RADIOLIB_LR2021_CMD_SET_RX)));
 }
 
-// --- CAD: LR20x0Interface::isChannelActive() -> startChannelScan(cfg) -> startCad() ---
+// --- CAD: LR20x0Interface::checkChannel() -> startChannelScan(cfg) -> startCad() ---
 //
 // LoRa CAD on the LR2021 is SetLoraCadParams (0x0227) + SetLoraCad (0x0228), 9 bytes:
 //   [0-1] opcode  [2] nb_symbols  [3] rfu(7:5) pbl_any(4) pnr_delta(3:0)  [4] exit mode
@@ -157,13 +157,13 @@ static void test_lr2021_other_setters_and_modes_succeed()
 // Exit mode for this command is CAD_ONLY 0x00, CAD_RX 0x01, CAD_LBT 0x10 (Table 6-18). RadioLib's
 // RADIOLIB_LR2021_CAD_EXIT_MODE_* hold the SetCadParams (0x021B) values instead, so its _RX is 0x02.
 // On hardware the chip rejects 0x02 with CMD_PERR, scanChannel() returns -706, and
-// LR20x0Interface::isChannelActive() reads that as a free channel, so a node sending it would transmit over
-// live frames (16/16 trials on the bench). develop does not: it sends 0x01 from its own local
+// LR20x0Interface::checkChannel() reads that as a failed scan; before ChannelScan::Failed it read it as a free
+// channel and transmitted over live frames (16/16 trials on the bench). develop does not: it sends 0x01 from its own local
 // CAD_EXIT_MODE_RX, which is what these tests keep it doing.
 //
 // Never call scanChannel() here: it spins on digitalRead(irq), which RecordingHal holds at 0.
 
-// Every field at its default sentinel, as LR20x0Interface::isChannelActive() builds it.
+// Every field at its default sentinel, as LR20x0Interface::checkChannel() builds it.
 static ChannelScanConfig_t lr2021CadConfig(uint8_t exitMode = RADIOLIB_LR2021_CAD_PARAM_DEFAULT,
                                            uint8_t detPeak = RADIOLIB_LR2021_CAD_PARAM_DEFAULT,
                                            uint8_t symNum = RADIOLIB_LR2021_CAD_PARAM_DEFAULT, RadioLibTime_t timeout = 0)
@@ -499,7 +499,7 @@ static void test_lr2021_cad_refused_start_returns_spi_cmd_invalid()
 //   setPaTable(): custom LF table entry chosen per output power (cf. meshtastic/firmware#11980)
 //   readData() / getPacketLength(): a chip-reported length longer than the caller's buffer
 //   getRSSI() / getSNR() / getPacketStatus(): decoding of known reply bytes
-//   LR20x0Interface::isChannelActive() is driven in lr20x0_interface_tests.h
+//   LR20x0Interface::checkChannel() is driven in lr20x0_interface_tests.h
 
 static void runLr2021Tests()
 {

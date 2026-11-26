@@ -284,7 +284,12 @@ int16_t RF95Interface::programModemParams()
 #else
     err = lora->setOutputPower(power);
 #endif
-    if (err != RADIOLIB_ERR_NONE) {
+    if (err == RADIOLIB_ERR_INVALID_OUTPUT_POWER) {
+        // Out of range: RadioLib refused it before touching the chip, so the previous power still holds
+        LOG_ERROR("RF95 setOutputPower %d dBm rejected (%s%d); keep previous Tx power", power, radioLibErr, err);
+        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+    } else if (err != RADIOLIB_ERR_NONE) {
+        // A command failed part-way through the power setup: return it so reconfigure() re-inits the chip
         LOG_ERROR("RF95 setOutputPower(%d) %s%d", power, radioLibErr, err);
         return err;
     }
@@ -312,7 +317,8 @@ bool RF95Interface::reconfigure()
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
         LOG_ERROR("RF95 rejected modem params, chip state lost? Full re-init");
         if (!reinitChip() || (err = programModemParams()) != RADIOLIB_ERR_NONE) {
-            LOG_ERROR("RF95 unrecoverable %s%d, radio down until reboot", radioLibErr, err);
+            LOG_ERROR("RF95 unrecoverable %s%d, radio offline, maintenance will retry", radioLibErr, err);
+            rxOffline = true; // periodicRadioMaintenance() retries recovery and RX; repeated failures reach the reboot ladder
             return false;
         }
         LOG_INFO("RF95 recovered after re-init");
@@ -393,27 +399,15 @@ void RF95Interface::startReceive()
     checkRxDoneIrqFlag();
 }
 
-bool RF95Interface::isChannelActive()
+RadioLibInterface::ChannelScan RF95Interface::checkChannel()
 {
     // check if we can detect a LoRa preamble on the current channel
     setTransmitEnable(false);
-    int16_t result = trySetStandby(); // needed for smooth transition
-    if (result == RADIOLIB_ERR_NONE) {
+    int16_t result = trySetStandby();
+    if (result == RADIOLIB_ERR_NONE)
         result = lora->scanChannel();
-
-        if (result == RADIOLIB_PREAMBLE_DETECTED) {
-            // LOG_DEBUG("Channel is busy");
-            return true;
-        }
-        if (result != RADIOLIB_CHANNEL_FREE)
-            LOG_ERROR("RF95 isChannelActive %s%d", radioLibErr, result);
-        if (result != RADIOLIB_ERR_WRONG_MODEM)
-            return false;
-    }
-
-    // standby failed or the LoRa modem type is gone - the chip lost its runtime state
-    maybeRecoverChipStateLoss();
-    return false; // report the channel free: a recovered chip can TX, a dead one fails startSend safely
+    // Any error, including a failed standby, is Failed; onNotify() decides what follows a failed scan
+    return scanVerdict(result);
 }
 
 /** Could we send right now (i.e. either not actively receiving or transmitting)? */

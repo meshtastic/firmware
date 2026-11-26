@@ -72,7 +72,7 @@ class SX126xInterface : public RadioLibInterface
 #endif
 
     /** can we detect a LoRa preamble on the current channel? */
-    virtual bool isChannelActive() override;
+    virtual ChannelScan checkChannel() override;
 
     /** are we actively receiving a packet (only called during receiving state) */
     virtual bool isActivelyReceiving() override;
@@ -101,7 +101,7 @@ class SX126xInterface : public RadioLibInterface
         return lora.getLoRaRxHeaderInfo(&cr, &hasCRC) == RADIOLIB_ERR_NONE;
     }
 
-    // Sub-GHz only. isChannelActive() passes CAD_ON_4_SYMB; keep the two in step.
+    // Sub-GHz only. checkChannel() passes CAD_ON_4_SYMB; keep the two in step.
     uint8_t getCadSymbolCountSubGhz() const override { return 4; }
 
 #ifdef ARCH_PORTDUINO
@@ -169,7 +169,7 @@ class SX126xInterface : public RadioLibInterface
     bool reinitChip();
 
     /** setStandby()'s body, returning the standby error instead of asserting - for callers that can recover */
-    int16_t trySetStandby();
+    int16_t trySetStandby() override;
 
     /** RX was armed continuous and nothing has put the chip into standby since, so it is still listening */
     bool rxArmedContinuous = false;

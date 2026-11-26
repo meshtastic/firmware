@@ -51,7 +51,7 @@ class RF95Interface : public RadioLibInterface
     virtual void setRadioIsr(void (*callback)()) override { lora->setDio0Action(callback, RISING); }
 
     /** can we detect a LoRa preamble on the current channel? */
-    virtual bool isChannelActive() override;
+    virtual ChannelScan checkChannel() override;
 
     // Sub-GHz only, CAD fixed in hardware at ~2.25 symbols; the legacy scanChannel() takes no symNum.
     // 2 puts the slot on its 2.5-symbol floor, which is the closest the shared formula gets.
@@ -98,7 +98,7 @@ class RF95Interface : public RadioLibInterface
     bool reinitChip();
 
     /** setStandby()'s body, returning the standby error instead of asserting - for callers that can recover */
-    int16_t trySetStandby();
+    int16_t trySetStandby() override;
 
     /** Recover a chip that lost its runtime state: hardware-reset via begin() and reprogram */
     bool recoverChipStateLoss() override { return reinitChip() && programModemParams() == RADIOLIB_ERR_NONE; }

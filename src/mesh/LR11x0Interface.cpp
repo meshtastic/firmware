@@ -267,8 +267,8 @@ template <typename T> bool LR11x0Interface<T>::init()
         return false;
 
     LR11x0VersionInfo_t version;
-    res = lora.getVersionInfo(&version);
-    if (res == RADIOLIB_ERR_NONE) {
+    // Own variable, as LR20x0 does: assigning to res would erase a begin() error and let init() succeed
+    if (lora.getVersionInfo(&version) == RADIOLIB_ERR_NONE) {
         // INFO, not radio debug: a transceiver firmware too old for a preset is otherwise invisible in a normal log
         LOG_INFO("LR11x0 Device %d, HW %d, FW %d.%d, WiFi %d.%d, GNSS %d.%d", version.device, version.hardware, version.fwMajor,
                  version.fwMinor, version.fwMajorWiFi, version.fwMinorWiFi, version.fwGNSS, version.almanacGNSS);
@@ -420,7 +420,12 @@ template <typename T> int16_t LR11x0Interface<T>::programModemParams()
     }
 
     err = applyOutputPower();
-    if (err != RADIOLIB_ERR_NONE) {
+    if (err == RADIOLIB_ERR_INVALID_OUTPUT_POWER) {
+        // Out of range: RadioLib refused it before touching the chip, so the previous power still holds
+        LOG_ERROR("LR11x0 setOutputPower %d dBm rejected (%s%d); keep previous Tx power", power, radioLibErr, err);
+        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+    } else if (err != RADIOLIB_ERR_NONE) {
+        // The PA config may be written without the Tx params: return it so reconfigure() re-inits the chip
         LOG_ERROR("LR11x0 setOutputPower(%d) %s%d", power, radioLibErr, err);
         return err;
     }
@@ -499,7 +504,8 @@ template <typename T> bool LR11x0Interface<T>::reconfigure()
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
         LOG_ERROR("LR11x0 rejected modem params, chip state lost? Full re-init");
         if (!reinitChip() || (err = programModemParams()) != RADIOLIB_ERR_NONE) {
-            LOG_ERROR("LR11x0 unrecoverable %s%d, radio down until reboot", radioLibErr, err);
+            LOG_ERROR("LR11x0 unrecoverable %s%d, radio offline, maintenance will retry", radioLibErr, err);
+            rxOffline = true; // periodicRadioMaintenance() retries recovery and RX; repeated failures reach the reboot ladder
             return false;
         }
         LOG_INFO("LR11x0 recovered after re-init");
@@ -708,7 +714,7 @@ template <typename T> bool LR11x0Interface<T>::adoptReceiveArmedFromIsr()
 #endif
 
 /** Is the channel currently active? */
-template <typename T> bool LR11x0Interface<T>::isChannelActive()
+template <typename T> RadioLibInterface::ChannelScan LR11x0Interface<T>::checkChannel()
 {
     // check if we can detect a LoRa preamble on the current channel.
     // symNum is SetCadParams SymbolNum - a plain count - so take it straight from getCadSymbolCount(),
@@ -777,15 +783,11 @@ template <typename T> bool LR11x0Interface<T>::isChannelActive()
             // RX_DONE is a clean edge.
             lora.clearIrqFlags(RADIOLIB_LR11X0_IRQ_CAD_DONE | RADIOLIB_LR11X0_IRQ_CAD_DETECTED);
             noteCadHandoffToRx(); // nothing below arms the radio; the caller's rearmReceive() adopts it
-            return true;
+            return ChannelScan::Busy;
         }
-        if (result != RADIOLIB_ERR_WRONG_MODEM)
-            return false;
     }
-
-    // standby failed or the LoRa modem type is gone - the chip lost its runtime state
-    maybeRecoverChipStateLoss();
-    return false; // report the channel free: a recovered chip can TX, a dead one fails startSend safely
+    // Any error, including a failed standby, is Failed; onNotify() decides what follows a failed scan
+    return scanVerdict(result);
 }
 
 /** Could we send right now (i.e. either not actively receiving or transmitting)? */

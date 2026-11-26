@@ -187,7 +187,12 @@ template <typename T> int16_t SX128xInterface<T>::programModemParams()
     limitPower(SX128X_MAX_POWER);
 
     err = lora.setOutputPower(power);
-    if (err != RADIOLIB_ERR_NONE) {
+    if (err == RADIOLIB_ERR_INVALID_OUTPUT_POWER) {
+        // Out of range: RadioLib refused it before touching the chip, so the previous power still holds
+        LOG_ERROR("SX128X setOutputPower %d dBm rejected (%s%d); keep previous Tx power", power, radioLibErr, err);
+        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+    } else if (err != RADIOLIB_ERR_NONE) {
+        // SetTxParams failed after RadioLib cached the new power: return it so reconfigure() re-inits the chip
         LOG_ERROR("SX128X setOutputPower(%d) %s%d", power, radioLibErr, err);
         return err;
     }
@@ -215,7 +220,8 @@ template <typename T> bool SX128xInterface<T>::reconfigure()
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
         LOG_ERROR("SX128x rejected modem params, chip state lost? Full re-init");
         if (!reinitChip() || (err = programModemParams()) != RADIOLIB_ERR_NONE) {
-            LOG_ERROR("SX128x unrecoverable %s%d, radio down until reboot", radioLibErr, err);
+            LOG_ERROR("SX128x unrecoverable %s%d, radio offline, maintenance will retry", radioLibErr, err);
+            rxOffline = true; // periodicRadioMaintenance() retries recovery and RX; repeated failures reach the reboot ladder
             return false;
         }
         LOG_INFO("SX128x recovered after re-init");
@@ -393,7 +399,7 @@ template <typename T> void SX128xInterface<T>::startReceive()
 }
 
 /** Is the channel currently active? */
-template <typename T> bool SX128xInterface<T>::isChannelActive()
+template <typename T> RadioLibInterface::ChannelScan SX128xInterface<T>::checkChannel()
 {
     // check if we can detect a LoRa preamble on the current channel.
     // symNum is the encoded SET_CAD_PARAMS value (symbol count in bits 7:5), not a raw count - pass the
@@ -412,19 +418,10 @@ template <typename T> bool SX128xInterface<T>::isChannelActive()
                                        .irqFlags = RADIOLIB_IRQ_CAD_DEFAULT_FLAGS,
                                        .irqMask = RADIOLIB_IRQ_CAD_DEFAULT_MASK}};
     int16_t result = trySetStandby();
-    if (result == RADIOLIB_ERR_NONE) {
+    if (result == RADIOLIB_ERR_NONE)
         result = lora.scanChannel(cfg);
-        if (result == RADIOLIB_LORA_DETECTED)
-            return true;
-        if (result != RADIOLIB_CHANNEL_FREE)
-            LOG_ERROR("SX128X scanChannel %s%d", radioLibErr, result);
-        if (result != RADIOLIB_ERR_WRONG_MODEM)
-            return false;
-    }
-
-    // standby failed or the LoRa modem type is gone - the chip lost its runtime state
-    maybeRecoverChipStateLoss();
-    return false; // report the channel free: a recovered chip can TX, a dead one fails startSend safely
+    // Any error, including a failed standby, is Failed; onNotify() decides what follows a failed scan
+    return scanVerdict(result);
 }
 
 /** Could we send right now (i.e. either not actively receiving or transmitting)? */
