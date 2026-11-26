@@ -31,6 +31,15 @@ int32_t LSM6DS3Sensor::runOnce()
             sampleSteps(x, y, z);
     }
 #endif
+#if HAS_SCREEN_AUTO_ROTATE
+    static uint32_t lastOrientationRead = 0;
+    if (millis() - lastOrientationRead >= 100) {
+        lastOrientationRead = millis();
+        float x, y, z;
+        if (sensor.readAcceleration(x, y, z))
+            followOrientation(x, y, z);
+    }
+#endif
     if (sensor.shake()) {
         wakeScreen();
         return 500;
