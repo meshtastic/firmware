@@ -5,8 +5,7 @@
 #if HAS_POWERBANK
 #include <stdint.h>
 
-// Battery and input state reported by a power-bank controller, in the terms
-// Power needs.
+// Battery and input state reported by a power-bank controller, in the terms Power needs.
 struct PowerBankStatus {
     uint16_t batteryMv = 0;
     int8_t batteryPercent = -1;
@@ -24,7 +23,6 @@ class PowerBank
     virtual bool getStatus(PowerBankStatus &out) = 0;
 };
 
-// Starts the board's power-bank controller; provided by the controller's
-// driver.
+// Starts the board's power-bank controller; provided by the controller's driver.
 PowerBank *powerBankSetup();
 #endif

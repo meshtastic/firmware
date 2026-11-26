@@ -24,14 +24,12 @@ struct HLT331Status {
     uint16_t busMa = 0;
     uint32_t wirelessMw = 0;
 
-    // A port feeding the bank counts as external power even when the cell is full
-    // and not charging.
+    // A port feeding the bank counts as external power even when the cell is full and not charging.
     bool inputPresent() const { return charging || c1State == PORT_CHARGING || c2State == PORT_CHARGING; }
 };
 
-// Byte-at-a-time decoder for the HLT331 status stream: A5 5A, length 13, 13
-// data bytes, CRC-8/MAXIM over the length and data. The controller only
-// transmits; nothing is ever sent to it.
+// Byte-at-a-time decoder for the HLT331 status stream: A5 5A, length 13, 13 data bytes, CRC-8/MAXIM
+// over the length and data. The controller only transmits; nothing is ever sent to it.
 class HLT331Parser
 {
   public:
@@ -39,8 +37,7 @@ class HLT331Parser
     static constexpr uint8_t HEADER_1 = 0x5A;
     static constexpr uint8_t DATA_LENGTH = 13;
 
-    // Returns true when this byte completes a valid frame; status() then holds
-    // its contents.
+    // Returns true when this byte completes a valid frame; status() then holds its contents.
     bool feed(uint8_t byte);
 
     const HLT331Status &status() const { return lastStatus; }
