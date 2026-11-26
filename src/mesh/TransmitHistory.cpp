@@ -207,6 +207,22 @@ uint32_t TransmitHistory::getLastSentToMeshMillis(uint16_t key) const
     return getLastSentAbsoluteMillis(it->second.seconds);
 }
 
+void TransmitHistory::forgetBootRelativeBeforeSleep(uint32_t msecToWake)
+{
+    // A crash or watchdog reboot never comes through here, so the recovery window still covers those.
+    // portMAX_DELAY (shutdown) is far past the window too.
+    if (msecToWake / 1000 <= BOOT_RELATIVE_RECOVERY_WINDOW_SEC)
+        return;
+    for (auto it = history.begin(); it != history.end();) {
+        if ((it->second.flags & ENTRY_FLAG_BOOT_RELATIVE) != 0) {
+            it = history.erase(it);
+            dirty = true;
+        } else {
+            ++it;
+        }
+    }
+}
+
 bool TransmitHistory::saveToDisk()
 {
     if (!dirty) {
@@ -300,6 +316,8 @@ uint32_t TransmitHistory::getLastSentToMeshMillis(uint16_t key) const
     auto mit = lastMillis.find(key);
     return (mit != lastMillis.end()) ? mit->second : 0;
 }
+
+void TransmitHistory::forgetBootRelativeBeforeSleep(uint32_t msecToWake) {}
 
 bool TransmitHistory::saveToDisk()
 {

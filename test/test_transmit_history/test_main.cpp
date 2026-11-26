@@ -8,6 +8,7 @@
 #include "TestUtil.h"
 #include "TransmitHistory.h"
 #include "UptimeClock.h"
+#include "freertosinc.h"
 #include "gps/RTC.h"
 #include <Throttle.h>
 #include <unity.h>
@@ -313,6 +314,56 @@ static void test_boot_without_time_source_expires_boot_relative_history()
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, restoredMs, "Boot-relative history should only suppress near-term restarts");
 }
 
+// TransmitHistory::forgetBootRelativeBeforeSleep() (src/mesh/TransmitHistory.cpp), called from doDeepSleep().
+// Without a clock a stamp is stored as uptime, and a reboot whose uptime lands within the recovery window of it
+// reads it as just sent. A sleepy sensor wakes to the same uptime every cycle, so each wake read the last
+// wake's device telemetry as just sent and only ever sent it to the phone (#12236). Before a sleep longer
+// than the window the boot-relative stamps go; a crash reboot never sleeps and keeps its suppression.
+static void test_deep_sleep_past_window_forgets_boot_relative_stamp()
+{
+    setBootRelativeTimeForUnitTest(9);
+    transmitHistory->setLastSentAtBootRelative(meshtastic_PortNum_TELEMETRY_APP, 9);
+    transmitHistory->forgetBootRelativeBeforeSleep(121 * 1000); // one second past the window
+    transmitHistory->saveToDisk();
+
+    delete transmitHistory;
+    transmitHistory = nullptr;
+    transmitHistory = TransmitHistory::getInstance();
+
+    setBootRelativeTimeForUnitTest(7); // the next wake reaches the module at about the same uptime
+    transmitHistory->loadFromDisk();
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, transmitHistory->getLastSentToMeshMillis(meshtastic_PortNum_TELEMETRY_APP),
+                                     "a stamp from before a long sleep must not read as just sent");
+}
+
+// A shutdown passes portMAX_DELAY, which is past the window too.
+static void test_shutdown_forgets_boot_relative_stamp()
+{
+    setBootRelativeTimeForUnitTest(9);
+    transmitHistory->setLastSentAtBootRelative(meshtastic_PortNum_TELEMETRY_APP, 9);
+    transmitHistory->forgetBootRelativeBeforeSleep(portMAX_DELAY);
+    TEST_ASSERT_EQUAL_UINT32(0, transmitHistory->getLastSentToMeshEpoch(meshtastic_PortNum_TELEMETRY_APP));
+}
+
+// A sleep no longer than the window keeps the stamp, as a reboot does: the next boot can still be inside it.
+static void test_sleep_within_window_keeps_boot_relative_stamp()
+{
+    setBootRelativeTimeForUnitTest(9);
+    transmitHistory->setLastSentAtBootRelative(meshtastic_PortNum_TELEMETRY_APP, 9);
+    transmitHistory->forgetBootRelativeBeforeSleep(120 * 1000); // exactly the window
+    TEST_ASSERT_EQUAL_UINT32(9, transmitHistory->getLastSentToMeshEpoch(meshtastic_PortNum_TELEMETRY_APP));
+}
+
+// A stamp taken with a valid clock is an epoch, comparable across any sleep, so it stays.
+static void test_deep_sleep_keeps_absolute_stamp()
+{
+    const uint32_t epoch = 1767225600; // 2026-01-01
+    transmitHistory->setLastSentAtEpoch(meshtastic_PortNum_TELEMETRY_APP, epoch);
+    transmitHistory->forgetBootRelativeBeforeSleep(3600 * 1000);
+    TEST_ASSERT_EQUAL_UINT32(epoch, transmitHistory->getLastSentToMeshEpoch(meshtastic_PortNum_TELEMETRY_APP));
+}
+
 void setup()
 {
     initializeTestEnvironment();
@@ -347,6 +398,12 @@ void setup()
     // No-RTC regression tests
     RUN_TEST(test_boot_without_time_source_still_throttles_recent_restart);
     RUN_TEST(test_boot_without_time_source_expires_boot_relative_history);
+
+    // Deep sleep without a clock (#12236)
+    RUN_TEST(test_deep_sleep_past_window_forgets_boot_relative_stamp);
+    RUN_TEST(test_shutdown_forgets_boot_relative_stamp);
+    RUN_TEST(test_sleep_within_window_keeps_boot_relative_stamp);
+    RUN_TEST(test_deep_sleep_keeps_absolute_stamp);
 
     exit(UNITY_END());
 }

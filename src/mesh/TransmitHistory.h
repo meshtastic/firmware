@@ -70,6 +70,13 @@ class TransmitHistory
     uint32_t getLastSentToMeshMillis(uint16_t key) const;
 
     /**
+     * Call before a deliberate deep sleep or shutdown of msecToWake (portMAX_DELAY for no timed wake).
+     * Drops the boot-relative entries when the sleep outlasts the recovery window: each wake reaches a
+     * module at about the same uptime, so a stamp from the last wake would read as just sent.
+     */
+    void forgetBootRelativeBeforeSleep(uint32_t msecToWake);
+
+    /**
      * Flush dirty entries to disk. Called periodically or on demand.
      *
      * @return true if the data is persisted (or there was nothing to write), false on write/open failure.

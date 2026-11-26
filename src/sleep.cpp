@@ -255,6 +255,10 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false, bool skipSaveN
         nimbleBluetooth->deinit();
 #endif
 
+    // Before either save below: an uptime stamp means nothing to the next boot once the sleep is long
+    if (transmitHistory)
+        transmitHistory->forgetBootRelativeBeforeSleep(msecToWake);
+
     // Before the observers: they park peripherals (and pin holds) that a board kept alive by USB cannot recover.
     if (msecToWake == portMAX_DELAY && variantPowerOff) {
         if (!skipSaveNodeDb)
