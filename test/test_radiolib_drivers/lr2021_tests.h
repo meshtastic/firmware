@@ -89,7 +89,7 @@ static void test_lr2021_dcdc_refused_register_write_fails_the_setter()
     hal.reply({static_cast<uint8_t>(RADIOLIB_LR2021_CMD_WRITE_REG_MEM_32 >> 8),
                static_cast<uint8_t>(RADIOLIB_LR2021_CMD_WRITE_REG_MEM_32 & 0xFF), static_cast<uint8_t>((addr >> 16) & 0xFF),
                static_cast<uint8_t>((addr >> 8) & 0xFF), static_cast<uint8_t>(addr & 0xFF)},
-              0x04, {0x02}, 1);
+              0x04, {RADIOLIB_LRXXXX_STAT_1_CMD_PERR}, 1);
     TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_SPI_CMD_INVALID, radio.setSpreadingFactor(9));
 }
 
@@ -489,7 +489,7 @@ static void test_lr2021_cad_refused_start_returns_spi_cmd_invalid()
 {
     LR2021_RADIO(hal);
     lr2021SetSf(hal, radio, 9);
-    hal.reply(op16(RADIOLIB_LR2021_CMD_SET_LORA_CAD), 0x04, {0x02});
+    hal.reply(op16(RADIOLIB_LR2021_CMD_SET_LORA_CAD), 0x04, {RADIOLIB_LRXXXX_STAT_1_CMD_PERR});
     TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_SPI_CMD_INVALID, radio.startChannelScan(lr2021CadConfig()));
 }
 

@@ -42,7 +42,10 @@
     KNOWN PROBLEMS
         * Until the module is initialized by the startup sequence, the TX pin is in a floating
           state. Device connected to that pin may see this as "noise".
-        * Will not work on Linux device targets.
+        * On meshtasticd the port is SerialModule.Path in config.yaml, not rxd/txd pins: a tty, or
+          pty:<link> for a PTY meshtasticd creates. WS85 is not supported there.
+        * On meshtasticd a tty is opened once at startup: if it goes away (a USB adapter
+          unplugged) nothing reopens it until meshtasticd restarts.
 
 
 */
@@ -75,8 +78,13 @@ bool serialConfigIsValid(const meshtastic_ModuleConfig_SerialConfig &config)
     return true;
 }
 
-#if (defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_RP2040) || defined(ARCH_STM32WL)) &&                             \
-    !defined(CONFIG_IDF_TARGET_ESP32S2) && !defined(CONFIG_IDF_TARGET_ESP32C3)
+#if HAS_SERIAL_MODULE
+
+#ifdef ARCH_PORTDUINO
+#include "HostSerialStream.h"
+#include "PortduinoGlue.h"
+#include "concurrency/LockGuard.h"
+#endif
 
 #define RX_BUFFER 256
 #define TIMEOUT 250
@@ -89,6 +97,11 @@ bool serialConfigIsValid(const meshtastic_ModuleConfig_SerialConfig &config)
 SerialModule *serialModule;
 SerialModuleRadio *serialModuleRadio;
 
+#ifdef ARCH_PORTDUINO
+// Serial1 belongs to GPS.SerialPath, so the module gets its own host tty.
+static HostSerialStream serialModulePort;
+#define SERIAL_PRINT_OBJECT serialModulePort
+#else
 #ifndef SERIAL_PRINT_PORT
 #define SERIAL_PRINT_PORT 2
 #endif
@@ -102,6 +115,7 @@ SerialModuleRadio *serialModuleRadio;
 #else
 #error "Unsupported SERIAL_PRINT_PORT value. Allowed values are 0, 1, or 2."
 #endif
+#endif // ARCH_PORTDUINO
 
 SerialModule::SerialModule() : StreamAPI(&SERIAL_PRINT_OBJECT), concurrency::OSThread("Serial")
 {
@@ -160,13 +174,24 @@ int32_t SerialModule::runOnce()
     if (!moduleConfig.serial.enabled)
         return disable();
 
-    if (moduleConfig.serial.override_console_serial_port || (moduleConfig.serial.rxd && moduleConfig.serial.txd)) {
+#ifdef ARCH_PORTDUINO
+    // The console is meshtasticd's log, so only a configured host tty can carry the module.
+    const bool portConfigured = !portduino_config.serial_module_path.empty();
+#else
+    const bool portConfigured =
+        moduleConfig.serial.override_console_serial_port || (moduleConfig.serial.rxd && moduleConfig.serial.txd);
+#endif
+    if (portConfigured) {
         if (firstTime) {
             // Interface with the serial peripheral from in here.
             LOG_INFO("Init serial peripheral interface");
 
             uint32_t baud = getBaudRate();
 
+#ifdef ARCH_PORTDUINO
+            if (!serialModulePort.begin(portduino_config.serial_module_path, baud))
+                return disable();
+#else
             if (moduleConfig.serial.override_console_serial_port) {
 #ifdef RP2040_SLOW_CLOCK
                 Serial2.flush();
@@ -231,6 +256,7 @@ int32_t SerialModule::runOnce()
             Serial.begin(baud, SERIAL_8N1);
             Serial.setTimeout(moduleConfig.serial.timeout > 0 ? moduleConfig.serial.timeout : TIMEOUT);
 #endif
+#endif // ARCH_PORTDUINO
             serialModuleRadio = new SerialModuleRadio();
 
             firstTime = 0;
@@ -266,8 +292,15 @@ int32_t SerialModule::runOnce()
                     }
                 }
             }
+#ifdef ARCH_PORTDUINO
+            else if (IS_ONE_OF(moduleConfig.serial.mode, meshtastic_ModuleConfig_SerialConfig_Serial_Mode_DEFAULT,
+                               meshtastic_ModuleConfig_SerialConfig_Serial_Mode_SIMPLE,
+                               meshtastic_ModuleConfig_SerialConfig_Serial_Mode_TEXTMSG)) {
+                readHostSerial();
+            }
+#endif
 
-#if SERIAL_PRINT_PORT != 0
+#if !defined(ARCH_PORTDUINO) && SERIAL_PRINT_PORT != 0
             else if ((moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_WS85)) {
                 processWXSerial();
 
@@ -304,6 +337,55 @@ int32_t SerialModule::runOnce()
         return disable();
     }
 }
+
+#ifdef ARCH_PORTDUINO
+// Never blocks the main loop as Stream::readBytes() would: take what is buffered and send once the
+// line idles for serial.timeout or the payload fills.
+void SerialModule::readHostSerial()
+{
+    while (serialModulePort.available() > 0 && serialPayloadSize < meshtastic_Constants_DATA_PAYLOAD_LEN) {
+        int c = serialModulePort.read();
+        if (c < 0)
+            break;
+        serialBytes[serialPayloadSize++] = (char)c;
+        lastHostRxMs = millis();
+    }
+    const uint32_t idleMs = moduleConfig.serial.timeout > 0 ? moduleConfig.serial.timeout : TIMEOUT;
+    if (serialPayloadSize > 0 &&
+        (serialPayloadSize >= meshtastic_Constants_DATA_PAYLOAD_LEN || !Throttle::isWithinTimespanMs(lastHostRxMs, idleMs))) {
+        serialModuleRadio->sendPayload();
+        serialPayloadSize = 0;
+    }
+}
+
+bool SerialModule::finishPendingFrame()
+{
+    concurrency::LockGuard guard(&streamLock);
+    return frameWriter.finishPendingFrame(serialModulePort);
+}
+
+bool SerialModule::hasRetainedFrame()
+{
+    concurrency::LockGuard guard(&streamLock);
+    return !frameWriter.isIdle();
+}
+
+// A retained log frame still points into the log buffer, so it must not be re-encoded under it.
+bool SerialModule::canEncodeLogRecord()
+{
+    concurrency::LockGuard guard(&streamLock);
+    return frameWriter.isIdle();
+}
+
+bool SerialModule::writeFrame(uint8_t *buf, size_t len, bool bestEffort)
+{
+    if (len == 0 || !canWrite)
+        return false;
+    const size_t totalLen = buildFrameHeader(buf, len);
+    concurrency::LockGuard guard(&streamLock);
+    return frameWriter.writeFrame(serialModulePort, buf, totalLen, bestEffort);
+}
+#endif
 
 /**
  * Sends telemetry packet over the mesh network.
@@ -534,7 +616,7 @@ ParsedLine parseLine(const char *line)
  */
 void SerialModule::processWXSerial()
 {
-#if SERIAL_PRINT_PORT != 0 && !defined(ARCH_STM32WL) && !defined(CONFIG_IDF_TARGET_ESP32C6)
+#if !defined(ARCH_PORTDUINO) && SERIAL_PRINT_PORT != 0 && !defined(ARCH_STM32WL) && !defined(CONFIG_IDF_TARGET_ESP32C6)
 
     static unsigned int lastAveraged = 0;
     static unsigned int averageIntervalMillis = 300000; // 5 minutes hard coded.

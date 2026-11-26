@@ -117,6 +117,8 @@ extern "C" {
 
 #define LR2021_DIO3_TCXO_VOLTAGE 1.6
 // #define LR2021_DIO_AS_RF_SWITCH
+// SIMO inductor on LXA/LXB not confirmed; drop this to run DC-DC once it is.
+#define LR2021_REGULATOR_LDO
 
 // GPS
 #define HAS_GPS 1

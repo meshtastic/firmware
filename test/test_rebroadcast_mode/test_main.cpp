@@ -12,8 +12,13 @@
 //                      identity/PKI-shape qualifier fails the stranger and foreign-mesh cases.
 //   licensed node      never carries ciphertext; carries plaintext unless a party is known unlicensed
 //   header gates       hop_limit 0, id 0, someone else's next_hop, CLIENT_MUTE each stop a relay
+//   relayed payload    a frame we can read is relayed with the ciphertext it arrived with, through
+//                      Router::useReceivedPayload() and Router::ReceivedFrameScope, on first receipt
+//                      and on an upgraded copy. Re-encoding the decoded copy instead drops any field
+//                      this build does not know and changes the frame on the air, so the frames here
+//                      carry one: a relay that re-encodes fails on size and bytes.
 //
-// Every case builds a real PKI frame, so the suite runs only where PKI is compiled in.
+// The harness builds real PKI frames, so the suite runs only where PKI is compiled in.
 
 #include "MeshTypes.h" // BEFORE TestUtil.h
 #include "TestUtil.h"
@@ -315,6 +320,79 @@ void test_relay_decision_ignores_signature_policy(void)
     }
 }
 
+// A readable channel frame whose plaintext ends in field 15, which meshtastic_Data does not define:
+// what a newer sender's frame looks like to this build. Decoding skips the field; re-encoding the
+// decoded Data would leave it out.
+static meshtastic_MeshPacket makeChannelFrameWithUnknownField(NodeNum from, NodeNum to, PacketId id)
+{
+    meshtastic_MeshPacket p = makeDecoded(from, to, meshtastic_PortNum_TEXT_MESSAGE_APP, SMALL_PAYLOAD);
+    p.id = id;
+    p.hop_limit = 2;
+    p.hop_start = 3;
+    p.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA;
+
+    uint8_t plain[MAX_LORA_PAYLOAD_LEN + 1] = {};
+    size_t plainSize = pb_encode_to_bytes(plain, sizeof(plain), &meshtastic_Data_msg, &p.decoded);
+    TEST_ASSERT_GREATER_THAN(0, plainSize);
+    plain[plainSize++] = (15 << 3) | 0; // field 15, varint
+    plain[plainSize++] = 0x01;
+
+    const int16_t hash = channels.setActiveByIndex(p.channel);
+    TEST_ASSERT_GREATER_OR_EQUAL(0, hash);
+    crypto->encryptPacket(p.from, p.id, plainSize, plain);
+    memcpy(p.encrypted.bytes, plain, plainSize);
+    p.encrypted.size = plainSize;
+    p.channel = hash;
+    p.which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
+    return p;
+}
+
+/// Assert `sent` is a relay of `received`: the same ciphertext and channel hash, one hop spent, sent by us.
+static void assertRelayedAsReceived(const meshtastic_MeshPacket &received, const meshtastic_MeshPacket *sent)
+{
+    TEST_ASSERT_NOT_NULL_MESSAGE(sent, "the frame was relayed");
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_MeshPacket_encrypted_tag, sent->which_payload_variant, "the relay went out encrypted");
+    TEST_ASSERT_EQUAL_MESSAGE(received.encrypted.size, sent->encrypted.size,
+                              "the relay carries the received ciphertext; a re-encoded one drops the unknown field");
+    TEST_ASSERT_EQUAL_MEMORY_MESSAGE(received.encrypted.bytes, sent->encrypted.bytes, received.encrypted.size,
+                                     "the relay carries the received ciphertext byte for byte");
+    TEST_ASSERT_EQUAL_MESSAGE(received.channel, sent->channel, "the relay carries the channel hash it arrived with");
+    TEST_ASSERT_EQUAL_MESSAGE(received.hop_limit - 1, sent->hop_limit, "the relay spends one hop");
+    TEST_ASSERT_EQUAL_MESSAGE(nodeDB->getLastByteOfNodeNum(LOCAL_NODE), sent->relay_node, "the relay names us as relayer");
+}
+
+// First receipt: the relay queued from RoutingModule during dispatch forwards the frame as received.
+void test_readable_frame_is_relayed_with_its_received_ciphertext(void)
+{
+    config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_ALL;
+    const meshtastic_MeshPacket received = makeChannelFrameWithUnknownField(REMOTE_NODE, NODENUM_BROADCAST, 0xADAF0001);
+
+    runPipelineIngress(received);
+    drainPhoneQueue();
+    TEST_ASSERT_EQUAL_MESSAGE(1, pipelineRadio->sendCalls, "a readable broadcast is relayed once");
+    assertRelayedAsReceived(received, pipelineRadio->lastSent());
+}
+
+// An upgraded copy (more hops left than the one queued) replaces the queued relay. That path decodes
+// the copy in place before relaying it, so it has to keep its own copy of the received frame.
+void test_upgraded_copy_is_relayed_with_its_received_ciphertext(void)
+{
+    config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_ALL;
+    const meshtastic_MeshPacket upgraded = makeChannelFrameWithUnknownField(REMOTE_NODE, NODENUM_BROADCAST, 0xADAF0002);
+
+    // The lower-hop copy we heard first, its relay still waiting in the TX queue
+    meshtastic_MeshPacket lower = upgraded;
+    lower.hop_limit = upgraded.hop_limit - 1;
+    pipelineRouter->remember(&lower);
+    pipelineRadio->holdInTxQueue(REMOTE_NODE, upgraded.id);
+
+    runPipelineIngress(upgraded);
+    drainPhoneQueue();
+    TEST_ASSERT_FALSE_MESSAGE(pipelineRadio->txQueueHolds(REMOTE_NODE, upgraded.id), "the queued lower-hop relay is replaced");
+    TEST_ASSERT_EQUAL_MESSAGE(1, pipelineRadio->sendCalls, "the upgraded copy is relayed");
+    assertRelayedAsReceived(upgraded, pipelineRadio->lastSent());
+}
+
 void setup()
 {
     pipelineHarnessCreate();
@@ -330,6 +408,8 @@ void setup()
     RUN_TEST(test_opaque_relay_header_gates_hold);
     RUN_TEST(test_opaque_relay_carries_a_frame_once_unless_the_originator_repeats_it);
     RUN_TEST(test_relay_decision_ignores_signature_policy);
+    RUN_TEST(test_readable_frame_is_relayed_with_its_received_ciphertext);
+    RUN_TEST(test_upgraded_copy_is_relayed_with_its_received_ciphertext);
     const int result = UNITY_END();
     pipelineHarnessDestroy();
     exit(result);
