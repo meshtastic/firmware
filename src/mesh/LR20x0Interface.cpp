@@ -807,12 +807,8 @@ template <typename T> RadioLibInterface::ChannelScan LR20x0Interface<T>::checkCh
             return ChannelScan::Busy;
         }
     }
-    // Any error, including a failed standby, is Failed: the caller recovers the chip and never sends on it
-    const ChannelScan verdict = classifyScan(result);
-    if (verdict == ChannelScan::Failed) {
-        LOG_ERROR("LR20x0 channel scan failed %s%d", radioLibErr, result);
-    }
-    return verdict;
+    // Any error, including a failed standby, is Failed; onNotify() decides what follows a failed scan
+    return scanVerdict(result);
 }
 
 /** Could we send right now (i.e. either not actively receiving or transmitting)? */

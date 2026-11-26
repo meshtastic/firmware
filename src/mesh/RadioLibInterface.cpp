@@ -672,6 +672,9 @@ void RadioLibInterface::onNotify(uint32_t notification)
                     setTransmitDelay();
                 } else if (action == RadioTxHook::PRETX_DEFER) {
                     setTransmitDelay(); // the radio config moved, so re-run the delay and scan on it
+                } else if (rxOffline) {
+                    // Nothing to scan with: maintenance owns the recovery, so wait for it instead of driving a dead chip
+                    scheduleTransmitDelayCompleted(SCAN_FAIL_RETRY_MS);
                 } else {
                     // The scan and the transmit it decides are one sequence: a readout landing between them would
                     // clear the flags startTransmit() is about to set up, or on SX128x leave the chip in standby.
@@ -681,21 +684,39 @@ void RadioLibInterface::onNotify(uint32_t notification)
                     scanForTx = txp;
                     const ChannelScan scan = checkChannel();
                     scanForTx = nullptr;
-                    if (scan != ChannelScan::Free) {
-                        LOG_DEBUG_RADIO(scan == ChannelScan::Busy ? "CAD busy" : "CAD failed");
-                        noteDeferral(txp, scan);
-                        // Failed: the channel state is unknown, so never send on it; recover and scan again later
-                        if (scan == ChannelScan::Failed)
-                            maybeRecoverChipStateLoss();
+                    bool send = scan == ChannelScan::Free;
+                    if (scan == ChannelScan::Busy) {
+                        LOG_DEBUG_RADIO("CAD busy");
+                        noteScanSucceeded();
+                        noteDeferral(txp);
                         // Beacon target or not: reconfigureForBeaconTX() already left RX running on that
                         // config, so skipping this only ever left the node deaf in standby.
                         rearmReceive();
                         setTransmitDelay();
+                    } else if (scan == ChannelScan::Failed) {
+                        LOG_DEBUG_RADIO("CAD failed");
+                        // The channel state is unknown, so normally hold the packet and scan again
+                        const ScanFailAction next = noteScanFailed(Time::getMillis());
+                        if (next == ScanFailAction::SendUnscanned && trySetStandby() == RADIOLIB_ERR_NONE) {
+                            send = true;
+                        } else {
+                            if (next == ScanFailAction::Recover) {
+                                const uint32_t lastAttempt = lastChipRecoveryMs;
+                                maybeRecoverChipStateLoss();
+                                if (lastChipRecoveryMs != lastAttempt)
+                                    noteScanRecoveryAttempted();
+                            }
+                            rearmReceive();
+                            scheduleTransmitDelayCompleted(SCAN_FAIL_RETRY_MS);
+                        }
                     } else {
                         LOG_DEBUG_RADIO("CAD free");
+                        noteScanSucceeded();
                         if (peek)
                             LOG_DEBUG_RADIO("Preamble hold released, CAD clear %ums after the sighting",
                                             Time::getMillis() - peekHoldStart);
+                    }
+                    if (send) {
                         // Send any outgoing packets we have ready as fast as possible to keep the time between channel scan and
                         // actual transmission as short as possible
                         consecutiveDeferrals = 0;
@@ -826,7 +847,7 @@ meshtastic_MeshPacket *RadioLibInterface::handleTransmitInterrupt()
     return sent;
 }
 
-void RadioLibInterface::noteDeferral(const meshtastic_MeshPacket *p, ChannelScan scan)
+void RadioLibInterface::noteDeferral(const meshtastic_MeshPacket *p)
 {
     if (p->id != deferredPacketId) {
         deferredPacketId = p->id;
@@ -834,13 +855,56 @@ void RadioLibInterface::noteDeferral(const meshtastic_MeshPacket *p, ChannelScan
     }
     if (consecutiveDeferrals < UINT16_MAX)
         consecutiveDeferrals++;
-    if (consecutiveDeferrals % DEFERRAL_WARN_THRESHOLD == 0) {
-        // A stuck CAD, constant false positives or a scan that always fails silence the node with no other trace
-        LOG_WARN("Tx packet 0x%08x deferred %u times in a row, last scan %s", p->id, consecutiveDeferrals,
-                 scan == ChannelScan::Failed ? "failed" : "busy");
-        if (consecutiveDeferrals == DEFERRAL_WARN_THRESHOLD)
-            RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_TRANSMIT_FAILED);
+    // A busy channel is normal on a crowded mesh, so this only logs; a stuck CAD shows up here first
+    if (consecutiveDeferrals % DEFERRAL_WARN_THRESHOLD == 0)
+        LOG_WARN("Tx packet 0x%08x deferred %u times in a row, channel busy", p->id, consecutiveDeferrals);
+}
+
+RadioLibInterface::ChannelScan RadioLibInterface::scanVerdict(int16_t result)
+{
+    const ChannelScan verdict = classifyScan(result);
+    if (verdict == ChannelScan::Failed)
+        scanFailLastError = result;
+    return verdict;
+}
+
+void RadioLibInterface::noteScanSucceeded()
+{
+    if (scanFailRunStartMs)
+        LOG_INFO("Channel scan working again after %u failed scans", scanFailCount);
+    scanFailRunStartMs = 0;
+    scanFailCount = 0;
+    scanFailRecoveryAttempted = false;
+    lastUnscannedTxMs = 0;
+}
+
+RadioLibInterface::ScanFailAction RadioLibInterface::noteScanFailed(uint32_t now)
+{
+    if (!scanFailRunStartMs) {
+        scanFailRunStartMs = Time::skipZero(now);
+        scanFailCount = 0;
+        scanFailRecoveryAttempted = false;
+        lastUnscannedTxMs = 0;
+        LOG_ERROR("Channel scan failed %s%d, holding Tx until a scan succeeds", radioLibErr, scanFailLastError);
     }
+    if (scanFailCount < UINT32_MAX)
+        scanFailCount++;
+
+    if (!scanFailRecoveryAttempted)
+        return ScanFailAction::Recover;
+    // A re-init did not bring the scan back. With RX still online the chip can transmit, so send without
+    // listen-before-talk rather than go silent - rate-limited, as nothing checks the channel first.
+    if (rxOffline || !Throttle::deadlinePassedAt(now, scanFailRunStartMs + SCAN_FAIL_UNSCANNED_AFTER_MS))
+        return ScanFailAction::Retry;
+    if (lastUnscannedTxMs && !Throttle::deadlinePassedAt(now, lastUnscannedTxMs + SCAN_FAIL_UNSCANNED_MIN_GAP_MS))
+        return ScanFailAction::Retry;
+    if (!lastUnscannedTxMs) {
+        LOG_WARN("Channel scan still failing (%u scans, last %s%d) after a re-init, sending without listen-before-talk",
+                 scanFailCount, radioLibErr, scanFailLastError);
+        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_TRANSMIT_FAILED);
+    }
+    lastUnscannedTxMs = Time::skipZero(now);
+    return ScanFailAction::SendUnscanned;
 }
 
 void RadioLibInterface::abandonSending()

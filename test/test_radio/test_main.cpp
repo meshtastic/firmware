@@ -759,6 +759,13 @@ class TestableRadioLibInterface : public RadioLibInterface
 
     size_t beginSendingPublic(meshtastic_MeshPacket *p) { return beginSending(p); }
     void abandonSendingPublic() { abandonSending(); }
+    ChannelScan scanVerdictPublic(int16_t result) { return scanVerdict(result); }
+    ScanFailAction noteScanFailedPublic(uint32_t now) { return noteScanFailed(now); }
+    void noteScanSucceededPublic() { noteScanSucceeded(); }
+    void noteScanRecoveryAttemptedPublic() { noteScanRecoveryAttempted(); }
+    void setRxOffline(bool offline) { rxOffline = offline; }
+    int16_t getScanFailLastError() const { return scanFailLastError; }
+    uint32_t getScanFailCount() const { return scanFailCount; }
     meshtastic_MeshPacket *getSendingPacket() const { return sendingPacket; }
     uint32_t getTxGood() const { return txGood; }
     uint32_t getTxRelay() const { return txRelay; }
@@ -783,6 +790,7 @@ class TestableRadioLibInterface : public RadioLibInterface
     uint32_t getPacketTime(uint32_t, bool) override { return packetTimeMs; }
     int16_t getCurrentRSSI() override { return 0; }
     ChannelScan checkChannel() override { return ChannelScan::Free; }
+    int16_t trySetStandby() override { return RADIOLIB_ERR_NONE; }
     bool isActivelyReceiving() override { return false; }
     void addReceiveMetadata(meshtastic_MeshPacket *) override {}
     void setRadioIsr(void (*)()) override {}
@@ -880,6 +888,83 @@ static void test_classifyScan_onlyCadOutcomesAreVerdicts()
 
 // startSend() takes this path when startTransmit() fails: nothing went on air, so the packet is
 // released and counted as dropped, never as sent.
+// A Failed scan keeps its error for the once-per-run log; a verdict never overwrites it.
+static void test_scanVerdict_keepsTheFailedScansError()
+{
+    using Scan = RadioLibInterface::ChannelScan;
+    auto *radioIf = makeTestableRadioLibInterface();
+    TEST_ASSERT_TRUE(radioIf->scanVerdictPublic(RADIOLIB_ERR_SPI_CMD_INVALID) == Scan::Failed);
+    TEST_ASSERT_TRUE(radioIf->scanVerdictPublic(RADIOLIB_CHANNEL_FREE) == Scan::Free);
+    TEST_ASSERT_TRUE(radioIf->scanVerdictPublic(RADIOLIB_LORA_DETECTED) == Scan::Busy);
+    TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_SPI_CMD_INVALID, radioIf->getScanFailLastError());
+    delete radioIf;
+}
+
+// Until a chip re-init has been tried in this run of failures, every Failed scan asks for one; the
+// throttled recovery decides whether it really runs.
+static void test_scanFailure_asksForRecoveryUntilOneIsAttempted()
+{
+    using Action = RadioLibInterface::ScanFailAction;
+    auto *radioIf = makeTestableRadioLibInterface();
+    TEST_ASSERT_TRUE(radioIf->noteScanFailedPublic(1000) == Action::Recover);
+    TEST_ASSERT_TRUE(radioIf->noteScanFailedPublic(1500) == Action::Recover);
+    radioIf->noteScanRecoveryAttemptedPublic();
+    TEST_ASSERT_TRUE(radioIf->noteScanFailedPublic(2000) == Action::Retry);
+    TEST_ASSERT_EQUAL_UINT32(3, radioIf->getScanFailCount());
+    delete radioIf;
+}
+
+// Failures that outlive a re-init by SCAN_FAIL_UNSCANNED_AFTER_MS, with RX online, send without the scan,
+// no more often than SCAN_FAIL_UNSCANNED_MIN_GAP_MS. Before that the packet is held, as a busy channel would.
+static void test_scanFailure_sendsUnscannedOnlyAfterTheRunOutlivesARecovery()
+{
+    using Action = RadioLibInterface::ScanFailAction;
+    auto *radioIf = makeTestableRadioLibInterface();
+    const uint32_t start = 0xFFFF0000u; // the run straddles the 32-bit wrap
+    const uint32_t after = RadioLibInterface::SCAN_FAIL_UNSCANNED_AFTER_MS;
+    const uint32_t gap = RadioLibInterface::SCAN_FAIL_UNSCANNED_MIN_GAP_MS;
+    TEST_ASSERT_TRUE(radioIf->noteScanFailedPublic(start) == Action::Recover);
+    radioIf->noteScanRecoveryAttemptedPublic();
+
+    TEST_ASSERT_TRUE(radioIf->noteScanFailedPublic(start + after - 1) == Action::Retry);
+    TEST_ASSERT_TRUE(radioIf->noteScanFailedPublic(start + after) == Action::SendUnscanned);
+    TEST_ASSERT_TRUE_MESSAGE(radioIf->noteScanFailedPublic(start + after + 1) == Action::Retry,
+                             "unscanned transmits must be rate-limited");
+    TEST_ASSERT_TRUE(radioIf->noteScanFailedPublic(start + after + gap - 1) == Action::Retry);
+    TEST_ASSERT_TRUE(radioIf->noteScanFailedPublic(start + after + gap) == Action::SendUnscanned);
+    delete radioIf;
+}
+
+// With RX offline the chip cannot be trusted to transmit, however long the run.
+static void test_scanFailure_neverSendsUnscannedWithRxOffline()
+{
+    using Action = RadioLibInterface::ScanFailAction;
+    auto *radioIf = makeTestableRadioLibInterface();
+    TEST_ASSERT_TRUE(radioIf->noteScanFailedPublic(1000) == Action::Recover);
+    radioIf->noteScanRecoveryAttemptedPublic();
+    radioIf->setRxOffline(true);
+    TEST_ASSERT_TRUE(radioIf->noteScanFailedPublic(1000 + 10 * RadioLibInterface::SCAN_FAIL_UNSCANNED_AFTER_MS) == Action::Retry);
+    radioIf->setRxOffline(false);
+    delete radioIf;
+}
+
+// A Free or Busy verdict ends the run: the next failure starts a fresh one that must re-earn the fallback.
+static void test_scanFailure_aWorkingScanEndsTheRun()
+{
+    using Action = RadioLibInterface::ScanFailAction;
+    auto *radioIf = makeTestableRadioLibInterface();
+    const uint32_t after = RadioLibInterface::SCAN_FAIL_UNSCANNED_AFTER_MS;
+    TEST_ASSERT_TRUE(radioIf->noteScanFailedPublic(1000) == Action::Recover);
+    radioIf->noteScanRecoveryAttemptedPublic();
+    TEST_ASSERT_TRUE(radioIf->noteScanFailedPublic(1000 + after) == Action::SendUnscanned);
+
+    radioIf->noteScanSucceededPublic();
+    TEST_ASSERT_EQUAL_UINT32(0, radioIf->getScanFailCount());
+    TEST_ASSERT_TRUE_MESSAGE(radioIf->noteScanFailedPublic(2000 + after) == Action::Recover,
+                             "a new run must not inherit the old run's recovery or age");
+    delete radioIf;
+}
+
 static void test_abandonSending_releasesAndCountsDropNotSend()
 {
     auto *radioIf = makeTestableRadioLibInterface();
@@ -1483,6 +1568,11 @@ void setup()
     RUN_TEST(test_isRadioLibTimeError_separatesCodesFromDurations);
     RUN_TEST(test_classifyScan_onlyCadOutcomesAreVerdicts);
     RUN_TEST(test_abandonSending_releasesAndCountsDropNotSend);
+    RUN_TEST(test_scanVerdict_keepsTheFailedScansError);
+    RUN_TEST(test_scanFailure_asksForRecoveryUntilOneIsAttempted);
+    RUN_TEST(test_scanFailure_sendsUnscannedOnlyAfterTheRunOutlivesARecovery);
+    RUN_TEST(test_scanFailure_neverSendsUnscannedWithRxOffline);
+    RUN_TEST(test_scanFailure_aWorkingScanEndsTheRun);
     RUN_TEST(test_clearReadIrqs_alsoDiscardsTheUnreadFrame);
     RUN_TEST(test_clearReadIrqs_retiresTheDeadFramesHeaderAndPreamble);
     RUN_TEST(test_staleRxFlagAction_keepsFlagsInsideTheWindow);

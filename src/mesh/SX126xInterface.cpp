@@ -708,15 +708,12 @@ RadioLibInterface::ChannelScan SX126xInterface::checkChannel()
             return ChannelScan::Busy;
         }
     }
-    // Any error, including a failed standby, is Failed: the caller recovers the chip and never sends on it
-    const ChannelScan verdict = classifyScan(result);
-    if (verdict == ChannelScan::Failed) {
-        LOG_ERROR("SX126X channel scan failed %s%d", radioLibErr, result);
+    // Any error, including a failed standby, is Failed; onNotify() decides what follows a failed scan
+    const ChannelScan verdict = scanVerdict(result);
 #ifdef ARCH_PORTDUINO
-        if (result == RADIOLIB_ERR_WRONG_MODEM)
-            portduino_status.LoRa_in_error = true;
+    if (verdict == ChannelScan::Failed && result == RADIOLIB_ERR_WRONG_MODEM)
+        portduino_status.LoRa_in_error = true;
 #endif
-    }
     return verdict;
 }
 

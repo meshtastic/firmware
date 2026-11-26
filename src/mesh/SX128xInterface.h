@@ -99,7 +99,7 @@ template <class T> class SX128xInterface : public RadioLibInterface
     bool reinitChip(bool fromInit = false);
 
     /** setStandby()'s body, returning the standby error instead of asserting - for callers that can recover */
-    int16_t trySetStandby();
+    int16_t trySetStandby() override;
 
     /** Recover a chip that lost its runtime state: hardware-reset via begin() and reprogram */
     bool recoverChipStateLoss() override

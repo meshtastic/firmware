@@ -194,6 +194,19 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     /// Maps a RadioLib scan result to a verdict: only the two scan outcomes are Free or Busy, any error is Failed.
     static ChannelScan classifyScan(int16_t result);
 
+    /// What onNotify() does after a Failed scan.
+    enum class ScanFailAction : uint8_t {
+        Recover,      ///< attempt a chip re-init, re-arm RX, retry after SCAN_FAIL_RETRY_MS
+        Retry,        ///< re-arm RX and retry after SCAN_FAIL_RETRY_MS
+        SendUnscanned ///< failures outlived a recovery with RX online: send without listen-before-talk
+    };
+    /// A Failed scan shorter than this, or with no recovery attempt behind it, never sends unscanned.
+    static constexpr uint32_t SCAN_FAIL_UNSCANNED_AFTER_MS = 60 * 1000UL;
+    /// Minimum gap between unscanned transmits, so a broken CAD cannot turn the node into a blind repeater.
+    static constexpr uint32_t SCAN_FAIL_UNSCANNED_MIN_GAP_MS = 5 * 1000UL;
+    /// Fixed retry after a Failed scan or while RX is offline: the contention backoff only applies to a busy channel.
+    static constexpr uint32_t SCAN_FAIL_RETRY_MS = 500;
+
     /** Our ISR code currently needs this to find our active instance
      */
     static RadioLibInterface *instance;
@@ -303,6 +316,9 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     /** Chip-specific recovery of a chip that lost its state to a reset/brownout. Returns true if reprogrammed. */
     virtual bool recoverChipStateLoss() { return false; }
 
+    /** Put the chip in standby without asserting; returns the RadioLib result. */
+    virtual int16_t trySetStandby() = 0;
+
     /** Throttled recoverChipStateLoss(), so a dead chip can't stall the RX/TX hot paths with repeated begin(). */
     bool maybeRecoverChipStateLoss();
 
@@ -322,11 +338,17 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     uint32_t lastRxGoodMs = 0, lastAgcResetMs = 0; // 0: none yet
     uint16_t txDrop = 0;
 
-    /// Consecutive non-Free scans for the packet at the head of the queue. Logged, never acted on:
-    /// what to do with a packet that never gets a free channel is still open.
+    /// Consecutive Busy scans for the packet at the head of the queue. Logged only: a busy channel is normal.
     static constexpr uint16_t DEFERRAL_WARN_THRESHOLD = 32;
     uint32_t deferredPacketId = 0;
     uint16_t consecutiveDeferrals = 0;
+
+    /// A run of Failed scans, across packets; any Free or Busy verdict ends it. 0: no run.
+    uint32_t scanFailRunStartMs = 0;
+    uint32_t scanFailCount = 0;
+    int16_t scanFailLastError = 0;
+    bool scanFailRecoveryAttempted = false; // a chip re-init was tried during this run
+    uint32_t lastUnscannedTxMs = 0;         // 0: none during this run
 
   public:
     RadioLibInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst,
@@ -532,8 +554,20 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     /// Release a packet whose transmit never started: no airtime, no txGood/txRelay, counted in txDrop.
     void abandonSending();
 
-    /// Count a Busy or Failed scan against packet `p`; warns every DEFERRAL_WARN_THRESHOLD in a row.
-    void noteDeferral(const meshtastic_MeshPacket *p, ChannelScan scan);
+    /// Count a Busy scan against packet `p`; warns every DEFERRAL_WARN_THRESHOLD in a row.
+    void noteDeferral(const meshtastic_MeshPacket *p);
+
+    /// Classify `result` as classifyScan() does, keeping the error of a Failed scan for noteScanFailed().
+    ChannelScan scanVerdict(int16_t result);
+
+    /// Record a Free or Busy verdict: ends any run of Failed scans.
+    void noteScanSucceeded();
+
+    /// Record a Failed scan at `now` and decide what onNotify() does next. Logs once per run, not per scan.
+    ScanFailAction noteScanFailed(uint32_t now);
+
+    /// Record that a chip re-init was attempted during the current run of Failed scans.
+    void noteScanRecoveryAttempted() { scanFailRecoveryAttempted = true; }
 
     /** Clear sendingPacket and release its per-packet radio state; returns the packet, or null. */
     meshtastic_MeshPacket *detachSentPacket();

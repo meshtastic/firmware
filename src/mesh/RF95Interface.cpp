@@ -402,12 +402,8 @@ RadioLibInterface::ChannelScan RF95Interface::checkChannel()
     int16_t result = trySetStandby();
     if (result == RADIOLIB_ERR_NONE)
         result = lora->scanChannel();
-    // Any error, including a failed standby, is Failed: the caller recovers the chip and never sends on it
-    const ChannelScan verdict = classifyScan(result);
-    if (verdict == ChannelScan::Failed) {
-        LOG_ERROR("RF95 channel scan failed %s%d", radioLibErr, result);
-    }
-    return verdict;
+    // Any error, including a failed standby, is Failed; onNotify() decides what follows a failed scan
+    return scanVerdict(result);
 }
 
 /** Could we send right now (i.e. either not actively receiving or transmitting)? */

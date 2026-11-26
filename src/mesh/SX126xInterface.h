@@ -169,7 +169,7 @@ class SX126xInterface : public RadioLibInterface
     bool reinitChip();
 
     /** setStandby()'s body, returning the standby error instead of asserting - for callers that can recover */
-    int16_t trySetStandby();
+    int16_t trySetStandby() override;
 
     /** RX was armed continuous and nothing has put the chip into standby since, so it is still listening */
     bool rxArmedContinuous = false;

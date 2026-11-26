@@ -98,7 +98,7 @@ class RF95Interface : public RadioLibInterface
     bool reinitChip();
 
     /** setStandby()'s body, returning the standby error instead of asserting - for callers that can recover */
-    int16_t trySetStandby();
+    int16_t trySetStandby() override;
 
     /** Recover a chip that lost its runtime state: hardware-reset via begin() and reprogram */
     bool recoverChipStateLoss() override { return reinitChip() && programModemParams() == RADIOLIB_ERR_NONE; }
