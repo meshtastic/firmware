@@ -43,6 +43,7 @@ class TCA8418KeyboardBase
 
     virtual void reset(void);
     void clearInt(void);
+    bool keyEventPending(void) const; // K_INT set: key events arrived since the interrupt was cleared
 
     virtual void trigger(void);
 

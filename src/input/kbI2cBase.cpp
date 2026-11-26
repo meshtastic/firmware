@@ -31,6 +31,7 @@ extern uint8_t kb_model;
 static constexpr uint32_t TCA_FALLBACK_POLL_MS = 1000;
 static KbI2cBase *tcaInterruptThread = nullptr;
 static uint32_t lastTcaReadMs = 0;
+static bool tcaRecheck = false; // INT_STAT showed new events right after the last drain
 
 static void IRAM_ATTR tcaKeyboardInterrupt()
 {
@@ -305,7 +306,9 @@ int32_t KbI2cBase::runOnce()
     case 0x84: { // Adafruit TCA8418
 #if defined(T_DECK_PRO)
         // KB_INT high with nothing queued means no key; the fallback poll reads the FIFO anyway, in case an edge was missed
-        if (::digitalRead(KB_INT) == HIGH && !TCAKeyboard->hasEvent() &&
+        const bool recheck = tcaRecheck;
+        tcaRecheck = false;
+        if (!recheck && ::digitalRead(KB_INT) == HIGH && !TCAKeyboard->hasEvent() &&
             !Throttle::hasElapsed(lastTcaReadMs, TCA_FALLBACK_POLL_MS))
             break;
         lastTcaReadMs = millis();
@@ -421,6 +424,10 @@ int32_t KbI2cBase::runOnce()
         // The chip keeps KB_INT low until its FIFO is empty, so this must follow the drain; a key that lands meanwhile
         // leaves the line low, and the 20 ms poll below picks it up
         TCAKeyboard->clearInt();
+#if defined(T_DECK_PRO)
+        // Per the datasheet, read INT_STAT again after clearing: events may have come in during the drain
+        tcaRecheck = TCAKeyboard->keyEventPending();
+#endif
         break;
     }
     case 0x02: {
@@ -709,6 +716,8 @@ int32_t KbI2cBase::runOnce()
     }
 #if defined(T_DECK_PRO)
     // KB_INT wakes the thread; keep draining while the chip still holds keys, otherwise only the fallback poll
+    if (tcaRecheck)
+        return 0;
     return (::digitalRead(KB_INT) == LOW) ? 20 : TCA_FALLBACK_POLL_MS;
 #elif defined(MESHTASTIC_INCLUDE_INKHUD)
     return 100; // CardKB hands out one key per read, so 300 ms makes typing crawl

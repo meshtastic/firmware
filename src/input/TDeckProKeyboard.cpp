@@ -79,6 +79,9 @@ void TDeckProKeyboard::trigger()
             pressed(key);
         else
             releaseKey(key);
+        // Popping back to back can leave the chip deaf to presses until a column-0 key is pressed
+        if (i + 1 < count)
+            delay(2);
     }
 }
 

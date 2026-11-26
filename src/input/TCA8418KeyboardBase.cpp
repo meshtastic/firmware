@@ -205,6 +205,11 @@ void TCA8418KeyboardBase::clearInt()
     writeRegister(TCA8418_REG_INT_STAT, 3);
 }
 
+bool TCA8418KeyboardBase::keyEventPending() const
+{
+    return readRegister(TCA8418_REG_INT_STAT) & 0x01; // K_INT
+}
+
 uint8_t TCA8418KeyboardBase::digitalRead(uint8_t pinnum) const
 {
     if (pinnum > TCA8418_COL9)
