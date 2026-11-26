@@ -199,7 +199,6 @@ StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
         packet_id INT NOT NULL,        \
         rx_time INT NOT NULL,          \
         root_hash BLOB NOT NULL,       \
-        commit_hash BLOB NOT NULL,     \
         encrypted_bytes BLOB NOT NULL, \
         message_hash BLOB NOT NULL,    \
         payload TEXT,                  \

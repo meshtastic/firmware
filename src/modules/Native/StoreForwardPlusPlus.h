@@ -23,40 +23,15 @@
 #define SFPP_SHORT_HASH_SIZE 8
 
 /**
- * Store and forward ++ module
- * There's an obvious need for a store-and-forward mechanism in Meshtastic.
- * This module takes heavy inspiration from Git, building a chain of messages that can be synced between nodes.
- * Each message is hashed, and the chain is built by hashing the previous commit hash and the current message hash.
- * Nodes can request missing messages by requesting the next message after a given commit hash.
+ * Store and forward ++ module (content model).
  *
- * The current focus is text messages, limited to the primary channel.
+ * The archive stores texts under the root derived from the channel. Each object is filed in the
+ * content bucket named by the first byte of its message hash; a bucket is summarised by its short
+ * IDs, their XOR checksum and their count.
  *
- * Each chain is identified by a root hash, which is derived from the channelHash, the local nodenum, and the timestamp when
- * created.
- *
- * Each message is also given a message hash, derived from the encrypted payload, the to, from, id.
- * Notably not the timestamp, as we want these to match across nodes, even if the timestamps differ.
- *
- * The authoritative node for the chain will generate a commit hash for each message when adding it to the chain.
- * The first message's commit hash is derived from the root hash and the message hash.
- * Subsequent messages' commit hashes are derived from the previous commit hash and the current message hash.
- * This allows a node to see only the last commit hash, and confirm it hasn't missed any messages.
- *
- * Nodes can request the next message in the chain by sending a LINK_REQUEST message with the root hash and the last known commit
- * hash. Any node that has the next message can respond with a LINK_PROVIDE message containing the next message.
- *
- * When a satellite node sees a new text message, it stores it in a scratch database.
- * These messages are periodically offered to the authoritative node for inclusion in the chain.
- *
- * The LINK_PROVIDE message does double-duty, sending both on-chain and off-chain messages.
- * The differentiator is whether the commit hash is set or left empty.
- *
- * When a satellite node receives a canonical link message, it checks if it has the message in scratch.
- * And evicts it when adding it to the canonical chain.
- *
- * This approach allows a node to know whether it has seen a given message before, or if it is new coming via SFPP.
- * If new, and the timestamp is within the rebroadcast timeout, it will process that message as if it were just received from the
- * mesh, allowing it to be decrypted, shown to the user, and rebroadcast.
+ * A node advertises a bucket with a scope and summary, fetches the difference from a peer, and
+ * stores the missing objects. The store is content-addressed: there is no chain, tip or authority.
+ * Only text messages on the primary channel are archived.
  */
 class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForwardPlusPlus>, private concurrency::OSThread
 {
@@ -116,6 +91,9 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     virtual bool handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_StoreForwardPlusPlus *t) override;
 
     virtual int32_t runOnce() override;
+
+    // Summarises one content bucket: its short IDs, their XOR checksum and their count.
+    bool buildBucketSummary(const uint8_t *root_hash, size_t root_hash_len, uint32_t bucket, sfppsr::BucketSummary &out);
 
   private:
     sqlite3 *ppDb;
@@ -217,10 +195,6 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     // Derives the short ID and checksum contribution for any chain row that predates those columns.
     // Bounded by the chain length, and a no-op on every run after the first.
     void backfillSetIndex();
-
-    // Summarises one content bucket: its members' short IDs, their XOR checksum and their count.
-    // Returns false when the bucket holds nothing, which is not the same as an empty sketch.
-    bool buildBucketSummary(const uint8_t *root_hash, size_t root_hash_len, uint32_t bucket, sfppsr::BucketSummary &out);
 
     // The short IDs stored in one bucket, for the enumeration list and for a windowed object lookup.
     bool collectBucketIds(const uint8_t *root_hash, size_t root_hash_len, uint32_t bucket, std::vector<pinsketch::Element> &out);
@@ -374,7 +348,6 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     uint32_t links_requested = 0;
     uint32_t links_provided = 0;
     uint32_t links_added = 0;
-    uint32_t links_from_canon_scratch = 0;
     uint32_t links_from_scratch = 0;
     uint32_t split_links_sent = 0;
     uint32_t split_links_received = 0;

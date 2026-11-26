@@ -125,6 +125,7 @@ class TestRoutingModule : public RoutingModule
 class TestSfppModule : public StoreForwardPlusPlusModule
 {
   public:
+    using StoreForwardPlusPlusModule::buildBucketSummary;
     using StoreForwardPlusPlusModule::handleReceived;
     using StoreForwardPlusPlusModule::handleReceivedProtobuf;
     using StoreForwardPlusPlusModule::runOnce;
@@ -1514,18 +1515,64 @@ void test_v3StoreIsMovedAside()
 // (D18): two evaluations over the same holding agree.
 void test_content_summary_matches_for_the_same_holding()
 {
+    // Two archives hold the same text; one also holds a row in another bucket. A counter-keyed
+    // summary would select different rows, the content summary must not.
     TEST_ASSERT_TRUE(ingestOneText("same holding"));
-    StoredRow row;
-    TEST_ASSERT_TRUE(readStoredRow(TEXT_ID, row));
-    TEST_ASSERT_EQUAL_UINT32(row.messageHash[0], row.bucket);
+    StoredRow target;
+    TEST_ASSERT_TRUE(readStoredRow(TEXT_ID, target));
+    const uint32_t bucket = target.bucket;
 
-    sfppsr::BucketSummary first(4);
-    first.add((pinsketch::Element)row.shortId, row.checksum);
-    sfppsr::BucketSummary second(4);
-    second.add((pinsketch::Element)row.shortId, row.checksum);
-    TEST_ASSERT_EQUAL_UINT32(first.count(), second.count());
-    TEST_ASSERT_EQUAL_UINT64(first.checksum(), second.checksum());
-    TEST_ASSERT_EQUAL_UINT32(1, first.count());
+    PacketId paddingId = TEXT_ID + 1;
+    uint32_t paddingBucket = bucket;
+    for (int i = 0; i < 32 && paddingBucket == bucket; i++, paddingId++) {
+        meshtastic_MeshPacket mp = makeText(REMOTE_NODE, paddingId, "padding", getValidTime(RTCQualityNTP, true));
+        meshtastic_MeshPacket enc = makeEncryptedCopy(mp);
+        uint8_t hash[SFPP_HASH_SIZE];
+        sfppframe::messageHash(enc.encrypted.bytes, enc.encrypted.size, mp.to, mp.from, mp.id, hash);
+        paddingBucket = sfppsr::contentBucket(hash, SFPP_HASH_SIZE);
+        if (paddingBucket != bucket)
+            TEST_ASSERT_EQUAL(ProcessMessage::CONTINUE, testSfpp->ingest(mp, &enc));
+    }
+    TEST_ASSERT_TRUE(bucket != paddingBucket);
+
+    char tmpl[] = "/tmp/meshtastic-sfpp-b-XXXXXX";
+    char *dir = mkdtemp(tmpl);
+    TEST_ASSERT_NOT_NULL(dir);
+    const std::string secondDir = dir;
+    const std::string savedPath = portduino_config.sfpp_db_path;
+    portduino_config.sfpp_db_path = secondDir + "/";
+    TestSfppModule *secondModule = new TestSfppModule();
+    meshtastic_MeshPacket mp = makeText(REMOTE_NODE, TEXT_ID, "same holding", getValidTime(RTCQualityNTP, true));
+    meshtastic_MeshPacket enc = makeEncryptedCopy(mp);
+    TEST_ASSERT_EQUAL(ProcessMessage::CONTINUE, secondModule->ingest(mp, &enc));
+
+    const std::vector<uint8_t> root = mappingRoot();
+    TEST_ASSERT_EQUAL_UINT(SFPP_HASH_SIZE, root.size());
+
+    sfppsr::BucketSummary a(4);
+    sfppsr::BucketSummary b(4);
+    TEST_ASSERT_TRUE(testSfpp->buildBucketSummary(root.data(), root.size(), bucket, a));
+    TEST_ASSERT_TRUE(secondModule->buildBucketSummary(root.data(), root.size(), bucket, b));
+    TEST_ASSERT_EQUAL_UINT32(1, a.count());
+    TEST_ASSERT_EQUAL_UINT32(a.count(), b.count());
+    TEST_ASSERT_EQUAL_UINT64(a.checksum(), b.checksum());
+
+    sfppsr::Scope scope;
+    memcpy(scope.rootPrefix, root.data(), root.size());
+    scope.rootPrefixLen = root.size();
+    scope.bucket = bucket;
+    meshtastic_StoreForwardPlusPlus advertA = meshtastic_StoreForwardPlusPlus_init_zero;
+    meshtastic_StoreForwardPlusPlus advertB = meshtastic_StoreForwardPlusPlus_init_zero;
+    TEST_ASSERT_TRUE(sfppsr::buildAdvert(scope, a, advertA));
+    TEST_ASSERT_TRUE(sfppsr::buildAdvert(scope, b, advertB));
+    TEST_ASSERT_EQUAL_UINT32(advertA.message.size, advertB.message.size);
+    TEST_ASSERT_EQUAL_MEMORY(advertA.message.bytes, advertB.message.bytes, advertA.message.size);
+
+    delete secondModule;
+    portduino_config.sfpp_db_path = savedPath;
+    std::remove((secondDir + "/storeforwardpp.db").c_str());
+    std::remove((secondDir + "/storeforwardpp.db-journal").c_str());
+    rmdir(secondDir.c_str());
 }
 
 void loop() {}
