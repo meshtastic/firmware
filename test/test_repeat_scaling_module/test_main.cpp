@@ -3,10 +3,12 @@
 // and shouldCancelDupe() over all of them.
 //
 // Why: text messages have no broadcast ACK or retry, so a relay waits for a second heard duplicate
-// before dropping its own copy; every other packet keeps today's cancel-on-first. On a busy mesh
-// (channel or TX airtime, or too many estimated direct neighbours) the extra repeat costs more than
-// it saves, so every threshold drops back to 1. Duplicates arrive encrypted, so the portnum cached
-// when we queued our copy is the only way a duplicate can be recognised as text.
+// before dropping its own copy. A packet whose portnum is unknown gets the same tolerance only when
+// its header shows a flooded DM (to one node, NO_NEXT_HOP_PREFERENCE); every other packet keeps
+// today's cancel-on-first. On a busy mesh (channel or TX airtime, or too many estimated direct
+// neighbours) the extra repeat costs more than it saves, so every threshold drops back to 1.
+// Duplicates arrive encrypted, so the portnum cached when we queued our copy is the only way a
+// duplicate can be recognised as text.
 //
 // Regressions guarded: text duplicates cancelling on the first copy again (lost or evicted cache
 // entries, or the cache filling with bulk broadcast relays); extra repeats on a busy or dense mesh,

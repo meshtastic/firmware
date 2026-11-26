@@ -281,10 +281,6 @@ bool NextHopRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
                     useReceivedPayload(tosend); // forward the ciphertext as received, without re-encoding it
                     LOG_INFO("Rebroadcast msg from %x", p->relay_node);
 
-                    // Duplicates arrive encrypted; keep the portnum for them
-                    if (repeatScalingModule)
-                        repeatScalingModule->noteScheduled(p);
-
                     // If exhausting hops, force hop_limit = 0 regardless of other logic
                     if (exhaustHops) {
                         tosend->hop_limit = 0;
@@ -303,6 +299,9 @@ bool NextHopRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
                         (p->next_hop == NO_NEXT_HOP_PREFERENCE) ? FloodingRouter::send(tosend) : NextHopRouter::send(tosend);
                     if (res == ERRNO_SHOULD_RELEASE)
                         packetPool.release(tosend);
+                    // Duplicates arrive encrypted; keep the portnum, but only for a copy the queue took
+                    else if (res == ERRNO_OK && repeatScalingModule)
+                        repeatScalingModule->noteScheduled(p);
 
                     return true;
                 }

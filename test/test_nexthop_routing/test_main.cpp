@@ -2,6 +2,8 @@
 //   M1 - NodeDB::resolveLastByte / resolveUniqueLastByte (ambiguity-aware last-byte resolution)
 //   M2 - NextHopRouter::getNextHop strict-neighbor gate + Router::shouldDecrementHopLimit favorite check
 //   M3 - NextHopRouter route-health freshness / failure decay
+// Also: perhapsRebroadcast() caches a relay's portnum in RepeatScalingModule only once the radio queue
+// takes the copy, so a declined relay cannot evict the cache entry of a packet still queued.
 //
 // Time handling: the route-health helpers take `now` as a parameter so the 30-minute TTL logic is
 // pure and testable without a clock mock. getNextHop()/sinceLastSeen() use the real native clock;
@@ -20,6 +22,7 @@
 #include "mesh/NodeDB.h"
 #include "mesh/RadioInterface.h"
 #include "mesh/ReliableRouter.h"
+#include "modules/RepeatScalingModule.h"
 #include "modules/RoutingModule.h"
 #include <cstdio>
 #include <cstring>
@@ -1045,6 +1048,50 @@ void test_rebroadcast_declined_send_releases_packet(void)
     TEST_ASSERT_EQUAL_MESSAGE(1, mockIface->sendCount, "the copy must have reached the mock radio");
 }
 
+class NotedPortnumProbe : public RepeatScalingModule
+{
+  public:
+    using RepeatScalingModule::lookupNotedPortnum;
+};
+
+static meshtastic_MeshPacket makeDecodedTextRebroadcast()
+{
+    return makeBehaviorPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kRemoteNode, NODENUM_BROADCAST, 0);
+}
+
+// A full queue declines the copy; caching it then would evict the portnum of a text packet still queued.
+void test_rebroadcast_declined_send_does_not_cache_portnum(void)
+{
+    MockRadioInterface *mockIface = installMockIface();
+    mockIface->declineAll = true;
+    NotedPortnumProbe probe;
+    RepeatScalingModule *previous = repeatScalingModule;
+    repeatScalingModule = &probe;
+    meshtastic_MeshPacket p = makeDecodedTextRebroadcast();
+
+    TEST_ASSERT_TRUE(shim->perhapsRebroadcast(&p));
+    repeatScalingModule = previous;
+
+    TEST_ASSERT_EQUAL_INT(1, mockIface->sendCount);
+    TEST_ASSERT_EQUAL_INT32(-1, probe.lookupNotedPortnum(p.from, p.id));
+}
+
+// Control: the same text relay, accepted by the queue, is cached for its encrypted duplicates.
+void test_rebroadcast_accepted_send_caches_portnum(void)
+{
+    MockRadioInterface *mockIface = installMockIface();
+    NotedPortnumProbe probe;
+    RepeatScalingModule *previous = repeatScalingModule;
+    repeatScalingModule = &probe;
+    meshtastic_MeshPacket p = makeDecodedTextRebroadcast();
+
+    TEST_ASSERT_TRUE(shim->perhapsRebroadcast(&p));
+    repeatScalingModule = previous;
+
+    TEST_ASSERT_EQUAL_INT(1, mockIface->sendCount);
+    TEST_ASSERT_EQUAL_INT32(meshtastic_PortNum_TEXT_MESSAGE_APP, probe.lookupNotedPortnum(p.from, p.id));
+}
+
 // An already-encrypted packet never reaches perhapsEncode's TOO_LARGE check, so Router::send() is the
 // last gate before the radio queue: MeshPacket.encrypted holds 256 bytes, the radio buffer 240.
 void test_send_rejects_payload_larger_than_radio_buffer(void)
@@ -1264,6 +1311,8 @@ void setup()
     RUN_TEST(test_rebroadcast_normal_broadcast_is_relayed);
     RUN_TEST(test_rebroadcast_no_lora_broadcast_is_not_relayed);
     RUN_TEST(test_rebroadcast_declined_send_releases_packet);
+    RUN_TEST(test_rebroadcast_declined_send_does_not_cache_portnum);
+    RUN_TEST(test_rebroadcast_accepted_send_caches_portnum);
     RUN_TEST(test_send_rejects_payload_larger_than_radio_buffer);
 #if USERPREFS_EVENT_MODE
     RUN_TEST(test_event_mode_hop_behavior);
