@@ -166,6 +166,7 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     uint32_t lastSeenUptime = 0;
     uint32_t lastSeenEpoch = 0;
 
+    void openStore();
     void initTimeState();
     void writeTimeState();
     void updateTimeState();
