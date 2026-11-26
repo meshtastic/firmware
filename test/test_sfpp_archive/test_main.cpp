@@ -571,6 +571,7 @@ void setUp(void)
     dbDir = dir ? dir : "/tmp";
     portduino_config.sfpp_db_path = dbDir + "/";
     portduino_config.sfpp_stratum0 = true;
+    portduino_config.sfpp_repair = SFPP_REPAIR_CHAIN; // the chain tests below; Q10 removes the chain
     portduino_config.sfpp_enabled = true;
     portduino_config.sfpp_hops = 3;
     portduino_config.sfpp_announce_interval = 5;

@@ -1600,7 +1600,7 @@ bool loadConfig(const char *configPath)
             portduino_config.sfpp_max_chain = (yamlConfig["StoreAndForward"]["MaxChainLength"]).as<uint32_t>(1000);
             portduino_config.sfpp_backlog_limit = (yamlConfig["StoreAndForward"]["BacklogLimit"]).as<uint32_t>(100);
             portduino_config.sfpp_steal_port = (yamlConfig["StoreAndForward"]["StealPort"]).as<bool>(false);
-            std::string repair = (yamlConfig["StoreAndForward"]["Repair"]).as<std::string>("chain");
+            std::string repair = (yamlConfig["StoreAndForward"]["Repair"]).as<std::string>("sketch");
             if (repair == "enum")
                 portduino_config.sfpp_repair = SFPP_REPAIR_ENUM;
             else if (repair == "sketch")
