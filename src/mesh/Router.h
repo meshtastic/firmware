@@ -130,6 +130,12 @@ class Router : protected concurrency::OSThread, protected PacketHistory
         return meshtastic_MeshPacket_AckProofStatus_ACK_PROOF_ABSENT;
     }
 
+    /// Router::send()'s hard duty-cycle gate: admits up to the whole duty cycle (exposed for tests).
+    static bool airUtilAllowsTx(float hourlyTxPercent, float effectiveDutyCycle)
+    {
+        return !(hourlyTxPercent > effectiveDutyCycle);
+    }
+
     /**
      * @return our local nodenum */
     [[nodiscard]] NodeNum getNodeNum();

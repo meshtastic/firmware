@@ -1,3 +1,10 @@
+// NMEA sentence generation: printWPL() and printGGA() in src/gps/NMEAWPL.cpp.
+//
+// Why: serial and CalTopo consumers drop a sentence whose checksum is wrong, and a write past
+// the caller's buffer corrupts memory.
+// Regression guarded: a checksum that counts the leading CRLF or is computed wrong, and output
+// that overruns a zero-sized or truncated buffer.
+
 #include "GeoCoord.h"
 #include "NMEAWPL.h"
 #include "TestUtil.h"
