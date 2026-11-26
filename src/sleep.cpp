@@ -647,7 +647,7 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     if (espBtnPin2 != 0xFF) {
         gpio_wakeup_disable((gpio_num_t)espBtnPin2);
         // The level type would outlive the sleep and storm once any pinMode() re-enables the pin's interrupt.
-        gpio_set_intr_type(espBtnPin2, GPIO_INTR_DISABLE);
+        gpio_set_intr_type((gpio_num_t)espBtnPin2, GPIO_INTR_DISABLE);
     }
 #endif
 #ifdef PMU_IRQ

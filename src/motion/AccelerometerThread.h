@@ -184,6 +184,7 @@ class AccelerometerThread : public concurrency::OSThread
 #if __has_include(<Adafruit_LSM6DSOX.h>)
         case ScanI2C::DeviceType::LSM6DSOX:
             sensor.reset(new LSM6DSOXSensor(device));
+            break;
 #endif
 #if defined(MESHTASTIC_INCLUDE_INKHUD) && __has_include(<Adafruit_ISM330DHCX.h>)
         case ScanI2C::DeviceType::ISM330DHCX:
