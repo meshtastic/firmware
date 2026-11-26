@@ -1,5 +1,10 @@
-// FloodingRouter::perhapsCancelDupe role-gating and its call into RepeatScalingModule; a stub radio
-// says whether our copy is still queued.
+// FloodingRouter::perhapsCancelDupe in src/mesh/FloodingRouter.cpp: role gating, the TX-queue check,
+// and its call into RepeatScalingModule; a stub radio says whether our copy is queued and counts cancels.
+//
+// Why: only a LoRa duplicate of a packet we still hold queued may cancel it, ROUTER never cancels,
+// and RepeatScalingModule alone decides when. Regression guarded: the router ignoring the module's
+// answer (cancelling on every duplicate, or never), or spending module tracker slots on duplicates
+// that have nothing left to cancel.
 
 #include "MeshTypes.h" // before TestUtil.h: provides NodeNum etc.
 #include "TestUtil.h"
@@ -50,6 +55,12 @@ class QueueStubRadio : public RadioInterface
 {
   public:
     bool queued = true;
+    int cancelCalls = 0;
+    bool cancelSending(NodeNum, PacketId) override
+    {
+        cancelCalls++;
+        return true;
+    }
     ErrorCode send(meshtastic_MeshPacket *p) override
     {
         packetPool.release(p);
@@ -80,6 +91,7 @@ void setUp(void)
     counting->decision = false;
     repeatScalingModule = counting;
     radio->queued = true;
+    radio->cancelCalls = 0;
 }
 
 void tearDown(void) {}
@@ -91,6 +103,7 @@ void test_perhapsCancelDupe_consults_repeatScalingModule_for_client_role(void)
     meshtastic_MeshPacket p = makeDupePacket(kSender1, kId1);
     shim->perhapsCancelDupe(&p);
     TEST_ASSERT_EQUAL_INT(1, counting->callCount);
+    TEST_ASSERT_EQUAL_INT(0, radio->cancelCalls); // the module said keep it, so nothing is cancelled
 }
 
 void test_perhapsCancelDupe_router_role_never_consults_repeatScalingModule(void)
@@ -120,13 +133,14 @@ void test_perhapsCancelDupe_non_lora_transport_never_consults_repeatScalingModul
 
 void test_perhapsCancelDupe_does_not_crash_when_repeatScalingModule_says_cancel(void)
 {
-    // The cancel branch runs against the stub radio and still consults the module once.
+    // The module's yes must reach the radio as exactly one cancel of our queued copy.
     counting->decision = true;
     meshtastic_MeshPacket p = makeDupePacket(kSender1, kId1);
 
     shim->perhapsCancelDupe(&p);
 
     TEST_ASSERT_EQUAL_INT(1, counting->callCount);
+    TEST_ASSERT_EQUAL_INT(1, radio->cancelCalls);
 }
 
 // A duplicate of a packet we have not queued (or already sent) has nothing to cancel, so it must not

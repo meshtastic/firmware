@@ -128,6 +128,7 @@ class HopScalingModule : private concurrency::OSThread
     struct PerHopCounts {
         uint16_t perHop[MAX_HOP + 1] = {};
         uint16_t total = 0;
+        uint8_t denominator = 1; // filteringDenominator these sampled counts were tallied under
     };
 
     /// Mesh activity trend stats produced at each hourly rollover.

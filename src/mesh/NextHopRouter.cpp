@@ -283,9 +283,7 @@ bool NextHopRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
 
                     // Duplicates arrive encrypted; keep the portnum for them
                     if (repeatScalingModule)
-                        repeatScalingModule->noteScheduled(
-                            p->from, p->id,
-                            p->which_payload_variant == meshtastic_MeshPacket_decoded_tag ? p->decoded.portnum : -1);
+                        repeatScalingModule->noteScheduled(p);
 
                     // If exhausting hops, force hop_limit = 0 regardless of other logic
                     if (exhaustHops) {

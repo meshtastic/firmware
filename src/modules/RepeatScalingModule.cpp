@@ -2,7 +2,11 @@
 #include "DebugConfiguration.h"
 #include "airtime.h"
 #include "configuration.h"
+#include "mesh/RadioInterface.h"
 #include "modules/HopScalingModule.h"
+#include <algorithm>
+
+static_assert(RepeatScalingModule::DUPE_COUNT_TRACKER_SIZE >= MAX_TX_QUEUE, "one tracker slot per queued packet");
 
 RepeatScalingModule *repeatScalingModule;
 static bool busy(const char *which)
@@ -20,7 +24,7 @@ bool RepeatScalingModule::meshTooBusy(float channelUtilPercent, float airUtilTxP
         return busy("airUtilTX");
     }
 #if HAS_VARIABLE_HOPS
-    // perHop[0]: active direct neighbours
+    // Estimated active direct neighbours (scaled perHop[0])
     if (directActiveNodes > BUSY_DIRECT_ACTIVE_NODES) {
         return busy("directActiveNodes");
     }
@@ -35,7 +39,13 @@ bool RepeatScalingModule::meshTooBusyForExtraRepeats()
     const float channelUtilPercent = airTime ? airTime->channelUtilizationPercent() : 0.0f;
     const float airUtilTxPercent = airTime ? airTime->utilizationTXPercent() : 0.0f;
 #if HAS_VARIABLE_HOPS
-    const uint16_t directActiveNodes = hopScalingModule ? hopScalingModule->getLastPerHopCounts().perHop[0] : 0;
+    uint16_t directActiveNodes = 0;
+    if (hopScalingModule) {
+        // perHop[] is a hash subsample; scale by the denominator captured with that tally
+        const auto &counts = hopScalingModule->getLastPerHopCounts();
+        directActiveNodes =
+            static_cast<uint16_t>(std::min<uint32_t>(static_cast<uint32_t>(counts.perHop[0]) * counts.denominator, UINT16_MAX));
+    }
 #else
     const uint16_t directActiveNodes = 0;
 #endif
@@ -46,28 +56,30 @@ uint8_t RepeatScalingModule::getDupeCancelThreshold(const meshtastic_MeshPacket 
 {
     const int32_t portnum = resolvePortnum(p);
 
-    uint8_t threshold;
-    if (portnum >= 0) {
-        switch (portnum) {
-        case meshtastic_PortNum_TEXT_MESSAGE_APP:
-        case meshtastic_PortNum_TEXT_MESSAGE_COMPRESSED_APP:
-            // Chat has no broadcast ACK/retry
-            threshold = 2;
-            break;
-        default:
-            threshold = 1;
-            break;
-        }
-    } else {
-        // Undecodable: only a flooded DM, judged from the plaintext header
-        threshold = (!isBroadcast(p->to) && p->next_hop == NO_NEXT_HOP_PREFERENCE) ? 2 : 1;
-    }
+    const uint8_t threshold = portnum >= 0 ? portnumThreshold(portnum) : headerThreshold(p);
 
     if (threshold > 1 && meshTooBusyForExtraRepeats()) {
         return 1;
     }
 
     return threshold;
+}
+
+uint8_t RepeatScalingModule::portnumThreshold(int32_t portnum)
+{
+    switch (portnum) {
+    case meshtastic_PortNum_TEXT_MESSAGE_APP:
+    case meshtastic_PortNum_TEXT_MESSAGE_COMPRESSED_APP:
+        return 2; // Chat has no broadcast ACK/retry
+    default:
+        return 1;
+    }
+}
+
+uint8_t RepeatScalingModule::headerThreshold(const meshtastic_MeshPacket *p)
+{
+    // Portnum unknown: only a flooded DM gets the extra tolerance
+    return (!isBroadcast(p->to) && p->next_hop == NO_NEXT_HOP_PREFERENCE) ? 2 : 1;
 }
 
 const RepeatScalingModule::DupeCountEntry *RepeatScalingModule::findEntry(NodeNum sender, PacketId id) const
@@ -112,6 +124,17 @@ void RepeatScalingModule::clearDupeCount(NodeNum sender, PacketId id)
 {
     if (DupeCountEntry *entry = findEntry(sender, id))
         *entry = DupeCountEntry{};
+}
+
+void RepeatScalingModule::noteScheduled(const meshtastic_MeshPacket *p)
+{
+    if (p->which_payload_variant != meshtastic_MeshPacket_decoded_tag)
+        return; // nothing to cache: a miss gives the same header guess
+    const int32_t portnum = p->decoded.portnum;
+    // A threshold-1 broadcast's miss is already right; caching such bulk relays would evict the rest
+    if (isBroadcast(p->to) && portnumThreshold(portnum) == 1)
+        return;
+    noteScheduled(p->from, p->id, portnum);
 }
 
 void RepeatScalingModule::noteScheduled(NodeNum sender, PacketId id, int32_t portnum)

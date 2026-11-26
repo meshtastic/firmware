@@ -1,5 +1,17 @@
-// Unit tests for RepeatScalingModule: its ring-buffer dupe tracking, per-portnum threshold,
-// busy-mesh gate, and the shouldCancelDupe integration of all three.
+// RepeatScalingModule in src/modules/RepeatScalingModule.cpp: the (sender, id) ring, the per-portnum
+// threshold with its plaintext-header fallback, the busy-mesh gate, the noteScheduled() portnum cache,
+// and shouldCancelDupe() over all of them.
+//
+// Why: text messages have no broadcast ACK or retry, so a relay waits for a second heard duplicate
+// before dropping its own copy; every other packet keeps today's cancel-on-first. On a busy mesh
+// (channel or TX airtime, or too many estimated direct neighbours) the extra repeat costs more than
+// it saves, so every threshold drops back to 1. Duplicates arrive encrypted, so the portnum cached
+// when we queued our copy is the only way a duplicate can be recognised as text.
+//
+// Regressions guarded: text duplicates cancelling on the first copy again (lost or evicted cache
+// entries, or the cache filling with bulk broadcast relays); extra repeats on a busy or dense mesh,
+// including a dense mesh hidden by HopScalingModule's hash subsampling; and tracker slots claimed or
+// leaked by packets that cannot need them.
 
 #include "MeshTypes.h" // before TestUtil.h: provides NodeNum etc.
 #include "TestUtil.h"
@@ -7,6 +19,7 @@
 
 #include "airtime.h"
 #include "configuration.h"
+#include "mesh/RadioInterface.h"
 #include "modules/HopScalingModule.h"
 #include "modules/RepeatScalingModule.h"
 
@@ -50,6 +63,7 @@ class RepeatScalingModuleBusyShim : public RepeatScalingModule
 };
 
 static RepeatScalingModuleTestShim *shim = nullptr;
+static constexpr uint32_t kRing = RepeatScalingModule::DUPE_COUNT_TRACKER_SIZE;
 static RepeatScalingModulePlainShim *plainShim = nullptr;
 
 // Scoped helpers that install a global airTime/hopScalingModule reporting a busy condition for the
@@ -77,10 +91,11 @@ class ScopedChannelUtil
 class ScopedDirectActiveNodes
 {
   public:
-    explicit ScopedDirectActiveNodes(uint16_t count) : previous(hopScalingModule)
+    explicit ScopedDirectActiveNodes(uint16_t count, uint8_t denominator = 1) : previous(hopScalingModule)
     {
         HopScalingModule::PerHopCounts counts;
         counts.perHop[0] = count;
+        counts.denominator = denominator;
         busy.setLastPerHopCountsForTest(counts);
         hopScalingModule = &busy;
     }
@@ -160,25 +175,25 @@ void test_clearDupeCount_of_untracked_packet_is_noop(void)
 
 void test_registerDupeHeard_ring_eviction_does_not_crash(void)
 {
-    // DUPE_COUNT_TRACKER_SIZE is 8 (see RepeatScalingModule.h); track more distinct packets than
-    // that and confirm the ring buffer just evicts older entries rather than misbehaving.
-    for (uint32_t i = 0; i < 20; i++) {
+    // Track more distinct packets than DUPE_COUNT_TRACKER_SIZE and confirm the ring buffer just
+    // evicts older entries rather than misbehaving.
+    for (uint32_t i = 0; i < 2u * RepeatScalingModule::DUPE_COUNT_TRACKER_SIZE + 4; i++) {
         uint8_t count = shim->registerDupeHeard(kSender1, 0x10000 + i);
         TEST_ASSERT_EQUAL_UINT8(1, count); // each is a fresh (sender, id) pair
     }
 }
 
-// Eight queued rebroadcasts fill the ring; freeing one must not cost any of the other seven their portnum.
+// Queued rebroadcasts fill the ring; freeing one must not cost any of the others their portnum.
 void test_claim_reuses_a_cleared_slot_before_evicting_a_live_one(void)
 {
     RepeatScalingModuleTestShim ring;
-    for (uint32_t i = 0; i < 8; i++)
+    for (uint32_t i = 0; i < kRing; i++)
         ring.noteScheduled(kSender1, 0x20000 + i, meshtastic_PortNum_TEXT_MESSAGE_APP);
     ring.clearDupeCount(kSender1, 0x20003);
 
     ring.noteScheduled(kSender2, kId2, meshtastic_PortNum_TEXT_MESSAGE_APP);
 
-    for (uint32_t i = 0; i < 8; i++) {
+    for (uint32_t i = 0; i < kRing; i++) {
         if (i != 3)
             TEST_ASSERT_EQUAL_INT32(meshtastic_PortNum_TEXT_MESSAGE_APP, ring.lookupNotedPortnum(kSender1, 0x20000 + i));
     }
@@ -189,7 +204,7 @@ void test_claim_reuses_a_cleared_slot_before_evicting_a_live_one(void)
 void test_full_ring_evicts_the_oldest_claim_after_reuse(void)
 {
     RepeatScalingModuleTestShim ring;
-    for (uint32_t i = 0; i < 8; i++)
+    for (uint32_t i = 0; i < kRing; i++)
         ring.noteScheduled(kSender1, 0x50000 + i, meshtastic_PortNum_TEXT_MESSAGE_APP);
     ring.clearDupeCount(kSender1, 0x50002);
     ring.noteScheduled(kSender2, 0x60000, meshtastic_PortNum_TEXT_MESSAGE_APP); // reuses the cleared slot
@@ -208,7 +223,7 @@ void test_full_ring_evicts_the_oldest_claim_after_reuse(void)
 void test_threshold_one_duplicates_do_not_claim_ring_slots(void)
 {
     RepeatScalingModuleTestShim ring;
-    for (uint32_t i = 0; i < 8; i++)
+    for (uint32_t i = 0; i < kRing; i++)
         ring.noteScheduled(kSender1, 0x30000 + i, meshtastic_PortNum_TEXT_MESSAGE_APP);
 
     ring.testThreshold = 1;
@@ -217,7 +232,7 @@ void test_threshold_one_duplicates_do_not_claim_ring_slots(void)
         TEST_ASSERT_TRUE(ring.shouldCancelDupe(&other));
     }
 
-    for (uint32_t i = 0; i < 8; i++)
+    for (uint32_t i = 0; i < kRing; i++)
         TEST_ASSERT_EQUAL_INT32(meshtastic_PortNum_TEXT_MESSAGE_APP, ring.lookupNotedPortnum(kSender1, 0x30000 + i));
 }
 
@@ -434,6 +449,22 @@ void test_direct_node_count_at_gate_does_not_suppress(void)
     p.decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
     TEST_ASSERT_EQUAL_UINT8(2, plainShim->getDupeCancelThreshold(&p));
 }
+
+// perHop[0] is a 1-in-denominator hash subsample: six sampled at denominator 2 estimate twelve neighbours.
+void test_sampled_direct_node_count_is_scaled_by_its_denominator(void)
+{
+    meshtastic_MeshPacket p = makeDupePacket(kSender1, kId1);
+    p.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    p.decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
+    {
+        ScopedDirectActiveNodes dense(6, 2);
+        TEST_ASSERT_EQUAL_UINT8(1, plainShim->getDupeCancelThreshold(&p));
+    }
+    {
+        ScopedDirectActiveNodes atGate(5, 2); // estimates exactly ten
+        TEST_ASSERT_EQUAL_UINT8(2, plainShim->getDupeCancelThreshold(&p));
+    }
+}
 #endif
 
 void test_busy_mesh_does_not_affect_already_unextended_portnums(void)
@@ -562,6 +593,62 @@ void test_clearDupeCount_also_forgets_noted_portnum(void)
     TEST_ASSERT_EQUAL_UINT8(1, plainShim->getDupeCancelThreshold(&dupe));
 }
 
+static meshtastic_MeshPacket makeScheduledPacket(NodeNum from, PacketId id, meshtastic_PortNum portnum)
+{
+    meshtastic_MeshPacket p = makeDupePacket(from, id);
+    p.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    p.decoded.portnum = portnum;
+    return p;
+}
+
+// A threshold-1 broadcast's cache miss already gives 1, so it must not take a slot.
+void test_noteScheduled_packet_skips_threshold_one_broadcasts(void)
+{
+    RepeatScalingModuleTestShim ring;
+    meshtastic_MeshPacket position = makeScheduledPacket(kSender1, kId1, meshtastic_PortNum_POSITION_APP);
+    ring.noteScheduled(&position);
+    TEST_ASSERT_EQUAL_INT32(-1, ring.lookupNotedPortnum(kSender1, kId1));
+}
+
+// An undecoded packet has no portnum to cache; a miss falls to the same header guess.
+void test_noteScheduled_packet_skips_undecoded(void)
+{
+    RepeatScalingModuleTestShim ring;
+    meshtastic_MeshPacket opaque = makeDupePacket(kSender1, kId1);
+    opaque.to = 0x12345678;
+    ring.noteScheduled(&opaque);
+    TEST_ASSERT_EQUAL_INT32(-1, ring.lookupNotedPortnum(kSender1, kId1));
+}
+
+// Text broadcasts need the cache for threshold 2; a non-text DM needs it to override the flooded-DM guess.
+void test_noteScheduled_packet_caches_text_and_dms(void)
+{
+    RepeatScalingModuleTestShim ring;
+    meshtastic_MeshPacket text = makeScheduledPacket(kSender1, kId1, meshtastic_PortNum_TEXT_MESSAGE_APP);
+    meshtastic_MeshPacket dm = makeScheduledPacket(kSender2, kId2, meshtastic_PortNum_POSITION_APP);
+    dm.to = 0x12345678;
+    ring.noteScheduled(&text);
+    ring.noteScheduled(&dm);
+    TEST_ASSERT_EQUAL_INT32(meshtastic_PortNum_TEXT_MESSAGE_APP, ring.lookupNotedPortnum(kSender1, kId1));
+    TEST_ASSERT_EQUAL_INT32(meshtastic_PortNum_POSITION_APP, ring.lookupNotedPortnum(kSender2, kId2));
+}
+
+// A full TX queue of text plus any number of telemetry relays must not evict a queued text packet's portnum.
+void test_noteScheduled_packet_bulk_broadcasts_do_not_evict_queued_text(void)
+{
+    RepeatScalingModuleTestShim ring;
+    for (uint32_t i = 0; i < MAX_TX_QUEUE; i++) {
+        meshtastic_MeshPacket text = makeScheduledPacket(kSender1, 0x70000 + i, meshtastic_PortNum_TEXT_MESSAGE_APP);
+        ring.noteScheduled(&text);
+    }
+    for (uint32_t i = 0; i < 50; i++) {
+        meshtastic_MeshPacket telemetry = makeScheduledPacket(kSender2, 0x80000 + i, meshtastic_PortNum_TELEMETRY_APP);
+        ring.noteScheduled(&telemetry);
+    }
+    for (uint32_t i = 0; i < MAX_TX_QUEUE; i++)
+        TEST_ASSERT_EQUAL_INT32(meshtastic_PortNum_TEXT_MESSAGE_APP, ring.lookupNotedPortnum(kSender1, 0x70000 + i));
+}
+
 void test_shouldCancelDupe_end_to_end_with_encrypted_duplicate(void)
 {
     // Full path through the real (non-overridden) threshold logic, starting from an encrypted
@@ -645,6 +732,7 @@ void setup()
 #if HAS_VARIABLE_HOPS
     RUN_TEST(test_busy_direct_node_count_suppresses_text_message_threshold);
     RUN_TEST(test_direct_node_count_at_gate_does_not_suppress);
+    RUN_TEST(test_sampled_direct_node_count_is_scaled_by_its_denominator);
 #endif
     RUN_TEST(test_busy_mesh_does_not_affect_already_unextended_portnums);
 
@@ -659,6 +747,10 @@ void setup()
     RUN_TEST(test_noteScheduled_is_keyed_per_sender_and_id);
     RUN_TEST(test_noteScheduled_updates_existing_entry);
     RUN_TEST(test_clearDupeCount_also_forgets_noted_portnum);
+    RUN_TEST(test_noteScheduled_packet_skips_threshold_one_broadcasts);
+    RUN_TEST(test_noteScheduled_packet_skips_undecoded);
+    RUN_TEST(test_noteScheduled_packet_caches_text_and_dms);
+    RUN_TEST(test_noteScheduled_packet_bulk_broadcasts_do_not_evict_queued_text);
     RUN_TEST(test_shouldCancelDupe_end_to_end_with_encrypted_duplicate);
     RUN_TEST(test_shouldCancelDupe_end_to_end_with_encrypted_dm_duplicate);
 

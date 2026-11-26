@@ -11,7 +11,8 @@
  *   broadcast ACK/retry.
  * - A packet we cannot decode is judged from its plaintext header: a DM-shaped flood (to a single
  *   node, NO_NEXT_HOP_PREFERENCE) gets threshold 2; broadcasts and routed DMs get 1. noteScheduled()
- *   caches the portnum when we queue a rebroadcast, so its later encrypted duplicates use the table.
+ *   caches the portnum when we queue a rebroadcast (except threshold-1 broadcasts, which the header
+ *   already gets right), so its later encrypted duplicates use the table.
  * - On a busy mesh (channel or TX airtime above the BUSY_* limits, or, on HAS_VARIABLE_HOPS builds, too
  *   many direct neighbours) every threshold is 1, today's behaviour.
  *
@@ -26,8 +27,13 @@ class RepeatScalingModule
     // True once enough duplicates are heard to cancel ours. Virtual for test doubles.
     virtual bool shouldCancelDupe(const meshtastic_MeshPacket *p);
 
-    // Portnum of a rebroadcast we queued (-1 if undecoded), for its later encrypted duplicates.
+    // Caches a queued rebroadcast's portnum unless the header alone already judges its duplicates.
+    void noteScheduled(const meshtastic_MeshPacket *p);
+    // Unconditional form: portnum of a rebroadcast we queued, for its later encrypted duplicates.
     void noteScheduled(NodeNum sender, PacketId id, int32_t portnum);
+
+    // One slot per packet the radio can hold queued; RepeatScalingModule.cpp asserts the match.
+    static constexpr uint8_t DUPE_COUNT_TRACKER_SIZE = 16;
 
     // Above any of these the mesh is too busy for extra repeats.
     static constexpr float BUSY_CHANNEL_UTIL_PERCENT = 10.0f;
@@ -51,8 +57,10 @@ class RepeatScalingModule
   private:
     // Decoded portnum, else the one noteScheduled() cached, else -1.
     int32_t resolvePortnum(const meshtastic_MeshPacket *p) const;
+    // Threshold from a known portnum, and from the plaintext header when the portnum is unknown.
+    static uint8_t portnumThreshold(int32_t portnum);
+    static uint8_t headerThreshold(const meshtastic_MeshPacket *p);
 
-    static constexpr uint8_t DUPE_COUNT_TRACKER_SIZE = 8;
     struct DupeCountEntry {
         NodeNum sender = 0;
         PacketId id = 0;

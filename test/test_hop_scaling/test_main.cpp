@@ -978,7 +978,7 @@ static void test_memory_layout()
     TEST_MSG_FMT("%-35s  %6s  %s", "Type", "bytes", "Notes");
     TEST_MSG_FMT("%-35s  %6zu  %s", "Record", sizeof(Record), "nodeHash:16 + hops:3 + seen:13 (32-bit packed)");
     TEST_MSG_FMT("%-35s  %6zu  %s", "HopScalingModule::PerHopCounts", sizeof(HopScalingModule::PerHopCounts),
-                 "perHop[8](16) + total(2)");
+                 "perHop[8](16) + total(2) + denominator(1)");
     TEST_MSG_FMT("%-35s  %6zu  %s", "HopScalingModule (instance)", HopScalingTestShim::sizeofSelf(),
                  "entries[128](512) + denom state + cached results + OSThread overhead");
 
