@@ -45,6 +45,10 @@ constexpr uint32_t kBucketObjects = 32;
 // Chain counters are 1-based; counter 0 means the object is not on the chain yet and has no bucket.
 bool bucketOf(uint32_t chainCounter, uint32_t &bucketOut);
 
+// The content-derived bucket: the first byte of the object hash, so every archive files an object
+// the same way with no counter, clock or coordinator.
+uint32_t contentBucket(const uint8_t *objectId, size_t len);
+
 /**
  * One bucket's summary: what an advert carries, and what a peer's advert is compared against.
  */

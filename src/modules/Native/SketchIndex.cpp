@@ -69,6 +69,11 @@ bool bucketOf(uint32_t chainCounter, uint32_t &bucketOut)
     return true;
 }
 
+uint32_t contentBucket(const uint8_t *objectId, size_t len)
+{
+    return len > 0 ? objectId[0] : 0;
+}
+
 void BucketSummary::add(const uint8_t *objectId, size_t len)
 {
     add(shortId(objectId, len), checksumContribution(objectId, len));

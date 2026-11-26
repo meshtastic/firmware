@@ -128,6 +128,17 @@ void test_bucketsCloseEveryFixedNumberOfObjects()
     TEST_ASSERT_EQUAL_UINT32(2, bucket);
 }
 
+// The content bucket is the first byte of the object hash, so every archive files an object the
+// same way with no counter, clock or coordinator.
+void test_contentBucketIsTheFirstHashByte()
+{
+    for (uint32_t i = 0; i < 256; i++) {
+        const ObjectId o = nthObject(i);
+        TEST_ASSERT_EQUAL_UINT32(o.bytes[0], sfppsr::contentBucket(o.bytes, sizeof(o.bytes)));
+    }
+    TEST_ASSERT_EQUAL_UINT32(0, sfppsr::contentBucket(nullptr, 0));
+}
+
 void test_aFullBucketSketchFitsOneFrame()
 {
     // 128 bytes at capacity 32, leaving room for the advert envelope inside a 237-byte payload.
@@ -325,6 +336,7 @@ void setup()
     // Buckets
     RUN_TEST(test_anObjectOffTheChainHasNoBucket);
     RUN_TEST(test_bucketsCloseEveryFixedNumberOfObjects);
+    RUN_TEST(test_contentBucketIsTheFirstHashByte);
     RUN_TEST(test_aFullBucketSketchFitsOneFrame);
 
     // Summary bookkeeping

@@ -950,6 +950,7 @@ bool StoreForwardPlusPlusModule::insertCanonObject(uint32_t to, uint32_t from, u
     sqlite3_bind_int64(chain_insert_stmt, 13, (sqlite3_int64)time.basis);
     sqlite3_bind_int64(chain_insert_stmt, 14, (sqlite3_int64)time.boot_id);
     sqlite3_bind_int64(chain_insert_stmt, 15, (sqlite3_int64)time.margin);
+    sqlite3_bind_int(chain_insert_stmt, 16, (int)sfppsr::contentBucket(hash, SFPP_HASH_SIZE));
 
     const int res = sqlite3_step(chain_insert_stmt);
     sqlite3_reset(chain_insert_stmt);

@@ -309,6 +309,7 @@ bool StoreForwardPlusPlusModule::addToChain(link_object &lo)
     sqlite3_bind_int64(chain_insert_stmt, 13, (sqlite3_int64)lo.time_basis);
     sqlite3_bind_int64(chain_insert_stmt, 14, (sqlite3_int64)lo.boot_id);
     sqlite3_bind_int64(chain_insert_stmt, 15, (sqlite3_int64)lo.age_margin);
+    sqlite3_bind_int(chain_insert_stmt, 16, (int)sfppsr::contentBucket(lo.message_hash, lo.message_hash_len));
     int res = sqlite3_step(chain_insert_stmt);
     if (res != SQLITE_OK && res != SQLITE_DONE) {
         LOG_ERROR("StoreForwardpp Cannot step: %s", sqlite3_errmsg(ppDb));

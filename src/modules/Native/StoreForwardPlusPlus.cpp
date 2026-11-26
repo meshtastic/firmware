@@ -157,6 +157,7 @@ StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
         time_basis INT NOT NULL DEFAULT 0, \
         boot_id INT NOT NULL DEFAULT 0,    \
         age_margin INT NOT NULL DEFAULT 0, \
+        bucket INT DEFAULT 0,          \
         PRIMARY KEY (message_hash)     \
         );",
                        NULL, NULL, &err);
@@ -315,7 +316,7 @@ StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
     // prepared statements *should* make this faster.
     sqlite3_prepare_v2(ppDb, "INSERT INTO channel_messages (destination, sender, packet_id, root_hash, \
         encrypted_bytes, message_hash, rx_time, commit_hash, payload, counter, short_id, checksum, \
-        time_basis, boot_id, age_margin) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
+        time_basis, boot_id, age_margin, bucket) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
                        -1, &chain_insert_stmt, NULL);
 
     // Both identifiers are stored beside the object, so summarising a bucket never rehashes and a
