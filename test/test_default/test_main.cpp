@@ -8,7 +8,8 @@
 #include <unity.h>
 
 // Expected values are worked by hand from Default::congestionScalingCoefficient() (src/mesh/Default.h),
-// not recomputed by a copy of it: coeff = 1 + (nodes - 40) * 2^SF / (BW_kHz * 100) above 40 nodes.
+// not recomputed by a copy of it: coeff = 1 + (nodes - 40) * 2^SF / (BW_kHz * 100) above 40 nodes, with 25 in
+// place of 100 under USERPREFS_EVENT_MODE, so each scaled case carries both expectations.
 // src truncates base * coeff, and the float coefficient is not exact, so scaled results allow +-1 ms.
 
 void test_router_no_scaling()
@@ -38,8 +39,13 @@ void test_client_default_preset_scaling()
     config.lora.spread_factor = 9; // SF9
     config.lora.bandwidth = 250;   // 250 kHz
 
+#if USERPREFS_EVENT_MODE
+    // 10 nodes over 40: 60000 * (1 + 10 * 512 / 6250) = 60000 * 1.8192 = 109152
+    TEST_ASSERT_UINT32_WITHIN(1, 109152U, Default::getConfiguredOrDefaultMsScaled(0, 60, 50));
+#else
     // 10 nodes over 40: 60000 * (1 + 10 * 512 / 25000) = 60000 * 1.2048 = 72288
     TEST_ASSERT_UINT32_WITHIN(1, 72288U, Default::getConfiguredOrDefaultMsScaled(0, 60, 50));
+#endif
 }
 
 void test_client_medium_fast_preset_scaling()
@@ -51,8 +57,13 @@ void test_client_medium_fast_preset_scaling()
     config.lora.spread_factor = 12;
     config.lora.bandwidth = 125;
 
+#if USERPREFS_EVENT_MODE
+    // 30 nodes over 40: 60000 * (1 + 30 * 512 / 6250) = 60000 * 3.4576 = 207456
+    TEST_ASSERT_UINT32_WITHIN(1, 207456U, Default::getConfiguredOrDefaultMsScaled(0, 60, 70));
+#else
     // 30 nodes over 40: 60000 * (1 + 30 * 512 / 25000) = 60000 * 1.6144 = 96864
     TEST_ASSERT_UINT32_WITHIN(1, 96864U, Default::getConfiguredOrDefaultMsScaled(0, 60, 70));
+#endif
 }
 
 void test_tak_tracker_no_scaling()
