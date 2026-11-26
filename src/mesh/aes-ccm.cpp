@@ -29,7 +29,7 @@ static int constant_time_compare(const void *a_, const void *b_, size_t len)
     size_t i;
     volatile uint8_t d = 0U;
     for (i = 0U; i < len; i++) {
-        d |= (a[i] ^ b[i]);
+        d = d | (a[i] ^ b[i]);
     }
     /* Constant time bit arithmetic to convert d > 0 to -1 and d = 0 to 0. */
     return (1 & (((unsigned int)d - 1) >> 8)) - 1;

@@ -126,11 +126,11 @@ void TraceRouteModule::rebuildResultLines(OLEDDisplay *display)
 
 bool TraceRouteModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_RouteDiscovery *r)
 {
-    // We only alter the packet in alterReceivedProtobuf()
+    // The route was already updated by updateRoute(), which the Router calls before dispatch
     return false; // let it be handled by RoutingModule
 }
 
-void TraceRouteModule::alterReceivedProtobuf(meshtastic_MeshPacket &p, meshtastic_RouteDiscovery *r)
+void TraceRouteModule::updateRoute(meshtastic_MeshPacket &p, meshtastic_RouteDiscovery *r)
 {
     const meshtastic_Data &incoming = p.decoded;
 
@@ -347,18 +347,19 @@ void TraceRouteModule::maybeSetNextHop(NodeNum target, uint8_t nextHopByte)
 #endif
 }
 
-void TraceRouteModule::processUpgradedPacket(const meshtastic_MeshPacket &mp)
+void TraceRouteModule::updateRoute(meshtastic_MeshPacket &p)
 {
-    if (mp.which_payload_variant != meshtastic_MeshPacket_decoded_tag || mp.decoded.portnum != meshtastic_PortNum_TRACEROUTE_APP)
+    if (p.which_payload_variant != meshtastic_MeshPacket_decoded_tag || p.decoded.portnum != meshtastic_PortNum_TRACEROUTE_APP)
         return;
 
     meshtastic_RouteDiscovery decoded = meshtastic_RouteDiscovery_init_zero;
-    if (!pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, &meshtastic_RouteDiscovery_msg, &decoded))
+    if (!pb_decode_from_bytes(p.decoded.payload.bytes, p.decoded.payload.size, &meshtastic_RouteDiscovery_msg, &decoded)) {
+        LOG_ERROR("Error decoding traceroute");
         return;
+    }
 
-    handleReceivedProtobuf(mp, &decoded);
-    // Intentionally modify the packet in-place so downstream relays see our updates.
-    alterReceivedProtobuf(const_cast<meshtastic_MeshPacket &>(mp), &decoded);
+    // Intentionally modify the packet in place so downstream relays see our updates.
+    updateRoute(p, &decoded);
 }
 
 void TraceRouteModule::insertUnknownHops(meshtastic_MeshPacket &p, meshtastic_RouteDiscovery *r, bool isTowardsDestination)

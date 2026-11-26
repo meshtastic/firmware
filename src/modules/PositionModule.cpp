@@ -17,7 +17,7 @@
 #include "gps/RTC.h"
 #include "main.h"
 #include "meshUtils.h"
-#include "meshtastic/atak.pb.h"
+#include "modules/AtakPluginModule.h"
 #include "sleep.h"
 #include "target_specific.h"
 #include <Throttle.h>
@@ -84,11 +84,8 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
 #endif
 
             nodeDB->setLocalPosition(p, true);
-            // Keep `precision` current for this channel even on this early-return path -
-            // alterReceivedProtobuf() runs right after handleReceived() on this same packet
-            // (MeshModule::callModules()) and depends on it to truncate correctly, whether this
-            // packet is our own already-truncated broadcast (re-truncating is a no-op) or a
-            // phone-submitted one that still needs it applied.
+            // Keep `precision` current for this channel on this early-return path too, as allocReply() reads it.
+            // The on-wire truncation of our own positions is applied in Router::send().
             precision = getPositionPrecisionForChannel(mp.channel);
             return false;
         } else {
@@ -126,20 +123,6 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
 #endif
 
     return false; // Let others look at this message also if they want
-}
-
-void PositionModule::alterReceivedProtobuf(meshtastic_MeshPacket &mp, meshtastic_Position *p)
-{
-    // Phone position packets need to be truncated to the channel precision
-    if (isFromUs(&mp)) {
-        if (precision == 0)
-            LOG_DEBUG("Strip phone position: channel precision 0");
-        else if (precision < 32)
-            LOG_DEBUG("Truncate phone position to channel precision %i", precision);
-        applyPositionPrecision(*p, precision);
-        mp.decoded.payload.size =
-            pb_encode_to_bytes(mp.decoded.payload.bytes, sizeof(mp.decoded.payload.bytes), &meshtastic_Position_msg, p);
-    }
 }
 
 void PositionModule::trySetRtc(meshtastic_Position p, bool isLocal, bool forceUpdate)
@@ -235,20 +218,7 @@ meshtastic_MeshPacket *PositionModule::allocPositionPacket(uint32_t atPrecision)
         p.location_source = localPosition.location_source;
     }
 
-    if (pos_flags & meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE) {
-        if (pos_flags & meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE_MSL) {
-            p.altitude = localPosition.altitude;
-            p.has_altitude = true;
-        } else {
-            p.altitude_hae = localPosition.altitude_hae;
-            p.has_altitude_hae = true;
-        }
-
-        if (pos_flags & meshtastic_Config_PositionConfig_PositionFlags_GEOIDAL_SEPARATION) {
-            p.altitude_geoidal_separation = localPosition.altitude_geoidal_separation;
-            p.has_altitude_geoidal_separation = true;
-        }
-    }
+    copyAltitudeFields(p, localPosition, pos_flags);
 
     if (pos_flags & meshtastic_Config_PositionConfig_PositionFlags_DOP) {
         if (pos_flags & meshtastic_Config_PositionConfig_PositionFlags_HVDOP) {
@@ -331,27 +301,14 @@ meshtastic_MeshPacket *PositionModule::allocAtakPli()
     meshtastic_MeshPacket *mp = allocDataPacket();
     if (!mp)
         return nullptr;
-    mp->decoded.portnum = meshtastic_PortNum_ATAK_PLUGIN_V2;
 
     meshtastic_TAKPacketV2 takPacket = meshtastic_TAKPacketV2_init_zero;
     takPacket.cot_type_id = meshtastic_CotType_CotType_a_f_G_U_C;
-
-    // Use TAK config for team/role if configured, otherwise use defaults (Cyan/TeamMember)
-    if (moduleConfig.has_tak && moduleConfig.tak.team != meshtastic_Team_Unspecifed_Color) {
-        takPacket.team = moduleConfig.tak.team;
-    } else {
-        takPacket.team = meshtastic_Team_Cyan;
-    }
-
-    if (moduleConfig.has_tak && moduleConfig.tak.role != meshtastic_MemberRole_Unspecifed) {
-        takPacket.role = moduleConfig.tak.role;
-    } else {
-        takPacket.role = meshtastic_MemberRole_TeamMember;
-    }
+    AtakPluginModule::fillSender(takPacket);
     takPacket.latitude_i = localPosition.latitude_i;
     takPacket.longitude_i = localPosition.longitude_i;
     takPacket.altitude = localPosition.altitude_hae;
-    takPacket.speed = localPosition.ground_speed;
+    takPacket.speed = groundSpeedKmhToCmPerSec(localPosition.ground_speed);
     // ground_track is stored as degrees * 1e5, course field expects degrees * 100
     int32_t course = localPosition.ground_track / 1000;
     if (course < 0)
@@ -372,35 +329,19 @@ meshtastic_MeshPacket *PositionModule::allocAtakPli()
         takPacket.alt_src = meshtastic_GeoPointSource_GeoPointSource_GPS;
     }
 
-    // Callsign - stored as plain string (no compression, apps handle that)
-    strncpy(takPacket.callsign, owner.long_name, sizeof(takPacket.callsign) - 1);
-    takPacket.callsign[sizeof(takPacket.callsign) - 1] = '\0';
     strncpy(takPacket.device_callsign, owner.long_name, sizeof(takPacket.device_callsign) - 1);
     takPacket.device_callsign[sizeof(takPacket.device_callsign) - 1] = '\0';
 
     // CoT uid - ATAK drops PLI entities with empty uid; derive stable "!<nodenum>" id.
     snprintf(takPacket.uid, sizeof(takPacket.uid), "!%08x", nodeDB->getNodeNum());
 
-    // Encode TAKPacketV2 protobuf, leaving room for flags byte prefix
-    uint8_t protobuf_bytes[sizeof(mp->decoded.payload.bytes) - 1];
-    size_t proto_size = pb_encode_to_bytes(protobuf_bytes, sizeof(protobuf_bytes), &meshtastic_TAKPacketV2_msg, &takPacket);
-
-    if (proto_size == 0) {
+    if (!AtakPluginModule::setPayload(mp, takPacket)) {
         LOG_ERROR("TAK V2 PLI packet encode failed");
         packetPool.release(mp);
         return nullptr;
     }
 
-    // Wire format: [flags byte][protobuf bytes]
-    // Flags byte 0xFF is a reserved sentinel meaning the remainder is an
-    // uncompressed raw protobuf payload (that is, no zstd dictionary ID is
-    // encoded in the flags byte). Decoders must check for this sentinel before
-    // applying any dictionary-ID masking/interpretation.
-    mp->decoded.payload.bytes[0] = 0xFF;
-    memcpy(mp->decoded.payload.bytes + 1, protobuf_bytes, proto_size);
-    mp->decoded.payload.size = proto_size + 1;
-
-    LOG_TRACE("TAK V2 PLI payload: %zu bytes (1 flags + %zu protobuf)", mp->decoded.payload.size, proto_size);
+    LOG_TRACE("TAK V2 PLI payload: %u bytes", mp->decoded.payload.size);
     return mp;
 }
 
@@ -521,6 +462,23 @@ bool PositionModule::positionUnchangedSinceLastSend(const meshtastic_PositionLit
     return positionWithinPrecisionCell(selfPos.latitude_i, selfPos.longitude_i, lastGpsLatitude, lastGpsLongitude, precisionBits);
 }
 
+void PositionModule::copyAltitudeFields(meshtastic_Position &to, const meshtastic_Position &from, uint32_t flags)
+{
+    if (!(flags & meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE))
+        return;
+    if (flags & meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE_MSL) {
+        to.altitude = from.altitude;
+        to.has_altitude = from.has_altitude;
+    } else {
+        to.altitude_hae = from.altitude_hae;
+        to.has_altitude_hae = from.has_altitude_hae;
+    }
+    if (flags & meshtastic_Config_PositionConfig_PositionFlags_GEOIDAL_SEPARATION) {
+        to.altitude_geoidal_separation = from.altitude_geoidal_separation;
+        to.has_altitude_geoidal_separation = from.has_altitude_geoidal_separation;
+    }
+}
+
 bool PositionModule::positionWithinPrecisionCell(int32_t aLat, int32_t aLon, int32_t bLat, int32_t bLon, uint32_t precision)
 {
     if (precision == 0 || precision >= 32)
@@ -543,6 +501,13 @@ uint32_t PositionModule::effectiveBroadcastIntervalMs(uint32_t configuredInterva
     if (stationary && stationaryFloorMs > configuredIntervalMs)
         return stationaryFloorMs;
     return configuredIntervalMs;
+}
+
+uint32_t PositionModule::groundSpeedKmhToCmPerSec(uint32_t kmh)
+{
+    // 1 km/h = 100000 cm / 3600 s = 250/9 cm/s
+    const uint64_t cmPerSec = (static_cast<uint64_t>(kmh) * 250 + 4) / 9;
+    return cmPerSec > UINT32_MAX ? UINT32_MAX : static_cast<uint32_t>(cmPerSec);
 }
 
 int32_t PositionModule::runOnce()

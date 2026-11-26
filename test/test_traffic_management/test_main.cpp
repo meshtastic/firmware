@@ -167,7 +167,6 @@ class MockRouter : public Router
 class TrafficManagementModuleTestShim : public TrafficManagementModule
 {
   public:
-    using TrafficManagementModule::alterReceived;
     using TrafficManagementModule::dropNodeInfoCacheForTest;
     using TrafficManagementModule::flushCache;
     using TrafficManagementModule::handleReceived;
@@ -3138,34 +3137,10 @@ static void test_tm_unknownRole_noUserBit_appliesFullInterval(void)
     TEST_ASSERT_EQUAL_UINT32(1, stats.position_dedup_drops);
 }
 
-/**
- * Verify a relayed position broadcast more precise than the channel setting passes through
- * handleReceived/alterReceived unmodified. Relays must forward position payloads byte-for-byte
- * so the sender's XEdDSA signature still verifies downstream.
- */
-static void test_tm_relayedPosition_payloadUnmodified(void)
-{
-    installWellKnownPrimaryChannelWithPrecision(13);
-    mockNodeDB->setCachedNode(kRemoteNode);
-
-    TrafficManagementModuleTestShim module;
-
-    meshtastic_MeshPacket packet = makePositionPacketWithPrecision(kRemoteNode, 374221234, -1220845678, 32);
-    packet.hop_start = 3;
-    packet.hop_limit = 2;
-    const meshtastic_Data_payload_t original = packet.decoded.payload;
-
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(module.handleReceived(packet)));
-    module.alterReceived(packet);
-
-    TEST_ASSERT_EQUAL_UINT32(original.size, packet.decoded.payload.size);
-    TEST_ASSERT_EQUAL_MEMORY(original.bytes, packet.decoded.payload.bytes, original.size);
-}
-
 // ---------------------------------------------------------------------------
 // Fuzz - crafted-nodenum blitz of the unified cache
 // ---------------------------------------------------------------------------
-// Floods handleReceived/alterReceived with crafted packets over a tiny node pool so the fixed-size
+// Floods handleReceived with crafted packets over a tiny node pool so the fixed-size
 // cache churns hard while the virtual clock sweeps the rate/unknown/position windows; no crash, counters bounded.
 static constexpr uint64_t FUZZ_SEED = 0x00D07E5701ULL;
 
@@ -3234,8 +3209,6 @@ static void test_tm_fuzz_nodenum_blitz(void)
         }
 
         (void)module.handleReceived(p);
-        if (rngRange(3) == 0)
-            module.alterReceived(p);
 
         // Advance the virtual clock so rate / unknown / position windows open and close under churn.
         if (rngRange(16) == 0)
@@ -3368,7 +3341,6 @@ TM_TEST_ENTRY void setup()
     RUN_TEST(test_tm_specialRole_evictedLastUnderPressure);
     RUN_TEST(test_tm_trackerRole_doesNotLengthenShorterOperatorInterval);
     RUN_TEST(test_tm_lostAndFoundRole_capsDedupAtFifteenMinutes);
-    RUN_TEST(test_tm_relayedPosition_payloadUnmodified);
     RUN_TEST(test_tm_unknownRole_noDbEntry_appliesFullInterval);
     RUN_TEST(test_tm_unknownRole_noUserBit_appliesFullInterval);
     RUN_TEST(test_tm_fuzz_nodenum_blitz);

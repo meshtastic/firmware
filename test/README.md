@@ -90,10 +90,10 @@ tail -15 /tmp/test_out.txt
 These wrappers are handy when local host dependencies are missing or when you want repeatable commands.
 
 ```bash
-# Run native tests in Docker (recommended on macOS / non-Linux hosts)
+# Run native tests in Docker through bin/run-tests.sh (recommended on macOS / non-Linux hosts)
 ./bin/test-native-docker.sh
 
-# Pass normal PlatformIO test args through to Dockerized test run
+# Pass run-tests.sh args through (-f filters, --quiet prints only the RESULT line)
 ./bin/test-native-docker.sh -f test_your_module
 
 # Force Docker image rebuild (after dependency changes)
@@ -115,7 +115,7 @@ pio run -e native && ./bin/test-simulator.sh
 Notes:
 
 - The repository script name is `./bin/test-simulator.sh` (there is no `test-native-simulator.sh`).
-- `./bin/test-native-docker.sh` is the closest match to CI behavior for native tests and avoids host package setup.
+- `./bin/test-native-docker.sh` is the closest match to CI behavior for native tests and avoids host package setup. Its verdict is the `RESULT:` line and exit code from `bin/run-tests.sh`.
 
 ### System Dependencies (Ubuntu/Debian)
 

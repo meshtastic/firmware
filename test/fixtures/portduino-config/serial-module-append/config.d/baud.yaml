@@ -1,0 +1,3 @@
+# A SerialModule section with no Path: baud is a module setting, so this key is ignored.
+SerialModule:
+  Baud: 9600
