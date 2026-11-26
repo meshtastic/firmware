@@ -1,5 +1,6 @@
 #include "LSM6DS3Sensor.h"
 #include "NodeDB.h"
+#include "Throttle.h"
 
 #if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && __has_include(<Adafruit_LSM6DS3TRC.h>)
 
@@ -31,11 +32,30 @@ int32_t LSM6DS3Sensor::runOnce()
             sampleSteps(x, y, z);
     }
 #endif
+#if HAS_SCREEN_AUTO_ROTATE
+    static uint32_t lastOrientationRead = 0;
+    if (Throttle::hasElapsed(lastOrientationRead, 100)) {
+        lastOrientationRead = millis();
+        float x, y, z;
+        if (sensor.readAcceleration(x, y, z))
+            followOrientation(x, y, z);
+    }
+    // The orientation keeps its 100 ms samples: a shake wakes the screen at most every 500 ms instead of pausing them
+    static uint32_t lastShakeWake = 0;
+    static bool shakeWoke = false;
+    if (sensor.shake() && (!shakeWoke || Throttle::hasElapsed(lastShakeWake, 500))) {
+        wakeScreen();
+        lastShakeWake = millis();
+        shakeWoke = true;
+    }
+    return MOTION_SENSOR_CHECK_INTERVAL_MS;
+#else
     if (sensor.shake()) {
         wakeScreen();
         return 500;
     }
     return MOTION_SENSOR_CHECK_INTERVAL_MS;
+#endif
 }
 
 #endif

@@ -46,8 +46,8 @@ bool SX126xInterface::init()
 // means this workaround is not necessary.
 #ifdef SX126X_ANT_SW // Perhaps add RADIOLIB_NC check, and beforehand define as such if it is undefined, but it is not commonly
                      // used and not part of the 'default' set of pin definitions.
-    digitalWrite(SX126X_ANT_SW, HIGH);
     pinMode(SX126X_ANT_SW, OUTPUT);
+    digitalWrite(SX126X_ANT_SW, HIGH);
 #endif
 
 #ifdef SX126X_POWER_EN // Perhaps add RADIOLIB_NC check, and beforehand define as such if it is undefined, but it is not commonly
@@ -79,8 +79,8 @@ bool SX126xInterface::init()
     else
         tcxoVoltage = 0;
     if (portduino_config.lora_sx126x_ant_sw_pin.pin != RADIOLIB_NC) {
-        digitalWrite(portduino_config.lora_sx126x_ant_sw_pin.pin, HIGH);
         pinMode(portduino_config.lora_sx126x_ant_sw_pin.pin, OUTPUT);
+        digitalWrite(portduino_config.lora_sx126x_ant_sw_pin.pin, HIGH);
     }
     // The knob here is the YAML key, not the variant define the other branch reports.
     if (tcxoVoltage == 0.0)
@@ -217,6 +217,7 @@ bool SX126xInterface::reinitChip()
         LOG_DEBUG_RADIO("Use MCU pin %i as RXEN, pin %i as TXEN for RF switching", portduino_config.lora_rxen_pin.pin,
                         portduino_config.lora_txen_pin.pin);
         lora.setRfSwitchPins(portduino_config.lora_rxen_pin.pin, portduino_config.lora_txen_pin.pin);
+        noteRfSwitchPins(portduino_config.lora_rxen_pin.pin, portduino_config.lora_txen_pin.pin);
     }
 #else
 #ifndef SX126X_RXEN
@@ -230,6 +231,7 @@ bool SX126xInterface::reinitChip()
     if (res == RADIOLIB_ERR_NONE) {
         LOG_DEBUG_RADIO("Use MCU pin %i as RXEN, pin %i as TXEN for RF switching", SX126X_RXEN, SX126X_TXEN);
         lora.setRfSwitchPins(SX126X_RXEN, SX126X_TXEN);
+        noteRfSwitchPins(SX126X_RXEN, SX126X_TXEN);
     }
 #endif
     if (config.lora.sx126x_rx_boosted_gain) {

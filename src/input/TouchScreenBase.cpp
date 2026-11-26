@@ -76,6 +76,7 @@ void TouchScreenBase::resetTouchState()
     _state = TOUCH_EVENT_CLEARED;
     _action = TOUCH_ACTION_NONE;
     _touchedOld = false;
+    _ignoreContact = false;
     _tapped = false;
     _longPressSuppressed = false;
 }
@@ -121,6 +122,11 @@ int32_t TouchScreenBase::runOnce()
             _longPressSuppressed = false;
             _first_x = x;
             _first_y = y;
+        } else if (_ignoreContact) {
+            _state = TOUCH_EVENT_CLEARED;
+            _ignoreContact = false;
+            _pressDownTimed = false;
+            _tapped = false;
         } else {
             _state = TOUCH_EVENT_CLEARED;
             uint32_t duration = nowMs - _pressStartMs;
@@ -213,8 +219,8 @@ int32_t TouchScreenBase::runOnce()
     const bool longPressSuppressed = _longPressSuppressed && !Throttle::deadlinePassed(_longPressSuppressUntilMs);
     uint32_t releasedMs;
     // A release edge means the finger is up, though the grace window still counts it as held: the release decides
-    if (allowLongPress && touched && !longPressSuppressed && Throttle::hasElapsed(_pressStartMs, TIME_LONG_PRESS) &&
-        !timedRelease(nowMs, releasedMs)) {
+    if (allowLongPress && touched && !_ignoreContact && !longPressSuppressed &&
+        Throttle::hasElapsed(_pressStartMs, TIME_LONG_PRESS) && !timedRelease(nowMs, releasedMs)) {
         // A finger held past the window re-reports LONG_PRESS once per window, as before.
         _longPressSuppressed = true;
         _longPressSuppressUntilMs = nowMs + LONG_PRESS_REPEAT_SUPPRESS_MS;

@@ -1,3 +1,9 @@
+// Stream framing parser: resync, length limits and partial buffers.
+//
+// Why: garbage or a split frame must not stall the stream or deliver a truncated payload.
+// Regression guarded: a leading-garbage burst not resyncing, or an over-length header
+// accepted.
+
 #include "MeshTypes.h"
 #include "TestUtil.h"
 #include "configuration.h"

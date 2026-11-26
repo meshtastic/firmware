@@ -11,6 +11,7 @@
 #include "TestUtil.h"
 #include "UptimeClock.h"
 #include "airtime.h"
+#include "mesh/Router.h"
 #include <cstdint>
 #include <cstdio>
 #include <unity.h>
@@ -1088,6 +1089,29 @@ void test_isTxAllowedAirUtil_blocks_at_half_the_duty_cycle()
     TEST_ASSERT_FALSE_MESSAGE(a.isTxAllowedAirUtil(), "70% of the allowance is over the polite half");
 }
 
+// The polite gate stops at half the duty cycle; Router::send()'s hard gate stops at the whole of
+// it. At 70% of the allowance the polite gate blocks while the router still admits, which is the
+// band a change to either threshold would collapse.
+void test_router_send_gate_uses_the_whole_duty_cycle()
+{
+    Time::setTestMillis(0);
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_EU_866;
+    config.lora.override_duty_cycle = false;
+    config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
+    initRegion();
+    const float duty = getEffectiveDutyCycle();
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 2.5f, duty);
+
+    AirTime a;
+    a.logAirtime(TX_LOG, (uint32_t)(MS_IN_HOUR * duty / 100.0f * 0.70f));
+
+    TEST_ASSERT_FALSE_MESSAGE(a.isTxAllowedAirUtil(), "the polite gate blocks at 70% of the allowance");
+    TEST_ASSERT_TRUE_MESSAGE(Router::airUtilAllowsTx(a.utilizationTXPercent(), duty),
+                             "the hard gate still admits at 70% of the allowance");
+    TEST_ASSERT_TRUE_MESSAGE(Router::airUtilAllowsTx(duty, duty), "exactly the duty cycle is admitted");
+    TEST_ASSERT_FALSE_MESSAGE(Router::airUtilAllowsTx(duty + 0.01f, duty), "over the duty cycle is refused");
+}
+
 // getEffectiveDutyCycle() special-cases EU_866 by role. Every other region -
 // including EU_868, one digit away - takes the generic myRegion->dutyCycle path.
 void test_effective_duty_cycle_special_case_is_eu_866_only()
@@ -1350,6 +1374,7 @@ void setup()
     RUN_TEST(test_isTxAllowedAirUtil_allows_when_override_is_set);
     RUN_TEST(test_isTxAllowedAirUtil_allows_when_the_region_is_unlimited);
     RUN_TEST(test_isTxAllowedAirUtil_blocks_at_half_the_duty_cycle);
+    RUN_TEST(test_router_send_gate_uses_the_whole_duty_cycle);
     RUN_TEST(test_effective_duty_cycle_special_case_is_eu_866_only);
     RUN_TEST(test_getSilentMinutes_returns_zero_when_already_under_the_limit);
     RUN_TEST(test_getSilentMinutes_returns_a_full_hour_when_nothing_ages_out);

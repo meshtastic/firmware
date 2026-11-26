@@ -1,18 +1,18 @@
 #include "Arduino.h"
 #include "configuration.h"
 
-#ifdef MESHTASTIC_INCLUDE_INKHUD
 #include "NodeDB.h"
 #include "concurrency/Periodic.h"
-#include "graphics/niche/Drivers/Backlight/LatchingBacklight.h"
-#include "graphics/niche/InkHUD/InkHUD.h"
 #include "modules/ExternalNotificationModule.h"
 #include <Adafruit_DRV2605.h>
 #include <Wire.h>
+#ifdef MESHTASTIC_INCLUDE_INKHUD
+#include "graphics/niche/Drivers/Backlight/LatchingBacklight.h"
+#include "graphics/niche/InkHUD/InkHUD.h"
+#endif
 
 static Adafruit_DRV2605 haptic;
 static bool hapticReady = false;
-static bool backlightsEnabled = false;
 static concurrency::Periodic *touchFeedbackTimer = nullptr;
 
 static int32_t stopTouchFeedback()
@@ -61,6 +61,9 @@ bool tDeckProIsV11()
     return v11;
 }
 
+#ifdef MESHTASTIC_INCLUDE_INKHUD
+static bool backlightsEnabled = false;
+
 void tDeckProUpdateBacklights(bool sleeping)
 {
     const bool on = backlightsEnabled && !sleeping && !NicheGraphics::InkHUD::InkHUD::getInstance()->isTouchTimedOut();
@@ -81,6 +84,7 @@ void tDeckProToggleBacklights()
     backlightsEnabled = !backlightsEnabled;
     tDeckProUpdateBacklights();
 }
+#endif
 
 void tDeckProSetVibration(int pin, bool on)
 {
@@ -88,10 +92,12 @@ void tDeckProSetVibration(int pin, bool on)
         touchFeedbackTimer->disable();
     if (tDeckProIsV11()) {
         if (hapticReady) {
-            if (on) {
+            // The nag cycle runs with vibration alerts off too; only start the haptic when one is on
+            if (on &&
+                (moduleConfig.external_notification.alert_message_vibra || moduleConfig.external_notification.alert_bell_vibra)) {
                 haptic.setWaveform(0, 16);
                 haptic.go();
-            } else
+            } else if (!on)
                 haptic.stop();
         }
         if (pin == PIN_VIBRATION)
@@ -101,6 +107,7 @@ void tDeckProSetVibration(int pin, bool on)
         digitalWrite(pin, on);
 }
 
+#ifdef MESHTASTIC_INCLUDE_INKHUD
 void tDeckProTouchFeedback()
 {
     const auto &settings = moduleConfig.external_notification;

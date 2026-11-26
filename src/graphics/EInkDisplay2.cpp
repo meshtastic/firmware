@@ -111,6 +111,11 @@ void EInkDisplay::endUpdate()
     // Boards/panels that define EINK_NOT_HIBERNATE intentionally skip this step.
     // Skipping hibernate() can help avoid panel-specific wake/refresh or ghosting issues,
     // but it typically trades lower power savings for that compatibility.
+#ifdef EINK_SKIP_HIBERNATE
+    // The same choice made at runtime, for a build that runs more than one board revision
+    if (EINK_SKIP_HIBERNATE)
+        return;
+#endif
     adafruitDisplay->hibernate();
 #endif
 }

@@ -601,6 +601,27 @@ static void test_broadcaster_rebuildCache_producesNonEmptyPayload(void)
     TEST_ASSERT_GREATER_THAN_MESSAGE(0, (int)bcast.payloadCacheSize, "rebuildCache must produce a non-empty payload");
 }
 
+// A second rebuild on an unchanged config must reproduce the first payload byte-for-byte.
+// Comparing sizes only would pass a rebuild that changed content but not length.
+static void test_broadcaster_rebuildCache_idempotent(void)
+{
+    resetConfig();
+    moduleConfig.has_mesh_beacon = true;
+    strncpy(moduleConfig.mesh_beacon.broadcast_message, "idem", sizeof(moduleConfig.mesh_beacon.broadcast_message) - 1);
+
+    MeshBeaconBroadcastModuleTestShim bcast;
+    bcast.rebuildCache();
+    const pb_size_t firstSize = bcast.payloadCacheSize;
+    uint8_t first[sizeof(bcast.payloadCache)];
+    memcpy(first, bcast.payloadCache, firstSize);
+
+    bcast.rebuildCache();
+
+    TEST_ASSERT_FALSE(bcast.payloadCacheDirty);
+    TEST_ASSERT_EQUAL(firstSize, bcast.payloadCacheSize);
+    TEST_ASSERT_EQUAL_MEMORY(first, bcast.payloadCache, firstSize);
+}
+
 /**
  * Verify the cached bytes round-trip through pb_decode back to the original message string.
  * Important to catch any protobuf field-tag or wire-type regression in the encoding path.
@@ -2460,6 +2481,7 @@ BEACON_TEST_ENTRY void setup()
     printf("\n=== Broadcaster payload cache ===\n");
 
     RUN_TEST(test_broadcaster_rebuildCache_producesNonEmptyPayload);
+    RUN_TEST(test_broadcaster_rebuildCache_idempotent);
     RUN_TEST(test_broadcaster_rebuildCache_payloadDecodesCorrectly);
     RUN_TEST(test_broadcaster_rebuildCache_offerFieldsEncoded);
     RUN_TEST(test_broadcaster_invalidateCache_setsDirtyFlag);
