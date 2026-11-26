@@ -10,17 +10,14 @@
 #include "ProtobufModule.h"
 #include "Router.h"
 #include "SfppFrame.h"
+#include "SfppStore.h"
 #include "SinglePortModule.h"
 #include "SketchIndex.h"
 #include "SketchWire.h"
 #include "mesh/generated/meshtastic/storeforward.pb.h"
-#include "sqlite3.h"
 
 #include <deque>
 #include <string>
-
-#define SFPP_HASH_SIZE 16
-#define SFPP_SHORT_HASH_SIZE 8
 
 /**
  * Store and forward ++ module (content model).
@@ -35,25 +32,6 @@
  */
 class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForwardPlusPlus>, private concurrency::OSThread
 {
-    struct stored_object {
-        uint32_t to;
-        uint32_t from;
-        uint32_t id;
-        uint32_t rx_time = 0;
-        uint8_t time_basis = 0;  // 0 epoch, 1 uptime seconds, 2 age at the restart that stamped it
-        uint32_t boot_id = 0;    // the boot a basis-1 stamp belongs to
-        uint32_t age_margin = 0; // extra uncertainty in seconds
-        ChannelHash channel_hash;
-        uint8_t encrypted_bytes[256] = {0};
-        size_t encrypted_len;
-        uint8_t message_hash[SFPP_HASH_SIZE] = {0};
-        size_t message_hash_len = 0;
-        uint8_t root_hash[SFPP_HASH_SIZE] = {0};
-        size_t root_hash_len = 0;
-        std::string payload;
-        bool validObject = true; // set this false when an object calculation fails, etc.
-    };
-
   public:
 #ifdef PIO_UNIT_TESTING
     void testPromoteScratchMatches(const uint8_t *root, uint32_t bucket, std::vector<pinsketch::Element> &ids)
@@ -63,13 +41,12 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
 #endif
 
     // Stamped into PRAGMA user_version. A store with any other value is moved aside, never migrated.
-    static constexpr int kSchemaVersion = 5;
+    static constexpr int kSchemaVersion = SfppStore::kSchemaVersion;
 
     /** Constructor
      *
      */
     StoreForwardPlusPlusModule();
-    ~StoreForwardPlusPlusModule();
 
     /*
       -Override the wantPacket method.
@@ -103,78 +80,18 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     bool buildBucketSummary(const uint8_t *root_hash, size_t root_hash_len, uint32_t bucket, sfppsr::BucketSummary &out);
 
   private:
-    sqlite3 *ppDb;
-    sqlite3_stmt *canon_insert_stmt;
-    sqlite3_stmt *scratch_insert_stmt;
-    sqlite3_stmt *identityCanonStmt;
-    sqlite3_stmt *identityScratchStmt;
-    sqlite3_stmt *replaceCanonCopyStmt;
-    sqlite3_stmt *replaceScratchCopyStmt;
-    sqlite3_stmt *checkDupMessageHash;
-    sqlite3_stmt *checkScratch;
-    sqlite3_stmt *removeScratch;
-    sqlite3_stmt *updatePayloadStmt;
-    sqlite3_stmt *payloadForHashStmt;
-    sqlite3_stmt *getPayloadFromScratchStmt;
-    sqlite3_stmt *fromScratchStmt;
-    sqlite3_stmt *fromScratchByHashStmt;
-    sqlite3_stmt *getHashFromRootStmt;
-    sqlite3_stmt *addRootToMappingsStmt;
-    sqlite3_stmt *getFullRootHashStmt;
-    sqlite3_stmt *getScratchCountStmt;
-    sqlite3_stmt *bucketSummaryStmt;
-    sqlite3_stmt *bucketIdsStmt;
-    sqlite3_stmt *distinctBucketsStmt;
-    sqlite3_stmt *getObjectByShortIdStmt;
-    sqlite3_stmt *deleteCanonStmt;
-    sqlite3_stmt *unindexedObjectsStmt;
-    sqlite3_stmt *setObjectIndexStmt;
-    sqlite3_stmt *legacyHistoryStmt;
-    sqlite3_stmt *timeStateReadStmt;
-    sqlite3_stmt *timeStateWriteStmt;
-    sqlite3_stmt *restampChannelStmt;
-    sqlite3_stmt *restampScratchStmt;
-    sqlite3_stmt *restampDirectStmt;
-    sqlite3_stmt *updateChannelTimeStmt;
-    sqlite3_stmt *updateScratchTimeStmt;
-    sqlite3_stmt *updateDirectTimeStmt;
-    sqlite3_stmt *canonTimeRowsStmt;
-    sqlite3_stmt *scratchTimeRowsStmt;
-    sqlite3_stmt *deleteCanonRowidStmt;
-    sqlite3_stmt *deleteScratchRowidStmt;
+    using stored_object = SfppStore::stored_object;
+    using RowTime = SfppStore::RowTime;
+    using RowAge = SfppStore::RowAge;
+    using IdentityHit = SfppStore::IdentityHit;
 
-    // Time model. A row carries its stamp, its basis and (for a boot stamp) the boot that wrote it.
-    // Everything that ages a row goes through rowAge() so the bases are never compared raw.
-    struct RowTime {
-        uint32_t stamp = 0;
-        uint8_t basis = 0;
-        uint32_t boot_id = 0;
-        uint32_t margin = 0;
-    };
-    struct RowAge {
-        uint32_t age = 0;
-        uint32_t margin = 0;
-        bool has_epoch = false;
-        uint32_t epoch = 0;
-        uint32_t estimate_epoch = 0;
-    };
-    uint32_t bootId = 0;
-    uint32_t bootEpoch = 0;
-    uint32_t prevBootId = 0;
-    uint32_t prevLastUptime = 0;
-    uint32_t prevLastEpoch = 0;
-    uint32_t lastSeenUptime = 0;
-    uint32_t lastSeenEpoch = 0;
+    SfppStore store_;
 
-    void openStore();
-    void initTimeState();
-    void writeTimeState();
     void updateTimeState();
     uint32_t estimateEpochNow() const;
     RowTime nowTime() const;
     bool timeFromAge(uint32_t heardAgo, RowTime &out) const;
     RowAge rowAge(const RowTime &t) const;
-    void restampPreviousBoot();
     void healBootRelativeTimestamps();
     void trimCanonByRetention(uint8_t *root_hash, size_t root_hash_len);
     bool linkIsFresh(const stored_object &lo) const;
@@ -204,10 +121,6 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
 
     // The module's single send boundary; EnumListenOnly drops every packet here.
     ErrorCode sendSfppPacket(meshtastic_MeshPacket *p, RxSource src, bool ccToPhone);
-
-    // Derives the short ID and checksum contribution for any canonical row that predates those
-    // columns. Bounded by the row count, and a no-op on every run after the first.
-    void backfillSetIndex();
 
     // The short IDs stored in one bucket, for the enumeration list and for a windowed object lookup.
     bool collectBucketIds(const uint8_t *root_hash, size_t root_hash_len, uint32_t bucket, std::vector<pinsketch::Element> &out);
@@ -309,11 +222,6 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     // Adds an incoming text message to the scratch database
     bool addToScratch(stored_object &, bool senderCopy = false);
 
-    // One object per (root, from, id, to); a sender's copy may replace a relay's.
-    struct IdentityHit {
-        uint8_t hash[SFPP_HASH_SIZE];
-        bool canon;
-    };
     bool findIdentityCopy(uint32_t to, uint32_t from, uint32_t id, const uint8_t *root_hash, IdentityHit &hit);
     bool replaceIdentityCopy(const IdentityHit &hit, const uint8_t *hash, const uint8_t *cipher, size_t cipherLen);
 
@@ -346,11 +254,6 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     uint32_t getScratchCount(uint8_t *, size_t);
 
     void pruneScratchQueue();
-
-    // Once we have multiple chain types, we can extend this
-    enum chain_types {
-        channel_chain = 0,
-    };
 
     uint32_t rebroadcastTimeout = 3600; // Messages older than this (in seconds) will not be rebroadcast
     bool doing_split_send = false;

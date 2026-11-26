@@ -431,10 +431,10 @@ void StoreForwardPlusPlusModule::repairPromotions()
     std::vector<pinsketch::Element> ids;
     for (const auto &promoted : enumPromoted) {
         if (isInDB(promoted.hash, SFPP_HASH_SIZE)) {
-            sqlite3_reset(deleteCanonStmt);
-            sqlite3_bind_blob(deleteCanonStmt, 1, promoted.hash, SFPP_HASH_SIZE, SQLITE_STATIC);
-            sqlite3_step(deleteCanonStmt);
-            sqlite3_reset(deleteCanonStmt);
+            sqlite3_reset(store_.deleteCanonStmt);
+            sqlite3_bind_blob(store_.deleteCanonStmt, 1, promoted.hash, SFPP_HASH_SIZE, SQLITE_STATIC);
+            sqlite3_step(store_.deleteCanonStmt);
+            sqlite3_reset(store_.deleteCanonStmt);
         }
         ids.push_back(promoted.id);
     }
@@ -1002,13 +1002,13 @@ bool StoreForwardPlusPlusModule::takeHeardListing(const uint8_t *root_hash, uint
 
 bool StoreForwardPlusPlusModule::bucketHoldsShortId(const uint8_t *root_hash, uint32_t bucket, pinsketch::Element id)
 {
-    sqlite3_reset(getObjectByShortIdStmt);
-    sqlite3_bind_int(getObjectByShortIdStmt, 1, SFPP_HASH_SIZE);
-    sqlite3_bind_blob(getObjectByShortIdStmt, 2, root_hash, SFPP_HASH_SIZE, SQLITE_STATIC);
-    sqlite3_bind_int(getObjectByShortIdStmt, 3, (int)bucket);
-    sqlite3_bind_int64(getObjectByShortIdStmt, 4, (sqlite3_int64)id);
-    const bool held = sqlite3_step(getObjectByShortIdStmt) == SQLITE_ROW;
-    sqlite3_reset(getObjectByShortIdStmt);
+    sqlite3_reset(store_.getObjectByShortIdStmt);
+    sqlite3_bind_int(store_.getObjectByShortIdStmt, 1, SFPP_HASH_SIZE);
+    sqlite3_bind_blob(store_.getObjectByShortIdStmt, 2, root_hash, SFPP_HASH_SIZE, SQLITE_STATIC);
+    sqlite3_bind_int(store_.getObjectByShortIdStmt, 3, (int)bucket);
+    sqlite3_bind_int64(store_.getObjectByShortIdStmt, 4, (sqlite3_int64)id);
+    const bool held = sqlite3_step(store_.getObjectByShortIdStmt) == SQLITE_ROW;
+    sqlite3_reset(store_.getObjectByShortIdStmt);
     return held;
 }
 
@@ -1111,27 +1111,27 @@ void StoreForwardPlusPlusModule::handleItemRequest(const meshtastic_MeshPacket &
         if (enumRequesterHasQueued(mp.from, wanted))
             continue;
 
-        sqlite3_reset(getObjectByShortIdStmt);
-        sqlite3_bind_int(getObjectByShortIdStmt, 1, SFPP_HASH_SIZE);
-        sqlite3_bind_blob(getObjectByShortIdStmt, 2, root, SFPP_HASH_SIZE, NULL);
-        sqlite3_bind_int(getObjectByShortIdStmt, 3, (int)list.scope.bucket);
-        sqlite3_bind_int64(getObjectByShortIdStmt, 4, (sqlite3_int64)wanted);
+        sqlite3_reset(store_.getObjectByShortIdStmt);
+        sqlite3_bind_int(store_.getObjectByShortIdStmt, 1, SFPP_HASH_SIZE);
+        sqlite3_bind_blob(store_.getObjectByShortIdStmt, 2, root, SFPP_HASH_SIZE, NULL);
+        sqlite3_bind_int(store_.getObjectByShortIdStmt, 3, (int)list.scope.bucket);
+        sqlite3_bind_int64(store_.getObjectByShortIdStmt, 4, (sqlite3_int64)wanted);
 
         // A short ID can name more than one stored object; serve every one so a collided pair
         // cannot hide behind a single row.
         bool served = false;
-        while (sqlite3_step(getObjectByShortIdStmt) == SQLITE_ROW) {
+        while (sqlite3_step(store_.getObjectByShortIdStmt) == SQLITE_ROW) {
             served = true;
-            const uint32_t to = (uint32_t)sqlite3_column_int64(getObjectByShortIdStmt, 0);
-            const uint32_t from = (uint32_t)sqlite3_column_int64(getObjectByShortIdStmt, 1);
-            const uint32_t id = (uint32_t)sqlite3_column_int64(getObjectByShortIdStmt, 2);
-            const uint8_t *enc = (const uint8_t *)sqlite3_column_blob(getObjectByShortIdStmt, 3);
-            const int encLen = sqlite3_column_bytes(getObjectByShortIdStmt, 3);
+            const uint32_t to = (uint32_t)sqlite3_column_int64(store_.getObjectByShortIdStmt, 0);
+            const uint32_t from = (uint32_t)sqlite3_column_int64(store_.getObjectByShortIdStmt, 1);
+            const uint32_t id = (uint32_t)sqlite3_column_int64(store_.getObjectByShortIdStmt, 2);
+            const uint8_t *enc = (const uint8_t *)sqlite3_column_blob(store_.getObjectByShortIdStmt, 3);
+            const int encLen = sqlite3_column_bytes(store_.getObjectByShortIdStmt, 3);
             RowTime stamp;
-            stamp.stamp = (uint32_t)sqlite3_column_int64(getObjectByShortIdStmt, 5);
-            stamp.basis = (uint8_t)sqlite3_column_int(getObjectByShortIdStmt, 6);
-            stamp.boot_id = (uint32_t)sqlite3_column_int64(getObjectByShortIdStmt, 7);
-            stamp.margin = (uint32_t)sqlite3_column_int64(getObjectByShortIdStmt, 8);
+            stamp.stamp = (uint32_t)sqlite3_column_int64(store_.getObjectByShortIdStmt, 5);
+            stamp.basis = (uint8_t)sqlite3_column_int(store_.getObjectByShortIdStmt, 6);
+            stamp.boot_id = (uint32_t)sqlite3_column_int64(store_.getObjectByShortIdStmt, 7);
+            stamp.margin = (uint32_t)sqlite3_column_int64(store_.getObjectByShortIdStmt, 8);
             std::vector<uint8_t> cipher(enc, enc + encLen);
 
             const uint32_t heardAgo = rowAge(stamp).age;
@@ -1147,7 +1147,7 @@ void StoreForwardPlusPlusModule::handleItemRequest(const meshtastic_MeshPacket &
             const NodeNum dest = portduino_config.sfpp_item_transport == SFPP_ITEM_DIRECT ? mp.from : NODENUM_BROADCAST;
             queueItemFrames(frames, mp.from, dest, scope, wanted);
         }
-        sqlite3_reset(getObjectByShortIdStmt);
+        sqlite3_reset(store_.getObjectByShortIdStmt);
 
         if (!served)
             LOG_WARN("StoreForwardpp item request for an unknown short ID 0x%08x", wanted);
@@ -1384,20 +1384,20 @@ void StoreForwardPlusPlusModule::promoteScratchMatches(const uint8_t *root_hash,
     std::vector<ScratchRow> matches;
     std::vector<std::vector<uint8_t>> corrupt;
 
-    sqlite3_reset(fromScratchStmt);
-    sqlite3_bind_blob(fromScratchStmt, 1, root_hash, SFPP_HASH_SIZE, NULL);
-    while (sqlite3_step(fromScratchStmt) == SQLITE_ROW) {
-        const uint8_t *stored = (const uint8_t *)sqlite3_column_blob(fromScratchStmt, 4);
+    sqlite3_reset(store_.fromScratchStmt);
+    sqlite3_bind_blob(store_.fromScratchStmt, 1, root_hash, SFPP_HASH_SIZE, NULL);
+    while (sqlite3_step(store_.fromScratchStmt) == SQLITE_ROW) {
+        const uint8_t *stored = (const uint8_t *)sqlite3_column_blob(store_.fromScratchStmt, 4);
         if (stored == nullptr)
             continue;
-        const uint8_t *cipher = (const uint8_t *)sqlite3_column_blob(fromScratchStmt, 3);
-        const int cipherLen = sqlite3_column_bytes(fromScratchStmt, 3);
+        const uint8_t *cipher = (const uint8_t *)sqlite3_column_blob(store_.fromScratchStmt, 3);
+        const int cipherLen = sqlite3_column_bytes(store_.fromScratchStmt, 3);
         if (cipher == nullptr || cipherLen <= 0)
             continue;
 
-        const uint32_t to = (uint32_t)sqlite3_column_int64(fromScratchStmt, 0);
-        const uint32_t from = (uint32_t)sqlite3_column_int64(fromScratchStmt, 1);
-        const uint32_t id = (uint32_t)sqlite3_column_int64(fromScratchStmt, 2);
+        const uint32_t to = (uint32_t)sqlite3_column_int64(store_.fromScratchStmt, 0);
+        const uint32_t from = (uint32_t)sqlite3_column_int64(store_.fromScratchStmt, 1);
+        const uint32_t id = (uint32_t)sqlite3_column_int64(store_.fromScratchStmt, 2);
 
         // The stored hash is only an index; recompute it from the object and refuse a mismatch.
         uint8_t computed[SFPP_HASH_SIZE];
@@ -1420,13 +1420,13 @@ void StoreForwardPlusPlusModule::promoteScratchMatches(const uint8_t *root_hash,
         row.id = id;
         row.cipher.assign(cipher, cipher + cipherLen);
         memcpy(row.hash, computed, SFPP_HASH_SIZE);
-        row.time.stamp = (uint32_t)sqlite3_column_int64(fromScratchStmt, 5);
-        row.time.basis = (uint8_t)sqlite3_column_int(fromScratchStmt, 7);
-        row.time.boot_id = (uint32_t)sqlite3_column_int64(fromScratchStmt, 8);
-        row.time.margin = (uint32_t)sqlite3_column_int64(fromScratchStmt, 9);
+        row.time.stamp = (uint32_t)sqlite3_column_int64(store_.fromScratchStmt, 5);
+        row.time.basis = (uint8_t)sqlite3_column_int(store_.fromScratchStmt, 7);
+        row.time.boot_id = (uint32_t)sqlite3_column_int64(store_.fromScratchStmt, 8);
+        row.time.margin = (uint32_t)sqlite3_column_int64(store_.fromScratchStmt, 9);
         matches.push_back(row);
     }
-    sqlite3_reset(fromScratchStmt);
+    sqlite3_reset(store_.fromScratchStmt);
 
     for (const auto &bad : corrupt)
         removeFromScratch(bad.data(), SFPP_HASH_SIZE);

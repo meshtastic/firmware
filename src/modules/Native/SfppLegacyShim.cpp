@@ -148,41 +148,41 @@ void StoreForwardPlusPlusModule::handleLegacyClientHistory(const meshtastic_Mesh
 
     uint8_t root_hash[SFPP_HASH_SIZE] = {0};
     if (getOrDeriveRootFromChannel(channels.getHash(0), root_hash) != 0) {
-        sqlite3_reset(legacyHistoryStmt);
-        sqlite3_bind_int(legacyHistoryStmt, 1, SFPP_HASH_SIZE);
-        sqlite3_bind_blob(legacyHistoryStmt, 2, root_hash, SFPP_HASH_SIZE, NULL);
-        sqlite3_bind_int64(legacyHistoryStmt, 3, (sqlite3_int64)requester);
-        sqlite3_bind_int64(legacyHistoryStmt, 4, (sqlite3_int64)NODENUM_BROADCAST);
-        sqlite3_bind_int64(legacyHistoryStmt, 5, (sqlite3_int64)requester);
+        sqlite3_reset(store_.legacyHistoryStmt);
+        sqlite3_bind_int(store_.legacyHistoryStmt, 1, SFPP_HASH_SIZE);
+        sqlite3_bind_blob(store_.legacyHistoryStmt, 2, root_hash, SFPP_HASH_SIZE, NULL);
+        sqlite3_bind_int64(store_.legacyHistoryStmt, 3, (sqlite3_int64)requester);
+        sqlite3_bind_int64(store_.legacyHistoryStmt, 4, (sqlite3_int64)NODENUM_BROADCAST);
+        sqlite3_bind_int64(store_.legacyHistoryStmt, 5, (sqlite3_int64)requester);
 
-        while (sqlite3_step(legacyHistoryStmt) == SQLITE_ROW) {
+        while (sqlite3_step(store_.legacyHistoryStmt) == SQLITE_ROW) {
             RowTime stamp;
-            stamp.stamp = (uint32_t)sqlite3_column_int64(legacyHistoryStmt, 3);
-            stamp.basis = (uint8_t)sqlite3_column_int(legacyHistoryStmt, 6);
-            stamp.boot_id = (uint32_t)sqlite3_column_int64(legacyHistoryStmt, 7);
-            stamp.margin = (uint32_t)sqlite3_column_int64(legacyHistoryStmt, 8);
+            stamp.stamp = (uint32_t)sqlite3_column_int64(store_.legacyHistoryStmt, 3);
+            stamp.basis = (uint8_t)sqlite3_column_int(store_.legacyHistoryStmt, 6);
+            stamp.boot_id = (uint32_t)sqlite3_column_int64(store_.legacyHistoryStmt, 7);
+            stamp.margin = (uint32_t)sqlite3_column_int64(store_.legacyHistoryStmt, 8);
             const RowAge age = rowAge(stamp);
             if (age.age > windowS)
                 continue; // outside the requested window, by the best age we can give it
 
             Candidate candidate;
-            candidate.item.from = (NodeNum)sqlite3_column_int64(legacyHistoryStmt, 0);
-            candidate.item.id = (PacketId)sqlite3_column_int64(legacyHistoryStmt, 1);
-            candidate.destination = (uint32_t)sqlite3_column_int64(legacyHistoryStmt, 2);
+            candidate.item.from = (NodeNum)sqlite3_column_int64(store_.legacyHistoryStmt, 0);
+            candidate.item.id = (PacketId)sqlite3_column_int64(store_.legacyHistoryStmt, 1);
+            candidate.destination = (uint32_t)sqlite3_column_int64(store_.legacyHistoryStmt, 2);
             candidate.display = age.has_epoch ? age.epoch : age.estimate_epoch;
-            candidate.rowid = sqlite3_column_int64(legacyHistoryStmt, 9);
+            candidate.rowid = sqlite3_column_int64(store_.legacyHistoryStmt, 9);
             if (rowidCursor) {
                 if (candidate.rowid <= (sqlite3_int64)cursorRowid)
                     continue;
             } else if (cursor > 0 && candidate.display <= cursor) {
                 continue;
             }
-            const unsigned char *text = sqlite3_column_text(legacyHistoryStmt, 4);
+            const unsigned char *text = sqlite3_column_text(store_.legacyHistoryStmt, 4);
             if (text)
-                candidate.item.payload.assign((const char *)text, sqlite3_column_bytes(legacyHistoryStmt, 4));
+                candidate.item.payload.assign((const char *)text, sqlite3_column_bytes(store_.legacyHistoryStmt, 4));
             if (candidate.item.payload.empty()) {
-                const uint8_t *encrypted = (const uint8_t *)sqlite3_column_blob(legacyHistoryStmt, 5);
-                const int encryptedLen = sqlite3_column_bytes(legacyHistoryStmt, 5);
+                const uint8_t *encrypted = (const uint8_t *)sqlite3_column_blob(store_.legacyHistoryStmt, 5);
+                const int encryptedLen = sqlite3_column_bytes(store_.legacyHistoryStmt, 5);
                 if (!decodeStoredText(encrypted, (size_t)encryptedLen, candidate.destination, candidate.item.from,
                                       candidate.item.id, candidate.item.payload))
                     continue;
@@ -193,7 +193,7 @@ void StoreForwardPlusPlusModule::handleLegacyClientHistory(const meshtastic_Mesh
             }
             page.push_back(std::move(candidate));
         }
-        sqlite3_reset(legacyHistoryStmt);
+        sqlite3_reset(store_.legacyHistoryStmt);
     }
 
     std::stable_sort(page.begin(), page.end(), [](const Candidate &a, const Candidate &b) { return a.display < b.display; });

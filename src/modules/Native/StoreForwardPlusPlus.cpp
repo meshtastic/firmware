@@ -33,28 +33,11 @@ StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
                      &meshtastic_StoreForwardPlusPlus_msg),
       concurrency::OSThread("StoreForwardpp")
 {
-    openStore();
+    uint8_t derived[SFPP_HASH_SIZE] = {0};
+    const bool haveDerived = deriveRootFromChannel(channels.getHash(0), derived);
+    store_.openStore(derived, haveDerived);
+    encryptedOk = true;
     this->setInterval(15 * 1000);
-}
-
-StoreForwardPlusPlusModule::~StoreForwardPlusPlusModule()
-{
-    sqlite3_stmt *statements[] = {
-        canon_insert_stmt,      scratch_insert_stmt,   identityCanonStmt,      identityScratchStmt,    replaceCanonCopyStmt,
-        replaceScratchCopyStmt, checkDupMessageHash,   checkScratch,           removeScratch,          updatePayloadStmt,
-        fromScratchStmt,        fromScratchByHashStmt, getHashFromRootStmt,    addRootToMappingsStmt,  getFullRootHashStmt,
-        getScratchCountStmt,    scratchTimeRowsStmt,   deleteScratchRowidStmt, canonTimeRowsStmt,      deleteCanonRowidStmt,
-        bucketSummaryStmt,      bucketIdsStmt,         distinctBucketsStmt,    getObjectByShortIdStmt, deleteCanonStmt,
-        unindexedObjectsStmt,   setObjectIndexStmt,    legacyHistoryStmt,      timeStateReadStmt,      timeStateWriteStmt,
-        restampChannelStmt,     restampScratchStmt,    restampDirectStmt,      updateChannelTimeStmt,  updateScratchTimeStmt,
-        updateDirectTimeStmt,
-    };
-    for (sqlite3_stmt *stmt : statements) {
-        if (stmt)
-            sqlite3_finalize(stmt);
-    }
-    if (ppDb)
-        sqlite3_close(ppDb);
 }
 
 int32_t StoreForwardPlusPlusModule::runOnce()
@@ -247,11 +230,11 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
 
 ChannelHash StoreForwardPlusPlusModule::getChannelHashFromRoot(uint8_t *_root_hash, size_t _root_hash_len)
 {
-    sqlite3_bind_int(getHashFromRootStmt, 1, _root_hash_len);
-    sqlite3_bind_blob(getHashFromRootStmt, 2, _root_hash, _root_hash_len, NULL);
-    sqlite3_step(getHashFromRootStmt);
-    ChannelHash tmp_hash = (ChannelHash)sqlite3_column_int(getHashFromRootStmt, 0);
-    sqlite3_reset(getHashFromRootStmt);
+    sqlite3_bind_int(store_.getHashFromRootStmt, 1, _root_hash_len);
+    sqlite3_bind_blob(store_.getHashFromRootStmt, 2, _root_hash, _root_hash_len, NULL);
+    sqlite3_step(store_.getHashFromRootStmt);
+    ChannelHash tmp_hash = (ChannelHash)sqlite3_column_int(store_.getHashFromRootStmt, 0);
+    sqlite3_reset(store_.getHashFromRootStmt);
     return tmp_hash;
 }
 
@@ -319,13 +302,13 @@ size_t StoreForwardPlusPlusModule::getOrDeriveRootFromChannel(ChannelHash _ch_ha
 
 void StoreForwardPlusPlusModule::addRootToMappings(ChannelHash _ch_hash, uint8_t *_root_hash)
 {
-    int type = chain_types::channel_chain;
-    sqlite3_bind_int(addRootToMappingsStmt, 1, type);
-    sqlite3_bind_int(addRootToMappingsStmt, 2, _ch_hash);
-    sqlite3_bind_blob(addRootToMappingsStmt, 3, _root_hash, SFPP_HASH_SIZE, NULL);
-    auto rc = sqlite3_step(addRootToMappingsStmt);
-    LOG_WARN("StoreForwardpp result %u, %s", rc, sqlite3_errmsg(ppDb));
-    sqlite3_reset(addRootToMappingsStmt);
+    int type = SfppStore::chain_types::channel_chain;
+    sqlite3_bind_int(store_.addRootToMappingsStmt, 1, type);
+    sqlite3_bind_int(store_.addRootToMappingsStmt, 2, _ch_hash);
+    sqlite3_bind_blob(store_.addRootToMappingsStmt, 3, _root_hash, SFPP_HASH_SIZE, NULL);
+    auto rc = sqlite3_step(store_.addRootToMappingsStmt);
+    LOG_WARN("StoreForwardpp result %u, %s", rc, sqlite3_errmsg(store_.ppDb));
+    sqlite3_reset(store_.addRootToMappingsStmt);
 }
 
 // should not need size considerations
