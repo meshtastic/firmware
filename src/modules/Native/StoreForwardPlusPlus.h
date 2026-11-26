@@ -341,39 +341,11 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     // can handle partial root hashes
     ChannelHash getChannelHashFromRoot(uint8_t *_root_hash, size_t);
 
-    // given a root hash and commit hash, returns the next commit hash in the chain
-    // can handle partial root and commit hashes, always fills the buffer with 32 bytes
-    // returns true if a next hash was found
-    bool getNextHash(uint8_t *, size_t, uint8_t *, size_t, uint8_t *);
-
     // adds the ChannelHash and root_hash to the mappings table
     void addRootToMappings(ChannelHash, uint8_t *);
 
-    // requests the next message in the chain from the mesh network
-    // Sends a LINK_REQUEST message
-    void requestNextMessage(uint8_t *, size_t, uint8_t *, size_t);
-
-    // request the message X entries from the end.
-    // used to bootstrap a chain, without downloading all of the history
-    void requestMessageCount(uint8_t *, size_t, uint32_t);
-
-    // sends a LINK_PROVIDE message broadcasting the given link object
-    void broadcastLink(uint8_t *, size_t);
-
-    // sends a LINK_PROVIDE message broadcasting the given link object
-    void broadcastLink(link_object &, bool, bool = false);
-
-    // sends a LINK_PROVIDE message broadcasting the given link object from scratch message store
-    bool sendFromScratch(uint8_t *);
-
-    // Adds the given link object to the canonical chain database
-    bool addToChain(link_object &);
-
     // Adds an incoming text message to the scratch database
     bool addToScratch(link_object &);
-
-    // sends a CANON_ANNOUNCE message, specifying the given root and commit hashes
-    void canonAnnounce(link_object &);
 
     // checks if the message hash is present in the canonical chain database
     bool isInDB(const uint8_t *, size_t);
@@ -390,12 +362,6 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     // removes a link object from the scratch database
     void removeFromScratch(const uint8_t *, size_t);
 
-    // iterate through our scratch database, and see if we can speculate a chain up to the given commit hash
-    bool speculateScratchChain(uint8_t *, size_t, uint8_t *, uint8_t *);
-
-    // retrieves the next link object from scratch given a root hash
-    link_object getNextScratchObject(uint8_t *);
-
     // fills the payload section with the decrypted data for the given message hash
     // probably not needed for production, but useful for testing
     void updatePayload(uint8_t *, size_t, std::string);
@@ -404,21 +370,11 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     // Generates a message hash, but does not set the commit hash
     link_object ingestTextPacket(const meshtastic_MeshPacket &, const meshtastic_MeshPacket *);
 
-    // ingests a LINK_PROVIDE message and builds a link_object
-    // confirms the root hash and commit hash
-    link_object ingestLinkMessage(meshtastic_StoreForwardPlusPlus *);
-
     // retrieves a link object from the canonical chain database given a commit hash
     link_object getLink(uint8_t *, size_t);
 
     // retrieves a link object from the canonical chain database given a message hash
     link_object getLinkFromMessageHash(uint8_t *, size_t);
-
-    // puts the encrypted payload back into the queue as if it were just received
-    void rebroadcastLinkObject(link_object &);
-
-    // Check if an incoming link object's commit hash matches the calculated commit hash
-    bool checkCommitHash(link_object &lo, uint8_t *commit_hash_bytes, size_t hash_len);
 
     // given a partial root hash, looks up the full 32-byte root hash
     // returns true if found
@@ -444,16 +400,6 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
 
     void clearChain(uint8_t *, size_t);
 
-    void recalculateMessageHash(link_object &);
-
-    // given a link object with a payload and other fields, recalculates the message hash
-    // returns true if a match
-    bool recalculateHash(link_object &, uint8_t *, size_t, uint8_t *, size_t);
-
-    void updatePeers(const meshtastic_MeshPacket &, meshtastic_StoreForwardPlusPlus_SFPP_message_type);
-
-    void maybeMoveFromCanonScratch(uint8_t *, size_t);
-
     void addToCanonScratch(link_object &);
 
     link_object getfromCanonScratch(uint8_t *, size_t);
@@ -462,12 +408,6 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     void clearCanonScratch(uint8_t *, size_t, uint32_t);
 
     bool isInCanonScratch(uint8_t *, size_t);
-
-    void logLinkObject(link_object &);
-
-    // Track if we have a scheduled runOnce pending
-    // useful to not accudentally delay a scheduled runOnce
-    bool pendingRun = false;
 
     // Once we have multiple chain types, we can extend this
     enum chain_types {

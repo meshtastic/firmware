@@ -807,8 +807,6 @@ void StoreForwardPlusPlusModule::addToCanonScratch(link_object &lo)
         return;
     }
 
-    logLinkObject(lo);
-
     // push a message into the local chain DB
     // destination
     sqlite3_bind_int64(canon_scratch_insert_stmt, 1, (sqlite3_int64)lo.to);

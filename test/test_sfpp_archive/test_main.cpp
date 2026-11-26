@@ -571,7 +571,6 @@ void setUp(void)
     dbDir = dir ? dir : "/tmp";
     portduino_config.sfpp_db_path = dbDir + "/";
     portduino_config.sfpp_stratum0 = true;
-    portduino_config.sfpp_repair = SFPP_REPAIR_CHAIN; // the chain tests below; Q10 removes the chain
     portduino_config.sfpp_enabled = true;
     portduino_config.sfpp_hops = 3;
     portduino_config.sfpp_announce_interval = 5;
@@ -651,59 +650,9 @@ void test_storedMessageHashMatchesTheFrameHash()
 // runOnce() in stratum-0 mode must announce the stored tip: CANON_ANNOUNCE with the full root, the
 // short message and commit hashes and a non-zero chain count. A quiet module here means a peer can
 // never learn the archive has anything.
-void test_announceCarriesTheStoredTip()
-{
-    TEST_ASSERT_TRUE(ingestOneText("announce me"));
-
-    StoredRow row;
-    TEST_ASSERT_TRUE(readStoredRow(TEXT_ID, row));
-
-    testRouter->sent.clear();
-    TEST_ASSERT_GREATER_THAN(0, testSfpp->runOnce());
-
-    TEST_ASSERT_EQUAL_UINT(1, testRouter->sent.size());
-    meshtastic_StoreForwardPlusPlus announce;
-    TEST_ASSERT_TRUE(decodeSfpp(testRouter->sent[0], announce));
-    TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_CANON_ANNOUNCE, announce.sfpp_message_type);
-    TEST_ASSERT_EQUAL_UINT(SFPP_HASH_SIZE, announce.root_hash.size);
-    TEST_ASSERT_EQUAL_MEMORY(row.root.data(), announce.root_hash.bytes, SFPP_HASH_SIZE);
-    TEST_ASSERT_EQUAL_UINT(SFPP_SHORT_HASH_SIZE, announce.message_hash.size);
-    TEST_ASSERT_EQUAL_UINT(SFPP_SHORT_HASH_SIZE, announce.commit_hash.size);
-    TEST_ASSERT_EQUAL_UINT32(1, announce.chain_count);
-}
 
 // A LINK_REQUEST with an empty commit hash asks for the first link. The answer must carry the
 // original ciphertext and sender/id back, i.e. the archive can serve what it stored.
-void test_linkRequestReadsTheStoredTextBack()
-{
-    TEST_ASSERT_TRUE(ingestOneText("read me back"));
-
-    StoredRow row;
-    TEST_ASSERT_TRUE(readStoredRow(TEXT_ID, row));
-
-    meshtastic_StoreForwardPlusPlus request = meshtastic_StoreForwardPlusPlus_init_zero;
-    request.sfpp_message_type = meshtastic_StoreForwardPlusPlus_SFPP_message_type_LINK_REQUEST;
-    request.root_hash.size = row.root.size();
-    memcpy(request.root_hash.bytes, row.root.data(), row.root.size());
-
-    meshtastic_MeshPacket mp = meshtastic_MeshPacket_init_zero;
-    mp.from = REMOTE_NODE;
-    mp.to = NODENUM_BROADCAST;
-    mp.id = 0x0A0B0C0D;
-    mp.channel = 0;
-
-    testRouter->sent.clear();
-    TEST_ASSERT_TRUE(testSfpp->handleReceivedProtobuf(mp, &request));
-
-    TEST_ASSERT_EQUAL_UINT(1, testRouter->sent.size());
-    meshtastic_StoreForwardPlusPlus provide;
-    TEST_ASSERT_TRUE(decodeSfpp(testRouter->sent[0], provide));
-    TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_LINK_PROVIDE, provide.sfpp_message_type);
-    TEST_ASSERT_EQUAL_UINT(row.encrypted.size(), provide.message.size);
-    TEST_ASSERT_EQUAL_MEMORY(row.encrypted.data(), provide.message.bytes, row.encrypted.size());
-    TEST_ASSERT_EQUAL_UINT32(REMOTE_NODE, provide.encapsulated_from);
-    TEST_ASSERT_EQUAL_UINT32(TEXT_ID, provide.encapsulated_id);
-}
 
 // --- Legacy CLIENT_HISTORY shim ---
 
@@ -890,18 +839,6 @@ void test_legacyHistoryPagesByCursor()
 }
 
 // G5: canon rows outside D7's 48 h window go even when the 1,000-row cap is not reached.
-void test_canonIsTrimmedByRetention()
-{
-    TEST_ASSERT_TRUE(ingestOneText("old canon row"));
-    setStoredRxTime(TEXT_ID, getValidTime(RTCQualityNTP, true) - LEGACY_RETENTION_S - 60);
-
-    myNodeInfo.my_node_num = LOCAL_NODE;
-    portduino_config.sfpp_stratum0 = true;
-    testSfpp->runOnce();
-
-    StoredRow row;
-    TEST_ASSERT_FALSE(readStoredRow(TEXT_ID, row));
-}
 
 // Item 8: an adopted broadcast text keeps its unsigned node number, so the shim serves it.
 void test_shimServesAdoptedBroadcastText()
@@ -1580,13 +1517,10 @@ void test_futureLookingAgeIsRejected()
         UNITY_BEGIN();
         RUN_TEST(test_ingestStoresTextWithPayloadAndHashes);
         RUN_TEST(test_storedMessageHashMatchesTheFrameHash);
-        RUN_TEST(test_announceCarriesTheStoredTip);
-        RUN_TEST(test_linkRequestReadsTheStoredTextBack);
         RUN_TEST(test_legacyHistoryAnswersInLegacyFormat);
         RUN_TEST(test_legacyHistoryUsesLegacyRequestWindow);
         RUN_TEST(test_legacyHistoryExcludesTextsOlderThanRetention);
         RUN_TEST(test_legacyHistoryPagesByCursor);
-        RUN_TEST(test_canonIsTrimmedByRetention);
         RUN_TEST(test_shimServesAdoptedBroadcastText);
         RUN_TEST(test_oldVersionStoreIsSetAsideAndNewRowsAreUnsigned);
         RUN_TEST(test_legacyHistoryDecryptsEmptyPayloadRow);

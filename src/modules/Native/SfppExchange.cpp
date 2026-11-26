@@ -1285,12 +1285,12 @@ bool StoreForwardPlusPlusModule::acceptPushedItemFrame(const meshtastic_MeshPack
     memcpy(lo.encrypted_bytes, replay.ciphertext.data(), replay.ciphertext.size());
     sfppframe::messageHash(lo.encrypted_bytes, lo.encrypted_len, lo.to, lo.from, lo.id, lo.message_hash);
     lo.message_hash_len = SFPP_HASH_SIZE;
-    lo.counter = 0; // 0 tells addToChain to append at the tip
-
     if (isInDB(lo.message_hash, lo.message_hash_len))
         return true; // already committed, maybe by another follower's push
     LOG_INFO("StoreForwardpp committing a writer-missed text from 0x%08x", mp.from);
-    return addToChain(lo);
+    return insertCanonObject(lo.to, lo.from, lo.id, lo.encrypted_bytes, lo.encrypted_len, lo.message_hash,
+                             RowTime{lo.rx_time, lo.time_basis, lo.boot_id, lo.age_margin}, lo.root_hash,
+                             sfppsr::contentBucket(lo.message_hash, lo.message_hash_len));
 }
 
 void StoreForwardPlusPlusModule::handleItemFrame(const meshtastic_MeshPacket &mp, meshtastic_StoreForwardPlusPlus *t)
