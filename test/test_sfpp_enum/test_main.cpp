@@ -2,14 +2,15 @@
  * Native coverage for arm C, the detector + short-ID enumeration repair path in
  * src/modules/Native/StoreForwardPlusPlus.cpp and the exchange helpers in SketchWire/SfppFrame.
  *
- * Two in-process archives share one sqlite root and counter space: the authority is stratum-0 and
- * ingests texts; the follower is built from a copy of the authority's store with rows removed, so
- * the surviving counters match. The test routes the captured packets between the two module
- * instances, which is the on-air exchange without a radio.
+ * Two in-process archives share one sqlite root: the authority is stratum-0 and ingests texts; the
+ * follower is built from a file copy of the authority's store with objects removed. A bucket is a
+ * content bucket (first message-hash byte), so the cases choose packet IDs that land their texts in
+ * a known bucket. The test routes the captured packets between the module instances, which is the
+ * on-air exchange without a radio.
  *
  * What is pinned:
  *   - a matching advert sends nothing (d = 0);
- *   - a follower missing d = 1, 4, 16, a whole bucket or three middle rows converges through
+ *   - a follower missing d = 1, 4, 16, a whole bucket or three middle objects converges through
  *     ENUM_REQUEST -> ENUM_PROVIDE -> ITEM_REQUEST -> ITEM_FRAME, with the exact message counts;
  *   - a short-ID collision (two objects, one short ID) is resolved by requesting the shared IDs and
  *     serving every stored row for them;
@@ -244,15 +245,19 @@ bool execSql(const std::string &dir, const char *sql)
     return ok;
 }
 
-bool deleteCounter(const std::string &dir, uint32_t counter)
+// Runs one statement with up to two integer binds; -1 leaves a bind unset.
+bool execBound(const std::string &dir, const char *sql, int64_t first = -1, int64_t second = -1)
 {
     sqlite3 *db = nullptr;
     if (!openDb(dir, &db))
         return false;
     sqlite3_stmt *stmt = nullptr;
-    bool ok = sqlite3_prepare_v2(db, "delete from channel_messages where counter=?;", -1, &stmt, nullptr) == SQLITE_OK;
+    bool ok = sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) == SQLITE_OK;
     if (ok) {
-        sqlite3_bind_int(stmt, 1, (int)counter);
+        if (first >= 0)
+            sqlite3_bind_int64(stmt, 1, (sqlite3_int64)first);
+        if (second >= 0)
+            sqlite3_bind_int64(stmt, 2, (sqlite3_int64)second);
         ok = sqlite3_step(stmt) == SQLITE_DONE;
     }
     if (stmt)
@@ -261,23 +266,117 @@ bool deleteCounter(const std::string &dir, uint32_t counter)
     return ok;
 }
 
-bool deleteCounterRange(const std::string &dir, uint32_t first, uint32_t last)
+bool deleteObject(const std::string &dir, const uint8_t hash[SFPP_HASH_SIZE])
 {
     sqlite3 *db = nullptr;
     if (!openDb(dir, &db))
         return false;
     sqlite3_stmt *stmt = nullptr;
-    bool ok =
-        sqlite3_prepare_v2(db, "delete from channel_messages where counter>=? and counter<=?;", -1, &stmt, nullptr) == SQLITE_OK;
+    bool ok = sqlite3_prepare_v2(db, "delete from channel_messages where message_hash=?;", -1, &stmt, nullptr) == SQLITE_OK;
     if (ok) {
-        sqlite3_bind_int(stmt, 1, (int)first);
-        sqlite3_bind_int(stmt, 2, (int)last);
-        ok = sqlite3_step(stmt) == SQLITE_DONE;
+        sqlite3_bind_blob(stmt, 1, hash, SFPP_HASH_SIZE, SQLITE_STATIC);
+        ok = sqlite3_step(stmt) == SQLITE_DONE && sqlite3_changes(db) == 1;
     }
     if (stmt)
         sqlite3_finalize(stmt);
     sqlite3_close(db);
     return ok;
+}
+
+// The `count` most recently inserted objects of one content bucket. The follower is a file copy of
+// the authority, so rowid order is the authority's insertion order.
+bool deleteNewest(const std::string &dir, uint32_t bucket, uint32_t count)
+{
+    return execBound(dir,
+                     "delete from channel_messages where rowid in (select rowid from channel_messages where bucket=? "
+                     "order by rowid desc limit ?);",
+                     bucket, count);
+}
+
+bool deleteBucket(const std::string &dir, uint32_t bucket)
+{
+    return execBound(dir, "delete from channel_messages where bucket=?;", bucket);
+}
+
+// The content bucket the store filed a packet under, or -1 when it is not stored.
+int64_t storedBucket(const std::string &dir, PacketId id)
+{
+    sqlite3 *db = nullptr;
+    if (!openDb(dir, &db))
+        return -1;
+    sqlite3_stmt *stmt = nullptr;
+    int64_t bucket = -1;
+    if (sqlite3_prepare_v2(db, "select bucket from channel_messages where packet_id=?;", -1, &stmt, nullptr) == SQLITE_OK) {
+        sqlite3_bind_int64(stmt, 1, (sqlite3_int64)id);
+        if (sqlite3_step(stmt) == SQLITE_ROW)
+            bucket = sqlite3_column_int64(stmt, 0);
+    }
+    if (stmt)
+        sqlite3_finalize(stmt);
+    sqlite3_close(db);
+    return bucket;
+}
+
+// The content bucket (first message-hash byte) a text would be filed under.
+uint32_t textBucket(NodeNum from, PacketId id, const char *text)
+{
+    meshtastic_MeshPacket enc = makeEncryptedCopy(makeText(from, id, text, 0));
+    uint8_t hash[SFPP_HASH_SIZE];
+    sfppframe::messageHash(enc.encrypted.bytes, enc.encrypted.size, enc.to, enc.from, enc.id, hash);
+    return sfppsr::contentBucket(hash, sizeof(hash));
+}
+
+// The first packet ID at or after `start` whose text lands in `bucket`; about 256 tries.
+PacketId idForBucket(NodeNum from, const char *text, uint32_t bucket, PacketId start)
+{
+    for (PacketId id = start; id < start + 0x10000; id++)
+        if (textBucket(from, id, text) == bucket)
+            return id;
+    TEST_FAIL_MESSAGE("no packet ID reaches the bucket");
+    return 0;
+}
+
+// Content buckets used by the cases. kBucket is the collision pair's own bucket; kLowBucket and
+// kHighBucket sit below and above it, because the advert rotation walks buckets highest first.
+constexpr uint32_t kLowBucket = 0x05;
+constexpr uint32_t kBucket = 0x1D;
+constexpr uint32_t kHighBucket = 0xC0;
+
+struct IngestedText {
+    PacketId id;
+    char text[16];
+    uint32_t bucket;
+};
+std::vector<IngestedText> ingested; // the authority's texts in insertion order
+PacketId nextTextId = BASE_ID;
+
+// The authority ingests `count` texts, each with a packet ID chosen so it lands in `bucket`, and the
+// stored row's bucket column is checked rather than assumed.
+void ingestIntoBucket(uint32_t bucket, uint32_t count)
+{
+    for (uint32_t i = 0; i < count; i++) {
+        IngestedText t;
+        snprintf(t.text, sizeof(t.text), "msg %u", (unsigned)ingested.size() + 1);
+        t.id = idForBucket(SENDER_NODE, t.text, bucket, nextTextId);
+        t.bucket = bucket;
+        nextTextId = t.id + 1;
+        portduino_config.sfpp_stratum0 = true;
+        ingestText(authority, SENDER_NODE, t.id, t.text);
+        TEST_ASSERT_EQUAL_INT64((int64_t)bucket, storedBucket(dirA, t.id));
+        ingested.push_back(t);
+    }
+}
+
+// The n-th (1-based) text the authority ingested, removed from `dir` by its message hash.
+bool deleteIngested(const std::string &dir, uint32_t n)
+{
+    if (n == 0 || n > ingested.size())
+        return false;
+    const IngestedText &t = ingested[n - 1];
+    meshtastic_MeshPacket enc = makeEncryptedCopy(makeText(SENDER_NODE, t.id, t.text, 0));
+    uint8_t hash[SFPP_HASH_SIZE];
+    sfppframe::messageHash(enc.encrypted.bytes, enc.encrypted.size, enc.to, enc.from, enc.id, hash);
+    return deleteObject(dir, hash);
 }
 
 bool readRoot(const std::string &dir, uint8_t out[SFPP_HASH_SIZE]);
@@ -297,17 +396,19 @@ void makeCandidate(const uint8_t cipher[16], uint32_t id, CollisionCandidate &ou
     out.shortId = sfppsr::shortId(out.hash, sizeof(out.hash));
 }
 
-// A real pair sharing a truncated short ID, computed once offline and checked in: the reassembler
-// recomputes the short ID from the ciphertext, so a forced column could not survive the trip.
-// Both hash to shortId 0x0985bdf3.
-const uint8_t kCollisionACipher[16] = {0xc0, 0x5f, 0x32, 0x33, 0xc4, 0x5b, 0x36, 0x37,
-                                       0xc8, 0x57, 0x3a, 0x3b, 0xcc, 0x53, 0x3e, 0x3f};
-const uint8_t kCollisionBCipher[16] = {0x01, 0x49, 0x32, 0x33, 0x05, 0x4d, 0x36, 0x37,
-                                       0x09, 0x41, 0x3a, 0x3b, 0x0d, 0x45, 0x3e, 0x3f};
-constexpr uint32_t kCollisionAId = 0x0000bef0;
-constexpr uint32_t kCollisionBId = 0x0000c831;
+// A real pair sharing a truncated short ID and a content bucket, found offline by a birthday search
+// and checked in: the reassembler recomputes both from the ciphertext, so forced columns could not
+// survive the trip. Both hash to shortId 0x598a726a in content bucket 0x1D.
+const uint8_t kCollisionACipher[16] = {0xeb, 0x34, 0x02, 0x00, 0x34, 0x35, 0x36, 0x37,
+                                       0x38, 0x39, 0x3a, 0x3b, 0x3c, 0x3d, 0x3e, 0x3f};
+const uint8_t kCollisionBCipher[16] = {0x24, 0x55, 0x1e, 0x00, 0x34, 0x35, 0x36, 0x37,
+                                       0x38, 0x39, 0x3a, 0x3b, 0x3c, 0x3d, 0x3e, 0x3f};
+constexpr uint32_t kCollisionAId = 0x000094eb;
+constexpr uint32_t kCollisionBId = 0x00009524;
 
-bool insertCandidateRow(const std::string &dir, uint32_t counter, const CollisionCandidate &candidate)
+// Inserts a canonical row with the current columns; the bucket is the hash's own content bucket.
+bool insertCanonRow(const std::string &dir, uint32_t id, const uint8_t *cipher, size_t cipherLen,
+                    const uint8_t hash[SFPP_HASH_SIZE], uint32_t shortId)
 {
     uint8_t root[SFPP_HASH_SIZE];
     if (!readRoot(dir, root))
@@ -319,28 +420,32 @@ bool insertCandidateRow(const std::string &dir, uint32_t counter, const Collisio
     sqlite3_stmt *stmt = nullptr;
     bool ok = sqlite3_prepare_v2(db,
                                  "insert into channel_messages (destination, sender, packet_id, root_hash, encrypted_bytes, "
-                                 "message_hash, commit_hash, payload, rx_time, counter, short_id, checksum) "
-                                 "values (?,?,?,?,?,?,?,?,?,?,?,?);",
+                                 "message_hash, payload, rx_time, short_id, checksum, time_basis, boot_id, age_margin, bucket) "
+                                 "values (?,?,?,?,?,?,?,?,?,?,0,0,0,?);",
                                  -1, &stmt, nullptr) == SQLITE_OK;
     if (ok) {
         sqlite3_bind_int64(stmt, 1, (sqlite3_int64)NODENUM_BROADCAST);
         sqlite3_bind_int64(stmt, 2, (sqlite3_int64)SENDER_NODE);
-        sqlite3_bind_int64(stmt, 3, (sqlite3_int64)candidate.id);
+        sqlite3_bind_int64(stmt, 3, (sqlite3_int64)id);
         sqlite3_bind_blob(stmt, 4, root, SFPP_HASH_SIZE, SQLITE_STATIC);
-        sqlite3_bind_blob(stmt, 5, candidate.cipher, sizeof(candidate.cipher), SQLITE_STATIC);
-        sqlite3_bind_blob(stmt, 6, candidate.hash, SFPP_HASH_SIZE, SQLITE_STATIC);
-        sqlite3_bind_blob(stmt, 7, candidate.hash, SFPP_HASH_SIZE, SQLITE_STATIC);
-        sqlite3_bind_text(stmt, 8, "", 0, SQLITE_STATIC);
-        sqlite3_bind_int64(stmt, 9, (sqlite3_int64)getValidTime(RTCQualityNTP, true));
-        sqlite3_bind_int(stmt, 10, (int)counter);
-        sqlite3_bind_int64(stmt, 11, (sqlite3_int64)candidate.shortId);
-        sqlite3_bind_int64(stmt, 12, (sqlite3_int64)sfppsr::checksumContribution(candidate.hash, sizeof(candidate.hash)));
+        sqlite3_bind_blob(stmt, 5, cipher, (int)cipherLen, SQLITE_STATIC);
+        sqlite3_bind_blob(stmt, 6, hash, SFPP_HASH_SIZE, SQLITE_STATIC);
+        sqlite3_bind_text(stmt, 7, "", 0, SQLITE_STATIC);
+        sqlite3_bind_int64(stmt, 8, (sqlite3_int64)getValidTime(RTCQualityNTP, true));
+        sqlite3_bind_int64(stmt, 9, (sqlite3_int64)shortId);
+        sqlite3_bind_int64(stmt, 10, (sqlite3_int64)sfppsr::checksumContribution(hash, SFPP_HASH_SIZE));
+        sqlite3_bind_int64(stmt, 11, (sqlite3_int64)sfppsr::contentBucket(hash, SFPP_HASH_SIZE));
         ok = sqlite3_step(stmt) == SQLITE_DONE;
     }
     if (stmt)
         sqlite3_finalize(stmt);
     sqlite3_close(db);
     return ok;
+}
+
+bool insertCandidateRow(const std::string &dir, const CollisionCandidate &candidate)
+{
+    return insertCanonRow(dir, candidate.id, candidate.cipher, sizeof(candidate.cipher), candidate.hash, candidate.shortId);
 }
 
 bool readRoot(const std::string &dir, uint8_t out[SFPP_HASH_SIZE])
@@ -421,45 +526,16 @@ bool insertScratchRow(const std::string &dir, uint32_t to, uint32_t from, uint32
     return ok;
 }
 
-bool insertExtraRow(const std::string &dir, uint32_t counter, uint32_t shortId)
+// A fabricated row whose hash starts with kBucket, so it files under kBucket by content, carrying a
+// forced short ID that its hash does not produce.
+bool insertExtraRow(const std::string &dir, uint32_t shortId)
 {
-    uint8_t root[SFPP_HASH_SIZE];
-    if (!readRoot(dir, root))
-        return false;
-
     uint8_t hash[SFPP_HASH_SIZE];
     for (size_t i = 0; i < sizeof(hash); i++)
         hash[i] = (uint8_t)(0xE0 + i);
+    hash[0] = (uint8_t)kBucket;
     const uint8_t cipher[4] = {0xDE, 0xAD, 0xBE, 0xEF};
-
-    sqlite3 *db = nullptr;
-    if (!openDb(dir, &db))
-        return false;
-    sqlite3_stmt *stmt = nullptr;
-    bool ok = sqlite3_prepare_v2(db,
-                                 "insert into channel_messages (destination, sender, packet_id, root_hash, encrypted_bytes, "
-                                 "message_hash, commit_hash, payload, rx_time, counter, short_id, checksum) "
-                                 "values (?,?,?,?,?,?,?,?,?,?,?,?);",
-                                 -1, &stmt, nullptr) == SQLITE_OK;
-    if (ok) {
-        sqlite3_bind_int64(stmt, 1, (sqlite3_int64)NODENUM_BROADCAST);
-        sqlite3_bind_int64(stmt, 2, (sqlite3_int64)SENDER_NODE);
-        sqlite3_bind_int64(stmt, 3, 0x7777);
-        sqlite3_bind_blob(stmt, 4, root, SFPP_HASH_SIZE, SQLITE_STATIC);
-        sqlite3_bind_blob(stmt, 5, cipher, sizeof(cipher), SQLITE_STATIC);
-        sqlite3_bind_blob(stmt, 6, hash, SFPP_HASH_SIZE, SQLITE_STATIC);
-        sqlite3_bind_blob(stmt, 7, hash, SFPP_HASH_SIZE, SQLITE_STATIC);
-        sqlite3_bind_text(stmt, 8, "", 0, SQLITE_STATIC);
-        sqlite3_bind_int64(stmt, 9, (sqlite3_int64)getValidTime(RTCQualityNTP, true));
-        sqlite3_bind_int(stmt, 10, (int)counter);
-        sqlite3_bind_int64(stmt, 11, (sqlite3_int64)shortId);
-        sqlite3_bind_int64(stmt, 12, (sqlite3_int64)sfppsr::checksumContribution(hash, sizeof(hash)));
-        ok = sqlite3_step(stmt) == SQLITE_DONE;
-    }
-    if (stmt)
-        sqlite3_finalize(stmt);
-    sqlite3_close(db);
-    return ok;
+    return insertCanonRow(dir, 0x7777, cipher, sizeof(cipher), hash, shortId);
 }
 
 struct BucketView {
@@ -467,19 +543,19 @@ struct BucketView {
     uint64_t checksum = 0;
 };
 
-BucketView readBucket(const std::string &dir, uint32_t first, uint32_t last)
+// One content bucket's count and XOR checksum; a negative bucket reads the whole store.
+BucketView readBucket(const std::string &dir, int64_t bucket)
 {
     BucketView view;
     sqlite3 *db = nullptr;
     if (!openDb(dir, &db))
         return view;
     sqlite3_stmt *stmt = nullptr;
-    if (sqlite3_prepare_v2(db,
-                           "select short_id, checksum from channel_messages where counter>=? and counter<=? and short_id is not "
-                           "null;",
-                           -1, &stmt, nullptr) == SQLITE_OK) {
-        sqlite3_bind_int(stmt, 1, (int)first);
-        sqlite3_bind_int(stmt, 2, (int)last);
+    const char *sql = bucket < 0 ? "select short_id, checksum from channel_messages where short_id is not null;"
+                                 : "select short_id, checksum from channel_messages where bucket=? and short_id is not null;";
+    if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) == SQLITE_OK) {
+        if (bucket >= 0)
+            sqlite3_bind_int64(stmt, 1, (sqlite3_int64)bucket);
         while (sqlite3_step(stmt) == SQLITE_ROW) {
             view.count++;
             view.checksum ^= (uint64_t)sqlite3_column_int64(stmt, 1);
@@ -489,6 +565,11 @@ BucketView readBucket(const std::string &dir, uint32_t first, uint32_t last)
         sqlite3_finalize(stmt);
     sqlite3_close(db);
     return view;
+}
+
+BucketView readStore(const std::string &dir)
+{
+    return readBucket(dir, -1);
 }
 
 // Builds an advert from a directory's stored bucket, optionally with a corrupted checksum, so a
@@ -505,14 +586,9 @@ bool buildAdvertFromDir(const std::string &dir, uint32_t bucket, bool corruptChe
     if (!openDb(dir, &db))
         return false;
     sqlite3_stmt *stmt = nullptr;
-    const uint32_t first = bucket * sfppsr::kBucketObjects + 1;
-    const uint32_t last = first + sfppsr::kBucketObjects - 1;
-    if (sqlite3_prepare_v2(db,
-                           "select short_id, checksum from channel_messages where counter>=? and counter<=? and short_id is not "
-                           "null;",
-                           -1, &stmt, nullptr) == SQLITE_OK) {
-        sqlite3_bind_int(stmt, 1, (int)first);
-        sqlite3_bind_int(stmt, 2, (int)last);
+    if (sqlite3_prepare_v2(db, "select short_id, checksum from channel_messages where bucket=? and short_id is not null;", -1,
+                           &stmt, nullptr) == SQLITE_OK) {
+        sqlite3_bind_int64(stmt, 1, (sqlite3_int64)bucket);
         while (sqlite3_step(stmt) == SQLITE_ROW)
             summary.add((pinsketch::Element)sqlite3_column_int64(stmt, 0), (uint64_t)sqlite3_column_int64(stmt, 1));
     }
@@ -530,7 +606,7 @@ bool buildAdvertFromDir(const std::string &dir, uint32_t bucket, bool corruptChe
         return false;
     if (corruptChecksum)
         msg.sr_checksum ^= 1;
-    msg.encapsulated_rxtime = tip; // Stage 8f: the sender's tip counter
+    msg.encapsulated_rxtime = tip ? tip : summary.count(); // Q2e R3: the bucket's content count, as the module sends
 
     out = meshtastic_MeshPacket_init_zero;
     out.from = AUTHORITY_NODE;
@@ -582,14 +658,11 @@ meshtastic_MeshPacket buildProvideFromDir(const std::string &dir, uint32_t bucke
     sqlite3 *db = nullptr;
     TEST_ASSERT_TRUE(openDb(dir, &db));
     sqlite3_stmt *stmt = nullptr;
-    const uint32_t first = bucket * sfppsr::kBucketObjects + 1;
-    const uint32_t last = first + sfppsr::kBucketObjects - 1;
     TEST_ASSERT_TRUE(sqlite3_prepare_v2(db,
-                                        "select short_id from channel_messages where counter>=? and counter<=? and short_id is "
-                                        "not null order by short_id;",
+                                        "select short_id from channel_messages where bucket=? and short_id is not null order by "
+                                        "short_id;",
                                         -1, &stmt, nullptr) == SQLITE_OK);
-    sqlite3_bind_int(stmt, 1, (int)first);
-    sqlite3_bind_int(stmt, 2, (int)last);
+    sqlite3_bind_int64(stmt, 1, (sqlite3_int64)bucket);
     while (sqlite3_step(stmt) == SQLITE_ROW)
         ids.push_back((pinsketch::Element)sqlite3_column_int64(stmt, 0));
     sqlite3_finalize(stmt);
@@ -619,15 +692,11 @@ bool readShortIds(const std::string &dir, uint32_t bucket, std::vector<pinsketch
     if (!openDb(dir, &db))
         return false;
     sqlite3_stmt *stmt = nullptr;
-    const uint32_t first = bucket * sfppsr::kBucketObjects + 1;
-    const uint32_t last = first + sfppsr::kBucketObjects - 1;
-    bool ok = sqlite3_prepare_v2(db,
-                                 "select short_id from channel_messages where counter>=? and counter<=? and short_id is not "
-                                 "null order by counter;",
-                                 -1, &stmt, nullptr) == SQLITE_OK;
+    bool ok =
+        sqlite3_prepare_v2(db, "select short_id from channel_messages where bucket=? and short_id is not null order by rowid;",
+                           -1, &stmt, nullptr) == SQLITE_OK;
     if (ok) {
-        sqlite3_bind_int(stmt, 1, (int)first);
-        sqlite3_bind_int(stmt, 2, (int)last);
+        sqlite3_bind_int64(stmt, 1, (sqlite3_int64)bucket);
         while (sqlite3_step(stmt) == SQLITE_ROW)
             out.push_back((pinsketch::Element)sqlite3_column_int64(stmt, 0));
     }
@@ -675,26 +744,10 @@ uint32_t drainPhoneQueueCount()
     return count;
 }
 
+// The authority's texts, all in kBucket, so one advert covers every object.
 void ingestAuthority(uint32_t count)
 {
-    myNodeInfo.my_node_num = AUTHORITY_NODE;
-    portduino_config.sfpp_stratum0 = true;
-    for (uint32_t i = 0; i < count; i++) {
-        char text[16];
-        snprintf(text, sizeof(text), "msg %u", i + 1);
-        ingestText(authority, SENDER_NODE, BASE_ID + i, text);
-    }
-}
-
-void ingestAuthorityMore(uint32_t start, uint32_t count)
-{
-    myNodeInfo.my_node_num = AUTHORITY_NODE;
-    portduino_config.sfpp_stratum0 = true;
-    for (uint32_t i = start; i < start + count; i++) {
-        char text[16];
-        snprintf(text, sizeof(text), "msg %u", i + 1);
-        ingestText(authority, SENDER_NODE, BASE_ID + i, text);
-    }
+    ingestIntoBucket(kBucket, count);
 }
 
 void buildFollowerFromCopy()
@@ -813,10 +866,11 @@ Exchange runExchange()
     return runExchangeFor(follower, FOLLOWER_NODE);
 }
 
-void assertConverged()
+void assertConverged(uint32_t bucket = kBucket, const std::string &dir = dirB)
 {
-    const BucketView a = readBucket(dirA, 1, sfppsr::kBucketObjects);
-    const BucketView b = readBucket(dirB, 1, sfppsr::kBucketObjects);
+    const BucketView a = readBucket(dirA, bucket);
+    const BucketView b = readBucket(dir, bucket);
+    TEST_ASSERT_GREATER_THAN_UINT32(0, a.count);
     TEST_ASSERT_EQUAL_UINT32(a.count, b.count);
     TEST_ASSERT_EQUAL_UINT64(a.checksum, b.checksum);
 }
@@ -904,6 +958,8 @@ void setUp(void)
     portduino_config.sfpp_db_path = dirA + "/";
 
     Time::setTestMillis(1000);
+    ingested.clear();
+    nextTextId = BASE_ID;
 
     authority = new TestSfppModule();
     follower = nullptr;
@@ -969,7 +1025,7 @@ void runTailCase(uint32_t total, uint32_t missing)
 {
     ingestAuthority(total);
     buildFollowerFromCopy();
-    TEST_ASSERT_TRUE(deleteCounterRange(dirB, total - missing + 1, total));
+    TEST_ASSERT_TRUE(deleteNewest(dirB, kBucket, missing));
 
     Exchange exchange = runExchange();
     TEST_ASSERT_EQUAL_UINT(1, exchange.enumRequests);
@@ -986,7 +1042,8 @@ void runTailCase(uint32_t total, uint32_t missing)
     TEST_ASSERT_EQUAL_UINT(0, takeSent().size());
 }
 
-// A missing tail of 1, 4 and 16 rows converges, with the exact one-request-per-kind exchange.
+// The 1, 4 and 16 most recently inserted objects are missing; each converges with the exact
+// one-request-per-kind exchange.
 void test_missingTail1Converges()
 {
     runTailCase(20, 1);
@@ -1002,28 +1059,32 @@ void test_missingTail16Converges()
     runTailCase(20, 16);
 }
 
-// The follower was away while the authority filled a whole new bucket: its local bucket is empty,
-// which must classify as count 0 / checksum 0 and pull rather than be skipped.
+// The follower lacks every object of one content bucket while holding another bucket: its local
+// bucket is empty, which must classify as count 0 / checksum 0 and pull rather than be skipped.
 void test_wholeBucketMissingConverges()
 {
+    ingestIntoBucket(kLowBucket, 4);
     ingestAuthority(8);
     buildFollowerFromCopy();
-    TEST_ASSERT_TRUE(deleteCounterRange(dirB, 1, 8));
+    TEST_ASSERT_TRUE(deleteBucket(dirB, kBucket));
+    TEST_ASSERT_EQUAL_UINT32(0, readBucket(dirB, kBucket).count);
+    TEST_ASSERT_EQUAL_UINT32(4, readBucket(dirB, kLowBucket).count);
 
     Exchange exchange = runExchange();
     TEST_ASSERT_EQUAL_UINT(8, exchange.itemFrames);
     assertConverged();
+    assertConverged(kLowBucket);
 }
 
-// A gap in the middle, not just the tail: rows 5, 9 and 17 missing. Recovered rows land in the
-// bucket by range even though their exact counter differs from the authority's.
+// A gap in the middle, not just the tail: the 5th, 9th and 17th of 20 objects are missing, none of
+// them first or last. Recovered objects file under their content bucket on arrival.
 void test_middleGapConverges()
 {
     ingestAuthority(20);
     buildFollowerFromCopy();
-    TEST_ASSERT_TRUE(deleteCounter(dirB, 5));
-    TEST_ASSERT_TRUE(deleteCounter(dirB, 9));
-    TEST_ASSERT_TRUE(deleteCounter(dirB, 17));
+    TEST_ASSERT_TRUE(deleteIngested(dirB, 5));
+    TEST_ASSERT_TRUE(deleteIngested(dirB, 9));
+    TEST_ASSERT_TRUE(deleteIngested(dirB, 17));
 
     Exchange exchange = runExchange();
     TEST_ASSERT_EQUAL_UINT(3, exchange.itemFrames);
@@ -1035,17 +1096,19 @@ void test_middleGapConverges()
 // authority serves every row for them, and the unknown hash is stored.
 void test_shortIdCollisionConverges()
 {
-    ingestAuthority(1); // establishes the root and a non-colliding filler row
+    ingestAuthority(1); // establishes the root and a non-colliding filler row in the pair's bucket
     CollisionCandidate held;
     CollisionCandidate missingObject;
     makeCandidate(kCollisionACipher, kCollisionAId, held);
     makeCandidate(kCollisionBCipher, kCollisionBId, missingObject);
     TEST_ASSERT_EQUAL_UINT32(held.shortId, missingObject.shortId);
     TEST_ASSERT_TRUE(memcmp(held.hash, missingObject.hash, SFPP_HASH_SIZE) != 0);
-    TEST_ASSERT_TRUE(insertCandidateRow(dirA, 2, held));
-    TEST_ASSERT_TRUE(insertCandidateRow(dirA, 3, missingObject));
+    TEST_ASSERT_EQUAL_UINT32(kBucket, sfppsr::contentBucket(held.hash, SFPP_HASH_SIZE));
+    TEST_ASSERT_EQUAL_UINT32(kBucket, sfppsr::contentBucket(missingObject.hash, SFPP_HASH_SIZE));
+    TEST_ASSERT_TRUE(insertCandidateRow(dirA, held));
+    TEST_ASSERT_TRUE(insertCandidateRow(dirA, missingObject));
     buildFollowerFromCopy();
-    TEST_ASSERT_TRUE(deleteCounter(dirB, 3)); // the follower holds counter 2, not counter 3
+    TEST_ASSERT_TRUE(deleteObject(dirB, missingObject.hash)); // the follower holds `held` only
 
     Exchange exchange = runExchange();
     TEST_ASSERT_EQUAL_UINT(1, exchange.enumRequests);
@@ -1065,19 +1128,19 @@ void test_unresolvableCollisionIsSuppressed()
     makeCandidate(kCollisionACipher, kCollisionAId, held);
     makeCandidate(kCollisionBCipher, kCollisionBId, missingObject);
     TEST_ASSERT_EQUAL_UINT32(held.shortId, missingObject.shortId);
-    TEST_ASSERT_TRUE(insertCandidateRow(dirA, 2, held));
-    TEST_ASSERT_TRUE(insertCandidateRow(dirA, 3, missingObject));
+    TEST_ASSERT_TRUE(insertCandidateRow(dirA, held));
+    TEST_ASSERT_TRUE(insertCandidateRow(dirA, missingObject));
     buildFollowerFromCopy();
-    TEST_ASSERT_TRUE(deleteCounter(dirB, 3)); // follower lacks counter 3
-    // ... and holds an extra row whose short ID is the same, keeping the lists equal while the
-    // checksums cannot converge.
-    TEST_ASSERT_TRUE(insertExtraRow(dirB, 4, held.shortId));
+    TEST_ASSERT_TRUE(deleteObject(dirB, missingObject.hash)); // follower lacks the second of the pair
+    // ... and holds an extra row in the same bucket whose short ID is the same, keeping the lists
+    // equal while the checksums cannot converge.
+    TEST_ASSERT_TRUE(insertExtraRow(dirB, held.shortId));
 
     Exchange exchange = runExchange();
     TEST_ASSERT_EQUAL_UINT(1, exchange.itemRequests);             // one probe
     TEST_ASSERT_EQUAL_UINT(1, countRows(dirB, missingObject.id)); // the collided object arrived
     TEST_ASSERT_EQUAL_UINT(1, countRows(dirB, 0x7777));           // the extra row is still there
-    TEST_ASSERT_TRUE(readBucket(dirB, 1, sfppsr::kBucketObjects).count != readBucket(dirA, 1, sfppsr::kBucketObjects).count);
+    TEST_ASSERT_TRUE(readBucket(dirB, kBucket).count != readBucket(dirA, kBucket).count);
 
     // Let the probe's idle timer expire, then present the unchanged advert again.
     Time::setTestMillis(Time::getMillis() + 31000);
@@ -1160,7 +1223,7 @@ void test_unknownShortIdRequestServesNothing()
     uint8_t root[SFPP_HASH_SIZE];
     TEST_ASSERT_TRUE(readRoot(dirA, root));
     memcpy(msg.root_hash.bytes, root, 4);
-    msg.chain_count = 0;
+    msg.chain_count = kBucket; // the populated bucket, so only the ID is unknown
     msg.sr_short_ids[0] = 0xDEADBEEF;
     msg.sr_short_ids_count = 1;
 
@@ -1195,7 +1258,7 @@ void test_firstItemFrameDrainsOnNextStep()
 {
     ingestAuthority(2);
     buildFollowerFromCopy();
-    TEST_ASSERT_TRUE(deleteCounter(dirB, 2));
+    TEST_ASSERT_TRUE(deleteNewest(dirB, kBucket, 1));
     driveToItemRequest(follower, FOLLOWER_NODE);
 
     std::vector<meshtastic_MeshPacket> sent = drainAuthorityOne(2000);
@@ -1208,7 +1271,7 @@ void test_rejectedItemFrameIsRequeued()
 {
     ingestAuthority(2);
     buildFollowerFromCopy();
-    TEST_ASSERT_TRUE(deleteCounter(dirB, 2));
+    TEST_ASSERT_TRUE(deleteNewest(dirB, kBucket, 1));
     driveToItemRequest(follower, FOLLOWER_NODE);
 
     testRouter->rejectNext = 1;
@@ -1227,7 +1290,7 @@ void test_lostItemFrameIsRetried()
 {
     ingestAuthority(2);
     buildFollowerFromCopy();
-    TEST_ASSERT_TRUE(deleteCounter(dirB, 2));
+    TEST_ASSERT_TRUE(deleteNewest(dirB, kBucket, 1));
     driveToItemRequest(follower, FOLLOWER_NODE);
 
     std::vector<meshtastic_MeshPacket> lost = drainAuthorityOne(2000);
@@ -1256,8 +1319,8 @@ void test_twoRequestersBothComplete()
     ingestAuthority(4);
     buildFollowerFromCopy();
     buildSecondFollowerFromCopy();
-    TEST_ASSERT_TRUE(deleteCounter(dirB, 3));
-    TEST_ASSERT_TRUE(deleteCounter(dirC, 4));
+    TEST_ASSERT_TRUE(deleteIngested(dirB, 3));
+    TEST_ASSERT_TRUE(deleteIngested(dirC, 4));
 
     meshtastic_MeshPacket advert = runAuthorityOnce();
     TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
@@ -1309,13 +1372,8 @@ void test_twoRequestersBothComplete()
     TEST_ASSERT_EQUAL_UINT(1, bFrames);
     TEST_ASSERT_EQUAL_UINT(1, cFrames);
 
-    const BucketView a = readBucket(dirA, 1, sfppsr::kBucketObjects);
-    const BucketView b = readBucket(dirB, 1, sfppsr::kBucketObjects);
-    const BucketView c = readBucket(dirC, 1, sfppsr::kBucketObjects);
-    TEST_ASSERT_EQUAL_UINT32(a.count, b.count);
-    TEST_ASSERT_EQUAL_UINT64(a.checksum, b.checksum);
-    TEST_ASSERT_EQUAL_UINT32(a.count, c.count);
-    TEST_ASSERT_EQUAL_UINT64(a.checksum, c.checksum);
+    assertConverged(kBucket, dirB);
+    assertConverged(kBucket, dirC);
 }
 
 // --- Stage 8b: wrong sketch decode ---
@@ -1334,14 +1392,9 @@ bool buildCraftedAdvertFromDir(const std::string &dir, uint32_t bucket, uint32_t
     if (!openDb(dir, &db))
         return false;
     sqlite3_stmt *stmt = nullptr;
-    const uint32_t first = bucket * sfppsr::kBucketObjects + 1;
-    const uint32_t last = first + sfppsr::kBucketObjects - 1;
-    if (sqlite3_prepare_v2(db,
-                           "select short_id, checksum from channel_messages where counter>=? and counter<=? and short_id is not "
-                           "null;",
-                           -1, &stmt, nullptr) == SQLITE_OK) {
-        sqlite3_bind_int(stmt, 1, (int)first);
-        sqlite3_bind_int(stmt, 2, (int)last);
+    if (sqlite3_prepare_v2(db, "select short_id, checksum from channel_messages where bucket=? and short_id is not null;", -1,
+                           &stmt, nullptr) == SQLITE_OK) {
+        sqlite3_bind_int64(stmt, 1, (sqlite3_int64)bucket);
         while (sqlite3_step(stmt) == SQLITE_ROW)
             summary.add((pinsketch::Element)sqlite3_column_int64(stmt, 0), (uint64_t)sqlite3_column_int64(stmt, 1));
     }
@@ -1384,10 +1437,10 @@ void test_sketchWrongDecodeFallsBackAfterRetries()
     portduino_config.sfpp_repair = SFPP_REPAIR_SKETCH;
     ingestAuthority(8);
     buildFollowerFromCopy();
-    TEST_ASSERT_TRUE(deleteCounter(dirB, 8));
+    TEST_ASSERT_TRUE(deleteNewest(dirB, kBucket, 1));
 
     meshtastic_MeshPacket advert;
-    TEST_ASSERT_TRUE(buildCraftedAdvertFromDir(dirB, 0, 2, false, advert));
+    TEST_ASSERT_TRUE(buildCraftedAdvertFromDir(dirB, kBucket, 2, false, advert));
     TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
     std::vector<meshtastic_MeshPacket> sent = takeSent();
     TEST_ASSERT_EQUAL_UINT(1, sent.size());
@@ -1417,10 +1470,10 @@ void test_sketchCountMismatchFallsBackImmediately()
     portduino_config.sfpp_repair = SFPP_REPAIR_SKETCH;
     ingestAuthority(8);
     buildFollowerFromCopy();
-    TEST_ASSERT_TRUE(deleteCounter(dirB, 8));
+    TEST_ASSERT_TRUE(deleteNewest(dirB, kBucket, 1));
 
     meshtastic_MeshPacket advert;
-    TEST_ASSERT_TRUE(buildCraftedAdvertFromDir(dirB, 0, 2, true, advert));
+    TEST_ASSERT_TRUE(buildCraftedAdvertFromDir(dirB, kBucket, 2, true, advert));
     TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
     std::vector<meshtastic_MeshPacket> sent = takeSent();
     TEST_ASSERT_EQUAL_UINT(1, sent.size());
@@ -1435,7 +1488,7 @@ void test_sendFreesPacketSafely()
 {
     ingestAuthority(2);
     buildFollowerFromCopy();
-    TEST_ASSERT_TRUE(deleteCounter(dirB, 2));
+    TEST_ASSERT_TRUE(deleteNewest(dirB, kBucket, 1));
     testRouter->freeOnSend = true; // every send frees the packet, as a real radio may
 
     Exchange exchange = runExchange();
@@ -1455,7 +1508,7 @@ void test_blankFollowerPullsFromFullRootAdvert()
     follower = new TestSfppModule();
 
     meshtastic_MeshPacket advert;
-    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, 0, false, advert, true));
+    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, kBucket, false, advert, true));
     TEST_ASSERT_EQUAL_UINT(SFPP_HASH_SIZE, decodeSfpp(advert).root_hash.size);
     TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
 
@@ -1510,8 +1563,9 @@ void test_unknownPusherIsBudgeted()
             TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, true, mp));
         }
     }
-    // One existing row plus eight accepted; the ninth is over the per-window budget.
-    TEST_ASSERT_EQUAL_UINT32(9, readBucket(dirA, 1, sfppsr::kBucketObjects).count);
+    // One existing row plus eight accepted; the ninth is over the per-window budget. The pushed
+    // objects file under their own content buckets, so the whole store is counted.
+    TEST_ASSERT_EQUAL_UINT32(9, readStore(dirA).count);
 }
 
 // Stage 8e: at production pacing (20 s) with two requesters, a follower missing 20 converges,
@@ -1522,8 +1576,8 @@ void test_pacedDeliveryConverges()
     ingestAuthority(20);
     buildFollowerFromCopy();
     buildSecondFollowerFromCopy();
-    TEST_ASSERT_TRUE(deleteCounterRange(dirB, 1, 20));  // empty
-    TEST_ASSERT_TRUE(deleteCounterRange(dirC, 17, 20)); // missing 4
+    TEST_ASSERT_TRUE(deleteBucket(dirB, kBucket));    // empty
+    TEST_ASSERT_TRUE(deleteNewest(dirC, kBucket, 4)); // missing the newest 4
 
     meshtastic_MeshPacket advert = runAuthorityOnce();
     TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
@@ -1582,13 +1636,8 @@ void test_pacedDeliveryConverges()
     TEST_ASSERT_EQUAL_UINT(20, bFrames); // no retry-induced duplicates
     TEST_ASSERT_EQUAL_UINT(4, cFrames);
 
-    const BucketView a = readBucket(dirA, 1, sfppsr::kBucketObjects);
-    const BucketView b = readBucket(dirB, 1, sfppsr::kBucketObjects);
-    const BucketView c = readBucket(dirC, 1, sfppsr::kBucketObjects);
-    TEST_ASSERT_EQUAL_UINT32(a.count, b.count);
-    TEST_ASSERT_EQUAL_UINT64(a.checksum, b.checksum);
-    TEST_ASSERT_EQUAL_UINT32(a.count, c.count);
-    TEST_ASSERT_EQUAL_UINT64(a.checksum, c.checksum);
+    assertConverged(kBucket, dirB);
+    assertConverged(kBucket, dirC);
 }
 
 // Stage 8e items 5, 8, 9: broadcast item frames serve a listener that never requests; a
@@ -1599,8 +1648,8 @@ void test_broadcastServesListenOnlyFollower()
     ingestAuthority(20);
     buildFollowerFromCopy();
     buildSecondFollowerFromCopy();
-    TEST_ASSERT_TRUE(deleteCounterRange(dirB, 1, 20));
-    TEST_ASSERT_TRUE(deleteCounterRange(dirC, 1, 20));
+    TEST_ASSERT_TRUE(deleteBucket(dirB, kBucket));
+    TEST_ASSERT_TRUE(deleteBucket(dirC, kBucket));
 
     meshtastic_MeshPacket advert = runAuthorityOnce();
     TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
@@ -1639,12 +1688,8 @@ void test_broadcastServesListenOnlyFollower()
     }
     TEST_ASSERT_EQUAL_UINT(20, frames);
 
-    const BucketView a = readBucket(dirA, 1, sfppsr::kBucketObjects);
-    const BucketView b = readBucket(dirB, 1, sfppsr::kBucketObjects);
-    const BucketView c = readBucket(dirC, 1, sfppsr::kBucketObjects);
-    TEST_ASSERT_EQUAL_UINT32(a.count, b.count);
-    TEST_ASSERT_EQUAL_UINT32(a.count, c.count);
-    TEST_ASSERT_EQUAL_UINT64(a.checksum, c.checksum);
+    assertConverged(kBucket, dirB);
+    assertConverged(kBucket, dirC);
 }
 
 // Stage 8e item 8: an object from a non-authority sender is not accepted.
@@ -1673,7 +1718,7 @@ void test_objectFromNonAuthorityIsIgnored()
                                                  &meshtastic_StoreForwardPlusPlus_msg, &frames[0]);
     TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, mp));
 
-    TEST_ASSERT_EQUAL_UINT32(3, readBucket(dirB, 1, sfppsr::kBucketObjects).count);
+    TEST_ASSERT_EQUAL_UINT32(3, readStore(dirB).count); // the frame's object would file under its own bucket
 }
 
 // Stage 8e item 10: texts heard live sit in scratch; promote them instead of re-fetching.
@@ -1681,16 +1726,14 @@ void test_heardLiveObjectsArePromoted()
 {
     ingestAuthority(20);
     TEST_ASSERT_TRUE(copyDb(dirA, dirB));
-    TEST_ASSERT_TRUE(deleteCounterRange(dirB, 1, 20)); // canon empty, root retained
+    TEST_ASSERT_TRUE(deleteBucket(dirB, kBucket)); // canon empty, root retained
+    TEST_ASSERT_EQUAL_UINT32(0, readStore(dirB).count);
     portduino_config.sfpp_db_path = dirB + "/";
     portduino_config.sfpp_stratum0 = false;
     follower = new TestSfppModule();
 
-    for (uint32_t i = 0; i < 15; i++) {
-        char text[16];
-        snprintf(text, sizeof(text), "msg %u", i + 1);
-        ingestScratchText(follower, FOLLOWER_NODE, SENDER_NODE, BASE_ID + i, text, 0);
-    }
+    for (uint32_t i = 0; i < 15; i++) // the first 15 of the authority's 20 texts, heard live
+        ingestScratchText(follower, FOLLOWER_NODE, SENDER_NODE, ingested[i].id, ingested[i].text, 0);
 
     Exchange exchange = runExchange();
     TEST_ASSERT_EQUAL_UINT(1, exchange.itemRequests);
@@ -1700,16 +1743,20 @@ void test_heardLiveObjectsArePromoted()
 
 // --- Stage 8h ---
 
-// A burst of adverts with rising tips starts at most one pull (one exchange, one pacer slot).
+// A burst of adverts whose tip (the bucket's content count) rises with each new write starts at most
+// one pull: the first opens the exchange, the rest name the bucket already being pulled.
 void test_risingTipsProduceOnePull()
 {
     ingestAuthority(40);
     buildFollowerFromCopy();
-    TEST_ASSERT_TRUE(deleteCounterRange(dirB, 39, 40));
+    TEST_ASSERT_TRUE(deleteNewest(dirB, kBucket, 2));
 
-    for (uint32_t tip = 40; tip < 45; tip++) {
+    for (uint32_t i = 0; i < 5; i++) {
+        if (i > 0)
+            ingestAuthority(1); // one more write, so the next advert carries a higher tip
         meshtastic_MeshPacket advert;
-        TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, 0, false, advert, false, tip));
+        TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, kBucket, false, advert));
+        TEST_ASSERT_EQUAL_UINT32(40 + i, decodeSfpp(advert).encapsulated_rxtime);
         TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
         myNodeInfo.my_node_num = FOLLOWER_NODE;
         portduino_config.sfpp_stratum0 = false;
@@ -1720,20 +1767,23 @@ void test_risingTipsProduceOnePull()
     TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_REQUEST, decodeSfpp(requests[0]).sfpp_message_type);
 }
 
-// The confirmed tip is per (root, authority): a new authority with a lower tip still gets its tail
-// pulled instead of being suppressed by the old high-water mark.
+// Pull state is per (root, authority): after converging with one authority, a new authority whose
+// advert carries a lower tip than the old one's still gets its differing bucket pulled. The content
+// model has no tip high-water mark, so this pins that none came back.
 void test_newAuthorityLowerTipPullsTail()
 {
     ingestAuthority(40);
     buildFollowerFromCopy();
-    TEST_ASSERT_TRUE(deleteCounterRange(dirB, 39, 40));
-    Exchange first = runExchange(); // converge; known tip becomes 40
+    TEST_ASSERT_TRUE(deleteNewest(dirB, kBucket, 2));
+    Exchange first = runExchange(); // converge with the first authority
     TEST_ASSERT_EQUAL_UINT(2, first.itemFrames);
+    assertConverged();
 
     Time::setTestMillis(Time::getMillis() + 2000); // clear any pacer slot
+    ingestAuthority(1);                            // the new authority's bucket differs by one object
 
     meshtastic_MeshPacket advert;
-    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, 0, false, advert, false, 39));
+    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, kBucket, false, advert, false, 1)); // tip 1, under the old 40
     advert.from = UNKNOWN_NODE;
     TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
     myNodeInfo.my_node_num = FOLLOWER_NODE;
@@ -1743,7 +1793,8 @@ void test_newAuthorityLowerTipPullsTail()
     std::vector<meshtastic_MeshPacket> request = takeSent();
     TEST_ASSERT_EQUAL_UINT(1, request.size());
     TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_REQUEST, decodeSfpp(request[0]).sfpp_message_type);
-    TEST_ASSERT_EQUAL_UINT32(1, decodeSfpp(request[0]).chain_count);
+    TEST_ASSERT_EQUAL_UINT32(kBucket, decodeSfpp(request[0]).chain_count);
+    TEST_ASSERT_EQUAL_UINT32(UNKNOWN_NODE, request[0].to);
 }
 
 // Two valid objects with the same 32-bit short ID: the scratch copy must not stand in for the
@@ -1756,10 +1807,10 @@ void test_genuineShortIdCollisionIsFetched()
     makeCandidate(kCollisionACipher, kCollisionAId, held);
     makeCandidate(kCollisionBCipher, kCollisionBId, missingObject);
     TEST_ASSERT_EQUAL_UINT32(held.shortId, missingObject.shortId);
-    TEST_ASSERT_TRUE(insertCandidateRow(dirA, 2, missingObject));
+    TEST_ASSERT_TRUE(insertCandidateRow(dirA, missingObject));
 
     TEST_ASSERT_TRUE(copyDb(dirA, dirB));
-    TEST_ASSERT_TRUE(deleteCounter(dirB, 2));
+    TEST_ASSERT_TRUE(deleteObject(dirB, missingObject.hash));
     portduino_config.sfpp_db_path = dirB + "/";
     portduino_config.sfpp_stratum0 = false;
     follower = new TestSfppModule();
@@ -1819,10 +1870,10 @@ void test_corruptScratchRowIsNotPromoted()
     makeCandidate(kCollisionACipher, kCollisionAId, held);
     makeCandidate(kCollisionBCipher, kCollisionBId, missingObject);
     TEST_ASSERT_EQUAL_UINT32(held.shortId, missingObject.shortId);
-    TEST_ASSERT_TRUE(insertCandidateRow(dirA, 2, missingObject));
+    TEST_ASSERT_TRUE(insertCandidateRow(dirA, missingObject));
 
     TEST_ASSERT_TRUE(copyDb(dirA, dirB));
-    TEST_ASSERT_TRUE(deleteCounter(dirB, 2));
+    TEST_ASSERT_TRUE(deleteObject(dirB, missingObject.hash));
     portduino_config.sfpp_db_path = dirB + "/";
     portduino_config.sfpp_stratum0 = false;
     follower = new TestSfppModule();
@@ -1838,39 +1889,21 @@ void test_corruptScratchRowIsNotPromoted()
     assertConverged();
 }
 
-// A behind-bucket advert that arrives mid-exchange is remembered and pulled when the exchange ends,
-// not dropped until its next rotation turn.
-void test_midExchangeAdvertIsPulledAfter()
+// Finishes a pull the requester opened: the authority answers `request` with a provide, the
+// requester asks for its missing objects, and the paced item frames are delivered. Returns the
+// number of item frames.
+uint32_t finishPull(TestSfppModule *requester, NodeNum node, const meshtastic_MeshPacket &request)
 {
-    ingestAuthority(40);
-    buildFollowerFromCopy();
-    TEST_ASSERT_TRUE(deleteCounter(dirB, 31));
-    TEST_ASSERT_TRUE(deleteCounter(dirB, 32)); // bucket 0 short 2
-    TEST_ASSERT_TRUE(deleteCounter(dirB, 39));
-    TEST_ASSERT_TRUE(deleteCounter(dirB, 40)); // bucket 1 short 2
+    TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, true, request));
+    std::vector<meshtastic_MeshPacket> provide = drainAuthorityOne(2000);
+    TEST_ASSERT_EQUAL_UINT(1, provide.size());
+    TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_PROVIDE, decodeSfpp(provide[0]).sfpp_message_type);
+    TEST_ASSERT_TRUE(deliver(requester, node, false, provide[0]));
+    std::vector<meshtastic_MeshPacket> item = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, item.size());
+    TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, true, item[0]));
 
-    meshtastic_MeshPacket advert1;
-    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, 1, false, advert1, false, 40));
-    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert1));
-    std::vector<meshtastic_MeshPacket> req1 = takeSent();
-    TEST_ASSERT_EQUAL_UINT(1, req1.size());
-    TEST_ASSERT_EQUAL_UINT32(1, decodeSfpp(req1[0]).chain_count);
-
-    // Bucket 0's advert arrives mid-exchange; it must be remembered, not dropped.
-    meshtastic_MeshPacket advert0;
-    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, 0, false, advert0, false, 40));
-    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert0));
-    TEST_ASSERT_EQUAL_UINT(0, takeSent().size());
-
-    // Complete bucket 1.
-    TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, true, req1[0]));
-    std::vector<meshtastic_MeshPacket> prov1 = drainAuthorityOne(2000);
-    TEST_ASSERT_EQUAL_UINT(1, prov1.size());
-    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, prov1[0]));
-    std::vector<meshtastic_MeshPacket> item1 = takeSent();
-    TEST_ASSERT_EQUAL_UINT(1, item1.size());
-    TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, true, item1[0]));
-    uint32_t frames1 = 0;
+    uint32_t frames = 0;
     for (uint32_t guard = 0; guard < 16; guard++) {
         std::vector<meshtastic_MeshPacket> out = drainAuthorityOne(2000);
         if (out.empty())
@@ -1878,156 +1911,117 @@ void test_midExchangeAdvertIsPulledAfter()
         if (decodeSfpp(out[0]).sfpp_message_type != meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_FRAME)
             break;
         for (const auto &frame : out) {
-            TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, frame));
-            frames1++;
+            TEST_ASSERT_TRUE(deliver(requester, node, false, frame));
+            frames++;
         }
     }
-    TEST_ASSERT_EQUAL_UINT(2, frames1);
+    return frames;
+}
+
+// A behind-bucket advert that arrives mid-exchange is remembered and pulled when the exchange ends,
+// not dropped until its next rotation turn.
+void test_midExchangeAdvertIsPulledAfter()
+{
+    ingestAuthority(32);
+    ingestIntoBucket(kHighBucket, 8);
+    buildFollowerFromCopy();
+    TEST_ASSERT_TRUE(deleteNewest(dirB, kBucket, 2));     // kBucket short 2
+    TEST_ASSERT_TRUE(deleteNewest(dirB, kHighBucket, 2)); // kHighBucket short 2
+
+    meshtastic_MeshPacket advertHigh;
+    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, kHighBucket, false, advertHigh));
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advertHigh));
+    std::vector<meshtastic_MeshPacket> reqHigh = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, reqHigh.size());
+    TEST_ASSERT_EQUAL_UINT32(kHighBucket, decodeSfpp(reqHigh[0]).chain_count);
+
+    // kBucket's advert arrives mid-exchange; it must be remembered, not dropped.
+    meshtastic_MeshPacket advertLow;
+    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, kBucket, false, advertLow));
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advertLow));
+    TEST_ASSERT_EQUAL_UINT(0, takeSent().size());
+
+    TEST_ASSERT_EQUAL_UINT(2, finishPull(follower, FOLLOWER_NODE, reqHigh[0]));
 
     // The exchange ended; the remembered bucket is pulled on the next run.
     myNodeInfo.my_node_num = FOLLOWER_NODE;
     portduino_config.sfpp_stratum0 = false;
     testRouter->sent.clear();
     follower->runOnce();
-    std::vector<meshtastic_MeshPacket> req0 = takeSent();
-    TEST_ASSERT_EQUAL_UINT(1, req0.size());
-    TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_REQUEST, decodeSfpp(req0[0]).sfpp_message_type);
-    TEST_ASSERT_EQUAL_UINT32(0, decodeSfpp(req0[0]).chain_count);
+    std::vector<meshtastic_MeshPacket> reqLow = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, reqLow.size());
+    TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_REQUEST, decodeSfpp(reqLow[0]).sfpp_message_type);
+    TEST_ASSERT_EQUAL_UINT32(kBucket, decodeSfpp(reqLow[0]).chain_count);
 
-    TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, true, req0[0]));
-    std::vector<meshtastic_MeshPacket> prov0 = drainAuthorityOne(2000);
-    TEST_ASSERT_EQUAL_UINT(1, prov0.size());
-    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, prov0[0]));
-    std::vector<meshtastic_MeshPacket> item0 = takeSent();
-    TEST_ASSERT_EQUAL_UINT(1, item0.size());
-    TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, true, item0[0]));
-    uint32_t frames0 = 0;
-    for (uint32_t guard = 0; guard < 16; guard++) {
-        std::vector<meshtastic_MeshPacket> out = drainAuthorityOne(2000);
-        if (out.empty())
-            continue;
-        if (decodeSfpp(out[0]).sfpp_message_type != meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_FRAME)
-            break;
-        for (const auto &frame : out) {
-            TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, frame));
-            frames0++;
-        }
-    }
-    TEST_ASSERT_EQUAL_UINT(2, frames0);
-
-    const BucketView a0 = readBucket(dirA, 1, 32);
-    const BucketView b0 = readBucket(dirB, 1, 32);
-    const BucketView a1 = readBucket(dirA, 33, 64);
-    const BucketView b1 = readBucket(dirB, 33, 64);
-    TEST_ASSERT_EQUAL_UINT32(a0.count, b0.count);
-    TEST_ASSERT_EQUAL_UINT64(a0.checksum, b0.checksum);
-    TEST_ASSERT_EQUAL_UINT32(a1.count, b1.count);
-    TEST_ASSERT_EQUAL_UINT64(a1.checksum, b1.checksum);
+    TEST_ASSERT_EQUAL_UINT(2, finishPull(follower, FOLLOWER_NODE, reqLow[0]));
+    assertConverged(kBucket);
+    assertConverged(kHighBucket);
 }
 
 // --- Stage 8f: advert rotation ---
 
-// A bucket that gained rows since its last advert goes ahead of the round-robin, so a follower
-// behind in the last bucket catches up on the next advert, not buckets x interval later.
+// A bucket that gained objects since its last advert goes ahead of the round-robin, so a follower
+// behind in it catches up on the next advert, not buckets x interval later. The changed bucket is
+// the lower one, so walking highest-first or round-robin would both name the other.
 void test_rotationServesChangedBucketFirst()
 {
-    ingestAuthority(40); // buckets 0 (32 rows) and 1 (8)
-    runAuthorityOnce();  // mark bucket 1 seen
-    runAuthorityOnce();  // mark bucket 0 seen
+    ingestIntoBucket(kHighBucket, 32);
+    ingestAuthority(8);
+    TEST_ASSERT_EQUAL_UINT32(kHighBucket, decodeSfpp(runAuthorityOnce()).chain_count); // mark it seen
+    TEST_ASSERT_EQUAL_UINT32(kBucket, decodeSfpp(runAuthorityOnce()).chain_count);     // mark it seen
 
-    buildFollowerFromCopy();    // B has 40
-    ingestAuthorityMore(40, 2); // A's bucket 1 gains two rows (now 10)
+    buildFollowerFromCopy(); // B has both buckets
+    ingestAuthority(2);      // A's kBucket gains two objects (now 10); the round-robin turn is kHighBucket's
 
     meshtastic_MeshPacket advert = runAuthorityOnce();
-    TEST_ASSERT_EQUAL_UINT32(1, decodeSfpp(advert).chain_count); // changed bucket first
+    TEST_ASSERT_EQUAL_UINT32(kBucket, decodeSfpp(advert).chain_count); // changed bucket first
     TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
 
     std::vector<meshtastic_MeshPacket> request = takeSent();
     TEST_ASSERT_EQUAL_UINT(1, request.size());
     TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_REQUEST, decodeSfpp(request[0]).sfpp_message_type);
-    TEST_ASSERT_EQUAL_UINT32(1, decodeSfpp(request[0]).chain_count);
+    TEST_ASSERT_EQUAL_UINT32(kBucket, decodeSfpp(request[0]).chain_count);
 
-    TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, true, request[0]));
-    std::vector<meshtastic_MeshPacket> provide = drainAuthorityOne(2000);
-    TEST_ASSERT_EQUAL_UINT(1, provide.size());
-    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, provide[0]));
-    std::vector<meshtastic_MeshPacket> item = takeSent();
-    TEST_ASSERT_EQUAL_UINT(1, item.size());
-
-    TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, true, item[0]));
-    uint32_t frames = 0;
-    for (uint32_t guard = 0; guard < 16; guard++) {
-        std::vector<meshtastic_MeshPacket> out = drainAuthorityOne(2000);
-        if (out.empty())
-            continue;
-        if (decodeSfpp(out[0]).sfpp_message_type != meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_FRAME)
-            break;
-        for (const auto &frame : out) {
-            TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, frame));
-            frames++;
-        }
-    }
-    TEST_ASSERT_EQUAL_UINT(2, frames);
-
-    const BucketView a = readBucket(dirA, 33, 64);
-    const BucketView b = readBucket(dirB, 33, 64);
-    TEST_ASSERT_EQUAL_UINT32(10, a.count);
-    TEST_ASSERT_EQUAL_UINT32(a.count, b.count);
-    TEST_ASSERT_EQUAL_UINT64(a.checksum, b.checksum);
+    TEST_ASSERT_EQUAL_UINT(2, finishPull(follower, FOLLOWER_NODE, request[0]));
+    TEST_ASSERT_EQUAL_UINT32(10, readBucket(dirA, kBucket).count);
+    assertConverged(kBucket);
 }
 
-// A follower that learns from any advert that the sender's tip is ahead pulls the newest bucket at
-// once, even if the advert named another bucket; at most one exchange is open.
+// The content model has no tip-driven pull (removed in Q10 step 4): an advert for a bucket the
+// follower agrees on starts nothing, whatever its tip. An advert for the bucket it lacks starts one
+// exchange inline, and at most one exchange is open.
 void test_onDemandPullsNewestBucketAndCapsPacing()
 {
-    ingestAuthority(40);
+    ingestAuthority(32);
+    ingestIntoBucket(kHighBucket, 8);
     buildFollowerFromCopy();
-    TEST_ASSERT_TRUE(deleteCounterRange(dirB, 39, 40)); // B tip 38, missing the last two
+    TEST_ASSERT_TRUE(deleteNewest(dirB, kHighBucket, 2)); // B lacks kHighBucket's newest two
 
-    meshtastic_MeshPacket advert;
-    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, 0, false, advert, false, 40)); // names bucket 0, tip 40
-    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
-    TEST_ASSERT_EQUAL_UINT(0, takeSent().size()); // queued for the pacer, not sent inline
-
-    // startPendingPull (from runOnce) sends the newest bucket on demand.
+    meshtastic_MeshPacket inSync;
+    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, kBucket, false, inSync));
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, inSync));
+    TEST_ASSERT_EQUAL_UINT(0, takeSent().size());
     myNodeInfo.my_node_num = FOLLOWER_NODE;
     portduino_config.sfpp_stratum0 = false;
     follower->runOnce();
+    for (const auto &p : takeSent()) // the follower may advertise, but nothing was queued to pull
+        TEST_ASSERT_NOT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_REQUEST, decodeSfpp(p).sfpp_message_type);
+
+    meshtastic_MeshPacket behind;
+    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, kHighBucket, false, behind));
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, behind));
     std::vector<meshtastic_MeshPacket> request = takeSent();
     TEST_ASSERT_EQUAL_UINT(1, request.size());
     TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_REQUEST, decodeSfpp(request[0]).sfpp_message_type);
-    TEST_ASSERT_EQUAL_UINT32(1, decodeSfpp(request[0]).chain_count); // newest bucket on demand
+    TEST_ASSERT_EQUAL_UINT32(kHighBucket, decodeSfpp(request[0]).chain_count);
 
-    // The one-exchange cap: a second advert while active starts nothing.
-    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
+    // The one-exchange cap: further adverts while active start nothing.
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, behind));
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, inSync));
     TEST_ASSERT_EQUAL_UINT(0, takeSent().size());
 
-    TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, true, request[0]));
-    std::vector<meshtastic_MeshPacket> provide = drainAuthorityOne(2000);
-    TEST_ASSERT_EQUAL_UINT(1, provide.size());
-    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, provide[0]));
-    std::vector<meshtastic_MeshPacket> item = takeSent();
-    TEST_ASSERT_EQUAL_UINT(1, item.size());
-    TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, true, item[0]));
-
-    uint32_t frames = 0;
-    for (uint32_t guard = 0; guard < 16; guard++) {
-        std::vector<meshtastic_MeshPacket> out = drainAuthorityOne(2000);
-        if (out.empty())
-            continue;
-        if (decodeSfpp(out[0]).sfpp_message_type != meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_FRAME)
-            break;
-        for (const auto &frame : out) {
-            TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, frame));
-            frames++;
-        }
-    }
-    TEST_ASSERT_EQUAL_UINT(2, frames);
-
-    const BucketView a = readBucket(dirA, 33, 64);
-    const BucketView b = readBucket(dirB, 33, 64);
-    TEST_ASSERT_EQUAL_UINT32(a.count, b.count);
-    TEST_ASSERT_EQUAL_UINT64(a.checksum, b.checksum);
+    TEST_ASSERT_EQUAL_UINT(2, finishPull(follower, FOLLOWER_NODE, request[0]));
+    assertConverged(kHighBucket);
 }
 
 void enablePullRetry()
@@ -2035,7 +2029,8 @@ void enablePullRetry()
     portduino_config.sfpp_pull_retry = true;
 }
 
-// Drives a paced pull to a failed exchange with the provide dropped, leaving a remembered hole.
+// Drives a pull to a failed exchange with the provide dropped, leaving a remembered hole. The pull
+// starts inline from an advert naming the hole, or from the remembered entry after its backoff.
 void failPendingPull(const meshtastic_MeshPacket &advert)
 {
     TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
@@ -2055,42 +2050,68 @@ void failPendingPull(const meshtastic_MeshPacket &advert)
     }
 }
 
+// The follower agrees on kBucket and lacks the two newest objects of kHighBucket. `hole` names the
+// hole's bucket and always pulls at once; `other` names kBucket, so it only nudges a remembered retry.
+void setupHighBucketHole(meshtastic_MeshPacket &hole, meshtastic_MeshPacket &other)
+{
+    ingestAuthority(32);
+    ingestIntoBucket(kHighBucket, 8);
+    buildFollowerFromCopy();
+    TEST_ASSERT_TRUE(deleteNewest(dirB, kHighBucket, 2));
+    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, kHighBucket, false, hole));
+    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, kBucket, false, other));
+}
+
 // --- Q6 groundwork: failed-pull retry and the shared pacer ---
 
-// The 8f on-demand tail must obey the same drain pacer as everything else. The parent started it
-// inline, so a second advert inside the interval sent a request and this assertion failed there.
+// A remembered pull obeys the same drain pacer as everything else. Three buckets each lack their
+// newest object, held in scratch so each list completes with no item request; the two remembered
+// mid-exchange are pulled one drain interval apart, never back to back.
 void test_secondAdvertInsideDrainIntervalSendsNoRequest()
 {
-    ingestAuthority(40);
+    ingestIntoBucket(kLowBucket, 2);
+    ingestIntoBucket(kBucket, 2);
+    ingestIntoBucket(kHighBucket, 2);
     buildFollowerFromCopy();
-    deleteCounter(dirB, 40);
-    ingestScratchText(follower, FOLLOWER_NODE, SENDER_NODE, BASE_ID + 39, "msg 40", 100); // too young to push
+    for (uint32_t bucket : {kLowBucket, kBucket, kHighBucket})
+        TEST_ASSERT_TRUE(deleteNewest(dirB, bucket, 1));
+    for (size_t i : {1, 3, 5}) // each bucket's newest object, too young to push
+        ingestScratchText(follower, FOLLOWER_NODE, SENDER_NODE, ingested[i].id, ingested[i].text, 100);
 
     meshtastic_MeshPacket advert;
-    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, 0, false, advert, false, 40));
+    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, kLowBucket, false, advert));
     TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
-    myNodeInfo.my_node_num = FOLLOWER_NODE;
-    portduino_config.sfpp_stratum0 = false;
-    follower->runOnce();
     std::vector<meshtastic_MeshPacket> first = takeSent();
     TEST_ASSERT_EQUAL_UINT(1, first.size());
-    TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_REQUEST, decodeSfpp(first[0]).sfpp_message_type);
+    TEST_ASSERT_EQUAL_UINT32(kLowBucket, decodeSfpp(first[0]).chain_count);
+    for (uint32_t bucket : {kBucket, kHighBucket}) { // remembered, not pulled, while busy
+        TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, bucket, false, advert));
+        TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
+    }
+    TEST_ASSERT_EQUAL_UINT(0, takeSent().size());
 
-    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, buildProvideFromDir(dirA, 1)));
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, buildProvideFromDir(dirA, kLowBucket)));
     TEST_ASSERT_EQUAL_UINT(0, takeSent().size()); // the scratch row filled the only hole
 
-    ingestAuthorityMore(40, 1);
-    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, 0, false, advert, false, 41));
-    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
-    follower->runOnce();
-    TEST_ASSERT_EQUAL_UINT(0, takeSent().size()); // inside the 2 s drain interval set in setUp()
-
-    Time::setTestMillis(Time::getMillis() + 2000); // one enumDrainIntervalMs()
-    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
+    myNodeInfo.my_node_num = FOLLOWER_NODE;
+    portduino_config.sfpp_stratum0 = false;
     follower->runOnce();
     std::vector<meshtastic_MeshPacket> second = takeSent();
     TEST_ASSERT_EQUAL_UINT(1, second.size());
     TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_REQUEST, decodeSfpp(second[0]).sfpp_message_type);
+    TEST_ASSERT_EQUAL_UINT32(kHighBucket, decodeSfpp(second[0]).chain_count); // newest bucket first
+
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, buildProvideFromDir(dirA, kHighBucket)));
+    TEST_ASSERT_EQUAL_UINT(0, takeSent().size());
+    follower->runOnce();
+    TEST_ASSERT_EQUAL_UINT(0, takeSent().size()); // inside the 2 s drain interval set in setUp()
+
+    Time::setTestMillis(Time::getMillis() + 2000); // one enumDrainIntervalMs()
+    follower->runOnce();
+    std::vector<meshtastic_MeshPacket> third = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, third.size());
+    TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_REQUEST, decodeSfpp(third[0]).sfpp_message_type);
+    TEST_ASSERT_EQUAL_UINT32(kBucket, decodeSfpp(third[0]).chain_count);
 }
 
 // A lost provide is remembered and retried on a later advert that names a different bucket, after
@@ -2098,70 +2119,31 @@ void test_secondAdvertInsideDrainIntervalSendsNoRequest()
 void test_lostEnumProvideRetriesWithinBackoff()
 {
     enablePullRetry();
-    ingestAuthority(40);
-    buildFollowerFromCopy();
-    deleteCounterRange(dirB, 39, 40);
-
-    meshtastic_MeshPacket advert;
-    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, 0, false, advert, false, 40));
-    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
-    myNodeInfo.my_node_num = FOLLOWER_NODE;
-    portduino_config.sfpp_stratum0 = false;
-    follower->runOnce();
-    std::vector<meshtastic_MeshPacket> first = takeSent();
-    TEST_ASSERT_EQUAL_UINT(1, first.size());
-
-    TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, true, first[0]));
-    TEST_ASSERT_EQUAL_UINT(1, drainAuthorityOne(2000).size()); // the provide is lost
-
-    for (uint32_t i = 0; i < 2; i++) { // one list resend, then the exchange fails
-        Time::setTestMillis(Time::getMillis() + 31000);
-        myNodeInfo.my_node_num = FOLLOWER_NODE;
-        portduino_config.sfpp_stratum0 = false;
-        follower->runOnce();
-        takeSent();
-    }
+    meshtastic_MeshPacket hole;
+    meshtastic_MeshPacket other;
+    setupHighBucketHole(hole, other);
+    failPendingPull(hole);
 
     for (uint32_t i = 0; i < 6; i++) { // no retry storm inside the 30 s backoff
-        TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
+        TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, other));
         follower->runOnce();
         TEST_ASSERT_EQUAL_UINT(0, takeSent().size());
     }
     Time::setTestMillis(Time::getMillis() + 29000);
-    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, other));
     follower->runOnce();
     TEST_ASSERT_EQUAL_UINT(0, takeSent().size());
 
     Time::setTestMillis(Time::getMillis() + 1000); // 30 s after the failure, under a 60 s rotation
-    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, other));
     follower->runOnce();
     std::vector<meshtastic_MeshPacket> retry = takeSent();
     TEST_ASSERT_EQUAL_UINT(1, retry.size());
     TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_REQUEST, decodeSfpp(retry[0]).sfpp_message_type);
-    TEST_ASSERT_EQUAL_UINT32(1, decodeSfpp(retry[0]).chain_count); // the hole's bucket, not the advert's
+    TEST_ASSERT_EQUAL_UINT32(kHighBucket, decodeSfpp(retry[0]).chain_count); // the hole's bucket, not the advert's
 
-    TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, true, retry[0]));
-    std::vector<meshtastic_MeshPacket> provide = drainAuthorityOne(2000);
-    TEST_ASSERT_EQUAL_UINT(1, provide.size());
-    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, provide[0]));
-    std::vector<meshtastic_MeshPacket> item = takeSent();
-    TEST_ASSERT_EQUAL_UINT(1, item.size());
-    TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, true, item[0]));
-
-    uint32_t frames = 0;
-    for (uint32_t guard = 0; guard < 16; guard++) {
-        std::vector<meshtastic_MeshPacket> out = drainAuthorityOne(2000);
-        if (out.empty())
-            continue;
-        if (decodeSfpp(out[0]).sfpp_message_type != meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_FRAME)
-            break;
-        for (const auto &frame : out) {
-            TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, frame));
-            frames++;
-        }
-    }
-    TEST_ASSERT_EQUAL_UINT(2, frames);
-    assertConverged();
+    TEST_ASSERT_EQUAL_UINT(2, finishPull(follower, FOLLOWER_NODE, retry[0]));
+    assertConverged(kHighBucket);
 }
 
 // W is D19's proposed 24 h service window; a hole older than it is accepted as lost instead of
@@ -2169,31 +2151,13 @@ void test_lostEnumProvideRetriesWithinBackoff()
 void test_failedPullStopsPastServiceWindow()
 {
     enablePullRetry();
-    ingestAuthority(40);
-    buildFollowerFromCopy();
-    deleteCounterRange(dirB, 39, 40);
-
-    meshtastic_MeshPacket advert;
-    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, 0, false, advert, false, 40));
-    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
-    myNodeInfo.my_node_num = FOLLOWER_NODE;
-    portduino_config.sfpp_stratum0 = false;
-    follower->runOnce();
-    std::vector<meshtastic_MeshPacket> first = takeSent();
-    TEST_ASSERT_EQUAL_UINT(1, first.size());
-
-    TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, true, first[0]));
-    TEST_ASSERT_EQUAL_UINT(1, drainAuthorityOne(2000).size());
-    for (uint32_t i = 0; i < 2; i++) {
-        Time::setTestMillis(Time::getMillis() + 31000);
-        myNodeInfo.my_node_num = FOLLOWER_NODE;
-        portduino_config.sfpp_stratum0 = false;
-        follower->runOnce();
-        takeSent();
-    }
+    meshtastic_MeshPacket hole;
+    meshtastic_MeshPacket other;
+    setupHighBucketHole(hole, other);
+    failPendingPull(hole);
 
     Time::setTestMillis(Time::getMillis() + 24ULL * 60 * 60 * 1000 + 1000);
-    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, other));
     follower->runOnce();
     TEST_ASSERT_EQUAL_UINT(0, takeSent().size());
 }
@@ -2203,84 +2167,81 @@ void test_failedPullStopsPastServiceWindow()
 void test_failedPullBackoffDoublesAcrossFailures()
 {
     enablePullRetry();
-    ingestAuthority(40);
-    buildFollowerFromCopy();
-    deleteCounterRange(dirB, 39, 40);
-
-    meshtastic_MeshPacket advert;
-    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, 0, false, advert, false, 40));
-    failPendingPull(advert); // first failure: 30 s backoff
+    meshtastic_MeshPacket hole;
+    meshtastic_MeshPacket other;
+    setupHighBucketHole(hole, other);
+    failPendingPull(hole); // first failure: 30 s backoff
 
     Time::setTestMillis(Time::getMillis() + 30000);
-    failPendingPull(advert); // second failure: 60 s backoff
+    failPendingPull(other); // the remembered entry retries and fails: 60 s backoff
 
     Time::setTestMillis(Time::getMillis() + 30000);
-    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, other));
     follower->runOnce();
     TEST_ASSERT_EQUAL_UINT(0, takeSent().size());
 
     Time::setTestMillis(Time::getMillis() + 31000);
-    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, other));
     follower->runOnce();
     std::vector<meshtastic_MeshPacket> retry = takeSent();
     TEST_ASSERT_EQUAL_UINT(1, retry.size());
     TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_REQUEST, decodeSfpp(retry[0]).sfpp_message_type);
 }
 
-// A failed tail pull must stay a tail pull: the retried list is the completion check, so a hole
-// filled in the meantime ends the exchange with no item request. On 28900150 the retry is stored
-// as (tip, 0), takes the checksum path and falls into a collision probe instead.
+// The content model has no tail pull, so this pins the remembered entry instead: it retries on its
+// own timer with no fresh advert and keeps its summary, so a hole the follower holds in scratch
+// completes the retried list by promotion, with no item request and no collision probe.
 void test_failedTailPullRetriesAsTail()
 {
     enablePullRetry();
-    ingestAuthority(40);
+    ingestAuthority(32);
+    ingestIntoBucket(kHighBucket, 8);
     buildFollowerFromCopy();
-    deleteCounter(dirB, 40);
-    ingestScratchText(follower, FOLLOWER_NODE, SENDER_NODE, BASE_ID + 39, "msg 40", 100); // too young to push
+    TEST_ASSERT_TRUE(deleteNewest(dirB, kHighBucket, 1));
+    const IngestedText &newest = ingested.back();
+    ingestScratchText(follower, FOLLOWER_NODE, SENDER_NODE, newest.id, newest.text, 100); // too young to push
 
-    meshtastic_MeshPacket advert;
-    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, 0, false, advert, false, 40));
-    failPendingPull(advert);
+    meshtastic_MeshPacket hole;
+    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, kHighBucket, false, hole));
+    failPendingPull(hole);
 
-    // No new advert: the remembered entry itself must retain its tail-pull type. A fresh advert
-    // would overwrite the summary and mask the parent's (tip, 0) misclassification.
+    // No new advert: the remembered entry itself must carry the bucket and its summary.
     Time::setTestMillis(Time::getMillis() + 30000);
     follower->runOnce();
     std::vector<meshtastic_MeshPacket> retry = takeSent();
     TEST_ASSERT_EQUAL_UINT(1, retry.size());
-    TEST_ASSERT_EQUAL_UINT32(1, decodeSfpp(retry[0]).chain_count); // the tail bucket
+    TEST_ASSERT_EQUAL_UINT32(kHighBucket, decodeSfpp(retry[0]).chain_count);
 
     TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, true, retry[0]));
     std::vector<meshtastic_MeshPacket> provide = drainAuthorityOne(2000);
     TEST_ASSERT_EQUAL_UINT(1, provide.size());
     TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, provide[0]));
     TEST_ASSERT_EQUAL_UINT(0, takeSent().size()); // the promoted scratch row completed the list
-    assertConverged();
+    assertConverged(kHighBucket);
 }
 
-// Eight retries (nine failures) park the hole; a changed advertised summary revives it.
+// Eight retries (nine failures) park the hole; neither its timer nor an advert for another bucket
+// wakes it, while a changed summary for its own bucket pulls again.
 // On 3cd7de9e7 the parked entry's attempt state survives the new summary, so the revival fails.
 void test_failedPullCapParksUntilSummaryChanges()
 {
     enablePullRetry();
-    ingestAuthority(40);
-    buildFollowerFromCopy();
-    deleteCounterRange(dirB, 39, 40);
-
-    meshtastic_MeshPacket advert;
-    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, 0, false, advert, false, 40));
+    meshtastic_MeshPacket hole;
+    meshtastic_MeshPacket other;
+    setupHighBucketHole(hole, other);
     for (uint8_t i = 0; i < 9; i++) {
         if (i > 0)
             Time::setTestMillis(Time::getMillis() + 6 * 60 * 1000); // past the 5 min backoff cap
-        failPendingPull(advert);
+        failPendingPull(i == 0 ? hole : other);
     }
     Time::setTestMillis(Time::getMillis() + 10 * 60 * 1000);
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, other));
     follower->runOnce();
     TEST_ASSERT_EQUAL_UINT(0, takeSent().size()); // parked after the eighth retry
 
-    ingestAuthorityMore(40, 1);
+    ingestIntoBucket(kHighBucket, 1);
     meshtastic_MeshPacket changed;
-    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, 0, false, changed, false, 41));
+    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, kHighBucket, false, changed));
     TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, changed));
     follower->runOnce();
     std::vector<meshtastic_MeshPacket> request = takeSent();
@@ -2293,17 +2254,14 @@ void test_failedPullCapParksUntilSummaryChanges()
 void test_failedPullServiceWindowAfterLaunchAndRevival()
 {
     enablePullRetry();
-    ingestAuthority(40);
-    buildFollowerFromCopy();
-    deleteCounterRange(dirB, 39, 40);
+    meshtastic_MeshPacket hole;
+    meshtastic_MeshPacket other;
+    setupHighBucketHole(hole, other);
+    failPendingPull(hole);
 
-    meshtastic_MeshPacket advert;
-    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, 0, false, advert, false, 40));
-    failPendingPull(advert);
-
-    ingestAuthorityMore(40, 1);
+    ingestIntoBucket(kHighBucket, 1);
     meshtastic_MeshPacket changed;
-    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, 0, false, changed, false, 41));
+    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, kHighBucket, false, changed));
     Time::setTestMillis(Time::getMillis() + 5000); // past the pacer, inside the old 30 s backoff
     TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, changed));
     follower->runOnce();
@@ -2329,13 +2287,10 @@ void test_failedPullServiceWindowAfterLaunchAndRevival()
 // On 3cd7de9e7 there is no setting, so the remembered hole retries at +30 s and this fails.
 void test_pullRetryDisabledByDefault()
 {
-    ingestAuthority(40);
-    buildFollowerFromCopy();
-    deleteCounterRange(dirB, 39, 40);
-
-    meshtastic_MeshPacket advert;
-    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, 0, false, advert, false, 40));
-    failPendingPull(advert);
+    meshtastic_MeshPacket hole;
+    meshtastic_MeshPacket other;
+    setupHighBucketHole(hole, other);
+    failPendingPull(hole);
 
     Time::setTestMillis(Time::getMillis() + 30000);
     follower->runOnce();
@@ -2351,14 +2306,11 @@ void test_pullRetryDisabledByDefault()
 // These pin today's behaviour, not a decision. Whichever way Tom settles each item, the matching
 // assertion is meant to change, so the change is deliberate and visible.
 
-// Sets up a hole (39-40) inside bucket 1 while the follower holds the tip, so only an advert that
-// names bucket 1 shows the mismatch: the named-mismatch path, not the tail path.
+// A failed pull of kHighBucket's hole, opened by the advert that names it.
 void failNamedBucketPull(meshtastic_MeshPacket &advert)
 {
-    ingestAuthority(64);
-    buildFollowerFromCopy();
-    TEST_ASSERT_TRUE(deleteCounterRange(dirB, 39, 40));
-    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, 1, false, advert, false, 64));
+    meshtastic_MeshPacket other;
+    setupHighBucketHole(advert, other);
     failPendingPull(advert);
 }
 
@@ -2375,11 +2327,11 @@ void test_pullRetryOffNamedAdvertRePullsAtOnce()
     std::vector<meshtastic_MeshPacket> again = takeSent();
     TEST_ASSERT_EQUAL_UINT(1, again.size());
     TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_REQUEST, decodeSfpp(again[0]).sfpp_message_type);
-    TEST_ASSERT_EQUAL_UINT32(1, decodeSfpp(again[0]).chain_count);
+    TEST_ASSERT_EQUAL_UINT32(kHighBucket, decodeSfpp(again[0]).chain_count);
 }
 
 // Item 4: with PullRetry on, a named-mismatch advert also bypasses the backoff; the backoff only
-// paces the remembered entry's own timer and tail pulls.
+// paces the remembered entry's own timer.
 void test_pullRetryOnNamedAdvertBypassesBackoff()
 {
     enablePullRetry();
@@ -2394,34 +2346,32 @@ void test_pullRetryOnNamedAdvertBypassesBackoff()
     TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_REQUEST, decodeSfpp(again[0]).sfpp_message_type);
 }
 
-// Item 2, first half: a parked tail hole is revived by any new write, because a tail entry's only
-// summary is the tip. A hole no peer can serve is therefore re-parked and revived once per write.
+// Item 2, first half: tail entries are gone with the chain, so this pins the named equivalent. A
+// parked hole stays parked until a write to its own bucket changes that bucket's summary; each write
+// re-opens it, so a hole that keeps failing is re-parked and re-opened once per write.
 void test_parkedTailHoleRevivesOnEveryWrite()
 {
     enablePullRetry();
-    ingestAuthority(40);
-    buildFollowerFromCopy();
-    deleteCounterRange(dirB, 39, 40);
+    meshtastic_MeshPacket hole;
+    meshtastic_MeshPacket other;
+    setupHighBucketHole(hole, other);
 
-    uint32_t tip = 40;
     for (uint8_t round = 0; round < 2; round++) {
-        meshtastic_MeshPacket advert;
-        TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, 0, false, advert, false, tip));
+        TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, kHighBucket, false, hole));
         for (uint8_t i = 0; i < 9; i++) {
             if (i > 0)
                 Time::setTestMillis(Time::getMillis() + 6 * 60 * 1000); // past the 5 min backoff cap
-            failPendingPull(advert);
+            failPendingPull(i == 0 ? hole : other);
         }
         Time::setTestMillis(Time::getMillis() + 10 * 60 * 1000);
+        TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, other));
         follower->runOnce();
         TEST_ASSERT_EQUAL_UINT(0, takeSent().size()); // parked
 
-        ingestAuthorityMore(tip, 1); // one new write moves the tip, and nothing else the hole needs
-        tip++;
+        ingestIntoBucket(kHighBucket, 1); // one new write changes the hole bucket's summary
     }
-    meshtastic_MeshPacket advert;
-    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, 0, false, advert, false, tip));
-    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
+    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, kHighBucket, false, hole));
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, hole));
     follower->runOnce();
     TEST_ASSERT_EQUAL_UINT(1, takeSent().size()); // revived a second time
 }
@@ -2431,19 +2381,16 @@ void test_parkedTailHoleRevivesOnEveryWrite()
 void test_revivalRestartsServiceWindow()
 {
     enablePullRetry();
-    ingestAuthority(40);
-    buildFollowerFromCopy();
-    deleteCounterRange(dirB, 39, 40);
-
-    meshtastic_MeshPacket advert;
-    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, 0, false, advert, false, 40));
-    failPendingPull(advert); // first failure: W starts here
+    meshtastic_MeshPacket hole;
+    meshtastic_MeshPacket other;
+    setupHighBucketHole(hole, other);
+    failPendingPull(hole); // first failure: W starts here
     const uint32_t firstFailure = Time::getMillis();
 
     Time::setTestMillis(firstFailure + 23ULL * 60 * 60 * 1000); // inside W
-    ingestAuthorityMore(40, 1);
+    ingestIntoBucket(kHighBucket, 1);
     meshtastic_MeshPacket changed;
-    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, 0, false, changed, false, 41));
+    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, kHighBucket, false, changed));
     failPendingPull(changed); // revived, then failed again
 
     Time::setTestMillis(firstFailure + 24ULL * 60 * 60 * 1000 + 1000); // past W from the first failure
@@ -2459,10 +2406,10 @@ void test_windowBudgetCapsServedFrames()
     portduino_config.sfpp_enum_drain_ms = 100;
     ingestAuthority(40);
     buildFollowerFromCopy();
-    TEST_ASSERT_TRUE(deleteCounterRange(dirB, 1, 40));
+    TEST_ASSERT_TRUE(deleteBucket(dirB, kBucket));
 
     meshtastic_MeshPacket advert;
-    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, 0, false, advert, false, 40));
+    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, kBucket, false, advert));
     TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
     myNodeInfo.my_node_num = FOLLOWER_NODE;
     portduino_config.sfpp_stratum0 = false;
@@ -2510,10 +2457,10 @@ void test_windowBudgetCapsServedFrames()
 void test_fourRequestersShareTheServingWindow()
 {
     portduino_config.sfpp_enum_drain_ms = 100;
-    ingestAuthority(40);
+    ingestAuthority(32);
     std::vector<pinsketch::Element> ids;
-    TEST_ASSERT_TRUE(readShortIds(dirA, 0, ids));
-    TEST_ASSERT_EQUAL_UINT(sfppsr::kBucketObjects, ids.size());
+    TEST_ASSERT_TRUE(readShortIds(dirA, kBucket, ids));
+    TEST_ASSERT_EQUAL_UINT(32, ids.size());
     uint8_t root[SFPP_HASH_SIZE];
     TEST_ASSERT_TRUE(readRoot(dirA, root));
 
@@ -2524,7 +2471,7 @@ void test_fourRequestersShareTheServingWindow()
         msg.sr_version = sfppsr::kDerivationVersion;
         msg.root_hash.size = 4;
         memcpy(msg.root_hash.bytes, root, 4);
-        msg.chain_count = 0;
+        msg.chain_count = kBucket;
         for (pb_size_t i = 0; i < 8; i++)
             msg.sr_short_ids[i] = ids[p * 8 + i];
         msg.sr_short_ids_count = 8;
@@ -2603,7 +2550,7 @@ void test_knownPeerTableIsLeastRecentlyUsed()
             TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, true, mp));
         }
     }
-    TEST_ASSERT_EQUAL_UINT32(10, readBucket(dirA, 1, sfppsr::kBucketObjects).count);
+    TEST_ASSERT_EQUAL_UINT32(10, readStore(dirA).count); // pushed objects file under their own buckets
 }
 
 // G4: a half-received provide ends at the idle gap, so a later advert can start a fresh pull.
@@ -2611,10 +2558,10 @@ void test_lostProvideFrameEndsAtIdle()
 {
     ingestAuthority(32);
     buildFollowerFromCopy();
-    TEST_ASSERT_TRUE(deleteCounterRange(dirB, 31, 32));
+    TEST_ASSERT_TRUE(deleteNewest(dirB, kBucket, 2));
 
     meshtastic_MeshPacket advert;
-    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, 0, false, advert, false, 32));
+    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, kBucket, false, advert));
     TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
     myNodeInfo.my_node_num = FOLLOWER_NODE;
     portduino_config.sfpp_stratum0 = false;
@@ -2622,8 +2569,8 @@ void test_lostProvideFrameEndsAtIdle()
     std::vector<meshtastic_MeshPacket> request = takeSent();
     TEST_ASSERT_EQUAL_UINT(1, request.size());
 
-    // Only frame 0 of 2 arrives for bucket 0; the idle gap must end the exchange.
-    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, buildProvideFromDir(dirA, 0, 0, 2)));
+    // Only frame 0 of 2 arrives for the bucket; the idle gap must end the exchange.
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, buildProvideFromDir(dirA, kBucket, 0, 2)));
     Time::setTestMillis(Time::getMillis() + 31000);
     follower->runOnce();
 
@@ -2644,7 +2591,7 @@ void test_servedRequesterSurvivesPeerTableFlood()
     uint8_t root[SFPP_HASH_SIZE];
     TEST_ASSERT_TRUE(readRoot(dirA, root));
     std::vector<pinsketch::Element> ids;
-    TEST_ASSERT_TRUE(readShortIds(dirA, 0, ids));
+    TEST_ASSERT_TRUE(readShortIds(dirA, kBucket, ids));
     TEST_ASSERT_TRUE(!ids.empty());
 
     constexpr NodeNum served = 0xB0000001;
@@ -2654,7 +2601,7 @@ void test_servedRequesterSurvivesPeerTableFlood()
         msg.sr_version = sfppsr::kDerivationVersion;
         msg.root_hash.size = 4;
         memcpy(msg.root_hash.bytes, root, 4);
-        msg.chain_count = 0;
+        msg.chain_count = kBucket;
         if (withId) {
             msg.sr_short_ids[0] = ids[0];
             msg.sr_short_ids_count = 1;
@@ -2694,7 +2641,7 @@ void test_servedRequesterSurvivesPeerTableFlood()
             TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, true, mp));
         }
     }
-    TEST_ASSERT_EQUAL_UINT32(10, readBucket(dirA, 1, sfppsr::kBucketObjects).count);
+    TEST_ASSERT_EQUAL_UINT32(10, readStore(dirA).count); // pushed objects file under their own buckets
 }
 
 // --- Stage 8: sketch mode ---
@@ -2704,7 +2651,7 @@ void runSketchCase(uint32_t total, uint32_t missing)
     portduino_config.sfpp_repair = SFPP_REPAIR_SKETCH;
     ingestAuthority(total);
     buildFollowerFromCopy();
-    TEST_ASSERT_TRUE(deleteCounterRange(dirB, total - missing + 1, total));
+    TEST_ASSERT_TRUE(deleteNewest(dirB, kBucket, missing));
 
     meshtastic_MeshPacket advert = runAuthorityOnce();
     TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
@@ -2749,7 +2696,7 @@ void test_sketchFallsBackAtSixteen()
     portduino_config.sfpp_repair = SFPP_REPAIR_SKETCH;
     ingestAuthority(20);
     buildFollowerFromCopy();
-    TEST_ASSERT_TRUE(deleteCounterRange(dirB, 5, 20));
+    TEST_ASSERT_TRUE(deleteNewest(dirB, kBucket, 16));
 
     Exchange exchange = runExchange();
     TEST_ASSERT_EQUAL_UINT(1, exchange.enumRequests);
@@ -2765,10 +2712,10 @@ void test_sketchWrongChecksumFallsBack()
     portduino_config.sfpp_repair = SFPP_REPAIR_SKETCH;
     ingestAuthority(8);
     buildFollowerFromCopy();
-    TEST_ASSERT_TRUE(deleteCounter(dirB, 8));
+    TEST_ASSERT_TRUE(deleteNewest(dirB, kBucket, 1));
 
     meshtastic_MeshPacket advert;
-    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, 0, true, advert));
+    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, kBucket, true, advert));
     TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
     std::vector<meshtastic_MeshPacket> sent = takeSent();
     TEST_ASSERT_EQUAL_UINT(1, sent.size());
@@ -2802,7 +2749,7 @@ void test_writerMissedIsPushedAndSecondFollowerConverges()
     // The follower is a copy missing that text; a normal exchange makes it a known peer and gives
     // it the root.
     TEST_ASSERT_TRUE(copyDb(dirA, dirB));
-    TEST_ASSERT_TRUE(deleteCounter(dirB, 1));
+    TEST_ASSERT_TRUE(deleteIngested(dirB, 1));
     portduino_config.sfpp_db_path = dirB + "/";
     portduino_config.sfpp_stratum0 = false;
     follower = new TestSfppModule();
@@ -2815,11 +2762,14 @@ void test_writerMissedIsPushedAndSecondFollowerConverges()
     portduino_config.sfpp_stratum0 = false;
     follower2 = new TestSfppModule();
 
-    // The follower hears five texts the authority did not.
+    // The follower hears five texts the authority did not, in the authority's bucket so the second
+    // follower's one exchange covers them.
+    PacketId missedId = 0x60000;
     for (uint32_t i = 0; i < 5; i++) {
         char text[24];
         snprintf(text, sizeof(text), "writer missed %u", i);
-        ingestScratchText(follower, FOLLOWER_NODE, SENDER_NODE, 0x6000 + i, text, 301);
+        missedId = idForBucket(SENDER_NODE, text, kBucket, missedId);
+        ingestScratchText(follower, FOLLOWER_NODE, SENDER_NODE, missedId++, text, 301);
     }
 
     // An advert teaches the follower the authority's node; it is in sync, so it does not pull.
@@ -2843,17 +2793,14 @@ void test_writerMissedIsPushedAndSecondFollowerConverges()
         }
     }
     TEST_ASSERT_EQUAL_UINT(5, pushed);
-    TEST_ASSERT_EQUAL_UINT32(6, readBucket(dirA, 1, sfppsr::kBucketObjects).count); // 1 live + 5 pushed
+    TEST_ASSERT_EQUAL_UINT32(6, readBucket(dirA, kBucket).count); // 1 live + 5 pushed
 
     // The second follower now converges through the ordinary exchange.
     Exchange second = runExchangeFor(follower2, FOLLOWER2_NODE);
     TEST_ASSERT_EQUAL_UINT(1, second.itemRequests);
     TEST_ASSERT_EQUAL_UINT(5, second.itemFrames);
 
-    const BucketView a = readBucket(dirA, 1, sfppsr::kBucketObjects);
-    const BucketView c = readBucket(dirC, 1, sfppsr::kBucketObjects);
-    TEST_ASSERT_EQUAL_UINT32(a.count, c.count);
-    TEST_ASSERT_EQUAL_UINT64(a.checksum, c.checksum);
+    assertConverged(kBucket, dirC);
 }
 
 void test_two_archives_derive_the_same_root_without_stratum0()
