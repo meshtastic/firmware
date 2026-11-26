@@ -12,9 +12,8 @@
 // buffer, on paths no hardware-free test reached before. Under [env:coverage] (-fsanitize=address)
 // an out-of-bounds access aborts the program at the call. The first such bug is jgromes/RadioLib#1864:
 // the LR2021 DC-DC workaround passes sizeof(uint32_t) as a word count, overrunning the stack on
-// every setRxPath() and LoRa modulation change. The pin here, 7.7.1, predates that workaround, so
-// the LR2021 DC-DC tests register only on a RadioLib that has it (see lr2021_tests.h). On one that
-// also carries the overrun (7.8.0) they abort, so the LR2021 set and the LR20x0Interface set, whose
+// every setRxPath() and LoRa modulation change. The LR2021 DC-DC tests always run; on a RadioLib
+// that carries the overrun (7.8.0) they abort, so the LR2021 set and the LR20x0Interface set, whose
 // setup runs the same workaround, run last and the rest report first.
 //
 // CAD (channel activity detection, the listen-before-talk check) is pinned per family: the command
@@ -25,6 +24,11 @@
 // sends 0x01 from a local constant and does not, which is what is pinned here. lr2021_tests.h
 // models that refusal; lr20x0_interface_tests.h runs LR20x0Interface::isChannelActive() against it,
 // so a firmware change that sends a refused exit byte fails here.
+//
+// The RadioLib pin (master commit 5878f99, after the 7.8.1 tag) has these changes, and the suite pins
+// them: the LR2021 LoRa CAD exit defines (#1882, after 7.8.1), the status of payload-less commands
+// (f1af229, 7.8.0), the SX128x first-byte status (#1872, 7.8.0), and the DC-DC workaround's retune
+// and error path (#1864, #1880).
 //
 // Anything that decodes a chip reply (begin(), readData(), getRSSI(), updateFirmware()) needs replies
 // scripted per opcode; each family's header lists those under "Grows here".

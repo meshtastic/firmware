@@ -156,6 +156,7 @@ bool NextHopRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
             LOG_INFO("Fallback to flooding from relay_node=0x%x", p->relay_node);
             // Check if it's still in the Tx queue, if not, we have to relay it again
             if (!findInTxQueue(p->from, p->id)) {
+                ReceivedFrameScope frame(*this, p, true); // reprocessPacket() decodes p in place
                 if (reprocessPacket(p))
                     perhapsRebroadcast(p);
             }
@@ -164,9 +165,11 @@ bool NextHopRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
             // If repeated and not in Tx queue anymore, try relaying again, or if we are the destination, send the ACK again
             if (isRepeated) {
                 if (!findInTxQueue(p->from, p->id)) {
+                    ReceivedFrameScope frame(*this, p, true); // reprocessPacket() decodes p in place
                     if (reprocessPacket(p) && !isBlockedEventCoordinatePacket(p) && !perhapsRebroadcast(p) && isToUs(p) &&
                         p->want_ack) {
-                        sendAckNak(meshtastic_Routing_Error_NONE, getFrom(p), p->id, p->channel, 0);
+                        // A duplicate gets the answer the original got: the NAK if we refused it, else the ACK
+                        sendAckNak(refusalFor(getFrom(p), p->id), getFrom(p), p->id, p->channel, 0);
                     }
                 }
             } else if (!weWereNextHop) {
@@ -274,6 +277,7 @@ bool NextHopRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
                     meshtastic_MeshPacket *tosend = packetPool.allocCopy(*p); // keep a copy because we will be sending it
                     if (!tosend)
                         return true;
+                    useReceivedPayload(tosend); // forward the ciphertext as received, without re-encoding it
                     LOG_INFO("Rebroadcast msg from %x", p->relay_node);
 
                     // If exhausting hops, force hop_limit = 0 regardless of other logic
@@ -470,7 +474,11 @@ int32_t NextHopRouter::doRetransmissions()
         // Judged against the snapshot above, so one pass sees one instant and the 49.7 day wrap
         // can't stall retransmission.
         if (Throttle::deadlinePassedAt(now, p.nextTxMsec)) {
-            if (p.numRetransmissions == 0) {
+            if (iface && iface->findInTxQueue(getFrom(p.packet), p.packet->id)) {
+                // Previous attempt is still waiting in the radio TX queue; defer retry timer
+                // without enqueuing a duplicate copy, burning a retry attempt, or penalizing route health.
+                setNextTx(&p);
+            } else if (p.numRetransmissions == 0) {
                 if (isFromUs(p.packet)) {
                     LOG_DEBUG("Reliable send failed, return nak fr=0x%08x,to=0x%08x,id=0x%08x", p.packet->from, p.packet->to,
                               p.packet->id);

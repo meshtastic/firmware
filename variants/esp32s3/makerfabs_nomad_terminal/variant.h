@@ -73,6 +73,9 @@
 #define HAS_TOUCHSCREEN 1
 #define SCREEN_TOUCH_INT 41
 #define ENABLE_TOUCH_INT
+// LovyanGFX puts the FT6236 in polling mode: INT stays low while a finger is down, so the interrupt times each press
+// and release (a redraw of this screen keeps the touch thread waiting long enough to turn taps into long presses)
+#define TOUCH_INT_LEVEL
 #define SCREEN_TOUCH_RST 42
 #define TOUCH_I2C_PORT 0
 #define TOUCH_SLAVE_ADDRESS 0x38

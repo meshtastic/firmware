@@ -31,8 +31,23 @@ TouchScreenImpl1 *touchScreenImpl1;
 // thread immediately so the touch is handled without waiting for the next idle poll. The
 // periodic poll in TouchScreenBase::runOnce() remains as a fallback. Mirrors the button
 // interrupt handling in ButtonThread/InputBroker.
+#ifdef TOUCH_INT_LEVEL
+// TOUCH_INT_LEVEL: the line stays low while a finger is down (an FT6236 in polling mode), so each edge is a press or a
+// release, timed here for TouchScreenBase (touchEdgeTimes)
+static volatile uint32_t touchDownMs = 0;
+static volatile uint32_t touchUpMs = 0;
+static volatile bool touchEdgesSeen = false;
+#endif
+
 static void touchScreenInterruptHandler()
 {
+#ifdef TOUCH_INT_LEVEL
+    if (digitalRead(SCREEN_TOUCH_INT) == LOW)
+        touchDownMs = millis();
+    else
+        touchUpMs = millis();
+    touchEdgesSeen = true;
+#endif
     if (touchScreenImpl1) {
         touchScreenImpl1->setIntervalFromNow(0);
         runASAP = true;
@@ -81,7 +96,11 @@ void TouchScreenImpl1::attachTouchInterrupt()
 {
 #ifdef ENABLE_TOUCH_INT
     pinMode(SCREEN_TOUCH_INT, INPUT_PULLUP);
+#ifdef TOUCH_INT_LEVEL
+    attachInterrupt(SCREEN_TOUCH_INT, touchScreenInterruptHandler, CHANGE); // the press and the release
+#else
     attachInterrupt(SCREEN_TOUCH_INT, touchScreenInterruptHandler, FALLING);
+#endif
     LOG_INFO("TouchScreen interrupt attached on pin %d", SCREEN_TOUCH_INT);
 #endif
 }
@@ -135,6 +154,24 @@ bool TouchScreenImpl1::getTouch(int16_t &x, int16_t &y)
     }
 #endif
     return touched;
+}
+
+bool TouchScreenImpl1::touchEdgeTimes(uint32_t &downMs, uint32_t &upMs)
+{
+#if defined(SCREEN_TOUCH_INT) && defined(ENABLE_TOUCH_INT) && defined(TOUCH_INT_LEVEL)
+    if (!touchEdgesSeen)
+        return false;
+    // Both from the same edges: read again if the interrupt ran in between
+    do {
+        downMs = touchDownMs;
+        upMs = touchUpMs;
+    } while (downMs != touchDownMs || upMs != touchUpMs);
+    return true;
+#else
+    (void)downMs;
+    (void)upMs;
+    return false;
+#endif
 }
 
 bool TouchScreenImpl1::fastTapModeEnabled() const

@@ -1,0 +1,4 @@
+# WARN. TransparentDevice only means something with Module transparent.
+Lora:
+  Module: sim
+  TransparentDevice: 192.168.1.20

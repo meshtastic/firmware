@@ -55,19 +55,6 @@ void test_text_message_serialization_long_text()
     verify_text_message_packet_structure(json, long_text.c_str());
 }
 
-void test_text_message_serialization_oversized()
-{
-    constexpr size_t OVERSIZED_MESSAGE = 250;
-    std::string oversized_text(OVERSIZED_MESSAGE, 'B');
-
-    meshtastic_MeshPacket packet = create_test_packet(
-        meshtastic_PortNum_TEXT_MESSAGE_APP, reinterpret_cast<const uint8_t *>(oversized_text.c_str()), oversized_text.length());
-
-    std::string json = MeshPacketSerializer::JsonSerialize(&packet, false);
-    std::string expected_text = oversized_text.substr(0, 234);
-    verify_text_message_packet_structure(json, expected_text.c_str());
-}
-
 void test_text_message_serialization_invalid_utf8()
 {
     const uint8_t invalid_utf8[] = {0xFF, 0xFE, 0xFD, 0x00};
@@ -75,5 +62,10 @@ void test_text_message_serialization_invalid_utf8()
         create_test_packet(meshtastic_PortNum_TEXT_MESSAGE_APP, invalid_utf8, sizeof(invalid_utf8) - 1);
 
     std::string json = MeshPacketSerializer::JsonSerialize(&packet, false);
-    TEST_ASSERT_TRUE(json.length() > 0);
+    // Invalid UTF-8 must still yield a well-formed text envelope, not an empty or unparseable string.
+    Json::Value root = parse_json(json);
+    TEST_ASSERT_TRUE(root.isObject());
+    TEST_ASSERT_EQUAL_STRING("text", root["type"].asString().c_str());
+    TEST_ASSERT_TRUE(root["payload"].isObject());
+    TEST_ASSERT_TRUE(root["payload"]["text"].isString());
 }

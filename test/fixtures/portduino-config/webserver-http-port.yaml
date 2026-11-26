@@ -1,0 +1,8 @@
+# FAULT: Webserver.HTTPPort out of range is an error like Port. HTTPBindAll is a known key,
+# so it must not be reported as unknown.
+Lora:
+  Module: sx1262
+Webserver:
+  Port: 9443
+  HTTPPort: 70000
+  HTTPBindAll: true
