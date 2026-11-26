@@ -2456,13 +2456,12 @@ void test_windowBudgetCapsServedFrames()
 // A second listing naming the same missing IDs does not request them again while in flight.
 void test_item_in_flight_is_not_requested_twice()
 {
-    ingestAuthority(4);
+    ingestIntoBucket(kBucket, 4);
     buildFollowerFromCopy();
-    const uint32_t bucket = firstStoredBucket(dirA);
-    TEST_ASSERT_TRUE(deleteStoredBucket(dirB, bucket));
+    TEST_ASSERT_TRUE(deleteBucket(dirB, kBucket));
 
     meshtastic_MeshPacket advert;
-    TEST_ASSERT_TRUE(buildBucketAdvert(dirA, bucket, 4, advert));
+    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, kBucket, false, advert, false, 4));
     TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
     myNodeInfo.my_node_num = FOLLOWER_NODE;
     portduino_config.sfpp_stratum0 = false;
