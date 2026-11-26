@@ -558,6 +558,18 @@ static void test_keylessDevice_skipsNodesProtoWrite(void)
 
 // --- Live satellite-cap eviction policy ---
 
+// A new key evicts at the cap or while heap is below MINIMUM_SAFE_FREE_HEAP; an update to an existing key never does.
+// memGet.getFreeHeap() is UINT32_MAX on native, so the low-heap leg is checked on the pure decision, not through a map.
+static void test_satelliteInsert_evictsAtCapOrUnderLowHeap(void)
+{
+    const uint32_t healthy = MINIMUM_SAFE_FREE_HEAP;
+    const uint32_t low = MINIMUM_SAFE_FREE_HEAP - 1;
+    TEST_ASSERT_FALSE_MESSAGE(satelliteInsertMustEvict(0, false, healthy), "room and heap: the map may grow");
+    TEST_ASSERT_TRUE_MESSAGE(satelliteInsertMustEvict(MAX_SATELLITE_NODES, false, healthy), "a new key at the cap");
+    TEST_ASSERT_TRUE_MESSAGE(satelliteInsertMustEvict(1, false, low), "a new key under low heap, below the cap");
+    TEST_ASSERT_FALSE_MESSAGE(satelliteInsertMustEvict(MAX_SATELLITE_NODES, true, low), "an update allocates nothing");
+}
+
 #if !MESHTASTIC_EXCLUDE_STATUSDB
 static void test_satelliteCap_evictionPolicy(void)
 {
@@ -817,6 +829,7 @@ NDBR_TEST_ENTRY void setup()
     RUN_TEST(test_keylessDevice_skipsNodesProtoWrite);
 
     printf("\n=== Satellite caps ===\n");
+    RUN_TEST(test_satelliteInsert_evictsAtCapOrUnderLowHeap);
 #if !MESHTASTIC_EXCLUDE_STATUSDB
     RUN_TEST(test_satelliteCap_evictionPolicy);
 #endif

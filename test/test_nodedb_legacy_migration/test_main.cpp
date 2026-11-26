@@ -492,6 +492,20 @@ static void test_overCapLegacyFile_truncatesToMaxNumNodes(void)
     TEST_ASSERT_EQUAL_INT_MESSAGE(maxNodes - 1, survivors, "exactly one within-cap node should have been evicted for self");
 }
 
+// The upgrade gives satellites only to the cap's freshest legacy nodes. Native builds have a satellite cap above
+// their hot cap, so a whole-boot fixture never reaches the bound; the ranking is checked directly with small caps.
+static void test_freshestLastHeardCutoff_keepsTheCapFreshest(void)
+{
+    std::vector<uint32_t> heard = {50, 10, 40, 20, 30};
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(30, freshestLastHeardCutoff(heard, 3), "cap 3 keeps 50, 40 and 30");
+
+    std::vector<uint32_t> fits = {5, 1};
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, freshestLastHeardCutoff(fits, 2), "everything fits: no cutoff");
+
+    std::vector<uint32_t> ties = {7, 7, 7, 1};
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(7, freshestLastHeardCutoff(ties, 2), "every entry tied at the cutoff passes");
+}
+
 // --- Full boot ladder persistence ---
 
 // The deferred migrationSavePending re-save must land: after the boot,
@@ -568,6 +582,7 @@ NDBM_TEST_ENTRY void setup()
 
     printf("\n=== Capacity and persistence ===\n");
     RUN_TEST(test_overCapLegacyFile_truncatesToMaxNumNodes);
+    RUN_TEST(test_freshestLastHeardCutoff_keepsTheCapFreshest);
     RUN_TEST(test_fullBootLadder_persistsMigratedV25);
 
     exit(UNITY_END());
