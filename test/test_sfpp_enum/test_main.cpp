@@ -3004,6 +3004,52 @@ std::vector<meshtastic_MeshPacket> tick(TestSfppModule *module, NodeNum node, ui
     return takeSent();
 }
 
+struct Archive {
+    TestSfppModule *module;
+    NodeNum node;
+};
+
+// Ingests one text into `module`'s store, in `bucket`, with a fresh packet ID.
+void ingestUnique(TestSfppModule *module, NodeNum node, uint32_t bucket, const char *text)
+{
+    IngestedText t;
+    snprintf(t.text, sizeof(t.text), "%s", text);
+    t.id = idForBucket(SENDER_NODE, t.text, bucket, nextTextId);
+    t.bucket = bucket;
+    nextTextId = t.id + 1;
+    ingestOn(module, node, t.id, t.text);
+    ingested.push_back(t);
+}
+
+// Ticks every archive in turn and hands each on-air packet to the others. Replies a receiver sends
+// immediately are queued and delivered too, as a shared radio would carry them.
+void runArchiveNetwork(const std::vector<Archive> &archives, uint32_t rounds)
+{
+    for (uint32_t round = 0; round < rounds; round++) {
+        for (const auto &sender : archives) {
+            std::vector<meshtastic_MeshPacket> pending = tick(sender.module, sender.node);
+            for (size_t i = 0; i < pending.size() && i < 4096; i++) {
+                const meshtastic_MeshPacket p = pending[i];
+                for (const auto &hearer : archives) {
+                    if (hearer.node == p.from)
+                        continue;
+                    deliver(hearer.module, hearer.node, p);
+                    for (const auto &reply : takeSent())
+                        pending.push_back(reply);
+                }
+            }
+        }
+    }
+}
+
+void assertSameStore(const std::string &one, const std::string &two)
+{
+    const BucketView a = readStore(one);
+    const BucketView b = readStore(two);
+    TEST_ASSERT_EQUAL_UINT32(a.count, b.count);
+    TEST_ASSERT_EQUAL_UINT64(a.checksum, b.checksum);
+}
+
 // A hash-verified broadcast item frame carrying (from, id, cipher), sent by `sender`.
 meshtastic_MeshPacket itemFrameFrom(NodeNum sender, PacketId id, const uint8_t *cipher, size_t len, uint8_t channel = 0)
 {
@@ -3167,6 +3213,88 @@ void test_writer_missed_object_is_found_by_advert()
     assertConverged(kBucket);
 }
 
+// Three archives each hold texts the others never heard. Every archive advertises, and each pulls
+// a bucket it is behind on from whoever advertises it, until all three stores hold the same set.
+void test_threeArchivesWithDifferentTextsConverge()
+{
+    ingestAuthority(2);
+    buildFollowerFromCopy();
+    buildSecondFollowerFromCopy();
+
+    ingestUnique(authority, AUTHORITY_NODE, kLowBucket, "alpha");
+    ingestUnique(follower, FOLLOWER_NODE, kBucket, "bravo");
+    ingestUnique(follower2, FOLLOWER2_NODE, kHighBucket, "charlie");
+
+    runArchiveNetwork({{authority, AUTHORITY_NODE}, {follower, FOLLOWER_NODE}, {follower2, FOLLOWER2_NODE}}, 240);
+
+    assertSameStore(dirA, dirB);
+    assertSameStore(dirA, dirC);
+    TEST_ASSERT_EQUAL_UINT32(5, readStore(dirA).count);
+    for (uint32_t bucket : {kLowBucket, kBucket, kHighBucket}) {
+        const BucketView a = readBucket(dirA, bucket);
+        TEST_ASSERT_EQUAL_UINT32(a.count, readBucket(dirB, bucket).count);
+        TEST_ASSERT_EQUAL_UINT64(a.checksum, readBucket(dirB, bucket).checksum);
+        TEST_ASSERT_EQUAL_UINT32(a.count, readBucket(dirC, bucket).count);
+        TEST_ASSERT_EQUAL_UINT64(a.checksum, readBucket(dirC, bucket).checksum);
+    }
+}
+
+// One archive is away while the other two exchange and converge. It returns and catches up from a
+// present archive that is not the sender of the texts it missed; the other then catches up too.
+void test_absentArchiveCatchesUpOnReturn()
+{
+    ingestAuthority(2);
+    buildFollowerFromCopy();
+    buildSecondFollowerFromCopy();
+
+    ingestUnique(authority, AUTHORITY_NODE, kLowBucket, "alpha");
+    ingestUnique(follower, FOLLOWER_NODE, kBucket, "bravo");
+    ingestUnique(follower2, FOLLOWER2_NODE, kHighBucket, "charlie");
+
+    // C is away: A and B converge on their two stores.
+    runArchiveNetwork({{authority, AUTHORITY_NODE}, {follower, FOLLOWER_NODE}}, 240);
+    assertSameStore(dirA, dirB);
+    TEST_ASSERT_EQUAL_UINT32(4, readStore(dirA).count);
+    TEST_ASSERT_EQUAL_UINT32(3, readStore(dirC).count);
+
+    // C returns to B only. B holds alpha, which reached it from A, so C catches up from a holder
+    // that did not send the text; B also picks up C's own text.
+    runArchiveNetwork({{follower, FOLLOWER_NODE}, {follower2, FOLLOWER2_NODE}}, 240);
+    assertSameStore(dirB, dirC);
+    TEST_ASSERT_EQUAL_UINT32(5, readStore(dirC).count);
+    TEST_ASSERT_EQUAL_UINT32(4, readStore(dirA).count);
+
+    // A returns and converges with the other two.
+    runArchiveNetwork({{authority, AUTHORITY_NODE}, {follower, FOLLOWER_NODE}, {follower2, FOLLOWER2_NODE}}, 240);
+    assertSameStore(dirA, dirB);
+    assertSameStore(dirA, dirC);
+    TEST_ASSERT_EQUAL_UINT32(5, readStore(dirA).count);
+}
+
+// An archive that never heard a text gets it while the only present holder is another archive,
+// not the text's original sender.
+void test_neverHeardTextArrivesFromAnotherArchive()
+{
+    ingestAuthority(1);
+    buildFollowerFromCopy();
+    const IngestedText text = ingested[0];
+
+    // C is empty but derives the same root, so it has heard no text at all.
+    portduino_config.sfpp_db_path = dirC + "/";
+    follower2 = new TestSfppModule();
+    myNodeInfo.my_node_num = FOLLOWER2_NODE;
+    follower2->runOnce();
+    takeSent();
+    TEST_ASSERT_EQUAL_UINT32(0, readStore(dirC).count);
+    TEST_ASSERT_EQUAL_UINT32(1, readStore(dirB).count);
+
+    // A is away. B is the only present holder and is not the original sender SENDER_NODE.
+    runArchiveNetwork({{follower, FOLLOWER_NODE}, {follower2, FOLLOWER2_NODE}}, 120);
+
+    TEST_ASSERT_EQUAL_UINT32(1, countRows(dirC, text.id));
+    assertSameStore(dirB, dirC);
+}
+
 void loop() {}
 
 void setup()
@@ -3237,6 +3365,9 @@ void setup()
     RUN_TEST(test_itemFrameOnAnotherChannelIsRefused);
     RUN_TEST(test_pendingPullUsesAnyAdvertiser);
     RUN_TEST(test_writer_missed_object_is_found_by_advert);
+    RUN_TEST(test_threeArchivesWithDifferentTextsConverge);
+    RUN_TEST(test_absentArchiveCatchesUpOnReturn);
+    RUN_TEST(test_neverHeardTextArrivesFromAnotherArchive);
     UNITY_END();
 }
 
