@@ -492,6 +492,23 @@ void StoreForwardPlusPlusModule::removeFromScratch(const uint8_t *message_hash_b
     sqlite3_reset(removeScratch);
 }
 
+void StoreForwardPlusPlusModule::fillPayloadIfEmpty(const link_object &lo)
+{
+    if (lo.payload.empty() || lo.message_hash_len < SFPP_SHORT_HASH_SIZE)
+        return;
+    sqlite3_reset(payloadForHashStmt);
+    sqlite3_bind_int(payloadForHashStmt, 1, (int)lo.message_hash_len);
+    sqlite3_bind_blob(payloadForHashStmt, 2, lo.message_hash, lo.message_hash_len, SQLITE_STATIC);
+    bool empty = false;
+    if (sqlite3_step(payloadForHashStmt) == SQLITE_ROW) {
+        const unsigned char *text = sqlite3_column_text(payloadForHashStmt, 0);
+        empty = text == nullptr || sqlite3_column_bytes(payloadForHashStmt, 0) == 0;
+    }
+    sqlite3_reset(payloadForHashStmt);
+    if (empty)
+        updatePayload((uint8_t *)lo.message_hash, lo.message_hash_len, lo.payload);
+}
+
 void StoreForwardPlusPlusModule::updatePayload(uint8_t *message_hash_bytes, size_t message_hash_len, std::string payload)
 {
     LOG_WARN("StoreForwardpp updatePayload");

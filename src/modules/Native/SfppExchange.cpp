@@ -1478,7 +1478,7 @@ void StoreForwardPlusPlusModule::promoteScratchMatches(const uint8_t *root_hash,
 
     for (const auto &row : matches) {
         insertCanonObject(row.to, row.from, row.id, row.cipher.data(), row.cipher.size(), row.hash, row.time, "", root_hash,
-                          bucket);
+                          bucket, row.from == nodeDB->getNodeNum());
         removeFromScratch(row.hash, SFPP_HASH_SIZE);
         const pinsketch::Element sid = sfppsr::shortId(row.hash, SFPP_HASH_SIZE);
         enumPromoted.push_back({sid, {}});

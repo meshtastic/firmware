@@ -368,6 +368,76 @@ uint32_t storedRowCount(PacketId id)
     return count;
 }
 
+uint32_t storedRowCountInBucket(PacketId id, uint32_t bucket)
+{
+    sqlite3 *db = nullptr;
+    if (sqlite3_open(dbFile().c_str(), &db) != SQLITE_OK) {
+        if (db)
+            sqlite3_close(db);
+        return 0;
+    }
+    sqlite3_stmt *stmt = nullptr;
+    uint32_t count = 0;
+    if (sqlite3_prepare_v2(db, "select count(*) from channel_messages where packet_id=? and bucket=?;", -1, &stmt, nullptr) ==
+        SQLITE_OK) {
+        sqlite3_bind_int64(stmt, 1, id);
+        sqlite3_bind_int64(stmt, 2, bucket);
+        if (sqlite3_step(stmt) == SQLITE_ROW)
+            count = (uint32_t)sqlite3_column_int64(stmt, 0);
+    }
+    if (stmt)
+        sqlite3_finalize(stmt);
+    sqlite3_close(db);
+    return count;
+}
+
+uint32_t storedScratchRowCount(PacketId id)
+{
+    sqlite3 *db = nullptr;
+    if (sqlite3_open(dbFile().c_str(), &db) != SQLITE_OK) {
+        if (db)
+            sqlite3_close(db);
+        return 0;
+    }
+    sqlite3_stmt *stmt = nullptr;
+    uint32_t count = 0;
+    if (sqlite3_prepare_v2(db, "select count(*) from local_messages where packet_id=?;", -1, &stmt, nullptr) == SQLITE_OK) {
+        sqlite3_bind_int64(stmt, 1, id);
+        if (sqlite3_step(stmt) == SQLITE_ROW)
+            count = (uint32_t)sqlite3_column_int64(stmt, 0);
+    }
+    if (stmt)
+        sqlite3_finalize(stmt);
+    sqlite3_close(db);
+    return count;
+}
+
+bool readScratchEncrypted(PacketId id, std::vector<uint8_t> &out)
+{
+    sqlite3 *db = nullptr;
+    if (sqlite3_open(dbFile().c_str(), &db) != SQLITE_OK) {
+        if (db)
+            sqlite3_close(db);
+        return false;
+    }
+    sqlite3_stmt *stmt = nullptr;
+    bool found = false;
+    if (sqlite3_prepare_v2(db, "select encrypted_bytes from local_messages where packet_id=? limit 1;", -1, &stmt, nullptr) ==
+        SQLITE_OK) {
+        sqlite3_bind_int64(stmt, 1, id);
+        if (sqlite3_step(stmt) == SQLITE_ROW) {
+            const uint8_t *enc = (const uint8_t *)sqlite3_column_blob(stmt, 0);
+            const int len = sqlite3_column_bytes(stmt, 0);
+            out.assign(enc, enc + len);
+            found = true;
+        }
+    }
+    if (stmt)
+        sqlite3_finalize(stmt);
+    sqlite3_close(db);
+    return found;
+}
+
 void insertRawCanonRow(PacketId id, const uint8_t *hash)
 {
     std::vector<uint8_t> root = mappingRoot();
@@ -742,6 +812,7 @@ void test_sender_copy_moves_the_content_bucket()
     TEST_ASSERT_TRUE(readStoredRow(id, row));
     TEST_ASSERT_EQUAL_UINT32(senderBucket, row.bucket);
     TEST_ASSERT_EQUAL_MEMORY(sender.encrypted.bytes, row.encrypted.data(), row.encrypted.size());
+    TEST_ASSERT_EQUAL_UINT32(0, storedRowCountInBucket(id, relayBucket));
 }
 
 // A relay's later copy never displaces the sender's copy.
@@ -765,7 +836,7 @@ void test_relay_copy_does_not_replace_the_sender_copy()
     TEST_ASSERT_EQUAL_MEMORY(sender.encrypted.bytes, row.encrypted.data(), row.encrypted.size());
 }
 
-// A replacement whose new hash already belongs to another identity is refused, not merged.
+// Guards R2 rule 5 on the base's isInDB path; not a RED parent test for the identity change.
 void test_identity_collision_never_adds_a_second_row()
 {
     const PacketId id = TEXT_ID + 0x203;
@@ -830,6 +901,31 @@ void test_recovered_item_with_the_same_identity_is_one_object()
     StoredRow row;
     TEST_ASSERT_TRUE(readStoredRow(id, row));
     TEST_ASSERT_EQUAL_MEMORY(relay.encrypted.bytes, row.encrypted.data(), row.encrypted.size());
+}
+
+// The default scratch path applies the same identity policy: one row, sender's copy wins.
+void test_scratch_path_keeps_one_object_for_two_ciphertexts()
+{
+    const PacketId id = TEXT_ID + 0x206;
+    portduino_config.sfpp_stratum0 = false;
+    meshtastic_MeshPacket mp = makeText(REMOTE_NODE, id, "scratch identity", getValidTime(RTCQualityNTP, true));
+
+    mp.relay_node = 0x5b;
+    meshtastic_MeshPacket relay = makeEncryptedCopy(mp);
+    relay.encrypted.bytes[0] ^= 0x33;
+    TEST_ASSERT_EQUAL(ProcessMessage::CONTINUE, testSfpp->ingest(mp, &relay));
+    TEST_ASSERT_EQUAL_UINT32(1, storedScratchRowCount(id));
+    TEST_ASSERT_EQUAL_UINT32(0, storedRowCount(id));
+
+    mp.relay_node = nodeDB->getLastByteOfNodeNum(REMOTE_NODE);
+    meshtastic_MeshPacket sender = makeEncryptedCopy(mp);
+    TEST_ASSERT_EQUAL(ProcessMessage::CONTINUE, testSfpp->ingest(mp, &sender));
+
+    TEST_ASSERT_EQUAL_UINT32(1, storedScratchRowCount(id));
+    std::vector<uint8_t> stored;
+    TEST_ASSERT_TRUE(readScratchEncrypted(id, stored));
+    TEST_ASSERT_EQUAL_UINT(sender.encrypted.size, stored.size());
+    TEST_ASSERT_EQUAL_MEMORY(sender.encrypted.bytes, stored.data(), stored.size());
 }
 
 // The store and the frame splitter must hash a message identically; if they drift, a frame's key
@@ -1810,6 +1906,7 @@ void setup()
     RUN_TEST(test_relay_copy_does_not_replace_the_sender_copy);
     RUN_TEST(test_identity_collision_never_adds_a_second_row);
     RUN_TEST(test_recovered_item_with_the_same_identity_is_one_object);
+    RUN_TEST(test_scratch_path_keeps_one_object_for_two_ciphertexts);
     RUN_TEST(test_storedMessageHashMatchesTheFrameHash);
     RUN_TEST(test_legacyHistoryAnswersInLegacyFormat);
     RUN_TEST(test_legacyHistoryUsesLegacyRequestWindow);

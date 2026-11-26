@@ -107,6 +107,7 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     sqlite3_stmt *checkScratch;
     sqlite3_stmt *removeScratch;
     sqlite3_stmt *updatePayloadStmt;
+    sqlite3_stmt *payloadForHashStmt;
     sqlite3_stmt *getPayloadFromScratchStmt;
     sqlite3_stmt *fromScratchStmt;
     sqlite3_stmt *fromScratchByHashStmt;
@@ -329,6 +330,7 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     // fills the payload section with the decrypted data for the given message hash
     // probably not needed for production, but useful for testing
     void updatePayload(uint8_t *, size_t, std::string);
+    void fillPayloadIfEmpty(const link_object &lo);
 
     // Takes the decrypted MeshPacket and the encrypted packet copy, and builds a link_object
     // Generates a message hash, but does not set the commit hash

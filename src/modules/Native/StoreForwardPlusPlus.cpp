@@ -335,6 +335,8 @@ StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
 
     sqlite3_prepare_v2(ppDb, "UPDATE channel_messages SET payload=? WHERE substr(message_hash,1,?)=?", -1, &updatePayloadStmt,
                        NULL);
+    sqlite3_prepare_v2(ppDb, "select payload from channel_messages where substr(message_hash,1,?)=? limit 1;", -1,
+                       &payloadForHashStmt, NULL);
 
     sqlite3_prepare_v2(ppDb, "select identifier from mappings where substr(root_hash,1,?)=?;", -1, &getHashFromRootStmt, NULL);
 
@@ -502,6 +504,7 @@ void StoreForwardPlusPlusModule::handleEncrypted(const meshtastic_MeshPacket *mp
     insertCanonObject(lo.to, lo.from, lo.id, lo.encrypted_bytes, lo.encrypted_len, lo.message_hash,
                       RowTime{lo.rx_time, lo.time_basis, lo.boot_id, lo.age_margin}, lo.payload, lo.root_hash,
                       sfppsr::contentBucket(lo.message_hash, lo.message_hash_len), senderCopy);
+    fillPayloadIfEmpty(lo);
 }
 
 ProcessMessage StoreForwardPlusPlusModule::handleReceived(const meshtastic_MeshPacket &mp)
@@ -554,10 +557,8 @@ ProcessMessage StoreForwardPlusPlusModule::handleReceived(const meshtastic_MeshP
 
         if (isInDB(lo.message_hash, lo.message_hash_len)) {
             LOG_DEBUG("StoreForwardpp Found text message in chain DB");
-            // We may have this message already, but we may not have the payload
-            // if we do, we can update the payload in the database
-            if (lo.payload != "")
-                updatePayload(lo.message_hash, lo.message_hash_len, lo.payload);
+            // We may have this message already, but we may not have the payload.
+            fillPayloadIfEmpty(lo);
             return ProcessMessage::CONTINUE;
         }
 
@@ -575,6 +576,7 @@ ProcessMessage StoreForwardPlusPlusModule::handleReceived(const meshtastic_MeshP
         insertCanonObject(lo.to, lo.from, lo.id, lo.encrypted_bytes, lo.encrypted_len, lo.message_hash,
                           RowTime{lo.rx_time, lo.time_basis, lo.boot_id, lo.age_margin}, lo.payload, lo.root_hash,
                           sfppsr::contentBucket(lo.message_hash, lo.message_hash_len), senderCopy);
+        fillPayloadIfEmpty(lo);
         return ProcessMessage::CONTINUE;
     }
 

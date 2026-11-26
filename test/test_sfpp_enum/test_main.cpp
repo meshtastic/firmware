@@ -2458,10 +2458,11 @@ void test_item_in_flight_is_not_requested_twice()
 {
     ingestAuthority(4);
     buildFollowerFromCopy();
-    TEST_ASSERT_TRUE(deleteCounterRange(dirB, 1, 4));
+    const uint32_t bucket = firstStoredBucket(dirA);
+    TEST_ASSERT_TRUE(deleteStoredBucket(dirB, bucket));
 
     meshtastic_MeshPacket advert;
-    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, 0, false, advert, false, 4));
+    TEST_ASSERT_TRUE(buildBucketAdvert(dirA, bucket, 4, advert));
     TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
     myNodeInfo.my_node_num = FOLLOWER_NODE;
     portduino_config.sfpp_stratum0 = false;
