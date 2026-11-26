@@ -1103,8 +1103,14 @@ void Screen::applyQuarterTurns()
     tft->setQuarterTurns(turns);
     displayWidth = dispdev->width();
     displayHeight = dispdev->height();
+    graphics::currentResolution = graphics::determineScreenResolution(displayHeight, displayWidth);
     // Messages are wrapped to the old width
     graphics::MessageRenderer::clearMessageCache();
+#if HAS_TOUCHSCREEN
+    // A finger down during the turn moved between frames: no swipe from it
+    if (touchScreenImpl1)
+        touchScreenImpl1->ignoreCurrentContact();
+#endif
     setFastFramerate();
 #endif
 }

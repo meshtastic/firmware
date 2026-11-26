@@ -401,7 +401,7 @@ void MotionSensor::followOrientation(float x, float y, float z)
         candidateSince = millis();
         return;
     }
-    if (turns >= 0 && screen && millis() - candidateSince >= kHoldMs)
+    if (turns >= 0 && screen && Throttle::hasElapsed(candidateSince, kHoldMs))
         screen->requestQuarterTurns(turns);
 }
 #endif

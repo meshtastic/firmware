@@ -21,6 +21,9 @@ class TouchScreenBase : public Observable<const InputEvent *>, public concurrenc
   public:
     explicit TouchScreenBase(const char *name, uint16_t width, uint16_t height);
     void init(bool hasTouch);
+    // The screen turned under a finger: its start and end points are in different frames, so the contact gives no
+    // swipe, tap or long press. The next contact is read as usual
+    void ignoreCurrentContact() { _ignoreContact = _touchedOld; }
 
   protected:
     enum TouchScreenBaseStateType { TOUCH_EVENT_OCCURRED, TOUCH_EVENT_CLEARED };
@@ -57,6 +60,7 @@ class TouchScreenBase : public Observable<const InputEvent *>, public concurrenc
 
   private:
     bool _touchedOld = false;     // previous touch state
+    bool _ignoreContact = false;  // the screen turned during this contact (ignoreCurrentContact)
     int16_t _first_x, _last_x;    // horizontal swipe direction
     int16_t _first_y, _last_y;    // vertical swipe direction
     uint32_t _pressStartMs;       // when the current touch began; read via Throttle::hasElapsed()
