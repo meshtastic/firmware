@@ -22,15 +22,26 @@
 namespace
 {
 
-// A packet that is only ever a queue occupant: id and tx_after are all the branch reads.
-meshtastic_MeshPacket *makePacket(uint32_t id, uint32_t txAfter)
+// A packet that is only ever a queue occupant: id, tx_after, and priority are what the queue reads.
+// Leaving `p->from = 0` makes `isFromUs(p)` short-circuit on `p->from == 0` without a NodeDB instance.
+meshtastic_MeshPacket *makePacket(uint32_t id, uint32_t txAfter,
+                                  meshtastic_MeshPacket_Priority pri = meshtastic_MeshPacket_Priority_DEFAULT)
 {
     meshtastic_MeshPacket *p = packetPool.allocZeroed();
     TEST_ASSERT_NOT_NULL(p);
     p->id = id;
     p->tx_after = txAfter;
-    p->priority = meshtastic_MeshPacket_Priority_DEFAULT;
+    p->priority = pri;
     return p;
+}
+
+uint32_t popId(MeshPacketQueue &q)
+{
+    meshtastic_MeshPacket *p = q.dequeue();
+    TEST_ASSERT_NOT_NULL(p);
+    uint32_t id = p->id;
+    packetPool.release(p);
+    return id;
 }
 
 // Drains whatever is still queued back to the pool, so a failing case cannot starve a later one.
@@ -148,6 +159,72 @@ static void test_decisions_survive_the_millis_wrap(void)
     drain(q2);
 }
 
+// When std::upper_bound inserts a freshly clamped DEFAULT late packet at queue.back() with a future
+// tx_after deadline, older late packets ahead of it in the queue may already be heavily overdue.
+// An arriving normal packet must evict the most-overdue late packet rather than being blocked by
+// the future deadline sitting at queue.back().
+static void test_evicts_most_overdue_late_packet_even_when_back_packet_is_future(void)
+{
+    Time::setTestMillis(10000);
+    MeshPacketQueue q(3);
+
+    meshtastic_MeshPacket *oldestLate = makePacket(0x6001, 2000);  // 8000ms overdue
+    meshtastic_MeshPacket *midLate = makePacket(0x6002, 5000);     // 5000ms overdue
+    meshtastic_MeshPacket *newestLate = makePacket(0x6003, 14000); // 4000ms in the future (at queue.back())
+    TEST_ASSERT_TRUE(q.enqueue(oldestLate));
+    TEST_ASSERT_TRUE(q.enqueue(midLate));
+    TEST_ASSERT_TRUE(q.enqueue(newestLate));
+
+    meshtastic_MeshPacket *freshNormal = makePacket(0x6004, 0);
+    TEST_ASSERT_TRUE(q.enqueue(freshNormal));
+
+    // freshNormal (tx_after == 0) sorts to the front; oldestLate (0x6001) was evicted.
+    TEST_ASSERT_EQUAL_HEX32(0x6004, popId(q));
+    TEST_ASSERT_EQUAL_HEX32(0x6002, popId(q));
+    TEST_ASSERT_EQUAL_HEX32(0x6003, popId(q));
+    drain(q);
+}
+
+// When all late packets in a full queue still have future tx_after deadlines, an arriving
+// higher-priority packet (e.g. ACK or HIGH text message) must still evict the lowest-priority
+// late packet at queue.back() rather than being dropped.
+static void test_high_priority_packet_evicts_future_default_late_packet(void)
+{
+    Time::setTestMillis(1000);
+    MeshPacketQueue q(2);
+
+    TEST_ASSERT_TRUE(q.enqueue(makePacket(0x7001, 3000, meshtastic_MeshPacket_Priority_DEFAULT)));
+    TEST_ASSERT_TRUE(q.enqueue(makePacket(0x7002, 4000, meshtastic_MeshPacket_Priority_DEFAULT)));
+
+    meshtastic_MeshPacket *ack = makePacket(0x7003, 0, meshtastic_MeshPacket_Priority_ACK);
+    TEST_ASSERT_TRUE(q.enqueue(ack));
+
+    TEST_ASSERT_EQUAL_HEX32(0x7003, popId(q));
+    TEST_ASSERT_EQUAL_HEX32(0x7001, popId(q));
+    drain(q);
+}
+
+// An overdue late packet (already rebroadcast by another node on the mesh) must be evicted
+// before an un-relayed normal packet (`tx_after == 0`) of lower priority than the new arrival.
+static void test_overdue_late_packet_evicted_before_lower_priority_normal_packet(void)
+{
+    Time::setTestMillis(5000);
+    MeshPacketQueue q(2);
+
+    meshtastic_MeshPacket *unrelayedNormal = makePacket(0x8001, 0, meshtastic_MeshPacket_Priority_DEFAULT);
+    meshtastic_MeshPacket *overdueLate = makePacket(0x8002, 2000, meshtastic_MeshPacket_Priority_DEFAULT);
+    TEST_ASSERT_TRUE(q.enqueue(unrelayedNormal));
+    TEST_ASSERT_TRUE(q.enqueue(overdueLate));
+
+    meshtastic_MeshPacket *highPri = makePacket(0x8003, 0, meshtastic_MeshPacket_Priority_HIGH);
+    TEST_ASSERT_TRUE(q.enqueue(highPri));
+
+    // highPri (0x8003) and unrelayedNormal (0x8001) remain; overdueLate (0x8002) was evicted.
+    TEST_ASSERT_EQUAL_HEX32(0x8003, popId(q));
+    TEST_ASSERT_EQUAL_HEX32(0x8001, popId(q));
+    drain(q);
+}
+
 void setup()
 {
     delay(10);
@@ -158,6 +235,9 @@ void setup()
     RUN_TEST(test_less_overdue_incoming_packet_is_rejected);
     RUN_TEST(test_undelayed_incoming_packet_evicts_the_late_back_packet);
     RUN_TEST(test_decisions_survive_the_millis_wrap);
+    RUN_TEST(test_evicts_most_overdue_late_packet_even_when_back_packet_is_future);
+    RUN_TEST(test_high_priority_packet_evicts_future_default_late_packet);
+    RUN_TEST(test_overdue_late_packet_evicted_before_lower_priority_normal_packet);
     exit(UNITY_END());
 }
 

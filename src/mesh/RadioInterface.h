@@ -124,6 +124,9 @@ class RadioInterface
 
     uint32_t computeSlotTimeMsec();
 
+    /** Time on air for totalPacketLen bytes at the current modem settings, for radios that can't ask RadioLib. */
+    [[nodiscard]] uint32_t computeTimeOnAirMsec(uint32_t totalPacketLen) const;
+
     // Symbols this part scans, declared per band: a part that works in both need not scan the same
     // length in each, and the parts sharing a band do not all agree. Each driver states its own, and
     // must pass a matching symNum - these are what size the CW slot, so a mismatch mis-scales backoff.
@@ -296,8 +299,8 @@ class RadioInterface
     // How many frequency slots the config's region holds at the config's bandwidth. 0 for an UNSET region.
     static uint32_t frequencySlotCount(const meshtastic_Config_LoRaConfig &loraConfig);
 
-    // The 1-based slot a config lands on for a channel name, without making that channel primary: an in-range
-    // channel_num wins, else the region's override slot, else the hash applyModemConfig() would use.
+    // The 1-based slot a config tunes for a channel name, and the only slot rule: an in-range channel_num wins,
+    // else the region's override slot if it fits, else the name hash (the preset name where overrideSlot is -1).
     static uint32_t resolveFrequencySlot(const meshtastic_Config_LoRaConfig &loraConfig, const char *channelName);
 
     // If preset is locked to a sibling of currentRegion among the swappable EU regions

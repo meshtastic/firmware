@@ -51,6 +51,7 @@ bool FloodingRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
             LOG_DEBUG("Repeated reliable tx");
             // Check if it's still in the Tx queue, if not, we have to relay it again
             if (!findInTxQueue(p->from, p->id)) {
+                ReceivedFrameScope frame(*this, p, true); // reprocessPacket() decodes p in place
                 if (reprocessPacket(p))
                     perhapsRebroadcast(p);
             }
@@ -86,6 +87,7 @@ bool FloodingRouter::perhapsHandleUpgradedPacket(const meshtastic_MeshPacket *p)
             LOG_DEBUG("Processing upgraded packet 0x%08x for rebroadcast with hop limit %d (dropping queued < %d)", p->id,
                       p->hop_limit, dropThreshold);
 
+            ReceivedFrameScope frame(*this, p, true); // reprocessPacket() decodes p in place
             if (!reprocessPacket(p))
                 return true;
             perhapsRebroadcast(p);
@@ -116,10 +118,8 @@ bool FloodingRouter::reprocessPacket(const meshtastic_MeshPacket *p)
         nodeDB->updateFrom(*p);
 
 #if !MESHTASTIC_EXCLUDE_TRACEROUTE
-    if (traceRouteModule && p->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
-        p->decoded.portnum == meshtastic_PortNum_TRACEROUTE_APP) {
-        traceRouteModule->processUpgradedPacket(*p);
-    }
+    if (traceRouteModule)
+        traceRouteModule->updateRoute(*const_cast<meshtastic_MeshPacket *>(p));
 #endif
     return true;
 }

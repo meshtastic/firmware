@@ -9,10 +9,10 @@
  *  4. RadioInterface::clampConfigLora()
  *  5. RegionInfo preset lists (PRESETS_STD, PRESETS_EU_868, PRESETS_UNDEF)
  *  6. RegionInfo::getSlotPlan() in src/mesh/MeshRadio.h and RadioInterface::frequencySlotCount() /
- *     clampConfigLora() in src/mesh/RadioInterface.cpp: unit-channel raster padding (JP ARIB STD-T108
- *     200 kHz grid), relative-epsilon floor slot counts, and the invariant that no region/preset top
- *     slot extends past freqEnd (guarding against round()-induced band-edge overflow and drift between
- *     slot-count callers).
+ *     clampConfigLora() in src/mesh/RadioInterface.cpp: real-region slot counts, unit-channel raster
+ *     padding (JP ARIB STD-T108 200 kHz grid), relative-epsilon floor slot counts, and the invariant
+ *     that no region/preset top slot extends past freqEnd (guarding against round()-induced band-edge
+ *     overflow and drift between slot-count callers).
  *  7. ClientNotification.type on the paths that do not set it as a literal at the send site:
  *     AdminModule's channel-warning queue (queueChannelWarning()/flushChannelWarnings()) and
  *     RadioInterface::checkConfigRegion(), which hands its failure type to validateConfigRegion().
@@ -21,7 +21,6 @@
  */
 
 #include "Channels.h"
-#include "DisplayFormatters.h"
 #include "FSCommon.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
@@ -43,9 +42,6 @@
 
 #include "meshtastic/config.pb.h"
 #include "support/AdminModuleTestShim.h"
-
-// hash() is a file-scope function in RadioInterface.cpp; link it in for slot-formula tests
-extern uint32_t hash(const char *str);
 
 // Every client notification the AdminModule emits flows through sendClientNotification();
 // capture each formatted message so the warning/coalescing tests can assert on the exact
@@ -158,347 +154,6 @@ static void test_validateConfigRegion_anotherUnknownCodeReturnsFalse()
 
     // Unknown code should be rejected even when owner is licensed.
     TEST_ASSERT_FALSE(RadioInterface::validateConfigRegion(cfg));
-}
-
-// -----------------------------------------------------------------------
-// Shadow tables for testing (preset lists → profiles → regions → lookup)
-// -----------------------------------------------------------------------
-
-// A minimal preset list with only one entry
-static const meshtastic_Config_LoRaConfig_ModemPreset TEST_PRESETS_SINGLE[] = {
-    meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST,
-    MODEM_PRESET_END,
-};
-
-// A preset list that includes all turbo variants only
-static const meshtastic_Config_LoRaConfig_ModemPreset TEST_PRESETS_TURBO_ONLY[] = {
-    meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO,
-    meshtastic_Config_LoRaConfig_ModemPreset_LONG_TURBO,
-    MODEM_PRESET_END,
-};
-
-// A restricted list simulating a hypothetical tight-regulation region
-static const meshtastic_Config_LoRaConfig_ModemPreset TEST_PRESETS_RESTRICTED[] = {
-    meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW,
-    meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE,
-    MODEM_PRESET_END,
-};
-
-// Mirrors PROFILE_STD but with non-zero spacing/padding for testing
-static const RegionProfile TEST_PROFILE_SPACED = {
-    TEST_PRESETS_SINGLE,
-    /* spacing */ 0.025f,
-    /* padding */ 0.010f,
-    /* unitChannelMHz */ 0.0f,
-    /* audioPermitted */ true,
-    /* licensedOnly */ false,
-    /* textThrottle */ 0,
-    /* positionThrottle */ 0,
-    /* telemetryThrottle */ 0,
-};
-
-// A licensed-only profile for testing access control
-static const RegionProfile TEST_PROFILE_LICENSED = {
-    TEST_PRESETS_RESTRICTED,
-    /* spacing */ 0.0f,
-    /* padding */ 0.0f,
-    /* unitChannelMHz */ 0.0f,
-    /* audioPermitted */ false,
-    /* licensedOnly */ true,
-    /* textThrottle */ 5,
-    /* positionThrottle */ 10,
-    /* telemetryThrottle */ 10,
-};
-
-// Turbo-only profile
-static const RegionProfile TEST_PROFILE_TURBO = {
-    TEST_PRESETS_TURBO_ONLY,
-    /* spacing */ 0.0f,
-    /* padding */ 0.0f,
-    /* unitChannelMHz */ 0.0f,
-    /* audioPermitted */ true,
-    /* licensedOnly */ false,
-    /* textThrottle */ 0,
-    /* positionThrottle */ 0,
-    /* telemetryThrottle */ 0,
-};
-
-// A preset list for the preset-hash override slot test (LONG_FAST + MEDIUM_FAST)
-static const meshtastic_Config_LoRaConfig_ModemPreset TEST_PRESETS_PRESET_HASH[] = {
-    meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST,
-    meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST,
-    MODEM_PRESET_END,
-};
-
-// Profile with overrideSlot = OVERRIDE_SLOT_PRESET_HASH (-1):
-// slot selection always uses hash(presetDisplayName), ignoring the primary channel name.
-static const RegionProfile TEST_PROFILE_PRESET_HASH = {
-    TEST_PRESETS_PRESET_HASH,
-    /* spacing */ 0.0f,
-    /* padding */ 0.0f,
-    /* unitChannelMHz */ 0.0f,
-    /* audioPermitted */ true,
-    /* licensedOnly */ false,
-    /* textThrottle */ 0,
-    /* positionThrottle */ 0,
-    /* telemetryThrottle */ 0,
-};
-
-// Standalone test region using US frequencies (26 MHz span → 104 slots at 250 kHz BW)
-// Used to verify OVERRIDE_SLOT_PRESET_HASH slot formula; not inserted into testRegions[].
-static const RegionInfo TEST_REGION_PRESET_HASH = {
-    meshtastic_Config_LoRaConfig_RegionCode_US,
-    902.0f,
-    928.0f,
-    100,
-    30,
-    false,
-    false,
-    &TEST_PROFILE_PRESET_HASH,
-    meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST,
-    OVERRIDE_SLOT_PRESET_HASH,
-    "TEST_PRESET_HASH",
-    0.0f,
-};
-
-static const RegionInfo testRegions[] = {
-    // A wide US-like region with spacing + padding
-    {meshtastic_Config_LoRaConfig_RegionCode_US, 902.0f, 928.0f, 100, 30, false, false, &TEST_PROFILE_SPACED,
-     meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, 0, "TEST_US_SPACED", 0.0f},
-
-    // A narrow band simulating tight EU regulation
-    {meshtastic_Config_LoRaConfig_RegionCode_EU_868, 869.4f, 869.65f, 10, 14, false, false, &TEST_PROFILE_LICENSED,
-     meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW, 3, "TEST_EU_LICENSED", 0.0f},
-
-    // A wide-LoRa region with turbo-only presets
-    {meshtastic_Config_LoRaConfig_RegionCode_LORA_24, 2400.0f, 2483.5f, 100, 10, false, true, &TEST_PROFILE_TURBO,
-     meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO, 0, "TEST_LORA24_TURBO", 0.0f},
-
-    // Sentinel - must be last
-    {meshtastic_Config_LoRaConfig_RegionCode_UNSET, 902.0f, 928.0f, 100, 30, false, false, &TEST_PROFILE_SPACED,
-     meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, 0, "TEST_UNSET", 0.0f},
-};
-
-static const RegionInfo *getTestRegion(meshtastic_Config_LoRaConfig_RegionCode code)
-{
-    const RegionInfo *r = testRegions;
-    while (r->code != meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
-        if (r->code == code)
-            return r;
-        r++;
-    }
-    return r; // Returns the UNSET sentinel
-}
-
-// -----------------------------------------------------------------------
-// Shadow table tests
-// -----------------------------------------------------------------------
-
-static uint32_t testComputeNumFreqSlots(const RegionInfo *r, float bw_kHz)
-{
-    return r->getSlotPlan(bw_kHz).count;
-}
-
-static void test_shadowTable_spacedProfileHasNonZeroSpacing()
-{
-    const RegionInfo *r = getTestRegion(meshtastic_Config_LoRaConfig_RegionCode_US);
-    TEST_ASSERT_EQUAL_STRING("TEST_US_SPACED", r->name);
-    TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.025f, r->profile->spacing);
-    TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.010f, r->profile->padding);
-}
-
-static void test_shadowTable_licensedProfileFlagsCorrect()
-{
-    const RegionInfo *r = getTestRegion(meshtastic_Config_LoRaConfig_RegionCode_EU_868);
-    TEST_ASSERT_TRUE(r->profile->licensedOnly);
-    TEST_ASSERT_FALSE(r->profile->audioPermitted);
-    TEST_ASSERT_EQUAL(3, r->overrideSlot);
-}
-
-static void test_shadowTable_presetCountMatchesExpected()
-{
-    const RegionInfo *spaced = getTestRegion(meshtastic_Config_LoRaConfig_RegionCode_US);
-    TEST_ASSERT_EQUAL(1, spaced->getNumPresets());
-
-    const RegionInfo *licensed = getTestRegion(meshtastic_Config_LoRaConfig_RegionCode_EU_868);
-    TEST_ASSERT_EQUAL(2, licensed->getNumPresets());
-
-    const RegionInfo *turbo = getTestRegion(meshtastic_Config_LoRaConfig_RegionCode_LORA_24);
-    TEST_ASSERT_EQUAL(2, turbo->getNumPresets());
-}
-
-static void test_shadowTable_defaultPresetIsFirstInList()
-{
-    const RegionInfo *spaced = getTestRegion(meshtastic_Config_LoRaConfig_RegionCode_US);
-    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, spaced->getDefaultPreset());
-
-    const RegionInfo *licensed = getTestRegion(meshtastic_Config_LoRaConfig_RegionCode_EU_868);
-    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW, licensed->getDefaultPreset());
-
-    const RegionInfo *turbo = getTestRegion(meshtastic_Config_LoRaConfig_RegionCode_LORA_24);
-    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO, turbo->getDefaultPreset());
-}
-
-static void test_shadowTable_channelSpacingWithPadding()
-{
-    // Verify RegionInfo::getSlotPlan() when spacing + padding are non-zero
-    const RegionInfo *r = getTestRegion(meshtastic_Config_LoRaConfig_RegionCode_US);
-    float bw = modemPresetToBwKHz(r->getDefaultPreset(), r->wideLora);
-    const RegionInfo::SlotPlan plan = r->getSlotPlan(bw);
-
-    // spacing=0.025, padding=0.010*2=0.020, bw=250kHz=0.250 -> width=0.295 MHz, floor((26 + 0.025) / 0.295) = 88
-    TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.295f, plan.width);
-    TEST_ASSERT_EQUAL_UINT32(88, plan.count);
-    TEST_ASSERT_FLOAT_WITHIN(0.001f, 902.135f, plan.firstCenter);
-}
-
-static void test_shadowTable_turboOnlyOnWideLora()
-{
-    const RegionInfo *r = getTestRegion(meshtastic_Config_LoRaConfig_RegionCode_LORA_24);
-    TEST_ASSERT_TRUE(r->wideLora);
-    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO, r->getDefaultPreset());
-
-    // Verify wide-LoRa bandwidth for SHORT_TURBO
-    float bw = modemPresetToBwKHz(r->getDefaultPreset(), r->wideLora);
-    TEST_ASSERT_FLOAT_WITHIN(0.1f, 1625.0f, bw); // 1625 kHz in wide mode
-}
-
-static void test_shadowTable_unknownCodeFallsToSentinel()
-{
-    const RegionInfo *r = getTestRegion((meshtastic_Config_LoRaConfig_RegionCode)200);
-    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_UNSET, r->code);
-    TEST_ASSERT_EQUAL_STRING("TEST_UNSET", r->name);
-}
-
-static void test_shadowTable_presetHashProfileHasCorrectOverrideSlot()
-{
-    TEST_ASSERT_EQUAL(OVERRIDE_SLOT_PRESET_HASH, TEST_REGION_PRESET_HASH.overrideSlot);
-    TEST_ASSERT_EQUAL(-1, TEST_REGION_PRESET_HASH.overrideSlot);
-    TEST_ASSERT_EQUAL(2, TEST_REGION_PRESET_HASH.getNumPresets());
-}
-
-// -----------------------------------------------------------------------
-// OVERRIDE_SLOT_PRESET_HASH (-1) slot formula tests
-//
-// Property under test:
-//   overrideSlot = -1  → slot = hash(presetDisplayName) % numSlots
-//     regardless of what the primary channel is named
-//   overrideSlot = 0   → slot = hash(channelName) % numSlots
-//     when channel name = preset display name, these two modes give identical slots
-// -----------------------------------------------------------------------
-
-static void test_overrideSlotPresetHash_longFast_customChannelMatchesDefaultNameSlot()
-{
-    // US + LONG_FAST: spacing=0, padding=0, bw=250 kHz
-    // numSlots = round((928-902+0)/0.250) = 104
-    const RegionInfo *us = getRegion(meshtastic_Config_LoRaConfig_RegionCode_US);
-    float bw = modemPresetToBwKHz(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, us->wideLora);
-    uint32_t numSlots = testComputeNumFreqSlots(us, bw);
-    TEST_ASSERT_EQUAL_UINT32(104, numSlots); // sanity
-
-    const char *presetName =
-        DisplayFormatters::getModemPresetDisplayName(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, false, true);
-
-    // OVERRIDE_SLOT_PRESET_HASH (-1):
-    //   channel is "MyCustomNetwork" but slot still uses preset name hash
-    uint32_t slotPresetHashMode = hash(presetName) % numSlots;
-
-    // OVERRIDE_SLOT_DEFAULT_CHANNEL_HASH (0) with channel name = preset name (user never renamed it):
-    //   channelName == presetName → same hash → same slot
-    const char *defaultChannelName = presetName;
-    uint32_t slotChannelHashModeDefaultName = hash(defaultChannelName) % numSlots;
-
-    TEST_ASSERT_EQUAL_UINT32(slotPresetHashMode, slotChannelHashModeDefaultName);
-
-    // Confirm a different custom channel name gives a different hash INPUT
-    // (so mode 0 would diverge while mode -1 stays locked)
-    TEST_ASSERT_TRUE(strcmp(presetName, "MyCustomNetwork") != 0);
-}
-
-static void test_overrideSlotPresetHash_mediumFast_customChannelMatchesDefaultNameSlot()
-{
-    // US + MEDIUM_FAST: bw=250 kHz → same 104 slots as LONG_FAST for US
-    const RegionInfo *us = getRegion(meshtastic_Config_LoRaConfig_RegionCode_US);
-    float bw = modemPresetToBwKHz(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST, us->wideLora);
-    uint32_t numSlots = testComputeNumFreqSlots(us, bw);
-    TEST_ASSERT_EQUAL_UINT32(104, numSlots); // sanity
-
-    const char *presetName =
-        DisplayFormatters::getModemPresetDisplayName(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST, false, true);
-
-    // Mode -1: slot = hash(presetName) % numSlots (channel name irrelevant)
-    uint32_t slotPresetHashMode = hash(presetName) % numSlots;
-
-    // Mode 0 + default name (channel name = preset display name):
-    uint32_t slotChannelHashModeDefaultName = hash(presetName) % numSlots;
-
-    TEST_ASSERT_EQUAL_UINT32(slotPresetHashMode, slotChannelHashModeDefaultName);
-
-    TEST_ASSERT_TRUE(strcmp(presetName, "MyCustomNetwork") != 0);
-}
-
-static void test_overrideSlotPresetHash_longFast_slotIsStableAcrossCustomNames()
-{
-    // Mode -1 must give the same slot for LONG_FAST regardless of which custom name is in use.
-    const RegionInfo *us = getRegion(meshtastic_Config_LoRaConfig_RegionCode_US);
-    float bw = modemPresetToBwKHz(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, us->wideLora);
-    uint32_t numSlots = testComputeNumFreqSlots(us, bw);
-
-    const char *presetName =
-        DisplayFormatters::getModemPresetDisplayName(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, false, true);
-    uint32_t expectedSlot = hash(presetName) % numSlots;
-
-    // Simulate three different custom channel names; mode -1 ignores all of them
-    const char *customNames[] = {"AlphaNet", "BetaMesh", "GammaMesh"};
-    for (int i = 0; i < 3; i++) {
-        uint32_t slotForCustom = hash(presetName) % numSlots; // mode -1: presetName only
-        TEST_ASSERT_EQUAL_UINT32(expectedSlot, slotForCustom);
-        // Confirm input would have differed in mode 0
-        TEST_ASSERT_TRUE(strcmp(presetName, customNames[i]) != 0);
-    }
-}
-
-static void test_overrideSlotPresetHash_mediumFast_slotIsStableAcrossCustomNames()
-{
-    const RegionInfo *us = getRegion(meshtastic_Config_LoRaConfig_RegionCode_US);
-    float bw = modemPresetToBwKHz(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST, us->wideLora);
-    uint32_t numSlots = testComputeNumFreqSlots(us, bw);
-
-    const char *presetName =
-        DisplayFormatters::getModemPresetDisplayName(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST, false, true);
-    uint32_t expectedSlot = hash(presetName) % numSlots;
-
-    const char *customNames[] = {"AlphaNet", "BetaMesh", "GammaMesh"};
-    for (int i = 0; i < 3; i++) {
-        uint32_t slotForCustom = hash(presetName) % numSlots; // mode -1: presetName only
-        TEST_ASSERT_EQUAL_UINT32(expectedSlot, slotForCustom);
-        TEST_ASSERT_TRUE(strcmp(presetName, customNames[i]) != 0);
-    }
-}
-
-static void test_overrideSlotPresetHash_longFastAndMediumFast_slotsAreDifferentPresets()
-{
-    // LONG_FAST and MEDIUM_FAST have different display names → likely different hash slots.
-    // This verifies the two presets genuinely occupy distinct positions, so the equivalence
-    // tests above are not trivially vacuous.
-    const RegionInfo *us = getRegion(meshtastic_Config_LoRaConfig_RegionCode_US);
-    float bw_lf = modemPresetToBwKHz(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, false);
-    float bw_mf = modemPresetToBwKHz(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST, false);
-    uint32_t numSlots_lf = testComputeNumFreqSlots(us, bw_lf);
-    uint32_t numSlots_mf = testComputeNumFreqSlots(us, bw_mf);
-
-    const char *nameLF =
-        DisplayFormatters::getModemPresetDisplayName(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, false, true);
-    const char *nameMF =
-        DisplayFormatters::getModemPresetDisplayName(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST, false, true);
-
-    TEST_ASSERT_TRUE(strcmp(nameLF, nameMF) != 0);
-
-    uint32_t slotLF = hash(nameLF) % numSlots_lf;
-    uint32_t slotMF = hash(nameMF) % numSlots_mf;
-    // They use the same numSlots (both 250 kHz on US), so a difference in display name
-    // should produce a different slot.
-    TEST_ASSERT_NOT_EQUAL(slotLF, slotMF);
 }
 
 // -----------------------------------------------------------------------
@@ -727,8 +382,11 @@ static void test_clampLoadedLoraConfig_legacyDefaultPrimaryGetsThePresetSlot()
 
     nodeDB->clampLoadedLoraConfig();
 
-    TEST_ASSERT_EQUAL_UINT32(presetSlot, config.lora.channel_num);
+    // The bad pin is cleared, and the renamed primary resolves to the preset's slot, not hash("Default")
+    TEST_ASSERT_EQUAL_UINT32(0, config.lora.channel_num);
     TEST_ASSERT_EQUAL_STRING("", channelFile.channels[0].settings.name);
+    TEST_ASSERT_EQUAL_UINT32(presetSlot,
+                             RadioInterface::resolveFrequencySlot(config.lora, channelFile.channels[0].settings.name));
 }
 
 static void test_clampConfigLora_customBwTooWideClampedToDefaultBw()
@@ -976,8 +634,25 @@ static void test_onlyLORA24HasWideLora()
 }
 
 // -----------------------------------------------------------------------
-// RegionInfo::getSlotPlan() & frequency-slot calculations
+// RegionInfo::getSlotPlan() & RadioInterface::frequencySlotCount() on real region tables
 // -----------------------------------------------------------------------
+
+// EU_868 fits exactly one 250 kHz LONG_FAST channel, and EU_866's PROFILE_LITE carries non-zero spacing and
+// padding (0.4 + 2*0.0375 MHz around a 125 kHz LITE_FAST channel: 2.4 / 0.6 = 4 slots). A change to the spacing
+// or padding terms of the slot formula moves the EU_866 count; US/LONG_FAST = 104 is pinned in test_mesh_beacon.
+static void test_frequencySlotCount_realRegions()
+{
+    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
+    cfg.use_preset = true;
+
+    cfg.region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
+    cfg.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    TEST_ASSERT_EQUAL_UINT32(1, RadioInterface::frequencySlotCount(cfg));
+
+    cfg.region = meshtastic_Config_LoRaConfig_RegionCode_EU_866;
+    cfg.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LITE_FAST;
+    TEST_ASSERT_EQUAL_UINT32(4, RadioInterface::frequencySlotCount(cfg));
+}
 
 static void test_channelSpacingCalculation_US_LONG_FAST()
 {
@@ -1249,7 +924,8 @@ static void resetUnnamedPrimaryChannel()
 static void test_clampConfigLora_JP_slotBounds()
 {
     // JP LongFast has 7 slots on the ARIB 200 kHz split grid (was 12). Slot 7 is valid; old slot 8+
-    // must be rejected by validateConfigLora() and clamped to the default hashed slot (6 = 922.9 MHz).
+    // must be rejected by validateConfigLora() and cleared to 0 by clampConfigLora() so the region
+    // rule resolves the default slot (6 = 922.9 MHz) with uses_default_frequency_slot=true.
     resetUnnamedPrimaryChannel();
     meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
     cfg.region = meshtastic_Config_LoRaConfig_RegionCode_JP;
@@ -1263,7 +939,10 @@ static void test_clampConfigLora_JP_slotBounds()
     TEST_ASSERT_FALSE(RadioInterface::validateConfigLora(cfg));
 
     RadioInterface::clampConfigLora(cfg);
-    TEST_ASSERT_EQUAL_UINT32(6, cfg.channel_num);
+    TEST_ASSERT_EQUAL_UINT32(0, cfg.channel_num);
+    TEST_ASSERT_TRUE(RadioInterface::uses_default_frequency_slot);
+    TEST_ASSERT_FALSE(RadioInterface::uses_custom_channel_name);
+    TEST_ASSERT_EQUAL_UINT32(6, RadioInterface::resolveFrequencySlot(cfg, ""));
 }
 
 static void test_clampConfigLora_JP_customModeSlotBounds()
@@ -1291,6 +970,8 @@ static void test_clampConfigLora_JP_customModeSlotBounds()
     TEST_ASSERT_FALSE(RadioInterface::validateConfigLora(cfg));
     RadioInterface::clampConfigLora(cfg);
     TEST_ASSERT_EQUAL_UINT32(0, cfg.channel_num);
+    TEST_ASSERT_TRUE(RadioInterface::uses_default_frequency_slot);
+    TEST_ASSERT_FALSE(RadioInterface::uses_custom_channel_name);
     TEST_ASSERT_TRUE(RadioInterface::validateConfigLora(cfg));
 }
 
@@ -1299,8 +980,8 @@ static void test_clampConfigLora_JP_pendingPresetSwitch()
     // AdminModule::handleSetConfig() validates/clamps the pending loraConfig before updating global
     // config.lora. With an unnamed primary channel, checkOrClampConfigLora() must resolve the default
     // channel name from the pending loraConfig rather than stale global config.lora; otherwise:
-    //  1. Switching preset->custom falsely sets uses_custom_channel_name=true and clamps to hash(oldPreset),
-    //  2. Switching presetA->presetB falsely clamps to hash(presetA) instead of hash(presetB).
+    //  1. Switching preset->custom falsely sets uses_custom_channel_name=true,
+    //  2. Switching presetA->presetB falsely compares/hashes presetA instead of presetB.
     resetUnnamedPrimaryChannel();
     config.lora = meshtastic_Config_LoRaConfig_init_zero;
     config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_JP;
@@ -1317,29 +998,28 @@ static void test_clampConfigLora_JP_pendingPresetSwitch()
     toCustom.channel_num = 8;
     RadioInterface::clampConfigLora(toCustom);
     TEST_ASSERT_EQUAL_UINT32(0, toCustom.channel_num);
+    TEST_ASSERT_TRUE(RadioInterface::uses_default_frequency_slot);
+    TEST_ASSERT_FALSE(RadioInterface::uses_custom_channel_name);
     TEST_ASSERT_TRUE(RadioInterface::validateConfigLora(toCustom));
 
-    // Case 2: pending switches from SHORT_FAST (slot 2) to LONG_FAST (slot 6) with OOB channel_num=8.
+    // Case 2a: pending switches from SHORT_FAST (slot 2) to LONG_FAST (slot 6) with OOB channel_num=8.
     meshtastic_Config_LoRaConfig toLongFast = meshtastic_Config_LoRaConfig_init_zero;
     toLongFast.region = meshtastic_Config_LoRaConfig_RegionCode_JP;
     toLongFast.use_preset = true;
     toLongFast.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
     toLongFast.channel_num = 8;
     RadioInterface::clampConfigLora(toLongFast);
-    TEST_ASSERT_EQUAL_UINT32(6, toLongFast.channel_num);
-}
+    TEST_ASSERT_EQUAL_UINT32(0, toLongFast.channel_num);
+    TEST_ASSERT_TRUE(RadioInterface::uses_default_frequency_slot);
+    TEST_ASSERT_FALSE(RadioInterface::uses_custom_channel_name);
+    TEST_ASSERT_EQUAL_UINT32(6, RadioInterface::resolveFrequencySlot(toLongFast, ""));
 
-// Placeholder: when protobuf region definitions include non-zero padding/spacing,
-// add tests here to verify the channel count and frequency calculations.
-static void test_channelSpacingCalculation_placeholder()
-{
-    // TODO: Once protobuf RegionInfo entries have non-zero padding or spacing values,
-    // verify:
-    //  - Channel count matches expected value for each (region, preset) pair
-    //  - First channel frequency = freqStart + (bw/2000) + padding
-    //  - Nth channel frequency = first + (n * channelSpacing)
-    //  - overrideSlot, when non-zero, forces the channel_num
-    TEST_PASS_MESSAGE("Placeholder for future channel spacing tests with updated protobuf region fields");
+    // Case 2b: pending LONG_FAST pinned to its own default slot 6 while global is still SHORT_FAST.
+    toLongFast.channel_num = 6;
+    RadioInterface::clampConfigLora(toLongFast);
+    TEST_ASSERT_EQUAL_UINT32(6, toLongFast.channel_num);
+    TEST_ASSERT_TRUE(RadioInterface::uses_default_frequency_slot);
+    TEST_ASSERT_FALSE(RadioInterface::uses_custom_channel_name);
 }
 
 // -----------------------------------------------------------------------
@@ -1651,6 +1331,126 @@ static void test_handleSetHamMode_acceptedRequestAcksSuccess()
     testAdmin->drainReply();
 }
 
+// The LORA_24 gate in handleReceivedProtobuf must ask the interface the router actually holds. It used
+// to ask RadioLibInterface::instance, which is null for any interface that is not a local RadioLib chip
+// (meshtasticd's transparent radio drives another node's chip), so LORA_24 was refused there even when
+// the radio behind it does 2.4 GHz.
+class WideLoraGateRadio : public RadioInterface
+{
+  public:
+    explicit WideLoraGateRadio(bool wide) : wide(wide) {}
+    ErrorCode send(meshtastic_MeshPacket *p) override
+    {
+        packetPool.release(p);
+        return ERRNO_OK;
+    }
+    uint32_t getPacketTime(uint32_t totalPacketLen, bool received = false) override { return 100; }
+    bool wideLora() override { return wide; }
+
+  private:
+    bool wide;
+};
+
+// Send set_config{region LORA_24} from a local client through a router whose interface reports
+// `radioIsWide`, and return the Routing error the dispatcher answered with.
+static meshtastic_Routing_Error setLora24Through(bool radioIsWide)
+{
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    initRegion();
+    testAdmin->deferSaves();
+    hamMockRouter = new HamModeMockRouter();
+    hamMockRouter->addInterface(std::unique_ptr<RadioInterface>(new WideLoraGateRadio(radioIsWide)));
+    router = hamMockRouter;
+
+    meshtastic_AdminMessage m = meshtastic_AdminMessage_init_zero;
+    m.which_payload_variant = meshtastic_AdminMessage_set_config_tag;
+    m.set_config.which_payload_variant = meshtastic_Config_lora_tag;
+    m.set_config.payload_variant.lora.region = meshtastic_Config_LoRaConfig_RegionCode_LORA_24;
+    m.set_config.payload_variant.lora.use_preset = true;
+    m.set_config.payload_variant.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    meshtastic_MeshPacket mp = meshtastic_MeshPacket_init_zero;
+    mp.from = 0;
+    mp.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    mp.decoded.want_response = true;
+    testAdmin->handleReceivedProtobuf(mp, &m);
+
+    meshtastic_Routing_Error err = meshtastic_Routing_Error_MAX_RETRANSMIT; // neither answer the test expects
+    TEST_ASSERT_TRUE_MESSAGE(decodeRoutingError(testAdmin->reply(), err), "want_response must be answered");
+    testAdmin->drainReply();
+    return err;
+}
+
+static void test_setConfig_lora24_acceptedWhenTheRouterInterfaceDoes2_4GHz()
+{
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_NONE, setLora24Through(true));
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_LORA_24, config.lora.region);
+}
+
+// The fail-closed half: an interface without 2.4 GHz still gets BAD_REQUEST and keeps its region.
+static void test_setConfig_lora24_rejectedWhenTheRouterInterfaceCannot()
+{
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_BAD_REQUEST, setLora24Through(false));
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_US, config.lora.region);
+}
+
+// A PKC admin request with want_ack and no want_response is answered by the module's ROUTING reply in place
+// of the ACK. That reply must still encode: PKC never wraps a ROUTING packet, so a reply left marked
+// pki_encrypted fails perhapsEncode and the sender hears nothing.
+static void expectPkcAdminRoutingReplyEncodes(meshtastic_AdminMessage &m)
+{
+    static constexpr NodeNum REMOTE_ADMIN = 0x0B0B0B0B;
+    myNodeInfo.my_node_num = 0x0A0A0A0A;
+    channels.initDefaults();
+    channels.onConfigChanged();
+    config.security.admin_key_count = 1;
+    config.security.admin_key[0].size = 32;
+    memset(config.security.admin_key[0].bytes, 0xAA, 32);
+
+    meshtastic_MeshPacket mp = meshtastic_MeshPacket_init_zero;
+    mp.from = REMOTE_ADMIN;
+    mp.to = myNodeInfo.my_node_num;
+    mp.id = 0x5151;
+    mp.channel = 0; // a PKC packet arrives with channel hash 0, which resolves to the primary channel
+    mp.want_ack = true;
+    mp.pki_encrypted = true;
+    mp.public_key.size = 32;
+    memset(mp.public_key.bytes, 0xAA, 32);
+    mp.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    mp.decoded.want_response = false;
+    meshtastic_AdminMessage session = meshtastic_AdminMessage_init_zero;
+    testAdmin->setPassKey(&session); // a state-changing request must carry a live session key
+    m.session_passkey = session.session_passkey;
+    testAdmin->handleReceivedProtobuf(mp, &m);
+
+    meshtastic_MeshPacket *reply = testAdmin->reply();
+    TEST_ASSERT_NOT_NULL_MESSAGE(reply, "the request must queue a routing reply");
+    TEST_ASSERT_EQUAL(meshtastic_PortNum_ROUTING_APP, reply->decoded.portnum);
+    meshtastic_Routing_Error err = meshtastic_Routing_Error_NONE;
+    TEST_ASSERT_TRUE(decodeRoutingError(reply, err));
+    TEST_ASSERT_NOT_EQUAL_MESSAGE(meshtastic_Routing_Error_ADMIN_BAD_SESSION_KEY, err, "the request must pass the session gate");
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Routing_Error_NONE, perhapsEncode(reply), "the routing reply was dropped at encode");
+    testAdmin->drainReply();
+}
+
+static void test_pkcAdminBadRequest_replyEncodes()
+{
+    meshtastic_AdminMessage m = meshtastic_AdminMessage_init_zero;
+    m.which_payload_variant = meshtastic_AdminMessage_get_channel_request_tag;
+    m.get_channel_request = MAX_NUM_CHANNELS + 2; // out of range, so the handler answers BAD_REQUEST
+    expectPkcAdminRoutingReplyEncodes(m);
+}
+
+static void test_pkcAdminBackupPreferencesReply_encodes()
+{
+    meshtastic_AdminMessage m = meshtastic_AdminMessage_init_zero;
+    m.which_payload_variant = meshtastic_AdminMessage_backup_preferences_tag;
+    m.backup_preferences = meshtastic_AdminMessage_BackupLocation_FLASH;
+    expectPkcAdminRoutingReplyEncodes(m);
+}
+
 static void test_bootDefense_sanitizesStaleLicensedChannelsOnce()
 {
     owner = meshtastic_User_init_zero;
@@ -1749,11 +1549,11 @@ static void test_handleSetConfig_persistsUnlicensedFirstRegionIdentity()
 
 static void test_handleSetConfig_fromOthers_invalidPresetRejected()
 {
-    // Set up a known-good baseline in the global config
+    // Baseline is not the region default (LONG_FAST), so a clamp cannot pass for a rejection
     config.lora = meshtastic_Config_LoRaConfig_init_zero;
     config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
     config.lora.use_preset = true;
-    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST;
     initRegion();
 
     // Build an admin set_config with an invalid preset for EU_868
@@ -1763,16 +1563,16 @@ static void test_handleSetConfig_fromOthers_invalidPresetRejected()
     testAdmin->handleSetConfig(c, true); // fromOthers = true
 
     // fromOthers=true: invalid preset should be rejected, old preset preserved
-    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, config.lora.modem_preset);
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST, config.lora.modem_preset);
 }
 
 static void test_handleSetConfig_fromLocal_invalidPresetClamped()
 {
-    // Set up a known-good baseline
+    // Baseline is not the region default (LONG_FAST), so a rejection cannot pass for a clamp
     config.lora = meshtastic_Config_LoRaConfig_init_zero;
     config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
     config.lora.use_preset = true;
-    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST;
     initRegion();
 
     // Build an admin set_config with an invalid preset for EU_868
@@ -2103,20 +1903,27 @@ class RestoreDerivingCryptoEngine : public CryptoEngine
   public:
     bool regenerateSucceeds = true;
     bool derivesLowEntropy = true;
+    const uint8_t *derivedKey = nullptr; // when set, regeneratePublicKey() yields exactly this key
     bool regeneratePublicKey(uint8_t *pubKey, uint8_t *privKey) override
     {
         if (!regenerateSucceeds)
             return false;
-        if (derivesLowEntropy)
+        if (derivedKey)
+            memcpy(pubKey, derivedKey, 32);
+        else if (derivesLowEntropy)
             memcpy(pubKey, COMPROMISED_PUBLIC_KEY, 32);
         else
             memset(pubKey, 0x7C, 32);
         return true;
     }
     bool mintsLowEntropy = false;
+    std::vector<const uint8_t *> mintQueue; // keys generateKeyPair() hands out first, in order
     void generateKeyPair(uint8_t *pubKey, uint8_t *privKey) override
     {
-        if (mintsLowEntropy)
+        if (!mintQueue.empty()) {
+            memcpy(pubKey, mintQueue.front(), 32);
+            mintQueue.erase(mintQueue.begin());
+        } else if (mintsLowEntropy)
             memcpy(pubKey, COMPROMISED_PUBLIC_KEY, 32);
         else
             memset(pubKey, 0x5E, 32);
@@ -2292,6 +2099,192 @@ static void test_generateCryptoKeyPair_failedDerivationFromStoredPrivateClearsKe
     TEST_ASSERT_EQUAL_UINT(0, config.security.public_key.size);
 }
 
+// --- Key-derived node numbers in the reserved range (#12439) ---
+//
+// Under test, in src/mesh/NodeDB.cpp: NodeDB::keyYieldsReservedNodeNum(), NodeDB::generateCryptoKeyPair()
+// (through generateBlacklistCheckedKeyPair() and derivePublicKeyFromPrivate()), NodeDB::ensurePkiIdentity()
+// and NodeDB::createNewIdentity().
+//
+// my_node_num is crc32(public_key), and nothing checked that against the reserved numbers 0-9 and
+// broadcast (0xFFFFFFFF). Number 0 is the one that hurts: the first send asserts on from == 0, and
+// every reboot re-derives the same key and number, so the node crash-loops until it gets a new key.
+// Number 1 collides with NODENUM_BROADCAST_NO_LORA. The number can't be rerolled - it must equal the
+// key's CRC - so these pin that such a key is redrawn when minted and replaced when derived (the
+// recovery path for a node already stuck), on boot, on admin keygen, and on the first-region path.
+//
+// The keys are 28 bytes of 0xA5 plus a 4-byte suffix solved to force the CRC32 (CRC32 is affine over
+// GF(2)), since a real key landing there takes ~2^32/5 draws.
+static const uint8_t KEY_CRC_0[32] = {0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5,
+                                      0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5,
+                                      0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0x98, 0xb5, 0x42, 0xed};
+static const uint8_t KEY_CRC_1[32] = {0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5,
+                                      0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5,
+                                      0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xd9, 0xb3, 0x33, 0x36};
+static const uint8_t KEY_CRC_9[32] = {0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5,
+                                      0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5,
+                                      0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0x94, 0x9e, 0x0e, 0x5b};
+static const uint8_t KEY_CRC_10[32] = {0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5,
+                                       0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5,
+                                       0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0x16, 0x92, 0xec, 0xed};
+static const uint8_t KEY_CRC_BROADCAST[32] = {0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5,
+                                              0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5,
+                                              0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xfa, 0x40, 0x64, 0x7f};
+
+static meshtastic_Config_SecurityConfig_public_key_t publicKeyOf(const uint8_t *bytes)
+{
+    meshtastic_Config_SecurityConfig_public_key_t key = {};
+    key.size = 32;
+    memcpy(key.bytes, bytes, 32);
+    return key;
+}
+
+// Our own number must be a usable one and must match the key it came from.
+static void assertUsableIdentity()
+{
+    TEST_ASSERT_EQUAL_UINT(32, config.security.public_key.size);
+    TEST_ASSERT_FALSE(NodeDB::keyYieldsReservedNodeNum(config.security.public_key));
+    TEST_ASSERT_EQUAL_HEX32(crc32Buffer(config.security.public_key.bytes, 32), nodeDB->getNodeNum());
+    TEST_ASSERT_TRUE(nodeDB->getNodeNum() >= 10 && nodeDB->getNodeNum() != NODENUM_BROADCAST);
+}
+
+// The vectors themselves, and both edges: 0, 1, 9 and broadcast are reserved; 10 and an ordinary CRC are not.
+static void test_keyYieldsReservedNodeNum_matchesTheReservedRange()
+{
+    TEST_ASSERT_EQUAL_HEX32(0x00000000, crc32Buffer(KEY_CRC_0, 32));
+    TEST_ASSERT_EQUAL_HEX32(0x00000001, crc32Buffer(KEY_CRC_1, 32));
+    TEST_ASSERT_EQUAL_HEX32(0x00000009, crc32Buffer(KEY_CRC_9, 32));
+    TEST_ASSERT_EQUAL_HEX32(0x0000000A, crc32Buffer(KEY_CRC_10, 32));
+    TEST_ASSERT_EQUAL_HEX32(0xFFFFFFFF, crc32Buffer(KEY_CRC_BROADCAST, 32));
+    TEST_ASSERT_TRUE(NodeDB::keyYieldsReservedNodeNum(publicKeyOf(KEY_CRC_0)));
+    TEST_ASSERT_TRUE(NodeDB::keyYieldsReservedNodeNum(publicKeyOf(KEY_CRC_1)));
+    TEST_ASSERT_TRUE(NodeDB::keyYieldsReservedNodeNum(publicKeyOf(KEY_CRC_9)));
+    TEST_ASSERT_TRUE(NodeDB::keyYieldsReservedNodeNum(publicKeyOf(KEY_CRC_BROADCAST)));
+    TEST_ASSERT_FALSE(NodeDB::keyYieldsReservedNodeNum(publicKeyOf(KEY_CRC_10)));
+    uint8_t ordinary[32];
+    memset(ordinary, 0xA5, 32); // CRC 0x775F2F85
+    TEST_ASSERT_FALSE(NodeDB::keyYieldsReservedNodeNum(publicKeyOf(ordinary)));
+}
+
+// A freshly minted key whose CRC is 0 is drawn again rather than adopted as node 0.
+static void test_generateCryptoKeyPair_mintedKeyForNodeZeroIsRedrawn()
+{
+    installRestoreCrypto()->mintQueue = {KEY_CRC_0};
+    config.security = meshtastic_Config_SecurityConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    initRegion();
+
+    TEST_ASSERT_TRUE(nodeDB->generateCryptoKeyPair());
+
+    TEST_ASSERT_TRUE(memcmp(KEY_CRC_0, config.security.public_key.bytes, 32) != 0);
+    assertUsableIdentity();
+}
+
+// The crash-loop recovery: a stored private key deriving node 0 is replaced at boot, not re-adopted.
+static void test_generateCryptoKeyPair_storedKeyForNodeZeroIsReplacedAtBoot()
+{
+    installRestoreCrypto()->derivedKey = KEY_CRC_0;
+    config.security = meshtastic_Config_SecurityConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    initRegion();
+    config.security.private_key.size = 32;
+    memset(config.security.private_key.bytes, 0x11, 32);
+    config.security.public_key.size = 32;
+    memcpy(config.security.public_key.bytes, KEY_CRC_0, 32); // as a stuck node has it saved
+
+    TEST_ASSERT_TRUE(nodeDB->generateCryptoKeyPair());
+
+    uint8_t storedPriv[32];
+    memset(storedPriv, 0x11, 32);
+    TEST_ASSERT_TRUE(memcmp(storedPriv, config.security.private_key.bytes, 32) != 0);
+    assertUsableIdentity();
+}
+
+// Every reserved number is refused, not just 0: 1 is NODENUM_BROADCAST_NO_LORA, 9 the top of the
+// range, 0xFFFFFFFF broadcast. Each is minted in turn ahead of a clean key.
+static void test_generateCryptoKeyPair_everyReservedMintIsRedrawn()
+{
+    installRestoreCrypto()->mintQueue = {KEY_CRC_1, KEY_CRC_9, KEY_CRC_BROADCAST};
+    config.security = meshtastic_Config_SecurityConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    initRegion();
+
+    TEST_ASSERT_TRUE(nodeDB->generateCryptoKeyPair());
+
+    TEST_ASSERT_TRUE(restoreCrypto->mintQueue.empty());
+    assertUsableIdentity();
+}
+
+// The range ends at 9: a minted key for node 10, the first usable number, is kept on the first draw.
+static void test_generateCryptoKeyPair_mintedKeyForNodeTenIsKept()
+{
+    installRestoreCrypto()->mintQueue = {KEY_CRC_10};
+    config.security = meshtastic_Config_SecurityConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    initRegion();
+
+    TEST_ASSERT_TRUE(nodeDB->generateCryptoKeyPair());
+
+    TEST_ASSERT_EQUAL_MEMORY(KEY_CRC_10, config.security.public_key.bytes, 32);
+    TEST_ASSERT_EQUAL_HEX32(10, nodeDB->getNodeNum());
+}
+
+// The draw is bounded at four: if every attempt is reserved, no key is kept rather than a reserved one.
+static void test_generateCryptoKeyPair_onlyReservedMintsLeaveNoKey()
+{
+    installRestoreCrypto()->mintQueue = {KEY_CRC_0, KEY_CRC_0, KEY_CRC_0, KEY_CRC_0, KEY_CRC_0, KEY_CRC_0};
+    config.security = meshtastic_Config_SecurityConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    initRegion();
+
+    TEST_ASSERT_FALSE(nodeDB->generateCryptoKeyPair());
+
+    TEST_ASSERT_EQUAL_UINT(2, restoreCrypto->mintQueue.size()); // exactly four of the six drawn
+    TEST_ASSERT_EQUAL_UINT(0, config.security.private_key.size);
+    TEST_ASSERT_EQUAL_UINT(0, config.security.public_key.size);
+}
+
+// Leaving our old number must remove only our own row: the removal compacts the next row into slot 0, and
+// a remote node numbered 9 (legal before reserved numbers grew to 0-9) is not ours.
+static void test_generateCryptoKeyPair_ordinaryRotationKeepsRemoteNodeNine()
+{
+    installRestoreCrypto();
+    config.security = meshtastic_Config_SecurityConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    initRegion();
+
+    const NodeNum oldSelf = 0x0A0B0C0D;
+    meshtastic_NodeInfoLite self = meshtastic_NodeInfoLite_init_zero;
+    self.num = oldSelf;
+    meshtastic_NodeInfoLite remoteNine = meshtastic_NodeInfoLite_init_zero;
+    remoteNine.num = 9;
+    // Earlier tests can leave the table full, so lay out exactly [self, remote 9] rather than inserting.
+    nodeDB->meshNodes->at(0) = self;
+    nodeDB->meshNodes->at(1) = remoteNine;
+    nodeDB->numMeshNodes = 2;
+    myNodeInfo.my_node_num = oldSelf;
+
+    TEST_ASSERT_TRUE(nodeDB->generateCryptoKeyPair()); // mints the clean 0x5E key: an ordinary rotation
+
+    TEST_ASSERT_NULL(nodeDB->getMeshNode(oldSelf));
+    TEST_ASSERT_NOT_NULL(nodeDB->getMeshNode(9));
+    assertUsableIdentity();
+}
+
+// The first-region path mints through CryptoEngine::ensurePkiKeys(), not NodeDB's checked keygen, and
+// switches number without a reboot - the route the issue traced to the node-0 crash.
+static void test_ensurePkiIdentity_mintedKeyForNodeZeroIsRedrawn()
+{
+    installRestoreCrypto()->mintQueue = {KEY_CRC_0};
+    config.security = meshtastic_Config_SecurityConfig_init_zero;
+    owner.is_licensed = false;
+
+    nodeDB->ensurePkiIdentity();
+
+    TEST_ASSERT_TRUE(memcmp(KEY_CRC_0, config.security.public_key.bytes, 32) != 0);
+    TEST_ASSERT_EQUAL_MEMORY(config.security.public_key.bytes, owner.public_key.bytes, 32);
+    assertUsableIdentity();
+}
+
 // keyIsLowEntropy survives from a boot-time regeneration, and generateCryptoKeyPair returns early on
 // an unset region without clearing it. The restore warning must stay gated on this keygen running.
 static void test_handleSetConfig_security_staleLowEntropyFlagDoesNotWarn()
@@ -2398,7 +2391,7 @@ static void test_handleSetConfig_fromOthers_lockedPresetFromNonTrioRegionRejecte
     config.lora = meshtastic_Config_LoRaConfig_init_zero;
     config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
     config.lora.use_preset = true;
-    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST;
     initRegion();
 
     meshtastic_Config c =
@@ -2407,7 +2400,7 @@ static void test_handleSetConfig_fromOthers_lockedPresetFromNonTrioRegionRejecte
     testAdmin->handleSetConfig(c, true); // fromOthers = true
 
     TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_US, config.lora.region);
-    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, config.lora.modem_preset);
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST, config.lora.modem_preset);
 }
 
 static void test_handleSetConfig_presetChosenBeforeRegionSurvives()
@@ -3046,6 +3039,10 @@ void setup()
     RUN_TEST(test_handleSetHamMode_blankCallSignIsRejected);
     RUN_TEST(test_handleSetHamMode_blankCallSignRepliesBadRequest);
     RUN_TEST(test_handleSetHamMode_acceptedRequestAcksSuccess);
+    RUN_TEST(test_setConfig_lora24_acceptedWhenTheRouterInterfaceDoes2_4GHz);
+    RUN_TEST(test_setConfig_lora24_rejectedWhenTheRouterInterfaceCannot);
+    RUN_TEST(test_pkcAdminBadRequest_replyEncodes);
+    RUN_TEST(test_pkcAdminBackupPreferencesReply_encodes);
     RUN_TEST(test_handleSetConfig_persistsLicensedFirstRegionIdentity);
     RUN_TEST(test_handleSetConfig_persistsUnlicensedFirstRegionIdentity);
     RUN_TEST(test_bootDefense_sanitizesStaleLicensedChannelsOnce);
@@ -3061,16 +3058,6 @@ void setup()
     RUN_TEST(test_validateConfigRegion_unsetRegionReturnsTrue);
     RUN_TEST(test_validateConfigRegion_unknownCodeReturnsFalse);
     RUN_TEST(test_validateConfigRegion_anotherUnknownCodeReturnsFalse);
-
-    // Shadow table tests
-    RUN_TEST(test_shadowTable_spacedProfileHasNonZeroSpacing);
-    RUN_TEST(test_shadowTable_licensedProfileFlagsCorrect);
-    RUN_TEST(test_shadowTable_presetCountMatchesExpected);
-    RUN_TEST(test_shadowTable_defaultPresetIsFirstInList);
-    RUN_TEST(test_shadowTable_channelSpacingWithPadding);
-    RUN_TEST(test_shadowTable_turboOnlyOnWideLora);
-    RUN_TEST(test_shadowTable_unknownCodeFallsToSentinel);
-    RUN_TEST(test_shadowTable_presetHashProfileHasCorrectOverrideSlot);
 
     // validateConfigLora()
     RUN_TEST(test_validateConfigLora_validPresetForUS);
@@ -3111,14 +3098,8 @@ void setup()
     RUN_TEST(test_regionFieldsAreSane);
     RUN_TEST(test_onlyLORA24HasWideLora);
 
-    // OVERRIDE_SLOT_PRESET_HASH (-1) slot formula tests
-    RUN_TEST(test_overrideSlotPresetHash_longFast_customChannelMatchesDefaultNameSlot);
-    RUN_TEST(test_overrideSlotPresetHash_mediumFast_customChannelMatchesDefaultNameSlot);
-    RUN_TEST(test_overrideSlotPresetHash_longFast_slotIsStableAcrossCustomNames);
-    RUN_TEST(test_overrideSlotPresetHash_mediumFast_slotIsStableAcrossCustomNames);
-    RUN_TEST(test_overrideSlotPresetHash_longFastAndMediumFast_slotsAreDifferentPresets);
-
-    // RegionInfo::getSlotPlan() and frequency-slot calculations
+    // RadioInterface::frequencySlotCount() and RegionInfo::getSlotPlan()
+    RUN_TEST(test_frequencySlotCount_realRegions);
     RUN_TEST(test_channelSpacingCalculation_US_LONG_FAST);
     RUN_TEST(test_channelSpacingCalculation_EU868_LONG_FAST);
     RUN_TEST(test_slotPlan_JP_250kHz_longFast);
@@ -3133,7 +3114,6 @@ void setup()
     RUN_TEST(test_clampConfigLora_JP_slotBounds);
     RUN_TEST(test_clampConfigLora_JP_customModeSlotBounds);
     RUN_TEST(test_clampConfigLora_JP_pendingPresetSwitch);
-    RUN_TEST(test_channelSpacingCalculation_placeholder);
 
     // handleSetConfig fromOthers dispatch
     RUN_TEST(test_handleSetConfig_fromOthers_invalidPresetRejected);
@@ -3156,6 +3136,14 @@ void setup()
     RUN_TEST(test_handleSetConfig_security_blacklistedMintLeavesNoKey);
     RUN_TEST(test_generateCryptoKeyPair_derivedFromStoredPrivateIsChecked);
     RUN_TEST(test_generateCryptoKeyPair_failedDerivationFromStoredPrivateClearsKeySizes);
+    RUN_TEST(test_keyYieldsReservedNodeNum_matchesTheReservedRange);
+    RUN_TEST(test_generateCryptoKeyPair_mintedKeyForNodeZeroIsRedrawn);
+    RUN_TEST(test_generateCryptoKeyPair_storedKeyForNodeZeroIsReplacedAtBoot);
+    RUN_TEST(test_generateCryptoKeyPair_everyReservedMintIsRedrawn);
+    RUN_TEST(test_generateCryptoKeyPair_mintedKeyForNodeTenIsKept);
+    RUN_TEST(test_generateCryptoKeyPair_onlyReservedMintsLeaveNoKey);
+    RUN_TEST(test_generateCryptoKeyPair_ordinaryRotationKeepsRemoteNodeNine);
+    RUN_TEST(test_ensurePkiIdentity_mintedKeyForNodeZeroIsRedrawn);
     RUN_TEST(test_handleSetConfig_security_staleLowEntropyFlagDoesNotWarn);
     RUN_TEST(test_handleSetConfig_security_failedDerivationClearsKeySizes);
     RUN_TEST(test_regionInfo_supportsPreset);

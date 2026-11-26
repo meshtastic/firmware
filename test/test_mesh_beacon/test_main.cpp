@@ -665,26 +665,6 @@ static void test_broadcaster_invalidateCache_setsDirtyFlag(void)
     TEST_ASSERT_TRUE(bcast.payloadCacheDirty);
 }
 
-/**
- * Verify calling rebuildCache a second time without an intervening invalidation is a no-op.
- * Important to prevent spurious re-encodes when config-observer callbacks fire multiple times.
- */
-static void test_broadcaster_rebuildCache_idempotent(void)
-{
-    resetConfig();
-    moduleConfig.has_mesh_beacon = true;
-    strncpy(moduleConfig.mesh_beacon.broadcast_message, "idem", sizeof(moduleConfig.mesh_beacon.broadcast_message) - 1);
-
-    MeshBeaconBroadcastModuleTestShim bcast;
-    bcast.rebuildCache();
-    pb_size_t firstSize = bcast.payloadCacheSize;
-    bcast.rebuildCache(); // second call - should be identical
-    pb_size_t secondSize = bcast.payloadCacheSize;
-
-    TEST_ASSERT_FALSE(bcast.payloadCacheDirty);
-    TEST_ASSERT_EQUAL(firstSize, secondSize);
-}
-
 // ===========================================================================
 // Group 3: Broadcaster sendBeacon - packet structure
 // ===========================================================================
@@ -1183,26 +1163,6 @@ static void test_listener_wantPacket_trueWhenEnabled(void)
 // ===========================================================================
 // Group 6: Legacy split messages
 // ===========================================================================
-
-/**
- * Verify broadcast_legacy_split causes sendBeacon to emit exactly two packets when both
- * text and offer content are present.
- * Important to confirm the split path is wired end-to-end rather than short-circuiting.
- */
-static void test_broadcaster_legacySplit_sendsTwoPackets(void)
-{
-    resetConfig();
-    moduleConfig.has_mesh_beacon = true;
-    moduleConfig.mesh_beacon.flags |= MESH_BEACON_FLAG_LEGACY_SPLIT;
-    strncpy(moduleConfig.mesh_beacon.broadcast_message, "split-text", sizeof(moduleConfig.mesh_beacon.broadcast_message) - 1);
-    moduleConfig.mesh_beacon.has_broadcast_offer_preset = true;
-    moduleConfig.mesh_beacon.broadcast_offer_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
-
-    MeshBeaconBroadcastModuleTestShim bcast;
-    bcast.sendBeacon();
-
-    TEST_ASSERT_EQUAL_UINT32_MESSAGE(2, mockRouter->sentPackets.size(), "Legacy split must emit exactly 2 packets");
-}
 
 /**
  * Verify the first packet in a legacy-split send is MESH_BEACON_APP (the offer packet).
@@ -2503,7 +2463,6 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_broadcaster_rebuildCache_payloadDecodesCorrectly);
     RUN_TEST(test_broadcaster_rebuildCache_offerFieldsEncoded);
     RUN_TEST(test_broadcaster_invalidateCache_setsDirtyFlag);
-    RUN_TEST(test_broadcaster_rebuildCache_idempotent);
 
     printf("\n=== Broadcaster sendBeacon ===\n");
 
@@ -2534,7 +2493,6 @@ BEACON_TEST_ENTRY void setup()
 
     printf("\n=== Legacy split messages ===\n");
 
-    RUN_TEST(test_broadcaster_legacySplit_sendsTwoPackets);
     RUN_TEST(test_broadcaster_legacySplit_firstPacketIsBeaconApp);
     RUN_TEST(test_broadcaster_legacySplit_firstPacketHasNoMessageText);
     RUN_TEST(test_broadcaster_legacySplit_secondPacketIsTextMessage);

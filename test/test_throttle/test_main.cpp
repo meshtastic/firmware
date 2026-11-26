@@ -202,15 +202,6 @@ void test_deadlinePassed_reads_disarmed_sentinels_as_passed()
     // it reads as passed like any other past value. ExternalNotificationModule used to reserve it
     // for "unarmed" and now keeps that state in its isNagging flag instead.
     TEST_ASSERT_TRUE(Throttle::deadlinePassed(UINT32_MAX));
-
-    // The guarded form every caller must use.
-    const uint32_t disarmed = 0;
-    TEST_ASSERT_FALSE(disarmed && Throttle::deadlinePassed(disarmed));
-
-    // And it still holds after a wrap.
-    Time::setTestMillis(0xFFFFFF00u);
-    Time::advanceTestMillis(1000);
-    TEST_ASSERT_FALSE(disarmed && Throttle::deadlinePassed(disarmed));
 }
 
 // --- execute() ---

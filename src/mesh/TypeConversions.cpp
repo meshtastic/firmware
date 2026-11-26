@@ -74,7 +74,8 @@ meshtastic_PositionLite TypeConversions::ConvertToPositionLite(meshtastic_Positi
     meshtastic_PositionLite lite = meshtastic_PositionLite_init_default;
     lite.latitude_i = position.latitude_i;
     lite.longitude_i = position.longitude_i;
-    lite.altitude = position.altitude;
+    // PositionLite has no presence flag and reads 0 as "no altitude", so store a real 0 m reading as 1 m.
+    lite.altitude = position.has_altitude ? (position.altitude != 0 ? position.altitude : 1) : 0;
     lite.location_source = position.location_source;
     lite.time = position.time;
     lite.precision_bits = position.precision_bits;
