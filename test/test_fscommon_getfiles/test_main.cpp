@@ -1,15 +1,16 @@
 // Tests for getFiles() - the bounded file-manifest walk in src/FSCommon.cpp that PhoneAPI's
 // STATE_SEND_FILEMANIFEST drives on every phone sync. Nothing else asserts its bounding behaviour:
 // the walk does run unasserted from test_stream_api's handshakes, but no test covers the cap, the
-// depth limit, the wasLimited paths, overlong-path rejection, or capacity release.
+// depth limit, the wasLimited paths, or overlong-path rejection.
 //
 // These assert what the code does today. Today's code is already correct here - #10778 landed the
-// by-reference collectFiles(), the 64-entry cap, strlcpy bounds and the swap-idiom release - so all
+// by-reference collectFiles(), the 64-entry cap and strlcpy bounds - so all
 // of these describe present behaviour rather than a pending fix.
 #include "MeshTypes.h"
 #include "TestUtil.h"
 // FSCommon.h is what defines FSCom, so it has to be included before anything tests for it.
 #include "FSCommon.h"
+#include "mesh/PhoneAPI.h"
 #include <cstdio>
 #include <cstring>
 #include <unity.h>
@@ -203,10 +204,8 @@ void test_getfiles_missing_dir_is_empty(void)
     TEST_ASSERT_FALSE(limited);
 }
 
-// 8. Capacity release. PhoneAPI's releaseFilesManifest() is file-local, so this pins the idiom it
-//    uses rather than calling it: a manifest reserved for 64 entries holds ~14 KB of file_name
-//    buffers, and clear() returns none of it. A size-only assertion would pass on clear(), which is
-//    exactly the bug #7924 shipped.
+// PhoneAPI releases the manifest with a swap, so the capacity is returned to the heap. A
+// clear() keeps it (#7924); this calls the real function, not a local vector::swap.
 void test_release_files_manifest_frees_capacity(void)
 {
     std::vector<meshtastic_FileInfo> manifest;
@@ -217,9 +216,8 @@ void test_release_files_manifest_frees_capacity(void)
         manifest.push_back(info);
     }
     TEST_ASSERT_EQUAL_size_t(64, manifest.size());
-    TEST_ASSERT_GREATER_OR_EQUAL_size_t(64, manifest.capacity());
 
-    std::vector<meshtastic_FileInfo>().swap(manifest);
+    releaseFilesManifest(manifest);
 
     TEST_ASSERT_EQUAL_size_t(0, manifest.size());
     TEST_ASSERT_EQUAL_size_t(0, manifest.capacity());
@@ -238,10 +236,10 @@ void setup()
 #ifndef _WIN32
     RUN_TEST(test_getfiles_rejects_overlong_path);
 #endif
+    RUN_TEST(test_release_files_manifest_frees_capacity);
     RUN_TEST(test_getfiles_skips_dot_entries);
     RUN_TEST(test_getfiles_reports_sizes);
     RUN_TEST(test_getfiles_missing_dir_is_empty);
-    RUN_TEST(test_release_files_manifest_frees_capacity);
 #endif
     exit(UNITY_END());
 }

@@ -60,6 +60,12 @@ class OSThread : public Thread
      */
     void setIntervalFromNow(unsigned long _interval);
 
+    virtual void setInterval(unsigned long _interval)
+    {
+        fromNowDuringRun = false; // a later setInterval() wins
+        Thread::setInterval(_interval);
+    }
+
   protected:
     /**
      * The method that will be called each time our thread gets a chance to run
@@ -71,6 +77,10 @@ class OSThread : public Thread
 
     // Do not override this
     virtual void run();
+
+  private:
+    // setIntervalFromNow() ran during runOnce(); run() keeps its due time rather than re-basing it in runned()
+    volatile bool fromNowDuringRun = false;
 };
 
 /**

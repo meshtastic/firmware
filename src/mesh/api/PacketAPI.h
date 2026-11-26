@@ -13,7 +13,7 @@ class PacketAPI : public PhoneAPI, public concurrency::OSThread
 {
   public:
     static PacketAPI *create(PacketServer *_server);
-    virtual ~PacketAPI(){};
+    virtual ~PacketAPI() {};
     virtual int32_t runOnce();
     // Check the current underlying physical queue to see if the client is fetching packets
     bool checkIsConnected() override;

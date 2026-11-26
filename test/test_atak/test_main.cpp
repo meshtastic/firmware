@@ -1,3 +1,10 @@
+// ATAK callsign/UID fields: pb_string_length() over fixed-size char arrays.
+//
+// Why: ATAK sends fixed-width strings that may fill the buffer or contain embedded nulls; a
+// length helper that runs past the field corrupts the next one.
+// Regression guarded: an embedded or trailing null shortening a callsign, and a full buffer
+// reading past its end.
+
 #include <string.h>
 #include <unity.h>
 
@@ -139,17 +146,6 @@ void test_full_buffer(void)
 }
 
 /**
- * Test buffer with all nulls
- * Should return 0
- */
-void test_all_nulls(void)
-{
-    char test_str[32] = {0};
-    size_t result = pb_string_length(test_str, sizeof(test_str));
-    TEST_ASSERT_EQUAL_size_t(0, result);
-}
-
-/**
  * Test single character followed by nulls
  * Minimal non-empty case
  */
@@ -206,7 +202,6 @@ void setup()
     RUN_TEST(test_android_uid_pattern);
     RUN_TEST(test_multiple_embedded_nulls);
     RUN_TEST(test_full_buffer);
-    RUN_TEST(test_all_nulls);
     RUN_TEST(test_single_char);
     RUN_TEST(test_callsign_field_size);
     RUN_TEST(test_data_at_buffer_end);

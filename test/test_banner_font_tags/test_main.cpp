@@ -104,8 +104,9 @@ void test_resolve_uses_parsed_lines_for_pairing_pin()
 {
     showBanner(BLE_PIN_MESSAGE, notificationTypeEnum::pairing_pin);
 
+    // The raw line differs from the parsed one, so only a read from the parsed-line cache passes.
     NotificationRenderer::BannerFont font = NotificationRenderer::BANNER_FONT_DEFAULT;
-    const char *text = NotificationRenderer::resolveBannerLine(2, "[M]123 456", font);
+    const char *text = NotificationRenderer::resolveBannerLine(2, "raw", font);
     TEST_ASSERT_EQUAL_STRING("123 456", text);
     TEST_ASSERT_EQUAL(NotificationRenderer::BANNER_FONT_MEDIUM, font);
 }

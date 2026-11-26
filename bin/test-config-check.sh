@@ -61,7 +61,7 @@ FAIL=0
 # assert <description> <expected-exit> <fixture> <mode> [expected-substring...]
 #   mode:    "check" adds --check, "yaml" adds --output-yaml, "check-yaml" adds both
 #            (to assert that --check wins), "normal" runs with neither.
-#   fixture: a bare name runs from a scratch directory. A name containing a slash
+#   fixture: a bare name runs from a scratch directory, as does an absolute path. A relative name containing a slash
 #            (configd-conflict/config.yaml) runs from that fixture's own directory,
 #            so a relative ConfigDirectory in it resolves the way it would in situ.
 #   Each expected substring must appear in the output. One prefixed with '!' must not:
@@ -71,7 +71,9 @@ assert() {
 	shift 4
 
 	local cwd="$WORKDIR" config="$FIXTURES/$fixture"
-	if [[ $fixture == */* ]]; then
+	if [[ $fixture == /* ]]; then
+		config="$fixture"
+	elif [[ $fixture == */* ]]; then
 		cwd="$FIXTURES/$(dirname "$fixture")"
 		config="$(basename "$fixture")"
 	fi
@@ -137,6 +139,7 @@ assert_clean_module module-lr1120.yaml lr1120
 assert_clean_module module-lr1121.yaml lr1121
 assert_clean_module module-sim.yaml sim
 assert_clean_module module-auto.yaml auto
+assert_clean_module module-transparent.yaml transparent
 
 echo
 echo "other configs that must not be flagged:"
@@ -147,6 +150,119 @@ assert "empty sections are not a fault" 0 empty-sections.yaml check \
 assert "warnings alone do not fail the run" 0 unknown-key.yaml check \
 	"unknown key 'Lora.Frequency'" \
 	"Result: 0 errors, 1 warning"
+# On a build without BLE support the same file additionally reports the build-time
+# gap as a warning, so only the error count is asserted here.
+assert "bluetooth section parses" 0 bluetooth.yaml check \
+	"Result: 0 errors,"
+assert "bluetooth bad Enabled is silently defaulted" 0 bluetooth-bad-enabled.yaml check \
+	"Bluetooth.Enabled is not a true/false value" \
+	"Result: 0 errors, 1 warning"
+# A build without BLE support adds its own build-time warning, so do not pin the count.
+assert "bluetooth AdapterId must name a real adapter" 0 bluetooth-bad-adapter.yaml check \
+	"is not a BlueZ adapter name" \
+	"Result: 0 errors,"
+
+echo
+echo "serial module:"
+assert "a serial module path is clean" 0 serial-module.yaml check \
+	"Result: 0 errors, 0 warnings"
+assert "a serial module path is written back" 0 serial-module.yaml yaml \
+	"SerialModule:" \
+	"Path: pty:/tmp/meshserial"
+# Only the document is reloaded: --output-yaml may print startup lines before it.
+timeout 60 "$BIN" --output-yaml --config "$FIXTURES/serial-module.yaml" -d "$WORKDIR/fs" 2>/dev/null |
+	sed -n '/^[A-Za-z][A-Za-z0-9]*:/,$p' >"$WORKDIR/serial-module-emitted.yaml"
+assert "the written-back serial module path loads clean" 0 "$WORKDIR/serial-module-emitted.yaml" check \
+	"Result: 0 errors, 0 warnings"
+# A config.d file with a SerialModule section but no Path keeps the path config.yaml set.
+assert "a serial module path survives a later file without Path" 0 serial-module-append/config.yaml yaml \
+	"Path: /dev/ttyUSB1"
+assert "an unknown serial module key is warned" 0 serial-module-unknown-key.yaml check \
+	"unknown key 'SerialModule.Baud'" \
+	"Result: 0 errors, 1 warning"
+
+echo
+echo "admin keys in the host config:"
+assert "a list of admin keys is clean" 0 adminkeys.yaml check \
+	"Result: 0 errors, 0 warnings"
+assert "a malformed admin key is refused" 1 adminkeys-bad.yaml check \
+	"is not a 32-byte base64 public key" \
+	"Result: 1 error, 0 warnings"
+assert "admin keys written as a scalar are refused" 1 adminkeys-not-a-list.yaml check \
+	"Security.AdminKeys must be a list of base64 public keys" \
+	"Result: 1 error, 0 warnings"
+# Admin keys append rather than the last file winning, so one file per admin works. config.yaml is
+# always loaded first, so the effective list is deterministic; --output-yaml is what reports it.
+assert "admin keys append across config.d" 0 adminkeys-append/config.yaml yaml \
+	"rvzaPCZmlh1nWnqNKUFHj0dLBJJIRJhRrkZmaFLHCVY=" \
+	"NGC+MSAeaf7aoO7ouZl/XHwpmf2v5ZMlPNZUr0361xQ=" \
+	"P2jeuoXA1sOGSPH9Vm3eHFlITu1EVnohWGKlGF3t8GU="
+
+echo
+echo "ignore relay nodes:"
+assert "a list of relay node numbers is clean" 0 ignore-relay-nodes.yaml check \
+	"Result: 0 errors, 0 warnings"
+assert "an entry that is not a node number is refused" 1 ignore-relay-nodes-bad.yaml check \
+	"is not a node number" \
+	"Result: 1 error, 0 warnings"
+assert "a bad relay node number is refused on a normal boot" 1 ignore-relay-nodes-bad.yaml normal \
+	"is not a node number"
+assert "two entries sharing a low byte are warned" 0 ignore-relay-nodes-duplicate-byte.yaml check \
+	"share low byte 0x44" \
+	"Result: 0 errors, 1 warning"
+assert "an entry ending in 00 is warned as 0xff" 0 ignore-relay-nodes-zero-byte.yaml check \
+	"ends in 00, which is sent as relay byte 0xff" \
+	"Result: 0 errors, 1 warning"
+assert "an entry ending in 00 collides with one ending in ff" 0 ignore-relay-nodes-zero-ff.yaml check \
+	"ends in 00, which is sent as relay byte 0xff" \
+	"share low byte 0xff" \
+	"Result: 0 errors, 2 warnings"
+assert "relay node lists accumulate across files" 0 ignore-relay-nodes-append/config.yaml check \
+	"'Lora.IgnoreRelayNodes' is set in 2 files" \
+	"The lists accumulate; to remove an entry, edit the file that adds it" \
+	"Result: 0 errors,"
+assert "relay nodes written as a scalar are refused" 1 ignore-relay-nodes-not-a-list.yaml check \
+	"must be a list of node numbers" \
+	"Result: 1 error, 0 warnings"
+assert "relay nodes as a scalar are refused on a normal boot" 1 ignore-relay-nodes-not-a-list.yaml normal \
+	"must be a list of node numbers"
+
+echo
+echo "command sensors:"
+assert "a list of command sensors is clean" 0 sensors.yaml check \
+	"Sensors are only read while the Telemetry module setting for their Type is enabled" \
+	"Result: 0 errors, 0 warnings"
+# An air-quality Type is accepted like an environment one, and written back under its field name.
+assert "air-quality sensor types are accepted" 0 sensors.yaml yaml \
+	"Type: co2" \
+	"Type: relative_humidity"
+assert "an unknown sensor Type is refused and the valid ones named" 1 sensors-bad-type.yaml check \
+	"Sensors Type 'humidity' is not an environment metric" \
+	"relative_humidity" \
+	"Result: 1 error, 0 warnings"
+assert "sensors written as a mapping are refused" 1 sensors-not-a-list.yaml check \
+	"Sensors must be a list of entries with a Type and a Command" \
+	"Result: 1 error, 0 warnings"
+assert "bad Scale, unknown key and duplicate Type are warned" 0 sensors-warnings.yaml check \
+	"Sensors Scale 'milli' is not a finite number" \
+	"Sensors Scale '.inf' is not a finite number" \
+	"unknown key 'Sensors.Interval'" \
+	"Sensors lists temperature 2 times" \
+	"Result: 0 errors, 4 warnings"
+# A non-finite Scale falls back to 1, so it is not written back out.
+assert "a non-finite Scale is replaced by 1" 0 sensors-warnings.yaml yaml \
+	"!Scale: .inf" \
+	"!Scale: inf"
+assert "an empty Sensors section is skipped" 0 sensors-empty.yaml check \
+	"!Sensors must be a list" \
+	"Result: 0 errors, 0 warnings"
+# Like admin keys, sensors append across files so one file per sensor works. --output-yaml reports
+# the merged list, with the Type normalised to the field name.
+assert "sensors append across config.d" 0 sensors-append/config.yaml yaml \
+	"Type: temperature" \
+	"Command: echo 21.5" \
+	"Type: barometric_pressure" \
+	"Command: echo 1013.2"
 
 echo
 echo "module names are matched exactly:"
@@ -156,6 +272,18 @@ assert "unknown module names the valid set" 1 module-unknown.yaml check \
 assert "wrong-case module suggests the right spelling" 1 module-wrong-case.yaml check \
 	"did you mean 'LLCC68'?" \
 	"Result: 1 error, 0 warnings"
+
+echo
+echo "transparent radio:"
+assert "transparent with no device is refused" 1 module-transparent-no-device.yaml check \
+	"Lora.TransparentDevice is not set" \
+	"Result: 1 error, 0 warnings"
+assert "an endpoint startup would refuse is refused" 1 transparent-device-bad.yaml check \
+	"is neither a serial device path nor host[:port]" \
+	"Result: 1 error, 0 warnings"
+assert "a device for another module is flagged" 0 transparent-device-unused.yaml check \
+	"Lora.TransparentDevice is set but Module is sim" \
+	"Result: 0 errors, 1 warning"
 
 echo
 echo "LR11xx rfswitch table:"
@@ -345,6 +473,14 @@ assert "ports outside their usable range" 1 port-out-of-range.yaml check \
 	"General.APIPort 80 is outside 1024-65535" \
 	"Webserver.Port 99999 is not a usable TCP port" \
 	"Result: 1 error, 1 warning"
+assert "Webserver.HTTPPort outside its usable range" 1 webserver-http-port.yaml check \
+	"Webserver.HTTPPort 70000 is not a usable TCP port" \
+	"!unknown key" \
+	"Result: 1 error, 0 warnings"
+assert "Webserver.HTTPPort without Port never listens" 0 webserver-http-port-alone.yaml check \
+	"Webserver.HTTPPort is set but Webserver.Port is not" \
+	"!unknown key" \
+	"Result: 0 errors, 1 warning"
 assert "StatusMessage longer than its buffer" 0 statusmessage-long.yaml check \
 	"is truncated to 79 when it is stored" \
 	"Result: 0 errors, 1 warning"
@@ -387,6 +523,18 @@ assert "joystick mappings that do nothing" 0 joystick-buttons-bad.yaml check \
 	"'BTN_SOUTH' is not an evdev button code" \
 	"button 0x121 is mapped to both 'select' and 'cancel'" \
 	"Result: 0 errors, 3 warnings"
+
+echo
+echo "arcade bonnet buttons:"
+# Same shape as JoystickButtons, with the bonnet's printed button names instead of evdev codes.
+assert "bonnet buttons bound by name" 0 arcade-bonnet.yaml check \
+	"Result: 0 errors, 0 warnings"
+assert "bonnet mappings that do nothing" 0 arcade-bonnet-bad.yaml check \
+	"Input.ArcadeBonnet '0x120' is not an MCP23017 address (0x20-0x27)" \
+	"'fire' is not a recognised action" \
+	"'2A' is not a bonnet button (1A-1F)" \
+	"button 1B is mapped to both 'cancel' and 'back'" \
+	"Result: 0 errors, 4 warnings"
 
 echo
 echo "CH341 USB-SPI adapters:"
@@ -442,6 +590,59 @@ assert "unparseable config still reaches the report" 1 malformed-indent.yaml che
 	"Result: 1 error, 0 warnings"
 
 echo
+echo "SPI device paths:"
+assert "valid display and touchscreen paths are clean" 0 spidev-valid.yaml check \
+	"Display spidev    : /dev/spidev1.0" \
+	"Touchscreen spidev: /dev/spidev0.1" \
+	"Result: 0 errors, 0 warnings"
+assert "display path on a bus the decoder cannot name is refused" 1 spidev-invalid-display.yaml check \
+	"Display.spidev 'spidev10.0' is not a usable path" \
+	"Result: 1 error, 0 warnings"
+assert "touchscreen device above 7 is refused" 1 spidev-invalid-touch.yaml check \
+	"Touchscreen.spidev 'spidev1.8' is not a usable path" \
+	"Result: 1 error, 0 warnings"
+assert "a Lora path outside the packing range is informational only" 0 spidev-lora-info.yaml check \
+	"Lora.spidev 'spidev10.0' is not a usable path" \
+	"Result: 0 errors, 0 warnings"
+assert "an empty Lora path on a hardware radio is refused" 1 spidev-lora-empty.yaml check \
+	"Lora.spidev is empty, but a hardware radio needs a SPI device" \
+	"Result: 1 error, 0 warnings"
+assert "a later file supplies the radio path" 0 spidev-lora-override/config.yaml check \
+	"!Lora.spidev is empty" \
+	"Result: 0 errors,"
+assert "a display without spidev emits no empty key" 0 spidev-display-default.yaml yaml \
+	"Panel: ILI9488" \
+	'!spidev: ""'
+assert "emitted display and touchscreen paths keep no /dev prefix" 0 spidev-valid.yaml yaml \
+	"spidev: spidev1.0" \
+	"spidev: spidev0.1" \
+	"!spidev: /dev/"
+
+# The writer and reader must agree on the Display key. Emit a config, then load
+# the emitted file again: a "Module" emitter would leave the panel unset and the
+# reload would report Display.Module as unknown. The summary names each host from
+# its own field, so it also catches an emitter that swaps Display and Touchscreen.
+ROUNDTRIP_YAML="$WORKDIR/roundtrip.yaml"
+(cd "$WORKDIR" && timeout 60 "$BIN" --config "$FIXTURES/spidev-valid.yaml" --output-yaml -d "$WORKDIR/fs" 2>&1) |
+	awk '/^Lora:/{emit=1} emit' >"$ROUNDTRIP_YAML"
+roundtrip_out="$(cd "$WORKDIR" && timeout 60 "$BIN" --config "$ROUNDTRIP_YAML" --check -d "$WORKDIR/fs" 2>&1)"
+roundtrip_rc=$?
+roundtrip_yaml="$(cd "$WORKDIR" && timeout 60 "$BIN" --config "$ROUNDTRIP_YAML" --output-yaml -d "$WORKDIR/fs" 2>&1)"
+if [[ $roundtrip_rc -eq 0 ]] && ! grep -qF "unknown key 'Display.Module'" <<<"$roundtrip_out" &&
+	grep -qF "Display spidev    : /dev/spidev1.0" <<<"$roundtrip_out" &&
+	grep -qF "Touchscreen spidev: /dev/spidev0.1" <<<"$roundtrip_out" &&
+	grep -qF "Panel: ILI9488" <<<"$roundtrip_yaml" &&
+	grep -qF "Result: 0 errors" <<<"$roundtrip_out"; then
+	PASS=$((PASS + 1))
+	echo "  ok    emitted YAML reloads with Display.Panel and both SPI hosts"
+else
+	FAIL=$((FAIL + 1))
+	echo "  FAIL  emitted YAML reloads with Display.Panel and both SPI hosts"
+	sed 's/^/          | /' <<<"$roundtrip_out"
+	sed 's/^/          | /' <<<"$roundtrip_yaml"
+fi
+
+echo
 echo "across a config directory:"
 # Three files each opening a 'Lora:' section. Every key not repeated in the last
 # one loaded is silently reset to its default - here config.yaml's TCXO voltage.
@@ -487,6 +688,14 @@ assert "non-mapping section is refused" 1 nonmap-section.yaml normal \
 	"as config file"
 assert "unknown module is refused" 1 module-unknown.yaml normal \
 	"Unknown Lora.Module: sx1263"
+assert "a malformed admin key is refused on a normal boot" 1 adminkeys-bad.yaml normal \
+	"is not a 32-byte base64 public key"
+assert "admin keys as a scalar are refused on a normal boot" 1 adminkeys-not-a-list.yaml normal \
+	"Security.AdminKeys must be a list of base64 public keys"
+assert "an unknown sensor Type is refused on a normal boot" 1 sensors-bad-type.yaml normal \
+	"Sensors: 'humidity' is not a known Type"
+assert "sensors as a mapping are refused on a normal boot" 1 sensors-not-a-list.yaml normal \
+	"Sensors must be a list of entries with a Type and a Command"
 assert "MACAddress conflict is refused" 1 mac-conflict.yaml normal \
 	"Cannot set both MACAddress and MACAddressSource!"
 # Only meaningful on a build without rgbmatrix. A build that supports HUB75 accepts

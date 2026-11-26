@@ -83,10 +83,14 @@ bool getHeadingRadians(double lat, double lon, float &headingRadian)
     }
 
     const float estimatedHeadingDeg = screen->estimatedHeading(lat, lon);
-    if (!(estimatedHeadingDeg >= 0.0f))
+    if (!std::isfinite(estimatedHeadingDeg))
         return false;
 
-    headingRadian = estimatedHeadingDeg * DEG_TO_RAD;
+    // atan2() reports westward bearings as negative values, so normalize them instead of rejecting them.
+    float normalizedHeadingDeg = fmod(estimatedHeadingDeg, 360.0f);
+    if (normalizedHeadingDeg < 0.0f)
+        normalizedHeadingDeg += 360.0f;
+    headingRadian = normalizedHeadingDeg * DEG_TO_RAD;
     return true;
 }
 

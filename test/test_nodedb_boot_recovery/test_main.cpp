@@ -377,6 +377,81 @@ static void test_oldModuleConfig_discardClearsTailSubmessages(void)
     rebootNodeDB();
 }
 
+// --- Leaving a reserved node number (#12439) ---
+
+// Under test: NodeDB::NodeDB() in src/mesh/NodeDB.cpp, which drops our saved self row when
+// pickNewNodeNum() moves us off a reserved number. A node stuck on 0 saved its row as number 0. With
+// the region unset, boot keygen doesn't run and nodeDBSelfCare() pins the provisional row to index 0,
+// so the old row has to go at boot. Otherwise it lingers as a phantom node 0 after the region is set.
+static void test_reservedSavedNodeNum_selfRowDroppedAtBootBeforeRegionSet(void)
+{
+    TEST_MESSAGE("=== Saved node 0 with region unset: old self row gone at boot and after region set ===");
+    const NodeNum remoteNum = 0x5A5A0009; // an ordinary remote row, which must survive the cleanup
+    meshtastic_NodeInfoLite *remote = nodeDB->getOrCreateMeshNode(remoteNum);
+    TEST_ASSERT_NOT_NULL(remote);
+    remote->bitfield |= NODEINFO_BITFIELD_HAS_USER_MASK; // userless rows are purged on load
+    meshtastic_NodeInfoLite *self = nodeDB->getMeshNode(nodeDB->getNodeNum());
+    TEST_ASSERT_NOT_NULL(self);
+    self->num = 0; // the row a node stuck on 0 saved
+    myNodeInfo.my_node_num = 0;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
+    TEST_ASSERT_TRUE(nodeDB->saveToDisk(SEGMENT_CONFIG | SEGMENT_DEVICESTATE | SEGMENT_NODEDATABASE));
+
+    rebootNodeDB();
+
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_UNSET, config.lora.region);
+    TEST_ASSERT_GREATER_OR_EQUAL_UINT32(10, nodeDB->getNodeNum());
+    TEST_ASSERT_NULL(nodeDB->getMeshNode(0));
+    TEST_ASSERT_EQUAL_HEX32(nodeDB->getNodeNum(), nodeDB->getMeshNodeByIndex(0)->num);
+    TEST_ASSERT_NOT_NULL(nodeDB->getMeshNode(remoteNum));
+
+    // Setting the region later moves us to the key's number without bringing node 0 back.
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    nodeDB->ensurePkiIdentity();
+
+    assertIdentityMatchesBaseline();
+    TEST_ASSERT_NULL(nodeDB->getMeshNode(0));
+    TEST_ASSERT_EQUAL_HEX32(baseNodeNum, nodeDB->getMeshNodeByIndex(0)->num);
+    TEST_ASSERT_NOT_NULL(nodeDB->getMeshNode(remoteNum));
+
+    TEST_ASSERT_TRUE(nodeDB->saveToDisk()); // leave the healthy keyed state on disk
+}
+
+// The same cleanup must only take our own row. If our row is missing, a remote node that held that
+// reserved number (1-9 were legal before) stays, whether it carries another key or none.
+static void bootWithRemoteNineInPlaceOfSelf(bool keyless)
+{
+    meshtastic_NodeInfoLite *self = nodeDB->getMeshNode(nodeDB->getNodeNum());
+    TEST_ASSERT_NOT_NULL(self);
+    TEST_ASSERT_EQUAL(32, self->public_key.size);
+    self->num = 9; // no self row saved; row 9 is a remote node
+    if (keyless)
+        self->public_key.size = 0;
+    else
+        self->public_key.bytes[0] ^= 0xFF;
+    myNodeInfo.my_node_num = 9;
+    TEST_ASSERT_TRUE(nodeDB->saveToDisk(SEGMENT_DEVICESTATE | SEGMENT_NODEDATABASE));
+
+    rebootNodeDB();
+
+    TEST_ASSERT_NOT_NULL(nodeDB->getMeshNode(9));
+    assertIdentityMatchesBaseline();
+
+    nodeDB->removeNodeByNum(9); // leave the healthy keyed state on disk
+}
+
+static void test_reservedSavedNodeNum_remoteRowWithOtherKeyIsKept(void)
+{
+    TEST_MESSAGE("=== Saved node 9, row 9 carries another key: kept ===");
+    bootWithRemoteNineInPlaceOfSelf(false);
+}
+
+static void test_reservedSavedNodeNum_keylessRemoteRowIsKept(void)
+{
+    TEST_MESSAGE("=== Saved node 9, row 9 carries no key: kept ===");
+    bootWithRemoteNineInPlaceOfSelf(true);
+}
+
 NBR_TEST_ENTRY void setup()
 {
     initializeTestEnvironment();
@@ -403,6 +478,11 @@ NBR_TEST_ENTRY void setup()
 
     printf("\n=== ModuleConfig discard completeness ===\n");
     RUN_TEST(test_oldModuleConfig_discardClearsTailSubmessages);
+
+    printf("\n=== Leaving a reserved node number ===\n");
+    RUN_TEST(test_reservedSavedNodeNum_selfRowDroppedAtBootBeforeRegionSet);
+    RUN_TEST(test_reservedSavedNodeNum_remoteRowWithOtherKeyIsKept);
+    RUN_TEST(test_reservedSavedNodeNum_keylessRemoteRowIsKept);
 
     exit(UNITY_END());
 }

@@ -1,0 +1,9 @@
+# FAULT: both entries end in byte 0x44, and relay_node carries only that byte, so the two nodes
+# cannot be told apart on receive. Acceptable, but it drops both. Expect a WARNING and exit 0.
+Lora:
+  Module: sx1262
+  CS: 21
+  IRQ: 16
+  Busy: 20
+  Reset: 18
+  IgnoreRelayNodes: [0x11223344, 0x55663344]

@@ -1,9 +1,11 @@
 #pragma once
 #include "PowerFSM.h"
 #include "SPILock.h"
+#include "UptimeClock.h"
 #include "concurrency/OSThread.h"
 #include "configuration.h"
 #include "main.h"
+#include "mesh/Throttle.h"
 #include "sleep.h"
 #include <memory>
 
@@ -27,6 +29,10 @@ extern PCA95X5_CLS io;
 
 #define AUDIO_THREAD_INTERVAL_MS 100
 
+#ifndef AUDIO_OUTPUT_GAIN
+#define AUDIO_OUTPUT_GAIN 0.2f
+#endif
+
 class AudioThread : public concurrency::OSThread
 {
   public:
@@ -38,7 +44,11 @@ class AudioThread : public concurrency::OSThread
         setCPUFast(true);
         rtttlFile = std::unique_ptr<AudioFileSourcePROGMEM>(new AudioFileSourcePROGMEM(data, len));
         i2sRtttl = std::unique_ptr<AudioGeneratorRTTTL>(new AudioGeneratorRTTTL());
-        i2sRtttl->begin(rtttlFile.get(), audioOut.get());
+#ifdef AUDIO_RTTTL_SAMPLE_RATE
+        i2sRtttl->SetRate(AUDIO_RTTTL_SAMPLE_RATE);
+#endif
+        if (i2sRtttl->begin(rtttlFile.get(), audioOut.get()))
+            playLeadIn();
     }
 
     // Also handles actually playing the RTTTL, needs to be called in loop
@@ -71,6 +81,8 @@ class AudioThread : public concurrency::OSThread
         }
 
         ampEnable(true);
+        if (audioOut->begin())
+            playLeadIn();
         auto sam = std::unique_ptr<ESP8266SAM>(new ESP8266SAM);
         sam->Say(audioOut.get(), text);
         setCPUFast(false);
@@ -105,11 +117,27 @@ class AudioThread : public concurrency::OSThread
 #endif
     }
 
+    // A codec that swallows its first frames after power-up defines AUDIO_TAKE_LEAD_IN_MS() (consume-once).
+    void playLeadIn()
+    {
+#ifdef AUDIO_TAKE_LEAD_IN_MS
+        const uint32_t leadInMs = AUDIO_TAKE_LEAD_IN_MS();
+        if (!leadInMs)
+            return;
+        const uint32_t until = Time::timerEndsAtMillis(leadInMs);
+        int16_t silence[2] = {0, 0};
+        while (!Throttle::deadlinePassed(until)) {
+            if (!audioOut->ConsumeSample(silence))
+                delay(1);
+        }
+#endif
+    }
+
     void initOutput()
     {
         audioOut = std::unique_ptr<AudioOutputI2S>(new AudioOutputI2S(1, AudioOutputI2S::EXTERNAL_I2S));
         audioOut->SetPinout(DAC_I2S_BCK, DAC_I2S_WS, DAC_I2S_DOUT, DAC_I2S_MCLK);
-        audioOut->SetGain(0.2);
+        audioOut->SetGain(AUDIO_OUTPUT_GAIN);
     };
 
     std::unique_ptr<AudioGeneratorRTTTL> i2sRtttl = nullptr;

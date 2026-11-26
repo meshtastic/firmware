@@ -58,6 +58,7 @@ mail:   marchammermann@googlemail.com
 #include "NodeDB.h"
 #include "PhoneAPI.h"
 #include "PiWebServer.h"
+#include "PiWebSocketAPI.h"
 #include "PowerFSM.h"
 #include "RadioLibInterface.h"
 #include "airtime.h"
@@ -539,16 +540,7 @@ PiWebServerThread::PiWebServerThread()
         configWeb.url_prefix = "";
         configWeb.rootPath = strdup(portduinoVFS->mountpoint());
 
-        u_map_put(instanceWeb.default_headers, "Access-Control-Allow-Origin", "*");
-        // Maximum body size sent by the client is 1 Kb
-        instanceWeb.max_post_body_size = 1024;
-        ulfius_add_endpoint_by_val(&instanceWeb, "GET", PREFIX, "/api/v1/fromradio/*", 1, &handleAPIv1FromRadio, &webAPI);
-        ulfius_add_endpoint_by_val(&instanceWeb, "OPTIONS", PREFIX, "/api/v1/fromradio/*", 1, &handleAPIv1FromRadio, &webAPI);
-        ulfius_add_endpoint_by_val(&instanceWeb, "PUT", PREFIX, "/api/v1/toradio/*", 1, &handleAPIv1ToRadio, &webAPI);
-        ulfius_add_endpoint_by_val(&instanceWeb, "OPTIONS", PREFIX, "/api/v1/toradio/*", 1, &handleAPIv1ToRadio, &webAPI);
-
-        // Add callback function to all endpoints for the Web Server
-        ulfius_add_endpoint_by_val(&instanceWeb, "GET", NULL, "/*", 2, &callback_static_file, &configWeb);
+        addEndpoints(&instanceWeb);
 
         // thats for serving without SSL
         // retssl = ulfius_start_framework(&instanceWeb);
@@ -562,7 +554,43 @@ PiWebServerThread::PiWebServerThread()
         } else {
             LOG_ERROR("Web Server framework start failed, err: %d", retssl);
         }
+
+        // Unencrypted and unauthenticated, so only when the config asks for it, and loopback unless HTTPBindAll.
+        const int plainPort = portduino_config.webserver_http_port;
+        const bool bindAll = portduino_config.webserver_http_bind_all;
+        memset(&plainBindAddress, 0, sizeof(plainBindAddress));
+        plainBindAddress.sin_family = AF_INET;
+        plainBindAddress.sin_port = htons(plainPort);
+        plainBindAddress.sin_addr.s_addr = htonl(bindAll ? INADDR_ANY : INADDR_LOOPBACK);
+        if (plainPort > 0 && ulfius_init_instance(&instanceWebPlain, plainPort, &plainBindAddress, DEFAULT_REALM) == U_OK) {
+            plainInstanceReady = true;
+            addEndpoints(&instanceWebPlain);
+            if (ulfius_start_framework(&instanceWebPlain) == U_OK)
+                LOG_INFO("Web Server framework started without TLS on %s port: %i ", bindAll ? "all interfaces" : "loopback",
+                         plainPort);
+            else
+                LOG_ERROR("Web Server framework start without TLS failed on port: %i ", plainPort);
+        } else if (plainPort > 0) {
+            LOG_ERROR("Webserver start without TLS failed on port: %i ", plainPort);
+        }
     }
+}
+
+void PiWebServerThread::addEndpoints(struct _u_instance *instance)
+{
+    u_map_put(instance->default_headers, "Access-Control-Allow-Origin", "*");
+    // Maximum body size sent by the client is 1 Kb
+    instance->max_post_body_size = 1024;
+    ulfius_add_endpoint_by_val(instance, "GET", PREFIX, "/api/v1/fromradio/*", 1, &handleAPIv1FromRadio, &webAPI);
+    ulfius_add_endpoint_by_val(instance, "OPTIONS", PREFIX, "/api/v1/fromradio/*", 1, &handleAPIv1FromRadio, &webAPI);
+    ulfius_add_endpoint_by_val(instance, "PUT", PREFIX, "/api/v1/toradio/*", 1, &handleAPIv1ToRadio, &webAPI);
+    ulfius_add_endpoint_by_val(instance, "OPTIONS", PREFIX, "/api/v1/toradio/*", 1, &handleAPIv1ToRadio, &webAPI);
+#ifdef HAS_PI_WEBSOCKET_API
+    initPiWebSocketAPI(instance);
+#endif
+
+    // Add callback function to all endpoints for the Web Server
+    ulfius_add_endpoint_by_val(instance, "GET", NULL, "/*", 2, &callback_static_file, &configWeb);
 }
 
 PiWebServerThread::~PiWebServerThread()
@@ -571,6 +599,10 @@ PiWebServerThread::~PiWebServerThread()
 
     ulfius_stop_framework(&instanceWeb);
     ulfius_clean_instance(&instanceWeb);
+    if (plainInstanceReady) {
+        ulfius_stop_framework(&instanceWebPlain);
+        ulfius_clean_instance(&instanceWebPlain);
+    }
     free(configWeb.rootPath);
     free(key_pem);
     free(cert_pem);

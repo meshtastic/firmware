@@ -36,6 +36,13 @@ class NotifiedWorkerThread : public OSThread
      */
     bool notifyLater(uint32_t delay, uint32_t v, bool overwrite);
 
+    /**
+     * Schedule a notification to fire in delay msecs, or shorten an already-pending
+     * notification of the same type `v` if the new delay fires earlier (without
+     * overwriting a different pending notification such as an ISR event).
+     */
+    bool notifyLaterOrShorten(uint32_t delay, uint32_t v, bool overwrite);
+
   protected:
     virtual void onNotify(uint32_t notification) = 0;
 
@@ -46,6 +53,9 @@ class NotifiedWorkerThread : public OSThread
     /// to change radio transmit/receive modes we want to handle any pending interrupts first).  You can call this method and if
     /// any notifications are currently pending they will be handled immediately.
     void checkNotification();
+
+    /// As checkNotification(), but a pending `deferred` is left for the wake-up it was scheduled for
+    void checkNotificationExcept(uint32_t deferred);
 
   private:
     /**
