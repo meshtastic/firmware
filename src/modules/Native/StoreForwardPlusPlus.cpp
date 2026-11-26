@@ -742,7 +742,18 @@ ProcessMessage StoreForwardPlusPlusModule::handleReceived(const meshtastic_MeshP
         insertCanonObject(lo.to, lo.from, lo.id, lo.encrypted_bytes, lo.encrypted_len, lo.message_hash,
                           RowTime{lo.rx_time, lo.time_basis, lo.boot_id, lo.age_margin}, lo.payload, lo.root_hash,
                           sfppsr::contentBucket(lo.message_hash, lo.message_hash_len));
+        return ProcessMessage::CONTINUE;
     }
+
+    const meshtastic_PortNum sfppPort = portduino_config.sfpp_steal_port ? meshtastic_PortNum_TEXT_MESSAGE_COMPRESSED_APP
+                                                                         : meshtastic_PortNum_STORE_FORWARD_PLUSPLUS_APP;
+    if (mp.decoded.portnum == sfppPort) {
+        meshtastic_StoreForwardPlusPlus scratch;
+        if (pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, meshtastic_StoreForwardPlusPlus_fields,
+                                 &scratch))
+            handleReceivedProtobuf(mp, &scratch);
+    }
+    return ProcessMessage::CONTINUE;
 }
 
 bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_StoreForwardPlusPlus *t)
