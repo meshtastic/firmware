@@ -2471,7 +2471,7 @@ bool drainReaches(NodeNum peer, uint32_t rounds)
     return false;
 }
 
-// A full table of idle requesters yields one slot to a newcomer.
+// A full table of idle (empty-queue) requesters yields one slot to a newcomer.
 void test_fullIdleRequesterTableServesNewcomer()
 {
     portduino_config.sfpp_enum_drain_ms = 100;
@@ -2486,12 +2486,60 @@ void test_fullIdleRequesterTableServesNewcomer()
         requestOneItemFrom(first + i, root, ids[0]);
     TEST_ASSERT_EQUAL_UINT(0, takeSent().size());
 
+    // Drain every queued frame so the requesters really are idle, not just quiet.
+    for (uint32_t i = 0; i < 20; i++)
+        drainAuthorityOne(100);
+
     Time::setTestMillis(Time::getMillis() + 2 * 100); // two drain intervals of idleness
     const NodeNum newcomer = first + 16;
     requestOneItemFrom(newcomer, root, ids[0]);
     TEST_ASSERT_EQUAL_UINT(0, takeSent().size());
 
     TEST_ASSERT_TRUE(drainReaches(newcomer, 20));
+}
+
+// A requester with frames still queued is busy even after a quiet drain interval: a newcomer
+// must not take its slot, and every queued frame is still delivered.
+void test_quietRequesterWithQueuedFramesKeepsItsSlot()
+{
+    portduino_config.sfpp_enum_drain_ms = 100;
+    ingestAuthority(32);
+    std::vector<pinsketch::Element> ids;
+    TEST_ASSERT_TRUE(readShortIds(dirA, kBucket, ids));
+    uint8_t root[SFPP_HASH_SIZE];
+    TEST_ASSERT_TRUE(readRoot(dirA, root));
+
+    constexpr NodeNum first = 0xD0000001;
+    requestOneItemFrom(first, root, ids[0]);
+    requestOneItemFrom(first, root, ids[1]); // a second frame still waiting its turn
+    for (uint32_t i = 1; i < 16; i++)
+        requestOneItemFrom(first + i, root, ids[0]);
+    TEST_ASSERT_EQUAL_UINT(0, takeSent().size());
+
+    Time::setTestMillis(Time::getMillis() + 2 * 100); // the whole table is quiet for a drain interval
+    const NodeNum newcomer = first + 16;
+    requestOneItemFrom(newcomer, root, ids[0]);
+    TEST_ASSERT_EQUAL_UINT(0, takeSent().size());
+
+    uint32_t victimFrames = 0;
+    bool newcomerServed = false;
+    for (uint32_t window = 0; window < 2; window++) {
+        for (uint32_t i = 0; i < 32; i++) {
+            for (const auto &out : drainAuthorityOne(100)) {
+                if (decodeSfpp(out).sfpp_message_type != meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_FRAME)
+                    continue;
+                if (out.to == newcomer)
+                    newcomerServed = true;
+                if (out.to == first)
+                    victimFrames++;
+            }
+        }
+        if (window == 0)
+            Time::setTestMillis(Time::getMillis() + 10 * 60 * 1000); // the next serving window
+    }
+
+    TEST_ASSERT_FALSE(newcomerServed);
+    TEST_ASSERT_EQUAL_UINT32(2, victimFrames);
 }
 
 // While every slot is active a newcomer is refused and no requester loses its slot.
@@ -3458,6 +3506,7 @@ void setup()
     RUN_TEST(test_fourRequestersShareTheServingWindow);
     RUN_TEST(test_fullIdleRequesterTableServesNewcomer);
     RUN_TEST(test_fullActiveRequesterTableKeepsSlots);
+    RUN_TEST(test_quietRequesterWithQueuedFramesKeepsItsSlot);
     RUN_TEST(test_lostEnumProvideRetriesWithinBackoff);
     RUN_TEST(test_failedPullStopsPastServiceWindow);
     RUN_TEST(test_failedPullBackoffDoublesAcrossFailures);

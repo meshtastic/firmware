@@ -111,10 +111,14 @@ void StoreForwardPlusPlusModule::queueEnumFrames(const std::vector<meshtastic_St
     }
     if (slot == nullptr) {
         if (enumTxQueues.size() >= kEnumMaxRequesters) {
-            // A full table still admits a newcomer by reclaiming the slot idle longest, once it has
-            // gone a whole drain interval without a request from it or a frame to it.
+            // A full table still admits a newcomer by reclaiming the slot idle longest, but only when
+            // that slot has nothing left to send: a requester whose frames are merely waiting their
+            // turn is busy, however long it has been quiet. Reclaim only once the empty slot has gone
+            // a whole drain interval without a request from it or a frame to it.
             auto idle = enumTxQueues.end();
             for (auto it = enumTxQueues.begin(); it != enumTxQueues.end(); ++it) {
+                if (!it->queue.empty())
+                    continue;
                 if (idle == enumTxQueues.end() ||
                     std::max(it->lastUsedMs, it->lastServeMs) < std::max(idle->lastUsedMs, idle->lastServeMs))
                     idle = it;
