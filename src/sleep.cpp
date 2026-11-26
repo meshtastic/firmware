@@ -282,8 +282,12 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false, bool skipSaveN
     }
 
     // Persist broadcast transmit times so throttle survives reboot
-    if (transmitHistory)
-        transmitHistory->saveToDisk();
+    if (transmitHistory) {
+        if (msecToWake == portMAX_DELAY)
+            transmitHistory->saveToDisk();
+        else
+            transmitHistory->saveToDiskBeforeSleep(msecToWake);
+    }
 
 #ifdef PIN_POWER_EN
     digitalWrite(PIN_POWER_EN, LOW);
