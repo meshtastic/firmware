@@ -1455,6 +1455,9 @@ void StoreForwardPlusPlusModule::promoteScratchMatches(const uint8_t *root_hash,
             continue;
         }
 
+        // A short ID only names a row in this bucket; a collision in another bucket is not a match.
+        if (sfppsr::contentBucket(computed, SFPP_HASH_SIZE) != bucket)
+            continue;
         const pinsketch::Element sid = sfppsr::shortId(computed, SFPP_HASH_SIZE);
         if (std::find(ids.begin(), ids.end(), sid) == ids.end())
             continue;

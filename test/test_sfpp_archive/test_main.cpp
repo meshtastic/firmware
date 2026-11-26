@@ -928,6 +928,30 @@ void test_scratch_path_keeps_one_object_for_two_ciphertexts()
     TEST_ASSERT_EQUAL_MEMORY(sender.encrypted.bytes, stored.data(), stored.size());
 }
 
+// A scratch row is promoted only under its own content bucket; a short-ID request for another
+// bucket must not move it there.
+void test_scratch_collision_across_buckets_is_not_promoted()
+{
+    const PacketId id = TEXT_ID + 0x207;
+    portduino_config.sfpp_stratum0 = false;
+    meshtastic_MeshPacket mp = makeText(REMOTE_NODE, id, "other bucket", getValidTime(RTCQualityNTP, true));
+    meshtastic_MeshPacket enc = makeEncryptedCopy(mp);
+    TEST_ASSERT_EQUAL(ProcessMessage::CONTINUE, testSfpp->ingest(mp, &enc));
+    TEST_ASSERT_EQUAL_UINT32(1, storedScratchRowCount(id));
+
+    uint8_t hash[SFPP_HASH_SIZE];
+    sfppframe::messageHash(enc.encrypted.bytes, enc.encrypted.size, mp.to, mp.from, id, hash);
+    const uint32_t ownBucket = sfppsr::contentBucket(hash, SFPP_HASH_SIZE);
+    const uint32_t otherBucket = (ownBucket + 1) % 256;
+    std::vector<pinsketch::Element> ids{sfppsr::shortId(hash, SFPP_HASH_SIZE)};
+    std::vector<uint8_t> root = mappingRoot();
+    TEST_ASSERT_EQUAL_UINT(SFPP_HASH_SIZE, root.size());
+
+    testSfpp->testPromoteScratchMatches(root.data(), otherBucket, ids);
+    TEST_ASSERT_EQUAL_UINT32(1, storedScratchRowCount(id));
+    TEST_ASSERT_EQUAL_UINT32(0, storedRowCount(id));
+}
+
 // The store and the frame splitter must hash a message identically; if they drift, a frame's key
 // stops matching the row it came from and no replay can ever verify.
 void test_storedMessageHashMatchesTheFrameHash()
@@ -1907,6 +1931,7 @@ void setup()
     RUN_TEST(test_identity_collision_never_adds_a_second_row);
     RUN_TEST(test_recovered_item_with_the_same_identity_is_one_object);
     RUN_TEST(test_scratch_path_keeps_one_object_for_two_ciphertexts);
+    RUN_TEST(test_scratch_collision_across_buckets_is_not_promoted);
     RUN_TEST(test_storedMessageHashMatchesTheFrameHash);
     RUN_TEST(test_legacyHistoryAnswersInLegacyFormat);
     RUN_TEST(test_legacyHistoryUsesLegacyRequestWindow);

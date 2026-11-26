@@ -55,6 +55,13 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     };
 
   public:
+#ifdef PIO_UNIT_TESTING
+    void testPromoteScratchMatches(const uint8_t *root, uint32_t bucket, std::vector<pinsketch::Element> &ids)
+    {
+        promoteScratchMatches(root, bucket, ids);
+    }
+#endif
+
     // Stamped into PRAGMA user_version. A store with any other value is moved aside, never migrated.
     static constexpr int kSchemaVersion = 5;
 

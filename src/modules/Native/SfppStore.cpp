@@ -675,7 +675,7 @@ bool StoreForwardPlusPlusModule::insertCanonObject(uint32_t to, uint32_t from, u
                                                    bool senderCopy)
 {
     IdentityHit hit;
-    if (findIdentityCopy(to, from, packetId, root_hash, hit)) {
+    if (findIdentityCopy(to, from, packetId, root_hash, hit) && hit.canon) {
         if (memcmp(hit.hash, hash, SFPP_HASH_SIZE) == 0)
             return true;
         if (!senderCopy)
