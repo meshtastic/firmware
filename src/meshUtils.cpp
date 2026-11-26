@@ -1,4 +1,5 @@
 #include "meshUtils.h"
+#include "configuration.h"
 #include "target_specific.h"
 #include <string.h>
 
@@ -107,6 +108,11 @@ bool isOneOf(int item, int count, ...)
     }
     va_end(args);
     return found;
+}
+
+void formatMacAddr(const uint8_t *mac, char *out, size_t outSize)
+{
+    snprintf(out, outSize, "%02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 }
 
 const std::string vformat(const char *const zcFormat, ...)

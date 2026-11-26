@@ -57,6 +57,9 @@ class InkHUD
     void setTouchEnabledProvider(TouchEnabledProvider provider);
     bool hasTouchEnabledProvider() const;
     bool isTouchEnabled() const;
+    bool isTouchTimedOut() const;
+    void setTouchTimedOut(bool timedOut);
+    void setTouchSleeping(bool sleeping, bool async = true);
 
     // Handle user-button press
     // - connected to an input source, in variant nicheGraphics.h
@@ -89,6 +92,7 @@ class InkHUD
     void openMenu();
     void openAppSwitcher();
     void openAlignStick();
+    void openAlignKeyboard();
     void openKeyboard();
     void closeKeyboard();
     void nextTile();
@@ -104,6 +108,9 @@ class InkHUD
 
     // Input mode hint for devices that use a left/right rocker plus center button
     bool twoWayRocker = false;
+
+    // Set by an input source that detected a physical keyboard at runtime: the on-screen keyboard is never shown
+    bool physicalKeyboard = false;
 
     // Updating the display
     // - called by various InkHUD components
@@ -144,6 +151,9 @@ class InkHUD
     Renderer *renderer = nullptr;           // Co-ordinate display updates
     WindowManager *windowManager = nullptr; // Multiplexing of applets
     TouchEnabledProvider touchEnabledProvider = nullptr;
+    bool touchTimedOut = false;
+    bool touchSleeping = false;
+    void refreshTouchStatus(bool async = true);
 };
 
 } // namespace NicheGraphics::InkHUD

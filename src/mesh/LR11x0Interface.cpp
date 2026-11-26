@@ -20,7 +20,52 @@
 // Note: RadioLib ships lr1110_transceiver_0308.h but has no selector for it in LR11x0_firmware.h.
 #error "LR11X0_UPDATE_FIRMWARE_TO must be one of 0x0307, 0x0401, 0x0402"
 #endif
+#include <algorithm>
 #include <modules/LR11x0/LR11x0_firmware.h>
+
+namespace
+{
+// RadioLib keeps the bootloader commands protected; naming them through a derived type is the standard way to reach them.
+template <class R> struct LR11x0BootCmds : R {
+    static int16_t eraseFlash(R &r) { return (r.*&LR11x0BootCmds::bootEraseFlash)(); }
+    static int16_t writeFlash(R &r, uint32_t offset, const uint32_t *data, size_t len)
+    {
+        return (r.*&LR11x0BootCmds::bootWriteFlashEncrypted)(offset, data, len, true);
+    }
+};
+
+// LR11x0::updateFirmware() minus its opening normal-mode REBOOT, which a radio already in its bootloader rejects (-706).
+template <class R> int16_t lr11x0FlashFromBootloader(R &lora, Module &module)
+{
+    int16_t state = LR11x0BootCmds<R>::eraseFlash(lora);
+    if (state != RADIOLIB_ERR_NONE)
+        return state;
+    const uint32_t start = millis();
+    while (module.hal->digitalRead(module.getGpio())) {
+        if (Throttle::hasElapsed(start, 3000))
+            return RADIOLIB_ERR_SPI_CMD_TIMEOUT;
+        delay(1);
+    }
+    constexpr size_t chunkWords = 64;
+    const size_t imageWords = LR11XX_FIRMWARE_IMAGE_SIZE;
+    for (size_t off = 0; off < imageWords; off += chunkWords) {
+        // Status errors are ignored, as in RadioLib; the version check after reset decides success.
+        state = LR11x0BootCmds<R>::writeFlash(lora, off * sizeof(uint32_t), &lr11xx_firmware_image[off],
+                                              std::min(chunkWords, imageWords - off));
+        // A stuck BUSY would otherwise cost the full SPI timeout (1 s before boundBusyWait()) on every chunk.
+        if (state == RADIOLIB_ERR_SPI_CMD_TIMEOUT)
+            return state;
+    }
+    state = lora.reset();
+    if (state != RADIOLIB_ERR_NONE)
+        return state;
+    LR11x0VersionInfo_t info = {};
+    state = lora.getVersionInfo(&info);
+    if (state == RADIOLIB_ERR_NONE && info.device == RADIOLIB_LR11X0_DEVICE_BOOT)
+        return RADIOLIB_ERR_CHIP_NOT_FOUND;
+    return state;
+}
+} // namespace
 #endif
 
 #ifdef LR11X0_DIO_AS_RF_SWITCH
@@ -184,31 +229,49 @@ template <typename T> bool LR11x0Interface<T>::init()
 
     resolvedTcxoVoltage = attemptVoltage;
 
+    if (res == RADIOLIB_ERR_NONE && resolvedTcxoVoltage > 0) {
+        // Standby and TX/RX fallback on STDBY_XOSC keep the TCXO powered
+        // to avoid the TCXO startup time on each TX/RX transition.
+        const int16_t xoscRes = lora.setStandbyXOSC(true);
+        LOG_DEBUG("Keep TCXO on in standby, result: %d", xoscRes);
+    }
+
     // \todo Display actual typename of the adapter, not just `LR11x0`
     LOG_INFO("LR11x0 init result %d", res);
 
-    if (res == RADIOLIB_ERR_CHIP_NOT_FOUND || lr11x0SpiFailed(res)) {
 #ifdef LR11X0_UPDATE_FIRMWARE_TO
-        // An interrupted update leaves the radio sitting in bootloader mode, where begin() fails. Retry the
-        // flash from here rather than giving up, otherwise the device could never recover on its own.
-        LOG_WARN("LR11x0 did not start; firmware recovery in case update was interrupted");
-        if (lora.updateFirmware(lr11xx_firmware_image, LR11XX_FIRMWARE_IMAGE_SIZE, true) == RADIOLIB_ERR_NONE) {
-            LOG_INFO("LR1110 firmware recovery OK, re-init radio");
-            res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage);
-            if (res == RADIOLIB_ERR_NONE)
-                resolvedTcxoVoltage = tcxoVoltage;
+    if (res != RADIOLIB_ERR_NONE) {
+        // An interrupted update leaves the radio in its bootloader, where begin() fails; re-flash only then, so running
+        // firmware is never replaced. Read twice: the first read can fail on the status of begin()'s rejected command.
+        LR11x0VersionInfo_t boot = {};
+        for (int i = 0; i < 2 && boot.device == 0; i++)
+            lora.getVersionInfo(&boot);
+        if (boot.device == RADIOLIB_LR11X0_DEVICE_BOOT) {
+            LOG_WARN("LR11x0 in bootloader mode (init result %d); retrying the interrupted firmware update", res);
+            const int16_t upd = lr11x0FlashFromBootloader(lora, module);
+            if (upd == RADIOLIB_ERR_NONE) {
+                LOG_INFO("LR1110 firmware recovery OK, re-init radio");
+                res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage);
+                if (res == RADIOLIB_ERR_NONE)
+                    resolvedTcxoVoltage = tcxoVoltage;
+            } else {
+                LOG_ERROR("LR1110 firmware recovery FAILED %s%d - reboot to retry", radioLibErr, upd);
+            }
+            if (res != RADIOLIB_ERR_NONE)
+                return false;
         }
-#endif
-        if (res != RADIOLIB_ERR_NONE)
-            return false;
     }
+#endif
+
+    if (res == RADIOLIB_ERR_CHIP_NOT_FOUND || lr11x0SpiFailed(res))
+        return false;
 
     LR11x0VersionInfo_t version;
     res = lora.getVersionInfo(&version);
     if (res == RADIOLIB_ERR_NONE) {
-        LOG_DEBUG_RADIO("LR11x0 Device %d, HW %d, FW %d.%d, WiFi %d.%d, GNSS %d.%d", version.device, version.hardware,
-                        version.fwMajor, version.fwMinor, version.fwMajorWiFi, version.fwMinorWiFi, version.fwGNSS,
-                        version.almanacGNSS);
+        // INFO, not radio debug: a transceiver firmware too old for a preset is otherwise invisible in a normal log
+        LOG_INFO("LR11x0 Device %d, HW %d, FW %d.%d, WiFi %d.%d, GNSS %d.%d", version.device, version.hardware, version.fwMajor,
+                 version.fwMinor, version.fwMajorWiFi, version.fwMinorWiFi, version.fwGNSS, version.almanacGNSS);
         transceiverFw = ((uint16_t)version.fwMajor << 8) | version.fwMinor;
         transceiverDevice = version.device;
     }
@@ -276,6 +339,12 @@ template <typename T> bool LR11x0Interface<T>::init()
         LOG_DEBUG_RADIO("Set DIO RF switch");
     }
 
+#ifdef LR11X0_FORCE_HP_PA
+    // begin() picked the PA from the power level; re-apply it on the high-power PA (see applyOutputPower())
+    if (res == RADIOLIB_ERR_NONE)
+        res = applyOutputPower();
+#endif
+
     if (res == RADIOLIB_ERR_NONE) {
         if (config.lora.sx126x_rx_boosted_gain) { // the name is unfortunate but historically accurate
             res = lora.setRxBoostedGainMode(true);
@@ -292,6 +361,17 @@ template <typename T> bool LR11x0Interface<T>::init()
     }
 
     return res == RADIOLIB_ERR_NONE;
+}
+
+template <typename T> int16_t LR11x0Interface<T>::applyOutputPower()
+{
+#ifdef LR11X0_FORCE_HP_PA
+    // The board reaches its sub-GHz antenna only through the high-power PA, but RadioLib picks the
+    // low-power PA at 14 dBm and below. The high-power PA's lower limit is -9 dBm.
+    return lora.setOutputPower(power < -9 ? (int8_t)-9 : power, true);
+#else
+    return lora.setOutputPower(power);
+#endif
 }
 
 template <typename T> int16_t LR11x0Interface<T>::programModemParams()
@@ -339,7 +419,7 @@ template <typename T> int16_t LR11x0Interface<T>::programModemParams()
         return err;
     }
 
-    err = lora.setOutputPower(power);
+    err = applyOutputPower();
     if (err != RADIOLIB_ERR_NONE) {
         LOG_ERROR("LR11x0 setOutputPower(%d) %s%d", power, radioLibErr, err);
         return err;

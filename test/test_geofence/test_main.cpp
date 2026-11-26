@@ -1,3 +1,9 @@
+// GeofenceModule waypoint preferences and packet handling.
+//
+// Why: a fence is a safety feature; dropping or inventing a local preference changes when
+// alerts fire.
+// Regression guarded: a remote waypoint overwriting local fence preferences.
+
 #include "TestUtil.h"
 #include "modules/GeofenceModule.h"
 #include <unity.h>

@@ -8,6 +8,7 @@
 #define HOP_LIMIT_HIGHEST_MASK 0x07 // Bits 0-2
 #define HOP_LIMIT_OUR_TX_MASK 0x38  // Bits 3-5
 #define HOP_LIMIT_OUR_TX_SHIFT 3    // Bits 3-5
+#define HEARD_FROM_SENDER_MASK 0x40 // Bit 6: a copy came straight from its sender
 
 /**
  * This is a mixin that adds a record of past packets we have seen
@@ -22,6 +23,7 @@ class PacketHistory
         uint8_t next_hop;                 // The next hop asked for this packet
         uint8_t hop_limit;                // bit 0-2: Highest hop limit observed for this packet,
                                           // bit 3-5: our hop limit when we first transmitted it
+                                          // bit 6: a copy came straight from its sender
         uint8_t relayed_by[NUM_RELAYERS]; // Array of nodes that relayed this packet
     }; // 4B + 4B + 4B + 1B + 1B + 6B = 20B
     static_assert(sizeof(PacketRecord) == 20,
@@ -95,6 +97,11 @@ class PacketHistory
      */
     void checkRelayers(uint8_t relayer1, uint8_t relayer2, uint32_t id, NodeNum sender, bool *r1Result, bool *r2Result,
                        bool *r2WasSole = nullptr);
+
+    /* Check if a copy of a packet in the history came straight from its sender, with hop_limit == hop_start.
+     * Every relayer uses up a hop on its first relay, so a relayed copy never has that.
+     * @return false if the packet is not in the history */
+    bool wasHeardFromSender(const uint32_t id, const NodeNum sender);
 
     // Remove a relayer from the list of relayers of a packet in the history given an ID and sender
     void removeRelayer(const uint8_t relayer, const uint32_t id, const NodeNum sender);

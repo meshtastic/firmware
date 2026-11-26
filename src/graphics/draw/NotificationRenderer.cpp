@@ -270,6 +270,11 @@ void NotificationRenderer::drawBannercallback(OLEDDisplay *display, OLEDDisplayU
         return;
     }
 
+    // Back (keyboard Esc, remote control) closes a menu; outside one it means the previous frame.
+    if (inEvent.inputEvent == INPUT_BROKER_BACK) {
+        inEvent.inputEvent = INPUT_BROKER_CANCEL;
+    }
+
     // Compact panels: DOWN cancels menus instead of scrolling (covers every picker below).
     if (graphics::isCompactPanel(display) && inEvent.inputEvent == INPUT_BROKER_DOWN) {
         inEvent.inputEvent = INPUT_BROKER_CANCEL;
@@ -1017,6 +1022,10 @@ void NotificationRenderer::drawTextInput(OLEDDisplay *display, OLEDDisplayUiStat
         // Clear the screen to avoid overlapping with underlying frames or overlays
         display->setColor(BLACK);
         display->fillRect(0, 0, display->getWidth(), display->getHeight());
+#if GRAPHICS_TFT_COLORING_ENABLED
+        // and their colors: the message bubbles of the frame underneath stayed on a TFT
+        resetTFTColorRegions(display->getWidth(), display->getHeight());
+#endif
         display->setColor(WHITE);
         // Draw the virtual keyboard
         virtualKeyboard->draw(display, 0, 0);

@@ -1102,11 +1102,12 @@ ProcessMessage TrafficManagementModule::handleReceived(const meshtastic_MeshPack
         return ProcessMessage::CONTINUE;
     }
 
-    // A known signer's NodeInfo arriving unsigned is unauthenticated and must not drive any
-    // cache or identity write below. isKnownXeddsaSigner covers the warm tier too - a forged
-    // unsigned NodeInfo carrying a warm-evicted signer's real (public!) key passes the key pin.
+    // An unsigned NodeInfo NodeDB would refuse must not drive any cache or identity write below
+    // either. The signer check covers the warm tier too - a forged unsigned NodeInfo carrying a
+    // warm-evicted signer's real (public!) key passes the key pin.
     const bool isNodeInfo = mp.decoded.portnum == meshtastic_PortNum_NODEINFO_APP;
-    const bool unauthenticatedSigner = isNodeInfo && !mp.xeddsa_signed && nodeDB && nodeDB->isKnownXeddsaSigner(getFrom(&mp));
+    const bool unauthenticatedSigner =
+        isNodeInfo && nodeDB && nodeDB->refusesUnsignedIdentity(getFrom(&mp), mp.channel, mp.xeddsa_signed);
 
     // Learn NodeInfo payloads into the dedicated NodeInfo cache, and refresh the tier-3
     // role cache for any node we already track (keeps the dedup role exception current).
@@ -1120,12 +1121,15 @@ ProcessMessage TrafficManagementModule::handleReceived(const meshtastic_MeshPack
     // -------------------------------------------------------------------------
     // Answer a unicast NodeInfo request for a known node straight from cache: STOP keeps the
     // request from being rebroadcast, and the reply goes back to the requestor with hop_limit=0.
+    // A signed request is forwarded instead: its sender signs, so it may require a signed reply,
+    // and only the target holds the key to sign one.
 
     if (cfg.nodeinfo_direct_response_max_hops > 0 && mp.decoded.portnum == meshtastic_PortNum_NODEINFO_APP &&
-        mp.decoded.want_response && !isBroadcast(mp.to) && !isToUs(&mp) && !isFromUs(&mp)) {
+        mp.decoded.want_response && !isBroadcast(mp.to) && !isToUs(&mp) && !isFromUs(&mp) &&
+        mp.decoded.xeddsa_signature.size == 0) {
         if (shouldRespondToNodeInfo(&mp, true)) {
-            // Unicast NodeInfo is never signed, so a known signer's identity claim here is
-            // unauthenticated: don't overwrite its stored name. The cached response is unaffected.
+            // This request is unsigned, so a known signer's identity claim here is unauthenticated:
+            // don't overwrite its stored name. The cached response is unaffected.
             meshtastic_User requester = meshtastic_User_init_zero;
             if (!unauthenticatedSigner &&
                 pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, &meshtastic_User_msg, &requester)) {
