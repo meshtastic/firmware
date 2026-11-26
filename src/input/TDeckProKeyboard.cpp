@@ -8,11 +8,6 @@
 
 #include "Throttle.h"
 #include "UptimeClock.h"
-#ifndef MESHTASTIC_INCLUDE_INKHUD
-#include "NodeDB.h"
-
-static constexpr uint32_t BACKLIGHT_TYPING_MS = 3000;
-#endif
 
 static constexpr uint32_t POP_GAP_US = 2000;
 
@@ -132,18 +127,6 @@ void TDeckProKeyboard::pressed(uint8_t key)
         character = TDeckProTapMap[key - 1][0];
     usedModifiers |= heldModifiers;
     latchedModifiers = 0;
-#ifndef MESHTASTIC_INCLUDE_INKHUD
-    if (character == Key::BL_TOGGLE) {
-        backlightShortcut();
-        return;
-    }
-    // Only characters count as typing: a modifier lighting it would make the Alt of Alt+B turn it straight off
-    if (uiconfig.keyboard_backlight == meshtastic_DeviceUIConfig_KeyboardBacklightMode_WHILE_TYPING) {
-        typingLit = true;
-        lastTypingMs = millis();
-        updateBacklight();
-    }
-#endif
     queueEvent(character);
 }
 
@@ -166,61 +149,5 @@ void TDeckProKeyboard::setBacklight(bool on)
 {
     ::digitalWrite(KB_BL_PIN, on ? HIGH : LOW);
 }
-
-#ifndef MESHTASTIC_INCLUDE_INKHUD
-// Alt+B: switch between On and Off and save it; in WHILE_TYPING, light it as a key press would, or turn it off early
-void TDeckProKeyboard::backlightShortcut()
-{
-    switch (uiconfig.keyboard_backlight) {
-    case meshtastic_DeviceUIConfig_KeyboardBacklightMode_WHILE_TYPING:
-        typingLit = !backlightLit;
-        lastTypingMs = millis();
-        break;
-    case meshtastic_DeviceUIConfig_KeyboardBacklightMode_ON:
-        uiconfig.keyboard_backlight = meshtastic_DeviceUIConfig_KeyboardBacklightMode_OFF;
-        nodeDB->saveProto("/prefs/uiconfig.proto", meshtastic_DeviceUIConfig_size, &meshtastic_DeviceUIConfig_msg, &uiconfig);
-        break;
-    default:
-        uiconfig.keyboard_backlight = meshtastic_DeviceUIConfig_KeyboardBacklightMode_ON;
-        nodeDB->saveProto("/prefs/uiconfig.proto", meshtastic_DeviceUIConfig_size, &meshtastic_DeviceUIConfig_msg, &uiconfig);
-        break;
-    }
-    updateBacklight();
-}
-
-void TDeckProKeyboard::setScreenOn(bool on)
-{
-    screenOn = on;
-    updateBacklight();
-}
-
-uint32_t TDeckProKeyboard::updateBacklight()
-{
-    if (state == Init) // KB_BL_PIN is set up by reset()
-        return UINT32_MAX;
-
-    bool lit = false;
-    uint32_t dueMs = UINT32_MAX;
-    switch (uiconfig.keyboard_backlight) {
-    case meshtastic_DeviceUIConfig_KeyboardBacklightMode_ON:
-        lit = screenOn;
-        break;
-    case meshtastic_DeviceUIConfig_KeyboardBacklightMode_WHILE_TYPING:
-        if (typingLit && Throttle::hasElapsed(lastTypingMs, BACKLIGHT_TYPING_MS))
-            typingLit = false;
-        lit = screenOn && typingLit;
-        if (typingLit)
-            dueMs = Throttle::remainingMs(lastTypingMs, BACKLIGHT_TYPING_MS);
-        break;
-    default:
-        break;
-    }
-    if (lit != backlightLit) {
-        setBacklight(lit);
-        backlightLit = lit;
-    }
-    return dueMs;
-}
-#endif
 
 #endif // T_DECK_PRO

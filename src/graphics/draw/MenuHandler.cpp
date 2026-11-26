@@ -2918,10 +2918,10 @@ void menuHandler::screenOptionsMenu()
     optionsEnumArray[options++] = Theme;
 #endif
 
-#if defined(T_DECK_PRO)
-    optionsArray[options] = "Keyboard Light";
-    optionsEnumArray[options++] = KeyboardLight;
-#endif
+    if (cardKbI2cImpl && cardKbI2cImpl->hasKeyboardLight()) {
+        optionsArray[options] = "Keyboard Light";
+        optionsEnumArray[options++] = KeyboardLight;
+    }
 
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Display Options";
