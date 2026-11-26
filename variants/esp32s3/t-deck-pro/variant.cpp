@@ -92,10 +92,12 @@ void tDeckProSetVibration(int pin, bool on)
         touchFeedbackTimer->disable();
     if (tDeckProIsV11()) {
         if (hapticReady) {
-            if (on) {
+            // The nag cycle runs with vibration alerts off too; only start the haptic when one is on
+            if (on &&
+                (moduleConfig.external_notification.alert_message_vibra || moduleConfig.external_notification.alert_bell_vibra)) {
                 haptic.setWaveform(0, 16);
                 haptic.go();
-            } else
+            } else if (!on)
                 haptic.stop();
         }
         if (pin == PIN_VIBRATION)
