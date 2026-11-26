@@ -1,3 +1,10 @@
+// SnakeGame rings, direction changes, growth and collisions.
+//
+// Why: pure game logic with no other coverage; a step/collision regression is otherwise
+// only visible on the device.
+// Regression guarded: a reversal accepted, food on the body, or a collision not ending the
+// game.
+
 #include "TestUtil.h"
 #include "modules/games/Snake.h"
 #include <unity.h>

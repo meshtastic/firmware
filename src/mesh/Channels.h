@@ -63,6 +63,10 @@ class Channels
     /** The index of the primary channel */
     ChannelIndex getPrimaryIndex() const { return primaryIndex; }
 
+    /// Points primaryIndex at the PRIMARY channel, if there is one, without fixing anything up
+    /// (onConfigChanged() does that). Returns whether one was found.
+    bool resolvePrimaryIndex();
+
     ChannelIndex getNumChannels() { return channelFile.channels_count; }
 
     /// Called by NodeDB on initial boot when the radio config settings are unset.  Set a default single channel config.

@@ -210,6 +210,8 @@ void test_expected_session_key_is_zero_before_any_get(void)
     meshtastic_AdminMessage probe = meshtastic_AdminMessage_init_zero;
     probe.session_passkey.size = 8;
     memcpy(probe.session_passkey.bytes, zero, 8); // even all-zeros must not authorize a state change
+    // The expected key is still its all-zero initial value, so only the unissued-session guard can refuse this.
+    TEST_ASSERT_FALSE(admin->checkPassKey(&probe));
     // A fresh module has minted no session; a stale/guessed key does not match.
     // (checkPassKey also requires size==8 AND session_time freshness.)
     uint8_t stale[8] = {0x29, 0x04, 0xb4, 0x78, 0xd8, 0x68, 0xa7, 0xff}; // ndoo's presented key

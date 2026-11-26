@@ -17,6 +17,10 @@
 #include "../graphics/Screen.h"
 #include "../graphics/ScreenFonts.h"
 #include "Wire.h"
+#ifdef MESHTASTIC_INCLUDE_INKHUD
+#include "StepTracker.h"
+#include "UptimeClock.h"
+#endif
 
 // Base class for motion processing
 class MotionSensor
@@ -44,6 +48,14 @@ class MotionSensor
 
     virtual void calibrate(uint16_t forSeconds) {};
 
+#ifdef MESHTASTIC_INCLUDE_INKHUD
+    enum class StepSource { None, Software, Hardware };
+    virtual StepSource stepSource() const { return StepSource::None; }
+    // Process queued step reports and return whether a fresh hardware total was received.
+    virtual bool syncStepCounter() { return false; }
+    StepTracker &stepTracker() { return tracker; }
+#endif
+
     // Latest samples published by the compass-fusion drivers (accel from the IMU, mag from the magnetometer).
     // Public so an optional on-screen sensor debug readout can read them. Return false if nothing published yet.
     static bool getLatestCompassAccelSample(float &x, float &y, float &z, uint32_t &ageMs);
@@ -56,6 +68,19 @@ class MotionSensor
     inline virtual bool providesHeading() const { return false; };
 
   protected:
+#ifdef MESHTASTIC_INCLUDE_INKHUD
+    void sampleSteps(float x, float y, float z)
+    {
+        if (tracker.isTracking())
+            tracker.sample(x, y, z, Time::getMillisMonotonic());
+    }
+#endif
+#if HAS_SCREEN_AUTO_ROTATE
+    // Turn the screen's picture to the way the device is held, from an accelerometer sample (any unit). The variant
+    // names the axes: AUTO_ROTATE_UP_AXIS points to the top of the screen in the build's orientation, and
+    // AUTO_ROTATE_LEFT_AXIS to its left edge. Call it a few times a second
+    void followOrientation(float x, float y, float z);
+#endif
     // Turn on the screen when a tap or motion is detected
     virtual void wakeScreen();
 
@@ -88,6 +113,11 @@ class MotionSensor
     // Do calibration if true
     bool doCalibration = false;
     uint32_t endCalibrationAt = 0;
+
+#ifdef MESHTASTIC_INCLUDE_INKHUD
+  private:
+    StepTracker tracker;
+#endif
 };
 
 #endif

@@ -13,17 +13,20 @@
 #include "api/ServerAPI.h"
 #include "mesh/Throttle.h"
 #include "meshUtils.h"
+#include "modules/Telemetry/Sensor/CommandSensorFields.h"
 #include <ErriezCRC32.h>
 #include <Utility.h>
 #include <algorithm>
 #include <array>
 #include <assert.h>
 #include <cctype>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <map>
 #include <memory>
 #include <set>
@@ -33,6 +36,18 @@
 // Only the PORTDUINO_LINUX_HARDWARE block below calls ioctl() (HCIGETDEVINFO,
 // for the BlueZ-derived MAC address); Windows has no <sys/ioctl.h>.
 #include <sys/ioctl.h>
+#endif
+#if !defined(_WIN32) && !defined(ARCH_PORTDUINO_WASM)
+// execCommand(): spawn a shell with a deadline and kill its process group on timeout.
+#include <cerrno>
+#include <chrono>
+#include <csignal>
+#include <cstring>
+#include <fcntl.h>
+#include <poll.h>
+#include <spawn.h>
+#include <sys/wait.h>
+extern char **environ;
 #endif
 
 #ifdef PORTDUINO_LINUX_HARDWARE
@@ -881,12 +896,15 @@ void portduinoSetup()
 
     gpioInit(max_GPIO + 1); // Done here so we can inform Portduino how many GPIOs we need.
 
+    // A ch341 adapter drives its Lora pins over USB, and a transparent radio has none here: leave those lines alone.
+    const bool loraPinsUnused = portduino_config.lora_spi_dev == "ch341" || portduino_config.lora_module == use_transparent;
+
     // Need to bind all the configured GPIO pins so they're not simulated
     // TODO: If one of these fails, we should log and terminate
     for (const auto *i : portduino_config.all_pins) {
         // In the case of a ch341 Lora device, we don't want to touch the system GPIO lines for Lora
         // Those GPIO are handled in our usermode driver instead.
-        if (i->config_section == "Lora" && portduino_config.lora_spi_dev == "ch341") {
+        if (i->config_section == "Lora" && loraPinsUnused) {
             continue;
         }
         if (i->enabled) {
@@ -905,7 +923,7 @@ void portduinoSetup()
     for (auto i : portduino_config.extra_pins) {
         // In the case of a ch341 Lora device, we don't want to touch the system GPIO lines for Lora
         // Those GPIO are handled in our usermode driver instead.
-        if (i.config_section == "Lora" && portduino_config.lora_spi_dev == "ch341") {
+        if (i.config_section == "Lora" && loraPinsUnused) {
             continue;
         }
         if (i.enabled) {
@@ -922,7 +940,7 @@ void portduinoSetup()
     }
 
     // In one test, this dance seemed necessary to trigger the pin to detect properly.
-    if (portduino_config.lora_pa_detect_pin.enabled) {
+    if (portduino_config.lora_pa_detect_pin.enabled && portduino_config.lora_module != use_transparent) {
         pinMode(portduino_config.lora_pa_detect_pin.pin, INPUT_PULLDOWN);
         sleep(1);
         if (digitalRead(portduino_config.lora_pa_detect_pin.pin) == LOW) {
@@ -952,7 +970,7 @@ void portduinoSetup()
     for (auto i : portduino_config.extra_pins) {
         // In the case of a ch341 Lora device, we don't want to touch the system GPIO lines for Lora
         // Those GPIO are handled in our usermode driver instead.
-        if (i.config_section == "Lora" && portduino_config.lora_spi_dev == "ch341") {
+        if (i.config_section == "Lora" && loraPinsUnused) {
             continue;
         }
         if (i.enabled && i.default_high) {
@@ -1102,6 +1120,8 @@ bool loadConfig(const char *configPath)
                     exit(EXIT_FAILURE);
                 }
             }
+            if (yamlConfig["Lora"]["TransparentDevice"])
+                portduino_config.lora_transparent_device = yamlConfig["Lora"]["TransparentDevice"].as<std::string>("");
             if (yamlConfig["Lora"]["SX126X_MAX_POWER"])
                 portduino_config.sx126x_max_power = yamlConfig["Lora"]["SX126X_MAX_POWER"].as<int>(22);
             if (yamlConfig["Lora"]["SX128X_MAX_POWER"])
@@ -1131,7 +1151,7 @@ bool loadConfig(const char *configPath)
             }
 
             if (portduino_config.lora_module != use_autoconf && portduino_config.lora_module != use_simradio &&
-                !portduino_config.force_simradio) {
+                portduino_config.lora_module != use_transparent && !portduino_config.force_simradio) {
                 portduino_config.dio2_as_rf_switch = yamlConfig["Lora"]["DIO2_AS_RF_SWITCH"].as<bool>(false);
                 portduino_config.dio3_tcxo_voltage = yamlConfig["Lora"]["DIO3_TCXO_VOLTAGE"].as<float>(0) * 1000;
                 if (portduino_config.dio3_tcxo_voltage == 0 && yamlConfig["Lora"]["DIO3_TCXO_VOLTAGE"].as<bool>(false)) {
@@ -1166,23 +1186,51 @@ bool loadConfig(const char *configPath)
             }
 
             portduino_config.spiSpeed = yamlConfig["Lora"]["spiSpeed"].as<int>(2000000);
+            if (yamlConfig["Lora"]["IgnoreRelayNodes"]) {
+                const YAML::Node relayNodes = yamlConfig["Lora"]["IgnoreRelayNodes"];
+                if (!relayNodes.IsSequence()) {
+                    std::cout << "Lora.IgnoreRelayNodes must be a list of node numbers!" << std::endl;
+                    if (!configCheck)
+                        exit(EXIT_FAILURE);
+                } else {
+                    for (const auto &entry : relayNodes) {
+                        uint32_t node = 0;
+                        if (!nodeNumberFromYaml(entry, node)) {
+                            const std::string written = entry.Scalar().empty() ? entry.Tag() : entry.Scalar();
+                            std::cout << "Lora.IgnoreRelayNodes: '" << written << "' is not a node number!" << std::endl;
+                            if (!configCheck)
+                                exit(EXIT_FAILURE);
+                            continue;
+                        }
+                        if (std::find(portduino_config.ignore_relay_nodes.begin(), portduino_config.ignore_relay_nodes.end(),
+                                      node) == portduino_config.ignore_relay_nodes.end())
+                            portduino_config.ignore_relay_nodes.push_back(node);
+                    }
+                }
+            }
             portduino_config.lora_usb_serial_num = yamlConfig["Lora"]["USB_Serialnum"].as<std::string>("");
             portduino_config.lora_usb_pid = yamlConfig["Lora"]["USB_PID"].as<int>(0x5512);
             portduino_config.lora_usb_vid = yamlConfig["Lora"]["USB_VID"].as<int>(0x1A86);
 
             portduino_config.lora_spi_dev = yamlConfig["Lora"]["spidev"].as<std::string>("spidev0.0");
-            if (portduino_config.lora_spi_dev != "ch341") {
-                portduino_config.lora_spi_dev = "/dev/" + portduino_config.lora_spi_dev;
-                if (portduino_config.lora_spi_dev.length() == 14) {
-                    int x = portduino_config.lora_spi_dev.at(11) - '0';
-                    int y = portduino_config.lora_spi_dev.at(13) - '0';
-                    // Pretty sure this is always true
-                    if (x >= 0 && x < 10 && y >= 0 && y < 10) {
-                        // I believe this bit of weirdness is specifically for the new GUI
-                        portduino_config.lora_spi_dev_int = x + y << 4;
-                        portduino_config.display_spi_dev_int = portduino_config.lora_spi_dev_int;
-                        portduino_config.touchscreen_spi_dev_int = portduino_config.lora_spi_dev_int;
+            if (portduino_config.lora_module == use_transparent) {
+                portduino_config.lora_spi_dev = ""; // the radio is on the other node, so leave the SPI bus alone
+            } else if (portduino_config.lora_spi_dev != "ch341") {
+                if (portduino_config.lora_spi_dev.rfind("/dev/", 0) != 0)
+                    portduino_config.lora_spi_dev = "/dev/" + portduino_config.lora_spi_dev;
+                const int host = spiHostFromDevicePath(portduino_config.lora_spi_dev);
+                if (host >= 0) {
+                    portduino_config.lora_spi_dev_int = host;
+                    // Let a display/touchscreen from an earlier config file keep its own bus.
+                    // The touchscreen follows the display when it has no spidev of its own.
+                    if (portduino_config.display_spi_dev.empty()) {
+                        portduino_config.display_spi_dev_int = host;
+                        if (portduino_config.touchscreen_spi_dev.empty())
+                            portduino_config.touchscreen_spi_dev_int = host;
                     }
+                } else {
+                    LOG_WARN("Lora.spidev \"%s\" is not a usable spidev path; display and touch keep their own bus",
+                             portduino_config.lora_spi_dev.c_str());
                 }
             }
             if (yamlConfig["Lora"]["rfswitch_table"]) {
@@ -1262,6 +1310,10 @@ bool loadConfig(const char *configPath)
                 }
             }
         }
+        // Only a file that names Path changes it, so a later config.d file cannot clear it by omission.
+        if (yamlConfig["SerialModule"] && yamlConfig["SerialModule"]["Path"]) {
+            portduino_config.serial_module_path = yamlConfig["SerialModule"]["Path"].as<std::string>("");
+        }
         if (yamlConfig["GPIO"]["ExtraPins"]) {
             for (auto extra_pin : yamlConfig["GPIO"]["ExtraPins"]) {
                 portduino_config.extra_pins.push_back(pinMapping());
@@ -1299,13 +1351,17 @@ bool loadConfig(const char *configPath)
             portduino_config.displayInvert = yamlConfig["Display"]["Invert"].as<bool>(false);
             portduino_config.displayBusFrequency = yamlConfig["Display"]["BusFrequency"].as<int>(40000000);
             if (yamlConfig["Display"]["spidev"]) {
-                portduino_config.display_spi_dev = "/dev/" + yamlConfig["Display"]["spidev"].as<std::string>("spidev0.1");
-                if (portduino_config.display_spi_dev.length() == 14) {
-                    int x = portduino_config.display_spi_dev.at(11) - '0';
-                    int y = portduino_config.display_spi_dev.at(13) - '0';
-                    if (x >= 0 && x < 10 && y >= 0 && y < 10) {
-                        portduino_config.display_spi_dev_int = x + y << 4;
-                        portduino_config.touchscreen_spi_dev_int = portduino_config.display_spi_dev_int;
+                portduino_config.display_spi_dev = yamlConfig["Display"]["spidev"].as<std::string>("spidev0.1");
+                if (!portduino_config.display_spi_dev.empty()) {
+                    if (portduino_config.display_spi_dev.rfind("/dev/", 0) != 0)
+                        portduino_config.display_spi_dev = "/dev/" + portduino_config.display_spi_dev;
+                    const int host = spiHostFromDevicePath(portduino_config.display_spi_dev);
+                    if (host >= 0) {
+                        portduino_config.display_spi_dev_int = host;
+                        if (portduino_config.touchscreen_spi_dev.empty())
+                            portduino_config.touchscreen_spi_dev_int = host;
+                    } else {
+                        LOG_WARN("Display.spidev \"%s\" is not a usable spidev path", portduino_config.display_spi_dev.c_str());
                     }
                 }
             }
@@ -1362,13 +1418,16 @@ bool loadConfig(const char *configPath)
             portduino_config.touchscreenRotate = yamlConfig["Touchscreen"]["Rotate"].as<int>(-1);
             portduino_config.touchscreenI2CAddr = yamlConfig["Touchscreen"]["I2CAddr"].as<int>(-1);
             if (yamlConfig["Touchscreen"]["spidev"]) {
-                portduino_config.touchscreen_spi_dev = "/dev/" + yamlConfig["Touchscreen"]["spidev"].as<std::string>("");
-                if (portduino_config.touchscreen_spi_dev.length() == 14) {
-                    int x = portduino_config.touchscreen_spi_dev.at(11) - '0';
-                    int y = portduino_config.touchscreen_spi_dev.at(13) - '0';
-                    if (x >= 0 && x < 10 && y >= 0 && y < 10) {
-                        portduino_config.touchscreen_spi_dev_int = x + y << 4;
-                    }
+                portduino_config.touchscreen_spi_dev = yamlConfig["Touchscreen"]["spidev"].as<std::string>("");
+                if (!portduino_config.touchscreen_spi_dev.empty()) {
+                    if (portduino_config.touchscreen_spi_dev.rfind("/dev/", 0) != 0)
+                        portduino_config.touchscreen_spi_dev = "/dev/" + portduino_config.touchscreen_spi_dev;
+                    const int host = spiHostFromDevicePath(portduino_config.touchscreen_spi_dev);
+                    if (host >= 0)
+                        portduino_config.touchscreen_spi_dev_int = host;
+                    else
+                        LOG_WARN("Touchscreen.spidev \"%s\" is not a usable spidev path",
+                                 portduino_config.touchscreen_spi_dev.c_str());
                 }
             }
         }
@@ -1449,6 +1508,8 @@ bool loadConfig(const char *configPath)
 
         if (yamlConfig["Webserver"]) {
             portduino_config.webserverport = (yamlConfig["Webserver"]["Port"]).as<int>(-1);
+            portduino_config.webserver_http_port = (yamlConfig["Webserver"]["HTTPPort"]).as<int>(-1);
+            portduino_config.webserver_http_bind_all = (yamlConfig["Webserver"]["HTTPBindAll"]).as<bool>(false);
             portduino_config.webserver_root_path =
                 (yamlConfig["Webserver"]["RootPath"]).as<std::string>("/usr/share/meshtasticd/web");
             portduino_config.webserver_ssl_key_path =
@@ -1473,6 +1534,44 @@ bool loadConfig(const char *configPath)
             portduino_config.hostMetrics_channel = (yamlConfig["HostMetrics"]["Channel"]).as<int>(0);
             portduino_config.hostMetrics_interval = (yamlConfig["HostMetrics"]["ReportInterval"]).as<int>(0);
             portduino_config.hostMetrics_user_command = (yamlConfig["HostMetrics"]["UserStringCommand"]).as<std::string>("");
+        }
+
+        // An empty `Sensors:` is null; skip it like any other empty section.
+        if (yamlConfig["Sensors"] && !yamlConfig["Sensors"].IsNull()) {
+            const YAML::Node sensors = yamlConfig["Sensors"];
+            if (!sensors.IsSequence()) {
+                std::cout << "Sensors must be a list of entries with a Type and a Command!" << std::endl;
+                if (!configCheck)
+                    exit(EXIT_FAILURE);
+            } else {
+                // Appended, like Security.AdminKeys, so each file in config.d can add its own sensors.
+                for (const auto &entry : sensors) {
+                    if (!entry.IsMap()) {
+                        std::cout << "Sensors: each entry needs a Type and a Command!" << std::endl;
+                        if (!configCheck)
+                            exit(EXIT_FAILURE);
+                        continue;
+                    }
+                    const std::string type = entry["Type"].as<std::string>("");
+                    commandSensorConfig sensor;
+                    sensor.type = CommandSensorFields::canonicalType(type);
+                    sensor.command = entry["Command"].as<std::string>("");
+                    sensor.scale = entry["Scale"].as<float>(1.0f);
+                    if (!std::isfinite(sensor.scale))
+                        sensor.scale = 1.0f;
+                    if (sensor.type.empty() || sensor.command.empty()) {
+                        if (sensor.type.empty())
+                            std::cout << "Sensors: '" << type
+                                      << "' is not a known Type. Valid: " << CommandSensorFields::knownTypes() << std::endl;
+                        else
+                            std::cout << "Sensors: the " << sensor.type << " entry has no Command!" << std::endl;
+                        if (!configCheck)
+                            exit(EXIT_FAILURE);
+                        continue;
+                    }
+                    portduino_config.command_sensors.push_back(sensor);
+                }
+            }
         }
 
         if (yamlConfig["Security"] && yamlConfig["Security"]["AdminKeys"]) {
@@ -1506,6 +1605,10 @@ bool loadConfig(const char *configPath)
                 }
             }
         }
+
+        // Only when the key is present, so a later file in config.d can turn it off again.
+        if (yamlConfig["Security"] && yamlConfig["Security"]["DMShell"])
+            portduino_config.dmshell_enabled = (yamlConfig["Security"]["DMShell"]).as<bool>(false);
 
         if (yamlConfig["Config"]) {
             portduino_config.has_config_overrides = true;
@@ -1560,10 +1663,7 @@ bool loadConfig(const char *configPath)
                 std::getline(infile, portduino_config.mac_address);
             }
 
-            // https://stackoverflow.com/a/20326454
-            portduino_config.mac_address.erase(
-                std::remove(portduino_config.mac_address.begin(), portduino_config.mac_address.end(), ':'),
-                portduino_config.mac_address.end());
+            std::erase(portduino_config.mac_address, ':');
         }
     } catch (YAML::Exception &e) {
         // The check report repeats this against the file it came from, so printing it
@@ -1572,6 +1672,51 @@ bool loadConfig(const char *configPath)
             std::cout << "*** Exception " << e.what() << std::endl;
         return false;
     }
+    return true;
+}
+#endif // !ARCH_PORTDUINO_WASM
+
+// Accepts `0xea618fb4` (yaml-cpp reads this as a number), `!a28e145b` (a local YAML tag on an empty
+// scalar), or decimal. Node number 0 is refused: its low byte would collide with NO_RELAY_NODE.
+#ifndef ARCH_PORTDUINO_WASM
+bool nodeNumberFromYaml(const YAML::Node &node, uint32_t &out)
+{
+    if (!node.IsScalar())
+        return false;
+
+    std::string text = node.Scalar();
+    bool hex = false;
+    // An unquoted `!xxxxxxxx` arrives as a tag with an empty scalar; a quoted one as a string.
+    if (text.empty() && node.Tag().size() > 1 && node.Tag()[0] == '!') {
+        text = node.Tag().substr(1);
+        hex = true;
+    } else if (!text.empty() && text[0] == '!') {
+        text = text.substr(1);
+        hex = true;
+    }
+    if (text.size() > 2 && text[0] == '0' && (text[1] == 'x' || text[1] == 'X')) {
+        text = text.substr(2);
+        hex = true;
+    }
+    if (text.empty() || text.size() > (hex ? 8 : 10))
+        return false;
+
+    uint64_t value = 0;
+    for (char c : text) {
+        int digit;
+        if (c >= '0' && c <= '9')
+            digit = c - '0';
+        else if (hex && c >= 'a' && c <= 'f')
+            digit = c - 'a' + 10;
+        else if (hex && c >= 'A' && c <= 'F')
+            digit = c - 'A' + 10;
+        else
+            return false;
+        value = value * (hex ? 16 : 10) + static_cast<uint64_t>(digit);
+    }
+    if (value == 0 || value > UINT32_MAX)
+        return false;
+    out = static_cast<uint32_t>(value);
     return true;
 }
 #endif // !ARCH_PORTDUINO_WASM
@@ -1643,9 +1788,48 @@ std::string adminKeyToBase64(const std::array<uint8_t, 32> &key)
     return out;
 }
 
+static bool parseSpidevNumber(const char *&cursor, unsigned &value)
+{
+    if (*cursor < '0' || *cursor > '9')
+        return false;
+    value = 0;
+    while (*cursor >= '0' && *cursor <= '9') {
+        const unsigned digit = (unsigned)(*cursor - '0');
+        if (value > (std::numeric_limits<unsigned>::max() - digit) / 10)
+            return false;
+        value = value * 10 + digit;
+        ++cursor;
+    }
+    return true;
+}
+
+int spiHostFromDevicePath(const std::string &devicePath)
+{
+    std::string name = devicePath;
+    const std::string devPrefix = "/dev/";
+    if (name.rfind(devPrefix, 0) == 0)
+        name.erase(0, devPrefix.size());
+
+    if (name.rfind("spidev", 0) != 0)
+        return -1;
+
+    // Digit-only fields: reject signs, whitespace and overflow rather than
+    // letting scanf's %u accept them.
+    const char *cursor = name.c_str() + 6;
+    unsigned bus = 0;
+    unsigned device = 0;
+    if (!parseSpidevNumber(cursor, bus) || *cursor++ != '.' || !parseSpidevNumber(cursor, device) || *cursor != '\0')
+        return -1;
+    // HardwareSPI turns the bus into one decimal character and the device into a
+    // signed high nibble, so only 0-9 and 0-7 round-trip through it.
+    if (bus > 9 || device > 7)
+        return -1;
+    return (int)(bus | (device << 4));
+}
+
 bool MAC_from_string(std::string mac_str, uint8_t *dmac)
 {
-    mac_str.erase(std::remove(mac_str.begin(), mac_str.end(), ':'), mac_str.end());
+    std::erase(mac_str, ':');
     if (mac_str.length() != 12) {
         return false;
     }
@@ -1673,22 +1857,125 @@ bool MAC_from_string(std::string mac_str, uint8_t *dmac)
     return true;
 }
 
-std::string exec(const char *cmd)
-{ // https://stackoverflow.com/a/478960
-#ifdef ARCH_PORTDUINO_WASM
+// Captured output beyond this is drained and dropped; nothing that reads it wants more.
+static constexpr size_t EXEC_MAX_OUTPUT = 4096;
+
+ExecResult execCommand(const char *cmd, uint32_t timeoutMs, std::string &output)
+{
+    output.clear();
+#if defined(ARCH_PORTDUINO_WASM)
     (void)cmd; // no shell/popen in the browser - shell-outs degrade to empty
-    return "";
-#endif
+    (void)timeoutMs;
+    return ExecResult::NotStarted;
+#elif defined(_WIN32)
+    // No process group to kill here, so the timeout is not enforced on Windows.
+    (void)timeoutMs;
+    FILE *pipe = popen(cmd, "r");
+    if (!pipe)
+        return ExecResult::NotStarted;
     std::array<char, 128> buffer;
-    std::string result;
-    std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(cmd, "r"), pclose);
-    if (!pipe) {
-        throw std::runtime_error("popen() failed!");
+    while (fgets(buffer.data(), static_cast<int>(buffer.size()), pipe) != nullptr)
+        if (output.size() < EXEC_MAX_OUTPUT)
+            output += buffer.data();
+    return pclose(pipe) == 0 ? ExecResult::Ok : ExecResult::Failed;
+#else
+    int fds[2];
+    if (pipe(fds) != 0)
+        return ExecResult::NotStarted;
+    fcntl(fds[0], F_SETFD, FD_CLOEXEC);
+    fcntl(fds[1], F_SETFD, FD_CLOEXEC);
+
+    posix_spawn_file_actions_t actions;
+    posix_spawn_file_actions_init(&actions);
+    posix_spawn_file_actions_addopen(&actions, STDIN_FILENO, "/dev/null", O_RDONLY, 0);
+    posix_spawn_file_actions_adddup2(&actions, fds[1], STDOUT_FILENO);
+    posix_spawnattr_t attr;
+    posix_spawnattr_init(&attr);
+    // Its own process group, so a timeout can kill the whole pipeline and not just the shell.
+    posix_spawnattr_setflags(&attr, POSIX_SPAWN_SETPGROUP);
+    posix_spawnattr_setpgroup(&attr, 0);
+
+    char shell[] = "/bin/sh";
+    char dashC[] = "-c";
+    std::string command(cmd);
+    char *argv[] = {shell, dashC, &command[0], nullptr};
+    pid_t pid;
+    const int spawnError = posix_spawn(&pid, shell, &actions, &attr, argv, environ);
+    posix_spawn_file_actions_destroy(&actions);
+    posix_spawnattr_destroy(&attr);
+    close(fds[1]);
+    if (spawnError != 0) {
+        close(fds[0]);
+        return ExecResult::NotStarted;
     }
-    while (fgets(buffer.data(), static_cast<int>(buffer.size()), pipe.get()) != nullptr) {
-        result += buffer.data();
+
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeoutMs);
+    auto remainingMs = [&deadline]() {
+        return std::chrono::duration_cast<std::chrono::milliseconds>(deadline - std::chrono::steady_clock::now()).count();
+    };
+
+    bool timedOut = false;
+    std::array<char, 256> buffer;
+    while (true) {
+        const auto remaining = remainingMs();
+        if (remaining <= 0) {
+            timedOut = true;
+            break;
+        }
+        pollfd pfd = {fds[0], POLLIN, 0};
+        const int ready = poll(&pfd, 1, static_cast<int>(remaining));
+        if (ready < 0 && errno == EINTR)
+            continue;
+        if (ready == 0) {
+            timedOut = true;
+            break;
+        }
+        if (ready < 0)
+            break;
+        const ssize_t n = read(fds[0], buffer.data(), buffer.size());
+        if (n < 0 && errno == EINTR)
+            continue;
+        if (n <= 0)
+            break; // EOF: every writer has closed stdout
+        if (output.size() < EXEC_MAX_OUTPUT)
+            output.append(buffer.data(), std::min(static_cast<size_t>(n), EXEC_MAX_OUTPUT - output.size()));
     }
-    return result;
+    close(fds[0]);
+
+    // A command can close stdout and keep running, so the deadline also bounds the wait for it to exit.
+    int status = 0;
+    pid_t waited = 0;
+    while (!timedOut) {
+        waited = waitpid(pid, &status, WNOHANG);
+        if (waited < 0 && errno == EINTR)
+            continue;
+        if (waited != 0)
+            break;
+        if (remainingMs() <= 0)
+            timedOut = true;
+        else
+            usleep(5000);
+    }
+    if (timedOut) {
+        kill(-pid, SIGKILL);
+        do {
+            waited = waitpid(pid, &status, 0);
+        } while (waited < 0 && errno == EINTR);
+        return ExecResult::TimedOut;
+    }
+    return waited == pid && WIFEXITED(status) && WEXITSTATUS(status) == 0 ? ExecResult::Ok : ExecResult::Failed;
+#endif
+}
+
+std::string exec(const char *cmd, uint32_t timeoutMs)
+{
+    std::string output;
+    const ExecResult result = execCommand(cmd, timeoutMs, output);
+    if (result == ExecResult::TimedOut)
+        LOG_WARN("Command timed out after %ums, killed: %s", static_cast<unsigned>(timeoutMs), cmd);
+    else if (result == ExecResult::NotStarted)
+        LOG_WARN("Command could not be started: %s", cmd);
+    return output;
 }
 
 #ifndef ARCH_PORTDUINO_WASM

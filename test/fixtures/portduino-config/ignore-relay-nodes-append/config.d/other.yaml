@@ -1,0 +1,3 @@
+# Adds a second relay node to the list from config.yaml.
+Lora:
+  IgnoreRelayNodes: [0xEA618FB4]

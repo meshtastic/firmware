@@ -77,6 +77,12 @@ class TransmitHistory
     bool saveToDisk();
 
     /**
+     * saveToDisk() before a timed deep sleep. Entries without wall-clock time are stored as their age at the
+     * next boot, so a wake from deep sleep (a reboot) still knows how long ago they were sent.
+     */
+    bool saveToDiskBeforeSleep(uint32_t sleepMs);
+
+    /**
      * Wipe in-memory throttle state + remove the on-disk file. Required
      * alongside rmDir("/prefs") in factoryReset - otherwise the 5-min
      * auto-flush resurrects the file from the still-populated maps.
@@ -97,6 +103,7 @@ class TransmitHistory
     enum EntryFlags : uint8_t {
         ENTRY_FLAG_NONE = 0,
         ENTRY_FLAG_BOOT_RELATIVE = 0x01,
+        ENTRY_FLAG_AGE_AT_BOOT = 0x02, // seconds = age at the next boot (set before deep sleep)
     };
 
     struct StoredTimestamp {
@@ -123,6 +130,7 @@ class TransmitHistory
 
     uint32_t getLastSentAbsoluteMillis(uint32_t storedEpoch) const;
     uint32_t getLastSentBootRelativeMillis(uint32_t storedSeconds) const;
+    static uint32_t getLastSentAgeAtBootMillis(uint32_t ageAtBoot);
     static StoredTimestamp makeStoredTimestamp(uint32_t seconds, uint8_t flags = ENTRY_FLAG_NONE);
     static StoredTimestamp decodeLegacyTimestamp(uint32_t seconds);
 

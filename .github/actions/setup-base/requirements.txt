@@ -1,6 +1,6 @@
 # See also: https://github.com/meshtastic/gh-action-firmware
 platformio==6.2.0
-nanopb==0.4.9.1
+nanopb==0.4.9.3
 # Match grpcio-tools version pinning from nanopb (where it's consumed)
 # but cap it below 2.x so a major release can't break the build unannounced.
 grpcio-tools>=1.43.0,<2

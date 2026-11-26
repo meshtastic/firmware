@@ -1,0 +1,18 @@
+# Before each start, write 1 to /sys/class/leds/ext_5v_out/brightness on the vendor image.
+# Also drive PI4IOE5V6408 P0 HIGH on I2C1 0x43; this YAML does not configure the expander.
+Meta:
+  name: M5Stack CardputerZero v5 with Cap LoRa-1262 (U214)
+  support: community
+  compatible:
+    - raspberry-pi
+
+Lora:
+  Module: sx1262
+  spidev: spidev0.1 # Kernel controls CE1/GPIO7; leave CS unset. The LCD uses CE0/GPIO8.
+  spiSpeed: 1000000
+  gpiochip: 0
+  IRQ: 23
+  Reset: 26
+  Busy: 22
+  DIO2_AS_RF_SWITCH: true
+  DIO3_TCXO_VOLTAGE: 3.0

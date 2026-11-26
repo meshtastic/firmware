@@ -1,0 +1,4 @@
+# Loaded after config.yaml. This sensor is added to its list, not substituted for it.
+Sensors:
+  - Type: barometric_pressure
+    Command: echo 1013.2

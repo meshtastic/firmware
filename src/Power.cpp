@@ -263,6 +263,9 @@ MAX17048Sensor max17048Sensor;
 NullSensor max17048Sensor;
 #endif
 #endif
+#elif HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+// MAX17048 is I2C-only; keep the symbol declared in Power.h defined as a stub
+NullSensor max17048Sensor;
 #endif
 
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && HAS_RAKPROT
@@ -585,7 +588,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
 #ifdef EXT_PWR_DETECT
         if (digitalRead(EXT_PWR_DETECT) == EXT_PWR_DETECT_VALUE)
             return true;
-#ifdef EXT_CHRG_DETECT
+#if defined(EXT_CHRG_DETECT) && !defined(EXT_CHRG_DETECT_IS_SOLAR)
         // EXT_PWR_DETECT alone may not catch active charging (e.g. a charge-complete
         // pin that only asserts once the battery is full) - CHRG being active implies
         // power is present regardless.
@@ -597,7 +600,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
 // technically speaking this should work for all(?) NRF52 boards
 // but needs testing across multiple devices. NRF52 USB would not even work if
 // VBUS was not properly connected and detected by the CPU
-#elif defined(MUZI_BASE) || defined(PROMICRO_DIY_TCXO) || defined(ELECROW_ThinkNode_M8)
+#elif defined(MUZI_BASE) || defined(PROMICRO_DIY_TCXO) || defined(ELECROW_ThinkNode_M8) || defined(M5STACK_SOLAR_NODE)
         return powerHAL_isVBUSConnected();
 #elif defined(USB_HOST_PWR_DETECT)
         // No VBUS sense pin, so ask the native USB port instead. This watches for start-of-frame

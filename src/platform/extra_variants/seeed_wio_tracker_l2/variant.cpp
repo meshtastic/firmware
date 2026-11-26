@@ -4,13 +4,33 @@
 
 #include "AudioBoard.h"
 #include "DebugConfiguration.h"
+#include "GpioLogic.h"
 #include "SPILock.h"
 #include "WakeKey.h"
 #include "driver/gpio.h"
 #include "input/InputBroker.h"
+#if !MESHTASTIC_EXCLUDE_GPS
+#include "gps/GPS.h"
+#endif
 
 #include PCA95X5_INC
 extern PCA95X5_CLS io;
+
+// The GNSS rail is on the expander, so the GPS enable has to drive it there.
+class GnssRail : public GpioPin
+{
+  public:
+    void set(bool on) override
+    {
+        concurrency::LockGuard guard(spiLock);
+        // The virtual pin never resends a level, so retry here; a failed transfer resets the bus first.
+        for (int attempt = 0; attempt < 3; attempt++)
+            if (io.digitalWrite(EXPANDS_GNSS_PWR_EN, on ? HIGH : LOW))
+                return;
+        LOG_ERROR("GNSS rail write failed, rail stays %s", on ? "off" : "on");
+    }
+};
+static GnssRail gnssRail;
 
 DriverPins PinsAudioBoardES8311;
 AudioBoard board(AudioDriverES8311, PinsAudioBoardES8311);
@@ -90,6 +110,18 @@ void lateInitVariant()
         LOG_ERROR("PCA9555 initialization failed");
         return;
     }
+
+#if !MESHTASTIC_EXCLUDE_GPS
+    if (gps) {
+        auto originalEnablePin = gps->enablePin;
+        auto enablePin = new GpioVirtPin();
+        new GpioUnaryTransformer(enablePin, new GpioSplitter(originalEnablePin, &gnssRail));
+        gps->enablePin = enablePin;
+        if (originalEnablePin->get() != GpioVirtPin::PinState::Unset)
+            enablePin->set(originalEnablePin->get() == GpioVirtPin::PinState::On);
+    } else
+#endif
+        gnssRail.set(false); // no GPS object: don't leave the module powered
 
     // wake button initialization
     WakeKeyInterruptThread::instance()->begin();

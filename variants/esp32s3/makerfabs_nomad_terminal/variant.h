@@ -68,11 +68,19 @@
 #define TFT_OFFSET_Y 0
 #define TFT_OFFSET_ROTATION 3 // portrait with connect()'s setRotation(3); 0 = landscape
 #define TFT_INVERT false
+// The picture follows the device's quarter turns, from the LSM6DS3TR-C: its x axis points to the top of the screen in
+// portrait, its y axis to the left edge
+#define HAS_SCREEN_AUTO_ROTATE 1
+#define AUTO_ROTATE_UP_AXIS (x)
+#define AUTO_ROTATE_LEFT_AXIS (y)
 #define SCREEN_TRANSITION_FRAMERATE 10
 // FT6236 touch on the sensor I2C bus
 #define HAS_TOUCHSCREEN 1
 #define SCREEN_TOUCH_INT 41
 #define ENABLE_TOUCH_INT
+// LovyanGFX puts the FT6236 in polling mode: INT stays low while a finger is down, so the interrupt times each press
+// and release (a redraw of this screen keeps the touch thread waiting long enough to turn taps into long presses)
+#define TOUCH_INT_LEVEL
 #define SCREEN_TOUCH_RST 42
 #define TOUCH_I2C_PORT 0
 #define TOUCH_SLAVE_ADDRESS 0x38

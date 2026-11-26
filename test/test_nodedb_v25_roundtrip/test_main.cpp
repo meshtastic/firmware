@@ -315,6 +315,7 @@ static void test_fullRoundTrip_headerAndSatelliteFidelity(void)
     meshtastic_Position pos = meshtastic_Position_init_zero;
     pos.latitude_i = 375000000;
     pos.longitude_i = -1219876543;
+    pos.has_altitude = true;
     pos.altitude = 123;
     pos.time = 1700000200;
     pos.location_source = meshtastic_Position_LocSource_LOC_INTERNAL;

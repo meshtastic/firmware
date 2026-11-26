@@ -30,16 +30,28 @@ bool BME280Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 
 bool BME280Sensor::getMetrics(meshtastic_Telemetry *measurement)
 {
+    LOG_DEBUG("BME280 getMetrics");
+    if (!bme280.takeForcedMeasurement()) {
+        LOG_WARN("%s read failed", sensorName);
+        return false;
+    }
+    // Temperature last: the library drops I2C errors, so a bus that fails mid-sequence must still trip the range check.
+    float humidity = bme280.readHumidity();
+    float pressure = bme280.readPressure() / 100.0F;
+    float temperature = bme280.readTemperature();
+
+    // Datasheet operating range; a failed I2C read compensates to ~180 °C. NaN fails these compares too.
+    if (!(temperature >= -40 && temperature <= 85 && pressure >= 300 && pressure <= 1100)) {
+        LOG_WARN("%s read failed", sensorName);
+        return false;
+    }
+
     measurement->variant.environment_metrics.has_temperature = true;
     measurement->variant.environment_metrics.has_relative_humidity = true;
     measurement->variant.environment_metrics.has_barometric_pressure = true;
-
-    LOG_DEBUG("BME280 getMetrics");
-    bme280.takeForcedMeasurement();
-    measurement->variant.environment_metrics.temperature = bme280.readTemperature();
-    measurement->variant.environment_metrics.relative_humidity = bme280.readHumidity();
-    measurement->variant.environment_metrics.barometric_pressure = bme280.readPressure() / 100.0F;
-
+    measurement->variant.environment_metrics.temperature = temperature;
+    measurement->variant.environment_metrics.relative_humidity = humidity;
+    measurement->variant.environment_metrics.barometric_pressure = pressure;
     return true;
 }
 #endif

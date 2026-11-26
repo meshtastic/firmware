@@ -142,6 +142,15 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
     float currentLimit = 100; // 100mA OCP - Should be acceptable for RFM95/SX127x chipset.
 
+    // RadioLib has no CS getter, and keeps the RF switch pins private, so usesPin() reads these copies
+    RADIOLIB_PIN_TYPE csPin, rfSwitchRxPin = RADIOLIB_NC, rfSwitchTxPin = RADIOLIB_NC;
+
+    void noteRfSwitchPins(RADIOLIB_PIN_TYPE rx, RADIOLIB_PIN_TYPE tx)
+    {
+        rfSwitchRxPin = rx;
+        rfSwitchTxPin = tx;
+    }
+
 #if !defined(USE_STM32WLx)
     Module module; // The HW interface to the radio
 #else
@@ -178,6 +187,7 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     uint32_t lastNoiseFloorUpdate = 0;
     static const uint32_t NOISE_FLOOR_UPDATE_INTERVAL_MS = 5000;
     int32_t currentNoiseFloor = NOISE_FLOOR_DEFAULT;
+    static bool isValidNoiseRssi(int16_t rssi) { return rssi < 0 && rssi >= NOISE_FLOOR_VALID_MIN; }
 
     /**
      * Pure virtual hook for derived radio interfaces to provide instantaneous RSSI.
@@ -319,6 +329,8 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     RadioLibInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst,
                       RADIOLIB_PIN_TYPE busy, PhysicalLayer *iface = NULL);
 
+    bool usesPin(uint32_t pin) const override;
+
     virtual ErrorCode send(meshtastic_MeshPacket *p) override;
 
     /**
@@ -359,7 +371,7 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     /** Write the next packet's payload while RX runs, ahead of its scan */
     virtual void stageTxEarly(meshtastic_MeshPacket *p) {}
     /** notifyLater(delay, TRANSMIT_DELAY_COMPLETED), brought forward where the payload can be staged early */
-    void scheduleTransmitDelayCompleted(uint32_t delay);
+    void scheduleTransmitDelayCompleted(uint32_t delay, bool allowShorten = false);
 
     /** can we detect a LoRa preamble on the current channel?
      *  A true return means the chip may have been handed to RX in place, so the caller MUST follow it
@@ -418,19 +430,19 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
     /** if we have something waiting to send, start a short (random) timer so we can come check for collision before actually
      * doing the transmit */
-    void setTransmitDelay();
+    void setTransmitDelay(bool allowShorten = false);
 
     /**
      * random timer with certain min. and max. settings
      * @return Timestamp after which the packet may be sent
      */
-    void startTransmitTimer(bool withDelay = true);
+    void startTransmitTimer(bool withDelay = true, bool allowShorten = false);
 
     /**
      * timer scaled to SNR of to be flooded packet
      * @return Timestamp after which the packet may be sent
      */
-    void startTransmitTimerRebroadcast(meshtastic_MeshPacket *p);
+    void startTransmitTimerRebroadcast(meshtastic_MeshPacket *p, bool allowShorten = false);
 
     /** Detach the sent packet and undo its pre-TX switch; the caller re-arms RX, then finishSentPacket(). */
     meshtastic_MeshPacket *handleTransmitInterrupt();
