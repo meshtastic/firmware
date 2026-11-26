@@ -135,6 +135,8 @@ int32_t KbI2cBase::runOnce()
         if (i2cBus && cardkb_found.address == TCA8418_KB_ADDR) {
             tcaInterruptThread = this;
             attachInterrupt(digitalPinToInterrupt(KB_INT), tcaKeyboardInterrupt, FALLING);
+            lsObserver.observe(&notifyLightSleep);
+            lsEndObserver.observe(&notifyLightSleepEnd);
         }
 #endif
     }
@@ -718,13 +720,32 @@ int32_t KbI2cBase::runOnce()
     // KB_INT wakes the thread; keep draining while the chip still holds keys, otherwise only the fallback poll
     if (tcaRecheck)
         return 0;
-    return (::digitalRead(KB_INT) == LOW) ? 20 : TCA_FALLBACK_POLL_MS;
+    // Set here rather than returned: an edge during runOnce() sets 0 from the ISR, and a returned value would overwrite it
+    setIntervalFromNow(TCA_FALLBACK_POLL_MS);
+    if (::digitalRead(KB_INT) == LOW)
+        setIntervalFromNow(20);
+    return RUN_SAME;
 #elif defined(MESHTASTIC_INCLUDE_INKHUD)
     return 100; // CardKB hands out one key per read, so 300 ms makes typing crawl
 #else
     return 300;
 #endif
 }
+
+#if defined(T_DECK_PRO)
+int KbI2cBase::beforeLightSleep(void *unused)
+{
+    detachInterrupt(digitalPinToInterrupt(KB_INT));
+    return 0;
+}
+
+int KbI2cBase::afterLightSleep(esp_sleep_wakeup_cause_t cause)
+{
+    attachInterrupt(digitalPinToInterrupt(KB_INT), tcaKeyboardInterrupt, FALLING);
+    setIntervalFromNow(0); // a key that woke the board fell before the ISR was back
+    return 0;
+}
+#endif
 
 void KbI2cBase::toggleBacklight(bool on)
 {

@@ -9,6 +9,8 @@
 #include "Throttle.h"
 #include "UptimeClock.h"
 
+static constexpr uint32_t POP_GAP_US = 2000;
+
 using Key = TCA8418KeyboardBase::TCA8418Key;
 
 static constexpr uint32_t MODIFIER_TIMEOUT_MS = 1500;
@@ -71,17 +73,20 @@ void TDeckProKeyboard::trigger()
 {
     const uint8_t count = keyCount();
     for (uint8_t i = 0; i < count; ++i) {
+        // Popping back to back can leave the chip deaf to presses until a column-0 key is pressed: keep 2 ms between
+        // pops, across calls too
+        const uint32_t sinceUs = micros() - lastPopUs;
+        if (sinceUs < POP_GAP_US)
+            delayMicroseconds(POP_GAP_US - sinceUs);
         // Each read pops the oldest event; advancing the register skips queued
         // keys.
         const uint8_t event = readRegister(TCA8418_REG_KEY_EVENT_A);
+        lastPopUs = micros();
         const uint8_t key = event & 0x7F;
         if (event & 0x80)
             pressed(key);
         else
             releaseKey(key);
-        // Popping back to back can leave the chip deaf to presses until a column-0 key is pressed
-        if (i + 1 < count)
-            delay(2);
     }
 }
 
