@@ -90,18 +90,16 @@ void NeighborInfoModule::cleanUpNeighbors()
 {
     uint32_t now = getTime();
     NodeNum my_node_id = nodeDB->getNodeNum();
-    for (auto it = neighbors.rbegin(); it != neighbors.rend();) {
+    std::erase_if(neighbors, [now, my_node_id](const meshtastic_Neighbor &n) {
         // We will remove a neighbor if we haven't heard from them in twice the
-        // broadcast interval cannot use isWithinTimespanMs() as it->last_rx_time is
+        // broadcast interval cannot use isWithinTimespanMs() as n.last_rx_time is
         // seconds since 1970
-        if ((now - it->last_rx_time > it->node_broadcast_interval_secs * 2) && (it->node_id != my_node_id)) {
-            LOG_DEBUG("Remove neighbor with node ID 0x%08x", it->node_id);
-            it = std::vector<meshtastic_Neighbor>::reverse_iterator(
-                neighbors.erase(std::next(it).base())); // Erase the element and update the iterator
-        } else {
-            ++it;
+        if ((now - n.last_rx_time > n.node_broadcast_interval_secs * 2) && (n.node_id != my_node_id)) {
+            LOG_DEBUG("Remove neighbor with node ID 0x%08x", n.node_id);
+            return true;
         }
-    }
+        return false;
+    });
 }
 
 /* Send neighbor info to the mesh */

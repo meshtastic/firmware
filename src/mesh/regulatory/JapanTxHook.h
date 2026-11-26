@@ -36,6 +36,7 @@ class JapanTxHook : public RadioTxHook
     virtual ~JapanTxHook();
 
     PreTxAction beforeTransmit(RadioInterface *iface, meshtastic_MeshPacket *p) override;
+    uint32_t getDeferDelayMs(uint32_t now) const override;
     void postTransmit(RadioInterface *iface, const meshtastic_MeshPacket *p) override;
     void packetReleased(RadioInterface *iface, const meshtastic_MeshPacket *p) override;
 
@@ -52,18 +53,30 @@ class JapanTxHook : public RadioTxHook
     bool performCarrierSense(RadioInterface *iface);
 
     uint32_t getLastTxEndTime() const { return lastTxEndTime; }
-    void setLastTxEndTime(uint32_t t) { lastTxEndTime = t; }
+    void setLastTxEndTime(uint32_t t)
+    {
+        lastTxEndTime = t;
+        pauseArmed = (t != 0);
+    }
     uint32_t getBusyCount() const { return busyCount; }
     void resetBusyCount() { busyCount = 0; }
     void reset()
     {
         lastTxEndTime = 0;
+        pauseArmed = false;
+        backoffUntilMs = 0;
+        backoffArmed = false;
         busyCount = 0;
+        backoffPacket = nullptr;
     }
 
   private:
     uint32_t lastTxEndTime = 0;
+    bool pauseArmed = false;
+    uint32_t backoffUntilMs = 0;
+    bool backoffArmed = false;
     uint32_t busyCount = 0;
+    const meshtastic_MeshPacket *backoffPacket = nullptr;
 };
 
 extern JapanTxHook *japanTxHook;

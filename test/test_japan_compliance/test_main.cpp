@@ -46,6 +46,10 @@ class MockRadioInterface : public RadioInterface
         return packetTimeToReturn;
     }
 
+    float getBw() const { return bw; }
+    uint8_t getSf() const { return sf; }
+    uint8_t getCr() const { return cr; }
+
     ErrorCode send(meshtastic_MeshPacket *p) override
     {
         (void)p;
@@ -65,6 +69,7 @@ void setUp(void)
 {
     Time::useRealClock();
     Time::setTestMillis(10000);
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
     setRegion(meshtastic_Config_LoRaConfig_RegionCode_JP);
 }
 
@@ -122,15 +127,18 @@ void test_pause_consecutive_transmission_held_before_50ms(void)
     // Attempt transmission 20ms later (t = 1020); 50ms pause not elapsed
     Time::setTestMillis(1020);
     TEST_ASSERT_EQUAL_INT(RadioTxHook::PRETX_DEFER, hook.beforeTransmit(&radio, &pkt2));
-    TEST_ASSERT_EQUAL_UINT32(1050, pkt2.tx_after);
+    TEST_ASSERT_EQUAL_UINT32(0, pkt2.tx_after);
+    TEST_ASSERT_EQUAL_UINT32(30, hook.getDeferDelayMs(1020));
 
     // Attempt transmission at 49ms (t = 1049); still inside quiet window
     Time::setTestMillis(1049);
     TEST_ASSERT_EQUAL_INT(RadioTxHook::PRETX_DEFER, hook.beforeTransmit(&radio, &pkt2));
-    TEST_ASSERT_EQUAL_UINT32(1050, pkt2.tx_after);
+    TEST_ASSERT_EQUAL_UINT32(0, pkt2.tx_after);
+    TEST_ASSERT_EQUAL_UINT32(1, hook.getDeferDelayMs(1049));
 
     // Attempt transmission at 50ms (t = 1050); pause elapsed -> allowed to proceed
     Time::setTestMillis(1050);
+    TEST_ASSERT_EQUAL_UINT32(0, hook.getDeferDelayMs(1050));
     TEST_ASSERT_EQUAL_INT(RadioTxHook::PRETX_SEND, hook.beforeTransmit(&radio, &pkt2));
 }
 
@@ -148,11 +156,12 @@ void test_pause_does_not_shorten_existing_longer_tx_after(void)
 
     meshtastic_MeshPacket pkt2 = meshtastic_MeshPacket_init_zero;
     pkt2.id = 0x1002;
-    pkt2.tx_after = 2000; // Scheduled far ahead
+    pkt2.tx_after = 2000; // Existing late-rebroadcast deadline must remain untouched
 
     Time::setTestMillis(1020);
     TEST_ASSERT_EQUAL_INT(RadioTxHook::PRETX_DEFER, hook.beforeTransmit(&radio, &pkt2));
-    TEST_ASSERT_EQUAL_UINT32(2000, pkt2.tx_after); // Must not be overwritten to 1050
+    TEST_ASSERT_EQUAL_UINT32(2000, pkt2.tx_after);
+    TEST_ASSERT_EQUAL_UINT32(30, hook.getDeferDelayMs(1020));
 }
 
 void test_failed_start_does_not_trigger_tx_pause(void)
@@ -263,27 +272,28 @@ void test_before_transmit_busy_defers_and_backs_off(void)
     Time::setTestMillis(5000);
     TEST_ASSERT_EQUAL_INT(RadioTxHook::PRETX_DEFER, hook.beforeTransmit(&radio, &pkt));
     TEST_ASSERT_EQUAL_UINT32(1, hook.getBusyCount());
+    TEST_ASSERT_EQUAL_UINT32(0, pkt.tx_after);
     // 1st backoff: range [250, 500]
-    const uint32_t now1 = Time::getMillis();
-    const uint32_t delay1 = pkt.tx_after - now1;
+    const uint32_t delay1 = hook.getDeferDelayMs(Time::getMillis());
     TEST_ASSERT_TRUE(delay1 >= 250);
     TEST_ASSERT_TRUE(delay1 <= 500);
 
-    // 2nd consecutive busy
+    // 2nd consecutive busy (after 1st backoff has elapsed)
     Time::setTestMillis(6000);
     TEST_ASSERT_EQUAL_INT(RadioTxHook::PRETX_DEFER, hook.beforeTransmit(&radio, &pkt));
     TEST_ASSERT_EQUAL_UINT32(2, hook.getBusyCount());
+    TEST_ASSERT_EQUAL_UINT32(0, pkt.tx_after);
     // 2nd backoff: range [500, 1000]
-    const uint32_t now2 = Time::getMillis();
-    const uint32_t delay2 = pkt.tx_after - now2;
+    const uint32_t delay2 = hook.getDeferDelayMs(Time::getMillis());
     TEST_ASSERT_TRUE(delay2 >= 500);
     TEST_ASSERT_TRUE(delay2 <= 1000);
 
-    // Channel becomes free: transmits and resets busy count
+    // Channel becomes free after 2nd backoff: transmits and resets busy count
     radio.rssiToReturn = -90;
     Time::setTestMillis(9000);
     TEST_ASSERT_EQUAL_INT(RadioTxHook::PRETX_SEND, hook.beforeTransmit(&radio, &pkt));
     TEST_ASSERT_EQUAL_UINT32(0, hook.getBusyCount());
+    TEST_ASSERT_EQUAL_UINT32(0, hook.getDeferDelayMs(9000));
 }
 
 void test_exponential_backoff_computation(void)
@@ -369,20 +379,26 @@ void test_dispatcher_integration(void)
     meshtastic_MeshPacket pkt = meshtastic_MeshPacket_init_zero;
     pkt.id = 0x4001;
 
-    // Calling via RadioTxHooks dispatcher must route to JapanTxHook
+    // Calling via RadioTxHooks dispatcher must route to JapanTxHook without mutating pkt.tx_after
     TEST_ASSERT_EQUAL_INT(RadioTxHook::PRETX_DEFER, RadioTxHooks::beforeTransmit(&radio, &pkt));
+    TEST_ASSERT_EQUAL_UINT32(0, pkt.tx_after);
+    const uint32_t backoff = RadioTxHooks::getDeferDelayMs(Time::getMillis());
+    TEST_ASSERT_TRUE(backoff >= 250 && backoff <= 500);
 
-    // Clear channel
+    // Advance past backoff and clear channel
+    Time::advanceTestMillis(backoff);
     radio.rssiToReturn = -90;
     TEST_ASSERT_EQUAL_INT(RadioTxHook::PRETX_SEND, RadioTxHooks::beforeTransmit(&radio, &pkt));
 
     // Complete sending
     RadioTxHooks::postTransmit(&radio, &pkt);
 
-    // Consecutive transmit immediately after must defer via dispatcher
+    // Consecutive transmit immediately after must defer via dispatcher for 50ms pause
     meshtastic_MeshPacket pkt2 = meshtastic_MeshPacket_init_zero;
     pkt2.id = 0x4002;
     TEST_ASSERT_EQUAL_INT(RadioTxHook::PRETX_DEFER, RadioTxHooks::beforeTransmit(&radio, &pkt2));
+    TEST_ASSERT_EQUAL_UINT32(0, pkt2.tx_after);
+    TEST_ASSERT_EQUAL_UINT32(50, RadioTxHooks::getDeferDelayMs(Time::getMillis()));
 }
 
 void test_millisecond_rollover_safety(void)
@@ -484,22 +500,37 @@ void test_packet_released_resets_busy_count(void)
     TEST_ASSERT_EQUAL_UINT32(1, hook.getBusyCount());
 }
 
-void test_deadline_wrap_zero_remapped_to_one(void)
+void test_pause_armed_at_tick_zero_and_midnight_wrap(void)
 {
     setRegion(meshtastic_Config_LoRaConfig_RegionCode_JP);
     JapanTxHook hook;
     MockRadioInterface radio;
     radio.rssiToReturn = -95;
 
-    // Set lastTxEndTime so that lastTxEndTime + 50 == 0 (wrap to 0)
-    hook.setLastTxEndTime(0xFFFFFFCEu); // UINT32_MAX - 49 -> + 50 wraps to 0
-
     meshtastic_MeshPacket pkt = meshtastic_MeshPacket_init_zero;
     pkt.id = 0x7001;
 
+    // Explicit pauseArmed flag ensures a TX completing at tick 0 enforces the full 50ms pause
+    Time::setTestMillis(0);
+    hook.postTransmit(&radio, &pkt);
+    TEST_ASSERT_EQUAL_INT(RadioTxHook::PRETX_DEFER, hook.beforeTransmit(&radio, &pkt));
+    TEST_ASSERT_EQUAL_UINT32(50, hook.getDeferDelayMs(0));
+    TEST_ASSERT_EQUAL_UINT32(1, hook.getDeferDelayMs(49));
+    Time::setTestMillis(50);
+    TEST_ASSERT_EQUAL_UINT32(0, hook.getDeferDelayMs(50));
+    TEST_ASSERT_EQUAL_INT(RadioTxHook::PRETX_SEND, hook.beforeTransmit(&radio, &pkt));
+
+    // Rollover when lastTxEndTime + 50 == 0: deadline 0 must still defer cleanly without remapping tx_after
+    hook.reset();
+    hook.setLastTxEndTime(0xFFFFFFCEu);
     Time::setTestMillis(0xFFFFFFCEu + 10);
     TEST_ASSERT_EQUAL_INT(RadioTxHook::PRETX_DEFER, hook.beforeTransmit(&radio, &pkt));
-    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, pkt.tx_after, "Wrapped deadline 0 must be remapped to 1");
+    TEST_ASSERT_EQUAL_UINT32(0, pkt.tx_after);
+    TEST_ASSERT_EQUAL_UINT32(40, hook.getDeferDelayMs(0xFFFFFFCEu + 10));
+    TEST_ASSERT_EQUAL_UINT32(1, hook.getDeferDelayMs(0xFFFFFFFFu));
+    Time::setTestMillis(0);
+    TEST_ASSERT_EQUAL_UINT32(0, hook.getDeferDelayMs(0));
+    TEST_ASSERT_EQUAL_INT(RadioTxHook::PRETX_SEND, hook.beforeTransmit(&radio, &pkt));
 }
 
 void test_is_valid_rssi_helper(void)
@@ -597,21 +628,85 @@ void test_dispatcher_packet_released_resets_busy_count(void)
     TEST_ASSERT_EQUAL_UINT32(0, hook.getBusyCount());
 }
 
-void test_pretx_defer_rollover_calculation(void)
+void test_defer_delay_rollover_across_uint32_max(void)
 {
-    // Test that when nowAfter is near UINT32_MAX and tx_after has wrapped around 0,
-    // unsigned subtraction tx_after - nowAfter produces the exact remaining interval
-    // and deadlinePassedAt correctly reports false without tripping any > comparison.
-    const uint32_t nowAfter = 0xFFFFFFFEu;
-    const uint32_t txAfter = 0x00000004u; // 6 ms in the future
+    // Verify real JapanTxHook::getDeferDelayMs() across 32-bit wrap when busy backoff crosses UINT32_MAX.
+    setRegion(meshtastic_Config_LoRaConfig_RegionCode_JP);
+    JapanTxHook hook;
+    MockRadioInterface radio;
+    radio.rssiToReturn = -75;
 
-    TEST_ASSERT_FALSE(Throttle::deadlinePassedAt(nowAfter, txAfter));
-    const uint32_t remaining = txAfter - nowAfter;
-    TEST_ASSERT_EQUAL_UINT32(6, remaining);
+    meshtastic_MeshPacket pkt = meshtastic_MeshPacket_init_zero;
+    pkt.id = 0x7002;
 
-    // Verify that the faulty (txAfter > nowAfter) check evaluates to FALSE across rollover,
-    // demonstrating why the raw > check was a bug.
-    TEST_ASSERT_FALSE(txAfter > nowAfter);
+    Time::setTestMillis(0xFFFFFFFEu);
+    TEST_ASSERT_EQUAL_INT(RadioTxHook::PRETX_DEFER, hook.beforeTransmit(&radio, &pkt));
+    TEST_ASSERT_EQUAL_UINT32(0, pkt.tx_after);
+
+    const uint32_t armedAt = Time::getMillis();
+    const uint32_t delay = hook.getDeferDelayMs(armedAt);
+    TEST_ASSERT_TRUE(delay >= 250 && delay <= 500);
+    TEST_ASSERT_EQUAL_UINT32(1, hook.getDeferDelayMs(armedAt + delay - 1));
+    TEST_ASSERT_EQUAL_UINT32(0, hook.getDeferDelayMs(armedAt + delay));
+}
+
+void test_backoff_early_wakeup_preserves_count_and_skips_sense(void)
+{
+    setRegion(meshtastic_Config_LoRaConfig_RegionCode_JP);
+    JapanTxHook hook;
+    MockRadioInterface radio;
+    radio.rssiToReturn = -75; // Busy
+
+    meshtastic_MeshPacket pkt = meshtastic_MeshPacket_init_zero;
+    pkt.id = 0x7003;
+
+    Time::setTestMillis(5000);
+    TEST_ASSERT_EQUAL_INT(RadioTxHook::PRETX_DEFER, hook.beforeTransmit(&radio, &pkt));
+    TEST_ASSERT_EQUAL_UINT32(1, hook.getBusyCount());
+    const uint32_t samplesAfterFirstSense = radio.sampleCount;
+    const uint32_t delay = hook.getDeferDelayMs(Time::getMillis());
+    TEST_ASSERT_TRUE(delay >= 250 && delay <= 500);
+
+    // An ISR_RX or allowShorten wakeup before backoff expires must defer without re-sensing or incrementing busyCount.
+    Time::advanceTestMillis(delay - 10);
+    TEST_ASSERT_EQUAL_INT(RadioTxHook::PRETX_DEFER, hook.beforeTransmit(&radio, &pkt));
+    TEST_ASSERT_EQUAL_UINT32(1, hook.getBusyCount());
+    TEST_ASSERT_EQUAL_UINT32(samplesAfterFirstSense, radio.sampleCount);
+    TEST_ASSERT_EQUAL_UINT32(10, hook.getDeferDelayMs(Time::getMillis()));
+
+    // Once backoff expires and channel clears, transmission proceeds and resets busyCount.
+    Time::advanceTestMillis(10);
+    radio.rssiToReturn = -90;
+    TEST_ASSERT_EQUAL_INT(RadioTxHook::PRETX_SEND, hook.beforeTransmit(&radio, &pkt));
+    TEST_ASSERT_EQUAL_UINT32(0, hook.getBusyCount());
+}
+
+void test_packet_released_ignores_unrelated_queued_packet(void)
+{
+    setRegion(meshtastic_Config_LoRaConfig_RegionCode_JP);
+    JapanTxHook hook;
+    MockRadioInterface radio;
+    radio.rssiToReturn = -75;
+
+    meshtastic_MeshPacket frontPkt = meshtastic_MeshPacket_init_zero;
+    frontPkt.id = 0x7004;
+    meshtastic_MeshPacket otherPkt = meshtastic_MeshPacket_init_zero;
+    otherPkt.id = 0x7005;
+
+    Time::setTestMillis(5000);
+    TEST_ASSERT_EQUAL_INT(RadioTxHook::PRETX_DEFER, hook.beforeTransmit(&radio, &frontPkt));
+    TEST_ASSERT_EQUAL_UINT32(1, hook.getBusyCount());
+    TEST_ASSERT_GREATER_THAN_UINT32(0, hook.getDeferDelayMs(Time::getMillis()));
+
+    // Cancelling a later queued packet must preserve frontPkt's active backoff and busyCount.
+    hook.packetReleased(&radio, &otherPkt);
+    TEST_ASSERT_EQUAL_UINT32(1, hook.getBusyCount());
+    TEST_ASSERT_GREATER_THAN_UINT32(0, hook.getDeferDelayMs(Time::getMillis()));
+
+    // Releasing frontPkt itself clears both.
+    hook.packetReleased(&radio, &frontPkt);
+    TEST_ASSERT_EQUAL_UINT32(0, hook.getBusyCount());
+    TEST_ASSERT_EQUAL_UINT32(0, hook.getDeferDelayMs(Time::getMillis()));
 }
 
 void test_dynamic_hook_attachment_on_region_switch(void)
@@ -754,6 +849,28 @@ void test_validate_config_lora_non_jp_allows_custom_settings_exceeding_4s(void)
     TEST_ASSERT_TRUE(RadioInterface::validateConfigLora(cfg));
 }
 
+void test_apply_modem_config_jp_clamps_custom_over_4s(void)
+{
+    // Regression test: applyModemConfig() must clamp illegal custom >4s JP configs before branching
+    // so persisted SF12/BW125/CR8 never falls through to program 14.3s hardware modulation.
+    MockRadioInterface radio;
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_JP;
+    config.lora.use_preset = false;
+    config.lora.bandwidth = bwKHzToCode(125);
+    config.lora.spread_factor = 12;
+    config.lora.coding_rate = 8;
+
+    radio.reconfigure();
+
+    TEST_ASSERT_TRUE(config.lora.use_preset);
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, config.lora.modem_preset);
+    TEST_ASSERT_EQUAL_UINT8(0, config.lora.coding_rate);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 250.0f, radio.getBw());
+    TEST_ASSERT_EQUAL_UINT8(11, radio.getSf());
+    TEST_ASSERT_EQUAL_UINT8(5, radio.getCr());
+}
+
 void setup()
 {
     initializeTestEnvironment();
@@ -779,6 +896,8 @@ void setup()
     RUN_TEST(test_carrier_sense_no_valid_samples_defers_tx);
     RUN_TEST(test_before_transmit_busy_defers_and_backs_off);
     RUN_TEST(test_packet_released_resets_busy_count);
+    RUN_TEST(test_packet_released_ignores_unrelated_queued_packet);
+    RUN_TEST(test_backoff_early_wakeup_preserves_count_and_skips_sense);
     RUN_TEST(test_dispatcher_packet_released_resets_busy_count);
     RUN_TEST(test_exponential_backoff_computation);
 
@@ -791,12 +910,13 @@ void setup()
     RUN_TEST(test_validate_config_lora_jp_accepts_custom_settings_under_4s);
     RUN_TEST(test_clamp_config_lora_jp_clamps_custom_settings_exceeding_4s);
     RUN_TEST(test_validate_config_lora_non_jp_allows_custom_settings_exceeding_4s);
+    RUN_TEST(test_apply_modem_config_jp_clamps_custom_over_4s);
 
     RUN_TEST(test_null_packet_is_noop);
     RUN_TEST(test_dispatcher_integration);
     RUN_TEST(test_millisecond_rollover_safety);
-    RUN_TEST(test_deadline_wrap_zero_remapped_to_one);
-    RUN_TEST(test_pretx_defer_rollover_calculation);
+    RUN_TEST(test_pause_armed_at_tick_zero_and_midnight_wrap);
+    RUN_TEST(test_defer_delay_rollover_across_uint32_max);
     RUN_TEST(test_dynamic_hook_attachment_on_region_switch);
     RUN_TEST(test_radio_reconfigure_region_switch);
     RUN_TEST(test_stack_allocated_hook_does_not_clobber_global);

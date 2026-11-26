@@ -1,5 +1,7 @@
 #include "ScanI2CTwoWire.h"
 #include "configuration.h"
+#include "detect/DS248XDetection.h"
+#include "detect/INA219Detection.h"
 #include "detect/ScanI2C.h"
 
 #if !MESHTASTIC_EXCLUDE_I2C
@@ -452,7 +454,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
             case BBQ10_KB_ADDR:
                 // Check status register (0xF0) for DS284X status and one-wire reset
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xF0), 1);
-                if (registerValue & 0x16) { // One-wire reset after power-on
+                if (matchesDs248xResetStatus(registerValue)) {
                     type = DS248X;
                     logFoundDevice("DS2482-800", (uint8_t)addr.address);
                     break;
@@ -582,6 +584,12 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                         type = INA226;
                         break;
                     }
+                    // TI INA3221 strapped to 0x40/0x41 instead of its usual 0x42
+                    else if (mfg == 0x5449 && die == 0x3220) {
+                        logFoundDevice("INA3221", (uint8_t)addr.address);
+                        type = INA3221;
+                        break;
+                    }
                     // TI INA260
                     else if (mfg == 0x5449) {
                         logFoundDevice("INA260", (uint8_t)addr.address);
@@ -604,9 +612,8 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                     break;
                 }
 #endif
-                // Get INA219 configuration register 0x00 expecting 0x399F after power-on reset
                 uint16_t registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x00), 2);
-                if (registerValue == 0x399F) {
+                if (matchesIna219ConfigurationSignature(registerValue)) {
                     logFoundDevice("INA219", (uint8_t)addr.address);
                     type = INA219;
                     break;
@@ -684,7 +691,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
 
                     // Check status register (0xF0) for DS284X status and one-wire reset
                     registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xF0), 1);
-                    if (registerValue & 0x16) { // One-wire reset after power-on
+                    if (matchesDs248xResetStatus(registerValue)) {
                         type = DS248X;
                         logFoundDevice("DS248X", (uint8_t)addr.address);
                     }
@@ -751,7 +758,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
             case DS248X_ADDR_ALT3:
                 // Check status register (0xF0) for DS284X status and one-wire reset
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xF0), 1);
-                if (registerValue & 0x16) { // One-wire reset after power-on
+                if (matchesDs248xResetStatus(registerValue)) {
                     type = DS248X;
                     logFoundDevice("DS2482-800", (uint8_t)addr.address);
                     break;
@@ -761,7 +768,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
             case QMC6310U_ADDR:
                 // Check status register (0xF0) for DS284X status and one-wire reset
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xF0), 1);
-                if (registerValue & 0x16) { // One-wire reset after power-on
+                if (matchesDs248xResetStatus(registerValue)) {
                     type = DS248X;
                     logFoundDevice("DS2482-800", (uint8_t)addr.address);
                     break;
@@ -815,7 +822,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
 
                 // Check status register (0xF0) for DS284X status and one-wire reset
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xF0), 1);
-                if (registerValue & 0x16) { // One-wire reset after power-on
+                if (matchesDs248xResetStatus(registerValue)) {
                     type = DS248X;
                     logFoundDevice("DS2482-800", (uint8_t)addr.address);
                     break;
@@ -855,7 +862,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
 
                 // Check status register (0xF0) for DS284X status and one-wire reset
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xF0), 1);
-                if (registerValue & 0x16) { // One-wire reset after power-on
+                if (matchesDs248xResetStatus(registerValue)) {
                     type = DS248X;
                     logFoundDevice("DS2482-800", (uint8_t)addr.address);
                     break;
@@ -943,7 +950,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
             case DFROBOT_RAIN_ADDR:
                 // Check status register (0xF0) for DS284X status and one-wire reset
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xF0), 1);
-                if (registerValue & 0x16) { // One-wire reset after power-on
+                if (matchesDs248xResetStatus(registerValue)) {
                     type = DS248X;
                     logFoundDevice("DS2482-800", (uint8_t)addr.address);
                     break;
@@ -957,7 +964,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
             case CST328_ADDR:
                 // Check status register (0xF0) for DS284X status and one-wire reset
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xF0), 1);
-                if (registerValue & 0x16) { // One-wire reset after power-on
+                if (matchesDs248xResetStatus(registerValue)) {
                     type = DS248X;
                     logFoundDevice("DS2482-800", (uint8_t)addr.address);
                     break;
@@ -967,14 +974,15 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                     // T-Deck pro V1.1 new touch panel use CST3530
                     int retry = 5;
                     while (retry--) {
-                        uint8_t buffer[7];
+                        uint8_t buffer[7] = {};
                         uint8_t r_cmd[] = {0x0d0, 0x03, 0x00, 0x00};
                         i2cBus->beginTransmission(addr.address);
                         i2cBus->write(r_cmd, sizeof(r_cmd));
                         if (i2cBus->endTransmission() == 0) {
-                            i2cBus->requestFrom((int)addr.address, 7);
-                            i2cBus->readBytes(buffer, 7);
-                            if (buffer[2] == 0xCA && buffer[3] == 0xCA) {
+                            // A short read must not match: the CST3530 result is final and skips the CST226SE/CST328 check
+                            const int received = i2cBus->requestFrom((int)addr.address, 7);
+                            const int read = i2cBus->readBytes(buffer, 7);
+                            if (received == 7 && read == 7 && buffer[2] == 0xCA && buffer[3] == 0xCA) {
                                 logFoundDevice("CST3530", (uint8_t)addr.address);
                                 type = CST3530;
                                 break;
@@ -987,6 +995,8 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                         delay(50);
                     }
                 }
+                if (type == CST3530) // the break above only left the retry loop
+                    break;
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xAB), 1);
                 if (registerValue == 0xA9) {
                     type = CST226SE;

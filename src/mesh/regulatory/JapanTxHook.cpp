@@ -95,30 +95,56 @@ RadioTxHook::PreTxAction JapanTxHook::beforeTransmit(RadioInterface *iface, mesh
     if (!isJapanRegion() || !p)
         return PRETX_SEND;
 
-    const uint32_t pauseMs = getTxPauseDurationMs();
-    if (lastTxEndTime != 0 && !Throttle::hasElapsed(lastTxEndTime, pauseMs)) {
-        uint32_t deadline = Time::skipZero(lastTxEndTime + pauseMs);
-        if (!p->tx_after || !Throttle::deadlinePassedAt(p->tx_after, deadline))
-            p->tx_after = deadline;
-        const uint32_t now = Time::getMillis();
-        LOG_DEBUG("JP LBT: deferring packet 0x%08x for mandatory 50ms pause (remaining %ums)", p->id,
-                  Throttle::deadlinePassedAt(now, deadline) ? 0 : deadline - now);
-        return PRETX_DEFER;
+    const uint32_t now = Time::getMillis();
+    if (pauseArmed) {
+        const uint32_t pauseUntil = lastTxEndTime + getTxPauseDurationMs();
+        if (!Throttle::deadlinePassedAt(now, pauseUntil)) {
+            LOG_DEBUG("JP LBT: deferring packet 0x%08x for mandatory 50ms pause (remaining %ums)", p->id, pauseUntil - now);
+            return PRETX_DEFER;
+        }
+        pauseArmed = false;
+    }
+
+    if (backoffArmed) {
+        if (!Throttle::deadlinePassedAt(now, backoffUntilMs)) {
+            LOG_DEBUG("JP LBT: deferring packet 0x%08x during LBT backoff (remaining %ums)", p->id, backoffUntilMs - now);
+            return PRETX_DEFER;
+        }
+        backoffArmed = false;
+        backoffPacket = nullptr;
     }
 
     if (!performCarrierSense(iface)) {
         busyCount++;
         const uint32_t backoffMs = computeBackoffMs(busyCount);
-        uint32_t deadline = Time::timerEndsAtMillis(backoffMs);
-        if (!p->tx_after || !Throttle::deadlinePassedAt(p->tx_after, deadline))
-            p->tx_after = deadline;
+        backoffUntilMs = Time::getMillis() + backoffMs;
+        backoffArmed = true;
+        backoffPacket = p;
         LOG_DEBUG("JP LBT: channel busy (attempt %u), backing off %ums for packet 0x%08x", busyCount, backoffMs, p->id);
         return PRETX_DEFER;
     }
 
     busyCount = 0;
+    backoffArmed = false;
+    backoffPacket = nullptr;
     LOG_DEBUG("JP LBT: carrier sense clear (5ms window), transmit permitted for packet 0x%08x", p->id);
     return PRETX_SEND;
+}
+
+uint32_t JapanTxHook::getDeferDelayMs(uint32_t now) const
+{
+    if (!isJapanRegion())
+        return 0;
+
+    uint32_t remaining = 0;
+    if (pauseArmed) {
+        const uint32_t pauseUntil = lastTxEndTime + getTxPauseDurationMs();
+        if (!Throttle::deadlinePassedAt(now, pauseUntil))
+            remaining = pauseUntil - now;
+    }
+    if (backoffArmed && !Throttle::deadlinePassedAt(now, backoffUntilMs))
+        remaining = std::max(remaining, backoffUntilMs - now);
+    return remaining;
 }
 
 void JapanTxHook::postTransmit(RadioInterface *iface, const meshtastic_MeshPacket *p)
@@ -127,13 +153,20 @@ void JapanTxHook::postTransmit(RadioInterface *iface, const meshtastic_MeshPacke
     (void)p;
     if (!isJapanRegion())
         return;
-    resetBusyCount();
-    lastTxEndTime = Time::stampMillis();
+    busyCount = 0;
+    backoffArmed = false;
+    backoffPacket = nullptr;
+    lastTxEndTime = Time::getMillis();
+    pauseArmed = true;
 }
 
 void JapanTxHook::packetReleased(RadioInterface *iface, const meshtastic_MeshPacket *p)
 {
     (void)iface;
-    (void)p;
-    resetBusyCount();
+    // Compare pointer identity only so cancelling a packet behind txQueue.front() leaves active backoff intact.
+    if (p && p == backoffPacket) {
+        busyCount = 0;
+        backoffArmed = false;
+        backoffPacket = nullptr;
+    }
 }
