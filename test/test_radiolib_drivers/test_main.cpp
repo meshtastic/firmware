@@ -26,9 +26,9 @@
 // so a firmware change that sends a refused exit byte fails here.
 //
 // The RadioLib pin (master commit 5878f99, after the 7.8.1 tag) has these changes, and the suite pins
-// them: the LR2021 LoRa CAD exit defines (#1882, after 7.8.1), the status of payload-less commands and
-// the SX128x first-byte status (#1872, 7.8.0), and the DC-DC workaround's retune and error path
-// (#1864, #1880).
+// them: the LR2021 LoRa CAD exit defines (#1882, after 7.8.1), the status of payload-less commands
+// (f1af229, 7.8.0), the SX128x first-byte status (#1872, 7.8.0), and the DC-DC workaround's retune
+// and error path (#1864, #1880).
 //
 // Anything that decodes a chip reply (begin(), readData(), getRSSI(), updateFirmware()) needs replies
 // scripted per opcode; each family's header lists those under "Grows here".
