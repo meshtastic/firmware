@@ -48,18 +48,11 @@ static int readSchemaVersion(sqlite3 *db, bool &hasTables)
 // After a short-ID-collision probe, silence this long means the peer has served all it has.
 static constexpr uint32_t kEnumProbeIdleMs = 30 * 1000;
 
-// One item frame per drain keeps the radio's 16-entry TX queue from overflowing on a large request.
-static constexpr size_t kEnumTxQueueMax = 256;
-static constexpr size_t kEnumMaxRequesters = 16;
 static constexpr uint32_t kEnumRetryMs = 30 * 1000;
-static constexpr uint32_t kEnumRequesterTtlMs = 2 * kEnumExchangeTimeoutMs;
+
 static constexpr uint32_t kEnumFullRootEvery = 10;
 static constexpr size_t kEnumPendingMax = 8;
 static constexpr uint32_t kEnumLateAcceptMs = 5 * 60 * 1000;
-
-// D11's one-pacer budget, shared by every serving path: 30 frames in any rolling 10 min.
-static constexpr uint32_t kServeWindowMs = 10 * 60 * 1000;
-static constexpr uint8_t kServeWindowFrames = 30;
 
 // D7's retention applies to canon rows as well as to the legacy read window.
 static constexpr uint32_t kRetentionS = 48 * 60 * 60;
@@ -1321,27 +1314,6 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
     }
 
     return true;
-}
-
-bool StoreForwardPlusPlusModule::consumeServeBudget()
-{
-    const uint32_t now = Time::getMillis();
-    while (!serveWindowSends.empty() && Throttle::hasElapsed(serveWindowSends.front(), kServeWindowMs))
-        serveWindowSends.pop_front();
-    if (serveWindowSends.size() >= kServeWindowFrames)
-        return false;
-    serveWindowSends.push_back(now);
-    return true;
-}
-
-ErrorCode StoreForwardPlusPlusModule::sendSfppPacket(meshtastic_MeshPacket *p, RxSource src, bool ccToPhone)
-{
-    if (portduino_config.sfpp_enum_listen_only) {
-        if (p)
-            packetPool.release(p);
-        return ERRNO_DISABLED;
-    }
-    return service->sendToMesh(p, src, ccToPhone);
 }
 
 ChannelHash StoreForwardPlusPlusModule::getChannelHashFromRoot(uint8_t *_root_hash, size_t _root_hash_len)
@@ -3548,150 +3520,6 @@ void StoreForwardPlusPlusModule::handleItemRequest(const meshtastic_MeshPacket &
 
     if (anyEnumQueuePending())
         setIntervalFromNow(10); // G21: the first frame goes on the next tick, not after a full drain interval
-}
-
-bool StoreForwardPlusPlusModule::anyEnumQueuePending() const
-{
-    for (const auto &requester : enumTxQueues) {
-        if (!requester.queue.empty())
-            return true;
-    }
-    return false;
-}
-
-bool StoreForwardPlusPlusModule::enumRequesterHasQueued(NodeNum to, pinsketch::Element id) const
-{
-    if (id == 0)
-        return false;
-    for (const auto &requester : enumTxQueues) {
-        if (requester.to != to)
-            continue;
-        for (const auto &out : requester.queue) {
-            if (out.id == id)
-                return true;
-        }
-    }
-    return false;
-}
-
-void StoreForwardPlusPlusModule::noteRequesterActivity(NodeNum to)
-{
-    const uint32_t now = Time::getMillis();
-    for (auto &requester : enumTxQueues) {
-        if (requester.to == to) {
-            requester.lastUsedMs = now;
-            return;
-        }
-    }
-}
-
-void StoreForwardPlusPlusModule::queueItemFrames(const std::vector<meshtastic_StoreForwardPlusPlus> &frames, NodeNum requester,
-                                                 NodeNum dest, const sfppsr::Scope &scope, pinsketch::Element id)
-{
-    queueEnumFrames(frames, requester, dest, scope, "item_frame", id);
-}
-
-void StoreForwardPlusPlusModule::queueEnumFrames(const std::vector<meshtastic_StoreForwardPlusPlus> &frames, NodeNum requester,
-                                                 NodeNum dest, const sfppsr::Scope &scope, const char *type,
-                                                 pinsketch::Element id)
-{
-    const uint32_t now = Time::getMillis();
-
-    // Drop empty or expired requester entries so the table does not grow without bound.
-    for (auto it = enumTxQueues.begin(); it != enumTxQueues.end();) {
-        if (it->queue.empty() || Throttle::hasElapsed(it->lastUsedMs, kEnumRequesterTtlMs))
-            it = enumTxQueues.erase(it);
-        else
-            ++it;
-    }
-
-    EnumRequester *slot = nullptr;
-    for (auto &entry : enumTxQueues) {
-        if (entry.to == requester) {
-            slot = &entry;
-            break;
-        }
-    }
-    if (slot == nullptr) {
-        if (enumTxQueues.size() >= kEnumMaxRequesters) {
-            LOG_WARN("StoreForwardpp enumeration queue limit reached, dropping the request");
-            return;
-        }
-        enumTxQueues.push_back(EnumRequester());
-        slot = &enumTxQueues.back();
-        slot->to = requester;
-        slot->lastUsedMs = now;
-    }
-
-    // Per-requester budget (2 x 32 x 4 frames); one requester cannot starve the others.
-    for (const auto &frame : frames) {
-        if (slot->queue.size() >= kEnumTxQueueMax) {
-            LOG_WARN("StoreForwardpp item frame queue full, dropping the rest of the request");
-            break;
-        }
-        EnumOutgoing out;
-        out.msg = frame;
-        out.to = dest;
-        out.scope = scope;
-        out.type = type;
-        out.id = id;
-        slot->queue.push_back(out);
-    }
-    slot->lastUsedMs = now;
-}
-
-bool StoreForwardPlusPlusModule::drainOneEnumFrame()
-{
-    // F3.7/N11: a requester's TTL is refreshed only by its own traffic, never by the drain. Drop
-    // its queue once it goes quiet.
-    for (auto it = enumTxQueues.begin(); it != enumTxQueues.end();) {
-        if (it->queue.empty() || Throttle::hasElapsed(it->lastUsedMs, kEnumRequesterTtlMs))
-            it = enumTxQueues.erase(it);
-        else
-            ++it;
-    }
-    if (!anyEnumQueuePending())
-        return false;
-
-    // One last-send timestamp across all requesters (N7); do not reset it on enqueue.
-    if (enumLastDrainMs != 0 && !Throttle::hasElapsed(enumLastDrainMs, enumDrainIntervalMs()))
-        return true;
-    if (!consumeServeBudget())
-        return true; // the queue stays pending until the window rolls over
-
-    // Round-robin across requesters so one cannot starve another. One attempt per step; a failed
-    // send leaves its frame queued for the next turn.
-    const uint32_t nowMs = Time::getMillis();
-    size_t active = 0;
-    for (const auto &entry : enumTxQueues)
-        if (!entry.queue.empty())
-            active++;
-    const uint8_t fairShare = active == 0 ? kServeWindowFrames : (uint8_t)(kServeWindowFrames / active);
-    bool deferred = false;
-    for (size_t i = 0; i < enumTxQueues.size(); i++) {
-        const size_t idx = (enumQueueCursor + i) % enumTxQueues.size();
-        auto &requester = enumTxQueues[idx];
-        if (requester.queue.empty())
-            continue;
-        if (requester.windowStartMs == 0 || Throttle::hasElapsed(requester.windowStartMs, kServeWindowMs)) {
-            requester.windowStartMs = nowMs;
-            requester.sentInWindow = 0;
-        }
-        if (requester.sentInWindow >= (fairShare == 0 ? 1 : fairShare)) {
-            deferred = true;
-            continue;
-        }
-
-        const EnumOutgoing &out = requester.queue.front();
-        if (sendEnumMessage(out.msg, out.to, out.type, 0, &out.scope)) {
-            requester.queue.pop_front();
-            requester.sentInWindow++;
-        }
-        enumQueueCursor = (idx + 1) % enumTxQueues.size();
-        enumLastDrainMs = nowMs;
-        return true;
-    }
-    return deferred;
 }
 
 void StoreForwardPlusPlusModule::resendEnumList()
