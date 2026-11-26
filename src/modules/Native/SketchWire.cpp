@@ -39,9 +39,10 @@ bool readFrame(const meshtastic_StoreForwardPlusPlus &in, uint8_t &index, uint8_
     return total != 0 && index < total;
 }
 
-// The chain's own fields have no meaning on a set-reconciliation message, and one carrying both is
-// either malformed or an attempt to have a single packet read differently by two handlers.
-bool carriesChainFields(const meshtastic_StoreForwardPlusPlus &in)
+// The item protocol's own hash fields have no meaning on a set-reconciliation message, and one
+// carrying both is either malformed or an attempt to have a single packet read differently by two
+// handlers.
+bool carriesObjectHashFields(const meshtastic_StoreForwardPlusPlus &in)
 {
     return in.message_hash.size != 0 || in.commit_hash.size != 0;
 }
@@ -159,9 +160,9 @@ bool parseScope(const meshtastic_StoreForwardPlusPlus &in, Scope &out)
 {
     if (!isSetReconciliationType(in.sfpp_message_type))
         return false;
-    // ITEM_PROVIDE moves an object in the chain protocol's own encoding, so its hash fields are
+    // ITEM_PROVIDE moves an object in the item protocol's own encoding, so its hash fields are
     // exactly what that type should carry. Every other type populating them is malformed.
-    if (in.sfpp_message_type != meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_PROVIDE && carriesChainFields(in))
+    if (in.sfpp_message_type != meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_PROVIDE && carriesObjectHashFields(in))
         return false;
     return commonHeaderValid(in, out);
 }

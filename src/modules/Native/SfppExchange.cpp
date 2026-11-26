@@ -1001,13 +1001,13 @@ bool StoreForwardPlusPlusModule::takeHeardListing(const uint8_t *root_hash, uint
 
 bool StoreForwardPlusPlusModule::bucketHoldsShortId(const uint8_t *root_hash, uint32_t bucket, pinsketch::Element id)
 {
-    sqlite3_reset(getLinkByShortIdStmt);
-    sqlite3_bind_int(getLinkByShortIdStmt, 1, SFPP_HASH_SIZE);
-    sqlite3_bind_blob(getLinkByShortIdStmt, 2, root_hash, SFPP_HASH_SIZE, SQLITE_STATIC);
-    sqlite3_bind_int(getLinkByShortIdStmt, 3, (int)bucket);
-    sqlite3_bind_int64(getLinkByShortIdStmt, 4, (sqlite3_int64)id);
-    const bool held = sqlite3_step(getLinkByShortIdStmt) == SQLITE_ROW;
-    sqlite3_reset(getLinkByShortIdStmt);
+    sqlite3_reset(getObjectByShortIdStmt);
+    sqlite3_bind_int(getObjectByShortIdStmt, 1, SFPP_HASH_SIZE);
+    sqlite3_bind_blob(getObjectByShortIdStmt, 2, root_hash, SFPP_HASH_SIZE, SQLITE_STATIC);
+    sqlite3_bind_int(getObjectByShortIdStmt, 3, (int)bucket);
+    sqlite3_bind_int64(getObjectByShortIdStmt, 4, (sqlite3_int64)id);
+    const bool held = sqlite3_step(getObjectByShortIdStmt) == SQLITE_ROW;
+    sqlite3_reset(getObjectByShortIdStmt);
     return held;
 }
 
@@ -1101,27 +1101,27 @@ void StoreForwardPlusPlusModule::handleItemRequest(const meshtastic_MeshPacket &
         if (enumRequesterHasQueued(mp.from, wanted))
             continue;
 
-        sqlite3_reset(getLinkByShortIdStmt);
-        sqlite3_bind_int(getLinkByShortIdStmt, 1, SFPP_HASH_SIZE);
-        sqlite3_bind_blob(getLinkByShortIdStmt, 2, root, SFPP_HASH_SIZE, NULL);
-        sqlite3_bind_int(getLinkByShortIdStmt, 3, (int)list.scope.bucket);
-        sqlite3_bind_int64(getLinkByShortIdStmt, 4, (sqlite3_int64)wanted);
+        sqlite3_reset(getObjectByShortIdStmt);
+        sqlite3_bind_int(getObjectByShortIdStmt, 1, SFPP_HASH_SIZE);
+        sqlite3_bind_blob(getObjectByShortIdStmt, 2, root, SFPP_HASH_SIZE, NULL);
+        sqlite3_bind_int(getObjectByShortIdStmt, 3, (int)list.scope.bucket);
+        sqlite3_bind_int64(getObjectByShortIdStmt, 4, (sqlite3_int64)wanted);
 
         // A short ID can name more than one stored object; serve every one so a collided pair
         // cannot hide behind a single row.
         bool served = false;
-        while (sqlite3_step(getLinkByShortIdStmt) == SQLITE_ROW) {
+        while (sqlite3_step(getObjectByShortIdStmt) == SQLITE_ROW) {
             served = true;
-            const uint32_t to = (uint32_t)sqlite3_column_int64(getLinkByShortIdStmt, 0);
-            const uint32_t from = (uint32_t)sqlite3_column_int64(getLinkByShortIdStmt, 1);
-            const uint32_t id = (uint32_t)sqlite3_column_int64(getLinkByShortIdStmt, 2);
-            const uint8_t *enc = (const uint8_t *)sqlite3_column_blob(getLinkByShortIdStmt, 3);
-            const int encLen = sqlite3_column_bytes(getLinkByShortIdStmt, 3);
+            const uint32_t to = (uint32_t)sqlite3_column_int64(getObjectByShortIdStmt, 0);
+            const uint32_t from = (uint32_t)sqlite3_column_int64(getObjectByShortIdStmt, 1);
+            const uint32_t id = (uint32_t)sqlite3_column_int64(getObjectByShortIdStmt, 2);
+            const uint8_t *enc = (const uint8_t *)sqlite3_column_blob(getObjectByShortIdStmt, 3);
+            const int encLen = sqlite3_column_bytes(getObjectByShortIdStmt, 3);
             RowTime stamp;
-            stamp.stamp = (uint32_t)sqlite3_column_int64(getLinkByShortIdStmt, 5);
-            stamp.basis = (uint8_t)sqlite3_column_int(getLinkByShortIdStmt, 6);
-            stamp.boot_id = (uint32_t)sqlite3_column_int64(getLinkByShortIdStmt, 7);
-            stamp.margin = (uint32_t)sqlite3_column_int64(getLinkByShortIdStmt, 8);
+            stamp.stamp = (uint32_t)sqlite3_column_int64(getObjectByShortIdStmt, 5);
+            stamp.basis = (uint8_t)sqlite3_column_int(getObjectByShortIdStmt, 6);
+            stamp.boot_id = (uint32_t)sqlite3_column_int64(getObjectByShortIdStmt, 7);
+            stamp.margin = (uint32_t)sqlite3_column_int64(getObjectByShortIdStmt, 8);
             std::vector<uint8_t> cipher(enc, enc + encLen);
 
             const uint32_t heardAgo = rowAge(stamp).age;
@@ -1137,7 +1137,7 @@ void StoreForwardPlusPlusModule::handleItemRequest(const meshtastic_MeshPacket &
             const NodeNum dest = portduino_config.sfpp_item_transport == SFPP_ITEM_DIRECT ? mp.from : NODENUM_BROADCAST;
             queueItemFrames(frames, mp.from, dest, scope, wanted);
         }
-        sqlite3_reset(getLinkByShortIdStmt);
+        sqlite3_reset(getObjectByShortIdStmt);
 
         if (!served)
             LOG_WARN("StoreForwardpp item request for an unknown short ID 0x%08x", wanted);

@@ -2,8 +2,6 @@
 // Track the nodenums we've gotten SFPP traffic from, to build a network graph
 // store nodes, packet counts, and hops away in a new peers table
 
-// TODO: Include the counter in the commit hash?
-
 #if __has_include("sqlite3.h")
 
 #include "StoreForwardPlusPlus.h"
@@ -257,7 +255,7 @@ StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
     sqlite3_prepare_v2(ppDb, "INSERT INTO channel_messages (destination, sender, packet_id, root_hash, \
         encrypted_bytes, message_hash, rx_time, payload, short_id, checksum, time_basis, boot_id, age_margin, bucket) \
         VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
-                       -1, &chain_insert_stmt, NULL);
+                       -1, &canon_insert_stmt, NULL);
 
     sqlite3_prepare_v2(ppDb,
                        "select message_hash from channel_messages where sender=? and packet_id=? and destination=? "
@@ -275,15 +273,15 @@ StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
                        &replaceScratchCopyStmt, NULL);
 
     // Both identifiers are stored beside the object, so summarising a bucket never rehashes and a
-    // restart costs a query rather than a pass over the chain.
+    // restart costs a query rather than a pass over the store.
     sqlite3_prepare_v2(ppDb, "select short_id, checksum from channel_messages \
         where substr(root_hash,1,?)=? and bucket=? and short_id is not null;",
                        -1, &bucketSummaryStmt, NULL);
 
     sqlite3_prepare_v2(ppDb, "select message_hash from channel_messages where short_id is null limit 128;", -1,
-                       &unindexedLinksStmt, NULL);
+                       &unindexedObjectsStmt, NULL);
 
-    sqlite3_prepare_v2(ppDb, "update channel_messages set short_id=?, checksum=? where message_hash=?;", -1, &setLinkSetIndexStmt,
+    sqlite3_prepare_v2(ppDb, "update channel_messages set short_id=?, checksum=? where message_hash=?;", -1, &setObjectIndexStmt,
                        NULL);
 
     sqlite3_prepare_v2(ppDb, "select short_id from channel_messages \
@@ -296,7 +294,7 @@ StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
 
     sqlite3_prepare_v2(ppDb, "select destination, sender, packet_id, encrypted_bytes, message_hash, rx_time, \
         time_basis, boot_id, age_margin from channel_messages where substr(root_hash,1,?)=? and bucket=? and short_id=?;",
-                       -1, &getLinkByShortIdStmt, NULL);
+                       -1, &getObjectByShortIdStmt, NULL);
 
     sqlite3_prepare_v2(ppDb, "delete from channel_messages where message_hash=?;", -1, &deleteCanonStmt, NULL);
 
@@ -388,13 +386,13 @@ StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
 StoreForwardPlusPlusModule::~StoreForwardPlusPlusModule()
 {
     sqlite3_stmt *statements[] = {
-        chain_insert_stmt,      scratch_insert_stmt,   identityCanonStmt,      identityScratchStmt,   replaceCanonCopyStmt,
-        replaceScratchCopyStmt, checkDupMessageHash,   checkScratch,           removeScratch,         updatePayloadStmt,
-        fromScratchStmt,        fromScratchByHashStmt, getHashFromRootStmt,    addRootToMappingsStmt, getFullRootHashStmt,
-        getScratchCountStmt,    scratchTimeRowsStmt,   deleteScratchRowidStmt, canonTimeRowsStmt,     deleteCanonRowidStmt,
-        bucketSummaryStmt,      bucketIdsStmt,         distinctBucketsStmt,    getLinkByShortIdStmt,  deleteCanonStmt,
-        unindexedLinksStmt,     setLinkSetIndexStmt,   legacyHistoryStmt,      timeStateReadStmt,     timeStateWriteStmt,
-        restampChannelStmt,     restampScratchStmt,    restampDirectStmt,      updateChannelTimeStmt, updateScratchTimeStmt,
+        canon_insert_stmt,      scratch_insert_stmt,   identityCanonStmt,      identityScratchStmt,    replaceCanonCopyStmt,
+        replaceScratchCopyStmt, checkDupMessageHash,   checkScratch,           removeScratch,          updatePayloadStmt,
+        fromScratchStmt,        fromScratchByHashStmt, getHashFromRootStmt,    addRootToMappingsStmt,  getFullRootHashStmt,
+        getScratchCountStmt,    scratchTimeRowsStmt,   deleteScratchRowidStmt, canonTimeRowsStmt,      deleteCanonRowidStmt,
+        bucketSummaryStmt,      bucketIdsStmt,         distinctBucketsStmt,    getObjectByShortIdStmt, deleteCanonStmt,
+        unindexedObjectsStmt,   setObjectIndexStmt,    legacyHistoryStmt,      timeStateReadStmt,      timeStateWriteStmt,
+        restampChannelStmt,     restampScratchStmt,    restampDirectStmt,      updateChannelTimeStmt,  updateScratchTimeStmt,
         updateDirectTimeStmt,
     };
     for (sqlite3_stmt *stmt : statements) {
@@ -475,7 +473,7 @@ void StoreForwardPlusPlusModule::handleEncrypted(const meshtastic_MeshPacket *mp
         return;
     }
 
-    link_object lo = ingestTextPacket(*mp, p_encrypted);
+    stored_object lo = ingestTextPacket(*mp, p_encrypted);
 
     if (lo.from == 0)
         lo.from = nodeDB->getNodeNum();
@@ -533,11 +531,11 @@ ProcessMessage StoreForwardPlusPlusModule::handleReceived(const meshtastic_MeshP
     }
 
     if (mp.decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP && mp.to == NODENUM_BROADCAST) {
-        link_object lo = ingestTextPacket(mp, currentEncrypted);
+        stored_object lo = ingestTextPacket(mp, currentEncrypted);
         const bool senderCopy = mp.relay_node == nodeDB->getLastByteOfNodeNum(lo.from);
 
         if (isInDB(lo.message_hash, lo.message_hash_len)) {
-            LOG_DEBUG("StoreForwardpp Found text message in chain DB");
+            LOG_DEBUG("StoreForwardpp Found text message in archive DB");
             // We may have this message already, but we may not have the payload.
             fillPayloadIfEmpty(lo);
             return ProcessMessage::CONTINUE;
@@ -677,10 +675,10 @@ void StoreForwardPlusPlusModule::addRootToMappings(ChannelHash _ch_hash, uint8_t
 }
 
 // should not need size considerations
-StoreForwardPlusPlusModule::link_object
+StoreForwardPlusPlusModule::stored_object
 StoreForwardPlusPlusModule::ingestTextPacket(const meshtastic_MeshPacket &mp, const meshtastic_MeshPacket *encrypted_meshpacket)
 {
-    link_object lo;
+    stored_object lo;
     lo.to = mp.to;
     lo.from = mp.from;
     lo.id = mp.id;

@@ -22,7 +22,7 @@
 #include <utility>
 #include <vector>
 
-// A follower's chain rows carry the ciphertext but not the plaintext. Decrypt the primary channel's
+// A follower's canonical archive rows carry the ciphertext but not the plaintext. Decrypt the primary channel's
 // copy and accept it only when it decodes as a text Data.
 static bool decodeStoredText(const uint8_t *encrypted, size_t encryptedLen, uint32_t to, uint32_t from, uint32_t id,
                              std::string &out)

@@ -10,7 +10,7 @@
  * Framed replay: one message split across independent, hash-keyed frames.
  *
  * A replay frame is an ordinary portnum-35 ITEM_FRAME. The key is the first eight bytes of
- * SHA-256(ciphertext || to || from || id), the same message hash the chain store already computes.
+ * SHA-256(ciphertext || to || from || id), the same message hash the object store already computes.
  * Keying on the message rather than the sender is what lets frames from different archives complete
  * one set instead of colliding, and what makes a duplicate cancel.
  *

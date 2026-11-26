@@ -310,7 +310,7 @@ void StoreForwardPlusPlusModule::trimCanonByRetention(uint8_t *root_hash, size_t
     }
 }
 
-bool StoreForwardPlusPlusModule::linkIsFresh(const link_object &lo) const
+bool StoreForwardPlusPlusModule::linkIsFresh(const stored_object &lo) const
 {
     RowTime t;
     t.stamp = lo.rx_time;
@@ -324,42 +324,42 @@ void StoreForwardPlusPlusModule::backfillSetIndex()
     uint32_t indexed = 0;
 
     // One batch per pass: the select finds rows the update then fills, so re-running it is how the
-    // loop advances. A store written before these columns existed converges in chain_length/128 passes.
+    // loop advances. A store written before these columns existed converges in one pass per 128 rows.
     while (true) {
         std::vector<std::pair<uint32_t, uint64_t>> derived;
         std::vector<std::vector<uint8_t>> hashes;
 
-        sqlite3_reset(unindexedLinksStmt);
-        while (sqlite3_step(unindexedLinksStmt) == SQLITE_ROW) {
-            const uint8_t *hash = (const uint8_t *)sqlite3_column_blob(unindexedLinksStmt, 0);
-            const int len = sqlite3_column_bytes(unindexedLinksStmt, 0);
+        sqlite3_reset(unindexedObjectsStmt);
+        while (sqlite3_step(unindexedObjectsStmt) == SQLITE_ROW) {
+            const uint8_t *hash = (const uint8_t *)sqlite3_column_blob(unindexedObjectsStmt, 0);
+            const int len = sqlite3_column_bytes(unindexedObjectsStmt, 0);
             if (hash == nullptr || len <= 0)
                 continue;
             hashes.emplace_back(hash, hash + len);
             derived.emplace_back(sfppsr::shortId(hash, len), sfppsr::checksumContribution(hash, len));
         }
-        sqlite3_reset(unindexedLinksStmt);
+        sqlite3_reset(unindexedObjectsStmt);
 
         if (hashes.empty())
             break;
 
         for (size_t i = 0; i < hashes.size(); i++) {
-            sqlite3_reset(setLinkSetIndexStmt);
-            sqlite3_bind_int64(setLinkSetIndexStmt, 1, derived[i].first);
-            sqlite3_bind_int64(setLinkSetIndexStmt, 2, (sqlite3_int64)derived[i].second);
-            sqlite3_bind_blob(setLinkSetIndexStmt, 3, hashes[i].data(), hashes[i].size(), NULL);
-            if (sqlite3_step(setLinkSetIndexStmt) != SQLITE_DONE) {
-                LOG_ERROR("StoreForwardpp cannot index link: %s", sqlite3_errmsg(ppDb));
-                sqlite3_reset(setLinkSetIndexStmt);
+            sqlite3_reset(setObjectIndexStmt);
+            sqlite3_bind_int64(setObjectIndexStmt, 1, derived[i].first);
+            sqlite3_bind_int64(setObjectIndexStmt, 2, (sqlite3_int64)derived[i].second);
+            sqlite3_bind_blob(setObjectIndexStmt, 3, hashes[i].data(), hashes[i].size(), NULL);
+            if (sqlite3_step(setObjectIndexStmt) != SQLITE_DONE) {
+                LOG_ERROR("StoreForwardpp cannot index object: %s", sqlite3_errmsg(ppDb));
+                sqlite3_reset(setObjectIndexStmt);
                 return; // an update that does not stick would loop the select forever
             }
             indexed++;
         }
-        sqlite3_reset(setLinkSetIndexStmt);
+        sqlite3_reset(setObjectIndexStmt);
     }
 
     if (indexed > 0)
-        LOG_INFO("StoreForwardpp indexed %u existing links for set reconciliation", indexed);
+        LOG_INFO("StoreForwardpp indexed %u existing objects for set reconciliation", indexed);
 }
 
 bool StoreForwardPlusPlusModule::buildBucketSummary(const uint8_t *root_hash, size_t root_hash_len, uint32_t bucket,
@@ -410,7 +410,7 @@ bool StoreForwardPlusPlusModule::collectBuckets(const uint8_t *root_hash, size_t
 }
 
 //
-bool StoreForwardPlusPlusModule::addToScratch(link_object &lo, bool senderCopy)
+bool StoreForwardPlusPlusModule::addToScratch(stored_object &lo, bool senderCopy)
 {
     IdentityHit hit;
     if (findIdentityCopy(lo.to, lo.from, lo.id, lo.root_hash, hit)) {
@@ -425,7 +425,7 @@ bool StoreForwardPlusPlusModule::addToScratch(link_object &lo, bool senderCopy)
         return replaceIdentityCopy(hit, lo.message_hash, lo.encrypted_bytes, lo.encrypted_len);
     }
 
-    // push a message into the local chain DB
+    // push a message into the canonical store
     // destination
     sqlite3_bind_int64(scratch_insert_stmt, 1, (sqlite3_int64)lo.to);
     // sender
@@ -492,7 +492,7 @@ void StoreForwardPlusPlusModule::removeFromScratch(const uint8_t *message_hash_b
     sqlite3_reset(removeScratch);
 }
 
-void StoreForwardPlusPlusModule::fillPayloadIfEmpty(const link_object &lo)
+void StoreForwardPlusPlusModule::fillPayloadIfEmpty(const stored_object &lo)
 {
     if (lo.payload.empty() || lo.message_hash_len < SFPP_SHORT_HASH_SIZE)
         return;
@@ -523,9 +523,9 @@ void StoreForwardPlusPlusModule::updatePayload(uint8_t *message_hash_bytes, size
     sqlite3_reset(updatePayloadStmt);
 }
 
-StoreForwardPlusPlusModule::link_object StoreForwardPlusPlusModule::getFromScratch(uint8_t *message_hash_bytes, size_t hash_len)
+StoreForwardPlusPlusModule::stored_object StoreForwardPlusPlusModule::getFromScratch(uint8_t *message_hash_bytes, size_t hash_len)
 {
-    link_object lo;
+    stored_object lo;
 
     sqlite3_bind_int(fromScratchByHashStmt, 1, hash_len);
     sqlite3_bind_blob(fromScratchByHashStmt, 2, message_hash_bytes, hash_len, NULL);
@@ -689,24 +689,24 @@ bool StoreForwardPlusPlusModule::insertCanonObject(uint32_t to, uint32_t from, u
     if (isInDB(hash, SFPP_HASH_SIZE))
         return true;
 
-    sqlite3_reset(chain_insert_stmt);
-    sqlite3_bind_int64(chain_insert_stmt, 1, (sqlite3_int64)to);
-    sqlite3_bind_int64(chain_insert_stmt, 2, (sqlite3_int64)from);
-    sqlite3_bind_int64(chain_insert_stmt, 3, (sqlite3_int64)packetId);
-    sqlite3_bind_blob(chain_insert_stmt, 4, root_hash, SFPP_HASH_SIZE, SQLITE_STATIC);
-    sqlite3_bind_blob(chain_insert_stmt, 5, cipher, (int)cipherLen, SQLITE_STATIC);
-    sqlite3_bind_blob(chain_insert_stmt, 6, hash, SFPP_HASH_SIZE, SQLITE_STATIC);
-    sqlite3_bind_int64(chain_insert_stmt, 7, (sqlite3_int64)time.stamp);
-    sqlite3_bind_text(chain_insert_stmt, 8, payload.c_str(), (int)payload.size(), SQLITE_STATIC);
-    sqlite3_bind_int64(chain_insert_stmt, 9, (sqlite3_int64)sfppsr::shortId(hash, SFPP_HASH_SIZE));
-    sqlite3_bind_int64(chain_insert_stmt, 10, (sqlite3_int64)sfppsr::checksumContribution(hash, SFPP_HASH_SIZE));
-    sqlite3_bind_int64(chain_insert_stmt, 11, (sqlite3_int64)time.basis);
-    sqlite3_bind_int64(chain_insert_stmt, 12, (sqlite3_int64)time.boot_id);
-    sqlite3_bind_int64(chain_insert_stmt, 13, (sqlite3_int64)time.margin);
-    sqlite3_bind_int(chain_insert_stmt, 14, (int)sfppsr::contentBucket(hash, SFPP_HASH_SIZE));
+    sqlite3_reset(canon_insert_stmt);
+    sqlite3_bind_int64(canon_insert_stmt, 1, (sqlite3_int64)to);
+    sqlite3_bind_int64(canon_insert_stmt, 2, (sqlite3_int64)from);
+    sqlite3_bind_int64(canon_insert_stmt, 3, (sqlite3_int64)packetId);
+    sqlite3_bind_blob(canon_insert_stmt, 4, root_hash, SFPP_HASH_SIZE, SQLITE_STATIC);
+    sqlite3_bind_blob(canon_insert_stmt, 5, cipher, (int)cipherLen, SQLITE_STATIC);
+    sqlite3_bind_blob(canon_insert_stmt, 6, hash, SFPP_HASH_SIZE, SQLITE_STATIC);
+    sqlite3_bind_int64(canon_insert_stmt, 7, (sqlite3_int64)time.stamp);
+    sqlite3_bind_text(canon_insert_stmt, 8, payload.c_str(), (int)payload.size(), SQLITE_STATIC);
+    sqlite3_bind_int64(canon_insert_stmt, 9, (sqlite3_int64)sfppsr::shortId(hash, SFPP_HASH_SIZE));
+    sqlite3_bind_int64(canon_insert_stmt, 10, (sqlite3_int64)sfppsr::checksumContribution(hash, SFPP_HASH_SIZE));
+    sqlite3_bind_int64(canon_insert_stmt, 11, (sqlite3_int64)time.basis);
+    sqlite3_bind_int64(canon_insert_stmt, 12, (sqlite3_int64)time.boot_id);
+    sqlite3_bind_int64(canon_insert_stmt, 13, (sqlite3_int64)time.margin);
+    sqlite3_bind_int(canon_insert_stmt, 14, (int)sfppsr::contentBucket(hash, SFPP_HASH_SIZE));
 
-    const int res = sqlite3_step(chain_insert_stmt);
-    sqlite3_reset(chain_insert_stmt);
+    const int res = sqlite3_step(canon_insert_stmt);
+    sqlite3_reset(canon_insert_stmt);
     if (res != SQLITE_OK && res != SQLITE_DONE) {
         LOG_ERROR("StoreForwardpp cannot store a canonical object: %s", sqlite3_errmsg(ppDb));
         return false;

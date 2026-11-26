@@ -35,7 +35,7 @@
  */
 class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForwardPlusPlus>, private concurrency::OSThread
 {
-    struct link_object {
+    struct stored_object {
         uint32_t to;
         uint32_t from;
         uint32_t id;
@@ -51,7 +51,7 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
         uint8_t root_hash[SFPP_HASH_SIZE] = {0};
         size_t root_hash_len = 0;
         std::string payload;
-        bool validObject = true; // set this false when a chain calulation fails, etc.
+        bool validObject = true; // set this false when an object calculation fails, etc.
     };
 
   public:
@@ -104,7 +104,7 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
 
   private:
     sqlite3 *ppDb;
-    sqlite3_stmt *chain_insert_stmt;
+    sqlite3_stmt *canon_insert_stmt;
     sqlite3_stmt *scratch_insert_stmt;
     sqlite3_stmt *identityCanonStmt;
     sqlite3_stmt *identityScratchStmt;
@@ -125,10 +125,10 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     sqlite3_stmt *bucketSummaryStmt;
     sqlite3_stmt *bucketIdsStmt;
     sqlite3_stmt *distinctBucketsStmt;
-    sqlite3_stmt *getLinkByShortIdStmt;
+    sqlite3_stmt *getObjectByShortIdStmt;
     sqlite3_stmt *deleteCanonStmt;
-    sqlite3_stmt *unindexedLinksStmt;
-    sqlite3_stmt *setLinkSetIndexStmt;
+    sqlite3_stmt *unindexedObjectsStmt;
+    sqlite3_stmt *setObjectIndexStmt;
     sqlite3_stmt *legacyHistoryStmt;
     sqlite3_stmt *timeStateReadStmt;
     sqlite3_stmt *timeStateWriteStmt;
@@ -176,7 +176,7 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     void restampPreviousBoot();
     void healBootRelativeTimestamps();
     void trimCanonByRetention(uint8_t *root_hash, size_t root_hash_len);
-    bool linkIsFresh(const link_object &lo) const;
+    bool linkIsFresh(const stored_object &lo) const;
 
     // Answers a legacy CLIENT_HISTORY from the stored texts. One text per runOnce() keeps the
     // archive inside the legacy module's pacing, which clients already expect.
@@ -204,8 +204,8 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     // The module's single send boundary; EnumListenOnly drops every packet here.
     ErrorCode sendSfppPacket(meshtastic_MeshPacket *p, RxSource src, bool ccToPhone);
 
-    // Derives the short ID and checksum contribution for any chain row that predates those columns.
-    // Bounded by the chain length, and a no-op on every run after the first.
+    // Derives the short ID and checksum contribution for any canonical row that predates those
+    // columns. Bounded by the row count, and a no-op on every run after the first.
     void backfillSetIndex();
 
     // The short IDs stored in one bucket, for the enumeration list and for a windowed object lookup.
@@ -306,7 +306,7 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     void addRootToMappings(ChannelHash, uint8_t *);
 
     // Adds an incoming text message to the scratch database
-    bool addToScratch(link_object &, bool senderCopy = false);
+    bool addToScratch(stored_object &, bool senderCopy = false);
 
     // One object per (root, from, id, to); a sender's copy may replace a relay's.
     struct IdentityHit {
@@ -316,26 +316,26 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     bool findIdentityCopy(uint32_t to, uint32_t from, uint32_t id, const uint8_t *root_hash, IdentityHit &hit);
     bool replaceIdentityCopy(const IdentityHit &hit, const uint8_t *hash, const uint8_t *cipher, size_t cipherLen);
 
-    // checks if the message hash is present in the canonical chain database
+    // checks if the message hash is present in the canonical archive
     bool isInDB(const uint8_t *, size_t);
 
     // checks if the message hash is present in the scratch database
     bool isInScratch(uint8_t *, size_t);
 
-    // retrieves a link object from the scratch database
-    link_object getFromScratch(uint8_t *, size_t);
+    // retrieves a stored object from the scratch database
+    stored_object getFromScratch(uint8_t *, size_t);
 
-    // removes a link object from the scratch database
+    // removes a stored object from the scratch database
     void removeFromScratch(const uint8_t *, size_t);
 
     // fills the payload section with the decrypted data for the given message hash
     // probably not needed for production, but useful for testing
     void updatePayload(uint8_t *, size_t, std::string);
-    void fillPayloadIfEmpty(const link_object &lo);
+    void fillPayloadIfEmpty(const stored_object &lo);
 
-    // Takes the decrypted MeshPacket and the encrypted packet copy, and builds a link_object
+    // Takes the decrypted MeshPacket and the encrypted packet copy, and builds a stored object.
     // Generates a message hash, but does not set the commit hash
-    link_object ingestTextPacket(const meshtastic_MeshPacket &, const meshtastic_MeshPacket *);
+    stored_object ingestTextPacket(const meshtastic_MeshPacket &, const meshtastic_MeshPacket *);
 
     // given a partial root hash, looks up the full 32-byte root hash
     // returns true if found
@@ -353,10 +353,10 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
 
     uint32_t rebroadcastTimeout = 3600; // Messages older than this (in seconds) will not be rebroadcast
     bool doing_split_send = false;
-    link_object split_link_out;
+    stored_object split_link_out;
 
     bool doing_split_receive = false;
-    link_object split_link_in;
+    stored_object split_link_in;
 
     bool did_announce_last = false;
 

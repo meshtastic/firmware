@@ -10,11 +10,11 @@
 /**
  * The set-reconciliation message types, on and off the wire.
  *
- * These share one protobuf with the chain protocol, and three of its fields carry a second meaning
+ * These share one protobuf with the item protocol, and three of its fields carry a second meaning
  * here: root_hash is the reconciliation scope, chain_count is the bucket index, and an advert's
  * sketch rides in message. Each pairing is the same quantity named differently rather than a
  * borrowed slot, but the overloading has to be policed in both directions - a set-reconciliation
- * message must not populate the chain's hash fields, and a chain message must not carry these.
+ * message must not populate the item's hash fields, and an item message must not carry these.
  * Otherwise one packet can be read two ways by two handlers.
  *
  * Every parse here is a rejection point, not a convenience. A malformed sketch, a short ID of zero
@@ -24,9 +24,9 @@
 namespace sfppsr
 {
 
-// Which derivation produced the fields: hash, short-ID width, checksum domain, bucket size, counter
-// origin. A receiver that does not implement the stated version discards the message rather than
-// parsing it under its own rules. Zero is invalid, not a default.
+// Which derivation produced the fields: hash, short-ID width, checksum domain, bucket size. A
+// receiver that does not implement the stated version discards the message rather than parsing it
+// under its own rules. Zero is invalid, not a default.
 constexpr uint32_t kDerivationVersion = 1;
 
 // Capacity 32 at four bytes per unit, which is a whole bucket in one frame.
@@ -72,7 +72,7 @@ bool parseAdvert(const meshtastic_StoreForwardPlusPlus &in, Advert &out);
 bool parseShortIds(const meshtastic_StoreForwardPlusPlus &in, ShortIdList &out);
 bool parseScope(const meshtastic_StoreForwardPlusPlus &in, Scope &out);
 
-// True when a message carries any set-reconciliation field. The chain handlers call this to refuse
+// True when a message carries any set-reconciliation field. The item handlers call this to refuse
 // types 0-6 that arrive carrying them, which is the other half of the overloading guard.
 bool hasSetReconciliationFields(const meshtastic_StoreForwardPlusPlus &msg);
 
