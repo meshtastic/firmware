@@ -979,10 +979,7 @@ void portduinoSetup()
         }
     }
 
-    // Only initialize the radio pins when dealing with real, kernel controlled SPI hardware
-    if (portduino_config.lora_spi_dev != "" && portduino_config.lora_spi_dev != "ch341") {
-        SPI.begin(portduino_config.lora_spi_dev.c_str());
-    }
+    // The radio opens its own per-host SPI instance in initLoRa(); leave the global SPI for the display.
 
     if (portduino_config.traceFilename != "") {
         try {
@@ -1229,7 +1226,10 @@ bool loadConfig(const char *configPath)
                             portduino_config.touchscreen_spi_dev_int = host;
                     }
                 } else {
-                    LOG_WARN("Lora.spidev \"%s\" is not a usable spidev path; display and touch keep their own bus",
+                    // The path cannot be packed into a host byte. Keep it out of host 0 so a
+                    // display that already opened that instance cannot capture the radio.
+                    portduino_config.lora_spi_dev_int = -1;
+                    LOG_WARN("Lora.spidev \"%s\" is not a usable spidev path; the radio opens it in its own instance",
                              portduino_config.lora_spi_dev.c_str());
                 }
             }
@@ -1428,6 +1428,9 @@ bool loadConfig(const char *configPath)
                     else
                         LOG_WARN("Touchscreen.spidev \"%s\" is not a usable spidev path",
                                  portduino_config.touchscreen_spi_dev.c_str());
+                } else {
+                    // An explicit empty value means "no separate bus", so follow the display.
+                    portduino_config.touchscreen_spi_dev_int = portduino_config.display_spi_dev_int;
                 }
             }
         }
@@ -1826,6 +1829,19 @@ int spiHostFromDevicePath(const std::string &devicePath)
         return -1;
     return (int)(bus | (device << 4));
 }
+
+#ifndef ARCH_PORTDUINO_WASM
+extern "C" bool lgfx_borrow_spiclass(int spi_host, SPIClass *&spi)
+{
+    if (spi_host < 0)
+        return false;
+    HardwareSPI *instance = HardwareSPI::getInstance((int8_t)spi_host);
+    // Opens /dev/spidev<bus>.<device> on first use; later calls keep the open device.
+    instance->begin();
+    spi = instance;
+    return true;
+}
+#endif
 
 bool MAC_from_string(std::string mac_str, uint8_t *dmac)
 {

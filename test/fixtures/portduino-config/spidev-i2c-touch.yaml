@@ -1,0 +1,7 @@
+# CLEAN. FT5x06 is an I2C controller, so --check must not report a touchscreen spidev.
+Lora:
+  Module: sim
+Display:
+  Panel: ILI9488
+Touchscreen:
+  Module: FT5x06
