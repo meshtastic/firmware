@@ -59,10 +59,12 @@ void UC8175::update(uint8_t *imageData, UpdateTypes type)
     writeNewImage();
     sendCommand(0x12); // Display refresh.
 
-    if (previousBuffer) {
+    // A failed update dropped its commands, so the panel does not show this frame: an identical next frame must not be skipped
+    if (previousBuffer && !failed) {
         memcpy(previousBuffer, buffer, bufferSize);
         hasPreviousBuffer = true;
-    }
+    } else
+        hasPreviousBuffer = false;
 
     detachFromUpdate();
 }

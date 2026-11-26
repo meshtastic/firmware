@@ -88,12 +88,18 @@ bool BaseUIEInkDisplay::forceDisplay(uint32_t msecLimit)
         return false;
 
     Drivers::EInk::UpdateTypes type = decide();
+    // A held FULL frame was already charged against the refresh debt; whatever replaces it must still be FULL
+    if (framePending && pendingType == Drivers::EInk::UpdateTypes::FULL)
+        type = Drivers::EInk::UpdateTypes::FULL;
+    // Decide on the type the panel will actually run: commit() turns FAST into FULL where FAST is unsupported
+    if (type == Drivers::EInk::UpdateTypes::FAST && !driver->supports(Drivers::EInk::UpdateTypes::FAST))
+        type = Drivers::EInk::UpdateTypes::FULL;
     // BLOCKING only holds for a FULL refresh (the deep-sleep screen), as it did in EInkDynamicDisplay
     const bool blocking = (frameFlags & BLOCKING) && type == Drivers::EInk::UpdateTypes::FULL;
 
     // Mid-refresh, keep only the newest frame rather than waiting: runOnce() draws it when the panel is free
     if (driver->busy() && !blocking) {
-        pendingType = (framePending && pendingType == Drivers::EInk::UpdateTypes::FULL) ? pendingType : type;
+        pendingType = type;
         framePending = true;
         OSThread::setIntervalFromNow(FLUSH_POLL_MS);
         OSThread::enabled = true;
@@ -188,9 +194,11 @@ uint32_t BaseUIEInkDisplay::repack()
 {
     const uint16_t pw = driver->width;
     const uint16_t ph = driver->height;
+    // flipScreenVertically() is a no-op here (sendCommand() discards commands), so honour flip_screen as a further 180°
+    const uint8_t rot = (rotation + (config.display.flip_screen ? 2 : 0)) & 0x3;
 
     // Unrotated, byte-aligned: convert 8x8 blocks, one OLED page of 8 columns into 8 panel row bytes
-    if (rotation == 0 && displayWidth == pw && displayHeight == ph && pw % 8 == 0 && ph % 8 == 0) {
+    if (rot == 0 && displayWidth == pw && displayHeight == ph && pw % 8 == 0 && ph % 8 == 0) {
         for (uint16_t page = 0; page < ph / 8; page++) {
             const uint8_t *col = &buffer[page * displayWidth];
             uint8_t *row = &panelBuffer[page * 8 * panelRowBytes];
@@ -216,7 +224,7 @@ uint32_t BaseUIEInkDisplay::repack()
             const bool isBlack = b & (1 << (oy & 7));
 
             uint16_t px, py;
-            switch (rotation) {
+            switch (rot) {
             case 1: // 90° CW: OLED (ox,oy) → panel (pw-1-oy, ox)
                 px = pw - 1 - oy;
                 py = ox;
