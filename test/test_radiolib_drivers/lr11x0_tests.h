@@ -54,7 +54,7 @@ static void test_lr11x0_packet_setters_send_packet_params()
     LR11X0_RADIO(hal);
     TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_NONE, radio.setPreambleLength(16));
     TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_NONE, radio.setCRC(2));
-    TEST_ASSERT_TRUE(hal.count(op16(RADIOLIB_LR11X0_CMD_SET_PACKET_PARAMS)) >= 2);
+    TEST_ASSERT_EQUAL_UINT32(2, hal.count(op16(RADIOLIB_LR11X0_CMD_SET_PACKET_PARAMS)));
 }
 
 static void test_lr11x0_other_setters_and_modes_succeed()
@@ -65,9 +65,9 @@ static void test_lr11x0_other_setters_and_modes_succeed()
     TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_NONE, radio.standby());
     TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_NONE, radio.startReceive());
     TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_NONE, radio.sleep());
-    TEST_ASSERT_TRUE(hal.count(op16(RADIOLIB_LR11X0_CMD_SET_LORA_SYNC_WORD)) >= 1);
-    TEST_ASSERT_TRUE(hal.count(op16(RADIOLIB_LR11X0_CMD_SET_TX_PARAMS)) >= 1);
-    TEST_ASSERT_TRUE(hal.count(op16(RADIOLIB_LR11X0_CMD_SET_RX)) >= 1);
+    TEST_ASSERT_EQUAL_UINT32(1, hal.count(op16(RADIOLIB_LR11X0_CMD_SET_LORA_SYNC_WORD)));
+    TEST_ASSERT_EQUAL_UINT32(1, hal.count(op16(RADIOLIB_LR11X0_CMD_SET_TX_PARAMS)));
+    TEST_ASSERT_EQUAL_UINT32(1, hal.count(op16(RADIOLIB_LR11X0_CMD_SET_RX)));
 }
 
 // --- CAD: LR11x0Interface::isChannelActive() -> startChannelScan(cfg) -> startCad() ---

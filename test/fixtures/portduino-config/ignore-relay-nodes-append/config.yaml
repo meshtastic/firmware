@@ -1,0 +1,11 @@
+# The primary file adds one relay node. A config.d file adds a second: the lists accumulate
+# rather than the last file replacing the first.
+General:
+  ConfigDirectory: config.d/
+Lora:
+  Module: sx1262
+  CS: 21
+  IRQ: 16
+  Busy: 20
+  Reset: 18
+  IgnoreRelayNodes: [0xA28E145B]

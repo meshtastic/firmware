@@ -14,6 +14,9 @@
 #include "mesh-pb-constants.h"
 #include "meshUtils.h"
 #include "modules/RoutingModule.h"
+#if !MESHTASTIC_EXCLUDE_TRACEROUTE
+#include "modules/TraceRouteModule.h"
+#endif
 #include <ErriezCRC32.h>
 #include <pb_decode.h>
 #include <pb_encode.h>
@@ -29,11 +32,12 @@
 #include "mqtt/MQTT.h"
 #endif
 #include "Default.h"
-#if ARCH_PORTDUINO
 #include "Throttle.h"
+#if ARCH_PORTDUINO
 #include "platform/portduino/PortduinoGlue.h"
 #include "serialization/MeshPacketSerializer.h"
 #endif
+#include <algorithm>
 
 // The size checks below budget for the tag that encryptPacketCCM actually appends, so the
 // two constants must not drift apart.
@@ -282,8 +286,13 @@ bool Router::shouldDecrementHopLimit(const meshtastic_MeshPacket *p)
     // (non-deterministic, depends on NodeDB order). resolveLastByte() reports a collision instead, and
     // we re-check the favorite/router predicate on the single resolved node. On ambiguity/none we
     // decrement (the safe default).
-    NodeNum resolved = 0;
-    if (nodeDB->resolveUniqueLastByte(p->relay_node, /*requireDirectNeighbor=*/false, &resolved)) {
+    // The relay was heard over the air, so a fresh direct neighbor with the byte is the likeliest sender; only when there
+    // is none do favorites and routers further out count, so a far node sharing the byte no longer costs the hop
+    ResolvedNode relay = nodeDB->resolveLastByte(p->relay_node, /*requireDirectNeighbor=*/true);
+    if (relay.status == LastByteResolution::None)
+        relay = nodeDB->resolveLastByte(p->relay_node, /*requireDirectNeighbor=*/false);
+    if (relay.status == LastByteResolution::Unique) {
+        const NodeNum resolved = relay.num;
         const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(resolved);
         if (node && nodeInfoLiteIsFavorite(node) && nodeInfoLiteHasUser(node) &&
             IS_ONE_OF(node->role, meshtastic_Config_DeviceConfig_Role_ROUTER, meshtastic_Config_DeviceConfig_Role_ROUTER_LATE,
@@ -295,6 +304,42 @@ bool Router::shouldDecrementHopLimit(const meshtastic_MeshPacket *p)
 
     // No unambiguous favorite router match found, decrement hop_limit
     return true;
+}
+
+Router::ReceivedFrameScope::ReceivedFrameScope(Router &r, const meshtastic_MeshPacket *frame, bool copy)
+    : scopedRouter(r), previous(r.receivedFrame)
+{
+    if (frame && frame->which_payload_variant != meshtastic_MeshPacket_encrypted_tag)
+        frame = nullptr; // Arrived decoded (phone, MQTT downlink): there is no ciphertext to forward
+    if (frame && copy) {
+        owned = packetPool.allocCopy(*frame);
+        frame = owned;
+    }
+    scopedRouter.receivedFrame = frame;
+}
+
+Router::ReceivedFrameScope::~ReceivedFrameScope()
+{
+    scopedRouter.receivedFrame = previous;
+    packetPool.release(owned); // release() handles nullptr
+}
+
+void Router::useReceivedPayload(meshtastic_MeshPacket *relay) const
+{
+    const meshtastic_MeshPacket *frame = receivedFrame;
+    if (!frame || relay->which_payload_variant != meshtastic_MeshPacket_decoded_tag || frame->from != relay->from ||
+        frame->id != relay->id || frame->to != relay->to)
+        return;
+#if !MESHTASTIC_EXCLUDE_TRACEROUTE
+    // The route was updated in the decoded payload, so the received ciphertext no longer matches it
+    if (relay->decoded.portnum == meshtastic_PortNum_TRACEROUTE_APP)
+        return;
+#endif
+    fixPriority(relay); // Priority is derived from the decoded payload, which is about to be replaced
+    relay->which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
+    relay->encrypted = frame->encrypted;
+    relay->channel = frame->channel; // The channel hash as received, not the local index decoding resolved
+    relay->pki_encrypted = frame->pki_encrypted;
 }
 
 /**
@@ -384,6 +429,37 @@ meshtastic_MeshPacket *Router::allocForSending()
     stampRxTime(p);
 
     return p;
+}
+
+void Router::rememberRefusal(NodeNum from, PacketId id, meshtastic_Routing_Error err)
+{
+    if (id == 0)
+        return;
+    uint8_t slot = nextRefusalSlot;
+    for (uint8_t i = 0; i < REFUSAL_CACHE_SIZE; i++) {
+        if (refusals[i].error != 0 && refusals[i].from == from && refusals[i].id == id) {
+            if (err == meshtastic_Routing_Error_NONE) {
+                refusals[i].error = 0; // the latest processing accepted it, so a duplicate must not replay the old refusal
+                return;
+            }
+            slot = i; // same request refused again: overwrite in place
+            break;
+        }
+    }
+    if (err == meshtastic_Routing_Error_NONE)
+        return;
+    if (slot == nextRefusalSlot)
+        nextRefusalSlot = (nextRefusalSlot + 1) % REFUSAL_CACHE_SIZE;
+    refusals[slot] = {from, id, Time::skipZero(Time::getMillis()), (uint8_t)err};
+}
+
+meshtastic_Routing_Error Router::refusalFor(NodeNum from, PacketId id) const
+{
+    for (const RefusalRecord &r : refusals) {
+        if (r.error != 0 && r.from == from && r.id == id && Throttle::isWithinTimespanMs(r.atMsec, REFUSAL_TTL_MSEC))
+            return (meshtastic_Routing_Error)r.error;
+    }
+    return meshtastic_Routing_Error_NONE;
 }
 
 /**
@@ -495,7 +571,7 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
     float effectiveDutyCycle = getEffectiveDutyCycle();
     if (!config.lora.override_duty_cycle && effectiveDutyCycle < 100) {
         float hourlyTxPercent = airTime->utilizationTXPercent();
-        if (hourlyTxPercent > effectiveDutyCycle) {
+        if (!airUtilAllowsTx(hourlyTxPercent, effectiveDutyCycle)) {
             uint8_t silentMinutes = airTime->getSilentMinutes(hourlyTxPercent, effectiveDutyCycle);
 
             LOG_WARN("Duty cycle limit exceeded, abort send, retry in %d mins", silentMinutes);
@@ -666,7 +742,7 @@ bool Router::cancelSending(NodeNum from, PacketId id)
 /** Attempt to find a packet in the TxQueue. Returns true if the packet was found. */
 bool Router::findInTxQueue(NodeNum from, PacketId id)
 {
-    return iface->findInTxQueue(from, id);
+    return iface && iface->findInTxQueue(from, id);
 }
 
 /**
@@ -1640,7 +1716,17 @@ void Router::dispatchReceived(meshtastic_MeshPacket *p, RxSource src)
     // call modules here
     // If this could be a spoofed packet, don't let the modules see it.
     if (!skipHandle) {
-        MeshModule::callModules(*p, src);
+#if !MESHTASTIC_EXCLUDE_TRACEROUTE
+        // Modules get the packet read-only; traceroute is the one payload a relay rewrites, so the hop is added here
+        // first. Our own loopback is left alone, as callModules() never showed it to the module.
+        if (traceRouteModule && src != RX_SRC_LOCAL)
+            traceRouteModule->updateRoute(*p);
+#endif
+        {
+            // RoutingModule queues the relay from here; it forwards p_encrypted's payload rather than re-encoding p
+            ReceivedFrameScope frame(*this, p_encrypted);
+            MeshModule::callModules(*p, src);
+        }
 
 #if !MESHTASTIC_EXCLUDE_MQTT
         if (p_encrypted == nullptr) {
@@ -1677,6 +1763,11 @@ void Router::dispatchReceived(meshtastic_MeshPacket *p, RxSource src)
         }
 #endif
     }
+
+    // After the modules, which may have just admitted the sender. Every decoded radio packet is a hear, also
+    // one skipped above (a disabled module, a filtered port): RoutingModule only records those it delivers.
+    if (src == RX_SRC_RADIO && decodedState == DecodeState::DECODE_SUCCESS && nodeDB)
+        nodeDB->noteRfHear(*p);
 
     packetPool.release(p_encrypted); // Release the encrypted packet (release() handles nullptr)
 }
@@ -1725,6 +1816,22 @@ void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
         }
         return;
     }
+
+#if ARCH_PORTDUINO
+    // Testing knob: drop frames transmitted by a listed relay byte before dedup, so the same packet
+    // relayed by another node still arrives.
+    if (p->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA && p->relay_node != NO_RELAY_NODE &&
+        !portduino_config.ignore_relay_nodes.empty()) {
+        const auto lowByteMatches = [&](uint32_t num) { return nodeDB->getLastByteOfNodeNum(num) == p->relay_node; };
+        if (std::find_if(portduino_config.ignore_relay_nodes.begin(), portduino_config.ignore_relay_nodes.end(),
+                         lowByteMatches) != portduino_config.ignore_relay_nodes.end()) {
+            clearRoutingAuthCache();
+            LOG_DEBUG("Ignore relay, frame from 0x%08x relayed by 0x%x", p->from, p->relay_node);
+            packetPool.release(p);
+            return;
+        }
+    }
+#endif
 
     // assert(radioConfig.has_preferences);
     if (is_in_repeated(config.lora.ignore_incoming, p->from)) {

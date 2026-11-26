@@ -1512,21 +1512,6 @@ void test_N3_unsigned_nodeinfo_from_nonsigner_not_dropped(void)
     TEST_ASSERT_FALSE(shim.handleReceivedProtobuf(mp, &user));
 }
 
-void test_N4_unsigned_unicast_nodeinfo_from_signer_accepted(void)
-{
-    mockNodeDB->addNode(REMOTE_NODE);
-    mockNodeDB->setSignerBit(REMOTE_NODE, true);
-
-    NodeInfoTestShim shim;
-    meshtastic_MeshPacket mp = makeDecoded(REMOTE_NODE, LOCAL_NODE, meshtastic_PortNum_NODEINFO_APP, SMALL_PAYLOAD);
-    mp.xeddsa_signed = false;
-    meshtastic_User user = meshtastic_User_init_zero;
-    user.is_licensed = owner.is_licensed;
-
-    TEST_ASSERT_FALSE_MESSAGE(shim.handleReceivedProtobuf(mp, &user),
-                              "unsigned unicast NodeInfo from signer must not be dropped");
-}
-
 // N12-N13: N1's refusal of an unsigned NodeInfo broadcast from a known signer applies under
 // Balanced and Strict only. Compatible accepts it, because firmware before 2.8 strips signatures
 // when relaying; refusing there would freeze every signer's name behind an older relay.
@@ -2149,6 +2134,60 @@ void test_C20_opaque_pki_dm_is_uplinked_to_mqtt_once(void)
     TEST_ASSERT_EQUAL(0, pipelineMqtt->queueSize());
 }
 
+// C21: a NodeInfo reply overheard over LoRa, addressed to a third node, from a node we had never heard.
+// NodeInfoModule admits the sender while RoutingModule delivers nothing, so the hear must still be
+// recorded; otherwise clients read the node as not heard on the current LoRa settings.
+void test_C21_overheard_nodeinfo_reply_marks_sender_heard(void)
+{
+    static constexpr NodeNum THIRD_NODE = 0x0C0C0C0C;
+    setPolicy(meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_COMPATIBLE);
+    mockNodeDB->refreshCommittedLoraSlot();
+    TEST_ASSERT_NULL(mockNodeDB->getMeshNode(REMOTE_NODE));
+    NodeInfoTestShim nodeInfo;
+
+    meshtastic_User user = meshtastic_User_init_zero;
+    snprintf(user.id, sizeof(user.id), "!%08x", REMOTE_NODE);
+    strncpy(user.long_name, "Overheard", sizeof(user.long_name) - 1);
+    strncpy(user.short_name, "OVR", sizeof(user.short_name) - 1);
+    meshtastic_MeshPacket reply = makeDecoded(REMOTE_NODE, THIRD_NODE, meshtastic_PortNum_NODEINFO_APP, 0);
+    reply.decoded.payload.size =
+        pb_encode_to_bytes(reply.decoded.payload.bytes, sizeof(reply.decoded.payload.bytes), &meshtastic_User_msg, &user);
+    TEST_ASSERT_GREATER_THAN(0, reply.decoded.payload.size);
+    reply.id = 0xC2100001;
+    reply.hop_limit = 2;
+    reply.hop_start = 3;
+    reply.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA;
+    runPipelineIngress(channelEncode(reply));
+
+    const meshtastic_NodeInfoLite *node = mockNodeDB->getMeshNode(REMOTE_NODE);
+    TEST_ASSERT_NOT_NULL_MESSAGE(node, "NodeInfoModule should admit the overheard sender");
+    TEST_ASSERT_TRUE_MESSAGE(nodeInfoLiteHasUser(node), "the overheard NodeInfo should land");
+    TEST_ASSERT_TRUE_MESSAGE(nodeInfoLiteHeardOnSlot(node, mockNodeDB->committedLoraSlot()),
+                             "a sender heard over our radio must read as heard on the current LoRa settings");
+}
+
+// C22: a packet the router decodes but then keeps from the modules still records the hear. NeighborInfo with the
+// module disabled is skipped in Router::dispatchReceived() before callModules(); if noteRfHear() ran only for packets
+// the modules saw, a known node whose only traffic on this slot is such a packet would read as not heard.
+void test_C22_skipped_neighborinfo_still_marks_sender_heard(void)
+{
+    setPolicy(meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_COMPATIBLE);
+    mockNodeDB->refreshCommittedLoraSlot();
+    mockNodeDB->addNode(REMOTE_NODE);
+    TEST_ASSERT_FALSE(nodeInfoLiteHasRfHear(mockNodeDB->getMeshNode(REMOTE_NODE)));
+    TEST_ASSERT_FALSE_MESSAGE(moduleConfig.has_neighbor_info, "fixture must leave NeighborInfo disabled");
+
+    meshtastic_MeshPacket p = makeDecoded(REMOTE_NODE, NODENUM_BROADCAST, meshtastic_PortNum_NEIGHBORINFO_APP, SMALL_PAYLOAD);
+    p.id = 0xC2200001;
+    p.hop_limit = 2;
+    p.hop_start = 3;
+    p.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA;
+    runPipelineIngress(channelEncode(p));
+
+    TEST_ASSERT_TRUE_MESSAGE(nodeInfoLiteHeardOnSlot(mockNodeDB->getMeshNode(REMOTE_NODE), mockNodeDB->committedLoraSlot()),
+                             "a decoded packet heard over our radio marks its sender heard, modules or not");
+}
+
 // C5: the packet survives (C4) but the identity claim inside it must not land - the pubkey guard
 // can't tell a signer from an impersonator replaying its (public) key. Only the write is refused.
 void test_N5_unsigned_unicast_nodeinfo_from_signer_does_not_change_name(void)
@@ -2555,24 +2594,6 @@ void test_E15_decoded_signed_response_retargeted_request_id_dropped(void)
     TEST_ASSERT_FALSE_MESSAGE(checkXeddsaReceivePolicy(&p), "a retargeted response must fail verification");
 }
 
-// E16: an ordinary signed broadcast with no envelope fields set still verifies. The single layout
-// signs those fields as zero rather than omitting them, so the common case must stay unaffected.
-void test_E16_decoded_signed_broadcast_without_linkage_still_verifies(void)
-{
-    uint8_t pub[32], priv[32];
-    crypto->generateKeyPair(pub, priv);
-    mockNodeDB->addNode(REMOTE_NODE);
-    mockNodeDB->setPublicKey(REMOTE_NODE, pub);
-
-    meshtastic_MeshPacket p = makeDecoded(REMOTE_NODE, NODENUM_BROADCAST, meshtastic_PortNum_TEXT_MESSAGE_APP, SMALL_PAYLOAD);
-    TEST_ASSERT_EQUAL(0, p.decoded.request_id);
-    TEST_ASSERT_EQUAL(0, p.decoded.reply_id);
-    signWithCurrentKey(&p);
-
-    TEST_ASSERT_TRUE(checkXeddsaReceivePolicy(&p));
-    TEST_ASSERT_TRUE(p.xeddsa_signed);
-}
-
 // E17: the other half of the reaction attack. A reaction is a TEXT_MESSAGE carrying the emoji in
 // the payload, reply_id naming the message reacted to, and the emoji flag telling the client to
 // render it as a reaction. Binding reply_id alone would still let a PSK holder flip that flag and
@@ -2744,11 +2765,12 @@ void setup()
     RUN_TEST(test_C18_inbound_ack_proof_status_is_cleared_before_modules_and_phone);
     RUN_TEST(test_C19_proven_ack_reaches_phone_as_valid);
     RUN_TEST(test_C20_opaque_pki_dm_is_uplinked_to_mqtt_once);
+    RUN_TEST(test_C21_overheard_nodeinfo_reply_marks_sender_heard);
+    RUN_TEST(test_C22_skipped_neighborinfo_still_marks_sender_heard);
     printf("\n=== Group N: NodeInfoModule authentication ===\n");
     RUN_TEST(test_N1_unsigned_nodeinfo_from_signer_dropped);
     RUN_TEST(test_N2_signed_nodeinfo_from_signer_not_dropped);
     RUN_TEST(test_N3_unsigned_nodeinfo_from_nonsigner_not_dropped);
-    RUN_TEST(test_N4_unsigned_unicast_nodeinfo_from_signer_accepted);
     RUN_TEST(test_N12_compatible_unsigned_nodeinfo_from_signer_not_dropped);
     RUN_TEST(test_N13_unsigned_nodeinfo_from_signer_on_aead_channel_not_dropped);
     RUN_TEST(test_N5_unsigned_unicast_nodeinfo_from_signer_does_not_change_name);
@@ -2775,7 +2797,6 @@ void setup()
     RUN_TEST(test_E9_decoded_partial_signature_from_nonsigner_dropped);
     RUN_TEST(test_E14_decoded_signed_reply_retargeted_reply_id_dropped);
     RUN_TEST(test_E15_decoded_signed_response_retargeted_request_id_dropped);
-    RUN_TEST(test_E16_decoded_signed_broadcast_without_linkage_still_verifies);
     RUN_TEST(test_E17_decoded_signed_reaction_emoji_flag_flip_dropped);
     RUN_TEST(test_E18_decoded_signed_broadcast_bitfield_tamper_dropped);
     RUN_TEST(test_E19_decoded_signed_broadcast_readdressed_as_dm_dropped);

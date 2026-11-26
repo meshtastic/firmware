@@ -26,6 +26,7 @@
 #include "main.h" // for cardkb_found
 #include "mesh/generated/meshtastic/cannedmessages.pb.h"
 #include "modules/AdminModule.h"
+#include "modules/AtakPluginModule.h"
 #include "modules/ExternalNotificationModule.h" // for buzzer control
 extern MessageStore messageStore;
 #if HAS_TRACKBALL
@@ -85,8 +86,31 @@ CannedMessageModule::CannedMessageModule()
     }
 }
 
+// TAK_TRACKER sends channel broadcasts only
+static bool allowsDirectMessages()
+{
+    return config.device.role != meshtastic_Config_DeviceConfig_Role_TAK_TRACKER;
+}
+
+static const char *const NO_DMS_BANNER = "No DMs in TAK Tracker mode";
+
+static bool refusesDirectMessage(NodeNum dest)
+{
+    if (isBroadcast(dest) || allowsDirectMessages())
+        return false;
+    LOG_WARN("No DMs in TAK Tracker mode, not sending to 0x%08x", dest);
+    return true;
+}
+
 void CannedMessageModule::LaunchWithDestination(NodeNum newDest, uint8_t newChannel)
 {
+    if (refusesDirectMessage(newDest == 0 ? NODENUM_BROADCAST : newDest)) {
+        // Shown from runOnce(): a menu banner callback clears any banner raised now
+        pendingDmRefusal = true;
+        setIntervalFromNow(0);
+        return;
+    }
+
     // Do NOT override explicit broadcast replies
 
     if (newDest == 0) {
@@ -176,6 +200,12 @@ bool CannedMessageModule::showOnScreenKeyboard()
 
 void CannedMessageModule::LaunchFreetextWithDestination(NodeNum newDest, uint8_t newChannel)
 {
+    if (refusesDirectMessage(newDest == 0 ? NODENUM_BROADCAST : newDest)) {
+        pendingDmRefusal = true;
+        setIntervalFromNow(0);
+        return;
+    }
+
     // Do NOT override explicit broadcast replies
 
     if (newDest == 0) {
@@ -208,6 +238,13 @@ void CannedMessageModule::LaunchFreetextWithDestination(NodeNum newDest, uint8_t
     notifyObservers(&e);
 
     LOG_TRACE("[CannedMessage] LaunchFreetextWithDestination dest=0x%08x ch=%d", dest, channel);
+}
+
+// Whether sendText PKC-encrypts a message to dest
+static bool sendsAsPki(NodeNum dest)
+{
+    const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(dest);
+    return node && node->num != nodeDB->getNodeNum() && nodeInfoLiteHasUser(node) && node->public_key.size == 32;
 }
 
 static bool returnToCannedList = false;
@@ -335,7 +372,7 @@ void CannedMessageModule::updateDestinationSelectionList()
     // Preallocate space to reduce reallocation
     this->filteredNodes.reserve(numMeshNodes);
 
-    for (size_t i = 0; i < numMeshNodes; ++i) {
+    for (size_t i = 0; allowsDirectMessages() && i < numMeshNodes; ++i) {
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(i);
         if (!node || node->num == myNodeNum || !nodeInfoLiteHasUser(node) || node->public_key.size != 32)
             continue;
@@ -1063,6 +1100,12 @@ int CannedMessageModule::handleEmotePickerInput(const InputEvent *event)
 
 void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const char *message, bool wantReplies)
 {
+    if (refusesDirectMessage(dest)) {
+        if (screen)
+            screen->showSimpleBanner(NO_DMS_BANNER, 2000);
+        return;
+    }
+
     lastDest = dest;
     lastChannel = channel;
     lastDestSet = true;
@@ -1075,40 +1118,42 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
     p->want_ack = true;
     p->decoded.dest = dest; // Mirror picker: NODENUM_BROADCAST or node->num
 
-    this->lastSentNode = dest;
-    this->incoming = dest;
-
-    // Manually find the node by number to check PKI capability
-    meshtastic_NodeInfoLite *node = nullptr;
-    size_t numMeshNodes = nodeDB->getNumMeshNodes();
-    for (size_t i = 0; i < numMeshNodes; ++i) {
-        meshtastic_NodeInfoLite *n = nodeDB->getMeshNodeByIndex(i);
-        if (n && n->num == dest) {
-            node = n;
-            break;
-        }
-    }
-
-    NodeNum myNodeNum = nodeDB->getNodeNum();
-    if (node && node->num != myNodeNum && nodeInfoLiteHasUser(node) && node->public_key.size == 32) {
+    if (sendsAsPki(dest)) {
         p->pki_encrypted = true;
         p->channel = 0; // force PKI
     }
 
-    // Track this packet’s request ID for matching ACKs
-    this->lastRequestId = p->id;
+    // What history records: all of the text, unless GeoChat had to cut it
+    size_t textLen = strlen(message);
 
-    // Copy payload, never past its buffer
-    size_t copyLen = strlen(message);
-    if (copyLen > sizeof(p->decoded.payload.bytes))
-        copyLen = sizeof(p->decoded.payload.bytes);
-    p->decoded.payload.size = copyLen;
-    memcpy(p->decoded.payload.bytes, message, p->decoded.payload.size);
+#if !MESHTASTIC_EXCLUDE_ATAK
+    // GeoChat carries the text alone, so send_bell doesn't apply to it
+    if (AtakPluginModule::sendsTextAsGeoChat()) {
+        if (!AtakPluginModule::setGeoChatPayload(p, message, textLen, &textLen)) {
+            packetPool.release(p);
+            return;
+        }
+    } else
+#endif
+    {
+        // Copy payload, never past its buffer
+        size_t copyLen = textLen;
+        if (copyLen > sizeof(p->decoded.payload.bytes))
+            copyLen = sizeof(p->decoded.payload.bytes);
+        p->decoded.payload.size = copyLen;
+        memcpy(p->decoded.payload.bytes, message, p->decoded.payload.size);
 
-    if (moduleConfig.canned_message.send_bell && p->decoded.payload.size + 1 < meshtastic_Constants_DATA_PAYLOAD_LEN) {
-        p->decoded.payload.bytes[p->decoded.payload.size++] = 7;
-        p->decoded.payload.bytes[p->decoded.payload.size] = '\0';
+        if (moduleConfig.canned_message.send_bell && p->decoded.payload.size + 1 < meshtastic_Constants_DATA_PAYLOAD_LEN) {
+            p->decoded.payload.bytes[p->decoded.payload.size++] = 7;
+            p->decoded.payload.bytes[p->decoded.payload.size] = '\0';
+        }
     }
+
+    // Track this packet’s request ID for matching ACKs. Only now: a failed build above must leave
+    // the previous packet's ACK context whole.
+    this->lastSentNode = dest;
+    this->incoming = dest;
+    this->lastRequestId = p->id;
 
     this->waitingForAck = true;
 
@@ -1133,7 +1178,7 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
 
     sm.sender = nodeDB->getNodeNum(); // us
     sm.channelIndex = channel;
-    size_t len = strnlen(message, MAX_MESSAGE_SIZE - 1);
+    size_t len = std::min(textLen, (size_t)(MAX_MESSAGE_SIZE - 1));
     sm.textOffset = MessageStore::storeText(message, len);
     sm.textLength = len;
 
@@ -1178,6 +1223,12 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
 
 int32_t CannedMessageModule::runOnce()
 {
+    if (this->pendingDmRefusal) {
+        this->pendingDmRefusal = false;
+        if (screen)
+            screen->showSimpleBanner(NO_DMS_BANNER, 2000);
+    }
+
     // A menu asked to compose freetext on the on-screen keyboard; the menu banner is gone
     // by now, so it is safe to bring the keyboard up.
     if (this->pendingOskLaunch) {
@@ -2230,9 +2281,9 @@ ProcessMessage CannedMessageModule::handleReceived(const meshtastic_MeshPacket &
                 this->ack = isAck;
                 waitingForAck = false;
             } else if (isAck) {
-                // Relay ACK → mark as RELAYED, still no final ACK
+                // A relay ACK is not a delivery, so stay in waitingForAck. Clearing it here makes the
+                // guard at the top reject the destination's own ACK and this stays RELAYED for good.
                 this->ack = false;
-                waitingForAck = false;
             } else {
                 // Explicit failure
                 this->ack = false;
@@ -2429,6 +2480,15 @@ void CannedMessageModule::handleSetCannedMessageModuleMessages(const char *from_
 
 unsigned int CannedMessageModule::maxFreetextBytes() const
 {
+#if !MESHTASTIC_EXCLUDE_ATAK
+    // GeoChat leaves less room than a plain text payload. If the lookup fails (0), keep the plain
+    // limit rather than wipe the draft; the send cuts the text to fit.
+    if (AtakPluginModule::sendsTextAsGeoChat()) {
+        const bool pki = sendsAsPki(dest);
+        if (const size_t limit = AtakPluginModule::maxGeoChatBytes(dest, pki ? 0 : channel, pki))
+            return limit;
+    }
+#endif
     // Below the payload size (meshtastic_Constants_DATA_PAYLOAD_LEN, 233)
     return 200 - (moduleConfig.canned_message.send_bell ? 1 : 0);
 }

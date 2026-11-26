@@ -134,12 +134,7 @@ static uint32_t targetFramerate = IDLE_FRAMERATE;
 static inline void prepareFrameColorRegions()
 {
 #if GRAPHICS_TFT_COLORING_ENABLED
-    clearTFTColorRegions();
-    // Full-frame FrameMono inversion for themes that need it (e.g. light themes).
-    if (isThemeFullFrameInvert()) {
-        setAndRegisterTFTColorRole(TFTColorRole::FrameMono, getThemeBodyFg(), getThemeBodyBg(), 0, 0, screen->getWidth(),
-                                   screen->getHeight());
-    }
+    resetTFTColorRegions(screen->getWidth(), screen->getHeight());
 #endif
 }
 #endif
@@ -446,6 +441,9 @@ void Screen::showTextInput(const char *header, const char *initialText, uint32_t
                            std::function<void(const std::string &)> textCallback)
 {
     LOG_INFO("showTextInput header='%s', durationMs=%d", header ? header : "NULL", durationMs);
+#ifdef USE_EINK
+    EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // Show the keyboard at once, like the overlay menus
+#endif
 
     // Start OnScreenKeyboardModule session (non-touch variant)
     OnScreenKeyboardModule::instance().start(header, initialText, durationMs, textCallback);
@@ -1094,6 +1092,30 @@ void Screen::forceDisplay(bool forceUiUpdate)
 
 static uint32_t lastScreenTransition;
 
+void Screen::applyQuarterTurns()
+{
+#if HAS_SCREEN_AUTO_ROTATE && USE_TFTDISPLAY
+    const int8_t turns = pendingQuarterTurns.exchange(-1);
+    if (turns < 0)
+        return;
+    auto *tft = static_cast<TFTDisplay *>(dispdev);
+    if (tft->getQuarterTurns() == turns)
+        return;
+    tft->setQuarterTurns(turns);
+    displayWidth = dispdev->width();
+    displayHeight = dispdev->height();
+    graphics::currentResolution = graphics::determineScreenResolution(displayHeight, displayWidth);
+    // Messages are wrapped to the old width
+    graphics::MessageRenderer::clearMessageCache();
+#if HAS_TOUCHSCREEN
+    // A finger down during the turn moved between frames: no swipe from it
+    if (touchScreenImpl1)
+        touchScreenImpl1->ignoreCurrentContact();
+#endif
+    setFastFramerate();
+#endif
+}
+
 int32_t Screen::runOnce()
 {
     // If we don't have a screen, don't ever spend any CPU for us.
@@ -1122,6 +1144,10 @@ int32_t Screen::runOnce()
 
         lastFrameIndex = currentFrameIndex;
     }
+
+#if HAS_SCREEN_AUTO_ROTATE && USE_TFTDISPLAY
+    applyQuarterTurns();
+#endif
 
     menuHandler::handleMenuSwitch(dispdev);
 
@@ -2196,6 +2222,9 @@ int Screen::handleInputEvent(const InputEvent *event)
         NotificationRenderer::inEvent = *event;
         static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawBannercallback};
         ui->setOverlays(overlays, 2);
+        // E-Ink: each key press redraws the keyboard at once, with a fast refresh (no rate limit, no full refresh while
+        // typing; the next frame after it takes the full refresh)
+        EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST);
         setFastFramerate(); // Draw ASAP
         updateUiFrame(ui);
         return 0;
@@ -2409,6 +2438,13 @@ int Screen::handleInputEvent(const InputEvent *event)
                            this->ui->getUiState()->currentFrame >= framesetInfo.positions.firstFavorite &&
                            this->ui->getUiState()->currentFrame <= framesetInfo.positions.lastFavorite) {
                     menuHandler::favoriteBaseMenu();
+                } else if ((this->ui->getUiState()->currentFrame == framesetInfo.positions.nodelist_location ||
+                            this->ui->getUiState()->currentFrame == framesetInfo.positions.nodelist_bearings) &&
+                           config.display.bearings_view_radar) {
+                    // Bearings/distance frame is being drawn as a radar - use the
+                    // radar-specific options menu (zoom, heading, favorites filter,
+                    // Tracking View picker).
+                    menuHandler::radarBearingsMenu();
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.nodelist_nodes ||
                            this->ui->getUiState()->currentFrame == framesetInfo.positions.nodelist_location ||
                            this->ui->getUiState()->currentFrame == framesetInfo.positions.nodelist_lastheard ||
