@@ -357,6 +357,8 @@ extern struct portduino_config_struct {
     bool sfpp_pull_retry = false;
     uint32_t sfpp_max_ids_per_frame = 40; // short IDs in one listing or item-request frame
     uint32_t sfpp_item_body_max = 168;    // encoded item-frame body limit, in bytes
+    uint32_t sfpp_retention_hours = 48;   // how long an archived object is kept, in hours
+    uint32_t sfpp_window_hours = 24;      // how far back an advert and its queries reach, in hours
     // allowed root hashes
     // upstream node
     // Are we allowing unknown channel hashes? Does this even make sense?
@@ -847,6 +849,8 @@ extern struct portduino_config_struct {
             out << YAML::Key << "PullRetry" << YAML::Value << sfpp_pull_retry;
             out << YAML::Key << "MaxIdsPerFrame" << YAML::Value << sfpp_max_ids_per_frame;
             out << YAML::Key << "ItemBodyMax" << YAML::Value << sfpp_item_body_max;
+            out << YAML::Key << "RetentionHours" << YAML::Value << sfpp_retention_hours;
+            out << YAML::Key << "WindowHours" << YAML::Value << sfpp_window_hours;
             out << YAML::EndMap; // StoreAndForward
         }
 

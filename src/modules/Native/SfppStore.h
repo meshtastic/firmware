@@ -109,6 +109,14 @@ class SfppStore
     bool collectBucketIds(const uint8_t *root_hash, size_t root_hash_len, uint32_t bucket, std::vector<pinsketch::Element> &out);
     bool collectBuckets(const uint8_t *root_hash, size_t root_hash_len, std::vector<uint32_t> &out);
 
+    bool buildWindowSummary(const uint8_t *root_hash, size_t root_hash_len, uint32_t capacity, uint32_t windowS, uint32_t marginS,
+                            sfppsr::BucketSummary &out);
+    bool collectWindowIds(const uint8_t *root_hash, size_t root_hash_len, uint32_t windowS, uint32_t marginS,
+                          std::vector<pinsketch::Element> &out);
+    uint32_t countCanonObjects(const uint8_t *root_hash, size_t root_hash_len);
+    std::vector<ObjectRow> collectWindowObjectsByShortId(const uint8_t *root_hash, size_t root_hash_len, pinsketch::Element id,
+                                                         uint32_t windowS, uint32_t marginS);
+
     bool addToScratch(stored_object &, bool senderCopy = false);
     bool isInDB(const uint8_t *, size_t);
     bool isInScratch(uint8_t *, size_t);
@@ -169,6 +177,10 @@ class SfppStore
     sqlite3_stmt *bucketSummaryStmt = nullptr;
     sqlite3_stmt *bucketIdsStmt = nullptr;
     sqlite3_stmt *distinctBucketsStmt = nullptr;
+    sqlite3_stmt *windowSummaryStmt = nullptr;
+    sqlite3_stmt *windowIdsStmt = nullptr;
+    sqlite3_stmt *countCanonObjectsStmt = nullptr;
+    sqlite3_stmt *windowObjectByShortIdStmt = nullptr;
     sqlite3_stmt *getObjectByShortIdStmt = nullptr;
     sqlite3_stmt *deleteCanonStmt = nullptr;
     sqlite3_stmt *unindexedObjectsStmt = nullptr;

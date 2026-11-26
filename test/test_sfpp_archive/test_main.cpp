@@ -40,6 +40,7 @@
 #include "modules/StoreForwardModule.h"
 #endif
 
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
 #include <dirent.h>
@@ -723,6 +724,8 @@ void setUp(void)
     portduino_config.sfpp_enabled = true;
     portduino_config.sfpp_hops = 3;
     portduino_config.sfpp_steal_port = false;
+    portduino_config.sfpp_retention_hours = 48;
+    portduino_config.sfpp_window_hours = 24;
 
     testSfpp = new TestSfppModule();
 }
@@ -1976,6 +1979,154 @@ void test_content_summary_matches_for_the_same_holding()
     rmdir(secondDir.c_str());
 }
 
+// --- whole-window store queries ---
+
+// Ingests a text and moves its stamp back by the given age, so the window queries see a known age.
+void ingestAtAge(PacketId id, const char *text, uint32_t ageS)
+{
+    meshtastic_MeshPacket mp = makeText(REMOTE_NODE, id, text, getValidTime(RTCQualityNTP, true));
+    meshtastic_MeshPacket enc = makeEncryptedCopy(mp);
+    TEST_ASSERT_EQUAL(ProcessMessage::CONTINUE, testSfpp->ingest(mp, &enc));
+    setStoredRxTime(id, getValidTime(RTCQualityNTP, true) - ageS);
+}
+
+// A configured retention shorter than the default bounds the trim: a row past 24 h is dropped.
+void test_retention_hours_trim_at_the_configured_age()
+{
+    constexpr uint32_t EPOCH = 1800000000;
+    constexpr uint32_t HOUR = 60 * 60;
+    setTestClock(RTCQualityNTP, EPOCH, 5000);
+    recreateModule();
+    portduino_config.sfpp_retention_hours = 24;
+
+    TEST_ASSERT_TRUE(ingestOneText("past the shorter retention"));
+    std::vector<uint8_t> root = mappingRoot();
+    TEST_ASSERT_EQUAL_UINT(SFPP_HASH_SIZE, root.size());
+    setStoredRxTime(TEXT_ID, EPOCH - 25 * HOUR);
+
+    testSfpp->testStore().trimCanonByRetention(root.data(), root.size());
+
+    StoredRow row;
+    TEST_ASSERT_FALSE(readStoredRow(TEXT_ID, row));
+}
+
+// One summary covers every content bucket inside the window, not one bucket at a time.
+void test_window_summary_spans_content_buckets()
+{
+    constexpr uint32_t EPOCH = 1800000000;
+    constexpr uint32_t WINDOW_S = 24 * 60 * 60;
+    constexpr uint32_t MARGIN_S = 5 * 60;
+    setTestClock(RTCQualityNTP, EPOCH, 5000);
+    recreateModule();
+
+    const PacketId ids[] = {TEXT_ID + 0x300, TEXT_ID + 0x301, TEXT_ID + 0x302, TEXT_ID + 0x303};
+    const char *texts[] = {"window alpha", "window bravo", "window charlie", "window delta"};
+    for (int i = 0; i < 4; i++)
+        ingestAtAge(ids[i], texts[i], 600 + (uint32_t)i);
+
+    std::vector<uint8_t> root = mappingRoot();
+    TEST_ASSERT_EQUAL_UINT(SFPP_HASH_SIZE, root.size());
+
+    std::vector<uint32_t> buckets;
+    TEST_ASSERT_TRUE(testSfpp->testStore().collectBuckets(root.data(), root.size(), buckets));
+    TEST_ASSERT_TRUE(buckets.size() >= 2);
+
+    sfppsr::BucketSummary summary(8);
+    TEST_ASSERT_TRUE(testSfpp->testStore().buildWindowSummary(root.data(), root.size(), 8, WINDOW_S, MARGIN_S, summary));
+    TEST_ASSERT_EQUAL_UINT32(4, summary.count());
+}
+
+// The window is the age interval [margin, W]: a row younger than the margin and a row past the
+// window are both left out, while the edges themselves are included.
+void test_window_summary_stops_at_window_and_margin()
+{
+    constexpr uint32_t EPOCH = 1800000000;
+    constexpr uint32_t WINDOW_S = 24 * 60 * 60;
+    constexpr uint32_t MARGIN_S = 5 * 60;
+    setTestClock(RTCQualityNTP, EPOCH, 5000);
+    recreateModule();
+
+    const PacketId ids[] = {TEXT_ID + 0x310, TEXT_ID + 0x311, TEXT_ID + 0x312, TEXT_ID + 0x313};
+    const char *texts[] = {"too old", "at window", "inside", "too fresh"};
+    const uint32_t ages[] = {25 * 60 * 60, 24 * 60 * 60, 60 * 60, 60};
+    for (int i = 0; i < 4; i++)
+        ingestAtAge(ids[i], texts[i], ages[i]);
+
+    std::vector<uint8_t> root = mappingRoot();
+    TEST_ASSERT_EQUAL_UINT(SFPP_HASH_SIZE, root.size());
+
+    sfppsr::BucketSummary summary(8);
+    TEST_ASSERT_TRUE(testSfpp->testStore().buildWindowSummary(root.data(), root.size(), 8, WINDOW_S, MARGIN_S, summary));
+    TEST_ASSERT_EQUAL_UINT32(2, summary.count());
+}
+
+// The IDs a peer is asked for are exactly the IDs the summary was built from.
+void test_window_ids_match_the_summary()
+{
+    constexpr uint32_t EPOCH = 1800000000;
+    constexpr uint32_t WINDOW_S = 24 * 60 * 60;
+    constexpr uint32_t MARGIN_S = 5 * 60;
+    setTestClock(RTCQualityNTP, EPOCH, 5000);
+    recreateModule();
+
+    const PacketId ids[] = {TEXT_ID + 0x320, TEXT_ID + 0x321, TEXT_ID + 0x322, TEXT_ID + 0x323, TEXT_ID + 0x324, TEXT_ID + 0x325};
+    const char *texts[] = {"match a", "match b", "match c", "match d", "match e", "match f"};
+    const uint32_t ages[] = {600, 3600, 7200, 24 * 60 * 60 + 1, 25 * 60 * 60, 60};
+    for (int i = 0; i < 6; i++)
+        ingestAtAge(ids[i], texts[i], ages[i]);
+
+    std::vector<uint8_t> root = mappingRoot();
+    TEST_ASSERT_EQUAL_UINT(SFPP_HASH_SIZE, root.size());
+
+    sfppsr::BucketSummary expected(8);
+    std::vector<pinsketch::Element> expectedIds;
+    for (int i = 0; i < 6; i++) {
+        if (ages[i] < MARGIN_S || ages[i] > WINDOW_S)
+            continue;
+        StoredRow row;
+        TEST_ASSERT_TRUE(readStoredRow(ids[i], row));
+        expected.add(row.messageHash.data(), row.messageHash.size());
+        expectedIds.push_back(sfppsr::shortId(row.messageHash.data(), row.messageHash.size()));
+    }
+    TEST_ASSERT_EQUAL_UINT32(3, expected.count());
+
+    sfppsr::BucketSummary summary(8);
+    TEST_ASSERT_TRUE(testSfpp->testStore().buildWindowSummary(root.data(), root.size(), 8, WINDOW_S, MARGIN_S, summary));
+    std::vector<pinsketch::Element> windowIds;
+    TEST_ASSERT_TRUE(testSfpp->testStore().collectWindowIds(root.data(), root.size(), WINDOW_S, MARGIN_S, windowIds));
+
+    TEST_ASSERT_EQUAL_UINT32(expected.count(), summary.count());
+    TEST_ASSERT_EQUAL_UINT64(expected.checksum(), summary.checksum());
+    TEST_ASSERT_EQUAL_UINT(expectedIds.size(), windowIds.size());
+    std::sort(expectedIds.begin(), expectedIds.end());
+    std::sort(windowIds.begin(), windowIds.end());
+    TEST_ASSERT_EQUAL_MEMORY(expectedIds.data(), windowIds.data(), expectedIds.size() * sizeof(pinsketch::Element));
+}
+
+// The store size is every canonical row, not just the ones inside the advert window.
+void test_store_size_counts_rows_not_just_the_window()
+{
+    constexpr uint32_t EPOCH = 1800000000;
+    constexpr uint32_t WINDOW_S = 24 * 60 * 60;
+    constexpr uint32_t MARGIN_S = 5 * 60;
+    setTestClock(RTCQualityNTP, EPOCH, 5000);
+    recreateModule();
+
+    const PacketId ids[] = {TEXT_ID + 0x330, TEXT_ID + 0x331, TEXT_ID + 0x332, TEXT_ID + 0x333};
+    const char *texts[] = {"size inside", "size older", "size too old", "size too fresh"};
+    const uint32_t ages[] = {600, 3600, 25 * 60 * 60, 60};
+    for (int i = 0; i < 4; i++)
+        ingestAtAge(ids[i], texts[i], ages[i]);
+
+    std::vector<uint8_t> root = mappingRoot();
+    TEST_ASSERT_EQUAL_UINT(SFPP_HASH_SIZE, root.size());
+
+    sfppsr::BucketSummary summary(8);
+    TEST_ASSERT_TRUE(testSfpp->testStore().buildWindowSummary(root.data(), root.size(), 8, WINDOW_S, MARGIN_S, summary));
+    TEST_ASSERT_EQUAL_UINT32(2, summary.count());
+    TEST_ASSERT_EQUAL_UINT32(4, testSfpp->testStore().countCanonObjects(root.data(), root.size()));
+}
+
 void loop() {}
 
 void setup()
@@ -2029,6 +2180,11 @@ void setup()
     RUN_TEST(test_futureLookingAgeIsRejected);
 
     RUN_TEST(test_v3StoreIsMovedAside);
+    RUN_TEST(test_retention_hours_trim_at_the_configured_age);
+    RUN_TEST(test_window_summary_spans_content_buckets);
+    RUN_TEST(test_window_summary_stops_at_window_and_margin);
+    RUN_TEST(test_window_ids_match_the_summary);
+    RUN_TEST(test_store_size_counts_rows_not_just_the_window);
     UNITY_END();
 }
 

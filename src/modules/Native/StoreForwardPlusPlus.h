@@ -38,6 +38,7 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     {
         promoteScratchMatches(root, bucket, ids);
     }
+    SfppStore &testStore() { return store_; }
 #endif
 
     // Stamped into PRAGMA user_version. A store with any other value is moved aside, never migrated.

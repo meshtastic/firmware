@@ -309,6 +309,8 @@ StoreAndForward:
 #  PullRetry: false # Retry a failed enum pull with capped backoff (opt-in; raises airtime)
 #  MaxIdsPerFrame: 40 # Short IDs per listing/item-request frame (4-40)
 #  ItemBodyMax: 168 # Item-frame body limit in bytes (48-168)
+#  RetentionHours: 48 # How long an archived object is kept, in hours (1-72)
+#  WindowHours: 24 # How far back an advert and its queries reach, in hours (1 to RetentionHours)
 
 Config:
 #  DisplayMode: TWOCOLOR # uncomment to force BaseUI

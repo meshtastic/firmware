@@ -1625,6 +1625,16 @@ bool loadConfig(const char *configPath)
                 portduino_config.sfpp_item_body_max = 48;
             if (portduino_config.sfpp_item_body_max > 168)
                 portduino_config.sfpp_item_body_max = 168;
+            portduino_config.sfpp_retention_hours = (yamlConfig["StoreAndForward"]["RetentionHours"]).as<uint32_t>(48);
+            if (portduino_config.sfpp_retention_hours < 1)
+                portduino_config.sfpp_retention_hours = 1;
+            if (portduino_config.sfpp_retention_hours > 72)
+                portduino_config.sfpp_retention_hours = 72;
+            portduino_config.sfpp_window_hours = (yamlConfig["StoreAndForward"]["WindowHours"]).as<uint32_t>(24);
+            if (portduino_config.sfpp_window_hours < 1)
+                portduino_config.sfpp_window_hours = 1;
+            if (portduino_config.sfpp_window_hours > portduino_config.sfpp_retention_hours)
+                portduino_config.sfpp_window_hours = portduino_config.sfpp_retention_hours;
         }
         if (yamlConfig["Routing"]) {
             if (yamlConfig["Routing"]["WhitelistPorts"]) {

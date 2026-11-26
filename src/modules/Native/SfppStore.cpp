@@ -25,6 +25,24 @@
 // Retention applies to canon rows as well as to the legacy read window.
 static constexpr uint32_t kRetentionS = 48 * 60 * 60;
 
+// The configured retention, clamped to the supported 1-72 h range.
+static uint32_t configuredRetentionS()
+{
+    uint32_t hours = portduino_config.sfpp_retention_hours;
+    if (hours < 1)
+        hours = 1;
+    if (hours > 72)
+        hours = 72;
+    return hours * 60 * 60;
+}
+
+// The advert window is the elapsed-age interval [margin, window]; a row younger than the margin is
+// left for a later advert rather than compared while it is still settling.
+static bool rowWithinWindow(const SfppStore::RowAge &age, uint32_t windowS, uint32_t marginS)
+{
+    return age.age >= marginS && age.age <= windowS;
+}
+
 // Reads PRAGMA user_version, and whether the store holds any table at all (a new file holds none).
 static int readSchemaVersion(sqlite3 *db, bool &hasTables)
 {
@@ -44,14 +62,16 @@ static int readSchemaVersion(sqlite3 *db, bool &hasTables)
 SfppStore::~SfppStore()
 {
     sqlite3_stmt *statements[] = {
-        canon_insert_stmt,      scratch_insert_stmt,   identityCanonStmt,      identityScratchStmt,    replaceCanonCopyStmt,
-        replaceScratchCopyStmt, checkDupMessageHash,   checkScratch,           removeScratch,          updatePayloadStmt,
-        fromScratchStmt,        fromScratchByHashStmt, getHashFromRootStmt,    addRootToMappingsStmt,  getFullRootHashStmt,
-        getScratchCountStmt,    scratchTimeRowsStmt,   deleteScratchRowidStmt, canonTimeRowsStmt,      deleteCanonRowidStmt,
-        bucketSummaryStmt,      bucketIdsStmt,         distinctBucketsStmt,    getObjectByShortIdStmt, deleteCanonStmt,
-        unindexedObjectsStmt,   setObjectIndexStmt,    legacyHistoryStmt,      timeStateReadStmt,      timeStateWriteStmt,
-        restampChannelStmt,     restampScratchStmt,    restampDirectStmt,      updateChannelTimeStmt,  updateScratchTimeStmt,
-        updateDirectTimeStmt,
+        canon_insert_stmt,    scratch_insert_stmt,    identityCanonStmt,         identityScratchStmt,
+        replaceCanonCopyStmt, replaceScratchCopyStmt, checkDupMessageHash,       checkScratch,
+        removeScratch,        updatePayloadStmt,      fromScratchStmt,           fromScratchByHashStmt,
+        getHashFromRootStmt,  addRootToMappingsStmt,  getFullRootHashStmt,       getScratchCountStmt,
+        scratchTimeRowsStmt,  deleteScratchRowidStmt, canonTimeRowsStmt,         deleteCanonRowidStmt,
+        bucketSummaryStmt,    bucketIdsStmt,          distinctBucketsStmt,       windowSummaryStmt,
+        windowIdsStmt,        countCanonObjectsStmt,  windowObjectByShortIdStmt, getObjectByShortIdStmt,
+        deleteCanonStmt,      unindexedObjectsStmt,   setObjectIndexStmt,        legacyHistoryStmt,
+        timeStateReadStmt,    timeStateWriteStmt,     restampChannelStmt,        restampScratchStmt,
+        restampDirectStmt,    updateChannelTimeStmt,  updateScratchTimeStmt,     updateDirectTimeStmt,
     };
     for (sqlite3_stmt *stmt : statements) {
         if (stmt)
@@ -300,6 +320,23 @@ void SfppStore::openStore(const uint8_t *derivedRoot, bool haveDerived)
     sqlite3_prepare_v2(ppDb, "select distinct bucket from channel_messages \
         where substr(root_hash,1,?)=? and short_id is not null order by bucket;",
                        -1, &distinctBucketsStmt, NULL);
+
+    // Whole-window queries span every content bucket. The age is applied after the read because the
+    // stamps have several bases and only rowAge() can compare them.
+    sqlite3_prepare_v2(ppDb, "select short_id, checksum, rx_time, time_basis, boot_id, age_margin from channel_messages \
+        where substr(root_hash,1,?)=? and short_id is not null;",
+                       -1, &windowSummaryStmt, NULL);
+
+    sqlite3_prepare_v2(ppDb, "select short_id, rx_time, time_basis, boot_id, age_margin from channel_messages \
+        where substr(root_hash,1,?)=? and short_id is not null;",
+                       -1, &windowIdsStmt, NULL);
+
+    sqlite3_prepare_v2(ppDb, "select count(*) from channel_messages where substr(root_hash,1,?)=?;", -1, &countCanonObjectsStmt,
+                       NULL);
+
+    sqlite3_prepare_v2(ppDb, "select destination, sender, packet_id, encrypted_bytes, rx_time, time_basis, boot_id, \
+        age_margin from channel_messages where substr(root_hash,1,?)=? and short_id=?;",
+                       -1, &windowObjectByShortIdStmt, NULL);
 
     sqlite3_prepare_v2(ppDb, "select destination, sender, packet_id, encrypted_bytes, message_hash, rx_time, \
         time_basis, boot_id, age_margin from channel_messages where substr(root_hash,1,?)=? and bucket=? and short_id=?;",
@@ -660,7 +697,7 @@ void SfppStore::trimCanonByRetention(uint8_t *root_hash, size_t root_hash_len)
         t.basis = (uint8_t)sqlite3_column_int64(canonTimeRowsStmt, 2);
         t.boot_id = (uint32_t)sqlite3_column_int64(canonTimeRowsStmt, 3);
         t.margin = (uint32_t)sqlite3_column_int64(canonTimeRowsStmt, 4);
-        if (rowAge(t).age >= kRetentionS)
+        if (rowAge(t).age >= configuredRetentionS())
             drop.push_back(rowid);
     }
     sqlite3_reset(canonTimeRowsStmt);
@@ -760,6 +797,97 @@ bool SfppStore::collectBuckets(const uint8_t *root_hash, size_t root_hash_len, s
         out.push_back((uint32_t)sqlite3_column_int64(distinctBucketsStmt, 0));
     sqlite3_reset(distinctBucketsStmt);
     return !out.empty();
+}
+
+bool SfppStore::buildWindowSummary(const uint8_t *root_hash, size_t root_hash_len, uint32_t capacity, uint32_t windowS,
+                                   uint32_t marginS, sfppsr::BucketSummary &out)
+{
+    out = sfppsr::BucketSummary(capacity);
+
+    sqlite3_reset(windowSummaryStmt);
+    sqlite3_bind_int(windowSummaryStmt, 1, root_hash_len);
+    sqlite3_bind_blob(windowSummaryStmt, 2, root_hash, root_hash_len, NULL);
+    while (sqlite3_step(windowSummaryStmt) == SQLITE_ROW) {
+        RowTime t;
+        t.stamp = (uint32_t)sqlite3_column_int64(windowSummaryStmt, 2);
+        t.basis = (uint8_t)sqlite3_column_int(windowSummaryStmt, 3);
+        t.boot_id = (uint32_t)sqlite3_column_int64(windowSummaryStmt, 4);
+        t.margin = (uint32_t)sqlite3_column_int64(windowSummaryStmt, 5);
+        if (!rowWithinWindow(rowAge(t), windowS, marginS))
+            continue;
+        out.add((pinsketch::Element)sqlite3_column_int64(windowSummaryStmt, 0),
+                (uint64_t)sqlite3_column_int64(windowSummaryStmt, 1));
+    }
+    sqlite3_reset(windowSummaryStmt);
+
+    return out.count() > 0;
+}
+
+bool SfppStore::collectWindowIds(const uint8_t *root_hash, size_t root_hash_len, uint32_t windowS, uint32_t marginS,
+                                 std::vector<pinsketch::Element> &out)
+{
+    out.clear();
+    sqlite3_reset(windowIdsStmt);
+    sqlite3_bind_int(windowIdsStmt, 1, root_hash_len);
+    sqlite3_bind_blob(windowIdsStmt, 2, root_hash, root_hash_len, NULL);
+    while (sqlite3_step(windowIdsStmt) == SQLITE_ROW) {
+        RowTime t;
+        t.stamp = (uint32_t)sqlite3_column_int64(windowIdsStmt, 1);
+        t.basis = (uint8_t)sqlite3_column_int(windowIdsStmt, 2);
+        t.boot_id = (uint32_t)sqlite3_column_int64(windowIdsStmt, 3);
+        t.margin = (uint32_t)sqlite3_column_int64(windowIdsStmt, 4);
+        if (!rowWithinWindow(rowAge(t), windowS, marginS))
+            continue;
+        out.push_back((pinsketch::Element)sqlite3_column_int64(windowIdsStmt, 0));
+    }
+    sqlite3_reset(windowIdsStmt);
+
+    return !out.empty();
+}
+
+uint32_t SfppStore::countCanonObjects(const uint8_t *root_hash, size_t root_hash_len)
+{
+    sqlite3_reset(countCanonObjectsStmt);
+    sqlite3_bind_int(countCanonObjectsStmt, 1, root_hash_len);
+    sqlite3_bind_blob(countCanonObjectsStmt, 2, root_hash, root_hash_len, NULL);
+    uint32_t count = 0;
+    if (sqlite3_step(countCanonObjectsStmt) == SQLITE_ROW)
+        count = (uint32_t)sqlite3_column_int64(countCanonObjectsStmt, 0);
+    sqlite3_reset(countCanonObjectsStmt);
+    return count;
+}
+
+std::vector<SfppStore::ObjectRow> SfppStore::collectWindowObjectsByShortId(const uint8_t *root_hash, size_t root_hash_len,
+                                                                           pinsketch::Element id, uint32_t windowS,
+                                                                           uint32_t marginS)
+{
+    std::vector<ObjectRow> rows;
+    sqlite3_reset(windowObjectByShortIdStmt);
+    sqlite3_bind_int(windowObjectByShortIdStmt, 1, root_hash_len);
+    sqlite3_bind_blob(windowObjectByShortIdStmt, 2, root_hash, root_hash_len, NULL);
+    sqlite3_bind_int64(windowObjectByShortIdStmt, 3, (sqlite3_int64)id);
+
+    while (sqlite3_step(windowObjectByShortIdStmt) == SQLITE_ROW) {
+        RowTime t;
+        t.stamp = (uint32_t)sqlite3_column_int64(windowObjectByShortIdStmt, 4);
+        t.basis = (uint8_t)sqlite3_column_int(windowObjectByShortIdStmt, 5);
+        t.boot_id = (uint32_t)sqlite3_column_int64(windowObjectByShortIdStmt, 6);
+        t.margin = (uint32_t)sqlite3_column_int64(windowObjectByShortIdStmt, 7);
+        if (!rowWithinWindow(rowAge(t), windowS, marginS))
+            continue;
+
+        ObjectRow row;
+        row.to = (uint32_t)sqlite3_column_int64(windowObjectByShortIdStmt, 0);
+        row.from = (uint32_t)sqlite3_column_int64(windowObjectByShortIdStmt, 1);
+        row.id = (uint32_t)sqlite3_column_int64(windowObjectByShortIdStmt, 2);
+        const uint8_t *enc = (const uint8_t *)sqlite3_column_blob(windowObjectByShortIdStmt, 3);
+        const int encLen = sqlite3_column_bytes(windowObjectByShortIdStmt, 3);
+        row.time = t;
+        row.cipher.assign(enc, enc + encLen);
+        rows.push_back(std::move(row));
+    }
+    sqlite3_reset(windowObjectByShortIdStmt);
+    return rows;
 }
 
 //
