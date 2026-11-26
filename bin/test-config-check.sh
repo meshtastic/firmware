@@ -620,6 +620,16 @@ assert "clearing Touchscreen.spidev follows the display" 0 spidev-touch-clear/co
 	"Display spidev    : /dev/spidev1.0" \
 	"Touchscreen spidev: /dev/spidev1.0" \
 	"Result: 0 errors, 0 warnings"
+assert "clearing Display.spidev returns display and touch to the radio host" 0 spidev-display-clear/config.yaml check \
+	"Display spidev    : /dev/spidev2.0" \
+	"Touchscreen spidev: /dev/spidev2.0" \
+	"Result: 0 errors, 0 warnings"
+assert "a display cannot inherit an unpackable radio path" 1 spidev-lora-unpackable-display.yaml check \
+	"Lora.spidev '/dev/spidev10.0' cannot be shared with a SPI display" \
+	"Result: 1 error, 0 warnings"
+assert "an explicit display host 0 beside an unpackable radio path is accepted" 0 spidev-lora-unpackable-display-own.yaml check \
+	"!cannot be shared with a SPI display" \
+	"Result: 0 errors, 0 warnings"
 assert "an X11 panel reports no display spidev" 0 spidev-x11.yaml check \
 	"!Display spidev" \
 	"Result: 0 errors, 0 warnings"

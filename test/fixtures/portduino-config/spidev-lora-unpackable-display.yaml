@@ -1,0 +1,7 @@
+# ERROR. The display has no spidev of its own, so it would follow the radio host,
+# but spidev10.0 cannot be packed into one and the display would open spidev0.0.
+Lora:
+  Module: sim
+  spidev: spidev10.0
+Display:
+  Panel: ILI9488

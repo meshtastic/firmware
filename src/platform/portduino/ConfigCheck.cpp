@@ -1323,6 +1323,17 @@ void checkPinValues(std::vector<Finding> &findings)
             report(pin.config_section + "." + pin.config_name);
 }
 
+std::string describeSpiHost(int host)
+{
+    return "/dev/spidev" + std::to_string(host & 0x0F) + "." + std::to_string((host >> 4) & 0x0F);
+}
+
+static bool displayUsesSpi()
+{
+    return portduino_config.displayPanel != no_screen && portduino_config.displayPanel != x11 &&
+           portduino_config.displayPanel != fb && portduino_config.displayPanel != hub75;
+}
+
 void checkMergedConfig(const PathIndex &paths, std::vector<Finding> &findings)
 {
     const std::string merged = "(merged configuration)";
@@ -1386,6 +1397,15 @@ void checkMergedConfig(const PathIndex &paths, std::vector<Finding> &findings)
         findings.push_back({kError, merged, 0,
                             "Lora.spidev is empty, but a hardware radio needs a SPI device. Expected "
                             "/dev/spidev<bus>.<device> with bus 0-9 and device 0-7"});
+
+    // A display with no path of its own follows the radio host, which an unpackable radio path
+    // cannot name; the display would open another device. An explicit Display.spidev stays valid.
+    if (portduino_config.lora_spi_dev_int < 0 && displayUsesSpi() && portduino_config.display_spi_dev.empty())
+        findings.push_back({kError, merged, 0,
+                            "Lora.spidev '" + portduino_config.lora_spi_dev +
+                                "' cannot be shared with a SPI display, which would open " +
+                                describeSpiHost(portduino_config.display_spi_dev_int) +
+                                " instead. Set Display.spidev to the display's own /dev/spidev<bus>.<device>"});
 
     // portduinoSetup() skips initGPIOPin() for every Lora pin when spidev is ch341, so a
     // gpiochip or line mapping written next to one is read, stored, and never used.
@@ -1574,11 +1594,6 @@ void checkMergedConfig(const PathIndex &paths, std::vector<Finding> &findings)
                             "at that setting's update interval"});
 }
 
-std::string describeSpiHost(int host)
-{
-    return "/dev/spidev" + std::to_string(host & 0x0F) + "." + std::to_string((host >> 4) & 0x0F);
-}
-
 void printSummary()
 {
     std::cout << "\nEffective radio configuration:\n";
@@ -1588,9 +1603,7 @@ void printSummary()
     if (!portduino_config.lora_spi_dev.empty())
         std::cout << "  spidev            : " << portduino_config.lora_spi_dev << "\n";
     std::cout << "  SPI speed         : " << portduino_config.spiSpeed << "\n";
-    const bool displayUsesSpi = portduino_config.displayPanel != no_screen && portduino_config.displayPanel != x11 &&
-                                portduino_config.displayPanel != fb && portduino_config.displayPanel != hub75;
-    if (displayUsesSpi)
+    if (displayUsesSpi())
         std::cout << "  Display spidev    : " << describeSpiHost(portduino_config.display_spi_dev_int) << "\n";
     const bool touchUsesSpi = portduino_config.touchscreenI2CAddr == -1 &&
                               (portduino_config.touchscreenModule == xpt2046 || portduino_config.touchscreenModule == stmpe610);

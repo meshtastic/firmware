@@ -19,14 +19,17 @@
 // device = (host >> 4) & 0x0F). These tests do not call HardwareSPI, so a
 // change to its decoder does not fail them.
 //
-// The config-loader tests pin two cross-file state rules: a radio path outside
+// The config-loader tests pin three cross-file state rules: a radio path outside
 // the packed range is left as the -1 sentinel (initLoRa() then opens it in its
-// own instance instead of host 0), and clearing a touchscreen override makes it
-// follow the display host again rather than keeping the old one.
+// own instance instead of host 0), clearing a touchscreen override makes it
+// follow the display host again rather than keeping the old one, and clearing a
+// display override returns the display (and a following touchscreen) to the
+// radio host.
 
 #include "Arduino.h"
 #include "PortduinoGlue.h"
 #include "TestUtil.h"
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -177,8 +180,17 @@ void test_registry_rejects_negative_host()
     TEST_ASSERT_NULL(HardwareSPI::getInstance(-1));
 }
 
+// lgfx_borrow_spiclass() calls begin(), which opens /dev/spidev<bus>.<device> on a host
+// that has one. Beginning the instance on a path that cannot exist installs the framework's
+// SimSPIChip first, and begin() keeps an existing chip, so the borrow never opens hardware.
+static void useSimulatedChip(int host)
+{
+    HardwareSPI::getInstance((int8_t)host)->begin("/nonexistent/meshtastic-test-spidev");
+}
+
 void test_borrow_lends_the_global_spi_for_host_zero()
 {
+    useSimulatedChip(0);
     SPIClass *spi = nullptr;
     TEST_ASSERT_TRUE(lgfx_borrow_spiclass(0, spi));
     TEST_ASSERT_EQUAL_PTR(&SPI, spi);
@@ -186,6 +198,7 @@ void test_borrow_lends_the_global_spi_for_host_zero()
 
 void test_borrow_lends_the_registry_instance()
 {
+    useSimulatedChip(5);
     SPIClass *spi = nullptr;
     TEST_ASSERT_TRUE(lgfx_borrow_spiclass(5, spi));
     TEST_ASSERT_EQUAL_PTR(HardwareSPI::getInstance(5), spi);
@@ -198,9 +211,22 @@ void test_borrow_leaves_negative_hosts_to_lovyangfx()
     TEST_ASSERT_NULL(spi);
 }
 
+// mkdtemp() creates the directory atomically with mode 0700, so concurrent runs cannot
+// share fixtures and no one else can plant a symlink where a fixture is written.
+static std::filesystem::path configDir()
+{
+    static std::filesystem::path dir;
+    if (dir.empty()) {
+        std::string pattern = (std::filesystem::temp_directory_path() / "meshtastic-spi-XXXXXX").string();
+        TEST_ASSERT_NOT_NULL(mkdtemp(pattern.data()));
+        dir = pattern;
+    }
+    return dir;
+}
+
 static std::string writeConfig(const char *name, const std::string &body)
 {
-    const auto path = std::filesystem::temp_directory_path() / name;
+    const auto path = configDir() / name;
     std::ofstream out(path);
     out << body;
     return path.string();
@@ -240,6 +266,29 @@ void test_clearing_touchscreen_spidev_returns_to_the_display_host()
     std::filesystem::remove(second, ec);
 }
 
+void test_clearing_display_spidev_returns_to_the_radio_host()
+{
+    const std::string first = writeConfig("meshtastic-spi-display-a.yaml", "Lora:\n"
+                                                                           "  Module: sim\n"
+                                                                           "  spidev: spidev2.0\n"
+                                                                           "Display:\n"
+                                                                           "  Panel: ILI9488\n"
+                                                                           "  spidev: spidev1.0\n"
+                                                                           "Touchscreen:\n"
+                                                                           "  Module: XPT2046\n");
+    const std::string second = writeConfig("meshtastic-spi-display-b.yaml", "Display:\n"
+                                                                            "  spidev: \"\"\n");
+    TEST_ASSERT_TRUE(loadConfig(first.c_str()));
+    TEST_ASSERT_EQUAL_INT(1, portduino_config.display_spi_dev_int);
+    TEST_ASSERT_EQUAL_INT(1, portduino_config.touchscreen_spi_dev_int);
+    TEST_ASSERT_TRUE(loadConfig(second.c_str()));
+    TEST_ASSERT_EQUAL_INT(2, portduino_config.display_spi_dev_int);
+    TEST_ASSERT_EQUAL_INT(2, portduino_config.touchscreen_spi_dev_int);
+    std::error_code ec;
+    std::filesystem::remove(first, ec);
+    std::filesystem::remove(second, ec);
+}
+
 void setup()
 {
     initializeTestEnvironment();
@@ -265,7 +314,11 @@ void setup()
     RUN_TEST(test_borrow_leaves_negative_hosts_to_lovyangfx);
     RUN_TEST(test_unpackable_radio_path_is_not_left_on_host_zero);
     RUN_TEST(test_clearing_touchscreen_spidev_returns_to_the_display_host);
-    exit(UNITY_END());
+    RUN_TEST(test_clearing_display_spidev_returns_to_the_radio_host);
+    const int failures = UNITY_END();
+    std::error_code ec;
+    std::filesystem::remove_all(configDir(), ec);
+    exit(failures);
 }
 
 void loop() {}

@@ -1,0 +1,12 @@
+# CLEAN. A later config.d file clears the explicit display bus, so the display
+# and the touchscreen that follows it must return to the radio host.
+General:
+  ConfigDirectory: config.d/
+Lora:
+  Module: sim
+  spidev: spidev2.0
+Display:
+  Panel: ILI9488
+  spidev: spidev1.0
+Touchscreen:
+  Module: XPT2046

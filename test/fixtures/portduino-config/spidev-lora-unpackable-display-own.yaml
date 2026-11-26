@@ -1,0 +1,7 @@
+# CLEAN. An explicit Display.spidev, host 0 included, needs nothing from the radio path.
+Lora:
+  Module: sim
+  spidev: spidev10.0
+Display:
+  Panel: ILI9488
+  spidev: spidev0.0
