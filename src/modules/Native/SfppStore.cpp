@@ -410,8 +410,21 @@ bool StoreForwardPlusPlusModule::collectBuckets(const uint8_t *root_hash, size_t
 }
 
 //
-bool StoreForwardPlusPlusModule::addToScratch(link_object &lo)
+bool StoreForwardPlusPlusModule::addToScratch(link_object &lo, bool senderCopy)
 {
+    IdentityHit hit;
+    if (findIdentityCopy(lo.to, lo.from, lo.id, lo.root_hash, hit)) {
+        if (memcmp(hit.hash, lo.message_hash, SFPP_HASH_SIZE) == 0)
+            return true;
+        if (!senderCopy)
+            return true; // first copy wins unless the sender's copy arrives
+        if (isInDB(lo.message_hash, SFPP_HASH_SIZE)) {
+            LOG_WARN("StoreForwardpp identity copy would collide with another object");
+            return true;
+        }
+        return replaceIdentityCopy(hit, lo.message_hash, lo.encrypted_bytes, lo.encrypted_len);
+    }
+
     // push a message into the local chain DB
     // destination
     sqlite3_bind_int64(scratch_insert_stmt, 1, (sqlite3_int64)lo.to);
@@ -589,10 +602,73 @@ void StoreForwardPlusPlusModule::pruneScratchQueue()
     scratch_timed_out += (uint32_t)drop.size();
 }
 
+bool StoreForwardPlusPlusModule::findIdentityCopy(uint32_t to, uint32_t from, uint32_t id, const uint8_t *root_hash,
+                                                  IdentityHit &hit)
+{
+    auto lookup = [&](sqlite3_stmt *stmt, bool canon) {
+        sqlite3_reset(stmt);
+        sqlite3_bind_int64(stmt, 1, (sqlite3_int64)from);
+        sqlite3_bind_int64(stmt, 2, (sqlite3_int64)id);
+        sqlite3_bind_int64(stmt, 3, (sqlite3_int64)to);
+        sqlite3_bind_int(stmt, 4, SFPP_HASH_SIZE);
+        sqlite3_bind_blob(stmt, 5, root_hash, SFPP_HASH_SIZE, SQLITE_STATIC);
+        bool found = false;
+        if (sqlite3_step(stmt) == SQLITE_ROW) {
+            const uint8_t *hash = (const uint8_t *)sqlite3_column_blob(stmt, 0);
+            if (hash && sqlite3_column_bytes(stmt, 0) == (int)SFPP_HASH_SIZE) {
+                memcpy(hit.hash, hash, SFPP_HASH_SIZE);
+                hit.canon = canon;
+                found = true;
+            }
+        }
+        sqlite3_reset(stmt);
+        return found;
+    };
+    return lookup(identityCanonStmt, true) || lookup(identityScratchStmt, false);
+}
+
+bool StoreForwardPlusPlusModule::replaceIdentityCopy(const IdentityHit &hit, const uint8_t *hash, const uint8_t *cipher,
+                                                     size_t cipherLen)
+{
+    if (hit.canon) {
+        sqlite3_reset(replaceCanonCopyStmt);
+        sqlite3_bind_blob(replaceCanonCopyStmt, 1, cipher, (int)cipherLen, SQLITE_STATIC);
+        sqlite3_bind_blob(replaceCanonCopyStmt, 2, hash, SFPP_HASH_SIZE, SQLITE_STATIC);
+        sqlite3_bind_int64(replaceCanonCopyStmt, 3, (sqlite3_int64)sfppsr::shortId(hash, SFPP_HASH_SIZE));
+        sqlite3_bind_int64(replaceCanonCopyStmt, 4, (sqlite3_int64)sfppsr::checksumContribution(hash, SFPP_HASH_SIZE));
+        sqlite3_bind_int(replaceCanonCopyStmt, 5, (int)sfppsr::contentBucket(hash, SFPP_HASH_SIZE));
+        sqlite3_bind_blob(replaceCanonCopyStmt, 6, hit.hash, SFPP_HASH_SIZE, SQLITE_STATIC);
+        const int res = sqlite3_step(replaceCanonCopyStmt);
+        sqlite3_reset(replaceCanonCopyStmt);
+        return res == SQLITE_OK || res == SQLITE_DONE;
+    }
+
+    sqlite3_reset(replaceScratchCopyStmt);
+    sqlite3_bind_blob(replaceScratchCopyStmt, 1, cipher, (int)cipherLen, SQLITE_STATIC);
+    sqlite3_bind_blob(replaceScratchCopyStmt, 2, hash, SFPP_HASH_SIZE, SQLITE_STATIC);
+    sqlite3_bind_blob(replaceScratchCopyStmt, 3, hit.hash, SFPP_HASH_SIZE, SQLITE_STATIC);
+    const int res = sqlite3_step(replaceScratchCopyStmt);
+    sqlite3_reset(replaceScratchCopyStmt);
+    return res == SQLITE_OK || res == SQLITE_DONE;
+}
+
 bool StoreForwardPlusPlusModule::insertCanonObject(uint32_t to, uint32_t from, uint32_t packetId, const uint8_t *cipher,
                                                    size_t cipherLen, const uint8_t *hash, const RowTime &time,
-                                                   const std::string &payload, const uint8_t *root_hash, uint32_t bucket)
+                                                   const std::string &payload, const uint8_t *root_hash, uint32_t bucket,
+                                                   bool senderCopy)
 {
+    IdentityHit hit;
+    if (findIdentityCopy(to, from, packetId, root_hash, hit)) {
+        if (memcmp(hit.hash, hash, SFPP_HASH_SIZE) == 0)
+            return true;
+        if (!senderCopy)
+            return true; // first copy wins unless the sender's copy arrives
+        if (isInDB(hash, SFPP_HASH_SIZE)) {
+            LOG_WARN("StoreForwardpp identity copy would collide with another object");
+            return true;
+        }
+        return replaceIdentityCopy(hit, hash, cipher, cipherLen);
+    }
     if (isInDB(hash, SFPP_HASH_SIZE))
         return true;
 

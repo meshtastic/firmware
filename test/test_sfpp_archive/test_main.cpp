@@ -345,6 +345,58 @@ uint32_t storedBucket(PacketId id)
     return bucket;
 }
 
+std::vector<uint8_t> mappingRoot();
+
+uint32_t storedRowCount(PacketId id)
+{
+    sqlite3 *db = nullptr;
+    if (sqlite3_open(dbFile().c_str(), &db) != SQLITE_OK) {
+        if (db)
+            sqlite3_close(db);
+        return 0;
+    }
+    sqlite3_stmt *stmt = nullptr;
+    uint32_t count = 0;
+    if (sqlite3_prepare_v2(db, "select count(*) from channel_messages where packet_id=?;", -1, &stmt, nullptr) == SQLITE_OK) {
+        sqlite3_bind_int64(stmt, 1, id);
+        if (sqlite3_step(stmt) == SQLITE_ROW)
+            count = (uint32_t)sqlite3_column_int64(stmt, 0);
+    }
+    if (stmt)
+        sqlite3_finalize(stmt);
+    sqlite3_close(db);
+    return count;
+}
+
+void insertRawCanonRow(PacketId id, const uint8_t *hash)
+{
+    std::vector<uint8_t> root = mappingRoot();
+    TEST_ASSERT_EQUAL_UINT(SFPP_HASH_SIZE, root.size());
+    uint8_t cipher[2] = {0x5A, 0x5A};
+    sqlite3 *db = nullptr;
+    TEST_ASSERT_EQUAL_INT(SQLITE_OK, sqlite3_open(dbFile().c_str(), &db));
+    sqlite3_stmt *stmt = nullptr;
+    TEST_ASSERT_EQUAL_INT(SQLITE_OK,
+                          sqlite3_prepare_v2(db,
+                                             "insert into channel_messages (destination, sender, packet_id, rx_time, root_hash, "
+                                             "encrypted_bytes, message_hash, payload, short_id, checksum, bucket) "
+                                             "values (?, ?, ?, ?, ?, ?, ?, '', ?, ?, ?);",
+                                             -1, &stmt, nullptr));
+    sqlite3_bind_int64(stmt, 1, NODENUM_BROADCAST);
+    sqlite3_bind_int64(stmt, 2, REMOTE_NODE);
+    sqlite3_bind_int64(stmt, 3, id);
+    sqlite3_bind_int64(stmt, 4, getValidTime(RTCQualityNTP, true));
+    sqlite3_bind_blob(stmt, 5, root.data(), SFPP_HASH_SIZE, NULL);
+    sqlite3_bind_blob(stmt, 6, cipher, sizeof(cipher), NULL);
+    sqlite3_bind_blob(stmt, 7, hash, SFPP_HASH_SIZE, NULL);
+    sqlite3_bind_int64(stmt, 8, (sqlite3_int64)sfppsr::shortId(hash, SFPP_HASH_SIZE));
+    sqlite3_bind_int64(stmt, 9, (sqlite3_int64)sfppsr::checksumContribution(hash, SFPP_HASH_SIZE));
+    sqlite3_bind_int(stmt, 10, (int)sfppsr::contentBucket(hash, SFPP_HASH_SIZE));
+    TEST_ASSERT_EQUAL_INT(SQLITE_DONE, sqlite3_step(stmt));
+    sqlite3_finalize(stmt);
+    sqlite3_close(db);
+}
+
 void setStoredRxTime(PacketId id, uint32_t rxTime)
 {
     sqlite3 *db = nullptr;
@@ -632,6 +684,152 @@ void test_ingestStoresTextWithPayloadAndHashes()
     TEST_ASSERT_EQUAL_UINT(SFPP_HASH_SIZE, row.root.size());
     TEST_ASSERT_TRUE(row.shortId != 0);
     TEST_ASSERT_TRUE(row.encrypted.size() > 0);
+}
+
+// One message heard as two ciphertexts is one object; the sender's copy replaces a relay's copy.
+void test_archive_keeps_one_object_for_two_ciphertexts()
+{
+    const PacketId id = TEXT_ID + 0x200;
+    meshtastic_MeshPacket mp = makeText(REMOTE_NODE, id, "one message, two copies", getValidTime(RTCQualityNTP, true));
+
+    mp.relay_node = 0x5b;
+    meshtastic_MeshPacket relay = makeEncryptedCopy(mp);
+    relay.encrypted.bytes[0] ^= 0xFF;
+    TEST_ASSERT_EQUAL(ProcessMessage::CONTINUE, testSfpp->ingest(mp, &relay));
+    TEST_ASSERT_EQUAL_UINT32(1, storedRowCount(id));
+
+    mp.relay_node = nodeDB->getLastByteOfNodeNum(REMOTE_NODE);
+    meshtastic_MeshPacket sender = makeEncryptedCopy(mp);
+    TEST_ASSERT_EQUAL(ProcessMessage::CONTINUE, testSfpp->ingest(mp, &sender));
+
+    TEST_ASSERT_EQUAL_UINT32(1, storedRowCount(id));
+    StoredRow row;
+    TEST_ASSERT_TRUE(readStoredRow(id, row));
+    TEST_ASSERT_EQUAL_UINT(sender.encrypted.size, row.encrypted.size());
+    TEST_ASSERT_EQUAL_MEMORY(sender.encrypted.bytes, row.encrypted.data(), row.encrypted.size());
+}
+
+// Replacing the hash moves the row out of the relay's content bucket into the sender's.
+void test_sender_copy_moves_the_content_bucket()
+{
+    const PacketId id = TEXT_ID + 0x201;
+    meshtastic_MeshPacket mp = makeText(REMOTE_NODE, id, "bucket move", getValidTime(RTCQualityNTP, true));
+
+    meshtastic_MeshPacket sender = makeEncryptedCopy(mp);
+    uint8_t senderHash[SFPP_HASH_SIZE];
+    sfppframe::messageHash(sender.encrypted.bytes, sender.encrypted.size, mp.to, mp.from, id, senderHash);
+    const uint32_t senderBucket = sfppsr::contentBucket(senderHash, SFPP_HASH_SIZE);
+
+    meshtastic_MeshPacket relay = makeEncryptedCopy(mp);
+    uint32_t relayBucket = senderBucket;
+    uint8_t relayHash[SFPP_HASH_SIZE];
+    for (uint16_t i = 0; i < 256 && relayBucket == senderBucket; i++) {
+        relay = makeEncryptedCopy(mp);
+        relay.encrypted.bytes[1] ^= (uint8_t)i;
+        sfppframe::messageHash(relay.encrypted.bytes, relay.encrypted.size, mp.to, mp.from, id, relayHash);
+        relayBucket = sfppsr::contentBucket(relayHash, SFPP_HASH_SIZE);
+    }
+    TEST_ASSERT_NOT_EQUAL_UINT32(senderBucket, relayBucket);
+
+    mp.relay_node = 0x5b;
+    TEST_ASSERT_EQUAL(ProcessMessage::CONTINUE, testSfpp->ingest(mp, &relay));
+    TEST_ASSERT_EQUAL_UINT32(relayBucket, storedBucket(id));
+
+    mp.relay_node = nodeDB->getLastByteOfNodeNum(REMOTE_NODE);
+    TEST_ASSERT_EQUAL(ProcessMessage::CONTINUE, testSfpp->ingest(mp, &sender));
+
+    StoredRow row;
+    TEST_ASSERT_TRUE(readStoredRow(id, row));
+    TEST_ASSERT_EQUAL_UINT32(senderBucket, row.bucket);
+    TEST_ASSERT_EQUAL_MEMORY(sender.encrypted.bytes, row.encrypted.data(), row.encrypted.size());
+}
+
+// A relay's later copy never displaces the sender's copy.
+void test_relay_copy_does_not_replace_the_sender_copy()
+{
+    const PacketId id = TEXT_ID + 0x202;
+    meshtastic_MeshPacket mp = makeText(REMOTE_NODE, id, "sender first", getValidTime(RTCQualityNTP, true));
+
+    mp.relay_node = nodeDB->getLastByteOfNodeNum(REMOTE_NODE);
+    meshtastic_MeshPacket sender = makeEncryptedCopy(mp);
+    TEST_ASSERT_EQUAL(ProcessMessage::CONTINUE, testSfpp->ingest(mp, &sender));
+
+    mp.relay_node = 0x5b;
+    meshtastic_MeshPacket relay = makeEncryptedCopy(mp);
+    relay.encrypted.bytes[0] ^= 0xAA;
+    TEST_ASSERT_EQUAL(ProcessMessage::CONTINUE, testSfpp->ingest(mp, &relay));
+
+    StoredRow row;
+    TEST_ASSERT_TRUE(readStoredRow(id, row));
+    TEST_ASSERT_EQUAL_UINT32(1, storedRowCount(id));
+    TEST_ASSERT_EQUAL_MEMORY(sender.encrypted.bytes, row.encrypted.data(), row.encrypted.size());
+}
+
+// A replacement whose new hash already belongs to another identity is refused, not merged.
+void test_identity_collision_never_adds_a_second_row()
+{
+    const PacketId id = TEXT_ID + 0x203;
+    const PacketId other = TEXT_ID + 0x204;
+    meshtastic_MeshPacket mp = makeText(REMOTE_NODE, id, "collision", getValidTime(RTCQualityNTP, true));
+
+    mp.relay_node = 0x5b;
+    meshtastic_MeshPacket relay = makeEncryptedCopy(mp);
+    relay.encrypted.bytes[0] ^= 0x11;
+    TEST_ASSERT_EQUAL(ProcessMessage::CONTINUE, testSfpp->ingest(mp, &relay));
+    StoredRow relayRow;
+    TEST_ASSERT_TRUE(readStoredRow(id, relayRow));
+    const uint32_t relayTime = relayRow.rxTime;
+
+    mp.relay_node = nodeDB->getLastByteOfNodeNum(REMOTE_NODE);
+    meshtastic_MeshPacket sender = makeEncryptedCopy(mp);
+    uint8_t senderHash[SFPP_HASH_SIZE];
+    sfppframe::messageHash(sender.encrypted.bytes, sender.encrypted.size, mp.to, mp.from, id, senderHash);
+    insertRawCanonRow(other, senderHash);
+
+    TEST_ASSERT_EQUAL(ProcessMessage::CONTINUE, testSfpp->ingest(mp, &sender));
+    TEST_ASSERT_EQUAL_UINT32(1, storedRowCount(id));
+    StoredRow row;
+    TEST_ASSERT_TRUE(readStoredRow(id, row));
+    TEST_ASSERT_EQUAL_MEMORY(relay.encrypted.bytes, row.encrypted.data(), row.encrypted.size());
+    TEST_ASSERT_EQUAL_UINT32(relayTime, row.rxTime);
+    TEST_ASSERT_EQUAL_UINT32(1, storedRowCount(other));
+}
+
+// A recovered item frame for the same identity does not add a second row.
+void test_recovered_item_with_the_same_identity_is_one_object()
+{
+    const PacketId id = TEXT_ID + 0x205;
+    meshtastic_MeshPacket mp = makeText(REMOTE_NODE, id, "recovered copy", getValidTime(RTCQualityNTP, true));
+
+    mp.relay_node = 0x5b;
+    meshtastic_MeshPacket relay = makeEncryptedCopy(mp);
+    relay.encrypted.bytes[0] ^= 0x22;
+    TEST_ASSERT_EQUAL(ProcessMessage::CONTINUE, testSfpp->ingest(mp, &relay));
+    TEST_ASSERT_EQUAL_UINT32(1, storedRowCount(id));
+
+    meshtastic_MeshPacket sender = makeEncryptedCopy(mp);
+    std::vector<meshtastic_StoreForwardPlusPlus> frames;
+    TEST_ASSERT_TRUE(sfppframe::split(sender.encrypted.bytes, sender.encrypted.size, mp.to, mp.from, id, 0, false, frames));
+    for (const auto &frame : frames) {
+        meshtastic_MeshPacket item = meshtastic_MeshPacket_init_zero;
+        item.from = REMOTE_NODE;
+        item.to = LOCAL_NODE;
+        item.id = 0x70000000 + id;
+        item.channel = 0;
+        item.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA;
+        item.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+        item.decoded.portnum = meshtastic_PortNum_STORE_FORWARD_PLUSPLUS_APP;
+        item.decoded.payload.size = pb_encode_to_bytes(item.decoded.payload.bytes, sizeof(item.decoded.payload.bytes),
+                                                       &meshtastic_StoreForwardPlusPlus_msg, &frame);
+        meshtastic_MeshPacket enc = meshtastic_MeshPacket_init_zero;
+        enc.id = item.id;
+        TEST_ASSERT_EQUAL(ProcessMessage::CONTINUE, testSfpp->ingest(item, &enc));
+    }
+
+    TEST_ASSERT_EQUAL_UINT32(1, storedRowCount(id));
+    StoredRow row;
+    TEST_ASSERT_TRUE(readStoredRow(id, row));
+    TEST_ASSERT_EQUAL_MEMORY(relay.encrypted.bytes, row.encrypted.data(), row.encrypted.size());
 }
 
 // The store and the frame splitter must hash a message identically; if they drift, a frame's key
@@ -1607,6 +1805,11 @@ void setup()
 
     UNITY_BEGIN();
     RUN_TEST(test_ingestStoresTextWithPayloadAndHashes);
+    RUN_TEST(test_archive_keeps_one_object_for_two_ciphertexts);
+    RUN_TEST(test_sender_copy_moves_the_content_bucket);
+    RUN_TEST(test_relay_copy_does_not_replace_the_sender_copy);
+    RUN_TEST(test_identity_collision_never_adds_a_second_row);
+    RUN_TEST(test_recovered_item_with_the_same_identity_is_one_object);
     RUN_TEST(test_storedMessageHashMatchesTheFrameHash);
     RUN_TEST(test_legacyHistoryAnswersInLegacyFormat);
     RUN_TEST(test_legacyHistoryUsesLegacyRequestWindow);

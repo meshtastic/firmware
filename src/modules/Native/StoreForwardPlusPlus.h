@@ -99,6 +99,10 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     sqlite3 *ppDb;
     sqlite3_stmt *chain_insert_stmt;
     sqlite3_stmt *scratch_insert_stmt;
+    sqlite3_stmt *identityCanonStmt;
+    sqlite3_stmt *identityScratchStmt;
+    sqlite3_stmt *replaceCanonCopyStmt;
+    sqlite3_stmt *replaceScratchCopyStmt;
     sqlite3_stmt *checkDupMessageHash;
     sqlite3_stmt *checkScratch;
     sqlite3_stmt *removeScratch;
@@ -267,7 +271,7 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     // A canonical row, shared by recovered objects and promoted scratch rows.
     bool insertCanonObject(uint32_t to, uint32_t from, uint32_t packetId, const uint8_t *cipher, size_t cipherLen,
                            const uint8_t *hash, const RowTime &time, const std::string &payload, const uint8_t *root_hash,
-                           uint32_t bucket);
+                           uint32_t bucket, bool senderCopy = false);
     // Stage 8e/10: a scratch row whose short ID the peer also holds is already "held"; move it into
     // the bucket and drop it from the fetch list instead of re-fetching it.
     void promoteScratchMatches(const uint8_t *root_hash, uint32_t bucket, std::vector<pinsketch::Element> &ids);
@@ -296,7 +300,15 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     void addRootToMappings(ChannelHash, uint8_t *);
 
     // Adds an incoming text message to the scratch database
-    bool addToScratch(link_object &);
+    bool addToScratch(link_object &, bool senderCopy = false);
+
+    // One object per (root, from, id, to); a sender's copy may replace a relay's.
+    struct IdentityHit {
+        uint8_t hash[SFPP_HASH_SIZE];
+        bool canon;
+    };
+    bool findIdentityCopy(uint32_t to, uint32_t from, uint32_t id, const uint8_t *root_hash, IdentityHit &hit);
+    bool replaceIdentityCopy(const IdentityHit &hit, const uint8_t *hash, const uint8_t *cipher, size_t cipherLen);
 
     // checks if the message hash is present in the canonical chain database
     bool isInDB(const uint8_t *, size_t);

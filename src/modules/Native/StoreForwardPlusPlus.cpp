@@ -262,6 +262,21 @@ StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
         VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
                        -1, &chain_insert_stmt, NULL);
 
+    sqlite3_prepare_v2(ppDb,
+                       "select message_hash from channel_messages where sender=? and packet_id=? and destination=? "
+                       "and substr(root_hash,1,?)=? order by rowid limit 1;",
+                       -1, &identityCanonStmt, NULL);
+    sqlite3_prepare_v2(ppDb,
+                       "select message_hash from local_messages where sender=? and packet_id=? and destination=? "
+                       "and substr(root_hash,1,?)=? order by rowid limit 1;",
+                       -1, &identityScratchStmt, NULL);
+    sqlite3_prepare_v2(ppDb,
+                       "update channel_messages set encrypted_bytes=?, message_hash=?, short_id=?, checksum=?, bucket=? "
+                       "where message_hash=?;",
+                       -1, &replaceCanonCopyStmt, NULL);
+    sqlite3_prepare_v2(ppDb, "update local_messages set encrypted_bytes=?, message_hash=? where message_hash=?;", -1,
+                       &replaceScratchCopyStmt, NULL);
+
     // Both identifiers are stored beside the object, so summarising a bucket never rehashes and a
     // restart costs a query rather than a pass over the chain.
     sqlite3_prepare_v2(ppDb, "select short_id, checksum from channel_messages \
@@ -374,13 +389,15 @@ StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
 StoreForwardPlusPlusModule::~StoreForwardPlusPlusModule()
 {
     sqlite3_stmt *statements[] = {
-        chain_insert_stmt,     scratch_insert_stmt,  checkDupMessageHash,   checkScratch,           removeScratch,
-        updatePayloadStmt,     fromScratchStmt,      fromScratchByHashStmt, getHashFromRootStmt,    addRootToMappingsStmt,
-        getFullRootHashStmt,   getScratchCountStmt,  scratchTimeRowsStmt,   deleteScratchRowidStmt, canonTimeRowsStmt,
-        deleteCanonRowidStmt,  bucketSummaryStmt,    bucketIdsStmt,         distinctBucketsStmt,    getLinkByShortIdStmt,
-        deleteCanonStmt,       unindexedLinksStmt,   setLinkSetIndexStmt,   legacyHistoryStmt,      timeStateReadStmt,
-        timeStateWriteStmt,    restampChannelStmt,   restampScratchStmt,    restampDirectStmt,      updateChannelTimeStmt,
-        updateScratchTimeStmt, updateDirectTimeStmt,
+        chain_insert_stmt,      scratch_insert_stmt,   identityCanonStmt,      identityScratchStmt,
+        replaceCanonCopyStmt,   replaceScratchCopyStmt, checkDupMessageHash,    checkScratch,
+        removeScratch,          updatePayloadStmt,     fromScratchStmt,        fromScratchByHashStmt,
+        getHashFromRootStmt,    addRootToMappingsStmt, getFullRootHashStmt,    getScratchCountStmt,
+        scratchTimeRowsStmt,    deleteScratchRowidStmt, canonTimeRowsStmt,     deleteCanonRowidStmt,
+        bucketSummaryStmt,      bucketIdsStmt,         distinctBucketsStmt,    getLinkByShortIdStmt,
+        deleteCanonStmt,        unindexedLinksStmt,    setLinkSetIndexStmt,    legacyHistoryStmt,
+        timeStateReadStmt,      timeStateWriteStmt,    restampChannelStmt,     restampScratchStmt,
+        restampDirectStmt,      updateChannelTimeStmt, updateScratchTimeStmt,  updateDirectTimeStmt,
     };
     for (sqlite3_stmt *stmt : statements) {
         if (stmt)
@@ -469,13 +486,14 @@ void StoreForwardPlusPlusModule::handleEncrypted(const meshtastic_MeshPacket *mp
 
     if (lo.from == 0)
         lo.from = nodeDB->getNodeNum();
+    const bool senderCopy = lo.from == nodeDB->getNodeNum() || mp->relay_node == nodeDB->getLastByteOfNodeNum(lo.from);
 
     if (!portduino_config.sfpp_stratum0) {
         if (lo.root_hash_len == 0) {
             LOG_DEBUG("StoreForwardpp Received text message, but no chain. Possibly no Stratum0 on local mesh.");
             return;
         }
-        addToScratch(lo);
+        addToScratch(lo, senderCopy);
         LOG_DEBUG("StoreForwardpp added message to scratch db");
         // send link to upstream?
 
@@ -483,7 +501,7 @@ void StoreForwardPlusPlusModule::handleEncrypted(const meshtastic_MeshPacket *mp
     }
     insertCanonObject(lo.to, lo.from, lo.id, lo.encrypted_bytes, lo.encrypted_len, lo.message_hash,
                       RowTime{lo.rx_time, lo.time_basis, lo.boot_id, lo.age_margin}, lo.payload, lo.root_hash,
-                      sfppsr::contentBucket(lo.message_hash, lo.message_hash_len));
+                      sfppsr::contentBucket(lo.message_hash, lo.message_hash_len), senderCopy);
 }
 
 ProcessMessage StoreForwardPlusPlusModule::handleReceived(const meshtastic_MeshPacket &mp)
@@ -532,6 +550,7 @@ ProcessMessage StoreForwardPlusPlusModule::handleReceived(const meshtastic_MeshP
 
     if (mp.decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP && mp.to == NODENUM_BROADCAST) {
         link_object lo = ingestTextPacket(mp, currentEncrypted);
+        const bool senderCopy = mp.relay_node == nodeDB->getLastByteOfNodeNum(lo.from);
 
         if (isInDB(lo.message_hash, lo.message_hash_len)) {
             LOG_DEBUG("StoreForwardpp Found text message in chain DB");
@@ -547,7 +566,7 @@ ProcessMessage StoreForwardPlusPlusModule::handleReceived(const meshtastic_MeshP
                 LOG_DEBUG("StoreForwardpp Received text message, but no chain. Possibly no Stratum0 on local mesh.");
                 return ProcessMessage::CONTINUE;
             }
-            addToScratch(lo);
+            addToScratch(lo, senderCopy);
             LOG_DEBUG("StoreForwardpp added message to scratch db");
             // send link to upstream?
 
@@ -555,7 +574,7 @@ ProcessMessage StoreForwardPlusPlusModule::handleReceived(const meshtastic_MeshP
         }
         insertCanonObject(lo.to, lo.from, lo.id, lo.encrypted_bytes, lo.encrypted_len, lo.message_hash,
                           RowTime{lo.rx_time, lo.time_basis, lo.boot_id, lo.age_margin}, lo.payload, lo.root_hash,
-                          sfppsr::contentBucket(lo.message_hash, lo.message_hash_len));
+                          sfppsr::contentBucket(lo.message_hash, lo.message_hash_len), senderCopy);
         return ProcessMessage::CONTINUE;
     }
 
