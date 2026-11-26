@@ -211,7 +211,7 @@ void TransmitHistory::forgetBootRelativeBeforeSleep(uint32_t msecToWake)
 {
     // A crash or watchdog reboot never comes through here, so the recovery window still covers those.
     // portMAX_DELAY (shutdown) is far past the window too.
-    if (msecToWake / 1000 <= BOOT_RELATIVE_RECOVERY_WINDOW_SEC)
+    if (msecToWake <= BOOT_RELATIVE_RECOVERY_WINDOW_SEC * 1000)
         return;
     for (auto it = history.begin(); it != history.end();) {
         if ((it->second.flags & ENTRY_FLAG_BOOT_RELATIVE) != 0) {

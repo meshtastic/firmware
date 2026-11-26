@@ -323,7 +323,8 @@ static void test_deep_sleep_past_window_forgets_boot_relative_stamp()
 {
     setBootRelativeTimeForUnitTest(9);
     transmitHistory->setLastSentAtBootRelative(meshtastic_PortNum_TELEMETRY_APP, 9);
-    transmitHistory->forgetBootRelativeBeforeSleep(121 * 1000); // one second past the window
+    transmitHistory->saveToDisk(); // on disk already, so only the removal can make the next save write
+    transmitHistory->forgetBootRelativeBeforeSleep(120 * 1000 + 1); // one millisecond past the window
     transmitHistory->saveToDisk();
 
     delete transmitHistory;
