@@ -2470,6 +2470,37 @@ void test_lostProvideFrameEndsAtIdle()
     TEST_ASSERT_EQUAL_UINT32(1, requests);
 }
 
+// A slow serving pacer lets one listing frame arrive well past the old fixed idle gap; the
+// exchange must wait for it instead of failing the pull.
+void test_listingOutlastsSlowDrainGap()
+{
+    portduino_config.sfpp_enum_drain_ms = 20000;
+    ingestAuthority(32);
+    buildFollowerFromCopy();
+    TEST_ASSERT_TRUE(deleteNewest(dirB, kBucket, 2));
+
+    meshtastic_MeshPacket advert;
+    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, kBucket, false, advert));
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, advert));
+    myNodeInfo.my_node_num = FOLLOWER_NODE;
+    follower->runOnce();
+    std::vector<meshtastic_MeshPacket> request = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, request.size());
+
+    // Frame 0 of 2, then a 45 s gap: longer than 30 s, well inside four 20 s drain intervals.
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, buildProvideFromDir(dirA, kBucket, 0, 2)));
+    TEST_ASSERT_EQUAL_UINT(0, takeSent().size());
+    Time::setTestMillis(Time::getMillis() + 45000);
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, buildProvideFromDir(dirA, kBucket, 1, 2)));
+
+    std::vector<meshtastic_MeshPacket> sent = takeSent();
+    uint32_t requests = 0;
+    for (const auto &out : sent)
+        if (decodeSfpp(out).sfpp_message_type == meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_REQUEST)
+            requests++;
+    TEST_ASSERT_EQUAL_UINT32(1, requests);
+}
+
 // --- Stage 8: sketch mode ---
 
 void runSketchCase(uint32_t total, uint32_t missing)
@@ -3334,6 +3365,7 @@ void setup()
     RUN_TEST(test_item_in_flight_is_not_requested_twice);
     RUN_TEST(test_windowBudgetCapsServedFrames);
     RUN_TEST(test_lostProvideFrameEndsAtIdle);
+    RUN_TEST(test_listingOutlastsSlowDrainGap);
     RUN_TEST(test_fourRequestersShareTheServingWindow);
     RUN_TEST(test_lostEnumProvideRetriesWithinBackoff);
     RUN_TEST(test_failedPullStopsPastServiceWindow);

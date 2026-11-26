@@ -39,6 +39,13 @@ static uint32_t itemRetryIntervalMs()
     return scaled > kEnumRetryMs ? scaled : kEnumRetryMs;
 }
 
+// A slow pacer spaces listing frames wider than the floor, so wait out four drain intervals.
+static uint32_t enumProbeIdleMs()
+{
+    const uint32_t scaled = 4 * enumDrainIntervalMs();
+    return scaled > kEnumProbeIdleMs ? scaled : kEnumProbeIdleMs;
+}
+
 // Overheard listings kept, and how long one stands in for our own ENUM_REQUEST.
 static constexpr size_t kEnumHeardListingsMax = 4;
 static constexpr uint32_t kEnumHeardListingMs = 5 * 60 * 1000;
@@ -237,7 +244,7 @@ void StoreForwardPlusPlusModule::expireEnumExchange()
     // stops. Silence is the only completion signal, so finalise a probe or a half-received provide
     // after an idle gap rather than waiting for the 15 min overall timeout.
     const bool partialProvide = enumProvideActive && enumProvideSeenCount < enumProvideTotal;
-    if ((enumCollisionProbe || partialProvide) && Throttle::hasElapsed(enumLastItemMs, kEnumProbeIdleMs)) {
+    if ((enumCollisionProbe || partialProvide) && Throttle::hasElapsed(enumLastItemMs, enumProbeIdleMs())) {
         // A lost provide frame is not a collision; only a real probe may suppress the bucket, or a
         // later advert with the same summary could never restart the exchange.
         if (enumCollisionProbe && !bucketMatchesPeer(enumExchangeRoot, enumExchangeBucket)) {
