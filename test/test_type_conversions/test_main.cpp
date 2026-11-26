@@ -5,6 +5,13 @@
 //   - wire-level decode acceptance of legacy 39-byte long_names
 //   - public_key / hw_model / role pass-through
 //   - thin vs bundled NodeInfo emission
+//   - altitude presence through PositionLite (ConvertToPositionLite / ConvertToPosition /
+//     ConvertToNodeInfo). PositionLite has no has_altitude, so every reader treats a stored 0
+//     as "no altitude". The store side therefore writes 0 only for an absent altitude and
+//     writes a real 0 m reading as 1 m. Regressions guarded: a sea-level node losing its
+//     altitude on reboot restore and in the phone's node list; and a stale value left in
+//     `altitude` after has_altitude was cleared (the GPS keeps its last reading) coming back
+//     as present.
 //
 // All exercised via the explicit-args overload of ConvertToNodeInfo so we don't
 // touch the global nodeDB pointer (which isn't initialized in this test env).
@@ -415,6 +422,61 @@ void test_convert_to_node_info_user_only_when_has_user_bit_set(void)
     TEST_ASSERT_EQUAL_STRING("!00000001", info2.user.id);
 }
 
+// ---------- altitude presence through PositionLite ---------------------------
+
+static meshtastic_Position positionWithAltitude(bool present, int32_t altitude)
+{
+    meshtastic_Position p = meshtastic_Position_init_default;
+    p.latitude_i = 374200000;
+    p.longitude_i = -1221000000;
+    p.has_altitude = present;
+    p.altitude = altitude;
+    return p;
+}
+
+void test_position_lite_altitude_zero_reading_survives_round_trip(void)
+{
+    const meshtastic_PositionLite lite = TypeConversions::ConvertToPositionLite(positionWithAltitude(true, 0));
+    TEST_ASSERT_EQUAL_INT32(1, lite.altitude);
+
+    const meshtastic_Position restored = TypeConversions::ConvertToPosition(lite);
+    TEST_ASSERT_TRUE(restored.has_altitude);
+    TEST_ASSERT_EQUAL_INT32(1, restored.altitude);
+
+    meshtastic_NodeInfoLite node = meshtastic_NodeInfoLite_init_default;
+    node.num = 0xAA;
+    const meshtastic_NodeInfo info = TypeConversions::ConvertToNodeInfo(&node, &lite, nullptr);
+    TEST_ASSERT_TRUE(info.position.has_altitude);
+    TEST_ASSERT_EQUAL_INT32(1, info.position.altitude);
+}
+
+// The GPS clears has_altitude when the receiver stops reporting it but leaves its last reading in `altitude`.
+void test_position_lite_absent_altitude_stays_absent(void)
+{
+    const meshtastic_PositionLite lite = TypeConversions::ConvertToPositionLite(positionWithAltitude(false, 545));
+    TEST_ASSERT_EQUAL_INT32(0, lite.altitude);
+
+    const meshtastic_Position restored = TypeConversions::ConvertToPosition(lite);
+    TEST_ASSERT_FALSE(restored.has_altitude);
+
+    meshtastic_NodeInfoLite node = meshtastic_NodeInfoLite_init_default;
+    node.num = 0xAA;
+    const meshtastic_NodeInfo info = TypeConversions::ConvertToNodeInfo(&node, &lite, nullptr);
+    TEST_ASSERT_FALSE(info.position.has_altitude);
+}
+
+void test_position_lite_nonzero_altitude_passes_through(void)
+{
+    const int32_t altitudes[] = {545, 1, -1, -28};
+    for (int32_t altitude : altitudes) {
+        const meshtastic_PositionLite lite = TypeConversions::ConvertToPositionLite(positionWithAltitude(true, altitude));
+        TEST_ASSERT_EQUAL_INT32(altitude, lite.altitude);
+        const meshtastic_Position restored = TypeConversions::ConvertToPosition(lite);
+        TEST_ASSERT_TRUE(restored.has_altitude);
+        TEST_ASSERT_EQUAL_INT32(altitude, restored.altitude);
+    }
+}
+
 // Regression for UnitConversions::displaySafeFloat: drop non-finite values and clamp magnitude so a
 // crafted telemetry float can't overflow Arduino String(float)'s fixed char[33].
 static void test_displaySafeFloat_bounds_and_finiteness()
@@ -506,6 +568,9 @@ void setup()
     RUN_TEST(test_convert_to_node_info_extracts_bitfield_bools);
     RUN_TEST(test_convert_to_node_info_extracts_bitfield_bools_none_set);
     RUN_TEST(test_convert_to_node_info_user_only_when_has_user_bit_set);
+    RUN_TEST(test_position_lite_altitude_zero_reading_survives_round_trip);
+    RUN_TEST(test_position_lite_absent_altitude_stays_absent);
+    RUN_TEST(test_position_lite_nonzero_altitude_passes_through);
     RUN_TEST(test_displaySafeFloat_bounds_and_finiteness);
     RUN_TEST(test_parseDecimalFloat_matches_strtof_for_plain_decimals);
     exit(UNITY_END());

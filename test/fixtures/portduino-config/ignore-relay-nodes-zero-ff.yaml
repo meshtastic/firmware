@@ -1,0 +1,9 @@
+# FAULT: 0xA28E1400 is sent as relay byte 0xff, the same byte as 0x112233ff, so the two collide.
+# Expect two WARNINGs (the 00 entry and the shared byte) and exit 0.
+Lora:
+  Module: sx1262
+  CS: 21
+  IRQ: 16
+  Busy: 20
+  Reset: 18
+  IgnoreRelayNodes: [0xA28E1400, 0x112233ff]

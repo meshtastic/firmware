@@ -19,6 +19,7 @@
 #include "graphics/SharedUIDisplay.h"
 #include "graphics/TFTColorRegions.h"
 #include "graphics/draw/MessageRenderer.h"
+#include "graphics/draw/RadarRenderer.h"
 #include "graphics/draw/UIRenderer.h"
 #include "input/RotaryEncoderInterruptImpl1.h"
 #include "input/UpDownInterruptImpl1.h"
@@ -525,29 +526,8 @@ void menuHandler::FrequencySlotPicker()
     optionsArray[options] = "Slot 0 (Auto)";
     optionsEnumArray[options++] = 0;
 
-    // Calculate number of channels (copied from RadioInterface::applyModemConfig())
-
-    meshtastic_Config_LoRaConfig &loraConfig = config.lora;
-    double bw = loraConfig.use_preset ? modemPresetToBwKHz(loraConfig.modem_preset, myRegion->wideLora)
-                                      : bwCodeToKHz(loraConfig.bandwidth);
-
-    uint32_t numChannels = 0;
-    if (myRegion) {
-        // Match RadioInterface::applyModemConfig(): include padding, add spacing in numerator, and use round()
-        const double spacing = myRegion->profile->spacing;
-        const double padding = myRegion->profile->padding;
-        const double channelBandwidthMHz = bw / 1000.0;
-        const double numerator = (myRegion->freqEnd - myRegion->freqStart) + spacing;
-        const double denominator = spacing + (padding * 2) + channelBandwidthMHz;
-        if (denominator > 0.0) {
-            numChannels = static_cast<uint32_t>(round(numerator / denominator));
-        } else {
-            LOG_WARN("Invalid region config: non-positive channel spacing/width");
-        }
-    } else {
-        LOG_WARN("Region not set, can't calc channel count");
-        return;
-    }
+    // The count the radio tunes against: 0 for UNSET, and an over-wide custom bandwidth falls back
+    uint32_t numChannels = RadioInterface::frequencySlotCount(config.lora);
 
     if (numChannels > (uint32_t)(MAX_CHANNEL_OPTIONS - 2))
         numChannels = (uint32_t)(MAX_CHANNEL_OPTIONS - 2);
@@ -710,6 +690,57 @@ void menuHandler::showConfirmationBanner(const char *message, std::function<void
         }
     };
     screen->showOverlayBanner(confirmBanner);
+}
+
+// Where trackingViewPicker should return when the user picks "Back".  Set by
+// the calling menu (nodeListMenu or radarBearingsMenu) just before queueing
+// the picker, so back behaves like the Clock Face → Clock Menu flow.
+static menuHandler::screenMenus s_trackingViewPickerReturn = menuHandler::MenuNone;
+
+void menuHandler::setTrackingViewPickerReturn(screenMenus target)
+{
+    s_trackingViewPickerReturn = target;
+}
+
+void menuHandler::trackingViewPicker()
+{
+    // Mirrors clockFacePicker: pick which view the bearings/distance frame
+    // shows.  Stored in config.display.bearings_view_radar (false=Bearings
+    // list, true=Radar overlay).
+    static const ClockFaceOption trackingOptions[] = {
+        {"Back", OptionsAction::Back},
+        {"Bearings", OptionsAction::Select, false},
+        {"Radar", OptionsAction::Select, true},
+    };
+
+    constexpr size_t trackingCount = sizeof(trackingOptions) / sizeof(trackingOptions[0]);
+    static std::array<const char *, trackingCount> trackingLabels{};
+
+    auto bannerOptions = createStaticBannerOptions("Tracking View?", trackingOptions, trackingLabels,
+                                                   [](const ClockFaceOption &option, int) -> void {
+                                                       if (option.action == OptionsAction::Back) {
+                                                           menuHandler::menuQueue = s_trackingViewPickerReturn;
+                                                           if (s_trackingViewPickerReturn != MenuNone)
+                                                               screen->runNow();
+                                                           return;
+                                                       }
+
+                                                       if (!option.hasValue) {
+                                                           return;
+                                                       }
+
+                                                       if (config.display.bearings_view_radar == option.value) {
+                                                           return;
+                                                       }
+
+                                                       config.display.bearings_view_radar = option.value;
+                                                       service->reloadConfig(SEGMENT_CONFIG);
+                                                       screen->setFrames(Screen::FOCUS_PRESERVE);
+                                                       screen->runNow();
+                                                   });
+
+    bannerOptions.InitialSelected = config.display.bearings_view_radar ? 2 : 1;
+    screen->showOverlayBanner(bannerOptions);
 }
 
 void menuHandler::clockFacePicker()
@@ -1493,7 +1524,7 @@ void menuHandler::positionBaseMenu()
         CompassCalibrate,
         GPSSmartPosition,
         GPSUpdateInterval,
-        GPSPositionBroadcast
+        GPSPositionBroadcast,
     };
 
     static const PositionMenuOption baseOptions[] = {
@@ -1553,7 +1584,7 @@ void menuHandler::positionBaseMenu()
                 accelerometerThread->calibrate(30);
             }
 #endif
-#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && !MESHTASTIC_EXCLUDE_MAGNETOMETER
+#if !MESHTASTIC_EXCLUDE_MAGNETOMETER
             if (magnetometerThread) {
                 magnetometerThread->calibrate(30);
             }
@@ -1585,6 +1616,57 @@ void menuHandler::positionBaseMenu()
     bannerOptions = createStaticBannerOptions("GPS Action", baseOptions, baseLabels, onSelection);
 #endif
 
+    screen->showOverlayBanner(bannerOptions);
+}
+
+void menuHandler::radarBearingsMenu()
+{
+    enum optionsNumbers { Back, TrackingView, ToggleHeading, ToggleFavorites, ZoomIn, ZoomOut };
+    static const char *optionsArray[] = {
+        "Back",    "Tracking View",
+        nullptr, // ToggleHeading - filled dynamically below
+        nullptr, // ToggleFavorites - filled dynamically below
+        "Zoom In", "Zoom Out",
+    };
+    static int optionsEnumArray[] = {Back, TrackingView, ToggleHeading, ToggleFavorites, ZoomIn, ZoomOut};
+
+    optionsArray[ToggleHeading] = graphics::RadarRenderer::isNorthUp() ? "Switch to HDG-UP" : "Switch to N-UP";
+    optionsArray[ToggleFavorites] = config.display.radar_favorites_only ? "Show: All Nodes" : "Show: Favorites Only";
+
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Radar Options";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = sizeof(optionsEnumArray) / sizeof(optionsEnumArray[0]);
+    bannerOptions.optionsEnumPtr = optionsEnumArray;
+
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == Back) {
+            screen->setFrames(Screen::FOCUS_PRESERVE);
+        } else if (selected == TrackingView) {
+            // Radar bearings menu has no enum value (invoked directly from input
+            // handler), so back from the picker just dismisses to the screen.
+            setTrackingViewPickerReturn(MenuNone);
+            menuQueue = TrackingViewPicker;
+            screen->runNow();
+        } else if (selected == ToggleHeading) {
+            graphics::RadarRenderer::toggleNorthUp();
+            screen->setFrames(Screen::FOCUS_PRESERVE);
+            screen->runNow();
+        } else if (selected == ToggleFavorites) {
+            config.display.radar_favorites_only = !config.display.radar_favorites_only;
+            service->reloadConfig(SEGMENT_CONFIG);
+            screen->setFrames(Screen::FOCUS_PRESERVE);
+            screen->runNow();
+        } else if (selected == ZoomIn) {
+            graphics::RadarRenderer::zoomIn();
+            screen->setFrames(Screen::FOCUS_PRESERVE);
+            screen->runNow();
+        } else if (selected == ZoomOut) {
+            graphics::RadarRenderer::zoomOut();
+            screen->setFrames(Screen::FOCUS_PRESERVE);
+            screen->runNow();
+        }
+    };
     screen->showOverlayBanner(bannerOptions);
 }
 
@@ -1660,7 +1742,7 @@ void menuHandler::environmentTelemetrySourceMenu()
 
 void menuHandler::nodeListMenu()
 {
-    enum optionsNumbers { Back, NodePicker, TraceRoute, Verify, Reset, NodeNameLength, enumEnd };
+    enum optionsNumbers { Back, NodePicker, TrackingView, TraceRoute, Verify, Reset, NodeNameLength, enumEnd };
     static const char *optionsArray[enumEnd] = {"Back"};
     static int optionsEnumArray[enumEnd] = {Back};
     int options = 1;
@@ -1671,6 +1753,11 @@ void menuHandler::nodeListMenu()
     optionsArray[options] = "Node Actions / Settings";
 #endif
     optionsEnumArray[options++] = NodePicker;
+
+#if HAS_GPS
+    optionsArray[options] = "Tracking View";
+    optionsEnumArray[options++] = TrackingView;
+#endif
 
     if (currentResolution != ScreenResolution::UltraLow) {
         optionsArray[options] = "Show Long/Short Name";
@@ -1687,6 +1774,10 @@ void menuHandler::nodeListMenu()
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == NodePicker) {
             menuQueue = NodePickerMenu;
+            screen->runNow();
+        } else if (selected == TrackingView) {
+            setTrackingViewPickerReturn(NodeBaseMenu);
+            menuQueue = TrackingViewPicker;
             screen->runNow();
         } else if (selected == Reset) {
             menuQueue = ResetNodeDbMenu;
@@ -3260,6 +3351,9 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         break;
     case ClockMenu:
         clockMenu();
+        break;
+    case TrackingViewPicker:
+        trackingViewPicker();
         break;
     case SystemBaseMenu:
         systemBaseMenu();
