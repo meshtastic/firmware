@@ -2303,12 +2303,14 @@ class PowerBankBatteryLevel : public HasBatteryLevel
 };
 
 PowerBankBatteryLevel powerBankLevel;
+PowerBank *powerBank = nullptr;
 
 bool Power::powerBankInit()
 {
     powerBankLevel.bank = powerBankSetup();
     if (!powerBankLevel.bank)
         return false;
+    powerBank = powerBankLevel.bank;
     batteryLevel = &powerBankLevel;
     return true;
 }

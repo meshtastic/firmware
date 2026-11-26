@@ -76,8 +76,9 @@ extern "C" {
 #define PIN_WIRE_SDA (0 + 13)
 #define PIN_WIRE_SCL (0 + 5)
 
-// CW2217 fuel gauge is not supported yet; battery state comes from the HLT331 below.
-#define CW2217_ADDR 0x64
+// CW2217 fuel gauge (0x64): the battery source, with the HLT331 below as fallback. Read only; its
+// battery profile is loaded at the factory.
+#define HAS_CW2217 1
 // #define PIN_CW_INT (0 + 12)
 
 // Power bank board (P1/P2 headers): the "9006" is an HLT331 power-bank controller. It streams status

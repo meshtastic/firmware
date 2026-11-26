@@ -50,6 +50,7 @@ extern NicheGraphics::BaseUIEInkDisplay *setupNicheGraphicsBaseUI();
 #include "draw/MessageRenderer.h"
 #include "draw/NodeListRenderer.h"
 #include "draw/NotificationRenderer.h"
+#include "draw/PowerBankPage.h"
 #include "draw/UIRenderer.h"
 #include "graphics/TFTColorRegions.h"
 #include "modules/CannedMessageModule.h"
@@ -1530,6 +1531,13 @@ void Screen::setFrames(FrameFocus focus)
         indicatorIcons.push_back(icon_system);
         PUSH_FRAME_TITLE("System");
     }
+#if HAS_POWERBANK
+    if (powerBank) {
+        normalFrames[numframes++] = graphics::PowerBankPage::drawFrame;
+        indicatorIcons.push_back(icon_power_bank);
+        PUSH_FRAME_TITLE("Power");
+    }
+#endif
 #if !defined(DISPLAY_CLOCK_FRAME)
     if (!hiddenFrames.clock) {
         fsi.positions.clock = numframes;

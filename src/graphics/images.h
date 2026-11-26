@@ -121,6 +121,18 @@ const uint8_t icon_system[] PROGMEM = {
     0x24  // Row 7: ..#..#..
 };
 
+// Power bank: an upright battery
+const uint8_t icon_power_bank[] PROGMEM = {
+    0x18, // Row 0: ...##...
+    0x7E, // Row 1: .######.
+    0x42, // Row 2: .#....#.
+    0x5A, // Row 3: .#.##.#.
+    0x5A, // Row 4: .#.##.#.
+    0x5A, // Row 5: .#.##.#.
+    0x42, // Row 6: .#....#.
+    0x7E  // Row 7: .######.
+};
+
 // 🌐 Wi-Fi
 const uint8_t icon_wifi[] PROGMEM = {0b00000000, 0b00011000, 0b00111100, 0b01111110,
                                      0b11011011, 0b00011000, 0b00011000, 0b00000000};
