@@ -924,7 +924,7 @@ void StoreForwardPlusPlusModule::clearCanonScratch(uint8_t *root_hash, size_t ro
 
 bool StoreForwardPlusPlusModule::insertCanonObject(uint32_t to, uint32_t from, uint32_t packetId, const uint8_t *cipher,
                                                    size_t cipherLen, const uint8_t *hash, const RowTime &time,
-                                                   const uint8_t *root_hash, uint32_t bucket)
+                                                   const std::string &payload, const uint8_t *root_hash, uint32_t bucket)
 {
     if (isInDB(hash, SFPP_HASH_SIZE))
         return true;
@@ -941,7 +941,7 @@ bool StoreForwardPlusPlusModule::insertCanonObject(uint32_t to, uint32_t from, u
     sqlite3_bind_int64(chain_insert_stmt, 7, (sqlite3_int64)time.stamp);
     // A unique non-zero commit hash keeps trimOldestLink deleting one row rather than every zero row.
     sqlite3_bind_blob(chain_insert_stmt, 8, hash, SFPP_HASH_SIZE, SQLITE_STATIC);
-    sqlite3_bind_text(chain_insert_stmt, 9, "", 0, SQLITE_STATIC);
+    sqlite3_bind_text(chain_insert_stmt, 9, payload.c_str(), (int)payload.size(), SQLITE_STATIC);
     sqlite3_bind_int64(chain_insert_stmt, 10, (sqlite3_int64)counter);
     sqlite3_bind_int64(chain_insert_stmt, 11, (sqlite3_int64)sfppsr::shortId(hash, SFPP_HASH_SIZE));
     sqlite3_bind_int64(chain_insert_stmt, 12, (sqlite3_int64)sfppsr::checksumContribution(hash, SFPP_HASH_SIZE));
@@ -971,7 +971,7 @@ bool StoreForwardPlusPlusModule::storeRecoveredObject(const sfppframe::Replay &r
     RowTime time;
     if (!timeFromAge(replay.heardAgoS, time))
         return false;
-    if (!insertCanonObject(replay.to, replay.from, replay.id, replay.ciphertext.data(), replay.ciphertext.size(), hash, time,
+    if (!insertCanonObject(replay.to, replay.from, replay.id, replay.ciphertext.data(), replay.ciphertext.size(), hash, time, "",
                            root_hash, bucket))
         return false;
     // The object is canonical now, so a scratch copy (a writer-missed offer) is no longer needed.

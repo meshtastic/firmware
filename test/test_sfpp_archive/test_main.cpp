@@ -1482,74 +1482,75 @@ void test_futureLookingAgeIsRejected()
     TEST_ASSERT_EQUAL_UINT8(0, row.timeBasis);
     TEST_ASSERT_LESS_OR_EQUAL_UINT32(EPOCH, row.rxTime);
     TEST_ASSERT_GREATER_OR_EQUAL_UINT32(EPOCH - 5, row.rxTime);
+}
 
-    // The content-bucket schema bumps the stamp again; a v3 store is served history and is moved aside.
-    void test_v3StoreIsMovedAside()
-    {
-        TEST_ASSERT_TRUE(ingestOneText("from version three"));
-        delete testSfpp;
-        testSfpp = nullptr;
+// The content-bucket schema bumps the stamp again; a v3 store is served history and is moved aside.
+void test_v3StoreIsMovedAside()
+{
+    TEST_ASSERT_TRUE(ingestOneText("from version three"));
+    delete testSfpp;
+    testSfpp = nullptr;
 
-        sqlite3 *db = nullptr;
-        TEST_ASSERT_EQUAL_INT(SQLITE_OK, sqlite3_open(dbFile().c_str(), &db));
-        TEST_ASSERT_EQUAL_INT(SQLITE_OK, sqlite3_exec(db, "PRAGMA user_version = 3;", nullptr, nullptr, nullptr));
-        sqlite3_close(db);
+    sqlite3 *db = nullptr;
+    TEST_ASSERT_EQUAL_INT(SQLITE_OK, sqlite3_open(dbFile().c_str(), &db));
+    TEST_ASSERT_EQUAL_INT(SQLITE_OK, sqlite3_exec(db, "PRAGMA user_version = 3;", nullptr, nullptr, nullptr));
+    sqlite3_close(db);
 
-        testSfpp = new TestSfppModule();
+    testSfpp = new TestSfppModule();
 
-        StoredRow row;
-        TEST_ASSERT_FALSE(readStoredRow(TEXT_ID, row));
-        TEST_ASSERT_EQUAL_INT(StoreForwardPlusPlusModule::kSchemaVersion, storedSchemaVersion());
+    StoredRow row;
+    TEST_ASSERT_FALSE(readStoredRow(TEXT_ID, row));
+    TEST_ASSERT_EQUAL_INT(StoreForwardPlusPlusModule::kSchemaVersion, storedSchemaVersion());
 
-        const std::vector<std::string> aside = filesMovedAside();
-        TEST_ASSERT_EQUAL_UINT(1, aside.size());
-        TEST_ASSERT_NOT_NULL(strstr(aside[0].c_str(), "storeforwardpp.db.v3-"));
-        for (const std::string &f : aside)
-            std::remove(f.c_str());
-    }
+    const std::vector<std::string> aside = filesMovedAside();
+    TEST_ASSERT_EQUAL_UINT(1, aside.size());
+    TEST_ASSERT_NOT_NULL(strstr(aside[0].c_str(), "storeforwardpp.db.v3-"));
+    for (const std::string &f : aside)
+        std::remove(f.c_str());
+}
 
-    void loop() {}
+void loop() {}
 
-    void setup()
-    {
-        initializeTestEnvironment();
+void setup()
+{
+    initializeTestEnvironment();
 
-        UNITY_BEGIN();
-        RUN_TEST(test_ingestStoresTextWithPayloadAndHashes);
-        RUN_TEST(test_storedMessageHashMatchesTheFrameHash);
-        RUN_TEST(test_legacyHistoryAnswersInLegacyFormat);
-        RUN_TEST(test_legacyHistoryUsesLegacyRequestWindow);
-        RUN_TEST(test_legacyHistoryExcludesTextsOlderThanRetention);
-        RUN_TEST(test_legacyHistoryPagesByCursor);
-        RUN_TEST(test_shimServesAdoptedBroadcastText);
-        RUN_TEST(test_oldVersionStoreIsSetAsideAndNewRowsAreUnsigned);
-        RUN_TEST(test_legacyHistoryDecryptsEmptyPayloadRow);
-        RUN_TEST(test_legacyHistorySkipsNonTextCiphertext);
-        RUN_TEST(test_legacyHistoryDecryptsAeadPrimary);
-        RUN_TEST(test_shimPassesNonHistoryPort65ToLaterModules);
-        RUN_TEST(test_shimClaimsPort65WithNoLegacyServer);
-        RUN_TEST(test_shimYieldsPort65ToLegacyServer);
-        RUN_TEST(test_shimClaimsPort65WithLegacyClientOnly);
-        RUN_TEST(test_storeIsStampedAndKeptAcrossRestart);
-        RUN_TEST(test_unstampedStoreIsMovedAsideAndStartsEmpty);
-        RUN_TEST(test_root_is_derived_on_two_archives_without_stratum0);
-        RUN_TEST(test_root_changes_when_the_channel_identity_changes);
-        RUN_TEST(test_stale_mapping_moves_the_store_aside);
-        RUN_TEST(test_channel_change_moves_the_v2_store_aside);
-        RUN_TEST(test_two_channels_sharing_a_hash_keep_two_mappings);
-        RUN_TEST(test_stored_row_carries_the_content_bucket);
-        RUN_TEST(test_versionOneStoreIsMovedAside);
-        RUN_TEST(test_noClockIngestAndServe);
-        RUN_TEST(test_meshTimeOnlyIngestStaysBootRelative);
-        RUN_TEST(test_receivedAgeIsKept);
-        RUN_TEST(test_healOnFirstProperClockDoesNotTrim);
-        RUN_TEST(test_restartKeepsAgeWithWidenedMargin);
-        RUN_TEST(test_mixedBasesTrimCorrectly);
-        RUN_TEST(test_noEpochHistoryPagesByRowid);
-        RUN_TEST(test_futureLookingAgeIsRejected);
+    UNITY_BEGIN();
+    RUN_TEST(test_ingestStoresTextWithPayloadAndHashes);
+    RUN_TEST(test_storedMessageHashMatchesTheFrameHash);
+    RUN_TEST(test_legacyHistoryAnswersInLegacyFormat);
+    RUN_TEST(test_legacyHistoryUsesLegacyRequestWindow);
+    RUN_TEST(test_legacyHistoryExcludesTextsOlderThanRetention);
+    RUN_TEST(test_legacyHistoryPagesByCursor);
+    RUN_TEST(test_shimServesAdoptedBroadcastText);
+    RUN_TEST(test_oldVersionStoreIsSetAsideAndNewRowsAreUnsigned);
+    RUN_TEST(test_legacyHistoryDecryptsEmptyPayloadRow);
+    RUN_TEST(test_legacyHistorySkipsNonTextCiphertext);
+    RUN_TEST(test_legacyHistoryDecryptsAeadPrimary);
+    RUN_TEST(test_shimPassesNonHistoryPort65ToLaterModules);
+    RUN_TEST(test_shimClaimsPort65WithNoLegacyServer);
+    RUN_TEST(test_shimYieldsPort65ToLegacyServer);
+    RUN_TEST(test_shimClaimsPort65WithLegacyClientOnly);
+    RUN_TEST(test_storeIsStampedAndKeptAcrossRestart);
+    RUN_TEST(test_unstampedStoreIsMovedAsideAndStartsEmpty);
+    RUN_TEST(test_root_is_derived_on_two_archives_without_stratum0);
+    RUN_TEST(test_root_changes_when_the_channel_identity_changes);
+    RUN_TEST(test_stale_mapping_moves_the_store_aside);
+    RUN_TEST(test_channel_change_moves_the_v2_store_aside);
+    RUN_TEST(test_two_channels_sharing_a_hash_keep_two_mappings);
+    RUN_TEST(test_stored_row_carries_the_content_bucket);
+    RUN_TEST(test_versionOneStoreIsMovedAside);
+    RUN_TEST(test_noClockIngestAndServe);
+    RUN_TEST(test_meshTimeOnlyIngestStaysBootRelative);
+    RUN_TEST(test_receivedAgeIsKept);
+    RUN_TEST(test_healOnFirstProperClockDoesNotTrim);
+    RUN_TEST(test_restartKeepsAgeWithWidenedMargin);
+    RUN_TEST(test_mixedBasesTrimCorrectly);
+    RUN_TEST(test_noEpochHistoryPagesByRowid);
+    RUN_TEST(test_futureLookingAgeIsRejected);
 
-        RUN_TEST(test_v3StoreIsMovedAside);
-        UNITY_END();
-    }
+    RUN_TEST(test_v3StoreIsMovedAside);
+    UNITY_END();
+}
 
 #endif // ARCH_PORTDUINO && !ARCH_PORTDUINO_WASM && !MESHTASTIC_EXCLUDE_SFPP

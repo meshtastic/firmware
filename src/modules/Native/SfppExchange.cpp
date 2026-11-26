@@ -1289,7 +1289,7 @@ bool StoreForwardPlusPlusModule::acceptPushedItemFrame(const meshtastic_MeshPack
         return true; // already committed, maybe by another follower's push
     LOG_INFO("StoreForwardpp committing a writer-missed text from 0x%08x", mp.from);
     return insertCanonObject(lo.to, lo.from, lo.id, lo.encrypted_bytes, lo.encrypted_len, lo.message_hash,
-                             RowTime{lo.rx_time, lo.time_basis, lo.boot_id, lo.age_margin}, lo.root_hash,
+                             RowTime{lo.rx_time, lo.time_basis, lo.boot_id, lo.age_margin}, lo.payload, lo.root_hash,
                              sfppsr::contentBucket(lo.message_hash, lo.message_hash_len));
 }
 
@@ -1494,7 +1494,8 @@ void StoreForwardPlusPlusModule::promoteScratchMatches(const uint8_t *root_hash,
         removeFromScratch(bad.data(), SFPP_HASH_SIZE);
 
     for (const auto &row : matches) {
-        insertCanonObject(row.to, row.from, row.id, row.cipher.data(), row.cipher.size(), row.hash, row.time, root_hash, bucket);
+        insertCanonObject(row.to, row.from, row.id, row.cipher.data(), row.cipher.size(), row.hash, row.time, "", root_hash,
+                          bucket);
         removeFromScratch(row.hash, SFPP_HASH_SIZE);
         const pinsketch::Element sid = sfppsr::shortId(row.hash, SFPP_HASH_SIZE);
         enumPromoted.push_back({sid, {}});

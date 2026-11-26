@@ -316,7 +316,8 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
 
     // A canonical row, shared by recovered objects and promoted scratch rows.
     bool insertCanonObject(uint32_t to, uint32_t from, uint32_t packetId, const uint8_t *cipher, size_t cipherLen,
-                           const uint8_t *hash, const RowTime &time, const uint8_t *root_hash, uint32_t bucket);
+                           const uint8_t *hash, const RowTime &time, const std::string &payload, const uint8_t *root_hash,
+                           uint32_t bucket);
     // Stage 8e/10: a scratch row whose short ID the peer also holds is already "held"; move it into
     // the bucket and drop it from the fetch list instead of re-fetching it.
     void promoteScratchMatches(const uint8_t *root_hash, uint32_t bucket, std::vector<pinsketch::Element> &ids);

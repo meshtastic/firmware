@@ -664,7 +664,7 @@ void StoreForwardPlusPlusModule::handleEncrypted(const meshtastic_MeshPacket *mp
         return;
     }
     insertCanonObject(lo.to, lo.from, lo.id, lo.encrypted_bytes, lo.encrypted_len, lo.message_hash,
-                      RowTime{lo.rx_time, lo.time_basis, lo.boot_id, lo.age_margin}, lo.root_hash,
+                      RowTime{lo.rx_time, lo.time_basis, lo.boot_id, lo.age_margin}, lo.payload, lo.root_hash,
                       sfppsr::contentBucket(lo.message_hash, lo.message_hash_len));
 }
 
@@ -725,22 +725,22 @@ ProcessMessage StoreForwardPlusPlusModule::handleReceived(const meshtastic_MeshP
         }
         if (isInDB(lo.message_hash, lo.message_hash_len) && isInScratch(lo.message_hash, lo.message_hash_len) &&
             isInCanonScratch(lo.message_hash, lo.message_hash_len)) {
-            return;
+            return ProcessMessage::CONTINUE;
         }
 
         if (!portduino_config.sfpp_stratum0) {
             if (lo.root_hash_len == 0) {
                 LOG_DEBUG("StoreForwardpp Received text message, but no chain. Possibly no Stratum0 on local mesh.");
-                return;
+                return ProcessMessage::CONTINUE;
             }
             addToScratch(lo);
             LOG_DEBUG("StoreForwardpp added message to scratch db");
             // send link to upstream?
 
-            return;
+            return ProcessMessage::CONTINUE;
         }
         insertCanonObject(lo.to, lo.from, lo.id, lo.encrypted_bytes, lo.encrypted_len, lo.message_hash,
-                          RowTime{lo.rx_time, lo.time_basis, lo.boot_id, lo.age_margin}, lo.root_hash,
+                          RowTime{lo.rx_time, lo.time_basis, lo.boot_id, lo.age_margin}, lo.payload, lo.root_hash,
                           sfppsr::contentBucket(lo.message_hash, lo.message_hash_len));
     }
 }
@@ -857,25 +857,6 @@ void StoreForwardPlusPlusModule::addRootToMappings(ChannelHash _ch_hash, uint8_t
     auto rc = sqlite3_step(addRootToMappingsStmt);
     LOG_WARN("StoreForwardpp result %u, %s", rc, sqlite3_errmsg(ppDb));
     sqlite3_reset(addRootToMappingsStmt);
-}
-
-// should not need size considerations
-StoreForwardPlusPlusModule::link_object
-StoreForwardPlusPlusModule::ingestTextPacket(const meshtastic_MeshPacket &mp, const meshtastic_MeshPacket *encrypted_meshpacket)
-{
-    link_object lo;
-    lo.to = mp.to;
-    lo.from = mp.from;
-    lo.id = mp.id;
-    lo.rx_time = mp.rx_time;
-    lo.channel_hash = encrypted_meshpacket->channel;
-    memcpy(lo.encrypted_bytes, encrypted_meshpacket->encrypted.bytes, encrypted_meshpacket->encrypted.size);
-    lo.encrypted_len = encrypted_meshpacket->encrypted.size;
-    lo.payload = std::string((char *)mp.decoded.payload.bytes, mp.decoded.payload.size);
-
-    sfppframe::messageHash(encrypted_meshpacket->encrypted.bytes, encrypted_meshpacket->encrypted.size, mp.to, mp.from, mp.id,
-                           lo.message_hash);
-    lo.message_hash_len = SFPP_HASH_SIZE;
 }
 
 // should not need size considerations
