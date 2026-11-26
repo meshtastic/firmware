@@ -168,6 +168,7 @@ bool RF95Interface::init()
     digitalWrite(RF95_RXEN, 1);
 #endif
 #if ARCH_PORTDUINO
+    noteRfSwitchPins(portduino_config.lora_rxen_pin.pin, portduino_config.lora_txen_pin.pin);
     if (portduino_config.lora_txen_pin.pin != RADIOLIB_NC) {
         pinMode(portduino_config.lora_txen_pin.pin, OUTPUT);
         digitalWrite(portduino_config.lora_txen_pin.pin, 0);
