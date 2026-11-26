@@ -1,4 +1,5 @@
 #include "HLT331Parser.h"
+#include <string.h>
 
 uint8_t HLT331Parser::crc8(const uint8_t *data, size_t len, uint8_t crc)
 {
@@ -62,6 +63,7 @@ bool HLT331Parser::feed(uint8_t byte)
             badCrcCount++;
             return false;
         }
+        memcpy(lastData, data, DATA_LENGTH);
         decode(data, lastStatus);
         goodFrameCount++;
         return true;

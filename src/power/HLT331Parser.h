@@ -41,6 +41,8 @@ class HLT331Parser
     bool feed(uint8_t byte);
 
     const HLT331Status &status() const { return lastStatus; }
+    // Data bytes of the last valid frame.
+    const uint8_t *lastFrame() const { return lastData; }
     uint32_t goodFrames() const { return goodFrameCount; }
     uint32_t badCrcFrames() const { return badCrcCount; }
     uint32_t badLengthFrames() const { return badLengthCount; }
@@ -54,6 +56,7 @@ class HLT331Parser
     State state = WAIT_HEADER_0;
     uint8_t dataIndex = 0;
     uint8_t data[DATA_LENGTH] = {};
+    uint8_t lastData[DATA_LENGTH] = {};
     HLT331Status lastStatus;
     uint32_t goodFrameCount = 0;
     uint32_t badCrcCount = 0;
