@@ -4,6 +4,7 @@
 #include "configuration.h"
 #include "mesh-pb-constants.h"
 #include "meshUtils.h"
+#include "modules/RepeatScalingModule.h"
 #include "modules/TextMessageModule.h"
 #if !MESHTASTIC_EXCLUDE_TRACEROUTE
 #include "modules/TraceRouteModule.h"
@@ -150,14 +151,17 @@ void FloodingRouter::perhapsCancelDupe(const meshtastic_MeshPacket *p)
     if (p->transport_mechanism != meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA)
         return;
 
-    if (roleAllowsCancelingDupe(p)) {
+    // Only a duplicate of a packet we still have queued can cancel anything, or take a tracker slot
+    if (roleAllowsCancelingDupe(p) && findInTxQueue(p->from, p->id)) {
         if (favoriteMayHaveMissedBroadcast(p)) {
             // The relayer we just heard may be out of our favorite's range, so fill in late instead of dropping
             if (iface)
                 iface->clampToLateRebroadcastWindow(getFrom(p), p->id);
-        } else if (Router::cancelSending(p->from, p->id)) {
+        } else if (!repeatScalingModule || repeatScalingModule->shouldCancelDupe(p)) {
+            // Without the module, cancel on the first duplicate
             // cancel rebroadcast of this message *if* there was already one, unless we're a router!
-            txRelayCanceled++;
+            if (Router::cancelSending(p->from, p->id))
+                txRelayCanceled++;
         }
     }
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_LATE && iface) {
