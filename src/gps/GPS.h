@@ -103,6 +103,9 @@ struct ChipInfo {
  */
 class GPS : private concurrency::OSThread
 {
+#ifdef PIO_UNIT_TESTING
+    friend class GpsTestShim; // native reply-parser tests
+#endif
   public:
     meshtastic_Position p = meshtastic_Position_init_default;
 

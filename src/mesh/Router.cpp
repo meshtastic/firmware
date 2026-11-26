@@ -566,7 +566,7 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
     float effectiveDutyCycle = getEffectiveDutyCycle();
     if (!config.lora.override_duty_cycle && effectiveDutyCycle < 100) {
         float hourlyTxPercent = airTime->utilizationTXPercent();
-        if (hourlyTxPercent > effectiveDutyCycle) {
+        if (!airUtilAllowsTx(hourlyTxPercent, effectiveDutyCycle)) {
             uint8_t silentMinutes = airTime->getSilentMinutes(hourlyTxPercent, effectiveDutyCycle);
 
             LOG_WARN("Duty cycle limit exceeded, abort send, retry in %d mins", silentMinutes);
@@ -1758,6 +1758,11 @@ void Router::dispatchReceived(meshtastic_MeshPacket *p, RxSource src)
         }
 #endif
     }
+
+    // After the modules, which may have just admitted the sender. Every decoded radio packet is a hear, also
+    // one skipped above (a disabled module, a filtered port): RoutingModule only records those it delivers.
+    if (src == RX_SRC_RADIO && decodedState == DecodeState::DECODE_SUCCESS && nodeDB)
+        nodeDB->noteRfHear(*p);
 
     packetPool.release(p_encrypted); // Release the encrypted packet (release() handles nullptr)
 }

@@ -1,3 +1,13 @@
+// PositionModule's broadcast-policy and conversion helpers (src/modules/PositionModule.cpp):
+// positionWithinPrecisionCell(), effectiveBroadcastIntervalMs(), shouldSendPositionToPhone(),
+// copyAltitudeFields(), groundSpeedKmhToCmPerSec() and allocAtakPli()'s speed field.
+//
+// Why: these decide how often a node sends its position and what the payload carries.
+// Regression guarded: jitter inside the precision cell counted as movement, the stationary
+// interval floor not applied, the phone cadence ignored or broken by millis() rollover,
+// altitude presence lost, and ground speed sent in the wrong unit. Receive handling, NodeDB
+// updates and publication are not exercised here.
+
 #include "TestUtil.h"
 #include "mesh/NodeDB.h"
 #include "mesh/Router.h"

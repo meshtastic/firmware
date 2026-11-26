@@ -485,13 +485,23 @@ template <typename T> void LR20x0Interface<T>::selectLfPaTable(float freq)
 
 template <typename T> void LR20x0Interface<T>::applyRegulator()
 {
+    // SetRegMode is refused outside STBY_RC (DS 6.3.18), and init() has already moved a TCXO board to STBY_XOSC
+    int16_t regRes = lora.standby(RADIOLIB_LR2021_STANDBY_RC);
 #ifdef LR2021_REGULATOR_LDO
     // For modules built without the SIMO inductor on LXA/LXB
-    int16_t regRes = lora.setRegulatorLDO();
+    if (regRes == RADIOLIB_ERR_NONE)
+        regRes = lora.setRegulatorLDO();
     const char *regName = "LDO";
 #else
-    int16_t regRes = lora.setRegulatorDCDC();
+    if (regRes == RADIOLIB_ERR_NONE)
+        regRes = lora.setRegulatorDCDC();
     const char *regName = "DC-DC";
+#endif
+#if !RADIOLIB_SPI_PARANOID
+    // The verdict comes back on the next transfer: read it here, or a refusal fails whichever command follows
+    const int16_t statusRes = module.spiConfig.checkStatusCb(&module);
+    if (regRes == RADIOLIB_ERR_NONE)
+        regRes = statusRes;
 #endif
     if (regRes != RADIOLIB_ERR_NONE)
         LOG_WARN("LR20x0 set %s regulator %s%d", regName, radioLibErr, regRes);

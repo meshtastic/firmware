@@ -7,6 +7,10 @@
 // that sent RadioLib's RADIOLIB_LR2021_CAD_EXIT_MODE_RX (0x02) instead would have its scan refused
 // (-706), read the error as a free channel, and transmit over live frames - 16/16 on the bench, and
 // 539 scans without a busy verdict on a Mesh-Tracker X1. These tests fail on that change.
+//
+// applyRegulator() in the same file must send SetRegMode from STBY_RC, the only mode the LR2021 takes it in, and read
+// the verdict itself so a refusal cannot fail the next command: a Mesh-Tracker X1 failed init() that way and booted
+// with no radio interface.
 
 #include "RecordingHal.h"
 #include "TestUtil.h"
@@ -56,8 +60,13 @@ class TestLr2021Interface : public LR2021Interface
     {
     }
 
+    using LR20x0Interface<LR2021>::applyRegulator;
     using LR20x0Interface<LR2021>::isChannelActive;
     using LR20x0Interface<LR2021>::launchTransmit;
+
+    // The plain chip command: setStandbyXOSC() would also latch XOSC standby into the suite's shared driver.
+    int16_t chipStandby(uint8_t mode) { return lora.standby(mode); }
+    int16_t setCrc() { return lora.setCRC(2); }
 
     // init() would set the SF via begin(); RadioLib's default det_peak lookup needs one (see lr2021SetSf).
     void setSpreadingFactor(uint8_t sf) { TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_NONE, lora.setSpreadingFactor(sf)); }
@@ -131,9 +140,64 @@ static void test_lr20x0_launchTransmit_reports_a_refused_settx()
     TEST_ASSERT_EQUAL_UINT32(1, hal.count(op16(RADIOLIB_LR2021_CMD_SET_TX)));
 }
 
-// Grows here:
-//   a scan that returns an error (-706, -707, -705) must not read as a free channel. Today every
-//   driver's isChannelActive() returns false on it; which verdict replaces that is undecided.
+// develop's verdict on a failed scan: a CAD the chip refuses (-706) reads as a free channel, after one
+// attempt. #12038 replaces this with ChannelScan::Failed; update this test there.
+static void test_lr20x0_isChannelActive_reports_a_refused_cad_free()
+{
+    RecordingHal &hal = freshHal();
+    auto &iface = lr20x0Interface(hal);
+    hal.rejectUnless(
+        op16(RADIOLIB_LR2021_CMD_SET_LORA_CAD), [](const std::vector<uint8_t> &) { return false; },
+        RADIOLIB_LRXXXX_STAT_1_CMD_PERR);
+    // A preamble on the air: if the refusal were ignored, the scan would report busy and fail this.
+    lr2021AnswerIrq(hal, RADIOLIB_LR2021_IRQ_CAD_DETECTED | RADIOLIB_LR2021_IRQ_CAD_DONE);
+    TEST_ASSERT_FALSE(iface.isChannelActive());
+    TEST_ASSERT_EQUAL_UINT32(1, hal.count(op16(RADIOLIB_LR2021_CMD_SET_LORA_CAD)));
+}
+
+// The standby mode of the last SetStandby before the transaction being checked, which is transactions.back().
+static uint8_t lr2021StandbyModeBeforeLast(const RecordingHal &hal)
+{
+    const auto &t = hal.transactions;
+    const auto op = op16(RADIOLIB_LR2021_CMD_SET_STANDBY);
+    for (size_t i = t.size() - 1; i-- > 0;)
+        if (t[i].size() > 2 && std::equal(op.begin(), op.end(), t[i].begin()))
+            return t[i][2];
+    return 0xFF;
+}
+
+// The LR2021 takes SetRegMode only in STBY_RC (DS 6.3.18) and reports a refusal in the next command's status. init()
+// moves a TCXO board to STBY_XOSC before it sets the regulator, so on a Mesh-Tracker X1 the refusal failed setCRC(2),
+// init() returned false, and the node booted with no radio interface. applyRegulator() must leave STBY_XOSC first.
+static void test_lr20x0_applyRegulator_sends_SetRegMode_from_standby_rc()
+{
+    RecordingHal &hal = freshHal();
+    auto &iface = lr20x0Interface(hal);
+    TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_NONE, iface.chipStandby(RADIOLIB_LR2021_STANDBY_XOSC)); // where init() leaves it
+    static bool fromRc;
+    fromRc = false;
+    hal.rejectUnless(
+        op16(RADIOLIB_LR2021_CMD_SET_REG_MODE),
+        [&hal](const std::vector<uint8_t> &) { return fromRc = lr2021StandbyModeBeforeLast(hal) == RADIOLIB_LR2021_STANDBY_RC; },
+        RADIOLIB_LRXXXX_STAT_1_CMD_FAIL);
+    iface.applyRegulator();
+    TEST_ASSERT_TRUE_MESSAGE(fromRc, "SetRegMode sent outside STBY_RC, which the LR2021 refuses");
+    TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_NONE, iface.setCrc());
+}
+
+// applyRegulator() is warn-only, but a refusal lands on whatever command comes next. It must read the verdict itself,
+// or a regulator the chip will not take fails the next step of init() instead.
+static void test_lr20x0_applyRegulator_keeps_a_refused_SetRegMode_to_itself()
+{
+    RecordingHal &hal = freshHal();
+    auto &iface = lr20x0Interface(hal);
+    hal.rejectUnless(
+        op16(RADIOLIB_LR2021_CMD_SET_REG_MODE), [](const std::vector<uint8_t> &) { return false; },
+        RADIOLIB_LRXXXX_STAT_1_CMD_FAIL);
+    iface.applyRegulator();
+    TEST_ASSERT_EQUAL_UINT32(1, hal.count(op16(RADIOLIB_LR2021_CMD_SET_REG_MODE)));
+    TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_NONE, iface.setCrc());
+}
 
 static void runLr20x0InterfaceTests()
 {
@@ -141,4 +205,7 @@ static void runLr20x0InterfaceTests()
     RUN_TEST(test_lr20x0_isChannelActive_reports_a_detected_preamble_busy);
     RUN_TEST(test_lr20x0_isChannelActive_reports_cad_done_free);
     RUN_TEST(test_lr20x0_launchTransmit_reports_a_refused_settx);
+    RUN_TEST(test_lr20x0_isChannelActive_reports_a_refused_cad_free);
+    RUN_TEST(test_lr20x0_applyRegulator_sends_SetRegMode_from_standby_rc);
+    RUN_TEST(test_lr20x0_applyRegulator_keeps_a_refused_SetRegMode_to_itself);
 }

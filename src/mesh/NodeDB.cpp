@@ -1055,6 +1055,28 @@ void NodeDB::refreshCommittedLoraSlot()
     committedSlot = currentLoraSlot().fingerprint();
 }
 
+void NodeDB::stampRfHear(meshtastic_NodeInfoLite *info, const meshtastic_MeshPacket &mp)
+{
+    // RF-origin only (a via_mqtt rebroadcast proves the gateway is in earshot, not the node); not
+    // has_rx_rssi-gated, as SimRadio omits it. Live slot, so a beacon-preset hear fails to match home.
+    if (!info || mp.transport_mechanism != meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA || mp.via_mqtt)
+        return;
+    const uint16_t slot = currentLoraSlot().fingerprint();
+    if (nodeInfoLiteHeardOnSlot(info, slot))
+        return;
+    nodeInfoLiteSetHeardSlot(info, slot);
+    // Anonymous peers are dropped at boot unless they acquire user info.
+    if (nodeInfoLiteHasUser(info))
+        nodeDatabaseDirty = true;
+}
+
+void NodeDB::noteRfHear(const meshtastic_MeshPacket &mp)
+{
+    if (mp.which_payload_variant != meshtastic_MeshPacket_decoded_tag || !mp.from || mp.from == getNodeNum())
+        return;
+    stampRfHear(getMeshNode(mp.from), mp);
+}
+
 bool NodeDB::factoryReset(bool eraseBleBonds)
 {
     LOG_INFO("Factory reset");
@@ -4188,17 +4210,7 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
             nodeInfoLiteSetBit(info, NODEINFO_BITFIELD_HAS_SNR_MASK, true);
         }
 
-        // RF-origin only (a via_mqtt rebroadcast proves the gateway is in earshot, not the node); not
-        // has_rx_rssi-gated, as SimRadio omits it. Live slot, so a beacon-preset hear fails to match home.
-        if (mp.transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA && !mp.via_mqtt) {
-            const uint16_t slot = currentLoraSlot().fingerprint();
-            if (!nodeInfoLiteHeardOnSlot(info, slot)) {
-                nodeInfoLiteSetHeardSlot(info, slot);
-                // Anonymous peers are dropped at boot unless they acquire user info.
-                if (nodeInfoLiteHasUser(info))
-                    nodeDatabaseDirty = true;
-            }
-        }
+        stampRfHear(info, mp);
 
         nodeInfoLiteSetBit(info, NODEINFO_BITFIELD_VIA_MQTT_MASK,
                            mp.via_mqtt); // Store if we received this packet via MQTT

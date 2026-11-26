@@ -197,6 +197,16 @@ static void test_hear_rfHearMarksNodeOnCurrentSlot(void)
     TEST_ASSERT_TRUE(heard(0x4444));
 }
 
+// noteRfHear() runs for every RF packet, including ones for other nodes: admitting their senders would
+// bypass updateFrom()'s full-database admission throttle.
+static void test_hear_overheardPacketAdmitsNoNode(void)
+{
+    meshtastic_MeshPacket mp = rxPacket(0x5555);
+    mp.to = 0x6666;
+    db->noteRfHear(mp);
+    TEST_ASSERT_NULL(db->getMeshNode(0x5555));
+}
+
 // A gateway rebroadcast is TRANSPORT_LORA + via_mqtt: we heard the gateway, not the node.
 static void test_hear_mqttRelayDoesNotMark(void)
 {
@@ -324,6 +334,7 @@ NDB_TEST_ENTRY void setup()
     RUN_TEST(test_fingerprint_dormantPresetIgnoredWhenNotUsingPreset);
     RUN_TEST(test_fingerprint_customModemFieldsCountWhenNotUsingPreset);
     RUN_TEST(test_hear_rfHearMarksNodeOnCurrentSlot);
+    RUN_TEST(test_hear_overheardPacketAdmitsNoNode);
     RUN_TEST(test_hear_mqttRelayDoesNotMark);
     RUN_TEST(test_hear_mqttTransportDoesNotMark);
     RUN_TEST(test_hear_countsWithUntrustedClock);
