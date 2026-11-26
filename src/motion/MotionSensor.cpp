@@ -373,6 +373,39 @@ void MotionSensor::drawFrameCalibration(OLEDDisplay *display, OLEDDisplayUiState
 }
 #endif
 
+#if HAS_SCREEN_AUTO_ROTATE
+void MotionSensor::followOrientation(float x, float y, float z)
+{
+    // Gravity reads as an acceleration upwards: the component along an axis that points up is positive
+    const float up = AUTO_ROTATE_UP_AXIS;
+    const float left = AUTO_ROTATE_LEFT_AXIS;
+    const float inPlane2 = up * up + left * left;
+    const float total2 = inPlane2 + z * z;
+    // Lying (nearly) flat: no edge is up, so the picture stays as it is
+    static constexpr float kMinTilt2 = 0.25f; // the screen tilted 30 degrees or more (sin^2)
+    // An edge counts as up within 30 degrees of vertical in the screen's plane: between two, nothing changes
+    static constexpr float kEdgeUp2 = 0.75f; // cos^2 30 degrees
+    static constexpr uint32_t kHoldMs = 700;
+
+    static int8_t candidate = -1;
+    static uint32_t candidateSince = 0;
+    int8_t turns = -1;
+    if (total2 > 0 && inPlane2 >= kMinTilt2 * total2) {
+        if (up * up >= kEdgeUp2 * inPlane2)
+            turns = up > 0 ? 0 : 2;
+        else if (left * left >= kEdgeUp2 * inPlane2)
+            turns = left > 0 ? 1 : 3; // left edge up: the device was turned a quarter turn clockwise
+    }
+    if (turns != candidate) {
+        candidate = turns;
+        candidateSince = millis();
+        return;
+    }
+    if (turns >= 0 && screen && Throttle::hasElapsed(candidateSince, kHoldMs))
+        screen->requestQuarterTurns(turns);
+}
+#endif
+
 #if !MESHTASTIC_EXCLUDE_POWER_FSM
 void MotionSensor::wakeScreen()
 {

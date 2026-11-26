@@ -47,6 +47,8 @@ extern XPowersPPM *PPM;
 #define INCLUDE_vTaskSuspend 0
 #endif
 
+void (*variantPowerOff)() = nullptr;
+
 /// Called to ask any observers if they want to veto sleep. Return 1 to veto or 0 to allow sleep to happen
 Observable<void *> preflightSleep;
 
@@ -174,6 +176,16 @@ void initDeepSleep()
     LOG_INFO("Booted, wake cause %d (boot count %d), reset_reason=%s", wakeCause, bootCount, reason);
 #endif
 
+    // esp_restart(), which every panic ends in, keeps the GPIO registers, and light sleep leaves its wake pins as level
+    // interrupts. One still asserted fires nonstop from the first attachInterrupt(), trips the interrupt watchdog and so
+    // loops through every reboot. Nothing has attached an interrupt yet, so clear them all.
+    for (uint8_t i = 0; i < GPIO_NUM_MAX; i++) {
+        if (!GPIO_IS_VALID_GPIO((gpio_num_t)i))
+            continue;
+        gpio_intr_disable((gpio_num_t)i);
+        gpio_set_intr_type((gpio_num_t)i, GPIO_INTR_DISABLE);
+    }
+
 #if SOC_RTCIO_HOLD_SUPPORTED
     // If waking from sleep, release any and all RTC GPIOs
     if (wakeCause != ESP_SLEEP_WAKEUP_UNDEFINED) {
@@ -242,6 +254,17 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false, bool skipSaveN
     if (nimbleBluetooth)
         nimbleBluetooth->deinit();
 #endif
+
+    // Before the observers: they park peripherals (and pin holds) that a board kept alive by USB cannot recover.
+    if (msecToWake == portMAX_DELAY && variantPowerOff) {
+        if (!skipSaveNodeDb)
+            nodeDB->saveToDisk();
+        if (transmitHistory)
+            transmitHistory->saveToDisk();
+        console->flush();
+        variantPowerOff();
+        skipSaveNodeDb = true;
+    }
 
 #ifdef ARCH_ESP32
     if (!shouldLoraWake(msecToWake))
@@ -558,7 +581,11 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
 #if HAS_BUTTON || defined(BUTTON_PIN)
     uint32_t espBtnPin2 = getResolvedButtonPin();
     if (espBtnPin2 != 0xFF) {
+#ifdef BUTTON_WAKE_ACTIVE_HIGH
+        gpio_wakeup_enable((gpio_num_t)espBtnPin2, GPIO_INTR_HIGH_LEVEL);
+#else
         gpio_wakeup_enable((gpio_num_t)espBtnPin2, GPIO_INTR_LOW_LEVEL);
+#endif
     }
 #endif
 #if defined(INPUTDRIVER_TWO_WAY_ROCKER_BTN) || defined(INPUTDRIVER_ENCODER_BTN)
@@ -651,6 +678,8 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     // Disable wake-on-button interrupt. Re-attach normal button-interrupts
     if (espBtnPin2 != 0xFF) {
         gpio_wakeup_disable((gpio_num_t)espBtnPin2);
+        // The level type would outlive the sleep and storm once any pinMode() re-enables the pin's interrupt.
+        gpio_set_intr_type((gpio_num_t)espBtnPin2, GPIO_INTR_DISABLE);
     }
 #endif
 #ifdef PMU_IRQ

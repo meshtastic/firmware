@@ -1,3 +1,10 @@
+// Position precision, channel selection and the event-channel coordinate gate.
+//
+// Why: precision and channel choice decide whether a position is shared at all; the event
+// policy is a privacy boundary.
+// Regression guarded: a precision clamp that keeps extra bits, or an event-channel
+// coordinate passing the gate.
+
 #include "Channels.h"
 #include "GeoCoord.h"
 #include "NodeDB.h"

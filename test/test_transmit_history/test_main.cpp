@@ -1,3 +1,10 @@
+// TransmitHistory persistence and its throttle.
+//
+// Why: retransmission state must survive a save/load, or a reboot forgets what was already
+// sent.
+// Regression guarded: a timestamp lost across save/load, or the throttle not releasing after
+// its interval.
+
 #include "TestUtil.h"
 #include "TransmitHistory.h"
 #include "UptimeClock.h"

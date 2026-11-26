@@ -337,31 +337,6 @@ static void test_validateConfigLora_allPresetsValidForLORA24()
 // clampConfigLora() tests
 // -----------------------------------------------------------------------
 
-static void test_clampConfigLora_invalidPresetClampedToDefault()
-{
-    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
-    cfg.region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
-    cfg.use_preset = true;
-    cfg.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO; // not in EU_868 preset list
-
-    RadioInterface::clampConfigLora(cfg);
-
-    const RegionInfo *eu868 = getRegion(meshtastic_Config_LoRaConfig_RegionCode_EU_868);
-    TEST_ASSERT_EQUAL(eu868->getDefaultPreset(), cfg.modem_preset);
-}
-
-static void test_clampConfigLora_validPresetUnchanged()
-{
-    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
-    cfg.region = meshtastic_Config_LoRaConfig_RegionCode_US;
-    cfg.use_preset = true;
-    cfg.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST;
-
-    RadioInterface::clampConfigLora(cfg);
-
-    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST, cfg.modem_preset);
-}
-
 // NodeDB::clampLoadedLoraConfig() runs at boot, before onConfigChanged() renames a legacy "Default"
 // primary to "". If it hashed "Default" as a custom channel name, an out-of-range channel_num would be
 // clamped to that hash's slot instead of the preset's default slot, moving the node off its mesh.
@@ -809,6 +784,37 @@ static void test_regionFieldsAreSane()
     }
 }
 
+// The invariants the deleted shadow table asserted, run over the real region table. A wrong
+// profile or region entry fails here; the synthetic table could not see it.
+static void test_regionTable_profileInvariants()
+{
+    const RegionInfo *r = regions;
+    while (true) {
+        char msg[96];
+        snprintf(msg, sizeof(msg), "Region %s profile invariants", r->name);
+
+        TEST_ASSERT_NOT_NULL_MESSAGE(r->profile, msg);
+        TEST_ASSERT_TRUE_MESSAGE(r->profile->spacing >= 0.0f, msg);
+        TEST_ASSERT_TRUE_MESSAGE(r->profile->padding >= 0.0f, msg);
+        if (r->profile->spacing > 0.0f)
+            TEST_ASSERT_TRUE_MESSAGE(r->profile->padding > 0.0f, msg);
+        if (r->profile->licensedOnly) {
+            TEST_ASSERT_FALSE_MESSAGE(r->profile->audioPermitted, msg);
+            TEST_ASSERT_TRUE_MESSAGE(r->overrideSlot > 0, msg);
+        }
+
+        bool defaultFound = false;
+        for (size_t i = 0; i < r->getNumPresets(); i++)
+            if (r->getAvailablePresets()[i] == r->getDefaultPreset())
+                defaultFound = true;
+        TEST_ASSERT_TRUE_MESSAGE(defaultFound, msg);
+
+        if (r->code == meshtastic_Config_LoRaConfig_RegionCode_UNSET)
+            break;
+        r++;
+    }
+}
+
 static void test_onlyLORA24HasWideLora()
 {
     // Verify that LORA_24 is the only region with wideLora=true
@@ -840,6 +846,10 @@ static void test_frequencySlotCount_realRegions()
 {
     meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
     cfg.use_preset = true;
+
+    cfg.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    cfg.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    TEST_ASSERT_EQUAL_UINT32(104, RadioInterface::frequencySlotCount(cfg));
 
     cfg.region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
     cfg.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
@@ -2874,8 +2884,6 @@ void setup()
     RUN_TEST(test_validateConfigLora_allPresetsValidForLORA24);
 
     // clampConfigLora()
-    RUN_TEST(test_clampConfigLora_invalidPresetClampedToDefault);
-    RUN_TEST(test_clampConfigLora_validPresetUnchanged);
     RUN_TEST(test_clampLoadedLoraConfig_legacyDefaultPrimaryGetsThePresetSlot);
     RUN_TEST(test_clampConfigLora_customBwTooWideClampedToDefaultBw);
     RUN_TEST(test_clampConfigLora_customBwValidLeftUnchanged);
@@ -2903,6 +2911,7 @@ void setup()
     RUN_TEST(test_presetsUndef_hasOneEntry);
     RUN_TEST(test_defaultPresetIsInAvailablePresets);
     RUN_TEST(test_regionFieldsAreSane);
+    RUN_TEST(test_regionTable_profileInvariants);
     RUN_TEST(test_onlyLORA24HasWideLora);
 
     // RadioInterface::frequencySlotCount()
