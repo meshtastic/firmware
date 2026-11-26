@@ -937,12 +937,35 @@ static void test_scanFailure_sendsUnscannedOnlyAfterTheRunOutlivesARecovery()
     TEST_ASSERT_TRUE(radioIf->noteScanFailedPublic(start) == Action::Recover);
     radioIf->noteScanRecoveryAttemptedPublic();
 
+    // Before the wrap the deadline has already wrapped to a small value, so a plain compare would send here
+    TEST_ASSERT_TRUE(radioIf->noteScanFailedPublic(start + 1) == Action::Retry);
     TEST_ASSERT_TRUE(radioIf->noteScanFailedPublic(start + after - 1) == Action::Retry);
     TEST_ASSERT_TRUE(radioIf->noteScanFailedPublic(start + after) == Action::SendUnscanned);
     TEST_ASSERT_TRUE_MESSAGE(radioIf->noteScanFailedPublic(start + after + 1) == Action::Retry,
                              "unscanned transmits must be rate-limited");
     TEST_ASSERT_TRUE(radioIf->noteScanFailedPublic(start + after + gap - 1) == Action::Retry);
     TEST_ASSERT_TRUE(radioIf->noteScanFailedPublic(start + after + gap) == Action::SendUnscanned);
+    delete radioIf;
+}
+
+// The gap between unscanned transmits measured across the wrap: the first send lands before it, the gap ends after it.
+static void test_scanFailure_unscannedGapHoldsAcrossTheClockWrap()
+{
+    using Action = RadioLibInterface::ScanFailAction;
+    auto *radioIf = makeTestableRadioLibInterface();
+    const uint32_t after = RadioLibInterface::SCAN_FAIL_UNSCANNED_AFTER_MS;
+    const uint32_t gap = RadioLibInterface::SCAN_FAIL_UNSCANNED_MIN_GAP_MS;
+    const uint32_t start = UINT32_MAX - after - gap / 2;
+    const uint32_t firstSend = start + after;
+    TEST_ASSERT_TRUE(firstSend > start);           // the fallback deadline itself does not wrap
+    TEST_ASSERT_TRUE(firstSend + gap < firstSend); // the gap does
+    TEST_ASSERT_TRUE(radioIf->noteScanFailedPublic(start) == Action::Recover);
+    radioIf->noteScanRecoveryAttemptedPublic();
+
+    TEST_ASSERT_TRUE(radioIf->noteScanFailedPublic(firstSend) == Action::SendUnscanned);
+    TEST_ASSERT_TRUE(radioIf->noteScanFailedPublic(firstSend + 1) == Action::Retry);
+    TEST_ASSERT_TRUE(radioIf->noteScanFailedPublic(firstSend + gap - 1) == Action::Retry);
+    TEST_ASSERT_TRUE(radioIf->noteScanFailedPublic(firstSend + gap) == Action::SendUnscanned);
     delete radioIf;
 }
 
@@ -1722,6 +1745,7 @@ void setup()
     RUN_TEST(test_scanVerdict_keepsTheFailedScansError);
     RUN_TEST(test_scanFailure_asksForRecoveryUntilOneIsAttempted);
     RUN_TEST(test_scanFailure_sendsUnscannedOnlyAfterTheRunOutlivesARecovery);
+    RUN_TEST(test_scanFailure_unscannedGapHoldsAcrossTheClockWrap);
     RUN_TEST(test_scanFailure_neverSendsUnscannedWithRxOffline);
     RUN_TEST(test_scanFailure_aWorkingScanEndsTheRun);
     RUN_TEST(test_clearReadIrqs_alsoDiscardsTheUnreadFrame);
