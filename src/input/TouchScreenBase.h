@@ -41,6 +41,10 @@ class TouchScreenBase : public Observable<const InputEvent *>, public concurrenc
     virtual void onEvent(const TouchEvent &event) = 0;
     virtual bool fastTapModeEnabled() const;
     virtual bool longPressEnabled() const;
+    // When the latest touch began and ended, as the touch interrupt saw them, for boards whose interrupt line stays
+    // low while a finger is down (TOUCH_INT_LEVEL). This thread can run hundreds of ms late (a slow screen redraw), and
+    // a release seen that late would turn a tap into a long press. False when the board doesn't record them
+    virtual bool touchEdgeTimes(uint32_t &downMs, uint32_t &upMs) { return false; }
     void resetTouchState();
 
     volatile TouchScreenBaseStateType _state = TOUCH_EVENT_CLEARED;
@@ -52,10 +56,14 @@ class TouchScreenBase : public Observable<const InputEvent *>, public concurrenc
     uint16_t _display_height;
 
   private:
-    bool _touchedOld = false;  // previous touch state
-    int16_t _first_x, _last_x; // horizontal swipe direction
-    int16_t _first_y, _last_y; // vertical swipe direction
-    uint32_t _pressStartMs;    // when the current touch began; read via Throttle::hasElapsed()
+    bool _touchedOld = false;     // previous touch state
+    int16_t _first_x, _last_x;    // horizontal swipe direction
+    int16_t _first_y, _last_y;    // vertical swipe direction
+    uint32_t _pressStartMs;       // when the current touch began; read via Throttle::hasElapsed()
+    bool _pressDownTimed = false; // _pressStartMs is the interrupt's down time, so a release can be matched to it
+
+    /// The interrupt's release time for the current touch, if its down edge is still the latest one
+    bool timedRelease(uint32_t nowMs, uint32_t &upMs);
 
     // LONG_PRESS repeat suppression while one touch is held: the bool is the armed flag, the
     // deadline is read only while it is set. No value of the deadline can mean "unarmed".

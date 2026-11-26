@@ -339,9 +339,11 @@ static void test_eventCoordinatePolicy_coversPortsAndExcludesPki()
 #endif
 }
 
+// Only compiled where the event policy is (env:coverage-event-policy); elsewhere it is not registered,
+// rather than registered as an empty pass.
+#if USERPREFS_BLOCK_POSITION_ON_EVENT_CHANNEL && defined(USERPREFS_CHANNEL_0_PSK)
 static void test_eventCoordinatePolicy_doesNotClassifyOpaquePacketsByHash()
 {
-#if USERPREFS_BLOCK_POSITION_ON_EVENT_CHANNEL && defined(USERPREFS_CHANNEL_0_PSK)
     configureEventChannels(false, false);
     meshtastic_MeshPacket packet = meshtastic_MeshPacket_init_default;
     packet.which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
@@ -363,14 +365,14 @@ static void test_eventCoordinatePolicy_doesNotClassifyOpaquePacketsByHash()
     packet.from = 0;
     packet.channel = channels.getHash(1);
     TEST_ASSERT_FALSE(isBlockedEventCoordinatePacket(&packet));
-#else
-    TEST_ASSERT_TRUE(true);
-#endif
 }
+#endif
 
+// Only compiled where the event policy is (env:coverage-event-policy); elsewhere it is not registered,
+// rather than registered as an empty pass.
+#if USERPREFS_BLOCK_POSITION_ON_EVENT_CHANNEL && defined(USERPREFS_CHANNEL_0_PSK)
 static void test_eventCoordinatePolicy_usesResolvedUnicastChannel()
 {
-#if USERPREFS_BLOCK_POSITION_ON_EVENT_CHANNEL && defined(USERPREFS_CHANNEL_0_PSK)
     NodeDB *savedNodeDB = nodeDB;
     nodeDB = new NodeDB();
     configureEventChannels(false, false);
@@ -399,10 +401,8 @@ static void test_eventCoordinatePolicy_usesResolvedUnicastChannel()
     node->channel = savedChannel;
     delete nodeDB;
     nodeDB = savedNodeDB;
-#else
-    TEST_ASSERT_TRUE(true);
-#endif
 }
+#endif
 
 static void test_findPositionChannel_skipsEventAndDisabledChannels()
 {
@@ -477,8 +477,10 @@ void setup()
     RUN_TEST(test_getPositionPrecisionForChannel_eventChannelClampedToZero);
     RUN_TEST(test_eventChannelIdentity_usesEffectiveKeyAndSurvivesReorder);
     RUN_TEST(test_eventCoordinatePolicy_coversPortsAndExcludesPki);
+#if USERPREFS_BLOCK_POSITION_ON_EVENT_CHANNEL && defined(USERPREFS_CHANNEL_0_PSK)
     RUN_TEST(test_eventCoordinatePolicy_doesNotClassifyOpaquePacketsByHash);
     RUN_TEST(test_eventCoordinatePolicy_usesResolvedUnicastChannel);
+#endif
     RUN_TEST(test_findPositionChannel_skipsEventAndDisabledChannels);
     RUN_TEST(test_getPositionPrecisionForChannel_nonEventFullKeyIsHonored);
     exit(UNITY_END());

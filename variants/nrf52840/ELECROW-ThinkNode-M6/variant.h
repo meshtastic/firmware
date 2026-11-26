@@ -102,15 +102,35 @@ static const uint8_t A0 = PIN_A0;
 #define SX126X_DIO2_AS_RF_SWITCH
 #define SX126X_DIO3_TCXO_VOLTAGE 3.3
 
-// GPS L76K
+// GPS: V1.2 boards have an L76K, V2.0 boards an AG3352. variant.cpp powers up an AG3352 at boot and listens for it.
 #define GPS_L76K
-#define GPS_BAUDRATE 9600
-#define PIN_GPS_EN (6)
-#define PIN_GPS_REINIT (29)
+extern int m6HasAg3352;
+
+// Decided at boot, after the probe's speed tables are built, so sweep the common speeds rather than fix one.
+#define GPS_BAUDRATE (m6HasAg3352 ? 115200 : 9600)
+#define GPS_BAUDRATE_FIXED 0
+
+// L76K: WAKE_UP, low allows sleep. AG3352: GPS_INT (idle_int), rests high and is pulled low around each command.
 #define PIN_GPS_STANDBY (30)
+#define GPS_STANDBY_L76K_ONLY
+#define GPS_SLEEP_INT (30)
+#define GPS_AIROHA_FITTED (m6HasAg3352) // park and wake it as an Airoha until the probe has named a model
+
+// Both boards invert it through a transistor (high asserts reset). L76K: left untouched as before.
+#define PIN_GPS_RESET (29)
+#define GPS_RESET_IN_USE (m6HasAg3352)
+
+// L76K: P0.06 switches VCC_GPS. AG3352: P0.26 enables the 0.8 V core supply; its 1.8 V rail is always on.
+#define GPS_EN_L76K (6)
+#define GPS_EN_AG3352 (26)
+#define PIN_GPS_EN (m6HasAg3352 ? GPS_EN_AG3352 : GPS_EN_L76K)
+#define GPS_AIROHA_RESET_WAKE // sleep in backup mode ($PAIR650) with EN low; EN high then a RESETB pulse wakes it
+
 #define PIN_GPS_PPS (31)
-#define GPS_TX_PIN (2)
-#define GPS_RX_PIN (3)
+
+// Both boards: the MCU transmits on P0.02 and receives on P0.03 (not P1.03 as the AG3352 readme says).
+#define GPS_TX_PIN (2) // This is for bits going TOWARDS the GPS
+#define GPS_RX_PIN (3) // This is for bits going TOWARDS the CPU
 #define GPS_THREAD_INTERVAL 50
 
 #define PIN_SERIAL1_TX GPS_TX_PIN

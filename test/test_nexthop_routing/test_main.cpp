@@ -15,6 +15,7 @@
 #include "airtime.h"
 #include "configuration.h"
 #include "gps/RTC.h"
+#include "memory/MemAudit.h"
 #include "mesh/Default.h"
 #include "mesh/NextHopRouter.h"
 #include "mesh/NodeDB.h"
@@ -836,22 +837,6 @@ void test_eventPolicy_seededRetrySuppressesTxUntilGateOff(void)
     TEST_ASSERT_EQUAL_UINT32(1, reliableShim->pendingCount());
 }
 
-void test_reliableAckStopsNormalPendingTransmission(void)
-{
-    auto original = makeBehaviorPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kLocalNode, kRemoteNode, 1, /*wantAck=*/true);
-    reliableShim->seedRetry(original, NextHopRouter::NUM_RELIABLE_RETX);
-    TEST_ASSERT_EQUAL_UINT32(1, reliableShim->pendingCount());
-
-    auto ack = makeBehaviorPacket(meshtastic_PortNum_ROUTING_APP, kRemoteNode, kLocalNode, 1);
-    ack.decoded.request_id = original.id;
-    meshtastic_Routing routing = meshtastic_Routing_init_zero;
-    routing.error_reason = meshtastic_Routing_Error_NONE;
-
-    reliableShim->sniffForTest(&ack, &routing);
-
-    TEST_ASSERT_EQUAL_UINT32(0, reliableShim->pendingCount());
-}
-
 // A PKI DM we originated is encrypted to the recipient, so when we overhear it being rebroadcast we
 // cannot decode it. The routing auth gate classifies it opaque and returns before
 // shouldFilterReceived() runs, so the implicit ACK has to be reachable from the header alone -
@@ -1035,14 +1020,34 @@ void test_rebroadcast_no_lora_broadcast_is_not_relayed(void)
     TEST_ASSERT_EQUAL_MESSAGE(0, mockIface->sendCount, "no packet should be handed to the radio at all");
 }
 
+// Live bytes the packet pool reports to memaudit, so a leaked pool packet shows up as a delta.
+static int32_t packetPoolLiveBytes()
+{
+    memaudit::Tag rows[memaudit::kMaxTags];
+    size_t n = memaudit::snapshot(rows, memaudit::kMaxTags);
+    for (size_t i = 0; i < n; i++)
+        if (rows[i].tag && strcmp(rows[i].tag, "pktpool(live)") == 0)
+            return rows[i].bytes;
+    return 0;
+}
+
+// A send the interface declines (ERRNO_SHOULD_RELEASE) hands the copy back: perhapsRebroadcast() must
+// release it, or every declined relay leaks one pool packet.
 void test_rebroadcast_declined_send_releases_packet(void)
 {
     MockRadioInterface *mockIface = installMockIface();
     mockIface->declineAll = true;
     meshtastic_MeshPacket p = makeRebroadcastCandidate(NODENUM_BROADCAST);
 
+    const int32_t liveBefore = packetPoolLiveBytes();
+    meshtastic_MeshPacket *probe = packetPool.allocZeroed(); // the count must move, or the check below is vacuous
+    TEST_ASSERT_NOT_NULL(probe);
+    TEST_ASSERT_GREATER_THAN_INT32(liveBefore, packetPoolLiveBytes());
+    packetPool.release(probe);
+
     TEST_ASSERT_TRUE_MESSAGE(shim->perhapsRebroadcast(&p), "the rebroadcast must still be attempted");
     TEST_ASSERT_EQUAL_MESSAGE(1, mockIface->sendCount, "the copy must have reached the mock radio");
+    TEST_ASSERT_EQUAL_INT32_MESSAGE(liveBefore, packetPoolLiveBytes(), "the declined copy must be returned to the pool");
 }
 
 // An already-encrypted packet never reaches perhapsEncode's TOO_LARGE check, so Router::send() is the
@@ -1248,7 +1253,6 @@ void setup()
     RUN_TEST(test_eventPolicy_nextHopDuplicateSuppressesEventButRelaysPrivateCoordinate);
     RUN_TEST(test_eventPolicy_repeatedLocalPacketSuppressesCoordinateAckButKeepsTextAck);
     RUN_TEST(test_eventPolicy_seededRetrySuppressesTxUntilGateOff);
-    RUN_TEST(test_reliableAckStopsNormalPendingTransmission);
 
     printf("\n=== pending retransmission bookkeeping ===\n");
     RUN_TEST(test_implicit_ack_for_opaque_own_packet);

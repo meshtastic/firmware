@@ -497,7 +497,6 @@ do not infer completeness from the row count.
 | `test_crypto`                | CryptoEngine                  |
 | `test_default`               | Default configuration helpers |
 | `test_hop_scaling`           | Hop scaling algorithm         |
-| `test_http_content_handler`  | HTTP handling                 |
 | `test_mac_from_string`       | MAC address parsing           |
 | `test_mesh_module`           | Module framework              |
 | `test_meshpacket_serializer` | Packet serialization          |

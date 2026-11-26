@@ -51,11 +51,8 @@ static void test_formatMacAddr_shortBuffer_truncatesAndTerminates()
     TEST_ASSERT_EQUAL_CHAR('x', out[6]); // nothing written past the stated size
 }
 
-static void test_bleAddressField_fitsAFormattedAddress()
-{
-    meshtastic_DeviceMetadata md = meshtastic_DeviceMetadata_init_zero;
-    TEST_ASSERT_TRUE(sizeof(md.ble_address) >= sizeof("AA:BB:CC:DD:EE:FF"));
-}
+static_assert(sizeof(meshtastic_DeviceMetadata::ble_address) >= sizeof("AA:BB:CC:DD:EE:FF"),
+              "DeviceMetadata.ble_address must hold a formatted MAC address");
 
 static void test_getDeviceMetadata_native_reportsNoBleAddress()
 {
@@ -70,7 +67,6 @@ void setup()
     RUN_TEST(test_formatMacAddr_uppercaseMostSignificantFirst);
     RUN_TEST(test_formatMacAddr_keepsLeadingZeros);
     RUN_TEST(test_formatMacAddr_shortBuffer_truncatesAndTerminates);
-    RUN_TEST(test_bleAddressField_fitsAFormattedAddress);
     RUN_TEST(test_getDeviceMetadata_native_reportsNoBleAddress);
     exit(UNITY_END());
 }
