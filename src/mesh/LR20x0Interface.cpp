@@ -349,11 +349,16 @@ template <typename T> bool LR20x0Interface<T>::reconfigure()
 
         selectLfPaTable(freq);
         err = lora.setOutputPower(power);
-        if (err != RADIOLIB_ERR_NONE) {
-            // Not a lost-state signature: keep the previous power instead of forcing a full re-init
+        if (err == RADIOLIB_ERR_INVALID_OUTPUT_POWER) {
+            // Out of range: RadioLib refused it before touching the chip, so the previous power still holds
             LOG_ERROR("LR20x0 setOutputPower %d dBm @ %.3f MHz rejected (%s%d); keep previous Tx power", power, freq, radioLibErr,
                       err);
             RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+        } else if (err != RADIOLIB_ERR_NONE) {
+            // The PA config may be written without the Tx params: force the full re-init below
+            LOG_ERROR("LR20x0 setOutputPower %d dBm @ %.3f MHz %s%d", power, freq, radioLibErr, err);
+            RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+            standbySuccess = false;
         }
 
         // Warn-only, as in LR11x0: a rejected gain mode is cosmetic and not a lost-state signature, so

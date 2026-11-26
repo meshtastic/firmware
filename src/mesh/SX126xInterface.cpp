@@ -321,11 +321,15 @@ int16_t SX126xInterface::programModemParams()
 #else
     err = lora.setOutputPower(power);
 #endif
-    if (err != RADIOLIB_ERR_NONE) {
+    if (err == RADIOLIB_ERR_INVALID_OUTPUT_POWER) {
         // Don't abort: this power is operator config (tx_power/SX126X_MAX_POWER); a value above the
         // driver's max would crash the daemon before reloadConfig() persists. Flag it and keep prior power.
         LOG_ERROR("SX126X setOutputPower %d dBm rejected (%s%d); keep previous Tx power", power, radioLibErr, err);
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+    } else if (err != RADIOLIB_ERR_NONE) {
+        // A command failed part-way through the power setup: return it so reconfigure() re-inits the chip
+        LOG_ERROR("SX126X setOutputPower(%d) %s%d", power, radioLibErr, err);
+        return err;
     }
 
     // Apply RX gain mode - valid in STDBY (datasheet §9.6), matches resetAGC() pattern

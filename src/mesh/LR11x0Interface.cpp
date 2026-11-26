@@ -420,11 +420,14 @@ template <typename T> int16_t LR11x0Interface<T>::programModemParams()
     }
 
     err = applyOutputPower();
-    if (err != RADIOLIB_ERR_NONE) {
-        // A rejected power is operator config, not lost chip state: keep the previous power, as SX126x does,
-        // rather than return an error that drives reconfigure() into a re-init failing the same way
+    if (err == RADIOLIB_ERR_INVALID_OUTPUT_POWER) {
+        // Out of range: RadioLib refused it before touching the chip, so the previous power still holds
         LOG_ERROR("LR11x0 setOutputPower %d dBm rejected (%s%d); keep previous Tx power", power, radioLibErr, err);
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+    } else if (err != RADIOLIB_ERR_NONE) {
+        // The PA config may be written without the Tx params: return it so reconfigure() re-inits the chip
+        LOG_ERROR("LR11x0 setOutputPower(%d) %s%d", power, radioLibErr, err);
+        return err;
     }
 
     // Apply RX gain mode - valid in STDBY, matches resetAGC() pattern
