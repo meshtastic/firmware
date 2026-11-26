@@ -1,3 +1,8 @@
+// StreamAPI framing and phone handshake.
+//
+// Why: a framing or handshake regression breaks every serial/TCP client.
+// Regression guarded: a handshake packet fit, or a delivered packet rewritten after send.
+
 #include "MeshTypes.h"
 #include "SerialConsole.h"
 #include "TestUtil.h"

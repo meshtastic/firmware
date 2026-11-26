@@ -1,3 +1,10 @@
+// Event profile file filtering.
+//
+// Why: an event build must back up and restore only the files its profile owns; a wrong
+// filter can copy radio identity onto a shared profile.
+// Regression guarded: a radio/profile file being treated as shareable, or a profile file
+// being omitted.
+
 #include "MeshTypes.h" // Include BEFORE TestUtil.h
 #include "TestUtil.h"
 #include "mesh/NodeDB.h"

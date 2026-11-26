@@ -66,6 +66,9 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     std::unique_ptr<RadioInterface> iface = nullptr;
 
   public:
+    using PacketHistory::wasHeardFromSender;
+
+  public:
     /**
      * Constructor
      *
@@ -128,6 +131,12 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     {
         (void)p;
         return meshtastic_MeshPacket_AckProofStatus_ACK_PROOF_ABSENT;
+    }
+
+    /// Router::send()'s hard duty-cycle gate: admits up to the whole duty cycle (exposed for tests).
+    static bool airUtilAllowsTx(float hourlyTxPercent, float effectiveDutyCycle)
+    {
+        return !(hourlyTxPercent > effectiveDutyCycle);
     }
 
     /**

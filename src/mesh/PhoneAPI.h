@@ -12,6 +12,10 @@
 #include <string>
 #include <vector>
 
+// Release the file manifest's capacity (swap with a fresh vector), used when a phone
+// sync ends. Exposed for the native test of the capacity regression (#7924).
+void releaseFilesManifest(std::vector<meshtastic_FileInfo> &filesManifest);
+
 // NodeNum stored as raw uint32_t below; including MeshTypes.h here breaks the
 // LOG_WARN include order via Arduino.h/MemoryPool.h.
 

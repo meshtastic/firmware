@@ -348,6 +348,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define ICM20948_ADDR_ALT 0x68
 #define BHI260AP_ADDR 0x28
 #define BMM150_ADDR 0x13
+#define BMM350_ADDR 0x15
 #define DA217_ADDR 0x26
 #define BMI270_ADDR 0x68
 #define BMI270_ADDR_ALT 0x69
@@ -475,6 +476,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #endif
 #ifndef HAS_TFT
 #define HAS_TFT 0
+#endif
+// A TFT whose picture follows the device as it's turned, from the accelerometer (TFTDisplay::setQuarterTurns)
+#ifndef HAS_SCREEN_AUTO_ROTATE
+#define HAS_SCREEN_AUTO_ROTATE 0
 #endif
 // Opt-in: build the BaseUI games frame (Snake). Off by default; enable per build/variant with
 // -DBASEUI_HAS_GAMES=1 (requires HAS_SCREEN and a non-color BaseUI display).

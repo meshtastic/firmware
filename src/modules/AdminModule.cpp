@@ -871,14 +871,14 @@ static void reconcileAccelerometerThread(bool wasOn, bool nowOn, bool otherFeatu
 #ifdef MESHTASTIC_INCLUDE_INKHUD
     if (!wasOn && nowOn)
         accelerometerThread->setMotionPolling(true);
-    else if (wasOn && !nowOn && !otherFeatureOn && !accelerometerThread->providesHeading())
+    else if (wasOn && !nowOn && !otherFeatureOn && !accelerometerThread->providesHeading() && !HAS_SCREEN_AUTO_ROTATE)
         accelerometerThread->setMotionPolling(false);
 #else
     if (!wasOn && nowOn && accelerometerThread->enabled == false) {
         accelerometerThread->enabled = true;
         accelerometerThread->start();
     } else if (wasOn && !nowOn && !otherFeatureOn && accelerometerThread->enabled == true &&
-               !accelerometerThread->providesHeading()) {
+               !accelerometerThread->providesHeading() && !HAS_SCREEN_AUTO_ROTATE) { // the screen follows its turns
         accelerometerThread->disable();
     }
 #endif
