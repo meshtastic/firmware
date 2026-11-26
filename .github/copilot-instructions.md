@@ -660,6 +660,18 @@ Many devices are battery-powered:
 - Default channels get stricter rate limits to prevent abuse
 - Private channels may have relaxed limits
 
+<a id="replying-on-github"></a>
+
+## Replying on GitHub
+
+A comment written by a person deserves a reply written by a person. Before replying to a comment on an issue or PR, judge who wrote it:
+
+- **Machine-written: reply as normal.** This covers a bot account (`coderabbitai[bot]`, Copilot review, `github-actions[bot]`), and a comment that reads as generated even when it comes from a person's account: an LLM summary's structure and cadence, or a generated-by footer.
+- **Human-written: ask your user to answer it.** Don't post the reply. Tell your user what was asked and what the answer needs (facts, code references, links), and suggest they write it by hand. This is a strong default, not a hard rule: if they ask you to post it anyway, do.
+- **When unsure, treat it as human-written.**
+
+Acting on a person's review is still fine: make the change they asked for and push it. The written reply on the thread is your user's.
+
 ## GitHub Actions CI/CD
 
 The project uses GitHub Actions extensively for CI/CD. Key workflows are in `.github/workflows/`:
