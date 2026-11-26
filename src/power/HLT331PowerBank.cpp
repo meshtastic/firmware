@@ -2,20 +2,26 @@
 
 #if HAS_HLT331
 #include "DebugConfiguration.h"
+#include "Power.h"
 #include "UptimeClock.h"
 #include "concurrency/OSThread.h"
 #include "mesh/Throttle.h"
+#include "power/CW2217.h"
 #include "power/HLT331Parser.h"
+#include "power/HLT331PowerStatus.h"
 #include "power/PowerBank.h"
 #include <Arduino.h>
+#if HAS_CW2217
+#include <Wire.h>
+#include <string.h>
+#endif
 
-// HLT331_DEBUG=1 logs status changes with the raw frame, IO1/IO2 activity, data going stale, and
-// whether the fuel gauge answers on I2C. Costs no flash when off.
+// HLT331_DEBUG=1 logs status changes with the raw frame, IO1/IO2 activity, data going stale, and the
+// fuel gauge's registers next to the HLT331's battery reading. Costs no flash when off.
 #ifndef HLT331_DEBUG
 #define HLT331_DEBUG 0
 #endif
 #if HLT331_DEBUG
-#include <Wire.h>
 #include <stdio.h>
 #include <string.h>
 #define LOG_DEBUG_HLT331(...) LOG_DEBUG(__VA_ARGS__)
@@ -34,9 +40,10 @@ namespace
 {
 // Polled faster than one frame fills the 64-byte UART buffer.
 constexpr uint32_t POLL_INTERVAL_MS = 100;
-// No frame for this long and the last status no longer describes the bank.
+// No frame for this long and the last frame no longer describes the ports.
 constexpr uint32_t STALE_MS = 3000;
 constexpr uint32_t WARN_INTERVAL_MS = 60 * 1000;
+constexpr uint32_t GAUGE_INTERVAL_MS = 3000;
 
 #if HLT331_DEBUG
 constexpr uint32_t HEARTBEAT_MS = 10 * 1000;
@@ -55,27 +62,42 @@ class HLT331PowerBank : public PowerBank, private concurrency::OSThread
         pinMode(PIN_HLT331_IO1, INPUT_PULLDOWN);
         pinMode(PIN_HLT331_IO2, INPUT_PULLDOWN);
         HLT331_SERIAL.begin(HLT331_BAUD);
+        // Read now so Power's first reading at boot already has the battery.
+        readGauge();
+        asleep = digitalRead(PIN_HLT331_IO2) == LOW;
 #if HLT331_DEBUG
         attachInterrupt(digitalPinToInterrupt(PIN_HLT331_IO1), io1Isr, RISING);
-        lastIo2 = digitalRead(PIN_HLT331_IO2);
-        LOG_DEBUG_HLT331("HLT331: setup, IO1=%d IO2=%d, %s", digitalRead(PIN_HLT331_IO1), lastIo2, gaugeProbe());
+        lastIo2 = !asleep;
+        LOG_DEBUG_HLT331("HLT331: setup, IO1=%d IO2=%d", digitalRead(PIN_HLT331_IO1), lastIo2);
+        logGauge();
 #endif
     }
 
-    bool getStatus(PowerBankStatus &out) override
+    bool getStatus(PowerBankStatus &out) override { return hlt331MergeStatus(sources(), out); }
+
+    bool getDetail(PowerBankDetail &out) override
     {
-        if (!isFresh())
+        if (!haveFrame)
             return false;
-        const HLT331Status &s = parser.status();
-        out.batteryMv = s.batteryMv;
-        out.batteryPercent = s.batteryPercent;
-        out.charging = s.charging;
-        out.inputPresent = s.inputPresent();
+        hlt331Detail(parser.status(), isFresh(), out);
         return true;
     }
 
   private:
     bool isFresh() const { return haveFrame && !Throttle::hasElapsed(lastFrameMs, STALE_MS); }
+
+    HLT331Sources sources() const
+    {
+        HLT331Sources in;
+        in.gaugeValid = gaugeValid;
+        in.gaugeMv = gauge.voltageMv;
+        in.gaugePercent = gauge.percent;
+        in.haveFrame = haveFrame;
+        in.fresh = isFresh();
+        in.asleep = asleep;
+        in.controller = parser.status();
+        return in;
+    }
 
     int32_t runOnce() override
     {
@@ -90,6 +112,8 @@ class HLT331PowerBank : public PowerBank, private concurrency::OSThread
                 lastFrameMs = Time::getMillis();
             }
         }
+        asleep = digitalRead(PIN_HLT331_IO2) == LOW;
+
         const uint32_t rejected = parser.badCrcFrames() + parser.badLengthFrames();
         if (rejected != lastRejected && (lastWarnMs == 0 || Throttle::hasElapsed(lastWarnMs, WARN_INTERVAL_MS))) {
             lastRejected = rejected;
@@ -97,11 +121,58 @@ class HLT331PowerBank : public PowerBank, private concurrency::OSThread
             LOG_WARN("HLT331: rejected frames, %u bad CRC, %u bad length", (unsigned)parser.badCrcFrames(),
                      (unsigned)parser.badLengthFrames());
         }
+
+        if (Throttle::hasElapsed(lastGaugeMs, GAUGE_INTERVAL_MS))
+            readGauge();
+
+        // Plugging in, unplugging and the battery appearing or going are worth more than Power's next poll.
+        PowerBankStatus now;
+        const bool available = getStatus(now);
+        if (available != lastAvailable || now.charging != lastReported.charging ||
+            now.inputPresent != lastReported.inputPresent) {
+            lastAvailable = available;
+            lastReported = now;
+            if (power)
+                power->setIntervalFromNow(0);
+        }
 #if HLT331_DEBUG
         debugLog(gotFrame);
 #endif
         return POLL_INTERVAL_MS;
     }
+
+    void readGauge()
+    {
+        lastGaugeMs = Time::getMillis();
+#if HAS_CW2217
+        // Read twice: a conversion landing between bytes tears the voltage and charge words.
+        uint8_t first[CW2217::REG_COUNT];
+        gaugeValid = false;
+        for (int attempt = 0; attempt < 3; attempt++) {
+            if (!readGaugeRegisters(first) || !readGaugeRegisters(gaugeRegs))
+                return;
+            if (memcmp(&first[CW2217::REG_VCELL], &gaugeRegs[CW2217::REG_VCELL], 4) == 0) {
+                gaugeValid = CW2217::decode(gaugeRegs, gauge);
+                return;
+            }
+        }
+#endif
+    }
+
+#if HAS_CW2217
+    static bool readGaugeRegisters(uint8_t regs[CW2217::REG_COUNT])
+    {
+        Wire.beginTransmission(CW2217_ADDR);
+        Wire.write(CW2217::REG_CHIP_ID);
+        if (Wire.endTransmission() != 0 || Wire.requestFrom((uint8_t)CW2217_ADDR, CW2217::REG_COUNT) != CW2217::REG_COUNT)
+            return false;
+        for (uint8_t i = 0; i < CW2217::REG_COUNT; i++)
+            regs[i] = Wire.read();
+        return true;
+    }
+
+    uint8_t gaugeRegs[CW2217::REG_COUNT] = {};
+#endif
 
 #if HLT331_DEBUG
     void debugLog(bool gotFrame)
@@ -121,11 +192,11 @@ class HLT331PowerBank : public PowerBank, private concurrency::OSThread
             if (fresh)
                 LOG_DEBUG_HLT331("HLT331: frames arriving");
             else
-                LOG_DEBUG_HLT331("HLT331: no frame for %u ms, status unavailable", (unsigned)STALE_MS);
+                LOG_DEBUG_HLT331("HLT331: no frame for %u ms", (unsigned)STALE_MS);
             wasFresh = fresh;
         }
 
-        const int io2 = digitalRead(PIN_HLT331_IO2);
+        const int io2 = !asleep;
         if (io2 != lastIo2) {
             LOG_DEBUG_HLT331("HLT331: IO2 -> %d", io2);
             lastIo2 = io2;
@@ -139,9 +210,18 @@ class HLT331PowerBank : public PowerBank, private concurrency::OSThread
 
         if (lastHeartbeatMs == 0 || Throttle::hasElapsed(lastHeartbeatMs, HEARTBEAT_MS)) {
             lastHeartbeatMs = Time::stampMillis();
-            LOG_DEBUG_HLT331("HLT331: heartbeat, %u good / %u bad CRC / %u bad length frames, IO1=%d IO2=%d, %s",
+            PowerBankStatus s;
+            const bool available = getStatus(s);
+            LOG_DEBUG_HLT331("HLT331: heartbeat, %u good / %u bad CRC / %u bad length frames, IO1=%d IO2=%d",
                              (unsigned)parser.goodFrames(), (unsigned)parser.badCrcFrames(), (unsigned)parser.badLengthFrames(),
-                             digitalRead(PIN_HLT331_IO1), io2, gaugeProbe());
+                             digitalRead(PIN_HLT331_IO1), io2);
+            if (available)
+                LOG_DEBUG_HLT331("HLT331: reporting battery %u mV %d%% from %s, charging=%d input=%d", s.batteryMv,
+                                 s.batteryPercent, s.batteryMv == gauge.voltageMv && gaugeValid ? "gauge" : "HLT331", s.charging,
+                                 s.inputPresent);
+            else
+                LOG_DEBUG_HLT331("HLT331: reporting no battery");
+            logGauge();
             if (haveFrame)
                 logFrame(fresh ? "last" : "last, stale");
         }
@@ -164,21 +244,27 @@ class HLT331PowerBank : public PowerBank, private concurrency::OSThread
         loggedFrame = true;
     }
 
-    // Whether the board's fuel gauge answers, and its chip ID register.
-    const char *gaugeProbe()
+    // Registers 0x00-0x0F and the IC state, raw and decoded, to check the register map against the HLT331.
+    void logGauge()
     {
-#ifdef CW2217_ADDR
+#if HAS_CW2217
+        char hex[CW2217::REG_COUNT * 3 + 1] = {};
+        for (uint8_t i = 0; i < CW2217::REG_COUNT; i++)
+            snprintf(&hex[i * 3], 4, "%02x ", gaugeRegs[i]);
+        int icState = -1;
         Wire.beginTransmission(CW2217_ADDR);
-        Wire.write(0x00);
-        if (Wire.endTransmission() != 0 || Wire.requestFrom((uint8_t)CW2217_ADDR, (uint8_t)1) != 1) {
-            snprintf(gaugeText, sizeof(gaugeText), "gauge 0x%x no answer", CW2217_ADDR);
-        } else {
-            snprintf(gaugeText, sizeof(gaugeText), "gauge 0x%x id 0x%x", CW2217_ADDR, Wire.read());
-        }
+        Wire.write(CW2217::REG_IC_STATE);
+        if (Wire.endTransmission() == 0 && Wire.requestFrom((uint8_t)CW2217_ADDR, (uint8_t)1) == 1)
+            icState = Wire.read();
+        LOG_DEBUG_HLT331("CW2217 regs 00-0f: %sIC state 0x%x", hex, icState);
+        if (gaugeValid)
+            LOG_DEBUG_HLT331("CW2217 decoded: %u mV %u%% %d.%dC profile=%d", gauge.voltageMv, gauge.percent,
+                             gauge.tempTenthsC / 10, abs(gauge.tempTenthsC % 10), gauge.profileLoaded);
+        else
+            LOG_DEBUG_HLT331("CW2217: no valid reading");
 #else
-        snprintf(gaugeText, sizeof(gaugeText), "no gauge defined");
+        LOG_DEBUG_HLT331("HLT331: no fuel gauge on this board");
 #endif
-        return gaugeText;
     }
 
     bool loggedFrame = false;
@@ -187,14 +273,19 @@ class HLT331PowerBank : public PowerBank, private concurrency::OSThread
     int lastIo2 = -1;
     uint32_t lastIo1Pulses = 0;
     uint32_t lastHeartbeatMs = 0;
-    char gaugeText[32] = {};
 #endif
 
     HLT331Parser parser;
     bool haveFrame = false;
+    bool asleep = false;
     uint32_t lastFrameMs = 0;
     uint32_t lastRejected = 0;
     uint32_t lastWarnMs = 0;
+    CW2217::Reading gauge;
+    bool gaugeValid = false;
+    uint32_t lastGaugeMs = 0;
+    PowerBankStatus lastReported;
+    bool lastAvailable = false;
 };
 } // namespace
 

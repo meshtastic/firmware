@@ -1106,6 +1106,16 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 }
                 break;
 
+            case CW2217_ADDR:
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x00), 1);
+                if (registerValue == 0xA0) {
+                    type = CW2217;
+                    logFoundDevice("CW2217", (uint8_t)addr.address);
+                } else {
+                    LOG_INFO("Device found at address 0x%x was not able to be enumerated", (uint8_t)addr.address);
+                }
+                break;
+
             case CGRADSENS_ADDR:
                 // Register 0x00 of the RadSens sensor contains is product identifier 0x7D
                 // Undocumented, but some devices return a product identifier of 0x7A
