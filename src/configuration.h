@@ -476,6 +476,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #ifndef HAS_TFT
 #define HAS_TFT 0
 #endif
+// A TFT whose picture follows the device as it's turned, from the accelerometer (TFTDisplay::setQuarterTurns)
+#ifndef HAS_SCREEN_AUTO_ROTATE
+#define HAS_SCREEN_AUTO_ROTATE 0
+#endif
 // Opt-in: build the BaseUI games frame (Snake). Off by default; enable per build/variant with
 // -DBASEUI_HAS_GAMES=1 (requires HAS_SCREEN and a non-color BaseUI display).
 #ifndef BASEUI_HAS_GAMES

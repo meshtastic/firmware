@@ -1091,6 +1091,24 @@ void Screen::forceDisplay(bool forceUiUpdate)
 
 static uint32_t lastScreenTransition;
 
+void Screen::applyQuarterTurns()
+{
+#if HAS_SCREEN_AUTO_ROTATE && USE_TFTDISPLAY
+    const int8_t turns = pendingQuarterTurns.exchange(-1);
+    if (turns < 0)
+        return;
+    auto *tft = static_cast<TFTDisplay *>(dispdev);
+    if (tft->getQuarterTurns() == turns)
+        return;
+    tft->setQuarterTurns(turns);
+    displayWidth = dispdev->width();
+    displayHeight = dispdev->height();
+    // Messages are wrapped to the old width
+    graphics::MessageRenderer::clearMessageCache();
+    setFastFramerate();
+#endif
+}
+
 int32_t Screen::runOnce()
 {
     // If we don't have a screen, don't ever spend any CPU for us.
@@ -1119,6 +1137,10 @@ int32_t Screen::runOnce()
 
         lastFrameIndex = currentFrameIndex;
     }
+
+#if HAS_SCREEN_AUTO_ROTATE && USE_TFTDISPLAY
+    applyQuarterTurns();
+#endif
 
     menuHandler::handleMenuSwitch(dispdev);
 
