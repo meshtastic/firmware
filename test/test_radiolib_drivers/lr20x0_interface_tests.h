@@ -140,6 +140,21 @@ static void test_lr20x0_launchTransmit_reports_a_refused_settx()
     TEST_ASSERT_EQUAL_UINT32(1, hal.count(op16(RADIOLIB_LR2021_CMD_SET_TX)));
 }
 
+// develop's verdict on a failed scan: a CAD the chip refuses (-706) reads as a free channel, after one
+// attempt. #12038 replaces this with ChannelScan::Failed; update this test there.
+static void test_lr20x0_isChannelActive_reports_a_refused_cad_free()
+{
+    RecordingHal &hal = freshHal();
+    auto &iface = lr20x0Interface(hal);
+    hal.rejectUnless(
+        op16(RADIOLIB_LR2021_CMD_SET_LORA_CAD), [](const std::vector<uint8_t> &) { return false; },
+        RADIOLIB_LRXXXX_STAT_1_CMD_PERR);
+    // A preamble on the air: if the refusal were ignored, the scan would report busy and fail this.
+    lr2021AnswerIrq(hal, RADIOLIB_LR2021_IRQ_CAD_DETECTED | RADIOLIB_LR2021_IRQ_CAD_DONE);
+    TEST_ASSERT_FALSE(iface.isChannelActive());
+    TEST_ASSERT_EQUAL_UINT32(1, hal.count(op16(RADIOLIB_LR2021_CMD_SET_LORA_CAD)));
+}
+
 // The standby mode of the last SetStandby before the transaction being checked, which is transactions.back().
 static uint8_t lr2021StandbyModeBeforeLast(const RecordingHal &hal)
 {
@@ -184,16 +199,13 @@ static void test_lr20x0_applyRegulator_keeps_a_refused_SetRegMode_to_itself()
     TEST_ASSERT_EQUAL_INT16(RADIOLIB_ERR_NONE, iface.setCrc());
 }
 
-// Grows here:
-//   a scan that returns an error (-706, -707, -705) must not read as a free channel. Today every
-//   driver's isChannelActive() returns false on it; which verdict replaces that is undecided.
-
 static void runLr20x0InterfaceTests()
 {
     RUN_TEST(test_lr20x0_isChannelActive_starts_a_cad_the_chip_accepts);
     RUN_TEST(test_lr20x0_isChannelActive_reports_a_detected_preamble_busy);
     RUN_TEST(test_lr20x0_isChannelActive_reports_cad_done_free);
     RUN_TEST(test_lr20x0_launchTransmit_reports_a_refused_settx);
+    RUN_TEST(test_lr20x0_isChannelActive_reports_a_refused_cad_free);
     RUN_TEST(test_lr20x0_applyRegulator_sends_SetRegMode_from_standby_rc);
     RUN_TEST(test_lr20x0_applyRegulator_keeps_a_refused_SetRegMode_to_itself);
 }

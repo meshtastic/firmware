@@ -1,0 +1,7 @@
+# FAULT. The framework decoder turns the bus nibble into one decimal character,
+# so bus 10 becomes ':' and the display cannot open the named device.
+Lora:
+  Module: sim
+Display:
+  Panel: ILI9488
+  spidev: spidev10.0
