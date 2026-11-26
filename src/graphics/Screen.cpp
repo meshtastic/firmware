@@ -1532,7 +1532,7 @@ void Screen::setFrames(FrameFocus focus)
         PUSH_FRAME_TITLE("System");
     }
 #if HAS_POWERBANK
-    if (powerBank) {
+    if (powerBank && powerBank->hasDetail()) {
         normalFrames[numframes++] = graphics::PowerBankPage::drawFrame;
         indicatorIcons.push_back(icon_power_bank);
         PUSH_FRAME_TITLE("Power");

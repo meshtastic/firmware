@@ -44,7 +44,10 @@ class PowerBank
     // False while no battery state is available.
     virtual bool getStatus(PowerBankStatus &out) = 0;
 
-    // False if the controller has nothing to show beyond getStatus().
+    // Whether getDetail() can ever succeed, and so whether the power bank page is worth showing.
+    virtual bool hasDetail() const { return false; }
+
+    // False while there is nothing to show beyond getStatus().
     virtual bool getDetail(PowerBankDetail &) { return false; }
 };
 

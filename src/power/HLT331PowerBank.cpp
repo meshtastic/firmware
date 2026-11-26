@@ -75,6 +75,8 @@ class HLT331PowerBank : public PowerBank, private concurrency::OSThread
 
     bool getStatus(PowerBankStatus &out) override { return hlt331MergeStatus(sources(), out); }
 
+    bool hasDetail() const override { return true; }
+
     bool getDetail(PowerBankDetail &out) override
     {
         if (!haveFrame)
