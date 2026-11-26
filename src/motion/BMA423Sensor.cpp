@@ -47,8 +47,7 @@ bool BMA423Sensor::init()
 
 #ifdef BMA4XX_INT
     pinMode(BMA4XX_INT, INPUT);
-    attachInterrupt(
-        BMA4XX_INT, [] { BMA_IRQ = true; }, RISING);
+    attachInterrupt(BMA4XX_INT, [] { BMA_IRQ = true; }, RISING);
 #endif
 
     LOG_DEBUG("BMA423 init ok");
@@ -57,6 +56,13 @@ bool BMA423Sensor::init()
 
 int32_t BMA423Sensor::runOnce()
 {
+#ifdef MESHTASTIC_INCLUDE_INKHUD
+    if (stepTracker().isTracking()) {
+        AccelerometerData data;
+        if (sensor.readData(data))
+            sampleSteps(data.mps2.x, data.mps2.y, data.mps2.z);
+    }
+#endif
 #ifdef BMA4XX_INT
     // INT1 is the fast path; update() reads and clears the status register and fires the callbacks.
     if (!BMA_IRQ && !Throttle::hasElapsed(lastPollMs, MOTION_SENSOR_IRQ_KEEPALIVE_MS))

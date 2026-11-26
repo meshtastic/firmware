@@ -1,3 +1,9 @@
+// BME680 indoor-air-quality conversion helpers.
+//
+// Why: the gas resistance to IAQ mapping is user-visible and its integer/finally scale is
+// easy to move without noticing.
+// Regression guarded: a humidity/temperature compensation or IAQ bucket regression.
+
 #include "MeshTypes.h"
 #include "TestUtil.h"
 #include <unity.h>

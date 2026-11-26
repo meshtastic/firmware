@@ -17,6 +17,11 @@ class Throttle
         return !isWithinTimespanMs(lastExecutionMs, intervalMs);
     }
 
+    /// What is left of intervalMs since lastExecutionMs, 0 once it has passed. One clock read, so a
+    /// caller waiting out the remainder cannot be preempted between the test and the subtraction.
+    /// Same sentinel rule as isWithinTimespanMs(): 0 is not treated as "never run".
+    static uint32_t remainingMs(uint32_t lastExecutionMs, uint32_t intervalMs);
+
     /// True once an absolute deadline has arrived. Use this rather than comparing against millis()
     /// directly: that inverts while the deadline sits on the far side of the 32-bit wrap, so the
     /// action either fires immediately or blocks for about the interval it should have waited.
@@ -35,8 +40,7 @@ class Throttle
     /// to decide. Same size and cost as the bare uint32_t. The conversion sites, grouped by the three
     /// meanings they give the sentinel today:
     ///   0 = unarmed - Power.cpp rebootAtMsec/shutdownAtMsec, GPS.cpp fixHoldEnds, AdminModule.cpp
-    ///                 enterDfuAtMsec and the other timerEndsAtMillis()/skipZero() arm sites dodge
-    ///                 it; RadioLibInterface::setTransmitDelay()'s tx_after recompute still cannot.
+    ///                 enterDfuAtMsec and the other timerEndsAtMillis()/skipZero() arm sites dodge it.
     ///   0 = forever - NotificationRenderer.cpp alertBannerUntil. Every read spells its own `> 0`
     ///                 guard, so this third state wants naming rather than repeating.
     ///   0 = due now - ethClient.cpp ntp_renew, forced at link-up. A computed renewal now dodges 0,

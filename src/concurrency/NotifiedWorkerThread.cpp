@@ -1,4 +1,5 @@
 #include "NotifiedWorkerThread.h"
+#include "UptimeClock.h"
 #include "configuration.h"
 #include "main.h"
 
@@ -74,6 +75,24 @@ bool NotifiedWorkerThread::notifyLater(uint32_t delay, uint32_t v, bool overwrit
     return didIt;
 }
 
+bool NotifiedWorkerThread::notifyLaterOrShorten(uint32_t delay, uint32_t v, bool overwrite)
+{
+    const long remaining = tillRun(Time::getMillis());
+    if (!overwrite && enabled && notification.load() == v && remaining > 0 && static_cast<unsigned long>(remaining) > delay) {
+        uint32_t expected = v;
+        if (notification.compare_exchange_strong(expected, v)) {
+            setIntervalFromNow(delay);
+            if (notification.load() != v) {
+                // An ISR replaced notification while updating the interval; restore immediate wake-up.
+                setIntervalFromNow(0);
+            }
+            mainDelay.interrupt();
+            return true;
+        }
+    }
+    return notifyLater(delay, v, overwrite);
+}
+
 void NotifiedWorkerThread::checkNotification()
 {
     // Atomically read and clear. (This avoids a potential race condition where an interrupt handler could set a new notification
@@ -83,6 +102,14 @@ void NotifiedWorkerThread::checkNotification()
     if (n) {
         onNotify(n);
     }
+}
+
+void NotifiedWorkerThread::checkNotificationExcept(uint32_t deferred)
+{
+    // Clear only the value that was read: one an interrupt writes in between is kept for the next look
+    uint32_t n = notification.load();
+    if (n && n != deferred && notification.compare_exchange_strong(n, 0))
+        onNotify(n);
 }
 
 int32_t NotifiedWorkerThread::runOnce()

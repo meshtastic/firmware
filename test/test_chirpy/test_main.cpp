@@ -1,3 +1,10 @@
+// ChirpyRunnerGame jump, gravity and obstacle collision.
+//
+// Why: pure game logic with no hardware dependency, and the only coverage of the runner
+// state machine.
+// Regression guarded: a second jump re-launching mid-air, and obstacle collision not ending
+// the run.
+
 #include "TestUtil.h"
 #include "modules/games/ChirpyRunner.h"
 #include <unity.h>
@@ -30,18 +37,27 @@ void test_jump_liftsChirpy()
 
 void test_jump_ignoredWhileAirborne()
 {
+    // A second jump mid-air must not re-launch. Step an identical control game that never presses
+    // jump again and compare every step until it lands: a single step can hide the re-launch, as
+    // chirpyY() rounds sub-pixels away, but the arcs must part before the control touches down.
     ChirpyRunnerGame game;
+    ChirpyRunnerGame control;
     game.reset(kSeed);
+    control.reset(kSeed);
     game.jump();
+    control.jump();
     game.step();
-    const int16_t yAfterFirst = game.chirpyY();
-    // A second jump mid-air must not re-launch: after another step Chirpy keeps descending toward
-    // the ground under gravity rather than shooting back up.
-    game.jump();
-    game.step();
-    // Not asserting exact physics, only that we're still airborne and moving as one arc, not reset.
+    control.step();
     TEST_ASSERT_FALSE(game.onGround());
-    (void)yAfterFirst;
+
+    game.jump();
+    for (int steps = 0; steps < 200 && !control.onGround(); steps++) {
+        game.step();
+        control.step();
+        TEST_ASSERT_EQUAL_INT16(control.chirpyY(), game.chirpyY());
+        TEST_ASSERT_EQUAL(control.onGround(), game.onGround());
+    }
+    TEST_ASSERT_TRUE_MESSAGE(control.onGround(), "the control arc never landed");
 }
 
 void test_obstacleSpawnsAndCollisionEndsGame()

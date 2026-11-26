@@ -186,7 +186,7 @@ void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
 #ifdef DISPLAY_FORCE_SMALL_FONTS
         float screenwidth_target_ratio = 0.70f; // Target 70% of display width (adjustable)
 #elif defined(BICOLOR_OLED_DISPLAY)
-        float screenwidth_target_ratio = 0.60f;     // Forced for BICOLOR_OLED_DISPLAY due to two color display
+        float screenwidth_target_ratio = 0.60f; // Forced for BICOLOR_OLED_DISPLAY due to two color display
 #else
         float screenwidth_target_ratio = 0.80f; // Target 80% of display width (adjustable)
 #endif

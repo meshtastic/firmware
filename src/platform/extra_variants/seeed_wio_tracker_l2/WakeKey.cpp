@@ -46,6 +46,15 @@ void WakeKeyInterruptThread::begin(void)
 {
     pinMode(BOARD_PCA9535_INT, INPUT_PULLUP);
     attachInterrupt(BOARD_PCA9535_INT, WakeKeyInterruptThread::isr, FALLING);
+    // INT stays latched low until the input port is read; an input change before attach would block all future edges.
+    bool intAsserted = (digitalRead(BOARD_PCA9535_INT) == LOW);
+    {
+        concurrency::LockGuard guard(spiLock);
+        (void)io.digitalRead(EXPANDS_BTN_WAKE_UP);
+    }
+    if (intAsserted) {
+        onInterruptEdge();
+    }
 }
 
 int32_t WakeKeyInterruptThread::runOnce(void)

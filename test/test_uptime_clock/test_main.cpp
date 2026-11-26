@@ -122,23 +122,12 @@ void test_stampMillis_calls_the_zero_tick_one()
 // elapsed time against a raw clock splits the two sides apart on the wrap tick: the stamp is 1 while
 // now is still 0, so `now - stamp` is UINT32_MAX and a brand new stamp reads as ~49.7 days old. Any
 // elapsed-since guard - a cooldown, a debounce, a long-press threshold - then fires when it must not.
-void test_store_side_dodge_alone_makes_a_fresh_stamp_read_as_ancient()
-{
-    Time::setTestMillis(0);
-    const uint32_t rawNow = Time::getMillis();              // what an un-normalised reader holds: 0
-    const uint32_t stampedAtStore = Time::skipZero(rawNow); // the old shape: dodge only at the store
-    TEST_ASSERT_EQUAL_UINT32(0u, rawNow);
-    TEST_ASSERT_EQUAL_UINT32(1u, stampedAtStore);
-    TEST_ASSERT_EQUAL_UINT32(UINT32_MAX, (uint32_t)(rawNow - stampedAtStore)); // the whole problem
-}
-
 void test_reading_through_stampMillis_keeps_elapsed_at_zero_on_the_wrap_tick()
 {
     Time::setTestMillis(0);
-    const uint32_t now = Time::stampMillis(); // read once, used for the store AND the comparison
-    const uint32_t stamp = now;               // store it as-is; no second dodge needed
-    TEST_ASSERT_EQUAL_UINT32(1u, now);
-    TEST_ASSERT_EQUAL_UINT32(0u, (uint32_t)(now - stamp)); // fresh reads as fresh
+    const uint32_t stamp = Time::stampMillis(); // read once, used for the store AND the comparison
+    TEST_ASSERT_EQUAL_UINT32(1u, stamp);
+    TEST_ASSERT_EQUAL_UINT32(0u, (uint32_t)(Time::stampMillis() - stamp)); // fresh reads as fresh
 
     // Once the clock moves on, the measured age is short by exactly the 1 ms the dodge introduced:
     // the stamp was taken at tick 0 and recorded as 1, so 400 ticks later it reads as 399 old. That
@@ -412,11 +401,12 @@ void test_getTime_unaffected_by_concurrent_readers_across_the_wrap()
 
 void test_real_clock_advances_when_not_injected()
 {
+    Time::setTestMillis(1); // start from the injected clock, so a useRealClock() that fails to clear it is caught
     Time::useRealClock();
     uint32_t t0 = Time::getMillis();
     testDelay(5);
     uint32_t t1 = Time::getMillis();
-    TEST_ASSERT_TRUE(t1 >= t0); // real millis() is monotonic over a short delay
+    TEST_ASSERT_GREATER_THAN_UINT32(t0, t1); // a frozen injected clock would read the same value twice
 }
 
 void setup()
@@ -430,7 +420,6 @@ void setup()
     RUN_TEST(test_skipZero_leaves_nonzero_values_alone);
     RUN_TEST(test_stampMillis_matches_getMillis_away_from_the_wrap);
     RUN_TEST(test_stampMillis_calls_the_zero_tick_one);
-    RUN_TEST(test_store_side_dodge_alone_makes_a_fresh_stamp_read_as_ancient);
     RUN_TEST(test_reading_through_stampMillis_keeps_elapsed_at_zero_on_the_wrap_tick);
     RUN_TEST(test_stampMillis_measures_across_the_wrap_boundary);
     RUN_TEST(test_timerEndsAtMillis_is_an_ordinary_sum_away_from_the_wrap);
