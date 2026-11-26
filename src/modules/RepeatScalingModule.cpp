@@ -140,7 +140,9 @@ void RepeatScalingModule::noteScheduled(const meshtastic_MeshPacket *p)
 void RepeatScalingModule::noteScheduled(NodeNum sender, PacketId id, int32_t portnum)
 {
     DupeCountEntry *entry = findEntry(sender, id);
-    if (!entry)
+    if (entry)
+        entry->claimedSeq = ++claimSeq; // now queued, so no longer the oldest claim to evict
+    else
         entry = &claimEntry(sender, id);
     entry->portnum = portnum;
 }

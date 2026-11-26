@@ -221,6 +221,21 @@ void test_full_ring_evicts_the_oldest_claim_after_reuse(void)
     TEST_ASSERT_EQUAL_INT32(meshtastic_PortNum_TEXT_MESSAGE_APP, ring.lookupNotedPortnum(kSender1, 0x50004));
 }
 
+// A duplicate heard before we (re)schedule claims the slot first; scheduling must make it the newest claim.
+void test_noteScheduled_on_existing_entry_refreshes_its_claim(void)
+{
+    RepeatScalingModuleTestShim ring;
+    ring.registerDupeHeard(kSender2, kId2); // oldest claim
+    for (uint32_t i = 1; i < kRing; i++)
+        ring.noteScheduled(kSender1, 0x90000 + i, meshtastic_PortNum_TEXT_MESSAGE_APP);
+    ring.noteScheduled(kSender2, kId2, meshtastic_PortNum_TEXT_MESSAGE_APP);
+
+    ring.noteScheduled(kSender1, 0x90000 + kRing, meshtastic_PortNum_TEXT_MESSAGE_APP); // ring full: evicts one
+
+    TEST_ASSERT_EQUAL_INT32(meshtastic_PortNum_TEXT_MESSAGE_APP, ring.lookupNotedPortnum(kSender2, kId2));
+    TEST_ASSERT_EQUAL_INT32(-1, ring.lookupNotedPortnum(kSender1, 0x90001));
+}
+
 // A threshold-1 duplicate cancels at once, so a burst of them must not evict the queued text packets' entries.
 void test_threshold_one_duplicates_do_not_claim_ring_slots(void)
 {
@@ -701,6 +716,7 @@ void setup()
     RUN_TEST(test_claim_reuses_a_cleared_slot_before_evicting_a_live_one);
     RUN_TEST(test_threshold_one_duplicates_do_not_claim_ring_slots);
     RUN_TEST(test_full_ring_evicts_the_oldest_claim_after_reuse);
+    RUN_TEST(test_noteScheduled_on_existing_entry_refreshes_its_claim);
 
     printf("\n=== getDupeCancelThreshold (compile-time default) ===\n");
     RUN_TEST(test_default_threshold_is_one_for_undecoded_directed_packet);

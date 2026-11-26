@@ -1069,8 +1069,10 @@ void test_rebroadcast_declined_send_does_not_cache_portnum(void)
     repeatScalingModule = &probe;
     meshtastic_MeshPacket p = makeDecodedTextRebroadcast();
 
-    TEST_ASSERT_TRUE(shim->perhapsRebroadcast(&p));
-    repeatScalingModule = previous;
+    const bool attempted = shim->perhapsRebroadcast(&p);
+    repeatScalingModule = previous; // before any assert: Unity's longjmp would skip a later restore
+
+    TEST_ASSERT_TRUE(attempted);
 
     TEST_ASSERT_EQUAL_INT(1, mockIface->sendCount);
     TEST_ASSERT_EQUAL_INT32(-1, probe.lookupNotedPortnum(p.from, p.id));
@@ -1085,8 +1087,10 @@ void test_rebroadcast_accepted_send_caches_portnum(void)
     repeatScalingModule = &probe;
     meshtastic_MeshPacket p = makeDecodedTextRebroadcast();
 
-    TEST_ASSERT_TRUE(shim->perhapsRebroadcast(&p));
-    repeatScalingModule = previous;
+    const bool attempted = shim->perhapsRebroadcast(&p);
+    repeatScalingModule = previous; // before any assert: Unity's longjmp would skip a later restore
+
+    TEST_ASSERT_TRUE(attempted);
 
     TEST_ASSERT_EQUAL_INT(1, mockIface->sendCount);
     TEST_ASSERT_EQUAL_INT32(meshtastic_PortNum_TEXT_MESSAGE_APP, probe.lookupNotedPortnum(p.from, p.id));
