@@ -419,21 +419,21 @@ void SfppStore::writeTimeState()
     sqlite3_reset(timeStateWriteStmt);
 }
 
-void StoreForwardPlusPlusModule::updateTimeState()
+void SfppStore::updateTimeState()
 {
     const uint32_t nowUptime = sfppUptimeSecs();
     const uint32_t nowEpoch = getValidTime(RTCQualityNTP, true);
     if (nowEpoch) {
-        store_.lastSeenEpoch = nowEpoch;
+        lastSeenEpoch = nowEpoch;
         // A clock that arrived after boot still pins the boot start for ageing epoch rows.
-        if (store_.bootEpoch == 0)
-            store_.bootEpoch = nowEpoch > nowUptime ? nowEpoch - nowUptime : 0;
+        if (bootEpoch == 0)
+            bootEpoch = nowEpoch > nowUptime ? nowEpoch - nowUptime : 0;
     }
-    store_.lastSeenUptime = nowUptime;
-    store_.writeTimeState();
+    lastSeenUptime = nowUptime;
+    writeTimeState();
 }
 
-uint32_t StoreForwardPlusPlusModule::estimateEpochNow() const
+uint32_t SfppStore::estimateEpochNow() const
 {
     const uint32_t proper = getValidTime(RTCQualityNTP, true);
     if (proper)
@@ -443,14 +443,14 @@ uint32_t StoreForwardPlusPlusModule::estimateEpochNow() const
     if (rough)
         return rough;
     const uint32_t nowUptime = sfppUptimeSecs();
-    if (store_.bootEpoch > 0)
-        return store_.bootEpoch + nowUptime;
-    if (store_.lastSeenEpoch > 0)
-        return store_.lastSeenEpoch + (nowUptime - store_.lastSeenUptime);
+    if (bootEpoch > 0)
+        return bootEpoch + nowUptime;
+    if (lastSeenEpoch > 0)
+        return lastSeenEpoch + (nowUptime - lastSeenUptime);
     return 0;
 }
 
-StoreForwardPlusPlusModule::RowTime StoreForwardPlusPlusModule::nowTime() const
+SfppStore::RowTime SfppStore::nowTime() const
 {
     RowTime t;
     const uint32_t nowEpoch = getValidTime(RTCQualityNTP, true);
@@ -460,12 +460,12 @@ StoreForwardPlusPlusModule::RowTime StoreForwardPlusPlusModule::nowTime() const
     } else {
         t.basis = kTimeBasisUptime;
         t.stamp = sfppUptimeSecs();
-        t.boot_id = store_.bootId;
+        t.boot_id = bootId;
     }
     return t;
 }
 
-bool StoreForwardPlusPlusModule::timeFromAge(uint32_t heardAgo, RowTime &out) const
+bool SfppStore::timeFromAge(uint32_t heardAgo, RowTime &out) const
 {
     out = nowTime();
     if (heardAgo > out.stamp)
@@ -475,7 +475,7 @@ bool StoreForwardPlusPlusModule::timeFromAge(uint32_t heardAgo, RowTime &out) co
     return true;
 }
 
-StoreForwardPlusPlusModule::RowAge StoreForwardPlusPlusModule::rowAge(const RowTime &t) const
+SfppStore::RowAge SfppStore::rowAge(const RowTime &t) const
 {
     RowAge a;
     a.margin = kTimeMarginS + t.margin;
@@ -499,7 +499,7 @@ StoreForwardPlusPlusModule::RowAge StoreForwardPlusPlusModule::rowAge(const RowT
     }
 
     if (t.basis == kTimeBasisUptime) {
-        if (t.boot_id == store_.bootId) {
+        if (t.boot_id == bootId) {
             if (t.stamp > nowUptime + a.margin)
                 a.margin += t.stamp - nowUptime;
             else
@@ -507,11 +507,9 @@ StoreForwardPlusPlusModule::RowAge StoreForwardPlusPlusModule::rowAge(const RowT
         } else {
             // A row from a boot that was not restamped: age it to the previous end, add the gap we
             // know about and the uptime since this boot started.
-            const uint32_t atEnd =
-                (t.boot_id == store_.prevBootId && store_.prevLastUptime > t.stamp) ? store_.prevLastUptime - t.stamp : 0;
-            const uint32_t down = (store_.bootEpoch > 0 && store_.prevLastEpoch > 0 && store_.bootEpoch >= store_.prevLastEpoch)
-                                      ? store_.bootEpoch - store_.prevLastEpoch
-                                      : 0;
+            const uint32_t atEnd = (t.boot_id == prevBootId && prevLastUptime > t.stamp) ? prevLastUptime - t.stamp : 0;
+            const uint32_t down =
+                (bootEpoch > 0 && prevLastEpoch > 0 && bootEpoch >= prevLastEpoch) ? bootEpoch - prevLastEpoch : 0;
             a.age = atEnd > UINT32_MAX - down ? UINT32_MAX : atEnd + down;
             a.age = a.age > UINT32_MAX - nowUptime ? UINT32_MAX : a.age + nowUptime;
         }
@@ -603,7 +601,7 @@ void SfppStore::restampPreviousBoot()
 
 // On the first proper clock, every boot-relative row becomes an epoch with its age unchanged, so
 // the 48 h trim cannot mistake an uptime stamp for an ancient epoch.
-void StoreForwardPlusPlusModule::healBootRelativeTimestamps()
+void SfppStore::healBootRelativeTimestamps()
 {
     const uint32_t nowEpoch = getValidTime(RTCQualityNTP, true);
     if (nowEpoch == 0)
@@ -644,44 +642,35 @@ void StoreForwardPlusPlusModule::healBootRelativeTimestamps()
         }
     };
 
-    heal(store_.restampChannelStmt, store_.updateChannelTimeStmt);
-    heal(store_.restampScratchStmt, store_.updateScratchTimeStmt);
-    heal(store_.restampDirectStmt, store_.updateDirectTimeStmt);
+    heal(restampChannelStmt, updateChannelTimeStmt);
+    heal(restampScratchStmt, updateScratchTimeStmt);
+    heal(restampDirectStmt, updateDirectTimeStmt);
 }
 
-void StoreForwardPlusPlusModule::trimCanonByRetention(uint8_t *root_hash, size_t root_hash_len)
+void SfppStore::trimCanonByRetention(uint8_t *root_hash, size_t root_hash_len)
 {
     std::vector<sqlite3_int64> drop;
-    sqlite3_reset(store_.canonTimeRowsStmt);
-    sqlite3_bind_int(store_.canonTimeRowsStmt, 1, root_hash_len);
-    sqlite3_bind_blob(store_.canonTimeRowsStmt, 2, root_hash, root_hash_len, SQLITE_STATIC);
-    while (sqlite3_step(store_.canonTimeRowsStmt) == SQLITE_ROW) {
+    sqlite3_reset(canonTimeRowsStmt);
+    sqlite3_bind_int(canonTimeRowsStmt, 1, root_hash_len);
+    sqlite3_bind_blob(canonTimeRowsStmt, 2, root_hash, root_hash_len, SQLITE_STATIC);
+    while (sqlite3_step(canonTimeRowsStmt) == SQLITE_ROW) {
         RowTime t;
-        const sqlite3_int64 rowid = sqlite3_column_int64(store_.canonTimeRowsStmt, 0);
-        t.stamp = (uint32_t)sqlite3_column_int64(store_.canonTimeRowsStmt, 1);
-        t.basis = (uint8_t)sqlite3_column_int64(store_.canonTimeRowsStmt, 2);
-        t.boot_id = (uint32_t)sqlite3_column_int64(store_.canonTimeRowsStmt, 3);
-        t.margin = (uint32_t)sqlite3_column_int64(store_.canonTimeRowsStmt, 4);
+        const sqlite3_int64 rowid = sqlite3_column_int64(canonTimeRowsStmt, 0);
+        t.stamp = (uint32_t)sqlite3_column_int64(canonTimeRowsStmt, 1);
+        t.basis = (uint8_t)sqlite3_column_int64(canonTimeRowsStmt, 2);
+        t.boot_id = (uint32_t)sqlite3_column_int64(canonTimeRowsStmt, 3);
+        t.margin = (uint32_t)sqlite3_column_int64(canonTimeRowsStmt, 4);
         if (rowAge(t).age >= kRetentionS)
             drop.push_back(rowid);
     }
-    sqlite3_reset(store_.canonTimeRowsStmt);
+    sqlite3_reset(canonTimeRowsStmt);
 
     for (sqlite3_int64 rowid : drop) {
-        sqlite3_reset(store_.deleteCanonRowidStmt);
-        sqlite3_bind_int64(store_.deleteCanonRowidStmt, 1, rowid);
-        sqlite3_step(store_.deleteCanonRowidStmt);
-        sqlite3_reset(store_.deleteCanonRowidStmt);
+        sqlite3_reset(deleteCanonRowidStmt);
+        sqlite3_bind_int64(deleteCanonRowidStmt, 1, rowid);
+        sqlite3_step(deleteCanonRowidStmt);
+        sqlite3_reset(deleteCanonRowidStmt);
     }
-}
-
-bool StoreForwardPlusPlusModule::linkIsFresh(const stored_object &lo) const
-{
-    RowTime t;
-    t.stamp = lo.rx_time;
-    t.basis = kTimeBasisEpoch; // the wire's rxtime is an epoch claim; an unusable one counts as stale
-    const RowAge age = rowAge(t);
-    return age.age + age.margin <= rebroadcastTimeout;
 }
 
 void SfppStore::backfillSetIndex()
@@ -727,55 +716,54 @@ void SfppStore::backfillSetIndex()
         LOG_INFO("StoreForwardpp indexed %u existing objects for set reconciliation", indexed);
 }
 
-bool StoreForwardPlusPlusModule::buildBucketSummary(const uint8_t *root_hash, size_t root_hash_len, uint32_t bucket,
-                                                    sfppsr::BucketSummary &out)
+bool SfppStore::buildBucketSummary(const uint8_t *root_hash, size_t root_hash_len, uint32_t bucket, sfppsr::BucketSummary &out)
 {
     out.clear();
 
-    sqlite3_reset(store_.bucketSummaryStmt);
-    sqlite3_bind_int(store_.bucketSummaryStmt, 1, root_hash_len);
-    sqlite3_bind_blob(store_.bucketSummaryStmt, 2, root_hash, root_hash_len, NULL);
-    sqlite3_bind_int(store_.bucketSummaryStmt, 3, (int)bucket);
+    sqlite3_reset(bucketSummaryStmt);
+    sqlite3_bind_int(bucketSummaryStmt, 1, root_hash_len);
+    sqlite3_bind_blob(bucketSummaryStmt, 2, root_hash, root_hash_len, NULL);
+    sqlite3_bind_int(bucketSummaryStmt, 3, (int)bucket);
 
-    while (sqlite3_step(store_.bucketSummaryStmt) == SQLITE_ROW) {
-        out.add((pinsketch::Element)sqlite3_column_int64(store_.bucketSummaryStmt, 0),
-                (uint64_t)sqlite3_column_int64(store_.bucketSummaryStmt, 1));
+    while (sqlite3_step(bucketSummaryStmt) == SQLITE_ROW) {
+        out.add((pinsketch::Element)sqlite3_column_int64(bucketSummaryStmt, 0),
+                (uint64_t)sqlite3_column_int64(bucketSummaryStmt, 1));
     }
-    sqlite3_reset(store_.bucketSummaryStmt);
+    sqlite3_reset(bucketSummaryStmt);
 
     return out.count() > 0;
 }
 
-bool StoreForwardPlusPlusModule::collectBucketIds(const uint8_t *root_hash, size_t root_hash_len, uint32_t bucket,
-                                                  std::vector<pinsketch::Element> &out)
+bool SfppStore::collectBucketIds(const uint8_t *root_hash, size_t root_hash_len, uint32_t bucket,
+                                 std::vector<pinsketch::Element> &out)
 {
     out.clear();
-    sqlite3_reset(store_.bucketIdsStmt);
-    sqlite3_bind_int(store_.bucketIdsStmt, 1, root_hash_len);
-    sqlite3_bind_blob(store_.bucketIdsStmt, 2, root_hash, root_hash_len, NULL);
-    sqlite3_bind_int(store_.bucketIdsStmt, 3, (int)bucket);
+    sqlite3_reset(bucketIdsStmt);
+    sqlite3_bind_int(bucketIdsStmt, 1, root_hash_len);
+    sqlite3_bind_blob(bucketIdsStmt, 2, root_hash, root_hash_len, NULL);
+    sqlite3_bind_int(bucketIdsStmt, 3, (int)bucket);
 
-    while (sqlite3_step(store_.bucketIdsStmt) == SQLITE_ROW)
-        out.push_back((pinsketch::Element)sqlite3_column_int64(store_.bucketIdsStmt, 0));
-    sqlite3_reset(store_.bucketIdsStmt);
+    while (sqlite3_step(bucketIdsStmt) == SQLITE_ROW)
+        out.push_back((pinsketch::Element)sqlite3_column_int64(bucketIdsStmt, 0));
+    sqlite3_reset(bucketIdsStmt);
 
     return !out.empty();
 }
 
-bool StoreForwardPlusPlusModule::collectBuckets(const uint8_t *root_hash, size_t root_hash_len, std::vector<uint32_t> &out)
+bool SfppStore::collectBuckets(const uint8_t *root_hash, size_t root_hash_len, std::vector<uint32_t> &out)
 {
     out.clear();
-    sqlite3_reset(store_.distinctBucketsStmt);
-    sqlite3_bind_int(store_.distinctBucketsStmt, 1, root_hash_len);
-    sqlite3_bind_blob(store_.distinctBucketsStmt, 2, root_hash, root_hash_len, NULL);
-    while (sqlite3_step(store_.distinctBucketsStmt) == SQLITE_ROW)
-        out.push_back((uint32_t)sqlite3_column_int64(store_.distinctBucketsStmt, 0));
-    sqlite3_reset(store_.distinctBucketsStmt);
+    sqlite3_reset(distinctBucketsStmt);
+    sqlite3_bind_int(distinctBucketsStmt, 1, root_hash_len);
+    sqlite3_bind_blob(distinctBucketsStmt, 2, root_hash, root_hash_len, NULL);
+    while (sqlite3_step(distinctBucketsStmt) == SQLITE_ROW)
+        out.push_back((uint32_t)sqlite3_column_int64(distinctBucketsStmt, 0));
+    sqlite3_reset(distinctBucketsStmt);
     return !out.empty();
 }
 
 //
-bool StoreForwardPlusPlusModule::addToScratch(stored_object &lo, bool senderCopy)
+bool SfppStore::addToScratch(stored_object &lo, bool senderCopy)
 {
     IdentityHit hit;
     if (findIdentityCopy(lo.to, lo.from, lo.id, lo.root_hash, hit)) {
@@ -792,200 +780,198 @@ bool StoreForwardPlusPlusModule::addToScratch(stored_object &lo, bool senderCopy
 
     // push a message into the canonical store
     // destination
-    sqlite3_bind_int64(store_.scratch_insert_stmt, 1, (sqlite3_int64)lo.to);
+    sqlite3_bind_int64(scratch_insert_stmt, 1, (sqlite3_int64)lo.to);
     // sender
-    sqlite3_bind_int64(store_.scratch_insert_stmt, 2, (sqlite3_int64)lo.from);
+    sqlite3_bind_int64(scratch_insert_stmt, 2, (sqlite3_int64)lo.from);
     // packet_id
-    sqlite3_bind_int64(store_.scratch_insert_stmt, 3, (sqlite3_int64)lo.id);
+    sqlite3_bind_int64(scratch_insert_stmt, 3, (sqlite3_int64)lo.id);
     // root_hash
-    sqlite3_bind_blob(store_.scratch_insert_stmt, 4, lo.root_hash, SFPP_HASH_SIZE, NULL);
+    sqlite3_bind_blob(scratch_insert_stmt, 4, lo.root_hash, SFPP_HASH_SIZE, NULL);
     // encrypted_bytes
-    sqlite3_bind_blob(store_.scratch_insert_stmt, 5, lo.encrypted_bytes, lo.encrypted_len, NULL);
+    sqlite3_bind_blob(scratch_insert_stmt, 5, lo.encrypted_bytes, lo.encrypted_len, NULL);
     // message_hash
-    sqlite3_bind_blob(store_.scratch_insert_stmt, 6, lo.message_hash, SFPP_HASH_SIZE, NULL);
+    sqlite3_bind_blob(scratch_insert_stmt, 6, lo.message_hash, SFPP_HASH_SIZE, NULL);
     // rx_time
-    sqlite3_bind_int(store_.scratch_insert_stmt, 7, lo.rx_time);
+    sqlite3_bind_int(scratch_insert_stmt, 7, lo.rx_time);
     // payload
-    sqlite3_bind_text(store_.scratch_insert_stmt, 8, lo.payload.c_str(), lo.payload.length(), NULL);
-    sqlite3_bind_int64(store_.scratch_insert_stmt, 9, (sqlite3_int64)lo.time_basis);
-    sqlite3_bind_int64(store_.scratch_insert_stmt, 10, (sqlite3_int64)lo.boot_id);
-    sqlite3_bind_int64(store_.scratch_insert_stmt, 11, (sqlite3_int64)lo.age_margin);
+    sqlite3_bind_text(scratch_insert_stmt, 8, lo.payload.c_str(), lo.payload.length(), NULL);
+    sqlite3_bind_int64(scratch_insert_stmt, 9, (sqlite3_int64)lo.time_basis);
+    sqlite3_bind_int64(scratch_insert_stmt, 10, (sqlite3_int64)lo.boot_id);
+    sqlite3_bind_int64(scratch_insert_stmt, 11, (sqlite3_int64)lo.age_margin);
 
-    int res = sqlite3_step(store_.scratch_insert_stmt);
+    int res = sqlite3_step(scratch_insert_stmt);
     if (res != SQLITE_OK) {
-        const char *_error_mesg = sqlite3_errmsg(store_.ppDb);
+        const char *_error_mesg = sqlite3_errmsg(ppDb);
         LOG_WARN("StoreForwardpp step %u, %s", res, _error_mesg);
     }
-    sqlite3_reset(store_.scratch_insert_stmt);
+    sqlite3_reset(scratch_insert_stmt);
     return true;
 }
 
-bool StoreForwardPlusPlusModule::isInDB(const uint8_t *message_hash_bytes, size_t message_hash_len)
+bool SfppStore::isInDB(const uint8_t *message_hash_bytes, size_t message_hash_len)
 {
     if (message_hash_len < SFPP_SHORT_HASH_SIZE)
         return false;
-    sqlite3_bind_int(store_.checkDupMessageHash, 1, message_hash_len);
-    sqlite3_bind_blob(store_.checkDupMessageHash, 2, message_hash_bytes, message_hash_len, NULL);
-    sqlite3_step(store_.checkDupMessageHash);
-    int numberFound = sqlite3_column_int(store_.checkDupMessageHash, 0);
-    sqlite3_reset(store_.checkDupMessageHash);
+    sqlite3_bind_int(checkDupMessageHash, 1, message_hash_len);
+    sqlite3_bind_blob(checkDupMessageHash, 2, message_hash_bytes, message_hash_len, NULL);
+    sqlite3_step(checkDupMessageHash);
+    int numberFound = sqlite3_column_int(checkDupMessageHash, 0);
+    sqlite3_reset(checkDupMessageHash);
     if (numberFound > 0)
         return true;
     return false;
 }
 
-bool StoreForwardPlusPlusModule::isInScratch(uint8_t *message_hash_bytes, size_t message_hash_len)
+bool SfppStore::isInScratch(uint8_t *message_hash_bytes, size_t message_hash_len)
 {
     if (message_hash_len < SFPP_SHORT_HASH_SIZE)
         return false;
-    sqlite3_bind_int(store_.checkScratch, 1, message_hash_len);
-    sqlite3_bind_blob(store_.checkScratch, 2, message_hash_bytes, message_hash_len, NULL);
-    sqlite3_step(store_.checkScratch);
-    int numberFound = sqlite3_column_int(store_.checkScratch, 0);
-    sqlite3_reset(store_.checkScratch);
+    sqlite3_bind_int(checkScratch, 1, message_hash_len);
+    sqlite3_bind_blob(checkScratch, 2, message_hash_bytes, message_hash_len, NULL);
+    sqlite3_step(checkScratch);
+    int numberFound = sqlite3_column_int(checkScratch, 0);
+    sqlite3_reset(checkScratch);
     if (numberFound > 0)
         return true;
     return false;
 }
 
-void StoreForwardPlusPlusModule::removeFromScratch(const uint8_t *message_hash_bytes, size_t message_hash_len)
+void SfppStore::removeFromScratch(const uint8_t *message_hash_bytes, size_t message_hash_len)
 {
     printBytes("StoreForwardpp removing from scratch: ", message_hash_bytes, message_hash_len);
-    sqlite3_bind_int(store_.removeScratch, 1, message_hash_len);
-    sqlite3_bind_blob(store_.removeScratch, 2, message_hash_bytes, message_hash_len, NULL);
-    sqlite3_step(store_.removeScratch);
-    sqlite3_reset(store_.removeScratch);
+    sqlite3_bind_int(removeScratch, 1, message_hash_len);
+    sqlite3_bind_blob(removeScratch, 2, message_hash_bytes, message_hash_len, NULL);
+    sqlite3_step(removeScratch);
+    sqlite3_reset(removeScratch);
 }
 
-void StoreForwardPlusPlusModule::fillPayloadIfEmpty(const stored_object &lo)
+void SfppStore::fillPayloadIfEmpty(const stored_object &lo)
 {
     if (lo.payload.empty() || lo.message_hash_len < SFPP_SHORT_HASH_SIZE)
         return;
-    sqlite3_reset(store_.payloadForHashStmt);
-    sqlite3_bind_int(store_.payloadForHashStmt, 1, (int)lo.message_hash_len);
-    sqlite3_bind_blob(store_.payloadForHashStmt, 2, lo.message_hash, lo.message_hash_len, SQLITE_STATIC);
+    sqlite3_reset(payloadForHashStmt);
+    sqlite3_bind_int(payloadForHashStmt, 1, (int)lo.message_hash_len);
+    sqlite3_bind_blob(payloadForHashStmt, 2, lo.message_hash, lo.message_hash_len, SQLITE_STATIC);
     bool empty = false;
-    if (sqlite3_step(store_.payloadForHashStmt) == SQLITE_ROW) {
-        const unsigned char *text = sqlite3_column_text(store_.payloadForHashStmt, 0);
-        empty = text == nullptr || sqlite3_column_bytes(store_.payloadForHashStmt, 0) == 0;
+    if (sqlite3_step(payloadForHashStmt) == SQLITE_ROW) {
+        const unsigned char *text = sqlite3_column_text(payloadForHashStmt, 0);
+        empty = text == nullptr || sqlite3_column_bytes(payloadForHashStmt, 0) == 0;
     }
-    sqlite3_reset(store_.payloadForHashStmt);
+    sqlite3_reset(payloadForHashStmt);
     if (empty)
         updatePayload((uint8_t *)lo.message_hash, lo.message_hash_len, lo.payload);
 }
 
-void StoreForwardPlusPlusModule::updatePayload(uint8_t *message_hash_bytes, size_t message_hash_len, std::string payload)
+void SfppStore::updatePayload(uint8_t *message_hash_bytes, size_t message_hash_len, std::string payload)
 {
     LOG_WARN("StoreForwardpp updatePayload");
-    sqlite3_bind_text(store_.updatePayloadStmt, 1, payload.c_str(), payload.length(), NULL);
-    sqlite3_bind_int(store_.updatePayloadStmt, 2, message_hash_len);
-    sqlite3_bind_blob(store_.updatePayloadStmt, 3, message_hash_bytes, message_hash_len, NULL);
-    auto res = sqlite3_step(store_.updatePayloadStmt);
+    sqlite3_bind_text(updatePayloadStmt, 1, payload.c_str(), payload.length(), NULL);
+    sqlite3_bind_int(updatePayloadStmt, 2, message_hash_len);
+    sqlite3_bind_blob(updatePayloadStmt, 3, message_hash_bytes, message_hash_len, NULL);
+    auto res = sqlite3_step(updatePayloadStmt);
     if (res != SQLITE_OK) {
-        const char *_error_mesg = sqlite3_errmsg(store_.ppDb);
-        LOG_WARN("StoreForwardpp store_.updatePayloadStmt step error %u, %s", res, _error_mesg);
+        const char *_error_mesg = sqlite3_errmsg(ppDb);
+        LOG_WARN("StoreForwardpp updatePayloadStmt step error %u, %s", res, _error_mesg);
     }
-    sqlite3_reset(store_.updatePayloadStmt);
+    sqlite3_reset(updatePayloadStmt);
 }
 
-StoreForwardPlusPlusModule::stored_object StoreForwardPlusPlusModule::getFromScratch(uint8_t *message_hash_bytes, size_t hash_len)
+SfppStore::stored_object SfppStore::getFromScratch(uint8_t *message_hash_bytes, size_t hash_len)
 {
     stored_object lo;
 
-    sqlite3_bind_int(store_.fromScratchByHashStmt, 1, hash_len);
-    sqlite3_bind_blob(store_.fromScratchByHashStmt, 2, message_hash_bytes, hash_len, NULL);
-    auto res = sqlite3_step(store_.fromScratchByHashStmt);
+    sqlite3_bind_int(fromScratchByHashStmt, 1, hash_len);
+    sqlite3_bind_blob(fromScratchByHashStmt, 2, message_hash_bytes, hash_len, NULL);
+    auto res = sqlite3_step(fromScratchByHashStmt);
     if (res != SQLITE_ROW && res != SQLITE_OK) {
-        const char *_error_mesg = sqlite3_errmsg(store_.ppDb);
-        LOG_WARN("StoreForwardpp store_.fromScratchByHashStmt step error %u, %s", res, _error_mesg);
+        const char *_error_mesg = sqlite3_errmsg(ppDb);
+        LOG_WARN("StoreForwardpp fromScratchByHashStmt step error %u, %s", res, _error_mesg);
     }
-    lo.to = sqlite3_column_int(store_.fromScratchByHashStmt, 0);
-    lo.from = sqlite3_column_int(store_.fromScratchByHashStmt, 1);
-    lo.id = sqlite3_column_int(store_.fromScratchByHashStmt, 2);
+    lo.to = sqlite3_column_int(fromScratchByHashStmt, 0);
+    lo.from = sqlite3_column_int(fromScratchByHashStmt, 1);
+    lo.id = sqlite3_column_int(fromScratchByHashStmt, 2);
 
-    uint8_t *encrypted_bytes = (uint8_t *)sqlite3_column_blob(store_.fromScratchByHashStmt, 3);
-    lo.encrypted_len = sqlite3_column_bytes(store_.fromScratchByHashStmt, 3);
+    uint8_t *encrypted_bytes = (uint8_t *)sqlite3_column_blob(fromScratchByHashStmt, 3);
+    lo.encrypted_len = sqlite3_column_bytes(fromScratchByHashStmt, 3);
     memcpy(lo.encrypted_bytes, encrypted_bytes, lo.encrypted_len);
 
-    uint8_t *message_hash = (uint8_t *)sqlite3_column_blob(store_.fromScratchByHashStmt, 4);
-    lo.message_hash_len = sqlite3_column_bytes(store_.fromScratchByHashStmt, 4);
+    uint8_t *message_hash = (uint8_t *)sqlite3_column_blob(fromScratchByHashStmt, 4);
+    lo.message_hash_len = sqlite3_column_bytes(fromScratchByHashStmt, 4);
     memcpy(lo.message_hash, message_hash, SFPP_HASH_SIZE);
 
-    lo.rx_time = sqlite3_column_int(store_.fromScratchByHashStmt, 5);
+    lo.rx_time = sqlite3_column_int(fromScratchByHashStmt, 5);
 
-    uint8_t *root_hash = (uint8_t *)sqlite3_column_blob(store_.fromScratchByHashStmt, 6);
+    uint8_t *root_hash = (uint8_t *)sqlite3_column_blob(fromScratchByHashStmt, 6);
     lo.root_hash_len = SFPP_HASH_SIZE;
     memcpy(lo.root_hash, root_hash, SFPP_HASH_SIZE);
-    lo.payload = std::string((char *)sqlite3_column_text(store_.fromScratchByHashStmt, 7),
-                             sqlite3_column_bytes(store_.fromScratchByHashStmt, 7));
-    lo.time_basis = (uint8_t)sqlite3_column_int(store_.fromScratchByHashStmt, 8);
-    lo.boot_id = (uint32_t)sqlite3_column_int64(store_.fromScratchByHashStmt, 9);
-    lo.age_margin = (uint32_t)sqlite3_column_int64(store_.fromScratchByHashStmt, 10);
-    sqlite3_reset(store_.fromScratchByHashStmt);
+    lo.payload =
+        std::string((char *)sqlite3_column_text(fromScratchByHashStmt, 7), sqlite3_column_bytes(fromScratchByHashStmt, 7));
+    lo.time_basis = (uint8_t)sqlite3_column_int(fromScratchByHashStmt, 8);
+    lo.boot_id = (uint32_t)sqlite3_column_int64(fromScratchByHashStmt, 9);
+    lo.age_margin = (uint32_t)sqlite3_column_int64(fromScratchByHashStmt, 10);
+    sqlite3_reset(fromScratchByHashStmt);
     return lo;
 }
 
-bool StoreForwardPlusPlusModule::lookUpFullRootHash(uint8_t *partial_root_hash, size_t partial_root_hash_len,
-                                                    uint8_t *full_root_hash)
+bool SfppStore::lookUpFullRootHash(uint8_t *partial_root_hash, size_t partial_root_hash_len, uint8_t *full_root_hash)
 {
     printBytes("StoreForwardpp partial_root_hash", partial_root_hash, partial_root_hash_len);
-    sqlite3_bind_int(store_.getFullRootHashStmt, 1, partial_root_hash_len);
-    sqlite3_bind_blob(store_.getFullRootHashStmt, 2, partial_root_hash, partial_root_hash_len, NULL);
-    sqlite3_step(store_.getFullRootHashStmt);
-    uint8_t *tmp_root_hash = (uint8_t *)sqlite3_column_blob(store_.getFullRootHashStmt, 0);
+    sqlite3_bind_int(getFullRootHashStmt, 1, partial_root_hash_len);
+    sqlite3_bind_blob(getFullRootHashStmt, 2, partial_root_hash, partial_root_hash_len, NULL);
+    sqlite3_step(getFullRootHashStmt);
+    uint8_t *tmp_root_hash = (uint8_t *)sqlite3_column_blob(getFullRootHashStmt, 0);
     if (tmp_root_hash) {
         LOG_DEBUG("StoreForwardpp Found full root hash!");
         memcpy(full_root_hash, tmp_root_hash, SFPP_HASH_SIZE);
-        sqlite3_reset(store_.getFullRootHashStmt);
+        sqlite3_reset(getFullRootHashStmt);
         return true;
     }
-    sqlite3_reset(store_.getFullRootHashStmt);
+    sqlite3_reset(getFullRootHashStmt);
     return false;
 }
 
-uint32_t StoreForwardPlusPlusModule::getScratchCount(uint8_t *root_hash, size_t root_hash_len)
+uint32_t SfppStore::getScratchCount(uint8_t *root_hash, size_t root_hash_len)
 {
-    sqlite3_bind_int(store_.getScratchCountStmt, 1, root_hash_len);
-    sqlite3_bind_blob(store_.getScratchCountStmt, 2, root_hash, root_hash_len, NULL);
+    sqlite3_bind_int(getScratchCountStmt, 1, root_hash_len);
+    sqlite3_bind_blob(getScratchCountStmt, 2, root_hash, root_hash_len, NULL);
 
-    int res = sqlite3_step(store_.getScratchCountStmt);
+    int res = sqlite3_step(getScratchCountStmt);
     if (res != SQLITE_OK && res != SQLITE_DONE && res != SQLITE_ROW) {
-        LOG_ERROR("StoreForwardpp store_.getScratchCountStmt sqlite error %u, %s", res, sqlite3_errmsg(store_.ppDb));
+        LOG_ERROR("StoreForwardpp getScratchCountStmt sqlite error %u, %s", res, sqlite3_errmsg(ppDb));
     }
-    uint32_t count = sqlite3_column_int(store_.getScratchCountStmt, 0);
-    sqlite3_reset(store_.getScratchCountStmt);
+    uint32_t count = sqlite3_column_int(getScratchCountStmt, 0);
+    sqlite3_reset(getScratchCountStmt);
     return count;
 }
 
-void StoreForwardPlusPlusModule::pruneScratchQueue()
+uint32_t SfppStore::pruneScratchQueue()
 {
     // Very little utility in holding on to very old scratch messages.
     constexpr uint32_t scratchMaxAgeS = 60 * 60 * 6;
     std::vector<sqlite3_int64> drop;
-    sqlite3_reset(store_.scratchTimeRowsStmt);
-    while (sqlite3_step(store_.scratchTimeRowsStmt) == SQLITE_ROW) {
+    sqlite3_reset(scratchTimeRowsStmt);
+    while (sqlite3_step(scratchTimeRowsStmt) == SQLITE_ROW) {
         RowTime t;
-        const sqlite3_int64 rowid = sqlite3_column_int64(store_.scratchTimeRowsStmt, 0);
-        t.stamp = (uint32_t)sqlite3_column_int64(store_.scratchTimeRowsStmt, 1);
-        t.basis = (uint8_t)sqlite3_column_int(store_.scratchTimeRowsStmt, 2);
-        t.boot_id = (uint32_t)sqlite3_column_int64(store_.scratchTimeRowsStmt, 3);
-        t.margin = (uint32_t)sqlite3_column_int64(store_.scratchTimeRowsStmt, 4);
+        const sqlite3_int64 rowid = sqlite3_column_int64(scratchTimeRowsStmt, 0);
+        t.stamp = (uint32_t)sqlite3_column_int64(scratchTimeRowsStmt, 1);
+        t.basis = (uint8_t)sqlite3_column_int(scratchTimeRowsStmt, 2);
+        t.boot_id = (uint32_t)sqlite3_column_int64(scratchTimeRowsStmt, 3);
+        t.margin = (uint32_t)sqlite3_column_int64(scratchTimeRowsStmt, 4);
         if (rowAge(t).age >= scratchMaxAgeS)
             drop.push_back(rowid);
     }
-    sqlite3_reset(store_.scratchTimeRowsStmt);
+    sqlite3_reset(scratchTimeRowsStmt);
 
     for (sqlite3_int64 rowid : drop) {
-        sqlite3_reset(store_.deleteScratchRowidStmt);
-        sqlite3_bind_int64(store_.deleteScratchRowidStmt, 1, rowid);
-        sqlite3_step(store_.deleteScratchRowidStmt);
-        sqlite3_reset(store_.deleteScratchRowidStmt);
+        sqlite3_reset(deleteScratchRowidStmt);
+        sqlite3_bind_int64(deleteScratchRowidStmt, 1, rowid);
+        sqlite3_step(deleteScratchRowidStmt);
+        sqlite3_reset(deleteScratchRowidStmt);
     }
-    scratch_timed_out += (uint32_t)drop.size();
+    return (uint32_t)drop.size();
 }
 
-bool StoreForwardPlusPlusModule::findIdentityCopy(uint32_t to, uint32_t from, uint32_t id, const uint8_t *root_hash,
-                                                  IdentityHit &hit)
+bool SfppStore::findIdentityCopy(uint32_t to, uint32_t from, uint32_t id, const uint8_t *root_hash, IdentityHit &hit)
 {
     auto lookup = [&](sqlite3_stmt *stmt, bool canon) {
         sqlite3_reset(stmt);
@@ -1006,38 +992,36 @@ bool StoreForwardPlusPlusModule::findIdentityCopy(uint32_t to, uint32_t from, ui
         sqlite3_reset(stmt);
         return found;
     };
-    return lookup(store_.identityCanonStmt, true) || lookup(store_.identityScratchStmt, false);
+    return lookup(identityCanonStmt, true) || lookup(identityScratchStmt, false);
 }
 
-bool StoreForwardPlusPlusModule::replaceIdentityCopy(const IdentityHit &hit, const uint8_t *hash, const uint8_t *cipher,
-                                                     size_t cipherLen)
+bool SfppStore::replaceIdentityCopy(const IdentityHit &hit, const uint8_t *hash, const uint8_t *cipher, size_t cipherLen)
 {
     if (hit.canon) {
-        sqlite3_reset(store_.replaceCanonCopyStmt);
-        sqlite3_bind_blob(store_.replaceCanonCopyStmt, 1, cipher, (int)cipherLen, SQLITE_STATIC);
-        sqlite3_bind_blob(store_.replaceCanonCopyStmt, 2, hash, SFPP_HASH_SIZE, SQLITE_STATIC);
-        sqlite3_bind_int64(store_.replaceCanonCopyStmt, 3, (sqlite3_int64)sfppsr::shortId(hash, SFPP_HASH_SIZE));
-        sqlite3_bind_int64(store_.replaceCanonCopyStmt, 4, (sqlite3_int64)sfppsr::checksumContribution(hash, SFPP_HASH_SIZE));
-        sqlite3_bind_int(store_.replaceCanonCopyStmt, 5, (int)sfppsr::contentBucket(hash, SFPP_HASH_SIZE));
-        sqlite3_bind_blob(store_.replaceCanonCopyStmt, 6, hit.hash, SFPP_HASH_SIZE, SQLITE_STATIC);
-        const int res = sqlite3_step(store_.replaceCanonCopyStmt);
-        sqlite3_reset(store_.replaceCanonCopyStmt);
+        sqlite3_reset(replaceCanonCopyStmt);
+        sqlite3_bind_blob(replaceCanonCopyStmt, 1, cipher, (int)cipherLen, SQLITE_STATIC);
+        sqlite3_bind_blob(replaceCanonCopyStmt, 2, hash, SFPP_HASH_SIZE, SQLITE_STATIC);
+        sqlite3_bind_int64(replaceCanonCopyStmt, 3, (sqlite3_int64)sfppsr::shortId(hash, SFPP_HASH_SIZE));
+        sqlite3_bind_int64(replaceCanonCopyStmt, 4, (sqlite3_int64)sfppsr::checksumContribution(hash, SFPP_HASH_SIZE));
+        sqlite3_bind_int(replaceCanonCopyStmt, 5, (int)sfppsr::contentBucket(hash, SFPP_HASH_SIZE));
+        sqlite3_bind_blob(replaceCanonCopyStmt, 6, hit.hash, SFPP_HASH_SIZE, SQLITE_STATIC);
+        const int res = sqlite3_step(replaceCanonCopyStmt);
+        sqlite3_reset(replaceCanonCopyStmt);
         return res == SQLITE_OK || res == SQLITE_DONE;
     }
 
-    sqlite3_reset(store_.replaceScratchCopyStmt);
-    sqlite3_bind_blob(store_.replaceScratchCopyStmt, 1, cipher, (int)cipherLen, SQLITE_STATIC);
-    sqlite3_bind_blob(store_.replaceScratchCopyStmt, 2, hash, SFPP_HASH_SIZE, SQLITE_STATIC);
-    sqlite3_bind_blob(store_.replaceScratchCopyStmt, 3, hit.hash, SFPP_HASH_SIZE, SQLITE_STATIC);
-    const int res = sqlite3_step(store_.replaceScratchCopyStmt);
-    sqlite3_reset(store_.replaceScratchCopyStmt);
+    sqlite3_reset(replaceScratchCopyStmt);
+    sqlite3_bind_blob(replaceScratchCopyStmt, 1, cipher, (int)cipherLen, SQLITE_STATIC);
+    sqlite3_bind_blob(replaceScratchCopyStmt, 2, hash, SFPP_HASH_SIZE, SQLITE_STATIC);
+    sqlite3_bind_blob(replaceScratchCopyStmt, 3, hit.hash, SFPP_HASH_SIZE, SQLITE_STATIC);
+    const int res = sqlite3_step(replaceScratchCopyStmt);
+    sqlite3_reset(replaceScratchCopyStmt);
     return res == SQLITE_OK || res == SQLITE_DONE;
 }
 
-bool StoreForwardPlusPlusModule::insertCanonObject(uint32_t to, uint32_t from, uint32_t packetId, const uint8_t *cipher,
-                                                   size_t cipherLen, const uint8_t *hash, const RowTime &time,
-                                                   const std::string &payload, const uint8_t *root_hash, uint32_t bucket,
-                                                   bool senderCopy)
+bool SfppStore::insertCanonObject(uint32_t to, uint32_t from, uint32_t packetId, const uint8_t *cipher, size_t cipherLen,
+                                  const uint8_t *hash, const RowTime &time, const std::string &payload, const uint8_t *root_hash,
+                                  uint32_t bucket, bool senderCopy)
 {
     IdentityHit hit;
     if (findIdentityCopy(to, from, packetId, root_hash, hit) && hit.canon) {
@@ -1054,32 +1038,32 @@ bool StoreForwardPlusPlusModule::insertCanonObject(uint32_t to, uint32_t from, u
     if (isInDB(hash, SFPP_HASH_SIZE))
         return true;
 
-    sqlite3_reset(store_.canon_insert_stmt);
-    sqlite3_bind_int64(store_.canon_insert_stmt, 1, (sqlite3_int64)to);
-    sqlite3_bind_int64(store_.canon_insert_stmt, 2, (sqlite3_int64)from);
-    sqlite3_bind_int64(store_.canon_insert_stmt, 3, (sqlite3_int64)packetId);
-    sqlite3_bind_blob(store_.canon_insert_stmt, 4, root_hash, SFPP_HASH_SIZE, SQLITE_STATIC);
-    sqlite3_bind_blob(store_.canon_insert_stmt, 5, cipher, (int)cipherLen, SQLITE_STATIC);
-    sqlite3_bind_blob(store_.canon_insert_stmt, 6, hash, SFPP_HASH_SIZE, SQLITE_STATIC);
-    sqlite3_bind_int64(store_.canon_insert_stmt, 7, (sqlite3_int64)time.stamp);
-    sqlite3_bind_text(store_.canon_insert_stmt, 8, payload.c_str(), (int)payload.size(), SQLITE_STATIC);
-    sqlite3_bind_int64(store_.canon_insert_stmt, 9, (sqlite3_int64)sfppsr::shortId(hash, SFPP_HASH_SIZE));
-    sqlite3_bind_int64(store_.canon_insert_stmt, 10, (sqlite3_int64)sfppsr::checksumContribution(hash, SFPP_HASH_SIZE));
-    sqlite3_bind_int64(store_.canon_insert_stmt, 11, (sqlite3_int64)time.basis);
-    sqlite3_bind_int64(store_.canon_insert_stmt, 12, (sqlite3_int64)time.boot_id);
-    sqlite3_bind_int64(store_.canon_insert_stmt, 13, (sqlite3_int64)time.margin);
-    sqlite3_bind_int(store_.canon_insert_stmt, 14, (int)sfppsr::contentBucket(hash, SFPP_HASH_SIZE));
+    sqlite3_reset(canon_insert_stmt);
+    sqlite3_bind_int64(canon_insert_stmt, 1, (sqlite3_int64)to);
+    sqlite3_bind_int64(canon_insert_stmt, 2, (sqlite3_int64)from);
+    sqlite3_bind_int64(canon_insert_stmt, 3, (sqlite3_int64)packetId);
+    sqlite3_bind_blob(canon_insert_stmt, 4, root_hash, SFPP_HASH_SIZE, SQLITE_STATIC);
+    sqlite3_bind_blob(canon_insert_stmt, 5, cipher, (int)cipherLen, SQLITE_STATIC);
+    sqlite3_bind_blob(canon_insert_stmt, 6, hash, SFPP_HASH_SIZE, SQLITE_STATIC);
+    sqlite3_bind_int64(canon_insert_stmt, 7, (sqlite3_int64)time.stamp);
+    sqlite3_bind_text(canon_insert_stmt, 8, payload.c_str(), (int)payload.size(), SQLITE_STATIC);
+    sqlite3_bind_int64(canon_insert_stmt, 9, (sqlite3_int64)sfppsr::shortId(hash, SFPP_HASH_SIZE));
+    sqlite3_bind_int64(canon_insert_stmt, 10, (sqlite3_int64)sfppsr::checksumContribution(hash, SFPP_HASH_SIZE));
+    sqlite3_bind_int64(canon_insert_stmt, 11, (sqlite3_int64)time.basis);
+    sqlite3_bind_int64(canon_insert_stmt, 12, (sqlite3_int64)time.boot_id);
+    sqlite3_bind_int64(canon_insert_stmt, 13, (sqlite3_int64)time.margin);
+    sqlite3_bind_int(canon_insert_stmt, 14, (int)sfppsr::contentBucket(hash, SFPP_HASH_SIZE));
 
-    const int res = sqlite3_step(store_.canon_insert_stmt);
-    sqlite3_reset(store_.canon_insert_stmt);
+    const int res = sqlite3_step(canon_insert_stmt);
+    sqlite3_reset(canon_insert_stmt);
     if (res != SQLITE_OK && res != SQLITE_DONE) {
-        LOG_ERROR("StoreForwardpp cannot store a canonical object: %s", sqlite3_errmsg(store_.ppDb));
+        LOG_ERROR("StoreForwardpp cannot store a canonical object: %s", sqlite3_errmsg(ppDb));
         return false;
     }
     return true;
 }
 
-bool StoreForwardPlusPlusModule::storeRecoveredObject(const sfppframe::Replay &replay, const uint8_t *root_hash, uint32_t bucket)
+bool SfppStore::storeRecoveredObject(const sfppframe::Replay &replay, const uint8_t *root_hash, uint32_t bucket)
 {
     uint8_t hash[SFPP_HASH_SIZE];
     sfppframe::messageHash(replay.ciphertext.data(), replay.ciphertext.size(), replay.to, replay.from, replay.id, hash);
@@ -1097,6 +1081,156 @@ bool StoreForwardPlusPlusModule::storeRecoveredObject(const sfppframe::Replay &r
     // The object is canonical now, so a scratch copy (a writer-missed offer) is no longer needed.
     removeFromScratch(hash, SFPP_HASH_SIZE);
     return true;
+}
+
+ChannelHash SfppStore::getChannelHashFromRoot(uint8_t *_root_hash, size_t _root_hash_len)
+{
+    sqlite3_bind_int(getHashFromRootStmt, 1, _root_hash_len);
+    sqlite3_bind_blob(getHashFromRootStmt, 2, _root_hash, _root_hash_len, NULL);
+    sqlite3_step(getHashFromRootStmt);
+    ChannelHash tmp_hash = (ChannelHash)sqlite3_column_int(getHashFromRootStmt, 0);
+    sqlite3_reset(getHashFromRootStmt);
+    return tmp_hash;
+}
+
+void SfppStore::addRootToMappings(ChannelHash _ch_hash, uint8_t *_root_hash)
+{
+    int type = chain_types::channel_chain;
+    sqlite3_bind_int(addRootToMappingsStmt, 1, type);
+    sqlite3_bind_int(addRootToMappingsStmt, 2, _ch_hash);
+    sqlite3_bind_blob(addRootToMappingsStmt, 3, _root_hash, SFPP_HASH_SIZE, NULL);
+    auto rc = sqlite3_step(addRootToMappingsStmt);
+    LOG_WARN("StoreForwardpp result %u, %s", rc, sqlite3_errmsg(ppDb));
+    sqlite3_reset(addRootToMappingsStmt);
+}
+
+void SfppStore::deleteCanon(const uint8_t *message_hash)
+{
+    sqlite3_reset(deleteCanonStmt);
+    sqlite3_bind_blob(deleteCanonStmt, 1, message_hash, SFPP_HASH_SIZE, SQLITE_STATIC);
+    sqlite3_step(deleteCanonStmt);
+    sqlite3_reset(deleteCanonStmt);
+}
+
+bool SfppStore::bucketHoldsShortId(const uint8_t *root_hash, uint32_t bucket, pinsketch::Element id)
+{
+    sqlite3_reset(getObjectByShortIdStmt);
+    sqlite3_bind_int(getObjectByShortIdStmt, 1, SFPP_HASH_SIZE);
+    sqlite3_bind_blob(getObjectByShortIdStmt, 2, root_hash, SFPP_HASH_SIZE, SQLITE_STATIC);
+    sqlite3_bind_int(getObjectByShortIdStmt, 3, (int)bucket);
+    sqlite3_bind_int64(getObjectByShortIdStmt, 4, (sqlite3_int64)id);
+    const bool held = sqlite3_step(getObjectByShortIdStmt) == SQLITE_ROW;
+    sqlite3_reset(getObjectByShortIdStmt);
+    return held;
+}
+
+std::vector<SfppStore::ObjectRow> SfppStore::collectObjectsByShortId(const uint8_t *root_hash, uint32_t bucket,
+                                                                     pinsketch::Element id)
+{
+    std::vector<ObjectRow> rows;
+    sqlite3_reset(getObjectByShortIdStmt);
+    sqlite3_bind_int(getObjectByShortIdStmt, 1, SFPP_HASH_SIZE);
+    sqlite3_bind_blob(getObjectByShortIdStmt, 2, root_hash, SFPP_HASH_SIZE, NULL);
+    sqlite3_bind_int(getObjectByShortIdStmt, 3, (int)bucket);
+    sqlite3_bind_int64(getObjectByShortIdStmt, 4, (sqlite3_int64)id);
+
+    while (sqlite3_step(getObjectByShortIdStmt) == SQLITE_ROW) {
+        ObjectRow row;
+        row.to = (uint32_t)sqlite3_column_int64(getObjectByShortIdStmt, 0);
+        row.from = (uint32_t)sqlite3_column_int64(getObjectByShortIdStmt, 1);
+        row.id = (uint32_t)sqlite3_column_int64(getObjectByShortIdStmt, 2);
+        const uint8_t *enc = (const uint8_t *)sqlite3_column_blob(getObjectByShortIdStmt, 3);
+        const int encLen = sqlite3_column_bytes(getObjectByShortIdStmt, 3);
+        row.time.stamp = (uint32_t)sqlite3_column_int64(getObjectByShortIdStmt, 5);
+        row.time.basis = (uint8_t)sqlite3_column_int(getObjectByShortIdStmt, 6);
+        row.time.boot_id = (uint32_t)sqlite3_column_int64(getObjectByShortIdStmt, 7);
+        row.time.margin = (uint32_t)sqlite3_column_int64(getObjectByShortIdStmt, 8);
+        row.cipher.assign(enc, enc + encLen);
+        rows.push_back(std::move(row));
+    }
+    sqlite3_reset(getObjectByShortIdStmt);
+    return rows;
+}
+
+void SfppStore::collectScratchMatches(const uint8_t *root_hash, uint32_t bucket, const std::vector<pinsketch::Element> &ids,
+                                      std::vector<ScratchRow> &matches, std::vector<std::vector<uint8_t>> &corrupt)
+{
+    sqlite3_reset(fromScratchStmt);
+    sqlite3_bind_blob(fromScratchStmt, 1, root_hash, SFPP_HASH_SIZE, NULL);
+    while (sqlite3_step(fromScratchStmt) == SQLITE_ROW) {
+        const uint8_t *stored = (const uint8_t *)sqlite3_column_blob(fromScratchStmt, 4);
+        if (stored == nullptr)
+            continue;
+        const uint8_t *cipher = (const uint8_t *)sqlite3_column_blob(fromScratchStmt, 3);
+        const int cipherLen = sqlite3_column_bytes(fromScratchStmt, 3);
+        if (cipher == nullptr || cipherLen <= 0)
+            continue;
+
+        const uint32_t to = (uint32_t)sqlite3_column_int64(fromScratchStmt, 0);
+        const uint32_t from = (uint32_t)sqlite3_column_int64(fromScratchStmt, 1);
+        const uint32_t id = (uint32_t)sqlite3_column_int64(fromScratchStmt, 2);
+
+        // The stored hash is only an index; recompute it from the object and refuse a mismatch.
+        uint8_t computed[SFPP_HASH_SIZE];
+        sfppframe::messageHash(cipher, (size_t)cipherLen, to, from, id, computed);
+        if (memcmp(computed, stored, SFPP_HASH_SIZE) != 0) {
+            corrupt.emplace_back(stored, stored + SFPP_HASH_SIZE);
+            continue;
+        }
+
+        // A short ID only names a row in this bucket; a collision in another bucket is not a match.
+        if (sfppsr::contentBucket(computed, SFPP_HASH_SIZE) != bucket)
+            continue;
+        const pinsketch::Element sid = sfppsr::shortId(computed, SFPP_HASH_SIZE);
+        if (std::find(ids.begin(), ids.end(), sid) == ids.end())
+            continue;
+
+        ScratchRow row;
+        row.to = to;
+        row.from = from;
+        row.id = id;
+        row.cipher.assign(cipher, cipher + cipherLen);
+        memcpy(row.hash, computed, SFPP_HASH_SIZE);
+        row.time.stamp = (uint32_t)sqlite3_column_int64(fromScratchStmt, 5);
+        row.time.basis = (uint8_t)sqlite3_column_int(fromScratchStmt, 7);
+        row.time.boot_id = (uint32_t)sqlite3_column_int64(fromScratchStmt, 8);
+        row.time.margin = (uint32_t)sqlite3_column_int64(fromScratchStmt, 9);
+        matches.push_back(row);
+    }
+    sqlite3_reset(fromScratchStmt);
+}
+
+std::vector<SfppStore::LegacyRow> SfppStore::collectLegacyHistory(const uint8_t *root_hash, uint32_t requester)
+{
+    std::vector<LegacyRow> rows;
+    sqlite3_reset(legacyHistoryStmt);
+    sqlite3_bind_int(legacyHistoryStmt, 1, SFPP_HASH_SIZE);
+    sqlite3_bind_blob(legacyHistoryStmt, 2, root_hash, SFPP_HASH_SIZE, NULL);
+    sqlite3_bind_int64(legacyHistoryStmt, 3, (sqlite3_int64)requester);
+    sqlite3_bind_int64(legacyHistoryStmt, 4, (sqlite3_int64)NODENUM_BROADCAST);
+    sqlite3_bind_int64(legacyHistoryStmt, 5, (sqlite3_int64)requester);
+
+    while (sqlite3_step(legacyHistoryStmt) == SQLITE_ROW) {
+        LegacyRow row;
+        row.time.stamp = (uint32_t)sqlite3_column_int64(legacyHistoryStmt, 3);
+        row.time.basis = (uint8_t)sqlite3_column_int(legacyHistoryStmt, 6);
+        row.time.boot_id = (uint32_t)sqlite3_column_int64(legacyHistoryStmt, 7);
+        row.time.margin = (uint32_t)sqlite3_column_int64(legacyHistoryStmt, 8);
+        row.from = (uint32_t)sqlite3_column_int64(legacyHistoryStmt, 0);
+        row.id = (uint32_t)sqlite3_column_int64(legacyHistoryStmt, 1);
+        row.destination = (uint32_t)sqlite3_column_int64(legacyHistoryStmt, 2);
+        row.rowid = sqlite3_column_int64(legacyHistoryStmt, 9);
+        const unsigned char *text = sqlite3_column_text(legacyHistoryStmt, 4);
+        if (text)
+            row.payload.assign((const char *)text, sqlite3_column_bytes(legacyHistoryStmt, 4));
+        const uint8_t *encrypted = (const uint8_t *)sqlite3_column_blob(legacyHistoryStmt, 5);
+        const int encryptedLen = sqlite3_column_bytes(legacyHistoryStmt, 5);
+        if (encrypted && encryptedLen > 0)
+            row.encrypted.assign(encrypted, encrypted + encryptedLen);
+        rows.push_back(std::move(row));
+    }
+    sqlite3_reset(legacyHistoryStmt);
+    return rows;
 }
 
 #endif // has include sqlite3

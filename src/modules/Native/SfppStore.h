@@ -15,8 +15,6 @@
 #define SFPP_HASH_SIZE 16
 #define SFPP_SHORT_HASH_SIZE 8
 
-class StoreForwardPlusPlusModule;
-
 // Owns the archive database: its handle, prepared statements and row operations.
 class SfppStore
 {
@@ -62,6 +60,36 @@ class SfppStore
         bool canon;
     };
 
+    // One canonical object read back for serving, keyed by its bucket short ID.
+    struct ObjectRow {
+        uint32_t to;
+        uint32_t from;
+        uint32_t id;
+        RowTime time;
+        std::vector<uint8_t> cipher;
+    };
+
+    // A scratch row whose short ID a peer also holds.
+    struct ScratchRow {
+        uint32_t to;
+        uint32_t from;
+        uint32_t id;
+        RowTime time;
+        std::vector<uint8_t> cipher;
+        uint8_t hash[SFPP_HASH_SIZE];
+    };
+
+    // One canonical row read for the legacy CLIENT_HISTORY shim.
+    struct LegacyRow {
+        uint32_t from;
+        uint32_t id;
+        uint32_t destination;
+        RowTime time;
+        std::string payload;
+        std::vector<uint8_t> encrypted;
+        sqlite3_int64 rowid;
+    };
+
     // Stamped into PRAGMA user_version. A store with any other value is moved aside, never migrated.
     static constexpr int kSchemaVersion = 5;
 
@@ -70,17 +98,54 @@ class SfppStore
 
     void openStore(const uint8_t *derivedRoot, bool haveDerived);
 
-  private:
-    friend class StoreForwardPlusPlusModule;
+    void updateTimeState();
+    RowTime nowTime() const;
+    bool timeFromAge(uint32_t heardAgo, RowTime &out) const;
+    RowAge rowAge(const RowTime &t) const;
+    void healBootRelativeTimestamps();
+    void trimCanonByRetention(uint8_t *root_hash, size_t root_hash_len);
 
+    bool buildBucketSummary(const uint8_t *root_hash, size_t root_hash_len, uint32_t bucket, sfppsr::BucketSummary &out);
+    bool collectBucketIds(const uint8_t *root_hash, size_t root_hash_len, uint32_t bucket, std::vector<pinsketch::Element> &out);
+    bool collectBuckets(const uint8_t *root_hash, size_t root_hash_len, std::vector<uint32_t> &out);
+
+    bool addToScratch(stored_object &, bool senderCopy = false);
+    bool isInDB(const uint8_t *, size_t);
+    bool isInScratch(uint8_t *, size_t);
+    void removeFromScratch(const uint8_t *, size_t);
+    void updatePayload(uint8_t *, size_t, std::string);
+    void fillPayloadIfEmpty(const stored_object &lo);
+    stored_object getFromScratch(uint8_t *, size_t);
+    bool lookUpFullRootHash(uint8_t *partial_root_hash, size_t partial_root_hash_len, uint8_t *full_root_hash);
+    uint32_t getScratchCount(uint8_t *, size_t);
+    uint32_t pruneScratchQueue();
+    bool insertCanonObject(uint32_t to, uint32_t from, uint32_t packetId, const uint8_t *cipher, size_t cipherLen,
+                           const uint8_t *hash, const RowTime &time, const std::string &payload, const uint8_t *root_hash,
+                           uint32_t bucket, bool senderCopy = false);
+    bool storeRecoveredObject(const sfppframe::Replay &replay, const uint8_t *root_hash, uint32_t bucket);
+
+    ChannelHash getChannelHashFromRoot(uint8_t *_root_hash, size_t);
+    void addRootToMappings(ChannelHash, uint8_t *);
+
+    void deleteCanon(const uint8_t *message_hash);
+    bool bucketHoldsShortId(const uint8_t *root_hash, uint32_t bucket, pinsketch::Element id);
+    std::vector<ObjectRow> collectObjectsByShortId(const uint8_t *root_hash, uint32_t bucket, pinsketch::Element id);
+    void collectScratchMatches(const uint8_t *root_hash, uint32_t bucket, const std::vector<pinsketch::Element> &ids,
+                               std::vector<ScratchRow> &matches, std::vector<std::vector<uint8_t>> &corrupt);
+    std::vector<LegacyRow> collectLegacyHistory(const uint8_t *root_hash, uint32_t requester);
+
+  private:
     enum chain_types {
         channel_chain = 0,
     };
 
     void initTimeState();
     void writeTimeState();
+    uint32_t estimateEpochNow() const;
     void restampPreviousBoot();
     void backfillSetIndex();
+    bool findIdentityCopy(uint32_t to, uint32_t from, uint32_t id, const uint8_t *root_hash, IdentityHit &hit);
+    bool replaceIdentityCopy(const IdentityHit &hit, const uint8_t *hash, const uint8_t *cipher, size_t cipherLen);
 
     sqlite3 *ppDb = nullptr;
     sqlite3_stmt *canon_insert_stmt = nullptr;

@@ -87,13 +87,6 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
 
     SfppStore store_;
 
-    void updateTimeState();
-    uint32_t estimateEpochNow() const;
-    RowTime nowTime() const;
-    bool timeFromAge(uint32_t heardAgo, RowTime &out) const;
-    RowAge rowAge(const RowTime &t) const;
-    void healBootRelativeTimestamps();
-    void trimCanonByRetention(uint8_t *root_hash, size_t root_hash_len);
     bool linkIsFresh(const stored_object &lo) const;
 
     // Answers a legacy CLIENT_HISTORY from the stored texts. One text per runOnce() keeps the
@@ -122,12 +115,6 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     // The module's single send boundary; EnumListenOnly drops every packet here.
     ErrorCode sendSfppPacket(meshtastic_MeshPacket *p, RxSource src, bool ccToPhone);
 
-    // The short IDs stored in one bucket, for the enumeration list and for a windowed object lookup.
-    bool collectBucketIds(const uint8_t *root_hash, size_t root_hash_len, uint32_t bucket, std::vector<pinsketch::Element> &out);
-
-    // The content buckets that hold at least one indexed object, ascending.
-    bool collectBuckets(const uint8_t *root_hash, size_t root_hash_len, std::vector<uint32_t> &out);
-
     // --- Arm C: detector + short-ID enumeration (StoreAndForward.Repair = enum) ---
 
     void advertiseOneBucket(uint8_t *root_hash, size_t root_hash_len);
@@ -155,11 +142,9 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     void handleItemFrame(const meshtastic_MeshPacket &mp, meshtastic_StoreForwardPlusPlus *t);
     void requestEnumList(const uint8_t *root_hash, uint32_t bucket, NodeNum peer);
     void requestMissingItems(const uint8_t *root_hash, uint32_t bucket, NodeNum peer, const std::vector<pinsketch::Element> &ids);
-    bool bucketHoldsShortId(const uint8_t *root_hash, uint32_t bucket, pinsketch::Element id);
     bool itemInFlight(const uint8_t *root_hash, uint32_t bucket, pinsketch::Element id);
     void noteItemInFlight(const uint8_t *root_hash, uint32_t bucket, pinsketch::Element id);
     void forgetItemInFlight(pinsketch::Element id);
-    bool storeRecoveredObject(const sfppframe::Replay &replay, const uint8_t *root_hash, uint32_t bucket);
 
     // Item frames are queued per requester and drained from runOnce() round-robin, so a 32-object
     // request cannot overflow the radio's 16-entry TX queue and one requester cannot starve another.
@@ -198,10 +183,6 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     void repairPromotions();
     void expireEnumLate();
 
-    // A canonical row, shared by recovered objects and promoted scratch rows.
-    bool insertCanonObject(uint32_t to, uint32_t from, uint32_t packetId, const uint8_t *cipher, size_t cipherLen,
-                           const uint8_t *hash, const RowTime &time, const std::string &payload, const uint8_t *root_hash,
-                           uint32_t bucket, bool senderCopy = false);
     // A scratch row whose short ID the peer also holds is already "held"; move it into
     // the bucket and drop it from the fetch list instead of re-fetching it.
     void promoteScratchMatches(const uint8_t *root_hash, uint32_t bucket, std::vector<pinsketch::Element> &ids);
@@ -212,48 +193,9 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     // Returns the derived root, replacing a stale mapping from an earlier root rule or channel.
     size_t getOrDeriveRootFromChannel(ChannelHash, uint8_t *);
 
-    // For a given root hash, returns the ChannelHash
-    // can handle partial root hashes
-    ChannelHash getChannelHashFromRoot(uint8_t *_root_hash, size_t);
-
-    // adds the ChannelHash and root_hash to the mappings table
-    void addRootToMappings(ChannelHash, uint8_t *);
-
-    // Adds an incoming text message to the scratch database
-    bool addToScratch(stored_object &, bool senderCopy = false);
-
-    bool findIdentityCopy(uint32_t to, uint32_t from, uint32_t id, const uint8_t *root_hash, IdentityHit &hit);
-    bool replaceIdentityCopy(const IdentityHit &hit, const uint8_t *hash, const uint8_t *cipher, size_t cipherLen);
-
-    // checks if the message hash is present in the canonical archive
-    bool isInDB(const uint8_t *, size_t);
-
-    // checks if the message hash is present in the scratch database
-    bool isInScratch(uint8_t *, size_t);
-
-    // retrieves a stored object from the scratch database
-    stored_object getFromScratch(uint8_t *, size_t);
-
-    // removes a stored object from the scratch database
-    void removeFromScratch(const uint8_t *, size_t);
-
-    // fills the payload section with the decrypted data for the given message hash
-    // probably not needed for production, but useful for testing
-    void updatePayload(uint8_t *, size_t, std::string);
-    void fillPayloadIfEmpty(const stored_object &lo);
-
     // Takes the decrypted MeshPacket and the encrypted packet copy, and builds a stored object.
     // Generates a message hash, but does not set the commit hash
     stored_object ingestTextPacket(const meshtastic_MeshPacket &, const meshtastic_MeshPacket *);
-
-    // given a partial root hash, looks up the full 32-byte root hash
-    // returns true if found
-    bool lookUpFullRootHash(uint8_t *partial_root_hash, size_t partial_root_hash_len, uint8_t *full_root_hash);
-
-    // get the scratch count for the given root hash
-    uint32_t getScratchCount(uint8_t *, size_t);
-
-    void pruneScratchQueue();
 
     uint32_t rebroadcastTimeout = 3600; // Messages older than this (in seconds) will not be rebroadcast
     bool doing_split_send = false;

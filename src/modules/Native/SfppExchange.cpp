@@ -430,12 +430,8 @@ void StoreForwardPlusPlusModule::repairPromotions()
 
     std::vector<pinsketch::Element> ids;
     for (const auto &promoted : enumPromoted) {
-        if (isInDB(promoted.hash, SFPP_HASH_SIZE)) {
-            sqlite3_reset(store_.deleteCanonStmt);
-            sqlite3_bind_blob(store_.deleteCanonStmt, 1, promoted.hash, SFPP_HASH_SIZE, SQLITE_STATIC);
-            sqlite3_step(store_.deleteCanonStmt);
-            sqlite3_reset(store_.deleteCanonStmt);
-        }
+        if (store_.isInDB(promoted.hash, SFPP_HASH_SIZE))
+            store_.deleteCanon(promoted.hash);
         ids.push_back(promoted.id);
     }
     enumPromoted.clear();
@@ -466,14 +462,14 @@ bool StoreForwardPlusPlusModule::bucketMatchesPeer(const uint8_t *root_hash, uin
     if (!enumPeerSummaryKnown) {
         // An overheard listing has no checksum: matching means holding every listed ID.
         std::vector<pinsketch::Element> own;
-        collectBucketIds(root_hash, SFPP_HASH_SIZE, bucket, own);
+        store_.collectBucketIds(root_hash, SFPP_HASH_SIZE, bucket, own);
         std::sort(own.begin(), own.end());
         std::vector<pinsketch::Element> listed = enumProvideIds;
         std::sort(listed.begin(), listed.end());
         return std::includes(own.begin(), own.end(), listed.begin(), listed.end());
     }
     sfppsr::BucketSummary local(4);
-    buildBucketSummary(root_hash, SFPP_HASH_SIZE, bucket, local);
+    store_.buildBucketSummary(root_hash, SFPP_HASH_SIZE, bucket, local);
     return local.count() == enumPeerCount && local.checksum() == enumPeerChecksum;
 }
 
@@ -512,7 +508,7 @@ void StoreForwardPlusPlusModule::advertiseOneBucket(uint8_t *root_hash, size_t r
         enumAdvertSeen.clear();
     }
     std::vector<uint32_t> buckets;
-    if (!collectBuckets(root_hash, root_hash_len, buckets))
+    if (!store_.collectBuckets(root_hash, root_hash_len, buckets))
         return;
 
     // Newest-changed first: a bucket whose summary differs from the one last advertised (or that
@@ -520,7 +516,7 @@ void StoreForwardPlusPlusModule::advertiseOneBucket(uint8_t *root_hash, size_t r
     int64_t chosenIndex = -1;
     for (int64_t i = (int64_t)buckets.size() - 1; i >= 0; i--) {
         sfppsr::BucketSummary summary(4);
-        if (!buildBucketSummary(root_hash, root_hash_len, buckets[(size_t)i], summary) || summary.count() == 0)
+        if (!store_.buildBucketSummary(root_hash, root_hash_len, buckets[(size_t)i], summary) || summary.count() == 0)
             continue;
         bool changed = true;
         for (const auto &seen : enumAdvertSeen) {
@@ -548,7 +544,7 @@ void StoreForwardPlusPlusModule::advertiseOneBucket(uint8_t *root_hash, size_t r
     }
 
     sfppsr::BucketSummary summary(4);
-    if (!buildBucketSummary(root_hash, root_hash_len, bucket, summary) || summary.count() == 0)
+    if (!store_.buildBucketSummary(root_hash, root_hash_len, bucket, summary) || summary.count() == 0)
         return;
 
     sfppsr::Scope scope;
@@ -588,7 +584,7 @@ void StoreForwardPlusPlusModule::handleEnumAdvert(const meshtastic_MeshPacket &m
         return;
 
     uint8_t root[SFPP_HASH_SIZE] = {0};
-    bool known = lookUpFullRootHash(advert.scope.rootPrefix, advert.scope.rootPrefixLen, root);
+    bool known = store_.lookUpFullRootHash(advert.scope.rootPrefix, advert.scope.rootPrefixLen, root);
     if (known && memcmp(root, derived, SFPP_HASH_SIZE) != 0) {
         if (mp.from != enumForeignRootLoggedPeer) {
             char rootHex[9];
@@ -633,7 +629,7 @@ void StoreForwardPlusPlusModule::handleEnumAdvert(const meshtastic_MeshPacket &m
     // The receiver of a mismatching advert always pulls. An empty local bucket is count 0 and
     // checksum 0, so it mismatches a non-empty peer and pulls too.
     sfppsr::BucketSummary local(4);
-    buildBucketSummary(root, SFPP_HASH_SIZE, advert.scope.bucket, local);
+    store_.buildBucketSummary(root, SFPP_HASH_SIZE, advert.scope.bucket, local);
     const bool namedMismatch = !(local.count() == advert.count && local.checksum() == advert.checksum);
     if (!namedMismatch)
         return;
@@ -679,7 +675,7 @@ bool StoreForwardPlusPlusModule::trySketchExchange(const sfppsr::Advert &advert,
     }
 
     std::vector<pinsketch::Element> own;
-    collectBucketIds(root_hash, SFPP_HASH_SIZE, bucket, own);
+    store_.collectBucketIds(root_hash, SFPP_HASH_SIZE, bucket, own);
     std::sort(own.begin(), own.end());
     own.erase(std::unique(own.begin(), own.end()), own.end());
 
@@ -759,13 +755,13 @@ void StoreForwardPlusPlusModule::handleEnumRequest(const meshtastic_MeshPacket &
         return;
 
     uint8_t root[SFPP_HASH_SIZE] = {0};
-    if (!lookUpFullRootHash(scope.rootPrefix, scope.rootPrefixLen, root))
+    if (!store_.lookUpFullRootHash(scope.rootPrefix, scope.rootPrefixLen, root))
         return;
 
     logEnum("rx", "enum_req", scope, mp.decoded.payload.size, mp.from, -1, 0, 1);
 
     std::vector<pinsketch::Element> ids;
-    if (!collectBucketIds(root, SFPP_HASH_SIZE, scope.bucket, ids))
+    if (!store_.collectBucketIds(root, SFPP_HASH_SIZE, scope.bucket, ids))
         return;
     std::sort(ids.begin(), ids.end());
     ids.erase(std::unique(ids.begin(), ids.end()), ids.end());
@@ -799,7 +795,7 @@ void StoreForwardPlusPlusModule::handleEnumProvide(const meshtastic_MeshPacket &
         return;
 
     uint8_t root[SFPP_HASH_SIZE] = {0};
-    if (!lookUpFullRootHash(list.scope.rootPrefix, list.scope.rootPrefixLen, root))
+    if (!store_.lookUpFullRootHash(list.scope.rootPrefix, list.scope.rootPrefixLen, root))
         return;
     if (!enumExchangeActive || mp.from != enumExchangePeer || list.scope.bucket != enumExchangeBucket ||
         memcmp(root, enumExchangeRoot, SFPP_HASH_SIZE) != 0) {
@@ -847,7 +843,7 @@ void StoreForwardPlusPlusModule::handleEnumProvide(const meshtastic_MeshPacket &
 void StoreForwardPlusPlusModule::actOnListing(const uint8_t *root, uint32_t bucket, NodeNum peer)
 {
     std::vector<pinsketch::Element> own;
-    collectBucketIds(root, SFPP_HASH_SIZE, bucket, own);
+    store_.collectBucketIds(root, SFPP_HASH_SIZE, bucket, own);
     std::sort(enumProvideIds.begin(), enumProvideIds.end());
     enumProvideIds.erase(std::unique(enumProvideIds.begin(), enumProvideIds.end()), enumProvideIds.end());
     std::sort(own.begin(), own.end());
@@ -939,7 +935,7 @@ void StoreForwardPlusPlusModule::handleOverheardListing(NodeNum peer, const uint
         return;
 
     std::vector<pinsketch::Element> own;
-    collectBucketIds(root_hash, SFPP_HASH_SIZE, list.scope.bucket, own);
+    store_.collectBucketIds(root_hash, SFPP_HASH_SIZE, list.scope.bucket, own);
     std::sort(own.begin(), own.end());
     std::vector<pinsketch::Element> listed = heard->ids;
     std::sort(listed.begin(), listed.end());
@@ -1000,18 +996,6 @@ bool StoreForwardPlusPlusModule::takeHeardListing(const uint8_t *root_hash, uint
     return false;
 }
 
-bool StoreForwardPlusPlusModule::bucketHoldsShortId(const uint8_t *root_hash, uint32_t bucket, pinsketch::Element id)
-{
-    sqlite3_reset(store_.getObjectByShortIdStmt);
-    sqlite3_bind_int(store_.getObjectByShortIdStmt, 1, SFPP_HASH_SIZE);
-    sqlite3_bind_blob(store_.getObjectByShortIdStmt, 2, root_hash, SFPP_HASH_SIZE, SQLITE_STATIC);
-    sqlite3_bind_int(store_.getObjectByShortIdStmt, 3, (int)bucket);
-    sqlite3_bind_int64(store_.getObjectByShortIdStmt, 4, (sqlite3_int64)id);
-    const bool held = sqlite3_step(store_.getObjectByShortIdStmt) == SQLITE_ROW;
-    sqlite3_reset(store_.getObjectByShortIdStmt);
-    return held;
-}
-
 bool StoreForwardPlusPlusModule::itemInFlight(const uint8_t *root_hash, uint32_t bucket, pinsketch::Element id)
 {
     const uint32_t now = Time::getMillis();
@@ -1055,7 +1039,7 @@ void StoreForwardPlusPlusModule::requestMissingItems(const uint8_t *root_hash, u
         for (pinsketch::Element id : ids) {
             if (itemInFlight(root_hash, bucket, id) || std::find(enumWanted.begin(), enumWanted.end(), id) != enumWanted.end() ||
                 std::find(enumLateWanted.begin(), enumLateWanted.end(), id) != enumLateWanted.end() ||
-                bucketHoldsShortId(root_hash, bucket, id))
+                store_.bucketHoldsShortId(root_hash, bucket, id))
                 continue;
             fresh.push_back(id);
         }
@@ -1100,7 +1084,7 @@ void StoreForwardPlusPlusModule::handleItemRequest(const meshtastic_MeshPacket &
         return;
 
     uint8_t root[SFPP_HASH_SIZE] = {0};
-    if (!lookUpFullRootHash(list.scope.rootPrefix, list.scope.rootPrefixLen, root))
+    if (!store_.lookUpFullRootHash(list.scope.rootPrefix, list.scope.rootPrefixLen, root))
         return;
 
     noteRequesterActivity(mp.from); // a re-request refreshes the requester's entry
@@ -1111,30 +1095,17 @@ void StoreForwardPlusPlusModule::handleItemRequest(const meshtastic_MeshPacket &
         if (enumRequesterHasQueued(mp.from, wanted))
             continue;
 
-        sqlite3_reset(store_.getObjectByShortIdStmt);
-        sqlite3_bind_int(store_.getObjectByShortIdStmt, 1, SFPP_HASH_SIZE);
-        sqlite3_bind_blob(store_.getObjectByShortIdStmt, 2, root, SFPP_HASH_SIZE, NULL);
-        sqlite3_bind_int(store_.getObjectByShortIdStmt, 3, (int)list.scope.bucket);
-        sqlite3_bind_int64(store_.getObjectByShortIdStmt, 4, (sqlite3_int64)wanted);
-
         // A short ID can name more than one stored object; serve every one so a collided pair
         // cannot hide behind a single row.
-        bool served = false;
-        while (sqlite3_step(store_.getObjectByShortIdStmt) == SQLITE_ROW) {
-            served = true;
-            const uint32_t to = (uint32_t)sqlite3_column_int64(store_.getObjectByShortIdStmt, 0);
-            const uint32_t from = (uint32_t)sqlite3_column_int64(store_.getObjectByShortIdStmt, 1);
-            const uint32_t id = (uint32_t)sqlite3_column_int64(store_.getObjectByShortIdStmt, 2);
-            const uint8_t *enc = (const uint8_t *)sqlite3_column_blob(store_.getObjectByShortIdStmt, 3);
-            const int encLen = sqlite3_column_bytes(store_.getObjectByShortIdStmt, 3);
-            RowTime stamp;
-            stamp.stamp = (uint32_t)sqlite3_column_int64(store_.getObjectByShortIdStmt, 5);
-            stamp.basis = (uint8_t)sqlite3_column_int(store_.getObjectByShortIdStmt, 6);
-            stamp.boot_id = (uint32_t)sqlite3_column_int64(store_.getObjectByShortIdStmt, 7);
-            stamp.margin = (uint32_t)sqlite3_column_int64(store_.getObjectByShortIdStmt, 8);
-            std::vector<uint8_t> cipher(enc, enc + encLen);
+        const std::vector<SfppStore::ObjectRow> rows = store_.collectObjectsByShortId(root, list.scope.bucket, wanted);
+        const bool served = !rows.empty();
+        for (const auto &row : rows) {
+            const uint32_t to = row.to;
+            const uint32_t from = row.from;
+            const uint32_t id = row.id;
+            const std::vector<uint8_t> &cipher = row.cipher;
 
-            const uint32_t heardAgo = rowAge(stamp).age;
+            const uint32_t heardAgo = store_.rowAge(row.time).age;
             std::vector<meshtastic_StoreForwardPlusPlus> frames;
             if (!sfppframe::split(cipher.data(), cipher.size(), to, from, id, heardAgo, false, frames))
                 continue;
@@ -1147,7 +1118,6 @@ void StoreForwardPlusPlusModule::handleItemRequest(const meshtastic_MeshPacket &
             const NodeNum dest = portduino_config.sfpp_item_transport == SFPP_ITEM_DIRECT ? mp.from : NODENUM_BROADCAST;
             queueItemFrames(frames, mp.from, dest, scope, wanted);
         }
-        sqlite3_reset(store_.getObjectByShortIdStmt);
 
         if (!served)
             LOG_WARN("StoreForwardpp item request for an unknown short ID 0x%08x", wanted);
@@ -1266,8 +1236,8 @@ void StoreForwardPlusPlusModule::handleItemFrame(const meshtastic_MeshPacket &mp
     // 1. An object this exchange asked for, from any peer that holds it.
     auto wantedIt = std::find(enumWanted.begin(), enumWanted.end(), shortId);
     if (enumExchangeActive && wantedIt != enumWanted.end()) {
-        const bool isNew = !isInDB(hash, sizeof(hash));
-        if (!storeRecoveredObject(replay, enumExchangeRoot, enumExchangeBucket))
+        const bool isNew = !store_.isInDB(hash, sizeof(hash));
+        if (!store_.storeRecoveredObject(replay, enumExchangeRoot, enumExchangeBucket))
             return;
         forgetItemInFlight(shortId);
         enumLastItemMs = Time::getMillis();
@@ -1316,7 +1286,7 @@ void StoreForwardPlusPlusModule::handleItemFrame(const meshtastic_MeshPacket &mp
     // 2. A late object for a recently ended exchange.
     auto lateIt = std::find(enumLateWanted.begin(), enumLateWanted.end(), shortId);
     if (enumLateActive && lateIt != enumLateWanted.end()) {
-        storeRecoveredObject(replay, enumLateRoot, enumLateBucket);
+        store_.storeRecoveredObject(replay, enumLateRoot, enumLateBucket);
         forgetItemInFlight(shortId);
         enumLateWanted.erase(lateIt);
         if (enumLateWanted.empty())
@@ -1347,9 +1317,9 @@ void StoreForwardPlusPlusModule::handleItemFrame(const meshtastic_MeshPacket &mp
     if (!flight && !heard)
         return;
     const uint32_t bucket = heard ? heard->bucket : flight->bucket;
-    if (isInDB(hash, sizeof(hash)))
+    if (store_.isInDB(hash, sizeof(hash)))
         return;
-    if (!storeRecoveredObject(replay, root, bucket))
+    if (!store_.storeRecoveredObject(replay, root, bucket))
         return;
     forgetItemInFlight(shortId);
 
@@ -1373,68 +1343,17 @@ void StoreForwardPlusPlusModule::promoteScratchMatches(const uint8_t *root_hash,
     if (ids.empty())
         return;
 
-    struct ScratchRow {
-        uint32_t to;
-        uint32_t from;
-        uint32_t id;
-        RowTime time;
-        std::vector<uint8_t> cipher;
-        uint8_t hash[SFPP_HASH_SIZE];
-    };
-    std::vector<ScratchRow> matches;
+    std::vector<SfppStore::ScratchRow> matches;
     std::vector<std::vector<uint8_t>> corrupt;
-
-    sqlite3_reset(store_.fromScratchStmt);
-    sqlite3_bind_blob(store_.fromScratchStmt, 1, root_hash, SFPP_HASH_SIZE, NULL);
-    while (sqlite3_step(store_.fromScratchStmt) == SQLITE_ROW) {
-        const uint8_t *stored = (const uint8_t *)sqlite3_column_blob(store_.fromScratchStmt, 4);
-        if (stored == nullptr)
-            continue;
-        const uint8_t *cipher = (const uint8_t *)sqlite3_column_blob(store_.fromScratchStmt, 3);
-        const int cipherLen = sqlite3_column_bytes(store_.fromScratchStmt, 3);
-        if (cipher == nullptr || cipherLen <= 0)
-            continue;
-
-        const uint32_t to = (uint32_t)sqlite3_column_int64(store_.fromScratchStmt, 0);
-        const uint32_t from = (uint32_t)sqlite3_column_int64(store_.fromScratchStmt, 1);
-        const uint32_t id = (uint32_t)sqlite3_column_int64(store_.fromScratchStmt, 2);
-
-        // The stored hash is only an index; recompute it from the object and refuse a mismatch.
-        uint8_t computed[SFPP_HASH_SIZE];
-        sfppframe::messageHash(cipher, (size_t)cipherLen, to, from, id, computed);
-        if (memcmp(computed, stored, SFPP_HASH_SIZE) != 0) {
-            corrupt.emplace_back(stored, stored + SFPP_HASH_SIZE);
-            continue;
-        }
-
-        // A short ID only names a row in this bucket; a collision in another bucket is not a match.
-        if (sfppsr::contentBucket(computed, SFPP_HASH_SIZE) != bucket)
-            continue;
-        const pinsketch::Element sid = sfppsr::shortId(computed, SFPP_HASH_SIZE);
-        if (std::find(ids.begin(), ids.end(), sid) == ids.end())
-            continue;
-
-        ScratchRow row;
-        row.to = to;
-        row.from = from;
-        row.id = id;
-        row.cipher.assign(cipher, cipher + cipherLen);
-        memcpy(row.hash, computed, SFPP_HASH_SIZE);
-        row.time.stamp = (uint32_t)sqlite3_column_int64(store_.fromScratchStmt, 5);
-        row.time.basis = (uint8_t)sqlite3_column_int(store_.fromScratchStmt, 7);
-        row.time.boot_id = (uint32_t)sqlite3_column_int64(store_.fromScratchStmt, 8);
-        row.time.margin = (uint32_t)sqlite3_column_int64(store_.fromScratchStmt, 9);
-        matches.push_back(row);
-    }
-    sqlite3_reset(store_.fromScratchStmt);
+    store_.collectScratchMatches(root_hash, bucket, ids, matches, corrupt);
 
     for (const auto &bad : corrupt)
-        removeFromScratch(bad.data(), SFPP_HASH_SIZE);
+        store_.removeFromScratch(bad.data(), SFPP_HASH_SIZE);
 
     for (const auto &row : matches) {
-        insertCanonObject(row.to, row.from, row.id, row.cipher.data(), row.cipher.size(), row.hash, row.time, "", root_hash,
-                          bucket, row.from == nodeDB->getNodeNum());
-        removeFromScratch(row.hash, SFPP_HASH_SIZE);
+        store_.insertCanonObject(row.to, row.from, row.id, row.cipher.data(), row.cipher.size(), row.hash, row.time, "",
+                                 root_hash, bucket, row.from == nodeDB->getNodeNum());
+        store_.removeFromScratch(row.hash, SFPP_HASH_SIZE);
         const pinsketch::Element sid = sfppsr::shortId(row.hash, SFPP_HASH_SIZE);
         enumPromoted.push_back({sid, {}});
         memcpy(enumPromoted.back().hash, row.hash, SFPP_HASH_SIZE);

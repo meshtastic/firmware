@@ -57,8 +57,8 @@ int32_t StoreForwardPlusPlusModule::runOnce()
             perhapsSetRTC(RTCQualityNTP, &tv);
         }
     }
-    updateTimeState();
-    healBootRelativeTimestamps();
+    store_.updateTimeState();
+    store_.healBootRelativeTimestamps();
 
     uint8_t root_hash_bytes[SFPP_HASH_SIZE] = {0};
     ChannelHash hash = channels.getHash(0);
@@ -69,9 +69,9 @@ int32_t StoreForwardPlusPlusModule::runOnce()
     }
 
     // Canon rows outside the retention window are gone even when the row cap is not reached.
-    trimCanonByRetention(root_hash_bytes, SFPP_HASH_SIZE);
+    store_.trimCanonByRetention(root_hash_bytes, SFPP_HASH_SIZE);
     // evict old messages from scratch
-    pruneScratchQueue();
+    scratch_timed_out += store_.pruneScratchQueue();
 
     if (memfll(root_hash_bytes, '\0', SFPP_HASH_SIZE)) {
         LOG_WARN("No root hash found, not sending");
@@ -103,6 +103,21 @@ int32_t StoreForwardPlusPlusModule::runOnce()
     }
 }
 
+bool StoreForwardPlusPlusModule::buildBucketSummary(const uint8_t *root_hash, size_t root_hash_len, uint32_t bucket,
+                                                    sfppsr::BucketSummary &out)
+{
+    return store_.buildBucketSummary(root_hash, root_hash_len, bucket, out);
+}
+
+bool StoreForwardPlusPlusModule::linkIsFresh(const stored_object &lo) const
+{
+    RowTime t;
+    t.stamp = lo.rx_time;
+    t.basis = kTimeBasisEpoch; // the wire's rxtime is an epoch claim; an unusable one counts as stale
+    const RowAge age = store_.rowAge(t);
+    return age.age + age.margin <= rebroadcastTimeout;
+}
+
 void StoreForwardPlusPlusModule::handleEncrypted(const meshtastic_MeshPacket *mp, const meshtastic_MeshPacket *p_encrypted)
 {
     // This is intended to handle text messages from the local node
@@ -117,10 +132,10 @@ void StoreForwardPlusPlusModule::handleEncrypted(const meshtastic_MeshPacket *mp
     const bool senderCopy = lo.from == nodeDB->getNodeNum() || mp->relay_node == nodeDB->getLastByteOfNodeNum(lo.from);
 
     if (lo.root_hash_len != 0)
-        insertCanonObject(lo.to, lo.from, lo.id, lo.encrypted_bytes, lo.encrypted_len, lo.message_hash,
-                          RowTime{lo.rx_time, lo.time_basis, lo.boot_id, lo.age_margin}, lo.payload, lo.root_hash,
-                          sfppsr::contentBucket(lo.message_hash, lo.message_hash_len), senderCopy);
-    fillPayloadIfEmpty(lo);
+        store_.insertCanonObject(lo.to, lo.from, lo.id, lo.encrypted_bytes, lo.encrypted_len, lo.message_hash,
+                                 RowTime{lo.rx_time, lo.time_basis, lo.boot_id, lo.age_margin}, lo.payload, lo.root_hash,
+                                 sfppsr::contentBucket(lo.message_hash, lo.message_hash_len), senderCopy);
+    store_.fillPayloadIfEmpty(lo);
 }
 
 ProcessMessage StoreForwardPlusPlusModule::handleReceived(const meshtastic_MeshPacket &mp)
@@ -171,18 +186,18 @@ ProcessMessage StoreForwardPlusPlusModule::handleReceived(const meshtastic_MeshP
         stored_object lo = ingestTextPacket(mp, currentEncrypted);
         const bool senderCopy = mp.relay_node == nodeDB->getLastByteOfNodeNum(lo.from);
 
-        if (isInDB(lo.message_hash, lo.message_hash_len)) {
+        if (store_.isInDB(lo.message_hash, lo.message_hash_len)) {
             LOG_DEBUG("StoreForwardpp Found text message in archive DB");
             // We may have this message already, but we may not have the payload.
-            fillPayloadIfEmpty(lo);
+            store_.fillPayloadIfEmpty(lo);
             return ProcessMessage::CONTINUE;
         }
 
         if (lo.root_hash_len != 0)
-            insertCanonObject(lo.to, lo.from, lo.id, lo.encrypted_bytes, lo.encrypted_len, lo.message_hash,
-                              RowTime{lo.rx_time, lo.time_basis, lo.boot_id, lo.age_margin}, lo.payload, lo.root_hash,
-                              sfppsr::contentBucket(lo.message_hash, lo.message_hash_len), senderCopy);
-        fillPayloadIfEmpty(lo);
+            store_.insertCanonObject(lo.to, lo.from, lo.id, lo.encrypted_bytes, lo.encrypted_len, lo.message_hash,
+                                     RowTime{lo.rx_time, lo.time_basis, lo.boot_id, lo.age_margin}, lo.payload, lo.root_hash,
+                                     sfppsr::contentBucket(lo.message_hash, lo.message_hash_len), senderCopy);
+        store_.fillPayloadIfEmpty(lo);
         return ProcessMessage::CONTINUE;
     }
 
@@ -226,16 +241,6 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
         }
     }
     return true;
-}
-
-ChannelHash StoreForwardPlusPlusModule::getChannelHashFromRoot(uint8_t *_root_hash, size_t _root_hash_len)
-{
-    sqlite3_bind_int(store_.getHashFromRootStmt, 1, _root_hash_len);
-    sqlite3_bind_blob(store_.getHashFromRootStmt, 2, _root_hash, _root_hash_len, NULL);
-    sqlite3_step(store_.getHashFromRootStmt);
-    ChannelHash tmp_hash = (ChannelHash)sqlite3_column_int(store_.getHashFromRootStmt, 0);
-    sqlite3_reset(store_.getHashFromRootStmt);
-    return tmp_hash;
 }
 
 // A root every archive on a channel derives identically: channel name and key, no node number and no
@@ -291,24 +296,13 @@ size_t StoreForwardPlusPlusModule::getOrDeriveRootFromChannel(ChannelHash _ch_ha
         return 0;
 
     uint8_t mapped[SFPP_HASH_SIZE] = {0};
-    if (!lookUpFullRootHash(derived, SFPP_HASH_SIZE, mapped)) {
+    if (!store_.lookUpFullRootHash(derived, SFPP_HASH_SIZE, mapped)) {
         LOG_INFO("StoreForwardpp Deriving root hash from the channel");
-        addRootToMappings(_ch_hash, derived);
+        store_.addRootToMappings(_ch_hash, derived);
     }
 
     memcpy(_root_hash, derived, SFPP_HASH_SIZE);
     return SFPP_HASH_SIZE;
-}
-
-void StoreForwardPlusPlusModule::addRootToMappings(ChannelHash _ch_hash, uint8_t *_root_hash)
-{
-    int type = SfppStore::chain_types::channel_chain;
-    sqlite3_bind_int(store_.addRootToMappingsStmt, 1, type);
-    sqlite3_bind_int(store_.addRootToMappingsStmt, 2, _ch_hash);
-    sqlite3_bind_blob(store_.addRootToMappingsStmt, 3, _root_hash, SFPP_HASH_SIZE, NULL);
-    auto rc = sqlite3_step(store_.addRootToMappingsStmt);
-    LOG_WARN("StoreForwardpp result %u, %s", rc, sqlite3_errmsg(store_.ppDb));
-    sqlite3_reset(store_.addRootToMappingsStmt);
 }
 
 // should not need size considerations
@@ -321,10 +315,10 @@ StoreForwardPlusPlusModule::ingestTextPacket(const meshtastic_MeshPacket &mp, co
     lo.id = mp.id;
     // Keep the age the packet arrived with; a live packet is normally zero, but a replay or a
     // queued API packet can be older. rx_time is never trusted when it points into the future.
-    RowTime live = nowTime();
+    RowTime live = store_.nowTime();
     RowTime stamped;
     const uint32_t heardAgo = (mp.rx_time != 0 && mp.rx_time <= live.stamp) ? live.stamp - mp.rx_time : 0;
-    if (!timeFromAge(heardAgo, stamped))
+    if (!store_.timeFromAge(heardAgo, stamped))
         stamped = live;
     lo.rx_time = stamped.stamp;
     lo.time_basis = stamped.basis;
