@@ -22,12 +22,6 @@
 #include <utility>
 #include <vector>
 
-// One item frame per drain keeps the radio's 16-entry TX queue from overflowing on a large request.
-static constexpr size_t kEnumTxQueueMax = 256;
-static constexpr size_t kEnumMaxRequesters = 16;
-
-static constexpr uint32_t kEnumRequesterTtlMs = 2 * kEnumExchangeTimeoutMs;
-
 // D11's one-pacer budget, shared by every serving path: 30 frames in any rolling 10 min.
 static constexpr uint32_t kServeWindowMs = 10 * 60 * 1000;
 static constexpr uint8_t kServeWindowFrames = 30;

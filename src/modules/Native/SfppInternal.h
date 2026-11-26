@@ -9,6 +9,13 @@ static constexpr uint32_t kEnumExchangeTimeoutMs = 15 * 60 * 1000;
 
 // One item frame per drain keeps the radio's 16-entry TX queue from overflowing on a large request.
 static constexpr uint32_t kEnumDrainMinMs = 100;
+static constexpr size_t kEnumTxQueueMax = 256;
+static constexpr size_t kEnumMaxRequesters = 16;
+static constexpr uint32_t kEnumRetryMs = 30 * 1000;
+static constexpr uint32_t kEnumRequesterTtlMs = 2 * kEnumExchangeTimeoutMs;
+static constexpr uint32_t kEnumFullRootEvery = 10;
+static constexpr size_t kEnumPendingMax = 8;
+static constexpr uint32_t kEnumLateAcceptMs = 5 * 60 * 1000;
 
 static inline uint32_t scratchSweepMs()
 {

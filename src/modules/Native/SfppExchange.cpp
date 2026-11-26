@@ -25,12 +25,6 @@
 // After a short-ID-collision probe, silence this long means the peer has served all it has.
 static constexpr uint32_t kEnumProbeIdleMs = 30 * 1000;
 
-static constexpr uint32_t kEnumRetryMs = 30 * 1000;
-
-static constexpr uint32_t kEnumFullRootEvery = 10;
-static constexpr size_t kEnumPendingMax = 8;
-static constexpr uint32_t kEnumLateAcceptMs = 5 * 60 * 1000;
-
 // D19 proposes W = 24 h as the service window; unconfirmed, so holes past it are accepted as lost.
 static constexpr uint32_t kServiceWindowMs = 24 * 60 * 60 * 1000;
 // Failed pulls back off, and the backoff and attempt count cap a busy advert stream's retry cost.
