@@ -4,16 +4,20 @@
 
 #include "MessageStore.h"
 
+#include <algorithm>
+
 using namespace NicheGraphics;
 
 void InkHUD::AllMessageApplet::onActivate()
 {
     textMessageObserver.observe(textMessageModule);
+    setInputsSubscribed(NAV_UP | NAV_DOWN, true);
 }
 
 void InkHUD::AllMessageApplet::onDeactivate()
 {
     textMessageObserver.unobserve(textMessageModule);
+    setInputsSubscribed(NAV_UP | NAV_DOWN, false);
 }
 
 // We're not consuming the data passed to this method;
@@ -29,6 +33,7 @@ int InkHUD::AllMessageApplet::onReceiveTextMessage(const meshtastic_MeshPacket *
     if (getFrom(p) == nodeDB->getNodeNum())
         return 0;
 
+    scrollY = 0;       // A new message starts from its top
     requestAutoshow(); // Want to become foreground, if permitted
     requestUpdate();   // Want to update display, if applet is foreground
 
@@ -103,12 +108,26 @@ void InkHUD::AllMessageApplet::onRender(bool full)
     // Extra gap below the header
     int16_t textTop = headerDivY + padDivH;
 
+    // Print the text, scrolled if it is taller than the room below the header
+    auto printScrolled = [&](uint32_t textHeight) {
+        const uint16_t viewH = (height() > textTop) ? (height() - textTop) : 1;
+        scrollStep = getFont().lineHeight();
+        maxScrollY = (textHeight > viewH) ? (textHeight - viewH) : 0;
+        scrollY = std::min(scrollY, maxScrollY);
+
+        setCrop(0, textTop, width(), viewH);
+        printWrapped(0, textTop - scrollY, width(), text);
+        resetCrop();
+
+        drawScrollHints(scrollY > 0, scrollY < maxScrollY);
+    };
+
     // Attempt to print with fontLarge
     uint32_t textHeight;
     setFont(fontLarge);
     textHeight = getWrappedTextHeight(0, width(), text);
     if (textHeight <= (uint32_t)height()) {
-        printWrapped(0, textTop, width(), text);
+        printScrolled(textHeight);
         return;
     }
 
@@ -116,13 +135,33 @@ void InkHUD::AllMessageApplet::onRender(bool full)
     setFont(fontMedium);
     textHeight = getWrappedTextHeight(0, width(), text);
     if (textHeight <= (uint32_t)height()) {
-        printWrapped(0, textTop, width(), text);
+        printScrolled(textHeight);
         return;
     }
 
     // Fallback (too large): print with fontSmall
     setFont(fontSmall);
-    printWrapped(0, textTop, width(), text);
+    printScrolled(getWrappedTextHeight(0, width(), text));
+}
+
+void InkHUD::AllMessageApplet::scrollBy(int direction)
+{
+    const int next = std::clamp<int>((int)scrollY + (direction * (int)scrollStep), 0, (int)maxScrollY);
+    if (next == scrollY)
+        return;
+
+    scrollY = (uint16_t)next;
+    requestUpdate(Drivers::EInk::UpdateTypes::FAST);
+}
+
+void InkHUD::AllMessageApplet::onNavUp()
+{
+    scrollBy(-1);
+}
+
+void InkHUD::AllMessageApplet::onNavDown()
+{
+    scrollBy(1);
 }
 
 // Don't show notifications for text messages when our applet is displayed

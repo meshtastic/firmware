@@ -3,6 +3,7 @@
 #if defined(USE_HUB75)
 
 #include "HUB75Display.h"
+#include "ScreenMirror.h"
 #include "TFTColorRegions.h"
 #include "TFTPalette.h"
 #include <ESP32-HUB75-MatrixPanel-I2S-DMA.h>
@@ -121,6 +122,9 @@ void HUB75Display::display()
     firstFrame = false;
 #if GRAPHICS_TFT_COLORING_ENABLED
     lastColorSig = colorSig;
+#if HAS_SCREEN_MIRROR
+    graphics::screenMirror.capturePalette(colorSig, onBe, offBe, graphics::colorRegions, graphics::getTFTColorRegionCount());
+#endif
     // Regions are re-registered every frame by the renderers; clear so they
     // don't accumulate across frames.
     graphics::clearTFTColorRegions();

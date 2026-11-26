@@ -19,6 +19,8 @@ extern Adafruit_nRFCrypto nRFCrypto;
 #include <esp_system.h>
 #elif defined(ARCH_RP2040)
 #include <Arduino.h>
+#elif defined(ARCH_STM32WL)
+#include <stm32wlxx_hal.h>
 #elif defined(ARCH_PORTDUINO)
 #include <random>
 #include <unistd.h>
@@ -51,6 +53,40 @@ void fillWithRandomDevice(uint8_t *buffer, size_t length)
         offset += toCopy;
     }
 }
+
+#if defined(ARCH_STM32WL) && defined(HAL_RNG_MODULE_ENABLED)
+// The STM32WL true RNG, clocked from MSI for the duration of the read: every STM32WL variant runs SYSCLK
+// from MSI, so it is always on. Returns false if the peripheral reports an error (seed or clock fault).
+bool fillFromStm32Rng(uint8_t *buffer, size_t length)
+{
+    RCC_PeriphCLKInitTypeDef clock = {};
+    clock.PeriphClockSelection = RCC_PERIPHCLK_RNG;
+    clock.RngClockSelection = RCC_RNGCLKSOURCE_MSI;
+    if (HAL_RCCEx_PeriphCLKConfig(&clock) != HAL_OK)
+        return false;
+    __HAL_RCC_RNG_CLK_ENABLE();
+
+    RNG_HandleTypeDef rng = {};
+    rng.Instance = RNG;
+    rng.Init.ClockErrorDetection = RNG_CED_ENABLE;
+    bool ok = HAL_RNG_Init(&rng) == HAL_OK;
+    size_t offset = 0;
+    while (ok && offset < length) {
+        uint32_t value;
+        ok = HAL_RNG_GenerateRandomNumber(&rng, &value) == HAL_OK;
+        if (ok) {
+            size_t toCopy = std::min(length - offset, sizeof(value));
+            memcpy(buffer + offset, &value, toCopy);
+            offset += toCopy;
+        }
+    }
+    HAL_RNG_DeInit(&rng);
+    __HAL_RCC_RNG_CLK_DISABLE();
+    if (!ok)
+        LOG_WARN("STM32WL RNG failed, falling back to software entropy");
+    return ok;
+}
+#endif
 
 #if HAS_RADIO
 bool mixWithLoRaEntropy(uint8_t *buffer, size_t length)
@@ -134,6 +170,8 @@ bool fill(uint8_t *buffer, size_t length, bool useRadioEntropy)
         offset += toCopy;
     }
     filled = true;
+#elif defined(ARCH_STM32WL) && defined(HAL_RNG_MODULE_ENABLED)
+    filled = fillFromStm32Rng(buffer, length);
 #elif defined(ARCH_PORTDUINO)
     // Prefer the host OS RNG first when running under Portduino.
 #ifdef __linux__

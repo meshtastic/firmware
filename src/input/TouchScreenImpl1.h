@@ -12,12 +12,18 @@ class TouchScreenImpl1 : public TouchScreenBase
     virtual void onEvent(const TouchEvent &event);
     bool fastTapModeEnabled() const override;
     bool longPressEnabled() const override;
+    bool touchEdgeTimes(uint32_t &downMs, uint32_t &upMs) override;
 
     // Attach/detach a hardware interrupt on the touch IRQ pin (SCREEN_TOUCH_INT) so a new touch
     // wakes the polling thread immediately. No-op on boards without a usable touch interrupt line.
     void attachTouchInterrupt();
 
     bool (*_getTouch)(int16_t *, int16_t *);
+#ifdef MESHTASTIC_INCLUDE_INKHUD
+    bool suppressUntilRelease = false;
+    bool releasePending = false;
+    uint32_t releaseStartedMs = 0;
+#endif
 
 #ifdef ARCH_ESP32
     // Detach the touch interrupt before light sleep (so sleep.cpp can own the wake config),

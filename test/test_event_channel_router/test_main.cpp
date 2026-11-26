@@ -480,7 +480,6 @@ void setUp(void)
     testAirTime = new AirTime();
     airTime = testAirTime;
 
-    cryptLock = nullptr;
     testRouter = new Router();
     router = testRouter;
     std::unique_ptr<CaptureRadio> radio(new CaptureRadio());
@@ -498,7 +497,6 @@ void tearDown(void)
     delete testRouter;
     testRouter = nullptr;
     captureRadio = nullptr;
-    delete cryptLock;
     cryptLock = saved.cryptLock;
 
     delete testNodeDB;

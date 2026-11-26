@@ -1,13 +1,16 @@
 #include "MeshModule.h"
 #include "MeshTypes.h"
 #include "TestUtil.h"
+#include "UptimeClock.h"
 #include <unity.h>
 
 #include "configuration.h"
+#include "gps/RTC.h"
 #include "mesh/CryptoEngine.h"
 #include "mesh/MeshService.h"
 #include "mesh/NodeDB.h"
 #include "mesh/RadioInterface.h"
+#include "mesh/ReliableRouter.h"
 #include "mesh/Router.h"
 #include "modules/NeighborInfoModule.h"
 #include "modules/RoutingModule.h"
@@ -54,12 +57,6 @@ class MockRadioInterface : public RadioInterface
 class MockRouter : public Router
 {
   public:
-    ~MockRouter()
-    {
-        delete cryptLock;
-        cryptLock = nullptr;
-    }
-
     ErrorCode send(meshtastic_MeshPacket *p) override
     {
         sentPackets.push_back(*p);
@@ -68,6 +65,19 @@ class MockRouter : public Router
     }
 
     std::vector<meshtastic_MeshPacket> sentPackets;
+};
+
+// The real dupe-handling router, with the NAK/ACK a duplicate is answered with captured by the routing module mock.
+class DupeRouter : public ReliableRouter
+{
+  public:
+    ErrorCode send(meshtastic_MeshPacket *p) override
+    {
+        packetPool.release(p);
+        return ERRNO_OK;
+    }
+
+    bool filterForTest(const meshtastic_MeshPacket *p) { return ReliableRouter::shouldFilterReceived(p); }
 };
 
 struct AckNak {
@@ -96,6 +106,25 @@ class MockRoutingModule : public RoutingModule
     {
         (void)p;
         return false;
+    }
+};
+
+// Refuses every packet the way AdminModule does: an error reply in myReply, whatever want_response says.
+class RefusingModule : public MeshModule
+{
+  public:
+    RefusingModule() : MeshModule("admin-shaped", meshtastic_PortNum_ADMIN_APP) {}
+
+    bool refuse = true; // false models the module accepting the request, as after an admin key is added
+
+  protected:
+    bool wantPacket(const meshtastic_MeshPacket *p) override { return p->decoded.portnum == ourPortNum; }
+
+    ProcessMessage handleReceived(const meshtastic_MeshPacket &mp) override
+    {
+        if (refuse)
+            myReply = allocErrorResponse(meshtastic_Routing_Error_ADMIN_PUBLIC_KEY_UNAUTHORIZED, &mp);
+        return ProcessMessage::CONTINUE;
     }
 };
 
@@ -264,6 +293,7 @@ static meshtastic_MeshPacket testPacket;
 static MockNodeDB *mockNodeDB;
 static MockMeshService *mockService;
 static MockRouter *mockRouter;
+static DupeRouter *dupeRouter;
 static MockRoutingModule *mockRoutingModule;
 static NeighborInfoModule *realNeighborInfoModule;
 static RoutingModule *realRoutingModule;
@@ -354,6 +384,7 @@ void setUp(void)
 
 void tearDown(void)
 {
+    Time::useRealClock();
     TestModule::currentRequest = NULL;
 
     for (auto it = dispatchModules.rbegin(); it != dispatchModules.rend(); ++it)
@@ -380,6 +411,9 @@ void tearDown(void)
     delete mockService;
     mockService = nullptr;
     service = nullptr;
+
+    delete dupeRouter;
+    dupeRouter = nullptr;
 
     delete mockRouter;
     mockRouter = nullptr;
@@ -558,6 +592,192 @@ static void test_dispatch_noResponderSendsNak()
     TEST_ASSERT_EQUAL_UINT32(1, mockRoutingModule->ackNaks.size());
     TEST_ASSERT_EQUAL(meshtastic_Routing_Error_NO_RESPONSE, mockRoutingModule->ackNaks[0].error);
     TEST_ASSERT_EQUAL_HEX32(REMOTE_NODE, mockRoutingModule->ackNaks[0].to);
+}
+
+// A refused admin write asks for an ACK but no response. The refusal must reach the sender as a NAK,
+// or ReliableRouter's plain ACK tells the client the write was applied.
+static void test_dispatch_refusalWithoutWantResponse_sendsNak()
+{
+    registerDispatchModule(new RefusingModule());
+    meshtastic_MeshPacket request = makeRequest(meshtastic_PortNum_ADMIN_APP);
+    request.decoded.want_response = false;
+    request.want_ack = true;
+
+    MeshModule::callModules(request);
+
+    TEST_ASSERT_EQUAL_UINT32(1, mockRouter->sentPackets.size());
+    const meshtastic_MeshPacket &nak = mockRouter->sentPackets[0];
+    TEST_ASSERT_EQUAL(meshtastic_PortNum_ROUTING_APP, nak.decoded.portnum);
+    TEST_ASSERT_EQUAL_HEX32(REMOTE_NODE, nak.to);
+    TEST_ASSERT_EQUAL_HEX32(request.id, nak.decoded.request_id);
+    TEST_ASSERT_FALSE(nak.want_ack);
+    TEST_ASSERT_EQUAL_UINT32(0, mockRoutingModule->ackNaks.size());
+}
+
+static meshtastic_MeshPacket makeDirectAckedWrite()
+{
+    meshtastic_MeshPacket request = makeRequest(meshtastic_PortNum_ADMIN_APP);
+    request.decoded.want_response = false;
+    request.want_ack = true;
+    request.hop_start = 3;
+    request.hop_limit = 3; // heard directly
+    request.relay_node = 0x22;
+    request.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA;
+    return request;
+}
+
+// The sender never heard our NAK and retransmits. The duplicate must be answered with the same refusal,
+// or the client reads the ACK as "applied" for a write we refused.
+static void test_refusedWrite_duplicateIsNakedWithOriginalError()
+{
+    dupeRouter = new DupeRouter();
+    dupeRouter->addInterface(std::unique_ptr<RadioInterface>(new MockRadioInterface()));
+    router = dupeRouter;
+    registerDispatchModule(new RefusingModule());
+    meshtastic_MeshPacket request = makeDirectAckedWrite();
+
+    TEST_ASSERT_FALSE(dupeRouter->filterForTest(&request)); // first delivery
+    MeshModule::callModules(request);                       // refused; its NAK is lost on the air
+    TEST_ASSERT_EQUAL_UINT32(0, mockRoutingModule->ackNaks.size());
+
+    meshtastic_MeshPacket duplicate = makeDirectAckedWrite();
+    TEST_ASSERT_TRUE(dupeRouter->filterForTest(&duplicate)); // the retransmission
+
+    TEST_ASSERT_EQUAL_UINT32(1, mockRoutingModule->ackNaks.size());
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_ADMIN_PUBLIC_KEY_UNAUTHORIZED, mockRoutingModule->ackNaks[0].error);
+    TEST_ASSERT_EQUAL_HEX32(REMOTE_NODE, mockRoutingModule->ackNaks[0].to);
+    TEST_ASSERT_EQUAL_HEX32(request.id, mockRoutingModule->ackNaks[0].requestId);
+}
+
+// The packet history can evict an id before the refusal ages out, so the retransmission is processed afresh and may be
+// accepted. Its duplicate must get the ACK for that acceptance, not the stale refusal.
+static void test_refusedThenAcceptedWrite_duplicateIsAcked()
+{
+    dupeRouter = new DupeRouter();
+    dupeRouter->addInterface(std::unique_ptr<RadioInterface>(new MockRadioInterface()));
+    router = dupeRouter;
+    auto *module = new RefusingModule();
+    registerDispatchModule(module);
+    meshtastic_MeshPacket request = makeDirectAckedWrite();
+
+    TEST_ASSERT_FALSE(dupeRouter->filterForTest(&request));
+    MeshModule::callModules(request); // refused
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_ADMIN_PUBLIC_KEY_UNAUTHORIZED, dupeRouter->refusalFor(REMOTE_NODE, request.id));
+
+    module->refuse = false;
+    meshtastic_MeshPacket resent = makeDirectAckedWrite();
+    MeshModule::callModules(resent); // evicted from history, so it reaches the modules again and is accepted
+
+    meshtastic_MeshPacket duplicate = makeDirectAckedWrite();
+    TEST_ASSERT_TRUE(dupeRouter->filterForTest(&duplicate));
+
+    TEST_ASSERT_EQUAL_UINT32(1, mockRoutingModule->ackNaks.size());
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_NONE, mockRoutingModule->ackNaks[0].error);
+}
+
+static void expectRefusalExpiresAfterTtl(uint32_t recordedAtMsec)
+{
+    Time::setTestMillis(recordedAtMsec);
+    mockRouter->rememberRefusal(REMOTE_NODE, 0x77, meshtastic_Routing_Error_NOT_AUTHORIZED);
+
+    Time::setTestMillis(recordedAtMsec + Router::REFUSAL_TTL_MSEC - 1); // wraps past 2^32 for the late start
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_NOT_AUTHORIZED, mockRouter->refusalFor(REMOTE_NODE, 0x77));
+
+    Time::setTestMillis(recordedAtMsec + Router::REFUSAL_TTL_MSEC);
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_NONE, mockRouter->refusalFor(REMOTE_NODE, 0x77));
+}
+
+// A refusal is replayed until REFUSAL_TTL_MSEC has passed, then the duplicate is plainly ACKed again.
+static void test_refusal_expiresAfterTtl()
+{
+    expectRefusalExpiresAfterTtl(1000);
+}
+
+static void test_refusal_expiresAfterTtlAcrossMillisWrap()
+{
+    expectRefusalExpiresAfterTtl(0xFFFFFF00u);
+}
+
+// The ninth distinct refusal evicts the oldest one; the newest eight still answer their own error.
+static void test_refusalCache_evictsOldestWhenFull()
+{
+    Time::setTestMillis(5000);
+    const uint32_t n = Router::REFUSAL_CACHE_SIZE + 1;
+    for (uint32_t i = 0; i < n; i++)
+        mockRouter->rememberRefusal(REMOTE_NODE, 0x100 + i, (meshtastic_Routing_Error)(1 + i));
+
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_NONE, mockRouter->refusalFor(REMOTE_NODE, 0x100));
+    for (uint32_t i = 1; i < n; i++)
+        TEST_ASSERT_EQUAL((meshtastic_Routing_Error)(1 + i), mockRouter->refusalFor(REMOTE_NODE, 0x100 + i));
+}
+
+// Refusing the same request again replaces its entry; it must not take a second slot or evict another entry.
+static void test_refusalCache_reRecordOverwritesInPlace()
+{
+    Time::setTestMillis(5000);
+    const uint32_t n = Router::REFUSAL_CACHE_SIZE;
+    for (uint32_t i = 0; i < n; i++)
+        mockRouter->rememberRefusal(REMOTE_NODE, 0x100 + i, (meshtastic_Routing_Error)(1 + i));
+
+    mockRouter->rememberRefusal(REMOTE_NODE, 0x103, meshtastic_Routing_Error_BAD_REQUEST);
+
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_BAD_REQUEST, mockRouter->refusalFor(REMOTE_NODE, 0x103));
+    for (uint32_t i = 0; i < n; i++) {
+        if (i != 3)
+            TEST_ASSERT_EQUAL((meshtastic_Routing_Error)(1 + i), mockRouter->refusalFor(REMOTE_NODE, 0x100 + i));
+    }
+
+    // The next new refusal still evicts the oldest entry, not the one just rewritten.
+    mockRouter->rememberRefusal(REMOTE_NODE, 0x200, meshtastic_Routing_Error_NOT_AUTHORIZED);
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_NONE, mockRouter->refusalFor(REMOTE_NODE, 0x100));
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_BAD_REQUEST, mockRouter->refusalFor(REMOTE_NODE, 0x103));
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_NOT_AUTHORIZED, mockRouter->refusalFor(REMOTE_NODE, 0x200));
+}
+
+// An accepted write leaves no refusal behind, so its duplicate still gets the plain ACK.
+static void test_acceptedWrite_duplicateStillAcked()
+{
+    dupeRouter = new DupeRouter();
+    dupeRouter->addInterface(std::unique_ptr<RadioInterface>(new MockRadioInterface()));
+    router = dupeRouter;
+    meshtastic_MeshPacket request = makeDirectAckedWrite();
+
+    TEST_ASSERT_FALSE(dupeRouter->filterForTest(&request));
+    MeshModule::callModules(request); // no module refuses
+
+    meshtastic_MeshPacket duplicate = makeDirectAckedWrite();
+    TEST_ASSERT_TRUE(dupeRouter->filterForTest(&duplicate));
+
+    TEST_ASSERT_EQUAL_UINT32(1, mockRoutingModule->ackNaks.size());
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_NONE, mockRoutingModule->ackNaks[0].error);
+    TEST_ASSERT_EQUAL_HEX32(request.id, mockRoutingModule->ackNaks[0].requestId);
+}
+
+// Without want_ack the sender expects no answer at all, so the refusal is still discarded.
+static void test_dispatch_refusalWithoutWantAck_isDiscarded()
+{
+    registerDispatchModule(new RefusingModule());
+    meshtastic_MeshPacket request = makeRequest(meshtastic_PortNum_ADMIN_APP);
+    request.decoded.want_response = false;
+
+    MeshModule::callModules(request);
+
+    TEST_ASSERT_EQUAL_UINT32(0, mockRouter->sentPackets.size());
+}
+
+// PhoneAPI rate-limits a phone packet before MeshService clears the from the client supplied, so the
+// NAK must go to our own node. Addressed by that from, a client could send it over the air to any node.
+static void test_phoneErrorResponse_ignoresForgedFrom()
+{
+    meshtastic_MeshPacket fromPhone = makeRequest(meshtastic_PortNum_POSITION_APP);
+    fromPhone.from = REMOTE_NODE;
+
+    service->sendRoutingErrorResponse(meshtastic_Routing_Error_RATE_LIMIT_EXCEEDED, &fromPhone);
+
+    TEST_ASSERT_EQUAL_UINT32(1, mockRoutingModule->ackNaks.size());
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_RATE_LIMIT_EXCEEDED, mockRoutingModule->ackNaks[0].error);
+    TEST_ASSERT_EQUAL_HEX32(LOCAL_NODE, mockRoutingModule->ackNaks[0].to);
+    TEST_ASSERT_EQUAL_HEX32(fromPhone.id, mockRoutingModule->ackNaks[0].requestId);
 }
 
 static void test_dispatch_ignoreRequestIsClearedPerPacket()
@@ -872,6 +1092,121 @@ static void test_deferredQueueOverflow_dropsGracefully()
     TEST_ASSERT_EQUAL_UINT32(burst, delivered);
 }
 
+// NeighborInfo: relays forward the payload unmodified (rewriting it breaks the sender's XEdDSA signature), so a
+// receiver attributes each copy to the node it heard it from using the packet header, not last_sent_by_id.
+class NeighborInfoModuleTestShim : public NeighborInfoModule
+{
+  public:
+    using NeighborInfoModule::collectNeighborInfo;
+    using NeighborInfoModule::updateNeighbors;
+};
+
+static constexpr NodeNum NI_NEIGHBOR = 0x33333333;
+
+static NeighborInfoModuleTestShim *makeNeighborInfoModule()
+{
+    moduleConfig.neighbor_info.enabled = true;
+    moduleConfig.neighbor_info.update_interval = 3600;
+    auto *module = new NeighborInfoModuleTestShim();
+    realNeighborInfoModule = module; // tearDown() deletes it
+    return module;
+}
+
+static meshtastic_MeshPacket makeNeighborInfoPacket(NodeNum lastSentBy, uint8_t hopStart, uint8_t hopLimit, uint8_t relayNode,
+                                                    meshtastic_NeighborInfo *ni)
+{
+    *ni = meshtastic_NeighborInfo_init_zero;
+    ni->node_id = REMOTE_NODE;
+    ni->last_sent_by_id = lastSentBy;
+    ni->node_broadcast_interval_secs = 3600;
+    ni->neighbors_count = 1;
+    ni->neighbors[0].node_id = NI_NEIGHBOR;
+    ni->neighbors[0].snr = 5.0f;
+
+    meshtastic_MeshPacket p = meshtastic_MeshPacket_init_zero;
+    p.from = REMOTE_NODE;
+    p.to = NODENUM_BROADCAST;
+    p.id = 0x0A0B0C0D;
+    p.hop_start = hopStart;
+    p.hop_limit = hopLimit;
+    p.relay_node = relayNode;
+    p.rx_snr = 7.0f;
+    p.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    p.decoded.portnum = meshtastic_PortNum_NEIGHBORINFO_APP;
+    p.decoded.payload.size =
+        pb_encode_to_bytes(p.decoded.payload.bytes, sizeof(p.decoded.payload.bytes), &meshtastic_NeighborInfo_msg, ni);
+    return p;
+}
+
+// Our recorded neighbours, as we would broadcast them.
+static meshtastic_NeighborInfo collectedNeighbors(NeighborInfoModuleTestShim *module)
+{
+    meshtastic_NeighborInfo out = meshtastic_NeighborInfo_init_zero;
+    module->collectNeighborInfo(&out);
+    return out;
+}
+
+static void test_neighborInfo_directCopyRecordsSenderAndOursOmitsLastSentBy()
+{
+    auto *module = makeNeighborInfoModule();
+    meshtastic_NeighborInfo ni;
+    meshtastic_MeshPacket p = makeNeighborInfoPacket(0, 3, 3, 0x22, &ni);
+
+    module->updateNeighbors(p, &ni);
+
+    meshtastic_NeighborInfo out = collectedNeighbors(module);
+    TEST_ASSERT_EQUAL_UINT32(1, out.neighbors_count);
+    TEST_ASSERT_EQUAL_HEX32(REMOTE_NODE, out.neighbors[0].node_id);
+    TEST_ASSERT_EQUAL_HEX32(LOCAL_NODE, out.node_id);
+    TEST_ASSERT_EQUAL_HEX32(0, out.last_sent_by_id);
+}
+
+static void test_neighborInfo_olderRelayRewriteMatchingHeaderIsTrusted()
+{
+    auto *module = makeNeighborInfoModule();
+    const NodeNum oldRelay = 0x55555544;
+    meshtastic_NeighborInfo ni;
+    meshtastic_MeshPacket p = makeNeighborInfoPacket(oldRelay, 3, 2, 0x44, &ni);
+
+    module->updateNeighbors(p, &ni);
+
+    meshtastic_NeighborInfo out = collectedNeighbors(module);
+    TEST_ASSERT_EQUAL_UINT32(1, out.neighbors_count);
+    TEST_ASSERT_EQUAL_HEX32(oldRelay, out.neighbors[0].node_id);
+}
+
+static void test_neighborInfo_relayResolvedFromHeaderByte()
+{
+    auto *module = makeNeighborInfoModule();
+    const NodeNum relay = 0x77777766;
+    meshtastic_NodeInfoLite *node = nodeDB->getOrCreateMeshNode(relay);
+    TEST_ASSERT_NOT_NULL(node);
+    node->has_hops_away = true;
+    node->hops_away = 0;
+    node->last_heard = getTime();
+
+    // Unmodified payload from an older sender: last_sent_by_id still names the originator.
+    meshtastic_NeighborInfo ni;
+    meshtastic_MeshPacket p = makeNeighborInfoPacket(REMOTE_NODE, 3, 2, 0x66, &ni);
+
+    module->updateNeighbors(p, &ni);
+
+    meshtastic_NeighborInfo out = collectedNeighbors(module);
+    TEST_ASSERT_EQUAL_UINT32(1, out.neighbors_count);
+    TEST_ASSERT_EQUAL_HEX32(relay, out.neighbors[0].node_id);
+}
+
+static void test_neighborInfo_unresolvableRelayRecordsNothing()
+{
+    auto *module = makeNeighborInfoModule();
+    meshtastic_NeighborInfo ni;
+    meshtastic_MeshPacket p = makeNeighborInfoPacket(0, 3, 2, 0x99, &ni);
+
+    module->updateNeighbors(p, &ni);
+
+    TEST_ASSERT_EQUAL_UINT32(0, collectedNeighbors(module).neighbors_count);
+}
+
 void setup()
 {
     initializeTestEnvironment();
@@ -894,6 +1229,16 @@ void setup()
     RUN_TEST(test_dispatch_crossPortReplyUsesRequestOwner);
     RUN_TEST(test_dispatch_foreignPortObserverCanSuppressNak);
     RUN_TEST(test_dispatch_noResponderSendsNak);
+    RUN_TEST(test_dispatch_refusalWithoutWantResponse_sendsNak);
+    RUN_TEST(test_dispatch_refusalWithoutWantAck_isDiscarded);
+    RUN_TEST(test_refusedWrite_duplicateIsNakedWithOriginalError);
+    RUN_TEST(test_refusedThenAcceptedWrite_duplicateIsAcked);
+    RUN_TEST(test_acceptedWrite_duplicateStillAcked);
+    RUN_TEST(test_refusal_expiresAfterTtl);
+    RUN_TEST(test_refusal_expiresAfterTtlAcrossMillisWrap);
+    RUN_TEST(test_refusalCache_evictsOldestWhenFull);
+    RUN_TEST(test_refusalCache_reRecordOverwritesInPlace);
+    RUN_TEST(test_phoneErrorResponse_ignoresForgedFrom);
     RUN_TEST(test_dispatch_ignoreRequestIsClearedPerPacket);
     RUN_TEST(test_dispatch_realNeighborInfoCannotShadowTelemetryOwner);
     RUN_TEST(test_localReplyToSelf_isDeliveredToPhone);
@@ -908,6 +1253,10 @@ void setup()
     RUN_TEST(test_nestedLocalSend_isDeferred_notReentrant);
     RUN_TEST(test_deferredChain_drainsBreadthFirst);
     RUN_TEST(test_deferredQueueOverflow_dropsGracefully);
+    RUN_TEST(test_neighborInfo_directCopyRecordsSenderAndOursOmitsLastSentBy);
+    RUN_TEST(test_neighborInfo_olderRelayRewriteMatchingHeaderIsTrusted);
+    RUN_TEST(test_neighborInfo_relayResolvedFromHeaderByte);
+    RUN_TEST(test_neighborInfo_unresolvableRelayRecordsNothing);
     exit(UNITY_END());
 }
 

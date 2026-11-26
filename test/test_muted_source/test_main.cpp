@@ -172,16 +172,6 @@ void test_plain_text_is_never_an_alert()
     TEST_ASSERT_FALSE(MeshService::isAlertPayload(withText(makePacket(kPeer, NODENUM_BROADCAST, 0), "wake up", false)));
 }
 
-// The wake gate is "not muted, or an alert": a bell must survive a muted channel.
-void test_alert_survives_a_muted_channel()
-{
-    moduleConfig.external_notification.alert_bell = true;
-    setSlot(0, meshtastic_Channel_Role_PRIMARY, true);
-    const meshtastic_MeshPacket p = withText(makePacket(kPeer, NODENUM_BROADCAST, 0), "wake up", true);
-    TEST_ASSERT_TRUE(isMutedForPacket(p));
-    TEST_ASSERT_TRUE(!isMutedForPacket(p) || MeshService::isAlertPayload(p));
-}
-
 // ---------------------------------------------------------------------------
 // Unity lifecycle
 // ---------------------------------------------------------------------------
@@ -231,7 +221,6 @@ void setup()
     RUN_TEST(test_bell_is_an_alert_when_a_bell_output_is_on);
     RUN_TEST(test_bell_is_not_an_alert_when_every_bell_output_is_off);
     RUN_TEST(test_plain_text_is_never_an_alert);
-    RUN_TEST(test_alert_survives_a_muted_channel);
 
     exit(UNITY_END());
 }

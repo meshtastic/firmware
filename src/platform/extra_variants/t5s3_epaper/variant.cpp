@@ -424,12 +424,15 @@ void t5BacklightHandleUserInput()
 
 void t5TouchSetForcedByTimeout(bool forced)
 {
+#ifdef MESHTASTIC_INCLUDE_INKHUD
+    NicheGraphics::InkHUD::InkHUD::getInstance()->setTouchTimedOut(forced);
+#endif
     if (touchForcedByTimeout == forced) {
         return;
     }
 
     touchForcedByTimeout = forced;
-    touchStateEpoch++;
+    touchStateEpoch = touchStateEpoch + 1;
     touchIndicatorRefreshPending = true;
 
     if (forced) {
@@ -477,7 +480,7 @@ void setTouchInputEnabled(bool enabled, bool showIndicator)
 
     LOG_DEBUG("touchscreen1: setTouchInputEnabled %d -> %d (showIndicator=%d)", touchInputEnabled, enabled, showIndicator);
     touchInputEnabled = enabled;
-    touchStateEpoch++;
+    touchStateEpoch = touchStateEpoch + 1;
 
     if (enabled) {
         touchNeedsWake = touchControllerReady;
@@ -555,7 +558,7 @@ struct TouchLightSleepEndObserver {
             touchNeedsWake = false;
         }
 
-        touchStateEpoch++;
+        touchStateEpoch = touchStateEpoch + 1;
         touchResumeAtMs = Time::skipZero(Time::getMillis());
         touchIndicatorRefreshPending = !isTouchInputEnabled();
 #ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
@@ -645,7 +648,7 @@ bool readTouch(int16_t *x, int16_t *y)
             *x = raw_x;
             *y = raw_y;
 #endif
-            LOG_DEBUG("touched(%d/%d)", *x, *y);
+            LOG_INPUT("touched(%d/%d)", *x, *y);
             return true;
         }
     }
@@ -692,7 +695,7 @@ void lateInitVariant()
         touchInputEnabled = true;
         touchForcedByTimeout = false;
         touchLightSleepActive = false;
-        touchStateEpoch++;
+        touchStateEpoch = touchStateEpoch + 1;
         touchDeepSleepObserver.observer.observe(&notifyDeepSleep);
 #ifdef ARCH_ESP32
         touchLightSleepObserver.observer.observe(&notifyLightSleep);

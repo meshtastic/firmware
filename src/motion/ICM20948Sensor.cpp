@@ -37,6 +37,13 @@ bool ICM20948Sensor::init()
 
 int32_t ICM20948Sensor::runOnce()
 {
+#ifdef MESHTASTIC_INCLUDE_INKHUD
+    if (stepTracker().isTracking() && sensor->dataReady()) {
+        sensor->getAGMT();
+        if (sensor->status == ICM_20948_Stat_Ok)
+            sampleSteps(sensor->agmt.acc.axes.x, sensor->agmt.acc.axes.y, sensor->agmt.acc.axes.z);
+    }
+#endif
 #if !defined(MESHTASTIC_EXCLUDE_SCREEN) && HAS_SCREEN
     if (screen && !doCalibration && !screen->isScreenOn() && !config.display.wake_on_tap_or_motion &&
         !config.device.double_tap_as_button_press) {

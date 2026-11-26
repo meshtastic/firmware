@@ -63,7 +63,8 @@ uint32_t NeighborInfoModule::collectNeighborInfo(meshtastic_NeighborInfo *neighb
 {
     NodeNum my_node_id = nodeDB->getNodeNum();
     neighborInfo->node_id = my_node_id;
-    neighborInfo->last_sent_by_id = my_node_id;
+    // last_sent_by_id is left unset: receivers attribute the transmission from the packet header. A 0 here
+    // also stops older receivers from recording a relayed copy as a direct link to the original sender.
     neighborInfo->node_broadcast_interval_secs =
         Default::getConfiguredOrDefault(moduleConfig.neighbor_info.update_interval, default_telemetry_broadcast_interval_secs);
 
@@ -89,18 +90,16 @@ void NeighborInfoModule::cleanUpNeighbors()
 {
     uint32_t now = getTime();
     NodeNum my_node_id = nodeDB->getNodeNum();
-    for (auto it = neighbors.rbegin(); it != neighbors.rend();) {
+    std::erase_if(neighbors, [now, my_node_id](const meshtastic_Neighbor &n) {
         // We will remove a neighbor if we haven't heard from them in twice the
-        // broadcast interval cannot use isWithinTimespanMs() as it->last_rx_time is
+        // broadcast interval cannot use isWithinTimespanMs() as n.last_rx_time is
         // seconds since 1970
-        if ((now - it->last_rx_time > it->node_broadcast_interval_secs * 2) && (it->node_id != my_node_id)) {
-            LOG_DEBUG("Remove neighbor with node ID 0x%08x", it->node_id);
-            it = std::vector<meshtastic_Neighbor>::reverse_iterator(
-                neighbors.erase(std::next(it).base())); // Erase the element and update the iterator
-        } else {
-            ++it;
+        if ((now - n.last_rx_time > n.node_broadcast_interval_secs * 2) && (n.node_id != my_node_id)) {
+            LOG_DEBUG("Remove neighbor with node ID 0x%08x", n.node_id);
+            return true;
         }
-    }
+        return false;
+    });
 }
 
 /* Send neighbor info to the mesh */
@@ -183,31 +182,40 @@ bool NeighborInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp,
     return false;
 }
 
-/*
-Copy the content of a current NeighborInfo packet into a new one and update the
-last_sent_by_id to our NodeNum
-*/
-void NeighborInfoModule::alterReceivedProtobuf(meshtastic_MeshPacket &p, meshtastic_NeighborInfo *n)
-{
-    n->last_sent_by_id = nodeDB->getNodeNum();
-
-    // Set updated last_sent_by_id to the payload of the to be flooded packet
-    p.decoded.payload.size =
-        pb_encode_to_bytes(p.decoded.payload.bytes, sizeof(p.decoded.payload.bytes), &meshtastic_NeighborInfo_msg, n);
-}
-
 void NeighborInfoModule::resetNeighbors()
 {
     neighbors.clear();
 }
 
+/*
+The node whose transmission of this NeighborInfo we heard, or 0 if it can't be identified. Relays forward
+the payload unmodified (rewriting it would break the sender's XEdDSA signature), so a relayed copy is
+attributed from the header's relay_node byte instead of last_sent_by_id.
+*/
+NodeNum NeighborInfoModule::lastTransmitter(const meshtastic_MeshPacket &mp, const meshtastic_NeighborInfo *np)
+{
+    const int8_t hopsAway = getHopsAway(mp);
+    if (hopsAway == 0)
+        return mp.from;
+    if (hopsAway < 0) // No hop information: fall back to the payload field, set only by older senders
+        return np->last_sent_by_id;
+
+    // Older relays still rewrite last_sent_by_id to themselves; trust it when it agrees with the header
+    if (np->last_sent_by_id && np->last_sent_by_id != np->node_id &&
+        nodeDB->getLastByteOfNodeNum(np->last_sent_by_id) == mp.relay_node)
+        return np->last_sent_by_id;
+
+    const ResolvedNode relay = nodeDB->resolveLastByte(mp.relay_node, /*requireDirectNeighbor=*/true);
+    return relay.status == LastByteResolution::Unique ? relay.num : 0;
+}
+
 void NeighborInfoModule::updateNeighbors(const meshtastic_MeshPacket &mp, const meshtastic_NeighborInfo *np)
 {
-    // The last sent ID will be 0 if the packet is from the phone, which we don't
-    // count as an edge. So we assume that if it's zero, then this packet is from
-    // our node.
+    // A packet from the phone has from == 0, which we don't count as an edge.
     if (mp.which_payload_variant == meshtastic_MeshPacket_decoded_tag && mp.from) {
-        getOrCreateNeighbor(mp.from, np->last_sent_by_id, np->node_broadcast_interval_secs, mp.rx_snr);
+        const NodeNum heardFrom = lastTransmitter(mp, np);
+        if (heardFrom)
+            getOrCreateNeighbor(mp.from, heardFrom, np->node_broadcast_interval_secs, mp.rx_snr);
     }
 }
 

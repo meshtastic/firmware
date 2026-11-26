@@ -3,8 +3,6 @@
 // #define BUTTON_PIN -1
 #define LED_POWER PIN_LED
 
-// no ADC by default
-#define BATTERY_PIN -1
 // ratio of voltage divider = 3.0 (R1=200k, R2=100k)
 #define ADC_MULTIPLIER 3
 // ADC_RESOLUTION is missing upstream, hardcode it here.
