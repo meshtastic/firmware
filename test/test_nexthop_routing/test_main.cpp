@@ -2,6 +2,7 @@
 //   M1 - NodeDB::resolveLastByte / resolveUniqueLastByte (ambiguity-aware last-byte resolution)
 //   M2 - NextHopRouter::getNextHop strict-neighbor gate + Router::shouldDecrementHopLimit favorite check
 //   M3 - NextHopRouter route-health freshness / failure decay
+//   M4 - FloodingRouter::perhapsCancelDupe CLIENT_BASE fill-in for favorited direct neighbors
 //
 // Time handling: the route-health helpers take `now` as a parameter so the 30-minute TTL logic is
 // pure and testable without a clock mock. getNextHop()/sinceLastSeen() use the real native clock;
@@ -252,6 +253,35 @@ class CaptureRadioInterface : public RadioInterface
     uint32_t clampCount = 0;
 };
 
+// Records what perhapsCancelDupe() asks of the radio queue: drop the queued relay, or move it late.
+class DupeQueueRadioInterface : public RadioInterface
+{
+  public:
+    ErrorCode send(meshtastic_MeshPacket *p) override
+    {
+        packetPool.release(p);
+        return ERRNO_OK;
+    }
+
+    bool cancelSending(NodeNum, PacketId) override
+    {
+        cancelCount++;
+        return true;
+    }
+
+    void clampToLateRebroadcastWindow(NodeNum, PacketId) override { clampCount++; }
+
+    uint32_t getPacketTime(uint32_t totalPacketLen, bool received = false) override
+    {
+        (void)totalPacketLen;
+        (void)received;
+        return 0;
+    }
+
+    uint32_t cancelCount = 0;
+    uint32_t clampCount = 0;
+};
+
 class ReliableRouterTestShim : public ReliableRouter
 {
   public:
@@ -340,6 +370,14 @@ static MockRadioInterface *installMockIface()
     MockRadioInterface *mock = new MockRadioInterface();
     // addInterface replaces and destroys the suite's original capture interface.
     // Clear its borrowed pointer before the next Unity setUp() runs.
+    nextHopRadio = nullptr;
+    shim->addInterface(std::unique_ptr<RadioInterface>(mock));
+    return mock;
+}
+
+static DupeQueueRadioInterface *installDupeQueueIface()
+{
+    DupeQueueRadioInterface *mock = new DupeQueueRadioInterface();
     nextHopRadio = nullptr;
     shim->addInterface(std::unique_ptr<RadioInterface>(mock));
     return mock;
@@ -744,6 +782,152 @@ void test_hoplimit_decrement_when_resolved_not_favorite(void)
     mockNodeDB->addNode(0x000007AB, 0, true, 60, meshtastic_Config_DeviceConfig_Role_ROUTER, /*favorite=*/false);
     meshtastic_MeshPacket p = makeRelayedPacket(0xAB, 1);
     TEST_ASSERT_TRUE(shim->shouldDecrementHopLimit(&p)); // unique but not a favorite -> decrement
+}
+
+// ===========================================================================
+// Group 4b - CLIENT_BASE duplicate handling for favorited direct neighbors (M4)
+//
+// A CLIENT_BASE exists to serve weaker nodes that often hear only the base. When the base hears
+// an outdoor node relay a broadcast first, it used to cancel its own relay, and a favorited
+// neighbor that cannot hear that outdoor node never got the packet. perhapsCancelDupe() must now
+// move the relay to the late window instead, and cancel only when the duplicate was relayed by
+// the favorite itself, resolved unambiguously from its last byte. Regressions guarded: favorites
+// silently starved of channel traffic again (fill-in lost), or every broadcast relayed even when
+// the favorite already has it (cancel lost), or the behavior leaking into other roles or DMs.
+// ===========================================================================
+
+static constexpr NodeNum kFavoriteNeighbor = 0x000033CC; // last byte 0xCC
+static constexpr uint8_t kOutdoorRelay = 0x44;
+
+static meshtastic_MeshPacket makeDupeHeardFrom(uint8_t relay, NodeNum to = NODENUM_BROADCAST)
+{
+    meshtastic_MeshPacket p = makeRebroadcastCandidate(to);
+    p.relay_node = relay;
+    p.hop_limit = 2;
+    p.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA;
+    return p;
+}
+
+void test_clientBase_outdoor_dupe_fills_in_for_favorite_neighbor(void)
+{
+    config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT_BASE;
+    mockNodeDB->addNode(kFavoriteNeighbor, 0, true, 60, meshtastic_Config_DeviceConfig_Role_CLIENT, /*favorite=*/true);
+    DupeQueueRadioInterface *radio = installDupeQueueIface();
+
+    meshtastic_MeshPacket dupe = makeDupeHeardFrom(kOutdoorRelay);
+    shim->perhapsCancelDupe(&dupe);
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, radio->cancelCount, "relay must not be dropped while the favorite may lack it");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, radio->clampCount, "relay must move to the late window");
+}
+
+void test_clientBase_dupe_relayed_by_favorite_cancels(void)
+{
+    config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT_BASE;
+    mockNodeDB->addNode(kFavoriteNeighbor, 0, true, 60, meshtastic_Config_DeviceConfig_Role_CLIENT, /*favorite=*/true);
+    DupeQueueRadioInterface *radio = installDupeQueueIface();
+
+    meshtastic_MeshPacket dupe = makeDupeHeardFrom(0xCC);
+    shim->perhapsCancelDupe(&dupe);
+
+    TEST_ASSERT_EQUAL_UINT32(1, radio->cancelCount);
+    TEST_ASSERT_EQUAL_UINT32(0, radio->clampCount);
+}
+
+// One favorite relaying the packet says nothing about the other, so the base must still fill in.
+// Both NodeDB orders, so the outcome cannot depend on which favorite the scan meets first.
+static constexpr NodeNum kSecondFavoriteNeighbor = 0x000066DD; // last byte 0xDD
+
+static void expectFillInWhenOneOfTwoFavoritesRelayed(NodeNum firstAdded, NodeNum secondAdded)
+{
+    config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT_BASE;
+    mockNodeDB->addNode(firstAdded, 0, true, 60, meshtastic_Config_DeviceConfig_Role_CLIENT, /*favorite=*/true);
+    mockNodeDB->addNode(secondAdded, 0, true, 60, meshtastic_Config_DeviceConfig_Role_CLIENT, /*favorite=*/true);
+    DupeQueueRadioInterface *radio = installDupeQueueIface();
+
+    meshtastic_MeshPacket dupe = makeDupeHeardFrom(0xCC); // relayed by kFavoriteNeighbor only
+    shim->perhapsCancelDupe(&dupe);
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, radio->cancelCount, "the other favorite may still lack the packet");
+    TEST_ASSERT_EQUAL_UINT32(1, radio->clampCount);
+}
+
+void test_clientBase_one_of_two_favorites_relayed_fills_in(void)
+{
+    expectFillInWhenOneOfTwoFavoritesRelayed(kFavoriteNeighbor, kSecondFavoriteNeighbor);
+}
+
+void test_clientBase_one_of_two_favorites_relayed_fills_in_reversed(void)
+{
+    expectFillInWhenOneOfTwoFavoritesRelayed(kSecondFavoriteNeighbor, kFavoriteNeighbor);
+}
+
+void test_clientBase_ambiguous_favorite_byte_fills_in(void)
+{
+    // A non-favorite neighbor shares 0xCC, so the duplicate does not prove the favorite has the packet.
+    config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT_BASE;
+    mockNodeDB->addNode(kFavoriteNeighbor, 0, true, 60, meshtastic_Config_DeviceConfig_Role_CLIENT, /*favorite=*/true);
+    mockNodeDB->addNode(0x000055CC, 0, true, 60, meshtastic_Config_DeviceConfig_Role_CLIENT, /*favorite=*/false);
+    DupeQueueRadioInterface *radio = installDupeQueueIface();
+
+    meshtastic_MeshPacket dupe = makeDupeHeardFrom(0xCC);
+    shim->perhapsCancelDupe(&dupe);
+
+    TEST_ASSERT_EQUAL_UINT32(0, radio->cancelCount);
+    TEST_ASSERT_EQUAL_UINT32(1, radio->clampCount);
+}
+
+void test_clientBase_distant_favorite_keeps_cancel(void)
+{
+    // Favorited routers far away (e.g. for hop preservation) are not served by our fill-in.
+    config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT_BASE;
+    mockNodeDB->addNode(kFavoriteNeighbor, 2, true, 60, meshtastic_Config_DeviceConfig_Role_ROUTER, /*favorite=*/true);
+    DupeQueueRadioInterface *radio = installDupeQueueIface();
+
+    meshtastic_MeshPacket dupe = makeDupeHeardFrom(kOutdoorRelay);
+    shim->perhapsCancelDupe(&dupe);
+
+    TEST_ASSERT_EQUAL_UINT32(1, radio->cancelCount);
+    TEST_ASSERT_EQUAL_UINT32(0, radio->clampCount);
+}
+
+void test_clientBase_self_favorite_keeps_cancel(void)
+{
+    config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT_BASE;
+    mockNodeDB->addNode(kLocalNode, 0, true, 0, meshtastic_Config_DeviceConfig_Role_CLIENT_BASE, /*favorite=*/true);
+    DupeQueueRadioInterface *radio = installDupeQueueIface();
+
+    meshtastic_MeshPacket dupe = makeDupeHeardFrom(kOutdoorRelay);
+    shim->perhapsCancelDupe(&dupe);
+
+    TEST_ASSERT_EQUAL_UINT32(1, radio->cancelCount);
+    TEST_ASSERT_EQUAL_UINT32(0, radio->clampCount);
+}
+
+void test_clientBase_direct_message_keeps_cancel(void)
+{
+    config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT_BASE;
+    mockNodeDB->addNode(kFavoriteNeighbor, 0, true, 60, meshtastic_Config_DeviceConfig_Role_CLIENT, /*favorite=*/true);
+    DupeQueueRadioInterface *radio = installDupeQueueIface();
+
+    meshtastic_MeshPacket dupe = makeDupeHeardFrom(kOutdoorRelay, /*to=*/0x00007777);
+    shim->perhapsCancelDupe(&dupe);
+
+    TEST_ASSERT_EQUAL_UINT32(1, radio->cancelCount);
+    TEST_ASSERT_EQUAL_UINT32(0, radio->clampCount);
+}
+
+void test_client_role_ignores_favorite_neighbor(void)
+{
+    config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
+    mockNodeDB->addNode(kFavoriteNeighbor, 0, true, 60, meshtastic_Config_DeviceConfig_Role_CLIENT, /*favorite=*/true);
+    DupeQueueRadioInterface *radio = installDupeQueueIface();
+
+    meshtastic_MeshPacket dupe = makeDupeHeardFrom(kOutdoorRelay);
+    shim->perhapsCancelDupe(&dupe);
+
+    TEST_ASSERT_EQUAL_UINT32(1, radio->cancelCount);
+    TEST_ASSERT_EQUAL_UINT32(0, radio->clampCount);
 }
 
 // ===========================================================================
@@ -1278,6 +1462,18 @@ void setup()
     RUN_TEST(test_router_late_ignores_non_lora_dupes);
     RUN_TEST(test_client_base_favorite_clamps_on_lora_dupe);
     RUN_TEST(test_client_base_favorite_ignores_non_lora_dupes);
+
+    // These replace the suite's capture radio, so they run after every test that reads nextHopRadio.
+    printf("\n=== CLIENT_BASE favorite fill-in (M4) ===\n");
+    RUN_TEST(test_clientBase_outdoor_dupe_fills_in_for_favorite_neighbor);
+    RUN_TEST(test_clientBase_dupe_relayed_by_favorite_cancels);
+    RUN_TEST(test_clientBase_one_of_two_favorites_relayed_fills_in);
+    RUN_TEST(test_clientBase_one_of_two_favorites_relayed_fills_in_reversed);
+    RUN_TEST(test_clientBase_ambiguous_favorite_byte_fills_in);
+    RUN_TEST(test_clientBase_distant_favorite_keeps_cancel);
+    RUN_TEST(test_clientBase_self_favorite_keeps_cancel);
+    RUN_TEST(test_clientBase_direct_message_keeps_cancel);
+    RUN_TEST(test_client_role_ignores_favorite_neighbor);
 
     int result = UNITY_END();
     airTimeFixture.reset();

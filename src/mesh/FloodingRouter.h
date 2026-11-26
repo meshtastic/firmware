@@ -73,6 +73,9 @@ class FloodingRouter : public Router
     /* Call when receiving a duplicate packet to check whether we should cancel a packet in the Tx queue */
     void perhapsCancelDupe(const meshtastic_MeshPacket *p);
 
+    // CLIENT_BASE: true while a favorited direct neighbor has not been heard relaying this broadcast itself
+    bool favoriteMayHaveMissedBroadcast(const meshtastic_MeshPacket *p);
+
     // Return true if we are a rebroadcaster
     bool isRebroadcaster();
 };
