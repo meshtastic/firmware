@@ -12,6 +12,7 @@
 #include "RTC.h"
 #include "SHA256.h"
 #include "SfppFrame.h"
+#include "SfppInternal.h"
 #include "UptimeClock.h"
 #include "concurrency/LockGuard.h"
 #include "mesh/CryptoEngine.h"
@@ -44,14 +45,10 @@ static int readSchemaVersion(sqlite3 *db, bool &hasTables)
     return version;
 }
 
-// One enumeration exchange is retried by the next advert tick; this is how long it may stay in flight.
-static constexpr uint32_t kEnumExchangeTimeoutMs = 15 * 60 * 1000;
-
 // After a short-ID-collision probe, silence this long means the peer has served all it has.
 static constexpr uint32_t kEnumProbeIdleMs = 30 * 1000;
 
 // One item frame per drain keeps the radio's 16-entry TX queue from overflowing on a large request.
-static constexpr uint32_t kEnumDrainMinMs = 100;
 static constexpr size_t kEnumTxQueueMax = 256;
 static constexpr size_t kEnumMaxRequesters = 16;
 static constexpr uint32_t kEnumRetryMs = 30 * 1000;
@@ -75,8 +72,6 @@ static constexpr uint32_t kFailedPullBackoffMaxMs = 5 * 60 * 1000;
 static constexpr uint8_t kFailedPullMaxAttempts = 8;
 
 // Stage 8e: the item retry must outlast a full round-robin delivery at the current pacing.
-static uint32_t enumDrainIntervalMs();
-
 static uint32_t itemRetryIntervalMs()
 {
     const uint32_t scaled = 4 * enumDrainIntervalMs(); // 2 requesters x 2 intervals
@@ -92,18 +87,6 @@ static constexpr size_t kEnumMaxKnownPeers = 16;
 static constexpr size_t kScratchPushPerSweep = 8;
 static constexpr size_t kEnumMaxPushSenders = 16;
 static constexpr uint32_t kPushBudgetRows = 8;
-
-static uint32_t scratchSweepMs()
-{
-    const uint32_t minutes = portduino_config.sfpp_scratch_sweep < 1 ? 1 : portduino_config.sfpp_scratch_sweep;
-    return minutes * 60 * 1000;
-}
-
-static uint32_t enumDrainIntervalMs()
-{
-    const uint32_t configured = portduino_config.sfpp_enum_drain_ms;
-    return configured < kEnumDrainMinMs ? kEnumDrainMinMs : configured;
-}
 
 namespace
 {
