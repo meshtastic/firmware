@@ -21,6 +21,8 @@ class KbI2cBase : public Observable<const InputEvent *>, public concurrency::OST
     // deleter must be instantiated in the .cpp where the type is complete
     ~KbI2cBase();
     void toggleBacklight(bool on);
+    // Whether the attached keyboard has a light that follows uiconfig.keyboard_backlight
+    bool hasKeyboardLight() const;
 
   protected:
     virtual int32_t runOnce() override;
@@ -43,4 +45,15 @@ class KbI2cBase : public Observable<const InputEvent *>, public concurrency::OST
     CallbackObserver<KbI2cBase, esp_sleep_wakeup_cause_t> lsEndObserver =
         CallbackObserver<KbI2cBase, esp_sleep_wakeup_cause_t>(this, &KbI2cBase::afterLightSleep);
 #endif
+
+    void driveKeyboardLight(bool on);
+    void keyboardLightTyped();
+    void keyboardLightShortcut();
+    // Applies the light's mode; returns ms until it next needs calling (UINT32_MAX: not until something changes)
+    uint32_t updateKeyboardLight();
+
+    bool screenOn = true;
+    bool typingLit = false; // WHILE_TYPING: lit by a key press (or Alt+B) less than KEYBOARD_LIGHT_TYPING_MS ago
+    uint32_t lastTypingMs = 0;
+    bool keyboardLit = false; // what the light is driven to
 };

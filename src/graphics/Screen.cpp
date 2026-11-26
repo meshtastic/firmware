@@ -103,10 +103,8 @@ extern MessageStore messageStore;
 #include "platform/portduino/PortduinoGlue.h"
 #endif
 
-#if defined(T_LORA_PAGER)
 // KB backlight control
 #include "input/cardKbI2cImpl.h"
-#endif
 
 using namespace meshtastic; /** @todo remove */
 
@@ -695,6 +693,9 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
         return;
 
     if (on != screenOn) {
+        // Here rather than in setOn(): turning on is queued, and a later off can overtake it
+        if (cardKbI2cImpl)
+            cardKbI2cImpl->toggleBacklight(on);
         if (on) {
             LOG_INFO("Turn on screen");
             powerMon->setState(meshtastic_PowerMon_State_Screen_On);
@@ -1030,10 +1031,6 @@ void Screen::setup()
 
 void Screen::setOn(bool on, FrameCallback einkScreensaver)
 {
-#if defined(T_LORA_PAGER)
-    if (cardKbI2cImpl)
-        cardKbI2cImpl->toggleBacklight(on);
-#endif
     if (!on) {
 #ifdef MESHTASTIC_LOCKDOWN
         // Screen powering off (idle timeout, shutdown, deep sleep) latches

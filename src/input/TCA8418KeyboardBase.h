@@ -48,6 +48,8 @@ class TCA8418KeyboardBase
     virtual void trigger(void);
 
     virtual void setBacklight(bool on);
+    // Steps a keyboard light with brightness levels to the next one; false when there is none, so Alt+B turns it off
+    virtual bool nextBacklightLevel() { return false; }
 
     // Key events available
     virtual bool hasEvent(void) const;

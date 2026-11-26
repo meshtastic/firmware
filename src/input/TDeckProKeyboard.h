@@ -16,7 +16,6 @@ class TDeckProKeyboard : public TCA8418KeyboardBase
   private:
     static uint8_t modifierForKey(uint8_t key);
     void releaseKey(uint8_t key);
-    void toggleBacklight();
 
     uint8_t heldModifiers = 0;
     uint8_t latchedModifiers = 0;

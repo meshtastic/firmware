@@ -127,12 +127,6 @@ void TDeckProKeyboard::pressed(uint8_t key)
         character = TDeckProTapMap[key - 1][0];
     usedModifiers |= heldModifiers;
     latchedModifiers = 0;
-#ifndef MESHTASTIC_INCLUDE_INKHUD
-    if (character == Key::BL_TOGGLE) {
-        toggleBacklight();
-        return;
-    }
-#endif
     queueEvent(character);
 }
 
@@ -154,11 +148,6 @@ void TDeckProKeyboard::releaseKey(uint8_t key)
 void TDeckProKeyboard::setBacklight(bool on)
 {
     ::digitalWrite(KB_BL_PIN, on ? HIGH : LOW);
-}
-
-void TDeckProKeyboard::toggleBacklight()
-{
-    ::digitalWrite(KB_BL_PIN, !::digitalRead(KB_BL_PIN));
 }
 
 #endif // T_DECK_PRO

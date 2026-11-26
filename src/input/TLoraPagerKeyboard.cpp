@@ -178,11 +178,6 @@ void TLoraPagerKeyboard::released()
     uint32_t now = millis();
     last_tap = now;
 
-    if (TLoraPagerTapMap[last_key][modifierFlag % TLoraPagerTapMod[last_key]] == Key::BL_TOGGLE) {
-        toggleBacklight();
-        return;
-    }
-
     queueEvent(TLoraPagerTapMap[last_key][modifierFlag % TLoraPagerTapMod[last_key]]);
     if (isModifierKey(last_key) == false)
         modifierFlag = 0;
@@ -195,23 +190,15 @@ void TLoraPagerKeyboard::hapticFeedback()
     drv.go();
 }
 
-// toggle brightness of the backlight in three steps
-void TLoraPagerKeyboard::toggleBacklight(bool off)
+// Two brightness levels; past the brighter one, Alt+B turns the light off and the next On starts dim again
+bool TLoraPagerKeyboard::nextBacklightLevel()
 {
-    if (off) {
-        brightness = 0;
-    } else {
-        if (brightness == 0) {
-            brightness = 40;
-        } else if (brightness == 40) {
-            brightness = 127;
-        } else if (brightness >= 127) {
-            brightness = 0;
-        }
+    if (brightness < 127) {
+        brightness = 127;
+        return true;
     }
-    LOG_DEBUG("Toggle backlight: %d", brightness);
-
-    setBacklight(true);
+    brightness = 40;
+    return false;
 }
 
 void TLoraPagerKeyboard::updateModifierFlag(uint8_t key)

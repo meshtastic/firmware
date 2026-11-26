@@ -65,6 +65,7 @@ class menuHandler
         DisplayUnits,
         MessageBubblesMenu,
         ThemeMenu,
+        KeyboardBacklightMenu,
         HamModeConfirm,
         LicensedToNormalConfirm,
 #if HAS_LORA_FEM
@@ -139,6 +140,7 @@ class menuHandler
     static void displayUnitsMenu();
     static void messageBubblesMenu();
     static void themeMenu();
+    static void keyboardBacklightMenu();
     static void textMessageMenu();
     static void hamModeConfirmMenu();
     static void licensedToNormalConfirmMenu();

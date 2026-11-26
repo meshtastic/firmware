@@ -1,11 +1,13 @@
 #include "kbI2cBase.h"
+#include "NodeDB.h"
+#include "Throttle.h"
 #include "configuration.h"
 #include "detect/ScanI2C.h"
 #include "detect/ScanI2CTwoWire.h"
+#include <algorithm>
 
 #if defined(T_DECK_PRO)
 #include "TDeckProKeyboard.h"
-#include "Throttle.h"
 #include "main.h"
 #elif defined(T_LORA_PAGER)
 #include "TLoraPagerKeyboard.h"
@@ -44,6 +46,8 @@ static void IRAM_ATTR tcaKeyboardInterrupt()
     }
 }
 #endif
+
+static constexpr uint32_t KEYBOARD_LIGHT_TYPING_MS = 3000;
 
 KbI2cBase::KbI2cBase(const char *name)
     : concurrency::OSThread(name),
@@ -237,6 +241,7 @@ int32_t KbI2cBase::runOnce()
 
                 if (e.inputEvent != INPUT_BROKER_NONE) {
                     this->notifyObservers(&e);
+                    keyboardLightTyped();
                 }
             }
         }
@@ -379,8 +384,8 @@ int32_t KbI2cBase::runOnce()
 #if defined(T_DECK_PRO) && defined(MESHTASTIC_INCLUDE_INKHUD)
                 e.inputEvent = INPUT_BROKER_ALT_PRESS;
 #else
-                e.inputEvent = INPUT_BROKER_ANYKEY;
-                e.kbchar = INPUT_BROKER_MSG_BLUETOOTH_TOGGLE;
+                keyboardLightShortcut();
+                e.inputEvent = INPUT_BROKER_NONE;
 #endif
                 break;
             case TCA8418KeyboardBase::TAB:
@@ -420,6 +425,7 @@ int32_t KbI2cBase::runOnce()
             if (e.inputEvent != INPUT_BROKER_NONE) {
                 // LOG_DEBUG("TCA8418 Notifying: %i Char: %c", e.inputEvent, e.kbchar);
                 this->notifyObservers(&e);
+                keyboardLightTyped();
             }
             TCAKeyboard->trigger();
         }
@@ -708,6 +714,7 @@ int32_t KbI2cBase::runOnce()
         if (e.inputEvent != INPUT_BROKER_NONE) {
             // LOG_DEBUG("STC8H companion-MCU keypad key event: 0x%02x", c);
             this->notifyObservers(&e);
+            keyboardLightTyped();
         }
 
         break;
@@ -716,19 +723,22 @@ int32_t KbI2cBase::runOnce()
     default:
         LOG_WARN("Unknown kb_model 0x%02x", kb_model);
     }
+    // A running keyboard-light countdown ends on time, not at the next poll
+    const uint32_t lightDueMs = updateKeyboardLight();
 #if defined(T_DECK_PRO)
     // KB_INT wakes the thread; keep draining while the chip still holds keys, otherwise only the fallback poll
     if (tcaRecheck)
         return 0;
     // Set here rather than returned: an edge during runOnce() sets 0 from the ISR, and a returned value would overwrite it
-    setIntervalFromNow(TCA_FALLBACK_POLL_MS);
+    const uint32_t idle = std::min(TCA_FALLBACK_POLL_MS, lightDueMs);
+    setIntervalFromNow(idle);
     if (::digitalRead(KB_INT) == LOW)
-        setIntervalFromNow(20);
+        setIntervalFromNow(std::min<uint32_t>(idle, 20));
     return RUN_SAME;
 #elif defined(MESHTASTIC_INCLUDE_INKHUD)
-    return 100; // CardKB hands out one key per read, so 300 ms makes typing crawl
+    return std::min<uint32_t>(100, lightDueMs); // CardKB hands out one key per read, so 300 ms makes typing crawl
 #else
-    return 300;
+    return std::min<uint32_t>(300, lightDueMs);
 #endif
 }
 
@@ -749,7 +759,118 @@ int KbI2cBase::afterLightSleep(esp_sleep_wakeup_cause_t cause)
 
 void KbI2cBase::toggleBacklight(bool on)
 {
-#if defined(T_LORA_PAGER) || defined(T_DECK_PRO)
+#if defined(T_DECK_PRO) && defined(MESHTASTIC_INCLUDE_INKHUD)
     TCAKeyboard->setBacklight(on);
+#else
+    screenOn = on;
+    updateKeyboardLight();
 #endif
+}
+
+bool KbI2cBase::hasKeyboardLight() const
+{
+#ifdef MESHTASTIC_INCLUDE_INKHUD
+    return false; // InkHUD drives the T-Deck Pro's lights itself
+#else
+    if (!i2cBus)
+        return false;
+    switch (kb_model) {
+    case 0x11: // BB Q10
+        return true;
+#if defined(T_DECK_PRO) || defined(T_LORA_PAGER)
+    case 0x84: // the other TCA8418 keyboards have no light
+        return true;
+#endif
+#if defined(ELECROW_ThinkNode_M9) && defined(KB_LED)
+    case 0x12:
+        return true;
+#endif
+    default:
+        return false;
+    }
+#endif
+}
+
+void KbI2cBase::driveKeyboardLight(bool on)
+{
+    switch (kb_model) {
+    case 0x11:
+        Q10keyboard.setBacklight(on ? 1.0f : 0.0f);
+        break;
+    case 0x84:
+        TCAKeyboard->setBacklight(on);
+        break;
+#if defined(ELECROW_ThinkNode_M9)
+    case 0x12:
+        Stc8HKeyBoard.set_keyboard_blight(on);
+        break;
+#endif
+    default:
+        break;
+    }
+}
+
+// Only delivered keys count as typing: a modifier lighting it would make the Alt of Alt+B turn it straight off
+void KbI2cBase::keyboardLightTyped()
+{
+    if (uiconfig.keyboard_backlight != meshtastic_DeviceUIConfig_KeyboardBacklightMode_WHILE_TYPING || !hasKeyboardLight())
+        return;
+    typingLit = true;
+    lastTypingMs = millis();
+    updateKeyboardLight();
+}
+
+// Alt+B: switch between On and Off and save it; in WHILE_TYPING, light it as a key press would, or turn it off early.
+// In On, a light with brightness levels steps through them before turning off.
+void KbI2cBase::keyboardLightShortcut()
+{
+    if (!hasKeyboardLight())
+        return;
+    switch (uiconfig.keyboard_backlight) {
+    case meshtastic_DeviceUIConfig_KeyboardBacklightMode_WHILE_TYPING:
+        typingLit = !keyboardLit;
+        lastTypingMs = millis();
+        break;
+    case meshtastic_DeviceUIConfig_KeyboardBacklightMode_ON:
+        if (keyboardLit && kb_model == 0x84 && TCAKeyboard->nextBacklightLevel()) {
+            driveKeyboardLight(true);
+            return;
+        }
+        uiconfig.keyboard_backlight = meshtastic_DeviceUIConfig_KeyboardBacklightMode_OFF;
+        nodeDB->saveProto("/prefs/uiconfig.proto", meshtastic_DeviceUIConfig_size, &meshtastic_DeviceUIConfig_msg, &uiconfig);
+        break;
+    default:
+        uiconfig.keyboard_backlight = meshtastic_DeviceUIConfig_KeyboardBacklightMode_ON;
+        nodeDB->saveProto("/prefs/uiconfig.proto", meshtastic_DeviceUIConfig_size, &meshtastic_DeviceUIConfig_msg, &uiconfig);
+        break;
+    }
+    updateKeyboardLight();
+}
+
+uint32_t KbI2cBase::updateKeyboardLight()
+{
+    if (!hasKeyboardLight())
+        return UINT32_MAX;
+
+    bool lit = false;
+    uint32_t dueMs = UINT32_MAX;
+    switch (uiconfig.keyboard_backlight) {
+    case meshtastic_DeviceUIConfig_KeyboardBacklightMode_ON:
+        lit = screenOn;
+        break;
+    case meshtastic_DeviceUIConfig_KeyboardBacklightMode_WHILE_TYPING:
+        if (typingLit && Throttle::hasElapsed(lastTypingMs, KEYBOARD_LIGHT_TYPING_MS))
+            typingLit = false;
+        lit = screenOn && typingLit;
+        if (typingLit)
+            dueMs = Throttle::remainingMs(lastTypingMs, KEYBOARD_LIGHT_TYPING_MS);
+        break;
+    default:
+        break;
+    }
+    if (lit != keyboardLit) {
+        driveKeyboardLight(lit);
+        keyboardLit = lit;
+    }
+    return dueMs;
 }
