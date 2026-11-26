@@ -882,6 +882,9 @@ StoreForwardPlusPlusModule::ingestTextPacket(const meshtastic_MeshPacket &mp, co
     memcpy(lo.encrypted_bytes, encrypted_meshpacket->encrypted.bytes, encrypted_meshpacket->encrypted.size);
     lo.encrypted_len = encrypted_meshpacket->encrypted.size;
     lo.payload = std::string((char *)mp.decoded.payload.bytes, mp.decoded.payload.size);
+    sfppframe::messageHash(encrypted_meshpacket->encrypted.bytes, encrypted_meshpacket->encrypted.size, mp.to, mp.from, mp.id,
+                           lo.message_hash);
+    lo.message_hash_len = SFPP_HASH_SIZE;
     lo.root_hash_len = getOrDeriveRootFromChannel(encrypted_meshpacket->channel, lo.root_hash);
     return lo;
 }
