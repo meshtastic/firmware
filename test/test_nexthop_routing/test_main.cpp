@@ -784,6 +784,41 @@ void test_hoplimit_decrement_when_resolved_not_favorite(void)
     TEST_ASSERT_TRUE(shim->shouldDecrementHopLimit(&p)); // unique but not a favorite -> decrement
 }
 
+// shouldDecrementHopLimit() in src/mesh/Router.cpp resolves relay_node among fresh direct neighbors before it widens to
+// favorites and routers further out. The relay was heard over the air, so a node two hops away cannot have sent this
+// copy, and must not cost a favorite router's free hop just by sharing its last byte. Before the direct-neighbor pass,
+// any such collision made the wide resolution ambiguous and every packet the favorite relayed was charged a hop.
+void test_hoplimit_preserve_favorite_neighbor_over_far_router_with_same_byte(void)
+{
+    config.device.role = meshtastic_Config_DeviceConfig_Role_ROUTER;
+    mockNodeDB->addNode(0x000007AB, 0, true, 60, meshtastic_Config_DeviceConfig_Role_ROUTER, /*favorite=*/true);
+    mockNodeDB->addNode(0x000009AB, 2, true, 60, meshtastic_Config_DeviceConfig_Role_ROUTER); // two hops out, same byte
+    meshtastic_MeshPacket p = makeRelayedPacket(0xAB, 1);
+    TEST_ASSERT_FALSE(shim->shouldDecrementHopLimit(&p));
+}
+
+// The other side of the direct-neighbor pass: when the one neighbor with the byte is not a favorite router, that
+// neighbor is taken as the relay and the hop is charged, even though a favorite router further out shares the byte.
+// Preferring the favorite here would hand a free hop to any neighbor that collides with one.
+void test_hoplimit_decrement_when_neighbor_with_byte_is_not_favorite(void)
+{
+    config.device.role = meshtastic_Config_DeviceConfig_Role_ROUTER;
+    mockNodeDB->addNode(0x000007AB, 0, false, 60, meshtastic_Config_DeviceConfig_Role_ROUTER, /*favorite=*/true);
+    mockNodeDB->addNode(0x000005AB, 0, true, 60); // direct neighbor, plain CLIENT
+    meshtastic_MeshPacket p = makeRelayedPacket(0xAB, 1);
+    TEST_ASSERT_TRUE(shim->shouldDecrementHopLimit(&p));
+}
+
+// A favorite router whose hop distance is unknown is no direct neighbor as far as NodeDB knows, so the direct pass
+// finds nothing. The wide pass must still run and keep its free hop, as it did before the direct pass was added.
+void test_hoplimit_preserve_favorite_router_of_unknown_distance(void)
+{
+    config.device.role = meshtastic_Config_DeviceConfig_Role_ROUTER;
+    mockNodeDB->addNode(0x000007AB, 0, false, 60, meshtastic_Config_DeviceConfig_Role_ROUTER, /*favorite=*/true);
+    meshtastic_MeshPacket p = makeRelayedPacket(0xAB, 1);
+    TEST_ASSERT_FALSE(shim->shouldDecrementHopLimit(&p));
+}
+
 // ===========================================================================
 // Group 4b - CLIENT_BASE duplicate handling for favorited direct neighbors (M4)
 //
@@ -1429,6 +1464,9 @@ void setup()
     RUN_TEST(test_hoplimit_preserve_unique_favorite_router);
     RUN_TEST(test_hoplimit_decrement_on_colliding_favorites);
     RUN_TEST(test_hoplimit_decrement_when_resolved_not_favorite);
+    RUN_TEST(test_hoplimit_preserve_favorite_neighbor_over_far_router_with_same_byte);
+    RUN_TEST(test_hoplimit_decrement_when_neighbor_with_byte_is_not_favorite);
+    RUN_TEST(test_hoplimit_preserve_favorite_router_of_unknown_distance);
 
     printf("\n=== event-coordinate routing behavior ===\n");
     RUN_TEST(test_eventPolicy_reliableOriginSendSuppressesTxAndPending);

@@ -286,8 +286,13 @@ bool Router::shouldDecrementHopLimit(const meshtastic_MeshPacket *p)
     // (non-deterministic, depends on NodeDB order). resolveLastByte() reports a collision instead, and
     // we re-check the favorite/router predicate on the single resolved node. On ambiguity/none we
     // decrement (the safe default).
-    NodeNum resolved = 0;
-    if (nodeDB->resolveUniqueLastByte(p->relay_node, /*requireDirectNeighbor=*/false, &resolved)) {
+    // The relay was heard over the air, so a fresh direct neighbor with the byte is the likeliest sender; only when there
+    // is none do favorites and routers further out count, so a far node sharing the byte no longer costs the hop
+    ResolvedNode relay = nodeDB->resolveLastByte(p->relay_node, /*requireDirectNeighbor=*/true);
+    if (relay.status == LastByteResolution::None)
+        relay = nodeDB->resolveLastByte(p->relay_node, /*requireDirectNeighbor=*/false);
+    if (relay.status == LastByteResolution::Unique) {
+        const NodeNum resolved = relay.num;
         const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(resolved);
         if (node && nodeInfoLiteIsFavorite(node) && nodeInfoLiteHasUser(node) &&
             IS_ONE_OF(node->role, meshtastic_Config_DeviceConfig_Role_ROUTER, meshtastic_Config_DeviceConfig_Role_ROUTER_LATE,
