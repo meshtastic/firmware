@@ -1385,7 +1385,11 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
         }
     }
 
-    const char *channelName = channels.getName(channels.getPrimaryIndex());
+    // Without a usable channel file the boot clamp runs before initDefaults() fills the table: resolve a blank primary.
+    const char *channelName =
+        channels.getNumChannels()
+            ? channels.getName(channels.getPrimaryIndex())
+            : DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, false, config.lora.use_preset);
     const char *presetNameDisplay =
         DisplayFormatters::getModemPresetDisplayName(loraConfig.modem_preset, false, loraConfig.use_preset);
     // After any clamp above, so this is the count applyModemConfig() tunes against
