@@ -1370,6 +1370,30 @@ void test_restartKeepsAgeWithWidenedMargin()
     TEST_ASSERT_EQUAL_UINT32(LEGACY_RETENTION_S, row.ageMargin);
 }
 
+// A second restart with unknown downtime keeps the margin at the 48 h retention horizon, not
+// another 48 h wider.
+void test_unknownDowntimeMarginIsCapped()
+{
+    setTestClock(RTCQualityNone, 0, 5000);
+    recreateModule();
+
+    meshtastic_MeshPacket mp = makeText(REMOTE_NODE, TEXT_ID, "margin cap", 4000);
+    meshtastic_MeshPacket enc = makeEncryptedCopy(mp);
+    TEST_ASSERT_EQUAL(ProcessMessage::CONTINUE, testSfpp->ingest(mp, &enc));
+
+    setTestClock(RTCQualityNone, 0, 0); // first power cycle, downtime unknown
+    recreateModule();
+    StoredRow first;
+    TEST_ASSERT_TRUE(readStoredRow(TEXT_ID, first));
+    TEST_ASSERT_EQUAL_UINT32(LEGACY_RETENTION_S, first.ageMargin);
+
+    setTestClock(RTCQualityNone, 0, 0); // second power cycle, downtime still unknown
+    recreateModule();
+    StoredRow second;
+    TEST_ASSERT_TRUE(readStoredRow(TEXT_ID, second));
+    TEST_ASSERT_LESS_OR_EQUAL_UINT32(LEGACY_RETENTION_S, second.ageMargin);
+}
+
 // Mixed bases are aged through the one helper: the old epoch row goes, the fresh epoch and the
 // boot-relative rows stay.
 void test_mixedBasesTrimCorrectly()
@@ -1612,6 +1636,7 @@ void setup()
     RUN_TEST(test_receivedAgeIsKept);
     RUN_TEST(test_healOnFirstProperClockDoesNotTrim);
     RUN_TEST(test_restartKeepsAgeWithWidenedMargin);
+    RUN_TEST(test_unknownDowntimeMarginIsCapped);
     RUN_TEST(test_mixedBasesTrimCorrectly);
     RUN_TEST(test_noEpochHistoryPagesByRowid);
     RUN_TEST(test_futureLookingAgeIsRejected);

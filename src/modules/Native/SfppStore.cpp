@@ -204,7 +204,10 @@ void StoreForwardPlusPlusModule::restampPreviousBoot()
                 ageAtEnd = old.stamp > UINT32_MAX - prevLastUptime ? UINT32_MAX : old.stamp + prevLastUptime;
             const uint32_t total = ageAtEnd > UINT32_MAX - down ? UINT32_MAX : ageAtEnd + down;
 
-            next.margin = old.margin + (downKnown ? 0 : kRetentionS);
+            // An unknown gap widens the margin to the retention horizon, never past it.
+            const uint32_t extra = downKnown ? 0 : kRetentionS;
+            const uint32_t widened = old.margin > UINT32_MAX - extra ? UINT32_MAX : old.margin + extra;
+            next.margin = widened > kRetentionS ? kRetentionS : widened;
             next.boot_id = 0;
             if (bootEpoch > 0) {
                 next.basis = kTimeBasisEpoch;
