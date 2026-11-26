@@ -271,6 +271,9 @@ struct StoredRow {
     std::vector<uint8_t> messageHash;
     std::string payload;
     uint32_t rxTime = 0;
+    uint8_t timeBasis = 0;
+    uint32_t bootId = 0;
+    uint32_t ageMargin = 0;
 };
 
 bool readStoredRow(PacketId id, StoredRow &row)
@@ -285,8 +288,8 @@ bool readStoredRow(PacketId id, StoredRow &row)
     sqlite3_stmt *stmt = nullptr;
     bool found = false;
     if (sqlite3_prepare_v2(db,
-                           "select root_hash, commit_hash, encrypted_bytes, payload, rx_time, message_hash from channel_messages "
-                           "where packet_id=? limit 1;",
+                           "select root_hash, commit_hash, encrypted_bytes, payload, rx_time, message_hash, time_basis, "
+                           "boot_id, age_margin from channel_messages where packet_id=? limit 1;",
                            -1, &stmt, nullptr) == SQLITE_OK) {
         sqlite3_bind_int64(stmt, 1, id);
         if (sqlite3_step(stmt) == SQLITE_ROW) {
@@ -305,6 +308,9 @@ bool readStoredRow(PacketId id, StoredRow &row)
             const uint8_t *hash = (const uint8_t *)sqlite3_column_blob(stmt, 5);
             int hashLen = sqlite3_column_bytes(stmt, 5);
             row.messageHash.assign(hash, hash + hashLen);
+            row.timeBasis = (uint8_t)sqlite3_column_int(stmt, 6);
+            row.bootId = (uint32_t)sqlite3_column_int64(stmt, 7);
+            row.ageMargin = (uint32_t)sqlite3_column_int64(stmt, 8);
             found = true;
         }
     }
@@ -479,6 +485,26 @@ std::vector<uint8_t> freshDerivedRoot(NodeNum node, uint32_t nowMs)
     testSfpp = new TestSfppModule();
     testSfpp->runOnce();
     return mappingRoot();
+}
+
+void setTestClock(RTCQuality quality, uint32_t epoch, uint32_t uptimeSecs)
+{
+    Time::setTestMillis(uptimeSecs * 1000);
+    resetRTCStateForTests();
+    if (quality == RTCQualityNone) {
+        setBootRelativeTimeForUnitTest(uptimeSecs);
+    } else {
+        struct timeval tv;
+        tv.tv_sec = epoch;
+        tv.tv_usec = 0;
+        perhapsSetRTC(quality, &tv);
+    }
+}
+
+void recreateModule()
+{
+    delete testSfpp;
+    testSfpp = new TestSfppModule();
 }
 
 void setPrimaryChannel(const char *name, const uint8_t *psk, size_t pskLen)
@@ -1233,6 +1259,261 @@ void test_versionOneStoreIsMovedAside()
         std::remove(f.c_str());
 }
 
+// --- G19: relative stamps and margins ---
+
+// No proper clock: the row is stamped in uptime seconds and the shim still serves it, with no epoch
+// passed off as wall time.
+void test_noClockIngestAndServe()
+{
+    setTestClock(RTCQualityNone, 0, 5000);
+    recreateModule();
+
+    meshtastic_MeshPacket mp = makeText(REMOTE_NODE, TEXT_ID, "no clock", 0);
+    meshtastic_MeshPacket enc = makeEncryptedCopy(mp);
+    TEST_ASSERT_EQUAL(ProcessMessage::CONTINUE, testSfpp->ingest(mp, &enc));
+
+    StoredRow row;
+    TEST_ASSERT_TRUE(readStoredRow(TEXT_ID, row));
+    TEST_ASSERT_EQUAL_UINT8(1, row.timeBasis);
+    TEST_ASSERT_NOT_EQUAL_UINT32(0, row.bootId);
+    TEST_ASSERT_EQUAL_UINT32(5000, row.rxTime);
+
+    meshtastic_MeshPacket request = makeHistoryRequest(0, LOCAL_NODE, 0x2A2A2A2A, 0);
+    TEST_ASSERT_EQUAL(ProcessMessage::STOP, testSfpp->dispatch(request));
+    std::vector<meshtastic_MeshPacket> phone = drainPhoneQueue();
+    TEST_ASSERT_EQUAL_UINT(1, phone.size());
+    meshtastic_StoreAndForward reply;
+    TEST_ASSERT_TRUE(decodeStoreForward(phone[0], reply));
+    TEST_ASSERT_EQUAL_UINT32(1, reply.variant.history.history_messages);
+
+    testSfpp->runOnce(); // the queued text goes before any timedatectl promotion
+    phone = drainPhoneQueue();
+    TEST_ASSERT_EQUAL_UINT(1, phone.size());
+    meshtastic_StoreAndForward text;
+    TEST_ASSERT_TRUE(decodeStoreForward(phone[0], text));
+    TEST_ASSERT_FALSE(phone[0].has_rx_time); // the route's uptime placeholder, never shown as an epoch
+    TEST_ASSERT_EQUAL_UINT(strlen("no clock"), text.variant.text.size);
+    TEST_ASSERT_EQUAL_MEMORY("no clock", text.variant.text.bytes, text.variant.text.size);
+}
+
+// Mesh time is not a proper clock: the row stays boot-relative, but the shim may show the rough
+// epoch it implies.
+void test_meshTimeOnlyIngestStaysBootRelative()
+{
+    constexpr uint32_t EPOCH = 1800000000;
+    setTestClock(RTCQualityFromNet, EPOCH, 5000);
+    recreateModule();
+
+    meshtastic_MeshPacket mp = makeText(REMOTE_NODE, TEXT_ID, "mesh time", 0);
+    meshtastic_MeshPacket enc = makeEncryptedCopy(mp);
+    TEST_ASSERT_EQUAL(ProcessMessage::CONTINUE, testSfpp->ingest(mp, &enc));
+
+    StoredRow row;
+    TEST_ASSERT_TRUE(readStoredRow(TEXT_ID, row));
+    TEST_ASSERT_EQUAL_UINT8(1, row.timeBasis);
+    TEST_ASSERT_EQUAL_UINT32(5000, row.rxTime);
+
+    meshtastic_MeshPacket request = makeHistoryRequest(0, LOCAL_NODE, 0x2B2B2B2B, 0);
+    TEST_ASSERT_EQUAL(ProcessMessage::STOP, testSfpp->dispatch(request));
+    std::vector<meshtastic_MeshPacket> phone = drainPhoneQueue();
+    TEST_ASSERT_EQUAL_UINT(1, phone.size());
+    meshtastic_StoreAndForward reply;
+    TEST_ASSERT_TRUE(decodeStoreForward(phone[0], reply));
+    TEST_ASSERT_EQUAL_UINT32(1, reply.variant.history.history_messages);
+
+    testSfpp->runOnce();
+    phone = drainPhoneQueue();
+    TEST_ASSERT_EQUAL_UINT(1, phone.size());
+    meshtastic_StoreAndForward text;
+    TEST_ASSERT_TRUE(decodeStoreForward(phone[0], text));
+    TEST_ASSERT_EQUAL_UINT32(EPOCH, phone[0].rx_time);
+}
+
+// A packet that arrived 400 s ago keeps that age; it is not stamped "now" on the way into the store.
+void test_receivedAgeIsKept()
+{
+    constexpr uint32_t EPOCH = 1800000000;
+    setTestClock(RTCQualityNTP, EPOCH, 5000);
+    recreateModule();
+
+    meshtastic_MeshPacket mp = makeText(REMOTE_NODE, TEXT_ID, "aged text", EPOCH - 400);
+    meshtastic_MeshPacket enc = makeEncryptedCopy(mp);
+    TEST_ASSERT_EQUAL(ProcessMessage::CONTINUE, testSfpp->ingest(mp, &enc));
+
+    StoredRow row;
+    TEST_ASSERT_TRUE(readStoredRow(TEXT_ID, row));
+    TEST_ASSERT_EQUAL_UINT8(0, row.timeBasis);
+    TEST_ASSERT_EQUAL_UINT32(EPOCH - 400, row.rxTime);
+
+    meshtastic_MeshPacket request = makeHistoryRequest(0, LOCAL_NODE, 0x2C2C2C2C, 0);
+    TEST_ASSERT_EQUAL(ProcessMessage::STOP, testSfpp->dispatch(request));
+    drainPhoneQueue();
+    testSfpp->runOnce();
+    std::vector<meshtastic_MeshPacket> phone = drainPhoneQueue();
+    TEST_ASSERT_EQUAL_UINT(1, phone.size());
+    meshtastic_StoreAndForward text;
+    TEST_ASSERT_TRUE(decodeStoreForward(phone[0], text));
+    TEST_ASSERT_EQUAL_UINT32(TEXT_ID, text.original_id);
+}
+
+// The first proper clock heals a boot-relative row to an epoch with its age intact, so the 48 h trim
+// does not mistake the uptime stamp for an ancient epoch.
+void test_healOnFirstProperClockDoesNotTrim()
+{
+    constexpr uint32_t EPOCH = 1800000000;
+    setTestClock(RTCQualityNone, 0, 5000);
+    recreateModule();
+
+    meshtastic_MeshPacket mp = makeText(REMOTE_NODE, TEXT_ID, "heal me", 4000);
+    meshtastic_MeshPacket enc = makeEncryptedCopy(mp);
+    TEST_ASSERT_EQUAL(ProcessMessage::CONTINUE, testSfpp->ingest(mp, &enc));
+
+    setTestClock(RTCQualityNTP, EPOCH, 5000);
+    testSfpp->runOnce();
+
+    StoredRow row;
+    TEST_ASSERT_TRUE(readStoredRow(TEXT_ID, row));
+    TEST_ASSERT_EQUAL_UINT8(0, row.timeBasis);
+    TEST_ASSERT_EQUAL_UINT32(EPOCH - 1000, row.rxTime);
+}
+
+// A restart keeps the age of a boot-relative row and widens its margin because the downtime is
+// unknown.
+void test_restartKeepsAgeWithWidenedMargin()
+{
+    setTestClock(RTCQualityNone, 0, 5000);
+    recreateModule();
+
+    meshtastic_MeshPacket mp = makeText(REMOTE_NODE, TEXT_ID, "restart me", 4000);
+    meshtastic_MeshPacket enc = makeEncryptedCopy(mp);
+    TEST_ASSERT_EQUAL(ProcessMessage::CONTINUE, testSfpp->ingest(mp, &enc));
+
+    setTestClock(RTCQualityNone, 0, 0); // a power cycle: uptime restarts
+    recreateModule();
+
+    StoredRow row;
+    TEST_ASSERT_TRUE(readStoredRow(TEXT_ID, row));
+    TEST_ASSERT_EQUAL_UINT8(2, row.timeBasis);
+    TEST_ASSERT_EQUAL_UINT32(1000, row.rxTime);
+    TEST_ASSERT_EQUAL_UINT32(LEGACY_RETENTION_S, row.ageMargin);
+}
+
+// Mixed bases are aged through the one helper: the old epoch row goes, the fresh epoch and the
+// boot-relative rows stay.
+void test_mixedBasesTrimCorrectly()
+{
+    constexpr uint32_t EPOCH = 1800000000;
+    constexpr PacketId FRESH_ID = TEXT_ID + 1;
+    constexpr PacketId BOOT_ID = TEXT_ID + 2;
+    setTestClock(RTCQualityNTP, EPOCH, 5000);
+    recreateModule();
+
+    meshtastic_MeshPacket old = makeText(REMOTE_NODE, TEXT_ID, "old epoch", EPOCH - LEGACY_RETENTION_S - 100);
+    meshtastic_MeshPacket oldEnc = makeEncryptedCopy(old);
+    TEST_ASSERT_EQUAL(ProcessMessage::CONTINUE, testSfpp->ingest(old, &oldEnc));
+    meshtastic_MeshPacket fresh = makeText(REMOTE_NODE, FRESH_ID, "fresh epoch", EPOCH);
+    meshtastic_MeshPacket freshEnc = makeEncryptedCopy(fresh);
+    TEST_ASSERT_EQUAL(ProcessMessage::CONTINUE, testSfpp->ingest(fresh, &freshEnc));
+
+    setTestClock(RTCQualityFromNet, EPOCH, 5000);
+    recreateModule();
+    meshtastic_MeshPacket boot = makeText(REMOTE_NODE, BOOT_ID, "boot row", 4940);
+    meshtastic_MeshPacket bootEnc = makeEncryptedCopy(boot);
+    TEST_ASSERT_EQUAL(ProcessMessage::CONTINUE, testSfpp->ingest(boot, &bootEnc));
+
+    // Keep the host's timedatectl from promoting in this no-proper-clock run.
+    const char *path = getenv("PATH");
+    const std::string savedPath = path ? path : "";
+    setenv("PATH", "/nonexistent", 1);
+    testSfpp->runOnce();
+    setenv("PATH", savedPath.c_str(), 1);
+
+    StoredRow oldRow, freshRow, bootRow;
+    TEST_ASSERT_FALSE(readStoredRow(TEXT_ID, oldRow));
+    TEST_ASSERT_TRUE(readStoredRow(FRESH_ID, freshRow));
+    TEST_ASSERT_TRUE(readStoredRow(BOOT_ID, bootRow));
+    TEST_ASSERT_EQUAL_UINT8(1, bootRow.timeBasis);
+}
+
+// Two pages of rows with no epoch must not overlap: the cursor advances by rowid when it cannot
+// advance by a displayed epoch.
+void test_noEpochHistoryPagesByRowid()
+{
+    constexpr uint32_t CURSOR_BASE = 0xF0000000;
+    setTestClock(RTCQualityNone, 0, 5000);
+    recreateModule();
+
+    constexpr uint32_t ROWS = 60;
+    for (uint32_t i = 0; i < ROWS; i++) {
+        meshtastic_MeshPacket mp = makeText(REMOTE_NODE, TEXT_ID + i, "paged no-epoch text", 0);
+        meshtastic_MeshPacket enc = makeEncryptedCopy(mp);
+        TEST_ASSERT_EQUAL(ProcessMessage::CONTINUE, testSfpp->ingest(mp, &enc));
+    }
+
+    meshtastic_MeshPacket first = makeHistoryRequest(0, LOCAL_NODE, 0x2D2D2D2D, 0);
+    TEST_ASSERT_EQUAL(ProcessMessage::STOP, testSfpp->dispatch(first));
+    std::vector<meshtastic_MeshPacket> phone = drainPhoneQueue();
+    TEST_ASSERT_EQUAL_UINT(1, phone.size());
+    meshtastic_StoreAndForward reply;
+    TEST_ASSERT_TRUE(decodeStoreForward(phone[0], reply));
+    TEST_ASSERT_EQUAL_UINT32(50, reply.variant.history.history_messages);
+    const uint32_t cursor = reply.variant.history.last_request;
+    TEST_ASSERT_GREATER_OR_EQUAL_UINT32(CURSOR_BASE, cursor);
+
+    for (uint32_t i = 0; i < 50; i++) {
+        if (i > 0 && i % 25 == 0)
+            Time::setTestMillis(Time::getMillis() + 10 * 60 * 1000 + 1);
+        testSfpp->runOnce();
+    }
+    phone = drainPhoneQueue();
+    TEST_ASSERT_EQUAL_UINT(50, phone.size());
+    std::vector<uint32_t> firstIds;
+    for (const auto &p : phone) {
+        meshtastic_StoreAndForward text;
+        TEST_ASSERT_TRUE(decodeStoreForward(p, text));
+        firstIds.push_back(text.original_id);
+    }
+
+    meshtastic_MeshPacket second = makeHistoryRequest(0, LOCAL_NODE, 0x2E2E2E2E, 0, cursor);
+    TEST_ASSERT_EQUAL(ProcessMessage::STOP, testSfpp->dispatch(second));
+    phone = drainPhoneQueue();
+    TEST_ASSERT_EQUAL_UINT(1, phone.size());
+    meshtastic_StoreAndForward next;
+    TEST_ASSERT_TRUE(decodeStoreForward(phone[0], next));
+    TEST_ASSERT_EQUAL_UINT32(10, next.variant.history.history_messages);
+    TEST_ASSERT_NOT_EQUAL_UINT32(cursor, next.variant.history.last_request);
+
+    Time::setTestMillis(Time::getMillis() + 10 * 60 * 1000 + 1);
+    for (uint32_t i = 0; i < 10; i++)
+        testSfpp->runOnce();
+    phone = drainPhoneQueue();
+    TEST_ASSERT_EQUAL_UINT(10, phone.size());
+    for (const auto &p : phone) {
+        meshtastic_StoreAndForward text;
+        TEST_ASSERT_TRUE(decodeStoreForward(p, text));
+        for (uint32_t id : firstIds)
+            TEST_ASSERT_NOT_EQUAL_UINT32(id, text.original_id);
+    }
+}
+
+// A stamp in the future is not aged as a negative interval; the future age is rejected, not stored.
+void test_futureLookingAgeIsRejected()
+{
+    constexpr uint32_t EPOCH = 1800000000;
+    setTestClock(RTCQualityNTP, EPOCH, 5000);
+    recreateModule();
+
+    meshtastic_MeshPacket mp = makeText(REMOTE_NODE, TEXT_ID, "future text", EPOCH + 500);
+    meshtastic_MeshPacket enc = makeEncryptedCopy(mp);
+    TEST_ASSERT_EQUAL(ProcessMessage::CONTINUE, testSfpp->ingest(mp, &enc));
+
+    StoredRow row;
+    TEST_ASSERT_TRUE(readStoredRow(TEXT_ID, row));
+    TEST_ASSERT_EQUAL_UINT8(0, row.timeBasis);
+    TEST_ASSERT_LESS_OR_EQUAL_UINT32(EPOCH, row.rxTime);
+    TEST_ASSERT_GREATER_OR_EQUAL_UINT32(EPOCH - 5, row.rxTime);
+}
+
 void loop() {}
 
 void setup()
@@ -1266,6 +1547,14 @@ void setup()
     RUN_TEST(test_channel_change_moves_the_v2_store_aside);
     RUN_TEST(test_two_channels_sharing_a_hash_keep_two_mappings);
     RUN_TEST(test_versionOneStoreIsMovedAside);
+    RUN_TEST(test_noClockIngestAndServe);
+    RUN_TEST(test_meshTimeOnlyIngestStaysBootRelative);
+    RUN_TEST(test_receivedAgeIsKept);
+    RUN_TEST(test_healOnFirstProperClockDoesNotTrim);
+    RUN_TEST(test_restartKeepsAgeWithWidenedMargin);
+    RUN_TEST(test_mixedBasesTrimCorrectly);
+    RUN_TEST(test_noEpochHistoryPagesByRowid);
+    RUN_TEST(test_futureLookingAgeIsRejected);
     UNITY_END();
 }
 

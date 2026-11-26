@@ -306,6 +306,9 @@ bool StoreForwardPlusPlusModule::addToChain(link_object &lo)
     // short_id and checksum, derived once here rather than on every advert
     sqlite3_bind_int64(chain_insert_stmt, 11, sfppsr::shortId(lo.message_hash, lo.message_hash_len));
     sqlite3_bind_int64(chain_insert_stmt, 12, (sqlite3_int64)sfppsr::checksumContribution(lo.message_hash, lo.message_hash_len));
+    sqlite3_bind_int64(chain_insert_stmt, 13, (sqlite3_int64)lo.time_basis);
+    sqlite3_bind_int64(chain_insert_stmt, 14, (sqlite3_int64)lo.boot_id);
+    sqlite3_bind_int64(chain_insert_stmt, 15, (sqlite3_int64)lo.age_margin);
     int res = sqlite3_step(chain_insert_stmt);
     if (res != SQLITE_OK && res != SQLITE_DONE) {
         LOG_ERROR("StoreForwardpp Cannot step: %s", sqlite3_errmsg(ppDb));
@@ -458,6 +461,9 @@ StoreForwardPlusPlusModule::link_object StoreForwardPlusPlusModule::getNextScrat
     memcpy(lo.message_hash, _message_hash, lo.message_hash_len);
 
     lo.rx_time = sqlite3_column_int(fromScratchStmt, 5);
+    lo.time_basis = (uint8_t)sqlite3_column_int(fromScratchStmt, 7);
+    lo.boot_id = (uint32_t)sqlite3_column_int64(fromScratchStmt, 8);
+    lo.age_margin = (uint32_t)sqlite3_column_int64(fromScratchStmt, 9);
 
     lo.root_hash_len = SFPP_HASH_SIZE;
     memcpy(lo.root_hash, root_hash, lo.root_hash_len);
@@ -477,7 +483,18 @@ StoreForwardPlusPlusModule::link_object StoreForwardPlusPlusModule::ingestLinkMe
     }
     lo.from = t->encapsulated_from;
     lo.id = t->encapsulated_id;
-    lo.rx_time = t->encapsulated_rxtime;
+    // The wire carries an absolute rxtime; treat it as an epoch and fall back to our own stamp when
+    // the sender had none, so a clockless peer's uptime value is never filed as an ancient epoch.
+    if (t->encapsulated_rxtime != 0) {
+        lo.rx_time = t->encapsulated_rxtime;
+        lo.time_basis = kTimeBasisEpoch;
+    } else {
+        const RowTime live = nowTime();
+        lo.rx_time = live.stamp;
+        lo.time_basis = live.basis;
+        lo.boot_id = live.boot_id;
+        lo.age_margin = live.margin;
+    }
     lo.counter = t->chain_count; // Should this be skipped if stratum0?
 
     // What if we don't have this root hash? Should drop this packet before this point.

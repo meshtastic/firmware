@@ -974,7 +974,6 @@ void StoreForwardPlusPlusModule::handleItemRequest(const meshtastic_MeshPacket &
 
     const uint32_t first = list.scope.bucket * sfppsr::kBucketObjects + 1;
     const uint32_t last = first + sfppsr::kBucketObjects - 1;
-    const uint32_t now = getValidTime(RTCQuality::RTCQualityNTP, true);
 
     for (pinsketch::Element wanted : list.ids) {
         // Already queued for this requester: do not duplicate it, just refresh the entry.
@@ -998,10 +997,14 @@ void StoreForwardPlusPlusModule::handleItemRequest(const meshtastic_MeshPacket &
             const uint32_t id = (uint32_t)sqlite3_column_int64(getLinkByShortIdStmt, 2);
             const uint8_t *enc = (const uint8_t *)sqlite3_column_blob(getLinkByShortIdStmt, 3);
             const int encLen = sqlite3_column_bytes(getLinkByShortIdStmt, 3);
-            const uint32_t rxTime = (uint32_t)sqlite3_column_int64(getLinkByShortIdStmt, 5);
+            RowTime stamp;
+            stamp.stamp = (uint32_t)sqlite3_column_int64(getLinkByShortIdStmt, 5);
+            stamp.basis = (uint8_t)sqlite3_column_int(getLinkByShortIdStmt, 7);
+            stamp.boot_id = (uint32_t)sqlite3_column_int64(getLinkByShortIdStmt, 8);
+            stamp.margin = (uint32_t)sqlite3_column_int64(getLinkByShortIdStmt, 9);
             std::vector<uint8_t> cipher(enc, enc + encLen);
 
-            const uint32_t heardAgo = rxTime < now ? now - rxTime : 0;
+            const uint32_t heardAgo = rowAge(stamp).age;
             std::vector<meshtastic_StoreForwardPlusPlus> frames;
             if (!sfppframe::split(cipher.data(), cipher.size(), to, from, id, heardAgo, false, frames))
                 continue;
@@ -1198,7 +1201,6 @@ void StoreForwardPlusPlusModule::pushScratchRows()
             ++it;
     }
 
-    const uint32_t now = getValidTime(RTCQuality::RTCQualityNTP, true);
     sfppsr::Scope scope;
     copyScopeRoot(root, SFPP_HASH_SIZE, scope, 0, false);
 
@@ -1213,16 +1215,21 @@ void StoreForwardPlusPlusModule::pushScratchRows()
         const uint8_t *cipher = (const uint8_t *)sqlite3_column_blob(fromScratchStmt, 3);
         const int cipherLen = sqlite3_column_bytes(fromScratchStmt, 3);
         const uint8_t *hash = (const uint8_t *)sqlite3_column_blob(fromScratchStmt, 4);
-        const uint32_t rxTime = (uint32_t)sqlite3_column_int64(fromScratchStmt, 5);
+        RowTime stamp;
+        stamp.stamp = (uint32_t)sqlite3_column_int64(fromScratchStmt, 5);
+        stamp.basis = (uint8_t)sqlite3_column_int(fromScratchStmt, 7);
+        stamp.boot_id = (uint32_t)sqlite3_column_int64(fromScratchStmt, 8);
+        stamp.margin = (uint32_t)sqlite3_column_int64(fromScratchStmt, 9);
 
         if (cipher == nullptr || cipherLen <= 0 || hash == nullptr)
             continue;
-        if (rxTime > now || now - rxTime < kScratchPushMinAgeS)
+        const RowAge age = rowAge(stamp);
+        if (age.age < kScratchPushMinAgeS)
             continue; // too young: the authority may still hear it live and announce it
         if (enumAlreadyOffered(hash))
             continue;
 
-        const uint32_t heardAgo = now - rxTime;
+        const uint32_t heardAgo = age.age;
         std::vector<meshtastic_StoreForwardPlusPlus> frames;
         if (!sfppframe::split(cipher, (size_t)cipherLen, to, from, id, heardAgo, false, frames))
             continue;
@@ -1261,11 +1268,16 @@ bool StoreForwardPlusPlusModule::acceptPushedItemFrame(const meshtastic_MeshPack
     if (replay.ciphertext.size() > sizeof(lo.encrypted_bytes))
         return false;
 
+    RowTime lo_time;
     lo.to = replay.to;
     lo.from = replay.from;
     lo.id = replay.id;
-    const uint32_t now = getValidTime(RTCQuality::RTCQualityNTP, true);
-    lo.rx_time = replay.heardAgoS <= now ? now - replay.heardAgoS : now;
+    if (!timeFromAge(replay.heardAgoS, lo_time))
+        return false;
+    lo.rx_time = lo_time.stamp;
+    lo.time_basis = lo_time.basis;
+    lo.boot_id = lo_time.boot_id;
+    lo.age_margin = lo_time.margin;
     memcpy(lo.root_hash, root, SFPP_HASH_SIZE);
     lo.root_hash_len = SFPP_HASH_SIZE;
     lo.channel_hash = channels.getHash(0);
@@ -1430,7 +1442,7 @@ void StoreForwardPlusPlusModule::promoteScratchMatches(const uint8_t *root_hash,
         uint32_t to;
         uint32_t from;
         uint32_t id;
-        uint32_t rxTime;
+        RowTime time;
         std::vector<uint8_t> cipher;
         uint8_t hash[SFPP_HASH_SIZE];
     };
@@ -1470,7 +1482,10 @@ void StoreForwardPlusPlusModule::promoteScratchMatches(const uint8_t *root_hash,
         row.id = id;
         row.cipher.assign(cipher, cipher + cipherLen);
         memcpy(row.hash, computed, SFPP_HASH_SIZE);
-        row.rxTime = (uint32_t)sqlite3_column_int64(fromScratchStmt, 5);
+        row.time.stamp = (uint32_t)sqlite3_column_int64(fromScratchStmt, 5);
+        row.time.basis = (uint8_t)sqlite3_column_int(fromScratchStmt, 7);
+        row.time.boot_id = (uint32_t)sqlite3_column_int64(fromScratchStmt, 8);
+        row.time.margin = (uint32_t)sqlite3_column_int64(fromScratchStmt, 9);
         matches.push_back(row);
     }
     sqlite3_reset(fromScratchStmt);
@@ -1479,8 +1494,7 @@ void StoreForwardPlusPlusModule::promoteScratchMatches(const uint8_t *root_hash,
         removeFromScratch(bad.data(), SFPP_HASH_SIZE);
 
     for (const auto &row : matches) {
-        insertCanonObject(row.to, row.from, row.id, row.cipher.data(), row.cipher.size(), row.hash, row.rxTime, root_hash,
-                          bucket);
+        insertCanonObject(row.to, row.from, row.id, row.cipher.data(), row.cipher.size(), row.hash, row.time, root_hash, bucket);
         removeFromScratch(row.hash, SFPP_HASH_SIZE);
         const pinsketch::Element sid = sfppsr::shortId(row.hash, SFPP_HASH_SIZE);
         enumPromoted.push_back({sid, {}});

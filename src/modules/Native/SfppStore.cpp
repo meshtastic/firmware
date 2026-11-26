@@ -22,6 +22,302 @@
 #include <utility>
 #include <vector>
 
+// D7's retention applies to canon rows as well as to the legacy read window.
+static constexpr uint32_t kRetentionS = 48 * 60 * 60;
+
+void StoreForwardPlusPlusModule::initTimeState()
+{
+    prevBootId = prevLastUptime = prevLastEpoch = 0;
+    sqlite3_reset(timeStateReadStmt);
+    if (sqlite3_step(timeStateReadStmt) == SQLITE_ROW) {
+        prevBootId = (uint32_t)sqlite3_column_int64(timeStateReadStmt, 0);
+        prevLastUptime = (uint32_t)sqlite3_column_int64(timeStateReadStmt, 1);
+        prevLastEpoch = (uint32_t)sqlite3_column_int64(timeStateReadStmt, 2);
+    }
+    sqlite3_reset(timeStateReadStmt);
+
+    bootId = prevBootId == UINT32_MAX ? 1 : prevBootId + 1;
+    if (bootId == 0)
+        bootId = 1;
+    bootEpoch = getValidTime(RTCQualityNTP, true);
+    lastSeenUptime = Time::getUptimeSecs();
+    lastSeenEpoch = bootEpoch;
+    writeTimeState();
+}
+
+void StoreForwardPlusPlusModule::writeTimeState()
+{
+    sqlite3_reset(timeStateWriteStmt);
+    sqlite3_bind_int64(timeStateWriteStmt, 1, (sqlite3_int64)bootId);
+    sqlite3_bind_int64(timeStateWriteStmt, 2, (sqlite3_int64)bootEpoch);
+    sqlite3_bind_int64(timeStateWriteStmt, 3, (sqlite3_int64)lastSeenUptime);
+    sqlite3_bind_int64(timeStateWriteStmt, 4, (sqlite3_int64)lastSeenEpoch);
+    sqlite3_step(timeStateWriteStmt);
+    sqlite3_reset(timeStateWriteStmt);
+}
+
+void StoreForwardPlusPlusModule::updateTimeState()
+{
+    const uint32_t nowUptime = Time::getUptimeSecs();
+    const uint32_t nowEpoch = getValidTime(RTCQualityNTP, true);
+    if (nowEpoch) {
+        lastSeenEpoch = nowEpoch;
+        // A clock that arrived after boot still pins the boot start for ageing epoch rows.
+        if (bootEpoch == 0)
+            bootEpoch = nowEpoch > nowUptime ? nowEpoch - nowUptime : 0;
+    }
+    lastSeenUptime = nowUptime;
+    writeTimeState();
+}
+
+uint32_t StoreForwardPlusPlusModule::estimateEpochNow() const
+{
+    const uint32_t proper = getValidTime(RTCQualityNTP, true);
+    if (proper)
+        return proper;
+    // Mesh/device time may age an existing epoch but never stamps a new row.
+    const uint32_t rough = getValidTime(RTCQualityDevice, true);
+    if (rough)
+        return rough;
+    const uint32_t nowUptime = Time::getUptimeSecs();
+    if (bootEpoch > 0)
+        return bootEpoch + nowUptime;
+    if (lastSeenEpoch > 0)
+        return lastSeenEpoch + (nowUptime - lastSeenUptime);
+    return 0;
+}
+
+StoreForwardPlusPlusModule::RowTime StoreForwardPlusPlusModule::nowTime() const
+{
+    RowTime t;
+    const uint32_t nowEpoch = getValidTime(RTCQualityNTP, true);
+    if (nowEpoch) {
+        t.basis = kTimeBasisEpoch;
+        t.stamp = nowEpoch;
+    } else {
+        t.basis = kTimeBasisUptime;
+        t.stamp = Time::getUptimeSecs();
+        t.boot_id = bootId;
+    }
+    return t;
+}
+
+bool StoreForwardPlusPlusModule::timeFromAge(uint32_t heardAgo, RowTime &out) const
+{
+    out = nowTime();
+    if (heardAgo > out.stamp)
+        return false; // an age that would put the object before its own basis is not plausible
+    out.stamp -= heardAgo;
+    out.margin = 0;
+    return true;
+}
+
+StoreForwardPlusPlusModule::RowAge StoreForwardPlusPlusModule::rowAge(const RowTime &t) const
+{
+    RowAge a;
+    a.margin = kTimeMarginS + t.margin;
+    const uint32_t nowUptime = Time::getUptimeSecs();
+
+    if (t.basis == kTimeBasisEpoch) {
+        a.has_epoch = true;
+        a.epoch = t.stamp;
+        a.estimate_epoch = t.stamp;
+        const uint32_t nowEpoch = estimateEpochNow();
+        if (nowEpoch == 0) {
+            a.margin = kRetentionS; // no reference to date against; keep the row out of every trim
+            return a;
+        }
+        if (t.stamp > nowEpoch + a.margin) {
+            a.margin += t.stamp - nowEpoch;
+        } else {
+            a.age = t.stamp < nowEpoch ? nowEpoch - t.stamp : 0;
+        }
+        return a;
+    }
+
+    if (t.basis == kTimeBasisUptime) {
+        if (t.boot_id == bootId) {
+            if (t.stamp > nowUptime + a.margin)
+                a.margin += t.stamp - nowUptime;
+            else
+                a.age = t.stamp < nowUptime ? nowUptime - t.stamp : 0;
+        } else {
+            // A row from a boot that was not restamped: age it to the previous end, add the gap we
+            // know about and the uptime since this boot started.
+            const uint32_t atEnd = (t.boot_id == prevBootId && prevLastUptime > t.stamp) ? prevLastUptime - t.stamp : 0;
+            const uint32_t down =
+                (bootEpoch > 0 && prevLastEpoch > 0 && bootEpoch >= prevLastEpoch) ? bootEpoch - prevLastEpoch : 0;
+            a.age = atEnd > UINT32_MAX - down ? UINT32_MAX : atEnd + down;
+            a.age = a.age > UINT32_MAX - nowUptime ? UINT32_MAX : a.age + nowUptime;
+        }
+    } else {
+        a.age = t.stamp > UINT32_MAX - nowUptime ? UINT32_MAX : t.stamp + nowUptime;
+    }
+
+    const uint32_t nowEpoch = estimateEpochNow();
+    if (nowEpoch == 0) {
+        a.margin = kRetentionS;
+    } else if (nowEpoch > a.age) {
+        a.estimate_epoch = nowEpoch - a.age;
+    }
+    return a;
+}
+
+// Restamps rows written by an earlier boot. The age at that boot's last observed second is kept;
+// a known gap is added, and an unknown one only widens the margin. A module restart in the same
+// boot (uptime did not go backwards) keeps its stamps as they are.
+void StoreForwardPlusPlusModule::restampPreviousBoot()
+{
+    const uint32_t nowUptime = Time::getUptimeSecs();
+    const bool continuousBoot = prevLastUptime > 0 && nowUptime >= prevLastUptime;
+    const bool downKnown = bootEpoch > 0 && prevLastEpoch > 0 && bootEpoch >= prevLastEpoch;
+    const uint32_t down = downKnown ? bootEpoch - prevLastEpoch : 0;
+
+    auto restamp = [&](sqlite3_stmt *sel, sqlite3_stmt *upd) {
+        if (!sel || !upd)
+            return;
+        std::vector<std::pair<sqlite3_int64, RowTime>> changes;
+        sqlite3_reset(sel);
+        while (sqlite3_step(sel) == SQLITE_ROW) {
+            RowTime old;
+            const sqlite3_int64 rowid = sqlite3_column_int64(sel, 0);
+            old.stamp = (uint32_t)sqlite3_column_int64(sel, 1);
+            old.basis = (uint8_t)sqlite3_column_int64(sel, 2);
+            old.boot_id = (uint32_t)sqlite3_column_int64(sel, 3);
+            old.margin = (uint32_t)sqlite3_column_int64(sel, 4);
+            if (old.basis == kTimeBasisEpoch)
+                continue; // an epoch needs no restamp: its age is now - stamp
+
+            RowTime next = old;
+            if (continuousBoot) {
+                if (old.basis == kTimeBasisUptime && old.boot_id == prevBootId) {
+                    next.boot_id = bootId; // same uptime base: keep the stamp, name the new module boot
+                    changes.emplace_back(rowid, next);
+                }
+                continue;
+            }
+
+            uint32_t ageAtEnd = 0;
+            if (old.basis == kTimeBasisUptime)
+                ageAtEnd = (old.boot_id == prevBootId && prevLastUptime > old.stamp) ? prevLastUptime - old.stamp : 0;
+            else
+                ageAtEnd = old.stamp > UINT32_MAX - prevLastUptime ? UINT32_MAX : old.stamp + prevLastUptime;
+            const uint32_t total = ageAtEnd > UINT32_MAX - down ? UINT32_MAX : ageAtEnd + down;
+
+            next.margin = old.margin + (downKnown ? 0 : kRetentionS);
+            next.boot_id = 0;
+            if (bootEpoch > 0) {
+                next.basis = kTimeBasisEpoch;
+                next.stamp = bootEpoch > total ? bootEpoch - total : 0;
+            } else {
+                next.basis = kTimeBasisAge;
+                next.stamp = total;
+            }
+            changes.emplace_back(rowid, next);
+        }
+        sqlite3_reset(sel);
+        for (const auto &change : changes) {
+            sqlite3_reset(upd);
+            sqlite3_bind_int64(upd, 1, (sqlite3_int64)change.second.stamp);
+            sqlite3_bind_int64(upd, 2, (sqlite3_int64)change.second.basis);
+            sqlite3_bind_int64(upd, 3, (sqlite3_int64)change.second.boot_id);
+            sqlite3_bind_int64(upd, 4, (sqlite3_int64)change.second.margin);
+            sqlite3_bind_int64(upd, 5, change.first);
+            sqlite3_step(upd);
+            sqlite3_reset(upd);
+        }
+    };
+
+    restamp(restampChannelStmt, updateChannelTimeStmt);
+    restamp(restampScratchStmt, updateScratchTimeStmt);
+    restamp(restampCanonScratchStmt, updateCanonScratchTimeStmt);
+    restamp(restampDirectStmt, updateDirectTimeStmt);
+}
+
+// On the first proper clock, every boot-relative row becomes an epoch with its age unchanged, so
+// the 48 h trim cannot mistake an uptime stamp for an ancient epoch.
+void StoreForwardPlusPlusModule::healBootRelativeTimestamps()
+{
+    const uint32_t nowEpoch = getValidTime(RTCQualityNTP, true);
+    if (nowEpoch == 0)
+        return;
+
+    auto heal = [&](sqlite3_stmt *sel, sqlite3_stmt *upd) {
+        if (!sel || !upd)
+            return;
+        std::vector<std::pair<sqlite3_int64, RowTime>> changes;
+        sqlite3_reset(sel);
+        while (sqlite3_step(sel) == SQLITE_ROW) {
+            RowTime old;
+            const sqlite3_int64 rowid = sqlite3_column_int64(sel, 0);
+            old.stamp = (uint32_t)sqlite3_column_int64(sel, 1);
+            old.basis = (uint8_t)sqlite3_column_int64(sel, 2);
+            old.boot_id = (uint32_t)sqlite3_column_int64(sel, 3);
+            old.margin = (uint32_t)sqlite3_column_int64(sel, 4);
+            if (old.basis == kTimeBasisEpoch)
+                continue;
+
+            const RowAge age = rowAge(old);
+            RowTime next;
+            next.basis = kTimeBasisEpoch;
+            next.stamp = age.age < nowEpoch ? nowEpoch - age.age : 0;
+            next.margin = old.margin;
+            changes.emplace_back(rowid, next);
+        }
+        sqlite3_reset(sel);
+        for (const auto &change : changes) {
+            sqlite3_reset(upd);
+            sqlite3_bind_int64(upd, 1, (sqlite3_int64)change.second.stamp);
+            sqlite3_bind_int64(upd, 2, (sqlite3_int64)change.second.basis);
+            sqlite3_bind_int64(upd, 3, (sqlite3_int64)change.second.boot_id);
+            sqlite3_bind_int64(upd, 4, (sqlite3_int64)change.second.margin);
+            sqlite3_bind_int64(upd, 5, change.first);
+            sqlite3_step(upd);
+            sqlite3_reset(upd);
+        }
+    };
+
+    heal(restampChannelStmt, updateChannelTimeStmt);
+    heal(restampScratchStmt, updateScratchTimeStmt);
+    heal(restampCanonScratchStmt, updateCanonScratchTimeStmt);
+    heal(restampDirectStmt, updateDirectTimeStmt);
+}
+
+void StoreForwardPlusPlusModule::trimCanonByRetention(uint8_t *root_hash, size_t root_hash_len)
+{
+    std::vector<sqlite3_int64> drop;
+    sqlite3_reset(canonTimeRowsStmt);
+    sqlite3_bind_int(canonTimeRowsStmt, 1, root_hash_len);
+    sqlite3_bind_blob(canonTimeRowsStmt, 2, root_hash, root_hash_len, SQLITE_STATIC);
+    while (sqlite3_step(canonTimeRowsStmt) == SQLITE_ROW) {
+        RowTime t;
+        const sqlite3_int64 rowid = sqlite3_column_int64(canonTimeRowsStmt, 0);
+        t.stamp = (uint32_t)sqlite3_column_int64(canonTimeRowsStmt, 1);
+        t.basis = (uint8_t)sqlite3_column_int64(canonTimeRowsStmt, 2);
+        t.boot_id = (uint32_t)sqlite3_column_int64(canonTimeRowsStmt, 3);
+        t.margin = (uint32_t)sqlite3_column_int64(canonTimeRowsStmt, 4);
+        if (rowAge(t).age >= kRetentionS)
+            drop.push_back(rowid);
+    }
+    sqlite3_reset(canonTimeRowsStmt);
+
+    for (sqlite3_int64 rowid : drop) {
+        sqlite3_reset(deleteCanonRowidStmt);
+        sqlite3_bind_int64(deleteCanonRowidStmt, 1, rowid);
+        sqlite3_step(deleteCanonRowidStmt);
+        sqlite3_reset(deleteCanonRowidStmt);
+    }
+}
+
+bool StoreForwardPlusPlusModule::linkIsFresh(const link_object &lo) const
+{
+    RowTime t;
+    t.stamp = lo.rx_time;
+    t.basis = kTimeBasisEpoch; // the wire's rxtime is an epoch claim; an unusable one counts as stale
+    const RowAge age = rowAge(t);
+    return age.age + age.margin <= rebroadcastTimeout;
+}
+
 void StoreForwardPlusPlusModule::backfillSetIndex()
 {
     uint32_t indexed = 0;
@@ -154,6 +450,9 @@ StoreForwardPlusPlusModule::link_object StoreForwardPlusPlusModule::getLink(uint
     lo.counter = sqlite3_column_int(getLinkStmt, 8);
 
     lo.payload = std::string((char *)sqlite3_column_text(getLinkStmt, 9));
+    lo.time_basis = (uint8_t)sqlite3_column_int(getLinkStmt, 10);
+    lo.boot_id = (uint32_t)sqlite3_column_int64(getLinkStmt, 11);
+    lo.age_margin = (uint32_t)sqlite3_column_int64(getLinkStmt, 12);
 
     lo.channel_hash = getChannelHashFromRoot(lo.root_hash, lo.root_hash_len);
 
@@ -195,6 +494,9 @@ StoreForwardPlusPlusModule::link_object StoreForwardPlusPlusModule::getLinkFromM
     lo.counter = sqlite3_column_int(getLinkFromMessageHashStmt, 8);
 
     lo.payload = std::string((char *)sqlite3_column_text(getLinkFromMessageHashStmt, 9));
+    lo.time_basis = (uint8_t)sqlite3_column_int(getLinkFromMessageHashStmt, 10);
+    lo.boot_id = (uint32_t)sqlite3_column_int64(getLinkFromMessageHashStmt, 11);
+    lo.age_margin = (uint32_t)sqlite3_column_int64(getLinkFromMessageHashStmt, 12);
 
     lo.channel_hash = getChannelHashFromRoot(lo.root_hash, lo.root_hash_len);
 
@@ -222,6 +524,9 @@ bool StoreForwardPlusPlusModule::addToScratch(link_object &lo)
     sqlite3_bind_int(scratch_insert_stmt, 7, lo.rx_time);
     // payload
     sqlite3_bind_text(scratch_insert_stmt, 8, lo.payload.c_str(), lo.payload.length(), NULL);
+    sqlite3_bind_int64(scratch_insert_stmt, 9, (sqlite3_int64)lo.time_basis);
+    sqlite3_bind_int64(scratch_insert_stmt, 10, (sqlite3_int64)lo.boot_id);
+    sqlite3_bind_int64(scratch_insert_stmt, 11, (sqlite3_int64)lo.age_margin);
 
     int res = sqlite3_step(scratch_insert_stmt);
     if (res != SQLITE_OK) {
@@ -327,6 +632,9 @@ StoreForwardPlusPlusModule::link_object StoreForwardPlusPlusModule::getFromScrat
     memcpy(lo.root_hash, root_hash, SFPP_HASH_SIZE);
     lo.payload =
         std::string((char *)sqlite3_column_text(fromScratchByHashStmt, 7), sqlite3_column_bytes(fromScratchByHashStmt, 7));
+    lo.time_basis = (uint8_t)sqlite3_column_int(fromScratchByHashStmt, 8);
+    lo.boot_id = (uint32_t)sqlite3_column_int64(fromScratchByHashStmt, 9);
+    lo.age_margin = (uint32_t)sqlite3_column_int64(fromScratchByHashStmt, 10);
     sqlite3_reset(fromScratchByHashStmt);
     return lo;
 }
@@ -440,14 +748,29 @@ StoreForwardPlusPlusModule::getLinkFromPositionFromTip(uint32_t _count, uint8_t 
 
 void StoreForwardPlusPlusModule::pruneScratchQueue()
 {
-    // Very little utility in holding on to very old scratch messages
-    sqlite3_bind_int(pruneScratchQueueStmt, 1, time(nullptr) - 60 * 60 * 6);
-    int res = sqlite3_step(pruneScratchQueueStmt);
-    if (res != SQLITE_OK && res != SQLITE_DONE) {
-        LOG_ERROR("StoreForwardpp Prune Scratch sqlite error %u, %s", res, sqlite3_errmsg(ppDb));
+    // Very little utility in holding on to very old scratch messages.
+    constexpr uint32_t scratchMaxAgeS = 60 * 60 * 6;
+    std::vector<sqlite3_int64> drop;
+    sqlite3_reset(scratchTimeRowsStmt);
+    while (sqlite3_step(scratchTimeRowsStmt) == SQLITE_ROW) {
+        RowTime t;
+        const sqlite3_int64 rowid = sqlite3_column_int64(scratchTimeRowsStmt, 0);
+        t.stamp = (uint32_t)sqlite3_column_int64(scratchTimeRowsStmt, 1);
+        t.basis = (uint8_t)sqlite3_column_int(scratchTimeRowsStmt, 2);
+        t.boot_id = (uint32_t)sqlite3_column_int64(scratchTimeRowsStmt, 3);
+        t.margin = (uint32_t)sqlite3_column_int64(scratchTimeRowsStmt, 4);
+        if (rowAge(t).age >= scratchMaxAgeS)
+            drop.push_back(rowid);
     }
-    sqlite3_reset(pruneScratchQueueStmt);
-    scratch_timed_out += sqlite3_changes(ppDb);
+    sqlite3_reset(scratchTimeRowsStmt);
+
+    for (sqlite3_int64 rowid : drop) {
+        sqlite3_reset(deleteScratchRowidStmt);
+        sqlite3_bind_int64(deleteScratchRowidStmt, 1, rowid);
+        sqlite3_step(deleteScratchRowidStmt);
+        sqlite3_reset(deleteScratchRowidStmt);
+    }
+    scratch_timed_out += (uint32_t)drop.size();
 }
 
 void StoreForwardPlusPlusModule::trimOldestLink(uint8_t *root_hash, size_t root_hash_len)
@@ -507,6 +830,9 @@ void StoreForwardPlusPlusModule::addToCanonScratch(link_object &lo)
     sqlite3_bind_text(canon_scratch_insert_stmt, 9, lo.payload.c_str(), lo.payload.length(), NULL);
 
     sqlite3_bind_int(canon_scratch_insert_stmt, 10, lo.counter);
+    sqlite3_bind_int64(canon_scratch_insert_stmt, 11, (sqlite3_int64)lo.time_basis);
+    sqlite3_bind_int64(canon_scratch_insert_stmt, 12, (sqlite3_int64)lo.boot_id);
+    sqlite3_bind_int64(canon_scratch_insert_stmt, 13, (sqlite3_int64)lo.age_margin);
     int res = sqlite3_step(canon_scratch_insert_stmt);
     if (res != SQLITE_OK && res != SQLITE_DONE) {
         LOG_ERROR("StoreForwardpp canon_scratch_insert_stmt Cannot step %u: %s", res, sqlite3_errmsg(ppDb));
@@ -553,6 +879,9 @@ StoreForwardPlusPlusModule::link_object StoreForwardPlusPlusModule::getfromCanon
     lo.counter = sqlite3_column_int(getCanonScratchStmt, 8);
 
     lo.payload = std::string((char *)sqlite3_column_text(getCanonScratchStmt, 9));
+    lo.time_basis = (uint8_t)sqlite3_column_int(getCanonScratchStmt, 10);
+    lo.boot_id = (uint32_t)sqlite3_column_int64(getCanonScratchStmt, 11);
+    lo.age_margin = (uint32_t)sqlite3_column_int64(getCanonScratchStmt, 12);
 
     sqlite3_reset(getCanonScratchStmt);
 
@@ -596,7 +925,7 @@ void StoreForwardPlusPlusModule::clearCanonScratch(uint8_t *root_hash, size_t ro
 }
 
 bool StoreForwardPlusPlusModule::insertCanonObject(uint32_t to, uint32_t from, uint32_t packetId, const uint8_t *cipher,
-                                                   size_t cipherLen, const uint8_t *hash, uint32_t rxTime,
+                                                   size_t cipherLen, const uint8_t *hash, const RowTime &time,
                                                    const uint8_t *root_hash, uint32_t bucket)
 {
     if (isInDB(hash, SFPP_HASH_SIZE))
@@ -611,13 +940,16 @@ bool StoreForwardPlusPlusModule::insertCanonObject(uint32_t to, uint32_t from, u
     sqlite3_bind_blob(chain_insert_stmt, 4, root_hash, SFPP_HASH_SIZE, SQLITE_STATIC);
     sqlite3_bind_blob(chain_insert_stmt, 5, cipher, (int)cipherLen, SQLITE_STATIC);
     sqlite3_bind_blob(chain_insert_stmt, 6, hash, SFPP_HASH_SIZE, SQLITE_STATIC);
-    sqlite3_bind_int64(chain_insert_stmt, 7, (sqlite3_int64)rxTime);
+    sqlite3_bind_int64(chain_insert_stmt, 7, (sqlite3_int64)time.stamp);
     // A unique non-zero commit hash keeps trimOldestLink deleting one row rather than every zero row.
     sqlite3_bind_blob(chain_insert_stmt, 8, hash, SFPP_HASH_SIZE, SQLITE_STATIC);
     sqlite3_bind_text(chain_insert_stmt, 9, "", 0, SQLITE_STATIC);
     sqlite3_bind_int64(chain_insert_stmt, 10, (sqlite3_int64)counter);
     sqlite3_bind_int64(chain_insert_stmt, 11, (sqlite3_int64)sfppsr::shortId(hash, SFPP_HASH_SIZE));
     sqlite3_bind_int64(chain_insert_stmt, 12, (sqlite3_int64)sfppsr::checksumContribution(hash, SFPP_HASH_SIZE));
+    sqlite3_bind_int64(chain_insert_stmt, 13, (sqlite3_int64)time.basis);
+    sqlite3_bind_int64(chain_insert_stmt, 14, (sqlite3_int64)time.boot_id);
+    sqlite3_bind_int64(chain_insert_stmt, 15, (sqlite3_int64)time.margin);
 
     const int res = sqlite3_step(chain_insert_stmt);
     sqlite3_reset(chain_insert_stmt);
@@ -637,9 +969,10 @@ bool StoreForwardPlusPlusModule::storeRecoveredObject(const sfppframe::Replay &r
         return true;
     }
 
-    const uint32_t now = getValidTime(RTCQuality::RTCQualityNTP, true);
-    const uint32_t rxTime = replay.heardAgoS <= now ? now - replay.heardAgoS : now;
-    if (!insertCanonObject(replay.to, replay.from, replay.id, replay.ciphertext.data(), replay.ciphertext.size(), hash, rxTime,
+    RowTime time;
+    if (!timeFromAge(replay.heardAgoS, time))
+        return false;
+    if (!insertCanonObject(replay.to, replay.from, replay.id, replay.ciphertext.data(), replay.ciphertext.size(), hash, time,
                            root_hash, bucket))
         return false;
     // The object is canonical now, so a scratch copy (a writer-missed offer) is no longer needed.

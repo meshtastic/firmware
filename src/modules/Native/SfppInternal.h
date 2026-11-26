@@ -17,6 +17,13 @@ static constexpr uint32_t kEnumFullRootEvery = 10;
 static constexpr size_t kEnumPendingMax = 8;
 static constexpr uint32_t kEnumLateAcceptMs = 5 * 60 * 1000;
 
+// G19: a proper clock is NTP or better. Without one, a row's age carries an uncertainty at the newest
+// end; an unknown reboot gap widens it to the retention horizon, past which the row is already gone.
+static constexpr uint32_t kTimeMarginS = 300;
+static constexpr uint8_t kTimeBasisEpoch = 0;
+static constexpr uint8_t kTimeBasisUptime = 1;
+static constexpr uint8_t kTimeBasisAge = 2;
+
 static inline uint32_t scratchSweepMs()
 {
     const uint32_t minutes = portduino_config.sfpp_scratch_sweep < 1 ? 1 : portduino_config.sfpp_scratch_sweep;

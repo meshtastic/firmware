@@ -2610,12 +2610,12 @@ void test_knownPeerTableIsLeastRecentlyUsed()
 // G4: a half-received provide ends at the idle gap, so a later advert can start a fresh pull.
 void test_lostProvideFrameEndsAtIdle()
 {
-    ingestAuthority(40);
+    ingestAuthority(32);
     buildFollowerFromCopy();
-    TEST_ASSERT_TRUE(deleteCounterRange(dirB, 39, 40));
+    TEST_ASSERT_TRUE(deleteCounterRange(dirB, 31, 32));
 
     meshtastic_MeshPacket advert;
-    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, 0, false, advert, false, 40));
+    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, 0, false, advert, false, 32));
     TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
     myNodeInfo.my_node_num = FOLLOWER_NODE;
     portduino_config.sfpp_stratum0 = false;

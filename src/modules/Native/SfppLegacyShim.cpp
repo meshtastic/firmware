@@ -106,6 +106,8 @@ void StoreForwardPlusPlusModule::handleLegacyClientHistory(const meshtastic_Mesh
 {
     constexpr uint32_t retentionS = 48 * 60 * 60; // D7
     constexpr uint32_t pageMax = 50;
+    // A row with no epoch cannot advance an epoch cursor, so page those by rowid with a tagged cursor.
+    constexpr uint32_t kRowidCursorBase = 0xF0000000;
 
     if (req->rr != meshtastic_StoreAndForward_RequestResponse_CLIENT_HISTORY)
         return;
@@ -126,49 +128,98 @@ void StoreForwardPlusPlusModule::handleLegacyClientHistory(const meshtastic_Mesh
             windowS = requested;
     }
 
-    uint32_t now = getValidTime(RTCQualityNTP, true);
-    uint32_t since = now > windowS ? now - windowS : 0;
     uint32_t cursor = 0;
     if (req->which_variant == meshtastic_StoreAndForward_history_tag)
         cursor = req->variant.history.last_request;
+    const bool rowidCursor = cursor >= kRowidCursorBase;
+    const uint32_t cursorRowid = rowidCursor ? cursor - kRowidCursorBase : 0;
     uint32_t lastServedRxTime = cursor;
     uint32_t count = 0;
+
+    struct Candidate {
+        legacy_history_item item;
+        uint32_t destination;
+        uint32_t display;
+        sqlite3_int64 rowid;
+    };
+    std::vector<Candidate> page;
 
     uint8_t root_hash[SFPP_HASH_SIZE] = {0};
     if (getOrDeriveRootFromChannel(channels.getHash(0), root_hash) != 0) {
         sqlite3_reset(legacyHistoryStmt);
         sqlite3_bind_int(legacyHistoryStmt, 1, SFPP_HASH_SIZE);
         sqlite3_bind_blob(legacyHistoryStmt, 2, root_hash, SFPP_HASH_SIZE, NULL);
-        sqlite3_bind_int64(legacyHistoryStmt, 3, (sqlite3_int64)since);
-        sqlite3_bind_int64(legacyHistoryStmt, 4, (sqlite3_int64)cursor);
+        sqlite3_bind_int64(legacyHistoryStmt, 3, (sqlite3_int64)requester);
+        sqlite3_bind_int64(legacyHistoryStmt, 4, (sqlite3_int64)NODENUM_BROADCAST);
         sqlite3_bind_int64(legacyHistoryStmt, 5, (sqlite3_int64)requester);
-        sqlite3_bind_int64(legacyHistoryStmt, 6, (sqlite3_int64)NODENUM_BROADCAST);
-        sqlite3_bind_int64(legacyHistoryStmt, 7, (sqlite3_int64)requester);
-        sqlite3_bind_int(legacyHistoryStmt, 8, pageMax);
 
         while (sqlite3_step(legacyHistoryStmt) == SQLITE_ROW) {
-            legacy_history_item item;
-            item.from = (NodeNum)sqlite3_column_int64(legacyHistoryStmt, 0);
-            item.id = (PacketId)sqlite3_column_int64(legacyHistoryStmt, 1);
-            uint32_t destination = (uint32_t)sqlite3_column_int64(legacyHistoryStmt, 2);
-            item.rx_time = (uint32_t)sqlite3_column_int64(legacyHistoryStmt, 3);
-            if (item.rx_time > lastServedRxTime)
-                lastServedRxTime = item.rx_time;
+            RowTime stamp;
+            stamp.stamp = (uint32_t)sqlite3_column_int64(legacyHistoryStmt, 3);
+            stamp.basis = (uint8_t)sqlite3_column_int(legacyHistoryStmt, 6);
+            stamp.boot_id = (uint32_t)sqlite3_column_int64(legacyHistoryStmt, 7);
+            stamp.margin = (uint32_t)sqlite3_column_int64(legacyHistoryStmt, 8);
+            const RowAge age = rowAge(stamp);
+            if (age.age > windowS)
+                continue; // outside the requested window, by the best age we can give it
+
+            Candidate candidate;
+            candidate.item.from = (NodeNum)sqlite3_column_int64(legacyHistoryStmt, 0);
+            candidate.item.id = (PacketId)sqlite3_column_int64(legacyHistoryStmt, 1);
+            candidate.destination = (uint32_t)sqlite3_column_int64(legacyHistoryStmt, 2);
+            candidate.display = age.has_epoch ? age.epoch : age.estimate_epoch;
+            candidate.rowid = sqlite3_column_int64(legacyHistoryStmt, 9);
+            if (rowidCursor) {
+                if (candidate.rowid <= (sqlite3_int64)cursorRowid)
+                    continue;
+            } else if (cursor > 0 && candidate.display <= cursor) {
+                continue;
+            }
             const unsigned char *text = sqlite3_column_text(legacyHistoryStmt, 4);
             if (text)
-                item.payload.assign((const char *)text, sqlite3_column_bytes(legacyHistoryStmt, 4));
-            if (item.payload.empty()) {
+                candidate.item.payload.assign((const char *)text, sqlite3_column_bytes(legacyHistoryStmt, 4));
+            if (candidate.item.payload.empty()) {
                 const uint8_t *encrypted = (const uint8_t *)sqlite3_column_blob(legacyHistoryStmt, 5);
                 const int encryptedLen = sqlite3_column_bytes(legacyHistoryStmt, 5);
-                if (!decodeStoredText(encrypted, (size_t)encryptedLen, destination, item.from, item.id, item.payload))
+                if (!decodeStoredText(encrypted, (size_t)encryptedLen, candidate.destination, candidate.item.from,
+                                      candidate.item.id, candidate.item.payload))
                     continue;
             }
-            item.to = requester;
-            item.broadcast = destination == NODENUM_BROADCAST;
-            legacyHistory.push_back(std::move(item));
-            count++;
+            if (!age.has_epoch) {
+                LOG_INFO("SFPP legacy shim serves a boot-relative row age=%u margin=%u estimated_epoch=%u", age.age, age.margin,
+                         candidate.display);
+            }
+            page.push_back(std::move(candidate));
         }
         sqlite3_reset(legacyHistoryStmt);
+    }
+
+    std::stable_sort(page.begin(), page.end(), [](const Candidate &a, const Candidate &b) { return a.display < b.display; });
+    bool servedEpoch = false;
+    uint32_t maxDisplay = 0;
+    uint32_t maxRowid = 0;
+    for (auto &candidate : page) {
+        if (count >= pageMax)
+            break;
+        legacy_history_item item = std::move(candidate.item);
+        item.rx_time = candidate.display;
+        if (candidate.display > 0) {
+            servedEpoch = true;
+            if (candidate.display > maxDisplay)
+                maxDisplay = candidate.display;
+        }
+        if ((uint32_t)candidate.rowid > maxRowid)
+            maxRowid = (uint32_t)candidate.rowid;
+        item.to = requester;
+        item.broadcast = candidate.destination == NODENUM_BROADCAST;
+        legacyHistory.push_back(std::move(item));
+        count++;
+    }
+    if (count > 0) {
+        if (servedEpoch)
+            lastServedRxTime = maxDisplay;
+        else
+            lastServedRxTime = kRowidCursorBase + maxRowid;
     }
 
     meshtastic_StoreAndForward response = meshtastic_StoreAndForward_init_zero;

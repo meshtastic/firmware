@@ -65,6 +65,9 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
         uint32_t from;
         uint32_t id;
         uint32_t rx_time = 0;
+        uint8_t time_basis = 0;  // 0 epoch, 1 uptime seconds, 2 age at the restart that stamped it
+        uint32_t boot_id = 0;    // the boot a basis-1 stamp belongs to
+        uint32_t age_margin = 0; // extra uncertainty in seconds
         ChannelHash channel_hash;
         uint8_t encrypted_bytes[256] = {0};
         size_t encrypted_len;
@@ -81,7 +84,7 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
 
   public:
     // Stamped into PRAGMA user_version. A store with any other value is moved aside, never migrated.
-    static constexpr int kSchemaVersion = 3;
+    static constexpr int kSchemaVersion = 4;
 
     /** Constructor
      *
@@ -140,9 +143,7 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     sqlite3_stmt *getChainCountStmt;
     sqlite3_stmt *getScratchCountStmt;
     sqlite3_stmt *getRootCanonScratchCountStmt;
-    sqlite3_stmt *pruneScratchQueueStmt;
     sqlite3_stmt *trimOldestLinkStmt;
-    sqlite3_stmt *trimOldByTimeStmt;
     sqlite3_stmt *maybeAddPeerStmt;
     sqlite3_stmt *getPeerStmt;
     sqlite3_stmt *updatePeerStmt;
@@ -160,6 +161,55 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     sqlite3_stmt *unindexedLinksStmt;
     sqlite3_stmt *setLinkSetIndexStmt;
     sqlite3_stmt *legacyHistoryStmt;
+    sqlite3_stmt *timeStateReadStmt;
+    sqlite3_stmt *timeStateWriteStmt;
+    sqlite3_stmt *restampChannelStmt;
+    sqlite3_stmt *restampScratchStmt;
+    sqlite3_stmt *restampCanonScratchStmt;
+    sqlite3_stmt *restampDirectStmt;
+    sqlite3_stmt *updateChannelTimeStmt;
+    sqlite3_stmt *updateScratchTimeStmt;
+    sqlite3_stmt *updateCanonScratchTimeStmt;
+    sqlite3_stmt *updateDirectTimeStmt;
+    sqlite3_stmt *canonTimeRowsStmt;
+    sqlite3_stmt *scratchTimeRowsStmt;
+    sqlite3_stmt *deleteCanonRowidStmt;
+    sqlite3_stmt *deleteScratchRowidStmt;
+
+    // G19 time model. A row carries its stamp, its basis and (for a boot stamp) the boot that wrote it.
+    // Everything that ages a row goes through rowAge() so the bases are never compared raw.
+    struct RowTime {
+        uint32_t stamp = 0;
+        uint8_t basis = 0;
+        uint32_t boot_id = 0;
+        uint32_t margin = 0;
+    };
+    struct RowAge {
+        uint32_t age = 0;
+        uint32_t margin = 0;
+        bool has_epoch = false;
+        uint32_t epoch = 0;
+        uint32_t estimate_epoch = 0;
+    };
+    uint32_t bootId = 0;
+    uint32_t bootEpoch = 0;
+    uint32_t prevBootId = 0;
+    uint32_t prevLastUptime = 0;
+    uint32_t prevLastEpoch = 0;
+    uint32_t lastSeenUptime = 0;
+    uint32_t lastSeenEpoch = 0;
+
+    void initTimeState();
+    void writeTimeState();
+    void updateTimeState();
+    uint32_t estimateEpochNow() const;
+    RowTime nowTime() const;
+    bool timeFromAge(uint32_t heardAgo, RowTime &out) const;
+    RowAge rowAge(const RowTime &t) const;
+    void restampPreviousBoot();
+    void healBootRelativeTimestamps();
+    void trimCanonByRetention(uint8_t *root_hash, size_t root_hash_len);
+    bool linkIsFresh(const link_object &lo) const;
 
     // Answers a legacy CLIENT_HISTORY from the stored texts. One text per runOnce() keeps the
     // archive inside the legacy module's pacing, which clients already expect.
@@ -266,7 +316,7 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
 
     // A canonical row, shared by recovered objects and promoted scratch rows.
     bool insertCanonObject(uint32_t to, uint32_t from, uint32_t packetId, const uint8_t *cipher, size_t cipherLen,
-                           const uint8_t *hash, uint32_t rxTime, const uint8_t *root_hash, uint32_t bucket);
+                           const uint8_t *hash, const RowTime &time, const uint8_t *root_hash, uint32_t bucket);
     // Stage 8e/10: a scratch row whose short ID the peer also holds is already "held"; move it into
     // the bucket and drop it from the fetch list instead of re-fetching it.
     void promoteScratchMatches(const uint8_t *root_hash, uint32_t bucket, std::vector<pinsketch::Element> &ids);

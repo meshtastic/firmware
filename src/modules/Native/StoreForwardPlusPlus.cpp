@@ -45,9 +45,6 @@ static int readSchemaVersion(sqlite3 *db, bool &hasTables)
     return version;
 }
 
-// D7's retention applies to canon rows as well as to the legacy read window.
-static constexpr uint32_t kRetentionS = 48 * 60 * 60;
-
 static_assert(sfppframe::kMessageHashBytes == SFPP_HASH_SIZE, "frame and store message-hash widths must agree");
 
 StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
@@ -157,6 +154,9 @@ StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
         counter INT DEFAULT 0,         \
         short_id INT,                  \
         checksum INT,                  \
+        time_basis INT NOT NULL DEFAULT 0, \
+        boot_id INT NOT NULL DEFAULT 0,    \
+        age_margin INT NOT NULL DEFAULT 0, \
         PRIMARY KEY (message_hash)     \
         );",
                        NULL, NULL, &err);
@@ -178,6 +178,9 @@ StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
         encrypted_bytes BLOB NOT NULL, \
         message_hash BLOB NOT NULL,    \
         payload TEXT,                  \
+        time_basis INT NOT NULL DEFAULT 0, \
+        boot_id INT NOT NULL DEFAULT 0,    \
+        age_margin INT NOT NULL DEFAULT 0, \
         PRIMARY KEY (message_hash)     \
         );",
                        NULL, NULL, &err);
@@ -201,6 +204,9 @@ StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
         encrypted_bytes BLOB NOT NULL, \
         message_hash BLOB NOT NULL,    \
         payload TEXT,                  \
+        time_basis INT NOT NULL DEFAULT 0, \
+        boot_id INT NOT NULL DEFAULT 0,    \
+        age_margin INT NOT NULL DEFAULT 0, \
         PRIMARY KEY (message_hash)     \
         );",
                        NULL, NULL, &err);
@@ -229,6 +235,9 @@ StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
         commit_hash BLOB NOT NULL,     \
         payload TEXT,                  \
         counter INT NOT NULL,          \
+        time_basis INT NOT NULL DEFAULT 0, \
+        boot_id INT NOT NULL DEFAULT 0,    \
+        age_margin INT NOT NULL DEFAULT 0, \
         PRIMARY KEY (message_hash)     \
         );",
                        NULL, NULL, &err);
@@ -282,12 +291,31 @@ StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
         LOG_ERROR("%s", err);
     sqlite3_free(err);
 
+    // One row of time state: the boot in progress and the last uptime/epoch seen in it, so a restart
+    // can age a previous boot's rows and add the downtime when both ends had a proper clock.
+    res = sqlite3_exec(ppDb, "         \
+        CREATE TABLE IF NOT EXISTS     \
+        time_state(                    \
+        id INT PRIMARY KEY,            \
+        boot_id INT NOT NULL DEFAULT 0,    \
+        boot_epoch INT NOT NULL DEFAULT 0, \
+        last_uptime INT NOT NULL DEFAULT 0,\
+        last_epoch INT NOT NULL DEFAULT 0  \
+        );",
+                       NULL, NULL, &err);
+    if (res != SQLITE_OK) {
+        LOG_ERROR("Failed to create table: %s", sqlite3_errmsg(ppDb));
+    }
+    if (err != nullptr)
+        LOG_ERROR("%s", err);
+    sqlite3_free(err);
+
     sqlite3_exec(ppDb, ("PRAGMA user_version = " + std::to_string(kSchemaVersion) + ";").c_str(), NULL, NULL, NULL);
 
     // prepared statements *should* make this faster.
     sqlite3_prepare_v2(ppDb, "INSERT INTO channel_messages (destination, sender, packet_id, root_hash, \
-        encrypted_bytes, message_hash, rx_time, commit_hash, payload, counter, short_id, checksum) \
-        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
+        encrypted_bytes, message_hash, rx_time, commit_hash, payload, counter, short_id, checksum, \
+        time_basis, boot_id, age_margin) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
                        -1, &chain_insert_stmt, NULL);
 
     // Both identifiers are stored beside the object, so summarising a bucket never rehashes and a
@@ -309,29 +337,34 @@ StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
         where substr(root_hash,1,?)=? and counter>=? and counter<=? and short_id is not null order by counter;",
                        -1, &bucketIdsStmt, NULL);
 
-    sqlite3_prepare_v2(ppDb, "select destination, sender, packet_id, encrypted_bytes, message_hash, rx_time, counter \
-        from channel_messages where substr(root_hash,1,?)=? and counter>=? and counter<=? and short_id=?;",
+    sqlite3_prepare_v2(ppDb, "select destination, sender, packet_id, encrypted_bytes, message_hash, rx_time, counter, \
+        time_basis, boot_id, age_margin from channel_messages \
+        where substr(root_hash,1,?)=? and counter>=? and counter<=? and short_id=?;",
                        -1, &getLinkByShortIdStmt, NULL);
 
     sqlite3_prepare_v2(ppDb, "delete from channel_messages where message_hash=?;", -1, &deleteCanonStmt, NULL);
 
     // Legacy CLIENT_HISTORY reads the stored plaintext, or the ciphertext a follower holds instead.
-    sqlite3_prepare_v2(ppDb, "select sender, packet_id, destination, rx_time, payload, encrypted_bytes from channel_messages \
-        where substr(root_hash,1,?)=? and rx_time>=? and rx_time>? and sender!=? \
-        and (destination=? or destination=?) order by rx_time asc limit ?;",
+    // Window and cursor are applied per row after ageing, because the two bases cannot be compared raw.
+    sqlite3_prepare_v2(ppDb,
+                       "select sender, packet_id, destination, rx_time, payload, encrypted_bytes, time_basis, boot_id, "
+                       "age_margin, rowid from channel_messages where substr(root_hash,1,?)=? and sender!=? "
+                       "and (destination=? or destination=?) order by rowid asc;",
                        -1, &legacyHistoryStmt, NULL);
 
     sqlite3_prepare_v2(ppDb, "INSERT INTO local_messages (destination, sender, packet_id, root_hash, \
-        encrypted_bytes, message_hash, rx_time, payload) VALUES(?, ?, ?, ?, ?, ?, ?, ?);",
+        encrypted_bytes, message_hash, rx_time, payload, time_basis, boot_id, age_margin) \
+        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
                        -1, &scratch_insert_stmt, NULL);
 
-    sqlite3_prepare_v2(ppDb, "select destination, sender, packet_id, encrypted_bytes, message_hash, rx_time, root_hash \
-        from local_messages where root_hash=? order by rx_time asc;", // earliest first
+    sqlite3_prepare_v2(ppDb, "select destination, sender, packet_id, encrypted_bytes, message_hash, rx_time, root_hash, \
+        time_basis, boot_id, age_margin from local_messages where root_hash=? order by rx_time asc;", // earliest first
                        -1, &fromScratchStmt, NULL);
 
     sqlite3_prepare_v2(ppDb,
-                       "select destination, sender, packet_id, encrypted_bytes, message_hash, rx_time, root_hash, payload \
-        from local_messages where substr(message_hash,1,?)=? order by rx_time asc LIMIT 1;", // earliest first
+                       "select destination, sender, packet_id, encrypted_bytes, message_hash, rx_time, root_hash, payload, \
+        time_basis, boot_id, age_margin from local_messages \
+        where substr(message_hash,1,?)=? order by rx_time asc LIMIT 1;", // earliest first
                        -1, &fromScratchByHashStmt, NULL);
 
     sqlite3_prepare_v2(ppDb, "SELECT COUNT(*) from channel_messages where substr(message_hash,1,?)=?", -1, &checkDupMessageHash,
@@ -357,14 +390,14 @@ StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
 
     sqlite3_prepare_v2(
         ppDb,
-        "select destination, sender, packet_id, encrypted_bytes, message_hash, rx_time, commit_hash, root_hash, counter, payload \
-        from channel_messages where substr(commit_hash,1,?)=?;",
+        "select destination, sender, packet_id, encrypted_bytes, message_hash, rx_time, commit_hash, root_hash, counter, payload, \
+        time_basis, boot_id, age_margin from channel_messages where substr(commit_hash,1,?)=?;",
         -1, &getLinkStmt, NULL);
 
     sqlite3_prepare_v2(
         ppDb,
-        "select destination, sender, packet_id, encrypted_bytes, message_hash, rx_time, commit_hash, root_hash, counter, payload \
-        from channel_messages where substr(message_hash,1,?)=?;",
+        "select destination, sender, packet_id, encrypted_bytes, message_hash, rx_time, commit_hash, root_hash, counter, payload, \
+        time_basis, boot_id, age_margin from channel_messages where substr(message_hash,1,?)=?;",
         -1, &getLinkFromMessageHashStmt, NULL);
 
     sqlite3_prepare_v2(ppDb, "select identifier from mappings where substr(root_hash,1,?)=?;", -1, &getHashFromRootStmt, NULL);
@@ -385,15 +418,22 @@ StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
     sqlite3_prepare_v2(ppDb, "SELECT count(*) FROM canon_scratch WHERE substr(root_hash,1,?)=?;", -1,
                        &getRootCanonScratchCountStmt, NULL);
 
-    sqlite3_prepare_v2(ppDb, "DELETE FROM local_messages WHERE rx_time < ?;", -1, &pruneScratchQueueStmt, NULL);
+    sqlite3_prepare_v2(ppDb, "select rowid, rx_time, time_basis, boot_id, age_margin from local_messages;", -1,
+                       &scratchTimeRowsStmt, NULL);
+
+    sqlite3_prepare_v2(ppDb, "DELETE FROM local_messages WHERE rowid=?;", -1, &deleteScratchRowidStmt, NULL);
 
     sqlite3_prepare_v2(ppDb,
                        "DELETE FROM channel_messages WHERE commit_hash in ( select commit_hash from channel_messages where "
                        "substr(root_hash,1,?)=? ORDER BY rowid ASC LIMIT 1);",
                        -1, &trimOldestLinkStmt, NULL);
 
-    sqlite3_prepare_v2(ppDb, "DELETE FROM channel_messages WHERE substr(root_hash,1,?)=? AND rx_time < ?;", -1,
-                       &trimOldByTimeStmt, NULL);
+    sqlite3_prepare_v2(ppDb,
+                       "select rowid, rx_time, time_basis, boot_id, age_margin from channel_messages "
+                       "where substr(root_hash,1,?)=?;",
+                       -1, &canonTimeRowsStmt, NULL);
+
+    sqlite3_prepare_v2(ppDb, "DELETE FROM channel_messages WHERE rowid=?;", -1, &deleteCanonRowidStmt, NULL);
 
     sqlite3_prepare_v2(ppDb,
                        "INSERT INTO peers (nodenum, total_count, average_hops) VALUES(?, ?, ?) ON CONFLICT(nodenum) DO NOTHING;",
@@ -412,7 +452,8 @@ StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
     sqlite3_prepare_v2(ppDb, "DELETE FROM channel_messages WHERE substr(root_hash,1,?)=?;", -1, &clearChainStmt, NULL);
 
     sqlite3_prepare_v2(ppDb, "INSERT INTO canon_scratch (destination, sender, packet_id, root_hash, \
-        encrypted_bytes, message_hash, rx_time, commit_hash, payload, counter) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
+        encrypted_bytes, message_hash, rx_time, commit_hash, payload, counter, time_basis, boot_id, age_margin) \
+        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
                        -1, &canon_scratch_insert_stmt, NULL);
 
     sqlite3_prepare_v2(ppDb, "SELECT count(*) FROM canon_scratch WHERE substr(message_hash,1,?)=?;", -1,
@@ -420,8 +461,8 @@ StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
 
     sqlite3_prepare_v2(
         ppDb,
-        "select destination, sender, packet_id, encrypted_bytes, message_hash, rx_time, commit_hash, root_hash, counter, payload \
-        from canon_scratch where substr(root_hash,1,?)=? ORDER BY counter ASC;",
+        "select destination, sender, packet_id, encrypted_bytes, message_hash, rx_time, commit_hash, root_hash, counter, payload, \
+        time_basis, boot_id, age_margin from canon_scratch where substr(root_hash,1,?)=? ORDER BY counter ASC;",
         -1, &getCanonScratchStmt, NULL);
 
     sqlite3_prepare_v2(ppDb, "DELETE from canon_scratch where substr(message_hash,1,?)=?", -1, &removeCanonScratch, NULL);
@@ -429,8 +470,33 @@ StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
     sqlite3_prepare_v2(ppDb, "DELETE from canon_scratch where substr(root_hash,1,?)=? AND counter < ?;", -1,
                        &clearCanonScratchStmt, NULL);
 
+    sqlite3_prepare_v2(ppDb, "select boot_id, last_uptime, last_epoch from time_state where id=1;", -1, &timeStateReadStmt, NULL);
+    sqlite3_prepare_v2(ppDb,
+                       "INSERT OR REPLACE INTO time_state (id, boot_id, boot_epoch, last_uptime, last_epoch) "
+                       "VALUES(1, ?, ?, ?, ?);",
+                       -1, &timeStateWriteStmt, NULL);
+
+    sqlite3_prepare_v2(ppDb, "select rowid, rx_time, time_basis, boot_id, age_margin from channel_messages;", -1,
+                       &restampChannelStmt, NULL);
+    sqlite3_prepare_v2(ppDb, "select rowid, rx_time, time_basis, boot_id, age_margin from local_messages;", -1,
+                       &restampScratchStmt, NULL);
+    sqlite3_prepare_v2(ppDb, "select rowid, rx_time, time_basis, boot_id, age_margin from canon_scratch;", -1,
+                       &restampCanonScratchStmt, NULL);
+    sqlite3_prepare_v2(ppDb, "select rowid, rx_time, time_basis, boot_id, age_margin from direct_messages;", -1,
+                       &restampDirectStmt, NULL);
+    sqlite3_prepare_v2(ppDb, "update channel_messages set rx_time=?, time_basis=?, boot_id=?, age_margin=? where rowid=?;", -1,
+                       &updateChannelTimeStmt, NULL);
+    sqlite3_prepare_v2(ppDb, "update local_messages set rx_time=?, time_basis=?, boot_id=?, age_margin=? where rowid=?;", -1,
+                       &updateScratchTimeStmt, NULL);
+    sqlite3_prepare_v2(ppDb, "update canon_scratch set rx_time=?, time_basis=?, boot_id=?, age_margin=? where rowid=?;", -1,
+                       &updateCanonScratchTimeStmt, NULL);
+    sqlite3_prepare_v2(ppDb, "update direct_messages set rx_time=?, time_basis=?, boot_id=?, age_margin=? where rowid=?;", -1,
+                       &updateDirectTimeStmt, NULL);
+
     encryptedOk = true;
 
+    initTimeState();
+    restampPreviousBoot();
     backfillSetIndex();
 
     this->setInterval(15 * 1000);
@@ -459,9 +525,11 @@ StoreForwardPlusPlusModule::~StoreForwardPlusPlusModule()
         getChainCountStmt,
         getScratchCountStmt,
         getRootCanonScratchCountStmt,
-        pruneScratchQueueStmt,
+        scratchTimeRowsStmt,
+        deleteScratchRowidStmt,
         trimOldestLinkStmt,
-        trimOldByTimeStmt,
+        canonTimeRowsStmt,
+        deleteCanonRowidStmt,
         maybeAddPeerStmt,
         getPeerStmt,
         updatePeerStmt,
@@ -479,6 +547,16 @@ StoreForwardPlusPlusModule::~StoreForwardPlusPlusModule()
         unindexedLinksStmt,
         setLinkSetIndexStmt,
         legacyHistoryStmt,
+        timeStateReadStmt,
+        timeStateWriteStmt,
+        restampChannelStmt,
+        restampScratchStmt,
+        restampCanonScratchStmt,
+        restampDirectStmt,
+        updateChannelTimeStmt,
+        updateScratchTimeStmt,
+        updateCanonScratchTimeStmt,
+        updateDirectTimeStmt,
     };
     for (sqlite3_stmt *stmt : statements) {
         if (stmt)
@@ -499,22 +577,19 @@ int32_t StoreForwardPlusPlusModule::runOnce()
         if (portduino_config.sfpp_repair == SFPP_REPAIR_CHAIN)
             setIntervalFromNow(portduino_config.sfpp_announce_interval * 60 * 1000 - 30 * 1000);
     }
+    // G19: promote the host's synchronized clock to NTP when we have no proper source yet, but never
+    // defer on it; a store without one works in boot-relative ages.
     if (getRTCQuality() < RTCQualityNTP) {
-        RTCQuality ourQuality = RTCQualityDevice;
-
         std::string timeCommandResult = exec("timedatectl status | grep synchronized | grep yes -c");
         if (timeCommandResult[0] == '1') {
-            ourQuality = RTCQualityNTP;
-
             struct timeval tv;
             tv.tv_sec = time(NULL);
             tv.tv_usec = 0;
-            perhapsSetRTC(ourQuality, &tv);
-        } else {
-            LOG_WARN("StoreForward++ deferred due to time quality %u result:%s", getRTCQuality(), timeCommandResult.c_str());
-            return portduino_config.sfpp_announce_interval * 60 * 1000;
+            perhapsSetRTC(RTCQualityNTP, &tv);
         }
     }
+    updateTimeState();
+    healBootRelativeTimestamps();
 
     uint8_t root_hash_bytes[SFPP_HASH_SIZE] = {0};
     ChannelHash hash = channels.getHash(0);
@@ -547,16 +622,8 @@ int32_t StoreForwardPlusPlusModule::runOnce()
         chain_count--;
     }
 
-    // D7: canon rows outside the service window are gone even when the row cap is not reached.
-    const uint32_t nowS = getValidTime(RTCQuality::RTCQualityNTP, true);
-    if (nowS > kRetentionS) {
-        sqlite3_reset(trimOldByTimeStmt);
-        sqlite3_bind_int(trimOldByTimeStmt, 1, SFPP_HASH_SIZE);
-        sqlite3_bind_blob(trimOldByTimeStmt, 2, root_hash_bytes, SFPP_HASH_SIZE, SQLITE_STATIC);
-        sqlite3_bind_int64(trimOldByTimeStmt, 3, (sqlite3_int64)(nowS - kRetentionS));
-        sqlite3_step(trimOldByTimeStmt);
-        sqlite3_reset(trimOldByTimeStmt);
-    }
+    // D7: canon rows outside the retention window are gone even when the row cap is not reached.
+    trimCanonByRetention(root_hash_bytes, SFPP_HASH_SIZE);
     // evict old messages from scratch
     pruneScratchQueue();
 
@@ -688,11 +755,6 @@ void StoreForwardPlusPlusModule::handleEncrypted(const meshtastic_MeshPacket *mp
 
 ProcessMessage StoreForwardPlusPlusModule::handleReceived(const meshtastic_MeshPacket &mp)
 {
-    // To avoid terrible time problems, require NTP or GPS time
-    if (getRTCQuality() < RTCQualityNTP) {
-        return ProcessMessage::CONTINUE;
-    }
-
     // A legacy CLIENT_HISTORY from a phone connected to this archive. Checked before the from==0
     // guard below, because the phone sends the request as the local node.
     if (mp.which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
@@ -914,7 +976,6 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
             if (t->message_hash.size >= 8 && t->commit_hash.size >= 8 &&
                 checkCommitHash(scratch_object, t->commit_hash.bytes, t->message_hash.size)) {
                 LOG_INFO("StoreForwardpp Found announced message in scratch, adding to chain");
-                scratch_object.rx_time = t->encapsulated_rxtime;
                 if (addToChain(scratch_object))
                     links_from_scratch++;
                 removeFromScratch(scratch_object.message_hash, scratch_object.message_hash_len);
@@ -930,7 +991,6 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
                 LOG_INFO("StoreForwardpp Could not speculate chain to announced commit hash. Moving from "
                          "local_messages to canon_scratch");
 
-                scratch_object.rx_time = t->encapsulated_rxtime;
                 scratch_object.counter = t->chain_count;
                 scratch_object.commit_hash_len = t->commit_hash.size;
                 memcpy(scratch_object.commit_hash, t->commit_hash.bytes, t->commit_hash.size);
@@ -1071,7 +1131,7 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
                     pendingRun = true;
                 }
                 // timebox to no more than an hour old
-                if (incoming_link.rx_time > getValidTime(RTCQuality::RTCQualityNTP, true) - rebroadcastTimeout) {
+                if (linkIsFresh(incoming_link)) {
                     // if this packet is new to us, we rebroadcast it
                     rebroadcastLinkObject(incoming_link);
                 } else {
@@ -1094,7 +1154,7 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
                     removeFromScratch(incoming_link.message_hash, incoming_link.message_hash_len);
                 } else {
                     // if this packet is new to us, we rebroadcast it, but only up to an hour old
-                    if (incoming_link.rx_time > getValidTime(RTCQuality::RTCQualityNTP, true) - rebroadcastTimeout) {
+                    if (linkIsFresh(incoming_link)) {
                         rebroadcastLinkObject(incoming_link);
                     } else {
                         LOG_DEBUG("StoreForwardpp Got previously unseen text, but not rebroadcasting because rxtime was %u",
@@ -1129,7 +1189,7 @@ bool StoreForwardPlusPlusModule::handleReceivedProtobuf(const meshtastic_MeshPac
                     !isInCanonScratch(incoming_link.message_hash, incoming_link.message_hash_len)) {
                     addToScratch(incoming_link);
                     LOG_INFO("StoreForwardpp added incoming non-canon message to scratch");
-                    if (incoming_link.rx_time > getValidTime(RTCQuality::RTCQualityNTP, true) - rebroadcastTimeout) {
+                    if (linkIsFresh(incoming_link)) {
                         rebroadcastLinkObject(incoming_link);
                     } else {
                         LOG_DEBUG("StoreForwardpp Got previously unseen text, but not rebroadcasting because rxtime was &u",
@@ -1251,7 +1311,17 @@ StoreForwardPlusPlusModule::ingestTextPacket(const meshtastic_MeshPacket &mp, co
     lo.to = mp.to;
     lo.from = mp.from;
     lo.id = mp.id;
-    lo.rx_time = mp.rx_time;
+    // Keep the age the packet arrived with; a live packet is normally zero, but a replay or a
+    // queued API packet can be older. rx_time is never trusted when it points into the future.
+    RowTime live = nowTime();
+    RowTime stamped;
+    const uint32_t heardAgo = (mp.rx_time != 0 && mp.rx_time <= live.stamp) ? live.stamp - mp.rx_time : 0;
+    if (!timeFromAge(heardAgo, stamped))
+        stamped = live;
+    lo.rx_time = stamped.stamp;
+    lo.time_basis = stamped.basis;
+    lo.boot_id = stamped.boot_id;
+    lo.age_margin = stamped.margin;
     lo.channel_hash = encrypted_meshpacket->channel;
     memcpy(lo.encrypted_bytes, encrypted_meshpacket->encrypted.bytes, encrypted_meshpacket->encrypted.size);
     lo.encrypted_len = encrypted_meshpacket->encrypted.size;
