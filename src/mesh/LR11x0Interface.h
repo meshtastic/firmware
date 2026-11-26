@@ -98,6 +98,8 @@ template <class T> class LR11x0Interface : public RadioLibInterface
   private:
     /** Program all modem parameters into the chip; returns the first RadioLib error, or RADIOLIB_ERR_NONE */
     int16_t programModemParams();
+    /// setOutputPower() on the PA the board needs; LR11X0_FORCE_HP_PA forces the sub-GHz high-power PA.
+    int16_t applyOutputPower();
 
     /** Reset and re-begin() a chip that lost its runtime configuration (reset/brownout) */
     bool reinitChip();

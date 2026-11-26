@@ -1,0 +1,9 @@
+# FAULT: the second entry is not a node number. Entries are read without a fallback, so
+# meshtasticd refuses to start on this file. Expect an ERROR and exit 1.
+Lora:
+  Module: sx1262
+  CS: 21
+  IRQ: 16
+  Busy: 20
+  Reset: 18
+  IgnoreRelayNodes: [!a28e145b, not-a-node]

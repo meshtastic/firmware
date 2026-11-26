@@ -1,0 +1,9 @@
+# FAULT: IgnoreRelayNodes is a list, not a scalar. meshtasticd refuses to start on this file.
+# Expect an ERROR and exit 1.
+Lora:
+  Module: sx1262
+  CS: 21
+  IRQ: 16
+  Busy: 20
+  Reset: 18
+  IgnoreRelayNodes: 0x5b

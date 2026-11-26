@@ -124,6 +124,14 @@ extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const c
 #include "Sensor/T1000xSensor.h"
 #endif
 
+#if defined(MAX31865_CS) && __has_include(<Adafruit_MAX31865.h>)
+#include "Sensor/MAX31865Sensor.h"
+#endif
+
+#if ARCH_PORTDUINO
+#include "Sensor/CommandSensor.h"
+#endif
+
 #if __has_include(<Adafruit_SPA06_003.h>)
 #include "Sensor/SPA06Sensor.h"
 #endif
@@ -144,6 +152,10 @@ extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const c
 #include "Sensor/DS248XSensor.h"
 #endif
 
+#ifdef HAS_RAKHUB
+#include "Sensor/RAKSensorHub.h" // env:rak_wismesh_sensorhub only
+#endif
+
 #define FAILED_STATE_SENSOR_READ_MULTIPLIER 10
 #define DISPLAY_RECEIVEID_MEASUREMENTS_ON_SCREEN true
 
@@ -152,6 +164,11 @@ extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const c
 #include <Throttle.h>
 
 EnvironmentTelemetryModule *environmentTelemetryModule = nullptr;
+
+#if ARCH_PORTDUINO
+// Also in `sensors`, but read last in getEnvironmentTelemetry() so a configured command wins a shared field.
+static TelemetrySensor *commandSensor = nullptr;
+#endif
 
 namespace
 {
@@ -281,6 +298,16 @@ void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
     // order by priority of metrics/values (low top, high bottom)
 
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+#if ARCH_PORTDUINO
+    // Not an I2C device.
+    commandSensor = new CommandSensor(CommandSensorFields::Message::Environment);
+    if (commandSensor->initDevice(nullptr, nullptr)) {
+        sensors.push_front(commandSensor);
+    } else {
+        delete commandSensor;
+        commandSensor = nullptr;
+    }
+#endif
 #ifdef T1000X_SENSOR_EN
     // Not a real I2C device
     addSensor<T1000xSensor>(i2cScanner, ScanI2C::DeviceType::NONE);
@@ -292,6 +319,10 @@ void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
 #endif
 
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR_EXTERNAL
+#if defined(MAX31865_CS) && __has_include(<Adafruit_MAX31865.h>)
+    // SPI device, probed in initDevice()
+    addSensor<MAX31865Sensor>(i2cScanner, ScanI2C::DeviceType::NONE);
+#endif
     addSensor<RCWL9620Sensor>(i2cScanner, ScanI2C::DeviceType::RCWL9620);
     addSensor<CGRadSensSensor>(i2cScanner, ScanI2C::DeviceType::CGRADSENS);
 #if __has_include(<DFRobot_LarkWeatherStation.h>)
@@ -422,6 +453,11 @@ int32_t EnvironmentTelemetryModule::runOnce()
 #ifdef HAS_RAKPROT
             if (rak9154Sensor.hasSensor())
                 result = rak9154Sensor.runOnce();
+#endif
+#ifdef HAS_RAKHUB
+            // 1-Wire SensorHub poll (not I2C); same UART as legacy RAK9154 but different env macro
+            if (rakSensorHub.hasSensor())
+                result = rakSensorHub.runOnce();
 #endif
 #endif
             refreshDisplayedMeasurement();
@@ -708,6 +744,10 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
     m->variant.environment_metrics = meshtastic_EnvironmentMetrics_init_zero;
 
     for (TelemetrySensor *sensor : sensors) {
+#if ARCH_PORTDUINO
+        if (sensor == commandSensor)
+            continue;
+#endif
         get_metrics = sensor->getMetrics(m); // avoid short-circuit evaluation rules
         valid = valid || get_metrics;
         hasSensor = true;
@@ -738,6 +778,21 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
 #ifdef HAS_RAKPROT
     if (rak9154Sensor.hasSensor()) {
         get_metrics = rak9154Sensor.getMetrics(m);
+        valid = valid || get_metrics;
+        hasSensor = true;
+    }
+#endif
+#ifdef HAS_RAKHUB
+    // IPSO cache -> EnvironmentMetrics; chemistry off unless RAK_SENSORHUB_EXTENDED_ENV_METRICS.
+    if (rakSensorHub.hasSensor()) {
+        get_metrics = rakSensorHub.getMetrics(m);
+        valid = valid || get_metrics;
+        hasSensor = true;
+    }
+#endif
+#if ARCH_PORTDUINO
+    if (commandSensor) {
+        get_metrics = commandSensor->getMetrics(m);
         valid = valid || get_metrics;
         hasSensor = true;
     }
@@ -852,6 +907,7 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
                     meshtastic_ClientNotification *notification = clientNotificationPool.allocZeroed();
                     if (notification) {
                         notification->level = meshtastic_LogRecord_Level_INFO;
+                        notification->type = meshtastic_ClientNotification_NotificationType_TELEMETRY_SENT_SLEEPING;
                         notification->time = getValidTime(RTCQualityFromNet);
                         sprintf(notification->message, "Sending telemetry and sleeping for %us interval in a moment",
                                 Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.environment_update_interval,

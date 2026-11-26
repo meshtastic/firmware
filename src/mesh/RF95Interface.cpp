@@ -91,7 +91,7 @@ RF95Interface::RF95Interface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIO
 /** Some boards require GPIO control of tx vs rx paths */
 void RF95Interface::setTransmitEnable(bool txon)
 {
-#ifdef RF95_TXEN
+#if defined(RF95_TXEN) && (RF95_TXEN != RADIOLIB_NC)
     digitalWrite(RF95_TXEN, txon ? 1 : 0);
 #elif ARCH_PORTDUINO
     if (portduino_config.lora_txen_pin.pin != RADIOLIB_NC) {
@@ -99,7 +99,7 @@ void RF95Interface::setTransmitEnable(bool txon)
     }
 #endif
 
-#ifdef RF95_RXEN
+#if defined(RF95_RXEN) && (RF95_RXEN != RADIOLIB_NC)
     digitalWrite(RF95_RXEN, txon ? 0 : 1);
 #elif ARCH_PORTDUINO
     if (portduino_config.lora_rxen_pin.pin != RADIOLIB_NC) {
@@ -113,7 +113,7 @@ void RF95Interface::setTransmitEnable(bool txon)
 /// \return true if initialisation succeeded.
 bool RF95Interface::init()
 {
-#ifdef RF95_POWER_EN
+#if defined(RF95_POWER_EN) && (RF95_POWER_EN != RADIOLIB_NC)
     pinMode(RF95_POWER_EN, OUTPUT);
     digitalWrite(RF95_POWER_EN, HIGH);
 #endif
@@ -153,21 +153,22 @@ bool RF95Interface::init()
     #define RF95_RXEN (23) // If defined, this pin should be set high prior to receive (controls an external analog switch)
     */
 
-#ifdef RF95_TXEN
+#if defined(RF95_TXEN) && (RF95_TXEN != RADIOLIB_NC)
     pinMode(RF95_TXEN, OUTPUT);
     digitalWrite(RF95_TXEN, 0);
 #endif
 
-#ifdef RF95_FAN_EN
+#if defined(RF95_FAN_EN) && (RF95_FAN_EN != RADIOLIB_NC)
     pinMode(RF95_FAN_EN, OUTPUT);
     digitalWrite(RF95_FAN_EN, 1);
 #endif
 
-#ifdef RF95_RXEN
+#if defined(RF95_RXEN) && (RF95_RXEN != RADIOLIB_NC)
     pinMode(RF95_RXEN, OUTPUT);
     digitalWrite(RF95_RXEN, 1);
 #endif
 #if ARCH_PORTDUINO
+    noteRfSwitchPins(portduino_config.lora_rxen_pin.pin, portduino_config.lora_txen_pin.pin);
     if (portduino_config.lora_txen_pin.pin != RADIOLIB_NC) {
         pinMode(portduino_config.lora_txen_pin.pin, OUTPUT);
         digitalWrite(portduino_config.lora_txen_pin.pin, 0);
@@ -198,6 +199,11 @@ bool RF95Interface::reinitChip()
     // Clamp here, not just in programModemParams(): applyModemConfig() resets `power` to the raw
     // config value, and the recovery path reaches begin() without passing through the params clamp
     limitPower(RF95_MAX_POWER);
+#ifndef USE_RF95_RFO
+    // PA_BOOST takes 2-17 dBm or exactly 20 dBm: RadioLib rejects 18 and 19 (CN's limit is 19)
+    if (power > 17 && power < 20)
+        power = 17;
+#endif
 
     int res = lora->begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength);
     LOG_INFO("RF95 init result %d", res);
@@ -267,6 +273,11 @@ int16_t RF95Interface::programModemParams()
     }
 
     limitPower(RF95_MAX_POWER);
+#ifndef USE_RF95_RFO
+    // PA_BOOST takes 2-17 dBm or exactly 20 dBm: RadioLib rejects 18 and 19 (CN's limit is 19)
+    if (power > 17 && power < 20)
+        power = 17;
+#endif
 
 #ifdef USE_RF95_RFO
     err = lora->setOutputPower(power, true);
@@ -420,11 +431,11 @@ bool RF95Interface::sleep()
     (void)trySetStandby(); // First cancel any active receiving/sending - going to sleep, a failure must not crash
     lora->sleep();
 
-#ifdef RF95_POWER_EN
+#if defined(RF95_POWER_EN) && (RF95_POWER_EN != RADIOLIB_NC)
     digitalWrite(RF95_POWER_EN, LOW);
 #endif
 
-#ifdef RF95_FAN_EN
+#if defined(RF95_FAN_EN) && (RF95_FAN_EN != RADIOLIB_NC)
     digitalWrite(RF95_FAN_EN, 0);
 #endif
 

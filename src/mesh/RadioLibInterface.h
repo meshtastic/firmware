@@ -36,6 +36,23 @@
 #define AGC_FORCED_RESET_MS (24 * 60 * 60 * 1000UL)
 #endif
 
+// 1 = send each radio command as one buffered SPI transfer, instead of RadioLib's one
+// SPI.transfer() call per byte. On nRF52 and ESP32 that per-byte call is its own DMA transfer, which
+// put a 200-byte payload write about 1.9 ms past the end of a SHORT_TURBO channel scan; buffered, it
+// finishes inside the scan. On every other architecture there is no buffered call to use.
+// This guards a virtual override, so it must hold the same value in every translation unit: set it
+// here rather than per-env, or the vtable disagrees across the build.
+#ifndef RADIO_SPI_BULK
+#if ARCH_PORTDUINO || defined(ARDUINO_NRF52_ADAFRUIT) || defined(ARDUINO_ARCH_ESP32)
+#define RADIO_SPI_BULK 1
+#else
+#define RADIO_SPI_BULK 0
+#endif
+#endif
+#if RADIO_SPI_BULK && !(ARCH_PORTDUINO || defined(ARDUINO_NRF52_ADAFRUIT) || defined(ARDUINO_ARCH_ESP32))
+#error "RADIO_SPI_BULK: no buffered SPI call on this architecture"
+#endif
+
 /**
  * We need to override the RadioLib ArduinoHal class to add mutex protection for SPI bus access
  */
@@ -46,7 +63,7 @@ class LockingArduinoHal : public ArduinoHal
 
     void spiBeginTransaction() override;
     void spiEndTransaction() override;
-#if ARCH_PORTDUINO
+#if RADIO_SPI_BULK
     void spiTransfer(uint8_t *out, size_t len, uint8_t *in) override;
 
 #endif
@@ -125,6 +142,15 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
     float currentLimit = 100; // 100mA OCP - Should be acceptable for RFM95/SX127x chipset.
 
+    // RadioLib has no CS getter, and keeps the RF switch pins private, so usesPin() reads these copies
+    RADIOLIB_PIN_TYPE csPin, rfSwitchRxPin = RADIOLIB_NC, rfSwitchTxPin = RADIOLIB_NC;
+
+    void noteRfSwitchPins(RADIOLIB_PIN_TYPE rx, RADIOLIB_PIN_TYPE tx)
+    {
+        rfSwitchRxPin = rx;
+        rfSwitchTxPin = tx;
+    }
+
 #if !defined(USE_STM32WLx)
     Module module; // The HW interface to the radio
 #else
@@ -161,6 +187,7 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     uint32_t lastNoiseFloorUpdate = 0;
     static const uint32_t NOISE_FLOOR_UPDATE_INTERVAL_MS = 5000;
     int32_t currentNoiseFloor = NOISE_FLOOR_DEFAULT;
+    static bool isValidNoiseRssi(int16_t rssi) { return rssi < 0 && rssi >= NOISE_FLOOR_VALID_MIN; }
 
     /**
      * Pure virtual hook for derived radio interfaces to provide instantaneous RSSI.
@@ -256,9 +283,14 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     uint32_t rxFlagsSeenMs = 0;
     // rxFlagsSeenMs was stamped by a header, not by a bare preamble before it
     bool rxFlagsSeenHeader = false;
+    // ...and that header was a valid one, not a failed header before it
+    bool rxFlagsSeenValidHeader = false;
 
     /** Plain-RX twin of checkCadHandoffTimeout(): retire flags no RX_DONE consumed within a max packet. */
     virtual void checkStaleRxFlags();
+
+    /** Whether a header error leaves this chip's RX wedged, so only a re-arm recovers it (SX1280 DS 16.2). */
+    virtual bool headerErrWedgesRx() const { return false; }
 
     /**
      * Reset AGC by power-cycling the analog frontend.
@@ -296,6 +328,8 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
   public:
     RadioLibInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst,
                       RADIOLIB_PIN_TYPE busy, PhysicalLayer *iface = NULL);
+
+    bool usesPin(uint32_t pin) const override;
 
     virtual ErrorCode send(meshtastic_MeshPacket *p) override;
 
@@ -337,7 +371,7 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     /** Write the next packet's payload while RX runs, ahead of its scan */
     virtual void stageTxEarly(meshtastic_MeshPacket *p) {}
     /** notifyLater(delay, TRANSMIT_DELAY_COMPLETED), brought forward where the payload can be staged early */
-    void scheduleTransmitDelayCompleted(uint32_t delay);
+    void scheduleTransmitDelayCompleted(uint32_t delay, bool allowShorten = false);
 
     /** can we detect a LoRa preamble on the current channel?
      *  A true return means the chip may have been handed to RX in place, so the caller MUST follow it
@@ -396,19 +430,19 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
     /** if we have something waiting to send, start a short (random) timer so we can come check for collision before actually
      * doing the transmit */
-    void setTransmitDelay();
+    void setTransmitDelay(bool allowShorten = false);
 
     /**
      * random timer with certain min. and max. settings
      * @return Timestamp after which the packet may be sent
      */
-    void startTransmitTimer(bool withDelay = true);
+    void startTransmitTimer(bool withDelay = true, bool allowShorten = false);
 
     /**
      * timer scaled to SNR of to be flooded packet
      * @return Timestamp after which the packet may be sent
      */
-    void startTransmitTimerRebroadcast(meshtastic_MeshPacket *p);
+    void startTransmitTimerRebroadcast(meshtastic_MeshPacket *p, bool allowShorten = false);
 
     /** Detach the sent packet and undo its pre-TX switch; the caller re-arms RX, then finishSentPacket(). */
     meshtastic_MeshPacket *handleTransmitInterrupt();
@@ -447,12 +481,21 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     uint32_t activeReceiveStart = 0;
     // Time::getMillis() when a look cleared PREAMBLE_DETECTED and began holding TX, or 0 if no hold.
     uint32_t preambleHoldStart = 0;
+    // Whether a look has found HEADER_VALID since this hold began, which makes it a frame rather than a bare preamble.
+    bool preambleHoldHeaderSeen = false;
 
-    /** True while a cleared preamble still holds TX; ends the hold once one max packet has passed. */
+    /** Airtime of the longest frame we could be receiving: 255 bytes at CR 4/8 with CRC, whatever our own CR. */
+    uint32_t maxRxFrameMsec();
+
+    /** True while a cleared preamble still holds TX; ends the hold once one max frame has passed. */
     bool preambleHoldActive();
 
-    /** Clear a bare PREAMBLE_DETECTED and hold TX one max packet, unless a hold is already running. */
+    /** Clear a bare PREAMBLE_DETECTED and hold TX one max frame, unless a hold is already running. */
     void holdOnPreamble();
+
+    /** True while a bare-preamble hold has outlived the time a frame we could decode needs to show its header, so the
+     *  pre-TX CAD may settle it rather than the TX path waiting out the whole hold. */
+    bool preambleHoldPeekable();
 
     /** Whether a packet is waiting to transmit; txQueue itself stays private. */
     bool hasQueuedTx() { return !txQueue.empty(); }
@@ -520,14 +563,15 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     static bool isRadioLibTimeError(RadioLibTime_t usec) { return usec == 0 || usec >= (RadioLibTime_t)0 - 32768; }
 
     /**
-     * Derive packet time either for a received (using header info) or a transmitted packet
+     * Derive packet time either for a received (using header info) or a transmitted packet.
+     * Without useRxHeaderInfo a received packet is timed on the configured coding rate and CRC.
      */
-    template <typename T> uint32_t computePacketTime(T &lora, uint32_t pl, bool received)
+    template <typename T> uint32_t computePacketTime(T &lora, uint32_t pl, bool received, bool useRxHeaderInfo = true)
     {
         DataRate_t dr = getDataRate();
         PacketConfig_t pc = getPacketConfig();
 
-        if (received) {
+        if (received && useRxHeaderInfo) {
             // Received packet configuration must be the same as configured, except for coding rate and CRC
             uint8_t rxCR = 0;
             bool hasCRC = true;
@@ -559,7 +603,7 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
                     pc.lora.crcEnabled = hasCRC;
                 }
             }
-        } else {
+        } else if (!received) {
             // Reads the packet type back over SPI, so a chip that lost its config answers WRONG_MODEM. Called after every
             // send by finishSentPacket() and the router, which hold no sequence: unlocked, a readout could land inside it.
             RadioLibTime_t reported;

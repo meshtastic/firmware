@@ -1,18 +1,30 @@
+// One build for V1.0 and V1.1: tDeckProIsV11() tells them apart at boot by the DRV2605 only V1.1 has
+bool tDeckProIsV11();
+void tDeckProSetVibration(int pin, bool on);
+#define EXT_NOTIFY_VIBRA_WRITE(pin, on) tDeckProSetVibration(pin, on)
+#ifdef MESHTASTIC_INCLUDE_INKHUD
+void tDeckProUpdateBacklights(bool sleeping = false);
+void tDeckProToggleBacklights();
+#endif
+
 // Display (E-Ink)
 #define PIN_EINK_CS 34
 #define PIN_EINK_BUSY 37
 #define PIN_EINK_DC 35
-#define PIN_EINK_RES -1
+// V1.1 wires the panel reset to GPIO16; on V1.0 that pin is the light sensor's interrupt
+#define PIN_EINK_RES (tDeckProIsV11() ? 16 : -1)
+// V1.1 keeps its panel out of hibernate, which needs that reset to wake
+#define EINK_SKIP_HIBERNATE tDeckProIsV11()
 #define PIN_EINK_SCLK 36
-#define PIN_EINK_MOSI 47
+#define PIN_EINK_MOSI 33
 
 #define I2C_SDA SDA
 #define I2C_SCL SCL
 
-// CST328 touch screen (implementation in src/platform/extra_variants/t_deck_pro/variant.cpp)
+// CST328 (V1.0) or CST3530 (V1.1) touch screen (implementation in src/platform/extra_variants/t_deck_pro/variant.cpp)
 #define HAS_TOUCHSCREEN 1
 #define CST328_PIN_INT 12
-#define CST328_PIN_RST 45
+#define CST328_PIN_RST 45 // V1.0; V1.1 resets its touch panel on GPIO38
 
 #define USE_POWERSAVE
 #define SLEEP_TIME 120
@@ -20,7 +32,7 @@
 // GNNS
 #define HAS_GPS 1
 #define GPS_BAUDRATE 38400
-#define PIN_GPS_EN 15
+#define PIN_GPS_EN 39
 #define GPS_EN_ACTIVE 1
 #define GPS_RX_PIN 44
 #define GPS_TX_PIN 43
@@ -28,13 +40,15 @@
 
 #define BUTTON_PIN 0
 
-// vibration motor
+// vibration: V1.0's motor, or V1.1's DRV2605 enable; tDeckProSetVibration() drives either, and sleep turns it off
 #define PIN_VIBRATION 2
-#define HAS_DRV2605 1
+#define PIN_DRV_EN PIN_VIBRATION
 
 // Have SPI interface SD card slot
 #define HAS_SDCARD
+#ifndef MESHTASTIC_INCLUDE_INKHUD
 #define SDCARD_USE_SPI1
+#endif
 #define SPI_MOSI (33)
 #define SPI_SCK (36)
 #define SPI_MISO (47)
@@ -44,19 +58,32 @@
 
 // TCA8418 keyboard
 #define KB_BL_PIN 42
+#ifdef MESHTASTIC_INCLUDE_INKHUD
+#define KB_INT 15
+#define WAKE_ON_TOUCH
+#define SCREEN_TOUCH_INT CST328_PIN_INT
+#endif
 
-// microphone PCM5102A
-#define PCM5102A_SCK 47
-#define PCM5102A_DIN 17
-#define PCM5102A_LRCK 18
+// Optional PCM5102A audio board shares these pins with the 4G module.
+#ifdef T_DECK_PRO_AUDIO
+#define HAS_I2S
+#define DAC_I2S_BCK 7
+#define DAC_I2S_WS 9
+#define DAC_I2S_DOUT 8
+// The audio library stores MCLK as uint8_t; use unused modem RX instead of -1.
+#define DAC_I2S_MCLK 10
+#define AUDIO_RTTTL_SAMPLE_RATE 44100
+// ESP8266Audio's uint8_t gain wraps at 4.0.
+#define AUDIO_OUTPUT_GAIN 3.9f
+#define AUDIO_AMP_ENABLE(on) digitalWrite(MODEM_POWER_EN, (on) ? HIGH : LOW)
+#define AUDIO_AMP_SETTLE_MS 50
+#endif
 
 // LTR_553ALS light sensor
 #define HAS_LTR553ALS
 
 // gyroscope BHI260AP
 #define BOARD_1V8_EN 38
-// Disabled until a SensorLib replacement is available
-// #define HAS_BHI260AP
 
 // battery charger BQ25896
 #define HAS_PPM 1

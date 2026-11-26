@@ -1,3 +1,13 @@
+// The event-channel position policy on phone-originated packets: position and waypoint
+// ToRadio packets sent through StreamAPI::handleToRadio() (src/mesh/PhoneAPI.cpp) and the
+// routing that follows.
+//
+// Why: a phone on a public event channel must not broadcast coordinates there, and the
+// policy must not break the phone's own retries or packets addressed to itself.
+// Regression guarded: a refused event-channel position poisoning a same-id retry on another
+// channel, a position to self being blocked, coordinates staying on the event channel instead
+// of moving to the position channel, and packets already on that channel being rewritten.
+
 #include "Channels.h"
 #include "MeshModule.h"
 #include "MeshService.h"
@@ -252,6 +262,8 @@ static void test_event_position_ingress_does_not_poison_retry_state()
     mockService->assertQueueStatus(BLOCKED_PACKET_ID);
     TEST_ASSERT_EQUAL(1, mockService->notifications.size());
     TEST_ASSERT_EQUAL_UINT32(BLOCKED_PACKET_ID, mockService->notifications[0].reply_id);
+    TEST_ASSERT_EQUAL(meshtastic_ClientNotification_NotificationType_POSITION_SHARING_DISABLED,
+                      mockService->notifications[0].type);
 
     TEST_ASSERT_TRUE(sendToRadio(sameIdPrivateRetry));
     TEST_ASSERT_EQUAL(1, mockRouter->sentPackets.size());

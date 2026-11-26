@@ -70,7 +70,8 @@ enum lora_module_enum {
     use_lr1120,
     use_lr1121,
     use_llcc68,
-    use_lr2021
+    use_lr2021,
+    use_transparent
 };
 
 // RF switch modes as the YAML names them; each family supports a different subset. The neutral
@@ -137,17 +138,38 @@ std::string adminKeyToBase64(const std::array<uint8_t, 32> &key);
 static bool ends_with(std::string_view str, std::string_view suffix);
 void getMacAddr(uint8_t *dmac);
 bool MAC_from_string(std::string mac_str, uint8_t *dmac);
+// Pack /dev/spidev<bus>.<device> into HardwareSPI's host byte (low nibble bus,
+// high nibble device). Returns -1 when the path cannot be represented.
+int spiHostFromDevicePath(const std::string &devicePath);
 #ifndef ARCH_PORTDUINO_WASM
 void readGPIOFromYaml(YAML::Node sourceNode, pinMapping &destPin, int pinDefault = RADIOLIB_NC);
+// A node number written as `0xea618fb4`, `!a28e145b`, or decimal. Shared by loadConfig and --check.
+bool nodeNumberFromYaml(const YAML::Node &node, uint32_t &out);
 #endif
-std::string exec(const char *cmd);
+// A command that outlives its limit is killed, along with anything it started, so a hung script
+// stalls the main loop for at most this long.
+constexpr uint32_t EXEC_DEFAULT_TIMEOUT_MS = 10000;
+constexpr uint32_t COMMAND_SENSOR_TIMEOUT_MS = 2000;
+// Logs a timeout or a failure to start; returns whatever the command printed, whatever its exit status.
+std::string exec(const char *cmd, uint32_t timeoutMs = EXEC_DEFAULT_TIMEOUT_MS);
+enum class ExecResult { Ok, Failed, TimedOut, NotStarted };
+// Runs cmd under /bin/sh and captures stdout. Ok only if it exited 0 within timeoutMs. Never logs, so it
+// is safe off the main thread.
+ExecResult execCommand(const char *cmd, uint32_t timeoutMs, std::string &output);
+
+// One Sensors: entry. type is an EnvironmentMetrics field name, see CommandSensorFields.h.
+struct commandSensorConfig {
+    std::string type;
+    std::string command;
+    float scale = 1.0f;
+};
 
 extern struct portduino_config_struct {
     // Lora
-    std::map<lora_module_enum, std::string> loraModules = {{use_simradio, "sim"},  {use_autoconf, "auto"}, {use_rf95, "RF95"},
-                                                           {use_sx1262, "sx1262"}, {use_sx1268, "sx1268"}, {use_sx1280, "sx1280"},
-                                                           {use_lr1110, "lr1110"}, {use_lr1120, "lr1120"}, {use_lr1121, "lr1121"},
-                                                           {use_llcc68, "LLCC68"}, {use_lr2021, "lr2021"}};
+    std::map<lora_module_enum, std::string> loraModules = {
+        {use_simradio, "sim"},  {use_autoconf, "auto"}, {use_rf95, "RF95"},     {use_sx1262, "sx1262"},
+        {use_sx1268, "sx1268"}, {use_sx1280, "sx1280"}, {use_lr1110, "lr1110"}, {use_lr1120, "lr1120"},
+        {use_lr1121, "lr1121"}, {use_llcc68, "LLCC68"}, {use_lr2021, "lr2021"}, {use_transparent, "transparent"}};
 
     std::map<screen_modules, std::string> screen_names = {{x11, "X11"},         {fb, "FB"},           {st7789, "ST7789"},
                                                           {st7735, "ST7735"},   {st7735s, "ST7735S"}, {st7796, "ST7796"},
@@ -167,6 +189,7 @@ extern struct portduino_config_struct {
     bool has_device_id = false;
     uint8_t device_id[16] = {0};
     std::string lora_spi_dev = "";
+    std::string lora_transparent_device = ""; // Lora.TransparentDevice: serial path or host[:port]
     std::string lora_usb_serial_num = "";
     int lora_spi_dev_int = 0;
     int lora_default_gpiochip = 0;
@@ -189,6 +212,8 @@ extern struct portduino_config_struct {
     int lora_usb_pid = 0x5512;
     int lora_usb_vid = 0x1A86;
     int spiSpeed = 2000000;
+    // Full node numbers whose LoRa frames are dropped on receive by their low byte (testing only).
+    std::vector<uint32_t> ignore_relay_nodes;
     int num_pa_points = 1; // default to 1 point, with 0 gain
     uint16_t tx_gain_lora[22] = {0};
     pinMapping lora_cs_pin = {"Lora", "CS"};
@@ -206,6 +231,9 @@ extern struct portduino_config_struct {
     std::string gps_serial_path = "";
     std::string gpsd_host = "";
     int gpsd_port = 2947;
+
+    // Serial module host tty
+    std::string serial_module_path = "";
 
     // I2C
     std::string i2cdev = "";
@@ -298,6 +326,8 @@ extern struct portduino_config_struct {
     std::string webserver_ssl_key_path = "/etc/meshtasticd/ssl/private_key.pem";
     std::string webserver_ssl_cert_path = "/etc/meshtasticd/ssl/certificate.pem";
     int webserverport = -1;
+    int webserver_http_port = -1;
+    bool webserver_http_bind_all = false;
 
     // Bluetooth (BLE peripheral via BlueZ; Linux only, and only when built with
     // sdbus-c++)
@@ -309,8 +339,12 @@ extern struct portduino_config_struct {
     int hostMetrics_interval = 0;
     int hostMetrics_channel = 0;
 
+    // Sensors
+    std::vector<commandSensorConfig> command_sensors;
+
     // Security
     std::vector<std::array<uint8_t, 32>> admin_keys;
+    bool dmshell_enabled = false;
 
     // config
     bool has_config_overrides = false;
@@ -363,6 +397,8 @@ extern struct portduino_config_struct {
         // Lora
         out << YAML::Key << "Lora" << YAML::Value << YAML::BeginMap;
         out << YAML::Key << "Module" << YAML::Value << loraModules[lora_module];
+        if (lora_module == use_transparent)
+            out << YAML::Key << "TransparentDevice" << YAML::Value << lora_transparent_device;
 
         for (const auto *lora_pin : all_pins) {
             if (lora_pin->config_section == "Lora" && lora_pin->enabled) {
@@ -422,6 +458,12 @@ extern struct portduino_config_struct {
             out << YAML::Key << "spiSpeed" << YAML::Value << spiSpeed;
         if (irq_dio_num >= 0)
             out << YAML::Key << "IRQ_DIO_NUM" << YAML::Value << irq_dio_num;
+        if (!ignore_relay_nodes.empty()) {
+            out << YAML::Key << "IgnoreRelayNodes" << YAML::Value << YAML::Flow << YAML::BeginSeq;
+            for (uint32_t node : ignore_relay_nodes)
+                out << YAML::Hex << node;
+            out << YAML::EndSeq << YAML::Dec;
+        }
         if (has_rfswitch_table) {
             out << YAML::Key << "rfswitch_table" << YAML::Value << YAML::BeginMap;
 
@@ -479,6 +521,12 @@ extern struct portduino_config_struct {
             out << YAML::EndMap; // GPS
         }
 
+        if (!serial_module_path.empty()) {
+            out << YAML::Key << "SerialModule" << YAML::Value << YAML::BeginMap;
+            out << YAML::Key << "Path" << YAML::Value << serial_module_path;
+            out << YAML::EndMap; // SerialModule
+        }
+
         if (i2cdev != "") {
             out << YAML::Key << "I2C" << YAML::Value << YAML::BeginMap;
             out << YAML::Key << "I2CDevice" << YAML::Value << i2cdev;
@@ -490,7 +538,7 @@ extern struct portduino_config_struct {
             out << YAML::Key << "Display" << YAML::Value << YAML::BeginMap;
             for (const auto &screen_name : screen_names) {
                 if (displayPanel == screen_name.first)
-                    out << YAML::Key << "Module" << YAML::Value << screen_name.second;
+                    out << YAML::Key << "Panel" << YAML::Value << screen_name.second;
             }
             for (const auto *display_pin : all_pins) {
                 if (display_pin->config_section == "Display" && display_pin->enabled) {
@@ -501,7 +549,12 @@ extern struct portduino_config_struct {
                     out << YAML::EndMap;
                 }
             }
-            out << YAML::Key << "spidev" << YAML::Value << display_spi_dev;
+            if (!display_spi_dev.empty()) {
+                std::string displaySpiDev = display_spi_dev;
+                if (displaySpiDev.rfind("/dev/", 0) == 0)
+                    displaySpiDev.erase(0, 5);
+                out << YAML::Key << "spidev" << YAML::Value << displaySpiDev;
+            }
             out << YAML::Key << "BusFrequency" << YAML::Value << displayBusFrequency;
             if (displayWidth)
                 out << YAML::Key << "Width" << YAML::Value << displayWidth;
@@ -552,17 +605,24 @@ extern struct portduino_config_struct {
         // Touchscreen
         if (touchscreen_spi_dev != "") {
             out << YAML::Key << "Touchscreen" << YAML::Value << YAML::BeginMap;
-            out << YAML::Key << "spidev" << YAML::Value << touchscreen_spi_dev;
+            std::string touchSpiDev = touchscreen_spi_dev;
+            if (touchSpiDev.rfind("/dev/", 0) == 0)
+                touchSpiDev.erase(0, 5);
+            out << YAML::Key << "spidev" << YAML::Value << touchSpiDev;
             out << YAML::Key << "BusFrequency" << YAML::Value << touchscreenBusFrequency;
             switch (touchscreenModule) {
             case xpt2046:
                 out << YAML::Key << "Module" << YAML::Value << "XPT2046";
+                break;
             case stmpe610:
                 out << YAML::Key << "Module" << YAML::Value << "STMPE610";
+                break;
             case gt911:
                 out << YAML::Key << "Module" << YAML::Value << "GT911";
+                break;
             case ft5x06:
                 out << YAML::Key << "Module" << YAML::Value << "FT5x06";
+                break;
             }
             for (const auto *touchscreen_pin : all_pins) {
                 if (touchscreen_pin->config_section == "Touchscreen" && touchscreen_pin->enabled) {
@@ -704,6 +764,10 @@ extern struct portduino_config_struct {
             out << YAML::Key << "SSLKey" << YAML::Value << webserver_ssl_key_path;
             out << YAML::Key << "SSLCert" << YAML::Value << webserver_ssl_cert_path;
             out << YAML::Key << "Port" << YAML::Value << webserverport;
+            if (webserver_http_port > 0)
+                out << YAML::Key << "HTTPPort" << YAML::Value << webserver_http_port;
+            if (webserver_http_bind_all)
+                out << YAML::Key << "HTTPBindAll" << YAML::Value << true;
             out << YAML::EndMap; // Webserver
         }
 
@@ -725,13 +789,31 @@ extern struct portduino_config_struct {
             out << YAML::EndMap; // HostMetrics
         }
 
+        // Sensors
+        if (!command_sensors.empty()) {
+            out << YAML::Key << "Sensors" << YAML::Value << YAML::BeginSeq;
+            for (const auto &sensor : command_sensors) {
+                out << YAML::BeginMap;
+                out << YAML::Key << "Type" << YAML::Value << sensor.type;
+                out << YAML::Key << "Command" << YAML::Value << sensor.command;
+                if (sensor.scale != 1.0f)
+                    out << YAML::Key << "Scale" << YAML::Value << sensor.scale;
+                out << YAML::EndMap;
+            }
+            out << YAML::EndSeq; // Sensors
+        }
+
         // Security
-        if (!admin_keys.empty()) {
+        if (!admin_keys.empty() || dmshell_enabled) {
             out << YAML::Key << "Security" << YAML::Value << YAML::BeginMap;
-            out << YAML::Key << "AdminKeys" << YAML::Value << YAML::BeginSeq;
-            for (const auto &key : admin_keys)
-                out << adminKeyToBase64(key);
-            out << YAML::EndSeq;
+            if (!admin_keys.empty()) {
+                out << YAML::Key << "AdminKeys" << YAML::Value << YAML::BeginSeq;
+                for (const auto &key : admin_keys)
+                    out << adminKeyToBase64(key);
+                out << YAML::EndSeq;
+            }
+            if (dmshell_enabled)
+                out << YAML::Key << "DMShell" << YAML::Value << true;
             out << YAML::EndMap; // Security
         }
 

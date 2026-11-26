@@ -254,17 +254,26 @@ class AuthPipelineRouter : public ReliableRouter
 };
 
 /// Counts every ACK/NAK the router asks for instead of transmitting it. The opaque path sends none.
+/// With deliverAcks set it also runs the real RoutingModule::sendAckNak(), so a test can follow the
+/// ACK through Router::sendLocal() to the phone queue.
 class AuthPipelineRoutingModule : public RoutingModule
 {
   public:
-    void sendAckNak(meshtastic_Routing_Error, NodeNum, PacketId, ChannelIndex, uint8_t = 0, bool = false,
-                    const meshtastic_MeshPacket * = nullptr) override
+    void sendAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex, uint8_t hopLimit = 0,
+                    bool ackWantsAck = false, const meshtastic_MeshPacket *relaySource = nullptr) override
     {
         ackCalls++;
+        if (deliverAcks)
+            RoutingModule::sendAckNak(err, to, idFrom, chIndex, hopLimit, ackWantsAck, relaySource);
     }
-    void reset() { ackCalls = 0; }
+    void reset()
+    {
+        ackCalls = 0;
+        deliverAcks = false;
+    }
 
     uint32_t ackCalls = 0;
+    bool deliverAcks = false;
 };
 
 /// A POSITION_APP module that counts how often ingress reaches module dispatch.

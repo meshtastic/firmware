@@ -7,57 +7,19 @@
 #include <algorithm>
 #include <unity.h>
 
-// Helper to compute expected ms using same logic as Default::congestionScalingCoefficient
-static uint32_t computeExpectedMs(uint32_t defaultSeconds, uint32_t numOnlineNodes)
-{
-    uint32_t baseMs = Default::getConfiguredOrDefaultMs(0, defaultSeconds);
-
-    // Routers (including ROUTER_LATE) don't scale
-    if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER ||
-        config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_LATE) {
-        return baseMs;
-    }
-
-    // Sensors and trackers don't scale
-    if ((config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR) ||
-        (config.device.role == meshtastic_Config_DeviceConfig_Role_TRACKER)) {
-        return baseMs;
-    }
-
-    if (numOnlineNodes <= 40) {
-        return baseMs;
-    }
-
-    float bwKHz =
-        config.lora.use_preset ? modemPresetToBwKHz(config.lora.modem_preset, false) : bwCodeToKHz(config.lora.bandwidth);
-
-    uint8_t sf = config.lora.spread_factor;
-    if (sf < 7)
-        sf = 7;
-    else if (sf > 12)
-        sf = 12;
-
-    float throttlingFactor = static_cast<float>(pow_of_2(sf)) / (bwKHz * 100.0f);
-#if USERPREFS_EVENT_MODE
-    throttlingFactor = static_cast<float>(pow_of_2(sf)) / (bwKHz * 25.0f);
-#endif
-
-    int nodesOverForty = (numOnlineNodes - 40);
-    float coeff = 1.0f + (nodesOverForty * throttlingFactor);
-    return static_cast<uint32_t>(baseMs * coeff + 0.5f);
-}
+// Expected values are worked by hand from Default::congestionScalingCoefficient() (src/mesh/Default.h),
+// not recomputed by a copy of it: coeff = 1 + (nodes - 40) * 2^SF / (BW_kHz * 100) above 40 nodes, with 25 in
+// place of 100 under USERPREFS_EVENT_MODE, so each scaled case carries both expectations.
+// src truncates base * coeff, and the float coefficient is not exact, so scaled results allow +-1 ms.
 
 void test_router_no_scaling()
 {
     config.device.role = meshtastic_Config_DeviceConfig_Role_ROUTER;
-    // set some sane lora config so bootstrap paths are deterministic
     config.lora.use_preset = false;
     config.lora.spread_factor = 9;
     config.lora.bandwidth = 250;
 
-    uint32_t res = Default::getConfiguredOrDefaultMsScaled(0, 60, 100);
-    uint32_t expected = computeExpectedMs(60, 100);
-    TEST_ASSERT_EQUAL_UINT32(expected, res);
+    TEST_ASSERT_EQUAL_UINT32(60000U, Default::getConfiguredOrDefaultMsScaled(0, 60, 100));
 }
 
 void test_client_below_threshold()
@@ -67,9 +29,7 @@ void test_client_below_threshold()
     config.lora.spread_factor = 9;
     config.lora.bandwidth = 250;
 
-    uint32_t res = Default::getConfiguredOrDefaultMsScaled(0, 60, 40);
-    uint32_t expected = computeExpectedMs(60, 40);
-    TEST_ASSERT_EQUAL_UINT32(expected, res);
+    TEST_ASSERT_EQUAL_UINT32(60000U, Default::getConfiguredOrDefaultMsScaled(0, 60, 40));
 }
 
 void test_client_default_preset_scaling()
@@ -79,9 +39,13 @@ void test_client_default_preset_scaling()
     config.lora.spread_factor = 9; // SF9
     config.lora.bandwidth = 250;   // 250 kHz
 
-    uint32_t res = Default::getConfiguredOrDefaultMsScaled(0, 60, 50);
-    uint32_t expected = computeExpectedMs(60, 50); // nodesOverForty = 10
-    TEST_ASSERT_EQUAL_UINT32(expected, res);
+#if USERPREFS_EVENT_MODE
+    // 10 nodes over 40: 60000 * (1 + 10 * 512 / 6250) = 60000 * 1.8192 = 109152
+    TEST_ASSERT_UINT32_WITHIN(1, 109152U, Default::getConfiguredOrDefaultMsScaled(0, 60, 50));
+#else
+    // 10 nodes over 40: 60000 * (1 + 10 * 512 / 25000) = 60000 * 1.2048 = 72288
+    TEST_ASSERT_UINT32_WITHIN(1, 72288U, Default::getConfiguredOrDefaultMsScaled(0, 60, 50));
+#endif
 }
 
 void test_client_medium_fast_preset_scaling()
@@ -89,11 +53,27 @@ void test_client_medium_fast_preset_scaling()
     config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
     config.lora.use_preset = true;
     config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST;
-    // nodesOverForty = 30 -> test with nodes=70
-    uint32_t res = Default::getConfiguredOrDefaultMsScaled(0, 60, 70);
-    uint32_t expected = computeExpectedMs(60, 70);
-    // Allow ±1 ms tolerance for floating-point rounding
-    TEST_ASSERT_INT_WITHIN(1, expected, res);
+    // Decoys: under use_preset the SF/BW must come from the preset (SF9/250 kHz), not these fields.
+    config.lora.spread_factor = 12;
+    config.lora.bandwidth = 125;
+
+#if USERPREFS_EVENT_MODE
+    // 30 nodes over 40: 60000 * (1 + 30 * 512 / 6250) = 60000 * 3.4576 = 207456
+    TEST_ASSERT_UINT32_WITHIN(1, 207456U, Default::getConfiguredOrDefaultMsScaled(0, 60, 70));
+#else
+    // 30 nodes over 40: 60000 * (1 + 30 * 512 / 25000) = 60000 * 1.6144 = 96864
+    TEST_ASSERT_UINT32_WITHIN(1, 96864U, Default::getConfiguredOrDefaultMsScaled(0, 60, 70));
+#endif
+}
+
+void test_tak_tracker_no_scaling()
+{
+    config.device.role = meshtastic_Config_DeviceConfig_Role_TAK_TRACKER;
+    config.lora.use_preset = false;
+    config.lora.spread_factor = 9;
+    config.lora.bandwidth = 250;
+
+    TEST_ASSERT_EQUAL_UINT32(60000U, Default::getConfiguredOrDefaultMsScaled(0, 60, 100));
 }
 
 void test_router_uses_router_minimums()
@@ -161,13 +141,6 @@ void test_ms_default_clamps()
 {
     // Clamp also applies when the default-arg path is taken (configured == 0).
     TEST_ASSERT_EQUAL_UINT32(static_cast<uint32_t>(INT32_MAX), Default::getConfiguredOrDefaultMs(0, UINT32_MAX));
-}
-
-void test_ms_result_is_int32_safe()
-{
-    // Regression guard for runOnce returns: cast to int32_t must not go negative.
-    int32_t result = static_cast<int32_t>(Default::getConfiguredOrDefaultMs(UINT32_MAX, 0));
-    TEST_ASSERT_GREATER_OR_EQUAL_INT32(0, result);
 }
 
 void test_scaled_overflow_saturates()
@@ -291,6 +264,7 @@ void setup()
     RUN_TEST(test_client_below_threshold);
     RUN_TEST(test_client_default_preset_scaling);
     RUN_TEST(test_client_medium_fast_preset_scaling);
+    RUN_TEST(test_tak_tracker_no_scaling);
     RUN_TEST(test_router_uses_router_minimums);
     RUN_TEST(test_router_late_uses_router_minimums);
     RUN_TEST(test_client_uses_public_channel_minimums);
@@ -299,7 +273,6 @@ void setup()
     RUN_TEST(test_ms_just_above_threshold);
     RUN_TEST(test_ms_uint32_max);
     RUN_TEST(test_ms_default_clamps);
-    RUN_TEST(test_ms_result_is_int32_safe);
     RUN_TEST(test_scaled_overflow_saturates);
     RUN_TEST(test_configured_or_default_hop_limit);
     RUN_TEST(test_trafficType_noRegion_returnsUnthrottled);

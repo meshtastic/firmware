@@ -7,6 +7,7 @@
 #include "airtime.h"
 #include "error.h"
 #include <memory>
+#include <meshUtils.h> // for pow_of_2
 
 #if HAS_LORA_FEM
 #include "LoRaFEMInterface.h"
@@ -123,6 +124,9 @@ class RadioInterface
 
     uint32_t computeSlotTimeMsec();
 
+    /** Time on air for totalPacketLen bytes at the current modem settings, for radios that can't ask RadioLib. */
+    [[nodiscard]] uint32_t computeTimeOnAirMsec(uint32_t totalPacketLen) const;
+
     // Symbols this part scans, declared per band: a part that works in both need not scan the same
     // length in each, and the parts sharing a band do not all agree. Each driver states its own, and
     // must pass a matching symNum - these are what size the CW slot, so a mismatch mis-scales backoff.
@@ -146,7 +150,17 @@ class RadioInterface
      */
     RadioInterface();
 
-    virtual ~RadioInterface() {}
+    virtual ~RadioInterface()
+    {
+        if (active == this)
+            active = nullptr;
+    }
+
+    /// The radio constructed last and not yet destroyed: the one initLoRa() kept, or null.
+    static RadioInterface *active;
+
+    /// True if this radio's driver drives pin (CS, IRQ, reset, busy, RF switch).
+    virtual bool usesPin(uint32_t pin) const { return false; }
 
     /// Fires once per valid received LoRa packet (arg = sender NodeNum). Used e.g. to flash LED_LORA.
     static Observable<uint32_t> loraRxPacketObservable;
@@ -277,9 +291,10 @@ class RadioInterface
 
     // Check if a candidate region is compatible and valid, with no side effects (safe for
     // speculative UI checks). prospectiveLicensedOwner is for a UI flow that requires
-    // confirmation before it sets the owner licensed. errBuf, if given, receives the failure reason.
+    // confirmation before it sets the owner licensed. errBuf and errType, if given, receive the failure reason.
     static bool checkConfigRegion(const meshtastic_Config_LoRaConfig &loraConfig, char *errBuf = nullptr, size_t errLen = 0,
-                                  bool prospectiveLicensedOwner = false);
+                                  bool prospectiveLicensedOwner = false,
+                                  meshtastic_ClientNotification_NotificationType *errType = nullptr);
 
     // Check if a candidate region is compatible and valid. On failure, logs at ERROR,
     // records a critical error, and sends a client notification.
@@ -290,6 +305,13 @@ class RadioInterface
 
     // Make a candidate radio configuration valid, even if it isn't.
     static void clampConfigLora(meshtastic_Config_LoRaConfig &loraConfig);
+
+    // How many frequency slots the config's region holds at the config's bandwidth. 0 for an UNSET region.
+    static uint32_t frequencySlotCount(const meshtastic_Config_LoRaConfig &loraConfig);
+
+    // The 1-based slot a config tunes for a channel name, and the only slot rule: an in-range channel_num wins,
+    // else the region's override slot if it fits, else the name hash (the preset name where overrideSlot is -1).
+    static uint32_t resolveFrequencySlot(const meshtastic_Config_LoRaConfig &loraConfig, const char *channelName);
 
     // If preset is locked to a sibling of currentRegion among the swappable EU regions
     // (EU_868/EU_866/EU_N_868), return the sibling region owning the preset, else nullptr.
@@ -358,16 +380,39 @@ class RadioInterface
 
 std::unique_ptr<RadioInterface> initLoRa();
 
+// True if pin belongs to the LoRa radio (its driver's pins, SPI bus or front end); config must not reuse it.
+bool isRadioPin(uint32_t pin);
+
 // What the plain-RX poll does with PREAMBLE/HEADER flags that no RX_DONE has consumed.
-enum class StaleRxFlagAction : uint8_t { Keep, ClearPreamble, Rearm };
+enum class StaleRxFlagAction : uint8_t { Keep, ClearPreamble, ClearHeaderErr, Rearm };
 
 // RX_DONE clears every flag, so one still latched a max packet after first sight has no frame behind it.
-// A header may mean a wedged demodulator (SX1280 DS 16.2), so re-arm; a bare preamble is only cleared.
-constexpr StaleRxFlagAction staleRxFlagAction(bool headerSeen, uint32_t sinceFirstSeenMsec, uint32_t maxPacketTimeMsec)
+// One header raises HEADER_VALID or HEADER_ERR and never both (SX1262 DS rev 2.1 table 13-29), so an error
+// beside a valid header is an earlier frame's and is retired without touching the valid header's window.
+// Where a header error wedges RX instead (SX1280 DS rev 3.3 16.2) the two together mean something else: RX
+// could not have reached a later header while wedged, so the error is the NEWER of the two, the frame behind
+// that valid header is dead, and only a re-arm gets the chip listening again - there is nothing left to abort.
+constexpr StaleRxFlagAction staleRxFlagAction(bool validSeen, bool errSeen, bool errWedgesRx, uint32_t sinceFirstSeenMsec,
+                                              uint32_t maxPacketTimeMsec)
 {
-    return sinceFirstSeenMsec < maxPacketTimeMsec ? StaleRxFlagAction::Keep
-           : headerSeen                           ? StaleRxFlagAction::Rearm
-                                                  : StaleRxFlagAction::ClearPreamble;
+    return validSeen && errSeen                     ? (errWedgesRx ? StaleRxFlagAction::Rearm : StaleRxFlagAction::ClearHeaderErr)
+           : sinceFirstSeenMsec < maxPacketTimeMsec ? StaleRxFlagAction::Keep
+           : validSeen                              ? StaleRxFlagAction::Rearm
+           : !errSeen                               ? StaleRxFlagAction::ClearPreamble
+           : errWedgesRx                            ? StaleRxFlagAction::Rearm
+                                                    : StaleRxFlagAction::ClearHeaderErr;
+}
+
+// How long after a preamble sighting a frame we can decode would have latched HEADER_VALID: the rest of the preamble plus
+// the ~12.25 symbols of sync word, SFD and explicit header, and 2 more because PREAMBLE_DETECTED dates from a look, not
+// from the first symbol. Taken from sf and bw, never from preambleTimeMsec: that is whole milliseconds, and a wide-LoRa
+// symbol is tens of microseconds, so the stored value truncates to 0 and would make every sighting peekable at once.
+inline uint32_t preambleHeaderGraceMsec(uint8_t sf, float bwKhz, uint16_t preambleLength)
+{
+    const float symbolMsec = (float)pow_of_2(sf) / bwKhz; // bw is in kHz, so a symbol time comes out in milliseconds
+    const float grace = symbolMsec * (preambleLength + 14.25f);
+    const uint32_t whole = (uint32_t)grace;
+    return grace > (float)whole ? whole + 1 : whole; // round up, so a sub-millisecond grace is never zero
 }
 
 /// Debug printing for packets

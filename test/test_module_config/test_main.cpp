@@ -29,7 +29,7 @@ static AdminModuleTestShim *admin = nullptr;
 
 // Both generated sets are contiguous: ModuleConfigType runs 0.._MAX and the matching ModuleConfig
 // submessage tags run 1.._MAX+1, so type + 1 == tag and no lookup table is needed.
-static const uint32_t moduleConfigTypeCount = _meshtastic_AdminMessage_ModuleConfigType_MAX + 1;
+static constexpr uint32_t moduleConfigTypeCount = _meshtastic_AdminMessage_ModuleConfigType_MAX + 1;
 
 // The submessages whose handlers are compiled out on some builds. Everything else must be present
 // unconditionally.
@@ -81,11 +81,8 @@ static bool decodeResponseTagFromReply(meshtastic_MeshPacket *reply, pb_size_t &
 
 // The proto guarantees the two enumerations stay in step; the sweeps below rely on it to pair a
 // ModuleConfigType with its submessage tag without a lookup table.
-void test_tagRangeMatchesTypeRange(void)
-{
-    TEST_ASSERT_EQUAL_MESSAGE(moduleConfigTypeCount, meshtastic_ModuleConfig_mesh_beacon_tag,
-                              "ModuleConfigType and ModuleConfig submessage tags are no longer 1:1");
-}
+static_assert(moduleConfigTypeCount == meshtastic_ModuleConfig_mesh_beacon_tag,
+              "ModuleConfigType and ModuleConfig submessage tags are no longer 1:1");
 
 // The full lifecycle per submessage: admin set -> encode (what saveToDisk writes) -> decode into the
 // live global (a reboot's loadFromDisk) -> admin get answers with that submessage. A missing set case
@@ -122,7 +119,7 @@ void test_everyModuleConfig_survivesSetSaveLoadGet(void)
         const NodeNum requesters[] = {ADMIN_NODE, 0};
         for (NodeNum from : requesters) {
             meshtastic_MeshPacket req = makeGetRequest(from);
-            admin->handleGetModuleConfig(req, tag - 1); // type pairs 1:1 with tag (guard test above)
+            admin->handleGetModuleConfig(req, tag - 1); // type pairs 1:1 with tag (static_assert above)
 
             pb_size_t responseTag = 0;
             bool decoded = decodeResponseTagFromReply(admin->reply(), responseTag);
@@ -185,7 +182,6 @@ void setup()
     initializeTestEnvironment();
     UNITY_BEGIN();
 
-    RUN_TEST(test_tagRangeMatchesTypeRange);
     RUN_TEST(test_everyModuleConfig_survivesSetSaveLoadGet);
     RUN_TEST(test_sequentialSets_preserveEarlierWrites);
 

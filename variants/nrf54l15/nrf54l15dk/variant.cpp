@@ -16,4 +16,12 @@ void initVariant()
     ledOff(PIN_LED1);
     pinMode(PIN_LED2, OUTPUT);
     ledOff(PIN_LED2);
+
+    // The core's Uart::begin() and SPIClass::begin() route the signals on the peripheral but leave the
+    // pads at their reset config: on nRF54L the UARTE TXD pad stays an input and never drives the pin,
+    // and the RXD / MISO pads keep their input buffer disconnected. Configure them here until the core does.
+    pinMode(PIN_SERIAL1_TX, OUTPUT);
+    digitalWrite(PIN_SERIAL1_TX, HIGH);
+    pinMode(PIN_SERIAL1_RX, INPUT);
+    pinMode(PIN_SPI_MISO, INPUT);
 }

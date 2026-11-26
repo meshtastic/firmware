@@ -42,7 +42,10 @@
     KNOWN PROBLEMS
         * Until the module is initialized by the startup sequence, the TX pin is in a floating
           state. Device connected to that pin may see this as "noise".
-        * Will not work on Linux device targets.
+        * On meshtasticd the port is SerialModule.Path in config.yaml, not rxd/txd pins: a tty, or
+          pty:<link> for a PTY meshtasticd creates. WS85 is not supported there.
+        * On meshtasticd a tty is opened once at startup: if it goes away (a USB adapter
+          unplugged) nothing reopens it until meshtasticd restarts.
 
 
 */
@@ -50,32 +53,60 @@
 #include "meshSolarApp.h"
 #endif
 
+static void rejectSerialConfig(const char *warning, meshtastic_ClientNotification_NotificationType type)
+{
+    LOG_ERROR(warning);
+#ifndef PIO_UNIT_TESTING
+    meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
+    if (cn) {
+        cn->level = meshtastic_LogRecord_Level_ERROR;
+        cn->type = type;
+        cn->time = getValidTime(RTCQualityFromNet);
+        snprintf(cn->message, sizeof(cn->message), "%s", warning);
+        service->sendClientNotification(cn);
+    }
+#endif
+}
+
 // Outside the architecture guard on purpose: config validation, not serial I/O. See SerialModule.h.
 bool serialConfigIsValid(const meshtastic_ModuleConfig_SerialConfig &config)
 {
     if (config.override_console_serial_port && !IS_ONE_OF(config.mode, meshtastic_ModuleConfig_SerialConfig_Serial_Mode_NMEA,
                                                           meshtastic_ModuleConfig_SerialConfig_Serial_Mode_CALTOPO,
                                                           meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MS_CONFIG)) {
-        const char *warning = "Invalid Serial config: override console serial port is only supported in NMEA, CalTopo, or MS "
-                              "Config output-only modes.";
-        LOG_ERROR(warning);
-#ifndef PIO_UNIT_TESTING
-        meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
-        if (cn) {
-            cn->level = meshtastic_LogRecord_Level_ERROR;
-            cn->time = getValidTime(RTCQualityFromNet);
-            snprintf(cn->message, sizeof(cn->message), "%s", warning);
-            service->sendClientNotification(cn);
-        }
-#endif
+        rejectSerialConfig("Invalid Serial config: override console serial port is only supported in NMEA, CalTopo, or MS "
+                           "Config output-only modes.",
+                           meshtastic_ClientNotification_NotificationType_SERIAL_CONSOLE_OVERRIDE_INVALID);
+        return false;
+    }
+
+    // Only an enabled module opens the UART, so a disabled config with stale pins must still save (the way out).
+    // UART pin arguments are 8-bit (nRF52 setPins, ESP32 begin), so 303 would wrap onto pin 47.
+    if (config.enabled && (config.rxd > UINT8_MAX || config.txd > UINT8_MAX)) {
+        char warning[96];
+        snprintf(warning, sizeof(warning), "Invalid Serial config: RX/TX pin %u is out of range.",
+                 (unsigned)(config.rxd > UINT8_MAX ? config.rxd : config.txd));
+        rejectSerialConfig(warning, meshtastic_ClientNotification_NotificationType_UNSET);
+        return false;
+    }
+    if (config.enabled && ((config.rxd && isRadioPin(config.rxd)) || (config.txd && isRadioPin(config.txd)))) {
+        char warning[96];
+        snprintf(warning, sizeof(warning), "Invalid Serial config: RX/TX pin %u is used by the LoRa radio.",
+                 (unsigned)(config.rxd && isRadioPin(config.rxd) ? config.rxd : config.txd));
+        rejectSerialConfig(warning, meshtastic_ClientNotification_NotificationType_UNSET); // no protobuf type for this yet
         return false;
     }
 
     return true;
 }
 
-#if (defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_RP2040) || defined(ARCH_STM32WL)) &&                             \
-    !defined(CONFIG_IDF_TARGET_ESP32S2) && !defined(CONFIG_IDF_TARGET_ESP32C3)
+#if HAS_SERIAL_MODULE
+
+#ifdef ARCH_PORTDUINO
+#include "HostSerialStream.h"
+#include "PortduinoGlue.h"
+#include "concurrency/LockGuard.h"
+#endif
 
 #define RX_BUFFER 256
 #define TIMEOUT 250
@@ -88,6 +119,11 @@ bool serialConfigIsValid(const meshtastic_ModuleConfig_SerialConfig &config)
 SerialModule *serialModule;
 SerialModuleRadio *serialModuleRadio;
 
+#ifdef ARCH_PORTDUINO
+// Serial1 belongs to GPS.SerialPath, so the module gets its own host tty.
+static HostSerialStream serialModulePort;
+#define SERIAL_PRINT_OBJECT serialModulePort
+#else
 #ifndef SERIAL_PRINT_PORT
 #define SERIAL_PRINT_PORT 2
 #endif
@@ -101,6 +137,7 @@ SerialModuleRadio *serialModuleRadio;
 #else
 #error "Unsupported SERIAL_PRINT_PORT value. Allowed values are 0, 1, or 2."
 #endif
+#endif // ARCH_PORTDUINO
 
 SerialModule::SerialModule() : StreamAPI(&SERIAL_PRINT_OBJECT), concurrency::OSThread("Serial")
 {
@@ -159,13 +196,33 @@ int32_t SerialModule::runOnce()
     if (!moduleConfig.serial.enabled)
         return disable();
 
-    if (moduleConfig.serial.override_console_serial_port || (moduleConfig.serial.rxd && moduleConfig.serial.txd)) {
+    // A config saved before the pin check existed would take the radio's pins and boot-loop the node
+    if (moduleConfig.serial.rxd > UINT8_MAX || moduleConfig.serial.txd > UINT8_MAX ||
+        (moduleConfig.serial.rxd && isRadioPin(moduleConfig.serial.rxd)) ||
+        (moduleConfig.serial.txd && isRadioPin(moduleConfig.serial.txd))) {
+        LOG_ERROR("Serial module not started: RX/TX pin %u/%u is out of range or overlaps the LoRa radio",
+                  (unsigned)moduleConfig.serial.rxd, (unsigned)moduleConfig.serial.txd);
+        return disable();
+    }
+
+#ifdef ARCH_PORTDUINO
+    // The console is meshtasticd's log, so only a configured host tty can carry the module.
+    const bool portConfigured = !portduino_config.serial_module_path.empty();
+#else
+    const bool portConfigured =
+        moduleConfig.serial.override_console_serial_port || (moduleConfig.serial.rxd && moduleConfig.serial.txd);
+#endif
+    if (portConfigured) {
         if (firstTime) {
             // Interface with the serial peripheral from in here.
             LOG_INFO("Init serial peripheral interface");
 
             uint32_t baud = getBaudRate();
 
+#ifdef ARCH_PORTDUINO
+            if (!serialModulePort.begin(portduino_config.serial_module_path, baud))
+                return disable();
+#else
             if (moduleConfig.serial.override_console_serial_port) {
 #ifdef RP2040_SLOW_CLOCK
                 Serial2.flush();
@@ -230,6 +287,7 @@ int32_t SerialModule::runOnce()
             Serial.begin(baud, SERIAL_8N1);
             Serial.setTimeout(moduleConfig.serial.timeout > 0 ? moduleConfig.serial.timeout : TIMEOUT);
 #endif
+#endif // ARCH_PORTDUINO
             serialModuleRadio = new SerialModuleRadio();
 
             firstTime = 0;
@@ -265,8 +323,15 @@ int32_t SerialModule::runOnce()
                     }
                 }
             }
+#ifdef ARCH_PORTDUINO
+            else if (IS_ONE_OF(moduleConfig.serial.mode, meshtastic_ModuleConfig_SerialConfig_Serial_Mode_DEFAULT,
+                               meshtastic_ModuleConfig_SerialConfig_Serial_Mode_SIMPLE,
+                               meshtastic_ModuleConfig_SerialConfig_Serial_Mode_TEXTMSG)) {
+                readHostSerial();
+            }
+#endif
 
-#if SERIAL_PRINT_PORT != 0
+#if !defined(ARCH_PORTDUINO) && SERIAL_PRINT_PORT != 0
             else if ((moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_WS85)) {
                 processWXSerial();
 
@@ -303,6 +368,55 @@ int32_t SerialModule::runOnce()
         return disable();
     }
 }
+
+#ifdef ARCH_PORTDUINO
+// Never blocks the main loop as Stream::readBytes() would: take what is buffered and send once the
+// line idles for serial.timeout or the payload fills.
+void SerialModule::readHostSerial()
+{
+    while (serialModulePort.available() > 0 && serialPayloadSize < meshtastic_Constants_DATA_PAYLOAD_LEN) {
+        int c = serialModulePort.read();
+        if (c < 0)
+            break;
+        serialBytes[serialPayloadSize++] = (char)c;
+        lastHostRxMs = millis();
+    }
+    const uint32_t idleMs = moduleConfig.serial.timeout > 0 ? moduleConfig.serial.timeout : TIMEOUT;
+    if (serialPayloadSize > 0 &&
+        (serialPayloadSize >= meshtastic_Constants_DATA_PAYLOAD_LEN || !Throttle::isWithinTimespanMs(lastHostRxMs, idleMs))) {
+        serialModuleRadio->sendPayload();
+        serialPayloadSize = 0;
+    }
+}
+
+bool SerialModule::finishPendingFrame()
+{
+    concurrency::LockGuard guard(&streamLock);
+    return frameWriter.finishPendingFrame(serialModulePort);
+}
+
+bool SerialModule::hasRetainedFrame()
+{
+    concurrency::LockGuard guard(&streamLock);
+    return !frameWriter.isIdle();
+}
+
+// A retained log frame still points into the log buffer, so it must not be re-encoded under it.
+bool SerialModule::canEncodeLogRecord()
+{
+    concurrency::LockGuard guard(&streamLock);
+    return frameWriter.isIdle();
+}
+
+bool SerialModule::writeFrame(uint8_t *buf, size_t len, bool bestEffort)
+{
+    if (len == 0 || !canWrite)
+        return false;
+    const size_t totalLen = buildFrameHeader(buf, len);
+    concurrency::LockGuard guard(&streamLock);
+    return frameWriter.writeFrame(serialModulePort, buf, totalLen, bestEffort);
+}
+#endif
 
 /**
  * Sends telemetry packet over the mesh network.
@@ -533,7 +647,7 @@ ParsedLine parseLine(const char *line)
  */
 void SerialModule::processWXSerial()
 {
-#if SERIAL_PRINT_PORT != 0 && !defined(ARCH_STM32WL) && !defined(CONFIG_IDF_TARGET_ESP32C6)
+#if !defined(ARCH_PORTDUINO) && SERIAL_PRINT_PORT != 0 && !defined(ARCH_STM32WL) && !defined(CONFIG_IDF_TARGET_ESP32C6)
 
     static unsigned int lastAveraged = 0;
     static unsigned int averageIntervalMillis = 300000; // 5 minutes hard coded.

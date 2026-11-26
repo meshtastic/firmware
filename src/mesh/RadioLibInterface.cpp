@@ -7,6 +7,9 @@
 #include "Throttle.h"
 #include "UptimeClock.h"
 #include "configuration.h"
+#if HAS_LORA_FEM
+#include "LoRaFEMInterface.h"
+#endif
 #include "error.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
@@ -17,6 +20,16 @@
 #include "PortduinoGlue.h"
 #include "meshUtils.h"
 #endif
+
+// The chip's RSSI includes any FEM LNA gain ahead of it; refer it to the antenna so it does not step when the LNA switches
+static int32_t rssiAtAntenna(int32_t chipRssi)
+{
+#if HAS_LORA_FEM
+    return chipRssi - loraFEMInterface.getRxLnaGainDb();
+#else
+    return chipRssi;
+#endif
+}
 
 void LockingArduinoHal::spiBeginTransaction()
 {
@@ -32,18 +45,26 @@ void LockingArduinoHal::spiEndTransaction()
     spiLock->unlock();
 }
 
-#if ARCH_PORTDUINO
+#if RADIO_SPI_BULK
 void LockingArduinoHal::spiTransfer(uint8_t *out, size_t len, uint8_t *in)
 {
-    spi->transfer(out, in, len);
+#if defined(ARDUINO_ARCH_ESP32)
+    spi->transferBytes(out, in, len);
+#else
+    spi->transfer(out, in, len); // on nRF52 one EasyDMA transfer, not one per byte
+#endif
 }
 #endif
 
 RadioLibInterface::RadioLibInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst,
                                      RADIOLIB_PIN_TYPE busy, PhysicalLayer *_iface)
-    : NotifiedWorkerThread("RadioIf"), module(hal, cs, irq, rst, busy), iface(_iface)
+    : NotifiedWorkerThread("RadioIf"), csPin(cs), module(hal, cs, irq, rst, busy), iface(_iface)
 {
     instance = this;
+
+#if RADIO_SPI_BULK && !ARCH_PORTDUINO
+    LOG_INFO("RADIO_SPI_BULK: one SPI transfer per radio command");
+#endif
 
 #ifdef MESHTASTIC_RX_READOUT_TASK
     // Before any sequence can start, not with the task in startReceive(): the first RadioSequence to wrap that call
@@ -117,6 +138,16 @@ void INTERRUPT_ATTR RadioLibInterface::isrTxLevel0()
  */
 RadioLibInterface *RadioLibInterface::instance;
 
+bool RadioLibInterface::usesPin(uint32_t pin) const
+{
+    const uint32_t pins[] = {csPin, module.getIrq(), module.getRst(), module.getGpio(), rfSwitchRxPin, rfSwitchTxPin};
+    for (uint32_t p : pins) {
+        if (p != RADIOLIB_NC && p == pin)
+            return true;
+    }
+    return false;
+}
+
 /** At most one busyRx deferral line per this interval; the line carries the count it stands for. */
 #define BUSY_RX_LOG_INTERVAL_MS 30000
 
@@ -163,11 +194,28 @@ bool RadioLibInterface::canSendImmediately()
         return true;
 }
 
+uint32_t RadioLibInterface::maxRxFrameMsec()
+{
+    // A sender's header can carry any CR up to 4/8, and a hold starts before that header can be read.
+    DataRate_t dr = getDataRate();
+    const uint8_t ourCR = dr.lora.codingRate;
+    dr.lora.codingRate = 8;
+    PacketConfig_t pc = getPacketConfig();
+    pc.lora.crcEnabled = true;
+    const RadioLibTime_t usec = iface->calculateTimeOnAir(modemType, dr, pc, MAX_LORA_PAYLOAD_LEN);
+    if (!isRadioLibTimeError(usec))
+        return (usec + 999) / 1000;
+    // The fallback times the frame at our own CR, which is short of the 4/8 bound the hold is for, so scale it up.
+    // The preamble does not scale with CR, so the result runs long - the safe direction for a hold.
+    const uint32_t ourMsec = getPacketTime(MAX_LORA_PAYLOAD_LEN);
+    const uint8_t scaleCR = (ourCR >= 5 && ourCR <= 8) ? ourCR : 8;
+    return (uint32_t)(((uint64_t)ourMsec * 8 + scaleCR - 1) / scaleCR);
+}
+
 bool RadioLibInterface::preambleHoldActive()
 {
-    // Whatever sent the cleared preamble is off the air one max packet later.
-    if (preambleHoldStart && !Throttle::isWithinTimespanMs(
-                                 preambleHoldStart, getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN + sizeof(PacketHeader))))
+    // Whatever sent the cleared preamble is off the air one max frame later.
+    if (preambleHoldStart && !Throttle::isWithinTimespanMs(preambleHoldStart, maxRxFrameMsec()))
         preambleHoldStart = 0;
     return preambleHoldStart != 0;
 }
@@ -179,19 +227,30 @@ void RadioLibInterface::holdOnPreamble()
         return;
     iface->clearIrq(1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED);
     preambleHoldStart = Time::skipZero(Time::getMillis());
+    preambleHoldHeaderSeen = false; // nothing says this preamble belongs to a frame we can decode yet
     LOG_TRACE("Preamble seen, cleared, holding TX");
+}
+
+bool RadioLibInterface::preambleHoldPeekable()
+{
+    // A frame we could decode has shown its header by now, so what is left is noise or LoRa we cannot read. Neither is
+    // worth the rest of a max-frame hold: let the pre-TX CAD listen and decide (#11933).
+    return preambleHoldActive() && !preambleHoldHeaderSeen &&
+           Throttle::hasElapsed(preambleHoldStart, preambleHeaderGraceMsec(sf, bw, preambleLength));
 }
 
 bool RadioLibInterface::receiveDetected(uint16_t irq, unsigned long syncWordHeaderValidFlag, unsigned long preambleDetectedFlag)
 {
+    if (irq & syncWordHeaderValidFlag)
+        preambleHoldHeaderSeen = true; // a real frame, so the hold is no longer a bare preamble the CAD may settle
+
     if (preambleHoldActive())
         return true;
 
     if (irq & syncWordHeaderValidFlag) {
         if (!activeReceiveStart) {
             activeReceiveStart = Time::skipZero(Time::getMillis());
-        } else if (!Throttle::isWithinTimespanMs(activeReceiveStart,
-                                                 getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN + sizeof(PacketHeader)))) {
+        } else if (!Throttle::isWithinTimespanMs(activeReceiveStart, maxRxFrameMsec())) {
             // We should have gotten an RX_DONE IRQ by now if it was really a packet, so ignore HEADER_VALID flag
             activeReceiveStart = 0;
             LOG_TRACE("Ignore false header detection");
@@ -250,6 +309,7 @@ ErrorCode RadioLibInterface::send(meshtastic_MeshPacket *p)
     printPacket("enqueue for send", p);
 
     LOG_TRACE("txGood=%d,txRelay=%d,rxGood=%d,rxBad=%d", txGood, txRelay, rxGood, rxBad);
+    const meshtastic_MeshPacket *prevFront = txQueue.getFront();
     bool dropped = false;
     ErrorCode res = txQueue.enqueue(p, &dropped) ? ERRNO_OK : ERRNO_UNKNOWN;
 
@@ -263,8 +323,10 @@ ErrorCode RadioLibInterface::send(meshtastic_MeshPacket *p)
     }
 
     // set (random) transmit delay to let others reconfigure their radio,
-    // to avoid collisions and implement timing-based flooding
-    setTransmitDelay();
+    // to avoid collisions and implement timing-based flooding.
+    // Only allow shortening a pending TX timer when the front packet changed so
+    // queuing behind an existing front packet does not re-roll its contention delay.
+    setTransmitDelay(txQueue.getFront() != prevFront);
 
     return res;
 #else
@@ -337,6 +399,10 @@ void RadioLibInterface::updateNoiseFloor()
     }
 
     int16_t rssi;
+#if HAS_LORA_FEM
+    bool lnaWindowDone = false, lnaWasOn = false;
+    int16_t rssiOther = NOISE_FLOOR_INVALID;
+#endif
     {
         // Three chip reads from the main loop, which holds no sequence of its own: unlocked, the readout task can land
         // between them and wedge BUSY for RadioLib's whole timeout, same as canSendImmediately() above.
@@ -346,13 +412,46 @@ void RadioLibInterface::updateNoiseFloor()
         }
         lastNoiseFloorUpdate = Time::getMillis();
         rssi = getCurrentRSSI();
+#if HAS_LORA_FEM
+        // Pair the reading with one on the other RX path; the lock keeps a transmit from starting while the LNA is switched
+        if (loraFEMInterface.isLnaAuto()) {
+            lnaWasOn = loraFEMInterface.isLnaEnabled();
+            loraFEMInterface.setRxLnaPath(!lnaWasOn);
+            delayMicroseconds(loraFEMInterface.getLnaSettleUs());
+            rssiOther = getCurrentRSSI();
+            if (isValidNoiseRssi(rssi) && isValidNoiseRssi(rssiOther)) {
+                lnaWindowDone = loraFEMInterface.addLnaAutoSample(lnaWasOn ? rssi : rssiOther, lnaWasOn ? rssiOther : rssi);
+            }
+            loraFEMInterface.setRxLnaPath(loraFEMInterface.isLnaEnabled());
+        }
+#endif
     }
-    if (rssi == NOISE_FLOOR_INVALID || rssi >= 0 || rssi < NOISE_FLOOR_VALID_MIN) {
+    if (!isValidNoiseRssi(rssi)) {
         LOG_DEBUG_RADIO("Skipping invalid RSSI reading: %d", rssi);
         return;
     }
+#if HAS_LORA_FEM
+    if (loraFEMInterface.isLnaAuto()) {
+        LOG_DEBUG_RADIO("FEM LNA auto pair: %d dBm on, %d dBm bypassed", lnaWasOn ? rssi : rssiOther,
+                        lnaWasOn ? rssiOther : rssi);
+    }
+    if (lnaWindowDone) {
+        loraFEMInterface.saveLnaAutoDecision();
+        const bool lnaOn = loraFEMInterface.isLnaEnabled();
+        const float benefitDb = loraFEMInterface.getLnaAutoBenefitTenthsDb() / 10.0f;
+        if (lnaOn == lnaWasOn) {
+            LOG_DEBUG("FEM LNA auto: LNA buys %.1f dB, stays %s", benefitDb, lnaOn ? "in" : "bypassed");
+        } else {
+            LOG_INFO("FEM LNA auto: LNA buys %.1f dB, now %s", benefitDb, lnaOn ? "in" : "bypassed");
+            // The window holds readings from the old path; restart it rather than average across the switch
+            resetNoiseFloor();
+            return;
+        }
+    }
+#endif
 
-    noiseFloorSamples[currentSampleIndex] = (int32_t)rssi;
+    const int32_t sample = rssiAtAntenna(rssi);
+    noiseFloorSamples[currentSampleIndex] = sample;
     currentSampleIndex++;
 
     if (currentSampleIndex >= NOISE_FLOOR_SAMPLES) {
@@ -362,7 +461,7 @@ void RadioLibInterface::updateNoiseFloor()
 
     currentNoiseFloor = getAverageNoiseFloorInternal();
 
-    LOG_TRACE("Noise floor: %d dBm (samples: %d, latest: %d dBm)", currentNoiseFloor, getNoiseFloorSampleCountInternal(), rssi);
+    LOG_TRACE("Noise floor: %d dBm (samples: %d, latest: %d dBm)", currentNoiseFloor, getNoiseFloorSampleCountInternal(), sample);
 }
 
 uint8_t RadioLibInterface::getNoiseFloorSampleCountInternal() const
@@ -556,7 +655,12 @@ void RadioLibInterface::onNotify(uint32_t notification)
         // If we are not currently in receive mode, then restart the random delay (this can happen if the main thread
         // has placed the unit into standby)  FIXME, how will this work if the chipset is in sleep mode?
         if (!txQueue.empty()) {
-            if (!canSendImmediately()) {
+            const bool clear = canSendImmediately();
+            // An old bare preamble is noise or LoRa we cannot decode; the CAD below judges the channel instead.
+            const bool peek = !clear && sendingPacket == NULL && preambleHoldPeekable();
+            // Snapshotted: the scan below can age the hold out, and the log would then read the cleared stamp.
+            const uint32_t peekHoldStart = peek ? preambleHoldStart : 0;
+            if (!clear && !peek) {
                 setTransmitDelay(); // currently Rx/Tx-ing: reset random delay
             } else {
                 meshtastic_MeshPacket *txp = txQueue.getFront();
@@ -583,18 +687,21 @@ void RadioLibInterface::onNotify(uint32_t notification)
                     // clear the flags startTransmit() is about to set up, or on SX128x leave the chip in standby.
                     RadioSequence seq(this);
                     // Listen-before-talk: a CAD preamble scan immediately before we key up.
-                    LOG_DEBUG("CAD arm");
+                    LOG_DEBUG_RADIO("CAD arm");
                     scanForTx = txp;
                     const bool channelActive = isChannelActive();
                     scanForTx = nullptr;
                     if (channelActive) { // currently traffic on the channel?
-                        LOG_DEBUG("CAD busy");
+                        LOG_DEBUG_RADIO("CAD busy");
                         // Beacon target or not: reconfigureForBeaconTX() already left RX running on that
                         // config, so skipping this only ever left the node deaf in standby.
                         rearmReceive();
                         setTransmitDelay();
                     } else {
-                        LOG_DEBUG("CAD free");
+                        LOG_DEBUG_RADIO("CAD free");
+                        if (peek)
+                            LOG_DEBUG_RADIO("Preamble hold released, CAD clear %ums after the sighting",
+                                            Time::getMillis() - peekHoldStart);
                         // Send any outgoing packets we have ready as fast as possible to keep the time between channel scan and
                         // actual transmission as short as possible
                         txp = txQueue.dequeue();
@@ -613,7 +720,7 @@ void RadioLibInterface::onNotify(uint32_t notification)
     }
 }
 
-void RadioLibInterface::setTransmitDelay()
+void RadioLibInterface::setTransmitDelay(bool allowShorten)
 {
     meshtastic_MeshPacket *p = txQueue.getFront();
     if (!p) {
@@ -625,51 +732,45 @@ void RadioLibInterface::setTransmitDelay()
     // So we want to make sure the other side has had a chance to reconfigure its radio.
 
     if (p->tx_after) {
-        unsigned long add_delay = p->rx_rssi ? getTxDelayMsecWeighted(p) : getTxDelayMsec();
-        unsigned long now = Time::getMillis();
-        // skipZero, not timerEndsAtMillis: this is a clamp of three candidates rather than a plain
-        // now + delay, and `if (p->tx_after)` above is the read that takes 0 as "no delay wanted" -
-        // so a recomputation landing on 0 drops the CSMA backoff and the packet goes out at once.
-        //
-        // Narrow to uint32_t BEFORE skipZero, not after: add_delay is unsigned long, 64-bit on the
-        // portduino host, so the clamp can exceed UINT32_MAX there. skipZero on the wide value would
-        // pass 0x100000000 through as non-zero and the store to this uint32_t field would truncate it
-        // back to the 0 being avoided.
-        p->tx_after = Time::skipZero(
-            (uint32_t)min(max(p->tx_after + add_delay, now + add_delay), now + 2 * getTxDelayMsecWeightedWorst(p->rx_snr)));
-        scheduleTransmitDelayCompleted(p->tx_after - now);
+        uint32_t now = Time::getMillis();
+        if (Throttle::deadlinePassedAt(now, p->tx_after)) {
+            // The initial late rebroadcast window has elapsed; use SNR-weighted rebroadcast backoff
+            // while keeping tx_after non-zero so normal packets retain queue and eviction priority.
+            p->tx_after = Time::timerEndsAtMillis(getTxDelayMsecWeighted(p));
+        }
+        scheduleTransmitDelayCompleted(p->tx_after - now, allowShorten);
     } else if (p->rx_snr == 0 && p->rx_rssi == 0) {
         /* We assume if rx_snr = 0 and rx_rssi = 0, the packet was generated locally.
          *   This assumption is valid because of the offset generated by the radio to account for the noise
          *   floor.
          */
-        startTransmitTimer(true);
+        startTransmitTimer(true, allowShorten);
     } else {
         // If there is a SNR, start a timer scaled based on that SNR.
         LOG_TRACE("rx_snr found. hop_limit:%d rx_snr:%f", p->hop_limit, p->rx_snr);
-        startTransmitTimerRebroadcast(p);
+        startTransmitTimerRebroadcast(p, allowShorten);
     }
 }
 
-void RadioLibInterface::startTransmitTimer(bool withDelay)
+void RadioLibInterface::startTransmitTimer(bool withDelay, bool allowShorten)
 {
     // If we have work to do and the timer wasn't already scheduled, schedule it now
     if (!txQueue.empty()) {
         uint32_t delay = !withDelay ? 1 : getTxDelayMsec();
-        scheduleTransmitDelayCompleted(delay); // This will implicitly enable
+        scheduleTransmitDelayCompleted(delay, allowShorten); // This will implicitly enable
     }
 }
 
-void RadioLibInterface::startTransmitTimerRebroadcast(meshtastic_MeshPacket *p)
+void RadioLibInterface::startTransmitTimerRebroadcast(meshtastic_MeshPacket *p, bool allowShorten)
 {
     // If we have work to do and the timer wasn't already scheduled, schedule it now
     if (!txQueue.empty()) {
         uint32_t delay = getTxDelayMsecWeighted(p);
-        scheduleTransmitDelayCompleted(delay); // This will implicitly enable
+        scheduleTransmitDelayCompleted(delay, allowShorten); // This will implicitly enable
     }
 }
 
-void RadioLibInterface::scheduleTransmitDelayCompleted(uint32_t delay)
+void RadioLibInterface::scheduleTransmitDelayCompleted(uint32_t delay, bool allowShorten)
 {
     // Where the driver wants it, fire at once so the radio thread writes the payload while RX runs, then wait out the
     // rest of the backoff
@@ -678,7 +779,11 @@ void RadioLibInterface::scheduleTransmitDelayCompleted(uint32_t delay)
         txStageDueMs = Time::timerEndsAtMillis(delay);
         delay = 1;
     }
-    notifyLater(delay, TRANSMIT_DELAY_COMPLETED, txTimerOverwrite);
+    if (allowShorten) {
+        notifyLaterOrShorten(delay, TRANSMIT_DELAY_COMPLETED, txTimerOverwrite);
+    } else {
+        notifyLater(delay, TRANSMIT_DELAY_COMPLETED, txTimerOverwrite);
+    }
 }
 
 /**
@@ -689,6 +794,12 @@ void RadioLibInterface::clampToLateRebroadcastWindow(NodeNum from, PacketId id)
     // Look for non-late packets only, so we don't do this twice!
     meshtastic_MeshPacket *p = txQueue.remove(from, id, true, false);
     if (p) {
+        if (shouldRebroadcastEarlyLikeRouter(p)) {
+            // Keep the early slot, a late relay would defeat its purpose
+            if (!txQueue.enqueue(p))
+                packetPool.release(p);
+            return;
+        }
         p->tx_after = Time::timerEndsAtMillis(getTxDelayMsecWeightedWorst(p->rx_snr));
         bool dropped = false;
         if (txQueue.enqueue(p, &dropped)) {
@@ -778,6 +889,7 @@ void RadioLibInterface::handleReceiveInterrupt(const CapturedRxInfo *captured)
     const bool wasCadHandoff = cadHandoffRxStart != 0;
     cadHandoffRxStart = 0; // this RX ends the wait either way; the outcome is logged below
     preambleHoldStart = 0; // likewise the reception a held preamble announced
+    preambleHoldHeaderSeen = false;
 
     size_t length;
     if (captured) {
@@ -798,7 +910,7 @@ void RadioLibInterface::handleReceiveInterrupt(const CapturedRxInfo *captured)
         // A CAD handoff's RX window expired with nothing on air. There is no packet to read, so don't count
         // it as a bad one - the caller's rearmReceive() puts the radio back to listening.
         if (!haveFrame && iface->checkIrq(RADIOLIB_IRQ_TIMEOUT) == 1) {
-            LOG_DEBUG("CAD>RX empty");
+            LOG_DEBUG_RADIO("CAD>RX empty");
             // Inside a handoff a damaged header's flags can be set alongside the timeout, both routed to DIO1:
             // clear them together, or the line stays asserted and the next frame's RX_DONE raises no edge. Plain
             // RX keeps leaving HEADER_ERR for checkStaleRxFlags() to judge.
@@ -813,7 +925,7 @@ void RadioLibInterface::handleReceiveInterrupt(const CapturedRxInfo *captured)
         // behind it. getPacketLength() would not be a frame's length here, so take the same exit as the empty
         // window, clearing what ended the RX instead of reading a packet that never arrived.
         if (wasCadHandoff && !haveFrame) {
-            LOG_DEBUG("CAD>RX damaged");
+            LOG_DEBUG_RADIO("CAD>RX damaged");
             iface->clearIrq(cadHandoffRxErrorIrqs);
             return;
         }
@@ -823,7 +935,7 @@ void RadioLibInterface::handleReceiveInterrupt(const CapturedRxInfo *captured)
     }
 
     if (wasCadHandoff)
-        LOG_DEBUG("CAD>RX pkt");
+        LOG_DEBUG_RADIO("CAD>RX pkt");
 
     // Some drivers report this as a 16 bit value, so a bad readback can overrun radioBuffer in readData()
     if (length > sizeof(radioBuffer)) {
@@ -960,6 +1072,7 @@ void RadioLibInterface::startReceive()
     chipRecoveryFailures = 0;
     rxFlagsSeenMs = 0;
     rxFlagsSeenHeader = false;
+    rxFlagsSeenValidHeader = false;
     powerMon->setState(meshtastic_PowerMon_State_Lora_RXOn);
 }
 
@@ -987,7 +1100,7 @@ bool RadioLibInterface::resetAGC()
 
 void RadioLibInterface::noteCadHandoffToRx()
 {
-    LOG_DEBUG("CAD>RX started");
+    LOG_DEBUG_RADIO("CAD>RX started");
     cadHandedToRx = true;
     // Same clock Throttle compares against, so a native test can drive both across the wrap. 0 is the
     // "none outstanding" sentinel and getMillis() does land on it once per wrap, so step past it.
@@ -1054,35 +1167,56 @@ void RadioLibInterface::checkStaleRxFlags()
     const uint32_t irq = iface->getIrqFlags();
     if (irq & iface->getIrqMapped(1UL << RADIOLIB_IRQ_RX_DONE))
         return;
-    // HEADER_ERR counts: on SX1280 it leaves RX wedged with no RX_DONE or TIMEOUT to follow.
-    const bool headerSeen = irq & iface->getIrqMapped((1UL << RADIOLIB_IRQ_HEADER_VALID) | (1UL << RADIOLIB_IRQ_HEADER_ERR));
+    const bool validSeen = irq & iface->getIrqMapped(1UL << RADIOLIB_IRQ_HEADER_VALID);
+    // HEADER_ERR counts on its own: on SX1280 it leaves RX wedged with no RX_DONE or TIMEOUT to follow.
+    const bool errSeen = irq & iface->getIrqMapped(1UL << RADIOLIB_IRQ_HEADER_ERR);
+    const bool headerSeen = validSeen || errSeen;
     const bool preambleSeen = irq & iface->getIrqMapped(1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED);
     if (!headerSeen && !preambleSeen) {
         rxFlagsSeenMs = 0;
         rxFlagsSeenHeader = false;
+        rxFlagsSeenValidHeader = false;
         return;
     }
-    // A header's window starts when the header shows, not when an earlier bare preamble did
-    if (!rxFlagsSeenMs || (headerSeen && !rxFlagsSeenHeader)) {
+    // A header's window starts when the header shows, not when an earlier bare preamble did - and a valid
+    // header's starts over a failed header's, whose flag stays latched beside it and is not this frame's.
+    if (!rxFlagsSeenMs || (headerSeen && !rxFlagsSeenHeader) || (validSeen && !rxFlagsSeenValidHeader)) {
         rxFlagsSeenMs = Time::skipZero(Time::getMillis());
         rxFlagsSeenHeader = headerSeen;
+        rxFlagsSeenValidHeader = validSeen;
         return;
     }
 
     const uint32_t maxPacketTimeMsec = getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN + sizeof(PacketHeader));
-    switch (staleRxFlagAction(headerSeen, Time::getMillis() - rxFlagsSeenMs, maxPacketTimeMsec)) {
+    switch (staleRxFlagAction(validSeen, errSeen, headerErrWedgesRx(), Time::getMillis() - rxFlagsSeenMs, maxPacketTimeMsec)) {
     case StaleRxFlagAction::Keep:
         break;
     case StaleRxFlagAction::Rearm:
         LOG_DEBUG("RX header stale, re-arm");
         startReceive(); // clears rxFlagsSeenMs
         break;
-    case StaleRxFlagAction::ClearPreamble:
+    case StaleRxFlagAction::ClearHeaderErr:
         // A clear never aborts a reception, unlike the standby inside startReceive().
+        LOG_DEBUG("RX header err stale, cleared");
+        if (validSeen) { // a valid header beside it keeps the window this error did not start
+            iface->clearIrq(1UL << RADIOLIB_IRQ_HEADER_ERR);
+            break;
+        }
+        // The failed frame's own preamble is latched beside its error. Retiring one and not the other
+        // leaves the next send's receiveDetected() holding TX a max packet over a frame already dead -
+        // a wait the re-arm this replaces never cost, because its standby cleared both flags at once.
+        iface->clearIrq((1UL << RADIOLIB_IRQ_HEADER_ERR) | (1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED));
+        rxFlagsSeenMs = 0;
+        rxFlagsSeenHeader = false;
+        rxFlagsSeenValidHeader = false;
+        break;
+    case StaleRxFlagAction::ClearPreamble:
+        // Also a clear, so also safe over a frame that may be arriving behind it.
         LOG_DEBUG("RX preamble stale, cleared");
         iface->clearIrq(1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED);
         rxFlagsSeenMs = 0;
         rxFlagsSeenHeader = false;
+        rxFlagsSeenValidHeader = false;
         break;
     }
 }
@@ -1152,7 +1286,10 @@ bool RadioLibInterface::maybeRecoverChipStateLoss()
 
 void RadioLibInterface::clearReadIrqs()
 {
-    iface->clearIrq((1UL << RADIOLIB_IRQ_RX_DONE) | (1UL << RADIOLIB_IRQ_CRC_ERR));
+    // Everything readData() would have cleared: a HEADER_VALID left latched times the next frame's stale-flag
+    // window from this dead frame, so checkStaleRxFlags() re-arms over the next frame instead of behind it.
+    iface->clearIrq((1UL << RADIOLIB_IRQ_RX_DONE) | (1UL << RADIOLIB_IRQ_CRC_ERR) | (1UL << RADIOLIB_IRQ_HEADER_VALID) |
+                    (1UL << RADIOLIB_IRQ_HEADER_ERR) | (1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED));
     discardUnreadRxFrame();
 }
 
@@ -1319,7 +1456,7 @@ void RadioLibInterface::readOutFromTask()
         clearReadIrqs();
     }
     f.info.snr = iface->getSNR();
-    f.info.rssi = lround(iface->getRSSI());
+    f.info.rssi = rssiAtAntenna(lround(iface->getRSSI()));
     f.info.len = (uint16_t)len;
     // Here, not where the radio thread accounts for the frame: by then the chip has been put back in RX - after a
     // resume it never left it - and its packet status describes the frame it is receiving now, not this one.
@@ -1378,7 +1515,14 @@ void RadioLibInterface::configHardwareForSend()
 
 int16_t RadioLibInterface::launchTransmit(size_t numbytes)
 {
-    return iface->startTransmit((uint8_t *)&radioBuffer, numbytes);
+    int16_t res = iface->startTransmit((uint8_t *)&radioBuffer, numbytes);
+#if !RADIOLIB_SPI_PARANOID
+    // Without paranoid SPI nothing reads SetTx's status (LR11x0/LR20x0 report it on the next transfer), so a refused
+    // SetTx would wait for a TX_DONE that never comes. Chips without checkStatusCb (SX12xx) have nothing to read.
+    if (res == RADIOLIB_ERR_NONE && module.spiConfig.checkStatusCb)
+        res = module.spiConfig.checkStatusCb(&module);
+#endif
+    return res;
 }
 
 void RadioLibInterface::setStandby()
@@ -1399,6 +1543,10 @@ void RadioLibInterface::setStandby()
 bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
 {
     cadHandoffRxStart = 0; // TX ends any handoff wait; completeSending() re-arms RX itself
+    // A peek reaches here with its hold still running; the CAD judged the channel clear and we are about to key up, so
+    // the next packet must not wait out the rest of it.
+    preambleHoldStart = 0;
+    preambleHoldHeaderSeen = false;
 
     /* NOTE: Minimize the actions before startTransmit() to keep the time between
              channel scan and actual transmit as low as possible to avoid collisions. */
