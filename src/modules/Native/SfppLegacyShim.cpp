@@ -90,6 +90,8 @@ bool StoreForwardPlusPlusModule::legacyStoreForwardServes()
 
 void StoreForwardPlusPlusModule::sendLegacyReply(NodeNum to, const meshtastic_StoreAndForward &payload)
 {
+    if (!consumeServeBudget())
+        return; // D11's one-pacer covers every legacy reply, not only the text frames
     meshtastic_MeshPacket *p = allocStoreForwardPacket(payload);
     if (!p)
         return;

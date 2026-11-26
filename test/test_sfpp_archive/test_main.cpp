@@ -1054,6 +1054,23 @@ void test_legacyHistoryAnswersInLegacyFormat()
     TEST_ASSERT_EQUAL_MEMORY("history text", text.variant.text.bytes, text.variant.text.size);
 }
 
+// The legacy shim's history replies share D11's 30-frame/10-min serving budget; a burst of requests
+// cannot send a 31st header inside the window.
+void test_legacyHistoryHeadersShareTheServeBudget()
+{
+    for (uint32_t i = 0; i < 31; i++) {
+        meshtastic_MeshPacket request = makeHistoryRequest(0, LOCAL_NODE, 0x40000000 + i, 0);
+        TEST_ASSERT_EQUAL(ProcessMessage::STOP, testSfpp->dispatch(request));
+    }
+    uint32_t replies = 0;
+    for (const auto &p : drainPhoneQueue()) {
+        meshtastic_StoreAndForward reply;
+        if (decodeStoreForward(p, reply) && reply.rr == meshtastic_StoreAndForward_RequestResponse_ROUTER_HISTORY)
+            replies++;
+    }
+    TEST_ASSERT_EQUAL_UINT32(30, replies);
+}
+
 // A client-supplied window is honoured (the legacy request carries minutes) and may shorten the
 // default retention but never extend past it.
 void test_legacyHistoryUsesLegacyRequestWindow()
@@ -1979,6 +1996,7 @@ void setup()
     RUN_TEST(test_storedMessageHashMatchesTheFrameHash);
     RUN_TEST(test_legacyHistoryAnswersInLegacyFormat);
     RUN_TEST(test_legacyHistoryUsesLegacyRequestWindow);
+    RUN_TEST(test_legacyHistoryHeadersShareTheServeBudget);
     RUN_TEST(test_legacyHistoryExcludesTextsOlderThanRetention);
     RUN_TEST(test_legacyHistoryPagesByCursor);
     RUN_TEST(test_shimServesAdoptedBroadcastText);
