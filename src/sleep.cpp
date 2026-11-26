@@ -182,7 +182,6 @@ void initDeepSleep()
             continue;
         gpio_intr_disable((gpio_num_t)i);
         gpio_set_intr_type((gpio_num_t)i, GPIO_INTR_DISABLE);
-        gpio_wakeup_disable((gpio_num_t)i);
     }
 
 #if SOC_RTCIO_HOLD_SUPPORTED
