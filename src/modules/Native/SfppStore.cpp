@@ -230,7 +230,6 @@ void StoreForwardPlusPlusModule::restampPreviousBoot()
 
     restamp(restampChannelStmt, updateChannelTimeStmt);
     restamp(restampScratchStmt, updateScratchTimeStmt);
-    restamp(restampCanonScratchStmt, updateCanonScratchTimeStmt);
     restamp(restampDirectStmt, updateDirectTimeStmt);
 }
 
@@ -279,7 +278,6 @@ void StoreForwardPlusPlusModule::healBootRelativeTimestamps()
 
     heal(restampChannelStmt, updateChannelTimeStmt);
     heal(restampScratchStmt, updateScratchTimeStmt);
-    heal(restampCanonScratchStmt, updateCanonScratchTimeStmt);
     heal(restampDirectStmt, updateDirectTimeStmt);
 }
 
@@ -366,15 +364,10 @@ bool StoreForwardPlusPlusModule::buildBucketSummary(const uint8_t *root_hash, si
 {
     out.clear();
 
-    // Counters are 1-based, so bucket b covers counters [b*n + 1, (b+1)*n].
-    const uint32_t first = bucket * sfppsr::kBucketObjects + 1;
-    const uint32_t last = first + sfppsr::kBucketObjects - 1;
-
     sqlite3_reset(bucketSummaryStmt);
     sqlite3_bind_int(bucketSummaryStmt, 1, root_hash_len);
     sqlite3_bind_blob(bucketSummaryStmt, 2, root_hash, root_hash_len, NULL);
-    sqlite3_bind_int(bucketSummaryStmt, 3, first);
-    sqlite3_bind_int(bucketSummaryStmt, 4, last);
+    sqlite3_bind_int(bucketSummaryStmt, 3, (int)bucket);
 
     while (sqlite3_step(bucketSummaryStmt) == SQLITE_ROW) {
         out.add((pinsketch::Element)sqlite3_column_int64(bucketSummaryStmt, 0),
@@ -385,30 +378,14 @@ bool StoreForwardPlusPlusModule::buildBucketSummary(const uint8_t *root_hash, si
     return out.count() > 0;
 }
 
-uint32_t StoreForwardPlusPlusModule::highestCounter(const uint8_t *root_hash, size_t root_hash_len)
-{
-    sqlite3_reset(maxCounterStmt);
-    sqlite3_bind_int(maxCounterStmt, 1, root_hash_len);
-    sqlite3_bind_blob(maxCounterStmt, 2, root_hash, root_hash_len, NULL);
-    uint32_t highest = 0;
-    if (sqlite3_step(maxCounterStmt) == SQLITE_ROW && sqlite3_column_type(maxCounterStmt, 0) != SQLITE_NULL)
-        highest = (uint32_t)sqlite3_column_int64(maxCounterStmt, 0);
-    sqlite3_reset(maxCounterStmt);
-    return highest;
-}
-
 bool StoreForwardPlusPlusModule::collectBucketIds(const uint8_t *root_hash, size_t root_hash_len, uint32_t bucket,
                                                   std::vector<pinsketch::Element> &out)
 {
     out.clear();
-    const uint32_t first = bucket * sfppsr::kBucketObjects + 1;
-    const uint32_t last = first + sfppsr::kBucketObjects - 1;
-
     sqlite3_reset(bucketIdsStmt);
     sqlite3_bind_int(bucketIdsStmt, 1, root_hash_len);
     sqlite3_bind_blob(bucketIdsStmt, 2, root_hash, root_hash_len, NULL);
-    sqlite3_bind_int(bucketIdsStmt, 3, first);
-    sqlite3_bind_int(bucketIdsStmt, 4, last);
+    sqlite3_bind_int(bucketIdsStmt, 3, (int)bucket);
 
     while (sqlite3_step(bucketIdsStmt) == SQLITE_ROW)
         out.push_back((pinsketch::Element)sqlite3_column_int64(bucketIdsStmt, 0));
@@ -417,94 +394,19 @@ bool StoreForwardPlusPlusModule::collectBucketIds(const uint8_t *root_hash, size
     return !out.empty();
 }
 
+bool StoreForwardPlusPlusModule::collectBuckets(const uint8_t *root_hash, size_t root_hash_len, std::vector<uint32_t> &out)
+{
+    out.clear();
+    sqlite3_reset(distinctBucketsStmt);
+    sqlite3_bind_int(distinctBucketsStmt, 1, root_hash_len);
+    sqlite3_bind_blob(distinctBucketsStmt, 2, root_hash, root_hash_len, NULL);
+    while (sqlite3_step(distinctBucketsStmt) == SQLITE_ROW)
+        out.push_back((uint32_t)sqlite3_column_int64(distinctBucketsStmt, 0));
+    sqlite3_reset(distinctBucketsStmt);
+    return !out.empty();
+}
+
 //
-StoreForwardPlusPlusModule::link_object StoreForwardPlusPlusModule::getLink(uint8_t *_commit_hash, size_t _commit_hash_len)
-{
-    link_object lo;
-    sqlite3_bind_int(getLinkStmt, 1, _commit_hash_len);
-    sqlite3_bind_blob(getLinkStmt, 2, _commit_hash, _commit_hash_len, NULL);
-    int res = sqlite3_step(getLinkStmt);
-
-    lo.to = sqlite3_column_int(getLinkStmt, 0);
-    lo.from = sqlite3_column_int(getLinkStmt, 1);
-    lo.id = sqlite3_column_int(getLinkStmt, 2);
-
-    uint8_t *_payload = (uint8_t *)sqlite3_column_blob(getLinkStmt, 3);
-    lo.encrypted_len = sqlite3_column_bytes(getLinkStmt, 3);
-    memcpy(lo.encrypted_bytes, _payload, lo.encrypted_len);
-
-    uint8_t *_message_hash = (uint8_t *)sqlite3_column_blob(getLinkStmt, 4);
-    lo.message_hash_len = SFPP_HASH_SIZE;
-    memcpy(lo.message_hash, _message_hash, lo.message_hash_len);
-
-    lo.rx_time = sqlite3_column_int(getLinkStmt, 5);
-
-    uint8_t *_tmp_commit_hash = (uint8_t *)sqlite3_column_blob(getLinkStmt, 6);
-    lo.commit_hash_len = SFPP_HASH_SIZE;
-    memcpy(lo.commit_hash, _tmp_commit_hash, lo.commit_hash_len);
-
-    uint8_t *_root_hash = (uint8_t *)sqlite3_column_blob(getLinkStmt, 7);
-    lo.root_hash_len = SFPP_HASH_SIZE;
-    memcpy(lo.root_hash, _root_hash, lo.root_hash_len);
-
-    lo.counter = sqlite3_column_int(getLinkStmt, 8);
-
-    lo.payload = std::string((char *)sqlite3_column_text(getLinkStmt, 9));
-    lo.time_basis = (uint8_t)sqlite3_column_int(getLinkStmt, 10);
-    lo.boot_id = (uint32_t)sqlite3_column_int64(getLinkStmt, 11);
-    lo.age_margin = (uint32_t)sqlite3_column_int64(getLinkStmt, 12);
-
-    lo.channel_hash = getChannelHashFromRoot(lo.root_hash, lo.root_hash_len);
-
-    sqlite3_reset(getLinkStmt);
-
-    return lo;
-}
-
-StoreForwardPlusPlusModule::link_object StoreForwardPlusPlusModule::getLinkFromMessageHash(uint8_t *_message_hash,
-                                                                                           size_t _message_hash_len)
-{
-    link_object lo;
-    sqlite3_bind_int(getLinkFromMessageHashStmt, 1, _message_hash_len);
-    sqlite3_bind_blob(getLinkFromMessageHashStmt, 2, _message_hash, _message_hash_len, NULL);
-    int res = sqlite3_step(getLinkFromMessageHashStmt);
-
-    lo.to = sqlite3_column_int(getLinkFromMessageHashStmt, 0);
-    lo.from = sqlite3_column_int(getLinkFromMessageHashStmt, 1);
-    lo.id = sqlite3_column_int(getLinkFromMessageHashStmt, 2);
-
-    uint8_t *_payload = (uint8_t *)sqlite3_column_blob(getLinkFromMessageHashStmt, 3);
-    lo.encrypted_len = sqlite3_column_bytes(getLinkFromMessageHashStmt, 3);
-    memcpy(lo.encrypted_bytes, _payload, lo.encrypted_len);
-
-    uint8_t *link_message_hash = (uint8_t *)sqlite3_column_blob(getLinkFromMessageHashStmt, 4);
-    lo.message_hash_len = SFPP_HASH_SIZE;
-    memcpy(lo.message_hash, link_message_hash, lo.message_hash_len);
-
-    lo.rx_time = sqlite3_column_int(getLinkFromMessageHashStmt, 5);
-
-    uint8_t *_tmp_commit_hash = (uint8_t *)sqlite3_column_blob(getLinkFromMessageHashStmt, 6);
-    lo.commit_hash_len = SFPP_HASH_SIZE;
-    memcpy(lo.commit_hash, _tmp_commit_hash, lo.commit_hash_len);
-
-    uint8_t *_root_hash = (uint8_t *)sqlite3_column_blob(getLinkFromMessageHashStmt, 7);
-    lo.root_hash_len = SFPP_HASH_SIZE;
-    memcpy(lo.root_hash, _root_hash, lo.root_hash_len);
-
-    lo.counter = sqlite3_column_int(getLinkFromMessageHashStmt, 8);
-
-    lo.payload = std::string((char *)sqlite3_column_text(getLinkFromMessageHashStmt, 9));
-    lo.time_basis = (uint8_t)sqlite3_column_int(getLinkFromMessageHashStmt, 10);
-    lo.boot_id = (uint32_t)sqlite3_column_int64(getLinkFromMessageHashStmt, 11);
-    lo.age_margin = (uint32_t)sqlite3_column_int64(getLinkFromMessageHashStmt, 12);
-
-    lo.channel_hash = getChannelHashFromRoot(lo.root_hash, lo.root_hash_len);
-
-    sqlite3_reset(getLinkFromMessageHashStmt);
-
-    return lo;
-}
-
 bool StoreForwardPlusPlusModule::addToScratch(link_object &lo)
 {
     // push a message into the local chain DB
@@ -546,20 +448,6 @@ bool StoreForwardPlusPlusModule::isInDB(const uint8_t *message_hash_bytes, size_
     sqlite3_step(checkDupMessageHash);
     int numberFound = sqlite3_column_int(checkDupMessageHash, 0);
     sqlite3_reset(checkDupMessageHash);
-    if (numberFound > 0)
-        return true;
-    return false;
-}
-
-bool StoreForwardPlusPlusModule::isCommitInDB(uint8_t *commit_hash_bytes, size_t commit_hash_len)
-{
-    if (commit_hash_len < SFPP_SHORT_HASH_SIZE)
-        return false;
-    sqlite3_bind_int(checkDupCommitHash, 1, commit_hash_len);
-    sqlite3_bind_blob(checkDupCommitHash, 2, commit_hash_bytes, commit_hash_len, NULL);
-    sqlite3_step(checkDupCommitHash);
-    int numberFound = sqlite3_column_int(checkDupCommitHash, 0);
-    sqlite3_reset(checkDupCommitHash);
     if (numberFound > 0)
         return true;
     return false;
@@ -657,29 +545,6 @@ bool StoreForwardPlusPlusModule::lookUpFullRootHash(uint8_t *partial_root_hash, 
     return false;
 }
 
-void StoreForwardPlusPlusModule::setChainCount(uint8_t *root_hash, size_t root_hash_len, uint32_t count)
-{
-    sqlite3_bind_int(setChainCountStmt, 1, root_hash_len);
-    sqlite3_bind_blob(setChainCountStmt, 2, root_hash, root_hash_len, NULL);
-    sqlite3_bind_int(setChainCountStmt, 3, count);
-    sqlite3_step(setChainCountStmt);
-    sqlite3_reset(setChainCountStmt);
-}
-
-uint32_t StoreForwardPlusPlusModule::getChainCount(uint8_t *root_hash, size_t root_hash_len)
-{
-    sqlite3_bind_int(getChainCountStmt, 1, root_hash_len);
-    sqlite3_bind_blob(getChainCountStmt, 2, root_hash, root_hash_len, NULL);
-
-    int res = sqlite3_step(getChainCountStmt);
-    if (res != SQLITE_OK && res != SQLITE_DONE && res != SQLITE_ROW) {
-        LOG_ERROR("StoreForwardpp getChainCount sqlite error %u, %s", res, sqlite3_errmsg(ppDb));
-    }
-    uint32_t count = sqlite3_column_int(getChainCountStmt, 0);
-    sqlite3_reset(getChainCountStmt);
-    return count;
-}
-
 uint32_t StoreForwardPlusPlusModule::getScratchCount(uint8_t *root_hash, size_t root_hash_len)
 {
     sqlite3_bind_int(getScratchCountStmt, 1, root_hash_len);
@@ -692,58 +557,6 @@ uint32_t StoreForwardPlusPlusModule::getScratchCount(uint8_t *root_hash, size_t 
     uint32_t count = sqlite3_column_int(getScratchCountStmt, 0);
     sqlite3_reset(getScratchCountStmt);
     return count;
-}
-
-uint32_t StoreForwardPlusPlusModule::getCanonScratchCount(uint8_t *root_hash, size_t root_hash_len)
-{
-    sqlite3_bind_int(getRootCanonScratchCountStmt, 1, root_hash_len);
-    sqlite3_bind_blob(getRootCanonScratchCountStmt, 2, root_hash, root_hash_len, NULL);
-
-    int res = sqlite3_step(getRootCanonScratchCountStmt);
-    if (res != SQLITE_OK && res != SQLITE_DONE && res != SQLITE_ROW) {
-        LOG_ERROR("StoreForwardpp getRootCanonScratchCountStmt sqlite error %u, %s", res, sqlite3_errmsg(ppDb));
-    }
-    uint32_t count = sqlite3_column_int(getRootCanonScratchCountStmt, 0);
-    sqlite3_reset(getRootCanonScratchCountStmt);
-    return count;
-}
-
-StoreForwardPlusPlusModule::link_object
-StoreForwardPlusPlusModule::getLinkFromPositionFromTip(uint32_t _count, uint8_t *_root_hash, size_t _root_hash_len)
-{
-    link_object lo;
-    int step = 0;
-    uint32_t _rx_time = 0;
-
-    uint8_t last_message_commit_hash[SFPP_HASH_SIZE] = {0};
-    uint8_t last_message_hash[SFPP_HASH_SIZE] = {0};
-
-    sqlite3_bind_int(getChainEndStmt, 1, _root_hash_len);
-    sqlite3_bind_blob(getChainEndStmt, 2, _root_hash, _root_hash_len, NULL);
-    // this needs to handle a count of 0, indicating the latest
-    while (sqlite3_step(getChainEndStmt) == SQLITE_ROW) {
-        // get the data from the row while it is still valid
-        uint8_t *last_message_commit_hash_ptr = (uint8_t *)sqlite3_column_blob(getChainEndStmt, 0);
-        uint8_t *last_message_hash_ptr = (uint8_t *)sqlite3_column_blob(getChainEndStmt, 1);
-        _rx_time = sqlite3_column_int(getChainEndStmt, 2);
-        memcpy(last_message_commit_hash, last_message_commit_hash_ptr, SFPP_HASH_SIZE);
-        memcpy(last_message_hash, last_message_hash_ptr, SFPP_HASH_SIZE);
-        if (_count == step)
-            break;
-
-        step++;
-    }
-    if (!memfll(last_message_commit_hash, '\0', SFPP_HASH_SIZE) && _rx_time != 0) {
-        lo = getLink(last_message_commit_hash, SFPP_HASH_SIZE);
-        if (lo.rx_time == 0)
-            lo.validObject = false;
-    } else {
-        LOG_WARN("StoreForwardpp Failed to get link from count");
-        lo.validObject = false;
-    }
-
-    sqlite3_reset(getChainEndStmt);
-    return lo;
 }
 
 void StoreForwardPlusPlusModule::pruneScratchQueue()
@@ -773,155 +586,6 @@ void StoreForwardPlusPlusModule::pruneScratchQueue()
     scratch_timed_out += (uint32_t)drop.size();
 }
 
-void StoreForwardPlusPlusModule::trimOldestLink(uint8_t *root_hash, size_t root_hash_len)
-{
-    links_pruned++;
-    sqlite3_bind_int(trimOldestLinkStmt, 1, root_hash_len);
-    sqlite3_bind_blob(trimOldestLinkStmt, 2, root_hash, root_hash_len, NULL);
-    int res = sqlite3_step(trimOldestLinkStmt);
-    if (res != SQLITE_OK && res != SQLITE_DONE) {
-        LOG_ERROR("StoreForwardpp Trim Oldest Link sqlite error %u, %s", res, sqlite3_errmsg(ppDb));
-    }
-    sqlite3_reset(trimOldestLinkStmt);
-}
-
-void StoreForwardPlusPlusModule::clearChain(uint8_t *root_hash, size_t root_hash_len)
-{
-    sqlite3_bind_int(clearChainStmt, 1, root_hash_len);
-    sqlite3_bind_blob(clearChainStmt, 2, root_hash, root_hash_len, NULL);
-    int res = sqlite3_step(clearChainStmt);
-    if (res != SQLITE_OK && res != SQLITE_DONE) {
-        LOG_ERROR("StoreForwardpp Clear Chain sqlite error %u, %s", res, sqlite3_errmsg(ppDb));
-    }
-    sqlite3_reset(clearChainStmt);
-    setChainCount(root_hash, root_hash_len, 0);
-}
-
-void StoreForwardPlusPlusModule::addToCanonScratch(link_object &lo)
-{
-
-    // recalculate full message hash?
-    LOG_INFO("StoreForwardpp addToCanonScratch");
-    if (lo.counter == 0) {
-        LOG_WARN("StoreForwardpp Counter 0, not adding to Canon Scratch");
-        return;
-    }
-
-    // push a message into the local chain DB
-    // destination
-    sqlite3_bind_int64(canon_scratch_insert_stmt, 1, (sqlite3_int64)lo.to);
-    // sender
-    sqlite3_bind_int64(canon_scratch_insert_stmt, 2, (sqlite3_int64)lo.from);
-    // packet_id
-    sqlite3_bind_int64(canon_scratch_insert_stmt, 3, (sqlite3_int64)lo.id);
-    // root_hash
-    sqlite3_bind_blob(canon_scratch_insert_stmt, 4, lo.root_hash, lo.root_hash_len, NULL);
-    // encrypted_bytes
-    sqlite3_bind_blob(canon_scratch_insert_stmt, 5, lo.encrypted_bytes, lo.encrypted_len, NULL);
-    // message_hash
-    sqlite3_bind_blob(canon_scratch_insert_stmt, 6, lo.message_hash, lo.message_hash_len, NULL);
-    // rx_time
-    sqlite3_bind_int(canon_scratch_insert_stmt, 7, lo.rx_time);
-    // commit_hash
-    sqlite3_bind_blob(canon_scratch_insert_stmt, 8, lo.commit_hash, lo.commit_hash_len, NULL);
-    // payload
-    sqlite3_bind_text(canon_scratch_insert_stmt, 9, lo.payload.c_str(), lo.payload.length(), NULL);
-
-    sqlite3_bind_int(canon_scratch_insert_stmt, 10, lo.counter);
-    sqlite3_bind_int64(canon_scratch_insert_stmt, 11, (sqlite3_int64)lo.time_basis);
-    sqlite3_bind_int64(canon_scratch_insert_stmt, 12, (sqlite3_int64)lo.boot_id);
-    sqlite3_bind_int64(canon_scratch_insert_stmt, 13, (sqlite3_int64)lo.age_margin);
-    int res = sqlite3_step(canon_scratch_insert_stmt);
-    if (res != SQLITE_OK && res != SQLITE_DONE) {
-        LOG_ERROR("StoreForwardpp canon_scratch_insert_stmt Cannot step %u: %s", res, sqlite3_errmsg(ppDb));
-    }
-    sqlite3_reset(canon_scratch_insert_stmt);
-}
-
-StoreForwardPlusPlusModule::link_object StoreForwardPlusPlusModule::getfromCanonScratch(uint8_t *root_hash_bytes, size_t hash_len)
-{
-
-    link_object lo;
-    sqlite3_bind_int(getCanonScratchStmt, 1, hash_len);
-    sqlite3_bind_blob(getCanonScratchStmt, 2, root_hash_bytes, hash_len, NULL);
-    auto res = sqlite3_step(getCanonScratchStmt);
-    if (res != SQLITE_ROW && res != SQLITE_OK) {
-        const char *_error_mesg = sqlite3_errmsg(ppDb);
-        LOG_ERROR("StoreForwardpp getCanonScratchStmt step error %u, %s", res, _error_mesg);
-        lo.validObject = false;
-        sqlite3_reset(getCanonScratchStmt);
-        return lo;
-    }
-    lo.to = sqlite3_column_int(getCanonScratchStmt, 0);
-    lo.from = sqlite3_column_int(getCanonScratchStmt, 1);
-    lo.id = sqlite3_column_int(getCanonScratchStmt, 2);
-
-    uint8_t *_payload = (uint8_t *)sqlite3_column_blob(getCanonScratchStmt, 3);
-    lo.encrypted_len = sqlite3_column_bytes(getCanonScratchStmt, 3);
-    memcpy(lo.encrypted_bytes, _payload, lo.encrypted_len);
-
-    uint8_t *_message_hash = (uint8_t *)sqlite3_column_blob(getCanonScratchStmt, 4);
-    lo.message_hash_len = sqlite3_column_bytes(getCanonScratchStmt, 4);
-    memcpy(lo.message_hash, _message_hash, lo.message_hash_len);
-
-    lo.rx_time = sqlite3_column_int(getCanonScratchStmt, 5);
-
-    uint8_t *_tmp_commit_hash = (uint8_t *)sqlite3_column_blob(getCanonScratchStmt, 6);
-    lo.commit_hash_len = sqlite3_column_bytes(getCanonScratchStmt, 6);
-    memcpy(lo.commit_hash, _tmp_commit_hash, lo.commit_hash_len);
-
-    uint8_t *_root_hash = (uint8_t *)sqlite3_column_blob(getCanonScratchStmt, 7);
-    lo.root_hash_len = sqlite3_column_bytes(getCanonScratchStmt, 7);
-    memcpy(lo.root_hash, _root_hash, lo.root_hash_len);
-
-    lo.counter = sqlite3_column_int(getCanonScratchStmt, 8);
-
-    lo.payload = std::string((char *)sqlite3_column_text(getCanonScratchStmt, 9));
-    lo.time_basis = (uint8_t)sqlite3_column_int(getCanonScratchStmt, 10);
-    lo.boot_id = (uint32_t)sqlite3_column_int64(getCanonScratchStmt, 11);
-    lo.age_margin = (uint32_t)sqlite3_column_int64(getCanonScratchStmt, 12);
-
-    sqlite3_reset(getCanonScratchStmt);
-
-    return lo;
-}
-
-void StoreForwardPlusPlusModule::removeFromCanonScratch(uint8_t *message_hash_bytes, size_t message_hash_len)
-{
-    printBytes("StoreForwardpp removing from canon scratch: ", message_hash_bytes, message_hash_len);
-    sqlite3_bind_int(removeCanonScratch, 1, message_hash_len);
-    sqlite3_bind_blob(removeCanonScratch, 2, message_hash_bytes, message_hash_len, NULL);
-    sqlite3_step(removeCanonScratch);
-    sqlite3_reset(removeCanonScratch);
-}
-
-bool StoreForwardPlusPlusModule::isInCanonScratch(uint8_t *message_hash, size_t message_hash_len)
-{
-    if (message_hash_len < SFPP_SHORT_HASH_SIZE) {
-        return false;
-    }
-    sqlite3_bind_int(getCanonScratchCountStmt, 1, message_hash_len);
-    sqlite3_bind_blob(getCanonScratchCountStmt, 2, message_hash, message_hash_len, NULL);
-    sqlite3_step(getCanonScratchCountStmt);
-    int count = sqlite3_column_int(getCanonScratchCountStmt, 0);
-    sqlite3_reset(getCanonScratchCountStmt);
-    if (count > 0)
-        return true;
-    return false;
-}
-
-void StoreForwardPlusPlusModule::clearCanonScratch(uint8_t *root_hash, size_t root_hash_len, uint32_t new_count)
-{
-    sqlite3_bind_int(clearCanonScratchStmt, 1, root_hash_len);
-    sqlite3_bind_blob(clearCanonScratchStmt, 2, root_hash, root_hash_len, NULL);
-    sqlite3_bind_int(clearCanonScratchStmt, 3, new_count);
-    int res = sqlite3_step(clearCanonScratchStmt);
-    if (res != SQLITE_OK && res != SQLITE_DONE) {
-        LOG_ERROR("StoreForwardpp Clear Canon Scratch sqlite error %u, %s", res, sqlite3_errmsg(ppDb));
-    }
-    sqlite3_reset(clearCanonScratchStmt);
-}
-
 bool StoreForwardPlusPlusModule::insertCanonObject(uint32_t to, uint32_t from, uint32_t packetId, const uint8_t *cipher,
                                                    size_t cipherLen, const uint8_t *hash, const RowTime &time,
                                                    const std::string &payload, const uint8_t *root_hash, uint32_t bucket)
@@ -929,8 +593,6 @@ bool StoreForwardPlusPlusModule::insertCanonObject(uint32_t to, uint32_t from, u
     if (isInDB(hash, SFPP_HASH_SIZE))
         return true;
 
-    // Bucket membership is a counter range, so any in-range counter stores the row in the right bucket.
-    const uint32_t counter = bucket * sfppsr::kBucketObjects + 1;
     sqlite3_reset(chain_insert_stmt);
     sqlite3_bind_int64(chain_insert_stmt, 1, (sqlite3_int64)to);
     sqlite3_bind_int64(chain_insert_stmt, 2, (sqlite3_int64)from);
@@ -939,16 +601,13 @@ bool StoreForwardPlusPlusModule::insertCanonObject(uint32_t to, uint32_t from, u
     sqlite3_bind_blob(chain_insert_stmt, 5, cipher, (int)cipherLen, SQLITE_STATIC);
     sqlite3_bind_blob(chain_insert_stmt, 6, hash, SFPP_HASH_SIZE, SQLITE_STATIC);
     sqlite3_bind_int64(chain_insert_stmt, 7, (sqlite3_int64)time.stamp);
-    // A unique non-zero commit hash keeps trimOldestLink deleting one row rather than every zero row.
-    sqlite3_bind_blob(chain_insert_stmt, 8, hash, SFPP_HASH_SIZE, SQLITE_STATIC);
-    sqlite3_bind_text(chain_insert_stmt, 9, payload.c_str(), (int)payload.size(), SQLITE_STATIC);
-    sqlite3_bind_int64(chain_insert_stmt, 10, (sqlite3_int64)counter);
-    sqlite3_bind_int64(chain_insert_stmt, 11, (sqlite3_int64)sfppsr::shortId(hash, SFPP_HASH_SIZE));
-    sqlite3_bind_int64(chain_insert_stmt, 12, (sqlite3_int64)sfppsr::checksumContribution(hash, SFPP_HASH_SIZE));
-    sqlite3_bind_int64(chain_insert_stmt, 13, (sqlite3_int64)time.basis);
-    sqlite3_bind_int64(chain_insert_stmt, 14, (sqlite3_int64)time.boot_id);
-    sqlite3_bind_int64(chain_insert_stmt, 15, (sqlite3_int64)time.margin);
-    sqlite3_bind_int(chain_insert_stmt, 16, (int)sfppsr::contentBucket(hash, SFPP_HASH_SIZE));
+    sqlite3_bind_text(chain_insert_stmt, 8, payload.c_str(), (int)payload.size(), SQLITE_STATIC);
+    sqlite3_bind_int64(chain_insert_stmt, 9, (sqlite3_int64)sfppsr::shortId(hash, SFPP_HASH_SIZE));
+    sqlite3_bind_int64(chain_insert_stmt, 10, (sqlite3_int64)sfppsr::checksumContribution(hash, SFPP_HASH_SIZE));
+    sqlite3_bind_int64(chain_insert_stmt, 11, (sqlite3_int64)time.basis);
+    sqlite3_bind_int64(chain_insert_stmt, 12, (sqlite3_int64)time.boot_id);
+    sqlite3_bind_int64(chain_insert_stmt, 13, (sqlite3_int64)time.margin);
+    sqlite3_bind_int(chain_insert_stmt, 14, (int)sfppsr::contentBucket(hash, SFPP_HASH_SIZE));
 
     const int res = sqlite3_step(chain_insert_stmt);
     sqlite3_reset(chain_insert_stmt);

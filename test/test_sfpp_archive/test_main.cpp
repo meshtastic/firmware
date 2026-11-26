@@ -266,11 +266,13 @@ bool decodeStoreForward(const meshtastic_MeshPacket &p, meshtastic_StoreAndForwa
 
 struct StoredRow {
     std::vector<uint8_t> root;
-    std::vector<uint8_t> commit;
     std::vector<uint8_t> encrypted;
     std::vector<uint8_t> messageHash;
     std::string payload;
     uint32_t rxTime = 0;
+    uint64_t shortId = 0;
+    uint64_t checksum = 0;
+    uint32_t bucket = 0;
     uint8_t timeBasis = 0;
     uint32_t bootId = 0;
     uint32_t ageMargin = 0;
@@ -288,29 +290,29 @@ bool readStoredRow(PacketId id, StoredRow &row)
     sqlite3_stmt *stmt = nullptr;
     bool found = false;
     if (sqlite3_prepare_v2(db,
-                           "select root_hash, commit_hash, encrypted_bytes, payload, rx_time, message_hash, time_basis, "
-                           "boot_id, age_margin from channel_messages where packet_id=? limit 1;",
+                           "select root_hash, encrypted_bytes, payload, rx_time, message_hash, short_id, checksum, bucket, "
+                           "time_basis, boot_id, age_margin from channel_messages where packet_id=? limit 1;",
                            -1, &stmt, nullptr) == SQLITE_OK) {
         sqlite3_bind_int64(stmt, 1, id);
         if (sqlite3_step(stmt) == SQLITE_ROW) {
             const uint8_t *root = (const uint8_t *)sqlite3_column_blob(stmt, 0);
             int rootLen = sqlite3_column_bytes(stmt, 0);
             row.root.assign(root, root + rootLen);
-            const uint8_t *commit = (const uint8_t *)sqlite3_column_blob(stmt, 1);
-            int commitLen = sqlite3_column_bytes(stmt, 1);
-            row.commit.assign(commit, commit + commitLen);
-            const uint8_t *enc = (const uint8_t *)sqlite3_column_blob(stmt, 2);
-            int encLen = sqlite3_column_bytes(stmt, 2);
+            const uint8_t *enc = (const uint8_t *)sqlite3_column_blob(stmt, 1);
+            int encLen = sqlite3_column_bytes(stmt, 1);
             row.encrypted.assign(enc, enc + encLen);
-            const unsigned char *text = sqlite3_column_text(stmt, 3);
-            row.payload.assign((const char *)text, sqlite3_column_bytes(stmt, 3));
-            row.rxTime = (uint32_t)sqlite3_column_int64(stmt, 4);
-            const uint8_t *hash = (const uint8_t *)sqlite3_column_blob(stmt, 5);
-            int hashLen = sqlite3_column_bytes(stmt, 5);
+            const unsigned char *text = sqlite3_column_text(stmt, 2);
+            row.payload.assign((const char *)text, sqlite3_column_bytes(stmt, 2));
+            row.rxTime = (uint32_t)sqlite3_column_int64(stmt, 3);
+            const uint8_t *hash = (const uint8_t *)sqlite3_column_blob(stmt, 4);
+            int hashLen = sqlite3_column_bytes(stmt, 4);
             row.messageHash.assign(hash, hash + hashLen);
-            row.timeBasis = (uint8_t)sqlite3_column_int(stmt, 6);
-            row.bootId = (uint32_t)sqlite3_column_int64(stmt, 7);
-            row.ageMargin = (uint32_t)sqlite3_column_int64(stmt, 8);
+            row.shortId = (uint64_t)sqlite3_column_int64(stmt, 5);
+            row.checksum = (uint64_t)sqlite3_column_int64(stmt, 6);
+            row.bucket = (uint32_t)sqlite3_column_int64(stmt, 7);
+            row.timeBasis = (uint8_t)sqlite3_column_int(stmt, 8);
+            row.bootId = (uint32_t)sqlite3_column_int64(stmt, 9);
+            row.ageMargin = (uint32_t)sqlite3_column_int64(stmt, 10);
             found = true;
         }
     }
@@ -573,7 +575,6 @@ void setUp(void)
     portduino_config.sfpp_stratum0 = true;
     portduino_config.sfpp_enabled = true;
     portduino_config.sfpp_hops = 3;
-    portduino_config.sfpp_announce_interval = 5;
     portduino_config.sfpp_steal_port = false;
 
     testSfpp = new TestSfppModule();
@@ -628,7 +629,7 @@ void test_ingestStoresTextWithPayloadAndHashes()
     TEST_ASSERT_TRUE(readStoredRow(TEXT_ID, row));
     TEST_ASSERT_EQUAL_STRING("hello archive", row.payload.c_str());
     TEST_ASSERT_EQUAL_UINT(SFPP_HASH_SIZE, row.root.size());
-    TEST_ASSERT_EQUAL_UINT(SFPP_HASH_SIZE, row.commit.size());
+    TEST_ASSERT_TRUE(row.shortId != 0);
     TEST_ASSERT_TRUE(row.encrypted.size() > 0);
 }
 
@@ -1509,6 +1510,24 @@ void test_v3StoreIsMovedAside()
         std::remove(f.c_str());
 }
 
+// The content summary is a function of the held objects, not of a local counter or arrival order
+// (D18): two evaluations over the same holding agree.
+void test_content_summary_matches_for_the_same_holding()
+{
+    TEST_ASSERT_TRUE(ingestOneText("same holding"));
+    StoredRow row;
+    TEST_ASSERT_TRUE(readStoredRow(TEXT_ID, row));
+    TEST_ASSERT_EQUAL_UINT32(row.messageHash[0], row.bucket);
+
+    sfppsr::BucketSummary first(4);
+    first.add((pinsketch::Element)row.shortId, row.checksum);
+    sfppsr::BucketSummary second(4);
+    second.add((pinsketch::Element)row.shortId, row.checksum);
+    TEST_ASSERT_EQUAL_UINT32(first.count(), second.count());
+    TEST_ASSERT_EQUAL_UINT64(first.checksum(), second.checksum());
+    TEST_ASSERT_EQUAL_UINT32(1, first.count());
+}
+
 void loop() {}
 
 void setup()
@@ -1539,6 +1558,7 @@ void setup()
     RUN_TEST(test_channel_change_moves_the_v2_store_aside);
     RUN_TEST(test_two_channels_sharing_a_hash_keep_two_mappings);
     RUN_TEST(test_stored_row_carries_the_content_bucket);
+    RUN_TEST(test_content_summary_matches_for_the_same_holding);
     RUN_TEST(test_versionOneStoreIsMovedAside);
     RUN_TEST(test_noClockIngestAndServe);
     RUN_TEST(test_meshTimeOnlyIngestStaysBootRelative);

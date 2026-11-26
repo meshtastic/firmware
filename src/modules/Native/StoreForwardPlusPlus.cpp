@@ -149,9 +149,7 @@ StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
         root_hash BLOB NOT NULL,       \
         encrypted_bytes BLOB NOT NULL, \
         message_hash BLOB NOT NULL,    \
-        commit_hash BLOB NOT NULL,     \
         payload TEXT,                  \
-        counter INT DEFAULT 0,         \
         short_id INT,                  \
         checksum INT,                  \
         time_basis INT NOT NULL DEFAULT 0, \
@@ -219,36 +217,6 @@ StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
         LOG_ERROR("%s", err);
     sqlite3_free(err);
 
-    // add canon_scratch table
-    // where we move message out of scratch when we've been informed that message exists on the canon chain, but we're not ready
-    // to commit it on our own chain
-
-    res = sqlite3_exec(ppDb, "         \
-        CREATE TABLE IF NOT EXISTS     \
-        canon_scratch(                 \
-        destination INT NOT NULL,      \
-        sender INT NOT NULL,           \
-        packet_id INT NOT NULL,        \
-        rx_time INT NOT NULL,          \
-        root_hash BLOB NOT NULL,       \
-        encrypted_bytes BLOB NOT NULL, \
-        message_hash BLOB NOT NULL,    \
-        commit_hash BLOB NOT NULL,     \
-        payload TEXT,                  \
-        counter INT NOT NULL,          \
-        time_basis INT NOT NULL DEFAULT 0, \
-        boot_id INT NOT NULL DEFAULT 0,    \
-        age_margin INT NOT NULL DEFAULT 0, \
-        PRIMARY KEY (message_hash)     \
-        );",
-                       NULL, NULL, &err);
-    if (res != SQLITE_OK) {
-        LOG_ERROR("Failed to create table: %s", sqlite3_errmsg(ppDb));
-    }
-    if (err != nullptr)
-        LOG_ERROR("%s", err);
-    sqlite3_free(err);
-
     // mappings table -- connects the root hashes to channel hashes and DM identifiers. Keyed by the
     // root, not the 1-byte identifier, so two channels that share a hash keep separate stores.
     res = sqlite3_exec(ppDb, "         \
@@ -257,31 +225,7 @@ StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
         chain_type INT NOT NULL,       \
         identifier INT NOT NULL,       \
         root_hash BLOB NOT NULL,       \
-        count INT DEFAULT 0,           \
         PRIMARY KEY (root_hash)        \
-        );",
-                       NULL, NULL, &err);
-
-    if (res != SQLITE_OK) {
-        LOG_ERROR("Failed to create table: %s", sqlite3_errmsg(ppDb));
-    }
-    if (err != nullptr)
-        LOG_ERROR("%s", err);
-    sqlite3_free(err);
-
-    // peers table, tracking nodes we've heard SFPP traffic from
-    res = sqlite3_exec(ppDb, "         \
-        CREATE TABLE IF NOT EXISTS     \
-        peers(                      \
-        nodenum INT NOT NULL,       \
-        announce_count INT DEFAULT 0,           \
-        query_count INT DEFAULT 0,           \
-        request_count INT DEFAULT 0,           \
-        provide_count INT DEFAULT 0,           \
-        split_count INT DEFAULT 0,           \
-        total_count INT DEFAULT 0,           \
-        average_hops REAL DEFAULT 0,           \
-        PRIMARY KEY (nodenum)       \
         );",
                        NULL, NULL, &err);
 
@@ -315,18 +259,15 @@ StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
 
     // prepared statements *should* make this faster.
     sqlite3_prepare_v2(ppDb, "INSERT INTO channel_messages (destination, sender, packet_id, root_hash, \
-        encrypted_bytes, message_hash, rx_time, commit_hash, payload, counter, short_id, checksum, \
-        time_basis, boot_id, age_margin, bucket) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
+        encrypted_bytes, message_hash, rx_time, payload, short_id, checksum, time_basis, boot_id, age_margin, bucket) \
+        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
                        -1, &chain_insert_stmt, NULL);
 
     // Both identifiers are stored beside the object, so summarising a bucket never rehashes and a
     // restart costs a query rather than a pass over the chain.
     sqlite3_prepare_v2(ppDb, "select short_id, checksum from channel_messages \
-        where substr(root_hash,1,?)=? and counter>=? and counter<=? and short_id is not null;",
+        where substr(root_hash,1,?)=? and bucket=? and short_id is not null;",
                        -1, &bucketSummaryStmt, NULL);
-
-    sqlite3_prepare_v2(ppDb, "select max(counter) from channel_messages where substr(root_hash,1,?)=?;", -1, &maxCounterStmt,
-                       NULL);
 
     sqlite3_prepare_v2(ppDb, "select message_hash from channel_messages where short_id is null limit 128;", -1,
                        &unindexedLinksStmt, NULL);
@@ -335,12 +276,15 @@ StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
                        NULL);
 
     sqlite3_prepare_v2(ppDb, "select short_id from channel_messages \
-        where substr(root_hash,1,?)=? and counter>=? and counter<=? and short_id is not null order by counter;",
+        where substr(root_hash,1,?)=? and bucket=? and short_id is not null order by short_id;",
                        -1, &bucketIdsStmt, NULL);
 
-    sqlite3_prepare_v2(ppDb, "select destination, sender, packet_id, encrypted_bytes, message_hash, rx_time, counter, \
-        time_basis, boot_id, age_margin from channel_messages \
-        where substr(root_hash,1,?)=? and counter>=? and counter<=? and short_id=?;",
+    sqlite3_prepare_v2(ppDb, "select distinct bucket from channel_messages \
+        where substr(root_hash,1,?)=? and short_id is not null order by bucket;",
+                       -1, &distinctBucketsStmt, NULL);
+
+    sqlite3_prepare_v2(ppDb, "select destination, sender, packet_id, encrypted_bytes, message_hash, rx_time, \
+        time_basis, boot_id, age_margin from channel_messages where substr(root_hash,1,?)=? and bucket=? and short_id=?;",
                        -1, &getLinkByShortIdStmt, NULL);
 
     sqlite3_prepare_v2(ppDb, "delete from channel_messages where message_hash=?;", -1, &deleteCanonStmt, NULL);
@@ -371,35 +315,12 @@ StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
     sqlite3_prepare_v2(ppDb, "SELECT COUNT(*) from channel_messages where substr(message_hash,1,?)=?", -1, &checkDupMessageHash,
                        NULL);
 
-    sqlite3_prepare_v2(ppDb, "SELECT COUNT(*) from channel_messages where substr(commit_hash,1,?)=?", -1, &checkDupCommitHash,
-                       NULL);
-
     sqlite3_prepare_v2(ppDb, "SELECT COUNT(*) from local_messages where substr(message_hash,1,?)=?", -1, &checkScratch, NULL);
 
     sqlite3_prepare_v2(ppDb, "DELETE from local_messages where substr(message_hash,1,?)=?", -1, &removeScratch, NULL);
 
     sqlite3_prepare_v2(ppDb, "UPDATE channel_messages SET payload=? WHERE substr(message_hash,1,?)=?", -1, &updatePayloadStmt,
                        NULL);
-
-    sqlite3_prepare_v2(ppDb, "select commit_hash from channel_messages where substr(root_hash,1,?)=? order by rowid ASC;", -1,
-                       &getNextHashStmt, NULL);
-
-    sqlite3_prepare_v2(ppDb,
-                       "select commit_hash, message_hash, rx_time from channel_messages where substr(root_hash,1,?)=? order by "
-                       "rowid desc;",
-                       -1, &getChainEndStmt, NULL);
-
-    sqlite3_prepare_v2(
-        ppDb,
-        "select destination, sender, packet_id, encrypted_bytes, message_hash, rx_time, commit_hash, root_hash, counter, payload, \
-        time_basis, boot_id, age_margin from channel_messages where substr(commit_hash,1,?)=?;",
-        -1, &getLinkStmt, NULL);
-
-    sqlite3_prepare_v2(
-        ppDb,
-        "select destination, sender, packet_id, encrypted_bytes, message_hash, rx_time, commit_hash, root_hash, counter, payload, \
-        time_basis, boot_id, age_margin from channel_messages where substr(message_hash,1,?)=?;",
-        -1, &getLinkFromMessageHashStmt, NULL);
 
     sqlite3_prepare_v2(ppDb, "select identifier from mappings where substr(root_hash,1,?)=?;", -1, &getHashFromRootStmt, NULL);
 
@@ -408,16 +329,8 @@ StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
 
     sqlite3_prepare_v2(ppDb, "select root_hash from mappings where substr(root_hash,1,?)=?;", -1, &getFullRootHashStmt, NULL);
 
-    sqlite3_prepare_v2(ppDb, "UPDATE mappings SET count=? WHERE substr(root_hash,1,?)=?;", -1, &setChainCountStmt, NULL);
-
-    sqlite3_prepare_v2(ppDb, "SELECT count(*) FROM channel_messages WHERE substr(root_hash,1,?)=?;", -1, &getChainCountStmt,
-                       NULL);
-
     sqlite3_prepare_v2(ppDb, "SELECT count(*) FROM local_messages WHERE substr(root_hash,1,?)=?;", -1, &getScratchCountStmt,
                        NULL);
-
-    sqlite3_prepare_v2(ppDb, "SELECT count(*) FROM canon_scratch WHERE substr(root_hash,1,?)=?;", -1,
-                       &getRootCanonScratchCountStmt, NULL);
 
     sqlite3_prepare_v2(ppDb, "select rowid, rx_time, time_basis, boot_id, age_margin from local_messages;", -1,
                        &scratchTimeRowsStmt, NULL);
@@ -425,51 +338,11 @@ StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
     sqlite3_prepare_v2(ppDb, "DELETE FROM local_messages WHERE rowid=?;", -1, &deleteScratchRowidStmt, NULL);
 
     sqlite3_prepare_v2(ppDb,
-                       "DELETE FROM channel_messages WHERE commit_hash in ( select commit_hash from channel_messages where "
-                       "substr(root_hash,1,?)=? ORDER BY rowid ASC LIMIT 1);",
-                       -1, &trimOldestLinkStmt, NULL);
-
-    sqlite3_prepare_v2(ppDb,
                        "select rowid, rx_time, time_basis, boot_id, age_margin from channel_messages "
                        "where substr(root_hash,1,?)=?;",
                        -1, &canonTimeRowsStmt, NULL);
 
     sqlite3_prepare_v2(ppDb, "DELETE FROM channel_messages WHERE rowid=?;", -1, &deleteCanonRowidStmt, NULL);
-
-    sqlite3_prepare_v2(ppDb,
-                       "INSERT INTO peers (nodenum, total_count, average_hops) VALUES(?, ?, ?) ON CONFLICT(nodenum) DO NOTHING;",
-                       -1, &maybeAddPeerStmt, NULL);
-
-    sqlite3_prepare_v2(ppDb,
-                       "SELECT announce_count, query_count, request_count, provide_count, split_count, total_count, average_hops "
-                       "FROM peers WHERE nodenum=?;",
-                       -1, &getPeerStmt, NULL);
-
-    sqlite3_prepare_v2(ppDb,
-                       "UPDATE peers SET announce_count=?, query_count=?, request_count=?, provide_count=?, split_count=?, "
-                       "total_count=?, average_hops=? WHERE nodenum=?;",
-                       -1, &updatePeerStmt, NULL);
-
-    sqlite3_prepare_v2(ppDb, "DELETE FROM channel_messages WHERE substr(root_hash,1,?)=?;", -1, &clearChainStmt, NULL);
-
-    sqlite3_prepare_v2(ppDb, "INSERT INTO canon_scratch (destination, sender, packet_id, root_hash, \
-        encrypted_bytes, message_hash, rx_time, commit_hash, payload, counter, time_basis, boot_id, age_margin) \
-        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
-                       -1, &canon_scratch_insert_stmt, NULL);
-
-    sqlite3_prepare_v2(ppDb, "SELECT count(*) FROM canon_scratch WHERE substr(message_hash,1,?)=?;", -1,
-                       &getCanonScratchCountStmt, NULL);
-
-    sqlite3_prepare_v2(
-        ppDb,
-        "select destination, sender, packet_id, encrypted_bytes, message_hash, rx_time, commit_hash, root_hash, counter, payload, \
-        time_basis, boot_id, age_margin from canon_scratch where substr(root_hash,1,?)=? ORDER BY counter ASC;",
-        -1, &getCanonScratchStmt, NULL);
-
-    sqlite3_prepare_v2(ppDb, "DELETE from canon_scratch where substr(message_hash,1,?)=?", -1, &removeCanonScratch, NULL);
-
-    sqlite3_prepare_v2(ppDb, "DELETE from canon_scratch where substr(root_hash,1,?)=? AND counter < ?;", -1,
-                       &clearCanonScratchStmt, NULL);
 
     sqlite3_prepare_v2(ppDb, "select boot_id, last_uptime, last_epoch from time_state where id=1;", -1, &timeStateReadStmt, NULL);
     sqlite3_prepare_v2(ppDb,
@@ -481,16 +354,12 @@ StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
                        &restampChannelStmt, NULL);
     sqlite3_prepare_v2(ppDb, "select rowid, rx_time, time_basis, boot_id, age_margin from local_messages;", -1,
                        &restampScratchStmt, NULL);
-    sqlite3_prepare_v2(ppDb, "select rowid, rx_time, time_basis, boot_id, age_margin from canon_scratch;", -1,
-                       &restampCanonScratchStmt, NULL);
     sqlite3_prepare_v2(ppDb, "select rowid, rx_time, time_basis, boot_id, age_margin from direct_messages;", -1,
                        &restampDirectStmt, NULL);
     sqlite3_prepare_v2(ppDb, "update channel_messages set rx_time=?, time_basis=?, boot_id=?, age_margin=? where rowid=?;", -1,
                        &updateChannelTimeStmt, NULL);
     sqlite3_prepare_v2(ppDb, "update local_messages set rx_time=?, time_basis=?, boot_id=?, age_margin=? where rowid=?;", -1,
                        &updateScratchTimeStmt, NULL);
-    sqlite3_prepare_v2(ppDb, "update canon_scratch set rx_time=?, time_basis=?, boot_id=?, age_margin=? where rowid=?;", -1,
-                       &updateCanonScratchTimeStmt, NULL);
     sqlite3_prepare_v2(ppDb, "update direct_messages set rx_time=?, time_basis=?, boot_id=?, age_margin=? where rowid=?;", -1,
                        &updateDirectTimeStmt, NULL);
 
@@ -506,58 +375,13 @@ StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
 StoreForwardPlusPlusModule::~StoreForwardPlusPlusModule()
 {
     sqlite3_stmt *statements[] = {
-        chain_insert_stmt,
-        scratch_insert_stmt,
-        checkDupMessageHash,
-        checkDupCommitHash,
-        checkScratch,
-        removeScratch,
-        updatePayloadStmt,
-        fromScratchStmt,
-        fromScratchByHashStmt,
-        getNextHashStmt,
-        getChainEndStmt,
-        getLinkStmt,
-        getLinkFromMessageHashStmt,
-        getHashFromRootStmt,
-        addRootToMappingsStmt,
-        getFullRootHashStmt,
-        setChainCountStmt,
-        getChainCountStmt,
-        getScratchCountStmt,
-        getRootCanonScratchCountStmt,
-        scratchTimeRowsStmt,
-        deleteScratchRowidStmt,
-        trimOldestLinkStmt,
-        canonTimeRowsStmt,
-        deleteCanonRowidStmt,
-        maybeAddPeerStmt,
-        getPeerStmt,
-        updatePeerStmt,
-        clearChainStmt,
-        canon_scratch_insert_stmt,
-        getCanonScratchCountStmt,
-        getCanonScratchStmt,
-        removeCanonScratch,
-        clearCanonScratchStmt,
-        bucketSummaryStmt,
-        maxCounterStmt,
-        bucketIdsStmt,
-        getLinkByShortIdStmt,
-        deleteCanonStmt,
-        unindexedLinksStmt,
-        setLinkSetIndexStmt,
-        legacyHistoryStmt,
-        timeStateReadStmt,
-        timeStateWriteStmt,
-        restampChannelStmt,
-        restampScratchStmt,
-        restampCanonScratchStmt,
-        restampDirectStmt,
-        updateChannelTimeStmt,
-        updateScratchTimeStmt,
-        updateCanonScratchTimeStmt,
-        updateDirectTimeStmt,
+        chain_insert_stmt,     scratch_insert_stmt,  checkDupMessageHash,   checkScratch,           removeScratch,
+        updatePayloadStmt,     fromScratchStmt,      fromScratchByHashStmt, getHashFromRootStmt,    addRootToMappingsStmt,
+        getFullRootHashStmt,   getScratchCountStmt,  scratchTimeRowsStmt,   deleteScratchRowidStmt, canonTimeRowsStmt,
+        deleteCanonRowidStmt,  bucketSummaryStmt,    bucketIdsStmt,         distinctBucketsStmt,    getLinkByShortIdStmt,
+        deleteCanonStmt,       unindexedLinksStmt,   setLinkSetIndexStmt,   legacyHistoryStmt,      timeStateReadStmt,
+        timeStateWriteStmt,    restampChannelStmt,   restampScratchStmt,    restampDirectStmt,      updateChannelTimeStmt,
+        updateScratchTimeStmt, updateDirectTimeStmt,
     };
     for (sqlite3_stmt *stmt : statements) {
         if (stmt)
@@ -571,7 +395,7 @@ int32_t StoreForwardPlusPlusModule::runOnce()
 {
     if (legacyHistoryBusy) {
         sendNextLegacyHistory();
-        return legacyHistoryBusy ? 5 * 1000 : portduino_config.sfpp_announce_interval * 60 * 1000;
+        return legacyHistoryBusy ? 5 * 1000 : 10 * 1000;
     }
     // G19: promote the host's synchronized clock to NTP when we have no proper source yet, but never
     // defer on it; a store without one works in boot-relative ages.
@@ -592,7 +416,7 @@ int32_t StoreForwardPlusPlusModule::runOnce()
 
     if (getOrDeriveRootFromChannel(hash, root_hash_bytes) == 0) {
         LOG_WARN("No root hash found, not sending");
-        return portduino_config.sfpp_announce_interval * 60 * 1000;
+        return 10 * 1000;
     }
 
     // D7: canon rows outside the retention window are gone even when the row cap is not reached.
@@ -602,7 +426,7 @@ int32_t StoreForwardPlusPlusModule::runOnce()
 
     if (memfll(root_hash_bytes, '\0', SFPP_HASH_SIZE)) {
         LOG_WARN("No root hash found, not sending");
-        return portduino_config.sfpp_announce_interval * 60 * 1000;
+        return 10 * 1000;
     }
 
     // One bucket is advertised per tick; the next advert is the retry for an unfinished exchange.
@@ -646,11 +470,6 @@ void StoreForwardPlusPlusModule::handleEncrypted(const meshtastic_MeshPacket *mp
 
     if (lo.from == 0)
         lo.from = nodeDB->getNodeNum();
-
-    if (isInDB(lo.message_hash, lo.message_hash_len) && isInScratch(lo.message_hash, lo.message_hash_len) &&
-        isInCanonScratch(lo.message_hash, lo.message_hash_len)) {
-        return;
-    }
 
     if (!portduino_config.sfpp_stratum0) {
         if (lo.root_hash_len == 0) {
@@ -721,10 +540,6 @@ ProcessMessage StoreForwardPlusPlusModule::handleReceived(const meshtastic_MeshP
             // if we do, we can update the payload in the database
             if (lo.payload != "")
                 updatePayload(lo.message_hash, lo.message_hash_len, lo.payload);
-            return ProcessMessage::CONTINUE;
-        }
-        if (isInDB(lo.message_hash, lo.message_hash_len) && isInScratch(lo.message_hash, lo.message_hash_len) &&
-            isInCanonScratch(lo.message_hash, lo.message_hash_len)) {
             return ProcessMessage::CONTINUE;
         }
 

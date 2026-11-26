@@ -75,9 +75,6 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
         size_t message_hash_len = 0;
         uint8_t root_hash[SFPP_HASH_SIZE] = {0};
         size_t root_hash_len = 0;
-        uint8_t commit_hash[SFPP_HASH_SIZE] = {0};
-        size_t commit_hash_len = 0;
-        uint32_t counter = 0;
         std::string payload;
         bool validObject = true; // set this false when a chain calulation fails, etc.
     };
@@ -125,37 +122,19 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     sqlite3_stmt *chain_insert_stmt;
     sqlite3_stmt *scratch_insert_stmt;
     sqlite3_stmt *checkDupMessageHash;
-    sqlite3_stmt *checkDupCommitHash;
     sqlite3_stmt *checkScratch;
     sqlite3_stmt *removeScratch;
     sqlite3_stmt *updatePayloadStmt;
     sqlite3_stmt *getPayloadFromScratchStmt;
     sqlite3_stmt *fromScratchStmt;
     sqlite3_stmt *fromScratchByHashStmt;
-    sqlite3_stmt *getNextHashStmt;
-    sqlite3_stmt *getChainEndStmt;
-    sqlite3_stmt *getLinkStmt;
-    sqlite3_stmt *getLinkFromMessageHashStmt;
     sqlite3_stmt *getHashFromRootStmt;
     sqlite3_stmt *addRootToMappingsStmt;
     sqlite3_stmt *getFullRootHashStmt;
-    sqlite3_stmt *setChainCountStmt;
-    sqlite3_stmt *getChainCountStmt;
     sqlite3_stmt *getScratchCountStmt;
-    sqlite3_stmt *getRootCanonScratchCountStmt;
-    sqlite3_stmt *trimOldestLinkStmt;
-    sqlite3_stmt *maybeAddPeerStmt;
-    sqlite3_stmt *getPeerStmt;
-    sqlite3_stmt *updatePeerStmt;
-    sqlite3_stmt *clearChainStmt;
-    sqlite3_stmt *canon_scratch_insert_stmt;
-    sqlite3_stmt *getCanonScratchCountStmt;
-    sqlite3_stmt *getCanonScratchStmt;
-    sqlite3_stmt *removeCanonScratch;
-    sqlite3_stmt *clearCanonScratchStmt;
     sqlite3_stmt *bucketSummaryStmt;
-    sqlite3_stmt *maxCounterStmt;
     sqlite3_stmt *bucketIdsStmt;
+    sqlite3_stmt *distinctBucketsStmt;
     sqlite3_stmt *getLinkByShortIdStmt;
     sqlite3_stmt *deleteCanonStmt;
     sqlite3_stmt *unindexedLinksStmt;
@@ -165,11 +144,9 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     sqlite3_stmt *timeStateWriteStmt;
     sqlite3_stmt *restampChannelStmt;
     sqlite3_stmt *restampScratchStmt;
-    sqlite3_stmt *restampCanonScratchStmt;
     sqlite3_stmt *restampDirectStmt;
     sqlite3_stmt *updateChannelTimeStmt;
     sqlite3_stmt *updateScratchTimeStmt;
-    sqlite3_stmt *updateCanonScratchTimeStmt;
     sqlite3_stmt *updateDirectTimeStmt;
     sqlite3_stmt *canonTimeRowsStmt;
     sqlite3_stmt *scratchTimeRowsStmt;
@@ -241,15 +218,15 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     // Bounded by the chain length, and a no-op on every run after the first.
     void backfillSetIndex();
 
-    // Summarises one bucket of a chain: its members' short IDs, their XOR checksum and their count.
+    // Summarises one content bucket: its members' short IDs, their XOR checksum and their count.
     // Returns false when the bucket holds nothing, which is not the same as an empty sketch.
     bool buildBucketSummary(const uint8_t *root_hash, size_t root_hash_len, uint32_t bucket, sfppsr::BucketSummary &out);
 
-    // The highest chain counter stored for a root (0 if empty). Used to detect a tail gap from an advert.
-    uint32_t highestCounter(const uint8_t *root_hash, size_t root_hash_len);
-
     // The short IDs stored in one bucket, for the enumeration list and for a windowed object lookup.
     bool collectBucketIds(const uint8_t *root_hash, size_t root_hash_len, uint32_t bucket, std::vector<pinsketch::Element> &out);
+
+    // The content buckets that hold at least one indexed object, ascending.
+    bool collectBuckets(const uint8_t *root_hash, size_t root_hash_len, std::vector<uint32_t> &out);
 
     // --- Arm C: detector + short-ID enumeration (StoreAndForward.Repair = enum) ---
 
@@ -351,9 +328,6 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     // checks if the message hash is present in the canonical chain database
     bool isInDB(const uint8_t *, size_t);
 
-    // checks if the commit hash is present in the canonical chain database
-    bool isCommitInDB(uint8_t *, size_t);
-
     // checks if the message hash is present in the scratch database
     bool isInScratch(uint8_t *, size_t);
 
@@ -371,44 +345,14 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     // Generates a message hash, but does not set the commit hash
     link_object ingestTextPacket(const meshtastic_MeshPacket &, const meshtastic_MeshPacket *);
 
-    // retrieves a link object from the canonical chain database given a commit hash
-    link_object getLink(uint8_t *, size_t);
-
-    // retrieves a link object from the canonical chain database given a message hash
-    link_object getLinkFromMessageHash(uint8_t *, size_t);
-
     // given a partial root hash, looks up the full 32-byte root hash
     // returns true if found
     bool lookUpFullRootHash(uint8_t *partial_root_hash, size_t partial_root_hash_len, uint8_t *full_root_hash);
 
-    // update the mappings table to set the chain count for the given root hash
-    void setChainCount(uint8_t *, size_t, uint32_t);
-
-    // get the chain count for the given root hash
-    uint32_t getChainCount(uint8_t *, size_t);
-
     // get the scratch count for the given root hash
     uint32_t getScratchCount(uint8_t *, size_t);
 
-    // get the canon scratch count for the given root hash
-    uint32_t getCanonScratchCount(uint8_t *, size_t);
-
-    link_object getLinkFromPositionFromTip(uint32_t, uint8_t *, size_t);
-
     void pruneScratchQueue();
-
-    void trimOldestLink(uint8_t *, size_t);
-
-    void clearChain(uint8_t *, size_t);
-
-    void addToCanonScratch(link_object &);
-
-    link_object getfromCanonScratch(uint8_t *, size_t);
-    void removeFromCanonScratch(uint8_t *, size_t);
-
-    void clearCanonScratch(uint8_t *, size_t, uint32_t);
-
-    bool isInCanonScratch(uint8_t *, size_t);
 
     // Once we have multiple chain types, we can extend this
     enum chain_types {

@@ -299,12 +299,8 @@ Security:
 StoreAndForward:
 #  Enabled: true # Enable Store and Forward++, false by default
 #  DBPath: /var/lib/meshtasticd/ # Path to the S&F++ Sqlite DB
-#  Stratum0: false # Specify if this node is a Stratum 0 node, the controller node.
-#  InitialSync: 10 # Number of messages to
 #  Hops: 3 # Number of hops to use for SF++ messages
-#  AnnounceInterval: 5 # Interval in minutes between announcing tip of chain hash
-#  MaxChainLength: 1000 # Maximum number of messages to store in a chain
-#  Repair: sketch # Repair path: sketch (default), enum (short-ID enumeration) or chain
+#  Repair: sketch # Repair path: sketch (default) or enum (short-ID enumeration)
 #  EnumInterval: 60 # Minutes between enumeration advert ticks (enum only, minimum 1)
 #  EnumDrainMs: 20000 # Milliseconds between queued enumeration item frames (enum only, minimum 100)
 #  ScratchSweep: 5 # Minutes between writer-missed scratch sweeps (enum only, minimum 1)

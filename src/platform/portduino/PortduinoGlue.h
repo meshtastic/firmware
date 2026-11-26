@@ -59,7 +59,7 @@ inline const std::unordered_map<std::string, std::string> configProducts = {
 enum screen_modules { no_screen, x11, fb, st7789, st7735, st7735s, st7796, ili9341, ili9342, ili9486, ili9488, hx8357d, hub75 };
 enum touchscreen_modules { no_touchscreen, xpt2046, stmpe610, gt911, ft5x06 };
 // SF++ repair path. chain keeps today's behaviour; enum is the arm C measurement baseline.
-enum sfpp_repair_mode { SFPP_REPAIR_CHAIN, SFPP_REPAIR_ENUM, SFPP_REPAIR_SKETCH };
+enum sfpp_repair_mode { SFPP_REPAIR_ENUM, SFPP_REPAIR_SKETCH };
 enum sfpp_item_transport { SFPP_ITEM_BROADCAST, SFPP_ITEM_DIRECT };
 enum portduino_log_level { level_error, level_warn, level_info, level_debug, level_trace };
 enum lora_module_enum {
@@ -348,11 +348,7 @@ extern struct portduino_config_struct {
     bool sfpp_stratum0 = false;
     bool sfpp_enabled = false;
     bool sfpp_steal_port = false;
-    int sfpp_initial_sync = 10;
     int sfpp_hops = 3;
-    int sfpp_announce_interval = 5; // minutes
-    uint32_t sfpp_max_chain = 1000;
-    uint32_t sfpp_backlog_limit = 100;
     sfpp_repair_mode sfpp_repair = SFPP_REPAIR_SKETCH;
     uint32_t sfpp_enum_interval = 60;    // minutes between advert ticks, enum only
     uint32_t sfpp_enum_drain_ms = 20000; // milliseconds between queued item frames, enum only
@@ -838,12 +834,7 @@ extern struct portduino_config_struct {
             out << YAML::Key << "StoreAndForward" << YAML::Value << YAML::BeginMap;
             out << YAML::Key << "Enabled" << YAML::Value << sfpp_enabled;
             out << YAML::Key << "DBPath" << YAML::Value << sfpp_db_path;
-            out << YAML::Key << "Stratum0" << YAML::Value << sfpp_stratum0;
-            out << YAML::Key << "InitialSync" << YAML::Value << sfpp_initial_sync;
             out << YAML::Key << "Hops" << YAML::Value << sfpp_hops;
-            out << YAML::Key << "AnnounceInterval" << YAML::Value << sfpp_announce_interval;
-            out << YAML::Key << "BacklogLimit" << YAML::Value << sfpp_backlog_limit;
-            out << YAML::Key << "MaxChainLength" << YAML::Value << sfpp_max_chain;
             out << YAML::Key << "StealPort" << YAML::Value << sfpp_steal_port;
             out << YAML::Key << "Repair" << YAML::Value
                 << (sfpp_repair == SFPP_REPAIR_SKETCH ? "sketch"

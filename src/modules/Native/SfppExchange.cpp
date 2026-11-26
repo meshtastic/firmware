@@ -510,56 +510,40 @@ void StoreForwardPlusPlusModule::advertiseOneBucket(uint8_t *root_hash, size_t r
         memcpy(enumSeenRoot, root_hash, SFPP_HASH_SIZE);
         enumAdvertSeen.clear();
     }
-    if (getChainCount(root_hash, root_hash_len) == 0)
+    std::vector<uint32_t> buckets;
+    if (!collectBuckets(root_hash, root_hash_len, buckets))
         return;
 
-    link_object tip = getLinkFromPositionFromTip(0, root_hash, root_hash_len);
-    if (tip.counter == 0)
-        return;
-    const uint32_t tipCounter = tip.counter;
-    const uint32_t maxBucket = (tipCounter - 1) / sfppsr::kBucketObjects;
-
-    // Stage 8f: newest-changed first. A bucket whose summary differs from the one last advertised
-    // (or that was never advertised) goes ahead of the round-robin.
-    int64_t chosen = -1;
-    for (int64_t b = (int64_t)maxBucket; b >= 0; b--) {
+    // Newest-changed first: a bucket whose summary differs from the one last advertised (or that
+    // was never advertised) goes ahead of the round-robin.
+    int64_t chosenIndex = -1;
+    for (int64_t i = (int64_t)buckets.size() - 1; i >= 0; i--) {
         sfppsr::BucketSummary summary(4);
-        if (!buildBucketSummary(root_hash, root_hash_len, (uint32_t)b, summary) || summary.count() == 0)
+        if (!buildBucketSummary(root_hash, root_hash_len, buckets[(size_t)i], summary) || summary.count() == 0)
             continue;
         bool changed = true;
         for (const auto &seen : enumAdvertSeen) {
-            if (seen.bucket == (uint32_t)b) {
+            if (seen.bucket == buckets[(size_t)i]) {
                 changed = (seen.count != summary.count() || seen.checksum != summary.checksum());
                 break;
             }
         }
         if (changed) {
-            chosen = b;
+            chosenIndex = i;
             break;
         }
     }
 
     uint32_t bucket = 0;
-    if (chosen >= 0) {
-        bucket = (uint32_t)chosen;
-        enumBucketCursor = (bucket + 1) % (maxBucket + 1);
+    if (chosenIndex >= 0) {
+        bucket = buckets[(size_t)chosenIndex];
+        enumBucketCursor = (uint32_t)(chosenIndex + 1) % (uint32_t)buckets.size();
     } else {
-        // No change: one bucket per tick, round-robin, skipping empty buckets.
-        bool found = false;
-        for (uint32_t attempts = 0; attempts <= maxBucket; attempts++) {
-            if (enumBucketCursor > maxBucket)
-                enumBucketCursor = 0;
-            const uint32_t candidate = enumBucketCursor;
-            enumBucketCursor = (enumBucketCursor + 1) % (maxBucket + 1);
-            sfppsr::BucketSummary summary(4);
-            if (buildBucketSummary(root_hash, root_hash_len, candidate, summary) && summary.count() > 0) {
-                bucket = candidate;
-                found = true;
-                break;
-            }
-        }
-        if (!found)
-            return;
+        // No change: one bucket per tick, round-robin.
+        if (enumBucketCursor >= buckets.size())
+            enumBucketCursor = 0;
+        bucket = buckets[enumBucketCursor];
+        enumBucketCursor = (enumBucketCursor + 1) % (uint32_t)buckets.size();
     }
 
     sfppsr::BucketSummary summary(4);
@@ -574,8 +558,8 @@ void StoreForwardPlusPlusModule::advertiseOneBucket(uint8_t *root_hash, size_t r
     meshtastic_StoreForwardPlusPlus msg;
     if (!sfppsr::buildAdvert(scope, summary, msg))
         return;
-    // Stage 8f: the advert names this bucket; encapsulated_rxtime carries the sender's tip counter.
-    msg.encapsulated_rxtime = tipCounter;
+    // Q2e R3: the 4-byte tip is the advertised bucket's content count, not a chain counter.
+    msg.encapsulated_rxtime = summary.count();
     if (!sendEnumMessage(msg, NODENUM_BROADCAST, "advert", msg.message.size))
         return;
 
@@ -654,40 +638,25 @@ void StoreForwardPlusPlusModule::handleEnumAdvert(const meshtastic_MeshPacket &m
         }
     }
 
-    const uint32_t advertTip = t->encapsulated_rxtime; // Stage 8f: the sender's highest counter
-    const uint32_t ownTip = highestCounter(root, SFPP_HASH_SIZE);
+    const uint32_t advertTip = t->encapsulated_rxtime; // Q2e R3: the sender's content-bucket count
 
     // The receiver of a mismatching advert always pulls. An empty local bucket is count 0 and
     // checksum 0, so it mismatches a non-empty peer and pulls too.
     sfppsr::BucketSummary local(4);
     buildBucketSummary(root, SFPP_HASH_SIZE, advert.scope.bucket, local);
     const bool namedMismatch = !(local.count() == advert.count && local.checksum() == advert.checksum);
-    const uint32_t knownTip = ownTip > enumKnownTip ? ownTip : enumKnownTip;
-    const bool tailBehind = advertTip > knownTip;
-    if (!namedMismatch && !tailBehind)
+    if (!namedMismatch)
         return;
-
-    const uint32_t tipBucket = advertTip > 0 ? (advertTip - 1) / sfppsr::kBucketObjects : 0;
 
     if (enumExchangeActive) {
         // Stage 8g: a behind bucket seen while busy is remembered (bounded, newest first) and
         // pulled when this exchange ends.
-        if (namedMismatch && advert.scope.bucket != enumExchangeBucket)
+        if (advert.scope.bucket != enumExchangeBucket)
             addPendingBucket(root, mp.from, advert.scope.bucket, advert.count, advert.checksum, advertTip);
-        if (tailBehind && tipBucket != enumExchangeBucket)
-            addPendingBucket(root, mp.from, tipBucket, 0, 0, advertTip);
         return;
     }
 
-    // Stage 8h: prefer the newest tail over an older named bucket.
-    if (tailBehind && namedMismatch && advert.scope.bucket != tipBucket) {
-        addPendingBucket(root, mp.from, advert.scope.bucket, advert.count, advert.checksum, advertTip);
-        addPendingBucket(root, mp.from, tipBucket, 0, 0, advertTip);
-        setIntervalFromNow(10);
-        return;
-    }
-
-    if (namedMismatch) {
+    {
         // A bucket that could not be repaired from this advertised summary is not pulled again until
         // the authority advertises a different one for it.
         if (enumBucketSuppressed(root, advert.scope.bucket, advert.count, advert.checksum))
@@ -701,11 +670,6 @@ void StoreForwardPlusPlusModule::handleEnumAdvert(const meshtastic_MeshPacket &m
         requestEnumList(root, advert.scope.bucket, mp.from);
         return;
     }
-
-    // The named bucket agrees but the sender's tip is ahead: queue the newest bucket; startPendingPull
-    // paces it with the one server pacer.
-    addPendingBucket(root, mp.from, tipBucket, 0, 0, advertTip);
-    setIntervalFromNow(10);
 }
 
 bool StoreForwardPlusPlusModule::trySketchExchange(const sfppsr::Advert &advert, sfppsr::BucketSummary &local,
@@ -972,9 +936,6 @@ void StoreForwardPlusPlusModule::handleItemRequest(const meshtastic_MeshPacket &
     noteRequesterActivity(mp.from); // a re-request refreshes the requester's entry
     logEnum("rx", "item_req", list.scope, mp.decoded.payload.size, mp.from, (int)list.ids.size(), 0, 1);
 
-    const uint32_t first = list.scope.bucket * sfppsr::kBucketObjects + 1;
-    const uint32_t last = first + sfppsr::kBucketObjects - 1;
-
     for (pinsketch::Element wanted : list.ids) {
         // Already queued for this requester: do not duplicate it, just refresh the entry.
         if (enumRequesterHasQueued(mp.from, wanted))
@@ -983,9 +944,8 @@ void StoreForwardPlusPlusModule::handleItemRequest(const meshtastic_MeshPacket &
         sqlite3_reset(getLinkByShortIdStmt);
         sqlite3_bind_int(getLinkByShortIdStmt, 1, SFPP_HASH_SIZE);
         sqlite3_bind_blob(getLinkByShortIdStmt, 2, root, SFPP_HASH_SIZE, NULL);
-        sqlite3_bind_int(getLinkByShortIdStmt, 3, first);
-        sqlite3_bind_int(getLinkByShortIdStmt, 4, last);
-        sqlite3_bind_int64(getLinkByShortIdStmt, 5, (sqlite3_int64)wanted);
+        sqlite3_bind_int(getLinkByShortIdStmt, 3, (int)list.scope.bucket);
+        sqlite3_bind_int64(getLinkByShortIdStmt, 4, (sqlite3_int64)wanted);
 
         // A short ID can name more than one stored object; serve every one so a collided pair
         // cannot hide behind a single row.
@@ -999,9 +959,9 @@ void StoreForwardPlusPlusModule::handleItemRequest(const meshtastic_MeshPacket &
             const int encLen = sqlite3_column_bytes(getLinkByShortIdStmt, 3);
             RowTime stamp;
             stamp.stamp = (uint32_t)sqlite3_column_int64(getLinkByShortIdStmt, 5);
-            stamp.basis = (uint8_t)sqlite3_column_int(getLinkByShortIdStmt, 7);
-            stamp.boot_id = (uint32_t)sqlite3_column_int64(getLinkByShortIdStmt, 8);
-            stamp.margin = (uint32_t)sqlite3_column_int64(getLinkByShortIdStmt, 9);
+            stamp.basis = (uint8_t)sqlite3_column_int(getLinkByShortIdStmt, 6);
+            stamp.boot_id = (uint32_t)sqlite3_column_int64(getLinkByShortIdStmt, 7);
+            stamp.margin = (uint32_t)sqlite3_column_int64(getLinkByShortIdStmt, 8);
             std::vector<uint8_t> cipher(enc, enc + encLen);
 
             const uint32_t heardAgo = rowAge(stamp).age;

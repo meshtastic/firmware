@@ -1591,14 +1591,9 @@ bool loadConfig(const char *configPath)
         }
 
         if (yamlConfig["StoreAndForward"]) {
-            portduino_config.sfpp_stratum0 = (yamlConfig["StoreAndForward"]["Stratum0"]).as<bool>(false);
             portduino_config.sfpp_enabled = (yamlConfig["StoreAndForward"]["Enabled"]).as<bool>(false);
             portduino_config.sfpp_db_path = (yamlConfig["StoreAndForward"]["DBPath"]).as<std::string>("/var/lib/meshtasticd/");
-            portduino_config.sfpp_initial_sync = (yamlConfig["StoreAndForward"]["InitialSync"]).as<int>(10);
             portduino_config.sfpp_hops = (yamlConfig["StoreAndForward"]["Hops"]).as<int>(3);
-            portduino_config.sfpp_announce_interval = (yamlConfig["StoreAndForward"]["AnnounceInterval"]).as<int>(5);
-            portduino_config.sfpp_max_chain = (yamlConfig["StoreAndForward"]["MaxChainLength"]).as<uint32_t>(1000);
-            portduino_config.sfpp_backlog_limit = (yamlConfig["StoreAndForward"]["BacklogLimit"]).as<uint32_t>(100);
             portduino_config.sfpp_steal_port = (yamlConfig["StoreAndForward"]["StealPort"]).as<bool>(false);
             std::string repair = (yamlConfig["StoreAndForward"]["Repair"]).as<std::string>("sketch");
             if (repair == "enum")
@@ -1606,7 +1601,7 @@ bool loadConfig(const char *configPath)
             else if (repair == "sketch")
                 portduino_config.sfpp_repair = SFPP_REPAIR_SKETCH;
             else
-                portduino_config.sfpp_repair = SFPP_REPAIR_CHAIN;
+                portduino_config.sfpp_repair = SFPP_REPAIR_SKETCH;
             portduino_config.sfpp_enum_interval = (yamlConfig["StoreAndForward"]["EnumInterval"]).as<uint32_t>(60);
             if (portduino_config.sfpp_enum_interval < 1)
                 portduino_config.sfpp_enum_interval = 1;
