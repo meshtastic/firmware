@@ -153,6 +153,12 @@ void CardputerKeyboard::pressed(uint8_t key)
 
     last_key = next_key;
     last_tap = now;
+
+    // Backspace (as this release will map it) starts a hold that deletes a word at a time; any other key ends one
+    if (CardputerTapMod[next_key] && CardputerTapMap[next_key][modifierFlag % CardputerTapMod[next_key]] == Key::BSP)
+        backspaceRepeat.press();
+    else
+        backspaceRepeat.cancel();
 }
 
 void CardputerKeyboard::released()
@@ -169,6 +175,12 @@ void CardputerKeyboard::released()
 
     uint32_t now = millis();
     last_tap = now;
+
+    // A hold that repeated has already deleted words: this release must not delete a character as well
+    if (backspaceRepeat.release()) {
+        modifierFlag = 0;
+        return;
+    }
 
     if (inputBroker->menuMode && modifierFlag == 0) {
         if (last_key == 0 || last_key == 43 || last_key == 46 || last_key == 47 ||

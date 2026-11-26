@@ -161,6 +161,12 @@ void TLoraPagerKeyboard::pressed(uint8_t key)
 
     last_key = next_key;
     last_tap = now;
+
+    // Backspace (as this release will map it) starts a hold that deletes a word at a time; any other key ends one
+    if (TLoraPagerTapMod[next_key] && TLoraPagerTapMap[next_key][modifierFlag % TLoraPagerTapMod[next_key]] == Key::BSP)
+        backspaceRepeat.press();
+    else
+        backspaceRepeat.cancel();
 }
 
 void TLoraPagerKeyboard::released()
@@ -177,6 +183,12 @@ void TLoraPagerKeyboard::released()
 
     uint32_t now = millis();
     last_tap = now;
+
+    // A hold that repeated has already deleted words: this release must not delete a character as well
+    if (backspaceRepeat.release()) {
+        modifierFlag = 0;
+        return;
+    }
 
     queueEvent(TLoraPagerTapMap[last_key][modifierFlag % TLoraPagerTapMod[last_key]]);
     if (isModifierKey(last_key) == false)

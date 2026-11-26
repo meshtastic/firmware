@@ -127,11 +127,17 @@ void TDeckProKeyboard::pressed(uint8_t key)
         character = TDeckProTapMap[key - 1][0];
     usedModifiers |= heldModifiers;
     latchedModifiers = 0;
+    if (character == Key::BSP)
+        backspaceRepeat.press();
+    else
+        backspaceRepeat.cancel();
     queueEvent(character);
 }
 
 void TDeckProKeyboard::releaseKey(uint8_t key)
 {
+    if (key >= 1 && key <= _TCA8418_NUM_KEYS && TDeckProTapMap[key - 1][0] == Key::BSP)
+        backspaceRepeat.release(); // the press already deleted, so nothing to skip
     const uint8_t modifier = modifierForKey(key);
     if (!modifier || !(heldModifiers & modifier))
         return;
