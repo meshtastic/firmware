@@ -107,6 +107,15 @@ typedef enum _meshtastic_DeviceUIConfig_GpsCoordinateFormat {
     meshtastic_DeviceUIConfig_GpsCoordinateFormat_MLS = 6
 } meshtastic_DeviceUIConfig_GpsCoordinateFormat;
 
+typedef enum _meshtastic_DeviceUIConfig_KeyboardBacklightMode {
+    /* Off, until turned on from the keyboard or the menu. */
+    meshtastic_DeviceUIConfig_KeyboardBacklightMode_OFF = 0,
+    /* On while the screen is on. */
+    meshtastic_DeviceUIConfig_KeyboardBacklightMode_ON = 1,
+    /* On at each key press, off again after a few seconds without one. */
+    meshtastic_DeviceUIConfig_KeyboardBacklightMode_WHILE_TYPING = 2
+} meshtastic_DeviceUIConfig_KeyboardBacklightMode;
+
 /* Struct definitions */
 typedef struct _meshtastic_NodeFilter {
     /* Filter unknown nodes */
@@ -198,6 +207,8 @@ typedef struct _meshtastic_DeviceUIConfig {
     bool is_clockface_analog;
     /* How the GPS coordinates are formatted on the OLED screen. */
     meshtastic_DeviceUIConfig_GpsCoordinateFormat gps_format;
+    /* How the keyboard backlight behaves, on devices that have one. */
+    meshtastic_DeviceUIConfig_KeyboardBacklightMode keyboard_backlight;
 } meshtastic_DeviceUIConfig;
 
 
@@ -222,10 +233,15 @@ extern "C" {
 #define _meshtastic_DeviceUIConfig_GpsCoordinateFormat_MAX meshtastic_DeviceUIConfig_GpsCoordinateFormat_MLS
 #define _meshtastic_DeviceUIConfig_GpsCoordinateFormat_ARRAYSIZE ((meshtastic_DeviceUIConfig_GpsCoordinateFormat)(meshtastic_DeviceUIConfig_GpsCoordinateFormat_MLS+1))
 
+#define _meshtastic_DeviceUIConfig_KeyboardBacklightMode_MIN meshtastic_DeviceUIConfig_KeyboardBacklightMode_OFF
+#define _meshtastic_DeviceUIConfig_KeyboardBacklightMode_MAX meshtastic_DeviceUIConfig_KeyboardBacklightMode_WHILE_TYPING
+#define _meshtastic_DeviceUIConfig_KeyboardBacklightMode_ARRAYSIZE ((meshtastic_DeviceUIConfig_KeyboardBacklightMode)(meshtastic_DeviceUIConfig_KeyboardBacklightMode_WHILE_TYPING+1))
+
 #define meshtastic_DeviceUIConfig_theme_ENUMTYPE meshtastic_Theme
 #define meshtastic_DeviceUIConfig_language_ENUMTYPE meshtastic_Language
 #define meshtastic_DeviceUIConfig_compass_mode_ENUMTYPE meshtastic_CompassMode
 #define meshtastic_DeviceUIConfig_gps_format_ENUMTYPE meshtastic_DeviceUIConfig_GpsCoordinateFormat
+#define meshtastic_DeviceUIConfig_keyboard_backlight_ENUMTYPE meshtastic_DeviceUIConfig_KeyboardBacklightMode
 
 
 
@@ -233,12 +249,12 @@ extern "C" {
 
 
 /* Initializer values for message structs */
-#define meshtastic_DeviceUIConfig_init_default   {0, 0, 0, 0, 0, 0, _meshtastic_Theme_MIN, 0, 0, 0, _meshtastic_Language_MIN, false, meshtastic_NodeFilter_init_default, false, meshtastic_NodeHighlight_init_default, {0, {0}}, false, meshtastic_Map_init_default, _meshtastic_CompassMode_MIN, 0, 0, _meshtastic_DeviceUIConfig_GpsCoordinateFormat_MIN}
+#define meshtastic_DeviceUIConfig_init_default   {0, 0, 0, 0, 0, 0, _meshtastic_Theme_MIN, 0, 0, 0, _meshtastic_Language_MIN, false, meshtastic_NodeFilter_init_default, false, meshtastic_NodeHighlight_init_default, {0, {0}}, false, meshtastic_Map_init_default, _meshtastic_CompassMode_MIN, 0, 0, _meshtastic_DeviceUIConfig_GpsCoordinateFormat_MIN, _meshtastic_DeviceUIConfig_KeyboardBacklightMode_MIN}
 #define meshtastic_NodeFilter_init_default       {0, 0, 0, 0, 0, "", 0}
 #define meshtastic_NodeHighlight_init_default    {0, 0, 0, 0, ""}
 #define meshtastic_GeoPoint_init_default         {0, 0, 0}
 #define meshtastic_Map_init_default              {false, meshtastic_GeoPoint_init_default, "", 0}
-#define meshtastic_DeviceUIConfig_init_zero      {0, 0, 0, 0, 0, 0, _meshtastic_Theme_MIN, 0, 0, 0, _meshtastic_Language_MIN, false, meshtastic_NodeFilter_init_zero, false, meshtastic_NodeHighlight_init_zero, {0, {0}}, false, meshtastic_Map_init_zero, _meshtastic_CompassMode_MIN, 0, 0, _meshtastic_DeviceUIConfig_GpsCoordinateFormat_MIN}
+#define meshtastic_DeviceUIConfig_init_zero      {0, 0, 0, 0, 0, 0, _meshtastic_Theme_MIN, 0, 0, 0, _meshtastic_Language_MIN, false, meshtastic_NodeFilter_init_zero, false, meshtastic_NodeHighlight_init_zero, {0, {0}}, false, meshtastic_Map_init_zero, _meshtastic_CompassMode_MIN, 0, 0, _meshtastic_DeviceUIConfig_GpsCoordinateFormat_MIN, _meshtastic_DeviceUIConfig_KeyboardBacklightMode_MIN}
 #define meshtastic_NodeFilter_init_zero          {0, 0, 0, 0, 0, "", 0}
 #define meshtastic_NodeHighlight_init_zero       {0, 0, 0, 0, ""}
 #define meshtastic_GeoPoint_init_zero            {0, 0, 0}
@@ -282,6 +298,7 @@ extern "C" {
 #define meshtastic_DeviceUIConfig_screen_rgb_color_tag 17
 #define meshtastic_DeviceUIConfig_is_clockface_analog_tag 18
 #define meshtastic_DeviceUIConfig_gps_format_tag 19
+#define meshtastic_DeviceUIConfig_keyboard_backlight_tag 20
 
 /* Struct field encoding specification for nanopb */
 #define meshtastic_DeviceUIConfig_FIELDLIST(X, a) \
@@ -303,7 +320,8 @@ X(a, STATIC,   OPTIONAL, MESSAGE,  map_data,         15) \
 X(a, STATIC,   SINGULAR, UENUM,    compass_mode,     16) \
 X(a, STATIC,   SINGULAR, UINT32,   screen_rgb_color,  17) \
 X(a, STATIC,   SINGULAR, BOOL,     is_clockface_analog,  18) \
-X(a, STATIC,   SINGULAR, UENUM,    gps_format,       19)
+X(a, STATIC,   SINGULAR, UENUM,    gps_format,       19) \
+X(a, STATIC,   SINGULAR, UENUM,    keyboard_backlight,  20)
 #define meshtastic_DeviceUIConfig_CALLBACK NULL
 #define meshtastic_DeviceUIConfig_DEFAULT NULL
 #define meshtastic_DeviceUIConfig_node_filter_MSGTYPE meshtastic_NodeFilter
@@ -360,7 +378,7 @@ extern const pb_msgdesc_t meshtastic_Map_msg;
 
 /* Maximum encoded size of messages (where known) */
 #define MESHTASTIC_MESHTASTIC_DEVICE_UI_PB_H_MAX_SIZE meshtastic_DeviceUIConfig_size
-#define meshtastic_DeviceUIConfig_size           204
+#define meshtastic_DeviceUIConfig_size           207
 #define meshtastic_GeoPoint_size                 33
 #define meshtastic_Map_size                      58
 #define meshtastic_NodeFilter_size               47

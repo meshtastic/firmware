@@ -103,7 +103,7 @@ extern MessageStore messageStore;
 #include "platform/portduino/PortduinoGlue.h"
 #endif
 
-#if defined(T_LORA_PAGER)
+#if defined(T_LORA_PAGER) || defined(T_DECK_PRO)
 // KB backlight control
 #include "input/cardKbI2cImpl.h"
 #endif
@@ -1030,7 +1030,7 @@ void Screen::setup()
 
 void Screen::setOn(bool on, FrameCallback einkScreensaver)
 {
-#if defined(T_LORA_PAGER)
+#if defined(T_LORA_PAGER) || defined(T_DECK_PRO)
     if (cardKbI2cImpl)
         cardKbI2cImpl->toggleBacklight(on);
 #endif

@@ -721,9 +721,14 @@ int32_t KbI2cBase::runOnce()
     if (tcaRecheck)
         return 0;
     // Set here rather than returned: an edge during runOnce() sets 0 from the ISR, and a returned value would overwrite it
-    setIntervalFromNow(TCA_FALLBACK_POLL_MS);
+    uint32_t idle = TCA_FALLBACK_POLL_MS;
+#ifndef MESHTASTIC_INCLUDE_INKHUD
+    // A running keyboard-light countdown ends on time, not at the next fallback poll
+    idle = std::min(idle, static_cast<TDeckProKeyboard *>(TCAKeyboard.get())->updateBacklight());
+#endif
+    setIntervalFromNow(idle);
     if (::digitalRead(KB_INT) == LOW)
-        setIntervalFromNow(20);
+        setIntervalFromNow(std::min<uint32_t>(idle, 20));
     return RUN_SAME;
 #elif defined(MESHTASTIC_INCLUDE_INKHUD)
     return 100; // CardKB hands out one key per read, so 300 ms makes typing crawl
@@ -749,7 +754,9 @@ int KbI2cBase::afterLightSleep(esp_sleep_wakeup_cause_t cause)
 
 void KbI2cBase::toggleBacklight(bool on)
 {
-#if defined(T_LORA_PAGER) || defined(T_DECK_PRO)
+#if defined(T_DECK_PRO) && !defined(MESHTASTIC_INCLUDE_INKHUD)
+    static_cast<TDeckProKeyboard *>(TCAKeyboard.get())->setScreenOn(on);
+#elif defined(T_LORA_PAGER) || defined(T_DECK_PRO)
     TCAKeyboard->setBacklight(on);
 #endif
 }

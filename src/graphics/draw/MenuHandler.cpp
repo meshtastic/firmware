@@ -23,6 +23,7 @@
 #include "graphics/draw/UIRenderer.h"
 #include "input/RotaryEncoderInterruptImpl1.h"
 #include "input/UpDownInterruptImpl1.h"
+#include "input/cardKbI2cImpl.h"
 #include "main.h"
 #include "mesh/Default.h"
 #if HAS_LORA_FEM
@@ -2892,9 +2893,9 @@ void menuHandler::screenOptionsMenu()
     bool hasSupportBrightness = false;
 #endif
 
-    enum optionsNumbers { Back, Brightness, FrameToggles, DisplayUnits, MessageBubbles, Theme };
-    static const char *optionsArray[7] = {"Back"};
-    static int optionsEnumArray[7] = {Back};
+    enum optionsNumbers { Back, Brightness, FrameToggles, DisplayUnits, MessageBubbles, Theme, KeyboardLight };
+    static const char *optionsArray[8] = {"Back"};
+    static int optionsEnumArray[8] = {Back};
     int options = 1;
 
     // Only show brightness for B&W displays
@@ -2915,6 +2916,11 @@ void menuHandler::screenOptionsMenu()
 #if GRAPHICS_TFT_COLORING_ENABLED
     optionsArray[options] = "Theme";
     optionsEnumArray[options++] = Theme;
+#endif
+
+#if defined(T_DECK_PRO)
+    optionsArray[options] = "Keyboard Light";
+    optionsEnumArray[options++] = KeyboardLight;
 #endif
 
     BannerOverlayOptions bannerOptions;
@@ -2938,10 +2944,51 @@ void menuHandler::screenOptionsMenu()
         } else if (selected == Theme) {
             menuHandler::menuQueue = menuHandler::ThemeMenu;
             screen->runNow();
+        } else if (selected == KeyboardLight) {
+            menuHandler::menuQueue = menuHandler::KeyboardBacklightMenu;
+            screen->runNow();
         } else {
             menuQueue = SystemBaseMenu;
             screen->runNow();
         }
+    };
+    screen->showOverlayBanner(bannerOptions);
+}
+
+void menuHandler::keyboardBacklightMenu()
+{
+    enum optionsNumbers { Back, Off, On, WhileTyping };
+    static const char *optionsArray[] = {"Back", "Off", "On", "While Typing"};
+    static int optionsEnumArray[] = {Back, Off, On, WhileTyping};
+
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Keyboard Light";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 4;
+    bannerOptions.optionsEnumPtr = optionsEnumArray;
+    switch (uiconfig.keyboard_backlight) {
+    case meshtastic_DeviceUIConfig_KeyboardBacklightMode_ON:
+        bannerOptions.InitialSelected = On;
+        break;
+    case meshtastic_DeviceUIConfig_KeyboardBacklightMode_WHILE_TYPING:
+        bannerOptions.InitialSelected = WhileTyping;
+        break;
+    default:
+        bannerOptions.InitialSelected = Off;
+        break;
+    }
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == Back) {
+            menuQueue = ScreenOptionsMenu;
+            screen->runNow();
+            return;
+        }
+        uiconfig.keyboard_backlight = (selected == On)            ? meshtastic_DeviceUIConfig_KeyboardBacklightMode_ON
+                                      : (selected == WhileTyping) ? meshtastic_DeviceUIConfig_KeyboardBacklightMode_WHILE_TYPING
+                                                                  : meshtastic_DeviceUIConfig_KeyboardBacklightMode_OFF;
+        saveUIConfig();
+        if (cardKbI2cImpl) // apply now rather than at the keyboard's next poll
+            cardKbI2cImpl->setIntervalFromNow(0);
     };
     screen->showOverlayBanner(bannerOptions);
 }
@@ -3501,6 +3548,9 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
     case ThemeMenu:
         break;
 #endif
+    case KeyboardBacklightMenu:
+        keyboardBacklightMenu();
+        break;
     case HamModeConfirm:
         hamModeConfirmMenu();
         break;
