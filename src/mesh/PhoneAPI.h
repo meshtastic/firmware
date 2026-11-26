@@ -167,6 +167,10 @@ class PhoneAPI
      */
     virtual bool handleToRadio(const uint8_t *buf, size_t len);
 
+    /// BLE duplicate-write filter: true if this write should be handled. Identical consecutive chunked_payload
+    /// writes are kept, because repeated chunk frames are valid; any other repeat of the previous write is dropped.
+    static bool shouldProcessToRadio(const uint8_t *data, size_t len, const uint8_t *previous);
+
     /**
      * Send a (client)notification to the phone
      */

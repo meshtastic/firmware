@@ -29,6 +29,7 @@
 #include "modules/NodeInfoModule.h"
 #include "modules/RoutingModule.h"
 #include "xmodem.h"
+#include <pb_decode.h>
 
 #if FromRadio_size > MAX_TO_FROM_RADIO_SIZE
 #error FromRadio is too big
@@ -116,12 +117,248 @@ namespace
 {
 constexpr uint8_t FILES_MANIFEST_LEVELS = 3;
 constexpr size_t FILES_MANIFEST_MAX_COUNT = 64;
+#if HAS_CHUNKED_PHONEAPI
+// Chunked client API: small-MTU BLE clients such as Garmin Connect IQ, whose public BLE API limits a write to
+// 20 bytes, send ToRadio split into ClientApiChunkedPayload frames and opt in to FromRadio being split the same way.
+// Frames arrive in order over a reliable link, so there are no offsets: just a total in the first frame, then data.
+constexpr size_t MAX_CHUNKED_FROMRADIO_PACKET_SIZE = 20;
+constexpr uint16_t CHUNKED_FROMRADIO_FIRST_BYTES = 12;
+constexpr uint16_t CHUNKED_FROMRADIO_NEXT_BYTES = 15;
+constexpr uint32_t CHUNKED_TORADIO_TIMEOUT_MS = 30000;
+static_assert(MAX_TO_FROM_RADIO_SIZE <= 0x3fff, "chunk payload size must fit in two protobuf varint bytes");
+static_assert(meshtastic_FromRadio_size <= MAX_TO_FROM_RADIO_SIZE, "an encoded FromRadio must fit the outbound slot");
+
+struct ChunkedClient {
+    PhoneAPI *who;
+    uint16_t inTotal;
+    uint16_t inUsed;
+    uint16_t outTotal;
+    uint16_t outUsed;
+    uint32_t inUpdated;
+    bool enabled;                 // client has completed a chunked request, so large replies are chunked too
+    const uint8_t *dispatchBytes; // set while a reassembled message is being handled; pins the slot
+    bool releaseAfterDispatch;    // close() arrived during that dispatch, so free the slot once it returns
+    uint8_t in[MAX_TO_FROM_RADIO_SIZE];
+    uint8_t out[MAX_TO_FROM_RADIO_SIZE];
+};
+
+// Only BLE needs chunking and the firmware allows one BLE connection, so there is a single slot. It is heap-allocated
+// on the first chunked write and freed by close(), so nothing is reserved until a BLE client actually chunks.
+// Kept file-scope, like the auth slots, not a PhoneAPI member.
+static ChunkedClient *g_chunked = nullptr;
+static concurrency::Lock g_chunkedMutex;
+#endif
 
 void releaseFilesManifest(std::vector<meshtastic_FileInfo> &filesManifest)
 {
     std::vector<meshtastic_FileInfo>().swap(filesManifest);
 }
+
+#if HAS_CHUNKED_PHONEAPI
+static ChunkedClient *findChunkedClient_LH(PhoneAPI *api)
+{
+    return g_chunked && g_chunked->who == api ? g_chunked : nullptr;
+}
+
+static void freeChunkedClient_LH()
+{
+    free(g_chunked);
+    g_chunked = nullptr;
+}
+
+// Called from close(). Drops any partial input and pending output, and frees the slot unless a dispatch is still
+// running from its buffer, in which case the free is left to handleChunkedToRadio().
+static void clearChunkedClient(PhoneAPI *api)
+{
+    concurrency::LockGuard guard(&g_chunkedMutex);
+    auto *slot = findChunkedClient_LH(api);
+    if (!slot)
+        return;
+    slot->inTotal = slot->inUsed = slot->outTotal = slot->outUsed = 0;
+    slot->enabled = false;
+    // Pin the slot until its dispatch returns, including a reassembled disconnect.
+    if (slot->dispatchBytes)
+        slot->releaseAfterDispatch = true;
+    else
+        freeChunkedClient_LH();
+}
+
+// Adds one chunk to the client's reassembly buffer and, once the advertised total has arrived, passes the whole
+// ToRadio back through handleToRadio(). Only a BLE client may allocate the slot, and only with a valid first chunk;
+// anything else is ignored. A bad, oversized or timed-out sequence is discarded and the client must start again.
+// During the dispatch the slot is pinned and the message is handled straight from slot->in, with no stack copy.
+// Any further chunk for this client, including a reassembled message that is itself chunked, is rejected rather
+// than recursing. A close() from inside the handler or another task only marks the slot, because the handler is
+// still reading its buffer; the slot is freed here once the dispatch returns.
+static bool handleChunkedToRadio(PhoneAPI *api, bool isBle, const meshtastic_ClientApiChunkedPayload &chunk)
+{
+    uint16_t reassembledSize = 0;
+    ChunkedClient *dispatchSlot = nullptr;
+
+    {
+        concurrency::LockGuard guard(&g_chunkedMutex);
+        const bool validStart = chunk.payload_size != 0 && chunk.payload_size <= MAX_TO_FROM_RADIO_SIZE &&
+                                chunk.payload_chunk.size != 0 && chunk.payload_size >= chunk.payload_chunk.size;
+        ChunkedClient *slot = findChunkedClient_LH(api);
+        if (!slot && validStart && isBle && !g_chunked) {
+            // malloc, not new: a failed new aborts on ESP32 builds without exceptions.
+            g_chunked = static_cast<ChunkedClient *>(calloc(1, sizeof(ChunkedClient)));
+            if (g_chunked)
+                g_chunked->who = api;
+            slot = g_chunked;
+        }
+        if (slot && slot->dispatchBytes) {
+            return false;
+        }
+        if (chunk.payload_chunk.size == 0 || (chunk.payload_size != 0 && !validStart)) {
+            if (slot)
+                slot->inTotal = slot->inUsed = 0;
+            return false;
+        }
+        if (slot && slot->inTotal && !Throttle::isWithinTimespanMs(slot->inUpdated, CHUNKED_TORADIO_TIMEOUT_MS)) {
+            slot->inTotal = slot->inUsed = 0;
+        }
+
+        if (chunk.payload_size != 0) {
+            if (slot) {
+                slot->inTotal = chunk.payload_size;
+                slot->inUsed = 0;
+            }
+        }
+
+        if (!slot || !slot->inTotal) {
+            return false;
+        }
+
+        if (slot->inUsed + chunk.payload_chunk.size > slot->inTotal) {
+            slot->inTotal = slot->inUsed = 0;
+            return false;
+        }
+
+        memcpy(slot->in + slot->inUsed, chunk.payload_chunk.bytes, chunk.payload_chunk.size);
+        slot->inUsed += chunk.payload_chunk.size;
+        slot->inUpdated = Time::getMillis();
+
+        if (slot->inUsed != slot->inTotal) {
+            return false;
+        }
+
+        reassembledSize = slot->inUsed;
+        slot->inTotal = slot->inUsed = 0;
+        slot->enabled = true;
+        // Dispatch straight from the slot: while pinned, further chunks are rejected and close() defers the free,
+        // so slot->in is stable and a nested chunked ToRadio costs one frame, not another 512-byte buffer.
+        slot->dispatchBytes = slot->in;
+        dispatchSlot = slot;
+    }
+
+    const bool result = api->handleToRadio(dispatchSlot->in, reassembledSize);
+    {
+        concurrency::LockGuard guard(&g_chunkedMutex);
+        dispatchSlot->dispatchBytes = nullptr;
+        if (dispatchSlot->releaseAfterDispatch)
+            freeChunkedClient_LH();
+    }
+    return result;
+}
+
+// Writes the next piece of slot.out as a FromRadio.chunked_payload frame of at most 20 bytes, encoded by hand
+// so no nanopb struct is needed. The first frame also carries the total, so it holds at most 12 data bytes;
+// later frames hold 15. Clears the pending output once the last piece has been sent.
+static size_t encodeChunkedFromRadio_LH(ChunkedClient &slot, uint8_t *buf)
+{
+    const bool firstChunk = slot.outUsed == 0;
+    uint16_t chunkSize = firstChunk ? CHUNKED_FROMRADIO_FIRST_BYTES : CHUNKED_FROMRADIO_NEXT_BYTES;
+    const uint16_t remaining = slot.outTotal - slot.outUsed;
+    if (chunkSize > remaining) {
+        chunkSize = remaining;
+    }
+
+    uint8_t *p = buf;
+    *p++ = 0xa2; // FromRadio field 20, length-delimited
+    *p++ = 0x01;
+    uint8_t *outerSize = p++;
+    if (firstChunk) {
+        *p++ = 0x08; // ClientApiChunkedPayload.payload_size
+        if (slot.outTotal >= 0x80) {
+            *p++ = (slot.outTotal & 0x7f) | 0x80;
+            *p++ = slot.outTotal >> 7;
+        } else {
+            *p++ = slot.outTotal;
+        }
+    }
+    *p++ = 0x12; // ClientApiChunkedPayload.payload_chunk
+    *p++ = chunkSize;
+    memcpy(p, slot.out + slot.outUsed, chunkSize);
+    p += chunkSize;
+    *outerSize = p - outerSize - 1;
+
+    slot.outUsed += chunkSize;
+    if (slot.outUsed == slot.outTotal) {
+        slot.outTotal = slot.outUsed = 0;
+    }
+    return p - buf;
+}
+
+// A chunked reply still being sent takes priority over the next FromRadio, so its frames are never interleaved.
+static size_t getPendingChunkedFromRadio(PhoneAPI *api, uint8_t *buf)
+{
+    concurrency::LockGuard guard(&g_chunkedMutex);
+    auto *slot = findChunkedClient_LH(api);
+    if (!slot || !slot->outTotal) {
+        return 0;
+    }
+    return encodeChunkedFromRadio_LH(*slot, buf);
+}
+
+// Replies of 20 bytes or less, and replies to clients that have not opted in, go out unchanged. Otherwise the
+// encoded FromRadio is copied to the slot and its first frame returned in its place; the rest follow on later reads.
+static size_t maybeEncodeChunkedFromRadio(PhoneAPI *api, uint8_t *buf, const uint8_t *fromRadioBytes, size_t fromRadioSize)
+{
+    if (fromRadioSize <= MAX_CHUNKED_FROMRADIO_PACKET_SIZE) {
+        return fromRadioSize;
+    }
+
+    concurrency::LockGuard guard(&g_chunkedMutex);
+    auto *slot = findChunkedClient_LH(api);
+    if (!slot || !slot->enabled) {
+        return fromRadioSize;
+    }
+
+    memcpy(slot->out, fromRadioBytes, fromRadioSize);
+    slot->outTotal = fromRadioSize;
+    slot->outUsed = 0;
+    return encodeChunkedFromRadio_LH(*slot, buf);
+}
+#else
+static size_t maybeEncodeChunkedFromRadio(PhoneAPI *, uint8_t *, const uint8_t *, size_t fromRadioSize)
+{
+    return fromRadioSize;
+}
+#endif
 } // namespace
+
+#if HAS_CHUNKED_PHONEAPI && defined(PIO_UNIT_TESTING)
+// Test hooks: encode one frame from an arbitrary offset, and report whether the single slot is allocated.
+size_t encodePhoneApiChunkForTest(const uint8_t *bytes, uint16_t total, uint16_t &offset, uint8_t *out)
+{
+    ChunkedClient slot = {};
+    if (total > sizeof(slot.out) || offset >= total)
+        return 0;
+    memcpy(slot.out, bytes, total);
+    slot.outTotal = total;
+    slot.outUsed = offset;
+    const size_t size = encodeChunkedFromRadio_LH(slot, out);
+    offset = slot.outTotal ? slot.outUsed : total;
+    return size;
+}
+
+bool phoneApiChunkSlotAllocatedForTest(const PhoneAPI *api)
+{
+    concurrency::LockGuard guard(&g_chunkedMutex);
+    return g_chunked && (!api || g_chunked->who == api);
+}
+#endif
 
 // Flag to indicate a heartbeat was received and we should send queue status
 bool heartbeatReceived = false;
@@ -432,6 +669,9 @@ void PhoneAPI::handleStartConfig()
 void PhoneAPI::close()
 {
     LOG_DEBUG("PhoneAPI::close()");
+#if HAS_CHUNKED_PHONEAPI
+    clearChunkedClient(this);
+#endif
     if (service->api_state == service->STATE_BLE && api_type == TYPE_BLE)
         service->api_state = service->STATE_DISCONNECTED;
     else if (service->api_state == service->STATE_WIFI && api_type == TYPE_WIFI)
@@ -511,11 +751,60 @@ bool PhoneAPI::checkConnectionTimeout()
     return false;
 }
 
-/**
- * Handle a ToRadio protobuf
- */
+// BLE stacks drop a write identical to the previous one, but consecutive chunk frames can legitimately repeat
+// (runs of zero bytes, for instance), so a repeated chunked_payload write is let through. Shared by the BLE receive
+// callbacks; normal ToRadio decoding remains the validation boundary.
+bool PhoneAPI::shouldProcessToRadio(const uint8_t *data, size_t len, const uint8_t *previous)
+{
+    if (!data || !previous || !len || len > MAX_TO_FROM_RADIO_SIZE)
+        return false;
+    if (memcmp(previous, data, len) != 0)
+        return true;
+#if !HAS_CHUNKED_PHONEAPI
+    return false;
+#else
+    // Honour protobuf field ordering and unknown fields, not just a leading 0x42 byte.
+    auto stream = pb_istream_from_buffer(data, len);
+    bool chunked = false;
+    while (stream.bytes_left) {
+        pb_wire_type_t wire;
+        uint32_t tag;
+        bool eof;
+        if (!pb_decode_tag(&stream, &wire, &tag, &eof))
+            return false;
+        switch (tag) {
+        case meshtastic_ToRadio_chunked_payload_tag:
+            if (wire != PB_WT_STRING)
+                return false;
+            chunked = true;
+            break;
+        case meshtastic_ToRadio_packet_tag:
+        case meshtastic_ToRadio_want_config_id_tag:
+        case meshtastic_ToRadio_disconnect_tag:
+        case meshtastic_ToRadio_xmodemPacket_tag:
+        case meshtastic_ToRadio_mqttClientProxyMessage_tag:
+        case meshtastic_ToRadio_heartbeat_tag:
+            chunked = false;
+            break;
+        }
+        if (!pb_skip_field(&stream, wire))
+            return false;
+    }
+    return chunked;
+#endif
+}
+
 bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
 {
+#if HAS_CHUNKED_PHONEAPI
+    // While a reassembled message from this client is being handled, refuse anything else from it.
+    {
+        concurrency::LockGuard guard(&g_chunkedMutex);
+        auto *slot = findChunkedClient_LH(this);
+        if (slot && slot->dispatchBytes && slot->dispatchBytes != buf)
+            return false;
+    }
+#endif
     powerFSM.trigger(EVENT_CONTACT_FROM_PHONE); // As long as the phone keeps talking to us, don't let the radio go to sleep
     lastContactMsec = Time::skipZero(Time::getMillis());
 
@@ -545,6 +834,14 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
 #endif
             return handleToRadioPacket(toRadioScratch.packet);
         case meshtastic_ToRadio_want_config_id_tag:
+#if HAS_CHUNKED_PHONEAPI
+            {
+                concurrency::LockGuard guard(&g_chunkedMutex);
+                // A fresh plain handshake may be a legacy client reusing the transport; a reassembled one keeps opt-in.
+                if (auto *slot = findChunkedClient_LH(this); slot && !slot->dispatchBytes)
+                    freeChunkedClient_LH();
+            }
+#endif
             config_nonce = toRadioScratch.want_config_id;
             LOG_INFO("Client wants config, nonce=%u", config_nonce);
             handleStartConfig();
@@ -599,6 +896,10 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
                 heartbeatReceived = true;
             }
             break;
+#if HAS_CHUNKED_PHONEAPI
+        case meshtastic_ToRadio_chunked_payload_tag:
+            return handleChunkedToRadio(this, api_type == TYPE_BLE, toRadioScratch.chunked_payload);
+#endif
         default:
             // Ignore nop messages
             break;
@@ -653,6 +954,12 @@ void PhoneAPI::fillMyInfo()
 
 size_t PhoneAPI::getFromRadio(uint8_t *buf)
 {
+#if HAS_CHUNKED_PHONEAPI
+    if (size_t chunkedBytes = getPendingChunkedFromRadio(this, buf)) {
+        return chunkedBytes;
+    }
+#endif
+
     // Respond to heartbeat by sending queue status
     if (heartbeatReceived) {
         memset(&fromRadioScratch, 0, sizeof(fromRadioScratch));
@@ -661,7 +968,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         heartbeatReceived = false;
         size_t numbytes = pb_encode_to_bytes(buf, meshtastic_FromRadio_size, &meshtastic_FromRadio_msg, &fromRadioScratch);
         LOG_TRACE("FromRadio=STATE_SEND_QUEUE_STATUS, numbytes=%u", (unsigned)numbytes);
-        return numbytes;
+        return maybeEncodeChunkedFromRadio(this, buf, buf, numbytes);
     }
 
     if (!available()) {
@@ -1213,7 +1520,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
 
         // VERY IMPORTANT to not print debug messages while writing to fromRadioScratch - because we use that same buffer
         // for logging (when we are encapsulating with protobufs)
-        return numbytes;
+        return maybeEncodeChunkedFromRadio(this, buf, buf, numbytes);
     }
 
     LOG_TRACE("No FromRadio packet available");
@@ -1769,6 +2076,14 @@ void PhoneAPI::releaseClientNotification()
  */
 bool PhoneAPI::available()
 {
+#if HAS_CHUNKED_PHONEAPI
+    {
+        concurrency::LockGuard guard(&g_chunkedMutex);
+        auto *slot = findChunkedClient_LH(this);
+        if (slot && slot->outTotal)
+            return true;
+    }
+#endif
     switch (state) {
     case STATE_SEND_NOTHING:
         return false;

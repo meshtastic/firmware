@@ -280,7 +280,7 @@ void onFromRadioAuthorize(uint16_t conn_hdl, BLECharacteristic *chr, ble_gatts_e
 void onToRadioWrite(uint16_t conn_hdl, BLECharacteristic *chr, uint8_t *data, uint16_t len)
 {
     LOG_INFO("toRadioWriteCb data %p, len %u", data, len);
-    if (memcmp(lastToRadio, data, len) != 0) {
+    if (PhoneAPI::shouldProcessToRadio(data, len, lastToRadio)) {
         LOG_DEBUG("New ToRadio packet");
         memcpy(lastToRadio, data, len);
         bluetoothPhoneAPI->handleToRadio(data, len);
