@@ -241,9 +241,110 @@ void test_aSketchOverTheCapacityBoundIsRefused()
 
 void test_anOversizedSketchIsNeverBuilt()
 {
-    // Capacity 40 is 160 bytes, past the frame budget the bound exists to keep.
+    // One past the whole-window capacity is 196 bytes, past the frame budget the bound keeps.
     meshtastic_StoreForwardPlusPlus msg;
-    TEST_ASSERT_FALSE(sfppsr::buildAdvert(aScope(), summaryOf(0, 10, 40), msg));
+    TEST_ASSERT_FALSE(sfppsr::buildAdvert(aScope(), summaryOf(0, 10, sfppsr::kMaxSketchCapacity + 1), msg));
+}
+
+// --- Packed advert scope ---
+
+static sfppsr::AdvertScope someScope()
+{
+    sfppsr::AdvertScope s;
+    s.version = sfppsr::kAdvertSchemaVersion;
+    s.retentionHours = 48;
+    s.windowEighths = 4;
+    s.storeSize = 192;
+    return s;
+}
+
+void test_scope_packs_the_19_bit_layout()
+{
+    const uint32_t packed = sfppsr::packAdvertScope(someScope());
+
+    // Version 1 in bits 0-2, retention 48 in 3-9, window 4 in 10-12, store size code 44 in 13-18.
+    TEST_ASSERT_EQUAL_HEX32(0x59181u, packed);
+
+    sfppsr::AdvertScope heard;
+    TEST_ASSERT_TRUE(sfppsr::parseAdvertScope(packed, heard));
+    TEST_ASSERT_EQUAL_UINT8(1, heard.version);
+    TEST_ASSERT_EQUAL_UINT8(48, heard.retentionHours);
+    TEST_ASSERT_EQUAL_UINT8(4, heard.windowEighths);
+    TEST_ASSERT_EQUAL_UINT16(192, heard.storeSize);
+}
+
+void test_scope_version_zero_is_invalid()
+{
+    sfppsr::AdvertScope scope = someScope();
+    scope.version = 0;
+
+    sfppsr::AdvertScope heard;
+    TEST_ASSERT_FALSE(sfppsr::parseAdvertScope(sfppsr::packAdvertScope(scope), heard));
+
+    scope.version = 7;
+    TEST_ASSERT_TRUE(sfppsr::parseAdvertScope(sfppsr::packAdvertScope(scope), heard));
+    TEST_ASSERT_EQUAL_UINT8(7, heard.version);
+}
+
+void test_scope_retention_and_window_ranges()
+{
+    sfppsr::AdvertScope scope = someScope();
+    sfppsr::AdvertScope heard;
+
+    scope.retentionHours = 1;
+    scope.windowEighths = 0; // the whole retention
+    TEST_ASSERT_TRUE(sfppsr::parseAdvertScope(sfppsr::packAdvertScope(scope), heard));
+    TEST_ASSERT_EQUAL_UINT8(1, heard.retentionHours);
+    TEST_ASSERT_EQUAL_UINT8(0, heard.windowEighths);
+
+    scope.retentionHours = 127;
+    scope.windowEighths = 7;
+    TEST_ASSERT_TRUE(sfppsr::parseAdvertScope(sfppsr::packAdvertScope(scope), heard));
+    TEST_ASSERT_EQUAL_UINT8(127, heard.retentionHours);
+    TEST_ASSERT_EQUAL_UINT8(7, heard.windowEighths);
+
+    // Retention zero is not an archive scope.
+    scope.retentionHours = 0;
+    TEST_ASSERT_FALSE(sfppsr::parseAdvertScope(sfppsr::packAdvertScope(scope), heard));
+
+    // Nothing above the nineteen bits belongs to the schema.
+    const uint32_t packed = sfppsr::packAdvertScope(someScope());
+    TEST_ASSERT_FALSE(sfppsr::parseAdvertScope(packed | (1u << 19), heard));
+    TEST_ASSERT_FALSE(sfppsr::parseAdvertScope(packed | (1u << 31), heard));
+}
+
+void test_store_size_minifloat_is_exact_to_fifteen()
+{
+    for (uint32_t size = 0; size <= 15; size++)
+        TEST_ASSERT_EQUAL_UINT16(size, sfppsr::codeToStoreSize(sfppsr::storeSizeToCode(size)));
+}
+
+void test_store_size_minifloat_steps_to_nine_sixty()
+{
+    TEST_ASSERT_EQUAL_UINT16(960, sfppsr::codeToStoreSize(63));
+    TEST_ASSERT_EQUAL_UINT8(63, sfppsr::storeSizeToCode(960));
+    TEST_ASSERT_EQUAL_UINT8(63, sfppsr::storeSizeToCode(2000)); // clamped to the largest code
+
+    uint16_t previous = sfppsr::codeToStoreSize(0);
+    for (uint8_t code = 1; code < 64; code++) {
+        const uint16_t size = sfppsr::codeToStoreSize(code);
+        TEST_ASSERT_GREATER_THAN_UINT16(previous, size);
+        previous = size;
+    }
+}
+
+void test_largest_advert_sketch_fits_one_payload()
+{
+    const BucketSummary largest = summaryOf(0, 64, sfppsr::kMaxSketchCapacity);
+    TEST_ASSERT_EQUAL_UINT(sfppsr::kMaxSketchBytes, largest.sketch().serializedSize());
+
+    meshtastic_StoreForwardPlusPlus msg;
+    TEST_ASSERT_TRUE(sfppsr::buildAdvert(aScope(), largest, msg));
+    TEST_ASSERT_EQUAL_UINT(sfppsr::kMaxSketchBytes, msg.message.size);
+
+    Advert heard;
+    TEST_ASSERT_TRUE(sfppsr::parseAdvert(msg, heard));
+    TEST_ASSERT_EQUAL_UINT(largest.sketch().serializedSize(), heard.sketch.serializedSize());
 }
 
 void test_aZeroShortIdIsRefusedBothWays()
@@ -337,6 +438,14 @@ void setup()
     RUN_TEST(test_aFragmentPastItsTotalIsRefused);
     RUN_TEST(test_aScopeTooShortToResolveIsRefused);
     RUN_TEST(test_fieldsBelongingToAnotherTypeAreRefused);
+
+    // Packed advert scope
+    RUN_TEST(test_scope_packs_the_19_bit_layout);
+    RUN_TEST(test_scope_version_zero_is_invalid);
+    RUN_TEST(test_scope_retention_and_window_ranges);
+    RUN_TEST(test_store_size_minifloat_is_exact_to_fifteen);
+    RUN_TEST(test_store_size_minifloat_steps_to_nine_sixty);
+    RUN_TEST(test_largest_advert_sketch_fits_one_payload);
 
     exit(UNITY_END());
 }

@@ -29,11 +29,37 @@ namespace sfppsr
 // under its own rules. Zero is invalid, not a default.
 constexpr uint32_t kDerivationVersion = 1;
 
-// Capacity 32 at four bytes per unit, which is a whole bucket in one frame.
-constexpr size_t kMaxSketchBytes = 4 * kBucketObjects;
+// The largest sketch an advert may carry: a whole window in one frame. The old per-bucket capacity
+// of 32 still fits inside it.
+constexpr size_t kMaxSketchCapacity = 48;
+constexpr size_t kMaxSketchBytes = 4 * kMaxSketchCapacity;
 
 // Enough to separate the roots one node knows, not a global identifier.
 constexpr size_t kRootPrefixBytes = 4;
+
+// The advert's own schema version, packed into the scope's low three bits. Zero is not a version.
+constexpr uint8_t kAdvertSchemaVersion = 1;
+
+// What an archive declares about its store: the schema it speaks, how long it retains, how much of
+// that retention the advert covers, and how many objects it holds.
+struct AdvertScope {
+    uint8_t version = kAdvertSchemaVersion;
+    uint8_t retentionHours = 0;
+    uint8_t windowEighths = 0;
+    uint16_t storeSize = 0;
+};
+
+// One 19-bit varint: bits 0-2 version, 3-9 retention hours, 10-12 window in eighths of the
+// retention (0 = all), 13-18 store size as a 3+3-bit minifloat.
+constexpr uint32_t kAdvertScopeMask = (1u << 19) - 1;
+
+uint32_t packAdvertScope(const AdvertScope &scope);
+bool parseAdvertScope(uint32_t packed, AdvertScope &out);
+
+// The store-size minifloat: code 0-7 is 0-7 exactly, then (8 + mantissa) << (exponent - 1), so
+// 0-15 is exact and the steps are at most one eighth to a maximum of 960.
+uint8_t storeSizeToCode(uint32_t storeSize);
+uint16_t codeToStoreSize(uint8_t code);
 
 // A full bucket and more, inside one frame.
 constexpr size_t kMaxShortIds = 40;

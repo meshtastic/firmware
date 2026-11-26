@@ -17,6 +17,62 @@ size_t maxShortIdsPerFrame()
     return configured;
 }
 
+uint16_t codeToStoreSize(uint8_t code)
+{
+    const uint8_t exponent = (code >> 3) & 0x7u;
+    const uint8_t mantissa = code & 0x7u;
+    if (exponent == 0)
+        return mantissa;
+    return (uint16_t)((8u + mantissa) << (exponent - 1));
+}
+
+uint8_t storeSizeToCode(uint32_t storeSize)
+{
+    const uint16_t largest = codeToStoreSize(63);
+    if (storeSize >= largest)
+        return 63;
+
+    uint8_t best = 0;
+    uint32_t bestDistance = UINT32_MAX;
+    for (uint8_t code = 0; code < 64; code++) {
+        const uint32_t value = codeToStoreSize(code);
+        const uint32_t distance = value > storeSize ? value - storeSize : storeSize - value;
+        if (distance < bestDistance) {
+            bestDistance = distance;
+            best = code;
+        }
+        // Values only grow from here, so this code is the nearest at or above the size and the
+        // previous one was the nearest below it.
+        if (value >= storeSize)
+            break;
+    }
+    return best;
+}
+
+uint32_t packAdvertScope(const AdvertScope &scope)
+{
+    return ((uint32_t)scope.version & 0x7u) | (((uint32_t)scope.retentionHours & 0x7Fu) << 3) |
+           (((uint32_t)scope.windowEighths & 0x7u) << 10) | (((uint32_t)storeSizeToCode(scope.storeSize) & 0x3Fu) << 13);
+}
+
+bool parseAdvertScope(uint32_t packed, AdvertScope &out)
+{
+    if (packed > kAdvertScopeMask)
+        return false;
+
+    AdvertScope scope;
+    scope.version = packed & 0x7u;
+    if (scope.version == 0)
+        return false;
+    scope.retentionHours = (packed >> 3) & 0x7Fu;
+    if (scope.retentionHours == 0)
+        return false;
+    scope.windowEighths = (packed >> 10) & 0x7u;
+    scope.storeSize = codeToStoreSize((packed >> 13) & 0x3Fu);
+    out = scope;
+    return true;
+}
+
 namespace
 {
 
