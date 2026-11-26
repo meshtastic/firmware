@@ -694,7 +694,7 @@ void RadioLibInterface::onNotify(uint32_t notification)
                     scanForTx = txp;
                     const ChannelScan scan = checkChannel();
                     scanForTx = nullptr;
-                    bool send = scan == ChannelScan::Free;
+                    bool transmitNow = scan == ChannelScan::Free;
                     if (scan == ChannelScan::Busy) {
                         LOG_DEBUG_RADIO("CAD busy");
                         noteScanSucceeded();
@@ -708,7 +708,7 @@ void RadioLibInterface::onNotify(uint32_t notification)
                         // The channel state is unknown, so normally hold the packet and scan again
                         const ScanFailAction next = noteScanFailed(Time::getMillis());
                         if (next == ScanFailAction::SendUnscanned && trySetStandby() == RADIOLIB_ERR_NONE) {
-                            send = true;
+                            transmitNow = true;
                         } else {
                             if (next == ScanFailAction::Recover) {
                                 const uint32_t lastAttempt = lastChipRecoveryMs;
@@ -726,7 +726,7 @@ void RadioLibInterface::onNotify(uint32_t notification)
                             LOG_DEBUG_RADIO("Preamble hold released, CAD clear %ums after the sighting",
                                             Time::getMillis() - peekHoldStart);
                     }
-                    if (send) {
+                    if (transmitNow) {
                         // Send any outgoing packets we have ready as fast as possible to keep the time between channel scan and
                         // actual transmission as short as possible
                         consecutiveDeferrals = 0;
