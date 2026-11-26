@@ -1,4 +1,5 @@
 // Based on the MPR121 Keyboard and Adafruit TCA8418 library
+#include "HeldKeyRepeat.h"
 #include "configuration.h"
 #include <Wire.h>
 
@@ -16,6 +17,7 @@ class TCA8418KeyboardBase
         BSP = 0x08,
         TAB = 0x09,
         SELECT = 0x0d,
+        DELETE_WORD = 0x17,
         ESC = 0x1b,
         REBOOT = 0x90,
         LEFT = 0xb4,
@@ -50,6 +52,13 @@ class TCA8418KeyboardBase
     virtual void setBacklight(bool on);
     // Steps a keyboard light with brightness levels to the next one; false when there is none, so Alt+B turns it off
     virtual bool nextBacklightLevel() { return false; }
+    // A held Backspace deletes a word at a time: the keyboard thread queues each repeat here and wakes for the next
+    void repeatHeldKey()
+    {
+        if (backspaceRepeat.due())
+            queueEvent(DELETE_WORD);
+    }
+    uint32_t heldKeyDueMs() const { return backspaceRepeat.dueInMs(); }
 
     // Key events available
     virtual bool hasEvent(void) const;
@@ -172,6 +181,8 @@ class TCA8418KeyboardBase
     uint8_t columns;
     KeyState state;
     String queue;
+    // Drivers press() it for Backspace, cancel() it for any other key, and release() it when Backspace comes up
+    HeldKeyRepeat backspaceRepeat;
 
   private:
     TwoWire *m_wire;

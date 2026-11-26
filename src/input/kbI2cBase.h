@@ -1,6 +1,7 @@
 #pragma once
 
 #include "BBQ10Keyboard.h"
+#include "HeldKeyRepeat.h"
 #include "InputBroker.h"
 #include "MPR121Keyboard.h"
 #include "Wire.h"
@@ -45,6 +46,10 @@ class KbI2cBase : public Observable<const InputEvent *>, public concurrency::OST
     CallbackObserver<KbI2cBase, esp_sleep_wakeup_cause_t> lsEndObserver =
         CallbackObserver<KbI2cBase, esp_sleep_wakeup_cause_t>(this, &KbI2cBase::afterLightSleep);
 #endif
+
+    // The BB Q10 reports a long press: a held Backspace deletes a word at a time from then until its release
+    HeldKeyRepeat q10Backspace;
+    void notifyDeleteWord();
 
     void driveKeyboardLight(bool on);
     void keyboardLightTyped();

@@ -178,6 +178,13 @@ void HackadayCommunicatorKeyboard::pressed(uint8_t key)
 
     last_key = next_key;
     last_tap = now;
+
+    // Backspace (as this release will map it) starts a hold that deletes a word at a time; any other key ends one
+    if (HackadayCommunicatorTapMod[next_key] &&
+        HackadayCommunicatorTapMap[next_key][modifierFlag % HackadayCommunicatorTapMod[next_key]] == Key::BSP)
+        backspaceRepeat.press();
+    else
+        backspaceRepeat.cancel();
 }
 
 void HackadayCommunicatorKeyboard::released()
@@ -194,6 +201,12 @@ void HackadayCommunicatorKeyboard::released()
 
     uint32_t now = millis();
     last_tap = now;
+
+    // A hold that repeated has already deleted words: this release must not delete a character as well
+    if (backspaceRepeat.release()) {
+        modifierFlag = 0;
+        return;
+    }
     if (HackadayCommunicatorTapMod[last_key])
         queueEvent(HackadayCommunicatorTapMap[last_key][modifierFlag % HackadayCommunicatorTapMod[last_key]]);
     if (isModifierKey(last_key) == false)

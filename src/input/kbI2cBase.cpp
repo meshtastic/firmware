@@ -147,9 +147,18 @@ int32_t KbI2cBase::runOnce()
 
     switch (kb_model) {
     case 0x11: { // BB Q10
+        if (q10Backspace.due())
+            notifyDeleteWord();
         int keyCount = Q10keyboard.keyCount();
         while (keyCount--) {
             const BBQ10Keyboard::KeyEvent key = Q10keyboard.keyEvent();
+            if (key.key == 0x08 && key.state == BBQ10Keyboard::StateLongPress)
+                q10Backspace.press();
+            else if (key.key != 0x08 && key.state == BBQ10Keyboard::StatePress)
+                q10Backspace.cancel(); // another key ends a hold, in case Backspace's release was lost
+            // A hold that repeated has already deleted words: its release must not delete a character as well
+            if (key.key == 0x08 && key.state == BBQ10Keyboard::StateRelease && q10Backspace.release())
+                continue;
             if ((key.key != 0x00) && (key.state == BBQ10Keyboard::StateRelease)) {
                 InputEvent e = {};
                 e.inputEvent = INPUT_BROKER_NONE;
@@ -311,6 +320,7 @@ int32_t KbI2cBase::runOnce()
         break;
     }
     case 0x84: { // Adafruit TCA8418
+        TCAKeyboard->repeatHeldKey();
 #if defined(T_DECK_PRO)
         // KB_INT high with nothing queued means no key; the fallback poll reads the FIFO anyway, in case an edge was missed
         const bool recheck = tcaRecheck;
@@ -355,6 +365,10 @@ int32_t KbI2cBase::runOnce()
             case TCA8418KeyboardBase::BSP:
                 e.inputEvent = INPUT_BROKER_BACK;
                 e.kbchar = 0x08;
+                break;
+            case TCA8418KeyboardBase::DELETE_WORD:
+                e.inputEvent = INPUT_BROKER_ANYKEY;
+                e.kbchar = INPUT_BROKER_MSG_DELETE_WORD;
                 break;
             case TCA8418KeyboardBase::SELECT:
                 e.inputEvent = INPUT_BROKER_SELECT;
@@ -693,9 +707,9 @@ int32_t KbI2cBase::runOnce()
             e.inputEvent = INPUT_BROKER_BACK;
             e.kbchar = 0;
             break;
-        case 0x89: // Del (long press)
+        case 0x89: // Del (long press): the editor deletes a word, anything else still sees Back
             e.inputEvent = INPUT_BROKER_BACK;
-            e.kbchar = 0;
+            e.kbchar = INPUT_BROKER_MSG_DELETE_WORD;
             break;
         case 0x88: // Invalid key value
             e.inputEvent = INPUT_BROKER_ANYKEY;
@@ -723,23 +737,33 @@ int32_t KbI2cBase::runOnce()
     default:
         LOG_WARN("Unknown kb_model 0x%02x", kb_model);
     }
-    // A running keyboard-light countdown ends on time, not at the next poll
-    const uint32_t lightDueMs = updateKeyboardLight();
+    // A running keyboard-light countdown ends on time, not at the next poll; a held key raises no interrupt, so its
+    // repeats need a wake of their own
+    const uint32_t dueMs = std::min({updateKeyboardLight(), TCAKeyboard->heldKeyDueMs(), q10Backspace.dueInMs()});
 #if defined(T_DECK_PRO)
     // KB_INT wakes the thread; keep draining while the chip still holds keys, otherwise only the fallback poll
     if (tcaRecheck)
         return 0;
     // Set here rather than returned: an edge during runOnce() sets 0 from the ISR, and a returned value would overwrite it
-    const uint32_t idle = std::min(TCA_FALLBACK_POLL_MS, lightDueMs);
+    const uint32_t idle = std::min(TCA_FALLBACK_POLL_MS, dueMs);
     setIntervalFromNow(idle);
     if (::digitalRead(KB_INT) == LOW)
         setIntervalFromNow(std::min<uint32_t>(idle, 20));
     return RUN_SAME;
 #elif defined(MESHTASTIC_INCLUDE_INKHUD)
-    return std::min<uint32_t>(100, lightDueMs); // CardKB hands out one key per read, so 300 ms makes typing crawl
+    return std::min<uint32_t>(100, dueMs); // CardKB hands out one key per read, so 300 ms makes typing crawl
 #else
-    return std::min<uint32_t>(300, lightDueMs);
+    return std::min<uint32_t>(300, dueMs);
 #endif
+}
+
+void KbI2cBase::notifyDeleteWord()
+{
+    InputEvent e = {};
+    e.inputEvent = INPUT_BROKER_ANYKEY;
+    e.kbchar = INPUT_BROKER_MSG_DELETE_WORD;
+    e.source = this->_originName;
+    this->notifyObservers(&e);
 }
 
 #if defined(T_DECK_PRO)

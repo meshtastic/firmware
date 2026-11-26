@@ -978,6 +978,17 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
         return true;
     }
 
+    // Delete the word before the cursor (a held Backspace); consumed even when empty, so a long hold can't close the editor
+    if (event->kbchar == INPUT_BROKER_MSG_DELETE_WORD) {
+        if (this->freetext.length() > 0) {
+            payload = INPUT_BROKER_MSG_DELETE_WORD;
+            lastTouchMillis = millis();
+            requestFocus();
+            runOnce();
+        }
+        return true;
+    }
+
     // Backspace
     if (event->inputEvent == INPUT_BROKER_BACK && this->freetext.length() > 0) {
         payload = 0x08;
@@ -1452,6 +1463,17 @@ int32_t CannedMessageModule::runOnce()
                 } else {
                 }
                 break;
+            case INPUT_BROKER_MSG_DELETE_WORD: {
+                // Back over any spaces, then over the word before them
+                unsigned int start = this->cursor;
+                while (start > 0 && this->freetext[start - 1] == ' ')
+                    start--;
+                while (start > 0 && this->freetext[start - 1] != ' ')
+                    start--;
+                this->freetext = this->freetext.substring(0, start) + this->freetext.substring(this->cursor);
+                this->cursor = start;
+                break;
+            }
             case INPUT_BROKER_MSG_TAB: // Tab key: handled by input handler
                 return 0;
             case INPUT_BROKER_LEFT:
