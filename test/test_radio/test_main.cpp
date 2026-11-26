@@ -928,9 +928,12 @@ static void test_scanFailure_sendsUnscannedOnlyAfterTheRunOutlivesARecovery()
 {
     using Action = RadioLibInterface::ScanFailAction;
     auto *radioIf = makeTestableRadioLibInterface();
-    const uint32_t start = 0xFFFF0000u; // the run straddles the 32-bit wrap
     const uint32_t after = RadioLibInterface::SCAN_FAIL_UNSCANNED_AFTER_MS;
     const uint32_t gap = RadioLibInterface::SCAN_FAIL_UNSCANNED_MIN_GAP_MS;
+    // Half the fallback delay before the 32-bit wrap: every check from start + after on reads a wrapped millis(),
+    // so a plain `start + after <= now` compare would fail here
+    const uint32_t start = UINT32_MAX - after / 2;
+    TEST_ASSERT_TRUE(start + after < start);
     TEST_ASSERT_TRUE(radioIf->noteScanFailedPublic(start) == Action::Recover);
     radioIf->noteScanRecoveryAttemptedPublic();
 
