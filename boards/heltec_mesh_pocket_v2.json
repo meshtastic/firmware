@@ -10,9 +10,10 @@
     "hwids": [
       ["0x239A", "0x4405"],
       ["0x239A", "0x0029"],
-      ["0x239A", "0x002A"]
+      ["0x239A", "0x002A"],
+      ["0x1915", "0x1667"]
     ],
-    "usb_product": "HT-n5262",
+    "usb_product": "pocket-v2",
     "mcu": "nrf52840",
     "variant": "heltec_mesh_pocket_v2",
     "variants_dir": "variants",
@@ -37,7 +38,7 @@
     "openocd_target": "nrf52840-mdk-rs"
   },
   "frameworks": ["arduino"],
-  "name": "Heltec nrf (Adafruit BSP)",
+  "name": "Heltec Mesh Pocket V2 (Adafruit BSP)",
   "upload": {
     "maximum_ram_size": 248832,
     "maximum_size": 815104,
@@ -48,6 +49,6 @@
     "require_upload_port": true,
     "wait_for_upload_port": true
   },
-  "url": "https://heltec.org/project/meshpocket/",
+  "url": "https://heltec.org",
   "vendor": "Heltec"
 }

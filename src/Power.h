@@ -133,6 +133,8 @@ class Power : public concurrency::OSThread
     bool meshSolarInit();
     /// Setup a serial battery sensor
     bool serialBatteryInit();
+    /// Setup a power-bank controller as the battery source
+    bool powerBankInit();
 #ifdef HAS_ADS1115
     /// Setup ADS1115 I2C battery level sensor
     bool ads1115Init();

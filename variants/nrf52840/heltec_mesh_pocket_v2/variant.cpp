@@ -19,6 +19,7 @@
 */
 
 #include "variant.h"
+#include "Arduino.h"
 #include "nrf.h"
 #include "wiring_constants.h"
 #include "wiring_digital.h"
@@ -66,4 +67,14 @@ void variant_shutdown()
     nrf_gpio_cfg_default(PIN_GPS_PPS);
     nrf_gpio_cfg_default(GPS_TX_PIN);
     nrf_gpio_cfg_default(GPS_RX_PIN);
+
+    Serial2.end();
+    nrf_gpio_cfg_default(PIN_SERIAL2_RX);
+    nrf_gpio_cfg_default(PIN_SERIAL2_TX);
+
+    // Wake from System OFF on the HLT331's next power event. Sense the level IO1 is not at now,
+    // so a line already held high does not wake the board straight back up.
+    pinMode(PIN_HLT331_IO1, INPUT_PULLDOWN);
+    const nrf_gpio_pin_sense_t sense = digitalRead(PIN_HLT331_IO1) ? NRF_GPIO_PIN_SENSE_LOW : NRF_GPIO_PIN_SENSE_HIGH;
+    nrf_gpio_cfg_sense_input(PIN_HLT331_IO1, NRF_GPIO_PIN_PULLDOWN, sense);
 }

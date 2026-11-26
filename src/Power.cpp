@@ -26,6 +26,7 @@
 #include "main.h"
 #include "memory/MemAudit.h"
 #include "meshUtils.h"
+#include "power/PowerBank.h"
 #include "power/PowerHAL.h"
 #include "power/SGM41562.h"
 #include "sleep.h"
@@ -995,6 +996,8 @@ bool Power::setup()
     } else if (ads1115Init()) {
         found = true;
 #endif
+    } else if (powerBankInit()) {
+        found = true;
     } else if (analogInit()) {
         found = true;
     } else {
@@ -2273,6 +2276,44 @@ bool Power::meshSolarInit()
  * AnalogBatteryLevel
  */
 bool Power::meshSolarInit()
+{
+    return false;
+}
+#endif
+
+#if HAS_POWERBANK
+/**
+ * Battery and input state from a power-bank controller.
+ */
+class PowerBankBatteryLevel : public HasBatteryLevel
+{
+  public:
+    PowerBank *bank = nullptr;
+
+    virtual int getBatteryPercent() override { return read() ? status.batteryPercent : -1; }
+    virtual uint16_t getBattVoltage() override { return read() ? status.batteryMv : 0; }
+    virtual bool isBatteryConnect() override { return read(); }
+    virtual bool isVbusIn() override { return read() && status.inputPresent; }
+    virtual bool isCharging() override { return read() && status.charging; }
+
+  private:
+    PowerBankStatus status;
+
+    bool read() { return bank && bank->getStatus(status); }
+};
+
+PowerBankBatteryLevel powerBankLevel;
+
+bool Power::powerBankInit()
+{
+    powerBankLevel.bank = powerBankSetup();
+    if (!powerBankLevel.bank)
+        return false;
+    batteryLevel = &powerBankLevel;
+    return true;
+}
+#else
+bool Power::powerBankInit()
 {
     return false;
 }

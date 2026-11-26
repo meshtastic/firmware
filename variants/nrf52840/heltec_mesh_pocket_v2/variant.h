@@ -52,7 +52,7 @@ extern "C" {
 #define TFT_BACKLIGHT_OFF LOW
 #define TFT_WIDTH 128
 #define TFT_HEIGHT 220
-#define SPI_FREQUENCY 8000000
+#define SPI_FREQUENCY 4000000
 #define SCREEN_ROTATE
 
 // Pins
@@ -65,31 +65,28 @@ extern "C" {
 // No status LED is fitted
 #define LED_STATE_ON 0
 
-// Buttons (both have external 10K pull-ups, active LOW)
+// Buttons (both have external 10K pull-ups, active LOW); primary and alternate as Heltec's firmware assigns them
 
-#define PIN_BUTTON1 (32 + 10) // S1 "USER_SW"
-#define PIN_BUTTON2 (32 + 11) // S2, silkscreened "RESET_SW" but wired to a GPIO, not nRESET
+#define PIN_BUTTON1 (32 + 11) // S2, silkscreened "RESET_SW" but wired to a GPIO, not nRESET
+#define PIN_BUTTON2 (32 + 10) // S1 "USER_SW"
 
-// Serial (P4 debug header)
-
-#define PIN_SERIAL2_RX (0 + 7)
-#define PIN_SERIAL2_TX (0 + 8)
-
-// I2C (P2 header to the power bank board: CW2015 fuel gauge)
+// I2C (P2 header to the power bank board: CW2217 fuel gauge)
 
 #define WIRE_INTERFACES_COUNT 1
 #define PIN_WIRE_SDA (0 + 13)
 #define PIN_WIRE_SCL (0 + 5)
 
-#define HAS_CW2015 1
-// #define CW2015_INT_PIN (0 + 12) // CW_INT - populated, not yet used in firmware
+// CW2217 fuel gauge at 0x64 is not supported yet; battery state comes from the HLT331 below.
+// #define PIN_CW_INT (0 + 12)
 
-// Power bank board (P1/P2 headers)
-// "9006" UART and GPIOs to the power bank controller - wired, not yet used in firmware
-// #define PIN_9006_RX (0 + 15)
-// #define PIN_9006_TX (0 + 26)
-// #define PIN_9006_IO1 (0 + 4)
-// #define PIN_9006_IO2 (32 + 9)
+// Power bank board (P1/P2 headers): the "9006" is an HLT331 power-bank controller. It streams status
+// frames on its UART (Serial2, receive only) and raises IO1 on power events.
+#define HAS_POWERBANK 1
+#define HAS_HLT331 1
+#define PIN_SERIAL2_RX (0 + 26)
+#define PIN_SERIAL2_TX (0 + 15)
+#define PIN_HLT331_IO1 (0 + 4)  // event pulse, active HIGH; wakes the board from System OFF
+#define PIN_HLT331_IO2 (32 + 9) // "system working", active HIGH; not used yet
 
 // IO_CSA switches VBUSC2 from the power bank board through to the nRF52840 VBUS pin; without it USB does not enumerate.
 #define PIN_USB_VBUS_EN (0 + 20)
@@ -137,9 +134,10 @@ extern "C" {
 #define PIN_SERIAL1_TX GPS_TX_PIN
 
 // Power / battery
-// No VBAT divider reaches the nRF52840 ADC; battery state comes from the CW2015 over I2C.
+// No VBAT divider reaches the nRF52840 ADC. NRF_APM is left undefined so that external power and
+// charging come from the HLT331, which sees both USB-C ports, rather than from the nRF's own VBUS.
 
-#define NRF_APM   // USB VBUS detection via nrfx_power_usbstatus_get()
+#define PERIPHERAL_WARMUP_MS 1000
 #define HAS_RTC 0 // No external RTC fitted
 
 #ifdef __cplusplus
