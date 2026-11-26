@@ -1,9 +1,12 @@
-// PhoneAPI's view of the event-channel position policy.
+// The event-channel position policy on phone-originated packets: position and waypoint
+// ToRadio packets sent through StreamAPI::handleToRadio() (src/mesh/PhoneAPI.cpp) and the
+// routing that follows.
 //
-// Why: the phone caches the config it reads; a policy read that disagrees with the router
-// makes clients write back the wrong channels.
-// Regression guarded: event-channel state leaking into the phone dump or the wrong channel
-// being reported.
+// Why: a phone on a public event channel must not broadcast coordinates there, and the
+// policy must not break the phone's own retries or packets addressed to itself.
+// Regression guarded: a refused event-channel position poisoning a same-id retry on another
+// channel, a position to self being blocked, coordinates staying on the event channel instead
+// of moving to the position channel, and packets already on that channel being rewritten.
 
 #include "Channels.h"
 #include "MeshModule.h"

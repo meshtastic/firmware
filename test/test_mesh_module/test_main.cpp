@@ -204,6 +204,28 @@ class ReplyIgnoreModule : public MeshModule
     }
 };
 
+// Counts its handleReceived() calls and returns a fixed result, to observe what dispatch does after it.
+class OutcomeModule : public MeshModule
+{
+  public:
+    OutcomeModule(const char *name, ProcessMessage result) : MeshModule(name, meshtastic_PortNum_PRIVATE_APP), result(result) {}
+
+    uint32_t handleReceivedCalls = 0;
+
+  protected:
+    bool wantPacket(const meshtastic_MeshPacket *p) override { return p->decoded.portnum == ourPortNum; }
+
+    ProcessMessage handleReceived(const meshtastic_MeshPacket &mp) override
+    {
+        (void)mp;
+        handleReceivedCalls++;
+        return result;
+    }
+
+  private:
+    ProcessMessage result;
+};
+
 // Sends, from inside callModules(), a self-addressed reply and a local broadcast - the fan-out an
 // AdminModule config save performs. Both go out through service->sendToMesh() while a
 // handleReceived() frame is live, so both must be deferred rather than handled re-entrantly.
@@ -588,6 +610,34 @@ static void test_dispatch_foreignPortObserverCanSuppressNak()
     TEST_ASSERT_EQUAL_UINT32(0, observer->allocReplyCalls);
     TEST_ASSERT_EQUAL_UINT32(0, mockRouter->sentPackets.size());
     TEST_ASSERT_EQUAL_UINT32(0, mockRoutingModule->ackNaks.size());
+}
+
+// Modules run in registration order, so the recorder comes after the first module and wants the same packet.
+static void test_dispatch_stopSkipsLaterModules()
+{
+    auto *stopper = registerDispatchModule(new OutcomeModule("stopper", ProcessMessage::STOP));
+    auto *recorder = registerDispatchModule(new OutcomeModule("recorder", ProcessMessage::CONTINUE));
+
+    meshtastic_MeshPacket request = makeRequest(meshtastic_PortNum_PRIVATE_APP);
+    request.decoded.want_response = false;
+    MeshModule::callModules(request);
+
+    TEST_ASSERT_EQUAL_UINT32(1, stopper->handleReceivedCalls);
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, recorder->handleReceivedCalls, "a STOP result must end dispatch");
+}
+
+// Control for the STOP case: the same recorder, behind a CONTINUE module, is reached.
+static void test_dispatch_continueReachesLaterModules()
+{
+    auto *first = registerDispatchModule(new OutcomeModule("continuer", ProcessMessage::CONTINUE));
+    auto *recorder = registerDispatchModule(new OutcomeModule("recorder", ProcessMessage::CONTINUE));
+
+    meshtastic_MeshPacket request = makeRequest(meshtastic_PortNum_PRIVATE_APP);
+    request.decoded.want_response = false;
+    MeshModule::callModules(request);
+
+    TEST_ASSERT_EQUAL_UINT32(1, first->handleReceivedCalls);
+    TEST_ASSERT_EQUAL_UINT32(1, recorder->handleReceivedCalls);
 }
 
 static void test_dispatch_noResponderSendsNak()
@@ -1234,6 +1284,8 @@ void setup()
     RUN_TEST(test_dispatch_ownerPortStillReplies);
     RUN_TEST(test_dispatch_crossPortReplyUsesRequestOwner);
     RUN_TEST(test_dispatch_foreignPortObserverCanSuppressNak);
+    RUN_TEST(test_dispatch_stopSkipsLaterModules);
+    RUN_TEST(test_dispatch_continueReachesLaterModules);
     RUN_TEST(test_dispatch_noResponderSendsNak);
     RUN_TEST(test_dispatch_refusalWithoutWantResponse_sendsNak);
     RUN_TEST(test_dispatch_refusalWithoutWantAck_isDiscarded);

@@ -1,7 +1,9 @@
-// NMEA WPL (waypoint) sentence parsing.
+// NMEA sentence generation: printWPL() and printGGA() in src/gps/NMEAWPL.cpp.
 //
-// Why: a malformed sentence must not produce a waypoint at a bogus coordinate.
-// Regression guarded: a short or malformed WPL accepted, or a valid one rejected.
+// Why: serial and CalTopo consumers drop a sentence whose checksum is wrong, and a write past
+// the caller's buffer corrupts memory.
+// Regression guarded: a checksum that counts the leading CRLF or is computed wrong, and output
+// that overruns a zero-sized or truncated buffer.
 
 #include "GeoCoord.h"
 #include "NMEAWPL.h"

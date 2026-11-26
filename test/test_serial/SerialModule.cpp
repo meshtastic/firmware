@@ -1,9 +1,8 @@
-// SerialModule configuration validation.
+// SerialModule configuration validation: serialConfigIsValid() in src/modules/SerialModule.cpp.
 //
-// Why: an invalid serial config can take the console UART or a radio pin and make the node
-// unreachable.
-// Regression guarded: an override console mode accepted on a write-capable mode, or a radio
-// pin accepted for an enabled module.
+// Why: an invalid serial config can take over the console UART and make the node unreachable.
+// Regression guarded: override_console_serial_port accepted with a mode that writes to the
+// port (DEFAULT, SIMPLE, TEXTMSG, PROTO), or rejected with a mode that is allowed there.
 
 #include "DebugConfiguration.h"
 #include "TestUtil.h"

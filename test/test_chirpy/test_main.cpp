@@ -38,7 +38,8 @@ void test_jump_liftsChirpy()
 void test_jump_ignoredWhileAirborne()
 {
     // A second jump mid-air must not re-launch. Step an identical control game that never presses
-    // jump again: if the mid-air press were honoured, the two arcs would part on the next step.
+    // jump again and compare every step until it lands: a single step can hide the re-launch, as
+    // chirpyY() rounds sub-pixels away, but the arcs must part before the control touches down.
     ChirpyRunnerGame game;
     ChirpyRunnerGame control;
     game.reset(kSeed);
@@ -50,9 +51,13 @@ void test_jump_ignoredWhileAirborne()
     TEST_ASSERT_FALSE(game.onGround());
 
     game.jump();
-    game.step();
-    control.step();
-    TEST_ASSERT_EQUAL_INT16(control.chirpyY(), game.chirpyY());
+    for (int steps = 0; steps < 200 && !control.onGround(); steps++) {
+        game.step();
+        control.step();
+        TEST_ASSERT_EQUAL_INT16(control.chirpyY(), game.chirpyY());
+        TEST_ASSERT_EQUAL(control.onGround(), game.onGround());
+    }
+    TEST_ASSERT_TRUE_MESSAGE(control.onGround(), "the control arc never landed");
 }
 
 void test_obstacleSpawnsAndCollisionEndsGame()

@@ -67,13 +67,17 @@ void test_historyAdd_full_ring_overwrites_from_the_start(void)
     StoreForwardModule module;
     TEST_ASSERT_TRUE(module.isServer());
 
-    for (PacketId id = 1; id <= 5; id++) {
+    for (PacketId id = 1; id <= 4; id++) {
         auto p = makeText(OTHER, PEER, id);
         module.historyAdd(p);
     }
+    // A different destination, so a count that resets without the write still shows slot 0's stale PEER packet.
+    auto fifth = makeText(PEER, OTHER, 5);
+    module.historyAdd(fifth);
 
-    // records=4: the fifth insert resets the write index and leaves one entry.
-    TEST_ASSERT_EQUAL_UINT32(1, module.getNumAvailablePackets(PEER, 0));
+    // records=4: the fifth insert resets the write index, overwrites slot 0, and leaves one entry.
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, module.getNumAvailablePackets(PEER, 0), "slot 0 kept the overwritten packet");
+    TEST_ASSERT_EQUAL_UINT32(1, module.getNumAvailablePackets(OTHER, 0));
 }
 
 void setup()
