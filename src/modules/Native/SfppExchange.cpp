@@ -713,8 +713,6 @@ void StoreForwardPlusPlusModule::fallbackToEnumList()
 {
     enumSketchAttempt = false;
     enumSketchIds = 0;
-    enumWanted.clear();
-    enumWantedRemaining = 0;
     enumProvideActive = false;
     enumCollisionProbe = false;
     enumListRetries = 0;
@@ -863,20 +861,81 @@ void StoreForwardPlusPlusModule::handleEnumProvide(const meshtastic_MeshPacket &
     requestMissingItems(root, enumProvideBucket, enumProvidePeer, enumProvideIds);
 }
 
+bool StoreForwardPlusPlusModule::bucketHoldsShortId(const uint8_t *root_hash, uint32_t bucket, pinsketch::Element id)
+{
+    sqlite3_reset(getLinkByShortIdStmt);
+    sqlite3_bind_int(getLinkByShortIdStmt, 1, SFPP_HASH_SIZE);
+    sqlite3_bind_blob(getLinkByShortIdStmt, 2, root_hash, SFPP_HASH_SIZE, SQLITE_STATIC);
+    sqlite3_bind_int(getLinkByShortIdStmt, 3, (int)bucket);
+    sqlite3_bind_int64(getLinkByShortIdStmt, 4, (sqlite3_int64)id);
+    const bool held = sqlite3_step(getLinkByShortIdStmt) == SQLITE_ROW;
+    sqlite3_reset(getLinkByShortIdStmt);
+    return held;
+}
+
+bool StoreForwardPlusPlusModule::itemInFlight(const uint8_t *root_hash, uint32_t bucket, pinsketch::Element id)
+{
+    const uint32_t now = Time::getMillis();
+    for (const auto &entry : enumInFlight) {
+        if (entry.id == id && entry.bucket == bucket && entry.expiresMs > now &&
+            memcmp(entry.root, root_hash, SFPP_HASH_SIZE) == 0)
+            return true;
+    }
+    return false;
+}
+
+void StoreForwardPlusPlusModule::noteItemInFlight(const uint8_t *root_hash, uint32_t bucket, pinsketch::Element id)
+{
+    const uint32_t now = Time::getMillis();
+    enumInFlight.erase(std::remove_if(enumInFlight.begin(), enumInFlight.end(),
+                                      [&](const EnumInFlight &entry) { return entry.expiresMs <= now; }),
+                       enumInFlight.end());
+    enumInFlight.push_back({id, {}, bucket, now + itemRetryIntervalMs()});
+    memcpy(enumInFlight.back().root, root_hash, SFPP_HASH_SIZE);
+    while (enumInFlight.size() > 256)
+        enumInFlight.pop_front();
+}
+
+void StoreForwardPlusPlusModule::forgetItemInFlight(pinsketch::Element id)
+{
+    enumInFlight.erase(
+        std::remove_if(enumInFlight.begin(), enumInFlight.end(), [&](const EnumInFlight &entry) { return entry.id == id; }),
+        enumInFlight.end());
+}
+
 void StoreForwardPlusPlusModule::requestMissingItems(const uint8_t *root_hash, uint32_t bucket, NodeNum peer,
                                                      const std::vector<pinsketch::Element> &ids)
 {
     if (ids.empty() || ids.size() > sfppsr::kMaxShortIds)
         return;
 
+    std::vector<pinsketch::Element> fresh;
+    if (enumCollisionProbe) {
+        fresh = ids; // a probe deliberately asks for every object a short ID names
+    } else {
+        for (pinsketch::Element id : ids) {
+            if (itemInFlight(root_hash, bucket, id) || std::find(enumWanted.begin(), enumWanted.end(), id) != enumWanted.end() ||
+                std::find(enumLateWanted.begin(), enumLateWanted.end(), id) != enumLateWanted.end() ||
+                bucketHoldsShortId(root_hash, bucket, id))
+                continue;
+            fresh.push_back(id);
+        }
+    }
+    if (fresh.empty())
+        return;
+
     sfppsr::Scope scope;
     copyScopeRoot(root_hash, SFPP_HASH_SIZE, scope, bucket, false);
     meshtastic_StoreForwardPlusPlus msg;
-    if (!sfppsr::buildItemRequest(scope, ids, msg))
+    if (!sfppsr::buildItemRequest(scope, fresh, msg))
         return;
 
-    enumWanted = ids;
-    enumWantedRemaining = ids.size();
+    for (pinsketch::Element id : fresh) {
+        if (std::find(enumWanted.begin(), enumWanted.end(), id) == enumWanted.end())
+            enumWanted.push_back(id);
+        noteItemInFlight(root_hash, bucket, id);
+    }
+    enumWantedRemaining = enumWanted.size();
     enumAwaitingList = false;
     enumItemRetries = 0;
     enumRequestSentMs = Time::getMillis();
@@ -1270,6 +1329,7 @@ void StoreForwardPlusPlusModule::handleItemFrame(const meshtastic_MeshPacket &mp
             const bool isNew = !isInDB(hash, sizeof(hash));
             if (!storeRecoveredObject(replay, enumExchangeRoot, enumExchangeBucket))
                 return;
+            forgetItemInFlight(shortId);
             enumLastItemMs = Time::getMillis();
             if (isNew)
                 enumRecovered++;
@@ -1319,6 +1379,7 @@ void StoreForwardPlusPlusModule::handleItemFrame(const meshtastic_MeshPacket &mp
         auto it = std::find(enumLateWanted.begin(), enumLateWanted.end(), shortId);
         if (it != enumLateWanted.end()) {
             storeRecoveredObject(replay, enumLateRoot, enumLateBucket);
+            forgetItemInFlight(shortId);
             enumLateWanted.erase(it);
             if (enumLateWanted.empty())
                 enumLateActive = false;
@@ -1338,6 +1399,7 @@ void StoreForwardPlusPlusModule::handleItemFrame(const meshtastic_MeshPacket &mp
         return;
     if (!storeRecoveredObject(replay, root, hint))
         return;
+    forgetItemInFlight(shortId);
 
     // Item 7: suppress our own pending request for an object we just overheard.
     enumWanted.erase(std::remove(enumWanted.begin(), enumWanted.end(), shortId), enumWanted.end());

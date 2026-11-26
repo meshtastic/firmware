@@ -230,6 +230,10 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     void handleItemFrame(const meshtastic_MeshPacket &mp, meshtastic_StoreForwardPlusPlus *t);
     void requestEnumList(const uint8_t *root_hash, uint32_t bucket, NodeNum peer);
     void requestMissingItems(const uint8_t *root_hash, uint32_t bucket, NodeNum peer, const std::vector<pinsketch::Element> &ids);
+    bool bucketHoldsShortId(const uint8_t *root_hash, uint32_t bucket, pinsketch::Element id);
+    bool itemInFlight(const uint8_t *root_hash, uint32_t bucket, pinsketch::Element id);
+    void noteItemInFlight(const uint8_t *root_hash, uint32_t bucket, pinsketch::Element id);
+    void forgetItemInFlight(pinsketch::Element id);
     bool storeRecoveredObject(const sfppframe::Replay &replay, const uint8_t *root_hash, uint32_t bucket);
 
     // Item frames are queued per requester and drained from runOnce() round-robin, so a 32-object
@@ -393,6 +397,13 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
 
     std::vector<pinsketch::Element> enumWanted;
     size_t enumWantedRemaining = 0;
+    struct EnumInFlight {
+        pinsketch::Element id;
+        uint8_t root[SFPP_HASH_SIZE];
+        uint32_t bucket;
+        uint32_t expiresMs;
+    };
+    std::deque<EnumInFlight> enumInFlight;
 
     // The peer summary this exchange is trying to reach, and the short-ID-collision probe state.
     uint32_t enumPeerCount = 0;

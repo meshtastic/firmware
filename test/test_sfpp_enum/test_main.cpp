@@ -2453,6 +2453,43 @@ void test_windowBudgetCapsServedFrames()
     TEST_ASSERT_GREATER_THAN_UINT32(0, resumed);
 }
 
+// A second listing naming the same missing IDs does not request them again while in flight.
+void test_item_in_flight_is_not_requested_twice()
+{
+    ingestAuthority(4);
+    buildFollowerFromCopy();
+    TEST_ASSERT_TRUE(deleteCounterRange(dirB, 1, 4));
+
+    meshtastic_MeshPacket advert;
+    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, 0, false, advert, false, 4));
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
+    myNodeInfo.my_node_num = FOLLOWER_NODE;
+    portduino_config.sfpp_stratum0 = false;
+    follower->runOnce();
+    std::vector<meshtastic_MeshPacket> request = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, request.size());
+    TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_REQUEST, decodeSfpp(request[0]).sfpp_message_type);
+
+    TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, true, request[0]));
+    std::vector<meshtastic_MeshPacket> provide = drainAuthorityOne(2000);
+    TEST_ASSERT_EQUAL_UINT(1, provide.size());
+    TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_PROVIDE, decodeSfpp(provide[0]).sfpp_message_type);
+
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, provide[0]));
+    uint32_t asked = 0;
+    for (const auto &out : takeSent())
+        if (decodeSfpp(out).sfpp_message_type == meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_REQUEST)
+            asked++;
+    TEST_ASSERT_EQUAL_UINT32(1, asked);
+
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, provide[0]));
+    asked = 0;
+    for (const auto &out : takeSent())
+        if (decodeSfpp(out).sfpp_message_type == meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_REQUEST)
+            asked++;
+    TEST_ASSERT_EQUAL_UINT32(0, asked);
+}
+
 // G11/F3.8: a single requester gets a per-peer window budget, not the whole global pacer.
 void test_fourRequestersShareTheServingWindow()
 {
@@ -3003,6 +3040,7 @@ void setup()
     RUN_TEST(test_rotationServesChangedBucketFirst);
     RUN_TEST(test_onDemandPullsNewestBucketAndCapsPacing);
     RUN_TEST(test_secondAdvertInsideDrainIntervalSendsNoRequest);
+    RUN_TEST(test_item_in_flight_is_not_requested_twice);
     RUN_TEST(test_windowBudgetCapsServedFrames);
     RUN_TEST(test_lostProvideFrameEndsAtIdle);
     RUN_TEST(test_fourRequestersShareTheServingWindow);
