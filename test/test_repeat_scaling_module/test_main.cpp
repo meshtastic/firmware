@@ -69,7 +69,8 @@ static constexpr uint32_t kRing = RepeatScalingModule::DUPE_COUNT_TRACKER_SIZE;
 static RepeatScalingModulePlainShim *plainShim = nullptr;
 
 // Scoped helpers that install a global airTime/hopScalingModule reporting a busy condition for the
-// enclosing scope, restoring the previous pointer on destruction (mirrors ScopedBusyAirTime).
+// enclosing scope, restoring the previous pointer on destruction (mirrors ScopedBusyAirTime). A failed
+// assertion longjmps past that destructor, so setUp() also reinstates the suite's original pointers.
 class ScopedChannelUtil
 {
   public:
@@ -121,8 +122,17 @@ static meshtastic_MeshPacket makeDupePacket(NodeNum from, PacketId id)
     return p;
 }
 
+static AirTime *suiteAirTime = nullptr;
+#if HAS_VARIABLE_HOPS
+static HopScalingModule *suiteHopScalingModule = nullptr;
+#endif
+
 void setUp(void)
 {
+    airTime = suiteAirTime;
+#if HAS_VARIABLE_HOPS
+    hopScalingModule = suiteHopScalingModule;
+#endif
     shim->testThreshold = 1;
     // Clear any tracking state a previous test may have left behind for our fixed test keys.
     shim->clearDupeCount(kSender1, kId1);
@@ -703,6 +713,10 @@ void setup()
     initializeTestEnvironment();
     UNITY_BEGIN();
 
+    suiteAirTime = airTime;
+#if HAS_VARIABLE_HOPS
+    suiteHopScalingModule = hopScalingModule;
+#endif
     shim = new RepeatScalingModuleTestShim();
     plainShim = new RepeatScalingModulePlainShim();
 

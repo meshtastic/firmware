@@ -159,10 +159,12 @@ void test_perhapsCancelDupe_skips_repeatScalingModule_when_nothing_is_queued(voi
 void test_findInTxQueue_without_a_radio_is_false(void)
 {
     shim->addInterface(nullptr); // frees the stub radio
-    TEST_ASSERT_FALSE(shim->findInTxQueue(kSender1, kId1));
+    const bool found = shim->findInTxQueue(kSender1, kId1);
 
+    // Rebuild before asserting: a failed assert longjmps out and setUp() would write through the freed radio
     radio = new QueueStubRadio();
     shim->addInterface(std::unique_ptr<RadioInterface>(radio));
+    TEST_ASSERT_FALSE(found);
 }
 
 void setup()
