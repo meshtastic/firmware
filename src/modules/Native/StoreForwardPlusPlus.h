@@ -257,7 +257,6 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     void resendItemRequest();
     bool anyEnumQueuePending() const;
     void beginEnumLateAccept();
-    void markEnumProgress();
     void addPendingBucket(const uint8_t *root_hash, NodeNum authority, uint32_t bucket, uint32_t count, uint64_t checksum,
                           uint32_t tip);
     void startPendingPull();
@@ -406,9 +405,7 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     uint32_t enumLastDrainMs = 0;
     std::deque<uint32_t> serveWindowSends; // rolling 10 min of served-frame timestamps
 
-    bool enumOnDemand = false;
     uint32_t enumPeerTip = 0;
-    uint32_t enumKnownTip = 0;
     struct EnumPendingBucket {
         uint32_t bucket;
         uint32_t count;
@@ -419,7 +416,6 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
         uint32_t retryAfterMs = 0;
         uint32_t firstFailedMs = 0;
         uint8_t attempts = 0;
-        bool onDemand = false;
     };
     std::vector<EnumPendingBucket> enumPending;
     struct EnumPromoted {
