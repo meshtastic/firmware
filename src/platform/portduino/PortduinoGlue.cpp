@@ -1209,6 +1209,9 @@ bool loadConfig(const char *configPath)
             portduino_config.lora_usb_pid = yamlConfig["Lora"]["USB_PID"].as<int>(0x5512);
             portduino_config.lora_usb_vid = yamlConfig["Lora"]["USB_VID"].as<int>(0x1A86);
 
+            // Each Lora section starts from the default host: ch341 and transparent radios assign none,
+            // so an earlier file's -1 would otherwise make --check flag a display that does not share the radio
+            portduino_config.lora_spi_dev_int = 0;
             portduino_config.lora_spi_dev = yamlConfig["Lora"]["spidev"].as<std::string>("spidev0.0");
             if (portduino_config.lora_module == use_transparent) {
                 portduino_config.lora_spi_dev = ""; // the radio is on the other node, so leave the SPI bus alone

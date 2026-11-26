@@ -244,6 +244,26 @@ void test_unpackable_radio_path_is_not_left_on_host_zero()
     std::filesystem::remove(path, ec);
 }
 
+// A ch341 radio assigns no SPI host, so a later file selecting it must not inherit the earlier file's -1,
+// which would make --check report that a display without its own spidev cannot share the radio.
+void test_ch341_radio_in_a_later_file_drops_an_earlier_unpackable_host()
+{
+    const std::string first = writeConfig("meshtastic-spi-ch341-a.yaml", "Lora:\n"
+                                                                         "  Module: sim\n"
+                                                                         "  spidev: spidev10.0\n");
+    const std::string second = writeConfig("meshtastic-spi-ch341-b.yaml", "Lora:\n"
+                                                                          "  Module: sim\n"
+                                                                          "  spidev: ch341\n");
+    TEST_ASSERT_TRUE(loadConfig(first.c_str()));
+    TEST_ASSERT_EQUAL_INT(-1, portduino_config.lora_spi_dev_int);
+    TEST_ASSERT_TRUE(loadConfig(second.c_str()));
+    TEST_ASSERT_EQUAL_INT(0, portduino_config.lora_spi_dev_int);
+    TEST_ASSERT_EQUAL_STRING("ch341", portduino_config.lora_spi_dev.c_str());
+    std::error_code ec;
+    std::filesystem::remove(first, ec);
+    std::filesystem::remove(second, ec);
+}
+
 void test_clearing_touchscreen_spidev_returns_to_the_display_host()
 {
     const std::string first = writeConfig("meshtastic-spi-touch-a.yaml", "Lora:\n"
@@ -313,6 +333,7 @@ void setup()
     RUN_TEST(test_borrow_lends_the_registry_instance);
     RUN_TEST(test_borrow_leaves_negative_hosts_to_lovyangfx);
     RUN_TEST(test_unpackable_radio_path_is_not_left_on_host_zero);
+    RUN_TEST(test_ch341_radio_in_a_later_file_drops_an_earlier_unpackable_host);
     RUN_TEST(test_clearing_touchscreen_spidev_returns_to_the_display_host);
     RUN_TEST(test_clearing_display_spidev_returns_to_the_radio_host);
     const int failures = UNITY_END();
