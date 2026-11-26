@@ -133,12 +133,7 @@ static uint32_t targetFramerate = IDLE_FRAMERATE;
 static inline void prepareFrameColorRegions()
 {
 #if GRAPHICS_TFT_COLORING_ENABLED
-    clearTFTColorRegions();
-    // Full-frame FrameMono inversion for themes that need it (e.g. light themes).
-    if (isThemeFullFrameInvert()) {
-        setAndRegisterTFTColorRole(TFTColorRole::FrameMono, getThemeBodyFg(), getThemeBodyBg(), 0, 0, screen->getWidth(),
-                                   screen->getHeight());
-    }
+    resetTFTColorRegions(screen->getWidth(), screen->getHeight());
 #endif
 }
 #endif
