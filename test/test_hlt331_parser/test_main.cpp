@@ -95,6 +95,7 @@ void test_valid_frame_decodes_every_field(void)
     TEST_ASSERT_EQUAL_UINT32(5000, s.wirelessMw);
     TEST_ASSERT_EQUAL_INT8(45, s.ntc2TempC);
     TEST_ASSERT_EQUAL_UINT32(1, parser.goodFrames());
+    TEST_ASSERT_EQUAL_HEX8_ARRAY(kData, parser.lastFrame(), HLT331Parser::DATA_LENGTH);
 }
 
 // The charge level has 7 bits; anything past 100 is clamped rather than reported as more than full.
@@ -127,6 +128,7 @@ void test_bad_crc_is_rejected_and_keeps_the_last_status(void)
     TEST_ASSERT_EQUAL(0, feedAll(parser, bad, sizeof(bad)));
     TEST_ASSERT_EQUAL_UINT16(3994, parser.status().batteryMv);
     TEST_ASSERT_EQUAL_UINT32(1, parser.badCrcFrames());
+    TEST_ASSERT_EQUAL_HEX8_ARRAY(kData, parser.lastFrame(), HLT331Parser::DATA_LENGTH);
     TEST_ASSERT_EQUAL_UINT32(1, parser.goodFrames());
 }
 

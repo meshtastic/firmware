@@ -74,6 +74,7 @@ void variant_shutdown()
 
     // Wake from System OFF on the HLT331's next power event. Sense the level IO1 is not at now,
     // so a line already held high does not wake the board straight back up.
+    detachInterrupt(PIN_HLT331_IO1);
     pinMode(PIN_HLT331_IO1, INPUT_PULLDOWN);
     const nrf_gpio_pin_sense_t sense = digitalRead(PIN_HLT331_IO1) ? NRF_GPIO_PIN_SENSE_LOW : NRF_GPIO_PIN_SENSE_HIGH;
     nrf_gpio_cfg_sense_input(PIN_HLT331_IO1, NRF_GPIO_PIN_PULLDOWN, sense);
