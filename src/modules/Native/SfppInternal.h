@@ -3,6 +3,23 @@
 #if __has_include("sqlite3.h")
 
 #include "StoreForwardPlusPlus.h"
+#include "UptimeClock.h"
+
+#include <time.h>
+
+// G19 ages rows by uptime, and Linux millis() follows the wall clock (an NTP step moved it by years on the bench),
+// so SF++ reads the monotonic clock; a unit test's clock still wins.
+static inline uint32_t sfppUptimeSecs()
+{
+#ifdef PIO_UNIT_TESTING
+    if (Time::useTestClock.load(std::memory_order_relaxed))
+        return Time::getUptimeSecs();
+#endif
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    static const time_t start = ts.tv_sec;
+    return (uint32_t)(ts.tv_sec - start);
+}
 
 // One enumeration exchange is retried by the next advert tick; this is how long it may stay in flight.
 static constexpr uint32_t kEnumExchangeTimeoutMs = 15 * 60 * 1000;

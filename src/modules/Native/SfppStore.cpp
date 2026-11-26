@@ -40,7 +40,7 @@ void StoreForwardPlusPlusModule::initTimeState()
     if (bootId == 0)
         bootId = 1;
     bootEpoch = getValidTime(RTCQualityNTP, true);
-    lastSeenUptime = Time::getUptimeSecs();
+    lastSeenUptime = sfppUptimeSecs();
     lastSeenEpoch = bootEpoch;
     writeTimeState();
 }
@@ -58,7 +58,7 @@ void StoreForwardPlusPlusModule::writeTimeState()
 
 void StoreForwardPlusPlusModule::updateTimeState()
 {
-    const uint32_t nowUptime = Time::getUptimeSecs();
+    const uint32_t nowUptime = sfppUptimeSecs();
     const uint32_t nowEpoch = getValidTime(RTCQualityNTP, true);
     if (nowEpoch) {
         lastSeenEpoch = nowEpoch;
@@ -79,7 +79,7 @@ uint32_t StoreForwardPlusPlusModule::estimateEpochNow() const
     const uint32_t rough = getValidTime(RTCQualityDevice, true);
     if (rough)
         return rough;
-    const uint32_t nowUptime = Time::getUptimeSecs();
+    const uint32_t nowUptime = sfppUptimeSecs();
     if (bootEpoch > 0)
         return bootEpoch + nowUptime;
     if (lastSeenEpoch > 0)
@@ -96,7 +96,7 @@ StoreForwardPlusPlusModule::RowTime StoreForwardPlusPlusModule::nowTime() const
         t.stamp = nowEpoch;
     } else {
         t.basis = kTimeBasisUptime;
-        t.stamp = Time::getUptimeSecs();
+        t.stamp = sfppUptimeSecs();
         t.boot_id = bootId;
     }
     return t;
@@ -116,7 +116,7 @@ StoreForwardPlusPlusModule::RowAge StoreForwardPlusPlusModule::rowAge(const RowT
 {
     RowAge a;
     a.margin = kTimeMarginS + t.margin;
-    const uint32_t nowUptime = Time::getUptimeSecs();
+    const uint32_t nowUptime = sfppUptimeSecs();
 
     if (t.basis == kTimeBasisEpoch) {
         a.has_epoch = true;
@@ -168,7 +168,7 @@ StoreForwardPlusPlusModule::RowAge StoreForwardPlusPlusModule::rowAge(const RowT
 // boot (uptime did not go backwards) keeps its stamps as they are.
 void StoreForwardPlusPlusModule::restampPreviousBoot()
 {
-    const uint32_t nowUptime = Time::getUptimeSecs();
+    const uint32_t nowUptime = sfppUptimeSecs();
     const bool continuousBoot = prevLastUptime > 0 && nowUptime >= prevLastUptime;
     const bool downKnown = bootEpoch > 0 && prevLastEpoch > 0 && bootEpoch >= prevLastEpoch;
     const uint32_t down = downKnown ? bootEpoch - prevLastEpoch : 0;
