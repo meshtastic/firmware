@@ -794,6 +794,12 @@ void RadioLibInterface::clampToLateRebroadcastWindow(NodeNum from, PacketId id)
     // Look for non-late packets only, so we don't do this twice!
     meshtastic_MeshPacket *p = txQueue.remove(from, id, true, false);
     if (p) {
+        if (shouldRebroadcastEarlyLikeRouter(p)) {
+            // Keep the early slot, a late relay would defeat its purpose
+            if (!txQueue.enqueue(p))
+                packetPool.release(p);
+            return;
+        }
         p->tx_after = Time::timerEndsAtMillis(getTxDelayMsecWeightedWorst(p->rx_snr));
         bool dropped = false;
         if (txQueue.enqueue(p, &dropped)) {

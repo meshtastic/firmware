@@ -908,6 +908,15 @@ bool RadioInterface::shouldRebroadcastEarlyLikeRouter(meshtastic_MeshPacket *p)
         return true;
     }
 
+    // CLIENT_BASE always relays its favorites' packets, so relaying one heard directly early costs no extra airtime.
+    // A favorite that hears only the base needs that relay as its implicit ACK before its retransmissions run out.
+    // Ask the packet history, not the queued copy: our copy's hops no longer show how the packet reached us
+    // (a favorite router's relay keeps its hop_limit, event mode caps hop_start).
+    if (config.device.role == meshtastic_Config_DeviceConfig_Role_CLIENT_BASE && nodeDB && router &&
+        nodeDB->isFavorite(p->from) && router->wasHeardFromSender(p->id, p->from)) {
+        return true;
+    }
+
     return false;
 }
 
