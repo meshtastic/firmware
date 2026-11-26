@@ -22,7 +22,7 @@
 #include <utility>
 #include <vector>
 
-// D11's one-pacer budget, shared by every serving path: 30 frames in any rolling 10 min.
+// One-pacer budget, shared by every serving path: 30 frames in any rolling 10 min.
 static constexpr uint32_t kServeWindowMs = 10 * 60 * 1000;
 static constexpr uint8_t kServeWindowFrames = 30;
 
@@ -151,7 +151,7 @@ void StoreForwardPlusPlusModule::queueEnumFrames(const std::vector<meshtastic_St
 
 bool StoreForwardPlusPlusModule::drainOneEnumFrame()
 {
-    // F3.7/N11: a requester's TTL is refreshed only by its own traffic, never by the drain. Drop
+    // A requester's TTL is refreshed only by its own traffic, never by the drain. Drop
     // its queue once it goes quiet.
     for (auto it = enumTxQueues.begin(); it != enumTxQueues.end();) {
         if (it->queue.empty() || Throttle::hasElapsed(it->lastUsedMs, kEnumRequesterTtlMs))
@@ -162,7 +162,7 @@ bool StoreForwardPlusPlusModule::drainOneEnumFrame()
     if (!anyEnumQueuePending())
         return false;
 
-    // One last-send timestamp across all requesters (N7); do not reset it on enqueue.
+    // One last-send timestamp across all requesters; do not reset it on enqueue.
     if (enumLastDrainMs != 0 && !Throttle::hasElapsed(enumLastDrainMs, enumDrainIntervalMs()))
         return true;
     if (!consumeServeBudget())

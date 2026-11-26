@@ -615,7 +615,7 @@ bool buildAdvertFromDir(const std::string &dir, uint32_t bucket, bool corruptChe
         return false;
     if (corruptChecksum)
         msg.sr_checksum ^= 1;
-    msg.encapsulated_rxtime = tip ? tip : summary.count(); // Q2e R3: the bucket's content count, as the module sends
+    msg.encapsulated_rxtime = tip ? tip : summary.count(); // the bucket's content count, as the module sends
 
     out = meshtastic_MeshPacket_init_zero;
     out.from = AUTHORITY_NODE;
@@ -828,7 +828,7 @@ Exchange runExchangeFor(TestSfppModule *requester, NodeNum node)
     result.enumRequests = (uint32_t)result.followerSends.size();
 
     TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, result.followerSends[0]));
-    std::vector<meshtastic_MeshPacket> provides = drainAuthorityOne(2000); // N6: the provide is queued too
+    std::vector<meshtastic_MeshPacket> provides = drainAuthorityOne(2000); // the provide is queued too
     TEST_ASSERT_EQUAL_UINT(1, provides.size());
     TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_PROVIDE, decodeSfpp(provides[0]).sfpp_message_type);
 
@@ -889,7 +889,7 @@ void driveToItemRequest(TestSfppModule *requester, NodeNum requesterNode)
     TEST_ASSERT_EQUAL_UINT(1, requests.size());
     TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, requests[0]));
 
-    std::vector<meshtastic_MeshPacket> provides = drainAuthorityOne(2000); // N6: the provide is queued
+    std::vector<meshtastic_MeshPacket> provides = drainAuthorityOne(2000); // the provide is queued
     TEST_ASSERT_EQUAL_UINT(1, provides.size());
     TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_PROVIDE, decodeSfpp(provides[0]).sfpp_message_type);
     TEST_ASSERT_TRUE(deliver(requester, requesterNode, provides[0]));
@@ -1240,9 +1240,9 @@ void test_unknownShortIdRequestServesNothing()
     TEST_ASSERT_EQUAL_UINT(0, takeSent().size());
 }
 
-// --- Stage 8a robustness ---
+// --- advert and drain robustness ---
 
-// G14: the advert carries only the 4-byte root prefix.
+// The advert carries only the 4-byte root prefix.
 void test_advertUsesFourByteRootPrefix()
 {
     ingestAuthority(4);
@@ -1252,8 +1252,8 @@ void test_advertUsesFourByteRootPrefix()
     TEST_ASSERT_EQUAL_UINT(4, decodeSfpp(advert).root_hash.size);
 }
 
-// G21: a queued frame goes on the next drain tick without waiting out a full interval.
-// G21 + N7: the first item frame goes on the next paced drain step, sharing the one last-send
+// A queued frame goes on the next drain tick without waiting out a full interval.
+// The first item frame goes on the next paced drain step, sharing the one last-send
 // timestamp with the provide that was just served.
 void test_firstItemFrameDrainsOnNextStep()
 {
@@ -1267,7 +1267,7 @@ void test_firstItemFrameDrainsOnNextStep()
     TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_FRAME, decodeSfpp(sent[0]).sfpp_message_type);
 }
 
-// G12: a rejected send leaves the frame queued and the next drain sends it.
+// A rejected send leaves the frame queued and the next drain sends it.
 void test_rejectedItemFrameIsRequeued()
 {
     ingestAuthority(2);
@@ -1286,7 +1286,7 @@ void test_rejectedItemFrameIsRequeued()
     assertConverged();
 }
 
-// G10: a lost ITEM_FRAME is recovered by the bounded item retry.
+// A lost ITEM_FRAME is recovered by the bounded item retry.
 void test_lostItemFrameIsRetried()
 {
     ingestAuthority(2);
@@ -1313,7 +1313,7 @@ void test_lostItemFrameIsRetried()
     assertConverged();
 }
 
-// G11: two requesters each get their frames; the per-requester queues are served round-robin.
+// Two requesters each get their frames; the per-requester queues are served round-robin.
 void test_twoRequestersBothComplete()
 {
     ingestAuthority(4);
@@ -1332,7 +1332,7 @@ void test_twoRequestersBothComplete()
 
     TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, bRequest[0]));
     TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, cRequest[0]));
-    // N6: both provides are queued and drained round-robin, one per step.
+    // Both provides are queued and drained round-robin, one per step.
     std::vector<meshtastic_MeshPacket> bProvide = drainAuthorityOne(2000);
     TEST_ASSERT_EQUAL_UINT(1, bProvide.size());
     TEST_ASSERT_EQUAL(NODENUM_BROADCAST, bProvide[0].to); // the listing is broadcast; requester order is kept
@@ -1376,7 +1376,7 @@ void test_twoRequestersBothComplete()
     assertConverged(kBucket, dirC);
 }
 
-// --- Stage 8b: wrong sketch decode ---
+// --- wrong sketch decode ---
 
 // Builds an advert whose sketch is the local bucket XOR a few fake IDs, so it decodes to IDs the
 // real authority does not hold. `addCountMismatch` makes the advertised count inconsistent.
@@ -1479,9 +1479,9 @@ void test_sketchCountMismatchFallsBackImmediately()
     TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_REQUEST, decodeSfpp(sent[0]).sfpp_message_type);
 }
 
-// --- Stage 8c robustness ---
+// --- send and advert robustness ---
 
-// N1: sendToMesh may free the packet during send; the module must not touch it afterwards. Run
+// sendToMesh may free the packet during send; the module must not touch it afterwards. Run
 // this under -e coverage (ASan) to catch a use-after-free.
 void test_sendFreesPacketSafely()
 {
@@ -1495,7 +1495,7 @@ void test_sendFreesPacketSafely()
     assertConverged();
 }
 
-// N3: a blank follower now derives the channel root itself, so a full-root advert naming that same
+// A blank follower now derives the channel root itself, so a full-root advert naming that same
 // root lets it join and pull normally.
 void test_blankFollowerPullsFromFullRootAdvert()
 {
@@ -1539,7 +1539,7 @@ void test_blankFollowerPullsFromFullRootAdvert()
     assertConverged();
 }
 
-// Stage 8e: at production pacing (20 s) with two requesters, a follower missing 20 converges,
+// At production pacing (20 s) with two requesters, a follower missing 20 converges,
 // receiving exactly its 20 frames and no duplicates from retries it should not have made.
 void test_pacedDeliveryConverges()
 {
@@ -1612,7 +1612,7 @@ void test_pacedDeliveryConverges()
     assertConverged(kBucket, dirC);
 }
 
-// Stage 8e items 5, 8, 9: broadcast item frames serve a listener that never requests; a
+// Broadcast item frames serve a listener that never requests; a
 // listen-only archive converges from another follower's exchange and sends nothing.
 void test_broadcastServesListenOnlyFollower()
 {
@@ -1668,7 +1668,7 @@ void test_broadcastServesListenOnlyFollower()
     assertConverged(kBucket, dirC);
 }
 
-// Stage 8e item 10: texts heard live sit in scratch; promote them instead of re-fetching.
+// Texts heard live sit in scratch; promote them instead of re-fetching.
 void test_heardLiveObjectsArePromoted()
 {
     ingestAuthority(20);
@@ -1687,7 +1687,7 @@ void test_heardLiveObjectsArePromoted()
     assertConverged();
 }
 
-// --- Stage 8h ---
+// --- rising tips pull once ---
 
 // A burst of adverts whose tip (the bucket's content count) rises with each new write starts at most
 // one pull: the first opens the exchange, the rest name the bucket already being pulled.
@@ -1738,7 +1738,7 @@ void test_genuineShortIdCollisionIsFetched()
     assertConverged();
 }
 
-// --- Stage 8g ---
+// --- listen-only silence ---
 
 // EnumListenOnly must be silent on every path, including the legacy CLIENT_HISTORY shim, because
 // the guard is at the module's send boundary.
@@ -1869,7 +1869,7 @@ void test_midExchangeAdvertIsPulledAfter()
     assertConverged(kHighBucket);
 }
 
-// --- Stage 8f: advert rotation ---
+// --- advert rotation ---
 
 // A bucket that gained objects since its last advert goes ahead of the round-robin, so a follower
 // behind in it catches up on the next advert, not buckets x interval later. The changed bucket is
@@ -1898,7 +1898,7 @@ void test_rotationServesChangedBucketFirst()
     assertConverged(kBucket);
 }
 
-// The content model has no tip-driven pull (removed in Q10 step 4): an advert for a bucket the
+// The content model has no tip-driven pull: an advert for a bucket the
 // follower agrees on starts nothing, whatever its tip. An advert for the bucket it lacks starts one
 // exchange inline, and at most one exchange is open.
 void test_onDemandPullsNewestBucketAndCapsPacing()
@@ -1970,7 +1970,7 @@ void setupHighBucketHole(meshtastic_MeshPacket &hole, meshtastic_MeshPacket &oth
     TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, kBucket, false, other));
 }
 
-// --- Q6 groundwork: failed-pull retry and the shared pacer ---
+// --- failed-pull retry and the shared pacer ---
 
 // A remembered pull obeys the same drain pacer as everything else. Three buckets each lack their
 // newest object, held in scratch so each list completes with no item request; the two remembered
@@ -2053,7 +2053,7 @@ void test_lostEnumProvideRetriesWithinBackoff()
     assertConverged(kHighBucket);
 }
 
-// W is D19's proposed 24 h service window; a hole older than it is accepted as lost instead of
+// W is the 24 h service window; a hole older than it is accepted as lost instead of
 // being chased by every advert from the peer.
 void test_failedPullStopsPastServiceWindow()
 {
@@ -2208,7 +2208,7 @@ void test_pullRetryDisabledByDefault()
     }
 }
 
-// --- Retry semantics still open (work plan, "Re-check of the final Q6 fix", items 1, 2 and 4) ---
+// --- Retry semantics still open ---
 // These pin today's behaviour, not a decision. Whichever way Tom settles each item, the matching
 // assertion is meant to change, so the change is deliberate and visible.
 
@@ -2220,7 +2220,7 @@ void failNamedBucketPull(meshtastic_MeshPacket &advert)
     failPendingPull(advert);
 }
 
-// Item 1: with PullRetry off, the failed hole's record is dropped, but the next advert naming the
+// With PullRetry off, the failed hole's record is dropped, but the next advert naming the
 // same mismatching bucket starts a new exchange at once. "Off" stops the timer, not the re-pull.
 void test_pullRetryOffNamedAdvertRePullsAtOnce()
 {
@@ -2236,7 +2236,7 @@ void test_pullRetryOffNamedAdvertRePullsAtOnce()
     TEST_ASSERT_EQUAL_UINT32(kHighBucket, decodeSfpp(again[0]).chain_count);
 }
 
-// Item 4: with PullRetry on, a named-mismatch advert also bypasses the backoff; the backoff only
+// With PullRetry on, a named-mismatch advert also bypasses the backoff; the backoff only
 // paces the remembered entry's own timer.
 void test_pullRetryOnNamedAdvertBypassesBackoff()
 {
@@ -2252,7 +2252,7 @@ void test_pullRetryOnNamedAdvertBypassesBackoff()
     TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_REQUEST, decodeSfpp(again[0]).sfpp_message_type);
 }
 
-// Item 2, first half: tail entries are gone with the chain, so this pins the named equivalent. A
+// Tail entries are gone with the chain, so this pins the named equivalent. A
 // parked hole stays parked until a write to its own bucket changes that bucket's summary; each write
 // re-opens it, so a hole that keeps failing is re-parked and re-opened once per write.
 void test_parkedTailHoleRevivesOnEveryWrite()
@@ -2282,7 +2282,7 @@ void test_parkedTailHoleRevivesOnEveryWrite()
     TEST_ASSERT_EQUAL_UINT(1, takeSent().size()); // revived a second time
 }
 
-// Item 2, second half: a revival resets firstFailedMs, so W counts from the last revival, not from
+// A revival resets firstFailedMs, so W counts from the last revival, not from
 // the hole's first failure. A hole in a bucket that keeps changing is never given up.
 void test_revivalRestartsServiceWindow()
 {
@@ -2304,9 +2304,9 @@ void test_revivalRestartsServiceWindow()
     TEST_ASSERT_EQUAL_UINT(1, takeSent().size()); // still retried: W restarted at the revival
 }
 
-// --- Q9 gap fixes ---
+// --- pacer and per-peer budget ---
 
-// G3: the one pacer has a 30-frame/10-min window across all sends, not just drain spacing.
+// The one pacer has a 30-frame/10-min window across all sends, not just drain spacing.
 void test_windowBudgetCapsServedFrames()
 {
     portduino_config.sfpp_enum_drain_ms = 100;
@@ -2394,7 +2394,7 @@ void test_item_in_flight_is_not_requested_twice()
     TEST_ASSERT_EQUAL_UINT32(0, asked);
 }
 
-// G11/F3.8: a single requester gets a per-peer window budget, not the whole global pacer.
+// A single requester gets a per-peer window budget, not the whole global pacer.
 void test_fourRequestersShareTheServingWindow()
 {
     portduino_config.sfpp_enum_drain_ms = 100;
@@ -2529,7 +2529,7 @@ void test_fullActiveRequesterTableKeepsSlots()
     TEST_ASSERT_EQUAL_UINT32(16, served);
 }
 
-// G4: a half-received provide ends at the idle gap, so a later advert can start a fresh pull.
+// A half-received provide ends at the idle gap, so a later advert can start a fresh pull.
 void test_lostProvideFrameEndsAtIdle()
 {
     ingestAuthority(32);
@@ -2590,7 +2590,7 @@ void test_listingOutlastsSlowDrainGap()
     TEST_ASSERT_EQUAL_UINT32(1, requests);
 }
 
-// --- Stage 8: sketch mode ---
+// --- sketch mode ---
 
 void runSketchCase(uint32_t total, uint32_t missing)
 {
@@ -2677,7 +2677,7 @@ void test_sketchWrongChecksumFallsBack()
     TEST_ASSERT_EQUAL(meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_REQUEST, decodeSfpp(fallback[0]).sfpp_message_type);
 }
 
-// --- Stage 9: writer-missed recovery ---
+// --- writer-missed recovery ---
 
 // Seeds a scratch row directly; live text now goes to the canonical store.
 void ingestScratchText(const std::string &dir, NodeNum from, PacketId id, const char *text)
@@ -2794,7 +2794,7 @@ void test_full_root_advert_with_our_root_is_pulled()
     TEST_ASSERT_EQUAL_UINT32(0, decodeSfpp(sent[0]).chain_count);
 }
 
-// --- Q6 stage 5: broadcast listing ---
+// --- broadcast listing ---
 
 // Counts the packets of one SF++ type, optionally only those naming `bucket`.
 uint32_t countType(const std::vector<meshtastic_MeshPacket> &sent, meshtastic_StoreForwardPlusPlus_SFPP_message_type type,
@@ -3112,7 +3112,7 @@ void test_overheard_listing_pulls_from_lister_and_keeps_other_pending()
     TEST_ASSERT_EQUAL_UINT32(AUTHORITY_NODE, decodeSfpp(request).encapsulated_to);
 }
 
-// --- Map step 5: no authority ---
+// --- no authority ---
 
 // Runs one archive's tick as that node and returns what it sent.
 std::vector<meshtastic_MeshPacket> tick(TestSfppModule *module, NodeNum node, uint32_t advanceMs = 2000)

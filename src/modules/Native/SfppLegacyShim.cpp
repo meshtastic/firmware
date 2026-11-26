@@ -91,7 +91,7 @@ bool StoreForwardPlusPlusModule::legacyStoreForwardServes()
 void StoreForwardPlusPlusModule::sendLegacyReply(NodeNum to, const meshtastic_StoreAndForward &payload)
 {
     if (!consumeServeBudget())
-        return; // D11's one-pacer covers every legacy reply, not only the text frames
+        return; // the one-pacer covers every legacy reply, not only the text frames
     meshtastic_MeshPacket *p = allocStoreForwardPacket(payload);
     if (!p)
         return;
@@ -106,7 +106,7 @@ void StoreForwardPlusPlusModule::sendLegacyReply(NodeNum to, const meshtastic_St
 
 void StoreForwardPlusPlusModule::handleLegacyClientHistory(const meshtastic_MeshPacket &mp, meshtastic_StoreAndForward *req)
 {
-    constexpr uint32_t retentionS = 48 * 60 * 60; // D7
+    constexpr uint32_t retentionS = 48 * 60 * 60; // retention window
     constexpr uint32_t pageMax = 50;
     // A row with no epoch cannot advance an epoch cursor, so page those by rowid with a tagged cursor.
     constexpr uint32_t kRowidCursorBase = 0xF0000000;

@@ -411,7 +411,7 @@ int32_t StoreForwardPlusPlusModule::runOnce()
         sendNextLegacyHistory();
         return legacyHistoryBusy ? 5 * 1000 : 10 * 1000;
     }
-    // G19: promote the host's synchronized clock to NTP when we have no proper source yet, but never
+    // Promote the host's synchronized clock to NTP when we have no proper source yet, but never
     // defer on it; a store without one works in boot-relative ages.
     if (getRTCQuality() < RTCQualityNTP) {
         std::string timeCommandResult = exec("timedatectl status | grep synchronized | grep yes -c");
@@ -433,7 +433,7 @@ int32_t StoreForwardPlusPlusModule::runOnce()
         return 10 * 1000;
     }
 
-    // D7: canon rows outside the retention window are gone even when the row cap is not reached.
+    // Canon rows outside the retention window are gone even when the row cap is not reached.
     trimCanonByRetention(root_hash_bytes, SFPP_HASH_SIZE);
     // evict old messages from scratch
     pruneScratchQueue();

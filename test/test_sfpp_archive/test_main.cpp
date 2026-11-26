@@ -11,7 +11,7 @@
  *   - runOnce() announces the tip of that stored chain, and a LINK_REQUEST for the first link reads
  *     the stored ciphertext back out;
  *   - a legacy CLIENT_HISTORY (portnum 65) is answered from the store in the legacy response format,
- *     with the D7 48 h retention;
+ *     with the 48 h retention;
  *   - portnum 65 is not claimed while the legacy StoreForwardModule is a server, so the two modules
  *     cannot answer the same request twice.
  *
@@ -884,7 +884,7 @@ void test_relay_copy_does_not_replace_the_sender_copy()
     TEST_ASSERT_EQUAL_MEMORY(sender.encrypted.bytes, row.encrypted.data(), row.encrypted.size());
 }
 
-// Guards R2 rule 5 on the base's isInDB path; not a RED parent test for the identity change.
+// Guards the base's isInDB path; not a RED parent test for the identity change.
 void test_identity_collision_never_adds_a_second_row()
 {
     const PacketId id = TEXT_ID + 0x203;
@@ -1054,7 +1054,7 @@ void test_legacyHistoryAnswersInLegacyFormat()
     TEST_ASSERT_EQUAL_MEMORY("history text", text.variant.text.bytes, text.variant.text.size);
 }
 
-// The legacy shim's history replies share D11's 30-frame/10-min serving budget; a burst of requests
+// The legacy shim's history replies share the 30-frame/10-min serving budget; a burst of requests
 // cannot send a 31st header inside the window.
 void test_legacyHistoryHeadersShareTheServeBudget()
 {
@@ -1088,7 +1088,7 @@ void test_legacyHistoryUsesLegacyRequestWindow()
     TEST_ASSERT_EQUAL_UINT32(1, reply.variant.history.history_messages);
 }
 
-// D7's 48 h default is the ceiling: a text older than that must not be returned even by an
+// The 48 h default is the ceiling: a text older than that must not be returned even by an
 // unspecified-window request. This keeps the archive from becoming an unbounded history oracle.
 void test_legacyHistoryExcludesTextsOlderThanRetention()
 {
@@ -1189,7 +1189,7 @@ void test_legacyHistoryDecryptsAeadPrimary()
     TEST_ASSERT_EQUAL_MEMORY("aead text", text.variant.text.bytes, text.variant.text.size);
 }
 
-// G16: the legacy shim pages from the last served rx_time, so a second request gets the next page.
+// The legacy shim pages from the last served rx_time, so a second request gets the next page.
 void test_legacyHistoryPagesByCursor()
 {
     TEST_ASSERT_TRUE(ingestNumberedTexts(60));
@@ -1221,9 +1221,9 @@ void test_legacyHistoryPagesByCursor()
     TEST_ASSERT_EQUAL_UINT32(10, next.variant.history.history_messages);
 }
 
-// G5: canon rows outside D7's 48 h window go even when the 1,000-row cap is not reached.
+// Canon rows outside the 48 h window go even when the 1,000-row cap is not reached.
 
-// Item 8: an adopted broadcast text keeps its unsigned node number, so the shim serves it.
+// An adopted broadcast text keeps its unsigned node number, so the shim serves it.
 void test_shimServesAdoptedBroadcastText()
 {
     TEST_ASSERT_TRUE(ingestOneText("adopted broadcast"));
@@ -1254,7 +1254,7 @@ void test_shimServesAdoptedBroadcastText()
     TEST_ASSERT_EQUAL_UINT(strlen("adopted broadcast"), text.variant.text.size);
 }
 
-// Item 8 repair: a negative destination from an old store is converted and served on restart;
+// Repair: a negative destination from an old store is converted and served on restart;
 // a peers collision is resolved rather than left half-converted.
 int storedSchemaVersion();
 std::vector<std::string> filesMovedAside();
@@ -1608,7 +1608,7 @@ void test_versionOneStoreIsMovedAside()
         std::remove(f.c_str());
 }
 
-// --- G19: relative stamps and margins ---
+// --- relative stamps and margins ---
 
 // No proper clock: the row is stamped in uptime seconds and the shim still serves it, with no epoch
 // passed off as wall time.
@@ -1912,8 +1912,8 @@ void test_v3StoreIsMovedAside()
         std::remove(f.c_str());
 }
 
-// The content summary is a function of the held objects, not of a local counter or arrival order
-// (D18): two evaluations over the same holding agree.
+// The content summary is a function of the held objects, not of a local counter or arrival order:
+// two evaluations over the same holding agree.
 void test_content_summary_matches_for_the_same_holding()
 {
     // Two archives hold the same text; one also holds a row in another bucket. A counter-keyed

@@ -143,7 +143,7 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     sqlite3_stmt *deleteCanonRowidStmt;
     sqlite3_stmt *deleteScratchRowidStmt;
 
-    // G19 time model. A row carries its stamp, its basis and (for a boot stamp) the boot that wrote it.
+    // Time model. A row carries its stamp, its basis and (for a boot stamp) the boot that wrote it.
     // Everything that ages a row goes through rowAge() so the bases are never compared raw.
     struct RowTime {
         uint32_t stamp = 0;
@@ -288,7 +288,7 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     bool insertCanonObject(uint32_t to, uint32_t from, uint32_t packetId, const uint8_t *cipher, size_t cipherLen,
                            const uint8_t *hash, const RowTime &time, const std::string &payload, const uint8_t *root_hash,
                            uint32_t bucket, bool senderCopy = false);
-    // Stage 8e/10: a scratch row whose short ID the peer also holds is already "held"; move it into
+    // A scratch row whose short ID the peer also holds is already "held"; move it into
     // the bucket and drop it from the fetch list instead of re-fetching it.
     void promoteScratchMatches(const uint8_t *root_hash, uint32_t bucket, std::vector<pinsketch::Element> &ids);
 
@@ -473,7 +473,7 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     NodeNum enumForeignRootLoggedPeer = 0;
     uint32_t enumAdvertTick = 0;
 
-    // Stage 8e: frames still in flight after an item exchange gave up.
+    // Frames still in flight after an item exchange gave up.
     bool enumLateActive = false;
     uint8_t enumLateRoot[SFPP_HASH_SIZE] = {0};
     uint32_t enumLateBucket = 0;

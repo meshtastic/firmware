@@ -7,7 +7,7 @@
 
 #include <time.h>
 
-// G19 ages rows by uptime, and Linux millis() follows the wall clock (an NTP step moved it by years on the bench),
+// SF++ ages rows by uptime, and Linux millis() follows the wall clock (an NTP step moved it by years on the bench),
 // so SF++ reads the monotonic clock; a unit test's clock still wins.
 static inline uint32_t sfppUptimeSecs()
 {
@@ -34,7 +34,7 @@ static constexpr uint32_t kEnumFullRootEvery = 10;
 static constexpr size_t kEnumPendingMax = 8;
 static constexpr uint32_t kEnumLateAcceptMs = 5 * 60 * 1000;
 
-// G19: a proper clock is NTP or better. Without one, a row's age carries an uncertainty at the newest
+// A proper clock is NTP or better. Without one, a row's age carries an uncertainty at the newest
 // end; an unknown reboot gap widens it to the retention horizon, past which the row is already gone.
 static constexpr uint32_t kTimeMarginS = 300;
 static constexpr uint8_t kTimeBasisEpoch = 0;

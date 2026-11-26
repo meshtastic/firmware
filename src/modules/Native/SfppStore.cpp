@@ -22,7 +22,7 @@
 #include <utility>
 #include <vector>
 
-// D7's retention applies to canon rows as well as to the legacy read window.
+// Retention applies to canon rows as well as to the legacy read window.
 static constexpr uint32_t kRetentionS = 48 * 60 * 60;
 
 void StoreForwardPlusPlusModule::initTimeState()

@@ -282,7 +282,7 @@ void test_theSketchIgnoresAnObjectWithNoIdentifier()
     TEST_ASSERT_TRUE(s.checksum() == 0);
 }
 
-// G22: removing an object the bucket never held must not toggle its short ID into the sketch.
+// Removing an object the bucket never held must not toggle its short ID into the sketch.
 void test_removingAnUnheldObjectLeavesTheSummaryAlone()
 {
     BucketSummary summary = summaryOf(0, 1);

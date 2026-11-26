@@ -25,14 +25,14 @@
 // After a short-ID-collision probe, silence this long means the peer has served all it has.
 static constexpr uint32_t kEnumProbeIdleMs = 30 * 1000;
 
-// D19 proposes W = 24 h as the service window; unconfirmed, so holes past it are accepted as lost.
+// Service window: a hole older than 24 h is accepted as lost instead of being retried.
 static constexpr uint32_t kServiceWindowMs = 24 * 60 * 60 * 1000;
 // Failed pulls back off, and the backoff and attempt count cap a busy advert stream's retry cost.
 static constexpr uint32_t kFailedPullBackoffMs = 30 * 1000;
 static constexpr uint32_t kFailedPullBackoffMaxMs = 5 * 60 * 1000;
 static constexpr uint8_t kFailedPullMaxAttempts = 8;
 
-// Stage 8e: the item retry must outlast a full round-robin delivery at the current pacing.
+// The item retry must outlast a full round-robin delivery at the current pacing.
 static uint32_t itemRetryIntervalMs()
 {
     const uint32_t scaled = 4 * enumDrainIntervalMs(); // 2 requesters x 2 intervals
@@ -376,7 +376,7 @@ void StoreForwardPlusPlusModule::startPendingPull()
     if (enumPending.empty())
         return;
 
-    // One pull per pacer slot (D11/G3), shared with the item drain on this node.
+    // One pull per pacer slot, shared with the item drain on this node.
     if (enumLastDrainMs != 0 && !Throttle::hasElapsed(enumLastDrainMs, enumDrainIntervalMs()))
         return;
 
@@ -559,7 +559,7 @@ void StoreForwardPlusPlusModule::advertiseOneBucket(uint8_t *root_hash, size_t r
     meshtastic_StoreForwardPlusPlus msg;
     if (!sfppsr::buildAdvert(scope, summary, msg))
         return;
-    // Q2e R3: the 4-byte tip is the advertised bucket's content count, not a chain counter.
+    // The 4-byte tip is the advertised bucket's content count, not a chain counter.
     msg.encapsulated_rxtime = summary.count();
     if (!sendEnumMessage(msg, NODENUM_BROADCAST, "advert", msg.message.size))
         return;
@@ -628,7 +628,7 @@ void StoreForwardPlusPlusModule::handleEnumAdvert(const meshtastic_MeshPacket &m
         }
     }
 
-    const uint32_t advertTip = t->encapsulated_rxtime; // Q2e R3: the sender's content-bucket count
+    const uint32_t advertTip = t->encapsulated_rxtime; // the sender's content-bucket count
 
     // The receiver of a mismatching advert always pulls. An empty local bucket is count 0 and
     // checksum 0, so it mismatches a non-empty peer and pulls too.
@@ -639,7 +639,7 @@ void StoreForwardPlusPlusModule::handleEnumAdvert(const meshtastic_MeshPacket &m
         return;
 
     if (enumExchangeActive) {
-        // Stage 8g: a behind bucket seen while busy is remembered (bounded, newest first) and
+        // A behind bucket seen while busy is remembered (bounded, newest first) and
         // pulled when this exchange ends.
         if (advert.scope.bucket != enumExchangeBucket)
             addPendingBucket(root, mp.from, advert.scope.bucket, advert.count, advert.checksum, advertTip);
@@ -699,7 +699,7 @@ bool StoreForwardPlusPlusModule::trySketchExchange(const sfppsr::Advert &advert,
         return false;
     }
 
-    // Item 10: a peer ID we already hold in scratch needs no fetch; promote it into the bucket.
+    // A peer ID we already hold in scratch needs no fetch; promote it into the bucket.
     const size_t missingBefore = missing.size();
     promoteScratchMatches(root_hash, bucket, missing);
     const size_t promoted = missingBefore - missing.size();
@@ -853,7 +853,7 @@ void StoreForwardPlusPlusModule::actOnListing(const uint8_t *root, uint32_t buck
     own.erase(std::unique(own.begin(), own.end()), own.end());
     std::vector<pinsketch::Element> missing;
     std::set_difference(enumProvideIds.begin(), enumProvideIds.end(), own.begin(), own.end(), std::back_inserter(missing));
-    // Item 10: a peer ID we already hold in scratch needs no fetch; promote it into the bucket.
+    // A peer ID we already hold in scratch needs no fetch; promote it into the bucket.
     promoteScratchMatches(root, bucket, missing);
 
     enumAwaitingList = false;
@@ -870,7 +870,7 @@ void StoreForwardPlusPlusModule::actOnListing(const uint8_t *root, uint32_t buck
         return;
     }
 
-    // Stage 8h: a promotion that the peer's checksum does not confirm is a collision; undo it and
+    // A promotion that the peer's checksum does not confirm is a collision; undo it and
     // fetch the peer's objects instead.
     if (!enumPromoted.empty() && !bucketMatchesPeer(root, bucket)) {
         repairPromotions();
@@ -1131,7 +1131,7 @@ void StoreForwardPlusPlusModule::handleItemRequest(const meshtastic_MeshPacket &
 
             sfppsr::Scope scope;
             copyScopeRoot(root, SFPP_HASH_SIZE, scope, list.scope.bucket, false);
-            // Item 6: every frame names its bucket so an overhearing archive can place it.
+            // Every frame names its bucket so an overhearing archive can place it.
             for (auto &frame : frames)
                 frame.chain_count = list.scope.bucket;
             const NodeNum dest = portduino_config.sfpp_item_transport == SFPP_ITEM_DIRECT ? mp.from : NODENUM_BROADCAST;
@@ -1144,7 +1144,7 @@ void StoreForwardPlusPlusModule::handleItemRequest(const meshtastic_MeshPacket &
     }
 
     if (anyEnumQueuePending())
-        setIntervalFromNow(10); // G21: the first frame goes on the next tick, not after a full drain interval
+        setIntervalFromNow(10); // the first frame goes on the next tick, not after a full drain interval
 }
 
 void StoreForwardPlusPlusModule::resendEnumList()
@@ -1206,7 +1206,7 @@ void StoreForwardPlusPlusModule::pumpEnumRetries()
             fallbackToEnumList();
         } else {
             rememberFailedPull();
-            // Paced frames may still be in flight; keep accepting them for a while (Stage 8e).
+            // Paced frames may still be in flight; keep accepting them for a while.
             beginEnumLateAccept();
             endEnumExchange();
         }
@@ -1343,7 +1343,7 @@ void StoreForwardPlusPlusModule::handleItemFrame(const meshtastic_MeshPacket &mp
         return;
     forgetItemInFlight(shortId);
 
-    // Item 7: suppress our own pending request for an object we just overheard.
+    // Suppress our own pending request for an object we just overheard.
     enumWanted.erase(std::remove(enumWanted.begin(), enumWanted.end(), shortId), enumWanted.end());
     enumWantedRemaining = enumWanted.size();
     if (enumLateActive) {
