@@ -5,8 +5,8 @@
 // the firmware builds. A detected preamble must be reported busy, and that needs a CAD the chip
 // accepts. develop sends exit byte 0x01 from its own local CAD_EXIT_MODE_RX and is fine; an interface
 // that sent RadioLib's RADIOLIB_LR2021_CAD_EXIT_MODE_RX (0x02) instead would have its scan refused
-// (-706) and, before ChannelScan::Failed existed, read the error as a free channel and transmit over live frames - 16/16 on the bench, and
-// 539 scans without a busy verdict on a Mesh-Tracker X1. These tests fail on that change.
+// (-706) and, before ChannelScan::Failed existed, read the error as a free channel and transmit over live frames - 16/16 on the
+// bench, and 539 scans without a busy verdict on a Mesh-Tracker X1. These tests fail on that change.
 //
 // applyRegulator() in the same file must send SetRegMode from STBY_RC, the only mode the LR2021 takes it in, and read
 // the verdict itself so a refusal cannot fail the next command: a Mesh-Tracker X1 failed init() that way and booted
