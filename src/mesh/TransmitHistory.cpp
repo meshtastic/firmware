@@ -200,11 +200,41 @@ uint32_t TransmitHistory::getLastSentToMeshMillis(uint16_t key) const
     // so the reconstructed age is preserved across wraparound:
     // - recent reboot, 5 min ago   -> (millis() - lastMs) == 300000, still throttled
     // - long reboot, 30 min ago    -> (millis() - lastMs) == 1800000, allowed
+    if ((it->second.flags & ENTRY_FLAG_AGE_AT_BOOT) != 0) {
+        return getLastSentAgeAtBootMillis(it->second.seconds);
+    }
+
     if ((it->second.flags & ENTRY_FLAG_BOOT_RELATIVE) != 0) {
         return getLastSentBootRelativeMillis(it->second.seconds);
     }
 
     return getLastSentAbsoluteMillis(it->second.seconds);
+}
+
+uint32_t TransmitHistory::getLastSentAgeAtBootMillis(uint32_t ageAtBoot)
+{
+    if (ageAtBoot > 86400) {
+        return 0;
+    }
+    // millis() counts from boot, so the send was ageAtBoot before millis() == 0
+    return Time::skipZero(0U - ageAtBoot * 1000U);
+}
+
+bool TransmitHistory::saveToDiskBeforeSleep(uint32_t sleepMs)
+{
+    const uint32_t nowMs = Time::getMillis();
+    for (auto &[key, stored] : history) {
+        if ((stored.flags & (ENTRY_FLAG_BOOT_RELATIVE | ENTRY_FLAG_AGE_AT_BOOT)) == 0) {
+            continue;
+        }
+        const uint32_t lastMs = getLastSentToMeshMillis(key);
+        if (lastMs == 0) {
+            continue;
+        }
+        stored = makeStoredTimestamp((nowMs - lastMs) / 1000 + sleepMs / 1000, ENTRY_FLAG_AGE_AT_BOOT);
+        dirty = true;
+    }
+    return saveToDisk();
 }
 
 bool TransmitHistory::saveToDisk()

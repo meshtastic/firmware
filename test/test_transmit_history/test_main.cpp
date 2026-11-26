@@ -313,6 +313,51 @@ static void test_boot_without_time_source_expires_boot_relative_history()
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, restoredMs, "Boot-relative history should only suppress near-term restarts");
 }
 
+// Simulate a reboot: a wake from deep sleep restarts millis() at 0
+static void rebootAtUptime(uint32_t uptimeSecs)
+{
+    delete transmitHistory;
+    transmitHistory = nullptr;
+    transmitHistory = TransmitHistory::getInstance();
+    Time::setTestMillis(uptimeSecs * 1000);
+    setBootRelativeTimeForUnitTest(uptimeSecs);
+    transmitHistory->loadFromDisk();
+}
+
+// A clockless power-saving SENSOR sends at the same uptime on every wake, so a plain boot-relative
+// stamp read as "0 s ago" on every wake and the interval never elapsed
+static void test_deep_sleep_wake_without_time_source_keeps_send_age()
+{
+    rebootAtUptime(9);
+    transmitHistory->setLastSentAtBootRelative(meshtastic_PortNum_TELEMETRY_APP, 9);
+    Time::setTestMillis(20 * 1000);
+    transmitHistory->saveToDiskBeforeSleep(600 * 1000);
+
+    rebootAtUptime(9);
+    uint32_t restoredMs = transmitHistory->getLastSentToMeshMillis(meshtastic_PortNum_TELEMETRY_APP);
+    TEST_ASSERT_NOT_EQUAL_UINT32(0, restoredMs);
+    // Sent at uptime 9, slept at 20 for 600 s, now uptime 9: 620 s ago
+    TEST_ASSERT_EQUAL_UINT32(620 * 1000, Time::getMillis() - restoredMs);
+    Time::useRealClock();
+}
+
+static void test_deep_sleep_wakes_without_time_source_let_interval_elapse()
+{
+    rebootAtUptime(9);
+    transmitHistory->setLastSentAtBootRelative(meshtastic_PortNum_TELEMETRY_APP, 9);
+    Time::setTestMillis(20 * 1000);
+    transmitHistory->saveToDiskBeforeSleep(1800 * 1000);
+
+    rebootAtUptime(20);
+    transmitHistory->saveToDiskBeforeSleep(1800 * 1000);
+
+    rebootAtUptime(9);
+    uint32_t restoredMs = transmitHistory->getLastSentToMeshMillis(meshtastic_PortNum_TELEMETRY_APP);
+    TEST_ASSERT_FALSE_MESSAGE(Throttle::isWithinTimespanMs(restoredMs, 3600 * 1000),
+                              "Two 1800 s sleeps must let a 3600 s interval elapse");
+    Time::useRealClock();
+}
+
 void setup()
 {
     initializeTestEnvironment();
@@ -347,6 +392,8 @@ void setup()
     // No-RTC regression tests
     RUN_TEST(test_boot_without_time_source_still_throttles_recent_restart);
     RUN_TEST(test_boot_without_time_source_expires_boot_relative_history);
+    RUN_TEST(test_deep_sleep_wake_without_time_source_keeps_send_age);
+    RUN_TEST(test_deep_sleep_wakes_without_time_source_let_interval_elapse);
 
     exit(UNITY_END());
 }
