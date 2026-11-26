@@ -943,13 +943,14 @@ void StoreForwardPlusPlusModule::handleOverheardListing(NodeNum peer, const uint
     LOG_INFO("SFPP-ENUM overheard listing root=%s bucket=%u peer=0x%08x ids=%u holds_all=%d", rootHex, list.scope.bucket, peer,
              (unsigned)listed.size(), holdsAll ? 1 : 0);
 
-    // Our own pending request for this bucket is superseded by the listing we just heard.
+    // The lister's own pending request for this bucket is superseded by the listing; other archives'
+    // pulls for the same bucket survive.
     uint32_t count = (uint32_t)listed.size();
     uint64_t checksum = 0;
     bool summaryKnown = false;
     for (auto it = enumPending.begin(); it != enumPending.end();) {
-        if (it->bucket == list.scope.bucket && memcmp(it->root, root_hash, SFPP_HASH_SIZE) == 0) {
-            if (it->authority == peer && it->summaryKnown) {
+        if (it->bucket == list.scope.bucket && it->authority == peer && memcmp(it->root, root_hash, SFPP_HASH_SIZE) == 0) {
+            if (it->summaryKnown) {
                 count = it->count;
                 checksum = it->checksum;
                 summaryKnown = true;

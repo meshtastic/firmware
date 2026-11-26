@@ -2872,6 +2872,157 @@ void test_overheard_listing_suppresses_own_request()
     assertConverged(kBucket);
 }
 
+// A complete listing from a third archive that names only objects we already hold must not drop a
+// pull queued from another archive. C is busy pulling kLowBucket with a kBucket pull from A
+// waiting; C overhears X's kBucket listing of the four objects C holds. A's pull survives and asks
+// A for the list on the next slot.
+void test_overheard_listing_keeps_other_archives_pending_pull()
+{
+    ingestIntoBucket(kLowBucket, 2);
+    ingestIntoBucket(kBucket, 5);
+    buildFollowerFromCopy();
+    TEST_ASSERT_TRUE(deleteNewest(dirB, kLowBucket, 1));
+    TEST_ASSERT_TRUE(deleteNewest(dirB, kBucket, 1));
+
+    meshtastic_MeshPacket lowAdvert;
+    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, kLowBucket, false, lowAdvert));
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, lowAdvert));
+    std::vector<meshtastic_MeshPacket> lowRequest = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, lowRequest.size());
+
+    meshtastic_MeshPacket advert;
+    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, kBucket, false, advert));
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
+    TEST_ASSERT_EQUAL_UINT(0, takeSent().size()); // busy: kBucket waits as a pending pull from A
+
+    // dirB has lost one kBucket object, so its four short IDs are all that C holds.
+    meshtastic_MeshPacket overheard = buildProvideFromDir(dirB, kBucket);
+    overheard.from = UNKNOWN_NODE;
+    overheard.to = NODENUM_BROADCAST;
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, overheard));
+    TEST_ASSERT_EQUAL_UINT(0, takeSent().size());
+
+    TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, false, lowRequest[0]));
+    std::vector<meshtastic_MeshPacket> lowProvide = drainAuthorityOne(2000);
+    TEST_ASSERT_EQUAL_UINT(1, lowProvide.size());
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, lowProvide[0]));
+    std::vector<meshtastic_MeshPacket> lowItems = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, lowItems.size());
+    TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, false, lowItems[0]));
+    TEST_ASSERT_EQUAL_UINT32(1, serveItemsTo({{follower, FOLLOWER_NODE}}));
+    assertConverged(kLowBucket);
+
+    std::vector<meshtastic_MeshPacket> sent;
+    for (uint32_t i = 0; i < 3; i++) {
+        Time::setTestMillis(Time::getMillis() + 2000);
+        myNodeInfo.my_node_num = FOLLOWER_NODE;
+        follower->runOnce();
+        for (const auto &out : takeSent())
+            sent.push_back(out);
+    }
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, countType(sent, meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_REQUEST, kBucket),
+                                     "a listing from another archive must not drop the pull queued from A");
+    meshtastic_MeshPacket request;
+    for (const auto &out : sent)
+        if (decodeSfpp(out).sfpp_message_type == meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_REQUEST &&
+            decodeSfpp(out).chain_count == kBucket)
+            request = out;
+    TEST_ASSERT_EQUAL_UINT32(AUTHORITY_NODE, decodeSfpp(request).encapsulated_to);
+
+    TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, false, request));
+    std::vector<meshtastic_MeshPacket> provide = drainAuthorityOne(2000);
+    TEST_ASSERT_EQUAL_UINT(1, provide.size());
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, provide[0]));
+    std::vector<meshtastic_MeshPacket> wanted = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, wanted.size());
+    TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, false, wanted[0]));
+    TEST_ASSERT_EQUAL_UINT32(1, serveItemsTo({{follower, FOLLOWER_NODE}}));
+    assertConverged(kBucket);
+}
+
+// A listing from a third archive that names an object we lack is pulled from that archive, and a
+// pull queued from another archive still survives. C is busy pulling kLowBucket with a kBucket
+// pull from A waiting; C overhears X's complete kBucket listing naming the object C lacks. C asks X
+// for the item, never for a list, and after that pull ends the next slot asks A for the list.
+void test_overheard_listing_pulls_from_lister_and_keeps_other_pending()
+{
+    ingestIntoBucket(kLowBucket, 2);
+    ingestIntoBucket(kBucket, 5);
+    buildFollowerFromCopy();
+    TEST_ASSERT_TRUE(deleteNewest(dirB, kLowBucket, 1));
+    TEST_ASSERT_TRUE(deleteNewest(dirB, kBucket, 1));
+
+    meshtastic_MeshPacket lowAdvert;
+    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, kLowBucket, false, lowAdvert));
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, lowAdvert));
+    std::vector<meshtastic_MeshPacket> lowRequest = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, lowRequest.size());
+
+    meshtastic_MeshPacket advert;
+    TEST_ASSERT_TRUE(buildAdvertFromDir(dirA, kBucket, false, advert));
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, advert));
+    TEST_ASSERT_EQUAL_UINT(0, takeSent().size()); // busy: kBucket waits as a pending pull from A
+
+    meshtastic_MeshPacket overheard = buildProvideFromDir(dirA, kBucket);
+    overheard.from = UNKNOWN_NODE;
+    overheard.to = NODENUM_BROADCAST;
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, overheard));
+    TEST_ASSERT_EQUAL_UINT(0, takeSent().size());
+
+    TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, false, lowRequest[0]));
+    std::vector<meshtastic_MeshPacket> lowProvide = drainAuthorityOne(2000);
+    TEST_ASSERT_EQUAL_UINT(1, lowProvide.size());
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, false, lowProvide[0]));
+    std::vector<meshtastic_MeshPacket> lowItems = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, lowItems.size());
+    TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, false, lowItems[0]));
+    TEST_ASSERT_EQUAL_UINT32(1, serveItemsTo({{follower, FOLLOWER_NODE}}));
+    assertConverged(kLowBucket);
+
+    // The heard listing answers kBucket: C asks X for the missing item and sends no ENUM_REQUEST.
+    std::vector<meshtastic_MeshPacket> sent;
+    for (uint32_t i = 0; i < 3; i++) {
+        Time::setTestMillis(Time::getMillis() + 2000);
+        myNodeInfo.my_node_num = FOLLOWER_NODE;
+        follower->runOnce();
+        for (const auto &out : takeSent())
+            sent.push_back(out);
+    }
+    TEST_ASSERT_EQUAL_UINT32(0, countType(sent, meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_REQUEST, kBucket));
+    TEST_ASSERT_EQUAL_UINT32(1, countType(sent, meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_REQUEST, kBucket));
+    meshtastic_MeshPacket itemRequest;
+    for (const auto &out : sent)
+        if (decodeSfpp(out).sfpp_message_type == meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_REQUEST &&
+            decodeSfpp(out).chain_count == kBucket)
+            itemRequest = out;
+    TEST_ASSERT_EQUAL_UINT32(UNKNOWN_NODE, itemRequest.to);
+
+    // The object can come from any peer; serve it from the authority under X's request.
+    meshtastic_MeshPacket served = itemRequest;
+    served.to = AUTHORITY_NODE;
+    TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, false, served));
+    TEST_ASSERT_EQUAL_UINT32(1, serveItemsTo({{follower, FOLLOWER_NODE}}));
+    assertConverged(kBucket);
+
+    // With the lister's pull finished, A's queued pull still runs and asks A for the list.
+    std::vector<meshtastic_MeshPacket> after;
+    for (uint32_t i = 0; i < 3; i++) {
+        Time::setTestMillis(Time::getMillis() + 2000);
+        myNodeInfo.my_node_num = FOLLOWER_NODE;
+        follower->runOnce();
+        for (const auto &out : takeSent())
+            after.push_back(out);
+    }
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, countType(after, meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_REQUEST, kBucket),
+                                     "a listing from another archive must not drop the pull queued from A");
+    meshtastic_MeshPacket request;
+    for (const auto &out : after)
+        if (decodeSfpp(out).sfpp_message_type == meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_REQUEST &&
+            decodeSfpp(out).chain_count == kBucket)
+            request = out;
+    TEST_ASSERT_EQUAL_UINT32(AUTHORITY_NODE, decodeSfpp(request).encapsulated_to);
+}
+
 // --- Map step 5: no authority ---
 
 // Runs one archive's tick as that node and returns what it sent.
@@ -3111,6 +3262,8 @@ void setup()
     RUN_TEST(test_stratum0_node_pulls_from_an_advert);
     RUN_TEST(test_broadcast_listing_serves_all_hearers);
     RUN_TEST(test_overheard_listing_suppresses_own_request);
+    RUN_TEST(test_overheard_listing_keeps_other_archives_pending_pull);
+    RUN_TEST(test_overheard_listing_pulls_from_lister_and_keeps_other_pending);
     RUN_TEST(test_objectFromAnyPeerIsAccepted);
     RUN_TEST(test_itemFrameOnAnotherChannelIsRefused);
     RUN_TEST(test_pendingPullUsesAnyAdvertiser);
