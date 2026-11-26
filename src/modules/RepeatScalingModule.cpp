@@ -7,7 +7,7 @@
 RepeatScalingModule *repeatScalingModule;
 static bool busy(const char *which)
 {
-    LOG_DEBUG("[REPEATSCALE] mesh busy: %s", which);
+    LOG_TRACE("[REPEATSCALE] mesh busy: %s", which);
     return true;
 }
 
@@ -86,7 +86,7 @@ RepeatScalingModule::DupeCountEntry *RepeatScalingModule::findEntry(NodeNum send
 
 RepeatScalingModule::DupeCountEntry &RepeatScalingModule::claimEntry(NodeNum sender, PacketId id)
 {
-    DupeCountEntry *slot = findEntry(0, 0); // ids are never 0, so (0, 0) only marks a free slot
+    DupeCountEntry *slot = findEntry(0, 0); // a received packet's from is never 0, so (0, 0) only marks a free slot
     if (!slot) {
         slot = &dupeCounts[0];
         for (auto &entry : dupeCounts) {

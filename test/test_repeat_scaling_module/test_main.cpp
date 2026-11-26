@@ -97,6 +97,8 @@ static meshtastic_MeshPacket makeDupePacket(NodeNum from, PacketId id)
     meshtastic_MeshPacket p = meshtastic_MeshPacket_init_zero;
     p.from = from;
     p.id = id;
+    p.to = NODENUM_BROADCAST;            // tests override for DM shapes
+    p.next_hop = NO_NEXT_HOP_PREFERENCE; // flooded unless a test pins a relay byte
     p.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA;
     p.which_payload_variant = meshtastic_MeshPacket_encrypted_tag; // undecodable by default
     return p;
@@ -485,8 +487,8 @@ void test_encrypted_dupe_uses_portnum_noted_when_we_scheduled_our_own_rebroadcas
     plainShim->noteScheduled(kSender1, kId1, meshtastic_PortNum_TEXT_MESSAGE_APP);
 
     // The duplicate heard over the air is still encrypted - this is the packet shape
-    // shouldCancelDupe actually sees in production. Broadcast-addressed (to left at its
-    // zero-init default, distinct from a DM's specific-node "to" below).
+    // shouldCancelDupe actually sees in production. Broadcast-addressed (makeDupePacket's default),
+    // so the next_hop gate alone would give 1 and only the cache can yield 2.
     meshtastic_MeshPacket dupe = makeDupePacket(kSender1, kId1);
     TEST_ASSERT_TRUE(dupe.which_payload_variant == meshtastic_MeshPacket_encrypted_tag);
 
@@ -503,6 +505,7 @@ void test_encrypted_dm_dupe_uses_portnum_noted_when_we_scheduled_our_own_rebroad
 
     meshtastic_MeshPacket dupe = makeDupePacket(kSender1, kId1);
     dupe.to = 0x12345678; // a specific node, not NODENUM_BROADCAST
+    dupe.next_hop = 0x42; // directed, so the next_hop gate alone would give 1
     TEST_ASSERT_TRUE(dupe.which_payload_variant == meshtastic_MeshPacket_encrypted_tag);
 
     TEST_ASSERT_EQUAL_UINT8(2, plainShim->getDupeCancelThreshold(&dupe));
@@ -584,6 +587,7 @@ void test_shouldCancelDupe_end_to_end_with_encrypted_dm_duplicate(void)
 
     meshtastic_MeshPacket dupe = makeDupePacket(kSender1, kId1);
     dupe.to = 0x12345678;                                // a specific node, not NODENUM_BROADCAST
+    dupe.next_hop = 0x42;                                // directed, so only the cache can yield 2
     TEST_ASSERT_FALSE(endToEnd.shouldCancelDupe(&dupe)); // 1st duplicate: tolerated, threshold is 2
     TEST_ASSERT_TRUE(endToEnd.shouldCancelDupe(&dupe));  // 2nd duplicate: threshold reached, cancel
 }
