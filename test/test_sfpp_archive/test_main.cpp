@@ -43,6 +43,8 @@
 #include <cstdio>
 #include <cstring>
 #include <dirent.h>
+#include <fstream>
+#include <iterator>
 #include <memory>
 #include <sqlite3.h>
 #include <string>
@@ -438,6 +440,30 @@ bool readScratchEncrypted(PacketId id, std::vector<uint8_t> &out)
     return found;
 }
 
+void insertScratchRow(uint32_t to, uint32_t from, PacketId id, const uint8_t *cipher, size_t len, const uint8_t *hash)
+{
+    std::vector<uint8_t> root = mappingRoot();
+    TEST_ASSERT_EQUAL_UINT(SFPP_HASH_SIZE, root.size());
+    sqlite3 *db = nullptr;
+    TEST_ASSERT_EQUAL_INT(SQLITE_OK, sqlite3_open(dbFile().c_str(), &db));
+    sqlite3_stmt *stmt = nullptr;
+    TEST_ASSERT_EQUAL_INT(SQLITE_OK,
+                          sqlite3_prepare_v2(db,
+                                             "insert into local_messages (destination, sender, packet_id, root_hash, "
+                                             "encrypted_bytes, message_hash, payload, rx_time) values (?, ?, ?, ?, ?, ?, '', ?);",
+                                             -1, &stmt, nullptr));
+    sqlite3_bind_int64(stmt, 1, (sqlite3_int64)to);
+    sqlite3_bind_int64(stmt, 2, (sqlite3_int64)from);
+    sqlite3_bind_int64(stmt, 3, (sqlite3_int64)id);
+    sqlite3_bind_blob(stmt, 4, root.data(), SFPP_HASH_SIZE, NULL);
+    sqlite3_bind_blob(stmt, 5, cipher, (int)len, NULL);
+    sqlite3_bind_blob(stmt, 6, hash, SFPP_HASH_SIZE, NULL);
+    sqlite3_bind_int64(stmt, 7, getValidTime(RTCQualityNTP, true));
+    TEST_ASSERT_EQUAL_INT(SQLITE_DONE, sqlite3_step(stmt));
+    sqlite3_finalize(stmt);
+    sqlite3_close(db);
+}
+
 void insertRawCanonRow(PacketId id, const uint8_t *hash)
 {
     std::vector<uint8_t> root = mappingRoot();
@@ -627,7 +653,6 @@ std::vector<uint8_t> freshDerivedRoot(NodeNum node, uint32_t nowMs)
 
     myNodeInfo.my_node_num = node;
     Time::setTestMillis(nowMs);
-    portduino_config.sfpp_stratum0 = false;
     portduino_config.sfpp_repair = SFPP_REPAIR_ENUM;
     testSfpp = new TestSfppModule();
     testSfpp->runOnce();
@@ -695,7 +720,6 @@ void setUp(void)
     char *dir = mkdtemp(tmpl);
     dbDir = dir ? dir : "/tmp";
     portduino_config.sfpp_db_path = dbDir + "/";
-    portduino_config.sfpp_stratum0 = true;
     portduino_config.sfpp_enabled = true;
     portduino_config.sfpp_hops = 3;
     portduino_config.sfpp_steal_port = false;
@@ -754,6 +778,30 @@ void test_ingestStoresTextWithPayloadAndHashes()
     TEST_ASSERT_EQUAL_UINT(SFPP_HASH_SIZE, row.root.size());
     TEST_ASSERT_TRUE(row.shortId != 0);
     TEST_ASSERT_TRUE(row.encrypted.size() > 0);
+}
+
+// Every archive stores the channel texts it hears directly, with no writer role to opt into.
+void test_text_is_canonical_without_stratum0()
+{
+    TEST_ASSERT_TRUE(ingestOneText("canonical without a flag"));
+
+    TEST_ASSERT_EQUAL_UINT32(1, storedRowCount(TEXT_ID));
+    TEST_ASSERT_EQUAL_UINT32(0, storedScratchRowCount(TEXT_ID));
+    StoredRow row;
+    TEST_ASSERT_TRUE(readStoredRow(TEXT_ID, row));
+    TEST_ASSERT_EQUAL_STRING("canonical without a flag", row.payload.c_str());
+}
+
+// The emitted config and the shipped config name no writer role.
+void test_default_config_has_no_stratum0()
+{
+    portduino_config.sfpp_enabled = true;
+    TEST_ASSERT_EQUAL(std::string::npos, portduino_config.emit_yaml().find("Stratum0"));
+
+    std::ifstream config("bin/config-dist.yaml");
+    TEST_ASSERT_TRUE(config.good());
+    const std::string text((std::istreambuf_iterator<char>(config)), std::istreambuf_iterator<char>());
+    TEST_ASSERT_EQUAL(std::string::npos, text.find("Stratum0"));
 }
 
 // One message heard as two ciphertexts is one object; the sender's copy replaces a relay's copy.
@@ -903,29 +951,28 @@ void test_recovered_item_with_the_same_identity_is_one_object()
     TEST_ASSERT_EQUAL_MEMORY(relay.encrypted.bytes, row.encrypted.data(), row.encrypted.size());
 }
 
-// The default scratch path applies the same identity policy: one row, sender's copy wins.
-void test_scratch_path_keeps_one_object_for_two_ciphertexts()
+// Every heard text is canonical: one row, and the sender's copy replaces a relay's.
+void test_live_text_keeps_one_object_for_two_ciphertexts()
 {
     const PacketId id = TEXT_ID + 0x206;
-    portduino_config.sfpp_stratum0 = false;
-    meshtastic_MeshPacket mp = makeText(REMOTE_NODE, id, "scratch identity", getValidTime(RTCQualityNTP, true));
+    meshtastic_MeshPacket mp = makeText(REMOTE_NODE, id, "canonical identity", getValidTime(RTCQualityNTP, true));
 
     mp.relay_node = 0x5b;
     meshtastic_MeshPacket relay = makeEncryptedCopy(mp);
     relay.encrypted.bytes[0] ^= 0x33;
     TEST_ASSERT_EQUAL(ProcessMessage::CONTINUE, testSfpp->ingest(mp, &relay));
-    TEST_ASSERT_EQUAL_UINT32(1, storedScratchRowCount(id));
-    TEST_ASSERT_EQUAL_UINT32(0, storedRowCount(id));
+    TEST_ASSERT_EQUAL_UINT32(1, storedRowCount(id));
+    TEST_ASSERT_EQUAL_UINT32(0, storedScratchRowCount(id));
 
     mp.relay_node = nodeDB->getLastByteOfNodeNum(REMOTE_NODE);
     meshtastic_MeshPacket sender = makeEncryptedCopy(mp);
     TEST_ASSERT_EQUAL(ProcessMessage::CONTINUE, testSfpp->ingest(mp, &sender));
 
-    TEST_ASSERT_EQUAL_UINT32(1, storedScratchRowCount(id));
-    std::vector<uint8_t> stored;
-    TEST_ASSERT_TRUE(readScratchEncrypted(id, stored));
-    TEST_ASSERT_EQUAL_UINT(sender.encrypted.size, stored.size());
-    TEST_ASSERT_EQUAL_MEMORY(sender.encrypted.bytes, stored.data(), stored.size());
+    TEST_ASSERT_EQUAL_UINT32(1, storedRowCount(id));
+    StoredRow row;
+    TEST_ASSERT_TRUE(readStoredRow(id, row));
+    TEST_ASSERT_EQUAL_UINT(sender.encrypted.size, row.encrypted.size());
+    TEST_ASSERT_EQUAL_MEMORY(sender.encrypted.bytes, row.encrypted.data(), row.encrypted.size());
 }
 
 // A scratch row is promoted only under its own content bucket; a short-ID request for another
@@ -933,14 +980,13 @@ void test_scratch_path_keeps_one_object_for_two_ciphertexts()
 void test_scratch_collision_across_buckets_is_not_promoted()
 {
     const PacketId id = TEXT_ID + 0x207;
-    portduino_config.sfpp_stratum0 = false;
     meshtastic_MeshPacket mp = makeText(REMOTE_NODE, id, "other bucket", getValidTime(RTCQualityNTP, true));
     meshtastic_MeshPacket enc = makeEncryptedCopy(mp);
-    TEST_ASSERT_EQUAL(ProcessMessage::CONTINUE, testSfpp->ingest(mp, &enc));
-    TEST_ASSERT_EQUAL_UINT32(1, storedScratchRowCount(id));
-
     uint8_t hash[SFPP_HASH_SIZE];
     sfppframe::messageHash(enc.encrypted.bytes, enc.encrypted.size, mp.to, mp.from, id, hash);
+    testSfpp->runOnce(); // derive the channel root before seeding the row
+    insertScratchRow(mp.to, mp.from, id, enc.encrypted.bytes, enc.encrypted.size, hash);
+    TEST_ASSERT_EQUAL_UINT32(1, storedScratchRowCount(id));
     const uint32_t ownBucket = sfppsr::contentBucket(hash, SFPP_HASH_SIZE);
     const uint32_t otherBucket = (ownBucket + 1) % 256;
     std::vector<pinsketch::Element> ids{sfppsr::shortId(hash, SFPP_HASH_SIZE)};
@@ -1425,7 +1471,6 @@ void test_root_changes_when_the_channel_identity_changes()
 // not match the derived root is moved aside and a fresh store is created under the derived root.
 void test_stale_mapping_moves_the_store_aside()
 {
-    portduino_config.sfpp_stratum0 = true;
     portduino_config.sfpp_repair = SFPP_REPAIR_ENUM;
     testSfpp->runOnce();
     const std::vector<uint8_t> derived = mappingRoot();
@@ -1437,7 +1482,6 @@ void test_stale_mapping_moves_the_store_aside()
     memset(stale, 0x5C, sizeof(stale));
     TEST_ASSERT_TRUE(writeMappingRoot(stale));
 
-    portduino_config.sfpp_stratum0 = false;
     testSfpp = new TestSfppModule(); // the ctor sees the stale channel mapping and moves the file
     testSfpp->runOnce();
 
@@ -1457,7 +1501,6 @@ void test_stale_mapping_moves_the_store_aside()
 // starts empty under the new channel root. The old rows are not served.
 void test_channel_change_moves_the_v2_store_aside()
 {
-    portduino_config.sfpp_stratum0 = true;
     portduino_config.sfpp_repair = SFPP_REPAIR_ENUM;
     TEST_ASSERT_TRUE(ingestOneText("served under the old channel"));
     const std::vector<uint8_t> oldRoot = mappingRoot();
@@ -1488,7 +1531,6 @@ void test_channel_change_moves_the_v2_store_aside()
 // mapping by the hash would replace the first with the second.
 void test_two_channels_sharing_a_hash_keep_two_mappings()
 {
-    portduino_config.sfpp_stratum0 = true;
     portduino_config.sfpp_repair = SFPP_REPAIR_ENUM;
     testSfpp->runOnce();
     const std::vector<uint8_t> rootA = mappingRoot();
@@ -1925,12 +1967,14 @@ void setup()
 
     UNITY_BEGIN();
     RUN_TEST(test_ingestStoresTextWithPayloadAndHashes);
+    RUN_TEST(test_text_is_canonical_without_stratum0);
+    RUN_TEST(test_default_config_has_no_stratum0);
     RUN_TEST(test_archive_keeps_one_object_for_two_ciphertexts);
     RUN_TEST(test_sender_copy_moves_the_content_bucket);
     RUN_TEST(test_relay_copy_does_not_replace_the_sender_copy);
     RUN_TEST(test_identity_collision_never_adds_a_second_row);
     RUN_TEST(test_recovered_item_with_the_same_identity_is_one_object);
-    RUN_TEST(test_scratch_path_keeps_one_object_for_two_ciphertexts);
+    RUN_TEST(test_live_text_keeps_one_object_for_two_ciphertexts);
     RUN_TEST(test_scratch_collision_across_buckets_is_not_promoted);
     RUN_TEST(test_storedMessageHashMatchesTheFrameHash);
     RUN_TEST(test_legacyHistoryAnswersInLegacyFormat);

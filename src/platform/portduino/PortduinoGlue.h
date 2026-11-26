@@ -345,7 +345,6 @@ extern struct portduino_config_struct {
 
     // Store and Forward++
     std::string sfpp_db_path = "/var/lib/meshtasticd/";
-    bool sfpp_stratum0 = false;
     bool sfpp_enabled = false;
     bool sfpp_steal_port = false;
     int sfpp_hops = 3;
@@ -846,7 +845,6 @@ extern struct portduino_config_struct {
             out << YAML::Key << "EnumItemTransport" << YAML::Value
                 << (sfpp_item_transport == SFPP_ITEM_DIRECT ? "direct" : "broadcast");
             out << YAML::Key << "EnumListenOnly" << YAML::Value << sfpp_enum_listen_only;
-            out << YAML::Key << "Stratum0" << YAML::Value << sfpp_stratum0;
             out << YAML::Key << "PullRetry" << YAML::Value << sfpp_pull_retry;
             out << YAML::EndMap; // StoreAndForward
         }

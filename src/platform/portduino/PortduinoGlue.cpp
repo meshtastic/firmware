@@ -1614,8 +1614,6 @@ bool loadConfig(const char *configPath)
             std::string itemTransport = (yamlConfig["StoreAndForward"]["EnumItemTransport"]).as<std::string>("broadcast");
             portduino_config.sfpp_item_transport = (itemTransport == "direct") ? SFPP_ITEM_DIRECT : SFPP_ITEM_BROADCAST;
             portduino_config.sfpp_enum_listen_only = (yamlConfig["StoreAndForward"]["EnumListenOnly"]).as<bool>(false);
-            // The writer role stays until map step 5 removes the authority; step 4 dropped the key too early.
-            portduino_config.sfpp_stratum0 = (yamlConfig["StoreAndForward"]["Stratum0"]).as<bool>(false);
             portduino_config.sfpp_pull_retry = (yamlConfig["StoreAndForward"]["PullRetry"]).as<bool>(false);
         }
         if (yamlConfig["Routing"]) {

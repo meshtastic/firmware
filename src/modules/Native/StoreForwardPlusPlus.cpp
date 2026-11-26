@@ -4,7 +4,6 @@
 
 // TODO: Include the counter in the commit hash?
 
-// Eventual TODO: non-stratum0 nodes need to be pointed at their upstream source? Maybe
 #if __has_include("sqlite3.h")
 
 #include "StoreForwardPlusPlus.h"
@@ -57,8 +56,6 @@ StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
 
     std::string db_path = portduino_config.sfpp_db_path + "storeforwardpp.db";
     LOG_INFO("Opening StoreForwardpp DB at %s", db_path.c_str());
-    if (portduino_config.sfpp_stratum0)
-        LOG_INFO("SF++ running as stratum0");
     int res = sqlite3_open(db_path.c_str(), &ppDb);
     if (res != SQLITE_OK) {
         LOG_ERROR("Cannot open database: %s", sqlite3_errmsg(ppDb));
@@ -484,20 +481,10 @@ void StoreForwardPlusPlusModule::handleEncrypted(const meshtastic_MeshPacket *mp
         lo.from = nodeDB->getNodeNum();
     const bool senderCopy = lo.from == nodeDB->getNodeNum() || mp->relay_node == nodeDB->getLastByteOfNodeNum(lo.from);
 
-    if (!portduino_config.sfpp_stratum0) {
-        if (lo.root_hash_len == 0) {
-            LOG_DEBUG("StoreForwardpp Received text message, but no chain. Possibly no Stratum0 on local mesh.");
-            return;
-        }
-        addToScratch(lo, senderCopy);
-        LOG_DEBUG("StoreForwardpp added message to scratch db");
-        // send link to upstream?
-
-        return;
-    }
-    insertCanonObject(lo.to, lo.from, lo.id, lo.encrypted_bytes, lo.encrypted_len, lo.message_hash,
-                      RowTime{lo.rx_time, lo.time_basis, lo.boot_id, lo.age_margin}, lo.payload, lo.root_hash,
-                      sfppsr::contentBucket(lo.message_hash, lo.message_hash_len), senderCopy);
+    if (lo.root_hash_len != 0)
+        insertCanonObject(lo.to, lo.from, lo.id, lo.encrypted_bytes, lo.encrypted_len, lo.message_hash,
+                          RowTime{lo.rx_time, lo.time_basis, lo.boot_id, lo.age_margin}, lo.payload, lo.root_hash,
+                          sfppsr::contentBucket(lo.message_hash, lo.message_hash_len), senderCopy);
     fillPayloadIfEmpty(lo);
 }
 
@@ -556,20 +543,10 @@ ProcessMessage StoreForwardPlusPlusModule::handleReceived(const meshtastic_MeshP
             return ProcessMessage::CONTINUE;
         }
 
-        if (!portduino_config.sfpp_stratum0) {
-            if (lo.root_hash_len == 0) {
-                LOG_DEBUG("StoreForwardpp Received text message, but no chain. Possibly no Stratum0 on local mesh.");
-                return ProcessMessage::CONTINUE;
-            }
-            addToScratch(lo, senderCopy);
-            LOG_DEBUG("StoreForwardpp added message to scratch db");
-            // send link to upstream?
-
-            return ProcessMessage::CONTINUE;
-        }
-        insertCanonObject(lo.to, lo.from, lo.id, lo.encrypted_bytes, lo.encrypted_len, lo.message_hash,
-                          RowTime{lo.rx_time, lo.time_basis, lo.boot_id, lo.age_margin}, lo.payload, lo.root_hash,
-                          sfppsr::contentBucket(lo.message_hash, lo.message_hash_len), senderCopy);
+        if (lo.root_hash_len != 0)
+            insertCanonObject(lo.to, lo.from, lo.id, lo.encrypted_bytes, lo.encrypted_len, lo.message_hash,
+                              RowTime{lo.rx_time, lo.time_basis, lo.boot_id, lo.age_margin}, lo.payload, lo.root_hash,
+                              sfppsr::contentBucket(lo.message_hash, lo.message_hash_len), senderCopy);
         fillPayloadIfEmpty(lo);
         return ProcessMessage::CONTINUE;
     }

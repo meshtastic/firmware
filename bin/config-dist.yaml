@@ -306,7 +306,6 @@ StoreAndForward:
 #  ScratchSweep: 5 # Minutes between writer-missed scratch sweeps (enum only, minimum 1)
 #  EnumItemTransport: broadcast # Item frames: broadcast (default) or direct
 #  EnumListenOnly: false # Accept overheard adverts/objects, never send anything
-#  Stratum0: false # This node writes canon rows and is the authority others pull from (until leaderless sync).
 #  PullRetry: false # Retry a failed enum pull with capped backoff (opt-in; raises airtime)
 
 Config:
