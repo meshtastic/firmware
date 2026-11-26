@@ -57,9 +57,9 @@ TDeckProKeyboard::TDeckProKeyboard() : TCA8418KeyboardBase(_TCA8418_ROWS, _TCA84
 
 void TDeckProKeyboard::reset()
 {
+    // Keeps the chip's debounce (reset() enables it). Disabling it caught quick repeat taps, but a burst of presses
+    // then left the chip's idle scan deaf to every key outside column 0
     TCA8418KeyboardBase::reset();
-    // The chip's debounce merges quick repeat taps of one key: ten fast Backspace taps arrived as one press
-    disableDebounce();
     heldModifiers = latchedModifiers = usedModifiers = 0;
     ::pinMode(KB_BL_PIN, OUTPUT);
     setBacklight(false);
