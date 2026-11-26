@@ -128,6 +128,7 @@ class HopScalingModule : private concurrency::OSThread
     struct PerHopCounts {
         uint16_t perHop[MAX_HOP + 1] = {};
         uint16_t total = 0;
+        uint8_t denominator = 1; // filteringDenominator these sampled counts were tallied under
     };
 
     /// Mesh activity trend stats produced at each hourly rollover.
@@ -212,6 +213,7 @@ class HopScalingModule : private concurrency::OSThread
     uint16_t getHashSeed() const { return hashSeed; }
     /// Expose hashNodeId for tests that need to compute which node IDs pass a given denominator.
     uint16_t hashNodeIdPublic(uint32_t nodeId) const { return hashNodeId(nodeId); }
+    void setLastPerHopCountsForTest(const PerHopCounts &counts) { lastPerHopCounts = counts; }
 #endif
 
   protected:

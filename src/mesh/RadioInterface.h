@@ -150,7 +150,17 @@ class RadioInterface
      */
     RadioInterface();
 
-    virtual ~RadioInterface() {}
+    virtual ~RadioInterface()
+    {
+        if (active == this)
+            active = nullptr;
+    }
+
+    /// The radio constructed last and not yet destroyed: the one initLoRa() kept, or null.
+    static RadioInterface *active;
+
+    /// True if this radio's driver drives pin (CS, IRQ, reset, busy, RF switch).
+    virtual bool usesPin(uint32_t pin) const { return false; }
 
     /// Fires once per valid received LoRa packet (arg = sender NodeNum). Used e.g. to flash LED_LORA.
     static Observable<uint32_t> loraRxPacketObservable;
@@ -375,6 +385,9 @@ class RadioInterface
 };
 
 std::unique_ptr<RadioInterface> initLoRa();
+
+// True if pin belongs to the LoRa radio (its driver's pins, SPI bus or front end); config must not reuse it.
+bool isRadioPin(uint32_t pin);
 
 // What the plain-RX poll does with PREAMBLE/HEADER flags that no RX_DONE has consumed.
 enum class StaleRxFlagAction : uint8_t { Keep, ClearPreamble, ClearHeaderErr, Rearm };

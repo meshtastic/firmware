@@ -894,6 +894,7 @@ bool GPS::verifyCachedProbePresence()
         break;
     case GNSS_MODEL_MTK_L76B:
         cachedProbeModelName = "L76B";
+        [[fallthrough]];
     case GNSS_MODEL_MTK_PA1010D:
         if (cachedProbeModel == GNSS_MODEL_MTK_PA1010D)
             cachedProbeModelName = "PA1010D";

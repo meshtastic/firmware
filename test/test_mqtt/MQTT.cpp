@@ -1,3 +1,10 @@
+// MQTT bridge: config validation, proxy ingress, map reports and downlink policy.
+//
+// Why: the broker is a second, non-RF ingress into the mesh and the firmware's outbound
+// mirror; a policy regression can leak private positions or accept forged downlink.
+// Regression guarded: a proxied packet read from the wrong variant, a private position
+// published on a public server, and a signature policy bypass on downlink.
+
 #include "DebugConfiguration.h"
 #include "TestUtil.h"
 #include <unity.h>

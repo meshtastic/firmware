@@ -142,6 +142,15 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
     float currentLimit = 100; // 100mA OCP - Should be acceptable for RFM95/SX127x chipset.
 
+    // RadioLib has no CS getter, and keeps the RF switch pins private, so usesPin() reads these copies
+    RADIOLIB_PIN_TYPE csPin, rfSwitchRxPin = RADIOLIB_NC, rfSwitchTxPin = RADIOLIB_NC;
+
+    void noteRfSwitchPins(RADIOLIB_PIN_TYPE rx, RADIOLIB_PIN_TYPE tx)
+    {
+        rfSwitchRxPin = rx;
+        rfSwitchTxPin = tx;
+    }
+
 #if !defined(USE_STM32WLx)
     Module module; // The HW interface to the radio
 #else
@@ -312,6 +321,8 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
   public:
     RadioLibInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst,
                       RADIOLIB_PIN_TYPE busy, PhysicalLayer *iface = NULL);
+
+    bool usesPin(uint32_t pin) const override;
 
     virtual ErrorCode send(meshtastic_MeshPacket *p) override;
 

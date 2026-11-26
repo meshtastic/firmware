@@ -1,27 +1,30 @@
-// Display (E-Ink)
-#ifdef MESHTASTIC_INCLUDE_INKHUD
+// One build for V1.0 and V1.1: tDeckProIsV11() tells them apart at boot by the DRV2605 only V1.1 has
 bool tDeckProIsV11();
 void tDeckProSetVibration(int pin, bool on);
+#define EXT_NOTIFY_VIBRA_WRITE(pin, on) tDeckProSetVibration(pin, on)
+#ifdef MESHTASTIC_INCLUDE_INKHUD
 void tDeckProUpdateBacklights(bool sleeping = false);
 void tDeckProToggleBacklights();
-#define EXT_NOTIFY_VIBRA_WRITE(pin, on) tDeckProSetVibration(pin, on)
-#else
-#define T_DECK_PRO_V1_0
 #endif
+
+// Display (E-Ink)
 #define PIN_EINK_CS 34
 #define PIN_EINK_BUSY 37
 #define PIN_EINK_DC 35
-#define PIN_EINK_RES -1
+// V1.1 wires the panel reset to GPIO16; on V1.0 that pin is the light sensor's interrupt
+#define PIN_EINK_RES (tDeckProIsV11() ? 16 : -1)
+// V1.1 keeps its panel out of hibernate, which needs that reset to wake
+#define EINK_SKIP_HIBERNATE tDeckProIsV11()
 #define PIN_EINK_SCLK 36
 #define PIN_EINK_MOSI 33
 
 #define I2C_SDA SDA
 #define I2C_SCL SCL
 
-// CST328 touch screen (implementation in src/platform/extra_variants/t_deck_pro/variant.cpp)
+// CST328 (V1.0) or CST3530 (V1.1) touch screen (implementation in src/platform/extra_variants/t_deck_pro/variant.cpp)
 #define HAS_TOUCHSCREEN 1
 #define CST328_PIN_INT 12
-#define CST328_PIN_RST 45
+#define CST328_PIN_RST 45 // V1.0; V1.1 resets its touch panel on GPIO38
 
 #define USE_POWERSAVE
 #define SLEEP_TIME 120
@@ -37,8 +40,9 @@ void tDeckProToggleBacklights();
 
 #define BUTTON_PIN 0
 
-// vibration motor
+// vibration: V1.0's motor, or V1.1's DRV2605 enable; tDeckProSetVibration() drives either, and sleep turns it off
 #define PIN_VIBRATION 2
+#define PIN_DRV_EN PIN_VIBRATION
 
 // Have SPI interface SD card slot
 #define HAS_SDCARD

@@ -1,3 +1,10 @@
+// RTC time sources and validity windows.
+//
+// Why: every timestamp, schedule and duty-cycle decision reads this clock; a bad quality
+// transition poisons them all.
+// Regression guarded: a stale/network time accepted after the validity window, or a good
+// time rejected.
+
 #include "TestUtil.h"
 #include "UptimeClock.h"
 #include "gps/RTC.h"

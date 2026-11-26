@@ -53,25 +53,47 @@
 #include "meshSolarApp.h"
 #endif
 
+static void rejectSerialConfig(const char *warning, meshtastic_ClientNotification_NotificationType type)
+{
+    LOG_ERROR(warning);
+#ifndef PIO_UNIT_TESTING
+    meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
+    if (cn) {
+        cn->level = meshtastic_LogRecord_Level_ERROR;
+        cn->type = type;
+        cn->time = getValidTime(RTCQualityFromNet);
+        snprintf(cn->message, sizeof(cn->message), "%s", warning);
+        service->sendClientNotification(cn);
+    }
+#endif
+}
+
 // Outside the architecture guard on purpose: config validation, not serial I/O. See SerialModule.h.
 bool serialConfigIsValid(const meshtastic_ModuleConfig_SerialConfig &config)
 {
     if (config.override_console_serial_port && !IS_ONE_OF(config.mode, meshtastic_ModuleConfig_SerialConfig_Serial_Mode_NMEA,
                                                           meshtastic_ModuleConfig_SerialConfig_Serial_Mode_CALTOPO,
                                                           meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MS_CONFIG)) {
-        const char *warning = "Invalid Serial config: override console serial port is only supported in NMEA, CalTopo, or MS "
-                              "Config output-only modes.";
-        LOG_ERROR(warning);
-#ifndef PIO_UNIT_TESTING
-        meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
-        if (cn) {
-            cn->level = meshtastic_LogRecord_Level_ERROR;
-            cn->type = meshtastic_ClientNotification_NotificationType_SERIAL_CONSOLE_OVERRIDE_INVALID;
-            cn->time = getValidTime(RTCQualityFromNet);
-            snprintf(cn->message, sizeof(cn->message), "%s", warning);
-            service->sendClientNotification(cn);
-        }
-#endif
+        rejectSerialConfig("Invalid Serial config: override console serial port is only supported in NMEA, CalTopo, or MS "
+                           "Config output-only modes.",
+                           meshtastic_ClientNotification_NotificationType_SERIAL_CONSOLE_OVERRIDE_INVALID);
+        return false;
+    }
+
+    // Only an enabled module opens the UART, so a disabled config with stale pins must still save (the way out).
+    // UART pin arguments are 8-bit (nRF52 setPins, ESP32 begin), so 303 would wrap onto pin 47.
+    if (config.enabled && (config.rxd > UINT8_MAX || config.txd > UINT8_MAX)) {
+        char warning[96];
+        snprintf(warning, sizeof(warning), "Invalid Serial config: RX/TX pin %u is out of range.",
+                 (unsigned)(config.rxd > UINT8_MAX ? config.rxd : config.txd));
+        rejectSerialConfig(warning, meshtastic_ClientNotification_NotificationType_UNSET);
+        return false;
+    }
+    if (config.enabled && ((config.rxd && isRadioPin(config.rxd)) || (config.txd && isRadioPin(config.txd)))) {
+        char warning[96];
+        snprintf(warning, sizeof(warning), "Invalid Serial config: RX/TX pin %u is used by the LoRa radio.",
+                 (unsigned)(config.rxd && isRadioPin(config.rxd) ? config.rxd : config.txd));
+        rejectSerialConfig(warning, meshtastic_ClientNotification_NotificationType_UNSET); // no protobuf type for this yet
         return false;
     }
 
@@ -173,6 +195,15 @@ int32_t SerialModule::runOnce()
 
     if (!moduleConfig.serial.enabled)
         return disable();
+
+    // A config saved before the pin check existed would take the radio's pins and boot-loop the node
+    if (moduleConfig.serial.rxd > UINT8_MAX || moduleConfig.serial.txd > UINT8_MAX ||
+        (moduleConfig.serial.rxd && isRadioPin(moduleConfig.serial.rxd)) ||
+        (moduleConfig.serial.txd && isRadioPin(moduleConfig.serial.txd))) {
+        LOG_ERROR("Serial module not started: RX/TX pin %u/%u is out of range or overlaps the LoRa radio",
+                  (unsigned)moduleConfig.serial.rxd, (unsigned)moduleConfig.serial.txd);
+        return disable();
+    }
 
 #ifdef ARCH_PORTDUINO
     // The console is meshtasticd's log, so only a configured host tty can carry the module.

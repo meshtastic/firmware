@@ -952,6 +952,15 @@ bool RadioInterface::shouldRebroadcastEarlyLikeRouter(meshtastic_MeshPacket *p)
         return true;
     }
 
+    // CLIENT_BASE always relays its favorites' packets, so relaying one heard directly early costs no extra airtime.
+    // A favorite that hears only the base needs that relay as its implicit ACK before its retransmissions run out.
+    // Ask the packet history, not the queued copy: our copy's hops no longer show how the packet reached us
+    // (a favorite router's relay keeps its hop_limit, event mode caps hop_start).
+    if (config.device.role == meshtastic_Config_DeviceConfig_Role_CLIENT_BASE && nodeDB && router &&
+        nodeDB->isFavorite(p->from) && router->wasHeardFromSender(p->id, p->from)) {
+        return true;
+    }
+
     return false;
 }
 
@@ -1035,9 +1044,118 @@ void printPacket(const char *prefix, const meshtastic_MeshPacket *p)
 #endif
 }
 
+RadioInterface *RadioInterface::active = nullptr;
+
 RadioInterface::RadioInterface()
 {
     assert(sizeof(PacketHeader) == MESHTASTIC_HEADER_LENGTH); // make sure the compiler did what we expected
+    active = this;
+}
+
+// Radio pins the driver is never handed: the SPI bus and front-end pins firmware drives itself.
+// int64_t fits -1 and RADIOLIB_NC; the trailing -1 keeps the array non-empty.
+static const int64_t radioBusAndFrontEndPins[] = {
+#ifdef LORA_SCK
+    LORA_SCK,
+#ifdef LORA_MISO
+    LORA_MISO,
+#endif
+#ifdef LORA_MOSI
+    LORA_MOSI,
+#endif
+#elif defined(PIN_SPI_SCK) && !defined(ARCH_STM32WL)
+    // No LORA_SCK: the radio is on the core's default SPI bus (STM32WL's radio is internal)
+    PIN_SPI_SCK, PIN_SPI_MISO, PIN_SPI_MOSI,
+#endif
+#if defined(USE_LR1110) // gated like the radio factory: an unused chip's names may not expand
+#ifdef LR1110_SPI_SCK_PIN
+    LR1110_SPI_SCK_PIN,
+#endif
+#ifdef LR1110_SPI_MISO_PIN
+    LR1110_SPI_MISO_PIN,
+#endif
+#ifdef LR1110_SPI_MOSI_PIN
+    LR1110_SPI_MOSI_PIN,
+#endif
+#endif
+#if defined(USE_LR1120)
+#ifdef LR1120_SPI_SCK_PIN
+    LR1120_SPI_SCK_PIN,
+#endif
+#ifdef LR1120_SPI_MISO_PIN
+    LR1120_SPI_MISO_PIN,
+#endif
+#ifdef LR1120_SPI_MOSI_PIN
+    LR1120_SPI_MOSI_PIN,
+#endif
+#endif
+#if defined(USE_LR1121)
+#ifdef LR1121_SPI_SCK_PIN
+    LR1121_SPI_SCK_PIN,
+#endif
+#ifdef LR1121_SPI_MISO_PIN
+    LR1121_SPI_MISO_PIN,
+#endif
+#ifdef LR1121_SPI_MOSI_PIN
+    LR1121_SPI_MOSI_PIN,
+#endif
+#endif
+#if defined(USE_LR2021)
+#ifdef LR2021_SPI_SCK_PIN
+    LR2021_SPI_SCK_PIN,
+#endif
+#ifdef LR2021_SPI_MISO_PIN
+    LR2021_SPI_MISO_PIN,
+#endif
+#ifdef LR2021_SPI_MOSI_PIN
+    LR2021_SPI_MOSI_PIN,
+#endif
+#ifdef LR2021_POWER_EN
+    LR2021_POWER_EN,
+#endif
+#endif
+#ifdef LORA_RXEN
+    LORA_RXEN,
+#endif
+#ifdef LORA_TXEN
+    LORA_TXEN,
+#endif
+#ifdef RF95_RXEN
+    RF95_RXEN,
+#endif
+#ifdef RF95_TXEN
+    RF95_TXEN,
+#endif
+#ifdef SX126X_POWER_EN
+    SX126X_POWER_EN,
+#endif
+#ifdef SX126X_ANT_SW
+    SX126X_ANT_SW,
+#endif
+#ifdef LORA_PA_POWER
+    LORA_PA_POWER,
+#endif
+#ifdef LORA_KCT8103L_PA_CSD
+    LORA_KCT8103L_PA_CSD,
+#endif
+#ifdef LORA_KCT8103L_PA_CTX
+    LORA_KCT8103L_PA_CTX,
+#endif
+#ifdef LORA_GC1109_PA_EN
+    LORA_GC1109_PA_EN,
+#endif
+#ifdef LORA_GC1109_PA_TX_EN
+    LORA_GC1109_PA_TX_EN,
+#endif
+    -1};
+
+bool isRadioPin(uint32_t pin)
+{
+    for (int64_t radioPin : radioBusAndFrontEndPins) {
+        if (radioPin >= 0 && radioPin == (int64_t)pin)
+            return true;
+    }
+    return RadioInterface::active && RadioInterface::active->usesPin(pin);
 }
 
 bool RadioInterface::reconfigure()
@@ -1339,7 +1457,11 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
         }
     }
 
-    const char *channelName = channels.getName(channels.getPrimaryIndex());
+    // Without a usable channel file the boot clamp runs before initDefaults() fills the table: resolve a blank primary.
+    const char *channelName =
+        channels.getNumChannels()
+            ? channels.getName(channels.getPrimaryIndex())
+            : DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, false, config.lora.use_preset);
     const char *presetNameDisplay =
         DisplayFormatters::getModemPresetDisplayName(loraConfig.modem_preset, false, loraConfig.use_preset);
     // After any clamp above, so this is the count applyModemConfig() tunes against

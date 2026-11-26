@@ -1,3 +1,9 @@
+// classifyHopStart(), shouldDropPacketForPreHop() and shouldSkipHandleForPostDecodeHop().
+//
+// Why: a corrupt hop pair must be dropped before decode, while an unknown pair must survive
+// so encrypted traffic is not discarded.
+// Regression guarded: dropping MISSING_OR_UNKNOWN packets at the pre-decode gate.
+
 #include "MeshTypes.h" // Include BEFORE TestUtil.h (provides NodeNum, isFromUs)
 #include "TestUtil.h"
 #include <unity.h>
