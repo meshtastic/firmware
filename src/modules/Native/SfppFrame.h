@@ -25,6 +25,10 @@ namespace sfppframe
 // R-sign: encoded body + routing header must leave room for the signature.
 constexpr size_t kMaxFrameBodyBytes = 168;
 
+// The configured item-frame body limit, clamped to the range the YAML knob accepts.
+constexpr size_t kMinFrameBodyBytes = 48;
+size_t maxFrameBodyBytes();
+
 // Any text Meshtastic can send needs at most two; four is the margin.
 constexpr uint8_t kMaxFrames = 4;
 

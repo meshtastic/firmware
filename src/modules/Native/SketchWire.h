@@ -38,6 +38,11 @@ constexpr size_t kRootPrefixBytes = 4;
 // A full bucket and more, inside one frame.
 constexpr size_t kMaxShortIds = 40;
 
+// The configured short IDs per listing or item-request frame, clamped to the range the YAML knob
+// accepts. Parsing still accepts up to kMaxShortIds, so a peer's larger frames remain readable.
+constexpr size_t kMinShortIdsPerFrame = 4;
+size_t maxShortIdsPerFrame();
+
 struct Scope {
     uint8_t rootPrefix[32] = {0};
     size_t rootPrefixLen = 0;

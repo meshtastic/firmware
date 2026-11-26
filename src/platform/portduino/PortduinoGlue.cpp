@@ -1615,6 +1615,16 @@ bool loadConfig(const char *configPath)
             portduino_config.sfpp_item_transport = (itemTransport == "direct") ? SFPP_ITEM_DIRECT : SFPP_ITEM_BROADCAST;
             portduino_config.sfpp_enum_listen_only = (yamlConfig["StoreAndForward"]["EnumListenOnly"]).as<bool>(false);
             portduino_config.sfpp_pull_retry = (yamlConfig["StoreAndForward"]["PullRetry"]).as<bool>(false);
+            portduino_config.sfpp_max_ids_per_frame = (yamlConfig["StoreAndForward"]["MaxIdsPerFrame"]).as<uint32_t>(40);
+            if (portduino_config.sfpp_max_ids_per_frame < 4)
+                portduino_config.sfpp_max_ids_per_frame = 4;
+            if (portduino_config.sfpp_max_ids_per_frame > 40)
+                portduino_config.sfpp_max_ids_per_frame = 40;
+            portduino_config.sfpp_item_body_max = (yamlConfig["StoreAndForward"]["ItemBodyMax"]).as<uint32_t>(168);
+            if (portduino_config.sfpp_item_body_max < 48)
+                portduino_config.sfpp_item_body_max = 48;
+            if (portduino_config.sfpp_item_body_max > 168)
+                portduino_config.sfpp_item_body_max = 168;
         }
         if (yamlConfig["Routing"]) {
             if (yamlConfig["Routing"]["WhitelistPorts"]) {

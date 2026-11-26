@@ -770,14 +770,15 @@ void StoreForwardPlusPlusModule::handleEnumRequest(const meshtastic_MeshPacket &
     std::sort(ids.begin(), ids.end());
     ids.erase(std::unique(ids.begin(), ids.end()), ids.end());
 
-    const size_t total = (ids.size() + sfppsr::kMaxShortIds - 1) / sfppsr::kMaxShortIds;
+    const size_t perFrame = sfppsr::maxShortIdsPerFrame();
+    const size_t total = (ids.size() + perFrame - 1) / perFrame;
     if (total == 0 || total > 255)
         return;
 
     std::vector<meshtastic_StoreForwardPlusPlus> frames;
     for (size_t i = 0; i < total; i++) {
-        const size_t begin = i * sfppsr::kMaxShortIds;
-        const size_t end = std::min(begin + sfppsr::kMaxShortIds, ids.size());
+        const size_t begin = i * perFrame;
+        const size_t end = std::min(begin + perFrame, ids.size());
         std::vector<pinsketch::Element> slice(ids.begin() + begin, ids.begin() + end);
         meshtastic_StoreForwardPlusPlus msg;
         if (!sfppsr::buildEnumProvide(scope, slice, (uint8_t)i, (uint8_t)total, msg))
@@ -1064,9 +1065,17 @@ void StoreForwardPlusPlusModule::requestMissingItems(const uint8_t *root_hash, u
 
     sfppsr::Scope scope;
     copyScopeRoot(root_hash, SFPP_HASH_SIZE, scope, bucket, false);
-    meshtastic_StoreForwardPlusPlus msg;
-    if (!sfppsr::buildItemRequest(scope, fresh, msg))
-        return;
+
+    std::vector<meshtastic_StoreForwardPlusPlus> requests;
+    const size_t perFrame = sfppsr::maxShortIdsPerFrame();
+    for (size_t begin = 0; begin < fresh.size(); begin += perFrame) {
+        const size_t end = std::min(begin + perFrame, fresh.size());
+        std::vector<pinsketch::Element> slice(fresh.begin() + begin, fresh.begin() + end);
+        meshtastic_StoreForwardPlusPlus msg;
+        if (!sfppsr::buildItemRequest(scope, slice, msg))
+            return;
+        requests.push_back(msg);
+    }
 
     for (pinsketch::Element id : fresh) {
         if (std::find(enumWanted.begin(), enumWanted.end(), id) == enumWanted.end())
@@ -1077,7 +1086,8 @@ void StoreForwardPlusPlusModule::requestMissingItems(const uint8_t *root_hash, u
     enumAwaitingList = false;
     enumItemRetries = 0;
     enumRequestSentMs = Time::getMillis();
-    sendEnumMessage(msg, peer, "item_req");
+    for (const auto &msg : requests)
+        sendEnumMessage(msg, peer, "item_req");
 }
 
 void StoreForwardPlusPlusModule::handleItemRequest(const meshtastic_MeshPacket &mp, meshtastic_StoreForwardPlusPlus *t)

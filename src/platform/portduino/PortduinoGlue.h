@@ -355,6 +355,8 @@ extern struct portduino_config_struct {
     sfpp_item_transport sfpp_item_transport = SFPP_ITEM_BROADCAST;
     bool sfpp_enum_listen_only = false;
     bool sfpp_pull_retry = false;
+    uint32_t sfpp_max_ids_per_frame = 40; // short IDs in one listing or item-request frame
+    uint32_t sfpp_item_body_max = 168;    // encoded item-frame body limit, in bytes
     // allowed root hashes
     // upstream node
     // Are we allowing unknown channel hashes? Does this even make sense?
@@ -843,6 +845,8 @@ extern struct portduino_config_struct {
                 << (sfpp_item_transport == SFPP_ITEM_DIRECT ? "direct" : "broadcast");
             out << YAML::Key << "EnumListenOnly" << YAML::Value << sfpp_enum_listen_only;
             out << YAML::Key << "PullRetry" << YAML::Value << sfpp_pull_retry;
+            out << YAML::Key << "MaxIdsPerFrame" << YAML::Value << sfpp_max_ids_per_frame;
+            out << YAML::Key << "ItemBodyMax" << YAML::Value << sfpp_item_body_max;
             out << YAML::EndMap; // StoreAndForward
         }
 

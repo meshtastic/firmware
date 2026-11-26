@@ -10,9 +10,13 @@
 
 #include "configuration.h" // for the extern "C" setup()/loop() the portduino runner links against
 #include "modules/Native/SfppFrame.h"
+#include "platform/portduino/PortduinoGlue.h"
 
+#include <cstdio>
 #include <cstring>
 #include <pb_encode.h>
+#include <string>
+#include <unistd.h>
 #include <unity.h>
 #include <vector>
 
@@ -52,9 +56,26 @@ const uint8_t *keyOf(const meshtastic_StoreForwardPlusPlus &frame)
 {
     return frame.message_hash.bytes;
 }
+
+bool loadSfppYaml(const std::string &body)
+{
+    char path[] = "/tmp/meshtastic-sfpp-frame-XXXXXX";
+    const int fd = mkstemp(path);
+    if (fd < 0)
+        return false;
+    const ssize_t written = write(fd, body.data(), body.size());
+    close(fd);
+    const bool loaded = written == (ssize_t)body.size() && loadConfig(path);
+    unlink(path);
+    return loaded;
+}
 } // namespace
 
-void setUp(void) {}
+void setUp(void)
+{
+    portduino_config.sfpp_max_ids_per_frame = 40;
+    portduino_config.sfpp_item_body_max = 168;
+}
 void tearDown(void) {}
 
 // --- Hash contract ---
@@ -282,6 +303,56 @@ void test_oversizedMessageIsRefused()
     TEST_ASSERT_EQUAL_UINT32(0, (uint32_t)frames.size());
 }
 
+// --- Configurable frame limits ---
+
+// The default config is the old 168-byte split, so each length produces the same frame fields,
+// body sizes and slice sizes as the fixed-bound splitter did.
+void test_defaultFramesStayByteForByteUnchanged()
+{
+    struct Golden {
+        size_t len;
+        size_t count;
+        uint32_t frame[4];
+        size_t body[4];
+        size_t size[4];
+    };
+    const Golden goldens[] = {
+        {40, 1, {0}, {72}, {40}},
+        {220, 2, {0x0200, 0x0201}, {163, 111}, {127, 93}},
+        {500, 4, {0x0400, 0x0401, 0x0402, 0x0403}, {163, 168, 168, 93}, {127, 149, 149, 75}},
+    };
+    for (const Golden &g : goldens) {
+        const auto frames = split(cipher(g.len, (uint8_t)g.len));
+        TEST_ASSERT_EQUAL_UINT32(g.count, (uint32_t)frames.size());
+        for (size_t i = 0; i < g.count; i++) {
+            TEST_ASSERT_EQUAL_UINT32(g.frame[i], frames[i].frame);
+            TEST_ASSERT_EQUAL_UINT32(g.body[i], (uint32_t)bodySize(frames[i]));
+            TEST_ASSERT_EQUAL_UINT32(g.size[i], (uint32_t)frames[i].message.size);
+        }
+    }
+}
+
+// A smaller item body limit splits a 100-byte object into more frames, each inside the limit, and
+// the set still reassembles to the same bytes.
+void test_itemBodyMaxSplitsAndReassembles()
+{
+    TEST_ASSERT_TRUE(loadSfppYaml("StoreAndForward:\n  Enabled: true\n  ItemBodyMax: 64\n"));
+
+    const auto data = cipher(100, 0x6B);
+    const auto frames = split(data);
+    TEST_ASSERT_GREATER_THAN_UINT32(1, (uint32_t)frames.size());
+    for (const auto &frame : frames)
+        TEST_ASSERT_LESS_OR_EQUAL_UINT32(64, (uint32_t)bodySize(frame));
+
+    Reassembler reassembler;
+    Replay replay;
+    for (size_t i = 0; i < frames.size(); i++) {
+        const bool last = i + 1 == frames.size();
+        TEST_ASSERT_EQUAL_UINT32(last ? 1u : 0u, (uint32_t)reassembler.offer(frames[i], (uint32_t)i, replay));
+    }
+    TEST_ASSERT_TRUE(replay.ciphertext == data);
+}
+
 void setup()
 {
     UNITY_BEGIN();
@@ -304,6 +375,9 @@ void setup()
 
     RUN_TEST(test_everyFrameBodyStaysWithin168Bytes);
     RUN_TEST(test_oversizedMessageIsRefused);
+
+    RUN_TEST(test_defaultFramesStayByteForByteUnchanged);
+    RUN_TEST(test_itemBodyMaxSplitsAndReassembles);
 
     exit(UNITY_END());
 }

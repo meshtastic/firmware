@@ -307,6 +307,8 @@ StoreAndForward:
 #  EnumItemTransport: broadcast # Item frames: broadcast (default) or direct
 #  EnumListenOnly: false # Accept overheard adverts/objects, never send anything
 #  PullRetry: false # Retry a failed enum pull with capped backoff (opt-in; raises airtime)
+#  MaxIdsPerFrame: 40 # Short IDs per listing/item-request frame (4-40)
+#  ItemBodyMax: 168 # Item-frame body limit in bytes (48-168)
 
 Config:
 #  DisplayMode: TWOCOLOR # uncomment to force BaseUI

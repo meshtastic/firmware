@@ -38,6 +38,7 @@
 #include "modules/Native/SketchWire.h"
 #include "modules/Native/StoreForwardPlusPlus.h"
 #include "modules/RoutingModule.h"
+#include "platform/portduino/PortduinoGlue.h"
 #include "support/MockMeshService.h"
 
 #include <algorithm>
@@ -909,6 +910,28 @@ std::vector<meshtastic_MeshPacket> drainAuthorityOne(uint32_t advanceMs)
     return takeSent();
 }
 
+bool loadSfppYaml(const std::string &body)
+{
+    char path[] = "/tmp/meshtastic-sfpp-enum-XXXXXX";
+    const int fd = mkstemp(path);
+    if (fd < 0)
+        return false;
+    const ssize_t written = write(fd, body.data(), body.size());
+    close(fd);
+    const bool loaded = written == (ssize_t)body.size() && loadConfig(path);
+    unlink(path);
+    return loaded;
+}
+
+std::string sfppBlock(const std::string &yaml)
+{
+    const size_t begin = yaml.find("StoreAndForward:");
+    if (begin == std::string::npos)
+        return "";
+    const size_t end = yaml.find("\nGeneral:", begin);
+    return yaml.substr(begin, end == std::string::npos ? std::string::npos : end - begin);
+}
+
 } // namespace
 
 void ingestScratchText(const std::string &dir, NodeNum from, PacketId id, const char *text);
@@ -957,6 +980,8 @@ void setUp(void)
     portduino_config.sfpp_item_transport = SFPP_ITEM_DIRECT; // existing cases drive direct exchanges
     portduino_config.sfpp_enum_listen_only = false;
     portduino_config.sfpp_pull_retry = false;
+    portduino_config.sfpp_max_ids_per_frame = 40;
+    portduino_config.sfpp_item_body_max = 168;
     portduino_config.sfpp_db_path = dirA + "/";
 
     Time::setTestMillis(1000);
@@ -3463,6 +3488,83 @@ void test_neverHeardTextArrivesFromAnotherArchive()
     assertSameStore(dirB, dirC);
 }
 
+// --- configurable frame limits ---
+
+// Ten short IDs per frame turns a 25-ID listing into three frames; the follower reassembles the
+// whole listing and asks for all 25 missing objects, three item-request frames.
+void test_maxIdsPerFrameSplitsListingIntoThreeFrames()
+{
+    const std::string yaml = "StoreAndForward:\n"
+                             "  Enabled: true\n"
+                             "  DBPath: " +
+                             dirA +
+                             "/\n"
+                             "  Repair: enum\n"
+                             "  EnumDrainMs: 100\n"
+                             "  MaxIdsPerFrame: 10\n";
+    TEST_ASSERT_TRUE(loadSfppYaml(yaml));
+
+    ingestAuthority(25);
+    buildFollowerFromCopy();
+    TEST_ASSERT_TRUE(deleteNewest(dirB, kBucket, 25));
+
+    meshtastic_MeshPacket advert = runAuthorityOnce();
+    TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, advert));
+    std::vector<meshtastic_MeshPacket> requests = takeSent();
+    TEST_ASSERT_EQUAL_UINT(1, requests.size());
+    TEST_ASSERT_TRUE(deliver(authority, AUTHORITY_NODE, requests[0]));
+
+    std::vector<meshtastic_MeshPacket> provides;
+    for (uint32_t i = 0; i < 20 && provides.size() < 3; i++) {
+        for (const auto &out : drainAuthorityOne(100)) {
+            if (decodeSfpp(out).sfpp_message_type == meshtastic_StoreForwardPlusPlus_SFPP_message_type_ENUM_PROVIDE)
+                provides.push_back(out);
+        }
+    }
+    TEST_ASSERT_EQUAL_UINT(3, provides.size());
+
+    uint32_t listed = 0;
+    for (uint32_t i = 0; i < provides.size(); i++) {
+        const meshtastic_StoreForwardPlusPlus msg = decodeSfpp(provides[i]);
+        TEST_ASSERT_EQUAL_UINT32(3, msg.sr_frame >> 8);
+        TEST_ASSERT_EQUAL_UINT32(i, msg.sr_frame & 0xFF);
+        TEST_ASSERT_LESS_OR_EQUAL_UINT32(10, msg.sr_short_ids_count);
+        listed += msg.sr_short_ids_count;
+        TEST_ASSERT_TRUE(deliver(follower, FOLLOWER_NODE, provides[i]));
+    }
+    TEST_ASSERT_EQUAL_UINT32(25, listed);
+
+    std::vector<meshtastic_MeshPacket> wanted = takeSent();
+    uint32_t requested = 0;
+    uint32_t requestFrames = 0;
+    for (const auto &out : wanted) {
+        const meshtastic_StoreForwardPlusPlus msg = decodeSfpp(out);
+        if (msg.sfpp_message_type != meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_REQUEST)
+            continue;
+        requestFrames++;
+        TEST_ASSERT_LESS_OR_EQUAL_UINT32(10, msg.sr_short_ids_count);
+        requested += msg.sr_short_ids_count;
+    }
+    TEST_ASSERT_EQUAL_UINT32(3, requestFrames);
+    TEST_ASSERT_EQUAL_UINT32(25, requested);
+}
+
+// The two frame-limit keys survive a parse -> emit -> parse -> emit round trip.
+void test_frameLimitConfigRoundTrips()
+{
+    TEST_ASSERT_TRUE(loadSfppYaml("StoreAndForward:\n"
+                                  "  Enabled: true\n"
+                                  "  MaxIdsPerFrame: 12\n"
+                                  "  ItemBodyMax: 100\n"));
+    const std::string first = sfppBlock(portduino_config.emit_yaml());
+    TEST_ASSERT_NOT_EQUAL(std::string::npos, first.find("MaxIdsPerFrame: 12"));
+    TEST_ASSERT_NOT_EQUAL(std::string::npos, first.find("ItemBodyMax: 100"));
+
+    TEST_ASSERT_TRUE(loadSfppYaml(first));
+    const std::string second = sfppBlock(portduino_config.emit_yaml());
+    TEST_ASSERT_EQUAL_STRING(first.c_str(), second.c_str());
+}
+
 void loop() {}
 
 void setup()
@@ -3540,6 +3642,8 @@ void setup()
     RUN_TEST(test_threeArchivesWithDifferentTextsConverge);
     RUN_TEST(test_absentArchiveCatchesUpOnReturn);
     RUN_TEST(test_neverHeardTextArrivesFromAnotherArchive);
+    RUN_TEST(test_maxIdsPerFrameSplitsListingIntoThreeFrames);
+    RUN_TEST(test_frameLimitConfigRoundTrips);
     UNITY_END();
 }
 

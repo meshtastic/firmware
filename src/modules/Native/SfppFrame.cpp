@@ -2,6 +2,7 @@
 
 #include "SHA256.h"
 #include "mesh/Throttle.h"
+#include "platform/portduino/PortduinoGlue.h"
 
 #include <algorithm>
 #include <cstring>
@@ -67,7 +68,7 @@ bool buildFrame(const uint8_t *hash, const uint8_t *slice, size_t len, uint32_t 
 // metadata is sized at its worst case so every archive splits the same message identically, even
 // though the frame that finally carries it may be a few bytes smaller.
 size_t maxSliceFor(const uint8_t *ciphertext, size_t len, uint32_t to, uint32_t from, uint32_t id, uint32_t frameField,
-                   bool withMeta, size_t fieldLimit)
+                   bool withMeta, size_t fieldLimit, size_t bodyLimit)
 {
     const uint32_t worstHeardAgo = withMeta ? 0xFFFFFFFFu : 0;
     const bool worstVerified = withMeta;
@@ -78,7 +79,7 @@ size_t maxSliceFor(const uint8_t *ciphertext, size_t len, uint32_t to, uint32_t 
         if (!buildFrame(ciphertext, ciphertext, sliceLen, to, from, id, worstHeardAgo, worstVerified, frameField, withMeta,
                         frame))
             break;
-        if (encodedSize(frame) > kMaxFrameBodyBytes)
+        if (encodedSize(frame) > bodyLimit)
             break;
         maxSlice = sliceLen;
     }
@@ -86,6 +87,16 @@ size_t maxSliceFor(const uint8_t *ciphertext, size_t len, uint32_t to, uint32_t 
 }
 
 } // namespace
+
+size_t maxFrameBodyBytes()
+{
+    const uint32_t configured = portduino_config.sfpp_item_body_max;
+    if (configured < kMinFrameBodyBytes)
+        return kMinFrameBodyBytes;
+    if (configured > kMaxFrameBodyBytes)
+        return kMaxFrameBodyBytes;
+    return configured;
+}
 
 void messageHash(const uint8_t *ciphertext, size_t len, uint32_t to, uint32_t from, uint32_t id, uint8_t out[kMessageHashBytes])
 {
@@ -108,6 +119,7 @@ bool split(const uint8_t *ciphertext, size_t len, uint32_t to, uint32_t from, ui
 
     meshtastic_StoreForwardPlusPlus probe = meshtastic_StoreForwardPlusPlus_init_default;
     const size_t fieldLimit = sizeof(probe.message.bytes);
+    const size_t bodyLimit = maxFrameBodyBytes();
 
     // A message that fits one frame carries no frame field at all, so try that shape first. The
     // envelope is sized at its worst case here too, so the decision is the same for every archive.
@@ -115,7 +127,7 @@ bool split(const uint8_t *ciphertext, size_t len, uint32_t to, uint32_t from, ui
         meshtastic_StoreForwardPlusPlus worst;
         if (!buildFrame(hash, ciphertext, len, to, from, id, 0xFFFFFFFFu, true, 0, true, worst))
             return false;
-        if (encodedSize(worst) <= kMaxFrameBodyBytes) {
+        if (encodedSize(worst) <= bodyLimit) {
             meshtastic_StoreForwardPlusPlus single;
             if (!buildFrame(hash, ciphertext, len, to, from, id, heardAgoS, originVerified, 0, true, single))
                 return false;
@@ -126,8 +138,8 @@ bool split(const uint8_t *ciphertext, size_t len, uint32_t to, uint32_t from, ui
 
     // Frame 0 carries the envelope; the rest are key, index and ciphertext only. Both slice sizes
     // use the worst-case envelope, so two archives split the same message identically.
-    const size_t maxFirst = maxSliceFor(ciphertext, len, to, from, id, packFrame(0, 2), true, fieldLimit);
-    const size_t maxRest = maxSliceFor(ciphertext, len, to, from, id, packFrame(1, 2), false, fieldLimit);
+    const size_t maxFirst = maxSliceFor(ciphertext, len, to, from, id, packFrame(0, 2), true, fieldLimit, bodyLimit);
+    const size_t maxRest = maxSliceFor(ciphertext, len, to, from, id, packFrame(1, 2), false, fieldLimit, bodyLimit);
     if (maxFirst == 0 || maxRest == 0)
         return false;
 
@@ -135,7 +147,7 @@ bool split(const uint8_t *ciphertext, size_t len, uint32_t to, uint32_t from, ui
         meshtastic_StoreForwardPlusPlus single;
         if (!buildFrame(hash, ciphertext, len, to, from, id, heardAgoS, originVerified, 0, true, single))
             return false;
-        if (encodedSize(single) > kMaxFrameBodyBytes)
+        if (encodedSize(single) > bodyLimit)
             return false;
         out.assign(1, single);
         return true;
@@ -156,7 +168,7 @@ bool split(const uint8_t *ciphertext, size_t len, uint32_t to, uint32_t from, ui
         if (!buildFrame(hash, ciphertext + offset, sliceLen, to, from, id, heardAgoS, originVerified,
                         packFrame((uint8_t)i, (uint8_t)total), withMeta, frame))
             return false;
-        if (encodedSize(frame) > kMaxFrameBodyBytes)
+        if (encodedSize(frame) > bodyLimit)
             return false;
         frames.push_back(frame);
         offset += sliceLen;

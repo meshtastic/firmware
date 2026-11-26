@@ -1,9 +1,21 @@
 #include "SketchWire.h"
 
+#include "platform/portduino/PortduinoGlue.h"
+
 #include <cstring>
 
 namespace sfppsr
 {
+
+size_t maxShortIdsPerFrame()
+{
+    const uint32_t configured = portduino_config.sfpp_max_ids_per_frame;
+    if (configured < kMinShortIdsPerFrame)
+        return kMinShortIdsPerFrame;
+    if (configured > kMaxShortIds)
+        return kMaxShortIds;
+    return configured;
+}
 
 namespace
 {
