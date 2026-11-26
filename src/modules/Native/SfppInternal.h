@@ -41,12 +41,6 @@ static constexpr uint8_t kTimeBasisEpoch = 0;
 static constexpr uint8_t kTimeBasisUptime = 1;
 static constexpr uint8_t kTimeBasisAge = 2;
 
-static inline uint32_t scratchSweepMs()
-{
-    const uint32_t minutes = portduino_config.sfpp_scratch_sweep < 1 ? 1 : portduino_config.sfpp_scratch_sweep;
-    return minutes * 60 * 1000;
-}
-
 static inline uint32_t enumDrainIntervalMs()
 {
     const uint32_t configured = portduino_config.sfpp_enum_drain_ms;

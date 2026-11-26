@@ -291,16 +291,6 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     // the bucket and drop it from the fetch list instead of re-fetching it.
     void promoteScratchMatches(const uint8_t *root_hash, uint32_t bucket, std::vector<pinsketch::Element> &ids);
 
-    // Stage 9: a follower offers scratch rows to the authority, which is the only counter authority.
-    void pushScratchRows();
-    bool acceptPushedItemFrame(const meshtastic_MeshPacket &mp, meshtastic_StoreForwardPlusPlus *t);
-    bool isEnumKnownPeer(NodeNum node, const uint8_t *root_prefix) const;
-    bool isEnumKnownPeerOnAnotherRoot(NodeNum node, const uint8_t *root_prefix) const;
-    void noteEnumPeer(NodeNum node, const uint8_t *root_prefix);
-    bool consumePushBudget(NodeNum node);
-    bool enumAlreadyOffered(const uint8_t *hash) const;
-    void noteEnumOffered(const uint8_t *hash);
-
     // Derives the channel's root from its name and key; no node number or clock is involved.
     bool deriveRootFromChannel(ChannelHash, uint8_t *);
 
@@ -426,7 +416,7 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     uint32_t enumLastItemMs = 0;
 
     // A bucket whose short-ID lists match but whose checksum never does is not pulled again until
-    // the authority changes what it advertises for it.
+    // a peer changes what it advertises for it.
     struct EnumSuppression {
         uint8_t root[SFPP_HASH_SIZE];
         uint32_t bucket;
@@ -459,8 +449,6 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
         uint8_t hash[SFPP_HASH_SIZE];
     };
     std::vector<EnumPromoted> enumPromoted;
-    uint8_t enumTipRoot[SFPP_HASH_SIZE] = {0};
-    NodeNum enumTipAuthority = 0;
     uint8_t enumSeenRoot[SFPP_HASH_SIZE] = {0};
     struct EnumBucketSeen {
         uint32_t bucket;
@@ -489,24 +477,9 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     uint8_t enumItemRetries = 0;
     uint32_t enumRequestSentMs = 0;
 
-    // Stage 9: writer-missed pushes.
-    NodeNum enumAuthorityNode = 0;
     // Log a foreign full-root advert once per peer, not once per advert.
     NodeNum enumForeignRootLoggedPeer = 0;
     uint32_t enumAdvertTick = 0;
-    uint32_t enumLastScratchSweepMs = 0;
-    struct EnumPeer {
-        NodeNum node;
-        uint8_t rootPrefix[sfppsr::kRootPrefixBytes];
-    };
-    std::vector<EnumPeer> enumKnownPeers;
-    struct EnumPushSender {
-        NodeNum node;
-        uint32_t windowStartMs;
-        uint32_t accepted;
-    };
-    std::vector<EnumPushSender> enumPushSenders;
-    sfppframe::Reassembler enumPushReassembler{16};
 
     // Stage 8e: frames still in flight after an item exchange gave up.
     bool enumLateActive = false;
@@ -515,11 +488,6 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     NodeNum enumLatePeer = 0;
     std::vector<pinsketch::Element> enumLateWanted;
     uint32_t enumLateStartedMs = 0;
-    struct EnumPushed {
-        uint8_t prefix[8];
-        uint32_t offeredMs;
-    };
-    std::deque<EnumPushed> enumPushOffered;
 };
 
 extern StoreForwardPlusPlusModule *storeForwardPlusPlusModule;

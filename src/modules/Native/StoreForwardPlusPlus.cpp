@@ -391,15 +391,14 @@ StoreForwardPlusPlusModule::StoreForwardPlusPlusModule()
 StoreForwardPlusPlusModule::~StoreForwardPlusPlusModule()
 {
     sqlite3_stmt *statements[] = {
-        chain_insert_stmt,      scratch_insert_stmt,   identityCanonStmt,      identityScratchStmt,
-        replaceCanonCopyStmt,   replaceScratchCopyStmt, checkDupMessageHash,    checkScratch,
-        removeScratch,          updatePayloadStmt,     fromScratchStmt,        fromScratchByHashStmt,
-        getHashFromRootStmt,    addRootToMappingsStmt, getFullRootHashStmt,    getScratchCountStmt,
-        scratchTimeRowsStmt,    deleteScratchRowidStmt, canonTimeRowsStmt,     deleteCanonRowidStmt,
-        bucketSummaryStmt,      bucketIdsStmt,         distinctBucketsStmt,    getLinkByShortIdStmt,
-        deleteCanonStmt,        unindexedLinksStmt,    setLinkSetIndexStmt,    legacyHistoryStmt,
-        timeStateReadStmt,      timeStateWriteStmt,    restampChannelStmt,     restampScratchStmt,
-        restampDirectStmt,      updateChannelTimeStmt, updateScratchTimeStmt,  updateDirectTimeStmt,
+        chain_insert_stmt,      scratch_insert_stmt,   identityCanonStmt,      identityScratchStmt,   replaceCanonCopyStmt,
+        replaceScratchCopyStmt, checkDupMessageHash,   checkScratch,           removeScratch,         updatePayloadStmt,
+        fromScratchStmt,        fromScratchByHashStmt, getHashFromRootStmt,    addRootToMappingsStmt, getFullRootHashStmt,
+        getScratchCountStmt,    scratchTimeRowsStmt,   deleteScratchRowidStmt, canonTimeRowsStmt,     deleteCanonRowidStmt,
+        bucketSummaryStmt,      bucketIdsStmt,         distinctBucketsStmt,    getLinkByShortIdStmt,  deleteCanonStmt,
+        unindexedLinksStmt,     setLinkSetIndexStmt,   legacyHistoryStmt,      timeStateReadStmt,     timeStateWriteStmt,
+        restampChannelStmt,     restampScratchStmt,    restampDirectStmt,      updateChannelTimeStmt, updateScratchTimeStmt,
+        updateDirectTimeStmt,
     };
     for (sqlite3_stmt *stmt : statements) {
         if (stmt)
@@ -454,11 +453,6 @@ int32_t StoreForwardPlusPlusModule::runOnce()
         if (portduino_config.sfpp_enum_listen_only)
             return (int32_t)portduino_config.sfpp_enum_interval * 60 * 1000;
         pumpEnumRetries();
-        // F3.5: the writer-missed sweep has its own timer, independent of the advert cadence.
-        if (enumLastScratchSweepMs == 0 || Throttle::hasElapsed(enumLastScratchSweepMs, scratchSweepMs())) {
-            enumLastScratchSweepMs = Time::getMillis();
-            pushScratchRows();
-        }
         if (drainOneEnumFrame())
             return enumDrainIntervalMs(); // serving a request takes priority over the advert cadence
         // Every archive advertises, but not in the middle of an exchange or with a pull queued.
@@ -471,9 +465,9 @@ int32_t StoreForwardPlusPlusModule::runOnce()
             return enumDrainIntervalMs(); // a paced pending pull is waiting
         if (enumLateActive)
             return 5 * 1000; // tighten the late-frame window expiry
-        // Every archive advertises; the scratch sweep keeps its own, shorter cadence.
+        // Every archive advertises.
         const uint32_t advertMs = (uint32_t)portduino_config.sfpp_enum_interval * 60 * 1000;
-        return (int32_t)(scratchSweepMs() < advertMs ? scratchSweepMs() : advertMs);
+        return (int32_t)advertMs;
     }
 }
 

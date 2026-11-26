@@ -39,15 +39,6 @@ static uint32_t itemRetryIntervalMs()
     return scaled > kEnumRetryMs ? scaled : kEnumRetryMs;
 }
 
-// Stage 9: offer a scratch row once it is old enough that the authority would have announced it if
-// it had heard it; re-offer at most hourly, and bound a sweep.
-static constexpr uint32_t kScratchPushMinAgeS = 300;
-static constexpr uint32_t kScratchReofferMs = 60 * 60 * 1000;
-static constexpr size_t kEnumPushOfferedMax = 64;
-static constexpr size_t kEnumMaxKnownPeers = 16;
-static constexpr size_t kScratchPushPerSweep = 8;
-static constexpr size_t kEnumMaxPushSenders = 16;
-static constexpr uint32_t kPushBudgetRows = 8;
 // Overheard listings kept, and how long one stands in for our own ENUM_REQUEST.
 static constexpr size_t kEnumHeardListingsMax = 4;
 static constexpr uint32_t kEnumHeardListingMs = 5 * 60 * 1000;
@@ -359,7 +350,7 @@ void StoreForwardPlusPlusModule::startPendingPull()
 {
     if (portduino_config.sfpp_enum_listen_only)
         return;
-    if (enumExchangeActive || enumPending.empty() || enumAuthorityNode == 0)
+    if (enumExchangeActive || enumPending.empty())
         return;
 
     uint8_t root[SFPP_HASH_SIZE] = {0};
@@ -367,14 +358,14 @@ void StoreForwardPlusPlusModule::startPendingPull()
         return;
     const uint32_t nowMs = Time::getMillis();
 
-    // Key by (root, authority); a hole older than the proposed service window is no longer chased.
-    enumPending.erase(
-        std::remove_if(enumPending.begin(), enumPending.end(),
-                       [&](const EnumPendingBucket &entry) {
-                           return entry.authority != enumAuthorityNode || memcmp(entry.root, root, SFPP_HASH_SIZE) != 0 ||
-                                  (entry.firstFailedMs != 0 && Throttle::hasElapsed(entry.firstFailedMs, kServiceWindowMs));
-                       }),
-        enumPending.end());
+    // A hole for another root, or older than the proposed service window, is no longer chased.
+    enumPending.erase(std::remove_if(enumPending.begin(), enumPending.end(),
+                                     [&](const EnumPendingBucket &entry) {
+                                         return memcmp(entry.root, root, SFPP_HASH_SIZE) != 0 ||
+                                                (entry.firstFailedMs != 0 &&
+                                                 Throttle::hasElapsed(entry.firstFailedMs, kServiceWindowMs));
+                                     }),
+                      enumPending.end());
     if (enumPending.empty())
         return;
 
@@ -592,7 +583,6 @@ void StoreForwardPlusPlusModule::handleEnumAdvert(const meshtastic_MeshPacket &m
     uint8_t root[SFPP_HASH_SIZE] = {0};
     bool known = lookUpFullRootHash(advert.scope.rootPrefix, advert.scope.rootPrefixLen, root);
     if (known && memcmp(root, derived, SFPP_HASH_SIZE) != 0) {
-        noteEnumPeer(mp.from, advert.scope.rootPrefix);
         if (mp.from != enumForeignRootLoggedPeer) {
             char rootHex[9];
             formatRootHex(root, SFPP_HASH_SIZE, rootHex);
@@ -606,7 +596,6 @@ void StoreForwardPlusPlusModule::handleEnumAdvert(const meshtastic_MeshPacket &m
         if (advert.scope.rootPrefixLen != SFPP_HASH_SIZE)
             return;
         if (memcmp(advert.scope.rootPrefix, derived, SFPP_HASH_SIZE) != 0) {
-            noteEnumPeer(mp.from, advert.scope.rootPrefix);
             if (mp.from != enumForeignRootLoggedPeer) {
                 char rootHex[9];
                 formatRootHex(advert.scope.rootPrefix, SFPP_HASH_SIZE, rootHex);
@@ -619,17 +608,9 @@ void StoreForwardPlusPlusModule::handleEnumAdvert(const meshtastic_MeshPacket &m
     }
     enumForeignRootLoggedPeer = 0;
 
-    // F3.2: only a parsed advert whose root is ours names the authority.
-    enumAuthorityNode = mp.from;
-    // Stage 8h: the tip and advert bookkeeping belong to (root, authority); reset on a change.
-    if (memcmp(enumTipRoot, root, SFPP_HASH_SIZE) != 0 || enumTipAuthority != mp.from) {
-        memcpy(enumTipRoot, root, SFPP_HASH_SIZE);
-        enumTipAuthority = mp.from;
-        enumPending.clear();
-    }
     logEnum("rx", "advert", advert.scope, mp.decoded.payload.size, mp.from, -1, 0, 1, t->message.size);
     if (portduino_config.sfpp_enum_listen_only)
-        return; // learn the authority, never request
+        return; // listen-only: never request
 
     // A failed pull is retried on the next advert from that peer, whichever bucket it names.
     for (const auto &entry : enumPending) {
@@ -660,7 +641,7 @@ void StoreForwardPlusPlusModule::handleEnumAdvert(const meshtastic_MeshPacket &m
 
     {
         // A bucket that could not be repaired from this advertised summary is not pulled again until
-        // the authority advertises a different one for it.
+        // a peer advertises a different one for it.
         if (enumBucketSuppressed(root, advert.scope.bucket, advert.count, advert.checksum))
             return;
 
@@ -774,7 +755,6 @@ void StoreForwardPlusPlusModule::handleEnumRequest(const meshtastic_MeshPacket &
     if (!lookUpFullRootHash(scope.rootPrefix, scope.rootPrefixLen, root))
         return;
 
-    noteEnumPeer(mp.from, scope.rootPrefix);
     logEnum("rx", "enum_req", scope, mp.decoded.payload.size, mp.from, -1, 0, 1);
 
     std::vector<pinsketch::Element> ids;
@@ -979,10 +959,12 @@ void StoreForwardPlusPlusModule::handleOverheardListing(NodeNum peer, const uint
             ++it;
         }
     }
-    if (holdsAll || portduino_config.sfpp_enum_listen_only) {
+    if (holdsAll) {
         enumHeardListings.erase(enumHeardListings.begin() + (heard - enumHeardListings.data()));
         return;
     }
+    if (portduino_config.sfpp_enum_listen_only)
+        return; // keep the complete listing so overheard item frames can be accepted
     // The hole is pulled from the lister on the next pacer slot, asking for items only.
     addPendingBucket(root_hash, peer, list.scope.bucket, count, checksum, 0);
     for (auto &entry : enumPending) {
@@ -1103,7 +1085,6 @@ void StoreForwardPlusPlusModule::handleItemRequest(const meshtastic_MeshPacket &
     if (!lookUpFullRootHash(list.scope.rootPrefix, list.scope.rootPrefixLen, root))
         return;
 
-    noteEnumPeer(mp.from, list.scope.rootPrefix);
     noteRequesterActivity(mp.from); // a re-request refreshes the requester's entry
     logEnum("rx", "item_req", list.scope, mp.decoded.payload.size, mp.from, (int)list.ids.size(), 0, 1);
 
@@ -1224,225 +1205,17 @@ void StoreForwardPlusPlusModule::pumpEnumRetries()
     }
 }
 
-bool StoreForwardPlusPlusModule::isEnumKnownPeer(NodeNum node, const uint8_t *root_prefix) const
-{
-    for (const auto &peer : enumKnownPeers) {
-        if (peer.node == node && memcmp(peer.rootPrefix, root_prefix, sfppsr::kRootPrefixBytes) == 0)
-            return true;
-    }
-    return false;
-}
-
-bool StoreForwardPlusPlusModule::isEnumKnownPeerOnAnotherRoot(NodeNum node, const uint8_t *root_prefix) const
-{
-    for (const auto &peer : enumKnownPeers) {
-        if (peer.node == node && memcmp(peer.rootPrefix, root_prefix, sfppsr::kRootPrefixBytes) != 0)
-            return true;
-    }
-    return false;
-}
-
-void StoreForwardPlusPlusModule::noteEnumPeer(NodeNum node, const uint8_t *root_prefix)
-{
-    if (node == 0 || node == NODENUM_BROADCAST)
-        return;
-    for (size_t i = 0; i < enumKnownPeers.size(); i++) {
-        if (enumKnownPeers[i].node == node) {
-            EnumPeer peer = enumKnownPeers[i];
-            memcpy(peer.rootPrefix, root_prefix, sfppsr::kRootPrefixBytes);
-            enumKnownPeers.erase(enumKnownPeers.begin() + i); // re-noted peer becomes most recent
-            enumKnownPeers.push_back(peer);
-            return;
-        }
-    }
-    if (enumKnownPeers.size() >= kEnumMaxKnownPeers) {
-        size_t victim = 0;
-        for (size_t i = 0; i < enumKnownPeers.size(); i++) {
-            const NodeNum candidate = enumKnownPeers[i].node;
-            bool served = false;
-            for (const auto &requester : enumTxQueues)
-                if (requester.to == candidate && !requester.queue.empty())
-                    served = true;
-            // Never evict the pull peer or a peer whose frames are queued to be served.
-            if (candidate != enumExchangePeer && !served) {
-                victim = i;
-                break;
-            }
-        }
-        enumKnownPeers.erase(enumKnownPeers.begin() + victim);
-    }
-    EnumPeer peer;
-    peer.node = node;
-    memcpy(peer.rootPrefix, root_prefix, sfppsr::kRootPrefixBytes);
-    enumKnownPeers.push_back(peer);
-}
-
-bool StoreForwardPlusPlusModule::consumePushBudget(NodeNum node)
-{
-    const uint32_t now = Time::getMillis();
-    for (auto &sender : enumPushSenders) {
-        if (sender.node != node)
-            continue;
-        if (Throttle::hasElapsed(sender.windowStartMs, scratchSweepMs())) {
-            sender.windowStartMs = now;
-            sender.accepted = 0;
-        }
-        if (sender.accepted >= kPushBudgetRows)
-            return false;
-        sender.accepted++;
-        return true;
-    }
-    if (enumPushSenders.size() >= kEnumMaxPushSenders)
-        enumPushSenders.erase(enumPushSenders.begin());
-    enumPushSenders.push_back({node, now, 1});
-    return true;
-}
-
-bool StoreForwardPlusPlusModule::enumAlreadyOffered(const uint8_t *hash) const
-{
-    for (const auto &entry : enumPushOffered) {
-        if (memcmp(entry.prefix, hash, sizeof(entry.prefix)) == 0)
-            return true;
-    }
-    return false;
-}
-
-void StoreForwardPlusPlusModule::noteEnumOffered(const uint8_t *hash)
-{
-    EnumPushed entry;
-    memcpy(entry.prefix, hash, sizeof(entry.prefix));
-    entry.offeredMs = Time::getMillis();
-    enumPushOffered.push_back(entry);
-    while (enumPushOffered.size() > kEnumPushOfferedMax)
-        enumPushOffered.pop_front();
-}
-
-void StoreForwardPlusPlusModule::pushScratchRows()
-{
-    if (portduino_config.sfpp_enum_listen_only || enumAuthorityNode == 0)
-        return;
-
-    uint8_t root[SFPP_HASH_SIZE] = {0};
-    if (getOrDeriveRootFromChannel(channels.getHash(0), root) == 0)
-        return;
-
-    // An offer older than the reoffer window may be tried again if the row is still in scratch.
-    for (auto it = enumPushOffered.begin(); it != enumPushOffered.end();) {
-        if (Throttle::hasElapsed(it->offeredMs, kScratchReofferMs))
-            it = enumPushOffered.erase(it);
-        else
-            ++it;
-    }
-
-    sfppsr::Scope scope;
-    copyScopeRoot(root, SFPP_HASH_SIZE, scope, 0, false);
-
-    sqlite3_reset(fromScratchStmt);
-    sqlite3_bind_blob(fromScratchStmt, 1, root, SFPP_HASH_SIZE, NULL);
-
-    size_t queued = 0;
-    while (queued < kScratchPushPerSweep && sqlite3_step(fromScratchStmt) == SQLITE_ROW) {
-        const uint32_t to = (uint32_t)sqlite3_column_int64(fromScratchStmt, 0);
-        const uint32_t from = (uint32_t)sqlite3_column_int64(fromScratchStmt, 1);
-        const uint32_t id = (uint32_t)sqlite3_column_int64(fromScratchStmt, 2);
-        const uint8_t *cipher = (const uint8_t *)sqlite3_column_blob(fromScratchStmt, 3);
-        const int cipherLen = sqlite3_column_bytes(fromScratchStmt, 3);
-        const uint8_t *hash = (const uint8_t *)sqlite3_column_blob(fromScratchStmt, 4);
-        RowTime stamp;
-        stamp.stamp = (uint32_t)sqlite3_column_int64(fromScratchStmt, 5);
-        stamp.basis = (uint8_t)sqlite3_column_int(fromScratchStmt, 7);
-        stamp.boot_id = (uint32_t)sqlite3_column_int64(fromScratchStmt, 8);
-        stamp.margin = (uint32_t)sqlite3_column_int64(fromScratchStmt, 9);
-
-        if (cipher == nullptr || cipherLen <= 0 || hash == nullptr)
-            continue;
-        const RowAge age = rowAge(stamp);
-        if (age.age < kScratchPushMinAgeS)
-            continue; // too young: the authority may still hear it live and announce it
-        if (enumAlreadyOffered(hash))
-            continue;
-
-        const uint32_t heardAgo = age.age;
-        std::vector<meshtastic_StoreForwardPlusPlus> frames;
-        if (!sfppframe::split(cipher, (size_t)cipherLen, to, from, id, heardAgo, false, frames))
-            continue;
-        queueItemFrames(frames, enumAuthorityNode, enumAuthorityNode, scope);
-        noteEnumOffered(hash);
-        queued++;
-    }
-    sqlite3_reset(fromScratchStmt);
-
-    if (queued > 0)
-        setIntervalFromNow(10); // the first offered frame drains on the next tick
-}
-
-bool StoreForwardPlusPlusModule::acceptPushedItemFrame(const meshtastic_MeshPacket &mp, meshtastic_StoreForwardPlusPlus *t)
-{
-    sfppframe::Replay replay;
-    if (!enumPushReassembler.offer(*t, Time::getMillis(), replay))
-        return false;
-
-    uint8_t root[SFPP_HASH_SIZE] = {0};
-    if (getOrDeriveRootFromChannel(channels.getHash(0), root) == 0)
-        return false;
-
-    if (isEnumKnownPeerOnAnotherRoot(mp.from, root)) {
-        LOG_INFO("StoreForwardpp refusing a push from 0x%08x on a foreign root", mp.from);
-        return false;
-    }
-
-    // F3.6: trust a known peer on this root; an unknown pusher gets a small budget per window.
-    if (!isEnumKnownPeer(mp.from, root) && !consumePushBudget(mp.from)) {
-        LOG_WARN("StoreForwardpp push from 0x%08x is over budget, dropping", mp.from);
-        return false;
-    }
-
-    link_object lo;
-    if (replay.ciphertext.size() > sizeof(lo.encrypted_bytes))
-        return false;
-
-    RowTime lo_time;
-    lo.to = replay.to;
-    lo.from = replay.from;
-    lo.id = replay.id;
-    if (!timeFromAge(replay.heardAgoS, lo_time))
-        return false;
-    lo.rx_time = lo_time.stamp;
-    lo.time_basis = lo_time.basis;
-    lo.boot_id = lo_time.boot_id;
-    lo.age_margin = lo_time.margin;
-    memcpy(lo.root_hash, root, SFPP_HASH_SIZE);
-    lo.root_hash_len = SFPP_HASH_SIZE;
-    lo.channel_hash = channels.getHash(0);
-    lo.encrypted_len = replay.ciphertext.size();
-    memcpy(lo.encrypted_bytes, replay.ciphertext.data(), replay.ciphertext.size());
-    sfppframe::messageHash(lo.encrypted_bytes, lo.encrypted_len, lo.to, lo.from, lo.id, lo.message_hash);
-    lo.message_hash_len = SFPP_HASH_SIZE;
-    if (isInDB(lo.message_hash, lo.message_hash_len))
-        return true; // already committed, maybe by another follower's push
-    LOG_INFO("StoreForwardpp committing a writer-missed text from 0x%08x", mp.from);
-    return insertCanonObject(lo.to, lo.from, lo.id, lo.encrypted_bytes, lo.encrypted_len, lo.message_hash,
-                             RowTime{lo.rx_time, lo.time_basis, lo.boot_id, lo.age_margin}, lo.payload, lo.root_hash,
-                             sfppsr::contentBucket(lo.message_hash, lo.message_hash_len));
-}
-
 void StoreForwardPlusPlusModule::handleItemFrame(const meshtastic_MeshPacket &mp, meshtastic_StoreForwardPlusPlus *t)
 {
+    // The derived root belongs to the primary channel; a decoded packet carries its channel index.
+    if (mp.channel != 0)
+        return;
     const bool addressed = (mp.to == nodeDB->getNodeNum() || mp.to == NODENUM_BROADCAST);
     if (!addressed)
         return;
 
-    // A writer-missed push is unicast to this archive. Any archive accepts one for its own root;
-    // frames belonging to the exchange (or its late window) go to the paths below.
-    if (mp.to == nodeDB->getNodeNum() && !(enumExchangeActive && mp.from == enumExchangePeer) &&
-        !(enumLateActive && mp.from == enumLatePeer)) {
-        acceptPushedItemFrame(mp, t);
-        return;
-    }
-
-    // Until archive membership is authenticated, a follower trusts item frames only from the
-    // authority it learned from an advert.
-    if (enumAuthorityNode == 0 || mp.from != enumAuthorityNode)
+    uint8_t root[SFPP_HASH_SIZE] = {0};
+    if (getOrDeriveRootFromChannel(channels.getHash(0), root) == 0)
         return;
 
     const bool fromActivePeer = enumExchangeActive && mp.from == enumExchangePeer;
@@ -1472,82 +1245,93 @@ void StoreForwardPlusPlusModule::handleItemFrame(const meshtastic_MeshPacket &mp
     sfppframe::messageHash(replay.ciphertext.data(), replay.ciphertext.size(), replay.to, replay.from, replay.id, hash);
     const pinsketch::Element shortId = sfppsr::shortId(hash, sizeof(hash));
 
-    // 1. An object this exchange asked for.
-    if (fromActivePeer) {
-        auto it = std::find(enumWanted.begin(), enumWanted.end(), shortId);
-        if (it != enumWanted.end()) {
-            const bool isNew = !isInDB(hash, sizeof(hash));
-            if (!storeRecoveredObject(replay, enumExchangeRoot, enumExchangeBucket))
-                return;
-            forgetItemInFlight(shortId);
-            enumLastItemMs = Time::getMillis();
-            if (isNew)
-                enumRecovered++;
+    // 1. An object this exchange asked for, from any peer that holds it.
+    auto wantedIt = std::find(enumWanted.begin(), enumWanted.end(), shortId);
+    if (enumExchangeActive && wantedIt != enumWanted.end()) {
+        const bool isNew = !isInDB(hash, sizeof(hash));
+        if (!storeRecoveredObject(replay, enumExchangeRoot, enumExchangeBucket))
+            return;
+        forgetItemInFlight(shortId);
+        enumLastItemMs = Time::getMillis();
+        if (isNew)
+            enumRecovered++;
 
-            if (enumCollisionProbe) {
-                if (bucketMatchesPeer(enumExchangeRoot, enumExchangeBucket)) {
-                    enumExchangeSucceeded = true;
-                    endEnumExchange();
-                }
-                return;
+        if (enumCollisionProbe) {
+            if (bucketMatchesPeer(enumExchangeRoot, enumExchangeBucket)) {
+                enumExchangeSucceeded = true;
+                endEnumExchange();
             }
-
-            enumWanted.erase(it);
-            enumWantedRemaining = enumWanted.size();
-            if (!enumWanted.empty())
-                return;
-
-            if (enumSketchAttempt) {
-                enumSketchAttempt = false;
-                if (bucketMatchesPeer(enumExchangeRoot, enumExchangeBucket)) {
-                    enumExchangeSucceeded = true;
-                    endEnumExchange();
-                } else if (!enumPromoted.empty()) {
-                    repairPromotions();
-                    return;
-                } else {
-                    char rootHex[9];
-                    formatRootHex(enumExchangeRoot, SFPP_HASH_SIZE, rootHex);
-                    LOG_INFO("SFPP-ENUM type=sketch_decode result=bad_checksum root=%s bucket=%u peer=0x%08x ids=%u", rootHex,
-                             enumExchangeBucket, enumExchangePeer, enumSketchIds);
-                    fallbackToEnumList();
-                }
-                return;
-            }
-            if (!enumPromoted.empty() && !bucketMatchesPeer(enumExchangeRoot, enumExchangeBucket)) {
-                repairPromotions();
-                return;
-            }
-            enumExchangeSucceeded = true;
-            endEnumExchange();
             return;
         }
+
+        enumWanted.erase(wantedIt);
+        enumWantedRemaining = enumWanted.size();
+        if (!enumWanted.empty())
+            return;
+
+        if (enumSketchAttempt) {
+            enumSketchAttempt = false;
+            if (bucketMatchesPeer(enumExchangeRoot, enumExchangeBucket)) {
+                enumExchangeSucceeded = true;
+                endEnumExchange();
+            } else if (!enumPromoted.empty()) {
+                repairPromotions();
+                return;
+            } else {
+                char rootHex[9];
+                formatRootHex(enumExchangeRoot, SFPP_HASH_SIZE, rootHex);
+                LOG_INFO("SFPP-ENUM type=sketch_decode result=bad_checksum root=%s bucket=%u peer=0x%08x ids=%u", rootHex,
+                         enumExchangeBucket, enumExchangePeer, enumSketchIds);
+                fallbackToEnumList();
+            }
+            return;
+        }
+        if (!enumPromoted.empty() && !bucketMatchesPeer(enumExchangeRoot, enumExchangeBucket)) {
+            repairPromotions();
+            return;
+        }
+        enumExchangeSucceeded = true;
+        endEnumExchange();
+        return;
     }
 
     // 2. A late object for a recently ended exchange.
-    if (enumLateActive && mp.from == enumLatePeer) {
-        auto it = std::find(enumLateWanted.begin(), enumLateWanted.end(), shortId);
-        if (it != enumLateWanted.end()) {
-            storeRecoveredObject(replay, enumLateRoot, enumLateBucket);
-            forgetItemInFlight(shortId);
-            enumLateWanted.erase(it);
-            if (enumLateWanted.empty())
-                enumLateActive = false;
-            return;
-        }
+    auto lateIt = std::find(enumLateWanted.begin(), enumLateWanted.end(), shortId);
+    if (enumLateActive && lateIt != enumLateWanted.end()) {
+        storeRecoveredObject(replay, enumLateRoot, enumLateBucket);
+        forgetItemInFlight(shortId);
+        enumLateWanted.erase(lateIt);
+        if (enumLateWanted.empty())
+            enumLateActive = false;
+        return;
     }
 
-    // 3. Overheard: any complete, hash-verified object from the authority, named by its bucket
-    // hint, whether or not an exchange is open. Item 6 until membership is authenticated.
-    const uint32_t hint = t->chain_count;
-    if (hint >= 0x100000)
+    // 3. An object named by a complete listing we hold, or one already in flight.
+    const uint32_t now = Time::getMillis();
+    const EnumInFlight *flight = nullptr;
+    for (const auto &entry : enumInFlight) {
+        if (entry.id == shortId && entry.expiresMs > now && memcmp(entry.root, root, SFPP_HASH_SIZE) == 0) {
+            flight = &entry;
+            break;
+        }
+    }
+    const EnumHeardListing *heard = nullptr;
+    for (const auto &entry : enumHeardListings) {
+        if (entry.seenCount != entry.total || Throttle::hasElapsed(entry.heardMs, kEnumHeardListingMs))
+            continue;
+        if (memcmp(entry.root, root, SFPP_HASH_SIZE) != 0)
+            continue;
+        if (std::find(entry.ids.begin(), entry.ids.end(), shortId) == entry.ids.end())
+            continue;
+        heard = &entry;
+        break;
+    }
+    if (!flight && !heard)
         return;
-    uint8_t root[SFPP_HASH_SIZE] = {0};
-    if (getOrDeriveRootFromChannel(channels.getHash(0), root) == 0)
-        return;
+    const uint32_t bucket = heard ? heard->bucket : flight->bucket;
     if (isInDB(hash, sizeof(hash)))
         return;
-    if (!storeRecoveredObject(replay, root, hint))
+    if (!storeRecoveredObject(replay, root, bucket))
         return;
     forgetItemInFlight(shortId);
 
