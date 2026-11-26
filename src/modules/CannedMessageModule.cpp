@@ -47,6 +47,7 @@ extern MessageStore messageStore;
 
 #include "graphics/ScreenFonts.h"
 #include <Throttle.h>
+#include <climits>
 
 // Remove Canned message screen if no action is taken for some milliseconds
 #define INACTIVATE_AFTER_MS 20000
@@ -444,10 +445,12 @@ static size_t firstWrappedTokenLen(const char *text)
     return graphics::EmoteRenderer::utf8CharLen(static_cast<uint8_t>(text[0]));
 }
 
-static void drawWrappedEmoteText(OLEDDisplay *display, int x, int y, const char *text, int maxWidth, int minimumRowHeight,
-                                 int emoteSpacing = 2)
+// Wrap text onto rows without splitting emotes, calling onLine(offset, line, rowY, rowHeight) for each row: line is the
+// row's text, which starts at text[offset]. drawWrappedEmoteText() draws these rows; freetextIndexAt() hit-tests them.
+template <typename OnLine>
+static void layoutWrappedEmoteText(OLEDDisplay *display, int y, const char *text, int maxWidth, int minimumRowHeight,
+                                   int emoteSpacing, OnLine onLine)
 {
-    // Wrap onto multiple rows without splitting emotes.
     if (!display || !text || maxWidth <= 0)
         return;
 
@@ -487,7 +490,7 @@ static void drawWrappedEmoteText(OLEDDisplay *display, int x, int y, const char 
 
         if (lineBuffer[0]) {
             const int rowHeight = getRowHeightForEmoteText(lineBuffer, minimumRowHeight, emoteSpacing);
-            drawCenteredEmoteText(display, x, yCursor, rowHeight, lineBuffer, emoteSpacing);
+            onLine(offset, static_cast<const char *>(lineBuffer), yCursor, rowHeight);
             yCursor += rowHeight;
         }
 
@@ -495,6 +498,15 @@ static void drawWrappedEmoteText(OLEDDisplay *display, int x, int y, const char 
         while (offset < textLen && text[offset] == ' ')
             ++offset;
     }
+}
+
+static void drawWrappedEmoteText(OLEDDisplay *display, int x, int y, const char *text, int maxWidth, int minimumRowHeight,
+                                 int emoteSpacing = 2)
+{
+    layoutWrappedEmoteText(display, y, text, maxWidth, minimumRowHeight, emoteSpacing,
+                           [&](size_t, const char *line, int rowY, int rowHeight) {
+                               drawCenteredEmoteText(display, x, rowY, rowHeight, line, emoteSpacing);
+                           });
 }
 /**
  * Main input event dispatcher for CannedMessageModule.
@@ -959,6 +971,19 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
         }
         return true;
     }
+#if HAS_TOUCHSCREEN && !defined(USE_VIRTUAL_KEYBOARD)
+    // Tap in the text: move the cursor to the tapped character. Long press still sends.
+    if (event->inputEvent == INPUT_BROKER_USER_PRESS && event->source && strcmp(event->source, "touchscreen1") == 0 && screen) {
+        cursor = freetextIndexAt(screen->getDisplayDevice(), event->touchX, event->touchY);
+        lastTouchMillis = millis();
+        requestFocus();
+        UIFrameEvent e;
+        e.action = UIFrameEvent::Action::REDRAW_ONLY;
+        notifyObservers(&e);
+        return true;
+    }
+#endif
+
     // Confirm select (Enter)
     bool isSelect = isSelectEvent(event);
     if (isSelect) {
@@ -2498,5 +2523,54 @@ String CannedMessageModule::drawWithCursor(String text, int cursor)
     String result = text.substring(0, cursor) + "_" + text.substring(cursor);
     return result;
 }
+
+#if HAS_TOUCHSCREEN && !defined(USE_VIRTUAL_KEYBOARD)
+unsigned int CannedMessageModule::freetextIndexAt(OLEDDisplay *display, int16_t tapX, int16_t tapY)
+{
+    if (!display)
+        return cursor;
+
+    // Same string, origin, width and font as drawFrame()'s freetext; its '_' marks the cursor
+    const String drawn = drawWithCursor(freetext, cursor);
+    const int inputX = BASEUI_BODY_LR_MARGIN;
+    const int inputY = FONT_HEIGHT_SMALL + BASEUI_HEADER_MARGIN;
+    constexpr int emoteSpacing = 2;
+    display->setFont(FONT_SMALL);
+
+    // The row under the tap; above the first row that row, below the last row the last
+    size_t rowOffset = 0;
+    std::string rowText;
+    bool rowFound = false;
+    layoutWrappedEmoteText(display, inputY, drawn.c_str(), display->getWidth() - inputX - BASEUI_BODY_LR_MARGIN,
+                           FONT_HEIGHT_SMALL, emoteSpacing, [&](size_t offset, const char *line, int rowY, int rowHeight) {
+                               if (rowFound)
+                                   return;
+                               rowOffset = offset;
+                               rowText = line;
+                               rowFound = tapY < rowY + rowHeight;
+                           });
+
+    // The boundary between characters (or whole emotes) nearest the tap
+    size_t best = 0;
+    int bestDistance = INT_MAX;
+    for (size_t i = 0;;) {
+        const int width = graphics::EmoteRenderer::measureStringWithEmotes(display, rowText.substr(0, i), graphics::emotes,
+                                                                           graphics::numEmotes, emoteSpacing);
+        const int distance = abs(inputX + width - tapX);
+        if (distance < bestDistance) {
+            bestDistance = distance;
+            best = i;
+        }
+        if (i >= rowText.size())
+            break;
+        i += std::max<size_t>(firstWrappedTokenLen(rowText.c_str() + i), 1);
+    }
+
+    // Back to a freetext index: positions past the '_' shift down by its one byte
+    const unsigned int drawnIndex = rowOffset + best;
+    const unsigned int index = drawnIndex <= cursor ? drawnIndex : drawnIndex - 1;
+    return std::min<unsigned int>(index, freetext.length());
+}
+#endif
 
 #endif

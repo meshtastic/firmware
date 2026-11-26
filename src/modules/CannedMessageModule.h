@@ -192,6 +192,10 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     int handleDestinationSelectionInput(const InputEvent *event, bool isUp, bool isDown, bool isSelect);
     bool handleMessageSelectorInput(const InputEvent *event, bool isUp, bool isDown, bool isSelect);
     bool handleFreeTextInput(const InputEvent *event);
+#if HAS_TOUCHSCREEN && !defined(USE_VIRTUAL_KEYBOARD)
+    // The freetext position under a tap, from the text laid out as drawFrame() draws it.
+    unsigned int freetextIndexAt(OLEDDisplay *display, int16_t tapX, int16_t tapY);
+#endif
     // Opens the on-screen keyboard prompt for the current destination.
     // Returns false when this device has no on-screen keyboard.
     bool showOnScreenKeyboard();
