@@ -2440,6 +2440,95 @@ void test_fourRequestersShareTheServingWindow()
         TEST_ASSERT_LESS_OR_EQUAL_UINT32(7, frames[p]); // 30 / 4 active requesters
 }
 
+void requestOneItemFrom(NodeNum peer, const uint8_t *root, pinsketch::Element id)
+{
+    meshtastic_StoreForwardPlusPlus msg = meshtastic_StoreForwardPlusPlus_init_default;
+    msg.sfpp_message_type = meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_REQUEST;
+    msg.sr_version = sfppsr::kDerivationVersion;
+    msg.root_hash.size = 4;
+    memcpy(msg.root_hash.bytes, root, 4);
+    msg.chain_count = kBucket;
+    msg.sr_short_ids[0] = id;
+    msg.sr_short_ids_count = 1;
+    meshtastic_MeshPacket request = meshtastic_MeshPacket_init_zero;
+    request.from = peer;
+    request.to = AUTHORITY_NODE;
+    request.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    request.decoded.portnum = meshtastic_PortNum_STORE_FORWARD_PLUSPLUS_APP;
+    myNodeInfo.my_node_num = AUTHORITY_NODE;
+    TEST_ASSERT_TRUE(authority->handleReceivedProtobuf(request, &msg));
+}
+
+bool drainReaches(NodeNum peer, uint32_t rounds)
+{
+    for (uint32_t i = 0; i < rounds; i++) {
+        for (const auto &out : drainAuthorityOne(100)) {
+            if (out.to == peer &&
+                decodeSfpp(out).sfpp_message_type == meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_FRAME)
+                return true;
+        }
+    }
+    return false;
+}
+
+// A full table of idle requesters yields one slot to a newcomer.
+void test_fullIdleRequesterTableServesNewcomer()
+{
+    portduino_config.sfpp_enum_drain_ms = 100;
+    ingestAuthority(32);
+    std::vector<pinsketch::Element> ids;
+    TEST_ASSERT_TRUE(readShortIds(dirA, kBucket, ids));
+    uint8_t root[SFPP_HASH_SIZE];
+    TEST_ASSERT_TRUE(readRoot(dirA, root));
+
+    constexpr NodeNum first = 0xB0000001;
+    for (uint32_t i = 0; i < 16; i++)
+        requestOneItemFrom(first + i, root, ids[0]);
+    TEST_ASSERT_EQUAL_UINT(0, takeSent().size());
+
+    Time::setTestMillis(Time::getMillis() + 2 * 100); // two drain intervals of idleness
+    const NodeNum newcomer = first + 16;
+    requestOneItemFrom(newcomer, root, ids[0]);
+    TEST_ASSERT_EQUAL_UINT(0, takeSent().size());
+
+    TEST_ASSERT_TRUE(drainReaches(newcomer, 20));
+}
+
+// While every slot is active a newcomer is refused and no requester loses its slot.
+void test_fullActiveRequesterTableKeepsSlots()
+{
+    portduino_config.sfpp_enum_drain_ms = 100;
+    ingestAuthority(32);
+    std::vector<pinsketch::Element> ids;
+    TEST_ASSERT_TRUE(readShortIds(dirA, kBucket, ids));
+    uint8_t root[SFPP_HASH_SIZE];
+    TEST_ASSERT_TRUE(readRoot(dirA, root));
+
+    constexpr NodeNum first = 0xC0000001;
+    for (uint32_t i = 0; i < 16; i++)
+        requestOneItemFrom(first + i, root, ids[0]);
+
+    const NodeNum newcomer = first + 16;
+    requestOneItemFrom(newcomer, root, ids[0]); // all 16 were heard from just now
+    TEST_ASSERT_EQUAL_UINT(0, takeSent().size());
+
+    uint32_t served = 0;
+    bool newcomerServed = false;
+    for (uint32_t i = 0; i < 30; i++) {
+        for (const auto &out : drainAuthorityOne(100)) {
+            if (decodeSfpp(out).sfpp_message_type != meshtastic_StoreForwardPlusPlus_SFPP_message_type_ITEM_FRAME)
+                continue;
+            if (out.to == newcomer)
+                newcomerServed = true;
+            for (uint32_t p = 0; p < 16; p++)
+                if (out.to == first + p)
+                    served++;
+        }
+    }
+    TEST_ASSERT_FALSE(newcomerServed);
+    TEST_ASSERT_EQUAL_UINT32(16, served);
+}
+
 // G4: a half-received provide ends at the idle gap, so a later advert can start a fresh pull.
 void test_lostProvideFrameEndsAtIdle()
 {
@@ -3367,6 +3456,8 @@ void setup()
     RUN_TEST(test_lostProvideFrameEndsAtIdle);
     RUN_TEST(test_listingOutlastsSlowDrainGap);
     RUN_TEST(test_fourRequestersShareTheServingWindow);
+    RUN_TEST(test_fullIdleRequesterTableServesNewcomer);
+    RUN_TEST(test_fullActiveRequesterTableKeepsSlots);
     RUN_TEST(test_lostEnumProvideRetriesWithinBackoff);
     RUN_TEST(test_failedPullStopsPastServiceWindow);
     RUN_TEST(test_failedPullBackoffDoublesAcrossFailures);

@@ -111,8 +111,20 @@ void StoreForwardPlusPlusModule::queueEnumFrames(const std::vector<meshtastic_St
     }
     if (slot == nullptr) {
         if (enumTxQueues.size() >= kEnumMaxRequesters) {
-            LOG_WARN("StoreForwardpp enumeration queue limit reached, dropping the request");
-            return;
+            // A full table still admits a newcomer by reclaiming the slot idle longest, once it has
+            // gone a whole drain interval without a request from it or a frame to it.
+            auto idle = enumTxQueues.end();
+            for (auto it = enumTxQueues.begin(); it != enumTxQueues.end(); ++it) {
+                if (idle == enumTxQueues.end() ||
+                    std::max(it->lastUsedMs, it->lastServeMs) < std::max(idle->lastUsedMs, idle->lastServeMs))
+                    idle = it;
+            }
+            if (idle == enumTxQueues.end() ||
+                !Throttle::hasElapsed(std::max(idle->lastUsedMs, idle->lastServeMs), enumDrainIntervalMs())) {
+                LOG_WARN("StoreForwardpp enumeration queue limit reached, dropping the request");
+                return;
+            }
+            enumTxQueues.erase(idle);
         }
         enumTxQueues.push_back(EnumRequester());
         slot = &enumTxQueues.back();
@@ -183,6 +195,7 @@ bool StoreForwardPlusPlusModule::drainOneEnumFrame()
         if (sendEnumMessage(out.msg, out.to, out.type, 0, &out.scope)) {
             requester.queue.pop_front();
             requester.sentInWindow++;
+            requester.lastServeMs = nowMs;
         }
         enumQueueCursor = (idx + 1) % enumTxQueues.size();
         enumLastDrainMs = nowMs;

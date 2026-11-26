@@ -259,6 +259,7 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     struct EnumRequester {
         NodeNum to = 0;
         uint32_t lastUsedMs = 0;
+        uint32_t lastServeMs = 0; // last frame sent to this requester, for idle-slot reclaim
         uint32_t windowStartMs = 0;
         uint8_t sentInWindow = 0;
         std::deque<EnumOutgoing> queue;
