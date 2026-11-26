@@ -243,7 +243,7 @@ void test_handshake_right_number_marks_both_sides_verified(void)
     meshtastic_MeshPacket m3 = testRouter->packets.back();
     m3.from = NODE_A;
     m3.to = NODE_B;
-    m3.pki_encrypted = true;
+    TEST_ASSERT_TRUE_MESSAGE(m3.pki_encrypted, "the responder only accepts the hash over PKI");
 
     switchTo(NODE_B, ownerB);
     meshtastic_KeyVerification kv3 = decode(m3);
@@ -274,7 +274,7 @@ void test_handshake_wrong_number_does_not_verify(void)
 
 void test_handshake_timeout_returns_to_idle(void)
 {
-    Time::setTestMillis(100000); // pin the domain sessionStartedMs uses before starting
+    Time::setTestMillis(100000); // sessionStartedMs and the timeout check both read this clock
     startHandshake();
 
     switchTo(NODE_A, ownerA);

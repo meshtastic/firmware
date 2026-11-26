@@ -193,7 +193,7 @@ bool KeyVerificationModule::sendInitialRequest(NodeNum remoteNode)
             CryptRNG.rand((uint8_t *)&currentNonce, sizeof(currentNonce));
     }
     currentNonceTimestamp = getTime();
-    sessionStartedMs = millis();
+    sessionStartedMs = Time::getMillis(); // the clock Throttle compares it against in updateState()
     currentRemoteNode = remoteNode;
     meshtastic_KeyVerification KeyVerification = meshtastic_KeyVerification_init_zero;
     KeyVerification.nonce = currentNonce;
@@ -239,7 +239,7 @@ meshtastic_MeshPacket *KeyVerificationModule::allocReply()
         ignoreRequest = true;
         return nullptr;
     }
-    sessionStartedMs = millis();
+    sessionStartedMs = Time::getMillis(); // the clock Throttle compares it against in updateState()
     sessionFromRemote = true;
     currentState = KEY_VERIFICATION_RECEIVER_AWAITING_HASH1;
 
