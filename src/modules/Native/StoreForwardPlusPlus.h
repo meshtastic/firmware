@@ -234,6 +234,9 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
     void fallbackToEnumList();
     void handleEnumRequest(const meshtastic_MeshPacket &mp, meshtastic_StoreForwardPlusPlus *t);
     void handleEnumProvide(const meshtastic_MeshPacket &mp, meshtastic_StoreForwardPlusPlus *t);
+    void handleOverheardListing(NodeNum peer, const uint8_t *root_hash, const sfppsr::ShortIdList &list);
+    bool takeHeardListing(const uint8_t *root_hash, uint32_t bucket, NodeNum &peer, std::vector<pinsketch::Element> &ids);
+    void actOnListing(const uint8_t *root_hash, uint32_t bucket, NodeNum peer);
     void handleItemRequest(const meshtastic_MeshPacket &mp, meshtastic_StoreForwardPlusPlus *t);
     void handleItemFrame(const meshtastic_MeshPacket &mp, meshtastic_StoreForwardPlusPlus *t);
     void requestEnumList(const uint8_t *root_hash, uint32_t bucket, NodeNum peer);
@@ -448,6 +451,7 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
         uint32_t retryAfterMs = 0;
         uint32_t firstFailedMs = 0;
         uint8_t attempts = 0;
+        bool summaryKnown = true; // false when only an overheard listing named the hole
     };
     std::vector<EnumPendingBucket> enumPending;
     struct EnumPromoted {
@@ -464,6 +468,21 @@ class StoreForwardPlusPlusModule : public ProtobufModule<meshtastic_StoreForward
         uint64_t checksum;
     };
     std::vector<EnumBucketSeen> enumAdvertSeen;
+
+    // A broadcast listing overheard outside our own exchange stands in for our ENUM_REQUEST.
+    struct EnumHeardListing {
+        uint8_t root[SFPP_HASH_SIZE];
+        uint32_t bucket;
+        NodeNum peer;
+        uint8_t total;
+        uint8_t seenCount;
+        bool seen[8];
+        std::vector<pinsketch::Element> ids;
+        uint32_t heardMs;
+    };
+    std::vector<EnumHeardListing> enumHeardListings;
+    // False for a pull started from an overheard listing, which carries no count or checksum.
+    bool enumPeerSummaryKnown = true;
 
     bool enumAwaitingList = false;
     uint8_t enumListRetries = 0;

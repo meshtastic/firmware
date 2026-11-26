@@ -48,6 +48,9 @@ static constexpr size_t kEnumMaxKnownPeers = 16;
 static constexpr size_t kScratchPushPerSweep = 8;
 static constexpr size_t kEnumMaxPushSenders = 16;
 static constexpr uint32_t kPushBudgetRows = 8;
+// Overheard listings kept, and how long one stands in for our own ENUM_REQUEST.
+static constexpr size_t kEnumHeardListingsMax = 4;
+static constexpr uint32_t kEnumHeardListingMs = 5 * 60 * 1000;
 
 namespace
 {
@@ -173,6 +176,7 @@ void StoreForwardPlusPlusModule::beginEnumExchange(const uint8_t *root_hash, uin
     enumProvideActive = false;
     enumPeerCount = peerCount;
     enumPeerChecksum = peerChecksum;
+    enumPeerSummaryKnown = true;
     enumCollisionProbe = false;
     enumSketchAttempt = false;
     enumSketchIds = 0;
@@ -402,10 +406,21 @@ void StoreForwardPlusPlusModule::startPendingPull()
     formatRootHex(root, SFPP_HASH_SIZE, rootHex);
     LOG_INFO("SFPP-ENUM sketch_decode result=skipped reason=pending_pull root=%s bucket=%u peer=0x%08x", rootHex, entry.bucket,
              entry.authority);
+    enumLastDrainMs = nowMs; // consume the pacer slot
+    NodeNum lister = 0;
+    std::vector<pinsketch::Element> listed;
+    if (takeHeardListing(root, entry.bucket, lister, listed)) {
+        // An overheard listing already answered this bucket: ask the lister for items only.
+        beginEnumExchange(root, entry.bucket, lister, entry.count, entry.checksum);
+        enumPeerSummaryKnown = entry.summaryKnown && lister == entry.authority;
+        enumPeerTip = entry.tip;
+        enumProvideIds = listed;
+        actOnListing(root, entry.bucket, lister);
+        return;
+    }
     beginEnumExchange(root, entry.bucket, entry.authority, entry.count, entry.checksum);
     enumPeerTip = entry.tip;
     requestEnumList(root, entry.bucket, entry.authority);
-    enumLastDrainMs = nowMs; // consume the pacer slot
 }
 
 void StoreForwardPlusPlusModule::repairPromotions()
@@ -450,6 +465,15 @@ void StoreForwardPlusPlusModule::expireEnumLate()
 
 bool StoreForwardPlusPlusModule::bucketMatchesPeer(const uint8_t *root_hash, uint32_t bucket)
 {
+    if (!enumPeerSummaryKnown) {
+        // An overheard listing has no checksum: matching means holding every listed ID.
+        std::vector<pinsketch::Element> own;
+        collectBucketIds(root_hash, SFPP_HASH_SIZE, bucket, own);
+        std::sort(own.begin(), own.end());
+        std::vector<pinsketch::Element> listed = enumProvideIds;
+        std::sort(listed.begin(), listed.end());
+        return std::includes(own.begin(), own.end(), listed.begin(), listed.end());
+    }
     sfppsr::BucketSummary local(4);
     buildBucketSummary(root_hash, SFPP_HASH_SIZE, bucket, local);
     return local.count() == enumPeerCount && local.checksum() == enumPeerChecksum;
@@ -730,12 +754,16 @@ void StoreForwardPlusPlusModule::requestEnumList(const uint8_t *root_hash, uint3
     enumAwaitingList = true;
     enumListRetries = 0;
     enumRequestSentMs = Time::getMillis();
-    sendEnumMessage(msg, peer, "enum_req");
+    // Broadcast so every archive hears the listing it asks for; only the named peer answers.
+    msg.encapsulated_to = peer;
+    sendEnumMessage(msg, NODENUM_BROADCAST, "enum_req");
 }
 
 void StoreForwardPlusPlusModule::handleEnumRequest(const meshtastic_MeshPacket &mp, meshtastic_StoreForwardPlusPlus *t)
 {
-    if (portduino_config.sfpp_enum_listen_only || mp.to != nodeDB->getNodeNum())
+    const NodeNum self = nodeDB->getNodeNum();
+    const bool named = mp.to == self || (mp.to == NODENUM_BROADCAST && t->encapsulated_to == self);
+    if (portduino_config.sfpp_enum_listen_only || !named)
         return;
 
     sfppsr::Scope scope;
@@ -770,16 +798,14 @@ void StoreForwardPlusPlusModule::handleEnumRequest(const meshtastic_MeshPacket &
         frames.push_back(msg);
     }
     if (!frames.empty()) {
-        queueEnumFrames(frames, mp.from, mp.from, scope, "enum_prov"); // N6: the same paced drain as items
+        // Broadcast, so every archive behind on this bucket can use the listing; paced per requester.
+        queueEnumFrames(frames, mp.from, NODENUM_BROADCAST, scope, "enum_prov");
         setIntervalFromNow(10);
     }
 }
 
 void StoreForwardPlusPlusModule::handleEnumProvide(const meshtastic_MeshPacket &mp, meshtastic_StoreForwardPlusPlus *t)
 {
-    if (!enumExchangeActive || mp.from != enumExchangePeer)
-        return;
-
     sfppsr::ShortIdList list;
     if (!sfppsr::parseShortIds(*t, list))
         return;
@@ -787,8 +813,11 @@ void StoreForwardPlusPlusModule::handleEnumProvide(const meshtastic_MeshPacket &
     uint8_t root[SFPP_HASH_SIZE] = {0};
     if (!lookUpFullRootHash(list.scope.rootPrefix, list.scope.rootPrefixLen, root))
         return;
-    if (list.scope.bucket != enumExchangeBucket || memcmp(root, enumExchangeRoot, SFPP_HASH_SIZE) != 0)
+    if (!enumExchangeActive || mp.from != enumExchangePeer || list.scope.bucket != enumExchangeBucket ||
+        memcmp(root, enumExchangeRoot, SFPP_HASH_SIZE) != 0) {
+        handleOverheardListing(mp.from, root, list);
         return;
+    }
 
     logEnum("rx", "enum_prov", list.scope, mp.decoded.payload.size, mp.from, (int)list.ids.size(), list.frameIndex,
             list.frameTotal);
@@ -822,9 +851,15 @@ void StoreForwardPlusPlusModule::handleEnumProvide(const meshtastic_MeshPacket &
     if (enumProvideSeenCount < enumProvideTotal)
         return;
 
-    // Complete list: everything the peer holds that we do not is what we fetch.
+    enumProvideActive = false;
+    actOnListing(root, enumProvideBucket, enumProvidePeer);
+}
+
+// A complete listing (enumProvideIds) for the open exchange: fetch what the peer holds and we do not.
+void StoreForwardPlusPlusModule::actOnListing(const uint8_t *root, uint32_t bucket, NodeNum peer)
+{
     std::vector<pinsketch::Element> own;
-    collectBucketIds(root, SFPP_HASH_SIZE, enumProvideBucket, own);
+    collectBucketIds(root, SFPP_HASH_SIZE, bucket, own);
     std::sort(enumProvideIds.begin(), enumProvideIds.end());
     enumProvideIds.erase(std::unique(enumProvideIds.begin(), enumProvideIds.end()), enumProvideIds.end());
     std::sort(own.begin(), own.end());
@@ -832,23 +867,30 @@ void StoreForwardPlusPlusModule::handleEnumProvide(const meshtastic_MeshPacket &
     std::vector<pinsketch::Element> missing;
     std::set_difference(enumProvideIds.begin(), enumProvideIds.end(), own.begin(), own.end(), std::back_inserter(missing));
     // Item 10: a peer ID we already hold in scratch needs no fetch; promote it into the bucket.
-    promoteScratchMatches(root, enumProvideBucket, missing);
+    promoteScratchMatches(root, bucket, missing);
 
-    enumProvideActive = false;
+    enumAwaitingList = false;
     if (!missing.empty()) {
         enumCollisionProbe = false;
-        requestMissingItems(root, enumProvideBucket, enumProvidePeer, missing);
+        requestMissingItems(root, bucket, peer, missing);
+        if (enumWanted.empty() && enumExchangeActive) {
+            // Every missing ID is already in flight elsewhere; this exchange has nothing to wait for.
+            enumExchangeSucceeded = bucketMatchesPeer(root, bucket);
+            if (!enumExchangeSucceeded)
+                rememberFailedPull();
+            endEnumExchange();
+        }
         return;
     }
 
     // Stage 8h: a promotion that the peer's checksum does not confirm is a collision; undo it and
     // fetch the peer's objects instead.
-    if (!enumPromoted.empty() && !bucketMatchesPeer(root, enumProvideBucket)) {
+    if (!enumPromoted.empty() && !bucketMatchesPeer(root, bucket)) {
         repairPromotions();
         return;
     }
 
-    if (bucketMatchesPeer(root, enumProvideBucket)) {
+    if (bucketMatchesPeer(root, bucket)) {
         enumExchangeSucceeded = true;
         endEnumExchange();
         return;
@@ -858,7 +900,113 @@ void StoreForwardPlusPlusModule::handleEnumProvide(const meshtastic_MeshPacket &
     // object. Ask for every object the shared IDs name; the probe ends on convergence or idle.
     enumCollisionProbe = true;
     enumLastItemMs = Time::getMillis();
-    requestMissingItems(root, enumProvideBucket, enumProvidePeer, enumProvideIds);
+    requestMissingItems(root, bucket, peer, enumProvideIds);
+}
+
+void StoreForwardPlusPlusModule::handleOverheardListing(NodeNum peer, const uint8_t *root_hash, const sfppsr::ShortIdList &list)
+{
+    if (peer == 0 || peer == nodeDB->getNodeNum())
+        return;
+    uint8_t derived[SFPP_HASH_SIZE] = {0};
+    if (getOrDeriveRootFromChannel(channels.getHash(0), derived) == 0 || memcmp(derived, root_hash, SFPP_HASH_SIZE) != 0)
+        return;
+    if (list.frameTotal == 0 || list.frameTotal > sizeof(EnumHeardListing::seen) || list.frameIndex >= list.frameTotal)
+        return;
+
+    const uint32_t nowMs = Time::getMillis();
+    EnumHeardListing *heard = nullptr;
+    for (auto &entry : enumHeardListings) {
+        if (entry.bucket == list.scope.bucket && memcmp(entry.root, root_hash, SFPP_HASH_SIZE) == 0) {
+            heard = &entry;
+            break;
+        }
+    }
+    if (heard && (heard->peer != peer || heard->total != list.frameTotal || heard->seenCount == heard->total ||
+                  Throttle::hasElapsed(heard->heardMs, kEnumHeardListingMs))) {
+        // A different lister, framing or a newer copy restarts the record.
+        heard->peer = peer;
+        heard->total = list.frameTotal;
+        heard->seenCount = 0;
+        memset(heard->seen, 0, sizeof(heard->seen));
+        heard->ids.clear();
+    }
+    if (!heard) {
+        if (enumHeardListings.size() >= kEnumHeardListingsMax)
+            enumHeardListings.erase(enumHeardListings.begin());
+        EnumHeardListing entry = {};
+        memcpy(entry.root, root_hash, SFPP_HASH_SIZE);
+        entry.bucket = list.scope.bucket;
+        entry.peer = peer;
+        entry.total = list.frameTotal;
+        enumHeardListings.push_back(entry);
+        heard = &enumHeardListings.back();
+    }
+    heard->heardMs = nowMs;
+    if (heard->seen[list.frameIndex])
+        return;
+    heard->seen[list.frameIndex] = true;
+    heard->seenCount++;
+    heard->ids.insert(heard->ids.end(), list.ids.begin(), list.ids.end());
+    if (heard->seenCount < heard->total)
+        return;
+
+    std::vector<pinsketch::Element> own;
+    collectBucketIds(root_hash, SFPP_HASH_SIZE, list.scope.bucket, own);
+    std::sort(own.begin(), own.end());
+    std::vector<pinsketch::Element> listed = heard->ids;
+    std::sort(listed.begin(), listed.end());
+    listed.erase(std::unique(listed.begin(), listed.end()), listed.end());
+    const bool holdsAll = std::includes(own.begin(), own.end(), listed.begin(), listed.end());
+
+    char rootHex[9];
+    formatRootHex(root_hash, SFPP_HASH_SIZE, rootHex);
+    LOG_INFO("SFPP-ENUM overheard listing root=%s bucket=%u peer=0x%08x ids=%u holds_all=%d", rootHex, list.scope.bucket, peer,
+             (unsigned)listed.size(), holdsAll ? 1 : 0);
+
+    // Our own pending request for this bucket is superseded by the listing we just heard.
+    uint32_t count = (uint32_t)listed.size();
+    uint64_t checksum = 0;
+    bool summaryKnown = false;
+    for (auto it = enumPending.begin(); it != enumPending.end();) {
+        if (it->bucket == list.scope.bucket && memcmp(it->root, root_hash, SFPP_HASH_SIZE) == 0) {
+            if (it->authority == peer && it->summaryKnown) {
+                count = it->count;
+                checksum = it->checksum;
+                summaryKnown = true;
+            }
+            it = enumPending.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    if (holdsAll || portduino_config.sfpp_enum_listen_only) {
+        enumHeardListings.erase(enumHeardListings.begin() + (heard - enumHeardListings.data()));
+        return;
+    }
+    // The hole is pulled from the lister on the next pacer slot, asking for items only.
+    addPendingBucket(root_hash, peer, list.scope.bucket, count, checksum, 0);
+    for (auto &entry : enumPending) {
+        if (entry.bucket == list.scope.bucket && entry.authority == peer && memcmp(entry.root, root_hash, SFPP_HASH_SIZE) == 0)
+            entry.summaryKnown = summaryKnown;
+    }
+    setIntervalFromNow(10);
+}
+
+bool StoreForwardPlusPlusModule::takeHeardListing(const uint8_t *root_hash, uint32_t bucket, NodeNum &peer,
+                                                  std::vector<pinsketch::Element> &ids)
+{
+    for (auto it = enumHeardListings.begin(); it != enumHeardListings.end(); ++it) {
+        if (it->bucket != bucket || memcmp(it->root, root_hash, SFPP_HASH_SIZE) != 0)
+            continue;
+        const bool usable = it->seenCount == it->total && !Throttle::hasElapsed(it->heardMs, kEnumHeardListingMs);
+        if (usable) {
+            peer = it->peer;
+            ids = it->ids;
+        }
+        enumHeardListings.erase(it);
+        return usable;
+    }
+    return false;
 }
 
 bool StoreForwardPlusPlusModule::bucketHoldsShortId(const uint8_t *root_hash, uint32_t bucket, pinsketch::Element id)
@@ -1015,8 +1163,10 @@ void StoreForwardPlusPlusModule::resendEnumList()
     sfppsr::Scope scope;
     copyScopeRoot(enumExchangeRoot, SFPP_HASH_SIZE, scope, enumExchangeBucket, false);
     meshtastic_StoreForwardPlusPlus msg;
-    if (sfppsr::buildEnumRequest(scope, msg))
-        sendEnumMessage(msg, enumExchangePeer, "enum_req");
+    if (sfppsr::buildEnumRequest(scope, msg)) {
+        msg.encapsulated_to = enumExchangePeer;
+        sendEnumMessage(msg, NODENUM_BROADCAST, "enum_req");
+    }
     enumRequestSentMs = Time::getMillis();
 }
 
