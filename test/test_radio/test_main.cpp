@@ -835,15 +835,17 @@ class EarlyRelayRouter : public Router
         p.id = id;
         p.hop_start = hopStart;
         p.hop_limit = hopLimit;
+        p.relay_node = hopLimit == hopStart ? (from & 0xFF) : 0x55; // the sender itself, or some relayer
         wasSeenRecently(&p);
     }
 };
 
 static constexpr PacketId EARLY_PACKET_ID = 0x1234;
 
-// heard: the hop_limit of each copy that reached us, in order. queuedHopLimit: our relay copy's hop_limit.
+// heard: the hop_limit of each copy that reached us, in order. queuedHopLimit/queuedHopStart: our relay copy's
+// hops, the same hop_start unless given.
 static bool earlyRelayFor(meshtastic_Config_DeviceConfig_Role role, NodeNum from, uint8_t hopStart,
-                          std::initializer_list<uint8_t> heard, uint8_t queuedHopLimit)
+                          std::initializer_list<uint8_t> heard, uint8_t queuedHopLimit, int queuedHopStart = -1)
 {
     EarlyRelayNodeDB db;
     NodeDB *savedNodeDB = nodeDB;
@@ -861,7 +863,7 @@ static bool earlyRelayFor(meshtastic_Config_DeviceConfig_Role role, NodeNum from
     p.from = from;
     p.to = NODENUM_BROADCAST;
     p.id = EARLY_PACKET_ID;
-    p.hop_start = hopStart;
+    p.hop_start = queuedHopStart < 0 ? hopStart : queuedHopStart;
     p.hop_limit = queuedHopLimit;
     const bool early = testRadio->shouldRebroadcastEarlyLikeRouter(&p);
 
@@ -874,6 +876,8 @@ static bool earlyRelayFor(meshtastic_Config_DeviceConfig_Role role, NodeNum from
 static void test_earlyRelay_clientBaseDirectFavorite()
 {
     TEST_ASSERT_TRUE(earlyRelayFor(meshtastic_Config_DeviceConfig_Role_CLIENT_BASE, EARLY_FAVORITE, 7, {7}, 6));
+    // A later relayed copy must not erase that the sender was heard
+    TEST_ASSERT_TRUE(earlyRelayFor(meshtastic_Config_DeviceConfig_Role_CLIENT_BASE, EARLY_FAVORITE, 7, {7, 6}, 6));
 }
 
 static void test_earlyRelay_clientBaseFavoriteViaRelayIsLate()
@@ -885,6 +889,13 @@ static void test_earlyRelay_clientBaseFavoriteViaRelayIsLate()
 static void test_earlyRelay_clientBaseFavoriteViaFavoriteRouterIsLate()
 {
     TEST_ASSERT_FALSE(earlyRelayFor(meshtastic_Config_DeviceConfig_Role_CLIENT_BASE, EARLY_FAVORITE, 7, {6}, 6));
+}
+
+// Event mode caps the relay copy's hops: a relayed 7/6 copy is queued as 4/2, a direct 7/7 one as 5/2
+static void test_earlyRelay_clientBaseEventModeCappedCopy()
+{
+    TEST_ASSERT_FALSE(earlyRelayFor(meshtastic_Config_DeviceConfig_Role_CLIENT_BASE, EARLY_FAVORITE, 7, {6}, 2, 4));
+    TEST_ASSERT_TRUE(earlyRelayFor(meshtastic_Config_DeviceConfig_Role_CLIENT_BASE, EARLY_FAVORITE, 7, {7}, 2, 5));
 }
 
 static void test_earlyRelay_clientBaseFavoriteHeardDirectlyAfterRelayIsEarly()
@@ -1356,6 +1367,7 @@ void setup()
     RUN_TEST(test_earlyRelay_clientBaseDirectFavorite);
     RUN_TEST(test_earlyRelay_clientBaseFavoriteViaRelayIsLate);
     RUN_TEST(test_earlyRelay_clientBaseFavoriteViaFavoriteRouterIsLate);
+    RUN_TEST(test_earlyRelay_clientBaseEventModeCappedCopy);
     RUN_TEST(test_earlyRelay_clientBaseFavoriteHeardDirectlyAfterRelayIsEarly);
     RUN_TEST(test_earlyRelay_clientBaseNotInHistoryIsLate);
     RUN_TEST(test_earlyRelay_clientBaseDirectStrangerIsLate);
