@@ -24,7 +24,7 @@ class TFTDisplay : public OLEDDisplay
     ~TFTDisplay();
 
     // Write the buffer to the display memory
-    virtual void display() override { display(false); };
+    virtual void display() override;
     virtual void display(bool fromBlank);
     void sdlLoop();
 
@@ -37,6 +37,11 @@ class TFTDisplay : public OLEDDisplay
 
     // Functions for changing display brightness
     void setDisplayBrightness(uint8_t);
+
+    /// Turn the picture by quarter turns clockwise from the build's orientation (0 to 3), for a screen that follows the
+    /// device as it's turned: a quarter turn swaps the width and the height. The next display() repaints everything
+    void setQuarterTurns(uint8_t turns);
+    uint8_t getQuarterTurns() const { return quarterTurns; }
 
     /**
      * shim to make the abstraction happy
@@ -64,4 +69,10 @@ class TFTDisplay : public OLEDDisplay
 
     uint16_t *linePixelBuffer = nullptr;
     uint16_t *repaintChunkBuffer = nullptr;
+    bool panelAwake = false;
+    bool wakeRepaintPending = false;
+    bool rotationRepaintPending = false;
+    uint8_t quarterTurns = 0;
+    uint8_t baseRotation = 0; // the panel rotation connect() set
+    uint16_t baseWidth = 0, baseHeight = 0;
 };

@@ -25,8 +25,8 @@ ScanI2C::FoundDevice ScanI2C::firstScreen() const
 
 ScanI2C::FoundDevice ScanI2C::firstRTC() const
 {
-    ScanI2C::DeviceType types[] = {RTC_RV3028, RTC_PCF8563, RTC_PCF85063, RTC_RX8130CE};
-    return firstOfOrNONE(4, types);
+    ScanI2C::DeviceType types[] = {RTC_RV3028, RTC_PCF8563, RTC_PCF85063, RTC_RX8130CE, RTC_YSN8900E};
+    return firstOfOrNONE(5, types);
 }
 
 ScanI2C::FoundDevice ScanI2C::firstKeyboard() const
@@ -37,15 +37,16 @@ ScanI2C::FoundDevice ScanI2C::firstKeyboard() const
 
 ScanI2C::FoundDevice ScanI2C::firstAccelerometer() const
 {
-    ScanI2C::DeviceType types[] = {MPU6050, LIS3DH, SC7A20,   BMA423,    LSM6DS3,    BMX160,   STK8BAXX, ICM20948,
-                                   BMM150,  BMI270, BHI260AP, ICM42607P, ISM330DHCX, QMA6100P, QMI8658};
-    return firstOfOrNONE(15, types);
+    // BMM150 is a magnetometer: last, so any real IMU takes the accelerometer thread and leaves it to the magnetometer one
+    ScanI2C::DeviceType types[] = {MPU6050, LIS3DH,   SC7A20,    BMA423,     LSM6DS3,  BMX160,  STK8BAXX, ICM20948,
+                                   BMI270,  BHI260AP, ICM42607P, ISM330DHCX, QMA6100P, QMI8658, LSM6DSOX, BMM150};
+    return firstOfOrNONE(16, types);
 }
 
 ScanI2C::FoundDevice ScanI2C::firstMagnetometer() const
 {
-    ScanI2C::DeviceType types[] = {MMC5983MA, IIS2MDCTR, QMC6309};
-    return firstOfOrNONE(3, types);
+    ScanI2C::DeviceType types[] = {MMC5983MA, IIS2MDCTR, QMC6309, BMM150, BMM350};
+    return firstOfOrNONE(5, types);
 }
 
 ScanI2C::FoundDevice ScanI2C::firstAQI() const

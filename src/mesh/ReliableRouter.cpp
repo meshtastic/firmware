@@ -12,6 +12,14 @@
 
 // ReliableRouter::ReliableRouter() {}
 
+static bool isLoRaTransport(meshtastic_MeshPacket_TransportMechanism t)
+{
+    return t == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA ||
+           t == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA_ALT1 ||
+           t == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA_ALT2 ||
+           t == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA_ALT3;
+}
+
 /**
  * If the message is want_ack, then add it to a list of packets to retransmit.
  * If we run out of retransmissions, send a nak packet towards the original client to indicate failure.
@@ -78,12 +86,8 @@ void ReliableRouter::perhapsGenerateImplicitAckForOwnOverheard(const meshtastic_
         // marked as wantAck
         // Pass the overheard rebroadcast as the relay source so the ack carries the relaying node's id
         // and the RSSI/SNR we heard it at.
+        // The ack also carries the copy's transport, so sniffReceived() stops the retries only for a LoRa copy.
         sendAckNak(meshtastic_Routing_Error_NONE, getFrom(p), p->id, old->packet->channel, 0, false, p);
-
-        // Only stop retransmissions if the rebroadcast came via LoRa
-        if (p->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA) {
-            stopRetransmission(key);
-        }
     } else {
         LOG_DEBUG("Didn't find pending packet");
     }
@@ -96,10 +100,12 @@ bool ReliableRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
     /* At this point we have already deleted the pending retransmission if this packet was an (implicit) ACK to it.
        Now for all other pending retransmissions, we have to add the airtime of this received packet to the retransmission timer,
        because while receiving this packet, we could not have received an (implicit) ACK for it.
-       If we don't add this, we will likely retransmit too early.
+       If we don't add this, we will likely retransmit too early. A copy heard on MQTT or UDP never held the radio.
     */
-    for (auto i = pending.begin(); i != pending.end(); i++) {
-        i->second.nextTxMsec += iface->getPacketTime(p, true);
+    if (isLoRaTransport(p->transport_mechanism)) {
+        for (auto i = pending.begin(); i != pending.end(); i++) {
+            i->second.nextTxMsec += iface->getPacketTime(p, true);
+        }
     }
 
     return isBroadcast(p->to) ? FloodingRouter::shouldFilterReceived(p) : NextHopRouter::shouldFilterReceived(p);
@@ -119,6 +125,7 @@ bool ReliableRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
  */
 void ReliableRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtastic_Routing *c)
 {
+    lastAckProof = {};
     if (isToUs(p)) { // ignore ack/nak/want_ack packets that are not address to us (we only handle 0 hop reliability)
         if (!MeshModule::currentReply) {
             if (p->want_ack) {
@@ -174,8 +181,10 @@ void ReliableRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
 
         // We intentionally don't check wasSeenRecently, because it is harmless to delete non existent retransmission records
         if ((ackId || nakId) && ackProofPermitsAction(p, ackId ? ackId : nakId, ackId != 0) &&
-            // Implicit ACKs from MQTT should not stop retransmissions
-            !(isFromUs(p) && p->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MQTT)) {
+            // An implicit ack for our own packet heard back off LoRa stops the LoRa retries; one heard on
+            // any other bearer only reports delivery. Our own NAKs are minted INTERNAL and always stop.
+            !(isFromUs(p) && p->transport_mechanism != meshtastic_MeshPacket_TransportMechanism_TRANSPORT_INTERNAL &&
+              !isLoRaTransport(p->transport_mechanism))) {
             LOG_DEBUG("Received a %s for 0x%08x, stopping retransmissions", ackId ? "ACK" : "NAK", ackId);
             if (ackId) {
                 stopRetransmission(p->to, ackId);
@@ -193,6 +202,30 @@ void ReliableRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
     isBroadcast(p->to) ? FloodingRouter::sniffReceived(p, c) : NextHopRouter::sniffReceived(p, c);
 }
 
+#if !(MESHTASTIC_EXCLUDE_PKI)
+static meshtastic_MeshPacket_AckProofStatus toAckProofStatus(AckProofResult result)
+{
+    switch (result) {
+    case AckProofResult::VALID:
+        return meshtastic_MeshPacket_AckProofStatus_ACK_PROOF_VALID;
+    case AckProofResult::INVALID:
+        return meshtastic_MeshPacket_AckProofStatus_ACK_PROOF_INVALID;
+    case AckProofResult::NO_KEY:
+        return meshtastic_MeshPacket_AckProofStatus_ACK_PROOF_NO_KEY;
+    case AckProofResult::ABSENT:
+        break;
+    }
+    return meshtastic_MeshPacket_AckProofStatus_ACK_PROOF_ABSENT;
+}
+#endif
+
+meshtastic_MeshPacket_AckProofStatus ReliableRouter::ackProofStatusFor(const meshtastic_MeshPacket &p) const
+{
+    if (lastAckProof.from == getFrom(&p) && lastAckProof.id == p.id)
+        return lastAckProof.status;
+    return meshtastic_MeshPacket_AckProofStatus_ACK_PROOF_ABSENT;
+}
+
 bool ReliableRouter::ackProofPermitsAction(const meshtastic_MeshPacket *p, PacketId originalId, bool isAck)
 {
 #if !(MESHTASTIC_EXCLUDE_PKI)
@@ -200,6 +233,12 @@ bool ReliableRouter::ackProofPermitsAction(const meshtastic_MeshPacket *p, Packe
     // and nothing caches the result), and an attacker with the channel key picks when we pay it. A
     // packet id is visible in the cleartext header, so without this gate a forged ack for any id at
     // all forces a DH. With it, only ids we genuinely have outstanding can, and only while pending.
+    //
+    // The cost of that gate: a relay's rebroadcast of our own DM already cleared this entry via
+    // perhapsGenerateImplicitAckForOwnOverheard, so on most multi-hop DMs the peer's genuine proof
+    // arrives after the entry is gone and reads ABSENT. Do not "fix" that by dropping the gate - it
+    // is the DoS guard. Checking the proof before the echo clears the entry, or keeping a short-lived
+    // record of completed sends to verify against, is the shape of a real fix.
     PendingPacket *orig = findPendingPacket(p->to, originalId);
     if (!orig)
         return true;
@@ -244,7 +283,9 @@ bool ReliableRouter::ackProofPermitsAction(const meshtastic_MeshPacket *p, Packe
     }
 
     // Safe to key off getFrom(p) below only because it is now known equal to orig->packet->to.
-    switch (ackProofVerify(p, originalId)) {
+    const AckProofResult verdict = ackProofVerify(p, originalId);
+    lastAckProof = {getFrom(p), p->id, toAckProofStatus(verdict)};
+    switch (verdict) {
     case AckProofResult::VALID:
         LOG_DEBUG("ACK proof OK for 0x%08x", originalId);
         return true;

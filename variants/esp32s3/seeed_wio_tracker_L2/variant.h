@@ -111,8 +111,9 @@
 #define HAS_SPI_TFT 1
 #define HAS_TOUCHSCREEN 1
 #define USE_TFTDISPLAY 1 // Enable legacy BaseUI TFTDisplay.cpp build
-#define TFT_WIDTH 320    // Required by BaseUI setGeometry
-#define TFT_HEIGHT 240   // Required by BaseUI setGeometry
+#define TFT_NV3031B
+#define TFT_WIDTH 320  // Required by BaseUI setGeometry
+#define TFT_HEIGHT 240 // Required by BaseUI setGeometry
 #define USE_VIRTUAL_KEYBOARD 1
 #endif
 

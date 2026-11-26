@@ -52,8 +52,8 @@
 #define D14 14 // P0.05 OLED SCL
 #define D15 15 // P0.06 OLED SDA
 #define D16 16 // P0.31 VBAT_ADC
-#define D17 17 // P0.00 GROVE SDA
-#define D18 18 // P0.01 GROVE_SCL
+#define D17 17 // GROVE SCL
+#define D18 18 // GROVE SDA
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  Analog Pin Definitions
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -69,8 +69,8 @@
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  I2C Configuration
 #define HAS_WIRE 1
-#define PIN_WIRE_SDA D18 // P0.09
-#define PIN_WIRE_SCL D17 // P0.10
+#define PIN_WIRE_SDA D18 // Grove SDA (same pins as Wire1 on the OLED L1)
+#define PIN_WIRE_SCL D17 // Grove SCL
 #define WIRE_INTERFACES_COUNT 1
 
 static const uint8_t SDA = PIN_WIRE_SDA;
@@ -127,8 +127,8 @@ static const uint8_t SCL = PIN_WIRE_SCL;
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #define GPS_L76K
 #ifdef GPS_L76K
-#define GPS_TX_PIN D6 // P0.26 - This is data from the MCU
-#define GPS_RX_PIN D7 // P0.27 - This is data from the GNSS
+#define GPS_TX_PIN D6 // P0.27 - This is data from the MCU
+#define GPS_RX_PIN D7 // P0.26 - This is data from the GNSS
 #define HAS_GPS 1
 #define GPS_BAUDRATE 9600
 #define GPS_THREAD_INTERVAL 50
@@ -144,13 +144,13 @@ static const uint8_t SCL = PIN_WIRE_SCL;
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  On-board QSPI Flash
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// On-board QSPI Flash
-#define PIN_QSPI_SCK (21)
-#define PIN_QSPI_CS (22)
-#define PIN_QSPI_IO0 (23)
-#define PIN_QSPI_IO1 (24)
-#define PIN_QSPI_IO2 (25)
-#define PIN_QSPI_IO3 (26)
+// Logical pin indices; the QSPI block is at D19-D24 in variant.cpp.
+#define PIN_QSPI_SCK (19)
+#define PIN_QSPI_CS (20)
+#define PIN_QSPI_IO0 (21)
+#define PIN_QSPI_IO1 (22)
+#define PIN_QSPI_IO2 (23)
+#define PIN_QSPI_IO3 (24)
 
 #define EXTERNAL_FLASH_DEVICES P25Q16H
 #define EXTERNAL_FLASH_USE_QSPI

@@ -130,11 +130,12 @@ int32_t ButtonThread::runOnce()
     }
 
     userButton.tick();
-    canSleep &= userButton.isIdle();
+    // OneButton stays idle until its debounce accepts the press, so a raw press must keep the loop awake too
+    bool buttonCurrentlyPressed = isButtonPressed(_pinNum);
+    canSleep &= userButton.isIdle() && !buttonCurrentlyPressed;
 
     // Check if we should play lead-up sound during long press
     // Play lead-up when button has been held for BUTTON_LEADUP_MS but before long press triggers
-    bool buttonCurrentlyPressed = isButtonPressed(_pinNum);
 
     // Detect start of button press
     if (buttonCurrentlyPressed && !buttonWasPressed) {
@@ -145,10 +146,8 @@ int32_t ButtonThread::runOnce()
         leadUpSequenceActive = false;
         resetLeadUpSequence();
     }
-#ifdef INPUT_DEBUG
     if (buttonCurrentlyPressed)
-        LOG_WARN("Button held for %u ms", millis() - buttonPressStartTime);
-#endif
+        LOG_INPUT("Button held for %u ms", millis() - buttonPressStartTime);
 
     // Progressive lead-up sound system
     if (!_suppressLeadUp && buttonCurrentlyPressed && (millis() - buttonPressStartTime) >= BUTTON_LEADUP_MS) {
@@ -228,7 +227,7 @@ int32_t ButtonThread::runOnce()
         }
 
         case BUTTON_EVENT_DOUBLE_PRESSED: { // only on boards binding ButtonConfig::doublePress
-            LOG_INFO("Double press");
+            LOG_INPUT("Double press");
             // Reset combination tracking
             waitingForLongPress = false;
 
@@ -241,7 +240,7 @@ int32_t ButtonThread::runOnce()
         }
 
         case BUTTON_EVENT_MULTI_PRESSED: { // not wired in when screen is present
-            LOG_INFO("Mulitipress! %hux", multipressClickCount);
+            LOG_INPUT("Multipress! %hux", multipressClickCount);
 
             // Reset combination tracking
             waitingForLongPress = false;
@@ -280,7 +279,7 @@ int32_t ButtonThread::runOnce()
         // may wake the board immediately.
         case BUTTON_EVENT_LONG_RELEASED: {
 
-            LOG_INFO("LONG PRESS RELEASE AFTER %u MILLIS", millis() - buttonPressStartTime);
+            LOG_INPUT("LONG PRESS RELEASE AFTER %u MILLIS", millis() - buttonPressStartTime);
             // Require press started after boot holdoff to avoid phantom shutdown from floating pins
             if (millis() > 30000 && buttonPressStartTime > 30000 && _longLongPress != INPUT_BROKER_NONE &&
                 (millis() - buttonPressStartTime) >= _longLongPressTime && leadUpPlayed) {
@@ -302,11 +301,15 @@ int32_t ButtonThread::runOnce()
     }
     btnEvent = BUTTON_EVENT_NONE;
 
-    // only pull when the button is pressed, we get notified via IRQ on a new press
-    if (!userButton.isIdle() || waitingForLongPress) {
+    // The IRQ tick only arms OneButton's debounce; poll fast while held so a later tick can accept the
+    // press before release, otherwise taps shorter than the idle poll are dropped.
+    if (buttonCurrentlyPressed || !userButton.isIdle()) {
+        return 10;
+    }
+    if (waitingForLongPress) {
         return 50;
     }
-    return 100; // FIXME: Why can't we rely on interrupts and use INT32_MAX here?
+    return 100;
 }
 
 /*

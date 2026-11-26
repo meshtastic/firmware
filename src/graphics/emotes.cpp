@@ -37,7 +37,7 @@ const Emote emotes[] = {
     {"\U0001F606", smiling_closed_eyes, smiling_closed_eyes_width, smiling_closed_eyes_height}, // 😆 Smiling Closed Eyes
     {"\U0001F605", haha, haha_width, haha_height},                                              // 😅 Smiling with Sweat
     {"\U0001F604", grinning_smiling_eyes_2, grinning_smiling_eyes_2_width,
-     grinning_smiling_eyes_2_height}, // 😄 Grinning Face with Smiling Eyes
+     grinning_smiling_eyes_2_height},                                                        // 😄 Grinning Face with Smiling Eyes
     {"\U0001F62D", loudly_crying_face, loudly_crying_face_width, loudly_crying_face_height}, // 😭 Loudly Crying Face
     {"\U0001F92E", vomiting, vomiting_width, vomiting_height},                               // 🤮 Face Vomiting
     {"\U0001F60E", cool, cool_width, cool_height},                                           // 😎 Smiling Face with Sunglasses

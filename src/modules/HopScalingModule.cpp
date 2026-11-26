@@ -233,6 +233,7 @@ void HopScalingModule::rollHour()
         if (seen == (1u << 12u))
             trendAgingOut++;
     }
+    counts.denominator = filteringDenominator;
     lastPerHopCounts = counts;
 
     // 1b. Pick the politeness factor from measured channel utilization.  How far the walk may

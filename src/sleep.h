@@ -10,6 +10,12 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight, bool skipSaveNodeDb), 
 #include "esp_sleep.h"
 esp_sleep_wakeup_cause_t doLightSleep(uint64_t msecToWake);
 
+/// True while a USB host has the hardware USB-serial/JTAG console open. Light sleep powers the USJ
+/// pad down for its duration, so sleeping under a host costs the port until the board is power
+/// cycled - see lsIdle(). Always false on a target with no USJ console, or when the PHY is routed
+/// to TinyUSB instead.
+bool usbConsoleHostAttached();
+
 extern esp_sleep_source_t wakeCause;
 #endif
 
@@ -49,6 +55,9 @@ extern Observable<void *> notifyDeepSleep;
 
 /// Called to tell observers we are rebooting ASAP.  Must return 0
 extern Observable<void *> notifyReboot;
+
+/// Set by boards with a soft power latch: cuts power on shutdown, returning only if power stayed on.
+extern void (*variantPowerOff)();
 
 #ifdef ARCH_ESP32
 /// Called to tell observers that light sleep is about to begin

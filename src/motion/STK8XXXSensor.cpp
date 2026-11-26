@@ -14,8 +14,7 @@ bool STK8XXXSensor::init()
         STK_IRQ = false;
         sensor.STK8xxx_Anymotion_init();
         pinMode(STK8XXX_INT, INPUT_PULLUP);
-        attachInterrupt(
-            digitalPinToInterrupt(STK8XXX_INT), [] { STK_IRQ = true; }, RISING);
+        attachInterrupt(digitalPinToInterrupt(STK8XXX_INT), [] { STK_IRQ = true; }, RISING);
 
         LOG_DEBUG("STK8XXX init ok");
         return true;
@@ -26,6 +25,13 @@ bool STK8XXXSensor::init()
 
 int32_t STK8XXXSensor::runOnce()
 {
+#ifdef MESHTASTIC_INCLUDE_INKHUD
+    if (stepTracker().isTracking()) {
+        float x = 0, y = 0, z = 0;
+        sensor.STK8xxx_Getregister_data(&x, &y, &z);
+        sampleSteps(x, y, z);
+    }
+#endif
     if (STK_IRQ) {
         STK_IRQ = false;
         if (config.display.wake_on_tap_or_motion) {

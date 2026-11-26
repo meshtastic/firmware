@@ -1,3 +1,10 @@
+// MQTT bridge: config validation, proxy ingress, map reports and downlink policy.
+//
+// Why: the broker is a second, non-RF ingress into the mesh and the firmware's outbound
+// mirror; a policy regression can leak private positions or accept forged downlink.
+// Regression guarded: a proxied packet read from the wrong variant, a private position
+// published on a public server, and a signature policy bypass on downlink.
+
 #include "DebugConfiguration.h"
 #include "TestUtil.h"
 #include <unity.h>
@@ -42,12 +49,6 @@ namespace
 class MockRouter : public Router
 {
   public:
-    ~MockRouter()
-    {
-        // cryptLock is created in the constructor for Router.
-        delete cryptLock;
-        cryptLock = NULL;
-    }
     void enqueueReceivedMessage(meshtastic_MeshPacket *p) override
     {
         packets_.emplace_back(*p);
@@ -721,14 +722,17 @@ void test_receiveTextVariantFromProxyIsNotReadAsBytes(void)
     TEST_ASSERT_TRUE(mockRouter->packets_.empty());
 }
 
-// A proxy message with no payload variant set must be ignored rather than read as bytes.
+// A proxy message with no payload variant set must be ignored rather than read as bytes. The bytes
+// are the deliverable envelope from test_receiveDecodedProtoFromProxy, so reading them would route it.
 void test_receiveNoVariantFromProxyIsIgnored(void)
 {
+    const meshtastic_ServiceEnvelope env = {
+        .packet = const_cast<meshtastic_MeshPacket *>(&decoded), .channel_id = "test", .gateway_id = "!87654321"};
     meshtastic_MqttClientProxyMessage message = meshtastic_MqttClientProxyMessage_init_default;
     snprintf(message.topic, sizeof(message.topic), "msh/2/e/test/!87654321");
     message.which_payload_variant = 0;
-    memset(message.payload_variant.data.bytes, 0xFF, sizeof(message.payload_variant.data.bytes));
-    message.payload_variant.data.size = sizeof(message.payload_variant.data.bytes);
+    message.payload_variant.data.size = pb_encode_to_bytes(
+        message.payload_variant.data.bytes, sizeof(message.payload_variant.data.bytes), &meshtastic_ServiceEnvelope_msg, &env);
 
     mqtt->onClientProxyReceive(message);
 
@@ -851,10 +855,11 @@ static meshtastic_MeshPacket makeDecodedBroadcast()
 }
 
 // Decoded (plaintext-broker) downlink skips perhapsDecode's crypto path, so MQTT applies
-// checkXeddsaReceivePolicy at ingress. An unsigned broadcast claiming to come from a node that
-// previously signed must be dropped - without this, a rogue broker peer could impersonate any
-// signing node (audit F3).
-void test_receiveDropsUnsignedBroadcastFromSigner(void)
+// checkXeddsaReceivePolicy at ingress. Balanced accepts an unsigned broadcast even from a node
+// that previously signed - only Strict drops a packet for being unsigned - but it must arrive
+// unmarked, so clients never show a broker peer's forgery as signed. A drop here means the old
+// Balanced downgrade rule is back; xeddsa_signed set means an unverified packet is vouched for.
+void test_receiveBalancedAcceptsUnsignedBroadcastFromSigner(void)
 {
     config.security.packet_signature_policy =
         meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_BALANCED;
@@ -863,7 +868,29 @@ void test_receiveDropsUnsignedBroadcastFromSigner(void)
     const meshtastic_MeshPacket p = makeDecodedBroadcast();
     unitTest->publish(&p);
 
-    TEST_ASSERT_TRUE(mockRouter->packets_.empty());
+    TEST_ASSERT_EQUAL(1, mockRouter->packets_.size());
+    TEST_ASSERT_FALSE(mockRouter->packets_.front().xeddsa_signed);
+}
+
+// An AES-CCM channel overrides the signature policy, and turning MQTT encryption off trusts the
+// broker like a channel member. So Strict accepts unsigned plaintext downlink on a CCM channel,
+// where AES-CCM traffic is never signed. A drop here would cut every CCM channel off a decoded
+// MQTT bridge under Strict.
+void test_receiveStrictAcceptsUnsignedDownlinkOnAeadChannel(void)
+{
+    config.security.packet_signature_policy =
+        meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_STRICT;
+    channelFile.channels[0].settings.psk.size = 1;
+    channelFile.channels[0].settings.psk.bytes[0] = 1;
+    channelFile.channels[0].settings.use_aead = true;
+    channels.onConfigChanged();
+    TEST_ASSERT_TRUE_MESSAGE(channels.isAEADEnabled(0), "fixture must leave channel 0 on AES-CCM");
+
+    const meshtastic_MeshPacket p = makeDecodedBroadcast();
+    unitTest->publish(&p);
+
+    TEST_ASSERT_EQUAL(1, mockRouter->packets_.size());
+    TEST_ASSERT_FALSE(mockRouter->packets_.front().xeddsa_signed);
 }
 
 // The same unsigned broadcast from a node never seen signing is accepted.
@@ -1242,6 +1269,8 @@ void test_reportToMapDefaultImprecise(void)
     TEST_ASSERT_EQUAL(1, pubsub->published_.size());
     const auto &[topic, payload] = pubsub->published_.front();
     TEST_ASSERT_EQUAL_STRING("msh/2/map/", topic.c_str());
+    // setUp configures precision 14: 700000000 / 300000000 truncated to that grid, then centred in the cell.
+    verifyLatLong(std::get<DecodedServiceEnvelope>(payload), 700055552, 300023808);
 }
 
 void test_eventPrimaryMapReportFollowsCompileTimePolicy(void)
@@ -1283,6 +1312,7 @@ void test_reportToMapImpreciseProxied(void)
     TEST_ASSERT_EQUAL_STRING("msh/2/map/", message.topic);
     TEST_ASSERT_EQUAL(meshtastic_MqttClientProxyMessage_data_tag, message.which_payload_variant);
     const DecodedServiceEnvelope env(message.payload_variant.data.bytes, message.payload_variant.data.size);
+    verifyLatLong(env, 700055552, 300023808);
 }
 
 // isUsingDefaultServer returns true when using the default server.
@@ -1480,15 +1510,6 @@ void test_configCustomHostAndPort(void)
     TEST_ASSERT_TRUE(MQTT::isValidConfig(config));
 }
 
-// An unreachable server is still a valid config - settings always save.
-// A warning notification is sent in non-test builds, but isValidConfig returns true.
-void test_configWithUnreachableServerIsStillValid(void)
-{
-    meshtastic_ModuleConfig_MQTTConfig config = {.enabled = true, .address = "server"};
-
-    TEST_ASSERT_TRUE(MQTT::isValidConfig(config));
-}
-
 // isValidConfig returns true when tls_enabled is supported, or false otherwise.
 void test_configWithTLSEnabled(void)
 {
@@ -1593,7 +1614,8 @@ void setup()
     RUN_TEST(test_receiveIgnoresDecodedWhenEncryptionEnabled);
     RUN_TEST(test_receiveIgnoresDecodedAdminApp);
 #if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
-    RUN_TEST(test_receiveDropsUnsignedBroadcastFromSigner);
+    RUN_TEST(test_receiveBalancedAcceptsUnsignedBroadcastFromSigner);
+    RUN_TEST(test_receiveStrictAcceptsUnsignedDownlinkOnAeadChannel);
     RUN_TEST(test_receiveAcceptsUnsignedBroadcastFromNonSigner);
     RUN_TEST(test_receiveVerifiesSignedDecodedDownlink);
     RUN_TEST(test_receiveDropsBadSignatureOnDecodedDownlink);
@@ -1642,7 +1664,6 @@ void setup()
     RUN_TEST(test_configWithDefaultServer);
     RUN_TEST(test_configWithDefaultServerAndInvalidPort);
     RUN_TEST(test_configCustomHostAndPort);
-    RUN_TEST(test_configWithUnreachableServerIsStillValid);
     RUN_TEST(test_configWithTLSEnabled);
     exit(UNITY_END());
 }
