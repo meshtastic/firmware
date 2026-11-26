@@ -8,21 +8,32 @@
 // frame to the radio's SPI0. The parser also replaces the old 14-character
 // string check, which silently skipped multi-digit buses/devices.
 //
+// It also pins the framework's per-host registry contract: host 0 is the global
+// SPI object, other hosts get a stable cached instance, and a negative host is
+// refused. LovyanGFX reaches that registry through lgfx_borrow_spiclass(),
+// which the firmware defines: it lends the per-host instance, host 0 included,
+// and leaves negative (software SPI) hosts to LovyanGFX.
+//
 // The packed value from spiHostFromDevicePath() is checked against local
 // helpers that encode the expected nibble layout (bus = host & 0x0F,
 // device = (host >> 4) & 0x0F). These tests do not call HardwareSPI, so a
 // change to its decoder does not fail them.
+//
+// The config-loader tests pin three cross-file state rules: a radio path outside
+// the packed range is left as the -1 sentinel (initLoRa() then opens it in its
+// own instance instead of host 0), clearing a touchscreen override makes it
+// follow the display host again rather than keeping the old one, and clearing a
+// display override returns the display (and a following touchscreen) to the
+// radio host.
 
 #include "Arduino.h"
+#include "PortduinoGlue.h"
 #include "TestUtil.h"
+#include <cstdlib>
+#include <filesystem>
+#include <fstream>
 #include <string>
 #include <unity.h>
-
-// Forward-declare instead of including PortduinoGlue.h to avoid pulling in
-// LR11x0Interface, USBHal, mesh.pb.h, yaml-cpp, and the full portduino_config
-// struct just to test a self-contained string parser. The symbol is defined
-// in PortduinoGlue.cpp and resolved at link time.
-int spiHostFromDevicePath(const std::string &devicePath);
 
 static int decodedBus(int host)
 {
@@ -150,6 +161,154 @@ void test_double_dev_prefix_is_rejected()
     TEST_ASSERT_EQUAL_INT(-1, spiHostFromDevicePath("/dev//dev/spidev1.0"));
 }
 
+void test_registry_host_zero_is_the_global_spi()
+{
+    TEST_ASSERT_EQUAL_PTR(&SPI, HardwareSPI::getInstance(0));
+}
+
+void test_registry_is_stable_per_host()
+{
+    HardwareSPI *first = HardwareSPI::getInstance(5);
+    HardwareSPI *second = HardwareSPI::getInstance(5);
+    TEST_ASSERT_NOT_NULL(first);
+    TEST_ASSERT_EQUAL_PTR(first, second);
+    TEST_ASSERT_NOT_EQUAL(&SPI, first);
+}
+
+void test_registry_rejects_negative_host()
+{
+    TEST_ASSERT_NULL(HardwareSPI::getInstance(-1));
+}
+
+// lgfx_borrow_spiclass() calls begin(), which opens /dev/spidev<bus>.<device> on a host
+// that has one. Beginning the instance on a path that cannot exist installs the framework's
+// SimSPIChip first, and begin() keeps an existing chip, so the borrow never opens hardware.
+static void useSimulatedChip(int host)
+{
+    HardwareSPI::getInstance((int8_t)host)->begin("/nonexistent/meshtastic-test-spidev");
+}
+
+void test_borrow_lends_the_global_spi_for_host_zero()
+{
+    useSimulatedChip(0);
+    SPIClass *spi = nullptr;
+    TEST_ASSERT_TRUE(lgfx_borrow_spiclass(0, spi));
+    TEST_ASSERT_EQUAL_PTR(&SPI, spi);
+}
+
+void test_borrow_lends_the_registry_instance()
+{
+    useSimulatedChip(5);
+    SPIClass *spi = nullptr;
+    TEST_ASSERT_TRUE(lgfx_borrow_spiclass(5, spi));
+    TEST_ASSERT_EQUAL_PTR(HardwareSPI::getInstance(5), spi);
+}
+
+void test_borrow_leaves_negative_hosts_to_lovyangfx()
+{
+    SPIClass *spi = nullptr;
+    TEST_ASSERT_FALSE(lgfx_borrow_spiclass(-1, spi));
+    TEST_ASSERT_NULL(spi);
+}
+
+// mkdtemp() creates the directory atomically with mode 0700, so concurrent runs cannot
+// share fixtures and no one else can plant a symlink where a fixture is written.
+static std::filesystem::path configDir()
+{
+    static std::filesystem::path dir;
+    if (dir.empty()) {
+        std::string pattern = (std::filesystem::temp_directory_path() / "meshtastic-spi-XXXXXX").string();
+        TEST_ASSERT_NOT_NULL(mkdtemp(pattern.data()));
+        dir = pattern;
+    }
+    return dir;
+}
+
+static std::string writeConfig(const char *name, const std::string &body)
+{
+    const auto path = configDir() / name;
+    std::ofstream out(path);
+    out << body;
+    return path.string();
+}
+
+void test_unpackable_radio_path_is_not_left_on_host_zero()
+{
+    const std::string path = writeConfig("meshtastic-spi-radio.yaml", "Lora:\n"
+                                                                      "  Module: sim\n"
+                                                                      "  spidev: spidev10.0\n");
+    TEST_ASSERT_TRUE(loadConfig(path.c_str()));
+    TEST_ASSERT_EQUAL_INT(-1, portduino_config.lora_spi_dev_int);
+    TEST_ASSERT_EQUAL_STRING("/dev/spidev10.0", portduino_config.lora_spi_dev.c_str());
+    std::error_code ec;
+    std::filesystem::remove(path, ec);
+}
+
+// A ch341 radio assigns no SPI host, so a later file selecting it must not inherit the earlier file's -1,
+// which would make --check report that a display without its own spidev cannot share the radio.
+void test_ch341_radio_in_a_later_file_drops_an_earlier_unpackable_host()
+{
+    const std::string first = writeConfig("meshtastic-spi-ch341-a.yaml", "Lora:\n"
+                                                                         "  Module: sim\n"
+                                                                         "  spidev: spidev10.0\n");
+    const std::string second = writeConfig("meshtastic-spi-ch341-b.yaml", "Lora:\n"
+                                                                          "  Module: sim\n"
+                                                                          "  spidev: ch341\n");
+    TEST_ASSERT_TRUE(loadConfig(first.c_str()));
+    TEST_ASSERT_EQUAL_INT(-1, portduino_config.lora_spi_dev_int);
+    TEST_ASSERT_TRUE(loadConfig(second.c_str()));
+    TEST_ASSERT_EQUAL_INT(0, portduino_config.lora_spi_dev_int);
+    TEST_ASSERT_EQUAL_STRING("ch341", portduino_config.lora_spi_dev.c_str());
+    std::error_code ec;
+    std::filesystem::remove(first, ec);
+    std::filesystem::remove(second, ec);
+}
+
+void test_clearing_touchscreen_spidev_returns_to_the_display_host()
+{
+    const std::string first = writeConfig("meshtastic-spi-touch-a.yaml", "Lora:\n"
+                                                                         "  Module: sim\n"
+                                                                         "Display:\n"
+                                                                         "  Panel: ILI9488\n"
+                                                                         "  spidev: spidev1.0\n"
+                                                                         "Touchscreen:\n"
+                                                                         "  Module: XPT2046\n"
+                                                                         "  spidev: spidev2.0\n");
+    const std::string second = writeConfig("meshtastic-spi-touch-b.yaml", "Touchscreen:\n"
+                                                                          "  spidev: \"\"\n");
+    TEST_ASSERT_TRUE(loadConfig(first.c_str()));
+    TEST_ASSERT_EQUAL_INT(1, portduino_config.display_spi_dev_int);
+    TEST_ASSERT_EQUAL_INT(2, portduino_config.touchscreen_spi_dev_int);
+    TEST_ASSERT_TRUE(loadConfig(second.c_str()));
+    TEST_ASSERT_EQUAL_INT(portduino_config.display_spi_dev_int, portduino_config.touchscreen_spi_dev_int);
+    std::error_code ec;
+    std::filesystem::remove(first, ec);
+    std::filesystem::remove(second, ec);
+}
+
+void test_clearing_display_spidev_returns_to_the_radio_host()
+{
+    const std::string first = writeConfig("meshtastic-spi-display-a.yaml", "Lora:\n"
+                                                                           "  Module: sim\n"
+                                                                           "  spidev: spidev2.0\n"
+                                                                           "Display:\n"
+                                                                           "  Panel: ILI9488\n"
+                                                                           "  spidev: spidev1.0\n"
+                                                                           "Touchscreen:\n"
+                                                                           "  Module: XPT2046\n");
+    const std::string second = writeConfig("meshtastic-spi-display-b.yaml", "Display:\n"
+                                                                            "  spidev: \"\"\n");
+    TEST_ASSERT_TRUE(loadConfig(first.c_str()));
+    TEST_ASSERT_EQUAL_INT(1, portduino_config.display_spi_dev_int);
+    TEST_ASSERT_EQUAL_INT(1, portduino_config.touchscreen_spi_dev_int);
+    TEST_ASSERT_TRUE(loadConfig(second.c_str()));
+    TEST_ASSERT_EQUAL_INT(2, portduino_config.display_spi_dev_int);
+    TEST_ASSERT_EQUAL_INT(2, portduino_config.touchscreen_spi_dev_int);
+    std::error_code ec;
+    std::filesystem::remove(first, ec);
+    std::filesystem::remove(second, ec);
+}
+
 void setup()
 {
     initializeTestEnvironment();
@@ -167,7 +326,20 @@ void setup()
     RUN_TEST(test_signed_whitespace_and_overflow_fields_are_rejected);
     RUN_TEST(test_non_spidev_paths_are_rejected);
     RUN_TEST(test_double_dev_prefix_is_rejected);
-    exit(UNITY_END());
+    RUN_TEST(test_registry_host_zero_is_the_global_spi);
+    RUN_TEST(test_registry_is_stable_per_host);
+    RUN_TEST(test_registry_rejects_negative_host);
+    RUN_TEST(test_borrow_lends_the_global_spi_for_host_zero);
+    RUN_TEST(test_borrow_lends_the_registry_instance);
+    RUN_TEST(test_borrow_leaves_negative_hosts_to_lovyangfx);
+    RUN_TEST(test_unpackable_radio_path_is_not_left_on_host_zero);
+    RUN_TEST(test_ch341_radio_in_a_later_file_drops_an_earlier_unpackable_host);
+    RUN_TEST(test_clearing_touchscreen_spidev_returns_to_the_display_host);
+    RUN_TEST(test_clearing_display_spidev_returns_to_the_radio_host);
+    const int failures = UNITY_END();
+    std::error_code ec;
+    std::filesystem::remove_all(configDir(), ec);
+    exit(failures);
 }
 
 void loop() {}

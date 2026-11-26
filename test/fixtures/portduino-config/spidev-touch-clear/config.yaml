@@ -1,0 +1,12 @@
+# CLEAN. A later config.d file clears the explicit touchscreen bus, so the
+# touchscreen must fall back to the display host rather than keep spidev2.0.
+General:
+  ConfigDirectory: config.d/
+Lora:
+  Module: sim
+Display:
+  Panel: ILI9488
+  spidev: spidev1.0
+Touchscreen:
+  Module: XPT2046
+  spidev: spidev2.0

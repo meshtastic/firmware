@@ -1013,8 +1013,8 @@ void checkMacAddress(const std::string &file, const YAML::Node &general, std::ve
 }
 
 // Display and touchscreen host packing only understands bus 0-9 and device 0-7
-// (see spiHostFromDevicePath); the radio still opens its own string by name, so a
-// Lora path outside that range is reported as information rather than a fault.
+// (see spiHostFromDevicePath); the radio opens its own string in a dedicated
+// instance, so a Lora path outside that range is information rather than a fault.
 void checkSpidevPath(const std::string &file, const std::string &section, const YAML::Node &value, std::vector<Finding> &findings)
 {
     if (!converts(value, kString))
@@ -1026,8 +1026,8 @@ void checkSpidevPath(const std::string &file, const std::string &section, const 
         return;
     if (isLora && text.empty())
         return; // the merged check reports this only if no later file supplies a path
-    if (section == "Touchscreen" && text.empty())
-        return; // no touchscreen bus was asked for
+    if ((section == "Display" || section == "Touchscreen") && text.empty())
+        return; // no separate bus was asked for; the peripheral follows the radio host
 
     if (text == "ch341") {
         findings.push_back({kError, file, lineOf(value),
@@ -1323,6 +1323,17 @@ void checkPinValues(std::vector<Finding> &findings)
             report(pin.config_section + "." + pin.config_name);
 }
 
+std::string describeSpiHost(int host)
+{
+    return "/dev/spidev" + std::to_string(host & 0x0F) + "." + std::to_string((host >> 4) & 0x0F);
+}
+
+static bool displayUsesSpi()
+{
+    return portduino_config.displayPanel != no_screen && portduino_config.displayPanel != x11 &&
+           portduino_config.displayPanel != fb && portduino_config.displayPanel != hub75;
+}
+
 void checkMergedConfig(const PathIndex &paths, std::vector<Finding> &findings)
 {
     const std::string merged = "(merged configuration)";
@@ -1386,6 +1397,15 @@ void checkMergedConfig(const PathIndex &paths, std::vector<Finding> &findings)
         findings.push_back({kError, merged, 0,
                             "Lora.spidev is empty, but a hardware radio needs a SPI device. Expected "
                             "/dev/spidev<bus>.<device> with bus 0-9 and device 0-7"});
+
+    // A display with no path of its own follows the radio host, which an unpackable radio path
+    // cannot name; the display would open another device. An explicit Display.spidev stays valid.
+    if (portduino_config.lora_spi_dev_int < 0 && displayUsesSpi() && portduino_config.display_spi_dev.empty())
+        findings.push_back({kError, merged, 0,
+                            "Lora.spidev '" + portduino_config.lora_spi_dev +
+                                "' cannot be shared with a SPI display, which would open " +
+                                describeSpiHost(portduino_config.display_spi_dev_int) +
+                                " instead. Set Display.spidev to the display's own /dev/spidev<bus>.<device>"});
 
     // portduinoSetup() skips initGPIOPin() for every Lora pin when spidev is ch341, so a
     // gpiochip or line mapping written next to one is read, stored, and never used.
@@ -1574,11 +1594,6 @@ void checkMergedConfig(const PathIndex &paths, std::vector<Finding> &findings)
                             "at that setting's update interval"});
 }
 
-std::string describeSpiHost(int host)
-{
-    return "/dev/spidev" + std::to_string(host & 0x0F) + "." + std::to_string((host >> 4) & 0x0F);
-}
-
 void printSummary()
 {
     std::cout << "\nEffective radio configuration:\n";
@@ -1588,9 +1603,11 @@ void printSummary()
     if (!portduino_config.lora_spi_dev.empty())
         std::cout << "  spidev            : " << portduino_config.lora_spi_dev << "\n";
     std::cout << "  SPI speed         : " << portduino_config.spiSpeed << "\n";
-    if (portduino_config.displayPanel != no_screen)
+    if (displayUsesSpi())
         std::cout << "  Display spidev    : " << describeSpiHost(portduino_config.display_spi_dev_int) << "\n";
-    if (portduino_config.touchscreenModule != no_touchscreen && portduino_config.touchscreenI2CAddr == -1)
+    const bool touchUsesSpi = portduino_config.touchscreenI2CAddr == -1 &&
+                              (portduino_config.touchscreenModule == xpt2046 || portduino_config.touchscreenModule == stmpe610);
+    if (touchUsesSpi)
         std::cout << "  Touchscreen spidev: " << describeSpiHost(portduino_config.touchscreen_spi_dev_int) << "\n";
     if (portduino_config.dio3_tcxo_voltage)
         std::cout << "  DIO3 TCXO voltage : " << portduino_config.dio3_tcxo_voltage << " mV\n";
