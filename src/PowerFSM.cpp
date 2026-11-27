@@ -17,6 +17,7 @@
 #include "graphics/Screen.h"
 #include "input/ButtonHelper.h"
 #include "main.h"
+#include "mesh/Throttle.h"
 #include "modules/StatusLEDModule.h"
 #include "sleep.h"
 #include "target_specific.h"
@@ -291,6 +292,9 @@ static void darkEnter()
     screenOffForTimeout();
 }
 
+static uint32_t serialScreenOnMs = 0;
+static bool serialScreenTimedOut = false;
+
 static void serialEnter()
 {
     LOG_POWERFSM("State: serialEnter");
@@ -301,6 +305,35 @@ static void serialEnter()
 #endif
     if (screen) {
         screen->setOn(true);
+    }
+    serialScreenOnMs = millis();
+    serialScreenTimedOut = false;
+}
+
+// The serial API pins us in SERIAL, so the screen-on timeout has to be applied here or the display never turns off
+static void serialIdle()
+{
+#ifdef USE_EINK
+    if (config.display.screen_on_secs == 0)
+        return;
+#endif
+    if (serialScreenTimedOut) {
+#if HAS_SCREEN
+        // Woken by something other than input (e.g. an incoming message): restart the timeout
+        if (screen && screen->isScreenOn()) {
+            serialScreenOnMs = millis();
+            serialScreenTimedOut = false;
+        }
+#endif
+        return;
+    }
+    if (Throttle::hasElapsed(serialScreenOnMs,
+                             Default::getConfiguredOrDefaultMs(config.display.screen_on_secs, default_screen_on_secs))) {
+        LOG_POWERFSM("State: serialIdle screen timeout");
+        serialScreenTimedOut = true;
+        if (screen)
+            screen->setOn(false);
+        screenOffForTimeout();
     }
 }
 
@@ -370,7 +403,7 @@ State stateLowBattSDS(lowBattSDSEnter, NULL, NULL, "SDS");
 State stateLS(lsEnter, lsIdle, lsExit, "LS");
 State stateNB(nbEnter, NULL, NULL, "NB");
 State stateDARK(darkEnter, NULL, NULL, "DARK");
-State stateSERIAL(serialEnter, NULL, serialExit, "SERIAL");
+State stateSERIAL(serialEnter, serialIdle, serialExit, "SERIAL");
 State stateBOOT(bootEnter, NULL, NULL, "BOOT");
 State stateON(onEnter, onIdle, NULL, "ON");
 State statePOWER(powerEnter, powerIdle, powerExit, "POWER");
@@ -435,9 +468,7 @@ void PowerFSM_setup()
                             "Input Device"); // restarts the sleep timer
     powerFSM.add_transition(&statePOWER, &statePOWER, EVENT_INPUT, screenOnFromUserInput,
                             "Input Device"); // restarts the sleep timer
-#ifdef MESHTASTIC_INCLUDE_INKHUD
     powerFSM.add_transition(&stateSERIAL, &stateSERIAL, EVENT_INPUT, screenOnFromUserInput, "Input Device");
-#endif
 
     powerFSM.add_transition(&stateDARK, &stateON, EVENT_BLUETOOTH_PAIR, NULL, "Bluetooth pairing");
     powerFSM.add_transition(&stateON, &stateON, EVENT_BLUETOOTH_PAIR, NULL, "Bluetooth pairing");
@@ -472,7 +503,7 @@ void PowerFSM_setup()
 
     // the only way to leave state serial is for the client to disconnect (or we timeout and force disconnect them)
     // when we leave, go to ON (which might not be the correct state if we have power connected, we will fix that in onEnter)
-    powerFSM.add_transition(&stateSERIAL, &stateON, EVENT_SERIAL_DISCONNECTED, NULL, "serial disconnect");
+    powerFSM.add_transition(&stateSERIAL, &stateON, EVENT_SERIAL_DISCONNECTED, screenOnFromUserInput, "serial disconnect");
 
     powerFSM.add_transition(&stateDARK, &stateDARK, EVENT_CONTACT_FROM_PHONE, NULL, "Contact from phone");
 
