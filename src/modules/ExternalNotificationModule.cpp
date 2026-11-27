@@ -103,12 +103,17 @@ int32_t ExternalNotificationModule::runOnce()
         // isNagging is the armed flag; nagCycleCutoff is only a deadline while it is set, so
         // short-circuit before the comparison. `millis() + durationMs` can land on any value.
         const bool nagWindowExpired = !isNagging || Throttle::deadlinePassed(nagCycleCutoff);
-        if (nagWindowExpired && !isRtttlPlaying) {
+        if (buzzerPulseArmed && Throttle::deadlinePassed(buzzerPulseEnd))
+            buzzerPulseArmed = false;
+        if (nagWindowExpired && !isRtttlPlaying && !buzzerPulseArmed) {
             // Turn off external notification immediately when timeout is reached, regardless of song state
             ExternalNotificationModule::stopNow();
             isNagging = false;
             return INT32_MAX; // save cycles till we're needed again
         }
+
+        if (buzzerPulseArmed && !isNagging)
+            delay = buzzerPulseEnd - millis();
 
         // If the output is turned on, turn it back off after the given period of time.
         if (isNagging) {
@@ -326,6 +331,7 @@ void ExternalNotificationModule::stopNow()
     // Prevent the state machine from immediately re-triggering outputs after a manual stop.
     // Clearing isNagging disarms the cycle; nagCycleCutoff is never read without it.
     isNagging = false;
+    buzzerPulseArmed = false;
     buzzerShouldAlert = false;
 
 #ifdef HAS_I2S
@@ -611,6 +617,12 @@ AdminMessageHandleResult ExternalNotificationModule::handleAdminMessageForModule
         this->handleSetRingtone(request->set_canned_message_module_messages);
         result = AdminMessageHandleResult::HANDLED;
         break;
+
+    case meshtastic_AdminMessage_play_ringtone_request_tag:
+        LOG_INFO("Client playing ringtone");
+        this->handlePlayRingtone();
+        result = AdminMessageHandleResult::HANDLED;
+        break;
 #endif
 
     default:
@@ -643,6 +655,35 @@ void ExternalNotificationModule::handleSetRingtone(const char *from_msg)
     if (changed) {
         nodeDB->saveProto(rtttlConfigFile, meshtastic_RTTTLConfig_size, &meshtastic_RTTTLConfig_msg, &rtttlConfig);
     }
+}
+
+void ExternalNotificationModule::handlePlayRingtone()
+{
+    if (!moduleConfig.external_notification.enabled || !canBuzz()) {
+        LOG_INFO("Ringtone playback skipped: external notification disabled or "
+                 "buzzer mode forbids it");
+        return;
+    }
+
+    // Restart from the beginning; runOnce() turns the outputs off again once the
+    // song has ended.
+    stopNow();
+    if (moduleConfig.external_notification.use_i2s_as_buzzer || moduleConfig.external_notification.use_pwm) {
+        buzzerShouldAlert = true;
+    } else {
+#if defined(HAS_I2S_SPEAKER_NRF52)
+        // These boards play the melody on an I2S speaker without either buzzer mode flag.
+        buzzerShouldAlert = true;
+        nrf52RtttlPlayer.begin(rtttlConfig.ringtone);
+#else
+        // A plain GPIO buzzer has no melody to play, so pulse only the buzzer output once.
+        buzzerPulseEnd = millis() + (moduleConfig.external_notification.output_ms ? moduleConfig.external_notification.output_ms
+                                                                                  : EXT_NOTIFICATION_MODULE_OUTPUT_MS);
+        buzzerPulseArmed = true;
+#endif
+    }
+    triggerBuzzerOutput();
+    setIntervalFromNow(0);
 }
 #endif
 

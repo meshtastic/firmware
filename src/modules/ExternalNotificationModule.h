@@ -97,6 +97,7 @@ class ExternalNotificationModule : public SinglePortModule, private concurrency:
 #if !MESHTASTIC_EXCLUDE_RTTTL
     void handleGetRingtone(const meshtastic_MeshPacket &req, meshtastic_AdminMessage *response);
     void handleSetRingtone(const char *from_msg);
+    void handlePlayRingtone();
 #endif
 
   protected:
@@ -116,6 +117,10 @@ class ExternalNotificationModule : public SinglePortModule, private concurrency:
     void armNagCycle();
 
     bool isNagging = false;
+
+    /// Plain GPIO buzzer pulse for a ringtone preview, kept apart from the nag cycle so outputs 0 and 1 stay off.
+    bool buzzerPulseArmed = false;
+    uint32_t buzzerPulseEnd = 0;
 
     bool isSilenced = false;
     bool buzzerShouldAlert = false;
