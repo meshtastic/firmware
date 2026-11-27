@@ -45,6 +45,7 @@
 // release-only stub because these tests need to inspect the captured message text, not just avoid leaks.
 static std::vector<std::string> capturedWarnings;
 static std::vector<meshtastic_ClientNotification_NotificationType> capturedTypes; // parallel to capturedWarnings
+static std::vector<meshtastic_LogRecord_Level> capturedLevels;                    // parallel to capturedWarnings
 
 class MockMeshService : public MeshService
 {
@@ -53,6 +54,7 @@ class MockMeshService : public MeshService
     {
         capturedWarnings.push_back(n->message);
         capturedTypes.push_back(n->type);
+        capturedLevels.push_back(n->level);
         releaseClientNotificationToPool(n);
     }
 };
@@ -506,6 +508,205 @@ static void test_clampConfigLora_narrowPresetOnHam125cmDoesNotSwap()
     TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_NARROW_SLOW, cfg.modem_preset);
 }
 
+static void resetUnnamedPrimaryChannel()
+{
+    channels.initDefaults();
+    channels.resolvePrimaryIndex();
+    channels.getByIndex(channels.getPrimaryIndex()).settings.name[0] = '\0';
+}
+
+static void test_clampConfigLora_longSlowOnJPClampedToLongFast()
+{
+    // Regulatory migration of removed JP LONG_SLOW clamps to LONG_FAST at INFO without Critical Fault #7.
+    resetUnnamedPrimaryChannel();
+    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
+    cfg.region = meshtastic_Config_LoRaConfig_RegionCode_JP;
+    cfg.use_preset = true;
+    cfg.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
+
+    RadioInterface::clampConfigLora(cfg);
+
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, cfg.modem_preset);
+    TEST_ASSERT_EQUAL(meshtastic_CriticalErrorCode_NONE, error_code);
+    TEST_ASSERT_EQUAL_INT(1, (int)capturedTypes.size());
+    TEST_ASSERT_EQUAL(meshtastic_ClientNotification_NotificationType_LORA_PRESET_INVALID_FOR_REGION, capturedTypes[0]);
+    TEST_ASSERT_EQUAL(meshtastic_LogRecord_Level_INFO, capturedLevels[0]);
+}
+
+static void test_clampConfigLora_longModerateOnJPClampedToLongFast()
+{
+    // Regulatory migration of removed JP LONG_MODERATE clamps to LONG_FAST at INFO without Critical Fault #7.
+    resetUnnamedPrimaryChannel();
+    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
+    cfg.region = meshtastic_Config_LoRaConfig_RegionCode_JP;
+    cfg.use_preset = true;
+    cfg.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE;
+
+    RadioInterface::clampConfigLora(cfg);
+
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, cfg.modem_preset);
+    TEST_ASSERT_EQUAL(meshtastic_CriticalErrorCode_NONE, error_code);
+    TEST_ASSERT_EQUAL_INT(1, (int)capturedTypes.size());
+    TEST_ASSERT_EQUAL(meshtastic_ClientNotification_NotificationType_LORA_PRESET_INVALID_FOR_REGION, capturedTypes[0]);
+    TEST_ASSERT_EQUAL(meshtastic_LogRecord_Level_INFO, capturedLevels[0]);
+}
+
+static void test_validateConfigLora_invalidPresetIsQuiet()
+{
+    // Pure validation (clamp == false) must return false without emitting client notifications or
+    // latching a critical error so local callers can defer cleanly to clampConfigLora().
+    resetUnnamedPrimaryChannel();
+
+    for (auto preset :
+         {meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW, meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE}) {
+        meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
+        cfg.region = meshtastic_Config_LoRaConfig_RegionCode_JP;
+        cfg.use_preset = true;
+        cfg.modem_preset = preset;
+
+        TEST_ASSERT_FALSE(RadioInterface::validateConfigLora(cfg));
+        TEST_ASSERT_EQUAL(meshtastic_CriticalErrorCode_NONE, error_code);
+        TEST_ASSERT_EQUAL_INT(0, (int)capturedTypes.size());
+    }
+
+    // Outside a region's retiredPresets list an invalid preset is still a fault, as before
+    meshtastic_Config_LoRaConfig euCfg = meshtastic_Config_LoRaConfig_init_zero;
+    euCfg.region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
+    euCfg.use_preset = true;
+    euCfg.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO;
+    TEST_ASSERT_FALSE(RadioInterface::validateConfigLora(euCfg));
+    TEST_ASSERT_EQUAL(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING, error_code);
+    TEST_ASSERT_EQUAL_INT(1, (int)capturedTypes.size());
+}
+
+static void test_clampConfigLora_jpPresetMigrationRepairsSlot()
+{
+    // JP LONG_MODERATE (default slot 14) and LONG_SLOW (up to slot 24) ran at 125 kHz (24 slots).
+    // Migrating to 250 kHz LONG_FAST (12 slots) invalidates slots 13..24 solely because bandwidth
+    // doubled: the derived slot repair must stay informational (no Critical Fault #7), clear the
+    // failed pin to 0 (Auto), and resolve the fallback slot from the pending migrated preset
+    // rather than stale global config.lora.
+    resetUnnamedPrimaryChannel();
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_JP;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE;
+
+    // Case 1: LONG_MODERATE with its legacy default hashed slot (14) -> clears pin to 0, resolves to LONG_FAST slot 12.
+    meshtastic_Config_LoRaConfig modCfg = meshtastic_Config_LoRaConfig_init_zero;
+    modCfg.region = meshtastic_Config_LoRaConfig_RegionCode_JP;
+    modCfg.use_preset = true;
+    modCfg.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE;
+    modCfg.channel_num = 14;
+
+    RadioInterface::clampConfigLora(modCfg);
+
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, modCfg.modem_preset);
+    TEST_ASSERT_EQUAL_UINT32(0, modCfg.channel_num);
+    TEST_ASSERT_TRUE(RadioInterface::uses_default_frequency_slot);
+    TEST_ASSERT_FALSE(RadioInterface::uses_custom_channel_name);
+    TEST_ASSERT_EQUAL_UINT32(12, RadioInterface::resolveFrequencySlot(modCfg, ""));
+    TEST_ASSERT_EQUAL(meshtastic_CriticalErrorCode_NONE, error_code);
+    TEST_ASSERT_EQUAL_INT(2, (int)capturedTypes.size());
+    TEST_ASSERT_EQUAL(meshtastic_ClientNotification_NotificationType_LORA_PRESET_INVALID_FOR_REGION, capturedTypes[0]);
+    TEST_ASSERT_EQUAL(meshtastic_LogRecord_Level_INFO, capturedLevels[0]);
+    TEST_ASSERT_EQUAL(meshtastic_ClientNotification_NotificationType_LORA_CHANNEL_NUM_INVALID, capturedTypes[1]);
+    TEST_ASSERT_EQUAL(meshtastic_LogRecord_Level_INFO, capturedLevels[1]);
+
+    // Case 2: LONG_SLOW at upper valid pre-migration slot (24) -> clears pin to 0, resolves to LONG_FAST slot 12 at INFO.
+    capturedWarnings.clear();
+    capturedTypes.clear();
+    capturedLevels.clear();
+
+    meshtastic_Config_LoRaConfig slowCfg = meshtastic_Config_LoRaConfig_init_zero;
+    slowCfg.region = meshtastic_Config_LoRaConfig_RegionCode_JP;
+    slowCfg.use_preset = true;
+    slowCfg.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
+    slowCfg.channel_num = 24;
+
+    RadioInterface::clampConfigLora(slowCfg);
+
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, slowCfg.modem_preset);
+    TEST_ASSERT_EQUAL_UINT32(0, slowCfg.channel_num);
+    TEST_ASSERT_TRUE(RadioInterface::uses_default_frequency_slot);
+    TEST_ASSERT_FALSE(RadioInterface::uses_custom_channel_name);
+    TEST_ASSERT_EQUAL_UINT32(12, RadioInterface::resolveFrequencySlot(slowCfg, ""));
+    TEST_ASSERT_EQUAL(meshtastic_CriticalErrorCode_NONE, error_code);
+    TEST_ASSERT_EQUAL_INT(2, (int)capturedTypes.size());
+    TEST_ASSERT_EQUAL(meshtastic_LogRecord_Level_INFO, capturedLevels[0]);
+    TEST_ASSERT_EQUAL(meshtastic_LogRecord_Level_INFO, capturedLevels[1]);
+}
+
+static void test_clampConfigLora_jpMigrationPreservesValidSlot()
+{
+    // A pre-migration JP LONG_SLOW slot that still fits in LONG_FAST (e.g. slot 3 <= 12) must be
+    // preserved untouched with only the single preset-migration INFO notification.
+    resetUnnamedPrimaryChannel();
+    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
+    cfg.region = meshtastic_Config_LoRaConfig_RegionCode_JP;
+    cfg.use_preset = true;
+    cfg.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
+    cfg.channel_num = 3;
+
+    RadioInterface::clampConfigLora(cfg);
+
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, cfg.modem_preset);
+    TEST_ASSERT_EQUAL_UINT32(3, cfg.channel_num);
+    TEST_ASSERT_EQUAL(meshtastic_CriticalErrorCode_NONE, error_code);
+    TEST_ASSERT_EQUAL_INT(1, (int)capturedTypes.size());
+    TEST_ASSERT_EQUAL(meshtastic_ClientNotification_NotificationType_LORA_PRESET_INVALID_FOR_REGION, capturedTypes[0]);
+    TEST_ASSERT_EQUAL(meshtastic_LogRecord_Level_INFO, capturedLevels[0]);
+}
+
+static void test_clampConfigLora_jpMigrationStillErrorsBadSlot()
+{
+    // Slots that were already invalid before migration (>24 for JP 125 kHz, or paired with a
+    // fabricated preset enum) must retain ERROR reporting and INVALID_RADIO_SETTING.
+    resetUnnamedPrimaryChannel();
+
+    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
+    cfg.region = meshtastic_Config_LoRaConfig_RegionCode_JP;
+    cfg.use_preset = true;
+    cfg.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
+    cfg.channel_num = 25;
+
+    RadioInterface::clampConfigLora(cfg);
+
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, cfg.modem_preset);
+    TEST_ASSERT_EQUAL_UINT32(0, cfg.channel_num);
+    TEST_ASSERT_TRUE(RadioInterface::uses_default_frequency_slot);
+    TEST_ASSERT_FALSE(RadioInterface::uses_custom_channel_name);
+    TEST_ASSERT_EQUAL_UINT32(12, RadioInterface::resolveFrequencySlot(cfg, ""));
+    TEST_ASSERT_EQUAL(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING, error_code);
+    TEST_ASSERT_EQUAL_INT(2, (int)capturedTypes.size());
+    TEST_ASSERT_EQUAL(meshtastic_ClientNotification_NotificationType_LORA_CHANNEL_NUM_INVALID, capturedTypes[1]);
+    TEST_ASSERT_EQUAL(meshtastic_LogRecord_Level_ERROR, capturedLevels[1]);
+
+    // Fabricated enum values are not known presets and must not downgrade an out-of-range slot.
+    error_code = meshtastic_CriticalErrorCode_NONE;
+    capturedWarnings.clear();
+    capturedTypes.clear();
+    capturedLevels.clear();
+
+    meshtastic_Config_LoRaConfig bogus = meshtastic_Config_LoRaConfig_init_zero;
+    bogus.region = meshtastic_Config_LoRaConfig_RegionCode_JP;
+    bogus.use_preset = true;
+    bogus.modem_preset = (meshtastic_Config_LoRaConfig_ModemPreset)99;
+    bogus.channel_num = 20;
+
+    RadioInterface::clampConfigLora(bogus);
+
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, bogus.modem_preset);
+    TEST_ASSERT_EQUAL_UINT32(0, bogus.channel_num);
+    TEST_ASSERT_TRUE(RadioInterface::uses_default_frequency_slot);
+    TEST_ASSERT_FALSE(RadioInterface::uses_custom_channel_name);
+    TEST_ASSERT_EQUAL_UINT32(12, RadioInterface::resolveFrequencySlot(bogus, ""));
+    TEST_ASSERT_EQUAL(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING, error_code);
+    TEST_ASSERT_EQUAL_INT(2, (int)capturedTypes.size());
+    TEST_ASSERT_EQUAL(meshtastic_ClientNotification_NotificationType_LORA_CHANNEL_NUM_INVALID, capturedTypes[1]);
+    TEST_ASSERT_EQUAL(meshtastic_LogRecord_Level_ERROR, capturedLevels[1]);
+}
+
 static void test_validateConfigLora_siblingLockedPresetStillFailsValidation()
 {
     // Validation (no clamp) must keep failing so callers route into clampConfigLora,
@@ -608,6 +809,13 @@ static void test_regionTable_profileInvariants()
             if (r->getAvailablePresets()[i] == r->getDefaultPreset())
                 defaultFound = true;
         TEST_ASSERT_TRUE_MESSAGE(defaultFound, msg);
+        if (r->profile->retiredPresets) {
+            for (size_t i = 0; r->profile->retiredPresets[i] != MODEM_PRESET_END; i++) {
+                const auto retired = r->profile->retiredPresets[i];
+                TEST_ASSERT_TRUE_MESSAGE(isKnownModemPreset(retired), msg);
+                TEST_ASSERT_FALSE_MESSAGE(r->supportsPreset(retired), msg);
+            }
+        }
 
         if (r->code == meshtastic_Config_LoRaConfig_RegionCode_UNSET)
             break;
@@ -673,6 +881,7 @@ static meshtastic_DeviceState savedDeviceState;
 static meshtastic_User savedOwner;
 static meshtastic_LocalConfig savedConfig;
 static meshtastic_ChannelFile savedChannelFile;
+static meshtastic_CriticalErrorCode savedErrorCode;
 // Only the ham dispatcher test installs a router (allocErrorResponse() allocates through it).
 // Saved/torn down for every test so a failed assertion's longjmp cannot leave one dangling.
 static Router *savedRouter;
@@ -690,6 +899,8 @@ static void replaceAdminRadioGlobals()
     savedOwner = owner;
     savedConfig = config;
     savedChannelFile = channelFile;
+    savedErrorCode = error_code;
+    error_code = meshtastic_CriticalErrorCode_NONE;
     replacementNodeDB = new NodeDB();
     nodeDB = replacementNodeDB;
 }
@@ -712,6 +923,7 @@ static void restoreAdminRadioGlobals()
     owner = savedOwner;
     config = savedConfig;
     channelFile = savedChannelFile;
+    error_code = savedErrorCode;
     initRegion();
 }
 
@@ -1202,6 +1414,139 @@ static void test_handleSetConfig_fromOthers_invalidPresetRejected()
 
     // fromOthers=true: invalid preset should be rejected, old preset preserved
     TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST, config.lora.modem_preset);
+}
+
+static void test_handleSetConfig_fromLocal_regionChangeToJpClampsPreset()
+{
+    // Changing US/LONG_SLOW to JP/LONG_SLOW via local client must clamp to LONG_FAST and apply JP.
+    resetUnnamedPrimaryChannel();
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
+    initRegion();
+    testAdmin->deferSaves();
+
+    meshtastic_Config c =
+        makeLoraSetConfig(meshtastic_Config_LoRaConfig_RegionCode_JP, true, meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW);
+    testAdmin->handleSetConfig(c, false);
+
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_JP, config.lora.region);
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_JP, myRegion->code);
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, config.lora.modem_preset);
+    TEST_ASSERT_EQUAL(meshtastic_CriticalErrorCode_NONE, error_code);
+    TEST_ASSERT_EQUAL_INT(1, (int)capturedTypes.size());
+    TEST_ASSERT_EQUAL(meshtastic_ClientNotification_NotificationType_LORA_PRESET_INVALID_FOR_REGION, capturedTypes[0]);
+    TEST_ASSERT_EQUAL(meshtastic_LogRecord_Level_INFO, capturedLevels[0]);
+}
+
+static void test_handleSetConfig_fromLocal_unsetLongSlowToJpInitsRegion()
+{
+    // First-time local region selection from UNSET/LONG_SLOW to JP/LONG_SLOW must clamp, enable TX, and mint PKI keys.
+    resetUnnamedPrimaryChannel();
+    owner = meshtastic_User_init_zero;
+    owner.is_licensed = false;
+    config.security = meshtastic_Config_SecurityConfig_init_zero;
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
+    config.lora.tx_enabled = false;
+    initRegion();
+    testAdmin->deferSaves();
+
+    meshtastic_Config c =
+        makeLoraSetConfig(meshtastic_Config_LoRaConfig_RegionCode_JP, true, meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW);
+    testAdmin->handleSetConfig(c, false);
+
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_JP, config.lora.region);
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_JP, myRegion->code);
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, config.lora.modem_preset);
+    TEST_ASSERT_TRUE(config.lora.tx_enabled);
+    TEST_ASSERT_EQUAL_UINT(32, config.security.public_key.size);
+    TEST_ASSERT_EQUAL(meshtastic_CriticalErrorCode_NONE, error_code);
+    TEST_ASSERT_EQUAL_INT(1, (int)capturedTypes.size());
+    TEST_ASSERT_EQUAL(meshtastic_ClientNotification_NotificationType_LORA_PRESET_INVALID_FOR_REGION, capturedTypes[0]);
+    TEST_ASSERT_EQUAL(meshtastic_LogRecord_Level_INFO, capturedLevels[0]);
+}
+
+static void test_handleSetConfig_fromLocal_regionChangeToJpRepairsSlot()
+{
+    // Switching US/LONG_MODERATE slot 14 to JP/LONG_MODERATE slot 14 must clamp to LONG_FAST and clear the out-of-range pin at
+    // INFO.
+    resetUnnamedPrimaryChannel();
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE;
+    config.lora.channel_num = 14;
+    initRegion();
+    testAdmin->deferSaves();
+
+    meshtastic_Config c = makeLoraSetConfig(meshtastic_Config_LoRaConfig_RegionCode_JP, true,
+                                            meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE);
+    c.payload_variant.lora.channel_num = 14;
+    testAdmin->handleSetConfig(c, false);
+
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_JP, config.lora.region);
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, config.lora.modem_preset);
+    TEST_ASSERT_EQUAL_UINT32(0, config.lora.channel_num);
+    TEST_ASSERT_TRUE(RadioInterface::uses_default_frequency_slot);
+    TEST_ASSERT_EQUAL(meshtastic_CriticalErrorCode_NONE, error_code);
+    TEST_ASSERT_EQUAL_INT(2, (int)capturedTypes.size());
+    TEST_ASSERT_EQUAL(meshtastic_ClientNotification_NotificationType_LORA_PRESET_INVALID_FOR_REGION, capturedTypes[0]);
+    TEST_ASSERT_EQUAL(meshtastic_LogRecord_Level_INFO, capturedLevels[0]);
+    TEST_ASSERT_EQUAL(meshtastic_ClientNotification_NotificationType_LORA_CHANNEL_NUM_INVALID, capturedTypes[1]);
+    TEST_ASSERT_EQUAL(meshtastic_LogRecord_Level_INFO, capturedLevels[1]);
+}
+
+static void test_handleSetConfig_fromLocal_unlicensedRegionRejectedWithoutClamp()
+{
+    // An invalid/unlicensed region must be rejected before clamping so no spurious preset notification is emitted.
+    resetUnnamedPrimaryChannel();
+    owner = meshtastic_User_init_zero;
+    owner.is_licensed = false;
+    devicestate.owner.is_licensed = false;
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    initRegion();
+    testAdmin->deferSaves();
+
+    meshtastic_Config c = makeLoraSetConfig(meshtastic_Config_LoRaConfig_RegionCode_ITU1_2M, true,
+                                            meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST);
+    testAdmin->handleSetConfig(c, false);
+
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_US, config.lora.region);
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_US, myRegion->code);
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, config.lora.modem_preset);
+    TEST_ASSERT_EQUAL_INT(1, (int)capturedTypes.size());
+    TEST_ASSERT_EQUAL(meshtastic_ClientNotification_NotificationType_LORA_REGION_REQUIRES_LICENSE, capturedTypes[0]);
+}
+
+static void test_handleSetConfig_fromOthers_regionChangeToJpInvalidPresetRejected()
+{
+    // Remote admin requests with an unsupported preset for the target region must still be rejected with a WARNING notification.
+    resetUnnamedPrimaryChannel();
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
+    initRegion();
+    testAdmin->deferSaves();
+
+    meshtastic_Config c =
+        makeLoraSetConfig(meshtastic_Config_LoRaConfig_RegionCode_JP, true, meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW);
+    testAdmin->handleSetConfig(c, true);
+
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_US, config.lora.region);
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_US, myRegion->code);
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW, config.lora.modem_preset);
+    TEST_ASSERT_EQUAL(meshtastic_CriticalErrorCode_NONE, error_code);
+    TEST_ASSERT_EQUAL_INT(1, (int)capturedTypes.size());
+    TEST_ASSERT_EQUAL(meshtastic_ClientNotification_NotificationType_LORA_PRESET_INVALID_FOR_REGION, capturedTypes[0]);
+    TEST_ASSERT_EQUAL(meshtastic_LogRecord_Level_WARNING, capturedLevels[0]);
 }
 
 static void test_handleSetConfig_fromLocal_invalidPresetClamped()
@@ -2613,6 +2958,7 @@ void setUp(void)
     testAdmin = new AdminModuleTestShim();
     capturedWarnings.clear();
     capturedTypes.clear();
+    capturedLevels.clear();
     // Every test gets its own NodeDB and its own copy of the globals the admin handlers write.
     replaceAdminRadioGlobals();
 }
@@ -2685,6 +3031,12 @@ void setup()
     RUN_TEST(test_clampConfigLora_bogusPresetOnUnsetClampedToLongFast);
     RUN_TEST(test_clampConfigLora_unsetRegionKeepsRealPreset);
     RUN_TEST(test_clampConfigLora_invalidPresetOnLORA24ClampedToDefault);
+    RUN_TEST(test_clampConfigLora_longSlowOnJPClampedToLongFast);
+    RUN_TEST(test_clampConfigLora_longModerateOnJPClampedToLongFast);
+    RUN_TEST(test_validateConfigLora_invalidPresetIsQuiet);
+    RUN_TEST(test_clampConfigLora_jpPresetMigrationRepairsSlot);
+    RUN_TEST(test_clampConfigLora_jpMigrationPreservesValidSlot);
+    RUN_TEST(test_clampConfigLora_jpMigrationStillErrorsBadSlot);
 
     // Region-locked preset swap
     RUN_TEST(test_clampConfigLora_narrowPresetOnEU866SwapsToEUN868);
@@ -2709,6 +3061,11 @@ void setup()
     // handleSetConfig fromOthers dispatch
     RUN_TEST(test_handleSetConfig_fromOthers_invalidPresetRejected);
     RUN_TEST(test_handleSetConfig_fromLocal_invalidPresetClamped);
+    RUN_TEST(test_handleSetConfig_fromLocal_regionChangeToJpClampsPreset);
+    RUN_TEST(test_handleSetConfig_fromLocal_unsetLongSlowToJpInitsRegion);
+    RUN_TEST(test_handleSetConfig_fromLocal_regionChangeToJpRepairsSlot);
+    RUN_TEST(test_handleSetConfig_fromLocal_unlicensedRegionRejectedWithoutClamp);
+    RUN_TEST(test_handleSetConfig_fromOthers_regionChangeToJpInvalidPresetRejected);
     RUN_TEST(test_handleSetConfig_fromOthers_validPresetAccepted);
     RUN_TEST(test_handleSetConfig_fromOthers_invalidChannelNumFullyRejected);
     RUN_TEST(test_clampBandwidthCode_zeroMapsToDefaultOthersUnchanged);

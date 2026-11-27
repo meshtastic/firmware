@@ -50,6 +50,14 @@ static const meshtastic_Config_LoRaConfig_ModemPreset PRESETS_EU_868[] = {
     PRESET(LONG_FAST),  PRESET(LONG_SLOW),  PRESET(MEDIUM_SLOW),   PRESET(MEDIUM_FAST),
     PRESET(SHORT_SLOW), PRESET(SHORT_FAST), PRESET(LONG_MODERATE), MODEM_PRESET_END};
 
+static const meshtastic_Config_LoRaConfig_ModemPreset PRESETS_JP[] = {
+    PRESET(LONG_FAST),   PRESET(MEDIUM_SLOW), PRESET(MEDIUM_FAST),  PRESET(SHORT_SLOW), PRESET(SHORT_FAST),
+    PRESET(SHORT_TURBO), PRESET(LONG_TURBO),  PRESET(MEDIUM_TURBO), MODEM_PRESET_END};
+
+// Presets retired from JP by ARIB STD-T108 (4 s max airtime): migrated to defaultPreset at INFO.
+static const meshtastic_Config_LoRaConfig_ModemPreset PRESETS_JP_RETIRED[] = {PRESET(LONG_SLOW), PRESET(LONG_MODERATE),
+                                                                              MODEM_PRESET_END};
+
 static const meshtastic_Config_LoRaConfig_ModemPreset PRESETS_UNDEF[] = {PRESET(LONG_FAST), MODEM_PRESET_END};
 
 static const meshtastic_Config_LoRaConfig_ModemPreset PRESETS_LITE[] = {PRESET(LITE_FAST), PRESET(LITE_SLOW), MODEM_PRESET_END};
@@ -88,16 +96,17 @@ static bool isSwappableEuRegion(meshtastic_Config_LoRaConfig_RegionCode code)
 }
 
 // Region profiles: bundle preset list + regulatory parameters shared across regions
-// presets, spacing, padding, audio, licensed, text throttle, position throttle, telemetry throttle
-const RegionProfile PROFILE_STD = {PRESETS_STD, 0, 0, true, false, 0, 1, 1};
-const RegionProfile PROFILE_EU868 = {PRESETS_EU_868, 0, 0, false, false, 0, 1, 1};
-const RegionProfile PROFILE_UNDEF = {PRESETS_UNDEF, 0, 0, true, false, 0, 1, 1};
-const RegionProfile PROFILE_LITE = {PRESETS_LITE, 0.4, 0.0375f, false, false, 0, 10, 10};
-const RegionProfile PROFILE_NARROW = {PRESETS_NARROW, 0, 0.0104f, true, false, 0, 1, 1};
+// presets, retiredPresets, spacing, padding, audio, licensed, text throttle, position throttle, telemetry throttle
+const RegionProfile PROFILE_STD = {PRESETS_STD, nullptr, 0, 0, true, false, 0, 1, 1};
+const RegionProfile PROFILE_JP = {PRESETS_JP, PRESETS_JP_RETIRED, 0, 0, true, false, 0, 1, 1};
+const RegionProfile PROFILE_EU868 = {PRESETS_EU_868, nullptr, 0, 0, false, false, 0, 1, 1};
+const RegionProfile PROFILE_UNDEF = {PRESETS_UNDEF, nullptr, 0, 0, true, false, 0, 1, 1};
+const RegionProfile PROFILE_LITE = {PRESETS_LITE, nullptr, 0.4, 0.0375f, false, false, 0, 10, 10};
+const RegionProfile PROFILE_NARROW = {PRESETS_NARROW, nullptr, 0, 0.0104f, true, false, 0, 1, 1};
 // Ham '20kHz' profile. 15.6kHz bandwidth coerced to 20kHz via padding.
-const RegionProfile PROFILE_HAM_20KHZ = {PRESETS_TINY, 0, 0.0022f, false, true, 0, 2, 2};
+const RegionProfile PROFILE_HAM_20KHZ = {PRESETS_TINY, nullptr, 0, 0.0022f, false, true, 0, 2, 2};
 // Ham '100kHz' profile. 62.5kHz bandwidth coerced to 100kHz via padding.
-const RegionProfile PROFILE_HAM_100KHZ = {PRESETS_NARROW, 0, 0.01875f, false, true, 0, 1, 1};
+const RegionProfile PROFILE_HAM_100KHZ = {PRESETS_NARROW, nullptr, 0, 0.01875f, false, true, 0, 1, 1};
 
 Observable<uint32_t> RadioInterface::loraRxPacketObservable;
 
@@ -165,7 +174,7 @@ const RegionInfo regions[] = {
         https://www.arib.or.jp/english/html/overview/doc/5-STD-T108v1_5-E1.pdf
         https://qiita.com/ammo0613/items/d952154f1195b64dc29f
      */
-    RDEF(JP, 920.5f, 923.5f, 100, 13, false, false, PROFILE_STD, PRESET(LONG_FAST), 0),
+    RDEF(JP, 920.5f, 923.5f, 100, 13, false, false, PROFILE_JP, PRESET(LONG_FAST), 0),
 
     /*
         https://www.iot.org.au/wp/wp-content/uploads/2016/12/IoTSpectrumFactSheet.pdf
@@ -1306,6 +1315,7 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
 {
     char err_string[160];
     float check_bw;
+    uint32_t preMigrationSlots = 0; // non-zero only when clamp migrated a known unsupported preset
 
     const RegionInfo *newRegion = getRegion(loraConfig.region);
 
@@ -1343,20 +1353,35 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
         }
         if (!preset_valid) {
             const char *defaultName = DisplayFormatters::getModemPresetDisplayName(newRegion->getDefaultPreset(), false, true);
+            // A preset retired from this region's profile is an expected upgrade migration, not a fault.
+            const bool retired = newRegion->retiresPreset(loraConfig.modem_preset);
             if (clamp) {
+                // Capture the outgoing preset's slot count so slots invalidated solely by bandwidth widening repair at INFO.
+                if (retired)
+                    preMigrationSlots = frequencySlotCount(loraConfig);
                 snprintf(err_string, sizeof(err_string), "Preset %s invalid for %s, using %s", presetName, newRegion->name,
                          defaultName);
-            } else {
-                snprintf(err_string, sizeof(err_string), "Preset %s invalid for %s", presetName, newRegion->name);
-            }
-            LOG_ERROR("%s", err_string);
-            RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
-            sendErrorNotification(err_string, meshtastic_ClientNotification_NotificationType_LORA_PRESET_INVALID_FOR_REGION);
-
-            if (clamp) {
+                if (retired) {
+                    LOG_INFO("%s", err_string);
+                    sendErrorNotification(err_string,
+                                          meshtastic_ClientNotification_NotificationType_LORA_PRESET_INVALID_FOR_REGION,
+                                          meshtastic_LogRecord_Level_INFO);
+                } else {
+                    LOG_ERROR("%s", err_string);
+                    RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+                    sendErrorNotification(err_string,
+                                          meshtastic_ClientNotification_NotificationType_LORA_PRESET_INVALID_FOR_REGION);
+                }
                 loraConfig.modem_preset = newRegion->getDefaultPreset();
                 check_bw = modemPresetToBwKHz(loraConfig.modem_preset, newRegion->wideLora);
+            } else if (retired) {
+                LOG_INFO("Preset %s invalid for %s, defer to clamp", presetName, newRegion->name);
+                return false;
             } else {
+                snprintf(err_string, sizeof(err_string), "Preset %s invalid for %s", presetName, newRegion->name);
+                LOG_ERROR("%s", err_string);
+                RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+                sendErrorNotification(err_string, meshtastic_ClientNotification_NotificationType_LORA_PRESET_INVALID_FOR_REGION);
                 return false;
             }
         }
@@ -1385,13 +1410,12 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
         }
     }
 
-    // Without a usable channel file the boot clamp runs before initDefaults() fills the table: resolve a blank primary.
-    const char *channelName =
-        channels.getNumChannels()
-            ? channels.getName(channels.getPrimaryIndex())
-            : DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, false, config.lora.use_preset);
     const char *presetNameDisplay =
         DisplayFormatters::getModemPresetDisplayName(loraConfig.modem_preset, false, loraConfig.use_preset);
+    // Without a usable channel file the boot clamp runs before initDefaults() fills the table: resolve a blank primary.
+    const char *storedPrimaryName =
+        channels.getNumChannels() ? channels.getByIndex(channels.getPrimaryIndex()).settings.name : "";
+    const char *channelName = *storedPrimaryName ? storedPrimaryName : presetNameDisplay;
     // After any clamp above, so this is the count applyModemConfig() tunes against
     const uint32_t numFreqSlots = frequencySlotCount(loraConfig);
 
@@ -1406,11 +1430,20 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
         uses_custom_channel_name = (strcmp(channelName, presetNameDisplay) != 0);
 
         if (loraConfig.channel_num > numFreqSlots) {
+            const bool causedByPresetMigration = clamp && preMigrationSlots > 0 && loraConfig.channel_num <= preMigrationSlots;
             snprintf(err_string, sizeof(err_string), "Channel number %u invalid for %s, max is %u", loraConfig.channel_num,
                      newRegion->name, numFreqSlots);
-            LOG_ERROR("%s", err_string);
-            RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
-            sendErrorNotification(err_string, meshtastic_ClientNotification_NotificationType_LORA_CHANNEL_NUM_INVALID);
+            if (causedByPresetMigration) {
+                LOG_INFO("%s", err_string);
+                sendErrorNotification(
+                    err_string, meshtastic_ClientNotification_NotificationType_LORA_CHANNEL_NUM_INVALID,
+                    meshtastic_LogRecord_Level_INFO); // This has to be done anyways, so stay notify stay low: INFO
+            } else {
+                LOG_ERROR("%s", err_string);
+                RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+                sendErrorNotification(err_string, meshtastic_ClientNotification_NotificationType_LORA_CHANNEL_NUM_INVALID,
+                                      meshtastic_LogRecord_Level_ERROR); // This is real issue, notify as ERROR
+            }
 
             if (!clamp)
                 return false;

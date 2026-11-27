@@ -22,9 +22,10 @@ static const meshtastic_Config_LoRaConfig_ModemPreset MODEM_PRESET_END =
 
 // Region profile: bundles the preset list with regulatory parameters shared across regions
 struct RegionProfile {
-    const meshtastic_Config_LoRaConfig_ModemPreset *presets; // sentinel-terminated
-    float spacing;                                           // gaps between radio channels
-    float padding;                                           // padding at each side of the "operating channel"
+    const meshtastic_Config_LoRaConfig_ModemPreset *presets;        // sentinel-terminated
+    const meshtastic_Config_LoRaConfig_ModemPreset *retiredPresets; // sentinel-terminated, nullptr if none
+    float spacing;                                                  // gaps between radio channels
+    float padding;                                                  // padding at each side of the "operating channel"
     bool audioPermitted;
     bool licensedOnly;        // a region profile for licensed operators only
     int8_t textThrottle;      // throttle for text - future expansion
@@ -45,6 +46,7 @@ extern float getEffectiveDutyCycle();
 extern bool isKnownModemPreset(meshtastic_Config_LoRaConfig_ModemPreset preset);
 
 extern const RegionProfile PROFILE_STD;
+extern const RegionProfile PROFILE_JP;
 extern const RegionProfile PROFILE_EU868;
 extern const RegionProfile PROFILE_UNDEF;
 extern const RegionProfile PROFILE_LITE;
@@ -84,6 +86,16 @@ struct RegionInfo {
         // real region offers; fabricated values still fail and are clamped as before.
         if (code == meshtastic_Config_LoRaConfig_RegionCode_UNSET)
             return isKnownModemPreset(preset);
+        return false;
+    }
+    bool retiresPreset(meshtastic_Config_LoRaConfig_ModemPreset preset) const
+    {
+        if (!profile || !profile->retiredPresets)
+            return false;
+        for (size_t i = 0; profile->retiredPresets[i] != MODEM_PRESET_END; i++) {
+            if (profile->retiredPresets[i] == preset)
+                return true;
+        }
         return false;
     }
     size_t getNumPresets() const
