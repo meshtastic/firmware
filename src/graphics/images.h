@@ -121,6 +121,17 @@ const uint8_t icon_system[] PROGMEM = {
     0x24  // Row 7: ..#..#..
 };
 
+#ifdef HELTEC_MESH_POCKET_V2
+#define icon_power_bank_width 16
+#define icon_power_bank_height 16
+// Shared identity lets the navigation renderer distinguish this native 16x16 XBM.
+inline const uint8_t icon_power_bank[] PROGMEM = {
+    0x00, 0x00, 0x00, 0x06, 0x00, 0x07, 0x80, 0x03, 0xC0, 0x03, 0xE0, 0x01, 0xF0, 0x3F, 0xF8, 0x1F,
+    0xC0, 0x0F, 0xC0, 0x07, 0xC0, 0x03, 0xE0, 0x01, 0xE0, 0x00, 0x70, 0x00, 0x30, 0x00, 0x00, 0x00,
+};
+
+#endif
+
 // 🌐 Wi-Fi
 const uint8_t icon_wifi[] PROGMEM = {0b00000000, 0b00011000, 0b00111100, 0b01111110,
                                      0b11011011, 0b00011000, 0b00011000, 0b00000000};
