@@ -1,6 +1,7 @@
 #include "JapanTxHook.h"
 #include "NodeDB.h"
 #include "RadioInterface.h"
+#include "RadioLibInterface.h"
 #include "Throttle.h"
 #include "UptimeClock.h"
 #include <algorithm>
@@ -69,6 +70,7 @@ bool JapanTxHook::performCarrierSense(RadioInterface *iface)
 {
     if (!iface)
         return false;
+    RadioLibInterface::RadioSequence seq((iface == RadioLibInterface::instance) ? RadioLibInterface::instance : nullptr);
     bool hasValidSample = false;
     const uint32_t start = Time::getMillis();
     while (!Throttle::hasElapsed(start, CARRIER_SENSE_TIME_MS)) {
@@ -77,7 +79,8 @@ bool JapanTxHook::performCarrierSense(RadioInterface *iface)
             hasValidSample = true;
             rssi -= RSSI_FEM_LNA_OFFSET;
             if (rssi >= CARRIER_SENSE_THRESHOLD_DBM) {
-                LOG_DEBUG("JP LBT: carrier sensed during 5ms window (RSSI %d dBm >= %d dBm)", rssi, CARRIER_SENSE_THRESHOLD_DBM);
+                LOG_DEBUG_RADIO("JP LBT: carrier sensed during 5ms window (RSSI %d dBm >= %d dBm)", rssi,
+                                CARRIER_SENSE_THRESHOLD_DBM);
                 return false;
             }
         }
@@ -99,7 +102,7 @@ RadioTxHook::PreTxAction JapanTxHook::beforeTransmit(RadioInterface *iface, mesh
     if (pauseArmed) {
         const uint32_t pauseUntil = lastTxEndTime + getTxPauseDurationMs();
         if (!Throttle::deadlinePassedAt(now, pauseUntil)) {
-            LOG_DEBUG("JP LBT: deferring packet 0x%08x for mandatory 50ms pause (remaining %ums)", p->id, pauseUntil - now);
+            LOG_DEBUG_RADIO("JP LBT: deferring packet 0x%08x for mandatory 50ms pause (remaining %ums)", p->id, pauseUntil - now);
             return PRETX_DEFER;
         }
         pauseArmed = false;
@@ -107,7 +110,7 @@ RadioTxHook::PreTxAction JapanTxHook::beforeTransmit(RadioInterface *iface, mesh
 
     if (backoffArmed) {
         if (!Throttle::deadlinePassedAt(now, backoffUntilMs)) {
-            LOG_DEBUG("JP LBT: deferring packet 0x%08x during LBT backoff (remaining %ums)", p->id, backoffUntilMs - now);
+            LOG_DEBUG_RADIO("JP LBT: deferring packet 0x%08x during LBT backoff (remaining %ums)", p->id, backoffUntilMs - now);
             return PRETX_DEFER;
         }
         backoffArmed = false;
@@ -120,14 +123,14 @@ RadioTxHook::PreTxAction JapanTxHook::beforeTransmit(RadioInterface *iface, mesh
         backoffUntilMs = Time::getMillis() + backoffMs;
         backoffArmed = true;
         backoffPacket = p;
-        LOG_DEBUG("JP LBT: channel busy (attempt %u), backing off %ums for packet 0x%08x", busyCount, backoffMs, p->id);
+        LOG_DEBUG_RADIO("JP LBT: channel busy (attempt %u), backing off %ums for packet 0x%08x", busyCount, backoffMs, p->id);
         return PRETX_DEFER;
     }
 
     busyCount = 0;
     backoffArmed = false;
     backoffPacket = nullptr;
-    LOG_DEBUG("JP LBT: carrier sense clear (5ms window), transmit permitted for packet 0x%08x", p->id);
+    LOG_DEBUG_RADIO("JP LBT: carrier sense clear (5ms window), transmit permitted for packet 0x%08x", p->id);
     return PRETX_SEND;
 }
 

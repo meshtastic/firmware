@@ -688,6 +688,7 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     void unlockRadioSequence() {}
 #endif
 
+  public:
     /** Held across a whole RadioLib call sequence, so the readout task cannot run between its calls.
      *
      *  The SPI lock is per transaction, so it does not span a sequence, and every driver's readData() ends by
@@ -705,7 +706,7 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     class RadioSequence
     {
       public:
-        explicit RadioSequence(RadioLibInterface *iface) : iface(iface), held(iface->lockRadioSequence()) {}
+        explicit RadioSequence(RadioLibInterface *iface) : iface(iface), held(iface && iface->lockRadioSequence()) {}
         ~RadioSequence()
         {
             if (held)
@@ -719,6 +720,7 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
         bool held;
     };
 
+  protected:
 #ifdef MESHTASTIC_RX_READOUT_TASK
     /** From the RX_DONE interrupt, wake the readout task; false if there is none. The interrupt stays enabled, and the
      *  task notifies ISR_RX once the frame is out of the radio. */

@@ -675,11 +675,7 @@ void RadioLibInterface::onNotify(uint32_t notification)
                     // There's still some delay pending on this packet, so resume waiting for it to elapse
                     notifyLater(txp->tx_after - now, TRANSMIT_DELAY_COMPLETED, txTimerOverwrite);
                 } else {
-                    RadioTxHook::PreTxAction action;
-                    {
-                        RadioSequence seq(this);
-                        action = RadioTxHooks::beforeTransmit(this, txp);
-                    }
+                    const RadioTxHook::PreTxAction action = RadioTxHooks::beforeTransmit(this, txp);
                     if (action == RadioTxHook::PRETX_DROP) {
                         // A module refuses this packet on the radio config we are holding: drop it rather
                         // than transmit it, and move on to the next queued packet.
@@ -1586,9 +1582,7 @@ bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
             LOG_ERROR("startTransmit failed, error=%d", res);
             RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_RADIO_SPI_BUG);
 
-            if (auto p = detachSentPacket()) {
-                packetPool.release(p);
-            }
+            finishSentPacket(detachSentPacket());
             powerMon->clearState(meshtastic_PowerMon_State_Lora_TXOn); // Transmitter off now
             startReceive(); // Restart receive mode (because startTransmit failed to put us in xmit mode)
         } else {
