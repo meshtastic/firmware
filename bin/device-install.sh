@@ -1,5 +1,17 @@
 #!/usr/bin/env bash
 
+# This script is meant to be executed, not sourced. It uses `exit` (and
+# `set -e`) on every error path; if it is sourced, those `exit`s terminate the
+# user's interactive shell and close the terminal, hiding the results. Detect
+# sourcing and bail out early with `return` instead so the terminal survives.
+# (Reported in meshtastic/firmware#11954.)
+if (return 0 2>/dev/null); then
+    echo "Error: this script must be run, not sourced." >&2
+    echo "Run it as:  ./$(basename "${BASH_SOURCE[0]}") [options]" >&2
+    echo "or:         bash $(basename "${BASH_SOURCE[0]}") [options]" >&2
+    return 1
+fi
+
 PYTHON=${PYTHON:-$(which python3 python | head -n 1)}
 BPS_RESET=false
 MCU=""
