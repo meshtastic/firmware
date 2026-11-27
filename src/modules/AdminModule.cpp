@@ -1063,7 +1063,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
         // it. Everything else - GPS timing and GPIO pin assignments - stays on the reboot path.
         // Fails safe: neutralize the known-live fields in a copy,
         // then reboot if any *other* byte differs, so a newly-added PositionConfig field reboots until it
-        // is explicitly cleared as live here. See docs/admin-config-save-gating.md.
+        // is explicitly cleared as live here.
         const bool gpsToggledLive = isLiveGpsModeToggle(config.position.gps_mode, c.payload_variant.position.gps_mode);
         {
             meshtastic_Config_PositionConfig live = config.position, incoming = c.payload_variant.position;

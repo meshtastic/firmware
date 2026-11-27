@@ -58,7 +58,7 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>,
 
     // While a transaction is open, saveChanges() defers the write - so the per-field reboot and
     // radio-reload decisions computed in handleSetConfig would otherwise be thrown away, and the
-    // commit would fall back to the defaults (both true) and always reboot + reconfigure. These
+    // commit would always reboot and reconfigure. These
     // accumulate the deferred decisions so the commit does the least work the batch actually needs.
     bool deferredShouldReboot = false;
     bool deferredRadioAffected = false;
@@ -72,7 +72,7 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>,
      * `radioAffected` has deliberately **no default**. It used to default to true, which was
      * harmless while reloadConfig()'s `saveWhat & (SEGMENT_CONFIG | SEGMENT_CHANNELS)` bitmask
      * still gated the reconfigure - a node-DB-only save could not reach the radio whatever it
-     * asked for. That stopped being true once the deferred flags below started accumulating the
+     * asked for. That stopped being true once the deferred flags above started accumulating the
      * value: inside a transaction the commit saves under a fixed full mask, so the bitmask no
      * longer gates anything and an accidental `true` reaches the live SX126x reconfigure. Making
      * it mandatory means a new call site has to think about it rather than inherit the answer.

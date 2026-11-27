@@ -61,8 +61,8 @@ class InkHUD
      *  - an imminent **reboot**, where it warns before the display goes. These sit next to an
      *    applyConfigChange(..., CONFIG_APPLY_REBOOT).
      *
-     * Neither is redundant with anything, which is the point worth recording. MeshService's
-     * requestReboot() deliberately carries no UI: BaseUI renders its own notice at draw time from
+     * Neither is redundant with anything, which is the point worth recording. requestReboot()
+     * (main.h) deliberately carries no UI: BaseUI renders its own notice at draw time from
      * rebootAtMsec, whereas e-ink only draws when pushed, so InkHUD has to be told explicitly.
      * And the existing `notifyReboot` Observable (sleep.h, fired from Power::reboot) is a
      * *different moment* - reboot execution, not scheduling - which InkHUD already observes to save

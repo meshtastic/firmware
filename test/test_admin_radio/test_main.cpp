@@ -2523,7 +2523,7 @@ static void test_toggleMutedNode_skipsRadioReload_butPersists()
 // display/bluetooth/security - must persist without firing the live SX126x reconfigure.
 // This is the same crash class as the WisMesh Tag favorite-node bug, reached through a
 // different admin message (a WiFi PSK change, a Bluetooth toggle, a keypair rotation, ...).
-// See docs/admin-config-save-gating.md. As with the node-DB tests above, these run
+// As with the node-DB tests above, these run
 // outside an edit transaction so saveChanges() reaches reloadConfig() directly; the
 // deferred-transaction equivalents are further down.
 // -----------------------------------------------------------------------
