@@ -1,6 +1,7 @@
 #include "configuration.h"
 #if !MESHTASTIC_EXCLUDE_BLUETOOTH
 #include "BluetoothCommon.h"
+#include "HardwareRNG.h"
 #include "NimbleBluetooth.h"
 #include "PowerFSM.h"
 #include "StaticPointerQueue.h"
@@ -650,10 +651,23 @@ class NimbleBluetoothLogRadioCallback : public BLECharacteristicCallbacks
     }
 };
 
+// RANDOM_PIN: install a passkey drawn from the hardware RNG. Not Arduino random(), which silently switches to the
+// seeded software PRNG once anything calls randomSeed().
+static void installRandomPasskey()
+{
+    uint32_t r = 0;
+    HardwareRNG::fill(reinterpret_cast<uint8_t *>(&r), sizeof(r));
+    BLESecurity::setPassKey(true, r % 900000u + 100000u);
+}
+
 class NimbleBluetoothSecurityCallback : public BLESecurityCallbacks
 {
     void onPassKeyNotify(uint32_t passkey) override
     {
+        // The stack has already copied this passkey into the pairing, so replacing it now gives the next pairing a
+        // fresh one.
+        if (config.bluetooth.mode == meshtastic_Config_BluetoothConfig_PairingMode_RANDOM_PIN)
+            installRandomPasskey();
         LOG_INFO("*** Enter passkey %06u on the peer side ***", passkey);
         powerFSM.trigger(EVENT_BLUETOOTH_PAIR);
         meshtastic::BluetoothStatus newStatus(std::to_string(passkey));
@@ -940,7 +954,7 @@ void NimbleBluetooth::setup()
         // Set the passkey
         if (config.bluetooth.mode == meshtastic_Config_BluetoothConfig_PairingMode_RANDOM_PIN) {
             LOG_INFO("Use random passkey");
-            security.setPassKey(false); // generate a random passkey
+            installRandomPasskey(); // replaced after each pairing, in onPassKeyNotify()
         } else {
             LOG_INFO("Use fixed passkey");
             security.setPassKey(true, config.bluetooth.fixed_pin);

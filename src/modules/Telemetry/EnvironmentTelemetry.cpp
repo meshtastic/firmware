@@ -124,6 +124,10 @@ extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const c
 #include "Sensor/T1000xSensor.h"
 #endif
 
+#if defined(MAX31865_CS) && __has_include(<Adafruit_MAX31865.h>)
+#include "Sensor/MAX31865Sensor.h"
+#endif
+
 #if ARCH_PORTDUINO
 #include "Sensor/CommandSensor.h"
 #endif
@@ -315,6 +319,10 @@ void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
 #endif
 
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR_EXTERNAL
+#if defined(MAX31865_CS) && __has_include(<Adafruit_MAX31865.h>)
+    // SPI device, probed in initDevice()
+    addSensor<MAX31865Sensor>(i2cScanner, ScanI2C::DeviceType::NONE);
+#endif
     addSensor<RCWL9620Sensor>(i2cScanner, ScanI2C::DeviceType::RCWL9620);
     addSensor<CGRadSensSensor>(i2cScanner, ScanI2C::DeviceType::CGRADSENS);
 #if __has_include(<DFRobot_LarkWeatherStation.h>)

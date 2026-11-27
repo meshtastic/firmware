@@ -61,7 +61,7 @@ FAIL=0
 # assert <description> <expected-exit> <fixture> <mode> [expected-substring...]
 #   mode:    "check" adds --check, "yaml" adds --output-yaml, "check-yaml" adds both
 #            (to assert that --check wins), "normal" runs with neither.
-#   fixture: a bare name runs from a scratch directory. A name containing a slash
+#   fixture: a bare name runs from a scratch directory, as does an absolute path. A relative name containing a slash
 #            (configd-conflict/config.yaml) runs from that fixture's own directory,
 #            so a relative ConfigDirectory in it resolves the way it would in situ.
 #   Each expected substring must appear in the output. One prefixed with '!' must not:
@@ -71,7 +71,9 @@ assert() {
 	shift 4
 
 	local cwd="$WORKDIR" config="$FIXTURES/$fixture"
-	if [[ $fixture == */* ]]; then
+	if [[ $fixture == /* ]]; then
+		config="$fixture"
+	elif [[ $fixture == */* ]]; then
 		cwd="$FIXTURES/$(dirname "$fixture")"
 		config="$(basename "$fixture")"
 	fi
@@ -156,6 +158,25 @@ assert "bluetooth bad Enabled is silently defaulted" 0 bluetooth-bad-enabled.yam
 	"Result: 0 errors, 1 warning"
 assert "bluetooth AdapterId must name a real adapter" 0 bluetooth-bad-adapter.yaml check \
 	"is not a BlueZ adapter name" \
+	"Result: 0 errors, 1 warning"
+
+echo
+echo "serial module:"
+assert "a serial module path is clean" 0 serial-module.yaml check \
+	"Result: 0 errors, 0 warnings"
+assert "a serial module path is written back" 0 serial-module.yaml yaml \
+	"SerialModule:" \
+	"Path: pty:/tmp/meshserial"
+# Only the document is reloaded: --output-yaml may print startup lines before it.
+timeout 60 "$BIN" --output-yaml --config "$FIXTURES/serial-module.yaml" -d "$WORKDIR/fs" 2>/dev/null |
+	sed -n '/^[A-Za-z][A-Za-z0-9]*:/,$p' >"$WORKDIR/serial-module-emitted.yaml"
+assert "the written-back serial module path loads clean" 0 "$WORKDIR/serial-module-emitted.yaml" check \
+	"Result: 0 errors, 0 warnings"
+# A config.d file with a SerialModule section but no Path keeps the path config.yaml set.
+assert "a serial module path survives a later file without Path" 0 serial-module-append/config.yaml yaml \
+	"Path: /dev/ttyUSB1"
+assert "an unknown serial module key is warned" 0 serial-module-unknown-key.yaml check \
+	"unknown key 'SerialModule.Baud'" \
 	"Result: 0 errors, 1 warning"
 
 echo
