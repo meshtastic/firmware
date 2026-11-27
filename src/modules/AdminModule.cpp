@@ -1056,7 +1056,8 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
 
         auto rejectRemoteLora = [&]() {
             LOG_WARN("Invalid LoRa config from another node, rejecting changes");
-            if (validatedLora.use_preset && !getRegion(validatedLora.region)->supportsPreset(validatedLora.modem_preset)) {
+            // Validation defers a retired preset to the clamp without notifying, so say why it was refused.
+            if (validatedLora.use_preset && getRegion(validatedLora.region)->retiresPreset(validatedLora.modem_preset)) {
                 const char *presetName = DisplayFormatters::getModemPresetDisplayName(validatedLora.modem_preset, false, true);
                 sendWarning(meshtastic_ClientNotification_NotificationType_LORA_PRESET_INVALID_FOR_REGION,
                             "Preset %s invalid for %s", presetName, getRegion(validatedLora.region)->name);
@@ -1064,16 +1065,18 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
             validatedLora = oldLoraConfig;
         };
 
-        // If we're setting a new region, validate the region and clamp local configs or reject remote ones.
+        // If we're setting a new region, check the region is valid and then init the region or discard the change
         if (validatedLora.region != myRegion->code) {
             bool regionLoraValid = RadioInterface::validateConfigRegion(validatedLora);
             if (regionLoraValid) {
-                if (!fromOthers) {
-                    // Disable EU sibling swap on region-only changes so switching to e.g. EU_866 clamps instead of reverting.
-                    RadioInterface::clampConfigLora(validatedLora, validatedLora.modem_preset != oldLoraConfig.modem_preset);
-                } else if (!RadioInterface::validateConfigLora(validatedLora)) {
+                // A local switch into a region that retired the active preset lands on its default instead of failing.
+                if (!fromOthers && validatedLora.use_preset &&
+                    getRegion(validatedLora.region)->retiresPreset(validatedLora.modem_preset))
+                    RadioInterface::clampConfigLora(validatedLora);
+                if (!RadioInterface::validateConfigLora(validatedLora)) {
                     regionLoraValid = false;
-                    rejectRemoteLora();
+                    if (fromOthers)
+                        rejectRemoteLora();
                 }
             }
             if (!regionLoraValid) {

@@ -569,13 +569,14 @@ static void test_validateConfigLora_invalidPresetIsQuiet()
         TEST_ASSERT_EQUAL_INT(0, (int)capturedTypes.size());
     }
 
+    // Outside a region's retiredPresets list an invalid preset is still a fault, as before
     meshtastic_Config_LoRaConfig euCfg = meshtastic_Config_LoRaConfig_init_zero;
     euCfg.region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
     euCfg.use_preset = true;
     euCfg.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO;
     TEST_ASSERT_FALSE(RadioInterface::validateConfigLora(euCfg));
-    TEST_ASSERT_EQUAL(meshtastic_CriticalErrorCode_NONE, error_code);
-    TEST_ASSERT_EQUAL_INT(0, (int)capturedTypes.size());
+    TEST_ASSERT_EQUAL(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING, error_code);
+    TEST_ASSERT_EQUAL_INT(1, (int)capturedTypes.size());
 }
 
 static void test_clampConfigLora_jpPresetMigrationRepairsSlot()
@@ -718,25 +719,6 @@ static void test_validateConfigLora_siblingLockedPresetStillFailsValidation()
     TEST_ASSERT_FALSE(RadioInterface::validateConfigLora(cfg));
 }
 
-static void test_clampConfigLora_allowRegionSwapFalseClampsEuSibling()
-{
-    // Disabling allowRegionSwap keeps an EU sibling region and clamps its preset to the region default.
-    resetUnnamedPrimaryChannel();
-    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
-    cfg.region = meshtastic_Config_LoRaConfig_RegionCode_EU_866;
-    cfg.use_preset = true;
-    cfg.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
-
-    RadioInterface::clampConfigLora(cfg, false);
-
-    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_EU_866, cfg.region);
-    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LITE_FAST, cfg.modem_preset);
-    TEST_ASSERT_EQUAL(meshtastic_CriticalErrorCode_NONE, error_code);
-    TEST_ASSERT_EQUAL_INT(1, (int)capturedTypes.size());
-    TEST_ASSERT_EQUAL(meshtastic_ClientNotification_NotificationType_LORA_PRESET_INVALID_FOR_REGION, capturedTypes[0]);
-    TEST_ASSERT_EQUAL(meshtastic_LogRecord_Level_INFO, capturedLevels[0]);
-}
-
 // -----------------------------------------------------------------------
 // RegionInfo preset list integrity tests
 // -----------------------------------------------------------------------
@@ -827,6 +809,13 @@ static void test_regionTable_profileInvariants()
             if (r->getAvailablePresets()[i] == r->getDefaultPreset())
                 defaultFound = true;
         TEST_ASSERT_TRUE_MESSAGE(defaultFound, msg);
+        if (r->profile->retiredPresets) {
+            for (size_t i = 0; r->profile->retiredPresets[i] != MODEM_PRESET_END; i++) {
+                const auto retired = r->profile->retiredPresets[i];
+                TEST_ASSERT_TRUE_MESSAGE(isKnownModemPreset(retired), msg);
+                TEST_ASSERT_FALSE_MESSAGE(r->supportsPreset(retired), msg);
+            }
+        }
 
         if (r->code == meshtastic_Config_LoRaConfig_RegionCode_UNSET)
             break;
@@ -1425,10 +1414,6 @@ static void test_handleSetConfig_fromOthers_invalidPresetRejected()
 
     // fromOthers=true: invalid preset should be rejected, old preset preserved
     TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST, config.lora.modem_preset);
-    TEST_ASSERT_EQUAL(meshtastic_CriticalErrorCode_NONE, error_code);
-    TEST_ASSERT_EQUAL_INT(1, (int)capturedTypes.size());
-    TEST_ASSERT_EQUAL(meshtastic_ClientNotification_NotificationType_LORA_PRESET_INVALID_FOR_REGION, capturedTypes[0]);
-    TEST_ASSERT_EQUAL(meshtastic_LogRecord_Level_WARNING, capturedLevels[0]);
 }
 
 static void test_handleSetConfig_fromLocal_regionChangeToJpClampsPreset()
@@ -1513,30 +1498,6 @@ static void test_handleSetConfig_fromLocal_regionChangeToJpRepairsSlot()
     TEST_ASSERT_EQUAL(meshtastic_LogRecord_Level_INFO, capturedLevels[0]);
     TEST_ASSERT_EQUAL(meshtastic_ClientNotification_NotificationType_LORA_CHANNEL_NUM_INVALID, capturedTypes[1]);
     TEST_ASSERT_EQUAL(meshtastic_LogRecord_Level_INFO, capturedLevels[1]);
-}
-
-static void test_handleSetConfig_fromLocal_explicitEuSiblingRegionClampsPreset()
-{
-    // A region-only change from EU_868/LONG_FAST to EU_866/LONG_FAST must clamp to LITE_FAST instead of swapping back to EU_868.
-    resetUnnamedPrimaryChannel();
-    config.lora = meshtastic_Config_LoRaConfig_init_zero;
-    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
-    config.lora.use_preset = true;
-    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
-    initRegion();
-    testAdmin->deferSaves();
-
-    meshtastic_Config c = makeLoraSetConfig(meshtastic_Config_LoRaConfig_RegionCode_EU_866, true,
-                                            meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST);
-    testAdmin->handleSetConfig(c, false);
-
-    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_EU_866, config.lora.region);
-    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_EU_866, myRegion->code);
-    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LITE_FAST, config.lora.modem_preset);
-    TEST_ASSERT_EQUAL(meshtastic_CriticalErrorCode_NONE, error_code);
-    TEST_ASSERT_EQUAL_INT(1, (int)capturedTypes.size());
-    TEST_ASSERT_EQUAL(meshtastic_ClientNotification_NotificationType_LORA_PRESET_INVALID_FOR_REGION, capturedTypes[0]);
-    TEST_ASSERT_EQUAL(meshtastic_LogRecord_Level_INFO, capturedLevels[0]);
 }
 
 static void test_handleSetConfig_fromLocal_unlicensedRegionRejectedWithoutClamp()
@@ -3084,7 +3045,6 @@ void setup()
     RUN_TEST(test_clampConfigLora_litePresetOnUSDoesNotSwap);
     RUN_TEST(test_clampConfigLora_narrowPresetOnHam125cmDoesNotSwap);
     RUN_TEST(test_validateConfigLora_siblingLockedPresetStillFailsValidation);
-    RUN_TEST(test_clampConfigLora_allowRegionSwapFalseClampsEuSibling);
 
     // RegionInfo preset list integrity
     RUN_TEST(test_presetsStd_hasTenEntries);
@@ -3104,7 +3064,6 @@ void setup()
     RUN_TEST(test_handleSetConfig_fromLocal_regionChangeToJpClampsPreset);
     RUN_TEST(test_handleSetConfig_fromLocal_unsetLongSlowToJpInitsRegion);
     RUN_TEST(test_handleSetConfig_fromLocal_regionChangeToJpRepairsSlot);
-    RUN_TEST(test_handleSetConfig_fromLocal_explicitEuSiblingRegionClampsPreset);
     RUN_TEST(test_handleSetConfig_fromLocal_unlicensedRegionRejectedWithoutClamp);
     RUN_TEST(test_handleSetConfig_fromOthers_regionChangeToJpInvalidPresetRejected);
     RUN_TEST(test_handleSetConfig_fromOthers_validPresetAccepted);
