@@ -56,9 +56,19 @@ uint8_t formatLines(bool haveStatus, const PowerBankStatus &status, bool haveDet
         return n;
     }
 
-    for (uint8_t i = 0; i < detail.numPorts && i < PowerBankDetail::MAX_PORTS; i++)
+    // The protocol is reported once for all ports: put it on the port using it when only one is active.
+    const uint8_t numPorts = detail.numPorts < PowerBankDetail::MAX_PORTS ? detail.numPorts : PowerBankDetail::MAX_PORTS;
+    int activePort = -1;
+    for (uint8_t i = 0; i < numPorts; i++) {
+        if (detail.portStates[i] != PowerBankDetail::PORT_IDLE)
+            activePort = activePort == -1 ? i : -2;
+    }
+    for (uint8_t i = 0; i < numPorts; i++) {
         append(lines[n], "%s%s %s", i ? "  " : "", detail.portNames[i], portWord(detail.portStates[i]));
-    if (detail.fastCharge)
+        if (detail.fastCharge && i == activePort)
+            append(lines[n], " %s", detail.fastCharge);
+    }
+    if (detail.fastCharge && activePort < 0)
         append(lines[n], "  %s", detail.fastCharge);
     n++;
 

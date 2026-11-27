@@ -16,9 +16,10 @@
 //  - charging or external power held over from a stale frame, which keeps the node in its powered
 //    state after unplugging;
 //  - the gauge used when it disagrees with a live HLT331 reading, or when it is not running;
-//  - a wrong voltage scale, register order or temperature offset in the gauge decode;
-//  - C1/C2 states or protocol names swapped on the page, or the page showing a sleeping
-//    controller's stale port states as live.
+//  - a wrong voltage scale, register order or temperature offset in the gauge decode, or a charge level
+//    truncated so that a full pack reads 99 %;
+//  - C1/C2 states or protocol names swapped on the page, the fast-charge protocol shown away from the port
+//    using it, or a sleeping controller's stale port states shown as live.
 #include "Arduino.h" // declares setup()/loop() with the linkage the framework's main() calls
 #include "TestUtil.h"
 #include "graphics/draw/PowerBankPage.h"
@@ -90,6 +91,22 @@ void test_gauge_percent_is_capped_at_100(void)
     CW2217::Reading r;
     TEST_ASSERT_TRUE(CW2217::decode(regs, r));
     TEST_ASSERT_EQUAL_UINT8(100, r.percent);
+}
+
+// Round 3 on hardware: a fully charged pack read 99 + 0xC0/256 % and the node showed 99 while the HLT331 said 100.
+void test_gauge_percent_rounds_its_fraction(void)
+{
+    uint8_t regs[CW2217::REG_COUNT];
+    CW2217::Reading r;
+    runningGauge(regs);
+    regs[CW2217::REG_SOC] = 99;
+    regs[CW2217::REG_SOC + 1] = 0xC0;
+    TEST_ASSERT_TRUE(CW2217::decode(regs, r));
+    TEST_ASSERT_EQUAL_UINT8(100, r.percent);
+
+    regs[CW2217::REG_SOC + 1] = 0x7F;
+    TEST_ASSERT_TRUE(CW2217::decode(regs, r));
+    TEST_ASSERT_EQUAL_UINT8(99, r.percent);
 }
 
 void test_gauge_rejected_unless_a_running_cw2217_with_a_plausible_voltage(void)
@@ -268,7 +285,7 @@ void test_page_shows_live_ports_wireless_bus_and_temperatures(void)
     char lines[graphics::PowerBankPage::PAGE_LINES][graphics::PowerBankPage::PAGE_LINE_CHARS];
     TEST_ASSERT_EQUAL_UINT8(4, graphics::PowerBankPage::formatLines(true, st, true, d, lines));
     TEST_ASSERT_EQUAL_STRING("Battery 87% 4.10V", lines[0]);
-    TEST_ASSERT_EQUAL_STRING("C1 -  C2 Out  PD", lines[1]);
+    TEST_ASSERT_EQUAL_STRING("C1 -  C2 Out PD", lines[1]);
     TEST_ASSERT_EQUAL_STRING("Wireless 17.2W Qi2", lines[2]);
     TEST_ASSERT_EQUAL_STRING("Bus 13.8V 1.30A  51/56C", lines[3]);
 }
@@ -290,6 +307,27 @@ void test_page_flags_charging_foreign_object_and_heat(void)
     TEST_ASSERT_EQUAL_STRING("C1 -  C2 In", lines[1]);
     TEST_ASSERT_EQUAL_STRING("Wireless: object on pad!", lines[2]);
     TEST_ASSERT_NOT_NULL(strstr(lines[3], " HOT"));
+}
+
+// Round 3 on hardware: "C1 Out  C2 -  PD" read as if PD were on C2. The protocol goes with the one active port,
+// and stays at the end when the port using it cannot be told.
+void test_page_puts_the_protocol_on_the_active_port(void)
+{
+    PowerBankStatus st;
+    st.batteryMv = 4265;
+    st.batteryPercent = 99;
+    HLT331Status s = controllerFrame(4265, 99, false, HLT331Status::PORT_DISCHARGING, 0);
+    s.fastChargeMode = 6;
+    PowerBankDetail d;
+    hlt331Detail(s, true, d);
+    char lines[graphics::PowerBankPage::PAGE_LINES][graphics::PowerBankPage::PAGE_LINE_CHARS];
+    graphics::PowerBankPage::formatLines(true, st, true, d, lines);
+    TEST_ASSERT_EQUAL_STRING("C1 Out PD  C2 -", lines[1]);
+
+    s.c2State = HLT331Status::PORT_CHARGING;
+    hlt331Detail(s, true, d);
+    graphics::PowerBankPage::formatLines(true, st, true, d, lines);
+    TEST_ASSERT_EQUAL_STRING("C1 Out  C2 In  PD", lines[1]);
 }
 
 // A sleeping controller's last frame is history: the page must not show its ports as current.
@@ -322,6 +360,7 @@ void setup()
     RUN_TEST(test_gauge_decodes_voltage_percent_and_temperature);
     RUN_TEST(test_gauge_temperature_below_zero);
     RUN_TEST(test_gauge_percent_is_capped_at_100);
+    RUN_TEST(test_gauge_percent_rounds_its_fraction);
     RUN_TEST(test_gauge_rejected_unless_a_running_cw2217_with_a_plausible_voltage);
     RUN_TEST(test_gauge_is_the_battery_source_when_it_agrees_with_the_controller);
     RUN_TEST(test_gauge_ignored_when_it_disagrees_with_a_live_controller);
@@ -334,6 +373,7 @@ void setup()
     RUN_TEST(test_protocol_names_have_no_entry_for_none_or_out_of_range);
     RUN_TEST(test_page_shows_live_ports_wireless_bus_and_temperatures);
     RUN_TEST(test_page_flags_charging_foreign_object_and_heat);
+    RUN_TEST(test_page_puts_the_protocol_on_the_active_port);
     RUN_TEST(test_page_shows_idle_rather_than_stale_ports);
     RUN_TEST(test_page_without_status_or_detail);
     exit(UNITY_END());
