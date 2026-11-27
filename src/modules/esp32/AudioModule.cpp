@@ -6,6 +6,7 @@
 #include "NodeDB.h"
 #include "Router.h"
 #include "gps/RTC.h"
+#include <cmath>
 
 /*
     AudioModule
@@ -20,17 +21,86 @@
         1) Enable the module by setting audio.codec2_enabled to 1.
         2) Set the pins for the I2S interface. Recommended on TLora is I2S_WS 13/I2S_SD 15/I2S_SIN 2/I2S_SCK 14
         3) Set audio.bitrate to the desired codec2 rate (CODEC2_3200, CODEC2_2400, CODEC2_1600, CODEC2_1400, CODEC2_1300,
-   CODEC2_1200, CODEC2_700, CODEC2_700B)
+   CODEC2_1200, CODEC2_700C, CODEC2_450)
 
     KNOWN PROBLEMS
         * Half Duplex
         * Will not work on NRF and the Linux device targets (yet?).
 */
 
-ButterworthFilter hp_filter(240, 8000, ButterworthFilter::ButterworthFilter::Highpass, 1);
+namespace
+{
+class HighpassFilter
+{
+  public:
+    HighpassFilter(float cutoffHz, float sampleRateHz, float damping)
+    {
+        constexpr float kPi = 3.14159265358979323846f;
+        const float c = std::tan(kPi * cutoffHz / sampleRateHz);
+        a1 = 1.0f / (1.0f + damping * c + c * c);
+        a2 = -2.0f * a1;
+        a3 = a1;
+        b1 = 2.0f * (c * c - 1.0f) * a1;
+        b2 = (1.0f - damping * c + c * c) * a1;
+    }
 
-TaskHandle_t codec2HandlerTask;
-AudioModule *audioModule;
+    float update(float x0)
+    {
+        const float y0 = a1 * x0 + a2 * x1 + a3 * x2 - b1 * y1 - b2 * y2;
+        x2 = x1;
+        x1 = x0;
+        y2 = y1;
+        y1 = y0;
+        return y0;
+    }
+
+  private:
+    float a1 = 0.0f;
+    float a2 = 0.0f;
+    float a3 = 0.0f;
+    float b1 = 0.0f;
+    float b2 = 0.0f;
+    float x1 = 0.0f;
+    float x2 = 0.0f;
+    float y1 = 0.0f;
+    float y2 = 0.0f;
+};
+
+int audioBaudToCodec2Mode(meshtastic_ModuleConfig_AudioConfig_Audio_Baud baud)
+{
+    if (baud == meshtastic_ModuleConfig_AudioConfig_Audio_Baud_CODEC2_DEFAULT)
+        baud = AUDIO_MODULE_MODE;
+
+    switch (baud) {
+    case meshtastic_ModuleConfig_AudioConfig_Audio_Baud_CODEC2_3200:
+        return CODEC2_MODE_3200;
+    case meshtastic_ModuleConfig_AudioConfig_Audio_Baud_CODEC2_2400:
+        return CODEC2_MODE_2400;
+    case meshtastic_ModuleConfig_AudioConfig_Audio_Baud_CODEC2_1600:
+        return CODEC2_MODE_1600;
+    case meshtastic_ModuleConfig_AudioConfig_Audio_Baud_CODEC2_1400:
+        return CODEC2_MODE_1400;
+    case meshtastic_ModuleConfig_AudioConfig_Audio_Baud_CODEC2_1300:
+        return CODEC2_MODE_1300;
+    case meshtastic_ModuleConfig_AudioConfig_Audio_Baud_CODEC2_1200:
+        return CODEC2_MODE_1200;
+    // Legacy 700/700B were removed upstream; fall back to 700C as the proto documents.
+    case meshtastic_ModuleConfig_AudioConfig_Audio_Baud_CODEC2_700:
+    case meshtastic_ModuleConfig_AudioConfig_Audio_Baud_CODEC2_700B:
+    case meshtastic_ModuleConfig_AudioConfig_Audio_Baud_CODEC2_700C:
+        return CODEC2_MODE_700C;
+    case meshtastic_ModuleConfig_AudioConfig_Audio_Baud_CODEC2_450:
+        return CODEC2_MODE_450;
+    default:
+        return -1;
+    }
+}
+} // namespace
+
+HighpassFilter hp_filter(240.0f, 8000.0f, 1.0f);
+
+TaskHandle_t codec2HandlerTask = nullptr;
+AudioModule *audioModule = nullptr;
 
 #ifdef ARCH_ESP32
 // ESP32 doesn't use that flag
@@ -54,7 +124,7 @@ void run_codec2(void *parameter)
         if (tcount != 0) {
             if (audioModule->radio_state == RadioState::tx) {
                 for (int i = 0; i < audioModule->adc_buffer_size; i++)
-                    audioModule->speech[i] = (int16_t)hp_filter.Update((float)audioModule->speech[i]);
+                    audioModule->speech[i] = (int16_t)hp_filter.update((float)audioModule->speech[i]);
 
                 codec2_encode(audioModule->codec2, audioModule->tx_encode_frame + audioModule->tx_encode_frame_index,
                               audioModule->speech);
@@ -101,11 +171,20 @@ AudioModule::AudioModule() : SinglePortModule("Audio", meshtastic_PortNum_AUDIO_
     // moduleConfig.audio.ptt_pin = 39;
 
     if ((moduleConfig.audio.codec2_enabled) && (myRegion->profile->audioPermitted)) {
-        LOG_INFO("Set up codec2 in mode %u", (moduleConfig.audio.bitrate ? moduleConfig.audio.bitrate : AUDIO_MODULE_MODE) - 1);
-        codec2 = codec2_create((moduleConfig.audio.bitrate ? moduleConfig.audio.bitrate : AUDIO_MODULE_MODE) - 1);
+        const int mode = audioBaudToCodec2Mode(moduleConfig.audio.bitrate);
+        if (mode >= 0) {
+            LOG_INFO("Set up codec2 in mode %d", mode);
+            codec2 = codec2_create(mode);
+        }
+        if (codec2 == nullptr) {
+            LOG_ERROR("Unsupported or unavailable codec2 bitrate %d (mode %d); disabling AudioModule",
+                      (int)moduleConfig.audio.bitrate, mode);
+            disable();
+            return;
+        }
         memcpy(tx_header.magic, c2_magic, sizeof(c2_magic));
-        tx_header.mode = (moduleConfig.audio.bitrate ? moduleConfig.audio.bitrate : AUDIO_MODULE_MODE) - 1;
-        codec2_set_lpc_post_filter(codec2, 1, 0, 0.8, 0.2);
+        tx_header.mode = static_cast<char>(mode);
+        codec2_set_lpc_post_filter(codec2, 1, 0, 0.8f, 0.2f);
         encode_codec_size = (codec2_bits_per_frame(codec2) + 7) / 8;
         encode_frame_num = (meshtastic_Constants_DATA_PAYLOAD_LEN - sizeof(tx_header)) / encode_codec_size;
         encode_frame_size = encode_frame_num * encode_codec_size; // max 233 bytes + 4 header bytes
@@ -126,8 +205,7 @@ void AudioModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int
     display->setFont(FONT_SMALL);
     display->fillRect(0 + x, 0 + y, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
     display->setColor(BLACK);
-    display->drawStringf(0 + x, 0 + y, buffer, "Codec2 Mode %d Audio",
-                         (moduleConfig.audio.bitrate ? moduleConfig.audio.bitrate : AUDIO_MODULE_MODE) - 1);
+    display->drawStringf(0 + x, 0 + y, buffer, "Codec2 Mode %d Audio", (int)tx_header.mode);
     display->setColor(WHITE);
     display->setFont(FONT_LARGE);
     display->setTextAlignment(TEXT_ALIGN_CENTER);
@@ -143,7 +221,8 @@ void AudioModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int
 
 int32_t AudioModule::runOnce()
 {
-    if ((moduleConfig.audio.codec2_enabled) && (myRegion->profile->audioPermitted)) {
+    if ((moduleConfig.audio.codec2_enabled) && (myRegion->profile->audioPermitted) && (codec2 != nullptr) &&
+        (codec2HandlerTask != nullptr)) {
         esp_err_t res;
         if (firstTime) {
             // Set up I2S Processor configuration. This will produce 16bit samples at 8 kHz instead of 12 from the ADC
@@ -249,7 +328,7 @@ meshtastic_MeshPacket *AudioModule::allocReply()
 
 bool AudioModule::shouldDraw()
 {
-    if (!moduleConfig.audio.codec2_enabled) {
+    if (!moduleConfig.audio.codec2_enabled || codec2 == nullptr) {
         return false;
     }
     return (radio_state == RadioState::tx);
@@ -274,7 +353,8 @@ void AudioModule::sendPayload(NodeNum dest, bool wantReplies)
 
 ProcessMessage AudioModule::handleReceived(const meshtastic_MeshPacket &mp)
 {
-    if ((moduleConfig.audio.codec2_enabled) && (myRegion->profile->audioPermitted)) {
+    if ((moduleConfig.audio.codec2_enabled) && (myRegion->profile->audioPermitted) && (codec2 != nullptr) &&
+        (codec2HandlerTask != nullptr)) {
         auto &p = mp.decoded;
         if (!isFromUs(&mp)) {
             size_t n = p.payload.size;
