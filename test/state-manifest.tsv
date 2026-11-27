@@ -58,6 +58,7 @@ test_hop_scaling	writes=config.proto,module.proto,device.proto,channels.proto,no
 test_hop_start_policy	writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto	constructs a NodeDB (isFromUs needs nodeDB->getNodeNum()), whose constructor persists a default set when the prefs directory is empty
 test_ignore_relay_nodes	writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto	the ingress harness builds a NodeDB (isFromUs needs nodeDB->getNodeNum()), whose constructor persists a default set when the prefs directory is empty
 test_key_verification_handshake	writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto,warm.dat	builds a NodeDB holding both peers' keys and calls commitVerifiedRemoteNode(), which persists the node DB
+test_lockdown_redaction	writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto,warm.dat	per-test ScopedNodeDB fixture constructs a NodeDB, whose constructor persists a default set when the prefs directory is empty
 test_mesh_beacon	writes=module.proto,transmit_history.dat	exercises the beacon's module-config save path; the broadcaster's interval tests stamp TransmitHistory, which persists the beacon send time
 test_mesh_module	writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto,warm.dat	module framework tests construct a NodeDB
 test_mqtt	writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto errors=1000..12000	constructs a NodeDB for node lookups in the MQTT paths
