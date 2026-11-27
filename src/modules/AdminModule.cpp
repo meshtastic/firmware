@@ -1056,6 +1056,13 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
 
         // If we're setting a new region, check the region is valid and then init the region or discard the change
         if (validatedLora.region != myRegion->code) {
+            const bool allowRegionSwap = oldLoraConfig.use_preset && validatedLora.modem_preset != oldLoraConfig.modem_preset;
+            if (!fromOthers && !allowRegionSwap && validatedLora.use_preset &&
+                RadioInterface::regionSwapForPreset(validatedLora.region, validatedLora.modem_preset) &&
+                RadioInterface::validateConfigRegion(validatedLora)) {
+                // Explicit switch into an EU sibling region keeps that region and clamps the carried-over preset.
+                RadioInterface::clampConfigLora(validatedLora, false);
+            }
             //  Region has changed so check whether it is valid for e.g. licensing conditions and if the lora config is valid
             if (RadioInterface::validateConfigRegion(validatedLora) && RadioInterface::validateConfigLora(validatedLora)) {
                 // If we're setting region for the first time, init the region and regenerate the keys

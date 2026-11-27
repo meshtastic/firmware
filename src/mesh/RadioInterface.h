@@ -287,7 +287,7 @@ class RadioInterface
     // Whether we have a custom channel name
     static bool uses_custom_channel_name;
 
-    static bool checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraConfig, bool clamp);
+    static bool checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraConfig, bool clamp, bool allowRegionSwap = true);
 
     // Check if a candidate region is compatible and valid, with no side effects (safe for
     // speculative UI checks). prospectiveLicensedOwner is for a UI flow that requires
@@ -304,7 +304,7 @@ class RadioInterface
     static bool validateConfigLora(const meshtastic_Config_LoRaConfig &loraConfig);
 
     // Make a candidate radio configuration valid, even if it isn't.
-    static void clampConfigLora(meshtastic_Config_LoRaConfig &loraConfig);
+    static void clampConfigLora(meshtastic_Config_LoRaConfig &loraConfig, bool allowRegionSwap = true);
 
     // How many frequency slots the config's region holds at the config's bandwidth. 0 for an UNSET region.
     static uint32_t frequencySlotCount(const meshtastic_Config_LoRaConfig &loraConfig);
