@@ -124,6 +124,10 @@ void MeshWebsocketHandler::onMessage(WebsocketInputStreambuf *input)
         shut(CLOSE_TOO_BIG);
         return;
     }
+    // Text frames are ignored, as on the Portduino route. They are read first so the payload is
+    // consumed in chunks here instead of byte by byte in the library's discard().
+    if (input->getOpCode() != OPCODE_BINARY)
+        return;
     if (webServerThread)
         webServerThread->markActivity();
     api->handleToRadio(buf, (size_t)len);
