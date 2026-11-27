@@ -518,6 +518,65 @@ static void test_validateConfigLora_siblingLockedPresetStillFailsValidation()
     TEST_ASSERT_FALSE(RadioInterface::validateConfigLora(cfg));
 }
 
+static void resetUnnamedPrimaryChannel()
+{
+    channels.initDefaults();
+    channels.resolvePrimaryIndex();
+    channels.getByIndex(channels.getPrimaryIndex()).settings.name[0] = '\0';
+}
+
+static void test_clampConfigLora_pendingPresetSwitchUsesPendingName()
+{
+    // With an unnamed primary channel, checkOrClampConfigLora() must resolve the default name from the
+    // prospective loraConfig rather than stale global config.lora.
+    resetUnnamedPrimaryChannel();
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST; // hash("ShortFast") % 104 + 1 == 68
+
+    // Case 1: pending switches from preset (SHORT_FAST) to custom (use_preset=false) with OOB channel_num=105.
+    meshtastic_Config_LoRaConfig toCustom = meshtastic_Config_LoRaConfig_init_zero;
+    toCustom.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    toCustom.use_preset = false;
+    toCustom.bandwidth = 250;
+    toCustom.spread_factor = 11;
+    toCustom.coding_rate = 5;
+    toCustom.channel_num = 105;
+    RadioInterface::clampConfigLora(toCustom);
+    TEST_ASSERT_EQUAL_UINT32(0, toCustom.channel_num);
+    TEST_ASSERT_TRUE(RadioInterface::uses_default_frequency_slot);
+    TEST_ASSERT_FALSE(RadioInterface::uses_custom_channel_name);
+    TEST_ASSERT_TRUE(RadioInterface::validateConfigLora(toCustom));
+
+    // Case 2a: pending switches from SHORT_FAST (slot 68) to LONG_FAST (slot 20) with OOB channel_num=105.
+    meshtastic_Config_LoRaConfig toLongFast = meshtastic_Config_LoRaConfig_init_zero;
+    toLongFast.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    toLongFast.use_preset = true;
+    toLongFast.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    toLongFast.channel_num = 105;
+    RadioInterface::clampConfigLora(toLongFast);
+    TEST_ASSERT_EQUAL_UINT32(0, toLongFast.channel_num);
+    TEST_ASSERT_TRUE(RadioInterface::uses_default_frequency_slot);
+    TEST_ASSERT_FALSE(RadioInterface::uses_custom_channel_name);
+    TEST_ASSERT_EQUAL_UINT32(20, RadioInterface::resolveFrequencySlot(toLongFast, ""));
+
+    // Case 2b: pending LONG_FAST pinned to its own default slot 20 while global is still SHORT_FAST.
+    toLongFast.channel_num = 20;
+    RadioInterface::clampConfigLora(toLongFast);
+    TEST_ASSERT_EQUAL_UINT32(20, toLongFast.channel_num);
+    TEST_ASSERT_TRUE(RadioInterface::uses_default_frequency_slot);
+    TEST_ASSERT_FALSE(RadioInterface::uses_custom_channel_name);
+
+    // Case 3: explicitly named primary channel keeps uses_custom_channel_name=true.
+    strncpy(channels.getByIndex(channels.getPrimaryIndex()).settings.name, "CustomMesh",
+            sizeof(channels.getByIndex(channels.getPrimaryIndex()).settings.name) - 1);
+    toLongFast.channel_num = 0;
+    RadioInterface::clampConfigLora(toLongFast);
+    TEST_ASSERT_TRUE(RadioInterface::uses_custom_channel_name);
+    TEST_ASSERT_TRUE(RadioInterface::uses_default_frequency_slot);
+}
+
 // -----------------------------------------------------------------------
 // RegionInfo preset list integrity tests
 // -----------------------------------------------------------------------
@@ -2693,6 +2752,7 @@ void setup()
     RUN_TEST(test_clampConfigLora_litePresetOnUSDoesNotSwap);
     RUN_TEST(test_clampConfigLora_narrowPresetOnHam125cmDoesNotSwap);
     RUN_TEST(test_validateConfigLora_siblingLockedPresetStillFailsValidation);
+    RUN_TEST(test_clampConfigLora_pendingPresetSwitchUsesPendingName);
 
     // RegionInfo preset list integrity
     RUN_TEST(test_presetsStd_hasTenEntries);
