@@ -1200,6 +1200,7 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
         }
     }
     sm.ackStatus = AckStatus::NONE;
+    sm.id = this->lastRequestId; // match replies to this packet
 
     messageStore.addLiveMessage(std::move(sm));
 

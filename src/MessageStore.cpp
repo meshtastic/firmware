@@ -112,7 +112,19 @@ template <typename T> static inline void pushWithLimit(std::deque<T> &queue, T &
 
 MessageStore::MessageStore(const std::string &label)
 {
-    filename = "/Messages_" + label + ".msgs";
+    filename = "/Messages_" + label + "_v2.msgs";
+
+#ifdef FSCom
+    // Delete the old v1 message file if exists to free up flash memory
+    std::string oldFilename = "/Messages_" + label + ".msgs";
+    spiLock->lock();
+    if (FSCom.exists(oldFilename.c_str())) {
+        FSCom.remove(oldFilename.c_str());
+        LOG_INFO("Removed legacy message file: %s", oldFilename.c_str());
+    }
+    spiLock->unlock();
+#endif
+
     resetMessagePool(); // initialize text pool on boot
 }
 
@@ -237,6 +249,8 @@ const StoredMessage *MessageStore::tryAddFromPacket(const meshtastic_MeshPacket 
 
     sm.type = isDM ? MessageType::DM_TO_US : MessageType::BROADCAST;
     sm.ackStatus = (packet.from == 0) ? AckStatus::NONE : AckStatus::ACKED;
+    sm.id = packet.id;
+    sm.replyId = packet.decoded.reply_id;
 
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
     sm.xeddsaSigned = packet.xeddsa_signed;
@@ -265,6 +279,8 @@ struct __attribute__((packed)) StoredMessageRecord {
     uint8_t xeddsaSigned;        // 1 if packet carried a verified XEdDSA signature
     uint16_t textLength;         // message length
     char text[MAX_MESSAGE_SIZE]; // store actual text here
+    uint32_t id;                 // message id
+    uint32_t replyId;            // message reply id
 };
 
 // Serialize one StoredMessage to flash
@@ -285,6 +301,9 @@ static inline void writeMessageRecord(SafeFile &f, const StoredMessage &m)
     const char *txt = getTextFromPool(m.textOffset);
     strncpy(rec.text, txt, MAX_MESSAGE_SIZE - 1);
     rec.text[MAX_MESSAGE_SIZE - 1] = '\0';
+
+    rec.id = m.id;
+    rec.replyId = m.replyId;
 
     f.write(reinterpret_cast<const uint8_t *>(&rec), sizeof(rec));
 }
@@ -309,6 +328,9 @@ static inline bool readMessageRecord(File &f, StoredMessage &m)
     // 💡 Re-store text into pool and update offset
     m.textLength = strnlen(rec.text, MAX_MESSAGE_SIZE - 1);
     m.textOffset = storeTextInPool(rec.text, m.textLength);
+
+    m.id = rec.id;
+    m.replyId = rec.replyId;
 
     return true;
 }

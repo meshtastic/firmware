@@ -85,7 +85,26 @@ void InkHUD::ThreadedMessageApplet::onRender(bool full)
 
         // Grab data for message
         bool outgoing = (m.sender == myNodeInfo.my_node_num);
-        std::string bodyText = parse(std::string(MessageStore::getText(m))); // Parse any non-ascii chars
+
+        std::string rawText = std::string(MessageStore::getText(m));
+        if (m.replyId != 0) {
+            const auto &messages = messageStore.getLiveMessages();
+            for (const auto &origMsg : messages) {
+                if (origMsg.id == m.replyId) {
+                    meshtastic_NodeInfoLite *senderNode = nodeDB->getMeshNode(origMsg.sender);
+                    if (senderNode && nodeInfoLiteHasUser(senderNode)) {
+                        std::string name = senderNode->short_name;
+                        if (name.empty())
+                            name = senderNode->long_name;
+                        if (name.empty())
+                            name = "Unknown";
+                        rawText = name + ", " + rawText;
+                    }
+                    break;
+                }
+            }
+        }
+        std::string bodyText = parse(rawText); // Parse any non-ascii chars
 
         // Cache bottom Y of message text
         // - Used when drawing vertical line alongside

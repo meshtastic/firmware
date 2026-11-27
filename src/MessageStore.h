@@ -75,11 +75,13 @@ struct StoredMessage {
     uint16_t textLength; // Length of text in bytes
 
     bool xeddsaSigned; // true if packet carried a verified XEdDSA signature
+    uint32_t id;       // Message id
+    uint32_t replyId;  // Reply to a previously sent message
 
     // Default constructor initializes all fields safely
     StoredMessage()
         : timestamp(0), sender(0), channelIndex(0), dest(0xffffffff), type(MessageType::BROADCAST), isBootRelative(false),
-          ackStatus(AckStatus::NONE), textOffset(0), textLength(0), xeddsaSigned(false)
+          ackStatus(AckStatus::NONE), textOffset(0), textLength(0), xeddsaSigned(false), id(0), replyId(0)
     {
     }
 };
