@@ -5,6 +5,7 @@
 #include "graphics/Screen.h"
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
+#include "mesh/NextHopRouter.h"
 #include "mesh/Router.h"
 #include "meshUtils.h"
 #include <vector>
@@ -628,6 +629,7 @@ bool TraceRouteModule::startTraceRoute(NodeNum node)
         // Manually encode the RouteDiscovery payload
         p->decoded.payload.size =
             pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), &meshtastic_RouteDiscovery_msg, &req);
+        trackingTimeoutMs = computeTrackingTimeoutMs(p);
 
         LOG_INFO("Packet allocated: to=0x%08x, portnum=%d, want_response=%d, payload_size=%d", p->to, p->decoded.portnum,
                  p->decoded.want_response, p->decoded.payload.size);
@@ -747,6 +749,7 @@ void TraceRouteModule::launch(NodeNum node)
 
         p->decoded.payload.size =
             pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), &meshtastic_RouteDiscovery_msg, &req);
+        trackingTimeoutMs = computeTrackingTimeoutMs(p);
 
         LOG_INFO("Packet allocated: to=0x%08x, portnum=%d, want_response=%d, payload_size=%d", p->to, p->decoded.portnum,
                  p->decoded.want_response, p->decoded.payload.size);
@@ -768,6 +771,18 @@ void TraceRouteModule::launch(NodeNum node)
         resultShowTime = millis();
         tracingNode = 0;
     }
+}
+
+uint32_t TraceRouteModule::computeTrackingTimeoutMs(const meshtastic_MeshPacket *p)
+{
+    RadioInterface *rif = router ? router->getRadioIface() : nullptr;
+    if (!rif)
+        return kMinTrackingTimeoutMs;
+    // Our reliable attempts, then one request and one response leg per hop, each paying airtime + contention
+    uint32_t perAttempt = rif->getRetransmissionMsec(p);
+    uint32_t legs = 2 * ((uint32_t)p->hop_limit + 1);
+    uint32_t timeout = perAttempt * (NextHopRouter::NUM_RELIABLE_UNICAST_ATTEMPTS + legs);
+    return clamp(timeout, kMinTrackingTimeoutMs, kMaxTrackingTimeoutMs);
 }
 
 void TraceRouteModule::handleTraceRouteResult(const String &result)
@@ -852,11 +867,11 @@ int32_t TraceRouteModule::runOnce()
 
     // Check for tracking timeout
     if (runState == TRACEROUTE_STATE_TRACKING && now - lastTraceRouteTime > trackingTimeoutMs) {
-        LOG_INFO("TraceRoute timeout, no response");
+        LOG_INFO("TraceRoute timeout after %lu ms, no response", trackingTimeoutMs);
         runState = TRACEROUTE_STATE_RESULT;
         setResultText("No response received");
         resultShowTime = now;
-        tracingNode = 0;
+        // keep tracingNode so a late reply still replaces this message while it is on screen
 
         requestFocus();
         UIFrameEvent e;

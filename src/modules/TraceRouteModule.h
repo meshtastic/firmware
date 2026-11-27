@@ -79,7 +79,10 @@ class TraceRouteModule : public ProtobufModule<meshtastic_RouteDiscovery>,
     unsigned long resultShowTime = 0;
     unsigned long cooldownMs = 30000;
     unsigned long resultDisplayMs = 10000;
-    unsigned long trackingTimeoutMs = 10000;
+    static constexpr uint32_t kMinTrackingTimeoutMs = 10000;
+    static constexpr uint32_t kMaxTrackingTimeoutMs = 60000;
+    unsigned long trackingTimeoutMs = kMinTrackingTimeoutMs; // recomputed per request from hop limit and modem preset
+    uint32_t computeTrackingTimeoutMs(const meshtastic_MeshPacket *p);
     String bannerText;
     String resultText;
     std::vector<String> resultLines;
