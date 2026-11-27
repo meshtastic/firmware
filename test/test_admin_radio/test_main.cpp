@@ -10,9 +10,9 @@
  *  5. RegionInfo preset lists (PRESETS_STD, PRESETS_EU_868, PRESETS_UNDEF)
  *  6. RegionInfo::getSlotPlan() in src/mesh/MeshRadio.h and RadioInterface::frequencySlotCount() /
  *     clampConfigLora() in src/mesh/RadioInterface.cpp: real-region slot counts, unit-channel raster
- *     padding (JP ARIB STD-T108 200 kHz grid), relative-epsilon floor slot counts, and the invariant
- *     that no region/preset top slot extends past freqEnd (guarding against round()-induced band-edge
- *     overflow and drift between slot-count callers).
+ *     padding (JP ARIB STD-T108 200 kHz grid), relative-epsilon floor slot counts on unit-channel
+ *     rasters (keeping develop's round() off-raster), and the invariant that no unit-channel-raster
+ *     preset top slot extends past freqEnd (plus agreement between slot-count callers).
  *  7. ClientNotification.type on the paths that do not set it as a literal at the send site:
  *     AdminModule's channel-warning queue (queueChannelWarning()/flushChannelWarnings()) and
  *     RadioInterface::checkConfigRegion(), which hands its failure type to validateConfigRegion().
@@ -865,9 +865,9 @@ static void test_slotPlan_spacedAndPaddedRegions()
 
 static void test_slotPlan_allRegionsPresetsStayInBand()
 {
-    // Universal band-edge and sub-band-split invariant: for every region and every preset in its
-    // profile, every slot must lie strictly within [freqStart, freqEnd], never overlap its neighbor,
-    // never straddle bandSplitMHz when configured, and agree with RadioInterface::frequencySlotCount().
+    // Band-edge and sub-band-split invariants: every slot must start at/after freqStart, never overlap its neighbor,
+    // never straddle bandSplitMHz when configured, agree with RadioInterface::frequencySlotCount(), and stay within
+    // freqEnd on unit-channel raster regions (off-raster regions retain round() counts whose top slot can pass freqEnd).
     const RegionInfo *r = regions;
     while (true) {
         const meshtastic_Config_LoRaConfig_ModemPreset *presets = r->getAvailablePresets();
@@ -889,9 +889,12 @@ static void test_slotPlan_allRegionsPresetsStayInBand()
                 snprintf(msg, sizeof(msg), "Region %s preset %d slot %u: lower %.4f < freqStart %.4f", r->name, (int)presets[i],
                          (unsigned)(s + 1), lowerEdge, r->freqStart);
                 TEST_ASSERT_TRUE_MESSAGE(lowerEdge >= r->freqStart - 1e-4f, msg);
-                snprintf(msg, sizeof(msg), "Region %s preset %d slot %u: upper %.4f > freqEnd %.4f", r->name, (int)presets[i],
-                         (unsigned)(s + 1), upperEdge, r->freqEnd);
-                TEST_ASSERT_TRUE_MESSAGE(upperEdge <= r->freqEnd + 1e-4f, msg);
+                // Off the unit-channel raster round() keeps existing counts, whose top slot can pass freqEnd.
+                if (r->profile->unitChannelMHz > 0.0f) {
+                    snprintf(msg, sizeof(msg), "Region %s preset %d slot %u: upper %.4f > freqEnd %.4f", r->name, (int)presets[i],
+                             (unsigned)(s + 1), upperEdge, r->freqEnd);
+                    TEST_ASSERT_TRUE_MESSAGE(upperEdge <= r->freqEnd + 1e-4f, msg);
+                }
                 if (s > 0) {
                     snprintf(msg, sizeof(msg), "Region %s preset %d slot %u: overlaps previous slot (%.4f < %.4f)", r->name,
                              (int)presets[i], (unsigned)(s + 1), lowerEdge, prevUpper);
@@ -921,6 +924,23 @@ static void test_slotPlan_allRegionsPresetsStayInBand()
         if (r->code == meshtastic_Config_LoRaConfig_RegionCode_UNSET)
             break;
         r++;
+    }
+}
+
+static void test_slotPlan_nonRasterRegionsKeepRoundedCount()
+{
+    // Off the unit-channel raster the count is develop's round(): changing it moves the default channel's slot.
+    const struct {
+        meshtastic_Config_LoRaConfig_RegionCode region;
+        uint32_t slots;
+    } cases[] = {{meshtastic_Config_LoRaConfig_RegionCode_PH_868, 6},
+                 {meshtastic_Config_LoRaConfig_RegionCode_LORA_24, 103},
+                 {meshtastic_Config_LoRaConfig_RegionCode_ANZ_433, 7},
+                 {meshtastic_Config_LoRaConfig_RegionCode_US, 104}};
+    for (const auto &c : cases) {
+        const RegionInfo *r = getRegion(c.region);
+        TEST_ASSERT_EQUAL_UINT32(
+            c.slots, r->getSlotPlan(modemPresetToBwKHz(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, r->wideLora)).count);
     }
 }
 
@@ -3120,6 +3140,7 @@ void setup()
     RUN_TEST(test_slotPlan_narrowSlotRelativeEpsilon);
     RUN_TEST(test_slotPlan_spacedAndPaddedRegions);
     RUN_TEST(test_slotPlan_allRegionsPresetsStayInBand);
+    RUN_TEST(test_slotPlan_nonRasterRegionsKeepRoundedCount);
     RUN_TEST(test_clampConfigLora_JP_slotBounds);
     RUN_TEST(test_clampConfigLora_JP_customModeSlotBounds);
     RUN_TEST(test_clampConfigLora_JP_pendingPresetSwitch);

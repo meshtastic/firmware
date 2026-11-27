@@ -5,6 +5,7 @@
 #include "PointerQueue.h"
 #include "configuration.h"
 #include "detect/LoRaRadioType.h"
+#include <math.h>
 
 // Sentinel marking the end of a modem preset array. Declared `const` rather
 // than `constexpr` because the cast from 0xFF to the enum is out-of-range and
@@ -150,6 +151,13 @@ struct RegionInfo {
             const float upperFirst = bandSplitMHz + centerOffset;
             const float firstCenter = (lowerCount > 0 || upperCount == 0) ? lowerFirst : upperFirst;
             return {width, total, firstCenter, lowerCount, upperFirst};
+        }
+
+        // Off the unit-channel raster keep round(), as before: flooring would move the hashed slot in other regions.
+        if (profile->unitChannelMHz <= 0.0f) {
+            const float span = freqEnd - freqStart;
+            const uint32_t count = span < width ? 0 : static_cast<uint32_t>(round((span + spacing) / width));
+            return {width, count, lowerFirst, count, lowerFirst};
         }
 
         const uint32_t count = countSubBand(freqStart, freqEnd);

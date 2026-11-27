@@ -302,7 +302,7 @@ static void test_applyModemConfig_tunesTheDocumentedSlotForEveryRegionAndPreset(
     TEST_ASSERT_GREATER_THAN_UINT32_MESSAGE(0, checked, "the region table was walked");
 }
 
-/** ITU2_70CM holds 55 slots at a custom 500 kHz, so its override slot 137 cannot apply and the name hash picks one. */
+/** ITU2_70CM holds 56 slots at a custom 500 kHz, so its override slot 137 cannot apply and the name hash picks one. */
 static void test_applyModemConfig_overrideSlotPastCountStaysInBand()
 {
     PrimaryNamed named("Home");
@@ -312,7 +312,7 @@ static void test_applyModemConfig_overrideSlotPastCountStaysInBand()
     config.lora.bandwidth = 500;
     config.lora.spread_factor = 8;
     config.lora.coding_rate = 6;
-    TEST_ASSERT_EQUAL_UINT32_MESSAGE(55, RadioInterface::frequencySlotCount(config.lora), "precondition: 137 is past the top");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(56, RadioInterface::frequencySlotCount(config.lora), "precondition: 137 is past the top");
 
     testRadio->reconfigure();
 
