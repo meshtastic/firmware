@@ -1,0 +1,12 @@
+# FAULT: Touchscreen.Rotate is a number 0 to 7. A boolean is silently read as the default, so
+# the touch axes stay unrotated.
+Lora:
+  Module: sim
+Display:
+  Panel: ST7789
+  Width: 320
+  Height: 240
+  DC: 25
+Touchscreen:
+  Module: XPT2046
+  Rotate: true

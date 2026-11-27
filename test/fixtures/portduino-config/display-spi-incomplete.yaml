@@ -1,0 +1,5 @@
+# FAULT: an SPI panel with no size and no DC pin. The size is an error, the DC pin a warning.
+Lora:
+  Module: sim
+Display:
+  Panel: ST7789
