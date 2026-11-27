@@ -1307,7 +1307,7 @@ bool RadioInterface::validateConfigRegion(const meshtastic_Config_LoRaConfig &lo
  * When clamp==false, returns false on first error (pure validation).
  * When clamp==true, fixes invalid settings in-place and returns true.
  */
-bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraConfig, bool clamp)
+bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraConfig, bool clamp, bool allowRegionSwap)
 {
     char err_string[160];
     float check_bw;
@@ -1322,7 +1322,7 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
         check_bw = modemPresetToBwKHz(loraConfig.modem_preset, newRegion->wideLora);
 
         bool preset_valid = newRegion->supportsPreset(loraConfig.modem_preset);
-        if (!preset_valid) {
+        if (!preset_valid && allowRegionSwap) {
             // A preset locked to a sibling of the swappable EU regions swaps the region instead
             // of clamping the preset, as long as the previous region was itself one of the trio.
             const RegionInfo *swapRegion = regionSwapForPreset(loraConfig.region, loraConfig.modem_preset);
@@ -1445,9 +1445,9 @@ bool RadioInterface::validateConfigLora(const meshtastic_Config_LoRaConfig &lora
     return checkOrClampConfigLora(copy, false);
 }
 
-void RadioInterface::clampConfigLora(meshtastic_Config_LoRaConfig &loraConfig)
+void RadioInterface::clampConfigLora(meshtastic_Config_LoRaConfig &loraConfig, bool allowRegionSwap)
 {
-    checkOrClampConfigLora(loraConfig, true);
+    checkOrClampConfigLora(loraConfig, true, allowRegionSwap);
 }
 
 uint32_t RadioInterface::frequencySlotCount(const meshtastic_Config_LoRaConfig &loraConfig)
