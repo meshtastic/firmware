@@ -133,6 +133,9 @@ class MenuApplet : public SystemApplet, public concurrency::OSThread
 
     bool invertedColors = false;  // Helper to display current state of config.display.displaymode in InkHUD options
     bool keepBacklightOn = false; // Helper to display current backlight latch state in InkHUD options
+#if defined(HELTEC_VISION_MASTER_E290)
+    std::string e290PanelLabel; // "Panel: …" Options row; string must outlive MenuItem
+#endif
 };
 
 } // namespace NicheGraphics::InkHUD

@@ -33,7 +33,7 @@ Different NicheGraphics UIs and different hardware variants will each have their
 
 // Shared NicheGraphics components
 // --------------------------------
-#include "graphics/niche/Drivers/EInk/DEPG0290BNS800.h"
+#include "graphics/niche/Drivers/EInk/HeltecVME290.h"
 #include "graphics/niche/Inputs/TwoButton.h"
 
 // Button feedback
@@ -53,8 +53,9 @@ void setupNicheGraphics()
     // E-Ink Driver
     // -----------------------------
 
-    Drivers::EInk *driver = new Drivers::DEPG0290BNS800;
-    driver->begin(hspi, PIN_EINK_DC, PIN_EINK_CS, PIN_EINK_BUSY);
+    Drivers::HeltecVME290 *driver = new Drivers::HeltecVME290;
+    driver->begin(hspi, PIN_EINK_DC, PIN_EINK_CS, PIN_EINK_BUSY, PIN_EINK_RES);
+    driver->runPanelSelectIfNeeded(BUTTON_PIN, PIN_BUTTON2);
 
     // InkHUD
     // ----------------------------
@@ -104,7 +105,7 @@ void setupNicheGraphics()
     buttons->setHandlerShortPress(0, [inkhud]() { inkhud->shortpress(); });
     buttons->setHandlerLongPress(0, [inkhud]() { inkhud->longpress(); });
 
-    // #1: Aux Button
+    // #1: Aux Button - short: next tile. Panel wizard redo is hold AUX + RESET (or Options menu).
     buttons->setWiring(1, PIN_BUTTON2);
     buttons->setHandlerShortPress(1, [inkhud]() {
         inkhud->nextTile();

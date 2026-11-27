@@ -23,6 +23,9 @@
 #include "graphics/niche/InkHUD/Applets/User/Steps/StepsApplet.h"
 #endif
 #include "graphics/niche/Utils/FlashData.h"
+#if defined(HELTEC_VISION_MASTER_E290)
+#include "graphics/niche/Drivers/EInk/HeltecVME290.h"
+#endif
 #include "main.h"
 #include "mesh/generated/meshtastic/deviceonly.pb.h"
 #include "modules/GeofenceModule.h"
@@ -586,6 +589,17 @@ void InkHUD::MenuApplet::execute(MenuItem item)
             config.display.displaymode = meshtastic_Config_DisplayConfig_DisplayMode_INVERTED;
 
         nodeDB->saveToDisk(SEGMENT_CONFIG);
+        break;
+
+    case TOGGLE_E290_PANEL_WAVEFORM:
+#if defined(HELTEC_VISION_MASTER_E290)
+        if (Drivers::HeltecVME290 *panel = Drivers::HeltecVME290::getActive()) {
+            inkhud->awaitUpdate();
+            panel->toggleWaveform();
+            panel->showModeBanner();
+            inkhud->forceUpdate(Drivers::EInk::UpdateTypes::FULL, true, false);
+        }
+#endif
         break;
 
     case SET_RECENTS: {
@@ -1434,6 +1448,13 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
                                  &settings->optionalFeatures.batteryIcon));
         invertedColors = (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED);
         items.push_back(MenuItem("Invert Color", MenuAction::TOGGLE_INVERT_COLOR, MenuPage::OPTIONS, &invertedColors));
+#if defined(HELTEC_VISION_MASTER_E290)
+        if (Drivers::HeltecVME290 *panel = Drivers::HeltecVME290::getActive()) {
+            e290PanelLabel = "E-Ink: ";
+            e290PanelLabel += Drivers::heltecVME290WaveformLabel(panel->waveform());
+            items.push_back(MenuItem(e290PanelLabel.c_str(), MenuAction::TOGGLE_E290_PANEL_WAVEFORM, MenuPage::OPTIONS));
+        }
+#endif
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
         break;
 
