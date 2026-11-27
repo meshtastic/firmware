@@ -22,14 +22,6 @@ inline uint8_t dypA01Checksum(uint8_t dataH, uint8_t dataL)
     return (uint8_t)((0xFF + dataH + dataL) & 0xFF);
 }
 
-inline void dypA01EncodeFrame(uint16_t distanceMm, uint8_t out[4])
-{
-    out[0] = 0xFF;
-    out[1] = (uint8_t)(distanceMm >> 8);
-    out[2] = (uint8_t)(distanceMm & 0xFF);
-    out[3] = dypA01Checksum(out[1], out[2]);
-}
-
 // Upper median of a real sample. Even counts are not averaged: a short false echo
 // must not invent a distance the sensor never measured.
 inline float dypA01MedianMm(float *samples, uint8_t count)
@@ -79,18 +71,17 @@ class DypA01Parser
         }
 
         // 0xFF is legal payload, so a rejected frame can contain the next header.
-        bool accepted = false;
         const uint8_t replay[3] = {dataH, dataL, sum};
         for (uint8_t b : replay) {
-            float replayMm = 0;
-            if (push(b, replayMm) == DypA01Parse::Accepted) {
-                distanceMm = replayMm;
-                accepted = true;
+            if (len == 0) {
+                if (b == 0xFF) {
+                    frame[0] = b;
+                    len = 1;
+                }
+            } else {
+                frame[len++] = b;
             }
         }
-        if (accepted)
-            return DypA01Parse::Accepted;
-        // Still assembling a frame that started inside the rejected bytes.
         if (len > 0)
             return DypA01Parse::NeedMore;
         return DypA01Parse::Rejected;

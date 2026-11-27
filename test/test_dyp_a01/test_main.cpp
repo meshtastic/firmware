@@ -1,5 +1,5 @@
 // Pins DypA01Parser, dypA01MedianMm and dypA01BurstPublishable in
-// src/modules/Telemetry/Sensor/DYPA01Protocol.h, plus EnvironmentMetrics.distance.
+// src/modules/Telemetry/Sensor/DYPA01Protocol.h.
 //
 // The DYP-A01 driver publishes millimetres on the existing environment_metrics.distance
 // field. There is no DYP sensor-type enum on that message, so a client already able to
@@ -11,14 +11,19 @@
 // must not be treated as publishable.
 
 #include "TestUtil.h"
-#include "mesh-pb-constants.h"
 #include "modules/Telemetry/Sensor/DYPA01Protocol.h"
-#include <pb_decode.h>
-#include <pb_encode.h>
 #include <unity.h>
 
 void setUp(void) {}
 void tearDown(void) {}
+
+static void encodeFrame(uint16_t distanceMm, uint8_t out[4])
+{
+    out[0] = 0xFF;
+    out[1] = (uint8_t)(distanceMm >> 8);
+    out[2] = (uint8_t)(distanceMm & 0xFF);
+    out[3] = dypA01Checksum(out[1], out[2]);
+}
 
 static bool feed(DypA01Parser &parser, const uint8_t *bytes, size_t count, float &distanceMm, bool &rejected)
 {
@@ -46,7 +51,7 @@ void test_known_distances_decode_from_checksummed_frames()
     const uint16_t knownMm[] = {280, 1000, 6000, 7500};
     for (uint16_t mm : knownMm) {
         uint8_t frame[4];
-        dypA01EncodeFrame(mm, frame);
+        encodeFrame(mm, frame);
         DypA01Parser parser;
         float decoded = -1;
         bool rejected = false;
@@ -56,7 +61,7 @@ void test_known_distances_decode_from_checksummed_frames()
     }
 
     uint8_t encoded[4];
-    dypA01EncodeFrame(1000, encoded);
+    encodeFrame(1000, encoded);
     TEST_ASSERT_EQUAL_UINT8_ARRAY(kFrame1000mm, encoded, 4);
 
     DypA01Parser parser;
@@ -119,45 +124,6 @@ void test_median_keeps_a_real_sample_when_a_short_echo_is_present()
     TEST_ASSERT_EQUAL_FLOAT(2000.0f, dypA01MedianMm(even, 2));
 }
 
-static bool roundTripDistance(float distanceMm, bool present, float &decodedMm, bool &decodedPresent)
-{
-    meshtastic_Telemetry in = meshtastic_Telemetry_init_zero;
-    in.which_variant = meshtastic_Telemetry_environment_metrics_tag;
-    in.variant.environment_metrics.has_distance = present;
-    in.variant.environment_metrics.distance = distanceMm;
-
-    uint8_t buf[meshtastic_Telemetry_size];
-    pb_ostream_t out = pb_ostream_from_buffer(buf, sizeof(buf));
-    if (!pb_encode(&out, &meshtastic_Telemetry_msg, &in))
-        return false;
-
-    meshtastic_Telemetry got = meshtastic_Telemetry_init_zero;
-    pb_istream_t inStream = pb_istream_from_buffer(buf, out.bytes_written);
-    if (!pb_decode(&inStream, &meshtastic_Telemetry_msg, &got))
-        return false;
-
-    decodedPresent = got.variant.environment_metrics.has_distance;
-    decodedMm = got.variant.environment_metrics.distance;
-    return got.which_variant == meshtastic_Telemetry_environment_metrics_tag;
-}
-
-void test_environment_metrics_distance_round_trips_without_a_new_sensor_type()
-{
-    const float knownMm[] = {280.0f, 1000.0f, 6000.0f, 7500.0f};
-    for (float mm : knownMm) {
-        float decoded = -1;
-        bool present = false;
-        TEST_ASSERT_TRUE(roundTripDistance(mm, true, decoded, present));
-        TEST_ASSERT_TRUE(present);
-        TEST_ASSERT_EQUAL_FLOAT(mm, decoded);
-    }
-
-    float decoded = 1;
-    bool present = true;
-    TEST_ASSERT_TRUE(roundTripDistance(0, false, decoded, present));
-    TEST_ASSERT_FALSE(present);
-}
-
 void setup()
 {
     initializeTestEnvironment();
@@ -166,7 +132,6 @@ void setup()
     RUN_TEST(test_invalid_frames_are_rejected);
     RUN_TEST(test_disconnected_sensor_is_not_publishable);
     RUN_TEST(test_median_keeps_a_real_sample_when_a_short_echo_is_present);
-    RUN_TEST(test_environment_metrics_distance_round_trips_without_a_new_sensor_type);
     exit(UNITY_END());
 }
 

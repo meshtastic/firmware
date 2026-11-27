@@ -118,12 +118,11 @@ static const uint8_t SCL = PIN_WIRE_SCL;
 //  GPS L76KB, or DYP-A01 on that same UART
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // seeed_solar_node_dyp takes Serial1 (D6 MCU TX, D7 MCU RX). Stock builds keep the L76K.
-#if defined(DYP_A01_USE_SERIAL1)
+#ifdef DYP_A01_ENABLE
 #define HAS_GPS 0
 #define HAS_DYP_A01 1
 #define DYP_A01_UART_RX D7
 #define DYP_A01_UART_TX D6
-#define DYP_A01_UART_BAUD 9600
 #define PIN_SERIAL1_RX DYP_A01_UART_RX
 #define PIN_SERIAL1_TX DYP_A01_UART_TX
 #define DYP_A01_POWER_EN D18 // switched GNSS 3V3, sensor VCC; rail stays on
@@ -132,7 +131,6 @@ static const uint8_t SCL = PIN_WIRE_SCL;
 #define GPS_STANDBY_ACTIVE LOW
 #define PIN_GPS_RESET D17
 #define GPS_RESET_MODE LOW // active-low; keeps the L76K off D6/D7
-#define ENVIRONMENTAL_TELEMETRY_MODULE_ENABLE 1
 #else
 #define GPS_L76K
 #ifdef GPS_L76K

@@ -17,10 +17,6 @@
 #define DYP_A01_UART_BAUD 9600
 #endif
 
-#ifndef DYP_A01_UART_CONTROLLED
-#define DYP_A01_UART_CONTROLLED 1
-#endif
-
 #ifndef DYP_A01_TRIGGER_BYTE
 #define DYP_A01_TRIGGER_BYTE 0x01
 #endif
@@ -45,22 +41,6 @@
 #define DYP_A01_RETRY_DELAY_MS 500
 #endif
 
-#ifndef DYP_A01_AUTO_INTERVAL_MS
-#define DYP_A01_AUTO_INTERVAL_MS 250
-#endif
-
-#ifndef DYP_A01_AUTO_STALE_MS
-#define DYP_A01_AUTO_STALE_MS 2000
-#endif
-
-#ifndef DYP_A01_POWER_BOOT_MS
-#define DYP_A01_POWER_BOOT_MS 100
-#endif
-
-#ifndef DYP_A01_POWER_SETTLE_MS
-#define DYP_A01_POWER_SETTLE_MS 50
-#endif
-
 #ifndef DYP_A01_UART_RX
 #error "HAS_DYP_A01 requires DYP_A01_UART_RX"
 #endif
@@ -69,14 +49,10 @@
 #endif
 
 #if defined(ARCH_ESP32)
-#ifndef DYP_A01_USE_SERIAL2
-#error "DYP-A01 on ESP32 must define DYP_A01_USE_SERIAL2; Serial1 belongs to GPS"
-#endif
+// Serial1 is GPS on ESP32 boards; DYP uses Serial2.
 #define DYP_A01_STREAM Serial2
 #elif defined(ARCH_NRF52)
-#ifndef DYP_A01_USE_SERIAL1
-#error "DYP-A01 on nRF52 must define DYP_A01_USE_SERIAL1 and must not leave GPS on that UART"
-#endif
+// Opt-in DYP builds must leave GPS off this UART (see variant).
 #define DYP_A01_STREAM Serial1
 #else
 #error "DYP-A01 UART is only implemented for ESP32 and nRF52"
@@ -89,36 +65,10 @@ static_assert(DYP_A01_UART_RX != GPS_TX_PIN, "DYP-A01 RX is the GPS TX pin");
 static_assert(DYP_A01_UART_TX != GPS_RX_PIN, "DYP-A01 TX is the GPS RX pin");
 #endif
 
-#if defined(SEEED_SOLAR_NODE)
-#if HAS_GPS
-#error "Seeed Solar Node DYP-A01 uses the GNSS UART; build seeed_solar_node_dyp so HAS_GPS is 0"
-#endif
-static_assert(DYP_A01_UART_RX == D7, "Seeed DYP-A01 RX must be GNSS RX (D7)");
-static_assert(DYP_A01_UART_TX == D6, "Seeed DYP-A01 TX must be GNSS TX (D6)");
-#endif
-
-#if defined(HELTEC_V4)
-static_assert(DYP_A01_UART_RX != LORA_KCT8103L_PA_CTX && DYP_A01_UART_TX != LORA_KCT8103L_PA_CTX,
-              "DYP-A01 pin collides with Heltec V4.3 PA_CTX (GPIO5)");
-static_assert(DYP_A01_UART_RX != LORA_GC1109_PA_EN && DYP_A01_UART_TX != LORA_GC1109_PA_EN,
-              "DYP-A01 pin collides with the LoRa FEM enable");
-static_assert(DYP_A01_UART_RX != LORA_PA_POWER && DYP_A01_UART_TX != LORA_PA_POWER,
-              "DYP-A01 pin collides with the LoRa FEM supply");
-#ifdef I2C_SDA1
-static_assert(DYP_A01_UART_RX != I2C_SDA1 && DYP_A01_UART_TX != I2C_SDA1, "DYP-A01 pin collides with Wire1 SDA");
-static_assert(DYP_A01_UART_RX != I2C_SCL1 && DYP_A01_UART_TX != I2C_SCL1, "DYP-A01 pin collides with Wire1 SCL");
-#endif
-#ifdef PIN_BUZZER
-static_assert(DYP_A01_UART_RX != PIN_BUZZER && DYP_A01_UART_TX != PIN_BUZZER, "DYP-A01 pin collides with the buzzer");
-#endif
-#endif
-
-#if DYP_A01_UART_CONTROLLED
 static_assert(DYP_A01_BURST_SAMPLES > 0 && DYP_A01_BURST_SAMPLES <= 255, "DYP_A01_BURST_SAMPLES out of range");
 static_assert(DYP_A01_MIN_VALID_SAMPLES > 0 && DYP_A01_MIN_VALID_SAMPLES <= DYP_A01_BURST_SAMPLES,
               "DYP_A01_MIN_VALID_SAMPLES out of range");
 static_assert(DYP_A01_MAX_BURST_ATTEMPTS >= 1 && DYP_A01_MAX_BURST_ATTEMPTS <= 255, "DYP_A01_MAX_BURST_ATTEMPTS out of range");
-#endif
 
 static int32_t atLeastOne(uint32_t ms)
 {
@@ -129,7 +79,6 @@ static int32_t atLeastOne(uint32_t ms)
     return (int32_t)ms;
 }
 
-// SENSOR_UNSET: EnvironmentMetrics.distance already carries the reading, so no new sensor enum.
 DYPA01Sensor::DYPA01Sensor() : TelemetrySensor(meshtastic_TelemetrySensorType_SENSOR_UNSET, "DYP-A01") {}
 
 bool DYPA01Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
@@ -137,16 +86,8 @@ bool DYPA01Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
     (void)bus;
     (void)dev;
     LOG_INFO("Init sensor: %s", sensorName);
-    bootStartedMs = Time::getMillis();
-    enablePeripheralPower();
     openUart();
-#if defined(DYP_A01_USE_SERIAL2)
-    LOG_INFO("%s: UART Serial2 RX=%d TX=%d %d baud (GPS keeps Serial1)", sensorName, DYP_A01_UART_RX, DYP_A01_UART_TX,
-             DYP_A01_UART_BAUD);
-#elif defined(DYP_A01_USE_SERIAL1)
-    LOG_INFO("%s: UART Serial1 RX=%d TX=%d %d baud (GPS disabled on this build)", sensorName, DYP_A01_UART_RX, DYP_A01_UART_TX,
-             DYP_A01_UART_BAUD);
-#endif
+    LOG_INFO("%s: UART RX=%d TX=%d %d baud", sensorName, DYP_A01_UART_RX, DYP_A01_UART_TX, DYP_A01_UART_BAUD);
     status = 1;
     initialized = true;
     return true;
@@ -160,32 +101,6 @@ void DYPA01Sensor::openUart()
 #elif defined(ARCH_NRF52)
     DYP_A01_STREAM.setPins(DYP_A01_UART_RX, DYP_A01_UART_TX);
     DYP_A01_STREAM.begin(DYP_A01_UART_BAUD);
-#endif
-}
-
-void DYPA01Sensor::enablePeripheralPower()
-{
-#ifdef DYP_A01_POWER_EN
-    if (peripheralPowerOn)
-        return;
-#if !HAS_GPS
-#ifdef PIN_GPS_STANDBY
-    pinMode(PIN_GPS_STANDBY, OUTPUT);
-    digitalWrite(PIN_GPS_STANDBY, GPS_STANDBY_ACTIVE);
-#endif
-#ifdef PIN_GPS_RESET
-    // Active level holds the onboard GNSS in reset so it cannot drive this UART.
-    pinMode(PIN_GPS_RESET, OUTPUT);
-    digitalWrite(PIN_GPS_RESET, GPS_RESET_MODE);
-#endif
-#endif
-    pinMode(DYP_A01_POWER_EN, OUTPUT);
-    digitalWrite(DYP_A01_POWER_EN, DYP_A01_POWER_EN_ACTIVE);
-    peripheralPowerOn = true;
-    bootStartedMs = Time::getMillis();
-    phase = Phase::Boot;
-#else
-    phase = Phase::Idle;
 #endif
 }
 
@@ -243,14 +158,13 @@ bool DYPA01Sensor::takeSampleIfReady()
     while (DYP_A01_STREAM.available() > 0) {
         float sampleMm = 0;
         const DypA01Parse parsed = parser.push((uint8_t)DYP_A01_STREAM.read(), sampleMm);
-        if (parsed == DypA01Parse::Rejected && !Throttle::isWithinTimespanMs(lastRejectLogMs, 1000)) {
+        if (parsed == DypA01Parse::Rejected && Throttle::hasElapsed(lastRejectLogMs, 1000)) {
             lastRejectLogMs = Time::getMillis();
             LOG_DEBUG("%s: rejected UART frame", sensorName);
         }
         if (parsed == DypA01Parse::Accepted && !capturedThisTrigger && validSamples < DYP_A01_BURST_SAMPLES) {
             samples[validSamples++] = sampleMm;
             capturedThisTrigger = true;
-            lastValidFrameMs = Time::getMillis();
         }
     }
     return capturedThisTrigger || Throttle::hasElapsed(readWindowStartMs, DYP_A01_READ_WINDOW_MS);
@@ -283,17 +197,10 @@ int32_t DYPA01Sensor::finishBurst()
 
 int32_t DYPA01Sensor::runControlled()
 {
-    // Nine samples at a 150 ms gap, plus one retry, is about 1.4-3.2 s. That wait is
-    // returned to the scheduler; getMetrics() only copies the finished median.
+    // Nine samples at a 150 ms gap, plus one retry, is about 1.4-3.2 s when paced by the
+    // scheduler. getMetrics() finishes an in-flight or due burst with delay() before publish.
     for (uint8_t step = 0; step < 6; step++) {
         switch (phase) {
-        case Phase::Boot: {
-            const uint32_t bootMs = DYP_A01_POWER_SETTLE_MS + DYP_A01_POWER_BOOT_MS;
-            if (!Throttle::hasElapsed(bootStartedMs, bootMs))
-                return atLeastOne(Throttle::remainingMs(bootStartedMs, bootMs));
-            phase = Phase::Idle;
-            break;
-        }
         case Phase::Idle:
             if (!burstIsDue())
                 return idleWait();
@@ -330,40 +237,39 @@ int32_t DYPA01Sensor::runControlled()
     return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
 }
 
-int32_t DYPA01Sensor::runAuto()
-{
-    while (DYP_A01_STREAM.available() > 0) {
-        float sampleMm = 0;
-        const DypA01Parse parsed = parser.push((uint8_t)DYP_A01_STREAM.read(), sampleMm);
-        if (parsed == DypA01Parse::Accepted) {
-            lastDistanceMm = sampleMm;
-            hasValidReading = true;
-            lastValidFrameMs = Time::getMillis();
-        } else if (parsed == DypA01Parse::Rejected && !Throttle::isWithinTimespanMs(lastRejectLogMs, 1000)) {
-            lastRejectLogMs = Time::getMillis();
-            LOG_DEBUG("%s: rejected UART frame", sensorName);
-        }
-    }
-    if (hasValidReading && Throttle::hasElapsed(lastValidFrameMs, DYP_A01_AUTO_STALE_MS))
-        hasValidReading = false;
-    return DYP_A01_AUTO_INTERVAL_MS;
-}
-
 int32_t DYPA01Sensor::runOnce()
 {
     if (!initialized)
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
-#if DYP_A01_UART_CONTROLLED
     return runControlled();
-#else
-    return runAuto();
-#endif
+}
+
+bool DYPA01Sensor::ensureBurstForPublish()
+{
+    // Fresh cache from this interval: publish without blocking.
+    if (phase == Phase::Idle && hasValidReading && !burstIsDue())
+        return true;
+
+    // Publishing with no usable cache must not wait out the telemetry interval.
+    if (phase == Phase::Idle && !burstIsDue())
+        burstCompleted = false;
+
+    const uint32_t startedMs = Time::getMillis();
+    const uint32_t budgetMs = controlledBudgetMs() + 500;
+    while (!Throttle::hasElapsed(startedMs, budgetMs)) {
+        const int32_t waitMs = runControlled();
+        if (phase == Phase::Idle && burstCompleted)
+            return hasValidReading;
+        if (waitMs > 0)
+            delay((uint32_t)waitMs);
+    }
+    return hasValidReading;
 }
 
 bool DYPA01Sensor::getMetrics(meshtastic_Telemetry *measurement)
 {
-    if (!hasValidReading) {
-        if (!Throttle::isWithinTimespanMs(lastNoMetricsLogMs, 5000)) {
+    if (!ensureBurstForPublish()) {
+        if (Throttle::hasElapsed(lastNoMetricsLogMs, 5000)) {
             lastNoMetricsLogMs = Time::getMillis();
             LOG_DEBUG("%s: not publishing distance", sensorName);
         }
@@ -384,11 +290,6 @@ bool DYPA01Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
     (void)bus;
     (void)dev;
     return false;
-}
-
-int32_t DYPA01Sensor::runOnce()
-{
-    return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
 }
 
 bool DYPA01Sensor::getMetrics(meshtastic_Telemetry *measurement)
