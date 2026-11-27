@@ -22,4 +22,5 @@ class TDeckProKeyboard : public TCA8418KeyboardBase
     uint8_t latchedModifiers = 0;
     uint8_t usedModifiers = 0;
     uint32_t lastModifierMs = 0;
+    uint32_t lastPopUs = 0;
 };

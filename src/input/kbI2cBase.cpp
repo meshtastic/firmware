@@ -5,6 +5,8 @@
 
 #if defined(T_DECK_PRO)
 #include "TDeckProKeyboard.h"
+#include "Throttle.h"
+#include "main.h"
 #elif defined(T_LORA_PAGER)
 #include "TLoraPagerKeyboard.h"
 #elif defined(M5STACK_CARDPUTER_ADV)
@@ -23,6 +25,25 @@
 
 extern ScanI2C::DeviceAddress cardkb_found;
 extern uint8_t kb_model;
+
+#if defined(T_DECK_PRO)
+// KB_INT falls when the TCA8418 queues a key event; the poll is only a fallback for an edge that never came
+static constexpr uint32_t TCA_FALLBACK_POLL_MS = 1000;
+static KbI2cBase *tcaInterruptThread = nullptr;
+static uint32_t lastTcaReadMs = 0;
+static bool tcaRecheck = false; // INT_STAT showed new events right after the last drain
+
+static void IRAM_ATTR tcaKeyboardInterrupt()
+{
+    if (tcaInterruptThread) {
+        tcaInterruptThread->setIntervalFromNow(0);
+        // The main loop may already be asleep until its next scheduled thread: wake it, or the key waits for that
+        BaseType_t higherWake = 0;
+        concurrency::mainDelay.interruptFromISR(&higherWake);
+        runASAP = true;
+    }
+}
+#endif
 
 KbI2cBase::KbI2cBase(const char *name)
     : concurrency::OSThread(name),
@@ -110,6 +131,14 @@ int32_t KbI2cBase::runOnce()
         default:
             i2cBus = 0;
         }
+#if defined(T_DECK_PRO)
+        if (i2cBus && cardkb_found.address == TCA8418_KB_ADDR) {
+            tcaInterruptThread = this;
+            attachInterrupt(digitalPinToInterrupt(KB_INT), tcaKeyboardInterrupt, FALLING);
+            lsObserver.observe(&notifyLightSleep);
+            lsEndObserver.observe(&notifyLightSleepEnd);
+        }
+#endif
     }
 
     switch (kb_model) {
@@ -277,9 +306,14 @@ int32_t KbI2cBase::runOnce()
         break;
     }
     case 0x84: { // Adafruit TCA8418
-#if defined(T_DECK_PRO) && defined(MESHTASTIC_INCLUDE_INKHUD)
-        if (::digitalRead(KB_INT) == HIGH && !TCAKeyboard->hasEvent())
+#if defined(T_DECK_PRO)
+        // KB_INT high with nothing queued means no key; the fallback poll reads the FIFO anyway, in case an edge was missed
+        const bool recheck = tcaRecheck;
+        tcaRecheck = false;
+        if (!recheck && ::digitalRead(KB_INT) == HIGH && !TCAKeyboard->hasEvent() &&
+            !Throttle::hasElapsed(lastTcaReadMs, TCA_FALLBACK_POLL_MS))
             break;
+        lastTcaReadMs = millis();
 #endif
         TCAKeyboard->trigger();
         InputEvent e = {};
@@ -389,7 +423,13 @@ int32_t KbI2cBase::runOnce()
             }
             TCAKeyboard->trigger();
         }
+        // The chip keeps KB_INT low until its FIFO is empty, so this must follow the drain; a key that lands meanwhile
+        // leaves the line low, and the 20 ms poll below picks it up
         TCAKeyboard->clearInt();
+#if defined(T_DECK_PRO)
+        // Per the datasheet, read INT_STAT again after clearing: events may have come in during the drain
+        tcaRecheck = TCAKeyboard->keyEventPending();
+#endif
         break;
     }
     case 0x02: {
@@ -676,14 +716,36 @@ int32_t KbI2cBase::runOnce()
     default:
         LOG_WARN("Unknown kb_model 0x%02x", kb_model);
     }
-#if defined(T_DECK_PRO) && defined(MESHTASTIC_INCLUDE_INKHUD)
-    return 20; // Drain the ten-event FIFO before fast typing can overflow it.
+#if defined(T_DECK_PRO)
+    // KB_INT wakes the thread; keep draining while the chip still holds keys, otherwise only the fallback poll
+    if (tcaRecheck)
+        return 0;
+    // Set here rather than returned: an edge during runOnce() sets 0 from the ISR, and a returned value would overwrite it
+    setIntervalFromNow(TCA_FALLBACK_POLL_MS);
+    if (::digitalRead(KB_INT) == LOW)
+        setIntervalFromNow(20);
+    return RUN_SAME;
 #elif defined(MESHTASTIC_INCLUDE_INKHUD)
     return 100; // CardKB hands out one key per read, so 300 ms makes typing crawl
 #else
     return 300;
 #endif
 }
+
+#if defined(T_DECK_PRO)
+int KbI2cBase::beforeLightSleep(void *unused)
+{
+    detachInterrupt(digitalPinToInterrupt(KB_INT));
+    return 0;
+}
+
+int KbI2cBase::afterLightSleep(esp_sleep_wakeup_cause_t cause)
+{
+    attachInterrupt(digitalPinToInterrupt(KB_INT), tcaKeyboardInterrupt, FALLING);
+    setIntervalFromNow(0); // a key that woke the board fell before the ISR was back
+    return 0;
+}
+#endif
 
 void KbI2cBase::toggleBacklight(bool on)
 {
